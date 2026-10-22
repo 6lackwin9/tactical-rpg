@@ -1,23 +1,26 @@
 //! The region map (scripts/ui/overworld/region_map_view.gd + dialogue_panel.gd + shop_panel.gd): walking a
-//! location's map over the game state (ExploreRunner), the "Here" list and event log, the dialogue dock at the bottom
+//! location's map over the game state (ExploreRunner) under the HUD bar, the floating "Here" legend and the event log
+//! ticker (PLAYUI1-M: the full-width map, a camera centred on the party with walls drawn past the edge), the dialogue dock at the bottom
 //! (DialogueRunner), the shop popup (ShopRules), the turn-in picker and lore pages. Fights start the battle screen;
 //! a world-map exit opens the world map. Map-less locations show their exits as buttons.
 
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
+use crate::hud::{hud_bar, hud_key, hud_open, Hud, HUD_H};
 use crate::music;
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
-use aegis_ui::ui::{tip, Gfx, Glyph, Tip, Ui, Widget, BODY, BORDER, CARD, DIM, FOE, GOLD, GOOD, H, INFO, SMALL, TEXT, TITLE, W};
+use aegis_ui::ui::{draw_glyph, tip, Gfx, Glyph, Ui, Widget, BODY, BORDER, CARD, DIM, GOLD, GOOD, H, INFO, PANEL_HI, SMALL, TEXT, TITLE, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
 use emberwake_world::dialogue::DialogueRunner;
 use emberwake_world::explore::{self, Pos};
-use emberwake_world::state::SUPPLIES_MAX;
 use emberwake_world::{quest, shop};
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
-const MAP: Rect = Rect::new(0, 23, 500, 337);
-const SIDE_X: i32 = 502;
+/// A map tile (logical px; 32 px at 1280 wide, MAPVIEW1).
+const TILE: i32 = 16;
+/// The dialogue dock's top edge (the map shows above it while talking).
+const DOCK_Y: i32 = 203;
 
 #[derive(Debug, Clone)]
 pub enum RAct {
@@ -39,6 +42,10 @@ pub enum RAct {
     ConfirmTurnIn,
     CancelTurnIn,
     CloseLore,
+    /// Fold or open the legend (`map_legend_open`).
+    Legend,
+    /// Show the last events in the ticker, or only the latest (L).
+    Log,
 }
 
 pub struct RegionMap {
@@ -51,12 +58,14 @@ pub struct RegionMap {
     pending: Option<Dict>,
     picks: Vec<String>,
     recipient: usize,
-    lore: Option<(String, String)>,
+    pub(crate) lore: Option<(String, String)>,
     walk: Vec<Pos>,
     walk_target: Option<String>,
     next_walk: Instant,
     /// Map geometry of the last frame: (origin x, origin y, tile size).
     geo: (i32, i32, i32),
+    /// The ticker shows the last `LOG_OPEN` events (else only the latest).
+    log_open: bool,
 }
 
 /// Starts a world fight: the battle screen, or the Skip / Fled / Lost popup in a debug game.
@@ -127,6 +136,7 @@ impl RegionMap {
             walk_target: None,
             next_walk: Instant::now(),
             geo: (0, 0, 1),
+            log_open: false,
         }
     }
 
@@ -440,6 +450,14 @@ impl RegionMap {
                 self.pending = None;
             }
             RAct::CloseLore => self.lore = None,
+            RAct::Legend => {
+                let open = cx.settings.v["map_legend_open"].as_bool().unwrap_or(true);
+                cx.settings.v["map_legend_open"] = json!(!open);
+                if let Err(e) = cx.settings.save() {
+                    cx.log(format!("Settings could not be saved: {e}"));
+                }
+            }
+            RAct::Log => self.log_open = !self.log_open,
         }
     }
 
@@ -477,37 +495,30 @@ impl Screen<GameCx> for RegionMap {
         let t = explore::template_of(&d, loc);
         let talking = self.talking();
         let modal = self.modal();
-        // -- Map
-        let map_area = if talking { Rect::new(0, 23, 500, 180) } else { MAP };
+        // -- Map (PLAYUI1-M, spec PLAYUI1 3.2): the full width under the HUD bar (above the dialogue dock while talking);
+        // the camera centres on the party with no clamp, and past the map's edge the location's wall tile is drawn
+        let map_area = if talking { Rect::new(0, HUD_H, W, DOCK_Y - HUD_H) } else { Rect::new(0, HUD_H, W, H - HUD_H) };
+        let names_always = cx.settings.v["map_names"].as_str() == Some("always");
         if !t.is_empty() {
-            let (mw, mh) = explore::size_of(t);
-            // MAPVIEW1: 32 px tiles at 1280 wide (16 logical), the camera centred on the party and clamped to the map;
-            // a map smaller than the view is centred.
-            let ts = 16;
-            let cam = |area_pos: i32, area_len: i32, party: i64, tiles: i64| -> i32 {
-                let len = ts * tiles as i32;
-                if len <= area_len {
-                    area_pos + (area_len - len) / 2
-                } else {
-                    (area_pos + area_len / 2 - (party as i32 * ts + ts / 2)).clamp(area_pos + area_len - len, area_pos)
-                }
-            };
-            let ox = cam(map_area.x, map_area.w, gs.position.0, mw);
-            let oy = cam(map_area.y, map_area.h, gs.position.1, mh);
+            let ts = TILE;
+            let ox = map_area.x + map_area.w / 2 - (gs.position.0 as i32 * ts + ts / 2);
+            let oy = map_area.y + map_area.h / 2 - (gs.position.1 as i32 * ts + ts / 2);
             self.geo = (ox, oy, ts);
             // ASSETORG2 4.5: the world lineage's tile sets, child first, then common
             let mut lineage = d.lineage(&gs.world_id);
             lineage.reverse();
             let sets = emberwake_content::art::region_sets(&lineage);
             let set_refs: Vec<&str> = sets.iter().map(String::as_str).collect();
-            for (y, row) in explore::rows_of(t).iter().enumerate() {
-                for (x, ch) in row.iter().enumerate() {
-                    let r = Rect::new(ox + x as i32 * ts, oy + y as i32 * ts, ts, ts);
-                    if r.y + r.h <= map_area.y || r.y >= map_area.y + map_area.h || r.x + r.w <= map_area.x || r.x >= map_area.x + map_area.w {
-                        continue;
-                    }
-                    let tile = emberwake_content::art::region_tile(*ch);
-                    match tile.and_then(|t| cx.art.tile_in(&set_refs, t, x as i32, y as i32, ts)) {
+            ui.push_clip(map_area);
+            let (x0, x1) = ((map_area.x - ox).div_euclid(ts), (map_area.x + map_area.w - ox - 1).div_euclid(ts));
+            let (y0, y1) = ((map_area.y - oy).div_euclid(ts), (map_area.y + map_area.h - oy - 1).div_euclid(ts));
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    let r = Rect::new(ox + x * ts, oy + y * ts, ts, ts);
+                    // render only: off the map is the wall (`#`), nothing walkable
+                    let ch = explore::tile(t, x as i64, y as i64).unwrap_or('#');
+                    let tile = emberwake_content::art::region_tile(ch);
+                    match tile.and_then(|t| cx.art.tile_in(&set_refs, t, x, y, ts)) {
                         Some(img) => ui.p.image(img, r),
                         None => ui.p.fill(r, match ch {
                             '.' => rgb(70, 90, 64),
@@ -519,9 +530,13 @@ impl Screen<GameCx> for RegionMap {
                 }
             }
             if !modal {
-                ui.push("map", "map", s_or(loc, "name", ""), Rect::new(ox.max(map_area.x), oy.max(map_area.y), (ts * mw as i32).min(map_area.w), (ts * mh as i32).min(map_area.h)), true, false, Some(RAct::MapClick), Vec::new());
+                ui.push("map", "map", s_or(loc, "name", ""), map_area, true, false, Some(RAct::MapClick), Vec::new());
             }
             let steps = gs.explore_int("loc_steps");
+            let ahead = (gs.position.0 + self.facing.0, gs.position.1 + self.facing.1);
+            let legend_hover = self.legend_hover(live);
+            // (marker, name, the name sits over a badge)
+            let mut labels: Vec<(Rect, String, bool)> = Vec::new();
             for raw in json::aget(loc, "markers") {
                 let m = explore::marker_full(json::dict(raw));
                 let view = explore::marker_view(&d, &gs, loc, &m);
@@ -534,43 +549,58 @@ impl Screen<GameCx> for RegionMap {
                     continue;
                 }
                 let r = Rect::new(ox + at.0 as i32 * ts, oy + at.1 as i32 * ts, ts, ts);
-                if r.y < map_area.y || r.y + r.h > map_area.y + map_area.h + ts / 2 || r.x < map_area.x || r.x + r.w > map_area.x + map_area.w {
+                let seen = r.intersect(map_area);
+                if seen.w <= 0 || seen.h <= 0 {
                     continue;
                 }
                 let kind = s(&m, "kind");
-                let (col, glyph) = Self::marker_style(&kind, &state);
+                let id = s(&m, "id");
+                let label = s(&view, "label");
                 let (cx_, cy_) = (r.x as f32 + ts as f32 / 2.0, r.y as f32 + ts as f32 / 2.0);
+                let mut services = Vec::new();
                 if kind == "npc" {
                     let who = d.resolve(&gs.world_id, "characters", &s(&m, "character"));
+                    services = explore::npc_services(&d, &gs, &s(who, "_qid"));
                     let (body, palette, _) = crate::screens::character_art(&d, who);
+                    let (col, _) = Self::marker_style(&kind, &state);
                     ui.p.circle(cx_, cy_, ts as f32 * 0.42, col);
                     let tok = Rect::new(r.x + ts / 8, r.y + ts / 8, ts - ts / 4, ts - ts / 4);
                     match cx.art.first_token(&emberwake_content::art::body_chain(&body), &palette, tok.w) {
                         Some(img) => ui.p.image(img, tok),
                         None => ui.p.text_center(cx_, cy_ - 4.0, &s(who, "name").chars().next().unwrap_or('?').to_string(), BODY, rgb(20, 20, 20)),
                     }
-                    ui.p.text_center(cx_ + 0.5, r.y as f32 - 8.5, &s(&view, "label"), SMALL, rgba(0, 0, 0, 200));
-                    ui.p.text_center(cx_, r.y as f32 - 9.0, &s(&view, "label"), SMALL, TEXT);
-                    match s(&view, "badge").as_str() {
-                        "quest" => {
-                            ui.p.text(r.x as f32 + ts as f32 - 5.0, r.y as f32 - 2.0, "!", TITLE, GOLD);
+                    // 2.2: the first service is the badge (turn_in and offer are today's `ready` and `quest`)
+                    if let Some(first) = services.first() {
+                        let br = Rect::new(r.x + ts - 5, r.y - 5, 9, 9);
+                        let px = ui.icon_px(Rect::new(0, 0, br.w + 4, br.h + 4));
+                        match cx.art.image(&service_icon(first), px, px) {
+                            Some(img) => ui.p.image(img, br),
+                            None => service_glyph(&mut ui, first, br),
                         }
-                        "ready" => {
-                            ui.p.text(r.x as f32 + ts as f32 - 5.0, r.y as f32 - 2.0, "?", TITLE, GOOD);
-                        }
-                        _ => {}
                     }
                 } else {
-                    ui.p.panel(r.inset(ts / 5), col, rgba(255, 255, 255, 90), 2.0);
-                    ui.p.text_center(cx_, cy_ - 4.5, glyph, BODY, rgb(16, 16, 20));
-                    if kind == "exit" {
-                        ui.p.text_center(cx_ + 0.5, r.y as f32 - 8.5, &s(&view, "label"), SMALL, rgba(0, 0, 0, 200));
-                        ui.p.text_center(cx_, r.y as f32 - 9.0, &s(&view, "label"), SMALL, TEXT);
+                    let px = ui.icon_px(Rect::new(0, 0, ts + 4, ts + 4));
+                    match cx.art.image(&emberwake_content::art::marker(marker_icon(&kind, &state)), px, px) {
+                        Some(img) => ui.p.image(img, r),
+                        None => {
+                            let (col, glyph) = Self::marker_style(&kind, &state);
+                            ui.p.panel(r.inset(ts / 5), col, rgba(255, 255, 255, 90), 2.0);
+                            ui.p.text_center(cx_, cy_ - 4.5, glyph, BODY, rgb(16, 16, 20));
+                        }
                     }
                 }
+                // 2.3: names always (people and exits, MAPREAD1), or on hover: the marker or its legend row under the
+                // pointer, or the marker the party faces
+                let named = if names_always { kind == "npc" || kind == "exit" } else { (!modal && ui.hover(r)) || legend_hover.as_deref() == Some(id.as_str()) || at == ahead };
+                if named {
+                    labels.push((r, label.clone(), !services.is_empty()));
+                }
                 if !modal {
-                    let id = s(&m, "id");
-                    ui.push(format!("marker.{id}"), "marker", s(&view, "label"), r, true, false, Some(RAct::Marker(id)), tip(&s(&view, "label"), &s(&view, "verb")));
+                    let mut t = tip(&label, &s(&view, "verb"));
+                    if !services.is_empty() {
+                        t.push((services_text(&services), INFO));
+                    }
+                    ui.push(format!("marker.{id}"), "marker", label.clone(), r, true, false, Some(RAct::Marker(id)), t);
                 }
             }
             // the party
@@ -579,6 +609,15 @@ impl Screen<GameCx> for RegionMap {
             ui.p.circle(pcx, pcy, ts as f32 * 0.3, rgb(250, 214, 60));
             ui.p.line(pcx, pcy, pcx + self.facing.0 as f32 * ts as f32 * 0.32, pcy + self.facing.1 as f32 * ts as f32 * 0.32, rgb(40, 30, 10), 0.0);
             ui.push("party", "party", format!("Party at {}, {}", gs.position.0, gs.position.1), pr, true, false, None, Vec::new());
+            // the names over everything on the map, kept inside the map area
+            for (r, label, badge) in labels {
+                let w = ui.p.text_w(&label, SMALL);
+                let lx = (r.x as f32 + ts as f32 / 2.0 - w / 2.0).min((map_area.x + map_area.w) as f32 - 2.0 - w).max(map_area.x as f32 + 2.0);
+                let ly = (r.y as f32 - if badge { 5.0 } else { 1.0 } - ui.p.line_h(SMALL)).max(map_area.y as f32 + 1.0);
+                ui.p.text(lx + 0.5, ly + 0.5, &label, SMALL, rgba(0, 0, 0, 200));
+                ui.p.text(lx, ly, &label, SMALL, TEXT);
+            }
+            ui.pop_clip();
         } else {
             ui.p.text(20.0, 40.0, &s_or(loc, "name", "Nowhere"), 11.0, GOLD);
             let y = ui.para(20, 58, 440, &s(loc, "description"), BODY, TEXT);
@@ -589,54 +628,22 @@ impl Screen<GameCx> for RegionMap {
             }
         }
         // -- HUD bar (PLAYUI1-H): the location name; gold, supplies and the icon buttons at the right
-        ui.p.fill(Rect::new(0, 0, W, MAP.y), rgba(10, 14, 22, 255));
         let name = s_or(loc, "name", "").to_string();
         let why = if modal { "Finish the conversation, shop or page first." } else { "" };
         hud_bar(&mut ui, cx, 4, &name, ("region.menu", "Esc"), why, &REGION_HELP, RAct::Hud);
-        // -- Right panel: here + log
-        let side = Rect::new(SIDE_X - 2, 23, W - SIDE_X + 2, H - 23);
-        ui.p.fill(side, rgba(12, 18, 28, 235));
-        let mut y = 28;
+        // -- The legend (2.1 A) at the top right and the event log ticker (MAPLOG1) at the bottom left; off in a talk
         if !t.is_empty() && !talking {
-            ui.p.text(SIDE_X as f32 + 2.0, y as f32, "Here", BODY, INFO);
-            y += 12;
-            for raw in json::aget(loc, "markers") {
-                let m = explore::marker_full(json::dict(raw));
-                let view = explore::marker_view(&d, &gs, loc, &m);
-                if s(&view, "state") == "absent" || s(&m, "kind") == "point" {
-                    continue;
-                }
-                let id = s(&m, "id");
-                let (col, _) = Self::marker_style(&s(&m, "kind"), &s(&view, "state"));
-                let r = Rect::new(SIDE_X, y, W - SIDE_X - 4, 12);
-                ui.p.fill(Rect::new(r.x + 2, r.y + 3, 5, 6), col);
-                ui.row(&format!("here.{id}"), Rect::new(r.x + 8, r.y, r.w - 8, r.h), &s(&view, "label"), TEXT, (!modal).then(|| RAct::Marker(id.clone())), false, tip(&s(&view, "label"), &s(&view, "verb")));
-                y += 13;
-            }
-            y += 4;
+            self.draw_legend(&mut ui, cx, modal);
         }
-        let max_lines = ((H - y - 4) / 8).max(1) as usize;
-        let mut lines: Vec<String> = Vec::new();
-        for l in cx.log.iter().rev() {
-            let mut wrapped = ui.p.wrap(l, SMALL, (W - SIDE_X - 8) as f32);
-            wrapped.reverse();
-            lines.extend(wrapped);
-            if lines.len() >= max_lines {
-                break;
-            }
-        }
-        lines.truncate(max_lines);
-        lines.reverse();
-        for l in &lines {
-            ui.p.text(SIDE_X as f32 + 2.0, y as f32, l, SMALL, TEXT);
-            y += 8;
+        if !talking {
+            self.draw_ticker(&mut ui, cx, modal);
         }
         // -- Dialogue dock
         if let Some(r) = self.runner.as_ref().filter(|r| !r.closed) {
             let view = r.view(&d, &gs);
-            let dock = Rect::new(0, 203, W, H - 203);
+            let dock = Rect::new(0, DOCK_Y, W, H - DOCK_Y);
             ui.p.fill(dock, rgb(14, 20, 34));
-            ui.p.line(0.0, 203.0, W as f32, 203.0, FRAME_LINE, 0.0);
+            ui.p.line(0.0, DOCK_Y as f32, W as f32, DOCK_Y as f32, FRAME_LINE, 0.0);
             let pbox = Rect::new(6, 208, 93, 120);
             ui.p.panel(pbox, rgb(22, 30, 48), BORDER, 2.0);
             let speaker = d.resolve(&gs.world_id, "characters", &s(&view, "speaker"));
@@ -752,6 +759,8 @@ impl Screen<GameCx> for RegionMap {
         } else if k == Key::Char('e') || k == Key::Enter {
             let dir = self.facing;
             self.interact(cx, dir);
+        } else if matches!(k, Key::Char(c) if c.eq_ignore_ascii_case(&'l')) {
+            self.act(cx, RAct::Log);
         } else if let Some(h) = hud_key(k) {
             self.act(cx, RAct::Hud(h));
         }
@@ -778,7 +787,7 @@ impl Screen<GameCx> for RegionMap {
             "walking": !self.walk.is_empty(), "log": cx.log.iter().rev().take(8).rev().collect::<Vec<_>>(),
             "dialogue": self.runner.as_ref().filter(|r| !r.closed).map(|r| Value::Object(r.view(&cx.data, gs))),
             "turn_in": self.pending.as_ref().map(|p| json!({"quest": p["quest"], "offers": p["offers"], "picks": self.picks})),
-            "lore": self.lore.as_ref().map(|l| l.0.clone())})
+            "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open})
     }
 
     /// MUSIC2: shop while the shop is open, else the location's kind.
@@ -885,6 +894,203 @@ impl RegionMap {
     }
 }
 
+impl RegionMap {
+    /// The marker whose legend row the pointer was over in the last frame (2.3: its marker shows its name).
+    fn legend_hover(&self, live: bool) -> Option<String> {
+        if !live {
+            return None;
+        }
+        self.w.iter().find(|w| w.kind == "row" && w.rect.contains(self.mouse.0, self.mouse.1)).and_then(|w| w.id.strip_prefix("here.")).map(str::to_string)
+    }
+
+    /// The legend (spec PLAYUI1 2.1 A, MAPNAV1-U's collapse): a pane floating at the map's top right under the HUD bar.
+    /// Its header "Here (N)" with a chevron collapses it to the header (kept in the settings as `map_legend_open`); a
+    /// row per marker shows the marker's map icon, its name and (people) their service icons at the right; spent
+    /// markers dim. A row click walks there as before. Width from the texts, at most `LEGEND_MAX` (times the text size).
+    fn draw_legend(&mut self, ui: &mut Ui<RAct>, cx: &mut Cx, modal: bool) {
+        let d = cx.data.clone();
+        let gs = cx.gs().clone();
+        let loc = explore::location(&d, &gs);
+        // (id, kind, state, label, verb, services)
+        let mut rows: Vec<(String, String, String, String, String, Vec<&'static str>)> = Vec::new();
+        for m in explore::markers_of(loc) {
+            let view = explore::marker_view(&d, &gs, loc, &m);
+            let (kind, state) = (s(&m, "kind"), s(&view, "state"));
+            if state == "absent" || kind == "point" {
+                continue;
+            }
+            let services = if kind == "npc" { explore::npc_services(&d, &gs, &s(d.resolve(&gs.world_id, "characters", &s(&m, "character")), "_qid")) } else { Vec::new() };
+            rows.push((s(&m, "id"), kind, state, s(&view, "label"), s(&view, "verb"), services));
+        }
+        let open = cx.settings.v["map_legend_open"].as_bool().unwrap_or(true);
+        let rh = (ui.p.line_h(BODY).ceil() as i32 + 4).max(14);
+        let title = format!("Here ({})", rows.len());
+        let mut w = 14 + ui.p.text_w(&title, BODY).ceil() as i32 + 8;
+        for (_, _, _, label, _, services) in &rows {
+            w = w.max(4 + ICON + 4 + ui.p.text_w(label, BODY).ceil() as i32 + 6 + services.len() as i32 * (SERVICE + 1) + 4);
+        }
+        let w = w.min((LEGEND_MAX as f32 * ui.p.fonts.scale).round() as i32);
+        let x = W - 4 - w;
+        let head = Rect::new(x, HUD_H + 4, w, rh);
+        ui.p.fill(head, PANE);
+        let t = tip(&title, if open { "Click to fold the legend to this line." } else { "Click to open the legend: who and what is here." });
+        ui.section("legend", head, &title, "", open, RAct::Legend, t);
+        if !open || rows.is_empty() {
+            return;
+        }
+        let top = head.y + head.h + 1;
+        let content = rows.len() as i32 * rh;
+        let pane = Rect::new(x, top, w, content.min(H - 4 - top));
+        ui.p.fill(pane, PANE);
+        ui.p.panel(pane, rgba(0, 0, 0, 0), BORDER, 3.0);
+        let off = ui.scroll_begin("legend.rows", pane, content);
+        let px = ui.icon_px(Rect::new(0, 0, ICON + 4, ICON + 4));
+        let spx = ui.icon_px(Rect::new(0, 0, SERVICE + 4, SERVICE + 4));
+        for (i, (id, kind, state, label, verb, services)) in rows.into_iter().enumerate() {
+            let r = Rect::new(x, top - off + i as i32 * rh, w, rh);
+            let hover = !modal && ui.hover(r);
+            if hover {
+                ui.p.panel(r, PANEL_HI, rgb(110, 140, 196), 3.0);
+            }
+            let ir = Rect::new(r.x + 4, r.y + (rh - ICON) / 2, ICON, ICON);
+            match cx.art.image(&emberwake_content::art::marker(marker_icon(&kind, &state)), px, px) {
+                Some(img) => ui.p.image(img, ir),
+                None => ui.p.fill(Rect::new(ir.x + 2, ir.y + 2, ICON - 4, ICON - 4), Self::marker_style(&kind, &state).0),
+            }
+            let sw = services.len() as i32 * (SERVICE + 1);
+            let tx = ir.x + ICON + 4;
+            ui.p.text_fit(tx as f32, r.y as f32 + (rh as f32 - ui.p.line_h(BODY)) / 2.0, &label, BODY, (r.x + r.w - 4 - sw - tx) as f32, if state == "spent" { DIM } else { TEXT });
+            let mut sx = r.x + r.w - 4 - sw;
+            for sv in &services {
+                let sr = Rect::new(sx, r.y + (rh - SERVICE) / 2, SERVICE, SERVICE);
+                match cx.art.image(&service_icon(sv), spx, spx) {
+                    Some(img) => ui.p.image(img, sr),
+                    None => service_glyph(ui, sv, sr),
+                }
+                sx += SERVICE + 1;
+            }
+            let mut t = tip(&label, &verb);
+            if !services.is_empty() {
+                t.push((services_text(&services), INFO));
+            }
+            ui.push(format!("here.{id}"), "row", label.clone(), r, true, false, (!modal).then(|| RAct::Marker(id.clone())), t);
+        }
+        ui.scroll_end();
+    }
+
+    /// The event log ticker (MAPLOG1-U, spec PLAYUI1 2.1 A): the latest event on one line at the map's bottom left; L
+    /// or a click opens the last `LOG_OPEN` events (newest at the bottom), and again shows only the latest.
+    fn draw_ticker(&mut self, ui: &mut Ui<RAct>, cx: &Cx, modal: bool) {
+        let Some(latest) = cx.log.last().cloned() else { return };
+        let lh = ui.p.line_h(SMALL).ceil() as i32 + 1;
+        let max_w = ((TICKER_MAX as f32 * ui.p.fonts.scale).round() as i32).min(W - 8);
+        let inner = max_w - 15 - 4;
+        let lines: Vec<String> = if self.log_open {
+            let room = ((H - HUD_H - 16) / lh).max(1) as usize;
+            let mut out = Vec::new();
+            for l in cx.log.iter().rev().take(LOG_OPEN) {
+                let mut wrapped = ui.p.wrap(l, SMALL, inner as f32);
+                wrapped.reverse();
+                out.extend(wrapped);
+            }
+            out.truncate(room);
+            out.reverse();
+            out
+        } else {
+            vec![latest.clone()]
+        };
+        let text_w = lines.iter().map(|l| ui.p.text_w(l, SMALL).ceil() as i32).max().unwrap_or(0);
+        let w = (15 + text_w + 4).min(max_w);
+        let h = lines.len() as i32 * lh + 5;
+        let r = Rect::new(4, H - 4 - h, w, h);
+        let hover = !modal && ui.hover(r);
+        ui.p.fill(r, PANE);
+        ui.p.panel(r, rgba(0, 0, 0, 0), if hover { GOLD } else { BORDER }, 3.0);
+        let last_y = r.y + 3 + (lines.len() as i32 - 1) * lh;
+        draw_glyph(&mut ui.p, if self.log_open { Glyph::ChevronDown } else { Glyph::ChevronRight }, Rect::new(r.x + 4, last_y + (lh - 8) / 2, 8, 8), if hover { GOLD } else { DIM });
+        for (i, l) in lines.iter().enumerate() {
+            let ly = (r.y + 3 + i as i32 * lh) as f32;
+            ui.p.text_fit((r.x + 15) as f32, ly, l, SMALL, inner as f32, if i + 1 == lines.len() { TEXT } else { DIM });
+        }
+        let mut t = tip("Event log (L)", if self.log_open { "Click or press L to show only the latest event." } else { "Click or press L for the last 12 events." });
+        if !self.log_open && ui.p.text_w(&latest, SMALL) > inner as f32 {
+            t.push((latest.clone(), TEXT));
+        }
+        ui.push("log", "button", latest, r, !modal, self.log_open, Some(RAct::Log), t);
+    }
+}
+
+/// The legend pane's and the ticker's fill.
+const PANE: Rgba = rgba(12, 18, 28, 235);
+/// The legend's widest at text size Normal (spec PLAYUI1 2.1 A), and the ticker's.
+const LEGEND_MAX: i32 = 170;
+const TICKER_MAX: i32 = 360;
+/// The events the opened ticker shows (MAPLOG1-U).
+pub const LOG_OPEN: usize = 12;
+/// A legend row's marker icon and a service icon (logical px).
+const ICON: i32 = 12;
+const SERVICE: i32 = 10;
+
+/// The marker's icon in `map/markers/` (`emberwake_content::art::marker`; the MARKERS1 idea may move it to `ui/markers/`).
+fn marker_icon(kind: &str, state: &str) -> &'static str {
+    match (kind, state) {
+        ("exit", "locked") => "exit_locked",
+        ("exit", _) => "exit",
+        ("chest", "spent") => "chest_open",
+        ("chest", _) => "chest",
+        ("lore", _) => "lore",
+        ("encounter", _) => "encounter",
+        ("roamer", _) => "roamer",
+        ("npc", _) => "npc",
+        ("point", _) => "poi",
+        _ => "objective",
+    }
+}
+
+/// A service's icon (spec PLAYUI1 section 6): `turn_in` and `offer` are the quest badges `ready` and `quest`.
+fn service_icon(service: &str) -> String {
+    match service {
+        "turn_in" => emberwake_content::art::badge("ready"),
+        "offer" => emberwake_content::art::badge("quest"),
+        _ => format!("ui/services/{service}.png"),
+    }
+}
+
+/// "Quest to turn in, Shop" for a hover card.
+fn services_text(services: &[&str]) -> String {
+    services
+        .iter()
+        .map(|sv| match *sv {
+            "turn_in" => "Quest to turn in",
+            "offer" => "New quest",
+            "shop" => "Shop",
+            "recruit" => "Recruits",
+            _ => "",
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The drawn stand-in of a service icon: today's `?` and `!` badges, a coin for a shop, a plus for recruits.
+fn service_glyph(ui: &mut Ui<RAct>, service: &str, r: Rect) {
+    let (cx_, cy_, sz) = (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0, r.w as f32);
+    match service {
+        "turn_in" | "offer" => {
+            let (text, col) = if service == "turn_in" { ("?", GOOD) } else { ("!", GOLD) };
+            let size = SMALL.max(r.h as f32 * 0.9 / 1.28);
+            ui.p.text_center(cx_, cy_ - ui.p.line_h(size) / 2.0, text, size, col);
+        }
+        "shop" => {
+            ui.p.circle(cx_, cy_, sz * 0.45, rgb(150, 110, 30));
+            ui.p.circle(cx_, cy_, sz * 0.33, GOLD);
+        }
+        _ => {
+            ui.p.line(cx_ - sz * 0.4, cy_, cx_ + sz * 0.4, cy_, GOOD, 0.0);
+            ui.p.line(cx_, cy_ - sz * 0.4, cx_, cy_ + sz * 0.4, GOOD, 0.0);
+        }
+    }
+}
+
 /// "+90 HP · Owned 2 · Anyone can use it" style detail of an item.
 pub fn item_line(cx: &Cx, item: &str) -> String {
     if item.is_empty() {
@@ -901,139 +1107,16 @@ pub fn item_line(cx: &Cx, item: &str) -> String {
     parts.join(" · ")
 }
 
-// ---- HUD bar (PLAYUI1-H, spec PLAYUI1 3.4): the top bar of the region map and the world map ----------------------
-
-/// The HUD bar's height (logical px).
-pub const HUD_H: i32 = 20;
-/// An icon button's hit box (it holds a 14 px icon).
-const HUD_BOX: i32 = 18;
-
-/// A HUD bar icon button.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Hud {
-    Party,
-    Journal,
-    Stash,
-    Help,
-    Menu,
-}
-
-/// The buttons left to right: (button, widget id, name, key, icon in the asset layers, drawn stand-in, hover text). The
-/// Menu button's id and key are the screen's own (`hud_bar`'s `menu`).
-const HUD_BUTTONS: [(Hud, &str, &str, &str, &str, Glyph, &str); 5] = [
-    (Hud::Party, "hud.party", "Party", "P", "ui/hud/party.png", Glyph::Letter('P'), "Roster, level up, skills and gear."),
-    (Hud::Journal, "hud.journal", "Journal", "J", "ui/hud/journal.png", Glyph::Letter('J'), "Quests ready, active, on hold and completed."),
-    (Hud::Stash, "hud.stash", "Stash", "I", "ui/hud/stash.png", Glyph::Letter('I'), "The party's shared stash, beside the selected hero's gear."),
-    (Hud::Help, "hud.help", "Help", "?", "ui/help.png", Glyph::Help, ""),
-    (Hud::Menu, "", "Game menu", "", "ui/hud/menu.png", Glyph::Menu, "Party, journal, save, load, settings."),
-];
-
 /// The region map's controls (the Help button's hover card and popup).
-pub const REGION_HELP: [&str; 6] = [
+pub const REGION_HELP: [&str; 7] = [
     "Arrows or WASD: move",
     "E or Enter: use what the party faces",
     "Click: walk there, or on a marker to use it",
     "1-9: pick a reply in a conversation",
     "P: party   J: journal   I: stash",
+    "L: the last events, or only the latest",
     "Esc: back, or the game menu",
 ];
-
-/// The HUD bar's keys: P party, J journal, I stash, ? help (Esc stays each screen's own).
-pub fn hud_key(k: Key) -> Option<Hud> {
-    match k {
-        Key::Char(c) => match c.to_ascii_lowercase() {
-            'p' => Some(Hud::Party),
-            'j' => Some(Hud::Journal),
-            'i' => Some(Hud::Stash),
-            '?' => Some(Hud::Help),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-/// What a HUD button opens: Party the Character popup on the first active member's Stats tab, Stash the same popup's
-/// Gear tab (where the party's shared stash lives), Journal the journal (a notice while there are no quests), Help the
-/// controls `help`, Menu the game menu.
-pub fn hud_open(cx: &mut Cx, h: Hud, help: &[&str]) {
-    let first = cx.gs().party.active_members().first().map(|m| m.id.clone()).unwrap_or_default();
-    match h {
-        Hud::Party => cx.nav.push(Nav::Push(Box::new(crate::party::Character::new(cx, &first, "stats")))),
-        Hud::Stash => cx.nav.push(Nav::Push(Box::new(crate::party::Character::new(cx, &first, "gear")))),
-        Hud::Journal if !crate::hub::has_quests(cx) => show_errors(cx, vec!["No quests yet.".into()]),
-        Hud::Journal => cx.nav.push(Nav::Push(Box::new(crate::hub::Journal::default()))),
-        Hud::Help => {
-            let lines = std::iter::once("Controls".to_string()).chain(help.iter().map(|l| l.to_string())).collect();
-            cx.nav.push(Nav::Push(Box::new(aegis_ui::screen::Notice::new(lines))));
-        }
-        Hud::Menu => cx.nav.push(Nav::Push(Box::new(crate::hub::Hub::default()))),
-    }
-}
-
-/// Draws the HUD bar: `name` (gold) from `left`, then at the right gold, supplies and the icon buttons Party, Journal,
-/// Stash, Help and Menu (icons from the asset layers, drawn shapes while a file is missing). `menu` is the Menu
-/// button's widget id and key; `why` (when not empty) disables every button but Help and says why on its hover card;
-/// `help` lists the controls; `wrap` makes the screen's action of a button.
-#[allow(clippy::too_many_arguments)]
-pub fn hud_bar<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, left: i32, name: &str, menu: (&str, &str), why: &str, help: &[&str], wrap: impl Fn(Hud) -> A) {
-    ui.p.fill(Rect::new(0, 0, W, HUD_H), rgba(10, 14, 22, 255));
-    let (gold, supplies) = cx.game.as_ref().map(|g| (g.gs.party.gold, g.gs.party.supplies)).unwrap_or((0, 0));
-    let journal = crate::hub::has_quests(cx);
-    let px = ui.icon_px(Rect::new(0, 0, HUD_BOX, HUD_BOX));
-    let start = W - 3 - HUD_BUTTONS.len() as i32 * (HUD_BOX + 2) + 2;
-    for (i, (h, id, label, key, rel, glyph, body)) in HUD_BUTTONS.into_iter().enumerate() {
-        let r = Rect::new(start + i as i32 * (HUD_BOX + 2), (HUD_H - HUD_BOX) / 2, HUD_BOX, HUD_BOX);
-        let (id, key) = if h == Hud::Menu { menu } else { (id, key) };
-        let title = if key.is_empty() { label.to_string() } else { format!("{label} ({key})") };
-        let mut t: Tip = tip(&title, body);
-        if h == Hud::Help {
-            t.extend(help.iter().map(|l| (l.to_string(), TEXT)));
-        }
-        let off = match h {
-            Hud::Help => "",
-            _ if !why.is_empty() => why,
-            Hud::Journal if !journal => "No quests yet.",
-            _ => "",
-        };
-        if !off.is_empty() {
-            t.push((off.to_string(), FOE));
-        }
-        ui.icon_button(id, r, label, cx.art.image(rel, px, px), glyph, wrap(h), off.is_empty(), false, t);
-    }
-    // supplies, then gold, right to left: an icon and the amount
-    let icon = Ui::<A>::icon_rect(Rect::new(0, 0, HUD_BOX, HUD_BOX)).w;
-    let ty = (HUD_H as f32 - ui.p.line_h(BODY)) / 2.0;
-    let mut right = start - 6;
-    let counters = [
-        ("hud.supplies", "Supplies", "ui/hud/supplies.png", format!("{supplies}/{SUPPLIES_MAX}"), "Food for the road: each day of travel eats some, and so does making camp."),
-        ("hud.gold", "Gold", "ui/hud/gold.png", gold.to_string(), "Earned from fights, chests and quests; spent in shops."),
-    ];
-    for (id, label, rel, amount, body) in counters {
-        let tw = ui.p.text_w(&amount, BODY).ceil() as i32;
-        let r = Rect::new(right - (icon + 3 + tw), 0, icon + 3 + tw, HUD_H);
-        let ir = Rect::new(r.x, (HUD_H - icon) / 2, icon, icon);
-        match cx.art.image(rel, px, px) {
-            Some(img) => ui.p.image(img, ir),
-            None => counter_glyph(ui, id, ir),
-        }
-        ui.p.text((ir.x + icon + 3) as f32, ty, &amount, BODY, TEXT);
-        ui.push(id, "label", amount.clone(), r, true, false, None, tip(label, body));
-        right = r.x - 8;
-    }
-    ui.p.text_fit(left as f32, (HUD_H as f32 - ui.p.line_h(TITLE)) / 2.0, name, TITLE, (right - left - 4) as f32, GOLD);
-}
-
-/// The drawn stand-in of the gold or supplies icon: a coin, or a tied sack.
-fn counter_glyph<A>(ui: &mut Ui<A>, id: &str, r: Rect) {
-    let (cx_, cy_, s) = (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0, r.w as f32);
-    if id == "hud.gold" {
-        ui.p.circle(cx_, cy_, s * 0.42, rgb(150, 110, 30));
-        ui.p.circle(cx_, cy_, s * 0.32, GOLD);
-    } else {
-        ui.p.panel(Rect::new(r.x + r.w / 6, r.y + r.h / 3, r.w - r.w / 3, r.h - r.h / 3), rgb(150, 112, 70), rgb(96, 70, 40), 3.0);
-        ui.p.line(cx_ - s * 0.18, r.y as f32 + s * 0.2, cx_ + s * 0.18, r.y as f32 + s * 0.2, rgb(196, 160, 110), 0.0);
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -1101,198 +1184,262 @@ mod tests {
     }
 }
 
-/// PLAYUI1-H: the HUD bar of the region map and the world map, drawn headless over a debug game of the first playable
-/// world (nothing saved; the art layers are off, so every icon is its drawn stand-in).
+/// PLAYUI1-M (spec PLAYUI1 2.1-2.3, 3.2): the full-width region map, its legend, the event log ticker, names on hover
+/// and the centred camera, drawn headless over a debug game of the first playable world (the art layers are off, so
+/// tiles are flat fills and icons their drawn stand-ins).
 #[cfg(test)]
-mod hud_tests {
+mod map_tests {
     use super::*;
-    use crate::screens::{default_settings, Game};
-    use aegis_ui::painter::{Fonts, TextRec, View};
+    use crate::hud::hud_tests::{frame, game_cx, gfx, rect};
+    use aegis_ui::painter::TextRec;
     use aegis_ui::screen::{Settings, TEXT_SIZES};
-    use emberwake_world::Data;
-    use std::path::Path;
-    use std::sync::Arc;
 
-    fn game_cx() -> Cx {
-        let tmp = std::env::temp_dir().join(format!("emberwake_hud_{}", std::process::id()));
-        let dir = Data::find_data_dir(Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
-        let data = Arc::new(Data::open(&dir).expect("data").0);
-        let world = emberwake_world::new_game::playable_worlds(&data).first().cloned().expect("a playable world");
-        let gs = emberwake_world::new_game::create_for_world(&data, &world, 1).expect("a new game");
-        let clean = gs.to_value();
-        let app = GameCx {
-            data,
-            manifest: Default::default(),
-            game: Some(Game { gs, slot: -1, clean, busy: false, sample: true }),
-            save_dir: tmp.join("saves"),
-            tuning: aegis_ui::tuning::TuningFile::new(None),
-            log: Vec::new(),
-            encounter: String::new(),
-            seed: None,
-            debug: true,
-            data_dir: dir,
-        };
-        Cx {
-            settings: Settings::load(tmp.join("settings.json"), default_settings()),
-            art: aegis_ui::art::Art::new(None),
-            audio: aegis_ui::audio::Audio::offline(None),
-            nav: Vec::new(),
-            notice: Vec::new(),
-            shot_dir: tmp,
-            quit: false,
-            answers: Vec::new(),
-            playtest: aegis_ui::playtest::Playtests::off(),
-            app,
-        }
-    }
-
-    fn gfx() -> Gfx {
-        let font = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../engine/assets/fonts/OpenSans-SemiBold.ttf")).expect("font");
-        Gfx { canvas: aegis_ui::canvas::Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Default::default() }
-    }
-
-    /// One frame of `screen` at text size `scale` (the mouse off the canvas); the texts drawn.
-    fn frame(screen: &mut dyn Screen<GameCx>, cx: &mut Cx, g: &mut Gfx, scale: f32) -> Vec<TextRec> {
-        g.fonts.scale = scale;
+    /// One frame with the mouse at `mouse` (text size Normal); the texts drawn.
+    fn frame_at(map: &mut RegionMap, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32)) -> Vec<TextRec> {
+        g.fonts.scale = 1.0;
         g.fonts.audit = Some(Vec::new());
-        screen.draw(cx, g, (-500, -500), true);
+        map.draw(cx, g, mouse, true);
         g.fonts.audit.take().unwrap_or_default()
     }
 
-    fn rect(w: &Value) -> (i64, i64, i64, i64) {
-        let n = |i: usize| w["rect"][i].as_i64().unwrap_or(0);
-        (n(0), n(1), n(2), n(3))
+    fn widget(map: &RegionMap, id: &str) -> Option<Value> {
+        map.widgets().into_iter().find(|w| w["id"] == id)
     }
 
-    /// The bar's widgets, left to right: (id, kind, enabled).
-    fn bar(screen: &dyn Screen<GameCx>) -> Vec<(String, String, bool)> {
-        let mut w: Vec<Value> = screen.widgets().into_iter().filter(|w| rect(w).1 + rect(w).3 <= HUD_H as i64).collect();
-        w.sort_by_key(|w| rect(w).0);
-        w.iter().map(|w| (s(json::dict(w), "id"), s(json::dict(w), "kind"), json::b(json::dict(w), "enabled", false))).collect()
+    fn ids_with(map: &RegionMap, prefix: &str) -> Vec<String> {
+        map.widgets().iter().map(|w| s(json::dict(w), "id")).filter(|id| id.starts_with(prefix)).collect()
     }
 
-    fn ids(b: &[(String, String, bool)]) -> Vec<&str> {
-        b.iter().map(|w| w.0.as_str()).collect()
+    fn area() -> Rect {
+        Rect::new(0, HUD_H, W, H - HUD_H)
     }
 
-    /// The screen the last navigation opened: (id, state); the navigation is cleared.
-    fn opened(cx: &mut Cx) -> (String, Value) {
-        let out = match cx.nav.last() {
-            Some(Nav::Push(s)) => (s.id().to_string(), s.state(cx)),
-            _ => (String::new(), Value::Null),
-        };
-        cx.nav.clear();
-        out
+    /// The markers the legend lists, in order: present (or spent or locked) and not a bare point.
+    fn listed(cx: &Cx) -> Vec<Dict> {
+        let gs = cx.gs();
+        let loc = explore::location(&cx.data, gs);
+        explore::markers_of(loc)
+            .into_iter()
+            .filter(|m| s(&explore::marker_view(&cx.data, gs, loc, m), "state") != "absent" && s(m, "kind") != "point")
+            .collect()
+    }
+
+    /// A text drawn as `marker`'s name: `label` just above the marker's tile (shifted sideways at most to stay inside).
+    fn named_above(recs: &[TextRec], label: &str, marker: (i64, i64, i64, i64)) -> bool {
+        let (mx, my, mw, _) = marker;
+        recs.iter().any(|r| r.text == label && r.y + r.h <= my as f32 + 2.0 && r.y >= my as f32 - 24.0 && (r.x + r.w / 2.0 - (mx + mw / 2) as f32).abs() <= r.w / 2.0 + TILE as f32)
     }
 
     #[test]
-    fn the_region_map_bar_is_the_name_then_gold_supplies_and_five_icon_buttons() {
+    fn the_map_takes_the_full_width_under_the_bar() {
         let (mut cx, mut g) = (game_cx(), gfx());
         let mut map = RegionMap::new(&mut cx);
-        let recs = frame(&mut map, &mut cx, &mut g, 1.0);
-        let b = bar(&map);
-        assert_eq!(ids(&b), ["hud.gold", "hud.supplies", "hud.party", "hud.journal", "hud.stash", "hud.help", "region.menu"], "{b:?}");
-        assert!(b[2..].iter().all(|w| w.1 == "icon_button"), "{b:?}");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let m = widget(&map, "map").expect("the map");
+        assert_eq!(rect(&m), (0, HUD_H as i64, W as i64, (H - HUD_H) as i64));
+        // a click on an open tile next to the party walks there (the click maps through the centred camera)
         let gs = cx.gs().clone();
-        let name = s_or(explore::location(&cx.data, &gs), "name", "").to_string();
-        let top: Vec<&TextRec> = recs.iter().filter(|r| r.y + r.h / 2.0 < HUD_H as f32).collect();
-        let at = |t: &str| top.iter().find(|r| r.text == t).map(|r| r.x);
-        assert!(!name.is_empty() && at(&name).is_some_and(|x| x < 10.0), "the location name at the top left: {top:?}");
-        let (gold, supplies) = (at(&gs.party.gold.to_string()), at(&format!("{}/{SUPPLIES_MAX}", gs.party.supplies)));
-        assert!(gold.zip(supplies).is_some_and(|(g, s)| g < s && g > W as f32 / 2.0), "gold, then supplies at the right: {top:?}");
-        assert!(!recs.iter().any(|r| r.text.contains("WASD") || r.text.starts_with("Supplies")), "the help line and the supplies text left the top left");
-        let widgets = map.widgets();
-        let card = |id: &str| widgets.iter().find(|w| w["id"] == id).map(|w| w["tip"].to_string()).unwrap_or_default();
-        for (id, key) in [("hud.party", "(P)"), ("hud.journal", "(J)"), ("hud.stash", "(I)"), ("hud.help", "(?)"), ("region.menu", "(Esc)")] {
-            assert!(card(id).contains(key), "{id}'s card names its key: {}", card(id));
+        let t = explore::template_of(&cx.data, explore::location(&cx.data, &gs));
+        let open = explore::DIRS.into_iter().map(|d| (gs.position.0 + d.0, gs.position.1 + d.1)).find(|p| explore::is_open(t, p.0, p.1));
+        if let Some(p) = open {
+            let (ox, oy, ts) = map.geo;
+            let at = (ox + p.0 as i32 * ts + ts / 2, oy + p.1 as i32 * ts + ts / 2);
+            frame_at(&mut map, &mut cx, &mut g, at);
+            assert!(map.click(&mut cx, at), "the map takes the click");
+            assert_eq!(map.state(&cx)["walking"], json!(true), "a click next to the party walks there");
         }
-        assert!(card("hud.help").contains("WASD"), "Help's card lists the controls");
+    }
+
+    /// 3.2 A: no clamp; with the party on each corner tile of every map of the world, the party is drawn at the centre
+    /// of the map area (within a tile), and past the map's edge the wall is drawn (render only).
+    #[test]
+    fn the_camera_centres_on_the_party_and_walls_fill_past_the_edge() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        cx.settings.v["map_legend_open"] = json!(false);
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        let mut maps = 0;
+        for loc in d.merged_entries(&world, "locations") {
+            let t = explore::template_of(&d, loc);
+            if t.is_empty() {
+                continue;
+            }
+            maps += 1;
+            let (w, h) = explore::size_of(t);
+            for (x, y) in [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)] {
+                cx.gs_mut().location_id = s(loc, "id");
+                let mut map = RegionMap::new(&mut cx);
+                // after `resume` (which puts the party back on a safe tile): the corner itself, wall or not
+                cx.gs_mut().position = (x, y);
+                cx.log.clear();
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                let (px, py, pw, ph) = rect(&widget(&map, "party").expect("the party"));
+                let a = area();
+                let (dx, dy) = ((px + pw / 2) as i32 - (a.x + a.w / 2), (py + ph / 2) as i32 - (a.y + a.h / 2));
+                assert!(dx.abs() <= TILE && dy.abs() <= TILE, "{} at ({x}, {y}): the party is {dx}, {dy} off the centre", s(loc, "id"));
+                // the canvas pixel just outside the map, away from the corner the party stands on
+                let ox = if x == 0 { a.x + 2 } else { a.x + a.w - 3 };
+                let oy = if y == 0 { a.y + 20 } else { a.y + a.h - 3 };
+                let i = ((oy * g.canvas.w + ox) * 4) as usize;
+                assert_eq!(&g.canvas.px[i..i + 3], &[40, 60, 50], "{} at ({x}, {y}): the wall is drawn past the edge at ({ox}, {oy})", s(loc, "id"));
+            }
+        }
+        assert!(maps > 0, "the world has a location with a map");
     }
 
     #[test]
-    fn the_bar_buttons_open_party_journal_stash_help_and_menu() {
+    fn the_legend_lists_the_markers_and_folds_to_its_header() {
         let (mut cx, mut g) = (game_cx(), gfx());
         let mut map = RegionMap::new(&mut cx);
         frame(&mut map, &mut cx, &mut g, 1.0);
-        let first = cx.gs().party.active_members().first().map(|m| m.id.clone()).expect("an active member");
-        map.click_id(&mut cx, "hud.party").expect("party");
-        let (id, state) = opened(&mut cx);
-        assert_eq!((id.as_str(), state["member"].clone(), state["tab"].clone()), ("character", json!(first), json!("stats")));
-        map.click_id(&mut cx, "hud.stash").expect("stash");
-        let (id, state) = opened(&mut cx);
-        assert_eq!((id.as_str(), state["member"].clone(), state["tab"].clone()), ("character", json!(first), json!("gear")), "the shared stash is on the Gear tab");
-        map.click_id(&mut cx, "hud.help").expect("help");
-        let (id, state) = opened(&mut cx);
-        assert_eq!(id, "notice");
-        assert_eq!(state["lines"].as_array().map(|l| l.len()), Some(REGION_HELP.len() + 1), "a title and the controls");
-        map.click_id(&mut cx, "region.menu").expect("menu");
-        assert_eq!(opened(&mut cx).0, "hub");
-        // Journal: on when there are quests (the Hub's rule), else off with the reason on its card
-        let journal = crate::hub::has_quests(&cx);
-        let b = bar(&map);
-        assert_eq!(b.iter().find(|w| w.0 == "hud.journal").map(|w| w.2), Some(journal), "{b:?}");
-        if journal {
-            map.click_id(&mut cx, "hud.journal").expect("journal");
-            assert_eq!(opened(&mut cx).0, "journal");
+        let head = widget(&map, "legend").expect("the legend header");
+        assert_eq!(head["kind"], json!("section"));
+        let (hx, hy, hw, _) = rect(&head);
+        assert_eq!((hx + hw, hy), ((W - 4) as i64, (HUD_H + 4) as i64), "top right under the bar");
+        assert!(hw <= LEGEND_MAX as i64, "at most {LEGEND_MAX} wide at Normal: {hw}");
+        let markers = listed(&cx);
+        assert!(head["text"].as_str().is_some_and(|t| t == format!("Here ({})", markers.len())), "{head}");
+        let want: Vec<String> = markers.iter().map(|m| format!("here.{}", s(m, "id"))).collect();
+        let rows = ids_with(&map, "here.");
+        assert_eq!(rows, want);
+        // a person's row names their services on its hover card
+        let gs = cx.gs().clone();
+        for m in markers.iter().filter(|m| s(m, "kind") == "npc") {
+            let who = cx.data.resolve(&gs.world_id, "characters", &s(m, "character"));
+            let services = explore::npc_services(&cx.data, &gs, &s(who, "_qid"));
+            let card = widget(&map, &format!("here.{}", s(m, "id"))).map(|w| w["tip"].to_string()).unwrap_or_default();
+            assert_eq!(card.contains(&services_text(&services)) && !services.is_empty(), !services.is_empty(), "{card}");
         }
-        for (k, want) in [('i', "character"), ('P', "character"), ('?', "notice"), ('j', if journal { "journal" } else { "notice" })] {
-            map.key(&mut cx, Key::Char(k));
-            assert_eq!(opened(&mut cx).0, want, "key {k}");
-        }
-    }
-
-    #[test]
-    fn a_popup_turns_the_bar_buttons_off_but_help_and_the_counters_stay() {
-        let (mut cx, mut g) = (game_cx(), gfx());
-        let mut map = RegionMap::new(&mut cx);
-        map.lore = Some(("A page".into(), "Its text.".into()));
+        // a click folds it to the header, kept in the settings file; another opens it again
+        map.click_id(&mut cx, "legend").expect("fold");
+        assert_eq!(map.state(&cx)["legend_open"], json!(false));
         frame(&mut map, &mut cx, &mut g, 1.0);
-        let on: Vec<(String, bool)> = bar(&map).into_iter().map(|w| (w.0, w.2)).collect();
-        let want = [("hud.gold", true), ("hud.supplies", true), ("hud.party", false), ("hud.journal", false), ("hud.stash", false), ("hud.help", true), ("region.menu", false)];
-        assert_eq!(on, want.map(|(id, e)| (id.to_string(), e)));
-        map.key(&mut cx, Key::Char('i'));
-        assert!(cx.nav.is_empty(), "the keys wait too");
+        assert!(widget(&map, "legend").is_some() && ids_with(&map, "here.").is_empty(), "folded to its header");
+        let saved = Settings::load(cx.shot_dir.join("settings.json"), crate::screens::default_settings());
+        assert_eq!(saved.v["map_legend_open"], json!(false), "the fold is saved");
+        map.click_id(&mut cx, "legend").expect("open");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_eq!(ids_with(&map, "here."), want);
     }
 
     #[test]
-    fn the_world_map_gets_the_same_bar() {
-        let (mut cx, mut g) = (game_cx(), gfx());
-        let mut wm = crate::worldmap::WorldMap::new();
-        frame(&mut wm, &mut cx, &mut g, 1.0);
-        let b = bar(&wm);
-        assert_eq!(ids(&b), ["world_map.back", "hud.gold", "hud.supplies", "hud.party", "hud.journal", "hud.stash", "hud.help", "world_map.menu"], "{b:?}");
-        wm.click_id(&mut cx, "hud.stash").expect("stash");
-        assert_eq!(opened(&mut cx).1["tab"], json!("gear"));
-        wm.key(&mut cx, Key::Char('p'));
-        assert_eq!(opened(&mut cx).1["tab"], json!("stats"));
-        wm.click_id(&mut cx, "world_map.menu").expect("menu");
-        assert_eq!(opened(&mut cx).0, "hub");
-    }
-
-    /// TEXTFIT1: the bar's texts fit (nothing cut, past the canvas, overlapping or out of its control) and stay in the
-    /// bar at every text size, on both maps.
-    #[test]
-    fn the_bar_reads_clean_at_every_text_size() {
+    fn the_ticker_shows_the_latest_event_and_l_shows_the_last_12() {
         let (mut cx, mut g) = (game_cx(), gfx());
         let mut map = RegionMap::new(&mut cx);
-        let mut wm = crate::worldmap::WorldMap::new();
-        let screens: [&mut dyn Screen<GameCx>; 2] = [&mut map, &mut wm];
-        for screen in screens {
-            for (size, scale) in TEXT_SIZES {
-                let recs: Vec<TextRec> = frame(screen, &mut cx, &mut g, scale as f32).into_iter().filter(|r| r.y + r.h / 2.0 < HUD_H as f32).collect();
-                let boxes: Vec<(String, f32, f32, f32, f32)> = screen
-                    .widgets()
-                    .iter()
-                    .filter(|w| rect(w).1 < HUD_H as i64)
-                    .map(|w| {
-                        let (x, y, ww, hh) = rect(w);
-                        (s(json::dict(w), "id"), x as f32, y as f32, ww as f32, hh as f32)
-                    })
-                    .collect();
-                let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
-                assert_eq!(v["counts"], json!({"cut": 0, "edge": 0, "overlap": 0, "spill": 0}), "{} at {size}: {v}", screen.id());
-                for r in &recs {
-                    assert!(r.y >= 0.0 && r.y + r.h <= HUD_H as f32 + 0.5, "{} at {size}: '{}' leaves the bar ({} to {})", screen.id(), r.text, r.y, r.y + r.h);
+        cx.log = (0..20).map(|i| format!("Event {i}.")).collect();
+        let shown = |map: &RegionMap, recs: &[TextRec]| -> Vec<String> {
+            let (x, y, w, h) = rect(&widget(map, "log").expect("the ticker"));
+            recs.iter().filter(|r| r.x >= x as f32 && r.x < (x + w) as f32 && r.y >= y as f32 && r.y < (y + h) as f32).map(|r| r.text.clone()).collect()
+        };
+        let recs = frame(&mut map, &mut cx, &mut g, 1.0);
+        let (x, y, _, h) = rect(&widget(&map, "log").expect("the ticker"));
+        assert!(x < 10 && y + h >= (H - 10) as i64, "bottom left: {x}, {y}");
+        assert_eq!(shown(&map, &recs), ["Event 19."]);
+        map.key(&mut cx, Key::Char('l'));
+        let recs = frame(&mut map, &mut cx, &mut g, 1.0);
+        let want: Vec<String> = (20 - LOG_OPEN..20).map(|i| format!("Event {i}.")).collect();
+        assert_eq!(shown(&map, &recs), want, "the last {LOG_OPEN}, newest at the bottom");
+        map.click_id(&mut cx, "log").expect("the ticker");
+        let recs = frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_eq!(shown(&map, &recs), ["Event 19."]);
+        // hidden while talking (and the legend with it)
+        let world = cx.gs().world_id.clone();
+        let people: Vec<String> = cx.data.merged_entries(&world, "characters").iter().map(|c| s(c, "id")).collect();
+        for p in people {
+            map.talk(&mut cx, &p);
+            if map.talking() {
+                break;
+            }
+        }
+        assert!(map.talking(), "someone in the world talks");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert!(widget(&map, "log").is_none() && widget(&map, "legend").is_none(), "no ticker or legend in a conversation");
+    }
+
+    /// 2.3 A: names on hover by default (a marker or its legend row under the pointer, or the marker ahead), or always.
+    #[test]
+    fn names_show_on_hover_by_default_or_always() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        assert_eq!(cx.settings.v["map_names"], json!("hover"), "the default");
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let gs = cx.gs().clone();
+        let ahead = (gs.position.0 + map.facing.0, gs.position.1 + map.facing.1);
+        let t = explore::template_of(&cx.data, explore::location(&cx.data, &gs)).clone();
+        let a = area();
+        // (id, kind, label, rect, ahead) of the markers wholly inside the map area
+        let markers: Vec<(String, String, String, (i64, i64, i64, i64), bool)> = map
+            .widgets()
+            .iter()
+            .filter(|w| w["kind"] == "marker")
+            .filter_map(|w| {
+                let id = s(json::dict(w), "id").trim_start_matches("marker.").to_string();
+                let m = explore::markers_of(explore::location(&cx.data, &gs)).into_iter().find(|m| s(m, "id") == id)?;
+                let r = rect(w);
+                let inside = r.0 >= 0 && r.1 >= a.y as i64 + 24 && r.0 + r.2 <= W as i64 && r.1 + r.3 <= H as i64;
+                inside.then(|| (id, s(&m, "kind"), s(json::dict(w), "text"), r, explore::marker_pos(&t, &m, gs.explore_int("loc_steps")) == ahead))
+            })
+            .collect();
+        assert!(!markers.is_empty(), "the start shows a marker");
+        let recs = frame(&mut map, &mut cx, &mut g, 1.0);
+        for (id, _, label, r, faced) in &markers {
+            assert_eq!(named_above(&recs, label, *r), *faced, "{id}: named only when the party faces it");
+        }
+        // the pointer on a marker names it; on its legend row too
+        let (id, _, label, r, _) = &markers[0];
+        let centre = ((r.0 + r.2 / 2) as i32, (r.1 + r.3 / 2) as i32);
+        let recs = frame_at(&mut map, &mut cx, &mut g, centre);
+        assert!(named_above(&recs, label, *r), "{id}: hovered, named");
+        if let Some(row) = widget(&map, &format!("here.{id}")) {
+            let (x, y, w, h) = rect(&row);
+            let on_row = ((x + w / 2) as i32, (y + h / 2) as i32);
+            frame_at(&mut map, &mut cx, &mut g, on_row);
+            let recs = frame_at(&mut map, &mut cx, &mut g, on_row);
+            assert!(named_above(&recs, label, *r), "{id}: its legend row hovered, named");
+        }
+        // always: every person and exit
+        cx.settings.v["map_names"] = json!("always");
+        let recs = frame(&mut map, &mut cx, &mut g, 1.0);
+        for (id, kind, label, r, _) in &markers {
+            assert_eq!(named_above(&recs, label, *r), kind == "npc" || kind == "exit", "{id} ({kind}) with names always");
+        }
+    }
+
+    /// TEXTFIT1: the map's own texts (legend open and folded, ticker short and opened, names on hover and always) fit
+    /// at every text size: nothing cut, past the canvas, overlapping or out of its control.
+    #[test]
+    fn the_region_map_reads_clean_at_every_text_size() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        let place = cx.location_name(&cx.gs().world_id.clone(), &cx.gs().location_id.clone());
+        for line in ["The party rests (+40 HP).".to_string(), format!("Entered {place}."), "The party makes camp (-3 supplies, +40 HP).".into(), "Found: Healing Draught x2, 15 gold.".into()] {
+            cx.log(line);
+        }
+        for names in ["hover", "always"] {
+            cx.settings.v["map_names"] = json!(names);
+            for legend in [true, false] {
+                cx.settings.v["map_legend_open"] = json!(legend);
+                for log_open in [false, true] {
+                    map.log_open = log_open;
+                    for (size, scale) in TEXT_SIZES {
+                        let recs = frame(&mut map, &mut cx, &mut g, scale as f32);
+                        let boxes: Vec<(String, f32, f32, f32, f32)> = map
+                            .widgets()
+                            .iter()
+                            .map(|w| {
+                                let (x, y, ww, hh) = rect(w);
+                                (s(json::dict(w), "id"), x as f32, y as f32, ww as f32, hh as f32)
+                            })
+                            .collect();
+                        let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+                        let counts = &v["counts"];
+                        let label = format!("names {names}, legend {legend}, log {log_open} at {size}: {v}");
+                        assert_eq!((counts["cut"].clone(), counts["edge"].clone(), counts["spill"].clone()), (json!(0), json!(0), json!(0)), "{label}");
+                        // names may meet each other where people stand side by side (content); nothing else may overlap
+                        if names == "hover" {
+                            assert_eq!(counts["overlap"], json!(0), "{label}");
+                        }
+                    }
                 }
             }
         }
