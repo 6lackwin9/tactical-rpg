@@ -4,6 +4,8 @@
 //! principle 2). Pure: they read data entries; the screens and the checks resolve them against the layers.
 
 use aegis_core::json::{self, Dict};
+use emberwake_data::ItemDef;
+use emberwake_rules::gear::{Inventory, Slot};
 
 /// A body key's class and variant (`<class>` = `<class>/base`).
 pub fn split_body(key: &str) -> (&str, &str) {
@@ -30,6 +32,98 @@ pub fn body_chain(key: &str) -> Vec<String> {
     } else {
         vec![key.to_string(), class.to_string()]
     }
+}
+
+/// What a unit's off hand holds, for its look (WAR2H1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OffHand {
+    Empty,
+    /// A shield that weighs on its bearer (burden above `BUCKLER_MAX_BURDEN`: the kite and tower shields).
+    Shield,
+    /// A light shield (burden at most `BUCKLER_MAX_BURDEN`: the buckler, a fist-shield that does not slow you down).
+    Buckler,
+    /// A weapon (dual wield, or the spare under a two-handed main weapon) or a focus (orb, tome).
+    Other,
+}
+
+/// The burden at or under which a shield is drawn as a buckler (WAR2H1): read from the item's resolved `burden` (its
+/// family base plus its modifiers), so a light shield gets the buckler look with no list of item ids.
+pub const BUCKLER_MAX_BURDEN: i32 = 0;
+
+/// The gear a body's look follows (WAR2H1): the main hand's item family ("" = no weapon), whether that weapon is
+/// two-handed, and what the off hand holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Grip {
+    pub main_family: String,
+    pub two_handed: bool,
+    pub off_hand: OffHand,
+}
+
+/// The family whose 2H look stands in for a family without its own (a mace or a dagger held with no shield): the
+/// greatsword, the warrior sheet's own weapon.
+pub const LOOK_FALLBACK_FAMILY: &str = "sword";
+
+impl Grip {
+    /// From the equipped items (resolved item rows: `item_type`, `weapon_type` = the item's family, `two_handed`,
+    /// `burden`; a shield is `item_type` SHIELD or `off_hand_category` shield, a buckler a shield of burden at most
+    /// `BUCKLER_MAX_BURDEN`). None = the slot is empty.
+    pub fn of(main: Option<&ItemDef>, off: Option<&ItemDef>) -> Grip {
+        let weapon = main.filter(|m| m.item_type == "WEAPON");
+        let off_hand = match off {
+            None => OffHand::Empty,
+            Some(o) if o.item_type == "SHIELD" || o.off_hand_category == "shield" => {
+                if o.burden <= BUCKLER_MAX_BURDEN {
+                    OffHand::Buckler
+                } else {
+                    OffHand::Shield
+                }
+            }
+            Some(_) => OffHand::Other,
+        };
+        Grip { main_family: weapon.map_or(String::new(), |m| m.weapon_type.clone()), two_handed: weapon.is_some_and(|m| m.two_handed), off_hand }
+    }
+
+    /// From a unit's equipped gear (its main and off hand; the class default items included, as the build gives them).
+    pub fn of_inventory(inv: &Inventory) -> Grip {
+        Grip::of(inv.get(Slot::MainHand).map(|e| &e.item), inv.get(Slot::OffHand).map(|e| &e.item))
+    }
+
+    /// The look's variant (WAR2H1, user 2026-10-23): `2h_<family>` when the main hand holds a two-handed weapon, or
+    /// a weapon with no shield beside it (an empty off hand or one holding a weapon or a focus); `1h_buckler` with a
+    /// buckler; None = the body's own sheet (a heavier shield: 1H + kite shield; no weapon and no buckler).
+    pub fn look(&self) -> Option<String> {
+        let two = Some(format!("2h_{}", self.main_family));
+        if self.main_family.is_empty() && self.off_hand != OffHand::Buckler {
+            return None;
+        }
+        match self.off_hand {
+            _ if self.two_handed => two,
+            OffHand::Shield => None,
+            OffHand::Buckler => Some(BUCKLER_LOOK.into()),
+            OffHand::Empty | OffHand::Other => two,
+        }
+    }
+}
+
+/// The 1H + buckler look's variant.
+pub const BUCKLER_LOOK: &str = "1h_buckler";
+
+/// The bodies to try for a unit wearing body `key` with gear `grip` (WAR2H1; the battle's token will call this, then
+/// `Art::first_body`, in WAR2H1's battle slice): a class base (`<class>`) whose grip has a look tries `<class>/<look>` (`1h_buckler` or
+/// `2h_<family>`), for a 2H look then the fallback family's `<class>/2h_sword`, then the class base itself (a class
+/// without looks shows its sheet; once another class gets a `2h_sword` look, a family without its own look, such as
+/// a bow, would show that greatsword: give the fallback per class then); any other body, a named or goblin variant, keeps its own art key: `body_chain(key)`.
+/// The looks share the base's palette slots and palette files (DIR4 L3), so the unit's palette applies unchanged.
+pub fn gear_body_chain(key: &str, grip: &Grip) -> Vec<String> {
+    let (class, variant) = split_body(key);
+    let Some(look) = grip.look().filter(|_| variant == "base") else { return body_chain(key) };
+    let mut out = vec![format!("{class}/{look}")];
+    let fallback = format!("{class}/2h_{LOOK_FALLBACK_FAMILY}");
+    if look.starts_with("2h_") && !out.contains(&fallback) {
+        out.push(fallback);
+    }
+    out.push(class.to_string());
+    out
 }
 
 /// The palette a unit wears: the character's `palette`, else its base unit's ("" = none).

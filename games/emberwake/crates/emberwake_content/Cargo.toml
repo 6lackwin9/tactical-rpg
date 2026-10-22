@@ -11,3 +11,6 @@ emberwake_data = { path = "../emberwake_data" }
 serde_json = { workspace = true }
 indexmap = { workspace = true }
 emberwake_battle = { path = "../emberwake_battle" }
+
+[dev-dependencies]
+png = "0.17.13"

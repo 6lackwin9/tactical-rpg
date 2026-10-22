@@ -2,6 +2,13 @@
 
 Status update (2026-10-20): SPRITE1-L, SPRITE1-U and SPRITE1-A2 approved (user 2026-10-20). The status line below is the original.
 
+Status update (2026-10-23): WAR2H1 slice 1: warrior looks are baked bodies of their own beside the class base:
+`units/warrior/1h_buckler/` (a small leather buckler) and `units/warrior/2h_<family>/` (greatsword, battle axe,
+warhammer), sharing the base's palette slots (DIR4 L3). The look follows the equipped gear
+(`emberwake_content::art::{Grip, gear_body_chain}`): a 2H weapon or a weapon with no shield gives `2h_<family>`, a
+shield of burden `BUCKLER_MAX_BURDEN` (0) or less gives `1h_buckler`, a heavier shield the class sheet; named bodies keep
+their art (Hest, Brask, Orsa: hatchet and buckler; Grakka: a 2H double-bladed axe). The battle switch is slice 2.
+
 Status update (2026-10-23): SPRITE2 done: goblin variants of each class body, the dummy, Grakka, the Horde Warchief and
 the NPC bodies on the rig with every clip; ash and named goblins as palette files (seed `sprite2.json`). Foes face the
 party: a foe's token frame and its outline are drawn mirrored (the sheets face right); allies as drawn (`token_frame` in
