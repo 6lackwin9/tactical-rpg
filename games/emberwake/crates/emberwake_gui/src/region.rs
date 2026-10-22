@@ -935,7 +935,8 @@ mod tests {
         stray
     }
 
-    /// One path of the section 3 tree (game, kit or engine root).
+    /// One path of the section 3 tree (game, kit or engine root), plus the PLAYUI1 section 6 icons: toolkit glyphs
+    /// `ui/<id>.png` and the `ui/hud`, `ui/markers` and `ui/services` folders.
     fn layout_ok(rel: &str) -> bool {
         let p: Vec<&str> = rel.split('/').collect();
         let png = |s: &str| s.ends_with(".png");
@@ -949,7 +950,7 @@ mod tests {
             ["portraits", "common" | "heroes" | "npcs" | "elites" | "bosses", f] => png(f),
             ["items", _, f] => png(f),
             ["skills", "kinds", f] | ["skills", f] | ["statuses", f] | ["map", "markers", f] => png(f),
-            ["ui", "pins" | "badges" | "chips" | "intents", f] => png(f),
+            ["ui", "pins" | "badges" | "chips" | "intents" | "hud" | "markers" | "services", f] | ["ui", f] => png(f),
             ["tilesets", _, _, f] => v(f),
             ["backgrounds", "menu" | "title" | "world_map" | "location", f] => png(f),
             ["audio", "sfx", f] => f.ends_with(".wav"),

@@ -36,7 +36,7 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 | :--- | :--- |
 | `crates/aegis_core/` | Engine core, game-agnostic (SPLIT1-2): Godot RNG, sort and `hash()`, Variant helpers (`json`), lenient field readers (`value`), Godot number formatting (`fmt::fixed`: `%.Nf` with ties away from zero) |
 | `crates/aegis_content/` | Engine content layer, game-agnostic (SPLIT1-3): data file format, schema normalize and storage, content store and world graph, upsert / remove over the game's hooks |
-| `crates/aegis_save/` | Engine save framework, game-agnostic (SPLIT1-4): slot files, envelope, atomic write, migration runner, slot headers |
+| `crates/aegis_save/` | Engine save framework, game-agnostic (SPLIT1-4): slot files, envelope, atomic write, migration runner, slot headers; slot locks (PLAYUI1-S): `is_locked` / `set_locked(fmt, dir, slot, on)` in `<save dir>/locks.json` `{"locked": [..]}` (sorted, manual slots only, an entry counts only while its save exists); `write` and `delete` refuse a locked slot (`Slot <n> is locked.`), the autosave is never locked. A disabled kit icon button swallows its click, so a row under it never fires (`ui::hit`) |
 | `../games/emberwake/crates/emberwake_data/` | Typed content catalog (classes, units, skills, items, passives, encounters, terrain) |
 | `../games/emberwake/crates/emberwake_rules/` | Pure rules: stats, gear, unit building, damage, statuses |
 | `../games/emberwake/crates/emberwake_battle/` | Battle sim: grid, paths, commands, resolver, planner, AI, session, action log, battle metrics and report, balance-sim fight |
