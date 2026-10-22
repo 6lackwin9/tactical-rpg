@@ -109,6 +109,18 @@ impl Image {
         Image { w, h, px }
     }
 
+    /// The image mirrored left to right (PROPS1: a prop's `flip`).
+    pub fn mirrored(&self) -> Image {
+        let mut px = Vec::with_capacity(self.px.len());
+        for y in 0..self.h {
+            for x in (0..self.w).rev() {
+                let i = ((y * self.w + x) * 4) as usize;
+                px.extend_from_slice(&self.px[i..i + 4]);
+            }
+        }
+        Image { w: self.w, h: self.h, px }
+    }
+
     /// Every pixel of exactly a `from` colour (any alpha) takes its `to` colour (ASSETORG2 palettes).
     pub fn swap_colours(&mut self, pairs: &[([u8; 3], [u8; 3])]) {
         for p in self.px.chunks_exact_mut(4) {

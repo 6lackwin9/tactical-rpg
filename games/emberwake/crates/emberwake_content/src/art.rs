@@ -136,6 +136,23 @@ pub fn region_sets(lineage_child_first: &[String]) -> Vec<String> {
     out
 }
 
+/// The folders of a map prop's art (PROPS1 3.1): `props/<set>/<art>` over the region sets (the world lineage child
+/// first, then `common`); the first holding `v0.png` in any layer gives the prop.
+pub fn prop_dirs(lineage_child_first: &[String], art: &str) -> Vec<String> {
+    region_sets(lineage_child_first).into_iter().map(|set| format!("props/{set}/{art}")).collect()
+}
+
+/// The pixel size a map prop's PNG may have (PROPS1 3.1, 32 px of art per tile): ((min w, max w), (min h, max h)). A
+/// standing (`sort`) prop is up to one tile wider than its footprint and up to four tiles taller (roof, chimney,
+/// canopy); a ground prop is exactly its footprint.
+pub fn prop_png_range(w: i64, h: i64, layer: &str) -> ((i64, i64), (i64, i64)) {
+    if layer == "ground" {
+        ((32 * w, 32 * w), (32 * h, 32 * h))
+    } else {
+        ((32 * w, 32 * w + 32), (32 * h, 32 * h + 128))
+    }
+}
+
 /// The region map's tile of a map character: `.` floor, `#` wall, `~` shallow_water (others: the screen's colour).
 pub fn region_tile(ch: char) -> Option<&'static str> {
     match ch {

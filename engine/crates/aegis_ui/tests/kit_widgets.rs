@@ -73,6 +73,24 @@ fn a_disabled_icon_button_still_shows_why_on_hover() {
     assert_ne!(ui.p.c.px, before, "the hover card is drawn over a disabled button");
 }
 
+/// PLAYUI1-S: icon buttons in a clickable row's corner (a save slot's lock and delete): a click on an icon, enabled or
+/// not, never reaches the row; a disabled plain button keeps today's pass-through.
+#[test]
+fn an_icon_over_a_row_takes_its_click_even_when_disabled() {
+    let mut g = gfx();
+    let mut ui: Ui<&str> = Ui::new(&mut g, (-1, -1), true);
+    let row = Rect::new(10, 10, 200, 30);
+    ui.card("row", row, &[("Slot 1".into(), BG)], Some("row"), false, true, Vec::new());
+    ui.icon_button("lock", Rect::new(170, 14, 16, 16), "Lock", None, Glyph::Unlock, "lock", true, false, Vec::new());
+    ui.icon_button("del", Rect::new(190, 14, 16, 16), "Delete", None, Glyph::Delete, "del", false, false, Vec::new());
+    ui.button("plain", Rect::new(20, 30, 20, 8), "Off", "plain", false);
+    let w = ui.widgets;
+    assert_eq!(hit(&w, (40, 20)), Some("row"), "the row is the click target away from its icons");
+    assert_eq!(hit(&w, (176, 20)), Some("lock"), "the enabled icon wins over the row");
+    assert_eq!(hit(&w, (196, 20)), None, "the disabled icon swallows the click: the row does not fire");
+    assert_eq!(hit(&w, (25, 33)), Some("row"), "a disabled plain button lets the click through as before");
+}
+
 #[test]
 fn a_section_header_reports_open_and_sends_its_toggle() {
     let mut g = gfx();

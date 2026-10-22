@@ -4,7 +4,8 @@
 //! palette), a tile by its set chain (`tile_in`, variants by the files present). The game names the files through
 //! its own lookup chains (ASSETORG2 section 4). SPRITE1-L: a body's clips play by time (`played` over an
 //! `aegis_core::assets::ClipPlayer`), a frame's silhouette outline is cached (`body_outline`, highlights) and a body
-//! is checked frame by frame (`body_problems`).
+//! is checked frame by frame (`body_problems`). PROPS1-E: a file's own size (`size_of`), mirrored images
+//! (`image_mirrored`) and a variant picked over a chain of folders (`varied`, which `tile_in` wraps).
 
 use crate::canvas::{Image, Rgba, OUTLINE_ALPHA};
 use aegis_core::assets::{self, ClipFrame, ClipPlayer, Clips, Layers};
@@ -30,6 +31,10 @@ pub struct Art {
     frames: HashMap<(String, String, String, u32, i32), Option<Image>>,
     /// (body key, palette id, clip, frame, size, colour) -> the frame's silhouette outline.
     outlines: HashMap<OutlineKey, Option<Image>>,
+    /// (rel, w, h) -> the scaled image mirrored left to right.
+    mirrors: HashMap<(String, i32, i32), Option<Image>>,
+    /// rel -> the PNG's own size.
+    sizes: HashMap<String, Option<(i32, i32)>>,
     /// rel -> whether a layer holds it, and tile folder -> its variant count (asked every frame, looked up once).
     present: HashMap<String, bool>,
     variant_counts: HashMap<String, usize>,
@@ -62,7 +67,7 @@ impl Art {
     }
 
     pub fn layered(layers: Layers) -> Self {
-        Self { layers, files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new() }
+        Self { layers, files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new() }
     }
 
     pub fn layers(&self) -> &Layers {
@@ -100,6 +105,26 @@ impl Art {
             self.files.insert(key.clone(), img);
         }
         self.files.get(&key).and_then(|i| i.as_ref())
+    }
+
+    /// `image` mirrored left to right (cached apart).
+    pub fn image_mirrored(&mut self, rel: &str, w: i32, h: i32) -> Option<&Image> {
+        let key = (rel.to_string(), w, h);
+        if !self.mirrors.contains_key(&key) {
+            let img = self.image(rel, w, h).map(|i| i.mirrored());
+            self.mirrors.insert(key.clone(), img);
+        }
+        self.mirrors.get(&key).and_then(|i| i.as_ref())
+    }
+
+    /// The pixel size of the PNG at `rel` (in the first layer holding it) as stored, read from its header; cached.
+    pub fn size_of(&mut self, rel: &str) -> Option<(i32, i32)> {
+        if let Some(&s) = self.sizes.get(rel) {
+            return s;
+        }
+        let size = self.layers.find(rel).and_then(|p| png_size(&p));
+        self.sizes.insert(rel.to_string(), size);
+        size
     }
 
     /// The first of `rels` a layer holds (a lookup chain), downsampled to `w` x `h`; when none is there, the trail
@@ -246,14 +271,41 @@ impl Art {
         blank_frames(&clips, &sheet).into_iter().map(|(clip, n)| format!("clip '{clip}' frame {n} is empty.")).collect()
     }
 
-    /// Tile `tile` from the first set of `sets` a layer holds (`tilesets/<set>/<tile>/v0.png`); the variant is
-    /// (x x 7 + y x 13) mod n over that layer's v0..v(n-1).
-    pub fn tile_in(&mut self, sets: &[&str], tile: &str, x: i32, y: i32, size: i32) -> Option<&Image> {
-        let (dir, n) = sets.iter().map(|s| format!("tilesets/{s}/{tile}")).map(|d| (d.clone(), self.variants(&d))).find(|(_, n)| *n > 0)?;
-        let v = (x * 7 + y * 13).rem_euclid(n as i32);
-        self.image(&format!("{dir}/v{v}.png"), size, size)
+    /// The file a variant pick over `dirs` names: the first folder holding `v0.png` in any layer, then `variant`
+    /// (at or above that layer's count n: `v0`) or, with None, (x x 7 + y x 13) mod n (Euclidean). None: no folder
+    /// has a `v0.png`.
+    pub fn pick(&mut self, dirs: &[&str], variant: Option<u32>, x: i32, y: i32) -> Option<String> {
+        let (dir, n) = dirs.iter().map(|d| (*d, self.variants(d))).find(|(_, n)| *n > 0)?;
+        let v = match variant {
+            Some(v) if (v as usize) < n => v as i32,
+            Some(_) => 0,
+            None => (x * 7 + y * 13).rem_euclid(n as i32),
+        };
+        Some(format!("{dir}/v{v}.png"))
     }
 
+    /// The image of `pick` (`dirs`, `variant`, `x`, `y`) downsampled to `w` x `h`.
+    pub fn varied(&mut self, dirs: &[&str], variant: Option<u32>, x: i32, y: i32, w: i32, h: i32) -> Option<&Image> {
+        let rel = self.pick(dirs, variant, x, y)?;
+        self.image(&rel, w, h)
+    }
+
+    /// Tile `tile` from the first set of `sets` a layer holds (`tilesets/<set>/<tile>/v0.png`); the variant is
+    /// (x x 7 + y x 13) mod n over that layer's v0..v(n-1) (`varied` by position).
+    pub fn tile_in(&mut self, sets: &[&str], tile: &str, x: i32, y: i32, size: i32) -> Option<&Image> {
+        let dirs: Vec<String> = sets.iter().map(|s| format!("tilesets/{s}/{tile}")).collect();
+        let dirs: Vec<&str> = dirs.iter().map(String::as_str).collect();
+        self.varied(&dirs, None, x, y, size, size)
+    }
+
+}
+
+/// A PNG's width and height from its header (None: not a readable PNG).
+pub fn png_size(path: &Path) -> Option<(i32, i32)> {
+    let file = std::fs::File::open(path).ok()?;
+    let reader = png::Decoder::new(std::io::BufReader::new(file)).read_info().ok()?;
+    let info = reader.info();
+    Some((info.width as i32, info.height as i32))
 }
 
 /// The frames of `sheet` (laid out by `clips`) with no pixel at `OUTLINE_ALPHA` or above: (clip, frame), sheet order.

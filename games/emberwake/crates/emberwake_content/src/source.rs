@@ -731,10 +731,43 @@ fn template(entry: &Dict, keys: &[(&str, Value)]) -> Dict {
     out
 }
 
-/// MapRules.normalize_template.
+/// MapRules.normalize_template; PROPS1 1: `props` (after `paths`), each prop with its defaults (`prop_full`).
 pub(crate) fn map_template(e: &Dict) -> Dict {
     let (s, a, d) = (Value::from(""), Value::Array(Vec::new()), Value::Object(Map::new()));
-    template(e, &[("id", s.clone()), ("name", s), ("rows", a.clone()), ("zones", a.clone()), ("zone_legend", d.clone()), ("anchors", a.clone()), ("paths", d), ("tags", a)])
+    let mut t = template(e, &[("id", s.clone()), ("name", s), ("rows", a.clone()), ("zones", a.clone()), ("zone_legend", d.clone()), ("anchors", a.clone()), ("paths", d), ("props", a.clone()), ("tags", a)]);
+    if let Some(Value::Array(list)) = t.get("props") {
+        let full = list.iter().map(|p| p.as_object().map_or_else(|| p.clone(), |o| Value::Object(prop_full(o)))).collect();
+        t.insert("props".into(), Value::Array(full));
+    }
+    t
+}
+
+/// A map prop's keys in stored order (PROPS1 1).
+pub const PROP_KEYS: [&str; 9] = ["id", "art", "x", "y", "w", "h", "layer", "variant", "flip"];
+
+/// A map prop with its defaults (`w` 1, `h` 1, `layer` sort, `variant` -1, `flip` false) in `PROP_KEYS` order; the
+/// required keys (`id`, `art`, `x`, `y`) stay missing when missing and unknown keys follow (the checks name both).
+pub fn prop_full(p: &Dict) -> Dict {
+    let p = json::normalize_dict(p);
+    let fallback = |k: &str| match k {
+        "w" | "h" => Some(int(1)),
+        "layer" => Some(Value::from("sort")),
+        "variant" => Some(int(-1)),
+        "flip" => Some(Value::Bool(false)),
+        _ => None,
+    };
+    let mut out = Dict::new();
+    for k in PROP_KEYS {
+        if let Some(v) = p.get(k).cloned().or_else(|| fallback(k)) {
+            out.insert(k.to_string(), v);
+        }
+    }
+    for (k, v) in &p {
+        if !out.contains_key(k) {
+            out.insert(k.clone(), v.clone());
+        }
+    }
+    out
 }
 
 /// QuestCatalog.normalize.

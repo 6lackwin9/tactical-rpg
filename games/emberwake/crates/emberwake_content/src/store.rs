@@ -156,7 +156,7 @@ pub fn file_of(data_dir: &Path, world: Option<&str>, kind: &str) -> PathBuf {
 /// "kind", the stored fields (to_storage keeps exactly these) and the normalize.
 type GameKind = (&'static str, &'static str, &'static str, &'static [&'static str]);
 pub const GAME_KINDS: [GameKind; 3] = [
-    ("maps", "maps/maps.json", "map_templates", &["id", "name", "rows", "zones", "zone_legend", "anchors", "paths", "tags"]),
+    ("maps", "maps/maps.json", "map_templates", &["id", "name", "rows", "zones", "zone_legend", "anchors", "paths", "props", "tags"]),
     ("quests", "quests/quests.json", "quest_templates", &["id", "name", "description", "objectives", "rewards", "tags"]),
     ("services", "dialogue/services.json", "dialogue_services", &["id", "text"]),
 ];
