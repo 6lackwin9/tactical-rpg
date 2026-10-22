@@ -74,8 +74,9 @@ def defensive_set(u, g, A, T):
     T['hurt_guarded'] = [60, 100, 110, 140]
 
 
-def clips(name, variant=''):
-    u = UNITS[name]; A, T = {}, {}
+def clips(name, variant='', unit=None):
+    # unit: a body variant of class `name` (tools/sprites/variants.py: goblins, named bodies); default the class's own
+    u = unit or UNITS[name]; A, T = {}, {}
     def put(k, v): A[k], T[k] = v
     if name == 'warrior':  # one-handed sword, kite shield on the far arm
         # variant: '' = current, 'A' = shield carried lower, 'B' = hunched behind the shield
@@ -255,7 +256,7 @@ def clips(name, variant=''):
                       [200, 60, 90, 130, 100, 90, 90, 600]))
     if name in GUARDS: defensive_set(u, GUARDS[name], A, T)
     if name == 'warrior' and variant == '':
-        a_, at_ = clips('warrior', 'A'); b_, bt_ = clips('warrior', 'B')
+        a_, at_ = clips('warrior', 'A', unit); b_, bt_ = clips('warrior', 'B', unit)
         A['attack'], T['attack'] = a_['attack'], at_['attack']
         for k in ('shield_bash', 'defend', 'idle_guarded', 'hurt_guarded'): A[k], T[k] = b_[k], bt_[k]
     return A, T
