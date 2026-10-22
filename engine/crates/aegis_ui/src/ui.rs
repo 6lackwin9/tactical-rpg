@@ -2,7 +2,7 @@
 //! id, kind, text, rect, enabled / active state, an optional action and a hover card, so the agent link can list,
 //! hover and click exactly what the player sees. Colours follow the Godot HUD (dark navy, gold accents).
 
-use crate::canvas::{rgb, rgba, Canvas, Rect, Rgba};
+use crate::canvas::{rgb, rgba, Canvas, Image, Rect, Rgba};
 use crate::painter::{Fonts, Painter, View};
 use serde_json::{json, Value};
 
@@ -83,66 +83,9 @@ pub struct Kit {
     pub edit: Option<Edit>,
 }
 
-/// A text field being edited: its id, the text so far, the caret (a character index) and whether Enter adds a line.
-/// The shell types into it and hands every change to the screen (`Screen::text_changed`), which owns the value.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Edit {
-    pub id: String,
-    pub text: String,
-    pub caret: usize,
-    pub multiline: bool,
-}
-
-impl Edit {
-    /// Editing `text` with the caret at its end.
-    pub fn new(id: &str, text: &str, multiline: bool) -> Self {
-        Self { id: id.into(), text: text.into(), caret: text.chars().count(), multiline }
-    }
-
-    fn byte_at(&self, caret: usize) -> usize {
-        self.text.char_indices().nth(caret).map_or(self.text.len(), |(i, _)| i)
-    }
-
-    /// Inserts typed text at the caret (control characters dropped; a newline only in a multiline field).
-    pub fn insert(&mut self, s: &str) {
-        for ch in s.chars().filter(|c| !c.is_control() || (*c == '\n' && self.multiline)) {
-            let at = self.byte_at(self.caret);
-            self.text.insert(at, ch);
-            self.caret += 1;
-        }
-    }
-
-    pub fn backspace(&mut self) {
-        if self.caret > 0 {
-            let at = self.byte_at(self.caret - 1);
-            self.text.remove(at);
-            self.caret -= 1;
-        }
-    }
-
-    pub fn delete(&mut self) {
-        if self.caret < self.text.chars().count() {
-            let at = self.byte_at(self.caret);
-            self.text.remove(at);
-        }
-    }
-
-    pub fn left(&mut self) {
-        self.caret = self.caret.saturating_sub(1);
-    }
-
-    pub fn right(&mut self) {
-        self.caret = (self.caret + 1).min(self.text.chars().count());
-    }
-
-    pub fn home(&mut self) {
-        self.caret = 0;
-    }
-
-    pub fn end(&mut self) {
-        self.caret = self.text.chars().count();
-    }
-}
+/// The text editor's model, layout, keys and clipboard live in `edit` (PLAYUI1-T); re-exported here for the kit's
+/// callers.
+pub use crate::edit::{clipboard, field_content_h, field_layout, field_scroll_id, field_shift, reveal_offset, word_end, word_start, Edit, EditKey, Layout, VLine, FIELD_PAD_X, FIELD_PAD_Y, UNDO_MAX, UNDO_PAUSE_MS};
 
 /// Pixels one wheel line scrolls a scroll area.
 pub const SCROLL_STEP: i32 = 12;
@@ -182,21 +125,32 @@ pub struct Ui<'a, A> {
     /// How many scroll areas are open (`scroll_begin`), each closed by `scroll_end`.
     scrolls: usize,
     /// The text field being edited (`Kit::edit`, read at the start of the frame; only the live screen sees it).
-    edit: Option<Edit>,
+    edit: Option<EditView>,
+}
+
+/// What a frame draws of the text field being edited: its id, text, caret and selection anchor (not its history).
+#[derive(Debug, Clone)]
+struct EditView {
+    id: String,
+    text: String,
+    caret: usize,
+    anchor: Option<usize>,
 }
 
 impl<'a, A: Clone> Ui<'a, A> {
     pub fn new(g: &'a mut Gfx, mouse: (i32, i32), live: bool) -> Self {
         // Only the live (top) screen sees the drag; screens under an overlay draw as if there were none.
         let (open, drag, scroll) = (g.kit.open.clone(), if live { g.kit.drag.clone() } else { None }, g.kit.scroll.clone());
-        let edit = if live { g.kit.edit.clone() } else { None };
+        let edit = g.kit.edit.as_ref().filter(|_| live).map(|e| EditView { id: e.id.clone(), text: e.text.clone(), caret: e.caret, anchor: e.anchor });
         g.canvas.clip = None;
         Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag, clip: None, clips: Vec::new(), scroll, scrolls: 0, edit }
     }
 
-    /// A text field (`multiline`: a text area, Enter adds a line). Clicking it starts editing: the shell types into it
-    /// and hands each change to the screen's `text_changed(id, text)`; `value` is the screen's text otherwise. While it
-    /// edits, a caret shows; the field scrolls to keep the caret's line in view.
+    /// A text field (`multiline`: a text area, Enter adds a line). Clicking it starts editing (the caret where the click
+    /// was): the shell types into it and hands each change to the screen's `text_changed(id, text)`; `value` is the
+    /// screen's text otherwise. While it edits, the caret and the selection show. A text area wraps at spaces and
+    /// scrolls (the wheel, a scroll bar when the text is taller; the shell keeps the caret's line in view); a one-line
+    /// field slides to keep the caret in view (PLAYUI1-T).
     pub fn text_field(&mut self, id: &str, r: Rect, value: &str, multiline: bool, enabled: bool) {
         let editing = self.edit.as_ref().filter(|e| e.id == id).cloned();
         let hover = enabled && self.hover(r);
@@ -204,49 +158,46 @@ impl<'a, A: Clone> Ui<'a, A> {
         self.p.panel(r, rgb(22, 30, 48), border, RADIUS);
         let text = editing.as_ref().map_or(value, |e| e.text.as_str()).to_string();
         let line = self.p.line_h(BODY);
-        let max_w = r.w as f32 - 10.0;
-        let lines = |p: &mut Painter, s: &str| -> Vec<String> {
-            let mut out = Vec::new();
-            for para in s.split('\n') {
-                let wrapped = p.wrap(para, BODY, max_w);
-                if wrapped.is_empty() {
-                    out.push(String::new());
-                } else {
-                    out.extend(wrapped);
+        let lay = field_layout(&mut self.p, &text, r, multiline);
+        let chars: Vec<char> = text.chars().collect();
+        let caret = editing.as_ref().map_or(chars.len(), |e| e.caret.min(chars.len()));
+        let selection = editing.as_ref().and_then(|e| e.anchor.map(|a| a.min(chars.len()))).filter(|a| *a != caret).map(|a| (a.min(caret), a.max(caret)));
+        // Where the text's top left is drawn: a text area scrolls down by its offset, a one-line field slides left.
+        let (dx, off) = if multiline {
+            let off = self.scroll_begin(&field_scroll_id(id), r, field_content_h(lay.lines.len(), line));
+            (0.0, off)
+        } else {
+            (field_shift(&lay, caret, r), 0)
+        };
+        let (tx, ty) = (r.x as f32 + FIELD_PAD_X - dx, r.y as f32 + FIELD_PAD_Y - off as f32);
+        let col = if enabled { TEXT } else { DIM };
+        self.push_clip(Rect::new(r.x + 3, r.y + 2, r.w - 6, r.h - 4));
+        for (i, l) in lay.lines.iter().enumerate() {
+            let y = ty + i as f32 * line;
+            if y + line < r.y as f32 || y > (r.y + r.h) as f32 {
+                continue;
+            }
+            if let Some((a, b)) = selection {
+                let (lo, hi) = (a.max(l.start), b.min(l.end));
+                // A selection that goes on past the line's end also marks the break.
+                let tail = if b > l.end && a <= l.end { 3.0 } else { 0.0 };
+                if lo < hi || tail > 0.0 {
+                    let (x0, x1) = (l.xs[lo - l.start], l.xs[hi - l.start] + tail);
+                    self.p.fill(Rect::new((tx + x0).floor() as i32, y.floor() as i32, ((x1 - x0).ceil() as i32).max(1), line.ceil() as i32), rgba(74, 110, 180, 170));
                 }
             }
-            out
-        };
-        let shown = if multiline { lines(&mut self.p, &text) } else { vec![text.clone()] };
-        // The caret: the line and x of the text before it.
-        let caret = editing.as_ref().map(|e| {
-            let before: String = e.text.chars().take(e.caret).collect();
-            let ls = if multiline { lines(&mut self.p, &before) } else { vec![before] };
-            let last = ls.last().cloned().unwrap_or_default();
-            (ls.len().saturating_sub(1), self.p.text_w(&last, BODY))
-        });
-        let rows = ((r.h as f32 - 6.0) / line).floor().max(1.0) as usize;
-        let first = caret.map_or(0, |(l, _)| l.saturating_sub(rows - 1));
-        let col = if enabled { TEXT } else { DIM };
-        let clip = Rect::new(r.x + 3, r.y + 2, r.w - 6, r.h - 4);
-        self.push_clip(clip);
-        for (i, l) in shown.iter().skip(first).take(rows).enumerate() {
-            let y = r.y as f32 + 3.0 + i as f32 * line;
-            if multiline {
-                self.p.text(r.x as f32 + 5.0, y, l, BODY, col);
-            } else {
-                // A single line keeps its end (the caret) in view.
-                let w = self.p.text_w(l, BODY);
-                self.p.text(r.x as f32 + 5.0 - (w - max_w).max(0.0), y, l, BODY, col);
-            }
+            let s: String = chars[l.start..l.end].iter().collect();
+            self.p.text(tx, y, &s, BODY, col);
         }
-        if let Some((l, x)) = caret {
-            let shift = if multiline { 0.0 } else { (self.p.text_w(&text, BODY) - max_w).max(0.0) };
-            let cx = r.x as f32 + 5.0 + x - shift + 0.5;
-            let cy = r.y as f32 + 3.0 + (l - first) as f32 * line;
+        if editing.is_some() {
+            let cx = tx + lay.x_of(caret) + 0.5;
+            let cy = ty + lay.line_of(caret) as f32 * line;
             self.p.line(cx, cy, cx, cy + line - 1.0, GOLD, 0.0);
         }
         self.pop_clip();
+        if multiline {
+            self.scroll_end();
+        }
         self.push(id, if multiline { "textarea" } else { "text" }, text, r, enabled, editing.is_some(), None, Vec::new());
     }
 
@@ -525,6 +476,161 @@ impl<'a, A: Clone> Ui<'a, A> {
         self.p.text_fit(r.x as f32 + 4.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, label, BODY, r.w as f32 - 8.0, col);
         self.push(id, "row", label, r, true, selected, action, t);
     }
+
+    /// The icon square of an icon button in hit box `r` (centred, 2 px inside the smaller side; a 16 px box holds a
+    /// 12 px icon).
+    pub fn icon_rect(r: Rect) -> Rect {
+        let s = (r.w.min(r.h) - 4).max(4);
+        Rect::new(r.x + (r.w - s) / 2, r.y + (r.h - s) / 2, s, s)
+    }
+
+    /// The physical pixel size to ask the art for an icon of hit box `r` in (`Art::image(rel, n, n)`), so the image is
+    /// drawn one source pixel per screen pixel.
+    pub fn icon_px(&self, r: Rect) -> i32 {
+        (Self::icon_rect(r).w as f32 * self.p.v.s).round().max(1.0) as i32
+    }
+
+    /// An icon button (PLAYUI1-K): `image` (a file from the asset layers the caller looked up, e.g. with
+    /// `Art::image(rel, icon_px, icon_px)`) or, when the file is missing, the drawn `glyph`; `label` names it for the
+    /// agent link and is the hover card's title when `t` is empty (a disabled button's card says why). `toggled` draws
+    /// it on (gold, a lock that is locked); disabled draws it dimmed and takes no click. It takes the keyboard focus
+    /// like any button (Enter or Space press it).
+    #[allow(clippy::too_many_arguments)]
+    pub fn icon_button(&mut self, id: &str, r: Rect, label: &str, image: Option<&Image>, glyph: Glyph, action: A, enabled: bool, toggled: bool, t: Tip) {
+        let hover = enabled && self.hover(r);
+        if toggled || hover {
+            self.p.panel(r, if toggled { SELECTED } else { PANEL_HI }, if hover { GOLD } else { rgb(150, 124, 56) }, RADIUS);
+        }
+        let ir = Self::icon_rect(r);
+        match image {
+            Some(img) if enabled => self.p.image(img, ir),
+            Some(img) => self.p.image(&faded(img, 0.4), ir),
+            None => {
+                let col = if !enabled { DIM } else if toggled { GOLD } else { TEXT };
+                draw_glyph(&mut self.p, glyph, ir, col);
+            }
+        }
+        let t = if t.is_empty() { tip(label, "") } else { t };
+        self.push(id, "icon_button", label, r, enabled, toggled, Some(action), t);
+    }
+
+    /// A collapsible section header (PLAYUI1-K): a chevron (down while open, right while closed), the title and a note
+    /// at the right (a count, a hint; may be empty). A click anywhere on it, or Enter / Space on its focus, sends
+    /// `toggle`; the screen keeps whether it is open and draws the section's content only then. Returns `open`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn section(&mut self, id: &str, r: Rect, title: &str, note: &str, open: bool, toggle: A, t: Tip) -> bool {
+        let hover = self.hover(r);
+        self.p.panel(r, if hover { PANEL_HI } else { rgb(26, 38, 64) }, if hover { GOLD } else { BORDER }, RADIUS);
+        let ty = r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0;
+        let c = Rect::new(r.x + 3, r.y + (r.h - 8) / 2, 8, 8);
+        draw_glyph(&mut self.p, if open { Glyph::ChevronDown } else { Glyph::ChevronRight }, c, if hover { GOLD } else { TEXT });
+        let note_w = if note.is_empty() { 0.0 } else { self.p.text_w(note, SMALL) + 6.0 };
+        self.p.text_fit(r.x as f32 + 14.0, ty, title, BODY, r.w as f32 - 18.0 - note_w, GOLD);
+        if !note.is_empty() {
+            self.p.text_right((r.x + r.w) as f32 - 4.0, ty + 0.5, note, SMALL, DIM);
+        }
+        self.push(id, "section", title, r, true, open, Some(toggle), t);
+        open
+    }
+}
+
+/// A drawn icon (PLAYUI1-K): what an icon button shows while its image file is missing, and the chevron of a section
+/// header. Shapes only, so every game has them before its art lands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Glyph {
+    /// A padlock, shut.
+    Lock,
+    /// A padlock with its shackle open.
+    Unlock,
+    /// A bin.
+    Delete,
+    /// A question mark in a ring.
+    Help,
+    ChevronDown,
+    ChevronRight,
+    /// Three bars.
+    Menu,
+    Plus,
+    Close,
+    /// A letter in a ring (an icon with no shape of its own, e.g. 'P' for a party button).
+    Letter(char),
+}
+
+/// Draws `g` inside the square `r` in `col`.
+pub fn draw_glyph(p: &mut Painter, g: Glyph, r: Rect, col: Rgba) {
+    let (x, y, s) = (r.x as f32, r.y as f32, r.w.min(r.h) as f32);
+    let (cx, cy) = (x + s / 2.0, y + s / 2.0);
+    let ring = |p: &mut Painter, rad: f32| {
+        let n = 20;
+        for i in 0..n {
+            let (a0, a1) = (i as f32 / n as f32 * std::f32::consts::TAU, (i + 1) as f32 / n as f32 * std::f32::consts::TAU);
+            p.line(cx + rad * a0.cos(), cy + rad * a0.sin(), cx + rad * a1.cos(), cy + rad * a1.sin(), col, 0.0);
+        }
+    };
+    match g {
+        Glyph::Lock | Glyph::Unlock => {
+            // The body in the lower half, the shackle over it (lifted to the right when open).
+            let body = Rect::new(r.x + (s * 0.15) as i32, r.y + (s * 0.45) as i32, (s * 0.7).round() as i32, (s * 0.5).round() as i32);
+            p.panel(body, col, col, 1.0);
+            let (l, rr, top) = (x + s * 0.3, x + s * 0.7, y + s * 0.1);
+            let lift = if g == Glyph::Unlock { s * 0.15 } else { 0.0 };
+            p.line(l, y + s * 0.45, l, top + s * 0.12 - lift, col, 0.0);
+            p.line(l, top + s * 0.12 - lift, l + s * 0.08, top - lift, col, 0.0);
+            p.line(l + s * 0.08, top - lift, rr - s * 0.08, top - lift, col, 0.0);
+            p.line(rr - s * 0.08, top - lift, rr, top + s * 0.12 - lift, col, 0.0);
+            let right_end = if g == Glyph::Unlock { y + s * 0.3 } else { y + s * 0.45 };
+            p.line(rr, top + s * 0.12 - lift, rr, right_end, col, 0.0);
+        }
+        Glyph::Delete => {
+            p.line(x + s * 0.12, y + s * 0.2, x + s * 0.88, y + s * 0.2, col, 0.0);
+            p.line(x + s * 0.38, y + s * 0.08, x + s * 0.62, y + s * 0.08, col, 0.0);
+            let (l, rr, top, bot) = (x + s * 0.22, x + s * 0.78, y + s * 0.3, y + s * 0.92);
+            p.line(l, top, l + s * 0.05, bot, col, 0.0);
+            p.line(rr, top, rr - s * 0.05, bot, col, 0.0);
+            p.line(l + s * 0.05, bot, rr - s * 0.05, bot, col, 0.0);
+            p.line(cx, top + s * 0.08, cx, bot - s * 0.1, col, 0.0);
+        }
+        Glyph::Help => {
+            ring(p, s * 0.45);
+            let h = p.line_h(SMALL);
+            p.text_center(cx, cy - h / 2.0, "?", SMALL, col);
+        }
+        Glyph::ChevronDown => {
+            p.line(x + s * 0.2, y + s * 0.35, cx, y + s * 0.65, col, 0.0);
+            p.line(cx, y + s * 0.65, x + s * 0.8, y + s * 0.35, col, 0.0);
+        }
+        Glyph::ChevronRight => {
+            p.line(x + s * 0.35, y + s * 0.2, x + s * 0.65, cy, col, 0.0);
+            p.line(x + s * 0.65, cy, x + s * 0.35, y + s * 0.8, col, 0.0);
+        }
+        Glyph::Menu => {
+            for f in [0.25, 0.5, 0.75] {
+                p.line(x + s * 0.15, y + s * f, x + s * 0.85, y + s * f, col, 0.0);
+            }
+        }
+        Glyph::Plus => {
+            p.line(cx, y + s * 0.15, cx, y + s * 0.85, col, 0.0);
+            p.line(x + s * 0.15, cy, x + s * 0.85, cy, col, 0.0);
+        }
+        Glyph::Close => {
+            p.line(x + s * 0.2, y + s * 0.2, x + s * 0.8, y + s * 0.8, col, 0.0);
+            p.line(x + s * 0.2, y + s * 0.8, x + s * 0.8, y + s * 0.2, col, 0.0);
+        }
+        Glyph::Letter(c) => {
+            ring(p, s * 0.45);
+            let h = p.line_h(SMALL);
+            p.text_center(cx, cy - h / 2.0, &c.to_string(), SMALL, col);
+        }
+    }
+}
+
+/// `img` with its alpha scaled by `a` (a disabled icon).
+fn faded(img: &Image, a: f32) -> Image {
+    let mut out = img.clone();
+    for alpha in out.px.iter_mut().skip(3).step_by(4) {
+        *alpha = (*alpha as f32 * a).round() as u8;
+    }
+    out
 }
 
 /// The hover card of the topmost hovered widget that has one.
@@ -571,29 +677,5 @@ pub fn by_id<A: Clone>(widgets: &[Widget<A>], id: &str) -> Result<A, String> {
         Some(w) if w.enabled && w.action.is_some() => Ok(w.action.clone().unwrap()),
         Some(_) => Err(format!("widget '{id}' is disabled or not clickable")),
         None => Err(format!("no widget '{id}'")),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Edit;
-
-    #[test]
-    fn an_edit_types_deletes_and_moves_the_caret_by_characters() {
-        let mut e = Edit::new("t", "héllo", false);
-        assert_eq!(e.caret, 5);
-        e.insert("!");
-        e.left();
-        e.left();
-        e.backspace();
-        assert_eq!((e.text.as_str(), e.caret), ("hélo!", 3), "keeps the multibyte é");
-        e.home();
-        e.delete();
-        e.end();
-        e.insert("\n x\t");
-        assert_eq!(e.text, "élo! x", "a single-line field drops the newline and the tab");
-        let mut m = Edit::new("m", "a", true);
-        m.insert("\nb");
-        assert_eq!((m.text.as_str(), m.caret), ("a\nb", 3));
     }
 }

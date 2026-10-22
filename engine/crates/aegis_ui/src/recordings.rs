@@ -2,12 +2,13 @@
 //! recording toggle, the recordings of the user folder and of the repo folders the game names (badge `repo`) newest
 //! first with a stale badge, a recording's battles and notes, Play back (watch a battle to its end), Take over (the
 //! battle replayed to a round, then played on as a new session that names its parent), Open folder and Copy to repo.
-//! The game supplies the screen a session plays in (`Launch`) and its content fingerprint.
+//! A note's row opens it whole with a Copy button (PLAYUI1-T, `NoteView`). The game supplies the screen a session plays
+//! in (`Launch`) and its content fingerprint.
 
 use crate::canvas::{rgba, Rect};
 use crate::playtest::TAGS;
 use crate::screen::{Cx, Nav, Screen};
-use crate::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
+use crate::ui::{clipboard, tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
 use crate::widget_plumbing;
 use aegis_host::playtest::{self, Recording, Session};
 use serde_json::{json, Value};
@@ -33,6 +34,8 @@ enum Act {
     CopyToRepo,
     Refresh,
     Back,
+    /// Open note `i` of the picked recording whole.
+    Note(usize),
 }
 
 struct Item {
@@ -166,6 +169,11 @@ impl<G> Recordings<G> {
             }
             Act::Refresh => self.refresh(cx),
             Act::Back => cx.nav.push(Nav::Pop),
+            Act::Note(i) => {
+                if let Some(n) = self.picked().and_then(|r| r.notes.get(i)) {
+                    cx.nav.push(Nav::Push(Box::new(NoteView::new(n))));
+                }
+            }
         }
     }
 }
@@ -270,9 +278,12 @@ impl<G> Screen<G> for Recordings<G> {
                         format!("{}. [{}] {place}: {}", n["n"], tags.join(", "), n["text"].as_str().unwrap_or("").replace('\n', " "))
                     })
                     .collect();
-                let off = ui.scroll_begin("recordings.notes", view, lines.len() as i32 * 10);
+                // One row per note, cut to one line; a click opens the note whole (PLAYUI1-T).
+                let row_h = 12;
+                let off = ui.scroll_begin("recordings.notes", view, lines.len() as i32 * row_h);
                 for (i, line) in lines.iter().enumerate() {
-                    ui.p.text_fit(view.x as f32, (view.y - off + i as i32 * 10) as f32, line, SMALL, (view.w - 6) as f32, TEXT);
+                    let r = Rect::new(view.x, view.y - off + i as i32 * row_h, view.w - 5, row_h);
+                    ui.row(&format!("recordings.note.{i}"), r, line, TEXT, Some(Act::Note(i)), false, tip(&format!("Note {}", i + 1), "Click to read it whole and copy it."));
                 }
                 ui.scroll_end();
                 let by = (right.y + right.h) - 19;
@@ -297,6 +308,93 @@ impl<G> Screen<G> for Recordings<G> {
             "pick": self.pick, "battle": self.battle, "round": self.round, "message": self.message})
     }
 
+    widget_plumbing!(Cx<G>);
+}
+
+/// A playtest note read whole (PLAYUI1-T): its number, tags and where it was taken, its full text (wrapped, the
+/// wheel scrolls it) and Copy, which puts the text on the clipboard. Esc, right click or Close go back.
+pub struct NoteView {
+    title: String,
+    meta: String,
+    pub text: String,
+    pub message: String,
+    w: Vec<Widget<NoteAct>>,
+}
+
+#[derive(Clone)]
+enum NoteAct {
+    Copy,
+    Close,
+}
+
+/// The id of the note view screen and the prefix of its widgets.
+pub const NOTE_ID: &str = "recordings.note_view";
+
+impl NoteView {
+    /// The note as a recording keeps it (`n`, `tags`, `scene`, `round`, `text`).
+    pub fn new(n: &Value) -> Self {
+        let tags: Vec<&str> = n["tags"].as_array().map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+        let mut meta = n["scene"].as_str().unwrap_or("").to_string();
+        if let Some(r) = n["round"].as_i64() {
+            meta = format!("{meta}, round {r}");
+        }
+        if !tags.is_empty() {
+            meta = format!("[{}] {meta}", tags.join(", "));
+        }
+        Self { title: format!("Note {}", n["n"]), meta, text: n["text"].as_str().unwrap_or("").to_string(), message: String::new(), w: Vec::new() }
+    }
+
+    fn act<G>(&mut self, cx: &mut Cx<G>, a: NoteAct) {
+        match a {
+            NoteAct::Copy => {
+                clipboard::set(&self.text);
+                self.message = "Copied to the clipboard.".into();
+            }
+            NoteAct::Close => cx.nav.push(Nav::Pop),
+        }
+    }
+}
+
+impl<G> Screen<G> for NoteView {
+    fn id(&self) -> &'static str {
+        NOTE_ID
+    }
+    fn overlay(&self) -> bool {
+        true
+    }
+    fn draw(&mut self, _cx: &mut Cx<G>, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+        let mut ui: Ui<NoteAct> = Ui::new(g, mouse, live);
+        ui.p.fill(Rect::new(0, 0, W, H), rgba(0, 0, 0, 120));
+        let r = Rect::new(W / 2 - 200, 30, 400, H - 60);
+        ui.frame(r, &self.title, false);
+        ui.p.text_fit(r.x as f32 + 10.0, r.y as f32 + 24.0, &self.meta, SMALL, (r.w - 20) as f32, DIM);
+        let view = Rect::new(r.x + 10, r.y + 36, r.w - 20, r.h - 36 - 28);
+        ui.p.panel(view, rgba(22, 30, 48, 255), BORDER, 2.0);
+        let line = ui.p.line_h(BODY).ceil() as i32 + 1;
+        let mut lines = Vec::new();
+        for para in self.text.split('\n') {
+            let wrapped = ui.p.wrap(para, BODY, (view.w - 14) as f32);
+            if wrapped.is_empty() {
+                lines.push(String::new());
+            }
+            lines.extend(wrapped);
+        }
+        let off = ui.scroll_begin(&format!("{NOTE_ID}.text"), view, lines.len() as i32 * line + 6);
+        for (i, l) in lines.iter().enumerate() {
+            ui.p.text((view.x + 5) as f32, (view.y + 3 - off + i as i32 * line) as f32, l, BODY, TEXT);
+        }
+        ui.scroll_end();
+        let by = r.y + r.h - 22;
+        if !self.message.is_empty() {
+            ui.p.text_fit(r.x as f32 + 10.0, by as f32 + 3.0, &self.message, SMALL, (r.w - 140) as f32, GOOD);
+        }
+        ui.button_tip(&format!("{NOTE_ID}.copy"), Rect::new(r.x + r.w - 124, by, 54, 15), "Copy", NoteAct::Copy, true, tip("Copy", "Puts the note's text on the clipboard."));
+        ui.button(&format!("{NOTE_ID}.close"), Rect::new(r.x + r.w - 64, by, 54, 15), "Close", NoteAct::Close, true);
+        self.w = ui.widgets;
+    }
+    fn state(&self, _cx: &Cx<G>) -> Value {
+        json!({"title": self.title, "meta": self.meta, "text": self.text, "message": self.message})
+    }
     widget_plumbing!(Cx<G>);
 }
 

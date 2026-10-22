@@ -1,5 +1,6 @@
 //! Engine UI, game-agnostic (docs/specs/SPLIT1.md section 2): sound and music (`audio`), the canvas and painter (pixel art scaled with nearest
-//! sampling, the UI drawn smooth at native resolution), the widget kit (`ui`), the art loader, live tuning files, the
+//! sampling, the UI drawn smooth at native resolution), the widget kit (`ui`; its text editor and clipboard in
+//! `edit`), the art loader, live tuning files, the
 //! agent link (`bridge`), keyboard focus (`focus`), playtest recordings (`playtest`: the hub that keeps a run's
 //! sessions, trail and notes; `recordings`: the browser that plays them back), the screen stack with its shared
 //! context (`screen`: the engine half, plus the game's half through `Cx<G>`) and the window shell and event loop
@@ -9,6 +10,7 @@ pub mod art;
 pub mod audio;
 pub mod bridge;
 pub mod canvas;
+pub mod edit;
 pub mod focus;
 pub mod jpeg;
 pub mod notes;
