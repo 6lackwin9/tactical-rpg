@@ -110,6 +110,7 @@ because the RNG is bit-exact.
 | `ui/dojo/*.gd` panels (party, inspector, derived, gear, stash, stash filter, stage, console, log, carry bar, allocation) | `emberwake_gui::dojo` on `aegis_ui::window`, scroll areas and `Painter::rich` | manual (GUI, agent link) |
 | `ui/framework/ui_window.gd` (`_clamp_to_parent`, `commit_fraction`, title drag, grip resize, collapse), `ui/dojo/dojo_workspace.gd` (`LAYOUTS`, `apply_layout`, `save_layout`, `_load_layout`, window toggles) | `aegis_ui::window` (`Desk`, `Win`, `Layout`), the shell's desk handling (`desk_press`, `save_desk`) | unit and shell tests (window.rs, shell.rs) |
 | `audio/music_director.gd` (choice: contexts, candidates, scopes, kind and combat context), `sound_events.gd` | `emberwake_gui::music`, `battle` (`sound_of`, from the resolver log; a hit for 0 plays mitigated, the engine log has no mitigation tag) | unit tests (chains, every shipped file decodes, log lines) |
+| none (Godot showed static tokens; its FxSettings speed and instant flags) | `aegis_core::assets::ClipPlayer`, `aegis_ui::art` `played` / `body_outline`, `Image::outline`, `Painter::ellipse` (SPRITE1-L, 2026-10-22); the battle honours the settings `anim_speed` and `skip_anim` | new in the engine, not a port |
 
 Godot behaviours found on the way:
 
@@ -145,6 +146,7 @@ The engine reads the project's `games/emberwake/data/` folder itself; the Godot 
 | `exploration/map_catalog.gd` + `map_rules.gd` (`normalize_template`), `quests/quest_catalog.gd`, `dialogue/service_catalog.gd`, `progression/xp_curve.gd` | `source::load_list`, `xp_curve` | `tests/data_source.rs` |
 
 - `tests/data_source.rs` compares the loader's output with `catalog.json`, `worlds.json` and `game_data.json`: keys, key
+- PHASEFOLD (2026-10-22) retired part of `data_source` and `store`: the loader diff folds Godot's catalog and world encounter rows with `source::fold_legacy_waves`, drops Godot's four `wave_*` schema rows per encounters section and skips the two `phases` help rows (`HELP_CHANGED`); the resave check reprints Godot's encounters files folded through the document writer (their data and key order still compared, Godot's byte formatting of those two files no longer). The reinforcement wave is an arrival phase in the engine; Godot's legacy rows replay through the fold (every battle trace, world trace, sim, journey and save unchanged).
   order and int / float types exactly, floats to 1e-9 (Godot's `JSON.stringify` writes fewer digits than it computes
   with: `0.1 + 0.2` is written `0.3`), and the playable worlds. 239 catalog rows and 3 worlds match.
 - Run on loader-built data instead of the exports, the journeys (5608 actions), save fixtures and world battles (240)

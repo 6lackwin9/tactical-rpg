@@ -3,9 +3,9 @@
 # one sheet per body, kits/rpg/assets/units/<class>/base/sheet.png plus clips.json (frame size, palette slots, clips).
 #   python tools/sprites/export_units.py [class ...] [--root DIR] [--clips idle|all]
 # DIR is a workspace root (default: this repository). Portraits do not come from the rig (ART2 portraits stay).
-# --clips idle (default, until SPRITE1-A2): a one-frame sheet, the idle pose's first frame (the 48 px figure at 2x,
+# --clips idle (the pre-SPRITE1-A2 form): a one-frame sheet, the idle pose's first frame (the 48 px figure at 2x,
 #   bottom-aligned in the 104 px square), clips.json frame [104, 104] with one idle clip.
-# --clips all (SPRITE1-A2): one row per clip in clips.json order, frames left to right, each 48x48 (nearest, transparent);
+# --clips all (default since SPRITE1-A2): one row per clip in clips.json order, frames left to right, each 48x48 (nearest, transparent);
 #   every clip with the rig's per-frame ms; loop true for idle, walk and idle_guarded.
 # Palette slots: the rig palette's base colours (keys without a _lo / _hi shade suffix) that occur in the sheet, so a
 # palette file (units/<class>/base/palettes/<id>.json) can recolour the body; at most 16 (aegis_core::assets).
@@ -65,7 +65,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("classes", nargs="*", help="class ids (default: every rig class)")
     ap.add_argument("--root", default=WORKSPACE, help="workspace root holding kits/rpg/assets")
-    ap.add_argument("--clips", choices=["idle", "all"], default="idle")
+    ap.add_argument("--clips", choices=["idle", "all"], default="all")
     args = ap.parse_args()
     for cls in args.classes or list(classes.UNITS):
         if cls not in classes.UNITS:

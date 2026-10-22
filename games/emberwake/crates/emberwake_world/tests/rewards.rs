@@ -66,7 +66,9 @@ fn envelope(gs: &GameState, version: i64) -> Dict {
 
 #[test]
 fn the_roster_keys_each_ref_by_its_earlier_entries_and_weighs_kill_xp() {
-    let (_s, d) = scratch("roster", &[(Some("ashlands"), "encounters", "ash_raiders", json!({"wave_units": ["ash_brawler"]}))]);
+    // the reinforcement wave as an arrival phase (PHASEFOLD), the first phase: its units follow the enemies
+    let arrival = emberwake_battle::encounter::arrival_phase(&["ash_brawler".to_string()], 1, 4, emberwake_battle::encounter::ARRIVAL_LABEL);
+    let (_s, d) = scratch("roster", &[(Some("ashlands"), "encounters", "ash_raiders", json!({"phases": [arrival]}))]);
     let r = battle::roster(&d, "ashlands", "ashlands:ash_raiders");
     let keys: Vec<&str> = r.iter().map(|f| f.key.as_str()).collect();
     assert_eq!(keys, ["ash_brawler#0", "ash_skirmisher#0", "ash_shaman#0", "ash_brawler#1"]);

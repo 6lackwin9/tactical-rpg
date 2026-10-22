@@ -37,8 +37,8 @@ kit's `kits/rpg/assets/` or `engine/assets/`). Python 3.12 with Pillow and numpy
   `--overwrite`: the committed portraits and skill and item icons are ART2 art from `art_src/` (Git LFS, made by
   `tools/portraits/`), which the placeholders must not replace.
 - `python tools/sprites/export_units.py [class ...] [--root DIR] [--clips idle|all]`: the six class bodies of the kit
-  from the sprite rig (`units/<class>/base/`; `idle` = the one-frame 104 px sheet, `all` = every clip at 48 px,
-  SPRITE1-A2), with the rig's base colours as palette slots.
+  from the sprite rig (`units/<class>/base/`; `all`, the default = every clip at 48 px, SPRITE1-A2; `idle` = the old
+  one-frame 104 px sheet), with the rig's base colours as palette slots.
 - `python tools/gen_music.py [track ...] [--layer kit|game] [--root DIR] [--list]`: the music (numpy and ffmpeg);
   `menu_theme` and the world tracks land here, the mood loops in the kit.
 - Check a regeneration without touching the committed files: run `gen_art.py --root DIR` and

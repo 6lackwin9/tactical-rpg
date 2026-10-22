@@ -135,12 +135,12 @@ pub struct RosterFoe {
     pub weight: i64,
 }
 
-/// The encounter's roster seen from `world_id`: `enemies`, `wave_units`, then the units of every phase's `wave`
-/// effects (phase order, effect order), keeping only refs that resolve to a unit (the refs the battle spawns).
+/// The encounter's roster seen from `world_id`: `enemies`, then the units of every phase's `wave` effects (phase
+/// order, effect order; the arrival, the reinforcements, comes first: PHASEFOLD 3), keeping only refs that resolve to
+/// a unit (the refs the battle spawns).
 pub fn roster(d: &Data, world_id: &str, encounter_qid: &str) -> Vec<RosterFoe> {
     let enc = d.resolve(world_id, "encounters", encounter_qid);
     let mut refs = json::sget(enc, "enemies");
-    refs.extend(json::sget(enc, "wave_units"));
     for phase in json::aget(enc, "phases") {
         for fx in json::aget(json::dict(phase), "effects") {
             let fx = json::dict(fx);

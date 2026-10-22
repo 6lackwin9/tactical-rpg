@@ -3,13 +3,62 @@
 //! PACE1 boss without an enrage, the PURSE1 purse).
 
 use super::View;
-use crate::source::{content, fields};
+use crate::source::content;
 use aegis_core::json::{self, gstr, Dict};
+use emberwake_battle::encounter::{ARRIVAL, ARRIVAL_BLOCK, ARRIVAL_ROUND};
 use emberwake_battle::grid::{terrain_walkable, Grid, TerrainTable, GRID_H, GRID_W, V2};
 use emberwake_rules::status;
-use serde_json::Value;
+use serde_json::{json, Value};
+use std::sync::OnceLock;
 
 const MAX_PARTY: usize = 4;
+
+// ---- The arrival (PHASEFOLD) ----
+
+/// PHASEFOLD 1.3: the retired `wave_units` field (label "Reinforcements", enemy units or enemy characters, dupes
+/// allowed). The arrival's units are checked as that field was (its messages, at its place after `enemies`), and it
+/// filters the refs of every phase wave.
+pub fn wave_field(world: bool) -> &'static Dict {
+    static CONTENT: OnceLock<Dict> = OnceLock::new();
+    static WORLD: OnceLock<Dict> = OnceLock::new();
+    let make = |r: &str, filter: Value| json!({"key": "wave_units", "label": "Reinforcements", "type": "refs", "default": [], "ref": r, "ref_filter": filter, "dupes": true}).as_object().cloned().unwrap_or_default();
+    if world {
+        WORLD.get_or_init(|| make("characters", json!({"role": "enemy"})))
+    } else {
+        CONTENT.get_or_init(|| make("units", json!({"side": "enemy"})))
+    }
+}
+
+fn is_arrival(phase: &Dict) -> bool {
+    json::s(json::dget(phase, "trigger"), "kind") == ARRIVAL
+}
+
+/// The encounter's first arrival phase (PHASEFOLD), if any.
+pub fn arrival(e: &Dict) -> Option<&Dict> {
+    dicts(json::get(e, "phases")).into_iter().find(|p| is_arrival(p))
+}
+
+/// The units of the arrival's wave effects as one list (the value the retired wave_units field held).
+pub fn arrival_units(e: &Dict) -> Option<Value> {
+    arrival(e).map(|p| Value::Array(dicts(json::get(p, "effects")).into_iter().filter(|fx| json::s(fx, "type") == "wave").flat_map(|fx| json::arr(json::get(fx, "units")).to_vec()).collect()))
+}
+
+/// PHASEFOLD 1.2: an arrival past the end of the round or after the last round (the retired wave fields' messages, at
+/// their place: after the party and enemy counts).
+pub fn arrival_errors(e: &Dict) -> Vec<String> {
+    let mut errors = Vec::new();
+    let Some(t) = arrival(e).map(|p| json::dget(p, "trigger")) else { return errors };
+    let read = |key: &str, default: i64| t.get(key).cloned().unwrap_or(json::int(default));
+    let (block, round) = (read("block", ARRIVAL_BLOCK as i64), read("round", ARRIVAL_ROUND as i64));
+    let total = json::to_int(json::get(e, "total_blocks"));
+    if whole(&block) && json::to_int(&block) > total {
+        errors.push(format!("The wave block is past the end of the round ({total} blocks)."));
+    }
+    if whole(&round) && json::to_int(&round) > json::to_int(json::get(e, "max_rounds")) {
+        errors.push("The wave round is after the last round.".into());
+    }
+    errors
+}
 
 /// An int, or a float with no fraction (EncounterPhases._is_whole; JSON numbers may load as floats).
 fn whole(v: &Value) -> bool {
@@ -46,19 +95,10 @@ pub fn errors(v: &View, e: &Dict) -> Vec<String> {
     if party.len() > MAX_PARTY {
         errors.push(format!("The party holds at most {MAX_PARTY} members."));
     }
-    if !json::arr(json::get(e, "wave_units")).is_empty() {
-        let total = json::to_int(json::get(e, "total_blocks"));
-        if json::to_int(json::get(e, "wave_block")) > total {
-            errors.push(format!("The wave block is past the end of the round ({total} blocks)."));
-        }
-        if json::to_int(json::get(e, "wave_round")) > json::to_int(json::get(e, "max_rounds")) {
-            errors.push("The wave round is after the last round.".into());
-        }
-    }
-    let wave_field = fields("content", "encounters").iter().map(json::dict).find(|f| json::s(f, "key") == "wave_units").unwrap_or_else(|| json::empty());
+    errors.extend(arrival_errors(e));
     errors.extend(phase_problems(e, &|r: &str| {
         let target = v.get("units", r);
-        !target.is_empty() && super::passes_filter(wave_field, target)
+        !target.is_empty() && super::passes_filter(wave_field(false), target)
     }));
     errors.extend(objective_problems(v, e, &|_: &str| true));
     errors.extend(morale_problems(e));
@@ -119,6 +159,7 @@ const PACES: [&str; 4] = ["auto", "mob", "elite", "boss"];
 fn trigger_keys(kind: &str) -> &'static [&'static str] {
     match kind {
         "hp_below" => &["kind", "unit", "pct", "or_round"],
+        ARRIVAL => &["kind", "round", "block"],
         _ => &["kind", "round"],
     }
 }
@@ -138,13 +179,15 @@ fn wave_refs_of(phase: &Dict) -> Vec<String> {
     dicts(json::get(phase, "effects")).into_iter().filter(|fx| json::s(fx, "type") == "wave").flat_map(|fx| strings(json::get(fx, "units"))).collect()
 }
 
-/// EncounterPhases.reserved_refs: every phase-wave unit of an encounter, in phase order.
+/// EncounterPhases.reserved_refs: every phase-wave unit of an encounter, in phase order (the arrival's first: it is
+/// first in the list, though never reserved in battle).
 pub fn reserved_refs(e: &Dict) -> Vec<String> {
     dicts(json::get(e, "phases")).into_iter().flat_map(wave_refs_of).collect()
 }
 
-/// EncounterPhases.problems: the `phases` list and the unit cap across enemies, wave_units and phase waves.
-/// `ref_ok(ref)` says whether a phase-wave ref resolves under the wave_units enemy filter.
+/// EncounterPhases.problems: the `phases` list (the arrival included, PHASEFOLD 1.3) and the unit cap across enemies
+/// and phase waves. `ref_ok(ref)` says whether a phase-wave ref resolves under the wave field's enemy filter (the
+/// arrival's refs are checked as that field, `wave_field`).
 pub fn phase_problems(e: &Dict, ref_ok: &dyn Fn(&str) -> bool) -> Vec<String> {
     let mut errors = Vec::new();
     let raw = e.get("phases").cloned().unwrap_or(Value::Array(Vec::new()));
@@ -153,25 +196,25 @@ pub fn phase_problems(e: &Dict, ref_ok: &dyn Fn(&str) -> bool) -> Vec<String> {
         return errors;
     };
     let enemies = strings(json::get(e, "enemies"));
-    let waves = strings(json::get(e, "wave_units"));
     let max_rounds = json::to_int(json::get(e, "max_rounds"));
-    if list.len() > MAX_PHASES {
+    let total_blocks = json::to_int(json::get(e, "total_blocks"));
+    let arrivals = list.iter().filter_map(Value::as_object).filter(|p| is_arrival(p)).count();
+    if list.len() - arrivals > MAX_PHASES {
         errors.push(format!("An encounter holds at most {MAX_PHASES} phases."));
     }
     let mut known: Vec<String> = enemies.clone();
-    known.extend(waves.iter().cloned());
     let mut phase_units = 0;
     for p in list.iter().filter_map(Value::as_object) {
         let refs = wave_refs_of(p);
         phase_units += refs.len();
         known.extend(refs);
     }
-    if enemies.len() + waves.len() + phase_units > MAX_UNITS {
+    if enemies.len() + phase_units > MAX_UNITS {
         errors.push(format!("Encounter enemies, waves and phase waves hold at most {MAX_UNITS} units."));
     }
     let mut seen: Vec<String> = Vec::new();
     let mut enrages = 0;
-    for p in &list {
+    for (index, p) in list.iter().enumerate() {
         let Some(phase) = p.as_object() else {
             errors.push("Each phase must be an object.".into());
             continue;
@@ -200,24 +243,47 @@ pub fn phase_problems(e: &Dict, ref_ok: &dyn Fn(&str) -> bool) -> Vec<String> {
         if phase.get("pause_autoplay").is_some_and(|b| !b.is_boolean()) {
             errors.push(format!("Phase '{tag}': pause_autoplay must be true or false."));
         }
-        errors.extend(trigger_errors(&tag, json::get(phase, "trigger"), &enemies, max_rounds));
-        errors.extend(effects_errors(&tag, json::get(phase, "effects"), &known, ref_ok));
+        let arrival = is_arrival(phase);
+        errors.extend(trigger_errors(&tag, json::get(phase, "trigger"), &enemies, max_rounds, total_blocks));
+        errors.extend(effects_errors(&tag, json::get(phase, "effects"), &known, ref_ok, arrival));
         errors.extend(enrage_errors(&tag, phase, &enemies));
+        if arrival {
+            errors.extend(arrival_shape_errors(&tag, phase, index));
+        }
     }
     if enrages > 1 {
         errors.push("An encounter holds at most one enrage.".into());
     }
+    if arrivals > 1 {
+        errors.push("An encounter holds at most one arrival.".into());
+    }
     errors
 }
 
-fn trigger_errors(tag: &str, raw: &Value, enemies: &[String], max_rounds: i64) -> Vec<String> {
+/// PHASEFOLD 1.3: an arrival holds one wave and nothing else, comes first and never pauses autoplay.
+fn arrival_shape_errors(tag: &str, phase: &Dict, index: usize) -> Vec<String> {
+    let mut errors = Vec::new();
+    let effects = json::arr(json::get(phase, "effects"));
+    if effects.len() != 1 || effects.iter().any(|fx| json::s(json::dict(fx), "type") != "wave") {
+        errors.push(format!("Phase '{tag}': an arrival holds one wave and nothing else."));
+    }
+    if index != 0 {
+        errors.push(format!("Phase '{tag}': the arrival comes first in the phase list."));
+    }
+    if phase.get("pause_autoplay") == Some(&Value::Bool(true)) {
+        errors.push(format!("Phase '{tag}': an arrival never pauses autoplay."));
+    }
+    errors
+}
+
+fn trigger_errors(tag: &str, raw: &Value, enemies: &[String], max_rounds: i64, total_blocks: i64) -> Vec<String> {
     let mut errors = Vec::new();
     let Some(t) = raw.as_object() else {
         errors.push(format!("Phase '{tag}' needs a trigger."));
         return errors;
     };
     let kind = json::s(t, "kind");
-    if kind != "hp_below" && kind != "round" {
+    if kind != "hp_below" && kind != "round" && kind != ARRIVAL {
         errors.push(format!("Phase '{tag}': unknown trigger '{kind}'."));
         return errors;
     }
@@ -242,13 +308,21 @@ fn trigger_errors(tag: &str, raw: &Value, enemies: &[String], max_rounds: i64) -
         if !whole(&or_round) || (n != 0 && (n < ROUND_MIN || n > max_rounds)) {
             errors.push(format!("Phase '{tag}': or_round must be {ROUND_MIN}..{max_rounds}."));
         }
+    } else if kind == ARRIVAL {
+        // Past the end: the retired wave field's messages (arrival_errors); here only below 1 or not whole.
+        for (key, default, hi) in [("round", ARRIVAL_ROUND as i64, max_rounds), ("block", ARRIVAL_BLOCK as i64, total_blocks)] {
+            let v = t.get(key).cloned().unwrap_or(json::int(default));
+            if !whole(&v) || json::to_int(&v) < 1 {
+                errors.push(format!("Phase '{tag}': {key} must be 1..{hi}."));
+            }
+        }
     } else if !in_range(json::get(t, "round"), ROUND_MIN, max_rounds) {
         errors.push(format!("Phase '{tag}': round must be {ROUND_MIN}..{max_rounds}."));
     }
     errors
 }
 
-fn effects_errors(tag: &str, raw: &Value, known: &[String], ref_ok: &dyn Fn(&str) -> bool) -> Vec<String> {
+fn effects_errors(tag: &str, raw: &Value, known: &[String], ref_ok: &dyn Fn(&str) -> bool, arrival: bool) -> Vec<String> {
     let mut errors = Vec::new();
     let list = json::arr(raw);
     if list.is_empty() || list.len() > MAX_EFFECTS {
@@ -281,7 +355,7 @@ fn effects_errors(tag: &str, raw: &Value, known: &[String], ref_ok: &dyn Fn(&str
             }
             "wave" => {
                 waves += 1;
-                errors.extend(wave_errors(tag, fx, ref_ok));
+                errors.extend(wave_errors(tag, fx, ref_ok, arrival));
             }
             "status" => errors.extend(status_errors(tag, fx, known)),
             "ai" => errors.extend(ai_errors(tag, fx, known)),
@@ -297,7 +371,8 @@ fn effects_errors(tag: &str, raw: &Value, known: &[String], ref_ok: &dyn Fn(&str
     errors
 }
 
-fn wave_errors(tag: &str, fx: &Dict, ref_ok: &dyn Fn(&str) -> bool) -> Vec<String> {
+/// One wave effect; an arrival's unit refs are checked as the wave field instead (`wave_field`, validate_entry).
+fn wave_errors(tag: &str, fx: &Dict, ref_ok: &dyn Fn(&str) -> bool, arrival: bool) -> Vec<String> {
     let mut errors = Vec::new();
     let units = match fx.get("units") {
         Some(Value::Array(a)) if !a.is_empty() => a,
@@ -306,7 +381,7 @@ fn wave_errors(tag: &str, fx: &Dict, ref_ok: &dyn Fn(&str) -> bool) -> Vec<Strin
             return errors;
         }
     };
-    for u in units {
+    for u in units.iter().filter(|_| !arrival) {
         let r = gstr(u);
         if !u.is_string() || !ref_ok(&r) {
             errors.push(format!("Phase '{tag}': wave unit '{r}' is not an enemy."));
@@ -401,15 +476,14 @@ fn ai_errors(tag: &str, fx: &Dict, known: &[String]) -> Vec<String> {
     errors
 }
 
-/// EncounterPhases.pace_of: a set `pace` wins; auto = boss when any enemy (enemies, wave_units, phase waves) is a
-/// boss, else elite when any is elite, else mob. `tier_of(ref)` is the unit tier of an encounter ref.
+/// EncounterPhases.pace_of: a set `pace` wins; auto = boss when any enemy (enemies, phase waves with the arrival) is
+/// a boss, else elite when any is elite, else mob. `tier_of(ref)` is the unit tier of an encounter ref.
 pub fn pace_of(e: &Dict, tier_of: &dyn Fn(&str) -> String) -> String {
     let pace = json::s_or(e, "pace", "auto");
     if PACES.contains(&pace.as_str()) && pace != "auto" {
         return pace;
     }
     let mut refs = strings(json::get(e, "enemies"));
-    refs.extend(strings(json::get(e, "wave_units")));
     refs.extend(reserved_refs(e));
     let mut elite = false;
     for r in &refs {

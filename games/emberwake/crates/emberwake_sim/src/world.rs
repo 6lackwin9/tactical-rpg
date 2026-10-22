@@ -164,14 +164,17 @@ pub fn encounter(r: &mut Runner, id: &str, foe_level: i32, elevel_set: bool, wor
     }
     let ctx = Ctx { world: world.to_string(), level: foe_level, shifted: elevel_set };
     let mut base = Map::new();
-    for key in ["zone", "arena", "exits", "total_blocks", "unit_ap", "ap_regen", "wave_round", "wave_block", "wave_label"] {
+    for key in ["zone", "arena", "exits", "total_blocks", "unit_ap", "ap_regen"] {
         if let Some(v) = entry.get(key) {
             base.insert(key.into(), v.clone());
         }
     }
     let enemies = map_refs(r, &ctx, json::aget(&entry, "enemies"));
-    let wave = map_refs(r, &ctx, json::aget(&entry, "wave_units"));
-    base.insert("wave_units".into(), json!(wave));
+    // PHASEFOLD rule 7: the arrival phase always (mapped where the wave was), the other phases only when full.
+    let arrival = crate::scenarios::arrival_of(&entry).map(|p| map_node(r, &ctx, &p));
+    if let Some(a) = &arrival {
+        base.insert("phases".into(), json!([a]));
+    }
     if full {
         for key in ["objective", "objective_tiles", "objective_rounds", "objective_count", "objective_text", "deployment"] {
             if let Some(v) = entry.get(key) {
@@ -184,7 +187,10 @@ pub fn encounter(r: &mut Runner, id: &str, foe_level: i32, elevel_set: bool, wor
         base.insert("guests".into(), json!(guests));
         let protect = map_refs(r, &ctx, json::aget(&entry, "protect"));
         base.insert("protect".into(), json!(protect));
-        let phases: Vec<Value> = json::aget(&entry, "phases").iter().map(|p| map_node(r, &ctx, p)).collect();
+        let mut phases: Vec<Value> = arrival.into_iter().collect();
+        for p in json::aget(&entry, "phases").iter().filter(|p| json::s(json::dget(json::dict(p), "trigger"), "kind") != emberwake_battle::encounter::ARRIVAL) {
+            phases.push(map_node(r, &ctx, p));
+        }
         base.insert("phases".into(), Value::Array(phases));
         for key in MORALE_KEYS {
             if let Some(v) = entry.get(key) {

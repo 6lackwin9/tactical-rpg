@@ -25,7 +25,7 @@ What is here (`assets/`):
 Placeholder and baseline art comes from the repository's `tools/`, which write the layered tree (ASSETORG2-T):
 
 - `python tools/sprites/export_units.py [class ...] [--clips idle|all]`: the six class bodies (`units/<class>/base/`)
-  from the sprite rig, with the rig's base colours as `clips.json` palette slots.
+  from the sprite rig, every clip by default (SPRITE1-A2), with the rig's base colours as `clips.json` palette slots.
 - `python tools/gen_art.py [group ...] --layer kit [--overwrite]`: the goblin variant and dummy bodies, common
   portraits, item bases and variants, skill kind icons, statuses, map markers and the UI pins, intents, badges and
   chips. Existing files are kept without `--overwrite` (the portraits and skill and item icons are ART2 art from

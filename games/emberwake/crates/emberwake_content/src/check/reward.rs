@@ -102,10 +102,10 @@ pub fn loot_warnings(v: &View, e: &Dict) -> Vec<String> {
     out
 }
 
-/// The refs of a world encounter's roster (REWARD1 2.1): enemies, reinforcements, phase waves, resolving ones only.
+/// The refs of a world encounter's roster (REWARD1 2.1): enemies, then every phase wave in list order (the arrival,
+/// the reinforcements, first: PHASEFOLD 3), resolving ones only.
 fn roster_refs(v: &View, w: &str, e: &Dict) -> Vec<String> {
     let mut refs = json::sget(e, "enemies");
-    refs.extend(json::sget(e, "wave_units"));
     for phase in json::aget(e, "phases") {
         for fx in json::aget(json::dict(phase), "effects") {
             let fx = json::dict(fx);

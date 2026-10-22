@@ -42,6 +42,26 @@ fn at_freeze(text: &str) -> String {
     s
 }
 
+/// Retired parity (PHASEFOLD, HISTORY 2026-10-22): the single reinforcement wave became an arrival phase, so the
+/// writer stores no `wave_*` keys. Godot's saved encounters files are parsed, every entry folded by the engine's
+/// `fold_legacy_wave` and printed by the same document writer before comparing; every other file stays byte for byte.
+fn godot_encounters_folded(text: &str) -> String {
+    let doc: serde_json::Value = serde_json::from_str(text).expect("Godot's encounters file");
+    let kind = doc["kind"].as_str().unwrap_or("encounters").to_string();
+    let version = doc["version"].as_i64().unwrap_or(1);
+    let (entries, _) = aegis_content::file::entries_of(doc);
+    let folded = entries
+        .into_iter()
+        .map(|mut e| {
+            if let Some(o) = e.as_object_mut() {
+                emberwake_battle::encounter::fold_legacy_wave(o);
+            }
+            e
+        })
+        .collect();
+    aegis_content::file::document(&kind, version, folded)
+}
+
 /// Godot's saves of the same files: `parity/export.sh only=resave` copies the catalog and worlds to resave/before and
 /// has ContentCatalog.save_all / WorldCatalog.save_all write them into resave/after. The writer, given resave/before,
 /// must write every file of resave/after byte for byte (field order, storage form, empty kinds).
@@ -59,7 +79,10 @@ fn writer_saves_exactly_what_godot_saves() {
     let mut compare = |path: PathBuf, text: Result<String, String>| {
         files += 1;
         let rel = path.strip_prefix(&dir).unwrap().to_path_buf();
-        let want = std::fs::read_to_string(after.join(&rel)).unwrap_or_default().replace("\r\n", "\n");
+        let mut want = std::fs::read_to_string(after.join(&rel)).unwrap_or_default().replace("\r\n", "\n");
+        if rel.file_name().is_some_and(|n| n == "encounters.json") && !want.is_empty() {
+            want = godot_encounters_folded(&want);
+        }
         match text {
             Err(e) => diffs.push(format!("{}: {e}", path.display())),
             Ok(t) if at_freeze(&t) != want => {
