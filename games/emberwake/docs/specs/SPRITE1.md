@@ -9,6 +9,10 @@ warhammer), sharing the base's palette slots (DIR4 L3). The look follows the equ
 shield of burden `BUCKLER_MAX_BURDEN` (0) or less gives `1h_buckler`, a heavier shield the class sheet; named bodies keep
 their art (Hest, Brask, Orsa: hatchet and buckler; Grakka: a 2H double-bladed axe). The battle switch is slice 2.
 
+Status update (2026-10-23): FACE1 done: units face their target or their step instead of their side (`Tokens::catch_up`,
+`UnitAnim` in `battle.rs`); this replaces SPRITE2's "foes face the party" mirroring. A battle still starts with the party
+facing right and the foes left; with the enemy tells hidden, enemies keep their facing while the party plans.
+
 Status update (2026-10-23): SPRITE2 done: goblin variants of each class body, the dummy, Grakka, the Horde Warchief and
 the NPC bodies on the rig with every clip; ash and named goblins as palette files (seed `sprite2.json`). Foes face the
 party: a foe's token frame and its outline are drawn mirrored (the sheets face right); allies as drawn (`token_frame` in

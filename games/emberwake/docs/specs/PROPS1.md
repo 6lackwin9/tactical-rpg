@@ -15,6 +15,11 @@ Sources: PLAYUI1 2.5 and 9b; preferences `assets-world.md` (Style A, 16-colour p
 `games/emberwake/data/maps/maps.json` and their checks (`emberwake_content::check::map`); `region.rs` as it is on
 2026-10-22 (16 logical px tiles, tiles then markers then the party, no sort).
 
+Status update (2026-10-23): PROPS1-L2 built the drawing. A standing prop without art also gets a darker south face
+(the bottom 4 logical px) besides the fill and edge of section 4.6, so the placeholder reads as a block (accepted in
+review). Missing prop art is reported by the content check (A7), not the playtest asset log (`Art::pick` finds no file
+before `Art::image` is asked).
+
 Status update (2026-10-23): PROPS1-T built `tools/portraits/sheets.py props-prompts` and `props` (alias `slice-props`)
 with three differences from section 7: the sheets use a flat magenta key (the ART2 and PLAYUI1 form; a dark ground
 still cuts by the edge flood), reduction is the most common colour per block rather than plain nearest neighbour, and

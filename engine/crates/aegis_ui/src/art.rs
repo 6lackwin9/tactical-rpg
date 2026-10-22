@@ -6,10 +6,11 @@
 //! `aegis_core::assets::ClipPlayer`), a frame's silhouette outline is cached (`body_outline`, highlights) and a body
 //! is checked frame by frame (`body_problems`); `played`, `body_outline` and `body_clip_flipped` take a `flip` to
 //! show a frame mirrored (a sheet facing right drawn facing left). PROPS1-E: a file's own size (`size_of`), mirrored images
-//! (`image_mirrored`) and a variant picked over a chain of folders (`varied`, which `tile_in` wraps).
+//! (`image_mirrored`) and a variant picked over a chain of folders (`varied`, which `tile_in` wraps). DIR4-E: a body
+//! played for a four-way `Facing` (`played_facing`: front and back rows of the sheet, side rows mirrored for left).
 
 use crate::canvas::{Image, Rgba, OUTLINE_ALPHA};
-use aegis_core::assets::{self, ClipFrame, ClipPlayer, Clips, Layers};
+use aegis_core::assets::{self, ClipFrame, ClipPlayer, Clips, Facing, Layers};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -251,6 +252,15 @@ impl Art {
     pub fn played(&mut self, key: &str, palette: &str, player: &ClipPlayer, now: u64, size: i32, flip: bool) -> Option<(ClipFrame, &Image)> {
         let f = player.frame(self.clips(key)?, now)?;
         let img = self.body_clip_flipped(key, palette, &f.clip, f.frame, size, flip)?;
+        Some((f, img))
+    }
+
+    /// `played` for a four-way `facing` (DIR4 3.2): the player's frame in `facing.view` (`ClipPlayer::frame_facing`:
+    /// the clip's view row, else its side row, else idle in that view, else side idle), mirrored only when it is a
+    /// side row and the facing is left (`Facing::mirrors`; pass the same to `body_outline`). Cached as `played`.
+    pub fn played_facing(&mut self, key: &str, palette: &str, player: &ClipPlayer, now: u64, size: i32, facing: Facing) -> Option<(ClipFrame, &Image)> {
+        let f = player.frame_facing(self.clips(key)?, now, facing.view)?;
+        let img = self.body_clip_flipped(key, palette, &f.clip, f.frame, size, facing.mirrors(&f))?;
         Some((f, img))
     }
 

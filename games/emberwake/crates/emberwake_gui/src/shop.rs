@@ -13,7 +13,8 @@ use aegis_ui::ui::{tip, Ui, BODY, BORDER, DIM, FOE, FRAME, GOLD, GOOD, INFO, MOD
 use emberwake_world::shop;
 use serde_json::{json, Value};
 
-/// The tag of the "Discard this trade?" question (`Cx::ask_tag`); `RegionMap` takes the Yes and leaves the shop.
+/// The tag of the "Discard this trade?" question (`Cx::ask_tag_no`: No is the default, PLAYUI1 4.3 rule 5); `RegionMap`
+/// takes the Yes and leaves the shop.
 pub const DISCARD: &str = "shop.discard";
 /// The frame at text size Normal (spec 4.2); bigger text grows it, centred, up to `EDGE` from the canvas and the HUD.
 const SHOP_W: i32 = 600;
@@ -232,7 +233,7 @@ impl ShopPane {
                 if self.trade.is_empty() {
                     return true;
                 }
-                cx.ask_tag("Discard this trade?", DISCARD);
+                cx.ask_tag_no("Discard this trade?", DISCARD);
             }
         }
         false
@@ -470,9 +471,9 @@ mod tests {
     use super::*;
     use crate::hud::hud_tests::{frame, game_cx, gfx, rect};
     use crate::region::RegionMap;
-    use crate::screens::Nav;
+    use crate::screens::{GameCx, Nav};
     use aegis_ui::painter::TextRec;
-    use aegis_ui::screen::{Screen, TEXT_SIZES};
+    use aegis_ui::screen::{Key, Screen, TEXT_SIZES};
     use aegis_ui::ui::Gfx;
 
     fn widget(map: &RegionMap, id: &str) -> Option<Value> {
@@ -738,6 +739,49 @@ mod tests {
             assert!(cx.nav.is_empty());
             frame(map, cx, g, 1.0);
             assert!(widget(map, "shop").is_none());
+            false
+        });
+    }
+
+    /// The question `back` pushed (ASKNO1), taken off `cx.nav`.
+    fn take_question(cx: &mut Cx) -> Box<dyn Screen<GameCx>> {
+        let Some(Nav::Push(q)) = cx.nav.pop() else { panic!("a question") };
+        assert!(cx.nav.is_empty());
+        q
+    }
+
+    /// 4.3 rule 5 "No focused" (ASKNO1): "Discard this trade?" has No as the default: Enter keeps the trade, `y`
+    /// discards it.
+    #[test]
+    fn enter_at_discard_keeps_the_trade_and_y_discards() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        each_shop(&mut cx, &mut g, |map, cx, g, q| {
+            fill_stash(cx);
+            frame(map, cx, g, 1.0);
+            let d = cx.data.clone();
+            let item = shop::sell_list(&d, cx.gs(), q).first().map(|r| s(r, "item")).expect("something the shop buys");
+            map.click_id(cx, &format!("stash.row.{item}")).expect("stash row");
+            frame(map, cx, g, 1.0);
+            let (before, trade) = (cx.gs().clone(), sells(map, cx));
+            map.back(cx);
+            let mut ask = take_question(cx);
+            assert_eq!((ask.id(), ask.state(cx)["question"].clone(), ask.state(cx)["default"].clone()), ("ask", json!("Discard this trade?"), json!("no")));
+            assert!(ask.auto_focus(), "No has the focus as it opens");
+            ask.key(cx, Key::Enter);
+            assert!(matches!(cx.nav.as_slice(), [Nav::Pop]) && cx.answers.is_empty(), "Enter: No");
+            cx.nav.clear();
+            frame(map, cx, g, 1.0);
+            frame(map, cx, g, 1.0);
+            assert!(widget(map, "shop").is_some() && sells(map, cx) == trade, "Enter keeps the shop and the trade");
+            map.back(cx);
+            let mut ask = take_question(cx);
+            ask.key(cx, Key::Char('y'));
+            assert!(matches!(cx.nav.as_slice(), [Nav::Pop]) && cx.answers == [DISCARD], "y: Yes");
+            cx.nav.clear();
+            frame(map, cx, g, 1.0);
+            frame(map, cx, g, 1.0);
+            assert!(widget(map, "shop").is_none() && widget(map, "dialogue").is_some(), "y discards the trade and leaves the shop");
+            assert!(*cx.gs() == before, "nothing traded");
             false
         });
     }

@@ -62,7 +62,7 @@ impl MainMenu {
             MenuAct::Tools => cx.nav.push(Nav::Push(Box::new(crate::runner::SceneRunner::new()))),
             MenuAct::Quit => {
                 if cx.is_dirty() {
-                    cx.ask("Quit without saving?", |cx| cx.quit = true);
+                    cx.ask_no("Quit without saving?", |cx| cx.quit = true);
                 } else {
                     cx.quit = true;
                 }
@@ -207,7 +207,7 @@ impl NewGameScreen {
                         cx.location_name(&s(&head, "world_id"), &s(&head, "location_id")),
                         if at > 0 { datetime(at) } else { "unknown time".into() }
                     );
-                    cx.ask(q, move |cx| start_world(cx, &world));
+                    cx.ask_no(q, move |cx| start_world(cx, &world));
                 } else {
                     start_world(cx, &world);
                 }
@@ -341,7 +341,7 @@ impl Slots {
                 } else if cx.has_game() && cx.is_dirty() {
                     let what = Self::describe(cx, slot);
                     let name = if slot == save::AUTOSAVE_SLOT { "the autosave".to_string() } else { format!("slot {slot}") };
-                    cx.ask(format!("Load {name} ({what})? Unsaved progress in the current game is lost."), move |cx| load_slot(cx, slot));
+                    cx.ask_no(format!("Load {name} ({what})? Unsaved progress in the current game is lost."), move |cx| load_slot(cx, slot));
                 } else {
                     load_slot(cx, slot);
                 }
@@ -355,7 +355,7 @@ impl Slots {
                     show_errors(cx, vec![format!("Slot {slot} is locked.")]);
                 } else if save::exists(&cx.save_dir, slot) {
                     let what = Self::describe(cx, slot);
-                    cx.ask(format!("Overwrite slot {slot}{}?", if what.is_empty() { String::new() } else { format!(": {what}") }), move |cx| save_now(cx, slot));
+                    cx.ask_no(format!("Overwrite slot {slot}{}?", if what.is_empty() { String::new() } else { format!(": {what}") }), move |cx| save_now(cx, slot));
                 } else {
                     save_now(cx, slot);
                 }
@@ -365,7 +365,7 @@ impl Slots {
                     return show_errors(cx, vec!["Unlock the save to delete it.".into()]);
                 }
                 let what = Self::describe(cx, slot);
-                cx.ask(format!("Delete the save in slot {slot}{}?", if what.is_empty() { String::new() } else { format!(" ({what})") }), move |cx| {
+                cx.ask_no(format!("Delete the save in slot {slot}{}?", if what.is_empty() { String::new() } else { format!(" ({what})") }), move |cx| {
                     if let Err(e) = save::delete(&cx.save_dir, slot) {
                         show_errors(cx, vec![e]);
                     }
@@ -833,6 +833,58 @@ mod tests {
         assert!(save::exists(&dir, 2), "delete asks first");
         answer_yes(&mut cx, &mut g);
         assert!(!save::exists(&dir, 2) && cx.notice.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// ASKNO2: the question the last action asked is the No-default form (it asks for the pointer on No); Enter
+    /// answers No: the question closes and nothing else happens.
+    fn enter_is_no(cx: &mut Cx, g: &mut Gfx, what: &str) {
+        let Some(Nav::Push(mut ask)) = cx.nav.pop() else { panic!("{what}: a question was asked") };
+        assert!(cx.nav.is_empty(), "{what}");
+        ask.draw(cx, g, (-1, -1), true);
+        assert_eq!((ask.id(), ask.state(cx)["default"].as_str(), ask.pointer_to()), ("ask", Some("no"), Some("ask.no")), "{what}");
+        ask.key(cx, Key::Enter);
+        assert!(matches!(cx.nav.as_slice(), [Nav::Pop]), "{what}: Enter only closes the question");
+        cx.nav.clear();
+    }
+
+    /// ASKNO2: every question that loses progress or a save defaults to No (quit, quit to the main menu, load over
+    /// unsaved progress, overwrite, delete, a new game over the autosave).
+    #[test]
+    fn the_risky_questions_answer_no_on_enter() {
+        let dir = std::env::temp_dir().join(format!("emberwake_askno_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut cx = cx(dir.clone());
+        let mut g = gfx();
+        cx.app.game.as_mut().unwrap().clean = Value::Null;
+        assert!(cx.is_dirty(), "unsaved progress");
+
+        MainMenu::default().act(&mut cx, MenuAct::Quit);
+        enter_is_no(&mut cx, &mut g, "Quit without saving?");
+        assert!(!cx.quit);
+
+        let mut hub = crate::hub::Hub::default();
+        hub.draw(&mut cx, &mut g, (-1, -1), true);
+        hub.click_id(&mut cx, "hub.quit").unwrap();
+        enter_is_no(&mut cx, &mut g, "Quit to the main menu without saving?");
+        assert!(cx.has_game() && cx.is_dirty());
+
+        assert!(save::write(&cx.data, &dir, cx.gs(), 2, 0).is_empty());
+        let mut slots = Slots::new(true);
+        slots.act(&mut cx, SlotAct::Save(2));
+        enter_is_no(&mut cx, &mut g, "Overwrite slot 2?");
+        assert!(cx.is_dirty(), "not saved");
+        slots.act(&mut cx, SlotAct::Load(2));
+        enter_is_no(&mut cx, &mut g, "Load slot 2?");
+        assert!(cx.is_dirty(), "not loaded");
+        slots.act(&mut cx, SlotAct::Delete(2));
+        enter_is_no(&mut cx, &mut g, "Delete the save in slot 2?");
+        assert!(save::exists(&dir, 2), "not deleted");
+
+        assert!(save::write(&cx.data, &dir, cx.gs(), save::AUTOSAVE_SLOT, 0).is_empty());
+        NewGameScreen::new(&cx).act(&mut cx, NgAct::Start);
+        enter_is_no(&mut cx, &mut g, "Starting a new game replaces your autosave");
+        assert!(cx.is_dirty(), "no new game");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
