@@ -16,6 +16,7 @@ the files are frozen in `legacy/data/seeds/` (and in git history). The tables be
 | `reward1.json` | REWARD1-A (loot tables, Ashlands purses, key loot, objective reward) | full entries: regenerate it before a re-run on data other tasks changed since |
 | `assetorg2.json` | ASSETORG2-D (body keys, portrait tiers, item icons) | full entries, as above |
 | `phasefold.json` | PHASEFOLD-A (arrival phases for goblin_ambush, pass_ambush, ashmaw_stand; rewrites the catalog, ashlands and tidewrack encounters without the wave_* keys) | full entries, as above |
+| `props1_ashlands.json` | PROPS1-A1 (`props` on the four Ashlands map templates: 63 props, spec 6.3) | full template entries, as above |
 
 ## Godot-era seeds
 
