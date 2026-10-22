@@ -1,5 +1,6 @@
 //! ShopRules runtime (scripts/dialogue/shop_rules.gd): open / closed, integer prices with reputation bands,
 //! offers (stock, loot, travel supplies), buy and sell over GameState. Validation of shop entries is not ported.
+//! PLAYUI1-P adds `trade` (engine-only): a whole trade of buys and sales settled at once, all-or-nothing.
 
 use crate::data::Data;
 use crate::dialogue::{self, rep};
@@ -224,4 +225,129 @@ pub fn sell(d: &Data, gs: &mut GameState, r: &str, item: &str, count: i64) -> Di
     out.insert("gold".into(), int(added));
     out.insert("notes".into(), json::strs(&notes));
     out
+}
+
+/// The `trade` result: {ok, errors, spent, earned, gold, notes}.
+fn trade_result(errors: &[String], spent: i64, earned: i64, gold: i64, notes: &[String]) -> Dict {
+    let mut out = json::ok_result(errors.is_empty(), errors);
+    out.insert("spent".into(), int(spent));
+    out.insert("earned".into(), int(earned));
+    out.insert("gold".into(), int(gold));
+    out.insert("notes".into(), json::strs(notes));
+    out
+}
+
+/// PLAYUI1-P (spec PLAYUI1 4.4; engine-only, the Godot shop has no trade): a whole trade at once, all-or-nothing.
+/// `buys` are (kind, id, count) as `offers` (kind item | loot | supplies), `sells` (item, count); counts are summed per
+/// id and side, then each buy passes `buy`'s checks and each sale `sell`'s against the state before the trade. Sales
+/// pay for purchases: the trade needs `gold + earned - spent >= 0`. Gold changes once, by `earned - spent` (a gain capped
+/// at GOLD_MAX with `sell`'s note). {ok, errors, spent, earned, gold (added or removed), notes}. `buy` and `sell` stay
+/// as they are (the journey parity calls them).
+pub fn trade(d: &Data, gs: &mut GameState, r: &str, buys: &[(String, String, i64)], sells: &[(String, i64)]) -> Dict {
+    if !is_open(d, gs, r) {
+        return trade_result(&["The shop is closed.".into()], 0, 0, 0, &[]);
+    }
+    let mut want_buys: indexmap::IndexMap<(String, String), i64> = indexmap::IndexMap::new();
+    for (kind, id, n) in buys {
+        *want_buys.entry((kind.clone(), id.clone())).or_insert(0) += n;
+    }
+    let mut want_sells: indexmap::IndexMap<String, i64> = indexmap::IndexMap::new();
+    for (item, n) in sells {
+        *want_sells.entry(item.clone()).or_insert(0) += n;
+    }
+    if want_buys.is_empty() && want_sells.is_empty() {
+        return trade_result(&["Nothing to trade.".into()], 0, 0, 0, &[]);
+    }
+    let all_offers = offers(d, gs, r);
+    let list = sell_list(d, gs, r);
+    let mut errors: Vec<String> = Vec::new();
+    let (mut spent, mut earned) = (0, 0);
+    // (kind, id, item, count, items given, limited stock) of each valid buy
+    let mut take: Vec<(String, String, String, i64, i64, bool)> = Vec::new();
+    for ((kind, id), count) in &want_buys {
+        let count = *count;
+        if count < 1 || (kind == "loot" && count != 1) {
+            errors.push(if kind == "loot" { "Loot is sold one at a time.".into() } else { "Buy at least one.".into() });
+            continue;
+        }
+        if count > BUY_MAX {
+            errors.push(format!("Buy at most {BUY_MAX} at a time."));
+            continue;
+        }
+        let Some(offer) = all_offers.iter().find(|o| json::s(o, "kind") == *kind && json::s(o, "id") == *id) else {
+            errors.push(format!("'{id}' is not for sale here."));
+            continue;
+        };
+        let left = json::i(offer, "left", 0);
+        let item = json::s(offer, "item");
+        if kind == SUPPLIES {
+            if count > left {
+                errors.push(format!("You can carry at most {SUPPLIES_MAX} supplies."));
+                continue;
+            }
+        } else if left != UNLIMITED && left < count {
+            errors.push(format!("Sold out: {} ({left} left).", d.item_name(&item)));
+            continue;
+        }
+        spent += json::i(offer, "price", 0) * count;
+        let amount = if kind == "loot" { json::i(offer, "count", 1) } else { count };
+        let limited = kind == "item" && json::i(offer, "count", 0) != UNLIMITED;
+        take.push((kind.clone(), id.clone(), item, count, amount, limited));
+    }
+    for (item, count) in &want_sells {
+        let Some(row) = list.iter().rfind(|x| json::s(x, "item") == *item) else {
+            errors.push(format!("The shop does not buy {}.", d.item_name(item)));
+            continue;
+        };
+        if *count < 1 || json::i(row, "count", 0) < *count {
+            errors.push(format!("Not enough {}.", d.item_name(item)));
+            continue;
+        }
+        earned += json::i(row, "price", 0) * count;
+    }
+    if errors.is_empty() && gs.party.gold + earned - spent < 0 {
+        errors.push("Not enough gold.".into());
+    }
+    if !errors.is_empty() {
+        return trade_result(&errors, 0, 0, 0, &[]);
+    }
+    // apply on a copy: the state changes only when every step held
+    let mut work = gs.clone();
+    for (item, count) in &want_sells {
+        work.party.remove_from_stash(item, *count);
+    }
+    let sqid = json::s(shop_of(d, gs, r), "_qid");
+    for (kind, id, item, count, amount, limited) in &take {
+        if kind == SUPPLIES {
+            work.party.add_supplies(*count);
+            continue;
+        }
+        if kind == "loot" {
+            let why = quest::claim_loot(&mut work, id);
+            if !why.is_empty() {
+                return trade_result(&[why], 0, 0, 0, &[]);
+            }
+        }
+        work.party.add_to_stash(item, *amount);
+        if *limited {
+            let mut sold_map = work.shops.get(&sqid).map(json::dict).cloned().unwrap_or_default();
+            let n = sold_map.get(item).map(json::to_int).unwrap_or(0) + count;
+            sold_map.insert(item.clone(), int(n));
+            work.shops.insert(sqid.clone(), Value::Object(sold_map));
+        }
+    }
+    let net = earned - spent;
+    let mut notes = Vec::new();
+    let gold = if net >= 0 {
+        let added = work.party.add_gold(net);
+        if added < net {
+            notes.push(format!("Gold is capped at {GOLD_MAX} ({} not added).", net - added));
+        }
+        added
+    } else {
+        work.party.gold += net;
+        net
+    };
+    *gs = work;
+    trade_result(&[], spent, earned, gold, &notes)
 }

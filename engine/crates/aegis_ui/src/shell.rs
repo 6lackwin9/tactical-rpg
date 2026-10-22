@@ -1999,6 +1999,33 @@ mod tests {
         assert_eq!((s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (Some("ok"), true), "back on a keyboard screen: focused again");
     }
 
+    /// ASKNO1 through the shell: a destructive question opens with the focus ring on No and Enter answers No (Tab to
+    /// Yes, then Enter, answers Yes); the default question opens without a ring and Enter answers Yes.
+    #[test]
+    fn a_destructive_question_opens_on_no_and_the_default_one_on_nothing() {
+        let mut s = form(Form::default());
+        s.cx.ask_tag_no("Discard?", "gone");
+        s.frame();
+        assert_eq!((s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (Some("ask.no"), true), "the ring on No");
+        press(&mut s, Key::Enter);
+        assert!(!s.cx.take_answer("gone") && s.stack.last().unwrap().id() == "form", "Enter: No, the question closed");
+        s.cx.ask_tag_no("Discard?", "gone");
+        s.frame();
+        press(&mut s, Key::Tab);
+        assert_eq!(s.gfx.kit.focus.as_deref(), Some("ask.yes"));
+        press(&mut s, Key::Enter);
+        assert!(s.cx.take_answer("gone"), "Enter on a focused Yes: Yes");
+        s.cx.ask_tag_no("Discard?", "gone");
+        s.frame();
+        press(&mut s, Key::Char('y'));
+        assert!(s.cx.take_answer("gone"), "y: Yes");
+        s.cx.ask_tag("Discard?", "kept");
+        s.frame();
+        assert_eq!((s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (None, false), "the default question shows no ring");
+        press(&mut s, Key::Enter);
+        assert!(s.cx.take_answer("kept") && s.stack.last().unwrap().id() == "form", "Enter: Yes, the question closed");
+    }
+
     #[test]
     fn esc_closes_a_keyboard_list_back_to_its_field_and_a_link_click_hides_the_ring() {
         let mut s = form(Form::default());

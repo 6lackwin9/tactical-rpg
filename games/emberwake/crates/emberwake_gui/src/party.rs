@@ -299,11 +299,11 @@ impl Character {
         }
     }
 
-    /// A member or tab switch; with a draft open it asks first (router.ask(DISCARD_QUESTION)) and applies on Yes.
+    /// A member or tab switch; with a draft open it asks first (router.ask(DISCARD_QUESTION), No the default: ASKNO1) and applies on Yes.
     fn switch(&mut self, cx: &mut Cx, member: Option<String>, tab: Option<&'static str>) {
         if self.has_draft(cx) {
             self.pending_switch = Some((member, tab));
-            cx.ask_tag("Discard the changes on this tab?", "character.discard");
+            cx.ask_tag_no("Discard the changes on this tab?", "character.discard");
         } else {
             self.apply_switch(member, tab);
         }
@@ -363,7 +363,7 @@ impl Character {
             }
             PAct::Close => {
                 if self.has_draft(cx) {
-                    cx.ask_tag("Discard the changes on this tab?", "character.close");
+                    cx.ask_tag_no("Discard the changes on this tab?", "character.close");
                 } else {
                     cx.nav.push(Nav::Pop);
                 }
@@ -1411,5 +1411,40 @@ mod tests {
         }
         assert!(changed);
         assert_eq!(before.len(), STATS.len() + derived(&d, &m).len());
+    }
+
+    /// ASKNO1: with a draft open, a tab switch and Close ask "Discard the changes on this tab?" with No as the default
+    /// (Enter keeps the draft, `y` drops it); "Spend these points?" keeps Yes as the default.
+    #[test]
+    fn discarding_a_draft_defaults_to_no() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let member = cx.gs().party.members[0].id.clone();
+        let mut c = Character::new(&cx, &member, "level_up");
+        c.draft.insert(STATS[0].to_string(), 1);
+        let ask = |c: &mut Character, cx: &mut Cx, a: PAct| -> Box<dyn Screen<GameCx>> {
+            c.act(cx, a);
+            let Some(Nav::Push(q)) = cx.nav.pop() else { panic!("a question") };
+            assert!(cx.nav.is_empty());
+            q
+        };
+        for (a, tag) in [(PAct::Tab("stats"), "character.discard"), (PAct::Close, "character.close")] {
+            let mut q = ask(&mut c, &mut cx, a);
+            assert_eq!((q.state(&cx)["question"].clone(), q.state(&cx)["default"].clone()), (json!("Discard the changes on this tab?"), json!("no")));
+            q.key(&mut cx, Key::Enter);
+            assert!(cx.answers.is_empty(), "{tag}: Enter is No");
+            cx.nav.clear();
+            c.take_answers(&mut cx);
+            assert!(c.has_draft(&cx) && c.tab == "level_up" && cx.nav.is_empty(), "{tag}: the draft stays");
+        }
+        let mut q = ask(&mut c, &mut cx, PAct::Tab("stats"));
+        q.key(&mut cx, Key::Char('y'));
+        assert_eq!(cx.answers, ["character.discard"], "y is Yes");
+        cx.nav.clear();
+        c.take_answers(&mut cx);
+        assert!(c.tab == "stats" && c.draft.is_empty(), "y drops the draft and switches");
+        c.tab = "level_up";
+        c.draft.insert(STATS[0].to_string(), 1);
+        let q = ask(&mut c, &mut cx, PAct::ConfirmLevel);
+        assert_eq!(q.state(&cx)["default"], json!("yes"), "spending points is not a discard");
     }
 }

@@ -1,13 +1,15 @@
 //! The region map (scripts/ui/overworld/region_map_view.gd + dialogue_panel.gd + shop_panel.gd): walking a
 //! location's map over the game state (ExploreRunner) under the HUD bar, the floating "Here" legend and the event log
 //! ticker (PLAYUI1-M: the full-width map, a camera centred on the party with walls drawn past the edge), the dialogue
-//! box at the bottom centre (DialogueRunner; PLAYUI1-D: the camera keeps both speakers above it), the shop popup over a
-//! dimmed map (ShopRules), the turn-in picker and lore pages. Fights start the battle screen; a world-map exit opens
+//! box at the bottom centre (DialogueRunner; PLAYUI1-D: the camera keeps both speakers above it), the shop's trade over
+//! a dimmed map (`shop.rs`, PLAYUI1-P), the turn-in picker and lore pages. Fights start the battle screen; a world-map exit opens
 //! the world map. Map-less locations show their exits as buttons.
 
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::hud::{hud_bar, hud_key, hud_open, Hud, HUD_H};
 use crate::music;
+use crate::props::{Item, PropDraw, BOX_EDGE, BOX_FACE, BOX_FACE_H, BOX_FILL};
+use crate::shop::{ShopAct, ShopPane};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{draw_glyph, tip, Gfx, Glyph, Ui, Widget, BODY, BORDER, CARD, DIM, GOLD, GOOD, H, INFO, PANEL_HI, SMALL, TEXT, W};
 use aegis_ui::painter::Painter;
@@ -15,7 +17,7 @@ use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
 use emberwake_world::dialogue::DialogueRunner;
 use emberwake_world::explore::{self, Pos};
-use emberwake_world::{quest, shop};
+use emberwake_world::quest;
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
@@ -48,9 +50,9 @@ pub enum RAct {
     Choose(i64),
     Advance,
     Farewell,
-    ShopTab(bool),
-    Buy(String, String, i64),
-    Sell(String),
+    /// A click in the shop's trade (PLAYUI1-P, `shop.rs`).
+    Shop(ShopAct),
+    /// Leaves the shop for the conversation (the trade is empty or discarded).
     CloseShop,
     TogglePick(String),
     PickRecipient(usize),
@@ -68,8 +70,8 @@ pub struct RegionMap {
     mouse: (i32, i32),
     facing: Pos,
     runner: Option<DialogueRunner>,
-    shop_buy: bool,
-    shop_detail: String,
+    /// The open shop's trade (PLAYUI1-P).
+    shop: ShopPane,
     pending: Option<Dict>,
     picks: Vec<String>,
     recipient: usize,
@@ -143,8 +145,7 @@ impl RegionMap {
             mouse: (0, 0),
             facing: (0, 1),
             runner: None,
-            shop_buy: true,
-            shop_detail: String::new(),
+            shop: ShopPane::default(),
             pending: None,
             picks: Vec::new(),
             recipient: 0,
@@ -160,6 +161,11 @@ impl RegionMap {
 
     fn talking(&self) -> bool {
         self.runner.as_ref().is_some_and(|r| !r.closed)
+    }
+
+    /// The open shop of the conversation ("" when none).
+    fn shop_qid(&self) -> String {
+        self.runner.as_ref().filter(|r| !r.closed).map(|r| r.shop_qid.clone()).unwrap_or_default()
     }
 
     fn modal(&self) -> bool {
@@ -255,6 +261,7 @@ impl RegionMap {
     fn end_talk(&mut self, cx: &mut Cx) {
         self.runner = None;
         self.pending = None;
+        self.shop = ShopPane::default();
         cx.set_busy(false);
     }
 
@@ -418,26 +425,14 @@ impl RegionMap {
                     None => self.end_talk(cx),
                 }
             }
-            RAct::ShopTab(buy) => self.shop_buy = buy,
-            RAct::Buy(kind, id, n) => {
-                let Some(sq) = self.runner.as_ref().map(|r| r.shop_qid.clone()) else { return };
-                let res = shop::buy(&d, cx.gs_mut(), &sq, &kind, &id, n);
-                if json::b(&res, "ok", false) {
-                    cx.log(format!("Bought for {} gold.", json::i(&res, "price", 0)));
-                } else {
-                    show_errors(cx, json::sget(&res, "errors"));
-                }
-            }
-            RAct::Sell(item) => {
-                let Some(sq) = self.runner.as_ref().map(|r| r.shop_qid.clone()) else { return };
-                let res = shop::sell(&d, cx.gs_mut(), &sq, &item, 1);
-                if json::b(&res, "ok", false) {
-                    cx.log(format!("Sold {} for {} gold.", d.item_name(&item), json::i(&res, "gold", 0)));
-                } else {
-                    show_errors(cx, json::sget(&res, "errors"));
+            RAct::Shop(a) => {
+                let sq = self.shop_qid();
+                if !sq.is_empty() && self.shop.act(cx, &sq, a) {
+                    self.act(cx, RAct::CloseShop);
                 }
             }
             RAct::CloseShop => {
+                self.shop = ShopPane::default();
                 let Some(r) = self.runner.as_mut() else { return };
                 let res = r.close_shop(&d, cx.gs_mut());
                 self.dialogue_result(cx, res);
@@ -505,6 +500,10 @@ impl Screen<GameCx> for RegionMap {
 
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         self.mouse = mouse;
+        // Yes to "Discard this trade?" (PLAYUI1-P): back to the conversation
+        if cx.take_answer(crate::shop::DISCARD) {
+            self.act(cx, RAct::CloseShop);
+        }
         let d = cx.data.clone();
         let gs = cx.gs().clone();
         // the open conversation; a new node starts its line and its replies scrolled to the top
@@ -521,7 +520,7 @@ impl Screen<GameCx> for RegionMap {
         let t = explore::template_of(&d, loc);
         let talking = self.talking();
         let modal = self.modal();
-        let shop_qid = self.runner.as_ref().filter(|r| !r.closed).map(|r| r.shop_qid.clone()).unwrap_or_default();
+        let shop_qid = self.shop_qid();
         // measured before the map: the camera keeps both speakers above the box (also while the shop hides it, so the
         // map does not jump when the shop opens or closes)
         let talk_box = talk_view.as_ref().map(|v| talk_layout(&mut ui.p, v));
@@ -565,11 +564,23 @@ impl Screen<GameCx> for RegionMap {
             if !modal {
                 ui.push("map", "map", s_or(loc, "name", ""), map_area, true, false, Some(RAct::MapClick), Vec::new());
             }
+            // PROPS1 4.2-4.6: the ground props over the tiles; the standing props go into the sorted pass below. Props
+            // are art only: no widget, and walking still comes from `rows`
+            let props = crate::props::layout(t, &lineage, (ox, oy), ts, map_area, |dirs, variant, x, y| {
+                let rel = cx.art.pick(dirs, variant, x, y)?;
+                let size = cx.art.size_of(&rel)?;
+                Some((rel, size))
+            });
+            for p in props.iter().filter(|p| p.ground) {
+                draw_prop(&mut ui, cx, p);
+            }
             let steps = gs.explore_int("loc_steps");
             let ahead = (gs.position.0 + self.facing.0, gs.position.1 + self.facing.1);
             let legend_hover = self.legend_hover(live);
             // (marker, name, the name sits over a badge)
             let mut labels: Vec<(Rect, String, bool)> = Vec::new();
+            // the markers to draw in the sorted pass (their widgets and names are taken here)
+            let mut marks: Vec<MarkDraw> = Vec::new();
             for raw in json::aget(loc, "markers") {
                 let m = explore::marker_full(json::dict(raw));
                 let view = explore::marker_view(&d, &gs, loc, &m);
@@ -589,39 +600,16 @@ impl Screen<GameCx> for RegionMap {
                 let kind = s(&m, "kind");
                 let id = s(&m, "id");
                 let label = s(&view, "label");
-                let (cx_, cy_) = (r.x as f32 + ts as f32 / 2.0, r.y as f32 + ts as f32 / 2.0);
                 let mut services = Vec::new();
+                let mut npc = None;
                 if kind == "npc" {
                     let who = d.resolve(&gs.world_id, "characters", &s(&m, "character"));
                     services = explore::npc_services(&d, &gs, &s(who, "_qid"));
                     let (body, palette, _) = crate::screens::character_art(&d, who);
-                    let (col, _) = Self::marker_style(&kind, &state);
-                    ui.p.circle(cx_, cy_, ts as f32 * 0.42, col);
-                    let tok = Rect::new(r.x + ts / 8, r.y + ts / 8, ts - ts / 4, ts - ts / 4);
-                    match cx.art.first_token(&emberwake_content::art::body_chain(&body), &palette, tok.w) {
-                        Some(img) => ui.p.image(img, tok),
-                        None => ui.p.text_center(cx_, cy_ - 4.0, &s(who, "name").chars().next().unwrap_or('?').to_string(), BODY, rgb(20, 20, 20)),
-                    }
-                    // 2.2: the first service is the badge (turn_in and offer are today's `ready` and `quest`)
-                    if let Some(first) = services.first() {
-                        let br = Rect::new(r.x + ts - 5, r.y - 5, 9, 9);
-                        let px = ui.icon_px(Rect::new(0, 0, br.w + 4, br.h + 4));
-                        match cx.art.image(&service_icon(first), px, px) {
-                            Some(img) => ui.p.image(img, br),
-                            None => service_glyph(&mut ui, first, br),
-                        }
-                    }
-                } else {
-                    let px = ui.icon_px(Rect::new(0, 0, ts + 4, ts + 4));
-                    match cx.art.image(&emberwake_content::art::marker(marker_icon(&kind, &state)), px, px) {
-                        Some(img) => ui.p.image(img, r),
-                        None => {
-                            let (col, glyph) = Self::marker_style(&kind, &state);
-                            ui.p.panel(r.inset(ts / 5), col, rgba(255, 255, 255, 90), 2.0);
-                            ui.p.text_center(cx_, cy_ - 4.5, glyph, BODY, rgb(16, 16, 20));
-                        }
-                    }
+                    npc = Some((body, palette, s(who, "name").chars().next().unwrap_or('?').to_string()));
                 }
+                // 2.2: the first service is the badge (turn_in and offer are today's `ready` and `quest`)
+                marks.push(MarkDraw { r, kind: kind.clone(), state: state.clone(), npc, badge: services.first().copied() });
                 // 2.3: names always (people and exits, MAPREAD1), or on hover: the marker or its legend row under the
                 // pointer, or the marker the party faces
                 let named = if names_always { kind == "npc" || kind == "exit" } else { (!modal && ui.hover(r)) || legend_hover.as_deref() == Some(id.as_str()) || at == ahead };
@@ -636,11 +624,34 @@ impl Screen<GameCx> for RegionMap {
                     ui.push(format!("marker.{id}"), "marker", label.clone(), r, true, false, Some(RAct::Marker(id)), t);
                 }
             }
-            // the party
+            // the sorted pass (PROPS1 4.4): standing props, markers and the party back to front by their feet
             let pr = Rect::new(ox + gs.position.0 as i32 * ts, oy + gs.position.1 as i32 * ts, ts, ts);
             let (pcx, pcy) = (pr.x as f32 + ts as f32 / 2.0, pr.y as f32 + ts as f32 / 2.0);
-            ui.p.circle(pcx, pcy, ts as f32 * 0.3, rgb(250, 214, 60));
-            ui.p.line(pcx, pcy, pcx + self.facing.0 as f32 * ts as f32 * 0.32, pcy + self.facing.1 as f32 * ts as f32 * 0.32, rgb(40, 30, 10), 0.0);
+            let order = crate::props::sorted(&props, &marks.iter().map(|m| m.r).collect::<Vec<_>>(), pr);
+            for item in &order {
+                match *item {
+                    Item::Prop(i) => draw_prop(&mut ui, cx, &props[i]),
+                    Item::Marker(i) => draw_marker(&mut ui, cx, &marks[i], ts),
+                    Item::Party => {
+                        ui.p.circle(pcx, pcy, ts as f32 * 0.3, crate::props::PARTY);
+                        ui.p.line(pcx, pcy, pcx + self.facing.0 as f32 * ts as f32 * 0.32, pcy + self.facing.1 as f32 * ts as f32 * 0.32, rgb(40, 30, 10), 0.0);
+                    }
+                }
+            }
+            // 4.5: a standing prop drawn over the party: its outline over the props
+            if crate::props::party_hidden(&props, &order, pr) {
+                ui.p.circle(pcx, pcy, ts as f32 * 0.3, crate::props::PARTY);
+            }
+            // overlays, never covered by a prop: the service badges, then the names
+            for m in &marks {
+                let Some(first) = m.badge else { continue };
+                let br = Rect::new(m.r.x + ts - 5, m.r.y - 5, 9, 9);
+                let px = ui.icon_px(Rect::new(0, 0, br.w + 4, br.h + 4));
+                match cx.art.image(&service_icon(first), px, px) {
+                    Some(img) => ui.p.image(img, br),
+                    None => service_glyph(&mut ui, first, br),
+                }
+            }
             ui.push("party", "party", format!("Party at {}, {}", gs.position.0, gs.position.1), pr, true, false, None, Vec::new());
             // the names over everything on the map, kept inside the map area
             for (r, label, badge) in labels {
@@ -677,7 +688,7 @@ impl Screen<GameCx> for RegionMap {
                 draw_talk(&mut ui, cx, view, b, self.pending.is_some());
             } else {
                 ui.p.fill(map_area, SHOP_DIM);
-                self.draw_shop(&mut ui, cx, &shop_qid);
+                self.shop.draw(&mut ui, cx, &shop_qid, RAct::Shop);
             }
         }
         if let Some(p) = self.pending.clone().filter(|_| self.talking()) {
@@ -761,8 +772,8 @@ impl Screen<GameCx> for RegionMap {
             self.lore = None;
         } else if self.pending.is_some() {
             self.act(cx, RAct::CancelTurnIn);
-        } else if self.runner.as_ref().is_some_and(|r| !r.shop_qid.is_empty()) {
-            self.act(cx, RAct::CloseShop);
+        } else if !self.shop_qid().is_empty() {
+            self.act(cx, RAct::Shop(ShopAct::Close));
         } else if self.talking() {
             self.act(cx, RAct::Farewell);
         } else {
@@ -777,7 +788,8 @@ impl Screen<GameCx> for RegionMap {
             "walking": !self.walk.is_empty(), "log": cx.log.iter().rev().take(8).rev().collect::<Vec<_>>(),
             "dialogue": self.runner.as_ref().filter(|r| !r.closed).map(|r| Value::Object(r.view(&cx.data, gs))),
             "turn_in": self.pending.as_ref().map(|p| json!({"quest": p["quest"], "offers": p["offers"], "picks": self.picks})),
-            "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open})
+            "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open,
+            "shop": if self.shop_qid().is_empty() { Value::Null } else { self.shop.state() }})
     }
 
     /// MUSIC2: shop while the shop is open, else the location's kind.
@@ -819,67 +831,6 @@ impl RegionMap {
             }
         }
         None
-    }
-
-    fn draw_shop(&mut self, ui: &mut Ui<RAct>, cx: &Cx, sq: &str) {
-        let d = &cx.data;
-        let gs = cx.gs();
-        let sh = shop::shop_of(d, gs, sq);
-        // centred under the HUD bar (spec PLAYUI1 3.3; PLAYUI1-P makes it the three-column trade)
-        let (fw, fh) = (373, 266);
-        let fr = Rect::new((W - fw) / 2, HUD_H + (H - HUD_H - fh) / 2, fw, fh);
-        ui.p.panel(fr, aegis_ui::ui::MODAL, FRAME_LINE, 4.0);
-        ui.push("shop", "panel", s_or(sh, "name", sq), fr, true, false, None, Vec::new());
-        ui.p.text(fr.x as f32 + 9.0, fr.y as f32 + 7.0, &s_or(sh, "name", sq), 10.0, GOLD);
-        ui.p.text_right((fr.x + fr.w) as f32 - 9.0, fr.y as f32 + 9.0, &format!("Gold: {}  Supplies: {}/99", gs.party.gold, gs.party.supplies), BODY, TEXT);
-        let fq = shop::keeper_faction(d, gs, sh);
-        if !fq.is_empty() {
-            ui.p.text(fr.x as f32 + 9.0, fr.y as f32 + 25.0, &format!("{}: {}", s(d.resolve(&gs.world_id, "factions", &fq), "name"), shop::keeper_band(d, gs, sh)), BODY, DIM);
-        }
-        ui.tab("shop.buy", Rect::new(fr.x + 9, fr.y + 40, 28, 17), "Buy", RAct::ShopTab(true), self.shop_buy);
-        ui.tab("shop.sell", Rect::new(fr.x + 39, fr.y + 40, 28, 17), "Sell", RAct::ShopTab(false), !self.shop_buy);
-        let mut y = fr.y + 62;
-        if self.shop_buy {
-            for o in shop::offers(d, gs, sq) {
-                let kind = s(&o, "kind");
-                let left = json::i(&o, "left", -1);
-                let (label, id, item) = if kind == shop::SUPPLIES { ("Supplies".to_string(), shop::SUPPLIES.to_string(), String::new()) } else { (d.item_name(&s(&o, "item")), s(&o, "id"), s(&o, "item")) };
-                let price = json::i(&o, "price", 0);
-                let counts: &[i64] = if kind == shop::SUPPLIES { &[1, 5] } else { &[1] };
-                for &n in counts {
-                    let mut text = format!("{label} x{} - {} gold", if kind == "loot" { json::i(&o, "count", 1) } else { n }, price * n);
-                    if left >= 0 && kind != shop::SUPPLIES {
-                        text = format!("{text}  ({left} left)");
-                    }
-                    let rr = Rect::new(fr.x + 9, y, fr.w - 18, 17);
-                    let ok = left != 0 && gs.party.gold >= price * n;
-                    ui.button_full(&format!("shop.offer.{id}.{n}"), rr, &text, RAct::Buy(kind.clone(), id.clone(), n), ok, false, BODY, tip(&label, &item_line(cx, &item)));
-                    if ui.hover(rr) && !item.is_empty() {
-                        self.shop_detail = item.clone();
-                    }
-                    y += 21;
-                }
-            }
-        } else {
-            let list = shop::sell_list(d, gs, sq);
-            if list.is_empty() {
-                ui.p.text(fr.x as f32 + 9.0, y as f32, "Nothing here the shop buys.", BODY, DIM);
-            }
-            for r in list {
-                let item = s(&r, "item");
-                let rr = Rect::new(fr.x + 9, y, fr.w - 18, 17);
-                ui.button_full(&format!("shop.sell.{item}"), rr, &format!("{} x{} - {} gold each", d.item_name(&item), json::i(&r, "count", 0), json::i(&r, "price", 0)), RAct::Sell(item.clone()), true, false, BODY, tip(&d.item_name(&item), &item_line(cx, &item)));
-                if ui.hover(rr) {
-                    self.shop_detail = item.clone();
-                }
-                y += 21;
-            }
-        }
-        if !self.shop_detail.is_empty() {
-            ui.p.text_fit(fr.x as f32 + 9.0, (fr.y + fr.h) as f32 - 36.0, &format!("{}: {}", d.item_name(&self.shop_detail), item_line(cx, &self.shop_detail)), BODY, (fr.w - 18) as f32, INFO);
-        }
-        ui.p.text(fr.x as f32 + 9.0, (fr.y + fr.h) as f32 - 17.0, "Esc or right click: close", SMALL, DIM);
-        ui.button("shop.close", Rect::new(fr.x + fr.w - 44, fr.y + fr.h - 22, 35, 17), "Close", RAct::CloseShop, true);
     }
 
     fn draw_turn_in(&mut self, ui: &mut Ui<RAct>, cx: &Cx, p: &Dict) {
@@ -1039,6 +990,67 @@ impl RegionMap {
             t.push((latest.clone(), TEXT));
         }
         ui.push("log", "button", latest, r, !modal, self.log_open, Some(RAct::Log), t);
+    }
+}
+
+/// A marker for the sorted pass (PROPS1 4.4): its tile, kind and state; for a person (body, palette, initial); the
+/// first service's badge (drawn with the overlays).
+struct MarkDraw {
+    r: Rect,
+    kind: String,
+    state: String,
+    npc: Option<(String, String, String)>,
+    badge: Option<&'static str>,
+}
+
+/// A marker on its tile: a person's ring and token (or initial), else the marker icon (or its drawn stand-in).
+fn draw_marker(ui: &mut Ui<RAct>, cx: &mut Cx, m: &MarkDraw, ts: i32) {
+    let r = m.r;
+    let (cx_, cy_) = (r.x as f32 + ts as f32 / 2.0, r.y as f32 + ts as f32 / 2.0);
+    if let Some((body, palette, initial)) = &m.npc {
+        let (col, _) = RegionMap::marker_style(&m.kind, &m.state);
+        ui.p.circle(cx_, cy_, ts as f32 * 0.42, col);
+        let tok = Rect::new(r.x + ts / 8, r.y + ts / 8, ts - ts / 4, ts - ts / 4);
+        match cx.art.first_token(&emberwake_content::art::body_chain(body), palette, tok.w) {
+            Some(img) => ui.p.image(img, tok),
+            None => ui.p.text_center(cx_, cy_ - 4.0, initial, BODY, rgb(20, 20, 20)),
+        }
+        return;
+    }
+    let px = ui.icon_px(Rect::new(0, 0, ts + 4, ts + 4));
+    match cx.art.image(&emberwake_content::art::marker(marker_icon(&m.kind, &m.state)), px, px) {
+        Some(img) => ui.p.image(img, r),
+        None => {
+            let (col, glyph) = RegionMap::marker_style(&m.kind, &m.state);
+            ui.p.panel(r.inset(ts / 5), col, rgba(255, 255, 255, 90), 2.0);
+            ui.p.text_center(cx_, cy_ - 4.5, glyph, BODY, rgb(16, 16, 20));
+        }
+    }
+}
+
+/// A prop (PROPS1 4.3, 4.6): its art in its drawn rect (mirrored when flipped), one source pixel per screen pixel;
+/// without art a standing prop is a plain block over its footprint (fill, a darker south face, a 1 px edge) and a
+/// ground prop is nothing.
+fn draw_prop(ui: &mut Ui<RAct>, cx: &mut Cx, p: &PropDraw) {
+    let (w, h) = ((p.rect.w as f32 * ui.p.v.s).round().max(1.0) as i32, (p.rect.h as f32 * ui.p.v.s).round().max(1.0) as i32);
+    let img = match &p.file {
+        Some(f) if p.flip => cx.art.image_mirrored(f, w, h),
+        Some(f) => cx.art.image(f, w, h),
+        None => None,
+    };
+    if let Some(img) = img {
+        ui.p.image(img, p.rect);
+        return;
+    }
+    if p.ground {
+        return;
+    }
+    let r = p.rect;
+    ui.p.fill(r, BOX_FILL);
+    let face = (r.h / 4).clamp(1, BOX_FACE_H);
+    ui.p.fill(Rect::new(r.x, r.y + r.h - face, r.w, face), BOX_FACE);
+    for edge in [Rect::new(r.x, r.y, r.w, 1), Rect::new(r.x, r.y + r.h - 1, r.w, 1), Rect::new(r.x, r.y, 1, r.h), Rect::new(r.x + r.w - 1, r.y, 1, r.h)] {
+        ui.p.fill(edge, BOX_EDGE);
     }
 }
 
@@ -1278,22 +1290,6 @@ fn draw_talk(ui: &mut Ui<RAct>, cx: &mut Cx, view: &Dict, b: &TalkBox, busy: boo
     ui.scroll_end();
 }
 
-/// "+90 HP · Owned 2 · Anyone can use it" style detail of an item.
-pub fn item_line(cx: &Cx, item: &str) -> String {
-    if item.is_empty() {
-        return "Travel supplies: one per day on the road.".into();
-    }
-    let e = cx.data.entry("items", item);
-    let owned = cx.game.as_ref().map(|g| g.gs.party.stash.get(item).copied().unwrap_or(0)).unwrap_or(0);
-    let mut parts = Vec::new();
-    let desc = s(e, "description");
-    if !desc.is_empty() {
-        parts.push(desc);
-    }
-    parts.push(format!("{} · Owned {owned}", s_or(e, "item_type", "ITEM").to_lowercase()));
-    parts.join(" · ")
-}
-
 /// The region map's controls (the Help button's hover card and popup).
 pub const REGION_HELP: [&str; 7] = [
     "Arrows or WASD: move",
@@ -1346,8 +1342,20 @@ mod tests {
         stray
     }
 
+    /// PROPS1 3.1: map prop art is `props/<set>/<art>/v<n>.png` (a variant run, as tile sets); anything else under
+    /// `props/` is a stray.
+    #[test]
+    fn prop_art_follows_the_variant_pattern() {
+        for ok in ["props/common/tent/v0.png", "props/ashlands/keep_hall/v12.png"] {
+            assert!(layout_ok(ok), "{ok}");
+        }
+        for stray in ["props/common/tent/tent.png", "props/common/tent/v0.jpg", "props/tent/v0.png", "props/common/tent/v0/a.png", "props/common/tent/vx.png"] {
+            assert!(!layout_ok(stray), "{stray}");
+        }
+    }
+
     /// One path of the section 3 tree (game, kit or engine root), plus the PLAYUI1 section 6 icons: toolkit glyphs
-    /// `ui/<id>.png` and the `ui/hud`, `ui/markers` and `ui/services` folders.
+    /// `ui/<id>.png` and the `ui/hud`, `ui/markers` and `ui/services` folders, and PROPS1's `props/<set>/<art>/`.
     fn layout_ok(rel: &str) -> bool {
         let p: Vec<&str> = rel.split('/').collect();
         let png = |s: &str| s.ends_with(".png");
@@ -1362,7 +1370,7 @@ mod tests {
             ["items", _, f] => png(f),
             ["skills", "kinds", f] | ["skills", f] | ["statuses", f] | ["map", "markers", f] => png(f),
             ["ui", "pins" | "badges" | "chips" | "intents" | "hud" | "markers" | "services", f] | ["ui", f] => png(f),
-            ["tilesets", _, _, f] => v(f),
+            ["tilesets", _, _, f] | ["props", _, _, f] => v(f),
             ["backgrounds", "menu" | "title" | "world_map" | "location", f] => png(f),
             ["audio", "sfx", f] => f.ends_with(".wav"),
             ["audio", "music", f] => f.ends_with(".ogg"),

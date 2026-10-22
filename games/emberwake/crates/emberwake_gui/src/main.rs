@@ -16,9 +16,11 @@ mod intent_text;
 mod menus;
 mod music;
 mod party;
+mod props;
 mod region;
 mod runner;
 mod screens;
+mod shop;
 mod tuning;
 mod worldmap;
 

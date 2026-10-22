@@ -185,14 +185,27 @@ impl<G> DerefMut for Cx<G> {
 }
 
 impl<G: Context> Cx<G> {
+    /// A yes / no question with Yes as the default (Enter = Yes); `yes` runs on Yes.
     pub fn ask(&mut self, question: impl Into<String>, yes: impl FnOnce(&mut Cx<G>) + 'static) {
-        self.nav.push(Nav::Push(Box::new(Ask { question: question.into(), yes: Some(Box::new(yes)), w: Vec::new() })));
+        self.nav.push(Nav::Push(Box::new(Ask::new(question.into(), Box::new(yes), false))));
+    }
+
+    /// A destructive question with No as the default (ASKNO1): No has the visible keyboard focus as it opens, Enter
+    /// = No, `y` = Yes; `yes` runs on Yes.
+    pub fn ask_no(&mut self, question: impl Into<String>, yes: impl FnOnce(&mut Cx<G>) + 'static) {
+        self.nav.push(Nav::Push(Box::new(Ask::new(question.into(), Box::new(yes), true))));
     }
 
     /// A question whose Yes leaves `tag` in `answers` for the asking screen.
     pub fn ask_tag(&mut self, question: impl Into<String>, tag: &str) {
         let tag = tag.to_string();
         self.ask(question, move |cx| cx.answers.push(tag));
+    }
+
+    /// `ask_tag` with No as the default (`ask_no`).
+    pub fn ask_tag_no(&mut self, question: impl Into<String>, tag: &str) {
+        let tag = tag.to_string();
+        self.ask_no(question, move |cx| cx.answers.push(tag));
     }
 
     pub fn take_answer(&mut self, tag: &str) -> bool {
@@ -312,13 +325,20 @@ macro_rules! widget_plumbing {
 
 // ---- Ask: the yes / no question (router.ask) -----------------------------------------------------------------
 
+/// The yes / no question (`Cx::ask`, `Cx::ask_no`). Esc, right click and `n` answer No, `y` answers Yes; Enter
+/// answers the default: Yes, or No for a destructive question (`no_default`, which also opens with the keyboard focus
+/// showing on No).
 pub struct Ask<G> {
     question: String,
     yes: Option<Box<dyn FnOnce(&mut Cx<G>)>>,
+    no_default: bool,
     w: Vec<Widget<bool>>,
 }
 
 impl<G> Ask<G> {
+    fn new(question: String, yes: Box<dyn FnOnce(&mut Cx<G>)>, no_default: bool) -> Self {
+        Self { question, yes: Some(yes), no_default, w: Vec::new() }
+    }
     fn act(&mut self, cx: &mut Cx<G>, yes: bool) {
         cx.nav.push(Nav::Pop);
         if yes {
@@ -352,15 +372,20 @@ impl<G> Screen<G> for Ask<G> {
         ui.button("ask.yes", Rect::new(r.x + r.w - 62, r.y + r.h - 22, 50, 15), "Yes", true, true);
         self.w = ui.widgets;
     }
+    fn auto_focus(&self) -> bool {
+        // "ask.no" is the first widget, so the opening focus lands on No.
+        self.no_default
+    }
     fn key(&mut self, cx: &mut Cx<G>, k: Key) {
         match k {
-            Key::Enter | Key::Char('y') => self.act(cx, true),
+            Key::Enter => self.act(cx, !self.no_default),
+            Key::Char('y') => self.act(cx, true),
             Key::Char('n') => self.act(cx, false),
             _ => {}
         }
     }
     fn state(&self, _cx: &Cx<G>) -> Value {
-        json!({"question": self.question})
+        json!({"question": self.question, "default": if self.no_default { "no" } else { "yes" }})
     }
     widget_plumbing!(Cx<G>);
 }
