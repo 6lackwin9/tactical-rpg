@@ -689,6 +689,7 @@ dependencies = [
  "emberwake_rules",
  "emberwake_world",
  "indexmap",
+ "png",
  "serde_json",
 ]
 

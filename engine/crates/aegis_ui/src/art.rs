@@ -4,7 +4,8 @@
 //! palette), a tile by its set chain (`tile_in`, variants by the files present). The game names the files through
 //! its own lookup chains (ASSETORG2 section 4). SPRITE1-L: a body's clips play by time (`played` over an
 //! `aegis_core::assets::ClipPlayer`), a frame's silhouette outline is cached (`body_outline`, highlights) and a body
-//! is checked frame by frame (`body_problems`). PROPS1-E: a file's own size (`size_of`), mirrored images
+//! is checked frame by frame (`body_problems`); `played`, `body_outline` and `body_clip_flipped` take a `flip` to
+//! show a frame mirrored (a sheet facing right drawn facing left). PROPS1-E: a file's own size (`size_of`), mirrored images
 //! (`image_mirrored`) and a variant picked over a chain of folders (`varied`, which `tile_in` wraps).
 
 use crate::canvas::{Image, Rgba, OUTLINE_ALPHA};
@@ -18,8 +19,10 @@ struct Body {
     clips: Clips,
 }
 
-/// (body key, palette id, clip, frame, size, colour) of a cached outline.
-type OutlineKey = (String, String, String, u32, i32, Rgba);
+/// (body key, palette id, clip, frame, size, flipped) of a cached fitted frame.
+type FrameKey = (String, String, String, u32, i32, bool);
+/// (body key, palette id, clip, frame, size, colour, flipped) of a cached outline.
+type OutlineKey = (String, String, String, u32, i32, Rgba, bool);
 
 pub struct Art {
     layers: Layers,
@@ -27,9 +30,9 @@ pub struct Art {
     files: HashMap<(String, i32, i32), Option<Image>>,
     /// (body key, palette id) -> the body.
     bodies: HashMap<(String, String), Option<Body>>,
-    /// (body key, palette id, clip, frame, size) -> the scaled frame.
-    frames: HashMap<(String, String, String, u32, i32), Option<Image>>,
-    /// (body key, palette id, clip, frame, size, colour) -> the frame's silhouette outline.
+    /// (body key, palette id, clip, frame, size, flipped) -> the scaled frame (mirrored left to right when flipped).
+    frames: HashMap<FrameKey, Option<Image>>,
+    /// (body key, palette id, clip, frame, size, colour, flipped) -> the frame's silhouette outline.
     outlines: HashMap<OutlineKey, Option<Image>>,
     /// (rel, w, h) -> the scaled image mirrored left to right.
     mirrors: HashMap<(String, i32, i32), Option<Image>>,
@@ -195,8 +198,19 @@ impl Art {
     /// Frame `n` of `clip` fitted to a `size` square (spec 4.1): scaled by k = floor(size / max(w, h)) with nearest
     /// pixels (downsampled when k is 0), centred across and standing on the bottom edge.
     pub fn body_clip(&mut self, key: &str, palette: &str, clip: &str, n: u32, size: i32) -> Option<&Image> {
-        let k = (key.to_string(), palette.to_string(), clip.to_string(), n, size);
+        self.body_clip_flipped(key, palette, clip, n, size, false)
+    }
+
+    /// `body_clip`, mirrored left to right when `flip` (a sheet drawn facing one way shown facing the other; the
+    /// fitted square is mirrored, so the figure stays on its spot). Cached apart.
+    pub fn body_clip_flipped(&mut self, key: &str, palette: &str, clip: &str, n: u32, size: i32, flip: bool) -> Option<&Image> {
+        let k = (key.to_string(), palette.to_string(), clip.to_string(), n, size, flip);
         if !self.frames.contains_key(&k) {
+            if flip {
+                let img = self.body_clip_flipped(key, palette, clip, n, size, false).map(|f| f.mirrored());
+                self.frames.insert(k.clone(), img);
+                return self.frames.get(&k).and_then(|i| i.as_ref());
+            }
             let img = self.body_frame(key, palette, clip, n).map(|f| {
                 let scale = size / f.w.max(f.h).max(1);
                 let fitted = if scale >= 1 {
@@ -233,19 +247,20 @@ impl Art {
     }
 
     /// The frame `player` shows at `now` (SPRITE1-L: the shot or the base loop, missing clips falling back to `idle`),
-    /// fitted to a `size` square like `body_clip`, and which frame it is.
-    pub fn played(&mut self, key: &str, palette: &str, player: &ClipPlayer, now: u64, size: i32) -> Option<(ClipFrame, &Image)> {
+    /// fitted to a `size` square like `body_clip` (mirrored left to right when `flip`), and which frame it is.
+    pub fn played(&mut self, key: &str, palette: &str, player: &ClipPlayer, now: u64, size: i32, flip: bool) -> Option<(ClipFrame, &Image)> {
         let f = player.frame(self.clips(key)?, now)?;
-        let img = self.body_clip(key, palette, &f.clip, f.frame, size)?;
+        let img = self.body_clip_flipped(key, palette, &f.clip, f.frame, size, flip)?;
         Some((f, img))
     }
 
     /// The silhouette outline (`Image::outline`, `col`) of frame `n` of `clip` in a `size` square; (size + 2) square,
-    /// drawn one pixel up and left of the frame. Cached.
-    pub fn body_outline(&mut self, key: &str, palette: &str, clip: &str, n: u32, size: i32, col: Rgba) -> Option<&Image> {
-        let k = (key.to_string(), palette.to_string(), clip.to_string(), n, size, col);
+    /// drawn one pixel up and left of the frame; of the mirrored frame when `flip` (as `played` draws it). Cached.
+    #[allow(clippy::too_many_arguments)]
+    pub fn body_outline(&mut self, key: &str, palette: &str, clip: &str, n: u32, size: i32, col: Rgba, flip: bool) -> Option<&Image> {
+        let k = (key.to_string(), palette.to_string(), clip.to_string(), n, size, col, flip);
         if !self.outlines.contains_key(&k) {
-            let img = self.body_clip(key, palette, clip, n, size).map(|f| f.outline(col));
+            let img = self.body_clip_flipped(key, palette, clip, n, size, flip).map(|f| f.outline(col));
             self.outlines.insert(k.clone(), img);
         }
         self.outlines.get(&k).and_then(|i| i.as_ref())

@@ -20,7 +20,9 @@ use emberwake_battle::command::CmdKind;
 use emberwake_battle::grid::{V2, GRID_H, GRID_W};
 use emberwake_battle::plan::expected;
 use emberwake_battle::session::{EncounterDef, Phase, Prebuilt, Session, StartGrant};
-use aegis_core::assets::ClipPlayer;
+use aegis_core::assets::{ClipFrame, ClipPlayer};
+use aegis_ui::art::Art;
+use aegis_ui::canvas::Image;
 use aegis_core::json::{self, s, Dict};
 use emberwake_rules::Stance;
 use emberwake_world::battle::WorldRoster;
@@ -1157,6 +1159,17 @@ pub(crate) fn kind_color(kind: &str) -> Rgba {
     }
 }
 
+/// The frame a battle token shows: the clip `player` plays at `now`, fitted to a `size` square; a foe's is mirrored
+/// so it faces the party (the rig's sheets face right, toward the foes' side).
+fn token_frame<'a>(art: &'a mut Art, body: &str, palette: &str, player: &ClipPlayer, now: u64, size: i32, ally: bool) -> Option<(ClipFrame, &'a Image)> {
+    art.played(body, palette, player, now, size, !ally)
+}
+
+/// The highlight outline of the token frame `f` (`token_frame`), mirrored with it for a foe.
+fn token_outline<'a>(art: &'a mut Art, body: &str, palette: &str, f: &ClipFrame, size: i32, col: Rgba, ally: bool) -> Option<&'a Image> {
+    art.body_outline(body, palette, &f.clip, f.frame, size, col, !ally)
+}
+
 fn hp_bar(p: &mut Painter, r: Rect, hp: i32, max: i32, color: Rgba) {
     p.fill(r, rgb(46, 24, 30));
     let w = if max > 0 { (r.w * hp.max(0) + max - 1) / max } else { 0 };
@@ -1514,7 +1527,8 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             }
         }
     }
-    // SPRITE1-U: each unit stands on a flat ellipse in its side's colour and plays its clips (anims); the selected
+    // SPRITE1-U: each unit stands on a flat ellipse in its side's colour and plays its clips (anims), a foe mirrored
+    // to face the party (`token_frame`, its outline with it); the selected
     // hero's sprite has a gold outline, a hovered unit's a faint white one. A unit without a body keeps the letter.
     let anim_now = g.anim_ms as u64;
     let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
@@ -1568,13 +1582,13 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         }
         let hover = ui.hover(r) && g.popup.is_none();
         let outline = if Some(i) == sel { Some(GOLD) } else if hover { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { None };
-        let frame = body.as_deref().and_then(|b| cx.art.played(b, palette, &a.player, anim_now, tp).map(|(f, img)| {
+        let frame = body.as_deref().and_then(|b| token_frame(&mut cx.art, b, palette, &a.player, anim_now, tp, ally).map(|(f, img)| {
             ui.p.image(img, tr);
             f
         }));
         match (frame, body.as_deref()) {
             (Some(f), Some(b)) => {
-                if let Some(o) = outline.and_then(|col| cx.art.body_outline(b, palette, &f.clip, f.frame, tp, col)) {
+                if let Some(o) = outline.and_then(|col| token_outline(&mut cx.art, b, palette, &f, tp, col, ally)) {
                     ui.p.image(o, Rect::new(tr.x - 1, tr.y - 1, tp + 2, tp + 2));
                 }
             }
@@ -1794,8 +1808,9 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
 
 #[cfg(test)]
 mod tests {
-    use super::{action_clips, boss_fight, sound_of, Tokens};
-    use aegis_core::assets::Clips;
+    use super::{action_clips, boss_fight, sound_of, token_frame, token_outline, Tokens};
+    use aegis_core::assets::{ClipPlayer, Clips, Layers};
+    use aegis_ui::art::Art;
     use emberwake_battle::session::{EncounterDef, Phase, Session};
     use emberwake_host::{Battle, Host};
     use emberwake_rules::Stance;
@@ -1813,6 +1828,42 @@ mod tests {
         assert_eq!(action_clips("volley", "area", "bow"), ["attack"]);
         assert_eq!(action_clips("mend", "support", "mace"), ["cast"]);
         assert!(action_clips("guard", "", "sword").is_empty(), "guards play through the stance, moves through the slide");
+    }
+
+    /// The rig's sheets face right: a foe's token frame and its outline are the sheet frame mirrored (it faces the
+    /// party), an ally's are the sheet frame as drawn. A scratch body whose frame is lopsided shows the difference.
+    #[test]
+    fn a_foe_token_is_the_sheet_frame_mirrored_and_an_ally_token_is_not() {
+        const F: u32 = 8;
+        let root = std::env::temp_dir().join(format!("emberwake_foe_facing_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("units/brawler/goblin");
+        std::fs::create_dir_all(&dir).unwrap();
+        // A bar on the left of the 8x8 frame (x 1..3, the back) and one pixel on the right (x 6, the face).
+        let mut px = vec![0u8; (F * F * 4) as usize];
+        for x in [1u32, 2, 3, 6] {
+            let i = ((4 * F + x) * 4) as usize;
+            px[i..i + 4].copy_from_slice(&[90, 140, 60, 255]);
+        }
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(dir.join("sheet.png")).unwrap()), F, F);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&px).unwrap();
+        std::fs::write(dir.join("clips.json"), json!({"frame": [F, F], "clips": [{"id": "idle", "frames": 1, "ms": [100]}]}).to_string()).unwrap();
+        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let (body, p, size) = ("brawler/goblin", ClipPlayer::default(), 3 * F as i32);
+        let sheet = art.body_clip(body, "", "idle", 0, size).unwrap().clone();
+        let foe = token_frame(&mut art, body, "", &p, 0, size, false).unwrap().1.clone();
+        let ally = token_frame(&mut art, body, "", &p, 0, size, true).unwrap().1.clone();
+        assert_eq!(foe, sheet.mirrored(), "a foe faces the party: the sheet frame mirrored");
+        assert_eq!(ally, sheet, "an ally as the sheet faces");
+        assert_ne!(foe, ally);
+        let f = token_frame(&mut art, body, "", &p, 0, size, false).unwrap().0;
+        let gold = [244, 198, 84, 255];
+        let foe_ring = token_outline(&mut art, body, "", &f, size, gold, false).unwrap().clone();
+        assert_eq!(foe_ring, sheet.mirrored().outline(gold), "the selection outline follows the mirrored frame");
+        assert_eq!(token_outline(&mut art, body, "", &f, size, gold, true).unwrap().clone(), sheet.outline(gold));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// Every rig clip (SPRITE1 section 2), one frame each, looping as the export writes them.
