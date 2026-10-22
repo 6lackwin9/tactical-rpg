@@ -101,13 +101,19 @@ start outside `new`, so their replay waits for PLAYTEST2.
 F8 (recording on) takes a note: the screen as it was goes to `<id>/note_<n>.jpg`, and a box asks for the text (types
 at once) and tags (mechanic, ui, ux, bug); Ctrl+Enter saves, Esc cancels. The note stamps the screen, mouse, control
 and the battle's round, block and phase. The kit's text field (`Ui::text_field`, single or multi-line) edits through
-the shell (`Kit.edit`, `Screen::text_changed`).
+the shell (`Kit.edit`, `Screen::text_changed`) with a full editor (PLAYUI1-T, `aegis_ui::edit`, re-exported from `ui`):
+it wraps at spaces and scrolls (`<id>.scroll`); Up/Down by visual line (sticky column), Home/End, Ctrl+Home/End,
+Page Up/Down, Ctrl+Left/Right, Ctrl+Backspace/Delete, Shift selects, mouse drag, Shift+click, double click selects a
+word, Ctrl+A/C/X/V, Ctrl+Z/Y; undo groups a typing run (a 1 s pause, a move or a delete ends it; 100 steps); the
+clipboard goes through `arboard` with an in-app fallback. The F8 note box is a full-height text area. The kit also has
+an icon button (`Ui::icon_button`: an image from the asset layers or a drawn `Glyph`, hover card, focus, toggled and
+disabled states) and a collapsible section header (`Ui::section`) (PLAYUI1-K).
 
 The Scene Runner's **Playtests** (`aegis_ui::recordings`, a kit screen the game opens with its own launcher) toggles
 recording and lists the user folder's recordings and the game's repo folders (`playtests/inbox`, `playtests/repro`,
 badge `repo`) with a stale badge: per battle Play back (watch it to its end, not recorded) or Take over at a round
-(replayed, then played on as a new session whose `end.parent` names the recording, battle and request), the notes,
-Open folder and Copy to repo (the recording and its images into `playtests/inbox/<id>/`).
+(replayed, then played on as a new session whose `end.parent` names the recording, battle and request), the notes
+(click a note's row, `recordings.note.<i>`, to read it whole in `recordings.note_view` with Copy), Open folder and Copy to repo (the recording and its images into `playtests/inbox/<id>/`).
 
 ```bash
 aegis replay <recording.json>                       # every battle: each checkpoint match / diverge (path, values) / unverified
@@ -145,7 +151,9 @@ I enemy tells, F12 screenshot.
 Feel values (timings, floating numbers, hit flash, colours) live in `games/emberwake/tuning.json` and reload while the game
 runs. The GUI serves an agent link on `127.0.0.1:47800`: `ui_tree` (the screen stack, the music wanted, the top screen's state and every
 widget with its id, text, rect, state, hover card and drag or drop key), `click {id}` (a select opens its list and replies with the option ids, `<id>.opt.<n>`), `drag {id, to}` (press, move, release to `[x, y]` or onto a widget id: slider drags and drag and drop), `hover {id}`, `type {text}` (into the text field being edited), `note` (F8), `key {key}` (up / down / left /
-right / enter / space / esc / a letter), `back`, `screenshot {path, max_w}`, `text_audit {scale, shot}` (TEXTFIT1: one
+right / enter / space / esc / a letter; while a field edits also home, end, backspace, delete, `shift+...` and
+`ctrl+a/c/x/v/z/y`, and enter, esc and tab end the edit; `ui_tree` then reports `edit` {id, caret, selection, selected,
+undo}), `back`, `screenshot {path, max_w}`, `text_audit {scale, shot}` (TEXTFIT1: one
 frame of the top screen at a text size, the mouse off the canvas, reporting the text `text_fit` or a button shortened
 (cut), text past the canvas (edge), texts drawn over each other (overlap) and text running out of its control (spill);
 text in a scroll area or under a later panel is skipped; `shot` saves that frame), `game` (the full game state), and the
