@@ -32,13 +32,17 @@ kit's `kits/rpg/assets/` or `engine/assets/`). Python 3.12 with Pillow and numpy
 
 - `python tools/gen_art.py [group ...] [--layer engine|kit|game ...] [--root DIR] [--overwrite]`: placeholder art
   (ART1-A). Groups (`--list`): bodies, portraits, items, skills, statuses, terrain, overlays, region, markers, pins,
-  chips, world_map, backdrops, menu. Here: named bodies (one-frame `sheet.png` + `clips.json`), unique portraits,
+  chips, world_map, backdrops, menu. Here: unique portraits (no bodies: every body is the rig's since SPRITE2),
   skill family icons, the named items, the Ashlands tiles and the backgrounds. An existing file is kept unless
   `--overwrite`: the committed portraits and skill and item icons are ART2 art from `art_src/` (Git LFS, made by
   `tools/portraits/`), which the placeholders must not replace.
-- `python tools/sprites/export_units.py [class ...] [--root DIR] [--clips idle|all]`: the six class bodies of the kit
-  from the sprite rig (`units/<class>/base/`; `all`, the default = every clip at 48 px, SPRITE1-A2; `idle` = the old
-  one-frame 104 px sheet), with the rig's base colours as palette slots.
+- `python tools/sprites/export_units.py [body ...] [--root DIR] [--clips idle|all] [--review OUT]`: every body on the
+  sprite rig (`all`, the default = every clip at 48 px, SPRITE1-A2; `idle` = the old one-frame 104 px sheet): the six
+  class bodies of the kit, and from `tools/sprites/variants.py` (SPRITE2) the kit's goblin variants and dummy and,
+  here, the named bodies (`warrior/grakka_ashmaw`, `brawler/ash_warchief`, `warrior/brask_toller`,
+  `warrior/hest_the_quartermaster`, `warrior/orsa_tallow`, `ranger/wenn_tallow`) and the palette files on the kit's
+  goblin bodies (`units/<class>/<goblin variant>/palettes/ash.json` for the Horde mobs, `<character>.json` for the
+  named goblins). `--review OUT` writes contact sheets and GIFs for a review page.
 - `python tools/gen_music.py [track ...] [--layer kit|game] [--root DIR] [--list]`: the music (numpy and ffmpeg);
   `menu_theme` and the world tracks land here, the mood loops in the kit.
 - Check a regeneration without touching the committed files: run `gen_art.py --root DIR` and

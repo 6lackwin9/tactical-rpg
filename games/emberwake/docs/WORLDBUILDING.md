@@ -145,19 +145,19 @@ A burnt frontier on the edge of the old empire. The Ember Wardens hold the passe
 
 - enemy; brawler class on unit `goblin_brawler` (tier minion, level 3); faction `ashen_horde`; home `-`
 - Background: Cracked his jaw on a Warden shield and never stopped grinning about it.
-- Art: body `brawler/skarn_ironjaw` (its own), portrait unique (`portraits/elites/skarn_ironjaw.png`)
+- Art: body `brawler/goblin` (the base unit's), portrait unique (`portraits/elites/skarn_ironjaw.png`)
 
 **Vex the Cutpurse**, Skirmisher (`vex_cutpurse`)
 
 - enemy; rogue class on unit `goblin_skirmisher` (tier minion, level 3); faction `ashen_horde`; home `-`
 - Background: Goes for whoever bleeds first.
-- Art: body `rogue/vex_cutpurse` (its own), portrait unique (`portraits/elites/vex_cutpurse.png`)
+- Art: body `rogue/goblin` (the base unit's), portrait unique (`portraits/elites/vex_cutpurse.png`)
 
 **Nok Flamebow**, Horde Archer (`nok_flamebow`)
 
 - enemy; ranger class on unit `goblin_archer` (tier minion, level 3); faction `ashen_horde`; home `-`
 - Background: Fires pitch-tipped arrows from the ridgeline and runs when anyone gets close.
-- Art: body `ranger/nok_flamebow` (its own), portrait unique (`portraits/elites/nok_flamebow.png`)
+- Art: body `ranger/goblin` (the base unit's), portrait unique (`portraits/elites/nok_flamebow.png`)
 
 **Gruk Smokecaller**, Warband Shaman (`gruk_smokecaller`)
 
@@ -169,7 +169,7 @@ A burnt frontier on the edge of the old empire. The Ember Wardens hold the passe
 
 - enemy; brawler class on unit `goblin_berserker` (tier minion, level 3); faction `ashen_horde`; home `-`
 - Background: Has never retreated, mostly because he forgets there is a direction for it.
-- Art: body `brawler/bolg_redhand` (its own), portrait unique (`portraits/elites/bolg_redhand.png`)
+- Art: body `brawler/goblin_berserker` (the base unit's), portrait unique (`portraits/elites/bolg_redhand.png`)
 
 **Horde Brawler**, Warband Muscle (`ash_brawler`)
 
@@ -440,7 +440,7 @@ A mining highland that does not inherit the Ashlands but is linked to them: its 
 - important NPC; warrior class on unit `warrior` (tier hero, level 5); faction `forge_guild`; home `slag_gate`
 - Background: Sells the Wardens steel at cost and never says why.
 - dialogue `orsa_talk`
-- Art: body `warrior` (the base unit's), portrait shared (the body's common portrait)
+- Art: body `warrior/orsa_tallow` (its own), portrait shared (the body's common portrait)
 
 ### Questlines
 
@@ -543,7 +543,7 @@ A salt-bitten coast where the old Warden order is a harbour guard and the Horde'
 
 | Fight | Where | With the party | Against | Objective | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Clash at Wreck Strand (`strand_clash`) | wreck_strand | Ilse Marrow, Pell Driftwood | Brannoch Saltfist, Gull-Hand, Salt-Eyed Sniper, Captain Dredge | defeat | - |
+| Clash at Wreck Strand (`strand_clash`) | wreck_strand | Ilse Marrow, Pell Driftwood | Brannoch Saltfist, Gull-Hand, Salt-Eyed Sniper, Captain Dredge | rout | - |
 
 - *Clash at Wreck Strand*: The tide is going out and the raiders are coming in.
 
