@@ -1,14 +1,16 @@
 //! The region map (scripts/ui/overworld/region_map_view.gd + dialogue_panel.gd + shop_panel.gd): walking a
 //! location's map over the game state (ExploreRunner) under the HUD bar, the floating "Here" legend and the event log
-//! ticker (PLAYUI1-M: the full-width map, a camera centred on the party with walls drawn past the edge), the dialogue dock at the bottom
-//! (DialogueRunner), the shop popup (ShopRules), the turn-in picker and lore pages. Fights start the battle screen;
-//! a world-map exit opens the world map. Map-less locations show their exits as buttons.
+//! ticker (PLAYUI1-M: the full-width map, a camera centred on the party with walls drawn past the edge), the dialogue
+//! box at the bottom centre (DialogueRunner; PLAYUI1-D: the camera keeps both speakers above it), the shop popup over a
+//! dimmed map (ShopRules), the turn-in picker and lore pages. Fights start the battle screen; a world-map exit opens
+//! the world map. Map-less locations show their exits as buttons.
 
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::hud::{hud_bar, hud_key, hud_open, Hud, HUD_H};
 use crate::music;
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
-use aegis_ui::ui::{draw_glyph, tip, Gfx, Glyph, Ui, Widget, BODY, BORDER, CARD, DIM, GOLD, GOOD, H, INFO, PANEL_HI, SMALL, TEXT, TITLE, W};
+use aegis_ui::ui::{draw_glyph, tip, Gfx, Glyph, Ui, Widget, BODY, BORDER, CARD, DIM, GOLD, GOOD, H, INFO, PANEL_HI, SMALL, TEXT, W};
+use aegis_ui::painter::Painter;
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
 use emberwake_world::dialogue::DialogueRunner;
@@ -19,8 +21,21 @@ use std::time::{Duration, Instant};
 
 /// A map tile (logical px; 32 px at 1280 wide, MAPVIEW1).
 const TILE: i32 = 16;
-/// The dialogue dock's top edge (the map shows above it while talking).
-const DOCK_Y: i32 = 203;
+/// The dialogue box (spec PLAYUI1 3.1, logical px at text size Normal): its width (times the text size, at most the
+/// canvas less 40), its gap above the bottom edge, its least height (its most is `TALK_MAX_PCT` % of the canvas).
+const TALK_W: i32 = 400;
+const TALK_GAP: i32 = 6;
+const TALK_MIN_H: i32 = 104;
+const TALK_MAX_PCT: i32 = 45;
+/// The left column (portrait, name, faction band) and the portrait in it.
+const TALK_LEFT: i32 = 76;
+const PORTRAIT: i32 = 64;
+/// The box's inner margin.
+const TALK_PAD: i32 = 6;
+/// The NPC's line scrolls past this many lines, the replies past this many rows; a reply row is at least this tall.
+const TALK_LINES: i32 = 4;
+const TALK_ROWS: usize = 5;
+const REPLY_H: i32 = 14;
 
 #[derive(Debug, Clone)]
 pub enum RAct {
@@ -66,6 +81,8 @@ pub struct RegionMap {
     geo: (i32, i32, i32),
     /// The ticker shows the last `LOG_OPEN` events (else only the latest).
     log_open: bool,
+    /// The conversation node shown last ("character/node"): a new node starts its line and replies scrolled to the top.
+    talk_node: String,
 }
 
 /// Starts a world fight: the battle screen, or the Skip / Fled / Lost popup in a debug game.
@@ -137,6 +154,7 @@ impl RegionMap {
             next_walk: Instant::now(),
             geo: (0, 0, 1),
             log_open: false,
+            talk_node: String::new(),
         }
     }
 
@@ -488,21 +506,36 @@ impl Screen<GameCx> for RegionMap {
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         self.mouse = mouse;
         let d = cx.data.clone();
+        let gs = cx.gs().clone();
+        // the open conversation; a new node starts its line and its replies scrolled to the top
+        let talk_view = self.runner.as_ref().filter(|r| !r.closed).map(|r| r.view(&d, &gs));
+        let node = self.runner.as_ref().filter(|r| !r.closed).map(|r| format!("{}/{}", r.character_qid, r.node_id)).unwrap_or_default();
+        if node != self.talk_node {
+            g.kit.scroll.remove("dialogue.text");
+            g.kit.scroll.remove("dialogue.choices");
+            self.talk_node = node;
+        }
         let mut ui: Ui<RAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), rgb(14, 18, 26));
-        let gs = cx.gs().clone();
         let loc = explore::location(&d, &gs);
         let t = explore::template_of(&d, loc);
         let talking = self.talking();
         let modal = self.modal();
-        // -- Map (PLAYUI1-M, spec PLAYUI1 3.2): the full width under the HUD bar (above the dialogue dock while talking);
-        // the camera centres on the party with no clamp, and past the map's edge the location's wall tile is drawn
-        let map_area = if talking { Rect::new(0, HUD_H, W, DOCK_Y - HUD_H) } else { Rect::new(0, HUD_H, W, H - HUD_H) };
+        let shop_qid = self.runner.as_ref().filter(|r| !r.closed).map(|r| r.shop_qid.clone()).unwrap_or_default();
+        // measured before the map: the camera keeps both speakers above the box (also while the shop hides it, so the
+        // map does not jump when the shop opens or closes)
+        let talk_box = talk_view.as_ref().map(|v| talk_layout(&mut ui.p, v));
+        // -- Map (PLAYUI1-M, spec PLAYUI1 3.2): the full width under the HUD bar; the camera centres on the party with no
+        // clamp (while talking, on the midpoint of the party and the speaker, inside the map above the dialogue box), and
+        // past the map's edge the location's wall tile is drawn
+        let map_area = Rect::new(0, HUD_H, W, H - HUD_H);
+        let focus_area = talk_box.as_ref().map_or(map_area, |b| Rect::new(0, HUD_H, W, b.r.y - HUD_H));
         let names_always = cx.settings.v["map_names"].as_str() == Some("always");
         if !t.is_empty() {
             let ts = TILE;
-            let ox = map_area.x + map_area.w / 2 - (gs.position.0 as i32 * ts + ts / 2);
-            let oy = map_area.y + map_area.h / 2 - (gs.position.1 as i32 * ts + ts / 2);
+            let other = talk_view.as_ref().and_then(|v| self.speaker_tile(cx, v)).unwrap_or(gs.position);
+            let ox = focus_area.x + focus_area.w / 2 - ((gs.position.0 + other.0) as i32 * ts + ts) / 2;
+            let oy = focus_area.y + focus_area.h / 2 - ((gs.position.1 + other.1) as i32 * ts + ts) / 2;
             self.geo = (ox, oy, ts);
             // ASSETORG2 4.5: the world lineage's tile sets, child first, then common
             let mut lineage = d.lineage(&gs.world_id);
@@ -638,57 +671,14 @@ impl Screen<GameCx> for RegionMap {
         if !talking {
             self.draw_ticker(&mut ui, cx, modal);
         }
-        // -- Dialogue dock
-        if let Some(r) = self.runner.as_ref().filter(|r| !r.closed) {
-            let view = r.view(&d, &gs);
-            let dock = Rect::new(0, DOCK_Y, W, H - DOCK_Y);
-            ui.p.fill(dock, rgb(14, 20, 34));
-            ui.p.line(0.0, DOCK_Y as f32, W as f32, DOCK_Y as f32, FRAME_LINE, 0.0);
-            let pbox = Rect::new(6, 208, 93, 120);
-            ui.p.panel(pbox, rgb(22, 30, 48), BORDER, 2.0);
-            let speaker = d.resolve(&gs.world_id, "characters", &s(&view, "speaker"));
-            let (_, _, portraits) = crate::screens::character_art(&d, speaker);
-            match cx.art.first(&portraits, 89, 89) {
-                Some(img) => ui.p.image(img, Rect::new(8, 214, 89, 89)),
-                None => ui.p.text_center(52.0, 250.0, &s(&view, "speaker_name").chars().next().unwrap_or('?').to_string(), 20.0, GOLD),
+        // -- The dialogue box (3.1); while the shop is open (3.3) the box hides and the shop sits centred over the dimmed map
+        if let (Some(view), Some(b)) = (talk_view.as_ref(), talk_box.as_ref()) {
+            if shop_qid.is_empty() {
+                draw_talk(&mut ui, cx, view, b, self.pending.is_some());
+            } else {
+                ui.p.fill(map_area, SHOP_DIM);
+                self.draw_shop(&mut ui, cx, &shop_qid);
             }
-            let mut head = s(&view, "speaker_name");
-            if !s(&view, "faction").is_empty() {
-                head = format!("{head}  ({}: {})", s(&view, "faction_name"), s(&view, "band"));
-            }
-            ui.p.text_fit(106.0, 210.0, &head, TITLE + 1.0, 280.0, GOLD);
-            ui.para(106, 226, 280, &s(&view, "text"), BODY, TEXT);
-            let mut cy = 209;
-            let choices = json::aget(&view, "choices");
-            let busy = self.pending.is_some() || !r.shop_qid.is_empty();
-            for (i, c) in choices.iter().enumerate() {
-                let c = json::dict(c);
-                let locked = json::b(c, "locked", false);
-                let mut text = format!("{}  {}", i + 1, s(c, "text"));
-                if locked {
-                    text = format!("{text}  ({})", s(c, "reason"));
-                }
-                let lines = ui.p.wrap(&text, BODY, 228.0);
-                let hgt = 6 + lines.len() as i32 * 10;
-                let rr = Rect::new(394, cy, 240, hgt);
-                let hover = !locked && !busy && ui.hover(rr);
-                ui.p.panel(rr, if hover { rgb(34, 50, 82) } else { CARD }, if hover { GOLD } else if locked { BORDER } else { rgb(100, 130, 186) }, 2.0);
-                let mut ly = cy as f32 + 3.0;
-                for l in &lines {
-                    ui.p.text(rr.x as f32 + 5.0, ly, l, BODY, if locked { DIM } else { TEXT });
-                    ly += 10.0;
-                }
-                ui.push(format!("choice.{i}"), "choice", text, rr, !locked && !busy, false, Some(RAct::Choose(i as i64)), Vec::new());
-                cy += hgt + 3;
-            }
-            if json::b(&view, "next", false) || (json::b(&view, "end", false) && choices.is_empty()) {
-                ui.button("dialogue.continue", Rect::new(394, cy, 240, 16), "Continue", RAct::Advance, !busy);
-            }
-            ui.p.text(106.0, 345.0, "1-9 choose   Esc or right click: Farewell", SMALL, DIM);
-        }
-        let shop_qid = self.runner.as_ref().filter(|r| !r.closed).map(|r| r.shop_qid.clone()).unwrap_or_default();
-        if !shop_qid.is_empty() {
-            self.draw_shop(&mut ui, cx, &shop_qid);
         }
         if let Some(p) = self.pending.clone().filter(|_| self.talking()) {
             self.draw_turn_in(&mut ui, cx, &p);
@@ -800,14 +790,46 @@ impl Screen<GameCx> for RegionMap {
 }
 
 const FRAME_LINE: Rgba = rgb(140, 196, 236);
+/// The dim over the map while the shop is open (spec PLAYUI1 3.3).
+const SHOP_DIM: Rgba = rgba(0, 0, 0, 150);
 
 impl RegionMap {
+    /// The tile of the person speaking (the node's speaker, else the one talked to): their marker here that is not
+    /// absent, the nearest to the party when several show them; None when they have no marker on this map.
+    fn speaker_tile(&self, cx: &Cx, view: &Dict) -> Option<Pos> {
+        let d = &cx.data;
+        let gs = cx.gs();
+        let loc = explore::location(d, gs);
+        let t = explore::template_of(d, loc);
+        let loc_qid = s(loc, "_qid");
+        let steps = gs.explore_int("loc_steps");
+        let talked = self.runner.as_ref().map(|r| r.character_qid.clone()).unwrap_or_default();
+        for who in [s(view, "speaker"), talked] {
+            if who.is_empty() {
+                continue;
+            }
+            let near = explore::markers_of(loc)
+                .into_iter()
+                .filter(|m| s(m, "kind") == "npc" && emberwake_world::dialogue::character_qid(d, gs, &s(m, "character")) == who && explore::presence(d, gs, &loc_qid, m) != "absent")
+                .map(|m| explore::marker_pos(t, &m, steps))
+                .filter(|at| at.0 >= 0)
+                .min_by_key(|at| (at.0 - gs.position.0).abs() + (at.1 - gs.position.1).abs());
+            if near.is_some() {
+                return near;
+            }
+        }
+        None
+    }
+
     fn draw_shop(&mut self, ui: &mut Ui<RAct>, cx: &Cx, sq: &str) {
         let d = &cx.data;
         let gs = cx.gs();
         let sh = shop::shop_of(d, gs, sq);
-        let fr = Rect::new(133, 47, 373, 266);
+        // centred under the HUD bar (spec PLAYUI1 3.3; PLAYUI1-P makes it the three-column trade)
+        let (fw, fh) = (373, 266);
+        let fr = Rect::new((W - fw) / 2, HUD_H + (H - HUD_H - fh) / 2, fw, fh);
         ui.p.panel(fr, aegis_ui::ui::MODAL, FRAME_LINE, 4.0);
+        ui.push("shop", "panel", s_or(sh, "name", sq), fr, true, false, None, Vec::new());
         ui.p.text(fr.x as f32 + 9.0, fr.y as f32 + 7.0, &s_or(sh, "name", sq), 10.0, GOLD);
         ui.p.text_right((fr.x + fr.w) as f32 - 9.0, fr.y as f32 + 9.0, &format!("Gold: {}  Supplies: {}/99", gs.party.gold, gs.party.supplies), BODY, TEXT);
         let fq = shop::keeper_faction(d, gs, sh);
@@ -1089,6 +1111,171 @@ fn service_glyph(ui: &mut Ui<RAct>, service: &str, r: Rect) {
             ui.p.line(cx_, cy_ - sz * 0.4, cx_, cy_ + sz * 0.4, GOOD, 0.0);
         }
     }
+}
+
+/// A reply row of the dialogue box: its widget id, the number shown (1-9 choose it), the text the agent link reads,
+/// the wrapped lines, locked, its action and its height.
+struct Reply {
+    id: String,
+    num: String,
+    label: String,
+    lines: Vec<String>,
+    locked: bool,
+    act: RAct,
+    h: i32,
+}
+
+/// The dialogue box measured for one frame (spec PLAYUI1 3.1): the box, its left column's width, the speaker's name
+/// and faction band lines, the NPC's line in its (scrolling) view, and the replies in theirs.
+struct TalkBox {
+    r: Rect,
+    left: i32,
+    name: Vec<String>,
+    band: Vec<String>,
+    text: Vec<String>,
+    text_view: Rect,
+    replies: Vec<Reply>,
+    num_w: i32,
+    rows_view: Rect,
+    rows_h: i32,
+}
+
+/// At most `n` lines of `lines`, the rest joined into the last one (drawn shortened, with the full text in the audit).
+fn capped(mut lines: Vec<String>, n: usize) -> Vec<String> {
+    if lines.len() > n {
+        let rest = lines.split_off(n - 1).join(" ");
+        lines.push(rest);
+    }
+    lines
+}
+
+/// Measures the dialogue box for `view` (a `DialogueRunner::view`) at the current text size: `TALK_W` wide (times the
+/// text size, at most the canvas less 40), centred, `TALK_GAP` above the bottom; its height from the content, at least
+/// `TALK_MIN_H`, at most `TALK_MAX_PCT` % of the canvas (the replies, then the line, scroll when they do not fit).
+fn talk_layout(p: &mut Painter, view: &Dict) -> TalkBox {
+    let sc = p.fonts.scale;
+    let bw = (W - 40).min((TALK_W as f32 * sc).round() as i32);
+    let left = TALK_LEFT.max((TALK_LEFT as f32 * sc).round() as i32);
+    let (lb, ls) = (p.line_h(BODY).ceil() as i32, p.line_h(SMALL).ceil() as i32);
+    let name = capped(p.wrap(&s(view, "speaker_name"), BODY, (left - 6) as f32), 2);
+    let band_text = if s(view, "faction").is_empty() { String::new() } else { format!("{}: {}", s(view, "faction_name"), s(view, "band")) };
+    let band = if band_text.is_empty() { Vec::new() } else { capped(p.wrap(&band_text, SMALL, (left - 6) as f32), 2) };
+    let left_h = TALK_PAD + PORTRAIT + 3 + name.len() as i32 * lb + if band.is_empty() { 0 } else { 1 + band.len() as i32 * ls } + TALK_PAD;
+    // the right part: the line on top, a 1 px divider, the replies below (3 px kept for a scroll bar)
+    let rw = bw - left - 2 - TALK_PAD;
+    let text = p.wrap(&s(view, "text"), BODY, (rw - 5) as f32);
+    let text_h = text.len() as i32 * lb;
+    let mut text_view_h = text_h.min(TALK_LINES * lb).max(lb);
+    let num_w = p.text_w("8", BODY).ceil() as i32 + 6;
+    let line_w = (rw - 4 - 5 - num_w - 4) as f32;
+    let mut replies = Vec::new();
+    let choices = json::aget(view, "choices");
+    for (i, c) in choices.iter().enumerate() {
+        let c = json::dict(c);
+        let locked = json::b(c, "locked", false);
+        let mut shown = s(c, "text");
+        if locked {
+            shown = format!("{shown}  ({})", s(c, "reason"));
+        }
+        let lines = p.wrap(&shown, BODY, line_w);
+        let h = REPLY_H.max(lines.len() as i32 * lb + 5);
+        let num = if i < 9 { (i + 1).to_string() } else { String::new() };
+        replies.push(Reply { id: format!("choice.{i}"), label: format!("{}  {shown}", i + 1), num, lines, locked, act: RAct::Choose(i as i64), h });
+    }
+    // Continue is a row when the node goes on (or ends with no reply)
+    if json::b(view, "next", false) || (json::b(view, "end", false) && choices.is_empty()) {
+        replies.push(Reply { id: "dialogue.continue".into(), num: String::new(), label: "Continue".into(), lines: vec!["Continue".into()], locked: false, act: RAct::Advance, h: REPLY_H.max(lb + 5) });
+    }
+    let rows_h: i32 = replies.iter().map(|r| r.h + 2).sum::<i32>() - if replies.is_empty() { 0 } else { 2 };
+    let mut rows_view_h: i32 = replies.iter().take(TALK_ROWS).map(|r| r.h + 2).sum::<i32>() - if replies.is_empty() { 0 } else { 2 };
+    let max_h = H * TALK_MAX_PCT / 100;
+    let content = |text_view_h: i32, rows_view_h: i32| TALK_PAD + text_view_h + 9 + rows_view_h + TALK_PAD;
+    let mut over = content(text_view_h, rows_view_h).max(left_h) - max_h;
+    if over > 0 {
+        let least = replies.first().map_or(0, |r| r.h);
+        let cut = over.min(rows_view_h - least).max(0);
+        rows_view_h -= cut;
+        over -= cut;
+        text_view_h -= over.min(text_view_h - lb).max(0);
+    }
+    let bh = content(text_view_h, rows_view_h).max(left_h).max(TALK_MIN_H).min(max_h);
+    let r = Rect::new((W - bw) / 2, H - TALK_GAP - bh, bw, bh);
+    let rx = r.x + left + 2;
+    let text_view = Rect::new(rx, r.y + TALK_PAD, rw, text_view_h);
+    let rows_view = Rect::new(rx, text_view.y + text_view.h + 9, rw, rows_view_h);
+    TalkBox { r, left, name, band, text, text_view, replies, num_w, rows_view, rows_h }
+}
+
+/// Text centred on `cx`, shortened to `max_w` (the audit keeps the full text).
+fn text_center_fit(p: &mut Painter, cx: f32, y: f32, text: &str, size: f32, max_w: f32, col: Rgba) {
+    let shown = p.fit(text, size, max_w);
+    p.text_center(cx, y, &shown, size, col);
+    if shown != text {
+        p.mark_cut(text);
+    }
+}
+
+/// Draws the dialogue box `b` (spec PLAYUI1 3.1): the portrait at the top of the left column with the speaker's name
+/// (GOLD) and faction band (DIM) under it; at the right the NPC's line, a divider and the numbered replies (locked
+/// ones dim with their reason; all off while `busy`, a turn-in picker over it). No key hint line: the numbers show
+/// 1-9, Esc is on the Help button's card.
+fn draw_talk(ui: &mut Ui<RAct>, cx: &mut Cx, view: &Dict, b: &TalkBox, busy: bool) {
+    ui.p.panel(b.r, rgba(14, 20, 34, 250), FRAME_LINE, 4.0);
+    ui.push("dialogue", "panel", s(view, "speaker_name"), b.r, true, false, None, Vec::new());
+    let pr = Rect::new(b.r.x + (b.left - PORTRAIT) / 2, b.r.y + TALK_PAD, PORTRAIT, PORTRAIT);
+    ui.p.panel(pr, rgb(22, 30, 48), BORDER, 2.0);
+    let speaker = cx.data.resolve(&cx.gs().world_id, "characters", &s(view, "speaker"));
+    let (_, _, portraits) = crate::screens::character_art(&cx.data, speaker);
+    let px = ui.icon_px(Rect::new(0, 0, PORTRAIT + 4, PORTRAIT + 4));
+    match cx.art.first(&portraits, px, px) {
+        Some(img) => ui.p.image(img, pr),
+        None => {
+            let initial = s(view, "speaker_name").chars().next().unwrap_or('?').to_string();
+            ui.p.text_center(pr.x as f32 + PORTRAIT as f32 / 2.0, pr.y as f32 + (PORTRAIT as f32 - ui.p.line_h(20.0)) / 2.0, &initial, 20.0, GOLD);
+        }
+    }
+    let mid = b.r.x as f32 + b.left as f32 / 2.0;
+    let max_w = (b.left - 6) as f32;
+    let (lb, ls) = (ui.p.line_h(BODY).ceil(), ui.p.line_h(SMALL).ceil());
+    let mut y = (pr.y + PORTRAIT + 3) as f32;
+    for l in &b.name {
+        text_center_fit(&mut ui.p, mid, y, l, BODY, max_w, GOLD);
+        y += lb;
+    }
+    y += 1.0;
+    for l in &b.band {
+        text_center_fit(&mut ui.p, mid, y, l, SMALL, max_w, DIM);
+        y += ls;
+    }
+    // the NPC's line (scrolls past TALK_LINES lines)
+    let tv = b.text_view;
+    let off = ui.scroll_begin("dialogue.text", tv, b.text.len() as i32 * lb as i32);
+    for (i, l) in b.text.iter().enumerate() {
+        ui.p.text(tv.x as f32, (tv.y - off) as f32 + i as f32 * lb, l, BODY, TEXT);
+    }
+    ui.scroll_end();
+    let dy = (tv.y + tv.h + 4) as f32 + 0.5;
+    ui.p.line(tv.x as f32, dy, (tv.x + tv.w) as f32, dy, BORDER, 0.0);
+    // the replies (scroll past TALK_ROWS rows)
+    let rv = b.rows_view;
+    let off = ui.scroll_begin("dialogue.choices", rv, b.rows_h);
+    let mut ry = rv.y - off;
+    for rep in &b.replies {
+        let rr = Rect::new(rv.x, ry, rv.w - 4, rep.h);
+        let on = !rep.locked && !busy;
+        let hover = on && ui.hover(rr);
+        ui.p.panel(rr, if hover { PANEL_HI } else { CARD }, if hover { GOLD } else if rep.locked { BORDER } else { rgb(100, 130, 186) }, 2.0);
+        let ty = rr.y as f32 + (rep.h as f32 - rep.lines.len() as f32 * lb) / 2.0;
+        if !rep.num.is_empty() {
+            ui.p.text(rr.x as f32 + 4.0, ty, &rep.num, BODY, if on { GOLD } else { DIM });
+        }
+        for (i, l) in rep.lines.iter().enumerate() {
+            ui.p.text_fit((rr.x + 4 + b.num_w) as f32, ty + i as f32 * lb, l, BODY, (rr.w - 8 - b.num_w) as f32, if rep.locked { DIM } else { TEXT });
+        }
+        ui.push(rep.id.clone(), "choice", rep.label.clone(), rr, on, false, Some(rep.act.clone()), Vec::new());
+        ry += rep.h + 2;
+    }
+    ui.scroll_end();
 }
 
 /// "+90 HP · Owned 2 · Anyone can use it" style detail of an item.
@@ -1442,6 +1629,246 @@ mod map_tests {
                     }
                 }
             }
+        }
+    }
+}
+
+/// PLAYUI1-D (spec PLAYUI1 3.1-3.3): the dialogue box, the camera on both speakers, the shop over the dimmed map, drawn
+/// headless over a debug game of the first playable world (art layers off: portraits are initials, tiles flat fills).
+#[cfg(test)]
+mod talk_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx, rect};
+    use aegis_ui::painter::TextRec;
+    use aegis_ui::screen::TEXT_SIZES;
+
+    fn widget(map: &RegionMap, id: &str) -> Option<Value> {
+        map.widgets().into_iter().find(|w| w["id"] == id)
+    }
+
+    fn replies(widgets: &[Value]) -> Vec<Value> {
+        widgets.iter().filter(|w| w["kind"] == "choice").cloned().collect()
+    }
+
+    /// TEXTFIT1 counts (cut, edge, spill, overlap) of a frame, and the report.
+    fn audit(widgets: &[Value], recs: &[TextRec]) -> (Vec<i64>, Value) {
+        let boxes: Vec<(String, f32, f32, f32, f32)> = widgets
+            .iter()
+            .map(|w| {
+                let (x, y, ww, hh) = rect(w);
+                (s(json::dict(w), "id"), x as f32, y as f32, ww as f32, hh as f32)
+            })
+            .collect();
+        let v = aegis_ui::text_audit::issues(recs, W as f32, H as f32, &boxes);
+        let c = &v["counts"];
+        (["cut", "edge", "spill", "overlap"].iter().map(|k| c[*k].as_i64().unwrap_or(-1)).collect(), v)
+    }
+
+    /// The box's width at text size `scale` (3.1: 400 times the text size, at most the canvas less 40).
+    fn box_w(scale: f64) -> i64 {
+        ((W - 40) as i64).min((TALK_W as f64 * scale).round() as i64)
+    }
+
+    /// Every conversation opened the way a player opens it: for each person on a map of the world, from each open tile
+    /// next to them, facing them and pressing E. `each` gets the map (talking), the party's tile and the person's, and
+    /// says whether to go on; the game state is put back after each. The number of conversations opened.
+    fn each_talk(cx: &mut Cx, mut each: impl FnMut(&mut RegionMap, &mut Cx, Pos, Pos) -> bool) -> usize {
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        let start = cx.gs().clone();
+        let mut opened = 0;
+        for loc in d.merged_entries(&world, "locations") {
+            let t = explore::template_of(&d, loc).clone();
+            if t.is_empty() {
+                continue;
+            }
+            cx.gs_mut().location_id = s(loc, "id");
+            let _ = RegionMap::new(cx);
+            let here = cx.gs().clone();
+            let steps = here.explore_int("loc_steps");
+            for m in explore::markers_of(loc) {
+                if s(&m, "kind") != "npc" || explore::presence(&d, &here, &s(loc, "_qid"), &m) == "absent" {
+                    continue;
+                }
+                let at = explore::marker_pos(&t, &m, steps);
+                for dir in explore::DIRS {
+                    let p = (at.0 - dir.0, at.1 - dir.1);
+                    if !explore::is_open(&t, p.0, p.1) {
+                        continue;
+                    }
+                    *cx.gs_mut() = here.clone();
+                    let mut map = RegionMap::new(cx);
+                    cx.gs_mut().position = p;
+                    map.interact(cx, dir);
+                    if map.talking() {
+                        opened += 1;
+                        let go_on = each(&mut map, cx, p, at);
+                        map.end_talk(cx);
+                        if !go_on {
+                            *cx.gs_mut() = start;
+                            return opened;
+                        }
+                    }
+                }
+            }
+        }
+        *cx.gs_mut() = start;
+        opened
+    }
+
+    /// 3.1: 400 wide (times the text size), centred, 6 above the bottom, 104 to 45 % of the canvas tall; the name under
+    /// the portrait; the line above the replies; no key hint line; the legend and the log ticker stay hidden.
+    #[test]
+    fn the_dialogue_box_is_a_small_centred_bottom_box() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let n = each_talk(&mut cx, |map, cx, _, _| {
+            let name = s(json::dict(&map.state(cx)["dialogue"]), "speaker_name");
+            for (size, scale) in TEXT_SIZES {
+                let recs = frame(map, cx, &mut g, scale as f32);
+                let (x, y, w, h) = rect(&widget(map, "dialogue").expect("the dialogue box"));
+                assert_eq!(w, box_w(scale), "{size}: width");
+                assert!((x - (W as i64 - x - w)).abs() <= 1, "{size}: centred ({x}, {w})");
+                assert_eq!(H as i64 - (y + h), TALK_GAP as i64, "{size}: {TALK_GAP} above the bottom");
+                assert!(h >= TALK_MIN_H as i64 && h <= (H * TALK_MAX_PCT / 100) as i64, "{size}: height {h}");
+                let left = (TALK_LEFT as f64).max((TALK_LEFT as f64 * scale).round()) as f32;
+                let under = (y + (TALK_PAD + PORTRAIT) as i64) as f32;
+                let named = recs.iter().any(|r| !r.text.is_empty() && name.starts_with(r.text.as_str()) && r.y >= under && r.x >= x as f32 && r.x + r.w <= x as f32 + left);
+                assert!(named, "{size}: {name} under the portrait");
+                let (_, ty, _, th) = rect(&widget(map, "dialogue.text").expect("the line"));
+                let rows = replies(&map.widgets());
+                assert!(!rows.is_empty(), "{size}: a reply or Continue");
+                for r in &rows {
+                    let (rx, ry, rw, rh) = rect(r);
+                    assert!(ry >= ty + th && rx >= x && ry + rh <= y + h && rx + rw <= x + w, "{size}: {r} below the line, inside the box");
+                }
+                assert!(!recs.iter().any(|r| r.text.contains("1-9")), "{size}: no key hint line");
+                assert!(widget(map, "legend").is_none() && widget(map, "log").is_none(), "{size}: no legend or ticker while talking");
+            }
+            false
+        });
+        assert!(n > 0, "someone on a map of the world talks");
+    }
+
+    /// 3.2 acceptance: for every person on the world's maps, a conversation opened from any open tile next to them keeps
+    /// both the party's and their tile inside the map above the box, at all four text sizes; every box reads clean.
+    #[test]
+    fn both_speakers_stay_in_view_above_the_box() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let n = each_talk(&mut cx, |map, cx, party, npc| {
+            for (size, scale) in TEXT_SIZES {
+                let recs = frame(map, cx, &mut g, scale as f32);
+                let (_, by, _, _) = rect(&widget(map, "dialogue").expect("the dialogue box"));
+                let view = Rect::new(0, HUD_H, W, by as i32 - HUD_H);
+                let (ox, oy, ts) = map.geo;
+                for (who, at) in [("party", party), ("speaker", npc)] {
+                    let r = Rect::new(ox + at.0 as i32 * ts, oy + at.1 as i32 * ts, ts, ts);
+                    let inside = r.x >= view.x && r.y >= view.y && r.x + r.w <= view.x + view.w && r.y + r.h <= view.y + view.h;
+                    assert!(inside, "{} at {party:?} talking to {npc:?}, {size}: the {who}'s tile {r:?} is not inside {view:?}", cx.gs().location_id);
+                }
+                // the box's texts (the map's own are `map_tests`'; a drawn badge stand-in may sit on the party's tile
+                // when the party stands just above a quest giver)
+                let in_box: Vec<TextRec> = recs.into_iter().filter(|r| r.y >= by as f32).collect();
+                let (counts, v) = audit(&map.widgets(), &in_box);
+                assert_eq!(counts, [0, 0, 0, 0], "{} at {party:?}, {size}: {v}", cx.gs().location_id);
+            }
+            true
+        });
+        eprintln!("{n} conversations checked");
+        assert!(n > 0, "someone on a map of the world talks");
+    }
+
+    /// 3.1: the number keys still choose (the farewell reply ends the conversation).
+    #[test]
+    fn a_number_key_chooses_a_reply() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut checked = false;
+        each_talk(&mut cx, |map, cx, _, _| {
+            frame(map, cx, &mut g, 1.0);
+            let choices = json::aget(json::dict(&map.state(cx)["dialogue"]), "choices").to_vec();
+            let Some(i) = choices.iter().position(|c| s(json::dict(c), "service") == "farewell").filter(|i| *i < 9) else { return true };
+            map.key(cx, Key::Char(char::from(b'1' + i as u8)));
+            assert!(!map.talking(), "key {} (farewell) ends the conversation", i + 1);
+            checked = true;
+            false
+        });
+        assert!(checked, "a conversation with a farewell reply");
+    }
+
+    /// 3.1 text audit with a long line and many replies: the box stays at most 45 % of the canvas, the line and the
+    /// replies scroll inside it, nothing is cut, past the canvas, spilled or overlapping at any text size.
+    #[test]
+    fn a_long_line_and_many_replies_scroll_inside_the_box() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let world = cx.gs().world_id.clone();
+        let speaker = cx.data.merged_entries(&world, "characters").first().map(|c| s(c, "id")).unwrap_or_default();
+        let line = "The ash has not stopped falling since the forge went cold, and every road out of the valley is watched by the Hollow riders. ".repeat(4);
+        let mut choices: Vec<Value> = (0..12)
+            .map(|i| json!({"text": format!("Reply {i}: tell me more about the riders, the forge and the road north before I decide."), "locked": false, "reason": "", "service": ""}))
+            .collect();
+        choices[2] = json!({"text": "[Might 8] Force the gate open.", "locked": true, "reason": "Needs Might 8 (best 5)", "service": ""});
+        let view = json::dict(&json!({"speaker": speaker, "speaker_name": "Warden Ilsa Varn", "node": "long", "text": line.trim_end(), "choices": choices,
+            "end": false, "next": false, "faction": "f", "faction_name": "Ember Wardens", "band": "neutral"}))
+        .clone();
+        for (size, scale) in TEXT_SIZES {
+            g.fonts.scale = scale as f32;
+            g.fonts.audit = Some(Vec::new());
+            let mut ui: Ui<RAct> = Ui::new(&mut g, (-500, -500), true);
+            let b = talk_layout(&mut ui.p, &view);
+            draw_talk(&mut ui, &mut cx, &view, &b, false);
+            let widgets: Vec<Value> = ui.widgets.iter().map(|w| w.info()).collect();
+            drop(ui);
+            let recs = g.fonts.audit.take().unwrap_or_default();
+            assert!(b.r.h <= H * TALK_MAX_PCT / 100 && b.r.y + b.r.h == H - TALK_GAP, "{size}: {:?}", b.r);
+            let max = |id: &str| widgets.iter().find(|w| w["id"] == id).and_then(|w| w["text"].as_str()?.parse::<i32>().ok()).unwrap_or(0);
+            assert!(max("dialogue.text") > 0 && max("dialogue.choices") > 0, "{size}: the line and the replies scroll");
+            let shown: Vec<Value> = replies(&widgets).into_iter().filter(|w| rect(w).2 > 0 && rect(w).3 > 0).collect();
+            assert!(shown.first().is_some_and(|w| w["id"] == "choice.0") && shown.len() < 12, "{size}: the first replies show, the rest scroll");
+            for w in &shown {
+                let (x, y, ww, hh) = rect(w);
+                let inside = x >= b.r.x as i64 && y >= b.r.y as i64 && x + ww <= (b.r.x + b.r.w) as i64 && y + hh <= (b.r.y + b.r.h) as i64;
+                assert!(inside, "{size}: {w} inside the box");
+            }
+            assert!(shown.iter().any(|w| w["id"] == "choice.2" && w["enabled"] == json!(false)), "{size}: the locked reply shows, off");
+            let (counts, v) = audit(&widgets, &recs);
+            assert_eq!(counts, [0, 0, 0, 0], "{size}: {v}");
+        }
+    }
+
+    /// 3.3: the shop hides the box and sits centred under the HUD bar over the dimmed map; Esc brings the box back.
+    #[test]
+    fn the_shop_hides_the_box_over_a_dimmed_map() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        // the map's brightness left of the box (the legend and the ticker are hidden while talking)
+        let light = |g: &Gfx| -> u64 {
+            let mut sum = 0;
+            for y in (HUD_H + 2)..(H - 10) {
+                for x in 0..100 {
+                    let i = ((y * g.canvas.w + x) * 4) as usize;
+                    sum += g.canvas.px[i..i + 3].iter().map(|v| *v as u64).sum::<u64>();
+                }
+            }
+            sum
+        };
+        let mut checked = false;
+        each_talk(&mut cx, |map, cx, _, _| {
+            let choices = json::aget(json::dict(&map.state(cx)["dialogue"]), "choices").to_vec();
+            let Some(k) = choices.iter().position(|c| s(json::dict(c), "service") == "shop") else { return true };
+            frame(map, cx, &mut g, 1.0);
+            let before = light(&g);
+            map.click_id(cx, &format!("choice.{k}")).expect("the shop reply");
+            frame(map, cx, &mut g, 1.0);
+            assert!(widget(map, "dialogue").is_none() && replies(&map.widgets()).is_empty(), "the box hides while the shop is open");
+            let (x, y, w, h) = rect(&widget(map, "shop").expect("the shop"));
+            assert!((x - (W as i64 - x - w)).abs() <= 1 && (y - HUD_H as i64 - (H as i64 - y - h)).abs() <= 1, "centred under the HUD bar: {x}, {y}, {w}, {h}");
+            assert!(light(&g) * 10 < before * 7, "the map is dimmed: {} vs {before}", light(&g));
+            map.back(cx);
+            frame(map, cx, &mut g, 1.0);
+            assert!(map.talking() && widget(map, "dialogue").is_some() && widget(map, "shop").is_none(), "Esc closes the shop, the box comes back");
+            checked = true;
+            false
+        });
+        if !checked {
+            eprintln!("no shop keeper on the world's maps: nothing to check");
         }
     }
 }

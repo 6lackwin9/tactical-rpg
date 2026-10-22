@@ -7,7 +7,8 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
 - Right-click goes back or closes on most settings and UI popups; an X button for back (2026-10-18 playtest).
 - One-time screens use explicit buttons (2026-10-18).
 - Popups over full screens where possible. The level-up popup shows current stats, with Auto and Revert next to the allocation and Confirm kept separate (2026-10-18).
-- Dialogue sits in a bottom dock (2026-10-18).
+- Dialogue sits in a bottom dock (2026-10-18). Refined: a 400 px box centred at the bottom, portrait and name on the left, the NPC's line above the
+  replies (user playtest 2026-10-22, PLAYUI1-D).
 
 ## Maps
 

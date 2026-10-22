@@ -138,8 +138,7 @@ any catalog or world encounter, Content Forge, World Forge, Gear & Skill Dojo, E
 nothing saved, a fight skipped as a win at no cost or fought), and the UI Gallery: the kit's widgets, every screen and the battle's panels one at a time). In play: arrows / W A S D walk, E interacts with the marker you face, a click walks there
 (or uses a marker), Esc opens the game menu (party, journal, save, load, settings, quit). Both maps have a HUD bar
 (PLAYUI1-H): the place name top left; gold, supplies and icon buttons top right (P party, J journal, I stash = the
-Character popup's Gear tab, ? help, Menu), off while a conversation, shop, turn-in or lore page is open. Talking opens the dialogue
-dock (1-9 choose); shops, turn-ins and lore open as popups; a world-map exit opens the world map (click a node, Travel,
+Character popup's Gear tab, ? help, Menu), off while a conversation, shop, turn-in or lore page is open. Talking opens the dialogue box at the bottom centre with the camera on both speakers (1-9 choose); shops, turn-ins and lore open as popups; a world-map exit opens the world map (click a node, Travel,
 Make camp, Enter). Fights open the battle screen with the saved party; Continue settles the outcome and shows the
 results. The screen list and what is left: [games/emberwake/docs/SCREENS.md](../games/emberwake/docs/SCREENS.md).
 
