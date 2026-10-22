@@ -10,6 +10,7 @@ mod battle;
 mod dojo;
 mod forge;
 mod gallery;
+mod hud;
 mod hub;
 mod intent_text;
 mod menus;

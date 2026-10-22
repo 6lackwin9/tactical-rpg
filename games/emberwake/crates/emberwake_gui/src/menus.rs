@@ -497,6 +497,8 @@ pub struct SettingsScreen {
 const TABS: [&str; 4] = ["Sound", "Display", "Gameplay", "Controls"];
 /// The display choices are the engine's (aegis_ui::screen).
 const CHOICES: [(&str, &[&str]); 3] = [("window_mode", &WINDOW_MODES), ("window_size", &WINDOW_SIZES), ("fps_cap", &FPS_CAPS)];
+/// PLAYUI1-M: the region map's marker names (value, label); the first is the default.
+pub const MAP_NAMES: [(&str, &str); 2] = [("hover", "On hover"), ("always", "Always")];
 const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
     (
         "Menus",
@@ -509,7 +511,7 @@ const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
             ("Back / close (mouse)", "Right click"),
         ],
     ),
-    ("Maps", &[("Move the party", "Arrow keys, W A S D"), ("Interact with the marker you face", "E"), ("Game menu", "Escape"), ("Choose a dialogue line", "1-9"), ("Party, journal, stash, help", "P, J, I, ?")]),
+    ("Maps", &[("Move the party", "Arrow keys, W A S D"), ("Interact with the marker you face", "E"), ("Game menu", "Escape"), ("Choose a dialogue line", "1-9"), ("Party, journal, stash, help, event log", "P, J, I, ?, L")]),
     ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Combat log", "L"), ("Screenshot", "F12")]),
 ];
 
@@ -540,6 +542,11 @@ impl SettingsScreen {
                 if let Some((bus, sample)) = preview_of(k) {
                     cx.audio.set_levels(&self.draft);
                     cx.audio.preview(bus, sample);
+                }
+            }
+            SetAct::Pick("map_names", i) => {
+                if let Some((v, _)) = MAP_NAMES.get(i) {
+                    self.draft["map_names"] = json!(v);
                 }
             }
             SetAct::Pick(k, i) => {
@@ -627,6 +634,12 @@ impl Screen<GameCx> for SettingsScreen {
                 ui.checkbox("settings.show_tells", x + 3, y, "Show enemy tells", d["show_tells"].as_bool().unwrap_or(true), SetAct::Toggle("show_tells"), true);
                 y += 18;
                 ui.checkbox("settings.warn_missing", x + 3, y, "Warn about missing actions", d["warn_missing"].as_bool().unwrap_or(true), SetAct::Toggle("warn_missing"), true);
+                y += 20;
+                ui.p.text(x as f32, y as f32 + 3.0, "Map names", BODY, TEXT);
+                let labels: Vec<String> = MAP_NAMES.iter().map(|m| m.1.to_string()).collect();
+                let at = MAP_NAMES.iter().position(|m| d["map_names"].as_str() == Some(m.0)).unwrap_or(0);
+                let t = tip("Map names", "On hover: a marker's name shows while you point at it, its legend row, or face it. Always: every person and exit is named.");
+                ui.select("settings.map_names", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick("map_names", i), true, t);
             }
             _ => {
                 for (head, rows) in CONTROLS {

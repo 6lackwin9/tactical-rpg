@@ -294,6 +294,50 @@ pub fn marker_view(d: &Data, gs: &GameState, loc: &Dict, m: &Dict) -> Dict {
     ])
 }
 
+/// The NPC services in badge order.
+pub const SERVICES: [&str; 4] = ["turn_in", "offer", "shop", "recruit"];
+
+/// PLAYUI1-M (spec PLAYUI1 2.2 A; engine-only, no Godot function): what the character `character_qid` offers now, in
+/// `SERVICES` order: `turn_in` (a ready quest turns in here), `offer` (an available quest starts here; both as the
+/// marker badges `ready` and `quest`), `shop` (keeper of an open shop), `recruit` (a choice in its dialogue tree with a
+/// `recruit` effect for a character not in the party, the choice's conditions holding). Read-only; `marker_view` stays
+/// as Godot had it (the journey parity compares it).
+pub fn npc_services(d: &Data, gs: &GameState, character_qid: &str) -> Vec<&'static str> {
+    let mut out = Vec::new();
+    if character_qid.is_empty() {
+        return out;
+    }
+    if quest::quests_with(d, gs, "ready").iter().any(|q| dialogue::turn_in_qid(d, gs, &quest::resolved(d, gs, q)) == character_qid) {
+        out.push("turn_in");
+    }
+    if quest::quests_with(d, gs, "available").iter().any(|q| dialogue::giver_qid(d, gs, &quest::resolved(d, gs, q)) == character_qid) {
+        out.push("offer");
+    }
+    let keeps_shop = d.merged_entries(&gs.world_id, "shops").into_iter().any(|sh| {
+        dialogue::character_qid(d, gs, &json::s(sh, "keeper")) == character_qid && crate::shop::is_open(d, gs, &json::s(sh, "_qid"))
+    });
+    if keeps_shop {
+        out.push("shop");
+    }
+    let c = d.resolve(&gs.world_id, "characters", character_qid);
+    let tree_ref = json::s(c, "dialogue");
+    let tree = if tree_ref.is_empty() { json::empty() } else { d.resolve(&gs.world_id, "dialogues", &tree_ref) };
+    let recruits = json::arr(&json::normalize(json::get(tree, "nodes"))).iter().any(|n| {
+        json::arr(&json::normalize(json::get(json::dict(n), "choices"))).iter().any(|ch| {
+            let ch = json::dict(ch);
+            let fx = json::normalize(json::get(ch, "effects"));
+            json::arr(&fx).iter().any(|f| {
+                let f = json::dict(f);
+                json::s(f, "effect") == "recruit" && !dialogue::is_member(d, gs, &json::s(f, "character"))
+            }) && dialogue::choice_open(d, gs, ch)
+        })
+    });
+    if recruits {
+        out.push("recruit");
+    }
+    out
+}
+
 /// Where a marker stands for `loc_steps` (roamers walk their path).
 pub fn marker_pos(t: &Dict, m: &Dict, loc_steps: i64) -> Pos {
     if json::s(m, "kind") == "roamer" {

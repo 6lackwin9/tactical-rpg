@@ -4,7 +4,7 @@
 
 use aegis_ui::canvas::{rgb, rgba, Rect};
 use crate::music;
-use crate::region::{hud_bar, hud_key, hud_open, Hud};
+use crate::hud::{hud_bar, hud_key, hud_open, Hud};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, H, INFO, SMALL, TEXT, W};
 use aegis_ui::widget_plumbing;
