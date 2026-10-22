@@ -665,10 +665,12 @@ pub fn draw_tip<A>(p: &mut Painter, widgets: &[Widget<A>], mouse: (i32, i32)) {
     }
 }
 
-/// The topmost enabled clickable widget under `pos`; an open select's options lie over everything.
+/// The topmost enabled clickable widget under `pos`; an open select's options lie over everything. A disabled icon
+/// button still takes its click (and does nothing), so a row or card drawn under it never fires (PLAYUI1 section 1).
 pub fn hit<A: Clone>(widgets: &[Widget<A>], pos: (i32, i32)) -> Option<A> {
-    let under = |w: &&Widget<A>| w.enabled && w.action.is_some() && w.rect.contains(pos.0, pos.1);
-    widgets.iter().rev().filter(|w| w.kind == "option").find(under).or_else(|| widgets.iter().rev().find(under)).and_then(|w| w.action.clone())
+    let under = |w: &&Widget<A>| (w.enabled || w.kind == "icon_button") && w.action.is_some() && w.rect.contains(pos.0, pos.1);
+    let top = widgets.iter().rev().filter(|w| w.kind == "option").find(under).or_else(|| widgets.iter().rev().find(under));
+    top.filter(|w| w.enabled).and_then(|w| w.action.clone())
 }
 
 /// The action of widget `id`, or why it can't be clicked.
