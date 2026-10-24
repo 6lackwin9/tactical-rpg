@@ -61,7 +61,8 @@ games/emberwake/lore/
     ├── roster_expansion_and_lifecycle.md  <-- Bunk capacity (6 to 8), recruitment jailbreaks, permadeath
     ├── gameplay_loop_and_ui_prototype.md  <-- Macro expedition loop, micro 4-step combat loop, UI reuse
     ├── screen_architecture_and_separation_plan.md<-- Combat UI vs. Exploration UI separation & 8 screens
-    └── enemy_bestiary_and_ai.md           <-- Base/elite bestiary, named bosses & modular encounter architecture
+    ├── enemy_bestiary_and_ai.md           <-- Base/elite bestiary, named bosses & modular encounter architecture
+    └── safehouse_economy_and_triage.md    <-- Undercroft wings, resource economy, and repurposed vs new UI elements
 ```
 
 ---
@@ -156,6 +157,9 @@ games/emberwake/lore/
 * [enemy_bestiary_and_ai.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/systems/enemy_bestiary_and_ai.md)  
   *Tags:* `#bestiary` `#enemies` `#named-bosses` `#encounters` `#ai`  
   *Summary:* Base and elite bestiary across 4 factions, named boss variants (Captain Vane, Proctor Malakar, Orlov, Grendel, Amalgam), and 6 modular placeholder encounter events (`ENC-EVT-01` to `06`).
+* [safehouse_economy_and_triage.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/systems/safehouse_economy_and_triage.md)  
+  *Tags:* `#safehouse` `#economy` `#triage` `#ui-reuse` `#deck-builder`  
+  *Summary:* The Sluice Undercroft facilities (Slab, Forge, Bunks, Basin), resource conversion (Tallow, Salt, Scrap, Marrow), repurposed engine UI widgets, and 4 new UI widgets.
 
 ---
 
