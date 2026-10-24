@@ -1,7 +1,10 @@
 # The central truth (spoiler sheet)
 
-Status: proposal (2026-10-25). The user decides; until then the domain docs say only what the Clerisy preaches and
-what the player sees. Part of [CANON.md](../CANON.md).
+Status: canon for Option A (user 2026-10-25, Q-01): the Clerisy is a selfish elite that feeds the dreaming horror for
+its own eternal youth, while the horror is blamed for the common folk's woes. Option B stays below as the road not
+taken. Still open: when the player learns it (Q-02), whether ordinary Spent drink marrow (Q-03), and the Tithing's
+history and what commoners know (Q-04 / Q-16, options in [tithing_options.md](tithing_options.md)). Game text says
+only what the Clerisy preaches and what the player sees until the reveal. Part of [CANON.md](../CANON.md).
 
 ## The question
 
@@ -60,7 +63,7 @@ the Act 1-2 resistance fantasy and makes Ending A a copy of what the Clerisy alr
 
 ## What the user must decide
 
-1. Option A or B.
+1. Option A or B. Decided (2026-10-25, user): A.
 2. Whether the player learns the truth before the final choice (recommended: Act 2 hint at the Embalming Cloisters,
    full reveal from Malachi before node 21).
 3. Whether ordinary Spent adults ever drink marrow (recommended: no; only the Clerisy, which keeps the draughts and the

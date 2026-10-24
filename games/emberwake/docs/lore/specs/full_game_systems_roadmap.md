@@ -141,8 +141,10 @@ What the endings mean depends on the central truth, a proposal for the user:
 1. The slice's four district nodes. Options: (a) 01 Drowned Runoff Grate, 03 Ash-Crawl Crossroads, 04 Fourth Kiln,
    06 Crucible Watchpost (07 Slag Gate as the Crucible's exit map); (b) 01, 02 Alleyway Junction 7, 04, 06.
    Recommendation: (a): the entry, one street node with M2 ready for the full Act 1, the bone-mill and the Crucible;
-   the full Act 1 adds 02, 05 and 07.
-2. The slice's one dilemma. Options: (a) one of the Act 1 board quests given a two-way choice (for example Corvo's
+   the full Act 1 adds 02, 05 and 07. Decided (2026-10-25, user, Q-83 and Q-84): (a), with the roadmap's mission list;
+   the slice exists to playtest the feel of the UI and the gameplay, and every milestone is planned around the whole
+   game, not the slice.
+2. The slice's one dilemma. Decided (2026-10-25, user, Q-85): (a). Options: (a) one of the Act 1 board quests given a two-way choice (for example Corvo's
    gate); (b) the ENC-EVT-05 marrow dose, which needs the interlude and only sets a flag in Act 1. Recommendation: (a); the
    interlude belongs to the full Act 1.
 3. Where the rest of Act 1 lands. Options: (a) an M2b of data tasks before M3; (b) inside M4. Recommendation: (a).

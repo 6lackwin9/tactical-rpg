@@ -3,7 +3,8 @@
 Status: canon for the Act 1 cast and quests (2026-10-25, consistent with [CANON.md](../CANON.md)); Act 2-3 quests
 and the disposition numbers are `proposal`. Names, ages and first appearances follow the
 [cast registry](cast_registry.md), which also lists the founders and the bosses. Related:
-[factions](factions_and_sociology.md), [Sunk Ward map](sunk_ward_campaign_map.md). Layer tags: `[engine]`,
+[factions](factions_and_sociology.md), [Sunk Ward map](sunk_ward_campaign_map.md), arcs and fates per act:
+[who's who](who_is_who.md). Layer tags: `[engine]`,
 `[kit hook]`, `[data]`, `[game code]`.
 
 ## 1. Overview

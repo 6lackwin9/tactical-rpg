@@ -1,6 +1,7 @@
 # Open questions (index)
 
-Status: open (2026-10-25, the final check of the lore consistency pass). One deduplicated list of every gap and open
+Status: open (2026-10-25, the final check of the lore consistency pass; the first answers are in section 1). Review
+page with a reply sheet: <https://claude.ai/artifact/92EzSi9BwoKB1REyhAM2HP> (private to the user). One deduplicated list of every gap and open
 question the library's writers found, plus the ones the final check found. Nothing here is decided: until the user
 (or the named lane) decides, the domain docs keep the question open and [CANON.md](CANON.md) does not change. When a
 question is decided, its row keeps its id and gets "Decided (date, by whom): ..." in the Rec. column; the planner
@@ -18,6 +19,13 @@ parts to keep each doc short:
 ## 1. Decide first
 
 These block the most other work (specs, data and the slice). Recommendations in brackets.
+
+Answered on 2026-10-25 (user, in chat): Q-01, Q-13, Q-25, Q-31, Q-47, Q-48, Q-83, Q-84 and Q-85 are decided (see
+their rows and `games/emberwake/docs/decisions/lore.md`); Q-04 and Q-16 are accepted in principle but wait for the
+story context in [tithing_options.md](background/tithing_options.md); Q-49 waits for a balance review; Q-47a (which
+resist takes Composure's uses) is new. The next ones to decide are Q-04 / Q-16, Q-09, Q-47a and Q-52. Story gaps
+G-01..G-30 (character arcs, motives and fates, several new) are in [STORY_GUIDE.md](STORY_GUIDE.md) section 7; they get
+Q-ids when decided.
 
 | Id | Question | Blocks |
 | --- | --- | --- |

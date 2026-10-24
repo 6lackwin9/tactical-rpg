@@ -1,7 +1,7 @@
 # Cast and place registry
 
 Status: canon (2026-10-25). Part of [CANON.md](../CANON.md); the domain docs follow it. Former names are in the "Renamed
-from" columns below.
+from" columns below. Arcs and fates per act: [who's who](who_is_who.md).
 
 Naming rule: within the founders and the hub cast every first letter and sound is distinct; nowhere in the cast is a
 near-collision (rhymes, shared stems, a name that is also a place). Ages: playable operatives are 18-24; everyone under
