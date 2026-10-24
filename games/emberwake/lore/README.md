@@ -40,9 +40,11 @@ games/emberwake/lore/
 ├── background/                            <-- Setting, Cosmology, Factions & Key NPCs
 │   ├── cosmology_and_setting.md           <-- The Low Sleep, The Shroud, Stagnation of Mortality, Lexicon
 │   ├── factions_and_sociology.md          <-- Sovereign Clerisy, Iron Inquisition, Tallow Guild, Severed Root
-│   ├── world_geography_and_hub.md         <-- Sluice Undercroft safehouse layout & Sunk Ward district map
-│   ├── sunk_ward_campaign_map.md          <-- Sunk Ward node graph, traversal rules & Phase 1 campaign staging
-│   └── npcs_and_questlines.md             <-- Aline Vance, Bram Karr, Tessia Morn, Pip dossiers
+│   ├── world_geography_and_hub.md         <-- Tripartite city geography (Lower, Upper, Sub-Basalt), Safehouse hubs
+│   ├── sunk_ward_campaign_map.md          <-- Act 1: Sunk Ward node graph, route mechanics & Phase 1 missions
+│   ├── upper_bastion_campaign_map.md      <-- Act 2: High Bastion node graph, rooftop routes & Phase 2 missions
+│   ├── mantle_fissure_campaign_map.md     <-- Act 3: Mantle Fissure node graph, Doom Clock & Phase 3 missions
+│   └── npcs_and_questlines.md             <-- Complete society of Cinderreach: Hub companions & faction cast
 │
 ├── narrative/                             <-- Campaign Narrative, Onboarding & Character Choices
 │   ├── campaign_narrative_structure.md    <-- 3-Phase dramatic arc (Cold Steel -> Sacrifice -> Red Tithing)
@@ -78,7 +80,7 @@ games/emberwake/lore/
   *Summary:* Complete verbatim source specification defining the worldbuilding transition, lore, combat mechanics, and tone.
 * [worldbuilding_decisions.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/specs/worldbuilding_decisions.md)  
   *Tags:* `#decisions` `#tracking` `#engine-mapping`  
-  *Summary:* Chronological decision log (DEC-LORE-01 through DEC-LORE-14) establishing setting boundaries, mechanics shifts, and mapping matrices to engine crates.
+  *Summary:* Chronological decision log (DEC-LORE-01 through DEC-LORE-16) establishing setting boundaries, mechanics shifts, and mapping matrices to engine crates.
 * [art_and_visual_style.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/specs/art_and_visual_style.md)  
   *Tags:* `#art` `#palette` `#resolution` `#vfx` `#audio`  
   *Summary:* Viewport architecture ($640 \times 360$), $32 \times 32$ grid tiles, $32 \times 48$ sprite bounds, 16-color master palette, telemetry visual hierarchy, and soundscape direction.
@@ -99,11 +101,17 @@ games/emberwake/lore/
   *Tags:* `#factions` `#clerisy` `#inquisition` `#resistance`  
   *Summary:* Power structures: The Sovereign Clerisy, Iron Inquisition, Tallow Guild, docile adult masses, and The Severed Root youth resistance cell.
 * [world_geography_and_hub.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/background/world_geography_and_hub.md)  
-  *Tags:* `#geography` `#hub` `#safehouse` `#sunk-ward`  
-  *Summary:* Subterranean safehouse (*The Sluice Undercroft*), environmental hazards (tallow fumes, sewer miasma), and the Act 1 district map (*The Sunk Ward*).
+  *Tags:* `#geography` `#hub` `#safehouse` `#tripartite` `#hazards`  
+  *Summary:* The tripartite vertical strata of Cinderreach (Lower, Upper, Sub-Basalt), Safehouse hub progression across 3 acts, and master environmental hazard taxonomy.
 * [sunk_ward_campaign_map.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/background/sunk_ward_campaign_map.md)  
-  *Tags:* `#campaign-map` `#node-graph` `#encounters` `#prologue` `#sacrifice`  
-  *Summary:* The Sunk Ward 8-node exploration graph, stealth/speed route mechanics, Inquisition Alert thresholds, and the 5 authored Phase 1 missions integrating `ENC-EVT-01` to `06`.
+  *Tags:* `#campaign-map` `#act-1` `#node-graph` `#encounters` `#prologue` `#sacrifice`  
+  *Summary:* Act 1: The Sunk Ward 8-node exploration graph, stealth/speed route mechanics, Inquisition Alert thresholds, and 5 missions integrating `ENC-EVT-01` to `06`.
+* [upper_bastion_campaign_map.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/background/upper_bastion_campaign_map.md)  
+  *Tags:* `#campaign-map` `#act-2` `#node-graph` `#vertical-routes` `#culling-wagons`  
+  *Summary:* Act 2: The High Bastion 8-node graph, rooftop vs street vertical traversal, curfew searchlights, procedural recruit jailbreaks, The Scribe's Crypt forward relay, and encounters `ENC-ACT2-01` to `06`.
+* [mantle_fissure_campaign_map.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/background/mantle_fissure_campaign_map.md)  
+  *Tags:* `#campaign-map` `#act-3` `#node-graph` `#doom-clock` `#titan-core` `#endings`  
+  *Summary:* Act 3: The Mantle Fissure 8-node graph, Red Tithing Doom Clock, continental tremors, living marrow conduits, The Weeping Redoubt FOB, and encounters `ENC-ACT3-01` to `06` concluding in Endings A, B, and C.
 * [npcs_and_questlines.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/background/npcs_and_questlines.md)  
   *Tags:* `#npcs` `#factions` `#quests` `#clerisy` `#inquisition` `#underworld`  
   *Summary:* The complete society of Cinderreach: Hub companions (Aline, Bram, Tess, Pip), regime leaders (Arch-Prelate Othemar, General Vaelen), neutral underworld brokers (Madame Vespera, "Nails" Morik), commoners (Old Mother Agnes, Lucan), and heretical hermits.

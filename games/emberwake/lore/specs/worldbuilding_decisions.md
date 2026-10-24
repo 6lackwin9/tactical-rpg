@@ -100,6 +100,17 @@ The following architectural decisions have been documented from the user's initi
   3. *Exclusive Signature Capstone:* Character-locked active maneuver representing their ultimate tactical expression.
 - **Consequence:** Detailed in [classes_and_skill_trees.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/systems/classes_and_skill_trees.md). Procedural recruits in Phase 2 adhere to standard base trees, while founders remain mechanically distinctive throughout the campaign.
 
+### DEC-LORE-15: Equipment Families, Consumables & Society Cast
+- **Decision:** Gear progression is structured around 8 distinct Weapon Families (4 Cold Steel, 4 Inoculated), 4-slot Battle Pouches for Strain/Poise triage consumables, 9 unique 1-per-world Relics, and an anatomical monster harvest economy. Hub and city cast are expanded beyond safehouse allies to include major faction leaders (Arch-Prelate Othemar, Inquisitor-General Vaelen, Madame Vespera, Bailiff Corvo, Old Mother Agnes, Brother Malachi, Lucan) with dynamic alignment consequences.
+- **Consequence:** Detailed in [items_gear_and_progression.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/systems/items_gear_and_progression.md) and [npcs_and_questlines.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/background/npcs_and_questlines.md).
+
+### DEC-LORE-16: Tripartite Campaign Map & Regional Encounter Framework
+- **Decision:** Campaign geography spans three distinct stratified tiers corresponding to the three narrative phases:
+  1. *Act 1 (The Sunk Ward):* Lower Cinderreach, industrial squalor, 8-node graph, cold steel survival, concluding at the Slag Gate sacrifice. Hub: *The Sluice Undercroft* (6 bunks).
+  2. *Act 2 (The High Bastion):* Upper Cinderreach, gothic monumentalism, 8-node graph, vertical rooftop/street navigation, culling wagon recruit jailbreaks, graft labs, concluding at the Reliquary Crypts. Hub Relay: *The Scribe's Crypt* (8 bunks).
+  3. *Act 3 (The Mantle Fissure):* The Sub-Basalt Abyss, 8-node graph, the ticking Red Tithing Doom Clock, continental tremors, living marrow conduits, concluding at the Dreaming Titan Core. Expedition FOB: *The Weeping Redoubt* (8 bunks).
+- **Consequence:** Detailed in [world_geography_and_hub.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/background/world_geography_and_hub.md), [sunk_ward_campaign_map.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/background/sunk_ward_campaign_map.md), [upper_bastion_campaign_map.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/background/upper_bastion_campaign_map.md), and [mantle_fissure_campaign_map.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/background/mantle_fissure_campaign_map.md).
+
 ---
 
 ## 3. Engine Alignment & Mapping Matrix
@@ -109,11 +120,11 @@ When the implementation phase commences, the new worldbuilding maps directly ont
 | Engine Concept (`aegis`) | Legacy Implementation | New Worldbuilding Binding |
 | :--- | :--- | :--- |
 | `ClassCatalog` (6 classes) | Warrior, Ranger, Rogue, Brawler, Priest, Mage | The Vanguard, The Arbalestier, The Gutter-Stalker, The Slag-Brute, The Heretic Acolyte, The Ichor Alchemist |
-| `PartyState` | 3–4 hero roster | The Severed Root 4-person cell (Kaelen, Vesper, Maren, Bran) |
+| `PartyState` | 3–4 hero roster | The Severed Root 4-person cell (Kaelen, Vesper, Maren, Bran + procedural recruits) |
 | `ResourceState` | HP, Mana/Stamina | HP, Action Points (AP), Strain Gauge (0–100%), Calcification Stages (I–V) |
-| `LocationKind::Hub` | `warden_keep` | `the_sluice_undercroft` (Apothecary Slab, Tinker's Hearth, Water-Lock, Dry Hollows) |
-| `RegionKind` | `ashen_marches`, `cinder_pass` | `the_sunk_ward` (Ash-Crawl Tenements, Tallow Vats, Crucible Watchpost, Slag Gate) |
-| `FactionCatalog` | `ember_wardens`, `ashen_horde` | `severed_root`, `sovereign_clerisy`, `iron_inquisition`, `tallow_guild` |
+| `LocationKind::Hub` | `warden_keep` | `the_sluice_undercroft` (Act 1), `the_scribes_crypt` (Act 2), `the_weeping_redoubt` (Act 3) |
+| `RegionKind` | `ashen_marches`, `cinder_pass` | `the_sunk_ward` (Act 1), `upper_cinderreach_bastion` (Act 2), `sub_basalt_mantle_fissure` (Act 3) |
+| `FactionCatalog` | `ember_wardens`, `ashen_horde` | `severed_root`, `sovereign_clerisy`, `iron_inquisition`, `tallow_guild`, `awakening_chorus` |
 | `Timeline / CombatSession` | Sequential initiative rounds | 6-Tick simultaneous Maneuver Blocks with Windup/Impact/Recovery |
 
 ---
@@ -124,3 +135,4 @@ The following open design items have been identified for user confirmation befor
 
 1. **Engine Migration Strategy for Combat:** The current Rust runtime engine (`engine/combat` / `crates/`) uses a turn-based grid system. Should the 6-tick simultaneous timeline be designed as an evolution of the existing combat engine, or will we build a dedicated timeline prototype?
 2. **Legacy Ashlands Data Policy:** Should existing files in `games/emberwake/data/` (Ashlands maps, goblin catalog entries) eventually be migrated/re-skinned in-place to The Sunk Ward, or should they be preserved as a legacy world module while creating a new `sunk_ward` campaign folder?
+
