@@ -30,7 +30,9 @@ follows [CANON.md](../CANON.md); where they differ, CANON wins. Names follow the
   will stay, so deployment is the decision.
 - The outcome: Nemeth takes the founder alive `[kit hook]` (unit lifecycle: scripted capture). The cell keeps that
   founder's keepsake, an ACC heirloom any operative can equip `[data]` (numbers Open). Act 2 opens: recruits, the Slab,
-  Strain and Calcification. The captured founder can return as the optional corrupted-founder boss in Act 3.
+  Strain and Calcification. Nemeth escapes with the captured founder (Q-25 a); at 2.4 the cell sees him deliver them
+  to Lazar and arrives too late; at the optional Act 3 node 20 the founder, corrupted, fights at Nemeth's side, then
+  breaks and kills everyone in reach, Nemeth included, and the cell fights the monstrosity (CANON 3.6).
 
 | Founder | Staying beat | The cell loses | Keepsake |
 | --- | --- | --- | --- |
@@ -81,7 +83,9 @@ The endings (Choice 5): A is open unless the cell is Flesh-Broker; B needs Flesh
   Aberrant Organ) for the Slab `[data]`. Old numbers "enters at maximum Strain and pays no AP" clash with the crisis
   rule (100 Strain rolls a crisis each round end): Open.
 - Option 2, mercy (salt cremation): Aline gives a lethal sedative; Rock Salt cremation and burial with honours in the
-  undercroft; no Terminal Drift. Old reward "+10 max Composure to the cell": Composure is undefined, Open.
+  undercroft; no Terminal Drift. Old reward "+10 max Composure to the cell": Composure is now a derived stat, the
+  corruption resist ([CANON](../CANON.md) 2.1), and the mercy reward is one of its readers; whether the reward exists and
+  its size stay open (Q-37; numbers after the derived-stat spec).
 - Option 3, stasis: kept alive in the Isolation Crypts on draughts and salt washes. Cost: Open (the old "+1 Salt Ration"
   upkeep is dropped: CANON has one upkeep, Warded Tallow).
 
@@ -101,8 +105,8 @@ A siege that is fought and lost costs facilities and forces a relocation; it is 
 
 ## 6. Choice 5: the ending (Act 3, proposal)
 
-At the end of Act 3 the bells ring without pause while the Clerisy gathers Unsealed youths for the Great Tithing (its
-size: Open). Arch-Prelate Othemar falls at the High Altar (node 21) in every run; at the Dreaming Core (node 22) the
+At the end of Act 3 the bells ring without pause while the Clerisy gathers Unsealed youths for the Great Tithing
+(thousands; CANON 3.6). Arch-Prelate Othemar falls at the High Altar (node 21) in every run; at the Dreaming Core (node 22) the
 cell chooses `[kit hook]` (event trigger gated by the doctrine meter) `[data]` (ending scenes):
 
 | Ending | What happens | Voice | Doctrine gate |
@@ -112,7 +116,9 @@ cell chooses `[kit hook]` (event trigger gated by the doctrine meter) `[data]` (
 | C Red Martyrdom | The cell gives itself to break the Tithing for good | the cell | always open |
 | Extinguished | Failure screen (no living operative, or the Act 3 clock), not an ending | - | - |
 
-What each ending means for the titan depends on the [central truth](../background/central_truth.md) (proposal).
+What each ending means for the titan follows the [central truth](../background/central_truth.md) (Option A, canon):
+A ends the cycle (no dream to feed); B hands the cell the chronicle and the source, so the next Great Tithing would be
+theirs to call; C sates the dream so the cycle never turns again (CANON 3.6).
 Retired: the old triangle "Sever the Clerisy / Drown the Leviathan / Red Martyrdom" (assassinating "High Archon Vane",
 now Othemar, and flooding the fissure from the Tallow Reservoirs), and the anarchy and flood endings.
 
@@ -130,6 +136,7 @@ now Othemar, and flooding the fissure from the Tallow Reservoirs), and the anarc
 - Crucible staying beats for Maren, Hollis and Elyse; keepsake names for Vesper, Maren, Dunstan and Elyse; keepsake
   numbers.
 - Doctrine inputs and thresholds; whether the meter is visible to the player.
-- Living Martyr shock-troop numbers; the mercy reward (Composure); the stasis cost.
+- Living Martyr shock-troop numbers; the mercy reward (whether it raises Composure, and by how much; Q-37); the stasis
+  cost.
 - Siege facility damage numbers; the relocation target.
-- The size of the Great Tithing.
+- The size of the Great Tithing: decided, thousands (CANON 3.6).

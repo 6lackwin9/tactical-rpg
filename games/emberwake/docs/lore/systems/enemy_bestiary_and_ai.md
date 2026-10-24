@@ -90,7 +90,7 @@ From [CANON](../CANON.md) 3.4-3.5; none has a maneuver set yet (gap 6).
 | ENC-ACT3-01 | Chasm Gatekeepers | open |
 | ENC-ACT3-02 | High Castellan Ulric | Iron Inquisition (a reconstructed inquisitor, cast registry) |
 | ENC-ACT3-03 | Cantor Ysolde | Awakening Chorus |
-| ENC-ACT3-04 | the corrupted founder (optional) | - |
+| ENC-ACT3-04 | the corrupted founder (optional), in two phases (CANON 3.6): phase 1 at Inquisitor-Prelate Nemeth's side with his guard, using the founder's old signature moves, twisted; then the founder goes insane, kills Nemeth and his guard and fights the cell alone as a monstrosity (a unit swap for the larger body, art Q-79); needs a phase effect that kills named units and a "hostile to all sides" AI or faction switch `[kit hook]` new | phase 1: Iron Inquisition (Nemeth's side); phase 2: hostile to all |
 | ENC-ACT3-05 | Arch-Prelate Othemar | Sovereign Clerisy |
 | ENC-ACT3-06 | the titan | the Low Sleep |
 
@@ -106,9 +106,13 @@ Q-11); the faction files point here.
    layouts ask for 12 x 10 up to 18 x 12.
 2. Combat hooks the maneuvers use that the engine lacks: forced movement (pull, push, knockback, drag), ground hazards a
    skill leaves behind, auras (effects in a radius), triggers on a poise break, terrain a skill destroys, scheduled
-   arena hazards (vents on fixed blocks).
+   arena hazards (vents on fixed blocks). Decided (2026-10-25, user, Q-55): every hook the slice uses is built as a
+   reusable kit or engine system before the slice, starting with forced movement and ground hazards; the rest when the
+   data that uses them is planned.
 3. Rolls and checks the canon cut: the Flagellant crit rider stays (crits exist), but "Poise check or slip", "DEX check
-   or slip", Blind and the 50% hallucination roll need a non-roll restatement.
+   or slip", Blind and the 50% hallucination roll need a non-roll restatement. Decided (2026-10-25, user, Q-56): each is
+   rebuilt on existing levers (a range cap, poise damage, AP loss; numbers by the balance lane); anything existing
+   systems do not cover becomes a reusable engine or kit system first.
 4. Strain riders in Act 1: Act 1 has no Strain (CANON 2.2), yet Quell, the Marrow Horror and the Amalgam push or read
    Strain in Act 1 fights.
 5. Unit names in the prologue: 0a uses Castellan Footmen (fixed 2026-10-25); 0b's ambush squad and 0c's "3

@@ -33,7 +33,9 @@ New Game -> ~30 s vignette (bell, rain, tallow crackle; violet sky, cathedral, i
 | 4 | A shattered city-watch insignia in the gutter mud, washed with fresh blood | "In the Seventh Ward, a garrison guard refuses to lock the cages." |
 
 Slide 3 states only what the Clerisy preaches; the truth is the [central truth](../background/central_truth.md)
-(proposal), and the size of the Tithing is Open.
+(Option A, canon). The folk know only the yearly rite (hundreds), so the vignette names no number; the Great Tithing of
+thousands is revealed at 2.4 ([CANON](../CANON.md) 3.6). Tone rule: the slides show the rite and the chains, never
+violence to a child.
 
 ## 3. The cold open: control of Kaelen (0a)
 
@@ -109,5 +111,6 @@ The player meets each faction through what it does on screen, not through lore m
 
 ## 6. Gaps (Open)
 
-- The size of the Red Tithing (slide 3 avoids a number).
+- The size of the Red Tithing: decided (a yearly rite of hundreds; the Great Tithing of thousands is a 2.4 reveal,
+  Q-04); slide 3 still avoids a number.
 - Whether the engine has a camera shake for the bell tolls (needed by 4.1).

@@ -36,8 +36,8 @@ near-collision (rhymes, shared stems, a name that is also a place). Ages: playab
 | Captain Vane | Kaelen's former commanding officer; ENC-EVT-01 boss | - | Sold his own men to the Inquisition for a church commission; leads the sweep hunting Kaelen | Prologue 0a (pursuer); boss Act 1 M1 | Castellan Miller (the cold-open pursuer) |
 | Corporal Fitch | Kaelen's squad corporal (off stage) | - | Gave the order to break the girl's knees; Kaelen broke his jaw | Mentioned in 0a | Sergeant Vane |
 | Proctor Quell | ENC-EVT-02 boss, "the Scalpel of St. Lyra's" | - | Inquisitor vivisector with an illegal marrow valve in his neck; denounced Maren and oversaw her mentor's autopsy | Act 1 M2 | Proctor Malakar |
-| Inquisitor-Prelate Nemeth | ENC-EVT-06 boss at the Crucible Watchpost | - | Marrow-infused commander whom cold steel cannot finish; takes the sacrificed founder alive | Act 1 M5 | High Inquisitor Bastion, "an Inquisitor Prelate" |
-| Chief Anatomist Lazar | ENC-ACT2-04 boss | - | Heads the Embalming Cloisters laboratory of Aline's former order | Act 2 M2.4 | Chief Anatomist Melchior, Dr. Melchior |
+| Inquisitor-Prelate Nemeth | ENC-EVT-06 boss at the Crucible Watchpost; ENC-ACT3-04 phase 1 (node 20) | - | Marrow-infused commander whom cold steel cannot finish; takes the sacrificed founder alive and escapes with them (CANON 3.6) | Act 1 M5 | High Inquisitor Bastion, "an Inquisitor Prelate" |
+| Chief Anatomist Lazar | ENC-ACT2-04 boss | - | Heads the Embalming Cloisters laboratory of Aline's former order, where his anatomists render the tithed into marrow (CANON 3.6, refinement) | Act 2 M2.4 | Chief Anatomist Melchior, Dr. Melchior |
 | High Castellan Ulric | ENC-ACT3-02 boss | - | Reconstructed inquisitor guarding the marrow conduits | Act 3 M3.2 | High Castellan Vane |
 | Bailiff Corvo | Third Ward gatekeeper; bribable neutral, non-combat | 29 | Stage II calcified leg; keeps his mind by paying for clean water; his sister Ida is marked for the Tithing | Act 1 (Third Ward gate) | - |
 
@@ -83,8 +83,8 @@ A guest who can be sworn in must be 18-24; Ferrand and Clemence ages are open
 - The Slumbering Root (heretics' name for the titan) and the Severed Root (the cell) echo on purpose: the cell names
   itself the root cut from the sleeper (planner pick).
 - The Extinguishing (the event two centuries ago) and Extinguished (the failure screen) echo on purpose; the
-  "first Extinguishers" of the Reliquary Crypts add a third word on the stem (open:
-  [Q-12](../questions/open_world_and_campaign.md#story-and-world)).
+  "first Extinguishers" of the Reliquary Crypts add a third word on the stem (kept: they are the Clerisy's founders,
+  [Q-12](../questions/open_world_and_campaign.md#story-and-world) option a, decided with Q-04 on 2026-10-25; CANON 3.6).
 - Unit names (final check 2026-10-25): the Watch's crossbow unit is the Watch Crossbowman, so "Arbalestier" names only
   the class; the prologue soldiers of 0a are Castellan Footmen (no "Castellan Warden" unit). Hollis's trait is Crag
   Hawkeye and his relic Hollis's Lever-Winch (the old "Clocktower" names recalled his retired clocktower origin).
@@ -104,4 +104,5 @@ A guest who can be sworn in must be 18-24; Ferrand and Clemence ages are open
 | The Chorus Spire | Act 3 node 19 | Awakening Chorus Redoubt, Chorus Redoubt (collided with the Weeping Redoubt) |
 | The Silent Ossuary | Act 3 node 20 | Silent Crypt of the Apostles, Apostles' Crypt (collided with the Act 2 Reliquary Crypts of the First Apostles) |
 | The Dreaming Core | Act 3 node 22 | Node 23 (there was no node 22) |
+| The Lullaby Houses | The Clerisy's foundling houses that raise tithe-children from infancy (planner refinement, CANON 3.6); no node or map yet | - |
 | Seventh Ward, Third Ward, Ash-Crawl Tenements, Tenement Block 12, Seventh Ward Toll-Pen, the Leaking Vat | Sunk Ward locations | - |

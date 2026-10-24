@@ -49,7 +49,9 @@ items, gold, stat; effects set_flag, add_flag, give, take, recruit, open_shop, f
   > sinew until we can breathe in the dark."
 - **Personal quest, "Anatomy of a Living Saint" (Act 2, proposal):** this is Act 2 mission 2.4 at the Embalming
   Cloisters ([High Bastion map](upper_bastion_campaign_map.md) section 4.4): retrieve her notes and excise the gland
-  cluster of an embalmed prelate before it decays `[kit hook]` objectives with a round limit, `[data]`.
+  cluster of an embalmed prelate before it decays `[kit hook]` objectives with a round limit, `[data]`. The same
+  mission reveals the Great Tithing's date, scale and cause in Lazar's records, and the cell sees Nemeth deliver the
+  captured founder to Lazar's anatomists (CANON 3.6).
 - **Unlocks:** Tier III (Apex) grafts; bone-scraping, the only Calcification undo (-1 stage, -10% max HP for good);
   Tincture of Still Blood (Strain does not change for 1 round) `[kit hook]` exchange recipes, `[data]` items.
 
@@ -103,8 +105,10 @@ items, gold, stat; effects set_flag, add_flag, give, take, recruit, open_shop, f
 - **Look:** shrunken and skeletal in cloth-of-gold copes stiff with pearl-crusted ossuary lace; a wheeled iron sedan
   chair pushed by deaf-mute acolytes; half his skull calcified into smooth black stone.
 - **Character:** not a cartoon tyrant but a frightening theological bureaucrat who preaches that the continent rests on
-  the sleeping titan's brow and that the Tithing is an agonising necessity to keep it from waking (how many it takes is
-  open, see gaps).
+  the sleeping titan's brow and that the Tithing is an agonising necessity to keep it from waking. The folk know a
+  yearly rite of hundreds; his last sacrament is this year's rite turned into a Great Tithing of thousands, because the
+  cell's raids hasten the waking ([CANON](../CANON.md) 3.6). The truth (spoiler): the marrow that keeps him alive is
+  rendered from the remains of the tithed, the younger the more potent.
   > "You call me a butcher because you see the blood on my altar. But you do not see the beast beneath the stone,
   > child. If I do not feed it the sweet warmth of your youth, it will wake, and its waking will snap this continent
   > like a dry bone."
@@ -174,7 +178,8 @@ items, gold, stat; effects set_flag, add_flag, give, take, recruit, open_shop, f
 - **Faction:** the Spent of the Ash-Crawl. **Age:** 44, one of the oldest in the Ash-Crawl.
 - **Look:** stooped; forearms and lower jaw petrified into brittle black stone; a faded wool shawl; a rickety stool in
   the courtyard of Tenement Block 12.
-- **Lore:** keeps her grandmother's tales of the stars from before the Extinguishing, two centuries ago. Runs a hidden
+- **Lore:** keeps her grandmother's tales of the stars from before the Extinguishing, two centuries ago; they hold a
+  first hint that the Extinguishing hid a Great Tithing, the Clerisy's founding act (CANON 3.6). Runs a hidden
   orphanage in the tenement attics for Unsealed children whose parents have gone docile.
 - **Side quest, "The Rafters of Tenement 12" (Act 1 board job):** a purge squad sweeps the chimneys of Block 12.
   - Intervene: wipe out the inquisitors and save Agnes and the children; the Inquisition Alert rises by 35% `[data]`.
@@ -206,7 +211,8 @@ items, gold, stat; effects set_flag, add_flag, give, take, recruit, open_shop, f
   - organ lore: decodes harvested Aberrant Organs, revealing their hidden passive traits before surgery (Act 2 on);
   - bell warnings: tells the cell on which day the cathedral bells will toll, so expeditions can fall between
     resonance waves;
-  - Act 3: mediates with the Awakening Chorus for a Flesh-Broker cell (ENC-ACT3-03).
+  - Act 3: mediates with the Awakening Chorus for a Flesh-Broker cell (ENC-ACT3-03), and confirms what the dream is
+    fed for (CANON 3.6).
 
 ## 6. Dispositions (proposal)
 
@@ -225,5 +231,7 @@ exists) and per-NPC flags, `[data]` thresholds.
 
 - What the timeline shows of enemy actions without Tess's reconnaissance (section 2.3): Open, see gaps.
 - The act of Bram's quest; a fight for Ruthven; doctrine thresholds: open in CANON.md section 6.
-- Red Tithing size (section 3.1): Open, see gaps.
+- Red Tithing size (section 3.1): decided (a yearly rite of hundreds; the Great Tithing of thousands; CANON 3.6).
+- What Sister Aline, a former prosector of the Clerisy, knew of the rendering of the tithed (section 2.1): not written
+  (story guide G-31).
 - Where Corvo's Third Ward gate sits on the Sunk Ward graph (section 3.2): Open, see gaps.

@@ -102,8 +102,9 @@ The titan (the Low Sleep) stirs beneath Cinderreach and corruption reaches life 
 - The Tallow Guild locks the city pipelines; how this reduces the Tallow on offer: Open.
 - At 0 Warded Tallow every battle starts with -2 AP until restocked (CANON 2.5).
 - The old nightmare layer (the flame in the Dry Hollows dies, mist seeps into the bunks, "The Leviathan's Whispers"
-  cost Composure and add neuroses such as Paranoid Insomnia) is a proposal only: Composure is undefined and there is no
-  trait system yet. Open.
+  cost Composure and add neuroses such as Paranoid Insomnia) is a proposal only. Composure is now defined: a derived
+  stat, the corruption resist, and the nightmares are one of its readers ([CANON](../CANON.md) 2.1, Q-47a). Still
+  open: the nightmare rule itself (roadmap P3-02) and the neuroses, which need a trait system.
 
 ### 5.3 The Isolation Crypts
 
@@ -116,5 +117,6 @@ The titan (the Low Sleep) stirs beneath Cinderreach and corruption reaches life 
 ## 6. Gaps (Open)
 
 - Quell's marrow-valve boss mechanics; the marrow dose's battle numbers.
-- Bell resonance effect; how Tallow scarcity works; Composure and neuroses.
+- Bell resonance effect; how Tallow scarcity works; the nightmare rule and neuroses (Composure itself is decided, a
+  derived stat).
 - Whether the Crypts move is automatic; the Rock Salt flush effect.

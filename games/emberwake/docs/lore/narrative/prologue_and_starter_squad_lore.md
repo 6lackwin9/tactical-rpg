@@ -63,7 +63,9 @@ The old five-vignette layout (a separate Maren cart break and a Hollis bridge sh
   crook staff. At the bridge she takes an embalmer's bone-saw from the cart's rack.
 - Backstory: six years copying medical and liturgical texts in the scriptorium. She believed the dogma: that the Red
   Tithing was a holy, sorrowful necessity that keeps the dreaming titan asleep and preserves mankind.
-- Breaking point: she copied the forbidden texts (what they reveal: Open). Proctor Quell denounced her; she was
+- Breaking point: she copied the forbidden texts, a chronicle of the first Great Tithing, held under cover of the
+  Extinguishing when the Clerisy was founded (user 2026-10-25, Q-07 option a; [CANON](../CANON.md) 3.6). What she
+  remembers of them is an Act 1 hint; 2.4 and 2.6 confirm it. Proctor Quell denounced her; she was
   defrocked under Arch-Prelate Othemar's seal and sent in an iron mortuary cart toward the dissection crypts. She knows
   Sister Aline only by reputation; it was Aline, not Maren, who found the drugged communion draughts.
 - Her taint (backstory): blackened veins creeping up her throat and along her jaw from years of marrow-ink; she feels
@@ -134,4 +136,5 @@ four of the six bunks `[kit hook]` (hub facility: bunks), and the Doom Clock app
 ## 5. Gaps (Open)
 
 - When and where the Inquisition graft trial on Kaelen happened (Act 2 hook).
-- What the forbidden texts Maren copied reveal.
+- What the forbidden texts Maren copied reveal: decided (a chronicle of the first Great Tithing, Q-07). Open: the
+  exact Act 1 lines in which she recalls them, and who carries the hint if Maren is the Crucible captive.

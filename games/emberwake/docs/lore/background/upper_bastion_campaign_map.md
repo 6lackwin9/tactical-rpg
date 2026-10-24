@@ -77,7 +77,9 @@ Both cost 1 Warded Tallow per day, as everywhere (CANON.md section 2.5).
   slabs `[kit hook]` moving world-map event, `[data]`.
 - **Interception:** engaging a convoy starts ENC-ACT2-02; a freed wagon yields 1-2 recruits aged 18-24 for empty bunks
   `[kit hook]` RECRUIT1 (exists), `[data]` recruit pools. One wagon carries Lucan (Bram's former apprentice, 14, a
-  non-combat NPC). What happens to freed youths under 18 is open (see gaps).
+  non-combat NPC). What happens to freed youths under 18 is open (see gaps). The first procedural recruit takes the
+  bunk the Crucible emptied, at the start of Act 2 (user 2026-10-25, Q-38; whether that recruit comes from the first
+  wagon or joins at the act transition: see gaps).
 
 ### 2.4 The Scribe's Crypt (optional forward base)
 
@@ -95,7 +97,7 @@ Both cost 1 Warded Tallow per day, as everywhere (CANON.md section 2.5).
 | 2.1 | Ingress | 09 Gilded Boulevard | ENC-ACT2-01, Inquisitor-General Ruthven's checkpoint | Into Upper Cinderreach |
 | 2.2 | Jailbreak | 12 Culling Stockades | ENC-ACT2-02, culling wagon (repeatable) | Recruits 18-24; Lucan's rescue (one wagon) |
 | 2.3 | Sabotage | 10 Tallow Reservoir | ENC-ACT2-03, silo sabotage | +20 Warded Tallow, -30% Alert |
-| 2.4 | The Cloisters | 11 Embalming Cloisters | ENC-ACT2-04, Chief Anatomist Lazar (Aline's quest) | Apex grafting; the true Tithing date |
+| 2.4 | The Cloisters | 11 Embalming Cloisters | ENC-ACT2-04, Chief Anatomist Lazar (Aline's quest) | Apex grafting; the Great Tithing's date, scale and cause; Nemeth seen delivering the captured founder |
 | 2.5 | The Chimes | 13 Grand Belltower | ENC-ACT2-05, Bell-Warden Colossus | Silences the bells' resonance |
 | 2.6 | The Reliquary | 14 Reliquary Crypts to 15 Grand Spire Gate | ENC-ACT2-06, Reliquary Guardian | Key of the Mantle Chasm; Act 3 |
 
@@ -146,8 +148,15 @@ hub, and a lost siege costs facilities and forces a relocation, never a Game Ove
   Inquisitorial Suture-Priests `[data]`.
 - **Play:** the Suture-Priests' channelled heal regenerates the husks; break it while it is in windup (it lands at the
   end of its own blocks) `[kit hook]` ruleset "timeline".
-- **Payoff:** Apex grafting at the Apothecary's Slab and Aline's bone-scraping; documents with the true date of the Red
-  Tithing (how this changes the visible Doom Clock is open, see gaps).
+- **The Great Tithing reveal** (user 2026-10-25, [CANON.md](../CANON.md) 3.6): Lazar's records give the Great
+  Tithing's date and scale (thousands) and show that the cell's own raids caused it: every tithe it freed and every
+  station it broke starved the dream, the titan stirred, and the Clerisy turned this year's rite into a Great Tithing to
+  drug it back to sleep. The visible Doom Clock is relabelled "the Great Tithing" `[data]` (the meter's label).
+- **Nemeth's sighting** (refinement, CANON 3.6): the cell sees Inquisitor-Prelate Nemeth deliver the founder captured
+  at the Crucible to Lazar's anatomists, to be made into a saint-weapon against the cell, and arrives too late; this
+  closes a rescue in practice (Q-33 option a). Staging `[data]` (a scene; no battle with Nemeth here).
+- **Payoff:** Apex grafting at the Apothecary's Slab and Aline's bone-scraping; the records above (whether the true
+  date also corrects the day count once and sets the Act 3 budget is open: Q-17).
 
 ### 4.5 Mission 2.5: silencing the chimes
 
@@ -157,7 +166,7 @@ hub, and a lost siege costs facilities and forces a relocation, never a Game Ove
 - **Encounter:** ENC-ACT2-05, the Grand Belltower. The Bell-Warden Colossus (heavy automaton) + 2 Watch Snipers
   `[data]`.
 - **Hazard:** the chimes sound every 2 rounds; every unit loses 15 Poise unless it passes a Composure check (Composure
-  undefined, see gaps) `[kit hook]` scheduled hazard.
+  is the derived corruption resist, CANON 2.1; how the check resolves: see gaps) `[kit hook]` scheduled hazard.
 - **Payoff:** ends the acoustic resonance penalty in Upper Cinderreach (operatives no longer start battles there with
   extra Strain) `[data]` flag.
 
@@ -165,7 +174,10 @@ hub, and a lost siege costs facilities and forces a relocation, never a Game Ove
 
 - **Node:** 14, the Reliquary Crypts of the First Apostles, then 15 Grand Spire Gate.
 - **Story:** under the cathedral floor lies the tomb of the first Extinguishers and the **Key of the Mantle Chasm**, the
-  iron seal to the volcanic vents beneath the city.
+  iron seal to the volcanic vents beneath the city. The first Extinguishers are the Clerisy's founders (Q-12 option a,
+  CANON 3.6): they founded the order two centuries ago, in the dark of the Extinguishing, with the first Great Tithing,
+  recorded as the titan's wrath, and were the first to drink the marrow. Their tomb holds the record of that night,
+  which the cell finds here `[data]` (a scene or a found document).
 - **Encounter:** ENC-ACT2-06, the Reliquary. The Reliquary Guardian (a gilded saint's sarcophagus animated by Apex
   marrow) + 2 Inquisitor Castellans + 2 Choral Acolytes `[data]`.
 - **Play:** the Guardian ignores Cold Steel damage until its four reliquary marrow-vials are smashed; Inoculated
@@ -207,6 +219,11 @@ Illustrative only (field names as today's `locations.json`; the logic lane owns 
 
 - What an ambush does in battle now that accuracy is cut; the Blinded status (sections 2.2, 4.1): Open, see gaps.
 - What happens to freed youths under 18 (section 2.3): Open, see gaps.
-- How the "true Tithing date" changes the visible Doom Clock (section 4.4): Open, see gaps.
-- The Composure check (section 4.5): Open, see gaps.
+- How the first procedural recruit arrives at the start of Act 2 (section 2.3): from the first culling wagon (2.2) or
+  as a join at the act transition; not written.
+- How the "true Tithing date" changes the visible Doom Clock (section 4.4): the relabel to "the Great Tithing" is
+  decided (CANON 2.6); a one-time correction of the day count and the Act 3 budget stay open (Q-17).
+- The Composure check (section 4.5): Composure is decided (a derived stat, CANON 2.1); how a hazard's check resolves
+  (a threshold, a scaled poise loss or a seeded roll) is open for the derived-stat spec and the balance lane.
+- Whether "the First Apostles" of the crypts' name are the founders' public title (section 4.6): not written.
 - A fight for Ruthven; Alert across act lines; the siege battle content: open in CANON.md section 6 and gaps.

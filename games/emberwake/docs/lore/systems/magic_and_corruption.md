@@ -57,13 +57,23 @@ a battle in the Aberrant Edge does not advance it (that rule of the older drafts
 
 | Stage | Name `[data]` | Look | Effect |
 | --- | --- | --- | --- |
-| I | Vein-Blackening | ink-black streaks from the graft site, chalky skin | -5 Composure (Composure is undefined; see gaps), +5% debuff resistance |
+| I | Vein-Blackening | ink-black streaks from the graft site, chalky skin | -5 Composure (section 3.1), +5% debuff resistance |
 | II | Calloused Chitin | black bone plates through shoulders, forearms or ribs | +2 armour rating, -1 tile per move block |
 | III | Sensory Rot | milky cataracts, ears weeping black fluid | immune to fear and morale debuffs; -15% ranged damage beyond 3 tiles |
 | IV | The Shakes | tremors as muscle fights petrified tendon | cannot equip two-handed weapons (bows and arbalests included); melee and bare-handed attacks pierce armour; sleeps in the Isolation Crypts |
 | V | Terminal Drift | the self is gone | lost: walks into the catacombs or turns hostile |
 
 A Stage IV Arbalestier loses the class weapon: the stage is a role change, not only a penalty.
+
+### 3.1 Composure, the corruption resist `[kit hook]` derived stat
+
+Composure is a derived stat, not a seventh base stat (user 2026-10-25, Q-47 and Q-47a; [CANON](../CANON.md) 2.1): the
+corruption resist, computed by its own formula from the base stats plus gear, status and Calcification modifiers, and
+shown on the unit panel. Every corruption effect reads it: Calcification I (-5), the High Bastion's curfew chimes and
+belltower chimes, the Act 3 continental shockwave, the nightmares, the Living Martyr mercy reward and recruit quirks.
+The formula and the numbers come from the derived-stat spec (`docs/specs/DERIVE1.md`: an `[engine]` formula evaluator
+and `[kit hook]` data-defined derived stats, with Composure as a `[data]` row) and the balance lane. It plays no part in
+Act 1, which has no corruption.
 
 ## 4. The Slab and the Hearth (hub side)
 
@@ -81,7 +91,7 @@ A Stage IV Arbalestier loses the class weapon: the stage is a role change, not o
 ## 5. Cut / later
 
 - The d100 crisis table (Flesh Mastery, Marrow Rupture, Predatory Frenzy, Spontaneous Calcification, Irreversible
-  Metamorphosis) and its Composure term: cut, replaced by the 1d3 table.
+  Metamorphosis) and its Composure term: cut, replaced by the 1d3 table (Composure itself stays, section 3.1).
 - "Ending a battle in the Aberrant Edge adds Calcification": cut (CANON 2.3).
 - Aberrant Edge's bonus bleed and stagger and its "100% armour pierce": dropped (Inoculated attacks pierce anyway).
 - "-20 Stance Stability" in Flesh-Tension: replaced by stagger taken x2 (stances are off).
@@ -91,7 +101,7 @@ A Stage IV Arbalestier loses the class weapon: the stage is a role change, not o
 
 | Gap | Options | Recommendation |
 | --- | --- | --- |
-| Composure (Stage I) is not an engine stat (STR DEX INT CONS PERC KNOW) | A: replace with an existing quantity, e.g. -5% debuff resistance against fear and morale, or -1 KNOW; B: add Composure as a new kit stat | A: Composure had one use, the cut d100 formula |
+| Composure (Stage I) is not an engine stat (STR DEX INT CONS PERC KNOW) | A: replace with an existing quantity, e.g. -5% debuff resistance against fear and morale, or -1 KNOW; B: add Composure as a new kit stat | Decided (2026-10-25, user, Q-47a): a derived stat, the corruption resist (section 3.1); formula and numbers: the derived-stat spec and the balance lane |
 | Strain after a crisis | A: set to 75 (the Edge); B: reset to the floor | A keeps the risk alive for the rest of the battle |
 | What a Rock Salt flush does | A: -10 dormant floor for the next battle; B: -Strain gain for one battle | A (one number, reads on the card) |
 | Stage III "-15% ranged damage beyond 3 tiles" replaces an accuracy roll (planner pick) | keep, or swap for -1 range | keep |

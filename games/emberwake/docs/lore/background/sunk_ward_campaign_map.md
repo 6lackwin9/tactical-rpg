@@ -63,8 +63,9 @@ The prologue maps (0a-0c) are scripted and sit outside this graph.
 
 ### 2.2 Inquisition Alert and searchlight sweeps
 
-The Inquisition Alert (0-100%) is the regime's search intensity `[kit hook]` campaign meter with thresholds and
-triggers, `[data]` bands and effects.
+The Inquisition Alert (0-100%) is the regime's search intensity, carried by the generic meter system (thresholds,
+triggers, inputs, a warning at each threshold and Lockdown effects; user 2026-10-25, Q-15) `[engine]` if game-agnostic,
+else `[kit hook]`; `[data]` bands, inputs and effects (numbers by the balance lane).
 
 - **Searchlight sweeps:** some routes are swept by searchlights from the watchtowers on a timer `[kit hook]` timed
   route hazard on the world map. Entering a node while it is lit starts an ambush battle and adds +10% Alert.
@@ -74,7 +75,12 @@ triggers, `[data]` bands and effects.
     a fight;
   - 71-99% Lockdown: Inquisitor-General Ruthven's Render-Beast packs roam the main roads; searchlights sweep every 2
     days;
-  - 100% Breach: no siege in Act 1; what Breach does in Act 1 is open (CANON.md section 6).
+  - 100% Breach: no siege in Act 1. An Act 1 Breach ends the run on the **Extinguished** failure screen (user
+    2026-10-25, Q-13; CANON 2.6), but only a player who blatantly ignores the meter gets there: Act 1 inputs are small
+    and a clear warning shows at each threshold (the warning steps are a design-lane spec with Q-15) `[kit hook]`
+    campaign fail condition, `[data]` warnings and text.
+- **Inputs** (Q-15 option a): loud and quiet tags on missions, bribes in Scrap or Rock Salt, and the story amounts listed
+  in the docs (searchlights, forced marches); numbers by the balance lane.
 
 ## 3. Act 1 missions
 
@@ -190,12 +196,14 @@ Full staging: [onboarding and intro](../narrative/new_game_onboarding_and_intro.
 - **The winch:** the Slag Gate winch is jammed with iron bolts; one founder must stay on the winch tile and work the
   lever under fire while the others get out `[kit hook]` objectives (hold, escape), `[game code]` only if the scripted
   stay-behind cannot be expressed as data. That founder is overwhelmed and taken alive by Nemeth's executioners
-  (captured, not killed): the one scripted Act 1 loss `[kit hook]` unit lifecycle (captured). Whether the cell defeats
-  Nemeth or only escapes is open (CANON.md section 6).
+  (captured, not killed): the one scripted Act 1 loss `[kit hook]` unit lifecycle (captured). The cell only escapes,
+  and Nemeth escapes with the captured founder (user 2026-10-25, Q-25 a; CANON 3.6): the cell sees him hand them to
+  Lazar at 2.4, and at the optional Act 3 node 20 the founder, corrupted, fights at his side, then breaks and kills him.
 - **Transition:** ends Act 1 (The Young Vanguard). The remaining founders go through the Slag Gate into Act 2 (The
   First Rupture). Switched on in Act 2: Inoculation, Strain, Calcification, grafts at the Apothecary's Slab, recruits,
   the doctrine split, permadeath and capture, sieges, the 8-bunk project; the captured founder leaves a keepsake (an
-  ACC heirloom; its numbers are open).
+  ACC heirloom; its numbers are open), and their bunk takes the first procedural recruit at the start of Act 2 (Act 1
+  holds only the six founders, Q-38).
 
 ### 3.8 Optional Act 1 board work
 
@@ -213,7 +221,7 @@ job is open (see gaps).
 | ENC-EVT-03 (Grendel) | M3 The Bone-Mill Raid | Sabotage: halt bone-mortar output to weaken a fortress wall |
 | ENC-EVT-04 (Orlov) | M4 The Tallow Vats | Vesper's loyalty quest: settle the feud and seize 10 Warded Tallow |
 | ENC-EVT-05 (Amalgam) | Interlude, the grafting teaser | Acts 2-3 only: a candidate siege battle when Alert reaches 100% (never in Act 1) |
-| ENC-EVT-06 (Nemeth) | M5 The Crucible | None: the one-time Act 1 to Act 2 trigger |
+| ENC-EVT-06 (Nemeth) | M5 The Crucible | None: the one-time Act 1 to Act 2 trigger (Nemeth himself returns in ENC-ACT3-04) |
 
 ## 5. Data sketch `[data]`
 
@@ -242,4 +250,6 @@ schema, including how hub facilities attach (no `facilities` field exists today)
 - What the youths freed in M2 give the cell (section 3.3): Open, see gaps.
 - Vesper's vendetta mechanic against Orlov (section 3.5): Open, see gaps.
 - Which node hosts each optional board job, including Corvo's Third Ward gate (section 3.8): Open, see gaps.
-- Alert 100% in Act 1, Nemeth defeated or escaped, keepsake numbers, wounded effects: open in CANON.md section 6.
+- Alert 100% in Act 1 (decided: the run ends, Q-13), Nemeth (decided: he escapes, Q-25) and wounded effects (decided:
+  -20% max HP until a rest, Q-31) are settled; the Breach story text and the warning steps are open (story guide G-23;
+  Q-15 spec); keepsake numbers: open in CANON.md section 6.

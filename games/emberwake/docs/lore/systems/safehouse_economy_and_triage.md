@@ -32,9 +32,9 @@ and the zero-Tallow AP penalty are the purse hook `[kit hook]`. Rock Salt and or
 
 | Facility | Keeper | Act 1 | Act 2 on (proposal) | Layer |
 | --- | --- | --- | --- | --- |
-| Apothecary's Slab | Sister Aline Vance | treats the wounded (rules open); the ENC-EVT-05 marrow dose | graft surgery (organs, raises the Strain floor 0-50), Rock Salt flushes, bone-scraping (-1 Calcification stage, -10% max HP, after her quest) | `[kit hook]` facility + exchange recipes |
-| Tinker's Hearth | Bram "Iron-Lung" Karr | forges and reinforces gear for Scrap and materials | the "Expanded Timber Frames" project (bunks 6 -> 8, player's choice, costs open) | `[kit hook]` facility with levels + exchange recipes |
-| Dry Hollows | - | six bunks, rest (1 day, 1 Warded Tallow, full HP) | eight bunks after the project | `[kit hook]` bunks |
+| Apothecary's Slab | Sister Aline Vance | treats the wounded (a wounded founder deploys at -20% max HP until a rest, Q-31); the ENC-EVT-05 marrow dose | graft surgery (organs, raises the Strain floor 0-50), Rock Salt flushes, bone-scraping (-1 Calcification stage, -10% max HP, after her quest) | `[kit hook]` facility + exchange recipes |
+| Tinker's Hearth | Bram "Iron-Lung" Karr | forges and reinforces gear for Scrap and materials | the "Expanded Timber Frames" project (bunks 6 -> 8, player's choice, Act 2 on, a Scrap cost from the balance lane; Q-38) | `[kit hook]` facility with levels + exchange recipes |
+| Dry Hollows | - | six bunks for the six founders only (Q-38), rest (1 day, 1 Warded Tallow, full HP) | eight bunks after the project | `[kit hook]` bunks |
 | Isolation Crypts (in the Dry Hollows) | - | none | Stage IV operatives sleep here | `[kit hook]` |
 | Water-Lock Basin | Tess Morn | the launch point (to the district map), Tess's dead-drop board | guest quarters | `[kit hook]` mission board |
 
@@ -79,46 +79,56 @@ Warded Tallow against the drain mists.
 A drowned iron sluice gate and spillway, the central pool where bone ciphers are fished out of the upper city's flues.
 
 - Tess's dead-drop board: the mission board (CANON 3.2): it offers the next main mission when the previous one is done,
-  plus optional board work (CANON 3.2). Stand-in `[data]`: Tess is an NPC whose dialogue offers quests (`start_quest`)
-  behind flag conditions.
+  plus optional board work (CANON 3.2). The mission board is a kit hook built before the slice (no stand-in, Q-55);
+  Tess is the board's keeper on the region map `[data]`.
 - Launch: leaving through the Basin opens the district map (world map).
 - Squad: pick up to four (the Character screen's active toggle) and their loadouts before leaving.
-- Alert: bribes in Scrap or Rock Salt can lower the Inquisition Alert (amounts and other inputs open).
+- Alert: bribes in Scrap or Rock Salt can lower the Inquisition Alert (one of the meter's inputs, Q-15; amounts by the
+  balance lane).
 - Guests (Act 2 on): lodge here without a bunk; examples Ferrand the Clock-Smith (+10% re-tempering speed at the Hearth)
   and Sister Clemence (-20% Rock Salt cost of Slab flushes).
 
-## 3. Campaign meters `[kit hook]`
+## 3. Campaign meters
 
-Meters with thresholds and triggers; shown on the map HUD bar next to Scrap and Tallow (the bar today shows the place,
+A generic meter system with thresholds, triggers, inputs and warnings (user 2026-10-25, Q-15) `[engine]` if
+game-agnostic, else `[kit hook]`; shown on the map HUD bar next to Scrap and Tallow (the bar today shows the place,
 gold and supplies, `emberwake_gui::hud`).
 
 | Meter | Canon value |
 | --- | --- |
-| Doom Clock | the Red Tithing calendar in days, 42 at Act 1 day 1; soft in Acts 1-2 (no fail), hard in Act 3 (fail if it reaches 0 before node 21 falls). A route leg costs 1 day (stealth +1), a rest 1 day, a battle none; the days run on the engine's travel clock (`gs.time`, route `time` 1 = 1 day) |
-| Inquisition Alert | 0-100: 0-30 Guarded, 31-70 Suspicious, 71-99 Lockdown, 100 Breach. No siege in Act 1; in Acts 2-3 Breach starts a siege of the hub, and a lost siege costs facilities and forces a relocation, never a Game Over |
+| Doom Clock | the Red Tithing calendar in days, 42 at Act 1 day 1; relabelled "the Great Tithing" at 2.4 (CANON 3.6); soft in Acts 1-2 (no fail; at 0 a lesser tithing, then it restarts), hard in Act 3 (fail if it reaches 0 before node 21 falls). A route leg costs 1 day (stealth +1), a rest 1 day, a battle none; the days run on the engine's travel clock (`gs.time`, route `time` 1 = 1 day) |
+| Inquisition Alert | 0-100: 0-30 Guarded, 31-70 Suspicious, 71-99 Lockdown, 100 Breach. No siege in Act 1: an Act 1 Breach ends the run, reachable only by blatantly ignoring the meter (small inputs, a clear warning at each threshold; Q-13). In Acts 2-3 Alert is an active management task; Breach starts a siege of the hub, and a lost siege costs facilities and forces a relocation, never a Game Over |
 
 Alert bands, what the player sees (proposal): Guarded, curfew patrols; Suspicious, armoured checkpoints at the district
 gates and crossbowmen on the roofs; Lockdown, hunter packs with Render-Beasts and lantern sweeps (roamer markers on the
-region maps; no sight cones, which are cut); Breach, the siege (Acts 2-3).
+region maps; no sight cones, which are cut); Breach, the end of the run in Act 1 and the siege in Acts 2-3. Inputs (Q-15
+option a): loud and quiet tags on missions, bribes in Scrap or Rock Salt and the story amounts; numbers by the balance
+lane.
 
-## 4. Kit hooks and the first-playable stand-ins
+## 4. Kit hooks: built before the slice
 
-| Kit hook | What it is | Data-only stand-in for the first playable |
+The slice gets no data-only stand-ins (user 2026-10-25, Q-55, Q-56): every hook it needs is built as a reusable engine
+or kit system in M0-M1 ([roadmap](../specs/full_game_systems_roadmap.md) section 2). The old stand-ins are kept below as
+the record.
+
+| Kit hook | What it is | When (old stand-in) |
 | --- | --- | --- |
-| Resource purse | named currency and upkeep with zero-effects | none: gold and supplies show their engine names until the hook lands |
-| Hub facilities with levels | a facility, its keeper, its level and its projects | the keeper as a region-map NPC whose dialogue offers the services |
-| Exchange recipes | inputs (items, Scrap) to outputs (item, upgrade, unlock) | crafting through dialogue choices that `requires` items and Scrap, `take` them and `give` the result |
-| Mission board | offers, the next main mission, optional work | Tess's dialogue offering quests behind flags |
-| Unit lifecycle | downed / wounded / captured / dead / retired, bunk count | none: downed exists; the rest waits for the hook |
-| Campaign meters | Doom Clock, Alert, thresholds and triggers | flags set by dialogue and quests; the travel clock already counts time |
+| Resource purse | named currency and upkeep with zero-effects | before the slice (gold and supplies under engine names) |
+| Hub facilities with levels | a facility, its keeper, its level and its projects | before the slice as far as the slice uses it (the keeper as a dialogue NPC) |
+| Exchange recipes | inputs (items, Scrap) to outputs (item, upgrade, unlock) | before the slice if the slice forges; else Act 2 (dialogue `requires`, `take`, `give`) |
+| Mission board | offers, the next main mission, optional work | before the slice (Tess's dialogue behind flags) |
+| Unit lifecycle | downed / wounded / captured / dead / retired, bunk count | before the slice: downed, wounded, captured, the bunk count; dead and retired from Act 2 |
+| Campaign meters | Doom Clock, Alert, thresholds, triggers, inputs, warnings | before the slice (flags set by dialogue and quests) |
 
 ## 5. Gaps
 
 1. Inquisition Alert inputs: what raises it (loud fights, failed stealth, missions) and what lowers it (bribe sizes,
-   missions such as ENC-ACT2-03 -30).
+   missions such as ENC-ACT2-03 -30). Decided (2026-10-25, user, Q-15): mission tags, bribes and story amounts, built
+   as a generic meter system; numbers by the balance lane.
 2. Facility levels beyond the bunk project: does the Hearth or the Slab have levels, and what each unlocks.
 3. Prices: Scrap costs of forging, reinforcement, the bunk project, bribes; drop sizes beyond the Act 1 encounter
-   purses.
+   purses (by the balance lane, Q-38, Q-44).
 4. Graft costs and the per-graft Strain floor step.
-5. Act 1 Alert at 100% (CANON open question): no siege in Act 1, so what happens.
+5. Act 1 Alert at 100%: no siege in Act 1, so what happens. Decided (2026-10-25, user, Q-13): the run ends, reachable
+   only by blatantly ignoring the meter.
 6. Where the meters show in battle: the map HUD bar only, or a line in the battle screen too.

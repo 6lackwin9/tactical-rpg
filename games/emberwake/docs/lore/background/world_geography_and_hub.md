@@ -45,14 +45,16 @@ Ashlands stays the kit's sample and parity world).
 
 One hub for the whole campaign is preferred for scope: the Sluice Undercroft. The Scribe's Crypt (Act 2) and the
 Weeping Redoubt (Act 3) stay `proposal` forward bases, used only if the story needs one. Bunks: 6 at the start of
-Act 1 (4 filled after the prologue); 8 only through Bram's "Expanded Timber Frames" project, chosen by the player; a
-forward base inherits the count `[kit hook]` hub facilities with levels, `[data]` project costs (open, CANON.md
-section 6). Guests take no bunk until sworn in. Squad: up to 4 deployed `[kit hook]` (exists: `PARTY_MAX`).
+Act 1 (4 filled after the prologue); Act 1 holds only the six founders, and the bunk the Crucible empties takes the
+first procedural recruit at the start of Act 2 (user 2026-10-25, Q-38); 8 only through Bram's "Expanded Timber Frames"
+project from Act 2, chosen by the player; a forward base inherits the count `[kit hook]` hub facilities with levels,
+`[data]` project costs (Scrap, by the balance lane). Guests take no bunk until sworn in. Squad: up to 4 deployed
+`[kit hook]` (exists: `PARTY_MAX`).
 
 | Act | Base | Facilities | Bunks |
 | --- | --- | --- | --- |
-| Act 1 (canon) | The Sluice Undercroft | Apothecary's Slab, Tinker's Hearth, Water-Lock Basin, Dry Hollows (Isolation Crypts inside) | 6, 8 after the project |
-| Act 2 (proposal) | The Sluice; optional forward base the Scribe's Crypt | as the Sluice, plus the Courier Blind | inherited |
+| Act 1 (canon) | The Sluice Undercroft | Apothecary's Slab, Tinker's Hearth, Water-Lock Basin, Dry Hollows (Isolation Crypts inside) | 6 (the founders only) |
+| Act 2 (proposal) | The Sluice; optional forward base the Scribe's Crypt | as the Sluice, plus the Courier Blind | 6, 8 after the project; inherited by the forward base |
 | Act 3 (proposal) | The Sluice; optional forward base the Weeping Redoubt | as the Sluice, plus the Quench-Anvil and the Ward-Lantern Rig | inherited |
 
 Today's code: `hub.rs` `Hub` is the in-game menu, `shop.rs` `Trade` the shop, the stash and HEAL1 rest exist; facilities
@@ -63,7 +65,8 @@ with levels do not exist yet `[kit hook]`.
 An old municipal storm-drain three levels beneath the basalt cobbles of Lower Cinderreach.
 
 1. **The Apothecary's Slab** (Sister Aline): a granite embalming slab. Act 1: trauma surgery for wounded founders
-   `[kit hook]` unit lifecycle (wounded effects and recovery are open, CANON.md section 6). Act 2 on: graft surgery,
+   `[kit hook]` unit lifecycle (a wounded founder deploys at -20% max HP until a rest, user 2026-10-25, Q-31; a
+   baseline the balance lane revisits). Act 2 on: graft surgery,
    Rock Salt flushes (effect open) and, after her quest, bone-scraping (-1 Calcification stage, -10% max HP for good)
    `[kit hook]` exchange recipes, `[data]`.
 2. **The Tinker's Hearth** (Bram "Iron-Lung" Karr): a ventless charcoal forge with water baffles. Cold Steel
@@ -134,7 +137,7 @@ round's six blocks.
 | Sunk Ward | Blight fog / warded smoke | Fog: +5 Strain per round (Act 2 on). Warded smoke: blocks Strain gain inside it; its "cover" effect is open (see gaps) |
 | Sunk Ward | Molten slag runoff | Bursts on block 5 of each round: 25 fire damage |
 | High Bastion | Magnesium spotlights | A unit seen in the beam raises Inquisition Alert (amount open) |
-| High Bastion | Curfew chimes | At the start of each round every unit loses 10 Poise unless it passes a Composure check (Composure is undefined, see gaps) |
+| High Bastion | Curfew chimes | At the start of each round every unit loses 10 Poise unless it passes a Composure check (Composure is the derived corruption resist, CANON 2.1; how the check resolves: see gaps) |
 | High Bastion | Blessed phosphor sprays | Ignite oil; 8 damage per block, ignores armour |
 | High Bastion | Crumbling parapet gaps | Edge tiles: a unit knocked off drops to 0 HP (downed) |
 | Mantle Fissure | Liquefied basalt flues | Entering: 20 fire damage and an armour expose (amount open) |
@@ -144,6 +147,9 @@ round's six blocks.
 
 ## 5. Gaps in this file
 
-- Searchlight battle effect, smoke "cover" and the Composure check (section 4): Open, see gaps.
-- Wounded effects and recovery at the Slab; costs of the 8-bunk project; Rock Salt flush effect: open in CANON.md
-  section 6.
+- Searchlight battle effect (section 4): Open; it leaned on a cut roll, so it is restated on existing levers or built as
+  a reusable kit or engine system before it is used (Q-56). Smoke "cover": smoke gives cover guard in Act 1 (Q-54).
+- The Composure check (section 4): Composure is decided (a derived stat, CANON 2.1); how a hazard's "Composure check"
+  resolves (a threshold against the stat, a poise loss scaled by it, or a seeded roll) is open for the derived-stat spec
+  and the balance lane.
+- Costs of the 8-bunk project (Scrap, balance lane, Q-38); Rock Salt flush effect: open in CANON.md section 6.

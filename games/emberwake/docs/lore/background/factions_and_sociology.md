@@ -37,7 +37,15 @@ titan. Power runs down from the cathedral through the Inquisition and the guilds
   original sin disturbed the titan's sleep, and only tithes of blood, labour and silence keep it asleep.
 - **The Red Tithing:** bells summon the city to the plazas; Unsealed youths of any age are chosen by the hierarchs and
   led in chains into the catacombs as the lullaby that keeps the titan asleep (what the Clerisy preaches). The date is
-  the Doom Clock `[kit hook]` campaign meter; size and frequency are open (see gaps).
+  the Doom Clock `[kit hook]` campaign meter. The folk know a yearly rite of hundreds; this year's rite is a Great
+  Tithing of thousands, known only to the inner circle until 2.4 (user 2026-10-25, [CANON](../CANON.md) 3.6).
+- **Founding (secret):** the Clerisy was founded two centuries ago, in the dark of the Extinguishing; its founding act
+  was the first Great Tithing, recorded as the titan's wrath, and its founders, "the first Extinguishers", lie in the
+  Reliquary Crypts (CANON 3.6).
+- **The harvest (secret; CANON 3.6, partly planner refinement):** the Clerisy raises tithe-children from infancy in its
+  foundling houses, the Lullaby Houses, which the folk see as charity; after the rite the tithed are laid in the crypts
+  over the titan's veins, where the dream steeps them, and Lazar's anatomists render the remains into the marrow the
+  Clerisy drinks, the younger the more potent. Spoiler sheet: [central truth](central_truth.md).
 - **Look:** featureless windowless iron masks with breath slits; bleached horsehair vestments stiffened with warded
   beeswax; swinging gilded censers burning narcotic resin that dulls a crowd into reverent stupor.
 
@@ -53,14 +61,17 @@ titan. Power runs down from the cathedral through the Inquisition and the guilds
   - magnesium flash-bombs in narrow alleys (the effect on the target is open: accuracy rolls are cut, see gaps).
 - **The culling pens:** walled stockades at every ward gate where the young are held without trial and inspected for
   bone growths under the skin or black blood.
+- **Infusions:** the Inquisition's elite (Quell's valve, Nemeth's infusion) carry aberrant marrow from older, weaker
+  stock, which wears the body down (CANON 3.6).
 
 ### 2.3 The Tallow Guild and the Fourth Kiln Syndicate (industry)
 
 - **Role:** the city's industrial backbone: rendering vats and crushing mills on the edge of the slums. The Fourth
   Kiln Syndicate is the Guild's foundry and bone-mill arm (Bram worked its upper forge, Dunstan its bone-mill).
 - **Monopolies:**
-  - **Warded Tallow:** rendered from carcasses, livestock and the unredeemed human dead; mandatory for house lamps,
-    because wood or raw coal draws shadow-aberrations from the vents;
+  - **Warded Tallow:** rendered from carcasses, livestock and the unredeemed human dead (the dead Spent among them:
+    the young become marrow, the old become fuel; CANON 3.6, refinement); mandatory for house lamps, because wood or
+    raw coal draws shadow-aberrations from the vents;
   - **Bone-mortar:** ground ossified remains, cement for the crumbling foundations of Upper Cinderreach;
   - **Salt ledgers:** the Rock Salt trade, rationed to keep ward bosses compliant.
 - **Standing:** despised as butcher-merchants, yet indispensable: insult a tallow-master and a household's lamp ration
@@ -143,6 +154,9 @@ from Preservationist (Bram's voice) to Flesh-Broker (Aline's voice) `[kit hook]`
 
 ## 5. Gaps in this file
 
-- Flash-bomb effect without accuracy rolls (section 2.2): Open, see gaps.
-- Red Tithing size and frequency (section 2.1): Open, see gaps.
+- Flash-bomb effect without accuracy rolls (section 2.2): Open; rebuilt on existing levers or a reusable kit or engine
+  system before use (Q-56).
+- Red Tithing size and frequency (section 2.1): decided (Q-04, Q-16; CANON 3.6).
+- Which arm runs the Lullaby Houses and the rendering (the Clerisy proper, or Lazar's order, whose faction is Q-76):
+  not written.
 - Doctrine inputs and thresholds (section 4): open in CANON.md section 6.

@@ -18,6 +18,12 @@ Two consequences: (1) a kit hook is written with genre names (`meter`, `stage tr
 (`strain`, `calcification`, `slab`); the story names arrive as data. (2) The Ashlands keep running on the same hooks
 with the "classic" options, so the parity suites stay the guard rail for every hook added.
 
+Reuse rules (user 2026-10-25, Q-52, Q-55, Q-56): the engine is reused with the Ashlands as the baseline; a rule
+incompatible with the classic rules is built as an option, a compatible one as an extension that can be disabled; bug
+fixes go to the core and may need an Ashlands or kit revisit. Every engine and kit system the vertical slice needs is
+built before it (M0-M1), so the slice is only narrative choices and catalog data; anything existing systems do not
+cover becomes a reusable engine or kit system, and only game-specific parts stay in the game.
+
 ## 2. What exists today
 
 | System | Real carrier | Tag |
@@ -59,25 +65,30 @@ features are `proposal`.
 
 | Lore feature | Carried by | Work | Tag |
 | --- | --- | --- | --- |
-| Ruleset switch "timeline" / "classic" | session start reads an option; classic = today's behaviour | new: the switch and where it is set (open) | `[kit hook]` |
+| Ruleset switch "timeline" / "classic" | session start reads an option; classic = today's behaviour | new: a world field (the Ashlands "classic", `sunk_ward` "timeline") with a Dojo toggle (Q-52) | `[kit hook]` |
 | 6 blocks, simultaneous, AP 10 +4 | resolver | exists | `[kit hook]` |
 | Timeline strip at the top of the battle screen | `aegis_ui::timeline` in the COMBAT-UI3 layout A | exists | `[engine]` |
 | Speed tiers Snap 1, Standard 2, Heavy 3-4 | skill `blocks` | exists: set `blocks` per skill | `[data]` |
-| Recovery blocks after the impact | resolver schedules start..end | new: blocks after the effect that keep the unit busy | `[kit hook]` |
+| Recovery blocks after the impact | resolver schedules start..end | new: blocks after the effect that keep the unit busy; 0 by default, set per skill | `[kit hook]` |
+| Chained commands (Q-54) | resolver schedules each action on its own | new: a follow-up skill can start in the blocks a previous action leaves, otherwise the unit spends them in recovery | `[kit hook]` |
 | `ap_cost` decoupled from level | skill AP = level | extend: field `ap_cost`, default = level | `[kit hook]`, `[data]` |
 | Same-block order, no mutual trades | highest initiative first; a downed unit's actions are cancelled | exists | `[kit hook]` |
 | Poise meter and break | `ScheduledAction.cancelled`, the stagger status, guard breaks | new: a per-unit poise meter (formula, refill each round), a break cancels the windup and the remaining blocks that round, doubled cost for a repeat break | `[kit hook]`, numbers `[data]` |
 | Stagger multipliers (windup x2, Active Guard x0.5) | - | new, with the poise meter | `[kit hook]` |
+| Stagger intent (Q-50) | seeded `rolls` | new: rescaled stagger values, more poise or an unbreakable flag on heavy enemy windups, an optional seeded break chance and a guaranteed break at a cost (AP, a skill or Strain); design-lane spec, then a sim | `[kit hook]`, numbers `[data]` |
+| Composure, the corruption resist (Q-47a) | stats are the six base stats only | new: data-defined derived stats computed by a formula evaluator from base stats plus gear, status and Calcification modifiers; shown on the unit panel (`docs/specs/DERIVE1.md`, being written) | `[engine]` evaluator, `[kit hook]` derived stats, `[data]` the Composure row |
 | Active Guard | DEFEND skills, the guard ratio, `GUARD_CAP` | extend: halves incoming stagger; venting is a meter trigger | `[kit hook]`, `[data]` |
 | Stances off | stance rules | extend: an option of the ruleset | `[kit hook]` |
 | Armour rescale | `DamageCalculator` curve | exists: lore armour points x 2 = rating | `[data]` |
 | Inoculated attacks ignore armour | round-end damage already ignores armour; the damage type `pierce` is a type, not a bypass | new: a skill flag that bypasses armour | `[kit hook]`, `[data]` |
-| Deck 8 slots (Move, Active Guard, 3 actives, 2 passives, 1 keystone) | loadout 5 class + 3 extra; basics always owned; passives come from sources, not slots | extend: slot kinds (open, see gaps) | `[kit hook]` |
+| Deck 8 slots (Move, Active Guard, 3 actives, 2 passives, 1 keystone) | loadout 5 class + 3 extra; basics always owned; passives come from sources, not slots | extend: slot kinds base, active, passive, keystone, working like today's skill slots (Q-48) | `[kit hook]` |
 | Advance and Disengage | `dash_tiles` (gap-close first in the sequence), DISENGAGE skills (`jump_tiles`) | exists for one move per round | `[kit hook]`, `[data]` |
 | Impact badges on the strip | strip segments and intent tells | extend: a badge on the block where an impact lands | `[engine]` |
 | Hit-stop, swing trails, impact sparks | FX1 (approved) | new under FX1 | `[engine]`, `[game code]` |
 | Telegraphed ground zones and hazards | hazards, cover, terrain, intent tells | exists; new zone kinds as data | `[data]` |
 | Named bosses, waves, morale | encounter phases, the arrival wave, morale | exists | `[data]` |
+| A phase where an ally boss turns on everyone (node 20: the corrupted founder breaks, kills Nemeth and his guard, then fights the cell; CANON 3.6) | `hp_below` with `or_round`, line, status, ai and enrage effects; a unit swap for the larger body | new (small): a phase effect that kills named units, and a "hostile to all sides" AI or faction switch | `[kit hook]` |
+| Maneuver hooks the slice needs (forced movement, ground hazards a skill leaves, scheduled arena hazards; effects that leaned on cut rolls) | statuses, hazards, phases | new: reusable kit or engine systems before the slice, starting with forced movement and ground hazards (Q-55, Q-56); cover and line of sight after testing (Q-54) | `[kit hook]` or `[engine]` |
 | Cut (DEC-LORE-37) | evasion and accuracy rolls, facing cones, backstab, stealth cones, mutual trades, the multi-track ghost scrubber | none | - |
 
 ### 3.2 Corruption (Act 2 on)
@@ -101,28 +112,38 @@ features are `proposal`.
 | Scrap as the currency | `PartyState.gold`, shops, purse, rewards | extend: the currency's display name per world | `[kit hook]`, `[data]` |
 | Warded Tallow upkeep | supplies (per time unit, camp cost, `start_supplies`) | extend: the name per world; the 0-stock effect becomes an option (today +50% encounter chance; Emberwake -2 starting AP) | `[kit hook]`, `[data]` |
 | Rock Salt, Aberrant Organs | stash items | exists | `[data]` |
-| Inquisition Alert, Doom Clock, doctrine | numeric flags and reputation bands | new: campaign meters with thresholds and triggers (visible, soft or hard) | `[kit hook]`, `[data]` |
+| Inquisition Alert, Doom Clock, doctrine | numeric flags and reputation bands | new: a generic meter system with thresholds, triggers, inputs (mission tags, bribes, story amounts), a warning at each threshold and effects such as Lockdown (visible, soft or hard; Q-15) | `[engine]` if game-agnostic, else `[kit hook]`; `[data]` |
 | Tess's dead-drop board | quests and dialogue `start_quest` | new: a mission board listing a giver's offers | `[kit hook]`, `[data]` |
 | The Undercroft hub and facilities with levels | a world location on the region map, NPC markers, shops | new: facilities with levels and projects (Bram's 8-bunk frames) | `[kit hook]`, `[data]` |
-| Bunks 6 to 8 | roster unbounded, `party_max` 4 active | new: a roster cap raised by a facility level | `[kit hook]` |
+| Bunks 6 to 8 | roster unbounded, `party_max` 4 active | new: a roster cap raised by a facility level (Act 1: six founders only; the 8-bunk level from Act 2, Q-38) | `[kit hook]` |
 | Downed, wounded, captured, dead, retired | downed in battle; HEAL1 rally and wake | new: the unit lifecycle after battle (states, effects, recovery) | `[kit hook]` |
 | Founders join | RECRUIT1 `recruit` effect, world characters | exists | `[data]` |
+| Class names per world (Vanguard over `warrior`) | one shared class set | extend: base classes live in the kit with a display name per world; the base set may grow so other games' classes port and are re-themed (Q-53) | `[kit hook]`, `[data]` |
 | Prologue missions 0a-0c, guests | encounters with `guests`, `deployment`, objectives | exists | `[data]` |
 | Intro vignette, hearth scene, title cards | dialogue | new: a vignette player (images and lines, skippable) | `[kit hook]`, `[data]` |
 | Scripted beats (hearth after 0c, the interlude) | flags, quests, dialogue | new: event triggers (on flag or arrival, play a scene or fight) | `[kit hook]` |
 | The Crucible sacrifice | deployment of four, `escape` / `protect` objectives | new: pick a deployed unit after the fight, apply "captured" | `[kit hook]`, `[data]` |
-| Extinguished failure screen | defeat wakes at the last rest | new: campaign fail conditions | `[kit hook]` |
+| Extinguished failure screen | defeat wakes at the last rest | new: campaign fail conditions (the Act 1 Breach first, Q-13) | `[kit hook]` |
 | Endings A-C | flags, dialogue | vignette player | `[data]` |
 | Sieges, procedural recruits, Living Martyrs, bells, blackouts (Acts 2-3, proposal) | encounters at the hub, RECRUIT1, the lifecycle, meter triggers | new hooks named in [full_game_systems_roadmap.md](full_game_systems_roadmap.md) | `[kit hook]`, `[data]` |
 
 ## 4. Kit hooks to add, in build order
 
-1. Ruleset option "timeline" with poise and break, recovery blocks, `ap_cost`, the armour-bypass flag, stances off
-   (M1, in the Dojo).
-2. Impact badges on the strip `[engine]` (M1).
-3. Vignette player, event triggers, mission board, campaign meters, the unit lifecycle (downed, wounded, captured),
-   the roster cap, the currency and upkeep names and the 0-stock option, rest time (M2, the slice).
-4. Per-unit meter, per-unit stage track, exchange recipes, facility levels, campaign fail conditions (M3).
+Every hook the slice needs lands in M0-M1, before the slice (Q-55, Q-56); M2 adds only data.
+
+1. M0: the ruleset as a world field with a Dojo toggle; base classes with per-world display names; data-defined
+   derived stats on a formula evaluator (Composure, DERIVE1); deck slot kinds; the vignette player, event triggers,
+   mission board, the generic meter system (Alert inputs, warnings and Lockdown; the Doom Clock), the unit lifecycle
+   (downed, wounded, captured), the roster cap, the currency and upkeep names and the 0-stock option, rest time, the
+   campaign fail conditions (the Act 1 Breach).
+2. M1, in the Dojo: the "timeline" rules with poise and break, stagger intent (rescale, break chance, guaranteed break
+   at a cost), recovery blocks and chained follow-ups, `ap_cost`, the armour-bypass flag, stances off; the maneuver
+   hooks the slice's encounters use (forced movement and ground hazards first); impact badges on the strip `[engine]`;
+   the sim's ruleset option.
+3. M3: per-unit meter, per-unit stage track, exchange recipes, more facility levels (the 8-bunk project), the
+   no-operative fail condition.
+4. Act 3 data: for the node 20 battle, a phase effect that kills named units and a "hostile to all sides" AI or
+   faction switch (both small; may ride with earlier kit work).
 
 Milestones: [full_game_systems_roadmap.md](full_game_systems_roadmap.md).
 
@@ -154,13 +175,17 @@ Everything else in the lore is data on kit hooks.
 1. Where kit code lives. Answered (user 2026-10-25): kit extraction happens in M0; the earlier recommendation to defer
    it is withdrawn (the planner's record holds the scope; [OPEN_QUESTIONS.md](../OPEN_QUESTIONS.md) section 3).
 2. Where the ruleset switch is set. Options: (a) the world manifest (Ashlands classic, `sunk_ward` timeline); (b) per
-   encounter. Recommendation: (a), with a Dojo toggle.
+   encounter. Recommendation: (a), with a Dojo toggle. Decided (2026-10-25, user, Q-52): (a), a world field with a Dojo
+   toggle, plus the reuse rules of section 1.
 3. Deck slots: the lore's 8 include 2 passives and a keystone, the engine's 8 are skill families, and passives come from
    sources. Options: (a) passives and keystone become loadout slot kinds; (b) keep the engine's 5 + 3 skills and grant
-   passives from sources. Recommendation: (a) for the timeline ruleset only; the user decides.
+   passives from sources. Decided (2026-10-25, user, Q-48): (a), working like today's skill slots, bucketed by kind.
 4. Class names per world (Vanguard for warrior). Options: (a) new class rows for the new worlds; (b) a world-level
-   display name over the shared classes. Recommendation: (b), so the Ashlands and the sim keep one class set.
-5. Composure (named by Calcification I and the recruit quirks) is not one of the six stats. Options: (a) drop it; (b)
-   derive it from KNOW. Recommendation: (a) until a system needs it.
+   display name over the shared classes. Decided (2026-10-25, user, Q-53): (b); the base classes live in the kit (not
+   the engine) and may grow so other games' classes port directly and are re-themed.
+5. Composure (named by Calcification I and the recruit quirks) is not one of the six stats. Decided (2026-10-25, user,
+   Q-47 and Q-47a): not a seventh base stat; Composure is a derived stat, the corruption resist, computed by its own
+   formula from base stats plus gear, status and Calcification modifiers (CANON 2.1); the engine gains a formula
+   evaluator and the kit data-defined derived stats (`docs/specs/DERIVE1.md`).
 6. The balance sim cannot run the timeline ruleset yet. Recommendation: the sim takes the ruleset option in M1 so the
-   balance lane can measure it.
+   balance lane can measure it (listed with Q-52's options; in the M1 list).

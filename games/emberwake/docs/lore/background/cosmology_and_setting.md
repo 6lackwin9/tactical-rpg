@@ -19,7 +19,9 @@ rot. The living work the cathedral factories and fear what seeps up from below.
 ### 2.1 The Shroud
 
 Two centuries ago an event the commoners call **the Extinguishing** put out the sun, the moon and the stars (not to be
-confused with the **Extinguished** failure screen).
+confused with the **Extinguished** failure screen). What caused it stays a mystery. The Sovereign Clerisy was founded in
+its dark as the order that holds the Tithing to pacify the titan; in secret, its founding act was the first Great
+Tithing, recorded as the titan's wrath (user 2026-10-25, [CANON](../CANON.md) 3.6; the folk know none of this).
 
 - In their place hangs **the Shroud**: a permanent bruised-violet canopy of petrified cloud, cold gloom and ash
   drifting from the highland cathedral kilns.
@@ -83,8 +85,9 @@ The young are the only supple, vital part of humanity.
 - **The coming line:** at 25 the Clerisy counts a person among the Spent. Unsealed who survive the press-gangs and the
   pens either give in to the draughts or take up heretical arms. This is a world fact, not a per-operative countdown
   (Act 1 has no countdown on any founder; whether operatives age during the campaign is open, see gaps).
-- **The Red Tithing** takes Unsealed youths of any age; children are stakes in the story (Pip, Lucan, Ida), never
-  fighters.
+- **The Red Tithing** takes Unsealed youths of any age, children raised for it first (refinement: from infancy, in the
+  Clerisy's foundling houses, the Lullaby Houses; CANON 3.6); children are stakes in the story (Pip, Lucan, Ida), never
+  fighters or on-screen victims.
 - **The rebellion's core:** every operative of **the Severed Root** is 18-24 `[data]` (recruit ages, RECRUIT1).
 
 ## 4. Where the setting touches the systems
@@ -95,7 +98,7 @@ The young are the only supple, vital part of humanity.
 | Rock Salt is rationed | Stash material (Slab flushes, bribes) | `[kit hook]` resource purse, `[data]` |
 | The cell lives on salvage | Scrap is the currency (there is no gold) | `[kit hook]` resource purse, `[data]` |
 | The titan's tremors and seepage | Battle hazards per region (see [world geography](world_geography_and_hub.md) section 4) | `[kit hook]` scheduled zone hazards, `[data]` numbers |
-| The Red Tithing date | Doom Clock: visible from Act 1 day 1 at 42 days; soft in Acts 1-2, hard in Act 3 | `[kit hook]` campaign meter, `[data]` |
+| The Red Tithing date | Doom Clock: visible from Act 1 day 1 at 42 days; relabelled "the Great Tithing" at 2.4; soft in Acts 1-2 (a lesser tithing at 0), hard in Act 3 | `[kit hook]` campaign meter, `[data]` |
 | Marrow grafts and Calcification | Strain and Calcification, Act 2 on (CANON.md sections 2.2-2.3) | `[kit hook]` per-unit meter and stage track, `[data]` names |
 | Bells keep the hours | Time is counted in days; there is no hour clock | `[kit hook]` travel clock (exists in `travel.rs`) |
 
@@ -107,8 +110,13 @@ These terms appear in dialogue, the quest log and item text.
 - **The Extinguishing:** the event, two centuries ago, that put out the sky.
 - **The Low Sleep:** the titan's slumber and, by extension, the titan, whose dreams bleed mutagenic black marrow.
 - **The Red Tithing:** the recurring rite in which Unsealed youths are led in chains into the cathedral crypts and
-  sacrificed. The Clerisy preaches that it is the lullaby that keeps the titan asleep and the continent whole. Its
-  size and frequency are open (see gaps).
+  sacrificed. The Clerisy preaches that it is the lullaby that keeps the titan asleep and the continent whole. The folk
+  know a yearly rite of hundreds (CANON 3.6).
+- **The Great Tithing:** a Tithing of thousands, held once before at the Extinguishing and again this year; known only
+  to the Clerisy's inner circle until mission 2.4.
+- **Lesser tithing:** an out-of-season Tithing when the soft Doom Clock runs out in Acts 1-2.
+- **The Lullaby Houses:** the Clerisy's foundling houses, a charity in the folk's eyes, where tithe-children are raised
+  from infancy and sung the lullaby each night (planner refinement, CANON 3.6).
 - **Warded Tallow:** rendered animal and human fat treated with herbs and brimstone; its yellow-green flame is the only
   light that repels the mist-aberrations from below.
 - **Rock Salt:** rationed preserving salt for rites, flushes and bribes.
@@ -131,5 +139,9 @@ These terms appear in dialogue, the quest log and item text.
 ## 6. Gaps in this file
 
 - Size and frequency of the Red Tithing (hundreds, a thousand or thousands; yearly, per generation or on emergency):
-  Open, see gaps.
+  decided (user 2026-10-25, Q-04, Q-16): a yearly rite of hundreds, a Great Tithing of thousands at the Extinguishing
+  and this year, lesser tithings when the soft clock runs out (CANON 3.6).
+- The lexicon's "dreams bleed mutagenic black marrow" (section 5) against CANON 3.6, where the Clerisy's marrow is
+  rendered from the dream-steeped remains of the tithed: whether the titan's own black marrow is a separate substance
+  is story guide gap G-33.
 - Whether operatives age, and what happens to one who turns 25 during the campaign: Open, see gaps.

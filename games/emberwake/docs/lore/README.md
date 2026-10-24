@@ -44,6 +44,7 @@ games/emberwake/docs/lore/
   CANON.md         the numbers sheet, campaign spine, endings, glossary, open questions
   OPEN_QUESTIONS.md  every open question with an id (index: decide first, planner picks)
   STORY_GUIDE.md   the story, who's who, story elements, reveal timeline and story gaps in one place
+  modules/         lore modules: independent lore and events, decided alone, connected later (index README.md)
   questions/       the open questions by area (two parts)
   background/      cast and places, setting, factions, geography, the three district maps, NPCs, the central truth
   narrative/       acts, prologue, founders, choices, fail states, onboarding
@@ -61,7 +62,8 @@ games/emberwake/docs/lore/
 | --- | --- | --- |
 | [CANON.md](CANON.md) | canon | The cell, the numbers sheet (combat, Strain, Calcification, roster, resources, meters), the campaign spine, endings, glossary, open questions |
 | [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) | open | Index of every open question (Q-01..Q-91): decide first, planner picks to confirm (P-01..P-29) |
-| [STORY_GUIDE.md](STORY_GUIDE.md) | canon summary | The story in one page, belief against truth, the acts, Nemeth traced, story elements, reveal timeline, story gaps G-01..G-30 |
+| [STORY_GUIDE.md](STORY_GUIDE.md) | canon summary | The story in one page, belief against truth, the acts, Nemeth traced, story elements, reveal timeline, story gaps G-01..G-33 |
+| [modules/README.md](modules/README.md) | open | Lore modules: the format, and the seeds LM-01..LM-17 from the `3 lore` questions and story gaps |
 | - part: [open_world_and_campaign.md](questions/open_world_and_campaign.md) | open | Story and world, campaign and meters, roster and lifecycle, hub and economy (Q-01..Q-46) |
 | - part: [open_systems_and_scope.md](questions/open_systems_and_scope.md) | open | Combat and rules, Strain and Calcification, items, enemies, art, slice scope, process (Q-47..Q-91) |
 | [worldbuilding_decisions.md](specs/worldbuilding_decisions.md) | canon | The brainstorm's decision log: DEC-LORE-01..16 (2026-10-24, superseded parts marked) and the 2026-10-25 decisions from DEC-LORE-17 on |
@@ -76,9 +78,9 @@ games/emberwake/docs/lore/
 | Doc | Status | What it holds |
 | --- | --- | --- |
 | [cast_registry.md](background/cast_registry.md) | canon | Every named character and place: role, age, one-line background, first appearance, former names |
-| [central_truth.md](background/central_truth.md) | canon (Option A) | Spoiler sheet: what the Red Tithing really does and how the endings relate (Option A chosen, Q-01) |
+| [central_truth.md](background/central_truth.md) | canon (Option A) | Spoiler sheet: what the Red Tithing really does, the precedent and the Clerisy's founding, and how the endings relate (Option A chosen, Q-01) |
 | [who_is_who.md](background/who_is_who.md) | canon summary | Every named character's want, first appearance, arc per act and fate (part of the story guide) |
-| [tithing_options.md](background/tithing_options.md) | proposal | The Great Tithing's story context: what commoners know, why now, precedent (options for Q-04 / Q-16) |
+| [tithing_options.md](background/tithing_options.md) | decided (user 2026-10-25): option B with b2, tied to the Clerisy's founding (CANON 3.6) | The Great Tithing's story context: what commoners know, why now, precedent (the decision on top; the options kept as the record of Q-04 / Q-16) |
 | [cosmology_and_setting.md](background/cosmology_and_setting.md) | canon | The Low Sleep titan, the Shroud, the Stagnation of Mortality, the lexicon |
 | [factions_and_sociology.md](background/factions_and_sociology.md) | canon | Sovereign Clerisy, Iron Inquisition, Castellan Watch, Tallow Guild, Fourth Kiln Syndicate, the Spent, the Severed Root, the doctrines |
 | [world_geography_and_hub.md](background/world_geography_and_hub.md) | canon | Cinderreach's three strata, the Sluice Undercroft and its facilities, the hazard list; forward bases as proposal |

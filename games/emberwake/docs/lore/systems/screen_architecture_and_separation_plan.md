@@ -32,7 +32,7 @@ or `Nav::Reset`; screens never call each other). A fight pushes the battle scree
 | Dialogue | the region map's bottom box (`talk_layout`, `draw_talk`; portrait, choices with lock reasons) | `[kit hook]` exists | `[data]` lines; stand-in for crafting and the board (section 3) |
 | Black market (Madame Sallow), forge and slab trades | the shop's three-column trade, `shop.rs` `Trade` / `ShopPane` | `[kit hook]` exists | currency shown as Scrap (purse hook) |
 | "Hub" menu (party, journal, save) | in-game menu, `hub.rs` `Hub` (doors Party, Journal, Save, Load, Settings, Quit, Return to map) | `[kit hook]` exists | none: this is not the safehouse |
-| Operative dossier and deck | Character, `party.rs` `Character` (tabs Stats, Level up, Skills, Gear; Gear holds the pouch and the stash) | `[kit hook]` exists | Poise and armour poise in Stats; Strain floor and Calcification stage (Act 2) `[kit hook]`; deck slots (section 4) |
+| Operative dossier and deck | Character, `party.rs` `Character` (tabs Stats, Level up, Skills, Gear; Gear holds the pouch and the stash) | `[kit hook]` exists | Poise and armour poise in Stats; Composure, a derived stat (CANON 2.1; data-defined derived stats `[kit hook]`); Strain floor and Calcification stage (Act 2) `[kit hook]`; deck slots (section 4) |
 | Quest journal | `hub.rs` `Journal` | `[kit hook]` exists | none |
 | Battle results and triage | `hub.rs` `Results` (headline, XP rows, gold, loot and quest lines, level-up prompt) | `[kit hook]` exists | lifecycle and Calcification lines `[kit hook]` |
 | Tactical battle | `battle.rs` `BattleScreen` on `aegis_ui::timeline` | `[engine]` widget, `[kit hook]` screen | section 5 |
@@ -45,16 +45,19 @@ frozen Godot model, the engine's is `hub.rs` `Results`.
 
 ## 3. Missing screens
 
-| Screen | What it shows | Layer | First-playable stand-in |
+The slice gets no stand-ins (user 2026-10-25, Q-55, Q-56): every screen it needs is built as an engine or kit piece
+in M0-M1, before the slice ([roadmap](../specs/full_game_systems_roadmap.md) section 2). The last column says when.
+
+| Screen | What it shows | Layer | When |
 | --- | --- | --- | --- |
-| Bunks (the Dry Hollows) | 6 (later 8) bunks with each operative's state: ready, wounded, captured (memorial), Isolation Crypts; dismiss and retire | `[kit hook]` unit lifecycle | none; the Character screen's roster |
-| Facility (Tinker's Hearth, Apothecary's Slab) | keeper, level, projects (the bunk project), exchange recipes | `[kit hook]` facility + recipes | dialogue choices that `take` and `give` items |
-| Slab patient view | the anatomical silhouette with four graft regions (Act 2) | `[game code]` | none (Act 2) |
-| Mission board (Tess's dead-drop board) | the next main mission and optional board work | `[kit hook]` | Tess's dialogue offering quests (`start_quest`) behind flags |
-| Vignette player | the opening vignette cards, the hearth scene card, act title cards, the Doom Clock's first appearance | `[kit hook]` (images and timed text on the engine painter) | dialogue lines over the region map |
-| Endings | Ending A Preservation, B Ascendancy, C Red Martyrdom (Act 3, proposal) | `[kit hook]` vignette player, `[data]` cards | none (Act 3) |
-| Extinguished | the failure screen: no living operative, or the Act 3 Doom Clock runs out | `[kit hook]` | none in Act 1 (no fail there) |
-| Campaign meters | Doom Clock and Inquisition Alert on the map HUD bar, beside Scrap and Tallow | `[kit hook]` | flags; the world map already shows Time |
+| Bunks (the Dry Hollows) | 6 (later 8) bunks with each operative's state: ready, wounded, captured (memorial), Isolation Crypts; dismiss and retire | `[kit hook]` unit lifecycle | before the slice if the slice shows bunks (wounded, the Crucible capture); dismiss, retire and the Crypts from Act 2 |
+| Facility (Tinker's Hearth, Apothecary's Slab) | keeper, level, projects (the bunk project), exchange recipes | `[kit hook]` facility + recipes | before the slice for the Hearth's forge if the slice sells forging; the bunk project from Act 2 |
+| Slab patient view | the anatomical silhouette with four graft regions (Act 2) | `[game code]` | Act 2 |
+| Mission board (Tess's dead-drop board) | the next main mission and optional board work | `[kit hook]` | before the slice |
+| Vignette player | the opening vignette cards, the hearth scene card, act title cards, the Doom Clock's first appearance | `[kit hook]` (images and timed text on the engine painter) | before the slice |
+| Endings | Ending A Preservation, B Ascendancy, C Red Martyrdom (Act 3, proposal) | `[kit hook]` vignette player, `[data]` cards | Act 3 |
+| Extinguished | the failure screen: an Act 1 Breach (Q-13), no living operative (Act 2 on), or the Act 3 Doom Clock runs out | `[kit hook]` | before the slice (the Act 1 Breach) |
+| Campaign meters | Doom Clock and Inquisition Alert on the map HUD bar, beside Scrap and Tallow, with a clear warning at each Alert threshold | `[kit hook]` | before the slice |
 
 ## 4. Character screen: the deck
 
@@ -62,7 +65,9 @@ CANON 2.1: 8 slots = 2 base moves (Move, Active Guard) + 3 class actives + 2 pas
 has five class and three extra slots (SKILLUI1-U) and holds skill families only: basics (strike, guard, move, rest,
 switch_target, offhand_jab) are always owned and never slotted, and passives come from sources (world character,
 faction, discipline, named item), never from slots. Passive and keystone slots are therefore a `[kit hook]`, not an
-existing engine slot (CANON 2.1 says so; the slot kinds are open question Q-48). Card faces (proposal): speed tier badge in blocks, AP cost, Strain
+existing engine slot (CANON 2.1 says so). Decided (2026-10-25, user, Q-48): the deck works like today's skill slots,
+bucketed by kind (base, active, passive, keystone); passive and keystone slots are a new kit slot type. Card faces
+(proposal): speed tier badge in blocks, AP cost, Strain
 cost (Act 2), poise damage, a pierce mark for Inoculated skills; Cold Steel and Inoculated cards in two palette hues
 from the [art bible](../specs/art_and_visual_style.md).
 
@@ -83,20 +88,25 @@ from the [art bible](../specs/art_and_visual_style.md).
   hue 10).
 - The Doom Clock and Alert are not on the battle screen (the strip owns the top); see gaps.
 
-## 6. Build order (proposal)
+## 6. Build order (proposal, re-based on the 2026-10-25 milestones)
 
-1. Combat sandbox: the battle screen with the "timeline" ruleset option, poise and impact badges, run from the Scene
-   Runner arena on ENC-PRO-0A (Kaelen against the two Castellan Footmen).
-2. Hub and loadout: the Undercroft as a region map with Aline, Bram and Tess; the Character screen's deck; crafting and
-   the board through dialogue stand-ins.
-3. District loop: the Sunk Ward world map with day costs, Tallow upkeep, the Doom Clock on the HUD bar, Results lines
-   for wounded founders.
-4. Kit screens: Bunks, Facility, Mission board, Vignette player, then Endings and Extinguished (Act 3).
+1. M0-M1, the kit screens the slice needs: the Mission board, the Vignette player, the campaign meters on the HUD bar
+   with the Alert warnings, the Extinguished screen (the Act 1 Breach), Results lines for wounded and captured
+   founders, the Character screen's deck with slot kinds, and Bunks and Facility as far as the slice uses them.
+2. M1, combat sandbox: the battle screen with the "timeline" ruleset option, poise, chains and impact badges, run from
+   the Dojo and the Scene Runner arena on ENC-PRO-0A (Kaelen against the two Castellan Footmen).
+3. M2, the slice as data: the Undercroft as a region map with Aline, Bram and Tess; the Sunk Ward world map with day
+   costs and Tallow upkeep; no dialogue stand-ins.
+4. Later: the Slab patient view and the Bunks project (Act 2), Endings (Act 3).
 
 ## 7. Gaps
 
-1. Deck slots: CANON 2.1 now states that the engine slots hold skill families only (section 4); the slot kinds are
-   open question Q-48.
+1. Deck slots: CANON 2.1 now states that the engine slots hold skill families only (section 4). Decided (2026-10-25,
+   user, Q-48): slot kinds base, active, passive, keystone.
 2. Battle meters: whether the Doom Clock and Alert appear anywhere in battle.
 3. Vignette player scope: still cards with typewriter text only, or also simple pans and fades.
 4. Who opens the facility screens: the keeper NPC on the region map, or a facility list on a hub screen.
+5. How much of the Bunks and Facility screens the slice needs (the roadmap's beat 6 names the Hearth's forge and the
+   bunks): with no stand-ins allowed, the answer sets M0-M1 scope. Options: (a) both screens in a slice cut (states,
+   forge recipes); (b) the slice shows bunks only on the Character screen's roster and sells forging through the
+   existing shop Trade. Recommendation: (b) if the shop Trade counts as an existing system, else (a).

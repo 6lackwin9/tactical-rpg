@@ -68,7 +68,9 @@ rescue mission -> guest in the Water-Lock Basin (no bunk; grants a hub perk) -> 
 - Swearing in: when a bunk opens (a death, a retirement, the 8-bunk project) the player can talk to a guest to induct
   them `[kit hook]` (dialogue effect `recruit`). Only guests aged 18-24 can be sworn in; Ferrand's and Clemence's ages
   are Open.
-- In Act 1 the only authored recruits are the two late founders: Dunstan (M3) and Elyse (M4).
+- In Act 1 the only authored recruits are the two late founders: Dunstan (M3) and Elyse (M4). Act 1 holds only the six
+  founders (user 2026-10-25, Q-38): no guest is sworn in and no procedural recruit joins before Act 2; the bunk the
+  Crucible empties takes the first procedural recruit at the start of Act 2, and the 8-bunk project is Act 2 on.
 
 ## 4. Living Martyrs (proposal, Acts 2-3)
 
@@ -102,10 +104,11 @@ blight mist, who arrive at Calcification Stage III (Sensory Rot) or IV (The Shak
 | --- | --- | --- | --- | --- |
 | Founders | prologue (4), Act 1 M3 and M4 (2) | the first six bunks | Act 1: wounded, never lost, except the Crucible capture; Act 2 on: standard | emotional anchors; personal hooks |
 | Named recruits | story milestones, Act 2 on | guest first; a bunk on induction | standard | unique dialogue, hub perks, faction ties |
-| Unsealed pool | culling raids, Act 2 on | needs a free bunk | standard | origin tags, temperaments |
+| Unsealed pool | culling raids, Act 2 on (the first takes the Crucible captive's bunk) | needs a free bunk | standard | origin tags, temperaments; quirks may read Composure (CANON 2.1) |
 | Living Martyrs | Inquisition death-pens, Act 2 on | Isolation Crypts (bunk count Open) | 1-2 missions (rule Open) | burst shock troops; leave an Apex organ |
 
-The first playable slice has five founders (Elyse joins later).
+The first playable slice has five founders (Elyse joins later) and runs from the prologue at level 1, so the prologue
+missions are also the onboarding test: the first fight must already be fun (user 2026-10-25, Q-41).
 
 ## 6. Gaps (Open)
 

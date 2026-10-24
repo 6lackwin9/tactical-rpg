@@ -16,16 +16,35 @@ parts to keep each doc short:
 | [World, campaign, roster, hub](questions/open_world_and_campaign.md) | Story and world; Campaign and meters; Roster and lifecycle; Hub and economy | Q-01..Q-46 |
 | [Combat, corruption, items, enemies, art, scope](questions/open_systems_and_scope.md) | Combat and rules; Strain and Calcification; Items; Enemies; Art and assets; Slice scope; Process | Q-47..Q-91 |
 
-## 1. Decide first
+## 1. Focus order (user 2026-10-25)
 
-These block the most other work (specs, data and the slice). Recommendations in brackets.
+Every question carries a Focus in its row. Systems come first, split by system so one can be taken at a time (ordered
+by what the slice needs first; 1.6 and 1.7 serve Acts 2-3); then art that needs a new engine type; then lore modules.
+The story gaps G-21, G-23, G-25, G-26 and G-28 follow their questions (Q-29, Q-15, Q-17, Q-09, Q-21).
 
-Answered on 2026-10-25 (user, in chat): Q-01, Q-13, Q-25, Q-31, Q-47, Q-48, Q-83, Q-84 and Q-85 are decided (see
-their rows and `games/emberwake/docs/decisions/lore.md`); Q-04 and Q-16 are accepted in principle but wait for the
-story context in [tithing_options.md](background/tithing_options.md); Q-49 waits for a balance review; Q-47a (which
-resist takes Composure's uses) is new. The next ones to decide are Q-04 / Q-16, Q-09, Q-47a and Q-52. Story gaps
-G-01..G-30 (character arcs, motives and fates, several new) are in [STORY_GUIDE.md](STORY_GUIDE.md) section 7; they get
-Q-ids when decided.
+| Order | Focus | System | Open questions |
+| --- | --- | --- | --- |
+| 1.1 | `1.1 combat` | Combat rules and feel (the M1 prototype and every slice fight): armour, poise, statuses, skill conventions, board size, reach, area shapes, the Crucible winch, enemy intent | Q-49 (after balance), Q-51, Q-57, Q-58, Q-59, Q-60, Q-61, Q-70, Q-72, Q-75, Q-91 |
+| 1.2 | `1.2 campaign` | Campaign meters and fail states (M0 hooks): Alert across acts, the Doom Clock budget, doctrine, lost battles, sieges, board jobs on the graph | Q-14, Q-17, Q-19, Q-20, Q-21, Q-22, Q-30 |
+| 1.3 | `1.3 roster` | Roster and lifecycle: freed youths, downed and captured, keepsakes, crypts and bunks, Living Martyrs, small roster rules, the first recruit | Q-29, Q-32, Q-34, Q-36, Q-37, Q-40, Q-93 |
+| 1.4 | `1.4 hub` | Hub and economy: zero Tallow, forward bases, facility levels, the Rock Salt flush, Act 3 Tallow, hub screens and meters, Quenched Cinder Salt | Q-18, Q-23, Q-42, Q-43, Q-45, Q-46, Q-69 |
+| 1.5 | `1.5 slice` | Slice scope and process: the rest of Act 1, prototype order and vignettes, barks, data ids, the Bunks and Facility screens | Q-86, Q-88, Q-89, Q-90, Q-96 |
+| 1.6 | `1.6 corruption` | Corruption and derived stats (Act 2 on): bell resonance on calcified operatives, Strain caps and kit, keystone cost, enemy Strain, Aline's dose, Strain sims, small Strain picks, hazard Composure checks, derived stats | Q-10, Q-62, Q-63, Q-64, Q-65, Q-66, Q-67, Q-68, Q-92; DERIVE1 DQ1-DQ5 (`docs/specs/DERIVE1.md`) |
+| 1.7 | `1.7 content` | Enemy and item content design: weapon families, boss kits, Act 2-3 adversaries | Q-71, Q-74, Q-76 |
+| 2 | `2 art type` | Art and assets that cannot reuse existing assets and need their own type in the engine | Q-78 (several skin ramps in the rig), Q-79 (frames larger than 48 x 48), Q-80 (palettes per world), Q-82 (camera shake) |
+| 2 | `2 art` | Other art questions (process, reuse) | Q-77, Q-81 |
+| 3 | `3 lore` | Lore and events, kept modular and independent: each is looked at on its own without fleshing out the broader narrative, written as a lore module ([modules/README.md](modules/README.md)); the narrative is fleshed out later by connecting the modules | Q-05, Q-08, Q-11, Q-24, Q-26, Q-27, Q-39, Q-73, Q-95, Q-97; story gaps G-03 to G-07, G-13, G-18 to G-20, G-22, G-29, G-30 |
+| Separate | `core story` | The core narrative the game needs to be built at all (the spine, the slice's story beats, world logic the systems read): handled on its own track, not mixed into the lore modules | Q-02, Q-03, Q-06, Q-09, Q-28, Q-35, Q-87, Q-94; story gaps G-08, G-09, G-10, G-12, G-14 to G-17, G-31, G-32, G-33 |
+
+### Decided first (2026-10-25)
+
+These blocked the most other work (specs, data and the slice). Recommendations in brackets.
+
+Answered on 2026-10-25 (user, in chat): Q-01, Q-04, Q-13, Q-16, Q-25, Q-31, Q-47, Q-47a, Q-48, Q-83, Q-84 and Q-85
+are decided, with Q-07, Q-12 and Q-33 following from them (see their rows and
+`games/emberwake/docs/decisions/lore.md`); Q-49 waits for a balance review. Later the same day the user also answered
+Q-15, Q-38, Q-41, Q-44, Q-50, Q-52, Q-53, Q-54, Q-55 and Q-56. Story gaps G-01..G-30 (character arcs, motives and
+fates) are in [STORY_GUIDE.md](STORY_GUIDE.md) section 7; they get Q-ids when decided.
 
 | Id | Question | Blocks |
 | --- | --- | --- |

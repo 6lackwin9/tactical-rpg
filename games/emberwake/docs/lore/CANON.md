@@ -29,6 +29,13 @@ and no countdown on any founder (the hearth line "four months" becomes a non-mec
 
 ### 2.1 Combat (ruleset option "timeline"; the Ashlands keeps "classic") `[kit hook]`
 
+The ruleset is a world field (the Ashlands "classic", `sunk_ward` "timeline") with a Dojo toggle (user 2026-10-25,
+Q-52). The engine is reused with the Ashlands as the baseline: a rule incompatible with the classic rules is built as
+an option; a compatible one as an extension that can be disabled; bug fixes go to the core and may need an Ashlands
+or kit revisit. Every engine and kit system the slice needs is built before it, so the slice itself is only narrative
+choices and catalog data (Q-55, Q-56). Commands that work together chain: a follow-up skill can start in the blocks a
+previous action leaves, otherwise the unit spends them in recovery; recovery makes heavy skills a commitment (Q-54).
+
 | Rule | Canon value | Layer |
 | --- | --- | --- |
 | Round | 6 blocks, all sides resolved simultaneously; timeline strip at the TOP of the battle screen | [kit hook] (exists: `emberwake_battle::resolver`); only the strip widget is [engine] (`aegis_ui::timeline`) |
@@ -37,6 +44,7 @@ and no countdown on any founder (the hearth line "four months" becomes a non-mec
 | Speed tiers | Relative windups: Snap 1 block, Standard 2, Heavy 3-4; the impact lands at the end of the action's own blocks; a maneuver may add recovery blocks. No fixed tick anchors | [data] through the skill field `blocks` (exists); recovery blocks are a new [kit hook] |
 | Same-block impacts | The game's initiative order; no mutual trades (a unit stopped earlier in the block does not land) | [kit hook] (exists) |
 | Poise | Max Poise = CONS x 2 + armour poise from gear (coefficients planner pick); refills each round; break at 0. CONS runs 6-18 in the stat budget, so CONS x 2 is 12-36 before armour; the lore's stagger values (Pommel Strike 25, Jaw-Breaker 30) were set for flat bars of 30-70 and need a rescale (Q-50) | [kit hook] (new) |
+| Stagger intent | A break is a tactical choice to disrupt an enemy action (user 2026-10-25, Q-50 a): the lore's stagger values are rescaled to a fraction of a typical Max Poise and heavy enemy windups get more poise or an unbreakable flag; an optional seeded chance to break adds some randomness, with a guaranteed break at a cost (AP, a skill or Strain; the design lane specs it, then a sim) | [kit hook] |
 | Stagger multipliers | x2 if struck in windup, x2 in Flesh-Tension, x0.5 under Active Guard; they multiply (planner pick) | [kit hook] |
 | Repeated breaks | A unit's second break in the same round or in the next round costs double stagger | [kit hook] |
 | Break effect | Cancels the action in windup and the unit's remaining blocks that round; nothing else (the evasion and +25% damage riders are dropped, planner pick) | [kit hook] |
@@ -44,6 +52,7 @@ and no countdown on any founder (the hearth line "four months" becomes a non-mec
 | Armour | The hyperbolic curve, reduction = rating / (rating + 50). Design intent (user 2026-10-25, Q-49): from Act 2, fights are hard unless the cell uses armour pierce and the other Inoculation benefits; the scale is set after a balance review. Until then lore armour points x 2 = engine rating (planner pick): Flesh-Tension +2 -> +4 rating, Chitin +1 -> +2, "shreds 4 armour" -> expose 8, boss armour 3-5 -> rating 6-10 | [kit hook] (exists: `emberwake_rules::damage`), [data] ratings |
 | Pierce | Inoculated attacks ignore armour (binary, DEC-LORE-12 baseline). Today's damage type `pierce` is a type, not a bypass, so this needs an armour-bypass skill flag | [kit hook] (new flag), [data] (which skills set it) |
 | Deck | 8 = 2 base moves (Move, Active Guard) + 3 class actives + 2 passives + 1 keystone. Today the basics (strike, guard, move, rest, switch_target, offhand_jab) are always active and take no slot, so the two base moves sit outside the loadout; the 5 class + 3 extra loadout slots hold skill families; passives are granted by sources (the world character, faction grants, disciplines, named items), not slotted. Decided (user 2026-10-25, Q-48): the deck works like today's skill slots, bucketed by kind (base, active, passive, keystone); the passive and keystone kinds are a new kit slot type | [kit hook] (new slot type) |
+| Composure | A derived stat, not a seventh base stat (user 2026-10-25, Q-47 and Q-47a): the corruption resist, computed by its own formula from base stats plus gear, status and Calcification modifiers; shown on the unit panel; read by every corruption effect (Calcification I, the curfew chimes, the shockwave, nightmares, the Martyr mercy reward, recruit quirks). Formula and numbers: the derived-stat spec and the balance lane | [engine] formula evaluator, [kit hook] data-defined derived stats (new), [data] the Composure row |
 | Pouch, gear | Pouch 3; six gear slots MAIN, OFF, HEAD, BODY, ACC1, ACC2. Graft slots 4 (Cranial, Thoracic, Forearms, Visceral) are an Act 2 proposal | [kit hook] (exists: `emberwake_rules::gear`); graft slots new |
 | Cut | Evasion and accuracy rolls, facing, backstab and stealth cones, the d100 crisis, mutual trades, the multi-track ghost scrubber (start with impact badges on the existing strip), stances (DEC-LORE-11) | - |
 
@@ -77,7 +86,7 @@ Advances only through Flesh Breach and Tier III graft surgery (not by ending a b
 
 | Stage | Name | Effect |
 | --- | --- | --- |
-| I | Vein-Blackening | +5% debuff resistance; the old "-5 Composure" becomes a resist malus (Composure is dropped, Q-47; which resist is open, Q-47a) |
+| I | Vein-Blackening | -5 Composure, +5% debuff resistance |
 | II | Calloused Chitin | +2 armour rating, -1 tile per move block |
 | III | Sensory Rot | immune to fear and morale debuffs; -15% ranged damage beyond 3 tiles (planner pick: accuracy rolls are cut) |
 | IV | The Shakes | cannot equip two-handed weapons (bows and arbalests included); melee and bare-handed attacks pierce armour; sleeps in the Isolation Crypts |
@@ -91,7 +100,7 @@ The only undo: Aline's bone-scraping (unlocked by her quest), -1 stage and -10% 
 | --- | --- |
 | Ages | Playable operatives and recruits 18-24; Unsealed = everyone under 25; children are stakes, never fighters; no combat graft surgery on anyone under 18. The Spent rarely pass 45 (Agnes, 44, is one of the oldest in the Ash-Crawl; Othemar at 64 is the exception, see the central truth) |
 | Squad | Up to 4 deployed (`PARTY_MAX` 4, [kit hook] exists). RECRUIT1 refuses a recruit once the roster holds `party_max`, so the bunk count needs a separate roster cap ([kit hook] new) |
-| Bunks | 6 at the start of Act 1 (4 filled after the prologue); 8 through Bram's "Expanded Timber Frames" project, chosen by the player; later hubs inherit the count. Guests take no bunk until sworn in |
+| Bunks | 6 at the start of Act 1 (4 filled after the prologue); Act 1 holds only the six founders (user 2026-10-25, Q-38); the bunk the Crucible empties takes the first procedural recruit at the start of Act 2; 8 through Bram's "Expanded Timber Frames" project from Act 2, chosen by the player; later hubs inherit the count. Guests take no bunk until sworn in |
 | Founder at 0 HP | Downed. Act 1: after the battle a downed founder is wounded (no death, no capture). From Act 2: permadeath and capture. Wounded: deploys at -20% max HP until a rest (user 2026-10-25, Q-31; a baseline the balance lane revisits); the Act 2 downed rule: Q-32 |
 | Scripted loss | The Crucible: one founder, chosen from the four deployed, holds the winch and is taken alive by the Inquisition |
 | Corrupted-founder boss | Optional Act 3 node, only for a captured founder (the Crucible's, or one captured in Act 2) |
@@ -112,7 +121,7 @@ No other upkeep (per-operative, per-leg, Tallow-and-Salt and per-rest versions a
 | Meter | Canon value |
 | --- | --- |
 | Inquisition Alert | 0-100%: 0-30 Guarded, 31-70 Suspicious, 71-99 Lockdown, 100 Breach. No siege in Act 1. Act 1 (user 2026-10-25, Q-13): Breach ends the run, but only a player who blatantly ignores the meter gets there (small Act 1 inputs, clear warnings at each threshold; the warning steps are a design-lane spec with Q-15). Acts 2-3: Alert is an active management task; Breach starts a siege of the hub; a lost siege costs facilities and forces a relocation, never a Game Over |
-| Doom Clock | The Red Tithing calendar in days, visible from Act 1 day 1 at 42 days ("six weeks"). Soft in Acts 1-2 (story pressure, no fail); hard in Act 3 (fail if it reaches 0 before node 21 falls) |
+| Doom Clock | The Red Tithing calendar in days, visible from Act 1 day 1 at 42 days ("six weeks"). Story (user 2026-10-25, Q-04 and Q-16; section 3.6): it counts to this year's rite, which the Clerisy turns into a Great Tithing because the cell's raids hasten the titan's waking; 2.4 reveals that and relabels the clock "the Great Tithing"; at 0 in Acts 1-2 the Clerisy holds a lesser tithing and the clock restarts. Soft in Acts 1-2 (story pressure, no fail); hard in Act 3 (fail if it reaches 0 before node 21 falls) |
 | Time costs | Route `time` 1 = 1 day on the travel clock ([kit hook] exists: `emberwake_world::travel`, `GameState.time`); a stealth leg takes 1 day more; a rest costs 1 day (planner pick; a rest advancing time is a [kit hook] extension); battles cost no days (planner pick) |
 | Doctrine | Preservationist (Bram) to Flesh-Broker (Aline), Act 2 on; gates the endings |
 
@@ -147,7 +156,7 @@ mission when the previous one is done (planner pick).
 | M3 | The Bone-Mill Raid | 04 Fourth Kiln | ENC-EVT-03, Overseer Grendel | Dunstan (bunk 5) | - |
 | M4 | The Tallow Vats | 05 Tallow Vats | ENC-EVT-04, Guild-Master Orlov (Vesper's vendetta) | Elyse (bunk 6) | - |
 | Interlude | The Awakening Fissure | 00 Sluice Undercroft | ENC-EVT-05, the Calcified Amalgam; Aline's single marrow dose (first grafting teaser) | - | Which deployed founder takes the dose; that founder starts Act 2 at Calcification I (planner pick) |
-| M5 | The Crucible | 06 Crucible Watchpost to 07 Slag Gate | ENC-EVT-06, Inquisitor-Prelate Nemeth; one founder holds the Slag Gate winch; the cell escapes and Nemeth survives into Act 2 (user 2026-10-25, Q-25) | Loses the chosen founder (captured) | Deploy four (the Crucible requires four, planner pick); choose who stays |
+| M5 | The Crucible | 06 Crucible Watchpost to 07 Slag Gate | ENC-EVT-06, Inquisitor-Prelate Nemeth; one founder holds the Slag Gate winch; the cell escapes and Nemeth survives into Act 2 (user 2026-10-25, Q-25); he returns in Acts 2-3 (3.6) | Loses the chosen founder (captured) | Deploy four (the Crucible requires four, planner pick); choose who stays |
 
 Optional Act 1 board work: Kaelen's watchpost raid (forge bellows), Hollis's vantage points over the Crucible, Vesper's
 drainage locks (route shortcuts), Tess's "Night of the Red Pen" (rescue Pip), Agnes's "Rafters of Tenement 12", Corvo's
@@ -168,7 +177,7 @@ gate, Brother Rook on street nodes. ENC-EVT-05 is not a siege in Act 1.
 | 2.1 | 09 Gilded Boulevard | ENC-ACT2-01, Inquisitor-General Ruthven's checkpoint | Into Upper Cinderreach |
 | 2.2 | 12 Culling Stockades | ENC-ACT2-02, culling wagon (repeatable) | Recruits 18-24; Lucan's rescue (planner pick: one wagon) |
 | 2.3 | 10 Tallow Reservoir | ENC-ACT2-03 | +20 Warded Tallow, -30 Alert |
-| 2.4 | 11 Embalming Cloisters | ENC-ACT2-04, Chief Anatomist Lazar (Aline's quest) | Apex grafting; the true Tithing date |
+| 2.4 | 11 Embalming Cloisters | ENC-ACT2-04, Chief Anatomist Lazar (Aline's quest) | Apex grafting; the Great Tithing's date and scale, and that the cell's raids caused it; the cell sees Nemeth deliver the captured founder to Lazar's anatomists and arrives too late (3.6) |
 | 2.5 | 13 Grand Belltower | ENC-ACT2-05, Bell-Warden Colossus | Silences the bells' resonance in Upper Cinderreach (conflicts with 3.3: Q-09) |
 | 2.6 | 14 Reliquary Crypts to 15 Grand Spire Gate | ENC-ACT2-06, Reliquary Guardian | Key of the Mantle Chasm; Act 3 |
 
@@ -181,11 +190,65 @@ Key choices: the doctrine split, Living Martyrs, the siege dilemma (defend the h
 | 3.1 | 17 Weeping Basalt Chasm | ENC-ACT3-01, Chasm Gatekeepers | Foothold |
 | 3.2 | 18 Marrow Conduits | ENC-ACT3-02, High Castellan Ulric | Conduits cut; Doom Clock +2 days |
 | 3.3 | 19 Chorus Spire (optional) | ENC-ACT3-03, Cantor Ysolde | Flesh-Brokers may turn the Chorus against the altar; Malachi mediates (planner pick) |
-| 3.4 | 20 Silent Ossuary (optional) | ENC-ACT3-04, the corrupted founder | Mercy; the Transcendent Relic (upgrades the keepsake, planner pick) |
+| 3.4 | 20 Silent Ossuary (optional) | ENC-ACT3-04 in two phases (user 2026-10-25): Nemeth with the corrupted founder at his side, then the founder goes insane and kills everyone, Nemeth included (3.6) | Nemeth's Warded Cassock; mercy; the Transcendent Relic (upgrades the keepsake, planner pick) |
 | 3.5 | 21 High Altar | ENC-ACT3-05, Arch-Prelate Othemar | Othemar always falls here (planner pick); the Doom Clock stops |
 | 3.6 | 22 Dreaming Core | ENC-ACT3-06, the titan | Endings |
 
 Main path 16-17-18-21-22; 19 and 20 are optional (planner pick).
+
+### 3.6 The Great Tithing and Nemeth (user 2026-10-25; "(refinement)" marks the planner's detail on the user's gist)
+
+The Great Tithing (Q-04, Q-16, Q-12; [tithing_options.md](background/tithing_options.md) option B with b2):
+
+- Founding: the Sovereign Clerisy was founded two centuries ago, in the dark of the Extinguishing, as the order that
+  holds the Tithing ritual to pacify the titan; that is its public charter. Its founding act was the first Great
+  Tithing, held under cover of the Extinguishing, its dead recorded as the titan's wrath. The founders found that the
+  dream's marrow kept them young, and the harvest began (the central truth, Option A). They are "the first
+  Extinguishers", entombed in the Reliquary Crypts (2.6), where the record of that night lies (Q-12 option a).
+- What the folk know: only the yearly Red Tithing (hundreds of Unsealed). The Great Tithing (thousands) is known to the
+  Clerisy's inner circle alone. What caused the Extinguishing stays a mystery (b2).
+- Why this year: the cell's own raids hasten the waking. Every tithe it frees and every station it breaks starves the
+  dream, the titan stirs, and the Clerisy turns this year's rite into a Great Tithing to drug it back to sleep. The
+  more the cell saves, the more the Clerisy needs. (refinement: the decision follows the Act 1 raids, M2 and the
+  Crucible; the player learns it at 2.4 from Lazar's records.)
+- Reveal path: Act 1, hints in Agnes's tales of the stars and Maren's forbidden texts (Q-07 option a: a chronicle of
+  the first Great Tithing); 2.4, the date, the scale and the cause; 2.6, the founders' record in the Reliquary Crypts;
+  Act 3, Malachi confirms what the dream is fed for.
+- What the Tithing is (user 2026-10-25): not only a killing. The Clerisy raises children as sacrifices for the titan,
+  and the marrow it drinks comes from the remains of the sacrificed; the younger the child, the more potent the
+  marrow. (refinement:) the tithe-children are raised from infancy in the Clerisy's foundling houses, the Lullaby
+  Houses, where they are sung the lullaby each night and the folk see charity; Unsealed youths swept from the wards
+  fill out the yearly count. After the rite the tithed are laid in the crypts over the titan's veins, where the dream
+  steeps them; Lazar's anatomists render the remains into marrow in the Embalming Cloisters, and the conduits carry it
+  up to the cathedral. Without the dream the remains are only flesh, which is why the Clerisy needs the titan asleep
+  and dreaming, and why its waking ends the harvest. The old serve too: the Spent are drugged docile and, dead, are
+  rendered into tallow by the Guild; the young become marrow, the old become fuel. The Inquisition's infusions
+  (Quell's valve, Nemeth's) are aberrant marrow from older, weaker stock, which wears the body down. A Great Tithing
+  yields marrow for a generation.
+- Tone rule (refinement): children are stakes, never fighters or on-screen victims; the game shows the Lullaby Houses,
+  the rite, the pens and the marrow, never violence to a child.
+- Endings: A Preservation ends the cycle (no dream to feed); B Ascendancy hands the cell the chronicle and the source,
+  so the next Great Tithing would be theirs to call; C Red Martyrdom sates the dream so the cycle never turns again.
+  Losing (the Extinguished screen) is a second Extinguishing for the Unsealed.
+
+Nemeth (Q-25, G-01, G-02):
+
+- Act 1: escapes the Crucible with the captured founder (3.2).
+- Want (refinement): his infusion is the Inquisition's crude aberrant marrow, which wears the body down; he wants the
+  Clerisy's pure marrow, rendered from the youngest tithe-children, and a place among the ageless. The captured
+  founder is his offering: he gives them to Lazar's anatomists to be made into a saint-weapon against the cell.
+- Act 2 sighting (refinement): at 2.4 the cell sees Nemeth deliver the founder to Lazar and arrives too late; this
+  also closes a rescue (Q-33 option a).
+- Act 3, node 20 the Silent Ossuary, one battle in two phases (user 2026-10-25): (1) the founder, already corrupted
+  by Lazar's anatomists, fights at Nemeth's side against the cell; (2) fighting their old teammates breaks the
+  founder's mind: they go insane and kill everyone in reach, Nemeth and his guard included, and the cell fights the
+  monstrosity alone. The win offers mercy and the Transcendent Relic. Nemeth's Warded Cassock drops where he dies.
+  (refinement:) phase 1 lets the founder use their old signature moves, twisted, and the founder's lines answer the
+  cell by name; the break comes on an `hp_below` trigger on the founder with a round fallback, or earlier if Nemeth
+  falls low. Build: one encounter with phases ([kit hook] exists: `emberwake_battle::encounter`, `hp_below` with
+  `or_round`, line, status, ai and enrage effects); new and small: a phase effect that kills named units, and a
+  "hostile to all sides" AI or faction switch for the founder ([kit hook] new); the monstrosity's larger body is a
+  unit swap (Q-79 for 96 x 96 art).
 
 ## 4. Endings (proposal; meaning set by the central truth)
 
@@ -202,7 +265,11 @@ Main path 16-17-18-21-22; 19 and 20 are optional (planner pick).
 | --- | --- | --- |
 | Act 1 / 2 / 3 | Campaign units; titles The Young Vanguard, The First Rupture, The Awakening Abyss | Phase 1-3, The Iron Vanguard, The Transhuman Rupture, The Blight of the Low Sleep, The Closed Four |
 | The Low Sleep | The titan's slumber and, by extension, the titan | (title "Emberwake: The Low Sleep") |
-| The Red Tithing | The recurring sacrifice of Unsealed youths of any age | - |
+| The Red Tithing | The recurring sacrifice of Unsealed youths of any age, children raised for it in the Lullaby Houses first; their remains become the Clerisy's marrow; the yearly rite is the one the folk know | - |
+| The Lullaby Houses | The Clerisy's foundling houses that raise tithe-children (planner refinement, 3.6) | - |
+| The Great Tithing | A Tithing of thousands, held once before at the Extinguishing (the Clerisy's founding) and again this year; known to the Clerisy's inner circle until 2.4 | - |
+| Lesser tithing | An out-of-season Tithing the Clerisy holds when the soft Doom Clock reaches 0 in Acts 1-2 | - |
+| Composure | The derived corruption resist (section 2.1) | - |
 | The Unsealed / the Spent | Under 25 / 25 and over (compliant through decades of draughts and tallow fumes) | The Caged Young, The Spent Generation (fine in prose), Docile Masses |
 | Sovereign Clerisy, Iron Inquisition, Castellan Watch, Tallow Guild, Fourth Kiln Syndicate, Severed Root, Awakening Chorus | Factions; the Watch is the Inquisition's city arm, the Syndicate the Guild's foundry arm | Hegemony, High Hegemony, Sub-Basalt Cults, Seventh Ward Watch, Castellan Guard |
 | Preservationist / Flesh-Broker | The two doctrines | The Purists, The Inoculated (as faction names) |
@@ -224,16 +291,16 @@ Main path 16-17-18-21-22; 19 and 20 are optional (planner pick).
 
 Every open question, with options, a recommendation, where it lives and who decides, is in
 [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) (stable ids Q-01..Q-91; the questions to decide first in its section 1, the
-planner picks to confirm in its section 2). The ones this file names: the Tithing's history and what commoners know
-(Q-04 with Q-16, options in [tithing_options.md](background/tithing_options.md)); the bell-resonance contradiction
+planner picks to confirm in its section 2). The ones this file names: the bell-resonance contradiction
 between 3.3 and 3.4 (Q-09, no pick); Alert across act lines (Q-14); soft-clock expiry in Acts 1-2 and the Act 3 day
 budget (Q-16, Q-17); doctrine inputs and thresholds (Q-19); a fight for Inquisitor-General Ruthven (Q-26); the act of
 Bram's quest (Q-27); the Act 2 downed rule (Q-32); rescuing a captured founder in Act 2 (Q-33); keepsake numbers
 (Q-34); Living Martyrs' "+1 stage per battle" against the Calcification rule of 2.3 (Q-37); costs of the 8-bunk
-project (Q-38); the Rock Salt flush effect (Q-43); which resist replaces Composure (Q-47a); the armour scale after the
-balance review (Q-49); the stagger rescale (Q-50); post-crisis Strain (Q-62).
+project (Q-38); the Rock Salt flush effect (Q-43); the armour scale after the balance review (Q-49); the stagger rescale (Q-50); post-crisis Strain (Q-62).
 
 Decided on 2026-10-25 (user; rows in `games/emberwake/docs/decisions/lore.md`): the central truth is Option A (Q-01);
 an Act 1 Breach ends the run only for a player who ignores the meter (Q-13); Nemeth escapes the Crucible (Q-25);
-wounded = -20% max HP until a rest (Q-31); Composure is dropped (Q-47); the deck is bucketed slot kinds (Q-48); the
-slice and its dilemma follow the roadmap (Q-83, Q-84, Q-85).
+wounded = -20% max HP until a rest (Q-31); Composure is not a base stat (Q-47); the deck is bucketed slot kinds (Q-48); the
+slice and its dilemma follow the roadmap (Q-83, Q-84, Q-85). Also 2026-10-25: the Great Tithing's story, the
+Clerisy's founding and Nemeth's arc (section 3.6; Q-04, Q-12, Q-16, Q-25 follow-up); Composure returns as a derived
+stat, the corruption resist (Q-47a).

@@ -15,8 +15,9 @@ Chasm from the Reliquary ([High Bastion map](upper_bastion_campaign_map.md) sect
 Spire Gate and descends into the caldera.
 
 Far below the city lies the titan of the Low Sleep. Veins of black marrow as thick as aqueducts run through boiling
-basalt canyons; the cathedral bells above ring down through the stone. The Clerisy is preparing the Red Tithing at the
-High Altar (its size is open, see gaps).
+basalt canyons; the cathedral bells above ring down through the stone. The Clerisy is preparing the Great Tithing at
+the High Altar: thousands of Unsealed, this year's rite turned into the second Great Tithing since the Clerisy's
+founding, because the cell's raids hasten the waking (user 2026-10-25, [CANON.md](../CANON.md) 3.6).
 
 The district graph has 8 nodes `[data]`. Main path 16-17-18-21-22; nodes 19 and 20 are optional.
 
@@ -33,7 +34,7 @@ The district graph has 8 nodes `[data]`. Main path 16-17-18-21-22; nodes 19 and 
                     +------------------------+------------------------+
                     | [route: Silent Ossuary]                         | [route: Pulsing Vein Chasm]
          [ 20. SILENT OSSUARY ] (optional)                 [ 18. MARROW CONDUITS ]
-     (3.4, ENC-ACT3-04: the corrupted founder)       (3.2, ENC-ACT3-02: High Castellan Ulric)
+     (3.4, ENC-ACT3-04: Nemeth, the founder)         (3.2, ENC-ACT3-02: High Castellan Ulric)
                     ^                                                 ^
                     | [route: Chasm Rift]                             | [route: Fissure Bridges]
          [ 19. CHORUS SPIRE ] (optional)                   [ 17. WEEPING BASALT CHASM ]
@@ -54,8 +55,9 @@ The district graph has 8 nodes `[data]`. Main path 16-17-18-21-22; nodes 19 and 
 
 ### 2.1 The Doom Clock turns hard
 
-- The Doom Clock is the Red Tithing calendar in days, visible since Act 1 day 1 (42 days); soft in Acts 1-2, hard in
-  Act 3 `[kit hook]` campaign meter with a fail trigger, `[data]`.
+- The Doom Clock is the Red Tithing calendar in days, visible since Act 1 day 1 (42 days) and labelled "the Great
+  Tithing" since mission 2.4; soft in Acts 1-2 (a lesser tithing at 0, then it restarts), hard in Act 3 `[kit hook]`
+  campaign meter with a fail trigger, `[data]`.
 - A route leg costs 1 day (stealth +1 day); a rest costs 1 day; battles cost no days `[kit hook]` travel clock
   (exists).
 - If the clock reaches 0 before node 21 (the High Altar) falls, the campaign shows the **Extinguished** failure screen
@@ -67,7 +69,8 @@ The district graph has 8 nodes `[data]`. Main path 16-17-18-21-22; nodes 19 and 
 - Crossing an unwarded node gives every operative at Calcification Stage I or later +10 Strain at the start of the next
   battle.
 - In battle, every 3 rounds a continental shockwave hits every unit: 10 damage that ignores armour and -15 Poise unless
-  it passes a Composure check (Composure undefined, see gaps) `[kit hook]` scheduled hazard.
+  it passes a Composure check (Composure is the derived corruption resist, CANON 2.1; how the check resolves: see gaps)
+  `[kit hook]` scheduled hazard.
 
 ### 2.3 Atmosphere and Warded Tallow
 
@@ -97,7 +100,7 @@ The district graph has 8 nodes `[data]`. Main path 16-17-18-21-22; nodes 19 and 
 | 3.1 | Descent | 17 Weeping Basalt Chasm | ENC-ACT3-01, Chasm Gatekeepers | Foothold |
 | 3.2 | Conduits | 18 Marrow Conduits | ENC-ACT3-02, High Castellan Ulric | Conduits cut; Doom Clock +2 days |
 | 3.3 | The Choir (optional) | 19 Chorus Spire | ENC-ACT3-03, Cantor Ysolde | Flesh-Brokers may turn the Chorus against the altar; Malachi mediates |
-| 3.4 | The Martyr (optional) | 20 Silent Ossuary | ENC-ACT3-04, the corrupted founder | Mercy; the Transcendent Relic |
+| 3.4 | The Martyr (optional) | 20 Silent Ossuary | ENC-ACT3-04 in two phases: Nemeth with the corrupted founder at his side, then the founder goes insane and kills everyone, Nemeth included | Nemeth's Warded Cassock; mercy; the Transcendent Relic |
 | 3.5 | High Altar | 21 High Altar | ENC-ACT3-05, Arch-Prelate Othemar | Othemar falls; the Doom Clock stops |
 | 3.6 | The Sleep | 22 Dreaming Core | ENC-ACT3-06, the titan | Endings A, B, C |
 
@@ -134,20 +137,29 @@ The district graph has 8 nodes `[data]`. Main path 16-17-18-21-22; nodes 19 and 
 
 ### 4.4 Mission 3.4: the corrupted founder (optional)
 
-- **Only if a founder was captured:** the Crucible's (always one, unless a rescue exists; open in CANON.md section 6)
-  or one captured in Act 2 `[kit hook]` unit lifecycle (captured).
-- **Story:** in the deepest ossuary the cell finds the captured founder. Nemeth took them alive at the Crucible; the
-  Clerisy's anatomists wired them into black-iron scaffolding and filled them with raw marrow to make a saint-aberration.
-- **Encounter:** ENC-ACT3-04. The Martyr-Saint (the corrupted founder) + 2 Suture-Priests `[data]`.
-- **Boss:** keeps the founder's signature skills (for example Kaelen's Shield Slam or Vesper's Shadow Leap), twisted
-  with aberrant mutations `[data]` boss built from the founder's loadout, boss phases (exists).
-- **Payoff:** mercy: the founder is released. The Founder's Transcendent Relic upgrades the keepsake (numbers open)
-  `[data]`.
+- **Only if a founder was captured:** the Crucible's (always one; the 2.4 sighting closes a rescue in practice, Q-33)
+  or one captured in Act 2 `[kit hook]` unit lifecycle (captured). Nemeth's part assumes the Crucible's founder; a
+  second founder captured in Act 2 at node 20 is not written.
+- **Story** ([CANON.md](../CANON.md) 3.6, user 2026-10-25): in the deepest ossuary the cell finds Inquisitor-Prelate
+  Nemeth and the captured founder. Nemeth took them alive at the Crucible, escaped with them and gave them to Lazar's
+  anatomists (the cell saw the handover at 2.4); the anatomists made them a saint-weapon against the cell.
+- **Encounter:** ENC-ACT3-04, one battle in two phases `[kit hook]` boss phases (exist: `emberwake_battle::encounter`,
+  `hp_below` with `or_round`, line, status, ai and enrage effects), `[data]`:
+  - phase 1: Nemeth and his guard, with the founder, already corrupted, fighting at his side against the cell; the
+    founder uses their old signature moves, twisted (for example Kaelen's Shield Slam or Vesper's Shadow Leap), and
+    their lines answer the cell by name (refinement);
+  - the break: fighting their old teammates breaks the founder's mind; they go insane and kill everyone in reach,
+    Nemeth and his guard included. Trigger (refinement): `hp_below` on the founder with a round fallback, or earlier
+    if Nemeth falls low. New and small `[kit hook]`: a phase effect that kills named units, and a "hostile to all
+    sides" AI or faction switch for the founder;
+  - phase 2: the cell against the monstrosity alone; its larger body is a unit swap (96 x 96 art: Q-79).
+- **Drops and payoff:** Nemeth's Warded Cassock drops where he dies (at the break). After the win: mercy, the founder
+  is released; the Founder's Transcendent Relic upgrades the keepsake (numbers open) `[data]`.
 
 ### 4.5 Mission 3.5: Othemar's last sacrament
 
 - **Story:** on a cyclopean basalt altar over the titan's heart, Arch-Prelate Othemar prepares the captive youths for
-  the Red Tithing.
+  the Great Tithing (no violence to a child is shown, CANON 3.6).
 - **Encounter:** ENC-ACT3-05. Arch-Prelate Othemar in a gold-and-iron reliquary war-chassis, 2 Castellan
   Inquisitors and 2 Purifier Executioners `[data]`.
 - **Objective:** kill the Executioners within 4 rounds to stop the sacrifice while surviving Othemar's magnesium beams
@@ -181,7 +193,7 @@ What a defeat in ENC-ACT3-06 leads to is open (see gaps).
 | ENC-ACT3-01 | Chasm ingress | Quarry: farm black basalt ore for endgame Black-Iron armour |
 | ENC-ACT3-02 | Conduit severance | Cut auxiliary lines to stop war-engine reinforcements |
 | ENC-ACT3-03 | Chorus Spire | Choral pact: Chorus zealots join as guests `[kit hook]` objectives (guests) |
-| ENC-ACT3-04 | The lost founder | Closure for the survivors (the old "maximum Composure" reward waits on Composure) |
+| ENC-ACT3-04 | The lost founder and Nemeth | Closure for the survivors (the old "maximum Composure" reward: Composure is the derived corruption resist, CANON 2.1; whether this reward exists and its size are open) |
 | ENC-ACT3-05 | High Altar | Stops the Doom Clock |
 | ENC-ACT3-06 | Finale | Endings A, B or C |
 
@@ -205,8 +217,14 @@ Illustrative only (field names as today's `locations.json`; the logic lane owns 
 
 ## 7. Gaps in this file
 
-- Size of the Red Tithing at the altar (section 1): Open, see gaps.
-- The Composure check and the Deafened status (sections 2.2, 4.3): Open, see gaps.
+- Size of the Tithing at the altar (section 1): decided, the Great Tithing of thousands (CANON 3.6).
+- The Composure check (section 2.2): Composure is decided (a derived stat, CANON 2.1); how a hazard's check resolves is
+  open for the derived-stat spec and the balance lane. The Deafened status (section 4.3): Open; it leaned on a cut roll,
+  so it is restated on existing levers or built as a reusable system before use (Q-56).
+- The Marrow Conduits (section 4.2) "pump living marrow from the titan's arteries up to the cathedral", while CANON 3.6
+  has the marrow rendered from the steeped remains in the Embalming Cloisters (High Bastion) and carried up by the
+  conduits: where the conduits run and what they carry is open.
+- Node 20 with two captured founders (the Crucible's and one taken in Act 2; section 4.4): not written.
 - Defeat in ENC-ACT3-06 (section 4.6): Open, see gaps.
-- Act 3 day budget, doctrine thresholds, keepsake and relic numbers, rescue of a captured founder: open in CANON.md
-  section 6.
+- Act 3 day budget, doctrine thresholds, keepsake and relic numbers: open in CANON.md section 6. Rescue of a captured
+  founder: closed in practice by the 2.4 sighting (CANON 3.6; Q-33).

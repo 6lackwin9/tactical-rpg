@@ -32,14 +32,16 @@ resolved simultaneously, 10 AP +4 per round, actions pay AP at start and land on
 
 ## 2. The ruleset option `[kit hook]`
 
-One switch per world picks **classic** or **timeline** (the field name and where it lives, world or encounter, are
-open; see gaps). It gates:
+One switch per world picks **classic** or **timeline**: a world field with a Dojo toggle (user 2026-10-25, Q-52; the
+field name is the spec's). Reuse rule: the Ashlands are the baseline; a rule incompatible with classic is an option, a
+compatible one an extension that can be disabled; bug fixes go to the core and may need an Ashlands or kit revisit. It
+gates:
 
 | Part | Classic | Timeline |
 | --- | --- | --- |
 | Stances, stance switch cost, matchup factor, `disrupt_break` | on | off (matchup factor 1.0) |
 | Poise bar and breaks | off | on |
-| Recovery blocks | ignored | honoured |
+| Recovery blocks and chained follow-ups | ignored | honoured |
 | Active Guard base move | - (the `guard` basic) | on |
 | Strain meter, crisis, pierce | off | on per world act (Act 2 on) |
 
@@ -59,6 +61,10 @@ Classic must replay the parity suites unchanged; every timeline addition reads t
 | `strain_cost` | 0-35, default 0 | Strain added at start (Act 2 on) |
 | `forced_move` | push or pull, tiles | knockback and pull (new kit hook) |
 
+Also for the spec (user 2026-10-25, no field names yet): which skills a follow-up can chain from (Q-54); the stagger
+intent's break chance and the cost of a guaranteed break, and an unbreakable flag or extra poise for heavy enemy
+windups (Q-50).
+
 Retired from the old drafts: a `speed_tier` enum and tick vectors (derived from `blocks`), `recoil_pct` (recoil is the
 Aberrant Edge bracket's effect, not a skill field), `graft_requirement` (grafts teach skills through `learn_skill`, see
 [skill acquisition](skill_acquisition_and_loadout_systems.md)).
@@ -71,6 +77,7 @@ Aberrant Edge bracket's effect, not a skill field), `graft_requirement` (grafts 
 | Strain | a per-unit meter 0-100 with a floor (0-50) and bracket thresholds | `[kit hook]` meter, `[data]` brackets |
 | Crisis | the 1d3 table at round end | `[game code]` unless the meter's triggers can express it |
 | Calcification | a per-unit stage track 0-5, out of combat, saved | `[kit hook]` track, `[data]` stage effects |
+| Composure | a derived stat, the corruption resist, computed by its own formula from base stats plus gear, status and Calcification modifiers; read by every corruption effect (CANON 2.1, Q-47a; spec `docs/specs/DERIVE1.md`) | `[engine]` formula evaluator, `[kit hook]` derived stats, `[data]` the row |
 
 The `stance` field stays (classic uses it); the timeline ruleset holds every unit in the neutral stance.
 
@@ -88,10 +95,12 @@ hyperbolic armour curve are reused as they are.
 ## 4. Resolver changes (timeline only)
 
 1. **Recovery**: `schedule` books `blocks + recovery_blocks`; the impact lands at the end of the windup, not at
-   `end`. Today an action lands at `end == block`, so the landing block becomes start + blocks - 1.
+   `end`. Today an action lands at `end == block`, so the landing block becomes start + blocks - 1. A chained
+   follow-up (Q-54) may start in those blocks instead of the recovery.
 2. **Poise**: each impact applies stagger x multipliers (windup x2, Flesh-Tension x2, Active Guard x0.5; they
    multiply), doubled again for a repeated break. At 0 the unit breaks: every scheduled action of that unit not yet
-   landed this round is set `cancelled` (the field exists; today only downed units are cancelled).
+   landed this round is set `cancelled` (the field exists; today only downed units are cancelled). The stagger intent
+   (Q-50) adds an optional seeded break chance and a guaranteed break at a cost.
 3. **Same block**: unchanged; initiative order, and a broken or downed unit does not land later in the block.
 4. **Round end**: poise refills; Strain decays (-10 without an Inoculated action, -10 more for Active Guard, floor);
    then the crisis roll for any unit at 100.
@@ -104,7 +113,10 @@ hyperbolic armour curve are reused as they are.
 | Strain timing: on action start or batched at round end | on start (brackets change mid-round) | DEC-LORE-12, CANON 2.2 |
 | Inoculated armour bypass: binary or 50% penetration | binary pierce | DEC-LORE-12, CANON 2.1 |
 | Impact timing: tier anchors (T2/T3/T4) or per-skill ticks | neither: relative windups from `blocks`, optional recovery | CANON 2.1 |
-| Crisis: d100 with Composure or 1d3 | 1d3 at round end | CANON 2.2 |
+| Crisis: d100 with Composure or 1d3 | 1d3 at round end (Composure stays, as a derived stat) | CANON 2.2, 2.1 |
+| Where the ruleset switch lives | a world field with a Dojo toggle | Q-52 |
+| Stagger: keep the lore values or rescale | rescale; heavy enemy windups get more poise or an unbreakable flag; optional break chance, guaranteed break at a cost | Q-50 |
+| Recovery default | 0, set per skill; chained follow-ups use the blocks an action leaves | Q-54 |
 | Same-block strikes: mutual trades or initiative | engine initiative, no mutual trades | CANON 2.1 |
 | Stances | off in timeline, on in classic | DEC-LORE-11, ruleset option |
 
@@ -129,11 +141,11 @@ hyperbolic armour curve are reused as they are.
 | `aegis_ui::timeline`, `emberwake_gui` | impact badges, windup and recovery shading, BREAK marker, poise and Strain on cards |
 | `emberwake_sim` | a timeline-ruleset mode so the balance lane can measure it |
 
-## 8. Gaps (open)
+## 8. Gaps
 
 | Gap | Options | Recommendation |
 | --- | --- | --- |
-| Where the ruleset switch lives | A: a world field inherited by its encounters; B: the game manifest | A: the Ashlands and the Low Sleep are worlds of one game |
+| Where the ruleset switch lives | A: a world field inherited by its encounters; B: the game manifest | Decided (2026-10-25, user, Q-52): A, with a Dojo toggle |
 | The skill field names above | A: as proposed; B: the spec renames | A unless the spec finds clashes |
-| AI under timeline: enemies plan first and never re-plan, so they cannot dodge a visible interrupt | A: give heavy enemy windups higher poise or an unbreakable flag; B: let enemies re-plan | A (no change to the INTENT1 contract) |
+| AI under timeline: enemies plan first and never re-plan, so they cannot dodge a visible interrupt | A: give heavy enemy windups higher poise or an unbreakable flag; B: let enemies re-plan | Decided (2026-10-25, user, Q-50 a): A (no change to the INTENT1 contract), with the stagger intent above |
 | The Strain meter as kit or game code | A: a generic per-unit meter with thresholds, triggers and decay (kit); B: game code | A; the crisis table stays game code if the triggers cannot roll a table |

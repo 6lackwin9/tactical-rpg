@@ -37,7 +37,7 @@ non-combat hub or quest NPCs. The old "15-24" cohort is retired.
 | Rule | Value | Layer |
 | --- | --- | --- |
 | Squad | up to 4 deployed (`PARTY_MAX` 4; world `party_max` 1..4); the Crucible requires four | `[kit hook]` (exists) |
-| Bunks | 6 at the start of Act 1, 4 filled after the prologue; 8 through Bram's "Expanded Timber Frames" project, chosen by the player (Act 2 on, costs open); later hubs inherit the count | `[kit hook]` |
+| Bunks | 6 at the start of Act 1, 4 filled after the prologue; Act 1 holds only the six founders, and the bunk the Crucible empties takes the first procedural recruit at the start of Act 2 (user 2026-10-25, Q-38); 8 through Bram's "Expanded Timber Frames" project, chosen by the player (Act 2 on, a Scrap cost from the balance lane); later hubs inherit the count | `[kit hook]` |
 | Full bunks | a new recruit needs a free bunk: dismiss or retire someone first (Act 2 on) | `[kit hook]` |
 | Guests | take no bunk until sworn in; they lodge at the Water-Lock Basin | `[kit hook]` |
 
@@ -52,7 +52,7 @@ The kit shape is downed / wounded / captured / dead / retired; the story decides
 | State | Act 1 | Act 2 on (proposal) | Engine today |
 | --- | --- | --- | --- |
 | Downed | a founder at 0 HP is downed for the rest of the battle | same | exists: downed heroes get up at the win rally (+25% max HP, HEAL1) |
-| Wounded | after the battle a downed founder is wounded | same | new; effects and recovery: CANON open question |
+| Wounded | after the battle a downed founder is wounded: deploys at -20% max HP until a rest (user 2026-10-25, Q-31; a baseline the balance lane revisits) | same | new |
 | Captured | only the Crucible's winch founder, taken alive by the Inquisition | capture in battle switches on | new |
 | Dead | none | permadeath switches on; a crisis Biological Collapse (bleed 3 rounds, armour 0) can kill a low-HP operative | new |
 | Retired | none | a Stage IV operative can be retired to the Undercroft staff, freeing a bunk (any bonus: open) | new |
@@ -63,12 +63,15 @@ Two story rules sit on top `[data]`:
 - The Crucible sacrifice (CANON 2.4): the one scripted Act 1 loss, chosen from the four deployed; deployment is the
   decision. The founder is captured, not killed; the keepsake (an ACC heirloom, planner pick) stays with the cell.
 - The corrupted-founder boss is an optional Act 3 node (ENC-ACT3-04), only for a captured founder (the Crucible's, or one
-  captured in Act 2).
+  captured in Act 2). The Crucible's founder is carried off by Nemeth, delivered to Lazar at 2.4 (a rescue is closed in
+  practice) and at node 20 fights at Nemeth's side, then breaks and kills him ([CANON](../CANON.md) 3.6).
 
 ## 5. How operatives join
 
 Act 1: only the scripted founder joins above (dialogue effect `recruit`, RECRUIT1, joins at the highest active XP)
-`[data]`. Recruits switch on in Act 2 (CANON 3.3). Act 2 paths (proposal):
+`[data]`; Act 1 holds only the six founders (Q-38). Recruits switch on in Act 2 (CANON 3.3): the first procedural
+recruit takes the bunk the Crucible emptied, at the start of Act 2 (how they arrive, the first wagon or a join at the
+act transition, is not written). Act 2 paths (proposal):
 
 | Path | How | Layer |
 | --- | --- | --- |
@@ -83,7 +86,7 @@ Act 1: only the scripted founder joins above (dialogue effect `recruit`, RECRUIT
 | --- | --- | --- |
 | The Crucible capture | 1 | scripted, see 4 |
 | Death in battle | 2 on | permadeath |
-| Capture in battle | 2 on | the rescue of a captured founder in Act 2: CANON open question |
+| Capture in battle | 2 on | the rescue of a founder captured in Act 2: CANON open question (Q-33; the Crucible's captive is closed in practice by the 2.4 sighting) |
 | Terminal Drift | 2 on | Stage V |
 | Retirement | 2 on | frees a bunk |
 | Dismissal | 2 on | frees a bunk; nothing else defined |
@@ -94,7 +97,9 @@ Repeated scraping can leave an operative too frail for the front line.
 ## 7. Quarantine
 
 A Stage IV operative (The Shakes) sleeps in the Isolation Crypts, which sit in the Dry Hollows (CANON 2.3, glossary).
-The old Composure penalty on bunkmates is dropped with the undefined Composure stat (CANON open question). Whether a
+The old Composure penalty on bunkmates was dropped while Composure was undefined; Composure is now a derived stat, the
+corruption resist ([CANON](../CANON.md) 2.1), so the penalty could return as one of its readers, but no doc restores
+it (open, with the Crypts move in [six founders](../narrative/six_founders_and_phase_progression.md) 5.3). Whether a
 crypt counts against the bunk total: Open, see gaps.
 
 ## 8. Upkeep
@@ -105,7 +110,8 @@ versions are dropped.
 
 ## 9. Gaps
 
-1. Wounded: what it does and how it heals (CANON open question; it is the main Act 1 cost of losing a fight).
+1. Wounded: what it does and how it heals. Decided (2026-10-25, user, Q-31): -20% max HP until a rest, a baseline the
+   balance lane revisits.
 2. Isolation Crypts: does a crypt use a bunk, and how many crypts are there.
 3. Retirement bonus: the old "+5% forge speed" is the only example; whether retirement grants anything.
 4. Recruit class and level: random or set by the encounter; RECRUIT1 joins at the highest active XP today.

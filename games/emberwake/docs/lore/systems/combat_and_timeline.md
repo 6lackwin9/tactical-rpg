@@ -17,9 +17,12 @@ mechanic only this story uses.
 ## 1. Two rulesets on one resolver
 
 The Low Sleep worlds (first `sunk_ward`) play the ruleset option **timeline**; the Ashlands (the kit's sample and
-parity world) keeps **classic** `[kit hook]`. Both run on the same block resolver; timeline adds poise, recovery blocks
-and (from Act 2) Strain, and switches stances off. Classic is what the Godot parity suites replay, so the timeline
-option must leave classic results unchanged.
+parity world) keeps **classic** `[kit hook]`. The ruleset is a world field with a Dojo toggle (user 2026-10-25, Q-52).
+Both run on the same block resolver; timeline adds poise, recovery blocks, chained follow-ups and (from Act 2) Strain,
+and switches stances off. Classic is what the Godot parity suites replay, so the timeline option must leave classic
+results unchanged: a rule incompatible with classic is built as an option, a compatible one as an extension that can be
+disabled, and bug fixes go to the core (they may need an Ashlands or kit revisit). Every engine and kit piece the
+vertical slice needs is built before it (Q-55, Q-56).
 
 | Rule | Classic (today, the Ashlands) | Timeline (the Low Sleep) |
 | --- | --- | --- |
@@ -55,8 +58,11 @@ A maneuver occupies its own blocks on the strip:
 - **Windup**: the action's blocks (the skill's `blocks`). The impact lands at the end of the last windup block, as
   every action lands today. A unit in windup takes double stagger and can be broken (section 5).
 - **Impact**: damage, stagger, statuses and forced movement resolve, in initiative order within the block.
-- **Recovery** (optional, per skill): blocks after the impact in which the unit is committed and cannot start another
-  action. Recovery is the price of heavy maneuvers; most skills have none.
+- **Recovery** (optional, per skill; 0 by default): blocks after the impact in which the unit is committed. Recovery
+  is the price of heavy maneuvers; most skills have none.
+- **Chains** `[kit hook]` (user 2026-10-25, Q-54): commands that work together chain. A follow-up skill can start in
+  the blocks a previous action leaves; otherwise the unit spends them in recovery. This makes a heavy skill a
+  commitment: plan its follow-up or pay the recovery. Which skills chain into which is the spec's call.
 
 ### 3.1 Speed tiers are relative windups
 
@@ -116,6 +122,10 @@ base stagger; the windup doubling is this general rule, never a skill rider.
 - **Repeated breaks**: a unit's second break in the same round, or in the next round, costs double stagger.
 - The classic `stagger` and `stun` statuses still exist as skill effects and AP-debt penalties; a poise break is a
   separate event, shown on the strip as a BREAK marker.
+- **Stagger intent** (user 2026-10-25, Q-50 a): a break is a tactical choice to disrupt an enemy action, not an
+  automatic lock. The lore's stagger values are rescaled to a fraction of a typical Max Poise; heavy enemy windups get
+  more poise or an unbreakable flag; an optional seeded chance to break adds some randomness, with a guaranteed break
+  at a cost (AP, a skill or Strain). The design lane specs the numbers and the cost, then the balance lane runs a sim.
 
 ### 5.4 Active Guard (base move)
 
@@ -129,7 +139,7 @@ cover); from Act 2 it vents 10 extra Strain at round end. It replaces the classi
 - **Advance** (move, then act) `[kit hook]` (exists): the move blocks come first in the unit's sequence, then the windup, as the
   engine's `dash_tiles` gap-close already does.
 - **Disengage** `[kit hook]` (exists): the engine's `DISENGAGE` kind jumps first in the round (`backflip`). An act-then-move
-  maneuver (strike, then retreat) is open (see gaps).
+  maneuver (strike, then retreat) is not in Act 1: only the first-in-round jump (Q-54).
 - **Chase when the target moves during a windup**:
 
 | Reach | Rule | Engine |
@@ -143,7 +153,7 @@ cover); from Act 2 it vents 10 extra Strain at round end. It replaces the classi
   formula). A unit knocked into another unit hurts both.
 - **Teleport** (Void-Flicker, Act 2) `[kit hook]`: new.
 - **Ground zones** (fire, smoke, tar) `[kit hook]` (exists) terrain hazards with round-end effects, filled as `[data]`; smoke
-  that blocks line of sight waits for the line-of-sight check.
+  gives cover guard in Act 1; smoke that blocks line of sight waits for the Act 2 line-of-sight check (Q-54).
 
 ## 7. Strain in combat (Act 2 on; proposal) `[kit hook]`
 
@@ -185,19 +195,20 @@ Inoculated action per round; more is a burst that climbs toward Rupture.
 | Evasion and accuracy rolls (incl. "+15% evasion", "-15% hit chance", Fear as -accuracy) | cut |
 | Facing, backstab bonuses, rear arcs, stealth and detection cones | cut |
 | Mutual trades (both same-block strikes land) and the defensive snapshot | cut |
-| The d100 crisis (Flesh Mastery, Marrow Rupture, Predatory Frenzy, Spontaneous Calcification, Metamorphosis) and "Composure" in its formula | cut; replaced by the 1d3 table |
+| The d100 crisis (Flesh Mastery, Marrow Rupture, Predatory Frenzy, Spontaneous Calcification, Metamorphosis) and "Composure" in its formula | cut; replaced by the 1d3 table (Composure itself returns as a derived stat, the corruption resist, CANON 2.1) |
 | Fixed tick anchors (T2, T4, T5-6) and tier-wide recovery windows | cut; relative windups |
 | Stances and stance switching in the Low Sleep | cut (DEC-LORE-11); classic keeps them |
 | Multi-track ghost scrubber | later; start with impact badges |
 | A per-tick resolver (`step_tick`) and per-tick hazard damage | cut; the engine resolves by block |
 
-## 10. Gaps (open)
+## 10. Gaps
 
 | Gap | Options | Recommendation |
 | --- | --- | --- |
 | Armour poise per gear piece (the CANON formula's second term) | A: a flat poise per armour weight class; B: poise = the item's mitigation x a factor | B: one number per item, no new field to author |
-| Lore stagger values (Pommel 25, Jaw-Breaker 30, wall slam 20) were set for flat bars of 30-70 | A: keep them and tune poise; B: rescale to a fraction of a typical Max Poise | B, then a balance-lane sim: at x2 windup a 25-stagger Snap breaks nearly any 12-36 bar (the interrupt-lock risk in [risk and reward](risk_reward_and_corruption_balance.md)) |
-| Act-then-move maneuvers (Disengage strike-and-retreat) | A: allow a move step after an action in the plan; B: only the engine's first-in-round jump | B for Act 1 (no new plan rule); revisit with the Gutter-Stalker tree |
-| Line of sight (smoke zones, ranged chase, full cover) | A: a kit line-of-sight check on the grid; B: smoke gives cover guard instead | B for Act 1 (cover exists today); A when Act 2 needs it |
-| Strain above 100 within a round, and Strain after a crisis | A: cap at 100, set to 75 after the crisis; B: no cap, reset to the floor | open in CANON; A keeps the crisis a one-off per round |
-| Recovery default per tier | A: 0 everywhere, set per skill; B: Heavy gets 1 by default | A |
+| Lore stagger values (Pommel 25, Jaw-Breaker 30, wall slam 20) were set for flat bars of 30-70 | A: keep them and tune poise; B: rescale to a fraction of a typical Max Poise | Decided (2026-10-25, user, Q-50): B, with the stagger intent of 5.3 (break chance, guaranteed break at a cost); then a balance-lane sim: at x2 windup a 25-stagger Snap breaks nearly any 12-36 bar (the interrupt-lock risk in [risk and reward](risk_reward_and_corruption_balance.md)) |
+| Act-then-move maneuvers (Disengage strike-and-retreat) | A: allow a move step after an action in the plan; B: only the engine's first-in-round jump | Decided (2026-10-25, user, Q-54): B in Act 1 |
+| Line of sight (smoke zones, ranged chase, full cover) | A: a kit line-of-sight check on the grid; B: smoke gives cover guard instead | Decided (2026-10-25, user, Q-54): B in Act 1, a kit line-of-sight check in Act 2; cover is only the existing cover guard (the brigandine's half-cover trait and "full cover" pillars are dropped); cover and line of sight become engine or kit systems after testing |
+| Strain above 100 within a round, and Strain after a crisis | A: cap at 100, set to 75 after the crisis; B: no cap, reset to the floor | open in CANON (Q-62); A keeps the crisis a one-off per round |
+| Recovery default per tier | A: 0 everywhere, set per skill; B: Heavy gets 1 by default | Decided (2026-10-25, user, Q-54): A, plus chains (section 3) |
+| Maneuver hooks the engine lacks (forced movement, ground hazards a skill leaves, auras, poise-break triggers, scheduled arena hazards) | A: the first playable uses existing statuses and phases; B: build them all first | Decided (2026-10-25, user, Q-55): A in spirit, but every hook the slice uses is built as a reusable kit or engine system before the slice, starting with forced movement and ground hazards |

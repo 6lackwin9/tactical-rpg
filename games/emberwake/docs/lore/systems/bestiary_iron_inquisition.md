@@ -11,7 +11,7 @@ The church's enforcement wing: fanatical speed, self-mutilation, phosphorus fire
 | Inquisitorial Purifier | elite | mage | 1.2 | 4 | 40 | normal | area denial, phosphorus |
 | Inquisitor Proctor | elite | warrior (two-handed sword) | 1.9 | 8 | 60 | quick | duelist and officer |
 | Proctor Quell | boss | warrior | 2.5 | 6 | 65 | quick | "the Scalpel of St. Lyra's" |
-| Inquisitor-Prelate Nemeth | boss | warrior | open | open | open | open | the Crucible's commander |
+| Inquisitor-Prelate Nemeth | boss | warrior | open | open | open | open | the Crucible's commander; node 20 phase 1 |
 
 ## Mortuary Flagellant (base)
 
@@ -64,10 +64,20 @@ Act 1 M2 "The Crossroads Cages". Template: Inquisitor Proctor.
   tuned).
 - Drops: see [Act 1 encounters](bestiary_encounters_act1.md) ENC-EVT-02.
 
-## Inquisitor-Prelate Nemeth (boss, ENC-EVT-06)
+## Inquisitor-Prelate Nemeth (boss, ENC-EVT-06 and ENC-ACT3-04)
 
 The marrow-infused commander of the Crucible Watchpost "whom cold steel cannot finish"; he takes the founder who holds
 the Slag Gate winch alive ([cast registry](../background/cast_registry.md); renamed from "High Inquisitor Bastion").
-Template: Inquisitor Proctor. No trait, altered maneuver or capstone is written yet, and CANON leaves open whether the
-cell defeats him or only escapes (CANON 6). Open: see gaps in the [index](enemy_bestiary_and_ai.md) and
-[Act 1 encounters](bestiary_encounters_act1.md).
+His infusion is aberrant marrow from older, weaker stock, which wears the body down ([CANON](../CANON.md) 3.6).
+Template: Inquisitor Proctor. No trait, altered maneuver or capstone is written yet (Q-74).
+
+- ENC-EVT-06, the Crucible (Act 1 M5): the cell does not defeat him; the objective is escape, and he escapes with the
+  captured founder (user 2026-10-25, Q-25 a).
+- ENC-ACT3-04, the Silent Ossuary (Act 3 node 20, optional; CANON 3.6): phase 1, Nemeth and his guard with the
+  corrupted founder fighting at his side; when the founder breaks (an `hp_below` trigger on the founder with a round
+  fallback, or earlier if Nemeth falls low, refinement), the founder kills Nemeth and his guard (a phase effect that
+  kills named units `[kit hook]` new). Drop: Nemeth's Warded Cassock, where he dies
+  ([items](items_gear_and_progression.md) 7).
+- The corrupted founder: built from the founder's loadout with their signature moves twisted; in phase 2 a "hostile to
+  all sides" AI or faction switch `[kit hook]` new and a unit swap for the monstrosity's larger body (art Q-79); see
+  the [index](enemy_bestiary_and_ai.md) section 4.

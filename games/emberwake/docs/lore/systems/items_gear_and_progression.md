@@ -60,7 +60,7 @@ rolls.
 | --- | --- | --- | --- | --- | --- | --- |
 | Heavy iron plate | `plate` | 8-12 | 25-40 | high | Vanguard | Snap hits deal no poise damage `[kit hook]` new |
 | Soot-stained leathers | `leather` | 2-4 | 10-15 | none | Gutter-Stalker | no move penalty in fog or rubble `[kit hook]` new |
-| Reinforced brigandine | `leather` | 4-6 | 15-20 | low | Arbalestier | the half-cover bonus needs cover rules (gap 2) |
+| Reinforced brigandine | `leather` | 4-6 | 15-20 | low | Arbalestier | the half-cover bonus is dropped (Q-54, gap 2) |
 | Penal foundry apron | `leather` | 4-8 | 30-50 | medium | Slag-Brute | `resist` burn |
 | Embalmer's habit | `cloth` | 2 | 10-15 | none | Heretic Acolyte | `skill_potency` heal +20%; `resist` debuffs +15% |
 | Tanner's rubbered coat | `cloth` | 2-4 | 10-15 | low | Ichor Alchemist | `resist` poison (its own splashback) |
@@ -123,7 +123,7 @@ effect needs a hook names it.
 | Grendel's Pneumatic Slag-Hammer | MAIN 2H hammer | Overseer Grendel (ENC-EVT-03) | Heavy; the shockwave also hits the unit behind the target | an area shape (gap 4) |
 | Sister Aline's Embalming Crook | MAIN staff | Aline's loyalty milestone | healing +35% (`skill_potency` heal); Maren cleanses without the Bile Phial cost | cost waiver `[kit hook]` |
 | The Dreamer's Crystalline Vertebra | ACC | the Calcified Amalgam (ENC-EVT-05) | Strain floor locked at 20; Inoculated attacks +30% damage (Act 2 on) | Strain `[kit hook]` |
-| Nemeth's Warded Cassock | BODY | the Crucible (ENC-EVT-06) | rating +10, poise +35; immune to Phosphorus Fire and Blight Miasma | Open: see gaps (gap 5) |
+| Nemeth's Warded Cassock | BODY | Nemeth, where he dies: the Silent Ossuary (ENC-ACT3-04, Act 3 node 20, optional; CANON 3.6) | rating +10, poise +35; immune to Phosphorus Fire and Blight Miasma | status immunity (`resist` exists) |
 | The keepsake | ACC | the founder captured at the Crucible | an heirloom (planner pick); numbers are a CANON open question | - |
 
 ## 8. Item fields: what exists and what is new
@@ -142,8 +142,12 @@ effect needs a hook names it.
 ## 9. Gaps
 
 1. Reach 2 melee (billhooks, the Flagellant's scourge): the engine's melee reach is 1.
-2. Cover: the brigandine's half-cover bonus and "full cover" pillars assume cover rules no doc defines.
+2. Cover: the brigandine's half-cover bonus and "full cover" pillars assume cover rules no doc defines. Decided
+   (2026-10-25, user, Q-54): cover is only the existing cover guard; the half-cover trait and "full cover" pillars are
+   dropped; cover and line of sight become engine or kit systems after testing.
 3. Quenched Cinder Salt overlaps the Rock Salt flush (CANON open question).
 4. Line and "behind the target" areas: the engine has areas (`Area.SWEEP` and others); which shape fits is unchecked.
-5. Nemeth's Warded Cassock depends on whether the cell can defeat Nemeth (CANON open question).
+5. Nemeth's Warded Cassock depends on whether the cell can defeat Nemeth (CANON open question). Resolved (2026-10-25,
+   user, Q-25 and its follow-up): it drops where Nemeth dies, at node 20 (CANON 3.6); a cell that skips the optional
+   node never gets it.
 6. Missing families: billhook / polearm, chemical sprayer, bone-saw and censer run on stand-in families.

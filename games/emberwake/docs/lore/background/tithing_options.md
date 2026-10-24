@@ -1,11 +1,32 @@
 # The Great Tithing: story options
 
-Status: proposal (2026-10-25). Options for the user; nothing here is canon until picked. The user accepted Q-04 and
-Q-16 in principle (a yearly rite of hundreds plus a Great Tithing of thousands; recurring lesser tithings when the soft
-Doom Clock hits 0) and asked for the story around them: do commoners know only the smaller tithings, why is the Great
-Tithing needed now, and is it the first or does it have a precedent. All options follow the
-[central truth](central_truth.md) option A (Q-01, canon: the lullaby is a harvest). No new character is named. Part of
-the [story guide](../STORY_GUIDE.md) (gap G-24).
+Status: decided (user 2026-10-25): option B with b2, tied to the Clerisy's founding ([CANON.md](../CANON.md) 3.6).
+The options below stay as the record of what was weighed. The user accepted Q-04 and Q-16 in principle (a yearly rite
+of hundreds plus a Great Tithing of thousands; recurring lesser tithings when the soft Doom Clock hits 0) and asked for
+the story around them: do commoners know only the smaller tithings, why is the Great Tithing needed now, and is it the
+first or does it have a precedent. All options follow the [central truth](central_truth.md) option A (Q-01, canon: the
+lullaby is a harvest). No new character is named. Part of the [story guide](../STORY_GUIDE.md) (gap G-24, resolved).
+
+## Decision (user 2026-10-25; CANON 3.6 wins on detail)
+
+- Option B with b2: the folk know only the yearly rite; the Great Tithing (thousands) is known to the Clerisy's inner
+  circle alone; the Extinguishing was only cover, and its cause stays a mystery.
+- Tied to the founding: the Sovereign Clerisy was founded two centuries ago, in the dark of the Extinguishing, as the
+  order that holds the Tithing; its founding act was the first Great Tithing, its dead recorded as the titan's wrath.
+  The founders found that the marrow kept them young, and the harvest began. They are "the first Extinguishers",
+  entombed in the Reliquary Crypts (Q-12 option a).
+- Why now (this replaces option B's "the dream thins on its own"): the cell's own raids hasten the waking. Every tithe
+  it frees and every station it breaks starves the dream, the titan stirs, and the Clerisy turns this year's rite into
+  a Great Tithing to drug it back to sleep (planner refinement: decided after the Act 1 raids; the player learns it at
+  2.4 from Lazar's records).
+- Reveal path as option B: Agnes's tales and Maren's texts in Act 1 (Q-07 option a: a chronicle of the first Great
+  Tithing); 2.4 the date, the scale and the cause, and the clock is relabelled "the Great Tithing"; 2.6 the founders'
+  record in the Reliquary Crypts; Act 3 Malachi.
+- What the Tithing is (user 2026-10-25, later the same day): not only a killing; the Clerisy raises children as
+  sacrifices, and its marrow is rendered from their remains, the younger the more potent (the Lullaby Houses and the
+  rendering in the Embalming Cloisters are planner refinements; [central truth](central_truth.md), CANON 3.6).
+- Lesser tithings at the soft clock's 0 in Acts 1-2, as section 2 (Q-16 option a). Still open: whether a lesser
+  tithing takes a named stake (section 8 question 3, G-20) and the Act 3 day budget (Q-17).
 
 ## 1. What the docs already say
 
@@ -123,7 +144,8 @@ the central truth, Mantle Fissure 2.1 and narrative_agency 3.4.
 
 ## 8. Questions for the user
 
-1. Option A, B or C (recommended: B).
-2. If B: b1 or b2 (recommended: b2).
-3. Does a lesser tithing take a named stake not yet freed (Pip, Ida)? Recommended: yes (story guide G-20).
+1. Option A, B or C (recommended: B). Decided (2026-10-25, user): B.
+2. If B: b1 or b2 (recommended: b2). Decided (2026-10-25, user): b2.
+3. Does a lesser tithing take a named stake not yet freed (Pip, Ida)? Recommended: yes (story guide G-20). Open.
 4. Does the visible clock change its label from "the Red Tithing" to "the Great Tithing" at 2.4? Recommended: yes.
+   Decided (2026-10-25, user; CANON 2.6): yes.

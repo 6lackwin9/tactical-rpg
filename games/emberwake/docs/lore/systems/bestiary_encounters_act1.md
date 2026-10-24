@@ -103,7 +103,8 @@ is index gap 1.
   under fire so the other three escape. That founder is captured alive by the Inquisition (not killed). Escape exists
   as an objective (OBJ1); a "hold this tile, chosen hero stays behind" rule and the capture state are `[kit hook]` new
   (unit lifecycle, [roster](roster_expansion_and_lifecycle.md)).
-- Whether the cell defeats Nemeth or only escapes: CANON open question.
+- Nemeth (user 2026-10-25, Q-25 a): the cell only escapes; Nemeth escapes with the captured founder and returns at
+  the optional Act 3 node 20 (CANON 3.6).
 - Payoff: the Slag Gate breach opens the High Bastion graph (node 08 on) and switches on the Act 2 systems (CANON 3.3);
   the captured founder's keepsake (an ACC heirloom, planner pick) stays with the cell; a memorial in the Dry Hollows.
-  Nemeth's Warded Cassock drops only if he can be defeated (Open, see gaps).
+  Nemeth's Warded Cassock does not drop here: it drops where he dies, at node 20 (CANON 3.6).

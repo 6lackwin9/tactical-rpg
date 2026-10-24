@@ -54,9 +54,14 @@ Recruits come from two sources `[kit hook]` (RECRUIT1; dialogue effect `recruit`
 ### 2.2 Limits on hoarding
 
 1. Bunks: 6 in the Dry Hollows, 8 after Bram's "Expanded Timber Frames" project (Act 2) `[kit hook]` (hub facility
-   levels). A recruit needs a free bunk; guests wait in the Water-Lock Basin and take none.
-2. Inquisition Alert `[kit hook]` (campaign meter): loud raids raise it. At Lockdown (71-99%) Inquisitor-General
-   Ruthven's Render-Beast packs hunt and routes harden (effects: Open); at Breach (100%) a siege starts (Acts 2-3).
+   levels). Act 1 holds only the six founders; the bunk the Crucible empties takes the first procedural recruit at the
+   start of Act 2 (user 2026-10-25, Q-38). A recruit needs a free bunk; guests wait in the Water-Lock Basin and take
+   none.
+2. Inquisition Alert, a generic meter system (user 2026-10-25, Q-15) `[engine]` if game-agnostic, else `[kit hook]`:
+   loud raids raise it (loud and quiet mission tags, bribes in Scrap or Rock Salt, story amounts; numbers by the balance
+   lane). At Lockdown (71-99%) Inquisitor-General Ruthven's Render-Beast packs hunt and routes harden (the Lockdown
+   effects are built with the meter); at Breach (100%) an Act 1 run ends (3.2) and from Act 2 a siege starts. In Acts
+   2-3 Alert is an active management task.
 3. Upkeep does not scale with the bench: it is 1 Warded Tallow per day of travel or rest for the whole cell. At 0
    Tallow every battle starts with -2 AP until restocked. The old per-operative "Tallow and Salt" tax and its "Strain
    and panic" penalty are dropped.
@@ -67,12 +72,14 @@ Recruits come from two sources `[kit hook]` (RECRUIT1; dialogue effect `recruit`
 
 - Losing any one operative, a founder included, never ends the campaign. A campaign that ended on one death would make
   players treat founders as fragile VIPs, reload every loss and avoid Inoculation and grafts.
-- Act 1: founders at 0 HP are downed and end the battle wounded; the Crucible capture is the one scripted loss.
+- Act 1: founders at 0 HP are downed and end the battle wounded (-20% max HP until a rest, Q-31); the Crucible capture
+  is the one scripted loss.
 - Acts 2-3: when an operative dies or reaches Terminal Drift, their gear goes to the stash `[kit hook]` (stash) and
   their name onto the Memorial Stone in the Dry Hollows `[kit hook]` (lifecycle event) `[data]`. How the survivors react
   (the old "Resolve or grief traits"): Open.
-- A captured operative may return as the optional corrupted-founder boss in Act 3; whether a capture can be undone in
-  Act 2: Open.
+- A captured operative may return as the optional corrupted-founder boss in Act 3. The Crucible's captive cannot be
+  saved in practice: at 2.4 the cell sees Nemeth deliver them to Lazar and arrives too late (CANON 3.6, refinement;
+  Q-33 option a). Whether a capture in Act 2 can be undone: Open.
 
 ### 3.2 The Extinguished screen
 
@@ -81,16 +88,17 @@ Extinguished is a failure screen, not an ending `[engine]` (a screen on `aegis_u
 
 | Condition | When |
 | --- | --- |
+| An Act 1 Breach | Inquisition Alert reaches 100 in Act 1 (user 2026-10-25, Q-13). Only a player who blatantly ignores the meter gets there: Act 1 inputs are small and a clear warning shows at each threshold (warning steps: a design-lane spec with Q-15; the screen's story text: story guide G-23) |
 | No living operative | No operative is left alive in the field or in the bunks (cannot happen in Act 1) |
 | The Act 3 Doom Clock | It reaches 0 before node 21 (the High Altar) falls: the Great Tithing completes |
 
-Not a fail: a single death; a lost siege; an Act 1-2 clock expiry (soft). If the squad is wiped while at least one
+Not a fail: a single death; a lost siege (Acts 2-3); an Act 1-2 clock expiry (soft). If the squad is wiped while at least one
 operative is resting in the bunks, the campaign goes on: the survivors run a low-tier rescue or scouting mission to
 rebuild the cell.
 
 ### 3.3 Siege of the Sluice (Acts 2-3)
 
-- Loud play raises Alert (which actions raise it, and by how much: Open). At Breach (100%) an Inquisition strike force
+- Loud play raises Alert (inputs as 2.2; amounts by the balance lane). At Breach (100%) an Inquisition strike force
   finds the Drowned Runoff Grate and assaults the Sluice Undercroft `[kit hook]` (meter threshold trigger) `[data]`
   (siege encounter with reinforcement waves and a hold objective).
 - Bram and Aline are non-combat (registry); whether they appear in the battle, for example as protect targets: Open.
@@ -102,16 +110,23 @@ rebuild the cell.
 - The Red Tithing calendar in days, visible from Act 1 day 1 at 42 ("six weeks") `[kit hook]` (campaign meter over the
   travel clock in `travel.rs`).
 - Soft in Acts 1-2 (story pressure, no fail); hard in Act 3.
+- Story (user 2026-10-25, Q-04 and Q-16; [CANON](../CANON.md) 3.6): the clock counts to this year's rite, which the
+  Clerisy turns into a Great Tithing (thousands) because the cell's raids hasten the titan's waking. Mission 2.4
+  reveals that and relabels the clock "the Great Tithing". At 0 in Acts 1-2 the Clerisy holds a lesser tithing and the
+  clock restarts (days by the balance lane; which named stakes a lesser tithing takes: story guide G-20).
 - Time: a route leg costs 1 day (stealth +1), a rest 1 day, a battle none (CANON 2.6).
-- The Clerisy preaches that the Tithing keeps the titan asleep. What it truly does, and its size, are in the
-  [central truth](../background/central_truth.md) (proposal). The old loss text "the bells toll, the Low Sleep wakes and
-  drags the continent into the tar-sea" is retired: the Act 3 loss is the Great Tithing completing.
+- The Clerisy preaches that the Tithing keeps the titan asleep. What it truly does is in the
+  [central truth](../background/central_truth.md) (Option A, canon: the dream steeps the tithed dead, whose remains are
+  rendered into the Clerisy's marrow). The old loss text "the bells toll, the Low Sleep wakes and drags the continent
+  into the tar-sea" is retired: the Act 3 loss is the Great Tithing completing, a second Extinguishing for the
+  Unsealed.
 
 ## 4. Gaps (Open)
 
 - The Act 2-3 rule that decides whether a downed operative dies, is captured or ends the battle wounded.
-- Wounded effects and recovery; the outcome of a lost Act 1 battle.
+- The outcome of a lost Act 1 battle (wounded effects are decided: -20% max HP until a rest, Q-31).
 - Whether barks are in scope; whether origin tags and temperaments carry mechanics.
-- Survivors' reaction to a death; capture rescue in Act 2.
-- Alert sources and Lockdown effects; Bram and Aline in a siege; the relocation target.
-- Expiry of the soft clock in Acts 1-2 (what the story does when it reaches 0).
+- Survivors' reaction to a death; rescue of a founder captured in Act 2.
+- Alert and Lockdown numbers (the system is decided, Q-15); the Act 1 warning steps and the Breach story text;
+  Bram and Aline in a siege; the relocation target.
+- Expiry of the soft clock in Acts 1-2: decided (a lesser tithing, Q-16); the named stakes it takes stay open (G-20).

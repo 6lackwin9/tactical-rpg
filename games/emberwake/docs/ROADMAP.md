@@ -29,6 +29,7 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | S15 | Balance tooling and reports | done | S1, S2 | `tools/balance_sim.gd`, `games/emberwake/docs/BALANCE_REPORT.md` |
 | S16 | Playtest tooling (debug only): recordings, notes, playback, headless replay | approved | S1 | Feedback loop desktop -> cloud; battles exact, overworld trail-only until PLAYTEST2. On the engine (PORT-PLAYTEST): arena battles record and replay; party battles of the world map wait for PLAYTEST2, so G1's "one full run replays headless" needs it too |
 | LEVERS1 | Role-feel levers: brawler spin, priest Ward (DR2 4B) | approved (user 2026-10-18 14:26) | BAL5-L, BAL5-A | `games/emberwake/docs/specs/LEVERS1.md`; Bodyguard deferred, boss acts twice not built |
+| DERIVE1 | Data-defined derived stats (an engine formula evaluator, kit derived-stat rows, resist checks); first row Composure, the corruption resist | proposed | - | `docs/specs/DERIVE1.md`; user 2026-10-25 (Q-47a) asked for the capability in the engine and kit; DQ1-DQ5 open |
 
 ## Goals (user 2026-10-17, decision "Goal-based roadmap"; replaces the suggested build order)
 
