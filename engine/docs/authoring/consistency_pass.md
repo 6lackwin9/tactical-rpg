@@ -21,6 +21,21 @@ Status: canon (user 2026-10-25). How a brainstormed design library becomes canon
    sheet), applies the canon-sheet fixes that need no decision, and writes one deduplicated open-questions doc.
 7. **Gap fill**: the user answers the open questions; the world and systems are locked; implementation starts.
 
+## Focus order for the open questions (user 2026-10-25)
+
+Tag every open question with a focus and work them in this order:
+
+1. `1.n <system>`: design and system questions, split into one group per system so they can be taken one system at
+   a time (for a tactics RPG: combat, campaign meters and fail states, roster and lifecycle, hub and economy, slice
+   scope and process, later-act systems, enemy and item content), ordered by what the slice needs first.
+2. `2 art type`: art and asset questions that cannot reuse existing assets and need their own type in the engine;
+   `2 art` for the rest (process, reuse).
+3. `3 lore`: lore and events, each written as an independent lore module ([lore_modules.md](lore_modules.md)) that
+   can be read and decided on its own; the narrative is fleshed out later by connecting modules.
+
+Separate track, `core story`: the core narrative the game needs to be built at all (the spine, the slice's story
+beats, the world logic the systems read). It is handled on its own, not mixed into the lore modules.
+
 ## Rules
 
 - The planner commits; writers never do. One branch for the whole pass.
