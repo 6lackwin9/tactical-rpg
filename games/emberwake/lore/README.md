@@ -32,9 +32,10 @@ games/emberwake/lore/
 │
 ├── specs/                                 <-- Core Specifications, Decision Logs & Visuals
 │   ├── master_specification.md            <-- Raw complete design bible export
-│   ├── worldbuilding_decisions.md         <-- Logged strategic decisions (DEC-LORE-01 to DEC-LORE-12)
-│   ├── art_and_visual_style.md            <-- 640x360 canvas, 32x32 tiles, palette constraints
-│   └── rpg_kit_and_system_architecture.md <-- Engine & RPG kit reuse assessment
+│   ├── worldbuilding_decisions.md         <-- Logged strategic decisions (DEC-LORE-01 to DEC-LORE-14)
+│   ├── art_and_visual_style.md            <-- 640x360 canvas, 32x32 tiles, 16-color master palette & VFX
+│   ├── rpg_kit_and_system_architecture.md <-- Engine & RPG kit reuse assessment
+│   └── full_game_systems_roadmap.md       <-- Vertical Slice sign-off & late-game placeholder systems roadmap
 │
 ├── background/                            <-- Setting, Cosmology, Factions & Key NPCs
 │   ├── cosmology_and_setting.md           <-- The Low Sleep, The Shroud, Stagnation of Mortality, Lexicon
@@ -76,13 +77,16 @@ games/emberwake/lore/
   *Summary:* Complete verbatim source specification defining the worldbuilding transition, lore, combat mechanics, and tone.
 * [worldbuilding_decisions.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/specs/worldbuilding_decisions.md)  
   *Tags:* `#decisions` `#tracking` `#engine-mapping`  
-  *Summary:* Chronological decision log (DEC-LORE-01 through DEC-LORE-12) establishing setting boundaries, mechanics shifts, and mapping matrices to engine crates.
+  *Summary:* Chronological decision log (DEC-LORE-01 through DEC-LORE-14) establishing setting boundaries, mechanics shifts, and mapping matrices to engine crates.
 * [art_and_visual_style.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/specs/art_and_visual_style.md)  
-  *Tags:* `#art` `#palette` `#resolution`  
-  *Summary:* Viewport architecture ($640 \times 360$), $32 \times 32$ grid tiles, $32 \times 48$ sprite bounds, restricted 5-accent color palette, and telegraph visual hierarchy.
+  *Tags:* `#art` `#palette` `#resolution` `#vfx` `#audio`  
+  *Summary:* Viewport architecture ($640 \times 360$), $32 \times 32$ grid tiles, $32 \times 48$ sprite bounds, 16-color master palette, telemetry visual hierarchy, and soundscape direction.
 * [rpg_kit_and_system_architecture.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/specs/rpg_kit_and_system_architecture.md)  
   *Tags:* `#architecture` `#rpg-kit` `#reuse`  
   *Summary:* Detailed audit of Aegis engine systems: reusable components (Grid, Stats, Inventory) vs. required extensions (Strain, Poise, Simultaneous Timeline).
+* [full_game_systems_roadmap.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/specs/full_game_systems_roadmap.md)  
+  *Tags:* `#roadmap` `#vertical-slice` `#phase-2` `#phase-3` `#endgame`  
+  *Summary:* Vertical slice readiness sign-off across 7 domains and placeholder data schemas for late-game systems (Procedural Recruits, Apex Grafts, Living Martyrs, Bell Resonance, Safehouse Siege, Doom Clock, Endings).
 
 ---
 

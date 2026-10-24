@@ -181,12 +181,12 @@ The six baseline classes are adapted directly to fit the setting:
 * **Identity:** Former garrison infantry clad in salvaged plate; controls chokepoints and shatters enemy stances.
 
 #### Branch A: Cold Steel (The Iron Discipline)
-* **T1 Active — Pommel Strike (2 AP | 0% Strain):** Blunt strike dealing moderate damage and **+20 Stagger**. Forces target into Neutral Stance.
-* **T1 Passive — Braced Poise:** In Defensive Stance, gain **+15% Physical Mitigation** and immunity to knockback/pulls from standard enemies.
-* **T2 Active — Intercepting Hook (3 AP | 0% Strain):** Step into adjacent tile to take a blow meant for an ally. Reduces damage by Armor Rating and pulls attacker 1 tile closer.
-* **T2 Passive — Stance Leverage:** Mitigating or blocking an attack refunds **1 AP** on the next turn (once per round).
-* **T3 Active — Sunder & Pin (4 AP | 0% Strain):** Heavy overhead strike. Permanently strips **3 Armor Rating** and applies **Rooted** for 1 round.
-* **Keystone — Unbroken Phalanx:** While at 0% Strain, incoming critical hits are downgraded to regular hits; guard cannot be broken by unblockable attacks.
+* **T1 Active — Pommel Strike (2 AP | 0% Strain):** Snap blunt strike (Impact T2) dealing moderate damage and **+25 Stagger**. Doubles stagger against winding-up targets to trigger interrupts.
+* **T1 Passive — Braced Poise:** Grants **+20 Maximum Poise**. While holding Active Guard, gain total immunity to knockback/pulls from standard human enemies.
+* **T2 Active — Intercepting Hook (3 AP | 0% Strain):** Standard maneuver (Impact T4). Step into an adjacent tile to take a blow meant for an ally. Reduces damage by Armor Rating and pulls attacker 1 tile closer.
+* **T2 Passive — Kinetic Leverage:** Mitigating or parrying an attack during Active Guard refunds **1 AP** on the subsequent round (once per round).
+* **T3 Active — Sunder & Pin (4 AP | 0% Strain):** Heavy cleave (Impact T5). Permanently strips **4 Armor Rating** and applies **Rooted** for 1 round.
+* **Keystone — Unbroken Phalanx:** While at 0% Strain, incoming critical hits are downgraded to regular hits; Active Guard cannot be broken by unblockable attacks.
 
 #### Branch B: Inoculated (The Marrow Graft)
 * **T1 Active — Calcified Spike (1 AP | +15% Strain):** Bone spurs punch through skin. Pierces armor completely and inflicts **Bleed** (4 dmg/round for 2 rounds).
