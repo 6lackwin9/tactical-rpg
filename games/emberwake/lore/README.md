@@ -60,7 +60,8 @@ games/emberwake/lore/
     ├── risk_reward_and_corruption_balance.md<-- 4 axes of balance, AP density, Strain surfing economics
     ├── roster_expansion_and_lifecycle.md  <-- Bunk capacity (6 to 8), recruitment jailbreaks, permadeath
     ├── gameplay_loop_and_ui_prototype.md  <-- Macro expedition loop, micro 4-step combat loop, UI reuse
-    └── screen_architecture_and_separation_plan.md<-- Combat UI vs. Exploration UI separation & 8 screens
+    ├── screen_architecture_and_separation_plan.md<-- Combat UI vs. Exploration UI separation & 8 screens
+    └── enemy_bestiary_and_ai.md           <-- Base/elite bestiary, named bosses & modular encounter architecture
 ```
 
 ---
@@ -152,6 +153,9 @@ games/emberwake/lore/
 * [screen_architecture_and_separation_plan.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/systems/screen_architecture_and_separation_plan.md)  
   *Tags:* `#screen-stack` `#exploration-vs-combat` `#ui-breakdown`  
   *Summary:* Architectural decoupling of Combat UI (`BattleScreen`) and Exploration UI (`DistrictMap`) via `aegis_ui::screen::Screen`, with a breakdown of all 8 game screens.
+* [enemy_bestiary_and_ai.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/systems/enemy_bestiary_and_ai.md)  
+  *Tags:* `#bestiary` `#enemies` `#named-bosses` `#encounters` `#ai`  
+  *Summary:* Base and elite bestiary across 4 factions, named boss variants (Captain Vane, Proctor Malakar, Orlov, Grendel, Amalgam), and 6 modular placeholder encounter events (`ENC-EVT-01` to `06`).
 
 ---
 
