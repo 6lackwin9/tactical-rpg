@@ -1,6 +1,8 @@
-# Emberwake: Canonical Lore, Worldbuilding & Systems Master Index
+# Emberwake: The Low Sleep
+## Canonical Lore, Worldbuilding & Systems Master Index
 
 > **Root Path:** `games/emberwake/lore/`  
+> **Official Title:** *Emberwake: The Low Sleep* (Internal Codename: `emberwake`)  
 > **Status:** Active Canonical Specification  
 > **Target Engine:** Aegis Tactical RPG Engine (`engine/crates/*`, `games/emberwake/crates/*`)  
 > **Primary Audience:** AI Agents, Systems Designers, and Content Implementers  

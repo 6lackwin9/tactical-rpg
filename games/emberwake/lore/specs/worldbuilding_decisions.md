@@ -1,4 +1,4 @@
-﻿# Worldbuilding Decisions & Architecture Log
+# Worldbuilding Decisions & Architecture Log
 
 > **Category:** Decision Tracking & Architectural Alignment  
 > **Status:** Active Canon Established (2026-10-24)  
@@ -85,6 +85,13 @@ The following architectural decisions have been documented from the user's initi
   2. *Binary Armor Piercing:* Inoculated attacks completely bypass physical armor rating, maintaining a visceral contrast against Cold Steel sunder/poise mechanics.
   3. *Speed Tier Impact Mapping:* Predictable telegraphing via Speed Tiers (Snap impact on T2, Standard impact on T3/T4, Heavy impact on T4/T5).
   All three baselines remain explicitly open to tuning, balancing, and adjustment based on playtest feedback once the initial playable slice is running.
+
+### DEC-LORE-13: Canonical Title Formulation ("Emberwake: The Low Sleep")
+- **Decision:** The game's official public-facing title is established as **Emberwake: The Low Sleep**.
+- **Consequence:**
+  - *Engineering Continuity:* Retains `emberwake` as the project codename, module prefix, and repository path (`games/emberwake/`), requiring zero directory renames.
+  - *Thematic Grounding:* The subtitle (*The Low Sleep*) eliminates generic high-fantasy fire assumptions and immediately anchors the game in cosmic dread and feudal gothic horror.
+  - *Lore Re-anchoring:* "Ember" is canonized as the dying, fleeting warmth of doomed youth (The Unsealed, ages 15–24) before calcifying into cold black stone; "Wake" represents both a funeral vigil over a dead world and the subterranean stirrings of the Low Sleep titan beneath Cinderreach.
 
 ---
 
