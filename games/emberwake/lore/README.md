@@ -64,7 +64,8 @@ games/emberwake/lore/
     ├── gameplay_loop_and_ui_prototype.md  <-- Macro expedition loop, micro 4-step combat loop, UI reuse
     ├── screen_architecture_and_separation_plan.md<-- Combat UI vs. Exploration UI separation & 8 screens
     ├── enemy_bestiary_and_ai.md           <-- Base/elite bestiary, named bosses & modular encounter architecture
-    └── safehouse_economy_and_triage.md    <-- Undercroft wings, resource economy, and repurposed vs new UI elements
+    ├── safehouse_economy_and_triage.md    <-- Undercroft wings, resource economy, and repurposed vs new UI elements
+    └── items_gear_and_progression.md      <-- Weapon families, armor profiles, strain consumables, monster parts & relics
 ```
 
 ---
@@ -168,6 +169,9 @@ games/emberwake/lore/
 * [safehouse_economy_and_triage.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/systems/safehouse_economy_and_triage.md)  
   *Tags:* `#safehouse` `#economy` `#triage` `#ui-reuse` `#deck-builder`  
   *Summary:* The Sluice Undercroft facilities (Slab, Forge, Bunks, Basin), resource conversion (Tallow, Salt, Scrap, Marrow), repurposed engine UI widgets, and 4 new UI widgets.
+* [items_gear_and_progression.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/systems/items_gear_and_progression.md)  
+  *Tags:* `#items` `#weapons` `#armor` `#consumables` `#relics` `#crafting`  
+  *Summary:* Valid weapon families, class armor profiles, Battle Pouch corruption/strain consumables, monster anatomical harvest reagents, and 9 unique 1-per-world named relics.
 
 ---
 
