@@ -8,6 +8,7 @@ Status: canon (user 2026-10-25). The layout every game's design library follows,
 | `CANON.md` | The single source the other docs follow: numbers sheet, campaign spine, endings, glossary, open questions |
 | `background/cast_registry.md` | Every named character and place: name, stable id, faction, role, age, background, first appearance, asset brief |
 | `background/central_truth.md` | The spoiler sheet: what is really going on; options until the user picks one |
+| `STORY_GUIDE.md`, `background/who_is_who.md` | The story and cast in one place: plot, arcs and fates per act, story elements, reveal timeline, story gaps ([template](story_guide.md)) |
 | `background/`, `narrative/`, `systems/`, `specs/` | Domain docs (world, story, rules, art and roadmap), each consistent with `CANON.md` |
 | `specs/naming_and_asset_guide.md` | The game's filled-in naming styles and asset brief rules ([template](naming_and_asset_briefs.md)) |
 | `archive/` | Superseded brainstorm exports, kept with an archive header (history is append-only) |
