@@ -40,6 +40,7 @@ games/emberwake/lore/
 │   ├── cosmology_and_setting.md           <-- The Low Sleep, The Shroud, Stagnation of Mortality, Lexicon
 │   ├── factions_and_sociology.md          <-- Sovereign Clerisy, Iron Inquisition, Tallow Guild, Severed Root
 │   ├── world_geography_and_hub.md         <-- Sluice Undercroft safehouse layout & Sunk Ward district map
+│   ├── sunk_ward_campaign_map.md          <-- Sunk Ward node graph, traversal rules & Phase 1 campaign staging
 │   └── npcs_and_questlines.md             <-- Aline Vance, Bram Karr, Tessia Morn, Pip dossiers
 │
 ├── narrative/                             <-- Campaign Narrative, Onboarding & Character Choices
@@ -95,6 +96,9 @@ games/emberwake/lore/
 * [world_geography_and_hub.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/background/world_geography_and_hub.md)  
   *Tags:* `#geography` `#hub` `#safehouse` `#sunk-ward`  
   *Summary:* Subterranean safehouse (*The Sluice Undercroft*), environmental hazards (tallow fumes, sewer miasma), and the Act 1 district map (*The Sunk Ward*).
+* [sunk_ward_campaign_map.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/background/sunk_ward_campaign_map.md)  
+  *Tags:* `#campaign-map` `#node-graph` `#encounters` `#prologue` `#sacrifice`  
+  *Summary:* The Sunk Ward 8-node exploration graph, stealth/speed route mechanics, Inquisition Alert thresholds, and the 5 authored Phase 1 missions integrating `ENC-EVT-01` to `06`.
 * [npcs_and_questlines.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/background/npcs_and_questlines.md)  
   *Tags:* `#npcs` `#quests` `#triage` `#forge`  
   *Summary:* Full dossiers and personal quest arcs for Sister Aline Vance, Bram Karr, Tessia Morn, and Pip.
