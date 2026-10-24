@@ -93,6 +93,13 @@ The following architectural decisions have been documented from the user's initi
   - *Thematic Grounding:* The subtitle (*The Low Sleep*) eliminates generic high-fantasy fire assumptions and immediately anchors the game in cosmic dread and feudal gothic horror.
   - *Lore Re-anchoring:* "Ember" is canonized as the dying, fleeting warmth of doomed youth (The Unsealed, ages 15–24) before calcifying into cold black stone; "Wake" represents both a funeral vigil over a dead world and the subterranean stirrings of the Low Sleep titan beneath Cinderreach.
 
+### DEC-LORE-14: Base Class Trees & Named Founder Specializations
+- **Decision:** All six base classes feature complete Branch A (Cold Steel) and Branch B (Inoculated) progression trees adhering to the 6-tick timeline and speed tiers. Furthermore, authored characters (The Six Founders) possess unique character specializations over procedural recruits:
+  1. *Innate Character Trait:* Permanent lore-tethered passive reflecting personal taints and psychological conditions.
+  2. *Authored Skill Variant:* Modified version of a base class skill with distinct mechanics or altered timing.
+  3. *Exclusive Signature Capstone:* Character-locked active maneuver representing their ultimate tactical expression.
+- **Consequence:** Detailed in [classes_and_skill_trees.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/systems/classes_and_skill_trees.md). Procedural recruits in Phase 2 adhere to standard base trees, while founders remain mechanically distinctive throughout the campaign.
+
 ---
 
 ## 3. Engine Alignment & Mapping Matrix
@@ -115,6 +122,5 @@ When the implementation phase commences, the new worldbuilding maps directly ont
 
 The following open design items have been identified for user confirmation before gameplay implementation begins:
 
-1. **Class Trees 3–6 Full Detailing:** Classes 1 (Vanguard) and 2 (Gutter-Stalker) have complete Branch A and Branch B active/passive skill trees specified in the design bible. Would you like to draft the exact skills for Classes 3–6 (Arbalestier, Slag-Brute, Heretic Acolyte, Ichor Alchemist) within `classes_and_skill_trees.md` next?
-2. **Engine Migration Strategy for Combat:** The current Rust runtime engine (`engine/combat` / `crates/`) uses a turn-based grid system. Should the 6-tick simultaneous timeline be designed as an evolution of the existing combat engine, or will we build a dedicated timeline prototype?
-3. **Legacy Ashlands Data Policy:** Should existing files in `games/emberwake/data/` (Ashlands maps, goblin catalog entries) eventually be migrated/re-skinned in-place to The Sunk Ward, or should they be preserved as a legacy world module while creating a new `sunk_ward` campaign folder?
+1. **Engine Migration Strategy for Combat:** The current Rust runtime engine (`engine/combat` / `crates/`) uses a turn-based grid system. Should the 6-tick simultaneous timeline be designed as an evolution of the existing combat engine, or will we build a dedicated timeline prototype?
+2. **Legacy Ashlands Data Policy:** Should existing files in `games/emberwake/data/` (Ashlands maps, goblin catalog entries) eventually be migrated/re-skinned in-place to The Sunk Ward, or should they be preserved as a legacy world module while creating a new `sunk_ward` campaign folder?
