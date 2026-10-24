@@ -105,8 +105,8 @@ games/emberwake/lore/
   *Tags:* `#campaign-map` `#node-graph` `#encounters` `#prologue` `#sacrifice`  
   *Summary:* The Sunk Ward 8-node exploration graph, stealth/speed route mechanics, Inquisition Alert thresholds, and the 5 authored Phase 1 missions integrating `ENC-EVT-01` to `06`.
 * [npcs_and_questlines.md](file:///c:/dev/tactical-rpg/games/emberwake/lore/background/npcs_and_questlines.md)  
-  *Tags:* `#npcs` `#quests` `#triage` `#forge`  
-  *Summary:* Full dossiers and personal quest arcs for Sister Aline Vance, Bram Karr, Tessia Morn, and Pip.
+  *Tags:* `#npcs` `#factions` `#quests` `#clerisy` `#inquisition` `#underworld`  
+  *Summary:* The complete society of Cinderreach: Hub companions (Aline, Bram, Tess, Pip), regime leaders (Arch-Prelate Othemar, General Vaelen), neutral underworld brokers (Madame Vespera, "Nails" Morik), commoners (Old Mother Agnes, Lucan), and heretical hermits.
 
 ---
 
