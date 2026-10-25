@@ -4,14 +4,14 @@ Status: proposed (spec 2026-10-25, from CANON 2.4 and the rows "Founder death an
 in Act 1", "Losses: choice, then fate", "Roster group (1.3)" and "Round intent (renamed)" (Q-37a, Q-40a) in
 `games/emberwake/docs/decisions/lore.md`; Q-29, Q-31, Q-32, Q-34, Q-36, Q-37, Q-37a, Q-38, Q-40, Q-40a, Q-93)
 Depends on: ENCOUNTER2-H (party fates) for the core; RULESET1-S (`default_intent`, passive `slot`) for temperament;
-CAMPAIGN1 (written in parallel: acts, the day clock, rests, the retreat, read keys) by reference; KIT1 moves the
-story-free modules into kit crates later (paths below are today's game crates)
+CAMPAIGN1 (written in parallel: acts, the day clock, rests, the retreat, read keys) by reference; KIT1-N
 Lane: logic first (schema, world rules, battle rules), then asset (the `sunk_ward` rows); tests, parity plan, task
 split, data, ENCOUNTER2 changes, docs delta and open questions: [ROSTER1_TASKS.md](ROSTER1_TASKS.md)
-Touches (by task, see the task file): under `games/emberwake/crates/`: `emberwake_world/src/{roster (new),state,save,
-progression,dialogue,quest,battle,new_game,data,lib}.rs`, `emberwake_battle/src/{session,world,skill,command,log,
-intent}.rs`, `emberwake_data/src/lib.rs`, `emberwake_content/src/{source,store,check/*}.rs`,
-`emberwake_gui/src/{battle,party,hub}.rs`; `games/emberwake/schema.json`; `games/emberwake/data/**` (asset lane)
+Touches (by task, see the task file): under `kits/rpg/crates/`: `rpgkit_world/src/{roster (new),state,save,
+progression,dialogue,quest,battle,new_game,data,lib}.rs`, `rpgkit_battle/src/{session,world,skill,command,log,
+intent}.rs`, `rpgkit_data/src/lib.rs`, `rpgkit_content/src/{source,store,check/*}.rs`, `kits/rpg/schema.json`;
+`games/emberwake/crates/emberwake_gui/src/{battle,party,hub}.rs`; `games/emberwake/data/**` (asset lane). Kit line
+numbers are pre-KIT1 (KIT1-M moved the files byte-identical; `rpgkit_*` = `kits/rpg/crates/rpgkit_*`).
 
 History: `docs/HISTORY.md` 2026-10-18 rejected "a temporary injury until the party rests" (a penalty for losing
 discouraged risk). Wounded is that idea; the reason changed for the new worlds only: the user chose it (Q-31) as the
@@ -29,21 +29,21 @@ counter for Living Martyrs. No `[engine]` part: every rule is genre logic (`[kit
 
 | Area | Where | What it does |
 | --- | --- | --- |
-| Caps | `emberwake_world/src/data.rs:17`, `:165-173` | `PARTY_MAX` 4; `party_max(world)` = nearest manifest value >= 1 |
-| Party | `emberwake_world/src/state.rs:291-305`, `:317-327`, `:372-375` | `members`, `active_ids` (empty = the first `max_active`), `max_active` (never saved), stash, gold, supplies |
+| Caps | `rpgkit_world/src/data.rs:17`, `:165-173` | `PARTY_MAX` 4; `party_max(world)` = nearest manifest value >= 1 |
+| Party | `rpgkit_world/src/state.rs:291-305`, `:317-327`, `:372-375` | `members`, `active_ids` (empty = the first `max_active`), `max_active` (never saved), stash, gold, supplies |
 | Member | `state.rs:33-51` | `UnitState`: id, base unit, `lore_ref`, XP, spend, skills, loadout, equipment (catalog ids), pouch, `hp_lost` (HEAL1) |
 | Recruit | `dialogue.rs:673-682`, `:724-734`; `new_game.rs:10-21`; `data.rs:188-207` | effect `recruit`: refused at `members.len() >= party_max` ("The party is full (n of cap)."); joins at the highest active XP; pushed onto `active_ids` when that list is non-empty (`:729-731`, can pass `max_active` once members may outnumber it); party heroes may not carry named items |
 | HP between fights | `progression.rs:228-279`, `:342-347`; `explore.rs:456-460`, `:528-551` | HEAL1: carry-over through `hp_lost`; a downed hero rallies to 25% on a win, 1 HP on a flee; a lost fight wakes everyone healed; entering a `rest` location heals all |
 | Write-back | `emberwake_gui/src/battle.rs:578`, `:744-751` | the GUI builds heroes at their stored HP and writes `hp_lost` back on won and fled: a world rule living in the GUI |
-| Results | `emberwake_world/src/battle.rs:179-214` | `Tally` holds enemy fates only; ENCOUNTER2-H adds `party_fates` (escaped, stayed, stood, downed, standing) |
-| Downed | `emberwake_battle/src/world.rs:142-148`; `grid.rs:154`; `metrics.rs:430-432` | HP 0 = not alive; heals refuse a downed unit; dead units keep their tile; no revive, no bleed-out |
-| Hero AI | `emberwake_gui/src/battle.rs:588`; `emberwake_battle/src/world.rs:31-42` | `AiProfile::for_unit` from the base unit: role, `defend_below`, `target_pref`, `reckless`, `heal_below`, `flee_ratio` |
-| Accessories | `emberwake_data/src/lib.rs:272-340`; `emberwake_content/src/source.rs:588-600`; `emberwake_rules/src/unit.rs:254`, `:278-341` | items are catalog rows; `effect` modifiers use the passive grammar (`stat`, `resist`, `ap_regen`, `skill_potency`, `status_potency`, `spell_reach`); worn by catalog id (`progression.rs:176-182`) |
-| Selling | `emberwake_world/src/shop.rs:183-201` | only stash items with a sell price >= 1 are offered: `value` 0 cannot be sold |
+| Results | `rpgkit_world/src/battle.rs:179-214` | `Tally` holds enemy fates only; ENCOUNTER2-H adds `party_fates` (escaped, stayed, stood, downed, standing) |
+| Downed | `rpgkit_battle/src/world.rs:142-148`; `grid.rs:154`; `metrics.rs:430-432` | HP 0 = not alive; heals refuse a downed unit; dead units keep their tile; no revive, no bleed-out |
+| Hero AI | `emberwake_gui/src/battle.rs:588`; `rpgkit_battle/src/world.rs:31-42` | `AiProfile::for_unit` from the base unit: role, `defend_below`, `target_pref`, `reckless`, `heal_below`, `flee_ratio` |
+| Accessories | `rpgkit_data/src/lib.rs:272-340`; `rpgkit_content/src/source.rs:588-600`; `rpgkit_rules/src/unit.rs:254`, `:278-341` | items are catalog rows; `effect` modifiers use the passive grammar (`stat`, `resist`, `ap_regen`, `skill_potency`, `status_potency`, `spell_reach`); worn by catalog id (`progression.rs:176-182`) |
+| Selling | `rpgkit_world/src/shop.rs:183-201` | only stash items with a sell price >= 1 are offered: `value` 0 cannot be sold |
 | Active toggle | `emberwake_gui/src/party.rs:371-388`, `:852` | "In party (n/max)" check box; the rule lives in the GUI |
 | Saves | `save.rs:17`, `:115-199`; `tests/saves.rs:41-47`; `tests/data_source.rs:25-34` | v12; Godot saves must give a `to_value()` equal to Godot's state (only `reward_paid` stripped); new schema keys go into `AFTER_GODOT`. No crate names `captured`, `wounded`, `bunk`, `keepsake` or `temperament` |
 
-## 3. The member lifecycle `[kit hook]` (module `emberwake_world::roster`, ROSTER1-L)
+## 3. The member lifecycle `[kit hook]` (module `rpgkit_world::roster`, ROSTER1-L)
 
 ### 3.1 States
 

@@ -4,15 +4,17 @@ Status: proposed (spec 2026-10-25, from CANON 2.5 and 2.6 and the rows "Inquisit
 and fail states", "Economy", "Campaign group (1.2)", "Campaign follow-ups", "Hub group (1.4)" in
 `games/emberwake/docs/decisions/lore.md`; Q-13 to Q-20a, Q-43, Q-45, Q-46)
 Depends on: none to start (CAMPAIGN1-E, -S); ROSTER1 (written in parallel) for wounded, captured and the living
-count; STORYUI1 (in parallel) for the vignette player, the end cards and the mission board; KIT1 (in parallel) moves
-this spec's story-free modules into kit crates later
+count; STORYUI1 (in parallel) for the vignette player, the end cards and the mission board; KIT1-N (this
+spec's story-free modules are written in the kit crates, KIT1_TASKS 5)
 Lane: logic first (engine, schema, runtime, GUI, sim), then asset (the `sunk_ward` rows); tests, parity plan, task
 split, data, docs delta and open questions: [CAMPAIGN1_TASKS.md](CAMPAIGN1_TASKS.md)
-Touches (by task, see the task file): `engine/crates/aegis_save/src/lib.rs`; under `games/emberwake/crates/`:
-`emberwake_world/src/{campaign/*,state,save,quest,dialogue,battle,travel,progression,explore,lib}.rs`,
-`emberwake_content/src/{source,store}.rs`, `check/{world,campaign}.rs`, `emberwake_gui/src/{hud,worldmap,region,
-battle,screens,menus,forge,runover}.rs`, `emberwake_sim/src/{args,deadlines}.rs`; `games/emberwake/schema.json`;
-`games/emberwake/data/worlds/sunk_ward/*` (asset lane)
+Touches (by task, see the task file): `engine/crates/aegis_save/src/lib.rs`; under `kits/rpg/crates/`:
+`rpgkit_world/src/{campaign/*,state,save,quest,dialogue,battle,travel,progression,explore,lib}.rs`,
+`rpgkit_content/src/{source,store}.rs`, `check/{world,campaign}.rs`, `rpgkit_sim/src/{args,deadlines}.rs`; under
+`games/emberwake/crates/`: `emberwake_gui/src/{hud,worldmap,region,battle,screens,menus,forge,runover}.rs`;
+`kits/rpg/schema.json`; `games/emberwake/data/worlds/sunk_ward/*` (asset lane)
+Paths (KIT1_TASKS 5): `rpgkit_*` crates are under `kits/rpg/crates/`, `emberwake_*` under `games/emberwake/crates/`;
+line numbers in kit files are pre-KIT1 (KIT1-M moved them byte-identical).
 
 History: `docs/HISTORY.md` 2026-10-25 drops gold, the other upkeep versions, a siege Breach as a Game Over and
 Extinguished as an ending; this spec keeps all four out. Nothing else there touches meters, clocks or fail screens.
@@ -24,13 +26,13 @@ meters with named bands and per-act rules (a gauge such as the Inquisition Alert
 Clock on the travel clock), checkpoint missions with day deadlines and bad ends, a run-over state shown on one
 failure screen, purse names and an upkeep zero effect per world, rests that cost days, a retreat after a lost
 battle, and data-driven triggers. Everything the game names (Alert, the Red Tithing, Scrap, Tallow, the
-Extinguished) is data. The code is story-free so KIT1 can move it.
+Extinguished) is data. The code is story-free, in the kit crates (KIT1).
 
 ## 2. Survey: what exists (`develop` at 153ec78)
 
 | Area | Where | Today |
 | --- | --- | --- |
-| Clock | `emberwake_world/src/state.rs:468`, `travel.rs:385-389` | `GameState.time`, a unitless count; a leg adds its route `time` (schema default 3; Ashlands routes 2-4, Iron Reaches 6) |
+| Clock | `rpgkit_world/src/state.rs:468`, `travel.rs:385-389` | `GameState.time`, a unitless count; a leg adds its route `time` (schema default 3; Ashlands routes 2-4, Iron Reaches 6) |
 | Upkeep | `state.rs:16-17,299,356-370`, `travel.rs:386-392` | `party.supplies` 0-99, start 10 (`start_supplies` manifest field, `travel.rs:126`); a leg spends `time` supplies; travel never refused |
 | Zero upkeep | `travel.rs:12,110-124` | road-fight chance x1.5 (`STARVED_PCT`), capped 100 |
 | Currency | `state.rs:15,298,350` | `party.gold` 0-9,999,999; dialogue `gold` condition and `take` gold (`dialogue.rs:177,661`) |
@@ -46,7 +48,7 @@ Extinguished) is data. The code is story-free so KIT1 can move it.
 | Game over | - | none: no fail condition, no failure screen, no run-over state |
 | Saves | `world/src/save.rs:17,115-199`; `aegis_save/src/lib.rs:13-25,143` | version 12; numbered slots 0 (autosave) to 5; no named saves |
 | World config | `games/emberwake/game.json`; `data/worlds/*/world.json`; `data.rs:166` | manifest fields resolve over the lineage (`party_max`, `start_supplies`); no `sunk_ward` yet (SUNKWARD1) |
-| Parity | `world/tests/{journey,saves,world_traces,data_source}.rs` | journeys compare every result, state and view with Godot (`journey.rs:16-18` strips REWARD1's keys); saves compare the loaded state |
+| Parity | `emberwake_world/tests/{journey,saves,world_traces,data_source}.rs` (game) | journeys compare every result, state and view with Godot (`journey.rs:16-18` strips REWARD1's keys); saves compare the loaded state |
 
 ## 3. Shared model `[kit hook]`
 

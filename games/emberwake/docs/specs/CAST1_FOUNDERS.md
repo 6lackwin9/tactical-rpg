@@ -87,7 +87,7 @@ Gear: main `curfew_bodkin` (dagger); body `soot_leathers`; pouch `sulfur_poultic
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `hamstring_sever` | Hamstring Sever | ATTACK | maneuver | 1 | 1 | 2 | 0.65 | 6 | 1-1 | `weapon_types` [dagger]; `dash_tiles` 3; slow potency 75, 2 rounds; exploit `flanked` x1.3 | Engage or Disengage opener; Snap repeats |
 | `ash_cloud_fade` | Ash-Cloud Fade | DEFEND | guard | 1 | 1 | 2 | - | 0 | self | mitigation 0.2; grant `stealth` 2 rounds; `hazard` {`smoke`, BURST, self, 2} | Guard opener: smoke over the 3x3 around her |
-| `throat_carver` | Throat-Carver | ATTACK | assault | 2 | 2 | 4 | 2.2 | 8 | 1-1 | `weapon_types` [dagger]; exploit `stagger` x1.5, `root` x1.5 | the finisher on a staggered or pinned foe |
+| `throat_carver` | Throat-Carver | ATTACK | assault | 2 | 2 | 4 | 2.2 | 8 | 1-1 | `weapon_types` [dagger]; exploit `stagger` x1.5, `root` x1.5, `hp_below` 35 x2.0 (HOOKS1 8.6, HQ15 a) | the finisher on a staggered, pinned or bleeding-out foe |
 | `orlovs_retribution` | Retribution | ATTACK | maneuver | 2 | 2 | 3 | 2.0 | 8 | 1-1 | `weapon_types` [dagger]; `dash_tiles` 2; exploit `stagger` x1.5, `root` x1.5 | Disengage: strike, then slip 2 tiles |
 
 - Ash-Cloud and Fade: the Defend places Soot Smoke at its start (HOOKS1 GH2; row `smoke`: cover 0.3 against ranged
@@ -104,7 +104,7 @@ Gear: main `curfew_bodkin` (dagger); body `soot_leathers`; pouch `sulfur_poultic
 | `prowlers_cadence` | Prowler's Cadence | passive | resist `slow` 40, `root` 40 | no extra move cost in cover, mist and rubble (G8) |
 | `anatomical_flaw` | Anatomical Flaw | passive | `skill_potency` family `throat_carver` +0.15, family `hamstring_sever` +0.15 | ignore armour and +25% crit on stunned, staggered or rooted targets (G11) |
 | `ghost_of_the_undercroft` | Ghost of the Undercroft | keystone | `foresight` (no range); `ap_regen` +1 | Q-58 a: rebuilt on foresight and stealth |
-| `cinder_childs_reflex` | Cinder-Child's Reflex | "" | trigger `evaded`: grant `haste` 1 round | - |
+| `cinder_childs_reflex` | Cinder-Child's Reflex | "" | trigger `evaded`: grant `haste` 1 round; trigger `kill` with `when.skills` [`throat_carver`]: `ap` 2 (HOOKS1 8.6, HQ16 a) | - |
 
 Deck at level 1: active [`hamstring_sever`, `ash_cloud_fade`]; passive [`prowlers_cadence`, `anatomical_flaw`];
 keystone [`ghost_of_the_undercroft`].

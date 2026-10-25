@@ -5,7 +5,8 @@ Status: proposed, revised 2026-10-25 (intent rename); companion of [RULESET1.md]
 
 ## 1. Schema contract (schema-first: yes; R and S)
 
-New schema rows join `AFTER_GODOT` (`emberwake_world/tests/data_source.rs:25`); defaults keep today's behaviour.
+New rows in `kits/rpg/schema.json` join `AFTER_GODOT` (`emberwake_world/tests/data_source.rs:25`); defaults keep
+today's behaviour.
 
 ### 1.1 World manifest (`world.world`, RULESET1-R)
 
@@ -242,9 +243,10 @@ and AP, flanks, carried moves, kite steps, lost attacks, planner reasons, rounds
 - Every parity suite passes untouched (section 5); each Ashlands encounter traced with classic and with every
   extension of 3.2 on (options off) gives identical traces, logs, metrics and RNG draw counts; classic stances, Rest,
   riposte removal and the dash and jump as the round's move stay byte-identical (`round_intent` off).
-- `emberwake_battle/tests/timeline_golden.rs` runs the five `tl_` encounters for seeds 1337, 7 and 42 through
-  `sim::fight` on a frozen kit copy (`tests/fixtures/timeline_kit.json`) against `tests/fixtures/timeline_golden.json`,
-  recorded once when X lands; re-recorded only for an intended rule change named in the commit and a HISTORY row.
+- `kits/rpg/crates/rpgkit_battle/tests/timeline_golden.rs` runs the five `tl_` encounters for seeds 1337, 7 and 42
+  through `sim::fight` on a frozen kit copy (`tests/fixtures/timeline_kit.json`) against
+  `tests/fixtures/timeline_golden.json`, recorded once when X lands; re-recorded only for an intended rule change
+  named in the commit and a HISTORY row.
 
 ## 5. Parity plan
 
@@ -257,35 +259,36 @@ and AP, flanks, carried moves, kite steps, lost attacks, planner reasons, rounds
 
 ## 6. Tasks
 
-Paths under `games/emberwake/crates/`: `b/`, `r/`, `w/`, `gui/` = `emberwake_{battle,rules,world,gui}/src/`.
+Paths: `b/` `r/` `w/` = `kits/rpg/crates/rpgkit_{battle,rules,world}/src/` (`rpgkit_*` there), `gui/` =
+`emberwake_gui/src/`; `schema.json` in `kits/rpg/`; `data_source.rs`, `saves.rs` in `emberwake_world/tests/`.
 
 | Id | Title | Layer | Lane | Depends | Touches |
 | --- | --- | --- | --- | --- | --- |
-| RULESET1-R | Ruleset switch: world fields, `rulesets` kind, `Ruleset`, `EncounterDef.ruleset`, bridge, sim and host args; classic stances inert under `round_intent` (3, 1.1, 1.2, IN3) | kit | logic | - | `schema.json`; `emberwake_data`; `emberwake_content/src/{source,store,check/*}`; `r/ruleset.rs` (new); `b/{session,plan,skill,command,sim}.rs`; `w/{data,battle}.rs`; `gui/battle.rs`; `emberwake_sim/src/args.rs`; `emberwake_host`; `data_source.rs` |
-| RULESET1-S | Timeline fields and checks (1.3-1.7): skills, `exploit` `flanked`, passives, units, families, `steadfast`, `stealth`, `intent_bound` | kit | logic | R | `schema.json`; `emberwake_data/src/lib.rs`; `emberwake_content/src/check/{skill,simple,unit,item}.rs`; `r/status.rs`; `data_source.rs` |
+| RULESET1-R | Ruleset switch: world fields, `rulesets` kind, `Ruleset`, `EncounterDef.ruleset`, bridge, sim and host args; classic stances inert under `round_intent` (3, 1.1, 1.2, IN3) | kit | logic | - | `schema.json`; `rpgkit_data/src/lib.rs`; `rpgkit_content/src/{source,store,check/*}`; `r/ruleset.rs` (new); `b/{session,plan,skill,command,sim}.rs`; `w/{data,battle}.rs`; `gui/battle.rs`; `rpgkit_sim/src/args.rs`; `emberwake_host/src/cli.rs` (args); `data_source.rs` |
+| RULESET1-S | Timeline fields and checks (1.3-1.7): skills, `exploit` `flanked`, passives, units, families, `steadfast`, `stealth`, `intent_bound` | kit | logic | R | `schema.json`; `rpgkit_data/src/lib.rs`; `rpgkit_content/src/check/{skill,simple,unit,item}.rs`; `r/status.rs`; `data_source.rs` |
 | RULESET1-T | Enemy recovery and no enemy AP (`enemy_moves`), `ap_cost`, `ScheduledAction.impact` (4.2, 4.4) | kit | logic | S | `b/{resolver,plan,skill,intent,log}.rs`; tests |
 | RULESET1-IN | Round intent rules (intent 2-6): persistence, intent-bound buffs, one target, the `add_step` filter, neutral moves, Rest, carried moves, after-moves, facing, flank, stealth, cover | kit | logic | T | `b/{round_intent (new),plan,resolver,command,skill,world}.rs`; `r/{unit,status,damage}.rs`; tests |
 | RULESET1-PL | Auto planner: opener, tiles (carried-move tiles too), follow-up fill, after-moves, reason tags, manual fill, `deck.order` (intent 4, 7, 8) | kit | logic | IN | `b/{round_intent_plan (new),plan}.rs`; tests |
 | RULESET1-P | Poise, stagger with the flank factor, breaks, chance, sure break, guard halving, pierce, metrics (5, 6, 7) | kit | logic | IN, DERIVE1-R | `r/{unit,damage,derived}.rs`; `b/{poise (new),resolver,command,session,metrics,log}.rs`; tests |
 | RULESET1-K | Reach-2 melee (8) | kit | logic | S (after P: shared files) | `r/{unit,gear}.rs`; `b/{skill,command,plan,ai}.rs`; tests |
-| RULESET1-V | Badges, the round intent in tells (`round_intents`, host reply), `plan_reveal`, foresight range, trace keys (10) | kit | logic | T | `b/{intent,session}.rs`; `r/unit.rs`; `w/battle.rs`; `emberwake_host`; tests |
+| RULESET1-V | Badges, the round intent in tells (`round_intents`, host reply), `plan_reveal`, foresight range, trace keys (10) | kit | logic | T | `b/{intent,session}.rs`; `r/unit.rs`; `w/battle.rs`; `rpgkit_host/src/lib.rs`; tests |
 | RULESET1-AI | Enemy and party AI: the intent pick table, enemy order lists, AUTO1 mapping (intent 9) | kit | logic | PL, V | `b/{ai,world}.rs`; `gui/battle.rs` (tactics); tests |
 | RULESET1-D | Deck rules: slot kinds, `basics`, order lists, slotted passives, member `deck`, save step (9 D1-D5) | kit + game | logic | S | `r/unit.rs`; `b/{skill,world}.rs`; `w/{state,save,progression}.rs`; `saves.rs`; tests |
 | RULESET1-E | Timeline widget: marks (glyph, colour, tip at a block) and segment parts (windup, impact, recovery; hatching; links) | engine | logic | - | `engine/crates/aegis_ui/src/{timeline,specimens}.rs`; `aegis_ui/tests/kit_widgets.rs`; `engine/README.md` |
 | RULESET1-U | Battle screen (intent 10, index 12): intent buttons, target, kinds, opener, Manual, reasons, after-moves, flank arc, stealth veil, intent in tells and threat intel, badges, BREAK, poise, forecasts, reach band | game | logic | E, P, K, V, PL | `gui/{battle,intent_text,hud}.rs` |
 | RULESET1-DU | Deck buckets, Basics row and order editor (party screen, Dojo; 9 D6) | game | logic | D | `gui/{party,dojo}.rs` |
-| RULESET1-G | Dojo toggle, planner view and readouts, Arena select and toggles, sim `feel` (index 12, tasks 3) | game | logic | P, K, V, PL | `b/dojo.rs`; `gui/{dojo,runner}.rs`; `emberwake_sim/src/{args,modes,feel (new)}.rs` |
+| RULESET1-G | Dojo toggle, planner view and readouts, Arena select and toggles, sim `feel` (index 12, tasks 3) | kit + game | logic | P, K, V, PL | `b/dojo.rs`; `gui/{dojo,runner}.rs`; `rpgkit_sim/src/{args,modes,feel (new)}.rs` |
 | RULESET1-A | Test kit data and the `sunk_ward` field (2) | game | asset | R, S, DERIVE1-S | `data/catalog/{rulesets,derived_stats,classes,item_families,items,skills,passives,units,encounters}.json`; `data/worlds/sunk_ward/world.json` |
-| RULESET1-X | Golden traces and the inert-extensions check (4.2) | kit | logic | A, G, AI | `emberwake_battle/tests/{timeline_golden.rs,fixtures/*}` |
+| RULESET1-X | Golden traces and the inert-extensions check (4.2) | kit | logic | A, G, AI | `rpgkit_battle/tests/{timeline_golden.rs,fixtures/*}` |
 | RULESET1-B | Feel sim report: stagger and poise factors, chance, sure break, pierce at 25/35/50, Rest gain, flanks, carried moves, kiting AP, intent variety (OI1), lock rate | game | balance | X | `games/emberwake/docs/BALANCE_REPORT.md` |
 
 R and S are schema-first. IN, PL, P, K share `plan.rs`, `command.rs`, `resolver.rs`: run them in that order; V may
-run beside IN after T. Sequence ENCOUNTER2 (`schema.json`, `session.rs`) with R. With KIT1 first, kit rows move there.
+run beside IN after T. Sequence ENCOUNTER2 (`schema.json`, `session.rs`) with R. Kit rows: kit crates (KIT1).
 
 ## 7. Docs delta (builders report, the planner applies)
 
 - `GAME_BRIEF.md`: a Rulesets section. `docs/STRUCTURE.md`: `r/ruleset.rs`,
-  `b/{round_intent,round_intent_plan,poise}.rs`, `emberwake_sim/src/feel.rs`, `rulesets.json`, the fixtures.
+  `b/{round_intent,round_intent_plan,poise}.rs`, `rpgkit_sim/src/feel.rs`, `rulesets.json`, the fixtures.
 - `engine/README.md` (widget marks and parts); `PORT_NOTES.md` (new modules port no Godot file); authoring notes
   "rulesets: options and extensions" and "a round-intent planner". Lore: `combat_and_timeline.md` 6 (reach 2);
   `rules_engine_architecture.md` 3.1, 4.2 (1.3's names). HISTORY: section 5's strips.

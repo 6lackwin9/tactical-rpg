@@ -2,13 +2,15 @@
 
 Status: proposed (spec 2026-10-25, from the user decision Q-47a: Composure returns as a derived stat, the corruption
 resist, and the engine and kit gain data-defined derived stats so any game can add them as data)
-Depends on: none (DERIVE1-E); the kit parts follow KIT1's crate paths if KIT1 lands first (section 8)
+Depends on: none (DERIVE1-E); the kit parts live in the kit crates (KIT1-M, on develop; section 8)
 Lane: logic (E, S, R, U), then asset (D)
-Touches: `engine/crates/aegis_core/src/{formula.rs,lib.rs}` (new module); `games/emberwake/schema.json`
-(`content.derived_stats`); under `games/emberwake/crates/`: `emberwake_data/src/lib.rs`,
-`emberwake_content/src/{source.rs,store.rs,check/*}`, `emberwake_rules/src/{derived.rs,unit.rs}`,
-`emberwake_world/tests/data_source.rs`, `emberwake_gui/src/{party,dojo,battle}.rs`;
-`games/emberwake/data/catalog/derived_stats.json` (new, asset lane)
+Touches: `engine/crates/aegis_core/src/{formula.rs,lib.rs}` (new module); `kits/rpg/schema.json`
+(`content.derived_stats`); under `kits/rpg/crates/`: `rpgkit_data/src/lib.rs`,
+`rpgkit_content/src/{source.rs,store.rs,check/*}`, `rpgkit_rules/src/{derived.rs,unit.rs}`,
+`rpgkit_rules/tests/derived.rs`; under `games/emberwake/crates/`: `emberwake_world/tests/data_source.rs`,
+`emberwake_gui/src/{party,dojo,battle}.rs`; `games/emberwake/data/catalog/derived_stats.json` (new, asset lane)
+Paths (KIT1_TASKS 5): `rpgkit_*` crates are under `kits/rpg/crates/`, `emberwake_*` under `games/emberwake/crates/`;
+`file:line` citations into kit crates are pre-KIT1 line numbers (KIT1-M moved the files byte-identical).
 
 History: `docs/HISTORY.md` (2026-10-25) lists "Composure as a unit stat: not adopted" because Composure was never one
 of the six stats. That reason still holds and this spec respects it: Composure is not a seventh base stat but a value
@@ -30,8 +32,8 @@ the same.
 
 | What | Where | Rule |
 | --- | --- | --- |
-| The six stats | `emberwake_data/src/lib.rs:13` `STATS` | STR DEX INT CONS PERC KNOW |
-| Core values | `emberwake_rules/src/stats.rs:193` `CharacterStats::new` | class base + spend + class growth per level |
+| The six stats | `rpgkit_data/src/lib.rs:13` `STATS` | STR DEX INT CONS PERC KNOW |
+| Core values | `rpgkit_rules/src/stats.rs:193` `CharacterStats::new` | class base + spend + class growth per level |
 | Modifier | `stats.rs:81` `StatModifier` | `stat`, `flat` i32, `percent` f64, `source`, `context` (`weapon:<type>`), `duration`; `permanent` upper-cases `stat` (`stats.rs:94`) |
 | Effective stat | `stats.rs:216` `effective` | `roundi((base + Σflat) × (1 + Σpercent))`, minimum 1, modifiers matching the weapon context |
 | Gear bonuses | `unit.rs:209` `sync_from_stats_and_gear` | item `stat_bonuses` become source `gear` modifiers, then tier bonuses (`unit.rs:233`, read without tier modifiers, `gear.rs:113-175`), then gear effects |
@@ -61,13 +63,13 @@ The party screen lists them in `emberwake_gui/src/party.rs:87` (`derived_of`) wi
   (`gear.rs:113`). `aegis_core::json::roundi` (`json.rs:31`) is Godot's round half away from zero.
 - Rule constants are Rust `const`s (`stats.rs:6-19`, `damage.rs:10-19`). `tuning.json` holds only battle feel values,
   read live by `aegis_ui::tuning::TuningFile` (`aegis_ui/src/tuning.rs:14`, `emberwake_gui/src/tuning.rs:1`).
-- Catalog kinds load in `emberwake_content/src/source.rs:94` (`CATALOG_KINDS`, `source.rs:27`); a missing file is no
+- Catalog kinds load in `rpgkit_content/src/source.rs:94` (`CATALOG_KINDS`, `source.rs:27`); a missing file is no
   error (`aegis_content/src/file.rs:20`). The writer maps kinds to files in `store.rs:146-165` (`BASE_KINDS`).
 - Content checks reject unknown stat names in item modifiers (`check/item.rs:478`), tier `when` (`item.rs:560`), tier
   bonuses (`item.rs:634`), passive effects (`check/simple.rs:73,108`) and dialogue stat conditions (`dialogue.rs:258`).
 - The loader's parity test compares Godot's schema whole and catalogs per `CATALOG_KINDS`; fields added after the
   freeze are stripped by `AFTER_GODOT` (`emberwake_world/tests/data_source.rs:20-34`, `87-96`).
-- Out-of-battle rolls are per-save streams (`emberwake_world/src/rolls.rs:15-30`); battle rolls use the session's
+- Out-of-battle rolls are per-save streams (`rpgkit_world/src/rolls.rs:15-30`); battle rolls use the session's
   `GodotRng` (`status.rs:199`).
 
 ## 3. Engine: the formula evaluator `[engine]` (DERIVE1-E)
@@ -106,8 +108,8 @@ above with its column; `names()` order and uniqueness; parse twice gives the sam
 
 ## 4. Kit hook: derived stats as data `[kit hook]` (DERIVE1-S, DERIVE1-R)
 
-Written story-free in today's genre crates (`emberwake_data`, `emberwake_content`, `emberwake_rules`) so KIT1 moves it
-unchanged. No game name, no Composure in code.
+Written story-free in the kit crates (`rpgkit_data`, `rpgkit_content`, `rpgkit_rules`; KIT1-M moved them there).
+No game name, no Composure in code.
 
 ### 4.1 Schema contract (`content.derived_stats`, file `data/catalog/derived_stats.json`, schema-first: yes)
 
@@ -128,7 +130,7 @@ unchanged. No game name, no Composure in code.
 | `suffix` | enum | "" | `""` or `"%"` (display only) |
 | `origin` | enum | "system" | as every catalog kind (system, user) |
 
-Cross-row validation (DERIVE1-S, `emberwake_content/src/check/derived.rs`):
+Cross-row validation (DERIVE1-S, `rpgkit_content/src/check/derived.rs`):
 
 - Cycles: the rows form a graph by the derived ids their formulas name; a cycle is an error on each row in it, naming
   the path (`grit -> composure -> grit`). The loader orders rows topologically (ties in file order).
@@ -141,7 +143,7 @@ Cross-row validation (DERIVE1-S, `emberwake_content/src/check/derived.rs`):
   only valid rows with their parsed `Formula`. The writer takes the kind (`BASE_KINDS`); `aegis content check` reports
   the same errors.
 
-### 4.2 Value rule (DERIVE1-R, `emberwake_rules/src/derived.rs`)
+### 4.2 Value rule (DERIVE1-R, `rpgkit_rules/src/derived.rs`)
 
 Inputs of a unit's formula: the six base stats as `CharacterStats::stat` gives them (effective, in the unit's weapon
 context), `level`, the final value of every derived row it names, and the row's `constants`.
@@ -260,12 +262,12 @@ Recommendation: keep them in code until a second game or a ruleset needs to tune
 | Id | Title | Layer | Lane | Depends | Touches |
 | --- | --- | --- | --- | --- | --- |
 | DERIVE1-E | Formula evaluator (section 3) | engine | logic | - | `aegis_core/src/{formula,lib}.rs`; README delta |
-| DERIVE1-S | Derived-stat rows: schema, typed rows, loader, checks, writer, parity strip (4.1, 6) | kit | logic | DERIVE1-E | `schema.json`, `emberwake_data`, `emberwake_content/src/{source,store,check/*}`, `data_source.rs` |
-| DERIVE1-R | Derived-stat rules: value, breakdown, resist chance (4.2, 4.3) | kit | logic | DERIVE1-S | `emberwake_rules/src/{derived,unit,lib}.rs`, `emberwake_rules/tests/derived.rs` |
+| DERIVE1-S | Derived-stat rows: schema, typed rows, loader, checks, writer, parity strip (4.1, 6) | kit | logic | DERIVE1-E | `kits/rpg/schema.json`, `rpgkit_data`, `rpgkit_content/src/{source,store,check/*}`, `data_source.rs` |
+| DERIVE1-R | Derived-stat rules: value, breakdown, resist chance (4.2, 4.3) | kit | logic | DERIVE1-S | `rpgkit_rules/src/{derived,unit,lib}.rs`, `rpgkit_rules/tests/derived.rs` (scratch data) |
 | DERIVE1-U | Derived stats on the party screen, Dojo and battle inspect (4.4) | game | logic | DERIVE1-R | `emberwake_gui/src/{party,dojo,battle}.rs` |
 | DERIVE1-D | The Composure row (section 5) | game | asset | DERIVE1-S | `data/catalog/derived_stats.json` |
 
-If KIT1 lands before S or R, their files go to the kit crates KIT1 names (same modules). Docs deltas: STRUCTURE rows
+S and R write in the kit crates (KIT1-M landed; the planner adds KIT1-N to their Depends). Docs deltas: STRUCTURE rows
 for `formula.rs` and `derived.rs`, `GAME_BRIEF.md` stats section, and an authoring note "derived stats as data" in
 `engine/docs/authoring/` (the generic method, per the promote-generic-methods practice). The balance lane sets
 Composure's constants when the first corruption consumer exists (no sim can measure it before).

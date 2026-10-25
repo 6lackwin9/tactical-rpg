@@ -132,13 +132,16 @@ Image, cue and music paths that no asset layer holds are warnings (the asset che
 
 ## 4. Task split (one builder run each)
 
+Paths (KIT1_TASKS 5): `rpgkit_*` under `kits/rpg/crates/`, `emberwake_*` under `games/emberwake/crates/`;
+`check/` = `rpgkit_content/src/check/`.
+
 | Id | Title | Layer | Lane | Depends | Touches |
 | --- | --- | --- | --- | --- | --- |
 | STORYUI1-E | Vignette player: the card model (phases, typewriter, fades, skip, cues), drawing, `VignetteScreen`, the sample reel, the `text_speed` and `reduce_motion` keys | engine | logic | - | `engine/crates/aegis_ui/src/{vignette (new),lib,screen}.rs`, `engine/crates/aegis_ui/tests/vignette.rs` (new) |
-| STORYUI1-S | Story and board schema: kinds `vignettes`, `sequences`, `boards`; quest fields; `start_sequence`; effects; checks; writer; parity strips | kit | logic | - (reuses DERIVE1-S's kind strip if it landed) | `games/emberwake/schema.json`, `emberwake_content/src/{source,store}.rs`, `check/{mod,world,quest,dialogue,story (new),board (new)}.rs`, `emberwake_content/tests/story_checks.rs` (new), `emberwake_world/tests/data_source.rs` |
-| STORYUI1-W | Story and board rules: queue, seen, tokens, sequences and the story fight runner, board view and accept, the board service and badge, map jobs, the `story` state field, the new game's start sequence | kit | logic | STORYUI1-S | `emberwake_world/src/{story (new),board (new),dialogue,explore,travel,state,save,new_game,lib}.rs`, `emberwake_world/tests/{story,board}.rs` (new) |
-| STORYUI1-U1 | Story stage: `StoryStage`, queue playback on the maps, runner `story` in the battle settle, `enter_game`, the two settings, the gallery's vignette pane | kit (in `emberwake_gui` until KIT1) | logic | STORYUI1-E, STORYUI1-W | `emberwake_gui/src/{story (new),screens,battle,region,worldmap,menus,gallery}.rs` |
-| STORYUI1-U2 | Board pane in the conversation, the service glyph and text, world-map job markers, the gallery's board pane (a fixture view) | kit (in `emberwake_gui` until KIT1) | logic | STORYUI1-U1 | `emberwake_gui/src/{board (new),region,worldmap,gallery}.rs` |
+| STORYUI1-S | Story and board schema: kinds `vignettes`, `sequences`, `boards`; quest fields; `start_sequence`; effects; checks; writer; parity strips | kit | logic | - (reuses DERIVE1-S's kind strip if it landed) | `kits/rpg/schema.json`, `rpgkit_content/src/{source,store}.rs`, `check/{mod,world,quest,dialogue,story (new),board (new)}.rs`, `rpgkit_content/tests/story_checks.rs` (new, scratch data), `emberwake_world/tests/data_source.rs` |
+| STORYUI1-W | Story and board rules: queue, seen, tokens, sequences and the story fight runner, board view and accept, the board service and badge, map jobs, the `story` state field, the new game's start sequence | kit | logic | STORYUI1-S | `rpgkit_world/src/{story (new),board (new),dialogue,explore,travel,state,save,new_game,lib}.rs`, `rpgkit_world/tests/{story,board}.rs` (new, scratch data) |
+| STORYUI1-U1 | Story stage: `StoryStage`, queue playback on the maps, runner `story` in the battle settle, `enter_game`, the two settings, the gallery's vignette pane | game (`emberwake_gui`; story-free, marked for KIT2-UI, KIT1 KQ4) | logic | STORYUI1-E, STORYUI1-W | `emberwake_gui/src/{story (new),screens,battle,region,worldmap,menus,gallery}.rs` |
+| STORYUI1-U2 | Board pane in the conversation, the service glyph and text, world-map job markers, the gallery's board pane (a fixture view) | game (`emberwake_gui`; story-free, marked for KIT2-UI, KIT1 KQ4) | logic | STORYUI1-U1 | `emberwake_gui/src/{board (new),region,worldmap,gallery}.rs` |
 | STORYUI1-A | Slice story data: the vignettes, the `prologue` and `slice_end` sequences, Tess's board, the two board quests, the service line, `start_sequence` | game (data) | asset | STORYUI1-S, SUNKWARD1, CAST1-A6; the Doom Clock step after CAMPAIGN1's meter task; `slice_end`'s trigger after CAMPAIGN1's triggers | `games/emberwake/data/worlds/sunk_ward/{vignettes,sequences,boards,quests,world}.json`, `games/emberwake/data/dialogue/services.json`, `games/emberwake/data/seeds/storyui1.json` |
 
 Hub files (shared with other tasks; the planner serialises them): `schema.json` and `data_source.rs` (DERIVE1-S,
@@ -148,8 +151,8 @@ reduce-motion control). U1 and U2 both touch `region.rs`, `worldmap.rs` and `gal
 
 ## 5. Docs delta
 
-- `docs/STRUCTURE.md`: `aegis_ui` row (`vignette.rs`, the card player), `emberwake_world` row (`story.rs`,
-  `board.rs`), `emberwake_content` row (`check/story.rs`, `check/board.rs`), `emberwake_gui` row (`story.rs`,
+- `docs/STRUCTURE.md`: `aegis_ui` row (`vignette.rs`, the card player), `rpgkit_world` row (`story.rs`,
+  `board.rs`), `rpgkit_content` row (`check/story.rs`, `check/board.rs`), `emberwake_gui` row (`story.rs`,
   `board.rs`), the world kinds in the data row.
 - `engine/README.md` (the vignette player and its settings), `engine/docs/PORT_NOTES.md` (`vignette.rs`: engine-only,
   no Godot source).

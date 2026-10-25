@@ -6,10 +6,13 @@ Depends on: none for the slice parts; STAGE1 for the room screen; RULESET1 (writ
 recovery (enemies), round intents and follow-ups, poise, reach-2 and the intent tells, which this spec only references
 Lane: logic first (schema and rules), then asset (kit samples); tasks, tests, parity plan and open questions:
 [ENCOUNTER2_TASKS.md](ENCOUNTER2_TASKS.md)
-Touches (by task, see the task file): under `games/emberwake/crates/`: `emberwake_battle/src/{encounter,session,
-world,grid,plan,ai,intent,log}.rs`, `emberwake_content/src/check/encounter.rs`, `emberwake_world/src/{battle,state,
-save}.rs`, `emberwake_host/src/lib.rs`, `emberwake_gui/src/battle.rs`, `emberwake_sim/src/args.rs`;
-`games/emberwake/schema.json`; `games/emberwake/data/catalog/encounters.json` (asset lane, `kit_*` samples)
+Touches (by task, see the task file): under `kits/rpg/crates/`: `rpgkit_battle/src/{encounter,session,
+world,grid,plan,ai,intent,log}.rs`, `rpgkit_content/src/check/encounter.rs`, `rpgkit_world/src/{battle,explore,
+dialogue,travel}.rs`, `rpgkit_host/src/lib.rs` (KIT1-N), `rpgkit_sim/src/args.rs`; under `games/emberwake/crates/`:
+`emberwake_gui/src/battle.rs`, `emberwake_host/src/cli.rs`; `kits/rpg/schema.json`;
+`games/emberwake/data/catalog/encounters.json` (asset lane, `kit_*` samples)
+Paths (KIT1_TASKS 5): `rpgkit_*` crates are under `kits/rpg/crates/`, `emberwake_*` under `games/emberwake/crates/`;
+line numbers in kit files are pre-KIT1 (KIT1-M moved them byte-identical).
 
 History: `docs/HISTORY.md` holds no row on rooms, stay-behind or phase kills. Decision S12 (2026-10-17,
 `decisions/combat.md`) kept zone maps in code "until S9 map data"; the new reason to author terrain as data is
@@ -28,22 +31,22 @@ the last stand, swap and side switch come later (task file section 3).
 
 | Area | Where | What it does |
 | --- | --- | --- |
-| Board | `emberwake_battle/src/grid.rs:8-9`, `:148-171` | One `Grid` per battle, 12 x 9 (`GRID_W`, `GRID_H`); terrain from 8 code zones (`zone_rows`, `grid.rs:133`); no authored layout |
+| Board | `rpgkit_battle/src/grid.rs:8-9`, `:148-171` | One `Grid` per battle, 12 x 9 (`GRID_W`, `GRID_H`); terrain from 8 code zones (`zone_rows`, `grid.rs:133`); no authored layout |
 | Exits | `grid.rs:220-226`, `world.rs:261-276` | Listed tiles (default `[[11, 4]]`, `session.rs:76-79`) or every edge when `arena` is OPEN; a step onto one withdraws the unit |
 | Withdraw | `plan.rs:648-668`, `plan.rs:603` | The planner's Withdraw routes to the nearest exit; a plain move onto an exit is refused |
 | Deployment | `world.rs:291-430` | Party columns 5/4, enemies 7/8 (ambush, centre variants); leftovers and waves take free tiles nearest the middle of their half |
 | Objectives | `encounter.rs:22-134` | rout, hold, escape, slay; verdict order (`:58-110`): a protected guest dead = lost, every hero dead = lost, no active foe = won, the objective, then no hero active with someone withdrawn = fled; escape needs `objective_count` (1-4) out and no hero left active |
 | Guests | `encounter.rs:20`, `session.rs:250-322` | At most 2 party-side guests; `protect` makes their death a loss |
 | Phases | `encounter.rs:138-423`, `session.rs:561-709`, `:976-1006` | Triggers `hp_below` (unit, pct, or_round), `round`, `arrival`; effects line, wave, status, ai, enrage; fire at round start or block start; phase-wave units spawn at battle start and stay reserved until fired |
-| Phase checks | `emberwake_content/src/check/encounter.rs:137-160`, `:279-330` | At most 4 phases, 5 effects, 12 enemy-side units; an `hp_below` unit must be in `enemies` |
+| Phase checks | `rpgkit_content/src/check/encounter.rs:137-160`, `:279-330` | At most 4 phases, 5 effects, 12 enemy-side units; an `hp_below` unit must be in `enemies` |
 | Sides | `world.rs:121-127`, `:189-209` | Two lists (`allies`, `enemies`); `foes_of` and `friends_of` return slices; `ai.rs` calls them 22 times |
-| Battle end | `session.rs:1056-1072`; `emberwake_gui/src/battle.rs:705-720`; `emberwake_host/src/lib.rs:203`; `sim.rs:208` | `outcome` won, lost or fled; the "last round over = fled" rule is written three times outside the session |
-| Results | `emberwake_world/src/battle.rs:173-211`, `session.rs:165-189`, `gui/battle.rs:722-768` | `Tally` holds enemy fates only (killed, surrendered, fled, standing); the GUI writes hero HP back; no party-side result; no unit lifecycle (`captured` appears in no crate); the party is `members` + `active_ids` (`emberwake_world/src/state.rs:293-294`) |
-| Key loot | `emberwake_world/src/battle.rs` (REWARD1 step 6) | Paid on a win when every unit of the ref is killed, by anyone |
-| Saves, replays | `emberwake_world/src/save.rs`; `emberwake_host/tests/replay.rs` | Battles are not saved mid-fight; recordings replay command-API requests |
+| Battle end | `session.rs:1056-1072`; `emberwake_gui/src/battle.rs:705-720`; `rpgkit_host/src/lib.rs:203`; `sim.rs:208` | `outcome` won, lost or fled; the "last round over = fled" rule is written three times outside the session |
+| Results | `rpgkit_world/src/battle.rs:173-211`, `session.rs:165-189`, `gui/battle.rs:722-768` | `Tally` holds enemy fates only (killed, surrendered, fled, standing); the GUI writes hero HP back; no party-side result; no unit lifecycle (`captured` appears in no crate); the party is `members` + `active_ids` (`rpgkit_world/src/state.rs:293-294`) |
+| Key loot | `rpgkit_world/src/battle.rs` (REWARD1 step 6) | Paid on a win when every unit of the ref is killed, by anyone |
+| Saves, replays | `rpgkit_world/src/save.rs`; `emberwake_host/tests/replay.rs` | Battles are not saved mid-fight; recordings replay command-API requests |
 | Screen | `emberwake_gui/src/battle.rs:37-41`, `:1396`, `:1563` | Board at (128, 30), 32 px cells; the strip panel on top; STAGE1 (approved, not on this branch) tilts it to 32 x 24 |
-| Sim | `emberwake_sim/src/args.rs:178` | The default encounter list is every catalog encounter |
-| Dialogue | `emberwake_world/src/dialogue.rs:178` | Choice conditions: flags and stats; none for "this member is deployed" |
+| Sim | `rpgkit_sim/src/args.rs:178` | The default encounter list is every catalog encounter |
+| Dialogue | `rpgkit_world/src/dialogue.rs:178` | Choice conditions: flags and stats; none for "this member is deployed" |
 
 ## 3. Stay-behind objectives `[kit hook]`
 
@@ -107,10 +110,10 @@ The theme (user): the first loss is a choice; as losses pile up they become the 
 
 - W1. `Tally` gains `party: Vec<(member id, fate)>` from S3; `after_fight` results carry `party_fates`.
 - W2. `stay_behind.flag` (a flag key): set to the member id that stayed or stood ("" when none) on every outcome.
-- W3. `stay_behind.then`: `none` (default) or `leave_party`: that member leaves `active_ids` and moves from
-  `members` into a new `party.away` list with `{id, reason: "stayed", encounter}`; kept in the save (a missing
-  `away` reads empty; a save step only if the format needs one). The unit lifecycle hook (CANON 2.4, not specced)
-  later maps `away` to its captured state. Downed heroes who did not stay follow today's rules (Act 1: wounded).
+- W3. `stay_behind.then`: `none` (default), `capture` or `kill` (ROSTER1 3.2, ROSTER1_TASKS 4): `capture` and
+  `kill` call `roster::depart(member, captured | dead, cause stayed | stood)`. No `party.away` list and no save step
+  of its own: departed members live in `party.departed` (ROSTER1-L). Heroes who did not stay settle by
+  `roster::settle_party` with the act's rule row (Act 1: wounded).
 - W4. The Results popup adds one line per stayed or stood hero ("Kaelen held the winch.", from the encounter's
   `result_line`, default "`{name}` stayed behind.").
 
@@ -208,7 +211,7 @@ is encounter data (objectives and arrivals per room), not a new mode.
 | `stand_statuses` | json | [{"status": "taunt", "rounds": 5}] | statuses from the table, rounds 1-10, at most 3 |
 | `stand_line`, `result_line` | string | see 3.2, 3.3 | at most 160 characters; `{name}` the only token |
 | `flag` | string | "" | a flag key (world encounters only) |
-| `then` | enum | "none" | `none`, `leave_party` (world encounters only) |
+| `then` | enum | "none" | `none`, `capture`, `kill` (world encounters only; ROSTER1 3.2) |
 
 Room keys: `id` (`[a-z][a-z0-9_]{1,23}`, unique), `name` (1-16 characters, the tab), `zone` (enum as today, default
 the top-level zone), `rows` (as above), `open` (bool, false), `exits` ([[x, y]], may be empty), `doors` (0-4),
@@ -231,7 +234,7 @@ the new json fields as raw JSON (no form work in this spec).
 ## 7. Out of scope
 
 RULESET1's rules (windups, enemy recovery, round intents and follow-ups, poise, armour, reach-2, deck slots, the
-intent tells); the unit lifecycle hook (captured, dead, retired); multi-cell units (Q-79 art only); line of sight
-across rooms; more than 12 enemy-side units or 4 rooms; a dropped-item marker on the field; the sunk_ward world
+intent tells); the unit lifecycle hook (captured, dead, retired: ROSTER1); multi-cell units (Q-79 art only); line of
+sight across rooms; more than 12 enemy-side units or 4 rooms; a dropped-item marker on the field; the sunk_ward world
 itself (the slice's data tasks fill the Crucible from the sketch in the task file); the Content Forge forms for the
 new fields.

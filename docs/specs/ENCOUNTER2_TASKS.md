@@ -19,7 +19,7 @@ to it)
 | H | every classic catalog encounter run to its end | the same outcome as before the change (S2 refactor) |
 | HA | `sim` with defaults on a data folder holding `kit_*` and `stay_behind` encounters | they are skipped; named they run (S4) |
 | HA | autoplay on a hold encounter | the holder reaches the tile and defends; the others withdraw once it is open (H6) |
-| W | a won hold battle with `flag` and `then: leave_party` | the flag holds the member id; the member is in `party.away`, not in `active_ids`; a save round trip keeps it (W2, W3) |
+| W | a won hold battle with `flag` and `then: capture` | the flag holds the member id; the member is `captured` in `party.departed` (`roster::depart`), not in `active_ids`; a save round trip keeps it (W2, W3) |
 | K | `kill` with two refs | every placed unit of them at HP 0 through the journal; fates Killed; one event cell (P1) |
 | K | `kill` with `within` 2 | only units within 2 tiles of `by` die |
 | K | two phases in one `group`, the second's trigger met first | it fires; the first drops (P2) |
@@ -48,25 +48,29 @@ to it)
   `timeout_outcome`, `stay_behind`; R adds `transit_blocks`, `rooms`, `objective_room`) through `AFTER_GODOT`,
   named in the commit and a HISTORY row each.
 - Godot data holds no new effect, trigger or field, so the content checks' reports stay the same.
-- Saves: a save without `party.away` reads it empty; if W needs a format step, it is a new version with a migration
-  test, and every Godot save still loads.
+- Saves: W adds no save key or step of its own (departed members are ROSTER1-L's `party.departed` and its save
+  keys); every Godot save still loads.
 
 ## 3. Tasks (split by layer and lane; slice = needed before the vertical slice)
 
+Paths (KIT1_TASKS 5): `rpgkit_*` under `kits/rpg/crates/`, `emberwake_*` under `games/emberwake/crates/`;
+`schema.json` = `kits/rpg/schema.json`; `check/` = `rpgkit_content/src/check/`; `data_source.rs` in
+`emberwake_world/tests/` (game).
+
 | Id | Title | Layer | Lane | Depends | Slice | Touches |
 | --- | --- | --- | --- | --- | --- | --- |
-| ENCOUNTER2-T | Authored terrain rows on encounters (R0) | kit | logic | - | yes | `emberwake_battle/src/{grid,session}.rs`, `emberwake_content/src/check/encounter.rs`, `schema.json`, `emberwake_world/tests/data_source.rs` |
-| ENCOUNTER2-H | Hold-a-tile escape, `unkillable`, timeout verdict in the session, party fates, `stay_pick` request (S1-S3, H1-H5) | kit | logic | ENCOUNTER2-T (same files) | yes | `emberwake_battle/src/{encounter,session,world,plan,log}.rs`, `emberwake_battle/tests/stay_behind.rs` (new), `emberwake_host/src/{lib,cli}.rs`, `emberwake_battle/src/sim.rs`, `check/encounter.rs`, `schema.json`, `data_source.rs` |
-| ENCOUNTER2-HA | Party AI for hold escapes and the sim's default list (H6, S4) | kit | logic | ENCOUNTER2-H | yes | `emberwake_battle/src/{ai,session}.rs`, `emberwake_sim/src/args.rs` |
-| ENCOUNTER2-W | The world reads stay-behind results (W1-W4) | kit | logic | ENCOUNTER2-H | yes | `emberwake_world/src/{battle,state,save,explore,dialogue,travel}.rs`, `emberwake_world/tests/rewards.rs`, `emberwake_gui/src/{battle,hub}.rs` (settle, results line) |
+| ENCOUNTER2-T | Authored terrain rows on encounters (R0) | kit | logic | - | yes | `rpgkit_battle/src/{grid,session}.rs`, `rpgkit_content/src/check/encounter.rs`, `schema.json`, `emberwake_world/tests/data_source.rs` |
+| ENCOUNTER2-H | Hold-a-tile escape, `unkillable`, timeout verdict in the session, party fates, `stay_pick` request (S1-S3, H1-H5) | kit | logic | ENCOUNTER2-T (same files) | yes | `rpgkit_battle/src/{encounter,session,world,plan,log}.rs`, `rpgkit_battle/tests/stay_behind.rs` (new, scratch data), `rpgkit_host/src/lib.rs`, `emberwake_host/src/cli.rs`, `rpgkit_battle/src/sim.rs`, `check/encounter.rs`, `schema.json`, `data_source.rs` |
+| ENCOUNTER2-HA | Party AI for hold escapes and the sim's default list (H6, S4) | kit | logic | ENCOUNTER2-H | yes | `rpgkit_battle/src/{ai,session}.rs`, `rpgkit_sim/src/args.rs` |
+| ENCOUNTER2-W | The world reads stay-behind results (W1-W4; `then` through `roster::depart`, ROSTER1_TASKS 4) | kit | logic | ENCOUNTER2-H, ROSTER1-L | yes | `rpgkit_world/src/{battle,explore,dialogue,travel}.rs`, `emberwake_world/tests/rewards.rs`, `emberwake_gui/src/{battle,hub}.rs` (settle, results line) |
 | ENCOUNTER2-U | Hold screen: the pick panel, gate and tile marks, objective line (H1, H7) | game | logic | ENCOUNTER2-H | yes | `emberwake_gui/src/battle.rs` (after STAGE1-L if it is in flight) |
-| ENCOUNTER2-K | Phase `kill` effect and phase groups (P1, P2, P5) | kit | logic | ENCOUNTER2-H (same files) | yes (M2 Culling Timer) | `emberwake_battle/src/{encounter,session,log}.rs`, `check/encounter.rs` |
+| ENCOUNTER2-K | Phase `kill` effect and phase groups (P1, P2, P5) | kit | logic | ENCOUNTER2-H (same files) | yes (M2 Culling Timer) | `rpgkit_battle/src/{encounter,session,log}.rs`, `check/encounter.rs` |
 | ENCOUNTER2-D | Kit samples `kit_winch_escape`, `kit_culling` (section 4.1) | game | asset | ENCOUNTER2-T, -H, -K | yes | `games/emberwake/data/catalog/encounters.json` |
 | ENCOUNTER2-L | Impossible fight and last stand (3.2) | kit | logic | ENCOUNTER2-HA | later | as H, plus `intent.rs`, `emberwake_gui/src/battle.rs` (L1 marks) |
-| ENCOUNTER2-X | Phase `swap` and the fate Transformed (P3) | kit | logic | ENCOUNTER2-K | later (Act 3) | `emberwake_battle/src/{encounter,session}.rs`, `emberwake_world/src/battle.rs`, `check/encounter.rs` |
-| ENCOUNTER2-F | Phase `side`: hostile to all (P4) | kit | logic | ENCOUNTER2-K | later (Act 3) | `emberwake_battle/src/{world,ai,session,intent}.rs`, `emberwake_gui/src/battle.rs` (rogue colour) |
-| ENCOUNTER2-R | Rooms core: data, grid rooms, doors, transit, deployment, verdict, host JSON (R1-R5, R7, R8, R10, R11) | kit | logic | ENCOUNTER2-T | later | `emberwake_battle/src/{grid,world,session,plan,path,encounter}.rs` (maybe `room.rs`), `check/encounter.rs`, `schema.json`, `emberwake_host/src/lib.rs` |
-| ENCOUNTER2-RA | Room AI: pursue, guard, doors in party presets (R6) | kit | logic | ENCOUNTER2-R | later | `emberwake_battle/src/ai.rs` |
+| ENCOUNTER2-X | Phase `swap` and the fate Transformed (P3) | kit | logic | ENCOUNTER2-K | later (Act 3) | `rpgkit_battle/src/{encounter,session}.rs`, `rpgkit_world/src/battle.rs`, `check/encounter.rs` |
+| ENCOUNTER2-F | Phase `side`: hostile to all (P4) | kit | logic | ENCOUNTER2-K | later (Act 3) | `rpgkit_battle/src/{world,ai,session,intent}.rs`, `emberwake_gui/src/battle.rs` (rogue colour) |
+| ENCOUNTER2-R | Rooms core: data, grid rooms, doors, transit, deployment, verdict, host JSON (R1-R5, R7, R8, R10, R11) | kit | logic | ENCOUNTER2-T | later | `rpgkit_battle/src/{grid,world,session,plan,path,encounter}.rs` (maybe `room.rs`), `check/encounter.rs`, `schema.json`, `rpgkit_host/src/lib.rs` |
+| ENCOUNTER2-RA | Room AI: pursue, guard, doors in party presets (R6) | kit | logic | ENCOUNTER2-R | later | `rpgkit_battle/src/ai.rs` |
 | ENCOUNTER2-RU | Room screen: tabs, follow, dimmed strip rows, letters on badges (R9) | game | logic | ENCOUNTER2-R, STAGE1-L, RULESET1-U (the strip) | later | `emberwake_gui/src/battle.rs` |
 | ENCOUNTER2-D2 | Later samples `kit_last_stand`, `kit_betrayal`, `kit_two_rooms` | game | asset | ENCOUNTER2-L, -X, -F, -RA | later | `data/catalog/encounters.json` |
 
@@ -102,11 +106,13 @@ y2 #..r..#....#    y5 #.........L.    y8 ############
 
 ### 4.2 The Crucible (sketch for the slice's sunk_ward data task; not this spec's asset task)
 
-World encounter `crucible_slag_gate`: the board, exits, objective, `unkillable` and `timeout_outcome` of
-`kit_winch_escape`; party = the four deployed founders; enemies Nemeth, 2 Inquisitorial Purifiers, 2 Castellan
-Footmen, 2 Watch Crossbowmen (ids from the cast registry's roster task); `unkillable` [Nemeth's ref]; `stay_behind`
-adds `flag` `crucible_stayed`, `then` leave_party, `result_line` "`{name}` held the winch."; `max_rounds` 8;
-numbers (levels, waves) from the balance lane.
+World encounter `enc_evt_06` (the lore id, CAST1 C3; CAST1-A6 writes the whole row from this sketch, CAST1_BOSSES
+3.6 and CAST1_ENCOUNTERS; ROSTER1-D only checks its roster keys, CAST1 C16): the board, exits, objective,
+`unkillable` and `timeout_outcome` of `kit_winch_escape`; party = the four deployed founders, `party_min` 4
+(ROSTER1); enemies Nemeth, 2 Inquisitorial Purifiers, 2 Castellan Footmen, 2 Watch Crossbowmen (ids from the cast
+registry's roster task); `unkillable` [Nemeth's ref]; `stay_behind` adds `flag` `crucible_stayed`, `then` capture
+(ROSTER1_TASKS 4), `result_line` "`{name}` held the winch."; `max_rounds` 8; numbers (levels, waves) from the balance
+lane.
 
 ### 4.3 Node 20 (sketch, Act 3; one variant per founder, EQ7)
 
@@ -119,7 +125,7 @@ corrupted founder 50 with `or_round` 4: line, kill [Nemeth, guard] by the founde
 
 - `games/emberwake/docs/GAME_BRIEF.md` encounter section: stay-behind, `unkillable`, `timeout_outcome`, the new
   phase effects and groups, `rows`, rooms (each when its task lands).
-- `docs/STRUCTURE.md`: `emberwake_battle` row (rooms, maybe `room.rs`), `emberwake_world` row (`party.away`).
+- `docs/STRUCTURE.md`: `rpgkit_battle` row (rooms, maybe `room.rs`), `rpgkit_world` row (stay-behind results).
 - `engine/docs/authoring/encounters.md` (new, game-agnostic): stay-behind and phase scripting as data, rooms; the
   promote-generic-methods practice.
 - CANON 2.1 rows Arenas and Stay-behind point to this spec; `decisions/lore.md` gets the Q-75a row (planner).
@@ -149,13 +155,14 @@ whole party fleeing. ENCOUNTER2-W reads the act's rule from the world.
 ## 7. Canon versus code (found while surveying)
 
 1. CANON 2.1 "escape and hold exist": true, but the last-round "fled" verdict lives in the GUI, host and sim, not the
-   session (`gui/battle.rs:716`, `host/lib.rs:203`, `sim.rs:208`), and the result names no hero (S2, S3).
+   session (`gui/battle.rs:716`, `host/lib.rs:203`, `sim.rs:208`; pre-KIT1 lines), and the result names no hero
+   (S2, S3).
 2. CANON 3.6 "or earlier if Nemeth falls low": a phase has one trigger, and the checks reject an `hp_below` unit
    outside `enemies` (`check/encounter.rs:301`), so the monstrosity cannot be a trigger unit (P2, P5).
 3. CANON 3.6 "the Cassock drops where he dies": loot is paid at settle, on a win only (key loot); no item lies on the
    field, and fleeing after the break pays nothing.
 4. ENC-EVT-02's Culling Timer meets the 2-guest cap and the 4-phase cap (EQ8).
-5. CANON 2.4 "captured" exists in no crate; W3's `party.away` is the stand-in.
+5. CANON 2.4 "captured" exists in no crate; ROSTER1-L adds it (`party.departed`), W3 calls `roster::depart`.
 6. "The Crucible requires four deployed" (CANON 3.2): no encounter field sets a minimum party; `PARTY_MAX` 4 only
    caps it (a small follow-up for the slice data task).
 7. Zone maps are code (decision S12) while the slice is data only: R0 resolves it.

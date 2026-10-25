@@ -8,9 +8,10 @@ Depends on: none for the engine and schema parts; interfaces with CAMPAIGN1, ROS
 Lane: logic first (E, S, W, U1, U2), then asset (A); assets, tests, parity, tasks, docs delta, conflicts and open
 questions: [STORYUI1_TASKS.md](STORYUI1_TASKS.md)
 Touches (by task, see the task file): `engine/crates/aegis_ui/src/{vignette,lib,screen}.rs`;
-`games/emberwake/schema.json`; under `games/emberwake/crates/`: `emberwake_content/src/{source,store}.rs` and
-`check/{mod,world,quest,dialogue,story,board}.rs`, `emberwake_world/src/{story,board,dialogue,explore,travel,state,
-save,new_game}.rs`, `emberwake_gui/src/{story,board,screens,battle,region,worldmap,menus,gallery}.rs`; data under
+`kits/rpg/schema.json`; under `kits/rpg/crates/`: `rpgkit_content/src/{source,store}.rs` and
+`check/{mod,world,quest,dialogue,story,board}.rs`, `rpgkit_world/src/{story,board,dialogue,explore,travel,state,
+save,new_game}.rs`; under `games/emberwake/crates/`: `emberwake_gui/src/{story,board,screens,battle,region,worldmap,
+menus,gallery}.rs` (the GUI stays in the game, KIT1 KQ4); data under
 `games/emberwake/data/worlds/sunk_ward/` and `data/dialogue/services.json` (asset lane)
 
 History: `docs/HISTORY.md` has no row on vignettes, cutscenes or a mission board. DESIGN_REVIEW1 4.6's "contracts
@@ -31,38 +32,38 @@ card, Tess's board with the slice's main missions.
 
 | Area | Where | What it does today |
 | --- | --- | --- |
-| Dialogue conditions | `emberwake_world/src/dialogue.rs:171-186` | `flag`, `quest`, `items`, `gold`, `stat`; `requires` all, `unless` any; lock reasons `:191-243` |
+| Dialogue conditions | `rpgkit_world/src/dialogue.rs:171-186` | `flag`, `quest`, `items`, `gold`, `stat`; `requires` all, `unless` any; lock reasons `:191-243` |
 | Dialogue effects | `dialogue.rs:607-722` | `set_flag`, `add_flag`, `start_quest` (giver must be the speaker, `:626-637`), `turn_in`, `give`, `take`, `open_shop`, `fight`, `recruit` (refused at `party_max`, `:680`) |
 | Service choices | `dialogue.rs:402-439` | Appended to the start node: one offer per available quest whose giver is the speaker, turn-ins, the keeper's shop, farewell; lines from `data/dialogue/services.json` |
 | Fights from talk | `dialogue.rs:573-579`, `:804-826` | `fight` closes the conversation; `after_fight` settles and wakes the party on a loss; no way to chain a next beat |
-| Quests | `emberwake_world/src/quest.rs:84-143`, `:211-239`, `:380-426` | Templates (`reach_location`, `win_encounter`, `flag`), steps, variants (`available: false` closes a quest), `requires` (completed quests) and `requires_flags` lock, `auto_start`; statuses invalid, completed, blocked, ready, active, unavailable, available, locked |
-| Quest progress | `emberwake_world/src/battle.rs:272`, `:363` | `settle` advances `win_encounter` on a win |
-| Map markers | `emberwake_world/src/travel.rs:225-276`, `emberwake_gui/src/worldmap.rs:164-181` | A "!" and a tooltip line on nodes that hold an active quest's current target; nothing for quests not yet taken |
-| NPC badges | `emberwake_world/src/explore.rs:305-335`, `emberwake_gui/src/region.rs:611`, `:1084-1105` | `turn_in`, `offer`, `shop`, `recruit`; the first service is the marker's badge |
+| Quests | `rpgkit_world/src/quest.rs:84-143`, `:211-239`, `:380-426` | Templates (`reach_location`, `win_encounter`, `flag`), steps, variants (`available: false` closes a quest), `requires` (completed quests) and `requires_flags` lock, `auto_start`; statuses invalid, completed, blocked, ready, active, unavailable, available, locked |
+| Quest progress | `rpgkit_world/src/battle.rs:272`, `:363` | `settle` advances `win_encounter` on a win |
+| Map markers | `rpgkit_world/src/travel.rs:225-276`, `emberwake_gui/src/worldmap.rs:164-181` | A "!" and a tooltip line on nodes that hold an active quest's current target; nothing for quests not yet taken |
+| NPC badges | `rpgkit_world/src/explore.rs:305-335`, `emberwake_gui/src/region.rs:611`, `:1084-1105` | `turn_in`, `offer`, `shop`, `recruit`; the first service is the marker's badge |
 | Conversation UI | `region.rs:247-308`, `:687-691`, `:1234` | The talk box (400 px dock, portrait, choices) and the shop pane live inside `RegionMap`; no dialogue surface exists off a region map |
 | Battle bridge | `emberwake_gui/src/battle.rs:548`, `:723-767` | `BattleScreen::world(fight, runner)`; `settle` writes HP, calls the runner's `after_fight` (`travel`, `dialogue`, else `explore`), autosaves, pops, opens `Results` |
-| New game | `emberwake_gui/src/menus.rs:59`, `:191-227`; `screens.rs:166`; `emberwake_world/src/new_game.rs:24-100` | Menu, world cards, Start, `create_for_world`, `enter_game` (always `Nav::Reset(RegionMap)`), an autosave |
-| Game state | `emberwake_world/src/state.rs:456-476`, `:515-521` | `flags` (keys `[a-z0-9_.]`, values bool, int, string), `quests`, `time` (the travel clock) |
+| New game | `emberwake_gui/src/menus.rs:59`, `:191-227`; `screens.rs:166`; `rpgkit_world/src/new_game.rs:24-100` | Menu, world cards, Start, `create_for_world`, `enter_game` (always `Nav::Reset(RegionMap)`), an autosave |
+| Game state | `rpgkit_world/src/state.rs:456-476`, `:515-521` | `flags` (keys `[a-z0-9_.]`, values bool, int, string), `quests`, `time` (the travel clock) |
 | Screens | `engine/crates/aegis_ui/src/screen.rs:85-90`, `:222-330` | `Nav` Push, Pop, Reset; `tick` for the top screen only (`shell.rs:301`), `resume` on a pop (`shell.rs:151`), `music()` (top wish wins, `shell.rs:359`) |
 | Drawing, sound | `aegis_ui/src/painter.rs:116`, `:172`, `:264`; `art.rs:136`; `audio.rs:142`, `:185` | Alpha fills blend (a fade is a cover fill), `image`, `wrap`, `Art::first`; no typewriter, fade or card widget; one-shot `play`, `music(Some(""))` = silence |
 | Settings | `screen.rs:109-112`; `emberwake_gui/src/screens.rs:24` | Engine keys (sound, display, `text_scale`); game keys `anim_speed`, `skip_anim`; no text speed or reduce-motion key |
 | UI Gallery | `emberwake_gui/src/gallery.rs:26-55`, `:145-170` | 26 entries; screens that need a game get the sample game of the first playable world |
-| World kinds | `emberwake_content/src/source.rs:29` | 13 kinds; `emberwake_world/tests/data_source.rs:25-34` strips post-freeze fields (`AFTER_GODOT`) |
+| World kinds | `rpgkit_content/src/source.rs:29` | 13 kinds; `emberwake_world/tests/data_source.rs:25-34` strips post-freeze fields (`AFTER_GODOT`) |
 
 ## 3. Layers
 
 | Piece | Layer | Where | Why |
 | --- | --- | --- | --- |
 | Card player: phases, typewriter, fades, skip, speed, cues, card drawing, `VignetteScreen` | `[engine]` | `aegis_ui/src/vignette.rs` (new) | Any game shows title cards and captions; like the timeline widget (CANON 2.1) the drawing is engine and the rules that feed it are kit |
-| Vignettes as data, the play queue, seen state, tokens, conditions | `[kit hook]` | `emberwake_world/src/story.rs` (new), checks in `emberwake_content/src/check/story.rs` (new) | Any story in the genre has scenes; story-free code, moved by KIT1 |
+| Vignettes as data, the play queue, seen state, tokens, conditions | `[kit hook]` | `rpgkit_world/src/story.rs` (new), checks in `rpgkit_content/src/check/story.rs` (new) | Any story in the genre has scenes; story-free code, moved by KIT1 |
 | Story sequences (cards, fights, effects, enter, end) | `[kit hook]` | `story.rs`, `emberwake_gui/src/story.rs` (new) | A prologue, an act opening, an epilogue: a shape any campaign fills |
-| Mission board | `[kit hook]` | `emberwake_world/src/board.rs`, `emberwake_gui/src/board.rs` (new) | Named in the layer rule; quests and the shop pane are its parts |
+| Mission board | `[kit hook]` | `rpgkit_world/src/board.rs`, `emberwake_gui/src/board.rs` (new) | Named in the layer rule; quests and the shop pane are its parts |
 | Text speed and reduce-motion settings | `[engine]` | `screen.rs` engine defaults | Accessibility for every game (reduce motion is shared with FX1) |
 | The intro, the prologue, the hearth, the cards, Tess's board, the slice quests | `[data]` | `data/worlds/sunk_ward/` | Named by the story |
 | Art-bible colours of the card text | `[game code]` | `emberwake_gui/src/story.rs` constants | One line: the engine takes a palette, the game passes its art bible's hues |
 
-The kit code stays in the game crates until KIT1 moves it (STRUCTURE.md: kit code comes when a second game shares
-rules); it names no Emberwake place, person or flag.
+Kit code is in `kits/rpg/crates/rpgkit_*` (line numbers pre-KIT1); screens stay in `emberwake_gui` (KIT1 KQ4); it
+names no Emberwake place, person or flag.
 
 ## 4. Schema contract (schema-first: yes)
 
@@ -282,9 +283,9 @@ Service line `board` (base line in `data/dialogue/services.json`, "Show me the b
 | --- | --- | --- |
 | CAMPAIGN1 | a meter effect that shows the Doom Clock (an `effects` step); `checkpoint(d, gs, quest) -> Option<(day, left)>` for B6 and B10; triggers whose effects may be `vignette` and `sequence` (the slice end on the Crucible's win, the Act 1 bad end); the purse's display name (Scrap) for B7 | the player, the two effects, the cards `slice_end` and `act1_bad_end` |
 | ROSTER1 | the roster cap, so the M3 recruit of Dunstan is not refused at `party_max` (`dialogue.rs:680`) | - |
-| ENCOUNTER2-W | the `crucible_stayed` flag and `party.away` for `{member:...}` | - |
+| ENCOUNTER2-W | the `crucible_stayed` flag and the captured member (`party.departed`, ROSTER1-L) for `{member:...}` | - |
 | CAST1, SUNKWARD1 | character ids (founders, Vane, Tess, Bram, Aline), encounters `enc_pro_0a..0c`, `enc_evt_03`, `enc_evt_06`, locations | the sequences that run them |
-| KIT1 | moves `story.rs`, `board.rs` and their checks to kit crates | story-free code |
+| KIT1 | the kit crates for `story.rs`, `board.rs` and their checks (`rpgkit_world`, `rpgkit_content`); the GUI stays (KQ4) | story-free code |
 | FX1 | the `reduce_motion` key | - |
 
 If CAMPAIGN1's triggers lack an "encounter won" condition, the slice end starts from a "quest ready" trigger on

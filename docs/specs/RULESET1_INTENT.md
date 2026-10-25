@@ -37,7 +37,7 @@ intent (UI5).
   change it: Shield Bash (ATTACK) is Assault whatever else it does.
 - IN5. Neutral commands, usable in any intent: a plain Move and Rest. Switch Target is never planned (TG3). Neutral is
   not an intent a member can pick. Pouch items take an intent by aim: self or ally items Support, foe-aimed items
-  (`aims_at_foes`, `emberwake_data/src/lib.rs:372`) Maneuver.
+  (`aims_at_foes`, `rpgkit_data/src/lib.rs:372`) Maneuver.
 - IN6. Buffs (user 2026-10-25). An **intent-bound** status instance lasts only while the intent it was applied under
   stays active: an intent change at a round start removes it whatever rounds it has left (log "`<unit>` leaves
   Guard: Riposte ends"). Every other instance (buffs, debuffs, the Focus boost) keeps its round duration across
@@ -272,7 +272,7 @@ Deterministic: the same world, plans and inputs give the same plan; it draws no 
 
 What the Dojo, the Arena and the battle screen show: [RULESET1.md](RULESET1.md) section 12.
 
-## 11. Code survey (develop, 2026-10-25; under `games/emberwake/crates/`: `b/` battle, `r/` rules, `gui/` gui src)
+## 11. Code survey (2026-10-25, pre-KIT1 lines; `b/` `r/` = `kits/rpg/crates/rpgkit_{battle,rules}/src/`)
 
 | Piece | Where | Today |
 | --- | --- | --- |
@@ -280,13 +280,13 @@ What the Dojo, the Arena and the battle screen show: [RULESET1.md](RULESET1.md) 
 | Guard, armour | `b/resolver.rs:84-95`, `r/damage.rs:11,122-138,202` | a running Defend raises `guard`; `min(0.9, guard + cover)`; `r / (r + 50)` |
 | Classic stances | `r/unit.rs:15-48,686-691`, `damage.rs:196-204`, `b/skill.rs:43-52,83-146`, `b/plan.rs:246-250,1085-1087`, `b/resolver.rs:151-177` | four stances, matchup 1.25 / 0.75; by kind or `stance`; switch 1 AP; `disrupt_break`; a change removes `riposte` |
 | AP | `b/skill.rs:149-156`, `b/session.rs:90` | `clamp(level, 1, 5) + modifier`; Move 1 a tile; Rest, Target, Status 0 |
-| Basics | `emberwake_data/src/lib.rs:480-505` | `strike`, `offhand_jab`, `guard`, `move`, `rest`, `switch_target` |
+| Basics | `rpgkit_data/src/lib.rs:480-505` | `strike`, `offhand_jab`, `guard`, `move`, `rest`, `switch_target` |
 | Move, Engage | `b/plan.rs:21,333-339,570-578,670-734` | once a round, first, at most 2 blocks, 1 AP a tile; approach, Switch Target, attack, chase |
 | Dash, jump | `b/plan.rs:736-770`, `b/command.rs:167-176,472-497,579-617` | gap-close in `dash_tiles` (one block, nearest band tile, refused in reach); DISENGAGE jumps `jump_tiles` |
 | Reach | `b/skill.rs:214-236`, `b/command.rs:244,260,538-549` | ranged (`attack_range > 1`): band (2, max(3, range)); melee (1, 1); support 0-3 |
 | Statuses, tells | `r/status.rs:37-53`, `b/intent.rs:19-48,135-146` | fifteen rows; `Intent` per enemy: first action's kind and target, reveal |
 | Threat intel | `gui/battle.rs:39,1784`, `gui/intent_text.rs:53-61` | the `intel` panel (hovered enemy); tell text |
-| Loadout, skill row | `r/unit.rs:279-400`, `emberwake_data/src/lib.rs:155-245` | 5 class + 3 extra, passives always on; `blocks` 1-6, reach, `exploit` |
-| Encounter, world | `b/session.rs:44-66`, `emberwake_world/src/data.rs:166` | no ruleset; `Session::start` 17 call sites; lineage fields |
-| Dojo, Arena, sim | `b/dojo.rs:1-27,631`, `gui/runner.rs:124-127`, `emberwake_sim/src/args.rs:36-55` | no resolver, stance shift; any encounter; args outside the help |
+| Loadout, skill row | `r/unit.rs:279-400`, `rpgkit_data/src/lib.rs:155-245` | 5 class + 3 extra, passives always on; `blocks` 1-6, reach, `exploit` |
+| Encounter, world | `b/session.rs:44-66`, `rpgkit_world/src/data.rs:166` | no ruleset; `Session::start` 17 call sites; lineage fields |
+| Dojo, Arena, sim | `b/dojo.rs:1-27,631`, `gui/runner.rs:124-127`, `rpgkit_sim/src/args.rs:36-55` | no resolver, stance shift; any encounter; args outside the help |
 | Facing, widget | `gui/battle.rs:141-188`; `engine/crates/aegis_ui/src/timeline.rs:20-58` | GUI-only left or right; segments, no marks or parts |

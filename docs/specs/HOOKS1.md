@@ -5,7 +5,7 @@ Q-61, Q-63, Q-74 in `games/emberwake/docs/decisions/lore.md`; the gaps are CAST1
 Depends on: KIT1-N (kit crates); RULESET1-S, -IN, -P, -PL, -AI; ENCOUNTER2-T, -H, -K
 Lane: logic (schema first, then one hook per run), asset (kit data), design (the CAST1 rewrite)
 Touches and companion: [HOOKS1_TASKS.md](HOOKS1_TASKS.md) (schema, data, tests, parity, tasks with Touches, the CAST1
-rows that change, docs delta, open questions HQ1-HQ14)
+rows that change, docs delta, open questions HQ1-HQ16)
 
 History check (`docs/HISTORY.md`; decision S12, `games/emberwake/docs/decisions/combat.md`): S12 kept terrain static
 ("skill-left terrain later") and zone maps in code ("until S9 map data"); "Slice is data only" is the new reason. No
@@ -31,19 +31,20 @@ rule register (RULESET1 3.2): classic never runs them, the Arena and the sim can
 | G22 | the backdrops | zones as a catalog kind (layout: ENCOUNTER2-T `rows`) | 13 | Z |
 | G24 | M3's slag vents | scheduled arena hazards | 7 | H |
 | G27, G28 | Martyr's Rush; Decapitation, Heretic's Brand | `hp_cost`; `ignore_guard`, rider `end_guard` | 8.5 | K |
+| G7 | Throat-Carver's execute and AP back | exploit `hp_below`; `kill` trigger | 8.6 | X |
 | G29 | Footman, Flagellant, Bailiff, Purifier, Nemeth | AI tactics, target preferences | 11 | AI |
 | G18 | Quell's valve (M2 = M2b) | once-only `unkillable`, trigger `spared`, effect `heal` | 10.2 | Q |
 | G13, G21, G23, G30 | join level; the Amalgam; the Crucible's four; `loud`, `quiet` tags | covered: ROSTER1 BK5; BIGUNIT1 (later); ROSTER1 BK6; CAMPAIGN1 M3 battle inputs (CAMPAIGN1_TASKS 2) | - | - |
 
-## 3. Survey (develop; paths `b/` `r/` `gui/` = `games/emberwake/crates/emberwake_{battle,rules,gui}/src/`)
+## 3. Survey (pre-KIT1 lines; `b/` `r/` = `kits/rpg/crates/rpgkit_{battle,rules}/src/`, `gui/` = `emberwake_gui/src/`)
 
 | Piece | Where | Today |
 | --- | --- | --- |
-| Statuses, skills | `r/status.rs:37-53`, `:199-244`; `emberwake_data/src/lib.rs:155-251`; `b/skill.rs:61-80`, `:239-260` | 15 code rows (debuffs roll potency, act next round); one status, grants, cleanses, `dash_tiles`, `jump_tiles`, `exploit`; areas NONE, PLUS, BURST, LINE, SWEEP; nothing moves another unit, leaves a hazard, costs HP or rides a hit |
+| Statuses, skills | `r/status.rs:37-53`, `:199-244`; `rpgkit_data/src/lib.rs:155-251`; `b/skill.rs:61-80`, `:239-260` | 15 code rows (debuffs roll potency, act next round); one status, grants, cleanses, `dash_tiles`, `jump_tiles`, `exploit`; areas NONE, PLUS, BURST, LINE, SWEEP; nothing moves another unit, leaves a hazard, costs HP or rides a hit |
 | Terrain, hazards, cover, moves | `b/grid.rs:61-127`; `b/command.rs:697-771`; `b/resolver.rs:183-218`; `b/world.rs:262-287` | 17 static code types with catalog move cost, cover, one hazard status; rolls on enter (walk `:667`, dash `:609`, jump `:498`) and at round end; cover on ranged hits only; `move_unit` (an exit withdraws), `jump_unit`: only the mover moves |
 | Zones | `b/grid.rs:130-173`; encounter `zone` (`options_from: zones`) | 8 code zones; STAGE1 keys the backdrop by zone id |
 | Damage, guard | `r/damage.rs:152-221`; `b/resolver.rs:83-96`, `:153-172` | `include_guard` (`:161`) always on; guard + cover capped 0.9 (`:202`); guard reset each block, raised by a running Defend |
-| Reactions, passives | `b/command.rs:19`, `:774-791`; `r/unit.rs:279-345`; `emberwake_content/src/check/simple.rs:70-71` | riposte only; 10 static effect types (items 4), no condition, event or counter |
+| Reactions, passives | `b/command.rs:19`, `:774-791`; `r/unit.rs:279-345`; `rpgkit_content/src/check/simple.rs:70-71` | riposte only; 10 static effect types (items 4), no condition, event or counter |
 | Phases, hook points | `b/encounter.rs:219-279`, `:390-422`; `b/session.rs:105-112`, `:652-709`, `:903-1053` | triggers `hp_below`, `round`, `arrival`; effects line, wave, status, ai, enrage; `Roster::customize`; `step_next`, `on_block_start`, `on_action_resolved`, `on_block_end` |
 | AI | `b/world.rs:24-42`; `b/ai.rs:595-619`; `b/plan.rs:312` | roles, NEAREST or WEAKEST, reckless, flee, defend; a hazard path penalty |
 | Class names | `gui/hub.rs:18`, `gui/party.rs:1143`, `gui/dojo.rs:261` | the class row's `name`; no class key in the world manifest |
@@ -62,6 +63,7 @@ rule register (RULESET1 3.2): classic never runs them, the Arena and the sim can
 | `hp_cost` | skill `hp_cost` | no cost |
 | `ignore_guard` | skill flag `ignore_guard` | guard applies |
 | `ai_tactics` | unit `tactics`, target prefs `SOFTEST`, `TOUGHEST`, hazard-aware tiles | prefs read as ROLE |
+| `execute` | skill `exploit` entries with `hp_below` (8.6) | the entry never matches |
 
 The phase effect `deck` (10) rides RULESET1's `deck` rule. Classic worlds set no `classes` (12) and use code zones (13).
 
@@ -202,7 +204,8 @@ alive): the hit is also computed against H (H's armour and guard, the same crit 
 100 only damage moves: H takes `pct`% of its result, F `100 - pct`% of its own (rounded, at least 1 when the share is
 above 0); status, stagger and forced moves stay on F. With 100 (an intercept) the whole hit (damage, status roll,
 stagger, forced move, events) lands on H. A redirect never takes H below 1 HP (the rest goes back to F). One redirect
-a hit: the first holder by registration order.
+a hit (CQ18 a): a running skill's triggers first, then passives and worn items, each in registration order; so
+Kaelen's running Intercepting Hook takes the hit and Castellan's Penance only the hits it does not take (CAST1 C14).
 
 ### 8.5 Riders, HP cost, guard bypass
 
@@ -213,6 +216,14 @@ a hit: the first holder by registration order.
   HP is at or below the cost (reason `HP 9 <= cost 10`). Log `[HP Cost] Flagellant bleeds 10 HP`.
 - IG1. Skill family flag `ignore_guard`: its hits set `include_guard` false (`r/damage.rs:161`, `:201`: the guard part
   of the guard-and-cover term is 0, cover stays) and P6's guard factor is 1.0. The breakdown says "ignores guard".
+
+### 8.6 Execute riders (G7) `[kit hook]`
+
+- EX1. `exploit` entry `{"hp_below": pct, "power_mult": x}` (pct 1-99) matches when the target's HP share is at or
+  below `pct` before the hit's damage (step 2); the best entry wins (`b/skill.rs:264`: x2.0 beats a staggered x1.5);
+  `exploit_consume` removes nothing for it. Rule `execute` (4.1); off and in classic it never matches.
+- EX2. Covered: the AP back is a passive trigger `kill`, `when.skills` [family]: `ap` 2 (as Dead-Eye); a flat bonus
+  is a rider `other_hp_below`: `damage`; RQ9 reads the holder's HP. Not built: a lethal execute (M4 Talon; HQ15 b).
 
 ## 9. Unit meters (G14; the shape Strain reuses, Q-63) `[kit hook]`, rows `[data]`
 
@@ -275,7 +286,7 @@ block start; phase effect `{"type": "heal", "unit", "pct"}` heals that share of 
 ## 12. Class names per world (G1, Q-53) `[kit hook]`, names `[data]`
 
 - CN1. World manifest field `classes` (json, {}): `{class_id: {name, description, skill_path}}`; per class id the
-  nearest manifest in the lineage with that key wins (as `party_max`, `emberwake_world/src/data.rs:165`).
+  nearest manifest in the lineage with that key wins (as `party_max`, `rpgkit_world/src/data.rs:165`).
 - CN2. `Data::class_name(world, class_id)` and `class_description`: the overlay's, else the class row's. Screens with a
   world read them: the hub roster (`gui/hub.rs:18`), the party header (`gui/party.rs:1143`), battle inspect, results
   and recruit lines. Catalog screens (Dojo, Forge, Arena) keep the base names.
@@ -295,6 +306,6 @@ block start; phase effect `{"type": "heal", "unit", "pct"}` heals that share of 
 
 ## 14. Out of scope
 
-G2, G6-G12, G15-G17, G20, G21, G25, G26 (not in the slice; riders can later carry execute riders and second
-statuses); hazard overlap reactions (Volatile Catalyst); the Strain crisis table; Ash-Cloud's jump (Q-54); windup
+G2, G6, G8-G12, G15-G17, G20, G21, G25, G26 (not in the slice; riders can later carry a lethal execute and
+second statuses); hazard overlap reactions (Volatile Catalyst); the Strain crisis table; Ash-Cloud's jump (Q-54); windup
 targeting (HQ2); Content Forge forms for the new fields (raw JSON, as ENCOUNTER2).

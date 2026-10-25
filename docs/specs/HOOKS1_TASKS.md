@@ -18,6 +18,7 @@ Status: proposed (2026-10-25); companion of [HOOKS1.md](HOOKS1.md) (rule ids and
 | `meters` | json | [] | rank | 0-2 `{meter, delta}`; `meter` a `unit_meters` row; `delta` -100..100, not 0 |
 | `hp_cost` | int | 0 | rank | 0-99; not MOVE, REST, TARGET, STATUS |
 | `ignore_guard` | bool | false | family | ATTACK |
+| `exploit` | json | [] | family | + entries `{hp_below 1-99, power_mult}` (range as a status entry's; no `status` key); timeline only, as `flanked` |
 
 Warnings: a placement (ATTACK, `power_mult` 0, a `hazard`) with a status, stagger or `forced_move`; `hp_cost` above
 half the lowest owner's max HP.
@@ -123,13 +124,13 @@ half the lowest owner's max HP.
 - `classes` (HQ5 a): `warrior` Vanguard, `rogue` Gutter-Stalker, `priest` Heretic Acolyte, `ranger` Arbalestier,
   `brawler` Slag-Brute, `mage` Ichor Alchemist; each `"skill_path": {}`; descriptions from `lore/systems/class_*.md`.
 - `rulesets.timeline.rules`: append `forced_move`, `ground_hazards`, `arena_hazards`, `triggers`, `unit_meters`,
-  `hp_cost`, `ignore_guard`, `ai_tactics`.
+  `hp_cost`, `ignore_guard`, `ai_tactics`, `execute`.
 
 ## 3. Tests (rule-derived; scratch data in the kit crates' `tests/`)
 
 | Task | Test | Expectation from |
 | --- | --- | --- |
-| every logic task | classic parity; the `tl_` goldens with all eight rules on | unchanged (4.2) |
+| every logic task | classic parity; the `tl_` goldens with all nine rules on | unchanged (4.2) |
 | S | each 1.1-1.6 violation; `legacy/data`; a classic world's `arena_hazards` | one error each; no new error; a warning |
 | F | push 2 east of the source; a diagonal tie facing north; pull from 3 tiles | 2 tiles east; north axis; stops at distance 1 (FM2) |
 | F | push 2 with a wall, a unit, an exit after 1 tile | collision hit and stagger; both units hit; stops before the exit (FM3, FM4) |
@@ -142,10 +143,12 @@ half the lowest owner's max HP.
 | G | a tripwire met by the placer's ally, then a foe mid-path; enemy paths past a hidden trap, visible grease | ally passes; foe stops, 15 and a root roll, trap gone; no penalty / penalty (GH6, GH8) |
 | E | each event; a trigger twice in a round, `limit` round / none; an effect that would raise an event | one call each; once / twice; no second call (8.1) |
 | E | redirect 35; redirect 100; holder at 5 HP | holder 35% of its own result, ally 65%; the whole hit on the holder; holder stops at 1 (8.4) |
+| E | one holder: passive redirect 35 and a running Guard's redirect 100; the Guard not running | the Guard takes the whole hit, the passive nothing; the passive redirects 35 (8.4, CQ18 a) |
 | E | `guard` 0.5 blocks 0 in block 3, a hit in block 5 | guard 0.5, stagger x0.5, `guarded_hit` fires; gone next round (8.3) |
 | E | `ap` 2 at 9 of 10 / on an enemy; `grant` until `guard_end`; `reveal`; `hp_below` 50 twice, `limit` battle | 10 / nothing; ends with the Defend; next round revealed; once (8.2) |
 | K | `hp_cost` 10 at HP 25 / 10 / 8; `ignore_guard` on a guarding unit in cover | HP 15 / refused / refused; guard term 0, cover kept, stagger factor 1.0 (HC1, IG1) |
 | K | rider `end_guard` on a guarding target; `when` `other_broken` | guard 0 at once; only on a target broken this round (RD1) |
+| X | exploit [`stagger` x1.5, `hp_below` 35 x2.0]: a foe at 36% / 35% / 35% staggered; rule `execute` off | x1.0 / x2.0 / x2.0; x1.0, no new RNG draw (EX1) |
 | M | `start` 1, `floor` 2; a skill delta -1 at 0 / 1 | starts at 2; refused (fails unpaid if forced) / value 0 (UM1, UM2) |
 | M | decay `-10 unless_gained` after a gaining / a quiet round; a band with empower 10 entered and left | unchanged / -10; empower held in the band only (UM3, UM4) |
 | M | rule `at` 3 up `once` over 2, 4, 2, 4; a meter skill, cost met / not | once; offered slotless / not (UM5, UM6) |
@@ -170,13 +173,14 @@ half the lowest owner's max HP.
 
 | Id | Title | Layer | Lane | Depends | Touches |
 | --- | --- | --- | --- | --- | --- |
-| HOOKS1-S | Schema, typed fields, checks for every field and kind (1.1-1.6), the 8 rule ids, parity strips | kit | logic | KIT1-N, RULESET1-S, ENCOUNTER2-K | `schema`; `kd`; `kc/{source,store}.rs`; `kc/check/{skill,simple,item,unit,encounter,world,mod}.rs`; `kr/ruleset.rs`; `ds` |
+| HOOKS1-S | Schema, typed fields, checks for every field and kind (1.1-1.6), the 9 rule ids, parity strips | kit | logic | KIT1-N, RULESET1-S, ENCOUNTER2-K | `schema`; `kd`; `kc/{source,store}.rs`; `kc/check/{skill,simple,item,unit,encounter,world,mod}.rs`; `kr/ruleset.rs`; `ds` |
 | HOOKS1-F | Forced movement: push, pull, collisions, immunity, bonus tiles, `stop_moves` (5) | kit | logic | HOOKS1-S, RULESET1-P | `kb/{forced (new),command,world,log,metrics}.rs`; `kr/unit.rs`; `rpgkit_battle/tests/forced_move.rs` |
 | HOOKS1-G | Ground hazards: kind, overlay, placement, traps, cover, expiry, AI penalty (6) | kit | logic | HOOKS1-F | `kb/{ground (new),grid,command,resolver,plan,ai,skill,log,metrics}.rs`; `tests/ground_hazards.rs` |
 | HOOKS1-Z | Zones as data: kind, `zone` options, board, backdrop key (13) | kit + game | logic | HOOKS1-G (grid), ENCOUNTER2-T | `kd`; `kc/source.rs`; `kb/{grid,session}.rs`; `gui/battle.rs` (backdrop key); `tests/zones.rs` |
 | HOOKS1-E | Events, triggers, held guard, redirect and intercept (8.1-8.4) | kit | logic | HOOKS1-Z, RULESET1-V | `kb/{trigger (new),command,resolver,session,poise,log}.rs`; `kr/{unit,damage}.rs`; `tests/triggers.rs` |
 | HOOKS1-K | Riders, `hp_cost`, `ignore_guard` (8.5) | kit | logic | HOOKS1-E | `kb/{trigger,command,resolver,round_intent_plan,ai}.rs`; `kr/damage.rs`; `tests/riders.rs` |
-| HOOKS1-M | Unit meters, bands helper, meter skills (9) | kit | logic | HOOKS1-K | `kb/{meter (new),trigger,session,skill,round_intent_plan}.rs`; `kr/{unit,bands (new)}.rs`; `tests/meters.rs` |
+| HOOKS1-X | Execute riders: exploit `hp_below` in the match and the breakdown (8.6) | kit | logic | HOOKS1-K (same files) | `kb/{skill,command}.rs`; `kr/damage.rs`; `tests/execute.rs` |
+| HOOKS1-M | Unit meters, bands helper, meter skills (9) | kit | logic | HOOKS1-X | `kb/{meter (new),trigger,session,skill,round_intent_plan}.rs`; `kr/{unit,bands (new)}.rs`; `tests/meters.rs` |
 | HOOKS1-H | Scheduled arena hazards and their tells (7) | kit | logic | HOOKS1-M | `kb/{arena (new),session,intent,log,metrics}.rs`; `tests/arena_hazards.rs` |
 | HOOKS1-U | Phase effect `deck` (10.1) | kit | logic | HOOKS1-H, RULESET1-D | `kb/{encounter,session}.rs`; `tests/deck_unlock.rs` |
 | HOOKS1-AI | Target prefs, tactics, hazard-aware tiles (11) | kit | logic | HOOKS1-U, RULESET1-AI | `kb/{ai,round_intent_plan,world,encounter}.rs`; `tests/tactics.rs` |
@@ -187,7 +191,7 @@ half the lowest owner's max HP.
 | HOOKS1-Q | Cheat-death `spare_once`, trigger `spared`, effect `heal` (10.2; M2b) | kit | logic | HOOKS1-U, ENCOUNTER2-H | `schema`; `kb/{encounter,session}.rs`; `kc/check/encounter.rs`; `ds` |
 | HOOKS1-D | Docs delta (7) | kit + game | planner | each task as it lands | the docs in 7 |
 
-Order: S; then F, G, Z, E, K, M, H, U, AI in a row (shared `command.rs`, `resolver.rs`, `session.rs`, `grid.rs`;
+Order: S; then F, G, Z, E, K, X, M, H, U, AI in a row (shared `command.rs`, `resolver.rs`, `session.rs`, `grid.rs`;
 one run each); C beside F; UI after H and C; A after S; Q after the slice. If S runs long, split 1.4-1.6 into S2.
 The planner adds HOOKS1-S, HOOKS1-A and CAST1-R to the Depends of CAST1-A2, -A3, -A4, -A6, HOOKS1-Z to CAST1-A6, and
 HOOKS1-AI and HOOKS1-UI to CAST1-B.
@@ -202,7 +206,8 @@ HOOKS1-AI and HOOKS1-UI to CAST1-B.
 | Founders 2 `unbroken_phalanx` | yes | trigger `guard_start`: grant steadfast until `guard_end` (crit immunity: G11) |
 | Founders 2 `castellans_penance` | yes | trigger `ally_hit` range 1: `guard` 0.5 for 1 block, then redirect 35 |
 | Founders 3 `ash_cloud_fade` | yes | + `hazard` smoke BURST self 2 (no jump, Q-54) |
-| Founders 3 `cinder_childs_reflex` | yes | trigger `evaded`: grant haste 1 round |
+| Founders 3 `cinder_childs_reflex` | yes | trigger `evaded`: grant haste 1 round; (HQ16 a) + trigger `kill` `skills` [throat_carver]: `ap` 2 |
+| Founders 3 `throat_carver` | yes | (HQ15 a) + exploit `hp_below` 35 x2.0 (EX1) |
 | Founders 4 `tourniquet_tonic` | yes | + rider `other_broken`: `guard` 0.5, blocks 0 |
 | Founders 4 `triage_efficiency` | yes | trigger `heal_given` `other_hp_below` 30: `ap` 1 |
 | Founders 4 `copyist_of_st_lyras` | yes | effect `meter` bile_phial; trigger `cleanse_given`: `meter` +1, limit none |
@@ -234,20 +239,20 @@ HOOKS1-AI and HOOKS1-UI to CAST1-B.
 | Encounters 2-3 every row | yes | `zone` per 2.3 |
 | Encounters 2 `enc_evt_03` | yes | `arena_hazards` `slag_vents`: columns [7, 8], blocks [3, 6], `damage_pct` 12, `stagger` 10, burn 60/3/1, line "The slag vents roar." |
 | Encounters 2 `enc_pro_0b` | yes | (HQ1 a) text "Follow the smoke: hide, guard each other, slip away." |
-| Gaps 1 G1, G3-G5, G14, G19, G22, G24, G27-G30 | - | point to HOOKS1; G18 to HOOKS1-Q (M2b) |
+| Gaps 1 G1, G3-G5, G7, G14, G19, G22, G24, G27-G30 | - | point to HOOKS1 (G7: 8.6); G18 to HOOKS1-Q (M2b) |
 
 ## 7. Docs delta (builders report, HOOKS1-D applies), ROADMAP and HISTORY rows
 
 - `GAME_BRIEF.md`: a "Combat hooks (HOOKS1)" note. `docs/STRUCTURE.md`: `kb/{forced,ground,trigger,meter,arena}.rs`,
   `kr/bands.rs`, `data/catalog/{hazards,unit_meters,zones}.json`, the kit tests. `kits/rpg/README.md`: the hooks.
-- RULESET1 3.2 (the 8 rule ids); RULESET1_INTENT 2 (a placement is a tile-target Assault opener), 7 PL4 (hazard
+- RULESET1 3.2 (the 9 rule ids); RULESET1_INTENT 2 (a placement is a tile-target Assault opener), 7 PL4 (hazard
   threats, `hold_line`), 9 (the `brace_after_hit` row); ENCOUNTER2 6 (`arena_hazards`, `deck`, later `spare_once`);
   CAMPAIGN1 M5 (the shared crossing helper); CAST1 and CAST1_GAPS (section 6, CAST1-R).
 - `engine/docs/authoring/combat_hooks.md` (new, game-agnostic): forced moves, hazards, triggers and meters as data.
 - Decision S12 (`decisions/combat.md`): the static-terrain and code-zone clauses superseded (planner).
 
 ROADMAP row (`proposed`): HOOKS1, Combat hooks for the slice's cast, depends on KIT1, RULESET1, ENCOUNTER2; spec
-`docs/specs/HOOKS1.md`; HQ1-HQ14 open.
+`docs/specs/HOOKS1.md`; HQ1-HQ16 open.
 
 HISTORY rows (append):
 
@@ -275,3 +280,5 @@ HISTORY rows (append):
 | HQ12 | Tripwire Snare's intent | (a) Assault, a tile-target placement; (b) Maneuver Utility (amends MV10) | a: no RULESET1 change |
 | HQ13 | Quell's cheat-death (G18) | (a) HOOKS1-Q after the slice (M2 is M2b); (b) before it | a |
 | HQ14 | Shackle Slam's break | (a) the wall-slam break replaces `sure_break`, AP 2 (lore); (b) keep both | a: rewards positioning |
+| HQ15 | Throat-Carver's execute (G7) | (a) x2.0 power under 35% HP (EX1), the lethal form later (EX3); (b) a lethal rider now | a: HQ9, no instant kills in Act 1 |
+| HQ16 | Where its 2 AP back lives | (a) a `kill` trigger on Vesper's trait (no new code); (b) a rider key `other_downed` on the skill | a: EX2 covers it |

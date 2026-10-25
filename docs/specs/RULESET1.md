@@ -3,7 +3,7 @@
 Status: proposed (spec 2026-10-25 from CANON 2.1 and Q-48..Q-61, Q-70, Q-72, Q-91 of `decisions/lore.md`; revised
 2026-10-25 to the user's round-intent model, first called the round stance; open questions in section 14)
 Depends on: DERIVE1-E/S/R (Max Poise is a derived row, TQ5); the M0 `sunk_ward` world skeleton (the world field's
-data); KIT1 if it lands first (same modules, kit crate paths); STAGE1 and FX1 as the roadmap's M1 says
+data); KIT1-N (the kit rows live in `kits/rpg/crates/rpgkit_*`, KIT1_TASKS 5); STAGE1 and FX1 as the roadmap's M1 says
 Lane: logic (R, S, T, IN, PL, AI, P, K, V, D, E, U, DU, G, X), asset (A), balance (B)
 Touches: per task in [RULESET1_TASKS.md](RULESET1_TASKS.md) section 6
 Companions: [RULESET1_INTENT.md](RULESET1_INTENT.md) (round intent, planner, AI, input, tells, code survey);

@@ -6,7 +6,8 @@ Depends on: STAGE1-E and STAGE1-L (the tilted stage: chest and foot points, draw
 STORYUI1-E (the shared `reduce_motion` key), STORYUI1-S (the card schema), KIT1-N (kit crate paths)
 Lane: logic (FX1-E engine, FX1-S kit, FX1-L1 and FX1-L2 game, FX1-V engine + game), asset (FX1-A data)
 Touches: per task in [FX1_TASKS.md](FX1_TASKS.md) section 2; overall `engine/crates/aegis_ui/src/{fx (new),painter,
-canvas,art,screen,specimens,vignette,lib}.rs`, the kit schema and checks, `emberwake_gui/src/{fx (new),battle,stage,
+canvas,art,screen,specimens,vignette,lib}.rs`, the kit schema and checks (`kits/rpg/schema.json`,
+`kits/rpg/crates/rpgkit_{content,battle}/src/`), `games/emberwake/crates/emberwake_gui/src/{fx (new),battle,stage,
 tuning,story,menus}.rs`, `games/emberwake/tuning.json`, the `sunk_ward` vignettes and encounters
 Companion: [FX1_TASKS.md](FX1_TASKS.md) (acceptance checks per task, task rows, sequencing, docs delta, HISTORY rows)
 

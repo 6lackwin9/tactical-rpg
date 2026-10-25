@@ -61,23 +61,27 @@ it)
 
 ## 3. Tasks (slice = needed before the vertical slice)
 
+Paths (KIT1_TASKS 5): `rpgkit_*` under `kits/rpg/crates/`, `emberwake_*` under `games/emberwake/crates/`;
+`schema.json` = `kits/rpg/schema.json`; `check/` = `rpgkit_content/src/check/`; `campaign/`, `quest.rs`, `shop.rs`
+in `rpgkit_world/src/`.
+
 | Id | Title | Layer | Lane | Depends | Slice | Touches |
 | --- | --- | --- | --- | --- | --- | --- |
 | CAMPAIGN1-E | Keyed saves: write, read, exists, peek by key outside the slot range (F5) | engine | logic | - | yes | `engine/crates/aegis_save/src/lib.rs`, `engine/crates/aegis_save/tests/keyed.rs` (new) |
-| CAMPAIGN1-S | Schema and checks: manifest fields, kinds `meters`, `checkpoints`, `triggers`, the new effect kinds and read keys in the effect and condition checkers, the Forge viewer list, the schema parity strip (11.1-11.4) | kit | logic | - | yes | `games/emberwake/schema.json`, `emberwake_content/src/{source,store}.rs`, `emberwake_content/src/check/{world,dialogue,campaign (new)}.rs`, `emberwake_gui/src/forge.rs`, `emberwake_world/tests/data_source.rs` |
-| CAMPAIGN1-M | Meter runtime: state and save step, `tick`, gauges, bands, rules, inputs, floors, the act, effects, read keys, run over (X1-X5, M1-M8, F1, F3, 11.3-11.5) | kit | logic | S | yes | `emberwake_world/src/campaign/{mod,meter}.rs` (new), `emberwake_world/src/{lib,state,save,quest,dialogue,battle}.rs`, `emberwake_world/tests/campaign.rs` (new), `emberwake_world/tests/saves.rs` (a v12 campaign case) |
-| CAMPAIGN1-C | Days, countdowns, checkpoints, purse, rest, defeat: the `days` tick in travel, rest and retreat, the clock effects, `per_day`, `at_zero`, band modifiers on road fights, `battle_mods` (K1-K5, C1-C3, P1-P3, R1-R4) | kit | logic | M | yes | `emberwake_world/src/campaign/{clock,checkpoint,purse}.rs` (new), `emberwake_world/src/{travel,progression,explore}.rs`, `emberwake_world/tests/campaign.rs` |
-| CAMPAIGN1-T | Triggers, the pending queue, previews; `dialogue::apply_effects` as a free function shared with triggers (T1-T3, F2, W3) | kit | logic | C | yes | `emberwake_world/src/campaign/{trigger,preview}.rs` (new), `emberwake_world/src/{dialogue,explore}.rs`, `emberwake_world/tests/campaign.rs` |
+| CAMPAIGN1-S | Schema and checks: manifest fields, kinds `meters`, `checkpoints`, `triggers`, the new effect kinds and read keys in the effect and condition checkers, the Forge viewer list, the schema parity strip (11.1-11.4) | kit | logic | - | yes | `kits/rpg/schema.json`, `rpgkit_content/src/{source,store}.rs`, `rpgkit_content/src/check/{world,dialogue,campaign (new)}.rs`, `emberwake_gui/src/forge.rs`, `emberwake_world/tests/data_source.rs` |
+| CAMPAIGN1-M | Meter runtime: state and save step, `tick`, gauges, bands, rules, inputs, floors, the act, effects, read keys, run over (X1-X5, M1-M8, F1, F3, 11.3-11.5) | kit | logic | S | yes | `rpgkit_world/src/campaign/{mod,meter}.rs` (new), `rpgkit_world/src/{lib,state,save,quest,dialogue,battle}.rs`, `rpgkit_world/tests/campaign.rs` (new, scratch data), `emberwake_world/tests/saves.rs` (a v12 campaign case) |
+| CAMPAIGN1-C | Days, countdowns, checkpoints, purse, rest, defeat: the `days` tick in travel, rest and retreat, the clock effects, `per_day`, `at_zero`, band modifiers on road fights, `battle_mods` (K1-K5, C1-C3, P1-P3, R1-R4) | kit | logic | M | yes | `rpgkit_world/src/campaign/{clock,checkpoint,purse}.rs` (new), `rpgkit_world/src/{travel,progression,explore}.rs`, `rpgkit_world/tests/campaign.rs` |
+| CAMPAIGN1-T | Triggers, the pending queue, previews; `dialogue::apply_effects` as a free function shared with triggers (T1-T3, F2, W3) | kit | logic | C | yes | `rpgkit_world/src/campaign/{trigger,preview}.rs` (new), `rpgkit_world/src/{dialogue,explore}.rs`, `rpgkit_world/tests/campaign.rs` |
 | CAMPAIGN1-U | Screens: HUD counters and meter chips, notices, fatal asks, the run-over screen, the act-start save, playing the pending queue, the start-AP penalty in the battle bridge, the Travel tip (F4, F5, W1-W6, P3) | game | logic | T, E; STORYUI1 card and vignette player (else plain cards) | yes | `emberwake_gui/src/{hud,worldmap,region,battle,screens,menus}.rs`, `emberwake_gui/src/runover.rs` (new) |
-| CAMPAIGN1-SIM | `aegis sim deadlines`: best and worst finish per checkpoint (section 4.3) | kit | logic | S | yes (the balance lane checks the slice's deadlines) | `emberwake_sim/src/{args,lib}.rs`, `emberwake_sim/src/deadlines.rs` (new), `emberwake_sim/tests/deadlines.rs` (new) |
+| CAMPAIGN1-SIM | `aegis sim deadlines`: best and worst finish per checkpoint (section 4.3) | kit | logic | S | yes (the balance lane checks the slice's deadlines) | `rpgkit_sim/src/{args,lib}.rs`, `rpgkit_sim/src/deadlines.rs` (new), `rpgkit_sim/tests/deadlines.rs` (new, scratch world) |
 | CAMPAIGN1-D | The `sunk_ward` campaign rows (section 4) | game | asset | S; the `sunk_ward` manifest and quests (SUNKWARD1's first step) | yes | `games/emberwake/data/worlds/sunk_ward/{world,meters,checkpoints,triggers,dialogues,encounters}.json` |
-| CAMPAIGN1-TM | Travel modes per leg: stealth (+1 day, lower road chance) and forced march (+Alert per leg, a roamer fight at Alert 50+); the mode toggle on the world map (CMQ2) | kit | logic | C, U | CMQ2 | `emberwake_world/src/travel.rs`, `campaign/meter.rs` (`on: leg` mode filter), `schema.json` (route fields), `emberwake_gui/src/worldmap.rs` |
-| CAMPAIGN1-P | Shop `supply_steps` (P4) | kit | logic | S | later (Act 3) | `schema.json`, `emberwake_world/src/shop.rs`, `check/shop.rs` |
+| CAMPAIGN1-TM | Travel modes per leg: stealth (+1 day, lower road chance) and forced march (+Alert per leg, a roamer fight at Alert 50+); the mode toggle on the world map (CMQ2) | kit | logic | C, U | CMQ2 | `rpgkit_world/src/travel.rs`, `campaign/meter.rs` (`on: leg` mode filter), `schema.json` (route fields), `emberwake_gui/src/worldmap.rs` |
+| CAMPAIGN1-P | Shop `supply_steps` (P4) | kit | logic | S | later (Act 3) | `schema.json`, `rpgkit_world/src/shop.rs`, `check/shop.rs` |
 | CAMPAIGN1-DOC | Doctrine: `scope` unit, leans, play inputs, favour conditions (M9) | kit | logic | M; ROSTER1 member records | later (Act 2) | `campaign/meter.rs`, `quest.rs`, `check/campaign.rs`, `emberwake_gui/src/party.rs` |
 
 Order: E and S in parallel; M, C, T in a row (shared `campaign/mod.rs` and `tests/campaign.rs`); U last; SIM after S;
 D after S and the manifest. Save bumps run one at a time (CAMPAIGN1-M, ROSTER1, RULESET1-D, ENCOUNTER2-W). Hub-file
-overlaps: S with RULESET1-R and DERIVE1-S (`schema.json`, `source.rs`); M and C with ENCOUNTER2-W (`world/src/
+overlaps: S with RULESET1-R and DERIVE1-S (`schema.json`, `source.rs`); M and C with ENCOUNTER2-W (`rpgkit_world/src/
 {battle,state,save,explore,dialogue,travel}.rs`); U with ENCOUNTER2-U and STAGE1-L (`gui/battle.rs`, one bridge hunk).
 
 ## 4. Data (asset lane, `tools/fc.sh content upsert <kind> @file.json world=sunk_ward`, then `content check`)
@@ -140,8 +144,8 @@ on SUNKWARD1's slice graph.
 
 ## 6. Docs delta (for the planner)
 
-- `docs/STRUCTURE.md`: `emberwake_world/src/campaign/` (meters, clock, checkpoints, purse, triggers, previews; kit,
-  story-free), `emberwake_gui/src/runover.rs`, `emberwake_sim/src/deadlines.rs`, `aegis_save` keyed saves.
+- `docs/STRUCTURE.md`: `rpgkit_world/src/campaign/` (meters, clock, checkpoints, purse, triggers, previews; kit,
+  story-free), `emberwake_gui/src/runover.rs`, `rpgkit_sim/src/deadlines.rs`, `aegis_save` keyed saves.
 - `games/emberwake/docs/GAME_BRIEF.md` "where to look": campaign meters, checkpoints, run over.
 - `engine/README.md` and `engine/docs/authoring/campaign_structure.md`: keyed saves; the kit hook that carries
   checkpoints and meters (link this spec); `games/emberwake/docs/SCREENS.md`: the run-over screen.

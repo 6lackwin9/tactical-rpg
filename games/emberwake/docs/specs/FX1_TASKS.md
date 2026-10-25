@@ -88,7 +88,7 @@ sections 7 (the code survey) and 8 (the effect table, FX1 4.4), which live here.
 | Id | Title | Layer | Lane | Depends on | Touches |
 | --- | --- | --- | --- | --- | --- |
 | FX1-E | Engine effects kit: `aegis_ui::fx` (clock with hit-stop, projectile, beam, trail, sparks, flash, ring, the live list, camera shake with presets, limits and the ceiling), `Painter::shift`, `Image::silhouette` and `Art::body_silhouette`, `Settings::reduce_motion`, the Effects page of the Kit widgets (FX1 section 3; checks E1-E13) | engine | logic | STAGE1-E (same `painter.rs`, `canvas.rs`, `art.rs`; `ellipse_ring`), STORYUI1-E (same `screen.rs`, `lib.rs`; the key) | `engine/crates/aegis_ui/src/{fx (new),lib,painter,canvas,art,screen,specimens}.rs`, `engine/crates/aegis_ui/tests/fx.rs` (new) |
-| FX1-S | Shake schema: the card key `shake`, the phase effect `shake`, checks, parse, writer, help text (5.1; S1-S4) | kit | logic | STORYUI1-S (the card schema and story check), KIT1-N (paths) | the kit schema (`schema.json`), `content/src/check/{encounter,story}.rs`, `battle/src/encounter.rs`, the content check tests (kit crate paths per KIT1_TASKS section 5) |
+| FX1-S | Shake schema: the card key `shake`, the phase effect `shake`, checks, parse, writer, help text (5.1; S1-S4) | kit | logic | STORYUI1-S (the card schema and story check), KIT1-N (paths) | `kits/rpg/schema.json`; under `kits/rpg/crates/`: `rpgkit_content/src/check/{encounter,story}.rs`, `rpgkit_battle/src/encounter.rs`, the content check tests (new ones on scratch data in `rpgkit_content/tests/`, shipped-data ones stay in `emberwake_content/tests/`; KIT1_TASKS 5) |
 | FX1-L1 | Battle effects core: `fx.rs` (look selection, melee and ranged rows, `arcane_bolt`, `shield_bash`, dashes), the FX clock in place of `anim_ms`, the impact timeline (rules I, F, P), hit-stop, the silhouette flash, the token shake fix, battle shakes, the camera shift, both views, tuning keys, the Reduce motion checkbox if STORYUI1-U1 has not added it (4.1-4.3, 4.4.1-4.4.2, 4.5-4.7; L1-L16) | game | logic | FX1-E, FX1-S (phase shakes), STAGE1-L, DIR4-G (same `battle.rs`) | `games/emberwake/crates/emberwake_gui/src/{fx (new),battle,stage,tuning,menus}.rs`, `games/emberwake/tuning.json` |
 | FX1-L2 | Battle effects, the rest: the skill rows of 4.4.3, support, items, falls, misses with the sidestep, the agent link `fx` state (4.3, 4.4.3-4.4.4, 4.8; M1-M8) | game | logic | FX1-L1 | `games/emberwake/crates/emberwake_gui/src/{fx,battle}.rs` |
 | FX1-V | Vignette shakes: `Card.shake`, `VignetteScreen::with_shakes`, the shifted parts; the game passes its tuning table (5.2; V1-V4) | engine + game | logic | FX1-E, STORYUI1-U1 (`story.rs`) | `engine/crates/aegis_ui/src/vignette.rs`, `engine/crates/aegis_ui/tests/vignette.rs`, `games/emberwake/crates/emberwake_gui/src/story.rs` |
@@ -154,11 +154,11 @@ Risks: rule I touches what `Tokens::catch_up` starts at the pop (L16 keeps the o
 the old path); pacing at slow animation speeds lengthens autoplay rounds (rule P, the intended effect); four rows
 share `battle.rs` (section 3); STORYUI1-E and STAGE1-E are in flight on FX1-E's files.
 
-## 7. Survey (develop 64f4419)
+## 7. Survey (develop 64f4419, before KIT1; kit line numbers are pre-KIT1, `rpgkit_*` under `kits/rpg/crates/`)
 
 | Area | Where | Today |
 | --- | --- | --- |
-| Action pacing | `emberwake_host/src/lib.rs:184-190`; `emberwake_battle/src/session.rs:903-940`; `battle.rs:1080-1087` | One `step` pops and executes one action at once (`last_popped`, `session.rs:228`, set at `:929`); autoplay sends a step every `step_ms` (420 wall ms) |
+| Action pacing | `rpgkit_host/src/lib.rs:184-190`; `rpgkit_battle/src/session.rs:903-940`; `battle.rs:1080-1087` | One `step` pops and executes one action at once (`last_popped`, `session.rs:228`, set at `:929`); autoplay sends a step every `step_ms` (420 wall ms) |
 | Action animation | `battle.rs:181-266` (`Tokens::catch_up`), `:309-320` (`action_clips`) | On a pop the actor turns (FACE1) and plays its attack clip by skill, kind and weapon; at the same moment targets play `hurt`, `death` or `defend` |
 | Animation clock | `battle.rs:376-378`, `:1046-1051` | `anim_ms` grows by wall ms x `anim_speed` (0.5-2.0); clips run on it |
 | Skip | `battle.rs:656`, `:1617` | `skip_anim` makes `catch_up` take the end state and the draw skip death clips |
@@ -170,7 +170,7 @@ share `battle.rs` (section 3); STORYUI1-E and STAGE1-E are in flight on FX1-E's 
 | Painter | `aegis_ui/src/painter.rs:90-94`, `:137`, `:310-350` | The painter holds a copy of the `View` (scale, letterbox offset); `clip` converts at the call; lines, ellipses, circles; no translation helper |
 | Effects | engine and game crates | None: no particle, projectile, trail or shake code |
 | Godot | `legacy/scripts/ui/combat/fx_presets.gd` (S14-L2), `combat_presenter.gd:64-167` | Token tweens only: melee bump 30 % toward the target, ranged 0.25 s, hit shake 4, -4, 2, 0 px, white flash, miss sidestep 6 px, heal and buff pulses, at most 24 live tweens; the engine ported the flash, the shake (with the bug) and the floats |
-| Phases | `emberwake_battle/src/encounter.rs:219-279`, `:285`; `session.rs:651-711`; `emberwake_content/src/check/encounter.rs:151` | Phase effects `line`, `wave`, `status`, `ai`, `enrage`; a fired phase is in `Phases.fired`; the check refuses other types |
+| Phases | `rpgkit_battle/src/encounter.rs:219-279`, `:285`; `session.rs:651-711`; `rpgkit_content/src/check/encounter.rs:151` | Phase effects `line`, `wave`, `status`, `ai`, `enrage`; a fired phase is in `Phases.fired`; the check refuses other types |
 | Schema parity | `emberwake_world/tests/data_source.rs:38-47` | The `phases` help rows are already in `HELP_CHANGED` (PHASEFOLD) |
 
 ## 8. The effect table (FX1 section 4.4; code in `fx.rs`, palette hues from the art bible)

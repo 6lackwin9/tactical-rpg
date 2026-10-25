@@ -52,20 +52,23 @@ Status: proposed (2026-10-25); the rules are in [ROSTER1.md](ROSTER1.md) (rule i
 
 ## 3. Tasks (split by layer and lane; one builder run each; status `spec`)
 
+Paths (KIT1_TASKS 5): `rpgkit_*` under `kits/rpg/crates/`, `emberwake_*` under `games/emberwake/crates/`;
+`schema.json` = `kits/rpg/schema.json`; `data_source.rs`, `tests/rewards.rs` = `emberwake_world/tests/` (game).
+
 | Id | Title | Layer | Lane | Depends | Slice | Touches |
 | --- | --- | --- | --- | --- | --- | --- |
-| ROSTER1-L | Roster core: manifest `roster`, rule rows, `settle_party` (moves the GUI write-back), wounded, bunks, `party_min`, join `level`, `departed` and `depart`, named keepsakes, read keys, save keys (3.1, 3.2, 4, 5.1, KS1-KS2, 9, 11) | kit | logic | ENCOUNTER2-H | yes | `emberwake_world/src/{roster (new),state,save,progression,dialogue,quest,battle,data,lib}.rs`; `emberwake_gui/src/battle.rs` (start and settle call the world); `emberwake_content/src/check/{world,dialogue,encounter}.rs`; `schema.json`; `emberwake_world/tests/{roster (new),data_source}.rs` |
-| ENCOUNTER2-W | Revised (section 4): `then` capture and kill through `roster::depart`; no `party.away` | kit | logic | ENCOUNTER2-H, ROSTER1-L | yes | `emberwake_world/src/{battle,explore,dialogue,travel}.rs`; `tests/rewards.rs`; `emberwake_gui/src/{battle,hub}.rs` |
+| ROSTER1-L | Roster core: manifest `roster`, rule rows, `settle_party` (moves the GUI write-back), wounded, bunks, `party_min`, join `level`, `departed` and `depart`, named keepsakes, read keys, save keys (3.1, 3.2, 4, 5.1, KS1-KS2, 9, 11) | kit | logic | ENCOUNTER2-H | yes | `rpgkit_world/src/{roster (new),state,save,progression,dialogue,quest,battle,data,lib}.rs`; `emberwake_gui/src/battle.rs` (start and settle call the world); `rpgkit_content/src/check/{world,dialogue,encounter}.rs`; `schema.json`; `rpgkit_world/tests/roster.rs` (new, scratch data); `emberwake_world/tests/data_source.rs` |
+| ENCOUNTER2-W | Revised (section 4): `then` capture and kill through `roster::depart`; no `party.away` | kit | logic | ENCOUNTER2-H, ROSTER1-L | yes | `rpgkit_world/src/{battle,explore,dialogue,travel}.rs`; `tests/rewards.rs`; `emberwake_gui/src/{battle,hub}.rs` |
 | ROSTER1-U | Party screen and Results: wounded mark and field HP, "Bunks n/cap", departure and keepsake lines, the `party_min` refusal | game | logic | ROSTER1-L, ENCOUNTER2-W | yes | `emberwake_gui/src/{party,hub}.rs` |
-| ROSTER1-D | `sunk_ward` roster rows (5.1) | game (data) | asset | ROSTER1-L, SUNKWARD1, CAST1-A (keepsake items) | yes | `data/worlds/sunk_ward/{world,characters,encounters,dialogues}.json` |
-| ROSTER1-T | Temperaments: kind, character and member field, passive, default intent, AI overrides (7) | kit | logic | ROSTER1-L, RULESET1-S, RULESET1-AI | if CAST1 gives founders one | `schema.json`; `emberwake_data/src/lib.rs`; `emberwake_content/src/{source,store,check/simple}.rs`; `emberwake_world/src/{roster,new_game,progression,state,save}.rs`; `emberwake_gui/src/{battle,party}.rs`; `data_source.rs` |
+| ROSTER1-D | `sunk_ward` roster rows (5.1); the Crucible (`enc_evt_06`) a check only | game (data) | asset | ROSTER1-L, SUNKWARD1, CAST1-A (keepsake items), CAST1-A6 (the Crucible row) | yes | `data/worlds/sunk_ward/{world,characters,encounters,dialogues}.json` (`encounters`: M2 only) |
+| ROSTER1-T | Temperaments: kind, character and member field, passive, default intent, AI overrides (7) | kit | logic | ROSTER1-L, RULESET1-S, RULESET1-AI | if CAST1 gives founders one | `schema.json`; `rpgkit_data/src/lib.rs`; `rpgkit_content/src/{source,store,check/simple}.rs`; `rpgkit_world/src/{roster,new_game,progression,state,save}.rs`; `emberwake_gui/src/{battle,party}.rs`; `data_source.rs` |
 | ROSTER1-TA | Temperament samples (5.2) | game (data) | asset | ROSTER1-T | as T | `data/catalog/{temperaments,passives}.json` |
-| ROSTER1-B | Bleed-out and revive (3.3) | kit | logic | ENCOUNTER2-H, RULESET1-IN | later (Act 2) | `emberwake_battle/src/{session,world,skill,command,plan,log}.rs`; `emberwake_content/src/check/{skill,item}.rs`; `schema.json`; `emberwake_battle/tests/bleed_out.rs` (new) |
+| ROSTER1-B | Bleed-out and revive (3.3) | kit | logic | ENCOUNTER2-H, RULESET1-IN | later (Act 2) | `rpgkit_battle/src/{session,world,skill,command,plan,log}.rs`; `rpgkit_content/src/check/{skill,item}.rs`; `schema.json`; `rpgkit_battle/tests/bleed_out.rs` (new, scratch data) |
 | ROSTER1-BU | Bleed counter on inspect and the tell (B5) | game | logic | ROSTER1-B | later | `emberwake_gui/src/{battle,intent_text}.rs` |
-| ROSTER1-P | Pool, `rescue`, recruit templates, generation, the `open_flag` gate, swear in, dismiss, retire, housing and crypts (5.2, 5.3) | kit | logic | ROSTER1-L | later (Act 2 start) | `emberwake_world/src/{roster,dialogue,rolls,state,save,progression}.rs`; `emberwake_content/src/check/{dialogue,world}.rs` (+ `recruits`); `schema.json`; `data_source.rs` |
-| ROSTER1-K | Procedural keepsake instances (KS3) | kit | logic | ROSTER1-P | later | `emberwake_world/src/{roster,progression,state,data}.rs`; `emberwake_gui/src/party.rs` |
+| ROSTER1-P | Pool, `rescue`, recruit templates, generation, the `open_flag` gate, swear in, dismiss, retire, housing and crypts (5.2, 5.3) | kit | logic | ROSTER1-L | later (Act 2 start) | `rpgkit_world/src/{roster,dialogue,rolls,state,save,progression}.rs`; `rpgkit_content/src/check/{dialogue,world}.rs` (+ `recruits`); `schema.json`; `data_source.rs` |
+| ROSTER1-K | Procedural keepsake instances (KS3) | kit | logic | ROSTER1-P | later | `rpgkit_world/src/{roster,progression,state,data}.rs`; `emberwake_gui/src/party.rs` |
 | ROSTER1-KD | Keepsake templates by class (5.3) | game (data) | asset | ROSTER1-K | later | `data/catalog/items.json`; `data/worlds/sunk_ward/world.json` |
-| ROSTER1-M | Living Martyr fuse (8) | kit | logic | ROSTER1-P, CAMPAIGN1 (clock), the Calcification spec | later (Act 2) | `emberwake_world/src/{roster,state,save}.rs` |
+| ROSTER1-M | Living Martyr fuse (8) | kit | logic | ROSTER1-P, CAMPAIGN1 (clock), the Calcification spec | later (Act 2) | `rpgkit_world/src/{roster,state,save}.rs` |
 | ROSTER1-RU | The Bunks screen (roster management) | game | logic | ROSTER1-P | later (Act 2, Q-96) | `emberwake_gui/src/` (a new hub screen) |
 
 Order: L shares `state.rs`, `save.rs`, `dialogue.rs` and `quest.rs` with CAMPAIGN1's world task and RULESET1-D: run
@@ -83,9 +86,9 @@ the module every later ROSTER1 task extends.
   with the act's rule row instead of "today's rules".
 - W4 unchanged; ROSTER1-U adds the departure and keepsake lines after it.
 - The row gains the dependency ROSTER1-L and drops `state.rs` and `save.rs` from its Touches.
-- Spec text to update (planner or a design pass; this task wrote only ROSTER1 files): ENCOUNTER2.md 3.3 W3, section 6
-  (`then` row) and 7 ("the unit lifecycle hook" is ROSTER1); ENCOUNTER2_TASKS.md 1 (the W test), 2 (the saves
-  bullet), 4.2 (`then` capture) and 7.5.
+- Spec text updated by KIT1-P (2026-10-25): ENCOUNTER2.md 3.3 W3, section 6 (`then` row) and 7 ("the unit
+  lifecycle hook" is ROSTER1); ENCOUNTER2_TASKS.md 1 (the W test), 2 (the saves bullet), 3 (the W row), 4.2 (`then`
+  capture, the id `enc_evt_06`) and 7.5.
 
 ## 5. Data (asset lane)
 
@@ -107,7 +110,7 @@ Manifest `roster` (act 0 is the prologue, CAMPAIGN1 `start_act`):
 | Where | Rows |
 | --- | --- |
 | characters (six founders) | `keepsake` `keepsake_<founder>` (CAST1_GEAR 7), only if RQ7 picks the hook |
-| `crucible_slag_gate` (ENCOUNTER2 4.2) | `party_min` 4; `stay_behind.then` `capture` (was `leave_party`) |
+| `enc_evt_06`, the Crucible (ENCOUNTER2 4.2; CAST1-A6 writes the whole row, CAST1 C16) | check only, no upsert: `content check` clean and the row holds `party_min` 4 and `stay_behind.then` `capture` (was `leave_party`); a missing key goes back to CAST1-A6 |
 | the Crucible's end (CAMPAIGN1 trigger or STORYUI1 card) | `set_flag` `roster_open` true |
 | M2 (`enc_evt_02`) win | `add_flag` `youths_saved` + the youths freed (SUNKWARD1's count) |
 | Bram (Act 2, later) | a choice with `requires` `campaign.act` >= 2 and `hub_bunks_bonus` 0: `take` Scrap (balance lane), `add_flag` `hub_bunks_bonus` +2 |
@@ -139,12 +142,12 @@ Each row: family `accessory`, slot ACCESSORY_1, rarity RARE, `value` 0, `special
 
 ## 6. Docs delta (for the planner)
 
-- `docs/STRUCTURE.md`: `emberwake_world` row adds `roster.rs` (lifecycle, bunks, pool, keepsakes, temperament);
+- `docs/STRUCTURE.md`: `rpgkit_world` row adds `roster.rs` (lifecycle, bunks, pool, keepsakes, temperament);
   content `temperaments`, world kind `recruits`.
 - `games/emberwake/docs/GAME_BRIEF.md`: a roster section (rule rows, bunks, wounded, keepsakes) as tasks land.
 - CANON 2.4 rows and `lore/systems/roster_expansion_and_lifecycle.md` gaps 2-5 point to ROSTER1.
 - `engine/docs/authoring/roster.md` (new, game-agnostic, promote-generic-methods): the lifecycle rule rows, bunks,
-  the pool, keepsakes, temperament and the fuse as a kit shape, written when KIT1 moves the module.
+  the pool, keepsakes, temperament and the fuse as a kit shape, written when ROSTER1-L lands (in `rpgkit_world`).
 - ROADMAP row wanted: ROSTER1, proposed, depends ENCOUNTER2: the unit lifecycle (wounded, captured, dead, retired,
   bleed-out), bunks apart from the party cap, the recruit pool and its flag, keepsakes, temperament, the Martyr fuse;
   spec `docs/specs/ROSTER1.md`.
