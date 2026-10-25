@@ -4,6 +4,10 @@ The harness agent list cannot be regrouped, so this file is the readable view: a
 
 ## Active now
 
+2026-10-25 (desktop, mode standard): building the Scarlet Lullaby vertical slice. Design lane: CAST1, KIT1, CAMPAIGN1,
+ROSTER1, STORYUI1 specs (worktree `C:\dev	actical-rpg-skill`, branch `claude/lore-canon`). Logic lane: DERIVE1-E and
+RULESET1-E (one worktree each from `origin/develop`). The rest of the queue: `docs/TASKS.md`.
+
 Desktop: the planner keeps this section current. Cloud: the project's area-thread list is the live view (one standing thread per area, `docs/workflow/cloud.md` "Area threads"), so this section changes only at a handover between environments (`docs/workflow/README.md`); merged cloud tasks still get a finished-runs line.
 
 No agents running (2026-10-19, desktop): the transition to the Aegis engine (steps 1-3) was done in one desktop engine session without lane agents; dispatch mode **interactive** (planner-ops). Before it: dispatch mode: **standard**. No agents running (wind-down 2026-10-17 for the move to a cloud instance).
