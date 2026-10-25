@@ -9,3 +9,4 @@ emberwake_data = { path = "../emberwake_data" }
 emberwake_rules = { path = "../emberwake_rules" }
 indexmap = { workspace = true }
 serde_json = { workspace = true }
+rpgkit_battle = { path = "../../../../kits/rpg/crates/rpgkit_battle" }

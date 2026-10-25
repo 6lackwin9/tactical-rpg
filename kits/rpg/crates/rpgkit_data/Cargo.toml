@@ -1,0 +1,10 @@
+[package]
+name = "rpgkit_data"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aegis_core = { path = "../../../../engine/crates/aegis_core" }
+serde_json = { workspace = true }
+indexmap = { workspace = true }
+anyhow = { workspace = true }

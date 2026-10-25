@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "engine/crates/*",
+    "kits/*/crates/*",
     "games/*/crates/*",
 ]
 

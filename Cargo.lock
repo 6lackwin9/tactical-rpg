@@ -646,6 +646,7 @@ dependencies = [
  "emberwake_data",
  "emberwake_rules",
  "indexmap",
+ "rpgkit_battle",
  "serde_json",
 ]
 
@@ -660,6 +661,7 @@ dependencies = [
  "emberwake_rules",
  "indexmap",
  "png",
+ "rpgkit_content",
  "serde_json",
 ]
 
@@ -670,6 +672,7 @@ dependencies = [
  "aegis_core",
  "anyhow",
  "indexmap",
+ "rpgkit_data",
  "serde_json",
 ]
 
@@ -720,6 +723,7 @@ dependencies = [
  "aegis_core",
  "emberwake_data",
  "indexmap",
+ "rpgkit_rules",
  "serde_json",
 ]
 
@@ -733,6 +737,7 @@ dependencies = [
  "emberwake_rules",
  "emberwake_world",
  "indexmap",
+ "rpgkit_sim",
  "serde_json",
 ]
 
@@ -749,6 +754,7 @@ dependencies = [
  "emberwake_data",
  "emberwake_rules",
  "indexmap",
+ "rpgkit_world",
  "serde_json",
 ]
 
@@ -2083,6 +2089,79 @@ dependencies = [
  "cpal",
  "hound",
  "lewton",
+]
+
+[[package]]
+name = "rpgkit_battle"
+version = "0.1.0"
+dependencies = [
+ "aegis_core",
+ "indexmap",
+ "rpgkit_data",
+ "rpgkit_rules",
+ "serde_json",
+]
+
+[[package]]
+name = "rpgkit_content"
+version = "0.1.0"
+dependencies = [
+ "aegis_content",
+ "aegis_core",
+ "indexmap",
+ "rpgkit_battle",
+ "rpgkit_data",
+ "rpgkit_rules",
+ "serde_json",
+]
+
+[[package]]
+name = "rpgkit_data"
+version = "0.1.0"
+dependencies = [
+ "aegis_core",
+ "anyhow",
+ "indexmap",
+ "serde_json",
+]
+
+[[package]]
+name = "rpgkit_rules"
+version = "0.1.0"
+dependencies = [
+ "aegis_core",
+ "indexmap",
+ "rpgkit_data",
+ "serde_json",
+]
+
+[[package]]
+name = "rpgkit_sim"
+version = "0.1.0"
+dependencies = [
+ "aegis_core",
+ "indexmap",
+ "rpgkit_battle",
+ "rpgkit_data",
+ "rpgkit_rules",
+ "rpgkit_world",
+ "serde_json",
+]
+
+[[package]]
+name = "rpgkit_world"
+version = "0.1.0"
+dependencies = [
+ "aegis_content",
+ "aegis_core",
+ "aegis_save",
+ "anyhow",
+ "indexmap",
+ "rpgkit_battle",
+ "rpgkit_content",
+ "rpgkit_data",
+ "rpgkit_rules",
+ "serde_json",
 ]
 
 [[package]]

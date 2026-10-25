@@ -14,7 +14,7 @@ build it replaced is frozen in `legacy/` and stays the reference the engine is c
 | `games/emberwake/assets/` | The game's asset layer: bodies, portraits, icons, tiles, backgrounds, UI files and audio (ASSETORG2; the engine reads them over the game, kit and engine layers; `games/emberwake/assets/README.md`). |
 | `docs/` | Game design: brief, roadmap, decisions, specs, balance reports, preferences, workflow. |
 | `legacy/` | The frozen Godot build: the whole project of `main` at 7fa10da with its own data copy ([legacy/LEGACY.md](legacy/LEGACY.md)). Branch `legacy` resumes Godot work if ever needed. |
-| `kits/` | Shared asset kits: `kits/rpg/` (reusable RPG art and sound, ASSETORG2; [kits/rpg/README.md](kits/rpg/README.md)). |
+| `kits/` | Shared kits: `kits/rpg/` (the RPG kit: genre rules in `rpgkit_*` crates and their `schema.json` since KIT1-M, plus reusable RPG art and sound, ASSETORG2; [kits/rpg/README.md](kits/rpg/README.md)). |
 | `tools/` | `fc.sh` (gate, tests, content, sim, parity), art and music generators, worktree helpers. |
 
 ## Playing

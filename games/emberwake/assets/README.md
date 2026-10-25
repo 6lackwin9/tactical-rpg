@@ -20,7 +20,7 @@ Tree (section 3 of the spec; a test keeps every file on these patterns):
 - `tilesets/<set>/<tile>/v<n>.png` (set = a world id, or `common`; variants are the files present).
 - `audio/sfx/<key>.wav`, `audio/music/<key>.ogg` (played by `aegis_ui::audio`).
 
-Which file an entry shows is decided by the lookup chains in `games/emberwake/crates/emberwake_content/src/art.rs` and
+Which file an entry shows is decided by the lookup chains in `kits/rpg/crates/rpgkit_content/src/art.rs` and
 checked by the asset checks A1-A6 (`check/assets.rs`). The Godot-era asset manifest is retired (the folders are the
 truth); Godot's copy stays in `legacy/data/assets/`.
 

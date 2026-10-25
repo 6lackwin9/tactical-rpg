@@ -14,3 +14,4 @@ emberwake_battle = { path = "../emberwake_battle" }
 indexmap = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
+rpgkit_world = { path = "../../../../kits/rpg/crates/rpgkit_world" }

@@ -5,8 +5,9 @@ The game runs on Aegis, its own Rust engine in `engine/` (since 2026-10-19). The
 branch resumes Godot work only if the user asks.
 
 Layers (SPLIT1, `docs/specs/SPLIT1.md`, done 2026-10-20): the engine (`engine/`, crates `aegis_*`) is game-agnostic; the
-game is `games/emberwake/` (crates `emberwake_*`, `data/`, `assets/`, `schema.json`, `tuning.json`, `parity/`, its
-manifest `game.json` and its design docs in `docs/`). Every task row has a Layer (engine, kit, game) and its change lands
+RPG kit is `kits/rpg/` (its genre rules in crates `rpgkit_*` and their field tables `schema.json`, since KIT1-M, plus kit
+assets); the game is `games/emberwake/` (crates `emberwake_*`, façades over the kit plus game code, `data/`, `assets/`,
+`tuning.json`, `parity/`, its manifest `game.json` and its design docs in `docs/`). Every task row has a Layer (engine, kit, game) and its change lands
 in that layer; the engine never names a game.
 
 Environment: `$CLAUDE_CODE_REMOTE` empty = **desktop** (read `docs/workflow/desktop.md`), `true` = **cloud** (read `docs/workflow/cloud.md`). Both share everything in this file; what differs (sessions, branches, commits, merges, gate time, IDE rule) and how to switch: `docs/workflow/README.md`.
@@ -31,7 +32,7 @@ Read these instead of crawling the code:
 
 - **Planner** (skills `planner`, `planner-ops`; the writer of TASKS, ROADMAP, decisions and HISTORY): task queue (`docs/TASKS.md`), dispatch in lanes, user confirmation gate, review, commit/push, README/docs. Desktop: the main session for everything; cloud: standing area threads (Gameplay, UI/UX, Assets & Audio, Balance, Design, Platform & Workflow), each working its area's tasks one at a time on its own branch, squash-merged into `develop` without a PR; a Merge & Release thread batches `develop` into `main` with one PR; no new thread without asking the user first (the project chat is the front desk).
 - `design-brainstorm` agent (design lane): options and specs in `games/emberwake/docs/specs/` (game) or `docs/specs/` (engine, process); lists wanted roadmap and task rows in its report (the planner writes them); works ahead while builders run.
-- `logic-builder` agent (logic lane): code in the task's layer (`engine/crates/**` engine, `games/emberwake/crates/**` game), schema, validation, tests and tools on the task's branch (desktop: a feature worktree); never edits shipped data; never commits (the planner or cloud thread does).
+- `logic-builder` agent (logic lane): code in the task's layer (`engine/crates/**` engine, `kits/rpg/crates/**` kit, `games/emberwake/crates/**` game), schema, validation, tests and tools on the task's branch (desktop: a feature worktree); never edits shipped data; never commits (the planner or cloud thread does).
 - `asset-builder` agent (asset lane): fills `games/emberwake/data/` through `aegis content` (upsert / remove / apply a seed) against a merged schema; no code, no tests.
 - `balance` agent (balance lane): sims on a clean `main` checkout (desktop: its own worktree) on `balance-ready` systems; writes `games/emberwake/docs/BALANCE_REPORT.md`.
 - `change-reviewer` agent: read-only pre-commit review.

@@ -139,7 +139,7 @@ The engine reads the project's `games/emberwake/data/` folder itself; the Godot 
 | Godot | Rust | Checked by |
 | :--- | :--- | :--- |
 | `content/content_catalog.gd` (`reload_from_disk`, `_read_kind`, `_read_ranked_skills`, `_read_items`) | `source::load_catalog` | `tests/data_source.rs` |
-| `content/content_schema.gd` (`normalize`, `coerce`, `_copy`), `world/world_schema.gd` (`normalize`) | `aegis_content::schema::normalize`, `coerce`, field tables in `games/emberwake/schema.json` | `tests/data_source.rs` |
+| `content/content_schema.gd` (`normalize`, `coerce`, `_copy`), `world/world_schema.gd` (`normalize`) | `aegis_content::schema::normalize`, `coerce`, field tables in `kits/rpg/schema.json` | `tests/data_source.rs` |
 | `content/skill_ranks.gd` (`expand`, `effective`, `resolve`), `content/skill_text.gd` (`render`, `token_value`) | `source::expand`, `render` | `tests/data_source.rs` (151 rank rows, every description) |
 | `core/specs/item_families.gd` (`derive`, hands, base), `item_modifiers.gd` (`resolve`, `legacy_tiers`), `item_text.gd` (`tier_desc`) | `source::derive_family`, `resolve_item` | `tests/data_source.rs` |
 | `core/specs/item_text.gd` (`render`, `token_value`) | `emberwake_content::source::render_item`, `emberwake_world::Data::item_description` | `emberwake_world/tests/item_text.rs` |
@@ -153,7 +153,7 @@ The engine reads the project's `games/emberwake/data/` folder itself; the Godot 
   with: `0.1 + 0.2` is written `0.3`), and the playable worlds. 239 catalog rows and 3 worlds match.
 - Run on loader-built data instead of the exports, the journeys (5608 actions), save fixtures and world battles (240)
   still match Godot, and the CLI balance sim prints the same table.
-- `games/emberwake/schema.json` is the committed copy of Godot's field tables (`parity/export.sh only=schema` writes
+- `kits/rpg/schema.json` (moved from `games/emberwake/schema.json` by KIT1-M) is the committed copy of Godot's field tables (`parity/export.sh only=schema` writes
   `parity/out/schema.json`; the test fails when they drift). It carries labels, help, options and groups too, for
   content editing in the engine later.
 - Not read: version 1 (flat) skills and items files, pre-CLASS1 class `skill_path` lists (the shipped data has none;
