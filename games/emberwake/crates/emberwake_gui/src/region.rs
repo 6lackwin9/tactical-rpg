@@ -3,8 +3,11 @@
 //! ticker (PLAYUI1-M: the full-width map, a camera centred on the party with walls drawn past the edge), the dialogue
 //! box at the bottom centre (DialogueRunner; PLAYUI1-D: the camera keeps both speakers above it), the shop's trade over
 //! a dimmed map (`shop.rs`, PLAYUI1-P), the turn-in picker and lore pages. Fights start the battle screen; a world-map exit opens
-//! the world map. Map-less locations show their exits as buttons.
+//! the world map. Map-less locations show their exits as buttons. PLAYUI1-R (spec PLAYUI1 2.4): the party leader and the
+//! people stand on their tiles as body sprites (`walk` while moving, else `idle`; side view, mirrored by the last
+//! left or right step; a person in the conversation faces the party), with today's tokens as the fallback.
 
+use aegis_core::assets::{ClipPlayer, Facing};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::hud::{hud_bar, hud_key, hud_open, Hud, HUD_H};
 use crate::music;
@@ -38,6 +41,12 @@ const TALK_PAD: i32 = 6;
 const TALK_LINES: i32 = 4;
 const TALK_ROWS: usize = 5;
 const REPLY_H: i32 = 14;
+/// A character sprite on the map (spec PLAYUI1 2.4): 1.5 tiles tall (the 48 px frame at 24 logical px), standing
+/// bottom-centred on its tile.
+const SPRITE: i32 = TILE * 3 / 2;
+/// The leader keeps walking this long (animation ms) after a step, so key steps and walked paths play `walk` without
+/// a stop between tiles.
+const WALK_LINGER_MS: f64 = 220.0;
 
 #[derive(Debug, Clone)]
 pub enum RAct {
@@ -85,6 +94,16 @@ pub struct RegionMap {
     log_open: bool,
     /// The conversation node shown last ("character/node"): a new node starts its line and replies scrolled to the top.
     talk_node: String,
+    /// PLAYUI1-R: the sprites' animation clock (ms, at the animation speed setting) and when it last advanced.
+    anim_ms: f64,
+    anim_at: Instant,
+    /// The leader's clips (`walk` / `idle`), the clock time of the last step that moved the party, and the facing
+    /// (side view, left after a step to the left until a step to the right; DIR4-M adds up and down).
+    leader: ClipPlayer,
+    moved_at: Option<f64>,
+    leader_face: Facing,
+    /// The sprites drawn last frame (agent link `state.sprites`, tests).
+    sprites: Vec<Value>,
 }
 
 /// Starts a world fight: the battle screen, or the Skip / Fled / Lost popup in a debug game.
@@ -156,6 +175,12 @@ impl RegionMap {
             geo: (0, 0, 1),
             log_open: false,
             talk_node: String::new(),
+            anim_ms: 0.0,
+            anim_at: Instant::now(),
+            leader: ClipPlayer::default(),
+            moved_at: None,
+            leader_face: Facing::default(),
+            sprites: Vec::new(),
         }
     }
 
@@ -174,9 +199,13 @@ impl RegionMap {
 
     /// One step; handles fights, world-map exits and the log. False when the walk should stop.
     fn step(&mut self, cx: &mut Cx, dir: Pos) -> bool {
-        self.facing = dir;
+        self.turn(dir);
         let d = cx.data.clone();
+        let from = cx.gs().position;
         let res = explore::step(&d, cx.gs_mut(), dir);
+        if cx.gs().position != from {
+            self.moved_at = Some(self.anim_ms);
+        }
         if !json::b(&res, "ok", false) {
             for e in json::sget(&res, "errors") {
                 cx.log(e);
@@ -211,8 +240,22 @@ impl RegionMap {
         begin_fight(cx, fight, runner);
     }
 
-    fn interact(&mut self, cx: &mut Cx, dir: Pos) {
+    /// Faces `dir` (a step or a use): the sprite turns left or right on a horizontal one and keeps its side on an up or
+    /// down one (spec PLAYUI1 2.4).
+    fn turn(&mut self, dir: Pos) {
         self.facing = dir;
+        if dir.0 != 0 {
+            self.leader_face = Facing::side(dir.0 < 0);
+        }
+    }
+
+    /// Whether the leader walks at the clock's now: on a walked path, or within `WALK_LINGER_MS` of the last step.
+    fn moving(&self) -> bool {
+        !self.walk.is_empty() || self.moved_at.is_some_and(|t| self.anim_ms - t < WALK_LINGER_MS)
+    }
+
+    fn interact(&mut self, cx: &mut Cx, dir: Pos) {
+        self.turn(dir);
         let d = cx.data.clone();
         let res = explore::interact(&d, cx.gs_mut(), dir);
         if !json::b(&res, "ok", false) {
@@ -575,6 +618,9 @@ impl Screen<GameCx> for RegionMap {
                 draw_prop(&mut ui, cx, p);
             }
             let steps = gs.explore_int("loc_steps");
+            // PLAYUI1-R: the people in the conversation turn to the party; the clock the sprites play at
+            let talk_tiles: Vec<Pos> = talk_view.as_ref().map(|v| self.talk_tiles(cx, v)).unwrap_or_default();
+            let now = self.anim_ms as u64;
             let ahead = (gs.position.0 + self.facing.0, gs.position.1 + self.facing.1);
             let legend_hover = self.legend_hover(live);
             // (marker, name, the name sits over a badge)
@@ -602,19 +648,27 @@ impl Screen<GameCx> for RegionMap {
                 let label = s(&view, "label");
                 let mut services = Vec::new();
                 let mut npc = None;
+                let mut top = r.y;
                 if kind == "npc" {
                     let who = d.resolve(&gs.world_id, "characters", &s(&m, "character"));
                     services = explore::npc_services(&d, &gs, &s(who, "_qid"));
                     let (body, palette, _) = crate::screens::character_art(&d, who);
-                    npc = Some((body, palette, s(who, "name").chars().next().unwrap_or('?').to_string()));
+                    // 2.4: the person's body, else its class body (the chain), else today's token
+                    let sprite = cx.art.first_body(&emberwake_content::art::body_chain(&body));
+                    if sprite.is_some() {
+                        top = sprite_rect(r).y;
+                    }
+                    // facing the party while in the conversation; else the sheets' right
+                    let face = if talk_tiles.contains(&at) { Facing::default().toward((gs.position.0 - at.0) as i32, 0) } else { Facing::default() };
+                    npc = Some(NpcDraw { body, sprite, palette, initial: s(who, "name").chars().next().unwrap_or('?').to_string(), face, offset: idle_offset(&s(who, "id")) });
                 }
                 // 2.2: the first service is the badge (turn_in and offer are today's `ready` and `quest`)
-                marks.push(MarkDraw { r, kind: kind.clone(), state: state.clone(), npc, badge: services.first().copied() });
+                marks.push(MarkDraw { id: id.clone(), r, top, kind: kind.clone(), state: state.clone(), npc, badge: services.first().copied() });
                 // 2.3: names always (people and exits, MAPREAD1), or on hover: the marker or its legend row under the
                 // pointer, or the marker the party faces
                 let named = if names_always { kind == "npc" || kind == "exit" } else { (!modal && ui.hover(r)) || legend_hover.as_deref() == Some(id.as_str()) || at == ahead };
                 if named {
-                    labels.push((r, label.clone(), !services.is_empty()));
+                    labels.push((Rect::new(r.x, top, r.w, r.h), label.clone(), !services.is_empty()));
                 }
                 if !modal {
                     let mut t = tip(&label, &s(&view, "verb"));
@@ -624,28 +678,55 @@ impl Screen<GameCx> for RegionMap {
                     ui.push(format!("marker.{id}"), "marker", label.clone(), r, true, false, Some(RAct::Marker(id)), t);
                 }
             }
-            // the sorted pass (PROPS1 4.4): standing props, markers and the party back to front by their feet
+            // the sorted pass (PROPS1 4.4): standing props, markers and the party back to front by their feet (the
+            // sprites stand on their tiles, so lower rows cover upper ones, spec PLAYUI1 2.4)
             let pr = Rect::new(ox + gs.position.0 as i32 * ts, oy + gs.position.1 as i32 * ts, ts, ts);
             let (pcx, pcy) = (pr.x as f32 + ts as f32 / 2.0, pr.y as f32 + ts as f32 / 2.0);
-            let order = crate::props::sorted(&props, &marks.iter().map(|m| m.r).collect::<Vec<_>>(), pr);
+            // 2.4: the leader (the first active member): `walk` while moving, else `idle`
+            let (leader_body, leader_palette) = leader_art(cx);
+            let leader_sprite = cx.art.first_body(&emberwake_content::art::body_chain(&leader_body));
+            let base = if self.moving() { "walk" } else { "idle" };
+            self.leader.set_base(base, now);
+            let drawn_party = if leader_sprite.is_some() { sprite_rect(pr) } else { pr };
+            let order = crate::props::sorted(&props, &marks.iter().map(|m| m.r).collect::<Vec<_>>(), drawn_party);
+            let idle = ClipPlayer::default();
+            let mut sprites = Vec::new();
+            let mut party_frame = None;
             for item in &order {
                 match *item {
                     Item::Prop(i) => draw_prop(&mut ui, cx, &props[i]),
-                    Item::Marker(i) => draw_marker(&mut ui, cx, &marks[i], ts),
+                    Item::Marker(i) => {
+                        if let Some(sp) = draw_marker(&mut ui, cx, &marks[i], ts, &idle, now) {
+                            sprites.push(sp.info(&format!("marker.{}", marks[i].id)));
+                        }
+                    }
                     Item::Party => {
-                        ui.p.circle(pcx, pcy, ts as f32 * 0.3, crate::props::PARTY);
-                        ui.p.line(pcx, pcy, pcx + self.facing.0 as f32 * ts as f32 * 0.32, pcy + self.facing.1 as f32 * ts as f32 * 0.32, rgb(40, 30, 10), 0.0);
+                        let drawn = leader_sprite.as_deref().and_then(|b| draw_sprite(&mut ui, cx, b, &leader_palette, &self.leader, now, self.leader_face, pr, crate::props::PARTY));
+                        match drawn {
+                            Some(sp) => {
+                                sprites.push(sp.info("party"));
+                                party_frame = Some(sp);
+                            }
+                            None => {
+                                ui.p.circle(pcx, pcy, ts as f32 * 0.3, crate::props::PARTY);
+                                ui.p.line(pcx, pcy, pcx + self.facing.0 as f32 * ts as f32 * 0.32, pcy + self.facing.1 as f32 * ts as f32 * 0.32, rgb(40, 30, 10), 0.0);
+                            }
+                        }
                     }
                 }
             }
-            // 4.5: a standing prop drawn over the party: its outline over the props
-            if crate::props::party_hidden(&props, &order, pr) {
-                ui.p.circle(pcx, pcy, ts as f32 * 0.3, crate::props::PARTY);
+            // 4.5: a standing prop drawn over the party: its outline over the props (the sprite's silhouette outline)
+            if crate::props::party_hidden(&props, &order, drawn_party) {
+                match party_frame.as_ref().and_then(|sp| cx.art.body_outline(&sp.body, &leader_palette, &sp.clip, sp.frame, sp.px, crate::props::PARTY, sp.flip)) {
+                    Some(o) => ui.p.image(o, Rect::new(drawn_party.x - 1, drawn_party.y - 1, drawn_party.w + 2, drawn_party.h + 2)),
+                    None => ui.p.circle(pcx, pcy, ts as f32 * 0.3, crate::props::PARTY),
+                }
             }
-            // overlays, never covered by a prop: the service badges, then the names
+            self.sprites = sprites;
+            // overlays, never covered by a prop: the service badges (over a sprite's head), then the names
             for m in &marks {
                 let Some(first) = m.badge else { continue };
-                let br = Rect::new(m.r.x + ts - 5, m.r.y - 5, 9, 9);
+                let br = Rect::new(m.r.x + ts - 5, m.top - 5, 9, 9);
                 let px = ui.icon_px(Rect::new(0, 0, br.w + 4, br.h + 4));
                 match cx.art.image(&service_icon(first), px, px) {
                     Some(img) => ui.p.image(img, br),
@@ -705,7 +786,12 @@ impl Screen<GameCx> for RegionMap {
     }
 
     fn tick(&mut self, cx: &mut Cx) {
-        if self.walk.is_empty() || self.modal() || Instant::now() < self.next_walk {
+        // PLAYUI1-R: the sprites play on their own clock at the animation speed setting (as the battle tokens)
+        let now = Instant::now();
+        let speed = cx.settings.v["anim_speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0);
+        self.anim_ms += now.duration_since(self.anim_at).as_secs_f64() * 1000.0 * speed;
+        self.anim_at = now;
+        if self.walk.is_empty() || self.modal() || now < self.next_walk {
             return;
         }
         self.next_walk = Instant::now() + Duration::from_millis(90);
@@ -789,7 +875,7 @@ impl Screen<GameCx> for RegionMap {
             "dialogue": self.runner.as_ref().filter(|r| !r.closed).map(|r| Value::Object(r.view(&cx.data, gs))),
             "turn_in": self.pending.as_ref().map(|p| json!({"quest": p["quest"], "offers": p["offers"], "picks": self.picks})),
             "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open,
-            "shop": if self.shop_qid().is_empty() { Value::Null } else { self.shop.state() }})
+            "shop": if self.shop_qid().is_empty() { Value::Null } else { self.shop.state() }, "sprites": self.sprites})
     }
 
     /// MUSIC2: shop while the shop is open, else the location's kind.
@@ -809,6 +895,12 @@ impl RegionMap {
     /// The tile of the person speaking (the node's speaker, else the one talked to): their marker here that is not
     /// absent, the nearest to the party when several show them; None when they have no marker on this map.
     fn speaker_tile(&self, cx: &Cx, view: &Dict) -> Option<Pos> {
+        self.talk_tiles(cx, view).first().copied()
+    }
+
+    /// The tiles of the people in the conversation (PLAYUI1-R: they face the party): the node's speaker's marker, then
+    /// the one talked to (when someone else), each the nearest to the party of their markers here that are not absent.
+    fn talk_tiles(&self, cx: &Cx, view: &Dict) -> Vec<Pos> {
         let d = &cx.data;
         let gs = cx.gs();
         let loc = explore::location(d, gs);
@@ -816,6 +908,7 @@ impl RegionMap {
         let loc_qid = s(loc, "_qid");
         let steps = gs.explore_int("loc_steps");
         let talked = self.runner.as_ref().map(|r| r.character_qid.clone()).unwrap_or_default();
+        let mut out = Vec::new();
         for who in [s(view, "speaker"), talked] {
             if who.is_empty() {
                 continue;
@@ -826,11 +919,11 @@ impl RegionMap {
                 .map(|m| explore::marker_pos(t, &m, steps))
                 .filter(|at| at.0 >= 0)
                 .min_by_key(|at| (at.0 - gs.position.0).abs() + (at.1 - gs.position.1).abs());
-            if near.is_some() {
-                return near;
+            if let Some(at) = near.filter(|at| !out.contains(at)) {
+                out.push(at);
             }
         }
-        None
+        out
     }
 
     fn draw_turn_in(&mut self, ui: &mut Ui<RAct>, cx: &Cx, p: &Dict) {
@@ -993,29 +1086,116 @@ impl RegionMap {
     }
 }
 
-/// A marker for the sorted pass (PROPS1 4.4): its tile, kind and state; for a person (body, palette, initial); the
-/// first service's badge (drawn with the overlays).
+/// A marker for the sorted pass (PROPS1 4.4): its id, tile, the top of what is drawn there (a sprite's head, else the
+/// tile; badges and names sit over it), kind and state; a person's art; the first service's badge (drawn with the
+/// overlays).
 struct MarkDraw {
+    id: String,
     r: Rect,
+    top: i32,
     kind: String,
     state: String,
-    npc: Option<(String, String, String)>,
+    npc: Option<NpcDraw>,
     badge: Option<&'static str>,
 }
 
-/// A marker on its tile: a person's ring and token (or initial), else the marker icon (or its drawn stand-in).
-fn draw_marker(ui: &mut Ui<RAct>, cx: &mut Cx, m: &MarkDraw, ts: i32) {
+/// A person's art on the map (PLAYUI1-R): the body key, the first of its chain that loads (None: today's token), the
+/// palette, the initial of the token stand-in, the facing and the person's idle offset (`idle_offset`).
+struct NpcDraw {
+    body: String,
+    sprite: Option<String>,
+    palette: String,
+    initial: String,
+    face: Facing,
+    offset: u64,
+}
+
+/// A person's stable idle offset (ms, under `IDLE_SPREAD_MS`): FNV-1a of their character id, so the people on a map do
+/// not idle in step and each always idles the same way (no random draw, no clock).
+fn idle_offset(id: &str) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in id.bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h % IDLE_SPREAD_MS
+}
+
+/// The range of the idle offsets (longer than an idle loop, so any phase is possible).
+const IDLE_SPREAD_MS: u64 = 4096;
+
+/// A sprite as drawn (PLAYUI1-R): the body, the clip and frame shown, mirrored or not, the drawn rect and the pixel
+/// size the frame was fitted to.
+struct SpriteDrawn {
+    body: String,
+    clip: String,
+    frame: u32,
+    flip: bool,
+    rect: Rect,
+    px: i32,
+}
+
+impl SpriteDrawn {
+    /// The agent link's line for it (`state.sprites`).
+    fn info(&self, id: &str) -> Value {
+        json!({"id": id, "body": self.body, "clip": self.clip, "frame": self.frame, "left": self.flip, "rect": [self.rect.x, self.rect.y, self.rect.w, self.rect.h]})
+    }
+}
+
+/// The rect of a character sprite on tile `r` (spec PLAYUI1 2.4): `SPRITE` square, bottom-centred on the tile.
+fn sprite_rect(r: Rect) -> Rect {
+    Rect::new(r.x + (r.w - SPRITE) / 2, r.y + r.h - SPRITE, SPRITE, SPRITE)
+}
+
+/// The party leader's body key and palette (spec PLAYUI1 2.4): the first active member's character art (its base
+/// unit's, its class's when it has no character), as the battle draws the member.
+fn leader_art(cx: &Cx) -> (String, String) {
+    let d = &cx.data;
+    let gs = cx.gs();
+    let Some(m) = gs.party.active_members().first().copied() else { return (String::new(), String::new()) };
+    let character = d.resolve(&gs.world_id, "characters", &m.lore_ref);
+    if character.is_empty() {
+        let unit = d.entry("units", &m.base_unit);
+        let class = d.entry("classes", &s(unit, "class_id"));
+        (emberwake_content::art::body_of(&Default::default(), unit, class), emberwake_content::art::palette_of(&Default::default(), unit))
+    } else {
+        let (body, palette, _) = crate::screens::character_art(d, character);
+        (body, palette)
+    }
+}
+
+/// Body `body` standing on tile `r` (spec PLAYUI1 2.4): a foot shadow in `foot`, then the frame `player` plays at
+/// `now` in `face` (side view; mirrored facing left), fitted one source pixel per screen pixel. None when it does not
+/// play (the caller draws today's token).
+#[allow(clippy::too_many_arguments)]
+fn draw_sprite(ui: &mut Ui<RAct>, cx: &mut Cx, body: &str, palette: &str, player: &ClipPlayer, now: u64, face: Facing, r: Rect, foot: Rgba) -> Option<SpriteDrawn> {
+    let sr = sprite_rect(r);
+    let px = (SPRITE as f32 * ui.p.v.s).round().max(1.0) as i32;
+    let (f, img) = cx.art.played_facing(body, palette, player, now, px, face)?;
+    let flip = face.mirrors(&f);
+    let feet = (r.y + r.h) as f32 - 2.0;
+    ui.p.ellipse(r.x as f32 + r.w as f32 / 2.0, feet, r.w as f32 * 0.4, r.h as f32 * 0.14, rgba(foot[0], foot[1], foot[2], FOOT_ALPHA));
+    ui.p.image(img, sr);
+    Some(SpriteDrawn { body: body.to_string(), clip: f.clip, frame: f.frame, flip, rect: sr, px })
+}
+
+/// A marker on its tile: a person's sprite (PLAYUI1-R; their ring and token, or initial, without a body), else the
+/// marker icon (or its drawn stand-in). The person's sprite as drawn.
+fn draw_marker(ui: &mut Ui<RAct>, cx: &mut Cx, m: &MarkDraw, ts: i32, idle: &ClipPlayer, now: u64) -> Option<SpriteDrawn> {
     let r = m.r;
     let (cx_, cy_) = (r.x as f32 + ts as f32 / 2.0, r.y as f32 + ts as f32 / 2.0);
-    if let Some((body, palette, initial)) = &m.npc {
+    if let Some(n) = &m.npc {
         let (col, _) = RegionMap::marker_style(&m.kind, &m.state);
+        if let Some(sp) = n.sprite.as_deref().and_then(|b| draw_sprite(ui, cx, b, &n.palette, idle, now + n.offset, n.face, r, col)) {
+            return Some(sp);
+        }
         ui.p.circle(cx_, cy_, ts as f32 * 0.42, col);
         let tok = Rect::new(r.x + ts / 8, r.y + ts / 8, ts - ts / 4, ts - ts / 4);
-        match cx.art.first_token(&emberwake_content::art::body_chain(body), palette, tok.w) {
+        match cx.art.first_token(&emberwake_content::art::body_chain(&n.body), &n.palette, tok.w) {
             Some(img) => ui.p.image(img, tok),
-            None => ui.p.text_center(cx_, cy_ - 4.0, initial, BODY, rgb(20, 20, 20)),
+            None => ui.p.text_center(cx_, cy_ - 4.0, &n.initial, BODY, rgb(20, 20, 20)),
         }
-        return;
+        return None;
     }
     let px = ui.icon_px(Rect::new(0, 0, ts + 4, ts + 4));
     match cx.art.image(&emberwake_content::art::marker(marker_icon(&m.kind, &m.state)), px, px) {
@@ -1026,7 +1206,11 @@ fn draw_marker(ui: &mut Ui<RAct>, cx: &mut Cx, m: &MarkDraw, ts: i32) {
             ui.p.text_center(cx_, cy_ - 4.5, glyph, BODY, rgb(16, 16, 20));
         }
     }
+    None
 }
+
+/// The foot shadow's alpha under a sprite.
+const FOOT_ALPHA: u8 = 150;
 
 /// A prop (PROPS1 4.3, 4.6): its art in its drawn rect (mirrored when flipped), one source pixel per screen pixel;
 /// without art a standing prop is a plain block over its footprint (fill, a darker south face, a 1 px edge) and a
@@ -1680,7 +1864,7 @@ mod talk_tests {
     /// Every conversation opened the way a player opens it: for each person on a map of the world, from each open tile
     /// next to them, facing them and pressing E. `each` gets the map (talking), the party's tile and the person's, and
     /// says whether to go on; the game state is put back after each. The number of conversations opened.
-    fn each_talk(cx: &mut Cx, mut each: impl FnMut(&mut RegionMap, &mut Cx, Pos, Pos) -> bool) -> usize {
+    pub(super) fn each_talk(cx: &mut Cx, mut each: impl FnMut(&mut RegionMap, &mut Cx, Pos, Pos) -> bool) -> usize {
         let d = cx.data.clone();
         let world = cx.gs().world_id.clone();
         let start = cx.gs().clone();
@@ -1878,5 +2062,267 @@ mod talk_tests {
         if !checked {
             eprintln!("no shop keeper on the world's maps: nothing to check");
         }
+    }
+}
+
+/// PLAYUI1-R (spec PLAYUI1 2.4): the leader and the people as body sprites, drawn headless over a debug game of the
+/// first playable world with the game's art layers (the game's, its kit's and the engine's assets).
+#[cfg(test)]
+mod sprite_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx};
+
+    /// A debug game with the game's art.
+    fn art_cx() -> Cx {
+        let mut cx = game_cx();
+        cx.art = aegis_ui::art::Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        cx
+    }
+
+    fn sprite(map: &RegionMap, cx: &Cx, id: &str) -> Option<Value> {
+        map.state(cx)["sprites"].as_array()?.iter().find(|s| s["id"] == id).cloned()
+    }
+
+    fn rect_of(v: &Value) -> Rect {
+        let n = |i: usize| v["rect"][i].as_i64().unwrap_or(0) as i32;
+        Rect::new(n(0), n(1), n(2), n(3))
+    }
+
+    /// The map tile at (`x`, `y`) in the last frame.
+    fn tile_rect(map: &RegionMap, at: Pos) -> Rect {
+        let (ox, oy, ts) = map.geo;
+        Rect::new(ox + at.0 as i32 * ts, oy + at.1 as i32 * ts, ts, ts)
+    }
+
+    /// The tile a sprite stands on: under the middle of its bottom edge.
+    fn stands_on(map: &RegionMap, r: Rect) -> Pos {
+        let (ox, oy, ts) = map.geo;
+        (((r.x + r.w / 2 - ox).div_euclid(ts)) as i64, ((r.y + r.h - 1 - oy).div_euclid(ts)) as i64)
+    }
+
+    /// The first active member's body as the art resolves it: their character's body, else the class body.
+    fn leader_body(cx: &mut Cx) -> Option<String> {
+        let d = cx.data.clone();
+        let gs = cx.gs().clone();
+        let m = gs.party.active_members().first().copied().cloned()?;
+        let ch = d.resolve(&gs.world_id, "characters", &m.lore_ref);
+        let (body, _, _) = crate::screens::character_art(&d, ch);
+        cx.art.first_body(&emberwake_content::art::body_chain(&body))
+    }
+
+    /// 2.4: the leader stands on the party's tile, 1.5 tiles tall and bottom-centred, idle and facing right at the start.
+    #[test]
+    fn the_leader_stands_on_the_party_tile() {
+        let (mut cx, mut g) = (art_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let want = leader_body(&mut cx).expect("the leader has a body");
+        let sp = sprite(&map, &cx, "party").expect("the leader is a sprite");
+        assert_eq!(sp["body"], json!(want));
+        assert_eq!((sp["clip"].clone(), sp["left"].clone()), (json!("idle"), json!(false)));
+        let (r, t) = (rect_of(&sp), tile_rect(&map, cx.gs().position));
+        assert_eq!((r.w, r.h), (TILE * 3 / 2, TILE * 3 / 2), "1.5 tiles tall");
+        assert_eq!((r.y + r.h, r.x + r.w / 2), (t.y + t.h, t.x + t.w / 2), "bottom-centred on the tile");
+    }
+
+    /// 2.4: a step plays `walk` and a step left mirrors the sprite; an up or down step keeps the side; a step right
+    /// turns it back; standing still it plays `idle` again.
+    #[test]
+    fn steps_walk_and_turn_the_leader() {
+        let (mut cx, mut g) = (art_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        let d = cx.data.clone();
+        let start = cx.gs().clone();
+        let t = explore::template_of(&d, explore::location(&d, &start)).clone();
+        let (w, h) = explore::size_of(&t);
+        let marked: Vec<Pos> = explore::markers_of(explore::location(&d, &start)).iter().map(|m| explore::marker_pos(&t, m, start.explore_int("loc_steps"))).collect();
+        let free = |p: Pos| explore::is_open(&t, p.0, p.1) && !marked.contains(&p);
+        // a free tile with free tiles left of it and below that one
+        let at = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|&(x, y)| free((x, y)) && free((x - 1, y)) && free((x - 1, y + 1)) && free((x, y + 1))).expect("room for three steps");
+        cx.gs_mut().position = at;
+        let mut checks = 0;
+        for (dir, left) in [((-1, 0), true), ((0, 1), true), ((1, 0), false)] {
+            let from = cx.gs().position;
+            map.step(&mut cx, dir);
+            assert_eq!(cx.gs().position, (from.0 + dir.0, from.1 + dir.1), "the step {dir:?} from {from:?}: {:?}", cx.log);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            let sp = sprite(&map, &cx, "party").expect("the leader");
+            assert_eq!((sp["clip"].clone(), sp["left"].clone()), (json!("walk"), json!(left)), "after the step {dir:?}");
+            checks += 1;
+        }
+        assert_eq!(checks, 3);
+        map.anim_ms += WALK_LINGER_MS + 1.0;
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_eq!(sprite(&map, &cx, "party").expect("the leader")["clip"], json!("idle"), "standing still");
+    }
+
+    /// 2.4: every person with a body is a sprite on their tile (idle, facing right); in a conversation opened from any
+    /// side the person turns to the party (left when the party is to their left), and the leader faces them.
+    #[test]
+    fn people_are_sprites_and_face_the_party_while_talking() {
+        let (mut cx, mut g) = (art_cx(), gfx());
+        let mut sides = (0, 0);
+        let n = super::talk_tests::each_talk(&mut cx, |map, cx, party, npc| {
+            frame(map, cx, &mut g, 1.0);
+            let sprites = map.state(cx)["sprites"].as_array().cloned().unwrap_or_default();
+            let them = sprites.iter().find(|s| s["id"] != "party" && stands_on(map, rect_of(s)) == npc);
+            let Some(them) = them else {
+                // no body anywhere in their chain: today's token
+                return true;
+            };
+            assert_eq!(them["clip"], json!("idle"), "{npc:?}");
+            let left = party.0 < npc.0;
+            assert_eq!(them["left"], json!(left), "{} at {npc:?} talking with the party at {party:?}", them["id"]);
+            if party.0 != npc.0 {
+                let lead = sprites.iter().find(|s| s["id"] == "party").expect("the leader");
+                assert_eq!(lead["left"], json!(npc.0 < party.0), "the leader faces {npc:?} from {party:?}");
+                if left { sides.0 += 1 } else { sides.1 += 1 }
+            }
+            map.end_talk(cx);
+            frame(map, cx, &mut g, 1.0);
+            let after = sprite(map, cx, them["id"].as_str().unwrap_or("")).expect("still drawn");
+            assert_eq!(after["left"], json!(false), "out of the conversation the sheets face right");
+            true
+        });
+        assert!(n > 0, "someone on a map of the world talks");
+        assert!(sides.0 > 0 && sides.1 > 0, "talked to from both sides: {sides:?}");
+    }
+
+    /// 2.4: on every map of the world each person whose body chain loads is a sprite, and the sprites draw in row
+    /// order (lower rows cover upper ones); the names sit over the sprites' heads.
+    #[test]
+    fn sprites_draw_in_row_order_with_names_above_their_heads() {
+        let (mut cx, mut g) = (art_cx(), gfx());
+        cx.settings.v["map_names"] = json!("always");
+        cx.settings.v["map_legend_open"] = json!(false);
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        let mut people = 0;
+        for loc in d.merged_entries(&world, "locations") {
+            let t = explore::template_of(&d, loc).clone();
+            if t.is_empty() {
+                continue;
+            }
+            cx.gs_mut().location_id = s(loc, "id");
+            let _ = RegionMap::new(&mut cx);
+            let here = cx.gs().clone();
+            // the party on an open tile next to each person in turn (the camera follows it)
+            let spots: Vec<Pos> = explore::markers_of(loc)
+                .iter()
+                .filter(|m| s(m, "kind") == "npc")
+                .map(|m| explore::marker_pos(&t, m, here.explore_int("loc_steps")))
+                .filter_map(|at| explore::DIRS.iter().map(|d| (at.0 + d.0, at.1 + d.1)).find(|p| explore::is_open(&t, p.0, p.1)))
+                .collect();
+            for spot in spots {
+            *cx.gs_mut() = here.clone();
+            let mut map = RegionMap::new(&mut cx);
+            cx.gs_mut().position = spot;
+            let recs = frame(&mut map, &mut cx, &mut g, 1.0);
+            let sprites = map.state(&cx)["sprites"].as_array().cloned().unwrap_or_default();
+            let feet: Vec<i32> = sprites.iter().map(|s| rect_of(s).y + rect_of(s).h).collect();
+            assert!(feet.windows(2).all(|w| w[0] <= w[1]), "{}: sprites back to front by their feet: {feet:?}", s(loc, "id"));
+            let gs = cx.gs().clone();
+            for wd in map.widgets().iter().filter(|w| w["kind"] == "marker") {
+                let id = s(json::dict(wd), "id");
+                let Some(m) = explore::markers_of(loc).into_iter().find(|m| format!("marker.{}", s(m, "id")) == id) else { continue };
+                if s(&m, "kind") != "npc" {
+                    continue;
+                }
+                let who = d.resolve(&world, "characters", &s(&m, "character"));
+                let (body, _, _) = crate::screens::character_art(&d, who);
+                let has = cx.art.first_body(&emberwake_content::art::body_chain(&body)).is_some();
+                let sp = sprite(&map, &cx, &id);
+                assert_eq!(sp.is_some(), has, "{id}: a sprite when the body chain of '{body}' loads");
+                let Some(sp) = sp else { continue };
+                people += 1;
+                let r = rect_of(&sp);
+                let tr = tile_rect(&map, explore::marker_pos(&t, &m, gs.explore_int("loc_steps")));
+                assert_eq!((r.y + r.h, r.x + r.w / 2), (tr.y + tr.h, tr.x + tr.w / 2), "{id}: bottom-centred on its tile");
+                let label = s(json::dict(wd), "text");
+                let named = recs.iter().any(|t| t.text == label && t.y + t.h <= r.y as f32 + 1.0 && t.x <= (r.x + r.w) as f32 && t.x + t.w >= r.x as f32);
+                let inside = r.y > HUD_H + 14;
+                assert!(named || !inside, "{id}: '{label}' above the sprite's head {r:?} at {:?}", gs.position);
+            }
+            }
+        }
+        assert!(people > 0, "a person with a body on a map of the world");
+    }
+
+    /// The idle offset is a pure function of the id (the same person always idles the same way) and spreads the ids.
+    #[test]
+    fn idle_offsets_are_stable_per_person() {
+        let ids = ["mara", "tev", "hest", "brask_toller", "orsa_tallow", "wenn_tallow"];
+        for id in ids {
+            assert_eq!(idle_offset(id), idle_offset(id), "{id}");
+            assert!(idle_offset(id) < IDLE_SPREAD_MS, "{id}");
+        }
+        let mut seen: Vec<u64> = ids.iter().map(|id| idle_offset(id)).collect();
+        seen.sort();
+        seen.dedup();
+        assert_eq!(seen.len(), ids.len(), "distinct ids, distinct offsets: {seen:?}");
+    }
+
+    /// Each person's idle plays at the clock plus their offset: on every map of the world (the party next to each
+    /// person) every person's sprite shows the idle frame at that time, and somewhere two people with different ids
+    /// show different frames at the same clock time.
+    #[test]
+    fn people_idle_out_of_step() {
+        let (mut cx, mut g) = (art_cx(), gfx());
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        let mut apart = false;
+        let mut checked = 0;
+        for loc in d.merged_entries(&world, "locations") {
+            let t = explore::template_of(&d, loc).clone();
+            if t.is_empty() {
+                continue;
+            }
+            cx.gs_mut().location_id = s(loc, "id");
+            let _ = RegionMap::new(&mut cx);
+            let here = cx.gs().clone();
+            let steps = here.explore_int("loc_steps");
+            let spots: Vec<Pos> = explore::markers_of(loc)
+                .iter()
+                .filter(|m| s(m, "kind") == "npc")
+                .map(|m| explore::marker_pos(&t, m, steps))
+                .filter_map(|at| explore::DIRS.iter().map(|d| (at.0 + d.0, at.1 + d.1)).find(|p| explore::is_open(&t, p.0, p.1)))
+                .collect();
+            for spot in spots {
+                *cx.gs_mut() = here.clone();
+                let mut map = RegionMap::new(&mut cx);
+                cx.gs_mut().position = spot;
+                map.anim_ms = 1000.0;
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                // (character id, frame shown) of each person drawn
+                let mut shown: Vec<(String, i64)> = Vec::new();
+                for m in explore::markers_of(loc).into_iter().filter(|m| s(m, "kind") == "npc") {
+                    let Some(sp) = sprite(&map, &cx, &format!("marker.{}", s(&m, "id"))) else { continue };
+                    let who = d.resolve(&world, "characters", &s(&m, "character"));
+                    let id = s(who, "id");
+                    let body = s(json::dict(&sp), "body");
+                    let want = cx.art.clips(&body).and_then(|c| c.frame_at("idle", 1000 + idle_offset(&id))).expect("an idle frame");
+                    assert_eq!(sp["frame"], json!(want.frame), "{id} at clock 1000 with offset {}", idle_offset(&id));
+                    checked += 1;
+                    shown.push((id, sp["frame"].as_i64().unwrap_or(-1)));
+                }
+                apart |= shown.iter().any(|a| shown.iter().any(|b| a.0 != b.0 && a.1 != b.1));
+            }
+        }
+        assert!(checked > 1, "people drawn: {checked}");
+        assert!(apart, "two people with different ids at different idle frames");
+    }
+
+    /// 2.4 fallback: with no body (the art layers off) the party is today's token, and no sprite is drawn.
+    #[test]
+    fn without_a_body_the_party_is_todays_token() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_eq!(map.state(&cx)["sprites"], json!([]));
+        let t = tile_rect(&map, cx.gs().position);
+        // the token's ring in the party colour on the party's tile
+        let near = |px: &[u8]| px.iter().zip(crate::props::PARTY.iter()).all(|(a, b)| (*a as i32 - *b as i32).abs() <= 24);
+        let ring = (t.y..t.y + t.h).flat_map(|y| (t.x..t.x + t.w).map(move |x| (x, y))).filter(|&(x, y)| near(&g.canvas.px[((y * g.canvas.w + x) * 4) as usize..][..3])).count();
+        assert!(ring >= 8, "the token's ring on the party's tile: {ring} pixels");
     }
 }
