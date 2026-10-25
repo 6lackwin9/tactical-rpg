@@ -215,16 +215,81 @@ pub fn resave_text(data_dir: &Path, world: Option<&str>, kind: &str) -> Result<S
     rewrite(data_dir, world, kind, &raw_entries(&file_of(data_dir, world, kind)))
 }
 
-/// The world manifest (world.json) as WorldCatalog.save_world writes it.
-pub fn manifest_text(data_dir: &Path, world: &str) -> Result<String, String> {
+/// The stored manifest of `world` (raw, as the file holds it), None when the world has no world.json.
+fn stored_manifest(data_dir: &Path, world: &str) -> Result<Option<Dict>, String> {
     let path = aegis_content::world::manifest_path(data_dir, world);
+    if !path.is_file() {
+        return Ok(None);
+    }
     let mut errors = Vec::new();
-    let raw = read(&path, &mut errors).and_then(|v| v.as_object().cloned()).ok_or_else(|| format!("{}: missing or not an object", path.display()))?;
-    let mut m = normalize(fields("world", "world"), &raw, true);
+    read(&path, &mut errors).and_then(|v| v.as_object().cloned()).map(Some).ok_or_else(|| format!("{}: {}", path.display(), errors.pop().unwrap_or_else(|| "not an object".into())))
+}
+
+/// WorldCatalog.save_world's document of a raw manifest: normalized against `world.world`, its id set, every field in
+/// schema order (unknown keys after), version 1.
+fn manifest_doc(world: &str, raw: &Dict) -> Dict {
+    let mut m = normalize(fields("world", "world"), raw, true);
     m.insert("id".into(), Value::from(world));
     let mut doc = world_storage("world", &m);
     doc.insert("version".into(), json::int(1));
+    doc
+}
+
+/// The world manifest (world.json) as WorldCatalog.save_world writes it.
+pub fn manifest_text(data_dir: &Path, world: &str) -> Result<String, String> {
+    let path = aegis_content::world::manifest_path(data_dir, world);
+    let raw = stored_manifest(data_dir, world)?.ok_or_else(|| format!("{}: missing", path.display()))?;
+    Ok(stringify(&Value::Object(manifest_doc(world, &raw))))
+}
+
+/// WORLDW1: the manifest of `world` after a write of `patch` (world.world fields only; `id`, when given, is the
+/// world's): merged over the stored manifest, or over the schema defaults for a new world; refused when a value has
+/// the wrong type for its field or the result fails the schema checks (id, name, enum options such as `ruleset`).
+/// Rendered as `manifest_text` renders; unless `full`, a field the stored file leaves out stays out while it holds its
+/// default and the patch does not name it, so a resave of an untouched manifest is byte-identical.
+pub fn world_manifest_text(data_dir: &Path, world: &str, patch: &Dict, full: bool) -> Result<String, Vec<String>> {
+    let schema = fields("world", "world");
+    let patch = json::normalize_dict(patch);
+    let mut errors: Vec<String> = patch
+        .keys()
+        .filter(|k| !has_field(source::schema(), "world", "world", k))
+        .map(|k| format!("A world manifest has no field '{k}' (fields: {}).", schema.iter().map(|f| json::s(json::dict(f), "key")).collect::<Vec<_>>().join(", ")))
+        .collect();
+    if let Some(id) = patch.get("id").filter(|id| gstr(id) != world) {
+        errors.push(format!("ID {id} is not the world's id '{world}' (a world is renamed by a new folder)."));
+    }
+    errors.extend(aegis_content::schema::type_errors(schema, &patch));
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+    let stored = stored_manifest(data_dir, world).map_err(|e| vec![e])?;
+    let mut raw = stored.clone().unwrap_or_default();
+    for (k, v) in &patch {
+        raw.insert(k.clone(), v.clone());
+    }
+    let mut m = normalize(schema, &raw, true);
+    m.insert("id".into(), Value::from(world));
+    let errors = field_errors(source::schema(), "world", "world", &m);
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+    let mut doc = manifest_doc(world, &raw);
+    if let (false, Some(stored)) = (full, &stored) {
+        for f in schema {
+            let f = json::dict(f);
+            let key = json::s(f, "key");
+            if !stored.contains_key(&key) && !patch.contains_key(&key) && doc.get(&key).is_some_and(|v| json::deep_equal(v, json::get(f, "default"))) {
+                doc.shift_remove(&key);
+            }
+        }
+    }
     Ok(stringify(&Value::Object(doc)))
+}
+
+/// WORLDW1: creates or updates world `world`'s manifest with `patch` (`world_manifest_text`), kept only when the data
+/// folder adds no blocking problem and no world manifest problem (`manifest_blocking`).
+pub fn set_world(data_dir: &Path, world: &str, patch: &Dict, full: bool) -> Result<Outcome, Vec<String>> {
+    aegis_content::store::set_world(&RpgContent, data_dir, world, patch, full)
 }
 
 // ---- Upsert / remove / check -------------------------------------------------------------------------------------
@@ -274,6 +339,14 @@ impl Hooks for RpgContent {
 
     fn warnings(&self, data_dir: &Path) -> Vec<String> {
         warnings(data_dir)
+    }
+
+    fn world_manifest_text(&self, data_dir: &Path, world: &str, patch: &Dict, full: bool) -> Result<String, Vec<String>> {
+        world_manifest_text(data_dir, world, patch, full)
+    }
+
+    fn world_blocking(&self, data_dir: &Path) -> Vec<String> {
+        manifest_blocking(data_dir)
     }
 }
 
@@ -330,6 +403,18 @@ pub fn blocking(data_dir: &Path) -> Vec<String> {
         }
     }
     out.extend(manifest_problems(data_dir, &src.worlds));
+    out
+}
+
+/// The problems a world manifest write may not add (WORLDW1; WorldCatalog.save_world checks the manifest): the
+/// `blocking` ones (load problems included) and every world's manifest problems (WorldCatalog.manifest_errors, as
+/// "<world>/world: <message>": a manifest change can break its children, e.g. a circular `extends`).
+pub fn manifest_blocking(data_dir: &Path) -> Vec<String> {
+    let mut out = blocking(data_dir);
+    let view = view(data_dir);
+    for w in view.worlds.world_ids() {
+        out.extend(crate::check::world::manifest_errors(&view, &w).into_iter().map(|m| format!("{w}/world: {m}")));
+    }
     out
 }
 

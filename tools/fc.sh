@@ -7,7 +7,7 @@
 #   tools/fc.sh test [filter]    cargo test --workspace, optional test-name filter
 #   tools/fc.sh clippy           cargo clippy --workspace --all-targets (advisory: warnings do not fail)
 #   tools/fc.sh docs             warn when an agent-facing doc passes 300 lines / 25 KB; markdown lint
-#   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | apply | manifest (aegis content)
+#   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest (aegis content)
 #   tools/fc.sh sim <args>       balance sim (aegis sim <mode> [level] [seeds] [key=value ...]; sim help: the keys)
 #   tools/fc.sh replay <file> [...] replay a playtest recording (aegis replay: battle=, until=, json, variant=, write=, seeds=, fallback=)
 #   tools/fc.sh parity           re-record the Godot reference from legacy/ (export, traces, journeys, sim runs, content checks; needs Godot 4.7.2)
