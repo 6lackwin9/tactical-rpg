@@ -34,6 +34,8 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | RULESET1 | The "timeline" combat ruleset (M1 feel prototype): ruleset world field and Dojo toggle, windups, recovery, chains, ap_cost, poise and breaks, Active Guard, pierce, reach 2, deck slot kinds, plan visibility; the classic ruleset byte-identical | proposed | DERIVE1 | `docs/specs/RULESET1.md`; user 2026-10-25 (combat group 1.1); TQ1-TQ11 open |
 | CAMPAIGN1 | Campaign meters (Alert, the Doom Clock), checkpoints and bad ends, the run-over screen, purse and upkeep names, rests that cost days, defeat retreat, event triggers; off in worlds without a `campaign` field | in-progress | - | `docs/specs/CAMPAIGN1.md`; user 2026-10-25 (slice M0) |
 | KIT1 | Kit extraction (kit crates, the Ashlands as the kit's sample) | in-progress | - | M0: genre rules into `kits/rpg/crates/rpgkit_*`, the `emberwake_*` crates become façades with game code and Emberwake's tests, the schema to the kit, a layer check in the gate; the Ashlands stay the kit's sample and parity world (classic); spec `docs/specs/KIT1.md`; KQ1-KQ8 open |
+| STORYUI1 | Vignette player (engine), story sequences and the new-game flow, the mission board (kit) | in-progress | KIT1 | `docs/specs/STORYUI1.md`; user 2026-10-25 (slice M0) |
+| CAST1 | The Act 1 combat cast as data: founders' kits by intent, new weapon families, the Act 1 bestiary, bosses, encounters, placeholder assets | in-progress | RULESET1, ENCOUNTER2, DERIVE1, HOOKS1 | `games/emberwake/docs/specs/CAST1.md`; user 2026-10-25 (Q-71, Q-74) |
 
 ## Goals (user 2026-10-17, decision "Goal-based roadmap"; replaces the suggested build order)
 
