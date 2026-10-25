@@ -1,0 +1,12 @@
+{
+  "model": "gemini-3-pro-image",
+  "id": "ranger",
+  "prompt": "Use the attached image (Mara Voss) as the style reference: the same pixel-art style, level of detail, framing, lighting and flat dark background. This is a different person, not the person in the reference.\nPixel art character portrait for a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG portraits. Square 1:1 image. Head and shoulders, the head filling about half the frame, three-quarter view facing slightly to the viewer's right, eyes looking right. Strong key light from the upper left, a warm orange rim light from the right edge, deep shadows on the far side of the face. Clear dark outlines, hand-placed pixel clusters, limited palette with 4 shades per colour, light dithering on metal and cloth. Plain flat very dark background (#120e12), no gradient, nothing behind the figure. No border, no frame, no text, no logo, no watermark.\n\nCharacter: Warden archer, a nameless ranger. An ordinary Warden archer, a woman in her twenties with a plain face and tied-back brown hair, a brown leather hood down, a green cloak, a quiver strap and a longbow over the shoulder. Nothing distinctive.\nMood: alert, quiet, plain.\nMain colours: green and brown leather with a red cord.",
+  "reference": "art_src/mara_voss.png",
+  "prompts_file": null,
+  "time": "2026-10-20T17:48:20+00:00",
+  "n": 1,
+  "backfilled": true,
+  "source": "Portrait Prompts page (artifact JgzkPDMAbzd6FPWW1cTDrR), copied by hand",
+  "added_in": "97f28a5"
+}

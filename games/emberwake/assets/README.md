@@ -13,7 +13,8 @@ Tree (section 3 of the spec; a test keeps every file on these patterns):
 
 - `units/<class>/<variant>/sheet.png` + `clips.json` (+ `palettes/<id>.json`): bodies; `<variant>` `base` is the class
   default. A unit's token is its `idle` clip's first frame; the team rim is drawn by code.
-- `portraits/{heroes,npcs,elites,bosses}/<id>.png` unique portraits; `portraits/common/<class>_<variant>.png` shared ones.
+- `portraits/{heroes,npcs,elites,bosses}/<id>.png` unique portraits; `portraits/common/<class>_<variant>.png` shared ones
+  (the game layer's `common/` holds the creature bodies' portraits, `beast_render_beast.png` and `crawler_ash_crawler.png`, ART3).
 - `items/<family>/base.png` and `items/<family>/<icon>.png`; `items/any/{base,<item_type>}.png`.
 - `skills/<family>.png`, `skills/kinds/<kind>.png`; `statuses/<id>.png`; `map/markers/<marker>.png`.
 - `ui/{pins,intents,badges,chips}/<id>.png`; `backgrounds/{menu,title,world_map,location,battle,story}/<id>.png` (`story`: vignette card pictures, STORYART1; `tools/gen_art.py` groups `story`, `world_card`, `menu_sunless`, `sunk_backdrops`, `family_icons` draw the Sunk Ward slice's story scenes at 1120 x 472 under a starless Shroud sky (`shroud_sky`, ash in `ASH_COLS`, never white), the `sunk_ward` world card, `menu/main_menu.png` (the sunless main menu, MENU2; the old sunny menu drawing is retired, so the `menu` group now draws only the Ashlands title card), the seven zone backdrops and the scourge and sprayer family icons in the ART2 icon look).

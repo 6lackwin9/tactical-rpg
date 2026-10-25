@@ -68,7 +68,7 @@ games/emberwake/data/seeds/storyui1.json`, then `tools/fc.sh content check` clea
 | Slice end, the Slag Gate | `cinder_gate.png` (a ruined gate, an ember sky) | good |
 | Bell toll, rain, dripping gutters (intro, cold open) | none (silence or the menu theme) | missing |
 | Hub music for the hearth | kit `music/town.ogg` | fair |
-| Portraits of Vane, Tess, Bram, Aline | the kit's common portraits through the body chain (`warrior_base.png` and the like) | poor |
+| Portraits of Vane, Tess, Bram, Aline | ART3 portraits `portraits/bosses/captain_vane.png`, `portraits/npcs/{tess,bram,aline}.png` (the lookup uses the character id, else the unit id: Vane's character id is `captain_vane` unless the file is renamed) | good |
 | Board service glyph | the quest badge `ui/badges/quest.png` (kit) | good |
 | The `sunk_ward` world card art, the main menu (an orange sun in a sunless world) | code-drawn `backgrounds/title/sunk_ward.png` and `backgrounds/menu/main_menu.png` (STORYART1 drew it as `main_menu_sunless.png`; MENU2 switched the menu to it on 2026-10-25) | fair |
 

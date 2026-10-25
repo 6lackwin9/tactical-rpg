@@ -1,0 +1,12 @@
+{
+  "model": "gemini-3-pro-image",
+  "id": "mara_voss",
+  "prompt": "Pixel art character portrait for a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG portraits. Square 1:1 image. Head and shoulders, the head filling about half the frame, three-quarter view facing slightly to the viewer's right, eyes looking right. Strong key light from the upper left, a warm orange rim light from the right edge, deep shadows on the far side of the face. Clear dark outlines, hand-placed pixel clusters, limited palette with 4 shades per colour, light dithering on metal and cloth. Plain flat very dark background (#120e12), no gradient, nothing behind the figure. No border, no frame, no text, no logo, no watermark.\n\nCharacter: Mara Voss, Captain of the Ember Wardens. A woman in her early thirties, strong build. Square jaw, steady stern gaze, one small old scar on the cheek. Dark copper-red hair tied back, a few loose strands. Wearing a deep red riveted brigandine with brass rivets over mail, steel pauldrons and a steel gorget. The hilt of a sword visible behind her shoulder. Mood: dry, stubborn, protective. Main colours: deep red and steel grey with brass accents.",
+  "reference": null,
+  "prompts_file": null,
+  "time": "2026-10-20T17:30:07+00:00",
+  "n": 1,
+  "backfilled": true,
+  "source": "the user's own run, prompt supplied by the user 2026-10-25",
+  "added_in": "67bd74f"
+}

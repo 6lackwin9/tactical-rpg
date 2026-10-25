@@ -176,6 +176,11 @@ CAST1 uses has its icon in `kits/rpg/assets/statuses/` (`empower` has none today
 | N9 | Scourge and sprayer family icons | a mace and a staff mislead in the shop and loadout | Scourge: a three-tailed flail with barbed wire tails, handle wrapped in vestment cloth. Sprayer: a brass pressure tank with a hose and a pole nozzle | the icon pipeline (ART2), or the image API asked first as one small sheet |
 | N10 | Battle backdrops for the seven Sunk Ward zones | a gradient stands in for every place | `alley` Cinder Alley: soot-black brick lanes, hanging linen, tallow lamps; `rooftops` Market Rooftops: wet slates, chimneys, meat hooks on lines; `canal` Canal Bridge: an iron bridge over black canal water, the mortuary cart; `foundry` The Fourth Kiln: slag pools, vent grates, chains, the bone-mill wheel; `tallow_vats` Tallow Vats: boiling vats, catwalks, grease runnels; `undercroft` Sluice Undercroft: drowned vaults, bone pillars, violet mist; `watchpost` Crucible Watchpost: the Slag Gate, the winch, braziers; all from the art bible's 16 hues | `backgrounds/battle/<id>.png` (HOOKS1 ZN1) in the STAGE1 backdrop format; M4 art (HOOKS1_TASKS 2.3), image API asked first, one zone at a time |
 
+ART3 (2026-10-25): the N1 and N2 portraits and N4-N8 are done through the ART2 route (Gemini 3 Pro Image, Mara Voss
+as the reference, `pixelize.py`; prompts in `ART3_PROMPTS.md`, a record beside every source in `art_src/`):
+`portraits/common/{beast_render_beast,crawler_ash_crawler}.png`, `portraits/elites/{inquisitorial_purifier,calcified_husk}.png`
+(the husk shows once its unit sets `portrait_tier` elite), `portraits/bosses/{proctor_quell,guild_master_orlov,inquisitor_prelate_nemeth}.png`.
+
 User 2026-10-25: N1 and N2 bodies are code creature rigs (task CREATURE1, built 2026-10-25), not image-API sheets; their portraits
 stay image-API, asked first. Story-scene art is on hold and code-drawn meanwhile (STORYART1, which also draws N9
 and N10 as placeholders).

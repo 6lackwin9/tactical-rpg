@@ -1,0 +1,13 @@
+{
+  "model": "gemini-3-pro-image",
+  "id": "skills_1",
+  "prompt": "A sheet of 16 pixel-art icons for a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG icons. Square 1:1 image, an exact 4 by 4 grid of 16 equal square tiles separated by thin straight gutters of pure black (#000000), no outer border beyond the gutters. Each tile is one icon on its own rounded-square tile filled with the colour named for it, with a subtle darker vignette. Every icon is drawn large and centred, with clear dark outlines, hand-placed pixel clusters, a limited palette with 4 shades per colour, a warm light from the upper left and a thin warm rim light. The icons show basic actions and warrior skills, each showing the action itself so it reads at a glance at small size. No text, no letters, no numbers, no labels, no frame, no watermark. Row by row, left to right:\nRow 1: a sword mid-slash with a bright arc (tile deep dark red); a short off-hand jab with a small blade (tile deep dark red); a wild two-handed overhead swing, motion lines (tile deep dark red); a shock wave rippling forward along the ground in a line (tile deep dark red).\nRow 2: a raised forearm guard with a faint shimmer (tile deep dark blue); a boot stepping forward with dust and a direction arrow (tile deep dark teal); a crosshair jumping from one target to another (tile deep dark gold-brown); a resting figure's breath, a soft swirl and a small campfire glow (tile dark slate grey).\nRow 3: a kite shield slamming forward with an impact burst (tile deep dark red); an axe chopping into cracked armour plate (tile deep dark red); a shouting helmeted face with sound waves (tile deep dark green); a sword parrying a blade and turning it back, a spark (tile deep dark blue).\nRow 4: a big kite shield planted in front with a glowing barrier (tile deep dark blue); claw-like blade tearing a breastplate open (tile deep dark red); a roaring face with a menacing red aura (tile deep dark green); a narrowed eye with a gold glint and concentration lines (tile deep dark gold-brown).",
+  "reference": null,
+  "prompts_file": "games/emberwake/docs/specs/ART2_ICONS.md",
+  "time": "2026-10-20T18:26:52+00:00",
+  "n": 1,
+  "backfilled": true,
+  "source": "games/emberwake/docs/specs/ART2_ICONS.md at 7b04f11 (`git show 7b04f11:games/emberwake/docs/specs/ART2_ICONS.md`)",
+  "added_in": "7b04f11",
+  "note": "--no-ref inferred, not recorded: the option was added in this same commit for the icon sheets, and the prompt asks for no portrait style"
+}

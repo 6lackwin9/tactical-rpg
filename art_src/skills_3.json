@@ -1,0 +1,13 @@
+{
+  "model": "gemini-3-pro-image",
+  "id": "skills_3",
+  "prompt": "A sheet of 16 pixel-art icons for a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG icons. Square 1:1 image, an exact 4 by 4 grid of 16 equal square tiles separated by thin straight gutters of pure black (#000000), no outer border beyond the gutters. Each tile is one icon on its own rounded-square tile filled with the colour named for it, with a subtle darker vignette. Every icon is drawn large and centred, with clear dark outlines, hand-placed pixel clusters, a limited palette with 4 shades per colour, a warm light from the upper left and a thin warm rim light. The icons show rogue and priest skills, each showing the action itself so it reads at a glance at small size. No text, no letters, no numbers, no labels, no frame, no watermark. Row by row, left to right:\nRow 1: a fast dagger thrust with a short speed line (tile deep dark red); a dagger slash leaving drops of blood (tile deep dark red); a figure in a backflip, a curved arrow (tile deep dark teal); a hooded figure pouncing forward, daggers out (tile deep dark red).\nRow 2: two crossing dagger slashes with blood (tile deep dark red); a dagger striking from shadow at a neck, a red glint (tile deep dark red); a dagger blade coated in dripping green poison (tile deep dark red); a dagger with a ghostly decoy copy beside it (tile deep dark red).\nRow 3: a dagger striking an exposed back, a gold glint (tile deep dark red); two hands glowing with soft healing light (tile deep dark green); a raised banner with upward speed arrows (tile deep dark green); a white flame cleansing dark smoke (tile deep dark green).\nRow 4: a beam of holy gold light striking down (tile deep dark red); a glowing gold mace head coming down with a halo (tile deep dark red); a large glowing healing cross with radiant rays (tile deep dark green); a sprouting leaf in healing light with a small up arrow (tile deep dark green).",
+  "reference": null,
+  "prompts_file": "games/emberwake/docs/specs/ART2_ICONS.md",
+  "time": "2026-10-20T18:26:52+00:00",
+  "n": 1,
+  "backfilled": true,
+  "source": "games/emberwake/docs/specs/ART2_ICONS.md at 7b04f11 (`git show 7b04f11:games/emberwake/docs/specs/ART2_ICONS.md`)",
+  "added_in": "7b04f11",
+  "note": "--no-ref inferred, not recorded: the option was added in this same commit for the icon sheets, and the prompt asks for no portrait style"
+}

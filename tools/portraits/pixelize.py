@@ -27,6 +27,26 @@ def clear_corner(im, frac=0.08):
     return im
 
 
+def clear_mark(im, cx=0.946, cy=0.946, half=0.03, ground=0.9):
+    """Removes the image model's four-point star mark where it sits on the background (ART3): in the small box round
+    the mark's place, when nearly all of the box's edge is background, every colourless pixel in it that is not
+    already background (the star and its soft rim) becomes the background colour. A box the figure crosses is left
+    to clear_corner. Runs before clear_corner, so that one finds nothing pale left in the box."""
+    w, h = im.size; px = im.load(); bg = px[2, 2][:3]
+    x0, x1 = int(w * (cx - half)), int(w * (cx + half)); y0, y1 = int(h * (cy - half)), int(h * (cy + half))
+    near = lambda c: sum((a - b) ** 2 for a, b in zip(c[:3], bg)) <= BG_TOL ** 2
+    edge = [(x, y0) for x in range(x0, x1)] + [(x, y1 - 1) for x in range(x0, x1)] + \
+           [(x0, y) for y in range(y0, y1)] + [(x1 - 1, y) for y in range(y0, y1)]
+    if sum(near(px[x, y]) for x, y in edge) < ground * len(edge):
+        return im
+    for y in range(y0, y1):
+        for x in range(x0, x1):
+            c = px[x, y]
+            if not near(c) and max(c[:3]) - min(c[:3]) < 28:
+                px[x, y] = bg + tuple(c[3:])
+    return im
+
+
 def cut_background(im):
     """Alpha 0 on the background: a flood fill from every edge pixel through colours near the corner colour."""
     w, h = im.size; px = im.load(); bg = px[2, 2][:3]
@@ -101,9 +121,10 @@ def ramps(colors, families=7, shades=4):
 BG = [(18, 14, 18), (30, 22, 26), (46, 30, 30), (64, 38, 32)]
 
 
-def pixelize(src, grid=96, crop=None, shades=4, families=10, size=240, border=(24, 16, 18), trim=(150, 116, 60)):
+def pixelize(src, grid=96, crop=None, shades=4, families=10, size=240, border=(24, 16, 18), trim=(150, 116, 60),
+             mark=True):
     """The framed game portrait and its colour count."""
-    fig, ramp = figure(src, grid, crop, shades, families)
+    fig, ramp = figure(src, grid, crop, shades, families, mark)
     return finish(fig, size, border, trim), len(ramp) - 1
 
 
@@ -111,13 +132,13 @@ def finish(fig, size=240, border=(24, 16, 18), trim=(150, 116, 60)):
     return P.frame(fig, size, BG, dither=True, border=(border, trim))
 
 
-def figure(src, grid=96, crop=None, shades=4, families=10):
+def figure(src, grid=96, crop=None, shades=4, families=10, mark=True):
     """The reduced, snapped and outlined figure on a clear background, and its ramps (`shades` colours per family,
-    then the outline colour)."""
+    then the outline colour). `mark` clears the image model's star first (clear_mark; whole images only, not crops)."""
     im = Image.open(src).convert("RGBA")
     if crop:
         im = im.crop(crop)
-    im = cut_background(clear_corner(im))
+    im = cut_background(clear_corner(clear_mark(im) if mark and not crop else im))
     small = mode_reduce(im, grid)
     px = small.load()
     # the figure's own colours, then its ramps
