@@ -11,7 +11,7 @@ filled-in version lives in its design library (`specs/art_and_visual_style.md`).
 | Sprites | Frame size of the rig, the figure bounds inside it, which clips exist, front/side/back views |
 | Palette | The master hues (named, with hex values), how many shade steps each, skin ramps, and the signal colours reserved for mechanics |
 | UI | Panel, border and text colours from the palette; text sizes (every screen fits at all of them) |
-| Portraits | Size, framing, style reference, the pipeline that makes them |
+| Portraits | Size, framing, style reference, the pipeline that makes them; the anchor sidecar (eyes, glow, veins) and expression frames, since the effects follow the engine's portrait layer |
 | Props and tiles | Footprints, which stand upright and sort with units, which are flat decals |
 | Effects | Hit, death, projectile and status visuals; hit-stop and shake limits |
 | Pipelines | For each asset kind: the sprite rig, the portrait pipeline, code-drawn art, or an image-API sheet (asked each time); what the rig cannot draw yet |

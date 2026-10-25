@@ -157,7 +157,7 @@ Overlays and colour operations never touch the border; the border moves only wit
 - The caller passes `now` in ms from a clock it advances: the battle passes FX1's clock (hit-stop pauses portraits,
   `anim_speed` scales them); other screens own an `fx::Clock` advanced by the frame's wall time (at most 100 ms a
   frame, as the vignette screen). Two draws at the same `now` give identical pixels.
-- Frame timing: time-varying effects read `tq = floor(now / 33) x 33`, so a portrait recomposes at most 30 times a
+- Frame timing (as built: see section 11, `tq(now) = floor(floor(3 now / 100) x 100 / 3)`): time-varying effects read `tq = floor(now / 33) x 33`, so a portrait recomposes at most 30 times a
   second whatever the frame rate.
 
 ### 4.6 Size tiers (by the drawn rect's side in device px)
@@ -384,3 +384,15 @@ frames for common portraits; animated region-map tokens.
 | PQ3 | When is Composure "low" (the cold tint)? | (a) a drop of 25 % or more from the unit's own value without status modifiers ("shaken"); (b) below 20 absolute | (a): (b) would tint every low-KNOW character all the time. Note: no slice status lowers Composure yet, so the tint shows in the Gallery until the Act 2 data adds modifiers |
 | PQ4 | Does a sheet's `neutral` cell replace a character's existing single portrait (the ART3 picks)? | (a) yes, per character at the review of its sheet, so dialogue does not jump between two drawings; (b) never: the ART3 pick stays the neutral face | (a), decided per character when the user sees the contact sheet |
 | PQ5 | Sinister overlays on the cast (the table in [PORTRAITFX1_TASKS.md](PORTRAITFX1_TASKS.md) 2.2) | (a) glow, veins and eye glow only on corrupted, Inoculated and eldritch portraits; ash or smoke on fire-and-smoke characters (the Ashlands goblins, Orlov's rendering vats, the Purifier's sulfur); heroes, the hub cast and plain humans clean; (b) also a faint ash on everyone | (a): the art bible's contrast rule (human matte versus eldritch glow) |
+
+## 11. Build notes (PORTRAITFX1-E, 2026-10-25)
+
+- Time steps: `tq(now) = floor(floor(3 now / 100) x 100 / 3)`, exactly 30 steps a second (`floor(now / 33) x 33` would give
+  31 compositions in 1000 ms, against E12).
+- Fade multiplies the alpha of the whole image, the border included (4.3 step 8); E13's "only the jolt changes a border
+  pixel" holds with fade left out.
+- Seeds the spec left open: ash start `h(650 + k)`, smoke x `h(820 + k)` and start `h(840 + k)`, vein segments
+  `k = 400 + 1000 x root + 200 x branch + segment` (the trunk takes the first 60 % of the 1800 ms growth); the jolt seed
+  is `seed ^ now`.
+- A sidecar that parses is kept even with range problems; drawing clamps to the inner rect and the asset check (A11)
+  reports the problems. A reduced-tier eye box blinks only when at least 2 px tall after scaling.

@@ -8,6 +8,8 @@
 //! the front or back drawing of the side clip `of`; `Facing` is four-way facing on a square grid (`Facing::toward`), and
 //! `Clips::resolve_view` / `frame_at_view` / `ClipPlayer::frame_facing` pick the row for a view, falling back to the
 //! side clip, then idle in that view, then side idle. Only side rows are ever mirrored. Engine-only (no Godot source).
+//! Face sidecars (PORTRAITFX1-E, spec 4.1): `<portrait>.face.json` beside a portrait PNG holds its anchors in image
+//! px (eye boxes, glow anchors, vein roots, the rim key, idle overlays): `face_file`, `parse_face`, `face_problems`.
 
 use crate::json::{self, Dict};
 use indexmap::IndexMap;
@@ -617,6 +619,293 @@ pub fn read_json(layers: &Layers, rel: &str) -> Option<Value> {
     serde_json::from_str(&text).ok()
 }
 
+// ---- Portrait face sidecars (PORTRAITFX1 4.1) ---------------------------------------------------------------------
+
+/// The keys a face sidecar may hold.
+pub const FACE_KEYS: [&str; 10] = ["size", "border", "eyes", "blink", "lid", "glow", "veins", "mouth", "rim", "idle"];
+/// The keys of one `idle` entry.
+pub const IDLE_KEYS: [&str; 3] = ["effect", "color", "intensity"];
+/// The overlays a sidecar's `idle` may name.
+pub const IDLE_OVERLAYS: [&str; 5] = ["glow", "veins", "eye_glow", "ash", "smoke"];
+/// A sidecar's `size` range (image px).
+pub const FACE_SIZE_MIN: i32 = 16;
+pub const FACE_SIZE_MAX: i32 = 1024;
+
+/// One idle overlay of a sidecar: an effect of `IDLE_OVERLAYS`, its colour (None: the effect's default) and intensity.
+#[derive(Debug, Clone, PartialEq)]
+pub struct IdleOverlay {
+    pub effect: String,
+    pub color: Option<[u8; 3]>,
+    pub intensity: f32,
+}
+
+/// A portrait's face sidecar (`<portrait>.face.json`): anchors in image px of a `size`-wide PNG. Boxes are
+/// `[x, y, w, h]`, glow anchors `[x, y, r]`, vein roots `[x, y, deg, len]` (0 deg = right, 90 = down).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Face {
+    pub size: i32,
+    /// The outer frame no effect draws on or moves (default `round(size / 30)`).
+    pub border: i32,
+    pub eyes: Vec<[i32; 4]>,
+    pub blink: bool,
+    /// The lid colour (None: sampled 1 px above each eye box).
+    pub lid: Option<[u8; 3]>,
+    pub glow: Vec<[i32; 3]>,
+    pub veins: Vec<[i32; 4]>,
+    /// Reserved for layered puppets: parsed and checked, read by nothing.
+    pub mouth: Option<[i32; 4]>,
+    /// The rim light's key colour (None: the caller's default).
+    pub rim: Option<[u8; 3]>,
+    pub idle: Vec<IdleOverlay>,
+}
+
+impl Face {
+    /// A sidecar with no anchors for a `size` portrait (the default border, blinking allowed, no overlays).
+    pub fn plain(size: i32) -> Face {
+        Face { size, border: default_border(size), eyes: Vec::new(), blink: true, lid: None, glow: Vec::new(), veins: Vec::new(), mouth: None, rim: None, idle: Vec::new() }
+    }
+
+    /// The inner rect's bounds on each axis, [lo, hi) in image px (inside the border).
+    pub fn inner(&self) -> (i32, i32) {
+        (self.border, self.size - self.border)
+    }
+}
+
+/// `round(size / 30)`: a sidecar's border when it names none (8 for a 240 px portrait).
+pub fn default_border(size: i32) -> i32 {
+    (size as f64 / 30.0).round() as i32
+}
+
+/// The sidecar path of a portrait: `.png` replaced by `.face.json` (`portraits/npcs/tess.png` ->
+/// `portraits/npcs/tess.face.json`).
+pub fn face_file(rel: &str) -> String {
+    format!("{}.face.json", rel.strip_suffix(".png").unwrap_or(rel))
+}
+
+/// A JSON number with no fraction as an i32.
+fn whole(v: &Value) -> Option<i32> {
+    let f = v.as_f64()?;
+    (f.fract() == 0.0 && f.abs() <= i32::MAX as f64).then_some(f as i32)
+}
+
+/// "" (None) or a `#rrggbb` colour; a problem otherwise.
+fn colour_or_empty(raw: Option<&Value>, label: &str, problems: &mut Vec<String>) -> Option<[u8; 3]> {
+    match raw {
+        None => None,
+        Some(Value::String(s)) if s.is_empty() => None,
+        Some(v) => {
+            let c = v.as_str().and_then(hex_colour);
+            if c.is_none() {
+                problems.push(format!("{label} must be \"\" or a #rrggbb colour."));
+            }
+            c
+        }
+    }
+}
+
+/// A list of `N`-number lists of whole numbers (`shape` names them in the message).
+fn tuples<const N: usize>(raw: Option<&Value>, label: &str, shape: &str, problems: &mut Vec<String>) -> Vec<[i32; N]> {
+    let Some(raw) = raw else { return Vec::new() };
+    let bad = |problems: &mut Vec<String>| problems.push(format!("{label} must be a list of {shape} lists of whole numbers."));
+    let Some(list) = raw.as_array() else {
+        bad(problems);
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for item in list {
+        let nums: Option<Vec<i32>> = item.as_array().filter(|a| a.len() == N).and_then(|a| a.iter().map(whole).collect());
+        match nums.and_then(|n| <[i32; N]>::try_from(n).ok()) {
+            Some(t) => out.push(t),
+            None => {
+                bad(problems);
+                return out;
+            }
+        }
+    }
+    out
+}
+
+/// Reads a face sidecar (PORTRAITFX1 4.1): the keys and their types (unknown keys refused, `size` required, colours
+/// "" or `#rrggbb`, whole numbers for every anchor); the ranges and anchor rules are `face_problems`. Every problem is
+/// listed.
+pub fn parse_face(v: &Value) -> Result<Face, Vec<String>> {
+    let mut p: Vec<String> = Vec::new();
+    let Some(o) = v.as_object() else { return Err(vec!["a face sidecar must be an object {size, eyes, ...}.".into()]) };
+    for k in o.keys().filter(|k| !FACE_KEYS.contains(&k.as_str())) {
+        p.push(format!("the face sidecar has no key '{k}' (keys: {}).", FACE_KEYS.join(", ")));
+    }
+    let size = match o.get("size").map(whole) {
+        Some(Some(s)) => s,
+        Some(None) => {
+            p.push("size must be a whole number.".into());
+            0
+        }
+        None => {
+            p.push("size is required.".into());
+            0
+        }
+    };
+    let border = match o.get("border").map(whole) {
+        None => default_border(size),
+        Some(Some(b)) => b,
+        Some(None) => {
+            p.push("border must be a whole number.".into());
+            default_border(size)
+        }
+    };
+    let eyes = tuples::<4>(o.get("eyes"), "eyes", "[x, y, w, h]", &mut p);
+    let blink = match o.get("blink") {
+        None => true,
+        Some(Value::Bool(b)) => *b,
+        Some(_) => {
+            p.push("blink must be true or false.".into());
+            true
+        }
+    };
+    let lid = colour_or_empty(o.get("lid"), "lid", &mut p);
+    let glow = tuples::<3>(o.get("glow"), "glow", "[x, y, r]", &mut p);
+    let veins = tuples::<4>(o.get("veins"), "veins", "[x, y, deg, len]", &mut p);
+    let mouth = match o.get("mouth") {
+        None => None,
+        Some(Value::Array(a)) if a.is_empty() => None,
+        Some(m) => {
+            let nums: Option<Vec<i32>> = m.as_array().filter(|a| a.len() == 4).and_then(|a| a.iter().map(whole).collect());
+            let t = nums.and_then(|n| <[i32; 4]>::try_from(n).ok());
+            if t.is_none() {
+                p.push("mouth must be [] or [x, y, w, h] of whole numbers.".into());
+            }
+            t
+        }
+    };
+    let rim = colour_or_empty(o.get("rim"), "rim", &mut p);
+    let mut idle = Vec::new();
+    match o.get("idle") {
+        None => {}
+        Some(Value::Array(list)) => {
+            for (i, e) in list.iter().enumerate() {
+                let n = i + 1;
+                let Some(e) = e.as_object() else {
+                    p.push(format!("idle entry {n} must be an object {{effect, color, intensity}}."));
+                    continue;
+                };
+                for k in e.keys().filter(|k| !IDLE_KEYS.contains(&k.as_str())) {
+                    p.push(format!("idle entry {n} has no key '{k}' (keys: {}).", IDLE_KEYS.join(", ")));
+                }
+                let effect = match e.get("effect") {
+                    Some(Value::String(s)) => s.clone(),
+                    _ => {
+                        p.push(format!("idle entry {n}: effect must be a name."));
+                        String::new()
+                    }
+                };
+                let color = colour_or_empty(e.get("color"), &format!("idle entry {n}: color"), &mut p);
+                let intensity = match e.get("intensity") {
+                    None => 1.0,
+                    Some(x) => x.as_f64().map(|f| f as f32).unwrap_or_else(|| {
+                        p.push(format!("idle entry {n}: intensity must be a number."));
+                        1.0
+                    }),
+                };
+                idle.push(IdleOverlay { effect, color, intensity });
+            }
+        }
+        Some(_) => p.push("idle must be a list of {effect, color, intensity}.".into()),
+    }
+    if p.is_empty() {
+        Ok(Face { size, border, eyes, blink, lid, glow, veins, mouth, rim, idle })
+    } else {
+        Err(p)
+    }
+}
+
+/// Every range and anchor rule of a parsed sidecar (PORTRAITFX1 4.1; the kit's asset check A11 calls it), one line
+/// each: `size` 16-1024 and equal to the PNG's width `png_w` (0: not checked; else a warning, the anchors being
+/// scaled by width / size), `border` 0-size/8, at most 2 eye boxes inside the inner rect (w 2-size/6, h 1-size/10),
+/// at most 3 glow anchors (centre inside, r 4-size/2), at most 3 vein roots (root inside, deg -180-360, len
+/// 6-size/2), the mouth inside, at most 4 idle overlays named by `IDLE_OVERLAYS` with their anchors and an intensity
+/// 0.05-1.0. Empty: the sidecar is sound.
+pub fn face_problems(face: &Face, png_w: i32) -> Vec<String> {
+    let mut out = Vec::new();
+    let s = face.size;
+    if !(FACE_SIZE_MIN..=FACE_SIZE_MAX).contains(&s) {
+        out.push(format!("size must be {FACE_SIZE_MIN}-{FACE_SIZE_MAX} (is {s})."));
+    }
+    if png_w > 0 && png_w != s {
+        out.push(format!("size {s} differs from the PNG's width {png_w}: the anchors are scaled by {png_w} / {s}."));
+    }
+    if !(0..=s / 8).contains(&face.border) {
+        out.push(format!("border must be 0-{} (is {}).", s / 8, face.border));
+    }
+    let (lo, hi) = face.inner();
+    let inside = |x: i32, y: i32| x >= lo && y >= lo && x < hi && y < hi;
+    if face.eyes.len() > 2 {
+        out.push(format!("eyes holds at most 2 boxes (has {}).", face.eyes.len()));
+    }
+    for (i, &[x, y, w, h]) in face.eyes.iter().enumerate() {
+        let n = i + 1;
+        if x < lo || y < lo || x + w > hi || y + h > hi {
+            out.push(format!("eye box {n} [{x}, {y}, {w}, {h}] must lie inside the inner rect ({lo}-{hi})."));
+        }
+        if !(2..=s / 6).contains(&w) {
+            out.push(format!("eye box {n} width must be 2-{} (is {w}).", s / 6));
+        }
+        if !(1..=s / 10).contains(&h) {
+            out.push(format!("eye box {n} height must be 1-{} (is {h}).", s / 10));
+        }
+    }
+    if face.glow.len() > 3 {
+        out.push(format!("glow holds at most 3 anchors (has {}).", face.glow.len()));
+    }
+    for (i, &[x, y, r]) in face.glow.iter().enumerate() {
+        let n = i + 1;
+        if !inside(x, y) {
+            out.push(format!("glow anchor {n} centre ({x}, {y}) must lie inside the inner rect ({lo}-{hi})."));
+        }
+        if !(4..=s / 2).contains(&r) {
+            out.push(format!("glow anchor {n} radius must be 4-{} (is {r}).", s / 2));
+        }
+    }
+    if face.veins.len() > 3 {
+        out.push(format!("veins holds at most 3 roots (has {}).", face.veins.len()));
+    }
+    for (i, &[x, y, deg, len]) in face.veins.iter().enumerate() {
+        let n = i + 1;
+        if !inside(x, y) {
+            out.push(format!("vein root {n} ({x}, {y}) must lie inside the inner rect ({lo}-{hi})."));
+        }
+        if !(-180..=360).contains(&deg) {
+            out.push(format!("vein root {n} deg must be -180-360 (is {deg})."));
+        }
+        if !(6..=s / 2).contains(&len) {
+            out.push(format!("vein root {n} len must be 6-{} (is {len}).", s / 2));
+        }
+    }
+    if let Some([x, y, w, h]) = face.mouth {
+        if x < lo || y < lo || x + w > hi || y + h > hi || w < 1 || h < 1 {
+            out.push(format!("mouth [{x}, {y}, {w}, {h}] must lie inside the inner rect ({lo}-{hi})."));
+        }
+    }
+    if face.idle.len() > 4 {
+        out.push(format!("idle holds at most 4 overlays (has {}).", face.idle.len()));
+    }
+    for o in &face.idle {
+        let e = o.effect.as_str();
+        if !IDLE_OVERLAYS.contains(&e) {
+            out.push(format!("idle '{e}' is not an overlay (one of {}).", IDLE_OVERLAYS.join(", ")));
+        }
+        match e {
+            "glow" if face.glow.is_empty() => out.push("idle glow needs a glow anchor.".into()),
+            "veins" if face.veins.is_empty() => out.push("idle veins needs a vein root.".into()),
+            "eye_glow" if face.eyes.is_empty() => out.push("idle eye_glow needs an eye box.".into()),
+            _ => {}
+        }
+        if !(0.05..=1.0).contains(&o.intensity) {
+            out.push(format!("idle '{e}' intensity must be 0.05-1.0 (is {}).", o.intensity));
+        }
+    }
+    out
+}
+
 /// A kit's manifest, `kits/<id>/kit.json`: {id, title, version, engine}.
 pub const KIT_KEYS: [&str; 4] = ["id", "title", "version", "engine"];
 
@@ -731,6 +1020,60 @@ mod tests {
         }
         assert_eq!(parse_palette(&json!({"slots": {"main": "#5a3a30"}})).unwrap()["main"], [0x5a, 0x3a, 0x30]);
         assert!(parse_palette(&json!({"main": "#5a3a30"})).is_err());
+    }
+
+    /// The sidecar example of PORTRAITFX1 4.1.
+    fn face_example() -> Value {
+        json!({"size": 240, "border": 8, "eyes": [[98, 92, 12, 6], [128, 90, 12, 6]], "blink": true, "lid": "",
+            "glow": [[120, 200, 30]], "veins": [[140, 120, 200, 40]], "mouth": [], "rim": "",
+            "idle": [{"effect": "eye_glow", "color": "#c084fc", "intensity": 0.8}]})
+    }
+
+    /// The example with `key` set to `v`, parsed (it must parse), then its range and anchor problems on a 240 px PNG.
+    fn face_with(key: &str, v: Value) -> Vec<String> {
+        let mut f = face_example();
+        f[key] = v;
+        face_problems(&parse_face(&f).unwrap(), 240)
+    }
+
+    #[test]
+    fn e1_the_sidecar_example_parses_and_each_broken_rule_names_itself() {
+        let f = parse_face(&face_example()).unwrap();
+        assert_eq!((f.size, f.border, f.eyes.len(), f.blink, f.lid, f.rim, f.mouth), (240, 8, 2, true, None, None, None));
+        assert_eq!((f.glow.clone(), f.veins.clone()), (vec![[120, 200, 30]], vec![[140, 120, 200, 40]]));
+        assert_eq!(f.idle, vec![IdleOverlay { effect: "eye_glow".into(), color: Some([0xc0, 0x84, 0xfc]), intensity: 0.8 }]);
+        assert!(face_problems(&f, 240).is_empty(), "{:?}", face_problems(&f, 240));
+        assert_eq!(parse_face(&json!({"size": 90})).unwrap().border, 3, "the border defaults to round(size / 30)");
+
+        // An eye box outside the inner rect (8..232): x 4 < 8.
+        assert_eq!(face_with("eyes", json!([[4, 92, 12, 6]])), ["eye box 1 [4, 92, 12, 6] must lie inside the inner rect (8-232)."]);
+        assert_eq!(face_with("eyes", json!([[98, 92, 12, 6], [128, 90, 12, 6], [60, 90, 12, 6]])), ["eyes holds at most 2 boxes (has 3)."]);
+        assert_eq!(face_with("eyes", json!([])), ["idle eye_glow needs an eye box."]);
+        let mut no_root = face_example();
+        no_root["veins"] = json!([]);
+        no_root["idle"] = json!([{"effect": "veins"}]);
+        assert_eq!(face_problems(&parse_face(&no_root).unwrap(), 240), ["idle veins needs a vein root."]);
+        let mut unknown = face_example();
+        unknown["nose"] = json!([1, 2]);
+        assert_eq!(parse_face(&unknown).unwrap_err(), [format!("the face sidecar has no key 'nose' (keys: {}).", FACE_KEYS.join(", "))]);
+        let mut bad_colour = face_example();
+        bad_colour["rim"] = json!("amber");
+        assert_eq!(parse_face(&bad_colour).unwrap_err(), ["rim must be \"\" or a #rrggbb colour."]);
+        assert_eq!(face_with("border", json!(31)), ["border must be 0-30 (is 31)."], "240 / 8 = 30");
+        let f200 = parse_face(&json!({"size": 200})).unwrap();
+        assert_eq!(face_problems(&f200, 240), ["size 200 differs from the PNG's width 240: the anchors are scaled by 240 / 200."]);
+        assert!(face_problems(&f200, 0).is_empty(), "width 0 skips the scale check");
+        assert_eq!(face_file("portraits/npcs/tess.png"), "portraits/npcs/tess.face.json");
+    }
+
+    #[test]
+    fn face_ranges_follow_the_size() {
+        assert_eq!(face_with("glow", json!([[120, 200, 3]])), ["glow anchor 1 radius must be 4-120 (is 3)."]);
+        assert_eq!(face_with("veins", json!([[140, 120, 400, 40]])), ["vein root 1 deg must be -180-360 (is 400)."]);
+        assert_eq!(face_with("eyes", json!([[98, 92, 41, 6]])), ["eye box 1 width must be 2-40 (is 41)."]);
+        assert_eq!(face_with("idle", json!([{"effect": "sparkle", "intensity": 2.0}])), ["idle 'sparkle' is not an overlay (one of glow, veins, eye_glow, ash, smoke).", "idle 'sparkle' intensity must be 0.05-1.0 (is 2)."]);
+        assert!(parse_face(&json!({"eyes": [[1, 2, 3]]})).unwrap_err().contains(&"size is required.".to_string()));
+        assert!(parse_face(&json!({"size": 96, "eyes": [[1.5, 2, 3, 4]]})).is_err(), "anchors are whole numbers");
     }
 
     #[test]
