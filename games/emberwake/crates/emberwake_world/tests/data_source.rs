@@ -32,6 +32,10 @@ const AFTER_GODOT: [(&str, &str, &str); 8] = [
     ("world", "characters", "portrait_tier"),
     ("game", "maps", "props"),
 ];
+/// Retired parity, kind level (the twin of AFTER_GODOT): schema kinds added after the freeze, by (section, kind); the
+/// whole kind leaves the engine's schema before comparing; each is named in docs/HISTORY.md. DERIVE1 (2026-10-25): the
+/// derived-stat rows (Godot had no such kind; its catalogs are compared per CATALOG_KINDS, which do not list it).
+const KINDS_AFTER_GODOT: [(&str, &str); 1] = [("content", "derived_stats")];
 /// Schema rows whose help text or options changed after the freeze (their `help` and `options_from` are not
 /// compared). REWARD1: the purse rows. ASSETORG2: the art rows (bodies of the asset layers, not Godot's art keys) and
 /// the item icon rows. PHASEFOLD: the phases rows (the arrival trigger).
@@ -83,9 +87,13 @@ fn strip_after_godot(v: &mut Value, section: &str) {
     }
 }
 
-/// The schema without the AFTER_GODOT rows and the HELP_CHANGED help texts.
+/// The schema without the KINDS_AFTER_GODOT kinds, the AFTER_GODOT rows and the HELP_CHANGED help texts.
 fn schema_at_freeze(schema: &Value) -> Value {
     let mut out = schema.clone();
+    for (section, kind) in KINDS_AFTER_GODOT {
+        let removed = out.get_mut(section).and_then(Value::as_object_mut).and_then(|s| s.shift_remove(kind));
+        assert!(removed.is_some(), "the engine schema has no {section}.{kind} to strip");
+    }
     for (section, kind, key) in AFTER_GODOT {
         if let Some(Value::Array(rows)) = out.get_mut(section).and_then(|s| s.get_mut(kind)) {
             rows.retain(|r| r["key"] != key);

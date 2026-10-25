@@ -161,8 +161,9 @@ pub const GAME_KINDS: [GameKind; 3] = [
     ("services", "dialogue/services.json", "dialogue_services", &["id", "text"]),
 ];
 
-/// The kinds an upsert takes in the base catalog (catalog kinds, item families, game-data kinds).
-const BASE_KINDS: [&str; 11] = ["classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain", "maps", "quests", "services"];
+/// The kinds an upsert takes in the base catalog (catalog kinds, item families, the derived stats (DERIVE1),
+/// game-data kinds).
+const BASE_KINDS: [&str; 12] = ["classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain", source::DERIVED_KIND, "maps", "quests", "services"];
 
 fn game_kind(kind: &str) -> Option<GameKind> {
     GAME_KINDS.iter().copied().find(|g| g.0 == kind)

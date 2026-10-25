@@ -475,7 +475,10 @@ fn modifier_problems(v: &View, e: &Dict, family: &Dict) -> Vec<String> {
             "stat_bonus" | "requirement" => {
                 let stat = json::s(m, "stat");
                 unique_tag = format!("{unique_tag}:{stat}");
-                if !STATS.contains(&stat.as_str()) {
+                // DERIVE1 4.1: a stat bonus may name a derived stat; requirements stay on the base stats
+                if kind == "stat_bonus" && !v.is_stat(&stat) {
+                    out.push(format!("Modifier {n}: unknown stat '{stat}' (one of {}).", v.stat_names()));
+                } else if kind == "requirement" && !STATS.contains(&stat.as_str()) {
                     out.push(format!("Modifier {n}: unknown stat '{stat}' (one of {}).", STATS.join(", ")));
                 }
                 int_problems(&mut out, json::get(m, "value"), "value", false);
@@ -486,7 +489,7 @@ fn modifier_problems(v: &View, e: &Dict, family: &Dict) -> Vec<String> {
                 if !fx.is_object() {
                     out.push(format!("Modifier {n}: effect needs an effect object ({{\"type\": ...}})."));
                 } else {
-                    for message in simple::effect_errors(&Value::Array(vec![fx.clone()]), &skill_ok, true, true) {
+                    for message in simple::effect_errors(&Value::Array(vec![fx.clone()]), &skill_ok, &[], true, true) {
                         out.push(format!("Modifier {n}: {message}"));
                     }
                 }
@@ -631,7 +634,8 @@ fn bonus_problems(v: &View, bonus: &Dict, t: &str, n: usize) -> Vec<String> {
                     out.push(format!("Tier {n}: at most {TIER_MAX_STATS} stat bonuses."));
                 }
                 for (stat, x) in stats {
-                    if !STATS.contains(&stat.as_str()) {
+                    // DERIVE1 4.1: a tier bonus may name a derived stat
+                    if !v.is_stat(stat) {
                         out.push(format!("Tier {n}: unknown stat '{stat}'."));
                     }
                     range_problem(&mut out, json::to_int(x), 1, 5, n, &format!("{stat} bonus"));
@@ -643,7 +647,7 @@ fn bonus_problems(v: &View, bonus: &Dict, t: &str, n: usize) -> Vec<String> {
                 if fx.len() > TIER_MAX_EFFECTS {
                     out.push(format!("Tier {n}: at most {TIER_MAX_EFFECTS} effects."));
                 }
-                for message in simple::effect_errors(&Value::Array(fx.to_vec()), &has_skill(v), true, true) {
+                for message in simple::effect_errors(&Value::Array(fx.to_vec()), &has_skill(v), &[], true, true) {
                     out.push(format!("Tier {n}: {message}"));
                 }
                 any = any || !fx.is_empty();
@@ -681,7 +685,7 @@ fn legacy_errors(v: &View, e: &Dict) -> Vec<String> {
         errors.push(format!("Off-hand category '{off}' needs the matching gear type '{off}'."));
     }
     if equip {
-        errors.extend(simple::effect_errors(json::get(e, "effects"), &has_skill(v), true, true));
+        errors.extend(simple::effect_errors(json::get(e, "effects"), &has_skill(v), &[], true, true));
         match json::get(e, "threshold_tiers") {
             Value::Array(tiers) => {
                 if tiers.iter().any(|t| !json::dict(t).contains_key("stat") || !json::dict(t).contains_key("threshold")) {

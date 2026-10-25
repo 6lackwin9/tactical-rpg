@@ -242,6 +242,7 @@ files (the Godot build's) are refused with that reason.
 | `scripts/playtest/playtest_logger.gd` (errors), `AssetRegistry.resolve_observer` (asset fallbacks) | `aegis_ui::playtest::report_error` with a panic hook, `report_asset` from the art loader | hub test |
 | `ui/playtest/note_box.gd` (the F8 note text box), Godot's `TextEdit` | `aegis_ui::edit` (PLAYUI1-T: the kit text editor), the taller note box, `recordings::NoteView` (a note's full text with Copy) | engine-only additions past Godot (no parity suite) |
 | none | `aegis_core::formula` (DERIVE1-E: data formula evaluator) | unit tests; engine-only addition (no parity suite) |
+| none | `rpgkit_content` `check/derived.rs`, the `derived_stats` kind (DERIVE1-S) | `rpgkit_content/tests/derived_stats.rs`; no Godot original; the schema parity strips `content.derived_stats` (`data_source.rs` `KINDS_AFTER_GODOT`) |
 | none | `aegis_ui` `Painter::ellipse_ring`, `Image::opaque_bounds`, `Art::body_bounds` (STAGE1-E) | `aegis_ui/tests/stage_pieces.rs`; engine-only addition (no parity suite) |
 | none | `emberwake_gui/src/stage.rs` (STAGE1-L: the tilted battle stage) | `stage.rs` and `battle.rs` inline tests; new in the port, no Godot counterpart; no parity suite draws the GUI |
 | none | `aegis_save` keyed saves (CAMPAIGN1-E: `write_keyed`, `read_keyed`, `exists_keyed`, `peek_keyed`) | `aegis_save/tests/keyed.rs`; engine-only addition (no parity suite) |

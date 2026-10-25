@@ -1,9 +1,11 @@
-//! Typed content catalog (classes, units, skills, items, passives, encounters, terrain).
+//! Typed content catalog (classes, units, skills, items, passives, encounters, terrain, and the engine-only derived
+//! stats of DERIVE1).
 //!
 //! Source today: the resolved catalog the Godot exporter writes (the game's `parity/out/catalog.json`), i.e. exactly the
 //! entries Godot's `ContentCatalog.entries(kind)` returns after item-family resolution and schema normalisation.
 //! Defaults below are the `ContentSchema` field defaults, so hand-written partial entries normalise the same way.
 
+use aegis_core::formula::Formula;
 use aegis_core::value::*;
 use anyhow::{Context, Result};
 use indexmap::IndexMap;
@@ -381,6 +383,85 @@ pub struct PassiveDef {
     pub effects: Vec<Value>,
 }
 
+/// The formula input name of the unit level (DERIVE1 4.1; reserved: no row id or constant takes it).
+pub const LEVEL_INPUT: &str = "level";
+
+/// A derived stat's change while a status is active on the unit (DERIVE1 4.1 `status_modifiers`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct StatusModifier {
+    pub status: String,
+    pub flat: i32,
+    pub percent: f64,
+}
+
+/// A derived-stat row (DERIVE1 4.1, kind `derived_stats`): a formula over the base stats, `level`, other rows and the
+/// row's constants, caps, the rulesets it exists in and the screens that list it. Engine-only (no Godot original).
+#[derive(Debug, Clone)]
+pub struct DerivedStatDef {
+    pub id: String,
+    pub name: String,
+    /// Table header ("" = the name).
+    pub label: String,
+    pub description: String,
+    pub formula: Formula,
+    pub constants: IndexMap<String, f64>,
+    pub min: i32,
+    pub max: i32,
+    pub status_modifiers: Vec<StatusModifier>,
+    /// Empty = every ruleset.
+    pub rulesets: Vec<String>,
+    pub show_on: Vec<String>,
+    pub order: i32,
+    pub suffix: String,
+}
+
+impl DerivedStatDef {
+    /// From a loaded (checked) row; None when the formula does not parse (the loader reports and skips such rows).
+    pub fn from_obj(o: &Obj) -> Option<Self> {
+        let formula = Formula::parse(&string(o, "formula", "0")).ok()?;
+        let constants = obj(o, "constants").map(|m| m.iter().map(|(k, v)| (k.clone(), to_float(v, 0.0))).collect()).unwrap_or_default();
+        let status_modifiers = array(o, "status_modifiers")
+            .iter()
+            .filter_map(Value::as_object)
+            .map(|m| StatusModifier { status: string(m, "status", ""), flat: int(m, "flat", 0), percent: float(m, "percent", 0.0) })
+            .collect();
+        Some(Self {
+            id: string(o, "id", ""),
+            name: string(o, "name", "New Stat"),
+            label: string(o, "label", ""),
+            description: string(o, "description", ""),
+            formula,
+            constants,
+            min: int(o, "min", 0),
+            max: int(o, "max", 100),
+            status_modifiers,
+            rulesets: strings(o, "rulesets"),
+            show_on: if o.contains_key("show_on") { strings(o, "show_on") } else { vec!["party".into(), "dojo".into()] },
+            order: int(o, "order", 0),
+            suffix: string(o, "suffix", ""),
+        })
+    }
+
+    /// The table header: the label, or the name when it has none.
+    pub fn header(&self) -> &str {
+        if self.label.is_empty() {
+            &self.name
+        } else {
+            &self.label
+        }
+    }
+
+    /// Whether the row exists in `ruleset` (no rulesets listed = every one).
+    pub fn in_ruleset(&self, ruleset: &str) -> bool {
+        self.rulesets.is_empty() || self.rulesets.iter().any(|r| r == ruleset)
+    }
+
+    /// Whether `screen` (party, dojo, battle) lists the row.
+    pub fn shows_on(&self, screen: &str) -> bool {
+        self.show_on.iter().any(|s| s == screen)
+    }
+}
+
 /// The whole catalog, every kind in file order. Entries the engine does not type yet stay raw.
 #[derive(Debug, Clone, Default)]
 pub struct Catalog {
@@ -391,6 +472,8 @@ pub struct Catalog {
     pub passives: IndexMap<String, PassiveDef>,
     pub encounters: IndexMap<String, Obj>,
     pub terrain: IndexMap<String, Obj>,
+    /// Derived-stat rows in the loader's order (topological: a row after the rows its formula names).
+    pub derived_stats: IndexMap<String, DerivedStatDef>,
     skill_index: IndexMap<String, usize>,
     tier_one: IndexMap<String, usize>,
 }
@@ -429,6 +512,9 @@ impl Catalog {
         }
         for o in rows("terrain") {
             cat.terrain.insert(string(&o, "id", ""), o);
+        }
+        for d in rows("derived_stats").iter().filter_map(DerivedStatDef::from_obj) {
+            cat.derived_stats.insert(d.id.clone(), d);
         }
         cat.skills = rows("skills").iter().map(SkillDef::from_obj).collect();
         cat.index_skills();

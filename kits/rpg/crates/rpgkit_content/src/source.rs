@@ -25,6 +25,8 @@ pub struct Source {
 
 /// Catalog kinds in the order the catalog export lists them (item families go with the game data).
 pub const CATALOG_KINDS: [&str; 7] = ["classes", "units", "skills", "items", "passives", "encounters", "terrain"];
+/// DERIVE1: the derived-stat rows, loaded into the catalog beside CATALOG_KINDS (Godot had no such kind).
+pub const DERIVED_KIND: &str = crate::check::derived::KIND;
 /// WorldSchema.KINDS.
 pub const WORLD_KINDS: [&str; 13] = ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot", "dialogues", "shops", "routes"];
 
@@ -98,8 +100,29 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
     for kind in CATALOG_KINDS {
         out.insert(kind.into(), Value::Array(read_kind(&dir, kind, &families, errors).into_iter().map(Value::Object).collect()));
     }
+    out.insert(DERIVED_KIND.into(), Value::Array(read_derived(&dir, errors).into_iter().map(Value::Object).collect()));
     out.insert("item_families".into(), Value::Array(families.into_iter().map(Value::Object).collect()));
     Value::Object(out)
+}
+
+/// DERIVE1 4.1 (engine-only, beside CATALOG_KINDS like the item families): the derived-stat rows that pass their
+/// checks (`check::derived`), in topological order; every problem goes to `errors` and its row is skipped.
+fn read_derived(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{DERIVED_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(DERIVED_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let checked = crate::check::derived::check_rows(&rows);
+    for (row, found) in rows.iter().zip(&checked.errors) {
+        errors.extend(found.iter().map(|m| format!("{at}: derived stat '{}': {m}", sget(row, "id", ""))));
+    }
+    checked.order.iter().map(|&i| rows[i].clone()).collect()
 }
 
 /// ContentCatalog._read_kind.

@@ -73,8 +73,9 @@ const GROUPS: [&str; 2] = ["spell", "heal"];
 const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 
 /// Passives.validate_effects: the problems of an effect list (`allow_empty`: none is fine; `items_only`: the kinds
-/// gear may carry).
-pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, allow_empty: bool, items_only: bool) -> Vec<String> {
+/// gear may carry). DERIVE1 4.1: a `stat` effect may name one of the `derived` stat ids, and only those take an
+/// optional `percent` (-1.0..1.0).
+pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, derived: &[String], allow_empty: bool, items_only: bool) -> Vec<String> {
     let mut errors = Vec::new();
     let Some(list) = effects.as_array() else {
         errors.push("Effects must be a list.".into());
@@ -105,10 +106,22 @@ pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, allow
         };
         match t.as_str() {
             "stat" => {
-                if !STATS.contains(&json::s(e, "stat").as_str()) {
-                    errors.push(format!("{at}: unknown stat '{}'.", json::s(e, "stat")));
+                let stat = json::s(e, "stat");
+                let is_derived = derived.contains(&stat);
+                if !STATS.contains(&stat.as_str()) && !is_derived {
+                    errors.push(format!("{at}: unknown stat '{stat}'."));
                 }
-                if json::i(e, "value", 0) == 0 {
+                let mut percent = 0.0;
+                if let Some(p) = e.get("percent") {
+                    if !is_derived {
+                        errors.push(format!("{at}: percent is for derived stats only (base stats take a flat value)."));
+                    } else if let Some(x) = p.as_f64().filter(|x| x.abs() <= 1.0) {
+                        percent = x;
+                    } else {
+                        errors.push(format!("{at}: percent must be -1.0..1.0."));
+                    }
+                }
+                if json::i(e, "value", 0) == 0 && percent == 0.0 {
                     errors.push(format!("{at}: the stat bonus needs a non-zero value."));
                 }
                 let ctx = e.get("context").cloned().unwrap_or(Value::Object(Default::default()));

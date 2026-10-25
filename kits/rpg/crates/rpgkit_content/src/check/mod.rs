@@ -4,6 +4,7 @@
 //! rows, resolved items, derived item families).
 
 pub mod assets;
+pub mod derived;
 pub mod dialogue;
 pub mod encounter;
 pub mod item;
@@ -73,6 +74,21 @@ impl View {
 
     pub fn has(&self, kind: &str, id: &str) -> bool {
         self.entries(kind).iter().any(|e| json::s(e, "id") == id)
+    }
+
+    /// The ids of the loaded derived-stat rows (DERIVE1 4.1: the stat fields of gear and passives accept them).
+    pub fn derived_ids(&self) -> Vec<String> {
+        self.entries(derived::KIND).iter().map(|e| json::s(e, "id")).collect()
+    }
+
+    /// A base stat or a loaded derived stat id.
+    pub fn is_stat(&self, stat: &str) -> bool {
+        rpgkit_data::STATS.contains(&stat) || self.has(derived::KIND, stat)
+    }
+
+    /// The stat names a stat field takes, for messages: the base stats, then the derived ids.
+    pub fn stat_names(&self) -> String {
+        rpgkit_data::STATS.iter().map(|s| s.to_string()).chain(self.derived_ids()).collect::<Vec<_>>().join(", ")
     }
 }
 
@@ -197,6 +213,10 @@ fn is_gear_field(kind: &str, key: &str) -> bool {
 /// ("" = a new entry).
 pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> Vec<String> {
     let entry = &crate::source::folded(kind, entry);
+    if kind == derived::KIND {
+        // DERIVE1: the row checks the loader applies (fields, names, unique ids and labels, cycles)
+        return derived::entry_errors(v, &content(kind, entry), current_id);
+    }
     let old_id = if current_id.is_empty() { json::s(entry, "id") } else { current_id.to_string() };
     let e = match kind {
         "items" => item::prepare(v, entry, v.get(kind, &old_id)),
@@ -220,7 +240,7 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
     let has_skill = |id: &str| v.has("skills", id);
     match kind {
         "skills" => errors.extend(skill::entry_errors(v, &e)),
-        "passives" => errors.extend(simple::effect_errors(json::get(&e, "effects"), &has_skill, false, false)),
+        "passives" => errors.extend(simple::effect_errors(json::get(&e, "effects"), &has_skill, &v.derived_ids(), false, false)),
         "terrain" => errors.extend(simple::terrain_errors(&e)),
         "classes" => errors.extend(unit::class_errors(v, &e)),
         "units" => {
