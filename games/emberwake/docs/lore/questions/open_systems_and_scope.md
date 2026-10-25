@@ -48,7 +48,7 @@ Where (paths from `games/emberwake/docs/lore/`); Decides.
 | --- | --- | --- | --- | --- | --- | --- |
 | Q-69 | decided | Quenched Cinder Salt overlaps the Rock Salt flush | (a) fold it into the flush; (b) keep it as the one-charge "prevent one Calcification advance" item | Decided (2026-10-25, user): b, Quenched Cinder Salt stays the rare one-charge item that prevents one Calcification advance | items 4, gap 3 | user |
 | Q-70 | decided | Reach 2 melee (billhooks, the Flagellant's scourge); the engine's melee reach is 1 | (a) reach 1 plus range-2 skills; (b) a reach-2 rule | Decided (2026-10-25, user): b, a reach-2 rule, so weapons and their ranges can be assessed | items gap 1; combat_and_timeline 6 | user |
-| Q-71 | 1.7 content | Missing weapon families: billhook or polearm, chemical sprayer, bone-saw, censer | (a) stand-in families; (b) new families as data | b | items 2, gap 6 | data authoring |
+| Q-71 | decided | Missing weapon families: billhook or polearm, chemical sprayer, bone-saw, censer | (a) stand-in families; (b) new families as data | Decided (2026-10-25, user): b, new families as data (with RULESET1's polearm and scourge) | items 2, gap 6 | data authoring |
 | Q-72 | decided | Area shapes for "behind the target" and lines | checked against the engine's `Area` shapes when the data is written | Decided (2026-10-25, user): as listed | items gap 4 | data authoring |
 
 ## Enemies
@@ -56,21 +56,21 @@ Where (paths from `games/emberwake/docs/lore/`); Decides.
 | Id | Focus | Question | Options | Rec. | Where | Decides |
 | --- | --- | --- | --- | --- | --- | --- |
 | Q-73 | 3 lore | Prologue rosters: 0a names Castellan Footmen (fixed in this pass); 0b's "ambush squad" and 0c's "3 Inquisitors + a crossbowman" name no bestiary unit | (a) 0b Mortuary Flagellants; 0c Castellan Footmen and 1 Watch Crossbowman; (b) prologue-only units | a | enemy_bestiary gap 5; CANON 3.1; bestiary_encounters_act1 | data authoring |
-| Q-74 | 1.7 content | Boss gaps: Quell's marrow valve (a Strain trigger in Act 1, a cheat-death trigger); Nemeth's trait, maneuver and capstone (after Q-25) | written by the design lane | - | bestiary_iron_inquisition; six_founders 6 | design lane |
+| Q-74 | decided | Boss gaps: Quell's marrow valve (a Strain trigger in Act 1, a cheat-death trigger); Nemeth's trait, maneuver and capstone (after Q-25) | written by the design lane | Decided (2026-10-25, user): Quell's valve becomes a cheat-death boss phase (once, a heal and a tell; no Strain in Act 1); Nemeth's Crucible kit follows ENCOUNTER2 (unkillable, escape); the rest in the design lane's Act 1 combat-cast spec (CAST1) | bestiary_iron_inquisition; six_founders 6 | design lane |
 | Q-75 | decided | The Crucible winch: how the stay-behind is played | (a) scripted in dialogue after the fight; (b) a kit "hold this tile, the chosen hero stays" objective | Decided (2026-10-25, user): b, kit objectives instead of a script: an escape that needs one unit to hold a tile while the rest get out, and an impossible fight where the first unit knocked out makes a heroic stand that holds the boss while the others escape; which one the Crucible uses: Q-75a | bestiary_encounters_act1 ENC-EVT-06; sunk_ward 3.7 | user |
 | Q-75a | decided | Which stay-behind the Crucible uses | (a) the hold-a-tile escape, the player picks who holds the winch before the fight (the canon dilemma); (b) the impossible fight: the first founder knocked out makes the heroic stand; (c) (b) by default, but the player may send someone to the winch first | Decided (2026-10-25, user): a for the Crucible (the player picks who holds the winch); the impossible fight (b) goes to a later mission: the first loss is a choice, and as losses pile up they become the fate of the downed. Planner notes: signal an impossible fight before it starts, keep the stand a payoff (a last-stand moment), at most one per act | CANON 3.2; narrative_choices 2 | user |
-| Q-76 | 1.7 content | Act 2-3 adversaries and Awakening Chorus troops have no maneuvers; the factions of Lazar, the Bell-Warden Colossus, the Reliquary Guardian and the Chasm Gatekeepers are open | written by the design lane before Act 2 data | - | enemy_bestiary 4, gap 6 | design lane |
+| Q-76 | decided | Act 2-3 adversaries and Awakening Chorus troops have no maneuvers; the factions of Lazar, the Bell-Warden Colossus, the Reliquary Guardian and the Chasm Gatekeepers are open | written by the design lane before Act 2 data | Decided (2026-10-25, user): written by the design lane before Act 2 data | enemy_bestiary 4, gap 6 | design lane |
 
 ## Art and assets
 
 | Id | Focus | Question | Options | Rec. | Where | Decides |
 | --- | --- | --- | --- | --- | --- | --- |
-| Q-77 | 2 art | The palette step rule | (a) computed (dark 65% value, light 35% toward Bleached Linen), hand-picked where it reads badly; (b) hand-picked per hue | a | specs/art_and_visual_style.md gap 1 | user (asset lane applies) |
-| Q-78 | 2 art type | One skin ramp for a varied cast | (a) add a light and a dark ramp; (b) one ramp, vary by recolour | a | art gap 2 | user |
-| Q-79 | 2 art type | Units larger than 48 x 48 (the Amalgam, the titan) | (a) 96 x 96 frames on the same scale, through the image API (asked first); (b) scaled 48 x 48 bodies | a | art gap 3 | user |
-| Q-80 | 2 art type | The Ashlands kit bodies' palette | (a) the Low Sleep palette applies per world through palette files; (b) it replaces the kit palette | a | art gap 4 | user |
-| Q-81 | 2 art | The preference "per-world art waits until the Ashlands are complete" against M2's Sunk Ward placeholders | the user confirms the placeholders may start | - | art gap 5 | user |
-| Q-82 | 2 art type | A camera shake for the bell tolls | checked with FX1; a new `[engine]` feature if missing | - | onboarding 4.1, 6 | logic lane |
+| Q-77 | decided | The palette step rule | (a) computed (dark 65% value, light 35% toward Bleached Linen), hand-picked where it reads badly; (b) hand-picked per hue | Decided (2026-10-25, user): a | specs/art_and_visual_style.md gap 1 | user (asset lane applies) |
+| Q-78 | decided | One skin ramp for a varied cast | (a) add a light and a dark ramp; (b) one ramp, vary by recolour | Decided (2026-10-25, user): a; three skin ramps in the master palette, chosen per character in the existing unit palette files | art gap 2 | user |
+| Q-79 | decided | Units larger than 48 x 48 (the Amalgam, the titan) | (a) 96 x 96 frames on the same scale, through the image API (asked first); (b) scaled 48 x 48 bodies | Decided (2026-10-25, user): a, 96 x 96 frames at the same scale on units that occupy 2 x 2 cells (a new engine type: frame size per sheet, multi-cell units); image API asked first; not needed by the slice | art gap 3 | user |
+| Q-80 | decided | The Ashlands kit bodies' palette | (a) the Low Sleep palette applies per world through palette files; (b) it replaces the kit palette | Decided (2026-10-25, user): a; the world picks which palette file its units use | art gap 4 | user |
+| Q-81 | decided | The preference "per-world art waits until the Ashlands are complete" against M2's Sunk Ward placeholders | the user confirms the placeholders may start | Decided (2026-10-25, user): placeholders (rig recolours in the new palette, code-drawn props) may start for the slice; final art in the M4 art pass; every image-API sheet asked first | art gap 5 | user |
+| Q-82 | decided | A camera shake for the bell tolls | checked with FX1; a new `[engine]` feature if missing | Decided (2026-10-25, user): a new engine camera shake (strength, duration, the art bible's limits, a reduce-motion setting), built within FX1; needed by the slice (the prologue's bells) | onboarding 4.1, 6 | logic lane |
 
 ## Slice scope
 

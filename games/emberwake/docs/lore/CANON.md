@@ -64,7 +64,7 @@ previous action leaves, otherwise the unit spends them in recovery; recovery mak
 Board and art: STAGE1 option B, a tilted battle board of cells drawn 32x24 px (12 x 9 cells today; arena sizes:
 Q-60) with zone backdrops, 40 px units and upright props sorted with the units; "32x48 sprite" means the figure
 bounds inside the rig's 48x48 frames; the region map stays square top-down. Palette: the art bible's hex values, 16
-master hues plus at most one dark and one light step each, plus a skin ramp.
+master hues plus at most one dark and one light step each (computed, hand-picked where a step reads badly, Q-77), plus three skin ramps chosen per character in the unit palette files (Q-78); each world picks its units' palette files (Q-80). Large units (the Amalgam, the titan, the node 20 monstrosity) use 96 x 96 frames on 2 x 2 cells (Q-79). A camera shake with limits and a reduce-motion setting serves bell tolls, heavy impacts and tremors (Q-82). Slice placeholders may start now; final art comes in the M4 pass (Q-81).
 
 ### 2.2 Strain (Act 2 on; Act 1 has none) `[kit hook]` per-unit meter, `[data]` bracket names
 
