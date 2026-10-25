@@ -130,6 +130,9 @@ corrupted founder 50 with `or_round` 4: line, kill [Nemeth, guard] by the founde
 ## 6. Open questions (recommended option first; Q-75a is decided: (a), section 3.1)
 
 Decided (user 2026-10-25): every EQ question as recommended.
+Added by the user's Q-32 (2026-10-25): from Act 2 a downed unit left behind when the others escape is captured (EQ2's
+"carried out, wounded" stays the Act 1 rule); the escape still counts as a success for those who got out, not as the
+whole party fleeing. ENCOUNTER2-W reads the act's rule from the world.
 
 | Id | Question | Options | Recommendation |
 | --- | --- | --- | --- |
