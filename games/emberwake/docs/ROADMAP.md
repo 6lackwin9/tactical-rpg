@@ -38,6 +38,7 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | ROSTER1 | The unit lifecycle (wounded, downed, captured, dead, retired), bunks apart from the party, recruits behind a story flag, keepsakes, temperament; hooks for bleed-out and Living Martyrs | in-progress | ENCOUNTER2, KIT1 | `docs/specs/ROSTER1.md`; user 2026-10-25 (slice M0) |
 | HOOKS1 | Combat hooks for the slice's cast: forced movement, ground and arena hazards, triggers and reactions, unit meters, riders, HP costs, guard bypass, a capstone unlock, AI tactics, data zones, class names per world | in-progress | KIT1, RULESET1, ENCOUNTER2 | `docs/specs/HOOKS1.md`; user 2026-10-25 (Q-55, Q-56: no stand-ins) |
 | CAST1 | The Act 1 combat cast as data: founders' kits by intent, new weapon families, the Act 1 bestiary, bosses, encounters, placeholder assets | in-progress | RULESET1, ENCOUNTER2, DERIVE1, HOOKS1 | `games/emberwake/docs/specs/CAST1.md`; user 2026-10-25 (Q-71, Q-74) |
+| PORTRAITFX1 | Animated, reactive portraits: engine portrait effects (breath, flicker, blink, overlays, state tints, reactions) with a UI Gallery page, a kit cue table, per-portrait face sidecars, four surfaces (dialogue and vignettes, party and roster, the battle panels, the timeline), then 2x2 expression sheets for the 13 main characters | approved | FX1, STORYUI1, ART3 | `docs/specs/PORTRAITFX1.md` (+ _TASKS.md); user 2026-10-25 (A now, B for the main cast; PQ1-PQ5 as recommended) |
 
 ## Goals (user 2026-10-17, decision "Goal-based roadmap"; replaces the suggested build order)
 

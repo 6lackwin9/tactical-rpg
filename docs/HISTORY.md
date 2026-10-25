@@ -91,6 +91,8 @@ Never delete or rewrite entries. When something is replaced, add a row with the 
 | 2026-10-25 | The Godot melee bump token tween (`fx_presets.gd`) | not ported | FX1's swing trail and impact sparks; the miss sidestep is ported smaller | The new effects carry the melee read |
 | 2026-10-25 | Godot schema parity over every kind | narrowed | `data_source.rs` no longer compares the kind `content.derived_stats` (`KINDS_AFTER_GODOT`); every other schema, catalog, world and game-data comparison stays | DERIVE1-S: engine-only derived-stat rows, Godot had none |
 | 2026-10-25 | Godot schema, loader and writer parity over world manifests and kinds | narrowed | `data_source.rs` strips `world.world` `ruleset`, `plan_reveal_flag` (also from each world's manifest) and the kind `content.rulesets`; `store.rs` strips the manifest lines `"ruleset": ""`, `"plan_reveal_flag": ""`; every other comparison stays | RULESET1-R: engine-only ruleset switch, Godot had none |
+| 2026-10-25 | Portrait anchors as content fields on characters (`aegis content`) | not adopted | The anchors describe one image's pixels and one common portrait serves many units; PORTRAITFX1 keeps them in a sidecar beside the PNG (`<portrait>.face.json`) | PORTRAITFX1 |
+| 2026-10-25 | Figure masks for portrait effects | deferred | No mask data exists yet; `pixelize.py` could write one later | PORTRAITFX1 |
 
 New rows go at the end of the table above (append-only); this section stays below it.
 
