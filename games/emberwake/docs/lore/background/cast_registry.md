@@ -24,7 +24,7 @@ near-collision (rhymes, shared stems, a name that is also a place). Ages: playab
 | --- | --- | --- | --- | --- | --- |
 | Sister Aline Vance | Surgeon at the Apothecary's Slab; Flesh-Broker voice | 26 | Former Anointed Prosector of the Hall of Holy Dissection; found that the communion draughts are laced with bone sediment; keeps her mind with her own counter-draught; early veins | Hearth scene | - |
 | Bram "Iron-Lung" Karr | Smith at the Tinker's Hearth; Preservationist voice | 33 | Master foundryman of the Fourth Kiln Syndicate forge; lungs ruined, mind intact; his apprentice Lucan was seized as flesh-stock | Hearth scene | - |
-| Tess Morn | Dead-drop courier; runs the mission board at the Water-Lock Basin | 19 | The cell's courier and Vesper's former runner contact; deaf in the left ear from a flash-bomb; her brother Pip waits in the Seventh Ward Toll-Pen | Act 1 hub | Tessia "Tess" Morn, Madame Tessia |
+| Tess Morn | Dead-drop courier; runs the mission board at the Water-Lock Basin | 19 | The cell's courier and Vesper's former runner contact; deaf in the right ear from a flash-bomb; her brother Pip waits in the Seventh Ward Toll-Pen | Act 1 hub | Tessia "Tess" Morn, Madame Tessia |
 | Pip | Tess's brother; later runs the runner network | 12 | Caught in a curfew sweep, held for the Tithing (a stake) | Act 1, Tess's quest (planner pick) | - |
 
 ## The regime (Sovereign Clerisy, Iron Inquisition, Castellan Watch)
