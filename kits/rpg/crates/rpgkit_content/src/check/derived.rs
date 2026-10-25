@@ -9,6 +9,7 @@ use aegis_content::schema::is_id;
 use aegis_core::formula::{self, Formula};
 use aegis_core::json::{self, gstr, Dict};
 use rpgkit_data::{LEVEL_INPUT, STATS};
+use rpgkit_rules::ruleset::RULESETS;
 use rpgkit_rules::status;
 use serde_json::Value;
 use std::collections::VecDeque;
@@ -187,7 +188,8 @@ fn row_errors(rows: &[Dict], ids: &[String], i: usize) -> (Vec<String>, Option<F
     }
     status_modifier_errors(json::get(e, "status_modifiers"), &mut out);
     for (key, label) in [("rulesets", "Rulesets"), ("show_on", "Show on")] {
-        let allowed = options(key);
+        // RULESET1-R: the ruleset ids are code-owned (rpgkit_rules::ruleset::RULESETS; the schema lists the same)
+        let allowed = if key == "rulesets" { RULESETS.iter().map(|s| s.to_string()).collect() } else { options(key) };
         let mut seen: Vec<String> = Vec::new();
         for v in json::sget(e, key) {
             if !allowed.contains(&v) {

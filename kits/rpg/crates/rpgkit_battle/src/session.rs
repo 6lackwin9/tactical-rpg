@@ -14,6 +14,7 @@ use crate::metrics::BattleMetrics;
 use crate::world::{AiProfile, UnitId, World};
 use aegis_core::value::{self, Obj};
 use rpgkit_data::{Catalog, UnitDef};
+use rpgkit_rules::ruleset::Ruleset;
 use rpgkit_rules::status;
 use rpgkit_rules::{build_unit, Unit};
 use indexmap::IndexMap;
@@ -62,6 +63,9 @@ pub struct EncounterDef {
     pub phases: Vec<Value>,
     pub start_status: Vec<Value>,
     pub start_grant: StartGrant,
+    /// RULESET1 3.1.3: the rules the battle plays by, set by its caller (the world bridge, the Combat Arena, the Dojo,
+    /// the sim, the host); never read from the row (classic by default).
+    pub ruleset: Ruleset,
     /// The whole entry (objective and morale fields are read from it).
     pub raw: Obj,
 }
@@ -98,6 +102,7 @@ impl EncounterDef {
             phases: value::array(o, "phases").to_vec(),
             start_status: value::array(o, "start_status").to_vec(),
             start_grant: StartGrant::None,
+            ruleset: Ruleset::classic(),
             raw: o.clone(),
         }
     }
@@ -339,7 +344,7 @@ impl Session {
         let count = built.len();
         let mut grid = Grid::new(def.open, def.exits.clone(), TerrainTable::from_catalog(&cat), count);
         grid.apply_zone(&def.zone);
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone() };
         w.add_item_skills();
         let objective = Objectives::create(&def.raw);
         // MORALE1 1.2: unit keys, tiers, authored profiles and the starting groups.

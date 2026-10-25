@@ -89,6 +89,12 @@ pub struct SimArgs {
     pub tier_foe: String,
     pub boss_phase: bool,
     pub s2: bool,
+    /// RULESET1 3.1.3: the fights' rules, from `ruleset=classic|timeline` (default classic) and `rules=-id,+id` (single
+    /// extensions switched). Not in the help text: those lines are Godot parity (as `rewards`). A world encounter
+    /// without `ruleset=` plays by its world's ruleset instead (`ruleset_for`).
+    pub ruleset: rpgkit_rules::ruleset::Ruleset,
+    ruleset_id: String,
+    rules: String,
 }
 
 impl Default for SimArgs {
@@ -135,6 +141,9 @@ impl Default for SimArgs {
             tier_foe: MIRROR.into(),
             boss_phase: true,
             s2: false,
+            ruleset: rpgkit_rules::ruleset::Ruleset::classic(),
+            ruleset_id: String::new(),
+            rules: String::new(),
         }
     }
 }
@@ -184,6 +193,21 @@ pub fn catalog_encounters(d: &Data) -> Vec<String> {
 }
 
 impl SimArgs {
+    /// RULESET1 3.1.2-3.1.3: the ruleset of a fight. `world`: the ruleset of the world that resolves the encounter (None
+    /// for a catalog or generated fight). `ruleset=` overrides it; without it a world fight plays by its world's ruleset
+    /// (with the `rules=` switches) and any other fight by classic.
+    pub fn ruleset_for(&self, world: Option<&rpgkit_rules::ruleset::Ruleset>) -> rpgkit_rules::ruleset::Ruleset {
+        match world {
+            Some(w) if self.ruleset_id.is_empty() => {
+                let mut r = w.clone();
+                // the switches were checked at parse; their errors depend on the ids only
+                let _ = r.adjust(&self.rules);
+                r
+            }
+            _ => self.ruleset.clone(),
+        }
+    }
+
     /// Parses the sim's command line (mode first) for a game without a default world or story run. Err = the
     /// message after "SIM argument error: ".
     pub fn parse(d: &Data, argv: &[String]) -> Result<Self, String> {
@@ -260,6 +284,8 @@ impl SimArgs {
         if a.quick {
             a.seed_count = 1;
         }
+        a.ruleset = rpgkit_rules::ruleset::Ruleset::of(&d.cat, &a.ruleset_id)?;
+        a.ruleset.adjust(&a.rules)?;
         Ok(a)
     }
 
@@ -311,6 +337,13 @@ impl SimArgs {
                 }
                 self.metrics = value == "on";
             }
+            "ruleset" => {
+                if !value.is_empty() && !rpgkit_rules::ruleset::RULESETS.contains(&value) {
+                    return Err(format!("ruleset must be one of {} (got '{value}')", godot_list(&rpgkit_rules::ruleset::RULESETS)));
+                }
+                self.ruleset_id = value.into();
+            }
+            "rules" => self.rules = value.into(),
             "rewards" => {
                 if value != "on" && value != "off" {
                     return Err(format!("rewards must be on or off (got '{value}')"));

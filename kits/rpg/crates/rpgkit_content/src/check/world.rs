@@ -610,6 +610,25 @@ pub fn manifest_errors(v: &View, w: &str) -> Vec<String> {
         errors.push("Start supplies must be -1 (inherited) or 0..99.".into());
     }
     errors.extend(dialogue::service_lines_errors(m.get("service_lines").unwrap_or(&Value::Object(Dict::new())), "Service lines"));
+    errors.extend(ruleset_errors(v, m));
+    errors
+}
+
+/// RULESET1-R (engine-only): the manifest's `ruleset` ("" inherits) is a ruleset id whose row exists (classic has
+/// none), and its `plan_reveal_flag` is empty or a flag key.
+fn ruleset_errors(v: &View, m: &Dict) -> Vec<String> {
+    use rpgkit_rules::ruleset::{CLASSIC, RULESETS};
+    let mut errors = Vec::new();
+    let r = json::s(m, "ruleset");
+    if !r.is_empty() && !RULESETS.contains(&r.as_str()) {
+        errors.push(format!("Ruleset: '{r}' is not one of {} (or empty: inherited).", RULESETS.join(", ")));
+    } else if !r.is_empty() && r != CLASSIC && !v.has(super::ruleset::KIND, &r) {
+        errors.push(format!("Ruleset '{r}' needs its row in {} (data/catalog/{}.json).", super::ruleset::KIND, super::ruleset::KIND));
+    }
+    let flag = json::s(m, "plan_reveal_flag");
+    if !flag.is_empty() && !quest::flag_key_ok(&flag) {
+        errors.push(format!("Plan reveal flag '{flag}' must be a flag key (a-z, 0-9, _ and .)."));
+    }
     errors
 }
 

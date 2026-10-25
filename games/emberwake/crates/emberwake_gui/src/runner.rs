@@ -17,6 +17,7 @@ pub enum SAct {
     MainMenu,
     Arena,
     PickEncounter(usize),
+    PickRuleset(usize),
     ContentForge,
     WorldForge,
     Dojo,
@@ -29,8 +30,14 @@ pub enum SAct {
     Exit,
 }
 
+/// The Combat Arena's rules (RULESET1-R): the encounter's own (its world's; classic for a catalog encounter), or a
+/// ruleset picked for the run.
+const RULESETS: [(&str, Option<&str>); 3] = [("World", None), ("Classic", Some("classic")), ("Timeline", Some("timeline"))];
+
 pub struct SceneRunner {
     encounter: usize,
+    /// An index into RULESETS.
+    ruleset: usize,
     world: usize,
     /// Exploration's start: an index into `starts`.
     location: usize,
@@ -39,7 +46,7 @@ pub struct SceneRunner {
 
 impl SceneRunner {
     pub fn new() -> Self {
-        Self { encounter: 0, world: 0, location: 0, w: Vec::new() }
+        Self { encounter: 0, ruleset: 0, world: 0, location: 0, w: Vec::new() }
     }
 
     /// The picked world of Exploration.
@@ -121,10 +128,12 @@ impl SceneRunner {
         match a {
             SAct::MainMenu | SAct::Exit => cx.nav.push(Nav::Pop),
             SAct::PickEncounter(i) => self.encounter = i,
+            SAct::PickRuleset(i) => self.ruleset = i.min(RULESETS.len() - 1),
             SAct::Arena => {
                 let list = Self::encounters(cx);
                 if let Some((_, world, id)) = list.get(self.encounter) {
-                    let b = crate::battle::BattleScreen::arena(cx, world.clone(), id);
+                    let ruleset = RULESETS[self.ruleset].1.map(String::from);
+                    let b = crate::battle::BattleScreen::arena_with(cx, world.clone(), id, ruleset);
                     cx.nav.push(Nav::Push(Box::new(b)));
                 }
             }
@@ -222,7 +231,9 @@ impl Screen<GameCx> for SceneRunner {
             ui.button(id, Rect::new(r.x + r.w - 50, r.y + 6, 45, 15), "Launch", act.clone(), true);
             if let SAct::Arena = act {
                 let labels: Vec<String> = encounters.iter().map(|e| e.0.clone()).collect();
-                ui.select("runner.arena.encounter", Rect::new(r.x + 5, pick_y, r.w - 60, 14), &labels, self.encounter, SAct::PickEncounter, !encounters.is_empty(), tip("Encounter", "The battle the arena launches."));
+                ui.select("runner.arena.encounter", Rect::new(r.x + 5, pick_y, r.w - 144, 14), &labels, self.encounter, SAct::PickEncounter, !encounters.is_empty(), tip("Encounter", "The battle the arena launches."));
+                let rules: Vec<String> = RULESETS.iter().map(|x| x.0.to_string()).collect();
+                ui.select("runner.arena.ruleset", Rect::new(r.x + r.w - 135, pick_y, 80, 14), &rules, self.ruleset, SAct::PickRuleset, true, tip("Rules", "World: the encounter's world's ruleset (classic for a catalog encounter). Classic or Timeline: play it by those rules."));
             } else if extra {
                 let names: Vec<String> = worlds.iter().map(|w| cx.world_name(w)).collect();
                 ui.select(&format!("{id}.world"), Rect::new(r.x + 5, pick_y, 140, 14), &names, self.world % worlds.len().max(1), SAct::PickWorld, worlds.len() > 1, tip("World", "The world to explore."));
@@ -245,7 +256,7 @@ impl Screen<GameCx> for SceneRunner {
     fn state(&self, cx: &Cx) -> Value {
         let world = self.world_id(cx);
         let start = world.as_deref().map(|w| Self::starts(&cx.data, w)).and_then(|st| st.get(self.location.min(st.len().saturating_sub(1))).cloned());
-        json!({"encounter": Self::encounters(cx).get(self.encounter).map(|e| e.0.clone()), "world": world, "start": start.map(|p| p.1.unwrap_or_else(|| "world_map".into()))})
+        json!({"encounter": Self::encounters(cx).get(self.encounter).map(|e| e.0.clone()), "ruleset": RULESETS[self.ruleset].0, "world": world, "start": start.map(|p| p.1.unwrap_or_else(|| "world_map".into()))})
     }
 
     widget_plumbing!();

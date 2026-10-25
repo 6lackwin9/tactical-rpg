@@ -244,10 +244,12 @@ impl PlanEntry {
         cmd.name = s.name.clone();
         cmd.ap_cost = self.skill_ap;
         cmd.stance_switch_cost = self.switch_ap;
-        cmd.stance_on_start = if skill::keeps_stance(s) { None } else { Some(skill::stance(s)) };
-        cmd.stance_on_end = skill::ends_in_stance(s);
+        // RULESET1_INTENT IN3: under round_intent no command enters, ends in or breaks a stance
+        let stances = w.ruleset.stances();
+        cmd.stance_on_start = if !stances || skill::keeps_stance(s) { None } else { Some(skill::stance(s)) };
+        cmd.stance_on_end = if stances { skill::ends_in_stance(s) } else { None };
         if skill::kind(s) == Kind::Attack {
-            cmd.disrupt_break = skill::is_stance_break(s);
+            cmd.disrupt_break = stances && skill::is_stance_break(s);
             cmd.exploit = s.exploit.clone();
             cmd.exploit_consume = s.exploit_consume;
         }
@@ -977,7 +979,7 @@ impl Plan {
         let p = self.add_entry(w, c, st, sid, index, None, &[], 0, &cells);
         if p.is_empty() {
             let stance_before = st.entries.last().unwrap().stance_before;
-            let attack_stance = skill::stance_during(s, stance_before);
+            let attack_stance = if w.ruleset.stances() { skill::stance_during(s, stance_before) } else { stance_before };
             let pos = st.pos;
             let mut total = 0;
             for &foe in w.foes_of(c) {
@@ -1082,15 +1084,18 @@ impl Plan {
         e.cells = cells.to_vec();
         e.direction = dirs.first().copied().unwrap_or(ZERO);
         e.skill_ap = skill::ap_cost(s, Some(u)) * if skill::kind(s) == Kind::Move { (dirs.len() as i32).max(1) } else { 1 };
-        e.switch_ap = skill::switch_cost(s, st.stance);
+        // RULESET1_INTENT IN3: under round_intent the stance stays (Neutral) and switching costs nothing
+        let stances = w.ruleset.stances();
+        e.switch_ap = if stances { skill::switch_cost(s, st.stance) } else { 0 };
         e.stance_before = st.stance;
-        e.stance_after = skill::stance_after(s, st.stance);
+        e.stance_after = if stances { skill::stance_after(s, st.stance) } else { st.stance };
         e.pos_before = st.pos;
         e.pos_after = st.pos;
         if skill::kind(s) == Kind::Attack && !skill::is_area(s) {
             if let Some(f) = foe {
                 let from = dirs.iter().fold(st.pos, |a, d| a + *d);
-                e.est_damage = self.estimate_hit(w, c, st, sid, skill::stance_during(s, e.stance_before), f, from);
+                let attack_stance = if stances { skill::stance_during(s, e.stance_before) } else { e.stance_before };
+                e.est_damage = self.estimate_hit(w, c, st, sid, attack_stance, f, from);
             }
         }
         let total = e.total_ap();

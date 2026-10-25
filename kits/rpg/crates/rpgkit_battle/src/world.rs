@@ -129,6 +129,8 @@ pub struct World {
     /// Every HP change in order while someone follows them (Combatant.health_changed): (unit, HP after). None = off;
     /// a battle's metrics switch it on and drain it. Battle code changes HP only through `damage` and `heal`.
     pub hp_journal: Option<Vec<(UnitId, i32)>>,
+    /// The battle's rules (RULESET1: `EncounterDef.ruleset`); every rule beyond classic reads its flag here first.
+    pub ruleset: rpgkit_rules::ruleset::Ruleset,
 }
 
 impl World {

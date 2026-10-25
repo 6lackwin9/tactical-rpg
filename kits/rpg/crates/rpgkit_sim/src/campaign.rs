@@ -101,9 +101,11 @@ fn run_party(r: &mut Runner, ids: &[String], fights: &[Enc], seed: i64) -> Run {
             }
         }
         r.rounds_override = enc.max_rounds;
+        r.world_ruleset = enc.ruleset.clone();
         let res = r.fight(&up, &enc.enemies, seed + i as i64 * SEED_STEP, &enc.base);
         r.start_hp.clear();
         r.rounds_override = 0;
+        r.world_ruleset = None;
         if res.skipped {
             return Run { wins, fell_at: 0, fell_fight: -1, hp: hp_after, skipped: Some(i + 1), rewards, gold };
         }

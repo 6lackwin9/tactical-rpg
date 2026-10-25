@@ -28,6 +28,7 @@ pub fn run_comp(r: &mut Runner, comp: &[String], enc_id: &str) -> FightSet {
     r.objective_wins = is_world;
     r.rounds_override = enc.max_rounds;
     r.key_kills = enc.key_kills.clone();
+    r.world_ruleset = enc.ruleset.clone();
     let mut acc = FightSet { purse_mean: enc.purse.map_or(0.0, |(lo, hi)| (lo + hi) as f64 / 2.0), ..FightSet::default() };
     for sv in a.spend_variants() {
         r.spend_variant = sv;
@@ -41,6 +42,7 @@ pub fn run_comp(r: &mut Runner, comp: &[String], enc_id: &str) -> FightSet {
     r.objective_wins = false;
     r.rounds_override = 0;
     r.key_kills.clear();
+    r.world_ruleset = None;
     acc.party_ids = party;
     acc
 }

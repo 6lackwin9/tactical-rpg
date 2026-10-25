@@ -1,5 +1,5 @@
 //! Typed content catalog (classes, units, skills, items, passives, encounters, terrain, and the engine-only derived
-//! stats of DERIVE1).
+//! stats of DERIVE1 and ruleset rows of RULESET1).
 //!
 //! Source today: the resolved catalog the Godot exporter writes (the game's `parity/out/catalog.json`), i.e. exactly the
 //! entries Godot's `ContentCatalog.entries(kind)` returns after item-family resolution and schema normalisation.
@@ -474,6 +474,8 @@ pub struct Catalog {
     pub terrain: IndexMap<String, Obj>,
     /// Derived-stat rows in the loader's order (topological: a row after the rows its formula names).
     pub derived_stats: IndexMap<String, DerivedStatDef>,
+    /// Ruleset rows (RULESET1-R, kind `rulesets`; engine-only), raw: `rpgkit_rules::ruleset::Ruleset` reads them.
+    pub rulesets: IndexMap<String, Obj>,
     skill_index: IndexMap<String, usize>,
     tier_one: IndexMap<String, usize>,
 }
@@ -512,6 +514,9 @@ impl Catalog {
         }
         for o in rows("terrain") {
             cat.terrain.insert(string(&o, "id", ""), o);
+        }
+        for o in rows("rulesets") {
+            cat.rulesets.insert(string(&o, "id", ""), o);
         }
         for d in rows("derived_stats").iter().filter_map(DerivedStatDef::from_obj) {
             cat.derived_stats.insert(d.id.clone(), d);

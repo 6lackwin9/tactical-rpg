@@ -13,6 +13,7 @@ use rpgkit_rules::carry;
 use rpgkit_rules::damage::{self, Hit, HitInput, CRIT_MULT};
 use rpgkit_rules::gear::{class_can_equip, item_fits_slot, off_hand_ok, Equipment, Slot};
 use rpgkit_rules::stats::Proficiency;
+use rpgkit_rules::ruleset::Ruleset;
 use rpgkit_rules::status;
 use rpgkit_rules::unit::{Stance, Unit};
 use rpgkit_rules::build_unit;
@@ -161,6 +162,9 @@ pub struct DojoSession {
     counter: usize,
     /// Stage effects not yet shown (the screen drains them).
     pub fx: Vec<Fx>,
+    /// RULESET1-R: the rules the dojo applies (the Classic / Timeline toggle; classic by default). Under
+    /// `round_intent` the classic stances are inert: no switch AP, no stance change, no stance shift.
+    pub ruleset: Ruleset,
 }
 
 impl DojoSession {
@@ -203,12 +207,15 @@ impl DojoSession {
             log: Vec::new(),
             counter: 0,
             fx: Vec::new(),
+            ruleset: Ruleset::classic(),
         }
     }
 
     /// DojoSession.reset: everything back to the baseline, the log too.
     pub fn reset(&mut self) {
+        let ruleset = self.ruleset.clone();
         *self = Self::new(self.cat.clone());
+        self.ruleset = ruleset;
         self.log_event("EVENT", "Dojo Reset", "Heroes, stash, loadouts and dummy restored to baseline", 0, "RESET");
         self.fx("text", true, "Dojo Reset", Tone::Info);
     }
@@ -474,9 +481,29 @@ impl DojoSession {
         }
     }
 
+    /// RULESET1-R: plays by `ruleset` from now on (the toggle); the log says which.
+    pub fn set_ruleset(&mut self, ruleset: Ruleset) {
+        if ruleset == self.ruleset {
+            return;
+        }
+        self.ruleset = ruleset;
+        let name = self.ruleset.name.clone();
+        let detail = if self.ruleset.stances() { format!("{name} rules: stances and their switch AP apply") } else { format!("{name} rules: no stances, no switch AP") };
+        self.log_event("EVENT", "Ruleset", &detail, 0, &name.to_uppercase());
+    }
+
+    /// The stance switch AP of `s` now (0 when the ruleset's stances are inert).
+    fn switch_ap(&self, s: &SkillDef) -> i32 {
+        if self.ruleset.stances() {
+            skill::switch_cost(s, self.hero().stance)
+        } else {
+            0
+        }
+    }
+
     /// AP the hero would pay now: the skill's cost + the automatic stance switch.
     pub fn skill_ap(&self, s: &SkillDef) -> i32 {
-        skill::ap_cost(s, Some(self.hero())) + skill::switch_cost(s, self.hero().stance)
+        skill::ap_cost(s, Some(self.hero())) + self.switch_ap(s)
     }
 
     /// DojoSession.use_skill: pays AP (debt allowed) and switches stance, then strikes (attack), raises a guard
@@ -492,8 +519,8 @@ impl DojoSession {
             return self.fail(&s.name, "The dummy is defeated - use Full Heal");
         }
         let cost = self.skill_ap(&s);
-        let switch = skill::switch_cost(&s, self.hero().stance);
-        let after = skill::stance_after(&s, self.hero().stance);
+        let switch = self.switch_ap(&s);
+        let after = if self.ruleset.stances() { skill::stance_after(&s, self.hero().stance) } else { self.hero().stance };
         let h = self.hero_mut();
         h.ap -= cost;
         h.set_stance(after);
@@ -576,7 +603,9 @@ impl DojoSession {
         }
         // Attacking: the dummy drops its guard and enters the skill's stance.
         self.dummy.guard = 0.0;
-        self.dummy.set_stance(skill::stance(&s));
+        if self.ruleset.stances() {
+            self.dummy.set_stance(skill::stance(&s));
+        }
         let ranged = self.dummy.attack_range > 1 && !skill::is_off_hand(&s);
         let roll = self.rng.randf();
         let res = damage::compute(&self.dummy, &self.heroes[self.active], HitInput { ranged, offhand: skill::is_off_hand(&s), skill_mult: s.power_mult, crit_roll: Some(roll), ..HitInput::default() });
@@ -629,6 +658,9 @@ impl DojoSession {
 
     /// Cycles the hero's stance: Neutral -> Offensive -> Tactical -> Defensive -> Neutral.
     pub fn shift_stance(&mut self) {
+        if !self.ruleset.stances() {
+            return self.fail("Stance Shift", &format!("{} rules have no stances", self.ruleset.name));
+        }
         let order = [Stance::Neutral, Stance::Offensive, Stance::Tactical, Stance::Defensive];
         let at = order.iter().position(|s| *s == self.hero().stance).unwrap_or(0);
         let next = order[(at + 1) % order.len()];
@@ -681,7 +713,9 @@ impl DojoSession {
             self.fx("text", false, "0% Mit", Tone::Good);
         } else {
             self.dummy.guard = 0.5;
-            self.dummy.set_stance(Stance::Defensive);
+            if self.ruleset.stances() {
+                self.dummy.set_stance(Stance::Defensive);
+            }
             self.log_action("DEFEND", "Dummy Stance", "Dummy guarding (Defensive stance) - hits halved", 50, "MITIGATED 50%", "", &name, false);
             self.fx("text", false, "50% Mit", Tone::Info);
         }

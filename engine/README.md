@@ -119,6 +119,10 @@ printf '%s\n' '{"cmd":"new","encounter":"goblin_skirmish"}' \
 Every mutating request is recorded; `{"cmd":"history"}` returns them (and the checkpoints: the round outcome after
 every concluded round), and feeding them to a fresh `serve` replays the battle exactly.
 
+`new` also takes `ruleset` (`classic` or `timeline`; default classic for a catalog encounter, the world's for a world
+encounter) and `rules` (`"-id,+id"`, extensions only; RULESET1-R); the CLI takes the same as
+`aegis battle <encounter> ruleset=<id> rules=<-id,+id>` and the sim as `ruleset=` / `rules=`.
+
 ## Playtest recordings and replay (PORT-PLAYTEST)
 
 While recording is on (the setting `record_playtests`, on in debug builds), the GUI keeps one recording per run in

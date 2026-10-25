@@ -90,6 +90,7 @@ Never delete or rewrite entries. When something is replaced, add a row with the 
 | 2026-10-25 | FX1 options: the effect table as a data field on skills and families (FQ1 b), a whole-frame shake (FQ2 b), hits shown at the pop with effects as decoration (FQ3 b) | not adopted | The table in code with numbers in tuning; the world layer shakes; hits show at the impact and autoplay waits (FX1 FQ1-FQ3 a) | Planner picks on the recommendations while the user is away (games/emberwake/docs/lore/OPEN_QUESTIONS.md section 4) |
 | 2026-10-25 | The Godot melee bump token tween (`fx_presets.gd`) | not ported | FX1's swing trail and impact sparks; the miss sidestep is ported smaller | The new effects carry the melee read |
 | 2026-10-25 | Godot schema parity over every kind | narrowed | `data_source.rs` no longer compares the kind `content.derived_stats` (`KINDS_AFTER_GODOT`); every other schema, catalog, world and game-data comparison stays | DERIVE1-S: engine-only derived-stat rows, Godot had none |
+| 2026-10-25 | Godot schema, loader and writer parity over world manifests and kinds | narrowed | `data_source.rs` strips `world.world` `ruleset`, `plan_reveal_flag` (also from each world's manifest) and the kind `content.rulesets`; `store.rs` strips the manifest lines `"ruleset": ""`, `"plan_reveal_flag": ""`; every other comparison stays | RULESET1-R: engine-only ruleset switch, Godot had none |
 
 New rows go at the end of the table above (append-only); this section stays below it.
 

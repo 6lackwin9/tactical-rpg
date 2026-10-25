@@ -11,6 +11,7 @@ pub mod item;
 pub mod map;
 pub mod quest;
 pub mod reward;
+pub mod ruleset;
 pub mod shop;
 pub mod simple;
 pub mod skill;
@@ -216,6 +217,10 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
     if kind == derived::KIND {
         // DERIVE1: the row checks the loader applies (fields, names, unique ids and labels, cycles)
         return derived::entry_errors(v, &content(kind, entry), current_id);
+    }
+    if kind == ruleset::KIND {
+        // RULESET1-R: the row checks the loader applies (fields, rules, intents, basics, numbers, unique ids)
+        return ruleset::entry_errors(v, &content(kind, entry), current_id);
     }
     let old_id = if current_id.is_empty() { json::s(entry, "id") } else { current_id.to_string() };
     let e = match kind {

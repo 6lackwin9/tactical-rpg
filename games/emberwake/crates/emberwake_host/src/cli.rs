@@ -3,6 +3,7 @@
 //!   aegis sim <mode> [level] [seeds] [key=value ...]   the balance sim (duel, tier, levels, group, stats, party, role,
 //!                                                      sweep, campaign; `aegis sim help` lists the keys)
 //!   aegis battle <encounter id> [seed=N] [preset=balanced] [log]              autoplay a catalog encounter
+//!                [ruleset=classic|timeline] [rules=-id,+id]               RULESET1: its rules (default classic)
 //! Data: the project's data/ folder (`data=<dir>`), read by the game's loader; `catalog=<path>` (or $AEGIS_CATALOG)
 //! reads a resolved Godot export instead (battle, serve); `sim` reads a Godot export folder with `parity=<dir>`. A sim
 //! key given twice keeps its last value.
@@ -23,7 +24,7 @@ pub struct Emberwake;
 
 impl Game for Emberwake {
     type Content = emberwake_content::store::RpgContent;
-    const USAGE: &'static str = "aegis sim <mode> [level] [seeds] [key=value ...]   (aegis sim help: modes and keys)\naegis battle <encounter id> [seed=N] [preset=balanced] [log]";
+    const USAGE: &'static str = "aegis sim <mode> [level] [seeds] [key=value ...]   (aegis sim help: modes and keys)\naegis battle <encounter id> [seed=N] [preset=balanced] [ruleset=classic|timeline] [rules=-id,+id] [log]";
 
     fn run(&self, args: &Args) -> Option<Result<()>> {
         match (args.pos(0), args.pos(1)) {
@@ -136,6 +137,9 @@ fn battle(args: &Args) -> Result<()> {
     if let Some(seed) = args.keys.get("seed") {
         def.rng_seed = seed.parse()?;
     }
+    // RULESET1 3.1.3: a catalog encounter plays classic unless ruleset= picks one; rules= switches single extensions
+    def.ruleset = emberwake_rules::ruleset::Ruleset::of(&cat, &args.key("ruleset", "")).map_err(anyhow::Error::msg)?;
+    def.ruleset.adjust(&args.key("rules", "")).map_err(anyhow::Error::msg)?;
     let preset = args.key("preset", "balanced");
     let mut s = Session::start(cat.clone(), def, &IndexMap::new());
     let show_log = args.flag("log");

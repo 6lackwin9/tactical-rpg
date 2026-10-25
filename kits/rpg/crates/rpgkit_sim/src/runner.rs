@@ -143,6 +143,9 @@ pub struct Runner<'a> {
     pub key_kills: Vec<String>,
     /// The printed lines (the "§" lines of the Godot sim, without the mark).
     pub out: Vec<String>,
+    /// RULESET1: the ruleset of the world that resolves the encounter being fought (None: a catalog or generated fight);
+    /// `fight_ruleset` picks the fights' ruleset from it and the arguments.
+    pub world_ruleset: Option<rpgkit_rules::ruleset::Ruleset>,
 }
 
 impl<'a> Runner<'a> {
@@ -167,7 +170,13 @@ impl<'a> Runner<'a> {
             objective_wins: false,
             key_kills: Vec::new(),
             out: Vec::new(),
+            world_ruleset: None,
         }
+    }
+
+    /// The ruleset the next fight plays by (SimArgs::ruleset_for over `world_ruleset`).
+    pub fn fight_ruleset(&self) -> rpgkit_rules::ruleset::Ruleset {
+        self.args.ruleset_for(self.world_ruleset.as_ref())
     }
 
     pub fn print(&mut self, line: impl Into<String>) {
@@ -264,7 +273,9 @@ impl<'a> Runner<'a> {
         let characters: IndexMap<String, (String, String)> =
             left.iter().chain(right).chain(&waves).filter_map(|id| self.defs.get(id).and_then(|d| d.character.clone()).map(|c| (id.clone(), c))).collect();
         let roster = SimRoster { d: self.d, units: &self.units, characters };
-        let mut s = Session::start(self.d.cat.clone(), EncounterDef::from_obj(&entry), &roster);
+        let mut def = EncounterDef::from_obj(&entry);
+        def.ruleset = self.fight_ruleset();
+        let mut s = Session::start(self.d.cat.clone(), def, &roster);
         self.prepare(&mut s, jitter.as_mut());
         for &a in &s.w.allies.clone() {
             if let Some(&hp) = self.start_hp.get(&s.w.units[a].name) {

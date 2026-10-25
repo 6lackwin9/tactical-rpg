@@ -119,6 +119,8 @@ pub struct Enc {
     pub max_rounds: i32,
     /// Campaign: a filler fight before a story battle.
     pub extra: bool,
+    /// RULESET1: the ruleset of the world that resolves a world encounter (None: catalog or generated).
+    pub ruleset: Option<rpgkit_rules::ruleset::Ruleset>,
 }
 
 /// Party units simp_<class>_<i> (i = slot, 1-based) with the loadout / spend arguments.

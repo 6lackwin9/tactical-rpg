@@ -184,6 +184,17 @@ impl Data {
         PARTY_MAX
     }
 
+    /// RULESET1 3.1.1: the world's ruleset id: its own non-empty `ruleset`, else the nearest ancestor's, else classic.
+    pub fn ruleset_id(&self, w: &str) -> String {
+        let lineage = self.lineage(w);
+        rpgkit_rules::ruleset::world_ruleset(lineage.iter().rev().map(|lw| self.manifest(lw)))
+    }
+
+    /// The rules of the world's battles (classic when its ruleset has no row: the content check reports that).
+    pub fn ruleset(&self, w: &str) -> rpgkit_rules::ruleset::Ruleset {
+        rpgkit_rules::ruleset::Ruleset::of_or_classic(&self.cat, &self.ruleset_id(w))
+    }
+
     /// The world's own non-empty `start_party`, else the nearest ancestor's.
     pub fn start_party(&self, w: &str) -> Vec<String> {
         for lw in self.lineage(w).iter().rev() {

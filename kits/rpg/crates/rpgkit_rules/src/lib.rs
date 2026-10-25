@@ -6,6 +6,7 @@ pub mod carry;
 pub mod damage;
 pub mod derived;
 pub mod gear;
+pub mod ruleset;
 pub mod stats;
 pub mod status;
 pub mod unit;

@@ -27,6 +27,9 @@ pub struct Source {
 pub const CATALOG_KINDS: [&str; 7] = ["classes", "units", "skills", "items", "passives", "encounters", "terrain"];
 /// DERIVE1: the derived-stat rows, loaded into the catalog beside CATALOG_KINDS (Godot had no such kind).
 pub const DERIVED_KIND: &str = crate::check::derived::KIND;
+/// RULESET1-R: the ruleset rows, loaded into the catalog beside CATALOG_KINDS after the skills and derived stats they
+/// name (Godot had no such kind).
+pub const RULESET_KIND: &str = crate::check::ruleset::KIND;
 /// WorldSchema.KINDS.
 pub const WORLD_KINDS: [&str; 13] = ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot", "dialogues", "shops", "routes"];
 
@@ -101,6 +104,8 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
         out.insert(kind.into(), Value::Array(read_kind(&dir, kind, &families, errors).into_iter().map(Value::Object).collect()));
     }
     out.insert(DERIVED_KIND.into(), Value::Array(read_derived(&dir, errors).into_iter().map(Value::Object).collect()));
+    let rulesets = read_rulesets(&dir, &out, errors);
+    out.insert(RULESET_KIND.into(), Value::Array(rulesets.into_iter().map(Value::Object).collect()));
     out.insert("item_families".into(), Value::Array(families.into_iter().map(Value::Object).collect()));
     Value::Object(out)
 }
@@ -123,6 +128,34 @@ fn read_derived(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
         errors.extend(found.iter().map(|m| format!("{at}: derived stat '{}': {m}", sget(row, "id", ""))));
     }
     checked.order.iter().map(|&i| rows[i].clone()).collect()
+}
+
+/// RULESET1-R (engine-only, beside CATALOG_KINDS): the ruleset rows that pass their checks (`check::ruleset`) against
+/// the loaded skills and derived stats (`loaded`); every problem goes to `errors` and its row is skipped.
+fn read_rulesets(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{RULESET_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(RULESET_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let skills = json::arr(json::get(loaded, "skills"));
+    let skill_intent = |id: &str| crate::check::ruleset::skill_intent_in(skills, id);
+    let derived: Vec<String> = json::arr(json::get(loaded, DERIVED_KIND)).iter().map(|e| json::s(json::dict(e), "id")).collect();
+    let checked = crate::check::ruleset::check_rows(&rows, &crate::check::ruleset::Refs { skill_intent: &skill_intent, derived: &derived });
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: ruleset '{}': {m}", sget(&row, "id", ""))));
+        }
+    }
+    kept
 }
 
 /// ContentCatalog._read_kind.

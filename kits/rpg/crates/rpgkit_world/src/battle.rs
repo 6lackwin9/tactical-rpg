@@ -8,10 +8,18 @@ use crate::data::Data;
 use crate::state::GameState;
 use crate::{progression, purse, quest, rolls};
 use aegis_core::json::{self, int, Dict};
-use rpgkit_battle::session::{Fate, Session};
+use rpgkit_battle::session::{EncounterDef, Fate, Session};
 use serde_json::Value;
 
 pub const OUTCOMES: [&str; 3] = ["won", "lost", "fled"];
+
+/// GameEncounter / WorldEncounter: the battle of encounter row `entry` resolved in `world`, with the ruleset of that
+/// world (RULESET1 3.1.2: a battle plays by the world that owns the encounter; ENCOUNTER2's linked rooms too).
+pub fn encounter_def(d: &Data, world: &str, entry: &Dict) -> EncounterDef {
+    let mut def = EncounterDef::from_obj(entry);
+    def.ruleset = d.ruleset(world);
+    def
+}
 
 /// WorldEncounter's roster: refs are world characters resolved in `world`; each spawns as its base unit wearing the
 /// character (WorldFactory.unit_entry) and then gets its named items, passives and tuning (apply_character).

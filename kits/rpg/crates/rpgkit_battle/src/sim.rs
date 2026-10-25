@@ -28,6 +28,8 @@ pub struct FightSpec {
     pub base: Option<serde_json::Map<String, Value>>,
     /// SimArgs `pouch=`: every party unit's battle pouch becomes these catalog consumables and its AI may use items.
     pub pouch: Vec<String>,
+    /// RULESET1: the rules of the fight (SimArgs `ruleset=`, `rules=`; classic by default).
+    pub ruleset: rpgkit_rules::ruleset::Ruleset,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -158,7 +160,8 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
     obj.insert("enemies".into(), json!(spec.right));
     obj.insert("max_rounds".into(), json!(spec.cap));
     obj.insert("rng_seed".into(), json!(spec.seed));
-    let def = EncounterDef::from_obj(obj);
+    let mut def = EncounterDef::from_obj(obj);
+    def.ruleset = spec.ruleset.clone();
     let mut s = Session::start(cat, def, units);
     if let Some(r) = jitter_rng.as_mut() {
         jitter_start(&mut s.w, r);

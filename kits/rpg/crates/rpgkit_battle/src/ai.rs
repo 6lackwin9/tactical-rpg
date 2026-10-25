@@ -273,7 +273,7 @@ fn combo_ordered(w: &World, plan: &Plan, skills: &[SkillId], target: UnitId) -> 
     let (mut first, mut middle, mut last) = (Vec::new(), Vec::new(), Vec::new());
     for &sid in skills {
         let s = &w.cat.skills[sid];
-        let breaks = guarded && skill::is_stance_break(s);
+        let breaks = guarded && w.ruleset.stances() && skill::is_stance_break(s);
         let applies = !skill::exploit_match(&s.exploit, t, &[]).0.is_empty();
         if breaks || applies {
             first.push(sid);

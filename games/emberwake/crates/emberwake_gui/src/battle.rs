@@ -21,7 +21,7 @@ use aegis_ui::ui::{Gfx, Tip, Ui, Widget, BODY, H, RADIUS, SMALL, TITLE, W};
 use emberwake_battle::command::CmdKind;
 use emberwake_battle::grid::{V2, GRID_H, GRID_W};
 use emberwake_battle::plan::expected;
-use emberwake_battle::session::{EncounterDef, Phase, Prebuilt, Session, StartGrant};
+use emberwake_battle::session::{Phase, Prebuilt, Session, StartGrant};
 use aegis_core::assets::{ClipFrame, ClipPlayer, Facing};
 use aegis_ui::art::Art;
 use aegis_ui::canvas::Image;
@@ -367,6 +367,9 @@ pub struct BattleScreen {
     seed: Option<i64>,
     /// Arena only: the world the encounter belongs to (played with that world's characters); None = catalog.
     arena_world: Option<String>,
+    /// Arena only (RULESET1-R): the ruleset picked in the Scene Runner (classic or timeline); None = the encounter's own
+    /// (its world's, classic for a catalog encounter).
+    arena_ruleset: Option<String>,
     /// Session events already shown in the message bar.
     events_seen: usize,
     /// Resolver log lines already sounded.
@@ -420,6 +423,7 @@ impl BattleScreen {
             encounter: cx.encounter.clone(),
             seed: cx.seed,
             arena_world: None,
+            arena_ruleset: None,
             events_seen: 0,
             log_seen: 0,
             slot: None,
@@ -516,9 +520,15 @@ impl BattleScreen {
     /// The arena on any encounter (Scene Runner): world None = a catalog encounter, else that world's encounter
     /// played with its authored party of world characters (WorldEncounter).
     pub fn arena(cx: &Cx, world: Option<String>, encounter: &str) -> Self {
+        Self::arena_with(cx, world, encounter, None)
+    }
+
+    /// `arena` played by `ruleset` (classic or timeline; None = the encounter's own: RULESET1 3.1.3).
+    pub fn arena_with(cx: &Cx, world: Option<String>, encounter: &str, ruleset: Option<String>) -> Self {
         let mut b = Self::blank(cx, Mode::Arena);
         b.encounter = encounter.to_string();
         b.arena_world = world;
+        b.arena_ruleset = ruleset;
         b.start_battle();
         b
     }
@@ -536,6 +546,7 @@ impl BattleScreen {
             None => (None, encounter),
         };
         b.seed = first["seed"].as_i64();
+        b.arena_ruleset = first["ruleset"].as_str().filter(|r| !r.is_empty()).map(String::from);
         let until = take_over.as_ref().map(|(_, at)| *at);
         let report = aegis_host::playtest::replay(&mut b.host, session, until);
         if b.host.session.is_none() {
@@ -576,7 +587,8 @@ impl BattleScreen {
         let hit_world = s(hit, "_world");
         let world = if d.lineage(&gs.world_id).contains(&hit_world) { gs.world_id.clone() } else { hit_world };
         let entry = d.resolve(&world, "encounters", &s(hit, "id"));
-        let mut def = EncounterDef::from_obj(entry);
+        // RULESET1 3.1.2: the battle plays by the ruleset of the world that resolves the encounter
+        let mut def = emberwake_world::battle::encounter_def(&d, &world, entry);
         let zone = s(fight, "zone");
         if !zone.is_empty() {
             def.zone = zone;
@@ -685,6 +697,9 @@ impl BattleScreen {
         let mut req = json!({"cmd": "new", "encounter": encounter});
         if let Some(s) = self.seed {
             req["seed"] = json!(s);
+        }
+        if let Some(r) = &self.arena_ruleset {
+            req["ruleset"] = json!(r);
         }
         let reply = self.host.handle(&req);
         if reply["ok"] != json!(true) {

@@ -6,6 +6,9 @@
 //! Requests (`cmd`; `history` is the protocol's own):
 //!   new {encounter, seed?}                     start a catalog encounter, or a world one ("<world>:<id>", when the
 //!                                              host has the world data)
+//!       {ruleset?, rules?}                     RULESET1: classic or timeline (default: classic for a catalog
+//!                                              encounter, the world's for a world one); rules "-id,+id" switches
+//!                                              single extensions
 //!   state                                      round, block, phase, outcome, units, grid
 //!   intents                                    every scheduled action this round (enemies included)
 //!   skills {unit}                              the skills the unit can plan now
@@ -35,6 +38,7 @@ use rpgkit_battle::session::{EncounterDef, Phase, Session};
 use rpgkit_battle::skill::{self, Kind};
 use rpgkit_battle::world::UnitId;
 use rpgkit_data::Catalog;
+use rpgkit_rules::ruleset::Ruleset;
 use indexmap::IndexMap;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -51,6 +55,19 @@ pub struct Battle {
 
 /// The game's command host (the engine protocol over the battle command set; derefs to `Battle`).
 pub type Host = aegis_host::Host<Battle>;
+
+/// RULESET1 3.1.3: the ruleset a `new` request picks (`ruleset`: classic or timeline; absent or "" = `default`), with
+/// its `rules` ("-id,+id": single extensions switched).
+fn picked_ruleset(cat: &Catalog, req: &Value, default: Ruleset) -> Result<Ruleset, String> {
+    let mut r = match req.get("ruleset").and_then(Value::as_str).filter(|s| !s.is_empty()) {
+        Some(id) => Ruleset::of(cat, id)?,
+        None => default,
+    };
+    if let Some(spec) = req.get("rules").and_then(Value::as_str) {
+        r.adjust(spec)?;
+    }
+    Ok(r)
+}
 
 fn err(msg: impl Into<String>) -> Value {
     json!({"ok": false, "error": msg.into()})
@@ -118,6 +135,11 @@ impl Battle {
         if let Some(seed) = req.get("seed").and_then(Value::as_i64) {
             def.rng_seed = seed;
         }
+        // RULESET1 3.1.2: a catalog encounter is classic unless the request picks a ruleset
+        match picked_ruleset(&self.cat, req, Ruleset::classic()) {
+            Ok(r) => def.ruleset = r,
+            Err(e) => return err(e),
+        }
         let s = Session::start(self.cat.clone(), def, &IndexMap::new());
         let state = state_of(&s);
         self.begin(s);
@@ -130,9 +152,13 @@ impl Battle {
         if entry.is_empty() {
             return err(format!("unknown encounter '{local}' in world '{world}'"));
         }
-        let mut def = EncounterDef::from_obj(entry);
+        let mut def = rpgkit_world::battle::encounter_def(&d, world, entry);
         if let Some(seed) = req.get("seed").and_then(Value::as_i64) {
             def.rng_seed = seed;
+        }
+        match picked_ruleset(&d.cat, req, def.ruleset.clone()) {
+            Ok(r) => def.ruleset = r,
+            Err(e) => return err(e),
         }
         def.id = format!("{world}:{local}");
         let roster = rpgkit_world::battle::WorldRoster { d: &d, world: world.to_string() };
