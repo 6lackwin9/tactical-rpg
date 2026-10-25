@@ -3,9 +3,9 @@
 Status: canon for Option A (user 2026-10-25, Q-01): the Clerisy is a selfish elite that feeds the dreaming horror for
 its own eternal youth, while the horror is blamed for the common folk's woes. Option B stays below as the road not
 taken. The Tithing's history and what commoners know are decided (user 2026-10-25, Q-04 / Q-16: option B with b2 of
-[tithing_options.md](tithing_options.md); CANON 3.6; see "The precedent and the founding" below). Still open: when the
-player learns the truth (Q-02) and whether ordinary Spent drink marrow (Q-03). Game text says only what the Clerisy
-preaches and what the player sees until the reveal. Part of [CANON.md](../CANON.md).
+[tithing_options.md](tithing_options.md); CANON 3.6; see "The precedent and the founding" below). Decided 2026-10-25 (user): the player gets a hint at the Embalming Cloisters (2.4) and the full reveal
+from Malachi before node 21, a fixed beat whatever the doctrine (Q-02, G-08); only the Clerisy drinks marrow (Q-03); the
+titan's raw black marrow and the rendered marrow are two substances (G-33).
 
 ## The question
 

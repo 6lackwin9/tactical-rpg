@@ -181,16 +181,16 @@ closed keeps its row, marked "Resolved (date): ...".
 | G-05 | Ruthven: fought or not, and his fate | Q-26 | - | Q-26 rec |
 | G-06 | Wants and fates of Lazar, Ulric and Ysolde; Lazar's faction | new; Q-76 | (a) each dies at their node, except Ysolde, who lives if Malachi mediates; (b) per-boss calls | a |
 | G-07 | Why the Awakening Chorus wants the titan awake, and whether it knows the truth | new | (a) it knows the dream is fed and wants the harvest ended; (b) it worships the titan and knows nothing | a |
-| G-08 | Malachi is the truth source, yet he stops talking to a strict Preservationist cell | new | (a) the reveal is a fixed beat whatever the doctrine; (b) a second source carries it (Maren's texts, but Maren may be captured) | a |
-| G-09 | When the player learns the truth | Q-02 | - | Q-02 rec |
-| G-10 | Spent and marrow; how the regime's officers act with purpose | Q-03, Q-06 | - | rec in Q |
+| G-08 | Malachi is the truth source, yet he stops talking to a strict Preservationist cell | new | (a) the reveal is a fixed beat whatever the doctrine; (b) a second source carries it (Maren's texts, but Maren may be captured) | Resolved (2026-10-25): a, the reveal is a fixed beat whatever the doctrine; Malachi's silence affects only favours |
+| G-09 | When the player learns the truth | Q-02 | - | Resolved (2026-10-25): Q-02 a |
+| G-10 | Spent and marrow; how the regime's officers act with purpose | Q-03, Q-06 | - | Resolved (2026-10-25): Q-03 a, Q-06 a |
 | G-11 | What Maren's forbidden texts reveal, and where it pays off | Q-07 | - | Resolved (2026-10-25): a chronicle of the first Great Tithing; hints in Act 1, confirmed at 2.4 and 2.6 (CANON 3.6) |
-| G-12 | Maren's, Dunstan's and Elyse's wants; Hollis's personal hook (Wren); Dunstan's and Elyse's Act 1 hooks | Q-28 | - | Q-28 rec |
+| G-12 | Maren's, Dunstan's and Elyse's wants; Hollis's personal hook (Wren); Dunstan's and Elyse's Act 1 hooks | Q-28 | - | Resolved in part (2026-10-25): Q-28 a; the design lane writes Dunstan's and Elyse's hooks |
 | G-13 | Kaelen's graft trial; Hollis's eye as an Act 2 hook | Q-08; Hollis new | (a) the design lane writes Hollis's hook with Q-08; (b) backstory only | a |
-| G-14 | Crucible staying beats and keepsake names | Q-35 | - | design lane |
-| G-15 | The captured founder: rescue; fate if node 20 is skipped (and with it Nemeth's) | Q-33; skip new | (a) they stay the Clerisy's saint-aberration, named in the ending text; (b) they appear in the Dreaming Core fight | Rescue closed in practice by the 2.4 sighting (Q-33 a); the skip fate: a |
-| G-16 | Surviving founders' Act 2-3 personal arcs (only Vesper's feud and Vane's bounty are proposed) | Q-40 (variants); new | (a) one loyalty mission per founder in Act 2; (b) hub dialogue only | a, when Act 2 is specced |
-| G-17 | Bram's and Aline's fates: in sieges and in each ending | Q-22; endings new | (a) each ending text states both fates; sieges keep them as protect targets; (b) either can die in a lost siege | a |
+| G-14 | Crucible staying beats and keepsake names | Q-35 | - | Resolved (2026-10-25): the design lane writes them (Q-35) |
+| G-15 | The captured founder: rescue; fate if node 20 is skipped (and with it Nemeth's) | Q-33; skip new | (a) they stay the Clerisy's saint-aberration, named in the ending text; (b) they appear in the Dreaming Core fight | Resolved (2026-10-25): a, skipped: the founder stays the Clerisy's saint-aberration, named in the ending text, and Nemeth survives |
+| G-16 | Surviving founders' Act 2-3 personal arcs (only Vesper's feud and Vane's bounty are proposed) | Q-40 (variants); new | (a) one loyalty mission per founder in Act 2; (b) hub dialogue only | Resolved (2026-10-25): a, one loyalty mission per founder in Act 2, written when Act 2 is specced |
+| G-17 | Bram's and Aline's fates: in sieges and in each ending | Q-22; endings new | (a) each ending text states both fates; sieges keep them as protect targets; (b) either can die in a lost siege | Resolved (2026-10-25): a |
 | G-18 | When the player hears Aline's draught discovery | new | (a) her first Slab dialogue in Act 1; (b) the hearth scene | a (the hearth lines are written without it) |
 | G-19 | Tess after Pip's rescue | new | (a) no further arc; (b) an Act 2-3 beat | a (scope) |
 | G-20 | Named stakes (Pip, Ida) when a lesser tithing comes first; Ida's and Corvo's fate | Q-16; new | (a) a lesser tithing takes any named stake not yet freed; (b) named stakes are safe until their own job fails | a |
@@ -199,11 +199,11 @@ closed keeps its row, marked "Resolved (date): ...".
 | G-23 | Act 1 Breach ends the run (Q-13 decided): what keeps it out of reach of normal play, which screen shows, and the story beat | new | (a) the Extinguished screen with its own text (the Sluice is found), after a loud Lockdown warning in the hub; (b) a separate failure screen | Resolved in part (2026-10-25): the Extinguished screen (CANON 2.6); small inputs and a warning at each threshold (spec with Q-15); story text open (rec: a) |
 | G-24 | The Great Tithing: why now, precedent, what commoners know | Q-04, Q-16 (story) | see [tithing_options.md](background/tithing_options.md) | Resolved (2026-10-25): option B with b2, tied to the Clerisy's founding; why now: the cell's raids (CANON 3.6) |
 | G-25 | The true Tithing date and the Act 3 day budget | Q-17 | - | Q-17 rec (the 2.4 relabel is decided, CANON 2.6) |
-| G-26 | Bell resonance in Act 2 and its effect | Q-09, Q-10 | - | user |
+| G-26 | Bell resonance in Act 2 and its effect | Q-09, Q-10 | - | Resolved (2026-10-25): Q-09 a |
 | G-27 | The Reliquary "first Extinguishers"; what caused the Extinguishing | Q-12; cause new | see tithing options B | Resolved (2026-10-25): they are the Clerisy's founders, who held the first Great Tithing (Q-12 a); the cause stays a mystery (b2) |
 | G-28 | Defeat in the final battle | Q-21 | - | Q-21 rec |
 | G-29 | Guests' ages and who can be sworn in | Q-39 | - | Q-39 rec |
 | G-30 | Bram's quest act (Jessop) | Q-27 | - | Q-27 rec |
-| G-31 | When the player learns the marrow is rendered from the tithed, and meets the Lullaby Houses; what Aline knew | new | (a) 2.4: the Cloisters show it, the Houses in Lazar's records; (b) Act 3, Malachi | a |
-| G-32 | Conduit route: the Cloisters (High Bastion) render the marrow, yet the Marrow Conduits (node 18, Mantle Fissure) "pump from the titan's arteries" | new | (a) remains rise from the deep crypts by conduit to the Cloisters, then the cathedral; (b) node 18 carries the titan's own marrow | a |
-| G-33 | The titan's own black marrow (veins, Aline's dose, organs, the Fissure) against the rendered marrow | new | (a) two substances, raw and rendered; (b) one | a |
+| G-31 | When the player learns the marrow is rendered from the tithed, and meets the Lullaby Houses; what Aline knew | new | (a) 2.4: the Cloisters show it, the Houses in Lazar's records; (b) Act 3, Malachi | Resolved (2026-10-25): a, at 2.4; Aline recognises her old order's work |
+| G-32 | Conduit route: the Cloisters (High Bastion) render the marrow, yet the Marrow Conduits (node 18, Mantle Fissure) "pump from the titan's arteries" | new | (a) remains rise from the deep crypts by conduit to the Cloisters, then the cathedral; (b) node 18 carries the titan's own marrow | Resolved (2026-10-25): a |
+| G-33 | The titan's own black marrow (veins, Aline's dose, organs, the Fissure) against the rendered marrow | new | (a) two substances, raw and rendered; (b) one | Resolved (2026-10-25): a, two substances: raw black marrow mutates, rendered marrow is the Clerisy's elixir |

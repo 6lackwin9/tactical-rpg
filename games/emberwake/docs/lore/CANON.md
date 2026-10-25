@@ -184,7 +184,7 @@ gate, Brother Rook on street nodes. ENC-EVT-05 is not a siege in Act 1.
 | --- | --- | --- | --- | --- |
 | Prologue to Act 1 | The Sluice Undercroft opens (6 bunks) | starts at 0 (planner pick) | appears at 42 days, soft | board, travel, upkeep |
 | Act 1 to Act 2 | Stays the Sluice; the Slag Gate breach opens the High Bastion graph (node 08 on); the Scribe's Crypt is a proposal forward base | open (Q-14) | stays soft | Inoculation, Strain, Calcification, grafts, recruits, doctrine, permadeath and capture, sieges, the 8-bunk project; the captured founder's keepsake (an ACC heirloom, planner pick) |
-| Act 2 to Act 3 | Stays the Sluice; the Weeping Redoubt is a proposal forward base | carries on | turns hard | bell resonance (but 3.4 M2.5 already silences a resonance in Act 2: Q-09), Act 3 hazards |
+| Act 2 to Act 3 | Stays the Sluice; the Weeping Redoubt is a proposal forward base | carries on | turns hard | a continental wave of bell resonance (resonance itself starts in Act 2 in Upper Cinderreach and 2.5 silences it there, Q-09), Act 3 hazards |
 
 ### 3.4 Act 2 "The First Rupture": the High Bastion (proposal)
 
@@ -246,6 +246,17 @@ The Great Tithing (Q-04, Q-16, Q-12; [tithing_options.md](background/tithing_opt
 - Endings: A Preservation ends the cycle (no dream to feed); B Ascendancy hands the cell the chronicle and the source,
   so the next Great Tithing would be theirs to call; C Red Martyrdom sates the dream so the cycle never turns again.
   Losing (the Extinguished screen) is a second Extinguishing for the Unsealed.
+
+Core story (user 2026-10-25): only the Clerisy drinks marrow, and the draughts suppress dissent, not competence (Q-03,
+Q-06). Two substances: the titan's raw black marrow mutates whoever touches it (veins, Aline's dose, organs), the
+rendered marrow is the Clerisy's elixir of youth (G-33); the tithed are steeped in the deep crypts, rendered in Lazar's
+Cloisters and piped up to the cathedral, the Marrow Conduits (node 18) being the deep end of that line (G-32). The
+player gets a hint and the rendering at 2.4, where Aline recognises her old order's work, and the full truth from
+Malachi before node 21, a fixed beat whatever the doctrine (Q-02, G-08, G-31). Bell resonance starts in Act 2 as the
+raids hasten the waking (Q-09). If node 20 is skipped, the captured founder stays the saint-aberration, named in the
+ending text, and Nemeth survives (G-15); only the Crucible's founder fights at Nemeth's side (Q-94). Each surviving
+founder gets an Act 2 loyalty mission (G-16); every ending states Bram's and Aline's fates (G-17). The slice ends on a
+card after the Crucible escape (Q-87); Act 1 founder hooks pay off in play (Q-28).
 
 Nemeth (Q-25, G-01, G-02):
 

@@ -294,6 +294,8 @@ keeps its name and fields. It extends the tells and threat intel for both sides 
 drop on a change, all others keep their round durations (IN6). A Maneuver skill carries its own move, free with the
 target in its range (MV4-MV10), replacing the half-AP maneuver move; `tl_flank_cut` is now `tl_hamstring_cut`.
 
+Decided (user 2026-10-25): TQ22 (a), a plain move first; TQ23 (a), a `default_intent` field now.
+
 | Id | Question | Options | Recommendation |
 | --- | --- | --- | --- |
 | TQ22 | A Maneuver opener whose range does not cover the target (intent MV9; the canon is silent) | (a) a standard plain move first (1 AP a tile, at most 2 blocks, the round's one move), then the skill carries the rest; (b) Engage is not offered: the player picks Assault to close in | a: Maneuver stays usable from afar at the plain move's price; being in range still saves that AP |
