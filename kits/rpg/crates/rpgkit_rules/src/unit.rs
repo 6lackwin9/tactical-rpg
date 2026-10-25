@@ -289,7 +289,12 @@ impl Unit {
                         }
                     }
                     let stat = value::string(e, "stat", "");
-                    self.stats.modifiers.push(StatModifier::permanent(&stat, value::int(e, "value", 0), &format!("passive:{id}"), &tag));
+                    let mut m = StatModifier::permanent(&stat, value::int(e, "value", 0), &format!("passive:{id}"), &tag);
+                    // DERIVE1 4.1: the optional percent counts only on a derived id (base stats stay flat-only)
+                    if cat.derived_stats.contains_key(&stat) {
+                        m.percent = value::float(e, "percent", 0.0);
+                    }
+                    self.stats.modifiers.push(m);
                 }
                 "proficiency" => self.stats.proficiency.add_bonus(&value::string(e, "gear", ""), value::int(e, "levels", 0)),
                 "resist" => {

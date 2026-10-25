@@ -160,6 +160,8 @@ The order follows `CharacterStats::effective` (`stats.rs:216`) with the row's ca
 are computed on read and never stored on `Unit`, `UnitState` or a save. A row whose `rulesets` excludes the current
 ruleset reads as absent (`None`), so no rule and no screen sees it.
 
+As built (DERIVE1-R, 2026-10-25): every call also takes the ruleset id (`value(cat, ruleset, unit, id)`, `resist_chance(cat, ruleset, unit, id, potency)`) until RULESET1 adds a `Ruleset` type and a wrapper (RULESET1-P).
+
 API: `derived::value(cat, unit, id) -> Option<i32>`; `derived::breakdown(cat, unit, id) -> Option<Breakdown>` (raw,
 each input with its value, each flat and percent part with its source name, the cap hit if any, the value), for the
 tooltips and the Dojo.

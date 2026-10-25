@@ -4,6 +4,7 @@
 pub mod budget;
 pub mod carry;
 pub mod damage;
+pub mod derived;
 pub mod gear;
 pub mod stats;
 pub mod status;
