@@ -10,6 +10,8 @@ use serde_json::Value;
 pub const BASE_AP: i32 = 10;
 pub const GEAR_REACH_CAP: i32 = 1;
 pub const GROUPS: [&str; 2] = ["spell", "heal"];
+/// RULESET1 V4 (tasks 1.4): the widest foresight reveal range in tiles.
+pub const FORESIGHT_RANGE_MAX: i32 = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Stance {
@@ -91,6 +93,9 @@ pub struct Unit {
     pub passive_status_potency: i32,
     pub passive_spell_reach: i32,
     pub foresight_source: String,
+    /// RULESET1 V4: the widest `range` of the unit's foresight passives (0 = today's rule only); read only under the
+    /// rule `plan_badges`.
+    pub foresight_range: i32,
     /// Passive ids applied (Passives.apply: each once).
     pub passives: Vec<String>,
     /// Combat state (empty for a freshly built unit).
@@ -152,6 +157,7 @@ impl Unit {
             passive_status_potency: 0,
             passive_spell_reach: 0,
             foresight_source: String::new(),
+            foresight_range: 0,
             passives: Vec::new(),
             st: StatusState::default(),
             is_withdrawn: false,
@@ -343,7 +349,12 @@ impl Unit {
                     map.insert(key, cur.max(levels));
                     self.refresh_path_skills(cat);
                 }
-                "foresight" if !gear && self.foresight_source.is_empty() => self.foresight_source = id.clone(),
+                "foresight" if !gear => {
+                    if self.foresight_source.is_empty() {
+                        self.foresight_source = id.clone();
+                    }
+                    self.foresight_range = self.foresight_range.max(value::int(e, "range", 0).clamp(0, FORESIGHT_RANGE_MAX));
+                }
                 _ => {}
             }
         }

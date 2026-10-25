@@ -69,6 +69,10 @@ pub struct EncounterDef {
     /// RULESET1 3.1.3: the rules the battle plays by, set by its caller (the world bridge, the Combat Arena, the Dojo,
     /// the sim, the host); never read from the row (classic by default).
     pub ruleset: Ruleset,
+    /// RULESET1 V2, V3: every enemy's whole plan is revealed while planning (read only under `plan_badges`); set by its
+    /// caller (the world bridge from the world's `plan_reveal_flag`, the Arena and Dojo toggles, the host); never read
+    /// from the row (false by default).
+    pub plan_reveal: bool,
     /// The whole entry (objective and morale fields are read from it).
     pub raw: Obj,
 }
@@ -107,6 +111,7 @@ impl EncounterDef {
             start_status: value::array(o, "start_status").to_vec(),
             start_grant: StartGrant::None,
             ruleset: Ruleset::classic(),
+            plan_reveal: false,
             raw: o.clone(),
         }
     }
@@ -353,7 +358,7 @@ impl Session {
         let count = built.len();
         let mut grid = Grid::new(def.open, def.exits.clone(), TerrainTable::from_catalog(&cat), count);
         grid.apply_board(&def.zone, &def.rows);
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new() };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal };
         w.add_item_skills();
         let objective = Objectives::create(&def.raw);
         // MORALE1 1.2: unit keys, tiers, authored profiles and the starting groups.
@@ -569,6 +574,23 @@ impl Session {
         let enraged: Vec<UnitId> = self.w.enemies.iter().copied().filter(|&e| self.is_enraged(e)).collect();
         let mut out = crate::intent::intents(&self.w, &self.resolver.scheduled, &self.on_grid_at_schedule, &enraged);
         for r in out.iter_mut() {
+            r.morale_state = self.morale_state_of(r.unit);
+            r.morale_group = self.morale_group_of(r.unit);
+        }
+        out
+    }
+
+    /// RULESET1 V5, intent UI5: the round intent records of every active unit, both sides (party from its plan while
+    /// planning, else from its committed actions; enemies as `enemy_intents`, with morale); empty without the rule
+    /// `plan_badges` (classic) or once the battle is over.
+    pub fn round_intents(&self) -> Vec<crate::intent::Intent> {
+        if self.combat_over || !crate::intent::badges_on(&self.w) {
+            return Vec::new();
+        }
+        let enraged: Vec<UnitId> = self.w.enemies.iter().copied().filter(|&e| self.is_enraged(e)).collect();
+        let plan = self.is_planning().then_some(&self.plan);
+        let mut out = crate::intent::round_intents(&self.w, plan, &self.resolver.scheduled, &self.on_grid_at_schedule, &enraged);
+        for r in out.iter_mut().filter(|r| self.w.enemies.contains(&r.unit)) {
             r.morale_state = self.morale_state_of(r.unit);
             r.morale_group = self.morale_group_of(r.unit);
         }

@@ -9,8 +9,13 @@
 //!       {ruleset?, rules?}                     RULESET1: classic or timeline (default: classic for a catalog
 //!                                              encounter, the world's for a world one); rules "-id,+id" switches
 //!                                              single extensions
+//!       {plan_reveal?}                         RULESET1 V2: reveal every enemy plan (rule `plan_badges`; default false)
 //!   state                                      round, block, phase, outcome, units, grid
-//!   intents                                    every scheduled action this round (enemies included)
+//!   intents                                    every scheduled action this round (enemies included); under the rule
+//!                                              `plan_badges` also `round_intents`: one record per active unit, both
+//!                                              sides (round intent, target, Maneuver kind, impact badges, tell, plan)
+//!   intel {unit}                               RULESET1 V5: the threat intel of one unit (its `round_intents` record;
+//!                                              `plan_badges` only)
 //!   skills {unit}                              the skills the unit can plan now
 //!   items {unit, target?}                      battle-pouch items it can use (on target: CombatPlan.item_options)
 //!   preset {preset, unit?}                     AI-draft one ally (or every ally) with a PlanPresets tactic
@@ -30,8 +35,9 @@
 //!                                              member's (planned, reason when the intent is not offered)
 //!   manual {unit, on?}                         the member's Manual toggle (default on; off rebuilds the auto plan)
 //!   fill {unit}                                Manual's "fill the rest": follow-ups and Rest after the last step
-//!   round_intents                              every active unit's intent, target, kind, opener, Manual and the
-//!                                              reason tag of each planned entry
+//!   round_plan                                 the planner's own state of every active party-side unit: intent,
+//!                                              target, kind, opener, Manual and the reason tag of each planned entry
+//!                                              (never an enemy: threat intel is `intents`' `round_intents`)
 //!   log {since?}                               resolution log lines
 //!   history                                    the mutating requests so far (feed them back to replay) and the
 //!                                              checkpoints: the round outcome after every concluded round
@@ -41,7 +47,8 @@
 //! or by name.
 
 use rpgkit_battle::command;
-use rpgkit_battle::grid::{V2, GRID_H, GRID_W, TERRAIN_IDS};
+use rpgkit_battle::grid::{V2, GRID_H, GRID_W, NO_CELL, TERRAIN_IDS};
+use rpgkit_battle::intent;
 use rpgkit_battle::plan::{PlanStep, Step};
 use rpgkit_battle::round_intent::{self, ManeuverKind, Opener, RoundTarget};
 use rpgkit_battle::round_intent_plan as rip;
@@ -151,6 +158,7 @@ impl Battle {
             Ok(r) => def.ruleset = r,
             Err(e) => return err(e),
         }
+        def.plan_reveal = req.get("plan_reveal").and_then(Value::as_bool).unwrap_or(false);
         let s = Session::start(self.cat.clone(), def, &IndexMap::new());
         let state = state_of(&s);
         self.begin(s);
@@ -171,6 +179,8 @@ impl Battle {
             Ok(r) => def.ruleset = r,
             Err(e) => return err(e),
         }
+        // RULESET1 V3: the host has no game state, so the request decides (the world runner reads the flag)
+        def.plan_reveal = req.get("plan_reveal").and_then(Value::as_bool).unwrap_or(false);
         def.id = format!("{world}:{local}");
         let roster = rpgkit_world::battle::WorldRoster { d: &d, world: world.to_string() };
         let s = Session::start(d.cat.clone(), def, &roster);
@@ -182,7 +192,24 @@ impl Battle {
     fn battle_cmd(cat: &Catalog, s: &mut Session, cmd: &str, req: &Value) -> Value {
         match cmd {
             "state" => json!({"ok": true, "state": state_of(s)}),
-            "intents" => json!({"ok": true, "actions": scheduled(s)}),
+            "intents" => {
+                let mut reply = json!({"ok": true, "actions": scheduled(s)});
+                // RULESET1 V5: both sides' round intents (classic keeps the reply's shape)
+                if intent::badges_on(&s.w) {
+                    reply["round_intents"] = Value::Array(s.round_intents().iter().map(|r| intel_json(s, r)).collect());
+                }
+                reply
+            }
+            "intel" => {
+                if !intent::badges_on(&s.w) {
+                    return err("intel needs the rule plan_badges");
+                }
+                let Some(u) = unit_arg(s, req, "unit") else { return err("intel needs a unit") };
+                match s.round_intents().iter().find(|r| r.unit == u) {
+                    Some(r) => json!({"ok": true, "intel": intel_json(s, r)}),
+                    None => err(format!("{} is not on the field", s.w.units[u].name)),
+                }
+            }
             "skills" => match unit_arg(s, req, "unit") {
                 Some(u) => json!({"ok": true, "skills": skills_of(cat, s, u)}),
                 None => err("skills needs a unit"),
@@ -269,7 +296,7 @@ impl Battle {
             "round_intent" => round_intent_req(s, req),
             "manual" => manual_req(s, req),
             "fill" => fill_req(s, req),
-            "round_intents" => json!({"ok": true, "round_intents": round_intents(s)}),
+            "round_plan" => json!({"ok": true, "round_plan": round_plan(s)}),
             "log" => {
                 let since = req.get("since").and_then(Value::as_u64).unwrap_or(0) as usize;
                 json!({"ok": true, "log": s.resolver.log.get(since..).unwrap_or(&[]).to_vec(), "next": s.resolver.log.len()})
@@ -351,6 +378,43 @@ fn scheduled(s: &Session) -> Vec<Value> {
         .iter()
         .map(|a| json!({"unit": a.unit, "name": s.w.units[a.unit].name, "command": a.command.name, "start": a.start, "end": a.end, "ap": a.command.ap_cost + a.command.stance_switch_cost, "cancelled": a.cancelled}))
         .collect()
+}
+
+/// RULESET1 V5, intent UI5: one unit's round intent record as JSON: {unit, name, side ("party" or "enemy"), intent
+/// ("" = none), maneuver, target {kind ("", "self", "unit", "cell"), unit?, cell?}, impacts [[block, kind]], tell (the
+/// first line), revealed, readers, plan (revealed lines)}; a line is {kind, target?, cell?, start, impact, recovery,
+/// skill}.
+fn intel_json(s: &Session, r: &intent::Intent) -> Value {
+    let w = &s.w;
+    let line = |l: &intent::Line| {
+        let mut v = json!({"kind": l.kind, "start": l.blocks.0, "impact": l.blocks.1, "recovery": l.recovery, "skill": l.skill});
+        if let Some(t) = l.target {
+            v["target"] = json!(t);
+        }
+        if l.cell != NO_CELL {
+            v["cell"] = json!([l.cell.x, l.cell.y]);
+        }
+        v
+    };
+    let target = match r.round_target {
+        None => json!({"kind": ""}),
+        Some(RoundTarget::Myself) => json!({"kind": "self", "unit": r.unit}),
+        Some(RoundTarget::Unit(u)) => json!({"kind": "unit", "unit": u, "name": w.units[u].name}),
+        Some(RoundTarget::Cell(p)) => json!({"kind": "cell", "cell": [p.x, p.y]}),
+    };
+    json!({
+        "unit": r.unit,
+        "name": w.units[r.unit].name,
+        "side": if w.allies.contains(&r.unit) { "party" } else { "enemy" },
+        "intent": r.round_intent.map_or("", |i| i.id()),
+        "maneuver": r.maneuver.map_or("", intent::maneuver_id),
+        "target": target,
+        "impacts": r.impacts.iter().map(|(b, k)| json!([b, k])).collect::<Vec<_>>(),
+        "tell": line(&r.line),
+        "revealed": r.revealed,
+        "readers": r.readers,
+        "plan": r.plan.iter().map(line).collect::<Vec<_>>(),
+    })
 }
 
 /// ITEMUSE1 rule 2: one row per distinct offered pouch item with copies left this round; with a target, only the items
@@ -553,14 +617,6 @@ fn kind_of(v: &Value) -> Result<Option<ManeuverKind>, String> {
     }
 }
 
-fn kind_name(k: ManeuverKind) -> &'static str {
-    match k {
-        ManeuverKind::Engage => "engage",
-        ManeuverKind::Disengage => "disengage",
-        ManeuverKind::Utility => "utility",
-    }
-}
-
 /// The party unit of a round intent request while the round is planned.
 fn planning_member(s: &Session, req: &Value, cmd: &str) -> Result<UnitId, Value> {
     if s.phase != Phase::Planning || s.plan_confirmed {
@@ -570,10 +626,10 @@ fn planning_member(s: &Session, req: &Value, cmd: &str) -> Result<UnitId, Value>
 }
 
 /// The reply after a round intent change: whether the member's auto plan was built (else PL7's reason), the later
-/// members the rebuild refused (PL8), the party plan and every unit's round intent.
+/// members the rebuild refused (PL8), the party plan and the party's planner state (`round_plan`).
 fn intent_reply(s: &Session, result: Result<(), String>, refused: Vec<(UnitId, String)>) -> Value {
     let refused: Vec<Value> = refused.into_iter().map(|(u, r)| json!({"unit": u, "name": s.w.units[u].name, "reason": r})).collect();
-    json!({"ok": true, "planned": result.is_ok(), "reason": result.err(), "refused": refused, "plan": plan_view(s, None), "round_intents": round_intents(s)})
+    json!({"ok": true, "planned": result.is_ok(), "reason": result.err(), "refused": refused, "plan": plan_view(s, None), "round_plan": round_plan(s)})
 }
 
 /// RULESET1_TASKS 1.8 `round_intent {unit, intent, target, maneuver, opener}`: each given field is set in order (the
@@ -642,14 +698,18 @@ fn fill_req(s: &mut Session, req: &Value) -> Value {
     }
 }
 
-/// RULESET1_TASKS 1.8 (UI5): every active unit's round intent, target, Maneuver kind, opener, Manual toggle and the
-/// reason tag of each entry it has planned (PL6); empty without the rule round_intent.
-fn round_intents(s: &Session) -> Vec<Value> {
+/// RULESET1_TASKS 1.8 `round_plan`: the planner's own state of every active party-side unit (round intent, target,
+/// Maneuver kind, opener, Manual toggle and the reason tag of each entry it has planned, PL6); never an enemy (its
+/// opener and target are not shown: the threat intel view is `intents`' `round_intents`, reveals respected); empty
+/// without the rule round_intent.
+fn round_plan(s: &Session) -> Vec<Value> {
     let w = &s.w;
     if !round_intent::on(w) {
         return Vec::new();
     }
-    (0..w.units.len())
+    w.allies
+        .iter()
+        .copied()
         .filter(|&c| w.units[c].is_active())
         .map(|c| {
             let rs = w.round_states.get(&c).cloned().unwrap_or_default();
@@ -664,8 +724,8 @@ fn round_intents(s: &Session) -> Vec<Value> {
                 Some(Opener::Item(id)) => json!({"item": id}),
                 None => Value::Null,
             };
-            json!({"unit": c, "name": w.units[c].name, "side": if w.allies.contains(&c) { "party" } else { "enemy" },
-                "intent": rs.intent.map(|i| i.id()), "target": target, "maneuver": rs.maneuver.map(kind_name), "maneuver_auto": rs.maneuver_auto,
+            json!({"unit": c, "name": w.units[c].name, "side": "party",
+                "intent": rs.intent.map(|i| i.id()), "target": target, "maneuver": rs.maneuver.map(intent::maneuver_id), "maneuver_auto": rs.maneuver_auto,
                 "opener": opener, "manual": rs.manual, "reasons": rip::reasons(w, &s.plan, c)})
         })
         .collect()

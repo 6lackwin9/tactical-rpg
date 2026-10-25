@@ -133,6 +133,9 @@ pub struct World {
     pub ruleset: rpgkit_rules::ruleset::Ruleset,
     /// RULESET1_INTENT (rule `round_intent`): each unit's round intent, target, facing and round marks; empty in classic.
     pub round_states: IndexMap<UnitId, crate::round_intent::RoundState>,
+    /// RULESET1 V2 (`EncounterDef.plan_reveal`): every enemy's whole plan is shown while planning; read only under the
+    /// rule `plan_badges` (the Arena and the Dojo may flip it mid-battle).
+    pub plan_reveal: bool,
 }
 
 impl World {

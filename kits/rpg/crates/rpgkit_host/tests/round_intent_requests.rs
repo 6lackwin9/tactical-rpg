@@ -1,7 +1,9 @@
 //! RULESET1-PL host requests on a scratch catalog (no shipped data): `round_intent` sets a member's intent, target,
-//! kind and opener and rebuilds its auto plan (RULESET1_TASKS 1.8), `manual` and `fill` (MM1, MM3), `round_intents`
-//! reports every unit's choice with the reason tags (PL6); the requests replay from the history; classic refuses them.
+//! kind and opener and rebuilds its auto plan (RULESET1_TASKS 1.8), `manual` and `fill` (MM1, MM3), `round_plan`
+//! reports every party-side unit's choice with the reason tags (PL6) and never an enemy; the requests replay from the
+//! history; classic refuses them.
 
+use rpgkit_battle::round_intent::RoundTarget;
 use rpgkit_data::Catalog;
 use rpgkit_host::{Battle, Host};
 use serde_json::{json, Value};
@@ -32,7 +34,7 @@ fn host(ruleset: &str) -> Host {
 }
 
 fn hero_row(h: &mut Host) -> Value {
-    h.handle(&json!({"cmd": "round_intents"}))["round_intents"][0].clone()
+    h.handle(&json!({"cmd": "round_plan"}))["round_plan"][0].clone()
 }
 
 /// PL1, PL6, GD2: Guard on self with 3 AP plans Active Guard three times (opener, then follow-ups) and reports the
@@ -63,7 +65,7 @@ fn manual_and_fill_replay() {
     let mut h = host("timeline");
     h.handle(&json!({"cmd": "round_intent", "unit": 0, "intent": "guard", "target": "self"}));
     let r = h.handle(&json!({"cmd": "manual", "unit": 0}));
-    assert_eq!(r["round_intents"][0]["manual"], json!(true), "{r}");
+    assert_eq!(r["round_plan"][0]["manual"], json!(true), "{r}");
     h.handle(&json!({"cmd": "clear", "unit": 0}));
     assert_eq!(h.handle(&json!({"cmd": "add_step", "unit": 0, "step": {"mode": "self", "skill": "rest"}}))["ok"], json!(true));
     let r = h.handle(&json!({"cmd": "fill", "unit": 0}));
@@ -79,7 +81,26 @@ fn manual_and_fill_replay() {
     }
     assert_eq!(hero_row(&mut again), hero_row(&mut h), "the requests replay");
     let r = h.handle(&json!({"cmd": "manual", "unit": 0, "on": false}));
-    assert_eq!((r["planned"].clone(), r["round_intents"][0]["reasons"].clone()), (json!(true), json!(["opener", "follow-up 1", "follow-up 1"])), "{r}");
+    assert_eq!((r["planned"].clone(), r["round_plan"][0]["reasons"].clone()), (json!(true), json!(["opener", "follow-up 1", "follow-up 1"])), "{r}");
+}
+
+/// `round_plan` is the planner's own state: it lists the party-side units only, never an enemy (not even one holding an
+/// intent and a round target), so it shows no enemy opener or target; the round intent replies carry it the same way.
+#[test]
+fn round_plan_never_lists_an_enemy() {
+    let mut h = host("timeline");
+    let foe = 1;
+    {
+        let s = h.commands.session.as_mut().unwrap();
+        assert!(s.w.enemies.contains(&foe));
+        s.set_round_intent(foe, "assault").expect("an enemy intent");
+        s.set_round_target(foe, RoundTarget::Unit(0)).expect("an enemy target");
+    }
+    let party = |rows: &Value| rows.as_array().unwrap().iter().map(|r| (r["unit"].as_u64().unwrap(), r["side"].as_str().unwrap().to_string())).collect::<Vec<_>>();
+    let r = h.handle(&json!({"cmd": "round_plan"}));
+    assert_eq!(party(&r["round_plan"]), [(0, "party".to_string())], "{r}");
+    let r = h.handle(&json!({"cmd": "round_intent", "unit": 0, "intent": "guard", "target": "self"}));
+    assert_eq!(party(&r["round_plan"]), [(0, "party".to_string())], "{r}");
 }
 
 /// A `round_intent` request is atomic: one that names a new intent and then a refused field leaves the battle exactly
@@ -111,11 +132,11 @@ fn a_refused_round_intent_changes_nothing() {
     assert_eq!(snapshot(&mut again), before, "the history replays to the same battle");
 }
 
-/// Classic has no round intents: the requests are refused and `round_intents` is empty.
+/// Classic has no round intents: the requests are refused and `round_plan` is empty.
 #[test]
 fn classic_refuses_round_intents() {
     let mut h = host("classic");
     assert!(h.handle(&json!({"cmd": "round_intent", "unit": 0, "intent": "guard"}))["error"].as_str().unwrap_or("").contains("no round intents"));
     assert_eq!(h.handle(&json!({"cmd": "manual", "unit": 0}))["ok"], json!(false));
-    assert_eq!(h.handle(&json!({"cmd": "round_intents"}))["round_intents"], json!([]));
+    assert_eq!(h.handle(&json!({"cmd": "round_plan"}))["round_plan"], json!([]));
 }

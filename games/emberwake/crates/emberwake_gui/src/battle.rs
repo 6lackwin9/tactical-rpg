@@ -587,8 +587,9 @@ impl BattleScreen {
         let hit_world = s(hit, "_world");
         let world = if d.lineage(&gs.world_id).contains(&hit_world) { gs.world_id.clone() } else { hit_world };
         let entry = d.resolve(&world, "encounters", &s(hit, "id"));
-        // RULESET1 3.1.2: the battle plays by the ruleset of the world that resolves the encounter
-        let mut def = emberwake_world::battle::encounter_def(&d, &world, entry);
+        // RULESET1 3.1.2: the battle plays by the ruleset of the world that resolves the encounter; V3: the world's plan
+        // reveal flag in the game state reveals the enemy plans
+        let mut def = emberwake_world::battle::encounter_def_in(&d, gs, &world, entry);
         let zone = s(fight, "zone");
         if !zone.is_empty() {
             def.zone = zone;
