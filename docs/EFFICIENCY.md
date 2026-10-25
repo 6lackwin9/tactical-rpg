@@ -15,6 +15,7 @@ Living file: measure, fix, record. Add a row whenever a step feels slow or a run
 | `aegis sim <mode>` (release build), the 20 recorded parity runs (`emberwake_sim` test `sim_parity`) | about 6 s in all | Godot took about 25 minutes for the same runs (`games/emberwake/parity/sim.sh`) |
 | `tools/fc.sh parity` (Godot 4.7.2 on `legacy/`) | export ~5 s, each trace mode about a minute or less, journeys ~4 min | only when the reference must be re-recorded (a fresh checkout, CI records the exports only) |
 | Windows Smart App Control blocking freshly built binaries (2026-10-19) | random test exes and GUI launches refused (`os error 4551`); retries and relinks did not always clear it | turned off by the user; the gates still relink a blocked exe (skill `known-issues`) |
+| Local image generation (LOCALGEN1, 2026-10-26; LCM Dreamshaper int8, 512 px, 6 steps) | GPU (Arc 140V) 0.8-1.0 s an image, first compile seconds; NPU 2.1 s an image, but its first compile is 3.5-16 min for each new size or LoRA (cached in `C:/dev/localgen/cache`); img2img on the GPU 3.5-4.5 s | default device GPU; NPU only for long batches at one fixed size, never for LoRA trials |
 
 ## Godot build (2026-10-15 to 2026-10-18, frozen in `legacy/`)
 

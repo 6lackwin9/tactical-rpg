@@ -8,13 +8,27 @@ takes), plus variant sheets such as `mara_voss_variant.png`.
   `games/emberwake/docs/specs/ART2_PROMPTS.md`, with `mara_voss.png` as the style reference.
 - `--prompts <file>` reads another prompts file in that layout (a shared style block, then one block per id):
   `games/emberwake/docs/specs/ART3_PROMPTS.md` holds the Scarlet Lullaby portraits (ART3, 2026-10-25).
+- Local drafts (LOCALGEN1, user 2026-10-25: drafts and iteration run on the PC's own model, the image API is the
+  fallback): `tools/portraits/localgen.py` runs OpenVINO GenAI on the Intel NPU, the Arc GPU or the CPU. It runs from
+  the venv outside the repo (`C:\dev\localgen\venv\Scripts\python.exe tools/portraits/localgen.py ...`; the model,
+  the LoRA files and the compile cache stay in `C:\dev\localgen`, or `LOCALGEN_HOME`). `run <id>...` writes
+  `<id>_loc<time>_<n>.png` takes from the id's prompts-file block, shortened for the 77-token encoder
+  (`ART_PROMPT_TEMPLATES.md`, "Local short prompt").
+  `vary <id> --from art_src/<id>.png --change "..." --strength 0.3` makes variants of an existing image. `--model`
+  picks another model folder; its family (LCM, SD 1.5, SDXL or FLUX, from `model_index.json`) sets the default steps,
+  guidance and size, the negative prompt and the prompt form (short for the CLIP-only families, whole for FLUX). `--sheet` (or `sheet OUT PNG...`) puts each take beside its `pixelize`
+  portrait, and `--dry-run` prints the prompt and record without generating. Benchmark and throwaway takes go to
+  `--out <scratch folder>`, not here.
 - Prompt records: beside every generated image, `<same name>.json` (plain Git, not LFS) keeps the model, the id, the
   full prompt sent (style block included), the reference image, the prompts file, the UTC time and the candidate
   index `n`; `generate.py` writes them since ART3. Records written afterwards carry `"backfilled": true` and a
   `source` (where the prompt text came from; the ART2 portraits from the Portrait Prompts page the user ran them
   from, the icon sheets from their prompts file at the commit that added them, `added_in`); a renamed pick names its
   original file in `generated_as`; Mara Voss's prompt is the one the user supplied (her own run, no reference), and
-  `mara_voss_variant` has no known prompt (`null`). Never the key.
+  `mara_voss_variant` has no known prompt (`null`). Never the key. A local take's record has the same keys first, with
+  `model` `local:<model folder>`, then `family`, `device`, `seed`, `steps`, `size`, `guidance`, `negative`, `lora`, `cut` (the
+  block parts left out of the short prompt) and `seconds`; a variant's also has `source_image`, `strength` and
+  `change`.
 - `tools/portraits/pixelize.py` turns a source into the 240 px game portrait (96 px grid, 4 shades per colour family);
   `clear_mark` and `clear_corner` remove the image model's star mark first.
 - ART3 (2026-10-25): the user's pick of each Scarlet Lullaby portrait is `<id>.png` (`render_beast`, `ash_crawler`,

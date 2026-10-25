@@ -1,6 +1,7 @@
 # Art prompt templates
 
-Reusable image-API prompt shapes in the house pixel-art style. Gemini wrote them on 2026-10-25 when the user asked it
+Reusable image-API prompt shapes in the house pixel-art style, and the short shape for the local model
+([Local short prompt](#local-short-prompt)). Gemini wrote them on 2026-10-25 when the user asked it
 for the prompts behind Mara Voss's portrait and her 2x2 variation sheet (`art_src/mara_voss*.png`); they name Mara as the
 worked example. To reuse one, swap the character lines (name, age, features, clothing, weapon, mood, colours) and attach
 the character's existing portrait as the reference. The game draws battle bodies with the code rig
@@ -45,6 +46,42 @@ The sheet contains multiple rows of frame-by-frame animation cycles, from left t
 - Row 4: Hurt & Knockdown. Character flinching back from an impact, then falling or kneeling, showing damage, and recovering (5 frames).
 
 Character has a tiny but highly readable silhouette with exaggerated key movement frames to preserve readability at small sizes.
+```
+
+## Local short prompt
+
+For the local model (LOCALGEN1, `tools/portraits/localgen.py`: LCM Dreamshaper v7, SD 1.5 family). Its CLIP text
+encoder reads 77 tokens, 75 of them the prompt's own, and drops the rest without a word, so the long image-API blocks
+above do not fit. `localgen.py prompt <id>` builds the short form from a prompts-file block and lists what it cut;
+`run` and `vary` send that form and keep the cut list in the take's record (`cut`). When a detail that makes the
+character is cut (Tess's burned ear is), write the prompt by hand and pass it as `--prompt`.
+
+The short form is only for models whose text encoders are all CLIP (LCM, SD 1.5 and SDXL; the tool reads the family
+from the model folder's `model_index.json`). FLUX gets the whole block, subject first, then the style block without
+its line about the attached reference. Its T5 encoder reads 256 tokens, though, and one ART3 character block nearly
+fills that (Bram's is 245 by FLUX's own tokenizer), so the style block mostly falls off; the record's `cut` says how
+much. The rules for the short form, from the 2026-10-25 and 2026-10-26 runs:
+
+- Subject first, style last. A style-first prompt made the small model draw a game scene instead of a portrait.
+- Who comes first, with "adult". The model draws young faces, and the tone rule (no child fighters or victims)
+  needs the word. Then two or three face features, the hair, one signature detail, the lead clothing item and the mood.
+- No names, no hex codes and no negations. The model cannot know a name, and hex codes waste tokens. A CLIP prompt
+  cannot say "no": "no hood" draws a hood. The ART3B hair rule becomes the negative prompt (`hood, cowl`) for models
+  that take one; LCM takes none.
+- Keep an adjective list with its noun ("large, bright, alert eyes"), and keep one look per clause.
+- The style tail is about 15 tokens and keeps the ART3B "stylized" rule. A LoRA's trigger words go after it
+  (`--trigger`), and `--style` replaces it.
+- For a variant (`vary`), the change goes first and replaces the mood.
+
+```text
+head and shoulders portrait of <who: age, build, adult>, <two or three face features>, <hair>, <signature detail>, <lead clothing>, <mood> expression, stylized dark fantasy character art, facing right, amber rim light, plain dark background
+```
+
+Worked example, Tess by hand (71 tokens; the automatic form spends its words on her eyes and armour and loses the
+ear):
+
+```text
+head and shoulders portrait of a wiry adult woman of nineteen, sharp lively freckled face, lopsided half-smile, wild dark-brown hair in one loose braid, burn-scarred notched right ear, patched leather armour, courier satchel strap, stylized dark fantasy character art, facing right, amber rim light, plain dark background
 ```
 
 ## Props and objects
