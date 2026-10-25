@@ -25,11 +25,17 @@ how far its features are pushed: the hub cast (Tess, Bram, Aline) readable and w
 Clerisy (Quell, Nemeth, the Purifier), the corrupted (the Calcified Husk) and Orlov much further. Hair now varies by
 character; a hood, cowl or habit veil stays only where the brief needs it (the Purifier's gas-mask hood). What the lore
 fixes stays: Tess's deaf, burned ear (her right ear since the user's call of 2026-10-25, so it shows in the
-right-facing framing; the ART3B takes were made with the left ear and no re-roll is run yet), Bram's loupe over the
+right-facing framing; the ART3B takes were made with the left ear, and the right-ear re-roll ran as ART3C, see
+below), Bram's loupe over the
 right eye and scarred throat, Aline's cropped soot-black hair and defaced habit, Quell's neck valve, Nemeth's grey skin
 and throat vial. The two creature blocks are unchanged and were not re-rolled. The user's ART3B picks (2026-10-25:
 take 1 of Vane, Quell, Orlov, Nemeth, the Husk, Tess and Bram, take 2 of the Purifier and Aline) are now
 `art_src/<id>.png` and the game portraits; the ART3 picks went back to their `_gen` names as takes.
+
+ART3C (user 2026-10-25, Tess's right-ear re-roll; 2 takes, Gemini 3 Pro Image): Tess's block names the near-side ear
+on the left of the picture, uncovered by hair, notched, with the burn running onto her jaw. The user picked take 2
+(`tess_gen1792945812_2`); it is now `art_src/tess.png` and the game portrait, and the ART3B pick went back to
+`tess_gen1792942586_1.png` as a take.
 
 Every prompt starts with the same style block:
 
@@ -136,7 +142,7 @@ Hub NPC (non-combat), the founders' portraits row. The game: Tess Morn, the cell
 board at the Water-Lock Basin; Vesper's former runner contact; deaf in one ear from an Inquisition flash-bomb.
 
 ```text
-Character: Tess Morn, Dead-Drop Courier. Stylization warm and readable: large, bright, alert eyes, a small pointed chin, expressive dark brows, a quick lopsided half-smile, a sharp, lively face with soot smudges and a few freckles. A young woman of nineteen, an adult, wiry and compact. Long, thick, wild dark-brown hair: one messy loose braid over her left shoulder, the rest falling free in tangled strands, swept back behind her right ear. Her right ear, the deaf one, on the near side toward the viewer, is scarred and notched, the skin round it puckered by an old burn from a flash-bomb. Patched leather shingle-armour of overlapping scraps over greasy wool wraps, a courier's satchel strap across the chest with a rolled message tube.
+Character: Tess Morn, Dead-Drop Courier. Stylization warm and readable: large, bright, alert eyes, a small pointed chin, expressive dark brows, a quick lopsided half-smile, a sharp, lively face with soot smudges and a few freckles. A young woman of nineteen, an adult, wiry and compact. Long, thick, wild dark-brown hair: one messy loose braid over her left shoulder, the rest falling free in tangled strands, swept back behind her right ear. Her right ear, the deaf one, on the near side toward the viewer (the left side of the picture), is fully visible and not covered by hair: scarred and notched at the rim, the skin round it and down onto her jaw puckered, shiny and pinkish-pale from an old burn from a flash-bomb, clearly readable at small size. Patched leather shingle-armour of overlapping scraps over greasy wool wraps, a courier's satchel strap across the chest with a rolled message tube.
 Mood: quick, wary, determined.
 Main colours: boiled leather brown and rotting oak, grey wool wraps, a small tallow amber accent.
 ```
