@@ -30,6 +30,8 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | S16 | Playtest tooling (debug only): recordings, notes, playback, headless replay | approved | S1 | Feedback loop desktop -> cloud; battles exact, overworld trail-only until PLAYTEST2. On the engine (PORT-PLAYTEST): arena battles record and replay; party battles of the world map wait for PLAYTEST2, so G1's "one full run replays headless" needs it too |
 | LEVERS1 | Role-feel levers: brawler spin, priest Ward (DR2 4B) | approved (user 2026-10-18 14:26) | BAL5-L, BAL5-A | `games/emberwake/docs/specs/LEVERS1.md`; Bodyguard deferred, boss acts twice not built |
 | DERIVE1 | Data-defined derived stats (an engine formula evaluator, kit derived-stat rows, resist checks); first row Composure, the corruption resist | proposed | - | `docs/specs/DERIVE1.md`; user 2026-10-25 (Q-47a) asked for the capability in the engine and kit; DQ1-DQ5 open |
+| ENCOUNTER2 | Encounter structures: authored terrain, hold-a-tile escape, impossible fight and last stand, boss phase kill / swap / rogue side, linked rooms | proposed | - | `docs/specs/ENCOUNTER2.md`; user 2026-10-25 (Q-60, Q-75, Q-75a); slice needs T, H, HA, W, U, K, D; EQ1-EQ9 open |
+| RULESET1 | The "timeline" combat ruleset (M1 feel prototype): ruleset world field and Dojo toggle, windups, recovery, chains, ap_cost, poise and breaks, Active Guard, pierce, reach 2, deck slot kinds, plan visibility; the classic ruleset byte-identical | proposed | DERIVE1 | `docs/specs/RULESET1.md`; user 2026-10-25 (combat group 1.1); TQ1-TQ11 open |
 
 ## Goals (user 2026-10-17, decision "Goal-based roadmap"; replaces the suggested build order)
 
