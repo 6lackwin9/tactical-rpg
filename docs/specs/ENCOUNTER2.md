@@ -136,6 +136,10 @@ founder kills Nemeth and his guard, then fights the cell alone as a monstrosity.
 
 ## 5. Connected rooms (Q-60) `[kit hook]`, later than the slice
 
+Room uses the user named (2026-10-25, Q-22): the hub siege (each facility a room; a lost room costs its facility a
+level), floors to climb, enemy waves or packs to defeat, and rooms to clear. The room core (R) carries all four; each
+is encounter data (objectives and arrivals per room), not a new mode.
+
 ### 5.1 Authored terrain (slice) and the room data
 
 - R0. `rows` (encounter field, optional): 9 strings of 12 glyphs from the terrain glyph set (`grid.rs:65`); when set
