@@ -1351,6 +1351,16 @@ fn next_action(s: &Session, e: usize) -> String {
     }
 }
 
+/// DERIVE1 4.4: unit `i`'s catalog derived stats shown in battle under the battle's ruleset (none in classic).
+fn derived_rows(s: &Session, i: usize) -> Vec<crate::party::DRow> {
+    crate::party::data_rows(&s.w.cat, &s.w.ruleset.id, &s.w.units[i], "battle")
+}
+
+/// Derived rows in one line (`Composure 26   Grit 3`), None when there are none.
+fn derived_line(rows: &[crate::party::DRow]) -> Option<String> {
+    (!rows.is_empty()).then(|| rows.iter().map(|r| format!("{} {}", r.label, r.shown)).collect::<Vec<_>>().join("   "))
+}
+
 /// Hover card of unit `i` (`tells`: the enemy intents while planning, INTENT1).
 fn unit_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent]) -> Tip {
     let w = &s.w;
@@ -1359,6 +1369,9 @@ fn unit_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent]) -> Tip 
     let mut t: Tip = vec![(u.name.clone(), if ally { ALLY } else { FOE })];
     t.push((format!("HP {}/{}   AP {}/{}   {}", u.hp, u.max_hp, u.ap, u.max_ap, stance_name(u)), TEXT));
     t.push((format!("Level {} {}   Speed {}   Reach {}", u.stats.level, u.tier, u.speed, u.attack_range), DIM));
+    if let Some(line) = derived_line(&derived_rows(s, i)) {
+        t.push((line, DIM));
+    }
     if !u.st.active.is_empty() {
         t.push((format!("Now: {}", u.st.active.iter().map(|x| emberwake_rules::status::display_name(x)).collect::<Vec<_>>().join(", ")), FOE));
     }
@@ -1531,11 +1544,14 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         ui.p.text_right(r.x as f32 + r.w as f32 - 4.0, r.y as f32 + 2.0, stance_name(u), SMALL, DIM);
         let st = s.plan.compile(w, h);
         let weapon = u.inventory.main_weapon().map(|e| e.item.name.clone()).unwrap_or_else(|| "Bare hands".into());
-        let mut lines: Vec<(String, Rgba)> = vec![
-            (format!("Speed {}  Reach {}", u.speed, u.attack_range), TEXT),
-            (format!("AP left {}/{}", if s.plan_confirmed { u.ap } else { st.ap_left }, u.max_ap), ALLY),
-            (format!("Gear: {weapon}"), GOLD),
-        ];
+        let mut lines: Vec<(String, Rgba)> = vec![(format!("Speed {}  Reach {}", u.speed, u.attack_range), TEXT)];
+        // DERIVE1 4.4: the derived-stat line hovers to each row's formula and breakdown
+        let derived = derived_rows(s, h);
+        if let Some(line) = derived_line(&derived) {
+            lines.push((line, TEXT));
+        }
+        lines.push((format!("AP left {}/{}", if s.plan_confirmed { u.ap } else { st.ap_left }, u.max_ap), ALLY));
+        lines.push((format!("Gear: {weapon}"), GOLD));
         if !u.st.active.is_empty() {
             lines.push((format!("Now: {}", u.st.active.iter().map(|x| emberwake_rules::status::display_name(x)).collect::<Vec<_>>().join(", ")), FOE));
         }
@@ -1567,13 +1583,18 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             }
         }
         let mut ly = r.y as f32 + 12.0;
-        for (text, col) in lines {
+        for (n, (text, col)) in lines.into_iter().enumerate() {
+            let top = ly;
             for part in ui.p.wrap(&text, SMALL, 108.0) {
                 if ly > (r.y + r.h) as f32 - 9.0 {
                     break;
                 }
                 ui.p.text(r.x as f32 + 4.0, ly, &part, SMALL, col);
                 ly += 8.0;
+            }
+            if n == 1 && !derived.is_empty() && ly > top {
+                let tip: Tip = derived.iter().flat_map(|d| [(format!("{} {}", d.label, d.shown), GOLD), (d.desc.clone(), TEXT)]).collect();
+                ui.push("hero.derived", "row", text, Rect::new(r.x + 2, top as i32 - 1, r.w - 4, (ly - top) as i32), true, false, None, tip);
             }
         }
         ui.push("hero.panel", "panel", u.name.clone(), r, true, false, None, Vec::new());
@@ -2815,6 +2836,43 @@ mod tests {
         let b = BattleScreen::sandbox(&cx);
         assert!(b.host.session.is_some(), "the ambush starts: {}", b.message);
         (cx, crate::hud::hud_tests::gfx(), b)
+    }
+
+    /// DERIVE1 4.4: the selected hero's panel and every unit's hover card list the catalog derived stats shown in
+    /// battle (by the battle's ruleset), the panel's line hovering to the formula and breakdown; with no such row the
+    /// panel and the cards are as before.
+    #[test]
+    fn the_hero_panel_lists_battle_derived_stats_with_their_breakdown() {
+        for shown in [false, true] {
+            let mut cx = crate::hud::hud_tests::game_cx();
+            let mut data = (*cx.app.data).clone();
+            let cat = Arc::make_mut(&mut data.cat);
+            cat.derived_stats.clear();
+            if shown {
+                let r = emberwake_data::DerivedStatDef::from_obj(json!({"id": "nerve", "name": "Nerve", "formula": "KNOW * 2", "show_on": ["battle"]}).as_object().unwrap()).unwrap();
+                cat.derived_stats.insert(r.id.clone(), r);
+            }
+            cx.app.data = Arc::new(data);
+            cx.app.encounter = "goblin_ambush".into();
+            cx.app.seed = Some(1);
+            let mut b = BattleScreen::sandbox(&cx);
+            let mut g = crate::hud::hud_tests::gfx();
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            let s = b.host.session.as_ref().unwrap();
+            let h = b.selected.expect("a hero is selected");
+            let card = b.w.iter().find(|w| w.id == format!("party.{h}")).unwrap();
+            let line = b.w.iter().find(|w| w.id == "hero.derived");
+            if !shown {
+                assert!(line.is_none() && !card.tip.iter().any(|t| t.0.starts_with("Nerve")));
+                continue;
+            }
+            let v = emberwake_rules::derived::value(&s.w.cat, &s.w.ruleset.id, &s.w.units[h], "nerve").unwrap();
+            let line = line.expect("the derived line");
+            assert_eq!(line.text, format!("Nerve {v}"));
+            assert_eq!(line.tip[0].0, format!("Nerve {v}"));
+            assert!(line.tip[1].0.starts_with("Formula: KNOW * 2. KNOW "), "{:?}", line.tip);
+            assert!(card.tip.iter().any(|t| t.0 == format!("Nerve {v}")), "the hover card: {:?}", card.tip);
+        }
     }
 
     fn rect_of(b: &BattleScreen, id: &str) -> aegis_ui::canvas::Rect {
