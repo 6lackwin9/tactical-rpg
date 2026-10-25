@@ -28,4 +28,6 @@ exploring) while the story still lands on time. A game's version lives in its ca
 ## Losses and retries
 
 - Early losses cost time and condition, not progress (retreat, wounded, the mission stays).
+- A run-ending bad end reloads the act's start: keep it as a keyed save (`aegis_save` keyed API, for example
+  `act<n>_<run>`), written when an act begins, never overwritten by slot saves and not listed as a slot.
 - A retry of a climactic fight needs a reason inside the story, and each retry costs something the player can see.
