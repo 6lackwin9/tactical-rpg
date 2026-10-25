@@ -3,7 +3,7 @@
 Status: proposed (spec 2026-10-25, from the user decisions Q-60, Q-75, Q-75a (a), "Nemeth's fight, revised" and
 "Slice is data only" in `games/emberwake/docs/decisions/lore.md`)
 Depends on: none for the slice parts; STAGE1 for the room screen; RULESET1 (written in parallel) for windups,
-recovery, chains, poise, reach-2 and intent visibility, which this spec only references
+recovery (enemies), round stances and follow-ups, poise, reach-2 and intent visibility, which this spec only references
 Lane: logic first (schema and rules), then asset (kit samples); tasks, tests, parity plan and open questions:
 [ENCOUNTER2_TASKS.md](ENCOUNTER2_TASKS.md)
 Touches (by task, see the task file): under `games/emberwake/crates/`: `emberwake_battle/src/{encounter,session,
@@ -80,7 +80,7 @@ The theme (user): the first loss is a choice; as losses pile up they become the 
   protected guest, every hero dead); "no active foe" still wins first, with `stayed` empty (use S1 to prevent it).
 - H5. Lost by S2 when `timeout_outcome` is `lost` (the Crucible: nobody avoids the choice by waiting).
 - H6. Party AI (sim, autoplay, the Balanced draft): the holder drafts a route to the nearest free hold tile, then
-  Defend while on it; the others draft Withdraw once the gate is open or the holder is within its move of a tile;
+  Defend while on it (under the timeline ruleset: a Guard round on the hold tile); the others draft Withdraw once the gate is open or the holder is within its move of a tile;
   otherwise their preset as today.
 - H7. Screen: hold tiles drawn with the objective ring and a winch marker; the gate's exits show "shut" (red) or
   "open" (green); the objective line adds "`{holder}` holds `{tiles_label}`."
@@ -228,7 +228,7 @@ the new json fields as raw JSON (no form work in this spec).
 
 ## 7. Out of scope
 
-RULESET1's rules (windups, recovery, chains, poise, armour, reach-2, deck slots, intent visibility); the unit
+RULESET1's rules (windups, enemy recovery, round stances and follow-ups, poise, armour, reach-2, deck slots, intent visibility); the unit
 lifecycle hook (captured, dead, retired); multi-cell units (Q-79 art only); line of sight across rooms; more than 12
 enemy-side units or 4 rooms; a dropped-item marker on the field; the sunk_ward world itself (the slice's data tasks
 fill the Crucible from the sketch in the task file); the Content Forge forms for the new fields.
