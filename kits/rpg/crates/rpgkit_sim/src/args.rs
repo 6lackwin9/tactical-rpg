@@ -2,6 +2,7 @@
 //! key=value tokens in any order.
 
 use crate::targets::{self, Targets};
+use crate::SimGame;
 use rpgkit_world::Data;
 use indexmap::IndexMap;
 
@@ -13,7 +14,6 @@ pub const SCORES: [&str; 3] = ["both", "hp", "binary"];
 pub const GENERATED: [&str; 5] = ["mob", "line", "wave", "elite", "boss"];
 pub const PRESETS: [&str; 7] = ["balanced", "aggressive", "focus_weakest", "defensive", "ranged_kite", "economy", "withdraw"];
 pub const REF_PREFIX: &str = "world:";
-pub const DEFAULT_WORLD: &str = "ashlands";
 /// BAL5-SIM K2: party / sweep cells default to 10 seeds (other modes keep 3).
 pub const PARTY_SEEDS: usize = 10;
 /// tier_foe default: each hero fights its own class.
@@ -78,8 +78,11 @@ pub struct SimArgs {
     pub jitter: bool,
     pub targets: Targets,
     pub pouch: Vec<String>,
+    /// world= (default: the game's default world).
     pub world: String,
     pub world_set: bool,
+    /// KIT1-SIM: what the game told the sim (default world, story run).
+    pub game: SimGame,
     pub comp_size: usize,
     pub lead: String,
     pub seeds_set: bool,
@@ -123,8 +126,9 @@ impl Default for SimArgs {
             jitter: true,
             targets: targets::defaults(),
             pouch: Vec::new(),
-            world: DEFAULT_WORLD.into(),
+            world: String::new(),
             world_set: false,
+            game: SimGame::default(),
             comp_size: 4,
             lead: String::new(),
             seeds_set: false,
@@ -180,9 +184,16 @@ pub fn catalog_encounters(d: &Data) -> Vec<String> {
 }
 
 impl SimArgs {
-    /// Parses the sim's command line (mode first). Err = the message after "SIM argument error: ".
+    /// Parses the sim's command line (mode first) for a game without a default world or story run. Err = the
+    /// message after "SIM argument error: ".
     pub fn parse(d: &Data, argv: &[String]) -> Result<Self, String> {
-        let mut a = SimArgs::default();
+        Self::parse_for(d, argv, &SimGame::default())
+    }
+
+    /// Parses the sim's command line (mode first) for `game`: world= defaults to its default world, the campaign
+    /// mode plays its story run. Err = the message after "SIM argument error: ".
+    pub fn parse_for(d: &Data, argv: &[String], game: &SimGame) -> Result<Self, String> {
+        let mut a = SimArgs { world: game.default_world.clone(), game: game.clone(), ..SimArgs::default() };
         let mut positional: Vec<String> = Vec::new();
         let mut metrics_set = false;
         let mut distance_set = false;
@@ -368,8 +379,10 @@ impl SimArgs {
                     for part in list(value) {
                         let at = part.split(':').next().unwrap_or("").to_string();
                         let enc = part.get(at.len() + 1..).unwrap_or("").to_string();
-                        if !is_int(&at) || int(&at) < 1 || enc.is_empty() || !has_encounter(d, DEFAULT_WORLD, &enc) {
-                            return Err(format!("extra must be <battle>:<{DEFAULT_WORLD} encounter>[,..], e.g. extra=4:ash_raiders (got '{part}')"));
+                        let world = &self.game.default_world;
+                        if !is_int(&at) || int(&at) < 1 || enc.is_empty() || !has_encounter(d, world, &enc) {
+                            let example = self.game.story.as_ref().map_or("4:<encounter>", |s| s.extra_example.as_str());
+                            return Err(format!("extra must be <battle>:<{world} encounter>[,..], e.g. extra={example} (got '{part}')"));
                         }
                         picked.entry(int(&at)).or_default().push(enc);
                     }
@@ -611,32 +624,44 @@ impl SimArgs {
     }
 }
 
-pub fn usage() -> Vec<String> {
-    strings(&[
-        "usage: tools/fc.sh sim <mode> [level] [seeds] [key=value ...]   (seed i = 11 + 12 i; level default 5, seeds 3; party / sweep 10)",
-        "modes: duel [level]       class round robin, hero vs hero (bin/hp matrix, row averages)",
-        "       tier [level]       hero vs its class (or tier_foe=) at minion/standard/elite/boss, 1v1 and 1v3",
-        "       levels             class at L vs L+2 for L = 1, 3, 5, 7",
-        "       group [level]      hero L vs 3 minions at L-2, 3 standard at L-2, 3 minions at L",
-        "       stats [level|all]  no fights: HP, armor, EHP, power, range, speed, crit, active families",
-        "       party [level]      comp (1..PARTY_MAX classes) vs generated mob/line/wave/elite/boss or catalog encounters",
-        "       role [level]       limit tests per class: tank_hold, ranged_dive, aoe_swarm, support_attrition, striker_priority",
-        "       sweep [level]      every size-class composition (size=4; lead= fixes one class) vs enc: ranking, swap delta, top-5 appearances",
-        "       campaign [level]   Ashlands story fights in quest order, HP carried over (level = party level, default 5): all 10 trios, both steel choices",
-        "keys:  cap=1..30 (10)  loadout=default|newest|role (default; party side)",
-        "       spend=class|cons|primary|mixed|all (class; party side)  preset=<PlanPresets id>|both (balanced; every unit)",
-        "       distance=default|2..6 (default; role mode 4)  score=both|hp|binary (both)  quick  metrics=on|off (on in party/role/sweep)",
-        "       band=lo-hi (30-70): duel row hp averages outside it are flagged LOW/HIGH (diagnostic, not a gate)",
-        "       comp=c1,c2,.. (warrior,ranger,priest,mage)  enc=<ids>|generated|all|world:<id>[,..] (generated)  elevel=+n|-n|catalog (+0)",
-        "       elite=<class> (warrior)  boss=<class> (brawler)  role=<tank|ranged|aoe|support|striker|all>  class=<id|all>",
-        "       dupes=on|off (off)  sample=<n> (sweep with dupes; RNG seed 7)  target=<key>:<lo>-<hi> (override a section 8 band)",
-        "       heal=none|full|rally|<pct> (none; campaign: between-battle healing, full also revives, rally = HealRules 25% after a win, a downed hero gets up)  comp=.. picks one campaign party",
-        "       rest=<b,b> (none): campaign story battles that start after a full rest  extra=<b>:<enc>[,..] (none): campaign extra fight(s) before story battle b (a loss there is a fall at b)",
-        "       jitter=on|off (on): seeded start tiles (each unit up to 1 tile inside its half) and party order per seed",
-        "       pouch=<id,id,id> (none): every party unit carries these consumables and may use them (TacticalAI use_items)",
-        "       world=<id> (ashlands): bare enc= ids also find that world's encounters (story characters with their extras and tuning)",
-        "       size=1..PARTY_MAX (4) lead=<class> (none): sweep compositions of that size holding the lead (size=3 lead=warrior: the 10 trios)",
-        "       tier_foe=mirror|<class> (mirror): tier mode foe class  phase=on|off (on): the generated boss's sim phase  s2=on|off (off): support_attrition S2 foes (authored since BAL5-R1b: no change)",
-        "       jitter PLAN FAIL on an unreachable target (no path / too far) is a skipped fight (PLAN SKIP line), not a fail",
-    ])
+/// The help text printed after an argument error; the campaign line is the game's story run's (KIT1-SIM).
+pub fn usage(game: &SimGame) -> Vec<String> {
+    let campaign = game.story.as_ref().map_or(NO_STORY_USAGE, |s| s.usage.as_str());
+    let world = format!("       world=<id> ({}): bare enc= ids also find that world's encounters (story characters with their extras and tuning)", game.default_world);
+    let mut out = strings(&USAGE);
+    out.insert(USAGE_CAMPAIGN_AT, campaign.to_string());
+    out.insert(USAGE_WORLD_AT, world);
+    out
 }
+
+/// The usage `campaign` line of a game without a story run.
+const NO_STORY_USAGE: &str = "       campaign [level]   the story fights of the game's story run (this game has none)";
+/// Where usage() inserts the campaign mode line and the world= key line into USAGE.
+const USAGE_CAMPAIGN_AT: usize = 9;
+const USAGE_WORLD_AT: usize = 21;
+
+const USAGE: [&str; 23] = [
+    "usage: tools/fc.sh sim <mode> [level] [seeds] [key=value ...]   (seed i = 11 + 12 i; level default 5, seeds 3; party / sweep 10)",
+    "modes: duel [level]       class round robin, hero vs hero (bin/hp matrix, row averages)",
+    "       tier [level]       hero vs its class (or tier_foe=) at minion/standard/elite/boss, 1v1 and 1v3",
+    "       levels             class at L vs L+2 for L = 1, 3, 5, 7",
+    "       group [level]      hero L vs 3 minions at L-2, 3 standard at L-2, 3 minions at L",
+    "       stats [level|all]  no fights: HP, armor, EHP, power, range, speed, crit, active families",
+    "       party [level]      comp (1..PARTY_MAX classes) vs generated mob/line/wave/elite/boss or catalog encounters",
+    "       role [level]       limit tests per class: tank_hold, ranged_dive, aoe_swarm, support_attrition, striker_priority",
+    "       sweep [level]      every size-class composition (size=4; lead= fixes one class) vs enc: ranking, swap delta, top-5 appearances",
+    "keys:  cap=1..30 (10)  loadout=default|newest|role (default; party side)",
+    "       spend=class|cons|primary|mixed|all (class; party side)  preset=<PlanPresets id>|both (balanced; every unit)",
+    "       distance=default|2..6 (default; role mode 4)  score=both|hp|binary (both)  quick  metrics=on|off (on in party/role/sweep)",
+    "       band=lo-hi (30-70): duel row hp averages outside it are flagged LOW/HIGH (diagnostic, not a gate)",
+    "       comp=c1,c2,.. (warrior,ranger,priest,mage)  enc=<ids>|generated|all|world:<id>[,..] (generated)  elevel=+n|-n|catalog (+0)",
+    "       elite=<class> (warrior)  boss=<class> (brawler)  role=<tank|ranged|aoe|support|striker|all>  class=<id|all>",
+    "       dupes=on|off (off)  sample=<n> (sweep with dupes; RNG seed 7)  target=<key>:<lo>-<hi> (override a section 8 band)",
+    "       heal=none|full|rally|<pct> (none; campaign: between-battle healing, full also revives, rally = HealRules 25% after a win, a downed hero gets up)  comp=.. picks one campaign party",
+    "       rest=<b,b> (none): campaign story battles that start after a full rest  extra=<b>:<enc>[,..] (none): campaign extra fight(s) before story battle b (a loss there is a fall at b)",
+    "       jitter=on|off (on): seeded start tiles (each unit up to 1 tile inside its half) and party order per seed",
+    "       pouch=<id,id,id> (none): every party unit carries these consumables and may use them (TacticalAI use_items)",
+    "       size=1..PARTY_MAX (4) lead=<class> (none): sweep compositions of that size holding the lead (size=3 lead=warrior: the 10 trios)",
+    "       tier_foe=mirror|<class> (mirror): tier mode foe class  phase=on|off (on): the generated boss's sim phase  s2=on|off (off): support_attrition S2 foes (authored since BAL5-R1b: no change)",
+    "       jitter PLAN FAIL on an unreachable target (no path / too far) is a skipped fight (PLAN SKIP line), not a fail",
+];

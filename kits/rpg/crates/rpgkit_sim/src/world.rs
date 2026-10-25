@@ -1,26 +1,24 @@
-//! Balance sim world encounters (tools/sim/sim_world.gd, BAL4-ATTR): the Ashlands story fights in quest order, read
+//! Balance sim world encounters (tools/sim/sim_world.gd, BAL4-ATTR): the game's story fights in quest order, read
 //! from the world data, with story characters mapped to their base catalog units. BAL5-SIM K1: any world's
 //! encounters; a character with extras (named items, passives, disciplines, tuning) plays as a sandbox copy
 //! simw_<world>_<id> of its base unit that spawns with those extras, as in a world battle.
 
 use crate::runner::{Def, Runner};
 use crate::scenarios::{catalog_ids, Enc};
+use crate::StoryRun;
 use aegis_core::json::{self, Dict};
 use rpgkit_world::Data;
 use serde_json::{json, Map, Value};
 
-pub const WORLD: &str = "ashlands";
-/// The flag of the "bar the gate" choice.
-pub const STEEL_FLAG: &str = "ashlands.steel_to_gate";
 /// MORALE1-S: morale fields copied into the base of full encounters.
 const MORALE_KEYS: [&str; 5] = ["morale", "morale_break", "morale_leader", "morale_groups", "morale_text"];
 
-/// The main story quests in order: the auto-start root with no requirements, then every quest that (transitively)
-/// requires it, in file order.
-pub fn story_quests(d: &Data) -> Vec<Dict> {
+/// The main story quests of `world` in order: the auto-start root with no requirements, then every quest that
+/// (transitively) requires it, in file order.
+pub fn story_quests(d: &Data, world: &str) -> Vec<Dict> {
     let mut in_story: Vec<String> = Vec::new();
     let mut out = Vec::new();
-    for q in d.own_entries(WORLD, "quests") {
+    for q in d.own_entries(world, "quests") {
         let reqs = json::sget(q, "requires");
         let root = reqs.is_empty() && json::b(q, "auto_start", false);
         let chained = reqs.iter().any(|r| in_story.contains(r));
@@ -53,14 +51,14 @@ pub fn scripted_encounters_for_flag(d: &Data, flag: &str) -> Vec<String> {
     out
 }
 
-/// The step encounter of quest `q` at step `i`, with the steel_to_gate variant applied.
-fn step_encounter(q: &Dict, i: usize, steel_to_gate: bool) -> String {
+/// The step encounter of quest `q` at step `i`, with the variant on choice flag `flag` applied when `flag_on`.
+fn step_encounter(q: &Dict, i: usize, flag: &str, flag_on: bool) -> String {
     let steps = json::aget(q, "steps");
     let mut enc = json::s(json::dict(&steps[i]), "encounter");
     for v in json::aget(q, "variants") {
         let v = json::dict(v);
-        let needs = json::aget(v, "when_flags").iter().any(|c| json::s(json::dict(c), "key") == STEEL_FLAG);
-        if needs && steel_to_gate {
+        let needs = json::aget(v, "when_flags").iter().any(|c| json::s(json::dict(c), "key") == flag);
+        if needs && flag_on {
             let over = json::dget(json::dget(json::dget(v, "set"), "steps"), &i.to_string());
             if over.contains_key("encounter") {
                 enc = json::s(over, "encounter");
@@ -77,14 +75,14 @@ pub struct StoryFight {
     pub scripted: bool,
 }
 
-/// Every story fight in order.
-pub fn story_fights(d: &Data, steel_to_gate: bool) -> Vec<StoryFight> {
+/// Every story fight of `story` in order, on the branch where its choice flag is `flag_on`.
+pub fn story_fights(d: &Data, story: &StoryRun, flag_on: bool) -> Vec<StoryFight> {
     let mut out = Vec::new();
-    for q in story_quests(d) {
+    for q in story_quests(d, &story.world) {
         let steps = json::aget(&q, "steps");
         for i in 0..steps.len() {
             let step = json::dict(&steps[i]);
-            let enc = step_encounter(&q, i, steel_to_gate);
+            let enc = step_encounter(&q, i, &story.branch_flag, flag_on);
             if !enc.is_empty() {
                 out.push(StoryFight { quest: json::s(&q, "id"), encounter: enc, scripted: false });
             }

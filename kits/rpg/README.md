@@ -10,8 +10,8 @@ Since KIT1-M and KIT1-N (2026-10-25) the kit also holds code and names no game: 
 their field tables `schema.json`; the lookup chains that pick a body, portrait, icon or battle stage art (`battle_stage_dirs`, `battle_prop_dirs`,
 `battle_backdrop`, STAGE1-L) are in `rpgkit_content`'s `art.rs`,
 the writer hooks are `rpgkit_content::store::RpgContent`, and the data folder is found by `Data::find_data_dir` or
-`find_game_data_dir` with the game's id. A game's crates re-export the kit and add their own code. Base-class ids
-(`warrior`, ...) are the kit's contract. See `docs/specs/KIT1.md`.
+`find_game_data_dir` with the game's id. A game's crates re-export the kit and add their own code. The sim names no world: a game passes
+`SimGame { default_world, story }` (KIT1-SIM). Base-class ids (`warrior`, ...) are the kit's contract. See `docs/specs/KIT1.md`.
 
 `kit.json` is written through `aegis content manifest --kit rpg <json>` (id = this folder's name, a semver version,
 the engine range it needs).

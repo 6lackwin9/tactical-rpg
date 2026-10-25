@@ -20,13 +20,38 @@ use args::SimArgs;
 use rpgkit_world::Data;
 use runner::Runner;
 
-/// Runs the sim command line `argv` (mode first, as `tools/fc.sh sim` takes it) on `d`; the printed lines.
-pub fn run(d: &Data, argv: &[String]) -> Vec<String> {
-    let a = match SimArgs::parse(d, argv) {
+/// What a game tells the sim (KIT1-SIM): the kit names no world, flag or story; the game's sim crate passes them.
+#[derive(Debug, Clone, Default)]
+pub struct SimGame {
+    /// The world of `world=` (bare enc= ids, `enc=world:<id>`) and of the `extra=` check.
+    pub default_world: String,
+    /// The story the `campaign` mode plays; None: the mode prints that the game has none.
+    pub story: Option<StoryRun>,
+}
+
+/// The story run of the `campaign` mode: the auto-start quest chain of `world`, played once per branch of the
+/// choice flag `branch_flag`.
+#[derive(Debug, Clone)]
+pub struct StoryRun {
+    pub world: String,
+    pub branch_flag: String,
+    /// What the output calls the choice (the word before a branch label in "<choice> <label>").
+    pub choice: String,
+    /// The branch labels in play order, each with whether the choice flag is set on that branch.
+    pub branches: Vec<(String, bool)>,
+    /// The usage line of the `campaign` mode.
+    pub usage: String,
+    /// The `extra=` example of its error message (`<battle>:<encounter>`).
+    pub extra_example: String,
+}
+
+/// Runs the sim command line `argv` (mode first, as `tools/fc.sh sim` takes it) on `d` for `game`; the printed lines.
+pub fn run(d: &Data, argv: &[String], game: &SimGame) -> Vec<String> {
+    let a = match SimArgs::parse_for(d, argv, game) {
         Ok(a) => a,
         Err(e) => {
             let mut out = vec![format!("SIM argument error: {e}")];
-            out.extend(args::usage());
+            out.extend(args::usage(game));
             return out;
         }
     };

@@ -10,7 +10,7 @@ emberwake_battle = { path = "../emberwake_battle" }
 indexmap = { workspace = true }
 serde_json = { workspace = true }
 rpgkit_sim = { path = "../../../../kits/rpg/crates/rpgkit_sim" }
+emberwake_world = { path = "../emberwake_world" }
 
 [dev-dependencies]
 aegis_core = { path = "../../../../engine/crates/aegis_core" }
-emberwake_world = { path = "../emberwake_world" }

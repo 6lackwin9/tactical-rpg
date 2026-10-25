@@ -1,5 +1,6 @@
 //! Balance sim `campaign` mode (tools/sim/sim_campaign.gd, BAL4-ATTR): a party of three (warrior + two of the other
-//! five classes: all 10 trios, or comp=) plays the Ashlands story fights in quest order for both steel choices. HP
+//! five classes: all 10 trios, or comp=) plays the game's story run (KIT1-SIM: SimGame.story) in quest order once per
+//! branch of its choice flag. HP
 //! carries over (statuses reset); a hero at 0 sits out the later fights; the run ends at the first battle not cleared.
 //! Between battles `heal` applies: none, full (a downed hero revives), rally (HealRules "won") or a percent of max HP
 //! for heroes still up; rest=<b,b> restores everyone before those story battles; extra=<b>:<enc> plays a filler fight
@@ -9,12 +10,11 @@ use crate::args::CLASSES;
 use crate::runner::Runner;
 use crate::scenarios::{self, Enc};
 use crate::world;
+use crate::StoryRun;
 use aegis_core::fmt::fixed;
 use rpgkit_rules::stats::MAX_LEVEL;
 use indexmap::IndexMap;
 
-/// arms = ashmaw_stand (full finale), gate = ashmaw_stand_barred.
-const STEELS: [&str; 2] = ["arms", "gate"];
 /// Battle i of a run uses seed + i * SEED_STEP.
 const SEED_STEP: i64 = 101;
 
@@ -141,16 +141,16 @@ fn run_party(r: &mut Runner, ids: &[String], fights: &[Enc], seed: i64) -> Run {
     Run { wins, fell_at, fell_fight, hp: hp_after, skipped: None, rewards, gold }
 }
 
-fn fights_for(r: &mut Runner, steel: &str) -> Vec<Enc> {
+fn fights_for(r: &mut Runner, story: &StoryRun, flag_on: bool) -> Vec<Enc> {
     let a = r.args;
     let foe_level = (a.level + a.elevel).clamp(1, MAX_LEVEL);
     let mut out = Vec::new();
     let mut story_no = 0;
-    for f in world::story_fights(r.d, steel == "gate") {
-        let Some(enc) = world::encounter(r, &f.encounter, foe_level, a.elevel_set, world::WORLD, true) else { continue };
+    for f in world::story_fights(r.d, story, flag_on) {
+        let Some(enc) = world::encounter(r, &f.encounter, foe_level, a.elevel_set, &story.world, true) else { continue };
         story_no += 1;
         for extra_id in a.extra.get(&story_no).cloned().unwrap_or_default() {
-            if let Some(mut filler) = world::encounter(r, &extra_id, foe_level, a.elevel_set, world::WORLD, true) {
+            if let Some(mut filler) = world::encounter(r, &extra_id, foe_level, a.elevel_set, &story.world, true) {
                 filler.extra = true;
                 out.push(filler);
             }
@@ -162,10 +162,16 @@ fn fights_for(r: &mut Runner, steel: &str) -> Vec<Enc> {
 
 pub fn campaign_mode(r: &mut Runner) {
     let a = r.args;
+    let Some(story_run) = a.game.story.as_ref() else {
+        r.print("CAMPAIGN: this game has no story run");
+        return;
+    };
+    let choice = &story_run.choice;
     let parties = if a.comp_set { vec![a.comp.clone()] } else { trios() };
-    let story: Vec<String> = STEELS
+    let story: Vec<String> = story_run
+        .branches
         .iter()
-        .map(|steel| format!("{steel}: {}", world::story_fights(r.d, *steel == "gate").iter().map(|f| f.encounter.as_str()).collect::<Vec<_>>().join(" > ")))
+        .map(|(label, on)| format!("{label}: {}", world::story_fights(r.d, story_run, *on).iter().map(|f| f.encounter.as_str()).collect::<Vec<_>>().join(" > ")))
         .collect();
     r.print(format!(
         "CAMPAIGN party level {} (foes at authored levels{}), heal {}, {} seeds, {} parties; story order {}",
@@ -180,8 +186,8 @@ pub fn campaign_mode(r: &mut Runner) {
         let ids = scenarios::define_party(r, &comp, a.level);
         let (mut overall_wins, mut overall_total, mut overall_runs) = (0.0, 0.0, 0usize);
         let name = comp.join(",");
-        for steel in STEELS {
-            let fights = fights_for(r, steel);
+        for (branch, flag_on) in &story_run.branches {
+            let fights = fights_for(r, story_run, *flag_on);
             let total = fights.len();
             let (mut wins_sum, mut clears, mut runs) = (0.0, 0, 0usize);
             let (mut run_xp, mut run_gold, mut run_drops, mut run_keys) = (0.0, 0.0, 0.0, 0.0);
@@ -190,7 +196,7 @@ pub fn campaign_mode(r: &mut Runner) {
             for s in a.seeds() {
                 let run = run_party(r, &ids, &fights, s);
                 if let Some(at) = run.skipped {
-                    r.print(format!("  {name} steel {steel} seed {s}: skipped at battle {at} (PLAN SKIP: jitter, unreachable target)"));
+                    r.print(format!("  {name} {choice} {branch} seed {s}: skipped at battle {at} (PLAN SKIP: jitter, unreachable target)"));
                     continue;
                 }
                 runs += 1;
@@ -211,7 +217,7 @@ pub fn campaign_mode(r: &mut Runner) {
                     *fell.entry(run.fell_at).or_insert(0) += 1;
                 }
                 let outcome = if run.fell_at == 0 { "cleared the campaign".to_string() } else { format!("fell at battle {} ({})", run.fell_at, fights[run.fell_fight as usize].label) };
-                r.print(format!("  {name} steel {steel} seed {s}: survived {}/{total}, {outcome}, party hp% after each battle [{}]", run.wins, hp_text.join(", ")));
+                r.print(format!("  {name} {choice} {branch} seed {s}: survived {}/{total}, {outcome}, party hp% after each battle [{}]", run.wins, hp_text.join(", ")));
                 if a.rewards {
                     let w = &run.rewards;
                     r.print(format!(
@@ -237,14 +243,14 @@ pub fn campaign_mode(r: &mut Runner) {
             let fell_text: Vec<String> = (1..=total as i32).filter_map(|b| fell.get(&b).map(|n| format!("b{b} x{n}"))).collect();
             let seeds_n = runs.max(1) as f64;
             r.print(format!(
-                "{name:<24} steel {steel:<4} survived {}/{total}, campaign cleared {clears}/{runs}, fell: {}, mean party hp% after: [{}]",
+                "{name:<24} {choice} {branch:<4} survived {}/{total}, campaign cleared {clears}/{runs}, fell: {}, mean party hp% after: [{}]",
                 fixed(wins_sum / seeds_n, 1),
                 if fell_text.is_empty() { "never".to_string() } else { fell_text.join(", ") },
                 avg_hp.join(", ")
             ));
             if a.rewards {
                 r.print(format!(
-                    "{name:<24} steel {steel:<4} rewards per run: xp/hero {}, gold {}, drops {}, key {}",
+                    "{name:<24} {choice} {branch:<4} rewards per run: xp/hero {}, gold {}, drops {}, key {}",
                     fixed(run_xp / seeds_n, 1),
                     fixed(run_gold / seeds_n, 1),
                     fixed(run_drops / seeds_n, 2),
@@ -256,6 +262,7 @@ pub fn campaign_mode(r: &mut Runner) {
             overall_runs += runs;
         }
         let n = overall_runs.max(1) as f64;
-        r.print(format!("{name:<24} TRIO summary (both steel choices): survived {} of {} battles per run", fixed(overall_wins / n, 1), fixed(overall_total / n, 1)));
+        let every = if story_run.branches.len() == 2 { "both".to_string() } else { format!("all {}", story_run.branches.len()) };
+        r.print(format!("{name:<24} TRIO summary ({every} {choice} choices): survived {} of {} battles per run", fixed(overall_wins / n, 1), fixed(overall_total / n, 1)));
     }
 }
