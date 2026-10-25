@@ -33,6 +33,7 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | ENCOUNTER2 | Encounter structures: authored terrain, hold-a-tile escape, impossible fight and last stand, boss phase kill / swap / rogue side, linked rooms | proposed | - | `docs/specs/ENCOUNTER2.md`; user 2026-10-25 (Q-60, Q-75, Q-75a); slice needs T, H, HA, W, U, K, D; EQ1-EQ9 open |
 | RULESET1 | The "timeline" combat ruleset (M1 feel prototype): ruleset world field and Dojo toggle, windups, recovery, chains, ap_cost, poise and breaks, Active Guard, pierce, reach 2, deck slot kinds, plan visibility; the classic ruleset byte-identical | proposed | DERIVE1 | `docs/specs/RULESET1.md`; user 2026-10-25 (combat group 1.1); TQ1-TQ11 open |
 | CAMPAIGN1 | Campaign meters (Alert, the Doom Clock), checkpoints and bad ends, the run-over screen, purse and upkeep names, rests that cost days, defeat retreat, event triggers; off in worlds without a `campaign` field | in-progress | - | `docs/specs/CAMPAIGN1.md`; user 2026-10-25 (slice M0) |
+| KIT1 | Kit extraction (kit crates, the Ashlands as the kit's sample) | in-progress | - | M0: genre rules into `kits/rpg/crates/rpgkit_*`, the `emberwake_*` crates become façades with game code and Emberwake's tests, the schema to the kit, a layer check in the gate; the Ashlands stay the kit's sample and parity world (classic); spec `docs/specs/KIT1.md`; KQ1-KQ8 open |
 
 ## Goals (user 2026-10-17, decision "Goal-based roadmap"; replaces the suggested build order)
 

@@ -81,6 +81,7 @@ Never delete or rewrite entries. When something is replaced, add a row with the 
 | 2026-10-25 | Rest's +2 AP per block under the timeline ruleset | replaced | Proposed 0.5 AP per Rest block (cap 2) plus poise, for the balance lane (RULESET1 TQ13) | The planner fills spare blocks with Rest, so +2 per block would flood AP |
 | 2026-10-25 | The round stance names (`round_stance`, `stance_bound`, `stance_buff`, task RULESET1-ST, `docs/specs/RULESET1_STANCE.md`) | replaced | The round intent names (`round_intent`, `intent_bound`, `intent_buff`, RULESET1-IN, `docs/specs/RULESET1_INTENT.md`) | User 2026-10-25: the user's word is intent; "stance" stays the Ashlands' classic system |
 | 2026-10-25 | Maneuver moves at half AP and double tiles (`maneuver_move_ap`, `maneuver_move_speed`; never built) | replaced | Carried moves: a maneuver skill's movement costs nothing beyond the skill when the target is in its range | User 2026-10-25 |
+| 2026-10-25 | Kit code only when a second game shares rules (SPLIT1 principle 2; `docs/STRUCTURE.md`, `kits/rpg/README.md`) | replaced | KIT1: the genre rules move into `kits/rpg/crates/rpgkit_*` in M0, the game crates become façades | User 2026-10-25 ("Worlds and reuse"): the new campaign is a second ruleset user inside the same game and the Ashlands become the kit's sample, so the reason to wait no longer holds |
 
 New rows go at the end of the table above (append-only); this section stays below it.
 
