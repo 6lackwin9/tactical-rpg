@@ -2,7 +2,7 @@
 //! key=value tokens in any order.
 
 use crate::targets::{self, Targets};
-use emberwake_world::Data;
+use rpgkit_world::Data;
 use indexmap::IndexMap;
 
 pub const MODES: [&str; 9] = ["duel", "tier", "levels", "group", "stats", "party", "role", "sweep", "campaign"];
@@ -28,9 +28,9 @@ pub const METRIC_MODES: [&str; 3] = ["party", "role", "sweep"];
 /// Role limit tests start enemies 4 tiles away.
 pub const ROLE_DISTANCE: i32 = 4;
 pub const DEFAULT_COMP: [&str; 4] = ["warrior", "ranger", "priest", "mage"];
-const PARTY_MAX: usize = emberwake_world::data::PARTY_MAX as usize;
-const POUCH_MAX: usize = emberwake_world::state::POUCH_MAX;
-const MAX_LEVEL: i32 = emberwake_rules::stats::MAX_LEVEL;
+const PARTY_MAX: usize = rpgkit_world::data::PARTY_MAX as usize;
+const POUCH_MAX: usize = rpgkit_world::state::POUCH_MAX;
+const MAX_LEVEL: i32 = rpgkit_rules::stats::MAX_LEVEL;
 
 #[derive(Debug, Clone)]
 pub struct SimArgs {

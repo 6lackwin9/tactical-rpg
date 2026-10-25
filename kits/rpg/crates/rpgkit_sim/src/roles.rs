@@ -5,9 +5,9 @@ use crate::kpi::{per_fight, ratio, Acc};
 use crate::scenarios::FightSet;
 use crate::targets::{self, Targets};
 use aegis_core::fmt::fixed;
-use emberwake_battle::metrics::EARLY_DOWN_ROUND;
-use emberwake_data::Catalog;
-use emberwake_rules::stats::MAX_CLASS_SLOTS;
+use rpgkit_battle::metrics::EARLY_DOWN_ROUND;
+use rpgkit_data::Catalog;
+use rpgkit_rules::stats::MAX_CLASS_SLOTS;
 
 pub fn role_label(role: &str) -> &'static str {
     match role {

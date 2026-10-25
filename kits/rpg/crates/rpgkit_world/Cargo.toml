@@ -7,10 +7,10 @@ edition = "2021"
 aegis_core = { path = "../../../../engine/crates/aegis_core" }
 aegis_content = { path = "../../../../engine/crates/aegis_content" }
 aegis_save = { path = "../../../../engine/crates/aegis_save" }
-emberwake_data = { package = "rpgkit_data", path = "../rpgkit_data" }
-emberwake_rules = { package = "rpgkit_rules", path = "../rpgkit_rules" }
-emberwake_content = { package = "rpgkit_content", path = "../rpgkit_content" }
-emberwake_battle = { package = "rpgkit_battle", path = "../rpgkit_battle" }
+rpgkit_data = { path = "../rpgkit_data" }
+rpgkit_rules = { path = "../rpgkit_rules" }
+rpgkit_content = { path = "../rpgkit_content" }
+rpgkit_battle = { path = "../rpgkit_battle" }
 indexmap = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }

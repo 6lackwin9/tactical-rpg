@@ -3,8 +3,8 @@
 use super::{capitalize, View, LOADOUT_SLOTS, NO_ITEM};
 use aegis_core::fmt::fixed;
 use aegis_core::json::{self, Dict};
-use emberwake_data::{ClassDef, ItemDef, SkillDef, STATS};
-use emberwake_rules::stats::{spend_pool, Proficiency, CLASS_BUDGET, DEFAULT_SCALING, MAX_CLASS_SLOTS, MAX_EXTRA_SLOTS, MAX_LEVEL, PROF_MAX_LEVEL};
+use rpgkit_data::{ClassDef, ItemDef, SkillDef, STATS};
+use rpgkit_rules::stats::{spend_pool, Proficiency, CLASS_BUDGET, DEFAULT_SCALING, MAX_CLASS_SLOTS, MAX_EXTRA_SLOTS, MAX_LEVEL, PROF_MAX_LEVEL};
 use indexmap::IndexMap;
 use serde_json::Value;
 
@@ -289,7 +289,7 @@ fn skill_loadout_errors(v: &View, e: &Dict, a: &ClassDef) -> Vec<String> {
 /// tiers past the level cap, weapon gates the class cannot reach) and the role mismatches.
 pub fn class_warnings(v: &View, e: &Dict) -> Vec<String> {
     let class = ClassDef::from_obj(e);
-    let mut out = emberwake_rules::budget::check_class(&class, &v.typed.items);
+    let mut out = rpgkit_rules::budget::check_class(&class, &v.typed.items);
     let path = json::dget(e, "skill_path");
     let families: Vec<String> = path.keys().filter(|k| !v.typed.is_basic_family(k)).cloned().collect();
     if families.len() > MAX_CLASS_SLOTS {

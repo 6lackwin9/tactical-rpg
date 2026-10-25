@@ -4,7 +4,7 @@
 
 use crate::metrics::{counts_json, BattleMetrics, Detail, UnitRecord, COMBO_KINDS};
 use crate::session::Session;
-use emberwake_rules::status;
+use rpgkit_rules::status;
 use indexmap::IndexMap;
 use serde_json::{json, Value};
 

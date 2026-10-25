@@ -7,10 +7,10 @@ use crate::path::{self, Cells, Hooks};
 use crate::skill::{self, SkillId};
 use crate::world::{UnitId, World};
 use aegis_core::rng::GodotRng;
-use emberwake_data::ItemDef;
-use emberwake_rules::damage::{self, Hit, HitInput};
-use emberwake_rules::stats::roundi;
-use emberwake_rules::{status, Stance, Unit};
+use rpgkit_data::ItemDef;
+use rpgkit_rules::damage::{self, Hit, HitInput};
+use rpgkit_rules::stats::roundi;
+use rpgkit_rules::{status, Stance, Unit};
 use serde_json::Value;
 
 pub const COUNTER_MULT: f64 = 0.5;
@@ -810,7 +810,7 @@ pub fn effective_heal(target: &Unit, amount: i32) -> i32 {
     amount.clamp(0, target.max_hp - target.hp)
 }
 
-pub fn cleansable(target: &Unit, s: &emberwake_data::SkillDef) -> Vec<&'static str> {
+pub fn cleansable(target: &Unit, s: &rpgkit_data::SkillDef) -> Vec<&'static str> {
     skill::cleanse_list(s).into_iter().filter(|st| target.st.has_any(st)).collect()
 }
 

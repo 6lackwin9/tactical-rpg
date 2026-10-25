@@ -2,9 +2,9 @@
 //! skill_catalog.gd, scripts/content/skill_kinds.gd). Skills are referenced by their index in `Catalog::skills`.
 
 use crate::grid::{V2, DIRS};
-use emberwake_data::{Catalog, SkillDef};
-use emberwake_rules::unit::skill_in_group;
-use emberwake_rules::{Stance, Unit};
+use rpgkit_data::{Catalog, SkillDef};
+use rpgkit_rules::unit::skill_in_group;
+use rpgkit_rules::{Stance, Unit};
 
 pub type SkillId = usize;
 
@@ -182,12 +182,12 @@ pub fn cleanse_list(s: &SkillDef) -> Vec<&'static str> {
         return Vec::new();
     }
     let all = s.cleanse_statuses.iter().any(|x| x == "all");
-    emberwake_rules::status::debuffs().into_iter().filter(|d| all || s.cleanse_statuses.iter().any(|x| x == d)).collect()
+    rpgkit_rules::status::debuffs().into_iter().filter(|d| all || s.cleanse_statuses.iter().any(|x| x == d)).collect()
 }
 
 /// ItemCommand.skill_for: the synthetic SUPPORT skill a battle item rides on the timeline (keeps the stance, never
 /// offered as a skill). Sessions add one per pouch item id to their catalog copy (Session::add_item_skills).
-pub fn item_skill(item: &emberwake_data::ItemDef) -> SkillDef {
+pub fn item_skill(item: &rpgkit_data::ItemDef) -> SkillDef {
     let o = serde_json::json!({"id": item_skill_id(&item.id), "name": item.name, "kind": "SUPPORT", "level": 1, "blocks": item.use_blocks.max(1),
         "target_mode": "ALLY_OR_SELF", "system": true, "_item": item.id});
     SkillDef::from_obj(o.as_object().unwrap())

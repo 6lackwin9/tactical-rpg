@@ -3,8 +3,8 @@
 
 use crate::grid::{Grid, V2, DEPLOY_ANCHOR_Y, DEPLOY_ROWS, GRID_H, GRID_W, NO_CELL};
 use crate::skill::{self, Book};
-use emberwake_data::{Catalog, UnitDef};
-use emberwake_rules::Unit;
+use rpgkit_data::{Catalog, UnitDef};
+use rpgkit_rules::Unit;
 use indexmap::IndexMap;
 use std::sync::Arc;
 
@@ -73,7 +73,7 @@ impl AiProfile {
         };
         let mut cap = e.skill_cap;
         if cap <= 0 && arch.is_some() {
-            let tier_cap = emberwake_rules::stats::tier_scales(&e.tier).2;
+            let tier_cap = rpgkit_rules::stats::tier_scales(&e.tier).2;
             cap = if tier_cap > 0 { tier_cap } else { NO_CEILING };
         } else if cap <= 0 {
             cap = 1;
@@ -160,7 +160,7 @@ impl World {
     /// Adds the synthetic skill (skill::item_skill) of every pouch item missing from this battle's catalog copy;
     /// call after pouches change.
     pub fn add_item_skills(&mut self) {
-        let mut missing: Vec<emberwake_data::SkillDef> = Vec::new();
+        let mut missing: Vec<rpgkit_data::SkillDef> = Vec::new();
         for p in self.units.iter().flat_map(|u| u.inventory.pouch.iter()) {
             let id = skill::item_skill_id(&p.id);
             if self.cat.skill(&id).is_none() && !missing.iter().any(|s| s.id == id) {

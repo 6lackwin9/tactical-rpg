@@ -4,13 +4,13 @@
 //! validation stay out): ContentCatalog.reload_from_disk / _read_kind (SkillRanks.expand with SkillText.render,
 //! ItemModifiers.resolve, ItemFamilies.derive), WorldCatalog.reload_from_disk (the engine's world loader over
 //! WORLD_KINDS), MapCatalog / QuestCatalog / ServiceCatalog (normalize) and XpCurve.load_file. The field tables are
-//! games/emberwake/schema.json, exported once from Godot's ContentSchema / WorldSchema (`parity/export.sh only=schema`).
+//! kits/rpg/schema.json, exported once from Godot's ContentSchema / WorldSchema (`parity/export.sh only=schema`).
 //! Like Godot, a bad file or entry is reported in `errors` and skipped, never fatal.
 
 use aegis_content::file::{entries_of, read};
 use aegis_content::schema::{normalize, sget, snapped};
 use aegis_core::json::{self, gstr, int, to_float_or, to_int_or, Dict};
-use emberwake_rules::status;
+use rpgkit_rules::status;
 use serde_json::{Map, Value};
 use std::path::Path;
 use std::sync::OnceLock;
@@ -30,10 +30,10 @@ pub const WORLD_KINDS: [&str; 13] = ["regions", "locations", "factions", "charac
 
 const SCHEMA_TEXT: &str = include_str!("../../../schema.json");
 
-/// games/emberwake/schema.json: {"content": {kind: [field]}, "world": {kind: [field]}}.
+/// kits/rpg/schema.json: {"content": {kind: [field]}, "world": {kind: [field]}}.
 pub fn schema() -> &'static Value {
     static S: OnceLock<Value> = OnceLock::new();
-    S.get_or_init(|| serde_json::from_str(SCHEMA_TEXT).expect("games/emberwake/schema.json"))
+    S.get_or_init(|| serde_json::from_str(SCHEMA_TEXT).expect("kits/rpg/schema.json"))
 }
 
 pub(crate) fn fields(section: &str, kind: &str) -> &'static [Value] {
@@ -51,7 +51,7 @@ pub fn load(data_dir: &Path) -> Source {
     game.insert("services".into(), Value::Array(load_list(&data_dir.join("dialogue/services.json"), &mut errors, service)));
     let curve = xp_curve(&data_dir.join("progression/xp_curve.json"), &mut errors);
     let steps = json::aget(&curve, "xp_to_next");
-    let xp: Vec<Value> = (1..=emberwake_rules::stats::MAX_LEVEL as usize).map(|level| int(steps.iter().take(level - 1).map(json::to_int).sum())).collect();
+    let xp: Vec<Value> = (1..=rpgkit_rules::stats::MAX_LEVEL as usize).map(|level| int(steps.iter().take(level - 1).map(json::to_int).sum())).collect();
     game.insert("xp_for_level".into(), Value::Array(xp));
     game.insert("xp_curve".into(), Value::Object(curve));
     game.insert("item_families".into(), catalog["item_families"].clone());
@@ -70,7 +70,7 @@ pub(crate) fn content(kind: &str, entry: &Dict) -> Dict {
 pub fn folded(kind: &str, entry: &Dict) -> Dict {
     let mut e = entry.clone();
     if kind == "encounters" {
-        emberwake_battle::encounter::fold_legacy_wave(&mut e);
+        rpgkit_battle::encounter::fold_legacy_wave(&mut e);
     }
     e
 }
@@ -80,7 +80,7 @@ pub fn folded(kind: &str, entry: &Dict) -> Dict {
 pub fn fold_legacy_waves(catalog: &mut Value, worlds: &mut Value) {
     let fold_all = |list: Option<&mut Value>| {
         for e in list.and_then(Value::as_array_mut).into_iter().flatten().filter_map(Value::as_object_mut) {
-            emberwake_battle::encounter::fold_legacy_wave(e);
+            rpgkit_battle::encounter::fold_legacy_wave(e);
         }
     };
     fold_all(catalog.get_mut("encounters"));
@@ -401,7 +401,7 @@ pub(crate) fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize) ->
         "recover" => format!("{} AP", i("recover_ap", 0)),
         "unlock" => {
             let offset = i("unlock_offset", -1);
-            format!("+{}", if offset >= 0 { offset } else { emberwake_rules::stats::TIER_UNLOCK_STEP as i64 * (rank as i64 - 1).max(0) })
+            format!("+{}", if offset >= 0 { offset } else { rpgkit_rules::stats::TIER_UNLOCK_STEP as i64 * (rank as i64 - 1).max(0) })
         }
         "flow" => match s("ends_in_stance").as_str() {
             "NEUTRAL" => "ends in Neutral".into(),
@@ -803,7 +803,7 @@ fn xp_curve(path: &Path, errors: &mut Vec<String>) -> Dict {
 fn xp_problems(doc: &Dict) -> Vec<String> {
     let mut errors = Vec::new();
     let steps = json::aget(doc, "xp_to_next");
-    let want = emberwake_rules::stats::MAX_LEVEL as usize - 1;
+    let want = rpgkit_rules::stats::MAX_LEVEL as usize - 1;
     if steps.len() != want {
         errors.push(format!("xp_to_next needs exactly {want} entries (got {}).", steps.len()));
     }

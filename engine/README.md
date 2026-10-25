@@ -101,7 +101,7 @@ Status and the file-by-file map: [docs/PORT_NOTES.md](docs/PORT_NOTES.md).
 ## Driving a battle from the CLI (agents)
 
 `aegis serve` reads one JSON request per line and answers one JSON line each (full list in
-`../games/emberwake/crates/emberwake_host/src/lib.rs`):
+`../kits/rpg/crates/rpgkit_host/src/lib.rs`, KIT1-N):
 
 ```bash
 printf '%s\n' '{"cmd":"new","encounter":"goblin_skirmish"}' \

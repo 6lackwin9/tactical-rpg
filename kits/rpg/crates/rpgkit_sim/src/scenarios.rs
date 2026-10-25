@@ -6,9 +6,9 @@ use crate::kpi::Acc;
 use crate::roles;
 use crate::runner::{Def, Runner};
 use aegis_core::json;
-use emberwake_battle::encounter;
-use emberwake_battle::metrics::accumulate;
-use emberwake_rules::stats::MAX_LEVEL;
+use rpgkit_battle::encounter;
+use rpgkit_battle::metrics::accumulate;
+use rpgkit_rules::stats::MAX_LEVEL;
 use indexmap::IndexMap;
 use serde_json::{json, Map, Value};
 
@@ -318,8 +318,8 @@ impl RewardSum {
         self.share += if rec.total > 0 { rec.weight as f64 / rec.total as f64 } else { 0.0 };
         self.drop_value += rec.drop_value_x100 as f64 / 100.0;
         for kill in key_kills {
-            let of: Vec<&emberwake_battle::session::Fate> = rec.fates.iter().filter(|f| &f.0 == kill).map(|f| &f.1).collect();
-            if won && !of.is_empty() && of.iter().all(|f| **f == emberwake_battle::session::Fate::Killed) {
+            let of: Vec<&rpgkit_battle::session::Fate> = rec.fates.iter().filter(|f| &f.0 == kill).map(|f| &f.1).collect();
+            if won && !of.is_empty() && of.iter().all(|f| **f == rpgkit_battle::session::Fate::Killed) {
                 self.keys += 1.0;
             }
         }

@@ -20,7 +20,7 @@ use crate::resolver::Combo;
 use crate::session::Session;
 use crate::skill;
 use crate::world::UnitId;
-use emberwake_rules::status;
+use rpgkit_rules::status;
 use indexmap::{IndexMap, IndexSet};
 use serde_json::{json, Map, Value};
 

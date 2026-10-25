@@ -9,7 +9,7 @@ use crate::targets;
 use crate::world;
 use aegis_core::fmt::fixed;
 use aegis_core::rng::GodotRng;
-use emberwake_rules::stats::MAX_LEVEL;
+use rpgkit_rules::stats::MAX_LEVEL;
 
 /// Sweep dupes=on sample=n draw.
 pub const SAMPLE_SEED: u64 = 7;
@@ -72,7 +72,7 @@ pub fn party_mode(r: &mut Runner) {
         a.level,
         a.comp.join(","),
         a.comp.len(),
-        emberwake_world::data::PARTY_MAX,
+        rpgkit_world::data::PARTY_MAX,
         spends.len() * presets.len() * a.seed_count,
         spends.join(","),
         presets.join(","),

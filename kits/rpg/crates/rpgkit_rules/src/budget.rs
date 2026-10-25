@@ -4,7 +4,7 @@
 use aegis_core::fmt::fixed;
 use aegis_core::json;
 use aegis_core::value::{boolean, string};
-use emberwake_data::{ClassDef, ItemDef, LOADOUT_SLOTS};
+use rpgkit_data::{ClassDef, ItemDef, LOADOUT_SLOTS};
 use indexmap::IndexMap;
 use serde_json::Value;
 

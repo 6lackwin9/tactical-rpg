@@ -34,7 +34,7 @@ pub struct View {
     /// checks are skipped).
     pub assets: aegis_core::assets::Layers,
     /// The same catalog typed (classes, the skill families: ClassArchetype, SkillCatalog).
-    pub typed: emberwake_data::Catalog,
+    pub typed: rpgkit_data::Catalog,
     /// The worlds over the catalog (WorldCatalog.resolve: a catalog encounter's qualified purse loot).
     pub worlds: aegis_content::world::Catalogs,
     /// True once the catalog has a terrain file (missing terrain rows are errors then, else warnings).
@@ -59,7 +59,7 @@ impl View {
         for (name, key) in [("item_families", "item_families"), ("quest_templates", "quests"), ("maps", "maps"), ("services", "services")] {
             rows.insert(name.into(), json::arr(&game[key]).iter().map(|e| json::dict(e).clone()).collect());
         }
-        Self { rows, assets, typed: emberwake_data::Catalog::from_value(catalog), worlds: aegis_content::world::Catalogs::from_values(catalog, worlds), terrain_file: true, load_errors: Vec::new() }
+        Self { rows, assets, typed: rpgkit_data::Catalog::from_value(catalog), worlds: aegis_content::world::Catalogs::from_values(catalog, worlds), terrain_file: true, load_errors: Vec::new() }
     }
 
     pub fn entries(&self, kind: &str) -> &[Dict] {
@@ -92,13 +92,13 @@ pub fn options_of(v: &View, f: &Dict) -> Vec<String> {
     };
     let s = |l: &[&str]| l.iter().map(|x| x.to_string()).collect::<Vec<String>>();
     match json::s(f, "options_from").as_str() {
-        "zones" => s(&emberwake_battle::grid::ZONE_IDS),
+        "zones" => s(&rpgkit_battle::grid::ZONE_IDS),
         "body" => bodies(false),
         "body_inherit" => bodies(true),
-        "status" => std::iter::once(String::new()).chain(emberwake_rules::status::debuffs().into_iter().map(String::from)).collect(),
-        "status_buff" => std::iter::once(String::new()).chain(emberwake_rules::status::ROWS.iter().filter(|r| r.buff && !r.grant.is_empty()).map(|r| r.id.to_string())).collect(),
+        "status" => std::iter::once(String::new()).chain(rpgkit_rules::status::debuffs().into_iter().map(String::from)).collect(),
+        "status_buff" => std::iter::once(String::new()).chain(rpgkit_rules::status::ROWS.iter().filter(|r| r.buff && !r.grant.is_empty()).map(|r| r.id.to_string())).collect(),
         "weapon_types" => skill::GEAR_TYPES.iter().map(|g| g.to_string()).chain(std::iter::once("unarmed".to_string())).collect(),
-        "debuffs_or_all" => emberwake_rules::status::debuffs().into_iter().map(String::from).chain(std::iter::once("all".to_string())).collect(),
+        "debuffs_or_all" => rpgkit_rules::status::debuffs().into_iter().map(String::from).chain(std::iter::once("all".to_string())).collect(),
         _ => json::aget(f, "options").iter().map(gstr).collect(),
     }
 }

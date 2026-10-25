@@ -2,8 +2,8 @@
 //! family: the AP the battle charges, the blocks, and only the fields that differ between the family's ranks, so the
 //! < > arrows read as "what changes". A locked rank reads "unlocks at Lv n".
 
-use emberwake_data::{Catalog, SkillDef};
-use emberwake_rules::unit::Unit;
+use rpgkit_data::{Catalog, SkillDef};
+use rpgkit_rules::unit::Unit;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RankLine {
@@ -62,7 +62,7 @@ pub fn rank_lines(cat: &Catalog, unit: &Unit, family: &str) -> Vec<RankLine> {
         .map(|s| {
             let unlocked = unit.owns_skill(cat, &s.id) && unit.tier_unlocked(cat, s);
             let unlock_level = unit.skill_unlock_level(cat, s);
-            let ap = emberwake_battle::skill::ap_cost(s, Some(unit));
+            let ap = rpgkit_battle::skill::ap_cost(s, Some(unit));
             let text = if unlocked {
                 let mut bits = vec![format!("{ap} AP"), format!("{} block{}", s.blocks, if s.blocks == 1 { "" } else { "s" })];
                 bits.extend(changing.iter().map(|f| f(s)).filter(|t| !t.is_empty()));

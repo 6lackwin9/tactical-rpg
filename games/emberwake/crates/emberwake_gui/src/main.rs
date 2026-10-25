@@ -61,7 +61,7 @@ fn main() -> Result<()> {
     });
     let start = engine_dir.clone().unwrap_or_else(|| cwd.clone());
     let game_dir = manifest::find_game_dir(&start, GAME_ID);
-    let data_dir = arg(&args, "data").map(PathBuf::from).or_else(|| emberwake_world::Data::find_data_dir(&start)).context("data folder not found: pass data=<dir> (a data folder or a Godot export folder)")?;
+    let data_dir = arg(&args, "data").map(PathBuf::from).or_else(|| emberwake_world::find_data_dir(&start)).context("data folder not found: pass data=<dir> (a data folder or a Godot export folder)")?;
     let (data, mut notices) = emberwake_world::Data::open(&data_dir).with_context(|| format!("loading the data in {}", data_dir.display()))?;
     let data = Arc::new(data);
     let manifest = match game_dir.as_ref().map(|g| Manifest::read(&g.join(manifest::FILE))) {

@@ -4,8 +4,8 @@
 //! principle 2). Pure: they read data entries; the screens and the checks resolve them against the layers.
 
 use aegis_core::json::{self, Dict};
-use emberwake_data::ItemDef;
-use emberwake_rules::gear::{Inventory, Slot};
+use rpgkit_data::ItemDef;
+use rpgkit_rules::gear::{Inventory, Slot};
 
 /// A body key's class and variant (`<class>` = `<class>/base`).
 pub fn split_body(key: &str) -> (&str, &str) {
@@ -309,7 +309,7 @@ mod tests {
         let class = d(json!({"id": "brawler", "art": "brawler"}));
         let unit = d(json!({"id": "goblin_brawler", "class_id": "brawler", "art": "brawler/goblin", "tier": "minion"}));
         let skarn = d(json!({"id": "skarn_ironjaw", "art": "brawler/skarn_ironjaw", "role": "enemy", "portrait_tier": "elite"}));
-        let mob = d(json!({"id": "ash_brawler", "art": "", "role": "enemy"}));
+        let mob = d(json!({"id": "mob_brawler", "art": "", "role": "enemy"}));
         assert_eq!(body_of(&skarn, &unit, &class), "brawler/skarn_ironjaw");
         assert_eq!(body_of(&mob, &unit, &class), "brawler/goblin", "a character without art wears its base unit's body");
         assert_eq!(body_of(&Dict::new(), &d(json!({"class_id": "mage"})), &Dict::new()), "mage");
@@ -321,7 +321,7 @@ mod tests {
         assert_eq!(portrait_tier(&d(json!({"role": "npc"})), &unit), "npc");
         assert_eq!(portrait_tier(&Dict::new(), &d(json!({"tier": "boss"}))), "boss");
         assert_eq!(portrait_chain("elite", "skarn_ironjaw", "brawler/skarn_ironjaw"), ["portraits/elites/skarn_ironjaw.png", "portraits/common/brawler_skarn_ironjaw.png", "portraits/common/brawler_base.png"]);
-        assert_eq!(portrait_chain("common", "ash_brawler", "brawler/goblin"), ["portraits/common/brawler_goblin.png", "portraits/common/brawler_base.png"]);
+        assert_eq!(portrait_chain("common", "mob_brawler", "brawler/goblin"), ["portraits/common/brawler_goblin.png", "portraits/common/brawler_base.png"]);
         assert_eq!(portrait_chain("common", "x", "mage"), ["portraits/common/mage_base.png"]);
     }
 
@@ -334,6 +334,6 @@ mod tests {
         assert_eq!(item_icon_chain(&oddity, &d(json!({"art": "hammer"})))[0], "items/hammer/base.png", "the family's art names the folder");
         assert_eq!(skill_icon_chain("shield_bash", "ATTACK"), ["skills/shield_bash.png", "skills/kinds/attack.png"]);
         assert_eq!(intent("idle"), "ui/intents/rest.png");
-        assert_eq!(region_sets(&["tidewrack".into(), "ashlands".into()]), ["tidewrack", "ashlands", "common"]);
+        assert_eq!(region_sets(&["world_a".into(), "world_b".into()]), ["world_a", "world_b", "common"]);
     }
 }

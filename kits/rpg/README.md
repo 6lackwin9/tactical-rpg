@@ -5,9 +5,12 @@ reuse groups (user 2026-10-20)"). A game uses the kit by naming it in its `game.
 then looks up every asset in the game's `assets/`, this kit's `assets/` and `engine/assets/`, in that order, so a game
 overrides a kit file by putting its own at the same path.
 
-Since KIT1-M (2026-10-25) the kit also holds code: the genre rules in `crates/rpgkit_{data,rules,battle,content,world,sim}`
-and their field tables `schema.json` (the lookup chains that pick a body, portrait or icon are in `rpgkit_content`'s
-`art.rs`); the game's `emberwake_*` crates re-export them. See `docs/specs/KIT1.md`.
+Since KIT1-M and KIT1-N (2026-10-25) the kit also holds code and names no game: the genre rules in
+`crates/rpgkit_{data,rules,battle,content,world,sim,host}` (the host crate is the battle command set on `aegis_host`) and
+their field tables `schema.json`; the lookup chains that pick a body, portrait or icon are in `rpgkit_content`'s `art.rs`,
+the writer hooks are `rpgkit_content::store::RpgContent`, and the data folder is found by `Data::find_data_dir` or
+`find_game_data_dir` with the game's id. A game's crates re-export the kit and add their own code. Base-class ids
+(`warrior`, ...) are the kit's contract. See `docs/specs/KIT1.md`.
 
 `kit.json` is written through `aegis content manifest --kit rpg <json>` (id = this folder's name, a semver version,
 the engine range it needs).

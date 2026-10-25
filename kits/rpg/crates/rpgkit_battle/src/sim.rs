@@ -8,7 +8,7 @@ use crate::report::Report;
 use crate::session::{EncounterDef, Phase, Session};
 use crate::world::{UnitId, World};
 use aegis_core::rng::GodotRng;
-use emberwake_data::{Catalog, UnitDef};
+use rpgkit_data::{Catalog, UnitDef};
 use indexmap::IndexMap;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -281,7 +281,7 @@ fn same_entry(x: &Value, y: &Value) -> bool {
 }
 
 /// The first difference in the metrics, report or log of a Godot fight record and a Rust trace (None = the same).
-/// A record without them comes from before PORT-BREPORT: re-record it (games/emberwake/parity/trace.sh).
+/// A record without them comes from before PORT-BREPORT: re-record it (the game's parity/trace.sh).
 pub fn metrics_divergence(g: &Value, r: &Value) -> Option<String> {
     if g.get("metrics").is_none() {
         return Some("the Godot record has no metrics, report or log: re-record the traces".into());

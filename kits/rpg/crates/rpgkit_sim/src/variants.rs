@@ -1,10 +1,10 @@
 //! Balance sim variants (tools/sim/sim_variants.gd, BAL2_SIM.md section 3): the "newest" loadout, the spend variants,
 //! the start-distance placement and the clumped enemy block (BAL3 3.2). Pure helpers over the catalog and the grid.
 
-use emberwake_battle::grid::{Grid, V2, GRID_H, GRID_W};
-use emberwake_battle::world::{UnitId, World};
-use emberwake_data::Catalog;
-use emberwake_rules::stats::{spend_pool, MAX_CLASS_SLOTS};
+use rpgkit_battle::grid::{Grid, V2, GRID_H, GRID_W};
+use rpgkit_battle::world::{UnitId, World};
+use rpgkit_data::Catalog;
+use rpgkit_rules::stats::{spend_pool, MAX_CLASS_SLOTS};
 use serde_json::{json, Map, Value};
 
 /// 3.1: owned class-path families of a `level` unit (path level 1 first in path order, then the rest by path level

@@ -2,7 +2,7 @@
 //! tile after it falls (Godot leaves dead units in combatant_positions), and leaves the grid when it withdraws.
 
 use aegis_core::value;
-use emberwake_data::Catalog;
+use rpgkit_data::Catalog;
 use std::ops::{Add, Mul, Sub};
 
 pub const GRID_W: i32 = 12;

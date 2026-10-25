@@ -13,9 +13,9 @@ use crate::resolver::Resolver;
 use crate::metrics::BattleMetrics;
 use crate::world::{AiProfile, UnitId, World};
 use aegis_core::value::{self, Obj};
-use emberwake_data::{Catalog, UnitDef};
-use emberwake_rules::status;
-use emberwake_rules::{build_unit, Unit};
+use rpgkit_data::{Catalog, UnitDef};
+use rpgkit_rules::status;
+use rpgkit_rules::{build_unit, Unit};
 use indexmap::IndexMap;
 use serde_json::Value;
 use std::collections::VecDeque;
@@ -104,7 +104,7 @@ impl EncounterDef {
 }
 
 /// Where roster refs come from: catalog units (an `IndexMap` of extra entries, then the catalog), or world characters
-/// (emberwake_world: the base unit wearing the character, then its named items, passives and tuning).
+/// (rpgkit_world: the base unit wearing the character, then its named items, passives and tuning).
 pub trait Roster {
     fn entry(&self, cat: &Catalog, r: &str) -> Option<UnitDef>;
     /// CatalogEncounter._customize: a freshly spawned unit's extras.
@@ -127,7 +127,7 @@ impl Roster for IndexMap<String, UnitDef> {
 
 /// A unit built outside the encounter (GameEncounter: a saved party member through PartyBuilder).
 pub struct Prebuilt {
-    pub unit: emberwake_rules::Unit,
+    pub unit: rpgkit_rules::Unit,
     pub art: String,
     /// The palette its body wears (ASSETORG2; "" = none).
     pub palette: String,
@@ -143,7 +143,7 @@ pub struct UnitSnap {
     pub max_hp: i32,
     pub ap: i32,
     pub pos: Option<V2>,
-    pub stance: emberwake_rules::Stance,
+    pub stance: rpgkit_rules::Stance,
     pub guard: f64,
     pub attack_boost: f64,
     pub active: bool,

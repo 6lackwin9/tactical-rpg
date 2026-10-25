@@ -1,6 +1,6 @@
 //! Typed content catalog (classes, units, skills, items, passives, encounters, terrain).
 //!
-//! Source today: the resolved catalog the Godot exporter writes (`games/emberwake/parity/out/catalog.json`), i.e. exactly the
+//! Source today: the resolved catalog the Godot exporter writes (the game's `parity/out/catalog.json`), i.e. exactly the
 //! entries Godot's `ContentCatalog.entries(kind)` returns after item-family resolution and schema normalisation.
 //! Defaults below are the `ContentSchema` field defaults, so hand-written partial entries normalise the same way.
 

@@ -5,11 +5,11 @@
 use crate::data::{Data, PARTY_MAX};
 use crate::progression;
 use aegis_core::json::{self, int, strs, Dict};
-use emberwake_data::STATS;
+use rpgkit_data::STATS;
 use indexmap::IndexMap;
 
 // The gear rules live in the rules crate (the battle crate's gear dojo uses them too).
-pub use emberwake_rules::gear::{class_can_equip, item_fits_slot, off_hand_ok};
+pub use rpgkit_rules::gear::{class_can_equip, item_fits_slot, off_hand_ok};
 use serde_json::Value;
 
 pub const GOLD_MAX: i64 = 9_999_999;
@@ -71,7 +71,7 @@ impl UnitState {
     }
 
     pub fn unspent(&self, d: &Data) -> i64 {
-        emberwake_rules::stats::spend_pool(self.level(d) as i32) as i64 - self.spent()
+        rpgkit_rules::stats::spend_pool(self.level(d) as i32) as i64 - self.spent()
     }
 
     /// UnitState._gear_errors for one item: it fits `slot` (ContentFactory.item_fits_slot, worn gear kept) and the
@@ -82,7 +82,7 @@ impl UnitState {
             return Err(format!("{} can't be equipped in {}.", def.name, slot.replace('_', " ")));
         }
         let class = d.cat.classes.get(&self.class_id(d));
-        if !class.is_some_and(|c| class_can_equip(&emberwake_rules::stats::Proficiency::from_class(c), def)) {
+        if !class.is_some_and(|c| class_can_equip(&rpgkit_rules::stats::Proficiency::from_class(c), def)) {
             return Err(format!("{} has no training in {} ({}).", class.map(|c| c.name.as_str()).unwrap_or("This class"), def.weapon_type, def.name));
         }
         Ok(())
@@ -101,7 +101,7 @@ impl UnitState {
         }
         ids.extend(json::sget(d.entry("units", &self.base_unit), "extra_skills"));
         ids.extend(self.learned_skills.iter().cloned());
-        emberwake_rules::unit::families_of(&d.cat, &ids)
+        rpgkit_rules::unit::families_of(&d.cat, &ids)
     }
 
     pub fn to_value(&self) -> Value {
@@ -207,7 +207,7 @@ impl UnitState {
                 errors.push(format!("{at}: spend {k} can't be negative."));
             }
         }
-        let pool = emberwake_rules::stats::spend_pool(self.level(d) as i32) as i64;
+        let pool = rpgkit_rules::stats::spend_pool(self.level(d) as i32) as i64;
         if self.spent() > pool {
             errors.push(format!("{at}: spend totals {}, above the level {} pool of {pool}.", self.spent(), self.level(d)));
         }
@@ -255,11 +255,11 @@ impl UnitState {
 
     pub fn loadout_errors(&self, d: &Data, at: &str) -> Vec<String> {
         let mut errors = Vec::new();
-        if self.loadout_class.len() > emberwake_rules::stats::MAX_CLASS_SLOTS {
-            errors.push(format!("{at}: at most {} class families in the loadout.", emberwake_rules::stats::MAX_CLASS_SLOTS));
+        if self.loadout_class.len() > rpgkit_rules::stats::MAX_CLASS_SLOTS {
+            errors.push(format!("{at}: at most {} class families in the loadout.", rpgkit_rules::stats::MAX_CLASS_SLOTS));
         }
-        if self.loadout_extra.len() > emberwake_rules::stats::MAX_EXTRA_SLOTS {
-            errors.push(format!("{at}: at most {} extra families in the loadout.", emberwake_rules::stats::MAX_EXTRA_SLOTS));
+        if self.loadout_extra.len() > rpgkit_rules::stats::MAX_EXTRA_SLOTS {
+            errors.push(format!("{at}: at most {} extra families in the loadout.", rpgkit_rules::stats::MAX_EXTRA_SLOTS));
         }
         let owned = self.owned_families(d);
         let mut seen: Vec<&String> = Vec::new();

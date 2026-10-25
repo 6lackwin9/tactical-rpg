@@ -5,6 +5,6 @@ edition = "2021"
 
 [dependencies]
 aegis_core = { path = "../../../../engine/crates/aegis_core" }
-emberwake_data = { package = "rpgkit_data", path = "../rpgkit_data" }
+rpgkit_data = { path = "../rpgkit_data" }
 indexmap = { workspace = true }
 serde_json = { workspace = true }

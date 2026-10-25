@@ -8,7 +8,6 @@ name = "aegis"
 path = "src/main.rs"
 
 [dependencies]
-aegis_core = { path = "../../../../engine/crates/aegis_core" }
 aegis_host = { path = "../../../../engine/crates/aegis_host" }
 aegis_cli = { path = "../../../../engine/crates/aegis_cli" }
 aegis_content = { path = "../../../../engine/crates/aegis_content" }
@@ -21,3 +20,7 @@ emberwake_sim = { path = "../emberwake_sim" }
 indexmap = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
+rpgkit_host = { path = "../../../../kits/rpg/crates/rpgkit_host" }
+
+[dev-dependencies]
+aegis_core = { path = "../../../../engine/crates/aegis_core" }

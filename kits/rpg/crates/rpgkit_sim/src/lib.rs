@@ -17,7 +17,7 @@ pub mod variants;
 pub mod world;
 
 use args::SimArgs;
-use emberwake_world::Data;
+use rpgkit_world::Data;
 use runner::Runner;
 
 /// Runs the sim command line `argv` (mode first, as `tools/fc.sh sim` takes it) on `d`; the printed lines.

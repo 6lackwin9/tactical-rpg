@@ -4,10 +4,10 @@
 use crate::data::Data;
 use crate::state::{GameState, PartyState, UnitState};
 use aegis_core::json::{self, int, Dict};
-use emberwake_data::STATS;
-use emberwake_rules::gear::{Equipment, Slot};
-use emberwake_rules::stats::MAX_LEVEL;
-use emberwake_rules::{build_unit, Unit};
+use rpgkit_data::STATS;
+use rpgkit_rules::gear::{Equipment, Slot};
+use rpgkit_rules::stats::MAX_LEVEL;
+use rpgkit_rules::{build_unit, Unit};
 use serde_json::Value;
 
 // ---- XpCurve -------------------------------------------------------------------------------------------------
@@ -109,7 +109,7 @@ pub fn auto_for(d: &Data, state: &mut UnitState) {
         return;
     }
     let growth = d.cat.classes.get(&state.class_id(d)).map(|c| c.growth.clone()).unwrap_or_default();
-    for (k, v) in emberwake_rules::stats::auto_spend(&growth, left as i32) {
+    for (k, v) in rpgkit_rules::stats::auto_spend(&growth, left as i32) {
         *state.spend.entry(k).or_insert(0) += v as i64;
     }
 }
@@ -161,7 +161,7 @@ pub fn build_with(d: &Data, state: &UnitState, auto_spend: bool) -> Option<Built
     def.spend = work.spend.iter().map(|(k, v)| (k.clone(), *v as i32)).collect();
     if def.spend.is_empty() {
         // ContentFactory.NO_AUTO_SPEND: an empty spend must not be auto-spent by the factory either
-        def.spend.insert(emberwake_data::STATS[0].to_string(), 0);
+        def.spend.insert(rpgkit_data::STATS[0].to_string(), 0);
     }
     def.name = display_name(d, &work);
     let mut u = build_unit(cat, &def, 0);

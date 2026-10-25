@@ -22,7 +22,7 @@ use std::time::Instant;
 pub struct Emberwake;
 
 impl Game for Emberwake {
-    type Content = emberwake_content::store::Emberwake;
+    type Content = emberwake_content::store::RpgContent;
     const USAGE: &'static str = "aegis sim <mode> [level] [seeds] [key=value ...]   (aegis sim help: modes and keys)\naegis battle <encounter id> [seed=N] [preset=balanced] [log]";
 
     fn run(&self, args: &Args) -> Option<Result<()>> {
@@ -44,7 +44,7 @@ impl Game for Emberwake {
     }
 
     fn content(&self) -> Self::Content {
-        emberwake_content::store::Emberwake
+        emberwake_content::store::RpgContent
     }
 
     fn host(&self, args: &Args) -> Result<Box<dyn FnMut(&Value) -> Value>> {
@@ -98,7 +98,7 @@ fn load_catalog(args: &Args) -> Result<Arc<Catalog>> {
 fn data_dir(args: &Args) -> Result<PathBuf> {
     match args.keys.get("data") {
         Some(d) => Ok(PathBuf::from(d)),
-        None => match emberwake_world::Data::find_data_dir(&std::env::current_dir()?) {
+        None => match emberwake_world::find_data_dir(&std::env::current_dir()?) {
             Some(d) => Ok(d),
             None => bail!("data folder not found: run from the project or pass data=<dir> (or catalog=<export file>)"),
         },

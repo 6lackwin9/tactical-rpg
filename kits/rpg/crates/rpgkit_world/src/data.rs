@@ -7,7 +7,7 @@
 
 use aegis_content::Catalogs;
 use aegis_core::json::{self, empty, Dict};
-use emberwake_data::Catalog;
+use rpgkit_data::Catalog;
 use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use serde_json::Value;
@@ -43,6 +43,11 @@ fn read(path: &Path) -> Result<Value> {
     serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))
 }
 
+/// A data folder: holds catalog/ and worlds/.
+fn is_data_dir(d: &Path) -> bool {
+    d.join("catalog").is_dir() && d.join("worlds").is_dir()
+}
+
 fn dicts(v: &Value) -> Vec<Dict> {
     json::arr(v).iter().filter_map(|x| x.as_object().cloned()).collect()
 }
@@ -63,14 +68,20 @@ impl Data {
             return Ok((Self::load(dir)?, Vec::new()));
         }
         anyhow::ensure!(dir.join("catalog").is_dir(), "{} is neither a data folder (catalog/, worlds/, ...) nor a Godot export folder", dir.display());
-        let src = emberwake_content::source::load(dir);
+        let src = rpgkit_content::source::load(dir);
         Ok((Self::from_values(&src.catalog, &src.worlds, &src.game), src.errors))
     }
 
-    /// The game's data/ folder (games/emberwake/data) found from `start` (the game folder, the repository, or a folder
-    /// inside either).
+    /// The data/ folder of the nearest game folder at or above `start` (one holding game.json, data/catalog/ and
+    /// data/worlds/): for a start inside a game's folder.
     pub fn find_data_dir(start: &Path) -> Option<std::path::PathBuf> {
-        aegis_content::manifest::find_game_dir(start, crate::GAME_ID).map(|g| g.join("data")).filter(|d| d.join("catalog").is_dir() && d.join("worlds").is_dir())
+        start.ancestors().find(|d| d.join(aegis_content::manifest::FILE).is_file() && is_data_dir(&d.join("data"))).map(|d| d.join("data"))
+    }
+
+    /// The data/ folder of game `id` found from `start` (the game folder, the repository, or a folder inside either;
+    /// `aegis_content::manifest::find_game_dir`), when it holds catalog/ and worlds/.
+    pub fn find_game_data_dir(start: &Path, id: &str) -> Option<std::path::PathBuf> {
+        aegis_content::manifest::find_game_dir(start, id).map(|g| g.join("data")).filter(|d| is_data_dir(d))
     }
 
     /// From the Godot export folder (catalog.json, worlds.json, game_data.json); encounters with the retired `wave_*`
@@ -79,7 +90,7 @@ impl Data {
         let mut catalog = read(&dir.join("catalog.json"))?;
         let mut worlds = read(&dir.join("worlds.json"))?;
         let game = read(&dir.join("game_data.json"))?;
-        emberwake_content::source::fold_legacy_waves(&mut catalog, &mut worlds);
+        rpgkit_content::source::fold_legacy_waves(&mut catalog, &mut worlds);
         Ok(Self::from_values(&catalog, &worlds, &game))
     }
 
@@ -119,7 +130,7 @@ impl Data {
     /// The item's description with its tokens filled from the resolved row (ItemText.render, as ContentFactory.item).
     pub fn item_description(&self, id: &str) -> String {
         let row = self.entry("items", id);
-        emberwake_content::source::render_item(&json::s(row, "description"), row)
+        rpgkit_content::source::render_item(&json::s(row, "description"), row)
     }
 
     // ---- MapCatalog / QuestCatalog / ServiceCatalog ------------------------------------------------------------

@@ -5,9 +5,9 @@
 use super::View;
 use crate::source::content;
 use aegis_core::json::{self, gstr, Dict};
-use emberwake_battle::encounter::{ARRIVAL, ARRIVAL_BLOCK, ARRIVAL_ROUND};
-use emberwake_battle::grid::{terrain_walkable, Grid, TerrainTable, GRID_H, GRID_W, V2};
-use emberwake_rules::status;
+use rpgkit_battle::encounter::{ARRIVAL, ARRIVAL_BLOCK, ARRIVAL_ROUND};
+use rpgkit_battle::grid::{terrain_walkable, Grid, TerrainTable, GRID_H, GRID_W, V2};
+use rpgkit_rules::status;
 use serde_json::{json, Value};
 use std::sync::OnceLock;
 

@@ -5,7 +5,7 @@ use crate::args::CLASSES;
 use crate::runner::{Cell, Def, Runner};
 use crate::variants;
 use aegis_core::fmt::fixed;
-use emberwake_rules::damage;
+use rpgkit_rules::damage;
 
 const TIER_ORDER: [&str; 4] = ["minion", "standard", "elite", "boss"];
 const LEVEL_STEPS: [i32; 4] = [1, 3, 5, 7];

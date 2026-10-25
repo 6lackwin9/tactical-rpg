@@ -7,13 +7,13 @@ use crate::roles;
 use crate::variants;
 use aegis_core::json;
 use aegis_core::rng::GodotRng;
-use emberwake_battle::encounter::Phases;
-use emberwake_battle::grid::NO_CELL;
-use emberwake_battle::metrics::{BattleMetrics, EndResult};
-use emberwake_battle::session::{EncounterDef, Fate, Phase, Roster, Session};
-use emberwake_battle::sim::{binary_score, hp_score, jitter_start, plan_skip, shuffled, side_hp_frac, JITTER_SALT, MAX_STEPS_PER_ROUND};
-use emberwake_data::{Catalog, UnitDef};
-use emberwake_world::Data;
+use rpgkit_battle::encounter::Phases;
+use rpgkit_battle::grid::NO_CELL;
+use rpgkit_battle::metrics::{BattleMetrics, EndResult};
+use rpgkit_battle::session::{EncounterDef, Fate, Phase, Roster, Session};
+use rpgkit_battle::sim::{binary_score, hp_score, jitter_start, plan_skip, shuffled, side_hp_frac, JITTER_SALT, MAX_STEPS_PER_ROUND};
+use rpgkit_data::{Catalog, UnitDef};
+use rpgkit_world::Data;
 use indexmap::IndexMap;
 use serde_json::{json, Map, Value};
 
@@ -106,9 +106,9 @@ impl Roster for SimRoster<'_> {
         self.units.get(r).cloned().or_else(|| cat.units.get(r).cloned())
     }
 
-    fn customize(&self, cat: &Catalog, r: &str, u: &mut emberwake_rules::Unit) {
+    fn customize(&self, cat: &Catalog, r: &str, u: &mut rpgkit_rules::Unit) {
         if let Some((w, c)) = self.characters.get(r) {
-            emberwake_world::battle::apply_character(self.d, cat, self.d.resolve(w, "characters", c), w, u);
+            rpgkit_world::battle::apply_character(self.d, cat, self.d.resolve(w, "characters", c), w, u);
         }
     }
 }
@@ -224,12 +224,12 @@ impl<'a> Runner<'a> {
     }
 
     /// The unit of declared `id` for the current variant (stats mode).
-    pub fn build(&mut self, id: &str) -> Option<emberwake_rules::Unit> {
+    pub fn build(&mut self, id: &str) -> Option<rpgkit_rules::Unit> {
         if !self.write(id) {
             return None;
         }
         let def = self.units.get(id)?;
-        Some(emberwake_rules::build_unit(&self.d.cat, def, STATS_AP))
+        Some(rpgkit_rules::build_unit(&self.d.cat, def, STATS_AP))
     }
 
     /// One battle of `left` (party) vs `right` (enemies); `base` replaces encounter defaults (zone, arena, exits,
@@ -339,7 +339,7 @@ impl<'a> Runner<'a> {
             let entry = d.entry("units", id);
             let level = def.map_or_else(|| json::i(entry, "level", 1), |x| x.level as i64);
             let tier = def.map_or_else(|| json::s_or(entry, "tier", "standard"), |x| x.tier.clone());
-            let weight = emberwake_world::progression::kill_weight(d, level, &tier);
+            let weight = rpgkit_world::progression::kill_weight(d, level, &tier);
             rec.roster += 1;
             rec.total += weight;
             match fate {
@@ -349,7 +349,7 @@ impl<'a> Runner<'a> {
                 Fate::Standing => continue,
             }
             rec.weight += weight;
-            rec.xp += emberwake_world::progression::kill_xp(d, level, &tier, self.args.level as i64);
+            rec.xp += rpgkit_world::progression::kill_xp(d, level, &tier, self.args.level as i64);
             let base = def.map(|x| x.copy_of.clone()).filter(|c| !c.is_empty()).unwrap_or_else(|| id.clone());
             for row in json::aget(d.entry("units", &base), "loot").iter().filter_map(serde_json::Value::as_object) {
                 let value = json::i(d.entry("items", &json::s(row, "item")), "value", 0);
@@ -389,7 +389,7 @@ impl<'a> Runner<'a> {
             changed = true;
         }
         if !self.args.pouch.is_empty() {
-            emberwake_battle::sim::apply_pouch(&mut s.w, &self.args.pouch);
+            rpgkit_battle::sim::apply_pouch(&mut s.w, &self.args.pouch);
         }
         if changed {
             s.replan_enemies();

@@ -2,8 +2,8 @@
 
 use aegis_core::fmt::fixed;
 use aegis_core::json::{self, Dict};
-use emberwake_battle::grid::{terrain_walkable, TERRAIN_IDS};
-use emberwake_rules::status;
+use rpgkit_battle::grid::{terrain_walkable, TERRAIN_IDS};
+use rpgkit_rules::status;
 use serde_json::Value;
 
 const TRIGGERS: [&str; 3] = ["enter", "round_end", "both"];

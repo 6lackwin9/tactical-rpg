@@ -5,10 +5,11 @@ The game runs on Aegis, its own Rust engine in `engine/` (since 2026-10-19). The
 branch resumes Godot work only if the user asks.
 
 Layers (SPLIT1, `docs/specs/SPLIT1.md`, done 2026-10-20): the engine (`engine/`, crates `aegis_*`) is game-agnostic; the
-RPG kit is `kits/rpg/` (its genre rules in crates `rpgkit_*` and their field tables `schema.json`, since KIT1-M, plus kit
-assets); the game is `games/emberwake/` (crates `emberwake_*`, façades over the kit plus game code, `data/`, `assets/`,
-`tuning.json`, `parity/`, its manifest `game.json` and its design docs in `docs/`). Every task row has a Layer (engine, kit, game) and its change lands
-in that layer; the engine never names a game.
+RPG kit is `kits/rpg/` (its genre rules in crates `rpgkit_*`, including the battle command set `rpgkit_host`, and their
+field tables `schema.json`, since KIT1-M/N; the kit names no game; plus kit assets); the game is `games/emberwake/`
+(crates `emberwake_*`, façades over the kit plus game code, `data/`, `assets/`, `tuning.json`, `parity/`, its manifest
+`game.json` and its design docs in `docs/`). Every task row has a Layer (engine, kit, game) and its change lands in that
+layer; the engine never names a game.
 
 Environment: `$CLAUDE_CODE_REMOTE` empty = **desktop** (read `docs/workflow/desktop.md`), `true` = **cloud** (read `docs/workflow/cloud.md`). Both share everything in this file; what differs (sessions, branches, commits, merges, gate time, IDE rule) and how to switch: `docs/workflow/README.md`.
 

@@ -203,7 +203,7 @@ fn shape_errors(kind: &str, e: &Dict) -> Vec<String> {
                 Some(list) => {
                     let off = |x: &Value| {
                         let pair = json::arr(x);
-                        let (w, h) = (emberwake_battle::grid::GRID_W as i64, emberwake_battle::grid::GRID_H as i64);
+                        let (w, h) = (rpgkit_battle::grid::GRID_W as i64, rpgkit_battle::grid::GRID_H as i64);
                         pair.len() != 2 || json::to_int(&pair[0]) < 0 || json::to_int(&pair[1]) < 0 || json::to_int(&pair[0]) >= w || json::to_int(&pair[1]) >= h
                     };
                     if list.iter().any(off) {
@@ -466,7 +466,7 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
                     break;
                 }
                 let (px, py) = (json::to_int(&pair[0]), json::to_int(&pair[1]));
-                if px < 0 || py < 0 || px >= emberwake_battle::grid::GRID_W as i64 || py >= emberwake_battle::grid::GRID_H as i64 {
+                if px < 0 || py < 0 || px >= rpgkit_battle::grid::GRID_W as i64 || py >= rpgkit_battle::grid::GRID_H as i64 {
                     errors.push(format!("Exit {} is off the 12x9 grid.", gstr(x)));
                 }
             }

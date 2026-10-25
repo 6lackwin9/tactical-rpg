@@ -6,8 +6,8 @@ use super::{capitalize, simple, View};
 use crate::source::{category, content, default_hand, hands_of, item_type_of, legacy_tier, render_item, resolve_item, tier_desc};
 use aegis_core::fmt::fixed;
 use aegis_core::json::{self, Dict};
-use emberwake_data::{ItemDef, STATS};
-use emberwake_rules::{budget, stats::MAX_LEVEL};
+use rpgkit_data::{ItemDef, STATS};
+use rpgkit_rules::{budget, stats::MAX_LEVEL};
 use serde_json::Value;
 
 const EQUIP_TYPES: [&str; 4] = ["WEAPON", "SHIELD", "ARMOR", "ACCESSORY"];

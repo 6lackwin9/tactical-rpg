@@ -10,7 +10,7 @@ use crate::runner::Runner;
 use crate::scenarios::{self, Enc};
 use crate::world;
 use aegis_core::fmt::fixed;
-use emberwake_rules::stats::MAX_LEVEL;
+use rpgkit_rules::stats::MAX_LEVEL;
 use indexmap::IndexMap;
 
 /// arms = ashmaw_stand (full finale), gate = ashmaw_stand_barred.
@@ -39,7 +39,7 @@ pub fn apply_heal(state: &mut State, mode: &str) {
         if mode == "full" {
             *hp = *max_hp;
         } else if mode == "rally" {
-            *hp = emberwake_world::progression::hp_after(*hp as i64, *max_hp as i64, "won") as i32;
+            *hp = rpgkit_world::progression::hp_after(*hp as i64, *max_hp as i64, "won") as i32;
         } else if mode != "none" && *hp > 0 {
             let pct: i32 = mode.parse().unwrap_or(0);
             *hp = (*max_hp).min(*hp + (*max_hp as f64 * pct as f64 / 100.0).ceil() as i32);

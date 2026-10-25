@@ -46,7 +46,7 @@ def goblin(cls, hat, pal, scale=0.84, **kw):
 # base, each a body of its own at units/<class>/<look>/ in the base's layer: `1h_buckler` (the base's one-hand weapon
 # and a buckler) and `2h_<family>`; the base's own sheet is its 1H + kite shield look. Every look of a body shares the
 # body's palette slots and palette files (DIR4 L3). The game picks the look from the equipped gear
-# (emberwake_content::art::gear_body_chain). A new family on the 2H grip: one drawer in rig.DRAWERS, one entry here.
+# (rpgkit_content::art::gear_body_chain). A new family on the 2H grip: one drawer in rig.DRAWERS, one entry here.
 TWO_HANDED = {'sword': 'greatsword', 'axe': 'battle_axe', 'hammer': 'warhammer'}
 LOOKS = {'warrior': ('1h_buckler', '2h_sword', '2h_axe', '2h_hammer')}
 

@@ -228,10 +228,10 @@ pub fn manifest_text(data_dir: &Path, world: &str) -> Result<String, String> {
 
 // ---- Upsert / remove / check -------------------------------------------------------------------------------------
 
-/// The game's hooks for the engine writer.
-pub struct Emberwake;
+/// The RPG content hooks for the engine writer (the kit's kinds, schema checks, storage rules and folder checks).
+pub struct RpgContent;
 
-impl Hooks for Emberwake {
+impl Hooks for RpgContent {
     fn kinds(&self, world: Option<&str>) -> &'static [&'static str] {
         if world.is_some() {
             &source::WORLD_KINDS
@@ -279,12 +279,12 @@ impl Hooks for Emberwake {
 /// ContentCatalog.upsert / WorldCatalog.upsert: validates `entry` (stored shape), replaces the entry with its id (or
 /// `replace_id`) or appends it, writes the file, and keeps it only when the whole data folder still loads cleanly.
 pub fn upsert(data_dir: &Path, world: Option<&str>, kind: &str, entry: &Dict, replace_id: Option<&str>) -> Result<Outcome, Vec<String>> {
-    aegis_content::store::upsert(&Emberwake, data_dir, world, kind, entry, replace_id)
+    aegis_content::store::upsert(&RpgContent, data_dir, world, kind, entry, replace_id)
 }
 
 /// Removes the entry `id` of `kind` (no reference check beyond the data folder still loading cleanly).
 pub fn remove(data_dir: &Path, world: Option<&str>, kind: &str, id: &str) -> Result<Outcome, Vec<String>> {
-    aegis_content::store::remove(&Emberwake, data_dir, world, kind, id)
+    aegis_content::store::remove(&RpgContent, data_dir, world, kind, id)
 }
 
 /// The checks view of a data folder: the loaded catalog and worlds, the art keys of its asset manifest, whether it has
@@ -341,7 +341,7 @@ pub fn warnings(data_dir: &Path) -> Vec<String> {
     out
 }
 
-/// The manifest beside the data folder (games/emberwake/game.json), when there is one: its own problems, and its
+/// The manifest beside the data folder (the game's game.json), when there is one: its own problems, and its
 /// worlds against the world folders (the list is metadata; the loader reads the folders).
 fn manifest_problems(data_dir: &Path, worlds: &Value) -> Vec<String> {
     let Some(path) = data_dir.parent().map(|g| g.join(aegis_content::manifest::FILE)).filter(|p| p.is_file()) else { return Vec::new() };

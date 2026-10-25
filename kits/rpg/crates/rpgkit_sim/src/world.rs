@@ -6,7 +6,7 @@
 use crate::runner::{Def, Runner};
 use crate::scenarios::{catalog_ids, Enc};
 use aegis_core::json::{self, Dict};
-use emberwake_world::Data;
+use rpgkit_world::Data;
 use serde_json::{json, Map, Value};
 
 pub const WORLD: &str = "ashlands";
@@ -188,7 +188,7 @@ pub fn encounter(r: &mut Runner, id: &str, foe_level: i32, elevel_set: bool, wor
         let protect = map_refs(r, &ctx, json::aget(&entry, "protect"));
         base.insert("protect".into(), json!(protect));
         let mut phases: Vec<Value> = arrival.into_iter().collect();
-        for p in json::aget(&entry, "phases").iter().filter(|p| json::s(json::dget(json::dict(p), "trigger"), "kind") != emberwake_battle::encounter::ARRIVAL) {
+        for p in json::aget(&entry, "phases").iter().filter(|p| json::s(json::dget(json::dict(p), "trigger"), "kind") != rpgkit_battle::encounter::ARRIVAL) {
             phases.push(map_node(r, &ctx, p));
         }
         base.insert("phases".into(), Value::Array(phases));
@@ -199,7 +199,7 @@ pub fn encounter(r: &mut Runner, id: &str, foe_level: i32, elevel_set: bool, wor
             }
         }
     }
-    let purse = emberwake_world::purse::read(&entry).map(|(lo, hi, _)| (lo, hi));
+    let purse = rpgkit_world::purse::read(&entry).map(|(lo, hi, _)| (lo, hi));
     let key_kills: Vec<String> = json::aget(&entry, "key_loot").iter().map(|k| map_ref(r, &ctx, &json::s(json::dict(k), "kill"))).collect();
     Some(Enc { purse, key_kills, enemies, base, label: id.into(), max_rounds: json::i(&entry, "max_rounds", 0) as i32, extra: false })
 }

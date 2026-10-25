@@ -713,6 +713,7 @@ dependencies = [
  "emberwake_sim",
  "emberwake_world",
  "indexmap",
+ "rpgkit_host",
  "serde_json",
 ]
 
@@ -2122,6 +2123,20 @@ dependencies = [
  "aegis_core",
  "anyhow",
  "indexmap",
+ "serde_json",
+]
+
+[[package]]
+name = "rpgkit_host"
+version = "0.1.0"
+dependencies = [
+ "aegis_core",
+ "aegis_host",
+ "indexmap",
+ "rpgkit_battle",
+ "rpgkit_data",
+ "rpgkit_rules",
+ "rpgkit_world",
  "serde_json",
 ]
 

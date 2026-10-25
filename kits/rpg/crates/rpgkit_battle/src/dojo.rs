@@ -8,14 +8,14 @@
 
 use crate::skill;
 use aegis_core::rng::GodotRng;
-use emberwake_data::{Catalog, ItemDef, SkillDef, STATS};
-use emberwake_rules::carry;
-use emberwake_rules::damage::{self, Hit, HitInput, CRIT_MULT};
-use emberwake_rules::gear::{class_can_equip, item_fits_slot, off_hand_ok, Equipment, Slot};
-use emberwake_rules::stats::Proficiency;
-use emberwake_rules::status;
-use emberwake_rules::unit::{Stance, Unit};
-use emberwake_rules::build_unit;
+use rpgkit_data::{Catalog, ItemDef, SkillDef, STATS};
+use rpgkit_rules::carry;
+use rpgkit_rules::damage::{self, Hit, HitInput, CRIT_MULT};
+use rpgkit_rules::gear::{class_can_equip, item_fits_slot, off_hand_ok, Equipment, Slot};
+use rpgkit_rules::stats::Proficiency;
+use rpgkit_rules::status;
+use rpgkit_rules::unit::{Stance, Unit};
+use rpgkit_rules::build_unit;
 use indexmap::IndexMap;
 use std::sync::Arc;
 
@@ -177,7 +177,7 @@ impl DojoSession {
             heroes.push(u);
             classes.push(def.class_id.clone());
         }
-        let mut dummy = cat.units.get(DUMMY).map(|d| build_unit(&cat, d, 0)).unwrap_or_else(|| build_unit(&cat, &emberwake_data::UnitDef::from_obj(&Default::default()), 0));
+        let mut dummy = cat.units.get(DUMMY).map(|d| build_unit(&cat, d, 0)).unwrap_or_else(|| build_unit(&cat, &rpgkit_data::UnitDef::from_obj(&Default::default()), 0));
         dummy.max_hp = DUMMY_MAX_HP;
         dummy.hp = DUMMY_MAX_HP;
         dummy.guard = 0.0;

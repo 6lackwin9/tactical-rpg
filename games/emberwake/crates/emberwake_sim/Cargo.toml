@@ -4,11 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-aegis_core = { path = "../../../../engine/crates/aegis_core" }
 emberwake_data = { path = "../emberwake_data" }
 emberwake_rules = { path = "../emberwake_rules" }
 emberwake_battle = { path = "../emberwake_battle" }
-emberwake_world = { path = "../emberwake_world" }
 indexmap = { workspace = true }
 serde_json = { workspace = true }
 rpgkit_sim = { path = "../../../../kits/rpg/crates/rpgkit_sim" }
+
+[dev-dependencies]
+aegis_core = { path = "../../../../engine/crates/aegis_core" }
+emberwake_world = { path = "../emberwake_world" }

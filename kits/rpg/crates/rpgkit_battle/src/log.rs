@@ -7,7 +7,7 @@ use crate::grid::{V2, NO_CELL};
 use crate::resolver::ScheduledAction;
 use crate::skill;
 use crate::world::World;
-use emberwake_rules::status;
+use rpgkit_rules::status;
 use serde_json::{json, Value};
 
 /// One log cell (ActionLogEntry). Units are named as the log shows them; an event's actor may be no unit at all

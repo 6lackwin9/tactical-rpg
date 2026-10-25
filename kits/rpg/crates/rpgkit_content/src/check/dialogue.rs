@@ -5,7 +5,7 @@ use super::quest::{flag_key_ok, flag_value_ok, rep_value_error};
 use super::world::{party_character_errors, ref_errors};
 use super::View;
 use aegis_core::json::{self, gstr, Dict};
-use emberwake_data::STATS;
+use rpgkit_data::STATS;
 use indexmap::IndexMap;
 use serde_json::Value;
 

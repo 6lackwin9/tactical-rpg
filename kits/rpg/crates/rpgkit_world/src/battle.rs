@@ -8,7 +8,7 @@ use crate::data::Data;
 use crate::state::GameState;
 use crate::{progression, purse, quest, rolls};
 use aegis_core::json::{self, int, Dict};
-use emberwake_battle::session::{Fate, Session};
+use rpgkit_battle::session::{Fate, Session};
 use serde_json::Value;
 
 pub const OUTCOMES: [&str; 3] = ["won", "lost", "fled"];
@@ -20,30 +20,30 @@ pub struct WorldRoster<'a> {
     pub world: String,
 }
 
-impl emberwake_battle::session::Roster for WorldRoster<'_> {
-    fn entry(&self, _cat: &emberwake_data::Catalog, r: &str) -> Option<emberwake_data::UnitDef> {
+impl rpgkit_battle::session::Roster for WorldRoster<'_> {
+    fn entry(&self, _cat: &rpgkit_data::Catalog, r: &str) -> Option<rpgkit_data::UnitDef> {
         let e = self.d.character_unit_entry(self.d.resolve(&self.world, "characters", r));
-        (!e.is_empty()).then(|| emberwake_data::UnitDef::from_obj(&e))
+        (!e.is_empty()).then(|| rpgkit_data::UnitDef::from_obj(&e))
     }
 
-    fn customize(&self, cat: &emberwake_data::Catalog, r: &str, u: &mut emberwake_rules::Unit) {
+    fn customize(&self, cat: &rpgkit_data::Catalog, r: &str, u: &mut rpgkit_rules::Unit) {
         apply_character(self.d, cat, self.d.resolve(&self.world, "characters", r), &self.world, u);
     }
 
-    fn tier(&self, _cat: &emberwake_data::Catalog, r: &str) -> String {
+    fn tier(&self, _cat: &rpgkit_data::Catalog, r: &str) -> String {
         let e = self.d.character_unit_entry(self.d.resolve(&self.world, "characters", r));
         json::s_or(&e, "tier", "standard")
     }
 
     /// WorldFactory: lore_ref = the character's qualified id, else its id.
-    fn lore_ref(&self, _cat: &emberwake_data::Catalog, r: &str) -> String {
+    fn lore_ref(&self, _cat: &rpgkit_data::Catalog, r: &str) -> String {
         let c = self.d.resolve(&self.world, "characters", r);
         json::s_or(c, "_qid", &json::s(c, "id"))
     }
 }
 
 /// WorldFactory.named_item: the base item with the named item's name, story, tuning deltas and extra stat bonuses.
-pub fn named_item(d: &Data, item_entry: &Dict) -> Option<emberwake_data::ItemDef> {
+pub fn named_item(d: &Data, item_entry: &Dict) -> Option<rpgkit_data::ItemDef> {
     let mut base = d.entry("items", &json::s(item_entry, "base_item")).clone();
     if base.is_empty() {
         return None;
@@ -68,12 +68,12 @@ pub fn named_item(d: &Data, item_entry: &Dict) -> Option<emberwake_data::ItemDef
     let qid = json::s_or(item_entry, "_qid", &json::s(item_entry, "id")).replace(':', "_");
     let id = format!("{}__{}", json::s_or(&base, "id", "item"), qid);
     base.insert("id".into(), Value::from(id));
-    Some(emberwake_data::ItemDef::from_obj(&base))
+    Some(rpgkit_data::ItemDef::from_obj(&base))
 }
 
 /// WorldFactory.apply_character: named items worn, lore passives applied, vitals re-derived when geared (derived
 /// units only), then the tuning deltas.
-pub fn apply_character(d: &Data, cat: &emberwake_data::Catalog, character: &Dict, world: &str, u: &mut emberwake_rules::Unit) {
+pub fn apply_character(d: &Data, cat: &rpgkit_data::Catalog, character: &Dict, world: &str, u: &mut rpgkit_rules::Unit) {
     let mut geared = false;
     for r in json::aget(character, "named_items") {
         let item_entry = d.resolve(world, "items", &json::gstr(r));
@@ -81,8 +81,8 @@ pub fn apply_character(d: &Data, cat: &emberwake_data::Catalog, character: &Dict
             continue;
         }
         if let Some(item) = named_item(d, item_entry).filter(|i| i.is_equipment()) {
-            let slot = emberwake_rules::gear::Slot::parse(&item.slot).unwrap_or(emberwake_rules::gear::Slot::MainHand);
-            u.inventory.equip(emberwake_rules::gear::Equipment::new(&item), slot);
+            let slot = rpgkit_rules::gear::Slot::parse(&item.slot).unwrap_or(rpgkit_rules::gear::Slot::MainHand);
+            u.inventory.equip(rpgkit_rules::gear::Equipment::new(&item), slot);
             geared = true;
         }
     }
@@ -104,11 +104,11 @@ pub fn apply_character(d: &Data, cat: &emberwake_data::Catalog, character: &Dict
     }
     let power = json::i(tuning, "power", 0) as i32;
     if power != 0 {
-        u.power_override = (emberwake_rules::damage::power_of(u, u.attack_range > 1, false) + power).max(1);
+        u.power_override = (rpgkit_rules::damage::power_of(u, u.attack_range > 1, false) + power).max(1);
     }
     let armor = json::i(tuning, "armor", 0) as i32;
     if armor != 0 {
-        u.armor_override = (emberwake_rules::damage::armor_rating(u) + armor).max(0);
+        u.armor_override = (rpgkit_rules::damage::armor_rating(u) + armor).max(0);
     }
     let speed = json::i(tuning, "speed", 0) as i32;
     if speed != 0 {

@@ -5,7 +5,7 @@ use super::View;
 use crate::source::{content, fields, render, token_value, RANK_KEYS};
 use aegis_content::schema::is_id;
 use aegis_core::json::{self, Dict};
-use emberwake_rules::status;
+use rpgkit_rules::status;
 use serde_json::Value;
 
 // ---- SkillKinds ----------------------------------------------------------------------------------------------------

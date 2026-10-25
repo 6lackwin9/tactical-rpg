@@ -9,8 +9,8 @@ use crate::plan::Plan;
 use crate::skill::{self, Kind, SkillId};
 use crate::world::{AiProfile, Role, TargetPref, UnitId, World};
 use aegis_core::sort::godot_sort;
-use emberwake_rules::damage;
-use emberwake_rules::status;
+use rpgkit_rules::damage;
+use rpgkit_rules::status;
 use std::collections::HashMap;
 
 pub const MAX_STEPS: usize = 16;
@@ -269,7 +269,7 @@ fn engage_any(w: &World, plan: &mut Plan, actor: UnitId, ranked: &[UnitId], cap:
 
 fn combo_ordered(w: &World, plan: &Plan, skills: &[SkillId], target: UnitId) -> Vec<SkillId> {
     let t = &w.units[target];
-    let guarded = t.stance == emberwake_rules::Stance::Defensive || t.st.has_any("riposte") || plans_riposte(w, plan, target);
+    let guarded = t.stance == rpgkit_rules::Stance::Defensive || t.st.has_any("riposte") || plans_riposte(w, plan, target);
     let (mut first, mut middle, mut last) = (Vec::new(), Vec::new(), Vec::new());
     for &sid in skills {
         let s = &w.cat.skills[sid];
@@ -384,8 +384,8 @@ fn fast_strike(w: &World, plan: &mut Plan, actor: UnitId, ranked: &[UnitId], cap
 /// HP is at or below the bomb's damage. Elixirs are never AI-used. True when a step was added.
 fn try_item(w: &World, plan: &mut Plan, actor: UnitId) -> bool {
     let pos = w.pos(actor);
-    let mut potion: Option<&emberwake_data::ItemDef> = None;
-    let mut bomb: Option<&emberwake_data::ItemDef> = None;
+    let mut potion: Option<&rpgkit_data::ItemDef> = None;
+    let mut bomb: Option<&rpgkit_data::ItemDef> = None;
     for id in command::pouch_ids(w, actor) {
         let con = command::pouch_item(w, actor, &id).unwrap();
         if !con.offered_in_battle() || plan.items_left(w, actor, &id, -1) <= 0 {

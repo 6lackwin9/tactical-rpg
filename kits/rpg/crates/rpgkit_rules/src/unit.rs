@@ -3,7 +3,7 @@
 use crate::gear::{Equipment, Inventory, Slot, TIER_SOURCE};
 use crate::stats::{self, roundi, CharacterStats, StatModifier};
 use aegis_core::value::{self, to_int, to_str};
-use emberwake_data::{Catalog, ClassDef, UnitDef, NO_ITEM};
+use rpgkit_data::{Catalog, ClassDef, UnitDef, NO_ITEM};
 use indexmap::{IndexMap, IndexSet};
 use serde_json::Value;
 
@@ -266,7 +266,7 @@ impl Unit {
     }
 
     /// Passives.apply: once per id, then the path refresh (a KNOW bonus can open an advanced family earlier).
-    pub fn apply_passive(&mut self, cat: &Catalog, passive: &emberwake_data::PassiveDef) {
+    pub fn apply_passive(&mut self, cat: &Catalog, passive: &rpgkit_data::PassiveDef) {
         if passive.id.is_empty() || self.passives.contains(&passive.id) {
             return;
         }
@@ -496,7 +496,7 @@ pub fn rank_numeral(rank: i32) -> &'static str {
 }
 
 /// SkillDef.in_group for the passive groups: "spell" = an attack that needs a staff or wand; "heal" = a support heal.
-pub fn skill_in_group(s: &emberwake_data::SkillDef, group: &str) -> bool {
+pub fn skill_in_group(s: &rpgkit_data::SkillDef, group: &str) -> bool {
     match group {
         "spell" => s.kind == "ATTACK" && s.weapon_types.iter().any(|w| w == "staff" || w == "wand"),
         "heal" => s.kind == "SUPPORT" && (s.heal_base > 0 || s.heal_mult > 0.0),
@@ -727,7 +727,7 @@ impl Unit {
         1.0 + self.potency_bonus.get(family).copied().unwrap_or(0.0) + self.gear_potency_family.get(family).copied().unwrap_or(0.0)
     }
 
-    pub fn potency_for_skill(&self, skill: &emberwake_data::SkillDef) -> f64 {
+    pub fn potency_for_skill(&self, skill: &rpgkit_data::SkillDef) -> f64 {
         let mut total = self.potency_for(skill.family_id());
         for g in GROUPS {
             if skill_in_group(skill, g) {
@@ -738,7 +738,7 @@ impl Unit {
     }
 
     /// SkillDef.power_for: the skill multiplier x potency x weaken x empower.
-    pub fn power_for(&self, skill: &emberwake_data::SkillDef) -> f64 {
+    pub fn power_for(&self, skill: &rpgkit_data::SkillDef) -> f64 {
         skill.power_mult * self.potency_for_skill(skill) * self.weaken_factor() * self.empower_factor()
     }
 
@@ -769,12 +769,12 @@ impl Unit {
         weapon.map(|w| w.weapon_type().to_string()).unwrap_or_else(|| "unarmed".into())
     }
 
-    pub fn skill_unlock_level(&self, cat: &Catalog, skill: &emberwake_data::SkillDef) -> i32 {
+    pub fn skill_unlock_level(&self, cat: &Catalog, skill: &rpgkit_data::SkillDef) -> i32 {
         stats::MAX_LEVEL.min(self.family_unlock_level(cat, skill.family_id()) + skill.tier_offset())
     }
 
     /// The level gate of can_use: basics, engine skills and hand-built units are never gated.
-    pub fn tier_unlocked(&self, cat: &Catalog, skill: &emberwake_data::SkillDef) -> bool {
+    pub fn tier_unlocked(&self, cat: &Catalog, skill: &rpgkit_data::SkillDef) -> bool {
         if self.path_levels.is_empty() || skill.system || skill.basic {
             return true;
         }
@@ -803,7 +803,7 @@ impl Unit {
     /// SKILLUI1 R3: the rank rule of `can_use`: off without a rank choice, for basics, engine and always-active
     /// skills and for families outside a set loadout (they fail `knows_skill` anyway); otherwise, with a loadout or
     /// without one (every owned family is then active), only the family's effective rank is usable.
-    pub fn rank_allowed(&self, cat: &Catalog, skill: &emberwake_data::SkillDef) -> bool {
+    pub fn rank_allowed(&self, cat: &Catalog, skill: &rpgkit_data::SkillDef) -> bool {
         if self.rank_choice.is_none() || skill.system || skill.basic || cat.is_always_active(&skill.id) {
             return true;
         }
@@ -816,7 +816,7 @@ impl Unit {
     }
 
     /// Known, unlocked, at the chosen rank (SKILLUI1 R3), and trained for (min_proficiency in the hand's weapon type).
-    pub fn can_use(&self, cat: &Catalog, skill: &emberwake_data::SkillDef) -> bool {
+    pub fn can_use(&self, cat: &Catalog, skill: &rpgkit_data::SkillDef) -> bool {
         if !self.knows_skill(cat, &skill.id) || !self.tier_unlocked(cat, skill) || !self.rank_allowed(cat, skill) {
             return false;
         }

@@ -1,6 +1,6 @@
 //! StatRules, StatModifier, Proficiency and CharacterStats (scripts/core/specs/).
 
-use emberwake_data::{ClassDef, ProfEntry, STATS};
+use rpgkit_data::{ClassDef, ProfEntry, STATS};
 use indexmap::IndexMap;
 
 pub const CLASS_BUDGET: i32 = 62;

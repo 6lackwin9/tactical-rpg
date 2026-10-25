@@ -2,7 +2,7 @@
 
 use crate::stats::{CharacterStats, Proficiency};
 use aegis_core::value::{self, Obj};
-use emberwake_data::ItemDef;
+use rpgkit_data::ItemDef;
 use indexmap::IndexMap;
 
 /// StatModifier source of every gear tier stat bonus.

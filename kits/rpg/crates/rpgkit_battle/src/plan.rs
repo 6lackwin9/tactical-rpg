@@ -10,9 +10,9 @@ use crate::resolver::Resolver;
 use crate::skill::{self, Kind, SkillId};
 use crate::world::{UnitId, World};
 use aegis_core::sort::godot_sort;
-use emberwake_data::ItemDef;
-use emberwake_rules::damage::{self, HitInput};
-use emberwake_rules::{status, Stance};
+use rpgkit_data::ItemDef;
+use rpgkit_rules::damage::{self, HitInput};
+use rpgkit_rules::{status, Stance};
 use indexmap::{IndexMap, IndexSet};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -485,7 +485,7 @@ impl Plan {
                 let fam = s.family_id();
                 let fam_name = w.cat.tier_one(fam).map(|t| t.name.as_str()).unwrap_or(fam);
                 let rank = u.effective_rank(&w.cat, fam).unwrap_or(0);
-                return format!("{} uses {} at Rank {} (set on the Skills tab).", u.name, fam_name, emberwake_rules::unit::rank_numeral(rank));
+                return format!("{} uses {} at Rank {} (set on the Skills tab).", u.name, fam_name, rpgkit_rules::unit::rank_numeral(rank));
             }
             if skill::kind(s) == Kind::Disengage {
                 return self.apply_disengage(w, c, st, step, index);

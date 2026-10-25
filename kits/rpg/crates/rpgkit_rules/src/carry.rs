@@ -5,7 +5,7 @@
 //! 10 weight over capacity (rounded up).
 
 use crate::unit::Unit;
-use emberwake_data::Catalog;
+use rpgkit_data::Catalog;
 
 pub const BASE_CAPACITY: i32 = 30;
 pub const HEAVY_RATIO: f64 = 0.75;

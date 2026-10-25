@@ -5,7 +5,7 @@ use crate::command::{hazard_round_end, CmdKind, Command};
 use crate::world::{UnitId, World};
 use aegis_core::rng::GodotRng;
 use aegis_core::sort::godot_sort;
-use emberwake_rules::status;
+use rpgkit_rules::status;
 
 #[derive(Debug, Clone)]
 pub struct ScheduledAction {
