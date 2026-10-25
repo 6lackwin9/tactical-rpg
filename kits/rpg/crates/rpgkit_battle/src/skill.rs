@@ -275,12 +275,19 @@ pub fn area_cells(s: &SkillDef, from: V2, cell: V2) -> Vec<V2> {
 
 /// The best exploit entry whose status is ACTIVE on `target`, skipping `skip`: (status, mult); ("", 1.0) when none.
 pub fn exploit_match(entries: &[serde_json::Value], target: &Unit, skip: &[String]) -> (String, f64) {
+    exploit_match_when(entries, target, skip, false)
+}
+
+/// `exploit_match` where the condition `flanked` (RULESET1_INTENT MV3) also matches when `flanked` is true (a flank
+/// hit under the rule `flank`); classic always passes false.
+pub fn exploit_match_when(entries: &[serde_json::Value], target: &Unit, skip: &[String], flanked: bool) -> (String, f64) {
     let mut best = (String::new(), 1.0);
     for row in entries {
         let Some(o) = row.as_object() else { continue };
         let status = aegis_core::value::string(o, "status", "");
         let mult = aegis_core::value::float(o, "power_mult", 1.0);
-        if target.has_status(&status) && !skip.contains(&status) && mult > best.1 {
+        let present = target.has_status(&status) || (flanked && status == ruleset::FLANKED);
+        if present && !skip.contains(&status) && mult > best.1 {
             best = (status, mult);
         }
     }

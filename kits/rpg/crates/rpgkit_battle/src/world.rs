@@ -131,6 +131,8 @@ pub struct World {
     pub hp_journal: Option<Vec<(UnitId, i32)>>,
     /// The battle's rules (RULESET1: `EncounterDef.ruleset`); every rule beyond classic reads its flag here first.
     pub ruleset: rpgkit_rules::ruleset::Ruleset,
+    /// RULESET1_INTENT (rule `round_intent`): each unit's round intent, target, facing and round marks; empty in classic.
+    pub round_states: IndexMap<UnitId, crate::round_intent::RoundState>,
 }
 
 impl World {

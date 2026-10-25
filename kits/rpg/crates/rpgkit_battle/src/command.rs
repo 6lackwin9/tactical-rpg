@@ -4,6 +4,7 @@
 
 use crate::grid::{Grid, V2, NO_CELL};
 use crate::path::{self, Cells, Hooks};
+use crate::round_intent;
 use crate::skill::{self, SkillId};
 use crate::world::{UnitId, World};
 use aegis_core::rng::GodotRng;
@@ -104,6 +105,16 @@ pub enum CmdKind {
     },
 }
 
+/// RULESET1_INTENT MV4: the move a Maneuver skill carries inside its own command (rule `round_intent`): to the planned
+/// Engage tile before the hit (at its start), or to the planned retreat tile after the hit (at its impact).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Carry {
+    #[default]
+    None,
+    Engage(V2),
+    Retreat(V2),
+}
+
 #[derive(Debug, Clone)]
 pub struct Command {
     pub source: UnitId,
@@ -130,6 +141,10 @@ pub struct Command {
     pub reactions: Vec<Reaction>,
     pub log: String,
     pub kind: CmdKind,
+    /// RULESET1_INTENT IN6: the skill's `intent_buff` (its grants to its own user are intent-bound).
+    pub intent_buff: bool,
+    /// RULESET1_INTENT MV4: the carried move (Carry::None in classic and for every other command).
+    pub carry: Carry,
 }
 
 impl Command {
@@ -157,6 +172,8 @@ impl Command {
             reactions: Vec::new(),
             log: String::new(),
             kind,
+            intent_buff: false,
+            carry: Carry::None,
         }
     }
 
@@ -175,6 +192,13 @@ impl Command {
             CmdKind::Attack { target, follow_tiles, dash_tiles, min_range, max_range, .. } => {
                 let tgt = effective_target(w, src, *target);
                 let band = reach_band(w, src, *min_range, *max_range);
+                // RULESET1_INTENT GD5: chases and carried moves do not step toward a hidden unit
+                if tgt.is_some_and(|t| round_intent::hidden(w, t)) {
+                    return String::new();
+                }
+                if let Carry::Engage(cell) = self.carry {
+                    return carried_engage(w, rng, src, tgt, band, *dash_tiles, cell);
+                }
                 if *dash_tiles > 0 {
                     return dash(w, rng, src, tgt, band, *dash_tiles);
                 }
@@ -206,7 +230,10 @@ impl Command {
                         status::queue(u, grant_status, *status_rounds, self.status_magnitude, &name);
                     }
                 }
-                status::grant_extras(u, extra_grants, true, &name);
+                let mut granted = status::grant_extras(u, extra_grants, true, &name);
+                // RULESET1_INTENT IN6: intent-bound grants carry the unit's intent
+                granted.insert(0, grant_status.clone());
+                round_intent::bind(w, src, src, &granted, self.intent_buff);
                 format!("[Grant] {} readies {}", name, grant_status)
             }
             _ => String::new(),
@@ -234,6 +261,12 @@ impl Command {
                     self.log = format!("[Attack Miss] {src_name}: target no longer in combat");
                     return;
                 };
+                // RULESET1_INTENT GD5: a stealthed unit that moved this round is not found (AP stays spent)
+                if round_intent::hidden(w, t) {
+                    self.failed = true;
+                    self.log = format!("[Lost] {src_name} loses {}", w.units[t].name);
+                    return;
+                }
                 let band = reach_band(w, src, min_range, max_range);
                 if !in_reach(w, src, t, band) {
                     self.failed = true;
@@ -242,13 +275,15 @@ impl Command {
                 }
                 w.units[src].active_target = Some(t);
                 let damaging = skill_mult > 0.0;
-                let matched = if damaging { skill::exploit_match(&self.exploit, &w.units[t], &[]) } else { (String::new(), 1.0) };
+                // RULESET1_INTENT MV3: a flank hit (rule flank) matches `flanked`, takes the flank power and no riposte
+                let flank = round_intent::flank_bonus(w, src, t);
+                let matched = if damaging { skill::exploit_match_when(&self.exploit, &w.units[t], &[], flank) } else { (String::new(), 1.0) };
                 let mut taken = 0;
                 let mut crit = false;
                 if damaging {
                     let ranged = w.units[src].attack_range > 1 && !use_offhand;
                     let cover = cover_between(w, src, t, ranged);
-                    let hit = roll_hit(w, rng, src, t, ranged, use_offhand, skill_mult * matched.1, cover);
+                    let hit = roll_hit(w, rng, src, t, ranged, use_offhand, skill_mult * matched.1 * flank_power(w, flank), cover);
                     taken = w.damage(t, hit.final_dmg, true);
                     crit = hit.is_crit;
                     self.set_attack_result(taken, crit, Some(t));
@@ -263,7 +298,7 @@ impl Command {
                     return;
                 }
                 let ranged = w.units[src].attack_range > 1 && !use_offhand;
-                if let Some(r) = riposte_counter(w, rng, src, t, ranged) {
+                if let Some(r) = riposte_counter(w, rng, src, t, ranged || flank) {
                     self.reactions.push(r);
                 }
                 self.after_hit(w, t, taken, &matched);
@@ -290,8 +325,9 @@ impl Command {
                     }
                     let ranged = w.units[src].attack_range > 1;
                     let cover = cover_for(&w.grid, w.pos(src), cell, ranged);
-                    let matched = skill::exploit_match(&self.exploit, &w.units[v], &[]);
-                    let hit = roll_hit(w, rng, src, v, ranged, false, skill_mult * matched.1, cover);
+                    let flank = round_intent::flank_bonus(w, src, v);
+                    let matched = skill::exploit_match_when(&self.exploit, &w.units[v], &[], flank);
+                    let hit = roll_hit(w, rng, src, v, ranged, false, skill_mult * matched.1 * flank_power(w, flank), cover);
                     let taken = w.damage(v, hit.final_dmg, true);
                     total += taken;
                     hits += 1;
@@ -311,7 +347,7 @@ impl Command {
                     let exploits = if matched.0.is_empty() { String::new() } else { format!(" (exploits {})", status::display_name(&matched.0)) };
                     let vu = &w.units[v];
                     parts.push(format!("{} {taken}{}{}{note}{exploits}", vu.name, if hit.is_crit { " CRIT" } else { "" }, if vu.is_alive() { "" } else { " DEFEATED" }));
-                    if let Some(r) = riposte_counter(w, rng, src, v, ranged) {
+                    if let Some(r) = riposte_counter(w, rng, src, v, ranged || flank) {
                         self.reactions.push(r);
                     }
                     self.after_hit(w, v, taken, &matched);
@@ -353,6 +389,10 @@ impl Command {
                 if !w.units[src].is_alive() {
                     return;
                 }
+                // RULESET1_INTENT RS2: under round_intent a landed Rest block pays its AP at round end
+                if round_intent::on(w) {
+                    w.round_states.entry(src).or_default().rest_blocks += self.block_cost.max(1);
+                }
                 let u = &mut w.units[src];
                 u.ap = u.max_ap.min(u.ap + recover_ap);
                 self.log = format!("[Rest] {src_name} AP {}/{}", u.ap, u.max_ap);
@@ -380,6 +420,11 @@ impl Command {
                     return;
                 }
                 let done = support_apply(w, src, target, skill);
+                // RULESET1_INTENT IN6: intent-bound grants carry the holder's intent
+                let mut granted = done.extras.clone();
+                granted.insert(0, done.status.clone());
+                let buff = w.cat.skills[skill].intent_buff;
+                round_intent::bind(w, target, src, &granted, buff);
                 let s = &w.cat.skills[skill];
                 let t = &w.units[target];
                 let mut parts = Vec::new();
@@ -473,6 +518,9 @@ impl Command {
                 if let CmdKind::Walk { moved_tiles, cut_short, blocked_by, .. } = &mut self.kind {
                     (*moved_tiles, *cut_short, *blocked_by) = (moved, cut, blocker);
                 }
+                if moved > 0 {
+                    round_intent::note_moved(w, src);
+                }
             }
             CmdKind::Disengage { dest, max_tiles, .. } => {
                 if let CmdKind::Disengage { landed, moved_tiles, .. } = &mut self.kind {
@@ -499,6 +547,7 @@ impl Command {
                 if let CmdKind::Disengage { landed, moved_tiles, .. } = &mut self.kind {
                     (*landed, *moved_tiles) = (true, dist);
                 }
+                round_intent::note_moved(w, src);
                 self.log = format!("[Disengage] {src_name} jumped {dist} tile{} from {from} to {dest}", if dist == 1 { "" } else { "s" });
                 for note in hazard_on_enter(w, rng, src, &[dest]) {
                     self.log += &format!(" {note}");
@@ -513,6 +562,48 @@ impl Command {
             *last_crit = crit;
             *last_target = tgt;
         }
+    }
+
+    /// RULESET1_INTENT MV8: after the impact, a carried retreat moves the unit to its planned tile (re-picked when it no
+    /// longer works, skipped when none does). Classic commands carry nothing.
+    pub fn after_impact(&mut self, w: &mut World, rng: &mut GodotRng) {
+        let Carry::Retreat(cell) = self.carry else { return };
+        let src = self.source;
+        let (dash_tiles, target) = match &self.kind {
+            CmdKind::Attack { dash_tiles, target, .. } => (*dash_tiles, effective_target(w, src, *target)),
+            _ => (0, None),
+        };
+        let note = carried_retreat(w, rng, src, target, dash_tiles, cell);
+        if !note.is_empty() {
+            self.log = if self.log.is_empty() { note } else { format!("{} {note}", self.log) };
+        }
+    }
+
+    /// The unit this command acts on, when it is another unit (RULESET1_INTENT TG4): an attack's target (or lock), a
+    /// support skill's or item's target other than the user. Areas aim at tiles and never fail.
+    pub fn acted_on(&self, w: &World) -> Option<UnitId> {
+        let t = match &self.kind {
+            CmdKind::Attack { target, .. } => effective_target(w, self.source, *target),
+            CmdKind::Support { target, .. } | CmdKind::Item { target, .. } => Some(*target),
+            _ => None,
+        };
+        t.filter(|t| *t != self.source)
+    }
+
+    /// RULESET1_INTENT TG4: the command becomes Rest blocks (no AP, no stance, no move); its blocks stay booked.
+    pub fn into_rest(&mut self) {
+        self.kind = CmdKind::Rest { recover_ap: 0 };
+        self.name = "Rest".into();
+        self.ap_cost = 0;
+        self.stance_switch_cost = 0;
+        self.stance_on_start = None;
+        self.stance_on_end = None;
+        self.carry = Carry::None;
+        self.priority = 0;
+        self.status_effect.clear();
+        self.exploit.clear();
+        self.disrupt_break = false;
+        self.est_damage = 0;
     }
 
     /// After one damaging hit: stance break (Offensive / Defensive target to Tactical), then exploit consume.
@@ -610,6 +701,7 @@ fn dash(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<UnitId>, ban
     if to == from {
         return format!("[Dash Blocked] {name} couldn't move toward {}.", w.units[t].name);
     }
+    round_intent::note_moved(w, src);
     let mut line = format!("[Dash] {name} dashes at {}: {from} to {to}", w.units[t].name);
     for note in hazard_on_enter(w, rng, src, &entered) {
         line += &format!(" {note}");
@@ -634,8 +726,101 @@ fn follow(w: &mut World, src: UnitId, t: UnitId, band: (i32, i32), follow_tiles:
         if w.pays_ap(src) {
             w.units[src].ap -= 1;
         }
+        round_intent::note_moved(w, src);
         left -= 1;
     }
+}
+
+/// RULESET1_INTENT MV3: the power factor of a flank hit (`flank_power_mult`; 1.0 otherwise).
+fn flank_power(w: &World, flank: bool) -> f64 {
+    if flank {
+        w.ruleset.numbers.flank_power_mult
+    } else {
+        1.0
+    }
+}
+
+/// Walks `route` from the unit's tile (stops at the first refused step); the tiles entered.
+fn step_along(w: &mut World, src: UnitId, route: &[V2]) -> Vec<V2> {
+    let mut entered = Vec::new();
+    for d in route {
+        if !w.move_unit(src, *d) {
+            break;
+        }
+        entered.push(w.pos(src));
+    }
+    entered
+}
+
+/// RULESET1_INTENT MV4, MV6: an Engage's carried move at the skill's start: to the stored tile while it still works
+/// (free, within `dash_tiles` in one block, the target in band, outside its front), else the PL4 re-pick; with none
+/// the move is skipped and the hit lands only if in band.
+fn carried_engage(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<UnitId>, band: (i32, i32), dash_tiles: i32, cell: V2) -> String {
+    let Some(t) = tgt.filter(|t| w.units[*t].is_active() && w.has(*t)) else { return String::new() };
+    if !w.units[src].is_active() || !w.has(src) {
+        return String::new();
+    }
+    let name = w.units[src].name.clone();
+    let from = w.pos(src);
+    let tp = w.pos(t);
+    let fits = |c: V2| c.dist(tp) >= band.0 && c.dist(tp) <= band.1;
+    if from == cell && fits(from) && !round_intent::in_front(w, t, from) {
+        return String::new();
+    }
+    if w.units[src].has_status("root") {
+        return format!("[Dash Blocked] {name} is rooted and can't move on {}.", w.units[t].name);
+    }
+    let blocked = others_blocked(w, src, true);
+    let mut tiles: Vec<(V2, Vec<V2>)> = round_intent::carry_tiles(w, from, dash_tiles, &blocked).into_iter().filter(|(c, _)| fits(*c) && !round_intent::in_front(w, t, *c)).collect();
+    round_intent::rank_tiles(w, src, tp, w.units[src].attack_range > 1, round_intent::Aim::Toward, &mut tiles);
+    let Some((dest, route)) = round_intent::pick(cell, &tiles) else {
+        return format!("[Dash Blocked] {name} finds no flank tile on {}.", w.units[t].name);
+    };
+    if dest == from {
+        return String::new();
+    }
+    let entered = step_along(w, src, &route);
+    let to = w.pos(src);
+    if to == from {
+        return format!("[Dash Blocked] {name} couldn't move toward {}.", w.units[t].name);
+    }
+    round_intent::note_moved(w, src);
+    let mut line = format!("[Dash] {name} dashes at {}: {from} to {to}", w.units[t].name);
+    for note in hazard_on_enter(w, rng, src, &entered) {
+        line += &format!(" {note}");
+    }
+    line
+}
+
+/// RULESET1_INTENT MV8: a Disengage's carried retreat after the hit: to the stored tile while it is free and within
+/// `dash_tiles` in one block, else the PL4 re-pick away from the target; skipped when none is left.
+fn carried_retreat(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<UnitId>, dash_tiles: i32, cell: V2) -> String {
+    if !w.units[src].is_active() || !w.has(src) {
+        return String::new();
+    }
+    let name = w.units[src].name.clone();
+    if w.units[src].has_status("root") {
+        return format!("[Retreat Blocked] {name} is rooted.");
+    }
+    let from = w.pos(src);
+    let blocked = others_blocked(w, src, true);
+    let tp = tgt.filter(|t| w.has(*t)).map_or(from, |t| w.pos(t));
+    let mut tiles: Vec<(V2, Vec<V2>)> = round_intent::carry_tiles(w, from, dash_tiles, &blocked).into_iter().filter(|(c, _)| *c != from).collect();
+    round_intent::rank_tiles(w, src, tp, w.units[src].attack_range > 1, round_intent::Aim::Away, &mut tiles);
+    let Some((_, route)) = round_intent::pick(cell, &tiles) else {
+        return format!("[Retreat Blocked] {name} has nowhere to fall back.");
+    };
+    let entered = step_along(w, src, &route);
+    let to = w.pos(src);
+    if to == from {
+        return format!("[Retreat Blocked] {name} couldn't fall back.");
+    }
+    round_intent::note_moved(w, src);
+    let mut line = format!("[Retreat] {name} falls back from {from} to {to}");
+    for note in hazard_on_enter(w, rng, src, &entered) {
+        line += &format!(" {note}");
+    }
+    line
 }
 
 /// WalkCommand.execute: follows the planned steps (re-paths when not where the plan expected); unwalked tiles are

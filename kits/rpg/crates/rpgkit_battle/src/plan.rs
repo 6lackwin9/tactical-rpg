@@ -3,15 +3,17 @@
 //! command at the lowest free block. Like Godot, compiling may write a chosen approach or landing tile back into
 //! the step (`PlanStep::cell`), and steps are shared by reference.
 
-use crate::command::{self, cover_for, dash_fits, CmdKind, Command};
+use crate::command::{self, cover_for, dash_fits, Carry, CmdKind, Command};
 use crate::grid::{V2, DIRS, NO_CELL, ZERO};
 use crate::path::{self, Cells, Hooks};
 use crate::resolver::Resolver;
+use crate::round_intent::{self, ManeuverKind, RoundIntent, RoundTarget};
 use crate::skill::{self, Kind, SkillId};
 use crate::world::{UnitId, World};
 use aegis_core::sort::godot_sort;
 use rpgkit_data::ItemDef;
 use rpgkit_rules::damage::{self, HitInput};
+use rpgkit_rules::ruleset;
 use rpgkit_rules::{status, Stance};
 use indexmap::{IndexMap, IndexSet};
 use std::cell::{Cell, RefCell};
@@ -43,6 +45,9 @@ pub struct PlanStep {
     pub cell: Cell<V2>,
     /// ITEM: the catalog consumable id used from the battle pouch.
     pub item_id: String,
+    /// GOTO only (RULESET1_INTENT AS3, rule `round_intent`): an after-move, one move block that may follow the unit's
+    /// actions (the kite step); still the round's one standard move.
+    pub after: bool,
 }
 
 pub type Step = Rc<PlanStep>;
@@ -87,16 +92,20 @@ impl PlanStep {
     }
 
     fn make(mode: Mode, skill: Option<SkillId>, target: Option<UnitId>, cell: V2) -> Step {
-        Rc::new(PlanStep { mode, skill, target, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new() })
+        Rc::new(PlanStep { mode, skill, target, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new(), after: false })
     }
     pub fn engage(skill: SkillId, target: UnitId) -> Step {
         Self::make(Mode::Engage, Some(skill), Some(target), NO_CELL)
     }
     pub fn mv(skill: SkillId, direction: V2, tiles: i32) -> Step {
-        Rc::new(PlanStep { mode: Mode::Move, skill: Some(skill), target: None, direction, tiles, cell: Cell::new(NO_CELL), item_id: String::new() })
+        Rc::new(PlanStep { mode: Mode::Move, skill: Some(skill), target: None, direction, tiles, cell: Cell::new(NO_CELL), item_id: String::new(), after: false })
     }
     pub fn go_to(skill: SkillId, cell: V2) -> Step {
         Self::make(Mode::Goto, Some(skill), None, cell)
+    }
+    /// RULESET1_INTENT AS3: an after-move to `cell` (a kite step after the attacks; rule `round_intent`).
+    pub fn after_move(skill: SkillId, cell: V2) -> Step {
+        Rc::new(PlanStep { mode: Mode::Goto, skill: Some(skill), target: None, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new(), after: true })
     }
     pub fn area_at(skill: SkillId, cell: V2) -> Step {
         Self::make(Mode::Area, Some(skill), None, cell)
@@ -112,7 +121,7 @@ impl PlanStep {
     }
     /// ITEMUSE1 1.3: use pouch item `item_id` on `target` (the user itself for self items). Skill-less step.
     pub fn use_item(item_id: &str, target: UnitId) -> Step {
-        Rc::new(PlanStep { mode: Mode::Item, skill: None, target: Some(target), direction: ZERO, tiles: 1, cell: Cell::new(NO_CELL), item_id: item_id.to_string() })
+        Rc::new(PlanStep { mode: Mode::Item, skill: None, target: Some(target), direction: ZERO, tiles: 1, cell: Cell::new(NO_CELL), item_id: item_id.to_string(), after: false })
     }
 }
 
@@ -144,6 +153,8 @@ pub struct PlanEntry {
     pub stance_after: Stance,
     /// ITEM (ITEMUSE1): the pouch consumable used (`skill` is its synthetic skill).
     pub item: Option<ItemDef>,
+    /// RULESET1_INTENT MV4: the move the skill carries (Engage before its hit, a retreat after it).
+    pub carry: Carry,
 }
 
 impl PlanEntry {
@@ -173,6 +184,7 @@ impl PlanEntry {
             stance_before: Stance::Neutral,
             stance_after: Stance::Neutral,
             item: None,
+            carry: Carry::None,
         }
     }
 
@@ -248,10 +260,13 @@ impl PlanEntry {
             Kind::Move => Command::new(actor, 0, blocks, CmdKind::Walk { path: self.path.clone(), expected_start: self.pos_before, goal: self.goal, approach: self.target, moved_tiles: 0, cut_short: false, blocked_by: String::new() }),
             Kind::Disengage => Command::new(actor, 0, s.blocks, CmdKind::Disengage { dest: self.pos_after, max_tiles: s.jump_tiles, landed: false, moved_tiles: 0 }),
             Kind::Target => Command::new(actor, 2, 1, CmdKind::Target { target: self.target }),
-            // RULESET1 T11: a unit that pays no AP gains none either
-            Kind::Rest => Command::new(actor, 0, s.blocks, CmdKind::Rest { recover_ap: if w.pays_ap(actor) { s.recover_ap } else { 0 } }),
+            // RULESET1 T11: a unit that pays no AP gains none either; RULESET1_INTENT RS2: under round_intent Rest pays
+            // its AP at round end
+            Kind::Rest => Command::new(actor, 0, s.blocks, CmdKind::Rest { recover_ap: if w.pays_ap(actor) && !round_intent::on(w) { s.recover_ap } else { 0 } }),
         };
         cmd.recovery = self.recovery;
+        cmd.carry = self.carry;
+        cmd.intent_buff = s.intent_buff;
         cmd.name = s.name.clone();
         cmd.ap_cost = self.skill_ap;
         cmd.stance_switch_cost = self.switch_ap;
@@ -291,6 +306,10 @@ pub struct SimState {
     pub error_text: String,
     pub dry_entry: i32,
     pub dry_step: i32,
+    /// RULESET1_INTENT TG1: the round target the steps so far act on (the unit's set one, else the first step's).
+    pub round_target: Option<RoundTarget>,
+    /// RULESET1_INTENT MV8: the step whose Maneuver skill carries the Disengage retreat (-1 = none).
+    pub retreat_step: i32,
 }
 
 impl SimState {
@@ -421,6 +440,8 @@ impl Plan {
             error_text: String::new(),
             dry_entry: -1,
             dry_step: -1,
+            round_target: w.round_states.get(&c).and_then(|r| r.target).filter(|_| round_intent::on(w)),
+            retreat_step: self.retreat_step(w, c),
         };
         for s in &u.st.active {
             for &b in status::blocked_blocks(s) {
@@ -500,9 +521,16 @@ impl Plan {
                 let rank = u.effective_rank(&w.cat, fam).unwrap_or(0);
                 return format!("{} uses {} at Rank {} (set on the Skills tab).", u.name, fam_name, rpgkit_rules::unit::rank_numeral(rank));
             }
-            if skill::kind(s) == Kind::Disengage {
-                return self.apply_disengage(w, c, st, step, index);
+        }
+        // RULESET1_INTENT IN5, TG1, MM1: a unit holding an intent uses only its skills, on one target a round
+        if let Some(intent) = round_intent::intent_of(w, c) {
+            let p = self.intent_problem(w, c, st, step, intent);
+            if !p.is_empty() {
+                return p;
             }
+        }
+        if step.skill.is_some_and(|sid| skill::kind(&w.cat.skills[sid]) == Kind::Disengage) {
+            return self.apply_disengage(w, c, st, step, index);
         }
         match step.mode {
             Mode::SelfCast => {
@@ -520,6 +548,77 @@ impl Plan {
             Mode::Area => self.apply_area(w, c, st, step.skill.unwrap(), step.cell.get(), index),
             Mode::Item => self.apply_item(w, c, st, step, index),
         }
+    }
+
+    /// RULESET1_INTENT IN5, TG1, MM1: "" when `step` fits `c`'s round: a neutral command (a plain move, Rest), or a
+    /// skill or item of the intent acting on the round target (the unit's set target, else the first step's; a
+    /// self-only skill also under a tile target; an area at the target unit's tile).
+    fn intent_problem(&self, w: &World, c: UnitId, st: &mut SimState, step: &Step, intent: RoundIntent) -> String {
+        let (of, target) = match step.mode {
+            Mode::Move | Mode::Goto | Mode::Withdraw => return String::new(),
+            Mode::Item => {
+                let Some(item) = command::pouch_item(w, c, &step.item_id).or_else(|| w.cat.items.get(&step.item_id)) else { return String::new() };
+                (round_intent::item_intent(item), step.target.map(RoundTarget::Unit))
+            }
+            _ => {
+                let Some(sid) = step.skill else { return String::new() };
+                let target = match step.mode {
+                    Mode::Area => Some(RoundTarget::Cell(step.cell.get())),
+                    Mode::SelfCast => Some(RoundTarget::Myself),
+                    _ => step.target.map(RoundTarget::Unit),
+                };
+                (round_intent::skill_intent(&w.cat.skills[sid]), target)
+            }
+        };
+        if of == ruleset::NEUTRAL {
+            return String::new();
+        }
+        if of != intent.id() {
+            return format!("Only {} skills this round.", intent.name());
+        }
+        let Some(target) = target.map(|t| round_intent::normalize(c, t)) else { return String::new() };
+        let self_only = step.mode == Mode::SelfCast;
+        let Some(round) = st.round_target else {
+            let p = round_intent::target_problem(w, c, intent, target);
+            if p.is_empty() {
+                st.round_target = Some(target);
+            }
+            return p;
+        };
+        let fits = match (round, target) {
+            (a, b) if a == b => true,
+            (RoundTarget::Unit(u), RoundTarget::Cell(p)) => w.has(u) && w.pos(u) == p,
+            (RoundTarget::Cell(_), RoundTarget::Myself) => self_only,
+            _ => false,
+        };
+        if fits {
+            return String::new();
+        }
+        let label = match round {
+            RoundTarget::Myself => "yourself".to_string(),
+            RoundTarget::Unit(u) => w.units[u].name.clone(),
+            RoundTarget::Cell(p) => p.to_string(),
+        };
+        format!("One target per round: {label}.")
+    }
+
+    /// RULESET1_INTENT MV8: in a Disengage round, the last step that is a Maneuver attack with a carried move carries
+    /// the retreat, unless a DISENGAGE skill (a jump) follows it; -1 otherwise.
+    fn retreat_step(&self, w: &World, c: UnitId) -> i32 {
+        if round_intent::intent_of(w, c) != Some(RoundIntent::Maneuver) || round_intent::maneuver_of(w, c) != ManeuverKind::Disengage {
+            return -1;
+        }
+        let mut idx = -1;
+        for (i, step) in self.steps_of(c).iter().enumerate() {
+            let Some(sid) = step.skill else { continue };
+            let s = &w.cat.skills[sid];
+            if skill::kind(s) == Kind::Disengage {
+                idx = -1;
+            } else if step.mode == Mode::Engage && carries(s) {
+                idx = i as i32;
+            }
+        }
+        idx
     }
 
     /// ITEMUSE1 rules 2-3: a battle-pouch consumable on its target. 1 AP, `use_blocks` blocks at the lowest free blocks
@@ -632,7 +731,8 @@ impl Plan {
     }
 
     fn apply_goto(&self, w: &World, c: UnitId, st: &mut SimState, step: &Step, index: i32) -> String {
-        let p = self.move_problem(w, c, st);
+        // RULESET1_INTENT AS3: an after-move may follow the actions; it is still the round's one standard move
+        let p = if step.after { self.after_move_problem(w, c, st) } else { self.move_problem(w, c, st) };
         if !p.is_empty() {
             return p;
         }
@@ -654,7 +754,36 @@ impl Plan {
         if !self.fits_move(w, c, st.pos, &route) {
             return self.too_far();
         }
+        if step.after && path::blocks_needed(&w.grid, st.pos, &route, w.units[c].move_per_block()) > 1 {
+            return "An after-move takes one move block.".into();
+        }
         self.add_move(w, c, st, &route, None, index)
+    }
+
+    /// RULESET1_INTENT AS3: why `c` cannot take an after-move now ("" = it can).
+    fn after_move_problem(&self, w: &World, c: UnitId, st: &SimState) -> String {
+        if round_intent::intent_of(w, c).is_none() {
+            return "An after-move needs a round intent.".into();
+        }
+        if st.rooted {
+            return format!("{} is rooted this round and can't move.", w.units[c].name);
+        }
+        if st.moved {
+            return format!("{} has already moved this round.", w.units[c].name);
+        }
+        String::new()
+    }
+
+    /// RULESET1_INTENT MV4, MV9: whether a carried move or a jump may follow actions (a unit holding an intent); then
+    /// only a root stops it.
+    fn carried_problem(&self, w: &World, c: UnitId, st: &SimState) -> String {
+        if round_intent::intent_of(w, c).is_none() {
+            return self.move_problem(w, c, st);
+        }
+        if st.rooted {
+            return format!("{} is rooted this round and can't move.", w.units[c].name);
+        }
+        String::new()
     }
 
     fn apply_withdraw(&self, w: &World, c: UnitId, st: &mut SimState, index: i32) -> String {
@@ -687,6 +816,10 @@ impl Plan {
         let s = &w.cat.skills[sid];
         if skill::is_area(s) {
             return self.apply_area(w, c, st, sid, w.pos(foe), index);
+        }
+        // RULESET1_INTENT MV4: a Maneuver skill carries its own move in a Maneuver round
+        if round_intent::intent_of(w, c) == Some(RoundIntent::Maneuver) && carries(s) {
+            return self.apply_carried(w, c, st, step, sid, foe, index);
         }
         if s.dash_tiles > 0 {
             return self.apply_dash(w, c, st, sid, foe, index);
@@ -728,7 +861,8 @@ impl Plan {
                 return p;
             }
         }
-        if st.lock.is_some_and(|l| l != foe) {
+        // RULESET1_INTENT TG3: under round_intent the target is the lock; Switch Target is never inserted
+        if st.lock.is_some_and(|l| l != foe) && !round_intent::on(w) {
             let sw = w.book().find("switch_target").unwrap();
             let p = self.add_entry(w, c, st, sw, index, Some(foe), &[], 0, &[]);
             if !p.is_empty() {
@@ -757,7 +891,8 @@ impl Plan {
         if d < band.0 {
             return "Too close.".into();
         }
-        let p = self.move_problem(w, c, st);
+        // RULESET1_INTENT MV4: under an intent a dash is not the round's move and may follow actions
+        let p = self.carried_problem(w, c, st);
         if !p.is_empty() {
             return format!("Can't dash: {p}");
         }
@@ -768,7 +903,7 @@ impl Plan {
         if !dash_fits(&w.grid, st.pos, &route, s.dash_tiles) {
             return "Too far for the dash.".into();
         }
-        if st.lock.is_some_and(|l| l != foe) {
+        if st.lock.is_some_and(|l| l != foe) && !round_intent::on(w) {
             let sw = w.book().find("switch_target").unwrap();
             let p = self.add_entry(w, c, st, sw, index, Some(foe), &[], 0, &[]);
             if !p.is_empty() {
@@ -786,17 +921,105 @@ impl Plan {
             e.goal = dest;
             let dmg = e.est_damage;
             st.pos = dest;
-            st.moved = true;
+            st.moved = round_intent::intent_of(w, c).is_none() || st.moved;
             st.positioned = false;
             *st.est_hp.entry(foe).or_insert(0) -= dmg;
         }
         p
     }
 
+    /// RULESET1_INTENT MV4-MV9: a Maneuver skill on `foe` with its carried move. Engage (and Utility): the move goes,
+    /// inside the skill's block, to the PL4 tile outside `foe`'s front with `foe` in band (the current tile when it
+    /// already is one); out of range, a standard plain move comes first (TQ22 a). Disengage: the hit from the current
+    /// tile (in band), and the round's retreat step falls back after its hit. No AP beyond the skill's; not the round's
+    /// standard move.
+    #[allow(clippy::too_many_arguments)]
+    fn apply_carried(&self, w: &World, c: UnitId, st: &mut SimState, step: &Step, sid: SkillId, foe: UnitId, index: i32) -> String {
+        let s = &w.cat.skills[sid];
+        let band = skill::reach_for(s, &w.units[c]);
+        let foe_pos = w.pos(foe);
+        let beyond = || format!("{} is beyond {}'s range.", w.units[foe].name, s.name);
+        let blocked = self.blocked_cells(w, c);
+        let (dest, route, carry) = if round_intent::maneuver_of(w, c) == ManeuverKind::Disengage {
+            let d = st.pos.dist(foe_pos);
+            if d < band.0 || d > band.1 {
+                return format!("Disengage needs {} within reach of {}.", w.units[foe].name, s.name);
+            }
+            if st.retreat_step == index && !st.rooted {
+                let tiles = round_intent::retreat_tiles(w, c, s, foe, st.pos, &blocked);
+                let Some((cell, _)) = round_intent::pick(step.cell.get(), &tiles) else { return format!("No tile to fall back to after {}.", s.name) };
+                step.cell.set(cell);
+                (cell, Vec::new(), Carry::Retreat(cell))
+            } else {
+                (st.pos, Vec::new(), Carry::None)
+            }
+        } else {
+            let here = st.pos;
+            let rooted = st.rooted;
+            let engage = |from: V2| -> Vec<(V2, Vec<V2>)> { round_intent::engage_tiles(w, c, s, foe, from, &blocked).into_iter().filter(|(cell, _)| !rooted || *cell == from).collect() };
+            let mut tiles = engage(here);
+            if tiles.is_empty() {
+                // MV9 (TQ22 a): a standard plain move first, to the PL4 tile from which the range covers the target
+                if !self.move_problem(w, c, st).is_empty() || st.moved {
+                    return beyond();
+                }
+                let Some(route) = self.range_approach(w, c, st.pos, s, foe, &blocked) else { return beyond() };
+                let p = self.add_move(w, c, st, &route, None, index);
+                if !p.is_empty() {
+                    return p;
+                }
+                tiles = engage(st.pos);
+            }
+            let Some((cell, route)) = round_intent::pick(step.cell.get(), &tiles) else { return beyond() };
+            step.cell.set(cell);
+            (cell, route, Carry::Engage(cell))
+        };
+        let from = st.pos;
+        st.lock = Some(foe);
+        let p = self.add_entry(w, c, st, sid, index, Some(foe), &route, 0, &[]);
+        if !p.is_empty() {
+            return p;
+        }
+        let e = st.entries.last_mut().unwrap();
+        e.pos_before = from;
+        e.pos_after = dest;
+        e.goal = dest;
+        e.carry = carry;
+        let dmg = e.est_damage;
+        st.pos = dest;
+        *st.est_hp.entry(foe).or_insert(0) -= dmg;
+        String::new()
+    }
+
+    /// MV9 (TQ22 a): the plain-move route (at most the standard move's 2 blocks) to the PL4-best tile from which skill
+    /// `s`'s carried move reaches an Engage tile on `foe`; None when there is none.
+    fn range_approach(&self, w: &World, c: UnitId, from: V2, s: &rpgkit_data::SkillDef, foe: UnitId, blocked: &Cells) -> Option<Vec<V2>> {
+        let foe_pos = w.pos(foe);
+        let reach = skill::reach_for(s, &w.units[c]).1;
+        let limit = self.max_move_tiles(w, c);
+        let mut cands: Vec<(V2, Vec<V2>)> = Vec::new();
+        for y in 0..crate::grid::GRID_H {
+            for x in 0..crate::grid::GRID_W {
+                let cell = V2::new(x, y);
+                if cell == from || cell.dist(from) > limit || cell.dist(foe_pos) > s.dash_tiles + reach || !w.grid.is_walkable(cell) || w.grid.is_exit(cell) || blocked.contains(&cell) {
+                    continue;
+                }
+                let route = self.route(w, c, from, &[cell].into_iter().collect(), blocked, false);
+                if route.is_empty() || !self.fits_move(w, c, from, &route) || round_intent::engage_tiles(w, c, s, foe, cell, blocked).is_empty() {
+                    continue;
+                }
+                cands.push((cell, route));
+            }
+        }
+        round_intent::rank_tiles(w, c, foe_pos, w.units[c].attack_range > 1, round_intent::Aim::Toward, &mut cands);
+        cands.into_iter().next().map(|(_, r)| r)
+    }
+
     fn apply_disengage(&self, w: &World, c: UnitId, st: &mut SimState, step: &Step, index: i32) -> String {
         let sid = step.skill.unwrap();
         let s = &w.cat.skills[sid];
-        let p = self.move_problem(w, c, st);
+        // RULESET1_INTENT MV4: under an intent a jump is not the round's move and may come last
+        let p = self.carried_problem(w, c, st);
         if !p.is_empty() {
             return format!("Can't disengage: {p}");
         }
@@ -858,7 +1081,7 @@ impl Plan {
             e.pos_after = dest;
             e.goal = dest;
             st.pos = dest;
-            st.moved = true;
+            st.moved = round_intent::intent_of(w, c).is_none() || st.moved;
             st.positioned = true;
         }
         p
@@ -1126,7 +1349,8 @@ impl Plan {
             st.dry_entry = st.entries.len() as i32 - 1;
         }
         st.stance = after;
-        if skill::kind(s) == Kind::Rest && pays {
+        // RULESET1_INTENT RS2, FU3: under round_intent Rest pays only at round end, so no AP returns mid-round
+        if skill::kind(s) == Kind::Rest && pays && !round_intent::on(w) {
             st.ap_left = st.max_ap.min(st.ap_left + s.recover_ap);
         }
         String::new()
@@ -1324,6 +1548,12 @@ impl Plan {
         }
         count
     }
+}
+
+/// RULESET1_INTENT MV4: a skill that carries its own move in a Maneuver round: a single-target Maneuver attack with
+/// `dash_tiles` (without them its range is its band and it plans like any attack).
+pub fn carries(s: &rpgkit_data::SkillDef) -> bool {
+    skill::kind(s) == Kind::Attack && !skill::is_area(s) && s.dash_tiles > 0 && round_intent::skill_intent(s) == "maneuver"
 }
 
 /// _better_jump: farther from the threat, then a shorter jump, then nearer the centre, then lower x, then lower y.

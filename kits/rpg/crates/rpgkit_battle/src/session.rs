@@ -10,6 +10,7 @@ use crate::encounter::{self, Morale, Objectives, Phases, LEADER_TIERS};
 use crate::grid::{Grid, TerrainTable, V2};
 use crate::plan::Plan;
 use crate::resolver::Resolver;
+use crate::round_intent;
 use crate::metrics::BattleMetrics;
 use crate::world::{AiProfile, UnitId, World};
 use aegis_core::value::{self, Obj};
@@ -293,6 +294,8 @@ impl Session {
         let mut palettes: Vec<String> = Vec::new();
         let mut units_by_ref: IndexMap<String, Vec<UnitId>> = IndexMap::new();
         let mut hero_keys: IndexMap<UnitId, String> = IndexMap::new();
+        // RULESET1 TQ23 (a): the intent each roster unit starts in (read only under round_intent)
+        let mut default_intents: Vec<(UnitId, String)> = Vec::new();
         for p in party {
             profiles.insert(built.len(), p.profile);
             hero_keys.insert(built.len(), p.key);
@@ -312,6 +315,9 @@ impl Session {
             built.push(u);
             units_by_ref.entry(r.to_string()).or_default().push(id);
             hero_keys.insert(id, roster.lore_ref(&cat, r));
+            if !e.default_intent.is_empty() {
+                default_intents.push((id, e.default_intent.clone()));
+            }
             id
         };
         let n_party_ids = party_ids.len();
@@ -347,7 +353,7 @@ impl Session {
         let count = built.len();
         let mut grid = Grid::new(def.open, def.exits.clone(), TerrainTable::from_catalog(&cat), count);
         grid.apply_board(&def.zone, &def.rows);
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone() };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new() };
         w.add_item_skills();
         let objective = Objectives::create(&def.raw);
         // MORALE1 1.2: unit keys, tiers, authored profiles and the starting groups.
@@ -387,6 +393,8 @@ impl Session {
         w.deploy(&allies, &deployed, &def.deployment);
         w.place_leftovers(&allies, true, &def.deployment);
         w.place_leftovers(&deployed, false, &def.deployment);
+        // RULESET1_INTENT MV1, TQ23: first facings and starting intents (nothing in classic)
+        round_intent::battle_start(&mut w, &default_intents);
         let mut resolver = Resolver::new(def.total_blocks, def.rng_seed);
         for &c in allies.iter().chain(enemies.iter()) {
             resolver.register(c);
@@ -438,6 +446,9 @@ impl Session {
         for &c in &self.resolver.registered.clone() {
             status::roll_over(&mut self.w.units[c], self.def.ap_regen);
         }
+        // RULESET1_INTENT RS2: last round's Rest pays after ap_regen; the round's target and marks reset
+        let rest = round_intent::round_start(&mut self.w);
+        self.events.extend(rest);
         self.current_round = round;
         self.current_block = 1;
         self.phase = Phase::Planning;
@@ -891,6 +902,38 @@ impl Session {
         }
         let p = self.w.profile_of(actor).with_preset(preset);
         ai::build_steps(&self.w, &mut self.plan, actor, &p);
+    }
+
+    /// RULESET1_INTENT IN2, IN6: sets unit `c`'s round intent while the round is planned (refused otherwise). A change
+    /// drops its intent-bound buffs (the lines go to `events`) and its planned steps (they were for the old intent).
+    pub fn set_round_intent(&mut self, c: UnitId, intent: &str) -> Result<Vec<String>, String> {
+        if self.phase != Phase::Planning || self.plan_confirmed {
+            return Err("The intent changes only at a round start, while planning.".into());
+        }
+        let Some(i) = round_intent::RoundIntent::parse(intent) else { return Err(format!("Unknown intent '{intent}'.")) };
+        let before = round_intent::intent_of(&self.w, c);
+        let lines = round_intent::set_intent(&mut self.w, c, i)?;
+        if before.is_some_and(|b| b != i) {
+            self.plan.clear(c);
+        }
+        self.events.extend(lines.iter().cloned());
+        Ok(lines)
+    }
+
+    /// RULESET1_INTENT TG1: sets unit `c`'s round target while planning (its intent first; the intent table decides).
+    pub fn set_round_target(&mut self, c: UnitId, target: round_intent::RoundTarget) -> Result<(), String> {
+        if self.phase != Phase::Planning || self.plan_confirmed {
+            return Err("The target is set while planning.".into());
+        }
+        round_intent::set_target(&mut self.w, c, target)
+    }
+
+    /// RULESET1_INTENT MV11: sets the kind of unit `c`'s Maneuver round while planning.
+    pub fn set_maneuver(&mut self, c: UnitId, kind: round_intent::ManeuverKind) -> Result<(), String> {
+        if self.phase != Phase::Planning || self.plan_confirmed {
+            return Err("The Maneuver kind is set while planning.".into());
+        }
+        round_intent::set_maneuver(&mut self.w, c, kind)
     }
 
     pub fn plan_is_valid(&self) -> bool {

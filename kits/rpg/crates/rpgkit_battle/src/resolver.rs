@@ -4,6 +4,7 @@
 //! under `enemy_moves`) keep the unit busy until `end`. In classic `impact == end`.
 
 use crate::command::{hazard_round_end, CmdKind, Command};
+use crate::round_intent;
 use crate::world::{UnitId, World};
 use aegis_core::rng::GodotRng;
 use aegis_core::sort::godot_sort;
@@ -92,6 +93,8 @@ impl Resolver {
         for &c in &self.registered {
             w.units[c].guard = 0.0;
         }
+        // RULESET1_INTENT MV1: every unit faces its round target, re-read each block
+        round_intent::update_facings(w);
         self.begin_actions(w, block);
         for a in &self.scheduled {
             if !a.cancelled && w.units[a.unit].is_active() && block >= a.start && block <= a.end {
@@ -117,6 +120,18 @@ impl Resolver {
                 continue;
             }
             let c = a.unit;
+            // RULESET1_INTENT TG4: a unit holding an intent whose target is gone before a command on it starts rests
+            // through that command and every later one this round (no AP)
+            if round_intent::intent_of(w, c).is_some() && a.command.acted_on(w).is_some_and(|t| !w.units[t].is_active()) {
+                let gone = w.units[a.command.acted_on(w).unwrap()].name.clone();
+                for later in self.scheduled.iter_mut().filter(|x| x.unit == c && !x.cancelled && x.start >= block) {
+                    later.command.into_rest();
+                }
+                let msg = format!("[Rest] {} has lost {gone}: the rest of its round is Rest", w.units[c].name);
+                self.notes.push((i, msg.clone()));
+                self.log.push(msg);
+            }
+            let a = &self.scheduled[i];
             let total = a.command.ap_cost + a.command.stance_switch_cost;
             if w.pays_ap(c) {
                 w.units[c].ap -= total;
@@ -144,6 +159,8 @@ impl Resolver {
             return;
         }
         self.scheduled[idx].command.execute(w, &mut self.rng);
+        // RULESET1_INTENT MV8: a carried retreat follows the hit (nothing in classic)
+        self.scheduled[idx].command.after_impact(w, &mut self.rng);
         let cmd = &self.scheduled[idx].command;
         if !cmd.log.is_empty() {
             self.log.push(cmd.log.clone());

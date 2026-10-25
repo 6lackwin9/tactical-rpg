@@ -12,6 +12,7 @@ pub mod path;
 pub mod plan;
 pub mod report;
 pub mod resolver;
+pub mod round_intent;
 pub mod session;
 pub mod sim;
 pub mod skill;
