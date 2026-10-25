@@ -58,7 +58,7 @@ workspace is the repo root (`Cargo.toml` members `engine/crates/*`, `kits/*/crat
 | `games/emberwake/data/maps/`, `games/emberwake/data/quests/`, `games/emberwake/data/dialogue/`, `games/emberwake/data/progression/` | region map templates, quest templates, dialogue service lines, the XP curve | in use |
 | `games/emberwake/data/assets/manifest.json` | the Godot-era art and sound rows; removed by ASSETORG2-G (2026-10-22: the folders are the truth; Godot's copy in `legacy/data/assets/`) | retired |
 | `games/emberwake/data/seeds/` | JSON seeds of tasks in flight (`aegis content apply`); `README.md` indexes executed seeds; Godot-era `.gd` seeds are in `legacy/data/seeds/` | in use |
-| `games/emberwake/assets/` | the game's asset layer (ASSETORG2): `units/<class>/<variant>/` bodies (sheet, clips, palettes), `portraits/`, `items/`, `skills/`, `statuses/`, `map/markers/`, `ui/`, `backgrounds/`, `tilesets/`, `audio/` (README lists the tree; the kit- and engine-bound folders move out in ASSETORG2-K and -B) | in use |
+| `games/emberwake/assets/` | the game's asset layer (ASSETORG2): `units/<class>/<variant>/` bodies (sheet, clips, palettes), `portraits/`, `items/`, `skills/`, `statuses/`, `map/markers/`, `ui/`, `backgrounds/`, `tilesets/`, `audio/` (README lists the tree; the kit- and engine-bound folders move out in ASSETORG2-K and -B); `backgrounds/story/<id>.png` story scene pictures named by vignette cards' `image` (STORYART1) | in use |
 
 ## Tools, CI, process
 

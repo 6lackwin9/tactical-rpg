@@ -59,18 +59,18 @@ games/emberwake/data/seeds/storyui1.json`, then `tools/fc.sh content check` clea
 
 | Need | Placeholder | Match |
 | --- | --- | --- |
-| Intro slide 1, the sunless violet sky with ash | code-drawn gradient and ash | fair |
-| Intro slide 2, the earth's cross-section, titan bones, black veins | code-drawn gradient | poor |
-| Intro slide 3, iron masks over chained youths at crypt arches | `ruined_courtyard.png` (arches only, an ember sky) | poor |
-| Intro slide 4, a watch insignia in bloody mud | code-drawn gradient to a crimson mix | poor |
-| Meat Market rendering station and queues | `ashmaw_camp.png` (tents and fires) | poor |
-| The hearth (Undercroft vault, forge glow) | `warden_keep.png` (stone hall, glowing arch; red banners do not belong) | fair |
+| Intro slide 1, the sunless violet sky with ash | code-drawn `backgrounds/story/intro_1.png` (STORYART1: the Shroud, falling ash) | good |
+| Intro slide 2, the earth's cross-section, titan bones, black veins | code-drawn `backgrounds/story/intro_2.png` (STORYART1) | fair |
+| Intro slide 3, iron masks over chained youths at crypt arches | code-drawn `backgrounds/story/intro_3.png` (STORYART1) | fair |
+| Intro slide 4, a watch insignia in bloody mud | code-drawn `backgrounds/story/intro_4.png` (STORYART1) | fair |
+| Meat Market rendering station and queues | code-drawn `backgrounds/story/meat_market.png` (STORYART1) | fair |
+| The hearth (Undercroft vault, forge glow) | code-drawn `backgrounds/story/hearth.png` (STORYART1) | good |
 | Slice end, the Slag Gate | `cinder_gate.png` (a ruined gate, an ember sky) | good |
 | Bell toll, rain, dripping gutters (intro, cold open) | none (silence or the menu theme) | missing |
 | Hub music for the hearth | kit `music/town.ogg` | fair |
 | Portraits of Vane, Tess, Bram, Aline | the kit's common portraits through the body chain (`warrior_base.png` and the like) | poor |
 | Board service glyph | the quest badge `ui/badges/quest.png` (kit) | good |
-| The `sunk_ward` world card art, the main menu (an orange sun in a sunless world) | today's Ashlands-era files | poor |
+| The `sunk_ward` world card art, the main menu (an orange sun in a sunless world) | code-drawn `backgrounds/title/sunk_ward.png` and `backgrounds/menu/main_menu_sunless.png` (STORYART1; the menu switch waits for the user's review) | fair |
 
 User 2026-10-25: hold new art for the story scenes (no image API for them yet) and fill them with code-drawn
 placeholders wherever code can draw them (task STORYART1, `tools/gen_art.py`); the rows above that stay poor are

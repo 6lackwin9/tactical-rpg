@@ -80,10 +80,10 @@ art. Quality: good (reads right at token size), fair (right role, a visible diff
 | Entity | Placeholder | Match | What is off |
 | --- | --- | --- | --- |
 | `polearm` family (billhooks, Vane's bill) | `kits/rpg/assets/items/axe/battle_axe.png` copied to `items/polearm/base.png` | fair | an axe head, no hook |
-| `scourge` family | `kits/rpg/assets/items/mace/base.png` copied to `items/scourge/base.png` | poor | a mace, not a three-tailed scourge (section 7, N9) |
+| `scourge` family | code-drawn `items/scourge/base.png` (STORYART1: a three-tailed barbed flail, ART2 icon look; was the kit mace copied) | fair | the wire tails are thin at 1x (section 7, N9) |
 | `censer` family | `kits/rpg/assets/items/mace/base.png` copied to `items/censer/base.png` | fair | a mace head, not a censer on a chain |
 | `bone_saw` family | `kits/rpg/assets/items/sword/shortsword.png` copied to `items/bone_saw/base.png` | fair | a blade without teeth |
-| `sprayer` family | `kits/rpg/assets/items/staff/base.png` copied to `items/sprayer/base.png` | poor | a staff, not a pressurised tank and nozzle (section 7, N9) |
+| `sprayer` family | code-drawn `items/sprayer/base.png` (STORYART1: a brass tank, hose and pole nozzle; was the kit staff copied) | fair | a code placeholder until the icon pass (section 7, N9) |
 | Founder and enemy gear on existing families | the family's `base.png` (dagger, crossbow, fist `knuckles.png`, hammer, axe, shield, plate, leather, cloth, tome) | good | - |
 | Slag-Hammer relic | `games/emberwake/assets/items/hammer/titan_warhammer.png` (`icon_id`) | good | - |
 | Gilded Pavise, Marrow Scalpel, Flensing Talon | their family's `base.png` | fair | not unique |
@@ -158,7 +158,7 @@ CAST1 uses has its icon in `kits/rpg/assets/statuses/` (`empower` has none today
 | Ground hazards (smoke, tripwire, grease, phosphorus and pitch fire, choke-gas) | the `hazards` rows' `tint` and `glyph` overlay (HOOKS1_TASKS 2.1) | fair | a tinted tile with a letter, no smoke or flame sprite; the hidden tripwire is drawn only for the party |
 | Meter pips (Bile Phial, Slag Fury) | the unit card's pips (HOOKS1 UM7) | good | - |
 | Rooftops (0b) | `stone` tiles | fair | flat stone, no slates |
-| Zone backdrops | the seven `zones` rows (HOOKS1_TASKS 2.3) with no backdrop file: STAGE1's fallback gradient from each row's `ground` (stone, bridge, floor) | poor | a flat gradient, no place; section 7, N10 |
+| Zone backdrops | code-drawn `backgrounds/battle/<zone>.png` for the seven `zones` rows (STORYART1, STAGE1 7.3 format) | fair | code placeholders from the N10 briefs; section 7, N10 |
 | Zone tile sets | none per zone (HOOKS1 ZN3: tiles are per terrain): the common terrain tiles above | fair | Ashlands tiles in the Sunk Ward |
 
 ## 7. For the user: new art to approve (each one asked first; the image API only after a yes)

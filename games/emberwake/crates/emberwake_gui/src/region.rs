@@ -1552,7 +1552,8 @@ mod tests {
     }
 
     /// One path of the section 3 tree (game, kit or engine root), plus the PLAYUI1 section 6 icons: toolkit glyphs
-    /// `ui/<id>.png` and the `ui/hud`, `ui/markers` and `ui/services` folders, and PROPS1's `props/<set>/<art>/`.
+    /// `ui/<id>.png` and the `ui/hud`, `ui/markers` and `ui/services` folders, PROPS1's `props/<set>/<art>/` and the
+    /// story scene pictures `backgrounds/story/<id>.png` (STORYART1, named by a vignette card's `image`).
     fn layout_ok(rel: &str) -> bool {
         let p: Vec<&str> = rel.split('/').collect();
         let png = |s: &str| s.ends_with(".png");
@@ -1568,7 +1569,7 @@ mod tests {
             ["skills", "kinds", f] | ["skills", f] | ["statuses", f] | ["map", "markers", f] => png(f),
             ["ui", "pins" | "badges" | "chips" | "intents" | "hud" | "markers" | "services", f] | ["ui", f] => png(f),
             ["tilesets", _, _, f] | ["props", _, _, f] => v(f),
-            ["backgrounds", "menu" | "title" | "world_map" | "location" | "battle", f] => png(f),
+            ["backgrounds", "menu" | "title" | "world_map" | "location" | "battle" | "story", f] => png(f),
             ["audio", "sfx", f] => f.ends_with(".wav"),
             ["audio", "music", f] => f.ends_with(".ogg"),
             _ => false,
