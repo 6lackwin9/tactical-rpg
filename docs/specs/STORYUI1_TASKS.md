@@ -70,7 +70,7 @@ games/emberwake/data/seeds/storyui1.json`, then `tools/fc.sh content check` clea
 | Hub music for the hearth | kit `music/town.ogg` | fair |
 | Portraits of Vane, Tess, Bram, Aline | the kit's common portraits through the body chain (`warrior_base.png` and the like) | poor |
 | Board service glyph | the quest badge `ui/badges/quest.png` (kit) | good |
-| The `sunk_ward` world card art, the main menu (an orange sun in a sunless world) | code-drawn `backgrounds/title/sunk_ward.png` and `backgrounds/menu/main_menu_sunless.png` (STORYART1; the menu switch waits for the user's review) | fair |
+| The `sunk_ward` world card art, the main menu (an orange sun in a sunless world) | code-drawn `backgrounds/title/sunk_ward.png` and `backgrounds/menu/main_menu.png` (STORYART1 drew it as `main_menu_sunless.png`; MENU2 switched the menu to it on 2026-10-25) | fair |
 
 User 2026-10-25: hold new art for the story scenes (no image API for them yet) and fill them with code-drawn
 placeholders wherever code can draw them (task STORYART1, `tools/gen_art.py`); the rows above that stay poor are

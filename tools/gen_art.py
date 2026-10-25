@@ -7,8 +7,8 @@
 # story world_card menu_sunless sunk_backdrops family_icons.
 # The last five (STORYART1) are the Sunk Ward slice's placeholders in the art bible's 16 hues: story = the vignette
 # pictures backgrounds/story/<id>.png (1120 x 472, 2x STORYUI1 V9's 560 x 236 picture area: intro_1-4, meat_market,
-# hearth), world_card = backgrounds/title/sunk_ward.png, menu_sunless = backgrounds/menu/main_menu_sunless.png (a
-# variant beside main_menu.png), sunk_backdrops = the seven zones' backgrounds/battle/<zone>.png, family_icons = the
+# hearth), world_card = backgrounds/title/sunk_ward.png, menu_sunless = backgrounds/menu/main_menu.png (the game's main menu, MENU2; the
+# old sunny menu drawing is retired, the menu group now draws only the Ashlands card), sunk_backdrops = the seven zones' backgrounds/battle/<zone>.png, family_icons = the
 # scourge and sprayer items/<family>/base.png in the ART2 icon look (they replace CAST1-A7's byte copies of the kit's
 # mace and staff icons only while those copies are still in place).
 # Layers (default all): engine = engine/assets/ (the common tileset and the common_stage 4:3 battle tiles), kit = kits/rpg/assets/ (class variant bodies,
@@ -1507,19 +1507,7 @@ def g_backdrops(out: Out) -> None:
 
 
 def g_menu(out: Out) -> None:
-    rng = np.random.default_rng(7)
-    W, H = 1920, 1080
-    img = sky(W, H, "#120f16", "#4a2418", rng)
-    glow(img, 1350, 330, 260, EMBER, 130)
-    d = ImageDraw.Draw(img, "RGBA")
-    d.ellipse([1290, 270, 1410, 390], fill=rgb("#f08a3a"))
-    ridge(img, rng, 700, 60, "#1c1618", 100, "#3a2a28")
-    keep_shape(img, 520, 760, 1.5, "#0e0c10", True)
-    ridge(img, rng, 850, 50, "#100d10", 90, None)
-    ridge(img, rng, 980, 30, "#0a080b", 80, None)
-    embers(img, rng, 220)
-    save(vignette(img, 0.7), "game", "backgrounds/menu/main_menu.png", out)
-    # title card
+    # the Ashlands world card only; the main menu picture is the sunless one (g_menu_sunless, MENU2)
     rng = np.random.default_rng(8)
     img = sky(1280, 360, "#160f14", "#3a1a12", rng)
     glow(img, 640, 330, 340, EMBER, 120)
@@ -2578,7 +2566,7 @@ def g_world_card(out: Out) -> None:
 
 
 def g_menu_sunless(out: Out) -> None:
-    # a main menu for a sunless world: the Shroud, a cathedral and the ward's roofs, falling ash; main_menu.png is kept
+    # the game's main menu (MENU2): the Shroud, a cathedral and the ward's roofs, falling ash
     W, H = 1920, 1080
     rng, img = st_canvas(W, H, VOID, mix(VOID, VIOLET, 0.25), "menu_sunless", 8)
     shroud_sky(img, rng, 760)
@@ -2587,7 +2575,7 @@ def g_menu_sunless(out: Out) -> None:
     skyline(img, rng, 900, "#0b0c11", 40, 120, 0.08, wmin=100, wmax=220)
     skyline(img, rng, 1010, VOID, 20, 70, 0.05, wmin=120, wmax=260)
     ash_fall(img, rng, 300)
-    save(vignette(img, 0.7), "game", "backgrounds/menu/main_menu_sunless.png", out)
+    save(vignette(img, 0.7), "game", "backgrounds/menu/main_menu.png", out)
 
 
 # The Sunk Ward battle zones (grounds from HOOKS1_TASKS 2.3) in the STAGE1 7.3 format; briefs from CAST1_ASSETS N10
