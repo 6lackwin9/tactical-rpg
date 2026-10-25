@@ -77,7 +77,7 @@ items, gold, stat; effects set_flag, add_flag, give, take, recruit, open_shop, f
 
 ### 2.3 Tess Morn and Pip (the courier network)
 
-- **Ages:** Tess 17, Pip 12 (both non-combat). **Origin:** Ash-Crawl runners.
+- **Ages:** Tess 19, Pip 12 (both non-combat). **Origin:** Ash-Crawl runners.
 - **Role:** Tess is the cell's dead-drop courier and runs the mission board at the Water-Lock Basin `[kit hook]` mission
   board, `[data]` quests. She was Vesper's runner contact before the cell.
 - **Look:** wiry and compact; patched leather shingle-armour, greasy wool wraps, soft calfskin boots. Left ear scarred
