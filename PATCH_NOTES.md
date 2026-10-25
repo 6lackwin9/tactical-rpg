@@ -2,7 +2,138 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: 6c265bd -->
+<!-- last: 3eea397 -->
+
+## 2026-10-25
+
+In the game:
+
+- **Main menu**: a new sunless main menu: the Shroud over the cathedral and the ward's roofs, with falling ash
+  (no more orange sun).
+- **Battle stage**: battles are drawn on a tilted stage, with the board, ground, props and a backdrop for the zone
+  (Settings: battle view Stage, the default, or Flat).
+- **Facing**: units in battle turn up, down, left and right toward their target or step, and on the region map the
+  leader turns with every step and people face the party when you talk to them.
+- **Region map sprites**: the leader and every person on the region map walk and idle as sprites, with foot shadows
+  and names above their heads.
+- **For testers**: the Combat Arena has a ruleset choice (World, Classic, Timeline) and the Dojo a Timeline toggle
+  (the timeline ruleset has no content yet, so it plays like classic for now). The UI Gallery gains Effects (hit flash,
+  camera shake), Timeline and Vignette pages.
+
+Every change that touched the game:
+
+- MENU2: the main menu shows the sunless picture (gen_art menu_sunless writes the game's backgrounds/menu/main_menu.png over the kit's generic path; the sunny menu drawing retires, the menu group keeps the Ashlands title card; main_menu_sunless.png removed); docs (3eea397)
+- Planner: milestone releases without asking and the main checkout on main (decisions/workflow.md); known-issues row for tab escapes in Python path strings (5a99850)
+- KIT1-DEPS: the game façade crates drop unused dependencies (data: aegis_core, serde_json, indexmap, anyhow; rules: indexmap; battle: emberwake_rules; content: aegis_content, emberwake_battle; world: aegis_save, anyhow; sim: emberwake_data, emberwake_rules, emberwake_battle, indexmap, serde_json); emberwake_sim::parse(d, argv) parses with the game's defaults; STRUCTURE (10ec302)
+- Planner: the user approves the sunless main menu (task MENU2) and the world card subtitle (195107e)
+- WTCLEAN1: tools/wt_remove.ps1 also deletes the removed worktree's build folder (`<target-dir>-<leaf>`, base from .cargo/config.toml) and gains -Targets [-WhatIf], a sweep of build folders whose worktree is gone (never the base or a live worktree's; stops if git worktree list fails); header updated for C:\dev and `claude/<task>`; desktop.md step 3, known-issues rows, EFFICIENCY and STRUCTURE (d578a23)
+- Planner: RULESET1-R, ASSETCHK1, WORLDW1, STORYART1 and CREATURE1 done; RULESET1-S in progress; CAST1-S takes the spit clip mapping (3d48430)
+- CREATURE1: code creature rigs (tools/sprites/rig.py: a quadruped and a segmented crawler skeleton with idle, walk, attack, hurt, death; variants.py CREATURES); bodies beast/render_beast and crawler/ash_crawler (with a spit clip) in the game, beast/base and crawler/base in the kit as the fallback; humanoid output unchanged; docs (a4253ef)
+- STORYART1: code-drawn placeholder art for the slice in tools/gen_art.py (groups story, world_card, menu_sunless, sunk_backdrops, family_icons; a starless Shroud sky with ash): intro slides 1-4, the Meat Market, the hearth, the sunk_ward world card, a sunless main menu (not switched yet), the seven Sunk Ward battle backdrops, the scourge and sprayer family icons; layout_ok accepts backgrounds/story; docs (557b8b0)
+- WORLDW1: the world manifest writer (`aegis content world <id> [json] [full]` and the seed step {op: world}; aegis_content set_world with the shared write-check-rollback, the Hooks world_manifest_text / world_blocking, schema::type_errors; rpgkit_content world_manifest_text, set_world, manifest_blocking; a trimmed write keeps shipped manifests byte-identical, full writes every field; a new world is listed in game.json first); docs (18ed9b0)
+- Planner: WTCLEAN1 (worktree removal also deletes its build folder) and the known-issues row for the full disk (d62788b)
+- Planner: non-human monsters get code creature rigs (decision, CAST1_ASSETS note, task CREATURE1) (c62f563)
+- Planner: the user confirms every planner pick (OPEN_QUESTIONS section 4); story-scene art on hold, code-drawn placeholders instead (STORYUI1_TASKS 1.5, task STORYART1) (2e98702)
+- ASSETCHK1: the asset check parses every palette file in every layer, referenced or not (aegis_core::assets::palette_problems with the loader's parse_palette rules; the game test every_shipped_palette_file_parses), so an unreferenced broken palette fails the gate; docs, known-issues row (9bec507)
+- RULESET1-R: the ruleset switch (world.world ruleset and plan_reveal_flag; the content.rulesets kind and its checks; rpgkit_rules::ruleset with the rule register, ids and intents; the world lineage rule; EncounterDef.ruleset through the world bridge, host new {ruleset, rules}, aegis battle and sim ruleset=/rules= (a world encounter defaults to its world's), the Arena select and the Dojo toggle; classic stances inert under round_intent); parity strips for the two world fields and the kind (HISTORY row); docs (29d9772)
+- Planner: DIR4-M done; WORLDW1 (world manifest writer) before SUNKWARD1; RULESET1-R picks (flag keys, Q1-Q3) in OPEN_QUESTIONS section 4 (21cc0d4)
+- DIR4-M: four-way facing on the region map (the leader turns toward each step with Facing::toward, side rows mirrored only facing left, up/down rows drawn when a body has them; people in a conversation face the party four ways; agent link fields facing and view); GAME_BRIEF (f429fe2)
+- Planner: DERIVE1-R, DERIVE1-D and KIT1-G done in TASKS (c22df47)
+- KIT1-G: the layer check in the gate (tools/fc.sh layers and check_project.ps1 step 3/3: engine and kit crates name no game, read from the folders under games/, and have no path dependency into games/; kit READMEs in the docs lint); docs (809fc5a)
+- DERIVE1-R: derived-stat rules (rpgkit_rules::derived: value, breakdown, resist chance and the seeded battle draw, the {resist, potency} validator; passive stat percent on derived ids only); docs (d444fa7)
+- DERIVE1-D: the Composure derived-stat row (timeline only; KNOW and CONS based, 0-100, first-guess constants for the balance lane), written with aegis content (seed derive1_d.json) (8354295)
+- Planner: PLAYUI1-R done; DIR4-M in progress; DERIVE1-D, DERIVE1-R, KIT1-G in review; RULESET1-P adds gear_mitigation and the Ruleset wrapper (a2d29fc)
+- PLAYUI1-R: region map sprites (the leader and every person as body sprites, walk and idle, side facing by the last step, talk facing, per-person idle offsets, foot shadows, names above heads, silhouette behind props, token fallback; agent link state.sprites) (204e1ce)
+- Planner: KIT1-SIM, DERIVE1-S, DIR4-G done; DERIVE1-R, KIT1-G, RULESET1-R in progress (91a7aca)
+- DIR4-G: battle facing in four directions (up or down when the target or step is more vertical, keeping left/right; tokens and outlines through Art::played_facing with the side-row fallback, so bodies without views draw as FACE1) (6c3f7f6)
+- DERIVE1-S: derived-stat rows (content.derived_stats in kits/rpg/schema.json; DerivedStatDef and Catalog.derived_stats; loader, checks with cycle detection and topological load order, writer; derived ids accepted in gear stat bonuses and passive stat effects with optional percent); the Godot schema parity strips the new kind (HISTORY row) (7b10c39)
+- KIT1-SIM: the kit sim names no world (SimGame { default_world, story: `Option<StoryRun>` }; run(d, argv, &SimGame), SimArgs::parse_for); the game's emberwake_sim passes the Ashlands story run (game(), run(d, argv); emberwake_world becomes a normal dependency); kit test story_run.rs; the art.rs test literal skarn_ironjaw -> elite_brawler (f889dd9)
+- Planner: DIR4-HB (view-aware hit rect, after DIR4-R1) (15025ba)
+- Planner: KIT1-DEPS also adds the façade sim parse with the game defaults (f13b06f)
+- Planner: STAGE1-L done; DIR4-G and PLAYUI1-R in progress (a425e1e)
+- STAGE1-L: the battle stage, option B (stage.rs: 32x24 cells, the terrain stage table, ground under props, lips, blocks, standing props, backdrop and front face, draw passes, ground arrows, feet order and outlines through, unit hit rects; battle.rs draws Stage or Flat by the battle_view setting, default Stage); tuning keys; kit art lookups for stage tiles, props and backdrops (e8d4e96)
+- KIT1-P: in-flight specs on the kit paths (16 files), ROSTER1's ENCOUNTER2-W changes applied, the Crucible row enc_evt_06 (C16), HOOKS1 8.4 redirect order (C14), the execute rider HOOKS1 8.6 for G7; CAST1 Throat-Carver and Reflex rows; task rows HOOKS1-X, layers fixed; HQ15-HQ16 planner picks (9d8f334)
+- Planner: FX1-E done; STAGE1-L in review (1f6e6d9)
+- FX1-E: engine effects kit (aegis_ui::fx: clock with hit-stop, six code-drawn primitives, live list, camera shake with presets, limits and the engine ceiling), Painter::shift, the silhouette hit flash, Settings::reduce_motion; the UI Gallery's Effects page (ticked from gallery.rs) (2b939fc)
+- Planner: KIT1-N done; DERIVE1-S and KIT1-SIM in progress (b6f118d)
+- KIT1-N: the kit names no game (real rpgkit_* crate names; GAME_ID and find_data_dir in the game façade, the kit's Data::find_data_dir / find_game_data_dir; store hooks RpgContent; the host battle command set moved to rpgkit_host with an emberwake_host façade; neutral comments and test ids; test-only deps to dev-dependencies; kit test data_dir.rs); docs (3e12a9a)
+- Planner: KIT1-SIM also renames the skarn_ironjaw test literal; KIT1-DEPS (prune unused façade dependencies) (fa98879)
+- Planner: CAST1-R done; CAST1 task dependencies and paths; CAST1-A6b (M2b encounters); KIT1-P also fixes C14, C16 and the G7 execute rider; CQ17-CQ18 planner picks (9945b68)
+- CAST1-R: the CAST1 parts use the HOOKS1 hooks, ROSTER1's keepsakes and roster keys, CAMPAIGN1's tags instead of stand-ins; gaps resolved with pointers; CQ1-CQ16 planner picks; new CQ17-CQ18, C14-C16 (2ddce66)
+- Planner: STAGE1-T done; FX1-E and STAGE1-L in progress (d595980)
+- STAGE1-T: battle stage art by code (tools/gen_art.py stage_tiles, battle_props, battle_backdrops; 64 tiles at 4:3 and 4 wall faces in engine common_stage, kit tree and stone props, 8 zone backdrops; at most 16 colours each); the asset layout test allows backgrounds/battle; READMEs (fe5068e)
+- Planner: STAGE1-E done (642ee49)
+- STAGE1-E: engine stage pieces (Painter::ellipse_ring, Image::opaque_bounds, Art::body_bounds with a cache) (72e8f6e)
+- Planner: STORYUI1-E and KIT1-M done; KIT1-N and CAST1-R in progress (bb80e48)
+- KIT1-M: the RPG kit crates by a byte-identical move (kits/rpg/crates/rpgkit_{data,rules,battle,content,world,sim}, 73 files, crate aliases; the emberwake_* crates become façades; schema.json to kits/rpg/); docs for the new layout (CLAUDE.md, README, STRUCTURE, engine README, PORT_NOTES, GAME_BRIEF, kit and asset READMEs, skills) (c1cee15)
+- STORYUI1-E: engine vignette player (aegis_ui::vignette: cards in four styles, typewriter at text_speed, fades, skip with ask-first, cues, music wish, code-drawn backdrops, reduce_motion; VignetteScreen; the UI Gallery entry) (7bbbc2e)
+- Planner: STAGE1-E and STAGE1-T in progress; FX1 spec being written (64f4419)
+- Planner: CAMPAIGN1-E done (d5e76eb)
+- CAMPAIGN1-E: keyed saves in aegis_save (write/read/exists/peek by key, the same envelope and safe write as a slot, outside the slot range; for the act-start save); README, PORT_NOTES, authoring note (ec736eb)
+- Planner: CAST1-A7 done; ASSETCHK1 (parse every palette file in the asset check) (163014c)
+- CAST1-A7: placeholder assets for the Act 1 cast: 22 palette files on existing rig bodies (art-bible hues, computed steps, Cinder Ash skin for the calcified), 59 copied item, status and skill icons; no new art (537b47f)
+- Planner: STORYUI1-E, CAMPAIGN1-E, CAST1-A7 in progress; AGENT_MAP (98f83a7)
+- Planner: RULESET1-E done, KIT1-M in progress (e0639a8)
+- RULESET1-E: timeline widget segment parts (windup, impact, recovery), whole hatching, links and marks; the UI Gallery's Timeline page; plain timelines draw and click as before (61156da)
+- DERIVE1-E: engine formula evaluator (aegis_core::formula): parse once with column errors and size limits, + - * / unary minus, min/max/clamp/floor/ceil/round, named inputs, never NaN or infinity; README, STRUCTURE, PORT_NOTES (de770d4)
+- Known issues: every trace diverges in a fresh worktree when parity/out was copied from a stale recording (8c9651b)
+- Planner: DERIVE1-E and RULESET1-E in progress (487b59d)
+- Planner: AGENT_MAP path fix (fabd0f6)
+- Planner: dispatch mode standard (user 2026-10-25, building the slice); AGENT_MAP active section (65f5864)
+- Planner: the vertical slice approved for building (DERIVE1, RULESET1, ENCOUNTER2 slice tasks); spec rows KIT1, CAMPAIGN1, ROSTER1, STORYUI1 and the SUNKWARD1 data row (4cd0da3)
+- Emberwake lore: core story track decided (Q-02, Q-03, Q-06, Q-09, Q-28, Q-35, Q-87, Q-94; story gaps G-08 to G-17, G-26, G-31 to G-33) in CANON 3.3 and 3.6, central_truth and the story guide; RULESET1 TQ22-TQ23 decided (eb8f5c8)
+- RULESET1: round stance renamed round intent (RULESET1_INTENT.md; round_intent, intent_bound, intent_buff, RULESET1-IN; the intent tells gain the round intent), intent-bound vs round-bound buffs, carried maneuver moves; TQ22-TQ23 open; ENCOUNTER2 references; task rows CAST1 (approved) and BIGUNIT1 (idea), FX1 adds the camera shake; HISTORY rows (812c94c)
+- Emberwake lore: content group 1.7 and the art questions decided (Q-71, Q-74, Q-76, Q-77-Q-82) in CANON and decisions/lore.md (a388a72)
+- Emberwake lore: corruption group 1.6 decided (Q-10, Q-62-Q-68, Q-92) in CANON 2.2 and decisions/lore.md; DERIVE1 DQ1-DQ5 decided (caaaed2)
+- Emberwake lore: slice group 1.5 decided (Q-86 M2b, Q-88 prototype order and vignettes, Q-89 barks later, Q-90, Q-96 reuse roster and shop) (caea9e1)
+- Emberwake lore: hub group 1.4 decided (Q-18, Q-23, Q-42, Q-43, Q-45, Q-46, Q-69) in CANON and decisions/lore.md (f5eaa1f)
+- Emberwake lore: round stance renamed to round intent (feeds the intent tells), intent-bound vs round-bound buffs, maneuver skills carry their movement; TQ12-TQ21, Q-37a, Q-40a decided (7390cf9)
+- ENCOUNTER2: from Act 2 a downed unit left behind on an escape is captured (Q-32) (5fa87a1)
+- Emberwake lore: roster group 1.3 decided (Q-29, Q-32 bleed-out and leaving a unit behind, Q-34 keepsakes, Q-36, Q-37 Martyr deployment counter, Q-40, Q-93 recruits after the Crucible); new Q-37a, Q-40a (fbac138)
+- Emberwake lore: cover, stealth and stance persistence; CANON Cut row (facing and stealth return without cones or rolls) (86e45d4)
+- RULESET1 revised to the round-stance model (RULESET1_STANCE.md: stances, one target, same-stance follow-ups, auto planner and manual mode, flanks, cover and stealth, Rest, enemy recovery); task rows ST, PL, AI added; ENCOUNTER2 references updated; HISTORY rows for the first draft's chains, base slots, player recovery and Rest AP (5614e23)
+- Emberwake lore: round stance details (no recovery for player units, neutral Rest, kiting, Guard cover and stealth, flanking and the Maneuver kinds, Support pouch use, per-stance chain order) in CANON 2.1 and decisions/lore.md (f0737f3)
+- Emberwake lore: Q-19a, Q-20a, Q-21a decided (character lean and endings, checkpoint bad ends, dream-echo retries); the round stance (intent) model and the deck without base-move slots in CANON 2.1 (2f97f1c)
+- RULESET1 and ENCOUNTER2: the user's answers to TQ1-TQ11 and EQ1-EQ9 (as recommended); RULESET1 4.3 chains marked for revision into the round-stance model (363c58c)
+- Emberwake lore: campaign group 1.2 decided (Q-14 Alert floor, Q-17 clock correction and side quests locked at 2.4, Q-19 doctrine by play and story with character alignment, Q-20 checkpoints with day deadlines, Q-21 final-battle retries, Q-22 hub siege as rooms, Q-30 board jobs, forks converge); new Q-19a, Q-20a, Q-21a (19fc838)
+- ENCOUNTER2: the room uses the user named (hub siege, floors to climb, waves, rooms to clear) (514fbab)
+- Emberwake lore: combat group 1.1 decided (Q-49 test armour 25-50, Q-51, Q-57-Q-61, Q-60 fixed arena plus linked rooms, Q-70 reach 2, Q-72, Q-75 stay-behind objectives, Q-75a the Crucible holds by choice, later losses by fate, Q-91); CANON 2.1 rows, the Cassock as the node 20 reward; ROADMAP rows ENCOUNTER2 and RULESET1 (d76448a)
+- tools/lorebook.py: renders a game's lore library (story guide, who's who, registry, canon glossary) as one Worldbook page with a note box per entry (db collection notes) (c1d8411)
+- Emberwake lore: the user's answers of 2026-10-25 (Great Tithing B tied to the Clerisy's founding, the Tithing harvest and Lullaby Houses, Nemeth's arc and node 20 fight, Composure as a derived stat, Q-15/38/41/44/50/52-56) in CANON 3.6, decisions/lore.md and every domain doc; questions tagged by focus with systems split into seven groups, Q-92..Q-97; lore modules index LM-01..LM-17; ROADMAP row DERIVE1 (399a74b)
+- Emberwake lore: the user's first answers (Q-01 truth A, Q-13, Q-25, Q-31, Q-47, Q-48, Q-49 intent, Q-83..85) in CANON, the question files and decisions/lore.md; STORY_GUIDE.md and who_is_who.md (story, arcs per act, gaps G-01..G-30); tithing_options.md (Q-04 / Q-16 options); HISTORY row for truth B and Composure (153ec78)
+- Planner: the Low Sleep decisions (games/emberwake/docs/decisions/lore.md, index row), HISTORY rows for the lore ideas not adopted, LORE1 archived (65c2f3f)
+- Engine authoring guide (top-down game design on Aegis, game-agnostic): the layer rule, a game's design library, the consistency pass, naming and asset briefs, the art bible and milestone templates; skill game-design-library; the docs check covers the lore folders and engine/docs subfolders (6a6b160)
+
+Under the hood:
+
+- FX1 spec (engine effects kit and camera shake, impact sync, the game's effect table, story shakes); task rows; FQ1-FQ8 planner picks; HISTORY rows (053d23c)
+- HOOKS1 spec (combat hooks for the slice's cast instead of stand-ins); task rows, CAST1 dependencies, CAST1-R; HQ1-HQ14 planner picks; HISTORY and ROADMAP rows (aeb9cbd)
+- ROSTER1 spec (unit lifecycle, bunks, recruits behind a flag, keepsakes, temperament; bleed-out and Martyr hooks); task rows; ENCOUNTER2-W depends on ROSTER1-L; RQ1-RQ11 planner picks; HISTORY and ROADMAP rows (43126b6)
+- Specs STORYUI1 (vignette player, story sequences, mission board) and CAST1 (the Act 1 combat cast as data, 8 parts); task rows; HOOKS1 spec row (no stand-ins in the slice); SQ and CQ planner picks while the user is away (06d4227)
+- KIT1 spec (kit extraction: rpgkit_* crates by a byte-identical move, façades, schema to the kit, layer check); task rows, KIT1-N added to the kit-layer slice tasks' dependencies; KQ1-KQ8 planner picks; DERIVE1-E done; HISTORY and ROADMAP rows (3c4717d)
+- CAMPAIGN1 spec (campaign meters, Doom Clock, checkpoints, run over, purse, rests, defeat retreat, triggers); task rows; CMQ1-CMQ9 planner picks while the user is away (OPEN_QUESTIONS section 4) (cce1c7f)
+- Engine docs: campaign structure (checkpoints with day deadlines, forks converge, meters across act lines, losses and retries) from the user's 2026-10-25 answers (db2906d)
+- Specs RULESET1 (the timeline combat ruleset, M1 feel prototype; renamed from TIMELINE1, which names the done widget task) and ENCOUNTER2 (authored terrain, hold-a-tile escape, impossible fight, boss phase kill/swap/rogue, linked rooms); task rows RULESET1-* and ENCOUNTER2-* (spec, not dispatched) (f0c7676)
+- DERIVE1 spec: data-defined derived stats (engine formula evaluator, kit derived-stat rows, resist checks; Composure the first row); task rows DERIVE1-E/S/R/U/D (spec, not dispatched) (f532298)
+- Engine docs: authoring rules from the user's 2026-10-25 answers: the slice is data only and starts at the onboarding, options vs extensions (milestones.md); question focus order with systems split per system (consistency_pass.md); lore modules (lore_modules.md) (b9484c3)
+- Engine docs: story guide template for a game's design library (engine/docs/authoring/story_guide.md), linked from the README and design_library (8fc2ed9)
+- LORE1 (game docs): the lore library moves into games/emberwake/docs/lore/ and becomes consistent: CANON.md, the cast registry, the central truth (proposal), renames, one set of numbers, layer tags, status lines, repo-relative links; the raw export archived; 91 open questions and 29 planner picks in OPEN_QUESTIONS.md; title Emberwake: A Scarlet Lullaby (9452138)
+- docs(emberwake): expand campaign architecture and geography for Act 2 and Act 3 (42d9dc2)
+- docs(emberwake): flesh out non-hub factional, neutral, and hostile character cast (970f7e7)
+- docs(emberwake): add comprehensive items, gear, corruption consumables, monster parts, and named relics specification (75aade3)
+
+## 2026-10-24
+
+Under the hood:
+
+- docs(emberwake): complete Step 5 consistency pass, expand art bible, and author full game systems roadmap (7412844)
+- docs(emberwake): add Sunk Ward campaign graph and Phase 1 encounter staging specification (6b4298a)
+- docs(emberwake): add safehouse economy, triage systems, and UI architecture specification (f866128)
+- docs(emberwake): expand combat and timeline spec with state machine, tie-breakers, and engine mappings (83a1113)
+- docs(emberwake): add base/elite enemy bestiary, named bosses, and modular placeholder encounters (b64bad8)
+- docs(emberwake): flesh out all base class trees and author founder specializations (DEC-LORE-14) (9dcddf5)
+- docs(emberwake): formalize official title as Emberwake: The Low Sleep (DEC-LORE-13) (4b4617c)
+- docs(emberwake): organize lore into background, narrative, specs, and systems with AI index (db7d5ee)
 
 ## 2026-10-23
 
@@ -23,9 +154,26 @@ In the game:
 - **Icons**: new icons for the save slots, the top bar and the map.
 - **For testers**: the F8 note box is taller and edits like a text editor (click to place the caret, select, copy and
   paste, undo, word jumps). In Playtests, click a note to read it whole and copy it.
+- **Warrior looks**: a warrior's sprite shows the gear it carries: one-handed with a kite shield or a buckler,
+  or a two-handed greatsword, battle axe or warhammer. Hest, Brask and Orsa carry a hatchet and buckler; Grakka a
+  two-handed double axe.
+- **Shop**: buying and selling is one three-column trade (shop, trade, stash): click to add, +5 / +10 for more,
+  see the net gold, then Confirm once.
+- **Dialogue**: the talk box sits centred at the bottom with the speaker's portrait, name and faction; the camera
+  frames the party and the speaker; the shop opens centred over the dimmed map.
 
 Every change that touched the game:
 
+- Planner: known issue: gate a push on the gate's exit code (its output does not reach the pipeline) (9f01456)
+- WAR2H1 (game code): the warrior look follows the equipped gear (Grip, gear_body_chain; a shield of burden 0 or less is a buckler); 7 tests; docs (SPRITE1 status, WAR2H1 row) (837a835)
+- WAR2H1 (game art): Hest, Brask and Orsa with a hatchet and buckler; Grakka with a two-handed double-bladed axe; no kite shields (e682d40)
+- WAR2H1 (kit art): warrior looks 1h_buckler, 2h_sword, 2h_axe, 2h_hammer with every clip (84820e5)
+- WAR2H1 (tools): the rig draws the warrior's looks: weapon drawers (greatsword, battle axe, warhammer, double axe, hatchet), the buckler, the two-hand and buckler grips; variants.py look matrix; export_units bakes looks sharing the base's palette (27a3a33)
+- Planner: WAR2H1 row (user 2026-10-23: warrior 2H and 1H + shield looks by equipped gear; Grakka, Hest, Brask, Orsa without the shield) (dacb704)
+- PLAYUI1-P (game): the shop is a three-column trade (shop, trade, stash): clicks add 1, +5 / +10 more, a trade line goes back whole, net gold, Confirm settles it all at once through the new all-or-nothing shop::trade; the shop moves to shop.rs (8b25d42)
+- Planner: known issue: stale test binaries from a scratch copy in a worktree's gate target folder (187fc12)
+- Planner: known issue: patch_notes.py misses commits merged from task branches (f2e05ea)
+- PLAYUI1-D (game): the dialogue box: 400 px centred at the bottom, portrait with name and faction under it, the NPC's line above the replies; the camera on the party and the speaker; the shop centred over a dimmed map with the box hidden (c40482b)
 - SPRITE2 (game art + data): Grakka, the Horde Warchief, Brask, Hest, Orsa and Wenn bodies; ash and named-goblin palettes; seeds/sprite2.json points the named goblins at their goblin body with a palette and Orsa at her body; the four old named goblin bodies removed; the worldbook regenerated (57c560d)
 - SPRITE2 (kit art): six goblin bodies (brawler, berserker, skirmisher, scout, archer, shaman) and the training dummy with every clip (96221e4)
 - SPRITE2 (tools): the rig draws goblin variants, the dummy and named bodies (rig scale and girth, goblin and named heads; variants.py; export_units writes kit and game bodies, palettes and review sheets); gen_art writes no bodies (4f5cbd5)
