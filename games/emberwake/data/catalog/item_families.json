@@ -1259,6 +1259,76 @@
 			"engine_rules": [],
 			"damage_type": "",
 			"art": ""
+		},
+		{
+			"id": "polearm",
+			"name": "Polearm",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_2h"
+			],
+			"default_hand": "main_2h",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"STR"
+			],
+			"base": {
+				"main_2h": {
+					"power": 26,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 2,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_2h": {
+					"power": {
+						"min": 18,
+						"max": 30
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [
+				"reach"
+			],
+			"damage_type": "pierce",
+			"art": ""
 		}
 	]
 }

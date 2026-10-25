@@ -133,6 +133,179 @@
 			"purse": {},
 			"guests": [],
 			"protect": []
+		},
+		{
+			"id": "tl_duel_windup",
+			"name": "Duel: Windup",
+			"description": "Timeline test: a Snap into a Heavy, follow-ups, Guard and riposte, Rest gain.",
+			"zone": "stone_arena",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"rng_seed": 1337,
+			"party": [
+				"tl_vanguard"
+			],
+			"enemies": [
+				"tl_enforcer"
+			],
+			"phases": [],
+			"pace": "auto",
+			"objective": "rout",
+			"objective_text": "",
+			"deployment": "standard",
+			"morale": false,
+			"purse": {},
+			"guests": [],
+			"protect": []
+		},
+		{
+			"id": "tl_duel_reach",
+			"name": "Duel: Reach",
+			"description": "Timeline test: reach 2 against reach 1, the sure break, Fade.",
+			"zone": "stone_arena",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"rng_seed": 1337,
+			"party": [
+				"tl_halberdier"
+			],
+			"enemies": [
+				"tl_footman"
+			],
+			"phases": [],
+			"pace": "auto",
+			"objective": "rout",
+			"objective_text": "",
+			"deployment": "standard",
+			"morale": false,
+			"purse": {},
+			"guests": [],
+			"protect": []
+		},
+		{
+			"id": "tl_duel_armour",
+			"name": "Duel: Armour",
+			"description": "Timeline test: pierce against armour 50, an unbreakable windup, enemy recovery.",
+			"zone": "stone_arena",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"rng_seed": 1337,
+			"party": [
+				"tl_spiker"
+			],
+			"enemies": [
+				"tl_captain"
+			],
+			"phases": [],
+			"pace": "auto",
+			"objective": "rout",
+			"objective_text": "",
+			"deployment": "standard",
+			"morale": false,
+			"purse": {},
+			"guests": [],
+			"protect": []
+		},
+		{
+			"id": "tl_flank",
+			"name": "Flank",
+			"description": "Timeline test: Engage with a carried move, Disengage, Utility fire bomb, kiting.",
+			"zone": "stone_arena",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"rng_seed": 1337,
+			"party": [
+				"tl_vanguard",
+				"tl_spiker"
+			],
+			"enemies": [
+				"tl_footman",
+				"tl_crossbowman"
+			],
+			"phases": [],
+			"pace": "auto",
+			"objective": "rout",
+			"objective_text": "",
+			"deployment": "standard",
+			"morale": false,
+			"purse": {},
+			"guests": [],
+			"protect": []
+		},
+		{
+			"id": "tl_skirmish",
+			"name": "Skirmish",
+			"description": "Timeline test: the 4-on-4 loop and the AI table.",
+			"zone": "stone_arena",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"rng_seed": 1337,
+			"party": [
+				"tl_vanguard",
+				"tl_halberdier",
+				"tl_spiker",
+				"tl_archer"
+			],
+			"enemies": [
+				"tl_footman",
+				"tl_footman_b",
+				"tl_enforcer",
+				"tl_crossbowman"
+			],
+			"phases": [],
+			"pace": "auto",
+			"objective": "rout",
+			"objective_text": "",
+			"deployment": "standard",
+			"morale": false,
+			"purse": {},
+			"guests": [],
+			"protect": []
 		}
 	]
 }

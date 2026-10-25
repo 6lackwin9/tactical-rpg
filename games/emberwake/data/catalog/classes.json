@@ -401,6 +401,66 @@
 			"accessory_1": "",
 			"accessory_2": "",
 			"pouch": []
+		},
+		{
+			"id": "tl_drill",
+			"name": "Drill (test)",
+			"description": "Test class for the timeline test kit.",
+			"art": "warrior",
+			"ai_role": "AGGRESSOR",
+			"base_stats": {
+				"STR": 13,
+				"DEX": 10,
+				"INT": 6,
+				"CONS": 13,
+				"PERC": 10,
+				"KNOW": 10
+			},
+			"growth": {
+				"STR": 2,
+				"CONS": 2,
+				"DEX": 1
+			},
+			"proficiency": {
+				"sword": {
+					"level": 2,
+					"scaling": 1.5
+				},
+				"mace": {
+					"level": 2,
+					"scaling": 1.5
+				},
+				"dagger": {
+					"level": 2,
+					"scaling": 1.5
+				},
+				"polearm": {
+					"level": 2,
+					"scaling": 1.5
+				},
+				"shield": {
+					"level": 2,
+					"scaling": 1.5
+				},
+				"plate": {
+					"level": 2,
+					"scaling": 1.5
+				},
+				"leather": {
+					"level": 2,
+					"scaling": 1.5
+				}
+			},
+			"skill_path": {
+				"tl_thrust": 1
+			},
+			"main_hand": "",
+			"off_hand": "",
+			"head": "",
+			"body": "",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": []
 		}
 	]
 }

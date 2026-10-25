@@ -12,7 +12,8 @@
 					"gear": "sword",
 					"levels": 1
 				}
-			]
+			],
+			"slot": ""
 		},
 		{
 			"id": "bow_training",
@@ -24,7 +25,8 @@
 					"gear": "bow",
 					"levels": 1
 				}
-			]
+			],
+			"slot": ""
 		},
 		{
 			"id": "axe_training",
@@ -36,7 +38,8 @@
 					"gear": "axe",
 					"levels": 1
 				}
-			]
+			],
+			"slot": ""
 		},
 		{
 			"id": "hardy",
@@ -48,7 +51,8 @@
 					"stat": "CONS",
 					"value": 2
 				}
-			]
+			],
+			"slot": ""
 		},
 		{
 			"id": "keen_senses",
@@ -60,7 +64,8 @@
 					"stat": "PERC",
 					"value": 2
 				}
-			]
+			],
+			"slot": ""
 		},
 		{
 			"id": "ruin_lore",
@@ -75,7 +80,8 @@
 						"biome": "ruins"
 					}
 				}
-			]
+			],
+			"slot": ""
 		},
 		{
 			"id": "steady_nerves",
@@ -92,7 +98,8 @@
 					"status": "stun",
 					"value": 25
 				}
-			]
+			],
+			"slot": ""
 		},
 		{
 			"id": "second_wind",
@@ -103,7 +110,8 @@
 					"type": "ap_regen",
 					"value": 1
 				}
-			]
+			],
+			"slot": ""
 		},
 		{
 			"id": "dirty_tricks",
@@ -114,7 +122,8 @@
 					"type": "skill",
 					"skill": "quick_stab"
 				}
-			]
+			],
+			"slot": ""
 		},
 		{
 			"id": "field_medic",
@@ -126,7 +135,8 @@
 					"group": "heal",
 					"levels": 1
 				}
-			]
+			],
+			"slot": ""
 		},
 		{
 			"id": "arcane_study",
@@ -138,7 +148,8 @@
 					"group": "spell",
 					"levels": 1
 				}
-			]
+			],
+			"slot": ""
 		},
 		{
 			"id": "riposte_drill",
@@ -150,7 +161,8 @@
 					"family": "riposte",
 					"levels": 2
 				}
-			]
+			],
+			"slot": ""
 		},
 		{
 			"id": "wardens_eye",
@@ -160,7 +172,46 @@
 				{
 					"type": "foresight"
 				}
-			]
+			],
+			"slot": ""
+		},
+		{
+			"id": "tl_braced_poise",
+			"name": "Braced Poise",
+			"description": "+20 Max Poise.",
+			"effects": [
+				{
+					"type": "stat",
+					"stat": "max_poise",
+					"value": 20
+				}
+			],
+			"slot": "passive"
+		},
+		{
+			"id": "tl_anvil_posture",
+			"name": "Anvil Posture",
+			"description": "Takes no stagger from the first block of an action.",
+			"effects": [
+				{
+					"type": "stagger_taken",
+					"mult": 0,
+					"max_blocks": 1
+				}
+			],
+			"slot": "keystone"
+		},
+		{
+			"id": "tl_hawk_eye",
+			"name": "Hawk Eye",
+			"description": "Foresight out to 4 tiles.",
+			"effects": [
+				{
+					"type": "foresight",
+					"range": 4
+				}
+			],
+			"slot": "passive"
 		}
 	]
 }

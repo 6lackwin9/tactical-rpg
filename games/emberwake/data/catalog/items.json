@@ -900,6 +900,24 @@
 				}
 			],
 			"tiers": []
+		},
+		{
+			"id": "tl_billhook",
+			"name": "Notched Billhook (test)",
+			"family": "polearm",
+			"rarity": "COMMON",
+			"weight": 4.0,
+			"value": 40,
+			"description": "A hooked polearm for the timeline test kit.",
+			"damage_type": "pierce",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_2h",
+			"scaling_stat": "STR",
+			"modifiers": [],
+			"tiers": []
 		}
 	]
 }

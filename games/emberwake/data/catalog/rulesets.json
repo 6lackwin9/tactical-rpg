@@ -1,0 +1,51 @@
+{
+	"kind": "rulesets",
+	"version": 1,
+	"entries": [
+		{
+			"id": "timeline",
+			"name": "Timeline",
+			"rules": [
+				"round_intent",
+				"enemy_moves",
+				"deck",
+				"poise",
+				"ap_cost",
+				"pierce",
+				"reach",
+				"flank",
+				"plan_badges"
+			],
+			"intents": [
+				"assault",
+				"guard",
+				"support",
+				"maneuver"
+			],
+			"basics": [
+				"move",
+				"rest",
+				"strike",
+				"offhand_jab",
+				"active_guard",
+				"flank_cut"
+			],
+			"poise_stat": "max_poise",
+			"stagger_windup_mult": 2.0,
+			"stagger_guard_mult": 0.5,
+			"stagger_repeat_mult": 0.5,
+			"flank_stagger_mult": 1.5,
+			"flank_power_mult": 1.0,
+			"break_chance_scale": 0.5,
+			"break_chance_cap": 50,
+			"rest_ap_per_block": 0.5,
+			"rest_ap_cap": 2,
+			"rest_poise_per_block": 5,
+			"deck_slots": {
+				"active": 3,
+				"passive": 2,
+				"keystone": 1
+			}
+		}
+	]
+}
