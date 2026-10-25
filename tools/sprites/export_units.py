@@ -4,8 +4,9 @@
 # units/<class>/<variant>/palettes/<id>.json that recolour a body (tools/sprites/variants.py lists them).
 #   python tools/sprites/export_units.py [body ...] [--root DIR] [--clips idle|all] [--review OUT]
 # body: a class id (its kit body <class>/base) or a variant key <class>/<variant> of variants.py (default: every class
-# and every variant). Bodies land in their layer: the class bodies, the goblin variants and the dummy in the kit
-# (kits/rpg/assets/), the named bodies and the character / ash palettes in the game (games/emberwake/assets/). A palette
+# and every variant). Bodies land in their layer: the class bodies, the goblin variants, the dummy and the creature
+# bases (beast/base, crawler/base; CREATURE1) in the kit (kits/rpg/assets/), the named bodies, the named creatures and
+# the character / ash palettes in the game (games/emberwake/assets/). A palette
 # file is written with its body. DIR is a workspace root (default: this repository). Portraits do not come from the rig.
 # --clips idle (the pre-SPRITE1-A2 form): a one-frame sheet, the idle pose's first frame (the 48 px figure at 2x,
 #   bottom-aligned in the 104 px square), clips.json frame [104, 104] with one idle clip.

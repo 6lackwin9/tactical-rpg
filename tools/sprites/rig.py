@@ -1,4 +1,5 @@
 # Shared pixel-art rig: one skeleton, swappable outfit (head/torso/legs), weapon family and palette.
+# CREATURE1: two creature skeletons beside it, a quadruped and a segmented crawler (the end of this file).
 # Frames are W x W, facing right. Units are dicts: proportions, part names and a palette.
 import math
 from PIL import Image
@@ -562,3 +563,406 @@ def export(name, A, T, out, bgc=(46, 52, 44), Z=6):
         g[0].save(f"{out}/{name}_{n}.gif", save_all=True, append_images=g[1:], duration=T[n], loop=0)
     sheet.save(f"{out}/{name}_sheet.png"); prev.convert("RGB").save(f"{out}/{name}_preview.png")
     return {n: len(v) for n, v in A.items()}
+
+
+
+# ------------------------------------------------------------------ creature skeletons (CREATURE1): non-human bodies
+# Two generic skeletons beside the humanoid one, in the same frame (W x W, facing right, feet on GY) with the same
+# clips (idle, walk, attack, hurt, death). A creature is a dict like a rig unit: proportions, feature options and a
+# palette `pal` whose keys are the body's palette slots (a palette file recolours them as it does a humanoid's).
+#   quadruped: a spine from hip to shoulder, a neck and a head with a hinged jaw, four legs on IK (front: elbow back;
+#     hind: knee forward, hock back), a tail when tail[0] > 0. quad_pose draws one frame, quad_clips the clip set.
+#   crawler: a chain of n segments laid along a path from the head (chain_along), a pair of legs per segment whose
+#     step phases alternate along the chain and between the near and far side. crawler_pose draws one frame,
+#     crawler_clips the clip set (plus `spit`, an acid spit, when the creature has spit=True).
+def mix(a, b, t):
+    """Colour `a` moved `t` of the way to `b` (a computed shade step between two palette hues)."""
+    return tuple(int(round(x + (y - x) * t)) for x, y in zip(a[:3], b[:3]))
+
+
+def _flash(f):
+    for y in range(W):
+        for x in range(W):
+            if f.px[x, y][3]: f.px[x, y] = (255, 255, 255, 255) if f.px[x, y][:3] != OUT else (255, 220, 220, 255)
+
+
+def _v(p, *terms):
+    """p plus each (vector, factor) of `terms`."""
+    x, y = p
+    for v, k in terms:
+        x += v[0] * k; y += v[1] * k
+    return (x, y)
+
+
+def _line(f, a, b, c, behind=False):  # a one-pixel line (behind: only where nothing is drawn yet)
+    n = int(max(abs(b[0] - a[0]), abs(b[1] - a[1]))) + 1
+    for i in range(n + 1):
+        t = i / n; x, y = int(round(a[0] + (b[0] - a[0]) * t)), int(round(a[1] + (b[1] - a[1]) * t))
+        if not behind or (0 <= x < W and 0 <= y < W and f.px[x, y][3] == 0): f.dot(x, y, c)
+
+
+P_RED = (225, 29, 72)   # a bite's spray (arterial red), an effect colour like the humanoids' sparks
+
+# A quadruped's proportions (px) and options; a creature overrides what it needs. stance: the pose every clip starts
+# from (pitch: degrees the spine tips, front down when positive; neck_a: the neck's angle, 0 forward, negative up;
+# head_a: the head's, nose down when positive; bob: px the body sits lower; paws: rest offsets of the paws).
+QUAD = dict(cx=20.0, body=14.0, hip_h=12.5, sh_h=13.0, arch=1.0, haunch=3.4, waist=2.4, chest=4.2,
+            fore=(5.2, 5.0), hind=(5.0, 4.6, 3.0), neck=5.0, head=2.7, snout=4.8, jaw_len=4.4,
+            tail=(5, 2.0), tail_a=-25.0, tail_curl=6.0, ears='pointed', ridges=0, ribs=0, wire=False,
+            stance=dict(pitch=0.0, neck_a=-30.0, head_a=10.0, bob=0.0, paws={}))
+
+
+def quad_pose(q, dx=0.0, bob=0.0, pitch=0.0, neck_a=-30.0, head_a=10.0, jaw=0.0, paws=None, tail=0.0, tail_a=None,
+              hurt=False, flash=False, fx=None):
+    """One frame of quadruped `q`. paws: 'nf' / 'ff' / 'nh' / 'fh' (near and far, front and hind) -> (x offset from
+    the paw's rest spot, lift); jaw: degrees open; tail: the tail's sway (radians of phase); tail_a: its angle
+    (degrees above straight back; default q's); fx: discs (x, y, r, colour) drawn last."""
+    P = q['pal']; paws = paws or {}
+    hide, lo, dk = P['hide'], P['hide_lo'], P.get('hide_dk', P['hide_lo'])
+    f = F()
+    a = math.radians(pitch); along = (math.cos(a), math.sin(a)); up = (math.sin(a), -math.cos(a))
+    mid = (q['cx'] + dx, GY - (q['hip_h'] + q['sh_h']) / 2 + bob)
+    H = _v(mid, (along, -q['body'] / 2), (up, (q['hip_h'] - q['sh_h']) / 2))
+    S = _v(mid, (along, q['body'] / 2), (up, (q['sh_h'] - q['hip_h']) / 2))
+
+    def spine(t):
+        return _v(H, ((S[0] - H[0], S[1] - H[1]), t), (up, q['arch'] * math.sin(math.pi * t)))
+
+    def rad(t):
+        pts = ((0.0, q['haunch']), (0.5, q['waist']), (0.82, q['chest']), (1.0, q['chest'] * 0.86))
+        for (t0, r0), (t1, r1) in zip(pts, pts[1:]):
+            if t <= t1: return r0 + (r1 - r0) * (t - t0) / (t1 - t0)
+        return pts[-1][1]
+
+    def centre(t):
+        return _v(spine(t), (up, -(rad(t) - 0.7)))
+
+    def leg(name, front, col, col_lo):
+        ox, lift = paws.get(name, (0.0, 0.0))
+        if front:
+            root = _v(centre(0.8), (along, 0.6))
+            tgt = (S[0] + 0.5 + ox, GY - 0.5 - lift)
+            knee, foot = ik(root, q['fore'][0], q['fore'][1], tgt, 1)
+            f.limb(root, knee, 1.8, col); f.limb(knee, foot, 1.1, col, col_lo)
+        else:
+            root = _v(centre(0.12), (along, -0.4))
+            tgt = (H[0] - 0.5 + ox, GY - 0.5 - lift)
+            m = q['hind'][2]; hock = (tgt[0] - m * 0.42, tgt[1] - m * 0.9)
+            knee, hk = ik(root, q['hind'][0], q['hind'][1], hock, -1)
+            f.limb(root, knee, 2.3, col); f.limb(knee, hk, 1.2, col); f.limb(hk, tgt, 0.9, col, col_lo)
+            foot = tgt
+        f.disc(foot[0] + 0.8, foot[1] - 0.1, 1.0, col)
+        f.dot(foot[0] + 1.9, foot[1] + 0.4, P.get('claw', col_lo))
+
+    # far side: legs in the dark shade, behind the body
+    leg('fh', False, dk, dk); leg('ff', True, dk, dk)
+    # tail
+    if q['tail'][0]:
+        n, sl = q['tail']; p = _v(spine(0.0), (along, -0.8), (up, -0.4))
+        ang = q['tail_a'] if tail_a is None else tail_a
+        for k in range(n):
+            ak = math.radians(ang - q['tail_curl'] * k + 9 * math.sin(tail + k * 0.8) * k / n) + a
+            nxt = (p[0] - math.cos(ak) * sl, p[1] - math.sin(ak) * sl)
+            f.limb(p, nxt, max(0.5, 1.2 - 0.7 * k / n), hide if k < n - 1 else lo); p = nxt
+    # torso: the shade, the body over it one px up, a lit back line
+    ts = [i / 24 for i in range(25)]
+    for t in ts: f.disc(*centre(t), rad(t), lo)
+    for t in ts: f.disc(*_v(centre(t), (up, 1.1)), rad(t) - 1.1, hide)
+    for t in ts[3:-3]: f.dot(*_v(spine(t), (up, -0.9)), P.get('hide_hi', hide))
+    for k in range(q['ribs']):  # a starved chest: the ribs show as short dark lines
+        t = 0.5 + k * 0.08; top = _v(spine(t), (up, -2.0)); bot = _v(centre(t), (up, -rad(t) * 0.55))
+        _line(f, top, bot, lo)
+    for k in range(q['ridges']):  # bone ridges along the spine, raked back, tallest over the shoulders
+        t = 0.1 + 0.8 * k / max(1, q['ridges'] - 1); b = spine(t); h = 1.8 + 1.4 * t
+        tip = _v(b, (up, h), (along, -1.1))
+        f.poly([_v(b, (along, -1.0)), _v(b, (along, 1.0)), tip], P['bone']); f.dot(*_v(b, (along, -0.6), (up, 0.3)), P.get('bone_lo', lo))
+    # neck and head
+    nb = _v(centre(0.94), (up, 0.6))
+    na = math.radians(neck_a); hd = (nb[0] + math.cos(na) * q['neck'], nb[1] + math.sin(na) * q['neck'])
+    f.limb(nb, hd, 2.0, hide, lo)
+    ha = math.radians(head_a); fw = (math.cos(ha), math.sin(ha)); hu = (math.sin(ha), -math.cos(ha))
+    r, sn = q['head'], q['snout']
+    if q['ears'] == 'pointed':
+        f.poly([_v(hd, (hu, 1.6), (fw, -0.2)), _v(hd, (hu, 4.4), (fw, -2.6)), _v(hd, (hu, 0.6), (fw, -2.4))], hide)
+        f.dot(*_v(hd, (hu, 2.2), (fw, -1.6)), lo)
+    elif q['ears'] == 'bat':  # big bare ears swept back
+        f.poly([_v(hd, (hu, 1.4), (fw, 0.2)), _v(hd, (hu, 4.8), (fw, -3.4)), _v(hd, (hu, 0.4), (fw, -2.6))], hide)
+        f.poly([_v(hd, (hu, 1.6), (fw, -0.8)), _v(hd, (hu, 3.6), (fw, -2.7)), _v(hd, (hu, 1.0), (fw, -2.2))], lo)
+    f.disc(*hd, r, hide)
+    J = _v(hd, (hu, -1.3), (fw, -0.2))
+    ja = ha + math.radians(jaw); jf = (math.cos(ja), math.sin(ja)); ju = (math.sin(ja), -math.cos(ja))
+    jl = q['jaw_len']
+    lower = [_v(J, (ju, 0.6)), _v(J, (jf, jl), (ju, 0.2)), _v(J, (jf, jl - 0.7), (ju, -0.9)), _v(J, (jf, 0.6), (ju, -1.3))]
+    upper = [_v(hd, (hu, 1.9), (fw, 0.4)), _v(hd, (fw, sn), (hu, 0.9)), _v(hd, (fw, sn + 0.5), (hu, -0.3)),
+             _v(hd, (fw, sn * 0.9), (hu, -1.0)), _v(hd, (fw, 0.6), (hu, -1.1))]
+    if jaw > 6:  # the open mouth: gums between the jaws, teeth on both edges
+        f.poly([_v(hd, (fw, 0.6), (hu, -1.0)), _v(hd, (fw, sn * 0.9), (hu, -0.9)), _v(J, (jf, jl * 0.95), (ju, 0.3)), _v(J, (ju, 0.6))],
+               P.get('mouth', lo))
+    f.poly(lower, lo)
+    f.poly(upper, hide)
+    f.dot(*_v(hd, (fw, sn + 0.4), (hu, 0.2)), P.get('nose', lo))
+    if jaw > 6:
+        for k in (0.45, 0.7, 0.92): f.dot(*_v(hd, (fw, sn * k), (hu, -1.6)), P.get('teeth', WHITE))
+        for k in (0.55, 0.85): f.dot(*_v(J, (jf, jl * k), (ju, 0.9)), P.get('teeth', WHITE))
+    if q['wire']:  # iron wire bound round each jaw; a strand between them pulls taut when the jaw opens
+        m = sn * 0.55; ml = jl * 0.55
+        top, bot = _v(hd, (fw, m), (hu, 1.0)), _v(hd, (fw, m), (hu, -1.0))
+        _line(f, top, bot, P['wire']); f.dot(*top, P.get('wire_hi', P['wire']))
+        jt, jb = _v(J, (jf, ml), (ju, 0.4)), _v(J, (jf, ml), (ju, -1.0))
+        _line(f, jt, jb, P['wire'])
+        if jaw > 6: _line(f, bot, jt, P.get('wire_hi', P['wire']))
+    f.dot(*_v(hd, (fw, 1.1), (hu, 0.7)), OUT if hurt else P['eye'])
+    f.dot(*_v(hd, (fw, 0.6), (hu, 1.5)), lo)  # brow
+    # near side: legs in the body colour, over it
+    leg('nh', False, hide, lo); leg('nf', True, hide, lo)
+    f.outline()
+    for (x, y, rr, c) in (fx or []): f.disc(x, y, rr, c)
+    if flash: _flash(f)
+    return f.im
+
+
+def quad_clips(q):
+    """(frames, ms) of quadruped `q`: idle, walk (a trot), attack (a lunge and bite), hurt, death."""
+    st = q['stance']; A, T = {}, {}
+    base = dict(pitch=st['pitch'], neck_a=st['neck_a'], head_a=st['head_a'], bob=st['bob'])
+    rest = st['paws']
+
+    def P(paws=None, **kw):
+        k = dict(base); k.update(kw)
+        pw = dict(rest)
+        pw.update(paws or {})
+        return quad_pose(q, paws=pw, **k)
+
+    fr = []
+    for i in range(8):  # breathing: the chest rises, the head sways, the tail twitches
+        t = i / 8 * 2 * math.pi; b = math.sin(t)
+        fr.append(P(bob=base['bob'] + 0.5 + 0.5 * b, neck_a=base['neck_a'] - 2 * math.sin(t - 0.8), jaw=3 + 3 * (0.5 + 0.5 * b), tail=t))
+    A['idle'], T['idle'] = fr, [160] * 8
+    fr = []
+    for i in range(8):  # a trot: the near front and far hind paws step together, then the other pair
+        ph = i / 8; s = math.sin(2 * math.pi * ph)
+        g1, g2 = gait(ph, 3.4, 2.4), gait(ph + 0.5, 3.4, 2.4)
+        pw = {n: (rest.get(n, (0, 0))[0] + g[0], g[1]) for n, g in (('nf', g1), ('fh', g1), ('ff', g2), ('nh', g2))}
+        fr.append(P(paws=pw, bob=base['bob'] + 0.6 - 1.2 * abs(s), neck_a=base['neck_a'] + 3 * abs(s), jaw=8, tail=ph * 6.28))
+    A['walk'], T['walk'] = fr, [90] * 8
+    hit = [(46, 31, 1.4, WHITE), (44, 28, 0.7, P_RED), (45, 35, 0.7, P_RED), (47, 27, 0.5, WHITE)]
+    A['attack'], T['attack'] = [
+        P(dx=-1, bob=base['bob'] + 2.0, pitch=base['pitch'] + 6, neck_a=12, head_a=18, jaw=4,
+          paws={'nh': (3.0, 0), 'fh': (3.5, 0), 'nf': (-1.5, 0), 'ff': (-1.0, 0)}),                        # coil on the haunches
+        P(dx=3, bob=base['bob'] - 2.0, pitch=-10, neck_a=-12, head_a=0, jaw=42,
+          paws={'nf': (5.0, 5.0), 'ff': (4.0, 6.0), 'nh': (-4.0, 0.5), 'fh': (-5.0, 1.0)}),                 # spring, jaws wide
+        P(dx=7, bob=base['bob'] - 0.5, pitch=2, neck_a=-4, head_a=8, jaw=4, fx=hit,
+          paws={'nf': (6.0, 1.0), 'ff': (5.0, 0.5), 'nh': (-3.0, 0), 'fh': (-4.0, 0)}),                     # the bite
+        P(dx=6.5, bob=base['bob'], pitch=4, neck_a=-2, head_a=16, jaw=2, fx=hit[1:2],
+          paws={'nf': (5.0, 0), 'ff': (4.5, 0), 'nh': (-2.0, 0), 'fh': (-3.0, 0)}),                         # hold, worrying
+        P(dx=3, jaw=12, paws={'nf': (2.5, 1.5), 'ff': (2.0, 0), 'nh': (-1.0, 0), 'fh': (-1.0, 0)}),
+        P(jaw=4)], [120, 150, 50, 150, 110, 110]
+    A['hurt'], T['hurt'] = [
+        P(dx=-1, bob=base['bob'] - 0.5, pitch=-4, neck_a=-45, head_a=-5, jaw=30, hurt=True, flash=True),
+        P(dx=-2.5, bob=base['bob'] - 1.0, pitch=-6, neck_a=-50, head_a=-10, jaw=34, hurt=True, paws={'nf': (-1.0, 2.0), 'ff': (-0.5, 1.0)}),
+        P(dx=-1.5, pitch=base['pitch'] - 2, neck_a=base['neck_a'] - 8, jaw=10),
+        P(jaw=4)], [60, 120, 90, 90]
+    lie = q['sh_h'] - q['chest'] * 1.7  # how far the body drops to lie on its side
+    sprawl = {'nf': (7.0, 1.5), 'ff': (8.0, 3.5), 'nh': (-6.5, 1.0), 'fh': (-7.0, 3.0)}
+    A['death'], T['death'] = [
+        P(dx=-1, bob=base['bob'] - 0.5, pitch=-4, neck_a=-45, head_a=-5, jaw=30, hurt=True, flash=True),
+        P(dx=-2, bob=base['bob'] - 1.5, pitch=-12, neck_a=-60, head_a=-20, jaw=40, hurt=True, paws={'nf': (-1.0, 3.0), 'ff': (0.0, 4.0)}),
+        P(dx=-1.5, bob=lie * 0.45, pitch=4, neck_a=20, head_a=25, jaw=20, hurt=True,
+          paws={'nf': (2.0, 0), 'ff': (2.5, 0.5), 'nh': (-2.0, 0), 'fh': (-1.5, 0.5)}),
+        P(dx=-0.5, bob=lie * 0.8, pitch=2, neck_a=25, head_a=30, jaw=16, hurt=True, tail_a=-5,
+          paws={n: (v[0] * 0.7, v[1] * 0.7) for n, v in sprawl.items()}),
+        P(dx=0.5, bob=lie, pitch=0, neck_a=18, head_a=22, jaw=14, hurt=True, tail_a=0, paws=sprawl),
+        P(dx=0.5, bob=lie, pitch=0, neck_a=18, head_a=24, jaw=12, hurt=True, tail_a=0, paws=sprawl)], [60, 140, 110, 100, 100, 600]
+    return A, T
+
+
+# A crawler's proportions (px) and options. head_at: the raised head's rest spot; run: px of body along the ground
+# behind the neck; coil: how far the tail end curls up and forward (0 = straight); belly: the segment range drawn as
+# a swollen translucent abdomen (None: all chitin); spit: also a `spit` clip; ride: px the body's centre line rides
+# above the ground on its legs.
+CRAWL = dict(n=13, gap=2.6, r=2.2, head=2.6, belly=None, belly_r=3.0, leg=(2.6, 2.6), antenna=6.0, spit=False,
+             head_at=(33.0, 25.0), run=18.0, coil=0.0, ride=4.6)
+
+
+def chain_along(path, n, gap):
+    """`n` points `gap` px apart along the polyline `path` (head first), measured along the line; past its end the
+    last piece runs on straight. A segmented body follows its head this way."""
+    lens = [math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(path, path[1:])]
+    out = []
+    for k in range(n):
+        d = k * gap
+        for i, L in enumerate(lens):
+            if d <= L or i == len(lens) - 1:
+                a, b = path[i], path[i + 1]; t = d / L if L else 0.0
+                out.append((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)); break
+            d -= L
+    return out
+
+
+def crawl_path(head, ground_x, run, lift=0.0, wave=0.0, amp=0.0, coil=0.0, floor=None):
+    """A crawler's path, head first: from `head` an S-curve down to the ground at `ground_x` (head raised; `lift`
+    bows the neck forward), then `run` px back along the ground (a travelling hump `amp` px high at phase `wave`),
+    then the tail end curling up and forward by `coil` (0 = straight on)."""
+    gy = floor if floor is not None else GY - 2.4
+    p0, p3 = head, (ground_x, gy)
+    p1 = (head[0] - 4.0, head[1] + 0.5)  # the head looks forward off the top of the curve
+    p2 = (ground_x + 3.0 + lift, gy - 1.0)
+    pts = []
+    for i in range(10):
+        t = i / 9; u = 1 - t
+        pts.append((u ** 3 * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t ** 3 * p3[0],
+                    u ** 3 * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t ** 3 * p3[1]))
+    for i in range(1, 10):
+        x = ground_x - run * i / 9
+        pts.append((x, gy - amp * max(0.0, math.sin(2 * math.pi * (i / 9 * 1.5 + wave)))))
+    if coil:  # round a circle standing on the ground behind the run: back, up and over towards the head
+        cx, cy, r = pts[-1][0], gy - 3.2, 3.2
+        for i in range(1, 7):
+            a = math.pi / 2 + coil * math.pi * 1.2 * i / 6
+            pts.append((cx - math.cos(a) * r, cy + math.sin(a) * r))
+    pts.append((2 * pts[-1][0] - pts[-2][0], 2 * pts[-1][1] - pts[-2][1]))
+    return pts
+
+
+def crawler_pose(c, path, phase=0.0, jaw=0.2, bubbles=0.0, sway=0.0, dead=False, hurt=False, flash=False, fx=None,
+                 dim=False):
+    """One frame of crawler `c` laid along `path` (head first). phase: the leg cycle (legs step in a wave from the
+    head back, the far side half a cycle off); jaw: radians the fangs open; bubbles: the abdomen's bubble cycle;
+    sway: the antennae's; dead: legs curled up; dim: the abdomen's glow out."""
+    P = c['pal']; f = F(); n = c['n']
+    pts = chain_along(path, n, c['gap'])
+    dirs = []
+    for i in range(n):
+        a, b = (pts[0], pts[1]) if i == 0 else (pts[i - 1], pts[i])
+        L = math.hypot(a[0] - b[0], a[1] - b[1]) or 1.0
+        dirs.append(((a[0] - b[0]) / L, (a[1] - b[1]) / L))
+    bel = c['belly']
+
+    def radius(i):
+        if i == 0: return c['head']
+        if bel and bel[0] <= i <= bel[1]:
+            return c['r'] + (c['belly_r'] - c['r']) * math.sin(math.pi * (i - bel[0] + 1) / (bel[1] - bel[0] + 2))
+        if i >= n - 3: return c['r'] - 0.35 * (i - (n - 4))
+        return c['r']
+
+    def legs(far):  # one-pixel legs drawn over the outlined body, so a row of them reads as legs, not a band
+        col = P['leg_lo'] if far else P['leg']
+        for i in range(1, n - 1):
+            p, d = pts[i], dirs[i]; up = (d[1], -d[0]); r = radius(i)
+            root = _v(p, (up, -(r - 0.6)))
+            ph = phase + i * 0.29 + (0.5 if far else 0.0)
+            if dead:
+                tgt = _v(root, (up, 3.6 + 0.6 * math.sin(i * 1.7)), (d, 1.2 if far else -1.2))
+            elif p[1] > GY - c['ride'] - 1.5:  # on the ground: the foot steps
+                g = gait(ph, 1.4, 1.2)
+                tgt = (root[0] + g[0] + (0.8 if far else -0.4), GY - 0.5 - g[1])
+            else:  # raised: the legs paddle in the air
+                tgt = _v(root, (up, -3.4), (d, 0.4 + 0.9 * math.sin(2 * math.pi * ph)))
+            knee, foot = ik(root, c['leg'][0], c['leg'][1], tgt, 1)
+            _line(f, root, knee, col, far); _line(f, knee, foot, col, far)
+        p, d = pts[-1], dirs[-1]; up = (d[1], -d[0]); s = 0.5 * math.sin(2 * math.pi * phase)  # the long trailing legs
+        _line(f, p, _v(p, (d, -4.6), (up, 1.2 + s + (0.8 if far else 0))), col, far)
+
+    for i in range(n - 1, -1, -1):
+        p, d = pts[i], dirs[i]; up = (d[1], -d[0]); r = radius(i)
+        acid = bel and bel[0] <= i <= bel[1]
+        if acid:
+            f.disc(*p, r, P['acid_lo'])
+            f.disc(*_v(p, (up, 0.3)), r - 0.8, P['acid_lo'] if dim else P['acid'])
+            if not dim:
+                b = (bubbles + i * 0.37) % 1.0  # a bubble rising through the acid
+                f.dot(*_v(p, (up, -r * 0.5 + r * 1.0 * b), (d, 0.9 * math.sin(i * 2.1))), P['glow'])
+                f.dot(*_v(p, (up, 0.4), (d, -0.6)), P['glow'])
+            f.disc(*_v(p, (up, r - 0.8)), 1.1, P['chitin'])  # the dorsal plate over the acid
+        else:
+            f.disc(*p, r, P['chitin_lo'])
+            f.disc(*_v(p, (up, 0.5)), r - 0.6, P['chitin'])
+            f.dot(*_v(p, (up, r - 0.9)), P['chitin_hi'])
+        if i:  # the plate's back edge over the segment behind it
+            for k in range(-int(r), int(r) + 1):
+                f.dot(*_v(p, (d, -(r - 0.4)), (up, k * 0.9)), P['chitin_lo'])
+    # head: fangs, antennae, eye
+    p, d = pts[0], dirs[0]; up = (d[1], -d[0])
+    base = _v(p, (d, 1.4), (up, -0.9))
+    for s in (-1, 1):
+        ang = math.atan2(d[1], d[0]) + s * jaw + 0.35
+        tip = (base[0] + math.cos(ang) * 3.0, base[1] + math.sin(ang) * 3.0)
+        mid = _v(base, ((tip[0] - base[0], tip[1] - base[1]), 0.55), (up, -0.5 * s))
+        f.limb(base, mid, 0.55, P['fang']); f.limb(mid, tip, 0.45, P['fang'])
+        f.dot(*tip, P['glow'])
+    for k in (0, 1):
+        a0 = math.atan2(d[1], d[0]) - 0.75 - k * 0.35; q = _v(p, (up, 1.2), (d, 0.8))  # swept forward over the fangs
+        seg = c['antenna'] / 3
+        for j in range(3):
+            a0 += 0.6 if dead else 0.2 + 0.15 * math.sin(sway + j + k)
+            nq = (q[0] + math.cos(a0) * seg, q[1] + math.sin(a0) * seg)
+            _line(f, q, nq, P['leg']); q = nq
+    f.dot(*_v(p, (d, 0.9), (up, 0.7)), OUT if hurt else P['glow'])
+    f.outline()
+    legs(True); legs(False)
+    for (x, y, rr, col) in (fx or []): f.disc(x, y, rr, col)
+    if flash: _flash(f)
+    return f.im
+
+
+def crawler_clips(c):
+    """(frames, ms) of crawler `c`: idle (head raised, swaying), walk, attack (rear and strike), hurt, death; `spit`
+    (rear and spit acid) when c['spit']."""
+    A, T = {}, {}
+    hx, hy = c['head_at']; gx = hx - 6.0; run = c['run']; coil = c['coil']; n_len = c['n'] * c['gap']
+
+    def path(dhx=0.0, dhy=0.0, dg=0.0, **kw):
+        kw.setdefault('coil', coil); kw.setdefault('floor', GY - c['ride'])
+        return crawl_path((hx + dhx, hy + dhy), gx + dg, run, **kw)
+
+    def pose(pth, **kw):
+        return crawler_pose(c, pth, **kw)
+
+    fr = []
+    for i in range(8):  # the raised head sways, the abdomen bubbles
+        t = i / 8 * 2 * math.pi
+        fr.append(pose(path(0.5 * math.sin(t), 0.7 * math.sin(t + 0.6)), phase=0.04 * math.sin(t), jaw=0.18 + 0.08 * math.sin(t),
+                       bubbles=i / 8, sway=t))
+    A['idle'], T['idle'] = fr, [160] * 8
+    fr = []
+    for i in range(8):  # a ripple runs down the legs; a hump travels back along the body
+        ph = i / 8
+        fr.append(pose(path(0.4 * math.sin(4 * math.pi * ph), 0.6 * math.sin(4 * math.pi * ph), wave=-ph, amp=0.8),
+                       phase=ph, jaw=0.2, bubbles=ph, sway=ph * 6.28))
+    A['walk'], T['walk'] = fr, [90] * 8
+    acid = c['pal'].get('acid', P_RED); glow = c['pal'].get('glow', WHITE)
+    hx2 = min(46.0, hx + 10.5)  # where the shut fangs land
+    hit = [(hx2, hy + 8.5, 1.4, WHITE), (hx2 - 1.0, hy + 6.0, 0.7, glow), (hx2 - 0.5, hy + 11.0, 0.7, glow)]
+    A['attack'], T['attack'] = [
+        pose(path(-3.0, -5.0, dg=-1.0, lift=-2.0), phase=0.1, jaw=0.7, bubbles=0.1),            # rear back
+        pose(path(-4.0, -6.0, dg=-1.5, lift=-3.0), phase=0.15, jaw=0.9, bubbles=0.2),           # poised
+        pose(path(5.5, 7.0, dg=4.0, lift=4.0), phase=0.3, jaw=0.9, bubbles=0.3),                # the strike
+        pose(path(6.0, 8.0, dg=4.5, lift=4.0), phase=0.35, jaw=0.05, bubbles=0.4, fx=hit),      # fangs shut
+        pose(path(4.0, 3.0, dg=2.0, lift=1.5), phase=0.2, jaw=0.3, bubbles=0.5),
+        pose(path(), phase=0.0, jaw=0.2, bubbles=0.6)], [130, 150, 50, 150, 110, 110]
+    A['hurt'], T['hurt'] = [
+        pose(path(-2.0, -2.0, dg=-1.0), jaw=0.8, hurt=True, flash=True, bubbles=0.2),
+        pose(path(-3.5, -3.0, dg=-2.0, lift=-2.0), phase=0.25, jaw=0.9, hurt=True, bubbles=0.3),
+        pose(path(-1.5, -1.0, dg=-1.0), phase=0.1, jaw=0.4, bubbles=0.4),
+        pose(path(), jaw=0.2, bubbles=0.5)], [60, 120, 90, 90]
+    flat = (min(38.0, max(gx + 6.0, n_len + 3.0)), GY - 2.6)  # dead and curled up, kept in the frame
+    A['death'], T['death'] = [
+        pose(path(-2.0, -2.0, dg=-1.0), jaw=0.8, hurt=True, flash=True),
+        pose(path(-3.0, -6.0, dg=-1.5, lift=-3.0), phase=0.4, jaw=1.0, hurt=True, bubbles=0.3),   # thrashes up
+        pose(path(2.0, 4.0, dg=1.0, lift=2.0), phase=0.7, jaw=0.6, hurt=True, bubbles=0.5),
+        pose(crawl_path((flat[0], GY - 6.0), flat[0] - 4, run + 2, coil=max(coil, 0.6) * 0.8), jaw=0.4, hurt=True, dead=True, bubbles=0.7),
+        pose(crawl_path(flat, flat[0] - 3, run + 2, coil=max(coil, 0.6)), jaw=0.3, hurt=True, dead=True, dim=True),
+        pose(crawl_path(flat, flat[0] - 3, run + 2, coil=max(coil, 0.6)), jaw=0.3, hurt=True, dead=True, dim=True)], [60, 140, 110, 100, 100, 600]
+    if c['spit']:
+        sx = lambda x: min(46.0, x)
+        A['spit'], T['spit'] = [
+            pose(path(-2.0, -4.0, dg=-1.0, lift=-2.0), phase=0.1, jaw=0.4, bubbles=0.1),
+            pose(path(-3.0, -5.0, dg=-1.0, lift=-2.5), phase=0.1, jaw=1.0, bubbles=0.3, fx=[(hx - 0.5, hy - 4.5, 1.0, acid)]),  # acid wells up
+            pose(path(1.5, 0.0, lift=1.0), phase=0.15, jaw=1.1, bubbles=0.5,
+                 fx=[(sx(hx + 6.0), hy - 1.0, 1.6, acid), (sx(hx + 6.4), hy - 1.4, 0.6, glow), (sx(hx + 3.5), hy, 0.6, acid)]),
+            pose(path(1.0, 0.5, lift=0.5), phase=0.2, jaw=0.6, bubbles=0.7,
+                 fx=[(sx(hx + 11.5), hy + 0.5, 1.7, acid), (sx(hx + 12.0), hy, 0.6, glow), (sx(hx + 8.0), hy + 1.0, 0.7, acid)]),
+            pose(path(0.5, 0.0), phase=0.1, jaw=0.4, bubbles=0.9,
+                 fx=[(sx(hx + 13.5), hy + 2.5, 1.2, acid), (sx(hx + 12.0), hy + 4.0, 0.7, glow), (sx(hx + 14.1), hy + 0.5, 0.6, acid)]),
+            pose(path(), jaw=0.2, bubbles=0.0)], [120, 160, 60, 70, 120, 110]
+    return A, T

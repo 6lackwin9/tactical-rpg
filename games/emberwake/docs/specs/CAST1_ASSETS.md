@@ -49,9 +49,9 @@ art. Quality: good (reads right at token size), fair (right role, a visible diff
 | Purifier portrait | `kits/rpg/assets/portraits/common/priest_base.png` | poor | a gentle hooded priestess; the unit is a gas-masked burner | section 7, N4 |
 | Tallow Dredger body | `ranger/wenn_tallow` + palette `tallow_guild` (09 grease-stained apron, 10 goggles) | fair | a bow, not a boning knife and lard pots | - |
 | Tallow Dredger portrait | `games/emberwake/assets/portraits/npcs/wenn_tallow.png` | fair | no goggles | - |
-| Render-Beast body | `rogue/goblin_scout` + palette `render_beast` (07 hairless skin, 05 jaw wire) | poor | a hooded humanoid stands in for a mastiff-sized beast | section 7, N1 |
+| Render-Beast body | `beast/render_beast` (CREATURE1, the rig's quadruped; base palette baked in) | fair | a code creature body; was `rogue/goblin_scout` + palette `render_beast` | section 7, N1 (portrait only) |
 | Render-Beast portrait | `kits/rpg/assets/portraits/common/rogue_goblin_scout.png` | poor | a goblin face | section 7, N1 |
-| Ash-Crawler body | `rogue/goblin` + palette `ash_crawler` (02 chitin, 14 acid) | poor | a humanoid stands in for a centipede | section 7, N2 |
+| Ash-Crawler body | `crawler/ash_crawler` (CREATURE1, the rig's segmented crawler, with a `spit` clip; base palette baked in) | fair | a code creature body; was `rogue/goblin` + palette `ash_crawler` | section 7, N2 (portrait only) |
 | Ash-Crawler portrait | `kits/rpg/assets/portraits/common/rogue_goblin.png` | poor | a goblin face | section 7, N2 |
 | Calcified Husk body | `brawler/base` + palette `calcified` (01 black bone, 08 ash skin) | fair | a whole body; the jutting bone is not drawn | - |
 | Calcified Husk portrait | `kits/rpg/assets/portraits/common/priest_goblin.png` | poor | a living goblin shaman, not a petrified corpse | section 7, N5 |
@@ -176,6 +176,6 @@ CAST1 uses has its icon in `kits/rpg/assets/statuses/` (`empower` has none today
 | N9 | Scourge and sprayer family icons | a mace and a staff mislead in the shop and loadout | Scourge: a three-tailed flail with barbed wire tails, handle wrapped in vestment cloth. Sprayer: a brass pressure tank with a hose and a pole nozzle | the icon pipeline (ART2), or the image API asked first as one small sheet |
 | N10 | Battle backdrops for the seven Sunk Ward zones | a gradient stands in for every place | `alley` Cinder Alley: soot-black brick lanes, hanging linen, tallow lamps; `rooftops` Market Rooftops: wet slates, chimneys, meat hooks on lines; `canal` Canal Bridge: an iron bridge over black canal water, the mortuary cart; `foundry` The Fourth Kiln: slag pools, vent grates, chains, the bone-mill wheel; `tallow_vats` Tallow Vats: boiling vats, catwalks, grease runnels; `undercroft` Sluice Undercroft: drowned vaults, bone pillars, violet mist; `watchpost` Crucible Watchpost: the Slag Gate, the winch, braziers; all from the art bible's 16 hues | `backgrounds/battle/<id>.png` (HOOKS1 ZN1) in the STAGE1 backdrop format; M4 art (HOOKS1_TASKS 2.3), image API asked first, one zone at a time |
 
-User 2026-10-25: N1 and N2 bodies are code creature rigs (task CREATURE1), not image-API sheets; their portraits
+User 2026-10-25: N1 and N2 bodies are code creature rigs (task CREATURE1, built 2026-10-25), not image-API sheets; their portraits
 stay image-API, asked first. Story-scene art is on hold and code-drawn meanwhile (STORYART1, which also draws N9
 and N10 as placeholders).

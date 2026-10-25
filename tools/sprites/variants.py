@@ -244,11 +244,65 @@ def dummy_clips():
 PROPS = {'dummy/base': ('kit', dummy_clips, DUMMY_PAL)}
 
 
+# ------------------------------------------------------------------ creature bodies (CREATURE1): the rig's quadruped and crawler
+# A creature body is a folder of its own under units/<kind>/: the kit's generic base (units/beast/base, units/crawler/base),
+# the game's named creatures beside it (units/beast/<id>, units/crawler/<id>), so a missing creature falls back to its
+# kind's base (rpgkit_content::art::body_chain). Every palette key is a slot (the first key wins when two share a colour).
+def creature(kind, **kw):
+    """A copy of the rig's quadruped (kind 'beast') or crawler (kind 'crawler') defaults with `kw` over them."""
+    u = copy.deepcopy(rig.QUAD if kind == 'beast' else rig.CRAWL)
+    u.update(kw)
+    return u
+
+
+# art bible hues (games/emberwake/docs/lore/specs/art_and_visual_style.md) the Sunk Ward creatures are coloured from
+H02, H05, H06, H07 = (20, 23, 31), (75, 85, 99), (156, 163, 175), (217, 203, 180)
+H08, H11, H12, H14, H15 = (107, 114, 128), (251, 191, 36), (225, 29, 72), (147, 51, 234), (192, 132, 252)
+BONE_WHITE = (255, 250, 240)
+
+CREATURES = {
+    # ---- kit: the generic bodies of each skeleton (a lean grey-brown hound; a rust-brown centipede)
+    'beast/base': ('kit', creature('beast', cx=21.0, tail=(5, 2.0), tail_a=-35.0, tail_curl=-5.0, pal=dict(
+        hide=(124, 108, 90), hide_lo=(92, 78, 64), hide_dk=(66, 56, 46), hide_hi=(156, 140, 118), mouth=(150, 56, 56),
+        teeth=(236, 230, 214), eye=(222, 178, 64), nose=(44, 36, 32), claw=(70, 60, 50)),
+        stance=dict(pitch=2.0, neck_a=-28.0, head_a=8.0, bob=0.0, paws={}))),
+    'crawler/base': ('kit', creature('crawler', pal=dict(
+        chitin=(124, 62, 40), chitin_lo=(84, 40, 28), chitin_hi=(170, 98, 62), leg=(196, 150, 92), leg_lo=(140, 104, 62),
+        fang=(226, 200, 150), glow=(240, 200, 90)))),
+    # ---- game (CAST1_ASSETS N1, N2)
+    # the Render-Beast: a starved, hairless mastiff-sized hound, bone ridges on the spine, jaws wired with iron; low,
+    # leaning forward, crouched to pounce (07 skin, 02 shadow, 05 wire, 12 gums; its shade steps computed between them)
+    'beast/render_beast': ('game', creature('beast', cx=19.0, body=15.0, hip_h=14.5, sh_h=15.5, haunch=3.6, waist=2.1, chest=5.0,
+        fore=(6.2, 6.0), hind=(6.0, 5.4, 3.6), neck=6.0, head=3.6, snout=5.4, jaw_len=5.0, ears='bat', ridges=6, ribs=4, wire=True,
+        tail=(4, 2.0), tail_a=-20.0, tail_curl=8.0, pal=dict(
+            hide=H07, hide_lo=rig.mix(H07, H02, 0.4), hide_dk=rig.mix(H07, H02, 0.62), hide_hi=rig.mix(H07, BONE_WHITE, 0.3),
+            bone=rig.mix(H07, BONE_WHITE, 0.45), mouth=H12, teeth=rig.mix(H07, BONE_WHITE, 0.7), eye=H11, nose=H02,
+            claw=rig.mix(H07, H02, 0.58), wire=H05, wire_hi=H06),
+        stance=dict(pitch=7.0, neck_a=14.0, head_a=12.0, bob=1.0, paws={'nf': (1.5, 0), 'ff': (2.0, 0), 'nh': (-1.0, 0), 'fh': (-0.5, 0)}))),
+    # the Ash-Crawler: a chitinous centipede a human's length, a swollen translucent abdomen of bubbling violet acid;
+    # low and long, the tail end coiled, the head raised; spits acid (02 chitin, 14 acid, 15 glow; 05, 06 and 08 lift
+    # the chitin and the legs off the dark; every slot its own colour, so a palette file recolours each part)
+    'crawler/ash_crawler': ('game', creature('crawler', n=16, gap=2.5, r=2.2, head=3.0, belly=(7, 12), belly_r=3.3, spit=True, leg=(3.0, 2.8), ride=5.2,
+        head_at=(35.0, 27.0), run=20.0, coil=0.5, pal=dict(
+            chitin=rig.mix(H02, H05, 0.7), chitin_lo=H02, chitin_hi=H08, leg=rig.mix(H08, H06, 0.5), leg_lo=H05, fang=H07,
+            acid=H14, acid_lo=rig.mix(H14, H02, 0.45), glow=H15))),
+}
+
+
+def creature_clips(key):
+    _, u = CREATURES[key]
+    return rig.quad_clips(u) if key.startswith('beast/') else rig.crawler_clips(u)
+
+
 def clips(key):
-    """(frames, ms, unit palette, slot keys) of a variant body or a prop body."""
+    """(frames, ms, unit palette, slot keys) of a variant body, a prop body or a creature body."""
     if key in PROPS:
         _, fn, pal = PROPS[key]
         A, T = fn()
+        return A, T, pal, tuple(pal)
+    if key in CREATURES:
+        A, T = creature_clips(key)
+        pal = CREATURES[key][1]['pal']
         return A, T, pal, tuple(pal)
     if key in looks():  # the exporter gives a look its base body's palette slots
         cls, look = looks()[key]
@@ -263,11 +317,11 @@ def clips(key):
 def layer(key):
     if key in looks():
         return 'kit'  # a class base's looks live with the class base, in the kit
-    return (BODIES.get(key) or PROPS[key])[0]
+    return (BODIES.get(key) or PROPS.get(key) or CREATURES[key])[0]
 
 
 def all_bodies():
-    return list(BODIES) + list(looks()) + list(PROPS)
+    return list(BODIES) + list(looks()) + list(PROPS) + list(CREATURES)
 
 
 if __name__ == "__main__":
