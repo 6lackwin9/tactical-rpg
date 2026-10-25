@@ -67,10 +67,13 @@ const AFTER_GODOT: [(&str, &str, &str); 34] = [
 /// Retired parity, option level: enum and multi-pick options added after the freeze, by (section, kind, key, option);
 /// the option leaves the engine's schema row before comparing (every other option and its order is still compared);
 /// each is named in docs/HISTORY.md. RULESET1-S (2026-10-25): the weapon types `polearm` and `scourge` (TQ8) and the
-/// family engine rule `reach` (K1).
-const OPTIONS_AFTER_GODOT: [(&str, &str, &str, &str); 3] = [
+/// family engine rule `reach` (K1). CAST1-S (2026-10-26): the weapon types `censer`, `bone_saw` and `sprayer`.
+const OPTIONS_AFTER_GODOT: [(&str, &str, &str, &str); 6] = [
     ("content", "items", "weapon_type", "polearm"),
     ("content", "items", "weapon_type", "scourge"),
+    ("content", "items", "weapon_type", "censer"),
+    ("content", "items", "weapon_type", "bone_saw"),
+    ("content", "items", "weapon_type", "sprayer"),
     ("content", "item_families", "engine_rules", "reach"),
 ];
 /// Retired parity, kind level (the twin of AFTER_GODOT): schema kinds added after the freeze, by (section, kind); the

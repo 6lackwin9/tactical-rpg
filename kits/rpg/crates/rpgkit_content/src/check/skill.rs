@@ -523,11 +523,12 @@ const MAX_UNLOCK_OFFSET: i64 = 8;
 const UNARMED_TOKEN: &str = "unarmed";
 const CLEANSE_ALL: &str = "all";
 const HEAL_STATS: [&str; 2] = ["INT", "KNOW"];
-/// Proficiency.gear_types(); RULESET1-S (TQ8) adds the reach-2 weapon types `polearm` and `scourge`.
-pub const GEAR_TYPES: [&str; 18] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "polearm", "scourge", "orb", "tome", "shield", "plate", "leather", "cloth"];
+/// Proficiency.gear_types(); RULESET1-S (TQ8) adds the reach-2 weapon types `polearm` and `scourge`, CAST1-S the weapon
+/// types `censer`, `bone_saw` and `sprayer`.
+pub const GEAR_TYPES: [&str; 21] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "polearm", "scourge", "censer", "bone_saw", "sprayer", "orb", "tome", "shield", "plate", "leather", "cloth"];
 /// Gear types added after the Godot freeze that need no item family until data uses them (ItemValidator.family_set_errors
 /// asks a family of every other gear type).
-pub const OPTIONAL_GEAR_TYPES: [&str; 2] = ["polearm", "scourge"];
+pub const OPTIONAL_GEAR_TYPES: [&str; 5] = ["polearm", "scourge", "censer", "bone_saw", "sprayer"];
 
 fn grade_rank(grade: &str) -> usize {
     ["novice", "advanced", "expert"].iter().position(|g| *g == grade).unwrap_or(0)

@@ -313,8 +313,10 @@ impl Tokens {
     }
 }
 
-/// Skills with a clip of their own on the sprite rig (SPRITE1 section 2; ids from tools/sprites/classes.py).
-const SKILL_CLIPS: [(&str, &str); 5] = [("shield_bash", "shield_bash"), ("offhand_jab", "jab"), ("haymaker", "haymaker"), ("sweep_kick", "sweep_kick"), ("cyclone_kick", "sweep_kick")];
+/// Skills with a clip of their own on the sprite rig (SPRITE1 section 2; ids from tools/sprites/classes.py). CAST1-S:
+/// the Ash-Crawler's `caustic_vomit` plays the crawler rig's `spit` (CREATURE1; a body without it falls back).
+const SKILL_CLIPS: [(&str, &str); 6] =
+    [("shield_bash", "shield_bash"), ("offhand_jab", "jab"), ("haymaker", "haymaker"), ("sweep_kick", "sweep_kick"), ("cyclone_kick", "sweep_kick"), ("caustic_vomit", "spit")];
 /// Weapon types that fight with fists (the brawler's jab and kicks).
 const FIST_WEAPONS: [&str; 3] = ["", "fist", "unarmed"];
 
@@ -2308,6 +2310,7 @@ mod tests {
         assert_eq!(action_clips("shield_bash", "attack", "sword"), ["shield_bash", "attack"], "a skill with its own clip first");
         assert_eq!(action_clips("cyclone_kick", "area", ""), ["sweep_kick", "sweep_kick", "kick", "jab", "attack"]);
         assert_eq!(action_clips("strike", "attack", "fist"), ["jab", "attack"], "fists jab");
+        assert_eq!(action_clips("caustic_vomit", "attack", ""), ["spit", "jab", "attack"], "the crawler spits, other bodies fall back");
         assert_eq!(action_clips("strike", "attack", "bow"), ["attack"]);
         assert_eq!(action_clips("volley", "area", "bow"), ["attack"]);
         assert_eq!(action_clips("mend", "support", "mace"), ["cast"]);

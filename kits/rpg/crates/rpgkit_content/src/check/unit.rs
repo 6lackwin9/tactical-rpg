@@ -17,8 +17,8 @@ const GROWTH_STAT_MAX: i64 = 3;
 const ADVANCED_MIN_LEVEL: i64 = 5;
 const MIN_SCALING: f64 = 1.0;
 const MAX_SCALING: f64 = 2.0;
-/// Proficiency.WEAPON_TYPES (RULESET1-S adds `polearm` and `scourge`).
-const WEAPON_TYPES: [&str; 15] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "polearm", "scourge", "orb", "tome", "shield"];
+/// Proficiency.WEAPON_TYPES (RULESET1-S adds `polearm` and `scourge`, CAST1-S `censer`, `bone_saw` and `sprayer`).
+const WEAPON_TYPES: [&str; 18] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "polearm", "scourge", "censer", "bone_saw", "sprayer", "orb", "tome", "shield"];
 pub const DUPLICATE_ACCESSORY_ERROR: &str = "The same accessory cannot fill both accessory slots.";
 
 type Ints = IndexMap<String, i64>;
