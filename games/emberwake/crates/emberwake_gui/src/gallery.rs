@@ -1,6 +1,7 @@
 //! UI Gallery (UIGALLERY1, Scene Runner; decision "UIGALLERY1 answers"): the UI one element at a time, each on sample
 //! data and named, so each can be judged and refined on its own. Three groups:
-//! - Kit: the engine's widgets in their states (`aegis_ui::specimens`).
+//! - Kit: the engine's widgets in their states (`aegis_ui::specimens`), and the vignette player on the engine's sample
+//!   reel (STORYUI1-E, `aegis_ui::vignette`; the preview plays on and starts over, Open plays it full screen).
 //! - Screens: every screen, drawn shrunk into the pane (`aegis_ui::preview`) on a sample game (a debug game of the
 //!   first playable world that saving refuses); Open shows the screen itself to try it.
 //! - Battle panels: each panel of the battle screen enlarged on its own (the battle records its panels' rects while it
@@ -16,6 +17,7 @@ use aegis_ui::preview;
 use aegis_ui::specimens::{KitAct, Specimens};
 use aegis_ui::timeline::{Section, Segment, Timeline, Track};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, INFO, SMALL, TEXT, TITLE, W};
+use aegis_ui::vignette::{self, VignetteScreen};
 use aegis_ui::widget_plumbing;
 use emberwake_battle::resolver::ScheduledAction;
 use emberwake_battle::session::{Phase, Session, UnitSnap};
@@ -23,8 +25,9 @@ use emberwake_host::{Battle, Host};
 use serde_json::{json, Value};
 
 /// (id, name, group, what it shows). Battle panel ids are the battle screen's own panel names.
-const ENTRIES: [(&str, &str, &str, &str); 26] = [
+const ENTRIES: [(&str, &str, &str, &str); 27] = [
     ("kit", "Kit widgets", "Kit", "Every kit widget in its states; use them, the foot of the page says what happened."),
+    ("vignette", "Vignette player", "Kit", "The engine's sample reel: image, text, title and line cards with fades, typing, hold and skip."),
     ("main_menu", "Main menu", "Screens", "The player's front door."),
     ("new_game", "New game", "Screens", "World cards and the start."),
     ("settings", "Settings", "Screens", "Sound, display and gameplay tabs."),
@@ -156,6 +159,8 @@ impl Gallery {
             "journal" => Box::new(crate::hub::Journal::default()),
             "stats" | "level_up" | "skills" | "gear" => Box::new(crate::party::Character::new(cx, &member, id)),
             "world_map" => Box::new(crate::worldmap::WorldMap::new()),
+            // opened full screen: the reel's end goes back to the gallery
+            "vignette" => Box::new(VignetteScreen::with_settings(&cx.settings, vignette::sample_reel(), |cx: &mut Cx, _| cx.nav.push(Nav::Pop))),
             "results" => {
                 let level = cx.game.as_ref().and_then(|g| g.gs.party.members.first()).map(|m| m.level(&cx.data)).unwrap_or(1);
                 let mut xp = json::Dict::new();
@@ -249,7 +254,13 @@ impl Gallery {
             return;
         }
         if self.shown.as_ref().is_none_or(|sh| sh.id != id) {
-            self.shown = Self::build(cx, id).map(|(screen, steps)| Shown { id, screen, steps, tries: 0 });
+            self.shown = if id == "vignette" {
+                // the preview's end changes nothing: `tick` starts it over
+                let screen: Box<dyn Screen<GameCx>> = Box::new(VignetteScreen::with_settings(&cx.settings, vignette::sample_reel(), |_: &mut Cx, _| {}));
+                Some(Shown { id, screen, steps: Vec::new(), tries: 0 })
+            } else {
+                Self::build(cx, id).map(|(screen, steps)| Shown { id, screen, steps, tries: 0 })
+            };
         }
         if let Some(sh) = self.shown.as_mut() {
             preview::screen_in(g, r, |g| sh.screen.draw(cx, g, OFF, false));
@@ -577,6 +588,15 @@ impl Screen<GameCx> for Gallery {
         self.shown = None;
     }
 
+    /// The vignette preview plays on (only the top screen ticks) and starts over at its end.
+    fn tick(&mut self, cx: &mut Cx) {
+        let Some(sh) = self.shown.as_mut().filter(|sh| sh.id == "vignette") else { return };
+        sh.screen.tick(cx);
+        if sh.screen.state(cx)["done"] == json!(true) {
+            self.shown = None;
+        }
+    }
+
     fn can_drop(&self, _cx: &Cx, from: &str, to: &str) -> bool {
         ENTRIES[self.entry].0 == "kit" && self.kit.can_drop(from, to)
     }
@@ -609,5 +629,25 @@ mod tests {
         ids.dedup();
         assert_eq!(ids.len(), ENTRIES.len(), "entry ids are unique");
         assert!(NEEDS_GAME.iter().all(|n| ENTRIES.iter().any(|e| e.0 == *n)), "every game-needing id is an entry");
+    }
+
+    /// STORYUI1-E: the vignette entry previews the engine's sample reel (it plays on as the gallery ticks) and Open
+    /// plays it full screen.
+    #[test]
+    fn the_vignette_entry_plays_the_sample_reel() {
+        use crate::hud::hud_tests::{game_cx, gfx};
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut gallery = Gallery::new();
+        let i = ENTRIES.iter().position(|e| e.0 == "vignette").expect("a vignette entry");
+        assert!(!NEEDS_GAME.contains(&"vignette"), "the player needs no game");
+        gallery.act(&mut cx, GAct::Entry(i));
+        gallery.draw(&mut cx, &mut g, (-500, -500), true);
+        let state = |gallery: &Gallery, cx: &Cx| gallery.shown.as_ref().map(|sh| sh.screen.state(cx)).expect("the preview is built");
+        let st = state(&gallery, &cx);
+        assert_eq!((st["reel"].clone(), st["cards"].clone()), (json!("sample"), json!(vignette::sample_reel().cards.len())));
+        gallery.tick(&mut cx);
+        assert!(gallery.shown.is_some(), "the preview survives a tick");
+        gallery.act(&mut cx, GAct::Open);
+        assert!(matches!(cx.nav.last(), Some(Nav::Push(s)) if s.id() == "vignette"), "Open pushes the player");
     }
 }

@@ -103,12 +103,16 @@ pub const WINDOW_SIZES: [&str; 8] = ["960x540", "1024x576", "1152x648", "1280x72
 pub const FPS_CAPS: [&str; 5] = ["Unlimited", "30", "60", "120", "144"];
 /// Text size levels (Godot TEXT_LEVELS): label and font factor.
 pub const TEXT_SIZES: [(&str, f64); 4] = [("Small", 0.85), ("Normal", 1.0), ("Large", 1.15), ("Extra large", 1.3)];
+/// Typewriter speeds (STORYUI1-E, setting `text_speed`; `vignette::TextSpeed`): 30, 60, 120 characters a second, or
+/// all at once.
+pub const TEXT_SPEEDS: [&str; 4] = ["slow", "normal", "fast", "instant"];
 
 impl Settings {
-    /// The engine's keys and their defaults.
+    /// The engine's keys and their defaults. STORYUI1-E: `text_speed` (the vignette player's typewriter) and
+    /// `reduce_motion` (no drifting or shaking effects; shared with FX1).
     pub fn engine_defaults() -> Value {
         json!({"mute": false, "master": 100, "music": 80, "effects": 80, "interface": 80, "window_mode": "Windowed", "window_size": "1280x720",
-            "vsync": true, "fps_cap": "Unlimited", "text_scale": 1.0, "record_playtests": cfg!(debug_assertions)})
+            "vsync": true, "fps_cap": "Unlimited", "text_scale": 1.0, "record_playtests": cfg!(debug_assertions), "text_speed": "normal", "reduce_motion": false})
     }
 
     /// Every default: the engine's keys, then the game's own (`game_defaults`).

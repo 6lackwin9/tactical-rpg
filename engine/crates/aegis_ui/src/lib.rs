@@ -4,7 +4,8 @@
 //! agent link (`bridge`), keyboard focus (`focus`), playtest recordings (`playtest`: the hub that keeps a run's
 //! sessions, trail and notes; `recordings`: the browser that plays them back), the screen stack with its shared
 //! context (`screen`: the engine half, plus the game's half through `Cx<G>`) and the window shell and event loop
-//! (`shell`), and a feet-sorted draw list (`depth`). A game supplies its screens, its context and the agent replies about its own state.
+//! (`shell`), a feet-sorted draw list (`depth`) and the vignette player (`vignette`: still cards with fades, a
+//! typewriter, skip and cues, and its full screen). A game supplies its screens, its context and the agent replies about its own state.
 
 pub mod art;
 pub mod audio;
@@ -26,6 +27,7 @@ pub mod timeline;
 pub mod text_audit;
 pub mod tuning;
 pub mod ui;
+pub mod vignette;
 pub mod window;
 
 pub use screen::{Context, Cx, Key, Nav, Screen};

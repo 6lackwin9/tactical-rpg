@@ -39,6 +39,16 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
   (`Mark { key, block, glyph, colour, tip }`, a glyph chip inside its block's cell, shown on masked tracks too). Links
   and marks are info widgets with a hover card and no click; labels leave room for marks; all empty by default. The
   UI Gallery's Kit widgets entry has a Timeline page (tabs at its foot) showing every part.
+* **Vignette player (STORYUI1-E):** `aegis_ui::vignette` plays a reel of still cards (styles `image`, `text`, `title`,
+  `line`) through fade in, typing, hold and fade out: a typewriter at the engine setting `text_speed` (`slow` 30,
+  `normal` 60, `fast` 120 characters a second, `instant`; fast halves the fades, instant drops them), a cover fill of the
+  frame colour for the fades, a press (click, Space, Enter) moving one phase, `hold_ms` above 0 moving on by itself, Skip
+  (Esc, right click, the button; `ask_first` asks "Skip this scene?", Yes the default), a cue per card on `Bus::Sfx`, the
+  reel's music wish, code-drawn gradient backdrops, letterboxed pictures and drifting ash (none under the shared
+  `reduce_motion` setting). The model `Player` moves only through `advance(ms)`, `press()`, `skip()`; `vignette::draw`
+  paints a card in the caller's `Palette`; `VignetteScreen<G>` measures frame time and runs `on_done` once. Agent link:
+  `state` {reel, card, cards, phase, shown, total, done}, widgets `vignette.next`, `vignette.skip`. The UI Gallery's Kit
+  group has a Vignette player entry on the engine's sample reel.
 * **Sound and music (PORT-AUDIO):** `aegis_ui::audio` plays the `audio/` files found over the asset layers (game, kit, engine; ASSETORG2) (WAV and Ogg Vorbis, through rodio) on four levels (master times music, effects or interface), 8 effect voices and 2 interface voices (the oldest restarts when all are busy), and one looping music track that crossfades (1 s; 2 s from silence; 6 dB under the effects). Each screen names its track (`Screen::music`); the shell plays the topmost screen's choice, so overlays keep the music below. Emberwake picks tracks with the MUSIC1 chain (`emberwake_gui/src/music.rs`: menu, region by location kind or shop, travel, combat or boss, each tried per region, world and lineage before the plain context) and battle sounds from the resolver log; the settings popup plays the draft levels and a sample per volume slider. Without a sound device everything stays silent.
 
 ## Workspace
