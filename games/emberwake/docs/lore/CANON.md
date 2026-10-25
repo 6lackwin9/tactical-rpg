@@ -106,6 +106,7 @@ The only undo: Aline's bone-scraping (unlocked by her quest), -1 stage and -10% 
 | Ages | Playable operatives and recruits 18-24; Unsealed = everyone under 25; children are stakes, never fighters; no combat graft surgery on anyone under 18. The Spent rarely pass 45 (Agnes, 44, is one of the oldest in the Ash-Crawl; Othemar at 64 is the exception, see the central truth) |
 | Squad | Up to 4 deployed (`PARTY_MAX` 4, [kit hook] exists). RECRUIT1 refuses a recruit once the roster holds `party_max`, so the bunk count needs a separate roster cap ([kit hook] new) |
 | Bunks | 6 at the start of Act 1 (4 filled after the prologue); Act 1 holds only the six founders (user 2026-10-25, Q-38); the bunk the Crucible empties takes the first procedural recruit at the start of Act 2; 8 through Bram's "Expanded Timber Frames" project from Act 2, chosen by the player; later hubs inherit the count. Guests take no bunk until sworn in |
+| Hub | One hub; forward bases are story only (Q-23); facility levels: the bunk project in the slice, a level tree per facility from Act 2 (Q-42); facility screens open from their keeper NPC; the Doom Clock and Alert sit on the map HUD only (Q-46) |
 | Founder at 0 HP | Downed. Act 1: after the battle a downed founder is wounded (no death, no capture). From Act 2: a downed unit bleeds out after a few rounds unless revived, and on a lost battle the downed are captured; the cell may also leave a unit behind so the rest escape (the left are captured; this is not the whole party fleeing) (user 2026-10-25, Q-32). Wounded: deploys at -20% max HP until a rest (user 2026-10-25, Q-31; a baseline the balance lane revisits);  |
 | Scripted loss | The Crucible: one founder, chosen from the four deployed, holds the winch and is taken alive by the Inquisition |
 | Corrupted-founder boss | Optional Act 3 node, only for a captured founder (the Crucible's, or one captured in Act 2) |
@@ -119,8 +120,8 @@ The only undo: Aline's bone-scraping (unlocked by her quest), -1 stage and -10% 
 | Resource | Use |
 | --- | --- |
 | Scrap | The currency (replaces gold): trade, forge costs, bribes |
-| Warded Tallow | Upkeep: 1 per day of travel or rest for the whole cell. At 0: -2 starting AP in every battle until restocked |
-| Rock Salt | Stash material: Slab flushes, bribes |
+| Warded Tallow | Upkeep: 1 per day of travel or rest for the whole cell. At 0: -2 starting AP in every battle until restocked; nothing else (the road-fight penalty stays an Ashlands option, Q-18); Act 3 Tallow costs more Scrap, daily use stays 1 (Q-45) |
+| Rock Salt | Stash material: Slab flushes, bribes; a Slab flush lowers the dormant Strain floor by 10 for the next battle; Quenched Cinder Salt is the rare one-charge item that prevents one Calcification advance (Q-43, Q-69) |
 | Aberrant Organs | Stash materials: graft surgery (Act 2 on) |
 
 No other upkeep (per-operative, per-leg, Tallow-and-Salt and per-rest versions are dropped).

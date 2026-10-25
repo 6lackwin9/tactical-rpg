@@ -46,7 +46,7 @@ Where (paths from `games/emberwake/docs/lore/`); Decides.
 
 | Id | Focus | Question | Options | Rec. | Where | Decides |
 | --- | --- | --- | --- | --- | --- | --- |
-| Q-69 | 1.4 hub | Quenched Cinder Salt overlaps the Rock Salt flush | (a) fold it into the flush; (b) keep it as the one-charge "prevent one Calcification advance" item | follows Q-43: b if the flush lowers the floor, a if the flush cancels an advance | items 4, gap 3 | user |
+| Q-69 | decided | Quenched Cinder Salt overlaps the Rock Salt flush | (a) fold it into the flush; (b) keep it as the one-charge "prevent one Calcification advance" item | Decided (2026-10-25, user): b, Quenched Cinder Salt stays the rare one-charge item that prevents one Calcification advance | items 4, gap 3 | user |
 | Q-70 | decided | Reach 2 melee (billhooks, the Flagellant's scourge); the engine's melee reach is 1 | (a) reach 1 plus range-2 skills; (b) a reach-2 rule | Decided (2026-10-25, user): b, a reach-2 rule, so weapons and their ranges can be assessed | items gap 1; combat_and_timeline 6 | user |
 | Q-71 | 1.7 content | Missing weapon families: billhook or polearm, chemical sprayer, bone-saw, censer | (a) stand-in families; (b) new families as data | b | items 2, gap 6 | data authoring |
 | Q-72 | decided | Area shapes for "behind the target" and lines | checked against the engine's `Area` shapes when the data is written | Decided (2026-10-25, user): as listed | items gap 4 | data authoring |
