@@ -129,6 +129,8 @@ corrupted founder 50 with `or_round` 4: line, kill [Nemeth, guard] by the founde
 
 ## 6. Open questions (recommended option first; Q-75a is decided: (a), section 3.1)
 
+Decided (user 2026-10-25): every EQ question as recommended.
+
 | Id | Question | Options | Recommendation |
 | --- | --- | --- | --- |
 | EQ1 | Where the holder is picked | (a) a pick panel on the battle screen before round 1, board visible (H1); (b) a dialogue choice per founder before the battle (needs a "member deployed" choice condition and a flag the battle reads) | (a): no per-founder data, the player sees the winch |

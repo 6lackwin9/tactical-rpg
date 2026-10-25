@@ -87,6 +87,10 @@ an action is every block from its start to its **impact block** (its last windup
 
 ### 4.3 Chained commands
 
+Under revision (user 2026-10-25): chains become same-stance follow-ups inside a round stance (CANON 2.1 "Round
+stance"); the base-move slots leave the deck (section 9); recovery for player units, kiting, flanking and chain order
+are being clarified. T5-T9 below are superseded once the revision lands.
+
 - T5. A lead skill lists the skill families that may follow it: `follow_ups` (at most 4; the lead needs
   `recovery_blocks >= 1`). TQ9 covers the follower-side alternative.
 - T6. When a unit's next planned step after the lead is a skill of a listed family, the follow-up starts at
@@ -284,6 +288,11 @@ the final factor.
 - Act-then-move maneuvers (Q-54); a re-planning AI (Q-50 kept INTENT1); any Ashlands row, label or help text change.
 
 ## 14. Open questions for the user
+
+Decided (user 2026-10-25): every TQ question as recommended. Chains apply to any skill type, not only heavy skills: a
+chain adds a quick follow-up on the target and cuts the selecting and clicking per character; each member sets an intent
+for the round and acts only within it. The intent model is being clarified with the user; section 6 (chains) will be
+revised after.
 
 | Id | Question | Options | Recommendation |
 | --- | --- | --- | --- |
