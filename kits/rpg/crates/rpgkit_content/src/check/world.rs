@@ -473,6 +473,7 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
         }
         _ => errors.push("Exit tiles must be a list of [x, y] pairs.".into()),
     }
+    errors.extend(encounter::rows_problems(e));
     errors
 }
 

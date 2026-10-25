@@ -46,6 +46,8 @@ pub struct EncounterDef {
     pub id: String,
     pub name: String,
     pub zone: String,
+    /// Authored terrain rows (ENCOUNTER2 R0): GRID_H strings of GRID_W glyphs; empty = the zone's rows.
+    pub rows: Vec<String>,
     pub open: bool,
     pub exits: Vec<V2>,
     pub max_rounds: i32,
@@ -86,6 +88,7 @@ impl EncounterDef {
             id: value::string(o, "id", ""),
             name: value::string(o, "name", ""),
             zone: value::string(o, "zone", "stone_arena"),
+            rows: value::strings(o, "rows"),
             open: value::string(o, "arena", "CLOSED") == "OPEN",
             exits,
             max_rounds: value::int(o, "max_rounds", 6),
@@ -343,7 +346,7 @@ impl Session {
         }
         let count = built.len();
         let mut grid = Grid::new(def.open, def.exits.clone(), TerrainTable::from_catalog(&cat), count);
-        grid.apply_zone(&def.zone);
+        grid.apply_board(&def.zone, &def.rows);
         let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone() };
         w.add_item_skills();
         let objective = Objectives::create(&def.raw);

@@ -17,8 +17,9 @@ const CATALOG: [&str; 8] = ["classes", "units", "skills", "items", "item_familie
 /// (HISTORY 2026-10-22) a unit's and a character's `palette` and `portrait_tier`; PROPS1 (HISTORY 2026-10-23) a map
 /// template's `props`; RULESET1-R (HISTORY 2026-10-25) a world manifest's `ruleset` and `plan_reveal_flag`; RULESET1-S
 /// (HISTORY 2026-10-25) a unit's `poise`, `deck` and `default_intent` and a passive's `slot` (a skill's timeline fields
-/// are left out at their defaults, as every skill field).
-const AFTER_GODOT: [&str; 12] = [
+/// are left out at their defaults, as every skill field); ENCOUNTER2-T (HISTORY 2026-10-25) an encounter's `rows`
+/// (catalog and world encounters).
+const AFTER_GODOT: [&str; 13] = [
     "\"loot\": []",
     "\"key_loot\": []",
     "\"objective_reward\": {}",
@@ -31,6 +32,7 @@ const AFTER_GODOT: [&str; 12] = [
     "\"deck\": {}",
     "\"default_intent\": \"\"",
     "\"slot\": \"\"",
+    "\"rows\": []",
 ];
 
 /// `text` without the AFTER_GODOT field lines (a dropped last field takes the comma off the line before it).

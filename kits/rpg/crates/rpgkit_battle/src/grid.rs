@@ -62,7 +62,8 @@ pub const TERRAIN_IDS: [&str; 17] = [
     "floor", "grass", "dirt", "stone", "sand", "snow", "shallow_water", "deep_water", "mud", "lava", "wall", "tree", "bridge", "rubble",
     "burning_ground", "toxic_bog", "ice",
 ];
-const GLYPHS: [char; 17] = ['.', ',', ':', 'o', 's', '*', '~', 'W', 'm', 'L', '#', 'T', '=', 'r', 'f', 'p', 'i'];
+/// The terrain glyph per type, in TERRAIN_IDS order (CombatZones' row glyphs; also the glyphs of authored rows).
+pub const GLYPHS: [char; 17] = ['.', ',', ':', 'o', 's', '*', '~', 'W', 'm', 'L', '#', 'T', '=', 'r', 'f', 'p', 'i'];
 const BLOCKED: [usize; 4] = [7, 9, 10, 11]; // deep water, lava, wall, tree
 
 /// Terrain.is_walkable of a terrain type id (an unknown id is walkable).
@@ -144,6 +145,11 @@ pub fn zone_rows(zone: &str) -> Option<[&'static str; 9]> {
     })
 }
 
+/// ENCOUNTER2 R0: authored terrain rows are GRID_H strings of GRID_W known terrain glyphs.
+pub fn rows_valid(rows: &[String]) -> bool {
+    rows.len() == GRID_H as usize && rows.iter().all(|r| r.chars().count() == GRID_W as usize && r.chars().all(|c| GLYPHS.contains(&c)))
+}
+
 #[derive(Debug, Clone)]
 pub struct Grid {
     pub open: bool,
@@ -162,12 +168,25 @@ impl Grid {
     }
 
     pub fn apply_zone(&mut self, zone: &str) {
+        self.apply_rows(zone_rows(zone).into_iter().flatten());
+    }
+
+    /// The battle board (ENCOUNTER2 R0): the encounter's authored rows when they are valid (`rows_valid`), else the
+    /// zone's rows; the zone still picks the backdrop and tiles.
+    pub fn apply_board(&mut self, zone: &str, rows: &[String]) {
+        if rows_valid(rows) {
+            self.apply_rows(rows.iter().map(String::as_str));
+        } else {
+            self.apply_zone(zone);
+        }
+    }
+
+    /// Terrain from glyph rows (an unknown glyph or a missing tile is floor).
+    fn apply_rows<'a>(&mut self, rows: impl IntoIterator<Item = &'a str>) {
         self.terrain = vec![0; (GRID_W * GRID_H) as usize];
-        if let Some(rows) = zone_rows(zone) {
-            for (y, row) in rows.iter().enumerate() {
-                for (x, ch) in row.chars().enumerate() {
-                    self.terrain[y * GRID_W as usize + x] = GLYPHS.iter().position(|g| *g == ch).unwrap_or(0);
-                }
+        for (y, row) in rows.into_iter().enumerate().take(GRID_H as usize) {
+            for (x, ch) in row.chars().enumerate().take(GRID_W as usize) {
+                self.terrain[y * GRID_W as usize + x] = GLYPHS.iter().position(|g| *g == ch).unwrap_or(0);
             }
         }
     }

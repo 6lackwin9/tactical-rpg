@@ -25,7 +25,8 @@ fn data_dir() -> PathBuf {
 /// `ruleset` and `plan_reveal_flag` (kind "world": taken off every world's `manifest`). RULESET1-S (2026-10-25): the
 /// timeline fields of a skill (`ap_cost`, `recovery_blocks`, `round_intent`, `intent_buff`, `stagger`, `windup_poise`,
 /// `unbreakable`, `sure_break`, `armor_piercing`), a unit (`poise`, `deck`, `default_intent`) and a passive (`slot`).
-const AFTER_GODOT: [(&str, &str, &str); 23] = [
+/// ENCOUNTER2-T (2026-10-25): an encounter's authored terrain `rows` (catalog and world encounters).
+const AFTER_GODOT: [(&str, &str, &str); 25] = [
     ("content", "units", "loot"),
     ("world", "encounters", "key_loot"),
     ("world", "encounters", "objective_reward"),
@@ -49,6 +50,8 @@ const AFTER_GODOT: [(&str, &str, &str); 23] = [
     ("content", "units", "deck"),
     ("content", "units", "default_intent"),
     ("content", "passives", "slot"),
+    ("content", "encounters", "rows"),
+    ("world", "encounters", "rows"),
 ];
 /// Retired parity, option level: enum and multi-pick options added after the freeze, by (section, kind, key, option);
 /// the option leaves the engine's schema row before comparing (every other option and its order is still compared);

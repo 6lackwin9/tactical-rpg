@@ -6,7 +6,7 @@ use super::View;
 use crate::source::content;
 use aegis_core::json::{self, gstr, Dict};
 use rpgkit_battle::encounter::{ARRIVAL, ARRIVAL_BLOCK, ARRIVAL_ROUND};
-use rpgkit_battle::grid::{terrain_walkable, Grid, TerrainTable, GRID_H, GRID_W, V2};
+use rpgkit_battle::grid::{rows_valid, terrain_walkable, Grid, TerrainTable, GRID_H, GRID_W, V2};
 use rpgkit_rules::status;
 use serde_json::{json, Value};
 use std::sync::OnceLock;
@@ -122,7 +122,19 @@ pub fn errors(v: &View, e: &Dict) -> Vec<String> {
         }
         _ => errors.push("Exit tiles must be a list of [x, y] pairs.".into()),
     }
+    errors.extend(rows_problems(e));
     errors
+}
+
+/// ENCOUNTER2 R0: `rows` is empty (the zone's rows) or GRID_H strings of GRID_W known terrain glyphs (catalog and
+/// world encounters).
+pub fn rows_problems(e: &Dict) -> Vec<String> {
+    match json::get(e, "rows") {
+        Value::Array(list) if list.is_empty() => Vec::new(),
+        Value::Array(list) if list.iter().all(Value::is_string) && rows_valid(&strings(json::get(e, "rows"))) => Vec::new(),
+        Value::Null => Vec::new(),
+        _ => vec![format!("Rows are {GRID_H} strings of {GRID_W} terrain glyphs.")],
+    }
 }
 
 /// ContentCatalog.warnings_for("encounters"): EncounterPhases.pace_warnings and PurseRules.warnings.
@@ -583,7 +595,7 @@ pub fn objective_problems(v: &View, e: &Dict, guest_ok: &dyn Fn(&str) -> bool) -
             match json::get(e, "objective_tiles") {
                 Value::Array(tiles) => {
                     let mut grid = Grid::new(false, Vec::new(), TerrainTable::from_catalog(&v.typed), 0);
-                    grid.apply_zone(&json::s(e, "zone"));
+                    grid.apply_board(&json::s(e, "zone"), &strings(json::get(e, "rows")));
                     let tile_ok = |c: V2| {
                         if !on_grid(c) || !terrain_walkable(grid.terrain_id(c)) {
                             return false;
