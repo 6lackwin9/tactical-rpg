@@ -1,5 +1,6 @@
 //! Dialogue rules of the world checks (DialogueRules): trees, nodes, choices, choice conditions and effects, service
-//! lines, and the soft tree and gone-NPC warnings.
+//! lines, and the soft tree and gone-NPC warnings. CAMPAIGN1 11.3: every effect list (nodes, choices, and the meter
+//! rules, checkpoints and triggers of `check::campaign`) knows the campaign effects; flag effects refuse reserved keys.
 
 use super::quest::{flag_key_ok, flag_value_ok, rep_value_error};
 use super::world::{party_character_errors, ref_errors};
@@ -34,6 +35,27 @@ const EFFECTS: [(&str, &[&str]); 9] = [
     ("recruit", &["character"]),
 ];
 const NODE_EFFECTS: [&str; 3] = ["set_flag", "add_flag", "give"];
+/// CAMPAIGN1 T2: the dialogue effects that open a screen (not in meter rules, checkpoints or triggers).
+const SCREEN_EFFECTS: [&str; 3] = ["turn_in", "open_shop", "fight"];
+
+/// Which effect list is checked: a node's, a choice's (the order rules apply), or a campaign row's (a meter rule's, a
+/// checkpoint's or a trigger's: CAMPAIGN1 T2, no effect that opens a screen).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EffectList {
+    Node,
+    Choice,
+    Campaign,
+}
+
+/// An effect kind's keys besides `effect`: the dialogue effects, then the campaign effects (CAMPAIGN1 11.3).
+fn effect_keys(effect: &str) -> Option<&'static [&'static str]> {
+    EFFECTS.iter().chain(rpgkit_data::CAMPAIGN_EFFECTS.iter()).find(|x| x.0 == effect).map(|x| x.1)
+}
+
+/// The effect kinds a list takes, for messages.
+fn effect_names(list: EffectList) -> Vec<&'static str> {
+    EFFECTS.iter().chain(rpgkit_data::CAMPAIGN_EFFECTS.iter()).map(|x| x.0).filter(|n| list != EffectList::Campaign || !SCREEN_EFFECTS.contains(n)).collect()
+}
 const EFFECT_GOLD_MAX: i64 = 99999;
 const ADD_DELTA_MAX: i64 = 100;
 const ITEM_COUNT_MAX: i64 = 99;
@@ -278,6 +300,12 @@ fn ref_value_errors(v: &View, w: &str, raw: &Value, ref_kind: &str, label: &str)
 /// DialogueRules.effects_errors (`node_level`: node effects, set_flag / add_flag / give only; otherwise choice
 /// effects with the order rules).
 pub fn effects_errors(v: &View, w: &str, raw: &Value, label: &str, node_level: bool) -> Vec<String> {
+    list_errors(v, w, raw, label, if node_level { EffectList::Node } else { EffectList::Choice })
+}
+
+/// The effects_errors of any effect list (CAMPAIGN1 11.3: the campaign effects are known to every list; a node takes
+/// set_flag / add_flag / give only, a choice has the order rules, a campaign row takes no effect that opens a screen).
+pub fn list_errors(v: &View, w: &str, raw: &Value, label: &str, kind: EffectList) -> Vec<String> {
     let mut errors = Vec::new();
     if !raw.is_array() {
         return vec![format!("{label}: effects must be a list.")];
@@ -295,25 +323,33 @@ pub fn effects_errors(v: &View, w: &str, raw: &Value, label: &str, node_level: b
             continue;
         };
         let effect = json::s(fx, "effect");
-        let Some(&(_, allowed)) = EFFECTS.iter().find(|x| x.0 == effect) else {
-            errors.push(format!("{label} effect {}: unknown effect '{effect}' (use {}).", k + 1, EFFECTS.iter().map(|x| x.0).collect::<Vec<_>>().join(", ")));
+        let Some(allowed) = effect_keys(&effect) else {
+            errors.push(format!("{label} effect {}: unknown effect '{effect}' (use {}).", k + 1, effect_names(kind).join(", ")));
             names.push(String::new());
             continue;
         };
         names.push(effect.clone());
         let el = format!("{label} effect {} ({effect})", k + 1);
-        if node_level && !NODE_EFFECTS.contains(&effect.as_str()) {
+        if kind == EffectList::Node && !NODE_EFFECTS.contains(&effect.as_str()) {
             errors.push(format!("{el}: Node effects may only be set_flag, add_flag or give."));
+        }
+        if kind == EffectList::Campaign && SCREEN_EFFECTS.contains(&effect.as_str()) {
+            errors.push(format!("{el}: {effect} opens a screen; queue a battle or a dialogue in then instead."));
+            continue;
         }
         for key in fx.keys().filter(|k| *k != "effect" && !allowed.contains(&k.as_str())) {
             errors.push(format!("{el}: unknown key '{key}'."));
         }
         errors.extend(effect_errors(v, w, &effect, fx, &el));
     }
-    if !node_level {
+    if kind == EffectList::Choice {
         errors.extend(order_errors(&names, label));
         if names.iter().filter(|n| *n == "recruit").count() > 1 {
             errors.push(format!("{label}: at most one recruit per choice."));
+        }
+        // CAMPAIGN1 11.3: nothing runs after an end
+        if names.iter().position(|n| n == "end").is_some_and(|at| at + 1 != names.len()) {
+            errors.push(format!("{label}: end must be the last effect."));
         }
     }
     errors
@@ -334,12 +370,14 @@ fn effect_errors(v: &View, w: &str, effect: &str, fx: &Dict, el: &str) -> Vec<St
             if !why.is_empty() {
                 errors.push(format!("{el}: {why}"));
             }
+            errors.extend(reserved_errors(&gstr(&key), el));
         }
         "add_flag" => {
             let key = fx.get("key").cloned().unwrap_or(Value::from(""));
             if !key.is_string() || !flag_key_ok(&gstr(&key)) {
                 errors.push(format!("{el}: flag key '{}' must be non-empty [a-z0-9_.].", gstr(&key)));
             }
+            errors.extend(reserved_errors(&gstr(&key), el));
             let delta = json::get(fx, "delta");
             if !json::is_int(delta) || json::to_int(delta) == 0 || json::to_int(delta).abs() > ADD_DELTA_MAX {
                 errors.push(format!("{el}: delta must be a whole number from -{ADD_DELTA_MAX} to {ADD_DELTA_MAX}, not 0."));
@@ -371,9 +409,15 @@ fn effect_errors(v: &View, w: &str, effect: &str, fx: &Dict, el: &str) -> Vec<St
             Some(id) if v.worlds.resolve(w, "characters", id).is_empty() => errors.push(format!("{el}: Recruit: unknown character '{id}'.")),
             Some(id) => errors.extend(party_character_errors(v, w, id).into_iter().map(|why| format!("{el}: {why}"))),
         },
-        _ => {}
+        _ => errors.extend(super::campaign::effect_errors(v, w, effect, fx, el)),
     }
     errors
+}
+
+/// CAMPAIGN1 11.4: a flag effect may not write a reserved key (meter., campaign., roster.).
+fn reserved_errors(key: &str, el: &str) -> Option<String> {
+    let why = super::campaign::write_key_error(key);
+    (!why.is_empty()).then(|| format!("{el}: {why}"))
 }
 
 /// give / take: items {base id: 1..99} (at most 8 keys), gold 0..EFFECT_GOLD_MAX, not both empty.

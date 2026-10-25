@@ -1,5 +1,6 @@
 //! Typed content catalog (classes, units, skills, items, passives, encounters, terrain, and the engine-only derived
-//! stats of DERIVE1 and ruleset rows of RULESET1).
+//! stats of DERIVE1 and ruleset rows of RULESET1), and the campaign vocabulary of CAMPAIGN1 (kinds, effect kinds, read
+//! keys, the manifest blocks with their defaults).
 //!
 //! Source today: the resolved catalog the Godot exporter writes (the game's `parity/out/catalog.json`), i.e. exactly the
 //! entries Godot's `ContentCatalog.entries(kind)` returns after item-family resolution and schema normalisation.
@@ -660,5 +661,158 @@ impl Catalog {
     /// Basic or engine skill: always passes the active-loadout filter.
     pub fn is_always_active(&self, skill_id: &str) -> bool {
         self.skill(skill_id).is_some_and(|s| s.system || self.is_basic_family(s.family_id()))
+    }
+}
+
+// ---- Campaign (CAMPAIGN1 11.1-11.4, kit hook; engine-only, no Godot original) ---------------------------------------
+
+/// CAMPAIGN1 11.2: the world kinds of a campaign (files `meters.json`, `checkpoints.json`, `triggers.json`).
+pub const CAMPAIGN_KINDS: [&str; 3] = ["meters", "checkpoints", "triggers"];
+/// M1: a gauge holds a value in `min..max`; a countdown holds a due time on the travel clock.
+pub const METER_KINDS: [&str; 2] = ["gauge", "countdown"];
+/// M2: the HUD tone of a band.
+pub const METER_TONES: [&str; 4] = ["calm", "warn", "danger", "fatal"];
+/// M5: the crossing direction of a meter rule (`up` the gauge default, `down` the countdown default).
+pub const RULE_DIRS: [&str; 2] = ["up", "down"];
+/// M3: what moves a gauge.
+pub const INPUT_ON: [&str; 3] = ["battle", "day", "leg"];
+/// A settled battle's outcomes (meter inputs, triggers).
+pub const OUTCOMES: [&str; 3] = ["won", "lost", "fled"];
+/// T1: the cause a trigger is checked after.
+pub const TRIGGER_ON: [&str; 5] = ["any", "day", "battle", "enter", "act"];
+/// F1: what an `end` effect ends the run as.
+pub const END_KINDS: [&str; 2] = ["fail", "bad_end"];
+/// R1: where the party may rest.
+pub const REST_WHERE: [&str; 3] = ["nodes", "rest_places", "none"];
+/// R4: what a lost battle does.
+pub const DEFEAT_MODES: [&str; 2] = ["wake", "retreat"];
+/// 11.3: the campaign effect kinds and their keys besides `effect` (dialogue choices, meter rules, checkpoints and
+/// triggers take them).
+pub const CAMPAIGN_EFFECTS: [(&str, &[&str]); 9] = [
+    ("meter_add", &["meter", "delta"]),
+    ("meter_set", &["meter", "value"]),
+    ("meter_show", &["meter", "visible"]),
+    ("clock_start", &["meter", "days"]),
+    ("clock_set", &["meter", "days", "label"]),
+    ("clock_stop", &["meter"]),
+    ("set_act", &["act"]),
+    ("rest", &[]),
+    ("end", &["kind", "card", "text"]),
+];
+/// 11.4: flag-key prefixes the campaign answers (read-only: `set_flag` and `add_flag` refuse them in every world).
+pub const RESERVED_PREFIXES: [&str; 3] = ["meter.", "campaign.", "roster."];
+/// 11.4: the read keys besides `meter.<id>`, `meter.<id>.band` and `meter.<id>.running`.
+pub const CAMPAIGN_READ_KEYS: [&str; 3] = ["campaign.act", "campaign.day", "roster.living"];
+/// 11.4: the read-key suffixes after `meter.<id>`.
+pub const METER_READ_SUFFIXES: [&str; 2] = ["band", "running"];
+
+/// Whether `key` starts with a reserved prefix (11.4).
+pub fn reserved_key(key: &str) -> bool {
+    RESERVED_PREFIXES.iter().any(|p| key.starts_with(p))
+}
+
+/// The meter id a read key names (`meter.<id>`, `meter.<id>.band`, `meter.<id>.running`), else None.
+pub fn meter_of_read_key(key: &str) -> Option<&str> {
+    let rest = key.strip_prefix("meter.")?;
+    match rest.split_once('.') {
+        None => Some(rest),
+        Some((id, suffix)) if METER_READ_SUFFIXES.contains(&suffix) => Some(id),
+        Some(_) => None,
+    }
+}
+
+/// The manifest's `campaign` block (11.1): `on` once the block holds anything (X1).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CampaignManifest {
+    pub on: bool,
+    pub start_act: i32,
+    pub act_saves: bool,
+}
+
+impl CampaignManifest {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self { on: !o.is_empty(), start_act: int(o, "start_act", 0), act_saves: boolean(o, "act_saves", true) }
+    }
+}
+
+/// One purse counter's names (P1): the HUD name, its short form, icon and tip.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PurseCounter {
+    pub name: String,
+    pub short: String,
+    pub icon: String,
+    pub tip: String,
+}
+
+impl PurseCounter {
+    fn from_obj(o: &Obj, name: &str, icon: &str, tip: &str) -> Self {
+        let name = string(o, "name", name);
+        Self { short: string(o, "short", &name), icon: string(o, "icon", icon), tip: string(o, "tip", tip), name }
+    }
+}
+
+/// The manifest's `purse` block (P1-P3): the currency's and the upkeep's names, the upkeep spent per day and what
+/// zero upkeep does (`road_pct` multiplies a leg's road-fight chance, `start_ap` changes each party unit's battle AP).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Purse {
+    pub currency: PurseCounter,
+    pub upkeep: PurseCounter,
+    pub per_day: i32,
+    pub road_pct: i32,
+    pub start_ap: i32,
+}
+
+/// The purse defaults: today's HUD names and tips, x1.5 road fights at zero supplies (`travel.rs` STARVED_PCT).
+pub const CURRENCY_NAME: &str = "Gold";
+pub const CURRENCY_ICON: &str = "ui/hud/gold.png";
+pub const CURRENCY_TIP: &str = "Earned from fights, chests and quests; spent in shops.";
+pub const UPKEEP_NAME: &str = "Supplies";
+pub const UPKEEP_ICON: &str = "ui/hud/supplies.png";
+pub const UPKEEP_TIP: &str = "Food for the road: each day of travel eats some, and so does making camp.";
+
+impl Purse {
+    pub fn from_obj(o: &Obj) -> Self {
+        let empty = Obj::new();
+        let up = obj(o, "upkeep").unwrap_or(&empty);
+        let zero = obj(up, "at_zero").unwrap_or(&empty);
+        Self {
+            currency: PurseCounter::from_obj(obj(o, "currency").unwrap_or(&empty), CURRENCY_NAME, CURRENCY_ICON, CURRENCY_TIP),
+            upkeep: PurseCounter::from_obj(up, UPKEEP_NAME, UPKEEP_ICON, UPKEEP_TIP),
+            per_day: int(up, "per_day", 1),
+            road_pct: int(zero, "road_pct", 150),
+            start_ap: int(zero, "start_ap", 0),
+        }
+    }
+}
+
+/// The manifest's `rest` block (R1); the defaults are today's Camp and free rest-place heal.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RestRule {
+    pub days: i32,
+    pub cost: i32,
+    /// One of REST_WHERE.
+    pub place: String,
+    pub on_enter: bool,
+    pub needs_upkeep: bool,
+}
+
+impl RestRule {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self { days: int(o, "days", 0), cost: int(o, "cost", 3), place: string(o, "where", "nodes"), on_enter: boolean(o, "on_enter", true), needs_upkeep: boolean(o, "needs_upkeep", true) }
+    }
+}
+
+/// The manifest's `defeat` block (R4); the default is today's wake.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefeatRule {
+    /// One of DEFEAT_MODES.
+    pub mode: String,
+    pub to: String,
+    pub days: i32,
+}
+
+impl DefeatRule {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self { mode: string(o, "mode", "wake"), to: string(o, "to", ""), days: int(o, "days", 0) }
     }
 }

@@ -35,13 +35,22 @@ const AFTER_GODOT: [&str; 13] = [
     "\"rows\": []",
 ];
 
-/// `text` without the AFTER_GODOT field lines (a dropped last field takes the comma off the line before it).
-fn at_freeze(text: &str) -> String {
+/// Retired parity, world manifests only (world.json): CAMPAIGN1-S (HISTORY 2026-10-25) a manifest's `campaign`,
+/// `purse`, `rest` and `defeat`, written as `{}` (an encounter's `purse` line is still compared).
+const MANIFEST_AFTER_GODOT: [&str; 4] = ["\"campaign\": {}", "\"purse\": {}", "\"rest\": {}", "\"defeat\": {}"];
+
+/// Retired parity, kind level: CAMPAIGN1-S (HISTORY 2026-10-25) the world kinds `meters`, `checkpoints` and
+/// `triggers` (Godot's WorldCatalog.save_all wrote no such files).
+const WORLD_KINDS_AFTER_GODOT: [&str; 3] = ["meters", "checkpoints", "triggers"];
+
+/// `text` without the AFTER_GODOT field lines, and in a world manifest without the MANIFEST_AFTER_GODOT ones (a
+/// dropped last field takes the comma off the line before it).
+fn at_freeze(text: &str, manifest: bool) -> String {
     let mut out: Vec<String> = Vec::new();
     for line in text.lines() {
         let t = line.trim();
         let field = t.trim_end_matches(',');
-        if AFTER_GODOT.contains(&field) {
+        if AFTER_GODOT.contains(&field) || (manifest && MANIFEST_AFTER_GODOT.contains(&field)) {
             if !t.ends_with(',') {
                 if let Some(prev) = out.last_mut() {
                     if prev.ends_with(',') {
@@ -101,10 +110,11 @@ fn writer_saves_exactly_what_godot_saves() {
         if rel.file_name().is_some_and(|n| n == "encounters.json") && !want.is_empty() {
             want = godot_encounters_folded(&want);
         }
+        let manifest = rel.file_name().is_some_and(|n| n == "world.json");
         match text {
             Err(e) => diffs.push(format!("{}: {e}", path.display())),
-            Ok(t) if at_freeze(&t) != want => {
-                let t = at_freeze(&t);
+            Ok(t) if at_freeze(&t, manifest) != want => {
+                let t = at_freeze(&t, manifest);
                 let line = t.lines().zip(want.lines()).position(|(a, b)| a != b).unwrap_or(0);
                 diffs.push(format!("{} line {}:\n  file   {:?}\n  writer {:?}", path.display(), line + 1, want.lines().nth(line), t.lines().nth(line)));
             }
@@ -116,7 +126,7 @@ fn writer_saves_exactly_what_godot_saves() {
     }
     for w in ["ashlands", "iron_reaches", "tidewrack"] {
         compare(dir.join("worlds").join(w).join("world.json"), store::manifest_text(&dir, w));
-        for kind in source::WORLD_KINDS {
+        for kind in source::WORLD_KINDS.into_iter().filter(|k| !WORLD_KINDS_AFTER_GODOT.contains(k)) {
             compare(store::file_of(&dir, Some(w), kind), store::resave_text(&dir, Some(w), kind));
         }
     }

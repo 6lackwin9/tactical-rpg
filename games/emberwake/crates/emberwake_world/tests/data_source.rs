@@ -25,8 +25,9 @@ fn data_dir() -> PathBuf {
 /// `ruleset` and `plan_reveal_flag` (kind "world": taken off every world's `manifest`). RULESET1-S (2026-10-25): the
 /// timeline fields of a skill (`ap_cost`, `recovery_blocks`, `round_intent`, `intent_buff`, `stagger`, `windup_poise`,
 /// `unbreakable`, `sure_break`, `armor_piercing`), a unit (`poise`, `deck`, `default_intent`) and a passive (`slot`).
-/// ENCOUNTER2-T (2026-10-25): an encounter's authored terrain `rows` (catalog and world encounters).
-const AFTER_GODOT: [(&str, &str, &str); 25] = [
+/// ENCOUNTER2-T (2026-10-25): an encounter's authored terrain `rows` (catalog and world encounters). CAMPAIGN1-S
+/// (2026-10-25): a world manifest's `campaign`, `purse`, `rest` and `defeat` (kind "world").
+const AFTER_GODOT: [(&str, &str, &str); 29] = [
     ("content", "units", "loot"),
     ("world", "encounters", "key_loot"),
     ("world", "encounters", "objective_reward"),
@@ -52,6 +53,10 @@ const AFTER_GODOT: [(&str, &str, &str); 25] = [
     ("content", "passives", "slot"),
     ("content", "encounters", "rows"),
     ("world", "encounters", "rows"),
+    ("world", "world", "campaign"),
+    ("world", "world", "purse"),
+    ("world", "world", "rest"),
+    ("world", "world", "defeat"),
 ];
 /// Retired parity, option level: enum and multi-pick options added after the freeze, by (section, kind, key, option);
 /// the option leaves the engine's schema row before comparing (every other option and its order is still compared);
@@ -65,8 +70,9 @@ const OPTIONS_AFTER_GODOT: [(&str, &str, &str, &str); 3] = [
 /// Retired parity, kind level (the twin of AFTER_GODOT): schema kinds added after the freeze, by (section, kind); the
 /// whole kind leaves the engine's schema before comparing; each is named in docs/HISTORY.md. DERIVE1 (2026-10-25): the
 /// derived-stat rows (Godot had no such kind; its catalogs are compared per CATALOG_KINDS, which do not list it).
-/// RULESET1-R (2026-10-25): the ruleset rows (the same).
-const KINDS_AFTER_GODOT: [(&str, &str); 2] = [("content", "derived_stats"), ("content", "rulesets")];
+/// RULESET1-R (2026-10-25): the ruleset rows (the same). CAMPAIGN1-S (2026-10-25): the world kinds `meters`,
+/// `checkpoints` and `triggers` (WorldSchema.KINDS had none; every world's `own` lists leave the loader's worlds too).
+const KINDS_AFTER_GODOT: [(&str, &str); 5] = [("content", "derived_stats"), ("content", "rulesets"), ("world", "meters"), ("world", "checkpoints"), ("world", "triggers")];
 /// Schema rows whose help text or options changed after the freeze (their `help` and `options_from` are not
 /// compared). REWARD1: the purse rows. ASSETORG2: the art rows (bodies of the asset layers, not Godot's art keys) and
 /// the item icon rows. PHASEFOLD: the phases rows (the arrival trigger).
@@ -98,13 +104,19 @@ fn godot_schema_folded(schema: &mut Value) {
 }
 
 /// `v` without the AFTER_GODOT keys of `section`: on every object in an array under a key named after the kind, and
-/// (kind "world") on every world's `manifest` object.
+/// (kind "world") on every world's `manifest` object; and (section "world") without the KINDS_AFTER_GODOT world kinds
+/// in every world's `own` object.
 fn strip_after_godot(v: &mut Value, section: &str) {
     match v {
         Value::Object(o) => {
             if let Some(Value::Object(m)) = o.get_mut("manifest").filter(|_| section == "world") {
                 for (_, _, key) in AFTER_GODOT.iter().filter(|(s, kind, _)| *s == "world" && *kind == "world") {
                     m.shift_remove(*key);
+                }
+            }
+            if let Some(Value::Object(own)) = o.get_mut("own").filter(|_| section == "world") {
+                for (_, kind) in KINDS_AFTER_GODOT.iter().filter(|(s, _)| *s == "world") {
+                    assert!(own.shift_remove(*kind).is_some(), "the loader's world has no own {kind} list to strip");
                 }
             }
             for (k, x) in o.iter_mut() {

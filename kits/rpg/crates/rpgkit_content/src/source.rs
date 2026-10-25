@@ -30,8 +30,9 @@ pub const DERIVED_KIND: &str = crate::check::derived::KIND;
 /// RULESET1-R: the ruleset rows, loaded into the catalog beside CATALOG_KINDS after the skills and derived stats they
 /// name (Godot had no such kind).
 pub const RULESET_KIND: &str = crate::check::ruleset::KIND;
-/// WorldSchema.KINDS.
-pub const WORLD_KINDS: [&str; 13] = ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot", "dialogues", "shops", "routes"];
+/// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2; Godot had no such kinds).
+pub const WORLD_KINDS: [&str; 16] =
+    ["regions", "locations", "factions", "characters", "items", "disciplines", "quests", "lore", "encounters", "loot", "dialogues", "shops", "routes", "meters", "checkpoints", "triggers"];
 
 const SCHEMA_TEXT: &str = include_str!("../../../schema.json");
 

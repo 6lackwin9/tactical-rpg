@@ -4,6 +4,7 @@
 //! rows, resolved items, derived item families).
 
 pub mod assets;
+pub mod campaign;
 pub mod derived;
 pub mod dialogue;
 pub mod encounter;
