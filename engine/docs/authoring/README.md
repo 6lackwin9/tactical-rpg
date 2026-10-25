@@ -14,6 +14,7 @@ from re-deriving the method each time.
 | [naming_and_asset_briefs.md](naming_and_asset_briefs.md) | Name things and write the asset briefs art is generated from |
 | [story_guide.md](story_guide.md) | Write a game's story guide: plot, who's who with arcs per act, story elements, reveal timeline, gaps |
 | [lore_modules.md](lore_modules.md) | Write lore and events as independent modules that can be decided alone and connected later |
+| [campaign_structure.md](campaign_structure.md) | Give the player forks and optional missions while checkpoints with deadlines keep the story on time |
 | [consistency_pass.md](consistency_pass.md) | Turn a brainstormed design library into canon and collect the gaps |
 | [art_bible.md](art_bible.md) | Fix canvas, board, sprite, palette and pipelines before any art is made |
 | [milestones.md](milestones.md) | Plan the build (foundation, feel prototype, slice on data, playtest, depth, balance and art) and measure throughput |
