@@ -260,6 +260,25 @@ pub fn region_tile(ch: char) -> Option<&'static str> {
 /// Battle tile sets: `common` until a map names a set (ASSETORG2 open question 5).
 pub const BATTLE_SETS: [&str; 1] = ["common"];
 
+/// STAGE1 4.4: the battle stage's tile sets (tiles redrawn at 4:3 for the tilted board, 128 x 96 drawn 32 x 24).
+pub const BATTLE_STAGE_SETS: [&str; 1] = ["common_stage"];
+
+/// STAGE1 4.4: the folders of a terrain's stage tile (`tilesets/<set>/<terrain>`, over `BATTLE_STAGE_SETS`); also the
+/// wall face (`wall_face`).
+pub fn battle_stage_dirs(terrain: &str) -> Vec<String> {
+    BATTLE_STAGE_SETS.iter().map(|set| format!("tilesets/{set}/{terrain}")).collect()
+}
+
+/// STAGE1 4.4: the folders of a battle prop's art (`props/<set>/<art>` over `BATTLE_SETS`: the tree and the stones).
+pub fn battle_prop_dirs(art: &str) -> Vec<String> {
+    BATTLE_SETS.iter().map(|set| format!("props/{set}/{art}")).collect()
+}
+
+/// STAGE1 4.4: a battle zone's backdrop over the board's far edge (384 x 52).
+pub fn battle_backdrop(zone: &str) -> String {
+    format!("backgrounds/battle/{zone}.png")
+}
+
 pub fn world_map_background(world: &str) -> String {
     format!("backgrounds/world_map/{world}.png")
 }
@@ -335,5 +354,13 @@ mod tests {
         assert_eq!(skill_icon_chain("shield_bash", "ATTACK"), ["skills/shield_bash.png", "skills/kinds/attack.png"]);
         assert_eq!(intent("idle"), "ui/intents/rest.png");
         assert_eq!(region_sets(&["world_a".into(), "world_b".into()]), ["world_a", "world_b", "common"]);
+    }
+
+    #[test]
+    fn battle_stage_art_follows_its_chains() {
+        assert_eq!(battle_stage_dirs("grass"), ["tilesets/common_stage/grass"]);
+        assert_eq!(battle_stage_dirs("wall_face"), ["tilesets/common_stage/wall_face"]);
+        assert_eq!(battle_prop_dirs("tree"), ["props/common/tree"]);
+        assert_eq!(battle_backdrop("forest_clearing"), "backgrounds/battle/forest_clearing.png");
     }
 }

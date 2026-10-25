@@ -549,6 +549,11 @@ impl SettingsScreen {
                     self.draft["map_names"] = json!(v);
                 }
             }
+            SetAct::Pick("battle_view", i) => {
+                if let Some((v, _)) = crate::stage::VIEWS.get(i) {
+                    self.draft["battle_view"] = json!(v);
+                }
+            }
             SetAct::Pick(k, i) => {
                 if let Some(o) = choices(k).get(i) {
                     self.draft[k] = json!(o);
@@ -640,6 +645,12 @@ impl Screen<GameCx> for SettingsScreen {
                 let at = MAP_NAMES.iter().position(|m| d["map_names"].as_str() == Some(m.0)).unwrap_or(0);
                 let t = tip("Map names", "On hover: a marker's name shows while you point at it, its legend row, or face it. Always: every person and exit is named.");
                 ui.select("settings.map_names", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick("map_names", i), true, t);
+                y += 22;
+                // STAGE1: the battle board tilted (Stage) or seen from above (Flat) until the user's review (STAGE1-C).
+                ui.p.text(x as f32, y as f32 + 3.0, "Battle view", BODY, TEXT);
+                let labels: Vec<String> = crate::stage::VIEWS.iter().map(|v| v.1.to_string()).collect();
+                let at = crate::stage::VIEWS.iter().position(|v| d["battle_view"].as_str() == Some(v.0)).unwrap_or(0);
+                ui.select("settings.battle_view", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick("battle_view", i), true, tip("Battle view", crate::stage::VIEW_TIP));
             }
             _ => {
                 for (head, rows) in CONTROLS {

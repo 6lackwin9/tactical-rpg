@@ -11,6 +11,8 @@
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::music;
 use crate::intent_text;
+use crate::stage::{self, Geom, Item, Pass, Through, View};
+use crate::tuning::Tuning;
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use emberwake_battle::intent::Intent;
 use aegis_ui::audio::Bus;
@@ -34,6 +36,7 @@ use emberwake_world::{dialogue, explore, progression, travel};
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
+/// The Flat view's cell (and the grid panel's: 12 x 9 cells of `TILE` at (`GRID_X`, `GRID_Y`)).
 const TILE: i32 = 32;
 /// The battle screen's panels by name (`BattleScreen::panels`; the UI Gallery's battle panel entries).
 pub const PANELS: [&str; 7] = ["strip", "party", "hero", "grid", "hostiles", "intel", "bar"];
@@ -1262,21 +1265,6 @@ fn cell_rect(c: V2) -> Rect {
     Rect::new(GRID_X + c.x * TILE, GRID_Y + c.y * TILE, TILE, TILE)
 }
 
-fn terrain_color(id: &str) -> Rgba {
-    match id {
-        "wall" => rgb(46, 46, 54),
-        "tree" => rgb(30, 70, 40),
-        "deep_water" => rgb(30, 54, 110),
-        "shallow_water" => rgb(56, 92, 140),
-        "lava" => rgb(150, 50, 20),
-        "grass" => rgb(60, 104, 56),
-        "dirt" => rgb(104, 84, 56),
-        "sand" | "snow" => rgb(170, 160, 120),
-        "stone" | "rubble" => rgb(92, 92, 100),
-        _ => rgb(80, 82, 92),
-    }
-}
-
 fn short_name(name: &str) -> String {
     name.strip_prefix("Goblin ").unwrap_or(name).to_string()
 }
@@ -1559,171 +1547,23 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         ui.push("hero.panel", "panel", u.name.clone(), r, true, false, None, Vec::new());
     }
 
-    // -- Grid (pixel layer): terrain, exits, plan ghost, intents, units, floating numbers.
-    ui.p.panel(Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4), rgb(8, 10, 16), BORDER, RADIUS);
-    for gy in 0..GRID_H {
-        for gx in 0..GRID_W {
-            let c = V2::new(gx, gy);
-            let r = cell_rect(c);
-            let tid = w.grid.terrain_id(c);
-            match cx.art.tile_in(&emberwake_content::art::BATTLE_SETS, tid, gx, gy, TILE) {
-                Some(img) => ui.p.image(img, r),
-                None => ui.p.fill(r, terrain_color(tid)),
-            }
-            if w.grid.is_exit(c) {
-                ui.p.panel(r.inset(7), rgba(70, 200, 90, 220), rgba(200, 255, 210, 255), 2.0);
-                ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, "EXIT", SMALL, BG);
-            }
-            if planning && sel.is_some() && ui.hover(r) && g.popup.is_none() {
-                ui.p.panel(r.inset(1), rgba(255, 255, 255, 30), rgba(255, 255, 255, 160), 1.5);
-            }
-            let tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), GOOD), ("A unit that steps here leaves the battle.".into(), TEXT)] } else { Vec::new() };
-            ui.push(format!("tile.{gx}.{gy}"), "tile", tid, r, planning, false, if w.occupant(c).is_none() { Some(Action::TileClick(c)) } else { None }, tip);
+    // -- Grid (pixel layer): STAGE1 Stage (the tilted board) or Flat (the board seen from above, as before) by the
+    // Battle view setting; both use the same tokens, actions, widget names and HUD.
+    let view = View::of_setting(&cx.settings.v["battle_view"]);
+    // 3.6 / 3.9: a unit hovered through its party or hostile card (the cards of the last frame) is hovered on the board.
+    let card_hover = if live && g.popup.is_none() {
+        g.w.iter().filter(|x| x.rect.contains(mouse.0, mouse.1)).find_map(|x| x.id.strip_prefix("party.").or_else(|| x.id.strip_prefix("foe.")).and_then(|n| n.parse::<usize>().ok()))
+    } else {
+        None
+    };
+    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.anim_ms, sel, planning, tells: &tells, show_tells, card_hover };
+    let board_hover = match view {
+        View::Stage => draw_stage(board, &mut ui, cx, &tuning, now),
+        View::Flat => {
+            draw_flat(board, &mut ui, cx, &tuning, now);
+            None
         }
-    }
-    let center = |c: V2| ((GRID_X + c.x * TILE + TILE / 2) as f32, (GRID_Y + c.y * TILE + TILE / 2) as f32);
-    if let Some(h) = sel {
-        if w.units[h].is_active() && planning {
-            let st = s.plan.compile(w, h);
-            let mut from = w.pos(h);
-            for e in &st.entries {
-                if e.pos_after != from && e.pos_after.x >= 0 {
-                    let (a, b) = (center(from), center(e.pos_after));
-                    ui.p.line(a.0, a.1, b.0, b.1, GOLD, 3.0);
-                    ui.p.panel(cell_rect(e.pos_after).inset(3), rgba(244, 198, 84, 40), GOLD, 2.0);
-                    from = e.pos_after;
-                }
-            }
-        }
-    }
-    if tuning.intent_arrows && planning {
-        let mut seen = Vec::new();
-        for a in &s.resolver.scheduled {
-            if !w.enemies.contains(&a.unit) || seen.contains(&a.unit) {
-                continue;
-            }
-            if let CmdKind::Attack { target: Some(t), .. } = a.command.kind {
-                seen.push(a.unit);
-                let (p, q) = (center(w.pos(a.unit)), center(w.pos(t)));
-                ui.p.line(p.0, p.1, q.0, q.1, rgba(240, 100, 92, 210), 4.0);
-            }
-        }
-    }
-    // SPRITE1-U: each unit stands on a flat ellipse in its side's colour and plays its clips (anims), mirrored while
-    // it faces left (FACE1: toward its target or its step, `Tokens::catch_up`; `token_frame`, its outline with it);
-    // the selected hero's sprite has a gold outline, a hovered unit's a faint white one. A unit without a body keeps
-    // the letter.
-    let anim_now = g.anim_ms as u64;
-    let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
-    let still = UnitAnim::default();
-    for i in 0..w.units.len() {
-        let Some(pos) = w.grid.pos(i) else { continue };
-        let u = &w.units[i];
-        let r = cell_rect(pos);
-        let ally = w.allies.contains(&i);
-        let body = cx.art.first_body(&emberwake_content::art::body_chain(&s.art[i]));
-        let palette = s.palettes.get(i).map_or("", |p| p.as_str());
-        if let (Some(a), Some(b)) = (g.tokens.anims.get_mut(i), body.as_deref()) {
-            // An action clip starts with the first candidate the body has.
-            if let Some((cands, t0)) = a.want.take() {
-                if let Some(c) = cands.into_iter().find(|c| cx.art.has_clip(b, c)) {
-                    a.player.play(c, t0);
-                }
-            }
-        }
-        let a = g.tokens.anims.get(i).unwrap_or(&still);
-        let left = if g.tokens.anims.get(i).is_some() { a.faces_left() } else { !ally };
-        if !u.is_alive() {
-            // A fall plays the death clip and holds its last frame for a while; then (or with no clip) the marker.
-            let dying = match (body.as_deref(), a.fell) {
-                (Some(b), Some(_)) if !instant && cx.art.has_clip(b, "death") => {
-                    cx.art.clips(b).is_some_and(|clips| a.player.playing(clips, anim_now) == "death" && a.player.held_for(clips, anim_now).is_none_or(|h| h < tuning.death_hold_ms))
-                }
-                _ => false,
-            };
-            if !dying {
-                ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, "x", BODY, DIM);
-                continue;
-            }
-        }
-        let flash = g.flashes.iter().any(|f| f.0 == i);
-        let shake = if flash { tuning.hit_shake_px as f32 * if (now.elapsed().as_millis() / 30) % 2 == 0 { 1.0 } else { -1.0 } } else { 0.0 };
-        let tp = tuning.token_px;
-        // A moving unit slides from its old tile.
-        let (mut dx, mut dy) = (0, 0);
-        if let Some((from, t0)) = a.slide {
-            let t = anim_now.saturating_sub(t0);
-            if t < tuning.walk_ms && !instant {
-                let k = 1.0 - t as f32 / tuning.walk_ms.max(1) as f32;
-                dx = ((from.x - pos.x) as f32 * TILE as f32 * k).round() as i32;
-                dy = ((from.y - pos.y) as f32 * TILE as f32 * k).round() as i32;
-            }
-        }
-        let tr = Rect::new(r.x + (TILE - tp) / 2 + shake as i32 + dx, r.y + (TILE - tp) / 2 + dy, tp, tp);
-        let ring = if ally { ALLY } else { FOE };
-        if u.is_alive() {
-            ui.p.ellipse(tr.x as f32 + tp as f32 / 2.0, (tr.y + tp) as f32 - 2.5, tp as f32 * 0.36, tp as f32 * 0.11, rgba(ring[0], ring[1], ring[2], tuning.foot_alpha));
-        }
-        let hover = ui.hover(r) && g.popup.is_none();
-        let outline = if Some(i) == sel { Some(GOLD) } else if hover { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { None };
-        let frame = body.as_deref().and_then(|b| token_frame(&mut cx.art, b, palette, &a.player, anim_now, tp, left).map(|(f, img)| {
-            ui.p.image(img, tr);
-            f
-        }));
-        match (frame, body.as_deref()) {
-            (Some(f), Some(b)) => {
-                if let Some(o) = outline.and_then(|col| token_outline(&mut cx.art, b, palette, &f, tp, col, left)) {
-                    ui.p.image(o, Rect::new(tr.x - 1, tr.y - 1, tp + 2, tp + 2));
-                }
-            }
-            _ => {
-                ui.p.panel(tr.inset(4), ring, outline.unwrap_or(ring), 6.0);
-                ui.p.text_center(tr.x as f32 + tp as f32 / 2.0, r.y as f32 + 11.0 + dy as f32, &u.name.chars().next().unwrap_or('?').to_string(), BODY, BG);
-            }
-        }
-        if flash {
-            ui.p.fill(tr, rgba(255, 255, 255, 110));
-        }
-        if !u.is_alive() {
-            continue;
-        }
-        hp_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 3 + dy, TILE - 6, 2), u.hp, u.max_hp, if ally { GOOD } else { FOE });
-        let tip = unit_tip(s, i, sel, &tells);
-        ui.push(format!("unit.{i}"), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), r, true, Some(i) == sel, Some(Action::UnitClick(i)), tip);
-    }
-    if show_tells {
-        for r in &tells {
-            let Some(from) = w.grid.pos(r.unit) else { continue };
-            let (fx, fy) = center(from);
-            let to = r.line.target.and_then(|t| w.grid.pos(t)).or((r.line.cell != emberwake_battle::grid::NO_CELL).then_some(r.line.cell));
-            if let Some(to) = to.filter(|c| *c != from) {
-                let (tx, ty) = center(to);
-                let (dx, dy) = (tx - fx, ty - fy);
-                let len = (dx * dx + dy * dy).sqrt().max(1.0);
-                // From the token's edge to just short of the target's.
-                let (sx, sy, ex, ey) = (fx + dx / len * 10.0, fy + dy / len * 10.0, tx - dx / len * 9.0, ty - dy / len * 9.0);
-                let dash = if matches!(r.line.kind, "move" | "flee") { 3.0 } else { 0.0 };
-                ui.p.arrow(sx, sy, ex, ey, rgba(240, 100, 92, 200), dash, 4.0);
-            }
-            let chip = Rect::new(GRID_X + from.x * TILE + 1, GRID_Y + from.y * TILE + 1, 10, 10);
-            match cx.art.image(&emberwake_content::art::intent(r.line.kind), 10, 10) {
-                Some(img) => ui.p.image(img, chip),
-                None => {
-                    ui.p.panel(chip, rgba(48, 28, 38, 230), FOE, 2.0);
-                    ui.p.text_center(chip.x as f32 + 5.0, chip.y as f32 + 1.0, &r.line.kind[..1].to_uppercase(), SMALL, TEXT);
-                }
-            }
-        }
-    }
-    for f in &g.floats {
-        if let Some(pos) = w.grid.pos(f.unit) {
-            let t = now.duration_since(f.born).as_millis() as f32 / tuning.float_ms.max(1) as f32;
-            let (cx, cy) = center(pos);
-            let yy = cy - 14.0 - tuning.float_rise_px as f32 * t;
-            ui.p.text_center(cx + 0.6, yy + 0.6, &f.text, TITLE, rgba(0, 0, 0, 220));
-            ui.p.text_center(cx, yy, &f.text, TITLE, f.color);
-        }
-    }
+    };
 
     // -- Right: hostile cards and the hovered (or first) foe's detail card.
     let right = Rect::new(W - 126, 28, 124, 290);
@@ -1747,7 +1587,11 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         let next_lines = if u.is_active() { ui.p.wrap(&next, SMALL, next_w) } else { Vec::new() };
         let two = next_lines.len() > 1;
         let r = Rect::new(right.x + 4, y, 116, if two { 22 + ui.p.line_h(SMALL).ceil() as i32 } else { 22 });
-        let hover = ui.hover(r) || w.grid.pos(e).is_some_and(|p| ui.hover(cell_rect(p)));
+        let on_board = match view {
+            View::Stage => board_hover == Some(e),
+            View::Flat => w.grid.pos(e).is_some_and(|p| ui.hover(cell_rect(p))),
+        };
+        let hover = ui.hover(r) || on_board;
         if hover {
             hovered_foe = Some(e);
         }
@@ -1890,9 +1734,507 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     g.w = ui.widgets;
 }
 
+/// What the board draws from the battle screen in one frame (borrowed apart from the session).
+struct Board<'a> {
+    s: &'a Session,
+    tokens: &'a mut Tokens,
+    floats: &'a [Float],
+    flashes: &'a [(usize, Instant)],
+    popup: bool,
+    anim_ms: f64,
+    sel: Option<usize>,
+    planning: bool,
+    /// INTENT1: the enemy tells while planning; drawn while `show_tells` (the Show enemy tells setting, I).
+    tells: &'a [Intent],
+    show_tells: bool,
+    /// STAGE1 3.9: the unit whose party or hostile card the mouse is over.
+    card_hover: Option<usize>,
+}
+
+/// An action clip a token wants starts with the first candidate its body has (SPRITE1-U).
+fn start_wanted(tokens: &mut Tokens, art: &mut Art, i: usize, body: Option<&str>) {
+    if let (Some(a), Some(b)) = (tokens.anims.get_mut(i), body) {
+        if let Some((cands, t0)) = a.want.take() {
+            if let Some(c) = cands.into_iter().find(|c| art.has_clip(b, c)) {
+                a.player.play(c, t0);
+            }
+        }
+    }
+}
+
+/// A fallen unit still playing its death clip (and holding its last frame for `death_hold_ms`); after it (or with no
+/// clip) the dead marker shows.
+fn still_dying(art: &mut Art, a: &UnitAnim, body: Option<&str>, now: u64, instant: bool, hold_ms: u64) -> bool {
+    match (body, a.fell) {
+        (Some(b), Some(_)) if !instant && art.has_clip(b, "death") => {
+            art.clips(b).is_some_and(|clips| a.player.playing(clips, now) == "death" && a.player.held_for(clips, now).is_none_or(|h| h < hold_ms))
+        }
+        _ => false,
+    }
+}
+
+/// STAGE1 4.1, the Flat view (the board as it was before STAGE1, until the user's review): 32 x 32 cells at (128, 30),
+/// the `common` tiles, tree tiles flat, tokens `flat_token_px` on a filled foot ellipse at `foot_alpha`, arrows centre
+/// to centre over the units, the cell widgets.
+fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) {
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, .. } = b;
+    let w = &s.w;
+    ui.p.panel(Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4), rgb(8, 10, 16), BORDER, RADIUS);
+    for gy in 0..GRID_H {
+        for gx in 0..GRID_W {
+            let c = V2::new(gx, gy);
+            let r = cell_rect(c);
+            let tid = w.grid.terrain_id(c);
+            match cx.art.tile_in(&emberwake_content::art::BATTLE_SETS, tid, gx, gy, TILE) {
+                Some(img) => ui.p.image(img, r),
+                None => ui.p.fill(r, stage::terrain_color(tid)),
+            }
+            if w.grid.is_exit(c) {
+                ui.p.panel(r.inset(7), rgba(70, 200, 90, 220), rgba(200, 255, 210, 255), 2.0);
+                ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, "EXIT", SMALL, BG);
+            }
+            if planning && sel.is_some() && ui.hover(r) && !popup {
+                ui.p.panel(r.inset(1), rgba(255, 255, 255, 30), rgba(255, 255, 255, 160), 1.5);
+            }
+            let tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), GOOD), ("A unit that steps here leaves the battle.".into(), TEXT)] } else { Vec::new() };
+            ui.push(format!("tile.{gx}.{gy}"), "tile", tid, r, planning, false, if w.occupant(c).is_none() { Some(Action::TileClick(c)) } else { None }, tip);
+        }
+    }
+    let center = |c: V2| ((GRID_X + c.x * TILE + TILE / 2) as f32, (GRID_Y + c.y * TILE + TILE / 2) as f32);
+    if let Some(h) = sel {
+        if w.units[h].is_active() && planning {
+            let st = s.plan.compile(w, h);
+            let mut from = w.pos(h);
+            for e in &st.entries {
+                if e.pos_after != from && e.pos_after.x >= 0 {
+                    let (a, b) = (center(from), center(e.pos_after));
+                    ui.p.line(a.0, a.1, b.0, b.1, GOLD, 3.0);
+                    ui.p.panel(cell_rect(e.pos_after).inset(3), rgba(244, 198, 84, 40), GOLD, 2.0);
+                    from = e.pos_after;
+                }
+            }
+        }
+    }
+    if tuning.intent_arrows && planning {
+        let mut seen = Vec::new();
+        for a in &s.resolver.scheduled {
+            if !w.enemies.contains(&a.unit) || seen.contains(&a.unit) {
+                continue;
+            }
+            if let CmdKind::Attack { target: Some(t), .. } = a.command.kind {
+                seen.push(a.unit);
+                let (p, q) = (center(w.pos(a.unit)), center(w.pos(t)));
+                ui.p.line(p.0, p.1, q.0, q.1, rgba(240, 100, 92, 210), 4.0);
+            }
+        }
+    }
+    // SPRITE1-U: each unit stands on a flat ellipse in its side's colour and plays its clips (anims), mirrored while
+    // it faces left (FACE1: toward its target or its step, `Tokens::catch_up`; `token_frame`, its outline with it);
+    // the selected hero's sprite has a gold outline, a hovered unit's a faint white one. A unit without a body keeps
+    // the letter.
+    let anim_now = anim_ms as u64;
+    let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
+    let still = UnitAnim::default();
+    let geo = Geom::new(View::Flat, tuning);
+    for i in 0..w.units.len() {
+        let Some(pos) = w.grid.pos(i) else { continue };
+        let u = &w.units[i];
+        let r = cell_rect(pos);
+        let ally = w.allies.contains(&i);
+        let body = cx.art.first_body(&emberwake_content::art::body_chain(&s.art[i]));
+        let palette = s.palettes.get(i).map_or("", |p| p.as_str());
+        start_wanted(tokens, &mut cx.art, i, body.as_deref());
+        let a = tokens.anims.get(i).unwrap_or(&still);
+        let left = if tokens.anims.get(i).is_some() { a.faces_left() } else { !ally };
+        if !u.is_alive() && !still_dying(&mut cx.art, a, body.as_deref(), anim_now, instant, tuning.death_hold_ms) {
+            ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, "x", BODY, DIM);
+            continue;
+        }
+        let flash = flashes.iter().any(|f| f.0 == i);
+        let shake = if flash { tuning.hit_shake_px as f32 * if (now.elapsed().as_millis() / 30).is_multiple_of(2) { 1.0 } else { -1.0 } } else { 0.0 };
+        let tp = geo.token_px;
+        // A moving unit slides from its old tile.
+        let (mut dx, mut dy) = (0, 0);
+        if let Some((from, t0)) = a.slide {
+            let t = anim_now.saturating_sub(t0);
+            if t < tuning.walk_ms && !instant {
+                (dx, dy) = geo.slide(from, pos, 1.0 - t as f32 / tuning.walk_ms.max(1) as f32);
+            }
+        }
+        let tr = geo.token_rect(pos, shake as i32 + dx, dy);
+        let ring = if ally { ALLY } else { FOE };
+        if u.is_alive() {
+            ui.p.ellipse(tr.x as f32 + tp as f32 / 2.0, (tr.y + tp) as f32 - 2.5, tp as f32 * 0.36, tp as f32 * 0.11, rgba(ring[0], ring[1], ring[2], tuning.foot_alpha));
+        }
+        let hover = ui.hover(r) && !popup;
+        let outline = if Some(i) == sel { Some(GOLD) } else if hover { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { None };
+        let frame = body.as_deref().and_then(|b| token_frame(&mut cx.art, b, palette, &a.player, anim_now, tp, left).map(|(f, img)| {
+            ui.p.image(img, tr);
+            f
+        }));
+        match (frame, body.as_deref()) {
+            (Some(f), Some(b)) => {
+                if let Some(o) = outline.and_then(|col| token_outline(&mut cx.art, b, palette, &f, tp, col, left)) {
+                    ui.p.image(o, Rect::new(tr.x - 1, tr.y - 1, tp + 2, tp + 2));
+                }
+            }
+            _ => {
+                ui.p.panel(tr.inset(4), ring, outline.unwrap_or(ring), 6.0);
+                ui.p.text_center(tr.x as f32 + tp as f32 / 2.0, r.y as f32 + 11.0 + dy as f32, &u.name.chars().next().unwrap_or('?').to_string(), BODY, BG);
+            }
+        }
+        if flash {
+            ui.p.fill(tr, rgba(255, 255, 255, 110));
+        }
+        if !u.is_alive() {
+            continue;
+        }
+        hp_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 3 + dy, TILE - 6, 2), u.hp, u.max_hp, if ally { GOOD } else { FOE });
+        let tip = unit_tip(s, i, sel, tells);
+        ui.push(format!("unit.{i}"), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), r, true, Some(i) == sel, Some(Action::UnitClick(i)), tip);
+    }
+    if show_tells {
+        for r in tells {
+            let Some(from) = w.grid.pos(r.unit) else { continue };
+            let (fx, fy) = center(from);
+            let to = r.line.target.and_then(|t| w.grid.pos(t)).or((r.line.cell != emberwake_battle::grid::NO_CELL).then_some(r.line.cell));
+            if let Some(to) = to.filter(|c| *c != from) {
+                let (tx, ty) = center(to);
+                let (dx, dy) = (tx - fx, ty - fy);
+                let len = (dx * dx + dy * dy).sqrt().max(1.0);
+                // From the token's edge to just short of the target's.
+                let (sx, sy, ex, ey) = (fx + dx / len * 10.0, fy + dy / len * 10.0, tx - dx / len * 9.0, ty - dy / len * 9.0);
+                ui.p.arrow(sx, sy, ex, ey, rgba(240, 100, 92, 200), stage::arrow_dash(r.line.kind), 4.0);
+            }
+            let chip = Rect::new(GRID_X + from.x * TILE + 1, GRID_Y + from.y * TILE + 1, 10, 10);
+            intent_chip(ui, cx, r.line.kind, chip);
+        }
+    }
+    for f in floats {
+        if let Some(pos) = w.grid.pos(f.unit) {
+            let t = now.duration_since(f.born).as_millis() as f32 / tuning.float_ms.max(1) as f32;
+            let (cx, cy) = center(pos);
+            float_text(ui, &f.text, f.color, cx, cy - 14.0 - tuning.float_rise_px as f32 * t);
+        }
+    }
+}
+
+/// An intent chip (INTENT1): the kind's icon, else a lettered plate.
+fn intent_chip(ui: &mut Ui<Action>, cx: &mut Cx, kind: &str, chip: Rect) {
+    match cx.art.image(&emberwake_content::art::intent(kind), 10, 10) {
+        Some(img) => ui.p.image(img, chip),
+        None => {
+            ui.p.panel(chip, rgba(48, 28, 38, 230), FOE, 2.0);
+            ui.p.text_center(chip.x as f32 + 5.0, chip.y as f32 + 1.0, &kind[..1].to_uppercase(), SMALL, TEXT);
+        }
+    }
+}
+
+/// A floating number with its shadow, centred on x at line top y.
+fn float_text(ui: &mut Ui<Action>, text: &str, col: Rgba, x: f32, y: f32) {
+    ui.p.text_center(x + 0.6, y + 0.6, text, TITLE, rgba(0, 0, 0, 220));
+    ui.p.text_center(x, y, text, TITLE, col);
+}
+
+/// One unit on the Stage this frame (STAGE1 3.6, 3.8).
+struct StageUnit {
+    i: usize,
+    pos: V2,
+    ally: bool,
+    alive: bool,
+    /// Its sprite draws (standing, or still playing its death clip); else the dead marker shows.
+    standing: bool,
+    body: Option<String>,
+    palette: String,
+    left: bool,
+    flash: bool,
+    /// The foot point with the slide.
+    foot: (i32, i32),
+    /// The drawn sprite square (slide and hit shake).
+    tr: Rect,
+    /// The body's solid rect at its place (slide, no shake): the feet pass's rect and half of its widget rect.
+    body_rect: Rect,
+}
+
+/// A 1 px edged plate (the Stage's ground markers, 3.7 pass 3).
+fn plate(p: &mut Painter, r: Rect, fill: Rgba, edge: Rgba) {
+    p.fill(r, fill);
+    p.fill(Rect::new(r.x, r.y, r.w, 1), edge);
+    p.fill(Rect::new(r.x, r.y + r.h - 1, r.w, 1), edge);
+    p.fill(Rect::new(r.x, r.y + 1, 1, r.h - 2), edge);
+    p.fill(Rect::new(r.x + r.w - 1, r.y + 1, 1, r.h - 2), edge);
+}
+
+/// A cell plate inset `ix` across and `iy` down.
+fn inset2(r: Rect, ix: i32, iy: i32) -> Rect {
+    Rect::new(r.x + ix, r.y + iy, r.w - 2 * ix, r.h - 2 * iy)
+}
+
+fn with_alpha(c: Rgba, a: u8) -> Rgba {
+    [c[0], c[1], c[2], a]
+}
+
+/// STAGE1 option B, the Stage view: the board tilted to 32 x 24 cells, run as `stage::passes` (backdrop, ground,
+/// markers, ground arrows, shadows, front face, the feet-sorted blocks, props and units, the outlines through what
+/// covers a unit, the top: HP bars, chips, the exit sign, floats). Cell widgets first, then the units' in feet order
+/// (front-most last, so it takes the click). Returns the unit the mouse is over on the board.
+fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover } = b;
+    let w = &s.w;
+    let geo = Geom::new(View::Stage, tuning);
+    let tp = geo.token_px;
+    let anim_now = anim_ms as u64;
+    let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
+    let still = UnitAnim::default();
+    ui.p.panel(Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4), rgb(8, 10, 16), BORDER, RADIUS);
+
+    // The units' places this frame.
+    let mut units: Vec<StageUnit> = Vec::new();
+    for i in 0..w.units.len() {
+        let Some(pos) = w.grid.pos(i) else { continue };
+        let u = &w.units[i];
+        let ally = w.allies.contains(&i);
+        let body = cx.art.first_body(&emberwake_content::art::body_chain(&s.art[i]));
+        let palette = s.palettes.get(i).cloned().unwrap_or_default();
+        start_wanted(tokens, &mut cx.art, i, body.as_deref());
+        let a = tokens.anims.get(i).unwrap_or(&still);
+        let left = if tokens.anims.get(i).is_some() { a.faces_left() } else { !ally };
+        let standing = u.is_alive() || still_dying(&mut cx.art, a, body.as_deref(), anim_now, instant, tuning.death_hold_ms);
+        let (mut dx, mut dy) = (0, 0);
+        if let Some((from, t0)) = a.slide {
+            let t = anim_now.saturating_sub(t0);
+            if t < tuning.walk_ms && !instant {
+                (dx, dy) = geo.slide(from, pos, 1.0 - t as f32 / tuning.walk_ms.max(1) as f32);
+            }
+        }
+        let flash = flashes.iter().any(|f| f.0 == i);
+        let shake = if flash { tuning.hit_shake_px as f32 * if (now.elapsed().as_millis() / 30).is_multiple_of(2) { 1.0 } else { -1.0 } } else { 0.0 };
+        let (fx, fy) = geo.foot(pos);
+        let rest = geo.token_rect(pos, dx, dy);
+        // 3.8: the body's solid bounds of its idle frame 0 (animation frames do not move it); no body: the letter plate.
+        let body_rect = match body.as_deref().and_then(|k| cx.art.body_bounds(k, &palette, tp, left)) {
+            Some(bb) => Rect::new(rest.x + bb.x, rest.y + bb.y, bb.w, bb.h),
+            None => rest.inset(4),
+        };
+        units.push(StageUnit { i, pos, ally, alive: u.is_alive(), standing, body, palette, left, flash, foot: (fx + dx, fy + dy), tr: geo.token_rect(pos, dx + shake as i32, dy), body_rect });
+    }
+    // 3.7 pass 7: blocks, standing props and units sorted by their feet.
+    let mut items = stage::board_items(&mut cx.art, &w.grid);
+    items.extend(units.iter().filter(|t| t.standing).map(|t| stage::unit_item(t.i, t.foot, t.body_rect)));
+    let order = stage::feet_order(&items);
+    let unit_of = |i: usize| units.iter().find(|t| t.i == i);
+    // 3.8: a standing unit's widget rect; the front-most under the mouse is the one a click reaches.
+    let widget_rect = |t: &StageUnit| stage::unit_rect(geo.cell_rect(t.pos), t.body_rect);
+    let board_hover = if ui.live && !popup {
+        order.iter().rev().find_map(|p| match p.item {
+            Item::Unit(i) => unit_of(i).filter(|t| t.alive && widget_rect(t).contains(ui.mouse.0, ui.mouse.1)).map(|t| t.i),
+            _ => None,
+        })
+    } else {
+        None
+    };
+    let hovered = board_hover.or(card_hover);
+    // The cell a click would reach (the hovered unit's, else the one under the mouse) shows the hover plate.
+    let hover_cell = if planning && sel.is_some() && ui.live && !popup {
+        board_hover.and_then(|u| w.grid.pos(u)).or_else(|| geo.cell_at(ui.mouse.0, ui.mouse.1))
+    } else {
+        None
+    };
+    let foot_f = |c: V2| {
+        let (x, y) = geo.foot(c);
+        (x as f32, y as f32)
+    };
+    let mut frames: Vec<(usize, ClipFrame)> = Vec::new();
+
+    ui.p.clip(Some(stage::INTERIOR));
+    for pass in stage::passes() {
+        match pass {
+            Pass::Backdrop => stage::draw_backdrop(&mut ui.p, &mut cx.art, &w.grid, &s.def.zone),
+            Pass::Ground => stage::draw_ground(&mut ui.p, &mut cx.art, &w.grid, tuning.grid_alpha),
+            Pass::Markers => {
+                if let Some(c) = hover_cell {
+                    plate(&mut ui.p, geo.cell_rect(c), rgba(255, 255, 255, 30), rgba(255, 255, 255, 160));
+                }
+                // INTENT1 area tells: the tiles an enemy's area attack will hit.
+                if show_tells {
+                    for r in tells.iter().filter(|r| r.line.kind == "area") {
+                        let cells = s.resolver.scheduled.iter().find_map(|a| match &a.command.kind {
+                            CmdKind::Area { cells, aim, .. } if a.unit == r.unit && *aim == r.line.cell => Some(cells.clone()),
+                            _ => None,
+                        });
+                        for c in cells.unwrap_or_default().into_iter().filter(|c| w.grid.is_valid(*c)) {
+                            plate(&mut ui.p, geo.cell_rect(c).inset(1), rgba(240, 100, 92, 70), rgba(240, 100, 92, 230));
+                        }
+                    }
+                }
+                if let Some(h) = sel.filter(|h| w.units[*h].is_active() && planning) {
+                    let st = s.plan.compile(w, h);
+                    let mut from = w.pos(h);
+                    for e in &st.entries {
+                        if e.pos_after != from && e.pos_after.x >= 0 {
+                            let (a, b) = (foot_f(from), foot_f(e.pos_after));
+                            stage::wide_line(&mut ui.p, a.0, a.1 - 3.0, b.0, b.1 - 3.0, GOLD, 2.0, 0.0);
+                            ui.p.panel(inset2(geo.cell_rect(e.pos_after), 3, 2), rgba(244, 198, 84, 40), GOLD, 2.0);
+                            from = e.pos_after;
+                        }
+                    }
+                }
+                for c in w.grid.exits.iter().filter(|c| w.grid.is_valid(**c)) {
+                    plate(&mut ui.p, inset2(geo.cell_rect(*c), 3, 2), rgba(70, 200, 90, 90), rgba(200, 255, 210, 200));
+                }
+            }
+            Pass::Arrows => {
+                let col = rgba(240, 100, 92, 210);
+                let mut drawn: Vec<(V2, V2)> = Vec::new();
+                if show_tells {
+                    for r in tells {
+                        let Some(from) = w.grid.pos(r.unit) else { continue };
+                        let to = r.line.target.and_then(|t| w.grid.pos(t)).or((r.line.cell != emberwake_battle::grid::NO_CELL).then_some(r.line.cell));
+                        if let Some(to) = to.filter(|c| *c != from) {
+                            if let Some((x0, y0, x1, y1)) = stage::ground_arrow(foot_f(from), foot_f(to)) {
+                                stage::wide_arrow(&mut ui.p, x0, y0, x1, y1, col, 1.5, stage::arrow_dash(r.line.kind), 4.0);
+                            }
+                            drawn.push((from, to));
+                        }
+                    }
+                }
+                if tuning.intent_arrows && planning {
+                    let mut seen = Vec::new();
+                    for a in &s.resolver.scheduled {
+                        if !w.enemies.contains(&a.unit) || seen.contains(&a.unit) {
+                            continue;
+                        }
+                        if let CmdKind::Attack { target: Some(t), .. } = a.command.kind {
+                            seen.push(a.unit);
+                            let (from, to) = (w.pos(a.unit), w.pos(t));
+                            if from == to || drawn.contains(&(from, to)) {
+                                continue;
+                            }
+                            if let Some((x0, y0, x1, y1)) = stage::ground_arrow(foot_f(from), foot_f(to)) {
+                                stage::wide_arrow(&mut ui.p, x0, y0, x1, y1, col, 1.5, 0.0, 4.0);
+                            }
+                        }
+                    }
+                }
+            }
+            Pass::Shadows => {
+                stage::draw_prop_shadows(&mut ui.p, &mut cx.art, &w.grid);
+                for t in units.iter().filter(|t| t.alive) {
+                    let (fx, fy) = (t.foot.0 as f32, t.foot.1 as f32);
+                    ui.p.ellipse(fx + 1.0, fy, 0.2 * tp as f32, 2.4, rgba(8, 10, 6, tuning.shadow_alpha));
+                    ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2, with_alpha(if t.ally { ALLY } else { FOE }, tuning.foot_ring_alpha));
+                }
+            }
+            Pass::Face => stage::draw_face(&mut ui.p, &mut cx.art, &w.grid),
+            Pass::Feet => {
+                for p in &order {
+                    match p.item {
+                        Item::Block(c) => stage::draw_block(&mut ui.p, &mut cx.art, &w.grid, c),
+                        Item::Prop(c) => stage::draw_prop(&mut ui.p, &mut cx.art, &w.grid, c),
+                        Item::Unit(i) => {
+                            let Some(t) = unit_of(i) else { continue };
+                            let a = tokens.anims.get(i).unwrap_or(&still);
+                            let ring = if t.ally { ALLY } else { FOE };
+                            let outline = if Some(i) == sel { Some(GOLD) } else if hovered == Some(i) { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { None };
+                            let frame = t.body.as_deref().and_then(|b| token_frame(&mut cx.art, b, &t.palette, &a.player, anim_now, tp, t.left).map(|(f, img)| {
+                                ui.p.image(img, t.tr);
+                                f
+                            }));
+                            match (frame, t.body.as_deref()) {
+                                (Some(f), Some(b)) => {
+                                    if let Some(o) = outline.and_then(|col| token_outline(&mut cx.art, b, &t.palette, &f, tp, col, t.left)) {
+                                        ui.p.image(o, Rect::new(t.tr.x - 1, t.tr.y - 1, tp + 2, tp + 2));
+                                    }
+                                    frames.push((i, f));
+                                }
+                                _ => {
+                                    ui.p.panel(t.tr.inset(4), ring, outline.unwrap_or(ring), 6.0);
+                                    let letter = w.units[i].name.chars().next().unwrap_or('?').to_string();
+                                    ui.p.text_center(t.tr.x as f32 + tp as f32 / 2.0, (t.tr.y + tp / 2) as f32 - 5.0, &letter, BODY, BG);
+                                }
+                            }
+                            if t.flash {
+                                ui.p.fill(t.tr, rgba(255, 255, 255, 110));
+                            }
+                        }
+                    }
+                }
+            }
+            Pass::Through => {
+                for (k, p) in order.iter().enumerate() {
+                    let Item::Unit(i) = p.item else { continue };
+                    let Some(t) = unit_of(i).filter(|t| t.alive) else { continue };
+                    let (Some(b), Some((_, f))) = (t.body.as_deref(), frames.iter().find(|(j, _)| *j == i)) else { continue };
+                    let col = match stage::through(&order, k, Some(i) == sel, hovered == Some(i)) {
+                        Some(Through::Side) => with_alpha(if t.ally { ALLY } else { FOE }, 230),
+                        Some(Through::Selected) => GOLD,
+                        Some(Through::Hovered) => rgba(255, 255, 255, tuning.hover_outline_alpha),
+                        None => continue,
+                    };
+                    if let Some(o) = token_outline(&mut cx.art, b, &t.palette, f, tp, col, t.left) {
+                        ui.p.image(o, Rect::new(t.tr.x - 1, t.tr.y - 1, tp + 2, tp + 2));
+                    }
+                }
+            }
+            Pass::Top => {
+                for t in &units {
+                    let u = &w.units[t.i];
+                    let (fx, fy) = t.foot;
+                    if !t.standing {
+                        ui.p.text_center(fx as f32, fy as f32 - ui.p.line_h(BODY) / 2.0, "x", BODY, DIM);
+                    } else if t.alive {
+                        hp_bar(&mut ui.p, Rect::new(fx - 12, fy + 3, 24, 2), u.hp, u.max_hp, if t.ally { GOOD } else { FOE });
+                    }
+                }
+                if show_tells {
+                    for r in tells {
+                        let Some(t) = units.iter().find(|t| t.i == r.unit) else { continue };
+                        let chip = Rect::new(t.foot.0 - 15, (t.foot.1 as f32 - 0.95 * tp as f32 - 2.0).round() as i32, 10, 10);
+                        intent_chip(ui, cx, r.line.kind, chip);
+                    }
+                }
+                for c in w.grid.exits.iter().filter(|c| w.grid.is_valid(**c)) {
+                    let r = geo.cell_rect(*c);
+                    let (cx_, cy_) = (r.x + r.w / 2, r.y + r.h / 2);
+                    let sign = Rect::new(cx_ - 11, cy_ - 2 - 5, 22, 9);
+                    ui.p.panel(sign, rgba(70, 200, 90, 230), rgba(200, 255, 210, 255), 2.0);
+                    ui.p.text_center(cx_ as f32, sign.y as f32 + (sign.h as f32 - ui.p.line_h(SMALL)) / 2.0, "EXIT", SMALL, BG);
+                }
+                for f in floats {
+                    let Some(pos) = w.grid.pos(f.unit) else { continue };
+                    let t = now.duration_since(f.born).as_millis() as f32 / tuning.float_ms.max(1) as f32;
+                    let (x, y) = geo.chest(pos);
+                    float_text(ui, &f.text, f.color, x as f32, y as f32 - 14.0 - tuning.float_rise_px as f32 * t);
+                }
+            }
+        }
+    }
+    ui.p.clip(None);
+
+    // 3.8: the cell widgets (32 x 24), then the units' in feet order (front-most last).
+    for gy in 0..GRID_H {
+        for gx in 0..GRID_W {
+            let c = V2::new(gx, gy);
+            let tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), GOOD), ("A unit that steps here leaves the battle.".into(), TEXT)] } else { Vec::new() };
+            ui.push(format!("tile.{gx}.{gy}"), "tile", w.grid.terrain_id(c), geo.cell_rect(c), planning, false, if w.occupant(c).is_none() { Some(Action::TileClick(c)) } else { None }, tip);
+        }
+    }
+    for p in &order {
+        let Item::Unit(i) = p.item else { continue };
+        let Some(t) = unit_of(i).filter(|t| t.alive) else { continue };
+        let u = &w.units[i];
+        let tip = unit_tip(s, i, sel, tells);
+        ui.push(format!("unit.{i}"), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), widget_rect(t), true, Some(i) == sel, Some(Action::UnitClick(i)), tip);
+    }
+    board_hover
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{action_clips, boss_fight, facing_toward, sound_of, token_frame, token_outline, Tokens};
+    use super::{action_clips, boss_fight, facing_toward, sound_of, token_frame, token_outline, Action, BattleScreen, Tokens};
+    use crate::screens::Screen;
+    use crate::stage::{Geom, View};
+    use emberwake_battle::grid::GRID_H;
     use emberwake_battle::command::CmdKind;
     use emberwake_battle::grid::{V2, NO_CELL};
     use aegis_core::assets::{ClipPlayer, Clips, Layers};
@@ -2222,6 +2564,97 @@ mod tests {
             }
         }
         assert!(turned_left > 0 && turned_right > 0, "actions turned left {turned_left}, right {turned_right}");
+    }
+
+    /// The Test Arena on `goblin_ambush` (the forest clearing) with the game's art, in battle view `view`.
+    fn ambush(view: serde_json::Value) -> (crate::screens::Cx, aegis_ui::ui::Gfx, BattleScreen) {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        cx.app.encounter = "goblin_ambush".into();
+        cx.app.seed = Some(1);
+        if !view.is_null() {
+            cx.settings.v["battle_view"] = view;
+        }
+        let b = BattleScreen::sandbox(&cx);
+        assert!(b.host.session.is_some(), "the ambush starts: {}", b.message);
+        (cx, crate::hud::hud_tests::gfx(), b)
+    }
+
+    fn rect_of(b: &BattleScreen, id: &str) -> aegis_ui::canvas::Rect {
+        b.w.iter().find(|w| w.id == id).unwrap_or_else(|| panic!("no widget {id}")).rect
+    }
+
+    /// STAGE1 check 10: the Battle view setting picks the board: Flat keeps today's 32 x 32 cells at (128, 30) and a
+    /// unit's widget is its cell; Stage (also an unknown value and the default) the 32 x 24 cells from (128, 82).
+    #[test]
+    fn the_battle_view_setting_picks_the_stage_or_the_flat_board() {
+        use aegis_ui::canvas::Rect;
+        for (view, flat) in [(json!("flat"), true), (json!("stage"), false), (json!("sideways"), false), (serde_json::Value::Null, false)] {
+            let (mut cx, mut g, mut b) = ambush(view.clone());
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            let (cell, last) = (rect_of(&b, "tile.0.0"), rect_of(&b, "tile.11.8"));
+            if flat {
+                assert_eq!((cell, last), (Rect::new(128, 30, 32, 32), Rect::new(480, 286, 32, 32)), "{view}");
+                let s = b.host.session.as_ref().unwrap();
+                let h = s.w.allies[0];
+                let p = s.w.grid.pos(h).unwrap();
+                assert_eq!(rect_of(&b, &format!("unit.{h}")), Rect::new(128 + p.x * 32, 30 + p.y * 32, 32, 32), "a unit's widget is its cell");
+            } else {
+                assert_eq!((cell, last), (Rect::new(128, 82, 32, 24), Rect::new(480, 274, 32, 24)), "{view}");
+            }
+            assert_eq!(b.w.iter().filter(|w| w.id.starts_with("tile.")).count(), 12 * 9, "every cell keeps its widget");
+        }
+    }
+
+    /// STAGE1 check 6: on the Stage the hero's topmost solid pixel (his helmet, above his cell) clicks him; the top-left
+    /// 2 x 2 px of a free cell north of a unit click that cell; where two units' rects overlap the southern one wins;
+    /// the backdrop and the front face hold no cell.
+    #[test]
+    fn stage_clicks_reach_heads_free_cells_and_the_unit_in_front() {
+        let (mut cx, mut g, mut b) = ambush(json!("stage"));
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let geo = Geom::new(View::Stage, &cx.tuning.value);
+        let (h, pos, body, palette) = {
+            let s = b.host.session.as_ref().unwrap();
+            let h = s.w.allies[0];
+            (h, s.w.grid.pos(h).unwrap(), cx.art.first_body(&emberwake_content::art::body_chain(&s.art[h])).expect("the hero has a body"), s.palettes.get(h).cloned().unwrap_or_default())
+        };
+        assert_eq!(h, 0, "the first hero is unit 0");
+        // before the first change the tokens have no animations yet and a hero faces right (as the draw does)
+        let left = b.tokens.anims.get(h).is_some_and(|a| a.faces_left());
+        let bb = cx.art.body_bounds(&body, &palette, geo.token_px, left).expect("solid pixels");
+        let frame = cx.art.body_clip_flipped(&body, &palette, "idle", 0, geo.token_px, left).unwrap().clone();
+        let top_x = (bb.x..bb.x + bb.w).find(|x| frame.px[((bb.y * frame.w + x) * 4 + 3) as usize] >= aegis_ui::canvas::OUTLINE_ALPHA).unwrap();
+        let tr = geo.token_rect(pos, 0, 0);
+        let helmet = (tr.x + top_x, tr.y + bb.y);
+        assert!(helmet.1 < geo.cell_rect(pos).y, "the helmet is above the hero's cell");
+        assert_eq!(aegis_ui::ui::hit(&b.w, helmet), Some(Action::UnitClick(h)), "the helmet pixel clicks the hero");
+        // A free cell north of a unit.
+        let free = {
+            let s = b.host.session.as_ref().unwrap();
+            s.w.grid.positions.iter().flatten().map(|p| V2 { x: p.x, y: p.y - 1 }).find(|c| s.w.grid.is_valid(*c) && s.w.occupant(*c).is_none()).expect("a free cell north of a unit")
+        };
+        let r = geo.cell_rect(free);
+        for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+            assert_eq!(aegis_ui::ui::hit(&b.w, (r.x + dx, r.y + dy)), Some(Action::TileClick(free)), "the corner of free cell {free}");
+        }
+        for pt in [(300, 50), (300, 305)] {
+            assert!(!matches!(aegis_ui::ui::hit(&b.w, pt), Some(Action::TileClick(_))), "{pt:?} holds no cell");
+        }
+        // Two units in one column: the southern one wins where their rects overlap.
+        let (north, south) = {
+            let s = b.host.session.as_mut().unwrap();
+            let other = (0..s.w.units.len()).find(|i| *i != h && s.w.units[*i].is_alive() && s.w.grid.pos(*i).is_some()).expect("another unit");
+            let below = if pos.y + 1 < GRID_H { V2 { x: pos.x, y: pos.y + 1 } } else { V2 { x: pos.x, y: pos.y - 1 } };
+            s.w.grid.positions[other] = Some(below);
+            if below.y > pos.y { (h, other) } else { (other, h) }
+        };
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let (rn, rs) = (rect_of(&b, &format!("unit.{north}")), rect_of(&b, &format!("unit.{south}")));
+        let m = rn.intersect(rs);
+        assert!(m.w > 0 && m.h > 0, "the southern unit's head reaches into the northern one's rect");
+        assert_eq!(aegis_ui::ui::hit(&b.w, (m.x + m.w / 2, m.y + m.h / 2)), Some(Action::UnitClick(south)), "the unit in front wins");
+        assert_eq!(aegis_ui::ui::hit(&b.w, (rn.x + rn.w / 2, rn.y + 1)), Some(Action::UnitClick(north)), "the unit behind still clicks on its head");
     }
 
     #[test]

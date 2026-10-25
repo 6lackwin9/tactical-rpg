@@ -21,6 +21,7 @@ mod region;
 mod runner;
 mod screens;
 mod shop;
+mod stage;
 mod tuning;
 mod worldmap;
 
