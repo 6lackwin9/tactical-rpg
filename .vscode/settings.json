@@ -9,6 +9,7 @@
     "*.ogg": "${capture}.ogg.import",
     "*.mp3": "${capture}.mp3.import"
   },
+  "git.detectWorktrees": false,
   "workbench.editorAssociations": {
     "*.md": "vscode.markdown.preview.editor"
   }
