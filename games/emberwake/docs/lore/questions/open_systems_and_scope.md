@@ -79,14 +79,14 @@ Where (paths from `games/emberwake/docs/lore/`); Decides.
 | Q-83 | decided | The slice's district nodes | (a) 01, 03, 04, 06 with 07 as the Crucible's exit map; (b) 01, 02, 04, 06 | Decided (2026-10-25, user): a; the slice is for playtesting the feel of the UI and gameplay, planned around the whole game | specs/full_game_systems_roadmap.md gap 1 | user |
 | Q-84 | decided | The slice's mission list | (a) the roadmap's: 0a-0c, the hearth, M3, one dilemma, M5; (b) the narrative writer's: 0a-0c, M1-M3, the interlude, M5 (M4 cut) | Decided (2026-10-25, user): a | roadmap 1; campaign_narrative 8 | user |
 | Q-85 | decided | The slice's one dilemma | (a) one Act 1 board quest given a two-way choice (for example Corvo's gate); (b) the ENC-EVT-05 marrow dose | Decided (2026-10-25, user): a | roadmap gap 2 | user |
-| Q-86 | 1.5 slice | Where the rest of Act 1 lands | (a) an M2b of data tasks before M3; (b) inside M4 | a | roadmap gap 3 | user |
+| Q-86 | decided | Where the rest of Act 1 lands | (a) an M2b of data tasks before M3; (b) inside M4 | Decided (2026-10-25, user): a, an M2b of data tasks after the slice playtest and before M3 | roadmap gap 3 | user |
 | Q-87 | core story | The slice's end | (a) an end card after the Crucible; (b) the Act 2 hub reveal | a | roadmap gap 4 | user |
-| Q-88 | 1.5 slice | Prototype order, mission sites, vignette scope | arena first on ENC-PRO-0A in the Scene Runner (rec) or the vertical slice; main missions on region maps, road fights from nodes; vignettes as still cards, typewriter text and fades | as listed | gameplay_loop gaps; screen_architecture gap 3 | user |
-| Q-89 | 1.5 slice | Battle barks | (a) in the slice; (b) out of scope until after the slice | b | narrative_agency 1.1 | user |
-| Q-96 | 1.5 slice | The Bunks and Facility screens in the slice, now that the slice may use no stand-ins | (a) build both before the slice; (b) bunks through the existing character roster, forging through the existing shop trade, both counted as reuse | b | screen_architecture gap 5 | user |
+| Q-88 | decided | Prototype order, mission sites, vignette scope | arena first on ENC-PRO-0A in the Scene Runner (rec) or the vertical slice; main missions on region maps, road fights from nodes; vignettes as still cards, typewriter text and fades | Decided (2026-10-25, user): as listed: the M1 feel prototype as an arena on ENC-PRO-0A in the Scene Runner (it also tunes the onboarding), then the slice; main missions on region maps, road fights from nodes; vignettes as still cards, typewriter text and fades | gameplay_loop gaps; screen_architecture gap 3 | user |
+| Q-89 | decided | Battle barks | (a) in the slice; (b) out of scope until after the slice | Decided (2026-10-25, user): b; boss fights speak through the existing phase line effect | narrative_agency 1.1 | user |
+| Q-96 | decided | The Bunks and Facility screens in the slice, now that the slice may use no stand-ins | (a) build both before the slice; (b) bunks through the existing character roster, forging through the existing shop trade, both counted as reuse | Decided (2026-10-25, user): b; roster management unlocks only after the Crucible, so the real Bunks and Facility screens land with Act 2 | screen_architecture gap 5 | user |
 
 ## Process
 
 | Id | Focus | Question | Options | Rec. | Where | Decides |
 | --- | --- | --- | --- | --- | --- | --- |
-| Q-90 | 1.5 slice | Ids for the `sunk_ward` factions, locations and units | set by the data authoring task from the cast registry (ids never follow a rename) | - | specs/worldbuilding_decisions.md 4; naming_and_asset_guide 1 | data authoring |
+| Q-90 | decided | Ids for the `sunk_ward` factions, locations and units | set by the data authoring task from the cast registry (ids never follow a rename) | Decided (2026-10-25, user): as listed (data authoring sets ids from the cast registry) | specs/worldbuilding_decisions.md 4; naming_and_asset_guide 1 | data authoring |
