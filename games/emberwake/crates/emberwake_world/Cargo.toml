@@ -4,8 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-aegis_save = { path = "../../../../engine/crates/aegis_save" }
-anyhow = { workspace = true }
 rpgkit_world = { path = "../../../../kits/rpg/crates/rpgkit_world" }
 
 [dev-dependencies]

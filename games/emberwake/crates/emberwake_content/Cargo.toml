@@ -4,8 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-aegis_content = { path = "../../../../engine/crates/aegis_content" }
-emberwake_battle = { path = "../emberwake_battle" }
 rpgkit_content = { path = "../../../../kits/rpg/crates/rpgkit_content" }
 
 [dev-dependencies]

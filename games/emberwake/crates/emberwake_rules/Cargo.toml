@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-indexmap = { workspace = true }
 rpgkit_rules = { path = "../../../../kits/rpg/crates/rpgkit_rules" }
 
 [dev-dependencies]

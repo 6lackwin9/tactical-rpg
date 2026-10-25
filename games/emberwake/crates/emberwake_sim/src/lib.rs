@@ -1,5 +1,5 @@
 //! The game's sim crate: a façade over the RPG kit crate rpgkit_sim (kits/rpg/crates/rpgkit_sim, KIT1). KIT1-SIM: the
-//! kit names no world; `game()` tells it Emberwake's default world and story run, and `run` passes them.
+//! kit names no world; `game()` tells it Emberwake's default world and story run, and `parse` and `run` pass them.
 pub use rpgkit_sim::*;
 
 use emberwake_world::Data;
@@ -23,6 +23,12 @@ pub fn game() -> SimGame {
             extra_example: "4:ash_raiders".into(),
         }),
     }
+}
+
+/// Parses the sim command line `argv` (mode first) on `d` for Emberwake: `world=` defaults to the Ashlands and the
+/// campaign mode plays its story run. Err = the message after "SIM argument error: ".
+pub fn parse(d: &Data, argv: &[String]) -> Result<args::SimArgs, String> {
+    args::SimArgs::parse_for(d, argv, &game())
 }
 
 /// Runs the sim command line `argv` (mode first, as `tools/fc.sh sim` takes it) on `d` for Emberwake; the printed

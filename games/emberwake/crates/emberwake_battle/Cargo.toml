@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-emberwake_rules = { path = "../emberwake_rules" }
 rpgkit_battle = { path = "../../../../kits/rpg/crates/rpgkit_battle" }
 
 [dev-dependencies]

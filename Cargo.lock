@@ -644,7 +644,6 @@ version = "0.1.0"
 dependencies = [
  "aegis_core",
  "emberwake_data",
- "emberwake_rules",
  "indexmap",
  "rpgkit_battle",
  "serde_json",
@@ -654,9 +653,7 @@ dependencies = [
 name = "emberwake_content"
 version = "0.1.0"
 dependencies = [
- "aegis_content",
  "aegis_core",
- "emberwake_battle",
  "emberwake_data",
  "emberwake_rules",
  "indexmap",
@@ -669,11 +666,7 @@ dependencies = [
 name = "emberwake_data"
 version = "0.1.0"
 dependencies = [
- "aegis_core",
- "anyhow",
- "indexmap",
  "rpgkit_data",
- "serde_json",
 ]
 
 [[package]]
@@ -723,7 +716,6 @@ version = "0.1.0"
 dependencies = [
  "aegis_core",
  "emberwake_data",
- "indexmap",
  "rpgkit_rules",
  "serde_json",
 ]
@@ -733,13 +725,8 @@ name = "emberwake_sim"
 version = "0.1.0"
 dependencies = [
  "aegis_core",
- "emberwake_battle",
- "emberwake_data",
- "emberwake_rules",
  "emberwake_world",
- "indexmap",
  "rpgkit_sim",
- "serde_json",
 ]
 
 [[package]]
@@ -748,8 +735,6 @@ version = "0.1.0"
 dependencies = [
  "aegis_content",
  "aegis_core",
- "aegis_save",
- "anyhow",
  "emberwake_battle",
  "emberwake_content",
  "emberwake_data",

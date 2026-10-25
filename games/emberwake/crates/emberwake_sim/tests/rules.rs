@@ -37,6 +37,22 @@ fn argument_errors_name_the_problem() {
     assert_eq!((a.distance, a.seed_count), (4, 1), "role: distance 4; quick: one seed");
 }
 
+/// The game's `parse` (KIT1-DEPS) is the kit's `parse_for` with Emberwake's sim description: world= defaults to the
+/// Ashlands, where the kit's own `parse` knows no world.
+#[test]
+fn game_parse_keeps_the_game_defaults() {
+    let d = data();
+    let a = emberwake_sim::parse(&d, &argv("party 3")).unwrap();
+    assert_eq!(a.world, emberwake_sim::WORLD);
+    assert_eq!(a.game.default_world, emberwake_sim::game().default_world);
+    let kit = SimArgs::parse(&d, &argv("party 3")).unwrap();
+    assert_eq!(kit.world, "", "the kit alone has no default world");
+    assert_eq!(
+        emberwake_sim::parse(&d, &argv("duel 5 1 bad=1")).err().unwrap_or_default(),
+        "unknown key 'bad'"
+    );
+}
+
 #[test]
 fn target_bands() {
     let mut t = targets::defaults();
