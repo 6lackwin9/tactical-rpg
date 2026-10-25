@@ -22,7 +22,7 @@ use emberwake_battle::command::CmdKind;
 use emberwake_battle::grid::{V2, GRID_H, GRID_W};
 use emberwake_battle::plan::expected;
 use emberwake_battle::session::{EncounterDef, Phase, Prebuilt, Session, StartGrant};
-use aegis_core::assets::{ClipFrame, ClipPlayer};
+use aegis_core::assets::{ClipFrame, ClipPlayer, Facing};
 use aegis_ui::art::Art;
 use aegis_ui::canvas::Image;
 use aegis_core::json::{self, s, Dict};
@@ -141,23 +141,34 @@ struct UnitAnim {
     /// When it fell (the death clip plays and holds, then the dead marker shows); None while it stands.
     fell: Option<u64>,
     seen: Seen,
-    /// FACE1: the facing it keeps (true = left, the sheet frame mirrored; the rig's sheets face right).
-    left: bool,
-    /// FACE1: while the party plans, the side of its planned or intended target (None: no target, or one in its column).
-    planned: Option<bool>,
+    /// DIR4-G (FACE1): the facing it keeps (`Facing`: the view and the last left/right; the rig's sheets face right,
+    /// a side row is mirrored when `left`).
+    facing: Facing,
+    /// DIR4-G G2: the facing of its last step, shown while it slides (`slide`).
+    step: Facing,
+    /// FACE1: while the party plans, the facing toward its planned or intended target (None: no target).
+    planned: Option<Facing>,
 }
 
 impl UnitAnim {
-    /// FACE1: the side the token faces now: its planned target's while planning, else the facing it keeps.
-    fn faces_left(&self) -> bool {
-        self.planned.unwrap_or(self.left)
+    /// DIR4-G G1/G3: the facing while it stands: its planned target's while planning, else the facing it keeps.
+    fn rest(&self) -> Facing {
+        self.planned.unwrap_or(self.facing)
+    }
+
+    /// DIR4-G: the facing drawn at `now` (the animation clock): its step's while the slide runs (`walk_ms`), else `rest`.
+    fn faces(&self, now: u64, walk_ms: u64) -> Facing {
+        match self.slide {
+            Some((_, t0)) if now.saturating_sub(t0) < walk_ms => self.step,
+            _ => self.rest(),
+        }
     }
 }
 
-/// FACE1: the facing that looks from `from` toward `to`: Some(true) = left, Some(false) = right, None when `to` is in
-/// the same column (the unit keeps its facing).
-fn facing_toward(from: V2, to: V2) -> Option<bool> {
-    (to.x != from.x).then_some(to.x < from.x)
+/// DIR4-G: `f` turned to look from `from` toward `to` (`Facing::toward`: up or down when the vertical distance is
+/// larger, keeping `left`; otherwise the side view, left when `to` is left; the same tile keeps `f`).
+fn turn(f: Facing, from: V2, to: V2) -> Facing {
+    f.toward(to.x - from.x, to.y - from.y)
 }
 
 /// The battle's token animations (SPRITE1-U): one per unit, the last popped action already animated and the action
@@ -177,10 +188,11 @@ impl Tokens {
     /// guards), a fall plays `death`, raising a guard plays `defend`, and the action just resolved plays its actor's
     /// attack clip (`action_clips`); the base loop is `idle_guarded` while it guards, else `idle`. Anything else (a new
     /// battle, another session) only takes the new state; `instant` (the skip setting) takes the end state at once.
-    /// FACE1 (also under `instant`): a unit turns toward the x of its step, then toward the target (or the area's aim)
-    /// of the action it just resolved; while the party plans each unit shows its planned or intended target
-    /// (`plan_facing`; an enemy only while `tells`, the Show enemy tells setting, is on), and the confirm keeps that
-    /// facing. A new battle faces the party right and the foes left.
+    /// FACE1, four-way since DIR4-G (also under `instant`): a unit turns toward its step (`turn`: up or down when the
+    /// step is more vertical, which keeps its left/right; it shows that facing while it slides, `UnitAnim::faces`),
+    /// then toward the target (or the area's aim) of the action it just resolved; while the party plans each unit
+    /// shows its planned or intended target (`plan_facing`; an enemy only while `tells`, the Show enemy tells setting,
+    /// is on), and the confirm keeps that facing. A new battle faces the party right and the foes left (side view).
     fn catch_up(&mut self, s: &Session, now: u64, instant: bool, walk_ms: u64, tells: bool) {
         self.tells = tells;
         let n = s.w.units.len();
@@ -191,8 +203,8 @@ impl Tokens {
         // The plan is confirmed (or the battle moved on): each unit keeps the facing its planned target gave it.
         if !s.is_planning() {
             for a in &mut self.anims {
-                if let Some(left) = a.planned.take() {
-                    a.left = left;
+                if let Some(f) = a.planned.take() {
+                    a.facing = f;
                 }
             }
         }
@@ -206,9 +218,8 @@ impl Tokens {
             if animate {
                 let was = &a.seen;
                 if let (Some(from), Some(to)) = (was.pos, pos) {
-                    if let Some(left) = facing_toward(from, to) {
-                        a.left = left;
-                    }
+                    a.facing = turn(a.facing, from, to);
+                    a.step = a.facing;
                     if from != to && !instant && walk_ms > 0 {
                         a.slide = Some((from, now));
                         a.player.play_for("walk", now, walk_ms);
@@ -231,7 +242,8 @@ impl Tokens {
                 a.slide = None;
                 // Fallen before this view: the dead marker at once.
                 a.fell = if seen.alive { None } else { Some(0) };
-                a.left = !s.w.allies.contains(&i);
+                a.facing = Facing::side(!s.w.allies.contains(&i));
+                a.step = a.facing;
                 a.planned = None;
             }
             if seen.alive && a.fell.is_some() {
@@ -254,8 +266,9 @@ impl Tokens {
             let u = &s.w.units[act.unit];
             if !act.cancelled && u.is_alive() {
                 let at = s.w.grid.pos(act.unit);
-                if let Some(left) = at.zip(aim.filter(|c| *c != emberwake_battle::grid::NO_CELL)).and_then(|(from, to)| facing_toward(from, to)) {
-                    self.anims[act.unit].left = left;
+                if let Some((from, to)) = at.zip(aim.filter(|c| *c != emberwake_battle::grid::NO_CELL)) {
+                    let a = &mut self.anims[act.unit];
+                    a.facing = turn(a.facing, from, to);
                 }
                 if !kind.is_empty() && !instant {
                     let skill = s.w.cat.skills.iter().find(|k| k.name == act.command.name).map_or("", |k| k.id.as_str());
@@ -269,22 +282,22 @@ impl Tokens {
         self.log_len_seen = s.log.len();
     }
 
-    /// FACE1: while the party plans, each unit shows the side of its target: an enemy its tell's while tells are shown
-    /// (INTENT1: the target unit, else the tile it aims at; hidden tells: it keeps its facing until it acts), a hero the first step of its plan that names another unit or an area tile; a
-    /// target in its own column, or none, shows the facing it keeps. Once the plan is confirmed the units keep the
+    /// FACE1: while the party plans, each unit faces its target (`turn`, DIR4-G four-way): an enemy its tell's while
+    /// tells are shown (INTENT1: the target unit, else the tile it aims at; hidden tells: it keeps its facing until it
+    /// acts), a hero the first step of its plan that names another unit or an area tile; none shows the facing it keeps. Once the plan is confirmed the units keep the
     /// facing they showed (`catch_up`).
     fn plan_facing(&mut self, s: &Session) {
         if !s.is_planning() {
             return;
         }
-        let side = |u: usize, to: Option<V2>| s.w.grid.pos(u).zip(to.filter(|c| *c != emberwake_battle::grid::NO_CELL)).and_then(|(from, to)| facing_toward(from, to));
+        let side = |u: usize, to: Option<V2>, f: Facing| s.w.grid.pos(u).zip(to.filter(|c| *c != emberwake_battle::grid::NO_CELL)).map(|(from, to)| turn(f, from, to));
         for a in &mut self.anims {
             a.planned = None;
         }
         for r in if self.tells { s.enemy_intents() } else { Vec::new() } {
             let to = r.line.target.and_then(|t| s.w.grid.pos(t)).or(Some(r.line.cell));
             if let Some(a) = self.anims.get_mut(r.unit) {
-                a.planned = side(r.unit, to);
+                a.planned = side(r.unit, to, a.facing);
             }
         }
         for &h in &s.w.allies {
@@ -294,7 +307,7 @@ impl Tokens {
                 _ => None,
             });
             if let Some(a) = self.anims.get_mut(h) {
-                a.planned = side(h, first);
+                a.planned = side(h, first, a.facing);
             }
         }
     }
@@ -1244,15 +1257,19 @@ pub(crate) fn kind_color(kind: &str) -> Rgba {
     }
 }
 
-/// The frame a battle token shows: the clip `player` plays at `now`, fitted to a `size` square; mirrored when the unit
-/// faces left (FACE1, `UnitAnim::faces_left`; the rig's sheets face right).
-fn token_frame<'a>(art: &'a mut Art, body: &str, palette: &str, player: &ClipPlayer, now: u64, size: i32, left: bool) -> Option<(ClipFrame, &'a Image)> {
-    art.played(body, palette, player, now, size, left)
+/// The frame a battle token shows (DIR4-G G4): the clip `player` plays at `now` in the unit's `facing`
+/// (`UnitAnim::faces`), fitted to a `size` square (`Art::played_facing`). The fallback is the engine's
+/// (`Clips::resolve_view`): the clip's `up`/`down` row when the body has it, else its side row, else `idle` in that
+/// view, else side `idle`. A side row is mirrored when the facing is left (the rig's sheets face right); an up or down
+/// row never is. So a body without view clips draws exactly as FACE1 did (side, mirrored when left), and a hit while
+/// facing up plays the side `hurt` with the last left/right, the view returning with the base loop.
+fn token_frame<'a>(art: &'a mut Art, body: &str, palette: &str, player: &ClipPlayer, now: u64, size: i32, facing: Facing) -> Option<(ClipFrame, &'a Image)> {
+    art.played_facing(body, palette, player, now, size, facing)
 }
 
-/// The highlight outline of the token frame `f` (`token_frame`), mirrored with it when the unit faces left.
-fn token_outline<'a>(art: &'a mut Art, body: &str, palette: &str, f: &ClipFrame, size: i32, col: Rgba, left: bool) -> Option<&'a Image> {
-    art.body_outline(body, palette, &f.clip, f.frame, size, col, left)
+/// The highlight outline of the token frame `f` (`token_frame` with the same `facing`), mirrored with it.
+fn token_outline<'a>(art: &'a mut Art, body: &str, palette: &str, f: &ClipFrame, size: i32, col: Rgba, facing: Facing) -> Option<&'a Image> {
+    art.body_outline(body, palette, &f.clip, f.frame, size, col, facing.mirrors(f))
 }
 
 fn hp_bar(p: &mut Painter, r: Rect, hp: i32, max: i32, color: Rgba) {
@@ -1828,8 +1845,8 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
             }
         }
     }
-    // SPRITE1-U: each unit stands on a flat ellipse in its side's colour and plays its clips (anims), mirrored while
-    // it faces left (FACE1: toward its target or its step, `Tokens::catch_up`; `token_frame`, its outline with it);
+    // SPRITE1-U: each unit stands on a flat ellipse in its side's colour and plays its clips (anims) in its facing
+    // (DIR4-G: toward its target or its step, `Tokens::catch_up`, `UnitAnim::faces`; `token_frame`, its outline with it);
     // the selected hero's sprite has a gold outline, a hovered unit's a faint white one. A unit without a body keeps
     // the letter.
     let anim_now = anim_ms as u64;
@@ -1845,7 +1862,7 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
         let palette = s.palettes.get(i).map_or("", |p| p.as_str());
         start_wanted(tokens, &mut cx.art, i, body.as_deref());
         let a = tokens.anims.get(i).unwrap_or(&still);
-        let left = if tokens.anims.get(i).is_some() { a.faces_left() } else { !ally };
+        let facing = if tokens.anims.get(i).is_some() { a.faces(anim_now, if instant { 0 } else { tuning.walk_ms }) } else { Facing::side(!ally) };
         if !u.is_alive() && !still_dying(&mut cx.art, a, body.as_deref(), anim_now, instant, tuning.death_hold_ms) {
             ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, "x", BODY, DIM);
             continue;
@@ -1868,13 +1885,13 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
         }
         let hover = ui.hover(r) && !popup;
         let outline = if Some(i) == sel { Some(GOLD) } else if hover { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { None };
-        let frame = body.as_deref().and_then(|b| token_frame(&mut cx.art, b, palette, &a.player, anim_now, tp, left).map(|(f, img)| {
+        let frame = body.as_deref().and_then(|b| token_frame(&mut cx.art, b, palette, &a.player, anim_now, tp, facing).map(|(f, img)| {
             ui.p.image(img, tr);
             f
         }));
         match (frame, body.as_deref()) {
             (Some(f), Some(b)) => {
-                if let Some(o) = outline.and_then(|col| token_outline(&mut cx.art, b, palette, &f, tp, col, left)) {
+                if let Some(o) = outline.and_then(|col| token_outline(&mut cx.art, b, palette, &f, tp, col, facing)) {
                     ui.p.image(o, Rect::new(tr.x - 1, tr.y - 1, tp + 2, tp + 2));
                 }
             }
@@ -1946,7 +1963,8 @@ struct StageUnit {
     standing: bool,
     body: Option<String>,
     palette: String,
-    left: bool,
+    /// DIR4-G: the facing drawn this frame (`UnitAnim::faces`).
+    facing: Facing,
     flash: bool,
     /// The foot point with the slide.
     foot: (i32, i32),
@@ -1998,7 +2016,7 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
         let palette = s.palettes.get(i).cloned().unwrap_or_default();
         start_wanted(tokens, &mut cx.art, i, body.as_deref());
         let a = tokens.anims.get(i).unwrap_or(&still);
-        let left = if tokens.anims.get(i).is_some() { a.faces_left() } else { !ally };
+        let facing = if tokens.anims.get(i).is_some() { a.faces(anim_now, if instant { 0 } else { tuning.walk_ms }) } else { Facing::side(!ally) };
         let standing = u.is_alive() || still_dying(&mut cx.art, a, body.as_deref(), anim_now, instant, tuning.death_hold_ms);
         let (mut dx, mut dy) = (0, 0);
         if let Some((from, t0)) = a.slide {
@@ -2011,12 +2029,13 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
         let shake = if flash { tuning.hit_shake_px as f32 * if (now.elapsed().as_millis() / 30).is_multiple_of(2) { 1.0 } else { -1.0 } } else { 0.0 };
         let (fx, fy) = geo.foot(pos);
         let rest = geo.token_rect(pos, dx, dy);
-        // 3.8: the body's solid bounds of its idle frame 0 (animation frames do not move it); no body: the letter plate.
-        let body_rect = match body.as_deref().and_then(|k| cx.art.body_bounds(k, &palette, tp, left)) {
+        // 3.8: the body's solid bounds of its idle frame 0 (animation frames do not move it; the side idle with the
+        // facing's left/right, also while it faces up or down); no body: the letter plate.
+        let body_rect = match body.as_deref().and_then(|k| cx.art.body_bounds(k, &palette, tp, facing.left)) {
             Some(bb) => Rect::new(rest.x + bb.x, rest.y + bb.y, bb.w, bb.h),
             None => rest.inset(4),
         };
-        units.push(StageUnit { i, pos, ally, alive: u.is_alive(), standing, body, palette, left, flash, foot: (fx + dx, fy + dy), tr: geo.token_rect(pos, dx + shake as i32, dy), body_rect });
+        units.push(StageUnit { i, pos, ally, alive: u.is_alive(), standing, body, palette, facing, flash, foot: (fx + dx, fy + dy), tr: geo.token_rect(pos, dx + shake as i32, dy), body_rect });
     }
     // 3.7 pass 7: blocks, standing props and units sorted by their feet.
     let mut items = stage::board_items(&mut cx.art, &w.grid);
@@ -2136,13 +2155,13 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                             let a = tokens.anims.get(i).unwrap_or(&still);
                             let ring = if t.ally { ALLY } else { FOE };
                             let outline = if Some(i) == sel { Some(GOLD) } else if hovered == Some(i) { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { None };
-                            let frame = t.body.as_deref().and_then(|b| token_frame(&mut cx.art, b, &t.palette, &a.player, anim_now, tp, t.left).map(|(f, img)| {
+                            let frame = t.body.as_deref().and_then(|b| token_frame(&mut cx.art, b, &t.palette, &a.player, anim_now, tp, t.facing).map(|(f, img)| {
                                 ui.p.image(img, t.tr);
                                 f
                             }));
                             match (frame, t.body.as_deref()) {
                                 (Some(f), Some(b)) => {
-                                    if let Some(o) = outline.and_then(|col| token_outline(&mut cx.art, b, &t.palette, &f, tp, col, t.left)) {
+                                    if let Some(o) = outline.and_then(|col| token_outline(&mut cx.art, b, &t.palette, &f, tp, col, t.facing)) {
                                         ui.p.image(o, Rect::new(t.tr.x - 1, t.tr.y - 1, tp + 2, tp + 2));
                                     }
                                     frames.push((i, f));
@@ -2171,7 +2190,7 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                         Some(Through::Hovered) => rgba(255, 255, 255, tuning.hover_outline_alpha),
                         None => continue,
                     };
-                    if let Some(o) = token_outline(&mut cx.art, b, &t.palette, f, tp, col, t.left) {
+                    if let Some(o) = token_outline(&mut cx.art, b, &t.palette, f, tp, col, t.facing) {
                         ui.p.image(o, Rect::new(t.tr.x - 1, t.tr.y - 1, tp + 2, tp + 2));
                     }
                 }
@@ -2231,13 +2250,13 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
 
 #[cfg(test)]
 mod tests {
-    use super::{action_clips, boss_fight, facing_toward, sound_of, token_frame, token_outline, Action, BattleScreen, Tokens};
+    use super::{action_clips, boss_fight, sound_of, token_frame, token_outline, turn, Action, BattleScreen, Tokens};
     use crate::screens::Screen;
     use crate::stage::{Geom, View};
     use emberwake_battle::grid::GRID_H;
     use emberwake_battle::command::CmdKind;
     use emberwake_battle::grid::{V2, NO_CELL};
-    use aegis_core::assets::{ClipPlayer, Clips, Layers};
+    use aegis_core::assets::{ClipPlayer, Clips, Facing, Layers, View as Look};
     use aegis_ui::art::Art;
     use emberwake_battle::session::{EncounterDef, Phase, Session};
     use emberwake_host::{Battle, Host};
@@ -2281,16 +2300,204 @@ mod tests {
         let mut art = Art::layered(Layers::of(vec![root.clone()]));
         let (body, p, size) = ("brawler/goblin", ClipPlayer::default(), 3 * F as i32);
         let sheet = art.body_clip(body, "", "idle", 0, size).unwrap().clone();
-        let left = token_frame(&mut art, body, "", &p, 0, size, true).unwrap().1.clone();
-        let right = token_frame(&mut art, body, "", &p, 0, size, false).unwrap().1.clone();
+        let left = token_frame(&mut art, body, "", &p, 0, size, Facing::side(true)).unwrap().1.clone();
+        let right = token_frame(&mut art, body, "", &p, 0, size, Facing::side(false)).unwrap().1.clone();
         assert_eq!(left, sheet.mirrored(), "facing left: the sheet frame mirrored");
         assert_eq!(right, sheet, "facing right: as the sheet faces");
         assert_ne!(left, right);
-        let f = token_frame(&mut art, body, "", &p, 0, size, true).unwrap().0;
+        let f = token_frame(&mut art, body, "", &p, 0, size, Facing::side(true)).unwrap().0;
         let gold = [244, 198, 84, 255];
-        let left_ring = token_outline(&mut art, body, "", &f, size, gold, true).unwrap().clone();
+        let left_ring = token_outline(&mut art, body, "", &f, size, gold, Facing::side(true)).unwrap().clone();
         assert_eq!(left_ring, sheet.mirrored().outline(gold), "the selection outline follows the mirrored frame");
-        assert_eq!(token_outline(&mut art, body, "", &f, size, gold, false).unwrap().clone(), sheet.outline(gold));
+        assert_eq!(token_outline(&mut art, body, "", &f, size, gold, Facing::side(false)).unwrap().clone(), sheet.outline(gold));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// DIR4-G: a scratch body `units/<key>` with clips `ids` (one 8 x 8 frame each, 100 ms; `hurt` and `death` play
+    /// once), each `<of>_<view>` id whose side clip is listed a view row of it; every row a lopsided bar (so a mirror
+    /// shows) in its own colour (so the rows differ).
+    fn scratch_body(root: &std::path::Path, key: &str, ids: &[&str]) {
+        const F: u32 = 8;
+        let dir = root.join("units").join(key);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut px = vec![0u8; (F * F * ids.len() as u32 * 4) as usize];
+        for row in 0..ids.len() as u32 {
+            for x in [1u32, 2, 3, 6] {
+                let i = (((row * F + 4) * F + x) * 4) as usize;
+                px[i..i + 4].copy_from_slice(&[40 + 20 * row as u8, 140, 60, 255]);
+            }
+        }
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(dir.join("sheet.png")).unwrap()), F, F * ids.len() as u32);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&px).unwrap();
+        let clips: Vec<_> = ids.iter().map(|id| {
+            let mut c = json!({"id": id, "frames": 1, "ms": [100], "loop": !["hurt", "death"].contains(id)});
+            for v in ["up", "down"] {
+                if let Some(of) = id.strip_suffix(&format!("_{v}")).filter(|of| ids.contains(of)) {
+                    c["of"] = json!(of);
+                    c["view"] = json!(v);
+                }
+            }
+            c
+        }).collect();
+        std::fs::write(dir.join("clips.json"), json!({"frame": [F, F], "clips": clips}).to_string()).unwrap();
+    }
+
+    /// DIR4-G: a scratch tree with a body with front and back views (`test/views`) and one with side clips only
+    /// (`test/side`, as every body before DIR4-R1/R2/R3), and its `Art`.
+    fn view_bodies(tag: &str) -> (std::path::PathBuf, Art) {
+        let root = std::env::temp_dir().join(format!("emberwake_dir4g_{tag}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        scratch_body(&root, "test/views", &["idle", "walk", "hurt", "idle_down", "idle_up", "walk_up"]);
+        scratch_body(&root, "test/side", &["idle", "walk", "hurt"]);
+        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        for body in ["test/views", "test/side"] {
+            assert_eq!(art.body_problems(body), Vec::<String>::new(), "the scratch body {body} loads");
+        }
+        (root, art)
+    }
+
+    /// DIR4-G check 1: a unit whose target is two tiles straight below faces down and draws `idle_down` (never
+    /// mirrored) when its body has it, its side `idle` (mirrored by its left/right) otherwise.
+    #[test]
+    fn a_target_straight_below_draws_idle_down_when_the_body_has_it_and_side_idle_otherwise() {
+        let (root, mut art) = view_bodies("below");
+        let size = 24;
+        let mut p = ClipPlayer::default();
+        p.set_base("idle", 0);
+        for left in [false, true] {
+            let f = turn(Facing::side(left), V2 { x: 5, y: 2 }, V2 { x: 5, y: 4 });
+            assert_eq!(f, Facing { view: Look::Down, left }, "two tiles below: down, keeping left/right");
+            let (fr, img) = token_frame(&mut art, "test/views", "", &p, 0, size, f).map(|(fr, i)| (fr, i.clone())).unwrap();
+            assert_eq!((fr.clip.as_str(), fr.side), ("idle_down", false));
+            assert_eq!(img, art.body_clip("test/views", "", "idle_down", 0, size).unwrap().clone(), "a down row is never mirrored");
+            let (fr, img) = token_frame(&mut art, "test/side", "", &p, 0, size, f).map(|(fr, i)| (fr, i.clone())).unwrap();
+            assert_eq!((fr.clip.as_str(), fr.side), ("idle", true), "no down view: the side idle");
+            assert_eq!(img, art.body_clip_flipped("test/side", "", "idle", 0, size, left).unwrap().clone(), "mirrored by the kept left/right");
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Unit `h` of `host` steps to `to` at `now` (a step the tokens see).
+    fn slide_to(host: &mut Host, t: &mut Tokens, h: usize, to: V2, now: u64) {
+        let s = host.session.as_mut().unwrap();
+        s.w.grid.positions[h] = Some(to);
+        t.catch_up(s, now, false, 300, true);
+    }
+
+    /// DIR4-G check 2 (G2): a slide plays its walk in the step's facing: (5, 4) to (5, 2) `walk_up`, then `idle_up`
+    /// once the slide ends; (5, 4) to (7, 5) the side walk as drawn; (5, 4) to (3, 3) the side walk mirrored. A body
+    /// without the up view walks side-on.
+    #[test]
+    fn a_slide_plays_walk_up_or_the_side_walk_mirrored_by_its_direction() {
+        let (root, mut art) = view_bodies("slide");
+        let size = 24;
+        let mut host = skirmish(3);
+        let mut t = Tokens::default();
+        t.catch_up(host.session.as_ref().unwrap(), 0, false, 300, true);
+        let h = host.session.as_ref().unwrap().w.allies[0];
+        let mut now = 0;
+        let mut go = |host: &mut Host, t: &mut Tokens, x: i32, y: i32| {
+            now += 1000;
+            slide_to(host, t, h, V2 { x, y }, now);
+            now
+        };
+        let start = V2 { x: 5, y: 4 };
+        go(&mut host, &mut t, start.x, start.y);
+        let at = go(&mut host, &mut t, 5, 2);
+        let a = t.anims[h].clone();
+        assert_eq!(a.slide, Some((start, at)));
+        assert_eq!(a.faces(at + 10, 300).view, Look::Up);
+        let (fr, img) = token_frame(&mut art, "test/views", "", &a.player, at + 10, size, a.faces(at + 10, 300)).map(|(fr, i)| (fr, i.clone())).unwrap();
+        assert_eq!((fr.clip.as_str(), fr.side), ("walk_up", false), "(5, 4) to (5, 2) walks up");
+        assert_eq!(img, art.body_clip("test/views", "", "walk_up", 0, size).unwrap().clone());
+        let fr = token_frame(&mut art, "test/side", "", &a.player, at + 10, size, a.faces(at + 10, 300)).unwrap().0;
+        assert_eq!((fr.clip.as_str(), fr.side), ("walk", true), "no up view: the side walk");
+        let fr = token_frame(&mut art, "test/views", "", &a.player, at + 400, size, a.faces(at + 400, 300)).unwrap().0;
+        assert_eq!(fr.clip, "idle_up", "the slide over: it stands facing up");
+        for ((x, y), mirrored) in [((7, 5), false), ((3, 3), true)] {
+            go(&mut host, &mut t, start.x, start.y);
+            let at = go(&mut host, &mut t, x, y);
+            let a = t.anims[h].clone();
+            let f = a.faces(at + 10, 300);
+            assert_eq!(f, Facing::side(mirrored), "(5, 4) to ({x}, {y})");
+            let (fr, img) = token_frame(&mut art, "test/views", "", &a.player, at + 10, size, f).map(|(fr, i)| (fr, i.clone())).unwrap();
+            assert_eq!((fr.clip.as_str(), fr.side), ("walk", true), "(5, 4) to ({x}, {y}) walks side-on");
+            assert_eq!(img, art.body_clip_flipped("test/views", "", "walk", 0, size, mirrored).unwrap().clone(), "(5, 4) to ({x}, {y}) mirrored: {mirrored}");
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// DIR4-G check 4 (G4): a unit facing up that is hit plays the side `hurt` with its last left/right (mirrored when
+    /// left), its outline with it, then shows `idle_up` again.
+    #[test]
+    fn a_hit_while_facing_up_plays_the_side_hurt_then_idle_up_again() {
+        let (root, mut art) = view_bodies("hurt");
+        let size = 24;
+        let mut host = skirmish(3);
+        let mut t = Tokens::default();
+        t.catch_up(host.session.as_ref().unwrap(), 0, false, 300, true);
+        let h = host.session.as_ref().unwrap().w.allies[0];
+        for (k, (x, y)) in [(5, 4), (4, 4), (4, 2)].into_iter().enumerate() {
+            slide_to(&mut host, &mut t, h, V2 { x, y }, 1000 * (k as u64 + 1));
+        }
+        assert_eq!(t.anims[h].rest(), Facing { view: Look::Up, left: true }, "a step left, then up");
+        let hit = 10_000;
+        {
+            let s = host.session.as_mut().unwrap();
+            let u = &mut s.w.units[h];
+            (u.guard, u.stance) = (0.0, Stance::Neutral);
+            t.catch_up(s, hit - 1, false, 300, true);
+            s.w.units[h].hp -= 1;
+            t.catch_up(s, hit, false, 300, true);
+        }
+        let a = t.anims[h].clone();
+        let f = a.faces(hit + 10, 300);
+        let (fr, img) = token_frame(&mut art, "test/views", "", &a.player, hit + 10, size, f).map(|(fr, i)| (fr, i.clone())).unwrap();
+        assert_eq!((fr.clip.as_str(), fr.side), ("hurt", true), "no hurt_up: the side hurt");
+        assert_eq!(img, art.body_clip_flipped("test/views", "", "hurt", 0, size, true).unwrap().clone(), "with the last left");
+        let gold = [244, 198, 84, 255];
+        assert_eq!(token_outline(&mut art, "test/views", "", &fr, size, gold, f).unwrap().clone(), img.outline(gold), "the outline follows the side frame");
+        let fr = token_frame(&mut art, "test/views", "", &a.player, hit + 500, size, a.faces(hit + 500, 300)).unwrap().0;
+        assert_eq!((fr.clip.as_str(), fr.side), ("idle_up", false), "after the hit: idle_up again");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// DIR4-G check 5: a body without view clips (the scratch side body, and every shipped body of the skirmish that
+    /// has none) draws in any facing exactly as FACE1 did: `Art::played` mirrored when left, its outline the same.
+    #[test]
+    fn a_body_without_view_clips_draws_exactly_as_face1() {
+        let (root, mut scratch) = view_bodies("side");
+        let host = skirmish(3);
+        let s = host.session.as_ref().unwrap();
+        let mut shipped = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        let bodies: Vec<String> = s.art.iter().filter_map(|chain| shipped.first_body(&emberwake_content::art::body_chain(chain))).collect();
+        let gold = [244, 198, 84, 255];
+        let facings: Vec<Facing> = [Look::Side, Look::Down, Look::Up].into_iter().flat_map(|view| [false, true].map(|left| Facing { view, left })).collect();
+        let check = |art: &mut Art, body: &str| {
+            for clip in ["idle", "walk", "hurt"] {
+                let mut p = ClipPlayer::default();
+                p.set_base("idle", 0);
+                p.play(clip, 0);
+                for &f in &facings {
+                    let (fr, img) = token_frame(art, body, "", &p, 10, 40, f).map(|(fr, i)| (fr, i.clone())).unwrap();
+                    let (was, old) = art.played(body, "", &p, 10, 40, f.left).map(|(fr, i)| (fr, i.clone())).unwrap();
+                    assert_eq!((fr.clip.as_str(), fr.frame, &img), (was.clip.as_str(), was.frame, &old), "{body} {clip} in {f:?}");
+                    let ring = token_outline(art, body, "", &fr, 40, gold, f).unwrap().clone();
+                    assert_eq!(&ring, art.body_outline(body, "", &was.clip, was.frame, 40, gold, f.left).unwrap(), "{body} {clip} outline in {f:?}");
+                }
+            }
+        };
+        check(&mut scratch, "test/side");
+        let mut checked = 0;
+        for body in &bodies {
+            if shipped.clips(body).is_some_and(|c| c.clips.iter().all(|c| c.view == Look::Side)) {
+                check(&mut shipped, body);
+                checked += 1;
+            }
+        }
+        println!("shipped bodies without views checked: {checked} of {}", bodies.len());
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -2382,43 +2589,54 @@ mod tests {
         host
     }
 
+    /// DIR4-G (spec 4, check 3): a unit looks up or down at a target more vertical than horizontal (keeping its
+    /// left/right), sideways at anything else (a diagonal tie keeps the side view); its own tile keeps the facing.
     #[test]
-    fn facing_looks_toward_the_x_of_the_target_and_keeps_in_its_column() {
-        let at = V2 { x: 4, y: 3 };
-        assert_eq!(facing_toward(at, V2 { x: 2, y: 3 }), Some(true), "a target on the left");
-        assert_eq!(facing_toward(at, V2 { x: 6, y: 0 }), Some(false), "a target on the right (any row)");
-        assert_eq!(facing_toward(at, V2 { x: 4, y: 7 }), None, "same column: keep the facing");
+    fn facing_turns_four_ways_toward_the_target_and_a_diagonal_keeps_the_side_view() {
+        let at = V2 { x: 5, y: 4 };
+        let (right, left) = (Facing::side(false), Facing::side(true));
+        assert_eq!(turn(left, at, V2 { x: 5, y: 6 }), Facing { view: Look::Down, left: true }, "two tiles straight below");
+        assert_eq!(turn(right, at, V2 { x: 5, y: 2 }), Facing { view: Look::Up, left: false }, "two tiles straight above");
+        assert_eq!(turn(left, at, V2 { x: 6, y: 5 }), right, "the diagonal (+1, +1): side, right");
+        assert_eq!(turn(right, at, V2 { x: 4, y: 3 }), left, "the diagonal (-1, -1): side, left");
+        assert_eq!(turn(right, at, V2 { x: 3, y: 4 }), left, "a target on the left");
+        assert_eq!(turn(left, at, V2 { x: 7, y: 5 }), right, "a target more right than down");
+        let up = Facing { view: Look::Up, left: true };
+        assert_eq!(turn(up, at, at), up, "its own tile: unchanged");
     }
 
-    /// FACE1: a new battle faces the party right and the foes left; a step turns a unit toward its x, a purely vertical
-    /// one keeps the facing it had.
+    /// FACE1 and DIR4-G G2: a new battle faces the party right and the foes left (side view); a step turns a unit
+    /// toward it: up or down on a vertical step (keeping its left/right), sideways by its x otherwise.
     #[test]
-    fn a_new_battle_faces_the_party_right_and_a_vertical_step_keeps_the_facing() {
+    fn a_new_battle_faces_the_party_right_and_a_vertical_step_faces_up_or_down() {
         let mut host = skirmish(3);
         let mut t = Tokens::default();
         t.catch_up(host.session.as_ref().unwrap(), 0, false, 300, true);
         let s = host.session.as_ref().unwrap();
         for i in 0..s.w.units.len() {
-            assert_eq!(t.anims[i].left, !s.w.allies.contains(&i), "{} at the start", s.w.units[i].name);
+            assert_eq!(t.anims[i].facing, Facing::side(!s.w.allies.contains(&i)), "{} at the start", s.w.units[i].name);
         }
         let h = s.w.allies[0];
         let up = if s.w.grid.pos(h).expect("the hero stands on the grid").y > 0 { -1 } else { 1 };
+        let (go, back) = if up < 0 { (Look::Up, Look::Down) } else { (Look::Down, Look::Up) };
         let mut walk = |t: &mut Tokens, dx: i32, dy: i32| {
             let s = host.session.as_mut().unwrap();
             let at = s.w.grid.pos(h).unwrap();
             s.w.grid.positions[h] = Some(V2 { x: at.x + dx, y: at.y + dy });
             t.catch_up(s, 0, false, 300, true);
-            t.anims[h].left
+            assert_eq!(t.anims[h].step, t.anims[h].facing, "the slide shows the step's facing");
+            t.anims[h].facing
         };
-        assert!(!walk(&mut t, 0, up), "a vertical step keeps right");
-        assert!(walk(&mut t, -1, 0), "a step left turns left");
-        assert!(walk(&mut t, 0, -up), "a vertical step keeps left");
-        assert!(walk(&mut t, -1, up), "a diagonal step goes by its x");
-        assert!(!walk(&mut t, 1, 0), "a step right turns right");
+        assert_eq!(walk(&mut t, 0, up), Facing { view: go, left: false }, "a vertical step faces that way and keeps right");
+        assert_eq!(walk(&mut t, -1, 0), Facing::side(true), "a step left turns left");
+        assert_eq!(walk(&mut t, 0, -up), Facing { view: back, left: true }, "a vertical step keeps left");
+        assert_eq!(walk(&mut t, -1, up), Facing::side(true), "a diagonal step goes by its x");
+        assert_eq!(walk(&mut t, 1, 0), Facing::side(false), "a step right turns right");
     }
 
-    /// FACE1: a unit that resolves an attack turns toward its target: left when the target stands left of it, right
-    /// when it stands right (a foe too), and keeps its facing when the target is in its column; skip turns it the same.
+    /// FACE1 and DIR4-G G3: a unit that resolves an attack turns toward its target: left when the target stands left
+    /// of it, right when it stands right (a foe too), up at a target straight above keeping its left/right; skip turns
+    /// it the same.
     #[test]
     fn an_attacker_faces_its_target_on_either_side() {
         let mut host = skirmish(3);
@@ -2442,15 +2660,18 @@ mod tests {
                 t.catch_up(s, 0, false, 300, true);
                 skip.catch_up(s, 0, true, 300, true);
                 if let Some(k) = keep {
-                    (t.anims[actor].left, skip.anims[actor].left) = (k, k);
+                    (t.anims[actor].facing, skip.anims[actor].facing) = (Facing::side(k), Facing::side(k));
                 }
                 block += 1;
                 s.last_popped = Some((s.current_round, block, idx));
                 t.catch_up(s, 0, false, 300, true);
                 skip.catch_up(s, 0, true, 300, true);
-                let want = keep.unwrap_or(dx > 0);
-                assert_eq!(t.anims[actor].faces_left(), want, "{} attacks from {dx},{dy} of its target", s.w.units[actor].name);
-                assert_eq!(skip.anims[actor].faces_left(), want, "skip: the same facing");
+                let want = match keep {
+                    Some(k) => Facing { view: Look::Up, left: k },
+                    None => Facing::side(dx > 0),
+                };
+                assert_eq!(t.anims[actor].rest(), want, "{} attacks from {dx},{dy} of its target", s.w.units[actor].name);
+                assert_eq!(skip.anims[actor].rest(), want, "skip: the same facing");
             }
             if host.session.as_ref().unwrap().w.allies.contains(&actor) {
                 sides.0 = true;
@@ -2478,10 +2699,10 @@ mod tests {
         let (mut shown, mut hidden) = (Tokens::default(), Tokens::default());
         shown.catch_up(s, 0, false, 300, true);
         hidden.catch_up(s, 0, false, 300, false);
-        assert!(!shown.anims[e].faces_left(), "tells shown: {} faces its intent's target on its right", s.w.units[e].name);
-        assert!(hidden.anims[e].faces_left(), "tells hidden: {} keeps its start facing (left)", s.w.units[e].name);
+        assert_eq!(shown.anims[e].rest(), Facing::side(false), "tells shown: {} faces its intent's target on its right", s.w.units[e].name);
+        assert_eq!(hidden.anims[e].rest(), Facing::side(true), "tells hidden: {} keeps its start facing (left)", s.w.units[e].name);
         for &h in &s.w.allies {
-            assert_eq!(shown.anims[h].faces_left(), hidden.anims[h].faces_left(), "{} shows its plan either way", s.w.units[h].name);
+            assert_eq!(shown.anims[h].rest(), hidden.anims[h].rest(), "{} shows its plan either way", s.w.units[h].name);
         }
         let hero_planned = s.w.allies.iter().any(|&h| shown.anims[h].planned.is_some());
         assert!(hero_planned, "the aggressive preset gives a hero a target");
@@ -2493,17 +2714,17 @@ mod tests {
         let s = host.session.as_ref().unwrap();
         shown.catch_up(s, 0, false, 300, true);
         hidden.catch_up(s, 0, false, 300, false);
-        assert!(!shown.anims[e].faces_left(), "tells shown: the confirm keeps the facing it showed");
-        assert!(hidden.anims[e].faces_left(), "tells hidden: still its own facing after the confirm");
+        assert_eq!(shown.anims[e].rest(), Facing::side(false), "tells shown: the confirm keeps the facing it showed");
+        assert_eq!(hidden.anims[e].rest(), Facing::side(true), "tells hidden: still its own facing after the confirm");
     }
 
-    /// FACE1, played step by step (rule-derived over several seeds): after every step each unit faces the target of
-    /// the action it just resolved when that stands in another column, else the x of its step, else it keeps its
-    /// facing; while the party plans an enemy faces its tell's target. The skip setting ends every step in the same
-    /// facing.
+    /// FACE1 and DIR4-G, played step by step (rule-derived over several seeds): after every step each unit faces its
+    /// step turned toward the target of the action it just resolved (`turn`: four ways; no step or no target keeps
+    /// the facing); while the party plans an enemy faces its tell's target. The skip setting ends every step in the
+    /// same facing (G5).
     #[test]
     fn units_face_their_targets_and_steps_and_skip_agrees() {
-        let (mut turned_left, mut turned_right) = (0, 0);
+        let (mut turned_left, mut turned_right, mut turned_vertical) = (0, 0, 0);
         for seed in 1..=4 {
             let mut host = skirmish(seed);
             let (mut t, mut skip) = (Tokens::default(), Tokens::default());
@@ -2529,13 +2750,12 @@ mod tests {
                     for r in s.enemy_intents() {
                         let to = r.line.target.and_then(|u| s.w.grid.pos(u)).unwrap_or(r.line.cell);
                         if let (Some(from), true) = (s.w.grid.pos(r.unit), to != NO_CELL) {
-                            if let Some(left) = facing_toward(from, to) {
-                                assert_eq!(t.anims[r.unit].faces_left(), left, "{} shows its tell's target", s.w.units[r.unit].name);
-                            }
+                            let want = turn(t.anims[r.unit].facing, from, to);
+                            assert_eq!(t.anims[r.unit].rest(), want, "{} shows its tell's target", s.w.units[r.unit].name);
                         }
                     }
                 }
-                let before: Vec<(bool, Option<V2>)> = t.anims.iter().map(|a| (a.faces_left(), a.seen.pos)).collect();
+                let before: Vec<(Facing, Option<V2>)> = t.anims.iter().map(|a| (a.rest(), a.seen.pos)).collect();
                 let popped = host.session.as_ref().unwrap().last_popped;
                 assert_eq!(host.handle(&json!({"cmd": "step"}))["ok"], json!(true));
                 now += 1000;
@@ -2550,20 +2770,22 @@ mod tests {
                         CmdKind::Support { target, .. } | CmdKind::Item { target, .. } => s.w.grid.pos(*target).or(before[*target].1),
                         _ => None,
                     });
-                    let turn = s.w.grid.pos(i).zip(aim.filter(|c| *c != NO_CELL)).and_then(|(from, to)| facing_toward(from, to));
-                    let step = before[i].1.zip(s.w.grid.pos(i)).and_then(|(from, to)| facing_toward(from, to));
-                    let want = turn.or(step).unwrap_or(before[i].0);
-                    assert_eq!(t.anims[i].faces_left(), want, "seed {seed}: {} after the step", s.w.units[i].name);
-                    assert_eq!(skip.anims[i].faces_left(), want, "seed {seed}: skip ends {} in the same facing", s.w.units[i].name);
-                    match turn {
-                        Some(true) => turned_left += 1,
-                        Some(false) => turned_right += 1,
-                        None => {}
+                    let stepped = before[i].1.zip(s.w.grid.pos(i)).map_or(before[i].0, |(from, to)| turn(before[i].0, from, to));
+                    let aimed = s.w.grid.pos(i).zip(aim.filter(|c| *c != NO_CELL));
+                    let want = aimed.map_or(stepped, |(from, to)| turn(stepped, from, to));
+                    assert_eq!(t.anims[i].rest(), want, "seed {seed}: {} after the step", s.w.units[i].name);
+                    assert_eq!(skip.anims[i].rest(), want, "seed {seed}: skip ends {} in the same facing", s.w.units[i].name);
+                    if let Some((from, to)) = aimed.filter(|(from, to)| from != to) {
+                        match turn(stepped, from, to) {
+                            Facing { view: Look::Side, left: true } => turned_left += 1,
+                            Facing { view: Look::Side, left: false } => turned_right += 1,
+                            _ => turned_vertical += 1,
+                        }
                     }
                 }
             }
         }
-        assert!(turned_left > 0 && turned_right > 0, "actions turned left {turned_left}, right {turned_right}");
+        assert!(turned_left > 0 && turned_right > 0 && turned_vertical > 0, "actions turned left {turned_left}, right {turned_right}, up or down {turned_vertical}");
     }
 
     /// The Test Arena on `goblin_ambush` (the forest clearing) with the game's art, in battle view `view`.
@@ -2621,7 +2843,7 @@ mod tests {
         };
         assert_eq!(h, 0, "the first hero is unit 0");
         // before the first change the tokens have no animations yet and a hero faces right (as the draw does)
-        let left = b.tokens.anims.get(h).is_some_and(|a| a.faces_left());
+        let left = b.tokens.anims.get(h).is_some_and(|a| a.rest().left);
         let bb = cx.art.body_bounds(&body, &palette, geo.token_px, left).expect("solid pixels");
         let frame = cx.art.body_clip_flipped(&body, &palette, "idle", 0, geo.token_px, left).unwrap().clone();
         let top_x = (bb.x..bb.x + bb.w).find(|x| frame.px[((bb.y * frame.w + x) * 4 + 3) as usize] >= aegis_ui::canvas::OUTLINE_ALPHA).unwrap();
