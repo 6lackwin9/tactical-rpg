@@ -57,6 +57,8 @@ pub fn create(d: &Data, world_id: &str, ids: &[String], seed: i64) -> Result<Gam
     }
     let mut state = GameState::create(d, world_id, party);
     state.rng_seed = if seed >= 0 { seed.min(SEED_MAX) } else { clock_seed() };
+    // CAMPAIGN1 F5: the run id comes from the seed
+    state.campaign = crate::campaign::Campaign::fresh(d, world_id, state.rng_seed);
     state.party.gold = dialogue::start_gold(d, world_id);
     state.party.supplies = travel::start_supplies(d, world_id);
     let errors = state.validate(d);

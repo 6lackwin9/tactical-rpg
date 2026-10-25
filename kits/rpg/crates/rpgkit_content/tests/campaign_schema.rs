@@ -254,6 +254,22 @@ fn each_bad_meter_field_is_one_error() {
 }
 
 #[test]
+fn a_self_feeding_pair_of_meters_is_one_error() {
+    // X4: alert's repeatable rule moves `heat`; heat's repeatable rule moves alert back
+    let data = campaign_world("feedback");
+    let heat = json!({"id": "heat", "name": "Heat", "bands": [{"id": "low", "name": "Low", "from": 0, "tone": "calm"}],
+        "rules": [{"id": "h50", "at": 50, "effects": [{"effect": "meter_add", "meter": "alert", "delta": 5}]}]});
+    write_kind(&data, "meters", json!([alert(), doom(), heat]));
+    let v = store::view(&data);
+    let gauge = alert();
+    let feeds = with(&gauge, &["rules", "0", "effects"], json!([{"effect": "meter_add", "meter": "heat", "delta": 5}]));
+    assert_one(&v, "meters", &gauge, &feeds, "move each other", "a pair");
+    let once = with(&feeds, &["rules", "0", "once"], json!(true));
+    assert_eq!(added(&v, "meters", &gauge, &once), Vec::<String>::new(), "a once rule cannot feed forever");
+    drop_scratch(&data);
+}
+
+#[test]
 fn each_bad_checkpoint_or_trigger_field_is_one_error() {
     let data = campaign_world("rows");
     let v = store::view(&data);

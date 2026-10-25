@@ -471,6 +471,9 @@ pub struct GameState {
     /// REWARD1: {encounter qid: [roster key `ref#n`, or "objective"]} whose `once` purse share or objective reward
     /// was paid.
     pub reward_paid: Dict,
+    /// CAMPAIGN1 11.5: the campaign state, Some only in a world whose lineage sets `campaign` (X1); saved as the key
+    /// `campaign` only then (X3).
+    pub campaign: Option<crate::campaign::Campaign>,
     /// Raw type problems from from_dict (not saved; validate reports them).
     pub load_problems: Vec<String>,
 }
@@ -507,6 +510,7 @@ impl Default for GameState {
             autoplay: default_autoplay(),
             purses: Dict::new(),
             reward_paid: Dict::new(),
+            campaign: None,
             load_problems: Vec::new(),
         }
     }
@@ -530,12 +534,16 @@ impl GameState {
     pub fn create(d: &Data, world_id: &str, party: PartyState) -> Self {
         let mut g = Self { world_id: world_id.into(), party, ..Default::default() };
         g.party.apply_cap(d.party_max(world_id));
+        g.campaign = crate::campaign::Campaign::fresh(d, world_id, g.rng_seed);
         g
     }
 
     pub fn set_flag(&mut self, key: &str, value: Value) -> String {
         if !flag_key_ok(key) {
             return format!("Flag key '{key}' must be non-empty [a-z0-9_.].");
+        }
+        if rpgkit_data::reserved_key(key) {
+            return crate::campaign::reserved_text(key);
         }
         if !flag_value_ok(&value) {
             return format!("Flag '{key}' must be a bool, int or String.");
@@ -547,6 +555,16 @@ impl GameState {
     /// `gs.get_flag(key, fallback)`.
     pub fn flag(&self, key: &str) -> Option<&Value> {
         self.flags.get(key)
+    }
+
+    /// A flag condition's value: a read key (`meter.`, `campaign.`, `roster.`; CAMPAIGN1 11.4) from the campaign,
+    /// any other key from the flags.
+    pub fn read_flag(&self, key: &str) -> Option<Value> {
+        if rpgkit_data::reserved_key(key) {
+            crate::campaign::read_key(self, key)
+        } else {
+            self.flags.get(key).cloned()
+        }
     }
 
     pub fn flag_true(&self, key: &str) -> bool {
@@ -564,7 +582,7 @@ impl GameState {
     pub fn to_value(&self) -> Value {
         let mut loot = self.loot_claimed.clone();
         loot.sort();
-        Value::Object(json::obj([
+        let mut out = json::obj([
             ("world_id", Value::String(self.world_id.clone())),
             ("location_id", Value::String(self.location_id.clone())),
             ("party", self.party.to_value()),
@@ -580,7 +598,11 @@ impl GameState {
             ("autoplay", Value::Object(self.autoplay.clone())),
             ("purses", Value::Object(self.purses.clone())),
             ("reward_paid", Value::Object(self.reward_paid.clone())),
-        ]))
+        ]);
+        if let Some(c) = &self.campaign {
+            out.insert("campaign".into(), c.to_value());
+        }
+        Value::Object(out)
     }
 
     pub fn from_dict(data: &Data, d: &Dict) -> Self {
@@ -647,6 +669,14 @@ impl GameState {
         };
         g.rng_seed = whole("rng_seed", "rng_seed must be a whole number.", &mut g);
         g.time = whole("time", "time must be a whole number >= 0.", &mut g);
+        // CAMPAIGN1 11.5: an absent block reads as a fresh one in a campaign world (older saves), none elsewhere
+        g.campaign = match d.get("campaign") {
+            Some(raw) => crate::campaign::Campaign::from_value(data, &g.world_id, g.rng_seed, g.time, raw, &mut g.load_problems),
+            None => crate::campaign::Campaign::fresh(data, &g.world_id, g.rng_seed).map(|mut c| {
+                c.sync(g.time);
+                c
+            }),
+        };
         g
     }
 
@@ -713,6 +743,9 @@ impl GameState {
         }
         if self.reward_paid.values().any(|v| !v.as_array().is_some_and(|a| a.iter().all(Value::is_string))) {
             errors.push("reward_paid must map encounter ids to lists of keys.".into());
+        }
+        if let Some(c) = &self.campaign {
+            errors.extend(c.validate());
         }
         errors
     }

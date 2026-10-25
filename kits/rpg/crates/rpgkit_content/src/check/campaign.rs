@@ -282,12 +282,46 @@ pub fn meter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
             }
         }
     }
+    errors.extend(feedback_errors(v, w, e));
     if let Some(hud) = object(json::get(e, "hud"), "HUD", &mut errors) {
         errors.extend(unknown_keys(hud, &HUD_KEYS, "HUD"));
         errors.extend(text_key(hud, "short", HUD_SHORT_MAX, true, "HUD"));
         errors.extend(text_key(hud, "icon", TEXT_MAX, false, "HUD"));
         if hud.get("order").is_some_and(|o| !json::is_int(o)) {
             errors.push("HUD: order must be a whole number.".into());
+        }
+    }
+    errors
+}
+
+/// The meter refs a meter row's repeatable rules (`once` off, the default) move through `meter_add` or `meter_set`.
+fn moved_by_repeatable_rules(e: &Dict) -> Vec<String> {
+    let mut out = Vec::new();
+    for r in json::aget(e, "rules").iter().filter_map(Value::as_object).filter(|r| !json::b(r, "once", false)) {
+        for fx in json::aget(r, "effects").iter().filter_map(Value::as_object) {
+            if matches!(json::s(fx, "effect").as_str(), "meter_add" | "meter_set") {
+                out.push(json::s(fx, "meter"));
+            }
+        }
+    }
+    out
+}
+
+/// X4: a self-feeding pair the check can see: two meters whose repeatable rules move each other (the runtime stops
+/// after 8 passes a tick; the data should not lean on that).
+fn feedback_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
+    let me = json::s(e, "id");
+    let mut errors = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    for r in moved_by_repeatable_rules(e) {
+        let other = v.worlds.resolve(w, "meters", &r);
+        let id = json::s(other, "id");
+        if other.is_empty() || id == me || seen.contains(&id) {
+            continue;
+        }
+        seen.push(id.clone());
+        if moved_by_repeatable_rules(other).iter().any(|back| json::s(v.worlds.resolve(w, "meters", back), "id") == me) {
+            errors.push(format!("Rules of meters '{me}' and '{id}' move each other (a self-feeding pair): make one of those rules once."));
         }
     }
     errors

@@ -384,6 +384,13 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     if paid_gold > 0 {
         out.insert("gold".into(), int(paid_gold));
     }
+    // CAMPAIGN1 X4: the battle tick (meter inputs by the encounter's tags and the outcome); its events only when there
+    // are some (none outside a campaign world, X3)
+    let cause = crate::campaign::Cause::Battle { encounter: qid, tags: json::sget(&enc, "tags"), outcome: outcome.to_string() };
+    let events = crate::campaign::tick(d, gs, &cause);
+    if !events.is_empty() {
+        out.insert("campaign".into(), Value::Array(events));
+    }
     out
 }
 
@@ -398,7 +405,8 @@ pub fn settle(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, 
     }
 }
 
-/// The keys an `after_fight` result carries from `apply`: `rewards`, and `gold` when some was paid.
+/// The keys an `after_fight` result carries from `apply`: `rewards`, `gold` when some was paid, and `campaign` (the
+/// campaign events, CAMPAIGN1 W1) when there are some.
 pub fn result_keys(applied: &Dict) -> Dict {
     let mut out = Dict::new();
     if let Some(r) = applied.get("rewards") {
@@ -406,6 +414,9 @@ pub fn result_keys(applied: &Dict) -> Dict {
     }
     if json::i(applied, "gold", 0) > 0 {
         out.insert("gold".into(), int(json::i(applied, "gold", 0)));
+    }
+    if let Some(c) = applied.get("campaign") {
+        out.insert("campaign".into(), c.clone());
     }
     out
 }

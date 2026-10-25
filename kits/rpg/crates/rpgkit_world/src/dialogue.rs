@@ -305,6 +305,9 @@ pub struct DialogueRunner {
     pending: Option<(String, Vec<Dict>, String)>,
     shop_to: String,
     pub notes: Vec<String>,
+    /// CAMPAIGN1 W1: the campaign events of the effects applied since the last result (a node's effects when the
+    /// conversation opens included); the next result carries them as `campaign`.
+    pub campaign_events: Vec<Value>,
 }
 
 fn res_ok() -> Dict {
@@ -526,10 +529,13 @@ impl DialogueRunner {
         }
     }
 
-    fn with_notes(&self, mut res: Dict) -> Dict {
+    fn with_notes(&mut self, mut res: Dict) -> Dict {
         let mut all = json::sget(&res, "notes");
         all.extend(self.notes.iter().cloned());
         res.insert("notes".into(), json::strs(&all));
+        if !self.campaign_events.is_empty() {
+            res.insert("campaign".into(), Value::Array(std::mem::take(&mut self.campaign_events)));
+        }
         res
     }
 
@@ -613,12 +619,16 @@ impl DialogueRunner {
                 "set_flag" => {
                     if !flag_key_ok(&json::s(fx, "key")) || !flag_value_ok(fx.get("value").unwrap_or(&Value::Bool(true))) {
                         out.push(format!("Flag '{}' can't be set.", json::s(fx, "key")));
+                    } else if rpgkit_data::reserved_key(&json::s(fx, "key")) {
+                        out.push(crate::campaign::reserved_text(&json::s(fx, "key")));
                     }
                 }
                 "add_flag" => {
                     let k = json::s(fx, "key");
                     if !flag_key_ok(&k) || !fx.get("delta").is_some_and(json::is_int) {
                         out.push(format!("Flag '{k}' can't be changed."));
+                    } else if rpgkit_data::reserved_key(&k) {
+                        out.push(crate::campaign::reserved_text(&k));
                     } else if !gs.flag(&k).map(json::is_int).unwrap_or(true) {
                         out.push(format!("Flag '{k}' is not a number."));
                     }
@@ -696,6 +706,7 @@ impl DialogueRunner {
     }
 
     fn apply(&mut self, d: &Data, gs: &mut GameState, effects: &[Dict]) {
+        let act = gs.campaign.as_ref().map(|c| c.act);
         for fx in effects {
             match json::s(fx, "effect").as_str() {
                 "set_flag" => {
@@ -716,8 +727,15 @@ impl DialogueRunner {
                     quest::take(d, gs, json::get(fx, "items"), json::i(fx, "gold", 0));
                 }
                 "recruit" => self.recruit(d, gs, &json::s(fx, "character")),
-                _ => {}
+                // CAMPAIGN1 11.3 (inert outside a campaign world)
+                _ => {
+                    crate::campaign::apply_effect(d, gs, fx, &mut self.campaign_events);
+                }
             }
+        }
+        if !effects.is_empty() {
+            let events = crate::campaign::after_effects(d, gs, act);
+            self.campaign_events.extend(events);
         }
     }
 
