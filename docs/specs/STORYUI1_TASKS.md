@@ -76,6 +76,9 @@ User 2026-10-25: hold new art for the story scenes (no image API for them yet) a
 placeholders wherever code can draw them (task STORYART1, `tools/gen_art.py`); the rows above that stay poor are
 revisited at the M4 art pass. Sound stays as listed.
 
+User 2026-10-25 (after the STORYART1 review): the main menu switches to the sunless picture (task MENU2: the game's
+`backgrounds/menu/main_menu.png` becomes it), and the `sunk_ward` world card keeps the subtitle "The Young Vanguard".
+
 ## 2. Tests derived from the rules
 
 | Id | Task | Test | Rule |
