@@ -12,6 +12,23 @@ pub const GEAR_REACH_CAP: i32 = 1;
 pub const GROUPS: [&str; 2] = ["spell", "heal"];
 /// RULESET1 V4 (tasks 1.4): the widest foresight reveal range in tiles.
 pub const FORESIGHT_RANGE_MAX: i32 = 8;
+/// RULESET1 tasks 1.4: the largest `stagger_taken` multiplier.
+pub const STAGGER_TAKEN_MULT_MAX: f64 = 2.0;
+
+/// RULESET1 P6, tasks 1.4: a passive `stagger_taken` effect: stagger from an action of at most `max_blocks` blocks
+/// (0 = any action) is multiplied by `mult` (a Snap-proof trait: mult 0, max_blocks 1).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StaggerTaken {
+    pub mult: f64,
+    pub max_blocks: i32,
+}
+
+impl StaggerTaken {
+    /// Whether the effect applies to stagger from an action `blocks` long.
+    pub fn matches(&self, blocks: i32) -> bool {
+        self.max_blocks <= 0 || blocks <= self.max_blocks
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Stance {
@@ -96,6 +113,11 @@ pub struct Unit {
     /// RULESET1 V4: the widest `range` of the unit's foresight passives (0 = today's rule only); read only under the
     /// rule `plan_badges`.
     pub foresight_range: i32,
+    /// RULESET1 P2 (rule poise): the unit row's `poise`: -1 = the ruleset's derived Max Poise, 0 = no poise bar (never
+    /// breaks), above 0 = a fixed Max Poise. Units built from member state keep -1.
+    pub poise: i32,
+    /// RULESET1 P6: the unit's passive `stagger_taken` effects in apply order (read only under the rule poise).
+    pub stagger_taken: Vec<StaggerTaken>,
     /// Passive ids applied (Passives.apply: each once).
     pub passives: Vec<String>,
     /// Combat state (empty for a freshly built unit).
@@ -158,6 +180,8 @@ impl Unit {
             passive_spell_reach: 0,
             foresight_source: String::new(),
             foresight_range: 0,
+            poise: -1,
+            stagger_taken: Vec::new(),
             passives: Vec::new(),
             st: StatusState::default(),
             is_withdrawn: false,
@@ -354,6 +378,11 @@ impl Unit {
                         self.foresight_source = id.clone();
                     }
                     self.foresight_range = self.foresight_range.max(value::int(e, "range", 0).clamp(0, FORESIGHT_RANGE_MAX));
+                }
+                // RULESET1 P6: passives only (gear effects are rebuilt on every sync and would pile up)
+                "stagger_taken" if !gear => {
+                    let mult = value::float(e, "mult", 1.0).clamp(0.0, STAGGER_TAKEN_MULT_MAX);
+                    self.stagger_taken.push(StaggerTaken { mult, max_blocks: value::int(e, "max_blocks", 0).max(0) });
                 }
                 _ => {}
             }
@@ -574,6 +603,7 @@ pub fn build_unit(cat: &Catalog, e: &UnitDef, default_ap: i32) -> Unit {
     }
     u.power_override = e.power;
     u.armor_override = e.armor;
+    u.poise = e.poise;
     for (k, v) in &e.status_resist {
         u.status_resist.insert(k.clone(), *v);
     }

@@ -4,11 +4,12 @@
 //! consumer calls `lands` (the classic rules read no derived stat).
 
 use crate::gear::TIER_SOURCE;
+use crate::ruleset::Ruleset;
 use crate::stats::roundi;
 use crate::unit::Unit;
 use aegis_core::rng::GodotRng;
 use indexmap::IndexMap;
-use rpgkit_data::{Catalog, DerivedStatDef, LEVEL_INPUT, STATS};
+use rpgkit_data::{Catalog, DerivedStatDef, GEAR_MITIGATION_INPUT, LEVEL_INPUT, STATS};
 use serde_json::Value;
 
 /// The per-save roll stream of resist checks out of battle (`rolls::chance(gs, RESIST_STREAM, chance)`).
@@ -28,6 +29,8 @@ pub enum InputKind {
     Stat,
     /// The unit level.
     Level,
+    /// RULESET1 P1: the summed `effective_mitigation` of the unit's worn gear (`Inventory::total_flat_mitigation`).
+    Gear,
     /// A key of the row's `constants`.
     Constant,
     /// Another derived row (its final value).
@@ -145,6 +148,34 @@ pub fn lands(cat: &Catalog, ruleset: &str, unit: &Unit, check: &ResistCheck, rng
     roll(rng, resist_chance(cat, ruleset, unit, &check.resist, check.potency))
 }
 
+// ---- The same reads by a battle's ruleset (RULESET1-P: `World.ruleset`, `EncounterDef.ruleset`; the `&str` above is
+// its id) ------------------------------------------------------------------------------------------------------------
+
+/// `row` in `rules`.
+pub fn row_for<'a>(cat: &'a Catalog, rules: &Ruleset, id: &str) -> Option<&'a DerivedStatDef> {
+    row(cat, &rules.id, id)
+}
+
+/// `value` in `rules`.
+pub fn value_for(cat: &Catalog, rules: &Ruleset, unit: &Unit, id: &str) -> Option<i32> {
+    value(cat, &rules.id, unit, id)
+}
+
+/// `breakdown` in `rules`.
+pub fn breakdown_for(cat: &Catalog, rules: &Ruleset, unit: &Unit, id: &str) -> Option<Breakdown> {
+    breakdown(cat, &rules.id, unit, id)
+}
+
+/// `resist_chance` in `rules`.
+pub fn resist_chance_for(cat: &Catalog, rules: &Ruleset, unit: &Unit, id: &str, potency: i32) -> i32 {
+    resist_chance(cat, &rules.id, unit, id, potency)
+}
+
+/// `lands` in `rules`.
+pub fn lands_for(cat: &Catalog, rules: &Ruleset, unit: &Unit, check: &ResistCheck, rng: &mut GodotRng) -> bool {
+    lands(cat, &rules.id, unit, check, rng)
+}
+
 /// The reserved consumer shape `{"resist": "<derived id>", "potency": 1-200}` (hazards, nightmares, quirks).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResistCheck {
@@ -199,13 +230,17 @@ impl<'a> Eval<'a> {
         Self { cat, unit, weapon: unit.weapon_context(), done: IndexMap::new(), busy: Vec::new() }
     }
 
-    /// A formula name: a base stat, `level`, a constant of the row, another row (computed whatever its rulesets), or 0.
+    /// A formula name: a base stat, `level`, `gear_mitigation`, a constant of the row, another row (computed whatever
+    /// its rulesets), or 0.
     fn input(&mut self, d: &DerivedStatDef, name: &str) -> (InputKind, f64) {
         if STATS.contains(&name) {
             return (InputKind::Stat, self.unit.stats.stat(name, self.weapon.as_deref()) as f64);
         }
         if name == LEVEL_INPUT {
             return (InputKind::Level, self.unit.stats.level as f64);
+        }
+        if name == GEAR_MITIGATION_INPUT {
+            return (InputKind::Gear, self.unit.inventory.total_flat_mitigation(Some(&self.unit.stats)) as f64);
         }
         if let Some(c) = d.constants.get(name) {
             return (InputKind::Constant, *c);

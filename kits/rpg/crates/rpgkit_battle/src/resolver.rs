@@ -20,6 +20,10 @@ pub struct ScheduledAction {
     /// The last block it occupies: `impact + recovery` (classic: `impact`).
     pub end: i32,
     pub cancelled: bool,
+    /// The action has landed (executed at its impact block); RULESET1 P5: no longer in windup.
+    pub landed: bool,
+    /// RULESET1 P7: cancelled by its unit's break (rule poise).
+    pub broken: bool,
 }
 
 /// A combo an action resolved (CombatResolver.combo_resolved): "exploit", "break" or "flow".
@@ -83,7 +87,7 @@ impl Resolver {
         if self.scheduled.iter().any(|a| a.unit == unit && !a.cancelled && !(end < a.start || start > a.end)) {
             return false;
         }
-        self.scheduled.push(ScheduledAction { unit, command, start, impact, end, cancelled: false });
+        self.scheduled.push(ScheduledAction { unit, command, start, impact, end, cancelled: false, landed: false, broken: false });
         true
     }
 
@@ -146,6 +150,8 @@ impl Resolver {
                 self.notes.push((i, msg.clone()));
                 self.log.push(msg);
             }
+            // RULESET1 P11: a heavy windup holds the unit up while it winds up (rule poise)
+            crate::poise::on_start(w, c, &mut self.scheduled[i].command);
         }
     }
 
@@ -161,6 +167,10 @@ impl Resolver {
         self.scheduled[idx].command.execute(w, &mut self.rng);
         // RULESET1_INTENT MV8: a carried retreat follows the hit (nothing in classic)
         self.scheduled[idx].command.after_impact(w, &mut self.rng);
+        self.scheduled[idx].landed = true;
+        // RULESET1 P11, P4-P14: the windup bonus comes off; the hits stagger and may break (rule poise)
+        crate::poise::drop_bonus(w, unit, &mut self.scheduled[idx].command);
+        crate::poise::resolve_hits(self, w, idx);
         let cmd = &self.scheduled[idx].command;
         if !cmd.log.is_empty() {
             self.log.push(cmd.log.clone());

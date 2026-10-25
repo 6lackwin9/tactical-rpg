@@ -136,6 +136,8 @@ pub struct World {
     /// RULESET1 V2 (`EncounterDef.plan_reveal`): every enemy's whole plan is shown while planning; read only under the
     /// rule `plan_badges` (the Arena and the Dojo may flip it mid-battle).
     pub plan_reveal: bool,
+    /// RULESET1 5 (rule `poise`): each unit's poise bar; empty in classic.
+    pub poise: IndexMap<UnitId, crate::poise::PoiseState>,
 }
 
 impl World {

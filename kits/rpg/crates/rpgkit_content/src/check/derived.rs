@@ -8,7 +8,7 @@ use crate::source::fields;
 use aegis_content::schema::is_id;
 use aegis_core::formula::{self, Formula};
 use aegis_core::json::{self, gstr, Dict};
-use rpgkit_data::{LEVEL_INPUT, STATS};
+use rpgkit_data::{GEAR_MITIGATION_INPUT, LEVEL_INPUT, STATS};
 use rpgkit_rules::ruleset::RULESETS;
 use rpgkit_rules::status;
 use serde_json::Value;
@@ -142,6 +142,8 @@ fn row_errors(rows: &[Dict], ids: &[String], i: usize) -> (Vec<String>, Option<F
         out.push(format!("ID '{id}' is a base stat."));
     } else if id == LEVEL_INPUT {
         out.push(format!("ID '{id}' is the unit level input."));
+    } else if id == GEAR_MITIGATION_INPUT {
+        out.push(format!("ID '{id}' is the worn gear mitigation input."));
     } else if formula::is_function(id) {
         out.push(format!("ID '{id}' is a formula function."));
     }
@@ -169,14 +171,14 @@ fn row_errors(rows: &[Dict], ids: &[String], i: usize) -> (Vec<String>, Option<F
         }
         Ok(f) => {
             for n in f.names() {
-                let known = STATS.contains(&n.as_str()) || n == LEVEL_INPUT || constants.contains(n) || ids.contains(n);
+                let known = STATS.contains(&n.as_str()) || n == LEVEL_INPUT || n == GEAR_MITIGATION_INPUT || constants.contains(n) || ids.contains(n);
                 if known {
                     continue;
                 }
                 if is_base_stat(n) {
                     out.push(format!("Formula: base stats are upper case ('{}', not '{n}').", n.to_ascii_uppercase()));
                 } else {
-                    out.push(format!("Formula: unknown name '{n}' (a base stat {}, {LEVEL_INPUT}, a derived stat id or a constant).", STATS.join(", ")));
+                    out.push(format!("Formula: unknown name '{n}' (a base stat {}, {LEVEL_INPUT}, {GEAR_MITIGATION_INPUT}, a derived stat id or a constant).", STATS.join(", ")));
                 }
             }
             Some(f)
@@ -226,6 +228,8 @@ fn constant_errors(v: &Value, ids: &[String], out: &mut Vec<String>) -> Vec<Stri
             out.push(format!("Constants: '{k}' is a base stat."));
         } else if k == LEVEL_INPUT {
             out.push(format!("Constants: '{k}' is the unit level input."));
+        } else if k == GEAR_MITIGATION_INPUT {
+            out.push(format!("Constants: '{k}' is the worn gear mitigation input."));
         } else if ids.contains(k) {
             out.push(format!("Constants: '{k}' is a derived stat id."));
         }

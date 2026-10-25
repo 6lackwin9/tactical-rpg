@@ -164,6 +164,9 @@ pub struct UnitSnap {
     pub withdrawn: bool,
     pub statuses: Vec<String>,
     pub pending: Vec<String>,
+    /// RULESET1 5 (rule poise): poise now and Max Poise at the last refill (0 and 0 in classic or without a bar).
+    pub poise: i32,
+    pub max_poise: i32,
 }
 
 /// One round as it was played (the round archive: CombatSession.round_actions and round_snapshots): the scheduled
@@ -358,7 +361,7 @@ impl Session {
         let count = built.len();
         let mut grid = Grid::new(def.open, def.exits.clone(), TerrainTable::from_catalog(&cat), count);
         grid.apply_board(&def.zone, &def.rows);
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new() };
         w.add_item_skills();
         let objective = Objectives::create(&def.raw);
         // MORALE1 1.2: unit keys, tiers, authored profiles and the starting groups.
@@ -454,6 +457,8 @@ impl Session {
         // RULESET1_INTENT RS2: last round's Rest pays after ap_regen; the round's target and marks reset
         let rest = round_intent::round_start(&mut self.w);
         self.events.extend(rest);
+        // RULESET1 P3: every poise bar refills before planning (rule poise)
+        crate::poise::round_start(&mut self.w);
         self.current_round = round;
         self.current_block = 1;
         self.phase = Phase::Planning;
@@ -543,6 +548,8 @@ impl Session {
                 withdrawn: u.is_withdrawn,
                 statuses: u.st.active.iter().cloned().collect(),
                 pending: u.st.pending.iter().cloned().collect(),
+                poise: crate::poise::state(&self.w, i).map_or(0, |p| p.value),
+                max_poise: crate::poise::state(&self.w, i).map_or(0, |p| p.max),
             })
             .collect()
     }
@@ -1007,10 +1014,22 @@ impl Session {
             self.on_action_resolved(idx);
             let (round, block) = (self.current_round, self.current_block);
             let a = self.resolver.scheduled[idx].clone();
-            // Every popped action gets its cell, also one cancelled before it resolved (as Godot logs it).
-            self.append(crate::log::from_action(&self.w, &a, round, block));
+            // Every popped action gets its cell, also one cancelled before it resolved (as Godot logs it); RULESET1 P9:
+            // one its unit's break cancelled has the break's cell instead
+            if !a.broken {
+                self.append(crate::log::from_action(&self.w, &a, round, block));
+            }
             for r in &a.command.reactions {
                 self.append(crate::log::riposte_entry(&self.w, r, round, block));
+            }
+            // RULESET1 P9: each break the action dealt gets its cell; the metrics count the hits (rule poise)
+            for st in &a.command.staggers {
+                if let Some(b) = &st.broke {
+                    self.append(crate::log::break_entry(&self.w, st.target, b, round, block));
+                }
+            }
+            if !a.command.staggers.is_empty() {
+                self.feed(|m, s| m.on_staggers(s, idx));
             }
         }
         if self.pending.is_empty() {

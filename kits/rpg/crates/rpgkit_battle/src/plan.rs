@@ -272,6 +272,8 @@ impl PlanEntry {
         cmd.recovery = self.recovery;
         cmd.carry = self.carry;
         cmd.intent_buff = s.intent_buff;
+        // RULESET1 5, 7: what the hit does to poise and armour (the rules poise and pierce read it)
+        cmd.impact = crate::poise::Impact::of(s);
         cmd.name = s.name.clone();
         cmd.ap_cost = self.skill_ap;
         cmd.stance_switch_cost = self.switch_ap;
@@ -1598,6 +1600,8 @@ pub fn expected(w: &World, c: UnitId, foe: UnitId, sid: SkillId, stance: Option<
             attacker_stance: stance,
             include_guard: false,
             cover,
+            // RULESET1 A2: an armour-piercing skill skips armour under the rule pierce
+            ignore_armor: crate::poise::Impact::of(s).armor_piercing && w.ruleset.has(rpgkit_rules::ruleset::PIERCE),
             ..HitInput::default()
         },
     )

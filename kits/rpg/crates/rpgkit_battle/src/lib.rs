@@ -10,6 +10,7 @@ pub mod log;
 pub mod metrics;
 pub mod path;
 pub mod plan;
+pub mod poise;
 pub mod report;
 pub mod resolver;
 pub mod round_intent;

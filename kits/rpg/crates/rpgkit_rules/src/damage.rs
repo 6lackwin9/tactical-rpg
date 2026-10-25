@@ -2,6 +2,7 @@
 //!
 //!   Attack Power = (Weapon Power + Unit Power) x tier power scale   (authored power replaces it, unscaled)
 //!   Hit = Attack Power x Focus x Skill x Stance x Crit x (1 - min(cap, Guard + Cover)) x (1 - Armor), minimum 1
+//!   (RULESET1 A2: an armour-piercing hit under the rule pierce skips the Armor term.)
 
 use crate::gear::Equipment;
 use crate::stats::roundi;
@@ -160,11 +161,13 @@ pub struct HitInput {
     pub attacker_stance: Option<Stance>,
     pub include_guard: bool,
     pub cover: f64,
+    /// RULESET1 A2 (rule pierce, skill flag `armor_piercing`): the armour term is 1.0 (guard and cover still apply).
+    pub ignore_armor: bool,
 }
 
 impl Default for HitInput {
     fn default() -> Self {
-        Self { ranged: false, offhand: false, skill_mult: 1.0, force_crit: false, crit_roll: None, attacker_stance: None, include_guard: true, cover: 0.0 }
+        Self { ranged: false, offhand: false, skill_mult: 1.0, force_crit: false, crit_roll: None, attacker_stance: None, include_guard: true, cover: 0.0, ignore_armor: false }
     }
 }
 
@@ -187,6 +190,8 @@ pub struct Hit {
     pub armor_ratio: f64,
     pub crit_mult: f64,
     pub final_attack_power: i32,
+    /// RULESET1 A2: the hit ignored the armour ("armour pierced"; `armor_rating` still names the target's rating).
+    pub armor_pierced: bool,
 }
 
 pub fn compute(attacker: &Unit, target: &Unit, h: HitInput) -> Hit {
@@ -201,7 +206,8 @@ pub fn compute(attacker: &Unit, target: &Unit, h: HitInput) -> Hit {
     let guard = if h.include_guard { target.guard } else { 0.0 };
     let guard_term = GUARD_CAP.min(guard + h.cover.max(0.0));
     let rating = armor_rating(target);
-    let gross = power as f64 * buff * h.skill_mult * stance_factor * crit_mult * (1.0 - guard_term) * (1.0 - armor_reduction(rating));
+    let armor_ratio = if h.ignore_armor { 0.0 } else { armor_reduction(rating) };
+    let gross = power as f64 * buff * h.skill_mult * stance_factor * crit_mult * (1.0 - guard_term) * (1.0 - armor_ratio);
     Hit {
         attack_power: power,
         is_crit,
@@ -214,8 +220,9 @@ pub fn compute(attacker: &Unit, target: &Unit, h: HitInput) -> Hit {
         skill_mult: h.skill_mult,
         mit_ratio: guard,
         mit_mult: 1.0 - guard_term,
-        armor_ratio: armor_reduction(rating),
+        armor_ratio,
         crit_mult,
         final_attack_power: roundi(power as f64 * buff),
+        armor_pierced: h.ignore_armor,
     }
 }

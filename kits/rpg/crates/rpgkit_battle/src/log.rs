@@ -140,6 +140,13 @@ pub fn from_action(w: &World, a: &ScheduledAction, round: i32, block: i32) -> En
                 None => e.target = "Target".into(),
             }
             e.detail = format!("Dealt {} | Skill x{:.2} | Range {}", last_damage, skill_mult, me.attack_range);
+            // RULESET1 A2, P6 (timeline only): the armour pierced and the poise the hit took
+            if cmd.impact.armor_piercing && w.ruleset.has(rpgkit_rules::ruleset::PIERCE) && *last_damage > 0 {
+                e.detail += " | Armour pierced";
+            }
+            if let Some(st) = cmd.staggers.first() {
+                e.detail += &format!(" | Stagger {} (poise {} -> {})", st.taken, st.before, st.after);
+            }
         }
         CmdKind::Walk { path, approach, moved_tiles, cut_short, blocked_by, .. } => {
             e.category = "MOVE";
@@ -271,6 +278,12 @@ pub fn from_action(w: &World, a: &ScheduledAction, round: i32, block: i32) -> En
         }
     }
     e
+}
+
+/// RULESET1 P9 (engine-only): the EVENT cell of a break: the broken unit, the action it lost, the cause.
+pub fn break_entry(w: &World, t: usize, b: &crate::poise::Break, round: i32, block: i32) -> Entry {
+    let line = crate::poise::break_line(w, t, b);
+    Entry::event(round, block, &w.units[t].name, w.allies.contains(&t), &b.skill, "Break", "BREAK", &line, b.cause.id())
 }
 
 /// CombatLogBuilder.riposte_entry: the defender countered the attack that just resolved.

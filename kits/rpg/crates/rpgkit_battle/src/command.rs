@@ -145,6 +145,15 @@ pub struct Command {
     pub intent_buff: bool,
     /// RULESET1_INTENT MV4: the carried move (Carry::None in classic and for every other command).
     pub carry: Carry,
+    /// RULESET1 5, 7: the skill's stagger, windup poise, unbreakable, sure break and armour piercing (read only under
+    /// the rules `poise` and `pierce`).
+    pub impact: crate::poise::Impact,
+    /// RULESET1 P11: the windup poise this action added at its start (taken off when it lands or is cancelled).
+    pub poise_bonus: i32,
+    /// RULESET1 P4: the units the last execution damaged, in hit order, each with whether the hit was a flank (MV3).
+    pub hits: Vec<(UnitId, bool)>,
+    /// RULESET1 P6-P14: what the last execution's hits did to poise (rule `poise` only; see `poise::resolve_hits`).
+    pub staggers: Vec<crate::poise::StaggerHit>,
 }
 
 impl Command {
@@ -174,7 +183,16 @@ impl Command {
             kind,
             intent_buff: false,
             carry: Carry::None,
+            impact: crate::poise::Impact::default(),
+            poise_bonus: 0,
+            hits: Vec::new(),
+            staggers: Vec::new(),
         }
+    }
+
+    /// RULESET1 A2: the hit skips armour (rule `pierce` and the skill's `armor_piercing`).
+    fn pierces(&self, w: &World) -> bool {
+        self.impact.armor_piercing && w.ruleset.has(rpgkit_rules::ruleset::PIERCE)
     }
 
     pub fn initiative(&self, w: &World) -> i32 {
@@ -245,6 +263,8 @@ impl Command {
         self.reactions.clear();
         self.broken_targets.clear();
         self.exploited.clear();
+        self.hits.clear();
+        self.staggers.clear();
         self.failed = false;
         let src = self.source;
         let src_name = w.units[src].name.clone();
@@ -283,10 +303,11 @@ impl Command {
                 if damaging {
                     let ranged = w.units[src].attack_range > 1 && !use_offhand;
                     let cover = cover_between(w, src, t, ranged);
-                    let hit = roll_hit(w, rng, src, t, ranged, use_offhand, skill_mult * matched.1 * flank_power(w, flank), cover);
+                    let hit = roll_hit_with(w, rng, src, t, ranged, use_offhand, skill_mult * matched.1 * flank_power(w, flank), cover, self.pierces(w));
                     taken = w.damage(t, hit.final_dmg, true);
                     crit = hit.is_crit;
                     self.set_attack_result(taken, crit, Some(t));
+                    self.hits.push((t, flank));
                 }
                 let mut detail = String::new();
                 if !self.status_effect.is_empty() && w.units[t].is_alive() {
@@ -327,8 +348,9 @@ impl Command {
                     let cover = cover_for(&w.grid, w.pos(src), cell, ranged);
                     let flank = round_intent::flank_bonus(w, src, v);
                     let matched = skill::exploit_match_when(&self.exploit, &w.units[v], &[], flank);
-                    let hit = roll_hit(w, rng, src, v, ranged, false, skill_mult * matched.1 * flank_power(w, flank), cover);
+                    let hit = roll_hit_with(w, rng, src, v, ranged, false, skill_mult * matched.1 * flank_power(w, flank), cover, self.pierces(w));
                     let taken = w.damage(v, hit.final_dmg, true);
+                    self.hits.push((v, flank));
                     total += taken;
                     hits += 1;
                     if hit.is_crit {
@@ -393,6 +415,9 @@ impl Command {
                 if round_intent::on(w) {
                     w.round_states.entry(src).or_default().rest_blocks += self.block_cost.max(1);
                 }
+                // RULESET1_INTENT RS3: each landed Rest block restores poise (rule poise)
+                let gain = w.ruleset.numbers.rest_poise_per_block * self.block_cost.max(1);
+                crate::poise::restore(w, src, gain);
                 let u = &mut w.units[src];
                 u.ap = u.max_ap.min(u.ap + recover_ap);
                 self.log = format!("[Rest] {src_name} AP {}/{}", u.ap, u.max_ap);
@@ -604,6 +629,7 @@ impl Command {
         self.exploit.clear();
         self.disrupt_break = false;
         self.est_damage = 0;
+        self.impact = crate::poise::Impact::default();
     }
 
     /// After one damaging hit: stance break (Offensive / Defensive target to Tactical), then exploit consume.
@@ -622,8 +648,14 @@ impl Command {
 
 /// One hit with a crit roll drawn from the battle RNG (DamageCalculator.compute with the resolver's rng).
 pub fn roll_hit(w: &World, rng: &mut GodotRng, a: UnitId, t: UnitId, ranged: bool, offhand: bool, skill_mult: f64, cover: f64) -> Hit {
+    roll_hit_with(w, rng, a, t, ranged, offhand, skill_mult, cover, false)
+}
+
+/// `roll_hit` that may skip the armour term (RULESET1 A2: `ignore_armor`; the same single crit draw).
+#[allow(clippy::too_many_arguments)]
+pub fn roll_hit_with(w: &World, rng: &mut GodotRng, a: UnitId, t: UnitId, ranged: bool, offhand: bool, skill_mult: f64, cover: f64, ignore_armor: bool) -> Hit {
     let roll = rng.randf();
-    damage::compute(&w.units[a], &w.units[t], HitInput { ranged, offhand, skill_mult, crit_roll: Some(roll), cover, ..HitInput::default() })
+    damage::compute(&w.units[a], &w.units[t], HitInput { ranged, offhand, skill_mult, crit_roll: Some(roll), cover, ignore_armor, ..HitInput::default() })
 }
 
 fn effective_target(w: &World, src: UnitId, target: Option<UnitId>) -> Option<UnitId> {

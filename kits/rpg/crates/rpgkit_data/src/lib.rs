@@ -454,6 +454,9 @@ pub struct PassiveDef {
 
 /// The formula input name of the unit level (DERIVE1 4.1; reserved: no row id or constant takes it).
 pub const LEVEL_INPUT: &str = "level";
+/// RULESET1 P1 (tasks 1.7): the formula input of the summed `effective_mitigation` of the unit's worn gear (reserved
+/// like `level`: no row id or constant takes it).
+pub const GEAR_MITIGATION_INPUT: &str = "gear_mitigation";
 
 /// A derived stat's change while a status is active on the unit (DERIVE1 4.1 `status_modifiers`).
 #[derive(Debug, Clone, PartialEq)]

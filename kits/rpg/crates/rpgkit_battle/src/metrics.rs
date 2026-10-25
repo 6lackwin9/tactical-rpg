@@ -216,6 +216,29 @@ impl Detail {
     }
 }
 
+/// RULESET1 P9 (rule poise; engine-only, timeline keys): one unit's stagger and break counts for one fight. The hits
+/// it dealt: `stagger_dealt` (poise taken), `windup_hits` (hits into a windup), `breaks` (breaks it dealt), of them
+/// `windup_breaks` (the target was in windup), `chance_breaks` (by the chance roll) and `sure_breaks` (by `sure_break`),
+/// and `chances` (break chance rolls); what it took: `broken` (times it broke).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PoiseRecord {
+    pub stagger_dealt: i32,
+    pub windup_hits: i32,
+    pub breaks: i32,
+    pub windup_breaks: i32,
+    pub chances: i32,
+    pub chance_breaks: i32,
+    pub sure_breaks: i32,
+    pub broken: i32,
+}
+
+impl PoiseRecord {
+    pub fn to_json(&self) -> Value {
+        json!({"stagger_dealt": self.stagger_dealt, "windup_hits": self.windup_hits, "breaks": self.breaks, "windup_breaks": self.windup_breaks,
+            "chances": self.chances, "chance_breaks": self.chance_breaks, "sure_breaks": self.sure_breaks, "broken": self.broken})
+    }
+}
+
 /// The last fight's outcome numbers.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FightRecord {
@@ -262,6 +285,8 @@ pub struct BattleMetrics {
     /// Display name -> record of the last fight (allies, then enemies).
     pub units: IndexMap<String, UnitRecord>,
     pub detail: IndexMap<String, Detail>,
+    /// RULESET1 P9: display name -> stagger and break counts of the last fight (empty without the rule poise).
+    pub poise: IndexMap<String, PoiseRecord>,
     /// Set when the fight ends.
     pub fight_record: Option<FightRecord>,
     pub fail_lines: Vec<String>,
@@ -307,6 +332,7 @@ impl BattleMetrics {
         self.frozen = false;
         self.units.clear();
         self.detail.clear();
+        self.poise.clear();
         self.fight_record = None;
         self.by_name.clear();
         self.ally.clear();
@@ -330,6 +356,9 @@ impl BattleMetrics {
             let rec = UnitRecord { hp_start: u.hp, max_hp: u.max_hp, min_hp_frac: u.hp as f64 / (u.max_hp as f64).max(1.0), ..UnitRecord::default() };
             self.units.insert(u.name.clone(), rec);
             self.detail.insert(u.name.clone(), Detail::default());
+            if crate::poise::on(w) {
+                self.poise.insert(u.name.clone(), PoiseRecord::default());
+            }
             self.last_hp.insert(c, u.hp);
             self.remember_statuses(s, c);
             self.track_tile(s, c);
@@ -503,6 +532,31 @@ impl BattleMetrics {
         *d.combo_counts.entry(k.kind.to_string()).or_insert(0) += 1;
         if k.killed && k.kind != "flow" && foes && d.best_finish.is_none() {
             d.best_finish = Some(BestFinish { skill: k.skill.clone(), target, combo: k.kind.into(), status: k.status.clone(), round: s.current_round, order });
+        }
+    }
+
+    /// RULESET1 P9: the stagger records of the action at `idx` of the round (its unit dealt them).
+    pub fn on_staggers(&mut self, s: &Session, idx: usize) {
+        let Some(a) = s.resolver.scheduled.get(idx) else { return };
+        let Some(actor) = self.names.get(&a.unit).cloned() else { return };
+        for st in &a.command.staggers {
+            let target = s.w.units[st.target].name.clone();
+            if let Some(r) = self.poise.get_mut(&actor) {
+                r.stagger_dealt += st.before - st.after.max(0);
+                r.windup_hits += st.windup as i32;
+                r.chances += st.chance.is_some() as i32;
+                if let Some(b) = &st.broke {
+                    r.breaks += 1;
+                    r.windup_breaks += st.windup as i32;
+                    r.chance_breaks += (b.cause == crate::poise::BreakCause::Chance) as i32;
+                    r.sure_breaks += (b.cause == crate::poise::BreakCause::Sure) as i32;
+                }
+            }
+            if st.broke.is_some() {
+                if let Some(r) = self.poise.get_mut(&target) {
+                    r.broken += 1;
+                }
+            }
         }
     }
 
@@ -941,12 +995,17 @@ impl BattleMetrics {
         d.best_save = best;
     }
 
-    /// The parity traces' shape: {units: {name: record}, detail: {name: detail}, fight, checks, fails}.
+    /// The parity traces' shape: {units: {name: record}, detail: {name: detail}, fight, checks, fails}; RULESET1 P9 adds
+    /// `poise: {name: record}` only under the rule poise (classic keeps its shape).
     pub fn to_json(&self) -> Value {
         let units: Map<String, Value> = self.units.iter().map(|(n, r)| (n.clone(), r.to_json())).collect();
         let detail: Map<String, Value> = self.detail.iter().map(|(n, d)| (n.clone(), d.to_json())).collect();
-        json!({"units": units, "detail": detail, "fight": self.fight_record.as_ref().map_or(json!({}), |f| f.to_json()),
-            "checks": self.checks, "fails": self.fail_lines})
+        let mut out = json!({"units": units, "detail": detail, "fight": self.fight_record.as_ref().map_or(json!({}), |f| f.to_json()),
+            "checks": self.checks, "fails": self.fail_lines});
+        if !self.poise.is_empty() {
+            out["poise"] = Value::Object(self.poise.iter().map(|(n, r)| (n.clone(), r.to_json())).collect());
+        }
+        out
     }
 }
 
