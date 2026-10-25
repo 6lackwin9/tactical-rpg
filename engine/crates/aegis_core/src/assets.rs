@@ -577,6 +577,40 @@ pub fn parse_palette(v: &Value) -> Result<IndexMap<String, [u8; 3]>, Vec<String>
     }
 }
 
+/// Every palette file (`units/<class>/<variant>/palettes/*.json`) in every layer, referenced or not and shadowed or
+/// not, read with the loader's rules (`parse_palette`): one line per problem, `<path>: <reason>`, in layer order and
+/// sorted by path within a layer. Empty: every palette file parses.
+pub fn palette_problems(layers: &Layers) -> Vec<String> {
+    let mut out = Vec::new();
+    for root in &layers.roots {
+        let mut files: Vec<PathBuf> = Vec::new();
+        for class in sorted_entries(&root.join("units")).into_iter().filter(|p| p.is_dir()) {
+            for variant in sorted_entries(&class).into_iter().filter(|p| p.is_dir()) {
+                files.extend(sorted_entries(&variant.join("palettes")).into_iter().filter(|p| p.is_file() && p.extension().is_some_and(|x| x == "json")));
+            }
+        }
+        for file in files {
+            let shown = file.to_string_lossy().replace('\\', "/");
+            let reasons = match std::fs::read_to_string(&file) {
+                Err(e) => vec![format!("unreadable ({e}).")],
+                Ok(text) => match serde_json::from_str::<Value>(&text) {
+                    Err(e) => vec![format!("not JSON ({e}).")],
+                    Ok(v) => parse_palette(&v).err().unwrap_or_default(),
+                },
+            };
+            out.extend(reasons.into_iter().map(|r| format!("{shown}: {r}")));
+        }
+    }
+    out
+}
+
+/// The entries directly in `dir`, sorted by path (none when it is not a readable folder).
+fn sorted_entries(dir: &Path) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = std::fs::read_dir(dir).map(|r| r.flatten().map(|e| e.path()).collect()).unwrap_or_default();
+    out.sort();
+    out
+}
+
 /// Reads a JSON file of the layers at `rel`.
 pub fn read_json(layers: &Layers, rel: &str) -> Option<Value> {
     let text = std::fs::read_to_string(layers.find(rel)?).ok()?;
