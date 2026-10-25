@@ -1,0 +1,389 @@
+//! Class and unit rows (ClassUnitValidator errors and warnings, StatRules.validate_class / validate_spend).
+
+use super::{capitalize, View, LOADOUT_SLOTS, NO_ITEM};
+use aegis_core::fmt::fixed;
+use aegis_core::json::{self, Dict};
+use rpgkit_data::{ClassDef, ItemDef, SkillDef, STATS};
+use rpgkit_rules::stats::{spend_pool, Proficiency, CLASS_BUDGET, DEFAULT_SCALING, MAX_CLASS_SLOTS, MAX_EXTRA_SLOTS, MAX_LEVEL, PROF_MAX_LEVEL};
+use indexmap::IndexMap;
+use serde_json::Value;
+
+const STAT_FLOOR: i64 = 6;
+const STAT_CEILING: i64 = 18;
+const GROWTH_TOTAL: i64 = 5;
+const GROWTH_STAT_MAX: i64 = 3;
+/// StatRules.ADVANCED_MIN_LEVEL: an advanced family may not sit on a class path below this level.
+const ADVANCED_MIN_LEVEL: i64 = 5;
+const MIN_SCALING: f64 = 1.0;
+const MAX_SCALING: f64 = 2.0;
+/// Proficiency.WEAPON_TYPES.
+const WEAPON_TYPES: [&str; 13] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "orb", "tome", "shield"];
+pub const DUPLICATE_ACCESSORY_ERROR: &str = "The same accessory cannot fill both accessory slots.";
+
+type Ints = IndexMap<String, i64>;
+
+/// StatRules.validate_class: every base stat in range, the class budget, the growth per level.
+fn validate_class(base: &Ints, growth: &Ints) -> Vec<String> {
+    let mut errors = Vec::new();
+    let mut total = 0;
+    for s in STATS {
+        let v = base.get(s).copied().unwrap_or(STAT_FLOOR);
+        total += v;
+        if !(STAT_FLOOR..=STAT_CEILING).contains(&v) {
+            errors.push(format!("Base {s} {v} must be between {STAT_FLOOR} and {STAT_CEILING}."));
+        }
+    }
+    if total != CLASS_BUDGET as i64 {
+        errors.push(format!("Base stats total {total}, every class must total {CLASS_BUDGET} (every stat set)."));
+    }
+    let growth_total: i64 = growth.values().sum();
+    if growth_total != GROWTH_TOTAL {
+        errors.push(format!("Growth totals {growth_total}, every class gains exactly {GROWTH_TOTAL} per level."));
+    }
+    for s in STATS {
+        if !(0..=GROWTH_STAT_MAX).contains(&growth.get(s).copied().unwrap_or(0)) {
+            errors.push(format!("Growth {s} must be 0-{GROWTH_STAT_MAX} per level."));
+        }
+    }
+    errors
+}
+
+/// StatRules.validate_spend: empty (follow the class) or exactly the pool of `level`.
+fn validate_spend(spend: &Ints, level: i64) -> Vec<String> {
+    let mut errors = Vec::new();
+    if spend.is_empty() {
+        return errors;
+    }
+    let pool = spend_pool(level.clamp(i32::MIN as i64, i32::MAX as i64) as i32) as i64;
+    for (k, v) in spend {
+        if !STATS.contains(&k.as_str()) {
+            errors.push(format!("Spend: unknown stat '{k}'."));
+        } else if *v < 0 {
+            errors.push(format!("Spend {k} can't be negative."));
+        }
+    }
+    let total: i64 = spend.values().sum();
+    if total != pool {
+        errors.push(format!("Spend totals {total}, a level {level} unit spends exactly {pool} (leave it empty to follow the class)."));
+    }
+    errors
+}
+
+/// Equipment.can_equip_in_slot without worn gear kept (the loadout gate; plain dual wield off): a shield or an
+/// off-hand weapon in the off hand only, other weapons in the main hand only, an accessory in either accessory slot,
+/// other gear in its own slot.
+fn fits_slot(item: &ItemDef, slot: &str) -> bool {
+    if !item.is_equipment() {
+        return false;
+    }
+    let target = slot.to_uppercase();
+    if item.item_type == "SHIELD" || item.off_hand_category == "shield" {
+        return target == "OFF_HAND";
+    }
+    if item.item_type == "WEAPON" {
+        if item.two_handed {
+            return target == "MAIN_HAND";
+        }
+        if !item.off_hand_category.is_empty() {
+            return target == "OFF_HAND";
+        }
+        return target == "MAIN_HAND";
+    }
+    if item.slot.starts_with("ACCESSORY") {
+        return target.starts_with("ACCESSORY");
+    }
+    target == item.slot
+}
+
+/// ClassUnitValidator._loadout_errors: every item fits its slot and (with `check_training`) is trained for by `prof`;
+/// no two-handed weapon with an off-hand item; no accessory twice.
+fn loadout_errors(v: &View, e: &Dict, prof: &Proficiency, check_training: bool) -> Vec<String> {
+    let mut errors = Vec::new();
+    for slot in LOADOUT_SLOTS {
+        let item_id = json::s(e, slot);
+        if item_id.is_empty() {
+            continue;
+        }
+        let item = v.get("items", &item_id);
+        if item.is_empty() {
+            continue;
+        }
+        let name = json::s_or(item, "name", &item_id);
+        let weapon_type = json::s(item, "weapon_type");
+        if !fits_slot(&ItemDef::from_obj(item), slot) {
+            errors.push(format!("{name} can't be equipped in {}.", capitalize(slot)));
+        } else if check_training && !weapon_type.is_empty() && !prof.can_use(&weapon_type) {
+            errors.push(format!("This class has no training in '{weapon_type}' ({name})."));
+        }
+    }
+    let main = v.get("items", &json::s(e, "main_hand"));
+    let off = v.get("items", &json::s(e, "off_hand"));
+    if json::b(main, "two_handed", false) && !off.is_empty() {
+        errors.push("A two-handed weapon can't be paired with an off-hand item.".into());
+    }
+    let (a1, a2) = (json::s(e, "accessory_1"), json::s(e, "accessory_2"));
+    if !a1.is_empty() && a1 != NO_ITEM && a1 == a2 {
+        errors.push(DUPLICATE_ACCESSORY_ERROR.into());
+    }
+    errors
+}
+
+/// ClassUnitValidator.path_errors: the class skill path {family head: unlock level}.
+fn path_errors(v: &View, raw: &Value) -> Vec<String> {
+    let mut errors = Vec::new();
+    let Some(path) = raw.as_object() else {
+        errors.push("The skill path must be a dictionary {skill family: unlock level} (a list [{level, skill}] is the old shape).".into());
+        return errors;
+    };
+    for (skill_id, raw_level) in path {
+        if !json::is_int(raw_level) {
+            errors.push(format!("Skill path: the level of '{skill_id}' must be a whole number 1-{MAX_LEVEL}."));
+            continue;
+        }
+        let level = json::to_int(raw_level);
+        let skill = v.get("skills", skill_id);
+        if !(1..=MAX_LEVEL as i64).contains(&level) {
+            errors.push(format!("Skill path: level {level} of '{skill_id}' is outside 1-{MAX_LEVEL}."));
+        }
+        if skill.is_empty() {
+            errors.push(format!("Skill path: unknown skill '{skill_id}'."));
+        } else if json::b(skill, "system", false) {
+            errors.push(format!("Skill path: '{skill_id}' is an engine skill (always known)."));
+        } else if json::b(skill, "basic", false) {
+            errors.push(format!("Skill path: '{skill_id}' is a basic skill; every unit owns the basics from level 1, so they are not valid in a class path."));
+        } else {
+            if json::i(skill, "tier", 1) != 1 {
+                errors.push(format!("Skill path: '{skill_id}' is a higher tier; list the tier 1 skill of the family (tiers open with it)."));
+            }
+            if json::s_or(skill, "grade", "novice") != "novice" && level < ADVANCED_MIN_LEVEL {
+                errors.push(format!("Skill path: {skill_id} is an advanced skill and needs unit level {ADVANCED_MIN_LEVEL} or higher (listed at {level})."));
+            }
+            for required in json::sget(skill, "requires") {
+                match path.get(&required).map(json::to_int) {
+                    None => errors.push(format!("Skill path: {skill_id} needs {required} on the same path.")),
+                    Some(at) if at > level => errors.push(format!("Skill path: {skill_id} (level {level}) needs {required} first, but {required} is only listed at level {at}.")),
+                    Some(_) => {}
+                }
+            }
+        }
+    }
+    errors
+}
+
+/// ClassUnitValidator.class_errors of a normalized class row.
+pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
+    let mut errors = validate_class(&json::ints(json::get(e, "base_stats")), &json::ints(json::get(e, "growth")));
+    // a class always names its body (A1; "" inherits only on units and characters)
+    let art = json::s(e, "art");
+    if art.is_empty() && !v.assets.roots.is_empty() {
+        errors.push("Art '' isn't a body (units/<class>/<variant>/ in the game, kit or engine).".into());
+    }
+    errors.extend(super::assets::body_errors(v, &art));
+    match json::get(e, "proficiency").as_object().filter(|p| !p.is_empty()) {
+        None => errors.push("A class needs a gear proficiency dictionary.".into()),
+        Some(prof) => {
+            let mut weapons = 0;
+            for (gear, raw) in prof {
+                let entry = json::dict(raw);
+                if !super::skill::GEAR_TYPES.contains(&gear.as_str()) {
+                    errors.push(format!("Proficiency: unknown gear type '{gear}'."));
+                }
+                let level = json::i(entry, "level", 0);
+                if !entry.contains_key("level") || !(1..=PROF_MAX_LEVEL as i64).contains(&level) {
+                    errors.push(format!("Proficiency {gear}: level must be 1-{PROF_MAX_LEVEL}."));
+                }
+                let scaling = entry.get("scaling").map_or(DEFAULT_SCALING, |s| json::to_float_or(s, -1.0));
+                if !(MIN_SCALING..=MAX_SCALING).contains(&scaling) {
+                    errors.push(format!("Proficiency {gear}: scaling must be {}-{}.", fixed(MIN_SCALING, 1), fixed(MAX_SCALING, 1)));
+                }
+                if WEAPON_TYPES.contains(&gear.as_str()) {
+                    weapons += 1;
+                }
+            }
+            if weapons == 0 {
+                errors.push("Proficiency needs at least one weapon type.".into());
+            }
+        }
+    }
+    errors.extend(path_errors(v, json::get(e, "skill_path")));
+    errors.extend(loadout_errors(v, e, &Proficiency::from_class(&ClassDef::from_obj(e)), true));
+    errors
+}
+
+/// ClassUnitValidator.unit_errors of a normalized unit row.
+pub fn unit_errors(v: &View, e: &Dict) -> Vec<String> {
+    let mut errors = Vec::new();
+    let fixed_mode = json::s(e, "stat_mode") == "fixed";
+    let class_id = json::s(e, "class_id");
+    let arch = v.typed.classes.get(&class_id).filter(|_| !class_id.is_empty());
+    if !fixed_mode && arch.is_none() {
+        errors.push("Class-derived units need a class (or set the stat model to fixed).".into());
+    }
+    if !fixed_mode {
+        errors.extend(validate_spend(&json::ints(json::get(e, "spend")), json::i(e, "level", 1)));
+    } else if json::get(e, "spend").as_object().is_some_and(|s| !s.is_empty()) {
+        errors.push("Fixed units don't spend points.".into());
+    }
+    let prof = arch.map(Proficiency::from_class).unwrap_or_default();
+    errors.extend(loadout_errors(v, e, &prof, arch.is_some()));
+    if let Some(a) = arch.filter(|_| !fixed_mode) {
+        errors.extend(skill_loadout_errors(v, e, a));
+    }
+    errors.extend(requires_errors(v, e, arch));
+    errors
+}
+
+/// ContentFactory.families_of: the families of skill ids, always-active ones left out, first-seen order.
+fn families_of(v: &View, ids: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for id in ids {
+        let fam = v.typed.family_of(id).to_string();
+        if !v.typed.is_always_active(id) && !out.contains(&fam) {
+            out.push(fam);
+        }
+    }
+    out
+}
+
+/// ClassUnitValidator._skill_loadout_errors: an explicit unit loadout lists owned, non-basic families once each,
+/// within the class and extra slot counts (ContentFactory.loadout_of splits a listed loadout by the class path).
+fn skill_loadout_errors(v: &View, e: &Dict, a: &ClassDef) -> Vec<String> {
+    let mut errors = Vec::new();
+    let listed = json::sget(e, "loadout");
+    if listed.is_empty() {
+        return errors;
+    }
+    let level = json::i(e, "level", 1);
+    let steps = a.path_steps();
+    let path_all: Vec<String> = steps.iter().map(|(_, s)| s.clone()).collect();
+    let mut owned_ids: Vec<String> = steps.iter().filter(|(l, _)| *l as i64 <= level).map(|(_, s)| s.clone()).collect();
+    owned_ids.extend(json::sget(e, "extra_skills"));
+    let owned = families_of(v, &owned_ids);
+    let mut seen: Vec<&String> = Vec::new();
+    for fam in &listed {
+        if seen.contains(&fam) {
+            errors.push(format!("Loadout: family '{fam}' is listed twice."));
+        }
+        seen.push(fam);
+        if !v.typed.skills.iter().any(|s| s.family_id() == fam) {
+            errors.push(format!("Loadout: unknown skill family '{fam}'."));
+        } else if v.typed.is_basic_family(fam) {
+            errors.push(format!("Loadout: '{fam}' is a basic family (always active, no slot)."));
+        } else if !owned.contains(fam) {
+            errors.push(format!("Loadout: the unit does not own the skill family '{fam}'."));
+        }
+    }
+    let path_families = families_of(v, &path_all);
+    let class_count = listed.iter().filter(|f| path_families.contains(f)).count();
+    let extra_count = listed.len() - class_count;
+    if class_count > MAX_CLASS_SLOTS {
+        errors.push(format!("Loadout: {class_count} class families (max {MAX_CLASS_SLOTS})."));
+    }
+    if extra_count > MAX_EXTRA_SLOTS {
+        errors.push(format!("Loadout: {extra_count} extra families (max {MAX_EXTRA_SLOTS})."));
+    }
+    errors
+}
+
+/// ClassUnitValidator.class_warnings: the gear budget, the path (more families than class slots, none at level 1,
+/// tiers past the level cap, weapon gates the class cannot reach) and the role mismatches.
+pub fn class_warnings(v: &View, e: &Dict) -> Vec<String> {
+    let class = ClassDef::from_obj(e);
+    let mut out = rpgkit_rules::budget::check_class(&class, &v.typed.items);
+    let path = json::dget(e, "skill_path");
+    let families: Vec<String> = path.keys().filter(|k| !v.typed.is_basic_family(k)).cloned().collect();
+    if families.len() > MAX_CLASS_SLOTS {
+        out.push(format!("The path lists {} families; only the first {MAX_CLASS_SLOTS} (by unlock level, then position) are active by default.", families.len()));
+    }
+    if !path.is_empty() && !path.values().any(|l| json::is_int(l) && json::to_int(l) == 1) {
+        out.push("No path family unlocks at level 1: a level 1 unit of this class has no class skill in its loadout.".into());
+    }
+    let prof = Proficiency::from_class(&class);
+    for fam in &families {
+        let base_level = json::to_int_or(&path[fam], 1);
+        let mut tiers: Vec<&SkillDef> = v.typed.skills.iter().filter(|s| s.family_id() == fam).collect();
+        tiers.sort_by_key(|s| s.tier);
+        for row in tiers {
+            let opens = base_level + row.tier_offset() as i64;
+            if row.tier > 1 && opens > MAX_LEVEL as i64 {
+                out.push(format!("{} unlocks at level {opens}, beyond the level cap {MAX_LEVEL} (capped).", row.name));
+            }
+        }
+        if let Some(head) = v.typed.tier_one(fam).filter(|h| !h.weapon_types.is_empty() && !gate_reachable(&h.weapon_types, &prof)) {
+            let unarmed = if head.weapon_types.iter().any(|t| t == UNARMED_TOKEN) { " ('unarmed' needs fist)" } else { "" };
+            out.push(format!("{} needs {}, but the class trains none of them{unarmed}.", head.name, head.weapon_types.join("/")));
+        }
+    }
+    out.extend(role_warnings(v, &json::s(e, "ai_role"), path_has_support(v, &families), &json::s(e, "main_hand"), false));
+    out
+}
+
+/// ClassUnitValidator.unit_warnings: the role mismatches for the unit's own role or its class's (derived units only).
+pub fn unit_warnings(v: &View, e: &Dict) -> Vec<String> {
+    let class_id = json::s(e, "class_id");
+    let Some(arch) = v.typed.classes.get(&class_id).filter(|_| !class_id.is_empty() && json::s_or(e, "stat_mode", "derived") != "fixed") else {
+        return Vec::new();
+    };
+    let mut role = json::s(e, "ai_role");
+    if role.is_empty() {
+        role = arch.ai_role.clone();
+    }
+    let mut families: Vec<String> = arch.path_steps().into_iter().map(|(_, s)| s).collect();
+    families.extend(json::sget(e, "extra_skills").iter().map(|x| v.typed.family_of(x).to_string()));
+    let mut main = json::s(e, "main_hand");
+    if main.is_empty() {
+        main = arch.loadout.get("main_hand").cloned().unwrap_or_default();
+    } else if main == NO_ITEM {
+        main.clear();
+    }
+    role_warnings(v, &role, path_has_support(v, &families), &main, json::b(e, "reckless", false))
+}
+
+fn role_warnings(v: &View, role: &str, has_support_skill: bool, main_hand: &str, reckless: bool) -> Vec<String> {
+    let mut out = Vec::new();
+    if role == "SUPPORT" && !has_support_skill {
+        out.push("Role SUPPORT without a SUPPORT skill: the unit has nothing to heal or buff with.".into());
+    }
+    if role == "SNIPER" {
+        let item = v.get("items", main_hand);
+        let reach = if item.is_empty() { 1 } else { json::i(item, "base_range", 1) };
+        if reach < 2 {
+            out.push(format!("Role SNIPER with a melee main hand (range {reach}): a sniper keeps its distance and needs range 2+."));
+        }
+    }
+    if role == "SUPPORT" && reckless {
+        out.push("A reckless SUPPORT never holds back to heal: reckless charges the nearest foe.".into());
+    }
+    out
+}
+
+fn path_has_support(v: &View, families: &[String]) -> bool {
+    families.iter().any(|f| v.typed.tier_one(f).is_some_and(|h| h.kind == "SUPPORT"))
+}
+
+/// SkillDef.UNARMED_TOKEN: the weapon gate of bare hands, trained as the fist proficiency.
+const UNARMED_TOKEN: &str = "unarmed";
+
+/// A weapon gate is reachable when the class trains one of its gear types.
+fn gate_reachable(tokens: &[String], prof: &Proficiency) -> bool {
+    tokens.iter().any(|t| prof.can_use(if t == UNARMED_TOKEN { "fist" } else { t }))
+}
+
+/// ClassUnitValidator._unit_requires_errors: a skill in `extra_skills` or `loadout` needs every family it requires on
+/// the class path (any level) or among the extra skills.
+fn requires_errors(v: &View, e: &Dict, arch: Option<&ClassDef>) -> Vec<String> {
+    let mut errors = Vec::new();
+    let extras = json::sget(e, "extra_skills");
+    let path: Vec<String> = arch.map(|a| a.path_steps().into_iter().map(|(_, s)| s).collect()).unwrap_or_default();
+    let owned: Vec<String> = path.iter().chain(&extras).map(|id| super::skill::head_of(v.get("skills", id))).collect();
+    let mut checked = extras.clone();
+    checked.extend(json::sget(e, "loadout"));
+    for id in &checked {
+        for required in json::sget(v.get("skills", id), "requires") {
+            if !owned.contains(&required) {
+                errors.push(format!("Unit skill '{id}' needs '{required}' (on the class path or in the extra skills)."));
+            }
+        }
+    }
+    errors
+}

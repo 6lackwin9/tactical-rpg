@@ -1,0 +1,14 @@
+[package]
+name = "rpgkit_host"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aegis_core = { path = "../../../../engine/crates/aegis_core" }
+aegis_host = { path = "../../../../engine/crates/aegis_host" }
+rpgkit_data = { path = "../rpgkit_data" }
+rpgkit_rules = { path = "../rpgkit_rules" }
+rpgkit_battle = { path = "../rpgkit_battle" }
+rpgkit_world = { path = "../rpgkit_world" }
+indexmap = { workspace = true }
+serde_json = { workspace = true }

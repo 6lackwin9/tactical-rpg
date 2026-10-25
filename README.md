@@ -14,7 +14,7 @@ build it replaced is frozen in `legacy/` and stays the reference the engine is c
 | `games/emberwake/assets/` | The game's asset layer: bodies, portraits, icons, tiles, backgrounds, UI files and audio (ASSETORG2; the engine reads them over the game, kit and engine layers; `games/emberwake/assets/README.md`). |
 | `docs/` | Game design: brief, roadmap, decisions, specs, balance reports, preferences, workflow. |
 | `legacy/` | The frozen Godot build: the whole project of `main` at 7fa10da with its own data copy ([legacy/LEGACY.md](legacy/LEGACY.md)). Branch `legacy` resumes Godot work if ever needed. |
-| `kits/` | Shared asset kits: `kits/rpg/` (reusable RPG art and sound, ASSETORG2; [kits/rpg/README.md](kits/rpg/README.md)). |
+| `kits/` | Shared kits: `kits/rpg/` (the RPG kit: genre rules in `rpgkit_*` crates and their `schema.json` since KIT1-M, plus reusable RPG art and sound, ASSETORG2; [kits/rpg/README.md](kits/rpg/README.md)). |
 | `tools/` | `fc.sh` (gate, tests, content, sim, parity), art and music generators, worktree helpers. |
 
 ## Playing
@@ -31,8 +31,9 @@ live in `%APPDATA%/Aegis/emberwake` (copied from `%APPDATA%/Aegis` on the first 
 
 ## Checks
 
-- `check_project.ps1 -Fast -Quiet` (desktop) or `tools/fc.sh gate`: builds every crate and runs every test (rules,
-  battle, world, data loader and writer, Godot parity). CI runs the same on pull requests into `main` and pushes to
+- `check_project.ps1 -Fast -Quiet` (desktop) or `tools/fc.sh gate`: builds every crate, runs every test (rules,
+  battle, world, data loader and writer, Godot parity) and the layer check (`tools/fc.sh layers`, KIT1-G: engine and kit
+  crates name no game and have no path into `games/`). CI runs the same on pull requests into `main` and pushes to
   `main` (`.github/workflows/gate.yml`, required check `gate`), after recording the Godot reference from `legacy/`.
 - `tools/fc.sh docs`: doc size and markdown lint.
 - `tools/fc.sh parity`: re-records the full Godot reference (battle traces, world battles, journeys) from `legacy/`

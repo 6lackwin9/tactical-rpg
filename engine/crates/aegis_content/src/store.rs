@@ -1,7 +1,8 @@
 //! The content writer (ContentCatalog.upsert / WorldCatalog.upsert, without Godot): an entry is given in its stored
 //! shape, checked by the game, put into its file (replacing the entry with its id, or `replace_id`, else appended)
 //! and kept only when it adds no blocking problem to the data folder, else the file is put back as it was. The game's
-//! `Hooks` say which kinds exist, where they live, how an entry is checked and how a file is written.
+//! `Hooks` say which kinds exist, where they live, how an entry is checked and how a file is written. A world's
+//! manifest (world.json) is written the same way through `set_world` (WORLDW1), its shape given by the game.
 
 use crate::file::raw_entries;
 use crate::schema::sget;
@@ -29,6 +30,17 @@ pub trait Hooks {
     /// The soft problems of the data folder (never blocking a write); none unless the game has lints.
     fn warnings(&self, _data_dir: &Path) -> Vec<String> {
         Vec::new()
+    }
+    /// The text of world `world`'s manifest (data/worlds/<world>/world.json) after a write of `patch`: the fields
+    /// merged over the stored manifest (over the schema defaults for a new world), checked, in the stored shape
+    /// (`full`: every field written, else fields the stored file leaves out stay out while at their default). None by
+    /// default: a game without world manifests refuses the write.
+    fn world_manifest_text(&self, _data_dir: &Path, _world: &str, _patch: &Dict, _full: bool) -> Result<String, Vec<String>> {
+        Err(vec!["This game has no world manifests.".into()])
+    }
+    /// The problems a world manifest write may not add; `blocking` unless the game checks manifests on top.
+    fn world_blocking(&self, data_dir: &Path) -> Vec<String> {
+        self.blocking(data_dir)
     }
 }
 
@@ -83,18 +95,47 @@ pub fn remove(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &s
     Ok(outcome)
 }
 
+/// Creates or updates world `world`'s manifest (data/worlds/<world>/world.json, the world's folder made when new):
+/// `patch` merged in by the game (`Hooks::world_manifest_text`), kept only when it adds no problem
+/// (`Hooks::world_blocking`) to the data folder, else the file (and a folder it made) is taken back. `replaced` is
+/// true when the world existed.
+pub fn set_world(hooks: &impl Hooks, data_dir: &Path, world: &str, patch: &Dict, full: bool) -> Result<Outcome, Vec<String>> {
+    if !crate::schema::is_id(world) {
+        return Err(vec![format!("World '{world}' must be a world id (lowercase snake_case).")]);
+    }
+    let path = manifest_path(data_dir, world);
+    let existed = path.is_file();
+    let text = hooks.world_manifest_text(data_dir, world, patch, full)?;
+    let folder = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    let new_folder = !folder.is_dir();
+    let old_problems = hooks.world_blocking(data_dir);
+    std::fs::create_dir_all(&folder).map_err(|e| vec![format!("{}: {e}", folder.display())])?;
+    write_checked(&path, &text, &old_problems, || hooks.world_blocking(data_dir)).inspect_err(|_| {
+        if new_folder {
+            std::fs::remove_dir(&folder).ok();
+        }
+    })?;
+    Ok(Outcome { file: path, replaced: existed })
+}
+
 /// Writes the file, then checks the data folder again: new problems put the file back.
 fn commit(hooks: &impl Hooks, data_dir: &Path, world: Option<&str>, kind: &str, entries: &[Dict]) -> Result<(), Vec<String>> {
     let path = hooks.file_of(data_dir, world, kind);
-    let before = std::fs::read_to_string(&path).ok();
     let old_problems = hooks.blocking(data_dir);
     let text = hooks.file_text(data_dir, world, kind, entries).map_err(|e| vec![e])?;
-    std::fs::write(&path, text).map_err(|e| vec![format!("{}: {e}", path.display())])?;
-    let new: Vec<String> = hooks.blocking(data_dir).into_iter().filter(|p| !old_problems.contains(p)).collect();
+    write_checked(&path, &text, &old_problems, || hooks.blocking(data_dir))
+}
+
+/// Writes `text` to `path`; when `problems()` then lists one that `old_problems` does not, the file is put back as it
+/// was (removed when it was new) and the new problems are the error.
+fn write_checked(path: &Path, text: &str, old_problems: &[String], problems: impl Fn() -> Vec<String>) -> Result<(), Vec<String>> {
+    let before = std::fs::read_to_string(path).ok();
+    std::fs::write(path, text).map_err(|e| vec![format!("{}: {e}", path.display())])?;
+    let new: Vec<String> = problems().into_iter().filter(|p| !old_problems.contains(p)).collect();
     if !new.is_empty() {
         match before {
-            Some(t) => std::fs::write(&path, t).ok(),
-            None => std::fs::remove_file(&path).ok(),
+            Some(t) => std::fs::write(path, t).ok(),
+            None => std::fs::remove_file(path).ok(),
         };
         return Err(new);
     }

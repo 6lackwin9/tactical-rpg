@@ -4,7 +4,7 @@
 //! ellipse (`Painter::ellipse`). Expectations follow from the clips.json
 //! rules (ASSETORG2 4.1) and the fixture's own durations.
 
-use aegis_core::assets::{Clip, ClipPlayer, Clips, Layers};
+use aegis_core::assets::{Clip, ClipPlayer, Clips, Layers, View as AssetView};
 use aegis_ui::art::Art;
 use aegis_ui::canvas::{Canvas, Image, Rgba};
 use aegis_ui::painter::{Fonts, Painter, View};
@@ -73,11 +73,11 @@ fn at(img: &Image, x: i32, y: i32) -> [u8; 4] {
 
 #[test]
 fn a_clip_walks_its_durations_looping_or_holding_the_last_frame() {
-    let looping = Clip { id: "idle".into(), frames: 3, ms: vec![100, 50, 150], looped: true };
+    let looping = Clip { id: "idle".into(), frames: 3, ms: vec![100, 50, 150], looped: true, of: String::new(), view: AssetView::Side };
     assert_eq!(looping.total_ms(), 300);
     let frames: Vec<(u32, bool)> = [0, 99, 100, 149, 150, 299, 300, 450].iter().map(|t| looping.frame_at(*t)).collect();
     assert_eq!(frames, [(0, false), (0, false), (1, false), (1, false), (2, false), (2, false), (0, false), (2, false)], "a loop wraps at 300 ms");
-    let once = Clip { id: "attack".into(), frames: 3, ms: vec![100, 50, 150], looped: false };
+    let once = Clip { id: "attack".into(), frames: 3, ms: vec![100, 50, 150], looped: false, of: String::new(), view: AssetView::Side };
     assert_eq!([once.frame_at(0), once.frame_at(149), once.frame_at(299), once.frame_at(300), once.frame_at(10_000)], [(0, false), (1, false), (2, false), (2, true), (2, true)], "a one-shot holds its last frame");
 }
 
@@ -89,7 +89,7 @@ fn a_missing_clip_falls_back_to_idle_then_to_the_first_frame() {
     let f = c.frame_at("shield_bash", 150).unwrap();
     assert_eq!((f.row, f.clip.as_str(), f.frame), (0, "idle", 1), "a clip the body lacks plays idle");
     // A body without idle (built by hand: parse refuses it) shows its first clip's first frame, still.
-    let no_idle = Clips { frame: (F, F), palette: Default::default(), clips: vec![Clip { id: "walk".into(), frames: 2, ms: vec![80, 80], looped: true }] };
+    let no_idle = Clips { frame: (F, F), palette: Default::default(), clips: vec![Clip { id: "walk".into(), frames: 2, ms: vec![80, 80], looped: true, of: String::new(), view: AssetView::Side }] };
     let f = no_idle.frame_at("hurt", 90).unwrap();
     assert_eq!((f.row, f.clip.as_str(), f.frame), (0, "walk", 0));
     assert!(Clips::default().frame_at("idle", 0).is_none(), "no clips: nothing to draw (the caller's fallback)");

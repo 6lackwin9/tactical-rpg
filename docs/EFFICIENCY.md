@@ -7,7 +7,9 @@ Living file: measure, fix, record. Add a row whenever a step feels slow or a run
 | Step | Cost | Verdict |
 | --- | --- | --- |
 | `tools/fc.sh gate` / `check_project.ps1 -Fast -Quiet`, warm build (2026-10-19) | 27 s: build check plus every test (battle traces ~8 s, journeys ~7 s, world battles ~5 s, the rest under 1 s) | pre-commit default |
+| Layer check (KIT1-G, in the gate) | about 0.7 s in bash (0.24 s of it one `git grep` per game id), 0.75 s in PowerShell | fine; note a git pathspec glob must match the whole path (`kits/*/crates/*`, not `kits/*/crates`) |
 | First build of a checkout or worktree (debug, every crate) | a few minutes; `run.bat` release build of the GUI and CLI likewise | once per folder; each worktree has its own build folder (fc.sh) |
+| Per-worktree build folders (`<target-dir>-<worktree>`, 2026-10-25) | 5-10 GB each; 33 stale ones filled C: (about 200 GB) | `tools/wt_remove.ps1` removes a worktree's folder with it; `-Targets -WhatIf` is the cheap disk audit (WTCLEAN1) |
 | `tools/fc.sh docs` | 16 s (129 files) | fine |
 | `aegis sim duel <level> 2` (120 fights, debug build) | 0.6 s | the Godot sim took ~90 s for the same table |
 | `aegis sim <mode>` (release build), the 20 recorded parity runs (`emberwake_sim` test `sim_parity`) | about 6 s in all | Godot took about 25 minutes for the same runs (`games/emberwake/parity/sim.sh`) |

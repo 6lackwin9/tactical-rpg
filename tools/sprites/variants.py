@@ -41,6 +41,53 @@ def goblin(cls, hat, pal, scale=0.84, **kw):
     return u
 
 
+# WAR2H1 look matrix (DIR4 section 7.1, W1: bake every look). A look is a grip (a pose set) plus a weapon drawing.
+# TWO_HANDED: item family -> its 2H drawing (rig.DRAWERS). LOOKS: class -> the looks the exporter bakes for the class
+# base, each a body of its own at units/<class>/<look>/ in the base's layer: `1h_buckler` (the base's one-hand weapon
+# and a buckler) and `2h_<family>`; the base's own sheet is its 1H + kite shield look. Every look of a body shares the
+# body's palette slots and palette files (DIR4 L3). The game picks the look from the equipped gear
+# (rpgkit_content::art::gear_body_chain). A new family on the 2H grip: one drawer in rig.DRAWERS, one entry here.
+TWO_HANDED = {'sword': 'greatsword', 'axe': 'battle_axe', 'hammer': 'warhammer'}
+LOOKS = {'warrior': ('1h_buckler', '2h_sword', '2h_axe', '2h_hammer')}
+
+
+def two_handed(u, family, drawing=None):
+    """Unit `u` on the 2H grip with `family`'s drawing (or `drawing`, a rig.DRAWERS key) and no off-hand."""
+    u = copy.deepcopy(u)
+    u.update(grip='2h', weapon=drawing or TWO_HANDED[family], offhand=None)
+    return u
+
+
+def with_buckler(u, weapon=None):
+    """Unit `u` on the buckler grip: its one-hand weapon (or `weapon`, a rig drawing) and a buckler on the far fist."""
+    u = copy.deepcopy(u)
+    u.update(grip='buckler', offhand='buckler')
+    if weapon:
+        u['weapon'] = weapon
+    return u
+
+
+def look_unit(u, look):
+    """Unit `u` wearing look `look` (a LOOKS id)."""
+    if look == '1h_buckler':
+        return with_buckler(u)
+    return two_handed(u, look[len('2h_'):])
+
+
+def looks():
+    """Look body key -> (base body key, look id)."""
+    return {'%s/%s' % (cls, look): (cls, look) for cls, ids in LOOKS.items() for look in ids}
+
+
+def look_base(key):
+    """The body a look belongs to (None: `key` is not a look)."""
+    return looks().get(key, (None, None))[0]
+
+
+# The named warrior bodies (WAR2H1, user 2026-10-23): one look each, the gear they wield (their gear in the data follows in a seed):
+# Hest, Brask and Orsa a hatchet (wpn_hand_axe) and a buckler; Grakka a two-handed double-bitted axe, no shield.
+
+
 # Ash goblins of the Horde (ASSETORG2: the ash_* mobs wear the goblin bodies): ashen skin, soot cloth, ember trim.
 ASH = dict(skin=(132, 138, 114), skin_lo=(96, 102, 82), main=(70, 64, 66), main_lo=(50, 46, 48), main_hi=(98, 92, 94),
            accent=(214, 104, 42), accent_lo=(150, 66, 28), leg=(64, 58, 58), leg_lo=(46, 42, 42), leather=(84, 66, 52),
@@ -75,36 +122,37 @@ BODIES = {
         trim=(226, 216, 186), sleeve=(106, 78, 126), sleeve_lo=(76, 54, 94), fore=(106, 78, 126), fore_lo=(76, 54, 94),
         leg=(76, 54, 94), leg_lo=(58, 40, 72), glove=(110, 150, 70))), GOBLIN_SLOTS),
     # ---- game: named bodies
-    # Grakka Ashmaw, Chieftain of the Horde: a large goblin warlord in dark iron, a crown of rusted nails, a red cape
-    'warrior/grakka_ashmaw': ('game', 'warrior', goblin('warrior', 'crown', dict(
+    # Grakka Ashmaw, Chieftain of the Horde: a large goblin warlord in dark iron, a crown of rusted nails, a red cape;
+    # a two-handed double-bitted axe, no shield (WAR2H1)
+    'warrior/grakka_ashmaw': ('game', 'warrior', two_handed(goblin('warrior', 'crown', dict(
         skin=(94, 128, 60), skin_lo=(66, 92, 42), metal=(104, 108, 116), metal_hi=(156, 162, 172), metal_lo=(66, 68, 76),
         main=(140, 36, 30), main_lo=(96, 24, 22), main_hi=(176, 60, 48), accent=(140, 36, 30), accent_lo=(96, 24, 22),
         sleeve=(140, 36, 30), sleeve_lo=(96, 24, 22), fore=(104, 108, 116), fore_lo=(66, 68, 76),
         leg=(104, 108, 116), leg_lo=(66, 68, 76), glove=(70, 54, 40), glove_lo=(50, 38, 28),
-        shield=(84, 66, 52), shield_lo=(60, 46, 36), emblem=(200, 64, 44)), scale=1.1, girth=1.0, neck=5.0, back='cape', weapon='sword2'), None),
+        shield=(84, 66, 52), shield_lo=(60, 46, 36), emblem=(200, 64, 44)), scale=1.1, girth=1.0, neck=5.0, back='cape'), 'axe', 'double_axe'), None),
     # the Horde Warchief (patrol leader): a big ash goblin brawler, horned iron cap, iron gauntlets, a shoulder plate
     'brawler/ash_warchief': ('game', 'brawler', goblin('brawler', 'horns', dict(
         ASH, main=(132, 138, 114), main_lo=(96, 102, 82), sleeve=(118, 124, 102), sleeve_lo=(104, 110, 90),
         fore=(112, 118, 128), fore_lo=(80, 86, 96), glove=(112, 118, 128), glove_lo=(90, 96, 106), glove_hi=(160, 166, 176),
         metal=(72, 74, 84), metal_hi=(122, 126, 138), metal_lo=(50, 52, 60), boot=(58, 52, 50), boot_lo=(44, 40, 38)),
         scale=0.97, girth=0.7, pauldron=True), None),
-    # NPCs: class bodies in their own outfit and colours
-    'warrior/brask_toller': ('game', 'warrior', variant('warrior', 1.0, dict(
+    # NPCs: class bodies in their own outfit and colours (the warrior NPCs: a hatchet and a buckler, WAR2H1)
+    'warrior/brask_toller': ('game', 'warrior', with_buckler(variant('warrior', 1.0, dict(
         main=(58, 82, 128), main_lo=(40, 56, 92), main_hi=(84, 110, 160), accent=(58, 82, 128), accent_lo=(40, 56, 92),
         sleeve=(58, 82, 128), sleeve_lo=(40, 56, 92), hair=(104, 72, 46), beard=(112, 78, 50),
-        shield=(58, 82, 128), shield_lo=(40, 56, 92), emblem=(224, 180, 60)), head='kettle', beard=True), HUMAN_SLOTS),
-    'warrior/hest_the_quartermaster': ('game', 'warrior', variant('warrior', 1.0, dict(
+        shield=(58, 82, 128), shield_lo=(40, 56, 92), emblem=(224, 180, 60)), head='kettle', beard=True), 'hand_axe'), HUMAN_SLOTS),
+    'warrior/hest_the_quartermaster': ('game', 'warrior', with_buckler(variant('warrior', 1.0, dict(
         main=(112, 86, 58), main_lo=(80, 60, 40), main_hi=(144, 114, 80), accent=(96, 104, 70), accent_lo=(70, 76, 50),
         sleeve=(112, 86, 58), sleeve_lo=(80, 60, 40), fore=(217, 166, 121), fore_lo=(176, 126, 88),
         leg=(92, 84, 70), leg_lo=(66, 60, 50), hair=(184, 180, 172), beard=(226, 222, 212), cap=(96, 70, 46), cap_lo=(70, 50, 32),
         cap_hi=(124, 94, 64), shield=(110, 84, 56), shield_lo=(80, 60, 40), emblem=(96, 104, 70)),
-        head='cap', beard=True, torso='leather'), HUMAN_SLOTS),
-    'warrior/orsa_tallow': ('game', 'warrior', variant('warrior', 1.0, dict(
+        head='cap', beard=True, torso='leather'), 'hand_axe'), HUMAN_SLOTS),
+    'warrior/orsa_tallow': ('game', 'warrior', with_buckler(variant('warrior', 1.0, dict(
         metal=(178, 188, 200), metal_hi=(230, 236, 244), metal_lo=(112, 122, 136), main=(48, 98, 82), main_lo=(32, 68, 56),
         main_hi=(76, 130, 110), accent=(48, 98, 82), accent_lo=(32, 68, 56), sleeve=(48, 98, 82), sleeve_lo=(32, 68, 56),
         fore=(178, 188, 200), fore_lo=(112, 122, 136), leg=(178, 188, 200), leg_lo=(112, 122, 136),
         hair=(150, 72, 42), hair_lo=(110, 50, 30), shield=(48, 98, 82), shield_lo=(32, 68, 56), emblem=(224, 180, 60)),
-        head='bare', braid=True), HUMAN_SLOTS),
+        head='bare', braid=True), 'hand_axe'), HUMAN_SLOTS),
     'ranger/wenn_tallow': ('game', 'ranger', variant('ranger', 1.0, dict(
         main=(152, 122, 80), main_lo=(112, 88, 56), main_hi=(184, 154, 106), accent=(176, 58, 46), accent_lo=(120, 40, 32),
         sleeve=(152, 122, 80), sleeve_lo=(112, 88, 56), leg=(84, 76, 96), leg_lo=(60, 54, 70), hair=(122, 82, 46)),
@@ -196,23 +244,84 @@ def dummy_clips():
 PROPS = {'dummy/base': ('kit', dummy_clips, DUMMY_PAL)}
 
 
+# ------------------------------------------------------------------ creature bodies (CREATURE1): the rig's quadruped and crawler
+# A creature body is a folder of its own under units/<kind>/: the kit's generic base (units/beast/base, units/crawler/base),
+# the game's named creatures beside it (units/beast/<id>, units/crawler/<id>), so a missing creature falls back to its
+# kind's base (rpgkit_content::art::body_chain). Every palette key is a slot (the first key wins when two share a colour).
+def creature(kind, **kw):
+    """A copy of the rig's quadruped (kind 'beast') or crawler (kind 'crawler') defaults with `kw` over them."""
+    u = copy.deepcopy(rig.QUAD if kind == 'beast' else rig.CRAWL)
+    u.update(kw)
+    return u
+
+
+# art bible hues (games/emberwake/docs/lore/specs/art_and_visual_style.md) the Sunk Ward creatures are coloured from
+H02, H05, H06, H07 = (20, 23, 31), (75, 85, 99), (156, 163, 175), (217, 203, 180)
+H08, H11, H12, H14, H15 = (107, 114, 128), (251, 191, 36), (225, 29, 72), (147, 51, 234), (192, 132, 252)
+BONE_WHITE = (255, 250, 240)
+
+CREATURES = {
+    # ---- kit: the generic bodies of each skeleton (a lean grey-brown hound; a rust-brown centipede)
+    'beast/base': ('kit', creature('beast', cx=21.0, tail=(5, 2.0), tail_a=-35.0, tail_curl=-5.0, pal=dict(
+        hide=(124, 108, 90), hide_lo=(92, 78, 64), hide_dk=(66, 56, 46), hide_hi=(156, 140, 118), mouth=(150, 56, 56),
+        teeth=(236, 230, 214), eye=(222, 178, 64), nose=(44, 36, 32), claw=(70, 60, 50)),
+        stance=dict(pitch=2.0, neck_a=-28.0, head_a=8.0, bob=0.0, paws={}))),
+    'crawler/base': ('kit', creature('crawler', pal=dict(
+        chitin=(124, 62, 40), chitin_lo=(84, 40, 28), chitin_hi=(170, 98, 62), leg=(196, 150, 92), leg_lo=(140, 104, 62),
+        fang=(226, 200, 150), glow=(240, 200, 90)))),
+    # ---- game (CAST1_ASSETS N1, N2)
+    # the Render-Beast: a starved, hairless mastiff-sized hound, bone ridges on the spine, jaws wired with iron; low,
+    # leaning forward, crouched to pounce (07 skin, 02 shadow, 05 wire, 12 gums; its shade steps computed between them)
+    'beast/render_beast': ('game', creature('beast', cx=19.0, body=15.0, hip_h=14.5, sh_h=15.5, haunch=3.6, waist=2.1, chest=5.0,
+        fore=(6.2, 6.0), hind=(6.0, 5.4, 3.6), neck=6.0, head=3.6, snout=5.4, jaw_len=5.0, ears='bat', ridges=6, ribs=4, wire=True,
+        tail=(4, 2.0), tail_a=-20.0, tail_curl=8.0, pal=dict(
+            hide=H07, hide_lo=rig.mix(H07, H02, 0.4), hide_dk=rig.mix(H07, H02, 0.62), hide_hi=rig.mix(H07, BONE_WHITE, 0.3),
+            bone=rig.mix(H07, BONE_WHITE, 0.45), mouth=H12, teeth=rig.mix(H07, BONE_WHITE, 0.7), eye=H11, nose=H02,
+            claw=rig.mix(H07, H02, 0.58), wire=H05, wire_hi=H06),
+        stance=dict(pitch=7.0, neck_a=14.0, head_a=12.0, bob=1.0, paws={'nf': (1.5, 0), 'ff': (2.0, 0), 'nh': (-1.0, 0), 'fh': (-0.5, 0)}))),
+    # the Ash-Crawler: a chitinous centipede a human's length, a swollen translucent abdomen of bubbling violet acid;
+    # low and long, the tail end coiled, the head raised; spits acid (02 chitin, 14 acid, 15 glow; 05, 06 and 08 lift
+    # the chitin and the legs off the dark; every slot its own colour, so a palette file recolours each part)
+    'crawler/ash_crawler': ('game', creature('crawler', n=16, gap=2.5, r=2.2, head=3.0, belly=(7, 12), belly_r=3.3, spit=True, leg=(3.0, 2.8), ride=5.2,
+        head_at=(35.0, 27.0), run=20.0, coil=0.5, pal=dict(
+            chitin=rig.mix(H02, H05, 0.7), chitin_lo=H02, chitin_hi=H08, leg=rig.mix(H08, H06, 0.5), leg_lo=H05, fang=H07,
+            acid=H14, acid_lo=rig.mix(H14, H02, 0.45), glow=H15))),
+}
+
+
+def creature_clips(key):
+    _, u = CREATURES[key]
+    return rig.quad_clips(u) if key.startswith('beast/') else rig.crawler_clips(u)
+
+
 def clips(key):
-    """(frames, ms, unit palette, slot keys) of a variant body or a prop body."""
+    """(frames, ms, unit palette, slot keys) of a variant body, a prop body or a creature body."""
     if key in PROPS:
         _, fn, pal = PROPS[key]
         A, T = fn()
         return A, T, pal, tuple(pal)
+    if key in CREATURES:
+        A, T = creature_clips(key)
+        pal = CREATURES[key][1]['pal']
+        return A, T, pal, tuple(pal)
+    if key in looks():  # the exporter gives a look its base body's palette slots
+        cls, look = looks()[key]
+        u = look_unit(classes.UNITS[cls], look)
+        A, T = classes.clips(cls, unit=u)
+        return A, T, u['pal'], None
     _, cls, u, slots = BODIES[key]
     A, T = classes.clips(cls, unit=u)
     return A, T, u['pal'], slots
 
 
 def layer(key):
-    return (BODIES.get(key) or PROPS[key])[0]
+    if key in looks():
+        return 'kit'  # a class base's looks live with the class base, in the kit
+    return (BODIES.get(key) or PROPS.get(key) or CREATURES[key])[0]
 
 
 def all_bodies():
-    return list(BODIES) + list(PROPS)
+    return list(BODIES) + list(looks()) + list(PROPS) + list(CREATURES)
 
 
 if __name__ == "__main__":

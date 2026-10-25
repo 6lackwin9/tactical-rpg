@@ -6,10 +6,13 @@
 //! `aegis_core::assets::ClipPlayer`), a frame's silhouette outline is cached (`body_outline`, highlights) and a body
 //! is checked frame by frame (`body_problems`); `played`, `body_outline` and `body_clip_flipped` take a `flip` to
 //! show a frame mirrored (a sheet facing right drawn facing left). PROPS1-E: a file's own size (`size_of`), mirrored images
-//! (`image_mirrored`) and a variant picked over a chain of folders (`varied`, which `tile_in` wraps).
+//! (`image_mirrored`) and a variant picked over a chain of folders (`varied`, which `tile_in` wraps). DIR4-E: a body
+//! played for a four-way `Facing` (`played_facing`: front and back rows of the sheet, side rows mirrored for left).
+//! STAGE1-E: the solid bounds of a body's fitted idle frame (`body_bounds`, a unit's hit rect on a stage).
+//! FX1-E: a frame's filled silhouette (`body_silhouette`, a hit flash), cached like the outline.
 
-use crate::canvas::{Image, Rgba, OUTLINE_ALPHA};
-use aegis_core::assets::{self, ClipFrame, ClipPlayer, Clips, Layers};
+use crate::canvas::{Image, Rect, Rgba, OUTLINE_ALPHA};
+use aegis_core::assets::{self, ClipFrame, ClipPlayer, Clips, Facing, Layers};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -34,6 +37,8 @@ pub struct Art {
     frames: HashMap<FrameKey, Option<Image>>,
     /// (body key, palette id, clip, frame, size, colour, flipped) -> the frame's silhouette outline.
     outlines: HashMap<OutlineKey, Option<Image>>,
+    /// The same key -> the frame's filled silhouette (`body_silhouette`, FX1-E hit flashes).
+    silhouettes: HashMap<OutlineKey, Option<Image>>,
     /// (rel, w, h) -> the scaled image mirrored left to right.
     mirrors: HashMap<(String, i32, i32), Option<Image>>,
     /// rel -> the PNG's own size.
@@ -41,6 +46,8 @@ pub struct Art {
     /// rel -> whether a layer holds it, and tile folder -> its variant count (asked every frame, looked up once).
     present: HashMap<String, bool>,
     variant_counts: HashMap<String, usize>,
+    /// (body key, palette id, size, flipped) -> the solid bounds of the fitted `idle` frame 0 (`body_bounds`).
+    body_rects: HashMap<(String, String, i32, bool), Option<Rect>>,
 }
 
 /// Decodes a PNG into RGBA (palette, grey and RGB inputs are expanded).
@@ -70,7 +77,7 @@ impl Art {
     }
 
     pub fn layered(layers: Layers) -> Self {
-        Self { layers, files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new() }
+        Self { layers, files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), silhouettes: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new(), body_rects: HashMap::new() }
     }
 
     pub fn layers(&self) -> &Layers {
@@ -231,6 +238,19 @@ impl Art {
         self.body_clip(key, palette, "idle", 0, size)
     }
 
+    /// The solid bounds (`Image::opaque_bounds` at `OUTLINE_ALPHA`) of body `key`'s `idle` frame 0 fitted to a `size`
+    /// square as `body_clip` fits it, mirrored left to right when `flip` (STAGE1-E: a unit's hit rect on the stage);
+    /// None when the body or frame does not load or the frame holds no solid pixel. Cached.
+    pub fn body_bounds(&mut self, key: &str, palette: &str, size: i32, flip: bool) -> Option<Rect> {
+        let k = (key.to_string(), palette.to_string(), size, flip);
+        if let Some(r) = self.body_rects.get(&k) {
+            return *r;
+        }
+        let r = self.body_clip_flipped(key, palette, "idle", 0, size, flip).and_then(|f| f.opaque_bounds(OUTLINE_ALPHA));
+        self.body_rects.insert(k, r);
+        r
+    }
+
     /// The first body of `keys` that loads (a body chain).
     pub fn first_body(&mut self, keys: &[String]) -> Option<String> {
         keys.iter().find(|k| self.has_body(k)).cloned()
@@ -254,6 +274,15 @@ impl Art {
         Some((f, img))
     }
 
+    /// `played` for a four-way `facing` (DIR4 3.2): the player's frame in `facing.view` (`ClipPlayer::frame_facing`:
+    /// the clip's view row, else its side row, else idle in that view, else side idle), mirrored only when it is a
+    /// side row and the facing is left (`Facing::mirrors`; pass the same to `body_outline`). Cached as `played`.
+    pub fn played_facing(&mut self, key: &str, palette: &str, player: &ClipPlayer, now: u64, size: i32, facing: Facing) -> Option<(ClipFrame, &Image)> {
+        let f = player.frame_facing(self.clips(key)?, now, facing.view)?;
+        let img = self.body_clip_flipped(key, palette, &f.clip, f.frame, size, facing.mirrors(&f))?;
+        Some((f, img))
+    }
+
     /// The silhouette outline (`Image::outline`, `col`) of frame `n` of `clip` in a `size` square; (size + 2) square,
     /// drawn one pixel up and left of the frame; of the mirrored frame when `flip` (as `played` draws it). Cached.
     #[allow(clippy::too_many_arguments)]
@@ -264,6 +293,19 @@ impl Art {
             self.outlines.insert(k.clone(), img);
         }
         self.outlines.get(&k).and_then(|i| i.as_ref())
+    }
+
+    /// FX1-E: the filled silhouette (`Image::silhouette`, `col`) of frame `n` of `clip` in a `size` square, the same
+    /// size and place as the frame; of the mirrored frame when `flip` (as `played` draws it). Cached like
+    /// `body_outline`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn body_silhouette(&mut self, key: &str, palette: &str, clip: &str, n: u32, size: i32, col: Rgba, flip: bool) -> Option<&Image> {
+        let k = (key.to_string(), palette.to_string(), clip.to_string(), n, size, col, flip);
+        if !self.silhouettes.contains_key(&k) {
+            let img = self.body_clip_flipped(key, palette, clip, n, size, flip).map(|f| f.silhouette(col));
+            self.silhouettes.insert(k.clone(), img);
+        }
+        self.silhouettes.get(&k).and_then(|i| i.as_ref())
     }
 
     /// What is wrong with body `key` (empty: it loads and every clip frame holds pixels): clips.json problems, a sheet

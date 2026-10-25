@@ -38,6 +38,8 @@ pub enum DAct {
     HealDummy,
     NextRound,
     Stance,
+    /// RULESET1-R: Classic / Timeline.
+    Ruleset,
     DummyGuard,
     Bench(usize),
     Switch,
@@ -157,6 +159,14 @@ impl Dojo {
             DAct::HealDummy => s.heal_dummy(),
             DAct::NextRound => s.next_round(),
             DAct::Stance => s.shift_stance(),
+            DAct::Ruleset => {
+                use emberwake_rules::ruleset::{Ruleset, CLASSIC, TIMELINE};
+                let next = if s.ruleset.is_classic() { TIMELINE } else { CLASSIC };
+                match Ruleset::of(&s.cat, next) {
+                    Ok(r) => s.set_ruleset(r),
+                    Err(e) => s.log_action("EVENT", "Ruleset", &e, 0, "FAILED", "", "", false),
+                }
+            }
             DAct::DummyGuard => s.toggle_dummy_defense(),
             DAct::Bench(n) => s.run_benchmark(n),
             DAct::Switch => s.switch_weapon(),
@@ -449,9 +459,14 @@ impl Dojo {
             ("counter", "Counter", DAct::Counter, self.s.dummy_counter, "The dummy strikes back after every hero skill."),
             ("crit", "Force crit", DAct::ForceCrit, self.s.force_crit, "Every hero hit crits."),
             ("guard", "Dummy guard", DAct::DummyGuard, self.s.dummy.guard > 0.0, "The dummy guards (Defensive stance, hits halved) or drops its guard."),
+            ("ruleset", "Timeline", DAct::Ruleset, !self.s.ruleset.is_classic(), "Timeline rules (on) or classic (off): under timeline the stances are inert (no switch AP, no stance change)."),
         ];
         for (id, label, act, on, help) in toggles {
             let w = ui.p.text_w(label, SMALL).ceil() as i32 + 8;
+            if x + w > b.x + b.w {
+                x = b.x + 2;
+                y += 13;
+            }
             ui.button_full(&format!("dojo.{id}"), Rect::new(x, y, w, 11), label, act, true, on, SMALL, tip(label, help));
             x += w + 2;
         }
@@ -469,7 +484,8 @@ impl Dojo {
                 x = b.x + 2;
                 y += 13;
             }
-            ui.button_full(&format!("dojo.{id}"), Rect::new(x, y, w, 11), label, act, true, false, SMALL, tip(label, help));
+            let enabled = id != "stance" || self.s.ruleset.stances();
+            ui.button_full(&format!("dojo.{id}"), Rect::new(x, y, w, 11), label, act, enabled, false, SMALL, tip(label, help));
             x += w + 2;
         }
         y += 14;

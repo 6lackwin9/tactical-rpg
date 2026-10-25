@@ -5,8 +5,13 @@ reuse groups (user 2026-10-20)"). A game uses the kit by naming it in its `game.
 then looks up every asset in the game's `assets/`, this kit's `assets/` and `engine/assets/`, in that order, so a game
 overrides a kit file by putting its own at the same path.
 
-The kit holds files and a manifest only, no code: the lookup chains that pick a body, portrait or icon live in the
-game until a second game needs them (SPLIT1 principle 2).
+Since KIT1-M and KIT1-N (2026-10-25) the kit also holds code and names no game: the genre rules in
+`crates/rpgkit_{data,rules,battle,content,world,sim,host}` (the host crate is the battle command set on `aegis_host`) and
+their field tables `schema.json`; the lookup chains that pick a body, portrait, icon or battle stage art (`battle_stage_dirs`, `battle_prop_dirs`,
+`battle_backdrop`, STAGE1-L) are in `rpgkit_content`'s `art.rs`,
+the writer hooks are `rpgkit_content::store::RpgContent`, and the data folder is found by `Data::find_data_dir` or
+`find_game_data_dir` with the game's id. A game's crates re-export the kit and add their own code. The sim names no world: a game passes
+`SimGame { default_world, story }` (KIT1-SIM). Base-class ids (`warrior`, ...) are the kit's contract. See `docs/specs/KIT1.md`.
 
 `kit.json` is written through `aegis content manifest --kit rpg <json>` (id = this folder's name, a semver version,
 the engine range it needs).
@@ -19,6 +24,7 @@ What is here (`assets/`):
 - `portraits/common/<class>_<variant>.png`: the portraits mobs and minor characters share.
 - `items/<family>/base.png` and generic variants (`sword/greatsword`, `accessory/amulet`, `consumable/bomb`, ...);
   `items/any/`.
+- `props/common/{tree,stones}/v<n>.png`: the battle stage's upright props (STAGE1-T; `tools/gen_art.py battle_props`).
 - `skills/kinds/<kind>.png`, `statuses/<id>.png`, `map/markers/<marker>.png`, `ui/{pins,intents,badges,chips}/`.
 - `ui/hud/` (gold, supplies, party, journal, stash, menu), `ui/markers/` (npc, chest, chest_open, lore, exit,
   world_map, encounter, roamer, point) and `ui/services/` (shop, recruit): the PLAYUI1 icons (32x32, made by

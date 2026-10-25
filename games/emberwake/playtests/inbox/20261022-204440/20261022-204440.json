@@ -1,0 +1,2249 @@
+{
+  "format": "playtest",
+  "version": 2,
+  "id": "20261022-204440",
+  "origin": "user",
+  "created": "2026-10-22T20:44:40Z",
+  "engine": "aegis 0.1.0",
+  "source_rev": "",
+  "scenario": "",
+  "parent": null,
+  "content": {
+    "algo": "sha256-12",
+    "total": "e4f9a0f4683e",
+    "files": {
+      "catalog/classes.json": "41f8fc292773",
+      "catalog/encounters.json": "12c38b8c5bb7",
+      "catalog/item_families.json": "79141dec15b0",
+      "catalog/items.json": "e02d921a7c1d",
+      "catalog/passives.json": "7ff5546f7341",
+      "catalog/skills.json": "2eca982be793",
+      "catalog/terrain.json": "19b58af1474c",
+      "catalog/units.json": "fd70c35e6024",
+      "dialogue/services.json": "2d46a14bb6d4",
+      "maps/maps.json": "8a8b52812ab6",
+      "progression/xp_curve.json": "0a033e698e9b",
+      "quests/quests.json": "650c0eecf7e8",
+      "seeds/assetorg2.json": "234b06d60625",
+      "seeds/phasefold.json": "9f08fa62f499",
+      "seeds/props1_ashlands.json": "8328796c4031",
+      "seeds/reward1.json": "be4eea13c9b9",
+      "seeds/sprite2.json": "47494843663d",
+      "worlds/ashlands/characters.json": "4b003add48c7",
+      "worlds/ashlands/dialogues.json": "30664475df60",
+      "worlds/ashlands/disciplines.json": "9e311d18d1d4",
+      "worlds/ashlands/encounters.json": "97cb7f8e0261",
+      "worlds/ashlands/factions.json": "e398a073d930",
+      "worlds/ashlands/items.json": "66cf7efea2c1",
+      "worlds/ashlands/locations.json": "e410fe4baf0e",
+      "worlds/ashlands/loot.json": "2ed5311d66e6",
+      "worlds/ashlands/lore.json": "6afefe6f4056",
+      "worlds/ashlands/quests.json": "681c36e572f0",
+      "worlds/ashlands/regions.json": "23956d3e749a",
+      "worlds/ashlands/routes.json": "b7d91729962a",
+      "worlds/ashlands/shops.json": "fa81e8137582",
+      "worlds/ashlands/world.json": "7eaf6e5d0cbf",
+      "worlds/iron_reaches/characters.json": "1e16f837f8a6",
+      "worlds/iron_reaches/dialogues.json": "066aca1e5c63",
+      "worlds/iron_reaches/disciplines.json": "e0a96eddfd09",
+      "worlds/iron_reaches/encounters.json": "83dd4617fbdc",
+      "worlds/iron_reaches/factions.json": "12f98fddfeab",
+      "worlds/iron_reaches/items.json": "7d317956248d",
+      "worlds/iron_reaches/locations.json": "c1b825822a36",
+      "worlds/iron_reaches/loot.json": "7f58314650b3",
+      "worlds/iron_reaches/lore.json": "9702a9f092ec",
+      "worlds/iron_reaches/quests.json": "68b3502b2272",
+      "worlds/iron_reaches/regions.json": "9c1665e882fa",
+      "worlds/iron_reaches/routes.json": "c8394d8dda64",
+      "worlds/iron_reaches/shops.json": "0628971b088e",
+      "worlds/iron_reaches/world.json": "da83c0436acb",
+      "worlds/tidewrack/characters.json": "1f9eaeda688f",
+      "worlds/tidewrack/disciplines.json": "e0a96eddfd09",
+      "worlds/tidewrack/encounters.json": "c3ba1fd99850",
+      "worlds/tidewrack/factions.json": "ab5f281d57d6",
+      "worlds/tidewrack/items.json": "7d317956248d",
+      "worlds/tidewrack/locations.json": "f591ec88a505",
+      "worlds/tidewrack/lore.json": "862903448e6e",
+      "worlds/tidewrack/quests.json": "ce14a73cc86f",
+      "worlds/tidewrack/regions.json": "385350066cf4",
+      "worlds/tidewrack/world.json": "99cc74461090"
+    }
+  },
+  "battles": [
+    {
+      "index": 0,
+      "requests": [
+        {
+          "cmd": "new",
+          "encounter": "goblin_ambush"
+        },
+        {
+          "cmd": "preset",
+          "preset": "balanced"
+        },
+        {
+          "cmd": "confirm"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "advance"
+        },
+        {
+          "cmd": "preset",
+          "preset": "balanced"
+        },
+        {
+          "cmd": "confirm"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "advance"
+        },
+        {
+          "cmd": "preset",
+          "preset": "balanced"
+        },
+        {
+          "cmd": "confirm"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "advance"
+        },
+        {
+          "cmd": "preset",
+          "preset": "balanced"
+        },
+        {
+          "cmd": "confirm"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "advance"
+        },
+        {
+          "cmd": "preset",
+          "preset": "balanced"
+        },
+        {
+          "cmd": "confirm"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        },
+        {
+          "cmd": "step"
+        }
+      ],
+      "checkpoints": [
+        {
+          "at": 17,
+          "state": {
+            "round": 1,
+            "over": false,
+            "result": "",
+            "log_count": 13,
+            "units": [
+              {
+                "id": 0,
+                "hp": 334,
+                "ap": 3,
+                "pos": [
+                  6,
+                  4
+                ],
+                "stance": "defensive",
+                "statuses": [],
+                "pending": [
+                  "taunt"
+                ],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 1,
+                "hp": 173,
+                "ap": 2,
+                "pos": [
+                  5,
+                  4
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 2,
+                "hp": 0,
+                "ap": 3,
+                "pos": [
+                  4,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 3,
+                "hp": 69,
+                "ap": 7,
+                "pos": null,
+                "stance": "neutral",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": true
+              },
+              {
+                "id": 4,
+                "hp": 209,
+                "ap": 12,
+                "pos": [
+                  6,
+                  3
+                ],
+                "stance": "neutral",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 5,
+                "hp": 65,
+                "ap": 12,
+                "pos": [
+                  7,
+                  4
+                ],
+                "stance": "neutral",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 6,
+                "hp": 71,
+                "ap": 12,
+                "pos": [
+                  6,
+                  5
+                ],
+                "stance": "neutral",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 7,
+                "hp": 77,
+                "ap": 12,
+                "pos": [
+                  6,
+                  2
+                ],
+                "stance": "neutral",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              }
+            ]
+          }
+        },
+        {
+          "at": 38,
+          "state": {
+            "round": 2,
+            "over": false,
+            "result": "",
+            "log_count": 31,
+            "units": [
+              {
+                "id": 0,
+                "hp": 189,
+                "ap": 2,
+                "pos": [
+                  6,
+                  4
+                ],
+                "stance": "defensive",
+                "statuses": [
+                  "taunt",
+                  "riposte"
+                ],
+                "pending": [
+                  "root"
+                ],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 1,
+                "hp": 173,
+                "ap": 2,
+                "pos": [
+                  4,
+                  3
+                ],
+                "stance": "tactical",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 2,
+                "hp": 0,
+                "ap": 7,
+                "pos": [
+                  4,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 3,
+                "hp": 69,
+                "ap": 11,
+                "pos": null,
+                "stance": "neutral",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": true
+              },
+              {
+                "id": 4,
+                "hp": 180,
+                "ap": 5,
+                "pos": [
+                  6,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 5,
+                "hp": 0,
+                "ap": 8,
+                "pos": [
+                  7,
+                  4
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 6,
+                "hp": 71,
+                "ap": 5,
+                "pos": [
+                  4,
+                  5
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 7,
+                "hp": 77,
+                "ap": 5,
+                "pos": [
+                  6,
+                  2
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              }
+            ]
+          }
+        },
+        {
+          "at": 57,
+          "state": {
+            "round": 3,
+            "over": false,
+            "result": "",
+            "log_count": 46,
+            "units": [
+              {
+                "id": 0,
+                "hp": 37,
+                "ap": 0,
+                "pos": [
+                  6,
+                  4
+                ],
+                "stance": "defensive",
+                "statuses": [
+                  "taunt",
+                  "riposte",
+                  "root"
+                ],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 1,
+                "hp": 173,
+                "ap": 0,
+                "pos": [
+                  4,
+                  1
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 2,
+                "hp": 0,
+                "ap": 11,
+                "pos": [
+                  4,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 3,
+                "hp": 69,
+                "ap": 12,
+                "pos": null,
+                "stance": "neutral",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": true
+              },
+              {
+                "id": 4,
+                "hp": 46,
+                "ap": 0,
+                "pos": [
+                  6,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [
+                  "stagger"
+                ],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 5,
+                "hp": 0,
+                "ap": 12,
+                "pos": [
+                  7,
+                  4
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 6,
+                "hp": 0,
+                "ap": 3,
+                "pos": [
+                  4,
+                  5
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [
+                  "root"
+                ],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 7,
+                "hp": 77,
+                "ap": 3,
+                "pos": [
+                  6,
+                  2
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              }
+            ]
+          }
+        },
+        {
+          "at": 74,
+          "state": {
+            "round": 4,
+            "over": false,
+            "result": "",
+            "log_count": 59,
+            "units": [
+              {
+                "id": 0,
+                "hp": 37,
+                "ap": -1,
+                "pos": null,
+                "stance": "defensive",
+                "statuses": [
+                  "taunt",
+                  "riposte"
+                ],
+                "pending": [],
+                "alive": true,
+                "withdrawn": true
+              },
+              {
+                "id": 1,
+                "hp": 173,
+                "ap": 0,
+                "pos": [
+                  4,
+                  1
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 2,
+                "hp": 0,
+                "ap": 12,
+                "pos": [
+                  4,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 3,
+                "hp": 69,
+                "ap": 12,
+                "pos": null,
+                "stance": "neutral",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": true
+              },
+              {
+                "id": 4,
+                "hp": 89,
+                "ap": -1,
+                "pos": [
+                  7,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [
+                  "stagger"
+                ],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 5,
+                "hp": 0,
+                "ap": 12,
+                "pos": [
+                  7,
+                  4
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 6,
+                "hp": 0,
+                "ap": 7,
+                "pos": [
+                  4,
+                  5
+                ],
+                "stance": "offensive",
+                "statuses": [
+                  "root"
+                ],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 7,
+                "hp": 0,
+                "ap": 1,
+                "pos": [
+                  6,
+                  2
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              }
+            ]
+          }
+        },
+        {
+          "at": 81,
+          "state": {
+            "round": 5,
+            "over": true,
+            "result": "won",
+            "log_count": 64,
+            "units": [
+              {
+                "id": 0,
+                "hp": 37,
+                "ap": 3,
+                "pos": null,
+                "stance": "defensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": true
+              },
+              {
+                "id": 1,
+                "hp": 173,
+                "ap": -1,
+                "pos": [
+                  5,
+                  2
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": false
+              },
+              {
+                "id": 2,
+                "hp": 0,
+                "ap": 12,
+                "pos": [
+                  4,
+                  3
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 3,
+                "hp": 69,
+                "ap": 12,
+                "pos": null,
+                "stance": "neutral",
+                "statuses": [],
+                "pending": [],
+                "alive": true,
+                "withdrawn": true
+              },
+              {
+                "id": 4,
+                "hp": 0,
+                "ap": 2,
+                "pos": [
+                  6,
+                  1
+                ],
+                "stance": "tactical",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 5,
+                "hp": 0,
+                "ap": 12,
+                "pos": [
+                  7,
+                  4
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 6,
+                "hp": 0,
+                "ap": 11,
+                "pos": [
+                  4,
+                  5
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              },
+              {
+                "id": 7,
+                "hp": 0,
+                "ap": 5,
+                "pos": [
+                  6,
+                  2
+                ],
+                "stance": "offensive",
+                "statuses": [],
+                "pending": [],
+                "alive": false,
+                "withdrawn": false
+              }
+            ]
+          }
+        }
+      ],
+      "end": {
+        "result": "won",
+        "at": 81
+      }
+    },
+    {
+      "index": 1,
+      "requests": [
+        {
+          "cmd": "new",
+          "encounter": "goblin_ambush"
+        }
+      ],
+      "checkpoints": [],
+      "end": {
+        "result": "abandoned",
+        "at": 1
+      }
+    }
+  ],
+  "trail": [
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "runner.arena",
+        "cls": "button",
+        "text": "Launch",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 1448,
+      "t": 3362
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        319,
+        118
+      ],
+      "ctl": {
+        "path": "runner.arena.encounter",
+        "cls": "select",
+        "text": "[Catalog] Goblin Skirmish",
+        "tip": "Encounter",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 3650
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "runner.arena.encounter",
+        "cls": "select",
+        "text": "[Catalog] Goblin Skirmish",
+        "tip": "Encounter",
+        "interactive": true
+      },
+      "t": 3650
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "runner.arena.encounter",
+        "cls": "select",
+        "text": "[Catalog] Goblin Skirmish",
+        "tip": "Encounter",
+        "interactive": true
+      },
+      "ms": 1453,
+      "t": 4837
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        254,
+        156
+      ],
+      "ctl": {
+        "path": "runner.arena.encounter.opt.2",
+        "cls": "option",
+        "text": "[Catalog] Goblin Ambush",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 5496
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "runner.arena.encounter.opt.2",
+        "cls": "option",
+        "text": "[Catalog] Goblin Ambush",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 5496
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        369,
+        101
+      ],
+      "ctl": {
+        "path": "runner.arena",
+        "cls": "button",
+        "text": "Launch",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 6270
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "runner.arena",
+        "cls": "button",
+        "text": "Launch",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 6270
+    },
+    {
+      "type": "screen",
+      "path": "test_arena",
+      "leaked": 0,
+      "t": 6273
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "strip.clear",
+        "cls": "button",
+        "text": "Clear",
+        "tip": "Clears the selected hero's steps.",
+        "interactive": true
+      },
+      "ms": 902,
+      "t": 7856
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "tile.11.4",
+        "cls": "tile",
+        "text": "grass",
+        "tip": "Exit",
+        "interactive": true
+      },
+      "ms": 756,
+      "t": 11656
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "unit.3",
+        "cls": "unit",
+        "text": "Fleeing Scout 69/69",
+        "tip": "Fleeing Scout",
+        "interactive": true
+      },
+      "ms": 2809,
+      "t": 14634
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "unit.2",
+        "cls": "unit",
+        "text": "Enemy Brawler 109/109",
+        "tip": "Enemy Brawler",
+        "interactive": true
+      },
+      "ms": 6873,
+      "t": 21507
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "unit.3",
+        "cls": "unit",
+        "text": "Fleeing Scout 69/69",
+        "tip": "Fleeing Scout",
+        "interactive": true
+      },
+      "ms": 2522,
+      "t": 24030
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "strip.auto",
+        "cls": "button",
+        "text": "Auto",
+        "tip": "Autoplay",
+        "interactive": true
+      },
+      "ms": 1591,
+      "t": 26306
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "unit.0",
+        "cls": "unit",
+        "text": "Warrior 334/334",
+        "tip": "Warrior",
+        "interactive": true
+      },
+      "ms": 11767,
+      "t": 39634
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "strip.auto",
+        "cls": "button",
+        "text": "Auto",
+        "tip": "Autoplay",
+        "interactive": true
+      },
+      "ms": 1047,
+      "t": 41089
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 42856
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "unit.1",
+        "cls": "unit",
+        "text": "Ranger 200/200",
+        "tip": "Ranger",
+        "interactive": true
+      },
+      "ms": 1303,
+      "t": 42856
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 129675,
+      "t": 172597
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        206,
+        283
+      ],
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 173505
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 173505
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        220,
+        83
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "The token looks weird now since the spri",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 175199
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "The token looks weird now since the spri",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 12334,
+      "t": 186145
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        287,
+        61
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "The token looks weird now since the spri",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 186732
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "The token looks weird now since the spri",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 16796,
+      "t": 203158
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        276,
+        87
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "The token looks weird now since the spri",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 257586
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "The token looks weird now since the spri",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 53490,
+      "t": 258079
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        416,
+        323
+      ],
+      "ctl": {
+        "path": "note.cancel",
+        "cls": "button",
+        "text": "Cancel",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 264699
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "note.cancel",
+        "cls": "button",
+        "text": "Cancel",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 264699
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 264699
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "unit.0",
+        "cls": "unit",
+        "text": "Warrior 334/334",
+        "tip": "Warrior",
+        "interactive": true
+      },
+      "ms": 1488,
+      "t": 268211
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "tile.3.8",
+        "cls": "tile",
+        "text": "tree",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 1213,
+      "t": 270065
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "unit.0",
+        "cls": "unit",
+        "text": "Warrior 334/334",
+        "tip": "Warrior",
+        "interactive": true
+      },
+      "ms": 1126,
+      "t": 271489
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        485,
+        16
+      ],
+      "ctl": {
+        "path": "strip.auto",
+        "cls": "button",
+        "text": "Auto",
+        "tip": "Autoplay",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 275007
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "strip.auto",
+        "cls": "button",
+        "text": "Auto",
+        "tip": "Autoplay",
+        "interactive": true
+      },
+      "t": 275007
+    },
+    {
+      "type": "plan_edit",
+      "kind": "preset_all",
+      "unit": null,
+      "round": 1,
+      "t": 275009
+    },
+    {
+      "type": "confirm",
+      "ok": true,
+      "reason": "",
+      "round": 1,
+      "t": 275009
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "strip.auto",
+        "cls": "button",
+        "text": "Auto",
+        "tip": "Autoplay",
+        "interactive": true
+      },
+      "ms": 6008,
+      "t": 279212
+    },
+    {
+      "type": "plan_edit",
+      "kind": "preset_all",
+      "unit": null,
+      "round": 2,
+      "t": 281825
+    },
+    {
+      "type": "confirm",
+      "ok": true,
+      "reason": "",
+      "round": 2,
+      "t": 281825
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "unit.5",
+        "cls": "unit",
+        "text": "Goblin Skirmisher 65/65",
+        "tip": "Goblin Skirmisher",
+        "interactive": true
+      },
+      "ms": 1002,
+      "t": 282143
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "unit.4",
+        "cls": "unit",
+        "text": "Goblin Berserker 209/209",
+        "tip": "Goblin Berserker",
+        "interactive": true
+      },
+      "ms": 1434,
+      "t": 285502
+    },
+    {
+      "type": "plan_edit",
+      "kind": "preset_all",
+      "unit": null,
+      "round": 3,
+      "t": 290394
+    },
+    {
+      "type": "confirm",
+      "ok": true,
+      "reason": "",
+      "round": 3,
+      "t": 290394
+    },
+    {
+      "type": "plan_edit",
+      "kind": "preset_all",
+      "unit": null,
+      "round": 4,
+      "t": 298227
+    },
+    {
+      "type": "confirm",
+      "ok": true,
+      "reason": "",
+      "round": 4,
+      "t": 298227
+    },
+    {
+      "type": "plan_edit",
+      "kind": "preset_all",
+      "unit": null,
+      "round": 5,
+      "t": 305256
+    },
+    {
+      "type": "confirm",
+      "ok": true,
+      "reason": "",
+      "round": 5,
+      "t": 305256
+    },
+    {
+      "type": "battle_end",
+      "round": 5,
+      "result": "won",
+      "t": 306705
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        308,
+        178
+      ],
+      "ctl": {
+        "path": "banner.restart",
+        "cls": "button",
+        "text": "Play again",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 308886
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "banner.restart",
+        "cls": "button",
+        "text": "Play again",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 308886
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 310978
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "tile.6.2",
+        "cls": "tile",
+        "text": "grass",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 1436,
+      "t": 310978
+    },
+    {
+      "type": "click",
+      "button": "right",
+      "pos": [
+        286,
+        124
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 312024
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 312024
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 964,
+      "t": 312024
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 313422
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "tile.4.2",
+        "cls": "tile",
+        "text": "dirt",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 1397,
+      "t": 313422
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 60091,
+      "t": 373591
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        432,
+        111
+      ],
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "The token looks weird now since the spri",
+        "tip": "",
+        "interactive": false
+      },
+      "handled": true,
+      "t": 374506
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "The token looks weird now since the spri",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 56919,
+      "t": 430874
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        213,
+        279
+      ],
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 432309
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 432309
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 1123,
+      "t": 432921
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "The token looks weird now since the spri",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 1104,
+      "t": 434026
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        267,
+        284
+      ],
+      "ctl": {
+        "path": "note.tag.ux",
+        "cls": "checkbox",
+        "text": "ux: off",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 434538
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "note.tag.ux",
+        "cls": "checkbox",
+        "text": "ux: off",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 434538
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.tag.ux",
+        "cls": "checkbox",
+        "text": "ux: off",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 784,
+      "t": 434810
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        207,
+        284
+      ],
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: on",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 435931
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: on",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 435931
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        208,
+        284
+      ],
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 436551
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: off",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 436551
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.tag.ui",
+        "cls": "checkbox",
+        "text": "ui: on",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 1839,
+      "t": 436904
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        271,
+        282
+      ],
+      "ctl": {
+        "path": "note.tag.ux",
+        "cls": "checkbox",
+        "text": "ux: on",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 437341
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "note.tag.ux",
+        "cls": "checkbox",
+        "text": "ux: on",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 437341
+    },
+    {
+      "type": "key",
+      "key": "ctrl+enter",
+      "mods": "",
+      "t": 439612
+    },
+    {
+      "type": "note",
+      "n": 1,
+      "t": 439690
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "note",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 439723
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "notice",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": true,
+      "t": 439723
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "note.text",
+        "cls": "textarea",
+        "text": "The token looks weird now since the spri",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 2205,
+      "t": 439724
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        401,
+        189
+      ],
+      "ctl": {
+        "path": "notice.ok",
+        "cls": "button",
+        "text": "OK",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 441399
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "notice.ok",
+        "cls": "button",
+        "text": "OK",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 441399
+    },
+    {
+      "type": "modal",
+      "ctl": {
+        "path": "notice",
+        "cls": "screen",
+        "text": "",
+        "tip": "",
+        "interactive": false
+      },
+      "open": false,
+      "t": 441399
+    },
+    {
+      "type": "click",
+      "button": "right",
+      "pos": [
+        401,
+        189
+      ],
+      "ctl": {
+        "path": "tile.8.4",
+        "cls": "tile",
+        "text": "dirt",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 442762
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "tile.8.4",
+        "cls": "tile",
+        "text": "dirt",
+        "tip": "",
+        "interactive": true
+      },
+      "ms": 2064,
+      "t": 443464
+    },
+    {
+      "type": "click",
+      "button": "right",
+      "pos": [
+        408,
+        156
+      ],
+      "ctl": {
+        "path": "tile.8.3",
+        "cls": "tile",
+        "text": "grass",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 443527
+    },
+    {
+      "type": "key",
+      "key": "esc",
+      "mods": "",
+      "t": 446821
+    },
+    {
+      "type": "screen",
+      "path": "scene_runner",
+      "leaked": 0,
+      "t": 446823
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        444,
+        103
+      ],
+      "ctl": {
+        "path": "runner.playtests",
+        "cls": "button",
+        "text": "Playtests",
+        "tip": "Playtests",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 454577
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "runner.playtests",
+        "cls": "button",
+        "text": "Playtests",
+        "tip": "Playtests",
+        "interactive": true
+      },
+      "t": 454577
+    },
+    {
+      "type": "screen",
+      "path": "recordings",
+      "leaked": 0,
+      "t": 454624
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        362,
+        338
+      ],
+      "ctl": {
+        "path": "recordings.copy",
+        "cls": "button",
+        "text": "Copy to repo",
+        "tip": "Copy to repo",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 459414
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "recordings.copy",
+        "cls": "button",
+        "text": "Copy to repo",
+        "tip": "Copy to repo",
+        "interactive": true
+      },
+      "t": 459414
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "recordings.copy",
+        "cls": "button",
+        "text": "Copy to repo",
+        "tip": "Copy to repo",
+        "interactive": true
+      },
+      "ms": 5451,
+      "t": 461310
+    },
+    {
+      "type": "hover",
+      "ctl": {
+        "path": "recordings.list",
+        "cls": "scroll",
+        "text": "0",
+        "tip": "",
+        "interactive": false
+      },
+      "ms": 1904,
+      "t": 463289
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        627,
+        9
+      ],
+      "ctl": {
+        "path": "recordings.back",
+        "cls": "button",
+        "text": "Back",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 465551
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "recordings.back",
+        "cls": "button",
+        "text": "Back",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 465551
+    },
+    {
+      "type": "screen",
+      "path": "scene_runner",
+      "leaked": 0,
+      "t": 465551
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        618,
+        15
+      ],
+      "ctl": {
+        "path": "runner.exit",
+        "cls": "button",
+        "text": "Exit",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 467263
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "runner.exit",
+        "cls": "button",
+        "text": "Exit",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 467263
+    },
+    {
+      "type": "screen",
+      "path": "main_menu",
+      "leaked": 0,
+      "t": 467263
+    },
+    {
+      "type": "click",
+      "button": "left",
+      "pos": [
+        312,
+        247
+      ],
+      "ctl": {
+        "path": "menu.quit",
+        "cls": "button",
+        "text": "Quit",
+        "tip": "",
+        "interactive": true
+      },
+      "handled": true,
+      "t": 468214
+    },
+    {
+      "type": "button",
+      "ctl": {
+        "path": "menu.quit",
+        "cls": "button",
+        "text": "Quit",
+        "tip": "",
+        "interactive": true
+      },
+      "t": 468214
+    }
+  ],
+  "trail_dropped": 0,
+  "notes": [
+    {
+      "scene": "test_arena",
+      "battle": -1,
+      "round": 1,
+      "block": 1,
+      "phase": "planning",
+      "mouse": [
+        286,
+        124
+      ],
+      "viewport": [
+        640,
+        360
+      ],
+      "ctl": {
+        "path": "tile.4.2",
+        "cls": "tile",
+        "text": "dirt",
+        "tip": "",
+        "interactive": true
+      },
+      "text": "The token looks weird now since the sprites are standing whole the ground tiles are flat making it feel disconnected from the background, I guess the ground/tiles needs to feel isometric, open to suggestions\nThe sprites look wierd when engaging unit from top or bottom, may be need to have sprite facing all 4 directions, is it possible using the rig\nThe token needs to be facing in the direction of their target, \nFor melee/ranged attack add some particle effect to show the attack, the hit and death effects look fine",
+      "tags": [
+        "ui"
+      ],
+      "n": 1,
+      "t": 439613,
+      "origin": "user",
+      "image": "note_1.jpg"
+    }
+  ]
+}

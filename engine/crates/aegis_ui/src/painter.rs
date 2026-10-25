@@ -138,6 +138,15 @@ impl<'a> Painter<'a> {
         self.c.clip = r.map(|r| self.v.rect(r));
     }
 
+    /// FX1-E: moves everything drawn after it by whole logical px (adds `d x scale` to the view offset, a camera
+    /// shake's world layer); `shift(-dx, -dy)` undoes it. A clip set before the shift stays where it was (it is held in
+    /// physical px), so a shaken board stays inside its panel; widget rects and hit tests never move. The text audit keeps the
+    /// unshifted places (a shake is a few px for a moment).
+    pub fn shift(&mut self, dx: i32, dy: i32) {
+        self.v.ox += dx as f32 * self.v.s;
+        self.v.oy += dy as f32 * self.v.s;
+    }
+
     /// Rounded panel with a 1-physical-pixel border; corner radius in logical units.
     pub fn panel(&mut self, r: Rect, fill: Rgba, border: Rgba, radius: f32) {
         let pr = self.v.rect(r);
@@ -328,6 +337,28 @@ impl<'a> Painter<'a> {
                 let grad = ((ux / (prx * prx)).powi(2) + (uy / (pry * pry)).powi(2)).sqrt() / k.max(1e-6);
                 let d = if k <= 1e-6 { -prx.min(pry) } else { (k - 1.0) / grad.max(1e-6) };
                 let cover = (0.5 - d).clamp(0.0, 1.0);
+                if cover > 0.0 {
+                    self.c.blend(px, py, mix(col, cover));
+                }
+            }
+        }
+    }
+
+    /// A 1 px (logical) anti-aliased ellipse outline centred on logical (`cx`, `cy`) with radii `rx` and `ry`, no fill
+    /// (STAGE1-E: a unit's foot ring). Only pixels within half the stroke plus half a pixel of the edge are touched.
+    pub fn ellipse_ring(&mut self, cx: f32, cy: f32, rx: f32, ry: f32, col: Rgba) {
+        let (x, y, prx, pry) = (self.v.ox + cx * self.v.s, self.v.oy + cy * self.v.s, (rx * self.v.s).max(0.5), (ry * self.v.s).max(0.5));
+        let t = self.v.s.max(1.0);
+        let pad = t / 2.0 + 1.0;
+        let (x0, y0, x1, y1) = ((x - prx - pad).floor() as i32, (y - pry - pad).floor() as i32, (x + prx + pad).ceil() as i32, (y + pry + pad).ceil() as i32);
+        for py in y0..=y1 {
+            for px in x0..=x1 {
+                let (ux, uy) = (px as f32 + 0.5 - x, py as f32 + 0.5 - y);
+                let k = ((ux / prx).powi(2) + (uy / pry).powi(2)).sqrt();
+                // Distance to the edge in physical pixels, measured as `ellipse` does.
+                let grad = ((ux / (prx * prx)).powi(2) + (uy / (pry * pry)).powi(2)).sqrt() / k.max(1e-6);
+                let d = if k <= 1e-6 { prx.min(pry) } else { ((k - 1.0) / grad.max(1e-6)).abs() };
+                let cover = (t / 2.0 + 0.5 - d).clamp(0.0, 1.0);
                 if cover > 0.0 {
                     self.c.blend(px, py, mix(col, cover));
                 }

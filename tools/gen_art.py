@@ -3,11 +3,18 @@
 # flat-shaded shapes with dark outlines in an Ashlands palette.
 #   python tools/gen_art.py [group ...] [--layer engine|kit|game ...] [--root DIR] [--overwrite] [--list]
 #   python tools/gen_art.py --compare DIR [--spot OUT]
-# Groups: bodies portraits items skills statuses terrain overlays region markers pins chips world_map backdrops menu.
-# Layers (default all): engine = engine/assets/ (the common tileset), kit = kits/rpg/assets/ (class variant bodies,
+# Groups: bodies portraits items skills statuses terrain overlays region markers pins chips world_map backdrops menu stage_tiles battle_props battle_backdrops
+# story world_card menu_sunless sunk_backdrops family_icons.
+# The last five (STORYART1) are the Sunk Ward slice's placeholders in the art bible's 16 hues: story = the vignette
+# pictures backgrounds/story/<id>.png (1120 x 472, 2x STORYUI1 V9's 560 x 236 picture area: intro_1-4, meat_market,
+# hearth), world_card = backgrounds/title/sunk_ward.png, menu_sunless = backgrounds/menu/main_menu.png (the game's main menu, MENU2; the
+# old sunny menu drawing is retired, the menu group now draws only the Ashlands card), sunk_backdrops = the seven zones' backgrounds/battle/<zone>.png, family_icons = the
+# scourge and sprayer items/<family>/base.png in the ART2 icon look (they replace CAST1-A7's byte copies of the kit's
+# mace and staff icons only while those copies are still in place).
+# Layers (default all): engine = engine/assets/ (the common tileset and the common_stage 4:3 battle tiles), kit = kits/rpg/assets/ (class variant bodies,
 # common portraits, item bases and generic variants, skill kind icons, statuses, map markers, UI pins, intents, badges
-# and chips), game = games/emberwake/assets/ (named bodies and portraits, skill family icons, the named items, the
-# Ashlands tiles, backgrounds). DIR is a workspace root (default: this repository); the three asset roots sit under it.
+# and chips, props/common/{tree,stones} battle props), game = games/emberwake/assets/ (named bodies and portraits, skill family icons, the named items, the
+# Ashlands tiles, backgrounds, backgrounds/battle zone backdrops). DIR is a workspace root (default: this repository); the three asset roots sit under it.
 # An existing file is kept (printed "kept"): the committed art includes ART2 portraits and icons made from art_src/
 # by tools/portraits/, which these placeholders must not replace; --overwrite rewrites them.
 # The six class bodies (units/<class>/base/) and every body of tools/sprites/variants.py (SPRITE2: the goblin variants,
@@ -1500,19 +1507,7 @@ def g_backdrops(out: Out) -> None:
 
 
 def g_menu(out: Out) -> None:
-    rng = np.random.default_rng(7)
-    W, H = 1920, 1080
-    img = sky(W, H, "#120f16", "#4a2418", rng)
-    glow(img, 1350, 330, 260, EMBER, 130)
-    d = ImageDraw.Draw(img, "RGBA")
-    d.ellipse([1290, 270, 1410, 390], fill=rgb("#f08a3a"))
-    ridge(img, rng, 700, 60, "#1c1618", 100, "#3a2a28")
-    keep_shape(img, 520, 760, 1.5, "#0e0c10", True)
-    ridge(img, rng, 850, 50, "#100d10", 90, None)
-    ridge(img, rng, 980, 30, "#0a080b", 80, None)
-    embers(img, rng, 220)
-    save(vignette(img, 0.7), "game", "backgrounds/menu/main_menu.png", out)
-    # title card
+    # the Ashlands world card only; the main menu picture is the sunless one (g_menu_sunless, MENU2)
     rng = np.random.default_rng(8)
     img = sky(1280, 360, "#160f14", "#3a1a12", rng)
     glow(img, 640, 330, 340, EMBER, 120)
@@ -1535,10 +1530,1374 @@ def g_menu(out: Out) -> None:
     save(img, "game", "backgrounds/title/ashlands.png", out)
 
 
+# ------------------------------------------------------------------------------
+# Stage art (STAGE1-T): 4:3 ground tiles, wall faces, battle props, zone backdrops
+# ------------------------------------------------------------------------------
+
+def quant16(img: Image.Image, n: int = 16, keep_top=None) -> Image.Image:
+    # Style A: at most 16 colours per image; only opaque pixels are quantised, transparent ones stay fully transparent
+    rgba = img.convert("RGBA")
+    a = np.asarray(rgba).copy()
+    opaque = a[..., 3] > 0
+    if not opaque.any():
+        return rgba
+    a[~opaque, :3] = a[opaque][0, :3]
+    q = Image.fromarray(a[..., :3], "RGB").quantize(colors=n - (1 if keep_top else 0), method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).convert("RGB")
+    out = np.asarray(q).copy()
+    res = np.zeros(a.shape, dtype=np.uint8)
+    res[..., :3] = out
+    res[..., 3] = a[..., 3]
+    res[~opaque] = 0
+    if keep_top:  # the backdrop's top row stays exactly this colour (one palette slot reserved)
+        res[0, :, :3] = keep_top
+    return Image.fromarray(res, "RGBA")
+
+
+def tnoise(rng, w, h, cell):
+    # value noise that wraps at the edges, so a tile runs on into its neighbour
+    small = rng.random((h // cell, w // cell))
+    big = np.tile(small, (3, 3))
+    im = Image.fromarray((big * 255).astype(np.uint8)).resize((w * 3, h * 3), Image.BICUBIC)
+    return np.asarray(im.crop((w, h, w * 2, h * 2)), dtype=np.float32) / 255.0
+
+
+class WCv:
+    # A 128 x 96 tile canvas in 100-unit x space (y runs 0-75); every shape is drawn at nine offsets so features wrap.
+    def __init__(self):
+        self.c = Cv(128, 96)
+
+    def _each(self, fn, pts):
+        for ox in (-100, 0, 100):
+            for oy in (-75, 0, 75):
+                fn([(x + ox, y + oy) for x, y in pts])
+
+    def ell(self, x, y, rx, fill, ol=None, w=1.2, ry=None):
+        ry = rx * 0.75 if ry is None else ry
+        self._each(lambda p: self.c.ell(p[0][0], p[0][1], rx, ry, fill, ol=ol, w=w), [(x, y)])
+
+    def poly(self, pts, fill, ol=None, w=1.2):
+        self._each(lambda p: self.c.poly(p, fill, ol=ol, w=w), pts)
+
+    def line(self, pts, col, w=1.4):
+        self._each(lambda p: self.c.line(p, col, w=w, ol=None), pts)
+
+
+def squash(pts, x, y):
+    return [(x + dx, y + dy * 0.75) for dx, dy in pts]
+
+
+def stage_tile(name: str, v: int) -> Image.Image:
+    rng = np.random.default_rng(seed_of("stage%s%d" % (name, v)))
+    base, amp = TERRAIN[name]
+    n = tnoise(rng, 128, 96, 16) * 0.6 + tnoise(rng, 128, 96, 4) * 0.4
+    img = Image.fromarray(np.clip(tint(base, n, amp), 0, 255).astype(np.uint8), "RGBA")
+    c = WCv()
+
+    def pt():
+        return float(rng.uniform(0, 100)), float(rng.uniform(0, 75))
+    if name == "floor":
+        for y in (0, 37.5):
+            c.line([(0, y + v * 2), (100, y + v * 2)], "#2c2c34", w=1.6)
+        for row, y in enumerate((0, 37.5)):
+            for x in range(row * 25 + v * 5, 100 + row * 25, 50):
+                c.line([(x, y + v * 2), (x, y + v * 2 + 37.5)], "#2c2c34", w=1.6)
+    elif name == "stone":
+        for _ in range(7):
+            x, y = pt()
+            c.poly(squash([(0, 0), (14, 3), (12, 14), (-2, 11)], x, y), "#6e727c", ol="#33353c")
+    elif name == "grass":
+        for _ in range(18):
+            x, y = pt()
+            c.line([(x, y), (x + 2, y - 7)], "#8a8a4a", w=1.2)
+    elif name == "dirt":
+        for _ in range(8):
+            x, y = pt()
+            c.ell(x, y, 3, "#4c3524")
+    elif name == "sand":
+        for i in range(4):
+            y = 8 + i * 17 + v * 2
+            c.line([(8 + i * 3, y), (50, y - 3), (92 - i * 3, y)], "#8a7a5a", w=1.2)
+    elif name == "snow":
+        for _ in range(12):
+            x, y = pt()
+            c.ell(x, y, 2, "#f4f4f6")
+    elif name in ("shallow_water", "deep_water"):
+        col = "#6aa0b0" if name == "shallow_water" else "#2a5a80"
+        for _ in range(4):
+            x, y = pt()
+            c.line([(x - 10, y), (x - 4, y - 2), (x + 4, y + 2), (x + 10, y)], col, w=1.6)
+    elif name == "mud":
+        for _ in range(6):
+            x, y = pt()
+            c.ell(x, y, 5, "#33261a")
+    elif name == "lava":
+        for _ in range(5):
+            x, y = pt()
+            c.line(squash([(0, 0), (14, 8), (10, 22)], x, y), EMBER2, w=2.4)
+            c.line(squash([(0, 0), (14, 8), (10, 22)], x, y), "#7a2a0a", w=0.8)
+    elif name == "wall":
+        for row in range(4):
+            y = row * 18.75
+            c.line([(0, y), (100, y)], "#15161b", w=2)
+            for x in range(row % 2 * 17, 100, 34):
+                c.line([(x, y), (x, y + 18.75)], "#15161b", w=2)
+        c.poly([(0, 0), (100, 0), (100, 6), (0, 6)], "#4a4d58")
+    elif name == "bridge":
+        for i in range(6):
+            y = i * 12.5
+            c.poly([(0, y + 1), (100, y + 1), (100, y + 12), (0, y + 12)], "#7a5a3a", ol="#3a2a1e", w=1.2)
+    elif name == "rubble":
+        for _ in range(9):
+            x, y = pt()
+            c.poly(squash([(0, 0), (9, 2), (7, 10), (-3, 7)], x, y), "#78746c", ol="#2c2a28")
+    elif name == "burning_ground":
+        for _ in range(3):
+            x, y = pt()
+            c.poly([(x, y - 10), (x + 6, y), (x + 3, y + 7), (x - 3, y + 7), (x - 6, y)], EMBER, ol="#3a2a26")
+        for _ in range(6):
+            x, y = pt()
+            c.ell(x, y, 2, EMBER2)
+    elif name == "toxic_bog":
+        for _ in range(5):
+            x, y = pt()
+            c.ell(x, y, 5, "#8ac03a", ol="#2c4a1a", w=1)
+    elif name == "ice":
+        for _ in range(4):
+            x, y = pt()
+            c.line([(x, y), (x + 14, y + 11)], "#f0fbff", w=1.4)
+    img.alpha_composite(c.c.done())
+    return img
+
+
+def wall_face(v: int) -> Image.Image:
+    # 128 x 48 (drawn 32 x 12): two brick courses of the wall texture at 75 % brightness, mortar every 6 drawn px
+    rng = np.random.default_rng(seed_of("wallface%d" % v))
+    base = shade(TERRAIN["wall"][0], -0.25)
+    n = tnoise(rng, 128, 48, 16) * 0.5 + tnoise(rng, 128, 48, 4) * 0.5
+    img = Image.fromarray(np.clip(tint(base, n, 0.3), 0, 255).astype(np.uint8), "RGBA")
+    d = ImageDraw.Draw(img)
+    mortar = rgb("#101115")
+    for row in range(2):
+        y = row * 24
+        d.rectangle([0, y, 127, y + 2], fill=mortar)
+        d.rectangle([0, y + 3, 127, y + 4], fill=rgb(shade(base, 0.18)))
+        for x in range((row + v) % 2 * 20 + v * 6, 128 + 40, 40):
+            xx = x % 128
+            d.rectangle([xx, y, xx + 2, y + 23], fill=mortar)
+    return img
+
+
+def g_stage_tiles(out: Out) -> None:
+    for name in TERRAIN:
+        if name == "tree":
+            continue
+        for v in range(4):
+            save(quant16(stage_tile(name, v)), "engine", "tilesets/common_stage/%s/v%d.png" % (name, v), out)
+    for v in range(4):
+        save(quant16(wall_face(v)), "engine", "tilesets/common_stage/wall_face/v%d.png" % v, out)
+
+
+TREE_OL = (22, 26, 16, 255)
+
+
+def tree_prop(v: int) -> Image.Image:
+    # 40 x 52: trunk 4 px wide centred at x 20, base 6 px above the bottom; v0-v2 leafy, v3 bare
+    img = Image.new("RGBA", (40, 52), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    wood, wood_hi = rgb("#4a3424"), rgb("#6a4c34")
+    if v == 3:
+        br = rgb("#2a1e16")
+        for a, b in (((20, 36), (6, 22)), ((20, 28), (34, 14)), ((20, 20), (10, 4)), ((20, 14), (30, 2)), ((20, 40), (33, 32))):
+            d.line([a, b], fill=TREE_OL, width=3)
+            d.line([a, b], fill=br, width=1)
+        d.rectangle([17, 12, 22, 45], fill=TREE_OL)
+        d.rectangle([18, 12, 21, 44], fill=wood)
+        d.line([(18, 12), (18, 44)], fill=wood_hi)
+        return img
+    rng = np.random.default_rng(seed_of("tree%d" % v))
+    d.rectangle([17, 26, 22, 45], fill=TREE_OL)
+    d.rectangle([18, 26, 21, 44], fill=wood)
+    d.line([(18, 28), (18, 44)], fill=wood_hi)
+    width = (30, 31, 28)[v]
+    top = (1, 0, 3)[v]
+    cx = 20
+    blobs = [(cx, top + 14, width // 2, 12), (cx - width // 4, top + 18, width // 4 + 1, 9), (cx + width // 4, top + 18, width // 4 + 1, 9),
+             (cx - 3, top + 8, width // 3, 8), (cx + 4, top + 10, width // 3 - 1, 7)]
+    greens = ["#3e4a24", "#566a30", "#7a8a44"]
+    for x, y, rx, ry in blobs:
+        d.ellipse([x - rx - 1, y - ry - 1, x + rx + 1, y + ry + 1], fill=TREE_OL)
+    for x, y, rx, ry in blobs:
+        d.ellipse([x - rx, y - ry, x + rx, y + ry], fill=rgb(greens[0]))
+    for x, y, rx, ry in blobs:  # light from the upper left
+        d.ellipse([x - rx + 1, y - ry + 1, x + rx - 3, y + ry - 3], fill=rgb(greens[1]))
+    for x, y, rx, ry in blobs[3:] + blobs[:1]:
+        d.ellipse([x - rx + 3, y - ry + 2, x + rx - 7, y + ry - 6], fill=rgb(greens[2]))
+    for _ in range(10):  # leaf specks
+        x, y = int(rng.integers(cx - width // 2 + 3, cx + width // 2 - 3)), int(rng.integers(top + 6, top + 26))
+        if img.getpixel((x, y))[3]:
+            d.point((x, y), fill=rgb(greens[0]) if rng.random() < 0.5 else rgb(greens[2]))
+    return img
+
+
+def stones_prop(v: int) -> Image.Image:
+    # 32 x 24: 2-3 small grey stones in the lower half, the largest at most 16 x 9
+    img = Image.new("RGBA", (32, 24), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    ol = (24, 24, 30, 255)
+    sets = (((3, 14, 15, 9), (19, 17, 9, 6), (12, 19, 7, 4)), ((9, 13, 16, 9), (2, 18, 8, 5)))[v]
+    for x, y, w, h in sets:
+        d.rounded_rectangle([x, y, x + w - 1, y + h - 1], radius=3, fill=ol)
+        d.rounded_rectangle([x + 1, y + 1, x + w - 2, y + h - 2], radius=2, fill=rgb("#6e727c"))
+        d.rectangle([x + 2, y + 1, x + max(2, w - 5), y + 2], fill=rgb("#9097a2"))
+        d.rectangle([x + 2, y + h - 3, x + w - 3, y + h - 2], fill=rgb("#4a4d58"))
+    return img
+
+
+def g_battle_props(out: Out) -> None:
+    for v in range(4):
+        save(quant16(tree_prop(v)), "kit", "props/common/tree/v%d.png" % v, out)
+    for v in range(2):
+        save(quant16(stones_prop(v)), "kit", "props/common/stones/v%d.png" % v, out)
+
+
+# Zone backdrops: 384 x 52, opaque; bottom 4 px far ground, 12 columns of 32 px line up with the board
+BD_W, BD_H = 384, 52
+BD_TOP = (10, 14, 24)
+ZONE_GROUND = {"stone_arena": "stone", "forest_clearing": "grass", "river_crossing": "grass", "ruined_courtyard": "stone",
+               "desert_outpost": "sand", "frozen_pass": "snow", "lava_cavern": "floor", "swamp_bog": "mud"}
+
+
+def bd_gap(x: int, cols) -> bool:
+    return any(c0 * 32 <= x < (c1 + 1) * 32 for c0, c1 in cols)
+
+
+def bd_gradient(top, bottom, y0=0, y1=BD_H - 4):
+    arr = np.zeros((BD_H, BD_W, 3), dtype=np.float32)
+    for y in range(BD_H):
+        t = min(1.0, max(0.0, (y - y0) / max(1, y1 - y0)))
+        arr[y, :, :] = [top[i] + (bottom[i] - top[i]) * t for i in range(3)]
+    return Image.fromarray(arr.astype(np.uint8), "RGB").convert("RGBA")
+
+
+def bd_finish(img: Image.Image, zone: str) -> Image.Image:
+    d = ImageDraw.Draw(img)
+    r, g, b, _ = rgb(shade(TERRAIN[ZONE_GROUND[zone]][0], -0.4))
+    d.rectangle([0, BD_H - 4, BD_W - 1, BD_H - 1], fill=(r, g, b, 255))
+    d.line([(0, BD_H - 5), (BD_W - 1, BD_H - 5)], fill=(max(0, r - 14), max(0, g - 14), max(0, b - 14), 255))
+    d.line([(0, 0), (BD_W - 1, 0)], fill=BD_TOP + (255,))
+    return img
+
+
+def bd_trees(d, rng, col, gaps, base_y, h_lo, h_hi, step, pine=False):
+    d.rectangle([0, base_y, BD_W - 1, BD_H - 5], fill=col)
+    x = int(rng.integers(0, step))
+    while x < BD_W:
+        if not bd_gap(x, gaps):
+            h = int(rng.integers(h_lo, h_hi))
+            w = int(rng.integers(8, 14))
+            if pine:
+                d.polygon([(x - w // 2, base_y), (x + w // 2, base_y), (x, base_y - h)], fill=col)
+            else:
+                d.ellipse([x - w, base_y - h, x + w, base_y + 3], fill=col)
+        x += int(rng.integers(step // 2, step + 3))
+
+
+def bd_forest(zone, gaps, far=(16, 28, 16), near=(24, 40, 22), bottom=(18, 30, 20)):
+    rng = np.random.default_rng(seed_of("bd" + zone))
+    img = bd_gradient(BD_TOP, bottom)
+    d = ImageDraw.Draw(img)
+    bd_trees(d, rng, far + (255,), gaps, 24, 8, 16, 14)
+    bd_trees(d, rng, near + (255,), gaps, 34, 10, 20, 17)
+    return img
+
+
+def bd_stone_arena():
+    img = bd_gradient(BD_TOP, (28, 28, 34))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 20, BD_W - 1, 21], fill=(20, 20, 26, 255))  # parapet line
+    for course, y in enumerate((22, 36)):
+        d.rectangle([0, y, BD_W - 1, y + 12], fill=(78, 80, 90, 255) if course else (66, 68, 78, 255))
+        d.line([(0, y), (BD_W - 1, y)], fill=(104, 106, 118, 255))
+        for x in range(course * 12, BD_W, 24):
+            d.line([(x, y), (x, y + 12)], fill=(30, 30, 38, 255))
+        d.line([(0, y + 12), (BD_W - 1, y + 12)], fill=(30, 30, 38, 255))
+    for x in range(48, BD_W, 96):  # a dim torch
+        d.rectangle([x - 1, 26, x + 1, 33], fill=(60, 44, 30, 255))
+        d.ellipse([x - 3, 20, x + 3, 27], fill=(224, 130, 50, 255))
+        d.ellipse([x - 1, 22, x + 1, 25], fill=(255, 210, 120, 255))
+    return img
+
+
+def bd_river():
+    img = bd_forest("river_crossing", ((8, 10),), bottom=(18, 30, 20))
+    d = ImageDraw.Draw(img)
+    for y in range(8, BD_H - 4):  # the river narrows upward between dark banks
+        half = int(6 + (y - 8) * 0.97)
+        cx = 304
+        d.line([(cx - half - 3, y), (cx + half + 3, y)], fill=(14, 22, 14, 255))
+        t = (y - 8) / (BD_H - 12)
+        d.line([(cx - half, y), (cx + half, y)], fill=(int(16 + 20 * t), int(36 + 40 * t), int(56 + 40 * t), 255))
+    return img
+
+
+def bd_courtyard():
+    rng = np.random.default_rng(seed_of("bdcourtyard"))
+    img = bd_gradient(BD_TOP, (34, 32, 38))
+    d = ImageDraw.Draw(img)
+    gaps = ((3, 3), (7, 7))
+    for x0 in range(0, BD_W, 32):
+        c = x0 // 32
+        if bd_gap(x0, gaps):
+            for _ in range(5):  # rubble at the foot of the gap
+                rx = x0 + int(rng.integers(2, 24))
+                d.ellipse([rx, 40 + int(rng.integers(0, 4)), rx + 6, 46], fill=(88, 84, 80, 255), outline=(36, 34, 32, 255))
+            continue
+        top = 14 + (c * 7) % 10  # ragged top
+        d.rectangle([x0, top, x0 + 31, 47], fill=(70, 70, 80, 255))  # cap
+        d.rectangle([x0, top, x0 + 31, top + 2], fill=(98, 100, 112, 255))
+        d.rectangle([x0, 34, x0 + 31, 47], fill=(52, 52, 60, 255))  # face
+        d.line([(x0, 34), (x0 + 31, 34)], fill=(24, 24, 30, 255))
+        for x in range(x0 + (c % 2) * 8, x0 + 32, 16):
+            d.line([(x, 35), (x, 47)], fill=(30, 30, 38, 255))
+        d.line([(x0, 41), (x0 + 31, 41)], fill=(30, 30, 38, 255))
+    return img
+
+
+def bd_desert():
+    rng = np.random.default_rng(seed_of("bddesert"))
+    img = bd_gradient((10, 14, 24), (196, 120, 80), 0, 30)
+    d = ImageDraw.Draw(img)
+    d.polygon([(250, 36), (256, 18), (300, 18), (312, 36)], fill=(104, 62, 50, 255))  # mesa
+    d.rectangle([256, 18, 300, 20], fill=(130, 80, 62, 255))
+    for col, base, amp, per in (((150, 112, 86, 255), 36, 5, 90), ((190, 160, 118, 255), 42, 4, 60)):
+        ph = float(rng.uniform(0, 6))
+        for x in range(BD_W):
+            top = int(base - amp * (0.5 + 0.5 * math.sin(x / per * 6.28 + ph)))
+            d.line([(x, top), (x, BD_H - 5)], fill=col)
+    return img
+
+
+def bd_frozen():
+    rng = np.random.default_rng(seed_of("bdfrozen"))
+    img = bd_gradient(BD_TOP, (60, 80, 110))
+    d = ImageDraw.Draw(img)
+    gaps = ((3, 8),)
+    for col, base, amp, per, hi in (((70, 92, 128, 255), 30, 14, 130, (150, 175, 205, 255)), ((100, 126, 160, 255), 38, 8, 80, (200, 220, 240, 255))):
+        ph = float(rng.uniform(0, 6))
+        for x in range(BD_W):
+            k = 0.5 + 0.5 * math.sin(x / per * 6.28 + ph)
+            if bd_gap(x, gaps):
+                k *= 0.15
+            top = int(base - amp * k)
+            d.line([(x, top), (x, BD_H - 5)], fill=col)
+            d.point((x, top), fill=hi)
+    bd_trees(d, rng, (30, 50, 80, 255), gaps, 40, 8, 16, 18, pine=True)
+    return img
+
+
+def bd_lava():
+    rng = np.random.default_rng(seed_of("bdlava"))
+    img = bd_gradient(BD_TOP, (36, 30, 34))
+    n = tnoise(rng, BD_W, BD_H // 4 * 4 if BD_H % 4 == 0 else 52, 4)
+    px = np.asarray(img).astype(np.float32)
+    px[..., :3] *= (0.85 + 0.3 * n)[..., None]
+    img = quant16(Image.fromarray(np.clip(px, 0, 255).astype(np.uint8), "RGBA"), 8)
+    d = ImageDraw.Draw(img)
+    for x in range(0, BD_W, 11):  # stalactite tips along the top
+        h = int(rng.integers(5, 14))
+        d.polygon([(x, 1), (x + 9, 1), (x + 4, 1 + h)], fill=(70, 60, 72, 255), outline=(14, 12, 18, 255))
+    for _ in range(14):  # glowing cracks
+        x, y = int(rng.integers(0, BD_W)), int(rng.integers(14, 44))
+        pts = [(x, y)]
+        for _ in range(4):
+            x += int(rng.integers(-5, 6))
+            y += int(rng.integers(1, 5))
+            pts.append((x, min(y, BD_H - 6)))
+        d.line(pts, fill=(190, 60, 16, 255), width=4)
+        d.line(pts, fill=(255, 190, 60, 255), width=2)
+    return img
+
+
+def bd_swamp():
+    rng = np.random.default_rng(seed_of("bdswamp"))
+    img = quant16(bd_gradient(BD_TOP, (62, 84, 66)), 6)
+    d = ImageDraw.Draw(img)
+    sil = (6, 12, 8, 255)
+    x = 10
+    while x < BD_W:  # dead trees
+        h = int(rng.integers(18, 34))
+        d.line([(x, 46), (x, 46 - h)], fill=sil, width=2)
+        for k in range(3):
+            y = 46 - h + 4 + k * 6
+            d.line([(x, y), (x + int(rng.integers(5, 10)) * (1 if k % 2 else -1), y - 5)], fill=sil, width=1)
+        x += int(rng.integers(40, 56))
+    for x in range(0, BD_W, 5):  # reeds
+        h = int(rng.integers(5, 12))
+        d.line([(x, 47), (x + int(rng.integers(-1, 2)), 47 - h)], fill=sil)
+    mist = Image.new("RGBA", (BD_W, BD_H), (0, 0, 0, 0))
+    md = ImageDraw.Draw(mist)
+    for y in range(BD_H - 10, BD_H):  # pale mist over the bottom 10 px
+        md.line([(0, y), (BD_W, y)], fill=(200, 222, 208, int(70 + 110 * (y - (BD_H - 10)) / 10)))
+    img.alpha_composite(mist)
+    return img
+
+
+def g_battle_backdrops(out: Out) -> None:
+    zones = {"stone_arena": bd_stone_arena(), "forest_clearing": bd_forest("forest_clearing", ((3, 4), (7, 8))),
+             "river_crossing": bd_river(), "ruined_courtyard": bd_courtyard(), "desert_outpost": bd_desert(),
+             "frozen_pass": bd_frozen(), "lava_cavern": bd_lava(), "swamp_bog": bd_swamp()}
+    for zone, img in zones.items():
+        save(quant16(bd_finish(img, zone), keep_top=BD_TOP).convert("RGB"), "game", "backgrounds/battle/%s.png" % zone, out)
+
+
+# ------------------------------------------------------------------------------
+# Story art (STORYART1): code-drawn placeholders for the Sunk Ward slice in the art bible's 16 hues
+# (games/emberwake/docs/lore/specs/art_and_visual_style.md section 3): the story scenes, the sunk_ward world card,
+# a sunless main menu, the seven Sunk Ward zone backdrops and the scourge and sprayer family icons
+# ------------------------------------------------------------------------------
+
+VOID, BASALT, SLATE, OAK = "#0a0b10", "#14171f", "#1e232d", "#2c221e"
+IRON, PSTEEL, LINEN, CINDER = "#4b5563", "#9ca3af", "#d9cbb4", "#6b7280"
+BLEATHER, TALLOW, CANDLE, ARTERIAL = "#92400e", "#d97706", "#fbbf24", "#e11d48"
+CRIMSON, VIOLET, ORCHID, CYAN = "#991b1b", "#9333ea", "#c084fc", "#06b6d4"
+ST_W, ST_H = 1120, 472   # story scenes: 2x the vignette picture area (STORYUI1 V9, 560 x 236), filling it unletterboxed
+
+
+def mix(a: str, b: str, t: float) -> str:
+    # b at t over a (the way STORYUI1_TASKS 1.1 states its backdrop colours)
+    ca, cb = rgb(a), rgb(b)
+    return "#%02x%02x%02x" % tuple(int(round(ca[i] + (cb[i] - ca[i]) * t)) for i in range(3))
+
+
+def st_canvas(w, h, top, bot, seed, amp=8):
+    rng = np.random.default_rng(seed_of(seed))
+    return rng, blotch(to_img(vgrad(w, h, top, bot)), rng, amp)
+
+
+def shroud(img: Image.Image, rng, y0, y1, col, a=170, cell=80, thr=0.48):
+    # banded cloud in three flat steps: noise over thr, strongest mid-band
+    w, h = img.size
+    n = noise(rng, w, h, cell) * 0.7 + noise(rng, w, h, max(4, cell // 3)) * 0.3
+    yy = np.arange(h, dtype=np.float32)[:, None]
+    band = np.clip(1 - np.abs((yy - (y0 + y1) / 2) / max(1, (y1 - y0) / 2)), 0, 1)
+    step = np.floor(np.clip((n - thr) * 4 * band, 0, 0.999) * 3) / 3
+    layer = np.zeros((h, w, 4), dtype=np.uint8)
+    layer[..., :3] = rgb(col)[:3]
+    layer[..., 3] = (step * a).astype(np.uint8)
+    img.alpha_composite(Image.fromarray(layer, "RGBA"))
+
+
+ASH_COLS = (mix(CINDER, VOID, 0.3), CINDER, mix(CINDER, TALLOW, 0.35), mix(TALLOW, BLEATHER, 0.4))   # grey to ember, never white
+
+
+def ash_fall(img: Image.Image, rng, n, cols=ASH_COLS, rmax=4.5, drift=(-0.7, 1.0)):
+    # falling ash: ragged flakes of varied size, each with a faint diagonal streak behind it along drift (dx, dy per
+    # unit of fall), so no flake reads as a star; sizes scale with the image width (1120 px = 1x)
+    d = ImageDraw.Draw(img, "RGBA")
+    k = max(1.0, img.width / 1120.0)
+    for _ in range(n):
+        x, y = float(rng.integers(0, img.width)), float(rng.integers(0, img.height))
+        r = float(rng.uniform(1.4, rmax)) * k
+        col = cols[int(rng.integers(0, len(cols)))]
+        a = int(rng.integers(90, 200))
+        ln = r * float(rng.uniform(1.5, 3.2))
+        d.line([(x - drift[0] * ln, y - drift[1] * ln), (x, y)], fill=rgb(col, a // 5), width=max(1, int(r * 0.9)))
+        ang = float(rng.uniform(0, math.pi))
+        pts = [(x + r * (1.0 if j % 2 == 0 else 0.55) * math.cos(ang + j * math.pi / 3),
+                y + r * 0.7 * (1.0 if j % 2 == 0 else 0.55) * math.sin(ang + j * math.pi / 3)) for j in range(6)]
+        d.polygon(pts, fill=rgb(col, a))
+
+
+def stretched_noise(rng, w, h, cell, s):
+    # noise with cells s times wider than tall (slow horizontal banding)
+    n = noise(rng, max(8, w // s), h, max(2, cell // s))
+    return np.asarray(Image.fromarray(n.astype(np.float32), "F").resize((w, h), Image.BICUBIC), dtype=np.float32)
+
+
+def shroud_sky(img: Image.Image, rng, horizon, a=235):
+    # the Shroud: a low, heavy violet-black cloud mass in slow horizontal bands down to horizon, its underside lit by a
+    # faint sickly glow from beneath; no sun, moon or stars
+    w, h = img.size
+    glow(img, w // 2, horizon, int(w * 0.42), mix(ORCHID, CANDLE, 0.25), 55)
+    glow(img, int(w * 0.3), horizon + h // 20, int(w * 0.25), mix(VIOLET, CINDER, 0.3), 60)
+    yy = np.arange(h, dtype=np.float32)[:, None]
+    layers = ((0.0, 0.55, mix(VOID, VIOLET, 0.12), 0.40), (0.15, 0.75, mix(VOID, VIOLET, 0.2), 0.47),
+              (0.4, 0.95, mix(VOID, VIOLET, 0.3), 0.52), (0.62, 1.05, mix(mix(VOID, VIOLET, 0.32), ORCHID, 0.18), 0.58))
+    for i, (f0, f1, col, thr) in enumerate(layers):
+        y0, y1 = horizon * f0, horizon * f1
+        n = stretched_noise(rng, w, h, max(24, h // 6), 6) * 0.75 + stretched_noise(rng, w, h, max(8, h // 20), 3) * 0.25
+        band = np.clip(1 - np.abs((yy - (y0 + y1) / 2) / max(1, (y1 - y0) / 2)), 0, 1) ** 0.6
+        step = np.floor(np.clip((n - thr) * 3.5 * band, 0, 0.999) * 3) / 3
+        layer = np.zeros((h, w, 4), dtype=np.uint8)
+        layer[..., :3] = rgb(col)[:3]
+        layer[..., 3] = (step * a).astype(np.uint8)
+        img.alpha_composite(Image.fromarray(layer, "RGBA"))
+        if i == len(layers) - 1:   # the lit underside: a thin brighter rim under the lowest bank
+            lit = step > 0
+            under = lit & ~np.roll(lit, -max(2, h // 120), axis=0)
+            rim = np.zeros((h, w, 4), dtype=np.uint8)
+            rim[..., :3] = rgb(mix(ORCHID, CANDLE, 0.2))[:3]
+            rim[..., 3] = np.where(under, 70, 0).astype(np.uint8)
+            img.alpha_composite(Image.fromarray(rim, "RGBA"))
+
+
+def rain(img: Image.Image, rng, n, col=PSTEEL, a=45, ln=22):
+    d = ImageDraw.Draw(img, "RGBA")
+    for _ in range(n):
+        x, y = int(rng.integers(0, img.width + 40)), int(rng.integers(-ln, img.height))
+        d.line([(x, y), (x - 5, y + ln)], fill=rgb(col, a), width=1)
+
+
+def soft(img: Image.Image, draw_fn, blur):
+    # draws on a clear layer, blurs it and lays it over img (smoke, steam, mist)
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw_fn(ImageDraw.Draw(layer, "RGBA"))
+    img.alpha_composite(layer.filter(ImageFilter.GaussianBlur(blur)))
+
+
+def arch_pts(x0, x1, ys, yb, f=0.8, n=24):
+    # a pointed arch: springing line ys between x0 and x1, jambs down to yb; f 0.5 = round, 1.0 = equilateral
+    span = x1 - x0
+    r = span * f
+    a_end = math.acos(max(-1.0, min(1.0, (span / 2 - r) / r)))
+    left = [(x0 + r + r * math.cos(math.pi + (a_end - math.pi) * i / n), ys - r * math.sin(math.pi + (a_end - math.pi) * i / n)) for i in range(n + 1)]
+    right = [(x0 + x1 - x, y) for x, y in reversed(left)]
+    return [(x0, yb)] + left + right + [(x1, yb)]
+
+
+def person(d, x, y, h, col, ol=None, bow=0.0, coat=True, bowl=None, arms_out=0.0):
+    # a standing adult silhouette (head about 1/7 of the height), feet at (x, y); bow tips the head forward (+x) and down
+    u = h / 100.0
+    hx, hy = x + bow * 5 * u, y - 92 * u + abs(bow) * 4 * u
+    sh, hip = y - 80 * u, y - 46 * u
+    reach = 15 + 10 * arms_out
+    arm_l = [(x - 12 * u, sh), (x - 15 * u, sh + 4 * u), (x - reach * u, hip + 2 * u), (x - (reach - 4) * u, hip + 3 * u), (x - 10 * u, sh + 10 * u)]
+    arm_r = [(2 * x - px, py) for px, py in arm_l]
+    if bowl:
+        arm_r = [(x + 12 * u, sh), (x + 15 * u, sh + 6 * u), (x + 14 * u, y - 56 * u), (x + 6 * u, y - 54 * u), (x + 9 * u, sh + 10 * u)]
+    if coat:
+        body = [(x - 12 * u, sh), (x + 12 * u, sh), (x + 14 * u, y - 12 * u), (x + 6 * u, y - 10 * u), (x + 7 * u, y), (x + 2 * u, y),
+                (x, y - 14 * u), (x - 2 * u, y), (x - 7 * u, y), (x - 6 * u, y - 10 * u), (x - 14 * u, y - 12 * u)]
+    else:
+        body = [(x - 12 * u, sh), (x + 12 * u, sh), (x + 10 * u, hip), (x + 8 * u, y), (x + 2 * u, y), (x, y - 38 * u), (x - 2 * u, y),
+                (x - 8 * u, y), (x - 10 * u, hip)]
+    neck = [(x - 3 * u, sh + 1), (x + 3 * u, sh + 1), (hx + 3 * u, hy + 4 * u), (hx - 3 * u, hy + 4 * u)]
+    for pts in (arm_l, arm_r, body, neck):
+        d.polygon(pts, fill=rgb(col), outline=rgb(ol) if ol else None)
+    d.ellipse([hx - 6.5 * u, hy - 7.5 * u, hx + 6.5 * u, hy + 7.5 * u], fill=rgb(col), outline=rgb(ol) if ol else None)
+    if bowl:
+        d.ellipse([x + 4 * u, y - 59 * u, x + 18 * u, y - 53 * u], fill=rgb(bowl), outline=rgb(VOID))
+    return (hx, hy, u)
+
+
+def chain(d, p0, p1, sag, col=IRON, hi=PSTEEL, link=7):
+    # iron links along a sagging curve from p0 to p1
+    (x0, y0), (x1, y1) = p0, p1
+    n = max(2, int((math.hypot(x1 - x0, y1 - y0) + sag) / link))
+    r = link * 0.55
+    for i in range(n + 1):
+        t = i / n
+        x = x0 + (x1 - x0) * t
+        y = y0 + (y1 - y0) * t + sag * 4 * t * (1 - t)
+        box = [x - r, y - r * 0.55, x + r, y + r * 0.55] if i % 2 else [x - r * 0.55, y - r, x + r * 0.55, y + r]
+        d.ellipse(box, outline=rgb(VOID), width=4)
+        d.ellipse(box, outline=rgb(col if i % 2 else hi), width=2)
+
+
+def iron_mask(d, hx, hy, u):
+    # a riveted iron face plate with eye slits over the head (faceless, nothing shown beneath)
+    box = [hx - 8 * u, hy - 9 * u, hx + 8 * u, hy + 9.5 * u]
+    d.ellipse(box, fill=rgb(IRON), outline=rgb(VOID), width=max(1, int(u)))
+    d.chord(box, 200, 340, fill=rgb(mix(IRON, PSTEEL, 0.45)))
+    d.line([(hx, hy - 8 * u), (hx, hy + 8 * u)], fill=rgb(mix(IRON, VOID, 0.45)), width=max(1, int(u * 0.8)))
+    d.rectangle([hx - 6 * u, hy - 2 * u, hx - 1.5 * u, hy - 0.4 * u], fill=rgb(VOID))
+    d.rectangle([hx + 1.5 * u, hy - 2 * u, hx + 6 * u, hy - 0.4 * u], fill=rgb(VOID))
+    for rx, ry in ((-6, -4), (6, -4), (-5, 5), (5, 5), (0, 8)):
+        d.ellipse([hx + (rx - 0.8) * u, hy + (ry - 0.8) * u, hx + (rx + 0.8) * u, hy + (ry + 0.8) * u], fill=rgb(PSTEEL))
+
+
+def skyline(img: Image.Image, rng, base_y, col, h_lo, h_hi, lit=0.0, x0=0, x1=None, wmin=40, wmax=110, win=TALLOW, ol=None, bottom=None):
+    # tenement roofs down to bottom (default the image's foot): gables, stepped tops and chimneys; windows lit with
+    # probability lit
+    x1 = x1 or img.width
+    bottom = img.height if bottom is None else bottom
+    d = ImageDraw.Draw(img, "RGBA")
+    x = x0 - int(rng.integers(0, wmin))
+    while x < x1:
+        w = int(rng.integers(wmin, wmax))
+        top = base_y - int(rng.integers(h_lo, h_hi))
+        kind = int(rng.integers(0, 3))
+        pts = [(x, bottom), (x, top)]
+        if kind == 0:
+            pts += [(x + w // 2, top - w // 3)]
+        elif kind == 1:
+            pts += [(x + w // 3, top), (x + w // 3, top - w // 4), (x + w * 2 // 3, top - w // 4), (x + w * 2 // 3, top)]
+        pts += [(x + w, top), (x + w, bottom)]
+        d.polygon(pts, fill=rgb(col), outline=rgb(ol) if ol else None)
+        if rng.random() < 0.6:
+            cx = x + int(rng.integers(4, max(5, w - 14)))
+            ch = int(rng.integers(h_lo // 4 + 4, h_lo // 2 + 10))
+            d.rectangle([cx, top - ch, cx + max(4, w // 9), top + 2], fill=rgb(col), outline=rgb(ol) if ol else None)
+        if lit > 0:
+            ww = max(3, w // 14)
+            for wy in range(top + ww * 2, base_y, ww * 4):
+                for wx in range(x + ww * 2, x + w - ww * 2, ww * 4):
+                    if rng.random() < lit:
+                        d.rectangle([wx, wy, wx + ww, wy + int(ww * 1.5)], fill=rgb(win, int(rng.integers(150, 255))))
+        x += w + int(rng.integers(-6, 10))
+
+
+def cathedral(img: Image.Image, x, base_y, s, col, lit=TALLOW, glow_a=60):
+    # a gothic silhouette: nave, two west towers with spires, the bell tower over the crossing, lancet and rose windows
+    d = ImageDraw.Draw(img, "RGBA")
+
+    def P(pts):
+        return [(x + px * s, base_y + py * s) for px, py in pts]
+
+    def box(x0, y0, x1, y1):
+        (a, b), (c, e) = P([(x0, y0), (x1, y1)])
+        return [a, b, c, e]
+
+    d.polygon(P([(-170, 0), (-170, -120), (-60, -175), (60, -175), (170, -120), (170, 0)]), fill=rgb(col))
+    for tx in (-150, 110):
+        d.polygon(P([(tx, 0), (tx, -230), (tx + 20, -330), (tx + 40, -230), (tx + 40, 0)]), fill=rgb(col))
+    d.polygon(P([(-28, -170), (-28, -280), (0, -300), (28, -280), (28, -170)]), fill=rgb(col))
+    d.polygon(P([(-22, -296), (0, -420), (22, -296)]), fill=rgb(col))
+    if lit:
+        for wx in (-110, -70, 60, 100):
+            d.polygon(P([(wx, -30), (wx, -80), (wx + 7, -92), (wx + 14, -80), (wx + 14, -30)]), fill=rgb(lit, 200))
+        d.ellipse(box(-26, -150, 26, -98), fill=rgb(mix(lit, CRIMSON, 0.45), 190))
+        for k in range(8):   # rose window tracery
+            a = k * math.pi / 4
+            d.line(P([(0, -124), (26 * math.cos(a), -124 + 26 * math.sin(a))]), fill=rgb(col), width=max(1, int(3 * s)))
+        d.ellipse(box(-26, -150, 26, -98), outline=rgb(col), width=max(1, int(4 * s)))
+        d.ellipse(box(-9, -133, 9, -115), fill=rgb(col))
+        d.rectangle(box(-6, -262, 6, -240), fill=rgb(mix(lit, CANDLE, 0.4), 230))
+        glow(img, x, base_y - 120 * s, 130 * s, lit, glow_a)
+
+
+def wall_courses(img: Image.Image, y0, y1, col, a=110, ch=34, cw=70):
+    d = ImageDraw.Draw(img, "RGBA")
+    for i, y in enumerate(range(y0, y1, ch)):
+        d.line([(0, y), (img.width, y)], fill=rgb(col, a), width=2)
+        for x in range((i % 2) * cw // 2, img.width, cw):
+            d.line([(x, y), (x, min(y1, y + ch))], fill=rgb(col, a), width=2)
+
+
+def st_intro_1():
+    # the Shroud where the stars and the sun were: a low cloud mass over the city, ash falling (no sun, moon or stars)
+    rng, img = st_canvas(ST_W, ST_H, VOID, mix(VOID, VIOLET, 0.25), "story_intro_1")
+    shroud_sky(img, rng, 400)
+    skyline(img, rng, 420, mix(VOID, BASALT, 0.6), 30, 80, 0.08, wmin=50, wmax=120)
+    cathedral(img, 760, 430, 0.62, VOID, TALLOW, 40)
+    skyline(img, rng, 455, VOID, 10, 50, 0.12, wmin=60, wmax=140)
+    ash_fall(img, rng, 220)
+    return vignette(img, 0.6)
+
+
+def st_intro_2():
+    # the earth in cross-section: the city on the crust, strata, the sleeping titan's bones, black veins up to the wells
+    rng, img = st_canvas(ST_W, ST_H, VOID, mix(VOID, VIOLET, 0.25), "story_intro_2", 4)
+    surf = 92
+    arr = np.asarray(img).astype(np.float32)
+    xs = np.arange(ST_W)
+    tex = np.floor(noise(rng, ST_W, ST_H, 18) * 3) / 3
+    bands = [(surf, mix(OAK, BASALT, 0.3)), (surf + 46, mix(SLATE, OAK, 0.35)), (surf + 104, BASALT), (surf + 168, mix(BASALT, VOID, 0.45))]
+    bands = [(by, mix(col, CINDER, 0.2)) for by, col in bands]   # one step lighter so the layers read
+    tops = []
+    for i, (by, col) in enumerate(bands):
+        ph = float(rng.uniform(0, 6))
+        top = by + (np.sin(xs / (90 + 30 * i) + ph) * (4 + 3 * i) + np.sin(xs / 23 + ph * 2) * 2).astype(int)
+        if i == 0:
+            top = np.full(ST_W, surf)
+        tops.append(top)
+        c = np.array(rgb(col)[:3], dtype=np.float32)
+        for x in range(ST_W):
+            arr[top[x]:, x, :3] = c * (0.88 + 0.22 * tex[top[x]:, x, None])
+    img = to_img(arr[..., :3])
+    d = ImageDraw.Draw(img, "RGBA")
+    for i, top in enumerate(tops):
+        if i:
+            d.line(list(zip(xs.tolist(), (top - 1).tolist())), fill=rgb(VOID, 200), width=2)
+        nxt = tops[i + 1] if i + 1 < len(tops) else np.full(ST_W, ST_H)
+        for f in (0.33, 0.66):   # fossil-like bedding lines inside each layer
+            ys = top + (nxt - top) * f + np.sin(xs / 37.0 + i * 2 + f * 5) * 2
+            d.line(list(zip(xs[::4].tolist(), ys[::4].tolist())), fill=rgb(mix(bands[i][1], LINEN, 0.14), 120), width=1)
+    # the titan's hollow and bones
+    d.ellipse([60, 270, 1080, 462], fill=rgb(mix(VOID, VIOLET, 0.07)), outline=rgb(VOID), width=3)
+    bone, bone_hi, bone_lo = mix(LINEN, CINDER, 0.45), mix(LINEN, CINDER, 0.15), mix(LINEN, VOID, 0.6)
+    spine = [(250 + i * 26, 382 + 16 * math.sin(i / 5.0)) for i in range(30)]
+    for i, (sx, sy) in enumerate(spine[:22]):   # ribs over the front half
+        if 2 <= i <= 16 and i % 2 == 0:
+            k = 1.0 - abs(i - 8) / 12.0
+            rib = [(sx + 40 * k * t * 0.4 + 30 * t * t, sy - 95 * k * math.sin(t * math.pi * 0.85)) for t in np.linspace(0, 1, 14)]
+            d.line(rib, fill=rgb(VOID), width=13, joint="curve")
+            d.line(rib, fill=rgb(bone), width=8, joint="curve")
+            d.line([(px - 2, py - 2) for px, py in rib[2:9]], fill=rgb(bone_hi), width=2)
+    for i, (sx, sy) in enumerate(spine):
+        r = 11 - i * 0.22
+        d.ellipse([sx - r, sy - r * 0.8, sx + r, sy + r * 0.8], fill=rgb(bone), outline=rgb(VOID), width=3)
+        d.line([(sx, sy - r * 0.8), (sx + 4, sy - r * 1.6)], fill=rgb(bone_lo), width=4)
+    arm = [(760, 386), (800, 330), (842, 300)]   # the forelimb reaching up toward the crust
+    for a, b in zip(arm, arm[1:]):
+        d.line([a, b], fill=rgb(VOID), width=18)
+        d.line([a, b], fill=rgb(bone), width=12)
+    for fx, fy in ((818, 262), (846, 252), (874, 262), (890, 284)):
+        d.line([(842, 300), (fx, fy)], fill=rgb(VOID), width=11)
+        d.line([(842, 300), (fx, fy)], fill=rgb(bone), width=6)
+        d.ellipse([fx - 4, fy - 4, fx + 4, fy + 4], fill=rgb(bone_hi), outline=rgb(VOID))
+    # the skull: long and heavy, jaw shut, half buried in the rock of the hollow's floor
+    d.polygon([(292, 318), (318, 300), (356, 290), (402, 296), (362, 302), (334, 316), (318, 330)], fill=rgb(bone_lo), outline=rgb(VOID), width=4)   # a swept-back horn
+    d.line([(318, 302), (356, 292), (390, 296)], fill=rgb(bone), width=3)
+    skull = [(84, 378), (100, 356), (160, 338), (232, 318), (290, 308), (336, 324), (352, 356), (330, 392), (220, 400), (110, 394)]
+    d.polygon(skull, fill=rgb(bone), outline=rgb(VOID), width=4)
+    d.polygon([(104, 354), (160, 336), (232, 316), (290, 306), (330, 320), (290, 318), (232, 328), (160, 346)], fill=rgb(bone_hi))   # the brow and snout ridge
+    d.polygon([(226, 346), (262, 334), (284, 340), (264, 352)], fill=rgb(VOID))   # a long, shut eye socket
+    d.ellipse([100, 360, 112, 368], fill=rgb(VOID))   # nostril
+    d.line([(96, 380), (180, 378), (300, 380)], fill=rgb(VOID), width=3)   # the closed jaw
+    d.line([(190, 352), (240, 366), (300, 360)], fill=rgb(bone_lo), width=3)   # cheekbone
+    for cx0, cy0 in ((150, 352), (196, 344), (310, 340)):   # cracks
+        d.line([(cx0, cy0), (cx0 + 8, cy0 + 10), (cx0 + 4, cy0 + 18)], fill=rgb(bone_lo), width=2)
+    rock = mix(mix(BASALT, VOID, 0.2), CINDER, 0.2)
+    ridge_pts = [(x, 368 + 6 * math.sin(x / 23.0) + 4 * math.sin(x / 9.0) + max(0, x - 360) * 0.9) for x in range(40, 471, 10)]
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))   # the rock mound, kept inside the hollow
+    ld = ImageDraw.Draw(layer, "RGBA")
+    ld.polygon([(40, ST_H)] + ridge_pts + [(470, ST_H)], fill=rgb(rock))
+    ld.line(ridge_pts, fill=rgb(VOID), width=3)
+    for j in range(3):   # bedding lines in the rock over the buried jaw
+        ld.line([(x, 388 + j * 18 + 3 * math.sin(x / 29.0 + j)) for x in range(40, 470, 6)], fill=rgb(mix(rock, LINEN, 0.14), 140), width=1)
+    hollow = Image.new("L", img.size, 0)
+    ImageDraw.Draw(hollow).ellipse([62, 272, 1078, 460], fill=255)
+    layer.putalpha(Image.fromarray(np.minimum(np.asarray(layer)[..., 3], np.asarray(hollow))))
+    img.alpha_composite(layer)
+    d = ImageDraw.Draw(img, "RGBA")
+    # black veins from the bones up through the strata to the wells
+    wells = []
+    for sx, sy in ((290, 330), (430, 300), (560, 300), (690, 330), (840, 260), (990, 360)):
+        x, y = float(sx), float(sy)
+        path = [(x, y)]
+        while y > surf + 2:
+            y -= float(rng.uniform(14, 26))
+            x += float(rng.uniform(-16, 16))
+            path.append((x, max(y, surf + 2)))
+        vein = [(int(px), int(py)) for px, py in path]
+        soft(img, lambda dd, p=vein: dd.line(p, fill=rgb(VIOLET, 170), width=12, joint="curve"), 5)
+        d = ImageDraw.Draw(img, "RGBA")
+        d.line(vein, fill=rgb("#030305"), width=5, joint="curve")
+        for j in range(1, len(vein) - 1, 2):   # branchlets
+            bx, by = vein[j]
+            d.line([(bx, by), (bx + int(rng.integers(-34, 34)), by - int(rng.integers(6, 22)))], fill=rgb("#030305"), width=2)
+        wells.append(vein[-1])
+    # the crust: the ward's roofs and the wells the marrow bleeds into
+    skyline(img, rng, surf, mix(VOID, BASALT, 0.5), 8, 30, 0.1, wmin=24, wmax=60, bottom=surf)
+    cathedral(img, 620, surf, 0.2, mix(VOID, BASALT, 0.5), TALLOW, 30)
+    d = ImageDraw.Draw(img, "RGBA")
+    d.line([(0, surf), (ST_W, surf)], fill=rgb(VOID), width=3)
+    for wx, _ in wells:
+        d.rectangle([wx - 9, surf - 9, wx + 9, surf], fill=rgb(IRON), outline=rgb(VOID), width=2)
+        d.rectangle([wx - 5, surf - 5, wx + 5, surf + 2], fill=rgb(mix(VOID, VIOLET, 0.6)))
+        glow(img, wx, surf, 18, VIOLET, 120)
+    return vignette(img, 0.5)
+
+
+def st_intro_3():
+    # crypt arches; iron masks over chained adult figures; tallow candles on the wet floor
+    rng, img = st_canvas(ST_W, ST_H, mix(BASALT, VOID, 0.4), BASALT, "story_intro_3", 6)
+    wall_courses(img, 6, 384, VOID, 120, 38, 76)
+    d = ImageDraw.Draw(img, "RGBA")
+    floor = 392
+    d.rectangle([0, floor, ST_W, ST_H], fill=rgb(SLATE))
+    for y in range(floor + 14, ST_H, 18):
+        d.line([(0, y), (ST_W, y)], fill=rgb(VOID, 110), width=2)
+    stone, stone_hi = mix(BASALT, IRON, 0.35), mix(BASALT, PSTEEL, 0.3)
+    for cx in (215, 560, 905):
+        x0, x1 = cx - 118, cx + 118
+        outer = arch_pts(x0 - 22, x1 + 22, 200, floor, 0.8)
+        d.polygon(outer, fill=rgb(stone), outline=rgb(VOID), width=4)
+        d.polygon(arch_pts(x0, x1, 200, floor, 0.8), fill=rgb(mix(VOID, VIOLET, 0.08)), outline=rgb(VOID), width=4)
+        glow(img, cx, floor - 70, 120, mix(VOID, VIOLET, 0.5), 90)
+        d = ImageDraw.Draw(img, "RGBA")
+        apex = 200 - 0.74 * (x1 - x0)
+        d.polygon([(cx - 14, apex - 22), (cx + 14, apex - 22), (cx + 9, apex + 6), (cx - 9, apex + 6)], fill=rgb(stone_hi), outline=rgb(VOID), width=3)
+        for rx in (x0 + 10, x1 - 10):   # ring bolts on the jambs
+            d.ellipse([rx - 8, 288, rx + 8, 304], outline=rgb(VOID), width=6)
+            d.ellipse([rx - 8, 288, rx + 8, 304], outline=rgb(IRON), width=3)
+        cloth = mix(SLATE, CINDER, 0.3)
+        hx, hy, u = person(d, cx, floor + 2, 200, cloth, VOID, arms_out=0.6)
+        d.polygon([(cx - 10 * u, floor - 78 * u), (cx + 10 * u, floor - 78 * u), (cx + 4 * u, floor - 50 * u), (cx - 4 * u, floor - 50 * u)], fill=rgb(mix(cloth, LINEN, 0.15)))
+        iron_mask(d, hx, hy, u)
+        for sx in (-1, 1):
+            hand = (cx + sx * 25 * u, floor + 2 - 44 * u)
+            d.rectangle([hand[0] - 3 * u, hand[1] - 4 * u, hand[0] + 3 * u, hand[1] + 1 * u], fill=rgb(IRON), outline=rgb(VOID))
+            chain(d, hand, ((x0 + 10) if sx < 0 else (x1 - 10), 300), 18)
+    for kx in (40, 388, 732, 1080):   # candles between the arches
+        d = ImageDraw.Draw(img, "RGBA")
+        for j, (dx, hgt) in enumerate(((-12, 34), (2, 48), (14, 26))):
+            d.rectangle([kx + dx - 4, floor - hgt, kx + dx + 4, floor + 4], fill=rgb(LINEN if j != 1 else mix(LINEN, CINDER, 0.3)), outline=rgb(VOID), width=2)
+            d.polygon([(kx + dx - 3, floor - hgt - 2), (kx + dx, floor - hgt - 14), (kx + dx + 3, floor - hgt - 2)], fill=rgb(CANDLE))
+        glow(img, kx, floor - 40, 70, TALLOW, 110)
+        d = ImageDraw.Draw(img, "RGBA")
+        for j in range(4):   # the flames' reflection on the wet floor
+            d.line([(kx - 12 + j * 8, floor + 10), (kx - 12 + j * 8, floor + 26 + (j % 2) * 10)], fill=rgb(TALLOW, 70), width=3)
+    soft(img, lambda dd: [dd.ellipse([x - 160, floor - 24, x + 160, floor + 30], fill=rgb(mix(VOID, VIOLET, 0.4), 90)) for x in range(0, ST_W + 160, 220)], 18)
+    return vignette(img, 0.55)
+
+
+def st_intro_4():
+    # a Watch insignia, half sunk in bloody mud under rain; boot prints lead past it
+    rng, img = st_canvas(ST_W, ST_H, mix(VOID, OAK, 0.5), mix(OAK, SLATE, 0.4), "story_intro_4", 6)
+    n = noise(rng, ST_W, ST_H, 40) * 0.6 + noise(rng, ST_W, ST_H, 12) * 0.4
+    arr = np.asarray(img).astype(np.float32)
+    arr[..., :3] *= (0.8 + 0.4 * (np.floor(n * 4) / 4))[..., None]
+    pud = noise(rng, ST_W, ST_H, 90)
+    yy = np.linspace(0.6, 1.0, ST_H)[:, None]
+    blood = (pud * yy > 0.6)
+    arr[blood, :3] = np.array(rgb(mix(SLATE, CRIMSON, 0.5))[:3], dtype=np.float32) * (0.85 + 0.3 * n[blood, None])
+    edge = blood & ~np.roll(blood, 3, axis=0)
+    arr[edge, :3] = rgb(mix(CRIMSON, ARTERIAL, 0.3))[:3]
+    img = to_img(arr[..., :3])
+    d = ImageDraw.Draw(img, "RGBA")
+    for i in range(9):   # boot prints, oblique
+        bx, by = 120 + i * 120 + (i % 2) * 22, 430 - i * 22 + (i % 2) * 18
+        d.ellipse([bx - 15, by - 8, bx + 15, by + 8], fill=rgb(mix(VOID, OAK, 0.4)))
+        d.ellipse([bx + 12, by - 6, bx + 24, by + 6], fill=rgb(mix(VOID, OAK, 0.4)))
+    # the insignia (a heater shield with the weeping eye), seen at a slant
+    cx, cy, sq = 560, 236, 0.62
+
+    def S(pts):
+        return [(cx + px, cy + py * sq) for px, py in pts]
+
+    d.polygon(S([(-170, -150), (170, -150), (160, 30), (90, 140), (0, 200), (-90, 140), (-160, 30)]), fill=rgb(VOID))
+    d.polygon(S([(-160, -150), (160, -150), (150, 30), (84, 132), (0, 188), (-84, 132), (-150, 30)]), fill=rgb(IRON), outline=rgb(VOID), width=5)
+    d.polygon(S([(-160, -150), (160, -150), (150, -112), (-150, -112)]), fill=rgb(mix(IRON, PSTEEL, 0.5)))
+    d.polygon(S([(-130, -112), (130, -112), (120, 24), (66, 112), (0, 160), (-66, 112), (-120, 24)]), fill=rgb(mix(IRON, VOID, 0.35)), outline=rgb(VOID), width=3)
+    d.polygon(S([(-100, -20), (-50, -64), (0, -78), (50, -64), (100, -20), (50, 22), (0, 34), (-50, 22)]), fill=rgb(mix(CANDLE, OAK, 0.45)), outline=rgb(VOID), width=4)
+    d.ellipse([cx - 30, cy - 50 * sq, cx + 30, cy + 10 * sq], fill=rgb(mix(CRIMSON, VOID, 0.2)), outline=rgb(VOID), width=3)
+    d.ellipse([cx - 11, cy - 30 * sq, cx + 11, cy - 6 * sq], fill=rgb(VOID))
+    d.polygon(S([(-8, 40), (8, 40), (14, 92), (0, 112), (-14, 92)]), fill=rgb(CRIMSON), outline=rgb(VOID), width=3)
+    for rx, ry in ((-140, -132), (140, -132), (-120, 10), (120, 10)):
+        d.ellipse([cx + rx - 7, cy + ry * sq - 7, cx + rx + 7, cy + ry * sq + 7], fill=rgb(PSTEEL), outline=rgb(VOID))
+    # the mud closes over its lower left; blood streaks across the plate
+    mud = []
+    for k in range(40):   # an irregular lip of mud over the lower left, its rim wet with blood
+        a = k / 40 * 2 * math.pi
+        rr = 1.0 + 0.18 * math.sin(a * 5 + 1.3) + 0.08 * math.sin(a * 11)
+        mud.append((cx - 150 + 170 * rr * math.cos(a), cy + 120 + 70 * rr * math.sin(a)))
+    d.polygon(mud, fill=rgb(mix(mix(OAK, SLATE, 0.4), CRIMSON, 0.18)), outline=rgb(VOID), width=3)
+    d.line([p for p in mud if p[1] < cy + 120] + [mud[0]], fill=rgb(mix(CRIMSON, ARTERIAL, 0.25)), width=3)
+    for _ in range(14):
+        x, y = cx - 150 + int(rng.integers(-130, 130)), cy + 120 + int(rng.integers(-30, 40))
+        d.ellipse([x - 9, y - 3, x + 9, y + 3], fill=rgb(mix(OAK, VOID, 0.4)))
+    for sx, sy, ex, ey in ((cx + 40, cy - 70, cx + 130, cy - 20), (cx + 70, cy - 60, cx + 120, cy - 4), (cx - 150, cy - 80, cx - 90, cy - 70)):
+        d.line([(sx, sy), (ex, ey)], fill=rgb(mix(CRIMSON, VOID, 0.2), 220), width=7)
+    rain(img, rng, 420, PSTEEL, 55, 26)
+    d = ImageDraw.Draw(img, "RGBA")
+    for _ in range(40):   # ripples
+        x, y = int(rng.integers(0, ST_W)), int(rng.integers(120, ST_H))
+        r = int(rng.integers(5, 14))
+        d.ellipse([x - r, y - r * 0.35, x + r, y + r * 0.35], outline=rgb(PSTEEL, 70), width=1)
+    return vignette(img, 0.6)
+
+
+def st_meat_market():
+    # the Lower Meat Market rendering station: cauldrons over fire pits, chimneys, a hook gantry, the Spent in queues
+    rng, img = st_canvas(ST_W, ST_H, VOID, mix(VOID, VIOLET, 0.18), "story_meat_market", 6)
+    shroud(img, rng, 0, 120, mix(VOID, VIOLET, 0.3), 160, 90)
+    d = ImageDraw.Draw(img, "RGBA")
+    d.rectangle([0, 150, ST_W, 372], fill=rgb(mix(BASALT, OAK, 0.4)))
+    wall_courses(img, 160, 372, VOID, 90, 26, 60)
+    d = ImageDraw.Draw(img, "RGBA")
+    for ax in (110, 1010):   # dim hall arches
+        d.polygon(arch_pts(ax - 60, ax + 60, 260, 372, 0.7), fill=rgb(mix(VOID, TALLOW, 0.12)), outline=rgb(VOID), width=3)
+    for cx, top in ((250, 10), (870, 30)):   # chimneys and their smoke
+        d.polygon([(cx - 34, 160), (cx - 24, top), (cx + 24, top), (cx + 34, 160)], fill=rgb(mix(BASALT, VOID, 0.3)), outline=rgb(VOID), width=3)
+        d.rectangle([cx - 30, top - 8, cx + 30, top + 4], fill=rgb(mix(BASALT, IRON, 0.3)), outline=rgb(VOID), width=3)
+        soft(img, lambda dd, c=cx, t=top: [dd.ellipse([c - 30 + k * 26, t - 40 - k * 30, c + 40 + k * 34, t + 10 - k * 30], fill=rgb(CINDER, 120 - k * 18)) for k in range(5)], 10)
+        d = ImageDraw.Draw(img, "RGBA")
+    d.rectangle([60, 140, 1060, 154], fill=rgb(OAK), outline=rgb(VOID), width=3)   # the hook gantry
+    for i, hx in enumerate(range(110, 1040, 64)):
+        if 440 < hx < 680:
+            continue
+        drop = 30 + (i % 3) * 10
+        d.line([(hx, 154), (hx, 154 + drop)], fill=rgb(IRON), width=3)
+        d.arc([hx - 8, 150 + drop, hx + 8, 166 + drop], 0, 200, fill=rgb(PSTEEL), width=3)
+        if i % 2 == 0:   # wrapped bundles
+            d.ellipse([hx - 16, 162 + drop, hx + 16, 228 + drop], fill=rgb(mix(LINEN, CINDER, 0.55)), outline=rgb(VOID), width=3)
+            for k in range(3):
+                d.line([(hx - 14, 182 + drop + k * 14), (hx + 14, 178 + drop + k * 14)], fill=rgb(mix(LINEN, OAK, 0.6)), width=2)
+    for cx in (430, 690):   # cauldrons over fire pits
+        glow(img, cx, 340, 170, TALLOW, 150)
+        d = ImageDraw.Draw(img, "RGBA")
+        d.rectangle([cx - 110, 340, cx + 110, 382], fill=rgb(mix(OAK, CRIMSON, 0.25)), outline=rgb(VOID), width=4)
+        for bx in range(cx - 100, cx + 100, 30):
+            d.line([(bx, 340), (bx, 382)], fill=rgb(VOID, 140), width=2)
+        d.rectangle([cx - 70, 356, cx + 70, 382], fill=rgb(TALLOW), outline=rgb(VOID), width=3)
+        for fx in range(cx - 60, cx + 60, 24):
+            d.polygon([(fx, 380), (fx + 12, 352 - (fx % 3) * 6), (fx + 24, 380)], fill=rgb(CANDLE))
+        d.chord([cx - 120, 220, cx + 120, 380], 0, 180, fill=rgb(IRON), outline=rgb(VOID), width=5)
+        d.chord([cx - 120, 220, cx + 120, 380], 20, 70, fill=rgb(mix(IRON, PSTEEL, 0.35)))
+        d.ellipse([cx - 120, 280, cx + 120, 320], fill=rgb(mix(TALLOW, BLEATHER, 0.35)), outline=rgb(VOID), width=5)
+        d.ellipse([cx - 90, 288, cx + 90, 312], fill=rgb(TALLOW))
+        for bx, by in ((cx - 40, 298), (cx + 24, 294), (cx + 60, 302)):
+            d.ellipse([bx - 7, by - 4, bx + 7, by + 4], outline=rgb(CANDLE), width=2)
+        soft(img, lambda dd, c=cx: [dd.ellipse([c - 70 + k * 10, 220 - k * 40, c + 60 + k * 16, 290 - k * 40], fill=rgb(LINEN, 70 - k * 12)) for k in range(5)], 14)
+        d = ImageDraw.Draw(img, "RGBA")
+    d.rectangle([520, 330, 600, 392], fill=rgb(OAK), outline=rgb(VOID), width=3)   # the ladling counter
+    for bx in range(530, 596, 16):
+        d.ellipse([bx - 6, 322, bx + 6, 330], fill=rgb(mix(OAK, LINEN, 0.3)), outline=rgb(VOID))
+    d.rectangle([0, 382, ST_W, ST_H], fill=rgb(SLATE))
+    for y in range(392, ST_H, 16):
+        for x in range((y // 16 % 2) * 20, ST_W, 40):
+            d.rectangle([x, y, x + 38, y + 14], outline=rgb(VOID, 120), width=2)
+    rim = mix(VOID, TALLOW, 0.45)
+    for (sx, sy, sh), (ex, ey, eh) in (((40, 470, 230), (470, 400, 96)), ((1090, 470, 230), (650, 400, 96))):
+        steps = 6
+        for k in range(steps, -1, -1):   # from the back of the queue to the front, larger toward the viewer
+            t = k / steps
+            x, y, h = ex + (sx - ex) * t, ey + (sy - ey) * t, eh + (sh - eh) * t
+            person(d, x, y, h, mix(VOID, SLATE, 0.55), rim, bow=0.8 if sx < ex else -0.8, bowl=mix(OAK, LINEN, 0.25) if sx < ex else None)
+    ash_fall(img, rng, 70, rmax=3.0)
+    return vignette(img, 0.55)
+
+
+def st_hearth():
+    # the Sluice Undercroft: ribbed vaults receding, the Water-Lock Basin, Bram's forge glowing at the Tinker's Hearth
+    rng, img = st_canvas(ST_W, ST_H, VOID, mix(VOID, BASALT, 0.6), "story_hearth", 4)
+    vx, vy = 560, 300
+    for k in range(5, -1, -1):   # vault rings from the back to the front
+        s = min(1.25, 0.28 + 0.16 * (5 - k) ** 1.15)
+        hw, base = 470 * s, vy + 175 * s
+        warm = mix(mix(BASALT, IRON, 0.08 + 0.05 * (5 - k)), TALLOW, 0.06 * (5 - k))
+        outer = arch_pts(vx - hw, vx + hw, vy - 40 * s, base, 0.62)
+        inner = arch_pts(vx - hw + 46 * s, vx + hw - 46 * s, vy - 40 * s, base, 0.62)
+        ring = Image.new("L", img.size, 0)
+        md = ImageDraw.Draw(ring)
+        md.polygon(outer, fill=255)
+        md.polygon(inner, fill=0)
+        img.paste(Image.new("RGBA", img.size, rgb(warm)), (0, 0), ring)
+        d = ImageDraw.Draw(img, "RGBA")
+        d.line(outer[1:-1], fill=rgb(VOID), width=4)
+        d.line(inner[1:-1], fill=rgb(VOID), width=4)
+        d.line(arch_pts(vx - hw + 6, vx + hw - 6, vy - 40 * s + 6, base, 0.62)[1:14], fill=rgb(mix(warm, PSTEEL, 0.15)), width=2)
+    d = ImageDraw.Draw(img, "RGBA")
+    d.polygon([(0, ST_H), (0, 410), (vx - 60, vy + 50), (vx + 60, vy + 50), (ST_W, 410), (ST_W, ST_H)], fill=rgb(SLATE))
+    for t in np.linspace(0, 1, 7):
+        d.line([(vx - 60 + 120 * t, vy + 50), (-200 + (ST_W + 400) * t, ST_H)], fill=rgb(VOID, 110), width=2)
+    for y in (vy + 62, vy + 82, vy + 112, vy + 152):
+        d.line([(0, y), (ST_W, y)], fill=rgb(VOID, 90), width=2)
+    # the Water-Lock Basin, foreground left
+    d.polygon([(30, 400), (420, 400), (470, 472), (0, 472)], fill=rgb(mix(BASALT, IRON, 0.35)), outline=rgb(VOID), width=4)
+    d.polygon([(54, 412), (404, 412), (440, 472), (24, 472)], fill=rgb(mix(VOID, CYAN, 0.16)), outline=rgb(VOID), width=3)
+    for i in range(6):
+        y = 424 + i * 8
+        d.line([(80 + i * 6, y), (240 + i * 14, y)], fill=rgb(mix(VOID, CYAN, 0.4), 160), width=2)
+        d.line([(300, y + 2), (330 + i * 8, y + 2)], fill=rgb(TALLOW, 120), width=2)
+    for x in (150, 300):
+        d.ellipse([x - 20, 436, x + 20, 446], outline=rgb(mix(VOID, CYAN, 0.55)), width=2)
+    # the forge, foreground right
+    glow(img, 900, 360, 260, TALLOW, 150)
+    d = ImageDraw.Draw(img, "RGBA")
+    d.polygon([(820, 200), (980, 200), (1000, 120), (800, 120)], fill=rgb(mix(BASALT, IRON, 0.25)), outline=rgb(VOID), width=4)
+    d.rectangle([860, 0, 940, 122], fill=rgb(mix(BASALT, IRON, 0.2)), outline=rgb(VOID), width=4)
+    d.rectangle([790, 200, 1010, 420], fill=rgb(mix(OAK, CRIMSON, 0.3)), outline=rgb(VOID), width=5)
+    for i, y in enumerate(range(212, 420, 18)):
+        d.line([(792, y), (1008, y)], fill=rgb(VOID, 140), width=2)
+        for x in range(796 + (i % 2) * 18, 1008, 36):
+            d.line([(x, y), (x, y + 18)], fill=rgb(VOID, 140), width=2)
+    d.polygon(arch_pts(840, 960, 300, 392, 0.55), fill=rgb(TALLOW), outline=rgb(VOID), width=5)
+    d.polygon(arch_pts(860, 940, 320, 392, 0.55), fill=rgb(CANDLE))
+    for cx in (880, 905, 925):
+        d.polygon([(cx - 10, 392), (cx, 340 + (cx % 7) * 3), (cx + 10, 392)], fill=rgb(mix(CANDLE, LINEN, 0.5)))
+    d.polygon([(700, 420), (720, 396), (800, 396), (812, 380), (840, 380), (820, 404), (790, 404), (780, 420), (790, 440), (708, 440)], fill=rgb(mix(VOID, IRON, 0.5)), outline=rgb(VOID), width=3)
+    d.line([(722, 396), (800, 396)], fill=rgb(TALLOW), width=2)
+    for _ in range(26):   # sparks
+        x, y = int(rng.integers(820, 1000)), int(rng.integers(160, 340))
+        d.ellipse([x - 2, y - 2, x + 2, y + 2], fill=rgb(CANDLE, int(rng.integers(120, 255))))
+    # the Apothecary's Slab, mid-depth left
+    d.rectangle([330, 330, 450, 344], fill=rgb(mix(LINEN, CINDER, 0.6)), outline=rgb(VOID), width=3)
+    for lx in (338, 438):
+        d.rectangle([lx, 344, lx + 6, 384], fill=rgb(OAK), outline=rgb(VOID))
+    for bx, bc in ((350, VIOLET), (372, CYAN), (392, CRIMSON), (414, TALLOW)):
+        d.rectangle([bx, 312, bx + 10, 330], fill=rgb(mix(bc, VOID, 0.35)), outline=rgb(VOID), width=2)
+    for _ in range(18):   # drips from the vault
+        x, y = int(rng.integers(40, ST_W - 40)), int(rng.integers(20, 240))
+        d.line([(x, y), (x, y + int(rng.integers(8, 20)))], fill=rgb(mix(VOID, CYAN, 0.5), 140), width=2)
+    return vignette(img, 0.55)
+
+
+def g_story(out: Out) -> None:
+    scenes = {"intro_1": st_intro_1, "intro_2": st_intro_2, "intro_3": st_intro_3, "intro_4": st_intro_4,
+              "meat_market": st_meat_market, "hearth": st_hearth}
+    for sid, fn in scenes.items():
+        save(fn(), "game", "backgrounds/story/%s.png" % sid, out)
+
+
+def g_world_card(out: Out) -> None:
+    # the sunk_ward world card (backgrounds/title/<world>.png, as the Ashlands card): the ward's skyline under the Shroud
+    W, H = 1280, 360
+    rng, img = st_canvas(W, H, VOID, mix(VOID, VIOLET, 0.25), "world_card_sunk_ward", 6)
+    shroud_sky(img, rng, 290)
+    skyline(img, rng, 300, mix(VOID, BASALT, 0.6), 20, 70, 0.08, wmin=40, wmax=100)
+    cathedral(img, 1060, 312, 0.55, VOID, TALLOW, 40)
+    skyline(img, rng, 318, VOID, 4, 30, 0.12, wmin=50, wmax=110)
+    d = ImageDraw.Draw(img, "RGBA")
+    d.rectangle([0, 318, W, H], fill=rgb(mix(VOID, CYAN, 0.07)))
+    for _ in range(40):   # lit windows on the canal
+        x, y = int(rng.integers(0, W)), int(rng.integers(322, H))
+        d.line([(x, y), (x + int(rng.integers(6, 24)), y)], fill=rgb(TALLOW, int(rng.integers(60, 150))), width=2)
+    ash_fall(img, rng, 90, rmax=3.0)
+    d = ImageDraw.Draw(img, "RGBA")
+    d.rectangle([20, 20, W - 21, H - 21], outline=rgb(CANDLE, 200), width=3)
+    d.rectangle([30, 30, W - 31, H - 31], outline=rgb(CANDLE, 90), width=1)
+    try:
+        font = ImageFont.load_default(size=110)
+        small = ImageFont.load_default(size=34)
+    except TypeError:
+        font = small = ImageFont.load_default()
+    text = "THE SUNK WARD"
+    tw = d.textlength(text, font=font)
+    d.text(((W - tw) / 2 + 4, 84 + 4), text, font=font, fill=rgb("#000000", 210))
+    d.text(((W - tw) / 2, 84), text, font=font, fill=rgb(LINEN))
+    sub = "The Young Vanguard"
+    sw = d.textlength(sub, font=small)
+    d.text(((W - sw) / 2 + 2, 232), sub, font=small, fill=rgb("#000000", 200))
+    d.text(((W - sw) / 2, 230), sub, font=small, fill=rgb(CANDLE))
+    save(img, "game", "backgrounds/title/sunk_ward.png", out)
+
+
+def g_menu_sunless(out: Out) -> None:
+    # the game's main menu (MENU2): the Shroud, a cathedral and the ward's roofs, falling ash
+    W, H = 1920, 1080
+    rng, img = st_canvas(W, H, VOID, mix(VOID, VIOLET, 0.25), "menu_sunless", 8)
+    shroud_sky(img, rng, 760)
+    skyline(img, rng, 780, mix(VOID, BASALT, 0.55), 60, 160, 0.06, wmin=80, wmax=200)
+    cathedral(img, 520, 800, 1.35, "#0c0d13", TALLOW, 55)
+    skyline(img, rng, 900, "#0b0c11", 40, 120, 0.08, wmin=100, wmax=220)
+    skyline(img, rng, 1010, VOID, 20, 70, 0.05, wmin=120, wmax=260)
+    ash_fall(img, rng, 300)
+    save(vignette(img, 0.7), "game", "backgrounds/menu/main_menu.png", out)
+
+
+# The Sunk Ward battle zones (grounds from HOOKS1_TASKS 2.3) in the STAGE1 7.3 format; briefs from CAST1_ASSETS N10
+ZONE_GROUND.update({"alley": "stone", "rooftops": "stone", "canal": "bridge", "foundry": "floor", "tallow_vats": "floor",
+                    "undercroft": "stone", "watchpost": "floor"})
+
+
+def bd_base(bottom: str) -> Image.Image:
+    # the sky gradient in four flat steps, so the 16-colour pass keeps its slots for the scenery's lights
+    return quant16(bd_gradient(BD_TOP, rgb(bottom)[:3]), 4)
+
+
+def bd_alley():
+    # Cinder Alley: soot-black brick tenements, linen on lines across the lane, tallow lamps
+    rng = np.random.default_rng(seed_of("bdalley"))
+    img = bd_base(mix(VOID, VIOLET, 0.14))
+    d = ImageDraw.Draw(img)
+    x = -10
+    while x < BD_W:
+        w = int(rng.integers(36, 64))
+        top = int(rng.integers(3, 14))
+        col = mix(BASALT, OAK, (0.0, 0.25, 0.5)[int(rng.integers(0, 3))])
+        d.polygon([(x, 47), (x, top + 6), (x + w // 2, top), (x + w, top + 6), (x + w, 47)], fill=rgb(col), outline=rgb(VOID))
+        for wy in range(top + 10, 42, 9):
+            for wx in range(x + 5, x + w - 6, 10):
+                d.rectangle([wx, wy, wx + 3, wy + 4], fill=rgb(TALLOW) if rng.random() < 0.22 else rgb(VOID))
+        x += w + int(rng.integers(4, 10))
+    for lx0 in range(20, BD_W, 96):   # washing lines with linen, a few across the lane
+        lx1 = lx0 + 60
+        pts = [(x, 18 + 5 * math.sin((x - lx0) / (lx1 - lx0) * math.pi)) for x in range(lx0, lx1 + 1, 3)]
+        d.line(pts, fill=rgb(CINDER))
+        for k in range(lx0 + 6, lx1 - 4, 11):
+            if rng.random() < 0.7:
+                yy = int(18 + 5 * math.sin((k - lx0) / (lx1 - lx0) * math.pi))
+                d.rectangle([k, yy, k + 4, yy + int(rng.integers(4, 8))], fill=rgb(mix(LINEN, CINDER, 0.35)), outline=rgb(VOID))
+    for lx in (48, 176, 304):   # tallow lamps on brackets
+        d.line([(lx, 30), (lx + 6, 30)], fill=rgb(IRON))
+        d.rectangle([lx + 5, 30, lx + 8, 35], fill=rgb(CANDLE), outline=rgb(VOID))
+    return img
+
+
+def bd_rooftops():
+    # Market Rooftops: wet slates, chimneys with smoke, meat hooks on a line
+    rng = np.random.default_rng(seed_of("bdrooftops"))
+    img = bd_base(mix(VOID, VIOLET, 0.16))
+    d = ImageDraw.Draw(img)
+    for base, col, hi in ((26, mix(BASALT, SLATE, 0.5), None), (40, mix(SLATE, IRON, 0.3), mix(SLATE, PSTEEL, 0.4))):
+        x = -int(rng.integers(0, 30))
+        while x < BD_W:
+            w = int(rng.integers(30, 56))
+            pk = base - int(rng.integers(6, 14))
+            d.polygon([(x, 47), (x, base), (x + w // 2, pk), (x + w, base), (x + w, 47)], fill=rgb(col), outline=rgb(VOID))
+            if hi:
+                d.line([(x + 2, base - 1), (x + w // 2, pk + 1)], fill=rgb(hi))
+                for sy in range(base + 3, 47, 3):
+                    d.line([(x + 1, sy), (x + w - 1, sy)], fill=rgb(mix(col, VOID, 0.3)))
+            if rng.random() < 0.55:
+                cx = x + int(rng.integers(4, w - 8))
+                ch = int(rng.integers(6, 12))
+                d.rectangle([cx, pk - ch + 4, cx + 5, base], fill=rgb(mix(OAK, CRIMSON, 0.2)), outline=rgb(VOID))
+                for k in range(3):   # a smoke wisp drifting right
+                    sx, sy = cx + 2 + k * 3, pk - ch + 1 - k * 4
+                    d.ellipse([sx - 2 - k, sy - 2, sx + 2 + k, sy + 1], fill=rgb(mix(CINDER, VOID, 0.45 + 0.1 * k)))
+            x += w - 2
+    d.line([(x, 12 + 6 * math.sin(x / BD_W * math.pi)) for x in range(0, BD_W, 4)], fill=rgb(IRON))
+    for k in range(20, BD_W, 28):
+        yy = int(12 + 6 * math.sin(k / BD_W * math.pi))
+        d.line([(k, yy), (k, yy + 4)], fill=rgb(PSTEEL))
+        d.arc([k - 2, yy + 3, k + 2, yy + 7], 0, 200, fill=rgb(PSTEEL))
+    return img
+
+
+def bd_canal():
+    # Canal Bridge: an iron truss bridge over black water, the mortuary cart on the deck
+    rng = np.random.default_rng(seed_of("bdcanal"))
+    img = bd_base(mix(VOID, VIOLET, 0.12))
+    d = ImageDraw.Draw(img)
+    x = 0
+    while x < BD_W:   # the far bank
+        w = int(rng.integers(24, 48))
+        top = int(rng.integers(8, 18))
+        d.rectangle([x, top, x + w, 34], fill=rgb(mix(VOID, BASALT, 0.7)))
+        if rng.random() < 0.5:
+            d.rectangle([x + 4, top + 4, x + 6, top + 7], fill=rgb(TALLOW))
+        x += w + 2
+    d.rectangle([0, 34, BD_W, 47], fill=rgb(mix(VOID, CYAN, 0.06)))
+    for _ in range(30):
+        x, y = int(rng.integers(0, BD_W)), int(rng.integers(36, 47))
+        d.line([(x, y), (x + int(rng.integers(3, 10)), y)], fill=rgb(mix(VOID, CYAN, 0.3)) if rng.random() < 0.7 else rgb(TALLOW))
+    d.rectangle([0, 26, BD_W, 29], fill=rgb(IRON), outline=rgb(VOID))   # deck and truss
+    d.line([(0, 16), (BD_W, 16)], fill=rgb(IRON), width=2)
+    for k in range(0, BD_W, 16):
+        d.line([(k, 17), (k + 16, 26)], fill=rgb(mix(IRON, VOID, 0.2)))
+        d.line([(k, 17), (k, 26)], fill=rgb(mix(IRON, PSTEEL, 0.3)))
+    for px in (64, 192, 320):
+        d.rectangle([px - 4, 29, px + 4, 47], fill=rgb(mix(BASALT, IRON, 0.3)), outline=rgb(VOID))
+        d.arc([px + 4, 28, px + 124, 52], 180, 360, fill=rgb(mix(IRON, VOID, 0.3)), width=2)
+    d.rectangle([150, 14, 182, 25], fill=rgb(mix(VOID, OAK, 0.6)), outline=rgb(VOID))   # the mortuary cart
+    for bx in range(153, 181, 4):
+        d.line([(bx, 15), (bx, 24)], fill=rgb(IRON))
+    d.polygon([(148, 14), (166, 9), (184, 14)], fill=rgb(mix(VOID, OAK, 0.6)), outline=rgb(VOID))
+    for wx in (156, 176):
+        d.ellipse([wx - 3, 22, wx + 3, 28], fill=rgb(OAK), outline=rgb(VOID))
+    d.line([(184, 20), (194, 24)], fill=rgb(OAK))
+    return img
+
+
+def bd_foundry():
+    # The Fourth Kiln: kiln stacks, the bone-mill wheel, chains, vent grates and slag pools
+    img = bd_base(mix(BASALT, OAK, 0.4))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 14, BD_W, 47], fill=rgb(mix(BASALT, OAK, 0.25)))   # the kiln hall wall
+    for i, y in enumerate(range(14, 47, 6)):
+        d.line([(0, y), (BD_W, y)], fill=rgb(VOID))
+        for x in range((i % 2) * 6, BD_W, 12):
+            d.line([(x, y), (x, y + 6)], fill=rgb(VOID))
+    d.rectangle([0, 10, BD_W, 13], fill=rgb(IRON), outline=rgb(VOID))   # a gantry beam
+    for kx in (40, 120):
+        d.polygon([(kx - 16, 47), (kx - 9, 2), (kx + 9, 2), (kx + 16, 47)], fill=rgb(mix(BASALT, OAK, 0.3)), outline=rgb(VOID))
+        d.polygon(arch_pts(kx - 8, kx + 8, 36, 47, 0.6, 8), fill=rgb(TALLOW), outline=rgb(VOID))
+    cx, cy, r = 280, 24, 19   # the bone-mill wheel
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=rgb(VOID), width=5)
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=rgb(LINEN), width=3)
+    for k in range(8):
+        a = k * math.pi / 4
+        d.line([(cx, cy), (cx + r * math.cos(a), cy + r * math.sin(a))], fill=rgb(LINEN), width=2)
+        d.ellipse([cx + r * math.cos(a) - 2, cy + r * math.sin(a) - 2, cx + r * math.cos(a) + 2, cy + r * math.sin(a) + 2], fill=rgb(LINEN), outline=rgb(VOID))
+    d.ellipse([cx - 4, cy - 4, cx + 4, cy + 4], fill=rgb(IRON), outline=rgb(VOID))
+    for chx in (180, 196, 344, 360):   # chains
+        for y in range(1, 30 + (chx % 3) * 4, 3):
+            d.point((chx, y), fill=rgb(IRON))
+            d.point((chx + (1 if y % 6 else -1), y + 1), fill=rgb(PSTEEL))
+    for gx in (200, 344):   # vent grates
+        d.rectangle([gx - 10, 34, gx + 10, 44], fill=rgb(ARTERIAL), outline=rgb(VOID))
+        for bx in range(gx - 8, gx + 10, 4):
+            d.line([(bx, 34), (bx, 44)], fill=rgb(VOID))
+    for px in (80, 240):   # slag pools
+        d.ellipse([px - 26, 42, px + 26, 49], fill=rgb(TALLOW), outline=rgb(VOID))
+        d.ellipse([px - 14, 44, px + 12, 47], fill=rgb(CANDLE))
+    return img
+
+
+def bd_tallow_vats():
+    # Tallow Vats: boiling vats with steam, a catwalk with rails, grease runnels
+    rng = np.random.default_rng(seed_of("bdtallow"))
+    img = bd_base(mix(BASALT, OAK, 0.5))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 18, BD_W, 20], fill=rgb(OAK), outline=rgb(VOID))   # the catwalk
+    d.line([(0, 12), (BD_W, 12)], fill=rgb(IRON))
+    for k in range(0, BD_W, 12):
+        d.line([(k, 12), (k, 18)], fill=rgb(IRON))
+    for vx in (48, 144, 240, 336):
+        w = 30
+        for k in range(3):   # steam wisps rising past the catwalk
+            sx, sy = vx - 4 + (k % 2) * 6, 14 - k * 5
+            d.ellipse([sx - 3, sy - 2, sx + 3, sy + 2], fill=rgb(mix(LINEN, VOID, 0.5 + 0.12 * k)))
+        d.rectangle([vx - w // 2, 26, vx + w // 2, 47], fill=rgb(IRON), outline=rgb(VOID))
+        d.line([(vx - w // 2 + 2, 27), (vx - w // 2 + 2, 46)], fill=rgb(mix(IRON, PSTEEL, 0.4)))
+        for by in (32, 40):
+            d.line([(vx - w // 2, by), (vx + w // 2, by)], fill=rgb(mix(IRON, VOID, 0.4)))
+        d.ellipse([vx - w // 2, 22, vx + w // 2, 30], fill=rgb(TALLOW), outline=rgb(VOID))
+        d.ellipse([vx - 8, 24, vx + 6, 28], fill=rgb(CANDLE))
+        for gx in (vx - 8, vx + 6):   # runnels down the vat sides
+            d.line([(gx, 30), (gx + 1, 30 + int(rng.integers(6, 16)))], fill=rgb(BLEATHER), width=2)
+    return img
+
+
+def bd_undercroft():
+    # Sluice Undercroft: drowned vault arches on bone pillars, violet mist over the water
+    img = bd_base(mix(VOID, VIOLET, 0.12))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 2, BD_W, 47], fill=rgb(mix(BASALT, VOID, 0.2)))
+    for k in range(-1, 7):
+        x0 = k * 64 + 8
+        d.polygon(arch_pts(x0, x0 + 48, 22, 48, 0.75, 10), fill=rgb(mix(VOID, VIOLET, 0.1)), outline=rgb(VOID))
+    for k in range(0, 7):
+        px = k * 64 + 4
+        d.rectangle([px - 4, 4, px + 4, 47], fill=rgb(mix(LINEN, CINDER, 0.5)), outline=rgb(VOID))
+        for jy in (10, 20, 30, 40):
+            d.ellipse([px - 5, jy - 2, px + 5, jy + 2], fill=rgb(mix(LINEN, CINDER, 0.3)), outline=rgb(VOID))
+    d.rectangle([0, 38, BD_W, 47], fill=rgb(mix(VOID, CYAN, 0.08)))
+    for x in range(0, BD_W, 9):
+        y = 41 + (x // 9) % 3 * 2
+        d.line([(x, y), (x + 5, y)], fill=rgb(mix(VOID, CYAN, 0.3)))
+    mist = Image.new("RGBA", (BD_W, BD_H), (0, 0, 0, 0))
+    md = ImageDraw.Draw(mist)
+    for y in range(BD_H - 14, BD_H):
+        md.line([(0, y), (BD_W, y)], fill=rgb(ORCHID, int(30 + 90 * (y - (BD_H - 14)) / 14)))
+    img.alpha_composite(mist)
+    return img
+
+
+def bd_watchpost():
+    # Crucible Watchpost: the Slag Gate between two towers, the winch, braziers
+    img = bd_base(mix(BASALT, OAK, 0.3))
+    d = ImageDraw.Draw(img)
+    wall, low = mix(BASALT, IRON, 0.3), mix(BASALT, IRON, 0.15)
+    d.rectangle([0, 22, BD_W, 47], fill=rgb(low), outline=rgb(VOID))
+    for x in range(0, BD_W, 8):
+        d.rectangle([x, 18, x + 4, 22], fill=rgb(low), outline=rgb(VOID))
+    for tx in (148, 220):   # the gate towers
+        d.rectangle([tx - 14, 4, tx + 14, 47], fill=rgb(wall), outline=rgb(VOID))
+        for x in range(tx - 14, tx + 14, 7):
+            d.rectangle([x, 1, x + 4, 4], fill=rgb(wall), outline=rgb(VOID))
+        d.rectangle([tx - 2, 12, tx + 2, 18], fill=rgb(TALLOW))
+    d.rectangle([162, 14, 206, 47], fill=rgb(wall), outline=rgb(VOID))
+    d.polygon(arch_pts(168, 200, 30, 47, 0.6, 8), fill=rgb(mix(VOID, TALLOW, 0.2)), outline=rgb(VOID))
+    for x in range(170, 200, 4):   # the portcullis
+        d.line([(x, 22), (x, 44)], fill=rgb(IRON))
+    for y in range(26, 46, 5):
+        d.line([(169, y), (199, y)], fill=rgb(IRON))
+    cx, cy, r = 290, 30, 10   # the winch
+    d.rectangle([cx - 14, 38, cx + 14, 47], fill=rgb(OAK), outline=rgb(VOID))
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=rgb(VOID), width=4)
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=rgb(BLEATHER), width=2)
+    for k in range(6):
+        a = k * math.pi / 3
+        d.line([(cx, cy), (cx + r * math.cos(a), cy + r * math.sin(a))], fill=rgb(BLEATHER))
+    d.line([(cx - r, cy), (206, 18)], fill=rgb(IRON))
+    for bx in (60, 110, 258, 340):   # braziers
+        d.line([(bx - 4, 47), (bx, 38)], fill=rgb(IRON))
+        d.line([(bx + 4, 47), (bx, 38)], fill=rgb(IRON))
+        d.chord([bx - 6, 32, bx + 6, 42], 0, 180, fill=rgb(IRON), outline=rgb(VOID))
+        d.polygon([(bx - 5, 37), (bx - 2, 28), (bx, 32), (bx + 2, 26), (bx + 5, 37)], fill=rgb(TALLOW), outline=rgb(VOID))
+        d.polygon([(bx - 2, 37), (bx, 31), (bx + 2, 37)], fill=rgb(CANDLE))
+    return img
+
+
+def g_sunk_backdrops(out: Out) -> None:
+    zones = {"alley": bd_alley(), "rooftops": bd_rooftops(), "canal": bd_canal(), "foundry": bd_foundry(),
+             "tallow_vats": bd_tallow_vats(), "undercroft": bd_undercroft(), "watchpost": bd_watchpost()}
+    for zone, img in zones.items():
+        save(quant16(bd_finish(img, zone), keep_top=BD_TOP).convert("RGB"), "game", "backgrounds/battle/%s.png" % zone, out)
+
+
+def it_scourge(c):
+    # a three-tailed flail: barbed wire tails, the handle wrapped in vestment cloth
+    c.line([(18, 94), (44, 56)], LINEN, w=10)
+    for k in range(4):   # vestment cloth wound in crimson bands
+        t = 0.15 + k * 0.22
+        px, py = 18 + 26 * t, 94 - 38 * t
+        c.line([(px - 5, py - 1), (px + 3, py + 6)], CRIMSON, w=3.0, ol=None)
+    c.ell(46, 53, 6, 6, IRON, w=1.8)
+    for ex, ey in ((66, 8), (86, 22), (92, 48)):   # three tails of barbed wire, zig-zag wound
+        n = 7
+        pts = []
+        for i in range(n + 1):
+            t = i / n
+            x, y = 46 + (ex - 46) * t, 53 + (ey - 53) * t
+            nx, ny = -(ey - 53), (ex - 46)
+            ln = math.hypot(nx, ny)
+            off = (3.0 if i % 2 else -3.0) * (0 if i in (0, n) else 1)
+            pts.append((x + nx / ln * off, y + ny / ln * off))
+        c.line(pts, mix(IRON, PSTEEL, 0.5), w=3.6)
+        for x, y in pts[2:-1:2]:
+            c.poly([(x - 3, y - 3), (x + 4, y - 1), (x - 1, y + 4)], PSTEEL, w=1.2)
+        c.poly([(ex - 5, ey - 2), (ex + 3, ey - 6), (ex + 5, ey + 3), (ex - 2, ey + 5)], PSTEEL, w=1.4)
+
+
+def it_sprayer(c):
+    # a brass pressure tank, a hose and a pole nozzle
+    brass, brass_hi = mix(CANDLE, BLEATHER, 0.45), mix(CANDLE, LINEN, 0.3)
+    c.rect(14, 34, 46, 90, brass, w=2.6, r=10)
+    c.rect(18, 40, 26, 84, brass_hi, ol=None, r=3)
+    for y in (48, 76):
+        c.line([(14, y), (46, y)], BLEATHER, w=2.4, ol=None)
+    c.ell(30, 30, 9, 6, IRON, w=2)
+    c.ell(30, 22, 6, 6, PSTEEL, w=1.6)
+    c.line([(23, 21), (37, 21)], ARTERIAL, w=1.6, ol=None)
+    c.line([(40, 30), (54, 18), (64, 30), (62, 56)], mix(OAK, LINEN, 0.25), w=4.4)
+    c.line([(54, 74), (88, 16)], PSTEEL, w=5.5)
+    c.poly([(84, 12), (94, 6), (96, 14), (90, 22)], brass, w=1.6)
+    c.ell(57, 68, 5, 5, BLEATHER, w=1.4)
+
+
+# The scourge and sprayer family icons (CAST1_ASSETS N9) over the stand-ins CAST1-A7 copied from kit icons: a drawn
+# icon replaces a file only while it is still that byte copy, never other art
+FAMILY_ICONS = {"scourge": (it_scourge, "items/mace/base.png"), "sprayer": (it_sprayer, "items/staff/base.png")}
+
+
+def grid_icon(draw_fn, grid=48, size=96) -> Image.Image:
+    # an item icon in the committed ART2 icon look: a 48-cell grid shown at 2x, a stepped teal field, a dark rim and
+    # bracketed corners (sampled from kits/rpg/assets/items/*/base.png); the art drawn by draw_fn on the Cv space
+    yy, xx = np.mgrid[0:grid, 0:grid]
+    dist = np.sqrt(((xx - grid / 2 + 0.5) / (grid / 2)) ** 2 + ((yy - grid / 2 + 0.5) / (grid / 2)) ** 2)
+    lo, hi = np.array(rgb("#273b3c")[:3], np.float32), np.array(rgb("#324a4c")[:3], np.float32)
+    bg = to_img(lo + (hi - lo) * (np.floor(np.clip(1 - dist, 0, 1) * 4) / 4)[..., None])
+    d = ImageDraw.Draw(bg)
+    d.rectangle([0, 0, grid - 1, grid - 1], outline=rgb("#1d282a"))
+    for fx, fy in ((0, 0), (1, 0), (0, 1), (1, 1)):
+        def at(x, y):
+            return (grid - 1 - x if fx else x, grid - 1 - y if fy else y)
+        for x, y in ((0, 0), (1, 0), (0, 1)):
+            d.point(at(x, y), fill=rgb("#d8d8d6"))
+        for x, y in ((2, 0), (3, 0), (4, 0), (1, 1), (2, 1), (0, 2), (1, 2), (0, 3), (0, 4)):
+            d.point(at(x, y), fill=rgb("#000203"))
+    c = Cv(96)
+    draw_fn(c)
+    inner = grid - 8
+    art = c.done().resize((inner, inner), Image.BOX)
+    a = np.asarray(art).copy()
+    a[..., 3] = np.where(a[..., 3] >= 110, 255, 0)
+    bg.alpha_composite(Image.fromarray(a, "RGBA"), (4, 4))
+    return bg.resize((size, size), Image.NEAREST)
+
+
+def g_family_icons(out: Out) -> None:
+    for fam, (fn, copied_from) in FAMILY_ICONS.items():
+        rel = "items/%s/base.png" % fam
+        path = os.path.join(layer_root(out.root, "game"), rel)
+        src = os.path.join(layer_root(out.root, "kit"), copied_from)
+        stand_in = os.path.exists(path) and os.path.exists(src) and same_bytes(path, src)
+        save(grid_icon(fn), "game", rel, Out(out.root, out.layers, True) if stand_in else out)
+
+
 GROUPS = {
     "bodies": g_bodies, "portraits": g_portraits, "items": g_items, "skills": g_skills, "statuses": g_statuses,
     "terrain": g_terrain, "overlays": g_overlays, "region": g_region, "markers": g_markers, "pins": g_pins,
     "chips": g_chips, "world_map": g_world_map, "backdrops": g_backdrops, "menu": g_menu,
+    "stage_tiles": g_stage_tiles, "battle_props": g_battle_props, "battle_backdrops": g_battle_backdrops,
+    "story": g_story, "world_card": g_world_card, "menu_sunless": g_menu_sunless, "sunk_backdrops": g_sunk_backdrops,
+    "family_icons": g_family_icons,
 }
 
 

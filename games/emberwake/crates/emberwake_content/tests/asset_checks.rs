@@ -104,3 +104,12 @@ fn art_offers_the_bodies_and_skips_the_enum_check() {
     assert!(check::validate_entry(&v, "classes", &class, "brawler").iter().any(|e| e.starts_with("Art '' isn't a body")), "a class names its body");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// ASSETCHK1: every palette file in the game's layers (game, kit, engine) parses with the loader's rules, whether a
+/// unit references it or not.
+#[test]
+fn every_shipped_palette_file_parses() {
+    let layers = Layers::for_game(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."));
+    assert!(!layers.roots.is_empty());
+    assert_eq!(aegis_core::assets::palette_problems(&layers), Vec::<String>::new());
+}

@@ -59,6 +59,12 @@ struct Shell<G> {
     text_click: Option<(Instant, (i32, i32))>,
     /// When the shell started: the clock a text field's undo groups typing by (`Edit::now_ms`).
     born: Instant,
+    /// A screen was pushed: once it drew, its `Screen::pointer_to` widget (if any) becomes `pointer_req` (ASKNO2).
+    pointer_pending: bool,
+    /// The canvas point the windowed shell should move the OS mouse pointer to (taken by `App::redraw`).
+    pointer_req: Option<(i32, i32)>,
+    /// An agent-link command is being run: screens it opens never move the pointer.
+    agent: bool,
 }
 
 /// A press on a draggable widget: its id, payload and text, and where the press was.
@@ -132,6 +138,7 @@ impl<G: Context> Shell<G> {
                         let event = if s.overlay() { json!({"type": "modal", "ctl": screen_ctl(s.id()), "open": true}) } else { json!({"type": "screen", "path": s.id(), "leaked": 0}) };
                         self.cx.playtest.trail(event);
                         self.stack.push(s);
+                        self.pointer_pending = true;
                     }
                     Nav::Pop => {
                         if self.stack.len() > 1 {
@@ -311,6 +318,7 @@ impl<G: Context> Shell<G> {
         }
         self.gfx.canvas.clip = None;
         self.settle_focus();
+        self.settle_pointer();
         let mut p = Painter { c: &mut self.gfx.canvas, v: self.gfx.view, fonts: &mut self.gfx.fonts };
         if self.gfx.kit.focus_visible && self.gfx.kit.open.is_none() {
             let infos = self.stack[n - 1].widgets();
@@ -366,9 +374,20 @@ impl<G: Context> Shell<G> {
         }
         let present = focus::live(&infos, self.gfx.kit.focus.as_deref(), open).is_some();
         if !present && (self.gfx.kit.focus_visible || (top.auto_focus() && self.gfx.kit.focus.is_none())) {
-            self.gfx.kit.focus = focus::step(&infos, None, focus::Move::Next, open);
+            let first = top.focus_first().filter(|f| focus::live(&infos, Some(f), open).is_some()).map(String::from);
+            self.gfx.kit.focus = first.or_else(|| focus::step(&infos, None, focus::Move::Next, open));
             self.gfx.kit.focus_visible = self.gfx.kit.focus.is_some();
         }
+    }
+
+    /// After a pushed screen first drew (ASKNO2): the centre of its `Screen::pointer_to` widget becomes the pointer
+    /// request the windowed shell carries out; a screen an agent-link command opened asks for nothing.
+    fn settle_pointer(&mut self) {
+        if !std::mem::take(&mut self.pointer_pending) || self.agent {
+            return;
+        }
+        let top = self.stack.last().unwrap();
+        self.pointer_req = top.pointer_to().and_then(|id| top.widget_rect(id)).map(|(r, _)| (r.x + r.w / 2, r.y + r.h / 2));
     }
 
     /// The wheel: the topmost scroll area under the mouse scrolls (a window above it stops the search), else the
@@ -796,6 +815,15 @@ impl<G: Context> Shell<G> {
 
     /// Agent link requests.
     fn bridge(&mut self, body: &Value) -> Value {
+        self.agent = true;
+        let reply = self.bridge_cmd(body);
+        // Screens the command opened never move the pointer (ASKNO2).
+        self.pointer_pending = false;
+        self.agent = false;
+        reply
+    }
+
+    fn bridge_cmd(&mut self, body: &Value) -> Value {
         let cmd = body.get("cmd").and_then(Value::as_str).unwrap_or("");
         let reply = match cmd {
             "ui_tree" => {
@@ -1048,6 +1076,15 @@ impl<G: Context> App<G> {
             shell.leave_all();
             std::process::exit(0);
         }
+        // A screen asked for the pointer on one of its widgets (ASKNO2): moved only while the window has the focus;
+        // a platform that refuses is ignored. The shell's mouse follows at once so the hover shows.
+        if let (Some(at), Some(window)) = (shell.pointer_req.take(), self.window.as_ref()) {
+            let v = shell.gfx.view;
+            let px = winit::dpi::PhysicalPosition::new(v.ox as f64 + (at.0 as f64 + 0.5) * v.s as f64, v.oy as f64 + (at.1 as f64 + 0.5) * v.s as f64);
+            if window.has_focus() && window.set_cursor_position(px).is_ok() {
+                shell.mouse = at;
+            }
+        }
         self.apply_settings();
         let Some(shell) = self.shell.as_mut() else { return };
         if let Some(p) = self.pixels.as_mut() {
@@ -1107,7 +1144,7 @@ impl<G: Context> ApplicationHandler for App<G> {
         let font_bytes = std::fs::read(&self.options.font).unwrap_or_else(|e| panic!("{}: {e}", self.options.font.display()));
         let (cx, stack) = self.start.take().expect("the shell starts once");
         let gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
-        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now() };
+        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
         let port = self.options.port;
         self.bridge = bridge::start(port, self.proxy.clone());
         if self.bridge.is_none() {
@@ -1414,7 +1451,7 @@ mod tests {
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
-        let mut s = Shell { cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now() };
+        let mut s = Shell { cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
         s.frame();
         s
     }
@@ -1999,6 +2036,33 @@ mod tests {
         assert_eq!((s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (Some("ok"), true), "back on a keyboard screen: focused again");
     }
 
+    /// ASKNO1 through the shell: a destructive question opens with the focus ring on No and Enter answers No (Tab to
+    /// Yes, then Enter, answers Yes); the default question opens without a ring and Enter answers Yes.
+    #[test]
+    fn a_destructive_question_opens_on_no_and_the_default_one_on_nothing() {
+        let mut s = form(Form::default());
+        s.cx.ask_tag_no("Discard?", "gone");
+        s.frame();
+        assert_eq!((s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (Some("ask.no"), true), "the ring on No");
+        press(&mut s, Key::Enter);
+        assert!(!s.cx.take_answer("gone") && s.stack.last().unwrap().id() == "form", "Enter: No, the question closed");
+        s.cx.ask_tag_no("Discard?", "gone");
+        s.frame();
+        press(&mut s, Key::Tab);
+        assert_eq!(s.gfx.kit.focus.as_deref(), Some("ask.yes"));
+        press(&mut s, Key::Enter);
+        assert!(s.cx.take_answer("gone"), "Enter on a focused Yes: Yes");
+        s.cx.ask_tag_no("Discard?", "gone");
+        s.frame();
+        press(&mut s, Key::Char('y'));
+        assert!(s.cx.take_answer("gone"), "y: Yes");
+        s.cx.ask_tag("Discard?", "kept");
+        s.frame();
+        assert_eq!((s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (None, false), "the default question shows no ring");
+        press(&mut s, Key::Enter);
+        assert!(s.cx.take_answer("kept") && s.stack.last().unwrap().id() == "form", "Enter: Yes, the question closed");
+    }
+
     #[test]
     fn esc_closes_a_keyboard_list_back_to_its_field_and_a_link_click_hides_the_ring() {
         let mut s = form(Form::default());
@@ -2392,15 +2456,15 @@ mod tests {
         fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
             use crate::timeline::{Section, Segment, Timeline, Track};
             let mut ui: Ui<String> = Ui::new(g, mouse, live);
-            let seg = |key: &str, start, end| Segment { key: key.into(), start, end, label: key.into(), fill: rgb(60, 90, 140), dashed: false, tip: Vec::new() };
+            let seg = |key: &str, start, end| Segment { key: key.into(), start, end, label: key.into(), fill: rgb(60, 90, 140), ..Segment::default() };
             let t = Timeline {
                 blocks: 6,
                 playhead: 3,
                 selected_block: None,
                 selected_track: Some("hero".into()),
                 sections: vec![
-                    Section { title: "Allies".into(), colour: TEXT, tracks: vec![Track { key: "hero".into(), label: "Hero".into(), colour: TEXT, segments: vec![seg("slash", 2, 4), seg("guard", 5, 5)], masked: None }] },
-                    Section { title: "Enemies".into(), colour: TEXT, tracks: vec![Track { key: "foe".into(), label: "Foe".into(), colour: TEXT, segments: vec![seg("hidden", 1, 6)], masked: Some("Plans in secret".into()) }] },
+                    Section { title: "Allies".into(), colour: TEXT, tracks: vec![Track { key: "hero".into(), label: "Hero".into(), colour: TEXT, segments: vec![seg("slash", 2, 4), seg("guard", 5, 5)], ..Track::default() }] },
+                    Section { title: "Enemies".into(), colour: TEXT, tracks: vec![Track { key: "foe".into(), label: "Foe".into(), colour: TEXT, segments: vec![seg("hidden", 1, 6)], masked: Some("Plans in secret".into()), ..Track::default() }] },
                 ],
             };
             t.draw(&mut ui, "tl", Rect::new(10, 10, 74 + 4 + 300, 120), |b| format!("block {b}"), |k| format!("track {k}"), |k, s| format!("seg {k} {s}"));
@@ -2424,5 +2488,84 @@ mod tests {
             assert_eq!(s.bridge(&json!({"cmd": "click", "id": id}))["ok"], json!(true));
         }
         assert_eq!(s.cx.app.log, ["block 4", "track foe", "seg hero guard"]);
+    }
+
+    /// Two buttons that ask a question: the default form (Yes) and the destructive one (No, ASKNO2).
+    #[derive(Default)]
+    struct Asker {
+        w: Vec<Widget<bool>>,
+    }
+
+    impl Asker {
+        fn act(&mut self, cx: &mut Cx, no_default: bool) {
+            if no_default {
+                cx.ask_tag_no("Delete it?", "asker.yes");
+            } else {
+                cx.ask_tag("Keep it?", "asker.yes");
+            }
+        }
+    }
+
+    impl Screen<App> for Asker {
+        fn id(&self) -> &'static str {
+            "asker"
+        }
+        fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            let mut ui: Ui<bool> = Ui::new(g, mouse, live);
+            ui.button("asker.plain", Rect::new(10, 10, 60, 14), "Plain", false, true);
+            ui.button("asker.risky", Rect::new(10, 30, 60, 14), "Risky", true, true);
+            self.w = ui.widgets;
+        }
+        crate::widget_plumbing!(Cx);
+    }
+
+    /// A person clicks one of the Asker's buttons: the question opens and draws once.
+    fn asked_by_click(id: &str) -> Shell<App> {
+        let mut s = shell();
+        s.stack = vec![Box::new(Asker::default())];
+        s.frame();
+        let r = s.stack.last().unwrap().widget_rect(id).unwrap().0;
+        s.mouse = (r.x + 2, r.y + 2);
+        s.click();
+        s.frame();
+        assert_eq!(s.stack.last().unwrap().id(), "ask");
+        s
+    }
+
+    #[test]
+    fn a_destructive_question_asks_for_the_pointer_on_no() {
+        let s = asked_by_click("asker.risky");
+        let r = s.stack.last().unwrap().widget_rect("ask.no").unwrap().0;
+        assert_eq!(s.pointer_req, Some((r.x + r.w / 2, r.y + r.h / 2)), "the centre of No");
+        assert_eq!((s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (Some("ask.no"), true), "No has the focus");
+        // the request is made once, as the question opens
+        let mut s = s;
+        s.pointer_req = None;
+        s.frame();
+        assert_eq!(s.pointer_req, None);
+    }
+
+    #[test]
+    fn a_default_question_leaves_the_pointer_alone() {
+        let s = asked_by_click("asker.plain");
+        assert_eq!(s.pointer_req, None);
+        assert!(!s.gfx.kit.focus_visible, "no focus shown");
+    }
+
+    #[test]
+    fn a_question_the_agent_link_opens_leaves_the_pointer_alone() {
+        let mut s = shell();
+        s.stack = vec![Box::new(Asker::default())];
+        s.frame();
+        assert_eq!(s.bridge(&json!({"cmd": "click", "id": "asker.risky"}))["ok"], json!(true));
+        s.frame();
+        assert_eq!(s.stack.last().unwrap().id(), "ask");
+        assert_eq!(s.pointer_req, None);
+        assert_eq!(s.gfx.kit.focus.as_deref(), Some("ask.no"), "the focus still opens on No");
+        // Enter on the focused No answers No
+        s.key(Key::Enter);
+        s.frame();
+        assert_eq!(s.stack.last().unwrap().id(), "asker");
+        assert!(!s.cx.take_answer("asker.yes"));
     }
 }

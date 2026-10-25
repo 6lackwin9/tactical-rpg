@@ -76,7 +76,7 @@ fn replay_file(cat: &Arc<Catalog>, name: &str) -> usize {
     let mut failures = Vec::new();
     for f in fights {
         let fo = f.as_object().unwrap();
-        let spec = FightSpec { left: value::strings(fo, "left"), right: value::strings(fo, "right"), seed: f["seed"].as_i64().unwrap(), preset: value::string(fo, "preset", "balanced"), cap: 10, jitter, base: f.get("base").and_then(|b| b.as_object()).filter(|b| !b.is_empty()).cloned(), pouch: pouch.clone() };
+        let spec = FightSpec { left: value::strings(fo, "left"), right: value::strings(fo, "right"), seed: f["seed"].as_i64().unwrap(), preset: value::string(fo, "preset", "balanced"), cap: 10, jitter, base: f.get("base").and_then(|b| b.as_object()).filter(|b| !b.is_empty()).cloned(), pouch: pouch.clone(), ruleset: Default::default() };
         let res = fight(cat.clone(), &units, &spec, true);
         let trace = res.trace.as_ref().unwrap();
         if let Some(d) = first_divergence(f, trace).or_else(|| metrics_divergence(f, trace)) {

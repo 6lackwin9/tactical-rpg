@@ -74,10 +74,106 @@ def defensive_set(u, g, A, T):
     T['hurt_guarded'] = [60, 100, 110, 140]
 
 
+def warrior_2h(u):
+    """WAR2H1: the warrior's two-handed look (grip '2h', no shield): u['weapon'] is a rig.DRAWERS drawing; both hands
+    hold the grip (pose grip2). Clips as the 1H look minus shield_bash: idle, walk, attack (an overhead chop),
+    defend / idle_guarded / hurt_guarded (a weapon block: the haft upright before the face), hurt, death."""
+    A, T = {}, {}
+    def put(k, v): A[k], T[k] = v
+    g2 = rig.GRIP2
+    def p(**kw): return pose(u, grip2=g2, **kw)
+    ready = dict(hand_f=(5, 4.5), wa=35, grip2=g2)
+    put('idle', idle(u, **ready)); put('walk', walk(u, wa=40, hand_f=(5, 5), grip2=g2, swing=0.3))
+    # attack: lift the weapon high behind the head, chop down and forward with the whole body, recover to guard
+    tip = lambda x, y: [(x, y, 2.2, (255, 255, 255)), (x - 2.5, y + 1.5, 0.9, (255, 240, 200)), (x + 2, y + 1.5, 0.9, (255, 240, 200)),
+                        (x - 1, y - 2.5, 0.7, (255, 220, 160))]
+    st = dict(fb=(-5.5, 0), ff=(4.5, 0))
+    put('attack', ([p(bob=1.2, lean=-1.0, wa=-55, hand_f=(1.5, -5), **st),
+                    p(bob=1.6, lean=-2.5, dx=-1.5, wa=-95, hand_f=(-0.5, -6.5), fb=(-6.5, 0), ff=(4, 0)),                  # wind-up
+                    p(bob=0.8, lean=2.0, dx=1.0, wa=60, hand_f=(8, -3), fb=(-6.5, 0), ff=(5.5, 0),
+                      slash=arc_pts(23, 19, 17, -60, 58, 14)),                                                          # the swing
+                    p(bob=2.4, lean=4.5, dx=3.0, wa=150, hand_f=(8, 5), fb=(-7, 0), ff=(6.5, 0), fx=tip(43, 40)),     # impact
+                    p(bob=2.2, lean=4.0, dx=3.0, wa=152, hand_f=(8, 5.5), fb=(-7, 0), ff=(6.5, 0)),                   # hold
+                    p(bob=1.2, lean=1.5, dx=1.0, wa=80, hand_f=(6, 4.5), fb=(-5.5, 0), ff=(5, 0)),
+                    pose(u, bob=0.3, **ready)], [120, 190, 45, 150, 120, 110, 110]))
+    # weapon block: hunch behind the weapon held upright before the face, the barrier on its far side
+    def sb(k, hit=False, cx=24, cy=22):
+        return barrier(k, hit, cx=cx, cy=cy) if not hit else barrier(k, False, cx=cx, cy=cy) + [(37, 15, 1.0, BLUE_HI), (38, 24, 1.0, BLUE_HI)]
+    gd = dict(bob=2.6, dx=-0.5, lean=1.5, head_dy=1.0, wa=8, hand_f=(8, 2), fb=(-6.5, 0), ff=(5, 0))
+    put('defend', ([pose(u, **ready),
+                    p(bob=1.6, dx=-0.5, lean=0.8, wa=20, hand_f=(6.5, 3.5), fb=(-6, 0), ff=(5, 0)),
+                    p(**dict(gd, hand_f=(8.5, 1.5)), fx=[(33, 12, 1.2, (255, 255, 255))]),                 # weapon snaps up
+                    p(fx=sb(0.5), **gd), p(fx=sb(0.8), **gd), p(fx=sb(1.0), **gd)], [90, 80, 60, 100, 120, 200]))
+    fr = []
+    for i in range(8):  # stance: guarded idle, weapon held up, barrier breathing on its far side
+        t = i / 8 * 2 * math.pi; b = 0.5 + 0.5 * math.sin(t)
+        fr.append(p(fx=sb(0.55 + 0.35 * b), **dict(gd, bob=gd['bob'] + b * 0.5)))
+    put('idle_guarded', (fr, [150] * 8))
+    # hit on the weapon: spark on the haft, the arms give, he slides back but keeps the guard
+    put('hurt_guarded', ([p(fx=sb(1.0) + [(33, 14, 2.4, (255, 255, 255)), (35, 11, 1.0, (255, 240, 200)), (35, 18, 1.0, (255, 240, 200))], **gd),
+                          p(fx=sb(0.9, True), **dict(gd, dx=-2.4, bob=3.0, lean=0.6, hand_f=(7, 2.8), fb=(-7.5, 0))),
+                          p(fx=sb(0.8), **dict(gd, dx=-1.8, bob=2.8, lean=1.0, hand_f=(7.5, 2.4), fb=(-7, 0))),
+                          p(fx=sb(0.8), **gd)], [60, 100, 110, 140]))
+    put('hurt', hurt(u, **ready)); put('death', death(u, drop=(31, 44, 95)))
+    return A, T
+
+
+def warrior_buckler(u):
+    """WAR2H1: the warrior's 1H + buckler look (grip 'buckler'): a one-hand weapon (u['weapon']) and a small round
+    buckler on the far fist, held forward like a duelist. Clips as the 1H + kite look: idle, walk, attack (an overhand
+    cut), shield_bash (a buckler punch), defend / idle_guarded / hurt_guarded (the buckler raised before the face, the
+    weapon drawn back low), hurt, death (the buckler stays strapped on)."""
+    A, T = {}, {}
+    def put(k, v): A[k], T[k] = v
+    ready = dict(hand_f=(2.5, 6.5), wa=20, hand_b=(7, 5.5))  # buckler forward at the waist, weapon raised behind it
+    put('idle', idle(u, **ready)); put('walk', walk(u, wa=25, hand_f=(2.5, 7), hand_b=(6, 6), swing=0.4))
+    spark = lambda x, y, r=2.0: [(x, y, r, (255, 255, 255)), (x - 2, y + 1.5, 0.8, (255, 240, 200)), (x + 2, y + 1.5, 0.8, (255, 240, 200))]
+    st = dict(fb=(-5.5, 0), ff=(4.5, 0))
+    # attack: raise the weapon behind the head, buckler forward; cut down and across, then back to the ready stance
+    put('attack', ([pose(u, bob=1.0, lean=-1.0, wa=-25, hand_f=(0.5, -5), hand_b=(6, 3), **st),
+                    pose(u, bob=1.4, lean=-2.0, dx=-1.0, wa=-60, hand_f=(-1, -5.5), hand_b=(6.5, 2.5), fb=(-6.5, 0), ff=(4, 0)),
+                    pose(u, bob=0.8, lean=2.5, dx=1.5, wa=70, hand_f=(9, -1.5), hand_b=(4, 5), fb=(-6.5, 0), ff=(5.5, 0),
+                         slash=arc_pts(23, 20, 13, -50, 70, 12)),
+                    pose(u, bob=2.0, lean=4.0, dx=2.5, wa=125, hand_f=(9.5, 5), hand_b=(3, 6), fb=(-7, 0), ff=(6.5, 0), fx=spark(43, 31)),
+                    pose(u, bob=1.8, lean=3.8, dx=2.5, wa=128, hand_f=(9.5, 5.5), hand_b=(3, 6), fb=(-7, 0), ff=(6.5, 0)),
+                    pose(u, bob=1.0, lean=1.5, dx=1.0, wa=60, hand_f=(6, 4.5), hand_b=(5, 4), fb=(-5.5, 0), ff=(5, 0)),
+                    pose(u, bob=0.3, **ready)], [110, 170, 45, 140, 110, 110, 110]))
+    # shield bash: weapon held back, punch the buckler straight out at face height
+    put('shield_bash', ([pose(u, bob=1.4, lean=-1.5, dx=-1.0, wa=-30, hand_f=(-1, 4), hand_b=(4.5, 3.5), fb=(-6, 0), ff=(4, 0)),
+                         pose(u, bob=1.8, lean=-2.0, dx=-1.5, wa=-40, hand_f=(-1.5, 4), hand_b=(3.5, 3), fb=(-6.5, 0), ff=(3.5, 0)),
+                         pose(u, bob=1.2, lean=4.0, dx=3.0, wa=-30, hand_f=(1, 3.5), hand_b=(11, 0), fb=(-7.5, 0), ff=(7, 0), fx=spark(42, 18, 2.2)),
+                         pose(u, bob=1.4, lean=4.0, dx=3.0, wa=-30, hand_f=(1, 3.5), hand_b=(10.5, 0.5), fb=(-7.5, 0), ff=(7, 0)),
+                         pose(u, bob=0.8, lean=1.5, dx=1.0, wa=10, hand_f=(3, 5), hand_b=(6, 3), fb=(-5.5, 0), ff=(5, 0)),
+                         pose(u, bob=0.3, **ready)], [100, 150, 45, 150, 110, 110]))
+    # buckler block: the buckler up before the face, weapon drawn back low ready to riposte; the barrier on the buckler
+    def sb(k, hit=False, cx=24, cy=20):
+        return barrier(k, hit, cx=cx, cy=cy) if not hit else barrier(k, False, cx=cx, cy=cy) + [(37, 14, 1.0, BLUE_HI), (38, 22, 1.0, BLUE_HI)]
+    gd = dict(bob=2.4, dx=-0.5, lean=1.5, head_dy=1.0, wa=-120, hand_f=(-0.5, 6), hand_b=(7, -1), fb=(-6.5, 0), ff=(5, 0))
+    put('defend', ([pose(u, **ready),
+                    pose(u, bob=1.4, dx=-0.5, lean=0.8, wa=-40, hand_f=(1.5, 5.5), hand_b=(6.5, 1.5), fb=(-6, 0), ff=(5, 0)),
+                    pose(u, **dict(gd, hand_b=(7.5, -1.5)), fx=[(33, 13, 1.2, (255, 255, 255))]),            # buckler snaps up
+                    pose(u, fx=sb(0.5), **gd), pose(u, fx=sb(0.8), **gd), pose(u, fx=sb(1.0), **gd)], [90, 80, 60, 100, 120, 200]))
+    fr = []
+    for i in range(8):  # stance: guarded idle, buckler up, barrier breathing on its face
+        t = i / 8 * 2 * math.pi; b = 0.5 + 0.5 * math.sin(t)
+        fr.append(pose(u, fx=sb(0.55 + 0.35 * b), **dict(gd, bob=gd['bob'] + b * 0.5)))
+    put('idle_guarded', (fr, [150] * 8))
+    put('hurt_guarded', ([pose(u, fx=sb(1.0) + spark(32, 15, 2.4), **gd),
+                          pose(u, fx=sb(0.9, True), **dict(gd, dx=-2.4, bob=2.8, lean=0.6, hand_b=(6, -0.2), fb=(-7.5, 0))),
+                          pose(u, fx=sb(0.8), **dict(gd, dx=-1.8, bob=2.6, lean=1.0, hand_b=(6.5, -0.6), fb=(-7, 0))),
+                          pose(u, fx=sb(0.8), **gd)], [60, 100, 110, 140]))
+    put('hurt', hurt(u, **ready)); put('death', death(u, drop=(30, 45, 92)))
+    return A, T
+
+
 def clips(name, variant='', unit=None):
     # unit: a body variant of class `name` (tools/sprites/variants.py: goblins, named bodies); default the class's own
     u = unit or UNITS[name]; A, T = {}, {}
     def put(k, v): A[k], T[k] = v
+    if name == 'warrior' and u.get('grip') == '2h':  # WAR2H1: the two-handed look (the class base keeps 1H + shield)
+        return warrior_2h(u)
+    if name == 'warrior' and u.get('grip') == 'buckler':  # WAR2H1: one hand + buckler
+        return warrior_buckler(u)
     if name == 'warrior':  # one-handed sword, kite shield on the far arm
         # variant: '' = current, 'A' = shield carried lower, 'B' = hunched behind the shield
         def wp(**kw):

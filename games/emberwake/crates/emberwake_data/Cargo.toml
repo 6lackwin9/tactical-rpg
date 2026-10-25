@@ -4,7 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-aegis_core = { path = "../../../../engine/crates/aegis_core" }
-serde_json = { workspace = true }
-indexmap = { workspace = true }
-anyhow = { workspace = true }
+rpgkit_data = { path = "../../../../kits/rpg/crates/rpgkit_data" }

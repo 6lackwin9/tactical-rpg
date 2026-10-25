@@ -1,0 +1,11 @@
+[package]
+name = "rpgkit_battle"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aegis_core = { path = "../../../../engine/crates/aegis_core" }
+rpgkit_data = { path = "../rpgkit_data" }
+rpgkit_rules = { path = "../rpgkit_rules" }
+indexmap = { workspace = true }
+serde_json = { workspace = true }

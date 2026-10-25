@@ -4,6 +4,10 @@
 //! putting its own at the same path. Bodies are sheets: one row per clip of `clips.json`, frames left to right.
 //! Playback (SPRITE1-L): `Clips::frame_at` picks a clip's frame by time (looping or holding the last frame, a missing
 //! clip falling back to `idle`), `ClipPlayer` keeps a base loop with one shot at a time over it.
+//! Direction views (DIR4-E, spec DIR4 section 3): a row with `of` and `view` (`down`, `up`) is
+//! the front or back drawing of the side clip `of`; `Facing` is four-way facing on a square grid (`Facing::toward`), and
+//! `Clips::resolve_view` / `frame_at_view` / `ClipPlayer::frame_facing` pick the row for a view, falling back to the
+//! side clip, then idle in that view, then side idle. Only side rows are ever mirrored. Engine-only (no Godot source).
 
 use crate::json::{self, Dict};
 use indexmap::IndexMap;
@@ -155,13 +159,80 @@ fn colours(raw: Option<&Value>, label: &str, problems: &mut Vec<String>) -> Inde
     out
 }
 
-/// One clip of a sheet: its row, frames left to right, each shown `ms[i]` milliseconds.
+/// Which drawing a clip row is (DIR4 3.1): the side view (the sheets face right; mirrored to face left), the front
+/// (`down`, toward the bottom of the screen) or the back (`up`). Front and back rows are never mirrored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum View {
+    #[default]
+    Side,
+    Down,
+    Up,
+}
+
+impl View {
+    /// The clips.json name of a view (`down`, `up`; "" for the side view).
+    pub fn name(self) -> &'static str {
+        match self {
+            View::Side => "",
+            View::Down => "down",
+            View::Up => "up",
+        }
+    }
+
+    /// A clips.json `view` value (`down` or `up`).
+    pub fn parse(s: &str) -> Option<View> {
+        match s {
+            "down" => Some(View::Down),
+            "up" => Some(View::Up),
+            _ => None,
+        }
+    }
+}
+
+/// Four-way facing on a square grid (DIR4 3.2): the view drawn and the last horizontal facing (`left`), kept while
+/// the unit faces up or down and used for side rows (mirrored when left) and side fallbacks. Default: side, right.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct Facing {
+    pub view: View,
+    pub left: bool,
+}
+
+impl Facing {
+    /// Side view facing left (`left`) or right.
+    pub fn side(left: bool) -> Facing {
+        Facing { view: View::Side, left }
+    }
+
+    /// The facing toward an offset of `dx`, `dy` tiles (+y down the screen): unchanged for (0, 0); up or down when the
+    /// vertical distance is larger (keeping `left`); otherwise (horizontal, or a diagonal tie) the side view, left
+    /// when `dx < 0`.
+    pub fn toward(self, dx: i32, dy: i32) -> Facing {
+        if dx == 0 && dy == 0 {
+            self
+        } else if dy.abs() > dx.abs() {
+            Facing { view: if dy > 0 { View::Down } else { View::Up }, left: self.left }
+        } else {
+            Facing::side(dx < 0)
+        }
+    }
+
+    /// Whether `frame` (drawn for this facing) shows mirrored: a side row while facing left. Pass it as the `flip` of
+    /// `body_outline` so a highlight rings the frame as drawn.
+    pub fn mirrors(self, frame: &ClipFrame) -> bool {
+        frame.side && self.left
+    }
+}
+
+/// One clip of a sheet: its row, frames left to right, each shown `ms[i]` milliseconds. A view clip (DIR4) also names
+/// the side clip it draws (`of`) and its `view`; a side clip has `of` "" and `View::Side`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Clip {
     pub id: String,
     pub frames: u32,
     pub ms: Vec<u32>,
     pub looped: bool,
+    pub of: String,
+    pub view: View,
 }
 
 /// A body's `clips.json`: the frame size, its palette slots and its clips (row order).
@@ -179,7 +250,8 @@ fn is_snake(s: &str) -> bool {
 impl Clips {
     /// Reads and checks a clips.json (spec 4.1): frame 8..256 each way, clips with unique snake_case ids and `idle`
     /// among them, 1..64 frames each with one duration 16..2000 ms per frame, `loop` a flag (default true), palette
-    /// slots `#rrggbb`. Every problem is listed.
+    /// slots `#rrggbb`. DIR4 3.1: a view row carries `of` and `view` together, `view` is `down` or `up`, `of` names a
+    /// side clip of the list and the id is `<of>_<view>`; `idle` is a side clip. Every problem is listed.
     pub fn parse(v: &Value) -> Result<Clips, Vec<String>> {
         let mut problems = Vec::new();
         let Some(o) = v.as_object() else { return Err(vec!["clips.json must be an object {frame, palette, clips}.".into()]) };
@@ -193,6 +265,8 @@ impl Clips {
         };
         let palette = colours(o.get("palette"), "palette", &mut problems);
         let mut clips: Vec<Clip> = Vec::new();
+        // Per clip: whether it carries both `of` and `view`, and its view when that is valid.
+        let mut views: Vec<(bool, Option<View>)> = Vec::new();
         let list = json::arr(o.get("clips").unwrap_or(&Value::Null));
         if list.is_empty() {
             problems.push("clips must list at least one clip.".into());
@@ -221,9 +295,40 @@ impl Clips {
                     true
                 }
             };
-            clips.push(Clip { id, frames, ms, looped });
+            // DIR4 3.1: a view row names its side clip (`of`) and its view (`down`, `up`), both or neither.
+            let of = c.get("of").map(|v| v.as_str().unwrap_or("").to_string());
+            let view = match c.get("view") {
+                None => None,
+                Some(v) => {
+                    let parsed = v.as_str().and_then(View::parse);
+                    if parsed.is_none() {
+                        problems.push(format!("clip '{id}': view must be down or up."));
+                    }
+                    Some(parsed)
+                }
+            };
+            if of.is_some() != view.is_some() {
+                problems.push(format!("clip '{id}': of and view go together."));
+            }
+            views.push((of.is_some() && view.is_some(), view.flatten()));
+            clips.push(Clip { id, frames, ms, looped, of: of.unwrap_or_default(), view: view.flatten().unwrap_or_default() });
         }
-        if !list.is_empty() && !clips.iter().any(|c| c.id == "idle") {
+        // Rows may come in any order: `of` is checked against the whole list.
+        for (c, (both, view)) in clips.iter().zip(&views) {
+            if !*both {
+                continue;
+            }
+            if !clips.iter().any(|x| x.id == c.of && x.view == View::Side && x.of.is_empty()) {
+                problems.push(format!("clip '{}': of '{}' is not a side clip of this body.", c.id, c.of));
+            }
+            if let Some(v) = view {
+                let want = format!("{}_{}", c.of, v.name());
+                if c.id != want {
+                    problems.push(format!("clip '{}': a view clip's id must be '{want}'.", c.id));
+                }
+            }
+        }
+        if !list.is_empty() && !clips.iter().any(|c| c.id == "idle" && c.view == View::Side && c.of.is_empty()) {
             problems.push("clips must include 'idle' (the token).".into());
         }
         if problems.is_empty() {
@@ -266,21 +371,44 @@ impl Clips {
     /// Which frame shows `ms` after clip `id` started (fallback as `resolve`). A clip that is not `id` or `idle` (a
     /// body without idle) shows its first frame, still.
     pub fn frame_at(&self, id: &str, ms: u64) -> Option<ClipFrame> {
-        let row = self.resolve(id)?;
+        self.frame_at_view(id, View::Side, ms)
+    }
+
+    /// The view row drawing side clip `of` in `view` (DIR4).
+    pub fn view_row(&self, of: &str, view: View) -> Option<usize> {
+        self.clips.iter().position(|c| c.view == view && c.view != View::Side && c.of == of)
+    }
+
+    /// The row played for side clip `id` in `view` and whether it is a side row (DIR4 3.2): the view row of `id`, the
+    /// side row of `id`, the view row of `idle`, the side row of `idle`, the first row; None for no clips.
+    /// `View::Side` skips the view steps (`resolve`).
+    pub fn resolve_view(&self, id: &str, view: View) -> Option<(usize, bool)> {
+        let viewed = |of: &str| if view == View::Side { None } else { self.view_row(of, view) };
+        let row = viewed(id).or_else(|| self.row(id)).or_else(|| viewed("idle")).or_else(|| self.resolve("idle"))?;
+        Some((row, self.clips[row].view == View::Side))
+    }
+
+    /// `frame_at` in `view` (DIR4 3.2): the frame of the row `resolve_view` picks; a row of `id` or `idle` (side or
+    /// view) animates, any other shows its first frame, still.
+    pub fn frame_at_view(&self, id: &str, view: View, ms: u64) -> Option<ClipFrame> {
+        let (row, side) = self.resolve_view(id, view)?;
         let c = &self.clips[row];
-        let (frame, done) = if c.id == id || c.id == "idle" { c.frame_at(ms) } else { (0, true) };
-        Some(ClipFrame { row, clip: c.id.clone(), frame, done })
+        let of_view = view != View::Side && c.view == view && (c.of == id || c.of == "idle");
+        let (frame, done) = if c.id == id || c.id == "idle" || of_view { c.frame_at(ms) } else { (0, true) };
+        Some(ClipFrame { row, clip: c.id.clone(), frame, done, side })
     }
 }
 
-/// One frame of a sheet chosen by time: its row, the clip that row holds (after fallback), the frame, and whether a
-/// one-shot clip has reached its end (always false for a looping one).
+/// One frame of a sheet chosen by time: its row, the clip that row holds (after fallback), the frame, whether a
+/// one-shot clip has reached its end (always false for a looping one) and whether the row is a side row (DIR4: only
+/// side rows are mirrored for a left facing).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClipFrame {
     pub row: usize,
     pub clip: String,
     pub frame: u32,
     pub done: bool,
+    pub side: bool,
 }
 
 impl Clip {
@@ -405,10 +533,17 @@ impl ClipPlayer {
 
     /// The frame to draw at `now`: the shot while it runs (a held one for good), else the base loop.
     pub fn frame(&self, clips: &Clips, now: u64) -> Option<ClipFrame> {
+        self.frame_facing(clips, now, View::Side)
+    }
+
+    /// `frame` in `view` (DIR4 3.2): the same clips on the same clocks drawn by `Clips::frame_at_view`. The player
+    /// keeps side clip ids (`playing`, `held_for` and a shot's length are the side clip's), so a turn in mid-clip keeps
+    /// the clip's clock; view rows have their side clip's frames and durations (DIR4 rule R3).
+    pub fn frame_facing(&self, clips: &Clips, now: u64, view: View) -> Option<ClipFrame> {
         if let Some(s) = &self.shot {
             let t = now.saturating_sub(s.since);
             if s.hold && self.shot_over(clips, s, now) {
-                let mut f = clips.frame_at(&s.clip, u64::MAX)?;
+                let mut f = clips.frame_at_view(&s.clip, view, u64::MAX)?;
                 if let Some(c) = clips.clip(&f.clip).filter(|c| c.looped) {
                     // A held clip that loops (or the idle fallback) stops on its last frame.
                     f.frame = c.frames.saturating_sub(1);
@@ -417,12 +552,12 @@ impl ClipPlayer {
                 return Some(f);
             }
             if !self.shot_over(clips, s, now) {
-                let mut f = clips.frame_at(&s.clip, t)?;
+                let mut f = clips.frame_at_view(&s.clip, view, t)?;
                 f.done = false;
                 return Some(f);
             }
         }
-        clips.frame_at(&self.base, now.saturating_sub(self.base_since))
+        clips.frame_at_view(&self.base, view, now.saturating_sub(self.base_since))
     }
 }
 
@@ -440,6 +575,40 @@ pub fn parse_palette(v: &Value) -> Result<IndexMap<String, [u8; 3]>, Vec<String>
     } else {
         Err(problems)
     }
+}
+
+/// Every palette file (`units/<class>/<variant>/palettes/*.json`) in every layer, referenced or not and shadowed or
+/// not, read with the loader's rules (`parse_palette`): one line per problem, `<path>: <reason>`, in layer order and
+/// sorted by path within a layer. Empty: every palette file parses.
+pub fn palette_problems(layers: &Layers) -> Vec<String> {
+    let mut out = Vec::new();
+    for root in &layers.roots {
+        let mut files: Vec<PathBuf> = Vec::new();
+        for class in sorted_entries(&root.join("units")).into_iter().filter(|p| p.is_dir()) {
+            for variant in sorted_entries(&class).into_iter().filter(|p| p.is_dir()) {
+                files.extend(sorted_entries(&variant.join("palettes")).into_iter().filter(|p| p.is_file() && p.extension().is_some_and(|x| x == "json")));
+            }
+        }
+        for file in files {
+            let shown = file.to_string_lossy().replace('\\', "/");
+            let reasons = match std::fs::read_to_string(&file) {
+                Err(e) => vec![format!("unreadable ({e}).")],
+                Ok(text) => match serde_json::from_str::<Value>(&text) {
+                    Err(e) => vec![format!("not JSON ({e}).")],
+                    Ok(v) => parse_palette(&v).err().unwrap_or_default(),
+                },
+            };
+            out.extend(reasons.into_iter().map(|r| format!("{shown}: {r}")));
+        }
+    }
+    out
+}
+
+/// The entries directly in `dir`, sorted by path (none when it is not a readable folder).
+fn sorted_entries(dir: &Path) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = std::fs::read_dir(dir).map(|r| r.flatten().map(|e| e.path()).collect()).unwrap_or_default();
+    out.sort();
+    out
 }
 
 /// Reads a JSON file of the layers at `rel`.

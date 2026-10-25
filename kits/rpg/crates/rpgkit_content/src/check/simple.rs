@@ -1,0 +1,186 @@
+//! Terrain rows (TerrainValidator) and effect lists (Passives.validate_effects, used by passives and item gear).
+
+use aegis_core::fmt::fixed;
+use aegis_core::json::{self, Dict};
+use rpgkit_battle::grid::{terrain_walkable, TERRAIN_IDS};
+use rpgkit_rules::status;
+use serde_json::Value;
+
+const TRIGGERS: [&str; 3] = ["enter", "round_end", "both"];
+
+/// TerrainValidator.entry_errors of a normalized terrain row.
+pub fn terrain_errors(e: &Dict) -> Vec<String> {
+    let mut errors = Vec::new();
+    let id = json::s(e, "id");
+    if !TERRAIN_IDS.contains(&id.as_str()) {
+        errors.push(format!("Unknown terrain type '{id}'."));
+        return errors;
+    }
+    let walkable = terrain_walkable(&id);
+    let cost = json::i(e, "move_cost", 1);
+    if walkable && !(1..=3).contains(&cost) {
+        errors.push("Move cost must be 1-3.".into());
+    }
+    let cover = json::f(e, "cover_guard", 0.0);
+    if !(0.0..=0.5).contains(&cover) {
+        errors.push("Cover must be 0.0-0.5.".into());
+    }
+    let st = json::s(e, "hazard_status");
+    if !st.is_empty() {
+        if !status::debuffs().contains(&st.as_str()) {
+            errors.push(format!("Hazard status '{st}' is not a debuff."));
+        }
+        if !walkable {
+            errors.push("Only walkable terrain can carry a hazard.".into());
+        }
+    }
+    if !(1..=100).contains(&json::i(e, "hazard_potency", 100)) {
+        errors.push("Hazard potency must be 1-100.".into());
+    }
+    let magnitude = json::i(e, "hazard_magnitude", 0);
+    match status::row_of(&st).filter(|r| r.magnitude_max > 0) {
+        Some(r) => {
+            if magnitude < r.magnitude_min as i64 || magnitude > r.magnitude_max as i64 {
+                errors.push(format!("{st} needs a magnitude {}-{}", r.magnitude_min, r.magnitude_max));
+            }
+        }
+        None if magnitude != 0 => {
+            let ids: Vec<&str> = status::ROWS.iter().filter(|r| r.magnitude_max > 0).map(|r| r.id).collect();
+            errors.push(format!("magnitude only applies to {}", ids.join(", ")));
+        }
+        None => {}
+    }
+    if !(1..=5).contains(&json::i(e, "hazard_rounds", 1)) {
+        errors.push("Hazard rounds must be 1-5.".into());
+    }
+    if !TRIGGERS.contains(&json::s(e, "hazard_on").as_str()) {
+        errors.push("Hazard trigger must be enter, round_end or both.".into());
+    }
+    if json::s_or(e, "origin", super::ORIGIN_SYSTEM) != super::ORIGIN_SYSTEM {
+        errors.push("Terrain rows are system assets (origin system).".into());
+    }
+    errors
+}
+
+/// TerrainValidator.missing_ids: terrain types without a row, in terrain order.
+pub fn missing_terrain(rows: &[Dict]) -> Vec<&'static str> {
+    TERRAIN_IDS.iter().copied().filter(|id| !rows.iter().any(|r| json::s(r, "id") == *id)).collect()
+}
+
+const TYPES: [&str; 10] = ["stat", "proficiency", "resist", "ap_regen", "skill", "skill_potency", "status_potency", "spell_reach", "unlock", "foresight"];
+const ITEM_TYPES: [&str; 4] = ["skill_potency", "status_potency", "spell_reach", "resist"];
+const GROUPS: [&str; 2] = ["spell", "heal"];
+const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
+
+/// Passives.validate_effects: the problems of an effect list (`allow_empty`: none is fine; `items_only`: the kinds
+/// gear may carry). DERIVE1 4.1: a `stat` effect may name one of the `derived` stat ids, and only those take an
+/// optional `percent` (-1.0..1.0).
+pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, derived: &[String], allow_empty: bool, items_only: bool) -> Vec<String> {
+    let mut errors = Vec::new();
+    let Some(list) = effects.as_array() else {
+        errors.push("Effects must be a list.".into());
+        return errors;
+    };
+    if list.is_empty() && !allow_empty {
+        errors.push("A passive needs at least one effect.".into());
+    }
+    let resistable: Vec<&str> = status::ROWS.iter().filter(|r| !r.buff && r.resistable).map(|r| r.id).collect();
+    for (i, raw) in list.iter().enumerate() {
+        let e = json::dict(raw);
+        let t = json::s(e, "type");
+        let at = format!("Effect {}", i + 1);
+        if items_only && TYPES.contains(&t.as_str()) && !ITEM_TYPES.contains(&t.as_str()) {
+            errors.push(format!("{at}: '{t}' is not allowed on items (use stat_bonuses / passives)."));
+            continue;
+        }
+        let target_problem = |errors: &mut Vec<String>| {
+            let fam = e.get("family").is_some_and(|v| !json::gstr(v).is_empty());
+            let group = e.get("group").is_some_and(|v| !json::gstr(v).is_empty());
+            if fam == group {
+                errors.push(format!("{at}: give exactly one of family (a skill id) or group ({}).", GROUPS.join(", ")));
+            } else if group && !GROUPS.contains(&json::s(e, "group").as_str()) {
+                errors.push(format!("{at}: unknown skill group '{}' (use {}).", json::s(e, "group"), GROUPS.join(", ")));
+            } else if fam && !skill_exists(&json::s(e, "family")) {
+                errors.push(format!("{at}: unknown skill family '{}'.", json::s(e, "family")));
+            }
+        };
+        match t.as_str() {
+            "stat" => {
+                let stat = json::s(e, "stat");
+                let is_derived = derived.contains(&stat);
+                if !STATS.contains(&stat.as_str()) && !is_derived {
+                    errors.push(format!("{at}: unknown stat '{stat}'."));
+                }
+                let mut percent = 0.0;
+                if let Some(p) = e.get("percent") {
+                    if !is_derived {
+                        errors.push(format!("{at}: percent is for derived stats only (base stats take a flat value)."));
+                    } else if let Some(x) = p.as_f64().filter(|x| x.abs() <= 1.0) {
+                        percent = x;
+                    } else {
+                        errors.push(format!("{at}: percent must be -1.0..1.0."));
+                    }
+                }
+                if json::i(e, "value", 0) == 0 && percent == 0.0 {
+                    errors.push(format!("{at}: the stat bonus needs a non-zero value."));
+                }
+                let ctx = e.get("context").cloned().unwrap_or(Value::Object(Default::default()));
+                if !ctx.as_object().is_some_and(|c| c.len() <= 1) {
+                    errors.push(format!("{at}: context is one {{key: value}} pair (or empty)."));
+                }
+            }
+            "proficiency" => {
+                if !super::skill::GEAR_TYPES.contains(&json::s(e, "gear").as_str()) {
+                    errors.push(format!("{at}: unknown gear type '{}'.", json::s(e, "gear")));
+                }
+                if !(1..=3).contains(&json::i(e, "levels", 0)) {
+                    errors.push(format!("{at}: levels must be 1-3."));
+                }
+            }
+            "resist" => {
+                if !resistable.contains(&json::s(e, "status").as_str()) {
+                    errors.push(format!("{at}: unknown status '{}'.", json::s(e, "status")));
+                }
+                if !(1..=100).contains(&json::i(e, "value", 0)) {
+                    errors.push(format!("{at}: resistance is 1-100."));
+                }
+            }
+            "ap_regen" => {
+                if !(1..=4).contains(&json::i(e, "value", 0)) {
+                    errors.push(format!("{at}: extra AP per round is 1-4."));
+                }
+            }
+            "skill" => {
+                if !skill_exists(&json::s(e, "skill")) {
+                    errors.push(format!("{at}: unknown skill '{}'.", json::s(e, "skill")));
+                }
+            }
+            "skill_potency" => {
+                target_problem(&mut errors);
+                let pv = json::f(e, "value", 0.0);
+                if pv.abs() < 0.00001 || !(-0.9..=2.0).contains(&pv) {
+                    errors.push(format!("{at}: potency bonus must be non-zero, {} to {} (0.25 = +25%).", fixed(-0.9, 1), fixed(2.0, 1)));
+                }
+            }
+            "unlock" => {
+                target_problem(&mut errors);
+                if !(1..=2).contains(&json::i(e, "levels", 0)) {
+                    errors.push(format!("{at}: unlock levels must be 1-2."));
+                }
+            }
+            "status_potency" => {
+                if !(1..=25).contains(&json::i(e, "value", 0)) {
+                    errors.push(format!("{at}: status potency is 1-25 points."));
+                }
+            }
+            "spell_reach" => {
+                if !(1..=2).contains(&json::i(e, "value", 0)) {
+                    errors.push(format!("{at}: spell reach is 1-2 tiles."));
+                }
+            }
+            "foresight" => {}
+            _ => errors.push(format!("{at}: unknown effect type '{t}' (use {}).", if items_only { ITEM_TYPES.join(", ") } else { TYPES.join(", ") })),
+        }
+    }
+    errors
+}

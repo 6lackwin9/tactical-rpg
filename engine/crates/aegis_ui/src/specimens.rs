@@ -1,9 +1,14 @@
 //! The kit's widgets on one page (UIGALLERY1): every widget family of `ui.rs` in its states, on sample values, to be
 //! judged on its own (a UI Gallery's "Kit widgets" entry). Game-agnostic: the gallery screen keeps a `Specimens`,
-//! wraps `KitAct` in its own action and forwards drops and text changes to it.
+//! wraps `KitAct` in its own action and forwards drops and text changes to it. Three pages, picked by the tabs at the
+//! page's foot: the widgets, the block timeline with its segment parts, links and marks (RULESET1-E), and the effects
+//! kit (FX1-E: each primitive and shake preset on a small stage, the clock's speed and hit-stop, a local reduce
+//! motion); the Effects page runs on its own clock, fed by `tick` (wall time) or `advance` (tests).
 
-use crate::canvas::{Image, Rect, Rgba};
-use crate::ui::{tip, Glyph, Ui, BODY, DIM, GOLD, GOOD, INFO, SMALL, TEXT};
+use crate::canvas::{rgb, rgba, Image, Rect, Rgba};
+use crate::fx::{Beam, Camera, Clock, Effect, Flash, Fx, Layer, Look, Projectile, Ring, ShakeLimits, ShakeTable, Sparks, Trail, PRIM_KINDS, SHAKE_PRESETS};
+use crate::timeline::{Link, Mark, Part, PartStyle, Section, Segment, Timeline, Track};
+use crate::ui::{tip, Glyph, Ui, BODY, DIM, FOE, GOLD, GOOD, INFO, SMALL, TEXT};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum KitAct {
@@ -21,9 +26,40 @@ pub enum KitAct {
     Icon(&'static str),
     /// The collapsible section header.
     Fold,
+    /// The page tabs at the foot.
+    Page(usize),
+    /// The timeline specimen: a block, a track, a segment (track, segment).
+    Block(i32),
+    Track(String),
+    Segment(String, String),
+    /// The Effects page: a primitive (`fx::PRIM_KINDS`), a shake preset (`fx::SHAKE_PRESETS`), the clock speed
+    /// (`FX_SPEEDS` index), the hit-stop toggle, the page's own reduce-motion check.
+    Effect(&'static str),
+    Shake(&'static str),
+    FxSpeed(usize),
+    HitStop,
+    Reduce,
 }
 
 pub const TABS: [&str; 3] = ["First", "Second", "Third"];
+pub const PAGES: [&str; 3] = ["Widgets", "Timeline", "Effects"];
+/// The Effects page: its stage (dark, the dummies 160 px apart), the clock speeds and the hit-stop.
+pub const FX_STAGE_W: i32 = 240;
+pub const FX_STAGE_H: i32 = 120;
+pub const FX_SPEEDS: [(&str, f64); 3] = [("0.5x", 0.5), ("1x", 1.0), ("2x", 2.0)];
+pub const FX_HIT_STOP_MS: f64 = 40.0;
+/// The dummies' chest points and their foot line, in stage px.
+pub const FX_FROM: (f32, f32) = (40.0, 82.0);
+pub const FX_TO: (f32, f32) = (200.0, 82.0);
+pub const FX_FOOT_Y: f32 = 96.0;
+/// Palette hues of the samples (steel, linen, ash, amber, gold, orchid) and the stage.
+const STEEL: Rgba = rgb(156, 163, 175);
+const LINEN: Rgba = rgb(217, 203, 180);
+const ASH: Rgba = rgb(107, 114, 128);
+const AMBER: Rgba = rgb(217, 119, 6);
+const CANDLE: Rgba = rgb(251, 191, 36);
+const ORCHID: Rgba = rgb(192, 132, 252);
+const STAGE_BG: Rgba = rgb(14, 15, 20);
 pub const OPTIONS: [&str; 4] = ["Small", "Normal", "Large", "Extra large"];
 pub const SLIDER_STEPS: usize = 5;
 
@@ -47,6 +83,99 @@ pub struct Specimens {
     pub left: Vec<String>,
     pub right: Vec<String>,
     pub last: String,
+    /// The page on view (`PAGES`), and the timeline specimen's selected block and track.
+    pub page: usize,
+    pub block: Option<i32>,
+    pub track: Option<String>,
+    /// The Effects page's state.
+    pub fx: FxDemo,
+}
+
+/// The Effects page's clock, live list, camera and choices; impacts to come fire their sparks, flash and hit-stop
+/// when the clock reaches them.
+#[derive(Debug, Clone)]
+pub struct FxDemo {
+    pub clock: Clock,
+    pub fx: Fx,
+    pub camera: Camera,
+    pub shakes: ShakeTable,
+    /// `FX_SPEEDS` index.
+    pub speed: usize,
+    pub hit_stop: bool,
+    pub reduce: bool,
+    /// (clock ms, seed) of the impacts to come.
+    pub impacts: Vec<(u64, u64)>,
+    /// Seeds handed out so far (each press gets the next).
+    pub seeds: u64,
+    last_wall: Option<std::time::Instant>,
+}
+
+impl Default for FxDemo {
+    fn default() -> Self {
+        Self { clock: Clock::default(), fx: Fx::default(), camera: Camera::default(), shakes: ShakeTable::default(), speed: 1, hit_stop: true, reduce: false, impacts: Vec::new(), seeds: 0, last_wall: None }
+    }
+}
+
+impl FxDemo {
+    fn seed(&mut self) -> u64 {
+        self.seeds += 1;
+        self.seeds
+    }
+
+    /// Plays primitive `kind` from the left dummy to the right one; what it did.
+    fn play(&mut self, kind: &str) -> String {
+        let now = self.clock.now();
+        let seed = self.seed();
+        let from = (FX_FROM.0 + 6.0, FX_FROM.1);
+        let (e, impact): (Effect, Option<u64>) = match kind {
+            "projectile" => {
+                let travel = (((FX_TO.0 - from.0) / 560.0) * 1000.0).round() as u32;
+                (Effect::new(Projectile { from, to: FX_TO, travel_ms: travel, arc_px: 6.0, look: Look::Arrow { len: 7.0, shaft: LINEN, head: STEEL } }, now), Some(now + travel as u64))
+            }
+            "beam" => (Effect::new(Beam { from, to: FX_TO, ms: 160, width: 2, core: LINEN, glow: ORCHID }, now), Some(now)),
+            "trail" => (Effect::new(Trail { at: (FX_TO.0 - 14.0, FX_TO.1), radius: 13.0, from_deg: -60.0, to_deg: 50.0, ms: 150, width: 2, col: STEEL, mirror: false, squash: 0.75 }, now), Some(now + 90)),
+            "sparks" => (Effect::new(Sparks { at: FX_TO, ms: 260, count: 10, dir_deg: -90.0, spread_deg: 160.0, speed: 70.0, gravity: 120.0, size: 1, cols: [AMBER, CANDLE] }, now), None),
+            "flash" => (Effect::new(Flash { at: FX_TO, rx: 8.0, ry: 6.0, ms: 140, col: rgba(CANDLE[0], CANDLE[1], CANDLE[2], 160) }, now), None),
+            _ => (Effect::new(Ring { at: (FX_TO.0, FX_FOOT_Y), r0: 3.0, r1: 12.0, ms: 260, col: rgba(ASH[0], ASH[1], ASH[2], 200), squash: 0.75 }, now).on(Layer::Ground), None),
+        };
+        let ms = e.ms();
+        self.fx.push(e.seeded(seed));
+        if let Some(t) = impact {
+            self.impacts.push((t, seed));
+        }
+        format!("{kind}: {ms} ms{}", if impact.is_some() { ", then the impact" } else { "" })
+    }
+
+    /// Starts preset `name` at the engine ceiling; what it did.
+    fn shake(&mut self, name: &str) -> String {
+        let Some(s) = self.shakes.get(name) else { return format!("no preset {name}") };
+        let (now, seed) = (self.clock.now(), self.seed());
+        if self.camera.start(s, now, seed, ShakeLimits::CEILING, self.reduce) {
+            format!("shake {name}: {} px, {} ms, {}, {}", s.px, s.ms, s.axis.name(), s.envelope.name())
+        } else if self.reduce {
+            format!("shake {name}: none (reduce motion)")
+        } else {
+            format!("shake {name}: a stronger shake runs")
+        }
+    }
+
+    /// `wall_ms` of wall time at the chosen speed: due impacts fire (their sparks and flash at the right dummy and,
+    /// when on, the hit-stop), done effects and shakes end.
+    pub fn advance(&mut self, wall_ms: f64) {
+        self.clock.advance(wall_ms, FX_SPEEDS[self.speed.min(FX_SPEEDS.len() - 1)].1);
+        let now = self.clock.now();
+        let due: Vec<(u64, u64)> = self.impacts.iter().copied().filter(|(t, _)| *t <= now).collect();
+        self.impacts.retain(|(t, _)| *t > now);
+        for (t, seed) in due {
+            self.fx.push(Effect::new(Sparks { at: FX_TO, ms: 260, count: 6, dir_deg: 0.0, spread_deg: 90.0, speed: 70.0, gravity: 120.0, size: 1, cols: [STEEL, LINEN] }, t).seeded(seed));
+            self.fx.push(Effect::new(Flash { at: FX_TO, rx: 5.0, ry: 4.0, ms: 100, col: rgba(255, 255, 255, 150) }, t));
+            if self.hit_stop {
+                self.clock.hold(FX_HIT_STOP_MS);
+            }
+        }
+        self.fx.prune(now);
+        self.camera.offset(now);
+    }
 }
 
 impl Default for Specimens {
@@ -66,6 +195,10 @@ impl Default for Specimens {
             left: vec!["Sword".into(), "Shield".into()],
             right: vec!["Potion".into()],
             last: "nothing yet".into(),
+            page: 0,
+            block: None,
+            track: None,
+            fx: FxDemo::default(),
         }
     }
 }
@@ -85,6 +218,15 @@ impl Specimens {
             KitAct::Lock => format!("lock {}", if self.locked { "off" } else { "on" }),
             KitAct::Icon(what) => format!("icon {what}"),
             KitAct::Fold => format!("section {}", if self.open { "folded" } else { "opened" }),
+            KitAct::Page(i) => format!("page {}", PAGES[*i % PAGES.len()]),
+            KitAct::Block(b) => format!("block {b}"),
+            KitAct::Track(t) => format!("track {t}"),
+            KitAct::Segment(t, s) => format!("segment {s} on {t}"),
+            KitAct::Effect(k) => self.fx.play(k),
+            KitAct::Shake(n) => self.fx.shake(n),
+            KitAct::FxSpeed(i) => format!("speed {}", FX_SPEEDS[*i % FX_SPEEDS.len()].0),
+            KitAct::HitStop => format!("hit-stop {}", if self.fx.hit_stop { "off" } else { "on" }),
+            KitAct::Reduce => format!("reduce motion {}", if self.fx.reduce { "off" } else { "on" }),
         };
         match a {
             KitAct::Tab(i) => self.tab = i % TABS.len(),
@@ -96,8 +238,37 @@ impl Specimens {
             KitAct::Row(i) => self.row = i,
             KitAct::Lock => self.locked = !self.locked,
             KitAct::Fold => self.open = !self.open,
-            KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) => {}
+            KitAct::Page(i) => self.page = i % PAGES.len(),
+            KitAct::Block(b) => self.block = Some(b),
+            KitAct::Track(t) => self.track = Some(t),
+            KitAct::FxSpeed(i) => self.fx.speed = i % FX_SPEEDS.len(),
+            KitAct::HitStop => self.fx.hit_stop = !self.fx.hit_stop,
+            KitAct::Reduce => {
+                self.fx.reduce = !self.fx.reduce;
+                if self.fx.reduce {
+                    self.fx.camera.stop();
+                }
+            }
+            KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) | KitAct::Segment(..) | KitAct::Effect(_) | KitAct::Shake(_) => {}
         }
+    }
+
+    /// The Effects page's clock moves by the wall time since the last call (at most `vignette::MAX_FRAME_MS`), while
+    /// that page is on view (the gallery screen calls it every frame).
+    pub fn tick(&mut self) {
+        if self.page != 2 {
+            self.fx.last_wall = None;
+            return;
+        }
+        let now = std::time::Instant::now();
+        let ms = self.fx.last_wall.map_or(0.0, |l| (now.duration_since(l).as_secs_f64() * 1000.0).min(crate::vignette::MAX_FRAME_MS as f64));
+        self.fx.last_wall = Some(now);
+        self.advance(ms);
+    }
+
+    /// The Effects page's clock moves by `wall_ms` (`FxDemo::advance`).
+    pub fn advance(&mut self, wall_ms: f64) {
+        self.fx.advance(wall_ms);
     }
 
     /// A chip (`chip.<name>`) onto the other box (`box.left` / `box.right`).
@@ -129,8 +300,131 @@ impl Specimens {
         }
     }
 
-    /// Draws the page in `r`: two columns of named groups. Widget ids start with `kit.`.
+    /// Draws the page on view in `r`, the page tabs (`kit.page.<i>`) and what happened last at its foot. Widget ids
+    /// start with `kit.`.
     pub fn draw<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: impl Fn(KitAct) -> A) {
+        let mut tx = r.x + r.w - 6;
+        for (i, p) in PAGES.iter().enumerate().rev() {
+            let w = (ui.p.text_w(p, BODY) + 12.0).ceil() as i32;
+            tx -= w;
+            ui.tab(&format!("kit.page.{i}"), Rect::new(tx, r.y + r.h - 15, w, 14), p, wrap(KitAct::Page(i)), self.page == i);
+            tx -= 2;
+        }
+        if self.page == 1 {
+            self.draw_timeline(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
+        } else if self.page == 2 {
+            self.draw_effects(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
+        } else {
+            self.draw_widgets(ui, r, &wrap);
+        }
+        ui.p.text_fit((r.x + 6) as f32, (r.y + r.h - 12) as f32, &format!("Last: {}", self.last), SMALL, (tx - r.x - 10) as f32, GOOD);
+    }
+
+    /// The timeline page: a sample round on two sides, every part, a whole-hatched segment, links, marks (one on a
+    /// masked track), then a legend.
+    fn draw_timeline<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: &impl Fn(KitAct) -> A) {
+        let x = r.x + 6;
+        let w = r.w - 12;
+        ui.p.text(x as f32, (r.y + 4) as f32, "Timeline: segment parts, hatching, links and marks (hover for the cards; clicks select)", SMALL, INFO);
+        let y = r.y + 4 + ui.p.line_h(SMALL).ceil() as i32 + 2;
+        let t = sample_timeline(self.block, self.track.clone());
+        let h = (crate::timeline::RULER_H + 2 + t.content_h()).min(r.y + r.h - y - 30);
+        t.draw(ui, "kit.timeline", Rect::new(x, y, w, h), |b| wrap(KitAct::Block(b)), |k| wrap(KitAct::Track(k.to_string())), |k, s| wrap(KitAct::Segment(k.to_string(), s.to_string())));
+        ui.para(
+            x,
+            y + h + 6,
+            w,
+            "A windup is shaded, an impact bright with an edge where it lands, a recovery hatched; a segment can be hatched whole. A link joins one segment's end to the next one's start. A mark is a glyph in a colour with a card, inside its block; it takes no click, the text beside it makes room, and it shows on a masked track too.",
+            SMALL,
+            DIM,
+        );
+    }
+
+    /// The Effects page: the stage (`kit.fx.stage`) with its two dummies and the live effects, shaken by the camera
+    /// (the panel and the controls stay put); beside it a button per primitive (`kit.fx.<kind>`) and per shake preset
+    /// (`kit.fx.shake.<name>`), the speed (`kit.fx.speed`), the hit-stop (`kit.fx.hitstop`) and reduce motion
+    /// (`kit.fx.reduce`); under it the clock's state.
+    fn draw_effects<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: &impl Fn(KitAct) -> A) {
+        let x = r.x + 6;
+        let line = ui.p.line_h(SMALL).ceil() as i32;
+        ui.p.text(x as f32, (r.y + 4) as f32, "Effects: drawn primitives on the effect clock and camera shakes by preset", SMALL, INFO);
+        let y = r.y + 4 + line + 2;
+        let stage = Rect::new(x, y, FX_STAGE_W, FX_STAGE_H);
+        let d = &self.fx;
+        let now = d.clock.now();
+        ui.p.panel(Rect::new(stage.x - 1, stage.y - 1, stage.w + 2, stage.h + 2), STAGE_BG, crate::ui::BORDER, 2.0);
+        let (dx, dy) = d.camera.offset_at(now);
+        ui.push("kit.fx.stage", "stage", format!("effects stage: {} live, shake ({dx}, {dy})", d.fx.kinds(now).len()), stage, true, false, None, Vec::new());
+        let saved = ui.p.c.clip;
+        ui.p.clip(Some(stage));
+        ui.p.shift(dx, dy);
+        let (ox, oy) = (stage.x as f32, stage.y as f32);
+        ui.p.fill(Rect::new(stage.x - 8, stage.y + FX_FOOT_Y as i32 + 1, FX_STAGE_W + 16, 1), rgb(44, 48, 60));
+        let placed = |layer: Layer| Fx { live: d.fx.live.iter().filter(|e| e.layer == layer).map(|e| e.moved(ox, oy)).collect() };
+        placed(Layer::Ground).draw(&mut ui.p, now, Layer::Ground);
+        for (cx, _) in [FX_FROM, FX_TO] {
+            let (fx_, fy) = (ox + cx, oy + FX_FOOT_Y);
+            ui.p.ellipse(fx_, fy, 8.0, 2.5, rgba(0, 0, 0, 120));
+            ui.p.fill(Rect::new(fx_ as i32 - 4, fy as i32 - 22, 8, 22), rgb(70, 78, 96));
+            ui.p.fill(Rect::new(fx_ as i32 - 3, fy as i32 - 29, 6, 6), rgb(96, 104, 122));
+        }
+        placed(Layer::Air).draw(&mut ui.p, now, Layer::Air);
+        ui.p.shift(-dx, -dy);
+        ui.p.c.clip = saved;
+        let state = format!("Clock {} ms, hold {} ms, {} live, impacts to come: {}", now, d.clock.hold.ceil(), d.fx.len(), d.impacts.len());
+        ui.p.text_fit(x as f32, (stage.y + stage.h + 4) as f32, &state, SMALL, FX_STAGE_W as f32, DIM);
+        ui.para(
+            x,
+            stage.y + stage.h + 6 + line,
+            FX_STAGE_W,
+            "Every piece is a pure function of the clock and a seed. A hit-stop holds the clock; the speed scales it. Shakes move the stage only, in whole pixels, never past the engine ceiling (6 px, 3 s); reduce motion stops them and keeps the effects.",
+            SMALL,
+            TEXT,
+        );
+
+        // -- Controls beside the stage
+        let x2 = stage.x + stage.w + 10;
+        let right = r.x + r.w - 6;
+        let bw = |ui: &mut Ui<A>, t: &str| (ui.p.text_w(t, BODY) + 12.0).ceil() as i32;
+        let head = |ui: &mut Ui<A>, y: i32, t: &str| -> i32 {
+            ui.p.text(x2 as f32, y as f32, t, SMALL, INFO);
+            y + line + 1
+        };
+        let mut yy = head(ui, y, "Primitives (left dummy to right)");
+        let mut bx = x2;
+        for kind in PRIM_KINDS {
+            let label = cap(kind);
+            let w = bw(ui, &label);
+            if bx + w > right {
+                bx = x2;
+                yy += 16;
+            }
+            ui.button(&format!("kit.fx.{kind}"), Rect::new(bx, yy, w, 14), &label, wrap(KitAct::Effect(kind)), true);
+            bx += w + 3;
+        }
+        yy += 14 + 5;
+        yy = head(ui, yy, "Camera shakes (engine presets)");
+        let mut bx = x2;
+        for name in SHAKE_PRESETS {
+            let w = bw(ui, name);
+            if bx + w > right {
+                bx = x2;
+                yy += 16;
+            }
+            ui.button(&format!("kit.fx.shake.{name}"), Rect::new(bx, yy, w, 14), name, wrap(KitAct::Shake(name)), true);
+            bx += w + 3;
+        }
+        yy += 14 + 5;
+        yy = head(ui, yy, "Clock speed, hit-stop, motion");
+        let speeds: Vec<String> = FX_SPEEDS.iter().map(|s| s.0.to_string()).collect();
+        ui.select("kit.fx.speed", Rect::new(x2, yy, 56, 14), &speeds, d.speed, |i| wrap(KitAct::FxSpeed(i)), true, tip("Speed", "Scales the effect clock (hit-stops stay wall time)."));
+        ui.checkbox("kit.fx.hitstop", x2 + 64, yy + 2, &format!("Hit-stop {} ms", FX_HIT_STOP_MS), d.hit_stop, wrap(KitAct::HitStop), true);
+        yy += 14 + 5;
+        ui.checkbox("kit.fx.reduce", x2, yy + 2, "Reduce motion (this page)", d.reduce, wrap(KitAct::Reduce), true);
+    }
+
+    /// The widgets page: two columns of named groups.
+    fn draw_widgets<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: &impl Fn(KitAct) -> A) {
         let col_w = (r.w - 18) / 2;
         let (x1, x2) = (r.x + 6, r.x + 12 + col_w);
         let gap = 5;
@@ -252,8 +546,76 @@ impl Specimens {
             ui.p.text((view.x + 4) as f32, (view.y + 2 - off + i * line) as f32, &format!("Line {} of a list taller than its area", i + 1), SMALL, TEXT);
         }
         ui.scroll_end();
+    }
+}
 
-        ui.p.text_fit(x1 as f32, (r.y + r.h - 12) as f32, &format!("Last: {}", self.last), SMALL, (r.w - 12) as f32, GOOD);
+/// The timeline specimen's round: 8 blocks, three tracks on one side and two on the other (one masked).
+fn sample_timeline(block: Option<i32>, track: Option<String>) -> Timeline {
+    let part = |start, end, style| Part { start, end, style };
+    let seg = |key: &str, start, end, label: &str, fill: Rgba, parts: Vec<Part>, card: &str| Segment { key: key.into(), start, end, label: label.into(), fill, parts, tip: tip(label, card), ..Segment::default() };
+    let mark = |key: &str, block, glyph: &str, colour, title: &str, body: &str| Mark { key: key.into(), block, glyph: glyph.into(), colour, tip: tip(title, body) };
+    let link = |from: &str, to: &str, colour, body: &str| Link { from: from.into(), to: to.into(), colour, tip: tip("Link", body) };
+    let (blue, dim) = (rgb(70, 110, 170), rgb(44, 56, 78));
+    let red = rgb(160, 70, 64);
+    let lead = Track {
+        key: "lead".into(),
+        label: "Lead".into(),
+        colour: TEXT,
+        segments: vec![
+            seg("strike", 1, 3, "Strike", blue, vec![part(1, 2, PartStyle::Windup), part(3, 3, PartStyle::Impact)], "Windup B1-B2 (shaded), impact B3 (bright, edged)."),
+            seg("follow", 4, 5, "Follow-up", blue, vec![part(4, 4, PartStyle::Windup), part(5, 5, PartStyle::Impact)], "Linked to the strike before it."),
+            seg("rest", 6, 8, "Rest", dim, Vec::new(), "A plain segment: no parts."),
+        ],
+        links: vec![link("strike", "follow", GOLD, "Chained: the follow-up starts as the strike lands.")],
+        marks: vec![mark("gain", 8, "+", GOOD, "Mark", "A glyph in a colour at one block, with its card.")],
+        ..Track::default()
+    };
+    let scout = Track {
+        key: "scout".into(),
+        label: "Scout".into(),
+        colour: TEXT,
+        segments: vec![
+            Segment { dashed: true, ..seg("move", 1, 2, "Move", rgb(60, 80, 110), Vec::new(), "Dashed: a planned move.") },
+            seg("shot", 3, 6, "Shot", blue, vec![part(3, 5, PartStyle::Windup), part(6, 6, PartStyle::Impact)], "A long windup, impact at B6."),
+        ],
+        links: vec![link("move", "shot", INFO, "Carried: the shot follows the move.")],
+        marks: vec![mark("step", 2, ">", INFO, "Step", "A mark on the move's last block.")],
+        ..Track::default()
+    };
+    let warden = Track {
+        key: "warden".into(),
+        label: "Warden".into(),
+        colour: TEXT,
+        segments: vec![
+            seg("hold", 1, 4, "Hold", rgb(60, 120, 100), Vec::new(), "A plain segment."),
+            Segment { hatched: true, ..seg("dropped", 5, 8, "Dropped", rgb(60, 120, 100), Vec::new(), "Hatched whole: a span that will not happen.") },
+        ],
+        marks: vec![mark("break", 5, "x", FOE, "Broken", "A mark at a segment's first block: its label starts after it."), mark("note", 5, "i", INFO, "Note", "Two marks in one block sit side by side.")],
+        ..Track::default()
+    };
+    let brute = Track {
+        key: "brute".into(),
+        label: "Brute".into(),
+        colour: FOE,
+        segments: vec![seg("smash", 1, 7, "Heavy smash", red, vec![part(1, 3, PartStyle::Windup), part(4, 4, PartStyle::Impact), part(5, 7, PartStyle::Recovery)], "Windup B1-B3, impact B4, recovery B5-B7 (hatched).")],
+        marks: vec![mark("impact", 4, "!", FOE, "Impact", "A badge where something lands.")],
+        ..Track::default()
+    };
+    let lurker = Track {
+        key: "lurker".into(),
+        label: "Lurker".into(),
+        colour: FOE,
+        segments: vec![seg("hidden", 1, 8, "Hidden", red, Vec::new(), "")],
+        masked: Some("Plans in secret".into()),
+        marks: vec![mark("impact", 4, "!", FOE, "Impact", "Marks show on a masked track: something lands here, the rest is hidden."), mark("guess", 7, "?", DIM, "Unknown", "")],
+        ..Track::default()
+    };
+    Timeline {
+        blocks: 8,
+        playhead: 0,
+        selected_block: block,
+        selected_track: track,
+        sections: vec![Section { title: "Allies".into(), colour: INFO, tracks: vec![lead, scout, warden] }, Section { title: "Enemies".into(), colour: FOE, tracks: vec![brute, lurker] }],
     }
 }
 
@@ -270,6 +632,12 @@ fn sample_icon(n: i32) -> Image {
         }
     }
     Image { w: n, h: n, px }
+}
+
+/// `kind` with its first letter in upper case.
+fn cap(kind: &str) -> String {
+    let mut c = kind.chars();
+    c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
 }
 
 fn label_key(id: &str) -> &'static str {

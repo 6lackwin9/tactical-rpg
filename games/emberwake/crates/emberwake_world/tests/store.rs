@@ -15,8 +15,8 @@ const CATALOG: [&str; 8] = ["classes", "units", "skills", "items", "item_familie
 /// Retired parity: fields added after the Godot freeze, written with their empty defaults by the engine's writer:
 /// REWARD1 (HISTORY 2026-10-21) a unit's `loot`, a world encounter's `key_loot` and `objective_reward`; ASSETORG2
 /// (HISTORY 2026-10-22) a unit's and a character's `palette` and `portrait_tier`; PROPS1 (HISTORY 2026-10-23) a map
-/// template's `props`.
-const AFTER_GODOT: [&str; 6] = ["\"loot\": []", "\"key_loot\": []", "\"objective_reward\": {}", "\"palette\": \"\"", "\"portrait_tier\": \"\"", "\"props\": []"];
+/// template's `props`; RULESET1-R (HISTORY 2026-10-25) a world manifest's `ruleset` and `plan_reveal_flag`.
+const AFTER_GODOT: [&str; 8] = ["\"loot\": []", "\"key_loot\": []", "\"objective_reward\": {}", "\"palette\": \"\"", "\"portrait_tier\": \"\"", "\"props\": []", "\"ruleset\": \"\"", "\"plan_reveal_flag\": \"\""];
 
 /// `text` without the AFTER_GODOT field lines (a dropped last field takes the comma off the line before it).
 fn at_freeze(text: &str) -> String {

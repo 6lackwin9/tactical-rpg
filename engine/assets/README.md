@@ -7,6 +7,8 @@ by putting its own at the same relative path.
 - `fonts/`: the UI font (Open Sans SemiBold, `OpenSans-OFL.txt`).
 - `tilesets/common/<tile>/v<n>.png`: the generic terrain set (battles use it until a map names a set; region maps fall
   back to it after the world's own sets). The variant count is the run of files present.
+- `tilesets/common_stage/<terrain>/v<n>.png` (128x96, 4:3) and `tilesets/common_stage/wall_face/v<n>.png` (128x48): the
+  tilted battle stage's tiles (STAGE1-T; `tools/gen_art.py stage_tiles`, at most 16 colours each).
 - `audio/sfx/ui_{click,back,confirm,error}.wav`: interface sounds.
 - `ui/{lock,unlock,delete,help,chevron}.png`: toolkit glyphs for the kit's icon buttons (PLAYUI1-I; 32x32, made by
   `tools/portraits/sheets.py ui` from `art_src/ui_1.png`; a missing file falls back to a drawn `Glyph`).

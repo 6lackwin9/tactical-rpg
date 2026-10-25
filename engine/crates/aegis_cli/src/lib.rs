@@ -3,7 +3,7 @@
 //!   aegis serve                                                                the game's command API over stdin / stdout
 //!   aegis link '<json>' ... [port=47800]                                       requests to a running GUI (agent link)
 //!   aegis replay <recording.json> ...                                          replay a playtest recording (see `replay`)
-//!   aegis content check | upsert | remove | apply | manifest                    edit the data folder (see `content`)
+//!   aegis content check | upsert | remove | world | apply | manifest            edit the data folder (see `content`)
 
 use aegis_content::file::stringify;
 use aegis_content::manifest::Manifest;
@@ -66,7 +66,7 @@ pub trait Game {
 const USAGE: &str = "aegis serve   (JSON lines on stdin / stdout; the game's command API)
 aegis replay <recording.json> [battle=K] [until=N] [json] [variant=<file>] [write=<out dir>] [seeds=a..b or a,b] [seed_key=seed] [fallback=stop or <json>] [trail-report]
 aegis link '<json>' ... [port=47800]   (requests to a running game GUI)
-aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>]";
+aegis content check | upsert <kind> <json or @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json or @file>] [full] | apply <seed.json> | manifest [<json or @file>] | manifest --kit <id> [<json or @file>]";
 
 /// Runs the command line of the process: the game's commands first, then the shell's.
 pub fn run<G: Game>(game: &G) -> Result<()> {
@@ -96,9 +96,17 @@ pub fn json_arg(raw: &str) -> Result<Value> {
     serde_json::from_str(&text).context("parsing the JSON argument")
 }
 
-/// One content step: {"op": "upsert", "kind", "entry", "world"?, "replace"?} or {"op": "remove", "kind", "id", "world"?}.
-fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result::Result<String, Vec<String>> {
+/// One content step: {"op": "upsert", "kind", "entry", "world"?, "replace"?}, {"op": "remove", "kind", "id",
+/// "world"?} or {"op": "world", "id", "fields", "full"?} (a world manifest, WORLDW1).
+pub fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result::Result<String, Vec<String>> {
     let s = |k: &str| step.get(k).and_then(|v| v.as_str()).map(String::from);
+    if s("op").as_deref() == Some("world") {
+        let id = s("id").ok_or_else(|| vec!["world needs an id".to_string()])?;
+        let fields = step.get("fields").and_then(|f| f.as_object()).ok_or_else(|| vec!["world needs a fields object".to_string()])?;
+        let full = step.get("full").and_then(Value::as_bool).unwrap_or(false);
+        let o = store::set_world(hooks, dir, &id, fields, full)?;
+        return Ok(format!("{} world '{id}' in {}", if o.replaced { "updated" } else { "created" }, o.file.display()));
+    }
     let kind = s("kind").ok_or_else(|| vec!["step needs a kind".to_string()])?;
     let world = s("world");
     let (verb, outcome) = match s("op").as_deref().unwrap_or("upsert") {
@@ -111,7 +119,7 @@ fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result::Re
             let o = store::upsert(hooks, dir, world.as_deref(), &kind, entry, s("replace").as_deref())?;
             (if o.replaced { "replaced" } else { "added" }, o)
         }
-        other => return Err(vec![format!("unknown op '{other}' (upsert or remove)")]),
+        other => return Err(vec![format!("unknown op '{other}' (upsert, remove or world)")]),
     };
     let id = s("id").or_else(|| step.get("entry").and_then(|e| e.get("id")).and_then(|v| v.as_str()).map(String::from)).unwrap_or_default();
     Ok(format!("{verb} {kind} '{id}' in {}", outcome.file.display()))
@@ -122,6 +130,8 @@ fn content_step(hooks: &impl Hooks, dir: &Path, step: &Value) -> std::result::Re
 ///   check                                              the game's warnings, then every problem (exit 1 when any)
 ///   upsert <kind> <json | @file> [world=<id>] [replace=<id>]   add or replace one entry (stored shape)
 ///   remove <kind> <id> [world=<id>]                    remove one entry
+///   world <id> [<json | @file>] [full]                 show a world manifest, or create / update it (data/worlds/<id>/
+///                                                      world.json; fields merged, checked, kept when the data loads)
 ///   apply <seed.json>                                  run a seed: {"steps": [step...]} (stops at the first failure)
 ///   manifest [<json | @file>]                          show the game manifest, or merge fields into it (checked)
 ///   manifest --kit <id> [<json | @file>]               show or write a kit manifest, kits/<id>/kit.json (ASSETORG2)
@@ -168,6 +178,20 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
             if let Some(w) = args.keys.get("world") {
                 step["world"] = json!(w);
             }
+            match content_step(&hooks, &dir, &step) {
+                Ok(line) => Ok(println!("{line}")),
+                Err(e) => fail(e),
+            }
+        }
+        Some("world") => {
+            let Some(id) = args.pos(2) else { bail!("usage: aegis content world <id> [<json | @file>] [full]") };
+            let Some(raw) = args.pos(3).filter(|r| *r != "full") else {
+                let path = aegis_content::world::manifest_path(&dir, id);
+                let text = std::fs::read_to_string(&path).with_context(|| format!("{}", path.display()))?;
+                print!("{text}");
+                return Ok(());
+            };
+            let step = json!({"op": "world", "id": id, "fields": json_arg(raw)?, "full": args.flag("full")});
             match content_step(&hooks, &dir, &step) {
                 Ok(line) => Ok(println!("{line}")),
                 Err(e) => fail(e),
@@ -223,7 +247,7 @@ fn content<G: Game>(game: &G, args: &Args) -> Result<()> {
                 Err(e) => fail(e),
             }
         }
-        _ => bail!("usage: aegis content check | upsert <kind> <json | @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | apply <seed.json> | manifest [<json | @file>] | manifest --kit <id> [<json | @file>]"),
+        _ => bail!("usage: aegis content check | upsert <kind> <json | @file> [world=<id>] [replace=<id>] | remove <kind> <id> [world=<id>] | world <id> [<json | @file>] [full] | apply <seed.json> | manifest [<json | @file>] | manifest --kit <id> [<json | @file>]"),
     }
 }
 

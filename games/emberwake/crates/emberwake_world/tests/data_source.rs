@@ -21,8 +21,9 @@ fn data_dir() -> PathBuf {
 /// side (catalog rows, world entries, game data rows, schema rows) before comparing; each is named in docs/HISTORY.md. REWARD1
 /// (2026-10-21): the unit loot table and a world encounter's key loot and objective reward. ASSETORG2 (2026-10-22): a
 /// unit's and a character's palette and portrait tier. PROPS1 (2026-10-23): a map template's props (section "game": the
-/// game data beside the catalogs; Godot's MapCatalog had no such field).
-const AFTER_GODOT: [(&str, &str, &str); 8] = [
+/// game data beside the catalogs; Godot's MapCatalog had no such field). RULESET1-R (2026-10-25): a world manifest's
+/// `ruleset` and `plan_reveal_flag` (kind "world": taken off every world's `manifest`).
+const AFTER_GODOT: [(&str, &str, &str); 10] = [
     ("content", "units", "loot"),
     ("world", "encounters", "key_loot"),
     ("world", "encounters", "objective_reward"),
@@ -31,7 +32,14 @@ const AFTER_GODOT: [(&str, &str, &str); 8] = [
     ("world", "characters", "palette"),
     ("world", "characters", "portrait_tier"),
     ("game", "maps", "props"),
+    ("world", "world", "ruleset"),
+    ("world", "world", "plan_reveal_flag"),
 ];
+/// Retired parity, kind level (the twin of AFTER_GODOT): schema kinds added after the freeze, by (section, kind); the
+/// whole kind leaves the engine's schema before comparing; each is named in docs/HISTORY.md. DERIVE1 (2026-10-25): the
+/// derived-stat rows (Godot had no such kind; its catalogs are compared per CATALOG_KINDS, which do not list it).
+/// RULESET1-R (2026-10-25): the ruleset rows (the same).
+const KINDS_AFTER_GODOT: [(&str, &str); 2] = [("content", "derived_stats"), ("content", "rulesets")];
 /// Schema rows whose help text or options changed after the freeze (their `help` and `options_from` are not
 /// compared). REWARD1: the purse rows. ASSETORG2: the art rows (bodies of the asset layers, not Godot's art keys) and
 /// the item icon rows. PHASEFOLD: the phases rows (the arrival trigger).
@@ -62,10 +70,16 @@ fn godot_schema_folded(schema: &mut Value) {
     }
 }
 
-/// `v` without the AFTER_GODOT keys of `section`: on every object in an array under a key named after the kind.
+/// `v` without the AFTER_GODOT keys of `section`: on every object in an array under a key named after the kind, and
+/// (kind "world") on every world's `manifest` object.
 fn strip_after_godot(v: &mut Value, section: &str) {
     match v {
         Value::Object(o) => {
+            if let Some(Value::Object(m)) = o.get_mut("manifest").filter(|_| section == "world") {
+                for (_, _, key) in AFTER_GODOT.iter().filter(|(s, kind, _)| *s == "world" && *kind == "world") {
+                    m.shift_remove(*key);
+                }
+            }
             for (k, x) in o.iter_mut() {
                 let keys: Vec<&str> = AFTER_GODOT.iter().filter(|(s, kind, _)| *s == section && kind == k).map(|t| t.2).collect();
                 if let (false, Value::Array(rows)) = (keys.is_empty(), &mut *x) {
@@ -83,9 +97,13 @@ fn strip_after_godot(v: &mut Value, section: &str) {
     }
 }
 
-/// The schema without the AFTER_GODOT rows and the HELP_CHANGED help texts.
+/// The schema without the KINDS_AFTER_GODOT kinds, the AFTER_GODOT rows and the HELP_CHANGED help texts.
 fn schema_at_freeze(schema: &Value) -> Value {
     let mut out = schema.clone();
+    for (section, kind) in KINDS_AFTER_GODOT {
+        let removed = out.get_mut(section).and_then(Value::as_object_mut).and_then(|s| s.shift_remove(kind));
+        assert!(removed.is_some(), "the engine schema has no {section}.{kind} to strip");
+    }
     for (section, kind, key) in AFTER_GODOT {
         if let Some(Value::Array(rows)) = out.get_mut(section).and_then(|s| s.get_mut(kind)) {
             rows.retain(|r| r["key"] != key);

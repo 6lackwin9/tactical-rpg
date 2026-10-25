@@ -192,6 +192,31 @@ pub fn is_id(id: &str) -> bool {
     c.next().is_some_and(|f| f.is_ascii_lowercase()) && c.all(|x| x.is_ascii_lowercase() || x.is_ascii_digit() || x == '_')
 }
 
+/// The values of `entry` (raw, before `normalize`) whose JSON type does not fit their field's type (normalize would
+/// coerce them silently): ints, numbers, bools, text, lists of text, objects. Keys without a field are not checked.
+pub fn type_errors(fields: &[Value], entry: &Dict) -> Vec<String> {
+    let mut errors = Vec::new();
+    for f in fields {
+        let f = json::dict(f);
+        let key = json::s(f, "key");
+        let Some(v) = entry.get(&key) else { continue };
+        let (ok, wants) = match json::s(f, "type").as_str() {
+            "int" => (json::is_int(v), "a whole number"),
+            "float" => (v.is_number(), "a number"),
+            "bool" => (v.is_boolean(), "true or false"),
+            "id" | "string" | "text" | "ref" | "enum" => (v.is_string(), "text"),
+            "refs" | "strings" | "multi_pick" => (v.as_array().is_some_and(|a| a.iter().all(Value::is_string)), "a list of text"),
+            "stats" | "dict_pick" => (v.is_object(), "an object"),
+            "json" => (v.is_object() || v.is_array(), "an object or a list"),
+            _ => (true, ""),
+        };
+        if !ok {
+            errors.push(format!("{}: {v} is not {wants}.", json::s_or(f, "label", &key)));
+        }
+    }
+    errors
+}
+
 /// Schema checks of a normalized entry (ContentSchema.field_errors / WorldSchema shape): id, name, enum options.
 pub fn field_errors(schema: &Value, section: &str, kind: &str, full: &Dict) -> Vec<String> {
     let mut errors = Vec::new();

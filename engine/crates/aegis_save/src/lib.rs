@@ -3,7 +3,9 @@
 //! format tag and run the migration runner, which brings an older envelope up to the current version one step at a
 //! time. The game supplies its `Format` (tag, version, slots, state keys) and the steps; the engine knows nothing of
 //! the state's shape (docs/specs/SPLIT1.md section 2). Engine-only addition (PLAYUI1 section 1): slot locks in a
-//! `locks.json` beside the saves; `write` and `delete` refuse a locked slot.
+//! `locks.json` beside the saves; `write` and `delete` refuse a locked slot. Engine-only addition (CAMPAIGN1 F5):
+//! keyed saves (`key_<key>.json`, for example an act-start save) beside the slots, in the same envelope; they are
+//! outside the slot range, so slot saves never overwrite them and slot listings never show them.
 
 use aegis_core::json::{self, int, Dict};
 use serde_json::Value;
@@ -156,6 +158,11 @@ pub fn write(fmt: &Format, dir: &Path, slot: i64, saved_at: i64, state: impl FnO
     if !exists(dir, slot) && slot != fmt.first_slot && listed_locks(dir).contains(&slot) {
         let _ = set_locked(fmt, dir, slot, false);
     }
+    write_envelope(fmt, dir, &path_for(dir, slot), saved_at, state)
+}
+
+/// Writes `state` in the envelope to `final_path` through a temp file and a rename; problem strings, empty = written.
+fn write_envelope(fmt: &Format, dir: &Path, final_path: &Path, saved_at: i64, state: Value) -> Vec<String> {
     let envelope = json::obj([
         ("format", fmt.tag.into()),
         ("version", int(fmt.version)),
@@ -165,7 +172,6 @@ pub fn write(fmt: &Format, dir: &Path, slot: i64, saved_at: i64, state: impl FnO
     if std::fs::create_dir_all(dir).is_err() && !dir.is_dir() {
         return vec![format!("Can't create the save folder '{}'.", dir.display())];
     }
-    let final_path = path_for(dir, slot);
     let mut tmp = final_path.with_extension("json.fc_tmp");
     let mut n = 1;
     while tmp.exists() {
@@ -179,7 +185,7 @@ pub fn write(fmt: &Format, dir: &Path, slot: i64, saved_at: i64, state: impl FnO
         let _ = std::fs::remove_file(&tmp);
         return vec![format!("Can't write '{}'.", final_path.display())];
     }
-    if std::fs::rename(&tmp, &final_path).is_err() {
+    if std::fs::rename(&tmp, final_path).is_err() {
         let _ = std::fs::remove_file(&tmp);
         return vec!["Can't move the save into place (the previous save was kept).".into()];
     }
@@ -255,10 +261,14 @@ pub enum Peek {
 }
 
 pub fn peek(fmt: &Format, dir: &Path, slot: i64) -> Peek {
-    if !exists(dir, slot) {
+    peek_file(fmt, &path_for(dir, slot))
+}
+
+fn peek_file(fmt: &Format, path: &Path) -> Peek {
+    if !path.is_file() {
         return Peek::Missing;
     }
-    let text = std::fs::read_to_string(path_for(dir, slot)).unwrap_or_default();
+    let text = std::fs::read_to_string(path).unwrap_or_default();
     let envelope = match serde_json::from_str::<Value>(&text) {
         Ok(Value::Object(e)) if json::s(&e, "format") == fmt.tag => e,
         _ => return Peek::Unreadable,
@@ -282,6 +292,61 @@ pub fn newest_slot(fmt: &Format, saved_at: impl Fn(i64) -> Option<i64>) -> i64 {
         }
     }
     best
+}
+
+// ---- Keyed saves (CAMPAIGN1 F5): a save named by a key instead of a slot number (an act-start save) -------------
+
+/// The longest save key.
+pub const KEY_MAX: usize = 64;
+
+/// Whether `key` names a keyed save: 1-`KEY_MAX` characters, each a-z, 0-9, '_' or '-' (so the file name is safe on
+/// every platform and never reads as a slot). The refusal text otherwise.
+pub fn check_key(key: &str) -> Result<(), String> {
+    let ok = !key.is_empty() && key.len() <= KEY_MAX && key.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-');
+    if ok {
+        Ok(())
+    } else {
+        Err(format!("Save key '{key}' must be 1-{KEY_MAX} characters a-z, 0-9, '_' or '-'."))
+    }
+}
+
+/// A keyed save's file: `<dir>/key_<key>.json` (the key is not checked here; the keyed calls check it).
+pub fn key_path(dir: &Path, key: &str) -> PathBuf {
+    dir.join(format!("key_{key}.json"))
+}
+
+/// Whether a keyed save exists; a bad key has none.
+pub fn exists_keyed(dir: &Path, key: &str) -> bool {
+    check_key(key).is_ok() && key_path(dir, key).is_file()
+}
+
+/// `write` for a keyed save: the same envelope and atomic write, no slot range and no locks; a later write with the
+/// same key replaces it. Problem strings; empty = written.
+pub fn write_keyed(fmt: &Format, dir: &Path, key: &str, saved_at: i64, state: impl FnOnce() -> Result<Value, Vec<String>>) -> Vec<String> {
+    if let Err(problem) = check_key(key) {
+        return vec![problem];
+    }
+    match state() {
+        Ok(state) => write_envelope(fmt, dir, &key_path(dir, key), saved_at, state),
+        Err(errors) => errors,
+    }
+}
+
+/// A keyed save's file text (for `open` and `migrate`, like `read`), or the refusal.
+pub fn read_keyed(dir: &Path, key: &str) -> Result<String, Vec<String>> {
+    check_key(key).map_err(|problem| vec![problem])?;
+    if !exists_keyed(dir, key) {
+        return Err(vec![format!("No save '{key}'.")]);
+    }
+    Ok(std::fs::read_to_string(key_path(dir, key)).unwrap_or_default())
+}
+
+/// `peek` for a keyed save; a bad key is `Missing`.
+pub fn peek_keyed(fmt: &Format, dir: &Path, key: &str) -> Peek {
+    if check_key(key).is_err() {
+        return Peek::Missing;
+    }
+    peek_file(fmt, &key_path(dir, key))
 }
 
 #[cfg(test)]
