@@ -22,7 +22,11 @@ Use this when Claude runs in a terminal on your machine (`$CLAUDE_CODE_REMOTE` e
 
 1. Run `check_project.ps1 -Fast -Quiet` (~30 s warm: build every crate, run every test) and `tools/fc.sh docs`; the IDE Problems tab must show 0 errors and warnings (markdownlint compliant, see `.agents/rules/engine_workflow.md` section 6). Never pipe `fc.sh docs` into `tail` before `&& git commit`.
 2. If clean: commit on the task branch with the attribution trailer from the session's system reminder, then land it on `develop`: squash it onto the latest `origin/develop` (one commit titled with the task id, its body ending with `Review:` and `Gate:` lines as in `cloud.md` "Landing a task on `develop`") and push `develop`. Never commit to `main` or `engine`.
-3. Remove the worktree and branch: `powershell -NoProfile -File tools/wt_remove.ps1 ../ngp-<id> feat/<branch>` (OneDrive marks folders read-only; plain `git worktree remove` can fail).
+3. Remove the worktree and branch: `powershell -NoProfile -File tools/wt_remove.ps1 ../tactical-rpg-<task> claude/<task>`
+   (plain `git worktree remove` can fail on read-only folders). It also deletes the worktree's build folder
+   `<target-dir>-<folder name>` (the base comes from `.cargo/config.toml`; several GB each, WTCLEAN1). To sweep build
+   folders left by older removals, run `tools/wt_remove.ps1 -Targets -WhatIf`, then without `-WhatIf`; it never touches
+   the base folder or a live worktree's folder.
 
 ## Release (desktop Merge & Release)
 
