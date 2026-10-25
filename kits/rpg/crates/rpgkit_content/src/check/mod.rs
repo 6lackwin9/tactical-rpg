@@ -4,6 +4,7 @@
 //! rows, resolved items, derived item families).
 
 pub mod assets;
+pub mod board;
 pub mod campaign;
 pub mod derived;
 pub mod dialogue;
@@ -16,6 +17,7 @@ pub mod ruleset;
 pub mod shop;
 pub mod simple;
 pub mod skill;
+pub mod story;
 pub mod travel;
 pub mod unit;
 pub mod world;

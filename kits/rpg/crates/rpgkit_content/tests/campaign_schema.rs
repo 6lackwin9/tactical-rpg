@@ -128,6 +128,9 @@ fn campaign_world(tag: &str) -> PathBuf {
     write_kind(&data, "meters", json!([alert(), doom()]));
     write_kind(&data, "checkpoints", checkpoints());
     write_kind(&data, "triggers", triggers());
+    // STORYUI1-S: a `then` vignette names a row of the world kind `vignettes`
+    let card = json!([{"style": "text", "text": "The bells toll."}]);
+    write_kind(&data, "vignettes", json!([{"id": "v_lesser_tithing", "name": "Lesser Tithing", "cards": card}, {"id": "v_act1_title", "name": "Act 1", "cards": card}]));
     data
 }
 
@@ -271,6 +274,7 @@ fn each_bad_checkpoint_or_trigger_field_is_one_error() {
         ("triggers", "no effects and no then", wiped.clone(), with(&wiped, &["effects"], json!([])), "needs effects or then"),
         ("triggers", "an effect that opens a screen", wiped.clone(), with(&wiped, &["effects", "0"], json!({"effect": "fight", "encounter": "raid"})), "opens a screen"),
         ("triggers", "a then battle unknown", raid.clone(), with(&raid, &["then", "0"], json!({"battle": "ghost"})), "unknown encounter 'ghost'"),
+        ("triggers", "a then vignette unknown (STORYUI1-S)", act1.clone(), with(&act1, &["then", "0", "vignette"], json!("v_ghost")), "unknown vignette 'v_ghost'"),
         ("triggers", "a speaker on a vignette", act1.clone(), with(&act1, &["then", "0", "speaker"], json!("tess")), "speaker is for a dialogue only."),
         ("triggers", "a when on an unknown meter", act1.clone(), with(&act1, &["when", "0", "key"], json!("meter.heat")), "names no meter"),
         ("triggers", "clock_start on a gauge", act1.clone(), with(&act1, &["effects", "2", "meter"], json!("alert")), "is not a countdown"),
@@ -309,9 +313,9 @@ fn campaign_effects_and_read_keys_are_checked_in_dialogue() {
     for (tag, bad, needle) in cases {
         assert_one(&v, "dialogues", &d, &bad, needle, tag);
     }
-    // the unknown-effect message lists the campaign effects after the dialogue ones
+    // the unknown-effect message lists the campaign effects after the dialogue ones (and STORYUI1's story effects)
     let unknown = added(&v, "dialogues", &d, &with(&d, &[&fx[..], &["1", "effect"]].concat(), json!("zz")));
-    assert!(unknown.iter().any(|m| m.contains("recruit, meter_add, meter_set, meter_show, clock_start, clock_set, clock_stop, set_act, rest, end)")), "{unknown:?}");
+    assert!(unknown.iter().any(|m| m.contains("recruit, vignette, sequence, open_board, meter_add, meter_set, meter_show, clock_start, clock_set, clock_stop, set_act, rest, end)")), "{unknown:?}");
     drop_scratch(&data);
 }
 

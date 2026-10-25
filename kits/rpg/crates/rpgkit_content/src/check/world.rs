@@ -2,14 +2,14 @@
 //! problem of a world entry (id, name, enums, references across the lineage and connections, overrides, the rules of
 //! its kind) and of a world manifest, and the soft warnings over a world.
 
-use super::{campaign, dialogue, encounter, map, quest, shop, travel, View};
+use super::{board, campaign, dialogue, encounter, map, quest, shop, story, travel, View};
 use crate::source::{content, fields};
 use aegis_content::world::split_qid;
 use aegis_core::json::{self, gstr, Dict};
 use serde_json::Value;
 
-/// WorldSchema.KINDS, then CAMPAIGN1's kinds (the loader's list).
-pub const KINDS: [&str; 16] = crate::source::WORLD_KINDS;
+/// WorldSchema.KINDS, then CAMPAIGN1's and STORYUI1's kinds (the loader's list).
+pub const KINDS: [&str; 19] = crate::source::WORLD_KINDS;
 const TUNING_KEYS: [&str; 5] = ["hp_pct", "power", "armor", "speed", "ap"];
 const ITEM_TUNING_KEYS: [&str; 3] = ["power", "mitigation", "burden"];
 const STANCES: [&str; 4] = ["ally", "rival", "enemy", "neutral"];
@@ -107,7 +107,11 @@ pub fn validate_entry(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &
         "factions" => errors.extend(faction_errors(v, w, &e)),
         "characters" => errors.extend(character_errors(v, w, &e)),
         "items" => errors.extend(item_errors(v, &e)),
-        "quests" => errors.extend(quest_errors(v, w, &e)),
+        "quests" => {
+            errors.extend(quest_errors(v, w, &e));
+            // STORYUI1 4.5: the board fields
+            errors.extend(board::quest_board_errors(v, w, &e));
+        }
         "encounters" => errors.extend(encounter_errors(v, w, &e)),
         "loot" => errors.extend(quest::loot_entry_errors(v, &e)),
         "dialogues" => errors.extend(dialogue::tree_errors(v, w, &e)),
@@ -116,6 +120,9 @@ pub fn validate_entry(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &
         "meters" => errors.extend(campaign::meter_errors(v, w, &e)),
         "checkpoints" => errors.extend(campaign::checkpoint_errors(v, w, &e)),
         "triggers" => errors.extend(campaign::trigger_errors(v, w, &e)),
+        "vignettes" => errors.extend(story::vignette_errors(v, w, &e)),
+        "sequences" => errors.extend(story::sequence_errors(v, w, &e)),
+        "boards" => errors.extend(board::board_errors(&e)),
         _ => {}
     }
     // CAMPAIGN1 11.4: reserved flag keys in the entry's conditions and flag lists
@@ -208,6 +215,10 @@ fn shape_errors(kind: &str, e: &Dict) -> Vec<String> {
         }
         "checkpoints" => list_errors(&mut errors, &["met_when", "warn_days", "effects"]),
         "triggers" => list_errors(&mut errors, &["when", "effects", "then"]),
+        // STORYUI1 4.1-4.4: the json fields of the story kinds
+        "vignettes" => list_errors(&mut errors, &["cards"]),
+        "sequences" => list_errors(&mut errors, &["steps"]),
+        "boards" => list_errors(&mut errors, &["requires_flags"]),
         "encounters" => {
             if json::aget(e, "party").len() as i64 > PARTY_MAX {
                 errors.push("The party holds at most 4 members.".into());
@@ -627,6 +638,7 @@ pub fn manifest_errors(v: &View, w: &str) -> Vec<String> {
     errors.extend(dialogue::service_lines_errors(m.get("service_lines").unwrap_or(&Value::Object(Dict::new())), "Service lines"));
     errors.extend(ruleset_errors(v, m));
     errors.extend(campaign::manifest_errors(v, w, m));
+    errors.extend(story::manifest_errors(v, w, m));
     errors
 }
 
@@ -711,6 +723,7 @@ pub fn world_warnings(v: &View, w: &str) -> Vec<String> {
     out.extend(character_asset_warnings(v, w));
     out.extend(super::assets::prop_warnings(v, w));
     out.extend(campaign::warnings(v, w));
+    out.extend(story::warnings(v, w));
     out
 }
 

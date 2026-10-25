@@ -36,21 +36,29 @@ const AFTER_GODOT: [&str; 13] = [
 ];
 
 /// Retired parity, world manifests only (world.json): CAMPAIGN1-S (HISTORY 2026-10-25) a manifest's `campaign`,
-/// `purse`, `rest` and `defeat`, written as `{}` (an encounter's `purse` line is still compared).
-const MANIFEST_AFTER_GODOT: [&str; 4] = ["\"campaign\": {}", "\"purse\": {}", "\"rest\": {}", "\"defeat\": {}"];
+/// `purse`, `rest` and `defeat`, written as `{}` (an encounter's `purse` line is still compared); STORYUI1-S (HISTORY
+/// 2026-10-26) its `start_sequence`, written as "".
+const MANIFEST_AFTER_GODOT: [&str; 5] = ["\"campaign\": {}", "\"purse\": {}", "\"rest\": {}", "\"defeat\": {}", "\"start_sequence\": \"\""];
+
+/// Retired parity, world quests only (worlds/<w>/quests.json): STORYUI1-S (HISTORY 2026-10-26) a quest's board
+/// fields `board`, `track`, `show_locked` and `closed_text`, written with their defaults (a dialogue choice's
+/// `show_locked` line is still compared).
+const QUEST_AFTER_GODOT: [&str; 4] = ["\"board\": \"\"", "\"track\": \"side\"", "\"show_locked\": false", "\"closed_text\": \"\""];
 
 /// Retired parity, kind level: CAMPAIGN1-S (HISTORY 2026-10-25) the world kinds `meters`, `checkpoints` and
-/// `triggers` (Godot's WorldCatalog.save_all wrote no such files).
-const WORLD_KINDS_AFTER_GODOT: [&str; 3] = ["meters", "checkpoints", "triggers"];
+/// `triggers`; STORYUI1-S (HISTORY 2026-10-26) the world kinds `vignettes`, `sequences` and `boards` (Godot's
+/// WorldCatalog.save_all wrote no such files).
+const WORLD_KINDS_AFTER_GODOT: [&str; 6] = ["meters", "checkpoints", "triggers", "vignettes", "sequences", "boards"];
 
-/// `text` without the AFTER_GODOT field lines, and in a world manifest without the MANIFEST_AFTER_GODOT ones (a
-/// dropped last field takes the comma off the line before it).
-fn at_freeze(text: &str, manifest: bool) -> String {
+/// `text` without the AFTER_GODOT field lines, and without the file's own retired lines (`extra`: a world manifest's
+/// MANIFEST_AFTER_GODOT, a world quests file's QUEST_AFTER_GODOT); a dropped last field takes the comma off the line
+/// before it.
+fn at_freeze(text: &str, extra: &[&str]) -> String {
     let mut out: Vec<String> = Vec::new();
     for line in text.lines() {
         let t = line.trim();
         let field = t.trim_end_matches(',');
-        if AFTER_GODOT.contains(&field) || (manifest && MANIFEST_AFTER_GODOT.contains(&field)) {
+        if AFTER_GODOT.contains(&field) || extra.contains(&field) {
             if !t.ends_with(',') {
                 if let Some(prev) = out.last_mut() {
                     if prev.ends_with(',') {
@@ -110,11 +118,16 @@ fn writer_saves_exactly_what_godot_saves() {
         if rel.file_name().is_some_and(|n| n == "encounters.json") && !want.is_empty() {
             want = godot_encounters_folded(&want);
         }
-        let manifest = rel.file_name().is_some_and(|n| n == "world.json");
+        let in_world = rel.starts_with("worlds");
+        let extra: &[&str] = match rel.file_name().and_then(|n| n.to_str()) {
+            Some("world.json") => &MANIFEST_AFTER_GODOT,
+            Some("quests.json") if in_world => &QUEST_AFTER_GODOT,
+            _ => &[],
+        };
         match text {
             Err(e) => diffs.push(format!("{}: {e}", path.display())),
-            Ok(t) if at_freeze(&t, manifest) != want => {
-                let t = at_freeze(&t, manifest);
+            Ok(t) if at_freeze(&t, extra) != want => {
+                let t = at_freeze(&t, extra);
                 let line = t.lines().zip(want.lines()).position(|(a, b)| a != b).unwrap_or(0);
                 diffs.push(format!("{} line {}:\n  file   {:?}\n  writer {:?}", path.display(), line + 1, want.lines().nth(line), t.lines().nth(line)));
             }

@@ -1,6 +1,7 @@
 //! Typed content catalog (classes, units, skills, items, passives, encounters, terrain, and the engine-only derived
 //! stats of DERIVE1 and ruleset rows of RULESET1), and the campaign vocabulary of CAMPAIGN1 (kinds, effect kinds, read
-//! keys, the manifest blocks with their defaults).
+//! keys, the manifest blocks with their defaults) and the story vocabulary of STORYUI1 (kinds, card and step keys,
+//! story effects, limits, the step reader).
 //!
 //! Source today: the resolved catalog the Godot exporter writes (the game's `parity/out/catalog.json`), i.e. exactly the
 //! entries Godot's `ContentCatalog.entries(kind)` returns after item-family resolution and schema normalisation.
@@ -814,5 +815,108 @@ pub struct DefeatRule {
 impl DefeatRule {
     pub fn from_obj(o: &Obj) -> Self {
         Self { mode: string(o, "mode", "wake"), to: string(o, "to", ""), days: int(o, "days", 0) }
+    }
+}
+
+// ---- Story (STORYUI1 4.1-4.8, kit hook; engine-only, no Godot original) ---------------------------------------------
+
+/// STORYUI1 4.1, 4.3, 4.4: the world kinds of the story layer (files `vignettes.json`, `sequences.json`, `boards.json`).
+pub const STORY_KINDS: [&str; 3] = ["vignettes", "sequences", "boards"];
+/// 4.2: a card's style.
+pub const CARD_STYLES: [&str; 4] = ["image", "text", "title", "line"];
+/// 4.2: the keys a card takes (any other key is refused).
+pub const CARD_KEYS: [&str; 14] = ["style", "image", "top", "bottom", "ash", "title", "subtitle", "text", "speaker", "fade_in_ms", "fade_out_ms", "hold_ms", "cue", "when"];
+/// 4.1: a vignette holds 1..CARDS_MAX cards.
+pub const CARDS_MAX: usize = 24;
+/// 4.2: the longest card title, subtitle and text (characters).
+pub const CARD_TITLE_MAX: usize = 48;
+pub const CARD_SUBTITLE_MAX: usize = 80;
+pub const CARD_TEXT_MAX: usize = 360;
+/// 4.2: the card timings (ms): fades 0..FADE_MS_MAX, holds 0..HOLD_MS_MAX (0 waits for the player).
+pub const FADE_MS_MAX: i64 = 3000;
+pub const HOLD_MS_MAX: i64 = 20000;
+pub const FADE_IN_MS: i64 = 600;
+pub const FADE_OUT_MS: i64 = 400;
+/// 4.1: the default frame (letterbox and fade) colour, also a card backdrop's default top.
+pub const FRAME_COLOUR: &str = "#0a0b10";
+/// 4.1: a vignette's `music` that means silence ("" keeps the music playing; anything else is a track).
+pub const MUSIC_NONE: &str = "none";
+/// 4.1: a vignette's music track ends with this (a path under the asset layers' `audio/`).
+pub const MUSIC_EXT: &str = ".ogg";
+/// 4.1, 4.2: the asset folder music tracks and card cues sit under.
+pub const AUDIO_DIR: &str = "audio/";
+/// W3: the token kinds of a card text, `{flag:KEY}` (the flag's value as text) and `{member:KEY}` (the name of the
+/// member or character whose id the flag holds).
+pub const TOKEN_KINDS: [&str; 2] = ["flag", "member"];
+/// 4.3: a sequence holds 1..STEPS_MAX steps; an effects step 1..STEP_EFFECTS_MAX effects.
+pub const STEPS_MAX: usize = 40;
+pub const STEP_EFFECTS_MAX: usize = 8;
+/// 4.3: the step kinds.
+pub const STEP_KINDS: [&str; 5] = ["vignette", "fight", "effects", "enter", "end"];
+/// 4.3: the step kinds that may only be the last step.
+pub const LAST_STEP_KINDS: [&str; 2] = ["enter", "end"];
+/// 4.3, Q5: what a lost or fled story fight does (`abort` the default).
+pub const FIGHT_OUTCOMES: [&str; 3] = ["retry", "abort", "continue"];
+/// 4.3, Q7: where an `end` step goes (`map` the default).
+pub const END_TO: [&str; 2] = ["map", "menu"];
+/// 4.7: the story effect kinds and their keys besides `effect`, all three in dialogue choices; meter rules,
+/// checkpoints and triggers take `vignette` and `sequence`; a sequence's effects step takes `vignette` only.
+pub const STORY_EFFECTS: [(&str, &[&str]); 3] = [("vignette", &["vignette"]), ("sequence", &["sequence"]), ("open_board", &["board"])];
+/// 4.3: the effects a sequence's `effects` step never takes (they open a screen or start a sequence).
+pub const SEQUENCE_BANNED_EFFECTS: [&str; 5] = ["fight", "turn_in", "open_shop", "open_board", "sequence"];
+/// 4.5: a board quest's section.
+pub const TRACKS: [&str; 2] = ["main", "side"];
+/// 4.5: the longest Closed line of a board quest; 4.4: the longest board intro.
+pub const CLOSED_TEXT_MAX: usize = 80;
+pub const BOARD_INTRO_MAX: usize = 160;
+/// 4.7: the service line id of the board choice.
+pub const BOARD_SERVICE: &str = "board";
+
+/// The keys a step of `kind` takes (`kind` included; an unknown kind takes only `kind`).
+pub fn step_keys(kind: &str) -> &'static [&'static str] {
+    match kind {
+        "vignette" => &["kind", "vignette"],
+        "fight" => &["kind", "encounter", "on_lost", "on_fled"],
+        "effects" => &["kind", "effects"],
+        "enter" => &["kind", "location", "anchor"],
+        "end" => &["kind", "to"],
+        _ => &["kind"],
+    }
+}
+
+/// W3: a card token's kind and key (`flag:act` -> ("flag", "act")), None for a token that is not `kind:key`.
+pub fn split_token(token: &str) -> Option<(&str, &str)> {
+    token.split_once(':')
+}
+
+/// B9: the flag the first open of board `board` sets (true).
+pub fn board_opened_flag(board: &str) -> String {
+    format!("board.{board}.opened")
+}
+
+/// One step of a story sequence (4.3), read with its defaults.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Step {
+    Vignette { vignette: String },
+    /// `on_lost` and `on_fled`: one of FIGHT_OUTCOMES.
+    Fight { encounter: String, on_lost: String, on_fled: String },
+    Effects { effects: Vec<Value> },
+    /// `anchor` "" = the location's entry.
+    Enter { location: String, anchor: String },
+    /// `to`: one of END_TO.
+    End { to: String },
+}
+
+impl Step {
+    /// The step `o` holds; None for an unknown kind.
+    pub fn from_obj(o: &Obj) -> Option<Self> {
+        Some(match string(o, "kind", "").as_str() {
+            "vignette" => Step::Vignette { vignette: string(o, "vignette", "") },
+            "fight" => Step::Fight { encounter: string(o, "encounter", ""), on_lost: string(o, "on_lost", "abort"), on_fled: string(o, "on_fled", "abort") },
+            "effects" => Step::Effects { effects: array(o, "effects").to_vec() },
+            "enter" => Step::Enter { location: string(o, "location", ""), anchor: string(o, "anchor", "") },
+            "end" => Step::End { to: string(o, "to", "map") },
+            _ => return None,
+        })
     }
 }

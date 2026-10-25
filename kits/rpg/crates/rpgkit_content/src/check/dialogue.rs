@@ -1,6 +1,8 @@
 //! Dialogue rules of the world checks (DialogueRules): trees, nodes, choices, choice conditions and effects, service
 //! lines, and the soft tree and gone-NPC warnings. CAMPAIGN1 11.3: every effect list (nodes, choices, and the meter
 //! rules, checkpoints and triggers of `check::campaign`) knows the campaign effects; flag effects refuse reserved keys.
+//! STORYUI1 4.7: every list knows the story effects `vignette`, `sequence` and `open_board`, and a sequence's effects
+//! step is a list of its own (no effect that opens a screen or starts a sequence); the service line `board`.
 
 use super::quest::{flag_key_ok, flag_value_ok, rep_value_error};
 use super::world::{party_character_errors, ref_errors};
@@ -35,32 +37,55 @@ const EFFECTS: [(&str, &[&str]); 9] = [
     ("recruit", &["character"]),
 ];
 const NODE_EFFECTS: [&str; 3] = ["set_flag", "add_flag", "give"];
-/// CAMPAIGN1 T2: the dialogue effects that open a screen (not in meter rules, checkpoints or triggers).
-const SCREEN_EFFECTS: [&str; 3] = ["turn_in", "open_shop", "fight"];
+/// STORYUI1 4.7: the story effect a node takes besides NODE_EFFECTS (the choice order rules keep NODE_EFFECTS).
+const NODE_STORY_EFFECTS: [&str; 1] = ["vignette"];
+/// CAMPAIGN1 T2: the dialogue effects that open a screen (not in meter rules, checkpoints or triggers); STORYUI1's
+/// `open_board` is one.
+const SCREEN_EFFECTS: [&str; 4] = ["turn_in", "open_shop", "fight", "open_board"];
+/// STORYUI1 4.7: choice effects that end the choice's effects (the board pane opens, the sequence starts).
+const LAST_STORY_EFFECTS: [&str; 2] = ["open_board", "sequence"];
 
-/// Which effect list is checked: a node's, a choice's (the order rules apply), or a campaign row's (a meter rule's, a
-/// checkpoint's or a trigger's: CAMPAIGN1 T2, no effect that opens a screen).
+/// Which effect list is checked: a node's, a choice's (the order rules apply), a campaign row's (a meter rule's, a
+/// checkpoint's or a trigger's: CAMPAIGN1 T2, no effect that opens a screen), or a sequence's effects step (STORYUI1
+/// 4.3: none of SEQUENCE_BANNED_EFFECTS).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EffectList {
     Node,
     Choice,
     Campaign,
+    Sequence,
 }
 
-/// An effect kind's keys besides `effect`: the dialogue effects, then the campaign effects (CAMPAIGN1 11.3).
+/// Every effect kind with its keys besides `effect`: the dialogue effects, the story effects (STORYUI1 4.7), then the
+/// campaign effects (CAMPAIGN1 11.3).
+fn all_effects() -> impl Iterator<Item = &'static (&'static str, &'static [&'static str])> {
+    EFFECTS.iter().chain(rpgkit_data::STORY_EFFECTS.iter()).chain(rpgkit_data::CAMPAIGN_EFFECTS.iter())
+}
+
+/// An effect kind's keys besides `effect`.
 fn effect_keys(effect: &str) -> Option<&'static [&'static str]> {
-    EFFECTS.iter().chain(rpgkit_data::CAMPAIGN_EFFECTS.iter()).find(|x| x.0 == effect).map(|x| x.1)
+    all_effects().find(|x| x.0 == effect).map(|x| x.1)
+}
+
+/// Whether list `list` refuses effect kind `effect` (a campaign row: the screen effects; a sequence step: 4.3's).
+fn refused(list: EffectList, effect: &str) -> bool {
+    match list {
+        EffectList::Campaign => SCREEN_EFFECTS.contains(&effect),
+        EffectList::Sequence => rpgkit_data::SEQUENCE_BANNED_EFFECTS.contains(&effect),
+        _ => false,
+    }
 }
 
 /// The effect kinds a list takes, for messages.
 fn effect_names(list: EffectList) -> Vec<&'static str> {
-    EFFECTS.iter().chain(rpgkit_data::CAMPAIGN_EFFECTS.iter()).map(|x| x.0).filter(|n| list != EffectList::Campaign || !SCREEN_EFFECTS.contains(n)).collect()
+    all_effects().map(|x| x.0).filter(|n| !refused(list, n)).collect()
 }
 const EFFECT_GOLD_MAX: i64 = 99999;
 const ADD_DELTA_MAX: i64 = 100;
 const ITEM_COUNT_MAX: i64 = 99;
 const MAX_ITEM_KEYS: usize = 8;
-const SERVICE_IDS: [&str; 7] = ["greeting", "offer", "accept", "decline", "turn_in", "shop", "farewell"];
+/// ServiceCatalog's line ids, then STORYUI1's `board` (4.7).
+const SERVICE_IDS: [&str; 8] = ["greeting", "offer", "accept", "decline", "turn_in", "shop", "farewell", rpgkit_data::BOARD_SERVICE];
 const TOKENS: [&str; 4] = ["npc", "quest", "shop", "gold"];
 const TEXT_TOKENS: [&str; 2] = ["npc", "gold"];
 
@@ -297,14 +322,15 @@ fn ref_value_errors(v: &View, w: &str, raw: &Value, ref_kind: &str, label: &str)
     }
 }
 
-/// DialogueRules.effects_errors (`node_level`: node effects, set_flag / add_flag / give only; otherwise choice
-/// effects with the order rules).
+/// DialogueRules.effects_errors (`node_level`: node effects, set_flag / add_flag / give and STORYUI1's vignette;
+/// otherwise choice effects with the order rules).
 pub fn effects_errors(v: &View, w: &str, raw: &Value, label: &str, node_level: bool) -> Vec<String> {
     list_errors(v, w, raw, label, if node_level { EffectList::Node } else { EffectList::Choice })
 }
 
 /// The effects_errors of any effect list (CAMPAIGN1 11.3: the campaign effects are known to every list; a node takes
-/// set_flag / add_flag / give only, a choice has the order rules, a campaign row takes no effect that opens a screen).
+/// set_flag / add_flag / give and vignette, a choice has the order rules, a campaign row takes no effect that opens a
+/// screen, a sequence step none of SEQUENCE_BANNED_EFFECTS).
 pub fn list_errors(v: &View, w: &str, raw: &Value, label: &str, kind: EffectList) -> Vec<String> {
     let mut errors = Vec::new();
     if !raw.is_array() {
@@ -330,11 +356,19 @@ pub fn list_errors(v: &View, w: &str, raw: &Value, label: &str, kind: EffectList
         };
         names.push(effect.clone());
         let el = format!("{label} effect {} ({effect})", k + 1);
-        if kind == EffectList::Node && !NODE_EFFECTS.contains(&effect.as_str()) {
+        // STORYUI1 4.7: a node queues a vignette (the conversation goes on); `sequence` and `open_board` close the
+        // conversation or open a screen, so they belong on a choice. Godot's message stays for its own effects.
+        if kind == EffectList::Node && LAST_STORY_EFFECTS.contains(&effect.as_str()) {
+            errors.push(format!("{el}: {effect} closes the conversation or opens a screen; put it on a choice (node effects: set_flag, add_flag, give, vignette)."));
+        } else if kind == EffectList::Node && !NODE_EFFECTS.contains(&effect.as_str()) && !NODE_STORY_EFFECTS.contains(&effect.as_str()) {
             errors.push(format!("{el}: Node effects may only be set_flag, add_flag or give."));
         }
         if kind == EffectList::Campaign && SCREEN_EFFECTS.contains(&effect.as_str()) {
             errors.push(format!("{el}: {effect} opens a screen; queue a battle or a dialogue in then instead."));
+            continue;
+        }
+        if kind == EffectList::Sequence && refused(kind, &effect) {
+            errors.push(format!("{el}: {effect} can't run in a sequence step (use a fight step, or a dialogue outside the sequence)."));
             continue;
         }
         for key in fx.keys().filter(|k| *k != "effect" && !allowed.contains(&k.as_str())) {
@@ -350,6 +384,12 @@ pub fn list_errors(v: &View, w: &str, raw: &Value, label: &str, kind: EffectList
         // CAMPAIGN1 11.3: nothing runs after an end
         if names.iter().position(|n| n == "end").is_some_and(|at| at + 1 != names.len()) {
             errors.push(format!("{label}: end must be the last effect."));
+        }
+        // STORYUI1 4.7: the board pane opens and a sequence starts after the choice's other effects
+        for last in LAST_STORY_EFFECTS {
+            if names.iter().position(|n| n == last).is_some_and(|at| at + 1 != names.len()) {
+                errors.push(format!("{label}: {last} must be the last effect."));
+            }
         }
     }
     errors
@@ -404,6 +444,10 @@ fn effect_errors(v: &View, w: &str, effect: &str, fx: &Dict, el: &str) -> Vec<St
         "give" | "take" => errors.extend(goods_errors(v, fx, el)),
         "open_shop" => errors.extend(ref_value_errors(v, w, fx.get("shop").unwrap_or(&Value::from("")), "shops", &format!("{el} shop"))),
         "fight" => errors.extend(ref_value_errors(v, w, fx.get("encounter").unwrap_or(&Value::from("")), "encounters", &format!("{el} encounter"))),
+        // STORYUI1 4.7
+        "vignette" => errors.extend(ref_value_errors(v, w, fx.get("vignette").unwrap_or(&Value::from("")), "vignettes", &format!("{el} vignette"))),
+        "sequence" => errors.extend(ref_value_errors(v, w, fx.get("sequence").unwrap_or(&Value::from("")), "sequences", &format!("{el} sequence"))),
+        "open_board" => errors.extend(ref_value_errors(v, w, fx.get("board").unwrap_or(&Value::from("")), "boards", &format!("{el} board"))),
         "recruit" => match fx.get("character").and_then(Value::as_str).filter(|s| !s.is_empty()) {
             None => errors.push(format!("{el}: choose a character.")),
             Some(id) if v.worlds.resolve(w, "characters", id).is_empty() => errors.push(format!("{el}: Recruit: unknown character '{id}'.")),

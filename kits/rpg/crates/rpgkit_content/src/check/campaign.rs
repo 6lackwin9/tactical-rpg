@@ -478,8 +478,8 @@ pub fn trigger_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors
 }
 
-/// T2: a `then` list: items with exactly one of `vignette` (an id), `battle` (an encounter), `dialogue` (a dialogue,
-/// with an optional `speaker` character).
+/// T2: a `then` list: items with exactly one of `vignette` (a STORYUI1 vignette), `battle` (an encounter), `dialogue`
+/// (a dialogue, with an optional `speaker` character).
 pub fn then_errors(v: &View, w: &str, raw: &Value, label: &str) -> Vec<String> {
     let mut errors = Vec::new();
     let Some(items) = raw.as_array() else { return vec![format!("{label}: then must be a list.")] };
@@ -497,7 +497,8 @@ pub fn then_errors(v: &View, w: &str, raw: &Value, label: &str) -> Vec<String> {
         }
         let r = json::s(d, set[0]);
         match set[0] {
-            "vignette" if !aegis_content::schema::is_id(&r) => errors.push(format!("{il}: vignette '{r}' must be an id.")),
+            // STORYUI1 4.1: a vignette of the world's lineage
+            "vignette" => errors.extend(ref_errors(v, w, &format!("{il} vignette"), "vignettes", &r)),
             "battle" => errors.extend(ref_errors(v, w, &format!("{il} battle"), "encounters", &r)),
             "dialogue" => errors.extend(ref_errors(v, w, &format!("{il} dialogue"), "dialogues", &r)),
             _ => {}

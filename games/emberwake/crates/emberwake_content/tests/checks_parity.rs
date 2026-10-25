@@ -27,9 +27,11 @@ fn kept(messages: Vec<String>) -> Vec<String> {
 /// a closed set: the gear types `polearm` and `scourge`, the family engine rule `reach`, the passive effect type
 /// `stagger_taken`, the buffs `steadfast` and `stealth`. Each ", <item>" ending at ",", ")", "." or the end of a
 /// message is taken out (both sides, so a Godot text that names one stays compared); every other word is compared.
-/// CAMPAIGN1-S (HISTORY 2026-10-25): the campaign effect kinds in the dialogue effect list.
-const LIST_ITEMS_AFTER_GODOT: [&str; 15] =
-    ["polearm", "scourge", "reach", "stagger_taken", "steadfast", "stealth", "meter_add", "meter_set", "meter_show", "clock_start", "clock_set", "clock_stop", "set_act", "rest", "end"];
+/// CAMPAIGN1-S (HISTORY 2026-10-25): the campaign effect kinds in the dialogue effect list. STORYUI1-S (HISTORY
+/// 2026-10-26): the story effect kinds in the same list and the service line `board`.
+const LIST_ITEMS_AFTER_GODOT: [&str; 19] = [
+    "polearm", "scourge", "reach", "stagger_taken", "steadfast", "stealth", "meter_add", "meter_set", "meter_show", "clock_start", "clock_set", "clock_stop", "set_act", "rest", "end", "vignette", "sequence", "open_board", "board",
+];
 
 fn at_freeze(message: &str) -> String {
     let mut out = message.to_string();
