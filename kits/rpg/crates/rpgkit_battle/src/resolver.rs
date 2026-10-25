@@ -1,5 +1,7 @@
 //! CombatResolver (scripts/combat/arena/combat_resolver.gd): the round timeline. Commands pay AP and enter their
 //! stance when they START; their effect lands at the end of their last block, highest initiative first.
+//! RULESET1 T1 (engine-only): an action lands at its impact block; recovery blocks booked after it (enemy-side units
+//! under `enemy_moves`) keep the unit busy until `end`. In classic `impact == end`.
 
 use crate::command::{hazard_round_end, CmdKind, Command};
 use crate::world::{UnitId, World};
@@ -12,6 +14,9 @@ pub struct ScheduledAction {
     pub unit: UnitId,
     pub command: Command,
     pub start: i32,
+    /// The block the action lands in (its last windup block): `start + block_cost - 1` (RULESET1 T1).
+    pub impact: i32,
+    /// The last block it occupies: `impact + recovery` (classic: `impact`).
     pub end: i32,
     pub cancelled: bool,
 }
@@ -65,16 +70,19 @@ impl Resolver {
         }
     }
 
+    /// Books `command` from `start`: refused when it (recovery included, RULESET1 T2) does not fit the round or overlaps
+    /// another live action of the unit (T3: a unit in recovery takes no other action).
     pub fn schedule(&mut self, unit: UnitId, command: Command, start: i32) -> bool {
         self.register(unit);
-        let end = start + command.block_cost - 1;
+        let impact = start + command.block_cost - 1;
+        let end = impact + command.recovery.max(0);
         if start < 1 || end > self.total_blocks {
             return false;
         }
         if self.scheduled.iter().any(|a| a.unit == unit && !a.cancelled && !(end < a.start || start > a.end)) {
             return false;
         }
-        self.scheduled.push(ScheduledAction { unit, command, start, end, cancelled: false });
+        self.scheduled.push(ScheduledAction { unit, command, start, impact, end, cancelled: false });
         true
     }
 
@@ -94,13 +102,14 @@ impl Resolver {
                 }
             }
         }
-        let mut resolving: Vec<usize> = (0..self.scheduled.len()).filter(|&i| !self.scheduled[i].cancelled && self.scheduled[i].end == block).collect();
+        let mut resolving: Vec<usize> = (0..self.scheduled.len()).filter(|&i| !self.scheduled[i].cancelled && self.scheduled[i].impact == block).collect();
         let inits: Vec<i32> = (0..self.scheduled.len()).map(|i| self.scheduled[i].command.initiative(w)).collect();
         godot_sort(&mut resolving, |a, b| inits[*a] > inits[*b]);
         resolving
     }
 
-    /// Commands starting now pay AP (skill + stance switch; debt allowed), enter their stance and run on_start.
+    /// Commands starting now pay AP (skill + stance switch; debt allowed; RULESET1 T11: not the units `pays_ap` spares),
+    /// enter their stance and run on_start.
     fn begin_actions(&mut self, w: &mut World, block: i32) {
         for i in 0..self.scheduled.len() {
             let a = &self.scheduled[i];
@@ -109,7 +118,9 @@ impl Resolver {
             }
             let c = a.unit;
             let total = a.command.ap_cost + a.command.stance_switch_cost;
-            w.units[c].ap -= total;
+            if w.pays_ap(c) {
+                w.units[c].ap -= total;
+            }
             if let Some(s) = a.command.stance_on_start {
                 if s != w.units[c].stance {
                     w.units[c].set_stance(s);
@@ -151,7 +162,7 @@ impl Resolver {
     /// Stance breaks end the broken units' running guards; a flow move then enters its end stance for free. The combos
     /// are recorded: exploits, then breaks, then the flow.
     fn apply_combo(&mut self, w: &mut World, idx: usize) {
-        let end = self.scheduled[idx].end;
+        let at = self.scheduled[idx].impact;
         let broken = self.scheduled[idx].command.broken_targets.clone();
         let (actor, skill) = (self.scheduled[idx].unit, self.scheduled[idx].command.name.clone());
         for (victim, status) in &self.scheduled[idx].command.exploited {
@@ -162,7 +173,7 @@ impl Resolver {
         }
         for b in broken {
             for other in self.scheduled.iter_mut() {
-                let running = other.start <= end && other.end >= end;
+                let running = other.start <= at && other.end >= at;
                 if other.unit == b && running && !other.cancelled {
                     if let CmdKind::Defend { guard_broken, .. } = &mut other.command.kind {
                         *guard_broken = true;

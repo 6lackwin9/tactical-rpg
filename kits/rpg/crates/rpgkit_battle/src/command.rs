@@ -109,6 +109,9 @@ pub struct Command {
     pub source: UnitId,
     pub priority: i32,
     pub block_cost: i32,
+    /// RULESET1 T1: blocks booked after the impact (enemy-side units under `enemy_moves`; 0 otherwise). The action
+    /// lands at its last `block_cost` block and occupies `recovery` more.
+    pub recovery: i32,
     pub name: String,
     pub ap_cost: i32,
     pub stance_switch_cost: i32,
@@ -135,6 +138,7 @@ impl Command {
             source,
             priority,
             block_cost,
+            recovery: 0,
             name: String::new(),
             ap_cost: 0,
             stance_switch_cost: 0,
@@ -186,7 +190,8 @@ impl Command {
                     return String::new();
                 }
                 let verb = if too_close { "backs off from" } else { "closes in on" };
-                format!("[Chase] {} {verb} {}: {} to {} (1 AP)", w.units[src].name, w.units[t].name, from, to)
+                let ap = if w.pays_ap(src) { "1 AP" } else { "no AP" };
+                format!("[Chase] {} {verb} {}: {} to {} ({ap})", w.units[src].name, w.units[t].name, from, to)
             }
             CmdKind::Defend { grant_status, status_rounds, extra_grants, .. } => {
                 if (grant_status.is_empty() && extra_grants.is_empty()) || !w.units[src].is_active() {
@@ -626,7 +631,9 @@ fn follow(w: &mut World, src: UnitId, t: UnitId, band: (i32, i32), follow_tiles:
         if route.is_empty() || !w.move_unit(src, route[0]) {
             return;
         }
-        w.units[src].ap -= 1;
+        if w.pays_ap(src) {
+            w.units[src].ap -= 1;
+        }
         left -= 1;
     }
 }
@@ -669,8 +676,11 @@ fn walk(w: &mut World, rng: &mut GodotRng, src: UnitId, planned: &[V2], expected
         return (moved, cut, blocked_by, notes);
     }
     if (moved as usize) < planned.len() {
+        let pays = w.pays_ap(src);
         let u = &mut w.units[src];
-        u.ap = u.max_ap.min(u.ap + (planned.len() as i32 - moved));
+        if pays {
+            u.ap = u.max_ap.min(u.ap + (planned.len() as i32 - moved));
+        }
         cut = true;
         if blocked_by.is_empty() {
             blocked_by = "no route".into();

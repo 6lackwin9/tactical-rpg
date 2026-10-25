@@ -192,7 +192,7 @@ pub fn build_steps(w: &World, plan: &mut Plan, actor: UnitId, profile: &AiProfil
         if advance_toward(w, plan, actor, &st, &ranked) {
             continue;
         }
-        let strike_cost = skill::ap_cost(&w.cat.skills[book.lowest(Kind::Attack)], Some(&w.units[actor]));
+        let strike_cost = skill::ap_cost_by(&w.cat.skills[book.lowest(Kind::Attack)], Some(&w.units[actor]), &w.ruleset);
         if rests < 2 && st.blocks_left() >= 2 && st.ap_left < strike_cost + 1 {
             rests += 1;
             if plan.add_step(w, actor, PlanStep::self_skill(book.find("rest").unwrap()), true).is_empty() {
@@ -1306,7 +1306,8 @@ fn strike_chain(w: &World, foe: UnitId, target: UnitId, at: V2, by_block: i32) -
             continue;
         }
         let mut hits = ((by_block - move_blocks) as f64 / s.blocks.max(1) as f64).floor() as i32;
-        let cost = skill::ap_cost(s, Some(fu));
+        // RULESET1 T10, T11: the AP the foe pays (none under enemy_moves)
+        let cost = if w.pays_ap(foe) { skill::ap_cost_by(s, Some(fu), &w.ruleset) } else { 0 };
         if cost > 0 {
             hits = hits.min(((fu.ap - tiles) as f64 / cost as f64).floor() as i32);
         }
@@ -1336,7 +1337,7 @@ fn taunt_pull(w: &World, plan: &Plan, actor: UnitId, st: &SimState, ranked: &[Un
 
 fn reserve_heal(w: &World, plan: &mut Plan, actor: UnitId, profile: &AiProfile, cap: i32) -> Option<UnitId> {
     let au = &w.units[actor];
-    let mut heals: Vec<SkillId> = w.book().available(Kind::Support, cap, Some(au)).into_iter().filter(|s| skill::heals(&w.cat.skills[*s]) && skill::ap_cost(&w.cat.skills[*s], Some(au)) <= au.ap).collect();
+    let mut heals: Vec<SkillId> = w.book().available(Kind::Support, cap, Some(au)).into_iter().filter(|s| skill::heals(&w.cat.skills[*s]) && (!w.pays_ap(actor) || skill::ap_cost_by(&w.cat.skills[*s], Some(au), &w.ruleset) <= au.ap)).collect();
     if heals.is_empty() {
         return None;
     }

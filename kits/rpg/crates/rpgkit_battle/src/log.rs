@@ -303,7 +303,8 @@ pub fn riposte_entry(w: &World, r: &Reaction, round: i32, block: i32) -> Entry {
 /// command's start note: "[Chase] ..." or "[Dash] ..."). None for any other note.
 pub fn move_note_entry(w: &World, a: &ScheduledAction, round: i32, block: i32, message: &str) -> Option<Entry> {
     let (skill, subtype, outcome, prefix) = if message.starts_with("[Chase]") {
-        ("Chase", "Closes the gap (1 AP)", "CHASED", "[Chase] ")
+        // RULESET1 T11: a unit that pays no AP chases for free
+        ("Chase", if w.pays_ap(a.unit) { "Closes the gap (1 AP)" } else { "Closes the gap (no AP)" }, "CHASED", "[Chase] ")
     } else if message.starts_with("[Dash]") {
         ("Dash", "Gap-close (no extra AP)", "DASHED", "[Dash] ")
     } else {

@@ -3,7 +3,8 @@
 
 use crate::grid::{V2, DIRS};
 use rpgkit_data::{Catalog, SkillDef};
-use rpgkit_rules::unit::skill_in_group;
+use rpgkit_rules::ruleset::{self, Ruleset};
+use rpgkit_rules::unit::{skill_in_group, BASE_AP};
 use rpgkit_rules::{Stance, Unit};
 
 pub type SkillId = usize;
@@ -154,6 +155,18 @@ pub fn ap_cost(s: &SkillDef, actor: Option<&Unit>) -> i32 {
     let shift = actor.map(|a| a.ap_cost_modifier).unwrap_or(0);
     let base = if k == Kind::Move { 1 } else { s.level.clamp(1, 5) };
     (base + shift).clamp(1, 5)
+}
+
+/// RULESET1 T10: the AP of `s` under `rules`. With the extension `ap_cost` on and the row's `ap_cost` set (>= 0), an
+/// authored kind costs `ap_cost` + the unit's modifier, clamped 0..BASE_AP; Move, Rest, Target and Status keep their
+/// rules; otherwise (and always in classic) `ap_cost` above. Who pays at all is `World::pays_ap` (T11).
+pub fn ap_cost_by(s: &SkillDef, actor: Option<&Unit>, rules: &Ruleset) -> i32 {
+    let k = kind(s);
+    if rules.has(ruleset::AP_COST) && s.ap_cost >= 0 && !matches!(k, Kind::Move | Kind::Rest | Kind::Target | Kind::Status) {
+        let shift = actor.map(|a| a.ap_cost_modifier).unwrap_or(0);
+        return (s.ap_cost + shift).clamp(0, BASE_AP);
+    }
+    ap_cost(s, actor)
 }
 
 pub fn is_area(s: &SkillDef) -> bool {

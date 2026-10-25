@@ -130,6 +130,8 @@ pub struct PlanEntry {
     pub goal: V2,
     pub skill_ap: i32,
     pub blocks_override: i32,
+    /// RULESET1 T1: blocks booked after the impact (`World::recovery_of`; 0 for party-side units and in classic).
+    pub recovery: i32,
     pub est_damage: i32,
     pub est_heal: i32,
     pub cells: Vec<V2>,
@@ -159,6 +161,7 @@ impl PlanEntry {
             goal: NO_CELL,
             skill_ap: 0,
             blocks_override: 0,
+            recovery: 0,
             est_damage: 0,
             est_heal: 0,
             cells: Vec::new(),
@@ -185,8 +188,14 @@ impl PlanEntry {
         }
     }
 
+    /// The impact block: where the action lands (its last windup block).
     pub fn end_block(&self, w: &World) -> i32 {
         self.start_block + self.blocks(w) - 1
+    }
+
+    /// The last block the action occupies: the impact plus its recovery (RULESET1 T1).
+    pub fn last_block(&self, w: &World) -> i32 {
+        self.end_block(w) + self.recovery
     }
 
     /// PlanEntry.build_command: the real command for the resolver.
@@ -239,8 +248,10 @@ impl PlanEntry {
             Kind::Move => Command::new(actor, 0, blocks, CmdKind::Walk { path: self.path.clone(), expected_start: self.pos_before, goal: self.goal, approach: self.target, moved_tiles: 0, cut_short: false, blocked_by: String::new() }),
             Kind::Disengage => Command::new(actor, 0, s.blocks, CmdKind::Disengage { dest: self.pos_after, max_tiles: s.jump_tiles, landed: false, moved_tiles: 0 }),
             Kind::Target => Command::new(actor, 2, 1, CmdKind::Target { target: self.target }),
-            Kind::Rest => Command::new(actor, 0, s.blocks, CmdKind::Rest { recover_ap: s.recover_ap }),
+            // RULESET1 T11: a unit that pays no AP gains none either
+            Kind::Rest => Command::new(actor, 0, s.blocks, CmdKind::Rest { recover_ap: if w.pays_ap(actor) { s.recover_ap } else { 0 } }),
         };
+        cmd.recovery = self.recovery;
         cmd.name = s.name.clone();
         cmd.ap_cost = self.skill_ap;
         cmd.stance_switch_cost = self.switch_ap;
@@ -544,9 +555,10 @@ impl Plan {
         let last = st.entries.len() - 1;
         let e = &mut st.entries[last];
         e.item = Some(con.clone());
-        e.skill_ap = command::ITEM_AP;
-        // add_entry charged the skill's AP; an item costs ITEM_AP
-        st.ap_left += skill::ap_cost(&w.cat.skills[sid], Some(&w.units[c])) - command::ITEM_AP;
+        // add_entry charged the skill's AP; an item costs ITEM_AP (RULESET1 T11: nothing for a unit that pays no AP)
+        let charged = e.skill_ap;
+        e.skill_ap = if w.pays_ap(c) { command::ITEM_AP } else { 0 };
+        st.ap_left += charged - e.skill_ap;
         if st.dry_entry == last as i32 && st.ap_left >= 0 {
             st.dry_entry = -1;
         }
@@ -1066,27 +1078,32 @@ impl Plan {
         -1
     }
 
-    /// Places one skill at the lowest free block and pays its AP (skill + stance switch; debt allowed).
+    /// Places one skill at the lowest free block and pays its AP (skill + stance switch; debt allowed). RULESET1: its
+    /// recovery blocks follow the impact and must fit too (T1, T2); the AP is `skill::ap_cost_by` (T10), none for a
+    /// unit that pays no AP (T11).
     #[allow(clippy::too_many_arguments)]
     fn add_entry(&self, w: &World, c: UnitId, st: &mut SimState, sid: SkillId, index: i32, foe: Option<UnitId>, dirs: &[V2], blocks_override: i32, cells: &[V2]) -> String {
         let s = &w.cat.skills[sid];
         let n = if blocks_override > 0 { blocks_override } else { s.blocks };
-        let start = self.free_start(st, n);
+        let recovery = w.recovery_of(c, s);
+        let start = self.free_start(st, n + recovery);
         if start < 0 {
-            return format!("Not enough free blocks: {} needs {}, {} left.", s.name, n, st.blocks_left());
+            return format!("Not enough free blocks: {} needs {}, {} left.", s.name, n + recovery, st.blocks_left());
         }
         let u = &w.units[c];
+        let pays = w.pays_ap(c);
         let mut e = PlanEntry::new(sid, start, index);
         e.blocks_override = blocks_override;
+        e.recovery = recovery;
         e.target = foe;
         e.path = dirs.to_vec();
         e.tiles = dirs.len() as i32;
         e.cells = cells.to_vec();
         e.direction = dirs.first().copied().unwrap_or(ZERO);
-        e.skill_ap = skill::ap_cost(s, Some(u)) * if skill::kind(s) == Kind::Move { (dirs.len() as i32).max(1) } else { 1 };
+        e.skill_ap = if pays { skill::ap_cost_by(s, Some(u), &w.ruleset) * if skill::kind(s) == Kind::Move { (dirs.len() as i32).max(1) } else { 1 } } else { 0 };
         // RULESET1_INTENT IN3: under round_intent the stance stays (Neutral) and switching costs nothing
         let stances = w.ruleset.stances();
-        e.switch_ap = if stances { skill::switch_cost(s, st.stance) } else { 0 };
+        e.switch_ap = if stances && pays { skill::switch_cost(s, st.stance) } else { 0 };
         e.stance_before = st.stance;
         e.stance_after = if stances { skill::stance_after(s, st.stance) } else { st.stance };
         e.pos_before = st.pos;
@@ -1101,7 +1118,7 @@ impl Plan {
         let total = e.total_ap();
         let after = e.stance_after;
         st.entries.push(e);
-        st.next_block = start + n;
+        st.next_block = start + n + recovery;
         st.acted = true;
         let was_solvent = st.ap_left >= 0;
         st.ap_left -= total;
@@ -1109,7 +1126,7 @@ impl Plan {
             st.dry_entry = st.entries.len() as i32 - 1;
         }
         st.stance = after;
-        if skill::kind(s) == Kind::Rest {
+        if skill::kind(s) == Kind::Rest && pays {
             st.ap_left = st.max_ap.min(st.ap_left + s.recover_ap);
         }
         String::new()

@@ -365,7 +365,7 @@ fn skills_of(cat: &Catalog, s: &Session, u: UnitId) -> Vec<Value> {
                 continue;
             }
             let reach = if k == Kind::Support { skill::support_reach(sk, &w.units[u]) } else { skill::reach_for(sk, &w.units[u]) };
-            out.push(json!({"skill": sk.id, "name": sk.name, "kind": sk.kind, "ap": skill::ap_cost(sk, Some(&w.units[u])), "blocks": sk.blocks, "reach": [reach.0, reach.1], "area": sk.area, "description": sk.raw.get("description")}));
+            out.push(json!({"skill": sk.id, "name": sk.name, "kind": sk.kind, "ap": if w.pays_ap(u) { skill::ap_cost_by(sk, Some(&w.units[u]), &w.ruleset) } else { 0 }, "blocks": sk.blocks, "reach": [reach.0, reach.1], "area": sk.area, "description": sk.raw.get("description")}));
         }
     }
     out

@@ -198,6 +198,22 @@ impl World {
         }
     }
 
+    /// Whether `c` pays AP (RULESET1 T11): always, but for enemy-side units under the option `enemy_moves`, which pay
+    /// nothing at a start (no chase tile, no move, no switch), gain none (Rest, refunds) and so never fall into debt.
+    pub fn pays_ap(&self, c: UnitId) -> bool {
+        !(self.ruleset.has(rpgkit_rules::ruleset::ENEMY_MOVES) && self.enemies.contains(&c))
+    }
+
+    /// The recovery blocks `c` books after the impact of `s` (RULESET1 T1, T4): the row's `recovery_blocks` for an
+    /// enemy-side unit under `enemy_moves` using an Attack, Support or Focus skill (not an item); else 0 (party-side
+    /// units, classic).
+    pub fn recovery_of(&self, c: UnitId, s: &rpgkit_data::SkillDef) -> i32 {
+        if self.pays_ap(c) || skill::is_item(s) || !matches!(skill::kind(s), skill::Kind::Attack | skill::Kind::Support | skill::Kind::Focus) {
+            return 0;
+        }
+        s.recovery_blocks.max(0)
+    }
+
     pub fn friends_of(&self, c: UnitId) -> &[UnitId] {
         if self.allies.contains(&c) {
             &self.allies

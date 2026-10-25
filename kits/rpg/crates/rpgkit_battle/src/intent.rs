@@ -26,8 +26,10 @@ pub struct Line {
     pub target: Option<UnitId>,
     /// NO_CELL when the line aims at no tile.
     pub cell: V2,
-    /// (start block, end block); (0, 0) when arriving or idle.
+    /// (start block, impact block: where it lands); (0, 0) when arriving or idle. Classic: the impact is the end.
     pub blocks: (i32, i32),
+    /// RULESET1 T1: the recovery blocks booked after the impact (0 in classic; not in the trace).
+    pub recovery: i32,
     /// The action's display name ("" when arriving or idle).
     pub skill: String,
 }
@@ -98,7 +100,7 @@ pub fn cell_of(cmd: &Command) -> V2 {
 }
 
 pub fn line_of(w: &World, a: &ScheduledAction) -> Line {
-    Line { kind: kind_of(w, &a.command), target: target_of(&a.command), cell: cell_of(&a.command), blocks: (a.start, a.end), skill: a.command.name.clone() }
+    Line { kind: kind_of(w, &a.command), target: target_of(&a.command), cell: cell_of(&a.command), blocks: (a.start, a.impact), recovery: a.end - a.impact, skill: a.command.name.clone() }
 }
 
 /// `unit`'s live (not cancelled) scheduled actions in block order.
@@ -136,7 +138,7 @@ pub fn intent_of(w: &World, unit: UnitId, scheduled: &[ScheduledAction], on_grid
     let actions = actions_of(unit, scheduled);
     if actions.is_empty() {
         let kind = if on_grid_at_schedule.contains(&unit) { IDLE } else { ARRIVING };
-        return Intent { unit, line: Line { kind, target: None, cell: NO_CELL, blocks: (0, 0), skill: String::new() }, revealed: enraged, enraged, readers: Vec::new(), plan: Vec::new(), morale_state: "", morale_group: -1 };
+        return Intent { unit, line: Line { kind, target: None, cell: NO_CELL, blocks: (0, 0), recovery: 0, skill: String::new() }, revealed: enraged, enraged, readers: Vec::new(), plan: Vec::new(), morale_state: "", morale_group: -1 };
     }
     let readers = readers_of(w, &actions);
     let revealed = !readers.is_empty() || enraged;
