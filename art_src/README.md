@@ -21,6 +21,11 @@ takes), plus variant sheets such as `mara_voss_variant.png`.
   `inquisitorial_purifier`, `calcified_husk`, `captain_vane`, `proctor_quell`, `guild_master_orlov`,
   `inquisitor_prelate_nemeth`, `tess`, `bram`, `aline`); the other candidates stay as `<id>_gen<time>_<n>.png` takes
   (`render_beast` has three: the two first candidates and one re-roll).
+- ART3B (2026-10-25): a stylized re-roll of the nine human portraits (the `ART3_PROMPTS.md` style block with its
+  stylization and hair lines), 2 takes each. The user's picks are now `<id>.png` with `generated_as` naming the
+  original take: take 1 of `captain_vane`, `proctor_quell`, `guild_master_orlov`, `inquisitor_prelate_nemeth`,
+  `calcified_husk`, `tess` and `bram`, take 2 of `inquisitorial_purifier` and `aline`. Each ART3 pick went back to its
+  original `_gen` name as a take; `render_beast` and `ash_crawler` keep their ART3 picks.
 - `ui_1.png`: the PLAYUI1 UI icon sheet (5x5 on a magenta key; prompt in
   `games/emberwake/docs/specs/PLAYUI1_ICONS.md`); `tools/portraits/sheets.py ui art_src/ui_1.png ui_1` cuts it into
   the 22 icons at their layer paths (`--contact` makes a review sheet).
