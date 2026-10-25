@@ -7,7 +7,7 @@
 //! people stand on their tiles as body sprites (`walk` while moving, else `idle`; side view, mirrored by the last
 //! left or right step; a person in the conversation faces the party), with today's tokens as the fallback.
 
-use aegis_core::assets::{ClipPlayer, Facing};
+use aegis_core::assets::{ClipPlayer, Facing, View};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::hud::{hud_bar, hud_key, hud_open, Hud, HUD_H};
 use crate::music;
@@ -240,13 +240,11 @@ impl RegionMap {
         begin_fight(cx, fight, runner);
     }
 
-    /// Faces `dir` (a step or a use): the sprite turns left or right on a horizontal one and keeps its side on an up or
-    /// down one (spec PLAYUI1 2.4).
+    /// Faces `dir` (a step or a use): the sprite turns four ways (DIR4-M, `Facing::toward`): up or down on an up or
+    /// down one (keeping its last left/right for side rows), left or right on a horizontal one.
     fn turn(&mut self, dir: Pos) {
         self.facing = dir;
-        if dir.0 != 0 {
-            self.leader_face = Facing::side(dir.0 < 0);
-        }
+        self.leader_face = self.leader_face.toward(dir.0 as i32, dir.1 as i32);
     }
 
     /// Whether the leader walks at the clock's now: on a walked path, or within `WALK_LINGER_MS` of the last step.
@@ -658,8 +656,9 @@ impl Screen<GameCx> for RegionMap {
                     if sprite.is_some() {
                         top = sprite_rect(r).y;
                     }
-                    // facing the party while in the conversation; else the sheets' right
-                    let face = if talk_tiles.contains(&at) { Facing::default().toward((gs.position.0 - at.0) as i32, 0) } else { Facing::default() };
+                    // facing the party while in the conversation (four ways, DIR4-M: up or down when the party is
+                    // more above or below, keeping the sheets' right); else the sheets' right
+                    let face = if talk_tiles.contains(&at) { Facing::default().toward((gs.position.0 - at.0) as i32, (gs.position.1 - at.1) as i32) } else { Facing::default() };
                     npc = Some(NpcDraw { body, sprite, palette, initial: s(who, "name").chars().next().unwrap_or('?').to_string(), face, offset: idle_offset(&s(who, "id")) });
                 }
                 // 2.2: the first service is the badge (turn_in and offer are today's `ready` and `quest`)
@@ -1125,7 +1124,8 @@ fn idle_offset(id: &str) -> u64 {
 const IDLE_SPREAD_MS: u64 = 4096;
 
 /// A sprite as drawn (PLAYUI1-R): the body, the clip and frame shown, mirrored or not, the drawn rect and the pixel
-/// size the frame was fitted to.
+/// size the frame was fitted to; the facing asked for and the view of the row shown (DIR4-M: a side row when the body
+/// has no up or down row for the clip).
 struct SpriteDrawn {
     body: String,
     clip: String,
@@ -1133,12 +1133,23 @@ struct SpriteDrawn {
     flip: bool,
     rect: Rect,
     px: i32,
+    face: Facing,
+    view: View,
 }
 
 impl SpriteDrawn {
-    /// The agent link's line for it (`state.sprites`).
+    /// The agent link's line for it (`state.sprites`): `facing` the view asked for, `view` the row drawn (`side`,
+    /// `down`, `up`).
     fn info(&self, id: &str) -> Value {
-        json!({"id": id, "body": self.body, "clip": self.clip, "frame": self.frame, "left": self.flip, "rect": [self.rect.x, self.rect.y, self.rect.w, self.rect.h]})
+        json!({"id": id, "body": self.body, "clip": self.clip, "frame": self.frame, "left": self.flip, "facing": view_name(self.face.view), "view": view_name(self.view), "rect": [self.rect.x, self.rect.y, self.rect.w, self.rect.h]})
+    }
+}
+
+/// A view's name on the agent link (`side`, `down`, `up`).
+fn view_name(v: View) -> &'static str {
+    match v {
+        View::Side => "side",
+        other => other.name(),
     }
 }
 
@@ -1165,8 +1176,9 @@ fn leader_art(cx: &Cx) -> (String, String) {
 }
 
 /// Body `body` standing on tile `r` (spec PLAYUI1 2.4): a foot shadow in `foot`, then the frame `player` plays at
-/// `now` in `face` (side view; mirrored facing left), fitted one source pixel per screen pixel. None when it does not
-/// play (the caller draws today's token).
+/// `now` in `face` (`Art::played_facing`, DIR4-M: the up or down row when the body has one, else the side row,
+/// mirrored facing left), fitted one source pixel per screen pixel. None when it does not play (the caller draws
+/// today's token).
 #[allow(clippy::too_many_arguments)]
 fn draw_sprite(ui: &mut Ui<RAct>, cx: &mut Cx, body: &str, palette: &str, player: &ClipPlayer, now: u64, face: Facing, r: Rect, foot: Rgba) -> Option<SpriteDrawn> {
     let sr = sprite_rect(r);
@@ -1176,7 +1188,8 @@ fn draw_sprite(ui: &mut Ui<RAct>, cx: &mut Cx, body: &str, palette: &str, player
     let feet = (r.y + r.h) as f32 - 2.0;
     ui.p.ellipse(r.x as f32 + r.w as f32 / 2.0, feet, r.w as f32 * 0.4, r.h as f32 * 0.14, rgba(foot[0], foot[1], foot[2], FOOT_ALPHA));
     ui.p.image(img, sr);
-    Some(SpriteDrawn { body: body.to_string(), clip: f.clip, frame: f.frame, flip, rect: sr, px })
+    let view = if f.side { View::Side } else { face.view };
+    Some(SpriteDrawn { body: body.to_string(), clip: f.clip, frame: f.frame, flip, rect: sr, px, face, view })
 }
 
 /// A marker on its tile: a person's sprite (PLAYUI1-R; their ring and token, or initial, without a body), else the
@@ -2125,8 +2138,20 @@ mod sprite_tests {
         assert_eq!((r.y + r.h, r.x + r.w / 2), (t.y + t.h, t.x + t.w / 2), "bottom-centred on the tile");
     }
 
-    /// 2.4: a step plays `walk` and a step left mirrors the sprite; an up or down step keeps the side; a step right
-    /// turns it back; standing still it plays `idle` again.
+    /// The view a body draws `clip` in for a `facing` (`side`, `down`, `up`): the facing's view when the body has a
+    /// row of that view for the clip, else the side row (DIR4 3.2).
+    fn drawn_view(cx: &mut Cx, body: &str, clip: &str, facing: &str) -> &'static str {
+        let has = cx.art.clips(body).is_some_and(|c| c.clips.iter().any(|c| c.of == clip && view_name(c.view) == facing));
+        match facing {
+            "down" if has => "down",
+            "up" if has => "up",
+            _ => "side",
+        }
+    }
+
+    /// 2.4 and DIR4-M: a step plays `walk` and a step left mirrors the sprite; a down or up step faces down or up
+    /// (`Facing::toward`, keeping the last left/right); a step right turns it back; standing still it plays `idle`
+    /// again. The row drawn is the facing's when the body has one, else the side row.
     #[test]
     fn steps_walk_and_turn_the_leader() {
         let (mut cx, mut g) = (art_cx(), gfx());
@@ -2141,51 +2166,73 @@ mod sprite_tests {
         let at = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|&(x, y)| free((x, y)) && free((x - 1, y)) && free((x - 1, y + 1)) && free((x, y + 1))).expect("room for three steps");
         cx.gs_mut().position = at;
         let mut checks = 0;
-        for (dir, left) in [((-1, 0), true), ((0, 1), true), ((1, 0), false)] {
+        // (step, facing, left/right kept): left, down (keeps left), right, up (keeps right), back to the start
+        for (dir, facing, left) in [((-1, 0), "side", true), ((0, 1), "down", true), ((1, 0), "side", false), ((0, -1), "up", false)] {
             let from = cx.gs().position;
             map.step(&mut cx, dir);
             assert_eq!(cx.gs().position, (from.0 + dir.0, from.1 + dir.1), "the step {dir:?} from {from:?}: {:?}", cx.log);
+            let want = Facing { view: View::parse(facing).unwrap_or(View::Side), left };
+            assert_eq!(map.leader_face, want, "the facing after the step {dir:?}");
             frame(&mut map, &mut cx, &mut g, 1.0);
             let sp = sprite(&map, &cx, "party").expect("the leader");
-            assert_eq!((sp["clip"].clone(), sp["left"].clone()), (json!("walk"), json!(left)), "after the step {dir:?}");
+            let body = s(json::dict(&sp), "body");
+            let view = drawn_view(&mut cx, &body, "walk", facing);
+            assert_eq!((sp["clip"].as_str().map(|c| c.starts_with("walk")), sp["facing"].clone(), sp["view"].clone()), (Some(true), json!(facing), json!(view)), "after the step {dir:?}");
+            // a side row mirrors facing left; an up or down row never does
+            assert_eq!(sp["left"], json!(view == "side" && left), "mirrored after the step {dir:?}");
             checks += 1;
         }
-        assert_eq!(checks, 3);
+        assert_eq!(checks, 4);
         map.anim_ms += WALK_LINGER_MS + 1.0;
         frame(&mut map, &mut cx, &mut g, 1.0);
         assert_eq!(sprite(&map, &cx, "party").expect("the leader")["clip"], json!("idle"), "standing still");
     }
 
-    /// 2.4: every person with a body is a sprite on their tile (idle, facing right); in a conversation opened from any
-    /// side the person turns to the party (left when the party is to their left), and the leader faces them.
+    /// 2.4 and DIR4-M: every person with a body is a sprite on their tile (idle, facing right); in a conversation
+    /// opened from any side the person turns to the party four ways (`Facing::toward`: left when the party is to their
+    /// left, down or up when it stands straight below or above, keeping the sheets' right), and the leader faces them
+    /// the same way. The row drawn is the facing's when the body has one, else the side row.
     #[test]
     fn people_are_sprites_and_face_the_party_while_talking() {
         let (mut cx, mut g) = (art_cx(), gfx());
-        let mut sides = (0, 0);
+        // (left, right, down or up) conversations checked
+        let mut sides = (0, 0, 0);
         let n = super::talk_tests::each_talk(&mut cx, |map, cx, party, npc| {
             frame(map, cx, &mut g, 1.0);
             let sprites = map.state(cx)["sprites"].as_array().cloned().unwrap_or_default();
-            let them = sprites.iter().find(|s| s["id"] != "party" && stands_on(map, rect_of(s)) == npc);
+            let them = sprites.iter().find(|s| s["id"] != "party" && stands_on(map, rect_of(s)) == npc).cloned();
             let Some(them) = them else {
                 // no body anywhere in their chain: today's token
                 return true;
             };
-            assert_eq!(them["clip"], json!("idle"), "{npc:?}");
-            let left = party.0 < npc.0;
-            assert_eq!(them["left"], json!(left), "{} at {npc:?} talking with the party at {party:?}", them["id"]);
-            if party.0 != npc.0 {
-                let lead = sprites.iter().find(|s| s["id"] == "party").expect("the leader");
-                assert_eq!(lead["left"], json!(npc.0 < party.0), "the leader faces {npc:?} from {party:?}");
-                if left { sides.0 += 1 } else { sides.1 += 1 }
+            let (dx, dy) = ((party.0 - npc.0) as i32, (party.1 - npc.1) as i32);
+            let want = Facing::default().toward(dx, dy);
+            let facing = view_name(want.view);
+            let view = drawn_view(cx, &s(json::dict(&them), "body"), "idle", facing);
+            assert_eq!(them["clip"].as_str().map(|c| c.starts_with("idle")), Some(true), "{npc:?}");
+            assert_eq!((them["facing"].clone(), them["view"].clone()), (json!(facing), json!(view)), "{} at {npc:?} talking with the party at {party:?}", them["id"]);
+            assert_eq!(them["left"], json!(view == "side" && want.left), "{} at {npc:?} talking with the party at {party:?}", them["id"]);
+            // the leader faces them (from a fresh map: the sheets' right kept on an up or down turn)
+            let lead = sprites.iter().find(|s| s["id"] == "party").expect("the leader");
+            let lead_want = Facing::default().toward(-dx, -dy);
+            assert_eq!(map.leader_face, lead_want, "the leader faces {npc:?} from {party:?}");
+            assert_eq!(lead["facing"], json!(view_name(lead_want.view)), "the leader faces {npc:?} from {party:?}");
+            if dy.abs() > dx.abs() {
+                sides.2 += 1;
+            } else if want.left {
+                sides.0 += 1;
+            } else {
+                sides.1 += 1;
             }
             map.end_talk(cx);
             frame(map, cx, &mut g, 1.0);
             let after = sprite(map, cx, them["id"].as_str().unwrap_or("")).expect("still drawn");
-            assert_eq!(after["left"], json!(false), "out of the conversation the sheets face right");
+            assert_eq!((after["left"].clone(), after["facing"].clone()), (json!(false), json!("side")), "out of the conversation the sheets face right");
             true
         });
+        println!("conversations checked (left, right, down or up): {sides:?}");
         assert!(n > 0, "someone on a map of the world talks");
-        assert!(sides.0 > 0 && sides.1 > 0, "talked to from both sides: {sides:?}");
+        assert!(sides.0 > 0 && sides.1 > 0 && sides.2 > 0, "talked to from both sides and from above or below: {sides:?}");
     }
 
     /// 2.4: on every map of the world each person whose body chain loads is a sprite, and the sprites draw in row
@@ -2310,6 +2357,102 @@ mod sprite_tests {
         }
         assert!(checked > 1, "people drawn: {checked}");
         assert!(apart, "two people with different ids at different idle frames");
+    }
+
+    /// DIR4-M: a scratch body `key` (its `body_dir`) under `root` with clips `ids` (one 8 x 8 frame each, 100 ms, looping),
+    /// each `<of>_<view>` id whose side clip is listed a view row of it; every row a lopsided bar (so a mirror shows)
+    /// in its own colour (so the rows differ).
+    fn scratch_body(root: &std::path::Path, key: &str, ids: &[&str]) {
+        const F: u32 = 8;
+        let dir = root.join(aegis_core::assets::body_dir(key));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut px = vec![0u8; (F * F * ids.len() as u32 * 4) as usize];
+        for row in 0..ids.len() as u32 {
+            for x in [1u32, 2, 3, 6] {
+                let i = (((row * F + 4) * F + x) * 4) as usize;
+                px[i..i + 4].copy_from_slice(&[40 + 30 * row as u8, 140, 60, 255]);
+            }
+        }
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(dir.join("sheet.png")).unwrap()), F, F * ids.len() as u32);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&px).unwrap();
+        let clips: Vec<Value> = ids
+            .iter()
+            .map(|id| {
+                let mut c = json!({"id": id, "frames": 1, "ms": [100], "loop": true});
+                for v in ["up", "down"] {
+                    if let Some(of) = id.strip_suffix(&format!("_{v}")).filter(|of| ids.contains(of)) {
+                        c["of"] = json!(of);
+                        c["view"] = json!(v);
+                    }
+                }
+                c
+            })
+            .collect();
+        std::fs::write(dir.join("clips.json"), json!({"frame": [F, F], "clips": clips}).to_string()).unwrap();
+    }
+
+    /// The canvas after a frame with the leader in `face`.
+    fn canvas_facing(map: &mut RegionMap, cx: &mut Cx, g: &mut Gfx, face: Facing) -> Vec<u8> {
+        map.leader_face = face;
+        frame(map, cx, g, 1.0);
+        g.canvas.px.clone()
+    }
+
+    /// Every facing: side, down and up, each right and left.
+    fn facings() -> Vec<Facing> {
+        [View::Side, View::Down, View::Up].into_iter().flat_map(|view| [false, true].map(|left| Facing { view, left })).collect()
+    }
+
+    /// DIR4-M (as DIR4-G check 5): a body without up or down rows (a scratch side body as the leader's, and the
+    /// shipped leader's body when it has none) draws the map in any facing pixel for pixel as the side facing with
+    /// the same left/right (PLAYUI1-R); a body with the rows draws them facing down or up (never mirrored), so the map
+    /// differs from the side facing there.
+    #[test]
+    fn a_body_without_view_rows_draws_the_side_row_exactly_as_before() {
+        let (mut cx, mut g) = (art_cx(), gfx());
+        let chain = emberwake_content::art::body_chain(&leader_art(&cx).0);
+        let key = chain.first().cloned().expect("the leader has a body chain");
+        let same_as_side = |cx: &mut Cx, g: &mut Gfx, what: &str| {
+            let mut map = RegionMap::new(cx);
+            for f in facings() {
+                let want = canvas_facing(&mut map, cx, g, Facing::side(f.left));
+                let got = canvas_facing(&mut map, cx, g, f);
+                assert!(got == want, "{what}: the map in {f:?} draws as the side facing");
+                let sp = sprite(&map, cx, "party").expect("the leader is a sprite");
+                assert_eq!((sp["view"].clone(), sp["left"].clone()), (json!("side"), json!(f.left)), "{what} in {f:?}");
+            }
+        };
+        // the shipped leader's body, when it has no view rows yet
+        let shipped = leader_body(&mut cx).expect("the leader has a body");
+        if cx.art.clips(&shipped).is_some_and(|c| c.clips.iter().all(|c| c.view == View::Side)) {
+            same_as_side(&mut cx, &mut g, &shipped);
+        } else {
+            println!("the shipped leader body {shipped} has view rows: checked by the scratch bodies only");
+        }
+        // scratch bodies as the leader's: side clips only, then with front and back rows
+        let root = std::env::temp_dir().join(format!("emberwake_dir4m_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let side = root.join("side");
+        scratch_body(&side, &key, &["idle", "walk"]);
+        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![side.clone()]));
+        assert_eq!(cx.art.body_problems(&key), Vec::<String>::new(), "the scratch side body loads");
+        same_as_side(&mut cx, &mut g, "the scratch side body");
+        let views = root.join("views");
+        scratch_body(&views, &key, &["idle", "walk", "idle_down", "idle_up", "walk_down", "walk_up"]);
+        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![views.clone()]));
+        assert_eq!(cx.art.body_problems(&key), Vec::<String>::new(), "the scratch view body loads");
+        let mut map = RegionMap::new(&mut cx);
+        for f in facings().into_iter().filter(|f| f.view != View::Side) {
+            let side_px = canvas_facing(&mut map, &mut cx, &mut g, Facing::side(f.left));
+            let got = canvas_facing(&mut map, &mut cx, &mut g, f);
+            let sp = sprite(&map, &cx, "party").expect("the leader is a sprite");
+            let name = view_name(f.view);
+            assert_eq!((sp["clip"].clone(), sp["view"].clone(), sp["left"].clone()), (json!(format!("idle_{name}")), json!(name), json!(false)), "in {f:?}");
+            assert!(got != side_px, "the {name} row differs from the side row on the map ({f:?})");
+        }
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// 2.4 fallback: with no body (the art layers off) the party is today's token, and no sprite is drawn.
