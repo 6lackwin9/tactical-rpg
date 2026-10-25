@@ -87,6 +87,8 @@ Never delete or rewrite entries. When something is replaced, add a row with the 
 | 2026-10-25 | Static terrain only; zone maps in code (decision S12) | replaced (for the timeline ruleset) | HOOKS1: ground and arena hazards, a `zones` catalog kind (the 8 code zones stay for the Ashlands) | The slice's cast needs hazards and data zones (user 2026-10-25, Q-55, Q-56) |
 | 2026-10-25 | CAST1's Act 1 stand-ins for gaps G1, G3-G5, G14, G19, G22, G24, G27-G29 | replaced | HOOKS1's hooks (CAST1-R rewrites the rows) | User rule: the slice ships no stand-ins (Q-55, Q-56) |
 | 2026-10-25 | The lore's Crossbowman AI that targets a unit in its windup | not adopted | Enemies plan before the player confirms (HOOKS1 HQ2) | Enemy plans are drafted first (INTENT1), so a windup is not yet known when the AI picks |
+| 2026-10-25 | FX1 options: the effect table as a data field on skills and families (FQ1 b), a whole-frame shake (FQ2 b), hits shown at the pop with effects as decoration (FQ3 b) | not adopted | The table in code with numbers in tuning; the world layer shakes; hits show at the impact and autoplay waits (FX1 FQ1-FQ3 a) | Planner picks on the recommendations while the user is away (games/emberwake/docs/lore/OPEN_QUESTIONS.md section 4) |
+| 2026-10-25 | The Godot melee bump token tween (`fx_presets.gd`) | not ported | FX1's swing trail and impact sparks; the miss sidestep is ported smaller | The new effects carry the melee read |
 
 New rows go at the end of the table above (append-only); this section stays below it.
 
