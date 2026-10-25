@@ -3,11 +3,11 @@
 # flat-shaded shapes with dark outlines in an Ashlands palette.
 #   python tools/gen_art.py [group ...] [--layer engine|kit|game ...] [--root DIR] [--overwrite] [--list]
 #   python tools/gen_art.py --compare DIR [--spot OUT]
-# Groups: bodies portraits items skills statuses terrain overlays region markers pins chips world_map backdrops menu.
-# Layers (default all): engine = engine/assets/ (the common tileset), kit = kits/rpg/assets/ (class variant bodies,
+# Groups: bodies portraits items skills statuses terrain overlays region markers pins chips world_map backdrops menu stage_tiles battle_props battle_backdrops.
+# Layers (default all): engine = engine/assets/ (the common tileset and the common_stage 4:3 battle tiles), kit = kits/rpg/assets/ (class variant bodies,
 # common portraits, item bases and generic variants, skill kind icons, statuses, map markers, UI pins, intents, badges
-# and chips), game = games/emberwake/assets/ (named bodies and portraits, skill family icons, the named items, the
-# Ashlands tiles, backgrounds). DIR is a workspace root (default: this repository); the three asset roots sit under it.
+# and chips, props/common/{tree,stones} battle props), game = games/emberwake/assets/ (named bodies and portraits, skill family icons, the named items, the
+# Ashlands tiles, backgrounds, backgrounds/battle zone backdrops). DIR is a workspace root (default: this repository); the three asset roots sit under it.
 # An existing file is kept (printed "kept"): the committed art includes ART2 portraits and icons made from art_src/
 # by tools/portraits/, which these placeholders must not replace; --overwrite rewrites them.
 # The six class bodies (units/<class>/base/) and every body of tools/sprites/variants.py (SPRITE2: the goblin variants,
@@ -1535,10 +1535,431 @@ def g_menu(out: Out) -> None:
     save(img, "game", "backgrounds/title/ashlands.png", out)
 
 
+# ------------------------------------------------------------------------------
+# Stage art (STAGE1-T): 4:3 ground tiles, wall faces, battle props, zone backdrops
+# ------------------------------------------------------------------------------
+
+def quant16(img: Image.Image, n: int = 16, keep_top=None) -> Image.Image:
+    # Style A: at most 16 colours per image; only opaque pixels are quantised, transparent ones stay fully transparent
+    rgba = img.convert("RGBA")
+    a = np.asarray(rgba).copy()
+    opaque = a[..., 3] > 0
+    if not opaque.any():
+        return rgba
+    a[~opaque, :3] = a[opaque][0, :3]
+    q = Image.fromarray(a[..., :3], "RGB").quantize(colors=n - (1 if keep_top else 0), method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).convert("RGB")
+    out = np.asarray(q).copy()
+    res = np.zeros(a.shape, dtype=np.uint8)
+    res[..., :3] = out
+    res[..., 3] = a[..., 3]
+    res[~opaque] = 0
+    if keep_top:  # the backdrop's top row stays exactly this colour (one palette slot reserved)
+        res[0, :, :3] = keep_top
+    return Image.fromarray(res, "RGBA")
+
+
+def tnoise(rng, w, h, cell):
+    # value noise that wraps at the edges, so a tile runs on into its neighbour
+    small = rng.random((h // cell, w // cell))
+    big = np.tile(small, (3, 3))
+    im = Image.fromarray((big * 255).astype(np.uint8)).resize((w * 3, h * 3), Image.BICUBIC)
+    return np.asarray(im.crop((w, h, w * 2, h * 2)), dtype=np.float32) / 255.0
+
+
+class WCv:
+    # A 128 x 96 tile canvas in 100-unit x space (y runs 0-75); every shape is drawn at nine offsets so features wrap.
+    def __init__(self):
+        self.c = Cv(128, 96)
+
+    def _each(self, fn, pts):
+        for ox in (-100, 0, 100):
+            for oy in (-75, 0, 75):
+                fn([(x + ox, y + oy) for x, y in pts])
+
+    def ell(self, x, y, rx, fill, ol=None, w=1.2, ry=None):
+        ry = rx * 0.75 if ry is None else ry
+        self._each(lambda p: self.c.ell(p[0][0], p[0][1], rx, ry, fill, ol=ol, w=w), [(x, y)])
+
+    def poly(self, pts, fill, ol=None, w=1.2):
+        self._each(lambda p: self.c.poly(p, fill, ol=ol, w=w), pts)
+
+    def line(self, pts, col, w=1.4):
+        self._each(lambda p: self.c.line(p, col, w=w, ol=None), pts)
+
+
+def squash(pts, x, y):
+    return [(x + dx, y + dy * 0.75) for dx, dy in pts]
+
+
+def stage_tile(name: str, v: int) -> Image.Image:
+    rng = np.random.default_rng(seed_of("stage%s%d" % (name, v)))
+    base, amp = TERRAIN[name]
+    n = tnoise(rng, 128, 96, 16) * 0.6 + tnoise(rng, 128, 96, 4) * 0.4
+    img = Image.fromarray(np.clip(tint(base, n, amp), 0, 255).astype(np.uint8), "RGBA")
+    c = WCv()
+
+    def pt():
+        return float(rng.uniform(0, 100)), float(rng.uniform(0, 75))
+    if name == "floor":
+        for y in (0, 37.5):
+            c.line([(0, y + v * 2), (100, y + v * 2)], "#2c2c34", w=1.6)
+        for row, y in enumerate((0, 37.5)):
+            for x in range(row * 25 + v * 5, 100 + row * 25, 50):
+                c.line([(x, y + v * 2), (x, y + v * 2 + 37.5)], "#2c2c34", w=1.6)
+    elif name == "stone":
+        for _ in range(7):
+            x, y = pt()
+            c.poly(squash([(0, 0), (14, 3), (12, 14), (-2, 11)], x, y), "#6e727c", ol="#33353c")
+    elif name == "grass":
+        for _ in range(18):
+            x, y = pt()
+            c.line([(x, y), (x + 2, y - 7)], "#8a8a4a", w=1.2)
+    elif name == "dirt":
+        for _ in range(8):
+            x, y = pt()
+            c.ell(x, y, 3, "#4c3524")
+    elif name == "sand":
+        for i in range(4):
+            y = 8 + i * 17 + v * 2
+            c.line([(8 + i * 3, y), (50, y - 3), (92 - i * 3, y)], "#8a7a5a", w=1.2)
+    elif name == "snow":
+        for _ in range(12):
+            x, y = pt()
+            c.ell(x, y, 2, "#f4f4f6")
+    elif name in ("shallow_water", "deep_water"):
+        col = "#6aa0b0" if name == "shallow_water" else "#2a5a80"
+        for _ in range(4):
+            x, y = pt()
+            c.line([(x - 10, y), (x - 4, y - 2), (x + 4, y + 2), (x + 10, y)], col, w=1.6)
+    elif name == "mud":
+        for _ in range(6):
+            x, y = pt()
+            c.ell(x, y, 5, "#33261a")
+    elif name == "lava":
+        for _ in range(5):
+            x, y = pt()
+            c.line(squash([(0, 0), (14, 8), (10, 22)], x, y), EMBER2, w=2.4)
+            c.line(squash([(0, 0), (14, 8), (10, 22)], x, y), "#7a2a0a", w=0.8)
+    elif name == "wall":
+        for row in range(4):
+            y = row * 18.75
+            c.line([(0, y), (100, y)], "#15161b", w=2)
+            for x in range(row % 2 * 17, 100, 34):
+                c.line([(x, y), (x, y + 18.75)], "#15161b", w=2)
+        c.poly([(0, 0), (100, 0), (100, 6), (0, 6)], "#4a4d58")
+    elif name == "bridge":
+        for i in range(6):
+            y = i * 12.5
+            c.poly([(0, y + 1), (100, y + 1), (100, y + 12), (0, y + 12)], "#7a5a3a", ol="#3a2a1e", w=1.2)
+    elif name == "rubble":
+        for _ in range(9):
+            x, y = pt()
+            c.poly(squash([(0, 0), (9, 2), (7, 10), (-3, 7)], x, y), "#78746c", ol="#2c2a28")
+    elif name == "burning_ground":
+        for _ in range(3):
+            x, y = pt()
+            c.poly([(x, y - 10), (x + 6, y), (x + 3, y + 7), (x - 3, y + 7), (x - 6, y)], EMBER, ol="#3a2a26")
+        for _ in range(6):
+            x, y = pt()
+            c.ell(x, y, 2, EMBER2)
+    elif name == "toxic_bog":
+        for _ in range(5):
+            x, y = pt()
+            c.ell(x, y, 5, "#8ac03a", ol="#2c4a1a", w=1)
+    elif name == "ice":
+        for _ in range(4):
+            x, y = pt()
+            c.line([(x, y), (x + 14, y + 11)], "#f0fbff", w=1.4)
+    img.alpha_composite(c.c.done())
+    return img
+
+
+def wall_face(v: int) -> Image.Image:
+    # 128 x 48 (drawn 32 x 12): two brick courses of the wall texture at 75 % brightness, mortar every 6 drawn px
+    rng = np.random.default_rng(seed_of("wallface%d" % v))
+    base = shade(TERRAIN["wall"][0], -0.25)
+    n = tnoise(rng, 128, 48, 16) * 0.5 + tnoise(rng, 128, 48, 4) * 0.5
+    img = Image.fromarray(np.clip(tint(base, n, 0.3), 0, 255).astype(np.uint8), "RGBA")
+    d = ImageDraw.Draw(img)
+    mortar = rgb("#101115")
+    for row in range(2):
+        y = row * 24
+        d.rectangle([0, y, 127, y + 2], fill=mortar)
+        d.rectangle([0, y + 3, 127, y + 4], fill=rgb(shade(base, 0.18)))
+        for x in range((row + v) % 2 * 20 + v * 6, 128 + 40, 40):
+            xx = x % 128
+            d.rectangle([xx, y, xx + 2, y + 23], fill=mortar)
+    return img
+
+
+def g_stage_tiles(out: Out) -> None:
+    for name in TERRAIN:
+        if name == "tree":
+            continue
+        for v in range(4):
+            save(quant16(stage_tile(name, v)), "engine", "tilesets/common_stage/%s/v%d.png" % (name, v), out)
+    for v in range(4):
+        save(quant16(wall_face(v)), "engine", "tilesets/common_stage/wall_face/v%d.png" % v, out)
+
+
+TREE_OL = (22, 26, 16, 255)
+
+
+def tree_prop(v: int) -> Image.Image:
+    # 40 x 52: trunk 4 px wide centred at x 20, base 6 px above the bottom; v0-v2 leafy, v3 bare
+    img = Image.new("RGBA", (40, 52), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    wood, wood_hi = rgb("#4a3424"), rgb("#6a4c34")
+    if v == 3:
+        br = rgb("#2a1e16")
+        for a, b in (((20, 36), (6, 22)), ((20, 28), (34, 14)), ((20, 20), (10, 4)), ((20, 14), (30, 2)), ((20, 40), (33, 32))):
+            d.line([a, b], fill=TREE_OL, width=3)
+            d.line([a, b], fill=br, width=1)
+        d.rectangle([17, 12, 22, 45], fill=TREE_OL)
+        d.rectangle([18, 12, 21, 44], fill=wood)
+        d.line([(18, 12), (18, 44)], fill=wood_hi)
+        return img
+    rng = np.random.default_rng(seed_of("tree%d" % v))
+    d.rectangle([17, 26, 22, 45], fill=TREE_OL)
+    d.rectangle([18, 26, 21, 44], fill=wood)
+    d.line([(18, 28), (18, 44)], fill=wood_hi)
+    width = (30, 31, 28)[v]
+    top = (1, 0, 3)[v]
+    cx = 20
+    blobs = [(cx, top + 14, width // 2, 12), (cx - width // 4, top + 18, width // 4 + 1, 9), (cx + width // 4, top + 18, width // 4 + 1, 9),
+             (cx - 3, top + 8, width // 3, 8), (cx + 4, top + 10, width // 3 - 1, 7)]
+    greens = ["#3e4a24", "#566a30", "#7a8a44"]
+    for x, y, rx, ry in blobs:
+        d.ellipse([x - rx - 1, y - ry - 1, x + rx + 1, y + ry + 1], fill=TREE_OL)
+    for x, y, rx, ry in blobs:
+        d.ellipse([x - rx, y - ry, x + rx, y + ry], fill=rgb(greens[0]))
+    for x, y, rx, ry in blobs:  # light from the upper left
+        d.ellipse([x - rx + 1, y - ry + 1, x + rx - 3, y + ry - 3], fill=rgb(greens[1]))
+    for x, y, rx, ry in blobs[3:] + blobs[:1]:
+        d.ellipse([x - rx + 3, y - ry + 2, x + rx - 7, y + ry - 6], fill=rgb(greens[2]))
+    for _ in range(10):  # leaf specks
+        x, y = int(rng.integers(cx - width // 2 + 3, cx + width // 2 - 3)), int(rng.integers(top + 6, top + 26))
+        if img.getpixel((x, y))[3]:
+            d.point((x, y), fill=rgb(greens[0]) if rng.random() < 0.5 else rgb(greens[2]))
+    return img
+
+
+def stones_prop(v: int) -> Image.Image:
+    # 32 x 24: 2-3 small grey stones in the lower half, the largest at most 16 x 9
+    img = Image.new("RGBA", (32, 24), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    ol = (24, 24, 30, 255)
+    sets = (((3, 14, 15, 9), (19, 17, 9, 6), (12, 19, 7, 4)), ((9, 13, 16, 9), (2, 18, 8, 5)))[v]
+    for x, y, w, h in sets:
+        d.rounded_rectangle([x, y, x + w - 1, y + h - 1], radius=3, fill=ol)
+        d.rounded_rectangle([x + 1, y + 1, x + w - 2, y + h - 2], radius=2, fill=rgb("#6e727c"))
+        d.rectangle([x + 2, y + 1, x + max(2, w - 5), y + 2], fill=rgb("#9097a2"))
+        d.rectangle([x + 2, y + h - 3, x + w - 3, y + h - 2], fill=rgb("#4a4d58"))
+    return img
+
+
+def g_battle_props(out: Out) -> None:
+    for v in range(4):
+        save(quant16(tree_prop(v)), "kit", "props/common/tree/v%d.png" % v, out)
+    for v in range(2):
+        save(quant16(stones_prop(v)), "kit", "props/common/stones/v%d.png" % v, out)
+
+
+# Zone backdrops: 384 x 52, opaque; bottom 4 px far ground, 12 columns of 32 px line up with the board
+BD_W, BD_H = 384, 52
+BD_TOP = (10, 14, 24)
+ZONE_GROUND = {"stone_arena": "stone", "forest_clearing": "grass", "river_crossing": "grass", "ruined_courtyard": "stone",
+               "desert_outpost": "sand", "frozen_pass": "snow", "lava_cavern": "floor", "swamp_bog": "mud"}
+
+
+def bd_gap(x: int, cols) -> bool:
+    return any(c0 * 32 <= x < (c1 + 1) * 32 for c0, c1 in cols)
+
+
+def bd_gradient(top, bottom, y0=0, y1=BD_H - 4):
+    arr = np.zeros((BD_H, BD_W, 3), dtype=np.float32)
+    for y in range(BD_H):
+        t = min(1.0, max(0.0, (y - y0) / max(1, y1 - y0)))
+        arr[y, :, :] = [top[i] + (bottom[i] - top[i]) * t for i in range(3)]
+    return Image.fromarray(arr.astype(np.uint8), "RGB").convert("RGBA")
+
+
+def bd_finish(img: Image.Image, zone: str) -> Image.Image:
+    d = ImageDraw.Draw(img)
+    r, g, b, _ = rgb(shade(TERRAIN[ZONE_GROUND[zone]][0], -0.4))
+    d.rectangle([0, BD_H - 4, BD_W - 1, BD_H - 1], fill=(r, g, b, 255))
+    d.line([(0, BD_H - 5), (BD_W - 1, BD_H - 5)], fill=(max(0, r - 14), max(0, g - 14), max(0, b - 14), 255))
+    d.line([(0, 0), (BD_W - 1, 0)], fill=BD_TOP + (255,))
+    return img
+
+
+def bd_trees(d, rng, col, gaps, base_y, h_lo, h_hi, step, pine=False):
+    d.rectangle([0, base_y, BD_W - 1, BD_H - 5], fill=col)
+    x = int(rng.integers(0, step))
+    while x < BD_W:
+        if not bd_gap(x, gaps):
+            h = int(rng.integers(h_lo, h_hi))
+            w = int(rng.integers(8, 14))
+            if pine:
+                d.polygon([(x - w // 2, base_y), (x + w // 2, base_y), (x, base_y - h)], fill=col)
+            else:
+                d.ellipse([x - w, base_y - h, x + w, base_y + 3], fill=col)
+        x += int(rng.integers(step // 2, step + 3))
+
+
+def bd_forest(zone, gaps, far=(16, 28, 16), near=(24, 40, 22), bottom=(18, 30, 20)):
+    rng = np.random.default_rng(seed_of("bd" + zone))
+    img = bd_gradient(BD_TOP, bottom)
+    d = ImageDraw.Draw(img)
+    bd_trees(d, rng, far + (255,), gaps, 24, 8, 16, 14)
+    bd_trees(d, rng, near + (255,), gaps, 34, 10, 20, 17)
+    return img
+
+
+def bd_stone_arena():
+    img = bd_gradient(BD_TOP, (28, 28, 34))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 20, BD_W - 1, 21], fill=(20, 20, 26, 255))  # parapet line
+    for course, y in enumerate((22, 36)):
+        d.rectangle([0, y, BD_W - 1, y + 12], fill=(78, 80, 90, 255) if course else (66, 68, 78, 255))
+        d.line([(0, y), (BD_W - 1, y)], fill=(104, 106, 118, 255))
+        for x in range(course * 12, BD_W, 24):
+            d.line([(x, y), (x, y + 12)], fill=(30, 30, 38, 255))
+        d.line([(0, y + 12), (BD_W - 1, y + 12)], fill=(30, 30, 38, 255))
+    for x in range(48, BD_W, 96):  # a dim torch
+        d.rectangle([x - 1, 26, x + 1, 33], fill=(60, 44, 30, 255))
+        d.ellipse([x - 3, 20, x + 3, 27], fill=(224, 130, 50, 255))
+        d.ellipse([x - 1, 22, x + 1, 25], fill=(255, 210, 120, 255))
+    return img
+
+
+def bd_river():
+    img = bd_forest("river_crossing", ((8, 10),), bottom=(18, 30, 20))
+    d = ImageDraw.Draw(img)
+    for y in range(8, BD_H - 4):  # the river narrows upward between dark banks
+        half = int(6 + (y - 8) * 0.97)
+        cx = 304
+        d.line([(cx - half - 3, y), (cx + half + 3, y)], fill=(14, 22, 14, 255))
+        t = (y - 8) / (BD_H - 12)
+        d.line([(cx - half, y), (cx + half, y)], fill=(int(16 + 20 * t), int(36 + 40 * t), int(56 + 40 * t), 255))
+    return img
+
+
+def bd_courtyard():
+    rng = np.random.default_rng(seed_of("bdcourtyard"))
+    img = bd_gradient(BD_TOP, (34, 32, 38))
+    d = ImageDraw.Draw(img)
+    gaps = ((3, 3), (7, 7))
+    for x0 in range(0, BD_W, 32):
+        c = x0 // 32
+        if bd_gap(x0, gaps):
+            for _ in range(5):  # rubble at the foot of the gap
+                rx = x0 + int(rng.integers(2, 24))
+                d.ellipse([rx, 40 + int(rng.integers(0, 4)), rx + 6, 46], fill=(88, 84, 80, 255), outline=(36, 34, 32, 255))
+            continue
+        top = 14 + (c * 7) % 10  # ragged top
+        d.rectangle([x0, top, x0 + 31, 47], fill=(70, 70, 80, 255))  # cap
+        d.rectangle([x0, top, x0 + 31, top + 2], fill=(98, 100, 112, 255))
+        d.rectangle([x0, 34, x0 + 31, 47], fill=(52, 52, 60, 255))  # face
+        d.line([(x0, 34), (x0 + 31, 34)], fill=(24, 24, 30, 255))
+        for x in range(x0 + (c % 2) * 8, x0 + 32, 16):
+            d.line([(x, 35), (x, 47)], fill=(30, 30, 38, 255))
+        d.line([(x0, 41), (x0 + 31, 41)], fill=(30, 30, 38, 255))
+    return img
+
+
+def bd_desert():
+    rng = np.random.default_rng(seed_of("bddesert"))
+    img = bd_gradient((10, 14, 24), (196, 120, 80), 0, 30)
+    d = ImageDraw.Draw(img)
+    d.polygon([(250, 36), (256, 18), (300, 18), (312, 36)], fill=(104, 62, 50, 255))  # mesa
+    d.rectangle([256, 18, 300, 20], fill=(130, 80, 62, 255))
+    for col, base, amp, per in (((150, 112, 86, 255), 36, 5, 90), ((190, 160, 118, 255), 42, 4, 60)):
+        ph = float(rng.uniform(0, 6))
+        for x in range(BD_W):
+            top = int(base - amp * (0.5 + 0.5 * math.sin(x / per * 6.28 + ph)))
+            d.line([(x, top), (x, BD_H - 5)], fill=col)
+    return img
+
+
+def bd_frozen():
+    rng = np.random.default_rng(seed_of("bdfrozen"))
+    img = bd_gradient(BD_TOP, (60, 80, 110))
+    d = ImageDraw.Draw(img)
+    gaps = ((3, 8),)
+    for col, base, amp, per, hi in (((70, 92, 128, 255), 30, 14, 130, (150, 175, 205, 255)), ((100, 126, 160, 255), 38, 8, 80, (200, 220, 240, 255))):
+        ph = float(rng.uniform(0, 6))
+        for x in range(BD_W):
+            k = 0.5 + 0.5 * math.sin(x / per * 6.28 + ph)
+            if bd_gap(x, gaps):
+                k *= 0.15
+            top = int(base - amp * k)
+            d.line([(x, top), (x, BD_H - 5)], fill=col)
+            d.point((x, top), fill=hi)
+    bd_trees(d, rng, (30, 50, 80, 255), gaps, 40, 8, 16, 18, pine=True)
+    return img
+
+
+def bd_lava():
+    rng = np.random.default_rng(seed_of("bdlava"))
+    img = bd_gradient(BD_TOP, (36, 30, 34))
+    n = tnoise(rng, BD_W, BD_H // 4 * 4 if BD_H % 4 == 0 else 52, 4)
+    px = np.asarray(img).astype(np.float32)
+    px[..., :3] *= (0.85 + 0.3 * n)[..., None]
+    img = quant16(Image.fromarray(np.clip(px, 0, 255).astype(np.uint8), "RGBA"), 8)
+    d = ImageDraw.Draw(img)
+    for x in range(0, BD_W, 11):  # stalactite tips along the top
+        h = int(rng.integers(5, 14))
+        d.polygon([(x, 1), (x + 9, 1), (x + 4, 1 + h)], fill=(70, 60, 72, 255), outline=(14, 12, 18, 255))
+    for _ in range(14):  # glowing cracks
+        x, y = int(rng.integers(0, BD_W)), int(rng.integers(14, 44))
+        pts = [(x, y)]
+        for _ in range(4):
+            x += int(rng.integers(-5, 6))
+            y += int(rng.integers(1, 5))
+            pts.append((x, min(y, BD_H - 6)))
+        d.line(pts, fill=(190, 60, 16, 255), width=4)
+        d.line(pts, fill=(255, 190, 60, 255), width=2)
+    return img
+
+
+def bd_swamp():
+    rng = np.random.default_rng(seed_of("bdswamp"))
+    img = quant16(bd_gradient(BD_TOP, (62, 84, 66)), 6)
+    d = ImageDraw.Draw(img)
+    sil = (6, 12, 8, 255)
+    x = 10
+    while x < BD_W:  # dead trees
+        h = int(rng.integers(18, 34))
+        d.line([(x, 46), (x, 46 - h)], fill=sil, width=2)
+        for k in range(3):
+            y = 46 - h + 4 + k * 6
+            d.line([(x, y), (x + int(rng.integers(5, 10)) * (1 if k % 2 else -1), y - 5)], fill=sil, width=1)
+        x += int(rng.integers(40, 56))
+    for x in range(0, BD_W, 5):  # reeds
+        h = int(rng.integers(5, 12))
+        d.line([(x, 47), (x + int(rng.integers(-1, 2)), 47 - h)], fill=sil)
+    mist = Image.new("RGBA", (BD_W, BD_H), (0, 0, 0, 0))
+    md = ImageDraw.Draw(mist)
+    for y in range(BD_H - 10, BD_H):  # pale mist over the bottom 10 px
+        md.line([(0, y), (BD_W, y)], fill=(200, 222, 208, int(70 + 110 * (y - (BD_H - 10)) / 10)))
+    img.alpha_composite(mist)
+    return img
+
+
+def g_battle_backdrops(out: Out) -> None:
+    zones = {"stone_arena": bd_stone_arena(), "forest_clearing": bd_forest("forest_clearing", ((3, 4), (7, 8))),
+             "river_crossing": bd_river(), "ruined_courtyard": bd_courtyard(), "desert_outpost": bd_desert(),
+             "frozen_pass": bd_frozen(), "lava_cavern": bd_lava(), "swamp_bog": bd_swamp()}
+    for zone, img in zones.items():
+        save(quant16(bd_finish(img, zone), keep_top=BD_TOP).convert("RGB"), "game", "backgrounds/battle/%s.png" % zone, out)
+
+
 GROUPS = {
     "bodies": g_bodies, "portraits": g_portraits, "items": g_items, "skills": g_skills, "statuses": g_statuses,
     "terrain": g_terrain, "overlays": g_overlays, "region": g_region, "markers": g_markers, "pins": g_pins,
     "chips": g_chips, "world_map": g_world_map, "backdrops": g_backdrops, "menu": g_menu,
+    "stage_tiles": g_stage_tiles, "battle_props": g_battle_props, "battle_backdrops": g_battle_backdrops,
 }
 
 

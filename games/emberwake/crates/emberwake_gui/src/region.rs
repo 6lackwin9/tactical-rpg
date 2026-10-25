@@ -1371,7 +1371,7 @@ mod tests {
             ["skills", "kinds", f] | ["skills", f] | ["statuses", f] | ["map", "markers", f] => png(f),
             ["ui", "pins" | "badges" | "chips" | "intents" | "hud" | "markers" | "services", f] | ["ui", f] => png(f),
             ["tilesets", _, _, f] | ["props", _, _, f] => v(f),
-            ["backgrounds", "menu" | "title" | "world_map" | "location", f] => png(f),
+            ["backgrounds", "menu" | "title" | "world_map" | "location" | "battle", f] => png(f),
             ["audio", "sfx", f] => f.ends_with(".wav"),
             ["audio", "music", f] => f.ends_with(".ogg"),
             _ => false,

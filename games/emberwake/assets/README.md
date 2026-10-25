@@ -16,7 +16,7 @@ Tree (section 3 of the spec; a test keeps every file on these patterns):
 - `portraits/{heroes,npcs,elites,bosses}/<id>.png` unique portraits; `portraits/common/<class>_<variant>.png` shared ones.
 - `items/<family>/base.png` and `items/<family>/<icon>.png`; `items/any/{base,<item_type>}.png`.
 - `skills/<family>.png`, `skills/kinds/<kind>.png`; `statuses/<id>.png`; `map/markers/<marker>.png`.
-- `ui/{pins,intents,badges,chips}/<id>.png`; `backgrounds/{menu,title,world_map,location}/<id>.png`.
+- `ui/{pins,intents,badges,chips}/<id>.png`; `backgrounds/{menu,title,world_map,location,battle}/<id>.png`.
 - `tilesets/<set>/<tile>/v<n>.png` (set = a world id, or `common`; variants are the files present).
 - `audio/sfx/<key>.wav`, `audio/music/<key>.ogg` (played by `aegis_ui::audio`).
 
