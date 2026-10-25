@@ -4,9 +4,7 @@ The harness agent list cannot be regrouped, so this file is the readable view: a
 
 ## Active now
 
-2026-10-25 (desktop, mode standard): building the Scarlet Lullaby vertical slice; the user is away (planner picks
-go to `games/emberwake/docs/lore/OPEN_QUESTIONS.md` section 4). Landed: DERIVE1-E, RULESET1-E. Running: KIT1-M, STORYUI1-E,
-CAMPAIGN1-E, CAST1-A7 (one worktree each, `C:/dev/tactical-rpg-<task>`), the HOOKS1 spec. Queue: `docs/TASKS.md`.
+2026-10-26 (desktop, mode standard), paused for the day by the user. Landed today: RULESET1-PL, RULESET1-V, STORYUI1-S, LOCALGEN1, CAST1-S, CAMPAIGN1-M, RULESET1-P (a3081fc). No agents running. Left open: LOCALGEN2 (reviewed, worktree `C:/dev/tactical-rpg-localgen2`; live smoke then land). Next session, in parallel where `Touches` allow: FLAKE1 (first: the flaky shell test failed three landings), RULESET1-K (battle, after P), STORYUI1-W (world story runtime), PORTRAITFX1-S (the one schema task at a time), CAST1-A1 (asset, after HOOKS1-S); then RULESET1-D, ENCOUNTER2-H, CAMPAIGN1-C (after STORYUI1-W: shared world state and save files), FX1-S. Local art next: LOCALGEN2 smoke and land, then PIXEL2 (pixelized faces that keep the expression: Klein redraw vs face-aware pixelize vs a 120 px grid) and LOCALGEN3 (variants first, then text-to-image with the founders as the test, sprite sets from references, props and backgrounds, icons), then ARTPROMPT1 (Gemini web prompt variants for what Klein cannot reach); the PORTRAITFX1 expression cells come from Klein edits (user). Waiting on the user: a look at the Klein expression drafts (`C:/dev/localgen/out/klein_faces`), STORYUI1-F (proposed). Local art: FLUX.2 Klein in ComfyUI is the main local model (`C:/dev/localgen/COMFYUI.md`).
 
 Desktop: the planner keeps this section current. Cloud: the project's area-thread list is the live view (one standing thread per area, `docs/workflow/cloud.md` "Area threads"), so this section changes only at a handover between environments (`docs/workflow/README.md`); merged cloud tasks still get a finished-runs line.
 
