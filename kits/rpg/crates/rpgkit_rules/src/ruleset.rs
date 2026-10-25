@@ -79,6 +79,28 @@ pub fn kind_intent(kind: &str) -> &'static str {
     }
 }
 
+/// The intent Act 2's meter spec reserves (IN1): a skill may take it only when a ruleset row lists it.
+pub const CHANNEL: &str = "channel";
+
+/// RULESET1_INTENT IN4: the `round_intent` values a skill of `kind` may set (beside "" = `kind_intent`): ATTACK assault
+/// or maneuver, DEFEND guard, SUPPORT support or guard (self-only), FOCUS support, DISENGAGE maneuver, the engine kinds
+/// neutral; `channel` (any authored kind) is checked on its own.
+pub fn kind_intents(kind: &str) -> &'static [&'static str] {
+    match kind {
+        "ATTACK" => &["assault", "maneuver"],
+        "DEFEND" => &["guard"],
+        "SUPPORT" => &["support", "guard"],
+        "FOCUS" => &["support"],
+        "DISENGAGE" => &["maneuver"],
+        "MOVE" | "REST" | "TARGET" | "STATUS" => &[NEUTRAL],
+        _ => &[],
+    }
+}
+
+/// RULESET1_INTENT MV3: the condition an attack's `exploit` may name for a flank hit (rule `flank`; not a status, so
+/// classic never matches it).
+pub const FLANKED: &str = "flanked";
+
 /// The deck's slot counts (RULESET1 9 D1; all 0 when the row sets none).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct DeckSlots {

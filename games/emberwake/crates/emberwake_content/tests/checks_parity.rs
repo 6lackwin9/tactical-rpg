@@ -20,7 +20,31 @@ fn strings(v: &Value) -> Vec<String> {
 /// it are left out on both sides (Godot's "Purse loot ..." checks, the engine's refusal of the key), in the recorded
 /// cases and in the whole-catalog and world reports; every other message of those cases is still compared.
 fn kept(messages: Vec<String>) -> Vec<String> {
-    messages.into_iter().filter(|m| !retired(m)).collect()
+    messages.into_iter().filter(|m| !retired(m)).map(|m| at_freeze(&m)).collect()
+}
+
+/// Retired parity (RULESET1-S, HISTORY 2026-10-25): list items added after the freeze, named in the messages that list
+/// a closed set: the gear types `polearm` and `scourge`, the family engine rule `reach`, the passive effect type
+/// `stagger_taken`, the buffs `steadfast` and `stealth`. Each ", <item>" ending at ",", ")", "." or the end of a
+/// message is taken out (both sides, so a Godot text that names one stays compared); every other word is compared.
+const LIST_ITEMS_AFTER_GODOT: [&str; 6] = ["polearm", "scourge", "reach", "stagger_taken", "steadfast", "stealth"];
+
+fn at_freeze(message: &str) -> String {
+    let mut out = message.to_string();
+    for item in LIST_ITEMS_AFTER_GODOT {
+        let needle = format!(", {item}");
+        let mut from = 0;
+        while let Some(at) = out[from..].find(&needle).map(|i| i + from) {
+            let end = at + needle.len();
+            if out[end..].chars().next().is_none_or(|c| matches!(c, ',' | ')' | '.')) {
+                out.replace_range(at..end, "");
+                from = at;
+            } else {
+                from = end;
+            }
+        }
+    }
+    out
 }
 
 fn retired(message: &str) -> bool {
@@ -43,7 +67,7 @@ fn frozen_view(src: &source::Source) -> View {
 
 fn without_retired(r: check::Report) -> check::Report {
     r.into_iter()
-        .map(|(k, l)| (k, l.into_iter().filter(|m| !retired(m)).collect::<Vec<_>>()))
+        .map(|(k, l)| (k, kept(l)))
         .filter(|(_, l)| !l.is_empty())
         .collect()
 }

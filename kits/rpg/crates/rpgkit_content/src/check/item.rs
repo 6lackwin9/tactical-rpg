@@ -23,7 +23,9 @@ const ACCESSORY_SLOTS: [&str; 2] = ["ACCESSORY_1", "ACCESSORY_2"];
 const SCALING_STATS: [&str; 3] = ["STR", "DEX", "INT"];
 const NO_HAND_KEY: &str = "none";
 const BONUS_BAND: &str = "bonus_value";
-const ENGINE_RULES: [&str; 4] = ["focus", "always_ranged", "shield", "spell_source"];
+/// ItemFamilies.ENGINE_RULES; RULESET1-S adds `reach` (RULESET1 K1: a melee family whose wielder reaches 2 under the
+/// timeline's reach rule).
+const ENGINE_RULES: [&str; 5] = ["focus", "always_ranged", "shield", "spell_source", "reach"];
 /// ItemFamilies.NUMBER_FIELDS with their flat keys and schema ranges.
 const NUMBERS: [(&str, &str, i64, i64); 5] = [("power", "base_power", 0, 200), ("range", "base_range", 1, 6), ("block_cost", "block_cost", 1, 6), ("burden", "burden", 0, 10), ("mitigation", "mitigation", 0, 100)];
 /// ItemModifiers.KINDS: (kind, params, unique param, min, max).
@@ -1024,6 +1026,8 @@ pub fn family_errors(v: &View, f: &Dict, current_id: &str) -> Vec<String> {
             out.push("shield needs a SHIELD family.".into());
         } else if (rule == "always_ranged" || rule == "spell_source") && t != "WEAPON" {
             out.push(format!("{rule} needs a WEAPON family."));
+        } else if rule == "reach" {
+            out.extend(reach_rule_problems(f, &t));
         }
     }
     let old_id = if current_id.is_empty() { id.clone() } else { current_id.to_string() };
@@ -1040,6 +1044,26 @@ pub fn family_errors(v: &View, f: &Dict, current_id: &str) -> Vec<String> {
     }
     if !failing.is_empty() {
         out.push(format!("This family change breaks {} item(s): {}.", failing.len(), failing.join("; ")));
+    }
+    out
+}
+
+/// RULESET1 K1: the engine rule `reach` is for melee WEAPON families only: not with always_ranged, and every hand's
+/// base range is 1 (the rule, not the range, gives the reach of 2).
+fn reach_rule_problems(f: &Dict, t: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    if t != "WEAPON" {
+        out.push("reach needs a WEAPON family.".into());
+        return out;
+    }
+    if json::sget(f, "engine_rules").iter().any(|r| r == "always_ranged") {
+        out.push("reach is for melee families; it can't go with always_ranged.".into());
+    }
+    for (hand, row) in json::dget(f, "base") {
+        let range = json::get(json::dict(row), "range");
+        if !range.is_null() && json::to_int(range) != 1 {
+            out.push(format!("reach needs base range 1 on every hand ({hand} has {}).", json::to_int(range)));
+        }
     }
     out
 }
@@ -1146,7 +1170,7 @@ pub fn family_warnings(f: &Dict) -> Vec<String> {
     out
 }
 
-/// ItemValidator.family_set_errors (validate_all): every gear token has its family.
+/// ItemValidator.family_set_errors (validate_all): every gear token has its family (but the optional ones, RULESET1-S).
 pub fn family_set_errors(families: &[Dict]) -> Vec<String> {
     if families.is_empty() {
         return Vec::new();
@@ -1154,7 +1178,7 @@ pub fn family_set_errors(families: &[Dict]) -> Vec<String> {
     let ids: Vec<String> = families.iter().map(|f| json::s(f, "id")).collect();
     super::skill::GEAR_TYPES
         .iter()
-        .filter(|g| !ids.iter().any(|i| i == *g))
+        .filter(|g| !super::skill::OPTIONAL_GEAR_TYPES.contains(g) && !ids.iter().any(|i| i == *g))
         .map(|g| format!("Gear token '{g}' has no item family (every Proficiency gear type needs one)."))
         .collect()
 }

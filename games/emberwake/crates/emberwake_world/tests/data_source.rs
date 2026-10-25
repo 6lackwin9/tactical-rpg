@@ -22,8 +22,10 @@ fn data_dir() -> PathBuf {
 /// (2026-10-21): the unit loot table and a world encounter's key loot and objective reward. ASSETORG2 (2026-10-22): a
 /// unit's and a character's palette and portrait tier. PROPS1 (2026-10-23): a map template's props (section "game": the
 /// game data beside the catalogs; Godot's MapCatalog had no such field). RULESET1-R (2026-10-25): a world manifest's
-/// `ruleset` and `plan_reveal_flag` (kind "world": taken off every world's `manifest`).
-const AFTER_GODOT: [(&str, &str, &str); 10] = [
+/// `ruleset` and `plan_reveal_flag` (kind "world": taken off every world's `manifest`). RULESET1-S (2026-10-25): the
+/// timeline fields of a skill (`ap_cost`, `recovery_blocks`, `round_intent`, `intent_buff`, `stagger`, `windup_poise`,
+/// `unbreakable`, `sure_break`, `armor_piercing`), a unit (`poise`, `deck`, `default_intent`) and a passive (`slot`).
+const AFTER_GODOT: [(&str, &str, &str); 23] = [
     ("content", "units", "loot"),
     ("world", "encounters", "key_loot"),
     ("world", "encounters", "objective_reward"),
@@ -34,6 +36,28 @@ const AFTER_GODOT: [(&str, &str, &str); 10] = [
     ("game", "maps", "props"),
     ("world", "world", "ruleset"),
     ("world", "world", "plan_reveal_flag"),
+    ("content", "skills", "ap_cost"),
+    ("content", "skills", "recovery_blocks"),
+    ("content", "skills", "round_intent"),
+    ("content", "skills", "intent_buff"),
+    ("content", "skills", "stagger"),
+    ("content", "skills", "windup_poise"),
+    ("content", "skills", "unbreakable"),
+    ("content", "skills", "sure_break"),
+    ("content", "skills", "armor_piercing"),
+    ("content", "units", "poise"),
+    ("content", "units", "deck"),
+    ("content", "units", "default_intent"),
+    ("content", "passives", "slot"),
+];
+/// Retired parity, option level: enum and multi-pick options added after the freeze, by (section, kind, key, option);
+/// the option leaves the engine's schema row before comparing (every other option and its order is still compared);
+/// each is named in docs/HISTORY.md. RULESET1-S (2026-10-25): the weapon types `polearm` and `scourge` (TQ8) and the
+/// family engine rule `reach` (K1).
+const OPTIONS_AFTER_GODOT: [(&str, &str, &str, &str); 3] = [
+    ("content", "items", "weapon_type", "polearm"),
+    ("content", "items", "weapon_type", "scourge"),
+    ("content", "item_families", "engine_rules", "reach"),
 ];
 /// Retired parity, kind level (the twin of AFTER_GODOT): schema kinds added after the freeze, by (section, kind); the
 /// whole kind leaves the engine's schema before comparing; each is named in docs/HISTORY.md. DERIVE1 (2026-10-25): the
@@ -97,7 +121,8 @@ fn strip_after_godot(v: &mut Value, section: &str) {
     }
 }
 
-/// The schema without the KINDS_AFTER_GODOT kinds, the AFTER_GODOT rows and the HELP_CHANGED help texts.
+/// The schema without the KINDS_AFTER_GODOT kinds, the AFTER_GODOT rows, the OPTIONS_AFTER_GODOT options and the
+/// HELP_CHANGED help texts.
 fn schema_at_freeze(schema: &Value) -> Value {
     let mut out = schema.clone();
     for (section, kind) in KINDS_AFTER_GODOT {
@@ -108,6 +133,13 @@ fn schema_at_freeze(schema: &Value) -> Value {
         if let Some(Value::Array(rows)) = out.get_mut(section).and_then(|s| s.get_mut(kind)) {
             rows.retain(|r| r["key"] != key);
         }
+    }
+    for (section, kind, key, option) in OPTIONS_AFTER_GODOT {
+        let row = out.get_mut(section).and_then(|s| s.get_mut(kind)).and_then(Value::as_array_mut).and_then(|rows| rows.iter_mut().find(|r| r["key"] == key));
+        let options = row.and_then(|r| r.get_mut("options")).and_then(Value::as_array_mut).expect("an options row to strip");
+        let before = options.len();
+        options.retain(|o| o != option);
+        assert_eq!(options.len() + 1, before, "the engine schema's {section}.{kind}.{key} has no option {option} to strip");
     }
     unhelp(&mut out);
     out

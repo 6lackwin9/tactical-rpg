@@ -32,43 +32,10 @@ pub fn world_storage(kind: &str, entry: &Dict) -> Dict {
 
 const ITEM_DERIVED: [&str; 13] = ["item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "block_cost", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
 
-/// SkillKinds.has_field: common fields, the ATTACK-only stance override, and the fields of the kind's sections.
+/// SkillKinds.has_field: common fields, the ATTACK-only stance override, and the fields of the kind's sections (one
+/// table with the checks; RULESET1-S added the timeline fields there).
 fn skill_has_field(kind: &str, key: &str) -> bool {
-    const COMMON: [&str; 16] = ["id", "name", "kind", "level", "blocks", "description", "template", "system", "basic", "learned_only", "grade", "requires", "origin", "unlock_offset", "family", "tier"];
-    if COMMON.contains(&key) {
-        return true;
-    }
-    if key == "stance" {
-        return kind == "ATTACK";
-    }
-    let sections: &[&str] = match kind {
-        "ATTACK" => &["damage", "inflict", "combo", "flow", "reach", "area", "gate"],
-        "DEFEND" => &["grant", "guard", "flow", "gate"],
-        "FOCUS" => &["focus", "flow"],
-        "SUPPORT" => &["reach", "support", "grant", "flow", "gate"],
-        "DISENGAGE" => &["jump"],
-        "REST" => &["rest"],
-        _ => &[],
-    };
-    sections.iter().any(|s| {
-        let f: &[&str] = match *s {
-            "damage" => &["power_mult", "weapon_hand", "dash_tiles"],
-            "inflict" => &["status_effect", "status_potency", "status_magnitude", "status_rounds"],
-            "reach" => &["reach_min", "reach_max"],
-            "area" => &["area"],
-            "support" => &["target_mode", "heal_stat", "heal_base", "heal_mult", "cleanse_statuses"],
-            "grant" => &["grant_status", "status_magnitude", "status_rounds", "extra_grants"],
-            "guard" => &["mitigation"],
-            "focus" => &["boost", "boost_rounds"],
-            "jump" => &["jump_tiles"],
-            "flow" => &["ends_in_stance"],
-            "combo" => &["disrupt", "exploit", "exploit_consume"],
-            "rest" => &["recover_ap"],
-            "gate" => &["weapon_types", "min_proficiency"],
-            _ => &[],
-        };
-        f.contains(&key)
-    })
+    crate::check::skill::has_field(kind, key)
 }
 
 /// SkillRanks.fold of one entry's rank rows: the ranked entry Godot writes (core keys always, other fields of the

@@ -67,10 +67,21 @@ pub fn missing_terrain(rows: &[Dict]) -> Vec<&'static str> {
     TERRAIN_IDS.iter().copied().filter(|id| !rows.iter().any(|r| json::s(r, "id") == *id)).collect()
 }
 
-const TYPES: [&str; 10] = ["stat", "proficiency", "resist", "ap_regen", "skill", "skill_potency", "status_potency", "spell_reach", "unlock", "foresight"];
+/// Passives.EFFECT_TYPES; RULESET1-S adds `stagger_taken` (rule poise, P6).
+const TYPES: [&str; 11] = ["stat", "proficiency", "resist", "ap_regen", "skill", "skill_potency", "status_potency", "spell_reach", "unlock", "foresight", "stagger_taken"];
+/// RULESET1-S: a `stagger_taken` effect's multiplier and the longest action (blocks) it matches (0 = any).
+const STAGGER_MULT_MAX: f64 = 2.0;
+const STAGGER_MAX_BLOCKS: i64 = 6;
+/// RULESET1 V4: a foresight effect's optional reveal range in tiles (0 = today's rule).
+const FORESIGHT_RANGE_MAX: i64 = 8;
 const ITEM_TYPES: [&str; 4] = ["skill_potency", "status_potency", "spell_reach", "resist"];
 const GROUPS: [&str; 2] = ["spell", "heal"];
 const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
+
+/// A whole number in `lo..=hi` (JSON numbers parse as floats).
+fn whole_in(v: &Value, lo: i64, hi: i64) -> bool {
+    v.as_f64().is_some_and(|x| x.fract() == 0.0 && (lo as f64..=hi as f64).contains(&x))
+}
 
 /// Passives.validate_effects: the problems of an effect list (`allow_empty`: none is fine; `items_only`: the kinds
 /// gear may carry). DERIVE1 4.1: a `stat` effect may name one of the `derived` stat ids, and only those take an
@@ -178,7 +189,19 @@ pub fn effect_errors(effects: &Value, skill_exists: &dyn Fn(&str) -> bool, deriv
                     errors.push(format!("{at}: spell reach is 1-2 tiles."));
                 }
             }
-            "foresight" => {}
+            "foresight" => {
+                if e.get("range").is_some_and(|r| !whole_in(r, 0, FORESIGHT_RANGE_MAX)) {
+                    errors.push(format!("{at}: foresight range must be a whole number 0-{FORESIGHT_RANGE_MAX} (0 = the plain rule)."));
+                }
+            }
+            "stagger_taken" => {
+                if !e.get("mult").and_then(Value::as_f64).is_some_and(|m| (0.0..=STAGGER_MULT_MAX).contains(&m)) {
+                    errors.push(format!("{at}: stagger taken needs a mult 0.0-{} (0 = immune).", fixed(STAGGER_MULT_MAX, 1)));
+                }
+                if e.get("max_blocks").is_some_and(|b| !whole_in(b, 0, STAGGER_MAX_BLOCKS)) {
+                    errors.push(format!("{at}: max_blocks must be a whole number 0-{STAGGER_MAX_BLOCKS} (0 = any action)."));
+                }
+            }
             _ => errors.push(format!("{at}: unknown effect type '{t}' (use {}).", if items_only { ITEM_TYPES.join(", ") } else { TYPES.join(", ") })),
         }
     }

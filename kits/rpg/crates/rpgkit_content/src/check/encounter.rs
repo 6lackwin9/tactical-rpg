@@ -513,7 +513,8 @@ const START_TEXT_MAX: usize = 120;
 const START_KEYS: [&str; 5] = ["status", "rounds", "magnitude", "requires_flags", "text"];
 
 /// EncounterPhases.start_status_problems: a world encounter's `start_status` (PACE1 3.4): at most START_MAX buffs other
-/// than taunt and riposte, each with rounds, magnitude, flag conditions and a text.
+/// than taunt and the intent-bound ones (riposte; RULESET1-S: stealth), each with rounds, magnitude, flag conditions and
+/// a text.
 pub fn start_status_problems(raw: &Value) -> Vec<String> {
     let Some(list) = raw.as_array() else {
         return vec!["Start buffs must be a list of objects.".into()];
@@ -522,7 +523,9 @@ pub fn start_status_problems(raw: &Value) -> Vec<String> {
     if list.len() > START_MAX {
         errors.push(format!("An encounter holds at most {START_MAX} start buffs."));
     }
-    let allowed: Vec<&str> = status::buffs().into_iter().filter(|s| *s != "taunt" && *s != "riposte").collect();
+    // RULESET1-S (planner pick): no intent-bound buff either (riposte, stealth): it needs a round intent, and no unit
+    // has one at deployment
+    let allowed: Vec<&str> = status::buffs().into_iter().filter(|s| *s != "taunt" && !status::intent_bound(s)).collect();
     for item in list {
         let Some(sb) = item.as_object() else {
             errors.push("Start buff: each entry must be an object.".into());
@@ -533,7 +536,13 @@ pub fn start_status_problems(raw: &Value) -> Vec<String> {
         }
         let st = json::s(sb, "status");
         if !sb.get("status").is_some_and(Value::is_string) || !allowed.contains(&st.as_str()) {
-            errors.push(format!("Start buff '{st}' must be a buff other than taunt or riposte."));
+            if status::intent_bound(&st) && st != "riposte" {
+                // the Godot text names riposte, the one intent-bound row it had
+                let bound: Vec<&str> = status::ROWS.iter().filter(|r| r.intent_bound).map(|r| r.id).collect();
+                errors.push(format!("Start buff '{st}' must be a buff other than taunt or an intent-bound one ({}).", bound.join(", ")));
+            } else {
+                errors.push(format!("Start buff '{st}' must be a buff other than taunt or riposte."));
+            }
             continue;
         }
         let rounds = sb.get("rounds").cloned().unwrap_or(json::int(DEFAULT_STATUS_ROUNDS));

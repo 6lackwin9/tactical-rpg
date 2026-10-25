@@ -115,6 +115,41 @@ pub struct UnitDef {
     /// Slot key -> item id as written ("" = the class's item, `NO_ITEM` = empty).
     pub slots: IndexMap<String, String>,
     pub pouch: Vec<String>,
+    /// RULESET1 9 D5 (timeline, rule deck): the slotted actives, passives, keystones and per-intent order (empty = auto).
+    pub deck: Deck,
+    /// RULESET1 5 P2 (rule poise): -1 = the derived Max Poise, 0 = no poise bar, above 0 = a fixed Max Poise.
+    pub poise: i32,
+    /// RULESET1 TQ23 (a) (rule round_intent): the round intent the unit starts a battle in ("" = none).
+    pub default_intent: String,
+}
+
+/// A unit's or party member's deck (RULESET1 9 D5, field `deck`): skill families in the active slots, passive ids in
+/// the passive and keystone slots, and per round intent the families in the order the planner fills them. Missing or
+/// empty keys mean auto.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Deck {
+    pub active: Vec<String>,
+    pub passive: Vec<String>,
+    pub keystone: Vec<String>,
+    /// Round intent -> skill families, in the order written.
+    pub order: IndexMap<String, Vec<String>>,
+}
+
+impl Deck {
+    /// The deck keys, in their stored order.
+    pub const KEYS: [&'static str; 4] = ["active", "passive", "keystone", "order"];
+
+    /// From a `deck` value (anything but an object is the empty deck; lists keep their strings).
+    pub fn from_value(v: &Value) -> Self {
+        let Some(o) = v.as_object() else { return Self::default() };
+        let order = obj(o, "order").map(|m| m.keys().map(|k| (k.clone(), strings(m, k))).collect()).unwrap_or_default();
+        Self { active: strings(o, "active"), passive: strings(o, "passive"), keystone: strings(o, "keystone"), order }
+    }
+
+    /// True when every key is empty (the auto deck).
+    pub fn is_empty(&self) -> bool {
+        self.active.is_empty() && self.passive.is_empty() && self.keystone.is_empty() && self.order.values().all(Vec::is_empty)
+    }
 }
 
 impl UnitDef {
@@ -149,6 +184,9 @@ impl UnitDef {
             heal_below: float(o, "heal_below", 0.7),
             slots: LOADOUT_SLOTS.iter().map(|s| (s.to_string(), string(o, s, ""))).collect(),
             pouch: strings(o, "pouch"),
+            deck: Deck::from_value(o.get("deck").unwrap_or(&Value::Null)),
+            poise: int(o, "poise", -1),
+            default_intent: string(o, "default_intent", ""),
         }
     }
 }
@@ -195,6 +233,24 @@ pub struct SkillDef {
     pub disrupt: String,
     pub exploit: Vec<Value>,
     pub exploit_consume: bool,
+    /// RULESET1_INTENT IN4 (rule round_intent): the skill's round intent as written ("" = by kind: `rpgkit_rules::ruleset::kind_intent`).
+    pub round_intent: String,
+    /// IN6: what the skill grants its own user is intent-bound.
+    pub intent_buff: bool,
+    /// RULESET1 T10 (rule ap_cost): the AP base instead of the level; -1 = unset.
+    pub ap_cost: i32,
+    /// RULESET1 T1 (rule enemy_moves): blocks an enemy-side unit spends after the impact (0-2).
+    pub recovery_blocks: i32,
+    /// RULESET1 P4 (rule poise): poise taken from each unit the hit damages.
+    pub stagger: i32,
+    /// P11: poise the user gains while the action winds up.
+    pub windup_poise: i32,
+    /// P12: the user's poise cannot drop below 1 while this action winds up.
+    pub unbreakable: bool,
+    /// P14: a hit landing in a windup breaks the target.
+    pub sure_break: bool,
+    /// RULESET1 A2 (rule pierce): the hit skips the armour term.
+    pub armor_piercing: bool,
     /// Family head id; "" when the skill heads its own family (ContentFactory drops `family == id`).
     pub family: String,
     pub tier: i32,
@@ -247,6 +303,15 @@ impl SkillDef {
             disrupt: string(o, "disrupt", "NONE"),
             exploit: array(o, "exploit").to_vec(),
             exploit_consume: boolean(o, "exploit_consume", false),
+            round_intent: string(o, "round_intent", ""),
+            intent_buff: boolean(o, "intent_buff", false),
+            ap_cost: int(o, "ap_cost", -1),
+            recovery_blocks: int(o, "recovery_blocks", 0),
+            stagger: int(o, "stagger", 0),
+            windup_poise: int(o, "windup_poise", 0),
+            unbreakable: boolean(o, "unbreakable", false),
+            sure_break: boolean(o, "sure_break", false),
+            armor_piercing: boolean(o, "armor_piercing", false),
             tier: int(o, "tier", 1),
             raw: o.clone(),
         }
@@ -381,6 +446,8 @@ pub struct PassiveDef {
     pub id: String,
     pub name: String,
     pub effects: Vec<Value>,
+    /// RULESET1 9 D3 (rule deck): "" = source-granted, always on; "passive" or "keystone" = applies only while slotted.
+    pub slot: String,
 }
 
 /// The formula input name of the unit level (DERIVE1 4.1; reserved: no row id or constant takes it).
@@ -506,7 +573,7 @@ impl Catalog {
             cat.items.insert(i.id.clone(), i);
         }
         for o in rows("passives") {
-            let p = PassiveDef { id: string(&o, "id", ""), name: string(&o, "name", ""), effects: array(&o, "effects").to_vec() };
+            let p = PassiveDef { id: string(&o, "id", ""), name: string(&o, "name", ""), effects: array(&o, "effects").to_vec(), slot: string(&o, "slot", "") };
             cat.passives.insert(p.id.clone(), p);
         }
         for o in rows("encounters") {

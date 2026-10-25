@@ -5,6 +5,7 @@ use super::View;
 use crate::source::{content, fields, render, token_value, RANK_KEYS};
 use aegis_content::schema::is_id;
 use aegis_core::json::{self, Dict};
+use rpgkit_rules::ruleset::{self, FLANKED};
 use rpgkit_rules::status;
 use serde_json::Value;
 
@@ -13,8 +14,11 @@ use serde_json::Value;
 /// The kinds in table order (SkillKinds.KINDS).
 pub const KINDS: [&str; 9] = ["ATTACK", "DEFEND", "FOCUS", "SUPPORT", "DISENGAGE", "REST", "MOVE", "TARGET", "STATUS"];
 const AUTHORABLE: [&str; 5] = ["ATTACK", "DEFEND", "FOCUS", "SUPPORT", "DISENGAGE"];
-const COMMON_FIELDS: [&str; 16] = ["id", "name", "kind", "level", "blocks", "description", "template", "system", "basic", "learned_only", "grade", "requires", "origin", "unlock_offset", "family", "tier"];
-const SECTION_FIELDS: [(&str, &[&str]); 13] = [
+/// The fields every kind has (RULESET1-S adds `round_intent`: every kind has an intent, IN4).
+const COMMON_FIELDS: [&str; 17] = ["id", "name", "kind", "level", "blocks", "description", "template", "system", "basic", "learned_only", "grade", "requires", "origin", "unlock_offset", "family", "tier", "round_intent"];
+/// The sections and their fields (SkillKinds.SECTIONS; the last four are RULESET1-S's timeline fields, RULESET1_TASKS
+/// 1.3: `cost` the authored kinds, `timing` ATTACK / SUPPORT / FOCUS, `intent` DEFEND / SUPPORT / FOCUS, `impact` ATTACK).
+const SECTION_FIELDS: [(&str, &[&str]); 17] = [
     ("damage", &["power_mult", "weapon_hand", "dash_tiles"]),
     ("inflict", &["status_effect", "status_potency", "status_magnitude", "status_rounds"]),
     ("reach", &["reach_min", "reach_max"]),
@@ -28,15 +32,19 @@ const SECTION_FIELDS: [(&str, &[&str]); 13] = [
     ("combo", &["disrupt", "exploit", "exploit_consume"]),
     ("rest", &["recover_ap"]),
     ("gate", &["weapon_types", "min_proficiency"]),
+    ("cost", &["ap_cost"]),
+    ("timing", &["recovery_blocks", "windup_poise", "unbreakable"]),
+    ("intent", &["intent_buff"]),
+    ("impact", &["stagger", "sure_break", "armor_piercing"]),
 ];
 
 fn sections_of(kind: &str) -> &'static [&'static str] {
     match kind {
-        "ATTACK" => &["damage", "inflict", "combo", "flow", "reach", "area", "gate"],
-        "DEFEND" => &["grant", "guard", "flow", "gate"],
-        "FOCUS" => &["focus", "flow"],
-        "SUPPORT" => &["reach", "support", "grant", "flow", "gate"],
-        "DISENGAGE" => &["jump"],
+        "ATTACK" => &["damage", "inflict", "combo", "flow", "reach", "area", "gate", "cost", "timing", "impact"],
+        "DEFEND" => &["grant", "guard", "flow", "gate", "cost", "intent"],
+        "FOCUS" => &["focus", "flow", "cost", "timing", "intent"],
+        "SUPPORT" => &["reach", "support", "grant", "flow", "gate", "cost", "timing", "intent"],
+        "DISENGAGE" => &["jump", "cost"],
         "REST" => &["rest"],
         _ => &[],
     }
@@ -314,8 +322,8 @@ pub fn fold(head: &str, family_rows: &[Dict]) -> Result<Dict, Vec<String>> {
 
 // ---- SkillText -----------------------------------------------------------------------------------------------------
 
-/// SkillText.TOKEN_KINDS in table order.
-const TOKENS: [(&str, &[&str]); 23] = [
+/// SkillText.TOKEN_KINDS in table order (the last two are RULESET1-S's: `stagger`, `recovery`).
+const TOKENS: [(&str, &[&str]); 25] = [
     ("name", &["ALL"]),
     ("ap", &["ALL"]),
     ("blocks", &["ALL"]),
@@ -339,8 +347,11 @@ const TOKENS: [(&str, &[&str]); 23] = [
     ("exploit", &["ATTACK"]),
     ("disrupt", &["ATTACK"]),
     ("extra", &["DEFEND", "SUPPORT"]),
+    ("stagger", &["ATTACK"]),
+    ("recovery", &["ATTACK", "SUPPORT", "FOCUS"]),
 ];
-const COUNTED: [&str; 5] = ["blocks", "dash", "reach", "rounds", "jump"];
+/// The tokens that take the `:n` suffix (the bare number); RULESET1-S adds `ap`, `stagger` and `recovery`.
+const COUNTED: [&str; 8] = ["blocks", "dash", "reach", "rounds", "jump", "ap", "stagger", "recovery"];
 const MAX_LENGTH: usize = 240;
 
 fn token_valid_for(token: &str, kind: &str) -> bool {
@@ -512,7 +523,11 @@ const MAX_UNLOCK_OFFSET: i64 = 8;
 const UNARMED_TOKEN: &str = "unarmed";
 const CLEANSE_ALL: &str = "all";
 const HEAL_STATS: [&str; 2] = ["INT", "KNOW"];
-pub const GEAR_TYPES: [&str; 16] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "orb", "tome", "shield", "plate", "leather", "cloth"];
+/// Proficiency.gear_types(); RULESET1-S (TQ8) adds the reach-2 weapon types `polearm` and `scourge`.
+pub const GEAR_TYPES: [&str; 18] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "polearm", "scourge", "orb", "tome", "shield", "plate", "leather", "cloth"];
+/// Gear types added after the Godot freeze that need no item family until data uses them (ItemValidator.family_set_errors
+/// asks a family of every other gear type).
+pub const OPTIONAL_GEAR_TYPES: [&str; 2] = ["polearm", "scourge"];
 
 fn grade_rank(grade: &str) -> usize {
     ["novice", "advanced", "expert"].iter().position(|g| *g == grade).unwrap_or(0)
@@ -769,6 +784,7 @@ fn row_problems(v: &View, e: &Dict) -> Vec<String> {
     }
     out.extend(extra_grant_problems(e, &kind));
     out.extend(combo_problems(e, &kind));
+    out.extend(timeline_problems(v, e, &kind));
     let types = json::sget(e, "weapon_types");
     for gear in &types {
         if !GEAR_TYPES.contains(&gear.as_str()) && gear != UNARMED_TOKEN {
@@ -856,7 +872,8 @@ fn combo_problems(e: &Dict, kind: &str) -> Vec<String> {
     for raw in exploit {
         let row = json::dict(raw);
         let st = json::s(row, "status");
-        if !debuffs.contains(&st.as_str()) {
+        // RULESET1_INTENT MV3: the condition `flanked` (timeline's flank rule; classic never matches it)
+        if !debuffs.contains(&st.as_str()) && st != FLANKED {
             out.push(format!("Exploit status '{st}' is not a debuff."));
         } else if seen.contains(&st) {
             out.push(format!("Exploit lists '{st}' twice."));
@@ -876,8 +893,73 @@ fn combo_problems(e: &Dict, kind: &str) -> Vec<String> {
     out
 }
 
+/// The most blocks an action may take with its recovery (the round's blocks; the schema's `blocks` max).
+const MAX_ACTION_BLOCKS: i64 = 6;
+
+/// Whether a ruleset row lists `intent` among its intents.
+fn ruleset_lists(v: &View, intent: &str) -> bool {
+    v.entries(ruleset::KIND).iter().any(|r| json::sget(r, "intents").iter().any(|i| i == intent))
+}
+
+/// The timeline fields of one flat row (RULESET1-S, RULESET1_TASKS 1.3): the round intent allowed for the kind (IN4;
+/// `channel` only when a ruleset row lists it), an intent-bound buff that grants something (IN6), recovery that fits
+/// the round (T2), a sure break with stagger (P14). Defaults never report, so classic rows are unaffected; the kinds a
+/// field belongs to are the sections' (row_problems).
+fn timeline_problems(v: &View, e: &Dict, kind: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let intent = json::s(e, "round_intent");
+    if intent == ruleset::CHANNEL {
+        if !AUTHORABLE.contains(&kind) {
+            out.push(format!("Round intent: {kind} skills are neutral; channel is for authored skills."));
+        } else if !ruleset_lists(v, ruleset::CHANNEL) {
+            out.push("Round intent: channel needs a ruleset whose intents list it.".into());
+        }
+    } else if ruleset::INTENTS.contains(&intent.as_str()) || intent == ruleset::NEUTRAL {
+        // (another value is not an option: the schema's enum check reports it)
+        let allowed = ruleset::kind_intents(kind);
+        if !allowed.contains(&intent.as_str()) {
+            out.push(format!("Round intent: {kind} skills take {} (not {intent}).", if allowed.is_empty() { "none".to_string() } else { allowed.join(" or ") }));
+        } else if kind == "SUPPORT" && intent == "guard" && json::s(e, "target_mode") != "SELF" {
+            out.push("Round intent guard on a SUPPORT skill needs Targets SELF (a self-only skill such as a taunt).".into());
+        }
+    }
+    if json::b(e, "intent_buff", false) && has_field(kind, "intent_buff") && kind != "FOCUS" && json::s(e, "grant_status").is_empty() && json::aget(e, "extra_grants").is_empty() {
+        out.push("Intent-bound buff needs a granted status (Grants or an extra grant).".into());
+    }
+    if has_field(kind, "recovery_blocks") {
+        let total = json::i(e, "blocks", 1) + json::i(e, "recovery_blocks", 0);
+        if total > MAX_ACTION_BLOCKS {
+            out.push(format!("Blocks plus recovery blocks is {total} (at most {MAX_ACTION_BLOCKS}: the action must fit the round)."));
+        }
+    }
+    if kind == "ATTACK" && json::b(e, "sure_break", false) && json::i(e, "stagger", 0) < 1 {
+        out.push("Sure break needs a stagger of at least 1 (on every rank).".into());
+    }
+    out
+}
+
+/// The timeline warnings of a skill's rank rows (RULESET1-S): a Maneuver attack with dash tiles 0 carries no move, its
+/// range is its band (MV5); an unbreakable windup with windup poise (the poise does nothing while it cannot break).
+fn timeline_warnings(rows: &[Dict]) -> Vec<String> {
+    let mut out = Vec::new();
+    let Some(first) = rows.first() else { return out };
+    let kind = json::s(first, "kind");
+    let ranked = rows.len() > 1;
+    if kind == "ATTACK" && json::s(first, "round_intent") == "maneuver" {
+        for (i, _) in rows.iter().enumerate().filter(|(_, r)| json::i(r, "dash_tiles", 0) <= 0) {
+            let at = if ranked { format!("Rank {}: a", i + 1) } else { "A".into() };
+            out.push(format!("{at} Maneuver attack with dash tiles 0 carries no move; its range is its reach band."));
+        }
+    }
+    if json::b(first, "unbreakable", false) && has_field(&kind, "unbreakable") && rows.iter().any(|r| json::i(r, "windup_poise", 0) > 0) {
+        out.push("Unbreakable with windup poise: the poise bonus does nothing while the unit cannot break.".into());
+    }
+    out
+}
+
 /// SkillValidator.warnings: a ranked entry's template and rank warnings, else a flat row's template warnings; an
-/// off-hand weapon gate other than unarmed. `raw` is the entry as given, `e` its normalized form.
+/// off-hand weapon gate other than unarmed. `raw` is the entry as given, `e` its normalized form. RULESET1-S: the
+/// timeline warnings of its rank rows.
 pub fn warnings(raw: &Dict, e: &Dict) -> Vec<String> {
     let mut out = Vec::new();
     let ranked = !raw.contains_key("tier") && !raw.contains_key("family");
@@ -894,6 +976,8 @@ pub fn warnings(raw: &Dict, e: &Dict) -> Vec<String> {
     } else if !json::s(e, "template").is_empty() {
         out.extend(template_warnings(&json::s(e, "template"), e));
     }
+    let rows: Vec<Dict> = if ranked { (1..=modifiers_of(raw).len() + 1).map(|r| effective(raw, r)).collect() } else { vec![e.clone()] };
+    out.extend(timeline_warnings(&rows));
     let hand = json::s(e, "weapon_hand");
     if hand != "main" {
         for gear in json::sget(e, "weapon_types") {

@@ -655,6 +655,9 @@ pub struct StatusState {
     pub pending_rounds: IndexMap<String, i32>,
     pub pending_magnitudes: IndexMap<String, i32>,
     pub pending_sources: IndexMap<String, String>,
+    /// RULESET1_INTENT IN6 (timeline, rule round_intent): status -> the round intent an intent-bound instance (active or
+    /// queued) was applied under; it ends when the unit's intent changes. Classic never fills it.
+    pub intents: IndexMap<String, String>,
 }
 
 impl StatusState {
@@ -707,6 +710,7 @@ impl Unit {
         st.pending_magnitudes.shift_remove(status);
         st.sources.shift_remove(status);
         st.pending_sources.shift_remove(status);
+        st.intents.shift_remove(status);
     }
 
     fn capped_magnitude(&self, status: &str) -> i32 {

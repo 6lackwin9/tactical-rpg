@@ -188,9 +188,11 @@ fn read_kind(dir: &Path, kind: &str, families: &[Dict], errors: &mut Vec<String>
 
 // ---- Skills (SkillRanks, SkillText) ----------------------------------------------------------------------------
 
-pub(crate) const RANK_KEYS: [&str; 20] = [
+/// The per-rank skill fields (SkillRanks.RANK_KEYS; RULESET1-S adds the timeline's `ap_cost`, `recovery_blocks`,
+/// `stagger` and `windup_poise`).
+pub(crate) const RANK_KEYS: [&str; 24] = [
     "level", "blocks", "unlock_offset", "power_mult", "dash_tiles", "reach_min", "reach_max", "status_potency", "status_magnitude", "status_rounds", "heal_base", "heal_mult", "grant_status", "extra_grants",
-    "cleanse_statuses", "mitigation", "boost", "boost_rounds", "jump_tiles", "recover_ap",
+    "cleanse_statuses", "mitigation", "boost", "boost_rounds", "jump_tiles", "recover_ap", "ap_cost", "recovery_blocks", "stagger", "windup_poise",
 ];
 
 /// ContentCatalog._read_ranked_skills: every entry expanded into its rank rows; all rank 1 rows first, then rank 2...
@@ -288,6 +290,9 @@ fn token_kinds(token: &str) -> Option<&'static [&'static str]> {
         "jump" => &["DISENGAGE"],
         "recover" => &["REST"],
         "extra" => &["DEFEND", "SUPPORT"],
+        // RULESET1-S (timeline): poise taken, enemy recovery blocks
+        "stagger" => &["ATTACK"],
+        "recovery" => &["ATTACK", "SUPPORT", "FOCUS"],
         _ => return None,
     })
 }
@@ -394,7 +399,23 @@ pub(crate) fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize) ->
     let counted = |n: i64, unit: &str| if bare { n.to_string() } else { plural(n, unit) };
     match token {
         "name" => s("name"),
-        "ap" => format!("{} AP", i("level", 1)),
+        // RULESET1 T10: a set `ap_cost` is the skill's AP (classic rows leave it -1: the level)
+        "ap" => {
+            let ap = if i("ap_cost", -1) >= 0 { i("ap_cost", -1) } else { i("level", 1) };
+            if bare {
+                ap.to_string()
+            } else {
+                format!("{ap} AP")
+            }
+        }
+        "stagger" | "recovery" => {
+            let n = i(if token == "stagger" { "stagger" } else { "recovery_blocks" }, 0);
+            match (n <= 0, token) {
+                (true, _) => String::new(),
+                (false, "stagger") => n.to_string(),
+                _ => counted(n, "block"),
+            }
+        }
         "blocks" => counted(i("blocks", 1), "block"),
         "power" => format_percent(f("power_mult", 1.0)),
         "dash" | "jump" => {
