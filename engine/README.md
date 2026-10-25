@@ -52,6 +52,13 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 * **Stage pieces (STAGE1-E):** `Painter::ellipse_ring` (a 1 px ellipse outline, no fill), `Image::opaque_bounds(min_alpha)`
   (the box of solid pixels), `Art::body_bounds(key, palette, size, flip)` (the solid box of a body's fitted idle frame 0,
   mirrored with flip, cached; a unit's hit rect on a stage).
+* **Effects (FX1-E):** `aegis_ui::fx`: the effect clock with hit-stop (`Clock`), six primitives drawn in code as pure
+  functions of the clock and a seed (`Projectile`, `Beam`, `Trail`, `Sparks`, `Flash`, `Ring`; `Effect` with start, layer,
+  seed), the live list `Fx` (at most 32), the camera shake (`Shake`, presets jolt / heavy / toll / tremor / quake in
+  `ShakeTable`, `ShakeLimits` clamped to the engine ceiling 6 px / 3000 ms, `Camera::start` / `offset` with whole-pixel
+  deterministic offsets; reduce motion starts none), `Painter::shift` (moves the world layer; clips and hit rects stay),
+  `Image::silhouette` / `Art::body_silhouette` (the hit flash), `Settings::reduce_motion`. The UI Gallery's Kit widgets entry
+  has an Effects page (a button per primitive and preset, speed, hit-stop, reduce motion).
 * **Sound and music (PORT-AUDIO):** `aegis_ui::audio` plays the `audio/` files found over the asset layers (game, kit, engine; ASSETORG2) (WAV and Ogg Vorbis, through rodio) on four levels (master times music, effects or interface), 8 effect voices and 2 interface voices (the oldest restarts when all are busy), and one looping music track that crossfades (1 s; 2 s from silence; 6 dB under the effects). Each screen names its track (`Screen::music`); the shell plays the topmost screen's choice, so overlays keep the music below. Emberwake picks tracks with the MUSIC1 chain (`emberwake_gui/src/music.rs`: menu, region by location kind or shop, travel, combat or boss, each tried per region, world and lineage before the plain context) and battle sounds from the resolver log; the settings popup plays the draft levels and a sample per volume slider. Without a sound device everything stays silent.
 
 ## Workspace

@@ -154,6 +154,13 @@ impl Image {
         Image { w, h, px }
     }
 
+    /// The silhouette of `self` (FX1-E: a hit flash): the same size, `col` on every pixel at or above `OUTLINE_ALPHA`,
+    /// the rest transparent.
+    pub fn silhouette(&self, col: Rgba) -> Image {
+        let px = self.px.as_chunks::<4>().0.iter().flat_map(|p| if p[3] >= OUTLINE_ALPHA { col } else { [0, 0, 0, 0] }).collect();
+        Image { w: self.w, h: self.h, px }
+    }
+
     /// The bounding box of the pixels whose alpha is at least `min_alpha` (STAGE1-E: a body's hit rect); None when
     /// there is none.
     pub fn opaque_bounds(&self, min_alpha: u8) -> Option<Rect> {

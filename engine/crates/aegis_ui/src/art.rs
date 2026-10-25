@@ -9,6 +9,7 @@
 //! (`image_mirrored`) and a variant picked over a chain of folders (`varied`, which `tile_in` wraps). DIR4-E: a body
 //! played for a four-way `Facing` (`played_facing`: front and back rows of the sheet, side rows mirrored for left).
 //! STAGE1-E: the solid bounds of a body's fitted idle frame (`body_bounds`, a unit's hit rect on a stage).
+//! FX1-E: a frame's filled silhouette (`body_silhouette`, a hit flash), cached like the outline.
 
 use crate::canvas::{Image, Rect, Rgba, OUTLINE_ALPHA};
 use aegis_core::assets::{self, ClipFrame, ClipPlayer, Clips, Facing, Layers};
@@ -36,6 +37,8 @@ pub struct Art {
     frames: HashMap<FrameKey, Option<Image>>,
     /// (body key, palette id, clip, frame, size, colour, flipped) -> the frame's silhouette outline.
     outlines: HashMap<OutlineKey, Option<Image>>,
+    /// The same key -> the frame's filled silhouette (`body_silhouette`, FX1-E hit flashes).
+    silhouettes: HashMap<OutlineKey, Option<Image>>,
     /// (rel, w, h) -> the scaled image mirrored left to right.
     mirrors: HashMap<(String, i32, i32), Option<Image>>,
     /// rel -> the PNG's own size.
@@ -74,7 +77,7 @@ impl Art {
     }
 
     pub fn layered(layers: Layers) -> Self {
-        Self { layers, files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new(), body_rects: HashMap::new() }
+        Self { layers, files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), silhouettes: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new(), body_rects: HashMap::new() }
     }
 
     pub fn layers(&self) -> &Layers {
@@ -290,6 +293,19 @@ impl Art {
             self.outlines.insert(k.clone(), img);
         }
         self.outlines.get(&k).and_then(|i| i.as_ref())
+    }
+
+    /// FX1-E: the filled silhouette (`Image::silhouette`, `col`) of frame `n` of `clip` in a `size` square, the same
+    /// size and place as the frame; of the mirrored frame when `flip` (as `played` draws it). Cached like
+    /// `body_outline`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn body_silhouette(&mut self, key: &str, palette: &str, clip: &str, n: u32, size: i32, col: Rgba, flip: bool) -> Option<&Image> {
+        let k = (key.to_string(), palette.to_string(), clip.to_string(), n, size, col, flip);
+        if !self.silhouettes.contains_key(&k) {
+            let img = self.body_clip_flipped(key, palette, clip, n, size, flip).map(|f| f.silhouette(col));
+            self.silhouettes.insert(k.clone(), img);
+        }
+        self.silhouettes.get(&k).and_then(|i| i.as_ref())
     }
 
     /// What is wrong with body `key` (empty: it loads and every clip frame holds pixels): clips.json problems, a sheet

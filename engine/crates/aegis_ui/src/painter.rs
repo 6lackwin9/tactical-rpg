@@ -138,6 +138,15 @@ impl<'a> Painter<'a> {
         self.c.clip = r.map(|r| self.v.rect(r));
     }
 
+    /// FX1-E: moves everything drawn after it by whole logical px (adds `d x scale` to the view offset, a camera
+    /// shake's world layer); `shift(-dx, -dy)` undoes it. A clip set before the shift stays where it was (it is held in
+    /// physical px), so a shaken board stays inside its panel; widget rects and hit tests never move. The text audit keeps the
+    /// unshifted places (a shake is a few px for a moment).
+    pub fn shift(&mut self, dx: i32, dy: i32) {
+        self.v.ox += dx as f32 * self.v.s;
+        self.v.oy += dy as f32 * self.v.s;
+    }
+
     /// Rounded panel with a 1-physical-pixel border; corner radius in logical units.
     pub fn panel(&mut self, r: Rect, fill: Rgba, border: Rgba, radius: f32) {
         let pr = self.v.rect(r);

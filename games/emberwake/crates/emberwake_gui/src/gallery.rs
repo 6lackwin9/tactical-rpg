@@ -588,8 +588,12 @@ impl Screen<GameCx> for Gallery {
         self.shown = None;
     }
 
-    /// The vignette preview plays on (only the top screen ticks) and starts over at its end.
+    /// The vignette preview plays on (only the top screen ticks) and starts over at its end; the Kit widgets' Effects
+    /// page runs its clock (FX1-E).
     fn tick(&mut self, cx: &mut Cx) {
+        if ENTRIES[self.entry].0 == "kit" {
+            self.kit.tick();
+        }
         let Some(sh) = self.shown.as_mut().filter(|sh| sh.id == "vignette") else { return };
         sh.screen.tick(cx);
         if sh.screen.state(cx)["done"] == json!(true) {
