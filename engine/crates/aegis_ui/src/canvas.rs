@@ -154,6 +154,20 @@ impl Image {
         Image { w, h, px }
     }
 
+    /// The bounding box of the pixels whose alpha is at least `min_alpha` (STAGE1-E: a body's hit rect); None when
+    /// there is none.
+    pub fn opaque_bounds(&self, min_alpha: u8) -> Option<Rect> {
+        let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+        for y in 0..self.h {
+            for x in 0..self.w {
+                if self.px[((y * self.w + x) * 4 + 3) as usize] >= min_alpha {
+                    (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+                }
+            }
+        }
+        (x0 <= x1).then(|| Rect::new(x0, y0, x1 - x0 + 1, y1 - y0 + 1))
+    }
+
     /// `self` on a transparent `size` x `size` square: centred across, standing on the bottom edge.
     pub fn on_square(&self, size: i32) -> Image {
         let mut px = vec![0u8; (size * size * 4) as usize];

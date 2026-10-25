@@ -8,8 +8,9 @@
 //! show a frame mirrored (a sheet facing right drawn facing left). PROPS1-E: a file's own size (`size_of`), mirrored images
 //! (`image_mirrored`) and a variant picked over a chain of folders (`varied`, which `tile_in` wraps). DIR4-E: a body
 //! played for a four-way `Facing` (`played_facing`: front and back rows of the sheet, side rows mirrored for left).
+//! STAGE1-E: the solid bounds of a body's fitted idle frame (`body_bounds`, a unit's hit rect on a stage).
 
-use crate::canvas::{Image, Rgba, OUTLINE_ALPHA};
+use crate::canvas::{Image, Rect, Rgba, OUTLINE_ALPHA};
 use aegis_core::assets::{self, ClipFrame, ClipPlayer, Clips, Facing, Layers};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -42,6 +43,8 @@ pub struct Art {
     /// rel -> whether a layer holds it, and tile folder -> its variant count (asked every frame, looked up once).
     present: HashMap<String, bool>,
     variant_counts: HashMap<String, usize>,
+    /// (body key, palette id, size, flipped) -> the solid bounds of the fitted `idle` frame 0 (`body_bounds`).
+    body_rects: HashMap<(String, String, i32, bool), Option<Rect>>,
 }
 
 /// Decodes a PNG into RGBA (palette, grey and RGB inputs are expanded).
@@ -71,7 +74,7 @@ impl Art {
     }
 
     pub fn layered(layers: Layers) -> Self {
-        Self { layers, files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new() }
+        Self { layers, files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new(), body_rects: HashMap::new() }
     }
 
     pub fn layers(&self) -> &Layers {
@@ -230,6 +233,19 @@ impl Art {
     /// A body's token: its `idle` clip's first frame in a `size` square.
     pub fn body_token(&mut self, key: &str, palette: &str, size: i32) -> Option<&Image> {
         self.body_clip(key, palette, "idle", 0, size)
+    }
+
+    /// The solid bounds (`Image::opaque_bounds` at `OUTLINE_ALPHA`) of body `key`'s `idle` frame 0 fitted to a `size`
+    /// square as `body_clip` fits it, mirrored left to right when `flip` (STAGE1-E: a unit's hit rect on the stage);
+    /// None when the body or frame does not load or the frame holds no solid pixel. Cached.
+    pub fn body_bounds(&mut self, key: &str, palette: &str, size: i32, flip: bool) -> Option<Rect> {
+        let k = (key.to_string(), palette.to_string(), size, flip);
+        if let Some(r) = self.body_rects.get(&k) {
+            return *r;
+        }
+        let r = self.body_clip_flipped(key, palette, "idle", 0, size, flip).and_then(|f| f.opaque_bounds(OUTLINE_ALPHA));
+        self.body_rects.insert(k, r);
+        r
     }
 
     /// The first body of `keys` that loads (a body chain).

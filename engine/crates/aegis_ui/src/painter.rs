@@ -335,6 +335,28 @@ impl<'a> Painter<'a> {
         }
     }
 
+    /// A 1 px (logical) anti-aliased ellipse outline centred on logical (`cx`, `cy`) with radii `rx` and `ry`, no fill
+    /// (STAGE1-E: a unit's foot ring). Only pixels within half the stroke plus half a pixel of the edge are touched.
+    pub fn ellipse_ring(&mut self, cx: f32, cy: f32, rx: f32, ry: f32, col: Rgba) {
+        let (x, y, prx, pry) = (self.v.ox + cx * self.v.s, self.v.oy + cy * self.v.s, (rx * self.v.s).max(0.5), (ry * self.v.s).max(0.5));
+        let t = self.v.s.max(1.0);
+        let pad = t / 2.0 + 1.0;
+        let (x0, y0, x1, y1) = ((x - prx - pad).floor() as i32, (y - pry - pad).floor() as i32, (x + prx + pad).ceil() as i32, (y + pry + pad).ceil() as i32);
+        for py in y0..=y1 {
+            for px in x0..=x1 {
+                let (ux, uy) = (px as f32 + 0.5 - x, py as f32 + 0.5 - y);
+                let k = ((ux / prx).powi(2) + (uy / pry).powi(2)).sqrt();
+                // Distance to the edge in physical pixels, measured as `ellipse` does.
+                let grad = ((ux / (prx * prx)).powi(2) + (uy / (pry * pry)).powi(2)).sqrt() / k.max(1e-6);
+                let d = if k <= 1e-6 { prx.min(pry) } else { ((k - 1.0) / grad.max(1e-6)).abs() };
+                let cover = (t / 2.0 + 0.5 - d).clamp(0.0, 1.0);
+                if cover > 0.0 {
+                    self.c.blend(px, py, mix(col, cover));
+                }
+            }
+        }
+    }
+
     pub fn circle(&mut self, cx: f32, cy: f32, r: f32, col: Rgba) {
         let (x, y, pr) = (self.v.ox + cx * self.v.s, self.v.oy + cy * self.v.s, r * self.v.s);
         let t = (self.v.s * 0.5).max(1.0);
