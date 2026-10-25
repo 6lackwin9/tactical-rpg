@@ -1,7 +1,8 @@
 # CAST1 gear: weapon families, items, drills, relics, keepsakes and loot rows
 
-Status: proposed (2026-10-25); part of [CAST1.md](CAST1.md). Lore: `systems/items_gear_and_progression.md` (canon
-for slots, pouch and resources; rows are proposals). Q-71 (b): the missing families are data. All numbers FP.
+Status: proposed (2026-10-25; rewritten to the HOOKS1 hooks and ROSTER1's keepsakes by CAST1-R the same day); part
+of [CAST1.md](CAST1.md). Lore: `systems/items_gear_and_progression.md` (canon for slots, pouch and resources; rows
+are proposals). Q-71 (b): the missing families are data. All numbers FP.
 
 ## 1. Weapon families (`item_families.json`, CAST1-A1)
 
@@ -90,7 +91,8 @@ Materials (`material` family) and quest items (`quest` family), value 0 unless n
 ## 3. Drill passives and disciplines (CAST1-A2, CAST1-A5)
 
 Proficiency for a family a class lacks comes from a source-granted passive (`slot` ""), the `proficiency` effect
-(today's grammar; unlisted families use the passive-only scaling 1.25). CQ1 (a).
+(today's grammar; unlisted families use the passive-only scaling 1.25). CQ1 (a); the `sunk_ward` class overlay
+renames the classes and empties their paths but adds no proficiency (HOOKS1 12, HQ6 a), so the drills stay.
 
 | Passive id | Name | Effects | Granted by |
 | --- | --- | --- | --- |
@@ -120,11 +122,12 @@ them onto a wrong row.
 
 Loot rows reference catalog items, not world named items (G26), so the relics are catalog items (`special` true with
 `special_note`, rarity RARE, `starter_stash` false) paid once through `key_loot` or `objective_reward` `once`. Their
-stand-in effects use item modifiers (a `stat_bonus` may name the derived `max_poise`, DERIVE1-S) and item effects.
+effects use item modifiers (a `stat_bonus` may name the derived `max_poise`, DERIVE1-S) and item effects, the HOOKS1
+item `trigger` included (the pavise: HOOKS1_TASKS 1.2, 6).
 
 | Id | Name | Family, hand | Source | Modifiers and effects | Lore effect deferred |
 | --- | --- | --- | --- | --- | --- |
-| `vanes_gilded_pavise` | Gilded Pavise | shield off | M1 objective reward | mitigation +4; stat `max_poise` +30; req STR 13 | Active Guard returns 15 damage and stagger 20 (G5) |
+| `vanes_gilded_pavise` | Gilded Pavise | shield off | M1 objective reward | mitigation +4; stat `max_poise` +30; req STR 13; effect trigger `guarded_hit`: `damage` 15, `stagger` 20, `to` other | - |
 | `quells_marrow_scalpel` | Marrow Scalpel | bone_saw main_1h | M2 key loot (Quell) | power +3; `status_potency` 10 | the hit vents Strain (Act 2), bleed on hit (G9) |
 | `grendels_slag_hammer` | Slag-Hammer | hammer main_2h | M3 key loot (Grendel) | power +4; req STR 15 | the shockwave hits the unit behind (G12) |
 | `orlovs_flensing_talon` | Flensing Talon | dagger main_1h | M4 key loot (Orlov) | power +3; `skill_potency` family `throat_carver` 0.2, family `orlovs_retribution` 0.2 | execute a bleeding foe below 35% (G7) |
@@ -140,9 +143,10 @@ Founders arrive with the gear and pouches in CAST1_FOUNDERS. The hub stash at th
 
 ## 7. Keepsakes (the Crucible's captured founder; Q-34, Q-35)
 
-Each is a catalog accessory (`special` true, `value` 0 as ROSTER1's check asks, rarity RARE, slot ACCESSORY_1) carrying the founder's name, about 50% of
-the founder's Act 1 trait and far above shop accessories (numbers by the balance lane). Kaelen's and Hollis's names
-are in the story guide; the other four are proposals (CQ11).
+Each is a catalog accessory (family `accessory`, slot ACCESSORY_1, rarity RARE, `special` true, `value` 0: never
+sold, as ROSTER1 KS2's check asks) carrying the founder's name, about 50% of the founder's Act 1 trait and far above
+shop accessories (ROSTER1 KS4; numbers by the balance lane). Kaelen's and Hollis's names are in the story guide; the
+other four are proposals (CQ11 a, planner pick).
 
 | Id | Name | Founder | Modifiers and effects (FP) |
 | --- | --- | --- | --- |
@@ -154,10 +158,10 @@ are in the story guide; the other four are proposals (CQ11).
 | `keepsake_elyse` | Elyse's Cracked Retort (proposal) | Elyse | stat INT +2; `status_potency` 10 |
 
 `name` short forms for lists: "Gouged Sigil", "Runner Whistle", "Copyist Quill", "Focusing Monocle", "Shackle Link",
-"Cracked Retort". Delivery: six loot rows, each with `requires_flags` naming the flag
-`sunk_ward.crucible_stayed` with the founder's id as its value (ENCOUNTER2 W2 sets the flag); the Act 1 to Act 2
-transition event pays the matching row (an event trigger, M0 kit; G26). Alternative: ROSTER1 KS2 pays it at the
-capture through the founder character's `keepsake` field; ROSTER1 RQ7 picks one path, and the other's rows are skipped.
+"Cracked Retort". Delivery (ROSTER1 RQ7 a, planner pick): each founder's world character carries `keepsake`
+`keepsake_<founder>` (CAST1_FOUNDERS 1); when the Crucible's `stay_behind` captures the founder (`then` `capture`),
+ROSTER1-L puts one copy in the stash at once (KS1, KS2; the manifest's `keepsakes.on` lists `captured`, ROSTER1-D).
+No loot row pays a keepsake: the six `loot_keepsake_<founder>` rows of the first draft are dropped.
 
 ## 8. Loot rows (`sunk_ward/loot.json`, CAST1-A5)
 
@@ -175,6 +179,5 @@ capture through the founder character's `keepsake` field; ROSTER1 RQ7 picks one 
 | `loot_marrow_core` | Marrow Core | item | `titan_marrow_core` | 1 | unique | - | `enc_evt_05` key loot (the Amalgam) |
 | `loot_dreamers_vertebra` | Dreamer's Vertebra | item | `dreamers_vertebra` | 1 | unique | - | `enc_evt_05` objective reward |
 | `loot_poultices` | Stitch-Poultices | item | `sulfur_poultice` | 2 | common | - | `enc_pro_0c`, `enc_job_corvo_gate` objective rewards |
-| `loot_keepsake_<founder>` (six) | the keepsake's name | item | `keepsake_<founder>` | 1 | unique | `sunk_ward.crucible_stayed` = founder id | Act 2 opening event |
 
 Unit `loot` tables (catalog units, one roll per defeated unit) are in CAST1_BESTIARY and CAST1_BOSSES.

@@ -1,6 +1,7 @@
 # CAST1 assets: placeholders from existing art, and new art for the user to approve
 
-Status: proposed (2026-10-25); part of [CAST1.md](CAST1.md). User rule (2026-10-25): every unit, founder, boss, item,
+Status: proposed (2026-10-25; CAST1-R the same day: the hook skills, hazards, vents and zones); part of
+[CAST1.md](CAST1.md). User rule (2026-10-25): every unit, founder, boss, item,
 skill icon, status and prop the cast needs takes the best-matching existing asset as its placeholder; recolouring an
 existing rig body with a new palette file is a placeholder, not new art; every poor match is listed in section 7 for
 the user to approve before any new art is made, and the image API is always asked first. Nothing here asks for art
@@ -99,9 +100,9 @@ differs, none poor (the kind icons in `kits/rpg/assets/skills/kinds/` are the fa
 | Placeholder icon | Good matches | Fair matches |
 | --- | --- | --- |
 | `sunder.png` | `billhook_sunder`, `gilded_billhook_sunder` | - |
-| `shield_wall.png` | `seventh_ward_bulwark` | `execution_wall` |
-| `shield_bash.png` | - | `pommel_strike` |
-| `charge_in.png` | - | `intercepting_hook`, `martyrs_rush` |
+| `shield_wall.png` | `seventh_ward_bulwark` | `execution_wall`, `intercepting_hook` (now a Guard that covers an ally; re-copy over the `charge_in.png` copy) |
+| `shield_bash.png` | `buckler_jab` (new) | `pommel_strike` |
+| `charge_in.png` | - | `martyrs_rush` |
 | `hamstring.png` | `hamstring_sever` | - |
 | `feint.png` | - | `ash_cloud_fade` |
 | `assassinate.png` | `throat_carver` | - |
@@ -110,14 +111,14 @@ differs, none poor (the kind icons in `kits/rpg/assets/skills/kinds/` are the fa
 | `greater_mend.png` | `tourniquet_tonic` | - |
 | `aegis.png` | `resilience_ward` | - |
 | `barbed_arrow.png` | `poachers_quarrel` | - |
-| `pinning_shot.png` | `tripwire_snare` | `iron_shackle_drag` |
+| `pinning_shot.png` | - | `tripwire_snare` (now a trap, not a shot), `iron_shackle_drag` |
 | `deadeye.png` | `heavy_winch_sunder` | - |
 | `haymaker.png` | `shackle_pummel_slam` | `pneumatic_hammer_strike` |
 | `crushing_blow.png` | - | `slag_slam_throw` |
 | `shockwave.png` | `foundry_shatter` | `bone_mill_pulverizer` |
 | `firebomb.png` | `phosphorus_pot` | - |
 | `stunned.png` | - | `magnesium_flash_bomb` |
-| `envenom.png` | - | `choke_gas`, `caustic_vomit` |
+| `envenom.png` | - | `choke_gas`, `caustic_vomit`, `bile_coat` (new: coats an ally's weapon) |
 | `reckless_swing.png` | `sanctified_decapitation` | `heavy_bill_thrust` |
 | `lunge.png` | - | `billhook_hook`, `burrow_ambush` |
 | `aimed_shot.png` | `aimed_bolt` | - |
@@ -152,9 +153,13 @@ CAST1 uses has its icon in `kits/rpg/assets/statuses/` (`empower` has none today
 | Catwalks (M4), the canal bridge (0c) | `bridge` tiles | good | - |
 | The canal (0c) | `deep_water` tiles | good | - |
 | Grease (M4), violet mist (interlude) | `toxic_bog` tiles | fair | green bog, not grease or violet mist |
-| Lanterns (M2), vents (M3), braziers (M5) | `burning_ground` tiles | fair | flat fire, no lantern or brazier |
+| Lanterns (M2), braziers (M5) | `burning_ground` tiles | fair | flat fire, no lantern or brazier |
+| Slag vents (M3, an arena hazard on columns 7-8) | the battle screen's arena telegraph marks and strip badge (HOOKS1 AH3, HOOKS1-UI) on floor tiles | fair | no vent grate drawn; the marks show only where and when it strikes |
+| Ground hazards (smoke, tripwire, grease, phosphorus and pitch fire, choke-gas) | the `hazards` rows' `tint` and `glyph` overlay (HOOKS1_TASKS 2.1) | fair | a tinted tile with a letter, no smoke or flame sprite; the hidden tripwire is drawn only for the party |
+| Meter pips (Bile Phial, Slag Fury) | the unit card's pips (HOOKS1 UM7) | good | - |
 | Rooftops (0b) | `stone` tiles | fair | flat stone, no slates |
-| Zone backdrops and tile sets | the code zones `ruined_courtyard`, `river_crossing`, `lava_cavern`, `swamp_bog`, `desert_outpost` (CAST1_ENCOUNTERS 1) | fair | Ashlands moods; Sunk Ward zones are G22 |
+| Zone backdrops | the seven `zones` rows (HOOKS1_TASKS 2.3) with no backdrop file: STAGE1's fallback gradient from each row's `ground` (stone, bridge, floor) | poor | a flat gradient, no place; section 7, N10 |
+| Zone tile sets | none per zone (HOOKS1 ZN3: tiles are per terrain): the common terrain tiles above | fair | Ashlands tiles in the Sunk Ward |
 
 ## 7. For the user: new art to approve (each one asked first; the image API only after a yes)
 
@@ -169,3 +174,4 @@ CAST1 uses has its icon in `kits/rpg/assets/statuses/` (`empower` has none today
 | N7 | Orlov portrait | the same face as Grendel and the Flagellants | Obese, heavily muscled guild master in an iron-plated butcher's harness, a steam hose over the shoulder, barbed hooks at the belt; palette 05, 09, 10 | ART2 portrait pipeline |
 | N8 | Nemeth portrait | the Footman's face for the Act 1 villain | Inquisitor-Prelate in mirror-polished plate over a crimson cassock, a tallow-marrow vial in the throat collar, grey skin from the infusion; cold and upright; palette 05, 13, 14 | ART2 portrait pipeline |
 | N9 | Scourge and sprayer family icons | a mace and a staff mislead in the shop and loadout | Scourge: a three-tailed flail with barbed wire tails, handle wrapped in vestment cloth. Sprayer: a brass pressure tank with a hose and a pole nozzle | the icon pipeline (ART2), or the image API asked first as one small sheet |
+| N10 | Battle backdrops for the seven Sunk Ward zones | a gradient stands in for every place | `alley` Cinder Alley: soot-black brick lanes, hanging linen, tallow lamps; `rooftops` Market Rooftops: wet slates, chimneys, meat hooks on lines; `canal` Canal Bridge: an iron bridge over black canal water, the mortuary cart; `foundry` The Fourth Kiln: slag pools, vent grates, chains, the bone-mill wheel; `tallow_vats` Tallow Vats: boiling vats, catwalks, grease runnels; `undercroft` Sluice Undercroft: drowned vaults, bone pillars, violet mist; `watchpost` Crucible Watchpost: the Slag Gate, the winch, braziers; all from the art bible's 16 hues | `backgrounds/battle/<id>.png` (HOOKS1 ZN1) in the STAGE1 backdrop format; M4 art (HOOKS1_TASKS 2.3), image API asked first, one zone at a time |
