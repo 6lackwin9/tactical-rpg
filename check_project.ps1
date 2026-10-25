@@ -2,7 +2,7 @@
 # Tactical RPG - commit gate on the Aegis engine (transition step 2, 2026-10-19)
 # Builds every crate and target (a compiler warning fails), then runs every test: the rules, battle, world, data-loader, content-writer and Godot
 # parity suites (the parity suites skip themselves when games/emberwake/parity/out is missing; tools/fc.sh parity records it
-# from legacy/). Same steps as `tools/fc.sh gate`. The Godot gate of the frozen Godot copy is legacy/check_project.ps1.
+# from legacy/), then the layer check (engine and kit crates name no game, KIT1-G). Same steps as `tools/fc.sh gate`. The Godot gate of the frozen Godot copy is legacy/check_project.ps1.
 # ==============================================================================
 param (
     [switch]$VerboseOutput,   # print the full cargo output
@@ -31,7 +31,7 @@ function Invoke-Cargo([string[]]$CargoArgs) {
 
 Write-Host "=== AEGIS: COMMIT GATE ===" -ForegroundColor Cyan
 
-Write-Host "[1/2] Building every crate..."
+Write-Host "[1/3] Building every crate..."
 # Every target (tests included); a compiler warning fails the gate like an error (cargo replays cached warnings, CI1).
 $build = Invoke-Cargo @("build", "--workspace", "--all-targets")
 if ($VerboseOutput) { $build.Lines | ForEach-Object { Write-Host $_ } }
@@ -43,7 +43,7 @@ if ($build.Code -ne 0 -or $warned) {
 }
 if (-not $Quiet) { Write-Host "  -> build ok" -ForegroundColor Green }
 
-Write-Host "[2/2] Running every test..."
+Write-Host "[2/3] Running every test..."
 # Windows Smart App Control sometimes blocks a freshly linked test binary (os error 4551): delete it and retry.
 $test = $null
 for ($try = 1; $try -le 4; $try++) {
@@ -62,6 +62,45 @@ if ($failed) {
     exit 1
 }
 if (-not $Quiet) { $summary | ForEach-Object { Write-Host "  $_" } }
+
+Write-Host "[3/3] Checking the layers..."
+# KIT1-G (docs/specs/KIT1_TASKS.md 4), same check as `tools/fc.sh layers`: the engine and kit crates name no game (every
+# folder under games/, whole word with `_` as a separator, any case; tracked or new files) and no engine or kit manifest
+# has a path dependency into games/ (an engine manifest none into kits/ either).
+$layerHits = @()
+$gameIds = @(Get-ChildItem -Path (Join-Path $projectRoot "games") -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+foreach ($id in $gameIds) {
+    $pattern = "(^|[^[:alnum:]])$([regex]::Replace($id, '[^A-Za-z0-9_-]', '\$0'))([^[:alnum:]]|$)"
+    $hits = & git grep --untracked -n -I -i -E -e $pattern -- engine/crates 'kits/*/crates/*' 'kits/*/schema.json'
+    foreach ($h in @($hits)) {
+        if ($h -match '^([^:]*):(\d+):(.*)$') {
+            $text = $Matches[3]; $at = [Math]::Max(0, $text.ToLower().IndexOf($id.ToLower()) - 40)
+            $layerHits += "$($Matches[1]):$($Matches[2]) names game `"$id`": $($text.Substring($at, [Math]::Min(120, $text.Length - $at)))"
+        }
+    }
+}
+$manifests = @(& git ls-files --cached --others --exclude-standard -- 'engine/*Cargo.toml' 'kits/*Cargo.toml')
+$gamesRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot "games")) + [IO.Path]::DirectorySeparatorChar
+$kitsRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot "kits")) + [IO.Path]::DirectorySeparatorChar
+foreach ($m in $manifests) {
+    $dir = Split-Path -Parent (Join-Path $projectRoot $m)
+    $n = 0
+    foreach ($line in [IO.File]::ReadAllLines((Join-Path $projectRoot $m))) {
+        $n++
+        if ($line -notmatch 'path *= *"([^"]*)"') { continue }
+        $p = $Matches[1]
+        $full = [IO.Path]::GetFullPath($(if ([IO.Path]::IsPathRooted($p)) { $p } else { Join-Path $dir $p })) + [IO.Path]::DirectorySeparatorChar
+        if ($full.StartsWith($gamesRoot, [StringComparison]::OrdinalIgnoreCase)) { $layerHits += "${m}:$n path dependency into games/: $p" }
+        elseif ($m -like 'engine/*' -and $full.StartsWith($kitsRoot, [StringComparison]::OrdinalIgnoreCase)) { $layerHits += "${m}:$n engine path dependency into kits/: $p" }
+    }
+}
+if ($layerHits.Count -gt 0) {
+    $layerHits | Select-Object -First 40 | ForEach-Object { Write-Host "  [layers] $_" -ForegroundColor Red }
+    Write-Host "=== [FAILED] layers: engine and kit code must not name a game (CLAUDE.md Layers) ===" -ForegroundColor Red
+    exit 1
+}
+if (-not $Quiet) { Write-Host "  -> layers ok: engine and kit crates name no game ($($gameIds -join ', '))" -ForegroundColor Green }
+
 $passed = 0
 $test.Lines | Select-String -Pattern "test result: ok\. (\d+) passed" | ForEach-Object { $passed += [int]$_.Matches[0].Groups[1].Value }
 Write-Host "=== [SUCCESS] ALL CHECKS PASSED: $passed tests ===" -ForegroundColor Green

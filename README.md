@@ -31,8 +31,9 @@ live in `%APPDATA%/Aegis/emberwake` (copied from `%APPDATA%/Aegis` on the first 
 
 ## Checks
 
-- `check_project.ps1 -Fast -Quiet` (desktop) or `tools/fc.sh gate`: builds every crate and runs every test (rules,
-  battle, world, data loader and writer, Godot parity). CI runs the same on pull requests into `main` and pushes to
+- `check_project.ps1 -Fast -Quiet` (desktop) or `tools/fc.sh gate`: builds every crate, runs every test (rules,
+  battle, world, data loader and writer, Godot parity) and the layer check (`tools/fc.sh layers`, KIT1-G: engine and kit
+  crates name no game and have no path into `games/`). CI runs the same on pull requests into `main` and pushes to
   `main` (`.github/workflows/gate.yml`, required check `gate`), after recording the Godot reference from `legacy/`.
 - `tools/fc.sh docs`: doc size and markdown lint.
 - `tools/fc.sh parity`: re-records the full Godot reference (battle traces, world battles, journeys) from `legacy/`
