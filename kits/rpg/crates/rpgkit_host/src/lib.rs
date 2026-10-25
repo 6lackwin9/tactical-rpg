@@ -23,6 +23,15 @@
 //!   resolve                                    resolve to the end of the round
 //!   advance                                    start the next round
 //!   autoplay {preset?, rounds?}                draft, confirm and resolve rounds until the battle ends
+//!   round_intent {unit, intent?, target?, maneuver?, opener?}   RULESET1-PL (rule round_intent): set a party member's
+//!                                              round intent, target ("self", a unit or [x, y]), Maneuver kind
+//!                                              (engage, disengage, utility; "" = auto) and opener (a skill id,
+//!                                              {"item": id}; "" = auto), then rebuild its auto plan and every later
+//!                                              member's (planned, reason when the intent is not offered)
+//!   manual {unit, on?}                         the member's Manual toggle (default on; off rebuilds the auto plan)
+//!   fill {unit}                                Manual's "fill the rest": follow-ups and Rest after the last step
+//!   round_intents                              every active unit's intent, target, kind, opener, Manual and the
+//!                                              reason tag of each planned entry
 //!   log {since?}                               resolution log lines
 //!   history                                    the mutating requests so far (feed them back to replay) and the
 //!                                              checkpoints: the round outcome after every concluded round
@@ -34,6 +43,8 @@
 use rpgkit_battle::command;
 use rpgkit_battle::grid::{V2, GRID_H, GRID_W, TERRAIN_IDS};
 use rpgkit_battle::plan::{PlanStep, Step};
+use rpgkit_battle::round_intent::{self, ManeuverKind, Opener, RoundTarget};
+use rpgkit_battle::round_intent_plan as rip;
 use rpgkit_battle::session::{EncounterDef, Phase, Session};
 use rpgkit_battle::skill::{self, Kind};
 use rpgkit_battle::world::UnitId;
@@ -75,7 +86,7 @@ fn err(msg: impl Into<String>) -> Value {
 
 impl aegis_host::Commands for Battle {
     fn mutating(&self, cmd: &str) -> bool {
-        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay")
+        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "manual" | "fill")
     }
 
     fn restarts(&self, cmd: &str) -> bool {
@@ -255,6 +266,10 @@ impl Battle {
                 }
                 json!({"ok": true, "rounds": played, "log": s.resolver.log[from..].to_vec(), "state": state_of(s)})
             }
+            "round_intent" => round_intent_req(s, req),
+            "manual" => manual_req(s, req),
+            "fill" => fill_req(s, req),
+            "round_intents" => json!({"ok": true, "round_intents": round_intents(s)}),
             "log" => {
                 let since = req.get("since").and_then(Value::as_u64).unwrap_or(0) as usize;
                 json!({"ok": true, "log": s.resolver.log.get(since..).unwrap_or(&[]).to_vec(), "next": s.resolver.log.len()})
@@ -496,4 +511,162 @@ fn edit_steps(s: &mut Session, req: &Value, op: &str) -> Value {
         _ => s.plan.set_steps(u, Vec::new()),
     }
     json!({"ok": true, "plan": plan_view(s, Some(u))})
+}
+
+// ---- RULESET1-PL: round intent requests (rule round_intent) ------------------------------------------------------
+
+/// RULESET1_TASKS 1.8: a round target: "self", a unit (index or name) or a cell [x, y].
+fn round_target_of(s: &Session, v: &Value) -> Option<RoundTarget> {
+    match v {
+        Value::String(t) if t == "self" => Some(RoundTarget::Myself),
+        Value::Array(_) => cell_of(v).map(RoundTarget::Cell),
+        Value::Number(n) => n.as_u64().map(|i| i as usize).filter(|i| *i < s.w.units.len()).map(RoundTarget::Unit),
+        Value::String(name) => s.w.units.iter().position(|u| u.name.eq_ignore_ascii_case(name)).map(RoundTarget::Unit),
+        _ => None,
+    }
+}
+
+/// An opener: a skill id, {"skill": id} or {"item": id}; null or "" = the planner's (PL3).
+fn opener_of(s: &Session, v: &Value) -> Result<Option<Opener>, String> {
+    let skill = |id: &str| s.w.book().find(id).map(|i| Some(Opener::Skill(i))).ok_or_else(|| format!("unknown skill '{id}'"));
+    match v {
+        Value::Null => Ok(None),
+        Value::String(id) if id.is_empty() => Ok(None),
+        Value::String(id) => skill(id),
+        Value::Object(o) => match (o.get("skill").and_then(Value::as_str), o.get("item").and_then(Value::as_str)) {
+            (Some(id), _) => skill(id),
+            (None, Some(id)) => Ok(Some(Opener::Item(id.to_string()))),
+            _ => Err("opener needs a skill or an item".into()),
+        },
+        _ => Err("opener: a skill id, {\"skill\": id} or {\"item\": id}".into()),
+    }
+}
+
+/// A Maneuver kind: engage, disengage, utility; "" or "auto" = the planner's (MV11).
+fn kind_of(v: &Value) -> Result<Option<ManeuverKind>, String> {
+    match v.as_str().unwrap_or("") {
+        "" | "auto" => Ok(None),
+        "engage" => Ok(Some(ManeuverKind::Engage)),
+        "disengage" => Ok(Some(ManeuverKind::Disengage)),
+        "utility" => Ok(Some(ManeuverKind::Utility)),
+        other => Err(format!("unknown maneuver '{other}' (engage, disengage, utility)")),
+    }
+}
+
+fn kind_name(k: ManeuverKind) -> &'static str {
+    match k {
+        ManeuverKind::Engage => "engage",
+        ManeuverKind::Disengage => "disengage",
+        ManeuverKind::Utility => "utility",
+    }
+}
+
+/// The party unit of a round intent request while the round is planned.
+fn planning_member(s: &Session, req: &Value, cmd: &str) -> Result<UnitId, Value> {
+    if s.phase != Phase::Planning || s.plan_confirmed {
+        return Err(err("not planning"));
+    }
+    unit_arg(s, req, "unit").filter(|u| s.w.allies.contains(u)).ok_or_else(|| err(format!("{cmd} needs a party unit")))
+}
+
+/// The reply after a round intent change: whether the member's auto plan was built (else PL7's reason), the later
+/// members the rebuild refused (PL8), the party plan and every unit's round intent.
+fn intent_reply(s: &Session, result: Result<(), String>, refused: Vec<(UnitId, String)>) -> Value {
+    let refused: Vec<Value> = refused.into_iter().map(|(u, r)| json!({"unit": u, "name": s.w.units[u].name, "reason": r})).collect();
+    json!({"ok": true, "planned": result.is_ok(), "reason": result.err(), "refused": refused, "plan": plan_view(s, None), "round_intents": round_intents(s)})
+}
+
+/// RULESET1_TASKS 1.8 `round_intent {unit, intent, target, maneuver, opener}`: each given field is set in order (the
+/// intent first: a change drops intent-bound buffs and the old steps), then a member that plans automatically gets its
+/// plan rebuilt, and every later member's (PL8). Atomic: on any refused field the battle is left exactly as it was
+/// (the protocol records only successful requests, so a replay must never see half a request).
+fn round_intent_req(s: &mut Session, req: &Value) -> Value {
+    let u = match planning_member(s, req, "round_intent") {
+        Ok(u) => u,
+        Err(e) => return e,
+    };
+    let (w0, steps0, events0) = (s.w.clone(), s.plan.sequences.clone(), s.events.len());
+    if let Err(e) = set_round_fields(s, u, req) {
+        s.w = w0;
+        s.plan.sequences = steps0;
+        s.events.truncate(events0);
+        return err(e);
+    }
+    if rip::manual(&s.w, u) {
+        return intent_reply(s, Ok(()), Vec::new());
+    }
+    let (result, refused) = rip::replan(&mut s.w, &mut s.plan, u);
+    intent_reply(s, result, refused)
+}
+
+/// The fields of a `round_intent` request, in order; the first refusal stops (the caller restores the battle).
+fn set_round_fields(s: &mut Session, u: UnitId, req: &Value) -> Result<(), String> {
+    if let Some(i) = req.get("intent").and_then(Value::as_str) {
+        s.set_round_intent(u, i)?;
+    }
+    if let Some(v) = req.get("target") {
+        let t = round_target_of(s, v).ok_or("target: \"self\", a unit or a cell [x, y]")?;
+        s.set_round_target(u, t)?;
+    }
+    if let Some(v) = req.get("maneuver") {
+        kind_of(v).and_then(|k| rip::set_kind(&mut s.w, u, k))?;
+    }
+    if let Some(v) = req.get("opener") {
+        opener_of(s, v).and_then(|o| rip::set_opener(&mut s.w, u, o))?;
+    }
+    Ok(())
+}
+
+/// MM1, MM3 `manual {unit, on}`: the Manual toggle (default on); off rebuilds the auto plan.
+fn manual_req(s: &mut Session, req: &Value) -> Value {
+    let u = match planning_member(s, req, "manual") {
+        Ok(u) => u,
+        Err(e) => return e,
+    };
+    let on = req.get("on").and_then(Value::as_bool).unwrap_or(true);
+    match rip::set_manual(&mut s.w, &mut s.plan, u, on) {
+        Err(e) if on => err(e),
+        result => intent_reply(s, result, Vec::new()),
+    }
+}
+
+/// MM3 `fill {unit}`: follow-ups and Rest after the member's last step.
+fn fill_req(s: &mut Session, req: &Value) -> Value {
+    let u = match planning_member(s, req, "fill") {
+        Ok(u) => u,
+        Err(e) => return e,
+    };
+    match rip::fill_rest(&s.w, &mut s.plan, u) {
+        Err(e) => err(e),
+        Ok(()) => intent_reply(s, Ok(()), Vec::new()),
+    }
+}
+
+/// RULESET1_TASKS 1.8 (UI5): every active unit's round intent, target, Maneuver kind, opener, Manual toggle and the
+/// reason tag of each entry it has planned (PL6); empty without the rule round_intent.
+fn round_intents(s: &Session) -> Vec<Value> {
+    let w = &s.w;
+    if !round_intent::on(w) {
+        return Vec::new();
+    }
+    (0..w.units.len())
+        .filter(|&c| w.units[c].is_active())
+        .map(|c| {
+            let rs = w.round_states.get(&c).cloned().unwrap_or_default();
+            let target = match rs.target {
+                Some(RoundTarget::Myself) => json!("self"),
+                Some(RoundTarget::Unit(t)) => json!(t),
+                Some(RoundTarget::Cell(p)) => json!([p.x, p.y]),
+                None => Value::Null,
+            };
+            let opener = match &rs.opener {
+                Some(Opener::Skill(i)) => json!(w.cat.skills[*i].id),
+                Some(Opener::Item(id)) => json!({"item": id}),
+                None => Value::Null,
+            };
+            json!({"unit": c, "name": w.units[c].name, "side": if w.allies.contains(&c) { "party" } else { "enemy" },
+                "intent": rs.intent.map(|i| i.id()), "target": target, "maneuver": rs.maneuver.map(kind_name), "maneuver_auto": rs.maneuver_auto,
+                "opener": opener, "manual": rs.manual, "reasons": rip::reasons(w, &s.plan, c)})
+        })
+        .collect()
 }

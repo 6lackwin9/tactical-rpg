@@ -83,6 +83,21 @@ pub struct RoundState {
     pub moved: bool,
     /// RS2: Rest blocks that landed this round.
     pub rest_blocks: i32,
+    /// PL1, FU1 (RULESET1-PL): the opener the player picked for this round (None = the planner's, PL3).
+    pub opener: Option<Opener>,
+    /// MM1: the member plans by hand (the auto planner leaves its steps alone); persists across rounds.
+    pub manual: bool,
+    /// MV11: `maneuver` was picked by the auto planner (Engage, else Disengage, else Utility), not by the player.
+    pub maneuver_auto: bool,
+    /// TG6: last round's target (the planner proposes it while it is valid).
+    pub last_target: Option<RoundTarget>,
+}
+
+/// RULESET1_INTENT FU1, PL1: a round's opener: a skill (catalog index) or a pouch item (its id).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Opener {
+    Skill(usize),
+    Item(String),
 }
 
 /// Whether the battle plays by the round intent.
@@ -187,6 +202,10 @@ pub fn set_intent(w: &mut World, c: UnitId, intent: RoundIntent) -> Result<Vec<S
     if intent != RoundIntent::Maneuver {
         rs.maneuver = None;
     }
+    // PL8: an opener picked for another intent no longer applies
+    if old != Some(intent) {
+        rs.opener = None;
+    }
     Ok(lines)
 }
 
@@ -211,7 +230,9 @@ pub fn set_maneuver(w: &mut World, c: UnitId, kind: ManeuverKind) -> Result<(), 
     if intent_of(w, c) != Some(RoundIntent::Maneuver) {
         return Err("Engage, Disengage and Utility are Maneuver kinds.".into());
     }
-    w.round_states.entry(c).or_default().maneuver = Some(kind);
+    let rs = w.round_states.entry(c).or_default();
+    rs.maneuver = Some(kind);
+    rs.maneuver_auto = false;
     Ok(())
 }
 
@@ -254,7 +275,8 @@ pub fn rest_gain(n: &Numbers, blocks: i32) -> i32 {
 }
 
 /// Round start (after the status roll-over and `ap_regen`): RS2's Rest gain for the units that pay AP, then the
-/// round's target, kind, move and Rest count reset (the intent and facing stay: IN2, MV1). Returns the gain lines.
+/// round's target, kind, opener, move and Rest count reset (the intent, facing and Manual toggle stay: IN2, MV1, MM1).
+/// Returns the gain lines.
 pub fn round_start(w: &mut World) -> Vec<String> {
     if !on(w) {
         return Vec::new();
@@ -270,8 +292,11 @@ pub fn round_start(w: &mut World) -> Vec<String> {
             lines.push(format!("[Rest] {} recovers {gain} AP from {blocks} Rest block{} (AP {}/{})", u.name, if blocks == 1 { "" } else { "s" }, u.ap, u.max_ap));
         }
         let rs = w.round_states.get_mut(&c).unwrap();
-        rs.target = None;
+        // TG6 (RULESET1-PL): the planner proposes last round's target; the opener and the kind are picked again
+        rs.last_target = rs.target.take();
         rs.maneuver = None;
+        rs.maneuver_auto = false;
+        rs.opener = None;
         rs.moved = false;
         rs.rest_blocks = 0;
     }

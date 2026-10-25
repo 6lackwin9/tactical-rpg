@@ -13,6 +13,7 @@ pub mod plan;
 pub mod report;
 pub mod resolver;
 pub mod round_intent;
+pub mod round_intent_plan;
 pub mod session;
 pub mod sim;
 pub mod skill;
