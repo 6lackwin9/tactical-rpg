@@ -84,6 +84,9 @@ Never delete or rewrite entries. When something is replaced, add a row with the 
 | 2026-10-25 | Kit code only when a second game shares rules (SPLIT1 principle 2; `docs/STRUCTURE.md`, `kits/rpg/README.md`) | replaced | KIT1: the genre rules move into `kits/rpg/crates/rpgkit_*` in M0, the game crates become façades | User 2026-10-25 ("Worlds and reuse"): the new campaign is a second ruleset user inside the same game and the Ashlands become the kit's sample, so the reason to wait no longer holds |
 | 2026-10-25 | The rejection (2026-10-18) of a temporary injury until a rest | reopened for the new worlds only | `wounded` (ROSTER1): -20% max HP until a rest; the Ashlands keep the rejection | User 2026-10-25 (Q-31) decided it for the Scarlet Lullaby campaign |
 | 2026-10-25 | ENCOUNTER2's `party.away` list and `leave_party` (never built) | replaced | ROSTER1's `party.departed` and `then: capture / kill` through `roster::depart` | ROSTER1 is the lifecycle spec the stand-in waited for |
+| 2026-10-25 | Static terrain only; zone maps in code (decision S12) | replaced (for the timeline ruleset) | HOOKS1: ground and arena hazards, a `zones` catalog kind (the 8 code zones stay for the Ashlands) | The slice's cast needs hazards and data zones (user 2026-10-25, Q-55, Q-56) |
+| 2026-10-25 | CAST1's Act 1 stand-ins for gaps G1, G3-G5, G14, G19, G22, G24, G27-G29 | replaced | HOOKS1's hooks (CAST1-R rewrites the rows) | User rule: the slice ships no stand-ins (Q-55, Q-56) |
+| 2026-10-25 | The lore's Crossbowman AI that targets a unit in its windup | not adopted | Enemies plan before the player confirms (HOOKS1 HQ2) | Enemy plans are drafted first (INTENT1), so a windup is not yet known when the AI picks |
 
 New rows go at the end of the table above (append-only); this section stays below it.
 
