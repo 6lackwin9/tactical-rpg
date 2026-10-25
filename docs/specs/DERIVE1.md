@@ -279,6 +279,10 @@ Composure's constants when the first corruption consumer exists (no sim can meas
 
 ## 10. Open questions (recommended option first)
 
+Decided (user 2026-10-25): DQ1-DQ5 as recommended. With Q-92: status-type corruption effects use the resist roll (DQ1
+a); hazards that shake a unit (the belltower, the shockwave) cause a poise loss scaled down by Composure, with no roll.
+Max Poise is the second derived-stat row (RULESET1 TQ5).
+
 | Id | Question | Options | Recommendation |
 | --- | --- | --- | --- |
 | DQ1 | What "resist" means mechanically | (a) a seeded d100: chance = potency − value, like debuffs; (b) a threshold, no roll: the effect lands if potency > value; (c) a scale: the effect is cut by value % | (a): one rule players already learn from debuffs; (c) suits poise losses if randomness feels bad in playtest |
