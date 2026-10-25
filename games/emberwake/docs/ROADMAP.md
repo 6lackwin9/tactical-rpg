@@ -32,6 +32,7 @@ Only the user moves an item to `approved`. Only the planner (main session) sets 
 | DERIVE1 | Data-defined derived stats (an engine formula evaluator, kit derived-stat rows, resist checks); first row Composure, the corruption resist | proposed | - | `docs/specs/DERIVE1.md`; user 2026-10-25 (Q-47a) asked for the capability in the engine and kit; DQ1-DQ5 open |
 | ENCOUNTER2 | Encounter structures: authored terrain, hold-a-tile escape, impossible fight and last stand, boss phase kill / swap / rogue side, linked rooms | proposed | - | `docs/specs/ENCOUNTER2.md`; user 2026-10-25 (Q-60, Q-75, Q-75a); slice needs T, H, HA, W, U, K, D; EQ1-EQ9 open |
 | RULESET1 | The "timeline" combat ruleset (M1 feel prototype): ruleset world field and Dojo toggle, windups, recovery, chains, ap_cost, poise and breaks, Active Guard, pierce, reach 2, deck slot kinds, plan visibility; the classic ruleset byte-identical | proposed | DERIVE1 | `docs/specs/RULESET1.md`; user 2026-10-25 (combat group 1.1); TQ1-TQ11 open |
+| CAMPAIGN1 | Campaign meters (Alert, the Doom Clock), checkpoints and bad ends, the run-over screen, purse and upkeep names, rests that cost days, defeat retreat, event triggers; off in worlds without a `campaign` field | in-progress | - | `docs/specs/CAMPAIGN1.md`; user 2026-10-25 (slice M0) |
 
 ## Goals (user 2026-10-17, decision "Goal-based roadmap"; replaces the suggested build order)
 

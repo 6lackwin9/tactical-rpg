@@ -106,3 +106,12 @@ written until the user says otherwise.
 - The archive is exempt from the doc size check (the planner widened `tools/fc.sh docs`).
 - The dialogue conditions are flag (reputation keys included), quest, items, gold and stat; there is no `status`
   condition; the effects include `turn_in` (checked against `emberwake_content` on 2026-10-25).
+
+## 4. Planner picks while the user is away (to confirm)
+
+The user asked on 2026-10-25 not to wait for input while away. Spec questions raised during the slice build take the
+recommended option and are listed here; each stands until the user says otherwise.
+
+| Spec | Questions | Pick |
+| --- | --- | --- |
+| CAMPAIGN1 | CMQ1 checkpoints; CMQ2 travel modes in the slice; CMQ3 failure screen options; CMQ4 the retreat day costs Tallow; CMQ5 rest only at the hub; CMQ6 Alert's floor of 30 is lasting; CMQ7 act-start save only on the failure screen; CMQ8 a confirmation before a run-ending step; CMQ9 the clock's HUD name | As recommended: M2 and M5 checkpoints (placeholder days 14 and 38); stealth travel by default; act start, any save, main menu; yes; hub only; yes; yes; yes; "The Red Tithing", relabelled "The Great Tithing" at 2.4 |
