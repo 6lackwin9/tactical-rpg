@@ -2456,15 +2456,15 @@ mod tests {
         fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
             use crate::timeline::{Section, Segment, Timeline, Track};
             let mut ui: Ui<String> = Ui::new(g, mouse, live);
-            let seg = |key: &str, start, end| Segment { key: key.into(), start, end, label: key.into(), fill: rgb(60, 90, 140), dashed: false, tip: Vec::new() };
+            let seg = |key: &str, start, end| Segment { key: key.into(), start, end, label: key.into(), fill: rgb(60, 90, 140), ..Segment::default() };
             let t = Timeline {
                 blocks: 6,
                 playhead: 3,
                 selected_block: None,
                 selected_track: Some("hero".into()),
                 sections: vec![
-                    Section { title: "Allies".into(), colour: TEXT, tracks: vec![Track { key: "hero".into(), label: "Hero".into(), colour: TEXT, segments: vec![seg("slash", 2, 4), seg("guard", 5, 5)], masked: None }] },
-                    Section { title: "Enemies".into(), colour: TEXT, tracks: vec![Track { key: "foe".into(), label: "Foe".into(), colour: TEXT, segments: vec![seg("hidden", 1, 6)], masked: Some("Plans in secret".into()) }] },
+                    Section { title: "Allies".into(), colour: TEXT, tracks: vec![Track { key: "hero".into(), label: "Hero".into(), colour: TEXT, segments: vec![seg("slash", 2, 4), seg("guard", 5, 5)], ..Track::default() }] },
+                    Section { title: "Enemies".into(), colour: TEXT, tracks: vec![Track { key: "foe".into(), label: "Foe".into(), colour: TEXT, segments: vec![seg("hidden", 1, 6)], masked: Some("Plans in secret".into()), ..Track::default() }] },
                 ],
             };
             t.draw(&mut ui, "tl", Rect::new(10, 10, 74 + 4 + 300, 120), |b| format!("block {b}"), |k| format!("track {k}"), |k, s| format!("seg {k} {s}"));

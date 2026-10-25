@@ -1,9 +1,11 @@
 //! The kit's widgets on one page (UIGALLERY1): every widget family of `ui.rs` in its states, on sample values, to be
 //! judged on its own (a UI Gallery's "Kit widgets" entry). Game-agnostic: the gallery screen keeps a `Specimens`,
-//! wraps `KitAct` in its own action and forwards drops and text changes to it.
+//! wraps `KitAct` in its own action and forwards drops and text changes to it. Two pages, picked by the tabs at the
+//! page's foot: the widgets, and the block timeline with its segment parts, links and marks (RULESET1-E).
 
-use crate::canvas::{Image, Rect, Rgba};
-use crate::ui::{tip, Glyph, Ui, BODY, DIM, GOLD, GOOD, INFO, SMALL, TEXT};
+use crate::canvas::{rgb, Image, Rect, Rgba};
+use crate::timeline::{Link, Mark, Part, PartStyle, Section, Segment, Timeline, Track};
+use crate::ui::{tip, Glyph, Ui, BODY, DIM, FOE, GOLD, GOOD, INFO, SMALL, TEXT};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum KitAct {
@@ -21,9 +23,16 @@ pub enum KitAct {
     Icon(&'static str),
     /// The collapsible section header.
     Fold,
+    /// The page tabs at the foot.
+    Page(usize),
+    /// The timeline specimen: a block, a track, a segment (track, segment).
+    Block(i32),
+    Track(String),
+    Segment(String, String),
 }
 
 pub const TABS: [&str; 3] = ["First", "Second", "Third"];
+pub const PAGES: [&str; 2] = ["Widgets", "Timeline"];
 pub const OPTIONS: [&str; 4] = ["Small", "Normal", "Large", "Extra large"];
 pub const SLIDER_STEPS: usize = 5;
 
@@ -47,6 +56,10 @@ pub struct Specimens {
     pub left: Vec<String>,
     pub right: Vec<String>,
     pub last: String,
+    /// The page on view (`PAGES`), and the timeline specimen's selected block and track.
+    pub page: usize,
+    pub block: Option<i32>,
+    pub track: Option<String>,
 }
 
 impl Default for Specimens {
@@ -66,6 +79,9 @@ impl Default for Specimens {
             left: vec!["Sword".into(), "Shield".into()],
             right: vec!["Potion".into()],
             last: "nothing yet".into(),
+            page: 0,
+            block: None,
+            track: None,
         }
     }
 }
@@ -85,6 +101,10 @@ impl Specimens {
             KitAct::Lock => format!("lock {}", if self.locked { "off" } else { "on" }),
             KitAct::Icon(what) => format!("icon {what}"),
             KitAct::Fold => format!("section {}", if self.open { "folded" } else { "opened" }),
+            KitAct::Page(i) => format!("page {}", PAGES[*i % PAGES.len()]),
+            KitAct::Block(b) => format!("block {b}"),
+            KitAct::Track(t) => format!("track {t}"),
+            KitAct::Segment(t, s) => format!("segment {s} on {t}"),
         };
         match a {
             KitAct::Tab(i) => self.tab = i % TABS.len(),
@@ -96,7 +116,10 @@ impl Specimens {
             KitAct::Row(i) => self.row = i,
             KitAct::Lock => self.locked = !self.locked,
             KitAct::Fold => self.open = !self.open,
-            KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) => {}
+            KitAct::Page(i) => self.page = i % PAGES.len(),
+            KitAct::Block(b) => self.block = Some(b),
+            KitAct::Track(t) => self.track = Some(t),
+            KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) | KitAct::Segment(..) => {}
         }
     }
 
@@ -129,8 +152,46 @@ impl Specimens {
         }
     }
 
-    /// Draws the page in `r`: two columns of named groups. Widget ids start with `kit.`.
+    /// Draws the page on view in `r`, the page tabs (`kit.page.<i>`) and what happened last at its foot. Widget ids
+    /// start with `kit.`.
     pub fn draw<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: impl Fn(KitAct) -> A) {
+        let mut tx = r.x + r.w - 6;
+        for (i, p) in PAGES.iter().enumerate().rev() {
+            let w = (ui.p.text_w(p, BODY) + 12.0).ceil() as i32;
+            tx -= w;
+            ui.tab(&format!("kit.page.{i}"), Rect::new(tx, r.y + r.h - 15, w, 14), p, wrap(KitAct::Page(i)), self.page == i);
+            tx -= 2;
+        }
+        if self.page == 1 {
+            self.draw_timeline(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
+        } else {
+            self.draw_widgets(ui, r, &wrap);
+        }
+        ui.p.text_fit((r.x + 6) as f32, (r.y + r.h - 12) as f32, &format!("Last: {}", self.last), SMALL, (tx - r.x - 10) as f32, GOOD);
+    }
+
+    /// The timeline page: a sample round on two sides, every part, a whole-hatched segment, links, marks (one on a
+    /// masked track), then a legend.
+    fn draw_timeline<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: &impl Fn(KitAct) -> A) {
+        let x = r.x + 6;
+        let w = r.w - 12;
+        ui.p.text(x as f32, (r.y + 4) as f32, "Timeline: segment parts, hatching, links and marks (hover for the cards; clicks select)", SMALL, INFO);
+        let y = r.y + 4 + ui.p.line_h(SMALL).ceil() as i32 + 2;
+        let t = sample_timeline(self.block, self.track.clone());
+        let h = (crate::timeline::RULER_H + 2 + t.content_h()).min(r.y + r.h - y - 30);
+        t.draw(ui, "kit.timeline", Rect::new(x, y, w, h), |b| wrap(KitAct::Block(b)), |k| wrap(KitAct::Track(k.to_string())), |k, s| wrap(KitAct::Segment(k.to_string(), s.to_string())));
+        ui.para(
+            x,
+            y + h + 6,
+            w,
+            "A windup is shaded, an impact bright with an edge where it lands, a recovery hatched; a segment can be hatched whole. A link joins one segment's end to the next one's start. A mark is a glyph in a colour with a card, inside its block; it takes no click, the text beside it makes room, and it shows on a masked track too.",
+            SMALL,
+            DIM,
+        );
+    }
+
+    /// The widgets page: two columns of named groups.
+    fn draw_widgets<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: &impl Fn(KitAct) -> A) {
         let col_w = (r.w - 18) / 2;
         let (x1, x2) = (r.x + 6, r.x + 12 + col_w);
         let gap = 5;
@@ -252,8 +313,76 @@ impl Specimens {
             ui.p.text((view.x + 4) as f32, (view.y + 2 - off + i * line) as f32, &format!("Line {} of a list taller than its area", i + 1), SMALL, TEXT);
         }
         ui.scroll_end();
+    }
+}
 
-        ui.p.text_fit(x1 as f32, (r.y + r.h - 12) as f32, &format!("Last: {}", self.last), SMALL, (r.w - 12) as f32, GOOD);
+/// The timeline specimen's round: 8 blocks, three tracks on one side and two on the other (one masked).
+fn sample_timeline(block: Option<i32>, track: Option<String>) -> Timeline {
+    let part = |start, end, style| Part { start, end, style };
+    let seg = |key: &str, start, end, label: &str, fill: Rgba, parts: Vec<Part>, card: &str| Segment { key: key.into(), start, end, label: label.into(), fill, parts, tip: tip(label, card), ..Segment::default() };
+    let mark = |key: &str, block, glyph: &str, colour, title: &str, body: &str| Mark { key: key.into(), block, glyph: glyph.into(), colour, tip: tip(title, body) };
+    let link = |from: &str, to: &str, colour, body: &str| Link { from: from.into(), to: to.into(), colour, tip: tip("Link", body) };
+    let (blue, dim) = (rgb(70, 110, 170), rgb(44, 56, 78));
+    let red = rgb(160, 70, 64);
+    let lead = Track {
+        key: "lead".into(),
+        label: "Lead".into(),
+        colour: TEXT,
+        segments: vec![
+            seg("strike", 1, 3, "Strike", blue, vec![part(1, 2, PartStyle::Windup), part(3, 3, PartStyle::Impact)], "Windup B1-B2 (shaded), impact B3 (bright, edged)."),
+            seg("follow", 4, 5, "Follow-up", blue, vec![part(4, 4, PartStyle::Windup), part(5, 5, PartStyle::Impact)], "Linked to the strike before it."),
+            seg("rest", 6, 8, "Rest", dim, Vec::new(), "A plain segment: no parts."),
+        ],
+        links: vec![link("strike", "follow", GOLD, "Chained: the follow-up starts as the strike lands.")],
+        marks: vec![mark("gain", 8, "+", GOOD, "Mark", "A glyph in a colour at one block, with its card.")],
+        ..Track::default()
+    };
+    let scout = Track {
+        key: "scout".into(),
+        label: "Scout".into(),
+        colour: TEXT,
+        segments: vec![
+            Segment { dashed: true, ..seg("move", 1, 2, "Move", rgb(60, 80, 110), Vec::new(), "Dashed: a planned move.") },
+            seg("shot", 3, 6, "Shot", blue, vec![part(3, 5, PartStyle::Windup), part(6, 6, PartStyle::Impact)], "A long windup, impact at B6."),
+        ],
+        links: vec![link("move", "shot", INFO, "Carried: the shot follows the move.")],
+        marks: vec![mark("step", 2, ">", INFO, "Step", "A mark on the move's last block.")],
+        ..Track::default()
+    };
+    let warden = Track {
+        key: "warden".into(),
+        label: "Warden".into(),
+        colour: TEXT,
+        segments: vec![
+            seg("hold", 1, 4, "Hold", rgb(60, 120, 100), Vec::new(), "A plain segment."),
+            Segment { hatched: true, ..seg("dropped", 5, 8, "Dropped", rgb(60, 120, 100), Vec::new(), "Hatched whole: a span that will not happen.") },
+        ],
+        marks: vec![mark("break", 5, "x", FOE, "Broken", "A mark at a segment's first block: its label starts after it."), mark("note", 5, "i", INFO, "Note", "Two marks in one block sit side by side.")],
+        ..Track::default()
+    };
+    let brute = Track {
+        key: "brute".into(),
+        label: "Brute".into(),
+        colour: FOE,
+        segments: vec![seg("smash", 1, 7, "Heavy smash", red, vec![part(1, 3, PartStyle::Windup), part(4, 4, PartStyle::Impact), part(5, 7, PartStyle::Recovery)], "Windup B1-B3, impact B4, recovery B5-B7 (hatched).")],
+        marks: vec![mark("impact", 4, "!", FOE, "Impact", "A badge where something lands.")],
+        ..Track::default()
+    };
+    let lurker = Track {
+        key: "lurker".into(),
+        label: "Lurker".into(),
+        colour: FOE,
+        segments: vec![seg("hidden", 1, 8, "Hidden", red, Vec::new(), "")],
+        masked: Some("Plans in secret".into()),
+        marks: vec![mark("impact", 4, "!", FOE, "Impact", "Marks show on a masked track: something lands here, the rest is hidden."), mark("guess", 7, "?", DIM, "Unknown", "")],
+        ..Track::default()
+    };
+    Timeline {
+        blocks: 8,
+        playhead: 0,
+        selected_block: block,
+        selected_track: track,
+        sections: vec![Section { title: "Allies".into(), colour: INFO, tracks: vec![lead, scout, warden] }, Section { title: "Enemies".into(), colour: FOE, tracks: vec![brute, lurker] }],
     }
 }
 

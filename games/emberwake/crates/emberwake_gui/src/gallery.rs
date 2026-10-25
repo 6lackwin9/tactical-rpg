@@ -350,7 +350,7 @@ fn segment_of(name: &str, start: i32, end: i32, kind: &str, target: Option<Strin
     }
     let mut fill = kind_color(kind);
     fill[3] = 230;
-    Segment { key, start, end, label: target.map(|t| format!("{name} > {t}")).unwrap_or_else(|| name.to_string()), fill, dashed: kind == "MOVE", tip: t }
+    Segment { key, start, end, label: target.map(|t| format!("{name} > {t}")).unwrap_or_else(|| name.to_string()), fill, dashed: kind == "MOVE", tip: t, ..Segment::default() }
 }
 
 fn rows(s: &Session, actions: &[ScheduledAction], u: usize) -> Vec<Segment> {
@@ -384,7 +384,7 @@ fn timeline_of(s: &Session, viewed: i32, reveal: bool, block: Option<i32>, track
             } else {
                 rows(s, &archived, u)
             };
-            Track { key: format!("u{u}"), label: w.units[u].name.clone(), colour: ALLY, segments, masked: None }
+            Track { key: format!("u{u}"), label: w.units[u].name.clone(), colour: ALLY, segments, ..Track::default() }
         })
         .collect();
     let enemies = w
@@ -396,7 +396,7 @@ fn timeline_of(s: &Session, viewed: i32, reveal: bool, block: Option<i32>, track
                 Some(t) => format!("Plans in secret. {}", intent_text::card_line(w, &t.line)),
                 None => "Plans in secret".to_string(),
             });
-            Track { key: format!("u{e}"), label: w.units[e].name.clone(), colour: FOE, segments: rows(s, &archived, e), masked }
+            Track { key: format!("u{e}"), label: w.units[e].name.clone(), colour: FOE, segments: rows(s, &archived, e), masked, ..Track::default() }
         })
         .collect();
     Timeline {

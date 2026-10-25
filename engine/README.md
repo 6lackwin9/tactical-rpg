@@ -33,6 +33,12 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
   playhead, sections of labelled tracks (one row each, scrolling when they overflow), segments spanning blocks (filled
   or dashed, with a hover tip) and masked tracks (one hatched bar with a line of text). Blocks, track labels and
   segments are clickable (`<id>.block.<b>`, `<id>.track.<key>`, `<id>.seg.<track>.<i>` on the agent link).
+  RULESET1-E: a segment can carry `parts` (`Part { start, end, style }`: `PartStyle::Windup` shaded, `Impact` bright
+  with a light edge at its last block, `Recovery` hatched) or be `hatched` whole; a track can carry `links` (`Link {
+  from, to, colour, tip }`, a bracket from one segment's end to the next one's start, hidden while masked) and `marks`
+  (`Mark { key, block, glyph, colour, tip }`, a glyph chip inside its block's cell, shown on masked tracks too). Links
+  and marks are info widgets with a hover card and no click; labels leave room for marks; all empty by default. The
+  UI Gallery's Kit widgets entry has a Timeline page (tabs at its foot) showing every part.
 * **Sound and music (PORT-AUDIO):** `aegis_ui::audio` plays the `audio/` files found over the asset layers (game, kit, engine; ASSETORG2) (WAV and Ogg Vorbis, through rodio) on four levels (master times music, effects or interface), 8 effect voices and 2 interface voices (the oldest restarts when all are busy), and one looping music track that crossfades (1 s; 2 s from silence; 6 dB under the effects). Each screen names its track (`Screen::music`); the shell plays the topmost screen's choice, so overlays keep the music below. Emberwake picks tracks with the MUSIC1 chain (`emberwake_gui/src/music.rs`: menu, region by location kind or shop, travel, combat or boss, each tried per region, world and lineage before the plain context) and battle sounds from the resolver log; the settings popup plays the draft levels and a sample per volume slider. Without a sound device everything stays silent.
 
 ## Workspace
