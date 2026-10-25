@@ -72,6 +72,10 @@ games/emberwake/data/seeds/storyui1.json`, then `tools/fc.sh content check` clea
 | Board service glyph | the quest badge `ui/badges/quest.png` (kit) | good |
 | The `sunk_ward` world card art, the main menu (an orange sun in a sunless world) | today's Ashlands-era files | poor |
 
+User 2026-10-25: hold new art for the story scenes (no image API for them yet) and fill them with code-drawn
+placeholders wherever code can draw them (task STORYART1, `tools/gen_art.py`); the rows above that stay poor are
+revisited at the M4 art pass. Sound stays as listed.
+
 ## 2. Tests derived from the rules
 
 | Id | Task | Test | Rule |
