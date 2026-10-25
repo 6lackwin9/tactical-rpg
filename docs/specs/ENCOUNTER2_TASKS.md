@@ -67,7 +67,7 @@ to it)
 | ENCOUNTER2-F | Phase `side`: hostile to all (P4) | kit | logic | ENCOUNTER2-K | later (Act 3) | `emberwake_battle/src/{world,ai,session,intent}.rs`, `emberwake_gui/src/battle.rs` (rogue colour) |
 | ENCOUNTER2-R | Rooms core: data, grid rooms, doors, transit, deployment, verdict, host JSON (R1-R5, R7, R8, R10, R11) | kit | logic | ENCOUNTER2-T | later | `emberwake_battle/src/{grid,world,session,plan,path,encounter}.rs` (maybe `room.rs`), `check/encounter.rs`, `schema.json`, `emberwake_host/src/lib.rs` |
 | ENCOUNTER2-RA | Room AI: pursue, guard, doors in party presets (R6) | kit | logic | ENCOUNTER2-R | later | `emberwake_battle/src/ai.rs` |
-| ENCOUNTER2-RU | Room screen: tabs, follow, dimmed strip rows, letters on badges (R9) | game | logic | ENCOUNTER2-R, STAGE1-L, RULESET1's strip task | later | `emberwake_gui/src/battle.rs` |
+| ENCOUNTER2-RU | Room screen: tabs, follow, dimmed strip rows, letters on badges (R9) | game | logic | ENCOUNTER2-R, STAGE1-L, RULESET1-U (the strip) | later | `emberwake_gui/src/battle.rs` |
 | ENCOUNTER2-D2 | Later samples `kit_last_stand`, `kit_betrayal`, `kit_two_rooms` | game | asset | ENCOUNTER2-L, -X, -F, -RA | later | `data/catalog/encounters.json` |
 
 T, H and K share `session.rs`, `encounter.rs` and `check/encounter.rs`: run them in a row (T, H, K). Rooms are later:
