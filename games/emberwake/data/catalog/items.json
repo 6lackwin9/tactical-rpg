@@ -1795,7 +1795,7 @@
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
-			"max_stack": 1
+			"max_stack": 20
 		},
 		{
 			"id": "render_beast_tendon",
@@ -1808,7 +1808,7 @@
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
-			"max_stack": 1
+			"max_stack": 20
 		},
 		{
 			"id": "caustic_gall_sac",
@@ -1821,7 +1821,7 @@
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
-			"max_stack": 1
+			"max_stack": 20
 		},
 		{
 			"id": "stalker_optic_nerve",
@@ -1834,7 +1834,7 @@
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
-			"max_stack": 1
+			"max_stack": 20
 		},
 		{
 			"id": "inquisitor_marrow_valve",
@@ -1847,7 +1847,7 @@
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
-			"max_stack": 1
+			"max_stack": 20
 		},
 		{
 			"id": "titan_marrow_core",
@@ -1860,7 +1860,7 @@
 			"damage_type": "",
 			"icon_id": "",
 			"starter_stash": false,
-			"max_stack": 1
+			"max_stack": 20
 		},
 		{
 			"id": "slab_retorts",
@@ -2128,6 +2128,89 @@
 					"effect": {
 						"type": "status_potency",
 						"value": 10
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "vanes_gilded_pavise",
+			"name": "Gilded Pavise",
+			"family": "shield",
+			"rarity": "RARE",
+			"weight": 5.0,
+			"value": 0,
+			"description": "Vane's Gilded Castellan Pavise.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "One copy per campaign.",
+			"hand": "off",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "mitigation",
+					"delta": 4
+				},
+				{
+					"kind": "stat_bonus",
+					"stat": "max_poise",
+					"value": 30
+				},
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 13
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "trigger",
+						"on": "guarded_hit",
+						"effects": [
+							{
+								"type": "damage",
+								"value": 15,
+								"to": "other"
+							},
+							{
+								"type": "stagger",
+								"value": 20,
+								"to": "other"
+							}
+						]
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_dunstan",
+			"name": "Shackle Link",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Dunstan's Shackle Link.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "max_poise",
+					"value": 12
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "stun",
+						"value": 30
 					}
 				}
 			],
