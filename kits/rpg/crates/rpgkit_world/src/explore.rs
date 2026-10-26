@@ -468,7 +468,10 @@ pub fn enter(d: &Data, gs: &mut GameState, location_ref: &str, anchor: &str) -> 
     let mut restored = 0;
     if json::b(loc, "rest", false) {
         gs.explore.insert("last_rest".into(), qid.clone().into());
-        restored = progression::rest(d, &mut gs.party);
+        // CAMPAIGN1 R1: a campaign's rest rule may turn the free heal on entering off (`on_enter`)
+        if crate::campaign::purse::rest_rule(d, &gs.world_id).on_enter {
+            restored = progression::rest(d, &mut gs.party);
+        }
     }
     quest::refresh(d, gs);
     let advanced = quest::on_location_reached(d, gs, &qid);
@@ -536,8 +539,27 @@ pub fn menu(d: &Data, gs: &GameState) -> Vec<Dict> {
     out
 }
 
-/// The defeat rule: heal, pick the checkpoint, wake there. Adds a `defeat` event.
+/// The defeat rule: heal, pick the checkpoint, wake there. Adds a `defeat` event. CAMPAIGN1 R4: a campaign world
+/// whose `defeat` is `retreat` retreats instead (`campaign::purse::retreat`; every `after_fight` path comes here); when
+/// its `to` cannot be entered the classic wake runs and a `retreat_failed` event (its `text` names why) comes first.
 pub fn wake(d: &Data, gs: &mut GameState, at: &str) -> Dict {
+    let mut failed = None;
+    if crate::campaign::purse::retreats(d, gs) {
+        failed = crate::campaign::purse::retreat_problem(d, gs);
+        if failed.is_none() {
+            return crate::campaign::purse::retreat(d, gs);
+        }
+    }
+    let mut woke = wake_classic(d, gs, at);
+    if let Some(note) = failed {
+        let mut events = vec![note];
+        events.extend(json::aget(&woke, "events").iter().cloned());
+        woke.insert("events".into(), Value::Array(events));
+    }
+    woke
+}
+
+fn wake_classic(d: &Data, gs: &mut GameState, at: &str) -> Dict {
     let target = if at.is_empty() { gs.location_id.clone() } else { at.to_string() };
     let loc = resolve_location(d, gs, &target);
     let t = template_of(d, loc);
@@ -765,6 +787,7 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
         return out;
     }
     let mut events = Vec::new();
+    let mut woke_campaign = Vec::new();
     let marker_id = json::s(fight, "marker");
     match outcome {
         "won" if !marker_id.is_empty() => {
@@ -790,6 +813,7 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
         "lost" => {
             let woke = wake(d, gs, "");
             events.extend(json::aget(&woke, "events").iter().cloned());
+            woke_campaign = json::aget(&woke, "campaign").to_vec();
         }
         _ => {}
     }
@@ -800,6 +824,8 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
     for (k, v) in crate::battle::result_keys(&applied) {
         out.insert(k, v);
     }
+    // CAMPAIGN1 R4: a retreat's tick events follow the battle's
+    crate::campaign::merge_events(&mut out, woke_campaign);
     out
 }
 

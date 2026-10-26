@@ -302,7 +302,11 @@ pub fn is_rest_place(d: &Data, gs: &GameState, location_ref: &str) -> bool {
     !location_ref.is_empty() && json::b(crate::explore::resolve_location(d, gs, location_ref), "rest", false)
 }
 
+/// HealRules.can_camp; in a campaign world the rest rule's refusal (CAMPAIGN1 R1, R2: `campaign::purse::rest_refusal`).
 pub fn can_camp(d: &Data, gs: &GameState) -> &'static str {
+    if gs.campaign.is_some() {
+        return crate::campaign::purse::rest_refusal(d, gs);
+    }
     if crate::travel::current_node(d, gs).is_empty() {
         return REFUSE_NOT_AT_NODE;
     }
@@ -315,8 +319,12 @@ pub fn can_camp(d: &Data, gs: &GameState) -> &'static str {
     ""
 }
 
-/// {ok, errors, spent, restored, events}.
+/// {ok, errors, spent, restored, events}. In a campaign world the rest rule's rest (CAMPAIGN1 R2: `campaign::purse::rest`,
+/// adding `days` and `campaign?`).
 pub fn make_camp(d: &Data, gs: &mut GameState) -> Dict {
+    if gs.campaign.is_some() {
+        return crate::campaign::purse::rest(d, gs);
+    }
     let refusal = can_camp(d, gs);
     if !refusal.is_empty() {
         let mut out = json::fail(refusal);

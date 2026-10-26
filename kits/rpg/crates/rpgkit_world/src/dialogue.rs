@@ -734,6 +734,13 @@ impl DialogueRunner {
                         out.push(format!("Unknown sequence '{r}'."));
                     }
                 }
+                // CAMPAIGN1 R2, R3: the rest rule's refusal (inert outside a campaign world)
+                "rest" if gs.campaign.is_some() => {
+                    let why = crate::campaign::purse::rest_refusal(d, gs);
+                    if !why.is_empty() {
+                        out.push(why.into());
+                    }
+                }
                 "recruit" => {
                     let who = json::s(fx, "character");
                     let cap = d.party_max(&gs.world_id);
@@ -883,8 +890,9 @@ impl DialogueRunner {
 /// the conversation, story sequences' `effects` steps and campaign rules (CAMPAIGN1 T2): `set_flag`, `add_flag`,
 /// `start_quest` (the giver check is the conversation's precheck), `give` (its notes), `take`, `recruit` (its note),
 /// the story effects `vignette` (queued, W1), `sequence` (started, Q1; refused while one runs, the refusal a note) and
-/// `open_board` (its first open sets the board's flag, B9; the runner opens the pane), then the campaign effects
-/// (11.3; inert outside a campaign world). No campaign tick: the caller ticks once after its list.
+/// `open_board` (its first open sets the board's flag, B9; the runner opens the pane), `rest` (CAMPAIGN1 R2, its note;
+/// the days it passes tick after the list), then the campaign effects (11.3; inert outside a campaign world). No
+/// campaign tick: the caller ticks once after its list.
 pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<String>, events: &mut Vec<Value>) {
     match json::s(fx, "effect").as_str() {
         "set_flag" => {
@@ -914,6 +922,13 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<Str
             }
         }
         "open_board" => board::mark_opened(d, gs, &json::s(fx, "board")),
+        // CAMPAIGN1 R2, R3: the rest and its note; its days run at the tick after the list (inert outside a campaign)
+        "rest" => {
+            let note = crate::campaign::purse::rest_effect(d, gs);
+            if !note.is_empty() {
+                notes.push(note);
+            }
+        }
         // CAMPAIGN1 11.3 (inert outside a campaign world)
         _ => {
             crate::campaign::apply_effect(d, gs, fx, events);
@@ -957,9 +972,11 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
         return out;
     }
     let mut events = Vec::new();
+    let mut woke_campaign = Vec::new();
     if outcome == "lost" {
         let woke = crate::explore::wake(d, gs, "");
         events.extend(json::aget(&woke, "events").iter().cloned());
+        woke_campaign = json::aget(&woke, "campaign").to_vec();
     }
     let mut out = json::ok_result(true, &json::sget(&applied, "errors"));
     out.insert("xp".into(), applied["xp"].clone());
@@ -968,5 +985,7 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
     for (k, v) in crate::battle::result_keys(&applied) {
         out.insert(k, v);
     }
+    // CAMPAIGN1 R4: a retreat's tick events follow the battle's
+    crate::campaign::merge_events(&mut out, woke_campaign);
     out
 }

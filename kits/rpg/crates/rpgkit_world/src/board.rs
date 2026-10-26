@@ -2,6 +2,8 @@
 //! `board` names it, by section (main, jobs, under way, locked, closed), with each quest's node; the conversation opens
 //! it (`open_board`, the runner's `board_qid`), Accept starts a quest there, the first open sets `board.<id>.opened`,
 //! and the world map shows the jobs of opened boards on their nodes (B10). A world without boards never sees any of it.
+//! The deadline lines (B6, B7, B10) come from the campaign's checkpoints (CAMPAIGN1 `campaign::checkpoint::checkpoint`)
+//! and appear only for a quest with an open checkpoint.
 
 use crate::data::Data;
 use crate::state::GameState;
@@ -16,6 +18,22 @@ pub const BUSY_TEXT: &str = "Close the board first.";
 pub const CLOSED_TEXT: &str = "The board is closed.";
 /// B4: the hover text of the keeper's board badge.
 pub const BADGE_TEXT: &str = "New work on the board";
+
+/// B6, B7: a row's and the detail's deadline line.
+pub fn deadline_text(day: i64, left: i64) -> String {
+    format!("By day {day} ({left} left)")
+}
+
+/// B10: a node's tooltip line for a checkpoint quest.
+pub fn checkpoint_text(day: i64) -> String {
+    format!("Checkpoint: by day {day}")
+}
+
+/// B6, B7: {day, left, text} of quest `qid`'s open checkpoint (CAMPAIGN1), None without one.
+pub fn deadline(d: &Data, gs: &GameState, qid: &str) -> Option<Value> {
+    let (day, left) = crate::campaign::checkpoint::checkpoint(d, gs, qid)?;
+    Some(Value::Object(json::obj([("day", json::int(day)), ("left", json::int(left)), ("text", deadline_text(day, left).into())])))
+}
 
 /// The board `r` names (from the party's world), {} when unknown.
 pub fn board_of<'a>(d: &'a Data, gs: &GameState, r: &str) -> &'a Dict {
@@ -122,7 +140,8 @@ pub fn lock_reason(d: &Data, gs: &GameState, qid: &str) -> String {
 }
 
 /// B5, B6: board `r` as the pane shows it: {board, name, keeper, keeper_name, intro, open, sections: [{id, title,
-/// rows: [{quest, name, status, node, node_name, line}]}]} (empty sections left out); {} for an unknown board.
+/// rows: [{quest, name, status, node, node_name, line, deadline?}]}]} (empty sections left out; `deadline` {day, left,
+/// text} only for a quest with an open checkpoint); {} for an unknown board.
 pub fn view(d: &Data, gs: &GameState, r: &str) -> Dict {
     let b = board_of(d, gs, r);
     if b.is_empty() {
@@ -136,17 +155,18 @@ pub fn view(d: &Data, gs: &GameState, r: &str) -> Dict {
         let Some((section, line)) = section_of(d, gs, &q, &keeper_name) else { continue };
         let node = node_of(d, gs, &q);
         let node_name = if node.is_empty() { String::new() } else { json::s_or(explore::resolve_location(d, gs, &node), "name", &node) };
-        rows.push((
-            section,
-            Value::Object(json::obj([
-                ("quest", q.clone().into()),
-                ("name", json::s_or(&quest::resolved(d, gs, &q), "name", &q).into()),
-                ("status", quest::status(d, gs, &q).into()),
-                ("node", node.into()),
-                ("node_name", node_name.into()),
-                ("line", line.into()),
-            ])),
-        ));
+        let mut row = json::obj([
+            ("quest", q.clone().into()),
+            ("name", json::s_or(&quest::resolved(d, gs, &q), "name", &q).into()),
+            ("status", quest::status(d, gs, &q).into()),
+            ("node", node.into()),
+            ("node_name", node_name.into()),
+            ("line", line.into()),
+        ]);
+        if let Some(due) = deadline(d, gs, &q) {
+            row.insert("deadline".into(), due);
+        }
+        rows.push((section, Value::Object(row)));
     }
     let sections: Vec<Value> = SECTIONS
         .iter()
@@ -168,7 +188,7 @@ pub fn view(d: &Data, gs: &GameState, r: &str) -> Dict {
 
 /// B7: a board quest's detail: {quest, name, status, description (variants applied), steps: [{text, state: done,
 /// current or to_come}], node, node_name, rewards (the resolved quest's), loot (the loot qids offered now),
-/// loot_picks, reputation}; the game formats the rewards.
+/// loot_picks, reputation, deadline? (as the row's)}; the game formats the rewards.
 pub fn detail(d: &Data, gs: &GameState, qid: &str) -> Dict {
     let q = quest::resolved(d, gs, qid);
     if q.is_empty() {
@@ -199,7 +219,7 @@ pub fn detail(d: &Data, gs: &GameState, qid: &str) -> Dict {
         .collect();
     let node = node_of(d, gs, qid);
     let node_name = if node.is_empty() { String::new() } else { json::s_or(explore::resolve_location(d, gs, &node), "name", &node) };
-    json::obj([
+    let mut out = json::obj([
         ("quest", json::s(&q, "_qid").into()),
         ("name", json::s(&q, "name").into()),
         ("status", status.into()),
@@ -211,7 +231,11 @@ pub fn detail(d: &Data, gs: &GameState, qid: &str) -> Dict {
         ("loot", json::strs(&quest::offers(d, gs, qid))),
         ("loot_picks", json::int(json::i(&q, "loot_picks", 0))),
         ("reputation", q.get("reputation").cloned().unwrap_or(Value::Object(Dict::new()))),
-    ])
+    ]);
+    if let Some(due) = deadline(d, gs, &json::s(&q, "_qid")) {
+        out.insert("deadline".into(), due);
+    }
+    out
 }
 
 /// B4: whether the character `character_qid` keeps an open board with at least one available quest.
@@ -237,6 +261,26 @@ pub fn jobs(d: &Data, gs: &GameState) -> Vec<(String, String)> {
                 out.push((node, json::s_or(&quest::resolved(d, gs, &q), "name", &q)));
             }
         }
+    }
+    out
+}
+
+/// B10: (node qid, {quest, name, day, left, text}) of every quest with an open checkpoint (CAMPAIGN1) whose node (as
+/// B6's) resolves, in checkpoint order; [] outside a campaign world.
+pub fn deadlines(d: &Data, gs: &GameState) -> Vec<(String, Value)> {
+    let mut out = Vec::new();
+    if gs.campaign.is_none() {
+        return out;
+    }
+    for cp in crate::campaign::checkpoint::defs(d, &gs.world_id).into_iter().filter(|c| !c.quest.is_empty()) {
+        let Some((day, left)) = crate::campaign::checkpoint::checkpoint(d, gs, &cp.quest) else { continue };
+        let node = node_of(d, gs, &cp.quest);
+        if node.is_empty() {
+            continue;
+        }
+        let name = json::s_or(&quest::resolved(d, gs, &cp.quest), "name", &cp.quest);
+        let line = json::obj([("quest", cp.quest.clone().into()), ("name", name.into()), ("day", json::int(day)), ("left", json::int(left)), ("text", checkpoint_text(day).into())]);
+        out.push((node, Value::Object(line)));
     }
     out
 }

@@ -3,14 +3,17 @@
 //! campaign effects (11.3), the read keys (11.4) and the run-over state (F1, F3). Everything is inert unless the
 //! world's lineage sets the manifest field `campaign` (X1): no state, no result key, no read key answered.
 //!
-//! Built here (CAMPAIGN1-M): gauges, bands, rules, inputs (battle, day, leg), floors, `set_act`, `meter_add`,
-//! `meter_set`, `meter_show`, `end`, the read keys and the run-over state. Later tasks fill the remaining steps of the
-//! tick and the remaining effects: the days tick, the clock effects, checkpoints, purse, rest and retreat
-//! (CAMPAIGN1-C), triggers and previews (CAMPAIGN1-T). Story-free: a `then` item (a vignette, a battle, a scene) is
+//! Built in CAMPAIGN1-M: gauges, bands, rules, inputs (battle, day, leg), floors, `set_act`, `meter_add`,
+//! `meter_set`, `meter_show`, `end`, the read keys and the run-over state. CAMPAIGN1-C: the days and leg ticks
+//! (travel, rest, retreat), the clock effects (`clock.rs`), checkpoints (`checkpoint.rs`), the purse, rests, the
+//! retreat, road-fight modifiers and `battle_mods` (`purse.rs`). Later: triggers and previews (CAMPAIGN1-T). Story-free: a `then` item (a vignette, a battle, a scene) is
 //! queued in `pending` and handed on through `pending_head` / `pop_pending` (the GUI plays it; `{vignette}` items at
 //! the head move to the story queue through `story::pull_pending`, which `story::next_scene` calls, STORYUI1-W).
 
+pub mod checkpoint;
+pub mod clock;
 pub mod meter;
+pub mod purse;
 
 use crate::data::Data;
 use crate::quest;
@@ -121,6 +124,10 @@ pub struct Campaign {
     pub defs: Arc<IndexMap<String, MeterDef>>,
     /// Runtime: each meter's value at the end of the last tick (a rule fires on the move from here to now; M5).
     pub last: IndexMap<String, i64>,
+    /// Runtime: the travel clock (`gs.time`) at the end of the last tick (checkpoint warnings and deadlines, C1, C2).
+    pub last_time: i64,
+    /// Runtime: days a `rest` effect passed inside an effect list; the next tick runs them first as days(n, rest).
+    pub owed_days: i64,
 }
 
 /// Equal when the saved parts are (the runtime parts follow from them or are never saved).
@@ -151,6 +158,8 @@ impl Campaign {
             over: None,
             defs: Arc::new(defs),
             last: IndexMap::new(),
+            last_time: 0,
+            owed_days: 0,
         };
         c.sync(0);
         Some(c)
@@ -164,10 +173,11 @@ impl Campaign {
         }
     }
 
-    /// The baseline of the next rule pass: every meter's value at `time`.
+    /// The baseline of the next rule pass and checkpoint step: every meter's value at `time`, and `time`.
     pub fn sync(&mut self, time: i64) {
         let values: IndexMap<String, i64> = self.meters.keys().map(|id| (id.clone(), self.value(id, time))).collect();
         self.last = values;
+        self.last_time = time;
     }
 
     pub fn is_over(&self) -> bool {
@@ -350,7 +360,7 @@ pub fn read_key(gs: &GameState, key: &str) -> Option<Value> {
 /// What a tick runs after (X4).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cause {
-    /// `n` days passed; `why` is travel, rest or retreat (the days tick is CAMPAIGN1-C's; day inputs run here).
+    /// `n` days passed (K2); `why` is travel (once per leg), rest or retreat. Day inputs run `n` times.
     Days { n: i64, why: String },
     /// One travel leg on a route carrying `route_tags` (leg inputs).
     Leg { route_tags: Vec<String> },
@@ -377,10 +387,18 @@ fn warning(def: &MeterDef, rule: &meter::Rule, value: i64) -> Value {
     ]))
 }
 
-/// X4: runs the campaign after `cause`: inputs, meter rules (gauges, then countdowns), [checkpoints: CAMPAIGN1-C],
-/// [triggers: CAMPAIGN1-T], then the run-over check. Returns the events for the action's result (W1:
-/// `meter_warning`, `run_over`, `act_start`); empty and untouched outside a campaign world, and once the run is over.
+/// X4: runs the campaign after `cause`: inputs, meter rules (gauges, then countdowns), checkpoints (C1-C3),
+/// [triggers: CAMPAIGN1-T], then the run-over check. Days a `rest` effect owed run first as their own days(n, rest)
+/// tick. Returns the events for the action's result (W1: `meter_warning`, `checkpoint_warning`, `checkpoint_missed`,
+/// `run_over`, `act_start`); empty and untouched outside a campaign world, and once the run is over.
 pub fn tick(d: &Data, gs: &mut GameState, cause: &Cause) -> Vec<Value> {
+    let owed = gs.campaign.as_mut().map(|c| std::mem::take(&mut c.owed_days)).unwrap_or(0);
+    let mut events = if owed > 0 { tick_once(d, gs, &Cause::Days { n: owed, why: "rest".into() }) } else { Vec::new() };
+    events.extend(tick_once(d, gs, cause));
+    events
+}
+
+fn tick_once(d: &Data, gs: &mut GameState, cause: &Cause) -> Vec<Value> {
     let mut events = Vec::new();
     let Some(c) = gs.campaign.as_ref() else { return events };
     let told = c.over.as_ref().is_some_and(|o| o.told);
@@ -388,9 +406,16 @@ pub fn tick(d: &Data, gs: &mut GameState, cause: &Cause) -> Vec<Value> {
         return events;
     }
     let before = c.last.clone();
+    let before_time = c.last_time;
+    let last_day = before_time + 1;
     if c.over.is_none() {
+        checkpoint::step_before(d, gs, last_day);
         inputs(gs, cause);
         rule_passes(d, gs, &mut events);
+        // C1-C3 at today's day (X2); a missed checkpoint's effects may move meters: the rules run again
+        if checkpoint::step(d, gs, gs.time + 1, last_day, &mut events) {
+            rule_passes(d, gs, &mut events);
+        }
     }
     let time = gs.time;
     let Some(c) = gs.campaign.as_mut() else { return events };
@@ -399,8 +424,8 @@ pub fn tick(d: &Data, gs: &mut GameState, cause: &Cause) -> Vec<Value> {
         events.push(Value::Object(json::obj([("event", "run_over".into()), ("kind", o.kind.clone().into()), ("card", o.card.clone().into()), ("text", o.text.clone().into())])));
     }
     c.sync(time);
-    // read keys moved: quest flag steps on them advance as after any flag change
-    if c.last != before && !c.is_over() {
+    // read keys moved (a meter, or the day): quest flag steps on them advance as after any flag change
+    if (c.last != before || time != before_time) && !c.is_over() {
         quest::refresh(d, gs);
     }
     events
@@ -505,14 +530,26 @@ fn meter_id(d: &Data, gs: &GameState, fx: &Dict) -> Option<String> {
 }
 
 /// Applies one campaign effect (11.3) in a campaign world; outside one, or after the run ended, it does nothing.
-/// Returns false for an effect kind this task does not run yet (`clock_*`, `rest`: CAMPAIGN1-C). `set_act` adds an
-/// `act_start` event (F5: the GUI writes the act-start save `save` when it is not "").
+/// Returns false for an effect kind that is not a campaign effect. `set_act` adds an `act_start` event (F5: the GUI
+/// writes the act-start save `save` when it is not ""); `rest` rests without a note (the dialogue's effect body calls
+/// `purse::rest_effect` itself for the note).
 pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, events: &mut Vec<Value>) -> bool {
     let effect = json::s(fx, "effect");
     let id = meter_id(d, gs, fx);
+    if effect == "rest" {
+        purse::rest_effect(d, gs);
+        return true;
+    }
+    let time = gs.time;
     let Some(c) = gs.campaign.as_mut() else { return is_campaign_effect(&effect) };
     if c.is_over() {
         return true;
+    }
+    if effect.starts_with("clock_") {
+        if let Some(id) = id {
+            clock::apply(c, &id, &effect, fx, time);
+        }
+        return is_campaign_effect(&effect);
     }
     let act = c.act;
     let defs = c.defs.clone();
@@ -521,7 +558,7 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, events: &mut Vec<Va
             let Some(id) = id else { return true };
             let (Some(def), Some(st)) = (defs.get(&id), c.meters.get_mut(&id)) else { return true };
             if def.countdown {
-                // days left move with a running clock (K3's clock_set is CAMPAIGN1-C's)
+                // days left move with a running clock
                 if effect == "meter_add" && st.running {
                     let left = (st.due - gs.time).max(0);
                     st.due = gs.time + (left + json::i(fx, "delta", 0)).clamp(0, def.max);
@@ -584,6 +621,16 @@ pub fn after_effects(d: &Data, gs: &mut GameState, act_before: Option<i64>) -> V
         }
     }
     events
+}
+
+/// Appends `events` to the result's `campaign` list (the key only when there are some, X3).
+pub fn merge_events(out: &mut Dict, events: Vec<Value>) {
+    if events.is_empty() {
+        return;
+    }
+    let mut all = json::aget(out, "campaign").to_vec();
+    all.extend(events);
+    out.insert("campaign".into(), Value::Array(all));
 }
 
 // ---- run over and the queue ----
