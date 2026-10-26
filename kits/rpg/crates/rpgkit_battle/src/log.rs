@@ -206,6 +206,14 @@ pub fn from_action(w: &World, a: &ScheduledAction, round: i32, block: i32) -> En
             e.detail = format!("+{}% Attack Power for {rounds} Round(s)", e.value);
             e.status = "Empowered".into();
         }
+        // HOOKS1 GH3: a placement aims like an area attack and hits nobody (its hazard has its own cell)
+        CmdKind::Area { cells, .. } if cmd.log.starts_with("[Place]") => {
+            e.skill = cmd.name.clone();
+            e.subtype = PLACEMENT.into();
+            e.outcome = "PLACED".into();
+            e.target = format!("{} tiles", cells.len());
+            e.detail = trim(&cmd.log, "[Place] ").into();
+        }
         CmdKind::Area { cells, last_damage, last_hits, .. } => {
             e.skill = cmd.name.clone();
             e.subtype = "Area Attack".into();
@@ -325,6 +333,59 @@ pub fn collision_entry(w: &World, m: &crate::forced::Moved, h: &crate::forced::C
         detail: trim(&h.line, "[Collision] ").into(),
         status: format!("Target HP: {}/{}", tu.hp, tu.max_hp),
         ..Entry::new(round, block)
+    }
+}
+
+/// HOOKS1 GH3: the subtype of a placement action's ATTACK cell (no damage, no target unit).
+pub const PLACEMENT: &str = "Placement";
+/// HOOKS1 GH5: the subtype of the ground hazards' cells; the ATTACK one (HP lost on entering) is credited to the placer
+/// as a collision's is.
+pub const HAZARD: &str = "Hazard";
+
+/// HOOKS1 GH2-GH7 (engine-only): the cell of a ground event: a placement (EVENT, PLACED: the placer and the tiles); a
+/// hazard that cost HP as the unit entered (ATTACK: the placer hits the unit for the HP it lost); any other hit (EVENT:
+/// TRAPPED, DEFEATED or HAZARD; a round-end hit's HP is round-end damage, its value only); a fade (EVENT, FADED: the
+/// hazard as the actor).
+pub fn ground_entry(w: &World, ev: &crate::ground::Event, round: i32, block: i32) -> Entry {
+    use crate::ground::Event;
+    match ev {
+        Event::Placed(p) => {
+            let rounds = format!("{} round{}", p.rounds, plural(p.rounds));
+            let mut e = Entry::event(round, block, &w.units[p.by].name, w.allies.contains(&p.by), &p.hazard, HAZARD, "PLACED", trim(&p.line, "[Hazard] "), &rounds);
+            e.target = format!("{} tiles", p.cells.len());
+            e.value = p.cells.len() as i32;
+            e
+        }
+        Event::Hit(h) => {
+            let tu = &w.units[h.unit];
+            let outcome = if !tu.is_alive() {
+                "DEFEATED"
+            } else if h.trap {
+                "TRAPPED"
+            } else {
+                "HAZARD"
+            };
+            let mut e = Entry {
+                actor: w.units[h.by].name.clone(),
+                actor_is_ally: w.allies.contains(&h.by),
+                target: tu.name.clone(),
+                target_is_ally: w.allies.contains(&h.unit),
+                skill: h.hazard.clone(),
+                subtype: HAZARD.into(),
+                value: h.damage,
+                outcome: outcome.into(),
+                detail: trim(&h.line, "[Hazard] ").into(),
+                status: format!("Target HP: {}/{}", tu.hp, tu.max_hp),
+                ..Entry::new(round, block)
+            };
+            if h.damage > 0 && !h.round_end {
+                e.damage = h.damage;
+            } else {
+                e.category = "EVENT";
+            }
+            e
+        }
+        Event::Faded(f) => Entry::event(round, block, &f.hazard, w.allies.contains(&f.by), &f.hazard, HAZARD, "FADED", trim(&f.line, "[Hazard] "), &format!("{} tiles", f.cells)),
     }
 }
 

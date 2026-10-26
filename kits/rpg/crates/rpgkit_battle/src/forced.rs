@@ -5,8 +5,8 @@
 //! active unit (FM3). A blocked step with tiles left is a collision: the moved unit takes `collide_mult` x the
 //! attacker's power through its own armour and guard (no crit roll) and `collide_stagger` through P6, a `collide_break`
 //! breaks it as P14 does; a unit that blocked it takes the same hit and stagger (FM4). Passive and item `forced_move`
-//! effects hold a unit firm or add tiles to its own pushes (FM5). Each tile entered rolls its hazards as a walk does
-//! (FM6); the move is not the unit's own move and costs nothing, and `stop_moves` cancels its Walks that have not landed
+//! effects hold a unit firm or add tiles to its own pushes (FM5). Each tile entered rolls its hazards as a walk does,
+//! and a ground trap the unit springs stops the move on its tile (FM6, HOOKS1 GH6); the move is not the unit's own move and costs nothing, and `stop_moves` cancels its Walks that have not landed
 //! (FM7). `shove` is the step rule the trigger effect `move` and an arena `push` reuse with a direction and a flat
 //! damage (FM9). Nothing here draws a random number but the hazards' existing status rolls (no crit, no break chance),
 //! and every entry point reads the rule first, so classic battles never move, log or record anything new.
@@ -258,6 +258,10 @@ pub fn shove_unit(res: &mut Resolver, w: &mut World, t: UnitId, by: Option<UnitI
                 break;
             }
             entered.push(next);
+            // FM6, HOOKS1 GH6: a trap the unit springs stops the move on its tile (no collision; rule ground_hazards)
+            if crate::ground::springs(w, t, next).is_some() {
+                break;
+            }
         }
     }
     m.to = w.pos(t);
@@ -281,8 +285,8 @@ pub fn shove_unit(res: &mut Resolver, w: &mut World, t: UnitId, by: Option<UnitI
     m
 }
 
-/// FM7: cancels `t`'s Walks of this round that have not landed; how many.
-fn stop_walks(res: &mut Resolver, t: UnitId) -> i32 {
+/// FM7: cancels `t`'s Walks of this round that have not landed; how many (also HOOKS1 GH6's `stop_moves`).
+pub(crate) fn stop_walks(res: &mut Resolver, t: UnitId) -> i32 {
     let mut n = 0;
     for a in res.scheduled.iter_mut().filter(|a| a.unit == t && !a.cancelled && !a.landed && matches!(a.command.kind, CmdKind::Walk { .. })) {
         a.cancelled = true;

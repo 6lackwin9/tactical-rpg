@@ -6,6 +6,7 @@ pub mod dojo;
 pub mod encounter;
 pub mod forced;
 pub mod grid;
+pub mod ground;
 pub mod intent;
 pub mod log;
 pub mod metrics;

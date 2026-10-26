@@ -145,6 +145,9 @@ pub struct World {
     /// S1: the unkillable units damage would have downed, in the order it first happened (once each; the session logs
     /// each one's cell).
     pub spared: Vec<UnitId>,
+    /// HOOKS1 6 (rule `ground_hazards`): the placements, hazard hits and fades the session has not logged yet (the
+    /// overlay itself is `grid.ground`).
+    pub ground: crate::ground::Ledger,
 }
 
 impl World {

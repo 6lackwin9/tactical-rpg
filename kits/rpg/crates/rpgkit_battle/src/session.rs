@@ -387,7 +387,7 @@ impl Session {
             fallback_any: sb.fallback_any,
             heroes: (0..n_allies).filter(|c| !guests.contains(c)).collect(),
         });
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new() };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default() };
         w.add_item_skills();
         let objective = Objectives::create(&def.raw);
         // MORALE1 1.2: unit keys, tiers, authored profiles and the starting groups.
@@ -1035,6 +1035,7 @@ impl Session {
                     self.append(e);
                 }
             }
+            self.log_ground(round, block);
             self.log_spared(round, block);
         }
         if let Some(idx) = self.pending.pop_front() {
@@ -1080,6 +1081,7 @@ impl Session {
             if !a.command.pushes.is_empty() {
                 self.feed(|m, s| m.on_forced(s, idx));
             }
+            self.log_ground(round, block);
             self.log_spared(round, block);
         }
         if self.pending.is_empty() {
@@ -1088,6 +1090,7 @@ impl Session {
             let end_of_round = self.current_block >= self.def.total_blocks;
             if end_of_round {
                 self.resolver.apply_round_end_effects(&mut self.w);
+                self.log_ground(self.current_round, block);
             }
             self.on_block_end();
             self.log_spared(self.current_round, block);
@@ -1111,6 +1114,20 @@ impl Session {
                 return;
             }
             self.current_block += 1;
+        }
+    }
+
+    /// HOOKS1 6: a cell per ground event since the last call (placements, hazard hits, fades; rule ground_hazards, none
+    /// in classic); a hit on entering hands its held-back HP rows to the metrics with its own cell.
+    fn log_ground(&mut self, round: i32, block: i32) {
+        for ev in self.w.ground.take() {
+            if let crate::ground::Event::Hit(h) = &ev {
+                if let Some(j) = self.w.hp_journal.as_mut() {
+                    j.extend(h.journal.iter().copied());
+                }
+            }
+            self.append(crate::log::ground_entry(&self.w, &ev, round, block));
+            self.feed(|m, s| m.on_ground(s, &ev));
         }
     }
 

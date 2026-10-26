@@ -158,6 +158,8 @@ pub struct Command {
     pub forced: Option<crate::forced::Shove>,
     /// HOOKS1 5: the forced moves the last execution drove (rule `forced_move` only; see `forced::resolve`).
     pub pushes: Vec<crate::forced::Moved>,
+    /// HOOKS1 GH2: the skill's or item's ground hazard (read only under the rule `ground_hazards`; see `ground`).
+    pub hazard: Option<crate::ground::Place>,
 }
 
 impl Command {
@@ -193,6 +195,7 @@ impl Command {
             staggers: Vec::new(),
             forced: None,
             pushes: Vec::new(),
+            hazard: None,
         }
     }
 
@@ -389,7 +392,10 @@ impl Command {
                     *last_hits = hits;
                     *crit_hits = crits;
                 }
-                self.log = if hits == 0 {
+                // HOOKS1 GH3: a placement (no power, a hazard) hits nobody on purpose; its hazard follows at step 7
+                self.log = if hits == 0 && skill_mult <= 0.0 && self.hazard.is_some() && crate::ground::on(w) {
+                    format!("[Place] {src_name} uses {}", self.name)
+                } else if hits == 0 {
                     format!("[Area Miss] {src_name}'s {} hit nobody.", self.name)
                 } else {
                     format!("[Attack] {src_name}'s {} hit {hits} unit{} for {total} damage ({})", self.name, if hits == 1 { "" } else { "s" }, parts.join(", "))
@@ -638,6 +644,7 @@ impl Command {
         self.est_damage = 0;
         self.impact = crate::poise::Impact::default();
         self.forced = None;
+        self.hazard = None;
     }
 
     /// After one damaging hit: stance break (Offensive / Defensive target to Tactical), then exploit consume.
@@ -736,6 +743,10 @@ fn dash(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<UnitId>, ban
             break;
         }
         entered.push(w.pos(src));
+        // HOOKS1 GH6: a trap stops the dash on its tile (rule ground_hazards; never in classic)
+        if crate::ground::springs(w, src, w.pos(src)).is_some() {
+            break;
+        }
     }
     let to = w.pos(src);
     if to == from {
@@ -780,7 +791,8 @@ fn flank_power(w: &World, flank: bool) -> f64 {
     }
 }
 
-/// Walks `route` from the unit's tile (stops at the first refused step); the tiles entered.
+/// Walks `route` from the unit's tile (stops at the first refused step, or on a trap it springs: HOOKS1 GH6); the tiles
+/// entered.
 fn step_along(w: &mut World, src: UnitId, route: &[V2]) -> Vec<V2> {
     let mut entered = Vec::new();
     for d in route {
@@ -788,6 +800,9 @@ fn step_along(w: &mut World, src: UnitId, route: &[V2]) -> Vec<V2> {
             break;
         }
         entered.push(w.pos(src));
+        if crate::ground::springs(w, src, w.pos(src)).is_some() {
+            break;
+        }
     }
     entered
 }
@@ -883,6 +898,7 @@ fn walk(w: &mut World, rng: &mut GodotRng, src: UnitId, planned: &[V2], expected
     let mut moved = 0;
     let mut cut = false;
     let mut blocked_by = String::new();
+    let mut trapped = String::new();
     let mut entered = Vec::new();
     for d in route {
         let next = w.pos(src) + d;
@@ -894,6 +910,11 @@ fn walk(w: &mut World, rng: &mut GodotRng, src: UnitId, planned: &[V2], expected
         moved += 1;
         if w.grid.pos(src).is_some() {
             entered.push(next);
+        }
+        // HOOKS1 GH6: a trap stops the walk on its tile; the rest of the path is dropped (rule ground_hazards)
+        if let Some(trap) = crate::ground::springs(w, src, next) {
+            trapped = format!("the {trap}");
+            break;
         }
     }
     let notes = hazard_on_enter(w, rng, src, &entered);
@@ -908,7 +929,7 @@ fn walk(w: &mut World, rng: &mut GodotRng, src: UnitId, planned: &[V2], expected
         }
         cut = true;
         if blocked_by.is_empty() {
-            blocked_by = "no route".into();
+            blocked_by = if trapped.is_empty() { "no route".into() } else { trapped };
         }
     }
     (moved, cut, blocked_by, notes)
@@ -969,13 +990,16 @@ pub fn hazard_on_enter(w: &mut World, rng: &mut GodotRng, u: UnitId, cells: &[V2
         return lines;
     }
     let mut seen: Vec<String> = Vec::new();
+    let mut ground_seen: Vec<String> = Vec::new();
     for &cell in cells {
-        let Some(h) = w.grid.hazard_at(cell).cloned() else { continue };
-        if !(h.on == "enter" || h.on == "both") || seen.contains(&h.status) {
-            continue;
+        if let Some(h) = w.grid.hazard_at(cell).cloned() {
+            if (h.on == "enter" || h.on == "both") && !seen.contains(&h.status) {
+                seen.push(h.status.clone());
+                lines.extend(hazard_roll(w, rng, u, &h, cell));
+            }
         }
-        seen.push(h.status.clone());
-        lines.extend(hazard_roll(w, rng, u, &h, cell));
+        // HOOKS1 GH4, GH5: the tile's ground hazard after its terrain's (rule ground_hazards; none in classic)
+        lines.extend(crate::ground::enter(w, rng, u, cell, &mut ground_seen));
     }
     lines
 }

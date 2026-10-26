@@ -169,8 +169,15 @@ pub fn ap_cost_by(s: &SkillDef, actor: Option<&Unit>, rules: &Ruleset) -> i32 {
     ap_cost(s, actor)
 }
 
+/// An area attack, or a hazard placement (HOOKS1 GH3), both aimed at a tile.
 pub fn is_area(s: &SkillDef) -> bool {
-    area(s) != Area::None
+    area(s) != Area::None || is_placement(s)
+}
+
+/// HOOKS1 GH3: an ATTACK with no power and a `hazard` is a placement: it aims at a tile like an area opener, deals no
+/// damage and rolls no status (the AI's attack lists skip it: it deals no damage and counts as an area).
+pub fn is_placement(s: &SkillDef) -> bool {
+    kind(s) == Kind::Attack && s.power_mult <= 0.0 && s.hazard.is_some() && !is_item(s)
 }
 
 pub fn is_off_hand(s: &SkillDef) -> bool {

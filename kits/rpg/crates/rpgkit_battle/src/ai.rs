@@ -4,7 +4,7 @@
 use crate::command::{self, cleansable};
 use crate::grid::{V2, DIRS, NO_CELL, ZERO};
 use crate::path::{self, Cells, Hooks};
-use crate::plan::{cover_pref, expected, PlanEntry, PlanStep, SimState, Step, AI_HAZARD_PENALTY, MAX_MOVE_BLOCKS};
+use crate::plan::{cover_pref, expected, PlanEntry, PlanStep, SimState, Step, MAX_MOVE_BLOCKS};
 use crate::plan::Plan;
 use crate::skill::{self, Kind, SkillId};
 use crate::world::{AiProfile, Role, TargetPref, UnitId, World};
@@ -528,7 +528,8 @@ fn kite_then_engage(w: &World, plan: &mut Plan, actor: UnitId, st: &SimState, fo
     }
     let cur_near = nearest_foe(w, st.pos, foes);
     let shooters = shooters_of(w, foes);
-    let penalty = |cell: V2| if w.grid.has_hazard(cell) { AI_HAZARD_PENALTY } else { 0 };
+    // HOOKS1 GH8: a visible ground hazard that would harm the unit costs as a terrain hazard does
+    let penalty = |cell: V2| crate::ground::ai_penalty(w, actor, cell);
     let prefer = |cell: V2| cover_pref(w, &shooters, cell);
     let hooks = Hooks { penalty: Some(&penalty), prefer: if shooters.is_empty() { None } else { Some(&prefer) } };
     let mut want = band.1;

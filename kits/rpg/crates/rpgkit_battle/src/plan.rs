@@ -276,6 +276,11 @@ impl PlanEntry {
         cmd.impact = crate::poise::Impact::of(s);
         // HOOKS1 FM1: the push or pull of each unit the hit damages (the rule forced_move reads it)
         cmd.forced = crate::forced::Shove::of(s);
+        // HOOKS1 GH2: the hazard the skill or item leaves (the rule ground_hazards reads it)
+        cmd.hazard = match &self.item {
+            Some(item) => crate::ground::Place::of_item(item),
+            None => crate::ground::Place::of_skill(s),
+        };
         cmd.name = s.name.clone();
         cmd.ap_cost = self.skill_ap;
         cmd.stance_switch_cost = self.switch_ap;
@@ -1272,9 +1277,10 @@ impl Plan {
         self.route(w, c, from, &goals, &blocked, false)
     }
 
-    /// GridPath.find_path with the unit's AI hazard penalty and cover preference, if any.
+    /// GridPath.find_path with the unit's AI hazard penalty (HOOKS1 GH8: a ground hazard that would harm it and that
+    /// its side sees counts too) and cover preference, if any.
     pub fn route(&self, w: &World, c: UnitId, from: V2, goals: &Cells, blocked: &Cells, goals_are_exits: bool) -> Vec<V2> {
-        let penalty = |cell: V2| if w.grid.has_hazard(cell) { AI_HAZARD_PENALTY } else { 0 };
+        let penalty = |cell: V2| crate::ground::ai_penalty(w, c, cell);
         let shooters = self.goal_preferences.get(&c);
         let prefer = |cell: V2| cover_pref(w, shooters.unwrap(), cell);
         let hooks = Hooks {

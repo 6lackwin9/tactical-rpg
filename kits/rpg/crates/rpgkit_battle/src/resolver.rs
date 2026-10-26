@@ -152,7 +152,11 @@ impl Resolver {
             }
             // RULESET1 P11: a heavy windup holds the unit up while it winds up (rule poise)
             crate::poise::on_start(w, c, &mut self.scheduled[i].command);
+            // HOOKS1 GH2: a Defend leaves its hazard as it starts (rule ground_hazards; nothing in classic)
+            crate::ground::on_start(self, w, i);
         }
+        // HOOKS1 GH6: a trap a dash or carried move sprang cancels that unit's later Walks (`stop_moves`)
+        crate::ground::settle(self, w);
     }
 
     pub fn execute_single(&mut self, w: &mut World, idx: usize) {
@@ -179,6 +183,9 @@ impl Resolver {
         }
         // HOOKS1 4.3 step 6: the forced moves follow the stagger and breaks (rule forced_move; nothing in classic)
         crate::forced::resolve(self, w, idx, &windups);
+        // HOOKS1 4.3 step 7: the hazard the action leaves, then the Walks a sprung trap cancels (rule ground_hazards)
+        crate::ground::after_impact(self, w, idx);
+        crate::ground::settle(self, w);
         self.apply_combo(w, idx);
         let inactive: Vec<UnitId> = self.registered.iter().copied().filter(|c| !w.units[*c].is_active()).collect();
         for c in inactive {
@@ -257,6 +264,8 @@ impl Resolver {
         let units = self.registered.clone();
         let lines = hazard_round_end(w, &mut self.rng, &units);
         self.log.extend(lines);
+        // HOOKS1 GH5, GH7: the ground hazards after the terrain's, then the expired ones fade (none in classic)
+        crate::ground::round_end(self, w);
     }
 
     /// _record_round_end: the step row with the status's recorded source.

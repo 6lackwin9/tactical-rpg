@@ -2,6 +2,7 @@
 //! tile after it falls (Godot leaves dead units in combatant_positions), and leaves the grid when it withdraws.
 
 use aegis_core::value;
+use indexmap::IndexMap;
 use rpgkit_data::Catalog;
 use std::ops::{Add, Mul, Sub};
 
@@ -160,11 +161,14 @@ pub struct Grid {
     /// Tile per battle unit (None = never placed or withdrawn). Dead units keep their tile.
     pub positions: Vec<Option<V2>>,
     pub withdrawn: Vec<usize>,
+    /// HOOKS1 GH1-GH7 (rule `ground_hazards`): the ground hazard on each tile that has one, oldest placement first
+    /// (`crate::ground`); empty in classic.
+    pub ground: IndexMap<V2, crate::ground::Placed>,
 }
 
 impl Grid {
     pub fn new(open: bool, exits: Vec<V2>, table: TerrainTable, unit_count: usize) -> Self {
-        Self { open, exits, terrain: vec![0; (GRID_W * GRID_H) as usize], table, positions: vec![None; unit_count], withdrawn: Vec::new() }
+        Self { open, exits, terrain: vec![0; (GRID_W * GRID_H) as usize], table, positions: vec![None; unit_count], withdrawn: Vec::new(), ground: IndexMap::new() }
     }
 
     pub fn apply_zone(&mut self, zone: &str) {
@@ -212,16 +216,18 @@ impl Grid {
         self.is_valid(c) && self.row(c).walkable
     }
 
+    /// The terrain's move cost, plus a ground hazard's `move_cost` (HOOKS1 GH5).
     pub fn move_cost(&self, c: V2) -> i32 {
-        self.row(c).move_cost
+        self.row(c).move_cost + self.ground.get(&c).map_or(0, |p| p.def.move_cost)
     }
 
+    /// The terrain's cover, or a ground hazard's when larger (HOOKS1 GH5: smoke gives cover).
     pub fn cover_guard(&self, c: V2) -> f64 {
-        if self.is_valid(c) {
-            self.row(c).cover_guard
-        } else {
-            0.0
+        if !self.is_valid(c) {
+            return 0.0;
         }
+        let terrain = self.row(c).cover_guard;
+        self.ground.get(&c).map_or(terrain, |p| terrain.max(p.def.cover_guard))
     }
 
     pub fn has_hazard(&self, c: V2) -> bool {

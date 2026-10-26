@@ -264,6 +264,29 @@ impl ForcedRecord {
     }
 }
 
+/// HOOKS1 4.2 (rule ground_hazards; engine-only, timeline keys): one unit's ground hazard counts for one fight, kept only
+/// for units a hazard involved. What it placed: `placed` (placements), `tiles` (tiles covered), `damage` (HP its hazards
+/// took, on entering and at round end), `statuses` (statuses they landed), `traps` (its traps sprung); what it met:
+/// `hits` (times a hazard acted on it), `taken` (HP it lost to hazards), `trapped` (traps it sprang).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct HazardRecord {
+    pub placed: i32,
+    pub tiles: i32,
+    pub damage: i32,
+    pub statuses: i32,
+    pub traps: i32,
+    pub hits: i32,
+    pub taken: i32,
+    pub trapped: i32,
+}
+
+impl HazardRecord {
+    pub fn to_json(&self) -> Value {
+        json!({"placed": self.placed, "tiles": self.tiles, "damage": self.damage, "statuses": self.statuses, "traps": self.traps,
+            "hits": self.hits, "taken": self.taken, "trapped": self.trapped})
+    }
+}
+
 /// The last fight's outcome numbers.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FightRecord {
@@ -315,6 +338,9 @@ pub struct BattleMetrics {
     /// HOOKS1 4.2: display name -> forced-move counts of the last fight (only units a forced move involved; empty
     /// without the rule forced_move).
     pub forced: IndexMap<String, ForcedRecord>,
+    /// HOOKS1 4.2: display name -> ground hazard counts of the last fight (only units a hazard involved; empty without
+    /// the rule ground_hazards).
+    pub hazards: IndexMap<String, HazardRecord>,
     /// Set when the fight ends.
     pub fight_record: Option<FightRecord>,
     pub fail_lines: Vec<String>,
@@ -362,6 +388,7 @@ impl BattleMetrics {
         self.detail.clear();
         self.poise.clear();
         self.forced.clear();
+        self.hazards.clear();
         self.fight_record = None;
         self.by_name.clear();
         self.ally.clear();
@@ -535,7 +562,7 @@ impl BattleMetrics {
             return;
         };
         match e.category {
-            "ATTACK" if e.subtype == crate::log::COLLISION => self.collision(s, actor, e, &changed),
+            "ATTACK" if e.subtype == crate::log::COLLISION || e.subtype == crate::log::HAZARD => self.collision(s, actor, e, &changed),
             "ATTACK" => self.attack(s, actor, e, &changed),
             "BUFF" => self.support(s, actor, e, &changed),
             _ => self.unexplained(&changed),
@@ -632,6 +659,37 @@ impl BattleMetrics {
         }
     }
 
+    /// HOOKS1 4.2: one ground event (rule ground_hazards): the placer's and the met unit's hazard counts.
+    pub fn on_ground(&mut self, _s: &Session, ev: &crate::ground::Event) {
+        use crate::ground::Event;
+        let name = |c: UnitId| self.names.get(&c).cloned();
+        match ev {
+            Event::Placed(p) => {
+                if let Some(n) = name(p.by) {
+                    let r = self.hazards.entry(n).or_default();
+                    r.placed += 1;
+                    r.tiles += p.cells.len() as i32;
+                }
+            }
+            Event::Hit(h) => {
+                let (by, unit) = (name(h.by), name(h.unit));
+                if let Some(n) = by {
+                    let r = self.hazards.entry(n).or_default();
+                    r.damage += h.damage;
+                    r.statuses += !h.status.is_empty() as i32;
+                    r.traps += h.trap as i32;
+                }
+                if let Some(n) = unit {
+                    let r = self.hazards.entry(n).or_default();
+                    r.hits += 1;
+                    r.taken += h.damage;
+                    r.trapped += h.trap as i32;
+                }
+            }
+            Event::Faded(_) => {}
+        }
+    }
+
     /// resolver.block_completed: unexplained changes, a position sample, and the round end begins after the last block.
     pub fn on_block_completed(&mut self, s: &Session, block: i32) {
         self.flush_hold();
@@ -704,7 +762,8 @@ impl BattleMetrics {
     }
 
     /// HOOKS1 FM4: a collision cell: the one unit it names lost exactly the logged HP, credited to the driver as a hit
-    /// (friendly fire on its own side or on itself); it is not an attack received.
+    /// (friendly fire on its own side or on itself); it is not an attack received. A ground hazard's ATTACK cell (GH5)
+    /// is checked and credited the same way, to the hazard's placer.
     fn collision(&mut self, s: &Session, actor: UnitId, e: &Entry, changed: &IndexMap<UnitId, Buf>) {
         let target = self.unit(&e.target);
         let (mut lost, mut touched) = (0, 0);
@@ -726,7 +785,7 @@ impl BattleMetrics {
         self.checks += 1;
         if touched > 1 || lost != e.damage {
             let name = self.names[&actor].clone();
-            self.fail(&name, &format!("log_collision {}: {} logged, {lost} HP lost by {touched} units", e.skill, e.damage));
+            self.fail(&name, &format!("log_{} {}: {} logged, {lost} HP lost by {touched} units", e.subtype.to_lowercase(), e.skill, e.damage));
         }
     }
 
@@ -1107,6 +1166,10 @@ impl BattleMetrics {
         // HOOKS1 4.2: only when a forced move happened (the rule on without one keeps the shape)
         if !self.forced.is_empty() {
             out["forced"] = Value::Object(self.forced.iter().map(|(n, r)| (n.clone(), r.to_json())).collect());
+        }
+        // HOOKS1 4.2: only when a ground hazard was placed or acted (the rule on without one keeps the shape)
+        if !self.hazards.is_empty() {
+            out["hazards"] = Value::Object(self.hazards.iter().map(|(n, r)| (n.clone(), r.to_json())).collect());
         }
         out
     }
