@@ -81,10 +81,12 @@ const OPTIONS_AFTER_GODOT: [(&str, &str, &str, &str); 6] = [
 /// derived-stat rows (Godot had no such kind; its catalogs are compared per CATALOG_KINDS, which do not list it).
 /// RULESET1-R (2026-10-25): the ruleset rows (the same). CAMPAIGN1-S (2026-10-25): the world kinds `meters`,
 /// `checkpoints` and `triggers` (WorldSchema.KINDS had none; every world's `own` lists leave the loader's worlds too).
-/// STORYUI1-S (2026-10-26): the world kinds `vignettes`, `sequences` and `boards` (the same).
-const KINDS_AFTER_GODOT: [(&str, &str); 8] = [
+/// STORYUI1-S (2026-10-26): the world kinds `vignettes`, `sequences` and `boards` (the same). PORTRAITFX1-S
+/// (2026-10-26): the portrait cue rows (as the derived stats).
+const KINDS_AFTER_GODOT: [(&str, &str); 9] = [
     ("content", "derived_stats"),
     ("content", "rulesets"),
+    ("content", "portrait_cues"),
     ("world", "meters"),
     ("world", "checkpoints"),
     ("world", "triggers"),
@@ -94,8 +96,9 @@ const KINDS_AFTER_GODOT: [(&str, &str); 8] = [
 ];
 /// Schema rows whose help text or options changed after the freeze (their `help` and `options_from` are not
 /// compared). REWARD1: the purse rows. ASSETORG2: the art rows (bodies of the asset layers, not Godot's art keys) and
-/// the item icon rows. PHASEFOLD: the phases rows (the arrival trigger).
-const HELP_CHANGED: [(&str, &str, &str); 9] = [
+/// the item icon rows. PHASEFOLD: the phases rows (the arrival trigger). PORTRAITFX1-S: the dialogue nodes row (a node's
+/// `expression`).
+const HELP_CHANGED: [(&str, &str, &str); 10] = [
     ("content", "encounters", "purse"),
     ("world", "encounters", "purse"),
     ("content", "classes", "art"),
@@ -105,6 +108,7 @@ const HELP_CHANGED: [(&str, &str, &str); 9] = [
     ("content", "items", "icon_id"),
     ("content", "encounters", "phases"),
     ("world", "encounters", "phases"),
+    ("world", "dialogues", "nodes"),
 ];
 
 /// Retired parity (PHASEFOLD, HISTORY 2026-10-22): the single reinforcement wave became an arrival phase. Godot's

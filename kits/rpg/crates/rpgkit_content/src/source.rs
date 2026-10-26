@@ -30,6 +30,9 @@ pub const DERIVED_KIND: &str = crate::check::derived::KIND;
 /// RULESET1-R: the ruleset rows, loaded into the catalog beside CATALOG_KINDS after the skills and derived stats they
 /// name (Godot had no such kind).
 pub const RULESET_KIND: &str = crate::check::ruleset::KIND;
+/// PORTRAITFX1-S: the portrait cue rows, loaded into the catalog beside CATALOG_KINDS after the derived stats they name
+/// (Godot had no such kind).
+pub const PORTRAIT_KIND: &str = crate::check::portrait::KIND;
 /// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2) and STORYUI1's `vignettes`,
 /// `sequences` and `boards` (4.1-4.4; Godot had no such kinds).
 pub const WORLD_KINDS: [&str; 19] = [
@@ -109,6 +112,8 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
     out.insert(DERIVED_KIND.into(), Value::Array(read_derived(&dir, errors).into_iter().map(Value::Object).collect()));
     let rulesets = read_rulesets(&dir, &out, errors);
     out.insert(RULESET_KIND.into(), Value::Array(rulesets.into_iter().map(Value::Object).collect()));
+    let cues = read_portrait_cues(&dir, &out, errors);
+    out.insert(PORTRAIT_KIND.into(), Value::Array(cues.into_iter().map(Value::Object).collect()));
     out.insert("item_families".into(), Value::Array(families.into_iter().map(Value::Object).collect()));
     Value::Object(out)
 }
@@ -156,6 +161,33 @@ fn read_rulesets(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Vec<Dic
             kept.push(row);
         } else {
             errors.extend(found.iter().map(|m| format!("{at}: ruleset '{}': {m}", sget(&row, "id", ""))));
+        }
+    }
+    kept
+}
+
+/// PORTRAITFX1-S 5.1 (engine-only, beside CATALOG_KINDS): the portrait cue rows that pass their checks
+/// (`check::portrait`) against the loaded derived stats (`loaded`), in file order; every problem goes to `errors` and
+/// its row is skipped.
+fn read_portrait_cues(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{PORTRAIT_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(PORTRAIT_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let derived: Vec<String> = json::arr(json::get(loaded, DERIVED_KIND)).iter().map(|e| json::s(json::dict(e), "id")).collect();
+    let checked = crate::check::portrait::check_rows(&rows, &crate::check::portrait::Refs { derived: &derived });
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: portrait cue '{}': {m}", sget(&row, "id", ""))));
         }
     }
     kept

@@ -1,6 +1,7 @@
 //! The story checks (STORYUI1 4.1-4.3, 4.6, kit hook; engine-only, no Godot original): the rows of the world kinds
 //! `vignettes` (their cards) and `sequences` (their steps), a world manifest's `start_sequence`, and the soft warnings
 //! for card images, cues and music that no asset layer holds. Worlds without the story kinds report as before.
+//! PORTRAITFX1 7: a `line` card's `expression`.
 
 use super::campaign::read_key_error;
 use super::dialogue::{self, EffectList};
@@ -113,6 +114,12 @@ fn card_errors(v: &View, w: &str, i: usize, raw: &Value) -> Vec<String> {
         (false, false) => errors.push(format!("{label}: speaker is for a line card only.")),
         (true, false) => errors.extend(ref_errors(v, w, &format!("{label} speaker"), "characters", &speaker)),
         (false, true) => {}
+    }
+    // PORTRAITFX1 7: the speaker's face on a line card
+    if c.get("expression").is_some_and(|x| x.as_str() != Some("")) && style != "line" && CARD_STYLES.contains(&style.as_str()) {
+        errors.push(format!("{label}: expression is for a line card only."));
+    } else {
+        errors.extend(dialogue::expression_error(c, &label));
     }
     for (key, max) in [("fade_in_ms", FADE_MS_MAX), ("fade_out_ms", FADE_MS_MAX), ("hold_ms", HOLD_MS_MAX)] {
         if c.get(key).is_some_and(|x| !int_in(x, 0, max)) {

@@ -11,6 +11,7 @@ pub mod metrics;
 pub mod path;
 pub mod plan;
 pub mod poise;
+pub mod portrait;
 pub mod report;
 pub mod resolver;
 pub mod round_intent;

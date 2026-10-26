@@ -25,6 +25,31 @@ fn content_storage(kind: &str, full: &Dict) -> Dict {
     to_storage(source::schema(), "content", kind, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system"))
 }
 
+/// PORTRAITFX1 5.1: a portrait cue row stores its id and only the fields that differ from their schema defaults.
+fn cue_storage(full: &Dict) -> Dict {
+    let kind = source::PORTRAIT_KIND;
+    let defaults: Dict = fields("content", kind).iter().map(json::dict).map(|f| (json::s(f, "key"), json::get(f, "default").clone())).collect();
+    to_storage(source::schema(), "content", kind, full, |key, v| key != "id" && defaults.get(key).is_some_and(|d| json::deep_equal(d, v)))
+}
+
+/// PORTRAITFX1 7: a dialogue node's and a vignette card's `expression` is stored only when it is not "".
+fn without_empty_expressions(kind: &str, entry: &Dict) -> Dict {
+    let mut out = entry.clone();
+    let list = match kind {
+        "dialogues" => "nodes",
+        "vignettes" => "cards",
+        _ => return out,
+    };
+    if let Some(Value::Array(items)) = out.get_mut(list) {
+        for item in items.iter_mut().filter_map(Value::as_object_mut) {
+            if item.get("expression").is_some_and(|x| x.as_str() == Some("")) {
+                item.shift_remove("expression");
+            }
+        }
+    }
+    out
+}
+
 /// WorldSchema.to_storage of a raw entry (normalized first; an empty `override` is left out).
 pub fn world_storage(kind: &str, entry: &Dict) -> Dict {
     aegis_content::schema::world_storage(source::schema(), kind, entry)
@@ -105,6 +130,7 @@ pub fn catalog_storage(kind: &str, entry: &Dict, families: &[Dict]) -> Result<Di
             Ok(row.into_iter().filter(|(k, _)| !(ITEM_DERIVED.contains(&k.as_str()) || (k == "slot" && has_hand) || (k == "hand" && !has_hand))).map(|(k, v)| (k, copy(&v))).collect())
         }
         "item_families" => Ok(content_storage(kind, &source::derive_family(&content(kind, entry)))),
+        k if k == source::PORTRAIT_KIND => Ok(cue_storage(&content(kind, entry))),
         _ => Ok(content_storage(kind, &content(kind, entry))),
     }
 }
@@ -130,8 +156,8 @@ pub const GAME_KINDS: [GameKind; 3] = [
 ];
 
 /// The kinds an upsert takes in the base catalog (catalog kinds, item families, the derived stats (DERIVE1), the
-/// rulesets (RULESET1), game-data kinds).
-const BASE_KINDS: [&str; 13] = ["classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain", source::DERIVED_KIND, source::RULESET_KIND, "maps", "quests", "services"];
+/// rulesets (RULESET1), the portrait cues (PORTRAITFX1), game-data kinds).
+const BASE_KINDS: [&str; 14] = ["classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain", source::DERIVED_KIND, source::RULESET_KIND, source::PORTRAIT_KIND, "maps", "quests", "services"];
 
 fn game_kind(kind: &str) -> Option<GameKind> {
     GAME_KINDS.iter().copied().find(|g| g.0 == kind)
@@ -170,7 +196,7 @@ fn rewrite(data_dir: &Path, world: Option<&str>, kind: &str, entries: &[Dict]) -
         // PHASEFOLD 1.4: an encounter written before PHASEFOLD is stored with its wave as an arrival phase.
         let e = &source::folded(kind, e);
         stored.push(Value::Object(match (world, game) {
-            (Some(_), _) => world_storage(kind, e),
+            (Some(_), _) => world_storage(kind, &without_empty_expressions(kind, e)),
             (None, Some(_)) => game_storage(kind, e),
             (None, None) => catalog_storage(kind, e, &families)?,
         }));
@@ -285,6 +311,10 @@ impl Hooks for RpgContent {
         let game = world.is_none() && game_kind(kind).is_some();
         let entry = &source::folded(kind, entry);
         let full = if world.is_some() { normalize(fields("world", kind), entry, true) } else if game { game_storage(kind, entry) } else { content(kind, entry) };
+        if world.is_none() && kind == source::PORTRAIT_KIND && sget(&full, "trigger", "") == rpgkit_data::PORTRAIT_METER_TRIGGER {
+            // PORTRAITFX1 5.1: the reserved trigger is refused with its reason, not as an unknown option
+            return Err(vec![crate::check::portrait::METER_MESSAGE.into()]);
+        }
         let errors = field_errors(source::schema(), if game { "none" } else { section }, kind, &full);
         if errors.is_empty() {
             Ok(full)

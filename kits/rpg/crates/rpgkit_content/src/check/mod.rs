@@ -11,6 +11,7 @@ pub mod dialogue;
 pub mod encounter;
 pub mod item;
 pub mod map;
+pub mod portrait;
 pub mod quest;
 pub mod reward;
 pub mod ruleset;
@@ -225,6 +226,10 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
         // RULESET1-R: the row checks the loader applies (fields, rules, intents, basics, numbers, unique ids)
         return ruleset::entry_errors(v, &content(kind, entry), current_id);
     }
+    if kind == portrait::KIND {
+        // PORTRAITFX1-S: the row checks the loader applies (trigger and match, effect and numbers, unique ids and cues)
+        return portrait::entry_errors(v, &content(kind, entry), current_id);
+    }
     let old_id = if current_id.is_empty() { json::s(entry, "id") } else { current_id.to_string() };
     let e = match kind {
         "items" => item::prepare(v, entry, v.get(kind, &old_id)),
@@ -343,6 +348,7 @@ pub fn warnings_for(v: &View, kind: &str, entry: &Dict) -> Vec<String> {
         "encounters" => encounter::warnings(v, &e),
         "items" => item::item_warnings(v, &e),
         "item_families" => item::family_warnings(&crate::source::derive_family(&e)),
+        portrait::KIND => portrait::warnings(&e),
         _ => Vec::new(),
     }
 }
@@ -390,7 +396,9 @@ pub fn validate_all(v: &View) -> Report {
 }
 
 /// ContentCatalog.warnings_all: every entry's warnings (skills once per family, as ranked entries), and the terrain
-/// rows the code defaults stand in for while there is no terrain file.
+/// rows the code defaults stand in for while there is no terrain file; PORTRAITFX1-S: the portrait cue rows' warnings
+/// (`portrait_cues:<id>`) and the portrait file checks A11 and A12 of each asset layer (`assets:<layer>`, the layer
+/// named by the folder holding its `assets/`).
 pub fn warnings_all(v: &View) -> Report {
     let mut out = Report::new();
     for kind in ["items", "item_families", "classes", "units", "encounters"] {
@@ -411,6 +419,18 @@ pub fn warnings_all(v: &View) -> Report {
         let missing: Vec<String> = simple::missing_terrain(v.entries("terrain")).iter().map(|id| format!("No terrain row for '{id}': the code defaults apply.")).collect();
         if !missing.is_empty() {
             out.insert("terrain:missing".into(), missing);
+        }
+    }
+    for e in v.entries(portrait::KIND) {
+        let found = portrait::warnings(e);
+        if !found.is_empty() {
+            out.insert(format!("{}:{}", portrait::KIND, json::s(e, "id")), found);
+        }
+    }
+    for root in &v.assets.roots {
+        let found = assets::portrait_file_warnings(root, &v.assets);
+        if !found.is_empty() {
+            out.insert(format!("assets:{}", assets::layer_name(root)), found);
         }
     }
     out

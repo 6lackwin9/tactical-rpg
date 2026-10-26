@@ -3,6 +3,7 @@
 //! rules, checkpoints and triggers of `check::campaign`) knows the campaign effects; flag effects refuse reserved keys.
 //! STORYUI1 4.7: every list knows the story effects `vignette`, `sequence` and `open_board`, and a sequence's effects
 //! step is a list of its own (no effect that opens a screen or starts a sequence); the service line `board`.
+//! PORTRAITFX1 7: a node's `expression` (shared with the `line` cards of `check::story`).
 
 use super::quest::{flag_key_ok, flag_value_ok, rep_value_error};
 use super::world::{party_character_errors, ref_errors};
@@ -16,7 +17,8 @@ const MAX_NODES: usize = 64;
 const MAX_CHOICES: usize = 6;
 const MAX_EFFECTS: usize = 8;
 const MAX_TEXT: usize = 1000;
-const NODE_KEYS: [&str; 7] = ["id", "speaker", "text", "choices", "effects", "next", "end"];
+/// PORTRAITFX1 7: `expression`, the speaker's face on the node.
+const NODE_KEYS: [&str; 8] = ["id", "speaker", "expression", "text", "choices", "effects", "next", "end"];
 const CHOICE_KEYS: [&str; 6] = ["text", "to", "requires", "unless", "effects", "show_locked"];
 /// Condition kind -> its keys besides `kind`.
 const CONDITION_KINDS: [(&str, &[&str]); 5] = [("flag", &["key", "value", "op"]), ("quest", &["quest", "status"]), ("items", &["item", "count"]), ("gold", &["min"]), ("stat", &["stat", "min"])];
@@ -175,6 +177,7 @@ fn node_errors(v: &View, w: &str, index: usize, raw: &Value, by_id: &IndexMap<St
         Value::String(s) => errors.extend(ref_errors(v, w, &format!("{label} speaker"), "characters", s)),
         _ => errors.push(format!("{label}: speaker must be a character ref or \"\".")),
     }
+    errors.extend(expression_error(node, &label));
     errors.extend(text_errors(node.get("text").unwrap_or(&Value::from("")), &label));
     let choices_raw = node.get("choices").cloned().unwrap_or(Value::Array(Vec::new()));
     let next_raw = node.get("next").cloned().unwrap_or(Value::from(""));
@@ -205,6 +208,13 @@ fn node_errors(v: &View, w: &str, index: usize, raw: &Value, by_id: &IndexMap<St
     }
     errors.extend(effects_errors(v, w, node.get("effects").unwrap_or(&Value::Array(Vec::new())), &label, true));
     errors
+}
+
+/// PORTRAITFX1 7: a node's or a `line` card's `expression`, when present: "" (neutral) or a name of `EXPRESSIONS`.
+pub fn expression_error(d: &Dict, label: &str) -> Option<String> {
+    let x = d.get("expression")?;
+    let ok = x.as_str().is_some_and(|s| s.is_empty() || rpgkit_data::EXPRESSIONS.contains(&s));
+    (!ok).then(|| format!("{label}: expression '{}' is not one of {} (or \"\").", gstr(x), rpgkit_data::EXPRESSIONS.join(", ")))
 }
 
 fn text_errors(raw: &Value, label: &str) -> Vec<String> {

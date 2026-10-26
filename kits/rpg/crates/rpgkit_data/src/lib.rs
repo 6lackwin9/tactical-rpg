@@ -1,7 +1,8 @@
 //! Typed content catalog (classes, units, skills, items, passives, encounters, terrain, and the engine-only derived
 //! stats of DERIVE1 and ruleset rows of RULESET1), and the campaign vocabulary of CAMPAIGN1 (kinds, effect kinds, read
 //! keys, the manifest blocks with their defaults) and the story vocabulary of STORYUI1 (kinds, card and step keys,
-//! story effects, limits, the step reader).
+//! story effects, limits, the step reader), and the portrait cue rows and vocabulary of PORTRAITFX1 (triggers, events,
+//! effects, surfaces, expressions).
 //!
 //! Source today: the resolved catalog the Godot exporter writes (the game's `parity/out/catalog.json`), i.e. exactly the
 //! entries Godot's `ContentCatalog.entries(kind)` returns after item-family resolution and schema normalisation.
@@ -558,6 +559,8 @@ pub struct Catalog {
     pub derived_stats: IndexMap<String, DerivedStatDef>,
     /// Ruleset rows (RULESET1-R, kind `rulesets`; engine-only), raw: `rpgkit_rules::ruleset::Ruleset` reads them.
     pub rulesets: IndexMap<String, Obj>,
+    /// Portrait cue rows (PORTRAITFX1 5.1, kind `portrait_cues`; engine-only) in file order.
+    pub portrait_cues: Vec<PortraitCue>,
     skill_index: IndexMap<String, usize>,
     tier_one: IndexMap<String, usize>,
 }
@@ -603,6 +606,7 @@ impl Catalog {
         for d in rows("derived_stats").iter().filter_map(DerivedStatDef::from_obj) {
             cat.derived_stats.insert(d.id.clone(), d);
         }
+        cat.portrait_cues = rows(PORTRAIT_CUES_KIND).iter().map(PortraitCue::from_obj).collect();
         cat.skills = rows("skills").iter().map(SkillDef::from_obj).collect();
         cat.index_skills();
         cat
@@ -837,8 +841,8 @@ impl DefeatRule {
 pub const STORY_KINDS: [&str; 3] = ["vignettes", "sequences", "boards"];
 /// 4.2: a card's style.
 pub const CARD_STYLES: [&str; 4] = ["image", "text", "title", "line"];
-/// 4.2: the keys a card takes (any other key is refused).
-pub const CARD_KEYS: [&str; 14] = ["style", "image", "top", "bottom", "ash", "title", "subtitle", "text", "speaker", "fade_in_ms", "fade_out_ms", "hold_ms", "cue", "when"];
+/// 4.2: the keys a card takes (any other key is refused); PORTRAITFX1 7: a `line` card's `expression`.
+pub const CARD_KEYS: [&str; 15] = ["style", "image", "top", "bottom", "ash", "title", "subtitle", "text", "speaker", "fade_in_ms", "fade_out_ms", "hold_ms", "cue", "when", "expression"];
 /// 4.1: a vignette holds 1..CARDS_MAX cards.
 pub const CARDS_MAX: usize = 24;
 /// 4.2: the longest card title, subtitle and text (characters).
@@ -931,5 +935,108 @@ impl Step {
             "end" => Step::End { to: string(o, "to", "map") },
             _ => return None,
         })
+    }
+}
+
+// ---- Portrait cues (PORTRAITFX1 5.1, 5.4, kit hook; engine-only, no Godot original) ---------------------------------
+
+/// 5.1: the catalog kind of the cue rows (file `data/catalog/portrait_cues.json`, read beside the catalog kinds).
+pub const PORTRAIT_CUES_KIND: &str = "portrait_cues";
+/// 5.1: what a row answers: `event` rows react to a battle step event; the others are state rows that hold while
+/// their match is true.
+pub const PORTRAIT_TRIGGERS: [&str; 6] = ["event", "status", "condition", "hp", "derived", "down"];
+/// 5.1: the trigger reserved for unit-scope meters (refused until CAMPAIGN1-DOC defines them).
+pub const PORTRAIT_METER_TRIGGER: &str = "meter";
+/// 5.1, 5.3: the battle step events an `event` row matches.
+pub const PORTRAIT_EVENTS: [&str; 5] = ["hit", "crit", "guard_hit", "heal", "break"];
+/// 5.1: the kit's copy of the engine's portrait effect names (`aegis_ui::portrait_fx::EFFECTS`, same order; the kit
+/// crates do not depend on the UI, so a game test keeps the two equal).
+pub const PORTRAIT_EFFECTS: [&str; 12] = ["flash", "jolt", "desaturate", "tint", "fade", "still", "glow", "veins", "eye_glow", "ash", "smoke", "face"];
+/// 5.1: the jolt presets (`aegis_ui::portrait_fx::PORTRAIT_JOLTS`).
+pub const PORTRAIT_JOLTS: [&str; 2] = ["hit", "crit"];
+/// 5.1: the effects whose colour a row may set.
+pub const PORTRAIT_COLOR_EFFECTS: [&str; 7] = ["flash", "tint", "glow", "veins", "eye_glow", "ash", "smoke"];
+/// 5.1, 6.2: the screens that draw portraits (a row's `surfaces`; none listed = all).
+pub const PORTRAIT_SURFACES: [&str; 4] = ["dialogue", "roster", "panel", "timeline"];
+/// 5.4 (PQ2): the expression names of a portrait's face frames (`portraits/<folder>/faces/<id>/<expression>.png`), a
+/// `face` row's `expression`, and a dialogue node's or `line` card's `expression` ("" = neutral).
+pub const EXPRESSIONS: [&str; 4] = ["neutral", "hurt", "angry", "afraid"];
+/// ROSTER1 W1: the member conditions the kit knows (a cue row naming another condition warns).
+pub const MEMBER_CONDITIONS: [&str; 1] = ["wounded"];
+
+/// A portrait cue row (PORTRAITFX1 5.1, kind `portrait_cues`): a trigger and its match, the effect it fires or holds
+/// and the effect's numbers, and where it applies. Read from a loaded (checked) row; the defaults are the schema's.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PortraitCue {
+    pub id: String,
+    /// One of PORTRAIT_TRIGGERS.
+    pub trigger: String,
+    /// `event` rows: one of PORTRAIT_EVENTS.
+    pub event: String,
+    /// `status` rows: a status id.
+    pub status: String,
+    /// `condition` rows: a member condition id.
+    pub condition: String,
+    /// `derived` rows: a derived stat id.
+    pub stat: String,
+    /// `hp`: HP percent of the max (strictly below); `derived`: an absolute value (strictly below); 0 = not used.
+    pub below: i32,
+    /// `derived`: the drop in percent from the value without statuses (at least); 0 = not used.
+    pub drop_pct: i32,
+    /// One of PORTRAIT_EFFECTS.
+    pub effect: String,
+    pub intensity: f64,
+    /// Event rows: how long the effect runs (0 = the jolt preset's own); state rows: 0.
+    pub ms: i32,
+    /// `jolt`: one of PORTRAIT_JOLTS.
+    pub preset: String,
+    /// "" (the effect's default) or `#rrggbb`.
+    pub color: String,
+    /// `face`: one of EXPRESSIONS.
+    pub expression: String,
+    /// `face`: the highest wins.
+    pub priority: i32,
+    /// None listed = every surface.
+    pub surfaces: Vec<String>,
+    /// None listed = every ruleset.
+    pub rulesets: Vec<String>,
+}
+
+impl PortraitCue {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self {
+            id: string(o, "id", ""),
+            trigger: string(o, "trigger", "event"),
+            event: string(o, "event", ""),
+            status: string(o, "status", ""),
+            condition: string(o, "condition", ""),
+            stat: string(o, "stat", ""),
+            below: int(o, "below", 0),
+            drop_pct: int(o, "drop_pct", 0),
+            effect: string(o, "effect", "flash"),
+            intensity: float(o, "intensity", 1.0),
+            ms: int(o, "ms", 0),
+            preset: string(o, "preset", ""),
+            color: string(o, "color", ""),
+            expression: string(o, "expression", ""),
+            priority: int(o, "priority", 50),
+            surfaces: strings(o, "surfaces"),
+            rulesets: strings(o, "rulesets"),
+        }
+    }
+
+    /// An `event` row (fired by a step event); every other trigger holds a state.
+    pub fn is_event(&self) -> bool {
+        self.trigger == "event"
+    }
+
+    /// Whether the row applies on `surface` (none listed = every surface).
+    pub fn on_surface(&self, surface: &str) -> bool {
+        self.surfaces.is_empty() || self.surfaces.iter().any(|s| s == surface)
+    }
+
+    /// Whether the row applies under `ruleset` (none listed = every ruleset).
+    pub fn in_ruleset(&self, ruleset: &str) -> bool {
+        self.rulesets.is_empty() || self.rulesets.iter().any(|r| r == ruleset)
     }
 }
