@@ -1,7 +1,7 @@
 # Art prompt templates
 
-Reusable image-API prompt shapes in the house pixel-art style, and the short shape for the local model
-([Local short prompt](#local-short-prompt)). Gemini wrote them on 2026-10-25 when the user asked it
+Reusable image-API prompt shapes in the house pixel-art style, and the shapes for the local models
+([Local short prompt](#local-short-prompt), with Klein's whole prompt and edit wording). Gemini wrote them on 2026-10-25 when the user asked it
 for the prompts behind Mara Voss's portrait and her 2x2 variation sheet (`art_src/mara_voss*.png`); they name Mara as the
 worked example. To reuse one, swap the character lines (name, age, features, clothing, weapon, mood, colours) and attach
 the character's existing portrait as the reference. The game draws battle bodies with the code rig
@@ -50,7 +50,24 @@ Character has a tiny but highly readable silhouette with exaggerated key movemen
 
 ## Local short prompt
 
-For the local model (LOCALGEN1, `tools/portraits/localgen.py`: LCM Dreamshaper v7, SD 1.5 family). Its CLIP text
+### Klein: the whole prompt (the main local model)
+
+Since LOCALGEN2 (user 2026-10-26) the main local model is FLUX.2 [klein] 4B in ComfyUI, the default backend of
+`localgen.py`. It needs no short form: its Qwen3 4B text encoder reads the whole prompt (Bram's recorded prompt is
+about 870 tokens by the tool's estimate, which the record keeps as `tokens_estimate`), so nothing is cut. `run` sends
+the character block first, then the shared style block without its "Use the attached image" line (a text-to-image
+run attaches no image, and the rest of that line speaks of it). `localgen.py prompt <id>` prints it.
+
+An edit (`vary`, `faces`) keeps the source as a reference latent, and the change is the whole prompt: say what stays,
+then the one thing that changes. The expression cells (`faces`, the cell lines of `PORTRAITFX1_TASKS.md` 2.4.2) use:
+
+```text
+Keep the same character, face shape, hair, scars and markings, outfit, pixel-art style, framing, lighting and dark background exactly. Change only the facial expression to <expression>: <cell line>.
+```
+
+### Short prompt for the CLIP models (OpenVINO drafts)
+
+For the OpenVINO draft model (LOCALGEN1, `--backend openvino`: LCM Dreamshaper v7, SD 1.5 family). Its CLIP text
 encoder reads 77 tokens, 75 of them the prompt's own, and drops the rest without a word, so the long image-API blocks
 above do not fit. `localgen.py prompt <id>` builds the short form from a prompts-file block and lists what it cut;
 `run` and `vary` send that form and keep the cut list in the take's record (`cut`). When a detail that makes the

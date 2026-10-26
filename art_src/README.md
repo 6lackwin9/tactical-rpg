@@ -18,7 +18,17 @@ takes), plus variant sheets such as `mara_voss_variant.png`.
   picks another model folder; its family (LCM, SD 1.5, SDXL or FLUX, from `model_index.json`) sets the default steps,
   guidance and size, the negative prompt and the prompt form (short for the CLIP-only families, whole for FLUX). `--sheet` (or `sheet OUT PNG...`) puts each take beside its `pixelize`
   portrait, and `--dry-run` prints the prompt and record without generating. Benchmark and throwaway takes go to
-  `--out <scratch folder>`, not here.
+  `--out <scratch folder>`, not here. Since LOCALGEN2 these OpenVINO drafts need `--backend openvino`.
+- Klein (LOCALGEN2, user 2026-10-26: FLUX.2 Klein 4B is the main local model; speed is not a concern): the default
+  backend of `localgen.py` is the local ComfyUI server (start `C:\dev\localgen\comfyui.bat`; `--server` or
+  `LOCALGEN_COMFY_URL`, default `http://127.0.0.1:8188`; `C:\dev\localgen\COMFYUI.md`). `run <id>...` sends the whole
+  prompt, the character block first, then the style block without its "Use the attached image" line (from the
+  record beside `<id>.png`, or `--prompts <file>`), and writes `<id>_loc<time>_<n>.png` (1024 px, 4 steps, cfg 1).
+  `vary <id> --from art_src/<id>.png --change "Keep the same character ... Change only ..."` is a Klein reference
+  edit: the source is uploaded and kept as a reference latent, the change is the whole prompt. `faces <id>...
+  [--exprs hurt angry afraid]` makes the PORTRAITFX1 expression cells from `<id>.png` as
+  `<id>_face_<expr>_loc<time>_<n>.png`, one image per cell (not a 2x2 sheet), ready to pixelize into
+  `faces/<id>/<expr>.png`. About 90 s a portrait and 4 min an edit on this PC.
 - Prompt records: beside every generated image, `<same name>.json` (plain Git, not LFS) keeps the model, the id, the
   full prompt sent (style block included), the reference image, the prompts file, the UTC time and the candidate
   index `n`; `generate.py` writes them since ART3. Records written afterwards carry `"backfilled": true` and a
@@ -28,7 +38,10 @@ takes), plus variant sheets such as `mara_voss_variant.png`.
   `mara_voss_variant` has no known prompt (`null`). Never the key. A local take's record has the same keys first, with
   `model` `local:<model folder>`, then `family`, `device`, `seed`, `steps`, `size`, `guidance`, `negative`, `lora`, `cut` (the
   block parts left out of the short prompt) and `seconds`; a variant's also has `source_image`, `strength` and
-  `change`.
+  `change`. A Klein take's record has `model` `local:flux-2-klein-4b` and `reference` the edited source (`null` for
+  text to image), then `backend` (`comfyui`), `kind` (`text`, `edit` or `face`), `unet`, `clip`, `vae`, `sampler`,
+  `steps`, `cfg`, `size` (text) or `megapixels` (edits), `seed`, `tokens_estimate`, `cut` (only the dropped reference
+  line), `seconds`, and `change` (vary) or `expression` (faces).
 - `tools/portraits/pixelize.py` turns a source into the 240 px game portrait (96 px grid, 4 shades per colour family);
   `clear_mark` and `clear_corner` remove the image model's star mark first.
 - ART3 (2026-10-25): the user's pick of each Scarlet Lullaby portrait is `<id>.png` (`render_beast`, `ash_crawler`,

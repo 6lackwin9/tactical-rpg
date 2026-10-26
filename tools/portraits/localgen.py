@@ -1,9 +1,37 @@
-# Local generation (LOCALGEN1): portrait drafts and variants on this PC's own model (OpenVINO GenAI on the Intel NPU,
-# the Arc GPU or the CPU; free, a few seconds an image), the art pipeline's draft tool; generate.py (the image API) is
-# the fallback. The venv, the models, the LoRA files and the compile cache stay outside the repo, in LOCALGEN_HOME
-# (default C:\dev\localgen); run the tool with that venv's Python, from the repo root:
+# Local generation (LOCALGEN1, LOCALGEN2): portrait drafts, edits and expression cells on this PC's own models, the art
+# pipeline's local tool; generate.py (the image API) is the fallback. Two backends (--backend):
+#   comfyui (default, LOCALGEN2, user 2026-10-26: FLUX.2 Klein 4B is the main local model; speed is not a concern):
+#       the local ComfyUI server (--server, env LOCALGEN_COMFY_URL, default http://127.0.0.1:8188; its folder
+#       LOCALGEN_HOME/comfyui; start it with C:\dev\localgen\comfyui.bat) runs FLUX.2 [klein] 4B distilled with the
+#       Qwen3 4B text encoder (--clip), 4 steps, cfg 1. The graphs are the ones verified on this machine
+#       (C:\dev\localgen\probe\comfy_run.py and comfy_faces.py). Standard library only (urllib).
+#   openvino (LOCALGEN1): OpenVINO GenAI on the Intel NPU, the Arc GPU or the CPU, a few seconds an image, for quick
+#       drafts.
+# The venv, the models, the LoRA files and the compile cache stay outside the repo, in LOCALGEN_HOME (default
+# C:\dev\localgen); run the tool with that venv's Python, from the repo root:
 #   C:\dev\localgen\venv\Scripts\python.exe tools/portraits/localgen.py <command> ...
 #
+# ComfyUI backend (Klein, the default):
+#   localgen.py run <id>... [--prompts FILE | --prompt TEXT] [--style TEXT] [--n N] [--seed S] [--size PX]
+#               [--steps K] [--clip FILE] [--server URL] [--out DIR] [--sheet PNG] [--dry-run]
+#       text to image with the whole prompt (Klein's Qwen3 encoder reads it all; nothing is cut, the record keeps a
+#       token estimate): the character block first, then the shared style block (or --style) without its "Use the
+#       attached image" line (a text-to-image run attaches none). The prompt is --prompt as given, else the id's
+#       block and style block in --prompts FILE, else the record beside art_src/<id>.png, else the id's block and
+#       style block in ART3_PROMPTS.md. Default 1024 px.
+#   localgen.py vary <id> --from PNG --change TEXT [--n N] [--seed S] [--megapixels M] [same options]
+#       a Klein reference edit: PNG (uploaded through /upload/image) becomes the reference latent and TEXT the whole
+#       prompt ("Keep the same character ... Change only ..."); the image is scaled to M megapixels (default 1).
+#   localgen.py faces <id>... [--exprs hurt angry afraid] [--src DIR] [--n N] [--seed S] [same options]
+#       the PORTRAITFX1 expression cells (the PORTRAITFX1_TASKS 2.4.2 cell lines) as Klein edits of <src>/<id>.png
+#       (default art_src/), written as <out>/<id>_face_<expr>_loc<time>_<n>.png.
+#   Takes of run and vary go to <out>/<id>_loc<time>_<n>.png (default out: art_src/). All jobs are queued first, then
+#   collected. The record: generate.py's keys (model "local:flux-2-klein-4b", reference = the source image of an
+#   edit), then backend, kind (text, edit, face), unet, clip, vae, sampler, steps, cfg, size (text) or megapixels
+#   (edit), seed, tokens_estimate, cut, seconds, and change (vary) or expression (faces). No server running: the
+#   error says to start C:\dev\localgen\comfyui.bat. `prompt <id>` prints the Klein prompt.
+#
+# OpenVINO backend (--backend openvino):
 #   localgen.py run <id>... [--prompts FILE | --prompt TEXT] [--n N] [--seed S] [--steps K] [--size PX]
 #               [--device GPU|NPU|CPU] [--model DIR] [--guidance G] [--lora PATH:ALPHA ...] [--trigger TEXT]
 #               [--style TEXT] [--out DIR] [--sheet PNG] [--dry-run]
@@ -40,6 +68,10 @@ import pathlib
 import re
 import sys
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -454,6 +486,318 @@ class Pipe:
         return Image.fromarray(out.data[0]), time.time() - t1
 
 
+# ------------------------------------------------------------------------------------------- ComfyUI backend (Klein)
+
+COMFY_URL = os.environ.get("LOCALGEN_COMFY_URL", "http://127.0.0.1:8188")
+COMFY = HOME / "comfyui"
+COMFY_START = HOME / "comfyui.bat"
+KLEIN = "local:flux-2-klein-4b"
+KLEIN_UNET = "flux-2-klein-4b.safetensors"
+# The full Qwen3 4B encoder (speed is not a concern); qwen_3_4b_fp4_flux2.safetensors is the smaller one that also works.
+KLEIN_CLIP = "qwen_3_4b.safetensors"
+KLEIN_VAE = "flux2-vae.safetensors"
+KLEIN_STEPS = 4  # the distilled model
+KLEIN_CFG = 1.0
+KLEIN_SIZE = 1024
+KLEIN_MEGAPIXELS = 1.0
+# The PORTRAITFX1 expression cells (PORTRAITFX1_TASKS 2.4.2 lines) and the edit wording comfy_faces.py verified.
+CELLS = {
+    "hurt": "wincing in pain, one eye squeezed narrower, teeth gritted, head pulled back slightly",
+    "angry": "brows drawn down hard, jaw set or snarling, eyes glaring",
+    "afraid": "eyes wide, brows raised, mouth slightly open, head drawn in",
+}
+KEEP = ("Keep the same character, face shape, hair, scars and markings, outfit, pixel-art style, framing, lighting and "
+        "dark background exactly. Change only the facial expression to {e}: {cell}.")
+
+
+def klein_graph(prompt, *, seed, steps=KLEIN_STEPS, size=KLEIN_SIZE, prefix="localgen/take", clip=KLEIN_CLIP):
+    """The ComfyUI API graph of a FLUX.2 Klein 4B text-to-image job (comfy_run.py's, verified 2026-10-26): the prompt
+    encoded once, its zeroed copy as the negative, CFG 1, euler over the Flux2 scheduler, an empty Flux2 latent."""
+    return {
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": KLEIN_UNET, "weight_dtype": "default"}},
+        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": clip, "type": "flux2", "device": "default"}},
+        "3": {"class_type": "VAELoader", "inputs": {"vae_name": KLEIN_VAE}},
+        "4": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}},
+        "5": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["4", 0]}},
+        "6": {"class_type": "CFGGuider", "inputs": {"model": ["1", 0], "positive": ["4", 0], "negative": ["5", 0],
+                                                    "cfg": KLEIN_CFG}},
+        "7": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}},
+        "8": {"class_type": "Flux2Scheduler", "inputs": {"steps": steps, "width": size, "height": size}},
+        "9": {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": size, "height": size, "batch_size": 1}},
+        "10": {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}},
+        "11": {"class_type": "SamplerCustomAdvanced", "inputs": {"noise": ["10", 0], "guider": ["6", 0],
+                                                                 "sampler": ["7", 0], "sigmas": ["8", 0],
+                                                                 "latent_image": ["9", 0]}},
+        "12": {"class_type": "VAEDecode", "inputs": {"samples": ["11", 0], "vae": ["3", 0]}},
+        "13": {"class_type": "SaveImage", "inputs": {"images": ["12", 0], "filename_prefix": prefix}},
+    }
+
+
+def klein_edit_graph(image, prompt, *, seed, steps=KLEIN_STEPS, megapixels=KLEIN_MEGAPIXELS, prefix="localgen/edit",
+                     clip=KLEIN_CLIP):
+    """The Klein reference edit (comfy_run.py --edit and comfy_faces.py, the template's single-image path): `image`
+    (a name in ComfyUI's input folder) scaled to `megapixels`, VAE-encoded and attached as a ReferenceLatent to both
+    the prompt and its zeroed copy; the scheduler and the latent take the scaled image's size."""
+    g = klein_graph(prompt, seed=seed, steps=steps, prefix=prefix, clip=clip)
+    g.update({
+        "20": {"class_type": "LoadImage", "inputs": {"image": image}},
+        "21": {"class_type": "ImageScaleToTotalPixels", "inputs": {"image": ["20", 0], "upscale_method": "nearest-exact",
+                                                                   "megapixels": megapixels, "resolution_steps": 1}},
+        "22": {"class_type": "GetImageSize", "inputs": {"image": ["21", 0]}},
+        "23": {"class_type": "VAEEncode", "inputs": {"pixels": ["21", 0], "vae": ["3", 0]}},
+        "24": {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["4", 0], "latent": ["23", 0]}},
+        "25": {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["5", 0], "latent": ["23", 0]}},
+    })
+    g["6"]["inputs"].update(positive=["24", 0], negative=["25", 0])
+    for node in ("8", "9"):
+        g[node]["inputs"].update(width=["22", 0], height=["22", 1])
+    return g
+
+
+def klein_prompt(text, style=""):
+    """The whole prompt for Klein (its Qwen3 encoder reads it all): the character block first, then the style block
+    (`style`, or the part of a whole recorded prompt before `Character:`) without its lines about an attached
+    reference image (the whole line: the rest of it, "Do not copy her face", speaks of that image). Returns (prompt,
+    cut), cut naming the dropped reference lines."""
+    cut = []
+    i = text.find("Character:")
+    if i > 0:
+        style, text = text[:i], text[i:]
+    kept = []
+    for line in style.strip().splitlines():
+        if re.search(r"\battached image\b", line, re.I):
+            cut.append(f"reference line: {line[:70]}...")
+        elif line.strip():
+            kept.append(line.strip())
+    return "\n\n".join(p for p in (text.strip(), "\n".join(kept)) if p), cut
+
+
+def face_prompt(expr):
+    """The edit prompt of one PORTRAITFX1 expression cell."""
+    return KEEP.format(e=expr, cell=CELLS[expr])
+
+
+def klein_record(cid, prompt, n, *, kind, seed, steps=KLEIN_STEPS, clip=KLEIN_CLIP, size=None, megapixels=None,
+                 prompts_file=None, reference=None, cut=(), seconds=None, when=None, change=None, expression=None):
+    """The prompt record of one Klein take: generate.py's keys first (model KLEIN, reference = the edited image), then
+    the backend settings."""
+    when = when or datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+    rec = {"model": KLEIN, "id": cid, "prompt": prompt, "reference": generate.rel(reference) if reference else None,
+           "prompts_file": generate.rel(prompts_file) if prompts_file else None, "time": when, "n": n,
+           "backend": "comfyui", "kind": kind, "unet": KLEIN_UNET, "clip": clip, "vae": KLEIN_VAE,
+           "sampler": "euler", "steps": steps, "cfg": KLEIN_CFG}
+    if reference is None:
+        rec["size"] = size or KLEIN_SIZE
+    else:
+        rec["megapixels"] = megapixels or KLEIN_MEGAPIXELS
+    rec.update(seed=seed, tokens_estimate=estimate(prompt), cut=list(cut), seconds=seconds)
+    if change is not None:
+        rec["change"] = change
+    if expression is not None:
+        rec["expression"] = expression
+    return rec
+
+
+def face_path(out, cid, expr, n, when=None):
+    return pathlib.Path(out) / f"{cid}_face_{expr}_loc{int(when or time.time())}_{n}.png"
+
+
+def multipart(fields, files):
+    """A multipart/form-data body: `fields` name -> text, `files` name -> (file name, bytes). Returns (body, type)."""
+    boundary = "----localgen" + uuid.uuid4().hex
+    out = []
+    for name, value in fields.items():
+        out.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
+    for name, (filename, data) in files.items():
+        out.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'
+                   f"Content-Type: image/png\r\n\r\n".encode() + data + b"\r\n")
+    out.append(f"--{boundary}--\r\n".encode())
+    return b"".join(out), f"multipart/form-data; boundary={boundary}"
+
+
+class Comfy:
+    """The local ComfyUI server's HTTP API (standard library): check, upload an input image, queue a graph, wait for
+    its history entry and fetch its image. `opener` (urllib.request.urlopen by default) is the one HTTP call, so tests
+    fake it."""
+
+    def __init__(self, url=COMFY_URL, home=None, opener=None, sleep=None, poll=3.0):
+        self.url = url.rstrip("/")
+        self.home = pathlib.Path(home or COMFY)
+        self.opener = opener or urllib.request.urlopen
+        self.sleep = sleep or time.sleep
+        self.poll = poll
+
+    def call(self, path, data=None, content_type=None):
+        req = urllib.request.Request(self.url + path, data=data,
+                                     headers={"Content-Type": content_type} if content_type else {})
+        try:
+            return self.opener(req, timeout=60).read()
+        except urllib.error.HTTPError as e:
+            raise SystemExit(f"ComfyUI rejected {path} ({e.code}): {e.read().decode('utf-8', 'replace')[:1500]}")
+        except (urllib.error.URLError, OSError) as e:
+            raise SystemExit(f"ComfyUI is not running at {self.url} ({getattr(e, 'reason', e)}): "
+                             f"start {COMFY_START}")
+
+    def json(self, path, body=None):
+        data = None if body is None else json.dumps(body).encode("utf-8")
+        return json.loads(self.call(path, data, "application/json" if data else None))
+
+    def check(self):
+        return self.json("/system_stats")
+
+    def upload(self, path):
+        """Uploads a source image to ComfyUI's input folder (as localgen_<file name>, so a user's own input of the
+        same name stays); returns the name a LoadImage node takes."""
+        path = pathlib.Path(path)
+        body, ctype = multipart({"type": "input", "overwrite": "true"},
+                                {"image": (f"localgen_{path.name}", path.read_bytes())})
+        r = json.loads(self.call("/upload/image", body, ctype))
+        return f"{r['subfolder']}/{r['name']}" if r.get("subfolder") else r["name"]
+
+    def queue(self, graph):
+        return self.json("/prompt", {"prompt": graph, "client_id": "localgen"})["prompt_id"]
+
+    def wait(self, pid):
+        while True:
+            h = self.json(f"/history/{pid}")
+            if pid in h:
+                return h[pid]
+            self.sleep(self.poll)
+
+    def image(self, entry):
+        """The first image of a finished job: from the ComfyUI output folder when it is there, else through /view."""
+        im = next(im for o in entry.get("outputs", {}).values() for im in o.get("images", []))
+        local = self.home / "output" / im.get("subfolder", "") / im["filename"]
+        if local.exists():
+            return local.read_bytes()
+        q = urllib.parse.urlencode({"filename": im["filename"], "subfolder": im.get("subfolder", ""),
+                                    "type": im.get("type", "output")})
+        return self.call(f"/view?{q}")
+
+
+def job_problem(entry):
+    """Why a finished job has no image ("" when it has one): its status and execution error."""
+    status = entry.get("status", {})
+    has = any(o.get("images") for o in entry.get("outputs", {}).values())
+    if status.get("status_str", "success") == "success" and has:
+        return ""
+    errs = [json.dumps(m[1])[:600] for m in status.get("messages", []) if m and m[0] == "execution_error"]
+    return f"{status.get('status_str', 'no image')}: " + ("; ".join(errs) or "no image in its outputs")
+
+
+def job_seconds(entry, fallback):
+    """The run time ComfyUI recorded (execution_start to execution_success, ms), else `fallback`."""
+    stamps = {m[0]: m[1].get("timestamp") for m in entry.get("status", {}).get("messages", [])
+              if m and isinstance(m[1], dict)}
+    if stamps.get("execution_start") and stamps.get("execution_success"):
+        return round((stamps["execution_success"] - stamps["execution_start"]) / 1000, 1)
+    return round(fallback, 1)
+
+
+def klein_base(a, cid):
+    """(prompt, cut, prompts_file) for one id of a Klein run: --prompt as given; else the id's block in --prompts FILE
+    with its style block; else the record beside art_src/<id>.png; else the id's block in ART3_PROMPTS.md. --style
+    replaces the style block."""
+    if a.prompt:
+        return a.prompt, [], None
+    rec = SRC / f"{cid}.json"
+    if not a.prompts and rec.exists():
+        r = json.loads(rec.read_text(encoding="utf-8"))
+        if r.get("prompt"):
+            text = r["prompt"]
+            if a.style and "Character:" in text:
+                text = text[text.find("Character:"):]
+            prompt, cut = klein_prompt(text, a.style or "")
+            return prompt, cut, r.get("prompts_file") and ROOT / r["prompts_file"]
+    path = pathlib.Path(a.prompts or ART3)
+    blocks = block_prompts(path)
+    if cid not in blocks:
+        raise SystemExit(f"{cid}: no block in {path.name}")
+    prompt, cut = klein_prompt(blocks[cid], a.style or style_block(path))
+    return prompt, cut, path
+
+
+def cmd_klein(a, kind):
+    """run (kind text), vary (edit) and faces (face) on the ComfyUI backend: every job queued, then collected."""
+    if a.lora or getattr(a, "strength", None):
+        raise SystemExit("--lora and --strength are for --backend openvino (Klein edits take no strength)")
+    out = pathlib.Path(a.out or SRC)
+    steps = a.steps or KLEIN_STEPS
+    when = int(time.time())
+    jobs = []  # dicts: id, n, seed, prompt, record kwargs, source, path
+    for cid in a.ids:
+        if kind == "text":
+            prompt, cut, pf = klein_base(a, cid)
+            for k in range(a.n):
+                jobs.append(dict(cid=cid, n=k + 1, seed=a.seed + k, prompt=prompt, source=None,
+                                 path=take_path(out, cid, k + 1, when),
+                                 rec=dict(kind="text", size=a.size or KLEIN_SIZE, prompts_file=pf, cut=cut)))
+        elif kind == "edit":
+            for k in range(a.n):
+                jobs.append(dict(cid=cid, n=k + 1, seed=a.seed + k, prompt=a.change, source=pathlib.Path(a.source),
+                                 path=take_path(out, cid, k + 1, when),
+                                 rec=dict(kind="edit", megapixels=a.megapixels, change=a.change)))
+        else:
+            src = pathlib.Path(a.src or SRC) / f"{cid}.png"
+            for e in a.exprs:
+                for k in range(a.n):
+                    jobs.append(dict(cid=cid, n=k + 1, seed=a.seed + k, prompt=face_prompt(e), source=src,
+                                     path=face_path(out, cid, e, k + 1, when),
+                                     rec=dict(kind="face", megapixels=a.megapixels, expression=e)))
+    for j in jobs:
+        j["rec"].update(steps=steps, clip=a.clip, reference=j["source"])
+    if a.dry_run:
+        for j in jobs:
+            print(f"--- {j['cid']} #{j['n']} -> {j['path'].name} (about {estimate(j['prompt'])} tokens, whole)")
+            print(json.dumps(klein_record(j["cid"], j["prompt"], j["n"], seed=j["seed"], **j["rec"]), indent=2,
+                             ensure_ascii=False))
+        return 0
+    for j in jobs:
+        if j["source"] is not None and not j["source"].exists():
+            raise SystemExit(f"{j['source']}: no such image")
+    client = Comfy(a.server)
+    client.check()
+    uploaded = {}
+    for j in jobs:
+        if j["source"] is not None and j["source"] not in uploaded:
+            uploaded[j["source"]] = client.upload(j["source"])
+    while any(j["path"].exists() for j in jobs):  # a second run in the same second
+        when += 1
+        for j in jobs:
+            j["path"] = j["path"].with_name(re.sub(r"_loc\d+_", f"_loc{when}_", j["path"].name))
+    for j in jobs:
+        prefix = f"localgen/{j['path'].stem}"
+        if j["source"] is None:
+            g = klein_graph(j["prompt"], seed=j["seed"], steps=steps, size=a.size or KLEIN_SIZE, prefix=prefix,
+                            clip=a.clip)
+        else:
+            g = klein_edit_graph(uploaded[j["source"]], j["prompt"], seed=j["seed"], steps=steps,
+                                 megapixels=a.megapixels, prefix=prefix, clip=a.clip)
+        j["pid"], j["t0"] = client.queue(g), time.time()
+    print(f"queued {len(jobs)} job(s) on {client.url}", flush=True)
+    made, failed = [], 0
+    out.mkdir(parents=True, exist_ok=True)
+    for j in jobs:
+        entry = client.wait(j["pid"])
+        problem = job_problem(entry)
+        if problem:
+            print(f"{j['path'].name}: FAILED {problem}", flush=True)
+            failed += 1
+            continue
+        j["path"].write_bytes(client.image(entry))
+        secs = job_seconds(entry, time.time() - j["t0"])
+        write_record(j["path"], klein_record(j["cid"], j["prompt"], j["n"], seed=j["seed"], seconds=secs, **j["rec"]))
+        made.append(j["path"])
+        print(f"{j['path'].name}  {secs} s", flush=True)
+    if made and a.sheet:
+        sources = list(dict.fromkeys(j["source"] for j in jobs if j["source"] is not None))
+        print("sheet", contact(a.sheet, sources + made))
+    for cid, cut in {j["cid"]: j["rec"].get("cut") for j in jobs}.items():
+        if cut:
+            print(f"{cid}: left out of the prompt: " + "; ".join(cut))
+    return 1 if failed else 0
+
+
 # ------------------------------------------------------------------------------------------------------ contact sheet
 
 def contact(out, images, cols=4, cell=240):
@@ -477,7 +821,7 @@ def contact(out, images, cols=4, cell=240):
         sheet.paste(px.convert("RGB").resize((cell, cell), Image.NEAREST), (x + cell, y))
         bits = [r.get("model")] if r and not local else []
         if local:
-            bits += [r.get("device"), f"seed {r.get('seed')}", f"{r.get('steps')} st"]
+            bits += [r.get("device") or r.get("expression") or "klein", f"seed {r.get('seed')}", f"{r.get('steps')} st"]
             if r.get("strength") is not None:
                 bits.append(f"str {r['strength']}")
             for ad in r.get("lora") or []:
@@ -599,6 +943,13 @@ def cmd_run(a, kind="text"):
 
 
 def cmd_prompt(a):
+    if a.backend == "comfyui":
+        for cid in a.ids:
+            prompt, cut, _ = klein_base(a, cid)
+            print(f"{cid} (klein, whole, about {estimate(prompt)} tokens): {prompt}")
+            for c in cut:
+                print(f"  left out: {c}")
+        return 0
     enc = encoder(a)
     fam, count, tokens = enc
     for cid in a.ids:
@@ -610,21 +961,26 @@ def cmd_prompt(a):
 
 
 def parser():
-    ap = argparse.ArgumentParser(prog="localgen.py", description="Local image generation (LOCALGEN1)")
+    ap = argparse.ArgumentParser(prog="localgen.py", description="Local image generation (LOCALGEN1, LOCALGEN2)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def common(p, gen=True):
+        p.add_argument("--backend", choices=("comfyui", "openvino"), default="comfyui",
+                       help="comfyui: FLUX.2 Klein 4B on the local ComfyUI server (default); openvino: quick drafts")
         p.add_argument("--prompts", help="prompts file (default ART3_PROMPTS.md)")
         p.add_argument("--prompt", help="the prompt as given, instead of a block")
-        p.add_argument("--trigger", help="LoRA trigger words, added to the style tail")
-        p.add_argument("--style", help="the style tail of a short prompt (default TAIL)")
-        p.add_argument("--model", default=str(MODEL))
+        p.add_argument("--trigger", help="(openvino) LoRA trigger words, added to the style tail")
+        p.add_argument("--style", help="the style tail of a short prompt (default TAIL); for Klein the style block")
+        p.add_argument("--model", default=str(MODEL), help="(openvino) the model folder")
         if not gen:
             return
+        p.add_argument("--server", default=COMFY_URL, help="(comfyui) the server URL (env LOCALGEN_COMFY_URL)")
+        p.add_argument("--clip", default=KLEIN_CLIP, help="(comfyui) the Qwen3 text encoder file")
+        p.add_argument("--megapixels", type=float, default=KLEIN_MEGAPIXELS, help="(comfyui) an edit's image size")
         p.add_argument("--n", type=int, default=1)
         p.add_argument("--seed", type=int, default=1)
-        p.add_argument("--steps", type=int, help="default: the model family's (FAMILIES)")
-        p.add_argument("--size", type=int, help="default: the model family's (FAMILIES)")
+        p.add_argument("--steps", type=int, help="default: Klein's 4, or the model family's (FAMILIES)")
+        p.add_argument("--size", type=int, help="default: Klein's 1024, or the model family's (FAMILIES)")
         # GPU by default: 2026-10-26 it made a 512 px take in 0.8-1.0 s against the NPU's 2.1 s, and it compiles a new
         # size or LoRA in seconds where the NPU takes 3.5 min (a size) to 16 min (a LoRA); NPU for long fixed batches
         p.add_argument("--device", default="GPU")
@@ -638,7 +994,10 @@ def parser():
     v = sub.add_parser("vary"); v.add_argument("ids", nargs=1); common(v)
     v.add_argument("--from", dest="source", required=True)
     v.add_argument("--change", required=True)
-    v.add_argument("--strength", type=float, action="append")
+    v.add_argument("--strength", type=float, action="append", help="(openvino)")
+    f = sub.add_parser("faces"); f.add_argument("ids", nargs="+"); common(f)
+    f.add_argument("--exprs", nargs="+", choices=list(CELLS), default=list(CELLS))
+    f.add_argument("--src", help="folder of the source portraits <id>.png (default art_src/)")
     s = sub.add_parser("sheet"); s.add_argument("out"); s.add_argument("images", nargs="+")
     s.add_argument("--cols", type=int, default=4)
     p = sub.add_parser("prompt"); p.add_argument("ids", nargs="+"); common(p, gen=False)
@@ -648,12 +1007,19 @@ def parser():
 
 def main(argv=None):
     a = parser().parse_args(argv)
+    comfy = getattr(a, "backend", None) == "comfyui"
     if a.cmd == "run":
-        return cmd_run(a)
+        return cmd_klein(a, "text") if comfy else cmd_run(a)
     if a.cmd == "vary":
+        if comfy:
+            return cmd_klein(a, "edit")
         if any(not 0.0 < s <= 1.0 for s in a.strength or []):
             raise SystemExit("--strength: between 0 and 1 (0.3-0.7 keeps the face)")
         return cmd_run(a, "vary")
+    if a.cmd == "faces":
+        if not comfy:
+            raise SystemExit("faces: a Klein edit, ComfyUI backend only")
+        return cmd_klein(a, "face")
     if a.cmd == "sheet":
         print(contact(a.out, a.images, a.cols))
         return 0
