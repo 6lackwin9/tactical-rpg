@@ -195,7 +195,7 @@ A 2x2 grid of four pixel art character portrait variations for a dark fantasy ta
 
 The four variations are:
 - Top-Left: Neutral: {mood line}, mouth closed, eyes looking right.
-- Top-Right: Hurt: wincing in pain, one eye squeezed narrower, teeth gritted, head pulled back slightly.
+- Top-Right: Hurt: in sharp pain: both eyes squeezed tightly shut with deep dark creases, brows pinched up and together, mouth pulled wide open in a grimace showing clenched teeth, strong dark lines around the eyes and mouth.
 - Bottom-Left: Angry: brows drawn down hard, jaw set or snarling, eyes glaring.
 - Bottom-Right: Afraid: eyes wide, brows raised, mouth slightly open, head drawn in.
 ```

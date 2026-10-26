@@ -338,7 +338,7 @@ class KleinGraphs(unittest.TestCase):
         self.assertEqual(g["10"]["inputs"]["noise_seed"], 7)
         self.assertEqual((g["8"]["inputs"]["steps"], g["6"]["inputs"]["cfg"]), (4, 1.0))
         self.assertEqual((g["8"]["inputs"]["width"], g["9"]["inputs"]["height"]), (768, 768))
-        self.assertEqual(g["2"]["inputs"], {"clip_name": "qwen_3_4b.safetensors", "type": "flux2", "device": "default"})
+        self.assertEqual(g["2"]["inputs"], {"clip_name": "qwen_3_4b_fp4_flux2.safetensors", "type": "flux2", "device": "default"})
         self.assertEqual(g["1"]["inputs"]["unet_name"], "flux-2-klein-4b.safetensors")
         self.assertEqual(g["13"]["inputs"]["filename_prefix"], "localgen/wren_loc1_1")
 
@@ -461,6 +461,19 @@ class KleinDryRun(unittest.TestCase):
                          [("wren", "angry"), ("wren", "hurt"), ("pell", "angry"), ("pell", "hurt")])
         self.assertIn("wren_face_angry_loc", out)
         self.assertEqual(recs[0]["prompt"], localgen.face_prompt("angry"))
+        self.assertNotIn("keep", recs[0])
+
+    def test_faces_keep_names_a_detail_per_id_in_the_keep_list(self):
+        (self.tmp / "pell.json").write_text(json.dumps({"id": "pell", "keep": ["her brass monocle"]}), encoding="utf-8")
+        code, out = run("faces", "wren", "pell", "--exprs", "hurt", "--src", self.tmp, "--keep",
+                        "wren=his iron loupe over his right eye", "--keep", "the scarf", "--dry-run")
+        self.assertEqual(code, 0)
+        wren, pell = records(out)
+        self.assertEqual(wren["keep"], ["his iron loupe over his right eye", "the scarf"])
+        self.assertEqual(pell["keep"], ["her brass monocle", "the scarf"])
+        self.assertIn("outfit, his iron loupe over his right eye, the scarf, pixel-art style", wren["prompt"])
+        self.assertNotIn("loupe", pell["prompt"])
+        self.assertTrue(wren["prompt"].endswith(f"to hurt: {localgen.CELLS['hurt']}."))
 
     def test_strength_and_faces_on_the_wrong_backend_are_refused(self):
         with self.assertRaises(SystemExit):
@@ -475,19 +488,45 @@ class KleinDryRun(unittest.TestCase):
         self.assertIn("Character: Wren Ash", out)
 
 
-def png_bytes():
+def png_bytes(color=(40, 20, 30)):
     from PIL import Image
     buf = io.BytesIO()
-    Image.new("RGB", (8, 8), (40, 20, 30)).save(buf, "PNG")
+    Image.new("RGB", (8, 8), color).save(buf, "PNG")
     return buf.getvalue()
+
+
+def washout_bytes():
+    """The red/green wash-out in miniature: the left half pure red, the right half pure green."""
+    from PIL import Image
+    im = Image.new("RGB", (16, 16), (230, 20, 20))
+    im.paste((20, 230, 20), (8, 0, 16, 16))
+    buf = io.BytesIO()
+    im.save(buf, "PNG")
+    return buf.getvalue()
+
+
+class BrokenTake(unittest.TestCase):
+    def test_a_red_green_washout_is_broken_with_or_without_a_source(self):
+        self.assertTrue(localgen.broken(washout_bytes()))
+        self.assertTrue(localgen.broken(washout_bytes(), png_bytes()))
+
+    def test_a_normal_take_is_not_broken(self):
+        self.assertFalse(localgen.broken(png_bytes()))
+        self.assertFalse(localgen.broken(png_bytes((48, 26, 34)), png_bytes()))
+
+    def test_an_edit_whose_colours_moved_from_the_source_is_broken(self):
+        shifted = png_bytes((40, 20 + localgen.BROKEN_SHIFT + 10, 30))
+        self.assertTrue(localgen.broken(shifted, png_bytes()))
+        self.assertFalse(localgen.broken(shifted), "a text take has no source to compare")
 
 
 class FakeComfy:
     """The ComfyUI HTTP API in miniature: the calls a run makes, each answered as the server answers."""
 
-    def __init__(self, fail=()):
+    def __init__(self, fail=(), views=()):
         self.calls, self.graphs, self.polls, self.fail = [], [], {}, set(fail)
         self.png = png_bytes()
+        self.views = list(views)  # PNGs /view answers first (a broken take), then self.png
 
     def __call__(self, req, timeout=None):
         url = urllib.parse.urlsplit(req.full_url)
@@ -515,7 +554,7 @@ class FakeComfy:
                     "outputs": {"13": {"images": [{"filename": prefix.split("/")[-1] + "_00001_.png",
                                                    "subfolder": "localgen", "type": "output"}]}}}}
         elif url.path == "/view":
-            return io.BytesIO(self.png)
+            return io.BytesIO(self.views.pop(0) if self.views else self.png)
         else:
             raise AssertionError(url.path)
         return io.BytesIO(json.dumps(body).encode())
@@ -572,6 +611,25 @@ class KleinOverHttp(unittest.TestCase):
         self.assertEqual(self.fake.graphs[0]["4"]["inputs"]["text"], BLOCK + "\n\nShared style block.")
         self.assertEqual(len(list((self.tmp / "out").glob("wren_loc*_*.png"))), 2)
         self.assertFalse([c for c in self.fake.calls if c[0] == "/upload/image"], "a text run uploads nothing")
+
+    def test_a_broken_take_is_retried_with_the_next_seed(self):
+        fake = FakeComfy(views=[washout_bytes()])
+        code, out = self.go("faces", "wren", "--exprs", "hurt", "--src", self.tmp / "src", "--seed", "4", fake=fake)
+        self.assertEqual(code, 0, out)
+        self.assertIn("retried with seed 5", out)
+        self.assertEqual([g["10"]["inputs"]["noise_seed"] for g in fake.graphs], [4, 5])
+        (made,) = (self.tmp / "out").glob("wren_face_hurt_loc*_1.png")
+        self.assertEqual(made.read_bytes(), fake.png)
+        self.assertEqual(json.loads(made.with_suffix(".json").read_text(encoding="utf-8"))["seed"], 5)
+
+    def test_a_take_broken_three_times_is_reported_and_not_saved(self):
+        (self.tmp / "P.md").write_text(PROMPTS_MD, encoding="utf-8")
+        fake = FakeComfy(views=[washout_bytes()] * 3)
+        code, out = self.go("run", "wren", "--prompts", self.tmp / "P.md", "--seed", "7", fake=fake)
+        self.assertEqual(code, 1)
+        self.assertIn("FAILED broken (red/green wash-out) with seeds 7-9", out)
+        self.assertEqual([g["10"]["inputs"]["noise_seed"] for g in fake.graphs], [7, 8, 9])
+        self.assertFalse(list((self.tmp / "out").glob("*.png")))
 
     def test_a_failed_job_is_reported_and_the_rest_kept(self):
         fake = FakeComfy(fail={"p2"})

@@ -34,7 +34,7 @@ the fallback. Presentation only: no rule, plan, AI, save, trace or sim changes.
 
 | Area | Where | Today |
 | --- | --- | --- |
-| Portrait files | `games/emberwake/assets/portraits/{heroes,npcs,elites,bosses,common}/` (29), `kits/rpg/assets/portraits/common/` (13) | 42 PNGs, all 240 x 240: a 96 px grid figure scaled 2.5x by `pixelize.py`, on an opaque dithered background glow, framed by a 3 grid px border (about 8 px at 240); no mask, no sidecar |
+| Portrait files | `games/emberwake/assets/portraits/{heroes,npcs,elites,bosses,common}/` (29), `kits/rpg/assets/portraits/common/` (13) | 42 PNGs, all 240 x 240: a 120 px grid figure (PIXEL2, 2026-10-26; was 96 at 2.5x) scaled 2x by `pixelize.py`, on an opaque dithered background glow, framed by a 3 grid px border (about 8 px at 240); no mask, no sidecar |
 | Lookup | `kits/rpg/crates/rpgkit_content/src/art.rs` `portrait_tier`, `portrait_chain` | Unique tier `portraits/<folder>/<id>.png`, then the body's common portrait, then the class base |
 | Where they draw | `emberwake_gui/src/region.rs` `draw_talk` (64 px, `screens::character_art`); `aegis_ui/src/vignette.rs` line cards (`PORTRAIT` 64) | Nowhere else: the Character screen (`party.rs`), the hub list (`hub.rs`), the battle hero and intel panels (`battle.rs`) and the timeline strip show no portrait |
 | Effects kit | `aegis_ui/src/fx.rs` (FX1-E) | `Clock` with hit-stop, `hash01`, `Shake`, `Camera::offset`, `SHAKE_PRESETS`; `Settings::reduce_motion` in `screen.rs` |

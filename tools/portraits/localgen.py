@@ -25,11 +25,15 @@
 #   localgen.py faces <id>... [--exprs hurt angry afraid] [--src DIR] [--n N] [--seed S] [same options]
 #       the PORTRAITFX1 expression cells (the PORTRAITFX1_TASKS 2.4.2 cell lines) as Klein edits of <src>/<id>.png
 #       (default art_src/), written as <out>/<id>_face_<expr>_loc<time>_<n>.png.
+#       --keep [ID=]TEXT (repeatable) names a detail the edit must keep (Bram's loupe: the edits dropped it), for that
+#       id or, without ID=, for every id; a `keep` list in the source record <src>/<id>.json adds to it.
 #   Takes of run and vary go to <out>/<id>_loc<time>_<n>.png (default out: art_src/). All jobs are queued first, then
 #   collected. The record: generate.py's keys (model "local:flux-2-klein-4b", reference = the source image of an
 #   edit), then backend, kind (text, edit, face), unet, clip, vae, sampler, steps, cfg, size (text) or megapixels
-#   (edit), seed, tokens_estimate, cut, seconds, and change (vary) or expression (faces). No server running: the
-#   error says to start C:\dev\localgen\comfyui.bat. `prompt <id>` prints the Klein prompt.
+#   (edit), seed, tokens_estimate, cut, seconds, and change (vary) or expression and keep (faces). No server
+#   running: the error says to start C:\dev\localgen\comfyui.bat. `prompt <id>` prints the Klein prompt. A broken
+#   take (the red/green wash-out, `broken`) is queued again with the next seed, at most twice; the record has the
+#   seed used; still broken after three seeds, it is reported as FAILED and not saved.
 #
 # OpenVINO backend (--backend openvino):
 #   localgen.py run <id>... [--prompts FILE | --prompt TEXT] [--n N] [--seed S] [--steps K] [--size PX]
@@ -46,7 +50,7 @@
 #       (or the id's block in FILE, or TEXT), shortened, with the change put first. Several strengths: one take each
 #       (the take's steps are about steps x strength, so raise --steps for low strengths).
 #   localgen.py sheet OUT PNG... [--cols C]
-#       a contact sheet: each image beside its pixelize.py game portrait (96 px grid), captioned from its record
+#       a contact sheet: each image beside its pixelize.py game portrait (120 px grid), captioned from its record
 #   localgen.py prompt <id>... [--prompts FILE] [--trigger TEXT] [--style TEXT]
 #       prints the short prompt, its token count and what was cut (no model needed)
 #   localgen.py lora-kohya SRC DST
@@ -62,6 +66,7 @@
 import argparse
 import datetime
 import importlib
+import io
 import json
 import os
 import pathlib
@@ -493,8 +498,9 @@ COMFY = HOME / "comfyui"
 COMFY_START = HOME / "comfyui.bat"
 KLEIN = "local:flux-2-klein-4b"
 KLEIN_UNET = "flux-2-klein-4b.safetensors"
-# The full Qwen3 4B encoder (speed is not a concern); qwen_3_4b_fp4_flux2.safetensors is the smaller one that also works.
-KLEIN_CLIP = "qwen_3_4b.safetensors"
+# The 4-bit Qwen3 4B encoder (user setup 2026-10-26: the same quality as the full qwen_3_4b.safetensors with about
+# 4 GB less memory; the full one is no longer installed).
+KLEIN_CLIP = "qwen_3_4b_fp4_flux2.safetensors"
 KLEIN_VAE = "flux2-vae.safetensors"
 KLEIN_STEPS = 4  # the distilled model
 KLEIN_CFG = 1.0
@@ -502,12 +508,13 @@ KLEIN_SIZE = 1024
 KLEIN_MEGAPIXELS = 1.0
 # The PORTRAITFX1 expression cells (PORTRAITFX1_TASKS 2.4.2 lines) and the edit wording comfy_faces.py verified.
 CELLS = {
-    "hurt": "wincing in pain, one eye squeezed narrower, teeth gritted, head pulled back slightly",
+    "hurt": ("in sharp pain: both eyes squeezed tightly shut with deep dark creases, brows pinched up and together, "
+             "mouth pulled wide open in a grimace showing clenched teeth, strong dark lines around the eyes and mouth"),
     "angry": "brows drawn down hard, jaw set or snarling, eyes glaring",
     "afraid": "eyes wide, brows raised, mouth slightly open, head drawn in",
 }
-KEEP = ("Keep the same character, face shape, hair, scars and markings, outfit, pixel-art style, framing, lighting and "
-        "dark background exactly. Change only the facial expression to {e}: {cell}.")
+KEEP = ("Keep the same character, face shape, hair, scars and markings, outfit, {extra}pixel-art style, framing, "
+        "lighting and dark background exactly. Change only the facial expression to {e}: {cell}.")
 
 
 def klein_graph(prompt, *, seed, steps=KLEIN_STEPS, size=KLEIN_SIZE, prefix="localgen/take", clip=KLEIN_CLIP):
@@ -572,13 +579,32 @@ def klein_prompt(text, style=""):
     return "\n\n".join(p for p in (text.strip(), "\n".join(kept)) if p), cut
 
 
-def face_prompt(expr):
-    """The edit prompt of one PORTRAITFX1 expression cell."""
-    return KEEP.format(e=expr, cell=CELLS[expr])
+def face_prompt(expr, keep=()):
+    """The edit prompt of one PORTRAITFX1 expression cell; `keep` adds the character's own details to the keep list
+    after the outfit (an edit can drop a small prop such as a loupe unless it is named)."""
+    return KEEP.format(e=expr, cell=CELLS[expr], extra="".join(f"{k}, " for k in keep))
+
+
+def face_keeps(cid, flags=(), src=None):
+    """The keep extras of one id: a `keep` list in the record beside its source portrait (<src>/<id>.json), then each
+    --keep flag that is `<id>=TEXT` for this id or TEXT for every id of the run."""
+    keep = []
+    rec = pathlib.Path(src or SRC) / f"{cid}.json"
+    if rec.exists():
+        extra = json.loads(rec.read_text(encoding="utf-8")).get("keep") or []
+        keep += [extra] if isinstance(extra, str) else list(extra)
+    for f in flags:
+        m = re.match(r"^([a-z0-9_]+)=(.+)$", f, re.S)
+        if m is None:
+            keep.append(f)
+        elif m.group(1) == cid:
+            keep.append(m.group(2))
+    return [k.strip() for k in keep if k.strip()]
 
 
 def klein_record(cid, prompt, n, *, kind, seed, steps=KLEIN_STEPS, clip=KLEIN_CLIP, size=None, megapixels=None,
-                 prompts_file=None, reference=None, cut=(), seconds=None, when=None, change=None, expression=None):
+                 prompts_file=None, reference=None, cut=(), seconds=None, when=None, change=None, expression=None,
+                 keep=()):
     """The prompt record of one Klein take: generate.py's keys first (model KLEIN, reference = the edited image), then
     the backend settings."""
     when = when or datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
@@ -595,6 +621,8 @@ def klein_record(cid, prompt, n, *, kind, seed, steps=KLEIN_STEPS, clip=KLEIN_CL
         rec["change"] = change
     if expression is not None:
         rec["expression"] = expression
+    if keep:
+        rec["keep"] = list(keep)
     return rec
 
 
@@ -685,6 +713,38 @@ def job_problem(entry):
     return f"{status.get('status_str', 'no image')}: " + ("; ".join(errs) or "no image in its outputs")
 
 
+# A broken take (2026-10-26, about one Klein render in 25 on this PC, more under memory pressure, even with
+# --fp32-vae): a red/green wash-out. comfy_faces.py's check: over BROKEN_LOUD of the pixels pure red or pure green,
+# or, for an edit, the mean of a channel more than BROKEN_SHIFT levels from the source's. Retried with the next seed.
+BROKEN_SHIFT = 35
+BROKEN_LOUD = 0.2
+BROKEN_RETRIES = 2  # 3 seeds in all
+
+
+def broken(img, src=None):
+    """True when a take is the red/green wash-out. `img`: PNG bytes, a path or an image; `src` (an edit's source,
+    same kinds) adds the colour-mean comparison; a text-to-image take has none and is judged by the pure share."""
+    from PIL import Image
+
+    def load(v):
+        if isinstance(v, (bytes, bytearray)):
+            v = Image.open(io.BytesIO(v))
+        elif not hasattr(v, "convert"):
+            v = Image.open(v)
+        raw = v.convert("RGB").resize((128, 128)).tobytes()
+        return [tuple(raw[i:i + 3]) for i in range(0, len(raw), 3)]
+
+    b = load(img)
+    loud = sum(1 for r, g, bl in b if (r > 200 and g < 70 and bl < 70) or (g > 200 and r < 90 and bl < 90))
+    if loud > BROKEN_LOUD * len(b):
+        return True
+    if src is None:
+        return False
+    a = load(src)
+    mean = lambda px: [sum(c) / len(c) for c in zip(*px)]
+    return max(abs(x - y) for x, y in zip(mean(a), mean(b))) > BROKEN_SHIFT
+
+
 def job_seconds(entry, fallback):
     """The run time ComfyUI recorded (execution_start to execution_success, ms), else `fallback`."""
     stamps = {m[0]: m[1].get("timestamp") for m in entry.get("status", {}).get("messages", [])
@@ -739,11 +799,12 @@ def cmd_klein(a, kind):
                                  rec=dict(kind="edit", megapixels=a.megapixels, change=a.change)))
         else:
             src = pathlib.Path(a.src or SRC) / f"{cid}.png"
+            keep = face_keeps(cid, a.keep, a.src)
             for e in a.exprs:
                 for k in range(a.n):
-                    jobs.append(dict(cid=cid, n=k + 1, seed=a.seed + k, prompt=face_prompt(e), source=src,
+                    jobs.append(dict(cid=cid, n=k + 1, seed=a.seed + k, prompt=face_prompt(e, keep), source=src,
                                      path=face_path(out, cid, e, k + 1, when),
-                                     rec=dict(kind="face", megapixels=a.megapixels, expression=e)))
+                                     rec=dict(kind="face", megapixels=a.megapixels, expression=e, keep=keep)))
     for j in jobs:
         j["rec"].update(steps=steps, clip=a.clip, reference=j["source"])
     if a.dry_run:
@@ -765,7 +826,7 @@ def cmd_klein(a, kind):
         when += 1
         for j in jobs:
             j["path"] = j["path"].with_name(re.sub(r"_loc\d+_", f"_loc{when}_", j["path"].name))
-    for j in jobs:
+    def send(j):
         prefix = f"localgen/{j['path'].stem}"
         if j["source"] is None:
             g = klein_graph(j["prompt"], seed=j["seed"], steps=steps, size=a.size or KLEIN_SIZE, prefix=prefix,
@@ -774,17 +835,34 @@ def cmd_klein(a, kind):
             g = klein_edit_graph(uploaded[j["source"]], j["prompt"], seed=j["seed"], steps=steps,
                                  megapixels=a.megapixels, prefix=prefix, clip=a.clip)
         j["pid"], j["t0"] = client.queue(g), time.time()
+
+    for j in jobs:
+        send(j)
     print(f"queued {len(jobs)} job(s) on {client.url}", flush=True)
     made, failed = [], 0
     out.mkdir(parents=True, exist_ok=True)
     for j in jobs:
-        entry = client.wait(j["pid"])
-        problem = job_problem(entry)
+        tries, data = 0, None
+        while True:
+            entry = client.wait(j["pid"])
+            problem = job_problem(entry)
+            if problem:
+                break
+            data = client.image(entry)
+            if not broken(data, j["source"]):
+                break
+            if tries == BROKEN_RETRIES:
+                problem = f"broken (red/green wash-out) with seeds {j['seed'] - tries}-{j['seed']}; not saved"
+                break
+            tries += 1
+            j["seed"] += 1
+            print(f"{j['path'].name}: broken take (red/green wash-out), retried with seed {j['seed']}", flush=True)
+            send(j)
         if problem:
             print(f"{j['path'].name}: FAILED {problem}", flush=True)
             failed += 1
             continue
-        j["path"].write_bytes(client.image(entry))
+        j["path"].write_bytes(data)
         secs = job_seconds(entry, time.time() - j["t0"])
         write_record(j["path"], klein_record(j["cid"], j["prompt"], j["n"], seed=j["seed"], seconds=secs, **j["rec"]))
         made.append(j["path"])
@@ -801,7 +879,7 @@ def cmd_klein(a, kind):
 # ------------------------------------------------------------------------------------------------------ contact sheet
 
 def contact(out, images, cols=4, cell=240):
-    """Each image beside its pixelize.py game portrait (96 px grid), a caption from its record below: one cell per
+    """Each image beside its pixelize.py game portrait (120 px grid), a caption from its record below: one cell per
     take, `cols` takes a row."""
     from PIL import Image, ImageDraw
     import pixelize
@@ -817,7 +895,7 @@ def contact(out, images, cols=4, cell=240):
         local = str(r.get("model", "")).startswith("local:")
         with Image.open(path) as im:
             sheet.paste(im.convert("RGB").resize((cell, cell)), (x, y))
-        px, _ = pixelize.pixelize(str(path), 96, mark=not local)  # an image-API source has the star mark to clear
+        px, _ = pixelize.pixelize(str(path), mark=not local)  # an image-API source has the star mark to clear
         sheet.paste(px.convert("RGB").resize((cell, cell), Image.NEAREST), (x + cell, y))
         bits = [r.get("model")] if r and not local else []
         if local:
@@ -998,6 +1076,9 @@ def parser():
     f = sub.add_parser("faces"); f.add_argument("ids", nargs="+"); common(f)
     f.add_argument("--exprs", nargs="+", choices=list(CELLS), default=list(CELLS))
     f.add_argument("--src", help="folder of the source portraits <id>.png (default art_src/)")
+    f.add_argument("--keep", action="append", default=[], metavar="[ID=]TEXT",
+                   help="a detail the edit must keep (e.g. bram=his iron jeweller's loupe over his right eye); "
+                        "without ID= for every id; adds to the `keep` list of the source record")
     s = sub.add_parser("sheet"); s.add_argument("out"); s.add_argument("images", nargs="+")
     s.add_argument("--cols", type=int, default=4)
     p = sub.add_parser("prompt"); p.add_argument("ids", nargs="+"); common(p, gen=False)

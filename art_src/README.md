@@ -28,7 +28,9 @@ takes), plus variant sheets such as `mara_voss_variant.png`.
   edit: the source is uploaded and kept as a reference latent, the change is the whole prompt. `faces <id>...
   [--exprs hurt angry afraid]` makes the PORTRAITFX1 expression cells from `<id>.png` as
   `<id>_face_<expr>_loc<time>_<n>.png`, one image per cell (not a 2x2 sheet), ready to pixelize into
-  `faces/<id>/<expr>.png`. About 90 s a portrait and 4 min an edit on this PC.
+  `faces/<id>/<expr>.png`; `--keep [ID=]TEXT` (or a `keep` list in the source's record) names a detail the edit
+  must keep, such as `bram=his iron jeweller's loupe strapped over his right eye`. About 90 s a portrait and 4 min an
+  edit on this PC. The text encoder is the 4-bit `qwen_3_4b_fp4_flux2.safetensors` (2026-10-26).
 - Prompt records: beside every generated image, `<same name>.json` (plain Git, not LFS) keeps the model, the id, the
   full prompt sent (style block included), the reference image, the prompts file, the UTC time and the candidate
   index `n`; `generate.py` writes them since ART3. Records written afterwards carry `"backfilled": true` and a
@@ -41,9 +43,12 @@ takes), plus variant sheets such as `mara_voss_variant.png`.
   `change`. A Klein take's record has `model` `local:flux-2-klein-4b` and `reference` the edited source (`null` for
   text to image), then `backend` (`comfyui`), `kind` (`text`, `edit` or `face`), `unet`, `clip`, `vae`, `sampler`,
   `steps`, `cfg`, `size` (text) or `megapixels` (edits), `seed`, `tokens_estimate`, `cut` (only the dropped reference
-  line), `seconds`, and `change` (vary) or `expression` (faces).
-- `tools/portraits/pixelize.py` turns a source into the 240 px game portrait (96 px grid, 4 shades per colour family);
-  `clear_mark` and `clear_corner` remove the image model's star mark first.
+  line), `seconds`, and `change` (vary) or `expression` and `keep` (faces).
+- `tools/portraits/pixelize.py` turns a source into the 240 px game portrait (120 px grid since PIXEL2, was 96; 4
+  shades per colour family); `clear_mark` and `clear_corner` remove the image model's star mark first. Since PIXEL2 a
+  small, saturated colour of its own hue (a violet vein glow, a gem, an amber rim light) keeps an accent family of its
+  own, and dark pixels on the figure's silhouette move up their own ramp, so dark hair does not merge with the dark
+  background (`accents=False`, `rim=False` turn them off).
 - ART3 (2026-10-25): the user's pick of each Scarlet Lullaby portrait is `<id>.png` (`render_beast`, `ash_crawler`,
   `inquisitorial_purifier`, `calcified_husk`, `captain_vane`, `proctor_quell`, `guild_master_orlov`,
   `inquisitor_prelate_nemeth`, `tess`, `bram`, `aline`); the other candidates stay as `<id>_gen<time>_<n>.png` takes
