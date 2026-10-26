@@ -368,8 +368,17 @@ pub struct ItemDef {
     pub use_reach: i32,
     /// Carry weight (PartyCarry; Item.weight, 1 when unset).
     pub weight: f64,
+    /// RULESET1 K1: the item's family has the engine rule `reach` (the resolved row's `ITEM_REACH_RULE` key, written
+    /// by the loader only for such families); the battle reads it only under the rule `reach`.
+    pub reach_rule: bool,
     pub raw: Obj,
 }
+
+/// RULESET1 K1: the resolved item row's key that carries its family's engine rule `reach` (set to true only for those
+/// families, so every other row keeps its Godot shape; the writer leaves it out of the stored form).
+pub const ITEM_REACH_RULE: &str = "reach_rule";
+/// RULESET1 K1: the family engine rule that gives a melee weapon its reach.
+pub const REACH_ENGINE_RULE: &str = "reach";
 
 impl ItemDef {
     pub fn from_obj(o: &Obj) -> Self {
@@ -400,6 +409,7 @@ impl ItemDef {
             use_blocks: int(o, "use_blocks", 1),
             use_reach: int(o, "use_reach", -1),
             weight: float(o, "weight", 1.0),
+            reach_rule: boolean(o, ITEM_REACH_RULE, false),
             raw: o.clone(),
         }
     }

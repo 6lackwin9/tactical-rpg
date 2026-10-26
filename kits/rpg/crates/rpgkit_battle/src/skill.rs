@@ -4,7 +4,7 @@
 use crate::grid::{V2, DIRS};
 use rpgkit_data::{Catalog, SkillDef};
 use rpgkit_rules::ruleset::{self, Ruleset};
-use rpgkit_rules::unit::{skill_in_group, BASE_AP};
+use rpgkit_rules::unit::{skill_in_group, BASE_AP, REACH_WEAPON_REACH};
 use rpgkit_rules::{Stance, Unit};
 
 pub type SkillId = usize;
@@ -232,8 +232,21 @@ pub fn support_reach(s: &SkillDef, c: &Unit) -> (i32, i32) {
     }
 }
 
-/// Distance band (min, max) at which `c` can use this attack.
+/// Distance band (min, max) at which `c` can use this attack (the classic rule; a battle calls `reach_by` with its
+/// ruleset).
 pub fn reach_for(s: &SkillDef, c: &Unit) -> (i32, i32) {
+    band(s, c, c.attack_range)
+}
+
+/// RULESET1 K2: the band of `reach_for` under `rules`. With the rule `reach`, a melee attack without its own
+/// `reach_max` by a unit with a reach weapon uses (1, its melee reach); off-hand jabs, LINE and SWEEP stay (1, 1).
+/// Without the rule (classic) it is `reach_for` exactly.
+pub fn reach_by(s: &SkillDef, c: &Unit, rules: &Ruleset) -> (i32, i32) {
+    band(s, c, melee_band_max(c, rules))
+}
+
+/// The attack band with `melee` as the far edge of a plain melee attack.
+fn band(s: &SkillDef, c: &Unit, melee: i32) -> (i32, i32) {
     let a = area(s);
     let extra = if skill_in_group(s, "spell") && a != Area::Line && a != Area::Sweep { c.spell_reach_bonus() } else { 0 };
     if s.reach_max > 0 {
@@ -245,7 +258,42 @@ pub fn reach_for(s: &SkillDef, c: &Unit) -> (i32, i32) {
     if c.attack_range > 1 {
         return (2, 3.max(c.attack_range) + extra);
     }
-    (1, c.attack_range + extra)
+    (1, melee + extra)
+}
+
+/// RULESET1 K1: whether `c` fights with a reach weapon in this battle (the rule `reach` on, a melee unit, its main
+/// weapon's family has the engine rule `reach`).
+pub fn has_reach(c: &Unit, rules: &Ruleset) -> bool {
+    rules.has(ruleset::REACH) && c.has_reach_weapon()
+}
+
+/// The far edge of `c`'s plain melee band: its melee reach with a reach weapon (K1), else `attack_range` as today.
+fn melee_band_max(c: &Unit, rules: &Ruleset) -> i32 {
+    if has_reach(c, rules) {
+        REACH_WEAPON_REACH
+    } else {
+        c.attack_range
+    }
+}
+
+/// RULESET1 K1: `c`'s melee reach, the far edge of its melee band (1 to it): 2 with a reach weapon under the rule
+/// `reach`, else 1. It also bounds "engaged" (RULESET1_INTENT MV2).
+pub fn melee_reach(c: &Unit, rules: &Ruleset) -> i32 {
+    if has_reach(c, rules) {
+        REACH_WEAPON_REACH
+    } else {
+        1
+    }
+}
+
+/// RULESET1_INTENT PL4, AS3: how far `c` strikes from where it stands, for a threat measure (its 2-block move plus
+/// this): a ranged unit's band edge (`max(3, range)`), else its melee band's far edge (at least 1; K1 widens it).
+pub fn threat_reach(c: &Unit, rules: &Ruleset) -> i32 {
+    if c.attack_range > 1 {
+        3.max(c.attack_range)
+    } else {
+        melee_band_max(c, rules).max(1)
+    }
 }
 
 /// Tiles an area attack aimed at `cell` hits, cast from `from`.

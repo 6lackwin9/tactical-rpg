@@ -686,6 +686,11 @@ pub(crate) fn resolve_item(entry: &Dict, family: &Dict) -> Dict {
     if sget(entry, "damage_type", "").is_empty() {
         row.insert("damage_type".into(), Value::from(sget(family, "damage_type", "")));
     }
+    // RULESET1 K1: the family's engine rule `reach` rides on the resolved row, and only for such a family (every other
+    // row keeps the Godot shape); the writer leaves it out of the stored form (`store::ITEM_DERIVED`)
+    if json::strings(json::get(family, "engine_rules")).iter().any(|r| r == rpgkit_data::REACH_ENGINE_RULE) {
+        row.insert(rpgkit_data::ITEM_REACH_RULE.into(), Value::Bool(true));
+    }
     row
 }
 

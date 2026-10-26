@@ -39,7 +39,7 @@ fn hp_ratio(w: &World, u: UnitId) -> f64 {
 }
 
 fn basic_band(w: &World, u: UnitId) -> (i32, i32) {
-    skill::reach_for(&w.cat.skills[w.book().lowest(Kind::Attack)], &w.units[u])
+    skill::reach_by(&w.cat.skills[w.book().lowest(Kind::Attack)], &w.units[u], &w.ruleset)
 }
 
 /// TacticalAI.build_steps. With a shared plan the draft is written into it (replacing the actor's steps).
@@ -302,7 +302,7 @@ fn can_strike_in_place(w: &World, actor: UnitId, cap: i32, dist: i32, profile: &
     }
     strikes(w, actor, cap).into_iter().any(|sid| {
         let s = &w.cat.skills[sid];
-        let b = skill::reach_for(s, &w.units[actor]);
+        let b = skill::reach_by(s, &w.units[actor], &w.ruleset);
         s.dash_tiles <= 0 && dist >= b.0 && dist <= b.1
     })
 }
@@ -1165,7 +1165,7 @@ fn try_area(w: &World, plan: &mut Plan, actor: UnitId, cap: i32, profile: &AiPro
     let mut cands: Vec<(SkillId, V2, f64, usize)> = Vec::new();
     for &sid in &skills {
         let s = &w.cat.skills[sid];
-        let band = skill::reach_for(s, &w.units[actor]);
+        let band = skill::reach_by(s, &w.units[actor], &w.ruleset);
         for aim in aim_cells(w, st.pos, sid, band) {
             let cells: Vec<V2> = skill::area_cells(s, st.pos, aim).into_iter().filter(|c| w.grid.is_valid(*c) && *c != st.pos).collect();
             let foes_hit = foes.iter().filter(|&&f| w.units[f].is_active() && w.has(f) && st.est(f) > 0 && cells.contains(&w.pos(f))).count() as i32;
@@ -1293,7 +1293,7 @@ fn strike_chain(w: &World, foe: UnitId, target: UnitId, at: V2, by_block: i32) -
     let fu = &w.units[foe];
     for sid in strikes(w, foe, w.skill_cap_of(foe)) {
         let s = &w.cat.skills[sid];
-        let band = skill::reach_for(s, fu);
+        let band = skill::reach_by(s, fu, &w.ruleset);
         let tiles = if d > band.1 {
             d - band.1
         } else if d < band.0 {

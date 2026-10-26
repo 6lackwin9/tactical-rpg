@@ -229,7 +229,7 @@ impl PlanEntry {
                 let mut c = if skill::is_area(s) {
                     Command::new(actor, 0, s.blocks, CmdKind::Area { cells: self.cells.clone(), aim: self.aim, skill_mult: u.power_for(s), status_rounds: s.status_rounds, last_damage: 0, last_hits: 0, crit_hits: Vec::new() })
                 } else {
-                    let (lo, hi) = skill::reach_for(s, u);
+                    let (lo, hi) = skill::reach_by(s, u, &w.ruleset);
                     Command::new(
                         actor,
                         0,
@@ -831,7 +831,7 @@ impl Plan {
         if s.dash_tiles > 0 {
             return self.apply_dash(w, c, st, sid, foe, index);
         }
-        let band = skill::reach_for(s, &w.units[c]);
+        let band = skill::reach_by(s, &w.units[c], &w.ruleset);
         let foe_pos = w.pos(foe);
         let d = st.pos.dist(foe_pos);
         if d < band.0 || d > band.1 {
@@ -890,7 +890,7 @@ impl Plan {
 
     fn apply_dash(&self, w: &World, c: UnitId, st: &mut SimState, sid: SkillId, foe: UnitId, index: i32) -> String {
         let s = &w.cat.skills[sid];
-        let band = skill::reach_for(s, &w.units[c]);
+        let band = skill::reach_by(s, &w.units[c], &w.ruleset);
         let d = st.pos.dist(w.pos(foe));
         if d >= band.0 && d <= band.1 {
             return "Already in reach.".into();
@@ -943,7 +943,7 @@ impl Plan {
     #[allow(clippy::too_many_arguments)]
     fn apply_carried(&self, w: &World, c: UnitId, st: &mut SimState, step: &Step, sid: SkillId, foe: UnitId, index: i32) -> String {
         let s = &w.cat.skills[sid];
-        let band = skill::reach_for(s, &w.units[c]);
+        let band = skill::reach_by(s, &w.units[c], &w.ruleset);
         let foe_pos = w.pos(foe);
         let beyond = || format!("{} is beyond {}'s range.", w.units[foe].name, s.name);
         let blocked = self.blocked_cells(w, c);
@@ -1002,7 +1002,7 @@ impl Plan {
     /// `s`'s carried move reaches an Engage tile on `foe`; None when there is none.
     fn range_approach(&self, w: &World, c: UnitId, from: V2, s: &rpgkit_data::SkillDef, foe: UnitId, blocked: &Cells) -> Option<Vec<V2>> {
         let foe_pos = w.pos(foe);
-        let reach = skill::reach_for(s, &w.units[c]).1;
+        let reach = skill::reach_by(s, &w.units[c], &w.ruleset).1;
         let limit = self.max_move_tiles(w, c);
         let mut cands: Vec<(V2, Vec<V2>)> = Vec::new();
         for y in 0..crate::grid::GRID_H {
@@ -1205,7 +1205,7 @@ impl Plan {
         if !w.grid.is_valid(aim) {
             return "Aim inside the arena.".into();
         }
-        let band = skill::reach_for(s, &w.units[c]);
+        let band = skill::reach_by(s, &w.units[c], &w.ruleset);
         let d = st.pos.dist(aim);
         let a = skill::area(s);
         if a == skill::Area::Line && d != 1 {
@@ -1248,7 +1248,7 @@ impl Plan {
     /// Steps from `from` to the nearest tile at distance near..far of `foe` (defaults: the basic attack band).
     pub fn approach_path(&self, w: &World, c: UnitId, from: V2, foe: UnitId, near: i32, far: i32) -> Vec<V2> {
         let foe_pos = w.pos(foe);
-        let basic = skill::reach_for(&w.cat.skills[w.book().lowest(Kind::Attack)], &w.units[c]);
+        let basic = skill::reach_by(&w.cat.skills[w.book().lowest(Kind::Attack)], &w.units[c], &w.ruleset);
         let lo = if near > 0 { near } else { basic.0 };
         let hi = if far > 0 { far } else { basic.1 };
         let blocked = self.blocked_cells(w, c);

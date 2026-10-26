@@ -14,6 +14,8 @@ pub const GROUPS: [&str; 2] = ["spell", "heal"];
 pub const FORESIGHT_RANGE_MAX: i32 = 8;
 /// RULESET1 tasks 1.4: the largest `stagger_taken` multiplier.
 pub const STAGGER_TAKEN_MULT_MAX: f64 = 2.0;
+/// RULESET1 K1: the melee reach a reach weapon gives its wielder (rule `reach`; melee band 1 to this).
+pub const REACH_WEAPON_REACH: i32 = 2;
 
 /// RULESET1 P6, tasks 1.4: a passive `stagger_taken` effect: stagger from an action of at most `max_blocks` blocks
 /// (0 = any action) is multiplied by `mult` (a Snap-proof trait: mult 0, max_blocks 1).
@@ -206,6 +208,13 @@ impl Unit {
         } else {
             1
         }
+    }
+
+    /// RULESET1 K1, K2: whether the unit is melee (`attack_range` at most 1, which the rule leaves as it is) with a
+    /// main weapon whose family has the engine rule `reach`. A gear fact: the battle reads it only under the rule
+    /// `reach` (`rpgkit_battle::skill::melee_reach`).
+    pub fn has_reach_weapon(&self) -> bool {
+        self.attack_range <= 1 && self.inventory.main_weapon().is_some_and(|w| w.has_reach())
     }
 
     pub fn has_status(&self, s: &str) -> bool {

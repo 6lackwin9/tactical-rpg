@@ -526,7 +526,7 @@ impl<'a> Builder<'a> {
         let s = self.skill(sid);
         let u = &w.units[self.c];
         let maneuver = self.intent == RoundIntent::Maneuver;
-        let band = skill::reach_for(s, u);
+        let band = skill::reach_by(s, u, &w.ruleset);
         let goal = self.target_pos(st);
         let d = st.pos.dist(goal);
         if skill::is_area(s) {
@@ -620,10 +620,10 @@ impl<'a> Builder<'a> {
             return Reserve::default();
         }
         let Some(opener) = st.entries.iter().find(|e| e.step_index >= 0 && skill::kind(self.skill(e.skill)) == Kind::Attack) else { return Reserve::default() };
-        let band = skill::reach_for(self.skill(opener.skill), u);
+        let band = skill::reach_by(self.skill(opener.skill), u, &w.ruleset);
         let (end, goal) = (st.pos, w.pos(foe));
         let f = &w.units[foe];
-        let foe_reach = if f.attack_range > 1 { 3.max(f.attack_range) } else { f.attack_range.max(1) };
+        let foe_reach = skill::threat_reach(f, &w.ruleset);
         if end.dist(goal) > f.move_per_block() * 2 + foe_reach {
             return Reserve::default();
         }

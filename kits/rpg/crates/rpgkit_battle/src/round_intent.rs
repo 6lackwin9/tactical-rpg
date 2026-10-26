@@ -376,9 +376,9 @@ pub fn facing(w: &World, c: UnitId) -> V2 {
     w.round_states.get(&c).map_or(ZERO, |r| r.facing)
 }
 
-/// K1's melee reach: 1 (RULESET1-K widens it to 2 for reach weapons).
-pub fn melee_reach(_w: &World, _c: UnitId) -> i32 {
-    1
+/// RULESET1 K1: `c`'s melee reach (2 with a reach weapon under the rule `reach`, else 1); MV2's engaged band is 1 to it.
+pub fn melee_reach(w: &World, c: UnitId) -> i32 {
+    skill::melee_reach(&w.units[c], &w.ruleset)
 }
 
 /// MV2: the unit `t` is engaged with: its round target (the lock), a foe of `t` on the field within `t`'s melee band.
@@ -434,7 +434,7 @@ pub fn threat(w: &World, c: UnitId, cell: V2) -> usize {
         .iter()
         .filter(|&&f| {
             let u = &w.units[f];
-            let reach = if u.attack_range > 1 { 3.max(u.attack_range) } else { u.attack_range.max(1) };
+            let reach = skill::threat_reach(u, &w.ruleset);
             u.is_active() && w.has(f) && w.pos(f).dist(cell) <= u.move_per_block() * 2 + reach
         })
         .count()
@@ -480,7 +480,7 @@ pub fn carry_tiles(w: &World, from: V2, dash_tiles: i32, blocked: &Cells) -> Vec
 /// MV5, MV7: the Engage tiles of skill `s` against `t` from `from`: carried-move ends with `t` in the skill's band
 /// and outside `t`'s front, ranked by PL4 (best first).
 pub fn engage_tiles(w: &World, c: UnitId, s: &SkillDef, t: UnitId, from: V2, blocked: &Cells) -> Vec<(V2, Vec<V2>)> {
-    let band = skill::reach_for(s, &w.units[c]);
+    let band = skill::reach_by(s, &w.units[c], &w.ruleset);
     let tp = w.pos(t);
     let mut out: Vec<(V2, Vec<V2>)> = carry_tiles(w, from, s.dash_tiles, blocked)
         .into_iter()
