@@ -154,6 +154,10 @@ pub struct Command {
     pub hits: Vec<(UnitId, bool)>,
     /// RULESET1 P6-P14: what the last execution's hits did to poise (rule `poise` only; see `poise::resolve_hits`).
     pub staggers: Vec<crate::poise::StaggerHit>,
+    /// HOOKS1 FM1: the skill's forced move (read only under the rule `forced_move`).
+    pub forced: Option<crate::forced::Shove>,
+    /// HOOKS1 5: the forced moves the last execution drove (rule `forced_move` only; see `forced::resolve`).
+    pub pushes: Vec<crate::forced::Moved>,
 }
 
 impl Command {
@@ -187,6 +191,8 @@ impl Command {
             poise_bonus: 0,
             hits: Vec::new(),
             staggers: Vec::new(),
+            forced: None,
+            pushes: Vec::new(),
         }
     }
 
@@ -265,6 +271,7 @@ impl Command {
         self.exploited.clear();
         self.hits.clear();
         self.staggers.clear();
+        self.pushes.clear();
         self.failed = false;
         let src = self.source;
         let src_name = w.units[src].name.clone();
@@ -630,6 +637,7 @@ impl Command {
         self.disrupt_break = false;
         self.est_damage = 0;
         self.impact = crate::poise::Impact::default();
+        self.forced = None;
     }
 
     /// After one damaging hit: stance break (Offensive / Defensive target to Tactical), then exploit consume.

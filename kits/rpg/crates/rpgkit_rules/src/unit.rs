@@ -32,6 +32,33 @@ impl StaggerTaken {
     }
 }
 
+/// HOOKS1 FM5 (rule `forced_move`; engine-only): what a unit's passive and worn-item `forced_move` effects add up to:
+/// it holds firm against every forced move (`immune` always) or while guarding (`immune` guarding), and its own pushes
+/// and pulls move `bonus_tiles` more tiles. Read only under the rule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ForcedTraits {
+    pub immune_always: bool,
+    pub immune_guarding: bool,
+    pub bonus_tiles: i32,
+}
+
+impl ForcedTraits {
+    /// Adds one `forced_move` effect row (`immune` "", always or guarding; `bonus_tiles` 0-2, summed).
+    fn add(&mut self, e: &value::Obj) {
+        match value::string(e, "immune", "").as_str() {
+            "always" => self.immune_always = true,
+            "guarding" => self.immune_guarding = true,
+            _ => {}
+        }
+        self.bonus_tiles += value::int(e, "bonus_tiles", 0).clamp(0, 2);
+    }
+
+    /// Both sets together.
+    pub fn with(self, o: ForcedTraits) -> ForcedTraits {
+        ForcedTraits { immune_always: self.immune_always || o.immune_always, immune_guarding: self.immune_guarding || o.immune_guarding, bonus_tiles: self.bonus_tiles + o.bonus_tiles }
+    }
+}
+
 /// RULESET1 9 D1-D4 (rule `deck`; engine-only, no Godot original): the deck terms a unit is built and fights under:
 /// the ruleset's `basics` (skill families open to every unit, no slot, never removed; every other basic is closed) and
 /// its `deck_slots`. Classic never makes one, so a classic unit keeps today's loadout, basics and passives.
@@ -141,6 +168,10 @@ pub struct Unit {
     pub poise: i32,
     /// RULESET1 P6: the unit's passive `stagger_taken` effects in apply order (read only under the rule poise).
     pub stagger_taken: Vec<StaggerTaken>,
+    /// HOOKS1 FM5: the passives' `forced_move` effects, and the worn items' (rebuilt on every gear sync); read only under
+    /// the rule forced_move (`forced_traits`).
+    pub passive_forced: ForcedTraits,
+    pub gear_forced: ForcedTraits,
     /// Passive ids applied (Passives.apply: each once).
     pub passives: Vec<String>,
     /// Combat state (empty for a freshly built unit).
@@ -211,6 +242,8 @@ impl Unit {
             foresight_range: 0,
             poise: -1,
             stagger_taken: Vec::new(),
+            passive_forced: ForcedTraits::default(),
+            gear_forced: ForcedTraits::default(),
             passives: Vec::new(),
             st: StatusState::default(),
             is_withdrawn: false,
@@ -244,6 +277,12 @@ impl Unit {
     /// `reach` (`rpgkit_battle::skill::melee_reach`).
     pub fn has_reach_weapon(&self) -> bool {
         self.attack_range <= 1 && self.inventory.main_weapon().is_some_and(|w| w.has_reach())
+    }
+
+    /// HOOKS1 FM5: the unit's passive and worn-item `forced_move` effects together (a battle reads them only under the
+    /// rule forced_move).
+    pub fn forced_traits(&self) -> ForcedTraits {
+        self.passive_forced.with(self.gear_forced)
     }
 
     pub fn has_status(&self, s: &str) -> bool {
@@ -319,6 +358,7 @@ impl Unit {
         self.gear_status_resist.clear();
         self.gear_status_potency = 0;
         self.gear_spell_reach = 0;
+        self.gear_forced = ForcedTraits::default();
         let item_fx: Vec<(String, Vec<Value>)> = self.inventory.gear().map(|e| (format!("gear:{}", e.id()), e.item.effects.clone())).collect();
         for (src, fx) in item_fx {
             self.apply_effects(cat, &fx, &src, true);
@@ -422,6 +462,14 @@ impl Unit {
                 "stagger_taken" if !gear => {
                     let mult = value::float(e, "mult", 1.0).clamp(0.0, STAGGER_TAKEN_MULT_MAX);
                     self.stagger_taken.push(StaggerTaken { mult, max_blocks: value::int(e, "max_blocks", 0).max(0) });
+                }
+                // HOOKS1 FM5: passives and worn items (the gear set is cleared on every sync)
+                "forced_move" => {
+                    if gear {
+                        self.gear_forced.add(e);
+                    } else {
+                        self.passive_forced.add(e);
+                    }
                 }
                 _ => {}
             }

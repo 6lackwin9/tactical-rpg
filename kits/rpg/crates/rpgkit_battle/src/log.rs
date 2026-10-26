@@ -286,6 +286,48 @@ pub fn break_entry(w: &World, t: usize, b: &crate::poise::Break, round: i32, blo
     Entry::event(round, block, &w.units[t].name, w.allies.contains(&t), &b.skill, "Break", "BREAK", &line, b.cause.id())
 }
 
+/// HOOKS1 FM4: the subtype of a collision's ATTACK cell (the metrics credit it to the driver, not as an attack received).
+pub const COLLISION: &str = "Collision";
+
+/// HOOKS1 FM9 (engine-only): the EVENT cell of a forced move: the driver (else the moved unit), the moved unit, the
+/// tiles and where it ended; a unit that held firm gets a HELD cell.
+pub fn forced_entry(w: &World, m: &crate::forced::Moved, skill: &str, round: i32, block: i32) -> Entry {
+    let (subtype, outcome) = if m.held {
+        ("Hold", "HELD")
+    } else if m.pull {
+        ("Pull", "PULLED")
+    } else {
+        ("Push", "PUSHED")
+    };
+    let actor = m.by.unwrap_or(m.unit);
+    let mut e = Entry::event(round, block, &w.units[actor].name, w.allies.contains(&actor), skill, subtype, outcome, &m.line, &format!("Position: {}", m.to));
+    e.target = w.units[m.unit].name.clone();
+    e.target_is_ally = w.allies.contains(&m.unit);
+    e.value = m.tiles;
+    e.coord_to = m.to;
+    e
+}
+
+/// HOOKS1 FM4 (engine-only): the ATTACK cell of one collision hit: the driver hits `h.unit` for the HP it lost (an
+/// arena push has no driver: the actor is "" and the metrics leave it unexplained).
+pub fn collision_entry(w: &World, m: &crate::forced::Moved, h: &crate::forced::CollisionHit, skill: &str, round: i32, block: i32) -> Entry {
+    let tu = &w.units[h.unit];
+    Entry {
+        actor: m.by.map_or_else(String::new, |b| w.units[b].name.clone()),
+        actor_is_ally: m.by.is_some_and(|b| w.allies.contains(&b)),
+        target: tu.name.clone(),
+        target_is_ally: w.allies.contains(&h.unit),
+        skill: skill.into(),
+        subtype: COLLISION.into(),
+        value: h.damage,
+        damage: h.damage,
+        outcome: if tu.is_alive() { "COLLISION" } else { "DEFEATED" }.into(),
+        detail: trim(&h.line, "[Collision] ").into(),
+        status: format!("Target HP: {}/{}", tu.hp, tu.max_hp),
+        ..Entry::new(round, block)
+    }
+}
+
 /// CombatLogBuilder.riposte_entry: the defender countered the attack that just resolved.
 pub fn riposte_entry(w: &World, r: &Reaction, round: i32, block: i32) -> Entry {
     let att = &w.units[r.attacker];

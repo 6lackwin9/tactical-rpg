@@ -170,11 +170,15 @@ impl Resolver {
         self.scheduled[idx].landed = true;
         // RULESET1 P11, P4-P14: the windup bonus comes off; the hits stagger and may break (rule poise)
         crate::poise::drop_bonus(w, unit, &mut self.scheduled[idx].command);
+        // HOOKS1 FM1: who was in windup as the hit landed, read before its stagger can break them (rule forced_move)
+        let windups = crate::forced::windups(self, w, idx);
         crate::poise::resolve_hits(self, w, idx);
         let cmd = &self.scheduled[idx].command;
         if !cmd.log.is_empty() {
             self.log.push(cmd.log.clone());
         }
+        // HOOKS1 4.3 step 6: the forced moves follow the stagger and breaks (rule forced_move; nothing in classic)
+        crate::forced::resolve(self, w, idx, &windups);
         self.apply_combo(w, idx);
         let inactive: Vec<UnitId> = self.registered.iter().copied().filter(|c| !w.units[*c].is_active()).collect();
         for c in inactive {

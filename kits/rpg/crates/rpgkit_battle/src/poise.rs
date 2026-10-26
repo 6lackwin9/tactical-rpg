@@ -191,6 +191,8 @@ pub enum BreakCause {
     Chance,
     /// P14: a `sure_break` hit into a windup.
     Sure,
+    /// HOOKS1 FM4: a `collide_break` collision into a windup (the wall-slam break, as P14).
+    Collision,
 }
 
 impl BreakCause {
@@ -199,6 +201,7 @@ impl BreakCause {
             BreakCause::Poise => "poise",
             BreakCause::Chance => "chance",
             BreakCause::Sure => "sure",
+            BreakCause::Collision => "collision",
         }
     }
 }

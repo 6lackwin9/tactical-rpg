@@ -274,6 +274,8 @@ impl PlanEntry {
         cmd.intent_buff = s.intent_buff;
         // RULESET1 5, 7: what the hit does to poise and armour (the rules poise and pierce read it)
         cmd.impact = crate::poise::Impact::of(s);
+        // HOOKS1 FM1: the push or pull of each unit the hit damages (the rule forced_move reads it)
+        cmd.forced = crate::forced::Shove::of(s);
         cmd.name = s.name.clone();
         cmd.ap_cost = self.skill_ap;
         cmd.stance_switch_cost = self.switch_ap;

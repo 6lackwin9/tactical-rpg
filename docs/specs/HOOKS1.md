@@ -81,6 +81,10 @@ Steps: (1) redirect (8.4), (2) damage, (3) status roll, (4) riposte, (5) stagger
 (5), (7) hazard placement (6), (8) riders (8.5), (9) events queued (8.1), run after the action resolves and the
 resolver's combo pass (`b/resolver.rs:140`). Area hits run 1-8 per unit in `area_cells` order, then 9 once.
 
+Area order (planner ruling 2026-10-27, HOOKS1-F): an area's hooks run all its hits, then all stagger, then all forced
+moves, each in hit order; a unit is never hit twice by one area, and outcomes differ from a per-unit order only when a
+pushed unit collides with another target of the same area.
+
 ## 5. Forced movement (G3) `[kit hook]`
 
 - FM1. Skill field `forced_move` (family; schema in the task file 1.1): `kind` push or pull, `tiles` 1-3, `from`

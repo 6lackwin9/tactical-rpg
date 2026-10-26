@@ -1041,6 +1041,23 @@ impl Session {
             if !a.command.staggers.is_empty() {
                 self.feed(|m, s| m.on_staggers(s, idx));
             }
+            // HOOKS1 FM9: each forced move's cell, then each collision hit's (the metrics hear its HP change with it)
+            // and the break it caused (rule forced_move)
+            for m in &a.command.pushes {
+                self.append(crate::log::forced_entry(&self.w, m, &a.command.name, round, block));
+                for h in &m.hits {
+                    if let Some(j) = self.w.hp_journal.as_mut() {
+                        j.extend(h.journal.iter().copied());
+                    }
+                    self.append(crate::log::collision_entry(&self.w, m, h, &a.command.name, round, block));
+                    if let Some(b) = h.stagger.as_ref().and_then(|st| st.broke.as_ref()) {
+                        self.append(crate::log::break_entry(&self.w, h.unit, b, round, block));
+                    }
+                }
+            }
+            if !a.command.pushes.is_empty() {
+                self.feed(|m, s| m.on_forced(s, idx));
+            }
         }
         if self.pending.is_empty() {
             let block = self.current_block;
