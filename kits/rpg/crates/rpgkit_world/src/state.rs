@@ -474,6 +474,9 @@ pub struct GameState {
     /// CAMPAIGN1 11.5: the campaign state, Some only in a world whose lineage sets `campaign` (X1); saved as the key
     /// `campaign` only then (X3).
     pub campaign: Option<crate::campaign::Campaign>,
+    /// STORYUI1 4.8: the running sequence, the vignette queue and the seen list; saved as the key `story` only when
+    /// not empty.
+    pub story: crate::story::Story,
     /// Raw type problems from from_dict (not saved; validate reports them).
     pub load_problems: Vec<String>,
 }
@@ -511,6 +514,7 @@ impl Default for GameState {
             purses: Dict::new(),
             reward_paid: Dict::new(),
             campaign: None,
+            story: crate::story::Story::default(),
             load_problems: Vec::new(),
         }
     }
@@ -602,6 +606,9 @@ impl GameState {
         if let Some(c) = &self.campaign {
             out.insert("campaign".into(), c.to_value());
         }
+        if !self.story.is_empty() {
+            out.insert("story".into(), self.story.to_value());
+        }
         Value::Object(out)
     }
 
@@ -677,6 +684,10 @@ impl GameState {
                 c
             }),
         };
+        // STORYUI1 4.8: an absent block reads empty (older saves, worlds without a story)
+        if let Some(raw) = d.get("story") {
+            g.story = crate::story::Story::from_value(raw, &mut g.load_problems);
+        }
         g
     }
 
@@ -747,6 +758,7 @@ impl GameState {
         if let Some(c) = &self.campaign {
             errors.extend(c.validate());
         }
+        errors.extend(self.story.validate());
         errors
     }
 }

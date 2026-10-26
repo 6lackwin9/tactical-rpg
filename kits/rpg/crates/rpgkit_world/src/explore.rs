@@ -245,9 +245,14 @@ fn npc_badge(d: &Data, gs: &GameState, character_qid: &str) -> &'static str {
         }
     }
     for qid in quest::quests_with(d, gs, "available") {
-        if dialogue::giver_qid(d, gs, &quest::resolved(d, gs, &qid)) == character_qid {
+        let q = quest::resolved(d, gs, &qid);
+        // STORYUI1 B3, B4: a board quest is offered only on its board; an open board with work shows the quest badge
+        if dialogue::giver_qid(d, gs, &q) == character_qid && !crate::board::on_a_board(&q) {
             return "quest";
         }
+    }
+    if crate::board::has_work(d, gs, character_qid) {
+        return "quest";
     }
     ""
 }
@@ -294,12 +299,13 @@ pub fn marker_view(d: &Data, gs: &GameState, loc: &Dict, m: &Dict) -> Dict {
     ])
 }
 
-/// The NPC services in badge order.
-pub const SERVICES: [&str; 4] = ["turn_in", "offer", "shop", "recruit"];
+/// The NPC services in badge order (`board`: STORYUI1 B4).
+pub const SERVICES: [&str; 5] = ["turn_in", "offer", "board", "shop", "recruit"];
 
 /// PLAYUI1-M (spec PLAYUI1 2.2 A; engine-only, no Godot function): what the character `character_qid` offers now, in
 /// `SERVICES` order: `turn_in` (a ready quest turns in here), `offer` (an available quest starts here; both as the
-/// marker badges `ready` and `quest`), `shop` (keeper of an open shop), `recruit` (a choice in its dialogue tree with a
+/// marker badges `ready` and `quest`; STORYUI1 B4: a board quest is no `offer`), `board` (keeper of an open board with
+/// an available quest, STORYUI1 B4), `shop` (keeper of an open shop), `recruit` (a choice in its dialogue tree with a
 /// `recruit` effect for a character not in the party, the choice's conditions holding). Read-only; `marker_view` stays
 /// as Godot had it (the journey parity compares it).
 pub fn npc_services(d: &Data, gs: &GameState, character_qid: &str) -> Vec<&'static str> {
@@ -310,8 +316,14 @@ pub fn npc_services(d: &Data, gs: &GameState, character_qid: &str) -> Vec<&'stat
     if quest::quests_with(d, gs, "ready").iter().any(|q| dialogue::turn_in_qid(d, gs, &quest::resolved(d, gs, q)) == character_qid) {
         out.push("turn_in");
     }
-    if quest::quests_with(d, gs, "available").iter().any(|q| dialogue::giver_qid(d, gs, &quest::resolved(d, gs, q)) == character_qid) {
+    if quest::quests_with(d, gs, "available").iter().any(|q| {
+        let q = quest::resolved(d, gs, q);
+        dialogue::giver_qid(d, gs, &q) == character_qid && !crate::board::on_a_board(&q)
+    }) {
         out.push("offer");
+    }
+    if crate::board::has_work(d, gs, character_qid) {
+        out.push("board");
     }
     let keeps_shop = d.merged_entries(&gs.world_id, "shops").into_iter().any(|sh| {
         dialogue::character_qid(d, gs, &json::s(sh, "keeper")) == character_qid && crate::shop::is_open(d, gs, &json::s(sh, "_qid"))

@@ -3,7 +3,7 @@
 
 use crate::data::Data;
 use crate::state::{flag_key_ok, flag_value_ok, GameState};
-use crate::{new_game, progression, quest, shop};
+use crate::{board, new_game, progression, quest, shop, story};
 use aegis_core::json::{self, int, Dict};
 use indexmap::IndexMap;
 use serde_json::Value;
@@ -299,11 +299,14 @@ pub struct DialogueRunner {
     pub services: bool,
     pub node_id: String,
     pub shop_qid: String,
+    /// STORYUI1 B3: the board whose pane is open over the conversation ("" = none), like `shop_qid`.
+    pub board_qid: String,
     tree_speaker: String,
     nodes: IndexMap<String, Dict>,
     /// Turn-in waiting for confirm: (quest qid, trailing effects, to).
     pending: Option<(String, Vec<Dict>, String)>,
     shop_to: String,
+    board_to: String,
     pub notes: Vec<String>,
     /// CAMPAIGN1 W1: the campaign events of the effects applied since the last result (a node's effects when the
     /// conversation opens included); the next result carries them as `campaign`.
@@ -405,7 +408,9 @@ impl DialogueRunner {
     fn service_choices(&self, d: &Data, gs: &GameState) -> Vec<Dict> {
         let mut out = Vec::new();
         for qid in quest::quests_with(d, gs, "available") {
-            if giver_qid(d, gs, &quest::resolved(d, gs, &qid)) == self.character_qid {
+            let q = quest::resolved(d, gs, &qid);
+            // STORYUI1 B3: a board quest is offered only on its board
+            if giver_qid(d, gs, &q) == self.character_qid && !board::on_a_board(&q) {
                 out.push(json::obj([
                     ("text", self.line(d, gs, "offer").into()),
                     ("to", format!("{OFFER_PREFIX}{qid}").into()),
@@ -422,6 +427,19 @@ impl DialogueRunner {
                     ("effects", Value::Array(vec![Value::Object(json::obj([("effect", "turn_in".into()), ("quest", qid.clone().into())]))])),
                     ("_quest", qid.clone().into()),
                     ("_service", "turn_in".into()),
+                ]));
+            }
+        }
+        // STORYUI1 B3: the keeper's board, after the turn-ins and before the shop, while it is open
+        for b in board::boards(d, gs) {
+            let bqid = json::s(b, "_qid");
+            if board::keeper_qid(d, gs, b) == self.character_qid && board::is_open(d, gs, &bqid) {
+                out.push(json::obj([
+                    ("text", self.line(d, gs, rpgkit_data::BOARD_SERVICE).into()),
+                    ("to", "".into()),
+                    ("effects", Value::Array(vec![Value::Object(json::obj([("effect", "open_board".into()), ("board", bqid.clone().into())]))])),
+                    ("_board", bqid.into()),
+                    ("_service", rpgkit_data::BOARD_SERVICE.into()),
                 ]));
             }
         }
@@ -476,7 +494,7 @@ impl DialogueRunner {
     }
 
     /// {speaker, speaker_name, node, text, choices: [{text, locked, reason, service}], end, next, shop, pending,
-    /// faction, faction_name, band}.
+    /// faction, faction_name, band}, plus `board` while a board pane is open (STORYUI1 B3).
     pub fn view(&self, d: &Data, gs: &GameState) -> Dict {
         let node = self.node(d, gs, &self.node_id);
         let mut speaker = character_qid(d, gs, &json::s(&node, "speaker"));
@@ -501,7 +519,7 @@ impl DialogueRunner {
         } else {
             (json::s(d.resolve(&gs.world_id, "factions", &fq), "name"), rep::band(rep::standing(d, gs, &fq)).to_string())
         };
-        json::obj([
+        let mut out = json::obj([
             ("speaker", speaker.clone().into()),
             ("speaker_name", json::s(d.resolve(&gs.world_id, "characters", &speaker), "name").into()),
             ("node", self.node_id.clone().into()),
@@ -514,7 +532,11 @@ impl DialogueRunner {
             ("faction", fq.into()),
             ("faction_name", faction_name.into()),
             ("band", band.into()),
-        ])
+        ]);
+        if !self.board_qid.is_empty() {
+            out.insert("board".into(), self.board_qid.clone().into());
+        }
+        out
     }
 
     fn busy(&self) -> Option<&'static str> {
@@ -524,6 +546,8 @@ impl DialogueRunner {
             Some("Confirm or cancel the turn-in first.")
         } else if !self.shop_qid.is_empty() {
             Some("Close the shop first.")
+        } else if !self.board_qid.is_empty() {
+            Some(board::BUSY_TEXT)
         } else {
             None
         }
@@ -588,6 +612,22 @@ impl DialogueRunner {
                 self.shop_to = if to.is_empty() { self.node_id.clone() } else { to };
                 let mut out = res_ok();
                 out.insert("shop".into(), self.shop_qid.clone().into());
+                out
+            }
+            // STORYUI1 4.7, B3: the board pane opens over the conversation, like the shop
+            "open_board" => {
+                self.board_qid = json::s(board::board_of(d, gs, &json::s(&last, "board")), "_qid");
+                self.board_to = if to.is_empty() { self.node_id.clone() } else { to };
+                let mut out = res_ok();
+                out.insert("board".into(), self.board_qid.clone().into());
+                out
+            }
+            // STORYUI1 4.7: the sequence started (in `apply`); the conversation closes and the game shows the story
+            "sequence" => {
+                self.closed = true;
+                let mut out = res_ok();
+                out.insert("end".into(), Value::Bool(true));
+                out.insert("sequence".into(), gs.story.running.as_ref().map(|r| r.sequence.clone()).unwrap_or_default().into());
                 out
             }
             _ => self.move_to(d, gs, &to),
@@ -680,6 +720,20 @@ impl DialogueRunner {
                         out.push(format!("Unknown encounter '{}'.", json::s(fx, "encounter")));
                     }
                 }
+                // STORYUI1 4.7
+                "open_board" => {
+                    if !board::is_open(d, gs, &json::s(fx, "board")) {
+                        out.push(board::CLOSED_TEXT.into());
+                    }
+                }
+                "sequence" => {
+                    let r = json::s(fx, "sequence");
+                    if story::is_running(gs) {
+                        out.push(story::RUNNING_TEXT.into());
+                    } else if d.resolve(&gs.world_id, "sequences", &r).is_empty() {
+                        out.push(format!("Unknown sequence '{r}'."));
+                    }
+                }
                 "recruit" => {
                     let who = json::s(fx, "character");
                     let cap = d.party_max(&gs.world_id);
@@ -708,48 +762,12 @@ impl DialogueRunner {
     fn apply(&mut self, d: &Data, gs: &mut GameState, effects: &[Dict]) {
         let act = gs.campaign.as_ref().map(|c| c.act);
         for fx in effects {
-            match json::s(fx, "effect").as_str() {
-                "set_flag" => {
-                    quest::set_flag(d, gs, &json::s(fx, "key"), fx.get("value").cloned().unwrap_or(Value::Bool(true)));
-                }
-                "add_flag" => {
-                    quest::add_flag(d, gs, &json::s(fx, "key"), json::i(fx, "delta", 0), json::get(fx, "min"), json::get(fx, "max"));
-                }
-                "start_quest" => {
-                    quest::start(d, gs, &json::s(fx, "quest"));
-                }
-                "give" => {
-                    let rewards = json::obj([("items", Value::Object(json::dget(fx, "items").clone())), ("gold", int(json::i(fx, "gold", 0)))]);
-                    let given = quest::reward_apply(d, gs, &rewards, "", &[]);
-                    self.notes.extend(json::sget(&given, "notes"));
-                }
-                "take" => {
-                    quest::take(d, gs, json::get(fx, "items"), json::i(fx, "gold", 0));
-                }
-                "recruit" => self.recruit(d, gs, &json::s(fx, "character")),
-                // CAMPAIGN1 11.3 (inert outside a campaign world)
-                _ => {
-                    crate::campaign::apply_effect(d, gs, fx, &mut self.campaign_events);
-                }
-            }
+            apply_effect(d, gs, fx, &mut self.notes, &mut self.campaign_events);
         }
         if !effects.is_empty() {
             let events = crate::campaign::after_effects(d, gs, act);
             self.campaign_events.extend(events);
         }
-    }
-
-    fn recruit(&mut self, d: &Data, gs: &mut GameState, who: &str) {
-        let Some(mut hero) = new_game::hero_from_character(d, &gs.world_id, who) else { return };
-        for m in gs.party.active_members() {
-            hero.total_xp = hero.total_xp.max(m.total_xp);
-        }
-        let name = progression::display_name(d, &hero);
-        if !gs.party.active_ids.is_empty() {
-            gs.party.active_ids.push(hero.id.clone());
-        }
-        gs.party.members.push(hero);
-        self.notes.push(format!("{name} joins the party."));
     }
 
     pub fn confirm_turn_in(&mut self, d: &Data, gs: &mut GameState, recipient: &str, picks: &[String]) -> Dict {
@@ -778,6 +796,50 @@ impl DialogueRunner {
         let mut out = res_ok();
         out.insert("node".into(), self.node_id.clone().into());
         out
+    }
+
+    /// STORYUI1 B11: closes the board pane back to the conversation (the node the choice led to).
+    pub fn close_board(&mut self, d: &Data, gs: &mut GameState) -> Dict {
+        self.notes.clear();
+        let res = if self.board_qid.is_empty() {
+            json::fail("No board is open.")
+        } else {
+            self.board_qid.clear();
+            if self.board_to == self.node_id {
+                let mut out = res_ok();
+                out.insert("node".into(), self.node_id.clone().into());
+                out
+            } else {
+                let to = self.board_to.clone();
+                self.move_to(d, gs, &to)
+            }
+        };
+        self.with_notes(res)
+    }
+
+    /// STORYUI1 B8: Accept on the open board: quest `r` must be on it; the `start_quest` path of a choice (the
+    /// precheck: available, given by this character or by no one), then the log says "Quest taken: {name}.".
+    /// {ok, errors, notes, quest, campaign?}.
+    pub fn accept(&mut self, d: &Data, gs: &mut GameState, r: &str) -> Dict {
+        self.notes.clear();
+        if self.board_qid.is_empty() {
+            return json::fail("No board is open.");
+        }
+        let q = quest::resolved(d, gs, r);
+        if q.is_empty() || board::board_qid_of(d, gs, &q) != self.board_qid {
+            return json::fail(&format!("Quest '{r}' is not on this board."));
+        }
+        let qid = json::s(&q, "_qid");
+        let effects = vec![json::obj([("effect", "start_quest".into()), ("quest", qid.clone().into())])];
+        let problems = self.precheck(d, gs, &effects);
+        if !problems.is_empty() {
+            return json::ok_result(false, &problems);
+        }
+        self.apply(d, gs, &effects);
+        self.notes.push(format!("Quest taken: {}.", json::s_or(&q, "name", r)));
+        let mut out = res_ok();
+        out.insert("quest".into(), qid.into());
+        self.with_notes(out)
     }
 
     pub fn close_shop(&mut self, d: &Data, gs: &mut GameState) -> Dict {
@@ -815,6 +877,72 @@ impl DialogueRunner {
         };
         self.with_notes(res)
     }
+}
+
+/// DialogueRunner.apply's body for one effect (STORYUI1 Q3: factored out with no change to the conversation), shared by
+/// the conversation, story sequences' `effects` steps and campaign rules (CAMPAIGN1 T2): `set_flag`, `add_flag`,
+/// `start_quest` (the giver check is the conversation's precheck), `give` (its notes), `take`, `recruit` (its note),
+/// the story effects `vignette` (queued, W1), `sequence` (started, Q1; refused while one runs, the refusal a note) and
+/// `open_board` (its first open sets the board's flag, B9; the runner opens the pane), then the campaign effects
+/// (11.3; inert outside a campaign world). No campaign tick: the caller ticks once after its list.
+pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<String>, events: &mut Vec<Value>) {
+    match json::s(fx, "effect").as_str() {
+        "set_flag" => {
+            quest::set_flag(d, gs, &json::s(fx, "key"), fx.get("value").cloned().unwrap_or(Value::Bool(true)));
+        }
+        "add_flag" => {
+            quest::add_flag(d, gs, &json::s(fx, "key"), json::i(fx, "delta", 0), json::get(fx, "min"), json::get(fx, "max"));
+        }
+        "start_quest" => {
+            quest::start(d, gs, &json::s(fx, "quest"));
+        }
+        "give" => {
+            let rewards = json::obj([("items", Value::Object(json::dget(fx, "items").clone())), ("gold", int(json::i(fx, "gold", 0)))]);
+            let given = quest::reward_apply(d, gs, &rewards, "", &[]);
+            notes.extend(json::sget(&given, "notes"));
+        }
+        "take" => {
+            quest::take(d, gs, json::get(fx, "items"), json::i(fx, "gold", 0));
+        }
+        "recruit" => recruit(d, gs, &json::s(fx, "character"), notes),
+        "vignette" => {
+            story::queue(d, gs, &json::s(fx, "vignette"));
+        }
+        "sequence" => {
+            if let Err(why) = story::start_quiet(d, gs, &json::s(fx, "sequence"), notes, events) {
+                notes.push(why);
+            }
+        }
+        "open_board" => board::mark_opened(d, gs, &json::s(fx, "board")),
+        // CAMPAIGN1 11.3 (inert outside a campaign world)
+        _ => {
+            crate::campaign::apply_effect(d, gs, fx, events);
+        }
+    }
+}
+
+/// The `recruit` effect: the character joins at the best active member's XP. Outside a conversation (whose precheck
+/// refuses these) a character already in the party or a full party is a note instead.
+fn recruit(d: &Data, gs: &mut GameState, who: &str, notes: &mut Vec<String>) {
+    let Some(mut hero) = new_game::hero_from_character(d, &gs.world_id, who) else { return };
+    let name = progression::display_name(d, &hero);
+    if is_member(d, gs, who) {
+        notes.push(format!("{name} is already with you."));
+        return;
+    }
+    let cap = d.party_max(&gs.world_id);
+    if gs.party.members.len() as i64 >= cap {
+        notes.push(format!("The party is full ({} of {cap}).", gs.party.members.len()));
+        return;
+    }
+    for m in gs.party.active_members() {
+        hero.total_xp = hero.total_xp.max(m.total_xp);
+    }
+    if !gs.party.active_ids.is_empty() {
+        gs.party.active_ids.push(hero.id.clone());
+    }
+    gs.party.members.push(hero);
+    notes.push(format!("{name} joins the party."));
 }
 
 /// After a dialogue fight: BattleBridge.apply (REWARD1: `tally` from the battle, None = settled without one), plus the

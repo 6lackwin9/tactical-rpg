@@ -7,8 +7,8 @@
 //! `meter_set`, `meter_show`, `end`, the read keys and the run-over state. Later tasks fill the remaining steps of the
 //! tick and the remaining effects: the days tick, the clock effects, checkpoints, purse, rest and retreat
 //! (CAMPAIGN1-C), triggers and previews (CAMPAIGN1-T). Story-free: a `then` item (a vignette, a battle, a scene) is
-//! queued in `pending` and handed on through `pending_head` / `pop_pending` (the GUI plays it; a `{vignette}` item
-//! goes to the story layer's vignette player, STORYUI1-W).
+//! queued in `pending` and handed on through `pending_head` / `pop_pending` (the GUI plays it; `{vignette}` items at
+//! the head move to the story queue through `story::pull_pending`, which `story::next_scene` calls, STORYUI1-W).
 
 pub mod meter;
 
@@ -561,35 +561,15 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, events: &mut Vec<Va
 }
 
 /// The effects of a meter rule (T2: the dialogue effects that need no screen, plus 11.3), in order, stopping at the
-/// first `end` (F1). `recruit` and the story effects (`vignette`, `sequence`) join when the dialogue's effect body is
-/// shared (CAMPAIGN1-T, STORYUI1-W); returns the notes of `give`.
+/// first `end` (F1), through the dialogue's shared effect body (`dialogue::apply_effect`, STORYUI1 Q3: `recruit` and
+/// the story effects `vignette` and `sequence` included); returns the notes (`give`, `recruit`, a refused sequence).
 pub fn apply_effects(d: &Data, gs: &mut GameState, effects: &[Dict], events: &mut Vec<Value>) -> Vec<String> {
     let mut notes = Vec::new();
     for fx in effects {
         if gs.campaign.as_ref().is_some_and(Campaign::is_over) {
             break;
         }
-        match json::s(fx, "effect").as_str() {
-            "set_flag" => {
-                quest::set_flag(d, gs, &json::s(fx, "key"), fx.get("value").cloned().unwrap_or(Value::Bool(true)));
-            }
-            "add_flag" => {
-                quest::add_flag(d, gs, &json::s(fx, "key"), json::i(fx, "delta", 0), json::get(fx, "min"), json::get(fx, "max"));
-            }
-            "start_quest" => {
-                quest::start(d, gs, &json::s(fx, "quest"));
-            }
-            "give" => {
-                let rewards = json::obj([("items", Value::Object(json::dget(fx, "items").clone())), ("gold", int(json::i(fx, "gold", 0)))]);
-                notes.extend(json::sget(&quest::reward_apply(d, gs, &rewards, "", &[]), "notes"));
-            }
-            "take" => {
-                quest::take(d, gs, json::get(fx, "items"), json::i(fx, "gold", 0));
-            }
-            _ => {
-                apply_effect(d, gs, fx, events);
-            }
-        }
+        crate::dialogue::apply_effect(d, gs, fx, &mut notes, events);
     }
     notes
 }

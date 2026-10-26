@@ -1,6 +1,6 @@
 //! SaveGame and SaveMigrations (scripts/game_state/), the game's side: the engine save framework (`aegis_save`) keeps
 //! the slot files, the envelope ({format: "fc_save", version, saved_at, game_state}), the atomic write and the
-//! migration runner; this module supplies the format, the GameState shape and every migration step (1 -> 12). Slot
+//! migration runner; this module supplies the format, the GameState shape and every migration step (1 -> 13). Slot
 //! 0 = autosave, 1..5 manual; reads migrate then validate and never return a half-loaded state. 2 -> 3 seeds
 //! rng_seed from Godot's sorted JSON text, rebuilt by godot_text.
 
@@ -18,9 +18,9 @@ pub const VERSION: i64 = 13;
 pub const FORMAT: &str = "fc_save";
 pub const AUTOSAVE_SLOT: i64 = 0;
 pub const LAST_SLOT: i64 = 5;
-const KEYS: [&str; 16] = [
+const KEYS: [&str; 17] = [
     "world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls", "shops", "time", "autoplay", "purses",
-    "reward_paid", "campaign",
+    "reward_paid", "campaign", "story",
 ];
 const SAVES: Format = Format { tag: FORMAT, version: VERSION, first_slot: AUTOSAVE_SLOT, last_slot: LAST_SLOT, keys: &KEYS };
 
@@ -63,11 +63,13 @@ pub fn read(d: &Data, dir: &Path, slot: i64) -> Result<Loaded, Vec<String>> {
     decode(d, &aegis_save::read(dir, slot)?)
 }
 
-/// A save file's text: parse, format check, migrate, validate.
+/// A save file's text: parse, format check, migrate, validate (STORYUI1 Q8: a `story.running` the data no longer has
+/// is dropped with a warning first).
 pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
     let envelope = aegis_save::open(&SAVES, text)?;
-    let (data, warnings) = migrate(d, &envelope)?;
-    let state = GameState::from_dict(d, json::dget(&data, "game_state"));
+    let (data, mut warnings) = migrate(d, &envelope)?;
+    let mut state = GameState::from_dict(d, json::dget(&data, "game_state"));
+    warnings.extend(crate::story::check_loaded(d, &mut state));
     let errors = state.validate(d);
     if !errors.is_empty() {
         return Err(errors);
@@ -200,6 +202,7 @@ fn step(d: &Data, version: i64, state: &Dict, quests_int: bool) -> Option<Dict> 
         }
         // CAMPAIGN1 11.5: a campaign world may save `campaign`; nothing to add (absent = a fresh campaign in a
         // campaign world, none elsewhere). The bump makes an older build refuse such a save instead of dropping it.
+        // STORYUI1 4.8 shares this unreleased bump (ROSTER1 11.4): `story` may be saved; absent reads empty.
         12 => {}
         _ => return None,
     }

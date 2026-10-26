@@ -293,16 +293,19 @@ pub fn trip(d: &Data, gs: &GameState, from: &str, to: &str) -> Dict {
     json::obj([("ok", Value::Bool(true)), ("time", int(time)), ("supplies", int(spent))])
 }
 
-/// {current, supplies, nodes: [{qid, name, visited, kind, region, quest, map_pos}], routes: [{qid, from, to, two_way, open, time}]}.
+/// {current, supplies, nodes: [{qid, name, visited, kind, region, quest, map_pos, jobs?}], routes: [{qid, from, to, two_way, open, time}]}.
+/// STORYUI1 B10: `jobs` (the names of the available quests of boards opened once whose node this is) only when there
+/// are some.
 pub fn view(d: &Data, gs: &GameState) -> Dict {
     let known_nodes = known(d, gs);
     let quest_at = quest_nodes(d, gs);
+    let jobs = crate::board::jobs(d, gs);
     let mut node_list = Vec::new();
     for q in &known_nodes {
         let loc = explore::resolve_location(d, gs, q);
         let region_ref = json::s(loc, "region");
         let region = if region_ref.is_empty() { json::empty() } else { d.resolve(&json::s_or(loc, "_world", &gs.world_id), "regions", &region_ref) };
-        node_list.push(Value::Object(json::obj([
+        let mut node = json::obj([
             ("qid", q.clone().into()),
             ("name", json::s_or(loc, "name", q).into()),
             ("visited", Value::Bool(is_visited(gs, q))),
@@ -310,7 +313,12 @@ pub fn view(d: &Data, gs: &GameState) -> Dict {
             ("region", json::s(region, "name").into()),
             ("quest", Value::Bool(quest_at.contains(q))),
             ("map_pos", Value::Array(json::aget(loc, "map_pos").to_vec())),
-        ])));
+        ]);
+        let here: Vec<String> = jobs.iter().filter(|(n, _)| n == q).map(|(_, name)| name.clone()).collect();
+        if !here.is_empty() {
+            node.insert("jobs".into(), json::strs(&here));
+        }
+        node_list.push(Value::Object(node));
     }
     let mut route_list = Vec::new();
     for r in graph(d, &gs.world_id) {
