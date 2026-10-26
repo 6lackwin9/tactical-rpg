@@ -44,6 +44,7 @@ pub struct FightResult {
     pub bin: f64,
     pub hp: f64,
     pub rounds: i32,
+    /// `Session::final_outcome` (ENCOUNTER2 S2: the round limit gives `timeout_outcome`).
     pub outcome: String,
     /// The step trace (when requested): {"start": [...], "rounds": [{"round", "actions", "intents", "steps"}],
     /// "metrics", "report", "log"}.
@@ -181,6 +182,8 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
         rounds = round + 1;
         // The tells while planning (INTENT1), before the party's plan is confirmed.
         let intents = record.then(|| crate::intent::trace(&s.w, &s.enemy_intents()));
+        // ENCOUNTER2 H1: a hold escape's holder by `pick_default` (nothing to pick elsewhere)
+        s.stay_pick_default();
         s.plan_apply_preset_all(&spec.preset);
         if !s.confirm_plan() {
             if spec.jitter && plan_skip(&s) {
@@ -231,7 +234,7 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
         bin: if won { 1.0 } else { binary_score(l, r) },
         hp: if won { 1.0 } else { hp_score(l, r) },
         rounds,
-        outcome: s.outcome.clone(),
+        outcome: s.final_outcome(),
         trace,
         metrics: s.metrics.take(),
     }

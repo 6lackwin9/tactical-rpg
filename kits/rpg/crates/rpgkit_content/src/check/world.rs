@@ -499,6 +499,9 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
         _ => errors.push("Exit tiles must be a list of [x, y] pairs.".into()),
     }
     errors.extend(encounter::rows_problems(e));
+    // ENCOUNTER2 S1 and section 6: unkillable refs and the stay-behind block (flag and then are a world encounter's)
+    errors.extend(encounter::unkillable_problems(e));
+    errors.extend(encounter::stay_behind_problems(v, e, true));
     // HOOKS1 AH1 and DU2: the arena hazards and the deck phase effects (a ref plays as its character's base unit)
     errors.extend(super::hooks::arena_hazards_errors(e));
     let unit_of = |r: &str| v.get("units", &json::s(v.worlds.resolve(w, "characters", r), "base_unit")).clone();

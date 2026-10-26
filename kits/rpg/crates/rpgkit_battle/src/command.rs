@@ -925,6 +925,10 @@ fn describe_blocker(w: &World, cell: V2) -> String {
     if !w.grid.is_walkable(cell) {
         return terrain_name(w, cell);
     }
+    // ENCOUNTER2 H3: an exit a hold escape's gate kept shut (or its holder may not take)
+    if w.hold.is_some() && w.grid.is_exit(cell) {
+        return "the shut gate".into();
+    }
     "an obstacle".into()
 }
 

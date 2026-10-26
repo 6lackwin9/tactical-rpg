@@ -288,6 +288,8 @@ impl<'a> Runner<'a> {
         let mut plan_failed = false;
         for round in 0..round_limit {
             rounds = round + 1;
+            // ENCOUNTER2 H1: a hold escape's holder by `pick_default` (nothing to pick elsewhere)
+            s.stay_pick_default();
             s.plan_apply_preset_all(&self.preset);
             if !s.confirm_plan() {
                 if self.args.jitter && self.plan_skip(&s, round + 1) {

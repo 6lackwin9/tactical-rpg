@@ -10,7 +10,8 @@
 //!                                              encounter, the world's for a world one); rules "-id,+id" switches
 //!                                              single extensions
 //!       {plan_reveal?}                         RULESET1 V2: reveal every enemy plan (rule `plan_badges`; default false)
-//!   state                                      round, block, phase, outcome, units, grid
+//!   state                                      round, block, phase, outcome, units, grid; `hold` (tiles, label,
+//!                                              holder, open, note) only for a hold escape (ENCOUNTER2 3.1)
 //!   intents                                    every scheduled action this round (enemies included); under the rule
 //!                                              `plan_badges` also `round_intents`: one record per active unit, both
 //!                                              sides (round intent, target, Maneuver kind, impact badges, tell, plan)
@@ -23,6 +24,9 @@
 //!   plan_view {unit?}                          compiled timeline per ally (blocks, AP, targets, est. damage)
 //!   probe {unit, step}                         would this step fit next? (valid, reason, entries it adds); no change
 //!   add_step {unit, step} / undo {unit} / clear {unit}   edit an ally's steps one at a time
+//!   stay_pick {unit}                           ENCOUNTER2 H1: who holds a hold escape's tiles (once, round 1, before
+//!                                              confirm; `confirm`, `step` and `resolve` refuse until then; autoplay
+//!                                              picks by the encounter's `pick_default`)
 //!   confirm                                    lock the party plan and schedule it
 //!   step                                       resolve one action (or block wrap-up)
 //!   resolve                                    resolve to the end of the round
@@ -93,7 +97,7 @@ fn err(msg: impl Into<String>) -> Value {
 
 impl aegis_host::Commands for Battle {
     fn mutating(&self, cmd: &str) -> bool {
-        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "manual" | "fill")
+        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "manual" | "fill" | "stay_pick")
     }
 
     fn restarts(&self, cmd: &str) -> bool {
@@ -236,7 +240,17 @@ impl Battle {
             "undo" => edit_steps(s, req, "undo"),
             "clear" => edit_steps(s, req, "clear"),
             "plan_view" => json!({"ok": true, "plan": plan_view(s, unit_arg(s, req, "unit"))}),
+            "stay_pick" => match unit_arg(s, req, "unit") {
+                Some(u) => match s.stay_pick(u) {
+                    Ok(()) => json!({"ok": true, "holder": u, "state": state_of(s)}),
+                    Err(e) => err(e),
+                },
+                None => err("stay_pick needs a unit"),
+            },
             "confirm" => {
+                if let Some(e) = pick_due(s) {
+                    return e;
+                }
                 if s.confirm_plan() {
                     json!({"ok": true, "actions": scheduled(s)})
                 } else {
@@ -244,6 +258,9 @@ impl Battle {
                 }
             }
             "step" => {
+                if let Some(e) = pick_due(s) {
+                    return e;
+                }
                 if s.phase == Phase::Planning && !s.plan_confirmed && !s.confirm_plan() {
                     return err("plan refused");
                 }
@@ -252,6 +269,9 @@ impl Battle {
                 json!({"ok": true, "log": s.resolver.log[from..].to_vec(), "state": state_of(s)})
             }
             "resolve" => {
+                if let Some(e) = pick_due(s) {
+                    return e;
+                }
                 if s.phase == Phase::Planning && !s.plan_confirmed && !s.confirm_plan() {
                     return err("plan refused");
                 }
@@ -281,6 +301,7 @@ impl Battle {
                         s.advance_round();
                     }
                     if !s.plan_confirmed {
+                        s.stay_pick_default();
                         s.plan_apply_preset_all(&preset);
                         if !s.confirm_plan() {
                             return err("autoplay: the party plan was refused");
@@ -304,6 +325,12 @@ impl Battle {
             _ => err(format!("unknown cmd '{cmd}'")),
         }
     }
+}
+
+/// ENCOUNTER2 H1: the refusal while a hold escape waits for its holder (None otherwise).
+fn pick_due(s: &Session) -> Option<Value> {
+    let label = s.w.hold.as_ref().filter(|_| s.needs_stay_pick())?.label.clone();
+    Some(err(format!("pick who holds {label} first: {{\"cmd\": \"stay_pick\", \"unit\": ...}}")))
 }
 
 fn unit_arg(s: &Session, req: &Value, key: &str) -> Option<UnitId> {
@@ -332,7 +359,8 @@ fn stance_name(u: &rpgkit_rules::Unit) -> &'static str {
 }
 
 /// The checkpoint after a request that concluded a round (or ended the battle): what a replay compares (PLAYTEST1 round
-/// outcome): round, over, result (won, lost, fled, or timeout at the round limit; "" while it goes on), the log
+/// outcome): round, over, result (won, lost or fled; at the round limit the encounter's `timeout_outcome`,
+/// `Session::final_outcome`, ENCOUNTER2 S2; "" while it goes on), the log
 /// length and every unit's HP, AP, tile, stance, statuses (active and pending), alive and withdrawn.
 pub fn outcome_of(s: &Session) -> Value {
     let state = state_of(s);
@@ -341,7 +369,7 @@ pub fn outcome_of(s: &Session) -> Value {
         .as_array()
         .map(|a| a.iter().map(|u| Value::Object(keep.iter().map(|k| (k.to_string(), u[*k].clone())).collect())).collect())
         .unwrap_or_default();
-    let result = if !s.outcome.is_empty() { s.outcome.clone() } else if s.combat_over { "timeout".into() } else { String::new() };
+    let result = s.final_outcome();
     json!({"round": s.current_round, "over": s.combat_over, "result": result, "log_count": s.resolver.log.len(), "units": units})
 }
 
@@ -364,12 +392,17 @@ pub fn state_of(s: &Session) -> Value {
     let rows: Vec<String> = (0..GRID_H)
         .map(|y| (0..GRID_W).map(|x| TERRAIN_IDS.iter().position(|t| *t == w.grid.terrain_id(V2::new(x, y))).map(|i| ".,:os*~WmL#T=rfpi".chars().nth(i).unwrap()).unwrap_or('.')).collect())
         .collect();
-    json!({
+    let mut state = json!({
         "encounter": s.def.id, "round": s.current_round, "max_rounds": s.def.max_rounds, "block": s.current_block,
         "blocks": s.def.total_blocks, "phase": phase_name(s.phase), "plan_confirmed": s.plan_confirmed,
         "outcome": s.outcome, "over": s.combat_over, "units": units,
         "grid": {"w": GRID_W, "h": GRID_H, "rows": rows, "exits": w.grid.exits.iter().map(|e| json!([e.x, e.y])).collect::<Vec<_>>()},
-    })
+    });
+    // ENCOUNTER2 3.1: a hold escape's tiles, holder and gate (other battles keep the state's shape)
+    if let Some(g) = &w.hold {
+        state["hold"] = json!({"tiles": g.tiles.iter().map(|c| json!([c.x, c.y])).collect::<Vec<_>>(), "label": g.label, "holder": g.holder, "open": g.is_open(w), "note": g.note(w)});
+    }
+    state
 }
 
 fn scheduled(s: &Session) -> Vec<Value> {

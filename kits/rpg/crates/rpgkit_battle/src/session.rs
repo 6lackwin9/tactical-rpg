@@ -6,7 +6,7 @@
 
 use crate::ai;
 use crate::command::CmdKind;
-use crate::encounter::{self, Morale, Objectives, Phases, LEADER_TIERS};
+use crate::encounter::{self, HoldGate, Morale, Objectives, PartyFate, Phases, StayBehind, LEADER_TIERS};
 use crate::grid::{Grid, TerrainTable, V2};
 use crate::plan::Plan;
 use crate::resolver::Resolver;
@@ -243,6 +243,12 @@ pub struct Session {
     /// The action the last resolving step popped: (round, block, index into `resolver.scheduled`); kept until the next
     /// one. Not in Godot; for the screens (SPRITE1-U: the actor plays its attack clip); no rule reads it.
     pub last_popped: Option<(i32, i32, usize)>,
+    /// ENCOUNTER2 section 6: the encounter's `stay_behind` block (None: none, or the objective is not escape).
+    pub stay: Option<StayBehind>,
+    /// ENCOUNTER2 S2: the verdict when the last round ends with none (`timeout_outcome`: fled, or lost).
+    pub timeout_outcome: String,
+    /// S1: how many of `w.spared` have their log cell.
+    spared_logged: usize,
     /// Unit -> its hero key (a party member id or a world character), when it has one.
     hero_keys: IndexMap<UnitId, String>,
     unit_keys: IndexMap<UnitId, String>,
@@ -371,7 +377,17 @@ impl Session {
         let count = built.len();
         let mut grid = Grid::new(def.open, def.exits.clone(), TerrainTable::from_catalog(&cat), count);
         grid.apply_board(&def.zone, &def.rows);
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new() };
+        // ENCOUNTER2 S1, H2: the unkillable enemy-side units and the gate of a hold escape (none in classic)
+        let unkillable: Vec<UnitId> = value::strings(&def.raw, "unkillable").iter().flat_map(|r| units_by_ref.get(r).cloned().unwrap_or_default()).filter(|&c| c >= n_allies).collect();
+        let stay = StayBehind::read(&def.raw);
+        let hold = stay.as_ref().filter(|sb| sb.is_hold()).map(|sb| HoldGate {
+            tiles: sb.tiles.clone(),
+            label: sb.tiles_label.clone(),
+            holder: None,
+            fallback_any: sb.fallback_any,
+            heroes: (0..n_allies).filter(|c| !guests.contains(c)).collect(),
+        });
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new() };
         w.add_item_skills();
         let objective = Objectives::create(&def.raw);
         // MORALE1 1.2: unit keys, tiers, authored profiles and the starting groups.
@@ -420,6 +436,7 @@ impl Session {
         for u in w.units.iter_mut() {
             u.loadout_locked = true;
         }
+        let timeout_outcome = encounter::timeout_outcome(&def.raw);
         let mut s = Session {
             def,
             w,
@@ -445,6 +462,9 @@ impl Session {
             log: Vec::new(),
             metrics: None,
             last_popped: None,
+            stay,
+            timeout_outcome,
+            spared_logged: 0,
             hero_keys,
             unit_keys,
             units_by_key,
@@ -980,7 +1000,8 @@ impl Session {
     }
 
     pub fn confirm_plan(&mut self) -> bool {
-        if self.phase != Phase::Planning || !self.plan_is_valid() {
+        // ENCOUNTER2 H1: a hold escape is not planned before someone holds
+        if self.phase != Phase::Planning || !self.plan_is_valid() || self.needs_stay_pick() {
             return false;
         }
         self.plan.commit(&self.w, &mut self.resolver);
@@ -1014,6 +1035,7 @@ impl Session {
                     self.append(e);
                 }
             }
+            self.log_spared(round, block);
         }
         if let Some(idx) = self.pending.pop_front() {
             self.last_popped = Some((self.current_round, self.current_block, idx));
@@ -1058,6 +1080,7 @@ impl Session {
             if !a.command.pushes.is_empty() {
                 self.feed(|m, s| m.on_forced(s, idx));
             }
+            self.log_spared(round, block);
         }
         if self.pending.is_empty() {
             let block = self.current_block;
@@ -1067,6 +1090,7 @@ impl Session {
                 self.resolver.apply_round_end_effects(&mut self.w);
             }
             self.on_block_end();
+            self.log_spared(self.current_round, block);
             // The archive: the actions as they resolved and the state after this block.
             self.refresh_archive();
             let snap = self.snapshot();
@@ -1178,6 +1202,105 @@ impl Session {
         let target = if self.objective.objective == "slay" { self.first_of_ref(&self.objective.unit_ref) } else { None };
         let (guests, protected) = (self.guests.clone(), self.protected.clone());
         self.objective.verdict(&self.w, &heroes, &guests, &protected, &foes, end_of_round, target)
+    }
+
+    /// ENCOUNTER2 S2 (was BattleBridge.outcome's last-round rule, written by each caller): the battle's verdict, else
+    /// `timeout_outcome` (fled by default) once the last round is over, else "" while it can go on.
+    pub fn final_outcome(&self) -> String {
+        if !self.outcome.is_empty() {
+            return self.outcome.clone();
+        }
+        if self.phase == Phase::Replay && !self.can_advance_round() {
+            return self.timeout_outcome.clone();
+        }
+        String::new()
+    }
+
+    /// ENCOUNTER2 S3: each hero (party-side units but guests, ally order) and how the battle left it: stayed (held at
+    /// a won hold escape), downed (0 HP), escaped (withdrew), else standing.
+    pub fn party_fates(&self) -> Vec<(UnitId, PartyFate)> {
+        self.w
+            .allies
+            .iter()
+            .copied()
+            .filter(|c| !self.guests.contains(c))
+            .map(|c| {
+                let u = &self.w.units[c];
+                let fate = if self.objective.stayed.contains(&c) {
+                    PartyFate::Stayed
+                } else if !u.is_alive() {
+                    PartyFate::Downed
+                } else if u.is_withdrawn {
+                    PartyFate::Escaped
+                } else {
+                    PartyFate::Standing
+                };
+                (c, fate)
+            })
+            .collect()
+    }
+
+    /// ENCOUNTER2 H1: a hold escape still waits for its holder (planning cannot be confirmed).
+    pub fn needs_stay_pick(&self) -> bool {
+        self.w.hold.as_ref().is_some_and(|g| g.holder.is_none())
+    }
+
+    /// ENCOUNTER2 H1: `c` holds the hold tiles (host request `stay_pick`): once, while round 1 is planned and nothing
+    /// is confirmed, a hero on the field.
+    pub fn stay_pick(&mut self, c: UnitId) -> Result<(), String> {
+        let Some(g) = self.w.hold.as_ref() else { return Err("This battle has no tile to hold.".into()) };
+        if let Some(h) = g.holder {
+            return Err(format!("{} already holds {}.", self.w.units[h].name, g.label));
+        }
+        if self.current_round != 1 || !self.is_planning() {
+            return Err("The holder is picked before round 1 is confirmed.".into());
+        }
+        if c >= self.w.units.len() || !g.heroes.contains(&c) || !self.w.has(c) {
+            return Err(format!("Pick a hero on the field to hold {}.", g.label));
+        }
+        if let Some(g) = self.w.hold.as_mut() {
+            g.holder = Some(c);
+        }
+        Ok(())
+    }
+
+    /// ENCOUNTER2 H1: the holder sims and autoplay pick (`pick_default`: the hero on the field with the most HP, the
+    /// first on a tie; or the first hero on the field); None when no pick is due.
+    pub fn stay_pick_default(&mut self) -> Option<UnitId> {
+        if !self.needs_stay_pick() || self.current_round != 1 || !self.is_planning() {
+            return None;
+        }
+        let g = self.w.hold.as_ref()?;
+        let on_field: Vec<UnitId> = g.heroes.iter().copied().filter(|&c| self.w.has(c)).collect();
+        let first = self.stay.as_ref().is_some_and(|sb| sb.pick_default == "first");
+        let mut pick = on_field.first().copied()?;
+        if !first {
+            for &c in &on_field {
+                if self.w.units[c].hp > self.w.units[pick].hp {
+                    pick = c;
+                }
+            }
+        }
+        self.stay_pick(pick).ok()?;
+        Some(pick)
+    }
+
+    /// ENCOUNTER2 H3: the plan line of a hold escape while its gate is shut ("" otherwise).
+    pub fn gate_note(&self) -> String {
+        self.w.hold.as_ref().map(|g| g.note(&self.w)).unwrap_or_default()
+    }
+
+    /// ENCOUNTER2 S1: one EVENT cell (and event line) for each unkillable unit damage first failed to down.
+    fn log_spared(&mut self, round: i32, block: i32) {
+        while self.spared_logged < self.w.spared.len() {
+            let c = self.w.spared[self.spared_logged];
+            self.spared_logged += 1;
+            let name = self.w.units[c].name.clone();
+            let line = format!("{name} will not fall here.");
+            let ally = self.w.allies.contains(&c);
+            self.append(crate::log::Entry::event(round, block, &name, ally, "Unkillable", "Unkillable", "SPARED", &line, ""));
+            self.events.push(line);
+        }
     }
 
     pub fn can_advance_round(&self) -> bool {

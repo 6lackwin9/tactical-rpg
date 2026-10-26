@@ -138,12 +138,26 @@ pub struct World {
     pub plan_reveal: bool,
     /// RULESET1 5 (rule `poise`): each unit's poise bar; empty in classic.
     pub poise: IndexMap<UnitId, crate::poise::PoiseState>,
+    /// ENCOUNTER2 H2, H3: the gate of a hold escape (None: exits always let a unit out, as before).
+    pub hold: Option<crate::encounter::HoldGate>,
+    /// ENCOUNTER2 S1: units damage never takes below 1 HP (the encounter's `unkillable`).
+    pub unkillable: Vec<UnitId>,
+    /// S1: the unkillable units damage would have downed, in the order it first happened (once each; the session logs
+    /// each one's cell).
+    pub spared: Vec<UnitId>,
 }
 
 impl World {
-    /// Combatant.take_damage on unit `c` (journaled). Returns the damage dealt.
+    /// Combatant.take_damage on unit `c` (journaled). Returns the damage dealt. ENCOUNTER2 S1: an unkillable unit keeps
+    /// 1 HP (the first time it would have fallen is recorded in `spared`).
     pub fn damage(&mut self, c: UnitId, amount: i32, mitigated: bool) -> i32 {
         let dealt = self.units[c].take_damage(amount, mitigated);
+        if self.units[c].hp == 0 && self.unkillable.contains(&c) {
+            self.units[c].hp = 1;
+            if !self.spared.contains(&c) {
+                self.spared.push(c);
+            }
+        }
         self.journal(c);
         dealt
     }
@@ -283,13 +297,17 @@ impl World {
         true
     }
 
-    /// One step by `offset`; stepping onto an exit (or off an open arena) withdraws the unit.
+    /// One step by `offset`; stepping onto an exit (or off an open arena) withdraws the unit. ENCOUNTER2 H3: while a
+    /// hold escape's gate is shut (or for its holder) that step fails like a blocked tile.
     pub fn move_unit(&mut self, c: UnitId, offset: V2) -> bool {
         if !self.units[c].is_active() || self.grid.positions[c].is_none() {
             return false;
         }
         let target = self.pos(c) + offset;
         if self.grid.is_exit(target) || (self.grid.open && !self.grid.is_valid(target)) {
+            if self.hold.as_ref().is_some_and(|g| !g.lets_out(self, c)) {
+                return false;
+            }
             self.leave(c);
             return true;
         }

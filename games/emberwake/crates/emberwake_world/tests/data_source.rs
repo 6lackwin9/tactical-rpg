@@ -30,8 +30,9 @@ fn data_dir() -> PathBuf {
 /// a world quest's board fields `board`, `track`, `show_locked`, `closed_text` and a manifest's `start_sequence`.
 /// HOOKS1-S (2026-10-27): a skill's combat hook fields (`forced_move`, `hazard`, `triggers`, `riders`, `meters`,
 /// `hp_cost`, `ignore_guard`), a consumable's `hazard`, a unit's `tactics`, an encounter's `arena_hazards` (catalog and
-/// world encounters) and a world manifest's `classes`.
-const AFTER_GODOT: [(&str, &str, &str); 46] = [
+/// world encounters) and a world manifest's `classes`. ENCOUNTER2-H (2026-10-27): an encounter's `unkillable`,
+/// `timeout_outcome` and `stay_behind` (catalog and world encounters).
+const AFTER_GODOT: [(&str, &str, &str); 52] = [
     ("content", "units", "loot"),
     ("world", "encounters", "key_loot"),
     ("world", "encounters", "objective_reward"),
@@ -77,6 +78,12 @@ const AFTER_GODOT: [(&str, &str, &str); 46] = [
     ("content", "units", "tactics"),
     ("content", "encounters", "arena_hazards"),
     ("world", "encounters", "arena_hazards"),
+    ("content", "encounters", "unkillable"),
+    ("content", "encounters", "timeout_outcome"),
+    ("content", "encounters", "stay_behind"),
+    ("world", "encounters", "unkillable"),
+    ("world", "encounters", "timeout_outcome"),
+    ("world", "encounters", "stay_behind"),
     ("world", "world", "classes"),
 ];
 /// Retired parity, option level: enum and multi-pick options added after the freeze, by (section, kind, key, option);

@@ -796,6 +796,11 @@ impl Plan {
     }
 
     fn apply_withdraw(&self, w: &World, c: UnitId, st: &mut SimState, index: i32) -> String {
+        // ENCOUNTER2 H3: the holder of a hold escape stays (a shut gate still accepts the others' Withdraw: the holder
+        // may reach the tile in the same round; the plan line shows `HoldGate::note`)
+        if let Some(g) = w.hold.as_ref().filter(|g| g.holder == Some(c)) {
+            return format!("{} holds {}.", w.units[c].name, g.label);
+        }
         let p = self.move_problem(w, c, st);
         if !p.is_empty() {
             return p;

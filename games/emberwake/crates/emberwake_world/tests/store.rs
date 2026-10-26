@@ -20,8 +20,9 @@ const CATALOG: [&str; 8] = ["classes", "units", "skills", "items", "item_familie
 /// are left out at their defaults, as every skill field); ENCOUNTER2-T (HISTORY 2026-10-25) an encounter's `rows`
 /// (catalog and world encounters); HOOKS1-S (HISTORY 2026-10-27) a unit's `tactics` and an encounter's `arena_hazards`
 /// (catalog and world encounters; a skill's hook fields are left out at their defaults, a consumable's `hazard` is
-/// ITEMS_AFTER_GODOT).
-const AFTER_GODOT: [&str; 15] = [
+/// ITEMS_AFTER_GODOT); ENCOUNTER2-H (HISTORY 2026-10-27) an encounter's `unkillable`, `timeout_outcome` and
+/// `stay_behind` (catalog and world encounters).
+const AFTER_GODOT: [&str; 18] = [
     "\"loot\": []",
     "\"key_loot\": []",
     "\"objective_reward\": {}",
@@ -37,6 +38,9 @@ const AFTER_GODOT: [&str; 15] = [
     "\"rows\": []",
     "\"tactics\": []",
     "\"arena_hazards\": []",
+    "\"unkillable\": []",
+    "\"timeout_outcome\": \"fled\"",
+    "\"stay_behind\": {}",
 ];
 
 /// Retired parity, the catalog items file only (catalog/items.json): HOOKS1-S (HISTORY 2026-10-27) a consumable's
