@@ -326,9 +326,8 @@ fn next_step(gs: &mut GameState) {
 /// the caller ticks the campaign once after).
 fn run_effects(d: &Data, gs: &mut GameState, notes: &mut Vec<String>, events: &mut Vec<Value>) {
     while let Some((Step::Effects { effects }, _)) = raw_step(d, gs) {
-        for fx in &effects {
-            dialogue::apply_effect(d, gs, json::dict(fx), notes, events);
-        }
+        let effects: Vec<Dict> = effects.iter().map(|fx| json::dict(fx).clone()).collect();
+        dialogue::apply_effects(d, gs, &effects, notes, events);
         next_step(gs);
     }
 }
@@ -433,6 +432,8 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
             if outcome == "lost" {
                 let woke = explore::wake(d, gs, "");
                 events.extend(json::aget(&woke, "events").iter().cloned());
+                // CAMPAIGN1 R4, T1: the retreat's and the arrival's tick events follow the battle's
+                fx_events.extend(json::aget(&woke, "campaign").iter().cloned());
             }
         }
     }

@@ -477,10 +477,17 @@ pub fn enter(d: &Data, gs: &mut GameState, location_ref: &str, anchor: &str) -> 
     let advanced = quest::on_location_reached(d, gs, &qid);
     let mut events = vec![ev([("kind", "entered".into()), ("location", qid.clone().into()), ("advanced", json::strs(&advanced))])];
     if restored > 0 {
-        events.push(ev([("kind", "rested".into()), ("location", qid.into()), ("restored", int(restored))]));
+        events.push(ev([("kind", "rested".into()), ("location", qid.clone().into()), ("restored", int(restored))]));
     }
-    events.push(ev([("kind", "autosave".into())]));
-    result(true, &[], events)
+    // CAMPAIGN1 T1: the enter tick (enter triggers); no autosave once it ended the run (F3); `campaign` holds its
+    // events when there are some (none outside a campaign world, X3)
+    let ticked = crate::campaign::tick(d, gs, &crate::campaign::Cause::Enter { location: qid });
+    if crate::campaign::save_refusal(gs).is_empty() {
+        events.push(ev([("kind", "autosave".into())]));
+    }
+    let mut out = result(true, &[], events);
+    crate::campaign::merge_events(&mut out, ticked);
+    out
 }
 
 pub fn begin(d: &Data, gs: &mut GameState) -> Dict {
@@ -670,7 +677,10 @@ pub fn step(d: &Data, gs: &mut GameState, dir: Pos) -> Dict {
                     return result(false, &json::sget(&left, "errors"), events);
                 }
                 events.push(ev([("kind", "exit".into()), ("to", to.into()), ("marker", json::s(m, "id").into()), ("events", left["events"].clone())]));
-                return result(true, &[], events);
+                let mut out = result(true, &[], events);
+                // CAMPAIGN1 T1: the enter tick's events
+                crate::campaign::merge_events(&mut out, json::aget(&left, "campaign").to_vec());
+                return out;
             }
             _ => {}
         }

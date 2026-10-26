@@ -6,14 +6,22 @@
 //! Built in CAMPAIGN1-M: gauges, bands, rules, inputs (battle, day, leg), floors, `set_act`, `meter_add`,
 //! `meter_set`, `meter_show`, `end`, the read keys and the run-over state. CAMPAIGN1-C: the days and leg ticks
 //! (travel, rest, retreat), the clock effects (`clock.rs`), checkpoints (`checkpoint.rs`), the purse, rests, the
-//! retreat, road-fight modifiers and `battle_mods` (`purse.rs`). Later: triggers and previews (CAMPAIGN1-T). Story-free: a `then` item (a vignette, a battle, a scene) is
+//! retreat, road-fight modifiers and `battle_mods` (`purse.rs`). CAMPAIGN1-T: triggers (`trigger.rs`, after the
+//! checkpoints; `Cause::Enter` from `explore::enter`), the follow-up ticks (owed rest days, act changes inside a tick),
+//! and the previews of a run-ending step (`preview.rs`). Story-free: a `then` item (a vignette, a battle, a scene) is
 //! queued in `pending` and handed on through `pending_head` / `pop_pending` (the GUI plays it; `{vignette}` items at
-//! the head move to the story queue through `story::pull_pending`, which `story::next_scene` calls, STORYUI1-W).
+//! the head move to the story queue through `story::pull_pending`, which `story::next_scene` calls, STORYUI1-W; a
+//! `{battle}` item is `trigger::fight`). Every effect list (meter rules, checkpoints, triggers) runs through the one
+//! shared effect body, `dialogue::apply_effects`.
 
 pub mod checkpoint;
 pub mod clock;
 pub mod meter;
+pub mod preview;
 pub mod purse;
+pub mod trigger;
+
+pub use preview::{preview_battle, preview_days};
 
 use crate::data::Data;
 use crate::quest;
@@ -24,11 +32,13 @@ use indexmap::IndexMap;
 use meter::{tags_match, MeterDef, MeterState};
 use rpgkit_data::CampaignManifest;
 use serde_json::Value;
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 /// X4: a rule's effects that move a meter re-enter the rule pass at most this many times per tick (the first pass
 /// plus REENTRIES_MAX more); a crossing still left after the last pass is not fired: the tick's end takes the values
-/// as the new baseline.
+/// as the new baseline. A tick also runs at most this many follow-up ticks (owed rest days, an act change); what is
+/// left of them waits for the next cause.
 pub const REENTRIES_MAX: usize = 8;
 /// 11.5: the keys of the saved campaign block.
 pub const BLOCK_KEYS: [&str; 7] = ["act", "run", "meters", "fired", "armed", "checkpoints", "pending"];
@@ -112,7 +122,8 @@ pub struct Campaign {
     pub meters: IndexMap<String, MeterState>,
     /// Once-items fired, sorted: `rule:<meter>/<rule>`, `trigger:<id>`.
     pub fired: Vec<String>,
-    /// Repeatable trigger ids whose `when` held at the last tick (CAMPAIGN1-T).
+    /// Repeatable trigger ids that fired and whose `when` has held at every tick since (T1: one leaves when its `when`
+    /// stops holding and may then fire again).
     pub armed: Vec<String>,
     /// Checkpoint id -> "met" or "missed" (CAMPAIGN1-C).
     pub checkpoints: IndexMap<String, String>,
@@ -126,7 +137,8 @@ pub struct Campaign {
     pub last: IndexMap<String, i64>,
     /// Runtime: the travel clock (`gs.time`) at the end of the last tick (checkpoint warnings and deadlines, C1, C2).
     pub last_time: i64,
-    /// Runtime: days a `rest` effect passed inside an effect list; the next tick runs them first as days(n, rest).
+    /// Runtime: days a `rest` effect passed inside an effect list; they run as their own days(n, rest) tick within the
+    /// next `tick` call (first, after a dialogue list; right after the tick whose rule, checkpoint or trigger rested).
     pub owed_days: i64,
 }
 
@@ -284,8 +296,8 @@ impl Campaign {
         Some(c)
     }
 
-    /// GameState::validate's part (11.5): meters known and in range, act 0-9, the run id, fired, checkpoints and
-    /// pending items well formed.
+    /// GameState::validate's part (11.5): meters known and in range, act 0-9, the run id, fired, armed, checkpoints
+    /// and pending items well formed.
     pub fn validate(&self) -> Vec<String> {
         let mut errors = Vec::new();
         if !(0..=ACT_MAX).contains(&self.act) {
@@ -311,6 +323,11 @@ impl Campaign {
                 || f.strip_prefix("trigger:").is_some_and(|t| !t.is_empty());
             if !ok {
                 errors.push(format!("campaign.fired: '{f}' must be rule:<meter>/<rule> or trigger:<id>."));
+            }
+        }
+        for (i, id) in self.armed.iter().enumerate() {
+            if id.is_empty() || self.armed[..i].contains(id) {
+                errors.push(format!("campaign.armed: '{id}' must be a trigger id, listed once."));
             }
         }
         for (id, st) in &self.checkpoints {
@@ -366,11 +383,12 @@ pub enum Cause {
     Leg { route_tags: Vec<String> },
     /// A settled battle: the encounter's qid and tags, the outcome (won, lost, fled).
     Battle { encounter: String, tags: Vec<String>, outcome: String },
-    /// The party entered a location (triggers: CAMPAIGN1-T).
+    /// The party entered the location with this qid (`explore::enter`; enter triggers, T1).
     Enter { location: String },
     /// A dialogue choice, a trigger or a rule applied effects.
     Effects,
-    /// The act changed to `n` (triggers: CAMPAIGN1-T).
+    /// The act changed to `n` (act triggers, T1): after an effect list that set it, and after a tick whose rules,
+    /// checkpoints or triggers set it.
     Act(i64),
 }
 
@@ -387,14 +405,49 @@ fn warning(def: &MeterDef, rule: &meter::Rule, value: i64) -> Value {
     ]))
 }
 
-/// X4: runs the campaign after `cause`: inputs, meter rules (gauges, then countdowns), checkpoints (C1-C3),
-/// [triggers: CAMPAIGN1-T], then the run-over check. Days a `rest` effect owed run first as their own days(n, rest)
-/// tick. Returns the events for the action's result (W1: `meter_warning`, `checkpoint_warning`, `checkpoint_missed`,
-/// `run_over`, `act_start`); empty and untouched outside a campaign world, and once the run is over.
+/// X4: runs the campaign after `cause`: inputs, meter rules (gauges, then countdowns), checkpoints (C1-C3), triggers
+/// (T1, T2), then the run-over check. Returns the events for the action's result (W1: `meter_warning`,
+/// `checkpoint_warning`, `checkpoint_missed`, `trigger_fired`, `run_over`, `act_start`); empty and untouched outside a
+/// campaign world, and once the run is over. Follow-up ticks run in the same call (`tick_all`).
 pub fn tick(d: &Data, gs: &mut GameState, cause: &Cause) -> Vec<Value> {
-    let owed = gs.campaign.as_mut().map(|c| std::mem::take(&mut c.owed_days)).unwrap_or(0);
-    let mut events = if owed > 0 { tick_once(d, gs, &Cause::Days { n: owed, why: "rest".into() }) } else { Vec::new() };
-    events.extend(tick_once(d, gs, cause));
+    tick_all(d, gs, vec![cause.clone()])
+}
+
+/// The ticks after `causes`, in order, with their follow-ups: days a `rest` effect owed run first as their own
+/// days(n, rest) tick (a rest in a dialogue choice before its tick; a rest in the effects of a rule, a missed `go_on`
+/// checkpoint or a trigger right after the tick that ran it), and an act changed inside a tick queues cause act(n)
+/// after the causes already waiting. At most REENTRIES_MAX follow-ups; owed days left over wait for the next cause.
+fn tick_all(d: &Data, gs: &mut GameState, causes: Vec<Cause>) -> Vec<Value> {
+    let mut events = Vec::new();
+    if gs.campaign.is_none() {
+        return events;
+    }
+    let mut queue: VecDeque<Cause> = causes.into();
+    let mut follow_ups = 0;
+    loop {
+        let owed = gs.campaign.as_ref().map_or(0, |c| c.owed_days);
+        let next = if owed > 0 && follow_ups < REENTRIES_MAX {
+            follow_ups += 1;
+            if let Some(c) = gs.campaign.as_mut() {
+                c.owed_days = 0;
+            }
+            Cause::Days { n: owed, why: "rest".into() }
+        } else if let Some(next) = queue.pop_front() {
+            next
+        } else {
+            break;
+        };
+        let act = gs.campaign.as_ref().map(|c| c.act);
+        events.extend(tick_once(d, gs, &next));
+        let Some(c) = gs.campaign.as_ref() else { break };
+        if c.is_over() {
+            break;
+        }
+        if act != Some(c.act) && follow_ups < REENTRIES_MAX {
+            follow_ups += 1;
+            queue.push_back(Cause::Act(c.act));
+        }
+    }
     events
 }
 
@@ -416,6 +469,10 @@ fn tick_once(d: &Data, gs: &mut GameState, cause: &Cause) -> Vec<Value> {
         if checkpoint::step(d, gs, gs.time + 1, last_day, &mut events) {
             rule_passes(d, gs, &mut events);
         }
+        // T1, T2; a trigger's effects may move meters: the rules run again
+        if trigger::step(d, gs, cause, &mut events) {
+            rule_passes(d, gs, &mut events);
+        }
     }
     let time = gs.time;
     let Some(c) = gs.campaign.as_mut() else { return events };
@@ -424,6 +481,9 @@ fn tick_once(d: &Data, gs: &mut GameState, cause: &Cause) -> Vec<Value> {
         events.push(Value::Object(json::obj([("event", "run_over".into()), ("kind", o.kind.clone().into()), ("card", o.card.clone().into()), ("text", o.text.clone().into())])));
     }
     c.sync(time);
+    // days a `rest` effect passed inside this tick are not ticked yet: the follow-up days(n, rest) tick sees them pass
+    // (its checkpoint step warns and misses across them; the rule passes after the effect already saw the meters move)
+    c.last_time = time - c.owed_days;
     // read keys moved (a meter, or the day): quest flag steps on them advance as after any flag change
     if (c.last != before || time != before_time) && !c.is_over() {
         quest::refresh(d, gs);
@@ -597,30 +657,25 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, events: &mut Vec<Va
     true
 }
 
-/// The effects of a meter rule (T2: the dialogue effects that need no screen, plus 11.3), in order, stopping at the
-/// first `end` (F1), through the dialogue's shared effect body (`dialogue::apply_effect`, STORYUI1 Q3: `recruit` and
-/// the story effects `vignette` and `sequence` included); returns the notes (`give`, `recruit`, a refused sequence).
+/// The effects of a meter rule, a missed `go_on` checkpoint or a trigger (T2: the dialogue effects that need no screen,
+/// plus 11.3), in order, through the one shared effect body (`dialogue::apply_effects`, which stops at the first `end`,
+/// F1); returns the notes (`give`, `recruit`, `rest`, a refused sequence). No tick: the caller's tick goes on.
 pub fn apply_effects(d: &Data, gs: &mut GameState, effects: &[Dict], events: &mut Vec<Value>) -> Vec<String> {
     let mut notes = Vec::new();
-    for fx in effects {
-        if gs.campaign.as_ref().is_some_and(Campaign::is_over) {
-            break;
-        }
-        crate::dialogue::apply_effect(d, gs, fx, &mut notes, events);
-    }
+    crate::dialogue::apply_effects(d, gs, effects, &mut notes, events);
     notes
 }
 
 /// The tick after an effect list (cause `effects`), then cause `act` when the list changed the act (`act_before`:
-/// the act before the list; None outside a campaign world).
+/// the act before the list; None outside a campaign world); act changes inside the tick follow as `tick_all` says.
 pub fn after_effects(d: &Data, gs: &mut GameState, act_before: Option<i64>) -> Vec<Value> {
-    let mut events = tick(d, gs, &Cause::Effects);
+    let mut causes = vec![Cause::Effects];
     if let (Some(was), Some(now)) = (act_before, gs.campaign.as_ref().map(|c| c.act)) {
         if was != now {
-            events.extend(tick(d, gs, &Cause::Act(now)));
+            causes.push(Cause::Act(now));
         }
     }
-    events
+    tick_all(d, gs, causes)
 }
 
 /// Appends `events` to the result's `campaign` list (the key only when there are some, X3).

@@ -335,26 +335,58 @@ impl DialogueRunner {
             r.start = ROOT.into();
             let root = json::obj([("id", ROOT.into()), ("text", service_line(d, &gs.world_id, "greeting").into()), ("choices", Value::Array(Vec::new()))]);
             r.nodes.insert(ROOT.into(), root);
-        } else {
-            let tree = d.resolve(&gs.world_id, "dialogues", &tree_ref);
-            if tree.is_empty() {
-                return r.refuse(&format!("Unknown dialogue '{tree_ref}'."));
-            }
-            for n in json::arr(&json::normalize(json::get(tree, "nodes"))) {
-                let node = json::dict(n).clone();
-                r.nodes.insert(json::s(&node, "id"), node);
-            }
-            r.start = json::s(tree, "start");
-            r.services = json::b(tree, "services", true);
-            r.tree_speaker = character_qid(d, gs, &json::s(tree, "speaker"));
-            if !r.nodes.contains_key(&r.start) {
-                let msg = format!("Start node '{}' does not exist.", r.start);
-                return r.refuse(&msg);
-            }
+        } else if let Err(why) = r.load_tree(d, gs, &tree_ref) {
+            return r.refuse(&why);
         }
         let start = r.start.clone();
         r.show(d, gs, &start);
         r
+    }
+
+    /// CAMPAIGN1 T2: a queued `{dialogue, speaker}` scene: the tree `dialogue_ref` with `speaker_ref` as the one talked
+    /// to ("" = none: the tree's and the nodes' own speakers), no services (a scene, not a visit). Refused for an
+    /// unknown ref or a speaker who is gone, as `open`.
+    pub fn open_scene(d: &Data, gs: &mut GameState, dialogue_ref: &str, speaker_ref: &str) -> Self {
+        let mut r = Self::default();
+        if !speaker_ref.is_empty() {
+            let c = d.resolve(&gs.world_id, "characters", speaker_ref);
+            if c.is_empty() {
+                return r.refuse(&format!("Unknown character '{speaker_ref}'."));
+            }
+            r.character_qid = json::s(c, "_qid");
+            r.character_name = json::s_or(c, "name", &json::s(c, "id"));
+            if is_gone(d, gs, &r.character_qid) {
+                let msg = format!("{} is gone.", r.character_name);
+                return r.refuse(&msg);
+            }
+        }
+        if let Err(why) = r.load_tree(d, gs, dialogue_ref) {
+            return r.refuse(&why);
+        }
+        r.services = false;
+        let start = r.start.clone();
+        r.show(d, gs, &start);
+        r
+    }
+
+    /// The nodes, start, services flag and speaker of dialogue tree `tree_ref`; Err(why) for an unknown tree or a
+    /// missing start node.
+    fn load_tree(&mut self, d: &Data, gs: &GameState, tree_ref: &str) -> Result<(), String> {
+        let tree = d.resolve(&gs.world_id, "dialogues", tree_ref);
+        if tree.is_empty() {
+            return Err(format!("Unknown dialogue '{tree_ref}'."));
+        }
+        for n in json::arr(&json::normalize(json::get(tree, "nodes"))) {
+            let node = json::dict(n).clone();
+            self.nodes.insert(json::s(&node, "id"), node);
+        }
+        self.start = json::s(tree, "start");
+        self.services = json::b(tree, "services", true);
+        self.tree_speaker = character_qid(d, gs, &json::s(tree, "speaker"));
+        if !self.nodes.contains_key(&self.start) {
+            return Err(format!("Start node '{}' does not exist.", self.start));
+        }
+        Ok(())
     }
 
     fn refuse(mut self, message: &str) -> Self {
@@ -768,9 +800,7 @@ impl DialogueRunner {
 
     fn apply(&mut self, d: &Data, gs: &mut GameState, effects: &[Dict]) {
         let act = gs.campaign.as_ref().map(|c| c.act);
-        for fx in effects {
-            apply_effect(d, gs, fx, &mut self.notes, &mut self.campaign_events);
-        }
+        apply_effects(d, gs, effects, &mut self.notes, &mut self.campaign_events);
         if !effects.is_empty() {
             let events = crate::campaign::after_effects(d, gs, act);
             self.campaign_events.extend(events);
@@ -893,6 +923,8 @@ impl DialogueRunner {
 /// `open_board` (its first open sets the board's flag, B9; the runner opens the pane), `rest` (CAMPAIGN1 R2, its note;
 /// the days it passes tick after the list), then the campaign effects (11.3; inert outside a campaign world). No
 /// campaign tick: the caller ticks once after its list.
+///
+/// A rest's days run as their own days(n, rest) tick within the caller's next `campaign::tick` (CAMPAIGN1-T).
 pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<String>, events: &mut Vec<Value>) {
     match json::s(fx, "effect").as_str() {
         "set_flag" => {
@@ -933,6 +965,19 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<Str
         _ => {
             crate::campaign::apply_effect(d, gs, fx, events);
         }
+    }
+}
+
+/// An effect list through `apply_effect`, in order, stopping once the run is over (CAMPAIGN1 F1: the first `end`
+/// wins). The one list body of the conversation (`DialogueRunner::apply`), story sequences' `effects` steps and the
+/// campaign's meter rules, missed `go_on` checkpoints and triggers (`campaign::apply_effects`, CAMPAIGN1 T2). No
+/// campaign tick: the caller ticks once after its list.
+pub fn apply_effects(d: &Data, gs: &mut GameState, effects: &[Dict], notes: &mut Vec<String>, events: &mut Vec<Value>) {
+    for fx in effects {
+        if gs.campaign.as_ref().is_some_and(crate::campaign::Campaign::is_over) {
+            break;
+        }
+        apply_effect(d, gs, fx, notes, events);
     }
 }
 

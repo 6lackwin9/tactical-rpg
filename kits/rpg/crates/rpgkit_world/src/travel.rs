@@ -375,8 +375,8 @@ fn trip_result(ok: bool, errors: &[String], status: &str, legs_done: i64, time: 
 
 /// Travels towards `to_ref` leg by leg; stops at the first fight. {ok, status: fight | arrived | over, ...,
 /// campaign?}. CAMPAIGN1: after each leg's time the campaign ticks days(time, travel), then leg(route tags); a tick
-/// that ends the run stops the trip before the leg's road roll (status `over`, no autosave); `campaign` holds the
-/// ticks' events when there are some.
+/// that ends the run stops the trip before the leg's road roll (status `over`, no autosave), and so does an arrival's
+/// enter tick (CAMPAIGN1-T: enter triggers) at that node; `campaign` holds the ticks' events when there are some.
 pub fn travel(d: &Data, gs: &mut GameState, to_ref: &str) -> Dict {
     let over = crate::campaign::save_refusal(gs);
     if !over.is_empty() {
@@ -445,6 +445,13 @@ pub fn travel(d: &Data, gs: &mut GameState, to_ref: &str) -> Dict {
         }
         events.extend(json::aget(&entered, "events").iter().filter(|e| json::s(json::dict(e), "kind") != "autosave").cloned());
         legs_done += 1;
+        // CAMPAIGN1 T1: the arrival's enter tick; one that ends the run stops the trip at this node
+        ticked.extend(json::aget(&entered, "campaign").iter().cloned());
+        if !crate::campaign::save_refusal(gs).is_empty() {
+            let mut out = trip_result(true, &[], "over", legs_done, spent, events, supplies_spent, starved_legs);
+            crate::campaign::merge_events(&mut out, ticked);
+            return out;
+        }
     }
     events.push(Value::Object(json::obj([("kind", "autosave".into())])));
     let mut out = json::ok_result(true, &[]);
@@ -570,6 +577,8 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
                 return base(false, &json::sget(&entered, "errors"), events, applied["xp"].clone(), applied["advanced"].clone());
             }
             events.extend(json::aget(&entered, "events").iter().cloned());
+            // CAMPAIGN1 T1: the arrival's enter tick events follow the battle's
+            woke_campaign = json::aget(&entered, "campaign").to_vec();
         }
         "lost" => {
             let woke = explore::wake(d, gs, &json::s(fight, "from"));

@@ -207,8 +207,9 @@ pub fn rest(d: &Data, gs: &mut GameState) -> Dict {
     out
 }
 
-/// 11.3 `rest` (a dialogue choice or a trigger, R3): the rest without its own tick; the days it passed are owed to
-/// the campaign and run as cause days(n, rest) at the start of the tick after the effect list. Returns the log note.
+/// 11.3 `rest` (a dialogue choice, a sequence step, a rule, a checkpoint or a trigger, R3): the rest without its own
+/// tick; the days it passed are owed to the campaign and run as cause days(n, rest) in the next `campaign::tick` call
+/// (first after a dialogue list; right after the tick whose effects rested, CAMPAIGN1-T). Returns the log note.
 /// Inert outside a campaign world; the dialogue's precheck refuses it as `rest_refusal` says.
 pub fn rest_effect(d: &Data, gs: &mut GameState) -> String {
     if gs.campaign.as_ref().is_none_or(super::Campaign::is_over) {
