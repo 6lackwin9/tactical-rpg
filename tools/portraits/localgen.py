@@ -895,7 +895,8 @@ def contact(out, images, cols=4, cell=240):
         local = str(r.get("model", "")).startswith("local:")
         with Image.open(path) as im:
             sheet.paste(im.convert("RGB").resize((cell, cell)), (x, y))
-        px, _ = pixelize.pixelize(str(path), mark=not local)  # an image-API source has the star mark to clear
+        reduce = pixelize.reduce_of(str(path))  # mode for a pixel-art source, smooth for a Klein image (PIXEL3)
+        px, _ = pixelize.pixelize(str(path), mark=not local, reduce=reduce)  # an image-API source has the star mark to clear
         sheet.paste(px.convert("RGB").resize((cell, cell), Image.NEAREST), (x + cell, y))
         bits = [r.get("model")] if r and not local else []
         if local:
@@ -906,6 +907,7 @@ def contact(out, images, cols=4, cell=240):
                 bits.append(f"lora {pathlib.Path(ad['path']).stem[:12]}:{ad['alpha']}")
             if r.get("seconds") is not None:
                 bits.append(f"{r['seconds']} s")
+        bits.append(f"px {reduce}")
         label = f"{path.stem[:40]}\n" + "  ".join(str(b) for b in bits if b)
         draw.multiline_text((x + 4, y + cell + 2), label, fill=(220, 210, 190))
     pathlib.Path(out).parent.mkdir(parents=True, exist_ok=True)

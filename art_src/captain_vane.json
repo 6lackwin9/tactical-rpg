@@ -6,5 +6,6 @@
   "prompts_file": "games/emberwake/docs/specs/ART3_PROMPTS.md",
   "time": "2026-10-25T15:30:25+00:00",
   "n": 1,
-  "generated_as": "art_src/captain_vane_gen1792942225_1.png"
+  "generated_as": "art_src/captain_vane_gen1792942225_1.png",
+  "faction": "castellan"
 }

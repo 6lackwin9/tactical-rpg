@@ -67,3 +67,10 @@ takes), plus variant sheets such as `mara_voss_variant.png`.
 - Keep every take: a portrait can be reused in another context or swapped later for a different feel.
 - Reusable prompt shapes (2x2 variations, full body, animation sheet, props) are in
   `games/emberwake/docs/specs/ART_PROMPT_TEMPLATES.md`; `mara_voss_variant.json` holds Gemini's reconstruction of its prompt.
+
+- Since PIXEL3 (2026-10-27) the portrait sits on its faction's backdrop (`BACKDROPS`: hearth, castellan, clerisy, guild, corrupted,
+  creature; the record's `faction` key, else hearth) in the corner style (darkest behind the face, brighter to the corners; `--backdrop
+  glow` is the PIXEL2 look). A dark edge that merges with the backdrop behind it is lifted 1-2 shades of its own ramp, evenly along each
+  edge run (runs under 3 px left alone; `--rim edge|lift|none`). The reduction is picked by the source: pixel-art sources (a steady
+  pixel grid) keep the most-common-colour reduction and 10x4, smooth sources (Klein) take a Lanczos downscale and 14x5 (`--reduce
+  auto|mode|smooth`). Record key `faction` (PIXEL3) on the shipped portrait sources.

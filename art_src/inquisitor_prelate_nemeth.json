@@ -6,5 +6,6 @@
   "prompts_file": "games/emberwake/docs/specs/ART3_PROMPTS.md",
   "time": "2026-10-25T15:33:16+00:00",
   "n": 1,
-  "generated_as": "art_src/inquisitor_prelate_nemeth_gen1792942396_1.png"
+  "generated_as": "art_src/inquisitor_prelate_nemeth_gen1792942396_1.png",
+  "faction": "clerisy"
 }

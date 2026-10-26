@@ -6,5 +6,6 @@
   "prompts_file": "games/emberwake/docs/specs/ART3_PROMPTS.md",
   "time": "2026-10-25T15:37:35+00:00",
   "n": 1,
-  "generated_as": "art_src/bram_gen1792942655_1.png"
+  "generated_as": "art_src/bram_gen1792942655_1.png",
+  "faction": "hearth"
 }
