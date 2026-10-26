@@ -315,3 +315,21 @@ fn the_writer_takes_the_kind_and_refuses_a_row_that_adds_a_problem() {
     assert!(store::check(&data).iter().all(|p| !p.contains("derived stat")), "{:?}", store::check(&data));
     drop_scratch(&data);
 }
+
+/// CAST1-S2: a stat bonus on a derived stat takes the derived range (1-50); a base stat keeps 1-8.
+#[test]
+fn a_derived_stat_bonus_has_its_own_range() {
+    let (data, v) = gear_view("bonus_range", true);
+    let errors_for = |stat: &str, value: i64| {
+        let item = dict(json!({"id": "wpn_test", "name": "Test Blade", "family": "sword", "hand": "main_1h", "modifiers": [{"kind": "stat_bonus", "stat": stat, "value": value}]}));
+        check::validate_entry(&v, "items", &item, "").into_iter().filter(|e| e.starts_with("Modifier 1:")).collect::<Vec<_>>()
+    };
+    assert_eq!(errors_for("grit", 30), Vec::<String>::new());
+    assert_eq!(errors_for("grit", 12), Vec::<String>::new());
+    assert_eq!(errors_for("grit", 50), Vec::<String>::new());
+    assert_eq!(errors_for("grit", 0), ["Modifier 1: value 0 is outside 1 to 50."]);
+    assert_eq!(errors_for("grit", 51), ["Modifier 1: value 51 is outside 1 to 50."]);
+    assert_eq!(errors_for("STR", 8), Vec::<String>::new());
+    assert_eq!(errors_for("STR", 9), ["Modifier 1: value 9 is outside 1 to 8."]);
+    drop_scratch(&data);
+}

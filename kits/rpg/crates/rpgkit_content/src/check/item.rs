@@ -30,6 +30,9 @@ const ENGINE_RULES: [&str; 5] = ["focus", "always_ranged", "shield", "spell_sour
 const NUMBERS: [(&str, &str, i64, i64); 5] = [("power", "base_power", 0, 200), ("range", "base_range", 1, 6), ("block_cost", "block_cost", 1, 6), ("burden", "burden", 0, 10), ("mitigation", "mitigation", 0, 100)];
 /// ItemModifiers.KINDS: (kind, params, unique param, min, max).
 const KINDS: [(&str, &[&str], &str, i64, i64); 4] = [("adjust", &["field", "delta"], "field", -100, 100), ("stat_bonus", &["stat", "value"], "stat", 1, 8), ("requirement", &["stat", "value"], "stat", 1, 30), ("effect", &["effect"], "effect", 0, 0)];
+/// CAST1-S2: the top of a gear stat bonus naming a derived stat (the bottom stays 1). The derived_stats row's own
+/// min/max cap the stat's value, not a bonus, so the row has no bound to read; 50 fits Max Poise +30 and +12.
+const DERIVED_BONUS_MAX: i64 = 50;
 const DERIVED_KEYS: [&str; 13] = ["item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "block_cost", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
 const FLAT_MARKERS: [&str; 9] = ["base_power", "base_range", "block_cost", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
 const ENGINE_KEYS: [&str; 15] = ["item_type", "slot", "weapon_type", "base_power", "base_range", "two_handed", "off_hand_category", "scaling_stat", "block_cost", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
@@ -453,6 +456,9 @@ fn modifier_problems(v: &View, e: &Dict, family: &Dict) -> Vec<String> {
             }
         }
         let mut unique_tag = kind.clone();
+        // CAST1-S2: a stat bonus on a derived stat row (max_poise +30) takes the derived range, not the base 1-8
+        let stat_name = json::s(m, "stat");
+        let hi = if kind == "stat_bonus" && !STATS.contains(&stat_name.as_str()) && v.has(super::derived::KIND, &stat_name) { DERIVED_BONUS_MAX } else { hi };
         let int_problems = |out: &mut Vec<String>, value: &Value, key: &str, nonzero: bool| {
             let whole = value.as_f64().is_some_and(|f| f == f.floor());
             if !whole {
