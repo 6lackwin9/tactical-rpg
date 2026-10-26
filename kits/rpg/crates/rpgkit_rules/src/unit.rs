@@ -3,7 +3,7 @@
 use crate::gear::{Equipment, Inventory, Slot, TIER_SOURCE};
 use crate::stats::{self, roundi, CharacterStats, StatModifier};
 use aegis_core::value::{self, to_int, to_str};
-use rpgkit_data::{Catalog, ClassDef, UnitDef, NO_ITEM};
+use rpgkit_data::{Catalog, ClassDef, Deck, UnitDef, NO_ITEM};
 use indexmap::{IndexMap, IndexSet};
 use serde_json::Value;
 
@@ -29,6 +29,27 @@ impl StaggerTaken {
     /// Whether the effect applies to stagger from an action `blocks` long.
     pub fn matches(&self, blocks: i32) -> bool {
         self.max_blocks <= 0 || blocks <= self.max_blocks
+    }
+}
+
+/// RULESET1 9 D1-D4 (rule `deck`; engine-only, no Godot original): the deck terms a unit is built and fights under:
+/// the ruleset's `basics` (skill families open to every unit, no slot, never removed; every other basic is closed) and
+/// its `deck_slots`. Classic never makes one, so a classic unit keeps today's loadout, basics and passives.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct DeckRule {
+    pub basics: Vec<String>,
+    pub slots: crate::ruleset::DeckSlots,
+}
+
+impl DeckRule {
+    /// The deck terms of `rs`: Some only while it has the rule `deck`.
+    pub fn of(rs: &crate::ruleset::Ruleset) -> Option<Self> {
+        rs.has(crate::ruleset::DECK).then(|| Self { basics: rs.numbers.basics.clone(), slots: rs.numbers.deck_slots })
+    }
+
+    /// The first `n` of `ids`: the slots a deck list fills.
+    fn take(ids: &[String], n: i32) -> &[String] {
+        &ids[..ids.len().min(n.max(0) as usize)]
     }
 }
 
@@ -137,6 +158,12 @@ pub struct Unit {
     /// guests, sims: every unlocked tier stays usable); `Some` = a hero built from member state, who uses only the
     /// effective rank of each slotted family (`effective_rank`).
     pub rank_choice: Option<IndexMap<String, i32>>,
+    /// RULESET1 9 D5: the unit's deck (its catalog row's; a party member's saved deck replaces it when not empty). Read
+    /// only under `deck_rule`.
+    pub deck: Deck,
+    /// RULESET1 9 D1-D4: the deck terms the unit is built and fights under (None = classic: today's loadout, basics and
+    /// passives).
+    pub deck_rule: Option<DeckRule>,
 }
 
 impl Unit {
@@ -194,6 +221,8 @@ impl Unit {
             ap_cost_modifier: 0,
             loadout_locked: false,
             rank_choice: None,
+            deck: Deck::default(),
+            deck_rule: None,
         }
     }
 
@@ -304,9 +333,10 @@ impl Unit {
         }
     }
 
-    /// Passives.apply: once per id, then the path refresh (a KNOW bonus can open an advanced family earlier).
+    /// Passives.apply: once per id, then the path refresh (a KNOW bonus can open an advanced family earlier). RULESET1 9
+    /// D3: under the deck rule a slottable passive applies only while slotted (`slotted`).
     pub fn apply_passive(&mut self, cat: &Catalog, passive: &rpgkit_data::PassiveDef) {
-        if passive.id.is_empty() || self.passives.contains(&passive.id) {
+        if passive.id.is_empty() || self.passives.contains(&passive.id) || !self.slotted(passive) {
             return;
         }
         self.passives.push(passive.id.clone());
@@ -404,7 +434,85 @@ impl Unit {
         self.active_class_families.iter().chain(&self.active_extra_families).cloned().collect()
     }
 
+    /// RULESET1 9 D1 (under the deck rule only, else None): Some(true) for a skill of the ruleset's `basics` (open to
+    /// every unit, no slot), Some(false) for any other basic row (closed: `guard`, `switch_target`), None for the rest
+    /// (today's rules).
+    pub fn deck_basic(&self, cat: &Catalog, skill_id: &str) -> Option<bool> {
+        let rule = self.deck_rule.as_ref()?;
+        let s = cat.skill(skill_id)?;
+        if rule.basics.iter().any(|b| b == s.family_id()) {
+            Some(true)
+        } else if s.basic {
+            Some(false)
+        } else {
+            None
+        }
+    }
+
+    /// Catalog.is_always_active, with the deck rule's open and closed basics (D1).
+    pub fn always_active(&self, cat: &Catalog, skill_id: &str) -> bool {
+        self.deck_basic(cat, skill_id).unwrap_or_else(|| cat.is_always_active(skill_id))
+    }
+
+    /// RULESET1 9 D3: whether `passive` applies: always without the deck rule and for a source-granted passive (`slot`
+    /// ""); under the rule a `passive` or `keystone` one only while the deck names it within that slot kind's count.
+    pub fn slotted(&self, passive: &rpgkit_data::PassiveDef) -> bool {
+        let Some(rule) = &self.deck_rule else { return true };
+        let list = match passive.slot.as_str() {
+            "" => return true,
+            "passive" => DeckRule::take(&self.deck.passive, rule.slots.passive),
+            "keystone" => DeckRule::take(&self.deck.keystone, rule.slots.keystone),
+            _ => return false,
+        };
+        list.contains(&passive.id)
+    }
+
+    /// RULESET1 9 D4: a catalog unit owns the slottable passives its deck names; applies those that are slotted (D3)
+    /// and returns how many it applied. Nothing without the deck rule.
+    pub fn apply_deck_passives(&mut self, cat: &Catalog) -> usize {
+        if self.deck_rule.is_none() {
+            return 0;
+        }
+        let named: Vec<String> = self.deck.passive.iter().chain(&self.deck.keystone).cloned().collect();
+        let mut applied = 0;
+        for id in named {
+            let Some(p) = cat.passives.get(&id) else { continue };
+            if !p.slot.is_empty() && !self.passives.contains(&p.id) && self.slotted(p) {
+                self.apply_passive(cat, p);
+                applied += 1;
+            }
+        }
+        applied
+    }
+
+    /// RULESET1 9 D1, D2: the active slots under the deck rule: the deck's `active` families the unit owns (no basic, no
+    /// repeat), else (auto) its loadout's families (today's default: the class path's first, then the extras), the
+    /// first `deck_slots.active` of them (a row without an active count, which the content check refuses, limits
+    /// nothing); the class and extra split does not apply. A unit with neither (a hand-built unit that owns every
+    /// skill) keeps every family. Nothing without the deck rule.
+    pub fn apply_deck(&mut self, cat: &Catalog) {
+        let Some(rule) = self.deck_rule.clone() else { return };
+        let wanted = if self.deck.active.is_empty() { self.active_families() } else { self.deck.active.clone() };
+        let mut actives: Vec<String> = Vec::new();
+        for fam in wanted {
+            let basic = cat.is_basic_family(&fam) || rule.basics.contains(&fam);
+            let owned = cat.family_rows(&fam).iter().any(|s| self.owns_skill(cat, &s.id));
+            if !basic && owned && !actives.contains(&fam) {
+                actives.push(fam);
+            }
+        }
+        if actives.is_empty() {
+            return;
+        }
+        let n = if rule.slots.active > 0 { rule.slots.active } else { actives.len() as i32 };
+        self.active_class_families = DeckRule::take(&actives, n).to_vec();
+        self.active_extra_families = Vec::new();
+    }
+
     pub fn owns_skill(&self, cat: &Catalog, skill_id: &str) -> bool {
+        if let Some(open) = self.deck_basic(cat, skill_id) {
+            return open;
+        }
         if self.known_skills.iter().any(|s| s == skill_id) || self.granted_skills.iter().any(|s| s == skill_id) || cat.is_system(skill_id) {
             return true;
         }
@@ -422,7 +530,7 @@ impl Unit {
             return false;
         }
         let active = self.active_families();
-        active.is_empty() || cat.is_always_active(skill_id) || active.iter().any(|f| f == cat.family_of(skill_id))
+        active.is_empty() || self.always_active(cat, skill_id) || active.iter().any(|f| f == cat.family_of(skill_id))
     }
 
     pub fn owned_families(&self, cat: &Catalog) -> Vec<String> {
@@ -537,7 +645,8 @@ impl Unit {
         if !self.granted_skills.iter().any(|s| s == skill_id) {
             self.granted_skills.push(skill_id.to_string());
             let active = self.active_families();
-            if !active.is_empty() && !cat.is_always_active(skill_id) && !active.contains(&fam) && self.active_extra_families.len() < stats::MAX_EXTRA_SLOTS {
+            // RULESET1 9 D2: under the deck rule only the deck fills the active slots
+            if self.deck_rule.is_none() && !active.is_empty() && !cat.is_always_active(skill_id) && !active.contains(&fam) && self.active_extra_families.len() < stats::MAX_EXTRA_SLOTS {
                 self.active_extra_families.push(fam);
             }
         }
@@ -568,6 +677,27 @@ fn class_for<'a>(cat: &'a Catalog, e: &UnitDef) -> Option<&'a ClassDef> {
 
 /// ContentFactory.unit: a fresh unit for catalog entry `e`. `default_ap` 0 = the Combatant default.
 pub fn build_unit(cat: &Catalog, e: &UnitDef, default_ap: i32) -> Unit {
+    build_unit_in(cat, e, default_ap, None)
+}
+
+/// `build_unit` under the deck rule (RULESET1 9 D1-D4) when `deck` is Some: the deck's slotted passives apply (D4,
+/// then the vitals of a derived unit are re-derived), the open basics replace the catalog's, the deck fills the active
+/// slots. None = `build_unit` exactly (classic).
+pub fn build_unit_in(cat: &Catalog, e: &UnitDef, default_ap: i32, deck: Option<&DeckRule>) -> Unit {
+    let mut u = build_catalog_unit(cat, e, default_ap);
+    u.deck = e.deck.clone();
+    if let Some(rule) = deck {
+        u.deck_rule = Some(rule.clone());
+        if u.apply_deck_passives(cat) > 0 && e.stat_mode == "derived" && class_for(cat, e).is_some() {
+            u.sync_from_stats_and_gear(cat);
+            u.hp = u.max_hp;
+        }
+        u.apply_deck(cat);
+    }
+    u
+}
+
+fn build_catalog_unit(cat: &Catalog, e: &UnitDef, default_ap: i32) -> Unit {
     let arch = class_for(cat, e);
     let derived = e.stat_mode == "derived" && arch.is_some();
     let warrior = || cat.classes.get("warrior").cloned().unwrap_or_else(|| ClassDef::from_obj(&Default::default()));
@@ -832,9 +962,10 @@ impl Unit {
         stats::MAX_LEVEL.min(self.family_unlock_level(cat, skill.family_id()) + skill.tier_offset())
     }
 
-    /// The level gate of can_use: basics, engine skills and hand-built units are never gated.
+    /// The level gate of can_use: basics (under the deck rule the ruleset's basics, D1), engine skills and hand-built
+    /// units are never gated.
     pub fn tier_unlocked(&self, cat: &Catalog, skill: &rpgkit_data::SkillDef) -> bool {
-        if self.path_levels.is_empty() || skill.system || skill.basic {
+        if self.path_levels.is_empty() || skill.system || skill.basic || self.deck_basic(cat, &skill.id) == Some(true) {
             return true;
         }
         self.stats.level >= self.skill_unlock_level(cat, skill)
@@ -863,7 +994,7 @@ impl Unit {
     /// skills and for families outside a set loadout (they fail `knows_skill` anyway); otherwise, with a loadout or
     /// without one (every owned family is then active), only the family's effective rank is usable.
     pub fn rank_allowed(&self, cat: &Catalog, skill: &rpgkit_data::SkillDef) -> bool {
-        if self.rank_choice.is_none() || skill.system || skill.basic || cat.is_always_active(&skill.id) {
+        if self.rank_choice.is_none() || skill.system || skill.basic || self.always_active(cat, &skill.id) {
             return true;
         }
         let fam = skill.family_id();

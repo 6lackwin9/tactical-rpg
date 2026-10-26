@@ -32,9 +32,9 @@ pub const AUTO_KINDS: [ManeuverKind; 3] = [ManeuverKind::Engage, ManeuverKind::D
 
 // ---- Inputs (RULESET1_TASKS 1.8 IntentChoice) -------------------------------------------------------------------
 
-/// The unit's deck (FU4): its catalog row's `deck` (RULESET1-D gives party members theirs); None when empty (auto).
+/// The unit's deck (FU4; RULESET1 9 D5): its catalog row's `deck`, a party member's saved one; None when empty (auto).
 pub fn deck_of(w: &World, c: UnitId) -> Option<&Deck> {
-    w.cat.units.get(&w.units[c].catalog_id).map(|d| &d.deck).filter(|d| !d.is_empty())
+    Some(&w.units[c].deck).filter(|d| !d.is_empty())
 }
 
 /// The row of skill family `fam` that `c` uses now: its highest tier the unit can use within its skill cap; None when
@@ -46,13 +46,14 @@ pub fn family_skill(w: &World, c: UnitId, fam: &str) -> Option<SkillId> {
     w.book().find(&row.id)
 }
 
-/// The families of FU4's auto order before the intent filter: the deck's actives (without a deck: every family the
-/// unit can use that is not a basic, in catalog order), then the basics (the ruleset's `basics` in their order; a row
-/// without any: the catalog's basic skills).
+/// The families of FU4's auto order before the intent filter: the deck's actives (under the deck rule the unit's
+/// active slots, RULESET1 9 D2; without a deck: every family the unit can use that is not a basic, in catalog order),
+/// then the basics (the ruleset's `basics` in their order; a row without any: the catalog's basic skills).
 fn auto_families(w: &World, c: UnitId) -> Vec<String> {
     let basics: Vec<String> = if w.ruleset.numbers.basics.is_empty() { w.cat.basic_ids().iter().map(|id| w.cat.family_of(id).to_string()).collect() } else { w.ruleset.numbers.basics.clone() };
-    let mut out: Vec<String> = match deck_of(w, c).filter(|d| !d.active.is_empty()) {
-        Some(d) => d.active.clone(),
+    let slots = Some(w.units[c].active_families()).filter(|a| w.units[c].deck_rule.is_some() && !a.is_empty());
+    let mut out: Vec<String> = match slots.or_else(|| deck_of(w, c).filter(|d| !d.active.is_empty()).map(|d| d.active.clone())) {
+        Some(active) => active,
         None => {
             let mut fams: Vec<String> = Vec::new();
             for s in w.cat.skills.iter().filter(|s| !s.system && !s.basic && !skill::is_item(s)) {

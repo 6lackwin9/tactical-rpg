@@ -17,7 +17,7 @@ use aegis_core::value::{self, Obj};
 use rpgkit_data::{Catalog, UnitDef};
 use rpgkit_rules::ruleset::Ruleset;
 use rpgkit_rules::status;
-use rpgkit_rules::{build_unit, Unit};
+use rpgkit_rules::{build_unit_in, DeckRule, Unit};
 use indexmap::IndexMap;
 use serde_json::Value;
 use std::collections::VecDeque;
@@ -304,17 +304,27 @@ impl Session {
         let mut hero_keys: IndexMap<UnitId, String> = IndexMap::new();
         // RULESET1 TQ23 (a): the intent each roster unit starts in (read only under round_intent)
         let mut default_intents: Vec<(UnitId, String)> = Vec::new();
+        // RULESET1 9 D1-D4: under the deck rule every unit fights with its deck (classic: None, units as today)
+        let deck = DeckRule::of(&def.ruleset);
         for p in party {
             profiles.insert(built.len(), p.profile);
             hero_keys.insert(built.len(), p.key);
             art.push(p.art);
             palettes.push(p.palette);
-            built.push(p.unit);
+            let mut u = p.unit;
+            // a party member built without the rule (its passives are its builder's: progression::build_in) gets
+            // the open basics and its active slots here
+            if let (Some(rule), None) = (&deck, &u.deck_rule) {
+                u.deck_rule = Some(rule.clone());
+                u.apply_deck(&cat);
+            }
+            built.push(u);
         }
         let mut spawn = |r: &str, name: &str, built: &mut Vec<Unit>| -> UnitId {
             let mut e = roster.entry(&cat, r).expect("checked");
             e.name = name.to_string();
-            let mut u = build_unit(&cat, &e, def.unit_ap);
+            let mut u = build_unit_in(&cat, &e, def.unit_ap, deck.as_ref());
+            // a world character's passives pass the deck rule's slot gate (D3) set above
             roster.customize(&cat, r, &mut u);
             let id = built.len();
             profiles.insert(id, AiProfile::for_unit(&cat, &e));

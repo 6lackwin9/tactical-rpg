@@ -5,7 +5,7 @@
 use crate::data::{Data, PARTY_MAX};
 use crate::progression;
 use aegis_core::json::{self, int, strs, Dict};
-use rpgkit_data::STATS;
+use rpgkit_data::{Deck, STATS};
 use indexmap::IndexMap;
 
 // The gear rules live in the rules crate (the battle crate's gear dojo uses them too).
@@ -48,6 +48,73 @@ pub struct UnitState {
     pub carried: Vec<String>,
     pub pouch: Vec<String>,
     pub hp_lost: i64,
+    /// RULESET1 9 D5 (read only under the rule `deck`): the member's actives, passives, keystones and per-intent order;
+    /// empty = auto (the base unit's deck). Saved as `deck` only when not empty (the unreleased save v13 carries it:
+    /// a save without it reads the empty deck).
+    pub deck: Deck,
+    /// The saved `deck`'s type problems (not saved; `validate` reports them, so a damaged deck is refused, never
+    /// coerced).
+    pub deck_problems: Vec<String>,
+}
+
+/// RULESET1 9 D5: a saved `deck` value: (the deck, its type problems). Absent = the empty deck; anything but an object
+/// of string lists (and an `order` object of string lists) is a problem.
+fn deck_from(raw: Option<&Value>) -> (Deck, Vec<String>) {
+    let mut problems = Vec::new();
+    let Some(raw) = raw else { return (Deck::default(), problems) };
+    let Some(o) = raw.as_object() else {
+        problems.push(format!("deck must be an object {{{}}}.", Deck::KEYS.join(", ")));
+        return (Deck::default(), problems);
+    };
+    let texts = |v: &Value| v.as_array().filter(|a| a.iter().all(Value::is_string)).map(|a| a.iter().map(json::gstr).collect::<Vec<String>>());
+    let mut deck = Deck::default();
+    for (k, v) in o {
+        match k.as_str() {
+            "active" | "passive" | "keystone" => {
+                let slot = match k.as_str() {
+                    "active" => &mut deck.active,
+                    "passive" => &mut deck.passive,
+                    _ => &mut deck.keystone,
+                };
+                match texts(v) {
+                    Some(list) => *slot = list,
+                    None => problems.push(format!("deck.{k} must be a list of text.")),
+                }
+            }
+            "order" => match v.as_object() {
+                Some(order) => {
+                    for (intent, fams) in order {
+                        match texts(fams) {
+                            // an empty list is the auto order, as an absent one
+                            Some(list) if list.is_empty() => {}
+                            Some(list) => {
+                                deck.order.insert(intent.clone(), list);
+                            }
+                            None => problems.push(format!("deck.order.{intent} must be a list of text.")),
+                        }
+                    }
+                }
+                None => problems.push("deck.order must be an object {intent: [skill families]}.".into()),
+            },
+            _ => problems.push(format!("deck: unknown key '{k}'.")),
+        }
+    }
+    (deck, problems)
+}
+
+/// The saved form of a deck: its non-empty keys in `Deck::KEYS` order (order: its non-empty lists).
+fn deck_value(deck: &Deck) -> Value {
+    let mut out = Dict::new();
+    for (k, list) in [("active", &deck.active), ("passive", &deck.passive), ("keystone", &deck.keystone)] {
+        if !list.is_empty() {
+            out.insert(k.into(), strs(list));
+        }
+    }
+    let order: Dict = deck.order.iter().filter(|(_, l)| !l.is_empty()).map(|(k, l)| (k.clone(), strs(l))).collect();
+    if !order.is_empty() {
+        out.insert("order".into(), Value::Object(order));
+    }
+    Value::Object(out)
 }
 
 impl UnitState {
@@ -120,7 +187,7 @@ impl UnitState {
         if !self.loadout_ranks.is_empty() {
             loadout.insert("ranks".into(), Value::Object(self.loadout_ranks.iter().map(|(k, v)| (k.clone(), int(*v))).collect()));
         }
-        Value::Object(json::obj([
+        let mut out = json::obj([
             ("id", Value::String(self.id.clone())),
             ("base_unit", Value::String(self.base_unit.clone())),
             ("lore_ref", Value::String(self.lore_ref.clone())),
@@ -133,7 +200,12 @@ impl UnitState {
             ("carried", strs(&self.carried)),
             ("pouch", strs(&self.pouch)),
             ("hp_lost", int(self.hp_lost)),
-        ]))
+        ]);
+        // RULESET1 9 D5: only a deck in use is saved (a classic member's save is unchanged)
+        if !self.deck.is_empty() {
+            out.insert("deck".into(), deck_value(&self.deck));
+        }
+        Value::Object(out)
     }
 
     fn hp_lost_of(raw: Option<&Value>) -> i64 {
@@ -158,6 +230,7 @@ impl UnitState {
         for (k, v) in json::dget(d, "equipment") {
             equipment.insert(k.clone(), json::gstr(v));
         }
+        let (deck, deck_problems) = deck_from(d.get("deck"));
         Self {
             id: json::s(d, "id"),
             base_unit: json::s(d, "base_unit"),
@@ -173,6 +246,8 @@ impl UnitState {
             carried: json::sget(d, "carried"),
             pouch: json::sget(d, "pouch"),
             hp_lost: Self::hp_lost_of(d.get("hp_lost")),
+            deck,
+            deck_problems,
         }
     }
 
@@ -222,6 +297,8 @@ impl UnitState {
             }
         }
         errors.extend(self.loadout_errors(d, &at));
+        errors.extend(self.deck_problems.iter().map(|p| format!("{at}: {p}")));
+        errors.extend(self.deck_errors(d, &at));
         for (slot, item) in &self.equipment {
             if !LOADOUT_SLOTS.contains(&slot.as_str()) {
                 errors.push(format!("{at}: unknown equipment slot '{slot}'."));
@@ -248,6 +325,84 @@ impl UnitState {
         for item in &self.pouch {
             if json::s(d.entry("items", item), "item_type") != "CONSUMABLE" {
                 errors.push(format!("{at}: Pouch: '{item}' is not a consumable."));
+            }
+        }
+        errors
+    }
+
+    /// RULESET1 9 D1-D5 for a member's saved deck (the content check's unit deck rules, ownership from the member):
+    /// actives are owned families, never a basic (a `basic` skill or a deck ruleset's `basics`); passive and keystone
+    /// hold known passives of that `slot` the member owns (its `passives`, D4); the counts fit the `deck_slots` of
+    /// every ruleset with the deck rule; order maps an intent to families of that intent among the actives and the
+    /// basics. Nothing repeats.
+    pub fn deck_errors(&self, d: &Data, at: &str) -> Vec<String> {
+        let mut errors = Vec::new();
+        if self.deck.is_empty() {
+            return errors;
+        }
+        let rules: Vec<rpgkit_rules::ruleset::Ruleset> =
+            d.cat.rulesets.values().map(rpgkit_rules::ruleset::Ruleset::from_row).filter(|r| r.has(rpgkit_rules::ruleset::DECK)).collect();
+        let mut basics: Vec<String> = Vec::new();
+        for b in rules.iter().flat_map(|r| r.numbers.basics.iter()) {
+            if !basics.contains(b) {
+                basics.push(b.clone());
+            }
+        }
+        let twice = |label: &str, ids: &[String], seen: &mut Vec<String>, errors: &mut Vec<String>| {
+            for id in ids {
+                if seen.contains(id) {
+                    errors.push(format!("{at}: deck {label} lists '{id}' twice."));
+                }
+                seen.push(id.clone());
+            }
+        };
+        let owned = self.owned_families(d);
+        twice("active", &self.deck.active, &mut Vec::new(), &mut errors);
+        for fam in &self.deck.active {
+            if d.cat.tier_one(fam).is_none() {
+                errors.push(format!("{at}: deck active: unknown skill family '{fam}'."));
+            } else if d.cat.is_basic_family(fam) || basics.contains(fam) || d.cat.is_system(fam) {
+                errors.push(format!("{at}: deck active: '{fam}' is a basic (open to every unit, no slot)."));
+            } else if !owned.contains(fam) {
+                errors.push(format!("{at}: deck active: family '{fam}' is not owned."));
+            }
+        }
+        let mut seen_passives = Vec::new();
+        for (slot, ids) in [("passive", &self.deck.passive), ("keystone", &self.deck.keystone)] {
+            twice(slot, ids, &mut seen_passives, &mut errors);
+            for id in ids {
+                match d.cat.passives.get(id) {
+                    None => errors.push(format!("{at}: deck {slot}: unknown passive '{id}'.")),
+                    Some(p) if p.slot != slot => errors.push(format!("{at}: deck {slot}: '{id}' does not take the {slot} slot.")),
+                    Some(_) if !self.passives.contains(id) => errors.push(format!("{at}: deck {slot}: passive '{id}' is not owned.")),
+                    Some(_) => {}
+                }
+            }
+        }
+        for r in &rules {
+            let s = r.numbers.deck_slots;
+            for (slot, n, max) in [("active", self.deck.active.len(), s.active), ("passive", self.deck.passive.len(), s.passive), ("keystone", self.deck.keystone.len(), s.keystone)] {
+                if n as i64 > max as i64 {
+                    errors.push(format!("{at}: deck: {n} {slot} entries (the {} ruleset's deck slots allow {max}).", r.name));
+                }
+            }
+        }
+        let mut seen = Vec::new();
+        for (intent, list) in &self.deck.order {
+            if !rpgkit_rules::ruleset::INTENTS.contains(&intent.as_str()) {
+                errors.push(format!("{at}: deck order: '{intent}' is not an intent (one of {}).", rpgkit_rules::ruleset::INTENTS.join(", ")));
+                continue;
+            }
+            twice("order", list, &mut seen, &mut errors);
+            for fam in list {
+                if !self.deck.active.contains(fam) && !basics.contains(fam) {
+                    errors.push(format!("{at}: deck order {intent}: '{fam}' is neither an active of the deck nor a basic."));
+                    continue;
+                }
+                let of = d.cat.tier_one(fam).map(|s| rpgkit_battle::round_intent::skill_intent(s).to_string()).unwrap_or_default();
+                if of != *intent {
+                    errors.push(format!("{at}: deck order {intent}: '{fam}' is of intent {}.", if of.is_empty() { "none (unknown family)" } else { &of }));
+                }
             }
         }
         errors

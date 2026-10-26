@@ -603,8 +603,10 @@ impl BattleScreen {
         let roster = WorldRoster { d: &d, world: world.clone() };
         let mut party = Vec::new();
         let mut members = Vec::new();
+        // RULESET1 9 D1-D5: under the deck rule a member fights with its deck (classic: None, built as before)
+        let deck = emberwake_rules::DeckRule::of(&def.ruleset);
         for m in active {
-            let Some(built) = progression::build(&d, m) else { continue };
+            let Some(built) = progression::build_in(&d, m, deck.as_ref()) else { continue };
             let mut unit = built.unit;
             unit.hp = progression::start_hp(unit.max_hp as i64, m.hp_lost) as i32;
             let base = d.cat.units.get(&m.base_unit).cloned().unwrap_or_else(|| UnitDef::from_obj(&Default::default()));
