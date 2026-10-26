@@ -1,0 +1,22 @@
+{
+  "model": "local:flux-2-klein-4b",
+  "id": "vesper",
+  "prompt": "Turn the person in this portrait into the character below, keeping exactly the same pixel-art style, outline weight, shading, pose, framing, lighting and flat dark background, with the same large, clearly drawn eyes, strong brows and defined mouth: a sly, feral young thief of eighteen, an adult, small, lean and wiry, with a narrow fox-like face: high sharp cheekbones, a small pointed nose, large dark narrowed eyes with thick dark upper-lid lines, bright irises and a single bright catchlight each, sharp dark brows, a wide tight-lipped smirk, black chimney soot smeared across both cheeks. Long, straight, ink-black hair streaked with ash-grey, loose past her shoulders, a ragged fringe swept to one side above her brows. A shredded charcoal cowl bunched around her neck and shoulders, a close-fitting jerkin of small overlapping slate-grey leather scales, a small tin whistle on a cord at her throat. Her hand is raised beside her chin holding a slim black dagger point-down, and thin wisps of grey smoke curl up from her fingertips. Head and shoulders, her whole body, shoulders and face turned three-quarters toward the right, looking right, her head filling most of the frame; large, clearly drawn eyes, strong dark brows, a large defined mouth, bold dark outlines. A plain, flat, empty dark background. Lighting: a soft, dim warm amber rim light from the right, its lamp far out of frame and never visible, gentle warm fill, deep warm brown shadows. A plain dark background with no lamp, lantern or light source in the frame.",
+  "reference": "C:/dev/localgen/templates (Gemini base template, user 2026-10-27)",
+  "prompts_file": "games/emberwake/docs/specs/FOUNDER_PORTRAITS.md",
+  "time": "2026-10-27T04:30:44",
+  "n": 1,
+  "source": "local Klein, template route (FOUNDERPORT1-R)",
+  "note": "user pick 2026-10-27",
+  "steps": [
+    {
+      "take": "vesper_s2",
+      "model": "local:flux-2-klein-4b (edit of a Gemini base template)",
+      "prompt": "Turn the person in this portrait into the character below, keeping exactly the same pixel-art style, outline weight, shading, pose, framing, lighting and flat dark background, with the same large, clearly drawn eyes, strong brows and defined mouth: a sly, feral young thief of eighteen, an adult, small, lean and wiry, with a narrow fox-like face: high sharp cheekbones, a small pointed nose, large dark narrowed eyes with thick dark upper-lid lines, bright irises and a single bright catchlight each, sharp dark brows, a wide tight-lipped smirk, black chimney soot smeared across both cheeks. Long, straight, ink-black hair streaked with ash-grey, loose past her shoulders, a ragged fringe swept to one side above her brows. A shredded charcoal cowl bunched around her neck and shoulders, a close-fitting jerkin of small overlapping slate-grey leather scales, a small tin whistle on a cord at her throat. Her hand is raised beside her chin holding a slim black dagger point-down, and thin wisps of grey smoke curl up from her fingertips. Head and shoulders, her whole body, shoulders and face turned three-quarters toward the right, looking right, her head filling most of the frame; large, clearly drawn eyes, strong dark brows, a large defined mouth, bold dark outlines. A plain, flat, empty dark background. Lighting: a soft, dim warm amber rim light from the right, its lamp far out of frame and never visible, gentle warm fill, deep warm brown shadows. A plain dark background with no lamp, lantern or light source in the frame.",
+      "reference": "C:/dev/localgen/templates/base_lean.png",
+      "seed": 2,
+      "steps": 4
+    }
+  ],
+  "faction": "hearth"
+}
