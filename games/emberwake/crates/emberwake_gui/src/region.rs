@@ -6,6 +6,9 @@
 //! the world map. Map-less locations show their exits as buttons. PLAYUI1-R (spec PLAYUI1 2.4): the party leader and the
 //! people stand on their tiles as body sprites (`walk` while moving, else `idle`; side view, mirrored by the last
 //! left or right step; a person in the conversation faces the party), with today's tokens as the fallback.
+//! STORYUI1-U1: with nothing open the map hands over to the story stage while a sequence runs and plays queued
+//! vignettes (`story::map_tick`); a `sequence` choice ends the talk and the stage takes over; an open board holds the
+//! replies until Esc or a right click closes it (its pane is STORYUI1-U2's).
 
 use aegis_core::assets::{ClipPlayer, Facing, View};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
@@ -63,6 +66,8 @@ pub enum RAct {
     Shop(ShopAct),
     /// Leaves the shop for the conversation (the trade is empty or discarded).
     CloseShop,
+    /// Closes the open board back to the conversation (STORYUI1 B11; the pane itself is STORYUI1-U2's).
+    CloseBoard,
     TogglePick(String),
     PickRecipient(usize),
     ConfirmTurnIn,
@@ -108,14 +113,20 @@ pub struct RegionMap {
 
 /// Starts a world fight: the battle screen, or the Skip / Fled / Lost popup in a debug game.
 pub fn begin_fight(cx: &mut Cx, fight: &Dict, runner: &str) {
+    if let Err(e) = try_fight(cx, fight, runner) {
+        show_errors(cx, vec![e]);
+    }
+}
+
+/// `begin_fight` that hands the reason back when the battle cannot start (the story stage shows it itself).
+pub fn try_fight(cx: &mut Cx, fight: &Dict, runner: &str) -> Result<(), String> {
     if cx.debug {
         cx.nav.push(Nav::Push(Box::new(crate::runner::DebugFight::new(fight, runner))));
-        return;
+        return Ok(());
     }
-    match crate::battle::BattleScreen::world(cx, fight, runner) {
-        Ok(b) => cx.nav.push(Nav::Push(Box::new(b))),
-        Err(e) => show_errors(cx, vec![e]),
-    }
+    let b = crate::battle::BattleScreen::world(cx, fight, runner)?;
+    cx.nav.push(Nav::Push(Box::new(b)));
+    Ok(())
 }
 
 /// Event lines for the log; `autosave` writes the autosave.
@@ -191,6 +202,11 @@ impl RegionMap {
     /// The open shop of the conversation ("" when none).
     fn shop_qid(&self) -> String {
         self.runner.as_ref().filter(|r| !r.closed).map(|r| r.shop_qid.clone()).unwrap_or_default()
+    }
+
+    /// The open board of the conversation ("" when none; STORYUI1 B3).
+    fn board_qid(&self) -> String {
+        self.runner.as_ref().filter(|r| !r.closed).map(|r| r.board_qid.clone()).unwrap_or_default()
     }
 
     fn modal(&self) -> bool {
@@ -476,6 +492,11 @@ impl RegionMap {
                 self.shop = ShopPane::default();
                 let Some(r) = self.runner.as_mut() else { return };
                 let res = r.close_shop(&d, cx.gs_mut());
+                self.dialogue_result(cx, res);
+            }
+            RAct::CloseBoard => {
+                let Some(r) = self.runner.as_mut() else { return };
+                let res = r.close_board(&d, cx.gs_mut());
                 self.dialogue_result(cx, res);
             }
             RAct::TogglePick(id) => {
@@ -765,7 +786,8 @@ impl Screen<GameCx> for RegionMap {
         // -- The dialogue box (3.1); while the shop is open (3.3) the box hides and the shop sits centred over the dimmed map
         if let (Some(view), Some(b)) = (talk_view.as_ref(), talk_box.as_ref()) {
             if shop_qid.is_empty() {
-                draw_talk(&mut ui, cx, view, b, self.pending.is_some());
+                // an open board (its pane is STORYUI1-U2's) holds the replies until Esc or a right click closes it
+                draw_talk(&mut ui, cx, view, b, self.pending.is_some() || view.contains_key("board"));
             } else {
                 ui.p.fill(map_area, SHOP_DIM);
                 self.shop.draw(&mut ui, cx, &shop_qid, RAct::Shop);
@@ -790,6 +812,12 @@ impl Screen<GameCx> for RegionMap {
         let speed = cx.settings.v["anim_speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0);
         self.anim_ms += now.duration_since(self.anim_at).as_secs_f64() * 1000.0 * speed;
         self.anim_at = now;
+        // STORYUI1 W2, 5.3: with nothing open, a running sequence takes over and queued vignettes play
+        if !self.modal() && crate::story::map_tick(cx) {
+            self.walk.clear();
+            self.walk_target = None;
+            return;
+        }
         if self.walk.is_empty() || self.modal() || now < self.next_walk {
             return;
         }
@@ -815,7 +843,7 @@ impl Screen<GameCx> for RegionMap {
                 }
                 return;
             }
-            if !r.shop_qid.is_empty() {
+            if !r.shop_qid.is_empty() || !r.board_qid.is_empty() {
                 return;
             }
             match k {
@@ -859,6 +887,8 @@ impl Screen<GameCx> for RegionMap {
             self.act(cx, RAct::CancelTurnIn);
         } else if !self.shop_qid().is_empty() {
             self.act(cx, RAct::Shop(ShopAct::Close));
+        } else if !self.board_qid().is_empty() {
+            self.act(cx, RAct::CloseBoard);
         } else if self.talking() {
             self.act(cx, RAct::Farewell);
         } else {
@@ -874,7 +904,7 @@ impl Screen<GameCx> for RegionMap {
             "dialogue": self.runner.as_ref().filter(|r| !r.closed).map(|r| Value::Object(r.view(&cx.data, gs))),
             "turn_in": self.pending.as_ref().map(|p| json!({"quest": p["quest"], "offers": p["offers"], "picks": self.picks})),
             "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open,
-            "shop": if self.shop_qid().is_empty() { Value::Null } else { self.shop.state() }, "sprites": self.sprites})
+            "shop": if self.shop_qid().is_empty() { Value::Null } else { self.shop.state() }, "board": Some(self.board_qid()).filter(|b| !b.is_empty()), "sprites": self.sprites})
     }
 
     /// MUSIC2: shop while the shop is open, else the location's kind.

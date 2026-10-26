@@ -1,7 +1,8 @@
 //! UI Gallery (UIGALLERY1, Scene Runner; decision "UIGALLERY1 answers"): the UI one element at a time, each on sample
 //! data and named, so each can be judged and refined on its own. Three groups:
 //! - Kit: the engine's widgets in their states (`aegis_ui::specimens`), and the vignette player on the engine's sample
-//!   reel (STORYUI1-E, `aegis_ui::vignette`; the preview plays on and starts over, Open plays it full screen).
+//!   reel (STORYUI1-E, `aegis_ui::vignette`; the preview plays on and starts over, Open plays it full screen) or any
+//!   world's vignette as written, in the game's card palette (STORYUI1-U1, a reel picker over the preview).
 //! - Screens: every screen, drawn shrunk into the pane (`aegis_ui::preview`) on a sample game (a debug game of the
 //!   first playable world that saving refuses); Open shows the screen itself to try it.
 //! - Battle panels: each panel of the battle screen enlarged on its own (the battle records its panels' rects while it
@@ -27,7 +28,7 @@ use serde_json::{json, Value};
 /// (id, name, group, what it shows). Battle panel ids are the battle screen's own panel names.
 const ENTRIES: [(&str, &str, &str, &str); 27] = [
     ("kit", "Kit widgets", "Kit", "Every kit widget in its states; use them, the foot of the page says what happened."),
-    ("vignette", "Vignette player", "Kit", "The engine's sample reel: image, text, title and line cards with fades, typing, hold and skip."),
+    ("vignette", "Vignette player", "Kit", "The engine's sample reel or a world's vignette: image, text, title and line cards with fades, typing, hold and skip."),
     ("main_menu", "Main menu", "Screens", "The player's front door."),
     ("new_game", "New game", "Screens", "World cards and the start."),
     ("settings", "Settings", "Screens", "Sound, display and gameplay tabs."),
@@ -67,6 +68,8 @@ const DETAIL_H: i32 = 64;
 pub enum GAct {
     Entry(usize),
     Kit(KitAct),
+    /// The vignette entry's reel (STORYUI1-U1: the sample, then every world's vignettes).
+    Reel(usize),
     /// Shows the previewed screen itself.
     Open,
     Exit,
@@ -110,6 +113,8 @@ enum Step {
 
 pub struct Gallery {
     entry: usize,
+    /// The vignette entry's reel (an index into `story::gallery_reels`).
+    reel: usize,
     demo: Option<Demo>,
     kit: Specimens,
     shown: Option<Shown>,
@@ -127,7 +132,7 @@ impl Default for Gallery {
 
 impl Gallery {
     pub fn new() -> Self {
-        Self { entry: 0, demo: None, kit: Specimens::default(), shown: None, battle: None, own_game: None, w: Vec::new() }
+        Self { entry: 0, reel: 0, demo: None, kit: Specimens::default(), shown: None, battle: None, own_game: None, w: Vec::new() }
     }
 
     /// The sample game for the screen entries: a debug game (nothing saved) of the first playable world.
@@ -137,7 +142,10 @@ impl Gallery {
         }
         let worlds = emberwake_world::new_game::playable_worlds(&cx.data);
         let Some(w) = worlds.first() else { return false };
-        let Ok(gs) = emberwake_world::new_game::create_for_world(&cx.data, w, 1) else { return false };
+        let Ok(mut gs) = emberwake_world::new_game::create_for_world(&cx.data, w, 1) else { return false };
+        // STORYUI1-U1: the sample game shows the screens, not the world's start sequence (its map hands over to the
+        // story stage while one runs)
+        gs.story = Default::default();
         let clean = gs.to_value();
         cx.game = Some(Game { gs, slot: -1, clean, busy: false, sample: true });
         self.own_game = Some(cx.debug);
@@ -145,7 +153,12 @@ impl Gallery {
         true
     }
 
-    fn build(cx: &mut Cx, id: &str) -> Option<(Box<dyn Screen<GameCx>>, Vec<Step>)> {
+    /// The vignette entry's picked reel (the sample when the pick is gone).
+    fn reel(&self, cx: &Cx) -> vignette::Reel {
+        crate::story::gallery_reels(&cx.data).into_iter().nth(self.reel).map(|r| r.1).unwrap_or_else(vignette::sample_reel)
+    }
+
+    fn build(&self, cx: &mut Cx, id: &str) -> Option<(Box<dyn Screen<GameCx>>, Vec<Step>)> {
         let member = cx.game.as_ref().and_then(|g| g.gs.party.members.first()).map(|m| m.id.clone()).unwrap_or_default();
         let screen: Box<dyn Screen<GameCx>> = match id {
             "main_menu" => Box::new(crate::menus::MainMenu::default()),
@@ -160,7 +173,7 @@ impl Gallery {
             "stats" | "level_up" | "skills" | "gear" => Box::new(crate::party::Character::new(cx, &member, id)),
             "world_map" => Box::new(crate::worldmap::WorldMap::new()),
             // opened full screen: the reel's end goes back to the gallery
-            "vignette" => Box::new(VignetteScreen::with_settings(&cx.settings, vignette::sample_reel(), |cx: &mut Cx, _| cx.nav.push(Nav::Pop))),
+            "vignette" => Box::new(VignetteScreen::with_settings(&cx.settings, self.reel(cx), |cx: &mut Cx, _| cx.nav.push(Nav::Pop)).palette(crate::story::PALETTE)),
             "results" => {
                 let level = cx.game.as_ref().and_then(|g| g.gs.party.members.first()).map(|m| m.level(&cx.data)).unwrap_or(1);
                 let mut xp = json::Dict::new();
@@ -256,10 +269,10 @@ impl Gallery {
         if self.shown.as_ref().is_none_or(|sh| sh.id != id) {
             self.shown = if id == "vignette" {
                 // the preview's end changes nothing: `tick` starts it over
-                let screen: Box<dyn Screen<GameCx>> = Box::new(VignetteScreen::with_settings(&cx.settings, vignette::sample_reel(), |_: &mut Cx, _| {}));
+                let screen: Box<dyn Screen<GameCx>> = Box::new(VignetteScreen::with_settings(&cx.settings, self.reel(cx), |_: &mut Cx, _| {}).palette(crate::story::PALETTE));
                 Some(Shown { id, screen, steps: Vec::new(), tries: 0 })
             } else {
-                Self::build(cx, id).map(|(screen, steps)| Shown { id, screen, steps, tries: 0 })
+                self.build(cx, id).map(|(screen, steps)| Shown { id, screen, steps, tries: 0 })
             };
         }
         if let Some(sh) = self.shown.as_mut() {
@@ -287,6 +300,10 @@ impl Gallery {
                 self.shown = None;
             }
             GAct::Kit(k) => self.kit.act(k),
+            GAct::Reel(i) => {
+                self.reel = i;
+                self.shown = None;
+            }
             GAct::Open => {
                 let id = ENTRIES[self.entry].0;
                 if id == "battle" || ENTRIES[self.entry].2 == "Battle panels" {
@@ -294,7 +311,7 @@ impl Gallery {
                     cx.nav.push(Nav::Push(Box::new(b)));
                 } else if id != "kit" && (!NEEDS_GAME.contains(&id) || self.ensure_game(cx)) {
                     // a fresh one, so the preview keeps its own state
-                    if let Some((screen, _)) = Self::build(cx, id) {
+                    if let Some((screen, _)) = self.build(cx, id) {
                         cx.nav.push(Nav::Push(screen));
                     }
                 }
@@ -489,7 +506,15 @@ impl Screen<GameCx> for Gallery {
             let nw = ui.p.text_w(name, TITLE).ceil() as i32;
             ui.p.text_fit((pane.x + 14 + nw) as f32, pane.y as f32 + 5.0, about, SMALL, (pane.w - nw - ow - 28) as f32, DIM);
             ui.button_full("gallery.open", Rect::new(pane.x + pane.w - ow - 4, pane.y + 3, ow, 12), "Open", GAct::Open, true, false, SMALL, tip("Open", "Shows the screen itself to try it."));
-            let top = pane.y + 4 + ui.p.line_h(TITLE).ceil() as i32 + 3;
+            let mut top = pane.y + 4 + ui.p.line_h(TITLE).ceil() as i32 + 3;
+            if id == "vignette" {
+                // STORYUI1-U1 (V15): the reel to play, the engine's sample or a world's vignette as written
+                let labels: Vec<String> = crate::story::gallery_reels(&cx.data).into_iter().map(|r| r.0).collect();
+                let h = (ui.p.line_h(BODY) + 4.0).ceil() as i32;
+                let t = tip("Reel", "The engine's sample reel, or a world's vignette (every card shown, tokens as written).");
+                ui.select("gallery.vignette.reel", Rect::new(pane.x + 4, top, 260, h), &labels, self.reel.min(labels.len().saturating_sub(1)), GAct::Reel, labels.len() > 1, t);
+                top += h + 3;
+            }
             let shown = Rect::new(pane.x + 4, top, pane.w - 8, pane.y + pane.h - 4 - top);
             ui.p.fill(shown, rgb(6, 8, 14));
             self.w = std::mem::take(&mut ui.widgets);
@@ -653,5 +678,30 @@ mod tests {
         assert!(gallery.shown.is_some(), "the preview survives a tick");
         gallery.act(&mut cx, GAct::Open);
         assert!(matches!(cx.nav.last(), Some(Nav::Push(s)) if s.id() == "vignette"), "Open pushes the player");
+    }
+
+    /// STORYUI1-U1 TU3 (V15): with no game, the vignette entry draws its reel picker at every text size, the engine's
+    /// sample first; a picked world vignette plays in the preview and Open plays it full screen.
+    #[test]
+    fn the_vignette_pane_plays_a_worlds_vignette_without_a_game() {
+        use crate::hud::hud_tests::{frame, gfx};
+        use crate::story::tests::{data, story_cx};
+        let (mut cx, mut g) = (story_cx(data()), gfx());
+        let mut gallery = Gallery::new();
+        let i = ENTRIES.iter().position(|e| e.0 == "vignette").expect("a vignette entry");
+        gallery.act(&mut cx, GAct::Entry(i));
+        for &(_, scale) in aegis_ui::screen::TEXT_SIZES.iter() {
+            frame(&mut gallery, &mut cx, &mut g, scale as f32);
+            assert!(gallery.widgets().iter().any(|w| w["id"] == "gallery.vignette.reel" && w["enabled"] == json!(true)), "the picker at text size {scale}");
+        }
+        let shown = |gallery: &Gallery, cx: &Cx| gallery.shown.as_ref().map(|sh| sh.screen.state(cx)).expect("the preview is built");
+        assert_eq!(shown(&gallery, &cx)["reel"], json!("sample"));
+        gallery.act(&mut cx, GAct::Reel(1));
+        gallery.draw(&mut cx, &mut g, (-500, -500), true);
+        let st = shown(&gallery, &cx);
+        assert_eq!((st["reel"].clone(), st["cards"].clone()), (json!("tale:v_intro"), json!(2)));
+        assert!(!cx.has_game(), "no game needed");
+        gallery.act(&mut cx, GAct::Open);
+        assert!(matches!(cx.nav.last(), Some(Nav::Push(s)) if s.id() == "vignette" && s.state(&cx)["reel"] == json!("tale:v_intro")), "Open plays the picked reel");
     }
 }

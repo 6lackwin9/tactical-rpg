@@ -1,6 +1,7 @@
 //! The world map (scripts/ui/overworld/world_map_view.gd): known nodes and routes of the party's world
 //! (TravelRules.view), trips by clicking a node (TravelRunner.travel: clock, supplies, road fights), making camp
 //! (HealRules.make_camp) and entering the location the party stands on. Esc / Back returns to the region map.
+//! STORYUI1-U1: like the region map, it hands over to the story stage and plays queued vignettes (`story::map_tick`).
 
 use aegis_ui::canvas::{rgb, rgba, Rect};
 use crate::music;
@@ -248,6 +249,11 @@ impl Screen<GameCx> for WorldMap {
 
     fn state(&self, cx: &Cx) -> Value {
         json!({"selected": self.selected, "view": travel::view(&cx.data, cx.gs())})
+    }
+
+    /// STORYUI1 W2, 5.3: a running sequence takes over and queued vignettes play (the map has nothing of its own open).
+    fn tick(&mut self, cx: &mut Cx) {
+        crate::story::map_tick(cx);
     }
 
     fn music(&self, cx: &Cx) -> Option<String> {

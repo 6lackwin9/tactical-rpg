@@ -163,14 +163,21 @@ pub fn character_art(d: &Data, character: &aegis_core::json::Dict) -> (String, S
     (body, palette, portraits)
 }
 
-/// Starts playing `gs` (a new game or a loaded save) and shows the region map.
+/// Starts playing `gs` (a new game or a loaded save) and shows the region map, or the story stage while a story
+/// sequence runs (STORYUI1 5.4: a new game in a world with a start sequence, a save made during one).
 pub fn enter_game(cx: &mut Cx, gs: GameState, slot: i64, warnings: Vec<String>) {
     let clean = gs.to_value();
+    let story = emberwake_world::story::is_running(&gs);
     cx.game = Some(Game { gs, slot, clean, busy: false, sample: false });
     cx.log.clear();
     if !warnings.is_empty() {
         cx.notice = warnings;
     }
-    let map = crate::region::RegionMap::new(cx);
-    cx.nav.push(Nav::Reset(Box::new(map)));
+    if story {
+        let stage = crate::story::StoryStage::new(cx);
+        cx.nav.push(Nav::Reset(Box::new(stage)));
+    } else {
+        let map = crate::region::RegionMap::new(cx);
+        cx.nav.push(Nav::Reset(Box::new(map)));
+    }
 }

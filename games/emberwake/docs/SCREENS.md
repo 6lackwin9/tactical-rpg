@@ -60,3 +60,15 @@ The rules behind every player screen come from `emberwake_world`, checked agains
    journeys replayed in both engines (state compared after every action).
 4. Screens on a shared widget kit (`ui.rs`, now `aegis_ui::ui`: buttons, tabs, cards, checkboxes, steppers, dropdowns, frames, rows,
    hover cards), menus first, then the play screens, then the dev tools.
+
+## Story stage (STORYUI1-U1)
+
+- Story stage (`story_stage`): opens on a new game in a world with a start sequence, on a save made during one, and when a sequence
+  starts from the maps (a dialogue choice, a campaign trigger). It plays the steps: vignettes full screen (Space, Enter or click to
+  continue; Esc, right click or Skip to skip, asking first for an unseen scene), fights with the results popup after, then the region map
+  at the `enter` location or the main menu at `end` `menu`. No game menu while it runs. Queued vignettes play over the region and world
+  maps when nothing is open. An open board holds the talk's replies; Esc or right click closes it (pane: STORYUI1-U2).
+- Settings, Gameplay tab: Text speed (Slow, Normal, Fast, Instant) and Reduce motion (engine keys `text_speed`, `reduce_motion`).
+- UI Gallery, Vignette player entry: a reel picker (the engine's sample, then every world's vignettes as written) in the game's card
+  palette.
+- Scene Runner, Exploration: a location other than the world's start drops the world's start sequence; the start location and the world map play it (STORYUI1-U1).

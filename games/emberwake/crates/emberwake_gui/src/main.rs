@@ -22,6 +22,7 @@ mod runner;
 mod screens;
 mod shop;
 mod stage;
+mod story;
 mod tuning;
 mod worldmap;
 

@@ -32,7 +32,7 @@ use emberwake_battle::skill::Kind;
 use emberwake_battle::world::{AiProfile, World};
 use emberwake_data::UnitDef;
 use emberwake_host::{Battle, Host};
-use emberwake_world::{dialogue, explore, progression, travel};
+use emberwake_world::{dialogue, explore, progression, story, travel};
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
@@ -337,9 +337,31 @@ fn action_clips(skill: &str, kind: &str, weapon: &str) -> Vec<&'static str> {
     out
 }
 
+/// The runner's settle of a world fight (BattleBridge's after_fight by the fight's source): `travel`, `dialogue`,
+/// `story` (STORYUI1 Q5: the story sequence moves on, retries or aborts), else `explore`. The battle screen and the
+/// debug fight popup both settle through it.
+pub fn after_fight(d: &emberwake_world::Data, gs: &mut emberwake_world::GameState, runner: &str, fight: &Dict, outcome: &str, tally: Option<&emberwake_world::battle::Tally>) -> Dict {
+    match runner {
+        "travel" => travel::after_fight(d, gs, fight, outcome, tally),
+        "dialogue" => dialogue::after_fight(d, gs, fight, outcome, tally),
+        story::FIGHT_SOURCE => story::after_fight(d, gs, fight, outcome, tally),
+        _ => explore::after_fight(d, gs, fight, outcome, tally),
+    }
+}
+
+/// The log lines of a settled world fight: its events, and a story fight's notes ("Try again.", the effects').
+pub fn log_settled(cx: &mut Cx, runner: &str, res: &Dict) {
+    crate::region::log_events(cx, json::aget(res, "events"));
+    if runner == story::FIGHT_SOURCE {
+        for n in json::sget(res, "notes") {
+            cx.log(n);
+        }
+    }
+}
+
 enum Mode {
     Arena,
-    /// A world fight: the fight dict, the runner that settles it (explore / travel / dialogue) and the member ids of
+    /// A world fight: the fight dict, the runner that settles it (explore / travel / dialogue / story) and the member ids of
     /// the party units in battle order.
     /// `members`: party member id and the saved pouch ids that found no battle slot (kept on write-back), per ally.
     World { fight: Dict, runner: String, members: Vec<(String, Vec<String>)> },
@@ -786,16 +808,12 @@ impl BattleScreen {
                 }
             }
         }
-        let res = match runner.as_str() {
-            "travel" => travel::after_fight(&d, gs, fight, &outcome, Some(&tally)),
-            "dialogue" => dialogue::after_fight(&d, gs, fight, &outcome, Some(&tally)),
-            _ => explore::after_fight(&d, gs, fight, &outcome, Some(&tally)),
-        };
+        let res = after_fight(&d, gs, runner, fight, &outcome, Some(&tally));
         cx.set_busy(false);
         if !json::b(&res, "ok", false) {
             show_errors(cx, json::sget(&res, "errors"));
         }
-        crate::region::log_events(cx, json::aget(&res, "events"));
+        log_settled(cx, runner, &res);
         cx.autosave();
         let fight = fight.clone();
         cx.nav.push(Nav::Pop);

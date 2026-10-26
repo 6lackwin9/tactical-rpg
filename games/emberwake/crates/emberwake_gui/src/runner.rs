@@ -8,7 +8,7 @@ use crate::screens::{enter_game, show_errors, Cx, GameCx, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
-use emberwake_world::{dialogue, explore, new_game, travel};
+use emberwake_world::{explore, new_game};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -91,9 +91,14 @@ impl SceneRunner {
     }
 
     /// Exploration's game and the arrival's events: a new game of `world` entered at `start` (a location qid), or a
-    /// plain new game when None (the region map enters the start location, the world map opens over it).
+    /// plain new game when None (the region map enters the start location, the world map opens over it). STORYUI1-U1
+    /// (planner ruling): a location other than the start drops the world's running start sequence, so the tester lands
+    /// where they asked; the start location and the world map keep it (the story stage plays it).
     fn start_game(d: &emberwake_world::Data, world: &str, start: Option<&str>, seed: i64) -> Result<(emberwake_world::GameState, Vec<Value>), Vec<String>> {
         let mut gs = new_game::create_for_world(d, world, seed)?;
+        if start.is_some_and(|q| q != explore::start_location(d, world)) {
+            gs.story.running = None;
+        }
         let mut events = Vec::new();
         if let Some(q) = start.filter(|q| *q != gs.location_id) {
             let res = explore::enter(d, &mut gs, q, explore::SPAWN);
@@ -291,14 +296,10 @@ impl DebugFight {
             DFAct::Outcome(outcome) => {
                 let d = cx.data.clone();
                 let gs = cx.gs_mut();
-                let res = match self.runner.as_str() {
-                    // no battle: the default tally (a skip = every enemy killed, REWARD1 2.5)
-                    "travel" => travel::after_fight(&d, gs, &self.fight, outcome, None),
-                    "dialogue" => dialogue::after_fight(&d, gs, &self.fight, outcome, None),
-                    _ => explore::after_fight(&d, gs, &self.fight, outcome, None),
-                };
+                // no battle: the default tally (a skip = every enemy killed, REWARD1 2.5)
+                let res = crate::battle::after_fight(&d, gs, &self.runner, &self.fight, outcome, None);
                 cx.set_busy(false);
-                crate::region::log_events(cx, json::aget(&res, "events"));
+                crate::battle::log_settled(cx, &self.runner, &res);
                 cx.nav.push(Nav::Push(Box::new(crate::hub::Results::new(&res, outcome, &self.fight))));
             }
         }
@@ -370,5 +371,20 @@ mod tests {
                 None => assert_eq!(gs.location_id, "", "{label}: a plain new game"),
             }
         }
+    }
+
+    /// STORYUI1-U1 (planner ruling): in a world with a start sequence, Exploration at a location other than the start
+    /// drops the running sequence (the tester lands there, on the map); the start location and the world map keep it.
+    #[test]
+    fn exploration_away_from_the_start_drops_the_start_sequence() {
+        let d = crate::story::tests::data();
+        let start = explore::start_location(&d, "tale");
+        let other = d.merged_entries("tale", "locations").iter().map(|e| s(e, "_qid")).find(|q| *q != start).expect("a second location");
+        let running = |pick: Option<&str>| SceneRunner::start_game(&d, "tale", pick, 1).expect("a game").0.story.running.is_some();
+        assert!(running(Some(&start)), "the start location keeps the start sequence");
+        assert!(running(None), "the world map start keeps it");
+        let (gs, _) = SceneRunner::start_game(&d, "tale", Some(&other), 1).expect("a game");
+        assert!(gs.story.running.is_none(), "another location drops it");
+        assert_eq!(gs.location_id, other, "the party stands where the tester asked");
     }
 }
