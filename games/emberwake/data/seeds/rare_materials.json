@@ -1,0 +1,38 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "inquisitor_marrow_valve",
+    "name": "Marrow Valve",
+    "family": "material",
+    "rarity": "RARE",
+    "weight": 0.2,
+    "value": 0,
+    "description": "An Inquisitor's marrow valve. Act 2 graft.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 5
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "titan_marrow_core",
+    "name": "Marrow Core",
+    "family": "material",
+    "rarity": "RARE",
+    "weight": 0.2,
+    "value": 0,
+    "description": "The core of a marrow titan. Act 2 Apex graft.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 5
+   }
+  }
+ ]
+}
