@@ -27,6 +27,18 @@ pub const PIERCE: &str = "pierce";
 pub const REACH: &str = "reach";
 pub const FLANK: &str = "flank";
 pub const PLAN_BADGES: &str = "plan_badges";
+/// HOOKS1 4.1: the combat hooks' rule ids (all extensions, off in classic): forced moves, ground hazards, scheduled
+/// arena hazards, events and triggers (riders, held guard), unit meters, the HP cost of skills, the guard bypass, the
+/// AI tactics and target preferences, and the execute match of an `exploit` entry with `hp_below`.
+pub const FORCED_MOVE: &str = "forced_move";
+pub const GROUND_HAZARDS: &str = "ground_hazards";
+pub const ARENA_HAZARDS: &str = "arena_hazards";
+pub const TRIGGERS: &str = "triggers";
+pub const UNIT_METERS: &str = "unit_meters";
+pub const HP_COST: &str = "hp_cost";
+pub const IGNORE_GUARD: &str = "ignore_guard";
+pub const AI_TACTICS: &str = "ai_tactics";
+pub const EXECUTE: &str = "execute";
 
 /// An option is incompatible with classic (on only under its ruleset); an extension is compatible and inert without
 /// data, still off in classic so classic cannot drift when data is added, and may be switched on or off one by one
@@ -43,8 +55,8 @@ pub struct Rule {
     pub kind: RuleKind,
 }
 
-/// The rule register (RULESET1 3.2), in its order.
-pub const REGISTER: [Rule; 9] = [
+/// The rule register (RULESET1 3.2, then HOOKS1 4.1), in its order.
+pub const REGISTER: [Rule; 18] = [
     Rule { id: ROUND_INTENT, kind: RuleKind::Option },
     Rule { id: ENEMY_MOVES, kind: RuleKind::Option },
     Rule { id: DECK, kind: RuleKind::Option },
@@ -54,6 +66,15 @@ pub const REGISTER: [Rule; 9] = [
     Rule { id: REACH, kind: RuleKind::Extension },
     Rule { id: FLANK, kind: RuleKind::Extension },
     Rule { id: PLAN_BADGES, kind: RuleKind::Extension },
+    Rule { id: FORCED_MOVE, kind: RuleKind::Extension },
+    Rule { id: GROUND_HAZARDS, kind: RuleKind::Extension },
+    Rule { id: ARENA_HAZARDS, kind: RuleKind::Extension },
+    Rule { id: TRIGGERS, kind: RuleKind::Extension },
+    Rule { id: UNIT_METERS, kind: RuleKind::Extension },
+    Rule { id: HP_COST, kind: RuleKind::Extension },
+    Rule { id: IGNORE_GUARD, kind: RuleKind::Extension },
+    Rule { id: AI_TACTICS, kind: RuleKind::Extension },
+    Rule { id: EXECUTE, kind: RuleKind::Extension },
 ];
 
 /// The register entry of `id`.

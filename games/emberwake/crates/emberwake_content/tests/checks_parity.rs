@@ -29,9 +29,11 @@ fn kept(messages: Vec<String>) -> Vec<String> {
 /// message is taken out (both sides, so a Godot text that names one stays compared); every other word is compared.
 /// CAMPAIGN1-S (HISTORY 2026-10-25): the campaign effect kinds in the dialogue effect list. STORYUI1-S (HISTORY
 /// 2026-10-26): the story effect kinds in the same list and the service line `board`. CAST1-S (HISTORY 2026-10-26): the
-/// gear types `censer`, `bone_saw` and `sprayer`.
-const LIST_ITEMS_AFTER_GODOT: [&str; 22] = [
+/// gear types `censer`, `bone_saw` and `sprayer`. HOOKS1-S (HISTORY 2026-10-27): the passive and item effect types
+/// `forced_move`, `trigger` and `meter`, the target preferences `SOFTEST` and `TOUGHEST` (a unit's and a phase ai's).
+const LIST_ITEMS_AFTER_GODOT: [&str; 27] = [
     "polearm", "scourge", "censer", "bone_saw", "sprayer", "reach", "stagger_taken", "steadfast", "stealth", "meter_add", "meter_set", "meter_show", "clock_start", "clock_set", "clock_stop", "set_act", "rest", "end", "vignette", "sequence", "open_board", "board",
+    "forced_move", "trigger", "meter", "SOFTEST", "TOUGHEST",
 ];
 
 fn at_freeze(message: &str) -> String {

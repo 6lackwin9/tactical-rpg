@@ -33,6 +33,9 @@ pub const RULESET_KIND: &str = crate::check::ruleset::KIND;
 /// PORTRAITFX1-S: the portrait cue rows, loaded into the catalog beside CATALOG_KINDS after the derived stats they name
 /// (Godot had no such kind).
 pub const PORTRAIT_KIND: &str = crate::check::portrait::KIND;
+/// HOOKS1-S: the combat hook kinds (ground hazards, unit meters, data zones), loaded into the catalog beside
+/// CATALOG_KINDS after the skills the meters name, in this order (Godot had no such kinds).
+pub const HOOK_KINDS: [&str; 3] = [rpgkit_data::HAZARDS_KIND, rpgkit_data::UNIT_METERS_KIND, rpgkit_data::ZONES_KIND];
 /// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2) and STORYUI1's `vignettes`,
 /// `sequences` and `boards` (4.1-4.4; Godot had no such kinds).
 pub const WORLD_KINDS: [&str; 19] = [
@@ -114,6 +117,10 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
     out.insert(RULESET_KIND.into(), Value::Array(rulesets.into_iter().map(Value::Object).collect()));
     let cues = read_portrait_cues(&dir, &out, errors);
     out.insert(PORTRAIT_KIND.into(), Value::Array(cues.into_iter().map(Value::Object).collect()));
+    for kind in HOOK_KINDS {
+        let rows = read_hook_kind(&dir, kind, &out, errors);
+        out.insert(kind.into(), Value::Array(rows.into_iter().map(Value::Object).collect()));
+    }
     out.insert("item_families".into(), Value::Array(families.into_iter().map(Value::Object).collect()));
     Value::Object(out)
 }
@@ -193,6 +200,33 @@ fn read_portrait_cues(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Ve
     kept
 }
 
+/// HOOKS1-S (engine-only, beside CATALOG_KINDS): the rows of a combat hook kind that pass their checks
+/// (`check::hook_kinds`) against the loaded skills (`loaded`), in file order; every problem goes to `errors` and its row
+/// is skipped.
+fn read_hook_kind(dir: &Path, kind: &str, loaded: &Dict, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{kind}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(kind, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let skills: Vec<Dict> = json::arr(json::get(loaded, "skills")).iter().map(|e| json::dict(e).clone()).collect();
+    let checked = crate::check::hook_kinds::check_rows(kind, &rows, &crate::check::hook_kinds::Refs { skills: &skills });
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: {} '{}': {m}", crate::check::hook_kinds::noun(kind), sget(&row, "id", ""))));
+        }
+    }
+    kept
+}
+
 /// ContentCatalog._read_kind.
 fn read_kind(dir: &Path, kind: &str, families: &[Dict], errors: &mut Vec<String>) -> Vec<Dict> {
     let path = dir.join(format!("{kind}.json"));
@@ -224,10 +258,10 @@ fn read_kind(dir: &Path, kind: &str, families: &[Dict], errors: &mut Vec<String>
 // ---- Skills (SkillRanks, SkillText) ----------------------------------------------------------------------------
 
 /// The per-rank skill fields (SkillRanks.RANK_KEYS; RULESET1-S adds the timeline's `ap_cost`, `recovery_blocks`,
-/// `stagger` and `windup_poise`).
-pub(crate) const RANK_KEYS: [&str; 24] = [
+/// `stagger` and `windup_poise`, HOOKS1-S the costs `meters` and `hp_cost`).
+pub(crate) const RANK_KEYS: [&str; 26] = [
     "level", "blocks", "unlock_offset", "power_mult", "dash_tiles", "reach_min", "reach_max", "status_potency", "status_magnitude", "status_rounds", "heal_base", "heal_mult", "grant_status", "extra_grants",
-    "cleanse_statuses", "mitigation", "boost", "boost_rounds", "jump_tiles", "recover_ap", "ap_cost", "recovery_blocks", "stagger", "windup_poise",
+    "cleanse_statuses", "mitigation", "boost", "boost_rounds", "jump_tiles", "recover_ap", "ap_cost", "recovery_blocks", "stagger", "windup_poise", "meters", "hp_cost",
 ];
 
 /// ContentCatalog._read_ranked_skills: every entry expanded into its rank rows; all rank 1 rows first, then rank 2...
@@ -425,6 +459,16 @@ fn format_magnitude(st: &str, magnitude: i64) -> String {
     status::format_magnitude(st, magnitude as i32)
 }
 
+/// One `exploit` entry as the {exploit} token shows it: "x1.3 vs Expose"; HOOKS1 EX1's execute entry "x2.0 at 35% HP or
+/// less".
+fn exploit_text(r: &Dict) -> String {
+    let mult = format_mult(json::f(r, "power_mult", 1.0));
+    match r.get("hp_below") {
+        Some(pct) => format!("{mult} at {}% HP or less", json::to_int(pct)),
+        None => format!("{mult} vs {}", status::display_name(&json::s(r, "status"))),
+    }
+}
+
 /// SkillText.token_value.
 pub(crate) fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize) -> String {
     let bare = suffix == "n";
@@ -522,10 +566,7 @@ pub(crate) fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize) ->
             "TACTICAL" => "ends in Tactical".into(),
             _ => String::new(),
         },
-        "exploit" => json::get(row, "exploit")
-            .as_array()
-            .map(|a| a.iter().map(|r| format!("{} vs {}", format_mult(json::f(json::dict(r), "power_mult", 1.0)), status::display_name(&json::s(json::dict(r), "status")))).collect::<Vec<_>>().join(", "))
-            .unwrap_or_default(),
+        "exploit" => json::get(row, "exploit").as_array().map(|a| a.iter().map(|r| exploit_text(json::dict(r))).collect::<Vec<_>>().join(", ")).unwrap_or_default(),
         "disrupt" => {
             if s("disrupt") == "STANCE_BREAK" {
                 "breaks stance".into()

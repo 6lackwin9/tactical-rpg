@@ -228,8 +228,10 @@ Kaelen's running Intercepting Hook takes the hit and Castellan's Penance only th
 ## 9. Unit meters (G14; the shape Strain reuses, Q-63) `[kit hook]`, rows `[data]`
 
 - UM1. Catalog kind `unit_meters` (`data/catalog/unit_meters.json`): `min`, `max`, `start`, `show` (pips, bar,
-  hidden), `decay`, `bands`, `rules`, `skills`. A unit holds a meter when a passive or item effect `{"type": "meter",
-  "meter": id}` applies (optional `start`, `floor`). Meters live in battle state only (no save key): each battle starts
+  hidden), `decay`, `bands`, `rules`, `skills`. A unit holds a meter when a passive effect `{"type": "meter",
+  "meter": id}` applies (optional `start`, `floor`; items: not in HOOKS1-S, whose items take only the `trigger` and
+  `forced_move` effects of the task file's 1.2 table; a later row may add an item meter effect). Meters live in battle
+  state only (no save key): each battle starts
   at the larger of `start` and the holder's `floor`.
 - UM2. Changes: the trigger effect `meter`; the skill field `meters` (`[{meter, delta}]`, applied at the command's
   start after AP and HP cost); values clamp to floor..max. A negative skill delta needs a value at least its size,

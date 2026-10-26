@@ -46,3 +46,5 @@ Placeholder and baseline art comes from the repository's `tools/`, which write t
 
 To check a regeneration, write it into an empty folder (`--root DIR`) and compare it with the committed tree
 (`tools/gen_art.py --compare DIR`). `tools/sprites/export_units.py` always rewrites the bodies it owns (no keep rule).
+
+HOOKS1-S: the combat hook schema (9 rule ids; skill, item, passive, unit, encounter and manifest fields; kinds `hazards`, `unit_meters`, `zones`). Behaviour lands per hook.

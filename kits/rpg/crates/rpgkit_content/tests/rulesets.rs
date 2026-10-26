@@ -52,7 +52,8 @@ fn base_catalog(data: &Path) {
 fn good_row() -> Value {
     json!({
         "id": "timeline", "name": "Timeline",
-        "rules": ["round_intent", "enemy_moves", "deck", "poise", "ap_cost", "pierce", "reach", "flank", "plan_badges"],
+        "rules": ["round_intent", "enemy_moves", "deck", "poise", "ap_cost", "pierce", "reach", "flank", "plan_badges",
+                  "forced_move", "ground_hazards", "arena_hazards", "triggers", "unit_meters", "hp_cost", "ignore_guard", "ai_tactics", "execute"],
         "intents": ["assault", "guard", "support", "maneuver"],
         "basics": ["move", "rest", "strike", "brace"],
         "poise_stat": "max_poise",

@@ -28,7 +28,10 @@ fn data_dir() -> PathBuf {
 /// ENCOUNTER2-T (2026-10-25): an encounter's authored terrain `rows` (catalog and world encounters). CAMPAIGN1-S
 /// (2026-10-25): a world manifest's `campaign`, `purse`, `rest` and `defeat` (kind "world"). STORYUI1-S (2026-10-26):
 /// a world quest's board fields `board`, `track`, `show_locked`, `closed_text` and a manifest's `start_sequence`.
-const AFTER_GODOT: [(&str, &str, &str); 34] = [
+/// HOOKS1-S (2026-10-27): a skill's combat hook fields (`forced_move`, `hazard`, `triggers`, `riders`, `meters`,
+/// `hp_cost`, `ignore_guard`), a consumable's `hazard`, a unit's `tactics`, an encounter's `arena_hazards` (catalog and
+/// world encounters) and a world manifest's `classes`.
+const AFTER_GODOT: [(&str, &str, &str); 46] = [
     ("content", "units", "loot"),
     ("world", "encounters", "key_loot"),
     ("world", "encounters", "objective_reward"),
@@ -63,18 +66,33 @@ const AFTER_GODOT: [(&str, &str, &str); 34] = [
     ("world", "quests", "show_locked"),
     ("world", "quests", "closed_text"),
     ("world", "world", "start_sequence"),
+    ("content", "skills", "forced_move"),
+    ("content", "skills", "hazard"),
+    ("content", "skills", "triggers"),
+    ("content", "skills", "riders"),
+    ("content", "skills", "meters"),
+    ("content", "skills", "hp_cost"),
+    ("content", "skills", "ignore_guard"),
+    ("content", "items", "hazard"),
+    ("content", "units", "tactics"),
+    ("content", "encounters", "arena_hazards"),
+    ("world", "encounters", "arena_hazards"),
+    ("world", "world", "classes"),
 ];
 /// Retired parity, option level: enum and multi-pick options added after the freeze, by (section, kind, key, option);
 /// the option leaves the engine's schema row before comparing (every other option and its order is still compared);
 /// each is named in docs/HISTORY.md. RULESET1-S (2026-10-25): the weapon types `polearm` and `scourge` (TQ8) and the
-/// family engine rule `reach` (K1). CAST1-S (2026-10-26): the weapon types `censer`, `bone_saw` and `sprayer`.
-const OPTIONS_AFTER_GODOT: [(&str, &str, &str, &str); 6] = [
+/// family engine rule `reach` (K1). CAST1-S (2026-10-26): the weapon types `censer`, `bone_saw` and `sprayer`. HOOKS1-S
+/// (2026-10-27): a unit's target preferences `SOFTEST` and `TOUGHEST`.
+const OPTIONS_AFTER_GODOT: [(&str, &str, &str, &str); 8] = [
     ("content", "items", "weapon_type", "polearm"),
     ("content", "items", "weapon_type", "scourge"),
     ("content", "items", "weapon_type", "censer"),
     ("content", "items", "weapon_type", "bone_saw"),
     ("content", "items", "weapon_type", "sprayer"),
     ("content", "item_families", "engine_rules", "reach"),
+    ("content", "units", "target_pref", "SOFTEST"),
+    ("content", "units", "target_pref", "TOUGHEST"),
 ];
 /// Retired parity, kind level (the twin of AFTER_GODOT): schema kinds added after the freeze, by (section, kind); the
 /// whole kind leaves the engine's schema before comparing; each is named in docs/HISTORY.md. DERIVE1 (2026-10-25): the
@@ -82,11 +100,15 @@ const OPTIONS_AFTER_GODOT: [(&str, &str, &str, &str); 6] = [
 /// RULESET1-R (2026-10-25): the ruleset rows (the same). CAMPAIGN1-S (2026-10-25): the world kinds `meters`,
 /// `checkpoints` and `triggers` (WorldSchema.KINDS had none; every world's `own` lists leave the loader's worlds too).
 /// STORYUI1-S (2026-10-26): the world kinds `vignettes`, `sequences` and `boards` (the same). PORTRAITFX1-S
-/// (2026-10-26): the portrait cue rows (as the derived stats).
-const KINDS_AFTER_GODOT: [(&str, &str); 9] = [
+/// (2026-10-26): the portrait cue rows (as the derived stats). HOOKS1-S (2026-10-27): the combat hook kinds `hazards`,
+/// `unit_meters` and `zones` (the same).
+const KINDS_AFTER_GODOT: [(&str, &str); 12] = [
     ("content", "derived_stats"),
     ("content", "rulesets"),
     ("content", "portrait_cues"),
+    ("content", "hazards"),
+    ("content", "unit_meters"),
+    ("content", "zones"),
     ("world", "meters"),
     ("world", "checkpoints"),
     ("world", "triggers"),
@@ -97,8 +119,9 @@ const KINDS_AFTER_GODOT: [(&str, &str); 9] = [
 /// Schema rows whose help text or options changed after the freeze (their `help` and `options_from` are not
 /// compared). REWARD1: the purse rows. ASSETORG2: the art rows (bodies of the asset layers, not Godot's art keys) and
 /// the item icon rows. PHASEFOLD: the phases rows (the arrival trigger). PORTRAITFX1-S: the dialogue nodes row (a node's
-/// `expression`).
-const HELP_CHANGED: [(&str, &str, &str); 10] = [
+/// `expression`). HOOKS1-S: a skill's `exploit` (the execute entry), the item and passive `effects` (the hook effect
+/// types) and a unit's `target_pref` (SOFTEST, TOUGHEST); the phases rows (the deck effect, ai tactics) are listed already.
+const HELP_CHANGED: [(&str, &str, &str); 14] = [
     ("content", "encounters", "purse"),
     ("world", "encounters", "purse"),
     ("content", "classes", "art"),
@@ -109,6 +132,10 @@ const HELP_CHANGED: [(&str, &str, &str); 10] = [
     ("content", "encounters", "phases"),
     ("world", "encounters", "phases"),
     ("world", "dialogues", "nodes"),
+    ("content", "skills", "exploit"),
+    ("content", "items", "effects"),
+    ("content", "passives", "effects"),
+    ("content", "units", "target_pref"),
 ];
 
 /// Retired parity (PHASEFOLD, HISTORY 2026-10-22): the single reinforcement wave became an arrival phase. Godot's

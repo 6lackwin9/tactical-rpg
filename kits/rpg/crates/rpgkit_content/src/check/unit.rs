@@ -231,9 +231,21 @@ pub fn unit_errors(v: &View, e: &Dict) -> Vec<String> {
         errors.extend(skill_loadout_errors(v, e, a));
     }
     errors.extend(requires_errors(v, e, arch));
-    errors.extend(deck_errors(v, e, arch));
+    errors.extend(deck_errors(v, e));
     errors.extend(default_intent_errors(v, e));
+    // HOOKS1 AT2: the unit's AI tactics
+    errors.extend(super::hooks::tactics_errors(json::get(e, "tactics"), "Tactics"));
     errors
+}
+
+/// The skill families a unit row owns (its class path up to its level and its extra skills; always-active skills left
+/// out), as the deck checks read them (RULESET1 9 D1; HOOKS1 DU2).
+pub(crate) fn owned_families(v: &View, e: &Dict) -> Vec<String> {
+    let class_id = json::s(e, "class_id");
+    let arch = v.typed.classes.get(&class_id).filter(|_| !class_id.is_empty());
+    let mut owned_ids: Vec<String> = arch.map(|a| a.path_steps().into_iter().filter(|(l, _)| *l as i64 <= json::i(e, "level", 1)).map(|(_, s)| s).collect()).unwrap_or_default();
+    owned_ids.extend(json::sget(e, "extra_skills"));
+    families_of(v, &owned_ids)
 }
 
 /// RULESET1 TQ23 (a): a unit's `default_intent` (the schema's enum: "" or one of the four intents) is one a ruleset
@@ -275,7 +287,7 @@ fn repeats(label: &str, ids: &[String], seen: &mut Vec<String>, errors: &mut Vec
 /// path at its level or extra skills), never a basic (a `basic` skill or a ruleset's basics); passive and keystone hold
 /// passives of that `slot`; the counts fit the `deck_slots` of every ruleset with the deck rule; order maps an intent
 /// to families of that intent among the actives and the basics. Nothing repeats.
-fn deck_errors(v: &View, e: &Dict, arch: Option<&ClassDef>) -> Vec<String> {
+fn deck_errors(v: &View, e: &Dict) -> Vec<String> {
     let mut errors = Vec::new();
     let Some(deck) = json::get(e, "deck").as_object() else {
         errors.push("Deck must be an object {active, passive, keystone, order}.".into());
@@ -293,9 +305,7 @@ fn deck_errors(v: &View, e: &Dict, arch: Option<&ClassDef>) -> Vec<String> {
     }
     let active = deck_list(deck, "active", &mut errors);
     repeats("Deck active", &active, &mut Vec::new(), &mut errors);
-    let mut owned_ids: Vec<String> = arch.map(|a| a.path_steps().into_iter().filter(|(l, _)| *l as i64 <= json::i(e, "level", 1)).map(|(_, s)| s).collect()).unwrap_or_default();
-    owned_ids.extend(json::sget(e, "extra_skills"));
-    let owned = families_of(v, &owned_ids);
+    let owned = owned_families(v, e);
     for fam in &active {
         if v.typed.tier_one(fam).is_none() {
             errors.push(format!("Deck active: unknown skill family '{fam}'."));

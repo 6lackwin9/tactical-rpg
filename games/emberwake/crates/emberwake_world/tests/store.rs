@@ -18,8 +18,10 @@ const CATALOG: [&str; 8] = ["classes", "units", "skills", "items", "item_familie
 /// template's `props`; RULESET1-R (HISTORY 2026-10-25) a world manifest's `ruleset` and `plan_reveal_flag`; RULESET1-S
 /// (HISTORY 2026-10-25) a unit's `poise`, `deck` and `default_intent` and a passive's `slot` (a skill's timeline fields
 /// are left out at their defaults, as every skill field); ENCOUNTER2-T (HISTORY 2026-10-25) an encounter's `rows`
-/// (catalog and world encounters).
-const AFTER_GODOT: [&str; 13] = [
+/// (catalog and world encounters); HOOKS1-S (HISTORY 2026-10-27) a unit's `tactics` and an encounter's `arena_hazards`
+/// (catalog and world encounters; a skill's hook fields are left out at their defaults, a consumable's `hazard` is
+/// ITEMS_AFTER_GODOT).
+const AFTER_GODOT: [&str; 15] = [
     "\"loot\": []",
     "\"key_loot\": []",
     "\"objective_reward\": {}",
@@ -33,12 +35,18 @@ const AFTER_GODOT: [&str; 13] = [
     "\"default_intent\": \"\"",
     "\"slot\": \"\"",
     "\"rows\": []",
+    "\"tactics\": []",
+    "\"arena_hazards\": []",
 ];
+
+/// Retired parity, the catalog items file only (catalog/items.json): HOOKS1-S (HISTORY 2026-10-27) a consumable's
+/// `hazard`, written as `{}`.
+const ITEMS_AFTER_GODOT: [&str; 1] = ["\"hazard\": {}"];
 
 /// Retired parity, world manifests only (world.json): CAMPAIGN1-S (HISTORY 2026-10-25) a manifest's `campaign`,
 /// `purse`, `rest` and `defeat`, written as `{}` (an encounter's `purse` line is still compared); STORYUI1-S (HISTORY
-/// 2026-10-26) its `start_sequence`, written as "".
-const MANIFEST_AFTER_GODOT: [&str; 5] = ["\"campaign\": {}", "\"purse\": {}", "\"rest\": {}", "\"defeat\": {}", "\"start_sequence\": \"\""];
+/// 2026-10-26) its `start_sequence`, written as ""; HOOKS1-S (HISTORY 2026-10-27) its `classes`, written as `{}`.
+const MANIFEST_AFTER_GODOT: [&str; 6] = ["\"campaign\": {}", "\"purse\": {}", "\"rest\": {}", "\"defeat\": {}", "\"start_sequence\": \"\"", "\"classes\": {}"];
 
 /// Retired parity, world quests only (worlds/<w>/quests.json): STORYUI1-S (HISTORY 2026-10-26) a quest's board
 /// fields `board`, `track`, `show_locked` and `closed_text`, written with their defaults (a dialogue choice's
@@ -51,8 +59,8 @@ const QUEST_AFTER_GODOT: [&str; 4] = ["\"board\": \"\"", "\"track\": \"side\"", 
 const WORLD_KINDS_AFTER_GODOT: [&str; 6] = ["meters", "checkpoints", "triggers", "vignettes", "sequences", "boards"];
 
 /// `text` without the AFTER_GODOT field lines, and without the file's own retired lines (`extra`: a world manifest's
-/// MANIFEST_AFTER_GODOT, a world quests file's QUEST_AFTER_GODOT); a dropped last field takes the comma off the line
-/// before it.
+/// MANIFEST_AFTER_GODOT, a world quests file's QUEST_AFTER_GODOT, the catalog items file's ITEMS_AFTER_GODOT); a
+/// dropped last field takes the comma off the line before it.
 fn at_freeze(text: &str, extra: &[&str]) -> String {
     let mut out: Vec<String> = Vec::new();
     for line in text.lines() {
@@ -122,6 +130,7 @@ fn writer_saves_exactly_what_godot_saves() {
         let extra: &[&str] = match rel.file_name().and_then(|n| n.to_str()) {
             Some("world.json") => &MANIFEST_AFTER_GODOT,
             Some("quests.json") if in_world => &QUEST_AFTER_GODOT,
+            Some("items.json") if !in_world => &ITEMS_AFTER_GODOT,
             _ => &[],
         };
         match text {

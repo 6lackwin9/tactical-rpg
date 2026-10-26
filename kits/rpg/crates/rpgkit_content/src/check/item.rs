@@ -399,6 +399,10 @@ pub fn item_errors(v: &View, e: &Dict, family: &Dict, inherit: bool) -> Vec<Stri
     out.extend(text_problems(&json::s(e, "description"), e));
     if t == "CONSUMABLE" {
         out.extend(consumable_problems(e));
+        // HOOKS1 GH2: the hazard a consumable leaves (no SKILL shape: an item has no area of its own)
+        if json::get(e, "hazard").as_object().is_none_or(|h| !h.is_empty()) {
+            out.extend(super::hooks::hazard_place_errors(json::get(e, "hazard"), &super::hooks::Ctx::of(v), false));
+        }
     }
     out
 }
@@ -491,7 +495,7 @@ fn modifier_problems(v: &View, e: &Dict, family: &Dict) -> Vec<String> {
                 if !fx.is_object() {
                     out.push(format!("Modifier {n}: effect needs an effect object ({{\"type\": ...}})."));
                 } else {
-                    for message in simple::effect_errors(&Value::Array(vec![fx.clone()]), &skill_ok, &[], true, true) {
+                    for message in simple::effect_errors(&Value::Array(vec![fx.clone()]), &skill_ok, &[], true, true, &super::hooks::Ctx::of(v)) {
                         out.push(format!("Modifier {n}: {message}"));
                     }
                 }
@@ -649,7 +653,7 @@ fn bonus_problems(v: &View, bonus: &Dict, t: &str, n: usize) -> Vec<String> {
                 if fx.len() > TIER_MAX_EFFECTS {
                     out.push(format!("Tier {n}: at most {TIER_MAX_EFFECTS} effects."));
                 }
-                for message in simple::effect_errors(&Value::Array(fx.to_vec()), &has_skill(v), &[], true, true) {
+                for message in simple::effect_errors(&Value::Array(fx.to_vec()), &has_skill(v), &[], true, true, &super::hooks::Ctx::of(v)) {
                     out.push(format!("Tier {n}: {message}"));
                 }
                 any = any || !fx.is_empty();
@@ -687,7 +691,7 @@ fn legacy_errors(v: &View, e: &Dict) -> Vec<String> {
         errors.push(format!("Off-hand category '{off}' needs the matching gear type '{off}'."));
     }
     if equip {
-        errors.extend(simple::effect_errors(json::get(e, "effects"), &has_skill(v), &[], true, true));
+        errors.extend(simple::effect_errors(json::get(e, "effects"), &has_skill(v), &[], true, true, &super::hooks::Ctx::of(v)));
         match json::get(e, "threshold_tiers") {
             Value::Array(tiers) => {
                 if tiers.iter().any(|t| !json::dict(t).contains_key("stat") || !json::dict(t).contains_key("threshold")) {

@@ -9,6 +9,8 @@ pub mod campaign;
 pub mod derived;
 pub mod dialogue;
 pub mod encounter;
+pub mod hook_kinds;
+pub mod hooks;
 pub mod item;
 pub mod map;
 pub mod portrait;
@@ -230,6 +232,10 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
         // PORTRAITFX1-S: the row checks the loader applies (trigger and match, effect and numbers, unique ids and cues)
         return portrait::entry_errors(v, &content(kind, entry), current_id);
     }
+    if crate::source::HOOK_KINDS.contains(&kind) {
+        // HOOKS1-S: the row checks the loader applies (hazards, unit meters, zones; unique ids)
+        return hook_kinds::entry_errors(v, kind, &content(kind, entry), current_id);
+    }
     let old_id = if current_id.is_empty() { json::s(entry, "id") } else { current_id.to_string() };
     let e = match kind {
         "items" => item::prepare(v, entry, v.get(kind, &old_id)),
@@ -253,7 +259,7 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
     let has_skill = |id: &str| v.has("skills", id);
     match kind {
         "skills" => errors.extend(skill::entry_errors(v, &e)),
-        "passives" => errors.extend(simple::effect_errors(json::get(&e, "effects"), &has_skill, &v.derived_ids(), false, false)),
+        "passives" => errors.extend(simple::effect_errors(json::get(&e, "effects"), &has_skill, &v.derived_ids(), false, false, &hooks::Ctx::of(v))),
         "terrain" => errors.extend(simple::terrain_errors(&e)),
         "classes" => errors.extend(unit::class_errors(v, &e)),
         "units" => {
@@ -342,7 +348,7 @@ pub fn warnings_for(v: &View, kind: &str, entry: &Dict) -> Vec<String> {
     let entry = &crate::source::folded(kind, entry);
     let e = content(kind, entry);
     match kind {
-        "skills" => skill::warnings(entry, &e),
+        "skills" => skill::warnings(entry, &e).into_iter().chain(skill::hook_warnings(v, entry, &e)).collect(),
         "classes" => unit::class_warnings(v, &e),
         "units" => unit::unit_warnings(v, &e).into_iter().chain(reward::loot_warnings(v, &e)).chain(assets::portrait_and_palette_warnings(v, &Dict::new(), &e)).collect(),
         "encounters" => encounter::warnings(v, &e),

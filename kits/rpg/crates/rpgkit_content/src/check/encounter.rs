@@ -123,6 +123,9 @@ pub fn errors(v: &View, e: &Dict) -> Vec<String> {
         _ => errors.push("Exit tiles must be a list of [x, y] pairs.".into()),
     }
     errors.extend(rows_problems(e));
+    // HOOKS1 AH1 and DU2: the arena hazards and the deck phase effects
+    errors.extend(super::hooks::arena_hazards_errors(e));
+    errors.extend(super::hooks::deck_effect_errors(v, e, None, &|r: &str| v.get("units", r).clone()));
     errors
 }
 
@@ -160,12 +163,15 @@ const DEFAULT_STATUS_ROUNDS: i64 = 2;
 const ENRAGE_POWER_MIN: i64 = 1;
 const ENRAGE_POWER_MAX: i64 = 25;
 const DEFAULT_ENRAGE_POWER: i64 = 20;
-const EFFECTS: [&str; 5] = ["line", "wave", "status", "ai", "enrage"];
+/// The phase effects (BOSS1; HOOKS1 DU1 adds `deck`).
+const EFFECTS: [&str; 6] = ["line", "wave", "status", "ai", "enrage", rpgkit_data::DECK_EFFECT];
 const PHASE_KEYS: [&str; 5] = ["id", "name", "trigger", "effects", "pause_autoplay"];
 const AI_ROLES: [&str; 4] = ["AGGRESSOR", "SKIRMISHER", "SNIPER", "SUPPORT"];
-const AI_TARGET_PREFS: [&str; 2] = ["NEAREST", "WEAKEST"];
+/// HOOKS1 AT1 adds SOFTEST and TOUGHEST (read under the rule ai_tactics).
+const AI_TARGET_PREFS: [&str; 4] = ["NEAREST", "WEAKEST", "SOFTEST", "TOUGHEST"];
 const AI_RATIOS: [&str; 3] = ["flee_ratio", "defend_below", "heal_below"];
-const AI_SETTINGS: [&str; 6] = ["role", "target_pref", "reckless", "flee_ratio", "defend_below", "heal_below"];
+/// HOOKS1 AT2 adds `tactics` (it replaces the unit's list).
+const AI_SETTINGS: [&str; 7] = ["role", "target_pref", "reckless", "flee_ratio", "defend_below", "heal_below", "tactics"];
 const PACES: [&str; 4] = ["auto", "mob", "elite", "boss"];
 
 fn trigger_keys(kind: &str) -> &'static [&'static str] {
@@ -181,7 +187,8 @@ fn effect_keys(kind: &str) -> &'static [&'static str] {
         "line" => &["type", "text"],
         "wave" => &["type", "units", "label"],
         "status" => &["type", "unit", "status", "rounds", "magnitude"],
-        "ai" => &["type", "unit", "role", "target_pref", "reckless", "flee_ratio", "defend_below", "heal_below"],
+        "ai" => &["type", "unit", "role", "target_pref", "reckless", "flee_ratio", "defend_below", "heal_below", "tactics"],
+        rpgkit_data::DECK_EFFECT => &rpgkit_data::DECK_EFFECT_KEYS,
         _ => &["type", "unit", "power"],
     }
 }
@@ -226,6 +233,15 @@ pub fn phase_problems(e: &Dict, ref_ok: &dyn Fn(&str) -> bool) -> Vec<String> {
     }
     let mut seen: Vec<String> = Vec::new();
     let mut enrages = 0;
+    // HOOKS1 DU2: one deck effect per unit ref
+    let mut deck_units: Vec<String> = Vec::new();
+    for fx in list.iter().filter_map(Value::as_object).flat_map(|p| dicts(json::get(p, "effects"))).filter(|fx| json::s(fx, "type") == rpgkit_data::DECK_EFFECT) {
+        let unit = json::s(fx, "unit");
+        if deck_units.contains(&unit) {
+            errors.push(format!("Phases hold one deck effect per unit ('{unit}' has two)."));
+        }
+        deck_units.push(unit);
+    }
     for (index, p) in list.iter().enumerate() {
         let Some(phase) = p.as_object() else {
             errors.push("Each phase must be an object.".into());
@@ -371,6 +387,10 @@ fn effects_errors(tag: &str, raw: &Value, known: &[String], ref_ok: &dyn Fn(&str
             }
             "status" => errors.extend(status_errors(tag, fx, known)),
             "ai" => errors.extend(ai_errors(tag, fx, known)),
+            rpgkit_data::DECK_EFFECT => {
+                errors.extend(unit_errors(tag, fx, known));
+                errors.extend(super::hooks::deck_shape_errors(tag, fx));
+            }
             _ => {}
         }
     }
@@ -477,6 +497,9 @@ fn ai_errors(tag: &str, fx: &Dict, known: &[String]) -> Vec<String> {
     }
     if fx.get("reckless").is_some_and(|b| !b.is_boolean()) {
         errors.push(format!("Phase '{tag}': reckless must be true or false."));
+    }
+    if let Some(t) = fx.get("tactics") {
+        errors.extend(super::hooks::tactics_errors(t, &format!("Phase '{tag}': tactics")));
     }
     for key in AI_RATIOS {
         if let Some(v) = fx.get(key) {

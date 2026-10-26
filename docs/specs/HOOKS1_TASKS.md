@@ -37,7 +37,7 @@ half the lowest owner's max HP.
 | encounters | `arena_hazards` | json [] | 0-4 rows (1.6) |
 | encounter phase effects | `deck` | `{type, unit, add, order}` | DU2; with `deck` in the world's ruleset |
 | world manifest | `classes` | json {} | class id keys; `name` 1-32, `description` 0-240, `skill_path` absent or `{family: level 1-30}` |
-| rulesets | `rules` | + 8 ids | HOOKS1 4.1 |
+| rulesets | `rules` | + 9 ids (with `execute`) | HOOKS1 4.1 |
 | later (HOOKS1-Q) | `spare_once`; trigger `spared`; effect `heal` | refs []; `{kind, unit}`; `{type, unit, pct 1-100}` | refs in `enemies` or phase waves |
 
 ### 1.3 Trigger rows (passives, items, skills, riders)

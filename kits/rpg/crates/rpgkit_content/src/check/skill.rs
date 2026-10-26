@@ -16,9 +16,11 @@ pub const KINDS: [&str; 9] = ["ATTACK", "DEFEND", "FOCUS", "SUPPORT", "DISENGAGE
 const AUTHORABLE: [&str; 5] = ["ATTACK", "DEFEND", "FOCUS", "SUPPORT", "DISENGAGE"];
 /// The fields every kind has (RULESET1-S adds `round_intent`: every kind has an intent, IN4).
 const COMMON_FIELDS: [&str; 17] = ["id", "name", "kind", "level", "blocks", "description", "template", "system", "basic", "learned_only", "grade", "requires", "origin", "unlock_offset", "family", "tier", "round_intent"];
-/// The sections and their fields (SkillKinds.SECTIONS; the last four are RULESET1-S's timeline fields, RULESET1_TASKS
-/// 1.3: `cost` the authored kinds, `timing` ATTACK / SUPPORT / FOCUS, `intent` DEFEND / SUPPORT / FOCUS, `impact` ATTACK).
-const SECTION_FIELDS: [(&str, &[&str]); 17] = [
+/// The sections and their fields (SkillKinds.SECTIONS; then RULESET1-S's timeline fields, RULESET1_TASKS 1.3: `cost`
+/// the authored kinds, `timing` ATTACK / SUPPORT / FOCUS, `intent` DEFEND / SUPPORT / FOCUS, `impact` ATTACK; then
+/// HOOKS1-S's hook fields, HOOKS1_TASKS 1.1: `forced` ATTACK, `ground` and `triggers` ATTACK / DEFEND / SUPPORT, `riders`
+/// ATTACK / SUPPORT, the costs `meters` and `hp_cost` in `cost`, `ignore_guard` in `impact`).
+const SECTION_FIELDS: [(&str, &[&str]); 21] = [
     ("damage", &["power_mult", "weapon_hand", "dash_tiles"]),
     ("inflict", &["status_effect", "status_potency", "status_magnitude", "status_rounds"]),
     ("reach", &["reach_min", "reach_max"]),
@@ -32,18 +34,22 @@ const SECTION_FIELDS: [(&str, &[&str]); 17] = [
     ("combo", &["disrupt", "exploit", "exploit_consume"]),
     ("rest", &["recover_ap"]),
     ("gate", &["weapon_types", "min_proficiency"]),
-    ("cost", &["ap_cost"]),
+    ("cost", &["ap_cost", "meters", "hp_cost"]),
     ("timing", &["recovery_blocks", "windup_poise", "unbreakable"]),
     ("intent", &["intent_buff"]),
-    ("impact", &["stagger", "sure_break", "armor_piercing"]),
+    ("impact", &["stagger", "sure_break", "armor_piercing", "ignore_guard"]),
+    ("forced", &["forced_move"]),
+    ("ground", &["hazard"]),
+    ("triggers", &["triggers"]),
+    ("riders", &["riders"]),
 ];
 
 fn sections_of(kind: &str) -> &'static [&'static str] {
     match kind {
-        "ATTACK" => &["damage", "inflict", "combo", "flow", "reach", "area", "gate", "cost", "timing", "impact"],
-        "DEFEND" => &["grant", "guard", "flow", "gate", "cost", "intent"],
+        "ATTACK" => &["damage", "inflict", "combo", "flow", "reach", "area", "gate", "cost", "timing", "impact", "forced", "ground", "triggers", "riders"],
+        "DEFEND" => &["grant", "guard", "flow", "gate", "cost", "intent", "ground", "triggers"],
         "FOCUS" => &["focus", "flow", "cost", "timing", "intent"],
-        "SUPPORT" => &["reach", "support", "grant", "flow", "gate", "cost", "timing", "intent"],
+        "SUPPORT" => &["reach", "support", "grant", "flow", "gate", "cost", "timing", "intent", "ground", "triggers", "riders"],
         "DISENGAGE" => &["jump", "cost"],
         "REST" => &["rest"],
         _ => &[],
@@ -746,7 +752,9 @@ fn row_problems(v: &View, e: &Dict) -> Vec<String> {
         let dash = json::i(e, "dash_tiles", 0);
         let hand = json::s(e, "weapon_hand");
         if json::f(e, "power_mult", 1.0) <= 0.0 {
-            if status_id.is_empty() {
+            // HOOKS1 GH3: an attack of power 0 with a hazard is a placement (no status needed)
+            let placement = json::get(e, "hazard").as_object().is_some_and(|h| !h.is_empty());
+            if status_id.is_empty() && !placement {
                 out.push("A skill with no damage needs a status".into());
             }
             if area != "NONE" {
@@ -786,6 +794,7 @@ fn row_problems(v: &View, e: &Dict) -> Vec<String> {
     out.extend(extra_grant_problems(e, &kind));
     out.extend(combo_problems(e, &kind));
     out.extend(timeline_problems(v, e, &kind));
+    out.extend(super::hooks::skill_errors(v, e, &kind));
     let types = json::sget(e, "weapon_types");
     for gear in &types {
         if !GEAR_TYPES.contains(&gear.as_str()) && gear != UNARMED_TOKEN {
@@ -865,13 +874,30 @@ fn combo_problems(e: &Dict, kind: &str) -> Vec<String> {
         out.push("A zero-power attack cannot break a stance.".into());
     }
     let exploit = json::aget(e, "exploit");
-    if exploit.len() > 2 {
+    // HOOKS1 EX1 (rule execute): an entry {hp_below, power_mult} is not a status; at most one beside the 2 statuses
+    let executes = exploit.iter().filter(|r| json::dict(r).contains_key(EXPLOIT_HP_BELOW)).count();
+    if exploit.len() - executes > 2 {
         out.push("Exploit takes at most 2 statuses.".into());
+    }
+    if executes > 1 {
+        out.push(format!("Exploit takes at most one {EXPLOIT_HP_BELOW} entry."));
     }
     let mut seen: Vec<String> = Vec::new();
     let debuffs = status::debuffs();
     for raw in exploit {
         let row = json::dict(raw);
+        if let Some(pct) = row.get(EXPLOIT_HP_BELOW) {
+            if row.contains_key("status") {
+                out.push(format!("Exploit {EXPLOIT_HP_BELOW} entry takes no status."));
+            }
+            if !super::hooks::whole_in(pct, super::hooks::PCT) {
+                out.push(format!("Exploit {EXPLOIT_HP_BELOW} must be a whole number {}-{}.", super::hooks::PCT.0, super::hooks::PCT.1));
+            }
+            if !(1.05..=2.0).contains(&json::f(row, "power_mult", 0.0)) {
+                out.push("Exploit power must be 1.05-2.0.".into());
+            }
+            continue;
+        }
         let st = json::s(row, "status");
         // RULESET1_INTENT MV3: the condition `flanked` (timeline's flank rule; classic never matches it)
         if !debuffs.contains(&st.as_str()) && st != FLANKED {
@@ -893,6 +919,9 @@ fn combo_problems(e: &Dict, kind: &str) -> Vec<String> {
     }
     out
 }
+
+/// HOOKS1 EX1: the key of an `exploit` entry that matches by the target's HP share (rule execute).
+pub const EXPLOIT_HP_BELOW: &str = "hp_below";
 
 /// The most blocks an action may take with its recovery (the round's blocks; the schema's `blocks` max).
 const MAX_ACTION_BLOCKS: i64 = 6;
@@ -985,6 +1014,35 @@ pub fn warnings(raw: &Dict, e: &Dict) -> Vec<String> {
             if gear != UNARMED_TOKEN {
                 out.push(format!("Weapon hand '{hand}' with weapon type '{gear}': off-hand slots hold shields, orbs and tomes, so only 'unarmed' can satisfy this gate."));
             }
+        }
+    }
+    out
+}
+
+/// HOOKS1-S warnings of a skill (ranked entry or flat row, as `warnings`): a placement whose status, stagger or forced
+/// move never land (`hooks::placement_warnings`); an HP cost above half the lowest max HP among the units that own the
+/// family (class path at any level or extra skills).
+pub fn hook_warnings(v: &View, raw: &Dict, e: &Dict) -> Vec<String> {
+    let ranked = !raw.contains_key("tier") && !raw.contains_key("family");
+    let rows: Vec<Dict> = if ranked { (1..=modifiers_of(raw).len() + 1).map(|r| effective(raw, r)).collect() } else { vec![e.clone()] };
+    let mut out = Vec::new();
+    if let Some(first) = rows.first() {
+        out.extend(super::hooks::placement_warnings(first));
+    }
+    let costs: Vec<(usize, i64)> = rows.iter().enumerate().map(|(i, r)| (i + 1, json::i(r, "hp_cost", 0))).filter(|(_, c)| *c > 0).collect();
+    if costs.is_empty() {
+        return out;
+    }
+    let family = head_of(e);
+    let owns = |u: &rpgkit_data::UnitDef| {
+        let path: Vec<String> = v.typed.classes.get(&u.class_id).map(|c| c.skill_path.keys().cloned().collect()).unwrap_or_default();
+        path.iter().chain(u.extra_skills.iter()).any(|s| v.typed.family_of(s) == family)
+    };
+    let lowest = v.typed.units.values().filter(|u| owns(u)).map(|u| (rpgkit_rules::unit::build_unit(&v.typed, u, 0).max_hp as i64, u.id.clone())).min();
+    if let Some((hp, unit)) = lowest {
+        for (rank, cost) in costs.into_iter().filter(|(_, c)| c * 2 > hp) {
+            let at = if rows.len() > 1 { format!("Rank {rank}: an") } else { "An".into() };
+            out.push(format!("{at} HP cost of {cost} is above half the lowest owner's max HP ({unit}: {hp})."));
         }
     }
     out
