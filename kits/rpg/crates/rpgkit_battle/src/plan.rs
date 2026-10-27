@@ -279,6 +279,13 @@ impl PlanEntry {
         // HOOKS1 8.1, 8.2: the skill's own triggers and its family (the rule triggers reads them)
         cmd.family = s.family_id().to_string();
         cmd.triggers = if self.item.is_some() { Vec::new() } else { s.triggers.clone() };
+        // HOOKS1 RD1, HC1, IG1: the riders (the rule triggers reads them), the HP cost and the guard bypass (set only
+        // under their rules)
+        if self.item.is_none() {
+            cmd.riders = s.riders.clone();
+            cmd.hp_cost = command::hp_cost_of(w, s);
+            cmd.ignore_guard = command::ignores_guard(w, s);
+        }
         // HOOKS1 GH2: the hazard the skill or item leaves (the rule ground_hazards reads it)
         cmd.hazard = match &self.item {
             Some(item) => crate::ground::Place::of_item(item),
@@ -327,6 +334,8 @@ pub struct SimState {
     pub round_target: Option<RoundTarget>,
     /// RULESET1_INTENT MV8: the step whose Maneuver skill carries the Disengage retreat (-1 = none).
     pub retreat_step: i32,
+    /// HOOKS1 HC1: the unit's HP after the HP costs of the steps so far (rule hp_cost).
+    pub hp_left: i32,
 }
 
 impl SimState {
@@ -459,6 +468,7 @@ impl Plan {
             dry_step: -1,
             round_target: w.round_states.get(&c).and_then(|r| r.target).filter(|_| round_intent::on(w)),
             retreat_step: self.retreat_step(w, c),
+            hp_left: u.hp,
         };
         for s in &u.st.active {
             for &b in status::blocked_blocks(s) {
@@ -537,6 +547,11 @@ impl Plan {
                 let fam_name = w.cat.tier_one(fam).map(|t| t.name.as_str()).unwrap_or(fam);
                 let rank = u.effective_rank(&w.cat, fam).unwrap_or(0);
                 return format!("{} uses {} at Rank {} (set on the Skills tab).", u.name, fam_name, rpgkit_rules::unit::rank_numeral(rank));
+            }
+            // HOOKS1 HC1: a skill is refused while the HP left is at or below its HP cost (rule hp_cost)
+            let p = command::hp_cost_problem(st.hp_left, command::hp_cost_of(w, s));
+            if !p.is_empty() {
+                return p;
             }
         }
         // RULESET1_INTENT IN5, TG1, MM1: a unit holding an intent uses only its skills, on one target a round
@@ -1372,6 +1387,11 @@ impl Plan {
             st.dry_entry = st.entries.len() as i32 - 1;
         }
         st.stance = after;
+        // HOOKS1 HC1: the HP cost is paid at the command's start: HP becomes max(1, hp - cost) (rule hp_cost)
+        let cost = command::hp_cost_of(w, s);
+        if cost > 0 {
+            st.hp_left = (st.hp_left - cost).max(1);
+        }
         // RULESET1_INTENT RS2, FU3: under round_intent Rest pays only at round end, so no AP returns mid-round
         if skill::kind(s) == Kind::Rest && pays && !round_intent::on(w) {
             st.ap_left = st.max_ap.min(st.ap_left + s.recover_ap);

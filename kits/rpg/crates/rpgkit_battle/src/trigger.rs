@@ -8,8 +8,10 @@
 //! the one event handled inside the hit, before its damage (4.3 step 1): its `guard` and `redirect` effects shape the
 //! hit (8.4: one redirect a hit; a running skill's triggers first, then passives and worn items), its other effects run
 //! after the action with the rest. A `guard` effect sets a held guard (8.3) that counts as guarding (P6's guard factor,
-//! `guarded_hit`, `immune: guarding`) until its last block, a break, `end_guard` or the round's end. Every entry point
-//! reads the rule first, so classic battles never fire, log, draw or record anything new.
+//! `guarded_hit`, `immune: guarding`) until its last block, a break, `end_guard` or the round's end. A skill's `riders`
+//! (RD1, HOOKS1-K) run at 4.3 step 8 per unit the skill landed on, with 8.2's conditions and effects (their `to`
+//! defaults to that unit). Every entry point reads the rule first, so classic battles never fire, log, draw or record
+//! anything new.
 
 use crate::command::CmdKind;
 use crate::forced::{self, Collide, Moved};
@@ -72,8 +74,9 @@ impl Event {
     }
 }
 
-/// What one trigger did: the holder, the event and its other unit, the source, one log line per effect, the HP journal
-/// rows of its damage held back for its own log cells, and the forced moves it drove.
+/// What one trigger (or rider) did: the holder, the event (`rider` for a rider) and its other unit, the source, one log
+/// line per effect with the HP that effect took (`dealt`) and its HP journal rows held back for the line's own log cell
+/// (`rows`), and the forced moves it drove (each collision hit holds its own rows).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Fired {
     pub holder: UnitId,
@@ -81,8 +84,22 @@ pub struct Fired {
     pub other: Option<UnitId>,
     pub source: String,
     pub lines: Vec<String>,
-    pub journal: Vec<(UnitId, i32)>,
+    pub dealt: Vec<i32>,
+    pub rows: Vec<Vec<(UnitId, i32)>>,
     pub moves: Vec<Moved>,
+}
+
+impl Fired {
+    fn new(holder: UnitId, on: &str, other: Option<UnitId>, source: &str) -> Self {
+        Self { holder, on: on.to_string(), other, source: source.to_string(), lines: Vec::new(), dealt: Vec::new(), rows: Vec::new(), moves: Vec::new() }
+    }
+
+    /// One effect's log line, the HP it took and its held-back journal rows.
+    fn push(&mut self, line: String, dealt: i32, rows: Vec<(UnitId, i32)>) {
+        self.lines.push(line);
+        self.dealt.push(dealt);
+        self.rows.push(rows);
+    }
 }
 
 /// 8.4: one `ally_hit` trigger that may fire inside a hit, and how many more times it may fire (-1 = no limit).
@@ -433,11 +450,12 @@ pub fn after_action(res: &mut Resolver, w: &mut World, idx: usize, before: &Befo
         for af in &watch.fired {
             let holder = &watch.guardians[af.guardian].holder;
             res.triggers.count(holder.unit, &holder.key);
-            let mut fired = Fired { holder: holder.unit, on: "ally_hit".into(), other: af.event.other, source: holder.source.clone(), lines: Vec::new(), journal: Vec::new(), moves: Vec::new() };
+            let mut fired = Fired::new(holder.unit, "ally_hit", af.event.other, &holder.source);
+            // the redirect's HP was lost inside the hit (the attack's own log cell explains it)
             for l in &af.lines {
                 let l = line(w, holder, l);
                 res.log.push(l.clone());
-                fired.lines.push(l);
+                fired.push(l, 0, Vec::new());
             }
             let h = holder.clone();
             run_effects(res, w, &af.event, &h, &af.rest, block, &mut fired);
@@ -449,6 +467,65 @@ pub fn after_action(res: &mut Resolver, w: &mut World, idx: usize, before: &Befo
     dispatch(res, w, events, block);
     end_guard_grants(res, w, block, false);
     raise_held(w, src, block);
+}
+
+/// The holder key prefix of a rider (riders have no `limit`; the log tags their lines `[Rider]`).
+const RIDER_KEY: &str = "rider:";
+
+/// 4.3 step 8, RD1 (rule triggers): the riders of the action `idx` run per unit it landed on: each unit its hits
+/// damaged (hit order, once each; an intercept's holder in place of the friend), or a support skill's target. The
+/// event (`rider`) has the skill's user as holder and that unit as `other` (an effect's `to` defaults to it), the hit's
+/// reach and family, and that unit's HP share before the action; 8.2's conditions apply. One line per effect.
+pub fn riders(res: &mut Resolver, w: &mut World, idx: usize, before: &Before) {
+    let a = &res.scheduled[idx];
+    let (src, cmd) = (a.unit, &a.command);
+    if cmd.riders.is_empty() || cmd.failed || !w.units[src].is_active() {
+        return;
+    }
+    let landed: Vec<(UnitId, Option<bool>)> = match &cmd.kind {
+        CmdKind::Attack { .. } | CmdKind::Area { .. } => {
+            let mut out: Vec<(UnitId, Option<bool>)> = Vec::new();
+            // RD1 "damaged by a hit": a status-only attack lands no rider, nor a hit the unit took no HP from (an
+            // intercept's holder already at 1 HP)
+            for &(t, _) in &cmd.hits {
+                let Some(s) = cmd.struck.iter().find(|s| s.target == t && s.damage > 0) else { continue };
+                if !out.iter().any(|(u, _)| *u == t) {
+                    out.push((t, Some(s.ranged)));
+                }
+            }
+            out
+        }
+        CmdKind::Support { target, .. } => vec![(*target, None)],
+        _ => Vec::new(),
+    };
+    let (name, family, riders, block) = (cmd.name.clone(), cmd.family.clone(), cmd.riders.clone(), a.impact);
+    for (t, ranged) in landed {
+        for (i, r) in riders.iter().enumerate() {
+            let ev = Event { ranged, family: family.clone(), other_hp: Some(share_of(w, t, before.hp[t])), ..Event::new("rider", src, Some(t)) };
+            if !matches(w, &ev, &r.when) {
+                continue;
+            }
+            let row = TriggerRow { on: "rider".into(), when: r.when.clone(), effects: r.effects.clone(), limit: "none".into() };
+            let h = Holder { unit: src, source: name.clone(), key: format!("{RIDER_KEY}{name}#{i}"), row };
+            // 8.2: a rider's effect acts on the unit it landed on unless it says `to: self`
+            let effects: Vec<Obj> = r
+                .effects
+                .iter()
+                .map(|e| {
+                    let mut e = e.clone();
+                    if !e.contains_key("to") {
+                        e.insert("to".into(), "other".into());
+                    }
+                    e
+                })
+                .collect();
+            let mut fired = Fired::new(src, "rider", Some(t), &name);
+            run_effects(res, w, &ev, &h, &effects, block, &mut fired);
+            if !fired.lines.is_empty() || !fired.moves.is_empty() {
+                res.triggers.fired.push(fired);
+            }
+        }
+    }
 }
 
 /// The events of the action `idx` in raise order (8.1), the `hp_below` crossings last (the seen HP updates).
@@ -529,6 +606,8 @@ fn hp_crossings(res: &mut Resolver, w: &World) -> Vec<Event> {
 
 /// Handles `events` in order: each holder's triggers whose event, limit and conditions match fire (8.1).
 fn dispatch(res: &mut Resolver, w: &mut World, events: Vec<Event>, block: i32) {
+    // the drops not passed yet (a seen HP above the HP now; a rise is simply seen)
+    let pending: Vec<i32> = (0..w.units.len()).map(|c| res.triggers.hp_seen.get(c).map_or(0, |s| (s - w.units[c].hp).max(0))).collect();
     for ev in events {
         if !w.units[ev.holder].is_active() {
             continue;
@@ -538,7 +617,7 @@ fn dispatch(res: &mut Resolver, w: &mut World, events: Vec<Event>, block: i32) {
                 continue;
             }
             res.triggers.count(h.unit, &h.key);
-            let mut fired = Fired { holder: h.unit, on: ev.on.to_string(), other: ev.other, source: h.source.clone(), lines: Vec::new(), journal: Vec::new(), moves: Vec::new() };
+            let mut fired = Fired::new(h.unit, ev.on, ev.other, &h.source);
             let effects = h.row.effects.clone();
             run_effects(res, w, &ev, &h, &effects, block, &mut fired);
             if !fired.lines.is_empty() || !fired.moves.is_empty() {
@@ -546,15 +625,17 @@ fn dispatch(res: &mut Resolver, w: &mut World, events: Vec<Event>, block: i32) {
             }
         }
     }
-    // depth 1: the HP the effects changed raises no `hp_below` later
-    for c in 0..w.units.len().min(res.triggers.hp_seen.len()) {
-        res.triggers.hp_seen[c] = w.units[c].hp;
+    // depth 1: the HP the effects changed raises no `hp_below` later; a drop not yet passed (one at a block's start)
+    // keeps its usual timing
+    for c in 0..w.units.len().min(res.triggers.hp_seen.len()).min(pending.len()) {
+        res.triggers.hp_seen[c] = w.units[c].hp + pending[c];
     }
 }
 
-/// `[Trigger] <holder>'s <source>: <what>`.
+/// `[Trigger] <holder>'s <source>: <what>` (a rider: `[Rider] ...`).
 fn line(w: &World, h: &Holder, what: &str) -> String {
-    format!("[Trigger] {}'s {}: {what}", w.units[h.unit].name, h.source)
+    let tag = if h.key.starts_with(RIDER_KEY) { "Rider" } else { "Trigger" };
+    format!("[{tag}] {}'s {}: {what}", w.units[h.unit].name, h.source)
 }
 
 /// 8.2: runs `effects` of the holder `h` for `ev` in list order (a `redirect` outside `ally_hit` does nothing; a `meter`
@@ -567,6 +648,7 @@ fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Holder, effect
             continue;
         }
         let name = w.units[to].name.clone();
+        let (mut dealt, mut rows) = (0, Vec::new());
         let what = match value::string(e, "type", "").as_str() {
             "ap" => {
                 // party side only; never re-plans the round
@@ -621,9 +703,7 @@ fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Holder, effect
                 let m = forced::shove_unit(res, w, to, Some(h.unit), dir, value::int(e, "tiles", 1).clamp(1, 3), pull.then_some(origin), false, &collide, block);
                 // HOOKS1-GF: a trap sprung on the way cancels the moved unit's later Walks (the session logs the ground)
                 crate::ground::settle(res, w);
-                for hit in &m.hits {
-                    fired.journal.extend(hit.journal.iter().copied());
-                }
+                // each collision hit keeps its HP rows for its own log cell
                 fired.moves.push(m);
                 continue;
             }
@@ -649,8 +729,9 @@ fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Holder, effect
                 let mark = w.hp_journal.as_ref().map_or(0, |j| j.len());
                 let before = w.units[to].hp;
                 w.damage(to, value::int(e, "value", 0).max(0), false);
-                fired.journal.extend(w.hp_journal.as_mut().map(|j| j.split_off(mark.min(j.len()))).unwrap_or_default());
+                rows = w.hp_journal.as_mut().map(|j| j.split_off(mark.min(j.len()))).unwrap_or_default();
                 let lost = before - w.units[to].hp;
+                dealt = lost;
                 format!("{lost} damage to {name}{}", if w.units[to].is_alive() { "" } else { ", defeated" })
             }
             "reveal" => {
@@ -687,7 +768,7 @@ fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Holder, effect
         };
         let l = line(w, h, &what);
         res.log.push(l.clone());
-        fired.lines.push(l);
+        fired.push(l, dealt, rows);
     }
 }
 
@@ -703,9 +784,11 @@ fn end_guard_grants(res: &mut Resolver, w: &mut World, block: i32, all: bool) {
     }
 }
 
-/// End of `prepare_block` (rule triggers): held guards raise the guards, then the `guard_start` events of the Defends
+/// End of `prepare_block` (rule triggers): held guards raise the guards, then the `hp_below` crossings of the HP costs
+/// `paid` as actions started (HC1: each payer's cost alone, from its HP before paying; every other drop since the last
+/// pass keeps its usual timing, the next action's or the round end's pass), then the `guard_start` events of the Defends
 /// that started now, then the grants of units that stopped guarding end.
-pub fn on_block_start(res: &mut Resolver, w: &mut World, block: i32) {
+pub fn on_block_start(res: &mut Resolver, w: &mut World, block: i32, paid: &[crate::resolver::HpPaid]) {
     if !on(w) {
         return;
     }
@@ -713,8 +796,16 @@ pub fn on_block_start(res: &mut Resolver, w: &mut World, block: i32) {
     for c in 0..w.units.len() {
         raise_held(w, c, block);
     }
+    let mut events = Vec::new();
+    for p in paid {
+        events.push(Event { hp_from: share_of(w, p.unit, p.before), hp_to: share_of(w, p.unit, p.before - p.paid), ..Event::new("hp_below", p.unit, None) });
+        // the cost is passed now: a later pass sees only the unit's other drops
+        if let Some(seen) = res.triggers.hp_seen.get_mut(p.unit) {
+            *seen -= p.paid;
+        }
+    }
     let started: Vec<UnitId> = res.scheduled.iter().filter(|a| !a.cancelled && a.start == block && a.command.is_defend() && w.units[a.unit].is_active()).map(|a| a.unit).collect();
-    let events = started.into_iter().map(|c| Event::new("guard_start", c, None)).collect();
+    events.extend(started.into_iter().map(|c| Event::new("guard_start", c, None)));
     dispatch(res, w, events, block);
     end_guard_grants(res, w, block, false);
 }
@@ -754,6 +845,13 @@ pub fn round_end(res: &mut Resolver, w: &mut World) {
     end_guard_grants(res, w, block, true);
     for u in w.units.iter_mut() {
         u.held_guard = None;
+    }
+}
+
+/// The HP seen before a block's actions start, for the units not seen yet (rule triggers).
+pub fn before_block(res: &mut Resolver, w: &World) {
+    if on(w) {
+        res.triggers.watch_hp(w);
     }
 }
 

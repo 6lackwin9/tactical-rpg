@@ -1057,6 +1057,13 @@ impl Session {
             self.pending = self.resolver.prepare_block(&mut self.w, self.current_block).into();
             // A chase or dash as an attack started gets its own cell.
             let (round, block) = (self.current_round, self.current_block);
+            // HOOKS1 HC1: each HP cost paid as an action started gets its cell (rule hp_cost; none in classic)
+            for p in std::mem::take(&mut self.resolver.hp_paid) {
+                if let Some(j) = self.w.hp_journal.as_mut() {
+                    j.extend(p.journal.iter().copied());
+                }
+                self.append(crate::log::hp_cost_entry(&self.w, &p, round, block));
+            }
             for (i, note) in std::mem::take(&mut self.resolver.notes) {
                 if let Some(e) = crate::log::move_note_entry(&self.w, &self.resolver.scheduled[i], round, block, &note) {
                     self.append(e);
@@ -1078,6 +1085,10 @@ impl Session {
             // Every popped action gets its cell, also one cancelled before it resolved (as Godot logs it); RULESET1 P9:
             // one its unit's break cancelled has the break's cell instead
             if !a.broken {
+                // HOOKS1 8.4: the metrics hear the redirected parts before the action's cell (rule triggers)
+                if crate::trigger::on(&self.w) {
+                    self.feed(|m, s| m.on_struck(s, idx));
+                }
                 self.append(crate::log::from_action(&self.w, &a, round, block));
             }
             for r in &a.command.reactions {
@@ -1148,23 +1159,31 @@ impl Session {
         }
     }
 
-    /// HOOKS1 8.1: a cell per trigger effect since the last call (rule triggers, none in classic); a trigger's forced move
-    /// gets its move and collision cells (FM9), and the HP rows its damage held back reach the metrics with its cells.
+    /// HOOKS1 8.1: a cell per trigger or rider effect since the last call (rule triggers, none in classic; the HP the
+    /// effect took as the cell's damage); a trigger's forced move gets its move and collision cells (FM9). The HP rows
+    /// each effect and collision held back reach the metrics with its own cell, which credit them to the holder (HOOKS1-K).
     /// The caller logs the ground next (HOOKS1-GF: a moved unit's hazard hits).
     fn log_triggers(&mut self, round: i32, block: i32) {
         for f in self.resolver.triggers.take() {
-            if let Some(j) = self.w.hp_journal.as_mut() {
-                j.extend(f.journal.iter().copied());
-            }
-            for l in &f.lines {
-                self.append(crate::log::trigger_entry(&self.w, &f, l, round, block));
+            self.feed(|m, s| m.on_trigger(s, &f));
+            for (i, l) in f.lines.iter().enumerate() {
+                if let (Some(j), Some(rows)) = (self.w.hp_journal.as_mut(), f.rows.get(i)) {
+                    j.extend(rows.iter().copied());
+                }
+                let mut e = crate::log::trigger_entry(&self.w, &f, l, round, block);
+                e.damage = f.dealt.get(i).copied().unwrap_or(0);
+                self.append(e);
             }
             for m in &f.moves {
                 self.append(crate::log::forced_entry(&self.w, m, &f.source, round, block));
                 for h in &m.hits {
+                    if let Some(j) = self.w.hp_journal.as_mut() {
+                        j.extend(h.journal.iter().copied());
+                    }
                     self.append(crate::log::collision_entry(&self.w, m, h, &f.source, round, block));
                 }
             }
+            self.feed(|m, _| m.trigger_closed());
         }
     }
 

@@ -298,7 +298,11 @@ pub fn resolve_hits(res: &mut Resolver, w: &mut World, idx: usize) {
             continue;
         }
         let windup = in_windup(&res.scheduled, t, block);
-        let f = factors(w, &res.scheduled, t, block, blocks, flank);
+        let mut f = factors(w, &res.scheduled, t, block, blocks, flank);
+        // HOOKS1 IG1: a guard-bypassing hit staggers as if the target did not guard (set only under the rule ignore_guard)
+        if res.scheduled[idx].command.ignore_guard {
+            f.guard = 1.0;
+        }
         let taken = stagger_taken(impact.stagger, &f);
         let mut hit = StaggerHit { target: t, stagger: impact.stagger, factors: f, windup, taken, before: st.value, after: st.value, chance: None, broke: None };
         // P8: a unit broken this round stays at 0 and breaks no further

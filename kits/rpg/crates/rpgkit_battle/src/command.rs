@@ -171,6 +171,14 @@ pub struct Command {
     /// HOOKS1 8.4: the `ally_hit` triggers the hits consult (set by the resolver before the action lands; rule
     /// `triggers` only).
     pub ally: Option<crate::trigger::AllyWatch>,
+    /// HOOKS1 RD1: the skill's riders, run per unit the command landed on (read only under the rule `triggers`).
+    pub riders: Vec<rpgkit_data::Rider>,
+    /// HOOKS1 HC1: the HP the command pays at its start (0 = none; set only under the rule `hp_cost`).
+    pub hp_cost: i32,
+    /// HOOKS1 IG1: the hits skip the target's guard and P6's guard factor (set only under the rule `ignore_guard`).
+    pub ignore_guard: bool,
+    /// HOOKS1 IG1: the last execution's bypass left out a guard (a hit target guarded; the breakdown says so).
+    pub guard_bypassed: bool,
 }
 
 impl Command {
@@ -212,6 +220,10 @@ impl Command {
             struck: Vec::new(),
             evaded: None,
             ally: None,
+            riders: Vec::new(),
+            hp_cost: 0,
+            ignore_guard: false,
+            guard_bypassed: false,
         }
     }
 
@@ -293,6 +305,7 @@ impl Command {
         self.pushes.clear();
         self.struck.clear();
         self.evaded = None;
+        self.guard_bypassed = false;
         self.failed = false;
         let src = self.source;
         let src_name = w.units[src].name.clone();
@@ -631,14 +644,20 @@ impl Command {
             Some(watch) => crate::trigger::ally_hit(w, watch, src, f, ranged, &self.family, skip),
             None => None,
         };
+        // HOOKS1 IG1: a guard-bypassing hit leaves out the guard part of the guard-and-cover term (cover stays)
+        let include_guard = !self.ignore_guard;
         let Some(r) = claim else {
-            let hit = roll_hit_with(w, rng, src, f, ranged, offhand, mult, cover, pierce);
+            self.guard_bypassed |= self.ignore_guard && w.units[f].guard > 0.0;
+            // one crit draw, then the damage (roll_hit_with's order)
+            let input = HitInput { ranged, offhand, skill_mult: mult, crit_roll: Some(rng.randf()), cover, ignore_armor: pierce, include_guard, ..HitInput::default() };
+            let hit = damage::compute(&w.units[src], &w.units[f], input);
             let taken = w.damage(f, hit.final_dmg, true);
             return (f, hit, taken);
         };
-        let input = HitInput { ranged, offhand, skill_mult: mult, crit_roll: Some(rng.randf()), cover, ignore_armor: pierce, ..HitInput::default() };
+        let input = HitInput { ranged, offhand, skill_mult: mult, crit_roll: Some(rng.randf()), cover, ignore_armor: pierce, include_guard, ..HitInput::default() };
         let own = damage::compute(&w.units[src], &w.units[f], input);
         let h = r.holder;
+        self.guard_bypassed |= self.ignore_guard && (w.units[f].guard > 0.0 || w.units[h].guard > 0.0);
         let theirs = damage::compute(&w.units[src], &w.units[h], input);
         let whole = r.pct >= 100;
         let h_part = if whole { theirs.final_dmg } else { crate::trigger::part(theirs.final_dmg, r.pct) };
@@ -723,6 +742,9 @@ impl Command {
         self.forced = None;
         self.hazard = None;
         self.triggers.clear();
+        self.riders.clear();
+        self.hp_cost = 0;
+        self.ignore_guard = false;
     }
 
     /// After one damaging hit: stance break (Offensive / Defensive target to Tactical), then exploit consume.
@@ -1153,6 +1175,29 @@ pub fn effective_heal(target: &Unit, amount: i32) -> i32 {
 
 pub fn cleansable(target: &Unit, s: &rpgkit_data::SkillDef) -> Vec<&'static str> {
     skill::cleanse_list(s).into_iter().filter(|st| target.st.has_any(st)).collect()
+}
+
+/// HOOKS1 HC1: the HP skill `s` costs (0 without the rule hp_cost; items pay none).
+pub fn hp_cost_of(w: &World, s: &rpgkit_data::SkillDef) -> i32 {
+    if w.ruleset.has(rpgkit_rules::ruleset::HP_COST) && !skill::is_item(s) {
+        s.hp_cost.max(0)
+    } else {
+        0
+    }
+}
+
+/// HOOKS1 HC1: why a unit at `hp` cannot use a skill costing `cost` HP ("" = it can): HP at or below the cost.
+pub fn hp_cost_problem(hp: i32, cost: i32) -> String {
+    if cost > 0 && hp <= cost {
+        format!("HP {hp} <= cost {cost}")
+    } else {
+        String::new()
+    }
+}
+
+/// HOOKS1 IG1: skill `s`'s hits skip the guard (the rule ignore_guard and the ATTACK flag `ignore_guard`).
+pub fn ignores_guard(w: &World, s: &rpgkit_data::SkillDef) -> bool {
+    s.ignore_guard && w.ruleset.has(rpgkit_rules::ruleset::IGNORE_GUARD) && !skill::is_item(s) && skill::kind(s) == skill::Kind::Attack
 }
 
 /// "" when `target` is legal for `skill` cast by `caster` (distance aside).

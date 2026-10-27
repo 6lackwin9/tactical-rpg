@@ -708,10 +708,14 @@ impl<'a> Builder<'a> {
                 let need = s.blocks + w.recovery_of(self.c, s);
                 let ap = if pays { skill::ap_cost_by(s, Some(u), &w.ruleset) } else { 0 };
                 let ap_free = st.ap_left - reserve.ap;
+                // HOOKS1 HC1: a skill whose HP cost the unit's HP left does not exceed is refused (rule hp_cost)
+                let hp = command::hp_cost_problem(st.hp_left, command::hp_cost_of(w, s));
                 if !fits_before(&st, need, limit) {
                     why = format!("blocks {free} < {need}");
                 } else if ap > ap_free {
                     why = format!("AP {} < {ap}", ap_free.max(0));
+                } else if !hp.is_empty() {
+                    why = hp;
                 } else if let Some(step) = self.follow_step(&st, sid) {
                     let before = st.entries.len();
                     let p = plan.add_step(w, self.c, tagged(step, &format!("follow-up {}", k + 1), ""), false);
