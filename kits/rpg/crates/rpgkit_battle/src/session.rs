@@ -891,6 +891,14 @@ impl Session {
     /// CombatEncounter.schedule_enemy_ai: drafts every enemy on the field into one shared plan, re-drafts broken
     /// drafts, trims what is still broken, and commits.
     fn schedule_enemy_ai(&mut self) {
+        // RULESET1_INTENT AI1 (RULESET1-AI): under round_intent every enemy picks its intent and target by the AI table
+        if round_intent::on(&self.w) {
+            let mut enemy_plan = Plan::new();
+            let lines = ai::plan_enemy_intents(&mut self.w, &mut enemy_plan);
+            self.events.extend(lines);
+            enemy_plan.commit(&self.w, &mut self.resolver);
+            return;
+        }
         let w = &self.w;
         let mut enemy_plan = Plan::new();
         let drafted: Vec<UnitId> = w.enemies.iter().copied().filter(|e| w.units[*e].is_active() && w.has(*e)).collect();
@@ -940,6 +948,13 @@ impl Session {
             return;
         }
         let allies = self.w.allies.clone();
+        // RULESET1_INTENT AI5 (RULESET1-AI): under round_intent a tactic picks each member's intent and target
+        if round_intent::on(&self.w) {
+            let presets: Vec<(UnitId, String)> = allies.iter().map(|&a| (a, self.preset_for(a, preset))).collect();
+            let lines = ai::plan_party_intents(&mut self.w, &mut self.plan, &presets);
+            self.events.extend(lines);
+            return;
+        }
         for &a in &allies {
             if self.w.units[a].is_active() {
                 let p = self.w.profile_of(a).with_preset(&self.preset_for(a, preset));
@@ -964,6 +979,11 @@ impl Session {
     /// plan_apply_preset: replaces one ally's steps with an AI draft for `preset`.
     pub fn plan_apply_preset(&mut self, actor: UnitId, preset: &str) {
         if self.phase != Phase::Planning || !self.w.units[actor].is_active() {
+            return;
+        }
+        if round_intent::on(&self.w) {
+            let lines = ai::plan_party_intents(&mut self.w, &mut self.plan, &[(actor, preset.to_string())]);
+            self.events.extend(lines);
             return;
         }
         let p = self.w.profile_of(actor).with_preset(preset);

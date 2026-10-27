@@ -249,6 +249,28 @@ Deterministic: the same world, plans and inputs give the same plan; it draws no 
 | Kite at Range | ranged: Assault (kites); melee: Maneuver Disengage when offered, else Assault |
 | Economy | Assault with the cheapest opener and no follow-ups (Rest) |
 
+As built (RULESET1-AI, 2026-10-28; `rpgkit_battle/src/ai.rs`; user answers 2026-10-28):
+
+- Tile ranking (positioning and cover), in tiers: (1) the selected target (the first ranked): a tile from which the
+  unit hits it (the planner's Assault, PL4); (2) out of reach this round: the tile within the standard move from
+  which it hits the most hostiles (a ranged unit: in its reach band; a melee unit: close quarters, then more
+  attackers drawn, the front line soaking pressure), a plain move there and the attacks on the first ranked hostile in
+  reach; (3) only when it can do neither, or at low HP: its own safety. Cover breaks ties inside a tier.
+- Row 3 (low HP) is tier 3: when a ranged foe threatens, the tile within one move block with the fewest threats, then
+  the most cover against that shooter, then farther from the foes; else Guard self. Flee stays row 1.
+- Row 5b, `advance` (no hostile in reach this round): the round's standard move along the approach path toward the
+  first ranked target, then by the unit's AI profile: the melee front line (every role but Support, not reckless)
+  Guards on that tile (the Guard intent on it: GD1); a ranged unit (`attack_range` above 1) uses a Support or Focus
+  skill on itself there when it has one this round, else Guards (rare: its range usually reaches); a Support-role unit Supports itself, else an ally, from there (a plain
+  move first, IN5); a reckless unit has no Guard: Assault, the move, an attack if one reaches, Rest. The Assault round
+  is also the fallback when the Guard or Support round is not offered. No rule change was needed.
+- Row 2: the condition counts friends (the unit included) at or below `heal_below`; a Support-role unit counts any
+  hurt friend. With nobody hurt a Support unit goes on down the table.
+- A tactic whose pick is not offered falls back to the table; a pick the trial offered but the real intent change
+  refuses (IN6 dropped a buff it relied on; an Economy round without an opener step) goes on from the next row.
+- Applying a tactic (one member or the party) skips members set to Manual (MM1).
+- An enemy's `default_intent` (TQ23) holds only until its first AI pick at round 1's planning.
+
 ## 10. Input, tells and display (RULESET1-U, -V, -G)
 
 - UI1. Each member's strip row: four intent buttons (keys 1-4; Channel hidden until listed), the current one lit,

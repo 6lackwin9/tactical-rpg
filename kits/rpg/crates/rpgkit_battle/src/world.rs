@@ -117,6 +117,37 @@ impl AiProfile {
     }
 }
 
+/// RULESET1_INTENT AI5 (RULESET1-AI): an AUTO1 tactic as the round intent AI reads it (the preset id of
+/// `AiProfile::with_preset`; any other id, "withdraw" included, drafts by the AI table with that preset's profile).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tactic {
+    /// "balanced": the AI table.
+    Balanced,
+    /// "aggressive" (All-out Attack): Assault, the first ranked target.
+    AllOut,
+    /// "focus_weakest": Assault, the lowest-HP foe reachable this round.
+    FocusWeakest,
+    /// "defensive" (Guard & Counter): Guard, self.
+    GuardCounter,
+    /// "ranged_kite" (Kite at Range): ranged units Assault (and kite); melee units Disengage when offered, else Assault.
+    KiteAtRange,
+    /// "economy": Assault with the cheapest opener and no follow-ups (Rest).
+    Economy,
+}
+
+impl Tactic {
+    pub fn parse(preset: &str) -> Self {
+        match preset {
+            "aggressive" => Tactic::AllOut,
+            "focus_weakest" => Tactic::FocusWeakest,
+            "defensive" => Tactic::GuardCounter,
+            "ranged_kite" => Tactic::KiteAtRange,
+            "economy" => Tactic::Economy,
+            _ => Tactic::Balanced,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct World {
     pub cat: Arc<Catalog>,

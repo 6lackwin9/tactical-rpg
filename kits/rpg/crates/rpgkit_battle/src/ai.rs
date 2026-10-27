@@ -1,17 +1,21 @@
 //! TacticalAI (scripts/combat/ai/tactical_ai.gd): drafts one unit's round as plan steps, growing a shared plan one
-//! validated step at a time. Used for enemies every round and for the party's AI presets.
+//! validated step at a time. Used for enemies every round and for the party's AI presets. Under the rule `round_intent`
+//! the round intent AI at the end of this file picks intents and targets instead (RULESET1_INTENT 9, engine-only).
 
 use crate::command::{self, cleansable};
-use crate::grid::{V2, DIRS, NO_CELL, ZERO};
+use crate::grid::{V2, DIRS, GRID_H, GRID_W, NO_CELL, ZERO};
 use crate::path::{self, Cells, Hooks};
 use crate::plan::{cover_pref, expected, PlanEntry, PlanStep, SimState, Step, MAX_MOVE_BLOCKS};
 use crate::plan::Plan;
+use crate::round_intent::{self, ManeuverKind, Opener, RoundIntent, RoundTarget};
+use crate::round_intent_plan;
 use crate::skill::{self, Kind, SkillId};
-use crate::world::{AiProfile, Role, TargetPref, UnitId, World};
+use crate::world::{AiProfile, Role, Tactic, TargetPref, UnitId, World};
 use aegis_core::sort::godot_sort;
 use rpgkit_rules::damage;
 use rpgkit_rules::status;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 pub const MAX_STEPS: usize = 16;
 pub const MAX_HEALS: usize = 2;
@@ -1399,5 +1403,707 @@ fn move_floor(w: &World, st: &SimState) -> usize {
 
 fn step_moves(w: &World, st: &SimState, index: usize) -> bool {
     st.entries.iter().any(|e| e.step_index == index as i32 && skill::kind(&w.cat.skills[e.skill]) == Kind::Move)
+}
+
+// ---- Round intent AI (RULESET1_INTENT 9, RULESET1-AI; engine-only, no Godot original) -----------------------------
+//
+// Under the rule `round_intent` a unit's round is its intent and target; the auto planner (`round_intent_plan`) builds
+// the steps. The AI only picks: enemies by the table of AI1 (first row that applies), party members by their AUTO1
+// tactic (AI5). Each candidate pick is tried on the unit's own state and steps and rolled back, so a refused pick drops
+// no intent-bound buff (IN6); the chosen one is then set for real (an intent change drops them and logs it).
+// Deterministic: candidates come in roster, ranking or order-list order; nothing draws a random number.
+
+/// AI1 row tags (`IntentRound::row`).
+pub const ROW_FLEE: &str = "flee";
+pub const ROW_SUPPORT: &str = "support";
+pub const ROW_GUARD: &str = "guard";
+pub const ROW_ENGAGE: &str = "engage";
+pub const ROW_ASSAULT: &str = "assault";
+/// Row 5 with no foe in reach this round: a move toward the first ranked target, then Guard there (front line),
+/// Support on itself or an ally (Support role) or Rest (reckless; also when the other two are not offered).
+pub const ROW_ADVANCE: &str = "advance";
+pub const ROW_IDLE_GUARD: &str = "idle guard";
+pub const ROW_REST: &str = "rest";
+/// AI5: a tactic other than Balanced decided the round.
+pub const ROW_TACTIC: &str = "tactic";
+
+/// RULESET1_INTENT AI1, AI5: one intent pick: the intent, its round target, the Maneuver kind (None: the planner's MV11
+/// pick), the opener (None: PL3's), Economy's opener-only round (no follow-ups, Rest after) and the advance of row 5
+/// (`advance_to`: a plain move to that tile first, then the intent's skills that act from there (MM3's fill), Rest
+/// after).
+#[derive(Debug, Clone, PartialEq)]
+pub struct IntentPick {
+    pub intent: RoundIntent,
+    pub target: RoundTarget,
+    pub kind: Option<ManeuverKind>,
+    pub opener: Option<Opener>,
+    pub opener_only: bool,
+    pub advance_to: Option<V2>,
+    /// The advance's round must place a skill of its intent (a Support buff, a repositioned attack).
+    pub must_act: bool,
+}
+
+impl IntentPick {
+    fn new(intent: RoundIntent, target: RoundTarget) -> Self {
+        Self { intent, target, kind: None, opener: None, opener_only: false, advance_to: None, must_act: false }
+    }
+}
+
+/// What the round intent AI did for one unit: the row (or tactic) that applied, the pick (None: a Withdraw or a Rest
+/// round, the intent unchanged) and the intent change's log lines (IN6: "`<unit>` leaves Guard: Riposte ends").
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct IntentRound {
+    pub row: &'static str,
+    pub pick: Option<IntentPick>,
+    pub lines: Vec<String>,
+}
+
+enum Choice {
+    Pick(&'static str, IntentPick),
+    Withdrawn,
+    Rest,
+}
+
+/// RULESET1_INTENT AI1, AI5: picks `c`'s round intent and target (the AI table for `Tactic::Balanced`, else the
+/// tactic's pick, falling back to the table when the tactic's intent is not offered) and plans the round with the
+/// intent planner (its `deck.order`, auto when empty). Inert (an empty plan) without the rule `round_intent`.
+pub fn plan_round_intent(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, tactic: Tactic) -> IntentRound {
+    plan.clear(c);
+    if !round_intent::on(w) || !w.units[c].is_active() || !w.has(c) {
+        return IntentRound::default();
+    }
+    plan.path_penalties.insert(c);
+    if w.units[c].attack_range > 1 {
+        let shooters = shooters_of(w, w.foes_of(c));
+        if !shooters.is_empty() {
+            plan.goal_preferences.insert(c, shooters);
+        }
+    }
+    let choice = match tactic_pick(w, plan, c, profile, tactic) {
+        Some(p) => Choice::Pick(ROW_TACTIC, p),
+        None => table(w, plan, c, profile, 0),
+    };
+    resolve(w, plan, c, profile, choice)
+}
+
+/// Commits `pick` for `c` as a tactic's pick would be (a failed commit goes on with the table from its first row); for
+/// tests of the fallback, which no shipped pick reaches.
+#[doc(hidden)]
+pub fn plan_given(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, pick: IntentPick) -> IntentRound {
+    plan.clear(c);
+    if !round_intent::on(w) || !w.units[c].is_active() || !w.has(c) {
+        return IntentRound::default();
+    }
+    plan.path_penalties.insert(c);
+    resolve(w, plan, c, profile, Choice::Pick(ROW_TACTIC, pick))
+}
+
+/// Commits the choice; a pick that fails for real goes on with the table from the next row.
+fn resolve(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, mut choice: Choice) -> IntentRound {
+    let mut lines = Vec::new();
+    loop {
+        match choice {
+            Choice::Pick(row, p) => match commit(w, plan, c, &p) {
+                Ok(l) => {
+                    lines.extend(l);
+                    return IntentRound { row, pick: Some(p), lines };
+                }
+                Err(l) => {
+                    // the trial offered it, the real set did not (IN6 dropped a buff the round relied on, or an
+                    // Economy round without an opener step): the table goes on from the next row (after a tactic:
+                    // from the first)
+                    lines.extend(l);
+                    plan.clear(c);
+                    let from = ROWS.iter().position(|r| *r == row).map_or(0, |i| i + 1);
+                    choice = table(w, plan, c, profile, from);
+                }
+            },
+            Choice::Withdrawn => return IntentRound { row: ROW_FLEE, pick: None, lines },
+            Choice::Rest => {
+                plan.clear(c);
+                rest_round(w, plan, c, "rest: nothing usable");
+                return IntentRound { row: ROW_REST, pick: None, lines };
+            }
+        }
+    }
+}
+
+/// AI1's rows in table order (`table` starts at an index into it).
+const ROWS: [&str; 7] = [ROW_FLEE, ROW_SUPPORT, ROW_GUARD, ROW_ENGAGE, ROW_ASSAULT, ROW_ADVANCE, ROW_IDLE_GUARD];
+
+/// AI1 for the enemy side (CombatEncounter.schedule_enemy_ai under `round_intent`): every enemy on the field picks and
+/// plans into the shared `plan` in roster order (earlier plans are claims), broken plans are re-picked, what is still
+/// broken is trimmed. Returns the intent change lines.
+pub fn plan_enemy_intents(w: &mut World, plan: &mut Plan) -> Vec<String> {
+    let drafted: Vec<UnitId> = w.enemies.iter().copied().filter(|&e| w.units[e].is_active() && w.has(e)).collect();
+    let picks: Vec<(UnitId, AiProfile, Tactic)> = drafted.iter().map(|&e| (e, w.profile_of(e), Tactic::Balanced)).collect();
+    let lines = plan_side(w, plan, &picks, true);
+    let mut trimmed = true;
+    while trimmed {
+        trimmed = false;
+        for &e in &drafted {
+            if draft_broken(w, plan, e) {
+                let st = plan.compile(w, e);
+                let keep = if st.error_index >= 0 { st.error_index as usize } else { 0 };
+                let steps = plan.steps_of(e);
+                plan.set_steps(e, steps[..keep].to_vec());
+                trimmed = true;
+            }
+        }
+    }
+    lines
+}
+
+/// AI5 for party members (plan_apply_preset_all under `round_intent`): each `(unit, preset)` in order picks by its
+/// tactic with the preset's profile; invalid plans are re-picked. A member set to Manual (MM1) is skipped: its intent,
+/// target and steps stay as the player left them (user 2026-10-28). Returns the intent change lines.
+pub fn plan_party_intents(w: &mut World, plan: &mut Plan, presets: &[(UnitId, String)]) -> Vec<String> {
+    let picks: Vec<(UnitId, AiProfile, Tactic)> = presets
+        .iter()
+        .filter(|(a, _)| w.units[*a].is_active() && !round_intent_plan::manual(w, *a))
+        .map(|(a, p)| (*a, w.profile_of(*a).with_preset(p), Tactic::parse(p)))
+        .collect();
+    plan_side(w, plan, &picks, false)
+}
+
+/// Picks and plans each unit in order, then re-picks broken (enemies) or invalid (party) plans until none changes.
+fn plan_side(w: &mut World, plan: &mut Plan, picks: &[(UnitId, AiProfile, Tactic)], enemies: bool) -> Vec<String> {
+    let mut lines = Vec::new();
+    for (c, profile, tactic) in picks {
+        lines.extend(plan_round_intent(w, plan, *c, profile, *tactic).lines);
+    }
+    for _ in 0..picks.len() {
+        let mut redrafted = false;
+        for (c, profile, tactic) in picks {
+            let bad = if enemies { draft_broken(w, plan, *c) } else { w.units[*c].is_active() && !plan.is_valid(w, *c) };
+            if bad {
+                lines.extend(plan_round_intent(w, plan, *c, profile, *tactic).lines);
+                redrafted = true;
+            }
+        }
+        if !redrafted {
+            break;
+        }
+    }
+    lines
+}
+
+/// A plan that does not compile or compiles to nothing (the session's draft check).
+fn draft_broken(w: &World, plan: &Plan, c: UnitId) -> bool {
+    if plan.steps_of(c).is_empty() {
+        return false;
+    }
+    let st = plan.compile(w, c);
+    st.error_index >= 0 || st.entries.is_empty()
+}
+
+/// RULESET1_INTENT AI1: the first row of the table, from `ROWS[from]` on, that applies.
+fn table(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, from: usize) -> Choice {
+    let on = |row: &str| ROWS.iter().position(|r| *r == row).is_some_and(|i| i >= from);
+    let ratio = hp_ratio(w, c);
+    // 1: `flee_ratio` reached: today's Withdraw (a neutral move); the intent stays
+    if on(ROW_FLEE) && profile.flee_ratio > 0.0 && !profile.reckless && ratio <= profile.flee_ratio && plan.add_step(w, c, PlanStep::withdraw(), true).is_empty() {
+        return Choice::Withdrawn;
+    }
+    // 2: Support role, or someone below `heal_below`, and a Support skill (or item) reaches
+    if on(ROW_SUPPORT) {
+        if let Some(p) = support_pick(w, plan, c, profile) {
+            return Choice::Pick(ROW_SUPPORT, p);
+        }
+    }
+    // 3: hurt, not reckless, a Guard skill usable: Guard self, or the best cover tile in one move against a shooter
+    if on(ROW_GUARD) && ratio <= profile.defend_below && !profile.reckless {
+        if let Some(p) = guard_pick(w, plan, c) {
+            return Choice::Pick(ROW_GUARD, p);
+        }
+    }
+    let ranked = ranked_foes(w, plan, c, profile);
+    // 4: a Skirmisher whose Maneuver attack reaches a flank tile on a ranked target engaged with another unit
+    if on(ROW_ENGAGE) && profile.role == Role::Skirmisher {
+        if let Some(p) = engage_pick(w, plan, c, &ranked) {
+            return Choice::Pick(ROW_ENGAGE, p);
+        }
+    }
+    // 5: Assault, the first ranked target it can reach (ranged units kite: AS2, AS3); none in reach this round: Assault
+    // the first ranked target it has a path to and close in with a plain move (IN5), Rest after
+    // (the tile ranking, user 2026-10-28: tier 1 the selected target, the first ranked; tier 2 the tile from which it
+    // hits the most hostiles; then the other ranked targets the planner reaches)
+    if on(ROW_ASSAULT) {
+        if let Some(p) = assault_pick(w, plan, c, &ranked[..ranked.len().min(1)]) {
+            return Choice::Pick(ROW_ASSAULT, p);
+        }
+        if let Some(p) = reposition_pick(w, plan, c, &ranked) {
+            return Choice::Pick(ROW_ASSAULT, p);
+        }
+        if let Some(p) = assault_pick(w, plan, c, ranked.get(1..).unwrap_or(&[])) {
+            return Choice::Pick(ROW_ASSAULT, p);
+        }
+    }
+    if on(ROW_ADVANCE) {
+        if let Some(p) = advance_pick(w, plan, c, &ranked, profile) {
+            return Choice::Pick(ROW_ADVANCE, p);
+        }
+    }
+    // 6: nothing usable: Guard self, else Rest
+    if on(ROW_IDLE_GUARD) {
+        return idle(w, plan, c);
+    }
+    Choice::Rest
+}
+
+/// AI5: the tactic's pick (None for Balanced, or when the tactic's intent is not offered: the table decides).
+fn tactic_pick(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, tactic: Tactic) -> Option<IntentPick> {
+    match tactic {
+        Tactic::Balanced => None,
+        Tactic::AllOut => {
+            let ranked = ranked_foes(w, plan, c, profile);
+            assault_pick(w, plan, c, &ranked)
+        }
+        Tactic::FocusWeakest => {
+            let st = plan.compile(w, c);
+            let mut foes: Vec<UnitId> = w.foes_of(c).iter().copied().filter(|&f| w.units[f].is_active() && w.has(f) && st.est(f) > 0).collect();
+            foes.sort_by_key(|&f| (st.est(f), f));
+            assault_pick(w, plan, c, &foes)
+        }
+        Tactic::GuardCounter => {
+            let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
+            trial(w, plan, c, &p).then_some(p)
+        }
+        Tactic::KiteAtRange => {
+            let ranked = ranked_foes(w, plan, c, profile);
+            if w.units[c].attack_range > 1 {
+                return assault_pick(w, plan, c, &ranked);
+            }
+            for &t in &ranked {
+                let mut p = IntentPick::new(RoundIntent::Maneuver, RoundTarget::Unit(t));
+                p.kind = Some(ManeuverKind::Disengage);
+                if trial(w, plan, c, &p) {
+                    return Some(p);
+                }
+            }
+            assault_pick(w, plan, c, &ranked)
+        }
+        Tactic::Economy => {
+            let ranked = ranked_foes(w, plan, c, profile);
+            let pays = w.pays_ap(c);
+            let mut by_cost: Vec<(i32, usize, SkillId)> = round_intent_plan::order(w, c, RoundIntent::Assault)
+                .into_iter()
+                .enumerate()
+                .map(|(i, sid)| (if pays { skill::ap_cost_by(&w.cat.skills[sid], Some(&w.units[c]), &w.ruleset) } else { 0 }, i, sid))
+                .collect();
+            by_cost.sort();
+            for &t in &ranked {
+                for &(_, _, sid) in &by_cost {
+                    let mut p = IntentPick::new(RoundIntent::Assault, RoundTarget::Unit(t));
+                    p.opener = Some(Opener::Skill(sid));
+                    p.opener_only = true;
+                    if trial(w, plan, c, &p) {
+                        return Some(p);
+                    }
+                }
+            }
+            None
+        }
+    }
+}
+
+/// The foes on the field best first (`rank_targets` from the unit's tile, nothing planned yet).
+fn ranked_foes(w: &World, plan: &Plan, c: UnitId, profile: &AiProfile) -> Vec<UnitId> {
+    let st = plan.compile(w, c);
+    let foes = w.foes_of(c).to_vec();
+    rank_targets(w, plan, c, &st, &foes, profile)
+}
+
+/// AI1 row 2: Support on the friend (or self) with the lowest HP share that a Support skill (or, with `use_items`, a
+/// self or ally pouch item) reaches. Candidates: friends at or below `heal_below`; a Support-role unit takes any hurt
+/// friend.
+fn support_pick(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile) -> Option<IntentPick> {
+    let support_role = profile.role == Role::Support;
+    let mut cands: Vec<UnitId> = w
+        .friends_of(c)
+        .iter()
+        .copied()
+        .filter(|&f| {
+            let u = &w.units[f];
+            u.is_active() && w.has(f) && u.hp < u.max_hp && (support_role || hp_ratio(w, f) <= profile.heal_below)
+        })
+        .collect();
+    cands.sort_by(|&a, &b| hp_ratio(w, a).partial_cmp(&hp_ratio(w, b)).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b)));
+    let items: Vec<String> = if profile.use_items {
+        w.units[c].inventory.pouch.iter().map(|p| p.id.clone()).filter(|id| command::pouch_item(w, c, id).is_some_and(|it| round_intent::item_intent(it) == "support")).collect()
+    } else {
+        Vec::new()
+    };
+    for f in cands {
+        let mut p = IntentPick::new(RoundIntent::Support, round_intent::normalize(c, RoundTarget::Unit(f)));
+        if trial(w, plan, c, &p) {
+            return Some(p);
+        }
+        for id in &items {
+            p.opener = Some(Opener::Item(id.clone()));
+            if trial(w, plan, c, &p) {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+/// AI1 row 3: Guard on the best cover tile in one move when a ranged foe threatens (and a tile beats the unit's own),
+/// else Guard self; None when no Guard skill is usable.
+fn guard_pick(w: &mut World, plan: &mut Plan, c: UnitId) -> Option<IntentPick> {
+    if let Some(cell) = cover_tile(w, plan, c) {
+        let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Cell(cell));
+        if trial(w, plan, c, &p) {
+            return Some(p);
+        }
+    }
+    let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
+    trial(w, plan, c, &p).then_some(p)
+}
+
+/// The free tiles `c` can walk to within `blocks` standard move blocks (a unit that pays: at most its AP in tiles), with
+/// their routes; its own tile first, with an empty route.
+fn walk_cands(w: &World, plan: &Plan, c: UnitId, blocks: usize) -> Vec<(V2, Vec<V2>)> {
+    let here = w.pos(c);
+    let st = plan.compile(w, c);
+    let blocked = plan.blocked_cells(w, c);
+    let mpb = w.units[c].move_per_block();
+    let ap = if w.pays_ap(c) { st.ap_left.max(0) as usize } else { usize::MAX };
+    let mut out: Vec<(V2, Vec<V2>)> = vec![(here, Vec::new())];
+    if st.rooted {
+        return out;
+    }
+    for y in 0..GRID_H {
+        for x in 0..GRID_W {
+            let cell = V2::new(x, y);
+            if cell == here || cell.dist(here) > mpb * blocks as i32 || !w.grid.is_walkable(cell) || w.grid.is_exit(cell) || blocked.contains(&cell) {
+                continue;
+            }
+            let goals: Cells = [cell].into_iter().collect();
+            let route = plan.route(w, c, here, &goals, &blocked, false);
+            if !route.is_empty() && route.len() <= ap && path::blocks_needed(&w.grid, here, &route, mpb) <= blocks {
+                out.push((cell, route));
+            }
+        }
+    }
+    out
+}
+
+/// The nearest ranged foe of `c` on the field (the cover tie-break is read against it); None without one.
+fn nearest_shooter(w: &World, c: UnitId) -> Option<V2> {
+    let here = w.pos(c);
+    w.foes_of(c).iter().copied().filter(|&f| w.has(f) && w.units[f].attack_range > 1).min_by_key(|&f| (w.pos(f).dist(here), f)).map(|f| w.pos(f))
+}
+
+/// Cover on `cell` against `shooter` (x1000, for sort keys; 0 without a shooter).
+fn shelter(w: &World, shooter: Option<V2>, cell: V2) -> i64 {
+    shooter.map_or(0, |s| (command::cover_for(&w.grid, s, cell, true) * 1000.0).round() as i64)
+}
+
+/// AI1 row 3's tile (user 2026-10-28, tier 3 of the tile ranking: a unit at low HP looks to its own safety), when a
+/// ranged foe's next-round reach covers `c` (PL4 (1)): among the free tiles one standard move block reaches and `c`'s
+/// own, fewer threats (foes whose next-round reach covers the tile) first, then more cover against the nearest
+/// threatening shooter, then farther from the nearest foe; ties: fewer path tiles, the cell index. The best, unless it
+/// is `c`'s own tile.
+pub fn cover_tile(w: &World, plan: &Plan, c: UnitId) -> Option<V2> {
+    let here = w.pos(c);
+    let shooter = w
+        .foes_of(c)
+        .iter()
+        .copied()
+        .filter(|&f| {
+            let u = &w.units[f];
+            u.is_active() && w.has(f) && u.attack_range > 1 && w.pos(f).dist(here) <= u.move_per_block() * 2 + skill::threat_reach(u, &w.ruleset)
+        })
+        .min_by_key(|&f| (w.pos(f).dist(here), f))?;
+    let foes: Vec<V2> = w.foes_of(c).iter().copied().filter(|&f| w.has(f)).map(|f| w.pos(f)).collect();
+    let from = Some(w.pos(shooter));
+    let mut cands = walk_cands(w, plan, c, 1);
+    cands.sort_by_key(|(cell, route)| {
+        let near = foes.iter().map(|f| f.dist(*cell)).min().unwrap_or(0);
+        (round_intent::threat(w, c, *cell), -shelter(w, from, *cell), -near, route.len(), cell.y * GRID_W + cell.x)
+    });
+    cands.first().map(|(cell, _)| *cell).filter(|&cell| cell != here)
+}
+
+/// Tier 2 of the tile ranking (user 2026-10-28; the selected target out of reach this round): the tiles within the
+/// standard move from which `c` can hit at least one foe (a foe within its reach band), best first: the most foes in
+/// reach first (a ranged unit: as many hostiles as it can hit; a melee unit: close quarters with as many as possible),
+/// then a melee unit draws more attackers (more threats on the tile: the front line soaks pressure), then more cover
+/// against the nearest shooter (a ranged unit: then fewer threats); ties: fewer path tiles, the cell index.
+pub fn press_tiles(w: &World, plan: &Plan, c: UnitId) -> Vec<V2> {
+    let band = basic_band(w, c);
+    let ranged = w.units[c].attack_range > 1;
+    let foes: Vec<V2> = w.foes_of(c).iter().copied().filter(|&f| w.has(f)).map(|f| w.pos(f)).collect();
+    let shooter = nearest_shooter(w, c);
+    let mut scored: Vec<(PressKey, V2)> = walk_cands(w, plan, c, MAX_MOVE_BLOCKS)
+        .into_iter()
+        .filter_map(|(cell, route)| {
+            let hits = foes.iter().filter(|f| (band.0..=band.1).contains(&f.dist(cell))).count() as i64;
+            if hits == 0 {
+                return None;
+            }
+            let threat = round_intent::threat(w, c, cell) as i64;
+            let cover = shelter(w, shooter, cell);
+            let index = cell.y * GRID_W + cell.x;
+            Some((if ranged { (-hits, 0, -cover, threat, route.len(), index) } else { (-hits, -threat, -cover, 0, route.len(), index) }, cell))
+        })
+        .collect();
+    scored.sort_by_key(|(k, _)| *k);
+    scored.into_iter().map(|(_, cell)| cell).collect()
+}
+
+/// `press_tiles`' sort key: (foes in reach, then a role's draw or cover, cover or threats, path tiles, cell index).
+type PressKey = (i64, i64, i64, i64, usize, i32);
+
+/// Row 5, tier 2: the selected target (the first ranked) is out of reach this round: Assault from the best `press_tiles`
+/// tile on the first ranked foe within reach of it (a plain move there, then the attacks: the advance's round, which
+/// must place an attack).
+fn reposition_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId]) -> Option<IntentPick> {
+    let band = basic_band(w, c);
+    let here = w.pos(c);
+    for cell in press_tiles(w, plan, c) {
+        let Some(&t) = ranked.iter().find(|&&f| (band.0..=band.1).contains(&w.pos(f).dist(cell))) else { continue };
+        let mut p = IntentPick::new(RoundIntent::Assault, RoundTarget::Unit(t));
+        p.advance_to = (cell != here).then_some(cell);
+        p.must_act = true;
+        if trial(w, plan, c, &p) {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// AI1 row 4: Maneuver Engage on the first ranked target engaged with another unit (MV2) on which one of `c`'s Maneuver
+/// attacks has a flank tile within its carried move (MV5, MV7), when the planner offers the round.
+fn engage_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId]) -> Option<IntentPick> {
+    let attacks: Vec<SkillId> = round_intent_plan::order(w, c, RoundIntent::Maneuver)
+        .into_iter()
+        .filter(|&sid| skill::kind(&w.cat.skills[sid]) == Kind::Attack && !skill::is_area(&w.cat.skills[sid]))
+        .collect();
+    if attacks.is_empty() {
+        return None;
+    }
+    let blocked = plan.blocked_cells(w, c);
+    let here = w.pos(c);
+    for &t in ranked {
+        let engaged = round_intent::engaged_with(w, t).is_some_and(|e| e != c);
+        if !engaged || !attacks.iter().any(|&sid| !round_intent::engage_tiles(w, c, &w.cat.skills[sid], t, here, &blocked).is_empty()) {
+            continue;
+        }
+        let mut p = IntentPick::new(RoundIntent::Maneuver, RoundTarget::Unit(t));
+        p.kind = Some(ManeuverKind::Engage);
+        if trial(w, plan, c, &p) {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// AI1 row 5 (and the Assault tactics): Assault on the first of `targets` the planner offers it on.
+fn assault_pick(w: &mut World, plan: &mut Plan, c: UnitId, targets: &[UnitId]) -> Option<IntentPick> {
+    for &t in targets {
+        let p = IntentPick::new(RoundIntent::Assault, RoundTarget::Unit(t));
+        if trial(w, plan, c, &p) {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// AI1 row 5 when no Assault opener reaches any ranked target this round (user 2026-10-28): the unit closes in on the
+/// first ranked target it has a path to (the round's standard move, `advance_dest`) and ends the round by its kind, read
+/// off its AI profile (no other data): a Support-role unit Supports itself, else an ally, from the tile it moved to
+/// (the Support intent, a plain move first: IN5); a reckless unit has no Guard: Assault on the target, the move, an
+/// attack if one reaches from there, Rest after; a ranged unit uses a Support or Focus skill on itself from there when
+/// it has one, else Guards; every other unit (the melee front line) Guards at the end of the move (the Guard intent on
+/// that tile: GD1's standard move there, then hold). When the Support or Guard round is not offered (no such skill,
+/// AP), the reckless round.
+fn advance_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId], profile: &AiProfile) -> Option<IntentPick> {
+    for &t in ranked {
+        let Some(dest) = advance_dest(w, plan, c, t) else { continue };
+        // a reckless unit skips both: the move and Rest below
+        if !profile.reckless && profile.role == Role::Support {
+            let mut friends: Vec<UnitId> = w.friends_of(c).iter().copied().filter(|&f| f != c && w.has(f)).collect();
+            friends.sort_by_key(|&f| (w.pos(f).dist(dest), f));
+            for target in std::iter::once(RoundTarget::Myself).chain(friends.into_iter().map(RoundTarget::Unit)) {
+                let mut p = IntentPick::new(RoundIntent::Support, target);
+                p.advance_to = Some(dest);
+                p.must_act = true;
+                if trial(w, plan, c, &p) {
+                    return Some(p);
+                }
+            }
+        } else if !profile.reckless {
+            // a ranged unit uses a self skill (a Support or Focus skill on itself) when it has one this round, and
+            // Guards only without one (user 2026-10-28)
+            if w.units[c].attack_range > 1 {
+                let mut p = IntentPick::new(RoundIntent::Support, RoundTarget::Myself);
+                p.advance_to = Some(dest);
+                p.must_act = true;
+                if trial(w, plan, c, &p) {
+                    return Some(p);
+                }
+            }
+            let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Cell(dest));
+            if trial(w, plan, c, &p) {
+                return Some(p);
+            }
+        }
+        let mut p = IntentPick::new(RoundIntent::Assault, RoundTarget::Unit(t));
+        p.advance_to = Some(dest);
+        if trial(w, plan, c, &p) {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// Where the round's standard move along the approach path toward `t` ends (at most the standard move's blocks, AP
+/// for a unit that pays); None when the unit cannot move closer.
+fn advance_dest(w: &World, plan: &Plan, c: UnitId, t: UnitId) -> Option<V2> {
+    let st = plan.compile(w, c);
+    let mut tiles = plan.max_move_tiles(w, c);
+    if w.pays_ap(c) {
+        tiles = tiles.min(st.ap_left.max(0));
+    }
+    if tiles < 1 || st.rooted {
+        return None;
+    }
+    let route = plan.approach_path(w, c, st.pos, t, -1, -1);
+    let reachable = path::fit_blocks(&w.grid, st.pos, &route, w.units[c].move_per_block(), MAX_MOVE_BLOCKS);
+    let dest = reachable.iter().take(tiles as usize).fold(st.pos, |a, d| a + *d);
+    (dest != st.pos).then_some(dest)
+}
+
+/// The advance's round (its state holds intent and target): a plain move (IN5: neutral) to `dest`, then MM3's fill (the
+/// intent's skills on the target from that tile) and Rest on every block left; with `must_act` it must place a skill of
+/// its intent. False when it is not offered.
+fn advance(w: &World, plan: &mut Plan, c: UnitId, dest: V2, must_act: bool) -> bool {
+    plan.set_steps(c, Vec::new());
+    let mut step = PlanStep::go_to(w.book().lowest(Kind::Move), dest);
+    if let Some(s) = Rc::get_mut(&mut step) {
+        s.reason = round_intent_plan::APPROACH.to_string();
+    }
+    let ok = plan.add_step(w, c, step, false).is_empty()
+        && round_intent_plan::fill_rest(w, plan, c).is_ok()
+        && (!must_act || plan.entries_for(w, c).iter().any(|e| matches!(skill::kind(&w.cat.skills[e.skill]), Kind::Attack | Kind::Support | Kind::Defend | Kind::Focus)));
+    if !ok {
+        plan.set_steps(c, Vec::new());
+    }
+    ok
+}
+
+/// Builds `c`'s round for `p` (its state already holds intent, target, kind and opener): the intent planner, or the
+/// advance. False when it is not offered.
+fn build_pick(w: &mut World, plan: &mut Plan, c: UnitId, p: &IntentPick) -> bool {
+    match p.advance_to {
+        Some(dest) => advance(w, plan, c, dest, p.must_act),
+        None => round_intent_plan::plan_unit(w, plan, c).is_ok(),
+    }
+}
+
+/// AI1 row 6: Guard self, else a Rest round.
+fn idle(w: &mut World, plan: &mut Plan, c: UnitId) -> Choice {
+    let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
+    if trial(w, plan, c, &p) {
+        return Choice::Pick(ROW_IDLE_GUARD, p);
+    }
+    Choice::Rest
+}
+
+/// Whether the planner offers `p` to `c` now (PL7): the pick is set on `c`'s state without IN6's side effects, the round
+/// is built, and `c`'s state, lock and steps are put back.
+fn trial(w: &mut World, plan: &mut Plan, c: UnitId, p: &IntentPick) -> bool {
+    if !w.ruleset.numbers.intents.iter().any(|i| i == p.intent.id()) {
+        return false;
+    }
+    let saved = w.round_states.get(&c).cloned();
+    let lock = w.units[c].active_target;
+    let steps = plan.sequences.contains_key(&c).then(|| plan.steps_of(c));
+    {
+        let rs = w.round_states.entry(c).or_default();
+        rs.intent = Some(p.intent);
+        rs.target = None;
+        rs.maneuver = p.kind;
+        rs.maneuver_auto = false;
+        rs.opener = p.opener.clone();
+    }
+    let ok = round_intent::set_target(w, c, p.target).is_ok() && build_pick(w, plan, c, p);
+    match saved {
+        Some(rs) => {
+            w.round_states.insert(c, rs);
+        }
+        None => {
+            w.round_states.shift_remove(&c);
+        }
+    }
+    w.units[c].active_target = lock;
+    match steps {
+        Some(s) => plan.set_steps(c, s),
+        None => plan.clear(c),
+    }
+    ok
+}
+
+/// Sets `p` for real (IN2, IN6: an intent change drops the intent-bound buffs) and plans the round; Economy's round
+/// keeps only the before-move and the opener, then Rests. Ok: the intent change lines. Err (the lines too): the pick
+/// is not offered after all (the round state keeps the new intent with no target, opener or kind; no steps).
+fn commit(w: &mut World, plan: &mut Plan, c: UnitId, p: &IntentPick) -> Result<Vec<String>, Vec<String>> {
+    let lines = match round_intent::set_intent(w, c, p.intent) {
+        Ok(l) => l,
+        Err(_) => return Err(Vec::new()),
+    };
+    // set_target makes a unit target the lock (TG3): a failed commit puts the previous lock back
+    let lock = w.units[c].active_target;
+    let fail = |w: &mut World, plan: &mut Plan, lines: Vec<String>| {
+        plan.clear(c);
+        w.units[c].active_target = lock;
+        let rs = w.round_states.entry(c).or_default();
+        rs.target = None;
+        rs.maneuver = None;
+        rs.maneuver_auto = false;
+        rs.opener = None;
+        Err(lines)
+    };
+    if round_intent::set_target(w, c, p.target).is_err() {
+        return fail(w, plan, lines);
+    }
+    {
+        let rs = w.round_states.entry(c).or_default();
+        rs.maneuver = p.kind;
+        rs.maneuver_auto = false;
+        rs.opener = p.opener.clone();
+    }
+    if !build_pick(w, plan, c, p) {
+        return fail(w, plan, lines);
+    }
+    if p.opener_only {
+        // Economy keeps the round up to its opener; a round with no opener step is not an Economy round, so the table
+        // picks instead (the caller goes on from the first row)
+        let steps = plan.steps_of(c);
+        let Some(i) = steps.iter().position(|s| s.reason == round_intent_plan::OPENER) else { return fail(w, plan, lines) };
+        plan.truncate(c, i + 1);
+        rest_round(w, plan, c, round_intent_plan::REST);
+    }
+    Ok(lines)
+}
+
+/// RS1: Rest on every free block left of `c`'s round, tagged `tag` (PL6).
+fn rest_round(w: &World, plan: &mut Plan, c: UnitId, tag: &str) {
+    let rest = w.book().lowest(Kind::Rest);
+    for _ in 0..w.total_blocks {
+        if plan.compile(w, c).blocks_left() <= 0 {
+            break;
+        }
+        let mut step = PlanStep::self_skill(rest);
+        if let Some(s) = Rc::get_mut(&mut step) {
+            s.reason = tag.to_string();
+        }
+        if !plan.add_step(w, c, step, false).is_empty() {
+            break;
+        }
+    }
 }
 

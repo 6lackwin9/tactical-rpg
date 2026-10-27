@@ -34,7 +34,7 @@ because the RNG is bit-exact.
 | `combat/arena/combat_resolver.gd` | `emberwake_battle::resolver` | battle traces |
 | `combat/planning/combat_plan.gd`, `plan_step.gd`, `plan_entry.gd` (no options / UI probes yet) | `emberwake_battle::plan` | battle traces |
 | `combat/planning/skill_def.gd`, `skill_catalog.gd`, `content/skill_kinds.gd` | `emberwake_battle::skill` | battle traces |
-| `combat/ai/tactical_ai.gd` (with `_try_item`), `ai_profile.gd`, `plan_presets.gd` | `emberwake_battle::ai`, `world` | battle traces, item traces |
+| `combat/ai/tactical_ai.gd` (with `_try_item`), `ai_profile.gd`, `plan_presets.gd` | `emberwake_battle::ai`, `world` (plus the round intent AI at the end of `ai.rs`: RULESET1_INTENT 9, engine-only, no Godot original; AI1 pick table, AUTO1 tactics as intents through `world::Tactic`; classic unchanged) | battle traces, item traces |
 | `combat/session/combat_session.gd`, `catalog_encounter.gd`, `combat_encounter.gd` | `emberwake_battle::session` | battle traces, world traces |
 | `combat/session/encounter_objectives.gd`, `encounter_phases.gd`, `encounter_morale.gd`, `world_encounter.gd` (guests, start buffs) | `emberwake_battle::encounter`, `session`; `emberwake_world::battle::WorldRoster` | world traces |
 | `tools/sim/sim_runner.gd` (`fight`, `apply_pouch`), `sim_variants.gd` (jitter) | `emberwake_battle::sim` | battle traces |

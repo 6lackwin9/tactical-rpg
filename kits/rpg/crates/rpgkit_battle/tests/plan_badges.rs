@@ -243,6 +243,12 @@ fn a_foresight_range_reveals_every_enemy_within_it() {
         w.units[HERO].foresight_source = "hawk_eye".into();
         w.units[HERO].foresight_range = range;
         assert_eq!((w.dist(HERO, FOE), w.dist(HERO, FOE_B)), (4, 5));
+        // RULESET1-AI: the session's enemy AI picked intents at the round start; these Braces need Guard
+        for c in [FOE, FOE_B] {
+            if round_intent::on(w) {
+                round_intent::set_intent(w, c, RoundIntent::Guard).expect("intent");
+            }
+        }
         let mut enemy = Plan::new();
         add(&mut enemy, w, FOE, PlanStep::self_skill(sid(w, "t_brace")));
         add(&mut enemy, w, FOE_B, PlanStep::self_skill(sid(w, "t_brace")));

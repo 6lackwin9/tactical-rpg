@@ -48,7 +48,7 @@ fn catalog() -> Catalog {
         json!({"id": id, "name": id, "side": side, "stat_mode": "fixed", "hp": 400, "speed": 12, "attack_range": 1, "skill_cap": 5, "default_intent": default_intent})
     };
     Catalog::from_value(&json!({"skills": skills, "units": [
-        unit("t_hero", "party", ""), unit("t_ally", "party", ""), unit("t_foe", "enemy", ""), unit("t_foe_b", "enemy", "guard")
+        unit("t_hero", "party", ""), unit("t_ally", "party", "guard"), unit("t_foe", "enemy", ""), unit("t_foe_b", "enemy", "guard")
     ]}))
 }
 
@@ -545,11 +545,13 @@ fn stealth_hides_a_unit_that_moved() {
     }
 }
 
-/// TQ23 (a): a unit's `default_intent` is its intent at battle start under the round intent; none in classic.
+/// TQ23 (a): a unit's `default_intent` is its intent at battle start under the round intent; none in classic. Narrowed
+/// by RULESET1-AI (AI1): an enemy re-picks at its first planning, so the default is read on a party member.
 #[test]
 fn default_intent_starts_the_battle() {
     let s = session(timeline());
-    assert_eq!(round_intent::intent_of(&s.w, FOE_B), Some(RoundIntent::Guard));
+    assert_eq!(round_intent::intent_of(&s.w, ALLY), Some(RoundIntent::Guard));
+    assert!(round_intent::intent_of(&s.w, FOE_B).is_some(), "the enemy AI picked one");
     assert_eq!(round_intent::intent_of(&s.w, HERO), None, "none by default");
     let c = session(Ruleset::classic());
     assert_eq!(round_intent::intent_of(&c.w, FOE_B), None);

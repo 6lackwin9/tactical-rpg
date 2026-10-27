@@ -53,6 +53,15 @@ const TACTIC_HELP: [&str; 6] = [
     "Holds maximum range and backs away from melee.",
     "Uses level 1 skills to stretch AP over more actions.",
 ];
+/// RULESET1_INTENT AI5: what each tactic picks under the round intent (the timeline ruleset).
+const TACTIC_INTENT_HELP: [&str; 6] = [
+    "The AI table: heals a hurt friend, guards when hurt, flanks an engaged foe, else Assault.",
+    "Assault on the first ranked enemy.",
+    "Assault on the lowest-HP enemy it can reach this round.",
+    "Guard on yourself.",
+    "Ranged: Assault and kite. Melee: Disengage when offered, else Assault.",
+    "Assault with the cheapest opener, then Rest.",
+];
 
 const BG: Rgba = rgb(10, 14, 24);
 const PANEL: Rgba = rgba(22, 32, 54, 245);
@@ -929,13 +938,14 @@ impl BattleScreen {
     /// Dropdown of the six tactics under the Party / Hero picker.
     fn tactic_menu(&mut self, party: bool) {
         let current = if party { self.party_tactic } else { self.hero_tactic };
+        let help = if emberwake_battle::round_intent::on(&self.session().w) { TACTIC_INTENT_HELP } else { TACTIC_HELP };
         let rows = (0..TACTICS.len())
             .map(|i| Row {
                 label: TACTIC_LABELS[i].to_string(),
                 detail: if i == current { "current".into() } else { String::new() },
                 valid: true,
                 act: if party { RowAct::PartyTactic(i) } else { RowAct::HeroTactic(i) },
-                tip: vec![(TACTIC_LABELS[i].to_string(), GOLD), (TACTIC_HELP[i].to_string(), TEXT)],
+                tip: vec![(TACTIC_LABELS[i].to_string(), GOLD), (help[i].to_string(), TEXT)],
             })
             .collect();
         let anchor = self.w.iter().find(|w| w.id == if party { "strip.party" } else { "strip.hero" }).map(|w| w.rect).unwrap_or_default();
