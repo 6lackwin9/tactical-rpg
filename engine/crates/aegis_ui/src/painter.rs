@@ -179,8 +179,14 @@ impl<'a> Painter<'a> {
 
     /// Pixel-art image scaled into logical `r` with nearest sampling.
     pub fn image(&mut self, img: &Image, r: Rect) {
+        self.image_alpha(img, r, 255);
+    }
+
+    /// STATUSFX1-E: `image` with each pixel's alpha scaled by `a / 255` (rounded; 255 draws exactly as `image`, 0
+    /// draws nothing).
+    pub fn image_alpha(&mut self, img: &Image, r: Rect, a: u8) {
         let pr = self.v.rect(r);
-        if pr.w <= 0 || pr.h <= 0 {
+        if pr.w <= 0 || pr.h <= 0 || a == 0 {
             return;
         }
         for y in 0..pr.h {
@@ -188,7 +194,8 @@ impl<'a> Painter<'a> {
             for x in 0..pr.w {
                 let sx = x * img.w / pr.w;
                 let i = ((sy * img.w + sx) * 4) as usize;
-                self.c.blend(pr.x + x, pr.y + y, [img.px[i], img.px[i + 1], img.px[i + 2], img.px[i + 3]]);
+                let alpha = ((img.px[i + 3] as u32 * a as u32 + 127) / 255) as u8;
+                self.c.blend(pr.x + x, pr.y + y, [img.px[i], img.px[i + 1], img.px[i + 2], alpha]);
             }
         }
     }
