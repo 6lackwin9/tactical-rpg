@@ -19,7 +19,15 @@
 # units/<class>/2h_<family>/, kit); a look's clips.json palette is its body's, exactly (DIR4 L3; the export exits when a look adds a slot colour), and the
 # body's palette files are written into each look's folder too.
 # --review OUT: per body a contact sheet (every clip's frames at 3x, one row per clip), GIFs of idle and the first attack
-#   clip, and per palette file the idle frame recoloured; for the review page (nothing is written under OUT otherwise).
+#   clip, and per palette file the idle frame recoloured; for the review page (nothing is written under OUT otherwise);
+#   per rig body also the DIR4 turnaround board (<body>_turnaround.png: idle, walk, the attack in side right, side left,
+#   down and up at 3x and at the 28 px token size) and <body>_walk_4dir.gif (plus <body>_<attack>_views.gif once the
+#   grip has an attack view); a body without view drawings is shown with views.STAND_INS, named on the board.
+# Views (DIR4, tools/sprites/views.py): a body whose parts and grip all have view drawings (views.supports) gets the
+#   view clips after its side clips, each with "of" and "view", its side clip's frames, ms and loop (R3, else exit);
+#   the view rows add no colour outside the unit's palette, rig OUT and WHITE and no palette slot (R4, else exit naming
+#   it); idle_down and idle_up must differ in 10 % of their opaque pixels at 28 px (6.4, else exit). Other bodies
+#   are written without views and the exporter prints what they lack.
 import argparse
 import json
 import os
@@ -31,6 +39,7 @@ from PIL import Image, ImageDraw  # noqa: E402
 import classes  # noqa: E402
 import rig  # noqa: E402
 import variants  # noqa: E402
+import views  # noqa: E402
 
 WORKSPACE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 LAYERS = {"kit": ("kits", "rpg", "assets"), "game": ("games", "emberwake", "assets")}
@@ -85,16 +94,96 @@ def body(key: str, mode: str):
                                               "clips": [{"id": "idle", "frames": 1, "ms": [1000]}]}
     w = rig.W
     names = list(frames)
-    sheet = Image.new("RGBA", (max(len(frames[n]) for n in names) * w, len(names) * w), (0, 0, 0, 0))
     clips = []
-    for r, n in enumerate(names):
+    for n in names:
         ms = list(times[n]) if isinstance(times[n], (list, tuple)) else [times[n]] * len(frames[n])
         if not 1 <= len(frames[n]) <= FRAMES_MAX or len(ms) != len(frames[n]) or not all(MS_MIN <= t <= MS_MAX for t in ms):
             sys.exit("export_units: %s clip %s: %d frames, ms %s outside the sheet rules" % (key, n, len(frames[n]), ms))
+        clips.append({"id": n, "frames": len(frames[n]), "ms": [int(t) for t in ms], "loop": n in LOOPING})
+    side = paste(frames, names)
+    rows = dict(frames)
+    for vid, vfr in view_rows(key, clips).items():  # DIR4: the view clips after the side clips, each with of and view
+        base, view = views.of(vid)
+        side_clip = next(c for c in clips if c["id"] == base)
+        rows[vid] = vfr
+        clips.append({"id": vid, "of": base, "view": view, "frames": side_clip["frames"], "ms": side_clip["ms"],
+                      "loop": side_clip["loop"]})
+    sheet = paste(rows, [c["id"] for c in clips])
+    if len(clips) > len(names):
+        check_view_colours(key, pal, keys, side, sheet)
+    return layer, folder, rows, sheet, {"frame": [w, w], "palette": look_slots(key, pal, keys, sheet), "clips": clips}
+
+
+def paste(frames: dict, names: list) -> Image.Image:
+    """One sheet: a row per clip of `names`, frames left to right."""
+    w = rig.W
+    sheet = Image.new("RGBA", (max(len(frames[n]) for n in names) * w, len(names) * w), (0, 0, 0, 0))
+    for r, n in enumerate(names):
         for c, fr in enumerate(frames[n]):
             sheet.paste(fr, (c * w, r * w))
-        clips.append({"id": n, "frames": len(frames[n]), "ms": [int(t) for t in ms], "loop": n in LOOPING})
-    return layer, folder, frames, sheet, {"frame": [w, w], "palette": look_slots(key, pal, keys, sheet), "clips": clips}
+    return sheet
+
+
+def unit_of(key: str):
+    """(class, rig unit) of a body drawn on the humanoid rig; None for the dummy and the creatures (no views, R5)."""
+    if key in classes.UNITS:
+        return key, classes.UNITS[key]
+    if key in variants.looks():
+        cls, look = variants.looks()[key]
+        return cls, variants.look_unit(classes.UNITS[cls], look)
+    if key in variants.BODIES:
+        _, cls, u, _ = variants.BODIES[key]
+        return cls, u
+    return None
+
+
+def view_rows(key: str, clips: list) -> dict:
+    """DIR4 view clips of body `key` in sheet order (each side clip's down then up), {} when the body has no views:
+    views.supports (R5; prints what is missing), equal frames and ms to the side clip (R3, exits otherwise) and the
+    readability check (6.4, exits when idle_down and idle_up do not differ enough at the token size)."""
+    cu = unit_of(key)
+    if cu is None:
+        return {}
+    cls, u = cu
+    miss = views.missing(u, cls)
+    if miss:
+        print("views: %s keeps side views only (no view drawing: %s)" % (key, ", ".join(miss)))
+        return {}
+    A, T = views.clips(cls, u)
+    side = {c["id"]: c for c in clips}
+    for vid in A:
+        base, _ = views.of(vid)
+        ms = list(T[vid]) if isinstance(T[vid], (list, tuple)) else [T[vid]] * len(A[vid])
+        if base not in side or len(A[vid]) != side[base]["frames"] or [int(t) for t in ms] != side[base]["ms"]:
+            sys.exit("export_units: %s view clip %s: %d frames, ms %s; its side clip %s has %s (DIR4 R3: equal frames and ms)"
+                     % (key, vid, len(A[vid]), ms, base, "%d frames, ms %s" % (side[base]["frames"], side[base]["ms"])
+                        if base in side else "no row"))
+    share = views.difference(A["idle_down"][0], A["idle_up"][0])
+    print("views: %s idle_down / idle_up differ in %.0f%% of their opaque pixels at %d px" % (key, share * 100, views.TOKEN))
+    if share < views.READABLE:
+        sys.exit("export_units: %s idle_down and idle_up differ in %.1f%% of their opaque pixels at %d px (at least %d%%, DIR4 6.4)"
+                 % (key, share * 100, views.TOKEN, views.READABLE * 100))
+    order = []
+    for c in clips:
+        order += ["%s_%s" % (c["id"], v) for v in views.VIEWS if "%s_%s" % (c["id"], v) in A]
+    return {vid: A[vid] for vid in order}
+
+
+def colours(sheet: Image.Image) -> set:
+    return {c[:3] for _, c in sheet.getcolors(maxcolors=1 << 20) if c[3] == 255}
+
+
+def check_view_colours(key: str, pal: dict, keys, side: Image.Image, sheet: Image.Image) -> None:
+    """DIR4 R4: the view rows draw only with the unit's palette, rig.OUT and rig.WHITE (or a colour the side rows use
+    already), and the palette slots are the same with and without them; exits naming any colour a view adds."""
+    allowed = colours(side) | {tuple(v[:3]) for v in pal.values()} | {rig.OUT, rig.WHITE}
+    added = sorted(colours(sheet) - allowed)
+    if added:
+        sys.exit("export_units: %s view rows add colours outside its palette: %s" % (key, ", ".join(hexc(c) for c in added)))
+    before, after = palette_slots(key, pal, keys, side), palette_slots(key, pal, keys, sheet)
+    if before != after:
+        extra = {k: v for k, v in after.items() if before.get(k) != v}
+        sys.exit("export_units: %s view rows add palette slots: %s" % (key, ", ".join("%s %s" % kv for kv in extra.items())))
 
 
 def look_slots(key: str, pal: dict, keys, sheet: Image.Image) -> dict:
@@ -170,6 +259,79 @@ def review(out: str, key: str, frames: dict, times: dict, pals: list) -> list:
     return paths
 
 
+def turnaround(out: str, key: str, frames: dict, times: dict) -> list:
+    """DIR4 6.4 review of a rig body: a turnaround board (rows idle, walk, the attack; columns side right, side left
+    mirrored, down, up) at 3x and at the battle's token size (actual size and 3x), a GIF of walk in the four directions
+    and one of the attack in down and up. A body without view support is drawn with the views.STAND_INS (named on the
+    board); nothing here is written to the sheets. Returns the paths written ([] for the dummy and the creatures)."""
+    cu = unit_of(key)
+    if cu is None:
+        return []
+    cls, u = cu
+    miss = views.missing(u, cls)
+    V, VT = views.clips(cls, u, stand_in=bool(miss))
+    z, w, tk, label = 3, rig.W, views.TOKEN, 96
+    name = key.replace("/", "_")
+    attack = next((n for n in frames if n not in STANDARD), None)
+    rows = [("idle", 0), ("walk", 2)] + ([(attack, len(frames[attack]) // 2)] if attack else [])
+    dirs = ("side right", "side left", "down", "up")
+
+    def cell(clip, n, d):
+        if d == "side right":
+            return frames[clip][n]
+        if d == "side left":
+            return frames[clip][n].transpose(Image.FLIP_LEFT_RIGHT)  # the battle mirrors the whole frame
+        vid = "%s_%s" % (clip, d)
+        return V[vid][n] if vid in V else None
+
+    top, foot, cz = 18, 30, w * z
+    x_tok = label + 4 * cz + 12
+    x_tok3 = x_tok + 4 * (tk + 6) + 12
+    board = Image.new("RGBA", (x_tok3 + 4 * tk * z, top + len(rows) * cz + foot), REVIEW_BG + (255,))
+    d = ImageDraw.Draw(board)
+    for i, dn in enumerate(dirs):
+        d.text((label + i * cz + 6, 4), dn, fill=(230, 226, 210))
+        d.text((x_tok3 + i * tk * z + 4, 4), dn, fill=(230, 226, 210))
+    d.text((x_tok, 4), "%d px" % tk, fill=(230, 226, 210))
+    for r, (clip, n) in enumerate(rows):
+        y = top + r * cz
+        d.text((6, y + 8), clip, fill=(230, 226, 210))
+        d.text((6, y + 22), "frame %d" % n, fill=(160, 166, 150))
+        for i, dn in enumerate(dirs):
+            fr = cell(clip, n, dn)
+            if fr is None:
+                d.text((label + i * cz + 6, y + cz // 2), "no view yet", fill=(160, 166, 150))
+                continue
+            board.alpha_composite(fr.resize((cz, cz), Image.NEAREST), (label + i * cz, y))
+            t = views.token(fr)
+            board.alpha_composite(t, (x_tok + i * (tk + 6), y + cz - tk - 4))
+            board.alpha_composite(t.resize((tk * z, tk * z), Image.NEAREST), (x_tok3 + i * tk * z, y + cz - tk * z))
+    share = views.difference(V["idle_down"][0], V["idle_up"][0])
+    note = "idle_down / idle_up differ %.0f%% at %d px (at least %d%%)" % (share * 100, tk, views.READABLE * 100)
+    if miss:
+        note += "; stand-ins for: " + ", ".join(miss)
+    d.text((6, top + len(rows) * cz + 8), note, fill=(230, 226, 210))
+    paths = [os.path.join(out, "%s_turnaround.png" % name)]
+    board.save(paths[-1])
+
+    def gif(panels, ms, path):
+        g = []
+        for k in range(len(panels[0])):
+            b = Image.new("RGBA", (w * len(panels), w), REVIEW_BG + (255,))
+            for p, frs in enumerate(panels):
+                b.alpha_composite(frs[k], (p * w, 0))
+            g.append(b.resize((b.width * 4, w * 4), Image.NEAREST).convert("P", palette=Image.ADAPTIVE))
+        g[0].save(path, save_all=True, append_images=g[1:], duration=list(ms), loop=0)
+        paths.append(path)
+
+    wt = times["walk"] if isinstance(times["walk"], (list, tuple)) else [times["walk"]] * len(frames["walk"])
+    gif([frames["walk"], [f.transpose(Image.FLIP_LEFT_RIGHT) for f in frames["walk"]], V["walk_down"], V["walk_up"]], wt,
+        os.path.join(out, "%s_walk_4dir.gif" % name))
+    if attack and "%s_down" % attack in V:
+        gif([V["%s_down" % attack], V["%s_up" % attack]], VT["%s_down" % attack], os.path.join(out, "%s_%s_views.gif" % (name, attack)))
+    return paths
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("bodies", nargs="*", help="class ids or variant keys (default: every class and every variant)")
@@ -206,7 +368,7 @@ def main() -> None:
             pals.append((pid, clips["palette"], {k: colours[k] for k in slots}))
         if args.review:
             _, _, fr, times, _, _ = source(key)
-            for p in review(args.review, key, fr, times, pals):
+            for p in review(args.review, key, fr, times, pals) + turnaround(args.review, key, fr, times):
                 print("review", p)
 
 

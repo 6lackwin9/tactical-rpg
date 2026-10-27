@@ -96,6 +96,18 @@ def warrior_2h(u):
                     p(bob=2.2, lean=4.0, dx=3.0, wa=152, hand_f=(8, 5.5), fb=(-7, 0), ff=(6.5, 0)),                   # hold
                     p(bob=1.2, lean=1.5, dx=1.0, wa=80, hand_f=(6, 4.5), fb=(-5.5, 0), ff=(5, 0)),
                     pose(u, bob=0.3, **ready)], [120, 190, 45, 150, 120, 110, 110]))
+    if u['weapon'] == 'greatsword':
+        # DIR4-R1 pilot review (user 2026-10-28): the greatsword cuts level at chest height instead of the chop: raised
+        # to the shoulder, cocked back over it, a level sweep, the blade straight out at chest height with the tip
+        # spark (the same frame count, ms and impact frame 3 as the chop, for FX1); the axe and hammer keep the chop
+        put('attack', ([p(bob=1.2, lean=-0.5, wa=-35, hand_f=(2, 1.5), **st),
+                        p(bob=1.6, lean=-2.0, dx=-1.0, wa=-70, hand_f=(0, -2), fb=(-6.5, 0), ff=(4, 0)),             # cocked
+                        p(bob=1.0, lean=1.5, dx=0.5, wa=75, hand_f=(4, 1), fb=(-6.5, 0), ff=(5.5, 0),
+                          slash=arc_pts(22, 50, 30, -25, 25, 14)),                                                    # the sweep
+                        p(bob=1.8, lean=3.0, dx=2.0, wa=95, hand_f=(3, 2.5), fb=(-7, 0), ff=(6.5, 0), fx=tip(44.5, 21.5)),  # impact
+                        p(bob=1.6, lean=3.0, dx=2.0, wa=95, hand_f=(3, 2.5), fb=(-7, 0), ff=(6.5, 0)),             # hold
+                        p(bob=1.2, lean=1.5, dx=1.0, wa=60, hand_f=(5, 3.5), fb=(-5.5, 0), ff=(5, 0)),
+                        pose(u, bob=0.3, **ready)], [120, 190, 45, 150, 120, 110, 110]))
     # weapon block: hunch behind the weapon held upright before the face, the barrier on its far side
     def sb(k, hit=False, cx=24, cy=22):
         return barrier(k, hit, cx=cx, cy=cy) if not hit else barrier(k, False, cx=cx, cy=cy) + [(37, 15, 1.0, BLUE_HI), (38, 24, 1.0, BLUE_HI)]

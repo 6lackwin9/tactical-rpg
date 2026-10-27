@@ -2216,7 +2216,11 @@ mod sprite_tests {
         assert_eq!(checks, 4);
         map.anim_ms += WALK_LINGER_MS + 1.0;
         frame(&mut map, &mut cx, &mut g, 1.0);
-        assert_eq!(sprite(&map, &cx, "party").expect("the leader")["clip"], json!("idle"), "standing still");
+        // standing still after the last step (up): idle in the view it faces, the side row when the body has no up row
+        let sp = sprite(&map, &cx, "party").expect("the leader");
+        let view = drawn_view(&mut cx, &s(json::dict(&sp), "body"), "idle", "up");
+        let want = if view == "side" { "idle".to_string() } else { format!("idle_{view}") };
+        assert_eq!((sp["clip"].clone(), sp["view"].clone()), (json!(want), json!(view)), "standing still");
     }
 
     /// 2.4 and DIR4-M: every person with a body is a sprite on their tile (idle, facing right); in a conversation

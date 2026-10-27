@@ -3,7 +3,7 @@
 //! heavier shield the class sheet (1H + kite shield); named bodies keep their own art. Fixture items are built here;
 //! the shipped checks derive what to expect from the item families, the warrior class, the shields and the layers.
 
-use aegis_core::assets::{self, Clips, Layers};
+use aegis_core::assets::{self, Clips, Layers, View};
 use aegis_core::json;
 use emberwake_content::art::{self, Grip, OffHand, BUCKLER_LOOK, BUCKLER_MAX_BURDEN};
 use emberwake_content::{source, store};
@@ -100,8 +100,9 @@ fn resolved(layers: &Layers, chain: Vec<String>) -> Option<String> {
 }
 
 /// Every family the warrior may wield two-handed (its hands allow main_2h and the class has proficiency in it) has a
-/// baked 2H look with the base's clips less the shield's; the buckler look has the base's clips; every look shares
-/// the base's palette slots (DIR4 L3) and is the body its grip resolves to.
+/// baked 2H look with the base's side clips less the shield's; the buckler look has the base's side clips; every look
+/// shares the base's palette slots (DIR4 L3) and is the body its grip resolves to. View clips (DIR4) are compared
+/// apart: a look has them only once its grip and weapon have view drawings (DIR4 L2), and then the same ones.
 #[test]
 fn every_warrior_look_is_baked() {
     let v = store::view(&game_dir().join("data"));
@@ -115,7 +116,8 @@ fn every_warrior_look_is_baked() {
         .collect();
     assert!(!families.is_empty(), "the warrior wields some two-handed family");
     let base = clips(&layers, "warrior");
-    let all: Vec<&str> = base.clips.iter().map(|c| c.id.as_str()).collect();
+    let all: Vec<&str> = base.clips.iter().filter(|c| c.view == View::Side).map(|c| c.id.as_str()).collect();
+    let views = |c: &Clips| c.clips.iter().filter(|c| c.view != View::Side).map(|c| (c.of.clone(), c.view)).collect::<Vec<_>>();
     let no_shield: Vec<&str> = all.iter().copied().filter(|id| !id.starts_with("shield")).collect();
     let mut grips: Vec<(Grip, Vec<&str>)> =
         families.iter().map(|fam| (Grip { main_family: fam.clone(), two_handed: true, off_hand: OffHand::Empty }, no_shield.clone())).collect();
@@ -124,7 +126,9 @@ fn every_warrior_look_is_baked() {
         let key = format!("warrior/{}", grip.look().unwrap());
         let look = clips(&layers, &key);
         assert_eq!(look.palette, base.palette, "{key}: the look shares the base's palette slots");
-        assert_eq!(look.clips.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), want, "{key}: clips");
+        assert_eq!(look.clips.iter().filter(|c| c.view == View::Side).map(|c| c.id.as_str()).collect::<Vec<_>>(), want, "{key}: clips");
+        let lv = views(&look);
+        assert!(lv.is_empty() || lv == views(&base), "{key}: view clips {lv:?}, the base's {:?}", views(&base));
         assert_eq!(resolved(&layers, art::gear_body_chain("warrior", &grip)).as_deref(), Some(key.as_str()));
     }
 }
