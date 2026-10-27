@@ -108,6 +108,7 @@ Never delete or rewrite entries. When something is replaced, add a row with the 
 | 2026-10-27 | A fixed-strength per-pixel portrait rim | superseded | patchy over the corner backdrop; replaced by a backdrop-aware lift, even along each edge run | PIXEL3 |
 | 2026-10-27 | The glow portrait backdrop | superseded | the corner faction backdrops (decision "Portrait backdrops and rims"); `--backdrop glow` keeps it available | PIXEL3 |
 | 2026-10-27 | The PHASEFOLD golden's `ashmaw_stand` fights with Grakka unarmed | re-recorded | the same golden re-recorded with WAR2H1's gear seed: `goblin_warlord` carries `wpn_battle_axe` (2H) and no off hand; fights 48-71 (`ashmaw_stand`) change, `goblin_ambush` and `pass_ambush` are unchanged | WAR2H1 (user 2026-10-23: Grakka a 2H double-bladed axe): an intended data change, not a regression; Ashlands campaign sim at level 5: clears 33 of 60 runs before, 29 of 60 after |
+| 2026-10-27 | Code-drawn battle props (STAGE1-T `tools/gen_art.py battle_props`: `tree_prop`, `stones_prop`) | retired | locally generated FLUX.2 Klein sheets in `art_src/props/`, cut by `tools/sprites/props_cut.py` (STAGE1-A2) | User 2026-10-27: local generation for assets; the generated trees and stones read better on the tilted board |
 
 New rows go at the end of the table above (append-only); this section stays below it.
 

@@ -288,6 +288,10 @@ colour and pixel fixes stay code. The flat `common` tiles are not touched (Flat 
 
 ### 7.2 Props
 
+Since STAGE1-A2 (user 2026-10-27, picks: tree set A, stones 4 and 6 of the review sheet) the tree and stones props are generated locally (FLUX.2
+Klein sheets in `art_src/props/`, cut by `tools/sprites/props_cut.py`) at the same sizes and outline colours; the
+code drawers below are retired from `tools/gen_art.py`.
+
 | Path | Files | PNG px | Content |
 | --- | --- | --- | --- |
 | `kits/rpg/assets/props/common/tree/v0-v3.png` | 4 | 40 x 52 | v0-v2 leafy trees (canopy 28-34 px wide, top 0-4 px from the PNG top, the olive greens of `grass`), v3 the bare tree of today's tile; trunk 4 px wide centred at x 20, its base 6 px above the PNG bottom; outline rgb(22, 26, 16) |
