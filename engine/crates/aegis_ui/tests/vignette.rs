@@ -40,6 +40,7 @@ fn cx() -> Cx<App> {
         quit: false,
         answers: Vec::new(),
         playtest: Playtests::off(),
+        held: Default::default(),
         app: App,
     }
 }

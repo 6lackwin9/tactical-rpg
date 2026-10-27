@@ -6,7 +6,8 @@
 //! settles the outcome and the results popup opens over the map).
 //! Mouse: click a hero to select; click a foe, an ally, the hero itself or a tile for its options; hover anything for
 //! details; right click closes a menu or undoes the hero's last step; the wheel scrolls the log. Keys: Enter confirm,
-//! Space step / next round, A autoplay, Z undo, L log, R restart (arena), Esc close.
+//! Space step / next round, A autoplay, Z undo, L log, R restart (arena), Esc close; hold Alt to outline every unit,
+//! covered or not (STAGE1-O).
 
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::music;
@@ -2239,11 +2240,13 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                 }
             }
             Pass::Through => {
+                // STAGE1-O: by default only the selected unit shows through; Alt held outlines every unit
+                let reveal = stage::Reveal::of(&cx.settings.v["see_through"], cx.held.alt);
                 for (k, p) in order.iter().enumerate() {
                     let Item::Unit(i) = p.item else { continue };
                     let Some(t) = unit_of(i).filter(|t| t.alive) else { continue };
                     let (Some(b), Some((_, f))) = (t.body.as_deref(), frames.iter().find(|(j, _)| *j == i)) else { continue };
-                    let col = match stage::through(&order, k, Some(i) == sel, hovered == Some(i)) {
+                    let col = match stage::through(&order, k, Some(i) == sel, hovered == Some(i), reveal) {
                         Some(Through::Side) => with_alpha(if t.ally { ALLY } else { FOE }, 230),
                         Some(Through::Selected) => GOLD,
                         Some(Through::Hovered) => rgba(255, 255, 255, tuning.hover_outline_alpha),

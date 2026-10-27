@@ -376,6 +376,7 @@ pub(crate) mod tests {
             quit: false,
             answers: Vec::new(),
             playtest: aegis_ui::playtest::Playtests::off(),
+            held: Default::default(),
             app,
         }
     }

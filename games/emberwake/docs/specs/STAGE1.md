@@ -1,6 +1,8 @@
 # STAGE1: battle stage look (tiles, props and units in one view)
 
-Status: approved (user 2026-10-23): option B in full, the oblique board with 32 x 24 cells and the zone backdrops in
+Status: done; reviewed (user 2026-10-27, decision "Battle and exploration view"): units stay 40 px, Flat is a Scene
+Runner debug setting (STAGE1-C), and the outlines through follow the setting `see_through` and the held Alt key
+(STAGE1-O, which supersedes the always-on pass 8 of section 3.7 by default). Was: approved (user 2026-10-23): option B in full, the oblique board with 32 x 24 cells and the zone backdrops in
 the same task; units 40 px; trees, stones, the wall face and the backdrops drawn by code now (an image-API sheet only
 if asked later); a Gameplay setting "Battle view: Stage / Flat" until the user's review (default Stage; Flat removed
 after the review); intent arrows on the ground under the units; the faint grid always on; a unit behind a tree canopy
@@ -203,7 +205,8 @@ Schema-first: no content schema change (the stage table is code, 3.1). New file 
 
 | Key | Values | Default | Label and tip |
 | --- | --- | --- | --- |
-| `battle_view` | `stage`, `flat` | `stage` | "Battle view", options "Stage" and "Flat"; tip: "Stage: a tilted board with standing trees and walls. Flat: the board seen from above, as before." |
+| `battle_view` | `stage`, `flat` | `stage` | "Battle view", options "Stage" and "Flat"; tip: "Stage: a tilted board with standing trees and walls. Flat: the board seen from above, as before." Since STAGE1-C (2026-10-27) a debug setting in the Scene Runner's Developer panel, not in the Gameplay tab; a game started without `screen=runner` always shows the Stage |
+| `see_through` (STAGE1-O, 2026-10-27) | `selected`, `always` | `selected` | Gameplay tab "Units behind", options "When selected or Alt held" (only the selected unit is outlined through what covers it; every unit is outlined while Alt is held) and "Always" (STAGE1's pass 8: the selected and hovered unit and any unit behind a block or standing prop) |
 
 An unknown value reads as `stage`. The setting applies at the next frame (no restart). Flat is today's draw exactly:
 32 x 32 cells at (128, 30), the `common` tiles, tree tiles flat, tokens `flat_token_px`, the filled foot ellipse at
@@ -350,7 +353,7 @@ section 12); two views to keep working until STAGE1-C (both are tested, check 10
 | STAGE1-E | Stage pieces: `Painter::ellipse_ring`, `Image::opaque_bounds`, `Art::body_bounds`, tests (4.3, check 12) | engine | logic | none | `engine/crates/aegis_ui/src/{painter,canvas,art}.rs` |
 | STAGE1-L | Battle stage B: `stage.rs` (geometry, stage table, ground under props, lips, blocks, props, backdrop and face, passes, ground arrows, outlines through, hit rects), `battle.rs` draws Stage or Flat by the `battle_view` setting, tuning keys, art lookups, tests (sections 3-5) | game | logic | STAGE1-E, FACE1 (same file) | `games/emberwake/crates/emberwake_gui/src/{stage,battle,lib,screens,menus}.rs`, `games/emberwake/crates/emberwake_content/src/art.rs`, `games/emberwake/tuning.json` |
 | STAGE1-T | Stage art by code: 64 stage tiles at 4:3, wall faces, tree and stones props, 8 zone backdrops (section 7) | engine + kit + game | asset | none (new folders; drawn once STAGE1-L reads them; before the review) | `tools/gen_art.py`, `engine/assets/tilesets/common_stage/`, `kits/rpg/assets/props/common/{tree,stones}/`, `games/emberwake/assets/backgrounds/battle/` |
-| STAGE1-C | Remove the Flat view after the user's review: the `battle_view` setting, `flat_token_px`, the flat draw path and its tests | game | logic | STAGE1-L, STAGE1-T, user review | `games/emberwake/crates/emberwake_gui/src/{stage,battle,screens,menus}.rs`, `games/emberwake/tuning.json` (status: waits for the review) |
+| STAGE1-C | Remove the Flat view after the user's review: the `battle_view` setting, `flat_token_px`, the flat draw path and its tests (rescoped 2026-10-27: Flat becomes a Scene Runner debug setting and stays) | game | logic | STAGE1-L, STAGE1-T, user review | `games/emberwake/crates/emberwake_gui/src/{stage,battle,screens,menus}.rs`, `games/emberwake/tuning.json` (status: waits for the review) |
 | STAGE1-A2 | Image-API sheet for battle trees and rocks (asked first) | kit | asset | STAGE1-T, user ask | `kits/rpg/assets/props/common/` (status `idea`) |
 
 Rows that build on it: DIR4-G after STAGE1-L (or rebased on it; both edit `battle.rs`); FX1's spec takes the chest

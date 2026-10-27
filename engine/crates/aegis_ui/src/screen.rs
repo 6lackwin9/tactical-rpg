@@ -163,6 +163,15 @@ pub trait Context: Sized + 'static {
     fn agent_game(&self) -> Value;
 }
 
+/// The modifier keys held down right now (the shell keeps it current; all up while the window is out of focus), for
+/// hold-to-show controls such as revealing what is hidden while a key is held.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Held {
+    pub shift: bool,
+    pub ctrl: bool,
+    pub alt: bool,
+}
+
 /// The shared context: the engine's half here, the game's half in `app` (reached through Deref).
 pub struct Cx<G> {
     pub settings: Settings,
@@ -177,6 +186,8 @@ pub struct Cx<G> {
     pub answers: Vec<String>,
     /// The playtest hub (recordings of this run: sessions, trail, notes).
     pub playtest: crate::playtest::Playtests,
+    /// The modifier keys held down right now.
+    pub held: Held,
     pub app: G,
 }
 

@@ -27,6 +27,8 @@ pub enum SAct {
     PickLocation(usize),
     Reload,
     Playtests,
+    /// STAGE1-C: the battle view (an index into `stage::VIEWS`), a debug setting kept out of the player's settings.
+    PickView(usize),
     Exit,
 }
 
@@ -158,6 +160,14 @@ impl SceneRunner {
                 self.location = 0;
             }
             SAct::PickLocation(i) => self.location = i,
+            SAct::PickView(i) => {
+                if let Some((v, _)) = crate::stage::VIEWS.get(i) {
+                    cx.settings.v["battle_view"] = serde_json::json!(v);
+                    if let Err(e) = cx.settings.save() {
+                        show_errors(cx, vec![format!("Settings could not be saved: {e}")]);
+                    }
+                }
+            }
             SAct::Playtests => {
                 let home = cx.data_dir.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
                 let repo = vec![home.join("playtests/inbox"), home.join("playtests/repro")];
@@ -189,7 +199,7 @@ impl Screen<GameCx> for SceneRunner {
         ui.p.text(12.0, 27.0, "Launch any scene; Esc returns here.", SMALL, DIM);
         ui.button("runner.exit", Rect::new(W - 40, 6, 34, 13), "Exit", SAct::Exit, true);
         let left = Rect::new(12, 41, 383, 300);
-        let right = Rect::new(402, 41, 235, 110);
+        let right = Rect::new(402, 41, 235, 128);
         ui.p.panel(left, rgba(18, 24, 38, 255), BORDER, 2.0);
         ui.p.panel(right, rgba(18, 24, 38, 255), BORDER, 2.0);
         ui.p.text(left.x as f32 + 6.0, left.y as f32 + 4.0, "SCENES", SMALL, INFO);
@@ -255,6 +265,11 @@ impl Screen<GameCx> for SceneRunner {
         ui.button_tip("runner.playtests", Rect::new(right.x + 6, right.y + 58, 70, 14), "Playtests", SAct::Playtests, true, tip("Playtests", "Recordings of played battles with their notes (F8): play back, take over at a round, copy to the repo inbox; the recording toggle."));
         ui.p.text(right.x as f32 + 82.0, right.y as f32 + 61.0, if cx.playtest.on { "Recording on" } else { "Recording off" }, SMALL, if cx.playtest.on { GOOD } else { DIM });
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 78.0, &format!("Data: {}", cx.data_dir.display()), SMALL, DIM);
+        // STAGE1-C: the battle view for testing (Stage ships; Flat is the board seen from above)
+        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 96.0, "Battle view", SMALL, TEXT);
+        let views: Vec<String> = crate::stage::VIEWS.iter().map(|v| v.1.to_string()).collect();
+        let at = crate::stage::VIEWS.iter().position(|v| cx.settings.v["battle_view"].as_str() == Some(v.0)).unwrap_or(0);
+        ui.select("runner.battle_view", Rect::new(right.x + 82, right.y + 93, 90, 14), &views, at, SAct::PickView, true, tip("Battle view (debug)", crate::stage::VIEW_TIP));
         self.w = ui.widgets;
     }
 

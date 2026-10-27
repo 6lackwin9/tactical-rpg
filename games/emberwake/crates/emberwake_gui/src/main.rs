@@ -101,7 +101,11 @@ fn main() -> Result<()> {
         debug: false,
         data_dir,
     };
-    let settings = Settings::load(aegis_save::user_dir(GAME_ID).join("settings.json"), default_settings());
+    let mut settings = Settings::load(aegis_save::user_dir(GAME_ID).join("settings.json"), default_settings());
+    // STAGE1-C: the battle view is a Scene Runner debug setting; the game itself always shows the Stage
+    if arg(&args, "screen") != Some("runner") {
+        settings.v["battle_view"] = serde_json::json!("stage");
+    }
     let record = settings.v["record_playtests"].as_bool().unwrap_or(cfg!(debug_assertions));
     // The data fingerprint a recording carries; hashed only while recording is on.
     let content = if record { aegis_content::fingerprint::of(&game.data_dir) } else { serde_json::Value::Null };
@@ -116,6 +120,7 @@ fn main() -> Result<()> {
         shot_dir: home.join("parity/out"),
         quit: false,
         answers: Vec::new(),
+        held: Default::default(),
         app: game,
     };
     let mut stack: Vec<Box<dyn Screen<GameCx>>> = vec![Box::new(menus::MainMenu::default())];

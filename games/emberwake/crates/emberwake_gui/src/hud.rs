@@ -181,6 +181,7 @@ pub(crate) mod hud_tests {
             quit: false,
             answers: Vec::new(),
             playtest: aegis_ui::playtest::Playtests::off(),
+            held: Default::default(),
             app,
         }
     }
