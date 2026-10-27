@@ -16,6 +16,58 @@
 			"grants": [],
 			"tags": [],
 			"icon_id": "ember_brigandine"
+		},
+		{
+			"id": "hest_hatchet",
+			"name": "Hest's Hatchet",
+			"base_item": "wpn_hand_axe",
+			"description": "A well-kept working hatchet.",
+			"history": "",
+			"owner": "hest_the_quartermaster",
+			"tuning": {},
+			"stat_bonuses": {},
+			"grants": [],
+			"tags": [],
+			"icon_id": ""
+		},
+		{
+			"id": "hest_buckler",
+			"name": "Hest's Buckler",
+			"base_item": "shd_buckler",
+			"description": "A small buckler worn smooth by years of carrying.",
+			"history": "",
+			"owner": "hest_the_quartermaster",
+			"tuning": {},
+			"stat_bonuses": {},
+			"grants": [],
+			"tags": [],
+			"icon_id": ""
+		},
+		{
+			"id": "brask_hatchet",
+			"name": "Brask's Hatchet",
+			"base_item": "wpn_hand_axe",
+			"description": "A well-kept working hatchet.",
+			"history": "",
+			"owner": "brask_toller",
+			"tuning": {},
+			"stat_bonuses": {},
+			"grants": [],
+			"tags": [],
+			"icon_id": ""
+		},
+		{
+			"id": "brask_buckler",
+			"name": "Brask's Buckler",
+			"base_item": "shd_buckler",
+			"description": "A small buckler worn smooth by years of carrying.",
+			"history": "",
+			"owner": "brask_toller",
+			"tuning": {},
+			"stat_bonuses": {},
+			"grants": [],
+			"tags": [],
+			"icon_id": ""
 		}
 	]
 }

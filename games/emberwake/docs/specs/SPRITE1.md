@@ -9,6 +9,12 @@ warhammer), sharing the base's palette slots (DIR4 L3). The look follows the equ
 shield of burden `BUCKLER_MAX_BURDEN` (0) or less gives `1h_buckler`, a heavier shield the class sheet; named bodies keep
 their art (Hest, Brask, Orsa: hatchet and buckler; Grakka: a 2H double-bladed axe). The battle switch is slice 2.
 
+Status update (2026-10-27): WAR2H1 slice 2 done: the battle token shows the gear look (`body_keys` in `battle.rs` over
+`gear_body_chain`); the seed `war2h1_gear.json` gives Hest, Brask and Orsa a hatchet and buckler and Grakka
+(`goblin_warlord`) a 2H battle axe; named bodies keep their baked art, so only bare class bases change look (the Gear
+Dojo's warrior, the timeline test-kit warriors). A weapon family without its own 2H look (dagger, mace, shortsword,
+polearm) falls back to the greatsword sheet; per-family looks come with DIR4-R2.
+
 Status update (2026-10-23): FACE1 done: units face their target or their step instead of their side (`Tokens::catch_up`,
 `UnitAnim` in `battle.rs`); this replaces SPRITE2's "foes face the party" mirroring. A battle still starts with the party
 facing right and the foes left; with the enemy tells hidden, enemies keep their facing while the party plans.

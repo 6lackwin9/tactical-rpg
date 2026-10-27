@@ -1,6 +1,7 @@
 //! PHASEFOLD (games/emberwake/docs/specs/PHASEFOLD.md section 4): the single reinforcement wave plays exactly as it did
 //! before it became an arrival phase. The golden `fixtures/phasefold_golden.json` was recorded once with the engine
-//! before the change (`RECORD=1 cargo test -p emberwake_world --test phasefold`; never re-recorded): the shipped fights
+//! before the change (`RECORD=1 cargo test -p emberwake_world --test phasefold`); re-recorded only for an intended
+//! data change, named in docs/HISTORY.md (2026-10-27, WAR2H1: Grakka's battle axe changed ashmaw_stand): the shipped fights
 //! with a wave (goblin_ambush in the catalog, pass_ambush and ashmaw_stand in ashlands), morale off and on, four presets,
 //! three seeds. Each fight is replayed and compared step for step (unit states, schedule, intents), then the outcome,
 //! the log, metrics and report, the events, the fates and the tally keys. Then the fold of legacy rows (1.4), the

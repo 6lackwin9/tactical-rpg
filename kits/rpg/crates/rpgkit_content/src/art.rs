@@ -110,8 +110,8 @@ impl Grip {
 /// The 1H + buckler look's variant.
 pub const BUCKLER_LOOK: &str = "1h_buckler";
 
-/// The bodies to try for a unit wearing body `key` with gear `grip` (WAR2H1; the battle's token will call this, then
-/// `Art::first_body`, in WAR2H1's battle slice): a class base (`<class>`) whose grip has a look tries `<class>/<look>` (`1h_buckler` or
+/// The bodies to try for a unit wearing body `key` with gear `grip` (WAR2H1; the game's battle token calls this, then
+/// `Art::first_body`): a class base (`<class>`) whose grip has a look tries `<class>/<look>` (`1h_buckler` or
 /// `2h_<family>`), for a 2H look then the fallback family's `<class>/2h_sword`, then the class base itself (a class
 /// without looks shows its sheet; once another class gets a `2h_sword` look, a family without its own look, such as
 /// a bow, would show that greatsword: give the fallback per class then); any other body, a named or goblin variant, keeps its own art key: `body_chain(key)`.
