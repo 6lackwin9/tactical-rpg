@@ -11,7 +11,9 @@
 # --clips idle (the pre-SPRITE1-A2 form): a one-frame sheet, the idle pose's first frame (the 48 px figure at 2x,
 #   bottom-aligned in the 104 px square), clips.json frame [104, 104] with one idle clip.
 # --clips all (default since SPRITE1-A2): one row per clip in clips.json order, frames left to right, each 48x48 (nearest, transparent);
-#   every clip with the rig's per-frame ms; loop true for idle, walk and idle_guarded.
+#   every clip with the rig's per-frame ms; loop true for idle, walk and idle_guarded. FX1-L1: an attack clip (ATTACKS)
+#   also has "impact", the index of the frame the rig marked with rig.impact (the blow lands or the shot leaves; the
+#   export exits when one is unmarked); a view row copies its side clip's.
 # Palette slots: a class body's are the rig palette's base colours (keys without a _lo / _hi shade suffix) that occur in
 # the sheet; a variant lists its own (shades included, the first key wins when two share a colour); at most 16
 # (aegis_core::assets). A palette file may only name its body's slots (checked here and by content check A4).
@@ -46,6 +48,8 @@ LAYERS = {"kit": ("kits", "rpg", "assets"), "game": ("games", "emberwake", "asse
 LOOPING = {"idle", "walk", "idle_guarded"}
 SLOTS_MAX, MS_MIN, MS_MAX, FRAMES_MAX = 16, 16, 2000, 64
 STANDARD = {"idle", "walk", "hurt", "death", "defend", "idle_guarded", "hurt_guarded", "idle_focus"}
+# FX1-L1: the attack clips, each of which must mark its impact frame (rig.impact)
+ATTACKS = {"attack", "jab", "haymaker", "kick", "sweep_kick", "shield_bash", "spit"}
 REVIEW_BG = (46, 52, 44)
 
 
@@ -99,7 +103,13 @@ def body(key: str, mode: str):
         ms = list(times[n]) if isinstance(times[n], (list, tuple)) else [times[n]] * len(frames[n])
         if not 1 <= len(frames[n]) <= FRAMES_MAX or len(ms) != len(frames[n]) or not all(MS_MIN <= t <= MS_MAX for t in ms):
             sys.exit("export_units: %s clip %s: %d frames, ms %s outside the sheet rules" % (key, n, len(frames[n]), ms))
-        clips.append({"id": n, "frames": len(frames[n]), "ms": [int(t) for t in ms], "loop": n in LOOPING})
+        clip = {"id": n, "frames": len(frames[n]), "ms": [int(t) for t in ms], "loop": n in LOOPING}
+        hit = rig.impact_frame(frames[n])  # FX1-L1: the frame the rig marked (rig.impact), written only when marked
+        if hit is not None:
+            clip["impact"] = hit
+        elif n in ATTACKS:
+            sys.exit("export_units: %s clip %s marks no impact frame (rig.impact on the frame the blow lands or the shot leaves)" % (key, n))
+        clips.append(clip)
     side = paste(frames, names)
     rows = dict(frames)
     for vid, vfr in view_rows(key, clips).items():  # DIR4: the view clips after the side clips, each with of and view
@@ -107,7 +117,7 @@ def body(key: str, mode: str):
         side_clip = next(c for c in clips if c["id"] == base)
         rows[vid] = vfr
         clips.append({"id": vid, "of": base, "view": view, "frames": side_clip["frames"], "ms": side_clip["ms"],
-                      "loop": side_clip["loop"]})
+                      "loop": side_clip["loop"], **({"impact": side_clip["impact"]} if "impact" in side_clip else {})})
     sheet = paste(rows, [c["id"] for c in clips])
     if len(clips) > len(names):
         check_view_colours(key, pal, keys, side, sheet)

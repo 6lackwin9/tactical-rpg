@@ -1,7 +1,7 @@
 # The six party classes on the shared rig: outfit + standard weapon + palette, and their base clips.
 import math, sys
 import rig
-from rig import pose, idle, walk, hurt, death, arc_pts, export
+from rig import pose, idle, walk, hurt, death, arc_pts, export, impact  # impact: FX1-L1's mark on an attack's hit frame
 
 BASE = dict(leather=(122, 82, 51), leather_lo=(80, 52, 32), wood=(138, 98, 58), wood_lo=(96, 66, 40), trim=(224, 180, 60),
             metal=(154, 166, 180), metal_hi=(214, 224, 235), metal_lo=(92, 102, 120), skin=(217, 166, 121), skin_lo=(176, 126, 88),
@@ -92,7 +92,7 @@ def warrior_2h(u):
                     p(bob=1.6, lean=-2.5, dx=-1.5, wa=-95, hand_f=(-0.5, -6.5), fb=(-6.5, 0), ff=(4, 0)),                  # wind-up
                     p(bob=0.8, lean=2.0, dx=1.0, wa=60, hand_f=(8, -3), fb=(-6.5, 0), ff=(5.5, 0),
                       slash=arc_pts(23, 19, 17, -60, 58, 14)),                                                          # the swing
-                    p(bob=2.4, lean=4.5, dx=3.0, wa=150, hand_f=(8, 5), fb=(-7, 0), ff=(6.5, 0), fx=tip(43, 40)),     # impact
+                    impact(p(bob=2.4, lean=4.5, dx=3.0, wa=150, hand_f=(8, 5), fb=(-7, 0), ff=(6.5, 0), fx=tip(43, 40))),  # impact
                     p(bob=2.2, lean=4.0, dx=3.0, wa=152, hand_f=(8, 5.5), fb=(-7, 0), ff=(6.5, 0)),                   # hold
                     p(bob=1.2, lean=1.5, dx=1.0, wa=80, hand_f=(6, 4.5), fb=(-5.5, 0), ff=(5, 0)),
                     pose(u, bob=0.3, **ready)], [120, 190, 45, 150, 120, 110, 110]))
@@ -104,7 +104,7 @@ def warrior_2h(u):
                         p(bob=1.6, lean=-2.0, dx=-1.0, wa=-70, hand_f=(0, -2), fb=(-6.5, 0), ff=(4, 0)),             # cocked
                         p(bob=1.0, lean=1.5, dx=0.5, wa=75, hand_f=(4, 1), fb=(-6.5, 0), ff=(5.5, 0),
                           slash=arc_pts(22, 50, 30, -25, 25, 14)),                                                    # the sweep
-                        p(bob=1.8, lean=3.0, dx=2.0, wa=95, hand_f=(3, 2.5), fb=(-7, 0), ff=(6.5, 0), fx=tip(44.5, 21.5)),  # impact
+                        impact(p(bob=1.8, lean=3.0, dx=2.0, wa=95, hand_f=(3, 2.5), fb=(-7, 0), ff=(6.5, 0), fx=tip(44.5, 21.5))),  # impact
                         p(bob=1.6, lean=3.0, dx=2.0, wa=95, hand_f=(3, 2.5), fb=(-7, 0), ff=(6.5, 0)),             # hold
                         p(bob=1.2, lean=1.5, dx=1.0, wa=60, hand_f=(5, 3.5), fb=(-5.5, 0), ff=(5, 0)),
                         pose(u, bob=0.3, **ready)], [120, 190, 45, 150, 120, 110, 110]))
@@ -146,14 +146,14 @@ def warrior_buckler(u):
                     pose(u, bob=1.4, lean=-2.0, dx=-1.0, wa=-60, hand_f=(-1, -5.5), hand_b=(6.5, 2.5), fb=(-6.5, 0), ff=(4, 0)),
                     pose(u, bob=0.8, lean=2.5, dx=1.5, wa=70, hand_f=(9, -1.5), hand_b=(4, 5), fb=(-6.5, 0), ff=(5.5, 0),
                          slash=arc_pts(23, 20, 13, -50, 70, 12)),
-                    pose(u, bob=2.0, lean=4.0, dx=2.5, wa=125, hand_f=(9.5, 5), hand_b=(3, 6), fb=(-7, 0), ff=(6.5, 0), fx=spark(43, 31)),
+                    impact(pose(u, bob=2.0, lean=4.0, dx=2.5, wa=125, hand_f=(9.5, 5), hand_b=(3, 6), fb=(-7, 0), ff=(6.5, 0), fx=spark(43, 31))),
                     pose(u, bob=1.8, lean=3.8, dx=2.5, wa=128, hand_f=(9.5, 5.5), hand_b=(3, 6), fb=(-7, 0), ff=(6.5, 0)),
                     pose(u, bob=1.0, lean=1.5, dx=1.0, wa=60, hand_f=(6, 4.5), hand_b=(5, 4), fb=(-5.5, 0), ff=(5, 0)),
                     pose(u, bob=0.3, **ready)], [110, 170, 45, 140, 110, 110, 110]))
     # shield bash: weapon held back, punch the buckler straight out at face height
     put('shield_bash', ([pose(u, bob=1.4, lean=-1.5, dx=-1.0, wa=-30, hand_f=(-1, 4), hand_b=(4.5, 3.5), fb=(-6, 0), ff=(4, 0)),
                          pose(u, bob=1.8, lean=-2.0, dx=-1.5, wa=-40, hand_f=(-1.5, 4), hand_b=(3.5, 3), fb=(-6.5, 0), ff=(3.5, 0)),
-                         pose(u, bob=1.2, lean=4.0, dx=3.0, wa=-30, hand_f=(1, 3.5), hand_b=(11, 0), fb=(-7.5, 0), ff=(7, 0), fx=spark(42, 18, 2.2)),
+                         impact(pose(u, bob=1.2, lean=4.0, dx=3.0, wa=-30, hand_f=(1, 3.5), hand_b=(11, 0), fb=(-7.5, 0), ff=(7, 0), fx=spark(42, 18, 2.2))),
                          pose(u, bob=1.4, lean=4.0, dx=3.0, wa=-30, hand_f=(1, 3.5), hand_b=(10.5, 0.5), fb=(-7.5, 0), ff=(7, 0)),
                          pose(u, bob=0.8, lean=1.5, dx=1.0, wa=10, hand_f=(3, 5), hand_b=(6, 3), fb=(-5.5, 0), ff=(5, 0)),
                          pose(u, bob=0.3, **ready)], [100, 150, 45, 150, 110, 110]))
@@ -204,16 +204,16 @@ def clips(name, variant='', unit=None):
         sh_up = dict(hand_b=(7.5, 0.5))
         put('attack', ([wp(bob=1.0, lean=0.5, wa=60, hand_f=(3, 5), hand_b=(6, 2), fb=(-5, 0), ff=(4, 0)),
                         wp(bob=2.0, lean=-1.0, dx=-1.5, wa=88, hand_f=(-2.5, 5.5), fb=(-6.5, 0), ff=(4, 0), **sh_up),          # draw back
-                        wp(bob=1.6, lean=3.5, dx=2.5, wa=92, hand_f=(10.5, 4), fb=(-7, 0), ff=(6.5, 0), **sh_up,
-                             fx=[(45, 24.5, 1.6, (255, 255, 255)), (44, 22.5, 0.6, (230, 236, 245)), (44, 26.5, 0.6, (230, 236, 245))]),  # thrust
+                        impact(wp(bob=1.6, lean=3.5, dx=2.5, wa=92, hand_f=(10.5, 4), fb=(-7, 0), ff=(6.5, 0), **sh_up,
+                                  fx=[(45, 24.5, 1.6, (255, 255, 255)), (44, 22.5, 0.6, (230, 236, 245)), (44, 26.5, 0.6, (230, 236, 245))])),  # thrust
                         wp(bob=1.8, lean=3.5, dx=2.5, wa=92, hand_f=(10.5, 4), fb=(-7, 0), ff=(6.5, 0), **sh_up),                 # hold
                         wp(bob=1.2, lean=1.5, dx=1.0, wa=80, hand_f=(5, 5), fb=(-5.5, 0), ff=(5, 0), **sh_up),
                         wp(bob=0.3, **ready)], [110, 160, 45, 140, 110, 110]))
         # shield bash: sword pulled back low, drive the shield forward with the whole body
         put('shield_bash', ([wp(bob=1.6, lean=-1.5, dx=-1.5, wa=-110, hand_f=(-0.5, 6.5), hand_b=(4, 2), fb=(-6, 0), ff=(4, 0)),
                              wp(bob=2.2, lean=-2.5, dx=-2.5, wa=-115, hand_f=(-1, 6.5), hand_b=(3, 2.5), fb=(-6.5, 0), ff=(3.5, 0)),
-                             wp(bob=1.4, lean=4.5, dx=3.5, wa=-110, hand_f=(0.5, 6.5), hand_b=(10, 0.5), fb=(-7.5, 0), ff=(7, 0),
-                                  fx=[(43, 19, 2.4, (255, 255, 255)), (45, 15, 1.0, (255, 240, 200)), (45, 24, 1.0, (255, 240, 200)), (41, 13, 0.8, (255, 220, 160))]),
+                             impact(wp(bob=1.4, lean=4.5, dx=3.5, wa=-110, hand_f=(0.5, 6.5), hand_b=(10, 0.5), fb=(-7.5, 0), ff=(7, 0),
+                                       fx=[(43, 19, 2.4, (255, 255, 255)), (45, 15, 1.0, (255, 240, 200)), (45, 24, 1.0, (255, 240, 200)), (41, 13, 0.8, (255, 220, 160))])),
                              wp(bob=1.6, lean=4.5, dx=3.5, wa=-110, hand_f=(0.5, 6.5), hand_b=(10, 0.5), fb=(-7.5, 0), ff=(7, 0)),
                              wp(bob=1.0, lean=2.0, dx=1.5, wa=-60, hand_f=(1.5, 6), hand_b=(6, 2), fb=(-5.5, 0), ff=(5, 0)),
                              wp(bob=0.3, **ready)], [110, 170, 45, 160, 110, 110]))
@@ -244,7 +244,7 @@ def clips(name, variant='', unit=None):
                         pose(u, bob=0.8, lean=-0.3, bow_a=0, hand_f=(9.5, 0.5), pull=0.2, nock=True, hand_b=(4.5, 0.5), **st),
                         pose(u, bob=1.0, lean=-0.8, bow_a=0, hand_f=(10, 0.5), pull=0.6, nock=True, hand_b=(1.0, 0.0), **st),
                         pose(u, bob=1.2, lean=-1.2, bow_a=0, hand_f=(10.2, 0.5), pull=1.0, nock=True, hand_b=(-2.0, -0.5), **st),
-                        pose(u, bob=1.0, lean=-1.6, dx=-0.6, bow_a=-4, hand_f=(10, 0), hand_b=(-3.5, -1), arrow=(44, 22.0), **st),
+                        impact(pose(u, bob=1.0, lean=-1.6, dx=-0.6, bow_a=-4, hand_f=(10, 0), hand_b=(-3.5, -1), arrow=(44, 22.0), **st)),  # the release
                         pose(u, bob=0.8, lean=-1.0, dx=-0.4, bow_a=-2, hand_f=(9.8, 0.3), hand_b=(-3, 0), **st),
                         pose(u, bob=0.4, bow_a=20, hand_f=(6, 4), **st)], [100, 110, 90, 260, 50, 140, 120]))
         # stance: focus (aim) idle: bow half-raised, eye glint, slow gold motes at the head
@@ -262,8 +262,8 @@ def clips(name, variant='', unit=None):
         put('attack', ([pose(u, bob=0.8, lean=-1.0, wa=-10, hand_f=(1, -6), hand_b=(-1, -3), **st),
                         pose(u, bob=1.2, lean=-2.0, dx=-1, wa=-40, hand_f=(-1, -7.5), hand_b=(-2, -4), **st),
                         pose(u, bob=0.8, lean=2.0, dx=1, wa=60, hand_f=(7, -2), slash=arc_pts(22, 18, 12, -20, 80, 12), **st),
-                        pose(u, bob=2.2, lean=4.0, dx=2.5, wa=140, hand_f=(8, 5), fb=(-6.5, 0), ff=(6, 0),
-                             fx=[(37, 38, 2.0, (255, 255, 255)), (34, 40, 1.0, GOLDEN_HI), (40, 40, 1.0, GOLDEN_HI), (37, 35, 0.8, GOLDEN)]),
+                        impact(pose(u, bob=2.2, lean=4.0, dx=2.5, wa=140, hand_f=(8, 5), fb=(-6.5, 0), ff=(6, 0),
+                                    fx=[(37, 38, 2.0, (255, 255, 255)), (34, 40, 1.0, GOLDEN_HI), (40, 40, 1.0, GOLDEN_HI), (37, 35, 0.8, GOLDEN)])),
                         pose(u, bob=2.0, lean=3.5, dx=2.5, wa=150, hand_f=(8, 5.5), fb=(-6.5, 0), ff=(6, 0)),
                         pose(u, bob=0.4, **rd)], [120, 180, 50, 150, 110, 120]))
         put('hurt', hurt(u, **rd)); put('death', death(u, drop=(31, 44, 95)))
@@ -273,8 +273,8 @@ def clips(name, variant='', unit=None):
         put('attack', ([pose(u, bob=1.6, lean=1.0, dx=-1, wa=100, wb=100, hand_f=(3, 6), hand_b=(0, 6), fb=(-6, 0), ff=(3, 0)),
                         pose(u, bob=1.2, lean=4.0, dx=3, wa=90, wb=110, hand_f=(10, 2.5), hand_b=(1, 6), fb=(-7, 0), ff=(6, 0),
                              fx=[(40, 22, 1.2, (255, 255, 255))]),
-                        pose(u, bob=1.4, lean=4.0, dx=3.5, wa=110, wb=95, hand_f=(5, 5), hand_b=(8, 3.5), fb=(-7, 0), ff=(6.5, 0),
-                             fx=[(39, 24, 1.2, (255, 255, 255)), (41, 23, 0.7, (255, 200, 200))]),
+                        impact(pose(u, bob=1.4, lean=4.0, dx=3.5, wa=110, wb=95, hand_f=(5, 5), hand_b=(8, 3.5), fb=(-7, 0), ff=(6.5, 0),
+                                    fx=[(39, 24, 1.2, (255, 255, 255)), (41, 23, 0.7, (255, 200, 200))])),        # the second stab lands (its spark)
                         pose(u, bob=1.0, lean=2.5, dx=1.5, wa=110, wb=110, hand_f=(6, 4.5), hand_b=(3, 5.5), fb=(-5, 0), ff=(4.5, 0)),
                         pose(u, bob=0.8, lean=1.5, **rd)], [120, 50, 70, 120, 120]))
         put('hurt', hurt(u, **rd)); put('death', death(u, drop=(29, 44, 88), drop_b=(15, 44, 95)))
@@ -285,7 +285,7 @@ def clips(name, variant='', unit=None):
         put('attack', ([pose(u, bob=0.4, wa=0, hand_f=(4.5, 2.5), hand_b=(4, 4)),
                         pose(u, bob=0.8, lean=-1.2, wa=-8, hand_f=(3, -0.5), hand_b=(4, 2), glow=0.4),
                         pose(u, bob=1.0, lean=-1.6, wa=-12, hand_f=(2.5, -1.5), hand_b=(4.5, 1.5), glow=1.0),
-                        pose(u, bob=0.8, lean=3.0, dx=1.5, wa=75, hand_f=(9, 1), hand_b=(5, 3), fb=(-6, 0), ff=(5, 0), glow=0.6, fx=bolt(41)),
+                        impact(pose(u, bob=0.8, lean=3.0, dx=1.5, wa=75, hand_f=(9, 1), hand_b=(5, 3), fb=(-6, 0), ff=(5, 0), glow=0.6, fx=bolt(41))),  # the bolt leaves
                         pose(u, bob=0.6, lean=2.0, dx=1.0, wa=80, hand_f=(8.5, 1.5), hand_b=(5, 3.5), fb=(-6, 0), ff=(5, 0), fx=bolt(52)),
                         pose(u, bob=0.3, **rd)], [120, 140, 220, 60, 120, 140]))
         fr = []
@@ -312,7 +312,7 @@ def clips(name, variant='', unit=None):
         bobf = lambda k: (G_F[0] - 0.5 * (k % 2), G_F[1] + (0.9 if k % 2 else -0.3))
         put('jab', ([pose(u, bob=1.2, lean=0.8, hand_f=bobf(0), hand_b=G_B, **st),
                      pose(u, bob=1.3, lean=1.0, hand_f=bobf(1), hand_b=(3, -0.5), **st),
-                     pose(u, bob=1.0, lean=2.5, dx=1.5, hand_f=(3.5, -3), hand_b=(12, -3.5), fx=spark(39, 13), **st),
+                     impact(pose(u, bob=1.0, lean=2.5, dx=1.5, hand_f=(3.5, -3), hand_b=(12, -3.5), fx=spark(39, 13), **st)),
                      pose(u, bob=1.1, lean=2.2, dx=1.5, hand_f=(3.5, -2.5), hand_b=(11.5, -3.2), **st),
                      pose(u, bob=1.2, lean=1.2, dx=0.5, hand_f=bobf(1), hand_b=(3.5, 0), **st),
                      pose(u, bob=1.0, lean=0.8, hand_f=bobf(0), hand_b=G_B, **st)], [80, 60, 50, 100, 70, 100]))
@@ -320,14 +320,14 @@ def clips(name, variant='', unit=None):
         put('haymaker', ([pose(u, bob=1.6, lean=-2.0, dx=-1.5, hand_f=bobf(1), hand_b=(-6, 5), **st),
                           pose(u, bob=2.0, lean=-3.0, dx=-2.5, hand_f=bobf(2), hand_b=(-8, 3), **st),
                           pose(u, bob=1.2, lean=1.5, dx=0.5, hand_f=(4, -1.5), hand_b=(2, -1), fx=[(x, y, 0.6, (255, 220, 160)) for x, y in arc_pts(20, 21, 10, -100, 20, 9)], **st),
-                          pose(u, bob=2.0, lean=5.0, dx=3.5, hand_f=(3, -3.5), hand_b=(12, 0), fx=spark(39, 17, 2.4) + [(38, 15, 0.8, (255, 200, 120))], **st),
+                          impact(pose(u, bob=2.0, lean=5.0, dx=3.5, hand_f=(3, -3.5), hand_b=(12, 0), fx=spark(39, 17, 2.4) + [(38, 15, 0.8, (255, 200, 120))], **st)),
                           pose(u, bob=1.6, lean=3.0, dx=2.0, hand_f=(4.5, -2), hand_b=(8, 2.5), **st),
                           pose(u, bob=1.0, lean=0.8, **guard)], [110, 200, 40, 160, 110, 120]))
         # front kick: chamber the knee high, snap the foot out at chest height, recoil
         put('kick', ([pose(u, bob=1.0, ff=(4.5, 0), fb=(-4.5, 0), **gb(1)),
                       pose(u, bob=0.0, lean=-2.0, dx=-1.0, ff=(5, 13), fb=(-3, 0), **gb(2)),
-                      pose(u, bob=-0.5, lean=-4.5, dx=-2.0, ff=(15.5, 21), fb=(-3.5, 0), hand_f=(4, -1), hand_b=(-4, 6), fist_f=True, fist_b=True,
-                           fx=[(37, 21, 2.0, (255, 255, 255)), (39, 19, 0.8, (255, 220, 160)), (39, 24, 0.8, (255, 220, 160))]),
+                      impact(pose(u, bob=-0.5, lean=-4.5, dx=-2.0, ff=(15.5, 21), fb=(-3.5, 0), hand_f=(4, -1), hand_b=(-4, 6), fist_f=True, fist_b=True,
+                                  fx=[(37, 21, 2.0, (255, 255, 255)), (39, 19, 0.8, (255, 220, 160)), (39, 24, 0.8, (255, 220, 160))])),
                       pose(u, bob=-0.5, lean=-4.5, dx=-2.0, ff=(15.5, 21), fb=(-3.5, 0), hand_f=(4, -1), hand_b=(-4, 6), fist_f=True, fist_b=True),
                       pose(u, bob=0.0, lean=-2.0, dx=-1.0, ff=(5, 13), fb=(-3, 0), **gb(3)),
                       pose(u, bob=1.0, lean=0.8, ff=(5, 0), fb=(-5, 0), **gb(4))], [90, 90, 50, 160, 90, 110]))
@@ -347,7 +347,7 @@ def clips(name, variant='', unit=None):
                             rig.mirror(pose(u, bob=7.5, lean=1.0, ff=(9, 1), fb=(-4, 0), leg_trail=tr(15, 13), fx=ring(0.45), **low)),  # coming round
                             pose(u, bob=7.5, lean=0.0, ff=(2, 1), fb=(-2, 0), hand_f=(3, 9), hand_b=(-1, 9), fist_f=True, fist_b=True, leg_trail=tr(-8, -12, -15), fx=ring(0.6)),
                             pose(u, bob=7.5, lean=1.5, ff=(10, 1), fb=(-6, 0), leg_trail=tr(-2, 3, 6), fx=ring(0.8), **low),
-                            pose(u, bob=7.5, lean=2.0, ff=(16, 1.5), fb=(-6, 0), leg_trail=tr(8, 11, 13.5), fx=ring(1.0) + [(38, 41, 2.0, (255, 255, 255)), (41, 39, 0.8, (255, 220, 160))], **low),
+                            impact(pose(u, bob=7.5, lean=2.0, ff=(16, 1.5), fb=(-6, 0), leg_trail=tr(8, 11, 13.5), fx=ring(1.0) + [(38, 41, 2.0, (255, 255, 255)), (41, 39, 0.8, (255, 220, 160))], **low)),
                             pose(u, bob=7.5, lean=2.0, ff=(16, 1.5), fb=(-6, 0), fx=ring(1.0), **low),
                             pose(u, bob=6.0, lean=1.5, ff=(8, 0), fb=(-7, 0), hand_f=(5, 6), hand_b=(3, 8), fist_f=True, fist_b=True),
                             pose(u, bob=1.0, lean=0.8, ff=(5, 0), fb=(-5, 0), **guard)], [110, 80, 50, 50, 50, 40, 60, 140, 110, 120]))

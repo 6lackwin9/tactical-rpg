@@ -128,13 +128,17 @@ FX clock (`Clock`, which replaces `anim_ms`; clips run on it too):
 1. `t0` = now, or the end of the actor's slide when it moved in this step (dash, charge, Engage carry).
 2. Melee: the trail starts at `t0`; impact at `t0 + melee_hit_ms`. Projectile: launch at `t0 + launch_ms`; travel
    = clamp(path px / speed, `travel_min_ms`, `travel_max_ms`); impact at launch + travel. Beam and support: impact
-   at `t0 + launch_ms`.
+   at `t0 + launch_ms`. (As built in FX1-L1, 2026-10-28, per decision "Attack timing on the board" A: a melee hit lands
+   and a shot launches at the attack clip's `impact` (release) frame; `melee_hit_ms` and `launch_ms` only for a clip
+   without one; tuning `shot_from_clip` false restores `launch_ms` for shots.)
 3. At the impact (rule I): the impact effects (sparks, rings, flashes of the table), and everything the player reads
    as the hit on the board: the hit flash and token shake of each unit whose HP fell in this step, the floats, the
    `hurt`, `hurt_guarded`, `defend` and `death` clips, the board HP bars (they show the HP before the step until
    then), the fall (a unit whose fall is pending is drawn standing), the step's log sounds, the hit-stop
    (`hit_stop_ms` when any HP fell) and the heavy shake (4.5). The actor's attack clip and facing start at `t0`.
-4. The HUD (cards, strip, log, message bar) updates at the pop, as today.
+4. The HUD (cards, strip, log, message bar) updates at the pop, as today (the agent link's unit HP too, while the board bar
+   waits for the impact). As built (FX1-L1): a restart or a new battle drops a pending impact instead of firing it (the
+   board resets anyway; its floats and sounds would land on the old battle).
 5. Flush (rule F): any later catch-up (the next pop, a new battle or view, `resolve`, the skip setting turning on)
    first fires every pending impact at once, in order. A step that popped no action (block or round wrap-up,
    status ticks, phases) has no effects and shows its changes at once.

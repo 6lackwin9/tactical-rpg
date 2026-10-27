@@ -12,6 +12,8 @@
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::music;
 use crate::intent_text;
+use crate::fx::{self, Impact, Shown};
+use aegis_ui::fx::Clock;
 use crate::stage::{self, Geom, Item, Pass, Through, View};
 use crate::tuning::Tuning;
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
@@ -140,7 +142,7 @@ struct Seen {
 }
 
 /// One unit's token animation (SPRITE1-U): its clips, a slide to a new tile, its fall. Times are on the battle's
-/// animation clock (`BattleScreen::anim_ms`, scaled by the animation speed setting).
+/// FX clock (`BattleScreen::clock`, scaled by the animation speed setting; FX1-L1).
 #[derive(Debug, Clone, Default)]
 struct UnitAnim {
     player: ClipPlayer,
@@ -203,13 +205,23 @@ impl Tokens {
     /// then toward the target (or the area's aim) of the action it just resolved; while the party plans each unit
     /// shows its planned or intended target (`plan_facing`; an enemy only while `tells`, the Show enemy tells setting,
     /// is on), and the confirm keeps that facing. A new battle faces the party right and the foes left (side view).
+    #[cfg(test)]
     fn catch_up(&mut self, s: &Session, now: u64, instant: bool, walk_ms: u64, tells: bool) {
+        self.follow(s, now, instant, walk_ms, tells, false);
+    }
+
+    /// `catch_up`, and FX1-L1 rule I: with `defer` the units' reactions to the step (hurt, defend, death, the fall, the
+    /// guard's base loop, the HP the board shows) wait for its impact (`react` with the returned state); moves, facing
+    /// and the actor's clip start now. The popped action's clip starts at `t0`: the pop, or the end of the actor's
+    /// slide when it moved in this step (FX1 4.2 step 1). Returns each unit's state after the step.
+    fn follow(&mut self, s: &Session, now: u64, instant: bool, walk_ms: u64, tells: bool, defer: bool) -> Vec<Shown> {
         self.tells = tells;
         let n = s.w.units.len();
         let animate = self.anims.len() == n && s.log.len() >= self.log_len_seen;
         if self.anims.len() != n {
             self.anims = vec![UnitAnim::default(); n];
         }
+        let mut after = Vec::with_capacity(n);
         // The plan is confirmed (or the battle moved on): each unit keeps the facing its planned target gave it.
         if !s.is_planning() {
             for a in &mut self.anims {
@@ -223,11 +235,11 @@ impl Tokens {
         for (i, u) in s.w.units.iter().enumerate() {
             let pos = s.w.grid.pos(i);
             let guarded = u.guard > 0.0 || u.stance == Stance::Defensive;
-            let seen = Seen { pos, hp: u.hp, alive: u.is_alive(), guarded };
+            let shown = Shown { hp: u.hp, alive: u.is_alive(), guarded };
+            after.push(shown);
             let a = &mut self.anims[i];
             if animate {
-                let was = &a.seen;
-                if let (Some(from), Some(to)) = (was.pos, pos) {
+                if let (Some(from), Some(to)) = (a.seen.pos, pos) {
                     a.facing = turn(a.facing, from, to);
                     a.step = a.facing;
                     if from != to && !instant && walk_ms > 0 {
@@ -235,33 +247,22 @@ impl Tokens {
                         a.player.play_for("walk", now, walk_ms);
                     }
                 }
-                if was.alive && !seen.alive {
-                    a.fell = Some(now);
-                    a.slide = None;
-                    if !instant {
-                        a.player.play_and_hold("death", now);
-                    }
-                } else if seen.alive && seen.hp < was.hp && !instant {
-                    a.player.play(if guarded { "hurt_guarded" } else { "hurt" }, now);
-                } else if seen.alive && guarded && !was.guarded && !instant {
-                    a.player.play("defend", now);
+                a.seen.pos = pos;
+                if !defer {
+                    react_unit(a, shown, now, instant);
                 }
             } else {
                 a.player.stop();
                 a.want = None;
                 a.slide = None;
                 // Fallen before this view: the dead marker at once.
-                a.fell = if seen.alive { None } else { Some(0) };
+                a.fell = if shown.alive { None } else { Some(0) };
                 a.facing = Facing::side(!s.w.allies.contains(&i));
                 a.step = a.facing;
                 a.planned = None;
+                a.seen = Seen { pos, hp: u.hp, alive: u.is_alive(), guarded };
+                a.player.set_base(if guarded { "idle_guarded" } else { "idle" }, now);
             }
-            if seen.alive && a.fell.is_some() {
-                a.fell = None;
-                a.player.stop();
-            }
-            a.player.set_base(if guarded { "idle_guarded" } else { "idle" }, now);
-            a.seen = seen;
         }
         // Only this round's pop: `scheduled` is rebuilt each round, so an older index names another action.
         let popped = s.last_popped.filter(|p| animate && Some(*p) != self.popped_seen && p.0 == s.current_round);
@@ -283,14 +284,65 @@ impl Tokens {
                 if !kind.is_empty() && !instant {
                     let skill = s.w.cat.skills.iter().find(|k| k.name == act.command.name).map_or("", |k| k.id.as_str());
                     let weapon = u.inventory.main_weapon().map_or("", |w| w.weapon_type());
-                    self.anims[act.unit].want = Some((action_clips(skill, kind, weapon), now));
+                    let a = &mut self.anims[act.unit];
+                    // FX1 4.2 step 1: after its slide when it moved in this step (a dash, a charge, an Engage carry)
+                    let t0 = if a.slide.is_some_and(|(_, t)| t == now) { now + walk_ms } else { now };
+                    a.want = Some((action_clips(skill, kind, weapon), t0));
                 }
             }
         }
         self.plan_facing(s);
         self.popped_seen = s.last_popped;
         self.log_len_seen = s.log.len();
+        after
     }
+
+    /// FX1-L1 rule I: the units react at `at` to the step state `after` (`follow` with `defer`): hurt, defend, death,
+    /// the fall, the base loop and the HP and life the board shows.
+    fn react(&mut self, after: &[Shown], at: u64, instant: bool) {
+        if after.len() != self.anims.len() {
+            return;
+        }
+        for (a, shown) in self.anims.iter_mut().zip(after) {
+            react_unit(a, *shown, at, instant);
+        }
+    }
+
+    /// What the board shows of unit `i` (FX1-L1 rule I: the state before a step until its impact): its HP and whether
+    /// it stands; the unit's own before the tokens first caught up.
+    fn shown(&self, i: usize, u: &emberwake_rules::unit::Unit, n: usize) -> (i32, bool) {
+        match self.anims.get(i).filter(|_| self.anims.len() == n) {
+            Some(a) => (a.seen.hp, a.seen.alive),
+            None => (u.hp, u.is_alive()),
+        }
+    }
+}
+
+/// One unit's reaction to its state `now` at clock `at` (SPRITE1-U): a fall plays `death` (held), a hit `hurt`
+/// (`hurt_guarded` while it guards), a raised guard `defend`; `instant` (skip) plays none. A unit standing again
+/// drops its fall; the base loop is `idle_guarded` while it guards, else `idle`.
+fn react_unit(a: &mut UnitAnim, now: Shown, at: u64, instant: bool) {
+    let was = a.seen.clone();
+    if was.alive && !now.alive {
+        a.fell = Some(at);
+        a.slide = None;
+        if !instant {
+            a.player.play_and_hold("death", at);
+        }
+    } else if now.alive && now.hp < was.hp && !instant {
+        a.player.play(if now.guarded { "hurt_guarded" } else { "hurt" }, at);
+    } else if now.alive && now.guarded && !was.guarded && !instant {
+        a.player.play("defend", at);
+    }
+    if now.alive && a.fell.is_some() {
+        a.fell = None;
+        a.player.stop();
+    }
+    a.player.set_base(if now.guarded { "idle_guarded" } else { "idle" }, at);
+    (a.seen.hp, a.seen.alive, a.seen.guarded) = (now.hp, now.alive, now.guarded);
+}
+
+impl Tokens {
 
     /// FACE1: while the party plans, each unit faces its target (`turn`, DIR4-G four-way): an enemy its tell's while
     /// tells are shown (INTENT1: the target unit, else the tile it aims at; hidden tells: it keeps its facing until it
@@ -425,11 +477,19 @@ pub struct BattleScreen {
     viewing: bool,
     /// A take-over: where its session branched off (recording id, battle, request), kept in its `end`.
     parent: Value,
-    /// SPRITE1-U: the token animations, the animation clock (ms, advanced at the animation speed setting) and when it
-    /// last advanced.
+    /// SPRITE1-U: the token animations; FX1-L1: the FX clock that replaced the animation clock (ms at the animation
+    /// speed setting, standing still through a hit-stop; clips run on it) and when it last advanced.
     tokens: Tokens,
-    anim_ms: f64,
-    anim_at: Instant,
+    clock: Clock,
+    clock_at: Instant,
+    /// FX1-L1 rule I: the step feedback waiting for its action to land (at most one: rule F fires it before the next).
+    impacts: Vec<Impact>,
+    /// FX1-L1 rule P: autoplay waits `impact_gap_ms` after the last impact.
+    gap_until: Option<Instant>,
+    /// The command of the request being shown (only a single `step` defers its feedback; rule 7).
+    req_cmd: String,
+    /// The battle view at the last tick (a view change flushes the impacts, rule F).
+    view_seen: Option<View>,
 }
 
 impl BattleScreen {
@@ -469,8 +529,12 @@ impl BattleScreen {
             viewing: false,
             parent: Value::Null,
             tokens: Tokens::default(),
-            anim_ms: 0.0,
-            anim_at: Instant::now(),
+            clock: Clock::default(),
+            clock_at: Instant::now(),
+            impacts: Vec::new(),
+            gap_until: None,
+            req_cmd: String::new(),
+            view_seen: None,
         }
     }
 
@@ -673,6 +737,8 @@ impl BattleScreen {
 
     /// Sends one request through the command API and turns HP changes into floating numbers.
     fn send(&mut self, cx: &Cx, req: Value) -> Value {
+        self.flush(cx);
+        self.req_cmd = req["cmd"].as_str().unwrap_or("").to_string();
         let reply = self.host.handle(&req);
         if cx.playtest.on {
             self.trail_of(&req, &reply);
@@ -684,19 +750,28 @@ impl BattleScreen {
         reply
     }
 
+    /// The board catches up with the battle after a request: the HP changes become floats and hit flashes, new log
+    /// lines their sounds, the tokens follow (`sync_anims`). FX1-L1: a pending impact fires first (rule F); a single
+    /// `step` that popped an action with a delivery (4.3) holds the step's board feedback until its impact (rule I,
+    /// `Impact`), everything else (and everything under skip animations) shows at once. The HUD updates now.
     pub fn after_change(&mut self, cx: &Cx) {
-        let now = Instant::now();
+        self.flush(cx);
+        let skip = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
+        let t = &cx.tuning.value;
+        let mut floats = Vec::new();
+        let mut struck = Vec::new();
+        let mut sounds = Vec::new();
         let hps: Vec<i32> = self.session().w.units.iter().map(|u| u.hp).collect();
         if hps.len() == self.last_hp.len() {
             for (i, (&old, &new)) in self.last_hp.iter().zip(hps.iter()).enumerate() {
                 if new < old {
-                    self.floats.push(Float { unit: i, text: format!("-{}", old - new), color: cx.tuning.value.damage_color, born: now });
-                    self.flashes.push((i, now));
+                    floats.push((i, format!("-{}", old - new), t.damage_color));
+                    struck.push(i);
                     if new <= 0 {
-                        cx.audio.play(Bus::Sfx, "sfx/defeat.wav");
+                        sounds.push("sfx/defeat.wav".to_string());
                     }
                 } else if new > old {
-                    self.floats.push(Float { unit: i, text: format!("+{}", new - old), color: cx.tuning.value.heal_color, born: now });
+                    floats.push((i, format!("+{}", new - old), t.heal_color));
                 }
             }
         }
@@ -704,7 +779,7 @@ impl BattleScreen {
         let log = &self.session().resolver.log;
         for line in log.iter().skip(self.log_seen) {
             if let Some(key) = sound_of(line) {
-                cx.audio.play(Bus::Sfx, &format!("sfx/{key}.wav"));
+                sounds.push(format!("sfx/{key}.wav"));
             }
         }
         self.log_seen = log.len();
@@ -713,15 +788,136 @@ impl BattleScreen {
             self.message = last.unwrap_or_default();
             self.events_seen = n;
         }
-        self.sync_anims(cx);
+        let pending = if skip || self.req_cmd != "step" { None } else { self.popped_impact(t.walk_ms) };
+        let after = self.sync_anims_deferred(cx, pending.is_some());
+        match pending {
+            Some(mut i) => {
+                (i.after, i.floats, i.struck, i.sounds) = (after, floats, struck, sounds);
+                self.impacts.push(i);
+            }
+            None => self.show(cx, floats, struck, sounds),
+        }
     }
 
-    /// SPRITE1-U: the tokens catch up with the battle (`Tokens::catch_up`; the skip animations setting applies).
+    /// The step feedback shown now: floats, hit flashes (wall clock) and sounds.
+    fn show(&mut self, cx: &Cx, floats: Vec<(usize, String, Rgba)>, struck: Vec<usize>, sounds: Vec<String>) {
+        let now = Instant::now();
+        self.floats.extend(floats.into_iter().map(|(unit, text, color)| Float { unit, text, color, born: now }));
+        self.flashes.extend(struck.into_iter().map(|i| (i, now)));
+        for s in sounds {
+            cx.audio.play(Bus::Sfx, &s);
+        }
+    }
+
+    /// FX1-L1 rule I: the impact of the action this step popped, when it has a delivery (4.3) and its actor stands:
+    /// the delivery, `t0` (now, or the end of the actor's slide when it moved in this step, `walk_ms`) and the cells
+    /// it goes between; when it lands is resolved with the actor's clip (`resolve_impacts`). Call before the tokens
+    /// follow the step.
+    fn popped_impact(&self, walk_ms: u64) -> Option<Impact> {
+        let s = self.host.session.as_ref()?;
+        let t = &self.tokens;
+        if t.anims.len() != s.w.units.len() || s.log.len() < t.log_len_seen {
+            return None;
+        }
+        let (_, _, idx) = s.last_popped.filter(|p| Some(*p) != t.popped_seen && p.0 == s.current_round)?;
+        let act = s.resolver.scheduled.get(idx)?;
+        let u = &s.w.units[act.unit];
+        if act.cancelled || !u.is_alive() {
+            return None;
+        }
+        let from = s.w.grid.pos(act.unit)?;
+        let at = |i: usize| s.w.grid.pos(i).or(t.anims[i].seen.pos);
+        let (kind, aim) = match &act.command.kind {
+            CmdKind::Attack { target, .. } => ("attack", target.and_then(at)),
+            CmdKind::Area { aim, .. } => ("area", Some(*aim)),
+            CmdKind::Support { target, .. } => ("support", at(*target)),
+            CmdKind::Item { target, .. } => ("item", at(*target)),
+            _ => ("", None),
+        };
+        let to = aim.filter(|c| *c != emberwake_battle::grid::NO_CELL).unwrap_or(from);
+        let skill = s.w.cat.skills.iter().find(|k| k.name == act.command.name).map_or("", |k| k.id.as_str());
+        let weapon = u.inventory.main_weapon();
+        let family = weapon.map_or("", |w| w.weapon_type());
+        let ranged = weapon.is_some_and(|w| w.is_ranged_weapon());
+        let magic = weapon.is_some_and(|w| json::s(&w.item.raw, "damage_type") == "magic");
+        let delivery = fx::delivery(fx::Act { kind, skill, family, ranged, magic, dist: from.dist(to) });
+        if delivery == fx::Delivery::None {
+            return None;
+        }
+        let now = self.clock.now();
+        let moved = t.anims[act.unit].seen.pos.is_some_and(|p| p != from);
+        let t0 = if moved && walk_ms > 0 { now + walk_ms } else { now };
+        let clips = if kind == "item" { Vec::new() } else { action_clips(skill, kind, family) };
+        Some(Impact { at: None, actor: act.unit, delivery, t0, clips, from, to, after: Vec::new(), floats: Vec::new(), struck: Vec::new(), sounds: Vec::new() })
+    }
+
+    /// FX1-L1: when each pending impact lands, from its actor's clip (the first candidate its body has; its `impact`
+    /// frame, decision "Attack timing on the board" A) and the board's anchors in the current view (a shot's path).
+    fn resolve_impacts(&mut self, cx: &mut Cx) {
+        let Some(s) = self.host.session.as_ref() else { return };
+        let t = cx.tuning.value.clone();
+        let geo = Geom::new(View::of_setting(&cx.settings.v["battle_view"]), &t);
+        for i in self.impacts.iter_mut().filter(|i| i.at.is_none()) {
+            let clip_ms = s.w.units.get(i.actor).and_then(|u| cx.art.first_body(&body_keys(&s.art[i.actor], u))).and_then(|b| {
+                let name = i.clips.iter().copied().find(|c| cx.art.has_clip(&b, c))?;
+                cx.art.clips(&b)?.clip(name)?.impact_ms()
+            });
+            i.at = Some(fx::impact_at(i.delivery, i.t0, clip_ms, fx::path_px(&geo, i.from, i.to), &t).unwrap_or(i.t0));
+        }
+    }
+
+    /// FX1-L1: fires the impacts due on the clock (rule I): the units react, the floats, flashes and sounds show, the
+    /// hit-stop holds the clock when any HP fell, and autoplay waits `impact_gap_ms` from now (rule P).
+    fn fire_due(&mut self, cx: &mut Cx) {
+        self.resolve_impacts(cx);
+        let now = self.clock.now();
+        while self.impacts.first().is_some_and(|i| i.at.is_some_and(|at| at <= now)) {
+            let i = self.impacts.remove(0);
+            let at = i.at.unwrap_or(now);
+            self.fire(cx, i, at);
+        }
+    }
+
+    /// FX1-L1 rule F: every pending impact fires now, in order (before any later catch-up).
+    fn flush(&mut self, cx: &Cx) {
+        let now = self.clock.now();
+        for i in std::mem::take(&mut self.impacts) {
+            let at = i.at.map_or(now, |a| a.min(now));
+            self.fire(cx, i, at);
+        }
+    }
+
+    fn fire(&mut self, cx: &Cx, i: Impact, at: u64) {
+        let t = &cx.tuning.value;
+        let stop = fx::hit_stop(&i, t);
+        if stop > 0.0 {
+            self.clock.hold(stop);
+        }
+        self.tokens.react(&i.after, at, false);
+        self.gap_until = Some(Instant::now() + Duration::from_millis(t.impact_gap_ms));
+        self.show(cx, i.floats, i.struck, i.sounds);
+    }
+
+    /// Rule P: autoplay may send the next step (no impact pending and its gap over).
+    fn impacts_done(&self, now: Instant) -> bool {
+        self.impacts.is_empty() && self.gap_until.is_none_or(|g| now >= g)
+    }
+
+    /// SPRITE1-U: the tokens catch up with the battle (`Tokens::catch_up`; the skip animations setting applies). While
+    /// an impact is pending they keep the state before its step (rule I).
     fn sync_anims(&mut self, cx: &Cx) {
+        let defer = !self.impacts.is_empty();
+        self.sync_anims_deferred(cx, defer);
+    }
+
+    fn sync_anims_deferred(&mut self, cx: &Cx, defer: bool) -> Vec<Shown> {
         let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
-        if let Some(s) = self.host.session.as_ref() {
-            let tells = cx.settings.v["show_tells"].as_bool().unwrap_or(true);
-            self.tokens.catch_up(s, self.anim_ms as u64, instant, cx.tuning.value.walk_ms, tells);
+        match self.host.session.as_ref() {
+            Some(s) => {
+                let tells = cx.settings.v["show_tells"].as_bool().unwrap_or(true);
+                self.tokens.follow(s, self.clock.now(), instant, cx.tuning.value.walk_ms, tells, defer)
+            }
+            None => Vec::new(),
         }
     }
 
@@ -749,6 +945,10 @@ impl BattleScreen {
 
     fn after_start(&mut self, intro: &str) {
         self.tokens = Tokens::default();
+        // A new battle: the last one's pending feedback has nothing left to show on (rule F's flush happens in `send`).
+        self.impacts.clear();
+        self.flashes.clear();
+        self.gap_until = None;
         self.last_hp = self.session().w.units.iter().map(|u| u.hp).collect();
         self.log_seen = self.session().resolver.log.len();
         self.selected = self.session().w.allies.first().copied();
@@ -1090,6 +1290,7 @@ impl Screen<GameCx> for BattleScreen {
 
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         self.mouse = mouse;
+        self.resolve_impacts(cx);
         draw(self, cx, g, mouse, live);
     }
 
@@ -1110,10 +1311,18 @@ impl Screen<GameCx> for BattleScreen {
 
     fn tick(&mut self, cx: &mut Cx) {
         let now = Instant::now();
-        // SPRITE1-U: the token animations run on their own clock at the animation speed setting (FxSettings 0.5-2x).
+        // SPRITE1-U, FX1-L1 3.1: the tokens and effects run on the FX clock at the animation speed setting (FxSettings
+        // 0.5-2x; at most 100 wall ms a frame), which a hit-stop holds still.
         let speed = cx.settings.v["anim_speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0);
-        self.anim_ms += now.duration_since(self.anim_at).as_secs_f64() * 1000.0 * speed;
-        self.anim_at = now;
+        self.clock.advance((now.duration_since(self.clock_at).as_secs_f64() * 1000.0).min(100.0), speed);
+        self.clock_at = now;
+        // Rule F: the skip setting turning on or another battle view shows the pending impacts at once.
+        let view = View::of_setting(&cx.settings.v["battle_view"]);
+        if cx.settings.v["skip_anim"].as_bool().unwrap_or(false) || self.view_seen.is_some_and(|v| v != view) {
+            self.flush(cx);
+        }
+        self.view_seen = Some(view);
+        self.fire_due(cx);
         // FACE1: the Show enemy tells setting changed (I or the settings): the planning facing follows it.
         if self.tokens.tells != cx.settings.v["show_tells"].as_bool().unwrap_or(true) {
             self.sync_anims(cx);
@@ -1135,14 +1344,16 @@ impl Screen<GameCx> for BattleScreen {
         if self.host.session.is_none() {
             return;
         }
+        // FX1 rule P: the next step waits for `step_ms` and for the last impact plus `impact_gap_ms`.
+        let ready = now >= self.next_at && self.impacts_done(now);
         if self.pending_next_round {
-            if now >= self.next_at && self.session().phase == Phase::Replay {
+            if ready && self.session().phase == Phase::Replay {
                 self.pending_next_round = false;
                 self.run(cx, Action::NextRound);
             }
             return;
         }
-        if self.playing && now >= self.next_at {
+        if self.playing && ready {
             if self.session().phase == Phase::Replay {
                 self.playing = false;
                 return;
@@ -1238,6 +1449,8 @@ impl Screen<GameCx> for BattleScreen {
         if restart && self.recordable() {
             self.parked.push((self.slot, self.recorded()));
         }
+        self.flush(cx);
+        self.req_cmd = body["cmd"].as_str().unwrap_or("").to_string();
         let reply = self.host.handle(body);
         if restart && reply["ok"] == json!(true) {
             self.new_session();
@@ -1325,6 +1538,14 @@ fn token_frame<'a>(art: &'a mut Art, body: &str, palette: &str, player: &ClipPla
 /// The highlight outline of the token frame `f` (`token_frame` with the same `facing`), mirrored with it.
 fn token_outline<'a>(art: &'a mut Art, body: &str, palette: &str, f: &ClipFrame, size: i32, col: Rgba, facing: Facing) -> Option<&'a Image> {
     art.body_outline(body, palette, &f.clip, f.frame, size, col, facing.mirrors(f))
+}
+
+/// FX1-L1 (FQ7): the hit flash, the white silhouette of the token frame `f` (`fx::FLASH`, alpha 150) over the sprite
+/// square `tr`, mirrored with it; it replaced the white square over the whole cell.
+fn hit_flash(p: &mut Painter, art: &mut Art, body: &str, palette: &str, f: &ClipFrame, tr: Rect, facing: Facing) {
+    if let Some(img) = art.body_silhouette(body, palette, &f.clip, f.frame, tr.w, fx::FLASH, facing.mirrors(f)) {
+        p.image(img, tr);
+    }
 }
 
 fn hp_bar(p: &mut Painter, r: Rect, hp: i32, max: i32, color: Rgba) {
@@ -1649,7 +1870,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     } else {
         None
     };
-    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.anim_ms, sel, planning, tells: &tells, show_tells, card_hover };
+    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.clock.ms, sel, planning, tells: &tells, show_tells, card_hover };
     let board_hover = match view {
         View::Stage => draw_stage(board, &mut ui, cx, &tuning, now),
         View::Flat => {
@@ -1834,6 +2055,7 @@ struct Board<'a> {
     floats: &'a [Float],
     flashes: &'a [(usize, Instant)],
     popup: bool,
+    /// The FX clock (ms; FX1-L1).
     anim_ms: f64,
     sel: Option<usize>,
     planning: bool,
@@ -1844,14 +2066,24 @@ struct Board<'a> {
     card_hover: Option<usize>,
 }
 
-/// An action clip a token wants starts with the first candidate its body has (SPRITE1-U).
-fn start_wanted(tokens: &mut Tokens, art: &mut Art, i: usize, body: Option<&str>) {
+/// An action clip a token wants starts with the first candidate its body has (SPRITE1-U), once the clock reaches its
+/// start (FX1-L1: after the actor's slide, so the walk shows until then).
+fn start_wanted(tokens: &mut Tokens, art: &mut Art, i: usize, body: Option<&str>, now: u64) {
     if let (Some(a), Some(b)) = (tokens.anims.get_mut(i), body) {
-        if let Some((cands, t0)) = a.want.take() {
+        if a.want.as_ref().is_some_and(|w| now >= w.1) {
+            let (cands, t0) = a.want.take().unwrap_or_default();
             if let Some(c) = cands.into_iter().find(|c| art.has_clip(b, c)) {
                 a.player.play(c, t0);
             }
         }
+    }
+}
+
+/// FX1-L1: a struck unit's flash (wall ms since its impact) and its token shake (4.5; none under reduce motion and skip).
+fn flash_of(flashes: &[(usize, Instant)], i: usize, now: Instant, t: &Tuning, still: bool) -> (bool, i32) {
+    match flashes.iter().rev().find(|f| f.0 == i) {
+        Some(f) => (true, fx::token_shake(t.hit_shake_px, now.saturating_duration_since(f.1).as_millis() as u64, t.hit_flash_ms, still)),
+        None => (false, 0),
     }
 }
 
@@ -1927,6 +2159,7 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
     // the letter.
     let anim_now = anim_ms as u64;
     let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
+    let reduce = cx.settings.reduce_motion();
     let still = UnitAnim::default();
     let geo = Geom::new(View::Flat, tuning);
     for i in 0..w.units.len() {
@@ -1936,15 +2169,16 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
         let ally = w.allies.contains(&i);
         let body = cx.art.first_body(&body_keys(&s.art[i], u));
         let palette = s.palettes.get(i).map_or("", |p| p.as_str());
-        start_wanted(tokens, &mut cx.art, i, body.as_deref());
+        start_wanted(tokens, &mut cx.art, i, body.as_deref(), anim_now);
+        // FX1-L1 rule I: the HP and life the board shows (the state before a step until its impact)
+        let (hp, alive) = tokens.shown(i, u, w.units.len());
         let a = tokens.anims.get(i).unwrap_or(&still);
         let facing = if tokens.anims.get(i).is_some() { a.faces(anim_now, if instant { 0 } else { tuning.walk_ms }) } else { Facing::side(!ally) };
-        if !u.is_alive() && !still_dying(&mut cx.art, a, body.as_deref(), anim_now, instant, tuning.death_hold_ms) {
+        if !alive && !still_dying(&mut cx.art, a, body.as_deref(), anim_now, instant, tuning.death_hold_ms) {
             ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, "x", BODY, DIM);
             continue;
         }
-        let flash = flashes.iter().any(|f| f.0 == i);
-        let shake = if flash { tuning.hit_shake_px as f32 * if (now.elapsed().as_millis() / 30).is_multiple_of(2) { 1.0 } else { -1.0 } } else { 0.0 };
+        let (flash, shake) = flash_of(flashes, i, now, tuning, reduce || instant);
         let tp = geo.token_px;
         // A moving unit slides from its old tile.
         let (mut dx, mut dy) = (0, 0);
@@ -1954,9 +2188,9 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
                 (dx, dy) = geo.slide(from, pos, 1.0 - t as f32 / tuning.walk_ms.max(1) as f32);
             }
         }
-        let tr = geo.token_rect(pos, shake as i32 + dx, dy);
+        let tr = geo.token_rect(pos, shake + dx, dy);
         let ring = if ally { ALLY } else { FOE };
-        if u.is_alive() {
+        if alive {
             ui.p.ellipse(tr.x as f32 + tp as f32 / 2.0, (tr.y + tp) as f32 - 2.5, tp as f32 * 0.36, tp as f32 * 0.11, rgba(ring[0], ring[1], ring[2], tuning.foot_alpha));
         }
         let hover = ui.hover(r) && !popup;
@@ -1967,6 +2201,9 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
         }));
         match (frame, body.as_deref()) {
             (Some(f), Some(b)) => {
+                if flash {
+                    hit_flash(&mut ui.p, &mut cx.art, b, palette, &f, tr, facing);
+                }
                 if let Some(o) = outline.and_then(|col| token_outline(&mut cx.art, b, palette, &f, tp, col, facing)) {
                     ui.p.image(o, Rect::new(tr.x - 1, tr.y - 1, tp + 2, tp + 2));
                 }
@@ -1974,15 +2211,15 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
             _ => {
                 ui.p.panel(tr.inset(4), ring, outline.unwrap_or(ring), 6.0);
                 ui.p.text_center(tr.x as f32 + tp as f32 / 2.0, r.y as f32 + 11.0 + dy as f32, &u.name.chars().next().unwrap_or('?').to_string(), BODY, BG);
+                if flash {
+                    ui.p.panel(tr.inset(4), fx::FLASH, fx::FLASH, 6.0);
+                }
             }
         }
-        if flash {
-            ui.p.fill(tr, rgba(255, 255, 255, 110));
-        }
-        if !u.is_alive() {
+        if !alive {
             continue;
         }
-        hp_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 3 + dy, TILE - 6, 2), u.hp, u.max_hp, if ally { GOOD } else { FOE });
+        hp_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 3 + dy, TILE - 6, 2), hp, u.max_hp, if ally { GOOD } else { FOE });
         let tip = unit_tip(s, i, sel, tells);
         ui.push(format!("unit.{i}"), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), r, true, Some(i) == sel, Some(Action::UnitClick(i)), tip);
     }
@@ -2034,7 +2271,9 @@ struct StageUnit {
     i: usize,
     pos: V2,
     ally: bool,
+    /// FX1-L1 rule I: the life and HP the board shows (`Tokens::shown`).
     alive: bool,
+    hp: i32,
     /// Its sprite draws (standing, or still playing its death clip); else the dead marker shows.
     standing: bool,
     body: Option<String>,
@@ -2079,6 +2318,7 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
     let tp = geo.token_px;
     let anim_now = anim_ms as u64;
     let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
+    let reduce = cx.settings.reduce_motion();
     let still = UnitAnim::default();
     ui.p.panel(Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4), rgb(8, 10, 16), BORDER, RADIUS);
 
@@ -2090,10 +2330,11 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
         let ally = w.allies.contains(&i);
         let body = cx.art.first_body(&body_keys(&s.art[i], u));
         let palette = s.palettes.get(i).cloned().unwrap_or_default();
-        start_wanted(tokens, &mut cx.art, i, body.as_deref());
+        start_wanted(tokens, &mut cx.art, i, body.as_deref(), anim_now);
+        let (hp, alive) = tokens.shown(i, u, w.units.len());
         let a = tokens.anims.get(i).unwrap_or(&still);
         let facing = if tokens.anims.get(i).is_some() { a.faces(anim_now, if instant { 0 } else { tuning.walk_ms }) } else { Facing::side(!ally) };
-        let standing = u.is_alive() || still_dying(&mut cx.art, a, body.as_deref(), anim_now, instant, tuning.death_hold_ms);
+        let standing = alive || still_dying(&mut cx.art, a, body.as_deref(), anim_now, instant, tuning.death_hold_ms);
         let (mut dx, mut dy) = (0, 0);
         if let Some((from, t0)) = a.slide {
             let t = anim_now.saturating_sub(t0);
@@ -2101,8 +2342,7 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                 (dx, dy) = geo.slide(from, pos, 1.0 - t as f32 / tuning.walk_ms.max(1) as f32);
             }
         }
-        let flash = flashes.iter().any(|f| f.0 == i);
-        let shake = if flash { tuning.hit_shake_px as f32 * if (now.elapsed().as_millis() / 30).is_multiple_of(2) { 1.0 } else { -1.0 } } else { 0.0 };
+        let (flash, shake) = flash_of(flashes, i, now, tuning, reduce || instant);
         let (fx, fy) = geo.foot(pos);
         let rest = geo.token_rect(pos, dx, dy);
         // 3.8: the body's solid bounds of its idle frame 0 (animation frames do not move it; the side idle with the
@@ -2111,7 +2351,7 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
             Some(bb) => Rect::new(rest.x + bb.x, rest.y + bb.y, bb.w, bb.h),
             None => rest.inset(4),
         };
-        units.push(StageUnit { i, pos, ally, alive: u.is_alive(), standing, body, palette, facing, flash, foot: (fx + dx, fy + dy), tr: geo.token_rect(pos, dx + shake as i32, dy), body_rect });
+        units.push(StageUnit { i, pos, ally, alive, hp, standing, body, palette, facing, flash, foot: (fx + dx, fy + dy), tr: geo.token_rect(pos, dx + shake, dy), body_rect });
     }
     // 3.7 pass 7: blocks, standing props and units sorted by their feet.
     let mut items = stage::board_items(&mut cx.art, &w.grid);
@@ -2238,6 +2478,10 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                             }));
                             match (frame, t.body.as_deref()) {
                                 (Some(f), Some(b)) => {
+                                    // FX1 4.1: the hit flash right after its unit's sprite
+                                    if t.flash {
+                                        hit_flash(&mut ui.p, &mut cx.art, b, &t.palette, &f, t.tr, t.facing);
+                                    }
                                     if let Some(o) = outline.and_then(|col| token_outline(&mut cx.art, b, &t.palette, &f, tp, col, t.facing)) {
                                         ui.p.image(o, Rect::new(t.tr.x - 1, t.tr.y - 1, tp + 2, tp + 2));
                                     }
@@ -2247,10 +2491,10 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                                     ui.p.panel(t.tr.inset(4), ring, outline.unwrap_or(ring), 6.0);
                                     let letter = w.units[i].name.chars().next().unwrap_or('?').to_string();
                                     ui.p.text_center(t.tr.x as f32 + tp as f32 / 2.0, (t.tr.y + tp / 2) as f32 - 5.0, &letter, BODY, BG);
+                                    if t.flash {
+                                        ui.p.panel(t.tr.inset(4), fx::FLASH, fx::FLASH, 6.0);
+                                    }
                                 }
-                            }
-                            if t.flash {
-                                ui.p.fill(t.tr, rgba(255, 255, 255, 110));
                             }
                         }
                     }
@@ -2281,7 +2525,7 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                     if !t.standing {
                         ui.p.text_center(fx as f32, fy as f32 - ui.p.line_h(BODY) / 2.0, "x", BODY, DIM);
                     } else if t.alive {
-                        hp_bar(&mut ui.p, Rect::new(fx - 12, fy + 3, 24, 2), u.hp, u.max_hp, if t.ally { GOOD } else { FOE });
+                        hp_bar(&mut ui.p, Rect::new(fx - 12, fy + 3, 24, 2), t.hp, u.max_hp, if t.ally { GOOD } else { FOE });
                     }
                 }
                 if show_tells {
@@ -3023,5 +3267,226 @@ mod tests {
         assert_eq!(sound_of("[Support] Cleric used Mend on Rook: healed 6"), Some("heal"));
         assert_eq!(sound_of("[Move] Rook moved 2 of 2 tiles to (3, 4)"), Some("move_step"));
         assert_eq!(sound_of("[Rest] Rook AP 3/4"), None);
+    }
+
+    /// FX1-L1: plays the ambush step by step (the party on the aggressive preset) until a single step leaves a pending
+    /// impact `want` accepts; earlier impacts fire before the next step (rule F). False when the battle ends first.
+    fn step_until(cx: &mut crate::screens::Cx, b: &mut BattleScreen, want: impl Fn(&BattleScreen, &crate::fx::Impact) -> bool) -> bool {
+        for _ in 0..600 {
+            let (over, phase, planning, can) = {
+                let s = b.host.session.as_ref().unwrap();
+                (s.combat_over, s.phase, s.is_planning(), s.can_advance_round())
+            };
+            if over || (phase == Phase::Replay && !can) {
+                return false;
+            }
+            if phase == Phase::Replay {
+                b.send(cx, json!({"cmd": "advance"}));
+                continue;
+            }
+            if planning {
+                b.send(cx, json!({"cmd": "preset", "preset": "aggressive"}));
+            }
+            b.flush(cx);
+            b.floats.clear();
+            b.flashes.clear();
+            b.send(cx, json!({"cmd": "step"}));
+            if b.impacts.last().is_some_and(|i| want(b, i)) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// The clips of unit `i`'s body (the game's art).
+    fn unit_clips(cx: &mut crate::screens::Cx, b: &BattleScreen, i: usize) -> Clips {
+        let s = b.host.session.as_ref().unwrap();
+        let body = cx.art.first_body(&super::body_keys(&s.art[i], &s.w.units[i])).expect("a body");
+        cx.art.clips(&body).unwrap().clone()
+    }
+
+    /// FX1-L1 L3 (rule I): between the pop and the impact the struck unit's board HP is the old one, no float, flash or
+    /// hurt clip shows and the step's sounds wait; at the impact all of them start, the board HP is the battle's and
+    /// the hit-stop holds `hit_stop_ms`. The impact of a blow is at its attack clip's `impact` frame (decision "Attack
+    /// timing on the board" A).
+    #[test]
+    fn a_hit_shows_on_the_board_at_its_impact_not_at_the_pop() {
+        let (mut cx, _g, mut b) = ambush(json!("stage"));
+        let found = step_until(&mut cx, &mut b, |b, i| {
+            let s = b.host.session.as_ref().unwrap();
+            i.struck.iter().any(|&u| s.w.units[u].is_alive())
+        });
+        assert!(found, "the ambush has a hit");
+        b.resolve_impacts(&mut cx);
+        let i = b.impacts[0].clone();
+        let at = i.at.expect("resolved");
+        let target = *i.struck.iter().find(|&&u| b.host.session.as_ref().unwrap().w.units[u].is_alive()).unwrap();
+        let (hp_now, n) = { let s = b.host.session.as_ref().unwrap(); (s.w.units[target].hp, s.w.units.len()) };
+        // before the impact
+        let (shown_hp, alive) = b.tokens.shown(target, &b.host.session.as_ref().unwrap().w.units[target], n);
+        assert!(alive && shown_hp > hp_now, "the board keeps the HP before the step ({shown_hp} vs {hp_now})");
+        assert!(b.floats.is_empty() && b.flashes.is_empty(), "no float or flash before the impact");
+        assert!(!i.sounds.is_empty() && !i.floats.is_empty(), "the step's sounds and floats wait in the impact");
+        let clips = unit_clips(&mut cx, &b, target);
+        assert!(!b.tokens.anims[target].player.playing(&clips, b.clock.now()).starts_with("hurt"), "no hurt clip yet");
+        assert!(at >= i.t0, "the impact comes after t0");
+        if i.delivery == crate::fx::Delivery::Melee {
+            let actor_clips = unit_clips(&mut cx, &b, i.actor);
+            let clip = i.clips.iter().copied().find(|c| actor_clips.clip(c).is_some());
+            let want = clip.and_then(|c| actor_clips.clip(c).unwrap().impact_ms()).unwrap_or(cx.tuning.value.melee_hit_ms);
+            assert_eq!(at, i.t0 + want, "a blow lands at its clip's impact frame");
+        }
+        // the impact
+        b.clock.ms = at as f64;
+        b.fire_due(&mut cx);
+        assert!(b.impacts.is_empty());
+        let n = b.host.session.as_ref().unwrap().w.units.len();
+        assert_eq!(b.tokens.shown(target, &b.host.session.as_ref().unwrap().w.units[target], n).0, hp_now, "the board HP is the battle's");
+        assert!(b.floats.iter().any(|f| f.unit == target) && b.flashes.iter().any(|f| f.0 == target));
+        assert!(b.tokens.anims[target].player.playing(&clips, at).starts_with("hurt"), "the hurt clip from the impact");
+        assert_eq!(b.clock.hold, cx.tuning.value.hit_stop_ms as f64, "the hit-stop");
+    }
+
+    /// FX1-L1 L7 (4.2 step 1): an actor that moved in the step it acts (a dash, a charge, an Engage carry) starts its
+    /// attack clip at the end of its slide, the walk showing until then; one that stood starts it at the pop.
+    #[test]
+    fn a_dash_starts_its_attack_after_the_slide() {
+        let mut host = skirmish(3);
+        assert_eq!(host.handle(&json!({"cmd": "preset", "preset": "aggressive"}))["ok"], json!(true));
+        assert_eq!(host.handle(&json!({"cmd": "confirm"}))["ok"], json!(true));
+        let mut art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        let s = host.session.as_mut().unwrap();
+        let (idx, actor, target) = s.resolver.scheduled.iter().enumerate().find_map(|(idx, a)| match a.command.kind {
+            CmdKind::Attack { target: Some(tg), .. } if !a.cancelled && tg != a.unit && s.w.grid.pos(tg).is_some() => Some((idx, a.unit, tg)),
+            _ => None,
+        }).expect("an attack");
+        let body = art.first_body(&super::body_keys(&s.art[actor], &s.w.units[actor])).expect("a body");
+        let clips = art.clips(&body).unwrap().clone();
+        let tp = s.w.grid.pos(target).unwrap();
+        let dir = if tp.x < emberwake_battle::grid::GRID_W / 2 { 1 } else { -1 };
+        let walk = 300;
+        let mut t = Tokens::default();
+        s.w.grid.positions[actor] = Some(V2 { x: tp.x + 2 * dir, y: tp.y });
+        t.catch_up(s, 0, false, walk, true);
+        // the step: it closes in and its attack pops
+        s.w.grid.positions[actor] = Some(V2 { x: tp.x + dir, y: tp.y });
+        s.last_popped = Some((s.current_round, 1, idx));
+        t.catch_up(s, 1000, false, walk, true);
+        assert_eq!(t.anims[actor].want.as_ref().map(|w| w.1), Some(1000 + walk), "t0 is the slide's end");
+        super::start_wanted(&mut t, &mut art, actor, Some(&body), 1000 + walk - 1);
+        assert_eq!(t.anims[actor].player.playing(&clips, 1000 + walk - 1), "walk", "the walk until then");
+        super::start_wanted(&mut t, &mut art, actor, Some(&body), 1000 + walk);
+        assert!(t.anims[actor].want.is_none());
+        let playing = t.anims[actor].player.playing(&clips, 1000 + walk).to_string();
+        assert!(!playing.is_empty() && playing != "walk", "the attack clip from t0: {playing}");
+        // standing still, the next pop starts it at once
+        s.last_popped = Some((s.current_round, 2, idx));
+        t.catch_up(s, 5000, false, walk, true);
+        assert_eq!(t.anims[actor].want.as_ref().map(|w| w.1), Some(5000));
+    }
+
+    /// FX1-L1 L4: a unit killed by the step is drawn standing until the impact, then plays `death` from it.
+    #[test]
+    fn a_fall_waits_for_its_impact() {
+        let (mut cx, _g, mut b) = ambush(json!("flat"));
+        let found = step_until(&mut cx, &mut b, |b, i| {
+            let s = b.host.session.as_ref().unwrap();
+            i.struck.iter().any(|&u| !s.w.units[u].is_alive())
+        });
+        assert!(found, "the ambush has a fall");
+        b.resolve_impacts(&mut cx);
+        let i = b.impacts[0].clone();
+        let n = b.host.session.as_ref().unwrap().w.units.len();
+        let dead = *i.struck.iter().find(|&&u| !b.host.session.as_ref().unwrap().w.units[u].is_alive()).unwrap();
+        assert!(b.tokens.shown(dead, &b.host.session.as_ref().unwrap().w.units[dead], n).1, "standing until the impact");
+        assert_eq!(b.tokens.anims[dead].fell, None);
+        let at = i.at.unwrap();
+        b.clock.ms = at as f64;
+        b.fire_due(&mut cx);
+        let clips = unit_clips(&mut cx, &b, dead);
+        assert!(!b.tokens.shown(dead, &b.host.session.as_ref().unwrap().w.units[dead], n).1);
+        assert_eq!((b.tokens.anims[dead].fell, b.tokens.anims[dead].player.playing(&clips, at)), (Some(at), "death"));
+    }
+
+    /// FX1-L1 L5 (rule F) and L11: the next request fires a pending impact first; `resolve` shows its end state with
+    /// no pending impact; under skip animations a step shows at once with no pending impact and no hit-stop.
+    #[test]
+    fn a_later_request_flushes_and_skip_shows_at_once() {
+        let (mut cx, _g, mut b) = ambush(json!("stage"));
+        assert!(step_until(&mut cx, &mut b, |_, i| i.hit()), "a hit");
+        let first = b.impacts[0].clone();
+        b.send(&cx, json!({"cmd": "step"}));
+        assert!(first.struck.iter().all(|u| b.flashes.iter().any(|f| f.0 == *u)), "the first impact fired before the next step");
+        assert!(b.impacts.len() <= 1, "at most the second step's impact pends");
+        b.send(&cx, json!({"cmd": "resolve"}));
+        assert!(b.impacts.is_empty(), "resolve: the end state, no pending impact");
+        let s = b.host.session.as_ref().unwrap();
+        let n = s.w.units.len();
+        assert!((0..n).all(|i| b.tokens.shown(i, &s.w.units[i], n) == (s.w.units[i].hp, s.w.units[i].is_alive())), "the board shows the end state");
+        // skip animations
+        let (mut cx, _g, mut b) = ambush(json!("stage"));
+        cx.settings.v["skip_anim"] = json!(true);
+        let hold = b.clock.hold;
+        let mut hits = 0;
+        for _ in 0..200 {
+            let s = b.host.session.as_ref().unwrap();
+            if s.combat_over || s.phase == Phase::Replay {
+                break;
+            }
+            if s.is_planning() {
+                b.send(&cx, json!({"cmd": "preset", "preset": "aggressive"}));
+            }
+            b.flashes.clear();
+            b.send(&cx, json!({"cmd": "step"}));
+            assert!(b.impacts.is_empty(), "skip: no pending impact");
+            hits += b.flashes.len();
+        }
+        assert!(hits > 0, "skip: the hits flash at once");
+        assert_eq!(b.clock.hold, hold, "skip: no hit-stop");
+    }
+
+    /// FX1-L1 L6 (rule P): autoplay sends no step while an impact pends, nor within `impact_gap_ms` of its firing.
+    #[test]
+    fn autoplay_waits_for_the_impact_and_its_gap() {
+        let (mut cx, _g, mut b) = ambush(json!("stage"));
+        assert!(step_until(&mut cx, &mut b, |_, i| i.hit()), "a hit");
+        b.resolve_impacts(&mut cx);
+        let sent = b.host.history.len();
+        (b.playing, b.next_at) = (true, std::time::Instant::now());
+        b.clock_at = std::time::Instant::now();
+        b.tick(&mut cx);
+        assert_eq!(b.host.history.len(), sent, "no step while the impact pends");
+        b.clock.ms = b.impacts[0].at.unwrap() as f64;
+        b.fire_due(&mut cx);
+        let now = std::time::Instant::now();
+        assert!(!b.impacts_done(now), "the gap after the impact");
+        assert!(b.impacts_done(now + std::time::Duration::from_millis(cx.tuning.value.impact_gap_ms)), "then the next step may go");
+    }
+
+    /// FX1-L1 L14: effects are presentation only: the same requests give the same battle log and HP with skip
+    /// animations on and off.
+    #[test]
+    fn effects_never_change_the_battle() {
+        let run = |skip: bool| {
+            let (mut cx, _g, mut b) = ambush(json!("stage"));
+            cx.settings.v["skip_anim"] = json!(skip);
+            for _ in 0..60 {
+                let s = b.host.session.as_ref().unwrap();
+                if s.combat_over || (s.phase == Phase::Replay && !s.can_advance_round()) {
+                    break;
+                }
+                if s.phase == Phase::Replay {
+                    b.send(&cx, json!({"cmd": "advance"}));
+                } else {
+                    if s.is_planning() {
+                        b.send(&cx, json!({"cmd": "preset", "preset": "aggressive"}));
+                    }
+                    b.send(&cx, json!({"cmd": "step"}));
+                }
+            }
+            let s = b.host.session.as_ref().unwrap();
+            (s.resolver.log.clone(), s.w.units.iter().map(|u| u.hp).collect::<Vec<_>>())
+        };
+        assert_eq!(run(false), run(true));
     }
 }

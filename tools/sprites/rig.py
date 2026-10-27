@@ -543,6 +543,19 @@ def death(u, drop=(30, 45, 92), drop_b=None, **kw):
              pose(u, bob=0.0, hurt=1.0, fall=1.0, dx=-1.0, loose=drop, loose_b=lb(drop_b[1]) if drop_b else None, **k)], [60, 140, 100, 90, 90, 600])
 
 
+def impact(im):
+    """FX1-L1 (decision "Attack timing on the board" A): marks `im` as its attack clip's impact frame, where the blow
+    lands or the shot leaves (the frame with the hit spark). The exporter writes its index as the clip's `impact` in
+    clips.json; the mark is image metadata only (no pixel changes). Returns `im`."""
+    im.info['impact'] = True
+    return im
+
+
+def impact_frame(frames):
+    """The index of the first frame marked by `impact` (None: the clip marks none)."""
+    return next((i for i, fr in enumerate(frames) if fr.info.get('impact')), None)
+
+
 def mirror(im, dx=0.0):
     from PIL import ImageOps
     m = ImageOps.mirror(im); out = Image.new("RGBA", im.size); shift = int(round(2 * (20 + dx) - (W - 1)))
@@ -751,8 +764,8 @@ def quad_clips(q):
           paws={'nh': (3.0, 0), 'fh': (3.5, 0), 'nf': (-1.5, 0), 'ff': (-1.0, 0)}),                        # coil on the haunches
         P(dx=3, bob=base['bob'] - 2.0, pitch=-10, neck_a=-12, head_a=0, jaw=42,
           paws={'nf': (5.0, 5.0), 'ff': (4.0, 6.0), 'nh': (-4.0, 0.5), 'fh': (-5.0, 1.0)}),                 # spring, jaws wide
-        P(dx=7, bob=base['bob'] - 0.5, pitch=2, neck_a=-4, head_a=8, jaw=4, fx=hit,
-          paws={'nf': (6.0, 1.0), 'ff': (5.0, 0.5), 'nh': (-3.0, 0), 'fh': (-4.0, 0)}),                     # the bite
+        impact(P(dx=7, bob=base['bob'] - 0.5, pitch=2, neck_a=-4, head_a=8, jaw=4, fx=hit,
+                 paws={'nf': (6.0, 1.0), 'ff': (5.0, 0.5), 'nh': (-3.0, 0), 'fh': (-4.0, 0)})),             # the bite
         P(dx=6.5, bob=base['bob'], pitch=4, neck_a=-2, head_a=16, jaw=2, fx=hit[1:2],
           paws={'nf': (5.0, 0), 'ff': (4.5, 0), 'nh': (-2.0, 0), 'fh': (-3.0, 0)}),                         # hold, worrying
         P(dx=3, jaw=12, paws={'nf': (2.5, 1.5), 'ff': (2.0, 0), 'nh': (-1.0, 0), 'fh': (-1.0, 0)}),
@@ -937,7 +950,7 @@ def crawler_clips(c):
         pose(path(-3.0, -5.0, dg=-1.0, lift=-2.0), phase=0.1, jaw=0.7, bubbles=0.1),            # rear back
         pose(path(-4.0, -6.0, dg=-1.5, lift=-3.0), phase=0.15, jaw=0.9, bubbles=0.2),           # poised
         pose(path(5.5, 7.0, dg=4.0, lift=4.0), phase=0.3, jaw=0.9, bubbles=0.3),                # the strike
-        pose(path(6.0, 8.0, dg=4.5, lift=4.0), phase=0.35, jaw=0.05, bubbles=0.4, fx=hit),      # fangs shut
+        impact(pose(path(6.0, 8.0, dg=4.5, lift=4.0), phase=0.35, jaw=0.05, bubbles=0.4, fx=hit)),  # fangs shut
         pose(path(4.0, 3.0, dg=2.0, lift=1.5), phase=0.2, jaw=0.3, bubbles=0.5),
         pose(path(), phase=0.0, jaw=0.2, bubbles=0.6)], [130, 150, 50, 150, 110, 110]
     A['hurt'], T['hurt'] = [
@@ -958,8 +971,8 @@ def crawler_clips(c):
         A['spit'], T['spit'] = [
             pose(path(-2.0, -4.0, dg=-1.0, lift=-2.0), phase=0.1, jaw=0.4, bubbles=0.1),
             pose(path(-3.0, -5.0, dg=-1.0, lift=-2.5), phase=0.1, jaw=1.0, bubbles=0.3, fx=[(hx - 0.5, hy - 4.5, 1.0, acid)]),  # acid wells up
-            pose(path(1.5, 0.0, lift=1.0), phase=0.15, jaw=1.1, bubbles=0.5,
-                 fx=[(sx(hx + 6.0), hy - 1.0, 1.6, acid), (sx(hx + 6.4), hy - 1.4, 0.6, glow), (sx(hx + 3.5), hy, 0.6, acid)]),
+            impact(pose(path(1.5, 0.0, lift=1.0), phase=0.15, jaw=1.1, bubbles=0.5,                    # the acid leaves
+                        fx=[(sx(hx + 6.0), hy - 1.0, 1.6, acid), (sx(hx + 6.4), hy - 1.4, 0.6, glow), (sx(hx + 3.5), hy, 0.6, acid)])),
             pose(path(1.0, 0.5, lift=0.5), phase=0.2, jaw=0.6, bubbles=0.7,
                  fx=[(sx(hx + 11.5), hy + 0.5, 1.7, acid), (sx(hx + 12.0), hy, 0.6, glow), (sx(hx + 8.0), hy + 1.0, 0.7, acid)]),
             pose(path(0.5, 0.0), phase=0.1, jaw=0.4, bubbles=0.9,

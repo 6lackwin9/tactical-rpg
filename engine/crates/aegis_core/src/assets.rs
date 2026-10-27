@@ -226,8 +226,9 @@ impl Facing {
 }
 
 /// One clip of a sheet: its row, frames left to right, each shown `ms[i]` milliseconds. A view clip (DIR4) also names
-/// the side clip it draws (`of`) and its `view`; a side clip has `of` "" and `View::Side`.
-#[derive(Debug, Clone, PartialEq)]
+/// the side clip it draws (`of`) and its `view`; a side clip has `of` "" and `View::Side`. `impact` (FX1-L1, optional)
+/// is the frame where an attack lands or its shot leaves; the caller times the hit at `ms_before(impact)`.
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Clip {
     pub id: String,
     pub frames: u32,
@@ -235,6 +236,7 @@ pub struct Clip {
     pub looped: bool,
     pub of: String,
     pub view: View,
+    pub impact: Option<u32>,
 }
 
 /// A body's `clips.json`: the frame size, its palette slots and its clips (row order).
@@ -253,7 +255,8 @@ impl Clips {
     /// Reads and checks a clips.json (spec 4.1): frame 8..256 each way, clips with unique snake_case ids and `idle`
     /// among them, 1..64 frames each with one duration 16..2000 ms per frame, `loop` a flag (default true), palette
     /// slots `#rrggbb`. DIR4 3.1: a view row carries `of` and `view` together, `view` is `down` or `up`, `of` names a
-    /// side clip of the list and the id is `<of>_<view>`; `idle` is a side clip. Every problem is listed.
+    /// side clip of the list and the id is `<of>_<view>`; `idle` is a side clip. FX1-L1: `impact`, when present, is a
+    /// frame of the clip (0 to frames - 1). Every problem is listed.
     pub fn parse(v: &Value) -> Result<Clips, Vec<String>> {
         let mut problems = Vec::new();
         let Some(o) = v.as_object() else { return Err(vec!["clips.json must be an object {frame, palette, clips}.".into()]) };
@@ -297,6 +300,17 @@ impl Clips {
                     true
                 }
             };
+            // FX1-L1: the frame an attack lands on (optional), a frame of the clip.
+            let impact = match c.get("impact") {
+                None => None,
+                Some(v) => match v.as_u64().filter(|i| *i < frames as u64) {
+                    Some(i) => Some(i as u32),
+                    None => {
+                        problems.push(format!("clip '{id}': impact must be 0 to {}.", frames.saturating_sub(1)));
+                        None
+                    }
+                },
+            };
             // DIR4 3.1: a view row names its side clip (`of`) and its view (`down`, `up`), both or neither.
             let of = c.get("of").map(|v| v.as_str().unwrap_or("").to_string());
             let view = match c.get("view") {
@@ -313,7 +327,7 @@ impl Clips {
                 problems.push(format!("clip '{id}': of and view go together."));
             }
             views.push((of.is_some() && view.is_some(), view.flatten()));
-            clips.push(Clip { id, frames, ms, looped, of: of.unwrap_or_default(), view: view.flatten().unwrap_or_default() });
+            clips.push(Clip { id, frames, ms, looped, of: of.unwrap_or_default(), view: view.flatten().unwrap_or_default(), impact });
         }
         // Rows may come in any order: `of` is checked against the whole list.
         for (c, (both, view)) in clips.iter().zip(&views) {
@@ -417,6 +431,16 @@ impl Clip {
     /// The clip's length: the sum of its frames' durations.
     pub fn total_ms(&self) -> u64 {
         self.ms.iter().map(|m| *m as u64).sum()
+    }
+
+    /// The ms from the clip's start to frame `frame` (the sum of the durations before it; the whole clip past its end).
+    pub fn ms_before(&self, frame: u32) -> u64 {
+        self.ms.iter().take(frame as usize).map(|m| *m as u64).sum()
+    }
+
+    /// FX1-L1: the ms from the clip's start to its `impact` frame (None: the clip marks none).
+    pub fn impact_ms(&self) -> Option<u64> {
+        self.impact.map(|f| self.ms_before(f))
     }
 
     /// The frame shown `ms` after the clip started and whether it is over: a looping clip wraps around (never over);

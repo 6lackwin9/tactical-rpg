@@ -11,8 +11,24 @@ pub struct Tuning {
     pub round_pause_ms: u64,
     pub float_ms: u64,
     pub float_rise_px: i32,
+    /// The white silhouette flash on a struck unit (60-400 wall ms; FX1 4.7).
     pub hit_flash_ms: u64,
+    /// The struck token's shake (0-2 px; FX1 4.5).
     pub hit_shake_px: i32,
+    /// FX1 4.2: the hit-stop when an impact lowers any HP (0 = off, else 30-60 wall ms).
+    pub hit_stop_ms: u64,
+    /// FX1 4.2: swing start to impact for an attack clip without an `impact` frame (40-200).
+    pub melee_hit_ms: u64,
+    /// FX1 4.2: to a projectile's release (0-200), and a cast's impact.
+    pub launch_ms: u64,
+    /// FX1 4.2: a projectile's flight clamp (20-500 each).
+    pub travel_min_ms: u64,
+    pub travel_max_ms: u64,
+    /// FX1 rule P: autoplay's pause after the last impact (0-400 wall ms).
+    pub impact_gap_ms: u64,
+    /// Decision "Attack timing on the board" A: a shot leaves at its attack clip's `impact` frame (false: at
+    /// `launch_ms`, FX1 4.2 as written).
+    pub shot_from_clip: bool,
     pub heal_color: Rgba,
     pub damage_color: Rgba,
     pub crit_color: Rgba,
@@ -47,7 +63,14 @@ impl Default for Tuning {
             float_ms: 900,
             float_rise_px: 16,
             hit_flash_ms: 180,
-            hit_shake_px: 2,
+            hit_shake_px: 1,
+            hit_stop_ms: 40,
+            melee_hit_ms: 90,
+            launch_ms: 70,
+            travel_min_ms: 60,
+            travel_max_ms: 260,
+            impact_gap_ms: 80,
+            shot_from_clip: true,
             heal_color: rgb(96, 220, 120),
             damage_color: rgb(255, 96, 80),
             crit_color: rgb(255, 210, 60),
@@ -83,8 +106,19 @@ impl Tuned for Tuning {
             round_pause_ms: u("round_pause_ms", d.round_pause_ms),
             float_ms: u("float_ms", d.float_ms),
             float_rise_px: i("float_rise_px", d.float_rise_px),
-            hit_flash_ms: u("hit_flash_ms", d.hit_flash_ms),
-            hit_shake_px: i("hit_shake_px", d.hit_shake_px),
+            hit_flash_ms: u("hit_flash_ms", d.hit_flash_ms).clamp(60, 400),
+            hit_shake_px: i("hit_shake_px", d.hit_shake_px).clamp(0, 2),
+            // FX1 4.7: 0 turns the hit-stop off; any other value is held to 30-60
+            hit_stop_ms: match u("hit_stop_ms", d.hit_stop_ms) {
+                0 => 0,
+                ms => ms.clamp(30, 60),
+            },
+            melee_hit_ms: u("melee_hit_ms", d.melee_hit_ms).clamp(40, 200),
+            launch_ms: u("launch_ms", d.launch_ms).min(200),
+            travel_min_ms: u("travel_min_ms", d.travel_min_ms).clamp(20, 500),
+            travel_max_ms: u("travel_max_ms", d.travel_max_ms).clamp(20, 500).max(u("travel_min_ms", d.travel_min_ms).clamp(20, 500)),
+            impact_gap_ms: u("impact_gap_ms", d.impact_gap_ms).min(400),
+            shot_from_clip: v.get("shot_from_clip").and_then(Value::as_bool).unwrap_or(d.shot_from_clip),
             heal_color: v.get("heal_color").map(|c| color(c, d.heal_color)).unwrap_or(d.heal_color),
             damage_color: v.get("damage_color").map(|c| color(c, d.damage_color)).unwrap_or(d.damage_color),
             crit_color: v.get("crit_color").map(|c| color(c, d.crit_color)).unwrap_or(d.crit_color),
@@ -103,3 +137,26 @@ impl Tuned for Tuning {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::Tuning;
+    use aegis_ui::tuning::Tuned;
+    use serde_json::json;
+
+    /// FX1 L15: the shipped file reads `hit_shake_px` 1; values outside the ranges of FX1 4.7 are clamped (a hit-stop
+    /// of 0 stays off); the defaults are the spec's.
+    #[test]
+    fn effect_timings_are_clamped_to_their_ranges() {
+        let shipped: serde_json::Value = serde_json::from_str(include_str!("../../../tuning.json")).unwrap();
+        assert_eq!(Tuning::from_json(&shipped).hit_shake_px, 1);
+        let d = Tuning::default();
+        assert_eq!((d.hit_stop_ms, d.hit_shake_px, d.hit_flash_ms, d.melee_hit_ms, d.launch_ms, d.travel_min_ms, d.travel_max_ms, d.impact_gap_ms), (40, 1, 180, 90, 70, 60, 260, 80));
+        let lo = Tuning::from_json(&json!({"hit_stop_ms": 5, "hit_shake_px": -3, "hit_flash_ms": 10, "melee_hit_ms": 1, "travel_min_ms": 1, "travel_max_ms": 1}));
+        assert_eq!((lo.hit_stop_ms, lo.hit_shake_px, lo.hit_flash_ms, lo.melee_hit_ms, lo.travel_min_ms, lo.travel_max_ms), (30, 0, 60, 40, 20, 20));
+        let hi = Tuning::from_json(&json!({"hit_stop_ms": 900, "hit_shake_px": 9, "hit_flash_ms": 9000, "melee_hit_ms": 900, "launch_ms": 900, "travel_min_ms": 900, "travel_max_ms": 900, "impact_gap_ms": 900}));
+        assert_eq!((hi.hit_stop_ms, hi.hit_shake_px, hi.hit_flash_ms, hi.melee_hit_ms, hi.launch_ms, hi.travel_min_ms, hi.travel_max_ms, hi.impact_gap_ms), (60, 2, 400, 200, 200, 500, 500, 400));
+        assert_eq!(Tuning::from_json(&json!({"hit_stop_ms": 0})).hit_stop_ms, 0, "0 is off");
+        let crossed = Tuning::from_json(&json!({"travel_min_ms": 300, "travel_max_ms": 100}));
+        assert!(crossed.travel_max_ms >= crossed.travel_min_ms, "the clamp never inverts");
+    }
+}
