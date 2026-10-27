@@ -1,5 +1,7 @@
 # STATUSFX1: status effects on the board
 
+Status update (2026-10-28): approved; the open questions answered as recommended (user 2026-10-28, decision "WINDUP1 and STATUSFX1 spec answers" in combat.md).
+
 Status: spec (2026-10-28). Approved by the user 2026-10-28 (decision "WINDUP1 answers" 5, `decisions/combat.md`):
 a looping effect on a unit's token for each status it carries, on FX1's engine effects kit, starting with the slice's
 statuses; Staggered is WINDUP1's `dazed` loop, not an effect; FX1 covers impacts only (FX1.md 7)
