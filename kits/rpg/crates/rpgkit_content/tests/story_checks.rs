@@ -232,7 +232,7 @@ fn each_bad_vignette_or_card_field_is_one_error() {
         ("25 cards", with(&g, &["cards"], json!(many)), "A vignette holds 1-24 cards (has 25)."),
         ("cards an object", with(&g, &["cards"], json!({})), "Cards must be a list."),
         ("a card not an object", with(&g, &["cards", "0"], json!("card")), "Card 1 must be an object"),
-        ("an unknown card key", with(&g, &["cards", "0", "shake"], json!(1)), "Card 1: unknown key 'shake'."),
+        ("an unknown card key", with(&g, &["cards", "0", "zoom"], json!(1)), "Card 1: unknown key 'zoom'."),
         ("an unknown style", with(&g, &["cards", "0", "style"], json!("comic")), "style 'comic' is not one of image, text, title, line."),
         ("an image on a text card", with(&g, &["cards", "1", "image"], json!("backgrounds/x.png")), "Card 2: image is for an image card only."),
         ("a top not a colour", with(&g, &["cards", "0", "top"], json!("#12")), "Card 1: top '#12' must be #rrggbb."),

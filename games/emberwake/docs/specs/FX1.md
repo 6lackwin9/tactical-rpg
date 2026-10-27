@@ -233,7 +233,9 @@ test or an agent can wait for the effects to end. Widget names do not change.
 The content check refuses an unknown preset (the kit check keeps its own copy of the five names, as the content
 crate does not depend on `aegis_ui`; an FX1-L1 test checks that it equals `aegis_ui::fx::SHAKE_PRESETS`);
 `parse_phases` keeps `preset` on `shake` effects; the `phases` help text gains the shape (its rows are already in
-`HELP_CHANGED`, so no parity check changes). The writer stores `shake` on cards only when not "".
+`HELP_CHANGED`, so no parity check changes). The writer stores `shake` on cards only when not "". (As built in FX1-S, 2026-10-28: cards are one JSON field the
+writer stores as given, so a card without `shake` has no key while an explicit `"shake": ""` is kept; the asset lane
+omits the key.)
 
 ### 5.2 The vignette player (FX1-V)
 

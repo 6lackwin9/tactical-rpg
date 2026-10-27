@@ -879,8 +879,16 @@ impl DefeatRule {
 pub const STORY_KINDS: [&str; 3] = ["vignettes", "sequences", "boards"];
 /// 4.2: a card's style.
 pub const CARD_STYLES: [&str; 4] = ["image", "text", "title", "line"];
-/// 4.2: the keys a card takes (any other key is refused); PORTRAITFX1 7: a `line` card's `expression`.
-pub const CARD_KEYS: [&str; 15] = ["style", "image", "top", "bottom", "ash", "title", "subtitle", "text", "speaker", "fade_in_ms", "fade_out_ms", "hold_ms", "cue", "when", "expression"];
+/// 4.2: the keys a card takes (any other key is refused); PORTRAITFX1 7: a `line` card's `expression`; FX1 5.1: a
+/// card's camera `shake`.
+pub const CARD_KEYS: [&str; 16] = ["style", "image", "top", "bottom", "ash", "title", "subtitle", "text", "speaker", "fade_in_ms", "fade_out_ms", "hold_ms", "cue", "when", "expression", "shake"];
+/// FX1 5.1: the camera shake presets a card's `shake` and a phase's shake effect may name: the kit's copy of the
+/// engine's `aegis_ui::fx::SHAKE_PRESETS` (the content crates do not depend on `aegis_ui`; a GUI test keeps them equal).
+pub const SHAKE_PRESETS: [&str; 5] = ["jolt", "heavy", "toll", "tremor", "quake"];
+/// FX1 5.1: the phase effect that asks for a camera shake (`{"type": "shake", "preset"}`, at most one per phase; no
+/// rule reads it, the GUI does).
+pub const SHAKE_EFFECT: &str = "shake";
+pub const SHAKE_EFFECT_KEYS: [&str; 2] = ["type", "preset"];
 /// 4.1: a vignette holds 1..CARDS_MAX cards.
 pub const CARDS_MAX: usize = 24;
 /// 4.2: the longest card title, subtitle and text (characters).

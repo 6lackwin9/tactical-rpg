@@ -166,8 +166,8 @@ const DEFAULT_STATUS_ROUNDS: i64 = 2;
 const ENRAGE_POWER_MIN: i64 = 1;
 const ENRAGE_POWER_MAX: i64 = 25;
 const DEFAULT_ENRAGE_POWER: i64 = 20;
-/// The phase effects (BOSS1; HOOKS1 DU1 adds `deck`).
-const EFFECTS: [&str; 6] = ["line", "wave", "status", "ai", "enrage", rpgkit_data::DECK_EFFECT];
+/// The phase effects (BOSS1; HOOKS1 DU1 adds `deck`; FX1 5.1 `shake`).
+const EFFECTS: [&str; 7] = ["line", "wave", "status", "ai", "enrage", rpgkit_data::DECK_EFFECT, rpgkit_data::SHAKE_EFFECT];
 const PHASE_KEYS: [&str; 5] = ["id", "name", "trigger", "effects", "pause_autoplay"];
 const AI_ROLES: [&str; 4] = ["AGGRESSOR", "SKIRMISHER", "SNIPER", "SUPPORT"];
 /// HOOKS1 AT1 adds SOFTEST and TOUGHEST (read under the rule ai_tactics).
@@ -192,6 +192,7 @@ fn effect_keys(kind: &str) -> &'static [&'static str] {
         "status" => &["type", "unit", "status", "rounds", "magnitude"],
         "ai" => &["type", "unit", "role", "target_pref", "reckless", "flee_ratio", "defend_below", "heal_below", "tactics"],
         rpgkit_data::DECK_EFFECT => &rpgkit_data::DECK_EFFECT_KEYS,
+        rpgkit_data::SHAKE_EFFECT => &rpgkit_data::SHAKE_EFFECT_KEYS,
         _ => &["type", "unit", "power"],
     }
 }
@@ -359,7 +360,7 @@ fn effects_errors(tag: &str, raw: &Value, known: &[String], ref_ok: &dyn Fn(&str
     if list.is_empty() || list.len() > MAX_EFFECTS {
         errors.push(format!("Phase '{tag}' needs 1 to {MAX_EFFECTS} effects."));
     }
-    let (mut lines, mut waves) = (0, 0);
+    let (mut lines, mut waves, mut shakes) = (0, 0, 0);
     for item in list {
         let Some(fx) = item.as_object() else {
             errors.push(format!("Phase '{tag}': each effect must be an object."));
@@ -394,11 +395,21 @@ fn effects_errors(tag: &str, raw: &Value, known: &[String], ref_ok: &dyn Fn(&str
                 errors.extend(unit_errors(tag, fx, known));
                 errors.extend(super::hooks::deck_shape_errors(tag, fx));
             }
+            rpgkit_data::SHAKE_EFFECT => {
+                shakes += 1;
+                let preset = json::s(fx, "preset");
+                if !fx.get("preset").is_some_and(Value::is_string) || !rpgkit_data::SHAKE_PRESETS.contains(&preset.as_str()) {
+                    errors.push(format!("Phase '{tag}': a shake needs a preset, one of {}.", rpgkit_data::SHAKE_PRESETS.join(", ")));
+                }
+            }
             _ => {}
         }
     }
     if lines > 1 {
         errors.push(format!("Phase '{tag}': one line per phase."));
+    }
+    if shakes > 1 {
+        errors.push(format!("Phase '{tag}': one shake per phase."));
     }
     if waves > 1 {
         errors.push(format!("Phase '{tag}': one wave per phase."));

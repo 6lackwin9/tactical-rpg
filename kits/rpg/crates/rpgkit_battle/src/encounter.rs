@@ -427,6 +427,10 @@ pub fn parse_phases(raw: &[Value]) -> Vec<PhaseDef> {
                             out.insert("unit".into(), Value::from(value::string(fx, "unit", "")));
                             out.insert("power".into(), Value::from(value::int(fx, "power", 20)));
                         }
+                        // FX1 5.1: kept for the GUI's camera shake; no rule reads it
+                        rpgkit_data::SHAKE_EFFECT => {
+                            out.insert("preset".into(), Value::from(value::string(fx, "preset", "")));
+                        }
                         _ => {}
                     }
                     out
