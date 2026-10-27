@@ -10,7 +10,7 @@ Status: canon (2026-10-25). The reuse assessment of the lore against the code as
 | Tag | Meaning | Test | Where it lives today |
 | --- | --- | --- | --- |
 | `[engine]` | Technology any game needs: rendering, screens, saves, assets, audio, the timeline widget | Would a puzzle game or a racing game need it? | `engine/crates/aegis_*` (never names a game) |
-| `[kit hook]` | A shape any story in the genre could fill: meters with thresholds and triggers, the unit lifecycle, hub facilities with levels, a resource purse, exchange recipes, ruleset options, event triggers, a mission board, a vignette player | Could another tactical RPG use it unchanged with its own data? | Story-free, data-driven code in the game's rule crates (`emberwake_rules`, `emberwake_battle`, `emberwake_world`) and screens (`emberwake_gui`); `kits/rpg/` holds kit assets only, and kit code comes when a second game shares rules (STRUCTURE.md) |
+| `[kit hook]` | A shape any story in the genre could fill: meters with thresholds and triggers, the unit lifecycle, hub facilities with levels, a resource purse, exchange recipes, ruleset options, event triggers, a mission board, a vignette player | Could another tactical RPG use it unchanged with its own data? | Story-free, data-driven code in the kit crates `kits/rpg/crates/rpgkit_*` (rules, battle, world, content, data, host, sim) with the field tables in `kits/rpg/schema.json`; the `emberwake_*` crates are façades over them plus game code and screens (KIT1, 2026-10-25) |
 | `[data]` | Named by the story, filling a kit hook | Is it a name, a number, a line of text or a map? | `games/emberwake/data/` through `aegis content` (world `sunk_ward`) |
 | `[game code]` | A story mechanic nothing else could use | Can no kit hook express it? | The game crates, kept small and named as game code |
 
@@ -173,7 +173,8 @@ Everything else in the lore is data on kit hooks.
 ## 7. Gaps
 
 1. Where kit code lives. Answered (user 2026-10-25): kit extraction happens in M0; the earlier recommendation to defer
-   it is withdrawn (the planner's record holds the scope; [OPEN_QUESTIONS.md](../OPEN_QUESTIONS.md) section 3).
+   it is withdrawn (the planner's record holds the scope; [OPEN_QUESTIONS.md](../OPEN_QUESTIONS.md) section 3). Done in KIT1
+   (2026-10-25): the kit crates `kits/rpg/crates/rpgkit_*`.
 2. Where the ruleset switch is set. Options: (a) the world manifest (Ashlands classic, `sunk_ward` timeline); (b) per
    encounter. Recommendation: (a), with a Dojo toggle. Decided (2026-10-25, user, Q-52): (a), a world field with a Dojo
    toggle, plus the reuse rules of section 1.

@@ -75,7 +75,10 @@
 			"home": "warden_keep",
 			"disciplines": [],
 			"passives": [],
-			"named_items": [],
+			"named_items": [
+				"hest_hatchet",
+				"hest_buckler"
+			],
 			"tuning": {},
 			"dialogue": "hest_talk",
 			"gone_flags": [],
@@ -485,7 +488,10 @@
 			"home": "warden_keep",
 			"disciplines": [],
 			"passives": [],
-			"named_items": [],
+			"named_items": [
+				"brask_hatchet",
+				"brask_buckler"
+			],
 			"tuning": {},
 			"dialogue": "muster_talk",
 			"gone_flags": [],

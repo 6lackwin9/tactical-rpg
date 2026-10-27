@@ -1,5 +1,32 @@
 {
 	"kind": "items",
 	"version": 1,
-	"entries": []
+	"entries": [
+		{
+			"id": "orsa_hatchet",
+			"name": "Orsa's Hatchet",
+			"base_item": "wpn_hand_axe",
+			"description": "A well-kept working hatchet.",
+			"history": "",
+			"owner": "orsa_tallow",
+			"tuning": {},
+			"stat_bonuses": {},
+			"grants": [],
+			"tags": [],
+			"icon_id": ""
+		},
+		{
+			"id": "orsa_buckler",
+			"name": "Orsa's Buckler",
+			"base_item": "shd_buckler",
+			"description": "A small buckler worn smooth by years of carrying.",
+			"history": "",
+			"owner": "orsa_tallow",
+			"tuning": {},
+			"stat_bonuses": {},
+			"grants": [],
+			"tags": [],
+			"icon_id": ""
+		}
+	]
 }

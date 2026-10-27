@@ -9,7 +9,7 @@ use crate::bridge;
 use crate::focus;
 use crate::canvas::{Canvas, Image};
 use crate::painter::{Fonts, Painter, View};
-use crate::screen::{Context, Cx, Key, Nav, Notice, Screen};
+use crate::screen::{Context, Cx, Held, Key, Nav, Notice, Screen};
 use crate::canvas::{rgb, rgba, Rect};
 use crate::window::Grab;
 use crate::ui::{clipboard, field_content_h, field_layout, field_scroll_id, field_shift, reveal_offset, Drag, Edit, EditKey, Gfx, Kit, Layout, BG, BODY, FIELD_PAD_X, FIELD_PAD_Y, GOLD, H, MODAL, PANEL_HI, RADIUS, TEXT, W};
@@ -1199,12 +1199,14 @@ impl<G: Context> ApplicationHandler for App<G> {
                 self.alt = m.state().alt_key();
                 if let Some(s) = self.shell.as_mut() {
                     s.shift = self.shift;
+                    s.cx.held = Held { shift: self.shift, ctrl: self.ctrl, alt: self.alt };
                 }
             }
             WindowEvent::Focused(false) => {
-                // The release may never arrive (alt-tab mid-drag): drop the drag.
+                // The release may never arrive (alt-tab mid-drag): drop the drag; no key counts as held.
                 if let Some(s) = self.shell.as_mut() {
                     s.cancel_drag();
+                    s.cx.held = Held::default();
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
@@ -1448,6 +1450,7 @@ mod tests {
             quit: false,
             answers: Vec::new(),
             playtest: crate::playtest::Playtests::off(),
+            held: Default::default(),
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };

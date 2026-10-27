@@ -1,0 +1,14 @@
+{
+  "model": "local:flux-2-klein-4b",
+  "id": "stage_props_trees",
+  "task": "STAGE1-A2",
+  "prompt": "A game asset sheet of four small pixel-art trees for a 2D tactics RPG battle board, seen from the side at a slight top-down angle, arranged in a 2 x 2 grid with wide empty space between them, on a perfectly flat solid magenta (#FF00FF) background. Three leafy trees with full rounded canopies in muted olive green, a darker olive shadow side on the left and a few lighter leaf highlights on the upper right, short straight brown trunks; one bare leafless dead tree with dark twisted branches. Every tree has a crisp one-pixel dark outline, a simple readable silhouette, chunky clean hand-placed pixel clusters, flat colours, no dithering. No ground, no grass, no cast shadow, no text, no border, no frame.",
+  "seed": 1,
+  "steps": 4,
+  "size": 1024,
+  "cfg": 1.0,
+  "backend": "ComfyUI (C:/dev/localgen/probe/comfy_run.py)",
+  "post": "tools/sprites/props_cut.py (run with C:/dev/localgen/comfyui/venv/Scripts/python.exe: needs scipy): magenta ground keyed out, objects cut, Lanczos to fit 32 x 44 (trees) or 18 x 9 (stones), colours reduced (trees 15, stones 6), one-pixel outline in the spec colour; trees on 40 x 52 with the base at y 45, stones on 32 x 24 with the base at y 22",
+  "picked": "objects 0-3 of the sheet (reading order) -> tree/v0-v3 (v3 the bare tree) (user 2026-10-27)",
+  "date": "2026-10-27"
+}

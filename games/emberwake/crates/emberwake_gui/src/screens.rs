@@ -20,9 +20,10 @@ pub type Nav = aegis_ui::Nav<GameCx>;
 /// The game's own settings keys and defaults (sound, display, text size and playtest recording are the
 /// engine's: `Settings::engine_defaults`). PLAYUI1-M: `map_names` (`hover` or `always`: the region map's marker names)
 /// and `map_legend_open` (the region map's legend, open or collapsed to its header). STAGE1: `battle_view` (`stage` or
-/// `flat`, `stage::VIEWS`; until the user's review, STAGE1-C).
+/// `flat`, `stage::VIEWS`; a debug setting set in the Scene Runner since STAGE1-C). STAGE1-O: `see_through`
+/// (`selected` or `always`, `stage::SEE_THROUGH`: when covered units are outlined in battle).
 pub fn default_settings() -> Value {
-    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "map_names": "hover", "map_legend_open": true, "battle_view": "stage"})
+    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "map_names": "hover", "map_legend_open": true, "battle_view": "stage", "see_through": "selected"})
 }
 
 /// The game in play (CurrentGame): the state, the slot it came from and its copy at the last save or load.

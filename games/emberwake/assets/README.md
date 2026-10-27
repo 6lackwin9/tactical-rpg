@@ -12,7 +12,8 @@ family icons, the named items' icons, the Ashlands tiles, backgrounds and the wo
 Tree (section 3 of the spec; a test keeps every file on these patterns):
 
 - `units/<class>/<variant>/sheet.png` + `clips.json` (+ `palettes/<id>.json`): bodies; `<variant>` `base` is the class
-  default. A unit's token is its `idle` clip's first frame; the team rim is drawn by code.
+  default. A unit's token is its `idle` clip's first frame; the team rim is drawn by code. A body with front and back
+  views (DIR4) also lists `<clip>_down` / `<clip>_up` clips in `clips.json`, each with `of` (its side clip) and `view`.
 - `portraits/{heroes,npcs,elites,bosses}/<id>.png` unique portraits; `portraits/common/<class>_<variant>.png` shared ones
   (the game layer's `common/` holds the creature bodies' portraits, `beast_render_beast.png` and `crawler_ash_crawler.png`, ART3).
 - `items/<family>/base.png` and `items/<family>/<icon>.png`; `items/any/{base,<item_type>}.png`.
@@ -43,7 +44,12 @@ kit's `kits/rpg/assets/` or `engine/assets/`). Python 3.12 with Pillow and numpy
   here, the named bodies (`warrior/grakka_ashmaw`, `brawler/ash_warchief`, `warrior/brask_toller`,
   `warrior/hest_the_quartermaster`, `warrior/orsa_tallow`, `ranger/wenn_tallow`) and the palette files on the kit's
   goblin bodies (`units/<class>/<goblin variant>/palettes/ash.json` for the Horde mobs, `<character>.json` for the
-  named goblins). `--review OUT` writes contact sheets and GIFs for a review page.
+  named goblins). `--review OUT` writes contact sheets and GIFs for a review page. DIR4: a body whose parts and grip all
+  have view drawers (`tools/sprites/views.py`; today `warrior/base` and `warrior/2h_sword`) gets its view rows after the
+  side rows; the exporter exits when a view clip's frames or ms differ from its side clip (R3), a view adds a colour or
+  a palette slot (R4), or front and back differ in under 10% of the pixels at 28 px (6.4); other bodies keep side rows
+  and the exporter prints what they lack; `--review` adds `<body>_turnaround.png`, `<body>_walk_4dir.gif` and
+  `<body>_<attack>_views.gif`.
 - `python tools/gen_music.py [track ...] [--layer kit|game] [--root DIR] [--list]`: the music (numpy and ffmpeg);
   `menu_theme` and the world tracks land here, the mood loops in the kit.
 - Check a regeneration without touching the committed files: run `gen_art.py --root DIR` and

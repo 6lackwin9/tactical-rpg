@@ -10,6 +10,7 @@ from re-deriving the method each time.
 | Page | Use it to |
 | --- | --- |
 | [layer_rule.md](layer_rule.md) | Decide whether a feature is engine, kit hook, data or game code |
+| [kit_layout.md](kit_layout.md) | Lay out a kit's folders and crates, and extract a kit from a game |
 | [design_library.md](design_library.md) | Set up a game's design library (canon sheet, registry, numbers, glossary, truth, gaps) |
 | [naming_and_asset_briefs.md](naming_and_asset_briefs.md) | Name things and write the asset briefs art is generated from |
 | [story_guide.md](story_guide.md) | Write a game's story guide: plot, who's who with arcs per act, story elements, reveal timeline, gaps |

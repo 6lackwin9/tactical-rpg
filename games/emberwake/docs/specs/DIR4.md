@@ -176,7 +176,8 @@ New rows per body in the first stage: 6 (`idle_down`, `idle_up`, `walk_down`, `w
   x 12..36 so it keeps to its tile.
 - R3 Timing: a view clip has the same frame count and `ms` as its side clip (one view key per side key), so a turn
   in mid-clip keeps the beat and FX1 can hang one impact time per clip. The exporter exits otherwise.
-- R4 Palette: the views draw only with the unit's `pal` colours plus `OUT` and `WHITE`; the body's `clips.json`
+- R4 Palette (as built in DIR4-R1, 2026-10-27: a view may also reuse colours the body's side rows already use, such as
+  the attack sparks; a new colour or palette slot still exits): the views draw only with the unit's `pal` colours plus `OUT` and `WHITE`; the body's `clips.json`
   palette (its slots, at most 16) is identical with and without the view rows. The exporter exits naming any colour a
   view adds. Palette files (`palettes/*.json`) are unchanged.
 - R5 A body gets view clips only when every part it uses has a view drawer (`views.supports(u)`); otherwise the
@@ -201,7 +202,8 @@ New rows per body in the first stage: 6 (`idle_down`, `idle_up`, `walk_down`, `w
 ### 6.3 Clip shapes
 
 - `idle_<view>`: 8 frames, 160 ms each (as `rig.idle`): the side idle's bob and breath; hands from the class's ready
-  pose (weapon low and forward in `down`, its tip visible past the hip in `up`).
+  pose (weapon low and forward in `down`, its tip visible past the hip in `up`; the warrior's 1H sword is held upright
+  as in the side view instead: pilot review, user 2026-10-28).
 - `walk_<view>`: 8 frames, 90 ms each (as `rig.walk`): the feet alternate (each foot lifts and its knee bends in its
   half of the gait), body bob `0.9 - 1.8 * |sin|`, arms swing as 1 px vertical offsets opposite to the legs.
 - `<attack>_<view>`: the side attack's keys, one view key each, with the motion turned toward the camera (`down`) or
@@ -211,7 +213,7 @@ New rows per body in the first stage: 6 (`idle_down`, `idle_up`, `walk_down`, `w
 
 | Class | Attack | `down` / `up` motion |
 | --- | --- | --- |
-| warrior | `attack` (variant A: shield carried lower) | sword drawn back by the right shoulder, thrust down (or up) past the feet (or head) with a tip spark; the shield stays up on the left arm |
+| warrior | `attack` (variant A: shield carried lower) | sword drawn back by the right shoulder, thrust down (or up) past the feet (or head) with a tip spark; the shield stays up on the left arm. As built after the pilot review (user 2026-10-28): 1H + kite a stab at chest height (front toward the camera, foreshortened, by the shield edge; back away, the tip past his right side); 2H greatsword a level cut across the chest; neither drops below the upper body; the spark at chest height on the impact frame |
 | ranger | `attack` | bow held upright across the chest, string pulled to the chin, release; a 1 x 5 px arrow leaves down (or up) |
 | brawler | `jab` | right fist drives 3 px toward the facing and grows 1 px, spark at the fist; the left fist stays at the chin, bobbing |
 | priest | `attack` | mace up over the head, smash down in front (`down`: the flash before the feet; `up`: the flash at both sides of the body) |
@@ -231,7 +233,9 @@ New rows per body in the first stage: 6 (`idle_down`, `idle_up`, `walk_down`, `w
 
 1. Each target body's `clips.json` lists the six view clips with `of`, `view`, the side clip's frames and `ms`.
 2. The side rows are pixel-identical to an export from before the task on the same machine (not byte-identical
-   files: HISTORY 2026-10-22, library versions).
+   files: HISTORY 2026-10-22, library versions). Waived once in DIR4-R1 for `warrior/2h_sword`'s `attack` row (user
+   2026-10-28: the greatsword's side attack changed from the chop to the chest cut, `classes.warrior_2h` greatsword
+   branch; the axe and hammer keep the chop).
 3. The `palette` object is unchanged; palette files are unchanged.
 4. No blank frame (`aegis_ui::art::blank_frames`); the body checks and content checks are clean.
 5. The review page shows the turnaround boards; the user's sign-off is recorded for DIR4-R1.
@@ -317,7 +321,8 @@ Rules for DIR4 with looks:
   on every look.
 - L4 2H depth order: `down`, the weapon is held in both hands before the torso (layer 8), its head above the
   screen-left shoulder in the ready pose; `up`, the haft is hidden by the body except the head over the right
-  shoulder and the pommel below the hands (layers 1 and 9).
+  shoulder and the pommel below the hands (layers 1 and 9). As built (pilot review, user 2026-10-28): in `up` the
+  hands, grip and pommel stay hidden behind the body; only the blade over the right shoulder shows.
 - L5 The pilot (DIR4-R1) does both warrior grips with one 2H family (greatsword); the battle axe and the warhammer
   come with DIR4-R2.
 

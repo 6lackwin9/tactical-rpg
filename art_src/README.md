@@ -74,3 +74,9 @@ takes), plus variant sheets such as `mara_voss_variant.png`.
   edge run (runs under 3 px left alone; `--rim edge|lift|none`). The reduction is picked by the source: pixel-art sources (a steady
   pixel grid) keep the most-common-colour reduction and 10x4, smooth sources (Klein) take a Lanczos downscale and 14x5 (`--reduce
   auto|mode|smooth`). Record key `faction` (PIXEL3) on the shipped portrait sources.
+
+## Props
+
+`props/stage_trees.png` and `props/stage_stones.png` (STAGE1-A2, 2026-10-27): local FLUX.2 Klein sheets on a magenta ground,
+each with its prompt record (`.json`: prompt, seed, steps, the cut and the picks). `tools/sprites/props_cut.py` cuts them
+into the battle props in `kits/rpg/assets/props/common/{tree,stones}/`.

@@ -3,7 +3,7 @@
 # flat-shaded shapes with dark outlines in an Ashlands palette.
 #   python tools/gen_art.py [group ...] [--layer engine|kit|game ...] [--root DIR] [--overwrite] [--list]
 #   python tools/gen_art.py --compare DIR [--spot OUT]
-# Groups: bodies portraits items skills statuses terrain overlays region markers pins chips world_map backdrops menu stage_tiles battle_props battle_backdrops
+# Groups: bodies portraits items skills statuses terrain overlays region markers pins chips world_map backdrops menu stage_tiles battle_backdrops
 # story world_card menu_sunless sunk_backdrops family_icons.
 # The last five (STORYART1) are the Sunk Ward slice's placeholders in the art bible's 16 hues: story = the vignette
 # pictures backgrounds/story/<id>.png (1120 x 472, 2x STORYUI1 V9's 560 x 236 picture area: intro_1-4, meat_market,
@@ -13,7 +13,7 @@
 # mace and staff icons only while those copies are still in place).
 # Layers (default all): engine = engine/assets/ (the common tileset and the common_stage 4:3 battle tiles), kit = kits/rpg/assets/ (class variant bodies,
 # common portraits, item bases and generic variants, skill kind icons, statuses, map markers, UI pins, intents, badges
-# and chips, props/common/{tree,stones} battle props), game = games/emberwake/assets/ (named bodies and portraits, skill family icons, the named items, the
+# and chips), game = games/emberwake/assets/ (named bodies and portraits, skill family icons, the named items, the
 # Ashlands tiles, backgrounds, backgrounds/battle zone backdrops). DIR is a workspace root (default: this repository); the three asset roots sit under it.
 # An existing file is kept (printed "kept"): the committed art includes ART2 portraits and icons made from art_src/
 # by tools/portraits/, which these placeholders must not replace; --overwrite rewrites them.
@@ -1697,67 +1697,10 @@ def g_stage_tiles(out: Out) -> None:
         save(quant16(wall_face(v)), "engine", "tilesets/common_stage/wall_face/v%d.png" % v, out)
 
 
-TREE_OL = (22, 26, 16, 255)
 
 
-def tree_prop(v: int) -> Image.Image:
-    # 40 x 52: trunk 4 px wide centred at x 20, base 6 px above the bottom; v0-v2 leafy, v3 bare
-    img = Image.new("RGBA", (40, 52), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    wood, wood_hi = rgb("#4a3424"), rgb("#6a4c34")
-    if v == 3:
-        br = rgb("#2a1e16")
-        for a, b in (((20, 36), (6, 22)), ((20, 28), (34, 14)), ((20, 20), (10, 4)), ((20, 14), (30, 2)), ((20, 40), (33, 32))):
-            d.line([a, b], fill=TREE_OL, width=3)
-            d.line([a, b], fill=br, width=1)
-        d.rectangle([17, 12, 22, 45], fill=TREE_OL)
-        d.rectangle([18, 12, 21, 44], fill=wood)
-        d.line([(18, 12), (18, 44)], fill=wood_hi)
-        return img
-    rng = np.random.default_rng(seed_of("tree%d" % v))
-    d.rectangle([17, 26, 22, 45], fill=TREE_OL)
-    d.rectangle([18, 26, 21, 44], fill=wood)
-    d.line([(18, 28), (18, 44)], fill=wood_hi)
-    width = (30, 31, 28)[v]
-    top = (1, 0, 3)[v]
-    cx = 20
-    blobs = [(cx, top + 14, width // 2, 12), (cx - width // 4, top + 18, width // 4 + 1, 9), (cx + width // 4, top + 18, width // 4 + 1, 9),
-             (cx - 3, top + 8, width // 3, 8), (cx + 4, top + 10, width // 3 - 1, 7)]
-    greens = ["#3e4a24", "#566a30", "#7a8a44"]
-    for x, y, rx, ry in blobs:
-        d.ellipse([x - rx - 1, y - ry - 1, x + rx + 1, y + ry + 1], fill=TREE_OL)
-    for x, y, rx, ry in blobs:
-        d.ellipse([x - rx, y - ry, x + rx, y + ry], fill=rgb(greens[0]))
-    for x, y, rx, ry in blobs:  # light from the upper left
-        d.ellipse([x - rx + 1, y - ry + 1, x + rx - 3, y + ry - 3], fill=rgb(greens[1]))
-    for x, y, rx, ry in blobs[3:] + blobs[:1]:
-        d.ellipse([x - rx + 3, y - ry + 2, x + rx - 7, y + ry - 6], fill=rgb(greens[2]))
-    for _ in range(10):  # leaf specks
-        x, y = int(rng.integers(cx - width // 2 + 3, cx + width // 2 - 3)), int(rng.integers(top + 6, top + 26))
-        if img.getpixel((x, y))[3]:
-            d.point((x, y), fill=rgb(greens[0]) if rng.random() < 0.5 else rgb(greens[2]))
-    return img
-
-
-def stones_prop(v: int) -> Image.Image:
-    # 32 x 24: 2-3 small grey stones in the lower half, the largest at most 16 x 9
-    img = Image.new("RGBA", (32, 24), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    ol = (24, 24, 30, 255)
-    sets = (((3, 14, 15, 9), (19, 17, 9, 6), (12, 19, 7, 4)), ((9, 13, 16, 9), (2, 18, 8, 5)))[v]
-    for x, y, w, h in sets:
-        d.rounded_rectangle([x, y, x + w - 1, y + h - 1], radius=3, fill=ol)
-        d.rounded_rectangle([x + 1, y + 1, x + w - 2, y + h - 2], radius=2, fill=rgb("#6e727c"))
-        d.rectangle([x + 2, y + 1, x + max(2, w - 5), y + 2], fill=rgb("#9097a2"))
-        d.rectangle([x + 2, y + h - 3, x + w - 3, y + h - 2], fill=rgb("#4a4d58"))
-    return img
-
-
-def g_battle_props(out: Out) -> None:
-    for v in range(4):
-        save(quant16(tree_prop(v)), "kit", "props/common/tree/v%d.png" % v, out)
-    for v in range(2):
-        save(quant16(stones_prop(v)), "kit", "props/common/stones/v%d.png" % v, out)
+# The battle props (props/common/{tree,stones}) are generated art since STAGE1-A2 (2026-10-27): art_src/props/stage_*.png
+# cut by tools/sprites/props_cut.py; the code-drawn trees and stones of STAGE1-T are retired.
 
 
 # Zone backdrops: 384 x 52, opaque; bottom 4 px far ground, 12 columns of 32 px line up with the board
@@ -2895,7 +2838,7 @@ GROUPS = {
     "bodies": g_bodies, "portraits": g_portraits, "items": g_items, "skills": g_skills, "statuses": g_statuses,
     "terrain": g_terrain, "overlays": g_overlays, "region": g_region, "markers": g_markers, "pins": g_pins,
     "chips": g_chips, "world_map": g_world_map, "backdrops": g_backdrops, "menu": g_menu,
-    "stage_tiles": g_stage_tiles, "battle_props": g_battle_props, "battle_backdrops": g_battle_backdrops,
+    "stage_tiles": g_stage_tiles, "battle_backdrops": g_battle_backdrops,
     "story": g_story, "world_card": g_world_card, "menu_sunless": g_menu_sunless, "sunk_backdrops": g_sunk_backdrops,
     "family_icons": g_family_icons,
 }

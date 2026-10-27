@@ -24,7 +24,9 @@ What is here (`assets/`):
 - `portraits/common/<class>_<variant>.png`: the portraits mobs and minor characters share.
 - `items/<family>/base.png` and generic variants (`sword/greatsword`, `accessory/amulet`, `consumable/bomb`, ...);
   `items/any/`.
-- `props/common/{tree,stones}/v<n>.png`: the battle stage's upright props (STAGE1-T; `tools/gen_art.py battle_props`).
+- `props/common/{tree,stones}/v<n>.png`: the battle stage's upright props (STAGE1-A2, 2026-10-27: generated locally with
+  FLUX.2 Klein, sources and prompt records in `art_src/props/`, cut by `tools/sprites/props_cut.py`; STAGE1-T drew them
+  by code before).
 - `skills/kinds/<kind>.png`, `statuses/<id>.png`, `map/markers/<marker>.png`, `ui/{pins,intents,badges,chips}/`.
 - `ui/hud/` (gold, supplies, party, journal, stash, menu), `ui/markers/` (npc, chest, chest_open, lore, exit,
   world_map, encounter, roamer, point) and `ui/services/` (shop, recruit): the PLAYUI1 icons (32x32, made by

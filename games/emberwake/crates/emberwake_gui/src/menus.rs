@@ -513,7 +513,7 @@ const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
         ],
     ),
     ("Maps", &[("Move the party", "Arrow keys, W A S D"), ("Interact with the marker you face", "E"), ("Game menu", "Escape"), ("Choose a dialogue line", "1-9"), ("Party, journal, stash, help, event log", "P, J, I, ?, L")]),
-    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Combat log", "L"), ("Screenshot", "F12")]),
+    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Screenshot", "F12")]),
 ];
 
 /// A volume slider's sample and bus (scripts/audio/volume_preview.gd: the master sample plays on the interface bus).
@@ -550,9 +550,9 @@ impl SettingsScreen {
                     self.draft["map_names"] = json!(v);
                 }
             }
-            SetAct::Pick("battle_view", i) => {
-                if let Some((v, _)) = crate::stage::VIEWS.get(i) {
-                    self.draft["battle_view"] = json!(v);
+            SetAct::Pick("see_through", i) => {
+                if let Some((v, _)) = crate::stage::SEE_THROUGH.get(i) {
+                    self.draft["see_through"] = json!(v);
                 }
             }
             SetAct::Pick(TEXT_SPEED, i) => {
@@ -652,11 +652,12 @@ impl Screen<GameCx> for SettingsScreen {
                 let t = tip("Map names", "On hover: a marker's name shows while you point at it, its legend row, or face it. Always: every person and exit is named.");
                 ui.select("settings.map_names", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick("map_names", i), true, t);
                 y += 22;
-                // STAGE1: the battle board tilted (Stage) or seen from above (Flat) until the user's review (STAGE1-C).
-                ui.p.text(x as f32, y as f32 + 3.0, "Battle view", BODY, TEXT);
-                let labels: Vec<String> = crate::stage::VIEWS.iter().map(|v| v.1.to_string()).collect();
-                let at = crate::stage::VIEWS.iter().position(|v| d["battle_view"].as_str() == Some(v.0)).unwrap_or(0);
-                ui.select("settings.battle_view", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick("battle_view", i), true, tip("Battle view", crate::stage::VIEW_TIP));
+                // STAGE1-O: when units hidden behind others or cover are outlined in battle (the Flat view is a Scene
+                // Runner debug setting since STAGE1-C, not a player choice).
+                ui.p.text(x as f32, y as f32 + 3.0, "Units behind", BODY, TEXT);
+                let labels: Vec<String> = crate::stage::SEE_THROUGH.iter().map(|v| v.1.to_string()).collect();
+                let at = crate::stage::SEE_THROUGH.iter().position(|v| d["see_through"].as_str() == Some(v.0)).unwrap_or(0);
+                ui.select("settings.see_through", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick("see_through", i), true, tip("Units behind", crate::stage::SEE_THROUGH_TIP));
                 y += 22;
                 // STORYUI1 4.8: the story cards' typewriter speed and the shared reduce-motion switch (engine keys)
                 ui.p.text(x as f32, y as f32 + 3.0, "Text speed", BODY, TEXT);
@@ -668,6 +669,10 @@ impl Screen<GameCx> for SettingsScreen {
                 ui.checkbox("settings.reduce_motion", x + 3, y, "Reduce motion", d[REDUCE_MOTION].as_bool().unwrap_or(false), SetAct::Toggle(REDUCE_MOTION), true);
             }
             _ => {
+                // The list scrolls inside the panel (the wheel over it) once it outgrows it.
+                let content: i32 = CONTROLS.iter().map(|(_, rows)| 14 + rows.len() as i32 * 11 + 3).sum::<i32>() + 6;
+                let off = ui.scroll_begin("settings.controls", body, content);
+                y -= off;
                 for (head, rows) in CONTROLS {
                     ui.p.text(x as f32, y as f32, head, BODY + 2.0, GOLD);
                     y += 14;
@@ -678,6 +683,7 @@ impl Screen<GameCx> for SettingsScreen {
                     }
                     y += 3;
                 }
+                ui.scroll_end();
             }
         }
         ui.button("settings.defaults", Rect::new(r.x + r.w - 160, r.y + r.h - 25, 80, 17), "Restore defaults", SetAct::Defaults, true);
@@ -767,6 +773,7 @@ mod tests {
             quit: false,
             answers: Vec::new(),
             playtest: aegis_ui::playtest::Playtests::off(),
+            held: Default::default(),
             app,
         }
     }

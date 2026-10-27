@@ -17,3 +17,4 @@ Status: canon (user 2026-10-25). Every feature of a game sits in exactly one lay
 - Prefer a data stand-in first (for example crafting as dialogue choices that take and give items) and build the kit
   hook when a playtest shows the stand-in hurts.
 - Measure throughput per layer: hours spent on data, kit hooks and game code per milestone.
+- Where a kit's code and schema live, and how to extract a kit from a game: [kit_layout.md](kit_layout.md).

@@ -6,7 +6,8 @@
 //! settles the outcome and the results popup opens over the map).
 //! Mouse: click a hero to select; click a foe, an ally, the hero itself or a tile for its options; hover anything for
 //! details; right click closes a menu or undoes the hero's last step; the wheel scrolls the log. Keys: Enter confirm,
-//! Space step / next round, A autoplay, Z undo, L log, R restart (arena), Esc close.
+//! Space step / next round, A autoplay, Z undo, L log, R restart (arena), Esc close; hold Alt to outline every unit,
+//! covered or not (STAGE1-O).
 
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::music;
@@ -1295,6 +1296,12 @@ pub(crate) fn kind_color(kind: &str) -> Rgba {
     }
 }
 
+/// WAR2H1 (battle slice): the bodies a unit's token tries, by its art key and its equipped gear: a class base shows
+/// the look its grip gives (`1h_buckler`, `2h_<family>`), then its own sheet; a named or variant body keeps its art.
+fn body_keys(art: &str, u: &emberwake_rules::unit::Unit) -> Vec<String> {
+    emberwake_content::art::gear_body_chain(art, &emberwake_content::art::Grip::of_inventory(&u.inventory))
+}
+
 /// The frame a battle token shows (DIR4-G G4): the clip `player` plays at `now` in the unit's `facing`
 /// (`UnitAnim::faces`), fitted to a `size` square (`Art::played_facing`). The fallback is the engine's
 /// (`Clips::resolve_view`): the clip's `up`/`down` row when the body has it, else its side row, else `idle` in that
@@ -1917,7 +1924,7 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
         let u = &w.units[i];
         let r = cell_rect(pos);
         let ally = w.allies.contains(&i);
-        let body = cx.art.first_body(&emberwake_content::art::body_chain(&s.art[i]));
+        let body = cx.art.first_body(&body_keys(&s.art[i], u));
         let palette = s.palettes.get(i).map_or("", |p| p.as_str());
         start_wanted(tokens, &mut cx.art, i, body.as_deref());
         let a = tokens.anims.get(i).unwrap_or(&still);
@@ -2071,7 +2078,7 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
         let Some(pos) = w.grid.pos(i) else { continue };
         let u = &w.units[i];
         let ally = w.allies.contains(&i);
-        let body = cx.art.first_body(&emberwake_content::art::body_chain(&s.art[i]));
+        let body = cx.art.first_body(&body_keys(&s.art[i], u));
         let palette = s.palettes.get(i).cloned().unwrap_or_default();
         start_wanted(tokens, &mut cx.art, i, body.as_deref());
         let a = tokens.anims.get(i).unwrap_or(&still);
@@ -2239,11 +2246,13 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                 }
             }
             Pass::Through => {
+                // STAGE1-O: by default only the selected unit shows through; Alt held outlines every unit
+                let reveal = stage::Reveal::of(&cx.settings.v["see_through"], cx.held.alt);
                 for (k, p) in order.iter().enumerate() {
                     let Item::Unit(i) = p.item else { continue };
                     let Some(t) = unit_of(i).filter(|t| t.alive) else { continue };
                     let (Some(b), Some((_, f))) = (t.body.as_deref(), frames.iter().find(|(j, _)| *j == i)) else { continue };
-                    let col = match stage::through(&order, k, Some(i) == sel, hovered == Some(i)) {
+                    let col = match stage::through(&order, k, Some(i) == sel, hovered == Some(i), reveal) {
                         Some(Through::Side) => with_alpha(if t.ally { ALLY } else { FOE }, 230),
                         Some(Through::Selected) => GOLD,
                         Some(Through::Hovered) => rgba(255, 255, 255, tuning.hover_outline_alpha),
@@ -2936,7 +2945,7 @@ mod tests {
         let (h, pos, body, palette) = {
             let s = b.host.session.as_ref().unwrap();
             let h = s.w.allies[0];
-            (h, s.w.grid.pos(h).unwrap(), cx.art.first_body(&emberwake_content::art::body_chain(&s.art[h])).expect("the hero has a body"), s.palettes.get(h).cloned().unwrap_or_default())
+            (h, s.w.grid.pos(h).unwrap(), cx.art.first_body(&crate::battle::body_keys(&s.art[h], &s.w.units[h])).expect("the hero has a body"), s.palettes.get(h).cloned().unwrap_or_default())
         };
         assert_eq!(h, 0, "the first hero is unit 0");
         // before the first change the tokens have no animations yet and a hero faces right (as the draw does)

@@ -641,15 +641,51 @@ pub enum Through {
     Hovered,
 }
 
-/// Pass 8 for the item at `at` in `order` (a unit): (b) the selected or hovered unit when anything sorted after it
-/// meets its body rect, else (a) any unit when a block or standing prop sorted after it does; None: nothing covers it.
-pub fn through(order: &[Placed], at: usize, selected: bool, hovered: bool) -> Option<Through> {
+/// When pass 8 reveals a covered unit (STAGE1-O, the Gameplay setting `see_through` and the held Alt key).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reveal {
+    /// The default: only the selected unit, so the unit lower on the board covers the one behind it.
+    Selected,
+    /// STAGE1's look: the selected and hovered unit, and any unit behind a block or standing prop.
+    Always,
+    /// While Alt is held: every unit outlined in its side colour, covered or not (other units count as cover).
+    Held,
+}
+
+/// The setting's values and labels; the first is the default.
+pub const SEE_THROUGH: [(&str, &str); 2] = [("selected", "When selected or Alt held"), ("always", "Always")];
+pub const SEE_THROUGH_TIP: &str =
+    "Outlines of units hidden behind others, trees or walls. When selected or Alt held: only the selected unit, and every unit outlined while you hold Alt. Always: the selected and hovered unit and any unit behind cover.";
+
+impl Reveal {
+    /// The setting's value and the Alt key: Alt held wins, `always` is Always, anything else (unknown, missing) the
+    /// default.
+    pub fn of(setting: &Value, alt: bool) -> Reveal {
+        if alt {
+            Reveal::Held
+        } else if setting.as_str() == Some("always") {
+            Reveal::Always
+        } else {
+            Reveal::Selected
+        }
+    }
+}
+
+/// Pass 8 for the item at `at` in `order` (a unit), by `reveal`: (b) the selected unit (and the hovered one, except
+/// by default) when anything sorted after it meets its body rect; else while Alt is held every unit (Side); else (a)
+/// with Always any unit a block or standing prop sorted after it meets; None: nothing covers it or it stays hidden.
+pub fn through(order: &[Placed], at: usize, selected: bool, hovered: bool, reveal: Reveal) -> Option<Through> {
     let me = order.get(at)?;
     let after = &order[at + 1..];
+    let hovered = hovered && reveal != Reveal::Selected;
     if (selected || hovered) && after.iter().any(|o| meets(o.rect, me.rect)) {
         return Some(if selected { Through::Selected } else { Through::Hovered });
     }
-    after.iter().any(|o| !matches!(o.item, Item::Unit(_)) && meets(o.rect, me.rect)).then_some(Through::Side)
+    match reveal {
+        Reveal::Selected => None,
+        Reveal::Held => Some(Through::Side),
+        Reveal::Always => after.iter().any(|o| !matches!(o.item, Item::Unit(_)) && meets(o.rect, me.rect)).then_some(Through::Side),
+    }
 }
 
 /// 3.8: a unit's widget rect: the bounding rect of its cell rect and its body rect.
@@ -978,8 +1014,8 @@ mod tests {
         let order = feet_order(&items);
         let pos = |it: Item| order.iter().position(|p| p.item == it).unwrap();
         assert!(pos(Item::Unit(0)) < pos(Item::Prop(V2::new(10, 2))) && pos(Item::Prop(V2::new(10, 2))) < pos(Item::Unit(1)));
-        assert_eq!(through(&order, pos(Item::Unit(0)), false, false), Some(Through::Side), "behind the canopy");
-        assert_eq!(through(&order, pos(Item::Unit(1)), false, false), None, "in front of the tree");
+        assert_eq!(through(&order, pos(Item::Unit(0)), false, false, Reveal::Always), Some(Through::Side), "behind the canopy");
+        assert_eq!(through(&order, pos(Item::Unit(1)), false, false, Reveal::Always), None, "in front of the tree");
         // a block and a unit at equal feet: the block first
         let cell = g.cell_rect(V2::new(3, 3));
         let block = Placed { item: Item::Block(V2::new(3, 3)), foot_y: cell.y + cell.h, x: cell.x, rect: cell };
@@ -993,10 +1029,39 @@ mod tests {
         with_board.extend(two);
         let order = feet_order(&with_board);
         assert_eq!(order.iter().map(|p| p.item).collect::<Vec<_>>(), vec![Item::Unit(0), Item::Unit(1)]);
-        assert_eq!(through(&order, 0, true, false), Some(Through::Selected), "a selected hero north of a unit");
-        assert_eq!(through(&order, 0, false, true), Some(Through::Hovered));
-        assert_eq!(through(&order, 0, false, false), None, "unselected and unhovered behind a unit");
-        assert_eq!(through(&order, 1, true, false), None, "nothing in front of the southern unit");
+        assert_eq!(through(&order, 0, true, false, Reveal::Always), Some(Through::Selected), "a selected hero north of a unit");
+        assert_eq!(through(&order, 0, false, true, Reveal::Always), Some(Through::Hovered));
+        assert_eq!(through(&order, 0, false, false, Reveal::Always), None, "unselected and unhovered behind a unit");
+        assert_eq!(through(&order, 1, true, false, Reveal::Always), None, "nothing in front of the southern unit");
+        // STAGE1-O: by default only the selected unit shows through; Alt held shows every covered unit, units included
+        assert_eq!(through(&order, 0, true, false, Reveal::Selected), Some(Through::Selected), "selected, by default");
+        assert_eq!(through(&order, 0, false, true, Reveal::Selected), None, "hovered alone stays hidden by default");
+        assert_eq!(through(&order, 0, false, false, Reveal::Held), Some(Through::Side), "Alt held: behind a unit");
+        assert_eq!(through(&order, 1, false, false, Reveal::Held), Some(Through::Side), "Alt held: uncovered units are outlined too");
+    }
+
+    /// STAGE1-O: the canopy hides a unit by default and reveals it while Alt is held or with the setting Always; the
+    /// setting's values map to the reveal, Alt winning.
+    #[test]
+    fn units_behind_cover_show_only_when_selected_alt_held_or_always() {
+        let mut art = game_art();
+        let g = stage();
+        let forest = zone("forest_clearing");
+        let n = V2::new(10, 1);
+        let mut items = board_items(&mut art, &forest);
+        items.push(unit_item(0, g.foot(n), body_on(&mut art, &g, "warrior", n)));
+        let order = feet_order(&items);
+        let at = order.iter().position(|p| p.item == Item::Unit(0)).unwrap();
+        assert_eq!(through(&order, at, false, false, Reveal::Selected), None, "behind the canopy, hidden by default");
+        assert_eq!(through(&order, at, true, false, Reveal::Selected), Some(Through::Selected));
+        assert_eq!(through(&order, at, false, false, Reveal::Held), Some(Through::Side));
+        assert_eq!(through(&order, at, false, false, Reveal::Always), Some(Through::Side));
+        assert_eq!(Reveal::of(&Value::from("selected"), false), Reveal::Selected);
+        assert_eq!(Reveal::of(&Value::from("always"), false), Reveal::Always);
+        assert_eq!(Reveal::of(&Value::from("always"), true), Reveal::Held, "Alt wins");
+        assert_eq!(Reveal::of(&Value::Null, false), Reveal::Selected, "missing: the default");
+        assert_eq!(Reveal::of(&crate::screens::default_settings()["see_through"], false), Reveal::Selected, "the default setting");
+        assert_eq!(SEE_THROUGH[0].0, "selected", "the first value is the default");
     }
 
     /// Check 7: an arrow ends `ARROW_END` flat px short of the target's foot point and starts `ARROW_START` from its
