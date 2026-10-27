@@ -175,7 +175,9 @@ pub fn is_area(s: &SkillDef) -> bool {
 }
 
 /// HOOKS1 GH3: an ATTACK with no power and a `hazard` is a placement: it aims at a tile like an area opener, deals no
-/// damage and rolls no status (the AI's attack lists skip it: it deals no damage and counts as an area).
+/// damage and rolls no status (the AI's attack lists skip it: it deals no damage and counts as an area). With the rule
+/// `ground_hazards` off the battle's catalog has no skill hazards (`World::ignore_hazards_when_off`, 4.1), so this is
+/// false there.
 pub fn is_placement(s: &SkillDef) -> bool {
     kind(s) == Kind::Attack && s.power_mult <= 0.0 && s.hazard.is_some() && !is_item(s)
 }

@@ -229,6 +229,10 @@ pub fn direction(w: &World, by: UnitId, origin: V2, at: V2, pull: bool) -> V2 {
 /// distance 1, or once level with the origin on its axis). A unit whose `forced_move` effects make it immune holds firm
 /// (FM5). The entered tiles roll their hazards (FM6); `stop` cancels its Walks that have not landed (FM7); a step
 /// refused with tiles left is a collision (FM4). Logs one line for the move and one per collision hit.
+///
+/// Callers outside a landed hit (the trigger effect `move`, HOOKS1-H; an arena `push`, HOOKS1-E) must afterwards call
+/// `ground::settle` (a trap's `stop_moves` cancels the moved unit's later Walks) and, in a session, `log_ground` (the
+/// hazard hits of the entered tiles get their log cells and metrics); the resolver does both for hits.
 #[allow(clippy::too_many_arguments)]
 pub fn shove_unit(res: &mut Resolver, w: &mut World, t: UnitId, by: Option<UnitId>, dir: V2, tiles: i32, toward: Option<V2>, stop: bool, collide: &Collide, block: i32) -> Moved {
     let from = w.grid.pos(t).unwrap_or(crate::grid::NO_CELL);

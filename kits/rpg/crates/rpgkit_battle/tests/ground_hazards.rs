@@ -3,24 +3,26 @@
 //! ATTACK with no power and a hazard aims at a tile, hits nobody and draws nothing (GH3); the newest hazard replaces
 //! the old and a terrain hazard acts first (GH4); flat damage through guard, not armour, then the status roll; cover is
 //! the larger of terrain and hazard and only for ranged hits; move cost adds (GH5); a trap spares the units it does not
-//! affect, stops the move of one it does on its tile, cancels its later Walks and is gone, also in a forced move (GH6,
-//! FM6); `rounds` N lasts through round placed + N - 1 (GH7); the AI path penalty counts a hazard that would harm the
-//! unit and that its side sees (GH8). The session logs a cell per placement, hit and fade and the metrics balance; with
-//! the rule off (and in classic) nothing is placed, logged or drawn.
+//! affect, stops the move of one it does on its tile, cancels its later Walks and is gone, also in a forced move, a dash
+//! and a carried move (GH6, FM6); guard reduces hazard damage (GH5); `rounds` N lasts through round placed + N - 1
+//! (GH7); the AI path penalty counts a hazard that would harm the unit and that its side sees (GH8). The session logs a
+//! cell per placement, hit and fade and the metrics balance; with the rule off (and in classic) the skills carry no
+//! hazard, a zero-power one is a plain attack, and nothing is placed, logged or drawn (4.1).
 
 use indexmap::IndexMap;
-use rpgkit_battle::command::{self, CmdKind, Command};
-use rpgkit_battle::ground::{self, Event, Place, Placed, Shape};
-use rpgkit_battle::grid::{V2, NO_CELL};
+use rpgkit_battle::command::{self, Carry, CmdKind, Command};
+use rpgkit_battle::ground::{self, Event, Hit, Place, Placed, Shape};
+use rpgkit_battle::grid::{GRID_H, NO_CELL, V2};
 use rpgkit_battle::metrics::BattleMetrics;
 use rpgkit_battle::path::{self, Cells, Hooks};
 use rpgkit_battle::plan::{Plan, PlanStep, Step, AI_HAZARD_PENALTY};
 use rpgkit_battle::resolver::Resolver;
+use rpgkit_battle::round_intent::{self, RoundIntent, RoundTarget};
 use rpgkit_battle::session::{EncounterDef, Phase, Session};
 use rpgkit_battle::skill;
 use rpgkit_battle::world::{UnitId, World};
 use rpgkit_data::{Catalog, ItemDef};
-use rpgkit_rules::ruleset::{Ruleset, FORCED_MOVE, GROUND_HAZARDS, TIMELINE};
+use rpgkit_rules::ruleset::{Ruleset, FORCED_MOVE, GROUND_HAZARDS, ROUND_INTENT, TIMELINE};
 use rpgkit_rules::status;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -39,7 +41,8 @@ const FOE_B: UnitId = 3;
 
 /// Engine skills and the test skills: a tripwire placement (power 0, reach 1-3, 3 rounds), a fire placement, a spit
 /// (a hit that leaves fire on the target's tile), a grease pot (BURST, grease on its own cells for 2 rounds), a smoke
-/// Defend (BURST on itself for 2 rounds), a shove (push 3) and a plain attack. Hazards: smoke (cover 0.3), a hidden
+/// Defend (BURST on itself for 2 rounds), a shove (push 3), a plain attack, a dash attack (reach 1, dash 5) and a
+/// Maneuver lunge (the same with a carried move under `round_intent`). Hazards: smoke (cover 0.3), a hidden
 /// tripwire (15 damage, root 90, stops moves), the same tripwire seen, grease (slow 100, move cost +1), fire (round end:
 /// 8 damage, burn 80). Mud has an enter hazard (poison 100), rubble cover 0.4. A flask leaves smoke around its user.
 fn catalog() -> Catalog {
@@ -62,6 +65,8 @@ fn catalog() -> Catalog {
         attack("g_pot", json!({"area": "BURST", "hazard": {"id": "g_grease", "shape": "SKILL", "at": "target", "rounds": 2}})),
         attack("g_shove", json!({"forced_move": {"kind": "push", "tiles": 3}})),
         attack("g_plain", json!({})),
+        attack("g_dash", json!({"reach_max": 1, "dash_tiles": 5})),
+        attack("g_lunge", json!({"reach_max": 1, "dash_tiles": 5, "round_intent": "maneuver"})),
         json!({"id": "g_fade", "name": "g_fade", "kind": "DEFEND", "level": 1, "blocks": 1, "mitigation": 0.2, "hazard": {"id": "g_smoke", "shape": "BURST", "at": "self", "rounds": 2}}),
     ];
     let unit = |id: &str, side: &str, speed: i32, extra: Value| {
@@ -444,28 +449,133 @@ fn the_session_logs_and_counts_hazards() {
     assert_eq!(m.to_json()["hazards"]["p_hero"]["placed"].as_i64(), Some(2));
 }
 
-/// 4.1, 4.2: with the rule off and in classic the fields are ignored: nothing placed, no hazard line, the same random
-/// draws as the skills without them; the commands still carry the placement.
+/// 4.1, 4.2: with the rule off and in classic the fields are ignored. The battle's catalog drops the skills' hazards
+/// (HOOKS1-GF), so the snare is no placement: it aims at a unit as any zero-power attack does and places nothing. A
+/// command that still carries a hazard (built from the raw catalog) places nothing either: no hazard line, the same
+/// random draws as the skills without them.
 #[test]
 fn off_and_classic_change_nothing() {
+    let raw = catalog();
+    let on = session(rules());
+    assert!(skill::is_placement(&on.w.cat.skills[sid(&on.w, "g_snare")]), "the rule on: a placement");
     for rules in [timeline(&[FORCED_MOVE]), Ruleset::classic()] {
         let s = session(rules.clone());
+        assert!(s.w.cat.skills.iter().all(|k| k.hazard.is_none()), "{}: no skill hazard in the battle's catalog", rules.id);
+        let snare = &s.w.cat.skills[sid(&s.w, "g_snare")];
+        assert!(!skill::is_placement(snare) && !skill::is_area(snare), "{}: the snare is a plain attack", rules.id);
         let mut w = s.w.clone();
+        w.grid.positions[FOE] = Some(v(7, 4));
         let mut res = Resolver::new(BLOCKS, 1);
-        let a = book(&mut res, HERO, at_tile(&w, HERO, "g_snare", v(6, 4)), 1);
-        book(&mut res, HERO, hit(&w, HERO, FOE, "g_spit"), 2);
-        book(&mut res, HERO, command(&w, HERO, PlanStep::self_skill(sid(&w, "g_fade")), "g_fade"), 3);
+        let a = book(&mut res, HERO, hit(&w, HERO, FOE, "g_snare"), 1);
+        let mut spit = hit(&w, HERO, FOE, "g_spit");
+        spit.hazard = Place::of_skill(raw.skill("g_spit").expect("g_spit"));
+        book(&mut res, HERO, spit, 2);
+        let mut fade = command(&w, HERO, PlanStep::self_skill(sid(&w, "g_fade")), "g_fade");
+        fade.hazard = Place::of_skill(raw.skill("g_fade").expect("g_fade"));
+        book(&mut res, HERO, fade, 3);
         run(&mut w, &mut res, 1, 3);
         res.apply_round_end_effects(&mut w);
         let mut plain_w = s.w.clone();
+        plain_w.grid.positions[FOE] = Some(v(7, 4));
         let mut plain = Resolver::new(BLOCKS, 1);
+        book(&mut plain, HERO, hit(&plain_w, HERO, FOE, "g_snare"), 1);
         book(&mut plain, HERO, hit(&plain_w, HERO, FOE, "g_plain"), 2);
         run(&mut plain_w, &mut plain, 1, 3);
         plain.apply_round_end_effects(&mut plain_w);
+        let snared = &res.scheduled[a].command;
+        assert!(matches!(snared.kind, CmdKind::Attack { target: Some(FOE), .. }) && snared.hazard.is_none(), "{}: the snare targets the foe, carries nothing", rules.id);
         assert!(w.grid.ground.is_empty() && w.ground.events.is_empty(), "{}: nothing placed", rules.id);
         assert!(res.log.iter().all(|l| !l.starts_with("[Hazard]") && !l.starts_with("[Place]")), "{}: {:?}", rules.id, res.log);
         assert_eq!(res.rng.randi(), plain.rng.randi(), "{}: no new draw", rules.id);
-        assert_eq!(w.units[FOE].hp, plain_w.units[FOE].hp, "{}: the spit's hit only", rules.id);
-        assert!(res.scheduled[a].command.hazard.is_some(), "carried");
+        assert_eq!(w.units[FOE].hp, plain_w.units[FOE].hp, "{}: the snare's and the spit's hits only", rules.id);
+    }
+}
+
+/// The hazard hits recorded on `u`.
+fn hits_on(w: &World, u: UnitId) -> Vec<&Hit> {
+    w.ground.events.iter().filter_map(|e| if let Event::Hit(h) = e { Some(h) } else { None }).filter(|h| h.unit == u).collect()
+}
+
+/// A hidden tripwire the foe laid on every tile of column x = 6 (any route east from x = 4 crosses it).
+fn trip_column(w: &mut World) -> Vec<V2> {
+    let column: Vec<V2> = (0..GRID_H).map(|y| v(6, y)).collect();
+    lay(w, "g_trip", FOE, &column);
+    column
+}
+
+/// GH6 on a dash (HOOKS1-GF): the hero's dash attack (reach 1, dash 5) on the foe 4 tiles east stops on the first trap
+/// it enters: the trap's 15 flat damage, the trap gone, the rest of the dash dropped (the foe stays out of reach, so
+/// the attack lands nothing) and `stop_moves` cancels the hero's later Walk.
+#[test]
+fn a_trap_stops_a_dash() {
+    let s = session(rules());
+    let mut w = s.w.clone();
+    let column = trip_column(&mut w);
+    let foe_hp = w.units[FOE].hp;
+    let mut res = Resolver::new(BLOCKS, 1);
+    book(&mut res, HERO, hit(&w, HERO, FOE, "g_dash"), 1);
+    let later = book(&mut res, HERO, walk(HERO, &[v(0, 1)]), 3);
+    run(&mut w, &mut res, 1, 1);
+    let at = w.pos(HERO);
+    assert_eq!(at.x, 6, "stopped on the first trap: {at}");
+    assert_eq!(w.units[HERO].hp, HP - 15, "the trap's flat damage");
+    assert!(!w.grid.ground.contains_key(&at) && w.grid.ground.len() == column.len() - 1, "that trap is gone");
+    assert_eq!(w.units[FOE].hp, foe_hp, "the foe out of reach: no hit");
+    let h = hits_on(&w, HERO);
+    assert_eq!((h.len(), h[0].trap, h[0].stopped), (1, true, 1));
+    assert!(res.scheduled[later].cancelled, "stop_moves cancels its later Walk");
+    assert!(res.log.iter().any(|l| l.starts_with("[Dash]") && l.contains("springs the Tripwire")), "{:?}", res.log);
+}
+
+/// GH6 on a carried move (RULESET1_INTENT MV4, HOOKS1-GF): under `round_intent` the hero's Maneuver lunge on the foe
+/// carries its move (an Engage tile in band); the trap across its route stops it there, as a dash: 15 damage, the trap
+/// gone, the planned tile not reached and no hit.
+#[test]
+fn a_trap_stops_a_carried_move() {
+    let s = session(timeline(&[GROUND_HAZARDS, ROUND_INTENT]));
+    let mut w = s.w.clone();
+    round_intent::set_intent(&mut w, HERO, RoundIntent::Maneuver).expect("intent");
+    round_intent::set_target(&mut w, HERO, RoundTarget::Unit(FOE)).expect("target");
+    let cmd = hit(&w, HERO, FOE, "g_lunge");
+    let Carry::Engage(planned) = cmd.carry else { panic!("a carried move: {:?}", cmd.carry) };
+    assert!(planned.x > 6, "the planned tile is past the column: {planned}");
+    let column = trip_column(&mut w);
+    let foe_hp = w.units[FOE].hp;
+    let mut res = Resolver::new(BLOCKS, 1);
+    book(&mut res, HERO, cmd, 1);
+    run(&mut w, &mut res, 1, 1);
+    let at = w.pos(HERO);
+    assert_eq!(at.x, 6, "stopped on the first trap, not at {planned}: {at}");
+    assert_eq!(w.units[HERO].hp, HP - 15);
+    assert!(!w.grid.ground.contains_key(&at) && w.grid.ground.len() == column.len() - 1, "that trap is gone");
+    assert_eq!(w.units[FOE].hp, foe_hp, "the foe out of reach: no hit");
+    assert_eq!(hits_on(&w, HERO).len(), 1);
+}
+
+/// GH5 (HOOKS1-GF): hazard damage goes through guard, not armour (`Combatant.take_damage`: the amount times
+/// (1 - guard), rounded, at least 1). The armoured foe on fire at round end takes the fire's full damage; guarding with
+/// the `guard` Defend through the last block it takes the reduced amount.
+#[test]
+fn guard_reduces_hazard_damage() {
+    let s = session(rules());
+    let mitigation = s.w.cat.skills[sid(&s.w, "guard")].mitigation;
+    let fire = s.w.cat.hazards["g_fire"].damage;
+    let reduced = ((fire as f64 * (1.0 - mitigation)).round() as i32).max(1);
+    assert!(reduced < fire);
+    for (guarded, want) in [(false, fire), (true, reduced)] {
+        let mut w = s.w.clone();
+        let foe_at = w.pos(FOE);
+        lay(&mut w, "g_fire", HERO, &[foe_at]);
+        let mut res = Resolver::new(BLOCKS, 1);
+        res.register(FOE);
+        if guarded {
+            book(&mut res, FOE, command(&w, FOE, PlanStep::self_skill(sid(&w, "guard")), "guard"), BLOCKS - 1);
+        }
+        run(&mut w, &mut res, 1, BLOCKS);
+        assert_eq!(w.units[FOE].guard > 0.0, guarded, "guarding through the last block");
+        res.apply_round_end_effects(&mut w);
+        let h = hits_on(&w, FOE);
+        assert_eq!(h.len(), 1);
+        assert_eq!((h[0].round_end, h[0].damage), (true, want), "guarded {guarded}");
     }
 }

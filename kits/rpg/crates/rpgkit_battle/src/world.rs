@@ -200,6 +200,22 @@ impl World {
         }
     }
 
+    /// HOOKS1 4.1: with the rule `ground_hazards` off a skill's `hazard` is ignored, so the battle's catalog copy drops
+    /// every skill's hazard: a zero-power ATTACK with one is then a plain zero-power attack on a unit, not a placement
+    /// aimed at a tile (GH3), wherever the skill is read (plan, AI, dojo, resolver). Call after `add_item_skills` (item
+    /// skills are covered too). No copy when the rule is on or no skill has a hazard (classic data has none); the skill
+    /// order and ids stay, so skill indices hold.
+    pub fn ignore_hazards_when_off(&mut self) {
+        if crate::ground::on(self) || self.cat.skills.iter().all(|s| s.hazard.is_none()) {
+            return;
+        }
+        let mut cat = (*self.cat).clone();
+        for s in &mut cat.skills {
+            s.hazard = None;
+        }
+        self.cat = Arc::new(cat);
+    }
+
     pub fn u(&self, id: UnitId) -> &Unit {
         &self.units[id]
     }
