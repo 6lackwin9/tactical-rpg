@@ -15,7 +15,7 @@ You are the planner and orchestrator. Agents cannot message each other; everythi
 | --- | --- | --- | --- |
 | plan | planner (desktop main session; cloud: each area thread for its own tasks' rows) | the only writer of `docs/TASKS.md`, `games/emberwake/docs/ROADMAP.md`, `docs/decisions/*`, `docs/HISTORY.md`, README, GAME_BRIEF, STRUCTURE | builder lanes' files |
 | design | `design-brainstorm` | new or updated spec files under `docs/specs/` (and archive moves it is asked for); lists wanted TASKS/ROADMAP/decision rows in its report | TASKS, ROADMAP, decisions, code, data |
-| logic | `logic-builder` | `engine/crates/**` (rules, schema, loader and writer, validation, tests), `games/emberwake/**`, `tools/**` | shipped `games/emberwake/data/**`, `legacy/**`, the recorded Godot reference (`games/emberwake/parity/**`) |
+| logic | `logic-builder` | `engine/crates/**` (rules, schema, loader and writer, validation, tests), `kits/rpg/crates/**` and `kits/rpg/schema.json` (the kit's genre rules), `games/emberwake/**`, `tools/**` | shipped `games/emberwake/data/**`, `legacy/**`, the recorded Godot reference (`games/emberwake/parity/**`) |
 | asset | `asset-builder` | `games/emberwake/data/**` through `aegis content` (upsert, remove, `games/emberwake/data/seeds/<task>.json` with `apply`) | engine code, tests, docs |
 | balance | `balance` | `games/emberwake/docs/BALANCE_REPORT.md`, sims on a clean `main` worktree | everything else |
 | review | `change-reviewer` | read-only | - |
