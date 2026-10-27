@@ -72,7 +72,7 @@ The measurements and fixes below are the Godot build's; they stay as the record.
 
 ### Agent reuse (2026-10-15)
 
-Agent types are reused; instances are fresh per call. Fresh instance for reviews (independence), balance runs and new milestones; resume the same instance (SendMessage) for follow-ups to its own work; do tiny fixes in the main session. A long-lived builder's context grows and every follow-up re-reads it. Since 2026-10-27 (decision "Logic lane scope") the builder takes only large logic work, one slice per run; the planner does small logic inline with the skills.
+Agent types are reused; instances are fresh per call. Fresh instance for reviews (independence), balance runs and new milestones; resume the same instance (SendMessage) for follow-ups to its own work; do tiny fixes in the main session. A long-lived builder's context grows and every follow-up re-reads it. Since 2026-10-27 (decision "Logic lane scope") the builder takes only large logic work, one slice per run; the planner does small logic inline with the skills. A chain of tasks (e.g. HOOKS1 E, K, X, M) gets a fresh builder per task, briefed with the previous builder's hand-off notes; only a small next task on the same files (HOOKS1-X after HOOKS1-K) continues the previous builder (user 2026-10-28: a continued builder re-sends its whole context, e.g. 245k tokens, on every call).
 
 ### Parallel lanes (2026-10-16)
 
