@@ -162,7 +162,8 @@ fn build_full(d: &Data, state: &UnitState, auto_spend: bool, deck: Option<&rpgki
     if !state.validate(d).is_empty() {
         return None;
     }
-    let cat = &d.cat;
+    // HOOKS1 CN3: the member's world may replace its class path (the base catalog when it does not)
+    let cat = d.cat_in(&state.path_world(d));
     let mut work = state.clone();
     if auto_spend {
         auto_for(d, &mut work);

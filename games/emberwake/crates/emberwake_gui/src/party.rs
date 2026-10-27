@@ -336,11 +336,11 @@ impl Character {
         self.skills_loaded = true;
     }
 
-    /// The member's class path families (class slots take only these, SKILLUI1 Q3 A).
+    /// The member's class path families (class slots take only these, SKILLUI1 Q3 A); its world's path (HOOKS1 CN3).
     fn path_families(&self, cx: &Cx) -> Vec<String> {
         let d = &cx.data;
         let m = self.m(cx);
-        d.cat.classes.get(&m.class_id(d)).map(|a| emberwake_rules::unit::families_of(&d.cat, &a.path_steps().into_iter().map(|(_, s)| s).collect::<Vec<_>>())).unwrap_or_default()
+        d.cat_in(&m.path_world(d)).classes.get(&m.class_id(d)).map(|a| emberwake_rules::unit::families_of(&d.cat, &a.path_steps().into_iter().map(|(_, s)| s).collect::<Vec<_>>())).unwrap_or_default()
     }
 
     /// The highest rank of `family` the member has unlocked (with confirmed gear): what a newly slotted skill stores.
@@ -1290,7 +1290,7 @@ impl Character {
         let now = sheet(d, &ruleset, &work);
         let then = preview.as_ref().map(|p| sheet(d, &ruleset, p));
         let (lx, lw) = (25, 210);
-        ui.p.text(lx as f32 + 3.0, 102.0, &format!("{}  Lv {}", d.cat.classes.get(&work.class_id(d)).map(|c| c.name.clone()).unwrap_or_default(), work.level(d)), head, INFO);
+        ui.p.text(lx as f32 + 3.0, 102.0, &format!("{}  Lv {}", d.class_name(&cx.gs().world_id, &work.class_id(d)), work.level(d)), head, INFO);
         // DERIVE1 4.4: catalog rows past the built-in ones close the 12 px step up (the last row starts at 260 at most)
         let step = 12f32.min(102.0 / (now.len().saturating_sub(STATS.len()).max(2) - 1) as f32);
         for (i, r) in now.iter().enumerate() {

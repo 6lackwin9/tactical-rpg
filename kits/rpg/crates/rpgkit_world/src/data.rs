@@ -36,6 +36,9 @@ pub struct Data {
     pub quest_templates: Vec<Dict>,
     pub services: Vec<Dict>,
     pub xp: XpCurve,
+    /// HOOKS1 CN3: per world whose `classes` overlay replaces a class path, the catalog with those paths (built at load;
+    /// other worlds build with `cat`).
+    world_cats: IndexMap<String, Arc<Catalog>>,
 }
 
 fn read(path: &Path) -> Result<Value> {
@@ -113,14 +116,72 @@ impl Data {
             level_delta_min: json::f(kill, "level_delta_min", 0.25),
             level_delta_max: json::f(kill, "level_delta_max", 2.0),
         };
-        Self {
+        let mut d = Self {
             cat: Arc::new(Catalog::from_value(catalog)),
             catalogs,
             maps: dicts(json::get(g, "maps")),
             quest_templates: dicts(json::get(g, "quests")),
             services: dicts(json::get(g, "services")),
             xp,
+            world_cats: IndexMap::new(),
+        };
+        d.world_cats = d.world_ids().into_iter().filter_map(|w| d.overlay_catalog(&w).map(|c| (w, Arc::new(c)))).collect();
+        d
+    }
+
+    // ---- Class names per world (HOOKS1 12) -------------------------------------------------------------------------
+
+    /// CN1: the `classes` overlay entry of `class_id` seen from world `w`: the nearest manifest in the lineage whose
+    /// `classes` has that key wins ({} when none does).
+    pub fn class_overlay(&self, w: &str, class_id: &str) -> &Dict {
+        self.lineage(w).iter().rev().find_map(|lw| json::get(self.manifest(lw), "classes").as_object().and_then(|o| o.get(class_id))).map_or(empty(), json::dict)
+    }
+
+    /// CN2: the class's display name in world `w`: the overlay's non-empty `name`, else the class row's, else its id.
+    pub fn class_name(&self, w: &str, class_id: &str) -> String {
+        let name = json::s(self.class_overlay(w, class_id), "name");
+        if !name.trim().is_empty() {
+            return name;
         }
+        json::s_or(self.entry("classes", class_id), "name", class_id)
+    }
+
+    /// CN2: the class's description in world `w`: the overlay's when it has one, else the class row's.
+    pub fn class_description(&self, w: &str, class_id: &str) -> String {
+        let o = self.class_overlay(w, class_id);
+        match o.get("description") {
+            Some(v) if v.is_string() => json::gstr(v),
+            _ => json::s(self.entry("classes", class_id), "description"),
+        }
+    }
+
+    /// CN3: the catalog units of world `w` are built from: each class whose overlay carries a `skill_path` object
+    /// (`{}` = no path) gets that path; `cat` itself when the world's overlay replaces no path.
+    pub fn cat_in(&self, w: &str) -> &Arc<Catalog> {
+        self.world_cats.get(w).unwrap_or(&self.cat)
+    }
+
+    /// The catalog with world `w`'s overlay paths, None when it replaces none (`cat_in`).
+    fn overlay_catalog(&self, w: &str) -> Option<Catalog> {
+        let paths: Vec<(String, IndexMap<String, i32>)> = self
+            .cat
+            .classes
+            .keys()
+            .filter_map(|id| {
+                let path = json::get(self.class_overlay(w, id), "skill_path").as_object()?;
+                Some((id.clone(), path.iter().map(|(fam, lvl)| (fam.clone(), json::to_int(lvl) as i32)).collect()))
+            })
+            .collect();
+        if paths.is_empty() {
+            return None;
+        }
+        let mut cat = (*self.cat).clone();
+        for (id, path) in paths {
+            if let Some(c) = cat.classes.get_mut(&id) {
+                c.skill_path = path;
+            }
+        }
+        Some(cat)
     }
 
     pub fn item_name(&self, id: &str) -> String {
