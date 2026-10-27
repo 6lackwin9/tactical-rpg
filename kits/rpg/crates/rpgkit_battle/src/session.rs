@@ -490,6 +490,12 @@ impl Session {
         self.events.extend(rest);
         // RULESET1 P3: every poise bar refills before planning (rule poise)
         crate::poise::round_start(&mut self.w);
+        // HOOKS1 8.1: `round_start` triggers after the refill (rule triggers; nothing in classic)
+        crate::trigger::round_start(&mut self.resolver, &mut self.w);
+        if crate::trigger::on(&self.w) {
+            self.log_triggers(round, 1);
+            self.log_ground(round, 1);
+        }
         self.current_round = round;
         self.current_block = 1;
         self.phase = Phase::Planning;
@@ -1036,6 +1042,7 @@ impl Session {
                     self.append(e);
                 }
             }
+            self.log_triggers(round, block);
             self.log_ground(round, block);
             self.log_spared(round, block);
         }
@@ -1082,6 +1089,8 @@ impl Session {
             if !a.command.pushes.is_empty() {
                 self.feed(|m, s| m.on_forced(s, idx));
             }
+            // HOOKS1 8.1: the triggers the action fired (rule triggers; none in classic)
+            self.log_triggers(round, block);
             self.log_ground(round, block);
             self.log_spared(round, block);
         }
@@ -1091,6 +1100,7 @@ impl Session {
             let end_of_round = self.current_block >= self.def.total_blocks;
             if end_of_round {
                 self.resolver.apply_round_end_effects(&mut self.w);
+                self.log_triggers(self.current_round, block);
                 self.log_ground(self.current_round, block);
             }
             self.on_block_end();
@@ -1115,6 +1125,26 @@ impl Session {
                 return;
             }
             self.current_block += 1;
+        }
+    }
+
+    /// HOOKS1 8.1: a cell per trigger effect since the last call (rule triggers, none in classic); a trigger's forced move
+    /// gets its move and collision cells (FM9), and the HP rows its damage held back reach the metrics with its cells.
+    /// The caller logs the ground next (HOOKS1-GF: a moved unit's hazard hits).
+    fn log_triggers(&mut self, round: i32, block: i32) {
+        for f in self.resolver.triggers.take() {
+            if let Some(j) = self.w.hp_journal.as_mut() {
+                j.extend(f.journal.iter().copied());
+            }
+            for l in &f.lines {
+                self.append(crate::log::trigger_entry(&self.w, &f, l, round, block));
+            }
+            for m in &f.moves {
+                self.append(crate::log::forced_entry(&self.w, m, &f.source, round, block));
+                for h in &m.hits {
+                    self.append(crate::log::collision_entry(&self.w, m, h, &f.source, round, block));
+                }
+            }
         }
     }
 

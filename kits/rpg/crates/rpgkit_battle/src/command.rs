@@ -160,6 +160,17 @@ pub struct Command {
     pub pushes: Vec<crate::forced::Moved>,
     /// HOOKS1 GH2: the skill's or item's ground hazard (read only under the rule `ground_hazards`; see `ground`).
     pub hazard: Option<crate::ground::Place>,
+    /// HOOKS1 8.2: the skill's family (a trigger's `skills` condition reads it).
+    pub family: String,
+    /// HOOKS1 8.1: the skill's own triggers, held while the command runs (read only under the rule `triggers`).
+    pub triggers: Vec<rpgkit_data::TriggerRow>,
+    /// HOOKS1 8.1: the damaging hits of the last execution, a redirected part included (rule `triggers` reads them).
+    pub struck: Vec<crate::trigger::Struck>,
+    /// HOOKS1 8.1 `evaded`: the locked target the last execution did not find (GD5).
+    pub evaded: Option<UnitId>,
+    /// HOOKS1 8.4: the `ally_hit` triggers the hits consult (set by the resolver before the action lands; rule
+    /// `triggers` only).
+    pub ally: Option<crate::trigger::AllyWatch>,
 }
 
 impl Command {
@@ -196,6 +207,11 @@ impl Command {
             forced: None,
             pushes: Vec::new(),
             hazard: None,
+            family: String::new(),
+            triggers: Vec::new(),
+            struck: Vec::new(),
+            evaded: None,
+            ally: None,
         }
     }
 
@@ -275,6 +291,8 @@ impl Command {
         self.hits.clear();
         self.staggers.clear();
         self.pushes.clear();
+        self.struck.clear();
+        self.evaded = None;
         self.failed = false;
         let src = self.source;
         let src_name = w.units[src].name.clone();
@@ -294,6 +312,7 @@ impl Command {
                 // RULESET1_INTENT GD5: a stealthed unit that moved this round is not found (AP stays spent)
                 if round_intent::hidden(w, t) {
                     self.failed = true;
+                    self.evaded = Some(t);
                     self.log = format!("[Lost] {src_name} loses {}", w.units[t].name);
                     return;
                 }
@@ -310,14 +329,18 @@ impl Command {
                 let matched = if damaging { skill::exploit_match_when(&self.exploit, &w.units[t], &[], flank) } else { (String::new(), 1.0) };
                 let mut taken = 0;
                 let mut crit = false;
+                let mut t = t;
                 if damaging {
                     let ranged = w.units[src].attack_range > 1 && !use_offhand;
                     let cover = cover_between(w, src, t, ranged);
-                    let hit = roll_hit_with(w, rng, src, t, ranged, use_offhand, skill_mult * matched.1 * flank_power(w, flank), cover, self.pierces(w));
-                    taken = w.damage(t, hit.final_dmg, true);
+                    // HOOKS1 8.4: an intercept moves the whole hit to the friend that took it (rule triggers)
+                    let (on, hit, dealt) = self.land(w, rng, src, t, ranged, use_offhand, skill_mult * matched.1 * flank_power(w, flank), cover, &[]);
+                    t = on;
+                    taken = dealt;
                     crit = hit.is_crit;
                     self.set_attack_result(taken, crit, Some(t));
                     self.hits.push((t, flank));
+                    self.struck.push(crate::trigger::Struck { target: t, damage: taken, ranged });
                 }
                 let mut detail = String::new();
                 if !self.status_effect.is_empty() && w.units[t].is_alive() {
@@ -349,6 +372,8 @@ impl Command {
                     return;
                 }
                 let mut parts = Vec::new();
+                // HOOKS1 8.4: a unit the area also strikes takes no redirect (rule triggers)
+                let inside: Vec<UnitId> = if self.ally.is_some() { cells.iter().filter_map(|c| w.occupant(*c)).collect() } else { Vec::new() };
                 for cell in cells {
                     let Some(v) = w.occupant(cell) else { continue };
                     if v == src || skill_mult <= 0.0 {
@@ -358,9 +383,9 @@ impl Command {
                     let cover = cover_for(&w.grid, w.pos(src), cell, ranged);
                     let flank = round_intent::flank_bonus(w, src, v);
                     let matched = skill::exploit_match_when(&self.exploit, &w.units[v], &[], flank);
-                    let hit = roll_hit_with(w, rng, src, v, ranged, false, skill_mult * matched.1 * flank_power(w, flank), cover, self.pierces(w));
-                    let taken = w.damage(v, hit.final_dmg, true);
+                    let (v, hit, taken) = self.land(w, rng, src, v, ranged, false, skill_mult * matched.1 * flank_power(w, flank), cover, &inside);
                     self.hits.push((v, flank));
+                    self.struck.push(crate::trigger::Struck { target: v, damage: taken, ranged });
                     total += taken;
                     hits += 1;
                     if hit.is_crit {
@@ -594,6 +619,58 @@ impl Command {
         }
     }
 
+    /// HOOKS1 4.3 steps 1-2: one damaging hit of this attack meant for `f`. The `ally_hit` triggers (rule triggers) may
+    /// move part of it or all of it to a friend (8.4: the same crit roll and factors, each through its own armour and
+    /// guard; the holder never drops below 1 HP, the rest goes back to `f`). Without a watch it is today's hit: one crit
+    /// draw, then the damage. Returns the unit the hit lands on (`f`, or the holder of an intercept), the hit and the
+    /// damage dealt to that unit.
+    #[allow(clippy::too_many_arguments)]
+    fn land(&mut self, w: &mut World, rng: &mut GodotRng, src: UnitId, f: UnitId, ranged: bool, offhand: bool, mult: f64, cover: f64, skip: &[UnitId]) -> (UnitId, Hit, i32) {
+        let pierce = self.pierces(w);
+        let claim = match self.ally.as_mut() {
+            Some(watch) => crate::trigger::ally_hit(w, watch, src, f, ranged, &self.family, skip),
+            None => None,
+        };
+        let Some(r) = claim else {
+            let hit = roll_hit_with(w, rng, src, f, ranged, offhand, mult, cover, pierce);
+            let taken = w.damage(f, hit.final_dmg, true);
+            return (f, hit, taken);
+        };
+        let input = HitInput { ranged, offhand, skill_mult: mult, crit_roll: Some(rng.randf()), cover, ignore_armor: pierce, ..HitInput::default() };
+        let own = damage::compute(&w.units[src], &w.units[f], input);
+        let h = r.holder;
+        let theirs = damage::compute(&w.units[src], &w.units[h], input);
+        let whole = r.pct >= 100;
+        let h_part = if whole { theirs.final_dmg } else { crate::trigger::part(theirs.final_dmg, r.pct) };
+        let h_take = h_part.min((w.units[h].hp - 1).max(0));
+        let back = h_part - h_take;
+        let h_dealt = if h_take > 0 { w.damage(h, h_take, true) } else { 0 };
+        let (hname, fname) = (w.units[h].name.clone(), w.units[f].name.clone());
+        let mut note = if whole { format!("{hname} takes the hit meant for {fname}: {h_dealt} damage") } else { format!("{hname} takes {}% of the hit meant for {fname}: {h_dealt} damage", r.pct) };
+        if whole {
+            if back > 0 {
+                let b = w.damage(f, back, true);
+                self.struck.push(crate::trigger::Struck { target: f, damage: b, ranged });
+                note += &format!("; {b} goes back to {fname}");
+            }
+            if let Some(watch) = self.ally.as_mut() {
+                watch.note(&r, note);
+            }
+            return (h, theirs, h_dealt);
+        }
+        if back > 0 {
+            note += &format!("; {back} more goes back to {fname}");
+        }
+        if let Some(watch) = self.ally.as_mut() {
+            watch.note(&r, note);
+        }
+        if h_dealt > 0 {
+            self.struck.push(crate::trigger::Struck { target: h, damage: h_dealt, ranged });
+        }
+        let dealt = w.damage(f, crate::trigger::part(own.final_dmg, 100 - r.pct) + back, true);
+        (f, own, dealt)
+    }
+
     fn set_attack_result(&mut self, dmg: i32, crit: bool, tgt: Option<UnitId>) {
         if let CmdKind::Attack { last_damage, last_crit, last_target, .. } = &mut self.kind {
             *last_damage = dmg;
@@ -645,6 +722,7 @@ impl Command {
         self.impact = crate::poise::Impact::default();
         self.forced = None;
         self.hazard = None;
+        self.triggers.clear();
     }
 
     /// After one damaging hit: stance break (Offensive / Defensive target to Tactical), then exploit consume.

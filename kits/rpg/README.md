@@ -51,6 +51,7 @@ To check a regeneration, write it into an empty folder (`--root DIR`) and compar
 
 HOOKS1-S: the combat hook schema (9 rule ids; skill, item, passive, unit, encounter and manifest fields; kinds `hazards`, `unit_meters`, `zones`). Behaviour lands per hook.
 HOOKS1-Z: zones as data: the 8 code zones plus `zones` rows (encounter and road-fight `zone` options, `Grid::apply_board(zone, rows, &cat.zones)`, `grid::data_zone`, `art::zone_backdrop`).
+HOOKS1-E: events and triggers (rule `triggers`): passive, item and running-skill triggers on 15 events with `when` conditions and `limit`, 12 effects (`meter` waits for HOOKS1-M), held guard, redirect and intercept (one per hit, the running skill first, the holder kept at 1 HP); `[Trigger]` log lines.
 
 HOOKS1-F: forced movement (rule `forced_move`): push and pull after stagger, collisions with no random draw, the wall-slam break of a windup, immunity and bonus tiles from passives and gear.
 

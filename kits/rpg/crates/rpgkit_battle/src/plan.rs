@@ -276,6 +276,9 @@ impl PlanEntry {
         cmd.impact = crate::poise::Impact::of(s);
         // HOOKS1 FM1: the push or pull of each unit the hit damages (the rule forced_move reads it)
         cmd.forced = crate::forced::Shove::of(s);
+        // HOOKS1 8.1, 8.2: the skill's own triggers and its family (the rule triggers reads them)
+        cmd.family = s.family_id().to_string();
+        cmd.triggers = if self.item.is_some() { Vec::new() } else { s.triggers.clone() };
         // HOOKS1 GH2: the hazard the skill or item leaves (the rule ground_hazards reads it)
         cmd.hazard = match &self.item {
             Some(item) => crate::ground::Place::of_item(item),

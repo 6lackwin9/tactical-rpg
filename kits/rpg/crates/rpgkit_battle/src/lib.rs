@@ -21,4 +21,5 @@ pub mod round_intent_plan;
 pub mod session;
 pub mod sim;
 pub mod skill;
+pub mod trigger;
 pub mod world;

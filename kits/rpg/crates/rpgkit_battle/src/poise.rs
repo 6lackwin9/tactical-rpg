@@ -166,7 +166,8 @@ pub fn factors(w: &World, sched: &[ScheduledAction], t: UnitId, block: i32, bloc
     let pick = |on: bool, mult: f64| if on { mult } else { 1.0 };
     Factors {
         windup: pick(in_windup(sched, t, block), n.stagger_windup_mult),
-        guard: pick(guarded(sched, t, block), n.stagger_guard_mult),
+        // HOOKS1 8.3: a held guard counts as guarding (rule triggers; none in classic)
+        guard: pick(crate::trigger::guarding(w, sched, t, block), n.stagger_guard_mult),
         repeat: pick(w.poise.get(&t).is_some_and(|s| s.broken_last), n.stagger_repeat_mult),
         flank: pick(flank, n.flank_stagger_mult),
         passive: w.units[t].stagger_taken.iter().filter(|e| e.matches(blocks)).map(|e| e.mult).product(),
@@ -367,6 +368,8 @@ pub fn break_unit(res: &mut Resolver, w: &mut World, t: UnitId, block: i32, caus
         a.command.poise_bonus = 0;
     }
     w.units[t].guard = 0.0;
+    // HOOKS1 8.3: a break ends a held guard (rule triggers; none in classic)
+    w.units[t].held_guard = None;
     let b = Break { cause, skill: named.map(|(_, n)| n).unwrap_or_default() };
     res.log.push(break_line(w, t, &b));
     b

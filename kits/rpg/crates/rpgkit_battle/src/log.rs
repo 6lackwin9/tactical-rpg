@@ -288,6 +288,20 @@ pub fn from_action(w: &World, a: &ScheduledAction, round: i32, block: i32) -> En
     e
 }
 
+/// HOOKS1 8.1: the subtype of a trigger effect's cell.
+pub const TRIGGER: &str = "Trigger";
+
+/// HOOKS1 8.1 (engine-only): the EVENT cell of one trigger effect: the holder, the trigger's source (skill, passive or
+/// item), the event as the status, the other unit as the target, the effect's line.
+pub fn trigger_entry(w: &World, f: &crate::trigger::Fired, line: &str, round: i32, block: i32) -> Entry {
+    let mut e = Entry::event(round, block, &w.units[f.holder].name, w.allies.contains(&f.holder), &f.source, TRIGGER, "TRIGGERED", trim(line, "[Trigger] "), &f.on);
+    if let Some(o) = f.other {
+        e.target = w.units[o].name.clone();
+        e.target_is_ally = w.allies.contains(&o);
+    }
+    e
+}
+
 /// RULESET1 P9 (engine-only): the EVENT cell of a break: the broken unit, the action it lost, the cause.
 pub fn break_entry(w: &World, t: usize, b: &crate::poise::Break, round: i32, block: i32) -> Entry {
     let line = crate::poise::break_line(w, t, b);

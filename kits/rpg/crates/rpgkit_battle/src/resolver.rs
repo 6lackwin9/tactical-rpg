@@ -62,11 +62,13 @@ pub struct Resolver {
     /// The last apply_round_end_effects call's steps, and how many calls there were (a new call = new steps).
     pub round_end_steps: Vec<RoundEndStep>,
     pub round_end_calls: u32,
+    /// HOOKS1 8.1-8.4: the events and triggers state (rule `triggers`; untouched in classic).
+    pub triggers: crate::trigger::State,
 }
 
 impl Resolver {
     pub fn new(total_blocks: i32, seed: i64) -> Self {
-        Self { scheduled: Vec::new(), registered: Vec::new(), current_round: 1, total_blocks, rng: GodotRng::from_i64(seed), log: Vec::new(), combos: Vec::new(), notes: Vec::new(), round_end_steps: Vec::new(), round_end_calls: 0 }
+        Self { scheduled: Vec::new(), registered: Vec::new(), current_round: 1, total_blocks, rng: GodotRng::from_i64(seed), log: Vec::new(), combos: Vec::new(), notes: Vec::new(), round_end_steps: Vec::new(), round_end_calls: 0, triggers: Default::default() }
     }
 
     pub fn register(&mut self, u: UnitId) {
@@ -109,6 +111,8 @@ impl Resolver {
                 }
             }
         }
+        // HOOKS1 8.3, 8.1: held guards, then the Defends' `guard_start` triggers (rule triggers; nothing in classic)
+        crate::trigger::on_block_start(self, w, block);
         let mut resolving: Vec<usize> = (0..self.scheduled.len()).filter(|&i| !self.scheduled[i].cancelled && self.scheduled[i].impact == block).collect();
         let inits: Vec<i32> = (0..self.scheduled.len()).map(|i| self.scheduled[i].command.initiative(w)).collect();
         godot_sort(&mut resolving, |a, b| inits[*a] > inits[*b]);
@@ -168,6 +172,8 @@ impl Resolver {
             self.scheduled[idx].cancelled = true;
             return;
         }
+        // HOOKS1 8.4: the `ally_hit` triggers the hits consult, and what the action's events compare with (rule triggers)
+        let before = crate::trigger::before_action(self, w, idx);
         self.scheduled[idx].command.execute(w, &mut self.rng);
         // RULESET1_INTENT MV8: a carried retreat follows the hit (nothing in classic)
         self.scheduled[idx].command.after_impact(w, &mut self.rng);
@@ -187,6 +193,12 @@ impl Resolver {
         crate::ground::after_impact(self, w, idx);
         crate::ground::settle(self, w);
         self.apply_combo(w, idx);
+        // HOOKS1 4.3 step 9, 8.1: the action's events after its combo pass, then the Walks a trap on a trigger's move
+        // cancels (rule triggers; nothing in classic)
+        if let Some(b) = before {
+            crate::trigger::after_action(self, w, idx, &b);
+            crate::ground::settle(self, w);
+        }
         let inactive: Vec<UnitId> = self.registered.iter().copied().filter(|c| !w.units[*c].is_active()).collect();
         for c in inactive {
             for a in self.scheduled.iter_mut() {
@@ -232,6 +244,7 @@ impl Resolver {
     pub fn apply_round_end_effects(&mut self, w: &mut World) {
         self.round_end_steps.clear();
         self.round_end_calls += 1;
+        crate::trigger::before_round_end(self, w);
         for &c in &self.registered.clone() {
             for st in ["bleed", "poison", "burn"] {
                 let u = &w.units[c];
@@ -266,6 +279,9 @@ impl Resolver {
         self.log.extend(lines);
         // HOOKS1 GH5, GH7: the ground hazards after the terrain's, then the expired ones fade (none in classic)
         crate::ground::round_end(self, w);
+        // HOOKS1 8.1, 8.3: `hp_below` and `round_end` after the ticks; held guards end (rule triggers; none in classic)
+        crate::trigger::round_end(self, w);
+        crate::ground::settle(self, w);
     }
 
     /// _record_round_end: the step row with the status's recorded source.

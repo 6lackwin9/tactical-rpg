@@ -59,6 +59,24 @@ impl ForcedTraits {
     }
 }
 
+/// HOOKS1 8.1 (rule `triggers`; engine-only): one trigger a unit holds from a passive or a worn item: where it comes
+/// from (`passive:<id>` or `gear:<item id>`, the battle names it from the catalog), its key for the `limit` counts
+/// (unique on the unit) and its row. Read only under the rule.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HeldTrigger {
+    pub source: String,
+    pub key: String,
+    pub row: rpgkit_data::TriggerRow,
+}
+
+/// HOOKS1 8.3 (rule `triggers`): a held guard set by a trigger's `guard` effect: its mitigation and the last block of
+/// the round it lasts through (a break, `end_guard` and the round's end end it).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HeldGuard {
+    pub mitigation: f64,
+    pub last_block: i32,
+}
+
 /// RULESET1 9 D1-D4 (rule `deck`; engine-only, no Godot original): the deck terms a unit is built and fights under:
 /// the ruleset's `basics` (skill families open to every unit, no slot, never removed; every other basic is closed) and
 /// its `deck_slots`. Classic never makes one, so a classic unit keeps today's loadout, basics and passives.
@@ -172,6 +190,14 @@ pub struct Unit {
     /// the rule forced_move (`forced_traits`).
     pub passive_forced: ForcedTraits,
     pub gear_forced: ForcedTraits,
+    /// HOOKS1 8.1: the passives' `trigger` effects in apply order, and the worn items' (rebuilt on every gear sync); read
+    /// only under the rule triggers (`held_triggers`).
+    pub passive_triggers: Vec<HeldTrigger>,
+    pub gear_triggers: Vec<HeldTrigger>,
+    /// HOOKS1 8.3: the held guard a trigger set this round (None in classic and without the rule).
+    pub held_guard: Option<HeldGuard>,
+    /// HOOKS1 8.2: crit chance points the trigger effect `crit` added for the battle (0 in classic).
+    pub trigger_crit: f64,
     /// Passive ids applied (Passives.apply: each once).
     pub passives: Vec<String>,
     /// Combat state (empty for a freshly built unit).
@@ -244,6 +270,10 @@ impl Unit {
             stagger_taken: Vec::new(),
             passive_forced: ForcedTraits::default(),
             gear_forced: ForcedTraits::default(),
+            passive_triggers: Vec::new(),
+            gear_triggers: Vec::new(),
+            held_guard: None,
+            trigger_crit: 0.0,
             passives: Vec::new(),
             st: StatusState::default(),
             is_withdrawn: false,
@@ -283,6 +313,12 @@ impl Unit {
     /// rule forced_move).
     pub fn forced_traits(&self) -> ForcedTraits {
         self.passive_forced.with(self.gear_forced)
+    }
+
+    /// HOOKS1 8.1: the triggers the unit holds, passives first then worn items, each in apply order (a battle reads them
+    /// only under the rule triggers).
+    pub fn held_triggers(&self) -> impl Iterator<Item = &HeldTrigger> {
+        self.passive_triggers.iter().chain(&self.gear_triggers)
     }
 
     pub fn has_status(&self, s: &str) -> bool {
@@ -359,6 +395,7 @@ impl Unit {
         self.gear_status_potency = 0;
         self.gear_spell_reach = 0;
         self.gear_forced = ForcedTraits::default();
+        self.gear_triggers.clear();
         let item_fx: Vec<(String, Vec<Value>)> = self.inventory.gear().map(|e| (format!("gear:{}", e.id()), e.item.effects.clone())).collect();
         for (src, fx) in item_fx {
             self.apply_effects(cat, &fx, &src, true);
@@ -470,6 +507,14 @@ impl Unit {
                     } else {
                         self.passive_forced.add(e);
                     }
+                }
+                // HOOKS1 8.1: passives and worn items (the gear list is cleared on every sync); a tier effect counts as
+                // its item's
+                "trigger" => {
+                    let from = if gear { format!("gear:{}", source.trim_start_matches("gear:").split(':').next().unwrap_or("")) } else { source.to_string() };
+                    let list = if gear { &mut self.gear_triggers } else { &mut self.passive_triggers };
+                    let key = format!("{source}#{}", list.len());
+                    list.push(HeldTrigger { source: from, key, row: rpgkit_data::TriggerRow::from_obj(e) });
                 }
                 _ => {}
             }
