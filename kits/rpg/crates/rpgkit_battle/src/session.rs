@@ -376,7 +376,7 @@ impl Session {
         }
         let count = built.len();
         let mut grid = Grid::new(def.open, def.exits.clone(), TerrainTable::from_catalog(&cat), count);
-        grid.apply_board(&def.zone, &def.rows);
+        grid.apply_board(&def.zone, &def.rows, &cat.zones);
         // ENCOUNTER2 S1, H2: the unkillable enemy-side units and the gate of a hold escape (none in classic)
         let unkillable: Vec<UnitId> = value::strings(&def.raw, "unkillable").iter().flat_map(|r| units_by_ref.get(r).cloned().unwrap_or_default()).filter(|&c| c >= n_allies).collect();
         let stay = StayBehind::read(&def.raw);

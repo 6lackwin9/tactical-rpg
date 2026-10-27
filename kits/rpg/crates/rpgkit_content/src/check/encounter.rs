@@ -621,7 +621,7 @@ pub fn objective_problems(v: &View, e: &Dict, guest_ok: &dyn Fn(&str) -> bool) -
             match json::get(e, "objective_tiles") {
                 Value::Array(tiles) => {
                     let mut grid = Grid::new(false, Vec::new(), TerrainTable::from_catalog(&v.typed), 0);
-                    grid.apply_board(&json::s(e, "zone"), &strings(json::get(e, "rows")));
+                    grid.apply_board(&json::s(e, "zone"), &strings(json::get(e, "rows")), &v.typed.zones);
                     let tile_ok = |c: V2| {
                         if !on_grid(c) || !terrain_walkable(grid.terrain_id(c)) {
                             return false;
@@ -774,7 +774,7 @@ pub fn stay_behind_problems(v: &View, e: &Dict, world: bool) -> Vec<String> {
             let arena_open = json::s_or(e, "arena", "CLOSED") == "OPEN";
             let exits: Vec<V2> = json::arr(json::get(e, "exits")).iter().map(json::arr).filter(|p| p.len() == 2).map(cell_of).collect();
             let mut grid = Grid::new(false, Vec::new(), TerrainTable::from_catalog(&v.typed), 0);
-            grid.apply_board(&json::s(e, "zone"), &strings(json::get(e, "rows")));
+            grid.apply_board(&json::s(e, "zone"), &strings(json::get(e, "rows")), &v.typed.zones);
             for raw in tiles {
                 let pair = json::arr(raw);
                 let cell = (pair.len() == 2).then(|| cell_of(pair));

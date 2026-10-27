@@ -6,7 +6,7 @@
 //! (`face_sidecars`).
 
 use aegis_core::json::{self, Dict};
-use rpgkit_data::ItemDef;
+use rpgkit_data::{ItemDef, ZoneDef};
 use rpgkit_rules::gear::{Inventory, Slot};
 
 /// A body key's class and variant (`<class>` = `<class>/base`).
@@ -317,6 +317,15 @@ pub fn battle_prop_dirs(art: &str) -> Vec<String> {
 /// STAGE1 4.4: a battle zone's backdrop over the board's far edge (384 x 52).
 pub fn battle_backdrop(zone: &str) -> String {
     format!("backgrounds/battle/{zone}.png")
+}
+
+/// HOOKS1 ZN1, ZN3: the backdrop key of battle zone `zone` whose data zone row is `row` (kind `zones`; None for a code
+/// zone): the row's `backdrop` asset key, else `battle_backdrop(zone)`.
+pub fn zone_backdrop(zone: &str, row: Option<&ZoneDef>) -> String {
+    match row.filter(|z| !z.backdrop.is_empty()) {
+        Some(z) => z.backdrop.clone(),
+        None => battle_backdrop(zone),
+    }
 }
 
 pub fn world_map_background(world: &str) -> String {

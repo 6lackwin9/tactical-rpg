@@ -128,7 +128,8 @@ const KINDS_AFTER_GODOT: [(&str, &str); 12] = [
 /// the item icon rows. PHASEFOLD: the phases rows (the arrival trigger). PORTRAITFX1-S: the dialogue nodes row (a node's
 /// `expression`). HOOKS1-S: a skill's `exploit` (the execute entry), the item and passive `effects` (the hook effect
 /// types) and a unit's `target_pref` (SOFTEST, TOUGHEST); the phases rows (the deck effect, ai tactics) are listed already.
-const HELP_CHANGED: [(&str, &str, &str); 14] = [
+/// HOOKS1-Z: a route's road fight `zone` (a code zone or a `zones` row).
+const HELP_CHANGED: [(&str, &str, &str); 15] = [
     ("content", "encounters", "purse"),
     ("world", "encounters", "purse"),
     ("content", "classes", "art"),
@@ -143,6 +144,7 @@ const HELP_CHANGED: [(&str, &str, &str); 14] = [
     ("content", "items", "effects"),
     ("content", "passives", "effects"),
     ("content", "units", "target_pref"),
+    ("world", "routes", "zone"),
 ];
 
 /// Retired parity (PHASEFOLD, HISTORY 2026-10-22): the single reinforcement wave became an arrival phase. Godot's

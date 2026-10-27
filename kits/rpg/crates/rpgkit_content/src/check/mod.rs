@@ -105,6 +105,18 @@ pub fn enum_checked(f: &Dict) -> bool {
     !matches!(json::s(f, "options_from").as_str(), "body" | "body_inherit")
 }
 
+/// HOOKS1 ZN2: the battle zones an encounter or a road fight may name: the 8 code zones, then the loaded data zone
+/// rows, each id once (a row reusing a code id is its own check error and adds nothing).
+pub fn zone_ids(v: &View) -> Vec<String> {
+    let mut out: Vec<String> = rpgkit_battle::grid::ZONE_IDS.iter().map(|z| z.to_string()).collect();
+    for id in v.entries(rpgkit_data::ZONES_KIND).iter().map(|e| json::s(e, "id")) {
+        if !out.contains(&id) {
+            out.push(id);
+        }
+    }
+    out
+}
+
 /// ContentSchema.options_of: a field's options, or the list its `options_from` names.
 pub fn options_of(v: &View, f: &Dict) -> Vec<String> {
     // ASSETORG2: the bodies across the asset layers
@@ -113,9 +125,8 @@ pub fn options_of(v: &View, f: &Dict) -> Vec<String> {
         out.extend(v.assets.bodies());
         out
     };
-    let s = |l: &[&str]| l.iter().map(|x| x.to_string()).collect::<Vec<String>>();
     match json::s(f, "options_from").as_str() {
-        "zones" => s(&rpgkit_battle::grid::ZONE_IDS),
+        "zones" => zone_ids(v),
         "body" => bodies(false),
         "body_inherit" => bodies(true),
         "status" => std::iter::once(String::new()).chain(rpgkit_rules::status::debuffs().into_iter().map(String::from)).collect(),

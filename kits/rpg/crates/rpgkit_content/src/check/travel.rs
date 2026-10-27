@@ -40,7 +40,8 @@ pub fn route_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
         errors.push(format!("Travel time must be {TIME_MIN}..{TIME_MAX}."));
     }
     let zone = e.get("zone").cloned().unwrap_or(Value::from(""));
-    if !zone.is_string() || (!json::gstr(&zone).is_empty() && !rpgkit_battle::grid::ZONE_IDS.contains(&json::gstr(&zone).as_str())) {
+    // HOOKS1 ZN2: the encounters' zone options (code zones, then the data zone rows)
+    if !zone.is_string() || (!json::gstr(&zone).is_empty() && !super::zone_ids(v).contains(&json::gstr(&zone))) {
         errors.push(format!("Unknown zone '{}'.", json::gstr(&zone)));
     }
     if !int_in(json::get(e, "encounter_pct"), 0, PCT_MAX) {
