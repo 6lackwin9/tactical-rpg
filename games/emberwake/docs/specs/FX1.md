@@ -118,7 +118,8 @@ reduce-motion check (`kit.fx.reduce`); the stage shakes, the panels around it do
 - Ground-layer effects draw after STAGE1 pass 4 (ground arrows); air-layer effects after pass 8 (outlines through)
   and before the floats of pass 9. The hit flash silhouette draws right after its unit's sprite in the feet pass.
 - The camera offset shifts passes 1-9 (the board, clipped to its interior (128, 30, 384, 288)); the planning strip,
-  the cards, the status bar, the banner and the log never shift.
+  the cards, the status bar, the banner and the log never shift. (As built in FX1-L1 slice 2, 2026-10-28: Flat shifts
+  its whole board and clips it to the board panel only while the camera is off centre, so at rest it draws as before.)
 
 ### 4.2 The impact timeline of an action
 
@@ -170,6 +171,12 @@ ring on the aim cell.
 
 The table (code in `fx.rs`, its numbers in the spec) is in [FX1_TASKS.md](FX1_TASKS.md) section 8, numbered 4.4.1
 (melee by weapon family), 4.4.2 (ranged by weapon family), 4.4.3 (skills) and 4.4.4 (support, items, falls).
+
+As built in FX1-L1 slice 2 (2026-10-28): a melee family the table does not name swings as the sword; spark rows
+without a direction fly along the attack (actor to struck unit), with gravity 120 and size 1 unless given; a trail
+starts 60 % of `trail_ms` before the impact (when its head ends its sweep; never before `t0`), which is `t0` with the
+defaults and no clip impact frame; a projectile launches its travel before the impact; a miss drops only the sparks
+(its overshoot and sidestep are FX1-L2's).
 
 ### 4.5 Shakes in battle
 

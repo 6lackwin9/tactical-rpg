@@ -13,6 +13,17 @@
   "travel_max_ms": 260,
   "impact_gap_ms": 80,
   "shot_from_clip": true,
+  "trail_ms": 150,
+  "spark_ms": 260,
+  "shake_max_px": 3,
+  "shake_max_ms": 1500,
+  "shakes": {
+    "jolt": {"px": 1, "ms": 90, "axis": "both", "envelope": "linear", "step_ms": 30},
+    "heavy": {"px": 2, "ms": 160, "axis": "both", "envelope": "ease_out", "step_ms": 30},
+    "toll": {"px": 2, "ms": 1100, "axis": "x", "envelope": "ease_out", "step_ms": 70},
+    "tremor": {"px": 2, "ms": 1400, "axis": "y", "envelope": "swell", "step_ms": 45},
+    "quake": {"px": 3, "ms": 900, "axis": "both", "envelope": "ease_out", "step_ms": 35}
+  },
   "heal_color": [96, 220, 120],
   "damage_color": [255, 96, 80],
   "crit_color": [255, 210, 60],

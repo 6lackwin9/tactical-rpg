@@ -2,6 +2,7 @@
 //! with, read by the engine's live tuning file (`aegis_ui::tuning::TuningFile`, reloaded when the file changes).
 
 use aegis_ui::canvas::{rgb, Rgba};
+use aegis_ui::fx::{Axis, Envelope, Shake, ShakeLimits, ShakeTable, SHAKE_PRESETS};
 use aegis_ui::tuning::Tuned;
 use serde_json::Value;
 
@@ -29,6 +30,15 @@ pub struct Tuning {
     /// Decision "Attack timing on the board" A: a shot leaves at its attack clip's `impact` frame (false: at
     /// `launch_ms`, FX1 4.2 as written).
     pub shot_from_clip: bool,
+    /// FX1 4.7: a swing trail's life (60-300 clock ms).
+    pub trail_ms: u64,
+    /// FX1 4.7: a spark burst's life (100-600 clock ms) unless its row gives one.
+    pub spark_ms: u64,
+    /// FX1 4.5, 4.7: the camera shake presets (`shakes`, over the engine's `ShakeTable::default()` row by row) and the
+    /// art bible's limits (`shake_max_px` 0-6, `shake_max_ms` 0-3000, clamped to the engine ceiling).
+    pub shakes: ShakeTable,
+    pub shake_max_px: f32,
+    pub shake_max_ms: u32,
     pub heal_color: Rgba,
     pub damage_color: Rgba,
     pub crit_color: Rgba,
@@ -71,6 +81,11 @@ impl Default for Tuning {
             travel_max_ms: 260,
             impact_gap_ms: 80,
             shot_from_clip: true,
+            trail_ms: 150,
+            spark_ms: 260,
+            shakes: ShakeTable::default(),
+            shake_max_px: 3.0,
+            shake_max_ms: 1500,
             heal_color: rgb(96, 220, 120),
             damage_color: rgb(255, 96, 80),
             crit_color: rgb(255, 210, 60),
@@ -96,6 +111,32 @@ fn color(v: &Value, d: Rgba) -> Rgba {
     }
 }
 
+impl Tuning {
+    /// The camera shake limits (FX1 4.7; the engine clamps them to its ceiling).
+    pub fn shake_limits(&self) -> ShakeLimits {
+        ShakeLimits::new(self.shake_max_px, self.shake_max_ms)
+    }
+}
+
+/// FX1 4.7 `shakes`: each preset's row over the engine's (a missing preset or key keeps the engine's), `px` 0-6, `ms`
+/// 0-3000, `axis` x/y/both, `envelope` linear/ease_out/swell, `step_ms` 20-120.
+fn shakes(v: Option<&Value>) -> ShakeTable {
+    let mut table = ShakeTable::default();
+    let Some(rows) = v.and_then(Value::as_object) else { return table };
+    for name in SHAKE_PRESETS {
+        let (Some(row), Some(base)) = (rows.get(name).and_then(Value::as_object), table.get(name)) else { continue };
+        let shake = Shake {
+            px: row.get("px").and_then(Value::as_f64).map_or(base.px, |x| x as f32).clamp(0.0, 6.0),
+            ms: row.get("ms").and_then(Value::as_u64).map_or(base.ms, |x| x.min(3000) as u32),
+            axis: row.get("axis").and_then(Value::as_str).and_then(Axis::parse).unwrap_or(base.axis),
+            envelope: row.get("envelope").and_then(Value::as_str).and_then(Envelope::parse).unwrap_or(base.envelope),
+            step_ms: row.get("step_ms").and_then(Value::as_u64).map_or(base.step_ms, |x| x.clamp(20, 120) as u32),
+        };
+        table.set(name, shake);
+    }
+    table
+}
+
 impl Tuned for Tuning {
     fn from_json(v: &Value) -> Self {
         let d = Tuning::default();
@@ -119,6 +160,11 @@ impl Tuned for Tuning {
             travel_max_ms: u("travel_max_ms", d.travel_max_ms).clamp(20, 500).max(u("travel_min_ms", d.travel_min_ms).clamp(20, 500)),
             impact_gap_ms: u("impact_gap_ms", d.impact_gap_ms).min(400),
             shot_from_clip: v.get("shot_from_clip").and_then(Value::as_bool).unwrap_or(d.shot_from_clip),
+            trail_ms: u("trail_ms", d.trail_ms).clamp(60, 300),
+            spark_ms: u("spark_ms", d.spark_ms).clamp(100, 600),
+            shakes: shakes(v.get("shakes")),
+            shake_max_px: v.get("shake_max_px").and_then(Value::as_f64).map_or(d.shake_max_px, |x| x as f32).clamp(0.0, 6.0),
+            shake_max_ms: u("shake_max_ms", d.shake_max_ms as u64).min(3000) as u32,
             heal_color: v.get("heal_color").map(|c| color(c, d.heal_color)).unwrap_or(d.heal_color),
             damage_color: v.get("damage_color").map(|c| color(c, d.damage_color)).unwrap_or(d.damage_color),
             crit_color: v.get("crit_color").map(|c| color(c, d.crit_color)).unwrap_or(d.crit_color),
@@ -158,5 +204,30 @@ mod tests {
         assert_eq!(Tuning::from_json(&json!({"hit_stop_ms": 0})).hit_stop_ms, 0, "0 is off");
         let crossed = Tuning::from_json(&json!({"travel_min_ms": 300, "travel_max_ms": 100}));
         assert!(crossed.travel_max_ms >= crossed.travel_min_ms, "the clamp never inverts");
+    }
+
+    /// FX1 L15 (4.7, slice 2): `trail_ms`, `spark_ms` and the shake limits clamp to their ranges; the defaults and the
+    /// shipped file hold the engine's shake table; a tuned preset row overrides only its keys (clamped), a missing
+    /// preset or an unknown axis keeps the engine's row.
+    #[test]
+    fn shake_presets_and_effect_lives_are_tuned_within_their_ranges() {
+        use aegis_ui::fx::{Axis, Envelope, ShakeTable};
+        let d = Tuning::default();
+        assert_eq!((d.trail_ms, d.spark_ms, d.shake_max_px, d.shake_max_ms), (150, 260, 3.0, 1500));
+        assert_eq!(d.shakes, ShakeTable::default());
+        let shipped: serde_json::Value = serde_json::from_str(include_str!("../../../tuning.json")).unwrap();
+        let s = Tuning::from_json(&shipped);
+        assert_eq!((s.shakes, s.trail_ms, s.spark_ms, s.shake_max_px, s.shake_max_ms), (ShakeTable::default(), 150, 260, 3.0, 1500), "the shipped file holds the spec's rows");
+        let lo = Tuning::from_json(&json!({"trail_ms": 1, "spark_ms": 1, "shake_max_px": -1.0}));
+        assert_eq!((lo.trail_ms, lo.spark_ms, lo.shake_max_px), (60, 100, 0.0));
+        let hi = Tuning::from_json(&json!({"trail_ms": 9000, "spark_ms": 9000, "shake_max_px": 40.0, "shake_max_ms": 90000}));
+        assert_eq!((hi.trail_ms, hi.spark_ms, hi.shake_max_px, hi.shake_max_ms), (300, 600, 6.0, 3000));
+        let t = Tuning::from_json(&json!({"shakes": {"toll": {"px": 1}, "heavy": {"px": 40, "ms": 99999, "step_ms": 1, "axis": "z", "envelope": "swell"}}}));
+        let base = ShakeTable::default();
+        let toll = t.shakes.get("toll").unwrap();
+        assert_eq!((toll.px, toll.ms, toll.axis), (1.0, base.get("toll").unwrap().ms, Axis::X), "only px tuned");
+        let heavy = t.shakes.get("heavy").unwrap();
+        assert_eq!((heavy.px, heavy.ms, heavy.step_ms, heavy.axis, heavy.envelope), (6.0, 3000, 20, Axis::Both, Envelope::Swell), "clamped; an unknown axis keeps the engine's");
+        assert_eq!(t.shakes.get("quake"), base.get("quake"), "a missing preset is the engine's");
     }
 }

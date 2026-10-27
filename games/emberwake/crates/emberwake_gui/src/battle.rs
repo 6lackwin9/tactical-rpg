@@ -13,7 +13,7 @@ use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::music;
 use crate::intent_text;
 use crate::fx::{self, Impact, Shown};
-use aegis_ui::fx::Clock;
+use aegis_ui::fx::{Camera, Clock, Fx, Layer};
 use crate::stage::{self, Geom, Item, Pass, Through, View};
 use crate::tuning::Tuning;
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
@@ -490,6 +490,11 @@ pub struct BattleScreen {
     req_cmd: String,
     /// The battle view at the last tick (a view change flushes the impacts, rule F).
     view_seen: Option<View>,
+    /// FX1-L1 slice 2: the live effects on the FX clock (board px of the current view), the camera whose shake moves
+    /// the board (4.1, 4.5), and the phases already fired when last seen (a newly fired one may shake).
+    fx: Fx,
+    camera: Camera,
+    phases_seen: usize,
 }
 
 impl BattleScreen {
@@ -535,6 +540,9 @@ impl BattleScreen {
             gap_until: None,
             req_cmd: String::new(),
             view_seen: None,
+            fx: Fx::default(),
+            camera: Camera::default(),
+            phases_seen: 0,
         }
     }
 
@@ -777,7 +785,8 @@ impl BattleScreen {
         }
         self.last_hp = hps;
         let log = &self.session().resolver.log;
-        for line in log.iter().skip(self.log_seen) {
+        let lines: Vec<String> = log.iter().skip(self.log_seen).cloned().collect();
+        for line in &lines {
             if let Some(key) = sound_of(line) {
                 sounds.push(format!("sfx/{key}.wav"));
             }
@@ -788,14 +797,53 @@ impl BattleScreen {
             self.message = last.unwrap_or_default();
             self.events_seen = n;
         }
+        self.phase_shakes(cx);
         let pending = if skip || self.req_cmd != "step" { None } else { self.popped_impact(t.walk_ms) };
         let after = self.sync_anims_deferred(cx, pending.is_some());
         match pending {
             Some(mut i) => {
+                i.mods = fx::Mods::of(&lines, !struck.is_empty());
+                i.broke = fx::broke(&lines);
                 (i.after, i.floats, i.struck, i.sounds) = (after, floats, struck, sounds);
                 self.impacts.push(i);
             }
-            None => self.show(cx, floats, struck, sounds),
+            None => {
+                // 4.5 row 2: a break whose step has no action to land shakes at once (not under skip animations, 4.6)
+                if !skip && fx::broke(&lines) {
+                    let now = self.clock.now();
+                    self.shake(cx, fx::HEAVY, now, now);
+                }
+                self.show(cx, floats, struck, sounds)
+            }
+        }
+    }
+
+    /// FX1 4.5: starts the preset `name` of the game's table at clock `at` (seeded by `seed`; the art bible's limits;
+    /// none under reduce motion; a weaker shake never replaces a stronger running one).
+    fn shake(&mut self, cx: &Cx, name: &str, at: u64, seed: u64) {
+        let t = &cx.tuning.value;
+        if let Some(s) = t.shakes.get(name) {
+            self.camera.start(s, at, seed, t.shake_limits(), cx.settings.reduce_motion());
+        }
+    }
+
+    /// FX1 4.5 row 3: the phases fired since the last look whose effects hold a `shake` start the strongest of their
+    /// presets at once (also under skip animations; not under reduce motion, 4.6).
+    fn phase_shakes(&mut self, cx: &Cx) {
+        let Some(s) = self.host.session.as_ref() else { return };
+        let fired = &s.phases.fired;
+        let presets: Vec<String> = fired
+            .keys()
+            .skip(self.phases_seen)
+            .filter_map(|id| s.phases.phase(id))
+            .flat_map(|p| p.effects_of(emberwake_data::SHAKE_EFFECT))
+            .filter_map(|e| e.get("preset").and_then(Value::as_str).map(str::to_string))
+            .collect();
+        self.phases_seen = fired.len();
+        let t = &cx.tuning.value;
+        if let Some(shake) = fx::strongest(presets.iter().map(String::as_str), &t.shakes) {
+            let now = self.clock.now();
+            self.camera.start(shake, now, now ^ 0x5348_414b, t.shake_limits(), cx.settings.reduce_motion());
         }
     }
 
@@ -835,20 +883,42 @@ impl BattleScreen {
             _ => ("", None),
         };
         let to = aim.filter(|c| *c != emberwake_battle::grid::NO_CELL).unwrap_or(from);
-        let skill = s.w.cat.skills.iter().find(|k| k.name == act.command.name).map_or("", |k| k.id.as_str());
+        let def = s.w.cat.skills.iter().find(|k| k.name == act.command.name);
+        let skill = def.map_or("", |k| k.id.as_str());
         let weapon = u.inventory.main_weapon();
         let family = weapon.map_or("", |w| w.weapon_type());
         let ranged = weapon.is_some_and(|w| w.is_ranged_weapon());
         let magic = weapon.is_some_and(|w| json::s(&w.item.raw, "damage_type") == "magic");
-        let delivery = fx::delivery(fx::Act { kind, skill, family, ranged, magic, dist: from.dist(to) });
+        let style = fx::style(fx::Act { kind, skill, family, ranged, magic, dist: from.dist(to) });
+        let delivery = style.delivery;
         if delivery == fx::Delivery::None {
             return None;
         }
+        let (round, block, _) = s.last_popped?;
         let now = self.clock.now();
         let moved = t.anims[act.unit].seen.pos.is_some_and(|p| p != from);
         let t0 = if moved && walk_ms > 0 { now + walk_ms } else { now };
         let clips = if kind == "item" { Vec::new() } else { action_clips(skill, kind, family) };
-        Some(Impact { at: None, actor: act.unit, delivery, t0, clips, from, to, after: Vec::new(), floats: Vec::new(), struck: Vec::new(), sounds: Vec::new() })
+        Some(Impact {
+            at: None,
+            actor: act.unit,
+            delivery,
+            t0,
+            clips,
+            from,
+            to,
+            after: Vec::new(),
+            floats: Vec::new(),
+            struck: Vec::new(),
+            sounds: Vec::new(),
+            style,
+            area: kind == "area",
+            seed: fx::seed_of(round, block, idx, act.unit),
+            blocks: def.map_or(0, |k| k.blocks),
+            mods: fx::Mods::default(),
+            broke: false,
+            launched: false,
+        })
     }
 
     /// FX1-L1: when each pending impact lands, from its actor's clip (the first candidate its body has; its `impact`
@@ -863,6 +933,17 @@ impl BattleScreen {
                 cx.art.clips(&b)?.clip(name)?.impact_ms()
             });
             i.at = Some(fx::impact_at(i.delivery, i.t0, clip_ms, fx::path_px(&geo, i.from, i.to), &t).unwrap_or(i.t0));
+        }
+        // Slice 2: the delivery (the trail or the projectile) goes on the live list once its impact time is known.
+        let mut out = Vec::new();
+        for i in self.impacts.iter_mut().filter(|i| !i.launched) {
+            if let Some(at) = i.at {
+                i.launched = true;
+                out.extend(fx::delivery_effects(&i.style, place(&geo, i.from, i.to), i.t0, at, i.seed, &t));
+            }
+        }
+        for e in out {
+            self.fx.push(e);
         }
     }
 
@@ -895,6 +976,24 @@ impl BattleScreen {
         }
         self.tokens.react(&i.after, at, false);
         self.gap_until = Some(Instant::now() + Duration::from_millis(t.impact_gap_ms));
+        // Slice 2: the impact effects (4.4) on the target, or on each unit an area struck (its aim when none), and the
+        // heavy shake of a Heavy hit or a break (4.5 rows 1-2); neither once skip animations is on (4.6)
+        let skip = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
+        if let Some(s) = self.host.session.as_ref().filter(|_| !skip) {
+            let geo = Geom::new(View::of_setting(&cx.settings.v["battle_view"]), t);
+            let cell = |u: usize| s.w.grid.pos(u).or(self.tokens.anims.get(u).and_then(|a| a.seen.pos));
+            let mut cells: Vec<V2> = if i.area { i.struck.iter().filter_map(|&u| cell(u)).collect() } else { Vec::new() };
+            if cells.is_empty() {
+                cells.push(i.to);
+            }
+            let hits: Vec<_> = cells.iter().map(|&c| fx::anchor(&geo, c)).collect();
+            for e in fx::impact_effects(&i.style, i.mods, place(&geo, i.from, i.to), &hits, at, i.seed, t) {
+                self.fx.push(e);
+            }
+        }
+        if !skip && fx::heavy_shake(i.blocks, i.hit(), i.broke) {
+            self.shake(cx, fx::HEAVY, at, i.seed);
+        }
         self.show(cx, i.floats, i.struck, i.sounds);
     }
 
@@ -949,6 +1048,9 @@ impl BattleScreen {
         self.impacts.clear();
         self.flashes.clear();
         self.gap_until = None;
+        self.fx.clear();
+        self.camera.stop();
+        self.phases_seen = self.session().phases.fired.len();
         self.last_hp = self.session().w.units.iter().map(|u| u.hp).collect();
         self.log_seen = self.session().resolver.log.len();
         self.selected = self.session().w.allies.first().copied();
@@ -1320,9 +1422,15 @@ impl Screen<GameCx> for BattleScreen {
         let view = View::of_setting(&cx.settings.v["battle_view"]);
         if cx.settings.v["skip_anim"].as_bool().unwrap_or(false) || self.view_seen.is_some_and(|v| v != view) {
             self.flush(cx);
+            // the live effects are in the old view's px; skip animations draws none (4.6)
+            self.fx.clear();
         }
         self.view_seen = Some(view);
         self.fire_due(cx);
+        // Slice 2: done effects leave the live list; a shake whose time is up ends.
+        let fx_now = self.clock.now();
+        self.fx.prune(fx_now);
+        self.camera.offset(fx_now);
         // FACE1: the Show enemy tells setting changed (I or the settings): the planning facing follows it.
         if self.tokens.tells != cx.settings.v["show_tells"].as_bool().unwrap_or(true) {
             self.sync_anims(cx);
@@ -1546,6 +1654,12 @@ fn hit_flash(p: &mut Painter, art: &mut Art, body: &str, palette: &str, f: &Clip
     if let Some(img) = art.body_silhouette(body, palette, &f.clip, f.frame, tr.w, fx::FLASH, facing.mirrors(f)) {
         p.image(img, tr);
     }
+}
+
+/// FX1 4.1: an action's effect places in the view `geo` (the anchors of its cells; the Stage's squash 0.75, Flat's 1).
+fn place(geo: &Geom, from: V2, to: V2) -> fx::Place {
+    let squash = if geo.view == View::Stage { 0.75 } else { 1.0 };
+    fx::Place { from: fx::anchor(geo, from), to: fx::anchor(geo, to), squash }
 }
 
 fn hp_bar(p: &mut Painter, r: Rect, hp: i32, max: i32, color: Rgba) {
@@ -1870,7 +1984,9 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     } else {
         None
     };
-    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.clock.ms, sel, planning, tells: &tells, show_tells, card_hover };
+    // FX1 4.1: the camera's shake shifts the board's passes (inside its clip); the HUD and every hit rect stay put.
+    let shift = g.camera.offset_at(g.clock.now());
+    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.clock.ms, sel, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift };
     let board_hover = match view {
         View::Stage => draw_stage(board, &mut ui, cx, &tuning, now),
         View::Flat => {
@@ -2064,6 +2180,10 @@ struct Board<'a> {
     show_tells: bool,
     /// STAGE1 3.9: the unit whose party or hostile card the mouse is over.
     card_hover: Option<usize>,
+    /// FX1-L1 slice 2: the live effects (drawn at `anim_ms` on the ground and air layers, 4.1) and the camera offset
+    /// the board's passes are shifted by.
+    fx: &'a Fx,
+    shift: (i32, i32),
 }
 
 /// An action clip a token wants starts with the first candidate its body has (SPRITE1-U), once the clock reaches its
@@ -2102,9 +2222,16 @@ fn still_dying(art: &mut Art, a: &UnitAnim, body: Option<&str>, now: u64, instan
 /// the `common` tiles, tree tiles flat, tokens `flat_token_px` on a filled foot ellipse at `foot_alpha`, arrows centre
 /// to centre over the units, the cell widgets.
 fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, .. } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, fx: live, shift, .. } = b;
     let w = &s.w;
-    ui.p.panel(Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4), rgb(8, 10, 16), BORDER, RADIUS);
+    let panel = Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4);
+    ui.p.panel(panel, rgb(8, 10, 16), BORDER, RADIUS);
+    // FX1 4.1: the board shifted by the camera, kept inside its panel while it shakes (at rest the Flat board draws
+    // unclipped, as before)
+    if shift != (0, 0) {
+        ui.p.clip(Some(panel));
+    }
+    ui.p.shift(shift.0, shift.1);
     for gy in 0..GRID_H {
         for gx in 0..GRID_W {
             let c = V2::new(gx, gy);
@@ -2153,11 +2280,13 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
             }
         }
     }
+    // FX1 4.1: the ground layer under the units
+    let anim_now = anim_ms as u64;
+    live.draw(&mut ui.p, anim_now, Layer::Ground);
     // SPRITE1-U: each unit stands on a flat ellipse in its side's colour and plays its clips (anims) in its facing
     // (DIR4-G: toward its target or its step, `Tokens::catch_up`, `UnitAnim::faces`; `token_frame`, its outline with it);
     // the selected hero's sprite has a gold outline, a hovered unit's a faint white one. A unit without a body keeps
     // the letter.
-    let anim_now = anim_ms as u64;
     let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
     let reduce = cx.settings.reduce_motion();
     let still = UnitAnim::default();
@@ -2240,12 +2369,18 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
             intent_chip(ui, cx, r.line.kind, chip);
         }
     }
+    // FX1 4.1: the air layer over the units, before the floats
+    live.draw(&mut ui.p, anim_now, Layer::Air);
     for f in floats {
         if let Some(pos) = w.grid.pos(f.unit) {
             let t = now.duration_since(f.born).as_millis() as f32 / tuning.float_ms.max(1) as f32;
             let (cx, cy) = center(pos);
             float_text(ui, &f.text, f.color, cx, cy - 14.0 - tuning.float_rise_px as f32 * t);
         }
+    }
+    ui.p.shift(-shift.0, -shift.1);
+    if shift != (0, 0) {
+        ui.p.clip(None);
     }
 }
 
@@ -2312,7 +2447,7 @@ fn with_alpha(c: Rgba, a: u8) -> Rgba {
 /// covers a unit, the top: HP bars, chips, the exit sign, floats). Cell widgets first, then the units' in feet order
 /// (front-most last, so it takes the click). Returns the unit the mouse is over on the board.
 fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift } = b;
     let w = &s.w;
     let geo = Geom::new(View::Stage, tuning);
     let tp = geo.token_px;
@@ -2381,7 +2516,9 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
     };
     let mut frames: Vec<(usize, ClipFrame)> = Vec::new();
 
+    // FX1 4.1: passes 1-9 inside the board's clip, shifted by the camera (the clip stays put)
     ui.p.clip(Some(stage::INTERIOR));
+    ui.p.shift(shift.0, shift.1);
     for pass in stage::passes() {
         match pass {
             // HOOKS1 ZN3: a data zone row keys its own backdrop and gradient ground (a code zone ignores any row)
@@ -2550,7 +2687,14 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                 }
             }
         }
+        // FX1 4.1: the ground layer after pass 4 (the ground arrows), the air layer after pass 8 (before the floats)
+        match pass {
+            Pass::Arrows => live.draw(&mut ui.p, anim_now, Layer::Ground),
+            Pass::Through => live.draw(&mut ui.p, anim_now, Layer::Air),
+            _ => {}
+        }
     }
+    ui.p.shift(-shift.0, -shift.1);
     ui.p.clip(None);
 
     // 3.8: the cell widgets (32 x 24), then the units' in feet order (front-most last).
@@ -3488,5 +3632,129 @@ mod tests {
             (s.resolver.log.clone(), s.w.units.iter().map(|u| u.hp).collect::<Vec<_>>())
         };
         assert_eq!(run(false), run(true));
+    }
+
+    /// The canvas's RGBA bytes at logical (`x`, `y`) (the test canvas is at scale 1).
+    fn pixel(g: &aegis_ui::ui::Gfx, x: i32, y: i32) -> [u8; 4] {
+        let k = ((y * g.canvas.w + x) * 4) as usize;
+        [g.canvas.px[k], g.canvas.px[k + 1], g.canvas.px[k + 2], g.canvas.px[k + 3]]
+    }
+
+    /// FX1-L1 slice 2 (4.2 steps 2-3, 4.4): the pop puts the delivery on the live list (the trail of a blow, the
+    /// projectile of a shot) from `t0`; the impact adds the row's ring, flash and sparks at the impact; the effects draw
+    /// on the board in both views (a frame with them differs from the same frame without).
+    #[test]
+    fn an_action_pushes_its_delivery_at_the_pop_and_its_impact_effects_at_the_impact() {
+        for view in ["stage", "flat"] {
+            let (mut cx, mut g, mut b) = ambush(json!(view));
+            assert!(step_until(&mut cx, &mut b, |_, i| i.hit() && (i.style.swing.is_some() || i.style.shot.is_some())), "{view}: a hit with a delivery");
+            b.resolve_impacts(&mut cx);
+            let i = b.impacts[0].clone();
+            let at = i.at.unwrap();
+            let want = if i.style.swing.is_some() { "trail" } else { "projectile" };
+            assert!(b.fx.kinds(b.clock.now()).contains(&want), "{view}: the {want} from the pop");
+            assert!(b.fx.live.iter().all(|e| e.start >= i.t0 && e.start <= at), "{view}: the delivery between t0 and the impact");
+            b.clock.ms = at as f64;
+            b.fire_due(&mut cx);
+            let landed: Vec<&str> = b.fx.live.iter().filter(|e| e.start == at).map(|e| e.kind()).collect();
+            let rows = [(i.style.hit.ring.is_some(), "ring"), (i.style.hit.flash.is_some(), "flash"), (i.style.hit.sparks.is_some(), "sparks")];
+            for (has, kind) in rows {
+                assert_eq!(landed.contains(&kind), has && (kind != "sparks" || !i.mods.miss), "{view}: {kind} at the impact ({landed:?})");
+            }
+            // the effects draw: the frame with them differs from the frame without
+            b.clock.ms = (at + 20) as f64;
+            b.floats.clear();
+            b.flashes.clear();
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            let with = g.canvas.px.clone();
+            let live = std::mem::take(&mut b.fx);
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            assert_ne!(with, g.canvas.px, "{view}: the effects show");
+            b.fx = live;
+        }
+    }
+
+    /// FX1-L1 L9 (4.5) and L11: at its impact a 3-block skill that hit starts `heavy`, a 2-block one does not, a crit
+    /// alone starts none, a break starts `heavy`; under reduce motion none starts (the effects and the hit-stop stay).
+    #[test]
+    fn heavy_hits_and_breaks_shake_the_board_at_their_impact() {
+        let (mut cx, _g, mut b) = ambush(json!("stage"));
+        assert!(step_until(&mut cx, &mut b, |_, i| i.hit()), "a hit");
+        b.resolve_impacts(&mut cx);
+        let i = b.impacts.remove(0);
+        let at = i.at.unwrap();
+        let heavy = cx.tuning.value.shakes.get("heavy").unwrap().clamped(cx.tuning.value.shake_limits());
+        let fire = |b: &mut BattleScreen, cx: &crate::screens::Cx, blocks: i32, broke: bool, crit: bool| {
+            b.camera.stop();
+            let mut j = i.clone();
+            (j.blocks, j.broke, j.mods.crit) = (blocks, broke, crit);
+            b.fire(cx, j, at);
+            b.camera.shake.map(|s| (s.0, s.1))
+        };
+        assert_eq!(fire(&mut b, &cx, 3, false, false), Some((heavy, at)), "a Heavy hit");
+        assert_eq!(fire(&mut b, &cx, 2, false, false), None, "a 2-block hit");
+        assert_eq!(fire(&mut b, &cx, 1, false, true), None, "a crit");
+        assert_eq!(fire(&mut b, &cx, 1, true, false), Some((heavy, at)), "a break");
+        cx.settings.v[aegis_ui::vignette::REDUCE_MOTION] = json!(true);
+        b.fx.clear();
+        b.clock.hold = 0.0;
+        assert_eq!(fire(&mut b, &cx, 3, true, false), None, "reduce motion: no shake");
+        assert!(!b.fx.is_empty() && b.clock.hold > 0.0, "reduce motion keeps the effects and the hit-stop");
+    }
+
+    /// FX1-L1 L9 (4.5 row 3) and L11: a newly fired phase whose effects hold `shake` `tremor` starts it at once, also
+    /// under skip animations; a phase already seen does not start it again; reduce motion starts none.
+    #[test]
+    fn a_fired_phase_with_a_shake_starts_it_at_once() {
+        let (mut cx, _g, mut b) = ambush(json!("stage"));
+        cx.settings.v["skip_anim"] = json!(true);
+        let fire_phase = |b: &mut BattleScreen, id: &str| {
+            let s = b.host.session.as_mut().unwrap();
+            let effect: aegis_core::value::Obj = serde_json::from_value(json!({"type": emberwake_data::SHAKE_EFFECT, "preset": "tremor"})).unwrap();
+            s.phases.phases.push(emberwake_battle::encounter::PhaseDef { id: id.into(), name: String::new(), trigger: Default::default(), effects: vec![effect] });
+            s.phases.fired.insert(id.into(), (s.current_round, s.current_block));
+        };
+        fire_phase(&mut b, "fx_tremor");
+        b.after_change(&cx);
+        let tremor = cx.tuning.value.shakes.get("tremor").unwrap().clamped(cx.tuning.value.shake_limits());
+        assert_eq!(b.camera.shake.map(|s| (s.0, s.1)), Some((tremor, b.clock.now())), "tremor at once, under skip too");
+        b.camera.stop();
+        b.after_change(&cx);
+        assert_eq!(b.camera.shake, None, "a phase starts its shake once");
+        cx.settings.v[aegis_ui::vignette::REDUCE_MOTION] = json!(true);
+        fire_phase(&mut b, "fx_tremor_2");
+        b.after_change(&cx);
+        assert_eq!(b.camera.shake, None, "reduce motion");
+    }
+
+    /// FX1-L1 L12 (4.1): in both views the camera's offset moves a board pixel and leaves the planning strip and the
+    /// hostile cards unchanged; the `unit.<i>` and `tile.<x>.<y>` hit rects do not move.
+    #[test]
+    fn the_camera_shakes_the_board_only() {
+        use aegis_ui::canvas::Rect;
+        for view in ["stage", "flat"] {
+            let (mut cx, mut g, mut b) = ambush(json!(view));
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            let before = g.canvas.px.clone();
+            let rects = |b: &BattleScreen| b.w.iter().filter(|w| w.id.starts_with("unit.") || w.id.starts_with("tile.")).map(|w| (w.id.clone(), w.rect)).collect::<Vec<_>>();
+            let hit_rects = rects(&b);
+            let now = b.clock.now();
+            let quake = cx.tuning.value.shakes.get("quake").unwrap();
+            assert!(b.camera.start(quake, now, 1, cx.tuning.value.shake_limits(), false));
+            assert_ne!(b.camera.offset_at(now), (0, 0), "{view}: the shake moves the camera now");
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            let at = |buf: &[u8], x: i32, y: i32| {
+                let k = ((y * g.canvas.w + x) * 4) as usize;
+                [buf[k], buf[k + 1], buf[k + 2], buf[k + 3]]
+            };
+            let board = crate::stage::INTERIOR;
+            let moved = (board.y..board.y + board.h).any(|y| (board.x..board.x + board.w).any(|x| at(&before, x, y) != pixel(&g, x, y)));
+            assert!(moved, "{view}: a board pixel moved");
+            for r in [Rect::new(2, 2, aegis_ui::ui::W - 4, 24), Rect::new(aegis_ui::ui::W - 126, 28, 124, 290)] {
+                let same = (r.y..r.y + r.h).all(|y| (r.x..r.x + r.w).all(|x| at(&before, x, y) == pixel(&g, x, y)));
+                assert!(same, "{view}: the HUD at {r:?} does not shake");
+            }
+            assert_eq!(rects(&b), hit_rects, "{view}: the hit rects stay");
+        }
     }
 }
