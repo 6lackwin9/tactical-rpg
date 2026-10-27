@@ -1,4 +1,4 @@
-//! RULESET1-R on the shipped data: every shipped world resolves to classic with no data change (3.1.1); a battle
+//! RULESET1-R on the shipped data: every shipped world resolves to the ruleset its manifest (or nearest ancestor) names, classic when unset, and the three classic worlds stay classic (3.1.1); a battle
 //! plays by the ruleset its caller gives it (3.1.3); under `round_intent` the classic stance machinery is inert (intent
 //! IN3: no stance change, no switch AP, no flow stance, no stance break), in battles and in the Dojo, while classic keeps
 //! it; the register's extensions change nothing in a classic battle until their rules land.
@@ -60,11 +60,28 @@ fn play(d: &Data, ruleset: Ruleset, rounds: i32) -> (Vec<(i32, Option<Stance>, O
 }
 
 #[test]
-fn every_shipped_world_plays_classic() {
+fn every_shipped_world_plays_its_manifest_ruleset() {
     let d = data();
     for w in d.world_ids() {
-        assert_eq!(d.ruleset_id(&w), CLASSIC, "{w}");
-        assert_eq!(d.ruleset(&w), Ruleset::classic(), "{w}");
+        // the nearest manifest in the world's lineage (itself first) that names a ruleset; classic when none does
+        let want = d.lineage(&w).iter().rev().find_map(|lw| d.manifest(lw).get("ruleset").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(str::to_string)).unwrap_or_else(|| CLASSIC.to_string());
+        assert_eq!(d.ruleset_id(&w), want, "{w}");
+        let r = d.ruleset(&w);
+        if want == CLASSIC {
+            assert_eq!(r, Ruleset::classic(), "{w}");
+        } else {
+            assert_eq!(r.id, want, "{w}: the ruleset row is found, not the classic fallback");
+        }
+    }
+}
+
+#[test]
+fn the_classic_worlds_stay_classic() {
+    let d = data();
+    for w in ["ashlands", "iron_reaches", "tidewrack"] {
+        assert!(d.has_world(w), "{w} ships");
+        assert_eq!(d.ruleset_id(w), CLASSIC, "{w}");
+        assert_eq!(d.ruleset(w), Ruleset::classic(), "{w}");
     }
 }
 

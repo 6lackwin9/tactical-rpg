@@ -1,0 +1,13 @@
+{
+  "model": "gemini-3-pro-image",
+  "id": "ui_1",
+  "prompt": "A sheet of 25 pixel-art icons for the interface of a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG icons. Square 1:1 image, an exact 5 by 5 grid of 25 equal square tiles separated by thin straight gutters of pure black (#000000), no outer border beyond the gutters. Every tile is filled edge to edge with flat, solid pure magenta (#FF00FF): square corners, no gradient, no vignette, no texture, no shadow on it, so the background can be keyed out. Each icon is one single object drawn large and centred on its tile, filling about three quarters of it, with clear dark outlines, hand-placed pixel clusters, a limited palette with 4 shades per colour, a warm light from the upper left and a thin warm rim light; no magenta, pink or purple anywhere in the icons. The icons are interface glyphs, HUD buttons, map markers and NPC service badges, each a simple bold silhouette that reads at a glance at 16 pixels. No text, no letters, no numbers (the question mark is the only glyph), no labels, no frame, no watermark. Row by row, left to right:\nRow 1: a closed iron padlock; an open iron padlock, the shackle swung up and open; a metal trash bin with a lid; a bold question mark inside a round ring; a thick chevron arrow pointing down.\nRow 2: a stack of gold coins; a tied supply sack with a loaf of bread and a coil of rope; three helmeted heads side by side, the middle one in front; a closed leather journal with a quill; a wooden chest with iron bands, seen from the front.\nRow 3: three thick horizontal bars stacked, light stone colour; the bust of a hooded figure, face in shadow; a closed treasure chest with a gold lock plate; an open treasure chest with a gold glint inside; an open book with a glowing rune on its pages.\nRow 4: a stone doorway with a bold arrow pointing out through it; a rolled parchment world map, partly unrolled; two crossed swords; a snarling grey wolf head in profile, prowling; a glowing golden waypoint pin.\nRow 5: brass merchant scales over a gold coin; a gauntleted hand clasping a sword hilt; a closed padlock with a gold rim; a single large gold coin; a rolled parchment scroll tied with a red ribbon.",
+  "reference": null,
+  "prompts_file": "games/emberwake/docs/specs/PLAYUI1_ICONS.md",
+  "time": "2026-10-22T18:46:21+00:00",
+  "n": 1,
+  "backfilled": true,
+  "source": "games/emberwake/docs/specs/PLAYUI1_ICONS.md at f83e656 (`git show f83e656:games/emberwake/docs/specs/PLAYUI1_ICONS.md`)",
+  "added_in": "f83e656",
+  "note": "--no-ref as the prompts file says"
+}

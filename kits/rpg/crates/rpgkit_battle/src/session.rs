@@ -6,17 +6,18 @@
 
 use crate::ai;
 use crate::command::CmdKind;
-use crate::encounter::{self, Morale, Objectives, Phases, LEADER_TIERS};
+use crate::encounter::{self, HoldGate, Morale, Objectives, PartyFate, Phases, StayBehind, LEADER_TIERS};
 use crate::grid::{Grid, TerrainTable, V2};
 use crate::plan::Plan;
 use crate::resolver::Resolver;
+use crate::round_intent;
 use crate::metrics::BattleMetrics;
 use crate::world::{AiProfile, UnitId, World};
 use aegis_core::value::{self, Obj};
 use rpgkit_data::{Catalog, UnitDef};
 use rpgkit_rules::ruleset::Ruleset;
 use rpgkit_rules::status;
-use rpgkit_rules::{build_unit, Unit};
+use rpgkit_rules::{build_unit_in, DeckRule, Unit};
 use indexmap::IndexMap;
 use serde_json::Value;
 use std::collections::VecDeque;
@@ -46,6 +47,8 @@ pub struct EncounterDef {
     pub id: String,
     pub name: String,
     pub zone: String,
+    /// Authored terrain rows (ENCOUNTER2 R0): GRID_H strings of GRID_W glyphs; empty = the zone's rows.
+    pub rows: Vec<String>,
     pub open: bool,
     pub exits: Vec<V2>,
     pub max_rounds: i32,
@@ -66,6 +69,10 @@ pub struct EncounterDef {
     /// RULESET1 3.1.3: the rules the battle plays by, set by its caller (the world bridge, the Combat Arena, the Dojo,
     /// the sim, the host); never read from the row (classic by default).
     pub ruleset: Ruleset,
+    /// RULESET1 V2, V3: every enemy's whole plan is revealed while planning (read only under `plan_badges`); set by its
+    /// caller (the world bridge from the world's `plan_reveal_flag`, the Arena and Dojo toggles, the host); never read
+    /// from the row (false by default).
+    pub plan_reveal: bool,
     /// The whole entry (objective and morale fields are read from it).
     pub raw: Obj,
 }
@@ -86,6 +93,7 @@ impl EncounterDef {
             id: value::string(o, "id", ""),
             name: value::string(o, "name", ""),
             zone: value::string(o, "zone", "stone_arena"),
+            rows: value::strings(o, "rows"),
             open: value::string(o, "arena", "CLOSED") == "OPEN",
             exits,
             max_rounds: value::int(o, "max_rounds", 6),
@@ -103,6 +111,7 @@ impl EncounterDef {
             start_status: value::array(o, "start_status").to_vec(),
             start_grant: StartGrant::None,
             ruleset: Ruleset::classic(),
+            plan_reveal: false,
             raw: o.clone(),
         }
     }
@@ -155,6 +164,9 @@ pub struct UnitSnap {
     pub withdrawn: bool,
     pub statuses: Vec<String>,
     pub pending: Vec<String>,
+    /// RULESET1 5 (rule poise): poise now and Max Poise at the last refill (0 and 0 in classic or without a bar).
+    pub poise: i32,
+    pub max_poise: i32,
 }
 
 /// One round as it was played (the round archive: CombatSession.round_actions and round_snapshots): the scheduled
@@ -231,6 +243,12 @@ pub struct Session {
     /// The action the last resolving step popped: (round, block, index into `resolver.scheduled`); kept until the next
     /// one. Not in Godot; for the screens (SPRITE1-U: the actor plays its attack clip); no rule reads it.
     pub last_popped: Option<(i32, i32, usize)>,
+    /// ENCOUNTER2 section 6: the encounter's `stay_behind` block (None: none, or the objective is not escape).
+    pub stay: Option<StayBehind>,
+    /// ENCOUNTER2 S2: the verdict when the last round ends with none (`timeout_outcome`: fled, or lost).
+    pub timeout_outcome: String,
+    /// S1: how many of `w.spared` have their log cell.
+    spared_logged: usize,
     /// Unit -> its hero key (a party member id or a world character), when it has one.
     hero_keys: IndexMap<UnitId, String>,
     unit_keys: IndexMap<UnitId, String>,
@@ -290,17 +308,29 @@ impl Session {
         let mut palettes: Vec<String> = Vec::new();
         let mut units_by_ref: IndexMap<String, Vec<UnitId>> = IndexMap::new();
         let mut hero_keys: IndexMap<UnitId, String> = IndexMap::new();
+        // RULESET1 TQ23 (a): the intent each roster unit starts in (read only under round_intent)
+        let mut default_intents: Vec<(UnitId, String)> = Vec::new();
+        // RULESET1 9 D1-D4: under the deck rule every unit fights with its deck (classic: None, units as today)
+        let deck = DeckRule::of(&def.ruleset);
         for p in party {
             profiles.insert(built.len(), p.profile);
             hero_keys.insert(built.len(), p.key);
             art.push(p.art);
             palettes.push(p.palette);
-            built.push(p.unit);
+            let mut u = p.unit;
+            // a party member built without the rule (its passives are its builder's: progression::build_in) gets
+            // the open basics and its active slots here
+            if let (Some(rule), None) = (&deck, &u.deck_rule) {
+                u.deck_rule = Some(rule.clone());
+                u.apply_deck(&cat);
+            }
+            built.push(u);
         }
         let mut spawn = |r: &str, name: &str, built: &mut Vec<Unit>| -> UnitId {
             let mut e = roster.entry(&cat, r).expect("checked");
             e.name = name.to_string();
-            let mut u = build_unit(&cat, &e, def.unit_ap);
+            let mut u = build_unit_in(&cat, &e, def.unit_ap, deck.as_ref());
+            // a world character's passives pass the deck rule's slot gate (D3) set above
             roster.customize(&cat, r, &mut u);
             let id = built.len();
             profiles.insert(id, AiProfile::for_unit(&cat, &e));
@@ -309,6 +339,9 @@ impl Session {
             built.push(u);
             units_by_ref.entry(r.to_string()).or_default().push(id);
             hero_keys.insert(id, roster.lore_ref(&cat, r));
+            if !e.default_intent.is_empty() {
+                default_intents.push((id, e.default_intent.clone()));
+            }
             id
         };
         let n_party_ids = party_ids.len();
@@ -343,8 +376,18 @@ impl Session {
         }
         let count = built.len();
         let mut grid = Grid::new(def.open, def.exits.clone(), TerrainTable::from_catalog(&cat), count);
-        grid.apply_zone(&def.zone);
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone() };
+        grid.apply_board(&def.zone, &def.rows);
+        // ENCOUNTER2 S1, H2: the unkillable enemy-side units and the gate of a hold escape (none in classic)
+        let unkillable: Vec<UnitId> = value::strings(&def.raw, "unkillable").iter().flat_map(|r| units_by_ref.get(r).cloned().unwrap_or_default()).filter(|&c| c >= n_allies).collect();
+        let stay = StayBehind::read(&def.raw);
+        let hold = stay.as_ref().filter(|sb| sb.is_hold()).map(|sb| HoldGate {
+            tiles: sb.tiles.clone(),
+            label: sb.tiles_label.clone(),
+            holder: None,
+            fallback_any: sb.fallback_any,
+            heroes: (0..n_allies).filter(|c| !guests.contains(c)).collect(),
+        });
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default() };
         w.add_item_skills();
         let objective = Objectives::create(&def.raw);
         // MORALE1 1.2: unit keys, tiers, authored profiles and the starting groups.
@@ -384,6 +427,8 @@ impl Session {
         w.deploy(&allies, &deployed, &def.deployment);
         w.place_leftovers(&allies, true, &def.deployment);
         w.place_leftovers(&deployed, false, &def.deployment);
+        // RULESET1_INTENT MV1, TQ23: first facings and starting intents (nothing in classic)
+        round_intent::battle_start(&mut w, &default_intents);
         let mut resolver = Resolver::new(def.total_blocks, def.rng_seed);
         for &c in allies.iter().chain(enemies.iter()) {
             resolver.register(c);
@@ -391,6 +436,7 @@ impl Session {
         for u in w.units.iter_mut() {
             u.loadout_locked = true;
         }
+        let timeout_outcome = encounter::timeout_outcome(&def.raw);
         let mut s = Session {
             def,
             w,
@@ -416,6 +462,9 @@ impl Session {
             log: Vec::new(),
             metrics: None,
             last_popped: None,
+            stay,
+            timeout_outcome,
+            spared_logged: 0,
             hero_keys,
             unit_keys,
             units_by_key,
@@ -435,6 +484,11 @@ impl Session {
         for &c in &self.resolver.registered.clone() {
             status::roll_over(&mut self.w.units[c], self.def.ap_regen);
         }
+        // RULESET1_INTENT RS2: last round's Rest pays after ap_regen; the round's target and marks reset
+        let rest = round_intent::round_start(&mut self.w);
+        self.events.extend(rest);
+        // RULESET1 P3: every poise bar refills before planning (rule poise)
+        crate::poise::round_start(&mut self.w);
         self.current_round = round;
         self.current_block = 1;
         self.phase = Phase::Planning;
@@ -524,6 +578,8 @@ impl Session {
                 withdrawn: u.is_withdrawn,
                 statuses: u.st.active.iter().cloned().collect(),
                 pending: u.st.pending.iter().cloned().collect(),
+                poise: crate::poise::state(&self.w, i).map_or(0, |p| p.value),
+                max_poise: crate::poise::state(&self.w, i).map_or(0, |p| p.max),
             })
             .collect()
     }
@@ -555,6 +611,23 @@ impl Session {
         let enraged: Vec<UnitId> = self.w.enemies.iter().copied().filter(|&e| self.is_enraged(e)).collect();
         let mut out = crate::intent::intents(&self.w, &self.resolver.scheduled, &self.on_grid_at_schedule, &enraged);
         for r in out.iter_mut() {
+            r.morale_state = self.morale_state_of(r.unit);
+            r.morale_group = self.morale_group_of(r.unit);
+        }
+        out
+    }
+
+    /// RULESET1 V5, intent UI5: the round intent records of every active unit, both sides (party from its plan while
+    /// planning, else from its committed actions; enemies as `enemy_intents`, with morale); empty without the rule
+    /// `plan_badges` (classic) or once the battle is over.
+    pub fn round_intents(&self) -> Vec<crate::intent::Intent> {
+        if self.combat_over || !crate::intent::badges_on(&self.w) {
+            return Vec::new();
+        }
+        let enraged: Vec<UnitId> = self.w.enemies.iter().copied().filter(|&e| self.is_enraged(e)).collect();
+        let plan = self.is_planning().then_some(&self.plan);
+        let mut out = crate::intent::round_intents(&self.w, plan, &self.resolver.scheduled, &self.on_grid_at_schedule, &enraged);
+        for r in out.iter_mut().filter(|r| self.w.enemies.contains(&r.unit)) {
             r.morale_state = self.morale_state_of(r.unit);
             r.morale_group = self.morale_group_of(r.unit);
         }
@@ -890,12 +963,45 @@ impl Session {
         ai::build_steps(&self.w, &mut self.plan, actor, &p);
     }
 
+    /// RULESET1_INTENT IN2, IN6: sets unit `c`'s round intent while the round is planned (refused otherwise). A change
+    /// drops its intent-bound buffs (the lines go to `events`) and its planned steps (they were for the old intent).
+    pub fn set_round_intent(&mut self, c: UnitId, intent: &str) -> Result<Vec<String>, String> {
+        if self.phase != Phase::Planning || self.plan_confirmed {
+            return Err("The intent changes only at a round start, while planning.".into());
+        }
+        let Some(i) = round_intent::RoundIntent::parse(intent) else { return Err(format!("Unknown intent '{intent}'.")) };
+        let before = round_intent::intent_of(&self.w, c);
+        let lines = round_intent::set_intent(&mut self.w, c, i)?;
+        if before.is_some_and(|b| b != i) {
+            self.plan.clear(c);
+        }
+        self.events.extend(lines.iter().cloned());
+        Ok(lines)
+    }
+
+    /// RULESET1_INTENT TG1: sets unit `c`'s round target while planning (its intent first; the intent table decides).
+    pub fn set_round_target(&mut self, c: UnitId, target: round_intent::RoundTarget) -> Result<(), String> {
+        if self.phase != Phase::Planning || self.plan_confirmed {
+            return Err("The target is set while planning.".into());
+        }
+        round_intent::set_target(&mut self.w, c, target)
+    }
+
+    /// RULESET1_INTENT MV11: sets the kind of unit `c`'s Maneuver round while planning.
+    pub fn set_maneuver(&mut self, c: UnitId, kind: round_intent::ManeuverKind) -> Result<(), String> {
+        if self.phase != Phase::Planning || self.plan_confirmed {
+            return Err("The Maneuver kind is set while planning.".into());
+        }
+        round_intent::set_maneuver(&mut self.w, c, kind)
+    }
+
     pub fn plan_is_valid(&self) -> bool {
         self.w.allies.iter().all(|&a| !self.w.units[a].is_active() || self.plan.is_valid(&self.w, a))
     }
 
     pub fn confirm_plan(&mut self) -> bool {
-        if self.phase != Phase::Planning || !self.plan_is_valid() {
+        // ENCOUNTER2 H1: a hold escape is not planned before someone holds
+        if self.phase != Phase::Planning || !self.plan_is_valid() || self.needs_stay_pick() {
             return false;
         }
         self.plan.commit(&self.w, &mut self.resolver);
@@ -929,6 +1035,8 @@ impl Session {
                     self.append(e);
                 }
             }
+            self.log_ground(round, block);
+            self.log_spared(round, block);
         }
         if let Some(idx) = self.pending.pop_front() {
             self.last_popped = Some((self.current_round, self.current_block, idx));
@@ -939,11 +1047,42 @@ impl Session {
             self.on_action_resolved(idx);
             let (round, block) = (self.current_round, self.current_block);
             let a = self.resolver.scheduled[idx].clone();
-            // Every popped action gets its cell, also one cancelled before it resolved (as Godot logs it).
-            self.append(crate::log::from_action(&self.w, &a, round, block));
+            // Every popped action gets its cell, also one cancelled before it resolved (as Godot logs it); RULESET1 P9:
+            // one its unit's break cancelled has the break's cell instead
+            if !a.broken {
+                self.append(crate::log::from_action(&self.w, &a, round, block));
+            }
             for r in &a.command.reactions {
                 self.append(crate::log::riposte_entry(&self.w, r, round, block));
             }
+            // RULESET1 P9: each break the action dealt gets its cell; the metrics count the hits (rule poise)
+            for st in &a.command.staggers {
+                if let Some(b) = &st.broke {
+                    self.append(crate::log::break_entry(&self.w, st.target, b, round, block));
+                }
+            }
+            if !a.command.staggers.is_empty() {
+                self.feed(|m, s| m.on_staggers(s, idx));
+            }
+            // HOOKS1 FM9: each forced move's cell, then each collision hit's (the metrics hear its HP change with it)
+            // and the break it caused (rule forced_move)
+            for m in &a.command.pushes {
+                self.append(crate::log::forced_entry(&self.w, m, &a.command.name, round, block));
+                for h in &m.hits {
+                    if let Some(j) = self.w.hp_journal.as_mut() {
+                        j.extend(h.journal.iter().copied());
+                    }
+                    self.append(crate::log::collision_entry(&self.w, m, h, &a.command.name, round, block));
+                    if let Some(b) = h.stagger.as_ref().and_then(|st| st.broke.as_ref()) {
+                        self.append(crate::log::break_entry(&self.w, h.unit, b, round, block));
+                    }
+                }
+            }
+            if !a.command.pushes.is_empty() {
+                self.feed(|m, s| m.on_forced(s, idx));
+            }
+            self.log_ground(round, block);
+            self.log_spared(round, block);
         }
         if self.pending.is_empty() {
             let block = self.current_block;
@@ -951,8 +1090,10 @@ impl Session {
             let end_of_round = self.current_block >= self.def.total_blocks;
             if end_of_round {
                 self.resolver.apply_round_end_effects(&mut self.w);
+                self.log_ground(self.current_round, block);
             }
             self.on_block_end();
+            self.log_spared(self.current_round, block);
             // The archive: the actions as they resolved and the state after this block.
             self.refresh_archive();
             let snap = self.snapshot();
@@ -973,6 +1114,20 @@ impl Session {
                 return;
             }
             self.current_block += 1;
+        }
+    }
+
+    /// HOOKS1 6: a cell per ground event since the last call (placements, hazard hits, fades; rule ground_hazards, none
+    /// in classic); a hit on entering hands its held-back HP rows to the metrics with its own cell.
+    fn log_ground(&mut self, round: i32, block: i32) {
+        for ev in self.w.ground.take() {
+            if let crate::ground::Event::Hit(h) = &ev {
+                if let Some(j) = self.w.hp_journal.as_mut() {
+                    j.extend(h.journal.iter().copied());
+                }
+            }
+            self.append(crate::log::ground_entry(&self.w, &ev, round, block));
+            self.feed(|m, s| m.on_ground(s, &ev));
         }
     }
 
@@ -1064,6 +1219,105 @@ impl Session {
         let target = if self.objective.objective == "slay" { self.first_of_ref(&self.objective.unit_ref) } else { None };
         let (guests, protected) = (self.guests.clone(), self.protected.clone());
         self.objective.verdict(&self.w, &heroes, &guests, &protected, &foes, end_of_round, target)
+    }
+
+    /// ENCOUNTER2 S2 (was BattleBridge.outcome's last-round rule, written by each caller): the battle's verdict, else
+    /// `timeout_outcome` (fled by default) once the last round is over, else "" while it can go on.
+    pub fn final_outcome(&self) -> String {
+        if !self.outcome.is_empty() {
+            return self.outcome.clone();
+        }
+        if self.phase == Phase::Replay && !self.can_advance_round() {
+            return self.timeout_outcome.clone();
+        }
+        String::new()
+    }
+
+    /// ENCOUNTER2 S3: each hero (party-side units but guests, ally order) and how the battle left it: stayed (held at
+    /// a won hold escape), downed (0 HP), escaped (withdrew), else standing.
+    pub fn party_fates(&self) -> Vec<(UnitId, PartyFate)> {
+        self.w
+            .allies
+            .iter()
+            .copied()
+            .filter(|c| !self.guests.contains(c))
+            .map(|c| {
+                let u = &self.w.units[c];
+                let fate = if self.objective.stayed.contains(&c) {
+                    PartyFate::Stayed
+                } else if !u.is_alive() {
+                    PartyFate::Downed
+                } else if u.is_withdrawn {
+                    PartyFate::Escaped
+                } else {
+                    PartyFate::Standing
+                };
+                (c, fate)
+            })
+            .collect()
+    }
+
+    /// ENCOUNTER2 H1: a hold escape still waits for its holder (planning cannot be confirmed).
+    pub fn needs_stay_pick(&self) -> bool {
+        self.w.hold.as_ref().is_some_and(|g| g.holder.is_none())
+    }
+
+    /// ENCOUNTER2 H1: `c` holds the hold tiles (host request `stay_pick`): once, while round 1 is planned and nothing
+    /// is confirmed, a hero on the field.
+    pub fn stay_pick(&mut self, c: UnitId) -> Result<(), String> {
+        let Some(g) = self.w.hold.as_ref() else { return Err("This battle has no tile to hold.".into()) };
+        if let Some(h) = g.holder {
+            return Err(format!("{} already holds {}.", self.w.units[h].name, g.label));
+        }
+        if self.current_round != 1 || !self.is_planning() {
+            return Err("The holder is picked before round 1 is confirmed.".into());
+        }
+        if c >= self.w.units.len() || !g.heroes.contains(&c) || !self.w.has(c) {
+            return Err(format!("Pick a hero on the field to hold {}.", g.label));
+        }
+        if let Some(g) = self.w.hold.as_mut() {
+            g.holder = Some(c);
+        }
+        Ok(())
+    }
+
+    /// ENCOUNTER2 H1: the holder sims and autoplay pick (`pick_default`: the hero on the field with the most HP, the
+    /// first on a tie; or the first hero on the field); None when no pick is due.
+    pub fn stay_pick_default(&mut self) -> Option<UnitId> {
+        if !self.needs_stay_pick() || self.current_round != 1 || !self.is_planning() {
+            return None;
+        }
+        let g = self.w.hold.as_ref()?;
+        let on_field: Vec<UnitId> = g.heroes.iter().copied().filter(|&c| self.w.has(c)).collect();
+        let first = self.stay.as_ref().is_some_and(|sb| sb.pick_default == "first");
+        let mut pick = on_field.first().copied()?;
+        if !first {
+            for &c in &on_field {
+                if self.w.units[c].hp > self.w.units[pick].hp {
+                    pick = c;
+                }
+            }
+        }
+        self.stay_pick(pick).ok()?;
+        Some(pick)
+    }
+
+    /// ENCOUNTER2 H3: the plan line of a hold escape while its gate is shut ("" otherwise).
+    pub fn gate_note(&self) -> String {
+        self.w.hold.as_ref().map(|g| g.note(&self.w)).unwrap_or_default()
+    }
+
+    /// ENCOUNTER2 S1: one EVENT cell (and event line) for each unkillable unit damage first failed to down.
+    fn log_spared(&mut self, round: i32, block: i32) {
+        while self.spared_logged < self.w.spared.len() {
+            let c = self.w.spared[self.spared_logged];
+            self.spared_logged += 1;
+            let name = self.w.units[c].name.clone();
+            let line = format!("{name} will not fall here.");
+            let ally = self.w.allies.contains(&c);
+            self.append(crate::log::Entry::event(round, block, &name, ally, "Unkillable", "Unkillable", "SPARED", &line, ""));
+            self.events.push(line);
+        }
     }
 
     pub fn can_advance_round(&self) -> bool {

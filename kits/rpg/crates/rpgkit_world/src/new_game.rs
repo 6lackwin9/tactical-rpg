@@ -57,8 +57,18 @@ pub fn create(d: &Data, world_id: &str, ids: &[String], seed: i64) -> Result<Gam
     }
     let mut state = GameState::create(d, world_id, party);
     state.rng_seed = if seed >= 0 { seed.min(SEED_MAX) } else { clock_seed() };
+    // CAMPAIGN1 F5: the run id comes from the seed
+    state.campaign = crate::campaign::Campaign::fresh(d, world_id, state.rng_seed);
     state.party.gold = dialogue::start_gold(d, world_id);
     state.party.supplies = travel::start_supplies(d, world_id);
+    // STORYUI1 5.4: the world's start sequence runs (its leading effects steps at once); the game opens on it
+    let seq = crate::story::start_sequence(d, world_id);
+    if !seq.is_empty() {
+        let started = crate::story::start(d, &mut state, &seq);
+        if !json::b(&started, "ok", false) {
+            return Err(json::sget(&started, "errors"));
+        }
+    }
     let errors = state.validate(d);
     if errors.is_empty() {
         Ok(state)

@@ -27,6 +27,18 @@ pub const PIERCE: &str = "pierce";
 pub const REACH: &str = "reach";
 pub const FLANK: &str = "flank";
 pub const PLAN_BADGES: &str = "plan_badges";
+/// HOOKS1 4.1: the combat hooks' rule ids (all extensions, off in classic): forced moves, ground hazards, scheduled
+/// arena hazards, events and triggers (riders, held guard), unit meters, the HP cost of skills, the guard bypass, the
+/// AI tactics and target preferences, and the execute match of an `exploit` entry with `hp_below`.
+pub const FORCED_MOVE: &str = "forced_move";
+pub const GROUND_HAZARDS: &str = "ground_hazards";
+pub const ARENA_HAZARDS: &str = "arena_hazards";
+pub const TRIGGERS: &str = "triggers";
+pub const UNIT_METERS: &str = "unit_meters";
+pub const HP_COST: &str = "hp_cost";
+pub const IGNORE_GUARD: &str = "ignore_guard";
+pub const AI_TACTICS: &str = "ai_tactics";
+pub const EXECUTE: &str = "execute";
 
 /// An option is incompatible with classic (on only under its ruleset); an extension is compatible and inert without
 /// data, still off in classic so classic cannot drift when data is added, and may be switched on or off one by one
@@ -43,8 +55,8 @@ pub struct Rule {
     pub kind: RuleKind,
 }
 
-/// The rule register (RULESET1 3.2), in its order.
-pub const REGISTER: [Rule; 9] = [
+/// The rule register (RULESET1 3.2, then HOOKS1 4.1), in its order.
+pub const REGISTER: [Rule; 18] = [
     Rule { id: ROUND_INTENT, kind: RuleKind::Option },
     Rule { id: ENEMY_MOVES, kind: RuleKind::Option },
     Rule { id: DECK, kind: RuleKind::Option },
@@ -54,6 +66,15 @@ pub const REGISTER: [Rule; 9] = [
     Rule { id: REACH, kind: RuleKind::Extension },
     Rule { id: FLANK, kind: RuleKind::Extension },
     Rule { id: PLAN_BADGES, kind: RuleKind::Extension },
+    Rule { id: FORCED_MOVE, kind: RuleKind::Extension },
+    Rule { id: GROUND_HAZARDS, kind: RuleKind::Extension },
+    Rule { id: ARENA_HAZARDS, kind: RuleKind::Extension },
+    Rule { id: TRIGGERS, kind: RuleKind::Extension },
+    Rule { id: UNIT_METERS, kind: RuleKind::Extension },
+    Rule { id: HP_COST, kind: RuleKind::Extension },
+    Rule { id: IGNORE_GUARD, kind: RuleKind::Extension },
+    Rule { id: AI_TACTICS, kind: RuleKind::Extension },
+    Rule { id: EXECUTE, kind: RuleKind::Extension },
 ];
 
 /// The register entry of `id`.
@@ -78,6 +99,28 @@ pub fn kind_intent(kind: &str) -> &'static str {
         _ => NEUTRAL,
     }
 }
+
+/// The intent Act 2's meter spec reserves (IN1): a skill may take it only when a ruleset row lists it.
+pub const CHANNEL: &str = "channel";
+
+/// RULESET1_INTENT IN4: the `round_intent` values a skill of `kind` may set (beside "" = `kind_intent`): ATTACK assault
+/// or maneuver, DEFEND guard, SUPPORT support or guard (self-only), FOCUS support, DISENGAGE maneuver, the engine kinds
+/// neutral; `channel` (any authored kind) is checked on its own.
+pub fn kind_intents(kind: &str) -> &'static [&'static str] {
+    match kind {
+        "ATTACK" => &["assault", "maneuver"],
+        "DEFEND" => &["guard"],
+        "SUPPORT" => &["support", "guard"],
+        "FOCUS" => &["support"],
+        "DISENGAGE" => &["maneuver"],
+        "MOVE" | "REST" | "TARGET" | "STATUS" => &[NEUTRAL],
+        _ => &[],
+    }
+}
+
+/// RULESET1_INTENT MV3: the condition an attack's `exploit` may name for a flank hit (rule `flank`; not a status, so
+/// classic never matches it).
+pub const FLANKED: &str = "flanked";
 
 /// The deck's slot counts (RULESET1 9 D1; all 0 when the row sets none).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

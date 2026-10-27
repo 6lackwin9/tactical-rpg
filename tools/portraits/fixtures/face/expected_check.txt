@@ -1,0 +1,12 @@
+portraits/common/orphan.face.json: no portrait orphan.png beside the sidecar.
+portraits/common/orphan.face.json: border must be 0-6 (is 7).
+portraits/common/overlays.face.json: idle eye_glow needs an eye box.
+portraits/common/overlays.face.json: idle 'sparkle' is not an overlay (one of glow, veins, eye_glow, ash, smoke).
+portraits/common/overlays.face.json: idle 'sparkle' intensity must be 0.05-1.0 (is 2).
+portraits/common/overlays.face.json: idle veins needs a vein root.
+portraits/common/overlays.face.json: idle 'veins' intensity must be 0.05-1.0 (is 0.01).
+portraits/heroes/bad_box.face.json: eye box 1 [0, 20, 5, 3] must lie inside the inner rect (2-46).
+portraits/heroes/bad_box.face.json: glow anchor 1 radius must be 4-24 (is 2).
+portraits/npcs/scaled.face.json: size 40 differs from the PNG's width 48: the anchors are scaled by 48 / 40.
+portraits/npcs/typo.face.json: the face sidecar has no key 'nose' (keys: size, border, eyes, blink, lid, glow, veins, mouth, rim, idle).
+portraits/npcs/typo.face.json: rim must be "" or a #rrggbb colour.

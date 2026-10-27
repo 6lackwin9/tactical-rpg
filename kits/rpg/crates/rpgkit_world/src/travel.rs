@@ -1,5 +1,8 @@
 //! TravelRules (runtime) and TravelRunner (scripts/travel/): the world-map graph, known nodes, best paths, the
-//! map view, and auto-pathed trips leg by leg (clock, supplies, scripted and road fights).
+//! map view, and auto-pathed trips leg by leg (clock, supplies, scripted and road fights). CAMPAIGN1 (engine-only,
+//! inert outside a campaign world): each leg ticks the campaign (days, then leg; K2, M3) and may end the trip (status
+//! `over`, K4); upkeep per day and the zero-upkeep and band modifiers of the road-fight chance (P2, P3, M7); the map
+//! view's checkpoint lines (STORYUI1 B10).
 
 use crate::data::Data;
 use crate::explore::{self, SPAWN};
@@ -285,7 +288,7 @@ pub fn trip(d: &Data, gs: &GameState, from: &str, to: &str) -> Dict {
     let (mut time, mut spent, mut have) = (0, 0, gs.party.supplies);
     for rq in routes {
         let leg = json::i(&route_in(d, &gs.world_id, &rq), "time", 0);
-        let paid = PartyState::supplies_cost(have, leg);
+        let paid = PartyState::supplies_cost(have, crate::campaign::purse::leg_upkeep(d, &gs.world_id, leg));
         have -= paid;
         spent += paid;
         time += leg;
@@ -293,16 +296,21 @@ pub fn trip(d: &Data, gs: &GameState, from: &str, to: &str) -> Dict {
     json::obj([("ok", Value::Bool(true)), ("time", int(time)), ("supplies", int(spent))])
 }
 
-/// {current, supplies, nodes: [{qid, name, visited, kind, region, quest, map_pos}], routes: [{qid, from, to, two_way, open, time}]}.
+/// {current, supplies, nodes: [{qid, name, visited, kind, region, quest, map_pos, jobs?, deadlines?}], routes: [{qid,
+/// from, to, two_way, open, time}]}. STORYUI1 B10: `jobs` (the names of the available quests of boards opened once
+/// whose node this is) and `deadlines` (the checkpoint lines of the quests whose node this is, CAMPAIGN1) only when
+/// there are some.
 pub fn view(d: &Data, gs: &GameState) -> Dict {
     let known_nodes = known(d, gs);
     let quest_at = quest_nodes(d, gs);
+    let jobs = crate::board::jobs(d, gs);
+    let deadlines = crate::board::deadlines(d, gs);
     let mut node_list = Vec::new();
     for q in &known_nodes {
         let loc = explore::resolve_location(d, gs, q);
         let region_ref = json::s(loc, "region");
         let region = if region_ref.is_empty() { json::empty() } else { d.resolve(&json::s_or(loc, "_world", &gs.world_id), "regions", &region_ref) };
-        node_list.push(Value::Object(json::obj([
+        let mut node = json::obj([
             ("qid", q.clone().into()),
             ("name", json::s_or(loc, "name", q).into()),
             ("visited", Value::Bool(is_visited(gs, q))),
@@ -310,7 +318,16 @@ pub fn view(d: &Data, gs: &GameState) -> Dict {
             ("region", json::s(region, "name").into()),
             ("quest", Value::Bool(quest_at.contains(q))),
             ("map_pos", Value::Array(json::aget(loc, "map_pos").to_vec())),
-        ])));
+        ]);
+        let here: Vec<String> = jobs.iter().filter(|(n, _)| n == q).map(|(_, name)| name.clone()).collect();
+        if !here.is_empty() {
+            node.insert("jobs".into(), json::strs(&here));
+        }
+        let due: Vec<Value> = deadlines.iter().filter(|(n, _)| n == q).map(|(_, line)| line.clone()).collect();
+        if !due.is_empty() {
+            node.insert("deadlines".into(), Value::Array(due));
+        }
+        node_list.push(Value::Object(node));
     }
     let mut route_list = Vec::new();
     for r in graph(d, &gs.world_id) {
@@ -356,8 +373,15 @@ fn trip_result(ok: bool, errors: &[String], status: &str, legs_done: i64, time: 
     out
 }
 
-/// Travels towards `to_ref` leg by leg; stops at the first fight. {ok, status: fight | arrived, ...}.
+/// Travels towards `to_ref` leg by leg; stops at the first fight. {ok, status: fight | arrived | over, ...,
+/// campaign?}. CAMPAIGN1: after each leg's time the campaign ticks days(time, travel), then leg(route tags); a tick
+/// that ends the run stops the trip before the leg's road roll (status `over`, no autosave), and so does an arrival's
+/// enter tick (CAMPAIGN1-T: enter triggers) at that node; `campaign` holds the ticks' events when there are some.
 pub fn travel(d: &Data, gs: &mut GameState, to_ref: &str) -> Dict {
+    let over = crate::campaign::save_refusal(gs);
+    if !over.is_empty() {
+        return json::fail(over);
+    }
     let start = current_node(d, gs);
     if start.is_empty() {
         return json::fail("The party is not at a world map node.");
@@ -380,15 +404,25 @@ pub fn travel(d: &Data, gs: &mut GameState, to_ref: &str) -> Dict {
         at = leg_to;
     }
     let mut events = Vec::new();
+    let mut ticked: Vec<Value> = Vec::new();
     let (mut spent, mut supplies_spent, mut starved_legs, mut legs_done) = (0, 0, 0, 0);
     for (route, from, to) in plan {
         let leg_time = json::i(&route, "time", 0);
         let starved = gs.party.supplies == 0;
         gs.time += leg_time;
         spent += leg_time;
-        supplies_spent += gs.party.spend_supplies(leg_time);
+        supplies_spent += gs.party.spend_supplies(crate::campaign::purse::leg_upkeep(d, &gs.world_id, leg_time));
         if starved {
             starved_legs += 1;
+        }
+        if gs.campaign.is_some() {
+            ticked.extend(crate::campaign::tick(d, gs, &crate::campaign::Cause::Days { n: leg_time, why: "travel".into() }));
+            ticked.extend(crate::campaign::tick(d, gs, &crate::campaign::Cause::Leg { route_tags: json::sget(&route, "tags") }));
+            if !crate::campaign::save_refusal(gs).is_empty() {
+                let mut out = trip_result(true, &[], "over", legs_done, spent, events, supplies_spent, starved_legs);
+                crate::campaign::merge_events(&mut out, ticked);
+                return out;
+            }
         }
         let fight = leg_fight(d, gs, &route, &from, &to, starved);
         if !fight.is_empty() {
@@ -400,14 +434,24 @@ pub fn travel(d: &Data, gs: &mut GameState, to_ref: &str) -> Dict {
             out.insert("events".into(), Value::Array(events));
             out.insert("supplies_spent".into(), int(supplies_spent));
             out.insert("starved_legs".into(), int(starved_legs));
+            crate::campaign::merge_events(&mut out, ticked);
             return out;
         }
         let entered = complete_leg(d, gs, &json::s(&route, "_qid"), &to);
         if !json::b(&entered, "ok", false) {
-            return trip_result(false, &json::sget(&entered, "errors"), "stopped", legs_done, spent, events, supplies_spent, starved_legs);
+            let mut out = trip_result(false, &json::sget(&entered, "errors"), "stopped", legs_done, spent, events, supplies_spent, starved_legs);
+            crate::campaign::merge_events(&mut out, ticked);
+            return out;
         }
         events.extend(json::aget(&entered, "events").iter().filter(|e| json::s(json::dict(e), "kind") != "autosave").cloned());
         legs_done += 1;
+        // CAMPAIGN1 T1: the arrival's enter tick; one that ends the run stops the trip at this node
+        ticked.extend(json::aget(&entered, "campaign").iter().cloned());
+        if !crate::campaign::save_refusal(gs).is_empty() {
+            let mut out = trip_result(true, &[], "over", legs_done, spent, events, supplies_spent, starved_legs);
+            crate::campaign::merge_events(&mut out, ticked);
+            return out;
+        }
     }
     events.push(Value::Object(json::obj([("kind", "autosave".into())])));
     let mut out = json::ok_result(true, &[]);
@@ -418,6 +462,7 @@ pub fn travel(d: &Data, gs: &mut GameState, to_ref: &str) -> Dict {
     out.insert("events".into(), Value::Array(events));
     out.insert("supplies_spent".into(), int(supplies_spent));
     out.insert("starved_legs".into(), int(starved_legs));
+    crate::campaign::merge_events(&mut out, ticked);
     out
 }
 
@@ -433,9 +478,13 @@ fn leg_fight(d: &Data, gs: &mut GameState, route: &Dict, from: &str, to: &str, s
             return fight(d, gs, route, "scripted", &json::s(&s, "encounter"), &sid, false, from, to);
         }
     }
-    let normal = json::aget(route, "encounters");
+    // CAMPAIGN1 M7, P3: the band modifiers' encounters join the normal pool, the zero-upkeep and band modifiers move
+    // the chance (outside a campaign world: no extra encounter and today's chance)
+    let mut pool = json::aget(route, "encounters").to_vec();
+    pool.extend(crate::campaign::purse::road_encounters(d, gs, route));
+    let normal = &pool[..];
     let elites = json::aget(route, "elites");
-    let chance = leg_chance(gs, route, starved);
+    let chance = if gs.campaign.is_some() { crate::campaign::purse::road_chance(d, gs, route, leg_chance(gs, route, false), starved) } else { leg_chance(gs, route, starved) };
     if chance <= 0 || (normal.is_empty() && elites.is_empty()) {
         return Dict::new();
     }
@@ -493,6 +542,7 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
     }
     let rq = json::s(fight, "route");
     let mut events = Vec::new();
+    let mut woke_campaign = Vec::new();
     match outcome {
         "won" => {
             let event_id = json::s(fight, "event");
@@ -527,10 +577,13 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
                 return base(false, &json::sget(&entered, "errors"), events, applied["xp"].clone(), applied["advanced"].clone());
             }
             events.extend(json::aget(&entered, "events").iter().cloned());
+            // CAMPAIGN1 T1: the arrival's enter tick events follow the battle's
+            woke_campaign = json::aget(&entered, "campaign").to_vec();
         }
         "lost" => {
             let woke = explore::wake(d, gs, &json::s(fight, "from"));
             events.extend(json::aget(&woke, "events").iter().cloned());
+            woke_campaign = json::aget(&woke, "campaign").to_vec();
         }
         _ => {}
     }
@@ -538,5 +591,7 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
     for (k, v) in crate::battle::result_keys(&applied) {
         out.insert(k, v);
     }
+    // CAMPAIGN1 R4: a retreat's tick events follow the battle's
+    crate::campaign::merge_events(&mut out, woke_campaign);
     out
 }

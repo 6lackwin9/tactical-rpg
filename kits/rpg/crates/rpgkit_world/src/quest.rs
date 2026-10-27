@@ -14,14 +14,15 @@ pub const ORDER_OPS: [&str; 4] = [">=", "<=", ">", "<"];
 
 // ---- QuestRules ----------------------------------------------------------------------------------------------
 
-/// The one evaluation path of every flag condition: `==` strict (a missing flag reads false), ordering ops on ints.
+/// The one evaluation path of every flag condition: `==` strict (a missing flag reads false), ordering ops on ints;
+/// read keys (CAMPAIGN1 11.4) answer from the campaign (`GameState::read_flag`).
 pub fn condition_met(gs: &GameState, cond: &Dict) -> bool {
     let want = json::normalize(cond.get("value").unwrap_or(&Value::Bool(true)));
     let key = json::s(cond, "key");
     let op = json::s_or(cond, "op", "==");
     match op.as_str() {
         "==" | "!=" => {
-            let have = gs.flag(&key).cloned().unwrap_or(Value::Bool(false));
+            let have = gs.read_flag(&key).unwrap_or(Value::Bool(false));
             let same = json::same(&have, &want);
             if op == "==" {
                 same
@@ -30,7 +31,7 @@ pub fn condition_met(gs: &GameState, cond: &Dict) -> bool {
             }
         }
         ">=" | "<=" | ">" | "<" => {
-            let raw = gs.flag(&key).cloned().unwrap_or(int(0));
+            let raw = gs.read_flag(&key).unwrap_or(int(0));
             if !json::is_int(&raw) || !json::is_int(&want) {
                 return false;
             }

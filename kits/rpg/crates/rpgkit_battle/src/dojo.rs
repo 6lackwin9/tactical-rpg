@@ -503,7 +503,7 @@ impl DojoSession {
 
     /// AP the hero would pay now: the skill's cost + the automatic stance switch.
     pub fn skill_ap(&self, s: &SkillDef) -> i32 {
-        skill::ap_cost(s, Some(self.hero())) + self.switch_ap(s)
+        skill::ap_cost_by(s, Some(self.hero()), &self.ruleset) + self.switch_ap(s)
     }
 
     /// DojoSession.use_skill: pays AP (debt allowed) and switches stance, then strikes (attack), raises a guard

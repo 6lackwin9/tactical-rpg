@@ -216,6 +216,77 @@ impl Detail {
     }
 }
 
+/// RULESET1 P9 (rule poise; engine-only, timeline keys): one unit's stagger and break counts for one fight. The hits
+/// it dealt: `stagger_dealt` (poise taken), `windup_hits` (hits into a windup), `breaks` (breaks it dealt), of them
+/// `windup_breaks` (the target was in windup), `chance_breaks` (by the chance roll) and `sure_breaks` (by `sure_break`),
+/// and `chances` (break chance rolls); what it took: `broken` (times it broke).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PoiseRecord {
+    pub stagger_dealt: i32,
+    pub windup_hits: i32,
+    pub breaks: i32,
+    pub windup_breaks: i32,
+    pub chances: i32,
+    pub chance_breaks: i32,
+    pub sure_breaks: i32,
+    pub broken: i32,
+}
+
+impl PoiseRecord {
+    pub fn to_json(&self) -> Value {
+        json!({"stagger_dealt": self.stagger_dealt, "windup_hits": self.windup_hits, "breaks": self.breaks, "windup_breaks": self.windup_breaks,
+            "chances": self.chances, "chance_breaks": self.chance_breaks, "sure_breaks": self.sure_breaks, "broken": self.broken})
+    }
+}
+
+/// HOOKS1 4.2 (rule forced_move; engine-only, timeline keys): one unit's forced-move counts for one fight, kept only
+/// for units a forced move involved. What it drove: `pushes` and `pulls` (moves that were not held), `tiles` (tiles it
+/// moved others), `collisions` (its moves that hit something), `collision_damage` (HP its collisions took, blockers
+/// included), `collision_breaks` (units its collisions broke), `stops` (Walks its moves cancelled); what it took:
+/// `moved` (times it was moved) and `held` (times it held firm).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ForcedRecord {
+    pub pushes: i32,
+    pub pulls: i32,
+    pub tiles: i32,
+    pub collisions: i32,
+    pub collision_damage: i32,
+    pub collision_breaks: i32,
+    pub stops: i32,
+    pub moved: i32,
+    pub held: i32,
+}
+
+impl ForcedRecord {
+    pub fn to_json(&self) -> Value {
+        json!({"pushes": self.pushes, "pulls": self.pulls, "tiles": self.tiles, "collisions": self.collisions, "collision_damage": self.collision_damage,
+            "collision_breaks": self.collision_breaks, "stops": self.stops, "moved": self.moved, "held": self.held})
+    }
+}
+
+/// HOOKS1 4.2 (rule ground_hazards; engine-only, timeline keys): one unit's ground hazard counts for one fight, kept only
+/// for units a hazard involved. What it placed: `placed` (placements), `tiles` (tiles covered), `damage` (HP its hazards
+/// took, on entering and at round end), `statuses` (statuses they landed), `traps` (its traps sprung); what it met:
+/// `hits` (times a hazard acted on it), `taken` (HP it lost to hazards), `trapped` (traps it sprang).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct HazardRecord {
+    pub placed: i32,
+    pub tiles: i32,
+    pub damage: i32,
+    pub statuses: i32,
+    pub traps: i32,
+    pub hits: i32,
+    pub taken: i32,
+    pub trapped: i32,
+}
+
+impl HazardRecord {
+    pub fn to_json(&self) -> Value {
+        json!({"placed": self.placed, "tiles": self.tiles, "damage": self.damage, "statuses": self.statuses, "traps": self.traps,
+            "hits": self.hits, "taken": self.taken, "trapped": self.trapped})
+    }
+}
+
 /// The last fight's outcome numbers.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FightRecord {
@@ -262,6 +333,14 @@ pub struct BattleMetrics {
     /// Display name -> record of the last fight (allies, then enemies).
     pub units: IndexMap<String, UnitRecord>,
     pub detail: IndexMap<String, Detail>,
+    /// RULESET1 P9: display name -> stagger and break counts of the last fight (empty without the rule poise).
+    pub poise: IndexMap<String, PoiseRecord>,
+    /// HOOKS1 4.2: display name -> forced-move counts of the last fight (only units a forced move involved; empty
+    /// without the rule forced_move).
+    pub forced: IndexMap<String, ForcedRecord>,
+    /// HOOKS1 4.2: display name -> ground hazard counts of the last fight (only units a hazard involved; empty without
+    /// the rule ground_hazards).
+    pub hazards: IndexMap<String, HazardRecord>,
     /// Set when the fight ends.
     pub fight_record: Option<FightRecord>,
     pub fail_lines: Vec<String>,
@@ -307,6 +386,9 @@ impl BattleMetrics {
         self.frozen = false;
         self.units.clear();
         self.detail.clear();
+        self.poise.clear();
+        self.forced.clear();
+        self.hazards.clear();
         self.fight_record = None;
         self.by_name.clear();
         self.ally.clear();
@@ -330,6 +412,9 @@ impl BattleMetrics {
             let rec = UnitRecord { hp_start: u.hp, max_hp: u.max_hp, min_hp_frac: u.hp as f64 / (u.max_hp as f64).max(1.0), ..UnitRecord::default() };
             self.units.insert(u.name.clone(), rec);
             self.detail.insert(u.name.clone(), Detail::default());
+            if crate::poise::on(w) {
+                self.poise.insert(u.name.clone(), PoiseRecord::default());
+            }
             self.last_hp.insert(c, u.hp);
             self.remember_statuses(s, c);
             self.track_tile(s, c);
@@ -477,6 +562,7 @@ impl BattleMetrics {
             return;
         };
         match e.category {
+            "ATTACK" if e.subtype == crate::log::COLLISION || e.subtype == crate::log::HAZARD => self.collision(s, actor, e, &changed),
             "ATTACK" => self.attack(s, actor, e, &changed),
             "BUFF" => self.support(s, actor, e, &changed),
             _ => self.unexplained(&changed),
@@ -503,6 +589,104 @@ impl BattleMetrics {
         *d.combo_counts.entry(k.kind.to_string()).or_insert(0) += 1;
         if k.killed && k.kind != "flow" && foes && d.best_finish.is_none() {
             d.best_finish = Some(BestFinish { skill: k.skill.clone(), target, combo: k.kind.into(), status: k.status.clone(), round: s.current_round, order });
+        }
+    }
+
+    /// RULESET1 P9: the stagger records of the action at `idx` of the round (its unit dealt them).
+    pub fn on_staggers(&mut self, s: &Session, idx: usize) {
+        let Some(a) = s.resolver.scheduled.get(idx) else { return };
+        let Some(actor) = self.names.get(&a.unit).cloned() else { return };
+        for st in &a.command.staggers {
+            self.stagger_hit(s, &actor, st);
+        }
+    }
+
+    /// RULESET1 P9: one stagger record `actor` dealt.
+    fn stagger_hit(&mut self, s: &Session, actor: &str, st: &crate::poise::StaggerHit) {
+        let target = s.w.units[st.target].name.clone();
+        if let Some(r) = self.poise.get_mut(actor) {
+            r.stagger_dealt += st.before - st.after.max(0);
+            r.windup_hits += st.windup as i32;
+            r.chances += st.chance.is_some() as i32;
+            if let Some(b) = &st.broke {
+                r.breaks += 1;
+                r.windup_breaks += st.windup as i32;
+                r.chance_breaks += (b.cause == crate::poise::BreakCause::Chance) as i32;
+                r.sure_breaks += (b.cause == crate::poise::BreakCause::Sure) as i32;
+            }
+        }
+        if st.broke.is_some() {
+            if let Some(r) = self.poise.get_mut(&target) {
+                r.broken += 1;
+            }
+        }
+    }
+
+    /// HOOKS1 4.2: the forced moves of the action at `idx` of the round (its unit drove them): the forced-move counts,
+    /// and the collisions' stagger and breaks as its poise record's (rule poise).
+    pub fn on_forced(&mut self, s: &Session, idx: usize) {
+        let Some(a) = s.resolver.scheduled.get(idx) else { return };
+        for m in &a.command.pushes {
+            let driver = m.by.and_then(|b| self.names.get(&b).cloned());
+            if let Some(name) = &driver {
+                let r = self.forced.entry(name.clone()).or_default();
+                if !m.held {
+                    if m.pull {
+                        r.pulls += 1;
+                    } else {
+                        r.pushes += 1;
+                    }
+                    r.tiles += m.tiles;
+                    r.collisions += !m.blocked_by.is_empty() as i32;
+                    r.collision_damage += m.hits.iter().map(|h| h.damage).sum::<i32>();
+                    r.collision_breaks += m.hits.iter().filter(|h| h.stagger.as_ref().is_some_and(|st| st.broke.is_some())).count() as i32;
+                    r.stops += m.stopped;
+                }
+            }
+            if let Some(name) = self.names.get(&m.unit).cloned() {
+                let r = self.forced.entry(name).or_default();
+                if m.held {
+                    r.held += 1;
+                } else {
+                    r.moved += 1;
+                }
+            }
+            if let Some(name) = &driver {
+                for st in m.hits.iter().filter_map(|h| h.stagger.as_ref()) {
+                    self.stagger_hit(s, name, st);
+                }
+            }
+        }
+    }
+
+    /// HOOKS1 4.2: one ground event (rule ground_hazards): the placer's and the met unit's hazard counts.
+    pub fn on_ground(&mut self, _s: &Session, ev: &crate::ground::Event) {
+        use crate::ground::Event;
+        let name = |c: UnitId| self.names.get(&c).cloned();
+        match ev {
+            Event::Placed(p) => {
+                if let Some(n) = name(p.by) {
+                    let r = self.hazards.entry(n).or_default();
+                    r.placed += 1;
+                    r.tiles += p.cells.len() as i32;
+                }
+            }
+            Event::Hit(h) => {
+                let (by, unit) = (name(h.by), name(h.unit));
+                if let Some(n) = by {
+                    let r = self.hazards.entry(n).or_default();
+                    r.damage += h.damage;
+                    r.statuses += !h.status.is_empty() as i32;
+                    r.traps += h.trap as i32;
+                }
+                if let Some(n) = unit {
+                    let r = self.hazards.entry(n).or_default();
+                    r.hits += 1;
+                    r.taken += h.damage;
+                    r.trapped += h.trap as i32;
+                }
+            }
+            Event::Faded(_) => {}
         }
     }
 
@@ -574,6 +758,34 @@ impl BattleMetrics {
         let expected = if touched > 0 { e.damage.min(capped_log) } else { e.damage };
         if touched > 1 || lost != expected {
             self.fail(&name, &format!("log_damage {}: {} logged (capped {expected}), {lost} HP lost by {touched} units", e.skill, e.damage));
+        }
+    }
+
+    /// HOOKS1 FM4: a collision cell: the one unit it names lost exactly the logged HP, credited to the driver as a hit
+    /// (friendly fire on its own side or on itself); it is not an attack received. A ground hazard's ATTACK cell (GH5)
+    /// is checked and credited the same way, to the hazard's placer.
+    fn collision(&mut self, s: &Session, actor: UnitId, e: &Entry, changed: &IndexMap<UnitId, Buf>) {
+        let target = self.unit(&e.target);
+        let (mut lost, mut touched) = (0, 0);
+        for (&v, b) in changed {
+            if b.gain > 0 {
+                self.rec(v).other_gain += b.gain;
+            }
+            if b.loss <= 0 {
+                continue;
+            }
+            touched += 1;
+            lost += b.loss;
+            if Some(v) != target {
+                self.rec(v).other_loss += b.loss;
+                continue;
+            }
+            self.hit(s, actor, v, b.loss, b.start, e);
+        }
+        self.checks += 1;
+        if touched > 1 || lost != e.damage {
+            let name = self.names[&actor].clone();
+            self.fail(&name, &format!("log_{} {}: {} logged, {lost} HP lost by {touched} units", e.subtype.to_lowercase(), e.skill, e.damage));
         }
     }
 
@@ -941,12 +1153,25 @@ impl BattleMetrics {
         d.best_save = best;
     }
 
-    /// The parity traces' shape: {units: {name: record}, detail: {name: detail}, fight, checks, fails}.
+    /// The parity traces' shape: {units: {name: record}, detail: {name: detail}, fight, checks, fails}; RULESET1 P9 adds
+    /// `poise: {name: record}` only under the rule poise (classic keeps its shape).
     pub fn to_json(&self) -> Value {
         let units: Map<String, Value> = self.units.iter().map(|(n, r)| (n.clone(), r.to_json())).collect();
         let detail: Map<String, Value> = self.detail.iter().map(|(n, d)| (n.clone(), d.to_json())).collect();
-        json!({"units": units, "detail": detail, "fight": self.fight_record.as_ref().map_or(json!({}), |f| f.to_json()),
-            "checks": self.checks, "fails": self.fail_lines})
+        let mut out = json!({"units": units, "detail": detail, "fight": self.fight_record.as_ref().map_or(json!({}), |f| f.to_json()),
+            "checks": self.checks, "fails": self.fail_lines});
+        if !self.poise.is_empty() {
+            out["poise"] = Value::Object(self.poise.iter().map(|(n, r)| (n.clone(), r.to_json())).collect());
+        }
+        // HOOKS1 4.2: only when a forced move happened (the rule on without one keeps the shape)
+        if !self.forced.is_empty() {
+            out["forced"] = Value::Object(self.forced.iter().map(|(n, r)| (n.clone(), r.to_json())).collect());
+        }
+        // HOOKS1 4.2: only when a ground hazard was placed or acted (the rule on without one keeps the shape)
+        if !self.hazards.is_empty() {
+            out["hazards"] = Value::Object(self.hazards.iter().map(|(n, r)| (n.clone(), r.to_json())).collect());
+        }
+        out
     }
 }
 

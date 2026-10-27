@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 
 const CONTENT_TABS: [(&str, &str); 8] =
     [("skills", "Skills"), ("items", "Items"), ("item_families", "Item families"), ("passives", "Passives"), ("classes", "Classes"), ("units", "Units"), ("encounters", "Encounters"), ("terrain", "Terrain")];
-const WORLD_TABS: [(&str, &str); 14] = [
+const WORLD_TABS: [(&str, &str); 17] = [
     ("overview", "Overview"),
     ("regions", "Regions"),
     ("locations", "Locations"),
@@ -26,6 +26,10 @@ const WORLD_TABS: [(&str, &str); 14] = [
     ("dialogues", "Dialogues"),
     ("shops", "Shops"),
     ("routes", "Routes"),
+    // CAMPAIGN1 11.2
+    ("meters", "Meters"),
+    ("checkpoints", "Checkpoints"),
+    ("triggers", "Triggers"),
 ];
 
 #[derive(Debug, Clone)]
@@ -275,9 +279,14 @@ impl Screen<GameCx> for Forge {
             ui.select("forge.world", Rect::new(x, 2, 140, 14), &names, at, FAct::PickWorld, true, Vec::new());
             x = 6;
         }
-        let ty = if self.world_forge { 20 } else { 3 };
+        let mut ty = if self.world_forge { 20 } else { 3 };
         for (i, (k, label)) in self.tabs().iter().enumerate() {
             let w = ui.p.text_w(label, SMALL) as i32 + 8;
+            // a tab that would run under the Exit button starts a new row
+            if x + w > W - 38 {
+                x = 6;
+                ty += 14;
+            }
             ui.button_full(&format!("forge.tab.{k}"), Rect::new(x, ty, w, 12), label, FAct::Tab(i), true, i == self.tab, SMALL, Vec::new());
             x += w + 2;
         }

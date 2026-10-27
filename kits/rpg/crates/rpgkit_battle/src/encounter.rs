@@ -30,6 +30,8 @@ pub struct Objectives {
     pub held: i32,
     /// The reason of a verdict that needs one ("X got away.").
     pub note: String,
+    /// ENCOUNTER2 H4: the heroes holding a hold tile when a hold escape was won (empty otherwise).
+    pub stayed: Vec<UnitId>,
 }
 
 impl Objectives {
@@ -51,6 +53,7 @@ impl Objectives {
             count: value::int(o, "objective_count", 1).clamp(1, 4),
             held: 0,
             note: String::new(),
+            stayed: Vec::new(),
         }
     }
 
@@ -86,7 +89,14 @@ impl Objectives {
             }
             "escape" => {
                 let protect_out = protect.iter().all(|&g| u(g).is_withdrawn);
-                if withdrew >= self.count && !hero_active && protect_out {
+                if let Some(gate) = &w.hold {
+                    // ENCOUNTER2 H4: the gate is open, enough heroes are out and every other one is out, down or holding
+                    let settled = heroes.iter().all(|&h| !u(h).is_alive() || u(h).is_withdrawn || gate.holding(w, h));
+                    if gate.is_open(w) && withdrew >= self.count && settled && protect_out {
+                        self.stayed = heroes.iter().copied().filter(|&h| gate.holding(w, h)).collect();
+                        return WON.into();
+                    }
+                } else if withdrew >= self.count && !hero_active && protect_out {
                     return WON.into();
                 }
             }
@@ -130,6 +140,155 @@ impl Objectives {
 
     fn on_tiles(&self, w: &World, units: &[UnitId]) -> bool {
         units.iter().any(|&c| w.units[c].is_active() && w.grid.positions[c].is_some() && self.tiles.contains(&w.pos(c)))
+    }
+}
+
+// ---- Stay-behind (ENCOUNTER2 3; not in Godot) ---------------------------------------------------------------------
+
+/// ENCOUNTER2 S2: the verdicts `timeout_outcome` may name (the first is the default, today's rule).
+pub const TIMEOUT_OUTCOMES: [&str; 2] = [FLED, LOST];
+/// ENCOUNTER2 section 6: the `stay_behind` modes (hold: 3.1; stand: 3.2, ENCOUNTER2-L).
+pub const STAY_HOLD: &str = "hold";
+pub const STAY_STAND: &str = "stand";
+pub const STAY_MODES: [&str; 2] = [STAY_HOLD, STAY_STAND];
+/// H1: who holds when nobody picked (`pick_default`): the hero with the most HP now, or the first deployed.
+pub const PICK_DEFAULTS: [&str; 2] = ["highest_hp", "first"];
+/// H2: who else opens the gate once the holder is down (`fallback`).
+pub const FALLBACKS: [&str; 2] = ["any", "none"];
+/// W3: what the world does with the hero who stayed (`then`; ROSTER1 3.2).
+pub const STAY_THEN: [&str; 3] = ["none", "capture", "kill"];
+pub const DEFAULT_TILES_LABEL: &str = "the line";
+pub const DEFAULT_RESULT_LINE: &str = "{name} stayed behind.";
+
+/// ENCOUNTER2 S2: an encounter's `timeout_outcome` (fled unless it names lost).
+pub fn timeout_outcome(o: &Obj) -> String {
+    let raw = value::string(o, "timeout_outcome", FLED);
+    if TIMEOUT_OUTCOMES.contains(&raw.as_str()) {
+        raw
+    } else {
+        FLED.into()
+    }
+}
+
+/// ENCOUNTER2 section 6: an encounter's `stay_behind` block with its defaults; None when the block is empty or absent,
+/// or the objective is not `escape` (the checks refuse that row).
+#[derive(Debug, Clone, PartialEq)]
+pub struct StayBehind {
+    pub mode: String,
+    pub tiles: Vec<V2>,
+    pub tiles_label: String,
+    pub fallback_any: bool,
+    pub pick_default: String,
+    pub result_line: String,
+    /// W2: the flag key the world sets to the member who stayed (world encounters).
+    pub flag: String,
+    /// W3: none, capture or kill (world encounters).
+    pub then: String,
+}
+
+impl StayBehind {
+    pub fn read(o: &Obj) -> Option<Self> {
+        if value::string(o, "objective", "rout") != "escape" {
+            return None;
+        }
+        let block = o.get("stay_behind").and_then(Value::as_object).filter(|b| !b.is_empty())?;
+        let pick = |key: &str, options: &[&str]| {
+            let raw = value::string(block, key, options[0]);
+            if options.contains(&raw.as_str()) {
+                raw
+            } else {
+                options[0].to_string()
+            }
+        };
+        let label = value::string(block, "tiles_label", DEFAULT_TILES_LABEL);
+        let line = value::string(block, "result_line", DEFAULT_RESULT_LINE);
+        Some(Self {
+            mode: pick("mode", &STAY_MODES),
+            tiles: value::array(block, "tiles").iter().filter_map(|p| p.as_array().filter(|p| p.len() == 2).map(|p| V2::new(value::to_int(&p[0], 0), value::to_int(&p[1], 0)))).collect(),
+            tiles_label: if label.trim().is_empty() { DEFAULT_TILES_LABEL.into() } else { label },
+            fallback_any: pick("fallback", &FALLBACKS) == "any",
+            pick_default: pick("pick_default", &PICK_DEFAULTS),
+            result_line: if line.trim().is_empty() { DEFAULT_RESULT_LINE.into() } else { line },
+            flag: value::string(block, "flag", ""),
+            then: pick("then", &STAY_THEN),
+        })
+    }
+
+    pub fn is_hold(&self) -> bool {
+        self.mode == STAY_HOLD
+    }
+}
+
+/// ENCOUNTER2 H2, H3: the gate of a hold escape, kept on the `World` so a step onto an exit can ask it.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct HoldGate {
+    pub tiles: Vec<V2>,
+    /// What the tiles are called ("the winch").
+    pub label: String,
+    /// The hero picked to hold (H1; None until the pick).
+    pub holder: Option<UnitId>,
+    /// `fallback` any: with the holder down, any hero on a hold tile opens the gate.
+    pub fallback_any: bool,
+    /// The heroes (party-side units that are not guests).
+    pub heroes: Vec<UnitId>,
+}
+
+impl HoldGate {
+    /// Unit `c` is active, on the board and on a hold tile.
+    pub fn holding(&self, w: &World, c: UnitId) -> bool {
+        w.has(c) && self.tiles.contains(&w.pos(c))
+    }
+
+    /// H2: open while the holder is active and on a hold tile; with the holder down (or out) and `fallback` any, while
+    /// any hero holds a tile; shut before the pick.
+    pub fn is_open(&self, w: &World) -> bool {
+        match self.holder {
+            None => false,
+            Some(h) if w.units[h].is_active() => self.holding(w, h),
+            Some(_) => self.fallback_any && self.heroes.iter().any(|&c| self.holding(w, c)),
+        }
+    }
+
+    /// H3: unit `c` may step onto an exit now: the gate is open and `c` is not the holder.
+    pub fn lets_out(&self, w: &World, c: UnitId) -> bool {
+        self.holder != Some(c) && self.is_open(w)
+    }
+
+    /// H3: the plan line while the gate is shut ("" when open or before the pick).
+    pub fn note(&self, w: &World) -> String {
+        match self.holder {
+            Some(_) if self.is_open(w) => String::new(),
+            Some(h) if w.units[h].is_active() || !self.fallback_any => format!("The gate is shut until {} holds {}.", w.units[h].name, self.label),
+            Some(_) => format!("The gate is shut until a hero holds {}.", self.label),
+            None => String::new(),
+        }
+    }
+}
+
+/// ENCOUNTER2 S3: how a battle left a hero (guests have none).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PartyFate {
+    /// Withdrew through an exit.
+    Escaped,
+    /// Held a hold tile when the hold escape was won (3.1).
+    Stayed,
+    /// Made the last stand (3.2, ENCOUNTER2-L).
+    Stood,
+    /// At 0 HP.
+    Downed,
+    /// Still on the field.
+    Standing,
+}
+
+impl PartyFate {
+    pub fn name(self) -> &'static str {
+        match self {
+            PartyFate::Escaped => "escaped",
+            PartyFate::Stayed => "stayed",
+            PartyFate::Stood => "stood",
+            PartyFate::Downed => "downed",
+            PartyFate::Standing => "standing",
+        }
     }
 }
 

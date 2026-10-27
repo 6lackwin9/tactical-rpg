@@ -21,6 +21,26 @@ pub fn encounter_def(d: &Data, world: &str, entry: &Dict) -> EncounterDef {
     def
 }
 
+/// RULESET1 V3: the plan reveal flag of `world`: the nearest non-empty `plan_reveal_flag` of its lineage (the world,
+/// then its parents), "" when none names one.
+pub fn plan_reveal_flag(d: &Data, world: &str) -> String {
+    d.lineage(world).iter().rev().map(|lw| json::s(d.manifest(lw), "plan_reveal_flag")).find(|f| !f.is_empty()).unwrap_or_default()
+}
+
+/// RULESET1 V3: whether a battle in `world` reveals every enemy's plan: the world names a plan reveal flag and the game
+/// state holds it (a flag condition with its default value true). Read by the battle only under `plan_badges`.
+pub fn plan_reveal(d: &Data, gs: &GameState, world: &str) -> bool {
+    let flag = plan_reveal_flag(d, world);
+    !flag.is_empty() && quest::condition_met(gs, json::dict(&serde_json::json!({"key": flag})))
+}
+
+/// `encounter_def` with the game state's reveal (V3): the battle the world runner starts.
+pub fn encounter_def_in(d: &Data, gs: &GameState, world: &str, entry: &Dict) -> EncounterDef {
+    let mut def = encounter_def(d, world, entry);
+    def.plan_reveal = plan_reveal(d, gs, world);
+    def
+}
+
 /// WorldEncounter's roster: refs are world characters resolved in `world`; each spawns as its base unit wearing the
 /// character (WorldFactory.unit_entry) and then gets its named items, passives and tuning (apply_character).
 pub struct WorldRoster<'a> {
@@ -364,6 +384,13 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     if paid_gold > 0 {
         out.insert("gold".into(), int(paid_gold));
     }
+    // CAMPAIGN1 X4: the battle tick (meter inputs by the encounter's tags and the outcome); its events only when there
+    // are some (none outside a campaign world, X3)
+    let cause = crate::campaign::Cause::Battle { encounter: qid, tags: json::sget(&enc, "tags"), outcome: outcome.to_string() };
+    let events = crate::campaign::tick(d, gs, &cause);
+    if !events.is_empty() {
+        out.insert("campaign".into(), Value::Array(events));
+    }
     out
 }
 
@@ -378,7 +405,8 @@ pub fn settle(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, 
     }
 }
 
-/// The keys an `after_fight` result carries from `apply`: `rewards`, and `gold` when some was paid.
+/// The keys an `after_fight` result carries from `apply`: `rewards`, `gold` when some was paid, and `campaign` (the
+/// campaign events, CAMPAIGN1 W1) when there are some.
 pub fn result_keys(applied: &Dict) -> Dict {
     let mut out = Dict::new();
     if let Some(r) = applied.get("rewards") {
@@ -386,6 +414,9 @@ pub fn result_keys(applied: &Dict) -> Dict {
     }
     if json::i(applied, "gold", 0) > 0 {
         out.insert("gold".into(), int(json::i(applied, "gold", 0)));
+    }
+    if let Some(c) = applied.get("campaign") {
+        out.insert("campaign".into(), c.clone());
     }
     out
 }

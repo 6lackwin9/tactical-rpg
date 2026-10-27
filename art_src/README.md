@@ -6,8 +6,71 @@ takes), plus variant sheets such as `mara_voss_variant.png`.
 
 - `tools/portraits/generate.py run <model> <id>...` makes new sources from the prompts in
   `games/emberwake/docs/specs/ART2_PROMPTS.md`, with `mara_voss.png` as the style reference.
-- `tools/portraits/pixelize.py` turns a source into the 240 px game portrait (96 px grid, 4 shades per colour family).
+- `--prompts <file>` reads another prompts file in that layout (a shared style block, then one block per id):
+  `games/emberwake/docs/specs/ART3_PROMPTS.md` holds the Scarlet Lullaby portraits (ART3, 2026-10-25).
+- Local drafts (LOCALGEN1, user 2026-10-25: drafts and iteration run on the PC's own model, the image API is the
+  fallback): `tools/portraits/localgen.py` runs OpenVINO GenAI on the Intel NPU, the Arc GPU or the CPU. It runs from
+  the venv outside the repo (`C:\dev\localgen\venv\Scripts\python.exe tools/portraits/localgen.py ...`; the model,
+  the LoRA files and the compile cache stay in `C:\dev\localgen`, or `LOCALGEN_HOME`). `run <id>...` writes
+  `<id>_loc<time>_<n>.png` takes from the id's prompts-file block, shortened for the 77-token encoder
+  (`ART_PROMPT_TEMPLATES.md`, "Local short prompt").
+  `vary <id> --from art_src/<id>.png --change "..." --strength 0.3` makes variants of an existing image. `--model`
+  picks another model folder; its family (LCM, SD 1.5, SDXL or FLUX, from `model_index.json`) sets the default steps,
+  guidance and size, the negative prompt and the prompt form (short for the CLIP-only families, whole for FLUX). `--sheet` (or `sheet OUT PNG...`) puts each take beside its `pixelize`
+  portrait, and `--dry-run` prints the prompt and record without generating. Benchmark and throwaway takes go to
+  `--out <scratch folder>`, not here. Since LOCALGEN2 these OpenVINO drafts need `--backend openvino`.
+- Klein (LOCALGEN2, user 2026-10-26: FLUX.2 Klein 4B is the main local model; speed is not a concern): the default
+  backend of `localgen.py` is the local ComfyUI server (start `C:\dev\localgen\comfyui.bat`; `--server` or
+  `LOCALGEN_COMFY_URL`, default `http://127.0.0.1:8188`; `C:\dev\localgen\COMFYUI.md`). `run <id>...` sends the whole
+  prompt, the character block first, then the style block without its "Use the attached image" line (from the
+  record beside `<id>.png`, or `--prompts <file>`), and writes `<id>_loc<time>_<n>.png` (1024 px, 4 steps, cfg 1).
+  `vary <id> --from art_src/<id>.png --change "Keep the same character ... Change only ..."` is a Klein reference
+  edit: the source is uploaded and kept as a reference latent, the change is the whole prompt. `faces <id>...
+  [--exprs hurt angry afraid]` makes the PORTRAITFX1 expression cells from `<id>.png` as
+  `<id>_face_<expr>_loc<time>_<n>.png`, one image per cell (not a 2x2 sheet), ready to pixelize into
+  `faces/<id>/<expr>.png`; `--keep [ID=]TEXT` (or a `keep` list in the source's record) names a detail the edit
+  must keep, such as `bram=his iron jeweller's loupe strapped over his right eye`. About 90 s a portrait and 4 min an
+  edit on this PC. The text encoder is the 4-bit `qwen_3_4b_fp4_flux2.safetensors` (2026-10-26).
+- Prompt records: beside every generated image, `<same name>.json` (plain Git, not LFS) keeps the model, the id, the
+  full prompt sent (style block included), the reference image, the prompts file, the UTC time and the candidate
+  index `n`; `generate.py` writes them since ART3. Records written afterwards carry `"backfilled": true` and a
+  `source` (where the prompt text came from; the ART2 portraits from the Portrait Prompts page the user ran them
+  from, the icon sheets from their prompts file at the commit that added them, `added_in`); a renamed pick names its
+  original file in `generated_as`; Mara Voss's prompt is the one the user supplied (her own run, no reference), and
+  `mara_voss_variant` has no known prompt (`null`). Never the key. A local take's record has the same keys first, with
+  `model` `local:<model folder>`, then `family`, `device`, `seed`, `steps`, `size`, `guidance`, `negative`, `lora`, `cut` (the
+  block parts left out of the short prompt) and `seconds`; a variant's also has `source_image`, `strength` and
+  `change`. A Klein take's record has `model` `local:flux-2-klein-4b` and `reference` the edited source (`null` for
+  text to image), then `backend` (`comfyui`), `kind` (`text`, `edit` or `face`), `unet`, `clip`, `vae`, `sampler`,
+  `steps`, `cfg`, `size` (text) or `megapixels` (edits), `seed`, `tokens_estimate`, `cut` (only the dropped reference
+  line), `seconds`, and `change` (vary) or `expression` and `keep` (faces).
+- `tools/portraits/pixelize.py` turns a source into the 240 px game portrait (120 px grid since PIXEL2, was 96; 4
+  shades per colour family); `clear_mark` and `clear_corner` remove the image model's star mark first. Since PIXEL2 a
+  small, saturated colour of its own hue (a violet vein glow, a gem, an amber rim light) keeps an accent family of its
+  own, and dark pixels on the figure's silhouette move up their own ramp, so dark hair does not merge with the dark
+  background (`accents=False`, `rim=False` turn them off).
+- ART3 (2026-10-25): the user's pick of each Scarlet Lullaby portrait is `<id>.png` (`render_beast`, `ash_crawler`,
+  `inquisitorial_purifier`, `calcified_husk`, `captain_vane`, `proctor_quell`, `guild_master_orlov`,
+  `inquisitor_prelate_nemeth`, `tess`, `bram`, `aline`); the other candidates stay as `<id>_gen<time>_<n>.png` takes
+  (`render_beast` has three: the two first candidates and one re-roll).
+- ART3B (2026-10-25): a stylized re-roll of the nine human portraits (the `ART3_PROMPTS.md` style block with its
+  stylization and hair lines), 2 takes each. The user's picks are now `<id>.png` with `generated_as` naming the
+  original take: take 1 of `captain_vane`, `proctor_quell`, `guild_master_orlov`, `inquisitor_prelate_nemeth`,
+  `calcified_husk`, `tess` and `bram`, take 2 of `inquisitorial_purifier` and `aline`. Each ART3 pick went back to its
+  original `_gen` name as a take; `render_beast` and `ash_crawler` keep their ART3 picks.
+- ART3C (2026-10-25): Tess's right-ear re-roll, 2 takes (`tess_gen1792945776_1`, `tess_gen1792945812_2`). The user
+  picked take 2; it is now `tess.png` with `generated_as`, and the ART3B pick went back to `tess_gen1792942586_1.png`
+  as a take.
 - `ui_1.png`: the PLAYUI1 UI icon sheet (5x5 on a magenta key; prompt in
   `games/emberwake/docs/specs/PLAYUI1_ICONS.md`); `tools/portraits/sheets.py ui art_src/ui_1.png ui_1` cuts it into
   the 22 icons at their layer paths (`--contact` makes a review sheet).
 - Keep every take: a portrait can be reused in another context or swapped later for a different feel.
+- Reusable prompt shapes (2x2 variations, full body, animation sheet, props) are in
+  `games/emberwake/docs/specs/ART_PROMPT_TEMPLATES.md`; `mara_voss_variant.json` holds Gemini's reconstruction of its prompt.
+
+- Since PIXEL3 (2026-10-27) the portrait sits on its faction's backdrop (`BACKDROPS`: hearth, castellan, clerisy, guild, corrupted,
+  creature; the record's `faction` key, else hearth) in the corner style (darkest behind the face, brighter to the corners; `--backdrop
+  glow` is the PIXEL2 look). A dark edge that merges with the backdrop behind it is lifted 1-2 shades of its own ramp, evenly along each
+  edge run (runs under 3 px left alone; `--rim edge|lift|none`). The reduction is picked by the source: pixel-art sources (a steady
+  pixel grid) keep the most-common-colour reduction and 10x4, smooth sources (Klein) take a Lanczos downscale and 14x5 (`--reduce
+  auto|mode|smooth`). Record key `faction` (PIXEL3) on the shipped portrait sources.

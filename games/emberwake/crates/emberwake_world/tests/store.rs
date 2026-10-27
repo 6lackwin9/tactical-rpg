@@ -15,16 +15,62 @@ const CATALOG: [&str; 8] = ["classes", "units", "skills", "items", "item_familie
 /// Retired parity: fields added after the Godot freeze, written with their empty defaults by the engine's writer:
 /// REWARD1 (HISTORY 2026-10-21) a unit's `loot`, a world encounter's `key_loot` and `objective_reward`; ASSETORG2
 /// (HISTORY 2026-10-22) a unit's and a character's `palette` and `portrait_tier`; PROPS1 (HISTORY 2026-10-23) a map
-/// template's `props`; RULESET1-R (HISTORY 2026-10-25) a world manifest's `ruleset` and `plan_reveal_flag`.
-const AFTER_GODOT: [&str; 8] = ["\"loot\": []", "\"key_loot\": []", "\"objective_reward\": {}", "\"palette\": \"\"", "\"portrait_tier\": \"\"", "\"props\": []", "\"ruleset\": \"\"", "\"plan_reveal_flag\": \"\""];
+/// template's `props`; RULESET1-R (HISTORY 2026-10-25) a world manifest's `ruleset` and `plan_reveal_flag`; RULESET1-S
+/// (HISTORY 2026-10-25) a unit's `poise`, `deck` and `default_intent` and a passive's `slot` (a skill's timeline fields
+/// are left out at their defaults, as every skill field); ENCOUNTER2-T (HISTORY 2026-10-25) an encounter's `rows`
+/// (catalog and world encounters); HOOKS1-S (HISTORY 2026-10-27) a unit's `tactics` and an encounter's `arena_hazards`
+/// (catalog and world encounters; a skill's hook fields are left out at their defaults, a consumable's `hazard` is
+/// ITEMS_AFTER_GODOT); ENCOUNTER2-H (HISTORY 2026-10-27) an encounter's `unkillable`, `timeout_outcome` and
+/// `stay_behind` (catalog and world encounters).
+const AFTER_GODOT: [&str; 18] = [
+    "\"loot\": []",
+    "\"key_loot\": []",
+    "\"objective_reward\": {}",
+    "\"palette\": \"\"",
+    "\"portrait_tier\": \"\"",
+    "\"props\": []",
+    "\"ruleset\": \"\"",
+    "\"plan_reveal_flag\": \"\"",
+    "\"poise\": -1",
+    "\"deck\": {}",
+    "\"default_intent\": \"\"",
+    "\"slot\": \"\"",
+    "\"rows\": []",
+    "\"tactics\": []",
+    "\"arena_hazards\": []",
+    "\"unkillable\": []",
+    "\"timeout_outcome\": \"fled\"",
+    "\"stay_behind\": {}",
+];
 
-/// `text` without the AFTER_GODOT field lines (a dropped last field takes the comma off the line before it).
-fn at_freeze(text: &str) -> String {
+/// Retired parity, the catalog items file only (catalog/items.json): HOOKS1-S (HISTORY 2026-10-27) a consumable's
+/// `hazard`, written as `{}`.
+const ITEMS_AFTER_GODOT: [&str; 1] = ["\"hazard\": {}"];
+
+/// Retired parity, world manifests only (world.json): CAMPAIGN1-S (HISTORY 2026-10-25) a manifest's `campaign`,
+/// `purse`, `rest` and `defeat`, written as `{}` (an encounter's `purse` line is still compared); STORYUI1-S (HISTORY
+/// 2026-10-26) its `start_sequence`, written as ""; HOOKS1-S (HISTORY 2026-10-27) its `classes`, written as `{}`.
+const MANIFEST_AFTER_GODOT: [&str; 6] = ["\"campaign\": {}", "\"purse\": {}", "\"rest\": {}", "\"defeat\": {}", "\"start_sequence\": \"\"", "\"classes\": {}"];
+
+/// Retired parity, world quests only (worlds/<w>/quests.json): STORYUI1-S (HISTORY 2026-10-26) a quest's board
+/// fields `board`, `track`, `show_locked` and `closed_text`, written with their defaults (a dialogue choice's
+/// `show_locked` line is still compared).
+const QUEST_AFTER_GODOT: [&str; 4] = ["\"board\": \"\"", "\"track\": \"side\"", "\"show_locked\": false", "\"closed_text\": \"\""];
+
+/// Retired parity, kind level: CAMPAIGN1-S (HISTORY 2026-10-25) the world kinds `meters`, `checkpoints` and
+/// `triggers`; STORYUI1-S (HISTORY 2026-10-26) the world kinds `vignettes`, `sequences` and `boards` (Godot's
+/// WorldCatalog.save_all wrote no such files).
+const WORLD_KINDS_AFTER_GODOT: [&str; 6] = ["meters", "checkpoints", "triggers", "vignettes", "sequences", "boards"];
+
+/// `text` without the AFTER_GODOT field lines, and without the file's own retired lines (`extra`: a world manifest's
+/// MANIFEST_AFTER_GODOT, a world quests file's QUEST_AFTER_GODOT, the catalog items file's ITEMS_AFTER_GODOT); a
+/// dropped last field takes the comma off the line before it.
+fn at_freeze(text: &str, extra: &[&str]) -> String {
     let mut out: Vec<String> = Vec::new();
     for line in text.lines() {
         let t = line.trim();
         let field = t.trim_end_matches(',');
-        if AFTER_GODOT.contains(&field) {
+        if AFTER_GODOT.contains(&field) || extra.contains(&field) {
             if !t.ends_with(',') {
                 if let Some(prev) = out.last_mut() {
                     if prev.ends_with(',') {
@@ -84,10 +130,17 @@ fn writer_saves_exactly_what_godot_saves() {
         if rel.file_name().is_some_and(|n| n == "encounters.json") && !want.is_empty() {
             want = godot_encounters_folded(&want);
         }
+        let in_world = rel.starts_with("worlds");
+        let extra: &[&str] = match rel.file_name().and_then(|n| n.to_str()) {
+            Some("world.json") => &MANIFEST_AFTER_GODOT,
+            Some("quests.json") if in_world => &QUEST_AFTER_GODOT,
+            Some("items.json") if !in_world => &ITEMS_AFTER_GODOT,
+            _ => &[],
+        };
         match text {
             Err(e) => diffs.push(format!("{}: {e}", path.display())),
-            Ok(t) if at_freeze(&t) != want => {
-                let t = at_freeze(&t);
+            Ok(t) if at_freeze(&t, extra) != want => {
+                let t = at_freeze(&t, extra);
                 let line = t.lines().zip(want.lines()).position(|(a, b)| a != b).unwrap_or(0);
                 diffs.push(format!("{} line {}:\n  file   {:?}\n  writer {:?}", path.display(), line + 1, want.lines().nth(line), t.lines().nth(line)));
             }
@@ -99,7 +152,7 @@ fn writer_saves_exactly_what_godot_saves() {
     }
     for w in ["ashlands", "iron_reaches", "tidewrack"] {
         compare(dir.join("worlds").join(w).join("world.json"), store::manifest_text(&dir, w));
-        for kind in source::WORLD_KINDS {
+        for kind in source::WORLD_KINDS.into_iter().filter(|k| !WORLD_KINDS_AFTER_GODOT.contains(k)) {
             compare(store::file_of(&dir, Some(w), kind), store::resave_text(&dir, Some(w), kind));
         }
     }

@@ -10,9 +10,11 @@
 //! played for a four-way `Facing` (`played_facing`: front and back rows of the sheet, side rows mirrored for left).
 //! STAGE1-E: the solid bounds of a body's fitted idle frame (`body_bounds`, a unit's hit rect on a stage).
 //! FX1-E: a frame's filled silhouette (`body_silhouette`, a hit flash), cached like the outline.
+//! PORTRAITFX1-E: the first path of a chain a layer holds (`first_rel`) and a portrait's face sidecar from the PNG's
+//! own layer (`face`), cached.
 
 use crate::canvas::{Image, Rect, Rgba, OUTLINE_ALPHA};
-use aegis_core::assets::{self, ClipFrame, ClipPlayer, Clips, Facing, Layers};
+use aegis_core::assets::{self, ClipFrame, ClipPlayer, Clips, Face, Facing, Layers};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -48,6 +50,8 @@ pub struct Art {
     variant_counts: HashMap<String, usize>,
     /// (body key, palette id, size, flipped) -> the solid bounds of the fitted `idle` frame 0 (`body_bounds`).
     body_rects: HashMap<(String, String, i32, bool), Option<Rect>>,
+    /// PNG rel -> its face sidecar from the PNG's own layer (PORTRAITFX1-E `face`).
+    faces: HashMap<String, Option<Face>>,
 }
 
 /// Decodes a PNG into RGBA (palette, grey and RGB inputs are expanded).
@@ -77,7 +81,7 @@ impl Art {
     }
 
     pub fn layered(layers: Layers) -> Self {
-        Self { layers, files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), silhouettes: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new(), body_rects: HashMap::new() }
+        Self { layers, files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), silhouettes: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new(), body_rects: HashMap::new(), faces: HashMap::new() }
     }
 
     pub fn layers(&self) -> &Layers {
@@ -149,6 +153,24 @@ impl Art {
                 None
             }
         }
+    }
+
+    /// PORTRAITFX1-E: the first path of a lookup chain a layer holds (so the caller knows which file, and which
+    /// sidecar, it draws); None when no layer holds any.
+    pub fn first_rel(&mut self, rels: &[String]) -> Option<String> {
+        rels.iter().find(|r| self.has(r)).cloned()
+    }
+
+    /// PORTRAITFX1-E: the face sidecar of the PNG at `rel` (`assets::face_file`), read from the layer that holds the
+    /// PNG (a game portrait never takes a kit sidecar) and cached; None when the PNG or its sidecar is missing or the
+    /// sidecar does not parse (`assets::parse_face`; its range problems are the asset check's, not the drawing's).
+    pub fn face(&mut self, rel: &str) -> Option<&Face> {
+        if !self.faces.contains_key(rel) {
+            let root = self.layers.roots.iter().find(|r| r.join(rel).is_file());
+            let face = root.and_then(|r| std::fs::read_to_string(r.join(assets::face_file(rel))).ok()).and_then(|t| serde_json::from_str(&t).ok()).and_then(|v| assets::parse_face(&v).ok());
+            self.faces.insert(rel.to_string(), face);
+        }
+        self.faces.get(rel).and_then(|f| f.as_ref())
     }
 
     /// The token of the first body of `keys` that loads (a body chain), with `palette`.

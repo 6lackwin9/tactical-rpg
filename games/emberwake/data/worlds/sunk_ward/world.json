@@ -1,0 +1,17 @@
+{
+	"id": "sunk_ward",
+	"name": "The Sunk Ward",
+	"tagline": "",
+	"description": "",
+	"extends": [],
+	"connects": [],
+	"start_location": "",
+	"start_party": [],
+	"party_max": -1,
+	"start_gold": -1,
+	"start_supplies": -1,
+	"service_lines": {},
+	"ruleset": "timeline",
+	"plan_reveal_flag": "",
+	"version": 1
+}

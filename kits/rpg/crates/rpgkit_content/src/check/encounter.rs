@@ -5,8 +5,8 @@
 use super::View;
 use crate::source::content;
 use aegis_core::json::{self, gstr, Dict};
-use rpgkit_battle::encounter::{ARRIVAL, ARRIVAL_BLOCK, ARRIVAL_ROUND};
-use rpgkit_battle::grid::{terrain_walkable, Grid, TerrainTable, GRID_H, GRID_W, V2};
+use rpgkit_battle::encounter::{ARRIVAL, ARRIVAL_BLOCK, ARRIVAL_ROUND, FALLBACKS, PICK_DEFAULTS, STAY_HOLD, STAY_MODES, STAY_STAND, STAY_THEN};
+use rpgkit_battle::grid::{rows_valid, terrain_walkable, Grid, TerrainTable, GRID_H, GRID_W, V2};
 use rpgkit_rules::status;
 use serde_json::{json, Value};
 use std::sync::OnceLock;
@@ -122,7 +122,25 @@ pub fn errors(v: &View, e: &Dict) -> Vec<String> {
         }
         _ => errors.push("Exit tiles must be a list of [x, y] pairs.".into()),
     }
+    errors.extend(rows_problems(e));
+    // ENCOUNTER2 S1 and section 6: unkillable refs and the stay-behind block
+    errors.extend(unkillable_problems(e));
+    errors.extend(stay_behind_problems(v, e, false));
+    // HOOKS1 AH1 and DU2: the arena hazards and the deck phase effects
+    errors.extend(super::hooks::arena_hazards_errors(e));
+    errors.extend(super::hooks::deck_effect_errors(v, e, None, &|r: &str| v.get("units", r).clone()));
     errors
+}
+
+/// ENCOUNTER2 R0: `rows` is empty (the zone's rows) or GRID_H strings of GRID_W known terrain glyphs (catalog and
+/// world encounters).
+pub fn rows_problems(e: &Dict) -> Vec<String> {
+    match json::get(e, "rows") {
+        Value::Array(list) if list.is_empty() => Vec::new(),
+        Value::Array(list) if list.iter().all(Value::is_string) && rows_valid(&strings(json::get(e, "rows"))) => Vec::new(),
+        Value::Null => Vec::new(),
+        _ => vec![format!("Rows are {GRID_H} strings of {GRID_W} terrain glyphs.")],
+    }
 }
 
 /// ContentCatalog.warnings_for("encounters"): EncounterPhases.pace_warnings and PurseRules.warnings.
@@ -148,12 +166,15 @@ const DEFAULT_STATUS_ROUNDS: i64 = 2;
 const ENRAGE_POWER_MIN: i64 = 1;
 const ENRAGE_POWER_MAX: i64 = 25;
 const DEFAULT_ENRAGE_POWER: i64 = 20;
-const EFFECTS: [&str; 5] = ["line", "wave", "status", "ai", "enrage"];
+/// The phase effects (BOSS1; HOOKS1 DU1 adds `deck`).
+const EFFECTS: [&str; 6] = ["line", "wave", "status", "ai", "enrage", rpgkit_data::DECK_EFFECT];
 const PHASE_KEYS: [&str; 5] = ["id", "name", "trigger", "effects", "pause_autoplay"];
 const AI_ROLES: [&str; 4] = ["AGGRESSOR", "SKIRMISHER", "SNIPER", "SUPPORT"];
-const AI_TARGET_PREFS: [&str; 2] = ["NEAREST", "WEAKEST"];
+/// HOOKS1 AT1 adds SOFTEST and TOUGHEST (read under the rule ai_tactics).
+const AI_TARGET_PREFS: [&str; 4] = ["NEAREST", "WEAKEST", "SOFTEST", "TOUGHEST"];
 const AI_RATIOS: [&str; 3] = ["flee_ratio", "defend_below", "heal_below"];
-const AI_SETTINGS: [&str; 6] = ["role", "target_pref", "reckless", "flee_ratio", "defend_below", "heal_below"];
+/// HOOKS1 AT2 adds `tactics` (it replaces the unit's list).
+const AI_SETTINGS: [&str; 7] = ["role", "target_pref", "reckless", "flee_ratio", "defend_below", "heal_below", "tactics"];
 const PACES: [&str; 4] = ["auto", "mob", "elite", "boss"];
 
 fn trigger_keys(kind: &str) -> &'static [&'static str] {
@@ -169,7 +190,8 @@ fn effect_keys(kind: &str) -> &'static [&'static str] {
         "line" => &["type", "text"],
         "wave" => &["type", "units", "label"],
         "status" => &["type", "unit", "status", "rounds", "magnitude"],
-        "ai" => &["type", "unit", "role", "target_pref", "reckless", "flee_ratio", "defend_below", "heal_below"],
+        "ai" => &["type", "unit", "role", "target_pref", "reckless", "flee_ratio", "defend_below", "heal_below", "tactics"],
+        rpgkit_data::DECK_EFFECT => &rpgkit_data::DECK_EFFECT_KEYS,
         _ => &["type", "unit", "power"],
     }
 }
@@ -214,6 +236,15 @@ pub fn phase_problems(e: &Dict, ref_ok: &dyn Fn(&str) -> bool) -> Vec<String> {
     }
     let mut seen: Vec<String> = Vec::new();
     let mut enrages = 0;
+    // HOOKS1 DU2: one deck effect per unit ref
+    let mut deck_units: Vec<String> = Vec::new();
+    for fx in list.iter().filter_map(Value::as_object).flat_map(|p| dicts(json::get(p, "effects"))).filter(|fx| json::s(fx, "type") == rpgkit_data::DECK_EFFECT) {
+        let unit = json::s(fx, "unit");
+        if deck_units.contains(&unit) {
+            errors.push(format!("Phases hold one deck effect per unit ('{unit}' has two)."));
+        }
+        deck_units.push(unit);
+    }
     for (index, p) in list.iter().enumerate() {
         let Some(phase) = p.as_object() else {
             errors.push("Each phase must be an object.".into());
@@ -359,6 +390,10 @@ fn effects_errors(tag: &str, raw: &Value, known: &[String], ref_ok: &dyn Fn(&str
             }
             "status" => errors.extend(status_errors(tag, fx, known)),
             "ai" => errors.extend(ai_errors(tag, fx, known)),
+            rpgkit_data::DECK_EFFECT => {
+                errors.extend(unit_errors(tag, fx, known));
+                errors.extend(super::hooks::deck_shape_errors(tag, fx));
+            }
             _ => {}
         }
     }
@@ -466,6 +501,9 @@ fn ai_errors(tag: &str, fx: &Dict, known: &[String]) -> Vec<String> {
     if fx.get("reckless").is_some_and(|b| !b.is_boolean()) {
         errors.push(format!("Phase '{tag}': reckless must be true or false."));
     }
+    if let Some(t) = fx.get("tactics") {
+        errors.extend(super::hooks::tactics_errors(t, &format!("Phase '{tag}': tactics")));
+    }
     for key in AI_RATIOS {
         if let Some(v) = fx.get(key) {
             if !v.is_number() || !(0.0..=1.0).contains(&json::to_float_or(v, 0.0)) {
@@ -513,7 +551,8 @@ const START_TEXT_MAX: usize = 120;
 const START_KEYS: [&str; 5] = ["status", "rounds", "magnitude", "requires_flags", "text"];
 
 /// EncounterPhases.start_status_problems: a world encounter's `start_status` (PACE1 3.4): at most START_MAX buffs other
-/// than taunt and riposte, each with rounds, magnitude, flag conditions and a text.
+/// than taunt and the intent-bound ones (riposte; RULESET1-S: stealth), each with rounds, magnitude, flag conditions and
+/// a text.
 pub fn start_status_problems(raw: &Value) -> Vec<String> {
     let Some(list) = raw.as_array() else {
         return vec!["Start buffs must be a list of objects.".into()];
@@ -522,7 +561,9 @@ pub fn start_status_problems(raw: &Value) -> Vec<String> {
     if list.len() > START_MAX {
         errors.push(format!("An encounter holds at most {START_MAX} start buffs."));
     }
-    let allowed: Vec<&str> = status::buffs().into_iter().filter(|s| *s != "taunt" && *s != "riposte").collect();
+    // RULESET1-S (planner pick): no intent-bound buff either (riposte, stealth): it needs a round intent, and no unit
+    // has one at deployment
+    let allowed: Vec<&str> = status::buffs().into_iter().filter(|s| *s != "taunt" && !status::intent_bound(s)).collect();
     for item in list {
         let Some(sb) = item.as_object() else {
             errors.push("Start buff: each entry must be an object.".into());
@@ -533,7 +574,13 @@ pub fn start_status_problems(raw: &Value) -> Vec<String> {
         }
         let st = json::s(sb, "status");
         if !sb.get("status").is_some_and(Value::is_string) || !allowed.contains(&st.as_str()) {
-            errors.push(format!("Start buff '{st}' must be a buff other than taunt or riposte."));
+            if status::intent_bound(&st) && st != "riposte" {
+                // the Godot text names riposte, the one intent-bound row it had
+                let bound: Vec<&str> = status::ROWS.iter().filter(|r| r.intent_bound).map(|r| r.id).collect();
+                errors.push(format!("Start buff '{st}' must be a buff other than taunt or an intent-bound one ({}).", bound.join(", ")));
+            } else {
+                errors.push(format!("Start buff '{st}' must be a buff other than taunt or riposte."));
+            }
             continue;
         }
         let rounds = sb.get("rounds").cloned().unwrap_or(json::int(DEFAULT_STATUS_ROUNDS));
@@ -574,7 +621,7 @@ pub fn objective_problems(v: &View, e: &Dict, guest_ok: &dyn Fn(&str) -> bool) -
             match json::get(e, "objective_tiles") {
                 Value::Array(tiles) => {
                     let mut grid = Grid::new(false, Vec::new(), TerrainTable::from_catalog(&v.typed), 0);
-                    grid.apply_zone(&json::s(e, "zone"));
+                    grid.apply_board(&json::s(e, "zone"), &strings(json::get(e, "rows")));
                     let tile_ok = |c: V2| {
                         if !on_grid(c) || !terrain_walkable(grid.terrain_id(c)) {
                             return false;
@@ -639,6 +686,164 @@ pub fn objective_problems(v: &View, e: &Dict, guest_ok: &dyn Fn(&str) -> bool) -
         if !guests.contains(&r) {
             errors.push(format!("Protect '{r}' is not a guest."));
         }
+    }
+    errors
+}
+
+// ---- Stay-behind and unkillable (ENCOUNTER2 3 and 6; not in Godot) ----
+
+/// The `stay_behind` keys (section 6); the hold-only and stand-only ones.
+const STAY_KEYS: [&str; 13] = ["mode", "tiles", "tiles_label", "room", "fallback", "pick_default", "exits_open", "stand_hp_pct", "stand_statuses", "stand_line", "result_line", "flag", "then"];
+const HOLD_ONLY: [&str; 2] = ["fallback", "pick_default"];
+const STAND_ONLY: [&str; 4] = ["exits_open", "stand_hp_pct", "stand_statuses", "stand_line"];
+const EXITS_OPEN: [&str; 2] = ["always", "after_stand"];
+const MAX_HOLD_TILES: usize = 2;
+const MAX_TILES_LABEL: usize = 24;
+const MAX_STAY_LINE: usize = 160;
+const MAX_STAND_STATUSES: usize = 3;
+const STAND_ROUNDS: (i64, i64) = (1, 10);
+
+/// The refs of every phase wave (the arrival's too).
+fn phase_wave_refs(e: &Dict) -> Vec<String> {
+    dicts(json::get(e, "phases"))
+        .into_iter()
+        .flat_map(|p| dicts(json::get(p, "effects")).into_iter().filter(|fx| json::s(fx, "type") == "wave").flat_map(|fx| strings(json::get(fx, "units"))).collect::<Vec<_>>())
+        .collect()
+}
+
+/// ENCOUNTER2 S1: each `unkillable` ref is in `enemies` or a phase wave (catalog and world encounters).
+pub fn unkillable_problems(e: &Dict) -> Vec<String> {
+    let mut known = strings(json::get(e, "enemies"));
+    known.extend(phase_wave_refs(e));
+    strings(json::get(e, "unkillable")).into_iter().filter(|r| !known.contains(r)).map(|r| format!("Unkillable unit '{r}' is not in this encounter.")).collect()
+}
+
+/// A line with `{name}` as its only token, at most MAX_STAY_LINE characters.
+fn stay_line_ok(text: &str) -> bool {
+    text.chars().count() <= MAX_STAY_LINE && text.replace("{name}", "").chars().all(|c| c != '{' && c != '}')
+}
+
+/// ENCOUNTER2 section 6: the `stay_behind` block (empty, or the keys with their ranges; only with the escape objective).
+/// `world`: a world encounter (`flag` and `then` are its own).
+pub fn stay_behind_problems(v: &View, e: &Dict, world: bool) -> Vec<String> {
+    let mut errors = Vec::new();
+    let block = match json::get(e, "stay_behind") {
+        Value::Null => return errors,
+        Value::Object(b) if b.is_empty() => return errors,
+        Value::Object(b) => b,
+        _ => return vec!["Stay-behind must be an object ({} = none).".into()],
+    };
+    if json::s_or(e, "objective", "rout") != "escape" {
+        errors.push("Stay-behind needs the escape objective.".into());
+    }
+    for key in block.keys().filter(|k| !STAY_KEYS.contains(&k.as_str())) {
+        errors.push(format!("Stay-behind: unknown key '{key}'."));
+    }
+    let option = |key: &str, options: &[&str], errors: &mut Vec<String>| {
+        if let Some(raw) = block.get(key) {
+            if !raw.as_str().is_some_and(|s| options.contains(&s)) {
+                errors.push(format!("Stay-behind {key} '{}' is not one of {}.", gstr(raw), options.join(", ")));
+            }
+        }
+    };
+    option("mode", &STAY_MODES, &mut errors);
+    let hold = json::s_or(block, "mode", STAY_HOLD) != STAY_STAND;
+    for key in block.keys() {
+        let (only, other) = if HOLD_ONLY.contains(&key.as_str()) {
+            (STAY_HOLD, !hold)
+        } else if STAND_ONLY.contains(&key.as_str()) {
+            (STAY_STAND, hold)
+        } else {
+            continue;
+        };
+        if other {
+            errors.push(format!("Stay-behind {key} is for mode {only} only."));
+        }
+    }
+    // the tiles: a hold names 1-2 walkable tiles on the board that are no exit; a stand names none
+    match json::get(block, "tiles") {
+        Value::Array(tiles) if !hold => {
+            if !tiles.is_empty() {
+                errors.push("A stand holds no tiles.".into());
+            }
+        }
+        Value::Array(tiles) => {
+            if tiles.is_empty() || tiles.len() > MAX_HOLD_TILES {
+                errors.push(format!("A hold needs 1 to {MAX_HOLD_TILES} tiles."));
+            }
+            let arena_open = json::s_or(e, "arena", "CLOSED") == "OPEN";
+            let exits: Vec<V2> = json::arr(json::get(e, "exits")).iter().map(json::arr).filter(|p| p.len() == 2).map(cell_of).collect();
+            let mut grid = Grid::new(false, Vec::new(), TerrainTable::from_catalog(&v.typed), 0);
+            grid.apply_board(&json::s(e, "zone"), &strings(json::get(e, "rows")));
+            for raw in tiles {
+                let pair = json::arr(raw);
+                let cell = (pair.len() == 2).then(|| cell_of(pair));
+                let ok = cell.is_some_and(|c| {
+                    on_grid(c) && terrain_walkable(grid.terrain_id(c)) && !exits.contains(&c) && (!arena_open || (c.x > 0 && c.y > 0 && c.x < GRID_W - 1 && c.y < GRID_H - 1))
+                });
+                if !ok {
+                    errors.push(format!("Hold tile {} is off the grid, blocked or an exit.", cell.map_or_else(|| gstr(raw), |c| c.to_string())));
+                }
+            }
+        }
+        Value::Null if hold => errors.push(format!("A hold needs 1 to {MAX_HOLD_TILES} tiles.")),
+        Value::Null => {}
+        _ => errors.push("Hold tiles must be a list of [x, y] pairs.".into()),
+    }
+    if let Some(label) = block.get("tiles_label") {
+        let n = label.as_str().map_or(0, |s| s.trim().chars().count());
+        if n == 0 || n > MAX_TILES_LABEL {
+            errors.push(format!("Stay-behind tiles_label is 1 to {MAX_TILES_LABEL} characters."));
+        }
+    }
+    let room = json::s(block, "room");
+    if !room.is_empty() {
+        // rooms come with ENCOUNTER2-R: until then no room id resolves
+        errors.push(format!("Stay-behind room '{room}' is not a room of this encounter."));
+    }
+    option("fallback", &FALLBACKS, &mut errors);
+    option("pick_default", &PICK_DEFAULTS, &mut errors);
+    option("exits_open", &EXITS_OPEN, &mut errors);
+    if let Some(pct) = block.get("stand_hp_pct") {
+        if !whole(pct) || !(1..=100).contains(&json::to_int(pct)) {
+            errors.push("Stay-behind stand_hp_pct must be 1..100.".into());
+        }
+    }
+    match block.get("stand_statuses") {
+        None => {}
+        Some(Value::Array(list)) => {
+            if list.len() > MAX_STAND_STATUSES {
+                errors.push(format!("Stay-behind stand_statuses: at most {MAX_STAND_STATUSES}."));
+            }
+            for item in list {
+                let st = item.as_object().map(|o| json::s(o, "status")).unwrap_or_default();
+                if status::row_of(&st).is_none() {
+                    errors.push(format!("Stand status '{st}' is not a status."));
+                    continue;
+                }
+                let rounds = item.get("rounds").cloned().unwrap_or(json::int(STAND_ROUNDS.0));
+                if !whole(&rounds) || !(STAND_ROUNDS.0..=STAND_ROUNDS.1).contains(&json::to_int(&rounds)) {
+                    errors.push(format!("Stand status '{st}': rounds must be {}..{}.", STAND_ROUNDS.0, STAND_ROUNDS.1));
+                }
+            }
+        }
+        Some(_) => errors.push("Stay-behind stand_statuses must be a list of {status, rounds}.".into()),
+    }
+    for key in ["stand_line", "result_line"] {
+        if let Some(line) = block.get(key) {
+            if !line.as_str().is_some_and(stay_line_ok) {
+                errors.push(format!("Stay-behind {key} holds at most {MAX_STAY_LINE} characters, {{name}} the only token."));
+            }
+        }
+    }
+    let flag = json::s(block, "flag");
+    if world {
+        if !flag.is_empty() && !super::quest::flag_key_ok(&flag) {
+            errors.push(format!("Stay-behind flag '{flag}' must be a flag key (a-z, 0-9, _ and .)."));
+        }
+        option("then", &STAY_THEN, &mut errors);
+    } else if !flag.is_empty() || block.get("then").is_some_and(|t| t.as_str() != Some("none")) {
+        errors.push("Stay-behind flag and then are for world encounters only.".into());
     }
     errors
 }

@@ -265,3 +265,39 @@ fn the_consumer_shape_is_validated_in_one_place() {
     assert_eq!(ResistCheck::from_value(&json!({"resist": "nerve", "potency": 0})), None);
     assert_eq!(derived::RESIST_STREAM, "resist");
 }
+
+/// RULESET1 P1 (tasks 1.7): `gear_mitigation` reads the summed `effective_mitigation` of the worn gear (the Max Poise
+/// row's input), and the `Ruleset` wrappers read as the ruleset id does.
+#[test]
+fn gear_mitigation_is_the_worn_mitigation_and_rulesets_read_by_id() {
+    use rpgkit_rules::ruleset::Ruleset;
+    let cat = Catalog::from_value(&json!({
+        "classes": [{"id": "drill", "name": "Drill", "base_stats": {"STR": 12, "DEX": 10, "INT": 8, "CONS": 13, "PERC": 9, "KNOW": 10}}],
+        "units": [{"id": "probe", "name": "Probe", "class_id": "drill", "level": 1, "side": "player"}],
+        "derived_stats": [{"id": "max_poise", "name": "Max Poise", "formula": "CONS * per_cons + gear_mitigation * armour_factor", "constants": {"per_cons": 2, "armour_factor": 1.0}, "min": 1, "max": 200, "rulesets": ["timeline"]}],
+        "items": [
+            {"id": "mail", "name": "Mail", "item_type": "ARMOR", "slot": "BODY", "mitigation": 6},
+            {"id": "cap", "name": "Cap", "item_type": "ARMOR", "slot": "HEAD", "mitigation": 2}
+        ]
+    }));
+    let mut u = probe(&cat);
+    let poise = |u: &Unit| rule(stat(u, "CONS") * 2.0 + u.inventory.total_flat_mitigation(Some(&u.stats)) as f64, 0, 0.0, 1, 200);
+    let bare = derived::value(&cat, TIMELINE, &u, "max_poise").unwrap();
+    assert_eq!(bare, poise(&u));
+    u.inventory.equip(Equipment { item: cat.items["mail"].clone() }, Slot::Body);
+    u.inventory.equip(Equipment { item: cat.items["cap"].clone() }, Slot::Head);
+    u.sync_from_stats_and_gear(&cat);
+    let worn = u.inventory.total_flat_mitigation(Some(&u.stats));
+    assert!(worn > 0, "the fixture wears mitigation");
+    assert_eq!(derived::value(&cat, TIMELINE, &u, "max_poise").unwrap(), poise(&u));
+    let b = derived::breakdown(&cat, TIMELINE, &u, "max_poise").unwrap();
+    let gear = b.inputs.iter().find(|i| i.name == "gear_mitigation").unwrap();
+    assert_eq!((gear.kind, gear.value), (InputKind::Gear, worn as f64));
+    let timeline = Ruleset::from_row(json!({"id": TIMELINE, "name": "Timeline", "rules": []}).as_object().unwrap());
+    for (rs, id) in [(Ruleset::classic(), CLASSIC), (timeline, TIMELINE)] {
+        assert_eq!(derived::value_for(&cat, &rs, &u, "max_poise"), derived::value(&cat, id, &u, "max_poise"), "{id}");
+        assert_eq!(derived::breakdown_for(&cat, &rs, &u, "max_poise"), derived::breakdown(&cat, id, &u, "max_poise"), "{id}");
+        assert_eq!(derived::row_for(&cat, &rs, "max_poise").is_some(), id == TIMELINE, "{id}: the row lives in timeline only");
+        assert_eq!(derived::resist_chance_for(&cat, &rs, &u, "max_poise", 90), derived::resist_chance(&cat, id, &u, "max_poise", 90), "{id}");
+    }
+}

@@ -1259,6 +1259,352 @@
 			"engine_rules": [],
 			"damage_type": "",
 			"art": ""
+		},
+		{
+			"id": "polearm",
+			"name": "Polearm",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_2h"
+			],
+			"default_hand": "main_2h",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"STR"
+			],
+			"base": {
+				"main_2h": {
+					"power": 26,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 2,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_2h": {
+					"power": {
+						"min": 18,
+						"max": 30
+					},
+					"range": {
+						"min": 1,
+						"max": 2
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 4
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [
+				"reach"
+			],
+			"damage_type": "pierce",
+			"art": ""
+		},
+		{
+			"id": "scourge",
+			"name": "Scourge",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_1h"
+			],
+			"default_hand": "main_1h",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"DEX",
+				"STR"
+			],
+			"base": {
+				"main_1h": {
+					"power": 12,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 0,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_1h": {
+					"power": {
+						"min": 8,
+						"max": 18
+					},
+					"range": {
+						"min": 1,
+						"max": 1
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 2
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [
+				"reach"
+			],
+			"damage_type": "slash",
+			"art": "scourge"
+		},
+		{
+			"id": "censer",
+			"name": "Censer",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_1h"
+			],
+			"default_hand": "main_1h",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"INT",
+				"STR"
+			],
+			"base": {
+				"main_1h": {
+					"power": 11,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 1,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_1h": {
+					"power": {
+						"min": 8,
+						"max": 18
+					},
+					"range": {
+						"min": 1,
+						"max": 1
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 3
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [],
+			"damage_type": "blunt",
+			"art": "censer"
+		},
+		{
+			"id": "bone_saw",
+			"name": "Bone-Saw",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_1h"
+			],
+			"default_hand": "main_1h",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"DEX",
+				"STR"
+			],
+			"base": {
+				"main_1h": {
+					"power": 14,
+					"range": 1,
+					"block_cost": 1,
+					"burden": 0,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_1h": {
+					"power": {
+						"min": 10,
+						"max": 20
+					},
+					"range": {
+						"min": 1,
+						"max": 1
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 2
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [],
+			"damage_type": "slash",
+			"art": "bone_saw"
+		},
+		{
+			"id": "sprayer",
+			"name": "Chemical Sprayer",
+			"description": "",
+			"item_type": "WEAPON",
+			"hands": [
+				"main_2h"
+			],
+			"default_hand": "main_2h",
+			"off_hand_category": "",
+			"scaling_stats": [
+				"INT"
+			],
+			"base": {
+				"main_2h": {
+					"power": 18,
+					"range": 3,
+					"block_cost": 1,
+					"burden": 1,
+					"mitigation": 0
+				}
+			},
+			"bands": {
+				"main_2h": {
+					"power": {
+						"min": 14,
+						"max": 24
+					},
+					"range": {
+						"min": 2,
+						"max": 4
+					},
+					"block_cost": {
+						"min": 1,
+						"max": 3
+					},
+					"burden": {
+						"min": 0,
+						"max": 3
+					},
+					"mitigation": {
+						"min": 0,
+						"max": 0
+					},
+					"bonus_value": {
+						"min": 0,
+						"max": 4
+					}
+				}
+			},
+			"adjustable": [
+				"power",
+				"range",
+				"block_cost",
+				"burden"
+			],
+			"modifier_kinds": [
+				"adjust",
+				"stat_bonus",
+				"requirement",
+				"effect"
+			],
+			"max_modifiers": 8,
+			"max_tiers": 3,
+			"engine_rules": [
+				"always_ranged"
+			],
+			"damage_type": "fire",
+			"art": "sprayer"
 		}
 	]
 }

@@ -1,0 +1,106 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "calcified_bone_shard",
+    "name": "Bone Shard",
+    "family": "material",
+    "rarity": "COMMON",
+    "weight": 0.2,
+    "value": 0,
+    "description": "A shard of calcified bone. Hearth recipes, later.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 20
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "render_beast_tendon",
+    "name": "Beast Tendon",
+    "family": "material",
+    "rarity": "COMMON",
+    "weight": 0.2,
+    "value": 0,
+    "description": "Tough tendon from a Render-Beast. Hearth recipes, later.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 20
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "caustic_gall_sac",
+    "name": "Gall-Sac",
+    "family": "material",
+    "rarity": "COMMON",
+    "weight": 0.2,
+    "value": 0,
+    "description": "A caustic gall-sac. Act 2.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 20
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "stalker_optic_nerve",
+    "name": "Optic Nerve",
+    "family": "material",
+    "rarity": "COMMON",
+    "weight": 0.2,
+    "value": 0,
+    "description": "A stalker's optic nerve. Act 2.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 20
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "inquisitor_marrow_valve",
+    "name": "Marrow Valve",
+    "family": "material",
+    "rarity": "COMMON",
+    "weight": 0.2,
+    "value": 0,
+    "description": "An Inquisitor's marrow valve. Act 2 graft.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 20
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "titan_marrow_core",
+    "name": "Marrow Core",
+    "family": "material",
+    "rarity": "COMMON",
+    "weight": 0.2,
+    "value": 0,
+    "description": "The core of a marrow titan. Act 2 Apex graft.",
+    "damage_type": "",
+    "icon_id": "",
+    "starter_stash": false,
+    "max_stack": 20
+   }
+  }
+ ]
+}

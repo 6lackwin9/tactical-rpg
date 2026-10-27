@@ -7,8 +7,10 @@ use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s_or};
-use emberwake_data::STATS;
+use emberwake_data::{Catalog, DerivedStatDef, STATS};
 use emberwake_rules::damage;
+use emberwake_rules::derived::{self, Breakdown, Cap, InputKind};
+use emberwake_rules::gear::TIER_SOURCE;
 use emberwake_rules::Unit;
 use emberwake_world::state::{off_hand_ok, UnitState, LOADOUT_SLOTS, POUCH_MAX};
 use emberwake_world::{progression, Data};
@@ -78,13 +80,153 @@ pub struct Character {
     w: Vec<Widget<PAct>>,
 }
 
-/// PartyPreview.derived: [(label, value)] of a member built without auto-spend.
-fn derived(d: &Data, m: &UnitState) -> Vec<(&'static str, i64)> {
-    progression::build_with(d, m, false).map(|b| derived_of(&b.unit)).unwrap_or_default()
+/// One derived row as a screen lists it: the header, the value, the value as shown (with the row's suffix) and the
+/// detail-pane and tooltip text.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct DRow {
+    pub label: String,
+    pub value: i64,
+    pub shown: String,
+    pub desc: String,
 }
 
-/// The derived values of a built unit.
-fn derived_of(u: &Unit) -> Vec<(&'static str, i64)> {
+impl DRow {
+    fn plain(label: &str, value: i64, desc: String) -> Self {
+        Self { label: label.into(), value, shown: value.to_string(), desc }
+    }
+}
+
+/// The ruleset the party screen reads derived rows by: the ruleset of the save's world (RULESET1 3.1.1).
+fn party_ruleset(cx: &Cx) -> String {
+    cx.data.ruleset_id(&cx.gs().world_id)
+}
+
+/// PartyPreview.derived: the derived rows of a member built without auto-spend.
+fn derived(d: &Data, ruleset: &str, m: &UnitState) -> Vec<DRow> {
+    progression::build_with(d, m, false).map(|b| derived_of(&d.cat, ruleset, &b.unit)).unwrap_or_default()
+}
+
+/// The derived rows of a built unit: the built-in numbers, then the catalog's derived stats shown on the party screen
+/// (DERIVE1 4.4; none in a ruleset without such rows, so the classic table is unchanged).
+fn derived_of(cat: &Catalog, ruleset: &str, u: &Unit) -> Vec<DRow> {
+    let mut rows: Vec<DRow> = builtin_of(u).into_iter().map(|(l, v)| DRow::plain(l, v, derived_desc(l))).collect();
+    rows.extend(data_rows(cat, ruleset, u, "party"));
+    rows
+}
+
+/// DERIVE1 4.4: the catalog derived-stat rows `screen` (`party`, `dojo`, `battle`) lists for `u` under `ruleset`, by
+/// `order` (ties in catalog order); a row whose `rulesets` leave the ruleset out is absent.
+pub(crate) fn data_rows(cat: &Catalog, ruleset: &str, u: &Unit, screen: &str) -> Vec<DRow> {
+    let mut defs: Vec<&DerivedStatDef> = cat.derived_stats.values().filter(|d| d.shows_on(screen)).collect();
+    defs.sort_by_key(|d| d.order);
+    defs.into_iter()
+        .filter_map(|d| {
+            let b = derived::breakdown(cat, ruleset, u, &d.id)?;
+            Some(DRow { label: d.header().to_string(), value: b.value as i64, shown: format!("{}{}", b.value, d.suffix), desc: data_desc(cat, d, &b) })
+        })
+        .collect()
+}
+
+/// A derived row's detail text: its description, its formula, then the breakdown, for example
+/// `0 + KNOW 14 x 2 + CONS 12 x 1 = 40; Salt charm +3; = 43 (0-100)`.
+fn data_desc(cat: &Catalog, d: &DerivedStatDef, b: &Breakdown) -> String {
+    let cap = match b.cap {
+        Some(Cap::Max) => "capped at the max; ",
+        Some(Cap::Min) => "held at the min; ",
+        None => "",
+    };
+    let end = format!("{}{} ({cap}{}-{})", b.value, d.suffix, b.min, b.max);
+    let steps = if b.parts.is_empty() {
+        format!("{} = {end}", worked(b))
+    } else {
+        let parts: Vec<String> = b.parts.iter().map(|p| format!("{} {}", source_name(cat, &p.source), part_text(p))).collect();
+        format!("{} = {}; {}; = {end}", worked(b), num(b.raw), parts.join("; "))
+    };
+    let head = if d.description.is_empty() { String::new() } else { format!("{} ", d.description) };
+    format!("{head}Formula: {}. {steps}.", b.formula)
+}
+
+/// The formula with its inputs filled in: a stat, `level` or another row as `NAME value`, a constant as its number,
+/// `*` as `x` (function names and the rest as written).
+fn worked(b: &Breakdown) -> String {
+    let src: Vec<char> = b.formula.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < src.len() {
+        let c = src[i];
+        if c.is_ascii_alphabetic() || c == '_' {
+            let start = i;
+            while i < src.len() && (src[i].is_ascii_alphanumeric() || src[i] == '_') {
+                i += 1;
+            }
+            let name: String = src[start..i].iter().collect();
+            let call = src[i..].iter().find(|c| !c.is_whitespace()) == Some(&'(');
+            match b.inputs.iter().find(|x| x.name == name).filter(|_| !call) {
+                Some(x) if matches!(x.kind, InputKind::Constant | InputKind::Unknown) => out.push_str(&num(x.value)),
+                Some(x) => out.push_str(&format!("{name} {}", num(x.value))),
+                None => out.push_str(&name),
+            }
+            continue;
+        }
+        out.push(if c == '*' { 'x' } else { c });
+        i += 1;
+    }
+    out
+}
+
+/// A number as a breakdown shows it: whole numbers without decimals, others to at most two.
+fn num(v: f64) -> String {
+    if v.fract() == 0.0 {
+        format!("{v:.0}")
+    } else {
+        let s = format!("{v:.2}");
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    }
+}
+
+/// A modifier part's change: `+3`, `-10%` or `+3, -10%`.
+fn part_text(p: &derived::Part) -> String {
+    let mut out: Vec<String> = Vec::new();
+    if p.flat != 0 {
+        out.push(format!("{:+}", p.flat));
+    }
+    if p.percent != 0.0 {
+        let pct = p.percent * 100.0;
+        out.push(format!("{}{}%", if pct > 0.0 { "+" } else { "-" }, num(pct.abs())));
+    }
+    out.join(", ")
+}
+
+/// The name of a modifier source (`derived::Part::source`): the item, passive or status it came from.
+fn source_name(cat: &Catalog, src: &str) -> String {
+    let item = |id: &str| cat.items.get(id).map(|i| i.name.clone()).unwrap_or_else(|| id.to_string());
+    if let Some(id) = src.strip_prefix(derived::STATUS_SOURCE).and_then(|s| s.strip_prefix(':')) {
+        return emberwake_rules::status::display_name(id);
+    }
+    if let Some(rest) = src.strip_prefix("passive:gear:") {
+        return match rest.split_once(":tier") {
+            Some((id, n)) => format!("{} {}", item(id), roman(n.parse().unwrap_or(0))),
+            None => item(rest),
+        };
+    }
+    if let Some(id) = src.strip_prefix("passive:") {
+        return cat.passives.get(id).map(|p| p.name.clone()).unwrap_or_else(|| id.to_string());
+    }
+    if let Some(id) = src.strip_prefix(TIER_SOURCE).and_then(|s| s.strip_prefix(':')) {
+        return format!("{} tier", item(id));
+    }
+    if let Some(id) = src.strip_prefix("gear:") {
+        return item(id);
+    }
+    match src {
+        "gear" => "Gear".into(),
+        TIER_SOURCE => "Gear tiers".into(),
+        _ => src.to_string(),
+    }
+}
+
+/// The built-in derived values of a built unit (rules code; the catalog's rows follow them).
+fn builtin_of(u: &Unit) -> Vec<(&'static str, i64)> {
     vec![
         ("Max HP", u.max_hp as i64),
         ("Speed", u.speed as i64),
@@ -873,14 +1015,17 @@ impl Character {
             }
             ui.push(format!("stats.{st}"), "row", format!("{st} {total}"), Rect::new(66, y as i32 - 2, (table_right - 62.0) as i32, 14), true, false, None, tip(st, &stat_desc(st)));
         }
-        let rows = derived(d, m);
+        let rows = derived(d, &party_ruleset(cx), m);
         let label_x = 250f32.max(table_right + 6.0);
-        let value_x = 325f32.max(label_x + rows.iter().map(|r| ui.p.text_w(r.0, BODY + 1.0)).fold(0.0, f32::max) + 8.0);
-        for (i, (label, v)) in rows.iter().enumerate() {
-            let y = 143.0 + i as f32 * 15.0;
-            ui.p.text(label_x, y, label, BODY + 1.0, DIM);
-            ui.p.text(value_x, y, &v.to_string(), BODY + 1.0, TEXT);
-            ui.push(format!("stats.derived.{label}"), "row", format!("{label} {v}"), Rect::new(label_x as i32 - 2, y as i32 - 2, (value_x - label_x) as i32 + 26, 14), true, false, None, tip(label, &derived_desc(label)));
+        let value_x = 325f32.max(label_x + rows.iter().map(|r| ui.p.text_w(&r.label, BODY + 1.0)).fold(0.0, f32::max) + 8.0);
+        // DERIVE1 4.4: the built-in rows keep their 15 px step; catalog rows past them close the step up to stay above
+        // the detail pane (the last row starts at 263 at most)
+        let step = 15f32.min(120.0 / (rows.len().max(2) - 1) as f32);
+        for (i, r) in rows.iter().enumerate() {
+            let y = 143.0 + i as f32 * step;
+            ui.p.text(label_x, y, &r.label, BODY + 1.0, DIM);
+            ui.p.text(value_x, y, &r.shown, BODY + 1.0, TEXT);
+            ui.push(format!("stats.derived.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(label_x as i32 - 2, y as i32 - 2, (value_x - label_x) as i32 + 26, step.min(14.0) as i32), true, false, None, tip(&r.label, &r.desc));
         }
         let names: Vec<String> = m.passives.iter().map(|p| s_or(d.entry("passives", p), "name", p)).collect();
         let line = format!("Passives: {}", if names.is_empty() { "none".into() } else { names.join(", ") });
@@ -923,15 +1068,19 @@ impl Character {
         for (k, v) in &self.draft {
             *work.spend.entry(k.clone()).or_insert(0) += v;
         }
-        let (before, after) = (derived(d, m), derived(d, &work));
+        let ruleset = party_ruleset(cx);
+        let (before, after) = (derived(d, &ruleset, m), derived(d, &ruleset, &work));
         let label_x = 352f32.max((auto_x + 86) as f32);
-        let value_x = 427f32.max(label_x + after.iter().map(|r| ui.p.text_w(r.0, BODY + 1.0)).fold(0.0, f32::max) + 8.0);
-        for (i, (label, v)) in after.iter().enumerate() {
-            let y = 122.0 + i as f32 * 15.0;
-            let old = before.get(i).map(|b| b.1).unwrap_or(*v);
-            ui.p.text(label_x, y, label, BODY + 1.0, DIM);
-            ui.p.text(value_x, y, &if old != *v { format!("{old} -> {v}") } else { v.to_string() }, BODY + 1.0, if old != *v { GOLD } else { TEXT });
-            ui.push(format!("level.derived.{label}"), "row", format!("{label} {v}"), Rect::new(label_x as i32 - 2, y as i32 - 2, (value_x - label_x) as i32 + 55, 14), true, false, None, tip(label, &derived_desc(label)));
+        let value_x = 427f32.max(label_x + after.iter().map(|r| ui.p.text_w(&r.label, BODY + 1.0)).fold(0.0, f32::max) + 8.0);
+        // DERIVE1 4.4: as on the Stats tab, more rows close the step up (the last row starts at 257 at most)
+        let step = 15f32.min(135.0 / (after.len().max(2) - 1) as f32);
+        for (i, r) in after.iter().enumerate() {
+            let y = 122.0 + i as f32 * step;
+            let old = before.get(i).filter(|b| b.value != r.value);
+            let text = old.map_or_else(|| r.shown.clone(), |b| format!("{} -> {}", b.shown, r.shown));
+            ui.p.text(label_x, y, &r.label, BODY + 1.0, DIM);
+            ui.p.text(value_x, y, &text, BODY + 1.0, if old.is_some() { GOLD } else { TEXT });
+            ui.push(format!("level.derived.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(label_x as i32 - 2, y as i32 - 2, (value_x - label_x) as i32 + 55, step.min(14.0) as i32), true, false, None, tip(&r.label, &r.desc));
         }
         ui.button("level.confirm", Rect::new(500, 312, 70, 18), "Confirm", PAct::ConfirmLevel, drafted > 0);
     }
@@ -1136,23 +1285,25 @@ impl Character {
             ui.p.text_right((sx + sw - 4) as f32, 262.0, &shown, SMALL, DIM);
         }
         // Left: the stats with this gear, and the change of the dragged item over a target, else of the hovered item.
+        let ruleset = party_ruleset(cx);
         let preview = self.gear_preview(ui, d, &work, &stash);
-        let now = sheet(d, &work);
-        let then = preview.as_ref().map(|p| sheet(d, p));
+        let now = sheet(d, &ruleset, &work);
+        let then = preview.as_ref().map(|p| sheet(d, &ruleset, p));
         let (lx, lw) = (25, 210);
         ui.p.text(lx as f32 + 3.0, 102.0, &format!("{}  Lv {}", d.cat.classes.get(&work.class_id(d)).map(|c| c.name.clone()).unwrap_or_default(), work.level(d)), head, INFO);
-        for (i, (label, v)) in now.iter().enumerate() {
+        // DERIVE1 4.4: catalog rows past the built-in ones close the 12 px step up (the last row starts at 260 at most)
+        let step = 12f32.min(102.0 / (now.len().saturating_sub(STATS.len()).max(2) - 1) as f32);
+        for (i, r) in now.iter().enumerate() {
             let core = i < STATS.len();
-            let (x, y, w) = if core { (lx + 3 + (i as i32 % 2) * 104, 117 + (i as i32 / 2) * 12, 100) } else { (lx + 3, 158 + (i - STATS.len()) as i32 * 12, lw - 6) };
-            ui.p.text(x as f32, y as f32, label, BODY, DIM);
+            let (x, y, w) = if core { (lx + 3 + (i as i32 % 2) * 104, 117 + (i as i32 / 2) * 12, 100) } else { (lx + 3, 158 + ((i - STATS.len()) as f32 * step) as i32, lw - 6) };
+            ui.p.text(x as f32, y as f32, &r.label, BODY, DIM);
             let right = (x + w - 26) as f32;
-            ui.p.text_right(right, y as f32, &v.to_string(), BODY, TEXT);
-            let delta = then.as_ref().and_then(|t| t.get(i)).map(|t| t.1 - v).unwrap_or(0);
+            ui.p.text_right(right, y as f32, &r.shown, BODY, TEXT);
+            let delta = then.as_ref().and_then(|t| t.get(i)).map(|t| t.value - r.value).unwrap_or(0);
             if delta != 0 {
                 ui.p.text(right + 3.0, y as f32, &format!("{delta:+}"), BODY, if delta > 0 { GOOD } else { FOE });
             }
-            let desc = if core { stat_desc(label) } else { derived_desc(label) };
-            ui.push(format!("gear.stat.{label}"), "row", format!("{label} {v}"), Rect::new(x - 2, y - 1, w, 12), true, false, None, tip(label, &desc));
+            ui.push(format!("gear.stat.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(x - 2, y - 1, w, if core { 12 } else { step.min(12.0) as i32 }), true, false, None, tip(&r.label, &r.desc));
         }
         let dirty = &work != m || stash != cx.gs().party.stash;
         ui.button("gear.reset", Rect::new(68, 312, 70, 18), "Reset", PAct::ResetGear, dirty);
@@ -1182,11 +1333,11 @@ impl Character {
     }
 }
 
-/// The Gear tab's stat list: the core stats with gear, then the derived values (`derived`).
-fn sheet(d: &Data, m: &UnitState) -> Vec<(String, i64)> {
+/// The Gear tab's stat list: the core stats with gear, then the derived rows (`derived`).
+fn sheet(d: &Data, ruleset: &str, m: &UnitState) -> Vec<DRow> {
     let Some(b) = progression::build_with(d, m, false) else { return Vec::new() };
-    let mut out: Vec<(String, i64)> = STATS.iter().map(|st| (st.to_string(), b.unit.stats.stat(st, None) as i64)).collect();
-    out.extend(derived_of(&b.unit).into_iter().map(|(l, v)| (l.to_string(), v)));
+    let mut out: Vec<DRow> = STATS.iter().map(|st| DRow::plain(st, b.unit.stats.stat(st, None) as i64, stat_desc(st))).collect();
+    out.extend(derived_of(&d.cat, ruleset, &b.unit));
     out
 }
 
@@ -1401,16 +1552,135 @@ mod tests {
     #[test]
     fn wearing_an_item_changes_the_stat_sheet_the_preview_shows() {
         let (d, m, mut st) = setup();
-        let before = sheet(&d, &m);
+        let rs = d.ruleset_id("ashlands");
+        let before = sheet(&d, &rs, &m);
         let mut changed = false;
         for slot in ["main_hand", "body", "accessory_1"] {
             let mut w = m.clone();
             let item = wearable(&d, &m, slot);
             equip(&d, &mut w, &mut st, &item, Some(slot)).unwrap();
-            changed |= sheet(&d, &w) != before;
+            changed |= sheet(&d, &rs, &w) != before;
         }
         assert!(changed);
-        assert_eq!(before.len(), STATS.len() + derived(&d, &m).len());
+        assert_eq!(before.len(), STATS.len() + derived(&d, &rs, &m).len());
+    }
+
+    /// A scratch derived-stat row (DERIVE1 4.1 keys; the rest take the schema defaults).
+    fn row(v: Value) -> emberwake_data::DerivedStatDef {
+        emberwake_data::DerivedStatDef::from_obj(v.as_object().unwrap()).expect("the formula parses")
+    }
+
+    /// `d` with exactly `rows` as its derived stats (scratch rows in the catalog, the shipped data untouched).
+    fn with_rows(d: &Data, rows: Vec<emberwake_data::DerivedStatDef>) -> Data {
+        let mut d = d.clone();
+        let cat = std::sync::Arc::make_mut(&mut d.cat);
+        cat.derived_stats = rows.into_iter().map(|r| (r.id.clone(), r)).collect();
+        d
+    }
+
+    fn labels(rows: &[DRow]) -> Vec<String> {
+        rows.iter().map(|r| r.label.clone()).collect()
+    }
+
+    /// DERIVE1 4.4 / 7 (U): with no derived row the party table lists the built-in numbers only; a row joins it after
+    /// them when its `show_on` names the party screen and its `rulesets` the ruleset, sorted by `order` (ties in
+    /// catalog order), with its value, its suffix and the value the rules give.
+    #[test]
+    fn catalog_derived_rows_join_the_party_table_by_screen_ruleset_and_order() {
+        use emberwake_rules::ruleset::{CLASSIC, TIMELINE};
+        let (d, m, _) = setup();
+        let built = progression::build_with(&d, &m, false).unwrap().unit;
+        let today: Vec<String> = builtin_of(&built).iter().map(|r| r.0.to_string()).collect();
+        let none = with_rows(&d, Vec::new());
+        for rs in [CLASSIC, TIMELINE] {
+            assert_eq!(labels(&derived(&none, rs, &m)), today, "{rs}: no row, the table of today");
+        }
+        let d = with_rows(&d, vec![
+            row(json!({"id": "dread", "name": "Dread", "formula": "100 - KNOW", "rulesets": ["timeline"], "show_on": ["party"]})),
+            row(json!({"id": "zeal", "name": "Zeal", "formula": "DEX + level", "show_on": ["party", "battle"]})),
+            row(json!({"id": "nerve", "name": "Nerve", "label": "Nrv", "formula": "KNOW * 2 + CONS", "order": 1, "suffix": "%", "show_on": ["party"]})),
+            row(json!({"id": "hush", "name": "Hush", "formula": "INT", "show_on": ["dojo"]})),
+        ]);
+        let with = |extra: &[&str]| today.iter().cloned().chain(extra.iter().map(|s| s.to_string())).collect::<Vec<String>>();
+        assert_eq!(labels(&derived(&d, CLASSIC, &m)), with(&["Zeal", "Nrv"]), "classic: the timeline row is absent, the dojo row is not on the party screen");
+        assert_eq!(labels(&derived(&d, TIMELINE, &m)), with(&["Dread", "Zeal", "Nrv"]), "timeline: order 0 in catalog order, then order 1");
+        for rs in [CLASSIC, TIMELINE] {
+            let rows = derived(&d, rs, &m);
+            for r in &rows[today.len()..] {
+                let id = d.cat.derived_stats.values().find(|x| x.header() == r.label).unwrap();
+                let v = derived::value(&d.cat, rs, &built, &id.id).unwrap();
+                assert_eq!((r.value, r.shown.clone()), (v as i64, format!("{v}{}", id.suffix)), "{rs} {}", r.label);
+            }
+            assert_eq!(rows[..today.len()], derived(&none, rs, &m)[..], "{rs}: the built-in rows are unchanged");
+        }
+        assert_eq!(labels(&data_rows(&d.cat, CLASSIC, &built, "dojo")), ["Hush"]);
+        assert_eq!(labels(&data_rows(&d.cat, CLASSIC, &built, "battle")), ["Zeal"]);
+        let rs = d.ruleset_id("ashlands");
+        assert_eq!(sheet(&d, &rs, &m).len(), STATS.len() + derived(&d, &rs, &m).len(), "the Gear tab lists the same rows");
+    }
+
+    /// DERIVE1 4.4: a row's detail text is its description, its formula and the breakdown: the formula with its inputs
+    /// filled in, each modifier by the passive or item it came from, the value and its caps.
+    #[test]
+    fn a_derived_rows_detail_names_its_formula_inputs_modifiers_and_caps() {
+        use emberwake_rules::ruleset::CLASSIC;
+        let (d, m, _) = setup();
+        let d = with_rows(&d, vec![
+            row(json!({"id": "nerve", "name": "Nerve", "description": "Holds the line.", "formula": "base + KNOW * per_know", "constants": {"base": 3, "per_know": 2}, "max": 1000})),
+            row(json!({"id": "tiny", "name": "Tiny", "formula": "KNOW * 10", "max": 5})),
+        ]);
+        let detail = |d: &Data, m: &UnitState, id: &str| -> (i64, String) {
+            let header = d.cat.derived_stats[id].header().to_string();
+            let r = derived(d, CLASSIC, m).into_iter().find(|r| r.label == header).unwrap();
+            (r.value, r.desc)
+        };
+        let built = progression::build_with(&d, &m, false).unwrap().unit;
+        let know = derived::breakdown(&d.cat, CLASSIC, &built, "nerve").unwrap().inputs.iter().find(|i| i.name == "KNOW").unwrap().value;
+        let (v, text) = detail(&d, &m, "nerve");
+        assert_eq!(v, 3 + know as i64 * 2);
+        assert_eq!(text, format!("Holds the line. Formula: base + KNOW * per_know. 3 + KNOW {know} x 2 = {v} (0-1000)."));
+        let (tiny, text) = detail(&d, &m, "tiny");
+        assert_eq!(tiny, 5);
+        assert!(text.ends_with(&format!("KNOW {know} x 10 = 5 (capped at the max; 0-5).")), "{text}");
+        // a passive `stat` effect on the derived id (a scratch passive applied to the built unit): the value rises by it
+        // and the breakdown names the passive
+        let steady = emberwake_data::PassiveDef { id: "test_steady".into(), name: "Steady Test".into(), effects: vec![json!({"type": "stat", "stat": "nerve", "value": 4})], slot: String::new() };
+        let mut d = d.clone();
+        std::sync::Arc::make_mut(&mut d.cat).passives.insert(steady.id.clone(), steady.clone());
+        let mut u = built.clone();
+        u.apply_passive(&d.cat, &steady);
+        let r = data_rows(&d.cat, CLASSIC, &u, "party").into_iter().find(|r| r.label == "Nerve").unwrap();
+        assert_eq!(r.value, v + 4);
+        assert!(r.desc.ends_with(&format!("3 + KNOW {know} x 2 = {v}; Steady Test +4; = {} (0-1000).", v + 4)), "{}", r.desc);
+    }
+
+    /// DERIVE1 4.4: with several catalog rows the Stats, Level up and Gear tabs close their derived rows up: every
+    /// derived row's hover rect stays inside its column of the popup, above the detail pane, and no two overlap.
+    #[test]
+    fn many_derived_rows_stay_inside_their_tab_without_overlapping() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut data = (*cx.app.data).clone();
+        let cat = std::sync::Arc::make_mut(&mut data.cat);
+        cat.derived_stats = (0..4).map(|i| row(json!({"id": format!("row_{i}"), "name": format!("Row {i}"), "formula": "KNOW + 1", "show_on": ["party"]}))).map(|r| (r.id.clone(), r)).collect();
+        cx.app.data = std::sync::Arc::new(data);
+        let member = cx.gs().party.members[0].id.clone();
+        // (tab, widget prefix of its derived rows, its column: x from, x to); the detail pane starts at y 275
+        for (tab, prefix, (x0, x1)) in [("stats", "stats.derived.", (230, 616)), ("level_up", "level.derived.", (340, 616)), ("gear", "gear.stat.", (25, 235))] {
+            let mut c = Character::new(&cx, &member, tab);
+            let mut g = crate::hud::hud_tests::gfx();
+            c.draw(&mut cx, &mut g, (-500, -500), true);
+            let rows: Vec<(String, Rect)> = c.w.iter().filter(|w| w.id.starts_with(prefix) && !STATS.iter().any(|s| w.id == format!("{prefix}{s}"))).map(|w| (w.id.clone(), w.rect)).collect();
+            for i in 0..4 {
+                assert!(rows.iter().any(|r| r.0 == format!("{prefix}Row {i}")), "{tab}: Row {i} is listed");
+            }
+            for (i, (id, r)) in rows.iter().enumerate() {
+                assert!(r.x >= x0 && r.x + r.w <= x1 && r.y >= 96 && r.y + r.h <= 275, "{tab}: {id} {r:?} inside its column, above the detail pane");
+                for (other, o) in &rows[i + 1..] {
+                    let x = r.intersect(*o);
+                    assert!(x.w == 0 || x.h == 0, "{tab}: {id} {r:?} overlaps {other} {o:?}");
+                }
+            }
+        }
     }
 
     /// ASKNO1: with a draft open, a tab switch and Close ask "Discard the changes on this tab?" with No as the default

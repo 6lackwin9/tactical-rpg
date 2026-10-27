@@ -135,17 +135,19 @@ fn every_field_rule_has_its_error() {
         (json!({"id": long}), "ID 'aaaaaaaaaaaaaaaaaaaaaaaaa' must be 2-24 characters long."),
         (json!({"id": "know"}), "ID 'know' is a base stat."),
         (json!({"id": "level"}), "ID 'level' is the unit level input."),
+        (json!({"id": "gear_mitigation"}), "ID 'gear_mitigation' is the worn gear mitigation input."),
         (json!({"id": "clamp"}), "ID 'clamp' is a formula function."),
         (json!({"id": "other"}), "ID 'other' is already used by another derived stat."),
         (json!({"name": " "}), "Name is required."),
         (json!({"name": "N".repeat(25)}), "Name is 25 characters (max 24)."),
         (json!({"label": "L".repeat(17)}), "Label is 17 characters (max 16)."),
         (json!({"label": "Oth"}), "Label 'Oth' is already used by derived stat 'other'."),
-        (json!({"formula": "KNOW * nope"}), "Formula: unknown name 'nope' (a base stat STR, DEX, INT, CONS, PERC, KNOW, level, a derived stat id or a constant)."),
+        (json!({"formula": "KNOW * nope"}), "Formula: unknown name 'nope' (a base stat STR, DEX, INT, CONS, PERC, KNOW, level, gear_mitigation, a derived stat id or a constant)."),
         (json!({"formula": "know + 1"}), "Formula: base stats are upper case ('KNOW', not 'know')."),
         (json!({"constants": [1]}), "Constants must be an object of name to number."),
         (json!({"constants": {"Str": 1}}), "Constants: 'Str' is a base stat."),
         (json!({"constants": {"level": 1}}), "Constants: 'level' is the unit level input."),
+        (json!({"constants": {"gear_mitigation": 1}}), "Constants: 'gear_mitigation' is the worn gear mitigation input."),
         (json!({"constants": {"other": 1}}), "Constants: 'other' is a derived stat id."),
         (json!({"constants": {"2x": 1}}), "Constants: '2x' is not a name (a letter or _ first, then letters, digits or _; not a function)."),
         (json!({"constants": {"round": 1}}), "Constants: 'round' is not a name (a letter or _ first, then letters, digits or _; not a function)."),
@@ -175,6 +177,15 @@ fn every_field_rule_has_its_error() {
         assert_eq!(checked.errors[1], [want], "{change}");
         assert_eq!(checked.order, [0], "{change}: the broken row does not load");
     }
+}
+
+/// RULESET1 P1 (tasks 1.7): `gear_mitigation` is a reserved formula input like `level` (the Max Poise row's shape).
+#[test]
+fn gear_mitigation_is_a_formula_input() {
+    let poise = json!({"id": "max_poise", "name": "Max Poise", "formula": "CONS * per_cons + gear_mitigation * armour_factor", "constants": {"per_cons": 2, "armour_factor": 1.0}, "min": 1, "max": 200});
+    let checked = derived::check_rows(&[row(poise)]);
+    assert!(checked.errors[0].is_empty(), "{:?}", checked.errors[0]);
+    assert_eq!(checked.order, [0]);
 }
 
 #[test]
@@ -286,7 +297,7 @@ fn the_writer_takes_the_kind_and_refuses_a_row_that_adds_a_problem() {
     let file = data.join("catalog").join("derived_stats.json");
     let up = |entry: Value| store::upsert(&data, None, derived::KIND, &dict(entry), None);
     let bad = up(json!({"id": "nerve", "name": "Nerve", "formula": "grit + 1"})).err().expect("the write is refused");
-    assert!(bad.iter().any(|e| e.ends_with("derived stat 'nerve': Formula: unknown name 'grit' (a base stat STR, DEX, INT, CONS, PERC, KNOW, level, a derived stat id or a constant).")), "{bad:?}");
+    assert!(bad.iter().any(|e| e.ends_with("derived stat 'nerve': Formula: unknown name 'grit' (a base stat STR, DEX, INT, CONS, PERC, KNOW, level, gear_mitigation, a derived stat id or a constant).")), "{bad:?}");
     assert!(!file.exists(), "a refused first row leaves no file");
     up(json!({"id": "grit", "name": "Grit", "formula": "KNOW * k", "constants": {"k": 2}})).unwrap();
     up(json!({"id": "nerve", "name": "Nerve", "formula": "grit + 1", "show_on": ["party", "battle"]})).unwrap();
@@ -299,8 +310,26 @@ fn the_writer_takes_the_kind_and_refuses_a_row_that_adds_a_problem() {
     assert!(cycle.iter().any(|e| e.ends_with("derived stat 'grit': Formula: cycle grit -> nerve -> grit.")), "{cycle:?}");
     assert_eq!(fs::read_to_string(&file).unwrap(), text, "a refused write puts the file back");
     let gone = store::remove(&data, None, derived::KIND, "grit").err().expect("the write is refused");
-    assert!(gone.iter().any(|e| e.ends_with("derived stat 'nerve': Formula: unknown name 'grit' (a base stat STR, DEX, INT, CONS, PERC, KNOW, level, a derived stat id or a constant).")), "{gone:?}");
+    assert!(gone.iter().any(|e| e.ends_with("derived stat 'nerve': Formula: unknown name 'grit' (a base stat STR, DEX, INT, CONS, PERC, KNOW, level, gear_mitigation, a derived stat id or a constant).")), "{gone:?}");
     store::remove(&data, None, derived::KIND, "nerve").unwrap();
     assert!(store::check(&data).iter().all(|p| !p.contains("derived stat")), "{:?}", store::check(&data));
+    drop_scratch(&data);
+}
+
+/// CAST1-S2: a stat bonus on a derived stat takes the derived range (1-50); a base stat keeps 1-8.
+#[test]
+fn a_derived_stat_bonus_has_its_own_range() {
+    let (data, v) = gear_view("bonus_range", true);
+    let errors_for = |stat: &str, value: i64| {
+        let item = dict(json!({"id": "wpn_test", "name": "Test Blade", "family": "sword", "hand": "main_1h", "modifiers": [{"kind": "stat_bonus", "stat": stat, "value": value}]}));
+        check::validate_entry(&v, "items", &item, "").into_iter().filter(|e| e.starts_with("Modifier 1:")).collect::<Vec<_>>()
+    };
+    assert_eq!(errors_for("grit", 30), Vec::<String>::new());
+    assert_eq!(errors_for("grit", 12), Vec::<String>::new());
+    assert_eq!(errors_for("grit", 50), Vec::<String>::new());
+    assert_eq!(errors_for("grit", 0), ["Modifier 1: value 0 is outside 1 to 50."]);
+    assert_eq!(errors_for("grit", 51), ["Modifier 1: value 51 is outside 1 to 50."]);
+    assert_eq!(errors_for("STR", 8), Vec::<String>::new());
+    assert_eq!(errors_for("STR", 9), ["Modifier 1: value 9 is outside 1 to 8."]);
     drop_scratch(&data);
 }

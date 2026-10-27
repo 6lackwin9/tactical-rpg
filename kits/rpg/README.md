@@ -46,3 +46,9 @@ Placeholder and baseline art comes from the repository's `tools/`, which write t
 
 To check a regeneration, write it into an empty folder (`--root DIR`) and compare it with the committed tree
 (`tools/gen_art.py --compare DIR`). `tools/sprites/export_units.py` always rewrites the bodies it owns (no keep rule).
+
+HOOKS1-S: the combat hook schema (9 rule ids; skill, item, passive, unit, encounter and manifest fields; kinds `hazards`, `unit_meters`, `zones`). Behaviour lands per hook.
+
+HOOKS1-F: forced movement (rule `forced_move`): push and pull after stagger, collisions with no random draw, the wall-slam break of a windup, immunity and bonus tiles from passives and gear.
+
+HOOKS1-G: ground hazards (rule `ground_hazards`): placements, the tile overlay, enter and round-end effects, traps, fades, the AI path penalty.

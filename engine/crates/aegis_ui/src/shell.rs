@@ -1592,7 +1592,7 @@ mod tests {
     /// click that only closes an open choice list presses no button.
     #[test]
     fn a_click_comes_before_what_it_opens() {
-        let _queues = crate::playtest::TEST_QUEUES.lock().unwrap_or_else(|e| e.into_inner());
+        let _queues = crate::playtest::test_queues();
         let dir = std::env::temp_dir().join(format!("aegis_shell_open_{}", std::process::id()));
         let mut s = shell();
         s.stack = vec![Box::new(Opener::default())];
@@ -1624,7 +1624,7 @@ mod tests {
     /// out of the trail); Ctrl+Enter saves the note (stamp, text, tags, a JPEG next to the recording) and closes it.
     #[test]
     fn f8_takes_a_note_with_a_screenshot() {
-        let _queues = crate::playtest::TEST_QUEUES.lock().unwrap_or_else(|e| e.into_inner());
+        let _queues = crate::playtest::test_queues();
         let dir = std::env::temp_dir().join(format!("aegis_shell_note_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut s = form(Form::default());
@@ -1817,7 +1817,7 @@ mod tests {
     /// PLAYUI1-T: a note's row in the Playtests browser opens it whole; Copy puts its text on the clipboard.
     #[test]
     fn the_recordings_browser_shows_a_note_whole_and_copies_it() {
-        let _queues = crate::playtest::TEST_QUEUES.lock().unwrap_or_else(|e| e.into_inner());
+        let _queues = crate::playtest::test_queues();
         let dir = std::env::temp_dir().join(format!("aegis_shell_note_view_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut s = shell();
@@ -1844,7 +1844,7 @@ mod tests {
     /// clean at every text size.
     #[test]
     fn the_note_box_and_the_note_view_read_clean_at_every_text_size() {
-        let _queues = crate::playtest::TEST_QUEUES.lock().unwrap_or_else(|e| e.into_inner());
+        let _queues = crate::playtest::test_queues();
         let dir = std::env::temp_dir().join(format!("aegis_shell_note_sizes_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut s = form(Form::default());
@@ -1886,7 +1886,7 @@ mod tests {
     /// plays back to the end, and copies the recording to the repo inbox, where it lists with the repo badge.
     #[test]
     fn the_recordings_browser_plays_back_takes_over_and_copies() {
-        let _queues = crate::playtest::TEST_QUEUES.lock().unwrap_or_else(|e| e.into_inner());
+        let _queues = crate::playtest::test_queues();
         let dir = std::env::temp_dir().join(format!("aegis_shell_recordings_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut s = shell();
@@ -1927,7 +1927,7 @@ mod tests {
     /// widget a click pressed, keys and a notice opening as a modal; leaving writes the recording.
     #[test]
     fn the_shell_feeds_the_playtest_trail() {
-        let _queues = crate::playtest::TEST_QUEUES.lock().unwrap_or_else(|e| e.into_inner());
+        let _queues = crate::playtest::test_queues();
         let dir = std::env::temp_dir().join(format!("aegis_shell_trail_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut s = form(Form::default());

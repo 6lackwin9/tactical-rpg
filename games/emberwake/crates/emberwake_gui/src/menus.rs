@@ -6,7 +6,8 @@ use aegis_ui::canvas::{rgba, Rect};
 use crate::music;
 use crate::screens::{default_settings, enter_game, show_errors, title, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Glyph, Ui, Widget, BODY, DIM, GOLD, H, INFO, PANEL_HI, SMALL, TEXT, W};
-use aegis_ui::screen::{Settings, FPS_CAPS, TEXT_SIZES, WINDOW_MODES, WINDOW_SIZES};
+use aegis_ui::screen::{Settings, FPS_CAPS, TEXT_SIZES, TEXT_SPEEDS, WINDOW_MODES, WINDOW_SIZES};
+use aegis_ui::vignette::{TextSpeed, REDUCE_MOTION, TEXT_SPEED};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or};
 use emberwake_world::{new_game, progression, save};
@@ -554,6 +555,11 @@ impl SettingsScreen {
                     self.draft["battle_view"] = json!(v);
                 }
             }
+            SetAct::Pick(TEXT_SPEED, i) => {
+                if let Some(v) = TEXT_SPEEDS.get(i) {
+                    self.draft[TEXT_SPEED] = json!(v);
+                }
+            }
             SetAct::Pick(k, i) => {
                 if let Some(o) = choices(k).get(i) {
                     self.draft[k] = json!(o);
@@ -651,6 +657,15 @@ impl Screen<GameCx> for SettingsScreen {
                 let labels: Vec<String> = crate::stage::VIEWS.iter().map(|v| v.1.to_string()).collect();
                 let at = crate::stage::VIEWS.iter().position(|v| d["battle_view"].as_str() == Some(v.0)).unwrap_or(0);
                 ui.select("settings.battle_view", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick("battle_view", i), true, tip("Battle view", crate::stage::VIEW_TIP));
+                y += 22;
+                // STORYUI1 4.8: the story cards' typewriter speed and the shared reduce-motion switch (engine keys)
+                ui.p.text(x as f32, y as f32 + 3.0, "Text speed", BODY, TEXT);
+                let labels: Vec<String> = TEXT_SPEEDS.iter().map(|v| TextSpeed::parse(v).label().to_string()).collect();
+                let at = TEXT_SPEEDS.iter().position(|v| d[TEXT_SPEED].as_str() == Some(*v)).unwrap_or(1);
+                let t = tip("Text speed", "How fast story captions type out: Slow, Normal, Fast, or Instant (the whole text at once). A click shows the rest at any speed.");
+                ui.select("settings.text_speed", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick(TEXT_SPEED, i), true, t);
+                y += 22;
+                ui.checkbox("settings.reduce_motion", x + 3, y, "Reduce motion", d[REDUCE_MOTION].as_bool().unwrap_or(false), SetAct::Toggle(REDUCE_MOTION), true);
             }
             _ => {
                 for (head, rows) in CONTROLS {

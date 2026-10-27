@@ -245,9 +245,14 @@ fn npc_badge(d: &Data, gs: &GameState, character_qid: &str) -> &'static str {
         }
     }
     for qid in quest::quests_with(d, gs, "available") {
-        if dialogue::giver_qid(d, gs, &quest::resolved(d, gs, &qid)) == character_qid {
+        let q = quest::resolved(d, gs, &qid);
+        // STORYUI1 B3, B4: a board quest is offered only on its board; an open board with work shows the quest badge
+        if dialogue::giver_qid(d, gs, &q) == character_qid && !crate::board::on_a_board(&q) {
             return "quest";
         }
+    }
+    if crate::board::has_work(d, gs, character_qid) {
+        return "quest";
     }
     ""
 }
@@ -294,12 +299,13 @@ pub fn marker_view(d: &Data, gs: &GameState, loc: &Dict, m: &Dict) -> Dict {
     ])
 }
 
-/// The NPC services in badge order.
-pub const SERVICES: [&str; 4] = ["turn_in", "offer", "shop", "recruit"];
+/// The NPC services in badge order (`board`: STORYUI1 B4).
+pub const SERVICES: [&str; 5] = ["turn_in", "offer", "board", "shop", "recruit"];
 
 /// PLAYUI1-M (spec PLAYUI1 2.2 A; engine-only, no Godot function): what the character `character_qid` offers now, in
 /// `SERVICES` order: `turn_in` (a ready quest turns in here), `offer` (an available quest starts here; both as the
-/// marker badges `ready` and `quest`), `shop` (keeper of an open shop), `recruit` (a choice in its dialogue tree with a
+/// marker badges `ready` and `quest`; STORYUI1 B4: a board quest is no `offer`), `board` (keeper of an open board with
+/// an available quest, STORYUI1 B4), `shop` (keeper of an open shop), `recruit` (a choice in its dialogue tree with a
 /// `recruit` effect for a character not in the party, the choice's conditions holding). Read-only; `marker_view` stays
 /// as Godot had it (the journey parity compares it).
 pub fn npc_services(d: &Data, gs: &GameState, character_qid: &str) -> Vec<&'static str> {
@@ -310,8 +316,14 @@ pub fn npc_services(d: &Data, gs: &GameState, character_qid: &str) -> Vec<&'stat
     if quest::quests_with(d, gs, "ready").iter().any(|q| dialogue::turn_in_qid(d, gs, &quest::resolved(d, gs, q)) == character_qid) {
         out.push("turn_in");
     }
-    if quest::quests_with(d, gs, "available").iter().any(|q| dialogue::giver_qid(d, gs, &quest::resolved(d, gs, q)) == character_qid) {
+    if quest::quests_with(d, gs, "available").iter().any(|q| {
+        let q = quest::resolved(d, gs, q);
+        dialogue::giver_qid(d, gs, &q) == character_qid && !crate::board::on_a_board(&q)
+    }) {
         out.push("offer");
+    }
+    if crate::board::has_work(d, gs, character_qid) {
+        out.push("board");
     }
     let keeps_shop = d.merged_entries(&gs.world_id, "shops").into_iter().any(|sh| {
         dialogue::character_qid(d, gs, &json::s(sh, "keeper")) == character_qid && crate::shop::is_open(d, gs, &json::s(sh, "_qid"))
@@ -456,16 +468,26 @@ pub fn enter(d: &Data, gs: &mut GameState, location_ref: &str, anchor: &str) -> 
     let mut restored = 0;
     if json::b(loc, "rest", false) {
         gs.explore.insert("last_rest".into(), qid.clone().into());
-        restored = progression::rest(d, &mut gs.party);
+        // CAMPAIGN1 R1: a campaign's rest rule may turn the free heal on entering off (`on_enter`)
+        if crate::campaign::purse::rest_rule(d, &gs.world_id).on_enter {
+            restored = progression::rest(d, &mut gs.party);
+        }
     }
     quest::refresh(d, gs);
     let advanced = quest::on_location_reached(d, gs, &qid);
     let mut events = vec![ev([("kind", "entered".into()), ("location", qid.clone().into()), ("advanced", json::strs(&advanced))])];
     if restored > 0 {
-        events.push(ev([("kind", "rested".into()), ("location", qid.into()), ("restored", int(restored))]));
+        events.push(ev([("kind", "rested".into()), ("location", qid.clone().into()), ("restored", int(restored))]));
     }
-    events.push(ev([("kind", "autosave".into())]));
-    result(true, &[], events)
+    // CAMPAIGN1 T1: the enter tick (enter triggers); no autosave once it ended the run (F3); `campaign` holds its
+    // events when there are some (none outside a campaign world, X3)
+    let ticked = crate::campaign::tick(d, gs, &crate::campaign::Cause::Enter { location: qid });
+    if crate::campaign::save_refusal(gs).is_empty() {
+        events.push(ev([("kind", "autosave".into())]));
+    }
+    let mut out = result(true, &[], events);
+    crate::campaign::merge_events(&mut out, ticked);
+    out
 }
 
 pub fn begin(d: &Data, gs: &mut GameState) -> Dict {
@@ -524,8 +546,27 @@ pub fn menu(d: &Data, gs: &GameState) -> Vec<Dict> {
     out
 }
 
-/// The defeat rule: heal, pick the checkpoint, wake there. Adds a `defeat` event.
+/// The defeat rule: heal, pick the checkpoint, wake there. Adds a `defeat` event. CAMPAIGN1 R4: a campaign world
+/// whose `defeat` is `retreat` retreats instead (`campaign::purse::retreat`; every `after_fight` path comes here); when
+/// its `to` cannot be entered the classic wake runs and a `retreat_failed` event (its `text` names why) comes first.
 pub fn wake(d: &Data, gs: &mut GameState, at: &str) -> Dict {
+    let mut failed = None;
+    if crate::campaign::purse::retreats(d, gs) {
+        failed = crate::campaign::purse::retreat_problem(d, gs);
+        if failed.is_none() {
+            return crate::campaign::purse::retreat(d, gs);
+        }
+    }
+    let mut woke = wake_classic(d, gs, at);
+    if let Some(note) = failed {
+        let mut events = vec![note];
+        events.extend(json::aget(&woke, "events").iter().cloned());
+        woke.insert("events".into(), Value::Array(events));
+    }
+    woke
+}
+
+fn wake_classic(d: &Data, gs: &mut GameState, at: &str) -> Dict {
     let target = if at.is_empty() { gs.location_id.clone() } else { at.to_string() };
     let loc = resolve_location(d, gs, &target);
     let t = template_of(d, loc);
@@ -636,7 +677,10 @@ pub fn step(d: &Data, gs: &mut GameState, dir: Pos) -> Dict {
                     return result(false, &json::sget(&left, "errors"), events);
                 }
                 events.push(ev([("kind", "exit".into()), ("to", to.into()), ("marker", json::s(m, "id").into()), ("events", left["events"].clone())]));
-                return result(true, &[], events);
+                let mut out = result(true, &[], events);
+                // CAMPAIGN1 T1: the enter tick's events
+                crate::campaign::merge_events(&mut out, json::aget(&left, "campaign").to_vec());
+                return out;
             }
             _ => {}
         }
@@ -753,6 +797,7 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
         return out;
     }
     let mut events = Vec::new();
+    let mut woke_campaign = Vec::new();
     let marker_id = json::s(fight, "marker");
     match outcome {
         "won" if !marker_id.is_empty() => {
@@ -778,6 +823,7 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
         "lost" => {
             let woke = wake(d, gs, "");
             events.extend(json::aget(&woke, "events").iter().cloned());
+            woke_campaign = json::aget(&woke, "campaign").to_vec();
         }
         _ => {}
     }
@@ -788,6 +834,8 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
     for (k, v) in crate::battle::result_keys(&applied) {
         out.insert(k, v);
     }
+    // CAMPAIGN1 R4: a retreat's tick events follow the battle's
+    crate::campaign::merge_events(&mut out, woke_campaign);
     out
 }
 

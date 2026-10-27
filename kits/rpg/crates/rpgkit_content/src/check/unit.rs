@@ -3,7 +3,8 @@
 use super::{capitalize, View, LOADOUT_SLOTS, NO_ITEM};
 use aegis_core::fmt::fixed;
 use aegis_core::json::{self, Dict};
-use rpgkit_data::{ClassDef, ItemDef, SkillDef, STATS};
+use rpgkit_data::{ClassDef, Deck, ItemDef, SkillDef, STATS};
+use rpgkit_rules::ruleset;
 use rpgkit_rules::stats::{spend_pool, Proficiency, CLASS_BUDGET, DEFAULT_SCALING, MAX_CLASS_SLOTS, MAX_EXTRA_SLOTS, MAX_LEVEL, PROF_MAX_LEVEL};
 use indexmap::IndexMap;
 use serde_json::Value;
@@ -16,8 +17,8 @@ const GROWTH_STAT_MAX: i64 = 3;
 const ADVANCED_MIN_LEVEL: i64 = 5;
 const MIN_SCALING: f64 = 1.0;
 const MAX_SCALING: f64 = 2.0;
-/// Proficiency.WEAPON_TYPES.
-const WEAPON_TYPES: [&str; 13] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "orb", "tome", "shield"];
+/// Proficiency.WEAPON_TYPES (RULESET1-S adds `polearm` and `scourge`, CAST1-S `censer`, `bone_saw` and `sprayer`).
+const WEAPON_TYPES: [&str; 18] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "polearm", "scourge", "censer", "bone_saw", "sprayer", "orb", "tome", "shield"];
 pub const DUPLICATE_ACCESSORY_ERROR: &str = "The same accessory cannot fill both accessory slots.";
 
 type Ints = IndexMap<String, i64>;
@@ -230,6 +231,146 @@ pub fn unit_errors(v: &View, e: &Dict) -> Vec<String> {
         errors.extend(skill_loadout_errors(v, e, a));
     }
     errors.extend(requires_errors(v, e, arch));
+    errors.extend(deck_errors(v, e));
+    errors.extend(default_intent_errors(v, e));
+    // HOOKS1 AT2: the unit's AI tactics
+    errors.extend(super::hooks::tactics_errors(json::get(e, "tactics"), "Tactics"));
+    errors
+}
+
+/// The skill families a unit row owns (its class path up to its level and its extra skills; always-active skills left
+/// out), as the deck checks read them (RULESET1 9 D1; HOOKS1 DU2).
+pub(crate) fn owned_families(v: &View, e: &Dict) -> Vec<String> {
+    let class_id = json::s(e, "class_id");
+    let arch = v.typed.classes.get(&class_id).filter(|_| !class_id.is_empty());
+    let mut owned_ids: Vec<String> = arch.map(|a| a.path_steps().into_iter().filter(|(l, _)| *l as i64 <= json::i(e, "level", 1)).map(|(_, s)| s).collect()).unwrap_or_default();
+    owned_ids.extend(json::sget(e, "extra_skills"));
+    families_of(v, &owned_ids)
+}
+
+/// RULESET1 TQ23 (a): a unit's `default_intent` (the schema's enum: "" or one of the four intents) is one a ruleset
+/// row lists among its intents; without ruleset rows only the enum applies.
+fn default_intent_errors(v: &View, e: &Dict) -> Vec<String> {
+    let intent = json::s(e, "default_intent");
+    let rows = v.entries(ruleset::KIND);
+    if intent.is_empty() || !ruleset::DEFAULT_INTENTS.contains(&intent.as_str()) || rows.is_empty() || rows.iter().any(|r| json::sget(r, "intents").contains(&intent)) {
+        return Vec::new();
+    }
+    let lists: Vec<String> = rows.iter().map(|r| format!("{}: {}", json::s(r, "id"), json::sget(r, "intents").join(", "))).collect();
+    vec![format!("Default intent: no ruleset lists '{intent}' among its intents ({}).", lists.join("; "))]
+}
+
+/// The ids of a deck list (`key` absent = none); a value that is not a list of strings is reported.
+fn deck_list(deck: &Dict, key: &str, errors: &mut Vec<String>) -> Vec<String> {
+    match deck.get(key) {
+        None => Vec::new(),
+        Some(Value::Array(a)) if a.iter().all(Value::is_string) => a.iter().map(json::gstr).collect(),
+        Some(_) => {
+            errors.push(format!("Deck {key} must be a list of ids."));
+            Vec::new()
+        }
+    }
+}
+
+/// Pushes "lists 'x' twice" for every repeat of `ids` against `seen` (which grows).
+fn repeats(label: &str, ids: &[String], seen: &mut Vec<String>, errors: &mut Vec<String>) {
+    for id in ids {
+        if seen.contains(id) {
+            errors.push(format!("{label} lists '{id}' twice."));
+        }
+        seen.push(id.clone());
+    }
+}
+
+/// RULESET1 9 D1-D5 (RULESET1_TASKS 1.5; rule deck, read only under timeline): a unit's `deck` is an object with the
+/// keys active, passive, keystone and order (empty or missing = auto). Actives are skill families the unit owns (class
+/// path at its level or extra skills), never a basic (a `basic` skill or a ruleset's basics); passive and keystone hold
+/// passives of that `slot`; the counts fit the `deck_slots` of every ruleset with the deck rule; order maps an intent
+/// to families of that intent among the actives and the basics. Nothing repeats.
+fn deck_errors(v: &View, e: &Dict) -> Vec<String> {
+    let mut errors = Vec::new();
+    let Some(deck) = json::get(e, "deck").as_object() else {
+        errors.push("Deck must be an object {active, passive, keystone, order}.".into());
+        return errors;
+    };
+    for k in deck.keys().filter(|k| !Deck::KEYS.contains(&k.as_str())) {
+        errors.push(format!("Deck: '{k}' is not one of {}.", Deck::KEYS.join(", ")));
+    }
+    let deck_rows: Vec<&Dict> = v.entries(ruleset::KIND).iter().filter(|r| json::sget(r, "rules").iter().any(|x| x == ruleset::DECK)).collect();
+    let mut basics: Vec<String> = Vec::new();
+    for b in deck_rows.iter().flat_map(|r| json::sget(r, "basics")) {
+        if !basics.contains(&b) {
+            basics.push(b);
+        }
+    }
+    let active = deck_list(deck, "active", &mut errors);
+    repeats("Deck active", &active, &mut Vec::new(), &mut errors);
+    let owned = owned_families(v, e);
+    for fam in &active {
+        if v.typed.tier_one(fam).is_none() {
+            errors.push(format!("Deck active: unknown skill family '{fam}'."));
+        } else if v.typed.is_basic_family(fam) || basics.contains(fam) || v.typed.is_system(fam) {
+            errors.push(format!("Deck active: '{fam}' is a basic (open to every unit, no slot)."));
+        } else if !owned.contains(fam) {
+            errors.push(format!("Deck active: the unit does not own the skill family '{fam}'."));
+        }
+    }
+    let mut slotted: Vec<(&str, Vec<String>)> = vec![("active", active.clone())];
+    let mut seen_passives: Vec<String> = Vec::new();
+    for slot in ["passive", "keystone"] {
+        let ids = deck_list(deck, slot, &mut errors);
+        repeats(&format!("Deck {slot}"), &ids, &mut seen_passives, &mut errors);
+        for id in &ids {
+            let p = v.get("passives", id);
+            if p.is_empty() {
+                errors.push(format!("Deck {slot}: unknown passive '{id}'."));
+            } else if json::s(p, "slot") != slot {
+                let has = json::s(p, "slot");
+                let has = if has.is_empty() { "no slot (granted by its source, always on)".to_string() } else { format!("the slot {has}") };
+                errors.push(format!("Deck {slot}: '{id}' has {has}, not the slot {slot}."));
+            }
+        }
+        slotted.push((slot, ids));
+    }
+    for r in &deck_rows {
+        let slots = json::dget(r, "deck_slots");
+        for (slot, ids) in &slotted {
+            let max = json::i(slots, slot, 0);
+            if ids.len() as i64 > max {
+                errors.push(format!("Deck: {} {slot} entries (the {} ruleset's deck slots allow {max}).", ids.len(), json::s_or(r, "name", &json::s(r, "id"))));
+            }
+        }
+    }
+    match deck.get("order") {
+        None => {}
+        Some(Value::Object(order)) => {
+            let mut seen: Vec<String> = Vec::new();
+            for (intent, fams) in order {
+                if !ruleset::INTENTS.contains(&intent.as_str()) {
+                    errors.push(format!("Deck order: '{intent}' is not an intent (one of {}).", ruleset::INTENTS.join(", ")));
+                    continue;
+                }
+                let Some(list) = fams.as_array().filter(|a| a.iter().all(Value::is_string)) else {
+                    errors.push(format!("Deck order {intent} must be a list of skill families."));
+                    continue;
+                };
+                let list: Vec<String> = list.iter().map(json::gstr).collect();
+                repeats("Deck order", &list, &mut seen, &mut errors);
+                for fam in &list {
+                    if !active.contains(fam) && !basics.contains(fam) {
+                        errors.push(format!("Deck order {intent}: '{fam}' is neither an active of the deck nor a basic."));
+                        continue;
+                    }
+                    let head = v.get("skills", fam);
+                    let of = if head.is_empty() { String::new() } else { super::ruleset::intent_of(head) };
+                    if of != *intent {
+                        errors.push(format!("Deck order {intent}: '{fam}' is of intent {}.", if of.is_empty() { "none (unknown family)" } else { &of }));
+                    }
+                }
+            }
+        }
+        Some(_) => errors.push("Deck order must be an object {intent: [skill families]}.".into()),
+    }
     errors
 }
 

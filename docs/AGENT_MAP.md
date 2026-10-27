@@ -4,9 +4,7 @@ The harness agent list cannot be regrouped, so this file is the readable view: a
 
 ## Active now
 
-2026-10-25 (desktop, mode standard): building the Scarlet Lullaby vertical slice; the user is away (planner picks
-go to `games/emberwake/docs/lore/OPEN_QUESTIONS.md` section 4). Landed: DERIVE1-E, RULESET1-E. Running: KIT1-M, STORYUI1-E,
-CAMPAIGN1-E, CAST1-A7 (one worktree each, `C:/dev/tactical-rpg-<task>`), the HOOKS1 spec. Queue: `docs/TASKS.md`.
+2026-10-27 (desktop, mode standard), paused for the day. Landed 2026-10-26/27: LOCALGEN2, FLAKE1, RULESET1-K, -D, STORYUI1-W, -U1, PORTRAITFX1-S, HOOKS1-S, -F, -G, CAST1-A1 (+ S2, the pavise, keepsake and material stacks), CAMPAIGN1-C, -T, ENCOUNTER2-H, PIXEL2, PIXEL3, the founder base portraits, the rare materials. No agents running; ComfyUI off. Next session: PIXEL4 (rim tune) then FOUNDERPORT1-P; CAMPAIGN1-TW, HOOKS1-GF; M1: HOOKS1-C, -D, -Z, -E, RULESET1-AI, -U, -DU, -G, FX1-S; M2: STORYUI1-U2, PORTRAITFX1-G, -A, CAMPAIGN1-U, CAST1-A3. Local art: FLUX.2 Klein on the template route (C:/dev/localgen/COMFYUI.md, templates, probe scripts); the template route moves into localgen.py in LOCALGEN3.
 
 Desktop: the planner keeps this section current. Cloud: the project's area-thread list is the live view (one standing thread per area, `docs/workflow/cloud.md` "Area threads"), so this section changes only at a handover between environments (`docs/workflow/README.md`); merged cloud tasks still get a finished-runs line.
 

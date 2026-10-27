@@ -26,6 +26,30 @@
 			],
 			"order": 0,
 			"suffix": ""
+		},
+		{
+			"id": "max_poise",
+			"name": "Max Poise",
+			"label": "Poise",
+			"description": "Refills each round. Stagger lowers it; at 0 the unit breaks and loses its action and the rest of its round.",
+			"formula": "CONS * per_cons + gear_mitigation * armour_factor",
+			"constants": {
+				"per_cons": 2,
+				"armour_factor": 1
+			},
+			"min": 1,
+			"max": 200,
+			"status_modifiers": [],
+			"rulesets": [
+				"timeline"
+			],
+			"show_on": [
+				"party",
+				"dojo",
+				"battle"
+			],
+			"order": 1,
+			"suffix": ""
 		}
 	]
 }

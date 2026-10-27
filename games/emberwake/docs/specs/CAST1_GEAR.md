@@ -122,7 +122,7 @@ them onto a wrong row.
 
 Loot rows reference catalog items, not world named items (G26), so the relics are catalog items (`special` true with
 `special_note`, rarity RARE, `starter_stash` false) paid once through `key_loot` or `objective_reward` `once`. Their
-effects use item modifiers (a `stat_bonus` may name the derived `max_poise`, DERIVE1-S) and item effects, the HOOKS1
+effects use item modifiers (a `stat_bonus` may name the derived `max_poise`, DERIVE1-S; a bonus on a derived stat is bounded 1-50 by the kit constant `DERIVED_BONUS_MAX`, CAST1-S2; base stats 1-8; tier bonuses on derived stats stay 1-5) and item effects, the HOOKS1
 item `trigger` included (the pavise: HOOKS1_TASKS 1.2, 6).
 
 | Id | Name | Family, hand | Source | Modifiers and effects | Lore effect deferred |

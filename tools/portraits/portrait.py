@@ -58,9 +58,32 @@ def reduce(cv, palette, outline=True):
     return small
 
 
-def frame(fig, size, bg, dither=False, border=None):
-    """The reduced figure on its background, scaled up (nearest) to `size`. dither: the background falls off from a
-    glow behind the head through checker dither instead of hard rings; border: (dark, light) for a framed edge."""
+def backdrop_step(g, x, y, n, style="glow"):
+    """Where grid pixel (x, y) of a dithered backdrop sits on its ramp of `n` colours: 0 the first (darkest), n - 1
+    the last; between two steps the frame dithers. "corner": 0 out to a quarter of the way from the face point to
+    the far corner, then up to n - 1 there; "glow": n - 1 at the face point, falling to 0 at 0.62 of the grid."""
+    cx, cy = g * 0.58, g * 0.40
+    if style == "corner":
+        far = max(math.hypot(px - cx, py - cy) for px, py in ((0, 0), (g, 0), (0, g), (g, g)))
+        d = math.hypot(x - cx, y - cy) / far
+        return min(1.0, max(0.0, (d - 0.25) / 0.75)) * (n - 1)
+    d = math.hypot(x - cx, y - cy) / (g * 0.62)
+    return (1 - min(1.0, d)) * (n - 1)
+
+
+def backdrop_pixel(g, x, y, bg, style="glow"):
+    """The dithered backdrop's colour at grid pixel (x, y), as frame draws it: between two ramp steps a checker."""
+    k = backdrop_step(g, x, y, len(bg), style)
+    lo = int(k); fr = k - lo
+    hi = min(lo + 1, len(bg) - 1)
+    return bg[hi] if (fr > 0.5) != ((x + y) % 2 == 0 and abs(fr - 0.5) < 0.25) else bg[lo]
+
+
+def frame(fig, size, bg, dither=False, border=None, style="glow"):
+    """The reduced figure on its background, scaled up (nearest) to `size`. dither: the background steps through its
+    ramp `bg` (dark to light) by checker dither instead of hard rings, in one of two styles: "glow" (lightest behind
+    the head, falling off to the dark edges) or "corner" (PIXEL3: darkest behind the face, brighter toward the
+    frame's corners and edges); border: (dark, light) for a framed edge."""
     g = fig.width
     back = Image.new("RGBA", (g, g), bg[0] + (255,)); bd = ImageDraw.Draw(back)
     cx, cy = g * 0.58, g * 0.40
@@ -68,11 +91,7 @@ def frame(fig, size, bg, dither=False, border=None):
         bp = back.load()
         for y in range(g):
             for x in range(g):
-                d = math.hypot(x - cx, y - cy) / (g * 0.62)          # 0 at the glow, 1 at its edge
-                k = (1 - min(1.0, d)) * (len(bg) - 1)
-                lo = int(k); fr = k - lo
-                hi = min(lo + 1, len(bg) - 1)
-                bp[x, y] = (bg[hi] if (fr > 0.5) != ((x + y) % 2 == 0 and abs(fr - 0.5) < 0.25) else bg[lo]) + (255,)
+                bp[x, y] = backdrop_pixel(g, x, y, bg, style) + (255,)
     else:
         for i, c in enumerate(bg[1:]):
             r = g * (0.62 - i * 0.12)

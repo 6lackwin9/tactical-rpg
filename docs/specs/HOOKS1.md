@@ -81,6 +81,10 @@ Steps: (1) redirect (8.4), (2) damage, (3) status roll, (4) riposte, (5) stagger
 (5), (7) hazard placement (6), (8) riders (8.5), (9) events queued (8.1), run after the action resolves and the
 resolver's combo pass (`b/resolver.rs:140`). Area hits run 1-8 per unit in `area_cells` order, then 9 once.
 
+Area order (planner ruling 2026-10-27, HOOKS1-F): an area's hooks run all its hits, then all stagger, then all forced
+moves, each in hit order; a unit is never hit twice by one area, and outcomes differ from a per-unit order only when a
+pushed unit collides with another target of the same area.
+
 ## 5. Forced movement (G3) `[kit hook]`
 
 - FM1. Skill field `forced_move` (family; schema in the task file 1.1): `kind` push or pull, `tiles` 1-3, `from`
@@ -228,8 +232,10 @@ Kaelen's running Intercepting Hook takes the hit and Castellan's Penance only th
 ## 9. Unit meters (G14; the shape Strain reuses, Q-63) `[kit hook]`, rows `[data]`
 
 - UM1. Catalog kind `unit_meters` (`data/catalog/unit_meters.json`): `min`, `max`, `start`, `show` (pips, bar,
-  hidden), `decay`, `bands`, `rules`, `skills`. A unit holds a meter when a passive or item effect `{"type": "meter",
-  "meter": id}` applies (optional `start`, `floor`). Meters live in battle state only (no save key): each battle starts
+  hidden), `decay`, `bands`, `rules`, `skills`. A unit holds a meter when a passive effect `{"type": "meter",
+  "meter": id}` applies (optional `start`, `floor`; items: not in HOOKS1-S, whose items take only the `trigger` and
+  `forced_move` effects of the task file's 1.2 table; a later row may add an item meter effect). Meters live in battle
+  state only (no save key): each battle starts
   at the larger of `start` and the holder's `floor`.
 - UM2. Changes: the trigger effect `meter`; the skill field `meters` (`[{meter, delta}]`, applied at the command's
   start after AP and HP cost); values clamp to floor..max. A negative skill delta needs a value at least its size,

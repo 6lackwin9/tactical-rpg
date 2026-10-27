@@ -145,6 +145,10 @@ fn battle(args: &Args) -> Result<()> {
     let show_log = args.flag("log");
     println!("{} (seed {}): {} rounds max", s.def.name, s.def.rng_seed, s.def.max_rounds);
     loop {
+        // ENCOUNTER2 H1: a hold escape's holder by the encounter's `pick_default`
+        if let Some(h) = s.stay_pick_default() {
+            println!("{} holds {}", s.w.units[h].name, s.w.hold.as_ref().map(|g| g.label.as_str()).unwrap_or(""));
+        }
         s.plan_apply_preset_all(&preset);
         if !s.confirm_plan() {
             println!("round {}: the party plan was refused", s.current_round);
@@ -170,7 +174,15 @@ fn battle(args: &Args) -> Result<()> {
         }
         s.advance_round();
     }
-    println!("outcome: {}", if s.outcome.is_empty() { "undecided (round limit)" } else { &s.outcome });
+    // ENCOUNTER2 S2: the round limit gives the encounter's timeout_outcome (fled unless it names lost)
+    let outcome = s.final_outcome();
+    println!("outcome: {}{}", if outcome.is_empty() { "undecided" } else { &outcome }, if s.outcome.is_empty() { " (round limit)" } else { "" });
+    // S3: a stay-behind battle names each hero's fate
+    if s.stay.is_some() {
+        for (c, fate) in s.party_fates() {
+            println!("  {} {}", s.w.units[c].name, fate.name());
+        }
+    }
     Ok(())
 }
 

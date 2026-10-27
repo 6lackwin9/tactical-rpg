@@ -23,11 +23,16 @@ const ACCESSORY_SLOTS: [&str; 2] = ["ACCESSORY_1", "ACCESSORY_2"];
 const SCALING_STATS: [&str; 3] = ["STR", "DEX", "INT"];
 const NO_HAND_KEY: &str = "none";
 const BONUS_BAND: &str = "bonus_value";
-const ENGINE_RULES: [&str; 4] = ["focus", "always_ranged", "shield", "spell_source"];
+/// ItemFamilies.ENGINE_RULES; RULESET1-S adds `reach` (RULESET1 K1: a melee family whose wielder reaches 2 under the
+/// timeline's reach rule).
+const ENGINE_RULES: [&str; 5] = ["focus", "always_ranged", "shield", "spell_source", "reach"];
 /// ItemFamilies.NUMBER_FIELDS with their flat keys and schema ranges.
 const NUMBERS: [(&str, &str, i64, i64); 5] = [("power", "base_power", 0, 200), ("range", "base_range", 1, 6), ("block_cost", "block_cost", 1, 6), ("burden", "burden", 0, 10), ("mitigation", "mitigation", 0, 100)];
 /// ItemModifiers.KINDS: (kind, params, unique param, min, max).
 const KINDS: [(&str, &[&str], &str, i64, i64); 4] = [("adjust", &["field", "delta"], "field", -100, 100), ("stat_bonus", &["stat", "value"], "stat", 1, 8), ("requirement", &["stat", "value"], "stat", 1, 30), ("effect", &["effect"], "effect", 0, 0)];
+/// CAST1-S2: the top of a gear stat bonus naming a derived stat (the bottom stays 1). The derived_stats row's own
+/// min/max cap the stat's value, not a bonus, so the row has no bound to read; 50 fits Max Poise +30 and +12.
+const DERIVED_BONUS_MAX: i64 = 50;
 const DERIVED_KEYS: [&str; 13] = ["item_type", "weapon_type", "two_handed", "off_hand_category", "base_power", "base_range", "block_cost", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
 const FLAT_MARKERS: [&str; 9] = ["base_power", "base_range", "block_cost", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
 const ENGINE_KEYS: [&str; 15] = ["item_type", "slot", "weapon_type", "base_power", "base_range", "two_handed", "off_hand_category", "scaling_stat", "block_cost", "burden", "mitigation", "required_stats", "stat_bonuses", "effects", "threshold_tiers"];
@@ -397,6 +402,10 @@ pub fn item_errors(v: &View, e: &Dict, family: &Dict, inherit: bool) -> Vec<Stri
     out.extend(text_problems(&json::s(e, "description"), e));
     if t == "CONSUMABLE" {
         out.extend(consumable_problems(e));
+        // HOOKS1 GH2: the hazard a consumable leaves (no SKILL shape: an item has no area of its own)
+        if json::get(e, "hazard").as_object().is_none_or(|h| !h.is_empty()) {
+            out.extend(super::hooks::hazard_place_errors(json::get(e, "hazard"), &super::hooks::Ctx::of(v), false));
+        }
     }
     out
 }
@@ -447,6 +456,9 @@ fn modifier_problems(v: &View, e: &Dict, family: &Dict) -> Vec<String> {
             }
         }
         let mut unique_tag = kind.clone();
+        // CAST1-S2: a stat bonus on a derived stat row (max_poise +30) takes the derived range, not the base 1-8
+        let stat_name = json::s(m, "stat");
+        let hi = if kind == "stat_bonus" && !STATS.contains(&stat_name.as_str()) && v.has(super::derived::KIND, &stat_name) { DERIVED_BONUS_MAX } else { hi };
         let int_problems = |out: &mut Vec<String>, value: &Value, key: &str, nonzero: bool| {
             let whole = value.as_f64().is_some_and(|f| f == f.floor());
             if !whole {
@@ -489,7 +501,7 @@ fn modifier_problems(v: &View, e: &Dict, family: &Dict) -> Vec<String> {
                 if !fx.is_object() {
                     out.push(format!("Modifier {n}: effect needs an effect object ({{\"type\": ...}})."));
                 } else {
-                    for message in simple::effect_errors(&Value::Array(vec![fx.clone()]), &skill_ok, &[], true, true) {
+                    for message in simple::effect_errors(&Value::Array(vec![fx.clone()]), &skill_ok, &[], true, true, &super::hooks::Ctx::of(v)) {
                         out.push(format!("Modifier {n}: {message}"));
                     }
                 }
@@ -647,7 +659,7 @@ fn bonus_problems(v: &View, bonus: &Dict, t: &str, n: usize) -> Vec<String> {
                 if fx.len() > TIER_MAX_EFFECTS {
                     out.push(format!("Tier {n}: at most {TIER_MAX_EFFECTS} effects."));
                 }
-                for message in simple::effect_errors(&Value::Array(fx.to_vec()), &has_skill(v), &[], true, true) {
+                for message in simple::effect_errors(&Value::Array(fx.to_vec()), &has_skill(v), &[], true, true, &super::hooks::Ctx::of(v)) {
                     out.push(format!("Tier {n}: {message}"));
                 }
                 any = any || !fx.is_empty();
@@ -685,7 +697,7 @@ fn legacy_errors(v: &View, e: &Dict) -> Vec<String> {
         errors.push(format!("Off-hand category '{off}' needs the matching gear type '{off}'."));
     }
     if equip {
-        errors.extend(simple::effect_errors(json::get(e, "effects"), &has_skill(v), &[], true, true));
+        errors.extend(simple::effect_errors(json::get(e, "effects"), &has_skill(v), &[], true, true, &super::hooks::Ctx::of(v)));
         match json::get(e, "threshold_tiers") {
             Value::Array(tiers) => {
                 if tiers.iter().any(|t| !json::dict(t).contains_key("stat") || !json::dict(t).contains_key("threshold")) {
@@ -1024,6 +1036,8 @@ pub fn family_errors(v: &View, f: &Dict, current_id: &str) -> Vec<String> {
             out.push("shield needs a SHIELD family.".into());
         } else if (rule == "always_ranged" || rule == "spell_source") && t != "WEAPON" {
             out.push(format!("{rule} needs a WEAPON family."));
+        } else if rule == "reach" {
+            out.extend(reach_rule_problems(f, &t));
         }
     }
     let old_id = if current_id.is_empty() { id.clone() } else { current_id.to_string() };
@@ -1040,6 +1054,26 @@ pub fn family_errors(v: &View, f: &Dict, current_id: &str) -> Vec<String> {
     }
     if !failing.is_empty() {
         out.push(format!("This family change breaks {} item(s): {}.", failing.len(), failing.join("; ")));
+    }
+    out
+}
+
+/// RULESET1 K1: the engine rule `reach` is for melee WEAPON families only: not with always_ranged, and every hand's
+/// base range is 1 (the rule, not the range, gives the reach of 2).
+fn reach_rule_problems(f: &Dict, t: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    if t != "WEAPON" {
+        out.push("reach needs a WEAPON family.".into());
+        return out;
+    }
+    if json::sget(f, "engine_rules").iter().any(|r| r == "always_ranged") {
+        out.push("reach is for melee families; it can't go with always_ranged.".into());
+    }
+    for (hand, row) in json::dget(f, "base") {
+        let range = json::get(json::dict(row), "range");
+        if !range.is_null() && json::to_int(range) != 1 {
+            out.push(format!("reach needs base range 1 on every hand ({hand} has {}).", json::to_int(range)));
+        }
     }
     out
 }
@@ -1146,7 +1180,7 @@ pub fn family_warnings(f: &Dict) -> Vec<String> {
     out
 }
 
-/// ItemValidator.family_set_errors (validate_all): every gear token has its family.
+/// ItemValidator.family_set_errors (validate_all): every gear token has its family (but the optional ones, RULESET1-S).
 pub fn family_set_errors(families: &[Dict]) -> Vec<String> {
     if families.is_empty() {
         return Vec::new();
@@ -1154,7 +1188,7 @@ pub fn family_set_errors(families: &[Dict]) -> Vec<String> {
     let ids: Vec<String> = families.iter().map(|f| json::s(f, "id")).collect();
     super::skill::GEAR_TYPES
         .iter()
-        .filter(|g| !ids.iter().any(|i| i == *g))
+        .filter(|g| !super::skill::OPTIONAL_GEAR_TYPES.contains(g) && !ids.iter().any(|i| i == *g))
         .map(|g| format!("Gear token '{g}' has no item family (every Proficiency gear type needs one)."))
         .collect()
 }

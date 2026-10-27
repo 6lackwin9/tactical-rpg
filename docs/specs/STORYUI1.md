@@ -146,7 +146,8 @@ names no Emberwake place, person or flag.
 | `open_board` | `board` | opens the board pane over the conversation, like `open_shop` |
 
 Service line `board` (base line in `data/dialogue/services.json`, "Show me the board."; worlds may override it in
-`service_lines`). The content checks know the three effects in nodes, choices and sequence `effects` steps.
+`service_lines`). Where the content checks allow the three effects (planner ruling 2026-10-26): node effects take
+`vignette` only (the conversation goes on); choices take all three; sequence `effects` steps take `vignette` only.
 
 ### 4.8 Game state and settings
 

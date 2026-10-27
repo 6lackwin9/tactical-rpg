@@ -27,7 +27,7 @@ const ORDER_OPS: [&str; 4] = [">=", "<=", ">", "<"];
 const CONDITION_KEYS: [&str; 3] = ["key", "value", "op"];
 const REP_DELTA_MAX: i64 = 50;
 const MAX_REP_KEYS: usize = 4;
-const SET_FLAG_LISTS: [&str; 2] = ["complete_flags", "sets_flags"];
+pub const SET_FLAG_LISTS: [&str; 2] = ["complete_flags", "sets_flags"];
 
 /// RepRules: flag keys "rep.<world>.<faction>" hold a standing in REP_MIN..REP_MAX.
 pub const REP_PREFIX: &str = "rep.";

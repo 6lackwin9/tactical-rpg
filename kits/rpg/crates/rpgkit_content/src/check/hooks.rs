@@ -1,0 +1,880 @@
+//! Combat hook fields (HOOKS1-S, docs/specs/HOOKS1_TASKS.md 1.1-1.3 and 1.6; engine-only, no Godot original): the
+//! checks of a skill's `forced_move`, `hazard`, `triggers`, `riders` and `meters`, a consumable's `hazard`, the passive
+//! and item effects `trigger`, `forced_move` and `meter`, a unit's and a phase's `tactics`, an encounter's
+//! `arena_hazards` and phase effect `deck`, and a world manifest's `classes`. Every field defaults to off, so a row
+//! that sets none of them reports nothing (classic data never changes). The battle reads them only under their rules
+//! (`rpgkit_rules::ruleset`, HOOKS1 4.1).
+
+use super::View;
+use aegis_core::json::{self, gstr, Dict};
+use rpgkit_battle::grid::{GRID_H, GRID_W};
+use rpgkit_data::{
+    ALLY_EVENTS, ARENA_DIRS, ARENA_EFFECT_KEYS, ARENA_HAZARD_KEYS, CLASS_OVERLAY_KEYS, DECK_EFFECT, EFFECT_TO, FORCED_FROM, FORCED_IMMUNE, FORCED_KINDS, FORCED_MOVE_KEYS, FORCED_WHEN, GRANT_UNTIL,
+    HAZARD_AT, HAZARD_PLACE_KEYS, HAZARD_SHAPES, METER_SET, METER_SET_KEYS, RIDER_KEYS, TACTICS, TRIGGER_EFFECTS, TRIGGER_EVENTS, TRIGGER_KEYS, TRIGGER_LIMITS, WHEN_KEYS,
+};
+use rpgkit_rules::ruleset;
+use rpgkit_rules::status;
+use serde_json::Value;
+
+/// FM1: tiles a skill pushes or pulls; a collision's multiplier and stagger.
+pub const FORCED_TILES: (i64, i64) = (1, 3);
+pub const COLLIDE_MULT: (f64, f64) = (0.0, 3.0);
+pub const COLLIDE_STAGGER: (i64, i64) = (0, 50);
+/// FM5: the extra tiles of a `forced_move` effect.
+pub const BONUS_TILES: (i64, i64) = (0, 2);
+/// GH2: a placement's own duration (0 = the row's).
+pub const PLACE_ROUNDS: (i64, i64) = (0, 5);
+/// 1.1: rows of a skill's `triggers` and `riders`; entries of its `meters` and their delta.
+pub const SKILL_ROWS_MAX: usize = 3;
+pub const METER_COSTS_MAX: usize = 2;
+pub const METER_COST: (i64, i64) = (-100, 100);
+/// HC1: a skill's HP cost (0 = none).
+pub const HP_COST: (i64, i64) = (0, 99);
+/// 1.3: effects of a trigger row.
+pub const EFFECTS_MAX: usize = 4;
+/// 8.2: the ranges of the conditions and effects.
+pub const PCT: (i64, i64) = (1, 99);
+pub const RANGE: (i64, i64) = (1, 6);
+pub const AP: (i64, i64) = (1, 4);
+pub const GRANT_ROUNDS: (i64, i64) = (1, 5);
+pub const POTENCY: (i64, i64) = (1, 100);
+pub const MITIGATION: (f64, f64) = (0.1, 0.9);
+pub const GUARD_BLOCKS: (i64, i64) = (0, 6);
+pub const REDIRECT: (i64, i64) = (1, 100);
+pub const METER_DELTA: (i64, i64) = (-10, 10);
+pub const CRIT: (i64, i64) = (1, 100);
+pub const RESIST: (i64, i64) = (1, 100);
+pub const STAGGER: (i64, i64) = (1, 100);
+pub const DAMAGE: (i64, i64) = (1, 99);
+/// AH1: arena hazards per encounter, the name and line lengths, the effect numbers.
+pub const ARENA_MAX: usize = 4;
+pub const ARENA_NAME_MAX: usize = 24;
+pub const ARENA_LINE_MAX: usize = 160;
+pub const ARENA_BLOCKS_MAX: i64 = 6;
+pub const ARENA_DAMAGE: (i64, i64) = (0, 99);
+pub const ARENA_DAMAGE_PCT: (i64, i64) = (0, 50);
+pub const ARENA_STAGGER: (i64, i64) = (0, 50);
+pub const ARENA_COLLIDE: (i64, i64) = (0, 50);
+/// CN1: a class overlay's name and description lengths, a path level.
+pub const CLASS_NAME_MAX: usize = 32;
+pub const CLASS_DESCRIPTION_MAX: usize = 240;
+pub const PATH_LEVEL: (i64, i64) = (1, 30);
+
+/// What the hook checks read from the rest of the catalog: the skill families (tier-one skill ids), the unit meter
+/// rows (id, min, max) and the ground hazard ids.
+#[derive(Debug, Clone, Default)]
+pub struct Ctx {
+    pub families: Vec<String>,
+    pub meters: Vec<(String, i64, i64)>,
+    pub hazards: Vec<String>,
+}
+
+impl Ctx {
+    /// From loaded skill rows (flat rank rows), unit meter rows and hazard rows.
+    pub fn from_rows(skills: &[Dict], meters: &[Dict], hazards: &[Dict]) -> Self {
+        Self {
+            families: skills.iter().filter(|s| json::i(s, "tier", 1) <= 1).map(|s| json::s(s, "id")).collect(),
+            meters: meters.iter().map(|m| (json::s(m, "id"), json::i(m, "min", 0), json::i(m, "max", 10))).collect(),
+            hazards: hazards.iter().map(|h| json::s(h, "id")).collect(),
+        }
+    }
+
+    /// From the checked catalog.
+    pub fn of(v: &View) -> Self {
+        Self::from_rows(v.entries("skills"), v.entries(rpgkit_data::UNIT_METERS_KIND), v.entries(rpgkit_data::HAZARDS_KIND))
+    }
+
+    fn meter(&self, id: &str) -> Option<(i64, i64)> {
+        self.meters.iter().find(|m| m.0 == id).map(|m| (m.1, m.2))
+    }
+}
+
+/// A whole number in `lo..=hi` (the loader reads every number as a float).
+pub fn whole_in(v: &Value, (lo, hi): (i64, i64)) -> bool {
+    v.as_f64().is_some_and(|x| x.fract() == 0.0 && (lo as f64..=hi as f64).contains(&x))
+}
+
+fn number_in(v: &Value, (lo, hi): (f64, f64)) -> bool {
+    v.as_f64().is_some_and(|x| (lo..=hi).contains(&x))
+}
+
+fn chars(s: &str) -> usize {
+    s.chars().count()
+}
+
+/// Unknown keys of `o` (not in `allowed`), one message each.
+fn unknown_keys(o: &Dict, allowed: &[&str], at: &str, out: &mut Vec<String>) {
+    for k in o.keys().filter(|k| !allowed.contains(&k.as_str())) {
+        out.push(format!("{at}: unknown key '{k}' (keys: {}).", allowed.join(", ")));
+    }
+}
+
+/// A whole-number key: required (`need`) or optional, in range.
+fn whole_key(o: &Dict, key: &str, range: (i64, i64), need: bool, at: &str, out: &mut Vec<String>) {
+    match o.get(key) {
+        None if need => out.push(format!("{at}: {key} is required ({}-{}).", range.0, range.1)),
+        Some(v) if !whole_in(v, range) => out.push(format!("{at}: {key} must be a whole number {}-{}.", range.0, range.1)),
+        _ => {}
+    }
+}
+
+fn bool_key(o: &Dict, key: &str, at: &str, out: &mut Vec<String>) {
+    if o.get(key).is_some_and(|b| !b.is_boolean()) {
+        out.push(format!("{at}: {key} must be true or false."));
+    }
+}
+
+/// An enum key: required or optional, one of `options`.
+fn enum_key(o: &Dict, key: &str, options: &[&str], need: bool, at: &str, out: &mut Vec<String>) {
+    match o.get(key) {
+        None if need => out.push(format!("{at}: {key} is required ({}).", options.join(", "))),
+        Some(v) if !v.as_str().is_some_and(|s| options.contains(&s)) => out.push(format!("{at}: {key} '{}' is not one of {}.", gstr(v), options.join(", "))),
+        _ => {}
+    }
+}
+
+/// A status magnitude: in the status's range, 0 (or absent) for a status without one.
+fn magnitude_key(o: &Dict, st: &str, at: &str, out: &mut Vec<String>) {
+    let m = o.get("magnitude").cloned().unwrap_or(json::int(0));
+    match status::row_of(st).filter(|r| r.magnitude_max > 0) {
+        Some(r) if !whole_in(&m, (r.magnitude_min as i64, r.magnitude_max as i64)) => out.push(format!("{at}: {st} needs a magnitude {}-{}.", r.magnitude_min, r.magnitude_max)),
+        None if !whole_in(&m, (0, 0)) => out.push(format!("{at}: {st} takes no magnitude (0).")),
+        _ => {}
+    }
+}
+
+/// An object field that holds off as `{}`: Some(object) when set, None when empty; a non-object is reported.
+fn set_object<'a>(v: &'a Value, label: &str, out: &mut Vec<String>) -> Option<&'a Dict> {
+    match v {
+        Value::Object(o) if o.is_empty() => None,
+        Value::Object(o) => Some(o),
+        _ => {
+            out.push(format!("{label} must be an object ({{}} = none)."));
+            None
+        }
+    }
+}
+
+/// A list field that holds off as `[]`: the entries, or a message when it is not a list.
+fn list_of<'a>(v: &'a Value, label: &str, max: usize, out: &mut Vec<String>) -> &'a [Value] {
+    match v {
+        Value::Array(a) => {
+            if a.len() > max {
+                out.push(format!("{label} holds at most {max} rows."));
+            }
+            a
+        }
+        Value::Null => &[],
+        _ => {
+            out.push(format!("{label} must be a list."));
+            &[]
+        }
+    }
+}
+
+// ---- Skills (1.1) ------------------------------------------------------------------------------------------------
+
+/// FM1: a skill's `forced_move` (`has_area`: the skill has an area, which `from` center needs).
+pub fn forced_move_errors(raw: &Value, has_area: bool) -> Vec<String> {
+    let mut out = Vec::new();
+    let at = "Forced move";
+    let Some(o) = set_object(raw, at, &mut out) else { return out };
+    unknown_keys(o, &FORCED_MOVE_KEYS, at, &mut out);
+    enum_key(o, "kind", &FORCED_KINDS, true, at, &mut out);
+    whole_key(o, "tiles", FORCED_TILES, true, at, &mut out);
+    enum_key(o, "from", &FORCED_FROM, false, at, &mut out);
+    if json::s(o, "from") == "center" && !has_area {
+        out.push(format!("{at}: from center needs an area attack (the area's aim cell)."));
+    }
+    enum_key(o, "when", &FORCED_WHEN, false, at, &mut out);
+    for key in ["stop_moves", "collide_break"] {
+        bool_key(o, key, at, &mut out);
+    }
+    if o.get("collide_mult").is_some_and(|v| !number_in(v, COLLIDE_MULT)) {
+        out.push(format!("{at}: collide_mult must be {:.1}-{:.1}.", COLLIDE_MULT.0, COLLIDE_MULT.1));
+    }
+    whole_key(o, "collide_stagger", COLLIDE_STAGGER, false, at, &mut out);
+    out
+}
+
+/// GH2: a skill's or consumable's `hazard`: a known hazard row, a shape (SKILL only on an area skill: `skill_area`),
+/// where and how long.
+pub fn hazard_place_errors(raw: &Value, ctx: &Ctx, skill_area: bool) -> Vec<String> {
+    let mut out = Vec::new();
+    let at = "Leaves hazard";
+    let Some(o) = set_object(raw, at, &mut out) else { return out };
+    unknown_keys(o, &HAZARD_PLACE_KEYS, at, &mut out);
+    let id = json::s(o, "id");
+    if id.is_empty() {
+        out.push(format!("{at}: id is required (a {} row).", rpgkit_data::HAZARDS_KIND));
+    } else if !ctx.hazards.contains(&id) {
+        out.push(format!("{at}: unknown hazard '{id}'."));
+    }
+    enum_key(o, "shape", &HAZARD_SHAPES, false, at, &mut out);
+    if json::s(o, "shape") == "SKILL" && !skill_area {
+        out.push(format!("{at}: shape SKILL needs an area attack (use NONE, PLUS, BURST, LINE or SWEEP)."));
+    }
+    enum_key(o, "at", &HAZARD_AT, false, at, &mut out);
+    whole_key(o, "rounds", PLACE_ROUNDS, false, at, &mut out);
+    out
+}
+
+/// UM2: a skill's `meters`: up to 2 entries, a known meter each (once), a delta in range and not 0.
+pub fn meter_costs_errors(raw: &Value, ctx: &Ctx) -> Vec<String> {
+    let mut out = Vec::new();
+    let list = list_of(raw, "Meter costs", METER_COSTS_MAX, &mut out);
+    let mut seen: Vec<String> = Vec::new();
+    for (i, item) in list.iter().enumerate() {
+        let at = format!("Meter cost {}", i + 1);
+        let Some(o) = item.as_object() else {
+            out.push(format!("{at} must be an object {{meter, delta}}."));
+            continue;
+        };
+        unknown_keys(o, &["meter", "delta"], &at, &mut out);
+        let meter = json::s(o, "meter");
+        if ctx.meter(&meter).is_none() {
+            out.push(format!("{at}: unknown unit meter '{meter}'."));
+        } else if seen.contains(&meter) {
+            out.push(format!("Meter costs list '{meter}' twice."));
+        }
+        seen.push(meter);
+        let delta = json::get(o, "delta");
+        if !whole_in(delta, METER_COST) || json::to_int(delta) == 0 {
+            out.push(format!("{at}: delta must be a whole number {}..{}, not 0.", METER_COST.0, METER_COST.1));
+        }
+    }
+    out
+}
+
+/// 1.1: a skill's `triggers` (up to 3 rows answering the skill events).
+pub fn skill_triggers_errors(raw: &Value, ctx: &Ctx) -> Vec<String> {
+    let mut out = Vec::new();
+    let list = list_of(raw, "Triggers", SKILL_ROWS_MAX, &mut out);
+    for (i, item) in list.iter().enumerate() {
+        let at = format!("Trigger {}", i + 1);
+        match item.as_object() {
+            Some(o) => out.extend(trigger_row_errors(o, ctx, &at, &rpgkit_data::SKILL_TRIGGER_EVENTS, &[])),
+            None => out.push(format!("{at} must be an object {{on, when, effects, limit}}.")),
+        }
+    }
+    out
+}
+
+/// RD1: a skill's `riders` (up to 3 rows of conditions and effects; no event, no redirect).
+pub fn riders_errors(raw: &Value, ctx: &Ctx) -> Vec<String> {
+    let mut out = Vec::new();
+    let list = list_of(raw, "Riders", SKILL_ROWS_MAX, &mut out);
+    for (i, item) in list.iter().enumerate() {
+        let at = format!("Rider {}", i + 1);
+        let Some(o) = item.as_object() else {
+            out.push(format!("{at} must be an object {{when, effects}}."));
+            continue;
+        };
+        unknown_keys(o, &RIDER_KEYS, &at, &mut out);
+        out.extend(when_errors(json::get(o, "when"), ctx, &at, None));
+        out.extend(effects_errors(json::get(o, "effects"), ctx, &at, None, false));
+    }
+    out
+}
+
+/// The hook fields of one flat skill row of `kind` (only the fields the kind has; another kind's field is reported by
+/// the belongs-to check).
+pub fn skill_errors(v: &View, e: &Dict, kind: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let has = |key: &str| super::skill::has_field(kind, key);
+    let empty = |key: &str| match json::get(e, key) {
+        Value::Object(o) => o.is_empty(),
+        Value::Array(a) => a.is_empty(),
+        Value::Null => true,
+        _ => false,
+    };
+    // HC1: the schema row carries no min / max, so an out-of-range cost is refused here, not clamped
+    let cost = json::i(e, "hp_cost", 0);
+    if has("hp_cost") && !(HP_COST.0..=HP_COST.1).contains(&cost) {
+        out.push(format!("HP cost must be {}-{} (is {cost}).", HP_COST.0, HP_COST.1));
+    }
+    let keys = ["forced_move", "hazard", "triggers", "riders", "meters"];
+    if keys.iter().all(|k| !has(k) || empty(k)) {
+        return out;
+    }
+    let ctx = Ctx::of(v);
+    let area = kind == "ATTACK" && json::s(e, "area") != "NONE";
+    if has("forced_move") {
+        out.extend(forced_move_errors(json::get(e, "forced_move"), area));
+    }
+    if has("hazard") {
+        out.extend(hazard_place_errors(json::get(e, "hazard"), &ctx, area));
+    }
+    if has("triggers") {
+        out.extend(skill_triggers_errors(json::get(e, "triggers"), &ctx));
+    }
+    if has("riders") {
+        out.extend(riders_errors(json::get(e, "riders"), &ctx));
+    }
+    if has("meters") {
+        out.extend(meter_costs_errors(json::get(e, "meters"), &ctx));
+    }
+    out
+}
+
+/// 1.1 warnings of one flat skill row: a placement (an ATTACK of power 0 with a hazard) whose status, stagger or forced
+/// move never land.
+pub fn placement_warnings(e: &Dict) -> Vec<String> {
+    let placement = json::s(e, "kind") == "ATTACK" && json::f(e, "power_mult", 1.0) <= 0.0 && json::get(e, "hazard").as_object().is_some_and(|h| !h.is_empty());
+    let mut parts = Vec::new();
+    if placement && !json::s(e, "status_effect").is_empty() {
+        parts.push("status");
+    }
+    if placement && json::i(e, "stagger", 0) > 0 {
+        parts.push("stagger");
+    }
+    if placement && json::get(e, "forced_move").as_object().is_some_and(|f| !f.is_empty()) {
+        parts.push("forced move");
+    }
+    if parts.is_empty() {
+        Vec::new()
+    } else {
+        vec![format!("A placement (power 0 with a hazard) lands no hit, so these never apply: {}.", parts.join(", "))]
+    }
+}
+
+// ---- Trigger rows (1.3) ------------------------------------------------------------------------------------------
+
+/// One trigger row (a skill's, or a passive or item `trigger` effect with `extra` keys such as `type`), answering one
+/// of `events`.
+pub fn trigger_row_errors(o: &Dict, ctx: &Ctx, at: &str, events: &[&str], extra: &[&str]) -> Vec<String> {
+    let mut out = Vec::new();
+    let allowed: Vec<&str> = TRIGGER_KEYS.iter().chain(extra.iter()).copied().collect();
+    unknown_keys(o, &allowed, at, &mut out);
+    let on = json::s(o, "on");
+    if on.is_empty() {
+        out.push(format!("{at}: on is required ({}).", events.join(", ")));
+    } else if !events.contains(&on.as_str()) {
+        out.push(format!("{at}: on '{on}' is not one of {}.", events.join(", ")));
+    }
+    let event = events.contains(&on.as_str()).then_some(on.as_str());
+    out.extend(when_errors(json::get(o, "when"), ctx, at, Some(event.unwrap_or(""))));
+    out.extend(effects_errors(json::get(o, "effects"), ctx, at, Some(event.unwrap_or("")), false));
+    enum_key(o, "limit", &TRIGGER_LIMITS, false, at, &mut out);
+    out
+}
+
+/// 8.2: a `when` (absent or an object). `event` is the row's event (Some("") when unknown), None on a rider.
+pub fn when_errors(raw: &Value, ctx: &Ctx, at: &str, event: Option<&str>) -> Vec<String> {
+    let mut out = Vec::new();
+    let o = match raw {
+        Value::Null => {
+            if event == Some("hp_below") {
+                out.push(format!("{at}: an hp_below trigger needs when.pct ({}-{}).", PCT.0, PCT.1));
+            }
+            return out;
+        }
+        Value::Object(o) => o,
+        _ => {
+            out.push(format!("{at}: when must be an object."));
+            return out;
+        }
+    };
+    let at = format!("{at} when");
+    unknown_keys(o, &WHEN_KEYS, &at, &mut out);
+    match (event, o.get("pct")) {
+        (Some("hp_below"), _) => whole_key(o, "pct", PCT, true, &at, &mut out),
+        (_, Some(_)) => out.push(format!("{at}: pct is for an hp_below trigger only.")),
+        _ => {}
+    }
+    if o.contains_key("range") {
+        if event.is_some_and(|e| ALLY_EVENTS.contains(&e)) {
+            whole_key(o, "range", RANGE, false, &at, &mut out);
+        } else {
+            out.push(format!("{at}: range is for {} only.", ALLY_EVENTS.join(" and ")));
+        }
+    }
+    for key in ["ranged", "melee", "other_broken"] {
+        bool_key(o, key, &at, &mut out);
+    }
+    if json::b(o, "ranged", false) && json::b(o, "melee", false) {
+        out.push(format!("{at}: ranged and melee together never match."));
+    }
+    match o.get("skills") {
+        None => {}
+        Some(Value::Array(list)) => {
+            for s in list {
+                if !s.as_str().is_some_and(|s| ctx.families.iter().any(|f| f == s)) {
+                    out.push(format!("{at}: skills: unknown skill family '{}'.", gstr(s)));
+                }
+            }
+        }
+        Some(_) => out.push(format!("{at}: skills must be a list of skill families.")),
+    }
+    whole_key(o, "other_hp_below", PCT, false, &at, &mut out);
+    if let Some(st) = o.get("other_status") {
+        if !st.as_str().is_some_and(|s| status::row_of(s).is_some()) {
+            out.push(format!("{at}: other_status: unknown status '{}'.", gstr(st)));
+        }
+    }
+    enum_key(o, "intent", &ruleset::INTENTS, false, &at, &mut out);
+    if let Some(m) = o.get("meter") {
+        match m.as_object() {
+            Some(m) => {
+                unknown_keys(m, &["id", "at_least"], &format!("{at} meter"), &mut out);
+                let id = json::s(m, "id");
+                match ctx.meter(&id) {
+                    None => out.push(format!("{at}: meter: unknown unit meter '{id}'.")),
+                    Some(range) => whole_key(m, "at_least", range, true, &format!("{at} meter"), &mut out),
+                }
+            }
+            None => out.push(format!("{at}: meter must be an object {{id, at_least}}.")),
+        }
+    }
+    out
+}
+
+/// 1.3: an `effects` list of 1-4 trigger effects. `event`: the row's event (Some("") unknown), None on a rider (no
+/// redirect); `meter_set`: a meter rule's list (it also takes `meter_set`).
+pub fn effects_errors(raw: &Value, ctx: &Ctx, at: &str, event: Option<&str>, meter_set: bool) -> Vec<String> {
+    let mut out = Vec::new();
+    let list = match raw {
+        Value::Array(a) => a.as_slice(),
+        _ => {
+            out.push(format!("{at}: effects must be a list of 1-{EFFECTS_MAX} effects."));
+            return out;
+        }
+    };
+    if list.is_empty() || list.len() > EFFECTS_MAX {
+        out.push(format!("{at}: effects holds 1-{EFFECTS_MAX} effects."));
+    }
+    let mut redirects = 0;
+    for (i, item) in list.iter().enumerate() {
+        let at = format!("{at} effect {}", i + 1);
+        let Some(o) = item.as_object() else {
+            out.push(format!("{at} must be an object {{type, ...}}."));
+            continue;
+        };
+        let t = json::s(o, "type");
+        if t == "redirect" {
+            redirects += 1;
+            match event {
+                None => out.push(format!("{at}: a rider cannot redirect.")),
+                Some(e) if e != "ally_hit" => out.push(format!("{at}: redirect needs an ally_hit trigger.")),
+                _ => {}
+            }
+        }
+        out.extend(effect_errors(o, &t, ctx, &at, meter_set));
+    }
+    if redirects > 1 {
+        out.push(format!("{at}: one redirect per row."));
+    }
+    out
+}
+
+/// One trigger effect of type `t` (8.2; `meter_set` too on a meter rule).
+fn effect_errors(o: &Dict, t: &str, ctx: &Ctx, at: &str, meter_set: bool) -> Vec<String> {
+    let mut out = Vec::new();
+    let keys: &[&str] = match TRIGGER_EFFECTS.iter().find(|(k, _)| *k == t) {
+        Some((_, keys)) => keys,
+        None if meter_set && t == METER_SET => &METER_SET_KEYS,
+        None => {
+            let mut names: Vec<&str> = TRIGGER_EFFECTS.iter().map(|(k, _)| *k).collect();
+            if meter_set {
+                names.push(METER_SET);
+            }
+            out.push(format!("{at}: unknown effect type '{t}' (use {}).", names.join(", ")));
+            return out;
+        }
+    };
+    let allowed: Vec<&str> = std::iter::once("type").chain(keys.iter().copied()).collect();
+    unknown_keys(o, &allowed, at, &mut out);
+    enum_key(o, "to", &EFFECT_TO, false, at, &mut out);
+    let st = json::s(o, "status");
+    match t {
+        "ap" => whole_key(o, "value", AP, true, at, &mut out),
+        "grant" => {
+            if !status::buffs().contains(&st.as_str()) {
+                out.push(format!("{at}: grant '{st}' is not a buff ({}).", status::buffs().join(", ")));
+            } else {
+                magnitude_key(o, &st, at, &mut out);
+            }
+            let rounds = o.get("rounds").cloned().unwrap_or(json::int(1));
+            if !whole_in(&rounds, (-1, -1)) && !whole_in(&rounds, GRANT_ROUNDS) {
+                out.push(format!("{at}: rounds must be -1 (the battle) or {}-{}.", GRANT_ROUNDS.0, GRANT_ROUNDS.1));
+            }
+            enum_key(o, "until", &GRANT_UNTIL, false, at, &mut out);
+        }
+        "inflict" => {
+            if !status::debuffs().contains(&st.as_str()) {
+                out.push(format!("{at}: inflict '{st}' is not a debuff ({}).", status::debuffs().join(", ")));
+            } else {
+                magnitude_key(o, &st, at, &mut out);
+            }
+            whole_key(o, "potency", POTENCY, true, at, &mut out);
+            whole_key(o, "rounds", GRANT_ROUNDS, false, at, &mut out);
+        }
+        "guard" => {
+            if !o.get("mitigation").is_some_and(|m| number_in(m, MITIGATION)) {
+                out.push(format!("{at}: guard needs a mitigation {:.1}-{:.1}.", MITIGATION.0, MITIGATION.1));
+            }
+            whole_key(o, "blocks", GUARD_BLOCKS, false, at, &mut out);
+        }
+        "redirect" => whole_key(o, "pct", REDIRECT, true, at, &mut out),
+        "move" => {
+            enum_key(o, "kind", &FORCED_KINDS, true, at, &mut out);
+            whole_key(o, "tiles", FORCED_TILES, true, at, &mut out);
+        }
+        "meter" | METER_SET => {
+            let meter = json::s(o, "meter");
+            match ctx.meter(&meter) {
+                None => out.push(format!("{at}: unknown unit meter '{meter}'.")),
+                Some(range) if t == METER_SET => whole_key(o, "value", range, true, at, &mut out),
+                Some(_) => {
+                    let delta = json::get(o, "delta");
+                    if !whole_in(delta, METER_DELTA) || json::to_int(delta) == 0 {
+                        out.push(format!("{at}: delta must be a whole number {}..{}, not 0.", METER_DELTA.0, METER_DELTA.1));
+                    }
+                }
+            }
+        }
+        "crit" => whole_key(o, "value", CRIT, true, at, &mut out),
+        "resist" => {
+            let resistable: Vec<&str> = status::ROWS.iter().filter(|r| !r.buff && r.resistable).map(|r| r.id).collect();
+            if !resistable.contains(&st.as_str()) {
+                out.push(format!("{at}: resist '{st}' is not a resistable status ({}).", resistable.join(", ")));
+            }
+            whole_key(o, "value", RESIST, true, at, &mut out);
+        }
+        "stagger" => whole_key(o, "value", STAGGER, true, at, &mut out),
+        "damage" => whole_key(o, "value", DAMAGE, true, at, &mut out),
+        "reveal" => whole_key(o, "rounds", (1, 1), false, at, &mut out),
+        _ => {}
+    }
+    out
+}
+
+// ---- Passive and item effects (1.2) ------------------------------------------------------------------------------
+
+/// The passive and item effect types HOOKS1 adds (`meter` passives only).
+pub const PASSIVE_EFFECTS: [&str; 3] = ["forced_move", "trigger", "meter"];
+pub const ITEM_EFFECTS: [&str; 2] = ["forced_move", "trigger"];
+
+/// One passive or item effect of a HOOKS1 type (`at` names it, e.g. "Effect 2").
+pub fn passive_effect_errors(e: &Dict, t: &str, ctx: &Ctx, at: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    match t {
+        "forced_move" => {
+            unknown_keys(e, &["type", "immune", "bonus_tiles"], at, &mut out);
+            enum_key(e, "immune", &FORCED_IMMUNE, false, at, &mut out);
+            whole_key(e, "bonus_tiles", BONUS_TILES, false, at, &mut out);
+            if json::s(e, "immune").is_empty() && json::to_int(json::get(e, "bonus_tiles")) == 0 {
+                out.push(format!("{at}: forced_move sets immune or bonus_tiles."));
+            }
+        }
+        "trigger" => out.extend(trigger_row_errors(e, ctx, at, &TRIGGER_EVENTS, &["type"])),
+        "meter" => {
+            unknown_keys(e, &["type", "meter", "start", "floor"], at, &mut out);
+            let meter = json::s(e, "meter");
+            match ctx.meter(&meter) {
+                None => out.push(format!("{at}: unknown unit meter '{meter}'.")),
+                Some(range) => {
+                    if e.get("start").is_some_and(|s| !whole_in(s, (-1, -1)) && !whole_in(s, range)) {
+                        out.push(format!("{at}: start must be -1 (the meter's) or {}-{}.", range.0, range.1));
+                    }
+                    whole_key(e, "floor", range, false, at, &mut out);
+                }
+            }
+        }
+        _ => {}
+    }
+    out
+}
+
+// ---- Units and phase ai (1.2) ------------------------------------------------------------------------------------
+
+/// AT2: a `tactics` list: known tactics, no repeats.
+pub fn tactics_errors(raw: &Value, label: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let Some(list) = raw.as_array() else {
+        out.push(format!("{label} must be a list of tactics ({}).", TACTICS.join(", ")));
+        return out;
+    };
+    let mut seen: Vec<String> = Vec::new();
+    for t in list.iter().map(gstr) {
+        if !TACTICS.contains(&t.as_str()) {
+            out.push(format!("{label}: '{t}' is not one of {}.", TACTICS.join(", ")));
+        } else if seen.contains(&t) {
+            out.push(format!("{label} lists '{t}' twice."));
+        }
+        seen.push(t);
+    }
+    out
+}
+
+// ---- Encounters (1.2, 1.6) ---------------------------------------------------------------------------------------
+
+/// AH1: an encounter's `arena_hazards` (catalog and world encounters).
+pub fn arena_hazards_errors(e: &Dict) -> Vec<String> {
+    let mut out = Vec::new();
+    let list = list_of(json::get(e, "arena_hazards"), "Arena hazards", ARENA_MAX, &mut out);
+    let max_rounds = json::to_int(json::get(e, "max_rounds")).max(1);
+    let max_block = json::to_int(json::get(e, "total_blocks")).clamp(1, ARENA_BLOCKS_MAX);
+    let mut seen: Vec<String> = Vec::new();
+    for (i, item) in list.iter().enumerate() {
+        let Some(o) = item.as_object() else {
+            out.push(format!("Arena hazard {} must be an object.", i + 1));
+            continue;
+        };
+        let id = json::s(o, "id");
+        let at = format!("Arena hazard '{}'", if id.is_empty() { (i + 1).to_string() } else { id.clone() });
+        unknown_keys(o, &ARENA_HAZARD_KEYS, &at, &mut out);
+        if !aegis_content::schema::is_id(&id) {
+            out.push(format!("{at}: the id must be lowercase snake_case (a-z, 0-9, _)."));
+        } else if seen.contains(&id) {
+            out.push(format!("Arena hazard ids must be unique: '{id}'."));
+        }
+        seen.push(id);
+        let name = json::s(o, "name");
+        if name.trim().is_empty() || chars(&name) > ARENA_NAME_MAX {
+            out.push(format!("{at}: the name needs 1 to {ARENA_NAME_MAX} characters."));
+        }
+        if o.get("line").is_some_and(|l| !l.as_str().is_some_and(|s| chars(s) <= ARENA_LINE_MAX)) {
+            out.push(format!("{at}: the line is text of at most {ARENA_LINE_MAX} characters."));
+        }
+        let set: Vec<&str> = ["cells", "columns", "rows"].into_iter().filter(|k| o.get(*k).is_some_and(|v| !json::arr(v).is_empty())).collect();
+        if set.len() != 1 {
+            out.push(format!("{at}: set exactly one of cells, columns or rows."));
+        }
+        for item in json::arr(json::get(o, "cells")) {
+            let pair = json::arr(item);
+            let on = pair.len() == 2 && whole_in(&pair[0], (0, GRID_W as i64 - 1)) && whole_in(&pair[1], (0, GRID_H as i64 - 1));
+            if !on {
+                out.push(format!("{at}: cell {} is not an [x, y] on the {GRID_W}x{GRID_H} board.", gstr(item)));
+            }
+        }
+        for (key, hi) in [("columns", GRID_W as i64 - 1), ("rows", GRID_H as i64 - 1)] {
+            if json::arr(json::get(o, key)).iter().any(|x| !whole_in(x, (0, hi))) {
+                out.push(format!("{at}: {key} are whole numbers 0-{hi}."));
+            }
+        }
+        if json::arr(json::get(o, "rounds")).iter().any(|x| !whole_in(x, (1, max_rounds))) {
+            out.push(format!("{at}: rounds are whole numbers 1-{max_rounds} ([] = every round)."));
+        }
+        let blocks = json::arr(json::get(o, "blocks"));
+        if blocks.is_empty() || blocks.iter().any(|x| !whole_in(x, (1, max_block))) {
+            out.push(format!("{at}: blocks lists at least one whole number 1-{max_block}."));
+        }
+        out.extend(arena_effect_errors(json::get(o, "effect"), &at));
+    }
+    out
+}
+
+/// AH2: an arena hazard's `effect`: at least one of damage, damage_pct, stagger, a status, a push.
+fn arena_effect_errors(raw: &Value, at: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let Some(o) = raw.as_object() else {
+        out.push(format!("{at}: effect must be an object."));
+        return out;
+    };
+    let at = format!("{at} effect");
+    unknown_keys(o, &ARENA_EFFECT_KEYS, &at, &mut out);
+    whole_key(o, "damage", ARENA_DAMAGE, false, &at, &mut out);
+    whole_key(o, "damage_pct", ARENA_DAMAGE_PCT, false, &at, &mut out);
+    whole_key(o, "stagger", ARENA_STAGGER, false, &at, &mut out);
+    let positive = |k: &str| json::to_int(json::get(o, k)) > 0;
+    if positive("damage") && positive("damage_pct") {
+        out.push(format!("{at}: damage and damage_pct together (one of them)."));
+    }
+    let st = json::s(o, "status");
+    if !st.is_empty() {
+        if !status::debuffs().contains(&st.as_str()) {
+            out.push(format!("{at}: status '{st}' is not a debuff."));
+        } else {
+            magnitude_key(o, &st, &at, &mut out);
+        }
+        whole_key(o, "potency", POTENCY, false, &at, &mut out);
+        whole_key(o, "status_rounds", GRANT_ROUNDS, false, &at, &mut out);
+    } else if ["potency", "magnitude", "status_rounds"].iter().any(|k| o.contains_key(*k)) {
+        out.push(format!("{at}: potency, magnitude and status_rounds need a status."));
+    }
+    let push = o.get("push");
+    if let Some(p) = push {
+        match p.as_object() {
+            Some(p) => {
+                let at = format!("{at} push");
+                unknown_keys(p, &["dir", "tiles", "collide_damage"], &at, &mut out);
+                enum_key(p, "dir", &ARENA_DIRS, true, &at, &mut out);
+                whole_key(p, "tiles", FORCED_TILES, true, &at, &mut out);
+                whole_key(p, "collide_damage", ARENA_COLLIDE, false, &at, &mut out);
+            }
+            None => out.push(format!("{at}: push must be an object {{dir, tiles, collide_damage}}.")),
+        }
+    }
+    if !positive("damage") && !positive("damage_pct") && !positive("stagger") && st.is_empty() && push.is_none() {
+        out.push(format!("{at}: set at least one of damage, damage_pct, stagger, status or push."));
+    }
+    out
+}
+
+/// The ruleset rows (of the catalog) that list `rule`.
+fn rows_with<'a>(v: &'a View, rule: &str) -> Vec<&'a Dict> {
+    v.entries(ruleset::KIND).iter().filter(|r| json::sget(r, "rules").iter().any(|x| x == rule)).collect()
+}
+
+/// The ruleset row world `w` plays by (its lineage's nearest `ruleset`), None in classic or without the row.
+pub fn world_ruleset_row<'a>(v: &'a View, w: &str) -> Option<&'a Dict> {
+    let lineage = v.worlds.lineage(w);
+    let id = ruleset::world_ruleset(lineage.iter().rev().map(|lw| v.worlds.manifest(lw)));
+    v.entries(ruleset::KIND).iter().find(|r| json::s(r, "id") == id)
+}
+
+/// Whether ruleset row `row` lists `rule`.
+pub fn lists_rule(row: Option<&Dict>, rule: &str) -> bool {
+    row.is_some_and(|r| json::sget(r, "rules").iter().any(|x| x == rule))
+}
+
+/// DU2: an encounter's phase effects `deck`: under the deck rule (`world`: the world's ruleset, else any ruleset row),
+/// `add` families the unit owns (path or extra skills) within every deck ruleset's active slots, `order` entries among
+/// the actives or the basics, of that intent. `unit_of(ref)` is the catalog unit a ref plays as.
+pub fn deck_effect_errors(v: &View, e: &Dict, world: Option<&str>, unit_of: &dyn Fn(&str) -> Dict) -> Vec<String> {
+    let mut out = Vec::new();
+    let decks: Vec<(String, &Dict)> = json::aget(e, "phases")
+        .iter()
+        .filter_map(Value::as_object)
+        .flat_map(|p| json::aget(p, "effects").iter().filter_map(Value::as_object).filter(|fx| json::s(fx, "type") == DECK_EFFECT).map(move |fx| (json::s(p, "id"), fx)))
+        .collect();
+    if decks.is_empty() {
+        return out;
+    }
+    let deck_rows: Vec<&Dict> = match world {
+        Some(w) => world_ruleset_row(v, w).filter(|r| lists_rule(Some(r), ruleset::DECK)).into_iter().collect(),
+        None => rows_with(v, ruleset::DECK),
+    };
+    if deck_rows.is_empty() {
+        out.push(match world {
+            Some(_) => "A deck phase effect needs the deck rule in the world's ruleset.".to_string(),
+            None => "A deck phase effect needs a ruleset row with the deck rule.".to_string(),
+        });
+        return out;
+    }
+    let basics: Vec<String> = deck_rows.iter().flat_map(|r| json::sget(r, "basics")).collect();
+    for (phase, fx) in decks {
+        let tag = format!("Phase '{phase}'");
+        let unit = unit_of(&json::s(fx, "unit"));
+        if unit.is_empty() {
+            continue;
+        }
+        let owned = super::unit::owned_families(v, &unit);
+        let deck = json::dget(&unit, "deck");
+        let mut actives = json::sget(deck, "active");
+        for fam in json::aget(fx, "add").iter().map(gstr) {
+            if v.typed.tier_one(&fam).is_none() {
+                out.push(format!("{tag}: deck add: unknown skill family '{fam}'."));
+            } else if !owned.contains(&fam) {
+                out.push(format!("{tag}: deck add: the unit does not own the skill family '{fam}'."));
+            }
+            if !actives.contains(&fam) {
+                actives.push(fam);
+            }
+        }
+        for r in &deck_rows {
+            let max = json::i(json::dget(r, "deck_slots"), "active", 0);
+            if actives.len() as i64 > max {
+                out.push(format!("{tag}: deck add makes {} actives (the {} ruleset's deck slots allow {max}).", actives.len(), json::s_or(r, "name", &json::s(r, "id"))));
+            }
+        }
+        for (intent, fams) in json::dget(fx, "order") {
+            for fam in json::arr(fams).iter().map(gstr) {
+                if !actives.contains(&fam) && !basics.contains(&fam) {
+                    out.push(format!("{tag}: deck order {intent}: '{fam}' is neither an active of the deck nor a basic."));
+                    continue;
+                }
+                let head = v.get("skills", &fam);
+                let of = if head.is_empty() { String::new() } else { super::ruleset::intent_of(head) };
+                if of != *intent {
+                    out.push(format!("{tag}: deck order {intent}: '{fam}' is of intent {}.", if of.is_empty() { "none (unknown family)" } else { &of }));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// DU1: the shape of one phase effect `deck` (keys, `add` a list of families, `order` {intent: [families]}, at least
+/// one of them set).
+pub fn deck_shape_errors(tag: &str, fx: &Dict) -> Vec<String> {
+    let mut out = Vec::new();
+    let add_ok = match fx.get("add") {
+        None => true,
+        Some(Value::Array(a)) => a.iter().all(Value::is_string),
+        Some(_) => false,
+    };
+    if !add_ok {
+        out.push(format!("Phase '{tag}': deck add must be a list of skill families."));
+    }
+    match fx.get("order") {
+        None => {}
+        Some(Value::Object(order)) => {
+            for (intent, fams) in order {
+                if !ruleset::INTENTS.contains(&intent.as_str()) {
+                    out.push(format!("Phase '{tag}': deck order: '{intent}' is not an intent (one of {}).", ruleset::INTENTS.join(", ")));
+                } else if !fams.as_array().is_some_and(|a| a.iter().all(Value::is_string)) {
+                    out.push(format!("Phase '{tag}': deck order {intent} must be a list of skill families."));
+                }
+            }
+        }
+        Some(_) => out.push(format!("Phase '{tag}': deck order must be an object {{intent: [skill families]}}.")),
+    }
+    let empty = |key: &str| match fx.get(key) {
+        None => true,
+        Some(Value::Array(a)) => a.is_empty(),
+        Some(Value::Object(o)) => o.is_empty(),
+        Some(_) => false,
+    };
+    if empty("add") && empty("order") {
+        out.push(format!("Phase '{tag}': a deck effect sets add or order."));
+    }
+    out
+}
+
+// ---- World manifest (1.2, CN1) -----------------------------------------------------------------------------------
+
+/// CN1: a manifest's `classes`: base class ids, each {name 1-32, description 0-240, skill_path absent or {family:
+/// level 1-30}}.
+pub fn classes_errors(v: &View, m: &Dict) -> Vec<String> {
+    let mut out = Vec::new();
+    let o = match m.get("classes") {
+        None => return out,
+        Some(Value::Object(o)) => o,
+        Some(_) => return vec!["Class names must be an object {class_id: {name, description, skill_path}}.".into()],
+    };
+    for (class_id, raw) in o {
+        let at = format!("Class names '{class_id}'");
+        if !v.has("classes", class_id) {
+            out.push(format!("Class names: unknown class '{class_id}'."));
+        }
+        let Some(c) = raw.as_object() else {
+            out.push(format!("{at} must be an object {{name, description, skill_path}}."));
+            continue;
+        };
+        unknown_keys(c, &CLASS_OVERLAY_KEYS, &at, &mut out);
+        let name = json::s(c, "name");
+        if name.trim().is_empty() || chars(&name) > CLASS_NAME_MAX {
+            out.push(format!("{at}: the name needs 1 to {CLASS_NAME_MAX} characters."));
+        }
+        if c.get("description").is_some_and(|d| !d.as_str().is_some_and(|s| chars(s) <= CLASS_DESCRIPTION_MAX)) {
+            out.push(format!("{at}: the description is text of at most {CLASS_DESCRIPTION_MAX} characters."));
+        }
+        match c.get("skill_path") {
+            None => {}
+            Some(Value::Object(path)) => {
+                for (fam, level) in path {
+                    if v.typed.tier_one(fam).is_none() {
+                        out.push(format!("{at}: skill path: unknown skill family '{fam}'."));
+                    }
+                    if !whole_in(level, PATH_LEVEL) {
+                        out.push(format!("{at}: skill path {fam}: the level must be a whole number {}-{}.", PATH_LEVEL.0, PATH_LEVEL.1));
+                    }
+                }
+            }
+            Some(_) => out.push(format!("{at}: skill_path must be an object {{family: level}} ({{}} = no path).")),
+        }
+    }
+    out
+}

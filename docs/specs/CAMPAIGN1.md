@@ -110,7 +110,9 @@ Extinguished) is data. The code is story-free, in the kit crates (KIT1).
 
 - C1. A checkpoint names an act, a quest (met when its status is `done`) or `met_when` conditions, and a deadline day.
   It is met at the first tick where its condition holds on or before the deadline; it is missed at the first tick
-  where `campaign.day > deadline` and it is not met. Each state is recorded once (`met`, `missed`).
+  where `campaign.day > deadline` and it is not met. Each state is recorded once (`met`, `missed`). Planner ruling
+  (2026-10-27, CAMPAIGN1-C): a quest checkpoint is met when the quest is `ready` or `completed` (the win counts, not
+  the turn-in).
 - C2. Warnings: on each `warn_days` value (days left before the deadline) one notice and a journal line.
 - C3. Bad end by act (Q-20a): `mode` `end_run` (Act 1) puts the run over with the checkpoint's bad-end card; `go_on`
   (Act 2 on) runs the checkpoint's `effects` (lasting costs as flags, meter moves, a lost facility later) and the
@@ -159,7 +161,8 @@ Extinguished) is data. The code is story-free, in the kit crates (KIT1).
 - R4. `[kit hook]` defeat rule (manifest `defeat`): `mode` `wake` (default, HEAL1 unchanged) or `retreat`: after a
   lost battle the cell moves to `to` (the hub), ROSTER1 applies the loss (Act 1: every deployed member wounded; HP
   is ROSTER1's), the encounter stays undone (the mission stays on the board), `days` pass (tick `days(n, retreat)`),
-  autosave. Applies to all three `after_fight` paths.
+  autosave. Applies to all three `after_fight` paths. Until ROSTER1, a retreat does not heal unless the hub is a rest
+  place with `on_enter`; a `to` that cannot be entered falls back to `wake` with a `retreat_failed` log note.
 
 ## 9. Triggers `[kit hook]` (world kind `triggers`), `[data]` rows
 

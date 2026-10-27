@@ -1,7 +1,10 @@
 //! CombatResolver (scripts/combat/arena/combat_resolver.gd): the round timeline. Commands pay AP and enter their
 //! stance when they START; their effect lands at the end of their last block, highest initiative first.
+//! RULESET1 T1 (engine-only): an action lands at its impact block; recovery blocks booked after it (enemy-side units
+//! under `enemy_moves`) keep the unit busy until `end`. In classic `impact == end`.
 
 use crate::command::{hazard_round_end, CmdKind, Command};
+use crate::round_intent;
 use crate::world::{UnitId, World};
 use aegis_core::rng::GodotRng;
 use aegis_core::sort::godot_sort;
@@ -12,8 +15,15 @@ pub struct ScheduledAction {
     pub unit: UnitId,
     pub command: Command,
     pub start: i32,
+    /// The block the action lands in (its last windup block): `start + block_cost - 1` (RULESET1 T1).
+    pub impact: i32,
+    /// The last block it occupies: `impact + recovery` (classic: `impact`).
     pub end: i32,
     pub cancelled: bool,
+    /// The action has landed (executed at its impact block); RULESET1 P5: no longer in windup.
+    pub landed: bool,
+    /// RULESET1 P7: cancelled by its unit's break (rule poise).
+    pub broken: bool,
 }
 
 /// A combo an action resolved (CombatResolver.combo_resolved): "exploit", "break" or "flow".
@@ -65,16 +75,19 @@ impl Resolver {
         }
     }
 
+    /// Books `command` from `start`: refused when it (recovery included, RULESET1 T2) does not fit the round or overlaps
+    /// another live action of the unit (T3: a unit in recovery takes no other action).
     pub fn schedule(&mut self, unit: UnitId, command: Command, start: i32) -> bool {
         self.register(unit);
-        let end = start + command.block_cost - 1;
+        let impact = start + command.block_cost - 1;
+        let end = impact + command.recovery.max(0);
         if start < 1 || end > self.total_blocks {
             return false;
         }
         if self.scheduled.iter().any(|a| a.unit == unit && !a.cancelled && !(end < a.start || start > a.end)) {
             return false;
         }
-        self.scheduled.push(ScheduledAction { unit, command, start, end, cancelled: false });
+        self.scheduled.push(ScheduledAction { unit, command, start, impact, end, cancelled: false, landed: false, broken: false });
         true
     }
 
@@ -84,6 +97,8 @@ impl Resolver {
         for &c in &self.registered {
             w.units[c].guard = 0.0;
         }
+        // RULESET1_INTENT MV1: every unit faces its round target, re-read each block
+        round_intent::update_facings(w);
         self.begin_actions(w, block);
         for a in &self.scheduled {
             if !a.cancelled && w.units[a.unit].is_active() && block >= a.start && block <= a.end {
@@ -94,13 +109,14 @@ impl Resolver {
                 }
             }
         }
-        let mut resolving: Vec<usize> = (0..self.scheduled.len()).filter(|&i| !self.scheduled[i].cancelled && self.scheduled[i].end == block).collect();
+        let mut resolving: Vec<usize> = (0..self.scheduled.len()).filter(|&i| !self.scheduled[i].cancelled && self.scheduled[i].impact == block).collect();
         let inits: Vec<i32> = (0..self.scheduled.len()).map(|i| self.scheduled[i].command.initiative(w)).collect();
         godot_sort(&mut resolving, |a, b| inits[*a] > inits[*b]);
         resolving
     }
 
-    /// Commands starting now pay AP (skill + stance switch; debt allowed), enter their stance and run on_start.
+    /// Commands starting now pay AP (skill + stance switch; debt allowed; RULESET1 T11: not the units `pays_ap` spares),
+    /// enter their stance and run on_start.
     fn begin_actions(&mut self, w: &mut World, block: i32) {
         for i in 0..self.scheduled.len() {
             let a = &self.scheduled[i];
@@ -108,8 +124,22 @@ impl Resolver {
                 continue;
             }
             let c = a.unit;
+            // RULESET1_INTENT TG4: a unit holding an intent whose target is gone before a command on it starts rests
+            // through that command and every later one this round (no AP)
+            if round_intent::intent_of(w, c).is_some() && a.command.acted_on(w).is_some_and(|t| !w.units[t].is_active()) {
+                let gone = w.units[a.command.acted_on(w).unwrap()].name.clone();
+                for later in self.scheduled.iter_mut().filter(|x| x.unit == c && !x.cancelled && x.start >= block) {
+                    later.command.into_rest();
+                }
+                let msg = format!("[Rest] {} has lost {gone}: the rest of its round is Rest", w.units[c].name);
+                self.notes.push((i, msg.clone()));
+                self.log.push(msg);
+            }
+            let a = &self.scheduled[i];
             let total = a.command.ap_cost + a.command.stance_switch_cost;
-            w.units[c].ap -= total;
+            if w.pays_ap(c) {
+                w.units[c].ap -= total;
+            }
             if let Some(s) = a.command.stance_on_start {
                 if s != w.units[c].stance {
                     w.units[c].set_stance(s);
@@ -120,7 +150,13 @@ impl Resolver {
                 self.notes.push((i, msg.clone()));
                 self.log.push(msg);
             }
+            // RULESET1 P11: a heavy windup holds the unit up while it winds up (rule poise)
+            crate::poise::on_start(w, c, &mut self.scheduled[i].command);
+            // HOOKS1 GH2: a Defend leaves its hazard as it starts (rule ground_hazards; nothing in classic)
+            crate::ground::on_start(self, w, i);
         }
+        // HOOKS1 GH6: a trap a dash or carried move sprang cancels that unit's later Walks (`stop_moves`)
+        crate::ground::settle(self, w);
     }
 
     pub fn execute_single(&mut self, w: &mut World, idx: usize) {
@@ -133,10 +169,23 @@ impl Resolver {
             return;
         }
         self.scheduled[idx].command.execute(w, &mut self.rng);
+        // RULESET1_INTENT MV8: a carried retreat follows the hit (nothing in classic)
+        self.scheduled[idx].command.after_impact(w, &mut self.rng);
+        self.scheduled[idx].landed = true;
+        // RULESET1 P11, P4-P14: the windup bonus comes off; the hits stagger and may break (rule poise)
+        crate::poise::drop_bonus(w, unit, &mut self.scheduled[idx].command);
+        // HOOKS1 FM1: who was in windup as the hit landed, read before its stagger can break them (rule forced_move)
+        let windups = crate::forced::windups(self, w, idx);
+        crate::poise::resolve_hits(self, w, idx);
         let cmd = &self.scheduled[idx].command;
         if !cmd.log.is_empty() {
             self.log.push(cmd.log.clone());
         }
+        // HOOKS1 4.3 step 6: the forced moves follow the stagger and breaks (rule forced_move; nothing in classic)
+        crate::forced::resolve(self, w, idx, &windups);
+        // HOOKS1 4.3 step 7: the hazard the action leaves, then the Walks a sprung trap cancels (rule ground_hazards)
+        crate::ground::after_impact(self, w, idx);
+        crate::ground::settle(self, w);
         self.apply_combo(w, idx);
         let inactive: Vec<UnitId> = self.registered.iter().copied().filter(|c| !w.units[*c].is_active()).collect();
         for c in inactive {
@@ -151,7 +200,7 @@ impl Resolver {
     /// Stance breaks end the broken units' running guards; a flow move then enters its end stance for free. The combos
     /// are recorded: exploits, then breaks, then the flow.
     fn apply_combo(&mut self, w: &mut World, idx: usize) {
-        let end = self.scheduled[idx].end;
+        let at = self.scheduled[idx].impact;
         let broken = self.scheduled[idx].command.broken_targets.clone();
         let (actor, skill) = (self.scheduled[idx].unit, self.scheduled[idx].command.name.clone());
         for (victim, status) in &self.scheduled[idx].command.exploited {
@@ -162,7 +211,7 @@ impl Resolver {
         }
         for b in broken {
             for other in self.scheduled.iter_mut() {
-                let running = other.start <= end && other.end >= end;
+                let running = other.start <= at && other.end >= at;
                 if other.unit == b && running && !other.cancelled {
                     if let CmdKind::Defend { guard_broken, .. } = &mut other.command.kind {
                         *guard_broken = true;
@@ -215,6 +264,8 @@ impl Resolver {
         let units = self.registered.clone();
         let lines = hazard_round_end(w, &mut self.rng, &units);
         self.log.extend(lines);
+        // HOOKS1 GH5, GH7: the ground hazards after the terrain's, then the expired ones fade (none in classic)
+        crate::ground::round_end(self, w);
     }
 
     /// _record_round_end: the step row with the status's recorded source.

@@ -2,6 +2,7 @@
 //! tile after it falls (Godot leaves dead units in combatant_positions), and leaves the grid when it withdraws.
 
 use aegis_core::value;
+use indexmap::IndexMap;
 use rpgkit_data::Catalog;
 use std::ops::{Add, Mul, Sub};
 
@@ -62,7 +63,8 @@ pub const TERRAIN_IDS: [&str; 17] = [
     "floor", "grass", "dirt", "stone", "sand", "snow", "shallow_water", "deep_water", "mud", "lava", "wall", "tree", "bridge", "rubble",
     "burning_ground", "toxic_bog", "ice",
 ];
-const GLYPHS: [char; 17] = ['.', ',', ':', 'o', 's', '*', '~', 'W', 'm', 'L', '#', 'T', '=', 'r', 'f', 'p', 'i'];
+/// The terrain glyph per type, in TERRAIN_IDS order (CombatZones' row glyphs; also the glyphs of authored rows).
+pub const GLYPHS: [char; 17] = ['.', ',', ':', 'o', 's', '*', '~', 'W', 'm', 'L', '#', 'T', '=', 'r', 'f', 'p', 'i'];
 const BLOCKED: [usize; 4] = [7, 9, 10, 11]; // deep water, lava, wall, tree
 
 /// Terrain.is_walkable of a terrain type id (an unknown id is walkable).
@@ -144,6 +146,11 @@ pub fn zone_rows(zone: &str) -> Option<[&'static str; 9]> {
     })
 }
 
+/// ENCOUNTER2 R0: authored terrain rows are GRID_H strings of GRID_W known terrain glyphs.
+pub fn rows_valid(rows: &[String]) -> bool {
+    rows.len() == GRID_H as usize && rows.iter().all(|r| r.chars().count() == GRID_W as usize && r.chars().all(|c| GLYPHS.contains(&c)))
+}
+
 #[derive(Debug, Clone)]
 pub struct Grid {
     pub open: bool,
@@ -154,20 +161,36 @@ pub struct Grid {
     /// Tile per battle unit (None = never placed or withdrawn). Dead units keep their tile.
     pub positions: Vec<Option<V2>>,
     pub withdrawn: Vec<usize>,
+    /// HOOKS1 GH1-GH7 (rule `ground_hazards`): the ground hazard on each tile that has one, oldest placement first
+    /// (`crate::ground`); empty in classic.
+    pub ground: IndexMap<V2, crate::ground::Placed>,
 }
 
 impl Grid {
     pub fn new(open: bool, exits: Vec<V2>, table: TerrainTable, unit_count: usize) -> Self {
-        Self { open, exits, terrain: vec![0; (GRID_W * GRID_H) as usize], table, positions: vec![None; unit_count], withdrawn: Vec::new() }
+        Self { open, exits, terrain: vec![0; (GRID_W * GRID_H) as usize], table, positions: vec![None; unit_count], withdrawn: Vec::new(), ground: IndexMap::new() }
     }
 
     pub fn apply_zone(&mut self, zone: &str) {
+        self.apply_rows(zone_rows(zone).into_iter().flatten());
+    }
+
+    /// The battle board (ENCOUNTER2 R0): the encounter's authored rows when they are valid (`rows_valid`), else the
+    /// zone's rows; the zone still picks the backdrop and tiles.
+    pub fn apply_board(&mut self, zone: &str, rows: &[String]) {
+        if rows_valid(rows) {
+            self.apply_rows(rows.iter().map(String::as_str));
+        } else {
+            self.apply_zone(zone);
+        }
+    }
+
+    /// Terrain from glyph rows (an unknown glyph or a missing tile is floor).
+    fn apply_rows<'a>(&mut self, rows: impl IntoIterator<Item = &'a str>) {
         self.terrain = vec![0; (GRID_W * GRID_H) as usize];
-        if let Some(rows) = zone_rows(zone) {
-            for (y, row) in rows.iter().enumerate() {
-                for (x, ch) in row.chars().enumerate() {
-                    self.terrain[y * GRID_W as usize + x] = GLYPHS.iter().position(|g| *g == ch).unwrap_or(0);
-                }
+        for (y, row) in rows.into_iter().enumerate().take(GRID_H as usize) {
+            for (x, ch) in row.chars().enumerate().take(GRID_W as usize) {
+                self.terrain[y * GRID_W as usize + x] = GLYPHS.iter().position(|g| *g == ch).unwrap_or(0);
             }
         }
     }
@@ -193,16 +216,18 @@ impl Grid {
         self.is_valid(c) && self.row(c).walkable
     }
 
+    /// The terrain's move cost, plus a ground hazard's `move_cost` (HOOKS1 GH5).
     pub fn move_cost(&self, c: V2) -> i32 {
-        self.row(c).move_cost
+        self.row(c).move_cost + self.ground.get(&c).map_or(0, |p| p.def.move_cost)
     }
 
+    /// The terrain's cover, or a ground hazard's when larger (HOOKS1 GH5: smoke gives cover).
     pub fn cover_guard(&self, c: V2) -> f64 {
-        if self.is_valid(c) {
-            self.row(c).cover_guard
-        } else {
-            0.0
+        if !self.is_valid(c) {
+            return 0.0;
         }
+        let terrain = self.row(c).cover_guard;
+        self.ground.get(&c).map_or(terrain, |p| terrain.max(p.def.cover_guard))
     }
 
     pub fn has_hazard(&self, c: V2) -> bool {

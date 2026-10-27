@@ -4,6 +4,8 @@
 //! GameState and returns Godot's result dictionaries. Checked against Godot by `tests/journey.rs`.
 
 pub mod battle;
+pub mod board;
+pub mod campaign;
 pub mod data;
 pub mod dialogue;
 pub mod explore;
@@ -16,6 +18,7 @@ pub mod save;
 pub mod shop;
 pub mod skill_text;
 pub mod state;
+pub mod story;
 pub mod travel;
 
 pub use data::Data;

@@ -485,6 +485,7 @@
 			"duration": 0,
 			"use_blocks": 1,
 			"use_reach": 1,
+			"hazard": {},
 			"max_stack": 5
 		},
 		{
@@ -506,6 +507,7 @@
 			"duration": 2,
 			"use_blocks": 1,
 			"use_reach": 0,
+			"hazard": {},
 			"max_stack": 5
 		},
 		{
@@ -527,6 +529,7 @@
 			"duration": 0,
 			"use_blocks": 1,
 			"use_reach": 3,
+			"hazard": {},
 			"max_stack": 5
 		},
 		{
@@ -896,6 +899,1318 @@
 					"effect": {
 						"type": "spell_reach",
 						"value": 1
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "tl_billhook",
+			"name": "Notched Billhook (test)",
+			"family": "polearm",
+			"rarity": "COMMON",
+			"weight": 4.0,
+			"value": 40,
+			"description": "A hooked polearm for the timeline test kit.",
+			"damage_type": "pierce",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_2h",
+			"scaling_stat": "STR",
+			"modifiers": [],
+			"tiers": []
+		},
+		{
+			"id": "notched_billhook",
+			"name": "Notched Billhook",
+			"family": "polearm",
+			"rarity": "COMMON",
+			"weight": 4.0,
+			"value": 40,
+			"description": "Notched Billhook.",
+			"damage_type": "pierce",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_2h",
+			"scaling_stat": "STR",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 12
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "castellan_breastplate",
+			"name": "Dented Cuirass",
+			"family": "plate",
+			"rarity": "COMMON",
+			"weight": 8.0,
+			"value": 60,
+			"description": "Dented Cuirass.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"slot": "BODY",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "CONS",
+					"value": 12
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "curfew_bodkin",
+			"name": "Curfew Bodkin",
+			"family": "dagger",
+			"rarity": "COMMON",
+			"weight": 0.8,
+			"value": 35,
+			"description": "Curfew Bodkin.",
+			"damage_type": "pierce",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_1h",
+			"scaling_stat": "DEX",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "power",
+					"delta": 1
+				},
+				{
+					"kind": "requirement",
+					"stat": "DEX",
+					"value": 11
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "soot_leathers",
+			"name": "Soot Leathers",
+			"family": "leather",
+			"rarity": "COMMON",
+			"weight": 2.5,
+			"value": 30,
+			"description": "Soot Leathers.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"slot": "BODY",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "DEX",
+					"value": 10
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "bronze_censer",
+			"name": "Bronze Censer",
+			"family": "censer",
+			"rarity": "COMMON",
+			"weight": 2.5,
+			"value": 40,
+			"description": "Bronze Censer.",
+			"damage_type": "blunt",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_1h",
+			"scaling_stat": "INT",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "INT",
+					"value": 10
+				},
+				{
+					"kind": "stat_bonus",
+					"stat": "KNOW",
+					"value": 1
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "copied_psalter",
+			"name": "Copied Psalter",
+			"family": "tome",
+			"rarity": "COMMON",
+			"weight": 1.0,
+			"value": 35,
+			"description": "Copied Psalter.",
+			"damage_type": "magic",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "off",
+			"scaling_stat": "INT",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "KNOW",
+					"value": 11
+				},
+				{
+					"kind": "stat_bonus",
+					"stat": "KNOW",
+					"value": 1
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "status_potency",
+						"value": 5
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "embalmers_habit",
+			"name": "Embalmer's Habit",
+			"family": "cloth",
+			"rarity": "COMMON",
+			"weight": 1.2,
+			"value": 40,
+			"description": "Embalmer's Habit.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"slot": "BODY",
+			"modifiers": [
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "skill_potency",
+						"group": "heal",
+						"value": 0.1
+					}
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "bleed",
+						"value": 15
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "winch_arbalest",
+			"name": "Winch Arbalest",
+			"family": "crossbow",
+			"rarity": "COMMON",
+			"weight": 4.5,
+			"value": 55,
+			"description": "Winch Arbalest.",
+			"damage_type": "pierce",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_2h",
+			"scaling_stat": "DEX",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "range",
+					"delta": 1
+				},
+				{
+					"kind": "requirement",
+					"stat": "DEX",
+					"value": 12
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "poachers_brigandine",
+			"name": "Poacher's Coat",
+			"family": "leather",
+			"rarity": "COMMON",
+			"weight": 3.0,
+			"value": 40,
+			"description": "Poacher's Coat.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"slot": "BODY",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "mitigation",
+					"delta": 1
+				},
+				{
+					"kind": "requirement",
+					"stat": "DEX",
+					"value": 10
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "penal_shackles",
+			"name": "Penal Shackles",
+			"family": "fist",
+			"rarity": "COMMON",
+			"weight": 1.5,
+			"value": 20,
+			"description": "Penal Shackles.",
+			"damage_type": "blunt",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_1h",
+			"scaling_stat": "STR",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "power",
+					"delta": 2
+				},
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 10
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "penal_foundry_apron",
+			"name": "Foundry Apron",
+			"family": "leather",
+			"rarity": "COMMON",
+			"weight": 4.0,
+			"value": 35,
+			"description": "Foundry Apron.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"slot": "BODY",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "mitigation",
+					"delta": 2
+				},
+				{
+					"kind": "adjust",
+					"field": "burden",
+					"delta": 1
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "burn",
+						"value": 25
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "brass_vitriol_sprayer",
+			"name": "Brass Sprayer",
+			"family": "sprayer",
+			"rarity": "COMMON",
+			"weight": 3.5,
+			"value": 50,
+			"description": "Brass Sprayer.",
+			"damage_type": "fire",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_2h",
+			"scaling_stat": "INT",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "INT",
+					"value": 12
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "tanners_rubbered_coat",
+			"name": "Rubbered Coat",
+			"family": "cloth",
+			"rarity": "COMMON",
+			"weight": 1.5,
+			"value": 30,
+			"description": "Rubbered Coat.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"slot": "BODY",
+			"modifiers": [
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "poison",
+						"value": 25
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "watch_hookbill",
+			"name": "Watch Hookbill",
+			"family": "axe",
+			"rarity": "COMMON",
+			"weight": 2.0,
+			"value": 30,
+			"description": "Watch Hookbill.",
+			"damage_type": "slash",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_1h",
+			"scaling_stat": "STR",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 10
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "watch_heater",
+			"name": "Heater Shield",
+			"family": "shield",
+			"rarity": "COMMON",
+			"weight": 3.5,
+			"value": 35,
+			"description": "Heater Shield.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "off",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "mitigation",
+					"delta": -1
+				},
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 11
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "watch_cuirass",
+			"name": "Watch Cuirass",
+			"family": "plate",
+			"rarity": "COMMON",
+			"weight": 8.0,
+			"value": 50,
+			"description": "Watch Cuirass.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"slot": "BODY",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "CONS",
+					"value": 12
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "watch_gambeson",
+			"name": "Watch Gambeson",
+			"family": "leather",
+			"rarity": "COMMON",
+			"weight": 3.0,
+			"value": 25,
+			"description": "Watch Gambeson.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"slot": "BODY",
+			"modifiers": [],
+			"tiers": []
+		},
+		{
+			"id": "stirrup_arbalest",
+			"name": "Stirrup Arbalest",
+			"family": "crossbow",
+			"rarity": "COMMON",
+			"weight": 4.0,
+			"value": 40,
+			"description": "Stirrup Arbalest.",
+			"damage_type": "pierce",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_2h",
+			"scaling_stat": "DEX",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "DEX",
+					"value": 11
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "bailiff_maul",
+			"name": "Bailiff's Maul",
+			"family": "hammer",
+			"rarity": "COMMON",
+			"weight": 6.5,
+			"value": 60,
+			"description": "Bailiff's Maul.",
+			"damage_type": "blunt",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_2h",
+			"scaling_stat": "STR",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 13
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "penitent_scourge",
+			"name": "Penitent Scourge",
+			"family": "scourge",
+			"rarity": "COMMON",
+			"weight": 1.5,
+			"value": 20,
+			"description": "Penitent Scourge.",
+			"damage_type": "slash",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_1h",
+			"scaling_stat": "DEX",
+			"modifiers": [],
+			"tiers": []
+		},
+		{
+			"id": "pyre_nozzle",
+			"name": "Pyre Nozzle",
+			"family": "sprayer",
+			"rarity": "COMMON",
+			"weight": 4.0,
+			"value": 45,
+			"description": "Pyre Nozzle.",
+			"damage_type": "fire",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_2h",
+			"scaling_stat": "INT",
+			"modifiers": [],
+			"tiers": []
+		},
+		{
+			"id": "warded_apron",
+			"name": "Warded Apron",
+			"family": "leather",
+			"rarity": "COMMON",
+			"weight": 4.0,
+			"value": 40,
+			"description": "Warded Apron.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"slot": "BODY",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "mitigation",
+					"delta": 2
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "burn",
+						"value": 25
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "boning_knife",
+			"name": "Boning Knife",
+			"family": "dagger",
+			"rarity": "COMMON",
+			"weight": 0.8,
+			"value": 20,
+			"description": "Boning Knife.",
+			"damage_type": "pierce",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_1h",
+			"scaling_stat": "DEX",
+			"modifiers": [],
+			"tiers": []
+		},
+		{
+			"id": "skinners_apron",
+			"name": "Skinner's Apron",
+			"family": "leather",
+			"rarity": "COMMON",
+			"weight": 2.5,
+			"value": 20,
+			"description": "Skinner's Apron.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"slot": "BODY",
+			"modifiers": [],
+			"tiers": []
+		},
+		{
+			"id": "bone_club",
+			"name": "Bone Club",
+			"family": "mace",
+			"rarity": "COMMON",
+			"weight": 3.0,
+			"value": 0,
+			"description": "Bone Club.",
+			"damage_type": "blunt",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_1h",
+			"scaling_stat": "STR",
+			"modifiers": [],
+			"tiers": []
+		},
+		{
+			"id": "vanes_bill",
+			"name": "Executioner Bill",
+			"family": "polearm",
+			"rarity": "UNCOMMON",
+			"weight": 5.0,
+			"value": 90,
+			"description": "Executioner Bill.",
+			"damage_type": "pierce",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_2h",
+			"scaling_stat": "STR",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "power",
+					"delta": 3
+				},
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 14
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "quells_bone_saws",
+			"name": "Twin Bone-Saws",
+			"family": "bone_saw",
+			"rarity": "UNCOMMON",
+			"weight": 1.5,
+			"value": 70,
+			"description": "Twin Bone-Saws.",
+			"damage_type": "slash",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_1h",
+			"scaling_stat": "DEX",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "power",
+					"delta": 2
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "foundry_sledge",
+			"name": "Foundry Sledge",
+			"family": "hammer",
+			"rarity": "COMMON",
+			"weight": 7.0,
+			"value": 70,
+			"description": "Foundry Sledge.",
+			"damage_type": "blunt",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_2h",
+			"scaling_stat": "STR",
+			"modifiers": [
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 15
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "flensing_hooks",
+			"name": "Flensing Hooks",
+			"family": "axe",
+			"rarity": "COMMON",
+			"weight": 3.0,
+			"value": 60,
+			"description": "Flensing Hooks.",
+			"damage_type": "slash",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_1h",
+			"scaling_stat": "STR",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "power",
+					"delta": 2
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "prelates_blade",
+			"name": "Prelate's Blade",
+			"family": "sword",
+			"rarity": "RARE",
+			"weight": 4.5,
+			"value": 120,
+			"description": "Prelate's Blade.",
+			"damage_type": "slash",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"hand": "main_2h",
+			"scaling_stat": "STR",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "power",
+					"delta": 4
+				},
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 14
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "slag_plating",
+			"name": "Slag Plating",
+			"family": "plate",
+			"rarity": "UNCOMMON",
+			"weight": 9.0,
+			"value": 90,
+			"description": "Slag Plating.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": false,
+			"special_note": "",
+			"slot": "BODY",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "mitigation",
+					"delta": 2
+				},
+				{
+					"kind": "requirement",
+					"stat": "CONS",
+					"value": 13
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "burn",
+						"value": 15
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "sulfur_poultice",
+			"name": "Stitch-Poultice",
+			"family": "consumable",
+			"rarity": "COMMON",
+			"weight": 0.5,
+			"value": 15,
+			"description": "Sulfur Stitch-Poultice: a packed dressing that closes wounds for +60 HP.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"consumable_type": "HEALTH_POTION",
+			"heal": 60,
+			"damage": 0,
+			"buff_stat": "",
+			"buff_pct": 0.0,
+			"duration": 0,
+			"use_blocks": 1,
+			"use_reach": 1,
+			"hazard": {},
+			"max_stack": 5
+		},
+		{
+			"id": "pitch_fire_bomb",
+			"name": "Pitch Fire-Bomb",
+			"family": "consumable",
+			"rarity": "COMMON",
+			"weight": 1.0,
+			"value": 30,
+			"description": "Clay jar of burning pitch, 40 fire damage on impact.",
+			"damage_type": "fire",
+			"icon_id": "",
+			"starter_stash": false,
+			"consumable_type": "THROWABLE_BOMB",
+			"heal": 0,
+			"damage": 40,
+			"buff_stat": "",
+			"buff_pct": 0.0,
+			"duration": 0,
+			"use_blocks": 1,
+			"use_reach": 3,
+			"hazard": {},
+			"max_stack": 5
+		},
+		{
+			"id": "brimstone_draught",
+			"name": "Brimstone Draught",
+			"family": "consumable",
+			"rarity": "COMMON",
+			"weight": 0.4,
+			"value": 25,
+			"description": "Brimstone Tallow Draught: +30% CONS for 3 rounds (steadier poise).",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"consumable_type": "FOCUS_INCENSE",
+			"heal": 0,
+			"damage": 0,
+			"buff_stat": "CONS",
+			"buff_pct": 0.3,
+			"duration": 3,
+			"use_blocks": 1,
+			"use_reach": 0,
+			"hazard": {},
+			"max_stack": 5
+		},
+		{
+			"id": "calcified_bone_shard",
+			"name": "Bone Shard",
+			"family": "material",
+			"rarity": "COMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "A shard of calcified bone. Hearth recipes, later.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "render_beast_tendon",
+			"name": "Beast Tendon",
+			"family": "material",
+			"rarity": "COMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Tough tendon from a Render-Beast. Hearth recipes, later.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "caustic_gall_sac",
+			"name": "Gall-Sac",
+			"family": "material",
+			"rarity": "COMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "A caustic gall-sac. Act 2.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "stalker_optic_nerve",
+			"name": "Optic Nerve",
+			"family": "material",
+			"rarity": "COMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "A stalker's optic nerve. Act 2.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 20
+		},
+		{
+			"id": "inquisitor_marrow_valve",
+			"name": "Marrow Valve",
+			"family": "material",
+			"rarity": "RARE",
+			"weight": 0.2,
+			"value": 0,
+			"description": "An Inquisitor's marrow valve. Act 2 graft.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 5
+		},
+		{
+			"id": "titan_marrow_core",
+			"name": "Marrow Core",
+			"family": "material",
+			"rarity": "RARE",
+			"weight": 0.2,
+			"value": 0,
+			"description": "The core of a marrow titan. Act 2 Apex graft.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 5
+		},
+		{
+			"id": "slab_retorts",
+			"name": "Slab Retorts",
+			"family": "quest",
+			"rarity": "COMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Opens the Slab's recipes.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 1
+		},
+		{
+			"id": "city_gate_pass",
+			"name": "Gate Pass Cipher",
+			"family": "quest",
+			"rarity": "COMMON",
+			"weight": 0.2,
+			"value": 0,
+			"description": "A cipher that opens the city gate.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"max_stack": 1
+		},
+		{
+			"id": "quells_marrow_scalpel",
+			"name": "Marrow Scalpel",
+			"family": "bone_saw",
+			"rarity": "RARE",
+			"weight": 1.5,
+			"value": 0,
+			"description": "Quell's Marrow Scalpel.",
+			"damage_type": "slash",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "One copy per campaign.",
+			"hand": "main_1h",
+			"scaling_stat": "DEX",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "power",
+					"delta": 3
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "status_potency",
+						"value": 10
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "grendels_slag_hammer",
+			"name": "Slag-Hammer",
+			"family": "hammer",
+			"rarity": "RARE",
+			"weight": 7.0,
+			"value": 0,
+			"description": "Overseer Grendel's Slag-Hammer.",
+			"damage_type": "blunt",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "One copy per campaign.",
+			"hand": "main_2h",
+			"scaling_stat": "STR",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "power",
+					"delta": 4
+				},
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 15
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "dreamers_vertebra",
+			"name": "Dreamer's Vertebra",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.3,
+			"value": 0,
+			"description": "A vertebra that hums with other people's dreams.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "One copy per campaign.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "KNOW",
+					"value": 1
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_kaelen",
+			"name": "Gouged Sigil",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Kaelen's Gouged Sigil.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "CONS",
+					"value": 2
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "stagger",
+						"value": 20
+					}
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "stun",
+						"value": 20
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_vesper",
+			"name": "Runner Whistle",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Vesper's Runner Whistle.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "DEX",
+					"value": 2
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "slow",
+						"value": 25
+					}
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "root",
+						"value": 25
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_maren",
+			"name": "Copyist Quill",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Maren's Copyist Quill.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "KNOW",
+					"value": 2
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "skill_potency",
+						"group": "heal",
+						"value": 0.1
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_hollis",
+			"name": "Focusing Monocle",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Hollis's Focusing Monocle.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "PERC",
+					"value": 3
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_elyse",
+			"name": "Cracked Retort",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Elyse's Cracked Retort.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "INT",
+					"value": 2
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "status_potency",
+						"value": 10
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "vanes_gilded_pavise",
+			"name": "Gilded Pavise",
+			"family": "shield",
+			"rarity": "RARE",
+			"weight": 5.0,
+			"value": 0,
+			"description": "Vane's Gilded Castellan Pavise.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "One copy per campaign.",
+			"hand": "off",
+			"modifiers": [
+				{
+					"kind": "adjust",
+					"field": "mitigation",
+					"delta": 4
+				},
+				{
+					"kind": "stat_bonus",
+					"stat": "max_poise",
+					"value": 30
+				},
+				{
+					"kind": "requirement",
+					"stat": "STR",
+					"value": 13
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "trigger",
+						"on": "guarded_hit",
+						"effects": [
+							{
+								"type": "damage",
+								"value": 15,
+								"to": "other"
+							},
+							{
+								"type": "stagger",
+								"value": 20,
+								"to": "other"
+							}
+						]
+					}
+				}
+			],
+			"tiers": []
+		},
+		{
+			"id": "keepsake_dunstan",
+			"name": "Shackle Link",
+			"family": "accessory",
+			"rarity": "RARE",
+			"weight": 0.2,
+			"value": 0,
+			"description": "Dunstan's Shackle Link.",
+			"damage_type": "",
+			"icon_id": "",
+			"starter_stash": false,
+			"special": true,
+			"special_note": "Keepsake: never sold.",
+			"slot": "ACCESSORY_1",
+			"modifiers": [
+				{
+					"kind": "stat_bonus",
+					"stat": "max_poise",
+					"value": 12
+				},
+				{
+					"kind": "effect",
+					"effect": {
+						"type": "resist",
+						"status": "stun",
+						"value": 30
 					}
 				}
 			],

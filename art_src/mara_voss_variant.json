@@ -1,0 +1,13 @@
+{
+  "model": "gemini-3-pro-image",
+  "id": "mara_voss_variant",
+  "prompt": "A 2x2 grid of four distinct pixel art character portrait variations for a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG portraits. 1:1 square image. No borders, no frame, no text, no dividers, no logo. Plain flat very dark background (#120e12) behind all figures. Each variation shows a head-and-shoulders, three-quarter view of Mara Voss, a woman in her early thirties with a strong build, square jaw, and dark copper-red hair. Each variation utilizes a 16-bit pixel art style with clear dark outlines, hand-placed pixel clusters, a limited palette with 4 shades per color, and light dithering on metal and cloth. Strong key light from the upper left and warm orange rim light from the right.\n\nThe four variations are:\n- Top-Left: A battle-worn version, showing a larger scar across her cheek, messy loose hair, and scuffed, dirt-spattered steel armor with deep red brigandine.\n- Top-Right: A heavily-armored, disciplined variant with tight-bound hair, heavily reinforced dark steel pauldrons, and a rugged leather shoulder strap over her deep red brigandine.\n- Bottom-Left: An older, battle-hardened version with a visible chainmail hood (coif) framing her face, worn iron armor, and deep red brigandine.\n- Bottom-Right: A survival-ready \"Ember Warden\" variant with looser hair, a frayed dark fur/wool collar over her steel gorget, and the warm orange glow of embers in the background.",
+  "reference": null,
+  "prompts_file": null,
+  "time": "2026-10-20T17:30:07+00:00",
+  "n": 1,
+  "backfilled": true,
+  "source": "reconstructed by Gemini from the image on 2026-10-25 (the user asked it for the prompt); likely close to, but not the exact text of, the user's own run",
+  "added_in": "67bd74f",
+  "reconstructed": true
+}

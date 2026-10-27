@@ -11,4 +11,4 @@ pub mod stats;
 pub mod status;
 pub mod unit;
 
-pub use unit::{build_unit, Stance, Unit};
+pub use unit::{build_unit, build_unit_in, DeckRule, Stance, Unit};

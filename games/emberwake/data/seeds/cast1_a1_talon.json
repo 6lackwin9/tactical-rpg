@@ -1,0 +1,48 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "items",
+   "entry": {
+    "id": "orlovs_flensing_talon",
+    "name": "Flensing Talon",
+    "family": "dagger",
+    "rarity": "RARE",
+    "weight": 1.0,
+    "value": 0,
+    "description": "Guild-Master Orlov's Flensing Talon.",
+    "damage_type": "pierce",
+    "icon_id": "",
+    "starter_stash": false,
+    "special": true,
+    "special_note": "One copy per campaign.",
+    "hand": "main_1h",
+    "scaling_stat": "DEX",
+    "modifiers": [
+     {
+      "kind": "adjust",
+      "field": "power",
+      "delta": 3
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "skill_potency",
+       "family": "throat_carver",
+       "value": 0.2
+      }
+     },
+     {
+      "kind": "effect",
+      "effect": {
+       "type": "skill_potency",
+       "family": "orlovs_retribution",
+       "value": 0.2
+      }
+     }
+    ],
+    "tiers": []
+   }
+  }
+ ]
+}

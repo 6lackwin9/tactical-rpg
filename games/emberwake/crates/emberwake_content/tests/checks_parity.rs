@@ -20,7 +20,38 @@ fn strings(v: &Value) -> Vec<String> {
 /// it are left out on both sides (Godot's "Purse loot ..." checks, the engine's refusal of the key), in the recorded
 /// cases and in the whole-catalog and world reports; every other message of those cases is still compared.
 fn kept(messages: Vec<String>) -> Vec<String> {
-    messages.into_iter().filter(|m| !retired(m)).collect()
+    messages.into_iter().filter(|m| !retired(m)).map(|m| at_freeze(&m)).collect()
+}
+
+/// Retired parity (RULESET1-S, HISTORY 2026-10-25): list items added after the freeze, named in the messages that list
+/// a closed set: the gear types `polearm` and `scourge`, the family engine rule `reach`, the passive effect type
+/// `stagger_taken`, the buffs `steadfast` and `stealth`. Each ", <item>" ending at ",", ")", "." or the end of a
+/// message is taken out (both sides, so a Godot text that names one stays compared); every other word is compared.
+/// CAMPAIGN1-S (HISTORY 2026-10-25): the campaign effect kinds in the dialogue effect list. STORYUI1-S (HISTORY
+/// 2026-10-26): the story effect kinds in the same list and the service line `board`. CAST1-S (HISTORY 2026-10-26): the
+/// gear types `censer`, `bone_saw` and `sprayer`. HOOKS1-S (HISTORY 2026-10-27): the passive and item effect types
+/// `forced_move`, `trigger` and `meter`, the target preferences `SOFTEST` and `TOUGHEST` (a unit's and a phase ai's).
+const LIST_ITEMS_AFTER_GODOT: [&str; 27] = [
+    "polearm", "scourge", "censer", "bone_saw", "sprayer", "reach", "stagger_taken", "steadfast", "stealth", "meter_add", "meter_set", "meter_show", "clock_start", "clock_set", "clock_stop", "set_act", "rest", "end", "vignette", "sequence", "open_board", "board",
+    "forced_move", "trigger", "meter", "SOFTEST", "TOUGHEST",
+];
+
+fn at_freeze(message: &str) -> String {
+    let mut out = message.to_string();
+    for item in LIST_ITEMS_AFTER_GODOT {
+        let needle = format!(", {item}");
+        let mut from = 0;
+        while let Some(at) = out[from..].find(&needle).map(|i| i + from) {
+            let end = at + needle.len();
+            if out[end..].chars().next().is_none_or(|c| matches!(c, ',' | ')' | '.')) {
+                out.replace_range(at..end, "");
+                from = at;
+            } else {
+                from = end;
+            }
+        }
+    }
+    out
 }
 
 fn retired(message: &str) -> bool {
@@ -43,7 +74,7 @@ fn frozen_view(src: &source::Source) -> View {
 
 fn without_retired(r: check::Report) -> check::Report {
     r.into_iter()
-        .map(|(k, l)| (k, l.into_iter().filter(|m| !retired(m)).collect::<Vec<_>>()))
+        .map(|(k, l)| (k, kept(l)))
         .filter(|(_, l)| !l.is_empty())
         .collect()
 }

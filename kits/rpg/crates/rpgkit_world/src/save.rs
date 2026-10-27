@@ -1,6 +1,6 @@
 //! SaveGame and SaveMigrations (scripts/game_state/), the game's side: the engine save framework (`aegis_save`) keeps
 //! the slot files, the envelope ({format: "fc_save", version, saved_at, game_state}), the atomic write and the
-//! migration runner; this module supplies the format, the GameState shape and every migration step (1 -> 11). Slot
+//! migration runner; this module supplies the format, the GameState shape and every migration step (1 -> 13). Slot
 //! 0 = autosave, 1..5 manual; reads migrate then validate and never return a half-loaded state. 2 -> 3 seeds
 //! rng_seed from Godot's sorted JSON text, rebuilt by godot_text.
 
@@ -14,13 +14,13 @@ use std::path::{Path, PathBuf};
 
 pub use aegis_save::{delete, exists, is_locked, path_for};
 
-pub const VERSION: i64 = 12;
+pub const VERSION: i64 = 13;
 pub const FORMAT: &str = "fc_save";
 pub const AUTOSAVE_SLOT: i64 = 0;
 pub const LAST_SLOT: i64 = 5;
-const KEYS: [&str; 15] = [
+const KEYS: [&str; 17] = [
     "world_id", "location_id", "party", "flags", "quests", "loot_claimed", "position", "explore", "rng_seed", "rolls", "shops", "time", "autoplay", "purses",
-    "reward_paid",
+    "reward_paid", "campaign", "story",
 ];
 const SAVES: Format = Format { tag: FORMAT, version: VERSION, first_slot: AUTOSAVE_SLOT, last_slot: LAST_SLOT, keys: &KEYS };
 
@@ -30,8 +30,13 @@ pub fn default_dir() -> PathBuf {
     base.join("Godot").join("app_userdata").join("Tactical RPG").join("saves")
 }
 
-/// Problem strings; empty = written. `saved_at` > 0 keeps a given save time.
+/// Problem strings; empty = written. `saved_at` > 0 keeps a given save time. Refused while the run is over
+/// (CAMPAIGN1 F3), so no slot ever holds a run-over state.
 pub fn write(d: &Data, dir: &Path, state: &GameState, slot: i64, saved_at: i64) -> Vec<String> {
+    let over = crate::campaign::save_refusal(state);
+    if !over.is_empty() {
+        return vec![over.to_string()];
+    }
     aegis_save::write(&SAVES, dir, slot, saved_at, || {
         let errors = state.validate(d);
         if errors.is_empty() {
@@ -58,11 +63,13 @@ pub fn read(d: &Data, dir: &Path, slot: i64) -> Result<Loaded, Vec<String>> {
     decode(d, &aegis_save::read(dir, slot)?)
 }
 
-/// A save file's text: parse, format check, migrate, validate.
+/// A save file's text: parse, format check, migrate, validate (STORYUI1 Q8: a `story.running` the data no longer has
+/// is dropped with a warning first).
 pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
     let envelope = aegis_save::open(&SAVES, text)?;
-    let (data, warnings) = migrate(d, &envelope)?;
-    let state = GameState::from_dict(d, json::dget(&data, "game_state"));
+    let (data, mut warnings) = migrate(d, &envelope)?;
+    let mut state = GameState::from_dict(d, json::dget(&data, "game_state"));
+    warnings.extend(crate::story::check_loaded(d, &mut state));
     let errors = state.validate(d);
     if !errors.is_empty() {
         return Err(errors);
@@ -193,6 +200,11 @@ fn step(d: &Data, version: i64, state: &Dict, quests_int: bool) -> Option<Dict> 
             }
             out.insert("reward_paid".into(), Value::Object(paid));
         }
+        // CAMPAIGN1 11.5: a campaign world may save `campaign`; nothing to add (absent = a fresh campaign in a
+        // campaign world, none elsewhere). The bump makes an older build refuse such a save instead of dropping it.
+        // STORYUI1 4.8 shares this unreleased bump (ROSTER1 11.4): `story` may be saved; absent reads empty.
+        // RULESET1 9 D5 shares it too: a party member may save `deck`; absent reads the empty deck (auto).
+        12 => {}
         _ => return None,
     }
     Some(out)

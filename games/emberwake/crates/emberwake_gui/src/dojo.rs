@@ -323,11 +323,34 @@ impl Dojo {
             ("Crit rate", format!("{:.1}%", damage::crit_chance(u))),
             ("Debuff resist", format!("{:.0}%", u.debuff_resistance())),
         ];
-        for (i, (k, v)) in rows.iter().enumerate() {
-            let y = b.y as f32 + 2.0 + i as f32 * 9.0;
-            ui.p.text(b.x as f32 + 3.0, y, k, SMALL, DIM);
-            ui.p.text_right((b.x + b.w) as f32 - 4.0, y, v, SMALL, TEXT);
+        // DERIVE1 4.4: the catalog's derived stats shown on the Dojo under its ruleset toggle follow, each hovering to its
+        // breakdown. With them the rows close up from 9 px to one line of text to fit the window; past that the list
+        // scrolls (the wheel), so no row runs out of the window. Without them the window is as before.
+        let extra = crate::party::data_rows(&self.s.cat, &self.s.ruleset.id, u, "dojo");
+        if extra.is_empty() {
+            for (i, (k, v)) in rows.iter().enumerate() {
+                let y = b.y as f32 + 2.0 + i as f32 * 9.0;
+                ui.p.text(b.x as f32 + 3.0, y, k, SMALL, DIM);
+                ui.p.text_right((b.x + b.w) as f32 - 4.0, y, v, SMALL, TEXT);
+            }
+            return;
         }
+        let n = (rows.len() + extra.len()) as i32;
+        let line = (ui.p.line_h(SMALL).ceil() as i32).min(9);
+        let step = ((b.h - 3) / n).clamp(line, 9);
+        let off = ui.scroll_begin("dojo.derived_scroll", b, n * step + 3);
+        let top = |i: usize| b.y + 2 - off + i as i32 * step;
+        for (i, (k, v)) in rows.iter().enumerate() {
+            ui.p.text(b.x as f32 + 3.0, top(i) as f32, k, SMALL, DIM);
+            ui.p.text_right((b.x + b.w) as f32 - 6.0, top(i) as f32, v, SMALL, TEXT);
+        }
+        for (i, r) in extra.iter().enumerate() {
+            let y = top(rows.len() + i);
+            ui.p.text(b.x as f32 + 3.0, y as f32, &r.label, SMALL, DIM);
+            ui.p.text_right((b.x + b.w) as f32 - 6.0, y as f32, &r.shown, SMALL, TEXT);
+            ui.push(format!("dojo.derived.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(b.x + 1, y - 1, b.w - 5, step), true, false, None, tip(&r.label, &r.desc));
+        }
+        ui.scroll_end();
     }
 
     fn draw_gear(&self, ui: &mut Ui<DAct>, b: Rect) {
@@ -666,3 +689,71 @@ impl Screen<GameCx> for Dojo {
     widget_plumbing!();
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    /// DERIVE1 4.4: the Derived Stats window lists the catalog rows shown on the Dojo after the built-in numbers, each
+    /// hovering to its formula and breakdown; a row for other screens only, or no row, adds nothing.
+    #[test]
+    fn the_derived_window_lists_dojo_rows_with_their_breakdown() {
+        for rows in [json!([]), json!([{"id": "nerve", "name": "Nerve", "formula": "KNOW * 2", "show_on": ["dojo"]}, {"id": "zeal", "name": "Zeal", "formula": "DEX", "show_on": ["party"]}])] {
+            let mut cx = crate::hud::hud_tests::game_cx();
+            let mut data = (*cx.app.data).clone();
+            let cat = Arc::make_mut(&mut data.cat);
+            cat.derived_stats = rows.as_array().unwrap().iter().filter_map(|r| emberwake_data::DerivedStatDef::from_obj(r.as_object().unwrap())).map(|r| (r.id.clone(), r)).collect();
+            cx.app.data = Arc::new(data);
+            let mut dojo = Dojo::new(&cx);
+            let mut g = crate::hud::hud_tests::gfx();
+            dojo.draw(&mut cx, &mut g, (-500, -500), true);
+            let shown: Vec<&Widget<DAct>> = dojo.w.iter().filter(|w| w.id.starts_with("dojo.derived.")).collect();
+            if rows.as_array().unwrap().is_empty() {
+                assert!(shown.is_empty());
+                continue;
+            }
+            let v = emberwake_rules::derived::value(&dojo.s.cat, &dojo.s.ruleset.id, dojo.s.hero(), "nerve").unwrap();
+            assert_eq!(shown.iter().map(|w| (w.id.as_str(), w.text.clone())).collect::<Vec<_>>(), [("dojo.derived.Nerve", format!("Nerve {v}"))], "the party-only row is not listed");
+            assert!(shown[0].tip[1].0.starts_with("Formula: KNOW * 2. KNOW "), "{:?}", shown[0].tip);
+        }
+    }
+
+    /// DERIVE1 4.4: with several catalog rows the Derived Stats window closes its rows up and scrolls the rest, in
+    /// every layout: each row's hover rect lies inside the window body, no two overlap, and scrolled to the end the
+    /// last row is on screen.
+    #[test]
+    fn many_derived_rows_stay_inside_the_window_without_overlapping() {
+        const N: usize = 6;
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut data = (*cx.app.data).clone();
+        let cat = Arc::make_mut(&mut data.cat);
+        cat.derived_stats = (0..N).map(|i| emberwake_data::DerivedStatDef::from_obj(json!({"id": format!("row_{i}"), "name": format!("Row {i}"), "formula": "KNOW", "show_on": ["dojo"]}).as_object().unwrap()).unwrap()).map(|r| (r.id.clone(), r)).collect();
+        cx.app.data = Arc::new(data);
+        let inside = |r: Rect, b: Rect| r.x >= b.x && r.y >= b.y && r.x + r.w <= b.x + b.w && r.y + r.h <= b.y + b.h;
+        for layout in layouts() {
+            let mut dojo = Dojo::new(&cx);
+            assert!(dojo.desk.apply_layout(&layout.name), "{}", layout.name);
+            let body = dojo.desk.body("derived").expect("the Derived Stats window");
+            for end in [false, true] {
+                let mut g = crate::hud::hud_tests::gfx();
+                if end {
+                    g.kit.scroll.insert("dojo.derived_scroll".into(), i32::MAX / 2);
+                }
+                dojo.draw(&mut cx, &mut g, (-500, -500), true);
+                let rows: Vec<Rect> = dojo.w.iter().filter(|w| w.id.starts_with("dojo.derived.Row")).map(|w| w.rect).filter(|r| r.w > 0 && r.h > 0).collect();
+                assert!(!rows.is_empty(), "{}: rows on screen", layout.name);
+                for (i, r) in rows.iter().enumerate() {
+                    assert!(inside(*r, body), "{}: {r:?} inside {body:?}", layout.name);
+                    for o in &rows[i + 1..] {
+                        let x = r.intersect(*o);
+                        assert!(x.w == 0 || x.h == 0, "{}: {r:?} overlaps {o:?}", layout.name);
+                    }
+                }
+                if end {
+                    let last = dojo.w.iter().find(|w| w.id == format!("dojo.derived.Row {}", N - 1)).unwrap().rect;
+                    assert!(last.h > 0 && inside(last, body), "{}: scrolled to the end the last row shows ({last:?})", layout.name);
+                }
+            }
+        }
+    }
+}

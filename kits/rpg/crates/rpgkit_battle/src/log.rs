@@ -140,6 +140,13 @@ pub fn from_action(w: &World, a: &ScheduledAction, round: i32, block: i32) -> En
                 None => e.target = "Target".into(),
             }
             e.detail = format!("Dealt {} | Skill x{:.2} | Range {}", last_damage, skill_mult, me.attack_range);
+            // RULESET1 A2, P6 (timeline only): the armour pierced and the poise the hit took
+            if cmd.impact.armor_piercing && w.ruleset.has(rpgkit_rules::ruleset::PIERCE) && *last_damage > 0 {
+                e.detail += " | Armour pierced";
+            }
+            if let Some(st) = cmd.staggers.first() {
+                e.detail += &format!(" | Stagger {} (poise {} -> {})", st.taken, st.before, st.after);
+            }
         }
         CmdKind::Walk { path, approach, moved_tiles, cut_short, blocked_by, .. } => {
             e.category = "MOVE";
@@ -198,6 +205,14 @@ pub fn from_action(w: &World, a: &ScheduledAction, round: i32, block: i32) -> En
             e.outcome = format!("+{}% ATK", e.value);
             e.detail = format!("+{}% Attack Power for {rounds} Round(s)", e.value);
             e.status = "Empowered".into();
+        }
+        // HOOKS1 GH3: a placement aims like an area attack and hits nobody (its hazard has its own cell)
+        CmdKind::Area { cells, .. } if cmd.log.starts_with("[Place]") => {
+            e.skill = cmd.name.clone();
+            e.subtype = PLACEMENT.into();
+            e.outcome = "PLACED".into();
+            e.target = format!("{} tiles", cells.len());
+            e.detail = trim(&cmd.log, "[Place] ").into();
         }
         CmdKind::Area { cells, last_damage, last_hits, .. } => {
             e.skill = cmd.name.clone();
@@ -273,6 +288,107 @@ pub fn from_action(w: &World, a: &ScheduledAction, round: i32, block: i32) -> En
     e
 }
 
+/// RULESET1 P9 (engine-only): the EVENT cell of a break: the broken unit, the action it lost, the cause.
+pub fn break_entry(w: &World, t: usize, b: &crate::poise::Break, round: i32, block: i32) -> Entry {
+    let line = crate::poise::break_line(w, t, b);
+    Entry::event(round, block, &w.units[t].name, w.allies.contains(&t), &b.skill, "Break", "BREAK", &line, b.cause.id())
+}
+
+/// HOOKS1 FM4: the subtype of a collision's ATTACK cell (the metrics credit it to the driver, not as an attack received).
+pub const COLLISION: &str = "Collision";
+
+/// HOOKS1 FM9 (engine-only): the EVENT cell of a forced move: the driver (else the moved unit), the moved unit, the
+/// tiles and where it ended; a unit that held firm gets a HELD cell.
+pub fn forced_entry(w: &World, m: &crate::forced::Moved, skill: &str, round: i32, block: i32) -> Entry {
+    let (subtype, outcome) = if m.held {
+        ("Hold", "HELD")
+    } else if m.pull {
+        ("Pull", "PULLED")
+    } else {
+        ("Push", "PUSHED")
+    };
+    let actor = m.by.unwrap_or(m.unit);
+    let mut e = Entry::event(round, block, &w.units[actor].name, w.allies.contains(&actor), skill, subtype, outcome, &m.line, &format!("Position: {}", m.to));
+    e.target = w.units[m.unit].name.clone();
+    e.target_is_ally = w.allies.contains(&m.unit);
+    e.value = m.tiles;
+    e.coord_to = m.to;
+    e
+}
+
+/// HOOKS1 FM4 (engine-only): the ATTACK cell of one collision hit: the driver hits `h.unit` for the HP it lost (an
+/// arena push has no driver: the actor is "" and the metrics leave it unexplained).
+pub fn collision_entry(w: &World, m: &crate::forced::Moved, h: &crate::forced::CollisionHit, skill: &str, round: i32, block: i32) -> Entry {
+    let tu = &w.units[h.unit];
+    Entry {
+        actor: m.by.map_or_else(String::new, |b| w.units[b].name.clone()),
+        actor_is_ally: m.by.is_some_and(|b| w.allies.contains(&b)),
+        target: tu.name.clone(),
+        target_is_ally: w.allies.contains(&h.unit),
+        skill: skill.into(),
+        subtype: COLLISION.into(),
+        value: h.damage,
+        damage: h.damage,
+        outcome: if tu.is_alive() { "COLLISION" } else { "DEFEATED" }.into(),
+        detail: trim(&h.line, "[Collision] ").into(),
+        status: format!("Target HP: {}/{}", tu.hp, tu.max_hp),
+        ..Entry::new(round, block)
+    }
+}
+
+/// HOOKS1 GH3: the subtype of a placement action's ATTACK cell (no damage, no target unit).
+pub const PLACEMENT: &str = "Placement";
+/// HOOKS1 GH5: the subtype of the ground hazards' cells; the ATTACK one (HP lost on entering) is credited to the placer
+/// as a collision's is.
+pub const HAZARD: &str = "Hazard";
+
+/// HOOKS1 GH2-GH7 (engine-only): the cell of a ground event: a placement (EVENT, PLACED: the placer and the tiles); a
+/// hazard that cost HP as the unit entered (ATTACK: the placer hits the unit for the HP it lost); any other hit (EVENT:
+/// TRAPPED, DEFEATED or HAZARD; a round-end hit's HP is round-end damage, its value only); a fade (EVENT, FADED: the
+/// hazard as the actor).
+pub fn ground_entry(w: &World, ev: &crate::ground::Event, round: i32, block: i32) -> Entry {
+    use crate::ground::Event;
+    match ev {
+        Event::Placed(p) => {
+            let rounds = format!("{} round{}", p.rounds, plural(p.rounds));
+            let mut e = Entry::event(round, block, &w.units[p.by].name, w.allies.contains(&p.by), &p.hazard, HAZARD, "PLACED", trim(&p.line, "[Hazard] "), &rounds);
+            e.target = format!("{} tiles", p.cells.len());
+            e.value = p.cells.len() as i32;
+            e
+        }
+        Event::Hit(h) => {
+            let tu = &w.units[h.unit];
+            let outcome = if !tu.is_alive() {
+                "DEFEATED"
+            } else if h.trap {
+                "TRAPPED"
+            } else {
+                "HAZARD"
+            };
+            let mut e = Entry {
+                actor: w.units[h.by].name.clone(),
+                actor_is_ally: w.allies.contains(&h.by),
+                target: tu.name.clone(),
+                target_is_ally: w.allies.contains(&h.unit),
+                skill: h.hazard.clone(),
+                subtype: HAZARD.into(),
+                value: h.damage,
+                outcome: outcome.into(),
+                detail: trim(&h.line, "[Hazard] ").into(),
+                status: format!("Target HP: {}/{}", tu.hp, tu.max_hp),
+                ..Entry::new(round, block)
+            };
+            if h.damage > 0 && !h.round_end {
+                e.damage = h.damage;
+            } else {
+                e.category = "EVENT";
+            }
+            e
+        }
+        Event::Faded(f) => Entry::event(round, block, &f.hazard, w.allies.contains(&f.by), &f.hazard, HAZARD, "FADED", trim(&f.line, "[Hazard] "), &format!("{} tiles", f.cells)),
+    }
+}
+
 /// CombatLogBuilder.riposte_entry: the defender countered the attack that just resolved.
 pub fn riposte_entry(w: &World, r: &Reaction, round: i32, block: i32) -> Entry {
     let att = &w.units[r.attacker];
@@ -303,7 +419,8 @@ pub fn riposte_entry(w: &World, r: &Reaction, round: i32, block: i32) -> Entry {
 /// command's start note: "[Chase] ..." or "[Dash] ..."). None for any other note.
 pub fn move_note_entry(w: &World, a: &ScheduledAction, round: i32, block: i32, message: &str) -> Option<Entry> {
     let (skill, subtype, outcome, prefix) = if message.starts_with("[Chase]") {
-        ("Chase", "Closes the gap (1 AP)", "CHASED", "[Chase] ")
+        // RULESET1 T11: a unit that pays no AP chases for free
+        ("Chase", if w.pays_ap(a.unit) { "Closes the gap (1 AP)" } else { "Closes the gap (no AP)" }, "CHASED", "[Chase] ")
     } else if message.starts_with("[Dash]") {
         ("Dash", "Gap-close (no extra AP)", "DASHED", "[Dash] ")
     } else {

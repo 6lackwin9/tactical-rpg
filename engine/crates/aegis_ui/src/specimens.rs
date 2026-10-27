@@ -1,12 +1,19 @@
 //! The kit's widgets on one page (UIGALLERY1): every widget family of `ui.rs` in its states, on sample values, to be
 //! judged on its own (a UI Gallery's "Kit widgets" entry). Game-agnostic: the gallery screen keeps a `Specimens`,
-//! wraps `KitAct` in its own action and forwards drops and text changes to it. Three pages, picked by the tabs at the
+//! wraps `KitAct` in its own action and forwards drops and text changes to it. Pages, picked by the tabs at the
 //! page's foot: the widgets, the block timeline with its segment parts, links and marks (RULESET1-E), and the effects
 //! kit (FX1-E: each primitive and shake preset on a small stage, the clock's speed and hit-stop, a local reduce
-//! motion); the Effects page runs on its own clock, fed by `tick` (wall time) or `advance` (tests).
+//! motion); the Effects page runs on its own clock, fed by `tick` (wall time) or `advance` (tests). PORTRAITFX1-E: a
+//! fourth page, Portraits, draws the engine's code-drawn sample face (`portrait_fx::sample`) through a `PortraitFx` at a
+//! chosen size, with toggles for each overlay and state, buttons for the reactions, a local reduce motion and the
+//! anchors check, on its own clock.
 
 use crate::canvas::{rgb, rgba, Image, Rect, Rgba};
 use crate::fx::{Beam, Camera, Clock, Effect, Flash, Fx, Layer, Look, Projectile, Ring, ShakeLimits, ShakeTable, Sparks, Trail, PRIM_KINDS, SHAKE_PRESETS};
+use crate::portrait_fx::{self, Budget, Cue, PortraitFx, PortraitOpts, Tier};
+use aegis_core::assets::Face;
+use std::cell::RefCell;
+use std::collections::BTreeSet;
 use crate::timeline::{Link, Mark, Part, PartStyle, Section, Segment, Timeline, Track};
 use crate::ui::{tip, Glyph, Ui, BODY, DIM, FOE, GOLD, GOOD, INFO, SMALL, TEXT};
 
@@ -39,10 +46,24 @@ pub enum KitAct {
     FxSpeed(usize),
     HitStop,
     Reduce,
+    /// The Portraits page: an overlay or state toggle (`PORTRAIT_OVERLAYS`, `PORTRAIT_STATES`), a reaction
+    /// (`PORTRAIT_REACTIONS`), the size (`PORTRAIT_SIZES` index), its reduce-motion and anchors checks.
+    PortraitToggle(&'static str),
+    PortraitFire(&'static str),
+    PortraitSize(usize),
+    PortraitReduce,
+    PortraitAnchors,
 }
 
 pub const TABS: [&str; 3] = ["First", "Second", "Third"];
-pub const PAGES: [&str; 3] = ["Widgets", "Timeline", "Effects"];
+pub const PAGES: [&str; 4] = ["Widgets", "Timeline", "Effects", "Portraits"];
+/// The Portraits page: the sizes on offer (logical px), the toggles, the reactions and the stage (the largest size
+/// plus the jolt ceiling and a margin on every side).
+pub const PORTRAIT_SIZES: [i32; 6] = [96, 64, 48, 32, 24, 16];
+pub const PORTRAIT_OVERLAYS: [&str; 5] = ["glow", "veins", "eye_glow", "ash", "smoke"];
+pub const PORTRAIT_STATES: [&str; 4] = ["desaturate", "tint", "fade", "still"];
+pub const PORTRAIT_REACTIONS: [&str; 3] = ["flash", "jolt.hit", "jolt.crit"];
+pub const PORTRAIT_STAGE: i32 = 96 + 2 * 6;
 /// The Effects page: its stage (dark, the dummies 160 px apart), the clock speeds and the hit-stop.
 pub const FX_STAGE_W: i32 = 240;
 pub const FX_STAGE_H: i32 = 120;
@@ -89,6 +110,67 @@ pub struct Specimens {
     pub track: Option<String>,
     /// The Effects page's state.
     pub fx: FxDemo,
+    /// The Portraits page's state.
+    pub portrait: PortraitDemo,
+}
+
+/// The Portraits page's clock, portrait (its cache behind a `RefCell`: the page draws through `&self`), sample face
+/// and choices.
+#[derive(Debug, Clone)]
+pub struct PortraitDemo {
+    pub clock: Clock,
+    pub fx: RefCell<PortraitFx>,
+    budget: RefCell<Budget>,
+    /// The overlays and states toggled on.
+    pub on: BTreeSet<&'static str>,
+    /// `PORTRAIT_SIZES` index.
+    pub size: usize,
+    pub reduce: bool,
+    pub anchors: bool,
+    pub image: Image,
+    pub face: Face,
+    last_wall: Option<std::time::Instant>,
+}
+
+impl Default for PortraitDemo {
+    fn default() -> Self {
+        let (image, face) = portrait_fx::sample();
+        Self { clock: Clock::default(), fx: RefCell::new(PortraitFx::new("kit.sample")), budget: RefCell::new(Budget::default()), on: BTreeSet::new(), size: 0, reduce: false, anchors: false, image, face, last_wall: None }
+    }
+}
+
+impl PortraitDemo {
+    /// Toggles overlay or state `e` and holds the new set; what it did.
+    fn toggle(&mut self, e: &'static str) -> String {
+        let on = !self.on.remove(e);
+        if on {
+            self.on.insert(e);
+        }
+        let cues: Vec<Cue> = self.on.iter().filter_map(|x| Cue::parse(x, "").map(|c| c.with_key(&format!("kit.{x}")))).collect();
+        self.fx.borrow_mut().hold(&cues, self.clock.now());
+        format!("portrait {} {}", e, if on { "on" } else { "off" })
+    }
+
+    /// Fires reaction `what` (`flash`, `jolt.hit`, `jolt.crit`); what it did.
+    fn fire(&mut self, what: &str) -> String {
+        let cue = match what {
+            "flash" => Cue::parse("flash", ""),
+            _ => Cue::parse("jolt", what.trim_start_matches("jolt.")),
+        };
+        let Some(cue) = cue else { return format!("no reaction {what}") };
+        self.fx.borrow_mut().fire(cue, self.clock.now());
+        let still = self.reduce && what.starts_with("jolt");
+        format!("portrait {what}{}", if still { ": no motion (reduce motion)" } else { "" })
+    }
+
+    fn opts(&self) -> PortraitOpts {
+        PortraitOpts { reduce_motion: self.reduce, rim_default: None, show_anchors: self.anchors }
+    }
+
+    /// The portrait's agent state at the page's clock (`PortraitFx::state`).
+    pub fn state(&self) -> serde_json::Value {
+        self.fx.borrow().state(self.clock.now())
+    }
 }
 
 /// The Effects page's clock, live list, camera and choices; impacts to come fire their sparks, flash and hit-stop
@@ -199,6 +281,7 @@ impl Default for Specimens {
             block: None,
             track: None,
             fx: FxDemo::default(),
+            portrait: PortraitDemo::default(),
         }
     }
 }
@@ -227,6 +310,11 @@ impl Specimens {
             KitAct::FxSpeed(i) => format!("speed {}", FX_SPEEDS[*i % FX_SPEEDS.len()].0),
             KitAct::HitStop => format!("hit-stop {}", if self.fx.hit_stop { "off" } else { "on" }),
             KitAct::Reduce => format!("reduce motion {}", if self.fx.reduce { "off" } else { "on" }),
+            KitAct::PortraitToggle(e) => self.portrait.toggle(e),
+            KitAct::PortraitFire(w) => self.portrait.fire(w),
+            KitAct::PortraitSize(i) => format!("portrait size {} px", PORTRAIT_SIZES[*i % PORTRAIT_SIZES.len()]),
+            KitAct::PortraitReduce => format!("portrait reduce motion {}", if self.portrait.reduce { "off" } else { "on" }),
+            KitAct::PortraitAnchors => format!("portrait anchors {}", if self.portrait.anchors { "off" } else { "on" }),
         };
         match a {
             KitAct::Tab(i) => self.tab = i % TABS.len(),
@@ -249,26 +337,38 @@ impl Specimens {
                     self.fx.camera.stop();
                 }
             }
-            KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) | KitAct::Segment(..) | KitAct::Effect(_) | KitAct::Shake(_) => {}
+            KitAct::PortraitSize(i) => self.portrait.size = i % PORTRAIT_SIZES.len(),
+            KitAct::PortraitReduce => self.portrait.reduce = !self.portrait.reduce,
+            KitAct::PortraitAnchors => self.portrait.anchors = !self.portrait.anchors,
+            KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) | KitAct::Segment(..) | KitAct::Effect(_) | KitAct::Shake(_) | KitAct::PortraitToggle(_) | KitAct::PortraitFire(_) => {}
         }
     }
 
-    /// The Effects page's clock moves by the wall time since the last call (at most `vignette::MAX_FRAME_MS`), while
-    /// that page is on view (the gallery screen calls it every frame).
+    /// The Effects or Portraits page's clock moves by the wall time since the last call (at most
+    /// `vignette::MAX_FRAME_MS`), while that page is on view (the gallery screen calls it every frame).
     pub fn tick(&mut self) {
-        if self.page != 2 {
-            self.fx.last_wall = None;
-            return;
-        }
         let now = std::time::Instant::now();
-        let ms = self.fx.last_wall.map_or(0.0, |l| (now.duration_since(l).as_secs_f64() * 1000.0).min(crate::vignette::MAX_FRAME_MS as f64));
-        self.fx.last_wall = Some(now);
-        self.advance(ms);
+        let since = |last: Option<std::time::Instant>| last.map_or(0.0, |l| (now.duration_since(l).as_secs_f64() * 1000.0).min(crate::vignette::MAX_FRAME_MS as f64));
+        if self.page == 2 {
+            let ms = since(self.fx.last_wall);
+            self.fx.last_wall = Some(now);
+            self.fx.advance(ms);
+        } else {
+            self.fx.last_wall = None;
+        }
+        if self.page == 3 {
+            let ms = since(self.portrait.last_wall);
+            self.portrait.last_wall = Some(now);
+            self.portrait.clock.advance(ms, 1.0);
+        } else {
+            self.portrait.last_wall = None;
+        }
     }
 
-    /// The Effects page's clock moves by `wall_ms` (`FxDemo::advance`).
+    /// The Effects page's clock moves by `wall_ms` (`FxDemo::advance`), and the Portraits page's clock with it.
     pub fn advance(&mut self, wall_ms: f64) {
         self.fx.advance(wall_ms);
+        self.portrait.clock.advance(wall_ms, 1.0);
     }
 
     /// A chip (`chip.<name>`) onto the other box (`box.left` / `box.right`).
@@ -314,6 +414,8 @@ impl Specimens {
             self.draw_timeline(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
         } else if self.page == 2 {
             self.draw_effects(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
+        } else if self.page == 3 {
+            self.draw_portraits(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
         } else {
             self.draw_widgets(ui, r, &wrap);
         }
@@ -421,6 +523,84 @@ impl Specimens {
         ui.checkbox("kit.fx.hitstop", x2 + 64, yy + 2, &format!("Hit-stop {} ms", FX_HIT_STOP_MS), d.hit_stop, wrap(KitAct::HitStop), true);
         yy += 14 + 5;
         ui.checkbox("kit.fx.reduce", x2, yy + 2, "Reduce motion (this page)", d.reduce, wrap(KitAct::Reduce), true);
+    }
+
+    /// The Portraits page: the stage (`kit.portrait.face`: the portrait and its jolt room) with the sample face at the
+    /// chosen size and, under it, the tier and what is live; beside it a toggle per overlay and state
+    /// (`kit.portrait.<effect>`), a button per reaction (`kit.portrait.flash`, `kit.portrait.jolt.hit`,
+    /// `kit.portrait.jolt.crit`), the size (`kit.portrait.size`), reduce motion (`kit.portrait.reduce`) and the
+    /// anchors check (`kit.portrait.anchors`).
+    fn draw_portraits<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: &impl Fn(KitAct) -> A) {
+        let d = &self.portrait;
+        let x = r.x + 6;
+        let line = ui.p.line_h(SMALL).ceil() as i32;
+        ui.p.text(x as f32, (r.y + 4) as f32, "Portraits: base life, overlays, states and reactions over a code-drawn face", SMALL, INFO);
+        let y = r.y + 4 + line + 2;
+        let stage = Rect::new(x, y, PORTRAIT_STAGE, PORTRAIT_STAGE);
+        ui.p.panel(stage, STAGE_BG, crate::ui::BORDER, 2.0);
+        let size = PORTRAIT_SIZES[d.size.min(PORTRAIT_SIZES.len() - 1)];
+        let face = Rect::new(stage.x + (stage.w - size) / 2, stage.y + (stage.h - size) / 2, size, size);
+        let now = d.clock.now();
+        {
+            let mut budget = d.budget.borrow_mut();
+            budget.begin();
+            d.fx.borrow_mut().draw_image(&mut ui.p, &d.image, "kit.sample", Some(&d.face), face, now, &d.opts(), &mut budget);
+        }
+        let (tier, live) = {
+            let fx = d.fx.borrow();
+            (fx.tier().map_or("", Tier::name), fx.live(now))
+        };
+        let device = (size as f32 * ui.p.v.s).round() as i32;
+        ui.push("kit.portrait.face", "portrait", format!("sample portrait: {size} px, tier {tier}"), stage, true, false, None, Vec::new());
+        let col_w = 200;
+        let foot = format!("Tier {tier} ({device} device px). Live: {}", if live.is_empty() { "nothing".to_string() } else { live.join(", ") });
+        let fy = ui.para(x, stage.y + stage.h + 4, col_w, &foot, SMALL, DIM);
+        ui.para(
+            x,
+            fy + 4,
+            col_w,
+            "Pure functions of the clock and a seed from the key, composed at the drawn size and cached. From 96 device px everything draws; 48-95 drops breath, veins and smoke; below 48 only flashes, colour states, fade and the eye glow's core. Reduce motion stops breath, jolts, flicker and drift.",
+            SMALL,
+            TEXT,
+        );
+
+        // -- Controls beside the stage
+        let x2 = x + col_w + 10;
+        let right = r.x + r.w - 6;
+        let head = |ui: &mut Ui<A>, y: i32, t: &str| -> i32 {
+            ui.p.text(x2 as f32, y as f32, t, SMALL, INFO);
+            y + line + 1
+        };
+        let mut yy = y;
+        for (title, names) in [("Overlays (held at full strength)", &PORTRAIT_OVERLAYS[..]), ("States", &PORTRAIT_STATES[..])] {
+            yy = head(ui, yy, title);
+            let mut bx = x2;
+            for name in names.iter().copied() {
+                let label = cap(&name.replace('_', " "));
+                let w = 12 + ui.p.text_w(&label, BODY).ceil() as i32 + 4;
+                if bx + w > right {
+                    bx = x2;
+                    yy += 16;
+                }
+                ui.checkbox(&format!("kit.portrait.{name}"), bx, yy + 2, &label, d.on.contains(name), wrap(KitAct::PortraitToggle(name)), true);
+                bx += w + 8;
+            }
+            yy += 14 + 5;
+        }
+        yy = head(ui, yy, "Reactions");
+        let mut bx = x2;
+        for (what, label) in PORTRAIT_REACTIONS.iter().zip(["Flash", "Hit jolt", "Crit jolt"]) {
+            let w = (ui.p.text_w(label, BODY) + 12.0).ceil() as i32;
+            ui.button(&format!("kit.portrait.{what}"), Rect::new(bx, yy, w, 14), label, wrap(KitAct::PortraitFire(what)), true);
+            bx += w + 3;
+        }
+        yy += 14 + 5;
+        yy = head(ui, yy, "Size, motion, anchors");
+        let sizes: Vec<String> = PORTRAIT_SIZES.iter().map(|s| format!("{s} px")).collect();
+        ui.select("kit.portrait.size", Rect::new(x2, yy, 56, 14), &sizes, d.size, |i| wrap(KitAct::PortraitSize(i)), true, tip("Size", "The portrait's side in logical px; the tier follows the device px."));
+        ui.checkbox("kit.portrait.reduce", x2 + 64, yy + 2, "Reduce motion (this page)", d.reduce, wrap(KitAct::PortraitReduce), true);
+        yy += 14 + 5;
+        ui.checkbox("kit.portrait.anchors", x2, yy + 2, "Anchors (eye boxes, glow, vein roots)", d.anchors, wrap(KitAct::PortraitAnchors), true);
     }
 
     /// The widgets page: two columns of named groups.

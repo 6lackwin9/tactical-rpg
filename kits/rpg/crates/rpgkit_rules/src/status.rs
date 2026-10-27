@@ -27,14 +27,24 @@ pub struct StatusRow {
     pub grant: &'static str,
     pub magnitude_min: i32,
     pub magnitude_max: i32,
+    /// RULESET1_INTENT IN6 (timeline, rule round_intent): an instance lasts only while the round intent it was applied
+    /// under stays active (riposte, stealth). Classic never reads it.
+    pub intent_bound: bool,
 }
 
 const fn row(id: &'static str, buff: bool, resistable: bool, default_rounds: i32, stacking: Stacking, cap: i32, display: &'static str, grant: &'static str, mmin: i32, mmax: i32) -> StatusRow {
-    StatusRow { id, buff, resistable, default_rounds, stacking, cap, display, grant, magnitude_min: mmin, magnitude_max: mmax }
+    StatusRow { id, buff, resistable, default_rounds, stacking, cap, display, grant, magnitude_min: mmin, magnitude_max: mmax, intent_bound: false }
+}
+
+/// A row whose instances are intent-bound (IN6).
+const fn bound(r: StatusRow) -> StatusRow {
+    StatusRow { intent_bound: true, ..r }
 }
 
 use Stacking::*;
-pub const ROWS: [StatusRow; 15] = [
+/// Rows 16-17 (RULESET1 P12, intent GD5; engine-only, no Godot row): `steadfast` (cannot be broken) and `stealth`
+/// (a Guard buff); classic data never grants them.
+pub const ROWS: [StatusRow; 17] = [
     row("stagger", false, true, 1, RefreshMaxDuration, 0, "Staggered", "", 0, 0),
     row("stun", false, true, 1, RefreshMaxDuration, 0, "Stunned", "", 0, 0),
     row("root", false, true, 1, RefreshMaxDuration, 0, "Rooted", "", 0, 0),
@@ -42,7 +52,7 @@ pub const ROWS: [StatusRow; 15] = [
     row("weaken", false, true, 2, RefreshMaxDuration, 25, "Weakened", "", 1, 25),
     row("haste", true, false, 1, RefreshMaxDuration, 0, "Hasted", "support", 0, 0),
     row("taunt", true, false, 1, RefreshMaxDuration, 0, "Taunting", "support", 0, 0),
-    row("riposte", true, false, 2, RefreshMaxDuration, 0, "Riposte", "defend", 0, 0),
+    bound(row("riposte", true, false, 2, RefreshMaxDuration, 0, "Riposte", "defend", 0, 0)),
     row("slow", false, true, 1, RefreshMaxDuration, 0, "Slowed", "", 0, 0),
     row("expose", false, true, 2, RefreshMaxDuration, 20, "Exposed", "", 1, 20),
     row("fortify", true, false, 2, RefreshMaxDuration, 20, "Fortified", "support", 1, 20),
@@ -50,6 +60,8 @@ pub const ROWS: [StatusRow; 15] = [
     row("poison", false, true, 3, StackPotency, 30, "Poisoned", "", 1, 15),
     row("burn", false, true, 2, RefreshMaxDuration, 10, "Burning", "", 1, 10),
     row("empower", true, false, 2, RefreshMaxDuration, 25, "Empowered", "", 1, 25),
+    row("steadfast", true, false, 1, RefreshMaxDuration, 0, "Steadfast", "support", 0, 0),
+    bound(row("stealth", true, false, 2, RefreshMaxDuration, 0, "Stealthed", "defend", 0, 0)),
 ];
 
 pub const BLEED_PCT: f64 = 0.06;
@@ -66,6 +78,11 @@ pub fn cap_of(status: &str) -> i32 {
 
 pub fn stacking_of(status: &str) -> Stacking {
     row_of(status).map(|r| r.stacking).unwrap_or(RefreshMaxDuration)
+}
+
+/// RULESET1_INTENT IN6: whether the row of `status` is intent-bound (false for an unknown id).
+pub fn intent_bound(status: &str) -> bool {
+    row_of(status).is_some_and(|r| r.intent_bound)
 }
 
 pub fn display_name(status: &str) -> String {
@@ -279,6 +296,9 @@ pub fn remove_active(target: &mut Unit, status: &str) -> bool {
     st.rounds_left.shift_remove(status);
     st.magnitudes.shift_remove(status);
     st.sources.shift_remove(status);
+    if !st.pending.contains(status) {
+        st.intents.shift_remove(status);
+    }
     found
 }
 
@@ -331,6 +351,9 @@ pub fn roll_over(c: &mut Unit, ap_regen: i32) -> Vec<String> {
     st.pending_rounds.clear();
     st.pending_magnitudes.clear();
     st.pending_sources.clear();
+    // IN6: an intent tag lives as long as its instance (classic never sets one)
+    let (active, intents) = (&st.active, &mut st.intents);
+    intents.retain(|k, _| active.contains(k));
     c.riposted.clear();
     let penalty = debt_status((-c.ap).max(0));
     if !penalty.is_empty() {

@@ -58,6 +58,6 @@ def recolor_families(fig, ramp, shades, moves):
     return out
 
 
-def look(src, regions, grid=96, crop=None, shades=4, families=10):
+def look(src, regions, grid=X.GRID, crop=None, shades=4, families=10):
     fig, ramp = X.figure(src, grid, crop, shades, families)
     return X.finish(recolor(fig, ramp, shades, regions))

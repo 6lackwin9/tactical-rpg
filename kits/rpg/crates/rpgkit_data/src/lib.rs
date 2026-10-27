@@ -1,5 +1,10 @@
 //! Typed content catalog (classes, units, skills, items, passives, encounters, terrain, and the engine-only derived
-//! stats of DERIVE1 and ruleset rows of RULESET1).
+//! stats of DERIVE1 and ruleset rows of RULESET1), and the campaign vocabulary of CAMPAIGN1 (kinds, effect kinds, read
+//! keys, the manifest blocks with their defaults) and the story vocabulary of STORYUI1 (kinds, card and step keys,
+//! story effects, limits, the step reader), and the portrait cue rows and vocabulary of PORTRAITFX1 (triggers, events,
+//! effects, surfaces, expressions), and the combat hook rows and vocabulary of HOOKS1 (the hazards, unit meters and
+//! zones kinds; forced moves, hazard placements, trigger rows, riders and meter costs on skills; events, effects,
+//! tactics).
 //!
 //! Source today: the resolved catalog the Godot exporter writes (the game's `parity/out/catalog.json`), i.e. exactly the
 //! entries Godot's `ContentCatalog.entries(kind)` returns after item-family resolution and schema normalisation.
@@ -115,6 +120,43 @@ pub struct UnitDef {
     /// Slot key -> item id as written ("" = the class's item, `NO_ITEM` = empty).
     pub slots: IndexMap<String, String>,
     pub pouch: Vec<String>,
+    /// RULESET1 9 D5 (timeline, rule deck): the slotted actives, passives, keystones and per-intent order (empty = auto).
+    pub deck: Deck,
+    /// RULESET1 5 P2 (rule poise): -1 = the derived Max Poise, 0 = no poise bar, above 0 = a fixed Max Poise.
+    pub poise: i32,
+    /// RULESET1 TQ23 (a) (rule round_intent): the round intent the unit starts a battle in ("" = none).
+    pub default_intent: String,
+    /// HOOKS1 AT2 (rule ai_tactics): the unit's AI tactics (TACTICS ids, in order).
+    pub tactics: Vec<String>,
+}
+
+/// A unit's or party member's deck (RULESET1 9 D5, field `deck`): skill families in the active slots, passive ids in
+/// the passive and keystone slots, and per round intent the families in the order the planner fills them. Missing or
+/// empty keys mean auto.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Deck {
+    pub active: Vec<String>,
+    pub passive: Vec<String>,
+    pub keystone: Vec<String>,
+    /// Round intent -> skill families, in the order written.
+    pub order: IndexMap<String, Vec<String>>,
+}
+
+impl Deck {
+    /// The deck keys, in their stored order.
+    pub const KEYS: [&'static str; 4] = ["active", "passive", "keystone", "order"];
+
+    /// From a `deck` value (anything but an object is the empty deck; lists keep their strings).
+    pub fn from_value(v: &Value) -> Self {
+        let Some(o) = v.as_object() else { return Self::default() };
+        let order = obj(o, "order").map(|m| m.keys().map(|k| (k.clone(), strings(m, k))).collect()).unwrap_or_default();
+        Self { active: strings(o, "active"), passive: strings(o, "passive"), keystone: strings(o, "keystone"), order }
+    }
+
+    /// True when every key is empty (the auto deck).
+    pub fn is_empty(&self) -> bool {
+        self.active.is_empty() && self.passive.is_empty() && self.keystone.is_empty() && self.order.values().all(Vec::is_empty)
+    }
 }
 
 impl UnitDef {
@@ -149,6 +191,10 @@ impl UnitDef {
             heal_below: float(o, "heal_below", 0.7),
             slots: LOADOUT_SLOTS.iter().map(|s| (s.to_string(), string(o, s, ""))).collect(),
             pouch: strings(o, "pouch"),
+            deck: Deck::from_value(o.get("deck").unwrap_or(&Value::Null)),
+            poise: int(o, "poise", -1),
+            default_intent: string(o, "default_intent", ""),
+            tactics: strings(o, "tactics"),
         }
     }
 }
@@ -195,6 +241,38 @@ pub struct SkillDef {
     pub disrupt: String,
     pub exploit: Vec<Value>,
     pub exploit_consume: bool,
+    /// RULESET1_INTENT IN4 (rule round_intent): the skill's round intent as written ("" = by kind: `rpgkit_rules::ruleset::kind_intent`).
+    pub round_intent: String,
+    /// IN6: what the skill grants its own user is intent-bound.
+    pub intent_buff: bool,
+    /// RULESET1 T10 (rule ap_cost): the AP base instead of the level; -1 = unset.
+    pub ap_cost: i32,
+    /// RULESET1 T1 (rule enemy_moves): blocks an enemy-side unit spends after the impact (0-2).
+    pub recovery_blocks: i32,
+    /// RULESET1 P4 (rule poise): poise taken from each unit the hit damages.
+    pub stagger: i32,
+    /// P11: poise the user gains while the action winds up.
+    pub windup_poise: i32,
+    /// P12: the user's poise cannot drop below 1 while this action winds up.
+    pub unbreakable: bool,
+    /// P14: a hit landing in a windup breaks the target.
+    pub sure_break: bool,
+    /// RULESET1 A2 (rule pierce): the hit skips the armour term.
+    pub armor_piercing: bool,
+    /// HOOKS1 FM1 (rule forced_move): the push or pull of each unit the skill damaged (None = no forced move).
+    pub forced_move: Option<ForcedMove>,
+    /// HOOKS1 GH2 (rule ground_hazards): the hazard the skill leaves (None = none).
+    pub hazard: Option<HazardPlace>,
+    /// HOOKS1 8.1 (rule triggers): the triggers held while the skill's command runs (start to impact).
+    pub triggers: Vec<TriggerRow>,
+    /// HOOKS1 RD1 (rule triggers): the riders run per unit the skill landed on.
+    pub riders: Vec<Rider>,
+    /// HOOKS1 UM2 (rule unit_meters): the meter changes paid at the command's start.
+    pub meters: Vec<MeterDelta>,
+    /// HOOKS1 HC1 (rule hp_cost): HP paid at the command's start (0 = none).
+    pub hp_cost: i32,
+    /// HOOKS1 IG1 (rule ignore_guard): the hits skip the guard term and P6's guard factor.
+    pub ignore_guard: bool,
     /// Family head id; "" when the skill heads its own family (ContentFactory drops `family == id`).
     pub family: String,
     pub tier: i32,
@@ -247,6 +325,22 @@ impl SkillDef {
             disrupt: string(o, "disrupt", "NONE"),
             exploit: array(o, "exploit").to_vec(),
             exploit_consume: boolean(o, "exploit_consume", false),
+            round_intent: string(o, "round_intent", ""),
+            intent_buff: boolean(o, "intent_buff", false),
+            ap_cost: int(o, "ap_cost", -1),
+            recovery_blocks: int(o, "recovery_blocks", 0),
+            stagger: int(o, "stagger", 0),
+            windup_poise: int(o, "windup_poise", 0),
+            unbreakable: boolean(o, "unbreakable", false),
+            sure_break: boolean(o, "sure_break", false),
+            armor_piercing: boolean(o, "armor_piercing", false),
+            forced_move: obj(o, "forced_move").and_then(ForcedMove::from_obj),
+            hazard: obj(o, "hazard").and_then(HazardPlace::from_obj),
+            triggers: objs(o, "triggers").iter().map(TriggerRow::from_obj).collect(),
+            riders: objs(o, "riders").iter().map(Rider::from_obj).collect(),
+            meters: objs(o, "meters").iter().map(MeterDelta::from_obj).collect(),
+            hp_cost: int(o, "hp_cost", 0),
+            ignore_guard: boolean(o, "ignore_guard", false),
             tier: int(o, "tier", 1),
             raw: o.clone(),
         }
@@ -301,8 +395,19 @@ pub struct ItemDef {
     pub use_reach: i32,
     /// Carry weight (PartyCarry; Item.weight, 1 when unset).
     pub weight: f64,
+    /// RULESET1 K1: the item's family has the engine rule `reach` (the resolved row's `ITEM_REACH_RULE` key, written
+    /// by the loader only for such families); the battle reads it only under the rule `reach`.
+    pub reach_rule: bool,
+    /// HOOKS1 GH2 (rule ground_hazards): the hazard a consumable leaves at use (None = none).
+    pub hazard: Option<HazardPlace>,
     pub raw: Obj,
 }
+
+/// RULESET1 K1: the resolved item row's key that carries its family's engine rule `reach` (set to true only for those
+/// families, so every other row keeps its Godot shape; the writer leaves it out of the stored form).
+pub const ITEM_REACH_RULE: &str = "reach_rule";
+/// RULESET1 K1: the family engine rule that gives a melee weapon its reach.
+pub const REACH_ENGINE_RULE: &str = "reach";
 
 impl ItemDef {
     pub fn from_obj(o: &Obj) -> Self {
@@ -333,6 +438,8 @@ impl ItemDef {
             use_blocks: int(o, "use_blocks", 1),
             use_reach: int(o, "use_reach", -1),
             weight: float(o, "weight", 1.0),
+            reach_rule: boolean(o, ITEM_REACH_RULE, false),
+            hazard: obj(o, "hazard").and_then(HazardPlace::from_obj),
             raw: o.clone(),
         }
     }
@@ -381,10 +488,15 @@ pub struct PassiveDef {
     pub id: String,
     pub name: String,
     pub effects: Vec<Value>,
+    /// RULESET1 9 D3 (rule deck): "" = source-granted, always on; "passive" or "keystone" = applies only while slotted.
+    pub slot: String,
 }
 
 /// The formula input name of the unit level (DERIVE1 4.1; reserved: no row id or constant takes it).
 pub const LEVEL_INPUT: &str = "level";
+/// RULESET1 P1 (tasks 1.7): the formula input of the summed `effective_mitigation` of the unit's worn gear (reserved
+/// like `level`: no row id or constant takes it).
+pub const GEAR_MITIGATION_INPUT: &str = "gear_mitigation";
 
 /// A derived stat's change while a status is active on the unit (DERIVE1 4.1 `status_modifiers`).
 #[derive(Debug, Clone, PartialEq)]
@@ -476,6 +588,14 @@ pub struct Catalog {
     pub derived_stats: IndexMap<String, DerivedStatDef>,
     /// Ruleset rows (RULESET1-R, kind `rulesets`; engine-only), raw: `rpgkit_rules::ruleset::Ruleset` reads them.
     pub rulesets: IndexMap<String, Obj>,
+    /// Portrait cue rows (PORTRAITFX1 5.1, kind `portrait_cues`; engine-only) in file order.
+    pub portrait_cues: Vec<PortraitCue>,
+    /// Ground hazard rows (HOOKS1 GH1, kind `hazards`; engine-only).
+    pub hazards: IndexMap<String, HazardDef>,
+    /// Unit meter rows (HOOKS1 UM1, kind `unit_meters`; engine-only).
+    pub unit_meters: IndexMap<String, UnitMeterDef>,
+    /// Data zone rows (HOOKS1 ZN1, kind `zones`; engine-only; the 8 code zones are not rows).
+    pub zones: IndexMap<String, ZoneDef>,
     skill_index: IndexMap<String, usize>,
     tier_one: IndexMap<String, usize>,
 }
@@ -506,7 +626,7 @@ impl Catalog {
             cat.items.insert(i.id.clone(), i);
         }
         for o in rows("passives") {
-            let p = PassiveDef { id: string(&o, "id", ""), name: string(&o, "name", ""), effects: array(&o, "effects").to_vec() };
+            let p = PassiveDef { id: string(&o, "id", ""), name: string(&o, "name", ""), effects: array(&o, "effects").to_vec(), slot: string(&o, "slot", "") };
             cat.passives.insert(p.id.clone(), p);
         }
         for o in rows("encounters") {
@@ -521,6 +641,10 @@ impl Catalog {
         for d in rows("derived_stats").iter().filter_map(DerivedStatDef::from_obj) {
             cat.derived_stats.insert(d.id.clone(), d);
         }
+        cat.portrait_cues = rows(PORTRAIT_CUES_KIND).iter().map(PortraitCue::from_obj).collect();
+        cat.hazards = rows(HAZARDS_KIND).iter().map(HazardDef::from_obj).map(|h| (h.id.clone(), h)).collect();
+        cat.unit_meters = rows(UNIT_METERS_KIND).iter().map(UnitMeterDef::from_obj).map(|m| (m.id.clone(), m)).collect();
+        cat.zones = rows(ZONES_KIND).iter().map(ZoneDef::from_obj).map(|z| (z.id.clone(), z)).collect();
         cat.skills = rows("skills").iter().map(SkillDef::from_obj).collect();
         cat.index_skills();
         cat
@@ -593,5 +717,681 @@ impl Catalog {
     /// Basic or engine skill: always passes the active-loadout filter.
     pub fn is_always_active(&self, skill_id: &str) -> bool {
         self.skill(skill_id).is_some_and(|s| s.system || self.is_basic_family(s.family_id()))
+    }
+}
+
+// ---- Campaign (CAMPAIGN1 11.1-11.4, kit hook; engine-only, no Godot original) ---------------------------------------
+
+/// CAMPAIGN1 11.2: the world kinds of a campaign (files `meters.json`, `checkpoints.json`, `triggers.json`).
+pub const CAMPAIGN_KINDS: [&str; 3] = ["meters", "checkpoints", "triggers"];
+/// M1: a gauge holds a value in `min..max`; a countdown holds a due time on the travel clock.
+pub const METER_KINDS: [&str; 2] = ["gauge", "countdown"];
+/// M2: the HUD tone of a band.
+pub const METER_TONES: [&str; 4] = ["calm", "warn", "danger", "fatal"];
+/// M5: the crossing direction of a meter rule (`up` the gauge default, `down` the countdown default).
+pub const RULE_DIRS: [&str; 2] = ["up", "down"];
+/// M3: what moves a gauge.
+pub const INPUT_ON: [&str; 3] = ["battle", "day", "leg"];
+/// A settled battle's outcomes (meter inputs, triggers).
+pub const OUTCOMES: [&str; 3] = ["won", "lost", "fled"];
+/// T1: the cause a trigger is checked after.
+pub const TRIGGER_ON: [&str; 5] = ["any", "day", "battle", "enter", "act"];
+/// F1: what an `end` effect ends the run as.
+pub const END_KINDS: [&str; 2] = ["fail", "bad_end"];
+/// R1: where the party may rest.
+pub const REST_WHERE: [&str; 3] = ["nodes", "rest_places", "none"];
+/// R4: what a lost battle does.
+pub const DEFEAT_MODES: [&str; 2] = ["wake", "retreat"];
+/// 11.3: the campaign effect kinds and their keys besides `effect` (dialogue choices, meter rules, checkpoints and
+/// triggers take them).
+pub const CAMPAIGN_EFFECTS: [(&str, &[&str]); 9] = [
+    ("meter_add", &["meter", "delta"]),
+    ("meter_set", &["meter", "value"]),
+    ("meter_show", &["meter", "visible"]),
+    ("clock_start", &["meter", "days"]),
+    ("clock_set", &["meter", "days", "label"]),
+    ("clock_stop", &["meter"]),
+    ("set_act", &["act"]),
+    ("rest", &[]),
+    ("end", &["kind", "card", "text"]),
+];
+/// 11.4: flag-key prefixes the campaign answers (read-only: `set_flag` and `add_flag` refuse them in every world).
+pub const RESERVED_PREFIXES: [&str; 3] = ["meter.", "campaign.", "roster."];
+/// 11.4: the read keys besides `meter.<id>`, `meter.<id>.band` and `meter.<id>.running`.
+pub const CAMPAIGN_READ_KEYS: [&str; 3] = ["campaign.act", "campaign.day", "roster.living"];
+/// 11.4: the read-key suffixes after `meter.<id>`.
+pub const METER_READ_SUFFIXES: [&str; 2] = ["band", "running"];
+
+/// Whether `key` starts with a reserved prefix (11.4).
+pub fn reserved_key(key: &str) -> bool {
+    RESERVED_PREFIXES.iter().any(|p| key.starts_with(p))
+}
+
+/// The meter id a read key names (`meter.<id>`, `meter.<id>.band`, `meter.<id>.running`), else None.
+pub fn meter_of_read_key(key: &str) -> Option<&str> {
+    let rest = key.strip_prefix("meter.")?;
+    match rest.split_once('.') {
+        None => Some(rest),
+        Some((id, suffix)) if METER_READ_SUFFIXES.contains(&suffix) => Some(id),
+        Some(_) => None,
+    }
+}
+
+/// The manifest's `campaign` block (11.1): `on` once the block holds anything (X1).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CampaignManifest {
+    pub on: bool,
+    pub start_act: i32,
+    pub act_saves: bool,
+}
+
+impl CampaignManifest {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self { on: !o.is_empty(), start_act: int(o, "start_act", 0), act_saves: boolean(o, "act_saves", true) }
+    }
+}
+
+/// One purse counter's names (P1): the HUD name, its short form, icon and tip.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PurseCounter {
+    pub name: String,
+    pub short: String,
+    pub icon: String,
+    pub tip: String,
+}
+
+impl PurseCounter {
+    fn from_obj(o: &Obj, name: &str, icon: &str, tip: &str) -> Self {
+        let name = string(o, "name", name);
+        Self { short: string(o, "short", &name), icon: string(o, "icon", icon), tip: string(o, "tip", tip), name }
+    }
+}
+
+/// The manifest's `purse` block (P1-P3): the currency's and the upkeep's names, the upkeep spent per day and what
+/// zero upkeep does (`road_pct` multiplies a leg's road-fight chance, `start_ap` changes each party unit's battle AP).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Purse {
+    pub currency: PurseCounter,
+    pub upkeep: PurseCounter,
+    pub per_day: i32,
+    pub road_pct: i32,
+    pub start_ap: i32,
+}
+
+/// The purse defaults: today's HUD names and tips, x1.5 road fights at zero supplies (`travel.rs` STARVED_PCT).
+pub const CURRENCY_NAME: &str = "Gold";
+pub const CURRENCY_ICON: &str = "ui/hud/gold.png";
+pub const CURRENCY_TIP: &str = "Earned from fights, chests and quests; spent in shops.";
+pub const UPKEEP_NAME: &str = "Supplies";
+pub const UPKEEP_ICON: &str = "ui/hud/supplies.png";
+pub const UPKEEP_TIP: &str = "Food for the road: each day of travel eats some, and so does making camp.";
+
+impl Purse {
+    pub fn from_obj(o: &Obj) -> Self {
+        let empty = Obj::new();
+        let up = obj(o, "upkeep").unwrap_or(&empty);
+        let zero = obj(up, "at_zero").unwrap_or(&empty);
+        Self {
+            currency: PurseCounter::from_obj(obj(o, "currency").unwrap_or(&empty), CURRENCY_NAME, CURRENCY_ICON, CURRENCY_TIP),
+            upkeep: PurseCounter::from_obj(up, UPKEEP_NAME, UPKEEP_ICON, UPKEEP_TIP),
+            per_day: int(up, "per_day", 1),
+            road_pct: int(zero, "road_pct", 150),
+            start_ap: int(zero, "start_ap", 0),
+        }
+    }
+}
+
+/// The manifest's `rest` block (R1); the defaults are today's Camp and free rest-place heal.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RestRule {
+    pub days: i32,
+    pub cost: i32,
+    /// One of REST_WHERE.
+    pub place: String,
+    pub on_enter: bool,
+    pub needs_upkeep: bool,
+}
+
+impl RestRule {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self { days: int(o, "days", 0), cost: int(o, "cost", 3), place: string(o, "where", "nodes"), on_enter: boolean(o, "on_enter", true), needs_upkeep: boolean(o, "needs_upkeep", true) }
+    }
+}
+
+/// The manifest's `defeat` block (R4); the default is today's wake.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefeatRule {
+    /// One of DEFEAT_MODES.
+    pub mode: String,
+    pub to: String,
+    pub days: i32,
+}
+
+impl DefeatRule {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self { mode: string(o, "mode", "wake"), to: string(o, "to", ""), days: int(o, "days", 0) }
+    }
+}
+
+// ---- Story (STORYUI1 4.1-4.8, kit hook; engine-only, no Godot original) ---------------------------------------------
+
+/// STORYUI1 4.1, 4.3, 4.4: the world kinds of the story layer (files `vignettes.json`, `sequences.json`, `boards.json`).
+pub const STORY_KINDS: [&str; 3] = ["vignettes", "sequences", "boards"];
+/// 4.2: a card's style.
+pub const CARD_STYLES: [&str; 4] = ["image", "text", "title", "line"];
+/// 4.2: the keys a card takes (any other key is refused); PORTRAITFX1 7: a `line` card's `expression`.
+pub const CARD_KEYS: [&str; 15] = ["style", "image", "top", "bottom", "ash", "title", "subtitle", "text", "speaker", "fade_in_ms", "fade_out_ms", "hold_ms", "cue", "when", "expression"];
+/// 4.1: a vignette holds 1..CARDS_MAX cards.
+pub const CARDS_MAX: usize = 24;
+/// 4.2: the longest card title, subtitle and text (characters).
+pub const CARD_TITLE_MAX: usize = 48;
+pub const CARD_SUBTITLE_MAX: usize = 80;
+pub const CARD_TEXT_MAX: usize = 360;
+/// 4.2: the card timings (ms): fades 0..FADE_MS_MAX, holds 0..HOLD_MS_MAX (0 waits for the player).
+pub const FADE_MS_MAX: i64 = 3000;
+pub const HOLD_MS_MAX: i64 = 20000;
+pub const FADE_IN_MS: i64 = 600;
+pub const FADE_OUT_MS: i64 = 400;
+/// 4.1: the default frame (letterbox and fade) colour, also a card backdrop's default top.
+pub const FRAME_COLOUR: &str = "#0a0b10";
+/// 4.1: a vignette's `music` that means silence ("" keeps the music playing; anything else is a track).
+pub const MUSIC_NONE: &str = "none";
+/// 4.1: a vignette's music track ends with this (a path under the asset layers' `audio/`).
+pub const MUSIC_EXT: &str = ".ogg";
+/// 4.1, 4.2: the asset folder music tracks and card cues sit under.
+pub const AUDIO_DIR: &str = "audio/";
+/// W3: the token kinds of a card text, `{flag:KEY}` (the flag's value as text) and `{member:KEY}` (the name of the
+/// member or character whose id the flag holds).
+pub const TOKEN_KINDS: [&str; 2] = ["flag", "member"];
+/// 4.3: a sequence holds 1..STEPS_MAX steps; an effects step 1..STEP_EFFECTS_MAX effects.
+pub const STEPS_MAX: usize = 40;
+pub const STEP_EFFECTS_MAX: usize = 8;
+/// 4.3: the step kinds.
+pub const STEP_KINDS: [&str; 5] = ["vignette", "fight", "effects", "enter", "end"];
+/// 4.3: the step kinds that may only be the last step.
+pub const LAST_STEP_KINDS: [&str; 2] = ["enter", "end"];
+/// 4.3, Q5: what a lost or fled story fight does (`abort` the default).
+pub const FIGHT_OUTCOMES: [&str; 3] = ["retry", "abort", "continue"];
+/// 4.3, Q7: where an `end` step goes (`map` the default).
+pub const END_TO: [&str; 2] = ["map", "menu"];
+/// 4.7: the story effect kinds and their keys besides `effect`, all three in dialogue choices; meter rules,
+/// checkpoints and triggers take `vignette` and `sequence`; a sequence's effects step takes `vignette` only.
+pub const STORY_EFFECTS: [(&str, &[&str]); 3] = [("vignette", &["vignette"]), ("sequence", &["sequence"]), ("open_board", &["board"])];
+/// 4.3: the effects a sequence's `effects` step never takes (they open a screen or start a sequence).
+pub const SEQUENCE_BANNED_EFFECTS: [&str; 5] = ["fight", "turn_in", "open_shop", "open_board", "sequence"];
+/// 4.5: a board quest's section.
+pub const TRACKS: [&str; 2] = ["main", "side"];
+/// 4.5: the longest Closed line of a board quest; 4.4: the longest board intro.
+pub const CLOSED_TEXT_MAX: usize = 80;
+pub const BOARD_INTRO_MAX: usize = 160;
+/// 4.7: the service line id of the board choice.
+pub const BOARD_SERVICE: &str = "board";
+
+/// The keys a step of `kind` takes (`kind` included; an unknown kind takes only `kind`).
+pub fn step_keys(kind: &str) -> &'static [&'static str] {
+    match kind {
+        "vignette" => &["kind", "vignette"],
+        "fight" => &["kind", "encounter", "on_lost", "on_fled"],
+        "effects" => &["kind", "effects"],
+        "enter" => &["kind", "location", "anchor"],
+        "end" => &["kind", "to"],
+        _ => &["kind"],
+    }
+}
+
+/// W3: a card token's kind and key (`flag:act` -> ("flag", "act")), None for a token that is not `kind:key`.
+pub fn split_token(token: &str) -> Option<(&str, &str)> {
+    token.split_once(':')
+}
+
+/// B9: the flag the first open of board `board` sets (true).
+pub fn board_opened_flag(board: &str) -> String {
+    format!("board.{board}.opened")
+}
+
+/// One step of a story sequence (4.3), read with its defaults.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Step {
+    Vignette { vignette: String },
+    /// `on_lost` and `on_fled`: one of FIGHT_OUTCOMES.
+    Fight { encounter: String, on_lost: String, on_fled: String },
+    Effects { effects: Vec<Value> },
+    /// `anchor` "" = the location's entry.
+    Enter { location: String, anchor: String },
+    /// `to`: one of END_TO.
+    End { to: String },
+}
+
+impl Step {
+    /// The step `o` holds; None for an unknown kind.
+    pub fn from_obj(o: &Obj) -> Option<Self> {
+        Some(match string(o, "kind", "").as_str() {
+            "vignette" => Step::Vignette { vignette: string(o, "vignette", "") },
+            "fight" => Step::Fight { encounter: string(o, "encounter", ""), on_lost: string(o, "on_lost", "abort"), on_fled: string(o, "on_fled", "abort") },
+            "effects" => Step::Effects { effects: array(o, "effects").to_vec() },
+            "enter" => Step::Enter { location: string(o, "location", ""), anchor: string(o, "anchor", "") },
+            "end" => Step::End { to: string(o, "to", "map") },
+            _ => return None,
+        })
+    }
+}
+
+// ---- Portrait cues (PORTRAITFX1 5.1, 5.4, kit hook; engine-only, no Godot original) ---------------------------------
+
+/// 5.1: the catalog kind of the cue rows (file `data/catalog/portrait_cues.json`, read beside the catalog kinds).
+pub const PORTRAIT_CUES_KIND: &str = "portrait_cues";
+/// 5.1: what a row answers: `event` rows react to a battle step event; the others are state rows that hold while
+/// their match is true.
+pub const PORTRAIT_TRIGGERS: [&str; 6] = ["event", "status", "condition", "hp", "derived", "down"];
+/// 5.1: the trigger reserved for unit-scope meters (refused until CAMPAIGN1-DOC defines them).
+pub const PORTRAIT_METER_TRIGGER: &str = "meter";
+/// 5.1, 5.3: the battle step events an `event` row matches.
+pub const PORTRAIT_EVENTS: [&str; 5] = ["hit", "crit", "guard_hit", "heal", "break"];
+/// 5.1: the kit's copy of the engine's portrait effect names (`aegis_ui::portrait_fx::EFFECTS`, same order; the kit
+/// crates do not depend on the UI, so a game test keeps the two equal).
+pub const PORTRAIT_EFFECTS: [&str; 12] = ["flash", "jolt", "desaturate", "tint", "fade", "still", "glow", "veins", "eye_glow", "ash", "smoke", "face"];
+/// 5.1: the jolt presets (`aegis_ui::portrait_fx::PORTRAIT_JOLTS`).
+pub const PORTRAIT_JOLTS: [&str; 2] = ["hit", "crit"];
+/// 5.1: the effects whose colour a row may set.
+pub const PORTRAIT_COLOR_EFFECTS: [&str; 7] = ["flash", "tint", "glow", "veins", "eye_glow", "ash", "smoke"];
+/// 5.1, 6.2: the screens that draw portraits (a row's `surfaces`; none listed = all).
+pub const PORTRAIT_SURFACES: [&str; 4] = ["dialogue", "roster", "panel", "timeline"];
+/// 5.4 (PQ2): the expression names of a portrait's face frames (`portraits/<folder>/faces/<id>/<expression>.png`), a
+/// `face` row's `expression`, and a dialogue node's or `line` card's `expression` ("" = neutral).
+pub const EXPRESSIONS: [&str; 4] = ["neutral", "hurt", "angry", "afraid"];
+/// ROSTER1 W1: the member conditions the kit knows (a cue row naming another condition warns).
+pub const MEMBER_CONDITIONS: [&str; 1] = ["wounded"];
+
+/// A portrait cue row (PORTRAITFX1 5.1, kind `portrait_cues`): a trigger and its match, the effect it fires or holds
+/// and the effect's numbers, and where it applies. Read from a loaded (checked) row; the defaults are the schema's.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PortraitCue {
+    pub id: String,
+    /// One of PORTRAIT_TRIGGERS.
+    pub trigger: String,
+    /// `event` rows: one of PORTRAIT_EVENTS.
+    pub event: String,
+    /// `status` rows: a status id.
+    pub status: String,
+    /// `condition` rows: a member condition id.
+    pub condition: String,
+    /// `derived` rows: a derived stat id.
+    pub stat: String,
+    /// `hp`: HP percent of the max (strictly below); `derived`: an absolute value (strictly below); 0 = not used.
+    pub below: i32,
+    /// `derived`: the drop in percent from the value without statuses (at least); 0 = not used.
+    pub drop_pct: i32,
+    /// One of PORTRAIT_EFFECTS.
+    pub effect: String,
+    pub intensity: f64,
+    /// Event rows: how long the effect runs (0 = the jolt preset's own); state rows: 0.
+    pub ms: i32,
+    /// `jolt`: one of PORTRAIT_JOLTS.
+    pub preset: String,
+    /// "" (the effect's default) or `#rrggbb`.
+    pub color: String,
+    /// `face`: one of EXPRESSIONS.
+    pub expression: String,
+    /// `face`: the highest wins.
+    pub priority: i32,
+    /// None listed = every surface.
+    pub surfaces: Vec<String>,
+    /// None listed = every ruleset.
+    pub rulesets: Vec<String>,
+}
+
+impl PortraitCue {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self {
+            id: string(o, "id", ""),
+            trigger: string(o, "trigger", "event"),
+            event: string(o, "event", ""),
+            status: string(o, "status", ""),
+            condition: string(o, "condition", ""),
+            stat: string(o, "stat", ""),
+            below: int(o, "below", 0),
+            drop_pct: int(o, "drop_pct", 0),
+            effect: string(o, "effect", "flash"),
+            intensity: float(o, "intensity", 1.0),
+            ms: int(o, "ms", 0),
+            preset: string(o, "preset", ""),
+            color: string(o, "color", ""),
+            expression: string(o, "expression", ""),
+            priority: int(o, "priority", 50),
+            surfaces: strings(o, "surfaces"),
+            rulesets: strings(o, "rulesets"),
+        }
+    }
+
+    /// An `event` row (fired by a step event); every other trigger holds a state.
+    pub fn is_event(&self) -> bool {
+        self.trigger == "event"
+    }
+
+    /// Whether the row applies on `surface` (none listed = every surface).
+    pub fn on_surface(&self, surface: &str) -> bool {
+        self.surfaces.is_empty() || self.surfaces.iter().any(|s| s == surface)
+    }
+
+    /// Whether the row applies under `ruleset` (none listed = every ruleset).
+    pub fn in_ruleset(&self, ruleset: &str) -> bool {
+        self.rulesets.is_empty() || self.rulesets.iter().any(|r| r == ruleset)
+    }
+}
+
+// ---- Combat hooks (HOOKS1_TASKS 1.1-1.6, kit hook; engine-only, no Godot original) ---------------------------------
+
+/// GH1: the catalog kind of the ground hazard rows (file `data/catalog/hazards.json`).
+pub const HAZARDS_KIND: &str = "hazards";
+/// UM1: the catalog kind of the unit meter rows (file `data/catalog/unit_meters.json`).
+pub const UNIT_METERS_KIND: &str = "unit_meters";
+/// ZN1: the catalog kind of the data zone rows (file `data/catalog/zones.json`).
+pub const ZONES_KIND: &str = "zones";
+
+/// FM1: a forced move's kind, origin and condition.
+pub const FORCED_KINDS: [&str; 2] = ["push", "pull"];
+pub const FORCED_FROM: [&str; 2] = ["source", "center"];
+pub const FORCED_WHEN: [&str; 3] = ["always", "moved", "windup"];
+/// FM1: the keys of a skill's `forced_move`.
+pub const FORCED_MOVE_KEYS: [&str; 8] = ["kind", "tiles", "from", "when", "stop_moves", "collide_mult", "collide_stagger", "collide_break"];
+/// FM5: a passive or item `forced_move` effect's `immune` values ("" = none).
+pub const FORCED_IMMUNE: [&str; 3] = ["", "always", "guarding"];
+
+/// GH2: the shapes a placed hazard covers (SKILL = the skill's own area cells; the others as `area`, NONE one tile).
+pub const HAZARD_SHAPES: [&str; 6] = ["SKILL", "NONE", "PLUS", "BURST", "LINE", "SWEEP"];
+/// GH2: where a hazard is placed.
+pub const HAZARD_AT: [&str; 2] = ["target", "self"];
+/// GH2: the keys of a skill's or item's `hazard`.
+pub const HAZARD_PLACE_KEYS: [&str; 4] = ["id", "shape", "at", "rounds"];
+/// GH1: when a hazard row acts, and whom it affects (relative to the placer).
+pub const HAZARD_ON: [&str; 3] = ["enter", "round_end", "both"];
+pub const HAZARD_AFFECTS: [&str; 3] = ["all", "foes", "friends"];
+
+/// 8.1: the events a trigger answers.
+pub const TRIGGER_EVENTS: [&str; 15] = [
+    "hit_taken", "guarded_hit", "ally_hit", "hit_dealt", "kill", "ally_downed", "broken", "break_dealt", "evaded", "heal_given", "cleanse_given", "hp_below", "guard_start", "round_start", "round_end",
+];
+/// 1.1: the events a skill's own `triggers` answer (while its command runs).
+pub const SKILL_TRIGGER_EVENTS: [&str; 5] = ["hit_taken", "guarded_hit", "ally_hit", "evaded", "broken"];
+/// 8.2: the events whose `when` takes `range` (a friend within range).
+pub const ALLY_EVENTS: [&str; 2] = ["ally_hit", "ally_downed"];
+/// 8.1: how often a trigger fires (`round` the default).
+pub const TRIGGER_LIMITS: [&str; 3] = ["round", "battle", "none"];
+/// 1.3: the keys of a trigger row (a passive or item effect adds `type`; a rider takes `when` and `effects` only).
+pub const TRIGGER_KEYS: [&str; 4] = ["on", "when", "effects", "limit"];
+pub const RIDER_KEYS: [&str; 2] = ["when", "effects"];
+/// 8.2: the condition keys of a trigger's or rider's `when`.
+pub const WHEN_KEYS: [&str; 10] = ["pct", "range", "ranged", "melee", "skills", "other_hp_below", "other_broken", "other_status", "intent", "meter"];
+/// 8.2: the trigger effects and their keys besides `type` (`to`: self or other, where the effect takes it).
+pub const TRIGGER_EFFECTS: [(&str, &[&str]); 14] = [
+    ("ap", &["value", "to"]),
+    ("grant", &["status", "rounds", "magnitude", "until", "to"]),
+    ("inflict", &["status", "potency", "rounds", "magnitude", "to"]),
+    ("guard", &["mitigation", "blocks", "to"]),
+    ("redirect", &["pct"]),
+    ("move", &["kind", "tiles", "to"]),
+    ("meter", &["meter", "delta", "to"]),
+    ("crit", &["value", "to"]),
+    ("resist", &["status", "value", "to"]),
+    ("stagger", &["value", "to"]),
+    ("damage", &["value", "to"]),
+    ("reveal", &["rounds"]),
+    ("end_guard", &["to"]),
+    ("stop_moves", &["to"]),
+];
+/// 8.2: whom an effect acts on.
+pub const EFFECT_TO: [&str; 2] = ["self", "other"];
+/// 8.2: a `grant` effect's `until` ("" = its rounds).
+pub const GRANT_UNTIL: [&str; 2] = ["", "guard_end"];
+/// UM5: the effect a meter rule adds to the trigger effects, and its keys besides `type`.
+pub const METER_SET: &str = "meter_set";
+pub const METER_SET_KEYS: [&str; 2] = ["meter", "value"];
+
+/// AT1: the unit `target_pref` values (HOOKS1 adds SOFTEST and TOUGHEST, read under the rule ai_tactics).
+pub const TARGET_PREFS: [&str; 5] = ["ROLE", "NEAREST", "WEAKEST", "SOFTEST", "TOUGHEST"];
+/// AT2: the AI tactics a unit or a phase `ai` effect may list.
+pub const TACTICS: [&str; 3] = ["brace_after_hit", "hold_line", "flush_cover"];
+
+/// UM1: how a meter is shown, and the most pips a `pips` meter draws.
+pub const METER_SHOW: [&str; 3] = ["pips", "bar", "hidden"];
+pub const METER_PIPS_MAX: i32 = 10;
+/// UM4: the passive effect types a meter band's `effects` take (`crit` as the trigger effect).
+pub const BAND_EFFECTS: [&str; 6] = ["stat", "resist", "stagger_taken", "skill_potency", "status_potency", "crit"];
+
+/// AH2: the directions of an arena hazard's push.
+pub const ARENA_DIRS: [&str; 4] = ["east", "west", "north", "south"];
+/// AH1: the keys of an arena hazard row and of its `effect`.
+pub const ARENA_HAZARD_KEYS: [&str; 9] = ["id", "name", "cells", "columns", "rows", "rounds", "blocks", "effect", "line"];
+pub const ARENA_EFFECT_KEYS: [&str; 8] = ["damage", "damage_pct", "stagger", "status", "potency", "magnitude", "status_rounds", "push"];
+
+/// DU1: the phase effect that changes a unit's deck mid-battle (rule deck), and its keys.
+pub const DECK_EFFECT: &str = "deck";
+pub const DECK_EFFECT_KEYS: [&str; 4] = ["type", "unit", "add", "order"];
+
+/// CN1: the keys of a world manifest's `classes` entry.
+pub const CLASS_OVERLAY_KEYS: [&str; 3] = ["name", "description", "skill_path"];
+
+/// The objects of the list `key` (entries that are not objects are left out).
+fn objs(o: &Obj, key: &str) -> Vec<Obj> {
+    array(o, key).iter().filter_map(|v| v.as_object().cloned()).collect()
+}
+
+/// FM1: a skill's forced move (`forced_move`), read with its defaults.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ForcedMove {
+    /// One of FORCED_KINDS.
+    pub kind: String,
+    pub tiles: i32,
+    /// One of FORCED_FROM.
+    pub from: String,
+    /// One of FORCED_WHEN.
+    pub when: String,
+    pub stop_moves: bool,
+    pub collide_mult: f64,
+    pub collide_stagger: i32,
+    pub collide_break: bool,
+}
+
+impl ForcedMove {
+    /// None for an empty object (no forced move).
+    pub fn from_obj(o: &Obj) -> Option<Self> {
+        if o.is_empty() {
+            return None;
+        }
+        Some(Self {
+            kind: string(o, "kind", "push"),
+            tiles: int(o, "tiles", 1),
+            from: string(o, "from", "source"),
+            when: string(o, "when", "always"),
+            stop_moves: boolean(o, "stop_moves", false),
+            collide_mult: float(o, "collide_mult", 0.0),
+            collide_stagger: int(o, "collide_stagger", 0),
+            collide_break: boolean(o, "collide_break", false),
+        })
+    }
+}
+
+/// GH2: where a skill or item places a hazard (`hazard`), read with its defaults.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HazardPlace {
+    /// A `hazards` row id.
+    pub id: String,
+    /// One of HAZARD_SHAPES.
+    pub shape: String,
+    /// One of HAZARD_AT.
+    pub at: String,
+    /// 0 = the row's `duration`.
+    pub rounds: i32,
+}
+
+impl HazardPlace {
+    /// None for an empty object (no hazard).
+    pub fn from_obj(o: &Obj) -> Option<Self> {
+        if o.is_empty() {
+            return None;
+        }
+        Some(Self { id: string(o, "id", ""), shape: string(o, "shape", "NONE"), at: string(o, "at", "target"), rounds: int(o, "rounds", 0) })
+    }
+}
+
+/// 1.3: a trigger row (a skill's `triggers`, a passive or item `trigger` effect): the event, the conditions and the
+/// effects (raw; HOOKS1-E reads them), how often it fires.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TriggerRow {
+    /// One of TRIGGER_EVENTS.
+    pub on: String,
+    pub when: Obj,
+    pub effects: Vec<Obj>,
+    /// One of TRIGGER_LIMITS.
+    pub limit: String,
+}
+
+impl TriggerRow {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self { on: string(o, "on", ""), when: obj(o, "when").cloned().unwrap_or_default(), effects: objs(o, "effects"), limit: string(o, "limit", "round") }
+    }
+}
+
+/// RD1: a skill's rider: conditions and effects run per unit the skill landed on (`to` defaults to that unit).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Rider {
+    pub when: Obj,
+    pub effects: Vec<Obj>,
+}
+
+impl Rider {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self { when: obj(o, "when").cloned().unwrap_or_default(), effects: objs(o, "effects") }
+    }
+}
+
+/// UM2: a skill's meter change (`meters` entry).
+#[derive(Debug, Clone, PartialEq)]
+pub struct MeterDelta {
+    pub meter: String,
+    pub delta: i32,
+}
+
+impl MeterDelta {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self { meter: string(o, "meter", ""), delta: int(o, "delta", 0) }
+    }
+}
+
+/// GH1: a ground hazard row (kind `hazards`): a timed tile overlay with terrain-like numbers.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HazardDef {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    /// One of HAZARD_ON.
+    pub on: String,
+    /// A debuff id ("" = none) and its roll.
+    pub status: String,
+    pub potency: i32,
+    pub magnitude: i32,
+    pub status_rounds: i32,
+    /// Flat damage, through guard, not armour.
+    pub damage: i32,
+    pub cover_guard: f64,
+    /// Added to the terrain's move cost.
+    pub move_cost: i32,
+    /// One of HAZARD_AFFECTS.
+    pub affects: String,
+    pub trap: bool,
+    pub hidden: bool,
+    pub stop_moves: bool,
+    /// Rounds it lasts when the placement sets none.
+    pub duration: i32,
+    /// `#rrggbb`.
+    pub tint: String,
+    pub glyph: String,
+}
+
+impl HazardDef {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self {
+            id: string(o, "id", ""),
+            name: string(o, "name", "New Hazard"),
+            description: string(o, "description", ""),
+            on: string(o, "on", "both"),
+            status: string(o, "status", ""),
+            potency: int(o, "potency", 100),
+            magnitude: int(o, "magnitude", 0),
+            status_rounds: int(o, "status_rounds", 1),
+            damage: int(o, "damage", 0),
+            cover_guard: float(o, "cover_guard", 0.0),
+            move_cost: int(o, "move_cost", 0),
+            affects: string(o, "affects", "all"),
+            trap: boolean(o, "trap", false),
+            hidden: boolean(o, "hidden", false),
+            stop_moves: boolean(o, "stop_moves", false),
+            duration: int(o, "duration", 2),
+            tint: string(o, "tint", "#808080"),
+            glyph: string(o, "glyph", "*"),
+        }
+    }
+}
+
+/// UM1: a unit meter row (kind `unit_meters`): its range and start, how it shows, its decay, bands and rules (raw;
+/// HOOKS1-M reads them) and the meter skills it opens.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnitMeterDef {
+    pub id: String,
+    pub name: String,
+    pub short: String,
+    pub description: String,
+    pub min: i32,
+    pub max: i32,
+    pub start: i32,
+    /// One of METER_SHOW.
+    pub show: String,
+    pub decay: Vec<Obj>,
+    pub bands: Vec<Obj>,
+    pub rules: Vec<Obj>,
+    pub skills: Vec<String>,
+}
+
+impl UnitMeterDef {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self {
+            id: string(o, "id", ""),
+            name: string(o, "name", "New Meter"),
+            short: string(o, "short", ""),
+            description: string(o, "description", ""),
+            min: int(o, "min", 0),
+            max: int(o, "max", 10),
+            start: int(o, "start", 0),
+            show: string(o, "show", "pips"),
+            decay: objs(o, "decay"),
+            bands: objs(o, "bands"),
+            rules: objs(o, "rules"),
+            skills: strings(o, "skills"),
+        }
+    }
+}
+
+/// ZN1: a data zone row (kind `zones`): its layout (empty = 9 rows of floor), backdrop asset key ("" =
+/// `backgrounds/battle/<id>.png`) and the terrain of its fallback gradient.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ZoneDef {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub rows: Vec<String>,
+    pub backdrop: String,
+    pub ground: String,
+}
+
+impl ZoneDef {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self {
+            id: string(o, "id", ""),
+            name: string(o, "name", "New Zone"),
+            description: string(o, "description", ""),
+            rows: strings(o, "rows"),
+            backdrop: string(o, "backdrop", ""),
+            ground: string(o, "ground", "floor"),
+        }
     }
 }

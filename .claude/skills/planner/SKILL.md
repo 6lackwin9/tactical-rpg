@@ -21,6 +21,8 @@ You are the planner and orchestrator. Agents cannot message each other; everythi
 | review | `change-reviewer` | read-only | - |
 | cleanup | `housekeeper` | `docs/specs/CLEANUP.md` | TASKS, ROADMAP, HISTORY, code, data, tests, tools |
 
+Logic lane scope (decision "Logic lane scope", user 2026-10-27): dispatch `logic-builder` only for a new system or module, or a change across several crates or more than about five files, one slice per run; do smaller logic (fixes, review follow-ups, `tools/**` scripts, flag flips, single-crate changes) yourself in this session with the skills `engine-checklist`, `rust-conventions`, `patch-and-seed` and `known-issues`, in the task's worktree, and still run `change-reviewer` before the commit.
+
 Docs written in the main checkout by a design or cleanup agent are committed by the planner right after that run (before any merge), so `main` never carries another lane's half-finished edits. If the custom agent types are not yet callable (agent files added this session), run the same instructions through a general-purpose agent; this is the only exception to the cloud rule that lane work uses the six repo agents (`docs/workflow/cloud.md` "Lanes inside an area thread").
 
 ## 1. Plan (no code changes)

@@ -135,7 +135,7 @@ asset preferences.
 | --- | --- |
 | Human bodies (founders, guards, inquisitors) | The rig: kit class bodies with palettes and named variants (SPRITE2) |
 | Aberrations and large bosses (the Amalgam, Act 2-3 horrors) | The image API, asked each time (what, how many, which model), or a future rig for non-human bodies |
-| Portraits | The ART2 pipeline (source art through `pixelize.py`, 96 px grid, 4 shades per family); new characters get a new generation, asked first |
+| Portraits | The ART2 pipeline (source art through `pixelize.py`, 120 px grid since PIXEL2 (was 96), 4 shades per family, accent families and a silhouette rim); new characters get a new generation, asked first |
 | Tiles, props, backdrops | Code first (`gen_art.py`), image-API sheets only when asked |
 
 ## 8. Audio

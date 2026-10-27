@@ -165,6 +165,8 @@ impl Data {
                 "turn_in" => "We finished: {quest}.",
                 "shop" => "Show me your wares.",
                 "farewell" => "Farewell.",
+                // STORYUI1 4.7 (no Godot line)
+                "board" => "Show me the board.",
                 _ => "",
             }
             .into(),

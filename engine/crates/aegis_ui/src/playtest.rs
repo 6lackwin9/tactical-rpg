@@ -27,14 +27,47 @@ pub const ERRORS_MAX: usize = 500;
 /// Errors reported from anywhere (a panic hook, code that hits a problem), drained into the trail each frame.
 static ERRORS: Mutex<Vec<Value>> = Mutex::new(Vec::new());
 
-/// Tests that report into or drain the shared queues hold this lock (the lib tests run in parallel).
+/// Tests that read or drain the shared queues take this guard (the lib tests run in parallel). It holds a lock, and
+/// while held only its own thread's reports reach the queues: any other test (art loading, a panic) that reports
+/// without the guard is ignored, so a trail never sees an event from a neighbouring test.
 #[cfg(test)]
-pub(crate) static TEST_QUEUES: Mutex<()> = Mutex::new(());
+pub(crate) struct TestQueues(#[allow(dead_code)] std::sync::MutexGuard<'static, ()>);
+
+#[cfg(test)]
+static TEST_QUEUES_LOCK: Mutex<()> = Mutex::new(());
+
+#[cfg(test)]
+thread_local! {
+    static OWNS_QUEUES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(crate) fn test_queues() -> TestQueues {
+    let guard = TEST_QUEUES_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    OWNS_QUEUES.with(|o| o.set(true));
+    TestQueues(guard)
+}
+
+#[cfg(test)]
+impl Drop for TestQueues {
+    fn drop(&mut self) {
+        OWNS_QUEUES.with(|o| o.set(false));
+    }
+}
+
+/// True when this report may enter the shared queues (always outside tests).
+fn may_report() -> bool {
+    #[cfg(test)]
+    if !OWNS_QUEUES.with(|o| o.get()) {
+        return false;
+    }
+    true
+}
 
 /// Reports an error or warning to the playtest trail (`level`: error, warning, panic; `place`: "file:line" or "").
 /// A panic that ends the process (on the event loop) is reported but never written: the next frame never comes.
 pub fn report_error(level: &str, msg: &str, place: &str) {
-    if !RECORDING.load(Ordering::Relaxed) {
+    if !RECORDING.load(Ordering::Relaxed) || !may_report() {
         return;
     }
     if let Ok(mut q) = ERRORS.lock() {
@@ -49,7 +82,7 @@ static ASSETS: Mutex<(Vec<String>, Vec<Value>)> = Mutex::new((Vec::new(), Vec::n
 
 /// Reports art that fell back (`source`: missing_file or load_failed), once per category / id / variant / source.
 pub fn report_asset(category: &str, id: &str, variant: &str, source: &str) {
-    if !RECORDING.load(Ordering::Relaxed) {
+    if !RECORDING.load(Ordering::Relaxed) || !may_report() {
         return;
     }
     let key = format!("{category}/{id}/{variant}/{source}");
@@ -290,7 +323,7 @@ mod tests {
 
     #[test]
     fn one_recording_per_run_keeps_every_session_and_saves() {
-        let _queues = TEST_QUEUES.lock().unwrap_or_else(|e| e.into_inner());
+        let _queues = test_queues();
         let dir = std::env::temp_dir().join(format!("aegis_hub_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut hub = Playtests::new(dir.clone(), true, json!({"total": "abc"}));

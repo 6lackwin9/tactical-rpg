@@ -2,6 +2,8 @@
 //! body, portrait, item icon, skill icon, status icon, tile set, background and UI file an entry shows, as relative
 //! paths or body keys tried in order. The RPG chains live in the game until a second game needs them (SPLIT1
 //! principle 2). Pure: they read data entries; the screens and the checks resolve them against the layers.
+//! PORTRAITFX1 5.4: the expression frames of a unique portrait (`face_chain`) and the sidecars a found portrait reads
+//! (`face_sidecars`).
 
 use aegis_core::json::{self, Dict};
 use rpgkit_data::ItemDef;
@@ -188,6 +190,44 @@ pub fn portrait_chain(tier: &str, id: &str, body: &str) -> Vec<String> {
     let base = format!("portraits/common/{}_base.png", split_body(body).0);
     if !out.contains(&base) {
         out.push(base);
+    }
+    out
+}
+
+/// PORTRAITFX1 5.4 (PQ2): the expression names of the face frames.
+pub use rpgkit_data::EXPRESSIONS;
+
+/// PORTRAITFX1 5.4: the folder of a unique portrait's expression frames, `portraits/<folder>/faces/<id>`.
+pub fn faces_dir(folder: &str, id: &str) -> String {
+    format!("portraits/{folder}/faces/{id}")
+}
+
+/// PORTRAITFX1 5.4: the portraits to try for `expression` ("" = neutral): a unique tier's frame of that expression,
+/// then its `neutral` frame, then `portrait_chain`; for "" or `neutral` the `neutral` frame, then `portrait_chain`; a
+/// common tier has no frames (`portrait_chain` alone).
+pub fn face_chain(tier: &str, id: &str, body: &str, expression: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(folder) = tier_folder(tier) {
+        let dir = faces_dir(folder, id);
+        if !expression.is_empty() && expression != EXPRESSIONS[0] {
+            out.push(format!("{dir}/{expression}.png"));
+        }
+        out.push(format!("{dir}/{}.png", EXPRESSIONS[0]));
+    }
+    out.extend(portrait_chain(tier, id, body));
+    out
+}
+
+/// PORTRAITFX1 5.4: the sidecars to try for the portrait file a chain found (`found_rel`): its own, then for an
+/// expression frame (`portraits/<folder>/faces/<id>/<expression>.png`) the base portrait's
+/// (`portraits/<folder>/<id>.face.json`), so a frame without its own anchors uses the base's.
+pub fn face_sidecars(found_rel: &str) -> Vec<String> {
+    let mut out = vec![aegis_core::assets::face_file(found_rel)];
+    let parts: Vec<&str> = found_rel.split('/').collect();
+    if let ["portraits", folder, "faces", id, file] = parts.as_slice() {
+        if file.ends_with(".png") {
+            out.push(aegis_core::assets::face_file(&format!("portraits/{folder}/{id}.png")));
+        }
     }
     out
 }

@@ -82,6 +82,12 @@ impl Equipment {
         self.is_weapon() && !self.is_ranged_weapon()
     }
 
+    /// RULESET1 K1: a melee weapon whose family has the engine rule `reach` (a gear fact; the battle reads it only
+    /// under the rule `reach`).
+    pub fn has_reach(&self) -> bool {
+        self.is_melee_weapon() && self.item.reach_rule
+    }
+
     fn discount(&self, prof: &Proficiency) -> i32 {
         if self.item.weapon_type.is_empty() {
             0

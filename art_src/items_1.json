@@ -1,0 +1,13 @@
+{
+  "model": "gemini-3-pro-image",
+  "id": "items_1",
+  "prompt": "A sheet of 16 pixel-art icons for a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG icons. Square 1:1 image, an exact 4 by 4 grid of 16 equal square tiles separated by thin straight gutters of pure black (#000000), no outer border beyond the gutters. Each tile is one icon on its own rounded-square tile filled with the colour named for it, with a subtle darker vignette. Every icon is drawn large and centred, with clear dark outlines, hand-placed pixel clusters, a limited palette with 4 shades per colour, a warm light from the upper left and a thin warm rim light. The icons show weapons and item family icons, each a single object on its tile, each showing the action itself so it reads at a glance at small size. No text, no letters, no numbers, no labels, no frame, no watermark. Row by row, left to right:\nRow 1: a one-handed hatchet with a single-bitted head (tile dark slate grey); a two-handed battle axe with a double-sided crescent head on a long haft (tile dark slate grey); a short dagger with a narrow straight blade and a small cross guard, clearly smaller than a sword (tile dark slate grey); a short sword, a broad leaf blade twice the dagger's length with a proper cross guard (tile dark slate grey).\nRow 2: a two-handed war hammer, the square head centred and aligned on the haft (tile dark slate grey); a colossal ornate warhammer with a huge runed head, aligned on its haft (tile dark slate grey); a long wooden staff taller than the tile with a carved knot at the top, no gem (tile dark slate grey); a short slender wand with a small glowing tip, clearly tiny next to a staff (tile dark slate grey).\nRow 3: a one-handed flanged mace (tile dark slate grey); a glass focus orb on a small stand, glowing softly (tile dark slate grey); a wooden crossbow with a loaded bolt (tile dark slate grey); a folded cloth robe (tile dark slate grey).\nRow 4: a pile of crafting materials: an ingot, leather and a gem (tile dark slate grey); a sealed letter with a wax seal and a ribbon (tile dark slate grey); a small travel pouch tied with string (tile dark slate grey); cloth hand wraps wound round a fist (tile dark slate grey).",
+  "reference": null,
+  "prompts_file": "games/emberwake/docs/specs/ART2_ICONS.md",
+  "time": "2026-10-20T18:26:52+00:00",
+  "n": 1,
+  "backfilled": true,
+  "source": "games/emberwake/docs/specs/ART2_ICONS.md at 7b04f11 (`git show 7b04f11:games/emberwake/docs/specs/ART2_ICONS.md`)",
+  "added_in": "7b04f11",
+  "note": "--no-ref inferred, not recorded: the option was added in this same commit for the icon sheets, and the prompt asks for no portrait style"
+}

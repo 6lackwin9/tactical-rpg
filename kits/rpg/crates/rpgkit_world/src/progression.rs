@@ -146,8 +146,19 @@ pub fn build(d: &Data, state: &UnitState) -> Option<Built> {
     build_with(d, state, true)
 }
 
+/// `build` for a battle under the deck rule when `deck` is Some (RULESET1 9 D1-D5): the member's saved deck (else its
+/// base unit's) slots its passives (a slottable passive the member owns applies only while slotted, D3, D4), the
+/// ruleset's basics are open and the deck fills the active slots (D2). None = `build` exactly (classic).
+pub fn build_in(d: &Data, state: &UnitState, deck: Option<&rpgkit_rules::DeckRule>) -> Option<Built> {
+    build_full(d, state, true, deck)
+}
+
 /// `auto_spend` false leaves unspent points unspent (the party screen's preview: confirmed and drafted points only).
 pub fn build_with(d: &Data, state: &UnitState, auto_spend: bool) -> Option<Built> {
+    build_full(d, state, auto_spend, None)
+}
+
+fn build_full(d: &Data, state: &UnitState, auto_spend: bool, deck: Option<&rpgkit_rules::DeckRule>) -> Option<Built> {
     if !state.validate(d).is_empty() {
         return None;
     }
@@ -165,6 +176,13 @@ pub fn build_with(d: &Data, state: &UnitState, auto_spend: bool) -> Option<Built
     }
     def.name = display_name(d, &work);
     let mut u = build_unit(cat, &def, 0);
+    if let Some(rule) = deck {
+        // RULESET1 9 D3-D5: the member's deck replaces its base unit's; the rule gates the passives below
+        if !work.deck.is_empty() {
+            u.deck = work.deck.clone();
+        }
+        u.deck_rule = Some(rule.clone());
+    }
     for id in &work.passives {
         if let Some(p) = cat.passives.get(id) {
             u.apply_passive(cat, p);
@@ -203,6 +221,8 @@ pub fn build_with(d: &Data, state: &UnitState, auto_spend: bool) -> Option<Built
             warnings.push(format!("Unit '{}': stored loadout ignored ({err}).", work.id));
         }
     }
+    // RULESET1 9 D1, D2: the deck (else the loadout, auto) fills the active slots
+    u.apply_deck(cat);
     // SKILLUI1 R4: a hero built from member state uses the ranks chosen on the Skills tab (set after gear, passives
     // and the loadout, so every unlock is final; fixed for the battle like the loadout).
     u.rank_choice = Some(work.loadout_ranks.iter().map(|(k, v)| (k.clone(), *v as i32)).collect());
@@ -282,7 +302,11 @@ pub fn is_rest_place(d: &Data, gs: &GameState, location_ref: &str) -> bool {
     !location_ref.is_empty() && json::b(crate::explore::resolve_location(d, gs, location_ref), "rest", false)
 }
 
+/// HealRules.can_camp; in a campaign world the rest rule's refusal (CAMPAIGN1 R1, R2: `campaign::purse::rest_refusal`).
 pub fn can_camp(d: &Data, gs: &GameState) -> &'static str {
+    if gs.campaign.is_some() {
+        return crate::campaign::purse::rest_refusal(d, gs);
+    }
     if crate::travel::current_node(d, gs).is_empty() {
         return REFUSE_NOT_AT_NODE;
     }
@@ -295,8 +319,12 @@ pub fn can_camp(d: &Data, gs: &GameState) -> &'static str {
     ""
 }
 
-/// {ok, errors, spent, restored, events}.
+/// {ok, errors, spent, restored, events}. In a campaign world the rest rule's rest (CAMPAIGN1 R2: `campaign::purse::rest`,
+/// adding `days` and `campaign?`).
 pub fn make_camp(d: &Data, gs: &mut GameState) -> Dict {
+    if gs.campaign.is_some() {
+        return crate::campaign::purse::rest(d, gs);
+    }
     let refusal = can_camp(d, gs);
     if !refusal.is_empty() {
         let mut out = json::fail(refusal);
