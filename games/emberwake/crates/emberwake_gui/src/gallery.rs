@@ -18,7 +18,7 @@ use aegis_ui::preview;
 use aegis_ui::specimens::{KitAct, Specimens};
 use aegis_ui::timeline::{Section, Segment, Timeline, Track};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, INFO, SMALL, TEXT, TITLE, W};
-use aegis_ui::vignette::{self, VignetteScreen};
+use aegis_ui::vignette;
 use aegis_ui::widget_plumbing;
 use emberwake_battle::resolver::ScheduledAction;
 use emberwake_battle::session::{Phase, Session, UnitSnap};
@@ -173,7 +173,7 @@ impl Gallery {
             "stats" | "level_up" | "skills" | "gear" => Box::new(crate::party::Character::new(cx, &member, id)),
             "world_map" => Box::new(crate::worldmap::WorldMap::new()),
             // opened full screen: the reel's end goes back to the gallery
-            "vignette" => Box::new(VignetteScreen::with_settings(&cx.settings, self.reel(cx), |cx: &mut Cx, _| cx.nav.push(Nav::Pop)).palette(crate::story::PALETTE)),
+            "vignette" => Box::new(crate::story::vignette_screen(cx, self.reel(cx), |cx: &mut Cx, _| cx.nav.push(Nav::Pop))),
             "results" => {
                 let level = cx.game.as_ref().and_then(|g| g.gs.party.members.first()).map(|m| m.level(&cx.data)).unwrap_or(1);
                 let mut xp = json::Dict::new();
@@ -269,7 +269,7 @@ impl Gallery {
         if self.shown.as_ref().is_none_or(|sh| sh.id != id) {
             self.shown = if id == "vignette" {
                 // the preview's end changes nothing: `tick` starts it over
-                let screen: Box<dyn Screen<GameCx>> = Box::new(VignetteScreen::with_settings(&cx.settings, self.reel(cx), |_: &mut Cx, _| {}).palette(crate::story::PALETTE));
+                let screen: Box<dyn Screen<GameCx>> = Box::new(crate::story::vignette_screen(cx, self.reel(cx), |_: &mut Cx, _| {}));
                 Some(Shown { id, screen, steps: Vec::new(), tries: 0 })
             } else {
                 self.build(cx, id).map(|(screen, steps)| Shown { id, screen, steps, tries: 0 })

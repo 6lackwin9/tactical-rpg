@@ -50,10 +50,17 @@ pub fn entry_reel(d: &Data, world: &str, entry: &Dict) -> Reel {
     reel
 }
 
+/// A vignette screen over `reel` as the game plays it: the player's text speed, the game's palette, and its tuned shake
+/// presets and limits for the cards' `shake` (FX1 5.2; `tuning.json` `shakes`, `shake_max_px`, `shake_max_ms`).
+pub fn vignette_screen(cx: &Cx, reel: Reel, on_done: impl FnOnce(&mut Cx, Ended) + 'static) -> VignetteScreen<GameCx> {
+    let t = &cx.tuning.value;
+    VignetteScreen::with_settings(&cx.settings, reel, on_done).palette(PALETTE).with_shakes(t.shakes.clone(), t.shake_limits())
+}
+
 /// The player for `scene` in the game's palette; Skip asks first for a scene not seen yet (W6).
 fn scene_screen(cx: &Cx, scene: &Dict, on_done: impl FnOnce(&mut Cx, Ended) + 'static) -> VignetteScreen<GameCx> {
     let reel = reel_of(&cx.data, &cx.gs().world_id, scene);
-    VignetteScreen::with_settings(&cx.settings, reel, on_done).palette(PALETTE).ask_first(!json::b(scene, "seen", false))
+    vignette_screen(cx, reel, on_done).ask_first(!json::b(scene, "seen", false))
 }
 
 /// W2: plays the queue's oldest vignette (pushed over the screen on top); its end or skip takes it off the queue and
@@ -601,6 +608,28 @@ pub(crate) mod tests {
         assert_eq!(s.state(&cx)["draft"][vignette::REDUCE_MOTION], json!(true));
         s.click_id(&mut cx, "settings.apply").expect("apply");
         assert!(cx.settings.reduce_motion());
+        let _ = std::fs::remove_dir_all(&cx.shot_dir);
+    }
+
+    /// FX1-V V4 (FX1 5.2): the game's vignette screens play the cards' shakes with its tuning table and limits: a tuned
+    /// `toll` of 1 px moves the card by at most 1 px (and does move it: at its start the envelope is full).
+    #[test]
+    fn vignette_screens_shake_with_the_tuning_table() {
+        use aegis_ui::tuning::Tuned;
+        let mut cx = story_cx(data());
+        cx.tuning.value = crate::tuning::Tuning::from_json(&json!({"shakes": {"toll": {"px": 1}}}));
+        let reel = Reel { id: "t".into(), cards: vec![Card { shake: "toll".into(), ..Card::default() }], ..Reel::default() };
+        let mut s = vignette_screen(&cx, reel, |_, _| {});
+        assert_eq!((&s.player.shakes, s.player.shake_limits), (&cx.tuning.value.shakes, cx.tuning.value.shake_limits()), "the tuning's table and limits");
+        let toll = s.player.shakes.get("toll").expect("toll");
+        assert_eq!(toll.px, 1.0);
+        let mut seen = Vec::new();
+        while s.player.card_ms() <= toll.ms as u64 {
+            seen.push(s.player.shake_offset(false));
+            s.player.advance(10);
+        }
+        assert!(seen.iter().all(|o| o.0.abs() <= 1 && o.1 == 0), "at most 1 px, along x: {seen:?}");
+        assert!(seen.iter().any(|o| *o != (0, 0)), "the card shakes");
         let _ = std::fs::remove_dir_all(&cx.shot_dir);
     }
 }
