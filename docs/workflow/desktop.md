@@ -20,6 +20,8 @@ Use this when Claude runs in a terminal on your machine (`$CLAUDE_CODE_REMOTE` e
 
 ## Ship (planner skill step 3)
 
+Batched gate (user 2026-10-28, decision "Batched gate"): a reviewed task lands on the local branch `staging` (checked out in the sibling worktree `tactical-rpg-stage`) after a partial gate: build every crate with its tests, run the tests of the crates it touches, the layer and docs checks (`stage.sh <worktree> <name>`, the planner's helper beside `land.sh`). `staging` reaches `develop` in batches under one full gate (`flush.sh`: rebase onto `origin/develop`, `check_project.ps1 -Fast -Quiet`, `fc.sh docs`, push), at the latest before a release or a wind-down; a failed full gate is bisected within the batch. New task worktrees branch from `staging`. Planner docs-only commits still go straight to `develop`. Steps 1-2 below are the per-task full gate this replaces for task landings.
+
 1. Run `check_project.ps1 -Fast -Quiet` (~30 s warm: build every crate, run every test) and `tools/fc.sh docs`; the IDE Problems tab must show 0 errors and warnings (markdownlint compliant, see `.agents/rules/engine_workflow.md` section 6). Never pipe `fc.sh docs` into `tail` before `&& git commit`.
 2. If clean: commit on the task branch with the attribution trailer from the session's system reminder, then land it on `develop`: squash it onto the latest `origin/develop` (one commit titled with the task id, its body ending with `Review:` and `Gate:` lines as in `cloud.md` "Landing a task on `develop`") and push `develop`. Never commit to `main` or `engine`.
 3. Remove the worktree and branch: `powershell -NoProfile -File tools/wt_remove.ps1 ../tactical-rpg-<task> claude/<task>`
