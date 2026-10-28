@@ -349,3 +349,6 @@ in `docs/archive/TASKS_DONE.md`, the user's rulings the rows in `games/emberwake
 - HOOKS1-C: members are built in their character's world (`UnitState::path_world`); screens name classes by the world
   being played.
 - HOOKS1-U (building): decision "HOOKS1-U unlock on an automatic deck (user 2026-10-29)".
+- HOOKS1-AI: AT3's threat (ground and arena) is under `ai_tactics` (the arena part also needs `arena_hazards`); hits
+  are remembered per round in `World::hits` (attack hits that took HP); under round intent `flush_cover` picks a tile
+  target for an area opener that still holds the first ranked target; SOFTEST and TOUGHEST outrank `reckless`.

@@ -428,8 +428,9 @@ pub enum Aim {
     Away,
 }
 
-/// PL4 (1): the active foes of `c` whose next-round reach covers `cell` (their 2-block move plus their reach), plus 1
-/// when an arena hazard is due on `cell` this round (HOOKS1 AT3, AH3; rule arena_hazards, never in classic).
+/// PL4 (1): the active foes of `c` whose next-round reach covers `cell` (their 2-block move plus their reach); HOOKS1
+/// AT3 (rule ai_tactics, never in classic): plus 1 for a ground hazard on `cell` that would harm `c` and that its side
+/// can see (`ground::harms`), plus 1 when an arena hazard is due on `cell` this round (AH3, rule arena_hazards too).
 pub fn threat(w: &World, c: UnitId, cell: V2) -> usize {
     let foes = w
         .foes_of(c)
@@ -440,16 +441,35 @@ pub fn threat(w: &World, c: UnitId, cell: V2) -> usize {
             u.is_active() && w.has(f) && w.pos(f).dist(cell) <= u.move_per_block() * 2 + reach
         })
         .count();
-    foes + crate::arena::due_on(w, cell) as usize
+    if !w.ai_tactics() {
+        return foes;
+    }
+    foes + crate::ground::harms(w, c, cell) as usize + crate::arena::due_on(w, cell) as usize
 }
 
-/// PL4: ranks candidate tiles (tile, route) for `c`'s move toward or away from `target`: fewer threats, more cover
-/// toward the target (only when `cover`), fewer path tiles, nearer (Toward) or farther (Away), lower cell index.
+/// HOOKS1 AT2 `hold_line` (rule ai_tactics): PL4's rank right after threat for a unit with the tactic: (0 next to a
+/// friend on the field else 1, the walkable free neighbours of `cell`), fewer first; (0, 0) for every other unit.
+pub fn hold_rank(w: &World, c: UnitId, cell: V2) -> (i32, i32) {
+    if !w.has_tactic(c, crate::world::UnitTactic::HoldLine) {
+        return (0, 0);
+    }
+    let beside = w.friends_of(c).iter().any(|&f| f != c && w.units[f].is_active() && w.has(f) && w.pos(f).dist(cell) == 1);
+    let free = crate::grid::DIRS
+        .iter()
+        .map(|d| cell + *d)
+        .filter(|&n| w.grid.is_valid(n) && w.grid.is_walkable(n) && !w.grid.is_exit(n) && w.occupant(n).is_none_or(|o| o == c))
+        .count() as i32;
+    (i32::from(!beside), free)
+}
+
+/// PL4: ranks candidate tiles (tile, route) for `c`'s move toward or away from `target`: fewer threats, (HOOKS1 AT2,
+/// a `hold_line` unit) next to a friend then fewer free neighbours, more cover toward the target (only when `cover`),
+/// fewer path tiles, nearer (Toward) or farther (Away), lower cell index.
 pub fn rank_tiles(w: &World, c: UnitId, target: V2, cover: bool, aim: Aim, cands: &mut [(V2, Vec<V2>)]) {
     let key = |cell: V2, route: &Vec<V2>| {
         let cov = if cover { cover_for(&w.grid, target, cell, true) } else { 0.0 };
         let d = cell.dist(target);
-        (threat(w, c, cell), cov, route.len(), if aim == Aim::Away { -d } else { d }, cell.y * crate::grid::GRID_W + cell.x)
+        ((threat(w, c, cell), hold_rank(w, c, cell)), cov, route.len(), if aim == Aim::Away { -d } else { d }, cell.y * crate::grid::GRID_W + cell.x)
     };
     cands.sort_by(|a, b| {
         let (ka, kb) = (key(a.0, &a.1), key(b.0, &b.1));

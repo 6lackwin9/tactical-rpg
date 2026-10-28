@@ -5,7 +5,7 @@
 //! with the content tools. The session calls them at the same points CatalogEncounter does.
 
 use crate::grid::V2;
-use crate::world::{AiProfile, Role, TargetPref, UnitId, World};
+use crate::world::{AiProfile, Role, TargetPref, UnitId, UnitTactic, World};
 use aegis_core::value::{self, Obj};
 use indexmap::IndexMap;
 use serde_json::Value;
@@ -417,7 +417,8 @@ pub fn parse_phases(raw: &[Value]) -> Vec<PhaseDef> {
                         }
                         "ai" => {
                             out.insert("unit".into(), Value::from(value::string(fx, "unit", "")));
-                            for key in ["role", "target_pref", "reckless", "flee_ratio", "defend_below", "heal_below"] {
+                            // HOOKS1 AT2: `tactics` (present only when authored, so classic phases keep their keys)
+                            for key in ["role", "target_pref", "reckless", "flee_ratio", "defend_below", "heal_below", "tactics"] {
                                 if let Some(v) = fx.get(key) {
                                     out.insert(key.into(), v.clone());
                                 }
@@ -671,7 +672,12 @@ pub fn apply_ai(p: &mut AiProfile, fx: &Obj) {
         }
     }
     if let Some(t) = fx.get("target_pref") {
-        p.target_pref = if value::to_str(t) == "WEAKEST" { TargetPref::Weakest } else { TargetPref::Nearest };
+        // HOOKS1 AT1: SOFTEST and TOUGHEST are kept and read as ROLE without the rule ai_tactics
+        p.target_pref = TargetPref::parse(&value::to_str(t)).unwrap_or(TargetPref::Nearest);
+    }
+    if fx.contains_key("tactics") {
+        // HOOKS1 AT2: the phase's list replaces the unit's (read only under the rule ai_tactics)
+        p.tactics = UnitTactic::list(&value::strings(fx, "tactics"));
     }
     if let Some(v) = fx.get("reckless") {
         p.reckless = v.as_bool().unwrap_or_else(|| value::to_float(v, 0.0) != 0.0);

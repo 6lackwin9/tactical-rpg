@@ -10,7 +10,7 @@ use crate::plan::Plan;
 use crate::round_intent::{self, ManeuverKind, Opener, RoundIntent, RoundTarget};
 use crate::round_intent_plan;
 use crate::skill::{self, Kind, SkillId};
-use crate::world::{AiProfile, Role, Tactic, TargetPref, UnitId, World};
+use crate::world::{AiProfile, Role, Tactic, TargetPref, UnitId, UnitTactic, World};
 use aegis_core::sort::godot_sort;
 use rpgkit_rules::damage;
 use rpgkit_rules::status;
@@ -597,9 +597,14 @@ fn advance_toward(w: &World, plan: &mut Plan, actor: UnitId, st: &SimState, rank
     false
 }
 
-/// Foes best first: a reachable taunter, then nearest (aggressors, reckless) or weakest, route-penalised.
+/// Foes best first: a reachable taunter, then nearest (aggressors, reckless) or weakest, route-penalised. HOOKS1 AT1
+/// (rule `ai_tactics`): SOFTEST and TOUGHEST rank by `rank_by_build` (without the rule they read as ROLE).
 fn rank_targets(w: &World, plan: &Plan, actor: UnitId, st: &SimState, foes: &[UnitId], profile: &AiProfile) -> Vec<UnitId> {
-    let nearest_first = profile.reckless || profile.target_pref == TargetPref::Nearest;
+    let pref = w.target_pref(profile);
+    if matches!(pref, TargetPref::Softest | TargetPref::Toughest) {
+        return rank_by_build(w, plan, actor, st, foes, pref == TargetPref::Softest);
+    }
+    let nearest_first = profile.reckless || pref == TargetPref::Nearest;
     let attack_reach = basic_band(w, actor).1;
     let mut scored: Vec<(UnitId, f64)> = Vec::new();
     for &f in foes {
@@ -622,6 +627,38 @@ fn rank_targets(w: &World, plan: &Plan, actor: UnitId, st: &SimState, foes: &[Un
     }
     godot_sort(&mut scored, |a, b| a.1 < b.1);
     scored.into_iter().map(|(f, _)| f).collect()
+}
+
+/// HOOKS1 AT1: a reachable taunter first; then SOFTEST (`softest`): the foes `actor` reaches this round (in reach
+/// now, or an approach path within its round's move) before the rest, each group by lowest armour rating, then lowest
+/// HP (as planned so far), then nearest (the approach path's length); or TOUGHEST: melee foes before the rest, each by
+/// highest max HP, ties nearest. A foe with no path at all comes last either way; full ties keep roster order.
+fn rank_by_build(w: &World, plan: &Plan, actor: UnitId, st: &SimState, foes: &[UnitId], softest: bool) -> Vec<UnitId> {
+    let attack_reach = basic_band(w, actor).1;
+    let move_tiles = plan.max_move_tiles(w, actor) as usize;
+    let mut keyed: Vec<((i32, i32, i32, i32, i32), UnitId)> = Vec::new();
+    for &f in foes {
+        if !w.units[f].is_active() || !w.has(f) || st.est(f) <= 0 {
+            continue;
+        }
+        let d = st.pos.dist(w.pos(f));
+        let (pathless, near, this_round) = if d <= attack_reach {
+            (false, d, true)
+        } else {
+            let route = plan.approach_path(w, actor, st.pos, f, -1, -1);
+            (route.is_empty(), if route.is_empty() { d } else { d.max(route.len() as i32) }, !route.is_empty() && route.len() <= move_tiles)
+        };
+        let taunter = w.units[f].has_status("taunt") && !pathless;
+        let u = &w.units[f];
+        let key = if softest {
+            (i32::from(!taunter), i32::from(pathless || !this_round), damage::armor_rating(u), st.est(f), near)
+        } else {
+            (i32::from(!taunter), i32::from(pathless), i32::from(u.attack_range > 1), -u.max_hp, near)
+        };
+        keyed.push((key, f));
+    }
+    keyed.sort_by_key(|&(k, f)| (k, f));
+    keyed.into_iter().map(|(_, f)| f).collect()
 }
 
 fn retreat_dir(w: &World, plan: &Plan, actor: UnitId, pos: V2, foes: &[UnitId], reach: i32, target_pos: V2) -> V2 {
@@ -1168,18 +1205,22 @@ fn try_area(w: &World, plan: &mut Plan, actor: UnitId, cap: i32, profile: &AiPro
     }
     let foes = w.foes_of(actor).to_vec();
     let friends = w.friends_of(actor).to_vec();
+    // HOOKS1 AT2 `flush_cover` (rule ai_tactics): a foe hit on a tile with cover against the actor scores once more
+    let flush = w.has_tactic(actor, UnitTactic::FlushCover);
     let mut cands: Vec<(SkillId, V2, f64, usize)> = Vec::new();
     for &sid in &skills {
         let s = &w.cat.skills[sid];
         let band = skill::reach_by(s, &w.units[actor], &w.ruleset);
         for aim in aim_cells(w, st.pos, sid, band) {
             let cells: Vec<V2> = skill::area_cells(s, st.pos, aim).into_iter().filter(|c| w.grid.is_valid(*c) && *c != st.pos).collect();
-            let foes_hit = foes.iter().filter(|&&f| w.units[f].is_active() && w.has(f) && st.est(f) > 0 && cells.contains(&w.pos(f))).count() as i32;
+            let hit: Vec<UnitId> = foes.iter().copied().filter(|&f| w.units[f].is_active() && w.has(f) && st.est(f) > 0 && cells.contains(&w.pos(f))).collect();
+            let foes_hit = hit.len() as i32;
             let hit_friends: Vec<UnitId> = friends.iter().copied().filter(|&f| f != actor && w.units[f].is_active() && cells.contains(&plan.planned_position(w, f))).collect();
             if foes_hit < profile.area_threshold() || !friendly_fire_ok(w, actor, sid, &hit_friends, foes_hit) {
                 continue;
             }
-            cands.push((sid, aim, w.units[actor].power_for(s) * foes_hit as f64, hit_friends.len()));
+            let covered = if flush { hit.iter().filter(|&&f| command::cover_for(&w.grid, st.pos, w.pos(f), true) > 0.0).count() as i32 } else { 0 };
+            cands.push((sid, aim, w.units[actor].power_for(s) * (foes_hit + covered) as f64, hit_friends.len()));
         }
     }
     godot_sort(&mut cands, |a, b| {
@@ -1418,6 +1459,8 @@ fn step_moves(w: &World, st: &SimState, index: usize) -> bool {
 pub const ROW_FLEE: &str = "flee";
 pub const ROW_SUPPORT: &str = "support";
 pub const ROW_GUARD: &str = "guard";
+/// HOOKS1 AT2 (rule `ai_tactics`): `brace_after_hit`, the row before row 4.
+pub const ROW_BRACE: &str = "brace";
 pub const ROW_ENGAGE: &str = "engage";
 pub const ROW_ASSAULT: &str = "assault";
 /// Row 5 with no foe in reach this round: a move toward the first ranked target, then Guard there (front line),
@@ -1530,7 +1573,7 @@ fn resolve(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, mut c
 }
 
 /// AI1's rows in table order (`table` starts at an index into it).
-const ROWS: [&str; 7] = [ROW_FLEE, ROW_SUPPORT, ROW_GUARD, ROW_ENGAGE, ROW_ASSAULT, ROW_ADVANCE, ROW_IDLE_GUARD];
+const ROWS: [&str; 8] = [ROW_FLEE, ROW_SUPPORT, ROW_GUARD, ROW_BRACE, ROW_ENGAGE, ROW_ASSAULT, ROW_ADVANCE, ROW_IDLE_GUARD];
 
 /// AI1 for the enemy side (CombatEncounter.schedule_enemy_ai under `round_intent`): every enemy on the field picks and
 /// plans into the shared `plan` in roster order (earlier plans are claims), broken plans are re-picked, what is still
@@ -1618,6 +1661,13 @@ fn table(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, from: u
             return Choice::Pick(ROW_GUARD, p);
         }
     }
+    // HOOKS1 AT2 `brace_after_hit` (rule ai_tactics): a friend within 2 tiles, or itself, lost HP to an attack hit last
+    // round, not reckless, a Guard skill usable: Guard self, or on its `hold_line` tile
+    if on(ROW_BRACE) && !profile.reckless && w.has_tactic(c, UnitTactic::BraceAfterHit) && hit_nearby(w, c) {
+        if let Some(p) = brace_pick(w, plan, c) {
+            return Choice::Pick(ROW_BRACE, p);
+        }
+    }
     let ranked = ranked_foes(w, plan, c, profile);
     // 4: a Skirmisher whose Maneuver attack reaches a flank tile on a ranked target engaged with another unit
     if on(ROW_ENGAGE) && profile.role == Role::Skirmisher {
@@ -1630,6 +1680,11 @@ fn table(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, from: u
     // (the tile ranking, user 2026-10-28: tier 1 the selected target, the first ranked; tier 2 the tile from which it
     // hits the most hostiles; then the other ranked targets the planner reaches)
     if on(ROW_ASSAULT) {
+        // HOOKS1 AT2 `flush_cover` (rule ai_tactics): an area opener aimed to catch more foes, those in cover counting
+        // twice, as long as it still hits the first ranked target
+        if let Some(p) = flush_pick(w, plan, c, ranked.first().copied()) {
+            return Choice::Pick(ROW_ASSAULT, p);
+        }
         if let Some(p) = assault_pick(w, plan, c, &ranked[..ranked.len().min(1)]) {
             return Choice::Pick(ROW_ASSAULT, p);
         }
@@ -1761,6 +1816,97 @@ fn guard_pick(w: &mut World, plan: &mut Plan, c: UnitId) -> Option<IntentPick> {
     }
     let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
     trial(w, plan, c, &p).then_some(p)
+}
+
+/// HOOKS1 AT2 `brace_after_hit`: `c` itself, or a friend on the field within 2 tiles of it, lost HP to an attack hit
+/// last round (`World::hits`).
+fn hit_nearby(w: &World, c: UnitId) -> bool {
+    let here = w.pos(c);
+    w.hits.last_round.iter().any(|&f| (f == c || w.friends_of(c).contains(&f)) && w.has(f) && w.pos(f).dist(here) <= 2)
+}
+
+/// HOOKS1 AT2 `brace_after_hit`: Guard on the `hold_line` tile (a unit with that tactic, when the tile is not its own),
+/// else Guard self; None when no Guard skill is usable.
+fn brace_pick(w: &mut World, plan: &mut Plan, c: UnitId) -> Option<IntentPick> {
+    if w.has_tactic(c, UnitTactic::HoldLine) {
+        if let Some(cell) = hold_tile(w, plan, c) {
+            let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Cell(cell));
+            if trial(w, plan, c, &p) {
+                return Some(p);
+            }
+        }
+    }
+    let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
+    trial(w, plan, c, &p).then_some(p)
+}
+
+/// HOOKS1 AT2: `c`'s `hold_line` tile: among the free tiles one standard move block reaches and its own, the first by
+/// PL4 (`round_intent::rank_tiles`, which ranks a `hold_line` unit's tiles next to a friend first, then fewer free
+/// neighbours, after threat), cover and distance read toward the nearest foe. None when it is `c`'s own tile, or
+/// without the tactic.
+pub fn hold_tile(w: &World, plan: &Plan, c: UnitId) -> Option<V2> {
+    if !w.has_tactic(c, UnitTactic::HoldLine) || !w.has(c) {
+        return None;
+    }
+    let here = w.pos(c);
+    let goal = w.foes_of(c).iter().copied().filter(|&f| w.has(f) && w.units[f].is_active()).map(|f| w.pos(f)).min_by_key(|p| (p.dist(here), p.y * GRID_W + p.x)).unwrap_or(here);
+    let mut cands = walk_cands(w, plan, c, 1);
+    round_intent::rank_tiles(w, c, goal, true, round_intent::Aim::Toward, &mut cands);
+    cands.first().map(|(cell, _)| *cell).filter(|&cell| cell != here)
+}
+
+/// HOOKS1 AT2 `flush_cover`: an area opener's aim from `c`'s tile, scored by foes hit plus 1 per foe hit on a tile with
+/// cover against `c` (`cover_for`), among the aims whose area still holds the first ranked target `t` and hit no more
+/// friends than an aim at `t`'s tile; the Assault order's area skills that reach `t` without a move, in order. Some
+/// only when an aim beats the one at `t`'s tile (the round target is then that tile, the skill its opener).
+fn flush_pick(w: &mut World, plan: &mut Plan, c: UnitId, t: Option<UnitId>) -> Option<IntentPick> {
+    let t = t?;
+    if !w.has_tactic(c, UnitTactic::FlushCover) || !w.has(t) {
+        return None;
+    }
+    let (here, goal) = (w.pos(c), w.pos(t));
+    let foes: Vec<V2> = w.foes_of(c).iter().copied().filter(|&f| w.units[f].is_active() && w.has(f)).map(|f| w.pos(f)).collect();
+    let friends: Vec<V2> = w.friends_of(c).iter().copied().filter(|&f| f != c && w.units[f].is_active() && w.has(f)).map(|f| w.pos(f)).collect();
+    // (score, friends hit) of an aim: foes hit plus the covered ones, and the friends it catches
+    let score = |s: &rpgkit_data::SkillDef, aim: V2| -> Option<(i32, usize)> {
+        let cells: Vec<V2> = skill::area_cells(s, here, aim).into_iter().filter(|cell| w.grid.is_valid(*cell) && *cell != here).collect();
+        if !cells.contains(&goal) {
+            return None;
+        }
+        let hit: Vec<&V2> = foes.iter().filter(|p| cells.contains(p)).collect();
+        let covered = hit.iter().filter(|p| command::cover_for(&w.grid, here, ***p, true) > 0.0).count();
+        Some(((hit.len() + covered) as i32, friends.iter().filter(|p| cells.contains(p)).count()))
+    };
+    let mut cands: Vec<((i32, usize, i32), SkillId, V2)> = Vec::new();
+    for (i, sid) in round_intent_plan::order(w, c, RoundIntent::Assault).into_iter().enumerate() {
+        let s = &w.cat.skills[sid];
+        if !skill::is_area(s) || !skill::deals_damage(s) {
+            continue;
+        }
+        let band = skill::reach_by(s, &w.units[c], &w.ruleset);
+        let d = here.dist(goal);
+        let Some((base, base_friends)) = score(s, goal).filter(|_| d >= band.0 && d <= band.1) else { continue };
+        for aim in aim_cells(w, here, sid, band) {
+            // the planner casts an area aimed outside its band only after a move: such aims are not scored
+            if aim == goal || !(band.0..=band.1).contains(&here.dist(aim)) {
+                continue;
+            }
+            if let Some((sc, fr)) = score(s, aim) {
+                if sc > base && fr <= base_friends {
+                    cands.push(((-sc, i, aim.y * GRID_W + aim.x), sid, aim));
+                }
+            }
+        }
+    }
+    cands.sort_by_key(|(k, _, _)| *k);
+    for (_, sid, aim) in cands {
+        let mut p = IntentPick::new(RoundIntent::Assault, RoundTarget::Cell(aim));
+        p.opener = Some(Opener::Skill(sid));
+        if trial(w, plan, c, &p) {
+            return Some(p);
+        }
+    }
+    None
 }
 
 /// The free tiles `c` can walk to within `blocks` standard move blocks (a unit that pays: at most its AP in tiles), with
