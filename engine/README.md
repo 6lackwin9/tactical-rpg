@@ -76,7 +76,7 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 | `../games/emberwake/crates/emberwake_content/` | The game's data loader and writer on `aegis_content` (`source` reads `games/emberwake/data/` like Godot's catalogs, `store` writes it like Godot's saves) |
 | `../games/emberwake/crates/emberwake_world/` | The game loop around battles: game state, new game, saves (Godot format, every migration step, on `aegis_save`), exploration, quests, dialogue, shops, travel, rest, battle bridge |
 | `crates/aegis_host/` | Engine command API protocol, game-agnostic (SPLIT1-6): JSON request in, JSON reply out, history and step counter over the game's command set |
-| `../games/emberwake/crates/emberwake_sim/` | The balance simulator (PORT-SIM): sandbox units, the nine modes (duel, tier, levels, group, stats, party, role, sweep, campaign), scenarios, roles, targets and KPI tables; `aegis sim <mode>` prints its lines |
+| `../games/emberwake/crates/emberwake_sim/` | The balance simulator (PORT-SIM): sandbox units, the nine modes (duel, tier, levels, group, stats, party, role, sweep, campaign) and the engine-only `feel` (RULESET1-G), scenarios, roles, targets and KPI tables; `aegis sim <mode>` prints its lines |
 | `../games/emberwake/crates/emberwake_host/` | The game's command set (state, skills, plan, preset, stay_pick, confirm, step, resolve, advance, autoplay) and CLI commands; holds the `aegis` binary (SPLIT1-6) |
 | `crates/aegis_cli/` | Engine command line shell (SPLIT1-6; the binary is built from `emberwake_host`; `content manifest --kit <id>` writes a kit's kit.json, ASSETORG2): the game's `sim <mode>`, `battle <encounter>`, and `serve` (the command API over stdin / stdout), `link` (the GUI's agent link), `content` (edit `games/emberwake/data/`: check, upsert, remove, apply; `content world <id> [<json | @file>] [full]` shows, creates or updates a world manifest `data/worlds/<id>/world.json` (WORLDW1): fields merge over the stored manifest or the schema defaults, values are checked for type and enum options, and the file is kept only when the data folder gains no blocking or manifest problem, else rolled back; without `full`, fields missing from the file stay out while at their default (a resave is byte-identical), `full` writes every field; seed step `{"op": "world", "id", "fields", "full"?}`; a new world is listed in game.json `worlds` first with `content manifest`) |
 | `crates/aegis_ui/` | Engine UI, game-agnostic (SPLIT1-5): canvas and painter, widget kit, art loader over the asset layers (ASSETORG2: the game's `assets/`, its kit's `kits/<kit>/assets/`, the engine's `engine/assets/`, first hit wins; files by relative path, bodies as clip sheets with `clips.json` and palettes, the token = the idle clip's first frame, tiles by the variant files present), audio over the same layers, live tuning files, agent link, screen stack with the game's context, window shell and event loop; clip playback (SPRITE1-L): `aegis_core::assets::ClipPlayer` (a base loop plus one shot, a missing clip falls back to `idle`, then the first frame) drawn by `Art::played` (`flip`: mirrored left to right, cached apart; `body_clip_flipped`; `body_outline` takes the same `flip`, SPRITE2), cached silhouette outlines (`Art::body_outline`, `Image::outline`), body checks frame by frame (`Art::body_problems`), `Painter::ellipse`; PROPS1-E: `aegis_ui::depth::DepthList` (sort by feet, then group, then x, then push order), `Image::mirrored` / `Art::image_mirrored`, `Art::size_of` (a PNG's own size), `Art::varied` / `Art::pick` (the first folder with `v0.png`, an explicit variant or the position pick; `tile_in` wraps it); DIR4-E: `Art::played_facing` (a four-way `Facing`; only side rows mirrored, for left) |
@@ -103,6 +103,10 @@ cargo test -p emberwake_rules -p emberwake_battle -p emberwake_host -p emberwake
     # metrics and reports), journeys (result, state and screen views per action), saves, the sim's printed tables,
     # the content checks (errors and warnings, message for message)
 cargo run --release -p emberwake_host -- sim duel 1 20   # the balance-sim duel table (sim help: every mode and key)
+tools/fc.sh sim feel [enc=a,b] [seeds=N] [ruleset=..] [rules=-id,+id]
+    # RULESET1-G, engine-only (not in the sim help): catalog encounters with their party (default the game's five tl_
+    # encounters, 10 seeds, timeline): breaks, windups, flanks, pierce, AP, intents, Rest, carried moves, kiting,
+    # planner reasons per encounter and in total; last line FEEL_JSON {...} (machine-readable, for RULESET1-B)
 ```
 
 Status and the file-by-file map: [docs/PORT_NOTES.md](docs/PORT_NOTES.md).
@@ -172,7 +176,8 @@ cargo run --release -p emberwake_gui -- screen=arena encounter=goblin_ambush see
 ```
 
 The main menu leads to New game (world cards), Continue / Load, Settings and Tools (the Scene Runner: Combat Arena on
-any catalog or world encounter, Content Forge, World Forge, Gear & Skill Dojo, Exploration (a world from any location or its world map,
+any catalog or world encounter (World / Classic / Timeline rules, single extensions switched, "Reveal enemy plans", a
+ruleset chip: RULESET1-G), Content Forge, World Forge, Gear & Skill Dojo, Exploration (a world from any location or its world map,
 nothing saved, a fight skipped as a win at no cost or fought), and the UI Gallery: the kit's widgets, every screen and the battle's panels one at a time). In play: arrows / W A S D walk, E interacts with the marker you face, a click walks there
 (or uses a marker), Esc opens the game menu (party, journal, save, load, settings, quit). Both maps have a HUD bar
 (PLAYUI1-H): the place name top left; gold, supplies and icon buttons top right (P party, J journal, I stash = the

@@ -146,6 +146,8 @@ pub struct Runner<'a> {
     /// RULESET1: the ruleset of the world that resolves the encounter being fought (None: a catalog or generated fight);
     /// `fight_ruleset` picks the fights' ruleset from it and the arguments.
     pub world_ruleset: Option<rpgkit_rules::ruleset::Ruleset>,
+    /// RULESET1-G: the `feel` mode's observer of the fights (None in every other mode: nothing is read).
+    pub feel: Option<crate::feel::Feel>,
 }
 
 impl<'a> Runner<'a> {
@@ -171,6 +173,7 @@ impl<'a> Runner<'a> {
             key_kills: Vec::new(),
             out: Vec::new(),
             world_ruleset: None,
+            feel: None,
         }
     }
 
@@ -284,6 +287,10 @@ impl<'a> Runner<'a> {
             }
         }
         s.attach_metrics(std::mem::take(&mut self.metrics), false);
+        // RULESET1-G: the feel mode reads the fight as it goes (nothing in the other modes)
+        if let Some(f) = self.feel.as_mut() {
+            f.start(&s);
+        }
         let mut rounds = 0;
         let mut plan_failed = false;
         for round in 0..round_limit {
@@ -300,12 +307,18 @@ impl<'a> Runner<'a> {
                 plan_failed = true;
                 break;
             }
+            if let Some(f) = self.feel.as_mut() {
+                f.planned(&s);
+            }
             for _ in 0..MAX_STEPS_PER_ROUND {
                 if s.phase == Phase::Replay {
                     break;
                 }
                 s.step_next();
                 s.metrics_step();
+            }
+            if let Some(f) = self.feel.as_mut() {
+                f.round_end(&s);
             }
             if s.combat_over || !s.can_advance_round() {
                 break;
@@ -334,6 +347,9 @@ impl<'a> Runner<'a> {
             party_max: s.w.allies.iter().map(|&c| (s.w.units[c].name.clone(), s.w.units[c].max_hp)).collect(),
             reward: self.reward_of(&s),
         };
+        if let Some(f) = self.feel.as_mut() {
+            f.end(&s, won, rounds);
+        }
         s.metrics_end(EndResult { cleared: res.cleared, rounds, l, r, hp: res.hp });
         self.metrics = *s.metrics.take().unwrap_or_default();
         self.fights += 1;

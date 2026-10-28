@@ -200,6 +200,7 @@ pub struct PlanView {
     pub rows: Vec<PlanRow>,
     /// PL7: the reason the intent (or kind) is refused ("" = planned).
     pub refused: String,
+    /// The AP the scratch session plans with (its round-1 AP; the hero's AP now when the plan is refused before it).
     pub ap_before: i32,
     pub ap_after: i32,
     pub rest_blocks: i32,
@@ -339,6 +340,8 @@ impl DojoSession {
         &mut self.heroes[self.active]
     }
 
+    /// Switches the hero the Dojo works on. The Rest blocks of this round belong to the hero that rested: the next
+    /// hero starts with none, so their AP is lost (RS2 pays at "Next round" to the active hero only).
     pub fn set_active(&mut self, i: usize) {
         if i < self.heroes.len() && i != self.active {
             self.alloc = None;
@@ -439,8 +442,10 @@ impl DojoSession {
                 return v;
             }
         };
-        let w = &mut s.w;
         let c: UnitId = 0;
+        // the AP the scratch session plans with (its round 1), not the Dojo hero's AP now
+        (v.ap_before, v.ap_after) = (s.w.units[c].ap, s.w.units[c].ap);
+        let w = &mut s.w;
         if let Err(e) = round_intent::set_intent(w, c, setup.intent) {
             v.refused = e;
             return v;
@@ -1022,7 +1027,7 @@ impl DojoSession {
                 self.log_event("BUFF", &s.name, &format!("Attack x{:.2} for {} rounds • {ap_note}", s.boost, s.boost_rounds), ((s.boost - 1.0) * 100.0).round() as i32, &format!("BUFF x{:.2}", s.boost));
                 self.fx("glow", true, &format!("x{:.2} ATK ({} rds)", s.boost, s.boost_rounds), Tone::Gold);
             }
-            _ if self.ruleset.has(ruleset::ROUND_INTENT) => {
+            "REST" if self.ruleset.has(ruleset::ROUND_INTENT) => {
                 // RULESET1_INTENT RS2, RS3: the Rest blocks pay their AP at the round's end ("Next round"); each one
                 // restores poise now (rule poise)
                 let blocks = s.blocks.max(1);

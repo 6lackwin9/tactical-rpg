@@ -792,6 +792,10 @@ pub struct BattleScreen {
     /// Arena only (RULESET1-R): the ruleset picked in the Scene Runner (classic or timeline); None = the encounter's own
     /// (its world's, classic for a catalog encounter).
     arena_ruleset: Option<String>,
+    /// Arena only (RULESET1-G): the extensions switched for the run ("-id,+id", the host's `rules`; "" = none).
+    arena_rules: String,
+    /// Arena only (RULESET1 V2): "Reveal enemy plans" (the host's `plan_reveal`).
+    arena_reveal: bool,
     /// Session events already shown in the message bar.
     events_seen: usize,
     /// Resolver log lines already sounded.
@@ -861,6 +865,8 @@ impl BattleScreen {
             seed: cx.seed,
             arena_world: None,
             arena_ruleset: None,
+            arena_rules: String::new(),
+            arena_reveal: false,
             events_seen: 0,
             log_seen: 0,
             slot: None,
@@ -965,15 +971,18 @@ impl BattleScreen {
     /// The arena on any encounter (Scene Runner): world None = a catalog encounter, else that world's encounter
     /// played with its authored party of world characters (WorldEncounter).
     pub fn arena(cx: &Cx, world: Option<String>, encounter: &str) -> Self {
-        Self::arena_with(cx, world, encounter, None)
+        Self::arena_with(cx, world, encounter, None, "", false)
     }
 
-    /// `arena` played by `ruleset` (classic or timeline; None = the encounter's own: RULESET1 3.1.3).
-    pub fn arena_with(cx: &Cx, world: Option<String>, encounter: &str, ruleset: Option<String>) -> Self {
+    /// `arena` played by `ruleset` (classic or timeline; None = the encounter's own: RULESET1 3.1.3) with the extensions
+    /// `rules` switches ("-id,+id"; "" = none: 3.2) and, with `plan_reveal`, every enemy plan shown (V2).
+    pub fn arena_with(cx: &Cx, world: Option<String>, encounter: &str, ruleset: Option<String>, rules: &str, plan_reveal: bool) -> Self {
         let mut b = Self::blank(cx, Mode::Arena);
         b.encounter = encounter.to_string();
         b.arena_world = world;
         b.arena_ruleset = ruleset;
+        b.arena_rules = rules.to_string();
+        b.arena_reveal = plan_reveal;
         b.start_battle();
         b
     }
@@ -992,6 +1001,8 @@ impl BattleScreen {
         };
         b.seed = first["seed"].as_i64();
         b.arena_ruleset = first["ruleset"].as_str().filter(|r| !r.is_empty()).map(String::from);
+        b.arena_rules = first["rules"].as_str().unwrap_or("").to_string();
+        b.arena_reveal = first["plan_reveal"].as_bool().unwrap_or(false);
         let until = take_over.as_ref().map(|(_, at)| *at);
         let report = aegis_host::playtest::replay(&mut b.host, session, until);
         if b.host.session.is_none() {
@@ -1443,6 +1454,13 @@ impl BattleScreen {
         }
         if let Some(r) = &self.arena_ruleset {
             req["ruleset"] = json!(r);
+        }
+        // RULESET1-G: the Arena's extension switches and plan reveal (absent when unset: a classic request is unchanged)
+        if !self.arena_rules.is_empty() {
+            req["rules"] = json!(self.arena_rules);
+        }
+        if self.arena_reveal {
+            req["plan_reveal"] = json!(true);
         }
         let reply = self.host.handle(&req);
         if reply["ok"] != json!(true) {
@@ -1962,10 +1980,15 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     fn state(&self, _cx: &Cx) -> Value {
-        json!({"message": self.message, "playing": self.playing, "auto": self.auto, "log_open": self.show_log, "world": self.world_mode(),
+        let mut out = json!({"message": self.message, "playing": self.playing, "auto": self.auto, "log_open": self.show_log, "world": self.world_mode(),
             "fx": self.fx_state(), "tokens": self.tokens.state(),
             "outcome": if self.host.session.is_some() { self.outcome() } else { String::new() },
-            "popup": self.popup.as_ref().map(|p| json!({"title": p.title, "rows": p.rows.iter().map(|r| json!({"label": r.label, "detail": r.detail, "valid": r.valid})).collect::<Vec<_>>()}))})
+            "popup": self.popup.as_ref().map(|p| json!({"title": p.title, "rows": p.rows.iter().map(|r| json!({"label": r.label, "detail": r.detail, "valid": r.valid})).collect::<Vec<_>>()}))});
+        // RULESET1-G: the rules the battle plays by, beyond classic (a classic battle's state keeps its shape)
+        if let Some(s) = self.host.session.as_ref().filter(|s| !s.w.ruleset.rules.is_empty()) {
+            out["ruleset"] = json!({"id": s.w.ruleset.id, "rules": s.w.ruleset.rules, "plan_reveal": s.w.plan_reveal});
+        }
+        out
     }
 
     fn command(&mut self, cx: &Cx, body: &Value) -> Option<Value> {
@@ -4797,5 +4820,35 @@ mod windup_tests {
         }
         assert!(winding > 0, "some unit winds up after the confirm");
         let _ = std::fs::remove_dir_all(&root);
+    }
+}
+
+#[cfg(test)]
+mod arena_rules_tests {
+    use super::*;
+    use emberwake_rules::ruleset::{Ruleset, PLAN_BADGES, TIMELINE};
+
+    /// RULESET1-G (index 12): the Arena passes its extension switches and "Reveal enemy plans" to the battle (and
+    /// they survive Restart); without them the request is the classic one: no ruleset, no reveal, no state key.
+    #[test]
+    fn the_arena_plays_by_its_switches_and_reveal() {
+        let cx = crate::hud::hud_tests::game_cx();
+        let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+        let classic = BattleScreen::arena(&cx, None, &encounter);
+        let s = classic.host.session.as_ref().expect("the battle starts");
+        assert!(s.w.ruleset.is_classic() && s.w.ruleset.rules.is_empty() && !s.w.plan_reveal);
+        assert!(classic.state(&cx).get("ruleset").is_none(), "a classic battle's state keeps its shape");
+        let timeline = Ruleset::of(&cx.data.cat, TIMELINE).expect("the catalog's timeline row");
+        let off = timeline.rules.iter().copied().find(|id| emberwake_rules::ruleset::rule(id).is_some_and(|r| r.kind == emberwake_rules::ruleset::RuleKind::Extension) && *id != PLAN_BADGES).expect("an extension besides plan_badges");
+        let mut b = BattleScreen::arena_with(&cx, None, &encounter, Some(TIMELINE.into()), &format!("-{off},+{PLAN_BADGES}"), true);
+        for start in ["first", "restarted"] {
+            let s = b.host.session.as_ref().expect("the battle starts");
+            assert!(!s.w.ruleset.has(off) && s.w.ruleset.has(PLAN_BADGES), "{start}: the switches apply");
+            assert!(s.w.plan_reveal, "{start}: the plans are revealed");
+            let st = b.state(&cx);
+            assert_eq!((st["ruleset"]["id"].clone(), st["ruleset"]["plan_reveal"].clone()), (json!(TIMELINE), json!(true)), "{start}");
+            // what the Arena's Restart does (without the playtest hub's save)
+            b.start_battle();
+        }
     }
 }

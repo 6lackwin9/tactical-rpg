@@ -10,7 +10,8 @@ pub const WORLD: &str = "ashlands";
 /// ashmaw_stand_barred.
 pub const STEEL_FLAG: &str = "ashlands.steel_to_gate";
 
-/// Emberwake's sim description: the Ashlands as default world and story run, branched on the steel choice.
+/// Emberwake's sim description: the Ashlands as default world and story run, branched on the steel choice; the
+/// timeline test encounters for `feel`.
 pub fn game() -> SimGame {
     SimGame {
         default_world: WORLD.into(),
@@ -22,8 +23,12 @@ pub fn game() -> SimGame {
             usage: "       campaign [level]   Ashlands story fights in quest order, HP carried over (level = party level, default 5): all 10 trios, both steel choices".into(),
             extra_example: "4:ash_raiders".into(),
         }),
+        feel_encounters: FEEL_ENCOUNTERS.iter().map(|e| e.to_string()).collect(),
     }
 }
+
+/// RULESET1-G (RULESET1_TASKS 2.7, 3): the timeline test encounters the `feel` mode fights by default.
+pub const FEEL_ENCOUNTERS: [&str; 5] = ["tl_duel_windup", "tl_duel_reach", "tl_duel_armour", "tl_flank", "tl_skirmish"];
 
 /// Parses the sim command line `argv` (mode first) on `d` for Emberwake: `world=` defaults to the Ashlands and the
 /// campaign mode plays its story run. Err = the message after "SIM argument error: ".

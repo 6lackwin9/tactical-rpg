@@ -8,7 +8,9 @@ use crate::screens::{enter_game, show_errors, Cx, GameCx, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
+use emberwake_rules::ruleset::{RuleKind, Ruleset, PLAN_BADGES, REGISTER};
 use emberwake_world::{explore, new_game};
+use indexmap::IndexMap;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -18,6 +20,12 @@ pub enum SAct {
     Arena,
     PickEncounter(usize),
     PickRuleset(usize),
+    /// RULESET1 12: the Arena's extension toggles shown or hidden.
+    ShowRules,
+    /// RULESET1 3.2: one extension (an index into `extensions()`) switched on or off for the Arena's run.
+    ToggleRule(usize),
+    /// RULESET1 V2, V3: "Reveal enemy plans" for the Arena's run.
+    Reveal,
     ContentForge,
     WorldForge,
     Dojo,
@@ -36,10 +44,26 @@ pub enum SAct {
 /// ruleset picked for the run.
 const RULESETS: [(&str, Option<&str>); 3] = [("World", None), ("Classic", Some("classic")), ("Timeline", Some("timeline"))];
 
+/// The Arena's extension toggles: columns and row height.
+const RULE_COLUMNS: usize = 4;
+const RULE_ROW_H: i32 = 13;
+
+/// The rules the Arena may switch one by one (RULESET1 3.2: the register's extensions, in its order).
+fn extensions() -> Vec<&'static str> {
+    REGISTER.iter().filter(|r| r.kind == RuleKind::Extension).map(|r| r.id).collect()
+}
+
 pub struct SceneRunner {
     encounter: usize,
     /// An index into RULESETS.
     ruleset: usize,
+    /// RULESET1 3.2: the extensions switched for the Arena's run (on or off whatever the picked ruleset has; one equal
+    /// to the ruleset's own changes nothing).
+    rules: IndexMap<&'static str, bool>,
+    /// The extension toggles are shown.
+    show_rules: bool,
+    /// RULESET1 V2: every enemy plan is revealed (the battle's `plan_reveal`; read under the rule `plan_badges`).
+    reveal: bool,
     world: usize,
     /// Exploration's start: an index into `starts`.
     location: usize,
@@ -48,7 +72,46 @@ pub struct SceneRunner {
 
 impl SceneRunner {
     pub fn new() -> Self {
-        Self { encounter: 0, ruleset: 0, world: 0, location: 0, w: Vec::new() }
+        Self { encounter: 0, ruleset: 0, rules: IndexMap::new(), show_rules: false, reveal: false, world: 0, location: 0, w: Vec::new() }
+    }
+
+    /// The ruleset the picked encounter plays by before the toggles: the picked one, or for World the ruleset of the
+    /// encounter's world (classic for a catalog encounter: RULESET1 3.1.2).
+    fn base_ruleset(&self, cx: &Cx) -> Ruleset {
+        match RULESETS[self.ruleset].1 {
+            Some(id) => Ruleset::of_or_classic(&cx.data.cat, id),
+            None => match Self::encounters(cx).get(self.encounter).and_then(|e| e.1.clone()) {
+                Some(world) => cx.data.ruleset(&world),
+                None => Ruleset::classic(),
+            },
+        }
+    }
+
+    /// The `rules` switches of the run ("-id,+id"): the toggles that differ from the base ruleset.
+    fn rules_spec(&self, base: &Ruleset) -> String {
+        self.rules.iter().filter(|(id, on)| base.has(id) != **on).map(|(id, on)| format!("{}{id}", if *on { '+' } else { '-' })).collect::<Vec<_>>().join(",")
+    }
+
+    /// The rules the Arena's run plays by: the base ruleset with the switches.
+    fn effective_ruleset(&self, cx: &Cx) -> Ruleset {
+        let mut r = self.base_ruleset(cx);
+        // only extensions are listed, so the switches cannot fail
+        let _ = r.adjust(&self.rules_spec(&r));
+        r
+    }
+
+    /// The ruleset chip: the run's ruleset name, its switches and the reveal ("Timeline -pierce +reach, plans shown").
+    fn chip(&self, cx: &Cx) -> String {
+        let base = self.base_ruleset(cx);
+        let spec = self.rules_spec(&base).replace(',', " ");
+        let mut t = base.name.clone();
+        if !spec.is_empty() {
+            t += &format!(" {spec}");
+        }
+        if self.reveal && self.effective_ruleset(cx).has(PLAN_BADGES) {
+            t += ", plans shown";
+        }
+        t
     }
 
     /// The picked world of Exploration.
@@ -136,11 +199,22 @@ impl SceneRunner {
             SAct::MainMenu | SAct::Exit => cx.nav.push(Nav::Pop),
             SAct::PickEncounter(i) => self.encounter = i,
             SAct::PickRuleset(i) => self.ruleset = i.min(RULESETS.len() - 1),
+            SAct::ShowRules => self.show_rules = !self.show_rules,
+            SAct::ToggleRule(i) => {
+                if let Some(id) = extensions().get(i).copied() {
+                    let on = self.effective_ruleset(cx).has(id);
+                    self.rules.insert(id, !on);
+                }
+            }
+            SAct::Reveal => self.reveal = !self.reveal,
             SAct::Arena => {
                 let list = Self::encounters(cx);
                 if let Some((_, world, id)) = list.get(self.encounter) {
                     let ruleset = RULESETS[self.ruleset].1.map(String::from);
-                    let b = crate::battle::BattleScreen::arena_with(cx, world.clone(), id, ruleset);
+                    let rules = self.rules_spec(&self.base_ruleset(cx));
+                    // a reveal ticked under another ruleset stays off where plan_badges is not on (classic stays byte-identical)
+                    let reveal = self.reveal && self.effective_ruleset(cx).has(PLAN_BADGES);
+                    let b = crate::battle::BattleScreen::arena_with(cx, world.clone(), id, ruleset, &rules, reveal);
                     cx.nav.push(Nav::Push(Box::new(b)));
                 }
             }
@@ -222,15 +296,26 @@ impl Screen<GameCx> for SceneRunner {
         let view = Rect::new(left.x, left.y + 14, left.w, left.h - 16);
         let desc_w = (left.w - 70) as f32;
         let (name_h, line_h) = (ui.p.line_h(BODY), ui.p.line_h(SMALL));
+        // RULESET1 12: the Arena's second row (reveal, chip, the toggles' button) and, shown, its extension toggles
+        let exts = extensions();
+        let rule_rows = exts.len().div_ceil(RULE_COLUMNS) as i32;
+        let arena_h = 32 + if self.show_rules { rule_rows * RULE_ROW_H + 2 } else { 0 };
         let cards: Vec<(Vec<String>, bool, i32)> = scenes
             .iter()
             .map(|s| {
                 let lines = ui.p.wrap(s.2, SMALL, desc_w);
                 let extra = matches!(s.3, SAct::Arena | SAct::Exploration);
-                let h = (3.0 + name_h + 1.0 + lines.len() as f32 * line_h + if extra { 16.0 } else { 0.0 } + 3.0).ceil() as i32;
+                let extra_h = match s.3 {
+                    SAct::Arena => arena_h,
+                    SAct::Exploration => 16,
+                    _ => 0,
+                };
+                let h = (3.0 + name_h + 1.0 + lines.len() as f32 * line_h + extra_h as f32 + 3.0).ceil() as i32;
                 (lines, extra, h.max(30))
             })
             .collect();
+        let effective = self.effective_ruleset(cx);
+        let chip = self.chip(cx);
         let content: i32 = cards.iter().map(|c| c.2 + 4).sum();
         let off = ui.scroll_begin("runner.scenes", view, content);
         let mut y = view.y - off;
@@ -249,6 +334,22 @@ impl Screen<GameCx> for SceneRunner {
                 ui.select("runner.arena.encounter", Rect::new(r.x + 5, pick_y, r.w - 144, 14), &labels, self.encounter, SAct::PickEncounter, !encounters.is_empty(), tip("Encounter", "The battle the arena launches."));
                 let rules: Vec<String> = RULESETS.iter().map(|x| x.0.to_string()).collect();
                 ui.select("runner.arena.ruleset", Rect::new(r.x + r.w - 135, pick_y, 80, 14), &rules, self.ruleset, SAct::PickRuleset, true, tip("Rules", "World: the encounter's world's ruleset (classic for a catalog encounter). Classic or Timeline: play it by those rules."));
+                // RULESET1 12: "Reveal enemy plans" (V2: under the rule plan_badges), the ruleset chip, the toggles
+                let row_y = pick_y + 17;
+                ui.checkbox("runner.arena.reveal", r.x + 5, row_y + 2, "Reveal enemy plans", self.reveal, SAct::Reveal, effective.has(PLAN_BADGES));
+                let chip_r = Rect::new(r.x + 110, row_y, r.w - 204, 14);
+                ui.p.panel(chip_r, rgba(30, 44, 70, 255), BORDER, 2.0);
+                ui.p.text_fit(chip_r.x as f32 + 4.0, chip_r.y as f32 + 2.0, &chip, SMALL, (chip_r.w - 8) as f32, if effective.is_classic() && effective.rules.is_empty() { DIM } else { GOLD });
+                let chip_tip = format!("Rules on: {}.", if effective.rules.is_empty() { "none (classic)".to_string() } else { effective.rules.join(", ") });
+                ui.push("runner.arena.chip", "label", chip.clone(), chip_r, true, false, None, tip(&format!("Ruleset: {chip}"), &chip_tip));
+                ui.button_full("runner.arena.rules", Rect::new(r.x + r.w - 90, row_y, 85, 14), "Extensions", SAct::ShowRules, true, self.show_rules, BODY, tip("Extensions", "Switch single extensions of the ruleset on or off for this run (RULESET1 3.2); options belong to their ruleset."));
+                if self.show_rules {
+                    let col_w = (r.w - 10) / RULE_COLUMNS as i32;
+                    for (i, id) in exts.iter().enumerate() {
+                        let (col, row) = ((i % RULE_COLUMNS) as i32, (i / RULE_COLUMNS) as i32);
+                        ui.checkbox(&format!("runner.arena.rule.{id}"), r.x + 5 + col * col_w, row_y + 18 + row * RULE_ROW_H, &id.replace('_', " "), effective.has(id), SAct::ToggleRule(i), true);
+                    }
+                }
             } else if extra {
                 let names: Vec<String> = worlds.iter().map(|w| cx.world_name(w)).collect();
                 ui.select(&format!("{id}.world"), Rect::new(r.x + 5, pick_y, 140, 14), &names, self.world % worlds.len().max(1), SAct::PickWorld, worlds.len() > 1, tip("World", "The world to explore."));
@@ -276,7 +377,9 @@ impl Screen<GameCx> for SceneRunner {
     fn state(&self, cx: &Cx) -> Value {
         let world = self.world_id(cx);
         let start = world.as_deref().map(|w| Self::starts(&cx.data, w)).and_then(|st| st.get(self.location.min(st.len().saturating_sub(1))).cloned());
-        json!({"encounter": Self::encounters(cx).get(self.encounter).map(|e| e.0.clone()), "ruleset": RULESETS[self.ruleset].0, "world": world, "start": start.map(|p| p.1.unwrap_or_else(|| "world_map".into()))})
+        let base = self.base_ruleset(cx);
+        json!({"encounter": Self::encounters(cx).get(self.encounter).map(|e| e.0.clone()), "ruleset": RULESETS[self.ruleset].0, "world": world, "start": start.map(|p| p.1.unwrap_or_else(|| "world_map".into())),
+            "rules": self.rules_spec(&base), "rules_on": self.effective_ruleset(cx).rules, "reveal": self.reveal, "chip": self.chip(cx)})
     }
 
     widget_plumbing!();
@@ -401,5 +504,37 @@ mod tests {
         let (gs, _) = SceneRunner::start_game(&d, "tale", Some(&other), 1).expect("a game");
         assert!(gs.story.running.is_none(), "another location drops it");
         assert_eq!(gs.location_id, other, "the party stands where the tester asked");
+    }
+
+    /// RULESET1-G (index 12): the Arena's toggles. A catalog encounter under World is classic, nothing switched; under
+    /// Timeline an extension of the row toggled off is the run's "-id" switch, one toggled back is no switch; the
+    /// extension toggles show one checkbox per register extension; "Reveal enemy plans" needs the rule plan_badges;
+    /// the chip names the ruleset and its switches.
+    #[test]
+    fn the_arena_toggles_switch_single_extensions_and_reveal_the_plans() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut r = SceneRunner::new();
+        let first_catalog = SceneRunner::encounters(&cx).iter().position(|e| e.1.is_none()).expect("a catalog encounter");
+        r.act(&mut cx, SAct::PickEncounter(first_catalog));
+        assert!(r.effective_ruleset(&cx).is_classic() && r.rules_spec(&r.base_ruleset(&cx)).is_empty(), "World on a catalog encounter: classic");
+        r.act(&mut cx, SAct::PickRuleset(2));
+        let base = r.base_ruleset(&cx);
+        assert!(!base.is_classic(), "the catalog has the timeline row");
+        let exts = extensions();
+        let (i, id) = exts.iter().enumerate().find(|(_, id)| base.has(id)).map(|(i, id)| (i, *id)).expect("the timeline row has an extension");
+        r.act(&mut cx, SAct::ToggleRule(i));
+        assert_eq!(r.rules_spec(&base), format!("-{id}"));
+        assert!(!r.effective_ruleset(&cx).has(id));
+        assert!(r.chip(&cx).ends_with(&format!("-{id}")) && r.chip(&cx).starts_with(&base.name), "{}", r.chip(&cx));
+        r.act(&mut cx, SAct::ToggleRule(i));
+        assert!(r.rules_spec(&base).is_empty(), "toggled back: no switch");
+        r.act(&mut cx, SAct::ShowRules);
+        let mut g = crate::hud::hud_tests::gfx();
+        r.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_eq!(r.w.iter().filter(|w| w.id.starts_with("runner.arena.rule.")).count(), exts.len(), "one toggle per extension");
+        let reveal = r.w.iter().find(|w| w.id == "runner.arena.reveal").expect("the reveal checkbox");
+        assert_eq!(reveal.enabled, r.effective_ruleset(&cx).has(PLAN_BADGES), "the reveal needs plan_badges");
+        r.act(&mut cx, SAct::Reveal);
+        assert_eq!(r.state(&cx)["reveal"], json!(true));
     }
 }

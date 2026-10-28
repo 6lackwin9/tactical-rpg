@@ -3,11 +3,13 @@
 //! `build_unit_in` under the deck rule, keeping their gear; a deck set in the Dojo fills the active slots and slots its
 //! passives (RULESET1 9 D2, D3); the planner view (RULESET1_INTENT UI4) is deterministic (PL1), adds up its AP and Rest
 //! gain (RS2) and makes one plan per intent of the ruleset; a hit's stagger follows P6 on the dummy's fixed Max Poise
-//! (P2) and the bars refill at the next round (P3); landed Rest blocks pay their AP at the round's end (RS2).
+//! (P2) and the bars refill at the next round (P3); landed Rest blocks pay their AP at the round's end (RS2). Slice 2
+//! (review): a rebuild keeps the spent points and the pouch; a broken dummy loses its action (P7); Reset rebuilds under
+//! timeline; the Rest AP is lost on a hero switch; the planner shows its scratch battle's AP; Rest matches by kind.
 
 use rpgkit_battle::dojo::{DojoSession, HEROES};
 use rpgkit_battle::round_intent::{self, RoundIntent};
-use rpgkit_data::{Catalog, Deck};
+use rpgkit_data::{Catalog, Deck, STATS};
 use rpgkit_rules::gear::{Equipment, Slot};
 use rpgkit_rules::ruleset::{Ruleset, AP_COST, DECK, POISE, ROUND_INTENT, TIMELINE};
 use rpgkit_rules::stats::roundi;
@@ -40,7 +42,7 @@ fn catalog() -> Catalog {
     Catalog::from_value(&json!({
         "skills": skills,
         "passives": [{"id": "t_tough", "name": "Tough", "slot": "passive", "effects": [{"type": "stat", "stat": "max_poise", "value": 5}]}],
-        "items": [{"id": "t_sword", "name": "Sword", "item_type": "WEAPON", "base_power": 5}],
+        "items": [{"id": "t_sword", "name": "Sword", "item_type": "WEAPON", "base_power": 5}, {"id": "t_potion", "name": "Potion", "item_type": "CONSUMABLE", "starter_stash": true}],
         "units": [unit(HEROES[0], "party", 30), unit(HEROES[1], "party", 30), unit("training_dummy", "enemy", DUMMY_POISE)],
     }))
 }
@@ -140,4 +142,99 @@ fn rest_blocks_pay_their_ap_at_the_rounds_end() {
     a.next_round();
     b.next_round();
     assert_eq!(a.hero().ap, b.hero().ap - 2 * cost + gain, "the Rest gain comes at the round's end");
+}
+
+#[test]
+fn a_rebuild_keeps_the_points_spent_here_and_the_pouch() {
+    let mut s = dojo(None);
+    assert!(s.add_to_pouch("t_potion"), "the starter stash's consumable goes to the pouch");
+    let stat = STATS[0];
+    s.begin_allocation();
+    s.allocate(stat);
+    s.allocate(stat);
+    s.confirm_allocation();
+    let (core, free, pouch) = (s.hero().stats.core.clone(), s.hero().stats.unallocated, s.hero().inventory.pouch.iter().map(|i| i.id.clone()).collect::<Vec<_>>());
+    assert_eq!(pouch, ["t_potion"]);
+    let kept = |s: &DojoSession, when: &str| {
+        assert_eq!(s.hero().stats.core, core, "{when}: the spent points stay");
+        assert_eq!(s.hero().stats.unallocated, free, "{when}: the unspent points too");
+        assert_eq!(s.hero().inventory.pouch.iter().map(|i| i.id.clone()).collect::<Vec<_>>(), pouch, "{when}: the pouch stays");
+    };
+    s.set_ruleset(timeline());
+    kept(&s, "the toggle to timeline");
+    s.set_deck(Deck { active: vec!["t_jab".into()], ..Deck::default() });
+    kept(&s, "a deck set here");
+    s.set_ruleset(Ruleset::classic());
+    kept(&s, "back to classic");
+}
+
+#[test]
+fn a_broken_dummy_loses_its_action_until_the_next_round() {
+    let mut s = dojo(Some(timeline()));
+    s.toggle_dummy_windup();
+    for _ in 0..10 {
+        if s.dummy_poise.broken {
+            break;
+        }
+        s.heal_dummy();
+        s.use_skill(Some("t_heavy"));
+    }
+    assert!(s.dummy_poise.broken, "P7: heavy hits into the windup break the dummy");
+    let hp = s.hero().hp;
+    s.dummy_attack();
+    let last = s.log.last().unwrap();
+    assert_eq!((last.outcome.as_str(), s.hero().hp), ("BROKEN", hp), "the broken dummy's strike is cancelled");
+    s.next_round();
+    assert!(!s.dummy_poise.broken, "P3: the bar refills");
+    s.dummy_attack();
+    assert_eq!(s.log.last().unwrap().category, "ATTACK", "the next round it strikes again");
+}
+
+#[test]
+fn reset_rebuilds_the_heroes_under_the_timeline_ruleset() {
+    let mut s = dojo(Some(timeline()));
+    s.set_deck(Deck { active: vec!["t_jab".into()], ..Deck::default() });
+    s.dummy_poise.value = 1;
+    s.reset();
+    assert_eq!(s.ruleset, timeline(), "the toggle stays");
+    assert!(s.heroes.iter().all(|h| h.deck_rule.is_some()), "every hero rebuilt under the deck rule");
+    assert!(s.deck_of(0).is_empty(), "the deck set here is gone (the baseline's)");
+    assert_eq!((s.dummy_poise.value, s.dummy_poise.max), (DUMMY_POISE, DUMMY_POISE), "the bars refill");
+    assert!(s.log.last().is_some_and(|e| e.title == "Dojo Reset"));
+}
+
+#[test]
+fn the_rest_ap_belongs_to_the_hero_that_rested_and_is_lost_on_a_switch() {
+    let (mut a, mut b) = (dojo(Some(timeline())), dojo(Some(timeline())));
+    let rest = a.cat.skills.iter().find(|k| k.id == "rest").unwrap().clone();
+    let cost = a.skill_ap(&rest);
+    a.use_skill(Some("rest"));
+    assert!(a.rest_blocks > 0);
+    a.set_active(1);
+    b.set_active(1);
+    assert_eq!(a.rest_blocks, 0, "the next hero starts with no Rest blocks");
+    a.next_round();
+    b.next_round();
+    assert_eq!(a.heroes[1].ap, b.heroes[1].ap, "the other hero gains no Rest AP");
+    assert_eq!(a.heroes[0].ap, b.heroes[0].ap - cost, "the hero that rested paid and gained nothing");
+}
+
+#[test]
+fn the_planner_shows_the_ap_its_scratch_battle_plans_with() {
+    let mut s = dojo(Some(timeline()));
+    let before = s.plan_view().ap_before;
+    s.heroes[0].ap = before - 3;
+    let v = s.plan_view();
+    assert_eq!(v.ap_before, before, "the scratch battle's round-1 AP, not the hero's AP now");
+    assert_eq!(v.ap_after, v.ap_before - v.rows.iter().map(|r| r.ap).sum::<i32>());
+}
+
+#[test]
+fn rest_is_matched_by_its_kind_only() {
+    let mut s = dojo(Some(timeline()));
+    let ap = s.hero().ap;
+    s.use_skill(Some("move"));
+    assert_eq!(s.rest_blocks, 0, "a MOVE used in the Dojo books no Rest block");
+    let mv = s.cat.skills.iter().find(|k| k.id == "move").unwrap().clone();
+    assert_eq!(s.hero().ap, ap - s.skill_ap(&mv));
 }

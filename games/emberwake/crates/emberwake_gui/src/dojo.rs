@@ -83,10 +83,13 @@ pub enum DAct {
     OrderAuto,
 }
 
+/// The planner cache's key: (screen revision, active hero, setup, rules).
+type PlanKey = (u64, usize, PlanSetup, Vec<&'static str>);
+
 /// What the planner window shows, computed when its inputs change (each plan compiles a scratch battle).
 #[derive(Clone)]
 struct PlanCache {
-    key: (usize, usize, PlanSetup, Vec<&'static str>),
+    key: PlanKey,
     view: PlanView,
     by_intent: Vec<PlanView>,
     openers: Vec<(String, String)>,
@@ -105,6 +108,8 @@ pub struct Dojo {
     /// The planner piece a board click moves ("hero", "dummy", "partner").
     plan_piece: &'static str,
     plan: Option<PlanCache>,
+    /// Counts the screen's actions and drops (the planner cache's key).
+    rev: u64,
     w: Vec<Widget<DAct>>,
 }
 
@@ -170,7 +175,7 @@ impl Dojo {
         ];
         let mut desk = Desk::new(AREA, wins, layouts());
         desk.restore(&cx.settings.v["desks"][SCREEN_ID]);
-        Self { s: DojoSession::new(cx.data.cat.clone()), desk, log_filter: "ALL", stash_filter: "all", picked: None, seen: 0, floats: Vec::new(), plan_piece: "dummy", plan: None, w: Vec::new() }
+        Self { s: DojoSession::new(cx.data.cat.clone()), desk, log_filter: "ALL", stash_filter: "all", picked: None, seen: 0, floats: Vec::new(), plan_piece: "dummy", plan: None, rev: 0, w: Vec::new() }
     }
 
     /// The active hero's deck terms (None without the deck rule).
@@ -188,16 +193,30 @@ impl Dojo {
         }
     }
 
-    /// The planner window's contents when its inputs changed (the log count stands for every change to the heroes).
+    /// What the planner's contents depend on: the screen's revision (every action and drop counts one, so a change
+    /// that logs nothing, such as the dummy's power, still counts), the active hero, the setup and the rules.
+    fn plan_key(&self) -> PlanKey {
+        (self.rev, self.s.active, self.s.planner.clone(), self.s.ruleset.rules.clone())
+    }
+
+    /// The planner's contents now (None without round intents).
+    fn plan_now(&self) -> Option<PlanCache> {
+        if self.s.plan_intents().is_empty() {
+            return None;
+        }
+        Some(PlanCache { view: self.s.plan_view(), by_intent: self.s.plans_by_intent(), openers: self.s.plan_openers(), key: self.plan_key() })
+    }
+
+    /// The planner window's contents when its inputs changed.
     fn refresh_plan(&mut self) {
-        let key = (self.s.log.last().map_or(0, |e| e.n), self.s.active, self.s.planner.clone(), self.s.ruleset.rules.clone());
-        if self.plan.as_ref().is_some_and(|p| p.key == key) {
+        if self.plan.as_ref().is_some_and(|p| p.key == self.plan_key()) {
             return;
         }
-        self.plan = Some(PlanCache { view: self.s.plan_view(), by_intent: self.s.plans_by_intent(), openers: self.s.plan_openers(), key });
+        self.plan = self.plan_now();
     }
 
     fn act(&mut self, cx: &mut Cx, a: DAct) {
+        self.rev += 1;
         let s = &mut self.s;
         match a {
             DAct::Hero(i) => s.set_active(i),
@@ -990,6 +1009,7 @@ impl Screen<GameCx> for Dojo {
     }
 
     fn accept_drop(&mut self, _cx: &mut Cx, from: &str, to: &str) {
+        self.rev += 1;
         let (kind, what) = from.split_once('.').unwrap_or((from, ""));
         let (target, at) = to.split_once('.').unwrap_or((to, ""));
         match (kind, target) {
@@ -1027,7 +1047,16 @@ impl Screen<GameCx> for Dojo {
                 out["dummy_poise"] = json!([d.value, d.max, d.broken]);
                 out["dummy_windup"] = json!(self.s.dummy_windup);
             }
-            if let Some(pc) = &self.plan {
+            // the plan as it stands now, the planner window open or not (the window's cache when it is current)
+            let fresh;
+            let current = match &self.plan {
+                Some(pc) if pc.key == self.plan_key() => Some(pc),
+                _ => {
+                    fresh = self.plan_now();
+                    fresh.as_ref()
+                }
+            };
+            if let Some(pc) = current {
                 let v = &pc.view;
                 out["plan"] = json!({
                     "intent": v.intent, "kind": v.kind, "target": v.target, "refused": v.refused, "ap_before": v.ap_before, "ap_after": v.ap_after,
@@ -1082,9 +1111,8 @@ mod tests {
         let mut dojo = Dojo::new(&cx);
         assert!(dojo.state(&cx).get("plan").is_none());
         dojo.act(&mut cx, DAct::Ruleset);
-        if dojo.s.ruleset.is_classic() || dojo.s.plan_intents().is_empty() {
-            return; // no timeline row with round intents in this catalog
-        }
+        // a timeline world needs the row (a content error without it), so the data has one with round intents
+        assert!(!dojo.s.ruleset.is_classic() && !dojo.s.plan_intents().is_empty(), "the catalog's timeline row with round intents");
         let mut g = crate::hud::hud_tests::gfx();
         dojo.draw(&mut cx, &mut g, (-500, -500), true);
         assert!(dojo.desk.win("planner").is_some_and(|w| w.open) && dojo.desk.win("deck").is_some_and(|w| w.open));
@@ -1109,6 +1137,28 @@ mod tests {
         }
         dojo.act(&mut cx, DAct::Ruleset);
         assert!(dojo.s.plan_intents().is_empty() && dojo.state(&cx).get("plan").is_none());
+    }
+
+    /// RULESET1-G review: a change that logs nothing (the dummy's power) still moves the planner cache's key, and the
+    /// state's plan follows the setup with the planner window closed (it is computed when the cache is stale).
+    #[test]
+    fn the_plan_state_follows_changes_that_log_nothing_and_a_closed_window() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut dojo = Dojo::new(&cx);
+        dojo.act(&mut cx, DAct::Ruleset);
+        let intents = dojo.s.plan_intents();
+        assert!(intents.len() > 1, "the catalog's timeline row offers several intents");
+        let mut g = crate::hud::hud_tests::gfx();
+        dojo.draw(&mut cx, &mut g, (-500, -500), true);
+        let (key, logged) = (dojo.plan_key(), dojo.s.log.len());
+        dojo.act(&mut cx, DAct::DummyPower(5));
+        assert_eq!(dojo.s.log.len(), logged, "the dummy's power logs nothing");
+        assert_ne!(dojo.plan_key(), key, "yet the planner's key moves");
+        dojo.desk.set_open("planner", false);
+        let other = intents.iter().position(|i| *i != dojo.s.planner.intent).unwrap();
+        dojo.act(&mut cx, DAct::PlanIntent(other));
+        dojo.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_eq!(dojo.state(&cx)["plan"]["intent"], json!(intents[other].name()), "the closed window's plan is current in the state");
     }
 
     /// DERIVE1 4.4: with several catalog rows the Derived Stats window closes its rows up and scrolls the rest, in
