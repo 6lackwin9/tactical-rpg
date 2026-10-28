@@ -324,8 +324,8 @@ in `docs/archive/TASKS_DONE.md`, the user's rulings the rows in `games/emberwake
 - HOOKS1-GF: with the rule off the battle's catalog drops skill hazards at the start (`World::ignore_hazards_when_off`).
 - HOOKS1-Z: data zones for encounters and road fights apply the board and hold tiles through `Grid::apply_board`.
 - HOOKS1-E (user-confirmed): a redirect's leftover counts against the holder; ripostes raise no hit events; area holders
-  take no redirect; the depth-1 rule. Open: `ally_hit` non-hit effects (Intercepting Hook's pull) run after the action,
-  pending the user's pick (no decision row yet).
+  take no redirect; the depth-1 rule. `ally_hit` non-hit effects (Intercepting Hook's pull) run after the action
+  (user 2026-10-29, decision "RULESET1-U slice 1 and HOOKS1-E answers"; this line said "pending the user's pick").
 - HOOKS1-K: decision "HOOKS1-K answers (user 2026-10-29)": the AI uses an HP-cost skill whenever it can pay; riders skip
   a user that died to a riposte.
 - HOOKS1-X: an `exploit` entry `{hp_below, power_mult}` reads the target's HP share before the hit; the best entry wins
