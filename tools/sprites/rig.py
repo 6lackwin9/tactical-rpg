@@ -498,8 +498,14 @@ def pose(u, bob=0.0, lean=0.0, dx=0.0, fb=(-3.5, 0), ff=(3.5, 0), hand_f=None, h
                 if f.px[x, y][3]: f.px[x, y] = (255, 255, 255, 255) if f.px[x, y][:3] != OUT else (255, 220, 220, 255)
     # WINDUP1: where the main hand and the main weapon's tip are (image metadata, for the wind-up effects)
     f.im.info['hand'] = (hfx, hfy)
+    f.im.info['off'] = R(hb)  # WINDUP1-R2: the off hand (a ranger's string hand, for the buff motes)
     if wf in WEAPON_TIP and not loose and not swap:
         ux, uy = udir(wa); f.im.info['tip'] = (hfx + ux * WEAPON_TIP[wf], hfy + uy * WEAPON_TIP[wf])
+    elif wf == 'bow' and nock and pull > 0 and not loose:  # the nocked arrow's head (draw_bow)
+        f.im.info['tip'] = (hfx + 5.2, hfy)
+    elif wf == 'fists' and not loose:  # the near fist's knuckles, along the forearm
+        ex, ey = R(ef); d = math.hypot(hfx - ex, hfy - ey) or 1.0
+        f.im.info['tip'] = (hfx + (hfx - ex) / d * 2.0, hfy + (hfy - ey) / d * 2.0)
     return f.im
 
 
@@ -592,6 +598,7 @@ LOOP_FROM = 3                         # the first looped frame of a wind-up (aft
 INTRO = (0.4, 0.75, 1.0)
 HOLD_BOB = (0.0, 0.5, 1.0, 0.5)
 TREMBLE = (0.0, 0.5, 0.0, -0.5)
+MOTE_ORBIT = 3.5                      # px from the tip of the buff motes circling it (motes='tip', WINDUP1-R2)
 # the values pose() draws for a key it is not given (None hands: the rest pose), so an intro can lerp from them
 SIDE_REST = dict(bob=0.0, lean=0.0, dx=0.0, fb=(-3.5, 0), ff=(3.5, 0), hand_f=(4.0, 6.5), hand_b=(-2.5, 8.5), wa=25.0,
                  wb=160.0, head_dy=0.0, glow=0.0, tails=0.0, bow_a=0.0, pull=0.0)
@@ -661,20 +668,30 @@ def shake_dx(kw, d):
     kw['dx'] = kw.get('dx', 0.0) + d
 
 
-def windup(kind, ready, hold, draw, rest=SIDE_REST, shake=shake_dx):
+def windup(kind, ready, hold, draw, rest=SIDE_REST, shake=shake_dx, motes='hand', steps=None):
     """(frames, ms) of wind-up `kind` (WINDUPS) from the `ready` keys to the `hold` keys (K1). `draw(keys)` draws one
     frame and puts the main hand (and the weapon tip, when it has one) in the frame's info ('hand', 'tip'), as pose
-    and views.pose_view do; `shake(keys, d)` applies the heavy tremble of d px."""
+    and views.pose_view do; `shake(keys, d)` applies the heavy tremble of d px. WINDUP1-R2: motes 'tip' sets the buff
+    motes circling the weapon's tip (a staff's gem) instead of rising from the hand, 'off' rising from the off hand
+    (frame info 'off'; a ranger's raised string hand); steps {key: four values} sets a
+    key per hold frame (a gem's glow pulsing over the hold)."""
     frames = [draw(lerp_kw(ready, hold, k, rest)) for k in INTRO]
     for i in range(len(HOLD_BOB)):
         kw = dict(hold)
         kw['bob'] = kw.get('bob', 0.0) + HOLD_BOB[i]
+        for key, vals in (steps or {}).items():
+            kw[key] = vals[i]
         if kind == 'windup_heavy':
             shake(kw, TREMBLE[i])
         im = draw(kw)
         hx, hy = im.info['hand']
-        if kind == 'windup_buff':  # two motes rise from the hand, a frame apart in their 4-frame climb
-            overlay(im, [(hx - 1.5, hy - 2 - i, GOLDEN), (hx + 1.5, hy - 2 - (i + 2) % 4, GOLDEN_HI)])
+        if kind == 'windup_buff' and motes == 'tip' and im.info.get('tip'):  # two motes circling the tip, opposite
+            tx, ty = im.info['tip']; a = i * math.pi / 2
+            overlay(im, [(tx + MOTE_ORBIT * math.cos(a), ty + MOTE_ORBIT * math.sin(a), GOLDEN),
+                         (tx - MOTE_ORBIT * math.cos(a), ty - MOTE_ORBIT * math.sin(a), GOLDEN_HI)])
+        elif kind == 'windup_buff':  # two motes rise from the hand (motes 'off': the off hand), a frame apart
+            mx, my = im.info['off'] if motes == 'off' and im.info.get('off') else (hx, hy)
+            overlay(im, [(mx - 1.5, my - 2 - i, GOLDEN), (mx + 1.5, my - 2 - (i + 2) % 4, GOLDEN_HI)])
         if kind == 'windup_debuff' and i in (0, 2) and im.info.get('tip'):
             tx, ty = im.info['tip']; d = math.hypot(tx - hx, ty - hy) or 1.0
             overlay(im, [(tx + (tx - hx) / d, ty + (ty - hy) / d, WHITE)])  # just past the tip, over the outline
@@ -695,14 +712,15 @@ def dazed(keys, draw):
     return out, list(DAZED_MS)
 
 
-def windup_rows(draw, ready, holds, stagger_keys, dazed_keys, rest=SIDE_REST, shake=shake_dx):
+def windup_rows(draw, ready, holds, stagger_keys, dazed_keys, rest=SIDE_REST, shake=shake_dx, motes='hand', steps=None):
     """The six WINDUP1 rows of one grip (WINDUP_ROWS order): {id: frames}, {id: ms}. holds: {wind-up id: hold keys}
     (a grip may leave a wind-up out; the screen falls back); stagger_keys: its first four keys (K3; frame 4 is dazed
-    frame 0); dazed_keys: the slumped pose (K4)."""
+    frame 0); dazed_keys: the slumped pose (K4); motes: windup's buff motes ('hand', 'off' or 'tip'); steps: {wind-up id:
+    windup's steps}."""
     A, T = {}, {}
     for kind in WINDUPS:
         if kind in holds:
-            A[kind], T[kind] = windup(kind, ready, holds[kind], draw, rest, shake)
+            A[kind], T[kind] = windup(kind, ready, holds[kind], draw, rest, shake, motes, (steps or {}).get(kind))
     dz, dzt = dazed(dazed_keys, draw)
     first = dazed(dazed_keys, lambda k: k)[0][0]  # dazed frame 0's keys: the stagger ends in it
     A['stagger'], T['stagger'] = [draw(dict(k)) for k in stagger_keys] + [draw(first)], list(STAGGER_MS)

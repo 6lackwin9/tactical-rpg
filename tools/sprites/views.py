@@ -691,10 +691,10 @@ W1_WINDUPS = dict(attack=warrior_attack_keys, strike=2, holds={
 # 2H (the greatsword): the windup is attack frame 1 (cocked over the right shoulder); both hands on the grip
 G2 = dict(grip2=rig.GRIP2)
 W2_WINDUPS = dict(attack=warrior_2h_attack_keys, strike=2, holds={
-    'down': {'windup_heavy': dict(bob=3.2, dy=-0.5, hand_r=(-1.5, -9.0), wa=350, wk=0.42, wz=RAISED_BACK, **G2),
+    'down': {'windup_heavy': dict(bob=3.2, dy=-0.5, hand_r=(3.0, -2.5), wa=318, wk=0.8, wz=RAISED_BACK, **G2),
              'windup_buff': dict(bob=1.0, head_dy=0.8, hand_r=(-4.0, 8.0), wa=180, wz=FRONT, **G2),
              'windup_debuff': dict(bob=1.0, dy=0.5, hand_r=(0.5, 2.5), wa=212, wk=0.6, **G2)},
-    'up': {'windup_heavy': dict(bob=3.2, dy=0.5, hand_r=(-1.5, -9.0), wa=5, wk=0.42, **G2),
+    'up': {'windup_heavy': dict(bob=3.2, dy=0.5, hand_r=(0.5, -1.0), wa=38, wk=0.75, fore_z=UP_FORE, **G2),
            'windup_buff': dict(bob=1.0, head_dy=0.8, hand_r=(-2.5, 3.5), wa=10, wk=1.0, fore_z=UP_FORE, **G2),
            'windup_debuff': dict(bob=1.0, dy=-0.5, hand_r=(2.0, 1.0), wa=40, wk=0.55, fore_z=UP_FORE, **G2)}},
     stagger={

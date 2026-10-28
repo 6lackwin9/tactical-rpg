@@ -245,7 +245,7 @@ def check_windups(key: str, frames: dict, clips: list, pal: dict, keys) -> None:
     new = [n for n in rig.WINDUP_ROWS if n in by_id]
     if not new:
         if cu is not None or key in variants.CREATURES:
-            print("windup: %s has no wind-up rows yet (WINDUP1-R2 / R3)" % key)
+            print("windup: %s has no wind-up rows yet (WINDUP1-R3)" % key)
         return
     want = {n: (7, rig.WINDUP_MS[n], True, rig.LOOP_FROM) for n in rig.WINDUPS}
     want.update(stagger=(5, rig.STAGGER_MS, False, None), dazed=(8, rig.DAZED_MS, True, None))

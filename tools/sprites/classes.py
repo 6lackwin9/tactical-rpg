@@ -8,8 +8,9 @@ BASE = dict(leather=(122, 82, 51), leather_lo=(80, 52, 32), wood=(138, 98, 58), 
             eye=(40, 30, 30), hair=(70, 48, 36), boot=(92, 62, 40), boot_lo=(64, 42, 28))
 def pal(**kw): p = dict(BASE); p.update(kw); return p
 
-# WINDUP1: the classes whose bodies have the six wind-up rows (rig.WINDUP_ROWS; WINDUP1-R2 adds the other five)
-WINDUP_CLASSES = ('warrior',)
+# WINDUP1: the classes whose bodies have the six wind-up rows (rig.WINDUP_ROWS): the warrior (R1) and the other five
+# (R2), every body of each (goblin, look and named)
+WINDUP_CLASSES = ('warrior', 'ranger', 'brawler', 'priest', 'rogue', 'mage')
 BLUE, BLUE_HI = (110, 170, 230), (200, 230, 255)
 GOLDEN, GOLDEN_HI = rig.GOLDEN, rig.GOLDEN_HI
 
@@ -136,6 +137,94 @@ WB_STAGGER = [dict(bob=0.5, lean=-2.5, dx=-1.5, head_dy=-1.0, wa=-50, hand_f=(-4
               dict(bob=2.5, lean=1.5, dx=-2.0, head_dy=1.0, wa=150, hand_f=(3.0, 8.0), hand_b=(2.0, 7.5), fb=(-6.5, 0), ff=(4.0, 0)),
               dict(bob=2.2, lean=1.5, dx=-2.0, head_dy=1.5, wa=158, hand_f=(3.5, 8.5), hand_b=(1.0, 8.5), fb=(-5.5, 0), ff=(4.0, 0))]
 WB_DAZED = dict(bob=2.0, lean=1.5, head_dy=1.5, wa=162, hand_f=(3.5, 8.5), hand_b=(0.5, 9.0), fb=(-5.0, 0), ff=(4.0, 0))
+
+# WINDUP1-R2: the other five classes (table 7.2), each one grip shared by its goblin and named bodies (the rig scales
+# the keys by the body's size). `windup` is the main attack's frame strike - 1 (K2: its own keys, below); the stagger
+# (K3) and dazed (K4) follow the warrior's shape: head snapped back and the weapon arm flung wide, knocked back a step,
+# knees buckling, swaying; slumped with the weapon toward the ground before the feet and the off hand hanging.
+# Ranger bow: full draw (attack 3); heavy tilted up 10 degrees, leaning back; buff the bow lowered and the string hand
+# raised palm up (the motes rise from it, motes 'off'); debuff a half draw aimed at the target's feet (the glint at
+# the arrow's head).
+R_DRAW = dict(bob=1.2, lean=-1.2, bow_a=0, hand_f=(10.2, 0.5), pull=1.0, nock=True, hand_b=(-2.0, -0.5), fb=(-5.5, 0), ff=(4.5, 0))  # attack 3
+R_HOLDS = {
+    'windup_heavy': dict(bob=2.4, lean=-2.4, dx=-0.5, bow_a=-10, hand_f=(10.0, -1.6), pull=1.0, nock=True, hand_b=(-2.2, -2.2),
+                         fb=(-6.5, 0), ff=(5.0, 0)),
+    'windup_buff': dict(bob=0.6, lean=0.3, bow_a=50, hand_f=(4.0, 8.0), hand_b=(6.0, -3.5), fb=(-4.0, 0), ff=(4.0, 0)),
+    'windup_debuff': dict(bob=1.0, lean=-0.4, bow_a=22, hand_f=(9.5, 3.5), pull=0.5, nock=True, hand_b=(3.0, 0.0), fb=(-5.5, 0), ff=(4.5, 0)),
+}
+R_STAGGER = [dict(bob=0.5, lean=-2.5, dx=-1.5, head_dy=-1.0, bow_a=-30, hand_f=(-4.0, 1.5), hand_b=(5.0, 3.5), fb=(-4.5, 0), ff=(4.0, 0)),
+             dict(bob=1.5, lean=-2.0, dx=-2.5, head_dy=-0.5, bow_a=-10, hand_f=(-3.0, 4.0), hand_b=(4.5, 4.5), fb=(-7.5, 0), ff=(3.5, 0)),
+             dict(bob=2.5, lean=1.5, dx=-2.0, head_dy=1.0, bow_a=55, hand_f=(3.5, 8.0), hand_b=(2.0, 7.5), fb=(-6.5, 0), ff=(4.0, 0)),
+             dict(bob=2.2, lean=1.5, dx=-2.0, head_dy=1.5, bow_a=60, hand_f=(3.5, 8.5), hand_b=(1.0, 8.5), fb=(-5.5, 0), ff=(4.0, 0))]
+R_DAZED = dict(bob=2.0, lean=1.5, head_dy=1.5, bow_a=62, hand_f=(3.5, 8.5), hand_b=(0.5, 9.0), fb=(-5.0, 0), ff=(4.0, 0))
+# Brawler fists: the power fist cocked at the chest (jab 1); heavy wound far back (haymaker 1, the clip a heavy blow
+# plays from its strike); buff the fists together before the chest, head bowed; debuff the near fist pointed at the
+# target (the glint at its knuckles); stagger the fists flung up and back, dazed the hands hanging open.
+B_GF = (9.5, -6)
+B_FISTS = dict(fb=(-5.5, 0), ff=(5, 0), fist_f=True, fist_b=True)
+B_JAB_COCKED = dict(bob=1.3, lean=1.0, hand_f=(B_GF[0] - 0.5, B_GF[1] + 0.9), hand_b=(3, -0.5), **B_FISTS)  # jab 1
+B_HAY_COCKED = dict(bob=2.0, lean=-3.0, dx=-2.5, hand_f=(B_GF[0], B_GF[1] - 0.3), hand_b=(-8, 3), **B_FISTS)  # haymaker 1
+B_HOLDS = {
+    'windup_heavy': B_HAY_COCKED,
+    'windup_buff': dict(bob=1.2, lean=1.2, head_dy=1.6, hand_f=(5.0, 2.5), hand_b=(6.5, 2.5), fb=(-4.0, 0), ff=(4.0, 0), fist_f=True, fist_b=True),
+    'windup_debuff': dict(bob=1.2, lean=1.8, dx=0.5, hand_f=(11.5, -3.0), hand_b=(6.0, -3.5), **B_FISTS),
+}
+B_STAGGER = [dict(bob=0.5, lean=-2.5, dx=-1.5, head_dy=-1.0, hand_f=(5.5, -6.0), hand_b=(-4.0, -2.5), fb=(-4.5, 0), ff=(4.0, 0), fist_f=True, fist_b=True),
+             dict(bob=1.5, lean=-2.0, dx=-2.5, head_dy=-0.5, hand_f=(4.5, -1.5), hand_b=(-4.5, 2.0), fb=(-7.5, 0), ff=(3.5, 0), fist_f=True, fist_b=True),
+             dict(bob=2.5, lean=1.5, dx=-2.0, head_dy=1.0, hand_f=(3.0, 9.5), hand_b=(0.5, 10.0), fb=(-6.5, 0), ff=(4.0, 0)),
+             dict(bob=2.2, lean=1.5, dx=-2.0, head_dy=1.5, hand_f=(2.5, 10.0), hand_b=(0.0, 10.5), fb=(-5.5, 0), ff=(4.0, 0))]
+B_DAZED = dict(bob=2.0, lean=1.5, head_dy=1.5, hand_f=(2.5, 10.2), hand_b=(0.0, 10.6), fb=(-5.0, 0), ff=(4.0, 0))  # arms hanging straight
+# Priest mace: raised over the head (attack 1); heavy high in both hands, further back, crouched; buff upright before
+# the face, the off hand raised; debuff pointed at the target, the off hand open.
+P_RAISED = dict(bob=1.2, lean=-2.0, dx=-1, wa=-40, hand_f=(-1, -7.5), hand_b=(-2, -4), fb=(-5.5, 0), ff=(4.5, 0))  # attack 1
+P_HOLDS = {
+    'windup_heavy': dict(bob=2.4, lean=-3.0, dx=-1.0, wa=-70, hand_f=(-2.0, -8.5), hand_b=(-2.5, -7.0), fb=(-6.5, 0), ff=(5.0, 0)),
+    'windup_buff': dict(bob=0.6, lean=0.0, wa=0, hand_f=(7.5, 3.0), hand_b=(2.5, -9.5), fb=(-4.0, 0), ff=(4.0, 0)),
+    'windup_debuff': dict(bob=1.0, lean=0.8, dx=0.5, wa=90, hand_f=(8.0, 0.5), hand_b=(6.0, 3.0), fb=(-5.5, 0), ff=(4.5, 0)),
+}
+P_STAGGER = [dict(bob=0.5, lean=-2.5, dx=-1.5, head_dy=-1.0, wa=-50, hand_f=(-4.5, 1.0), hand_b=(5.0, 3.5), fb=(-4.5, 0), ff=(4.0, 0)),
+             dict(bob=1.5, lean=-2.0, dx=-2.5, head_dy=-0.5, wa=-25, hand_f=(-4.0, 3.0), hand_b=(4.5, 4.5), fb=(-7.5, 0), ff=(3.5, 0)),
+             dict(bob=2.5, lean=1.5, dx=-2.0, head_dy=1.0, wa=150, hand_f=(3.0, 8.0), hand_b=(2.0, 7.5), fb=(-6.5, 0), ff=(4.0, 0)),
+             dict(bob=2.2, lean=1.5, dx=-2.0, head_dy=1.5, wa=158, hand_f=(3.5, 8.5), hand_b=(1.0, 8.5), fb=(-5.5, 0), ff=(4.0, 0))]
+P_DAZED = dict(bob=2.0, lean=1.5, head_dy=1.5, wa=162, hand_f=(3.5, 8.5), hand_b=(0.5, 9.0), fb=(-5.0, 0), ff=(4.0, 0))
+# Rogue daggers: crouched with the daggers drawn back low (attack 0, the main attack's frame strike - 1, as K2; table
+# 7.2's "bob +1" read as attack 0's own crouch, 0.8 px below the idle's: a further 1 px breaks X2 continuity); heavy a deeper crouch, the daggers reversed (blades down from the raised fists); buff the
+# daggers lowered, the off hand at the chest; debuff one dagger pointed at the target.
+G_DRAWN = dict(bob=1.6, lean=1.0, dx=-1, wa=100, wb=100, hand_f=(3, 6), hand_b=(0, 6), fb=(-6, 0), ff=(3, 0))  # attack 0
+G_HOLDS = {
+    'windup_heavy': dict(bob=3.4, lean=2.0, dx=-1.5, wa=195, wb=195, hand_f=(6.0, 0.5), hand_b=(4.0, 1.5), fb=(-7.0, 0), ff=(3.5, 0)),
+    'windup_buff': dict(bob=0.6, lean=0.5, wa=165, wb=190, hand_f=(3.0, 8.5), hand_b=(4.5, 2.0), fb=(-4.0, 0), ff=(4.0, 0)),
+    'windup_debuff': dict(bob=1.0, lean=1.5, dx=0.5, wa=90, wb=120, hand_f=(9.0, 1.5), hand_b=(2.0, 6.0), fb=(-5.5, 0), ff=(4.5, 0)),
+}
+G_STAGGER = [dict(bob=0.5, lean=-2.5, dx=-1.5, head_dy=-1.0, wa=-30, wb=60, hand_f=(-4.0, 1.0), hand_b=(5.0, 3.5), fb=(-4.5, 0), ff=(4.0, 0)),
+             dict(bob=1.5, lean=-2.0, dx=-2.5, head_dy=-0.5, wa=0, wb=90, hand_f=(-3.5, 3.0), hand_b=(4.5, 4.5), fb=(-7.5, 0), ff=(3.5, 0)),
+             dict(bob=2.5, lean=1.5, dx=-2.0, head_dy=1.0, wa=150, wb=165, hand_f=(3.0, 8.0), hand_b=(2.0, 7.5), fb=(-6.5, 0), ff=(4.0, 0)),
+             dict(bob=2.2, lean=1.5, dx=-2.0, head_dy=1.5, wa=160, wb=170, hand_f=(3.5, 8.5), hand_b=(1.0, 8.5), fb=(-5.5, 0), ff=(4.0, 0))]
+G_DAZED = dict(bob=2.0, lean=1.5, head_dy=1.5, wa=165, wb=172, hand_f=(3.5, 8.5), hand_b=(0.5, 9.0), fb=(-5.0, 0), ff=(4.0, 0))
+# Mage staff: charging, the gem at full glow (attack 2); heavy high in both hands, the glow pulsing 0.6 - 1.0 over the
+# hold (steps); buff upright, the motes circling the gem (motes 'tip'); debuff pointed at the target, glow 0.5.
+M_CHARGED = dict(bob=1.0, lean=-1.6, wa=-12, hand_f=(2.5, -1.5), hand_b=(4.5, 1.5), glow=1.0)  # attack 2
+M_HOLDS = {
+    'windup_heavy': dict(bob=2.2, lean=-2.6, dx=-0.5, wa=-45, hand_f=(2.0, -6.0), hand_b=(0.5, -4.0), glow=0.6, fb=(-6.0, 0), ff=(4.5, 0)),
+    'windup_buff': dict(bob=0.6, lean=0.0, wa=0, hand_f=(5.0, 2.0), hand_b=(4.0, 5.0), glow=0.3, fb=(-4.0, 0), ff=(4.0, 0)),
+    'windup_debuff': dict(bob=1.0, lean=1.5, dx=0.5, wa=90, hand_f=(8.0, 1.0), hand_b=(5.0, 3.0), glow=0.5, fb=(-5.5, 0), ff=(4.5, 0)),
+}
+M_STEPS = {'windup_heavy': {'glow': (0.6, 0.8, 1.0, 0.8)}}
+M_STAGGER = [dict(bob=0.5, lean=-2.5, dx=-1.5, head_dy=-1.0, wa=-40, hand_f=(-4.0, 1.0), hand_b=(5.0, 3.5), fb=(-4.5, 0), ff=(4.0, 0)),
+             dict(bob=1.5, lean=-2.0, dx=-2.5, head_dy=-0.5, wa=-20, hand_f=(-3.5, 3.0), hand_b=(4.5, 4.5), fb=(-7.5, 0), ff=(3.5, 0)),
+             dict(bob=2.5, lean=1.5, dx=-2.0, head_dy=1.0, wa=150, hand_f=(3.0, 7.5), hand_b=(2.0, 7.5), fb=(-6.5, 0), ff=(4.0, 0)),
+             dict(bob=2.2, lean=1.5, dx=-2.0, head_dy=1.5, wa=156, hand_f=(3.5, 8.0), hand_b=(1.0, 8.5), fb=(-5.5, 0), ff=(4.0, 0))]
+M_DAZED = dict(bob=2.0, lean=1.5, head_dy=1.5, wa=158, hand_f=(3.5, 8.0), hand_b=(0.5, 9.0), fb=(-5.0, 0), ff=(4.0, 0))
+# per class: (the idle keys its intros start from, the holds with `windup`, stagger, dazed, rig.windup_rows options)
+CLASS_WINDUPS = {
+    'ranger': (dict(bow_a=35, hand_f=(5, 7.5)), dict(R_HOLDS, windup=R_DRAW), R_STAGGER, R_DAZED, dict(motes='off')),
+    'brawler': (dict(bob=1.0, lean=0.8, alt=1.3, hand_f=(8.5, -4.5), hand_b=(7, -3.5), fist_f=True, fist_b=True),
+                dict(B_HOLDS, windup=B_JAB_COCKED), B_STAGGER, B_DAZED, {}),
+    'priest': (dict(wa=30, hand_f=(5, 6.5)), dict(P_HOLDS, windup=P_RAISED), P_STAGGER, P_DAZED, {}),
+    'rogue': (dict(bob=0.8, lean=1.5, wa=110, wb=110, hand_f=(5, 5), hand_b=(2, 6)), dict(G_HOLDS, windup=G_DRAWN),
+              G_STAGGER, G_DAZED, {}),
+    'mage': (dict(wa=5, hand_f=(4.5, 4)), dict(M_HOLDS, windup=M_CHARGED), M_STAGGER, M_DAZED, dict(motes='tip', steps=M_STEPS)),
+}
 
 
 def warrior_2h(u):
@@ -425,6 +514,10 @@ def clips(name, variant='', unit=None):
                        pose(u, bob=0.0, hurt=1.0, fall=1.0, dx=-1.0, hand_f=(-2.5, 10.5), hand_b=(-4.5, -11))],
                       [200, 60, 90, 130, 100, 90, 90, 600]))
     if name in GUARDS: defensive_set(u, GUARDS[name], A, T)
+    if name in CLASS_WINDUPS:  # WINDUP1-R2: the wind-up rows after today's rows (K7)
+        rd, holds, stagger_keys, dazed_keys, opts = CLASS_WINDUPS[name]
+        W, WT = rig.windup_rows(lambda kw: pose(u, **kw), rig.idle_keys(**rd)[0], holds, stagger_keys, dazed_keys, **opts)
+        A.update(W); T.update(WT)
     if name == 'warrior' and variant == '':
         a_, at_ = clips('warrior', 'A', unit); b_, bt_ = clips('warrior', 'B', unit)
         A['attack'], T['attack'] = a_['attack'], at_['attack']

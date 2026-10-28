@@ -304,6 +304,32 @@ jerked up (neck -55 degrees), dx -2, hind paws splayed; `dazed` head low (neck +
   dazed blade rests on the right shoulder, the tip showing above it (the hilt stays hidden); the 1H + buckler grip has
   view keys (`views.GRIPS['warrior/buckler']`): idle and walk with the sword raised as the kite look's, drawn on the
   review boards with stand-ins until the buckler has a view drawing (its sheets keep side rows only).
+- Review fix (user 2026-10-29, done in WINDUP1-R2): the 2H heavy hold's front and back views no longer hold the
+  weapon upright behind the head (the hilt by the face, only the tip over the helmet); as in the side view the blade
+  rests angled back over the right shoulder, hands and hilt at shoulder height beside the head, inside the 48 px frame
+  (`views.W2_WINDUPS`, `warrior/2h_sword`, the only 2H body with views; the axe and hammer have none). The intro
+  frames lerp to it as before; only `windup_heavy_down` and `windup_heavy_up` changed.
+
+### 7.5 As built (WINDUP1-R2, 2026-10-29)
+
+- The six rows on the other five classes and every body of each (`classes.CLASS_WINDUPS`, `WINDUP_CLASSES` all six):
+  ranger (base, goblin, Wenn), brawler (base, goblin, goblin_berserker, Ash Warchief), priest (base, goblin), rogue
+  (base, goblin, goblin_scout), mage (base); side rows only (none of these bodies has view rows). Variants need no
+  code: `classes.clips` draws them through the class's keys and the rig scales the keys by the body's size.
+- `windup` holds the main attack's frame `strike - 1` pixel for pixel on every body (X2 0 %), as table 7.2: ranger
+  attack 3, brawler jab 1, priest attack 1, rogue attack 0, mage attack 2; the brawler's `windup_heavy` is the
+  haymaker's frame 1 pixel for pixel (the clip a heavy blow plays from its strike).
+- Readings of table 7.2: the rogue's "attack 0, bob +1" is attack 0's own crouch (0.8 px below the idle's); a further
+  1 px fails X2 (41 % apart). The ranger's buff motes rise from the raised string hand and the mage's circle the gem
+  (3.5 px out, two opposite, a quarter turn a frame); the debuff glint sits past the nocked arrow's head (ranger) and the
+  near fist's knuckles (brawler). The mage's heavy glow pulses 0.6, 0.8, 1.0, 0.8 over the hold.
+- Rig (`rig.py`, generic): `windup` / `windup_rows` take `motes` (`'hand'`, `'off'` the off hand, `'tip'` circling the
+  tip) and `steps` (a key's value per hold frame); `pose` puts the off hand (`off`) in the frame's info and a `tip` for
+  a nocked arrow and for fists (metadata only).
+- Checks: today's rows pixel-identical on every body (compared row by row with the sheets before the task), clip
+  entries and palettes unchanged, widths unchanged, +6 rows a body; the new frames touch the frame's edge only where
+  the body's own rows already do (the priest's `windup` is its attack frame 1, whose mace head already touches the top;
+  the mage's hat tip touches the top in every row today).
 
 ## 8. Costs
 
