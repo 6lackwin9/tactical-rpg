@@ -389,7 +389,7 @@ impl Session {
             fallback_any: sb.fallback_any,
             heroes: (0..n_allies).filter(|c| !guests.contains(c)).collect(),
         });
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default() };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset) };
         w.add_item_skills();
         w.ignore_hazards_when_off();
         let objective = Objectives::create(&def.raw);
@@ -496,6 +496,8 @@ impl Session {
         crate::poise::round_start(&mut self.w);
         // HOOKS1 UM4: the meters' bands hold their statuses this round (rule unit_meters; nothing in classic)
         crate::meter::round_start(&mut self.w);
+        // HOOKS1 AH3: the arena hazards due this round are told before anyone plans (rule arena_hazards)
+        crate::arena::round_start(&mut self.w, round);
         // HOOKS1 8.1: `round_start` triggers after the refill (rule triggers; nothing in classic)
         crate::trigger::round_start(&mut self.resolver, &mut self.w);
         if crate::trigger::on(&self.w) || crate::meter::on(&self.w) {
@@ -1134,6 +1136,8 @@ impl Session {
         }
         if self.pending.is_empty() {
             let block = self.current_block;
+            // HOOKS1 AH2: the arena hazards due now strike after the block's actions (rule arena_hazards; none in classic)
+            self.arena_strikes(self.current_round, block);
             self.feed(|m, s| m.on_block_completed(s, block));
             let end_of_round = self.current_block >= self.def.total_blocks;
             if end_of_round {
@@ -1206,6 +1210,50 @@ impl Session {
             self.append(crate::log::ground_entry(&self.w, &ev, round, block));
             self.feed(|m, s| m.on_ground(s, &ev));
         }
+    }
+
+    /// HOOKS1 AH2 (rule arena_hazards; none in classic): the hazards due at the end of `block` strike the units on their
+    /// cells (reserved units are spared). Each strike gets its event cell (the hazard's name as the actor), then each
+    /// struck unit its cell (the HP the hit took, held back until then), the break the stagger caused, and its push
+    /// with its collision cells; the triggers and the ground hits the pushes caused follow (HOOKS1-GF).
+    fn arena_strikes(&mut self, round: i32, block: i32) {
+        if !crate::arena::on(&self.w) || self.w.arena.hazards.is_empty() {
+            return;
+        }
+        let reserved: Vec<UnitId> = (0..self.w.units.len()).filter(|&c| self.is_reserved(c)).collect();
+        let strikes = crate::arena::block_end(&mut self.resolver, &mut self.w, round, block, &reserved);
+        for st in &strikes {
+            self.feed(|m, s| m.on_arena(s, st));
+            self.append(crate::log::arena_entry(st, round, block));
+            for h in &st.hits {
+                if let Some(j) = self.w.hp_journal.as_mut() {
+                    j.extend(h.journal.iter().copied());
+                }
+                self.append(crate::log::arena_hit_entry(&self.w, st, h, round, block));
+                if let Some(b) = h.stagger.as_ref().and_then(|x| x.broke.as_ref()) {
+                    self.append(crate::log::break_entry(&self.w, h.unit, b, round, block));
+                }
+                let Some(m) = &h.push else { continue };
+                self.append(crate::log::forced_entry(&self.w, m, &st.name, round, block));
+                for c in &m.hits {
+                    if let Some(j) = self.w.hp_journal.as_mut() {
+                        j.extend(c.journal.iter().copied());
+                    }
+                    self.append(crate::log::arena_collision_entry(&self.w, st, c, round, block));
+                }
+            }
+        }
+        self.log_triggers(round, block);
+        self.log_ground(round, block);
+    }
+
+    /// HOOKS1 AH3: the arena hazards due this round, known from its start (empty without the rule arena_hazards or once
+    /// the battle is over).
+    pub fn arena_tells(&self) -> Vec<crate::intent::ArenaTell> {
+        if self.combat_over {
+            return Vec::new();
+        }
+        crate::intent::arena_tells(&self.w)
     }
 
     /// CatalogEncounter.on_block_start: a due phase fires first, then one morale break line, then the arrival (the

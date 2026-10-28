@@ -11,7 +11,8 @@
 //! victims lost, a heal entry's amount the HP gained, an area entry's hit count the units it touched; a gain outside a
 //! heal entry or a loss without an attack entry is unexplained. HOOKS1 (timeline keys): a trigger or rider effect's cell
 //! credits the HP it took to its holder as a hit, a redirected part of an attack is a hit on the unit that took it, and
-//! an HP cost is its payer's own loss (`triggers.hp_paid`, part of the HP balance).
+//! an HP cost is its payer's own loss (`triggers.hp_paid`, part of the HP balance); the HP an arena hazard's cell names
+//! is its target's arena loss (`arena.taken`, part of the HP balance; no unit dealt it).
 //!
 //! The session feeds it (`Session::attach_metrics`): the sim driver calls `Session::metrics_step` / `metrics_round` /
 //! `metrics_end` like SimRunner's observer hooks; a live battle lets the session close each round itself.
@@ -310,6 +311,26 @@ impl TriggerRecord {
     }
 }
 
+/// HOOKS1 4.2 (rule arena_hazards; engine-only, timeline keys): one unit's arena hazard counts for one fight, kept only
+/// for units a strike caught: `struck` (times a strike caught it), `taken` (HP it lost to strikes and their collisions;
+/// part of the HP balance, no unit dealt it), `statuses` (statuses a strike landed on it), `pushed` (its arena pushes
+/// that were not held), `collisions` (its pushes that hit something), `broken` (breaks a strike's stagger caused).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ArenaRecord {
+    pub struck: i32,
+    pub taken: i32,
+    pub statuses: i32,
+    pub pushed: i32,
+    pub collisions: i32,
+    pub broken: i32,
+}
+
+impl ArenaRecord {
+    pub fn to_json(&self) -> Value {
+        json!({"struck": self.struck, "taken": self.taken, "statuses": self.statuses, "pushed": self.pushed, "collisions": self.collisions, "broken": self.broken})
+    }
+}
+
 /// The last fight's outcome numbers.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FightRecord {
@@ -367,6 +388,10 @@ pub struct BattleMetrics {
     /// HOOKS1 4.2: display name -> trigger counts of the last fight (only units a trigger, rider or HP cost involved;
     /// empty without the rules triggers and hp_cost).
     pub triggers: IndexMap<String, TriggerRecord>,
+    /// HOOKS1 4.2: display name -> arena hazard counts of the last fight (only units a strike caught; empty without the
+    /// rule arena_hazards), and how many strikes there were.
+    pub arena: IndexMap<String, ArenaRecord>,
+    pub arena_strikes: i32,
     /// Set when the fight ends.
     pub fight_record: Option<FightRecord>,
     pub fail_lines: Vec<String>,
@@ -420,6 +445,8 @@ impl BattleMetrics {
         self.forced.clear();
         self.hazards.clear();
         self.triggers.clear();
+        self.arena.clear();
+        self.arena_strikes = 0;
         self.redirected.clear();
         self.trigger_open = false;
         self.fight_record = None;
@@ -590,6 +617,17 @@ impl BattleMetrics {
         }
         self.flush_hold();
         let changed = std::mem::take(&mut self.buf);
+        // HOOKS1 AH2: an arena hazard's cell (no unit is its actor); the statuses it landed are nobody's to credit
+        if e.subtype == crate::log::ARENA {
+            self.arena_cell(e, &changed);
+            for c in self.ally.keys().copied().collect::<Vec<_>>() {
+                self.credit_statuses(s, None, c);
+                self.remember_statuses(s, c);
+                self.track_tile(s, c);
+            }
+            self.check_priority(s);
+            return;
+        }
         let Some(actor) = actor else {
             self.unexplained(&changed);
             return;
@@ -722,6 +760,61 @@ impl BattleMetrics {
                 }
             }
             Event::Faded(_) => {}
+        }
+    }
+
+    /// HOOKS1 4.2: one arena strike (rule arena_hazards): the struck units' counts, the forced-move counts of its pushes
+    /// (no driver) and the breaks its stagger caused (as the broken units' poise records'); its cells follow and carry
+    /// the HP (`arena_cell`).
+    pub fn on_arena(&mut self, s: &Session, st: &crate::arena::Strike) {
+        self.arena_strikes += 1;
+        for h in &st.hits {
+            let Some(name) = self.names.get(&h.unit).cloned() else { continue };
+            let r = self.arena.entry(name.clone()).or_default();
+            r.struck += 1;
+            r.statuses += !h.status.is_empty() as i32;
+            r.broken += h.stagger.as_ref().is_some_and(|x| x.broke.is_some()) as i32;
+            if let Some(m) = &h.push {
+                r.pushed += !m.held as i32;
+                r.collisions += !m.blocked_by.is_empty() as i32;
+                let f = self.forced.entry(name).or_default();
+                if m.held {
+                    f.held += 1;
+                } else {
+                    f.moved += 1;
+                }
+            }
+            if let Some(x) = &h.stagger {
+                self.stagger_hit(s, "", x);
+            }
+        }
+    }
+
+    /// HOOKS1 AH2: an arena cell: the one unit it names lost exactly the logged HP (its `arena.taken`; no unit dealt it).
+    fn arena_cell(&mut self, e: &Entry, changed: &IndexMap<UnitId, Buf>) {
+        let target = self.unit(&e.target);
+        let (mut lost, mut touched) = (0, 0);
+        for (&v, b) in changed {
+            if b.gain > 0 {
+                self.rec(v).other_gain += b.gain;
+            }
+            if b.loss <= 0 {
+                continue;
+            }
+            touched += 1;
+            lost += b.loss;
+            if Some(v) != target {
+                self.rec(v).other_loss += b.loss;
+                continue;
+            }
+            let name = self.names[&v].clone();
+            self.arena.entry(name).or_default().taken += b.loss;
+        }
+        if touched > 0 || e.damage > 0 {
+            self.checks += 1;
+            if touched > 1 || lost != e.damage {
+                self.fail(&e.actor, &format!("log_arena {}: {} logged, {lost} HP lost by {touched} units", e.target, e.damage));
+            }
         }
     }
 
@@ -1223,7 +1316,9 @@ impl BattleMetrics {
             self.checks += 1;
             // HOOKS1 HC1: the HP costs it paid (timeline key; 0 in classic)
             let paid = self.triggers.get(&name).map_or(0, |t| t.hp_paid);
-            let expect = rec.hp_start - rec.dmg_taken - rec.ff_taken - rec.dot_taken + rec.heal_received - paid;
+            // HOOKS1 AH2: the HP arena hazards took (timeline key; 0 in classic)
+            let arena = self.arena.get(&name).map_or(0, |a| a.taken);
+            let expect = rec.hp_start - rec.dmg_taken - rec.ff_taken - rec.dot_taken + rec.heal_received - paid - arena;
             if expect != rec.hp_end {
                 self.fail(&name, &format!("hp ({expect} expected, {} at the end)", rec.hp_end));
             }
@@ -1300,6 +1395,10 @@ impl BattleMetrics {
         // HOOKS1 4.2: only when a trigger, rider or HP cost did something (the rules on without one keep the shape)
         if !self.triggers.is_empty() {
             out["triggers"] = Value::Object(self.triggers.iter().map(|(n, r)| (n.clone(), r.to_json())).collect());
+        }
+        // HOOKS1 4.2: only when an arena hazard struck (the rule on without one keeps the shape)
+        if self.arena_strikes > 0 {
+            out["arena"] = json!({"strikes": self.arena_strikes, "units": Value::Object(self.arena.iter().map(|(n, r)| (n.clone(), r.to_json())).collect())});
         }
         out
     }

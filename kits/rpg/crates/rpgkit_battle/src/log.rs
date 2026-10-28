@@ -431,6 +431,43 @@ pub fn ground_entry(w: &World, ev: &crate::ground::Event, round: i32, block: i32
     }
 }
 
+/// HOOKS1 AH2: the subtype of the arena hazards' cells (all EVENT; the hazard's name is the actor, no unit; the metrics
+/// count the HP a cell names as the target's arena loss).
+pub const ARENA: &str = "Arena";
+
+/// HOOKS1 AH2 (engine-only): the EVENT cell of a strike: the hazard as the actor, its line, the units it caught.
+pub fn arena_entry(st: &crate::arena::Strike, round: i32, block: i32) -> Entry {
+    let mut e = Entry::event(round, block, &st.name, false, &st.name, ARENA, "STRIKE", &st.line, &format!("{} tiles", st.cells.len()));
+    e.value = st.hits.len() as i32;
+    e
+}
+
+/// HOOKS1 AH2 (engine-only): the EVENT cell of one struck unit: the hazard hits the unit for the HP it lost (`damage`),
+/// the status that landed, its stagger; DEFEATED when it fell.
+pub fn arena_hit_entry(w: &World, st: &crate::arena::Strike, h: &crate::arena::Hit, round: i32, block: i32) -> Entry {
+    let tu = &w.units[h.unit];
+    let outcome = if tu.is_alive() { "ARENA" } else { "DEFEATED" };
+    let mut e = Entry::event(round, block, &st.name, false, &st.name, ARENA, outcome, trim(&h.line, "[Arena] "), &format!("Target HP: {}/{}", tu.hp, tu.max_hp));
+    e.target = tu.name.clone();
+    e.target_is_ally = w.allies.contains(&h.unit);
+    e.value = h.damage;
+    e.damage = h.damage;
+    e
+}
+
+/// HOOKS1 AH2, FM9 (engine-only): the EVENT cell of one collision hit of an arena push: the hazard hits `h.unit` (the
+/// pushed unit or the one that blocked it) for the HP it lost.
+pub fn arena_collision_entry(w: &World, st: &crate::arena::Strike, h: &crate::forced::CollisionHit, round: i32, block: i32) -> Entry {
+    let tu = &w.units[h.unit];
+    let outcome = if tu.is_alive() { "COLLISION" } else { "DEFEATED" };
+    let mut e = Entry::event(round, block, &st.name, false, &st.name, ARENA, outcome, trim(&h.line, "[Collision] "), &format!("Target HP: {}/{}", tu.hp, tu.max_hp));
+    e.target = tu.name.clone();
+    e.target_is_ally = w.allies.contains(&h.unit);
+    e.value = h.damage;
+    e.damage = h.damage;
+    e
+}
+
 /// CombatLogBuilder.riposte_entry: the defender countered the attack that just resolved.
 pub fn riposte_entry(w: &World, r: &Reaction, round: i32, block: i32) -> Entry {
     let att = &w.units[r.attacker];

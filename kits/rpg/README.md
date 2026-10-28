@@ -61,3 +61,5 @@ HOOKS1-M: unit meters (rule `unit_meters`): a passive `meter` effect gives a bat
 HOOKS1-F: forced movement (rule `forced_move`): push and pull after stagger, collisions with no random draw, the wall-slam break of a windup, immunity and bonus tiles from passives and gear.
 
 HOOKS1-G: ground hazards (rule `ground_hazards`): placements, the tile overlay, enter and round-end effects, traps, fades, the AI path penalty.
+
+HOOKS1-H: scheduled arena hazards (rule `arena_hazards`; `arena.rs`): an encounter's `arena_hazards` strike their cells at the end of their listed blocks and rounds, after the block's actions and before the verdict (damage through guard, not armour; the status roll; stagger through P6; a compass push with flat collision damage under `forced_move`); the round's cells and blocks are told from its start (`Session::arena_tells`, the host `intents` reply's `arena`), PL4 counts a due cell as a threat; `Arena` log cells and the metrics key `arena` {strikes, units: {struck, taken, statuses, pushed, collisions, broken}}.

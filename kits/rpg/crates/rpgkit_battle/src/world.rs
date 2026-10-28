@@ -181,6 +181,9 @@ pub struct World {
     pub ground: crate::ground::Ledger,
     /// HOOKS1 9 (rule `unit_meters`): the meters the units hold this battle (empty in classic; no save key).
     pub meters: crate::meter::Meters,
+    /// HOOKS1 7 (rule `arena_hazards`): the encounter's scheduled arena hazards and the round they are told for (empty
+    /// in classic).
+    pub arena: crate::arena::Arena,
 }
 
 impl World {

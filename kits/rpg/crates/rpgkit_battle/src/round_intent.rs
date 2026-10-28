@@ -428,16 +428,19 @@ pub enum Aim {
     Away,
 }
 
-/// PL4 (1): the active foes of `c` whose next-round reach covers `cell` (their 2-block move plus their reach).
+/// PL4 (1): the active foes of `c` whose next-round reach covers `cell` (their 2-block move plus their reach), plus 1
+/// when an arena hazard is due on `cell` this round (HOOKS1 AT3, AH3; rule arena_hazards, never in classic).
 pub fn threat(w: &World, c: UnitId, cell: V2) -> usize {
-    w.foes_of(c)
+    let foes = w
+        .foes_of(c)
         .iter()
         .filter(|&&f| {
             let u = &w.units[f];
             let reach = skill::threat_reach(u, &w.ruleset);
             u.is_active() && w.has(f) && w.pos(f).dist(cell) <= u.move_per_block() * 2 + reach
         })
-        .count()
+        .count();
+    foes + crate::arena::due_on(w, cell) as usize
 }
 
 /// PL4: ranks candidate tiles (tile, route) for `c`'s move toward or away from `target`: fewer threats, more cover
