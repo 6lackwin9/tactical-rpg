@@ -495,6 +495,8 @@ pub struct BattleScreen {
     fx: Fx,
     camera: Camera,
     phases_seen: usize,
+    /// FX1-L2 (4.3): the targets stepping aside from a miss (unit, clock ms of the impact, direction away).
+    sidesteps: Vec<fx::Sidestep>,
 }
 
 impl BattleScreen {
@@ -543,6 +545,7 @@ impl BattleScreen {
             fx: Fx::default(),
             camera: Camera::default(),
             phases_seen: 0,
+            sidesteps: Vec::new(),
         }
     }
 
@@ -811,7 +814,8 @@ impl BattleScreen {
                 // 4.5 row 2: a break whose step has no action to land shakes at once (not under skip animations, 4.6)
                 if !skip && fx::broke(&lines) {
                     let now = self.clock.now();
-                    self.shake(cx, fx::HEAVY, now, now);
+                    let seed = { let s = self.session(); fx::shake_seed(s.current_round, s.current_block, fx::BREAK_KEY) };
+                    self.shake(cx, fx::HEAVY, now, seed);
                 }
                 self.show(cx, floats, struck, sounds)
             }
@@ -839,11 +843,13 @@ impl BattleScreen {
             .flat_map(|p| p.effects_of(emberwake_data::SHAKE_EFFECT))
             .filter_map(|e| e.get("preset").and_then(Value::as_str).map(str::to_string))
             .collect();
+        // 4.2 step 8: seeded by the round, block and the first new phase's index (never the FX clock)
+        let seed = fx::shake_seed(s.current_round, s.current_block, self.phases_seen as u64);
         self.phases_seen = fired.len();
         let t = &cx.tuning.value;
         if let Some(shake) = fx::strongest(presets.iter().map(String::as_str), &t.shakes) {
             let now = self.clock.now();
-            self.camera.start(shake, now, now ^ 0x5348_414b, t.shake_limits(), cx.settings.reduce_motion());
+            self.camera.start(shake, now, seed, t.shake_limits(), cx.settings.reduce_motion());
         }
     }
 
@@ -875,11 +881,21 @@ impl BattleScreen {
         }
         let from = s.w.grid.pos(act.unit)?;
         let at = |i: usize| s.w.grid.pos(i).or(t.anims[i].seen.pos);
+        let (mut on_self, mut harms, mut target, mut cells) = (false, false, None, Vec::new());
         let (kind, aim) = match &act.command.kind {
-            CmdKind::Attack { target, .. } => ("attack", target.and_then(at)),
-            CmdKind::Area { aim, .. } => ("area", Some(*aim)),
+            CmdKind::Attack { target: tg, .. } => {
+                target = *tg;
+                ("attack", tg.and_then(at))
+            }
+            CmdKind::Area { aim, cells: c, .. } => {
+                cells = c.iter().copied().filter(|c| s.w.grid.is_valid(*c)).collect();
+                ("area", Some(*aim))
+            }
             CmdKind::Support { target, .. } => ("support", at(*target)),
-            CmdKind::Item { target, .. } => ("item", at(*target)),
+            CmdKind::Item { target, item, .. } => {
+                (on_self, harms) = (*target == act.unit, item.damage > 0);
+                ("item", at(*target))
+            }
             _ => ("", None),
         };
         let to = aim.filter(|c| *c != emberwake_battle::grid::NO_CELL).unwrap_or(from);
@@ -889,7 +905,8 @@ impl BattleScreen {
         let family = weapon.map_or("", |w| w.weapon_type());
         let ranged = weapon.is_some_and(|w| w.is_ranged_weapon());
         let magic = weapon.is_some_and(|w| json::s(&w.item.raw, "damage_type") == "magic");
-        let style = fx::style(fx::Act { kind, skill, family, ranged, magic, dist: from.dist(to) });
+        let style = fx::style(fx::Act { kind, skill, family, ranged, magic, dist: from.dist(to), on_self, harms });
+        let radius = cells.iter().map(|c| c.dist(to)).max().unwrap_or(0);
         let delivery = style.delivery;
         if delivery == fx::Delivery::None {
             return None;
@@ -918,6 +935,9 @@ impl BattleScreen {
             mods: fx::Mods::default(),
             broke: false,
             launched: false,
+            cells,
+            radius,
+            target,
         })
     }
 
@@ -932,14 +952,18 @@ impl BattleScreen {
                 let name = i.clips.iter().copied().find(|c| cx.art.has_clip(&b, c))?;
                 cx.art.clips(&b)?.clip(name)?.impact_ms()
             });
-            i.at = Some(fx::impact_at(i.delivery, i.t0, clip_ms, fx::path_px(&geo, i.from, i.to), &t).unwrap_or(i.t0));
+            // FX1-L2: the shot's own flight (a falling orb's from above), a volley's or a shockwave's spread
+            let pl = place(&geo, i.from, i.to, i.area);
+            let cells = foot_points(&geo, &i.cells);
+            let at = fx::impact_at(i.delivery, i.t0, clip_ms, fx::flight_px(&i.style, pl), &t).map(|a| a + fx::spread_ms(&i.style, &cells, pl.to));
+            i.at = Some(at.unwrap_or(i.t0));
         }
         // Slice 2: the delivery (the trail or the projectile) goes on the live list once its impact time is known.
         let mut out = Vec::new();
         for i in self.impacts.iter_mut().filter(|i| !i.launched) {
             if let Some(at) = i.at {
                 i.launched = true;
-                out.extend(fx::delivery_effects(&i.style, place(&geo, i.from, i.to), i.t0, at, i.seed, &t));
+                out.extend(fx::delivery_effects(&i.style, place(&geo, i.from, i.to, i.area), &foot_points(&geo, &i.cells), i.mods, i.t0, at, i.seed, &t));
             }
         }
         for e in out {
@@ -976,19 +1000,44 @@ impl BattleScreen {
         }
         self.tokens.react(&i.after, at, false);
         self.gap_until = Some(Instant::now() + Duration::from_millis(t.impact_gap_ms));
-        // Slice 2: the impact effects (4.4) on the target, or on each unit an area struck (its aim when none), and the
-        // heavy shake of a Heavy hit or a break (4.5 rows 1-2); neither once skip animations is on (4.6)
+        // Slice 2: the impact effects (4.4) on the target, or on each unit an area struck, and the heavy shake of a
+        // Heavy hit or a break (4.5 rows 1-2); neither once skip animations is on (4.6). FX1-L2: an area's aim ring
+        // (and a BURST's flash), the effects on the actor for `on_actor` rows, the dust of each unit that falls, all
+        // within the impact budget (sparks first); a miss's target steps aside (not under reduce motion).
         let skip = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
         if let Some(s) = self.host.session.as_ref().filter(|_| !skip) {
             let geo = Geom::new(View::of_setting(&cx.settings.v["battle_view"]), t);
             let cell = |u: usize| s.w.grid.pos(u).or(self.tokens.anims.get(u).and_then(|a| a.seen.pos));
-            let mut cells: Vec<V2> = if i.area { i.struck.iter().filter_map(|&u| cell(u)).collect() } else { Vec::new() };
-            if cells.is_empty() {
-                cells.push(i.to);
+            let spot = |c: V2| fx::Spot { chest: fx::anchor(&geo, c), foot: foot_point(&geo, c) };
+            let struck: Vec<V2> = i.struck.iter().filter_map(|&u| cell(u)).collect();
+            let cells: Vec<V2> = if i.style.on_actor {
+                vec![i.from]
+            } else if i.area {
+                struck.clone()
+            } else {
+                vec![i.to]
+            };
+            let pl = place(&geo, i.from, i.to, i.area);
+            let mut out = Vec::new();
+            if i.area || i.style.aim.is_some() {
+                out.extend(fx::aim_effects(&i.style, i.area, foot_point(&geo, i.to), i.radius, struck.contains(&i.to), pl.squash, at, i.seed));
             }
-            let hits: Vec<_> = cells.iter().map(|&c| fx::anchor(&geo, c)).collect();
-            for e in fx::impact_effects(&i.style, i.mods, place(&geo, i.from, i.to), &hits, at, i.seed, t) {
+            let hits: Vec<fx::Spot> = cells.iter().map(|&c| spot(c)).collect();
+            out.extend(fx::impact_effects(&i.style, i.mods, pl, &hits, at, i.seed, t));
+            for (k, &u) in i.struck.iter().enumerate() {
+                if i.after.get(u).is_some_and(|a| !a.alive) {
+                    if let Some(c) = cell(u) {
+                        out.extend(fx::fall_effects(foot_point(&geo, c), pl.squash, at, i.seed ^ k as u64, t));
+                    }
+                }
+            }
+            for e in fx::budget(out, fx::IMPACT_BUDGET) {
                 self.fx.push(e);
+            }
+            let standing = |u: usize| i.after.get(u).is_some_and(|a| a.alive) && s.w.grid.pos(u).is_some();
+            if let Some(u) = i.target.filter(|&u| i.mods.miss && !i.area && u != i.actor && standing(u) && !cx.settings.reduce_motion()) {
+                let away = fx::unit_dir(fx::anchor(&geo, i.from), fx::anchor(&geo, s.w.grid.pos(u).unwrap_or(i.to)));
+                self.sidesteps.push((u, at, away));
             }
         }
         if !skip && fx::heavy_shake(i.blocks, i.hit(), i.broke) {
@@ -1000,6 +1049,15 @@ impl BattleScreen {
     /// Rule P: autoplay may send the next step (no impact pending and its gap over).
     fn impacts_done(&self, now: Instant) -> bool {
         self.impacts.is_empty() && self.gap_until.is_none_or(|g| now >= g)
+    }
+
+    /// FX1 4.8, the agent link's `state.fx`: the effects not done on the FX clock (`live`, their `kinds`), the impacts
+    /// waiting to land (`pending`) and the camera's offset (`shake`), so a test or an agent can wait for them to end.
+    fn fx_state(&self) -> Value {
+        let now = self.clock.now();
+        let kinds = self.fx.kinds(now);
+        let (dx, dy) = self.camera.offset_at(now);
+        json!({"live": kinds.len(), "pending": self.impacts.len(), "shake": [dx, dy], "kinds": kinds})
     }
 
     /// SPRITE1-U: the tokens catch up with the battle (`Tokens::catch_up`; the skip animations setting applies). While
@@ -1050,6 +1108,7 @@ impl BattleScreen {
         self.gap_until = None;
         self.fx.clear();
         self.camera.stop();
+        self.sidesteps.clear();
         self.phases_seen = self.session().phases.fired.len();
         self.last_hp = self.session().w.units.iter().map(|u| u.hp).collect();
         self.log_seen = self.session().resolver.log.len();
@@ -1431,6 +1490,7 @@ impl Screen<GameCx> for BattleScreen {
         let fx_now = self.clock.now();
         self.fx.prune(fx_now);
         self.camera.offset(fx_now);
+        self.sidesteps.retain(|s| fx_now < s.1 + fx::SIDESTEP_OUT_MS + fx::SIDESTEP_BACK_MS);
         // FACE1: the Show enemy tells setting changed (I or the settings): the planning facing follows it.
         if self.tokens.tells != cx.settings.v["show_tells"].as_bool().unwrap_or(true) {
             self.sync_anims(cx);
@@ -1547,6 +1607,7 @@ impl Screen<GameCx> for BattleScreen {
 
     fn state(&self, _cx: &Cx) -> Value {
         json!({"message": self.message, "playing": self.playing, "auto": self.auto, "log_open": self.show_log, "world": self.world_mode(),
+            "fx": self.fx_state(),
             "outcome": if self.host.session.is_some() { self.outcome() } else { String::new() },
             "popup": self.popup.as_ref().map(|p| json!({"title": p.title, "rows": p.rows.iter().map(|r| json!({"label": r.label, "detail": r.detail, "valid": r.valid})).collect::<Vec<_>>()}))})
     }
@@ -1656,10 +1717,24 @@ fn hit_flash(p: &mut Painter, art: &mut Art, body: &str, palette: &str, f: &Clip
     }
 }
 
+/// A cell's foot point as an effect point (4.1: an area's aim, support motes, falls).
+fn foot_point(geo: &Geom, c: V2) -> (f32, f32) {
+    let (x, y) = geo.foot(c);
+    (x as f32, y as f32)
+}
+
+fn foot_points(geo: &Geom, cells: &[V2]) -> Vec<(f32, f32)> {
+    cells.iter().map(|&c| foot_point(geo, c)).collect()
+}
+
 /// FX1 4.1: an action's effect places in the view `geo` (the anchors of its cells; the Stage's squash 0.75, Flat's 1).
-fn place(geo: &Geom, from: V2, to: V2) -> fx::Place {
+/// FX1-L2: an area's aim is its cell's foot point (4.1); a target further above or below than aside faces the actor up
+/// or down (DIR4-G `Facing::toward`), so its swing turns toward it.
+fn place(geo: &Geom, from: V2, to: V2, area: bool) -> fx::Place {
     let squash = if geo.view == View::Stage { 0.75 } else { 1.0 };
-    fx::Place { from: fx::anchor(geo, from), to: fx::anchor(geo, to), squash }
+    let to_pt = if area { foot_point(geo, to) } else { fx::anchor(geo, to) };
+    let vertical = (to.y - from.y).abs() > (to.x - from.x).abs();
+    fx::Place { from: fx::anchor(geo, from), to: to_pt, squash, vertical }
 }
 
 fn hp_bar(p: &mut Painter, r: Rect, hp: i32, max: i32, color: Rgba) {
@@ -1986,7 +2061,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     };
     // FX1 4.1: the camera's shake shifts the board's passes (inside its clip); the HUD and every hit rect stay put.
     let shift = g.camera.offset_at(g.clock.now());
-    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.clock.ms, sel, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift };
+    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.clock.ms, sel, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift, sidesteps: &g.sidesteps };
     let board_hover = match view {
         View::Stage => draw_stage(board, &mut ui, cx, &tuning, now),
         View::Flat => {
@@ -2184,6 +2259,8 @@ struct Board<'a> {
     /// the board's passes are shifted by.
     fx: &'a Fx,
     shift: (i32, i32),
+    /// FX1-L2: the miss sidesteps (4.3).
+    sidesteps: &'a [fx::Sidestep],
 }
 
 /// An action clip a token wants starts with the first candidate its body has (SPRITE1-U), once the clock reaches its
@@ -2222,7 +2299,7 @@ fn still_dying(art: &mut Art, a: &UnitAnim, body: Option<&str>, now: u64, instan
 /// the `common` tiles, tree tiles flat, tokens `flat_token_px` on a filled foot ellipse at `foot_alpha`, arrows centre
 /// to centre over the units, the cell widgets.
 fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, fx: live, shift, .. } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, fx: live, shift, sidesteps, .. } = b;
     let w = &s.w;
     let panel = Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4);
     ui.p.panel(panel, rgb(8, 10, 16), BORDER, RADIUS);
@@ -2317,7 +2394,9 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
                 (dx, dy) = geo.slide(from, pos, 1.0 - t as f32 / tuning.walk_ms.max(1) as f32);
             }
         }
-        let tr = geo.token_rect(pos, shake + dx, dy);
+        // FX1-L2: a miss's target steps aside and back
+        let (sx, sy) = fx::sidestep_of(sidesteps, i, anim_now);
+        let tr = geo.token_rect(pos, shake + dx + sx, dy + sy);
         let ring = if ally { ALLY } else { FOE };
         if alive {
             ui.p.ellipse(tr.x as f32 + tp as f32 / 2.0, (tr.y + tp) as f32 - 2.5, tp as f32 * 0.36, tp as f32 * 0.11, rgba(ring[0], ring[1], ring[2], tuning.foot_alpha));
@@ -2447,7 +2526,7 @@ fn with_alpha(c: Rgba, a: u8) -> Rgba {
 /// covers a unit, the top: HP bars, chips, the exit sign, floats). Cell widgets first, then the units' in feet order
 /// (front-most last, so it takes the click). Returns the unit the mouse is over on the board.
 fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps } = b;
     let w = &s.w;
     let geo = Geom::new(View::Stage, tuning);
     let tp = geo.token_px;
@@ -2486,7 +2565,9 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
             Some(bb) => Rect::new(rest.x + bb.x, rest.y + bb.y, bb.w, bb.h),
             None => rest.inset(4),
         };
-        units.push(StageUnit { i, pos, ally, alive, hp, standing, body, palette, facing, flash, foot: (fx + dx, fy + dy), tr: geo.token_rect(pos, dx + shake, dy), body_rect });
+        // FX1-L2: a miss's target steps aside and back (its sprite only; its foot keeps its place in the draw order)
+        let (sx, sy) = fx::sidestep_of(sidesteps, i, anim_now);
+        units.push(StageUnit { i, pos, ally, alive, hp, standing, body, palette, facing, flash, foot: (fx + dx, fy + dy), tr: geo.token_rect(pos, dx + shake + sx, dy + sy), body_rect });
     }
     // 3.7 pass 7: blocks, standing props and units sorted by their feet.
     let mut items = stage::board_items(&mut cx.art, &w.grid);
@@ -2718,7 +2799,9 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
 #[cfg(test)]
 mod tests {
     use super::{action_clips, boss_fight, sound_of, token_frame, token_outline, turn, Action, BattleScreen, Tokens};
+    use crate::fx;
     use crate::screens::Screen;
+    use aegis_ui::fx::Layer;
     use crate::stage::{Geom, View};
     use emberwake_battle::grid::GRID_H;
     use emberwake_battle::command::CmdKind;
@@ -3725,6 +3808,114 @@ mod tests {
         fire_phase(&mut b, "fx_tremor_2");
         b.after_change(&cx);
         assert_eq!(b.camera.shake, None, "reduce motion");
+    }
+
+    /// FX1-L2 M6 (4.4.4, 4.1): a unit the impact fells raises its dust ring and dust at its foot point on the ground
+    /// layer, which the Stage draws (pass Arrows) before the feet pass; under skip animations none.
+    #[test]
+    fn a_fall_raises_dust_on_the_ground_at_its_impact() {
+        let (mut cx, _g, mut b) = ambush(json!("stage"));
+        assert!(step_until(&mut cx, &mut b, |b, i| i.struck.iter().any(|&u| !b.host.session.as_ref().unwrap().w.units[u].is_alive())), "a fall");
+        b.resolve_impacts(&mut cx);
+        let i = b.impacts[0].clone();
+        let at = i.at.unwrap();
+        let dead = *i.struck.iter().find(|&&u| !i.after[u].alive).unwrap();
+        let geo = Geom::new(View::Stage, &cx.tuning.value);
+        let foot = super::foot_point(&geo, b.host.session.as_ref().unwrap().w.grid.pos(dead).unwrap());
+        b.clock.ms = at as f64;
+        b.fire_due(&mut cx);
+        let dust: Vec<_> = b.fx.live.iter().filter(|e| e.layer == Layer::Ground && e.start == at && matches!(e.prim, aegis_ui::fx::Prim::Ring(r) if r.at == foot && r.r1 == 10.0)).collect();
+        assert_eq!(dust.len(), 1, "the dust ring at the fallen unit's foot");
+        let order = crate::stage::passes();
+        let pos = |p: crate::stage::Pass| order.iter().position(|q| *q == p).unwrap();
+        assert!(pos(crate::stage::Pass::Arrows) < pos(crate::stage::Pass::Feet), "the ground layer draws before the feet pass");
+        // skip animations: no effects at the impact
+        b.fx.clear();
+        cx.settings.v["skip_anim"] = json!(true);
+        b.fire(&cx, i, at);
+        assert!(b.fx.is_empty());
+    }
+
+    /// FX1-L2 M4 (4.4.4, 4.2): a support's impact rises the gold motes from its target's foot point; its heal float
+    /// waits for the impact.
+    #[test]
+    fn mend_motes_rise_at_the_targets_foot_and_its_float_waits_for_the_impact() {
+        let (mut cx, _g, mut b) = ambush(json!("flat"));
+        assert!(step_until(&mut cx, &mut b, |_, i| i.hit()), "a step with feedback");
+        b.resolve_impacts(&mut cx);
+        let mut i = b.impacts.remove(0);
+        let target = i.struck[0];
+        let cell = b.host.session.as_ref().unwrap().w.grid.pos(target).unwrap();
+        (i.style, i.area, i.to, i.struck, i.floats) = (fx::MEND, false, cell, Vec::new(), vec![(target, "+5".into(), cx.tuning.value.heal_color)]);
+        let at = i.at.unwrap();
+        b.floats.clear();
+        b.impacts.push(i);
+        b.fire_due(&mut cx);
+        assert!(b.floats.is_empty(), "no heal float before the impact");
+        b.clock.ms = at as f64;
+        b.fire_due(&mut cx);
+        assert!(b.floats.iter().any(|f| f.unit == target && f.text == "+5"), "the heal float at the impact");
+        let foot = super::foot_point(&Geom::new(View::Flat, &cx.tuning.value), cell);
+        let motes = b.fx.live.iter().find_map(|e| match e.prim {
+            aegis_ui::fx::Prim::Sparks(s) if e.start == at => Some(s),
+            _ => None,
+        });
+        assert_eq!(motes.map(|s| (s.at, s.cols[0], s.ms)), Some((foot, fx::GOLD, 500)), "the gold motes at its foot");
+    }
+
+    /// FX1-L2 M7 (4.3): a missed attack's target steps 3 px away from its attacker and back at the impact; not under
+    /// reduce motion nor skip animations; a missed shot flies past it.
+    #[test]
+    fn a_missed_target_sidesteps_unless_reduce_motion() {
+        let (mut cx, mut g, mut b) = ambush(json!("stage"));
+        assert!(step_until(&mut cx, &mut b, |b, i| !i.area && i.target.is_some_and(|u| b.host.session.as_ref().unwrap().w.units[u].is_alive() && u != i.actor)), "an attack on a standing unit");
+        b.resolve_impacts(&mut cx);
+        let mut i = b.impacts.remove(0);
+        i.mods = fx::Mods { miss: true, ..fx::Mods::default() };
+        let (u, at) = (i.target.unwrap(), i.at.unwrap());
+        for (reduce, want) in [(true, false), (false, true)] {
+            cx.settings.v[aegis_ui::vignette::REDUCE_MOTION] = json!(reduce);
+            b.sidesteps.clear();
+            b.fire(&cx, i.clone(), at);
+            assert_eq!(b.sidesteps.iter().any(|s| s.0 == u && s.1 == at), want, "reduce motion {reduce}");
+        }
+        assert_ne!(fx::sidestep_of(&b.sidesteps, u, at + fx::SIDESTEP_OUT_MS), (0, 0), "3 px out at 80 ms");
+        // the sidestep moves the target's sprite on the board
+        b.clock.ms = (at + fx::SIDESTEP_OUT_MS) as f64;
+        b.fx.clear();
+        b.floats.clear();
+        b.flashes.clear();
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let with = g.canvas.px.clone();
+        b.sidesteps.clear();
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_ne!(with, g.canvas.px, "the target is drawn aside");
+        cx.settings.v["skip_anim"] = json!(true);
+        b.fire(&cx, i, at);
+        assert!(b.sidesteps.is_empty(), "skip animations: no sidestep");
+    }
+
+    /// FX1-L2 M8 (4.8): the agent link's `state.fx` counts the live effects and pending impacts with their kinds and the
+    /// camera offset, and goes to 0 after the last impact plus its longest effect.
+    #[test]
+    fn the_agent_link_reports_the_effects_until_they_end() {
+        let (mut cx, _g, mut b) = ambush(json!("stage"));
+        assert!(step_until(&mut cx, &mut b, |_, i| i.hit() && (i.style.swing.is_some() || i.style.shot.is_some())), "a hit with a delivery");
+        b.resolve_impacts(&mut cx);
+        let st = b.state(&cx)["fx"].clone();
+        assert_eq!(st["pending"], json!(1));
+        assert!(st["live"].as_u64().unwrap() >= 1 && st["kinds"].as_array().is_some_and(|k| !k.is_empty()), "{st}");
+        assert_eq!(st["shake"], json!([0, 0]));
+        let at = b.impacts[0].at.unwrap();
+        b.clock.ms = at as f64;
+        b.fire_due(&mut cx);
+        let st = b.state(&cx)["fx"].clone();
+        assert_eq!(st["pending"], json!(0));
+        assert_eq!(st["live"].as_u64().unwrap() as usize, b.fx.kinds(at).len());
+        b.clock.ms = b.fx.busy_until().unwrap() as f64;
+        b.clock.hold = 0.0;
+        let st = b.state(&cx)["fx"].clone();
+        assert_eq!((st["live"].clone(), st["pending"].clone(), st["kinds"].clone()), (json!(0), json!(0), json!([])), "all done");
     }
 
     /// FX1-L1 L12 (4.1): in both views the camera's offset moves a board pixel and leaves the planning strip and the

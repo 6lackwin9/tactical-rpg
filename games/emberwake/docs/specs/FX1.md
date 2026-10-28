@@ -178,6 +178,22 @@ starts 60 % of `trail_ms` before the impact (when its head ends its sweep; never
 defaults and no clip impact frame; a projectile launches its travel before the impact; a miss drops only the sparks
 (its overshoot and sidestep are FX1-L2's).
 
+As built in FX1-L2 (2026-10-29): the rows of 4.4.3 and 4.4.4 are `fx::skill_style`, `support_style` and `item_style`.
+Where a row is silent the code takes: `arc_lance` sparks spread 360 and speed 50 (the arcane bolt's); `smite` speed 60 and
+tail 2; `shockwave` rings 200 ms and sparks Ash / Ash, spread 120, speed 50; `haymaker` sparks spread 90, speed 70; the
+`aegis` flash 300 ms; a fall's dust flies up (dir -90). The `arc_lance` beam lands at the attack clip's impact frame like a
+shot's release (`launch_ms` without one). A volley's arrows leave 30 ms apart with the arrow to the aim last, landing at
+the impact; a shockwave's rings start at the clip's impact frame, 40 ms apart from the actor out, and the impact comes
+with the last ring. An area's aim is its cell's foot point (4.1); its aim ring draws on the ground layer (a BURST row's
+ring grows 32 x 0.6 px per cell of the area's radius, its flash in the air); an area without an aim row plays its row's
+ring on the aim unless a struck unit stands there. Items: a damage consumable is one with `damage` above 0 (the
+firebomb's impact on its target), any other the mend motes. Falls show at the impact of the action that fells the unit
+(a fall by a status tick has no action, so no dust, 4.2 step 5). The miss sidestep only shows on an attack's target that
+still stands on the board (the kit's misses are "target no longer in combat"; there is no dodge roll yet). A swing at a
+target further above or below than aside turns its trail by the attack's angle (unmirrored). An impact keeps at most
+`MAX_LIVE` - 8 (24) effects: sparks first, then rings (the aim's first), then flashes. A break with no action and a
+fired phase seed their shakes from the round, the block and the break key or the phase's index.
+
 ### 4.5 Shakes in battle
 
 | Trigger | Preset | When |
