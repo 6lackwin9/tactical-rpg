@@ -148,6 +148,12 @@ pub fn from_action(w: &World, a: &ScheduledAction, round: i32, block: i32) -> En
             if cmd.guard_bypassed && *last_damage > 0 {
                 e.detail += " | Ignores guard";
             }
+            // HOOKS1 EX1 (rule execute): the hit matched the skill's `hp_below` exploit entry
+            if *last_damage > 0 && cmd.exploited.iter().any(|(_, l)| l == skill::EXECUTE) {
+                if let Some((pct, mult)) = skill::execute_entry(&cmd.exploit) {
+                    e.detail += &format!(" | Execute x{mult:.2} (HP {pct}% or less)");
+                }
+            }
             if let Some(st) = cmd.staggers.first() {
                 e.detail += &format!(" | Stagger {} (poise {} -> {})", st.taken, st.before, st.after);
             }

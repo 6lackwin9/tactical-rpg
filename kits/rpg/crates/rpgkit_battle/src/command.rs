@@ -339,7 +339,8 @@ impl Command {
                 let damaging = skill_mult > 0.0;
                 // RULESET1_INTENT MV3: a flank hit (rule flank) matches `flanked`, takes the flank power and no riposte
                 let flank = round_intent::flank_bonus(w, src, t);
-                let matched = if damaging { skill::exploit_match_when(&self.exploit, &w.units[t], &[], flank) } else { (String::new(), 1.0) };
+                // HOOKS1 EX1: an `hp_below` entry matches the target's HP share before the hit (rule execute)
+                let matched = if damaging { skill::exploit_match_by(&self.exploit, &w.units[t], &[], flank, &w.ruleset) } else { (String::new(), 1.0) };
                 let mut taken = 0;
                 let mut crit = false;
                 let mut t = t;
@@ -395,7 +396,7 @@ impl Command {
                     let ranged = w.units[src].attack_range > 1;
                     let cover = cover_for(&w.grid, w.pos(src), cell, ranged);
                     let flank = round_intent::flank_bonus(w, src, v);
-                    let matched = skill::exploit_match_when(&self.exploit, &w.units[v], &[], flank);
+                    let matched = skill::exploit_match_by(&self.exploit, &w.units[v], &[], flank, &w.ruleset);
                     let (v, hit, taken) = self.land(w, rng, src, v, ranged, false, skill_mult * matched.1 * flank_power(w, flank), cover, &inside);
                     self.hits.push((v, flank));
                     self.struck.push(crate::trigger::Struck { target: v, damage: taken, ranged });
@@ -414,7 +415,13 @@ impl Command {
                             format!(" [resisted {} ({chance}%)]", status::display_name(&st).to_lowercase())
                         };
                     }
-                    let exploits = if matched.0.is_empty() { String::new() } else { format!(" (exploits {})", status::display_name(&matched.0)) };
+                    let exploits = if matched.0.is_empty() {
+                        String::new()
+                    } else if matched.0 == skill::EXECUTE {
+                        format!(" (execute x{:.2})", matched.1)
+                    } else {
+                        format!(" (exploits {})", status::display_name(&matched.0))
+                    };
                     let vu = &w.units[v];
                     parts.push(format!("{} {taken}{}{}{note}{exploits}", vu.name, if hit.is_crit { " CRIT" } else { "" }, if vu.is_alive() { "" } else { " DEFEATED" }));
                     if let Some(r) = riposte_counter(w, rng, src, v, ranged || flank) {
@@ -755,7 +762,8 @@ impl Command {
             tu.guard = 0.0;
             self.broken_targets.push(t);
         }
-        if self.exploit_consume && !matched.0.is_empty() {
+        // HOOKS1 EX1: an execute match names no status, so nothing is consumed
+        if self.exploit_consume && !matched.0.is_empty() && matched.0 != skill::EXECUTE {
             status::remove_active(&mut w.units[t], &matched.0);
         }
     }

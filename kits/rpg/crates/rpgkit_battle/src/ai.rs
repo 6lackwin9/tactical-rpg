@@ -278,7 +278,8 @@ fn combo_ordered(w: &World, plan: &Plan, skills: &[SkillId], target: UnitId) -> 
     for &sid in skills {
         let s = &w.cat.skills[sid];
         let breaks = guarded && w.ruleset.stances() && skill::is_stance_break(s);
-        let applies = !skill::exploit_match(&s.exploit, t, &[]).0.is_empty();
+        // HOOKS1 EX1: an execute that applies now leads too (rule execute)
+        let applies = !skill::exploit_match_by(&s.exploit, t, &[], false, &w.ruleset).0.is_empty();
         if breaks || applies {
             first.push(sid);
         } else if !s.exploit.is_empty() {

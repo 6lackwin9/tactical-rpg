@@ -53,6 +53,7 @@ HOOKS1-S: the combat hook schema (9 rule ids; skill, item, passive, unit, encoun
 HOOKS1-Z: zones as data: the 8 code zones plus `zones` rows (encounter and road-fight `zone` options, `Grid::apply_board(zone, rows, &cat.zones)`, `grid::data_zone`, `art::zone_backdrop`).
 HOOKS1-E: events and triggers (rule `triggers`): passive, item and running-skill triggers on 15 events with `when` conditions and `limit`, 12 effects (`meter` waits for HOOKS1-M), held guard, redirect and intercept (one per hit, the running skill first, the holder kept at 1 HP); `[Trigger]` log lines.
 HOOKS1-K: riders (rule `triggers`; per unit a hit damaged or the support target, `[Rider]` lines), HP cost (rule `hp_cost`; paid at the command's start, refused at or below the cost, an `HP Cost` cell), guard bypass (rule `ignore_guard`; cover kept, P6 guard factor 1.0); metrics key `triggers` {fired, riders, damage, taken, hp_paid}.
+HOOKS1-X: execute (rule `execute`): an `exploit` entry `{hp_below, power_mult}` matches a target at or below that HP share before the hit (best entry wins, nothing consumed); in the hit, the estimate, the AI's combo order and the log cell.
 
 HOOKS1-F: forced movement (rule `forced_move`): push and pull after stagger, collisions with no random draw, the wall-slam break of a windup, immunity and bonus tiles from passives and gear.
 

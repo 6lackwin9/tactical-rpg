@@ -1405,7 +1405,8 @@ impl Plan {
         if !skill::deals_damage(s) {
             return 0;
         }
-        let exploit_mult = skill::exploit_match(&s.exploit, &w.units[foe], consumed).1;
+        // HOOKS1 EX1: an execute entry counts when the foe's HP share meets it now (rule execute)
+        let exploit_mult = skill::exploit_match_by(&s.exploit, &w.units[foe], consumed, false, &w.ruleset).1;
         expected(w, c, foe, sid, Some(stance), self.estimate_cover(w, c, sid, foe, from), exploit_mult)
     }
 
@@ -1414,8 +1415,8 @@ impl Plan {
         let hit = self.estimate_damage(w, c, sid, stance, foe, from, &used);
         let s = &w.cat.skills[sid];
         if s.exploit_consume && skill::deals_damage(s) {
-            let matched = skill::exploit_match(&s.exploit, &w.units[foe], &used).0;
-            if !matched.is_empty() {
+            let matched = skill::exploit_match_by(&s.exploit, &w.units[foe], &used, false, &w.ruleset).0;
+            if !matched.is_empty() && matched != skill::EXECUTE {
                 used.push(matched);
                 st.consumed.insert(foe, used);
             }
