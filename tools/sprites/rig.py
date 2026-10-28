@@ -1,5 +1,6 @@
 # Shared pixel-art rig: one skeleton, swappable outfit (head/torso/legs), weapon family and palette.
 # CREATURE1: two creature skeletons beside it, a quadruped and a segmented crawler (the end of this file).
+# WINDUP1: the wind-up, stagger and dazed helpers and the strike and loop marks (after `impact`).
 # Frames are W x W, facing right. Units are dicts: proportions, part names and a palette.
 import math
 from PIL import Image
@@ -8,6 +9,7 @@ W = 48
 GY = 43.0
 OUT = (20, 17, 15)
 WHITE = (250, 244, 230)
+GOLDEN, GOLDEN_HI = (240, 200, 90), (255, 240, 180)  # effect colours (no palette slot): focus and buff motes
 
 
 class F:
@@ -349,6 +351,9 @@ def _hand_axe(f, P, h, u):
 
 
 DRAWERS = {'greatsword': _greatsword, 'battle_axe': _battle_axe, 'warhammer': _warhammer, 'double_axe': _double_axe, 'hand_axe': _hand_axe}
+# WINDUP1: how far each weapon reaches past the hand along its angle (px; the debuff wind-up's glint sits at its tip)
+WEAPON_TIP = {'sword': 12.0, 'sword2': 15.0, 'mace': 10.8, 'dagger': 6.8, 'staff': 11.8, 'greatsword': 16.8,
+              'battle_axe': 14.0, 'warhammer': 15.0, 'double_axe': 16.4, 'hand_axe': 9.5}
 
 
 def draw_bow(f, P, hand, bow_a, pull_hand=None, nock=False):
@@ -491,11 +496,16 @@ def pose(u, bob=0.0, lean=0.0, dx=0.0, fb=(-3.5, 0), ff=(3.5, 0), hand_f=None, h
         for y in range(W):
             for x in range(W):
                 if f.px[x, y][3]: f.px[x, y] = (255, 255, 255, 255) if f.px[x, y][:3] != OUT else (255, 220, 220, 255)
+    # WINDUP1: where the main hand and the main weapon's tip are (image metadata, for the wind-up effects)
+    f.im.info['hand'] = (hfx, hfy)
+    if wf in WEAPON_TIP and not loose and not swap:
+        ux, uy = udir(wa); f.im.info['tip'] = (hfx + ux * WEAPON_TIP[wf], hfy + uy * WEAPON_TIP[wf])
     return f.im
 
 
 # ------------------------------------------------------------------ shared clips (any unit)
-def idle(u, frames=8, hf_amp=0.8, alt=0.0, **kw):
+def idle_keys(frames=8, hf_amp=0.8, alt=0.0, **kw):
+    """The pose keys of each idle frame (idle draws them; WINDUP1's wind-up intros start from frame 0's)."""
     out = []
     for i in range(frames):
         t = i / frames * 2 * math.pi; b = 0.5 + 0.5 * math.sin(t - 0.6); lag = 0.5 + 0.5 * math.sin(t - 1.4)
@@ -506,9 +516,13 @@ def idle(u, frames=8, hf_amp=0.8, alt=0.0, **kw):
             a = math.sin(t)
             hf = (base_f[0], base_f[1] - a * alt)
             hb = (base_b[0], base_b[1] + a * alt)
-        out.append(pose(u, bob=k.pop('bob', 0.0) + b * 0.9, head_dy=lag * 0.8 - 0.2, lean=k.pop('lean', 0.0) + math.sin(t) * 0.4,
+        out.append(dict(bob=k.pop('bob', 0.0) + b * 0.9, head_dy=lag * 0.8 - 0.2, lean=k.pop('lean', 0.0) + math.sin(t) * 0.4,
                         hand_f=hf, hand_b=hb, fb=(-3.5 - b * 0.4, 0), ff=(3.5 + b * 0.4, 0), tails=t, **k))
-    return out, [160] * frames
+    return out
+
+
+def idle(u, frames=8, hf_amp=0.8, alt=0.0, **kw):
+    return [pose(u, **k) for k in idle_keys(frames, hf_amp, alt, **kw)], [160] * frames
 
 
 def walk(u, frames=8, stride=6.0, hf_amp=0.5, **kw):
@@ -554,6 +568,146 @@ def impact(im):
 def impact_frame(frames):
     """The index of the first frame marked by `impact` (None: the clip marks none)."""
     return next((i for i, fr in enumerate(frames) if fr.info.get('impact')), None)
+
+
+# ------------------------------------------------------------------ wind-ups, stagger and dazed (WINDUP1 section 7)
+# games/emberwake/docs/specs/WINDUP1.md: a unit whose action spans several blocks raises its weapon (an intro), holds
+# the pose breathing until the impact block, then its attack plays from the `strike` frame. Per body (one set per grip)
+# the rig draws six rows: the four wind-ups (attack, heavy, buff, debuff; 7 frames, the loop from frame 3), `stagger`
+# (the reaction to a break, 5 frames once) and `dazed` (the loop while Staggered, 8 frames). The helpers here take a
+# draw function (pose keys -> frame), so the side rig (pose) and the views (views.pose_view) share them:
+#   K1 the intro lerps the pose keys (numbers and tuples) from the ready pose (idle frame 0) to the hold pose at
+#      k = INTRO; the hold is four frames bobbing HOLD_BOB px; windup_heavy trembles TREMBLE px across; windup_buff
+#      adds two gold motes (GOLDEN, GOLDEN_HI) rising 1 px a frame from the main hand; windup_debuff a 1 px WHITE
+#      glint at the weapon's tip on hold frames 0 and 2.
+#   K3 / K4 stagger: four keys of the grip, then dazed frame 0; dazed: the slumped keys swaying dx 0.8 sin and
+#      head_dy 0.5 cos over its 8 frames. No flash and no new colour (K5).
+WINDUP_MS = {'windup': [90, 110, 120, 180, 180, 180, 180], 'windup_heavy': [100, 120, 140, 160, 160, 160, 160],
+             'windup_buff': [90, 110, 120, 180, 180, 180, 180], 'windup_debuff': [90, 110, 120, 180, 180, 180, 180]}
+WINDUPS = tuple(WINDUP_MS)
+STAGGER_MS, DAZED_MS = [60, 90, 110, 120, 160], [150] * 8
+REACTIONS = ('stagger', 'dazed')
+WINDUP_ROWS = WINDUPS + REACTIONS     # the six rows, in sheet order (K7)
+LOOP_FROM = 3                         # the first looped frame of a wind-up (after its three intro frames)
+INTRO = (0.4, 0.75, 1.0)
+HOLD_BOB = (0.0, 0.5, 1.0, 0.5)
+TREMBLE = (0.0, 0.5, 0.0, -0.5)
+# the values pose() draws for a key it is not given (None hands: the rest pose), so an intro can lerp from them
+SIDE_REST = dict(bob=0.0, lean=0.0, dx=0.0, fb=(-3.5, 0), ff=(3.5, 0), hand_f=(4.0, 6.5), hand_b=(-2.5, 8.5), wa=25.0,
+                 wb=160.0, head_dy=0.0, glow=0.0, tails=0.0, bow_a=0.0, pull=0.0)
+
+
+def strike(im):
+    """WINDUP1 (table 7.2): marks `im` as its attack clip's `strike` frame, the first frame after the clip's own wind-up
+    frames, where the clip starts after a held wind-up. The exporter writes its index as the clip's `strike`;
+    metadata only (no pixel changes). Returns `im`."""
+    im.info['strike'] = True
+    return im
+
+
+def strike_frame(frames):
+    """The index of the first frame marked by `strike` (None: the clip marks none)."""
+    return next((i for i, fr in enumerate(frames) if fr.info.get('strike')), None)
+
+
+def loop_start(im):
+    """WINDUP1: marks `im` as its looping clip's first looped frame (the frames before it are the intro); the exporter
+    writes its index as `loop_from`. Metadata only. Returns `im`."""
+    im.info['loop_from'] = True
+    return im
+
+
+def loop_frame(frames):
+    """The index of the frame marked by `loop_start` (None: the clip loops whole)."""
+    return next((i for i, fr in enumerate(frames) if fr.info.get('loop_from')), None)
+
+
+ANGLES = ('wa', 'wb', 'bow_a')  # weapon angles lerp the short way round
+
+
+def lerp_kw(a, b, k, rest=SIDE_REST):
+    """Pose keys `k` of the way from `a` to `b`: numbers and number tuples lerp (a key missing, or None, on one side
+    takes `rest`'s value; an angle of ANGLES the short way round); any other value (flags, layers, effects) is `b`'s,
+    left out when only `a` has it."""
+    out = {}
+    for key in list(a) + [x for x in b if x not in a]:
+        va, vb = a.get(key), b.get(key)
+        va = rest.get(key) if va is None else va
+        vb = rest.get(key) if vb is None else vb
+        if isinstance(vb, bool) or isinstance(va, bool) or va is None or vb is None:
+            if key in b or key in rest:  # a flag or a layer only the ready pose sets ends with the intro
+                out[key] = b.get(key, rest.get(key))
+        elif isinstance(va, (int, float)) and isinstance(vb, (int, float)):
+            d = (vb - va + 180.0) % 360.0 - 180.0 if key in ANGLES else vb - va
+            out[key] = vb if k == 1.0 else va + d * k
+        elif isinstance(va, tuple) and isinstance(vb, tuple) and len(va) == len(vb):
+            out[key] = tuple(x + (y - x) * k for x, y in zip(va, vb))
+        elif key in b:
+            out[key] = b[key]
+    return out
+
+
+def overlay(im, dots):
+    """Draws (x, y, colour) one-pixel dots on frame `im` (over the outline, as pose's fx); returns `im`."""
+    for x, y, c in dots:
+        x, y = int(round(x)), int(round(y))
+        if 0 <= x < im.width and 0 <= y < im.height:
+            im.putpixel((x, y), tuple(c[:3]) + (255,))
+    return im
+
+
+def shake_dx(kw, d):
+    """The heavy wind-up's tremble on the side rig: the figure moved `d` px across (dx)."""
+    kw['dx'] = kw.get('dx', 0.0) + d
+
+
+def windup(kind, ready, hold, draw, rest=SIDE_REST, shake=shake_dx):
+    """(frames, ms) of wind-up `kind` (WINDUPS) from the `ready` keys to the `hold` keys (K1). `draw(keys)` draws one
+    frame and puts the main hand (and the weapon tip, when it has one) in the frame's info ('hand', 'tip'), as pose
+    and views.pose_view do; `shake(keys, d)` applies the heavy tremble of d px."""
+    frames = [draw(lerp_kw(ready, hold, k, rest)) for k in INTRO]
+    for i in range(len(HOLD_BOB)):
+        kw = dict(hold)
+        kw['bob'] = kw.get('bob', 0.0) + HOLD_BOB[i]
+        if kind == 'windup_heavy':
+            shake(kw, TREMBLE[i])
+        im = draw(kw)
+        hx, hy = im.info['hand']
+        if kind == 'windup_buff':  # two motes rise from the hand, a frame apart in their 4-frame climb
+            overlay(im, [(hx - 1.5, hy - 2 - i, GOLDEN), (hx + 1.5, hy - 2 - (i + 2) % 4, GOLDEN_HI)])
+        if kind == 'windup_debuff' and i in (0, 2) and im.info.get('tip'):
+            tx, ty = im.info['tip']; d = math.hypot(tx - hx, ty - hy) or 1.0
+            overlay(im, [(tx + (tx - hx) / d, ty + (ty - hy) / d, WHITE)])  # just past the tip, over the outline
+        frames.append(im)
+    loop_start(frames[LOOP_FROM])
+    return frames, list(WINDUP_MS[kind])
+
+
+def dazed(keys, draw):
+    """(frames, ms) of `dazed` (K4): the slumped `keys` swaying dx 0.8 sin and head_dy 0.5 cos over 8 frames."""
+    out = []
+    for i in range(8):
+        t = i / 8 * 2 * math.pi
+        kw = dict(keys)
+        kw['dx'] = kw.get('dx', 0.0) + 0.8 * math.sin(t)
+        kw['head_dy'] = kw.get('head_dy', 0.0) + 0.5 * math.cos(t)
+        out.append(draw(kw))
+    return out, list(DAZED_MS)
+
+
+def windup_rows(draw, ready, holds, stagger_keys, dazed_keys, rest=SIDE_REST, shake=shake_dx):
+    """The six WINDUP1 rows of one grip (WINDUP_ROWS order): {id: frames}, {id: ms}. holds: {wind-up id: hold keys}
+    (a grip may leave a wind-up out; the screen falls back); stagger_keys: its first four keys (K3; frame 4 is dazed
+    frame 0); dazed_keys: the slumped pose (K4)."""
+    A, T = {}, {}
+    for kind in WINDUPS:
+        if kind in holds:
+            A[kind], T[kind] = windup(kind, ready, holds[kind], draw, rest, shake)
+    dz, dzt = dazed(dazed_keys, draw)
+    first = dazed(dazed_keys, lambda k: k)[0][0]  # dazed frame 0's keys: the stagger ends in it
+    A['stagger'], T['stagger'] = [draw(dict(k)) for k in stagger_keys] + [draw(first)], list(STAGGER_MS)
+    A['dazed'], T['dazed'] = dz, dzt
+    return A, T
 
 
 def mirror(im, dx=0.0):
@@ -762,8 +916,8 @@ def quad_clips(q):
     A['attack'], T['attack'] = [
         P(dx=-1, bob=base['bob'] + 2.0, pitch=base['pitch'] + 6, neck_a=12, head_a=18, jaw=4,
           paws={'nh': (3.0, 0), 'fh': (3.5, 0), 'nf': (-1.5, 0), 'ff': (-1.0, 0)}),                        # coil on the haunches
-        P(dx=3, bob=base['bob'] - 2.0, pitch=-10, neck_a=-12, head_a=0, jaw=42,
-          paws={'nf': (5.0, 5.0), 'ff': (4.0, 6.0), 'nh': (-4.0, 0.5), 'fh': (-5.0, 1.0)}),                 # spring, jaws wide
+        strike(P(dx=3, bob=base['bob'] - 2.0, pitch=-10, neck_a=-12, head_a=0, jaw=42,
+                 paws={'nf': (5.0, 5.0), 'ff': (4.0, 6.0), 'nh': (-4.0, 0.5), 'fh': (-5.0, 1.0)})),         # spring, jaws wide
         impact(P(dx=7, bob=base['bob'] - 0.5, pitch=2, neck_a=-4, head_a=8, jaw=4, fx=hit,
                  paws={'nf': (6.0, 1.0), 'ff': (5.0, 0.5), 'nh': (-3.0, 0), 'fh': (-4.0, 0)})),             # the bite
         P(dx=6.5, bob=base['bob'], pitch=4, neck_a=-2, head_a=16, jaw=2, fx=hit[1:2],
@@ -949,7 +1103,7 @@ def crawler_clips(c):
     A['attack'], T['attack'] = [
         pose(path(-3.0, -5.0, dg=-1.0, lift=-2.0), phase=0.1, jaw=0.7, bubbles=0.1),            # rear back
         pose(path(-4.0, -6.0, dg=-1.5, lift=-3.0), phase=0.15, jaw=0.9, bubbles=0.2),           # poised
-        pose(path(5.5, 7.0, dg=4.0, lift=4.0), phase=0.3, jaw=0.9, bubbles=0.3),                # the strike
+        strike(pose(path(5.5, 7.0, dg=4.0, lift=4.0), phase=0.3, jaw=0.9, bubbles=0.3)),        # the strike
         impact(pose(path(6.0, 8.0, dg=4.5, lift=4.0), phase=0.35, jaw=0.05, bubbles=0.4, fx=hit)),  # fangs shut
         pose(path(4.0, 3.0, dg=2.0, lift=1.5), phase=0.2, jaw=0.3, bubbles=0.5),
         pose(path(), phase=0.0, jaw=0.2, bubbles=0.6)], [130, 150, 50, 150, 110, 110]
@@ -971,8 +1125,8 @@ def crawler_clips(c):
         A['spit'], T['spit'] = [
             pose(path(-2.0, -4.0, dg=-1.0, lift=-2.0), phase=0.1, jaw=0.4, bubbles=0.1),
             pose(path(-3.0, -5.0, dg=-1.0, lift=-2.5), phase=0.1, jaw=1.0, bubbles=0.3, fx=[(hx - 0.5, hy - 4.5, 1.0, acid)]),  # acid wells up
-            impact(pose(path(1.5, 0.0, lift=1.0), phase=0.15, jaw=1.1, bubbles=0.5,                    # the acid leaves
-                        fx=[(sx(hx + 6.0), hy - 1.0, 1.6, acid), (sx(hx + 6.4), hy - 1.4, 0.6, glow), (sx(hx + 3.5), hy, 0.6, acid)])),
+            strike(impact(pose(path(1.5, 0.0, lift=1.0), phase=0.15, jaw=1.1, bubbles=0.5,             # the acid leaves
+                               fx=[(sx(hx + 6.0), hy - 1.0, 1.6, acid), (sx(hx + 6.4), hy - 1.4, 0.6, glow), (sx(hx + 3.5), hy, 0.6, acid)]))),
             pose(path(1.0, 0.5, lift=0.5), phase=0.2, jaw=0.6, bubbles=0.7,
                  fx=[(sx(hx + 11.5), hy + 0.5, 1.7, acid), (sx(hx + 12.0), hy, 0.6, glow), (sx(hx + 8.0), hy + 1.0, 0.7, acid)]),
             pose(path(0.5, 0.0), phase=0.1, jaw=0.4, bubbles=0.9,

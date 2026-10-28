@@ -277,6 +277,34 @@ jerked up (neck -55 degrees), dx -2, hind paws splayed; `dazed` head low (neck +
   and up for the two warrior bodies) and GIFs of `windup` intro, two holds and the attack from `strike` (as the
   battle plays it), and `stagger` into `dazed`.
 
+### 7.4 As built (WINDUP1-R1, 2026-10-29)
+
+- Rig core (`tools/sprites/rig.py`): `strike(im)` / `strike_frame` and `loop_start(im)` / `loop_frame` mark frames as
+  `impact` does (metadata only); `windup(kind, ready, hold, draw)`, `dazed(keys, draw)` and `windup_rows(draw, ready,
+  holds, stagger_keys, dazed_keys)` draw K1, K3 and K4 through any draw function (the side `pose`, the views'
+  `pose_view`); `lerp_kw` lerps numbers and tuples, weapon angles the short way round; `pose` and `pose_view` put the
+  main hand and the weapon tip (`WEAPON_TIP`) in the frame's info for the motes and the glint.
+- `strike` (table 7.2) on every attack-like clip of every body, the creatures included (`clips.json` only).
+- The six rows on all nine warrior bodies (`classes.py`): 1H + kite (`warrior/base`), 1H + buckler (`1h_buckler`,
+  Brask, Hest, Orsa), 2H (`2h_sword`, `2h_axe`, `2h_hammer`, Grakka); `windup` holds the grip's attack frame
+  `strike - 1` pixel for pixel (X2 0 %). Views (`views.py`): the twelve view rows of `warrior/base` and `2h_sword`.
+- Exporter (`export_units.py`): writes `loop_from` and `strike`; X1 binds the classes in `classes.WINDUP_CLASSES`
+  (the warrior; R2 and R3 extend it, the other bodies print that they have none yet); X2 and X3 also on the view rows;
+  X5 colours and palette slots; X6 `windup_review`. Today's rows are pixel-identical and the palettes unchanged on
+  every body (an export before the task compared row by row); sheets 33 and 32 rows for the two view bodies.
+- Readings of the rules: the heavy holds follow table 7.2's picture with K2's direction (further back or higher,
+  crouched by bob +1.2 to +2.1, lean back); in the views the heavy tremble shakes the weapon hand and the dazed sway
+  moves in whole pixels (a half-pixel shift of the symmetric figure blurs its legs); a mote is one pixel; the debuff
+  glint sits 1 px past the tip, over the outline, so it shows beside the blade's white core.
+- Review fixes (user 2026-10-29, the recommendations taken): the debuff hold's front view angles the blade to the
+  unit's right side so the point shows (`warrior/base` and `2h_sword`); the 2H heavy hold is lower and further back
+  (weapon behind the head, hands just above the shoulder) so every weapon fits the 48 px frame in every view on every
+  2H body (Grakka's two intro frames, passing the weapon upright from his idle, still touch the top by 2 to 4 px, as
+  his idle reach and attack do; Grakka's light wind-up and stagger intro frames touch the top too, as his idle, walk and attack already did; in the back view the greatsword's stagger hides the blade on frames 2-3 and shows it over the shoulder on frame 4, handing into dazed); from behind, the greatsword's buff hold is held point up before the chest and its
+  dazed blade rests on the right shoulder, the tip showing above it (the hilt stays hidden); the 1H + buckler grip has
+  view keys (`views.GRIPS['warrior/buckler']`): idle and walk with the sword raised as the kite look's, drawn on the
+  review boards with stand-ins until the buckler has a view drawing (its sheets keep side rows only).
+
 ## 8. Costs
 
 | Task | Size | Sessions |
