@@ -147,6 +147,8 @@ pub fn rows_problems(e: &Dict) -> Vec<String> {
 pub fn warnings(v: &View, e: &Dict) -> Vec<String> {
     let mut out = pace_warnings(e, &|r: &str| json::s(&content("units", v.get("units", r)), "tier"));
     out.extend(purse_warnings(e));
+    // HOOKS1 DU1 (user 2026-10-29 (b)): an add that pushes out an automatic deck's families
+    out.extend(super::hooks::deck_effect_warnings(v, e, None, &|r: &str| v.get("units", r).clone()));
     out
 }
 

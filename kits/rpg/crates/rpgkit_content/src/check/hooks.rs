@@ -779,9 +779,20 @@ pub fn deck_effect_errors(v: &View, e: &Dict, world: Option<&str>, unit_of: &dyn
                 out.push(format!("{tag}: deck add makes {} actives (the {} ruleset's deck slots allow {max}).", actives.len(), json::s_or(r, "name", &json::s(r, "id"))));
             }
         }
+        // planner 2026-10-29: an automatic deck's order may also name the automatic actives the add leaves in place
+        let mut orderable = actives.clone();
+        if json::sget(deck, "active").is_empty() {
+            for r in &deck_rows {
+                for fam in auto_after_add(v, &unit, fx, r).0 {
+                    if !orderable.contains(&fam) {
+                        orderable.push(fam);
+                    }
+                }
+            }
+        }
         for (intent, fams) in json::dget(fx, "order") {
             for fam in json::arr(fams).iter().map(gstr) {
-                if !actives.contains(&fam) && !basics.contains(&fam) {
+                if !orderable.contains(&fam) && !basics.contains(&fam) {
                     out.push(format!("{tag}: deck order {intent}: '{fam}' is neither an active of the deck nor a basic."));
                     continue;
                 }
@@ -794,6 +805,67 @@ pub fn deck_effect_errors(v: &View, e: &Dict, world: Option<&str>, unit_of: &dyn
         }
     }
     out
+}
+
+/// DU1 as built (user 2026-10-29 (b)): an `add` on an automatic deck (no `active` list) whose loadout (else class path
+/// and extra skills) already fills a deck ruleset's active slots pushes out the last automatic families at run time;
+/// a warning names them. Same rows and refs as `deck_effect_errors`.
+pub fn deck_effect_warnings(v: &View, e: &Dict, world: Option<&str>, unit_of: &dyn Fn(&str) -> Dict) -> Vec<String> {
+    let mut out = Vec::new();
+    let decks: Vec<(String, &Dict)> = json::aget(e, "phases")
+        .iter()
+        .filter_map(Value::as_object)
+        .flat_map(|p| json::aget(p, "effects").iter().filter_map(Value::as_object).filter(|fx| json::s(fx, "type") == DECK_EFFECT).map(move |fx| (json::s(p, "id"), fx)))
+        .collect();
+    if decks.is_empty() {
+        return out;
+    }
+    let deck_rows: Vec<&Dict> = match world {
+        Some(w) => world_ruleset_row(v, w).filter(|r| lists_rule(Some(r), ruleset::DECK)).into_iter().collect(),
+        None => rows_with(v, ruleset::DECK),
+    };
+    for (phase, fx) in decks {
+        let unit = unit_of(&json::s(fx, "unit"));
+        if unit.is_empty() || !json::sget(json::dget(&unit, "deck"), "active").is_empty() {
+            continue;
+        }
+        for r in &deck_rows {
+            let max = json::i(json::dget(r, "deck_slots"), "active", 0).max(0);
+            let pushed = auto_after_add(v, &unit, fx, r).1;
+            if !pushed.is_empty() {
+                out.push(format!(
+                    "Phase '{phase}': deck add on the automatic deck of '{}' pushes out {} (the {} ruleset's deck slots allow {max}).",
+                    json::s(fx, "unit"),
+                    pushed.iter().map(|f| format!("'{f}'")).collect::<Vec<_>>().join(", "),
+                    json::s_or(r, "name", &json::s(r, "id"))
+                ));
+            }
+        }
+    }
+    out
+}
+
+/// DU1 as built: the automatic actives of `unit` (no authored `active` list) under deck ruleset row `r` that the
+/// effect's `add` keeps, and the ones it pushes out (the last ones, one per new owned family when the slots are full),
+/// as the run time does. The automatic list is the battle's own (`rpgkit_rules::unit::auto_actives`: the unit built
+/// under the row's deck rule with its deck left automatic), so the check and the run time cannot drift.
+fn auto_after_add(v: &View, unit: &Dict, fx: &Dict, r: &Dict) -> (Vec<String>, Vec<String>) {
+    let owned = super::unit::owned_families(v, unit);
+    let max = json::i(json::dget(r, "deck_slots"), "active", 0).max(0) as usize;
+    let basics = json::sget(r, "basics");
+    let rule = rpgkit_rules::unit::DeckRule::of(&ruleset::Ruleset::from_row(r)).unwrap_or_default();
+    let auto = rpgkit_rules::unit::auto_actives(&v.typed, &rpgkit_data::UnitDef::from_obj(unit), &rule);
+    let mut new: Vec<String> = Vec::new();
+    for f in json::aget(fx, "add").iter().map(gstr) {
+        if owned.contains(&f) && !auto.contains(&f) && !basics.contains(&f) && !new.contains(&f) {
+            new.push(f);
+        }
+    }
+    if max == 0 || auto.len() + new.len() <= max {
+        return (auto, Vec::new());
+    }
+    let keep = max.saturating_sub(new.len()).min(auto.len());
+    (auto[..keep].to_vec(), auto[keep..].to_vec())
 }
 
 /// DU1: the shape of one phase effect `deck` (keys, `add` a list of families, `order` {intent: [families]}, at least

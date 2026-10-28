@@ -147,6 +147,11 @@ pushed unit collides with another target of the same area.
   registration order: damage (flat or `damage_pct` of max HP, through guard, not armour), the status roll, stagger
   (P6: a vent into a windup can break it), then `push` (FM9: `dir` east, west, north or south, `tiles`,
   `collide_damage`). One event cell with `line` (actor: the hazard's `name`).
+  As built (user 2026-10-29, HOOKS1-U): the fight ends as soon as one side is wiped out; when the block's actions
+  already wiped a side (every hero down, or no unreserved enemy standing) that block's strikes are skipped (no damage,
+  no log cells, no random draws); with both sides standing they still strike before the verdict. Also as built: the
+  strike cell is logged even with nobody on its cells; arena hits raise no trigger events and give no kill credit; a
+  status from a last-block strike acts next round.
 - AH3. Telegraph: the struck cells and blocks of the round are known at its start; the tells record gains `arena`
   (cells, blocks) under timeline; the battle screen marks them and the strip shows a hazard badge at the blocks; PL4
   counts a cell due this round as a threat (AT3).
@@ -268,6 +273,14 @@ Kaelen's running Intercepting Hook takes the hit and Castellan's Penance only th
   the ref adds `add` to its deck's actives and replaces the named intents' order lists. It applies from that unit's
   next planning, as the `ai` effect does (`b/encounter.rs:390-422`). DU2. Checks: `add` owned (path or
   `extra_skills`) and within `deck_slots`; `order` entries in the actives or that intent's basics; one per unit ref.
+- As built (HOOKS1-U, user 2026-10-29 (b)): an added family always lands. On an automatic deck (no `active` list) the
+  deck first takes its current active slots; when they are full each added family pushes out the last automatic
+  family, keeping the slot count (authored actives keep their order and are never pushed out; an authored deck that is
+  full stays a DU2 error). The content check warns (not an error) when an `add` on an automatic deck pushes families
+  out, naming them; on an automatic deck DU2's `order` check also accepts the automatic actives the `add` keeps (as the
+  run time does; planner 2026-10-29), while a family outside that fill and `add` stays an error; the check reads the
+  automatic list from the battle's own build (`rpgkit_rules::unit::auto_actives`). An order-only effect
+  leaves an automatic deck's actives automatic (a phase is not a player edit).
 
 ### 10.2 Cheat-death (G18; Quell is M2, so M2b: HOOKS1-Q, after the slice)
 

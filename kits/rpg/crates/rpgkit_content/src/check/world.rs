@@ -714,7 +714,10 @@ fn encounter_warnings(v: &View, w: &str) -> Vec<String> {
         // HOOKS1 AH1: arena hazards strike only under the rule arena_hazards of the world's ruleset
         let off = !json::aget(e, "arena_hazards").is_empty() && !super::hooks::lists_rule(super::hooks::world_ruleset_row(v, w), rpgkit_rules::ruleset::ARENA_HAZARDS);
         let arena = off.then(|| "Arena hazards never strike here: the world's ruleset does not list the rule arena_hazards.".to_string());
-        for warning in encounter::pace_warnings(e, &tier_of).into_iter().chain(encounter::purse_warnings(e)).chain(reward).chain(arena) {
+        // HOOKS1 DU1 (user 2026-10-29 (b)): an add that pushes out an automatic deck's families
+        let unit_of = |r: &str| v.get("units", &json::s(v.worlds.resolve(w, "characters", r), "base_unit")).clone();
+        let deck = super::hooks::deck_effect_warnings(v, e, Some(w), &unit_of);
+        for warning in encounter::pace_warnings(e, &tier_of).into_iter().chain(encounter::purse_warnings(e)).chain(reward).chain(arena).chain(deck) {
             out.push(format!("{w}:{id}: {warning}"));
         }
     }

@@ -902,6 +902,14 @@ pub fn build_unit_in(cat: &Catalog, e: &UnitDef, default_ap: i32, deck: Option<&
     u
 }
 
+/// HOOKS1 DU1: the active slots catalog unit `e` fills with an automatic deck (its authored deck ignored) under `rule`:
+/// the battle's own build (`build_unit_in`, `loadout_of`, `apply_deck`), so the content check reads the run time's list.
+pub fn auto_actives(cat: &Catalog, e: &UnitDef, rule: &DeckRule) -> Vec<String> {
+    let mut auto = e.clone();
+    auto.deck = Deck::default();
+    build_unit_in(cat, &auto, 1, Some(rule)).active_families()
+}
+
 fn build_catalog_unit(cat: &Catalog, e: &UnitDef, default_ap: i32) -> Unit {
     let arch = class_for(cat, e);
     let derived = e.stat_mode == "derived" && arch.is_some();

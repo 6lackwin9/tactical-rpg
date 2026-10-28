@@ -343,6 +343,37 @@ fn a_strike_comes_before_the_verdict() {
     assert!(s.log.iter().filter(|e| e.subtype == "Arena" && e.outcome == "DEFEATED").count() == 2, "both fall to the vents");
 }
 
+/// AH2 as built (user 2026-10-29): the fight ends as soon as one side is wiped out; a block whose actions kill the last
+/// enemy skips that block's strikes (no damage, no cells, no draws), so the ally on a due cell takes nothing and the
+/// battle is won. With both sides standing the same strike lands before the verdict.
+#[test]
+fn a_block_that_wipes_a_side_skips_its_strikes() {
+    let pit = json!({"id": "pit", "name": "Pit", "cells": [[0, 8]], "blocks": [1], "effect": {"damage": 9}});
+    let play = |foe_hp: i32| {
+        let mut s = session(rules(), json!([pit.clone()]));
+        s.w.units[FOE_B].hp = 0;
+        s.w.grid.positions[FOE_B] = None;
+        s.w.units[FOE].hp = foe_hp;
+        let id = s.w.book().find("strike").expect("strike");
+        let w = s.w.clone();
+        assert_eq!(s.plan.add_step(&w, HERO, PlanStep::engage(id, FOE), true), "", "the hero's strike");
+        let ally_hp = s.w.units[ALLY].hp;
+        while s.current_round == 1 && !s.combat_over && s.phase != Phase::Replay && s.current_block == 1 {
+            s.step_next();
+        }
+        let cells = s.log.iter().filter(|e| e.subtype == "Arena").count();
+        (s, ally_hp, cells)
+    };
+    let (s, ally_hp, cells) = play(1);
+    assert!(!s.w.units[FOE].is_alive(), "the hero's strike kills the last enemy in block 1");
+    assert_eq!((s.outcome.as_str(), s.combat_over, s.current_block), ("won", true, 1));
+    assert_eq!((s.w.units[ALLY].hp, cells), (ally_hp, 0), "no strike: the ally on the pit takes nothing, no arena cell");
+    let (s, ally_hp, cells) = play(HP);
+    assert!(s.w.units[FOE].is_alive() && !s.combat_over);
+    assert_eq!(s.w.units[ALLY].hp, ally_hp - 9, "both sides stand: the pit strikes the ally");
+    assert!(cells >= 2, "the strike's cell and the ally's");
+}
+
 /// 4.1, 4.2: with the rule off and in classic, an encounter with arena hazards plays exactly as one without (log, HP,
 /// random draws, the AI's plans); with the rule on and no hazard row, as with the rule off.
 #[test]

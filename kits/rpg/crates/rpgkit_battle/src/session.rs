@@ -796,6 +796,10 @@ impl Session {
         if p.effects_of("ai").next().is_some() {
             parts.push(if block > 0 { "new tactics from the next round" } else { "new tactics" }.into());
         }
+        // HOOKS1 DU1: the deck changes at the unit's next planning (rule deck; none in classic)
+        if self.w.ruleset.has(rpgkit_rules::ruleset::DECK) && p.effects_of(rpgkit_data::DECK_EFFECT).next().is_some() {
+            parts.push(if block > 0 { "new skills from the next round" } else { "new skills" }.into());
+        }
         let line = p.effects_of("line").last().map(|fx| value::string(fx, "text", "")).unwrap_or_default();
         self.append(crate::log::Entry::event(round, block, &actor, false, &p.name, "Phase", "PHASE", &line, &parts.join(", ")));
         self.events.push(format!("{}: {}{}", p.name, line, if parts.is_empty() { String::new() } else { format!(" ({})", parts.join(", ")) }));
@@ -811,6 +815,8 @@ impl Session {
         }
         let by_ref = self.units_by_ref.clone();
         self.phases.apply_profiles(&mut self.w.profiles, |r| by_ref.get(r).cloned().unwrap_or_default(), round);
+        // HOOKS1 DU1: phase deck effects, from the unit's next planning (rule deck; nothing in classic)
+        self.phases.apply_decks(&mut self.w, |r| by_ref.get(r).cloned().unwrap_or_default(), round);
         if !self.morale.on {
             return;
         }
@@ -1216,8 +1222,9 @@ impl Session {
     /// cells (reserved units are spared). Each strike gets its event cell (the hazard's name as the actor), then each
     /// struck unit its cell (the HP the hit took, held back until then), the break the stagger caused, and its push
     /// with its collision cells; the triggers and the ground hits the pushes caused follow (HOOKS1-GF).
+    /// A side the block's actions already wiped out ends the fight first: no strike runs (user 2026-10-29).
     fn arena_strikes(&mut self, round: i32, block: i32) {
-        if !crate::arena::on(&self.w) || self.w.arena.hazards.is_empty() {
+        if !crate::arena::on(&self.w) || self.w.arena.hazards.is_empty() || self.a_side_is_wiped() {
             return;
         }
         let reserved: Vec<UnitId> = (0..self.w.units.len()).filter(|&c| self.is_reserved(c)).collect();
@@ -1335,6 +1342,14 @@ impl Session {
         for c in surrendering {
             self.w.withdraw_in_place(c);
         }
+    }
+
+    /// HOOKS1-H follow-up (user 2026-10-29): the verdict's wipe-outs: every hero (guests aside) down, or no enemy that
+    /// is not reserved still standing (alive, not withdrawn).
+    fn a_side_is_wiped(&self) -> bool {
+        let heroes = self.w.allies.iter().filter(|a| !self.guests.contains(a)).any(|&a| self.w.units[a].is_alive());
+        let foes = self.w.enemies.iter().any(|&e| !self.is_reserved(e) && self.w.units[e].is_active());
+        !heroes || !foes
     }
 
     /// OBJ1 rule 3 over the heroes, guests, protected guests and every enemy that is not reserved.
