@@ -1,3 +1,5 @@
+Archived 2026-10-29: the cloud wind-down state of 2026-10-18 (CLEANUP.md CLN-32); superseded by a fresh handover that a resumed area thread writes (`docs/workflow/cloud.md`, decision "Fresh area sessions"). Text below unchanged.
+
 # Gameplay handover
 
 Updated 2026-10-18 17:00 UTC by Gameplay session session_01QCe4DugW3btbTntzfddbhN (project wind-down, user 16:28 UTC). Read this first, then `docs/workflow/cloud.md`. Mode is now **interactive** (planner-ops "Current mode", decision "Interactive mode"): act only on Tushar's direct requests; do not start queued rows on your own. Land with `bash tools/fc.sh gate auto` (per-system gate; a new suite needs its `if _on("<system>")` line in suite_registry.gd). Landed pings to Merge & Release are off (f1db72d); patch notes are written per release.

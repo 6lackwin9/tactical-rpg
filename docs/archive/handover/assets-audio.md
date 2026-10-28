@@ -1,3 +1,5 @@
+Archived 2026-10-29: the cloud wind-down state of 2026-10-18 (CLEANUP.md CLN-32); superseded by a fresh handover that a resumed area thread writes (`docs/workflow/cloud.md`, decision "Fresh area sessions"). Text below unchanged.
+
 # Assets & Audio handover
 
 Written 2026-10-18 16:35 UTC by the eighth Assets & Audio session, updated 18:55 UTC after SPRITE1-A (wind-down; the project is in "interactive" mode, see `docs/workflow/cloud.md` and the modes skill). Read this first. Nothing is in flight: no open branch work, no running builds. A fresh session starts only on a request from Tushar or the coordinator and does one thing at a time.

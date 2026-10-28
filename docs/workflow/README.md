@@ -16,10 +16,10 @@ The game, the lanes, the agents, the gate steps and every decision are the same 
 | --- | --- | --- |
 | Planner | the main terminal session, one for everything | each area thread plans its area's tasks one at a time; the project chat (coordinator) routes asks and opens a new thread only with the user's approval |
 | Front desk | a second local session, found with `ListAgents` | the project chat |
-| Parallel builders | subagents in sibling worktrees (`../ngp-<id>`) | one area thread per focus area, each in its own container; the six lane agents run one after another in that thread's checkout (the thread writes only planner docs itself, see cloud.md "Lanes inside an area thread") |
-| Branch | a `claude/<id>-<slug>` branch per task from the latest `develop`, created by the planner (a worktree per concurrent builder) | a `claude/...` branch per task from the latest `develop`; feature branches are free; the squash commit on `develop` starts with the task id |
+| Parallel builders | subagents in sibling worktrees (`C:/dev/tactical-rpg-<task>`) | one area thread per focus area, each in its own container; the six lane agents run one after another in that thread's checkout (the thread writes only planner docs itself, see cloud.md "Lanes inside an area thread") |
+| Branch | a `claude/<task>` branch per task from the local `staging` branch (decision "Batched gate", 2026-10-28), created by the planner (a worktree per concurrent builder) | a `claude/...` branch per task from the latest `develop`; feature branches are free; the squash commit on `develop` starts with the task id |
 | Commits | planner commits after review; builders never commit | the thread commits and pushes after each green step; its subagents never commit; `change-reviewer` reviews the whole task branch before it lands on `develop` and its verdict goes in the squash commit (`Review:` line) |
-| Merge to `main` | tasks squash onto `develop` (no PR); the planner session, acting as Merge & Release, releases `develop` -> `main` through one PR with the GitHub CLI after CI (merge commit), then fast-forwards `develop` to it | area threads squash tasks into `develop` (no PR); the Merge & Release thread merges one batched `develop` -> `main` PR (merge commit) after CI |
+| Merge to `main` | tasks land on the local `staging` branch under a partial gate and reach `develop` in batches under one full gate (`flush.sh`, skill `task-landing`; no PR); the planner session, acting as Merge & Release, releases `develop` -> `main` through one PR with the GitHub CLI after CI (merge commit), then fast-forwards `develop` to it | area threads squash tasks into `develop` (no PR); the Merge & Release thread merges one batched `develop` -> `main` PR (merge commit) after CI |
 | Writer of `docs/TASKS.md`, ROADMAP, decisions, HISTORY | planner only | each area thread for its tasks' rows and the decisions you gave in that thread, inside the task's commit |
 | `docs/AGENT_MAP.md` "Active now" | kept current by the planner | not used (the project's thread list is live); the finished-run log and `docs/archive/TASKS_DONE.md` are written only by the Merge & Release thread at release time, from each task commit's `AgentMap:` and `Done:` lines |
 | Gate | `check_project.ps1 -Fast -Quiet` (builds every engine crate and runs every test, ~30 s warm) and IDE Problems tab 0 | `tools/fc.sh gate` (the same steps; `auto` is accepted and runs everything) and `tools/fc.sh docs`; no IDE rule; CI runs the same gate after recording the Godot reference from `legacy/` (`gate`, a required check on `main`) |
@@ -46,7 +46,7 @@ The repo is the handover: state lives in `docs/TASKS.md`, `docs/AGENT_MAP.md`, t
 
 1. Ask the project chat to wind down: each running thread pushes its branch and writes its `docs/TASKS.md` row with the branch name and next step.
 2. Land what is approved and gated on `develop` and release it to `main`; leave the rest on pushed task branches.
-3. Locally: `git pull` on `main`, then `git fetch` the open branches; create a worktree per branch you continue (`git worktree add ../ngp-<id> <branch>`).
+3. Locally: `git pull` on `main`, then `git fetch` the open branches; create a worktree per branch you continue (`git worktree add ../tactical-rpg-<task> <branch>`).
 4. Start the planner session (skills `planner`, `planner-ops`, [desktop.md](desktop.md)) and the front desk; set "Active now" in `docs/AGENT_MAP.md`.
 5. Continue from the pushed task branches; the desktop planner may fast-forward a branch to `main` instead of using `develop`.
 

@@ -1,3 +1,5 @@
+Archived 2026-10-29: the cloud wind-down state of 2026-10-18 (CLEANUP.md CLN-32); superseded by a fresh handover that a resumed area thread writes (`docs/workflow/cloud.md`, decision "Fresh area sessions"). Text below unchanged.
+
 # UI/UX handover
 
 Written 2026-10-18 16:52 UTC by the UI/UX session at the project wind-down (Tushar 16:28: agents finish in-flight work, then act only on his direct requests; "interactive" mode, skill `planner-ops`). Read this first, then `docs/workflow/cloud.md` and `docs/preferences/ui.md` (add a dated line whenever Tushar states or approves a UI preference). Do not start queue items on your own; wait for his request. Never touch the `engine` branch (decision "Engine branch hold"). Landed tasks no longer get a "landed" ping to Merge & Release (cloud.md step 7, f1db72d).

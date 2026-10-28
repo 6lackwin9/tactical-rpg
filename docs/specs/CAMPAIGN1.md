@@ -277,3 +277,8 @@ no shipped flag uses them (checked 2026-10-25). The content check reports a cond
 Validation (`GameState::validate`): meter ids resolve, values in range, `act` 0-9, pending items well formed.
 Save: version 13 (or the next free number; sequence with ROSTER1, RULESET1-D, ENCOUNTER2-W); the step adds nothing
 (an absent `campaign` reads as a fresh one at the current time when the world has a campaign, else empty).
+
+## As built (2026-10-29, CLEANUP.md CLN-24)
+
+- CAMPAIGN1-C (c9fbd8c): the defeat retreat as R4 in section 8, including its fallback: a `to` hub that cannot be
+  entered falls back to the wake (`retreat_failed` log note).

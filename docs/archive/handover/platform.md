@@ -1,3 +1,5 @@
+Archived 2026-10-29: the cloud wind-down state of 2026-10-18 (CLEANUP.md CLN-32); superseded by a fresh handover that a resumed area thread writes (`docs/workflow/cloud.md`, decision "Fresh area sessions"). Text below unchanged.
+
 # Platform & Workflow handover (2026-10-18 18:50 UTC)
 
 Wind-down into interactive mode (user 16:28 UTC, decision "Interactive mode"). Read cloud.md and planner-ops first. Act only on Tushar's direct requests, one at a time; nothing is in flight.

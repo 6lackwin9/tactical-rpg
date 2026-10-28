@@ -315,3 +315,24 @@ block start; phase effect `{"type": "heal", "unit", "pct"}` heals that share of 
 G2, G6, G8-G12, G15-G17, G20, G21, G25, G26 (not in the slice; riders can later carry a lethal execute and
 second statuses); hazard overlap reactions (Volatile Catalyst); the Strain crisis table; Ash-Cloud's jump (Q-54); windup
 targeting (HQ2); Content Forge forms for the new fields (raw JSON, as ENCOUNTER2).
+
+## 15. As built (2026-10-29, CLEANUP.md CLN-24)
+
+One line per landed task where the build settled something this spec does not state; the full notes are the task rows
+in `docs/archive/TASKS_DONE.md`, the user's rulings the rows in `games/emberwake/docs/decisions/combat.md`.
+
+- HOOKS1-GF: with the rule off the battle's catalog drops skill hazards at the start (`World::ignore_hazards_when_off`).
+- HOOKS1-Z: data zones for encounters and road fights apply the board and hold tiles through `Grid::apply_board`.
+- HOOKS1-E (user-confirmed): a redirect's leftover counts against the holder; ripostes raise no hit events; area holders
+  take no redirect; the depth-1 rule. Open: `ally_hit` non-hit effects (Intercepting Hook's pull) run after the action,
+  pending the user's pick (no decision row yet).
+- HOOKS1-K: decision "HOOKS1-K answers (user 2026-10-29)": the AI uses an HP-cost skill whenever it can pay; riders skip
+  a user that died to a riposte.
+- HOOKS1-X: an `exploit` entry `{hp_below, power_mult}` reads the target's HP share before the hit; the best entry wins
+  and nothing is consumed.
+- HOOKS1-M: decision "HOOKS1-M and deck answers (user 2026-10-29)"; meters share `rpgkit_rules::bands` with the
+  campaign meters.
+- HOOKS1-H: decision "HOOKS1-H, RULESET1-G and STATUSFX1-L answers (user 2026-10-29, all as recommended)".
+- HOOKS1-C: members are built in their character's world (`UnitState::path_world`); screens name classes by the world
+  being played.
+- HOOKS1-U (building): decision "HOOKS1-U unlock on an automatic deck (user 2026-10-29)".
