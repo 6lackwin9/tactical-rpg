@@ -6,17 +6,23 @@
 //! action is logged with a step-by-step damage breakdown (markup `[color=#rrggbb]`, `[b]`); stage effects queue for the
 //! screen. Crit rolls are seeded, so benchmarks repeat.
 
+use crate::grid::V2;
+use crate::poise::{self, Factors, Impact, PoiseState};
+use crate::round_intent::{self, ManeuverKind, Opener, RoundIntent};
+use crate::round_intent_plan as rip;
+use crate::session::{EncounterDef, Prebuilt, Session};
 use crate::skill;
+use crate::world::{AiProfile, UnitId};
 use aegis_core::rng::GodotRng;
-use rpgkit_data::{Catalog, ItemDef, SkillDef, STATS};
+use rpgkit_data::{Catalog, Deck, ItemDef, SkillDef, UnitDef, STATS};
+use rpgkit_rules::build_unit_in;
 use rpgkit_rules::carry;
 use rpgkit_rules::damage::{self, Hit, HitInput, CRIT_MULT};
 use rpgkit_rules::gear::{class_can_equip, item_fits_slot, off_hand_ok, Equipment, Slot};
+use rpgkit_rules::ruleset::{self, Ruleset};
 use rpgkit_rules::stats::Proficiency;
-use rpgkit_rules::ruleset::Ruleset;
 use rpgkit_rules::status;
-use rpgkit_rules::unit::{Stance, Unit};
-use rpgkit_rules::build_unit;
+use rpgkit_rules::unit::{DeckRule, Stance, Unit};
 use indexmap::IndexMap;
 use std::sync::Arc;
 
@@ -30,6 +36,12 @@ pub const RNG_SEED: i64 = 1337;
 /// The heroes and the dummy (catalog units).
 pub const HEROES: [&str; 2] = ["dojo_warrior", "dojo_ranger"];
 pub const DUMMY: &str = "training_dummy";
+/// RULESET1_INTENT UI4: the planner's scratch board (the battle grid): the hero's, the dummy's and the second
+/// dummy's first tiles, and the round's blocks.
+pub const PLAN_HERO: V2 = V2::new(3, 4);
+pub const PLAN_DUMMY: V2 = V2::new(6, 4);
+pub const PLAN_PARTNER: V2 = V2::new(7, 4);
+pub const PLAN_BLOCKS: i32 = 6;
 /// The equipment slots, in their order (slot keys as the saves write them).
 pub const SLOTS: [(&str, Slot); 6] = [
     ("main_hand", Slot::MainHand),
@@ -141,6 +153,61 @@ pub struct Struck {
     pub breakdown: String,
 }
 
+/// RULESET1_INTENT UI4: what the Dojo's planner view plans for: the hero's intent, Maneuver kind and opener against
+/// the dummy, and the tiles of the hero, the dummy and the second dummy that engages it (None: off the board).
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlanSetup {
+    pub intent: RoundIntent,
+    /// None = the planner's pick (MV11).
+    pub kind: Option<ManeuverKind>,
+    /// A skill id (None = the planner's opener, PL3).
+    pub opener: Option<String>,
+    pub hero: V2,
+    pub dummy: V2,
+    pub partner: Option<V2>,
+}
+
+impl Default for PlanSetup {
+    fn default() -> Self {
+        Self { intent: RoundIntent::Assault, kind: None, opener: None, hero: PLAN_HERO, dummy: PLAN_DUMMY, partner: None }
+    }
+}
+
+/// One planned command (a compiled plan entry) with its reason tag (PL6) and readouts.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlanRow {
+    pub skill: String,
+    pub name: String,
+    pub start: i32,
+    pub end: i32,
+    pub ap: i32,
+    pub reason: String,
+    /// The hero's tile after it.
+    pub cell: V2,
+    /// The planner's damage estimate on the dummy (0 for no hit).
+    pub damage: i32,
+    /// "flank", "armour pierced", "stagger 12" (the rules that apply to this hit).
+    pub notes: Vec<String>,
+}
+
+/// The plan an intent makes now on the scratch board, or why it is not offered (PL7).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PlanView {
+    pub intent: String,
+    /// The Maneuver kind the plan uses ("" for the other intents).
+    pub kind: String,
+    pub target: String,
+    pub rows: Vec<PlanRow>,
+    /// PL7: the reason the intent (or kind) is refused ("" = planned).
+    pub refused: String,
+    pub ap_before: i32,
+    pub ap_after: i32,
+    pub rest_blocks: i32,
+    /// RS2, RS3: the AP and poise the Rest blocks would give.
+    pub rest_ap: i32,
+    pub rest_poise: i32,
+}
+
 pub struct DojoSession {
     pub cat: Arc<Catalog>,
     pub heroes: Vec<Unit>,
@@ -165,6 +232,21 @@ pub struct DojoSession {
     /// RULESET1-R: the rules the dojo applies (the Classic / Timeline toggle; classic by default). Under
     /// `round_intent` the classic stances are inert: no switch AP, no stance change, no stance shift.
     pub ruleset: Ruleset,
+    /// RULESET1-G: each hero's catalog unit id (rebuilds start from it).
+    pub hero_ids: Vec<String>,
+    /// The attribute points spent on each hero here (a rebuild spends them again).
+    spent: Vec<IndexMap<String, i32>>,
+    /// Each hero's deck set here (None = its catalog row's; RULESET1 9 D5).
+    decks: Vec<Option<Deck>>,
+    /// RULESET1 5 (rule `poise`): each hero's and the dummy's poise bar (refilled each round).
+    pub hero_poise: Vec<PoiseState>,
+    pub dummy_poise: PoiseState,
+    /// "Dummy in windup": hits on the dummy count as hits into a windup (P5, P13, P14).
+    pub dummy_windup: bool,
+    /// RS2: the hero's Rest blocks this round (their AP comes at "Next round" under `round_intent`).
+    pub rest_blocks: i32,
+    /// RULESET1_INTENT UI4: the planner view's inputs.
+    pub planner: PlanSetup,
 }
 
 impl DojoSession {
@@ -173,15 +255,18 @@ impl DojoSession {
     pub fn new(cat: Arc<Catalog>) -> Self {
         let mut heroes = Vec::new();
         let mut classes = Vec::new();
+        let mut hero_ids = Vec::new();
         for id in HEROES {
             let Some(def) = cat.units.get(id) else { continue };
-            let mut u = build_unit(&cat, def, 0);
+            let mut u = build_unit_in(&cat, def, 0, None);
             u.max_ap = HERO_AP;
             u.ap = HERO_AP;
             heroes.push(u);
             classes.push(def.class_id.clone());
+            hero_ids.push(id.to_string());
         }
-        let mut dummy = cat.units.get(DUMMY).map(|d| build_unit(&cat, d, 0)).unwrap_or_else(|| build_unit(&cat, &rpgkit_data::UnitDef::from_obj(&Default::default()), 0));
+        let n = heroes.len();
+        let mut dummy = cat.units.get(DUMMY).map(|d| build_unit_in(&cat, d, 0, None)).unwrap_or_else(|| build_unit_in(&cat, &UnitDef::from_obj(&Default::default()), 0, None));
         dummy.max_hp = DUMMY_MAX_HP;
         dummy.hp = DUMMY_MAX_HP;
         dummy.guard = 0.0;
@@ -208,6 +293,14 @@ impl DojoSession {
             counter: 0,
             fx: Vec::new(),
             ruleset: Ruleset::classic(),
+            hero_ids,
+            spent: vec![IndexMap::new(); n],
+            decks: vec![None; n],
+            hero_poise: vec![PoiseState::default(); n],
+            dummy_poise: PoiseState::default(),
+            dummy_windup: false,
+            rest_blocks: 0,
+            planner: PlanSetup::default(),
         }
     }
 
@@ -216,6 +309,9 @@ impl DojoSession {
         let ruleset = self.ruleset.clone();
         *self = Self::new(self.cat.clone());
         self.ruleset = ruleset;
+        if !self.ruleset.is_classic() {
+            self.rebuild_all();
+        }
         self.log_event("EVENT", "Dojo Reset", "Heroes, stash, loadouts and dummy restored to baseline", 0, "RESET");
         self.fx("text", true, "Dojo Reset", Tone::Info);
     }
@@ -247,6 +343,7 @@ impl DojoSession {
         if i < self.heroes.len() && i != self.active {
             self.alloc = None;
             self.active = i;
+            self.rest_blocks = 0;
         }
     }
 
@@ -279,6 +376,183 @@ impl DojoSession {
 
     pub fn set_dummy_power(&mut self, power: i32) {
         self.dummy.power_override = power.max(0);
+    }
+
+    // ---- RULESET1_INTENT UI4: the planner view (no resolver: plans compile on a scratch board) ------------------
+
+    /// The intents the Dojo's ruleset offers (none without `round_intent`).
+    pub fn plan_intents(&self) -> Vec<RoundIntent> {
+        if !self.ruleset.has(ruleset::ROUND_INTENT) {
+            return Vec::new();
+        }
+        self.ruleset.numbers.intents.iter().filter_map(|i| RoundIntent::parse(i)).collect()
+    }
+
+    /// The scratch battle the planner plans on: the active hero (as it stands: gear, AP, deck), the second dummy on
+    /// its side when placed (it engages the dummy, which faces it: MV1, MV2) and the dummy on the other, on the battle
+    /// grid at the setup's tiles, under the Dojo's ruleset. Err without `round_intent`.
+    fn plan_session(&self, setup: &PlanSetup) -> Result<(Session, UnitId), String> {
+        if !self.ruleset.has(ruleset::ROUND_INTENT) {
+            return Err(format!("{} rules have no round intents", self.ruleset.name));
+        }
+        let Some(dummy_def) = self.cat.units.get(DUMMY) else { return Err(format!("no '{DUMMY}' unit in the catalog")) };
+        let hero_def = self.hero_def(self.active).unwrap_or_else(|| UnitDef::from_obj(&Default::default()));
+        let row = serde_json::json!({"id": "dojo_planner", "name": "Gear Dojo", "party": [], "enemies": [DUMMY], "total_blocks": PLAN_BLOCKS, "unit_ap": HERO_AP, "max_rounds": 1});
+        let mut def = EncounterDef::from_obj(row.as_object().expect("an object"));
+        def.ruleset = self.ruleset.clone();
+        let prebuilt = |unit: Unit, d: &UnitDef, key: &str| Prebuilt { unit, art: String::new(), palette: String::new(), profile: AiProfile::for_unit(&self.cat, d), key: key.into() };
+        let mut party = vec![prebuilt(self.hero().clone(), &hero_def, "hero")];
+        if setup.partner.is_some() {
+            let mut partner = build_unit_in(&self.cat, dummy_def, 0, self.deck_rule().as_ref());
+            partner.name = format!("{} 2", self.dummy.name);
+            party.push(prebuilt(partner, dummy_def, "partner"));
+        }
+        let mut s = Session::start_with(self.cat.clone(), def, &IndexMap::<String, UnitDef>::new(), party);
+        let dummy = s.w.enemies.first().copied().ok_or("the dummy did not spawn")?;
+        // the dummy as it stands here (HP, guard, statuses)
+        let (name, guard, hp) = (self.dummy.name.clone(), self.dummy.guard, self.dummy.hp);
+        let d = &mut s.w.units[dummy];
+        (d.name, d.guard, d.hp) = (name, guard, hp);
+        for c in 0..s.w.units.len() {
+            s.w.grid.positions[c] = None;
+        }
+        s.w.grid.positions[0] = Some(setup.hero);
+        s.w.grid.positions[dummy] = Some(setup.dummy);
+        if let Some(cell) = setup.partner {
+            s.w.grid.positions[1] = Some(cell);
+            s.w.units[dummy].active_target = Some(1);
+        } else {
+            s.w.units[dummy].active_target = Some(0);
+        }
+        round_intent::update_facings(&mut s.w);
+        Ok((s, dummy))
+    }
+
+    /// The plan `setup` makes for the active hero now (PL1-PL7), with each command's reason tag (PL6), AP before and
+    /// after, the Rest gain (RS2, RS3) and each hit's estimate and rules (flank, pierce, stagger). Nothing changes.
+    pub fn plan_view_of(&self, setup: &PlanSetup) -> PlanView {
+        let mut v = PlanView { intent: setup.intent.name().to_string(), ap_before: self.hero().ap, ap_after: self.hero().ap, ..PlanView::default() };
+        let (mut s, dummy) = match self.plan_session(setup) {
+            Ok(x) => x,
+            Err(e) => {
+                v.refused = e;
+                return v;
+            }
+        };
+        let w = &mut s.w;
+        let c: UnitId = 0;
+        if let Err(e) = round_intent::set_intent(w, c, setup.intent) {
+            v.refused = e;
+            return v;
+        }
+        if setup.intent == RoundIntent::Maneuver {
+            if let Err(e) = rip::set_kind(w, c, setup.kind) {
+                v.refused = e;
+                return v;
+            }
+        }
+        if let Some(sid) = setup.opener.as_deref().and_then(|id| w.book().find(id)) {
+            if let Err(e) = rip::set_opener(w, c, Some(Opener::Skill(sid))) {
+                v.refused = e;
+                return v;
+            }
+        }
+        if let Err(e) = rip::plan_unit(w, &mut s.plan, c) {
+            v.refused = e;
+            return v;
+        }
+        let w = &s.w;
+        let rs = w.round_states.get(&c).cloned().unwrap_or_default();
+        v.kind = match (setup.intent, rs.maneuver) {
+            (RoundIntent::Maneuver, Some(ManeuverKind::Engage)) => "Engage".into(),
+            (RoundIntent::Maneuver, Some(ManeuverKind::Disengage)) => "Disengage".into(),
+            (RoundIntent::Maneuver, Some(ManeuverKind::Utility)) => "Utility".into(),
+            _ => String::new(),
+        };
+        v.target = match rs.target {
+            Some(round_intent::RoundTarget::Myself) => "self".into(),
+            Some(round_intent::RoundTarget::Unit(t)) => w.units[t].name.clone(),
+            Some(round_intent::RoundTarget::Cell(p)) => format!("tile {},{}", p.x, p.y),
+            None => String::new(),
+        };
+        let entries = s.plan.entries_for(w, c);
+        let reasons = rip::reasons(w, &s.plan, c);
+        let n = &w.ruleset.numbers;
+        for (e, reason) in entries.iter().zip(reasons) {
+            let sk = &w.cat.skills[e.skill];
+            let mut notes = Vec::new();
+            if skill::kind(sk) == skill::Kind::Attack && e.target == Some(dummy) {
+                let mut w2 = w.clone();
+                w2.grid.positions[c] = Some(e.pos_after);
+                if w.ruleset.has(ruleset::FLANK) && round_intent::flank_bonus(&w2, c, dummy) {
+                    notes.push("flank".to_string());
+                }
+                let imp = Impact::of(sk);
+                if imp.armor_piercing && w.ruleset.has(ruleset::PIERCE) {
+                    notes.push("armour pierced".to_string());
+                }
+                if imp.stagger > 0 && w.ruleset.has(ruleset::POISE) {
+                    notes.push(format!("stagger {}", imp.stagger));
+                }
+            }
+            if skill::kind(sk) == skill::Kind::Rest {
+                v.rest_blocks += e.end_block(w) - e.start_block + 1;
+            }
+            v.ap_after -= e.total_ap();
+            v.rows.push(PlanRow { skill: sk.id.clone(), name: sk.name.clone(), start: e.start_block, end: e.end_block(w), ap: e.total_ap(), reason, cell: e.pos_after, damage: e.est_damage, notes });
+        }
+        v.rest_ap = round_intent::rest_gain(n, v.rest_blocks);
+        if w.ruleset.has(ruleset::POISE) {
+            v.rest_poise = n.rest_poise_per_block * v.rest_blocks;
+        }
+        v
+    }
+
+    /// The planner view of the Dojo's setup.
+    pub fn plan_view(&self) -> PlanView {
+        self.plan_view_of(&self.planner)
+    }
+
+    /// UI4: the plan each intent of the ruleset would make now (its kind and opener the planner's).
+    pub fn plans_by_intent(&self) -> Vec<PlanView> {
+        self.plan_intents().into_iter().map(|i| self.plan_view_of(&PlanSetup { intent: i, kind: None, opener: None, ..self.planner.clone() })).collect()
+    }
+
+    /// The openers the hero may pick for the setup's intent: its order for the intent (FU4), as (skill id, name).
+    pub fn plan_openers(&self) -> Vec<(String, String)> {
+        let setup = PlanSetup { opener: None, ..self.planner.clone() };
+        let Ok((mut s, _)) = self.plan_session(&setup) else { return Vec::new() };
+        if round_intent::set_intent(&mut s.w, 0, setup.intent).is_err() {
+            return Vec::new();
+        }
+        rip::order(&s.w, 0, setup.intent).into_iter().map(|sid| (s.w.cat.skills[sid].id.clone(), s.w.cat.skills[sid].name.clone())).collect()
+    }
+
+    /// Sets the planner's intent (the kind and opener go back to the planner's pick).
+    pub fn set_plan_intent(&mut self, intent: RoundIntent) {
+        self.planner.intent = intent;
+        self.planner.kind = None;
+        self.planner.opener = None;
+    }
+
+    /// Moves a planner piece ("hero", "dummy", "partner") to `cell` when it is on the grid and free; "partner" with
+    /// None takes the second dummy off the board.
+    pub fn place_plan(&mut self, piece: &str, cell: Option<V2>) -> bool {
+        let p = &mut self.planner;
+        let on_grid = |c: V2| c.x >= 0 && c.y >= 0 && c.x < crate::grid::GRID_W && c.y < crate::grid::GRID_H;
+        if let Some(c) = cell {
+            let taken = [Some(p.hero), Some(p.dummy), p.partner].into_iter().flatten().any(|o| o == c);
+            if !on_grid(c) || taken {
+                return false;
+            }
+        }
+        match (piece, cell) {
+            ("hero", Some(c)) => p.hero = c,
+            ("dummy", Some(c)) => p.dummy = c,
+            ("partner", c) => p.partner = c,
+            _ => return false,
+        }
+        true
     }
 
     // ---- Strikes ------------------------------------------------------------------------------------------------
@@ -408,8 +682,13 @@ impl DojoSession {
     /// DojoSession._apply_hit: one weapon hit on the dummy (the breakdown read right after, so multi-hits show the HP
     /// after each).
     fn apply_hit(&mut self, title: &str, ranged: bool, offhand: bool, mult: f64) -> Struck {
+        self.apply_hit_by(title, ranged, offhand, mult, false)
+    }
+
+    /// `apply_hit`; `pierce`: the hit skips the armour term (RULESET1 A2).
+    fn apply_hit_by(&mut self, title: &str, ranged: bool, offhand: bool, mult: f64, pierce: bool) -> Struck {
         let roll = if self.force_crit { None } else { Some(self.rng.randf()) };
-        let res = damage::compute(&self.heroes[self.active], &self.dummy, HitInput { ranged, offhand, skill_mult: mult, force_crit: self.force_crit, crit_roll: roll, ..HitInput::default() });
+        let res = damage::compute(&self.heroes[self.active], &self.dummy, HitInput { ranged, offhand, skill_mult: mult, force_crit: self.force_crit, crit_roll: roll, ignore_armor: pierce, ..HitInput::default() });
         let dmg = self.dummy.take_damage(res.final_dmg, true);
         let mitigated = res.mit_ratio > 0.0;
         let outcome = if !self.dummy.is_alive() {
@@ -487,9 +766,169 @@ impl DojoSession {
             return;
         }
         self.ruleset = ruleset;
+        // RULESET1-G: the heroes are built again under the new rules (the deck rule's slots and basics; gear, pouch and
+        // spent points kept), the poise bars refill
+        self.rebuild_all();
         let name = self.ruleset.name.clone();
-        let detail = if self.ruleset.stances() { format!("{name} rules: stances and their switch AP apply") } else { format!("{name} rules: no stances, no switch AP") };
+        let mut detail = if self.ruleset.stances() { format!("{name} rules: stances and their switch AP apply") } else { format!("{name} rules: no stances, no switch AP") };
+        if self.deck_rule().is_some() {
+            detail += "; heroes rebuilt with their decks";
+        }
         self.log_event("EVENT", "Ruleset", &detail, 0, &name.to_uppercase());
+    }
+
+    // ---- RULESET1-G: rebuilds, decks, poise ---------------------------------------------------------------------
+
+    /// The deck rule of the Dojo's ruleset (None in classic).
+    pub fn deck_rule(&self) -> Option<DeckRule> {
+        DeckRule::of(&self.ruleset)
+    }
+
+    /// Whether the Dojo plays by poise (rule `poise`).
+    pub fn poise_on(&self) -> bool {
+        self.ruleset.has(ruleset::POISE)
+    }
+
+    /// Hero `i`'s catalog row with the deck set here (its own when none).
+    fn hero_def(&self, i: usize) -> Option<UnitDef> {
+        let mut def = self.cat.units.get(self.hero_ids.get(i)?)?.clone();
+        if let Some(d) = &self.decks[i] {
+            def.deck = d.clone();
+        }
+        Some(def)
+    }
+
+    /// Builds hero `i` again from its catalog row under the Dojo's ruleset (`build_unit_in`: under the deck rule its
+    /// deck's slotted passives, open basics and active slots; classic: `build_unit`), then puts back its gear, pouch
+    /// and the points spent here. HP and AP refill; the poise bar refills.
+    fn rebuild(&mut self, i: usize) {
+        let Some(def) = self.hero_def(i) else { return };
+        let rule = self.deck_rule();
+        let mut u = build_unit_in(&self.cat, &def, 0, rule.as_ref());
+        u.inventory = self.heroes[i].inventory.clone();
+        for (st, pts) in &self.spent[i] {
+            *u.stats.core.entry(st.clone()).or_insert(0) += pts;
+            u.stats.unallocated -= pts;
+        }
+        u.max_ap = HERO_AP;
+        u.ap = HERO_AP;
+        self.heroes[i] = u;
+        self.changed();
+        let h = &mut self.heroes[i];
+        h.hp = h.max_hp;
+        self.hero_poise[i] = self.full_bar(&self.heroes[i], self.hero_poise[i]);
+    }
+
+    fn rebuild_all(&mut self) {
+        self.alloc = None;
+        for i in 0..self.heroes.len() {
+            self.rebuild(i);
+        }
+        self.dummy_poise = self.full_bar(&self.dummy, self.dummy_poise);
+        self.rest_blocks = 0;
+    }
+
+    /// The deck hero `i` plays with (its unit's `deck`: empty = the automatic deck, D5).
+    pub fn deck_of(&self, i: usize) -> Deck {
+        self.heroes.get(i).map(|h| h.deck.clone()).unwrap_or_default()
+    }
+
+    /// RULESET1 9 D6 (the Dojo's deck view): the active hero fights with `deck` from now on (empty = the automatic
+    /// deck): it is rebuilt with it (gear, pouch and spent points kept).
+    pub fn set_deck(&mut self, deck: Deck) {
+        let i = self.active;
+        self.decks[i] = Some(deck);
+        self.alloc = None;
+        self.rebuild(i);
+        let h = self.hero();
+        let detail = if h.deck.is_empty() {
+            "Automatic deck".to_string()
+        } else {
+            format!("Actives: {}; passives: {}; keystone: {}", list_or_auto(&h.active_families()), list_or_none(&h.deck.passive), list_or_none(&h.deck.keystone))
+        };
+        let name = h.name.clone();
+        self.log_action("EVENT", "Deck", &detail, 0, "DECK", "", &name, false);
+    }
+
+    /// P1-P3: `u`'s bar refilled to its Max Poise (last round's break remembered for P10); empty without the rule.
+    fn full_bar(&self, u: &Unit, last: PoiseState) -> PoiseState {
+        if !self.poise_on() {
+            return PoiseState::default();
+        }
+        let max = poise::max_poise_of(&self.cat, &self.ruleset, u);
+        PoiseState { max, value: max, broken: false, broken_last: last.broken }
+    }
+
+    /// The active hero's poise bar.
+    pub fn poise(&self) -> PoiseState {
+        self.hero_poise.get(self.active).copied().unwrap_or_default()
+    }
+
+    /// "Dummy in windup" on or off.
+    pub fn toggle_dummy_windup(&mut self) {
+        self.dummy_windup = !self.dummy_windup;
+        let name = self.dummy.name.clone();
+        let detail = if self.dummy_windup { "Dummy winding up: hits stagger it more and may break it" } else { "Dummy not winding up" };
+        self.log_action("EVENT", "Dummy Windup", detail, 0, if self.dummy_windup { "WINDUP" } else { "IDLE" }, "", &name, false);
+    }
+
+    /// P4-P14 on one bar for one hit (the Dojo's own sandbox, one hit at a time): stagger taken by the factors that
+    /// apply, the break by poise, by `sure_break` into a windup, or by the chance roll (P13), and the line the
+    /// breakdown shows (`stagger 12 x windup 2 x guard 0.5 = 12 -> poise 40 -> 28`). None without a bar.
+    fn stagger(&mut self, on_dummy: bool, s: &SkillDef, guarding: bool) -> Option<String> {
+        let mut bar = if on_dummy { self.dummy_poise } else { self.poise() };
+        let imp = Impact::of(s);
+        if !self.poise_on() || bar.max <= 0 || (imp.stagger <= 0 && !imp.sure_break) {
+            return None;
+        }
+        let n = self.ruleset.numbers.clone();
+        let target = if on_dummy { &self.dummy } else { self.hero() };
+        let windup = on_dummy && self.dummy_windup;
+        let pick = |on: bool, m: f64| if on { m } else { 1.0 };
+        let f = Factors {
+            windup: pick(windup, n.stagger_windup_mult),
+            guard: pick(guarding, n.stagger_guard_mult),
+            repeat: pick(bar.broken_last, n.stagger_repeat_mult),
+            passive: target.stagger_taken.iter().filter(|e| e.matches(s.blocks)).map(|e| e.mult).product(),
+            ..Factors::default()
+        };
+        let taken = poise::stagger_taken(imp.stagger, &f);
+        let mut terms = vec![format!("stagger {}", imp.stagger)];
+        for (label, v) in [("windup", f.windup), ("guard", f.guard), ("repeat", f.repeat), ("passive", f.passive)] {
+            if v != 1.0 {
+                terms.push(format!("{label} {}", num(v)));
+            }
+        }
+        if bar.broken {
+            return Some(format!("{} = {taken} (already broken this round)", terms.join(" x ")));
+        }
+        let before = bar.value;
+        let after = (before - taken).max(0);
+        let mut line = format!("{} = {taken} -> poise {before} -> {after}", terms.join(" x "));
+        let cause = if taken > 0 && after == 0 {
+            Some("BREAK")
+        } else if windup && imp.sure_break {
+            Some("BREAK (sure break)")
+        } else if windup && taken > 0 && n.break_chance_scale > 0.0 {
+            let chance = poise::break_chance(&n, taken, before);
+            let roll = self.rng.randi_range(1, 100);
+            line += &format!(" (may break: {chance}%, rolled {roll})");
+            (roll <= chance).then_some("BREAK (chance)")
+        } else {
+            None
+        };
+        bar.value = after;
+        if let Some(c) = cause {
+            bar.value = 0;
+            bar.broken = true;
+            line += &format!(" {c}");
+        }
+        if on_dummy {
+            self.dummy_poise = bar;
+        } else {
+            self.hero_poise[self.active] = bar;
+        }
+        Some(line)
     }
 
     /// The stance switch AP of `s` now (0 when the ruleset's stances are inert).
@@ -535,11 +974,26 @@ impl DojoSession {
             "ATTACK" => {
                 let ranged = self.hero().inventory.main_weapon().is_some_and(|m| m.is_ranged_weapon()) && !skill::is_off_hand(&s);
                 let mult = self.hero().power_for(&s);
-                let hit = if skill::deals_damage(&s) {
-                    Some(self.apply_hit(&s.name, ranged, skill::is_off_hand(&s), mult))
+                // RULESET1 A2: an armour-piercing hit under the rule pierce
+                let pierce = Impact::of(&s).armor_piercing && self.ruleset.has(ruleset::PIERCE);
+                let guarding = self.dummy.guard > 0.0;
+                let mut hit = if skill::deals_damage(&s) {
+                    Some(self.apply_hit_by(&s.name, ranged, skill::is_off_hand(&s), mult, pierce))
                 } else {
                     None
                 };
+                // RULESET1 5: the hit's stagger on the dummy's bar (rule poise)
+                if let Some(h) = hit.as_mut() {
+                    if pierce {
+                        h.breakdown += "\n[color=#38bdf8]armour pierced[/color]";
+                    }
+                    if let Some(line) = self.stagger(true, &s, guarding) {
+                        h.breakdown += &format!("\n[color=#fbbf24]{line}[/color]");
+                        if line.contains("BREAK") {
+                            h.detail += " • BREAK";
+                        }
+                    }
+                }
                 let mut detail = format!("{} • {ap_note}", hit.as_ref().map(|h| h.detail.clone()).unwrap_or_else(|| "No damage".into()));
                 if skill::is_area(&s) {
                     detail += " • area: the dummy is the only target here";
@@ -567,6 +1021,25 @@ impl DojoSession {
                 self.hero_mut().apply_attack_boost(s.boost, s.boost_rounds);
                 self.log_event("BUFF", &s.name, &format!("Attack x{:.2} for {} rounds • {ap_note}", s.boost, s.boost_rounds), ((s.boost - 1.0) * 100.0).round() as i32, &format!("BUFF x{:.2}", s.boost));
                 self.fx("glow", true, &format!("x{:.2} ATK ({} rds)", s.boost, s.boost_rounds), Tone::Gold);
+            }
+            _ if self.ruleset.has(ruleset::ROUND_INTENT) => {
+                // RULESET1_INTENT RS2, RS3: the Rest blocks pay their AP at the round's end ("Next round"); each one
+                // restores poise now (rule poise)
+                let blocks = s.blocks.max(1);
+                self.rest_blocks += blocks;
+                let mut bar = self.poise();
+                let before = bar.value;
+                if self.poise_on() && bar.max > 0 && !bar.broken && bar.value < bar.max {
+                    bar.value = (bar.value + self.ruleset.numbers.rest_poise_per_block * blocks).min(bar.max);
+                    self.hero_poise[self.active] = bar;
+                }
+                let ap = round_intent::rest_gain(&self.ruleset.numbers, self.rest_blocks);
+                let mut detail = format!("{} Rest block{} this round: +{ap} AP at the round's end", self.rest_blocks, if self.rest_blocks == 1 { "" } else { "s" });
+                if bar.value > before {
+                    detail += &format!(", poise {before} -> {}", bar.value);
+                }
+                self.log_event("BUFF", &s.name, &format!("{detail} • {ap_note}"), ap, &format!("REST {}", self.rest_blocks));
+                self.fx("text", true, "Rest", Tone::Good);
             }
             _ => {
                 let before = self.hero().ap;
@@ -601,6 +1074,11 @@ impl DojoSession {
             self.log_action("EVENT", &title, &format!("The dummy is {} and loses its action this round", shown.to_lowercase()), 0, &shown.to_uppercase(), "", &hero_name, true);
             return;
         }
+        // RULESET1 P7: a broken dummy's actions are cancelled until the next round
+        if self.dummy_poise.broken {
+            self.log_action("EVENT", &title, "The dummy is broken and loses its action this round", 0, "BROKEN", "", &hero_name, true);
+            return;
+        }
         // Attacking: the dummy drops its guard and enters the skill's stance.
         self.dummy.guard = 0.0;
         if self.ruleset.stances() {
@@ -619,7 +1097,12 @@ impl DojoSession {
         } else {
             "HIT"
         };
-        let breakdown = breakdown_strike(&title, &self.dummy.name, self.hero(), &res, dealt);
+        let mut breakdown = breakdown_strike(&title, &self.dummy.name, self.hero(), &res, dealt);
+        // RULESET1 5: the hit's stagger on the hero's bar (rule poise; a guarding hero takes the guard factor)
+        let guarding = self.hero().guard > 0.0;
+        if let Some(line) = self.stagger(false, &s, guarding) {
+            breakdown += &format!("\n[color=#fbbf24]{line}[/color]");
+        }
         let detail = format!("{} ATK vs {hero_name} ({} stance)", res.final_attack_power, stance_label(self.hero().stance));
         self.log_action("ATTACK", &title, &detail, dealt, outcome, &breakdown, &hero_name, true);
         self.fx("strike", false, &if res.is_crit { format!("CRIT -{dealt}") } else { format!("-{dealt}") }, if res.is_crit { Tone::Warn } else { Tone::Bad });
@@ -645,8 +1128,25 @@ impl DojoSession {
             }
         }
         self.hero_mut().guard = 0.0;
+        // RULESET1_INTENT RS2: the Rest gain of the round that ended (round_intent); RULESET1 P3: the bars refill (poise)
+        let mut extra = String::new();
+        if self.ruleset.has(ruleset::ROUND_INTENT) {
+            let gain = round_intent::rest_gain(&self.ruleset.numbers, self.rest_blocks);
+            if gain > 0 {
+                let h = self.hero_mut();
+                h.ap = h.max_ap.min(h.ap + gain);
+                extra += &format!("; Rest: +{gain} AP from {} block{}", self.rest_blocks, if self.rest_blocks == 1 { "" } else { "s" });
+            }
+        }
+        self.rest_blocks = 0;
+        if self.poise_on() {
+            let i = self.active;
+            self.hero_poise[i] = self.full_bar(&self.heroes[i], self.hero_poise[i]);
+            self.dummy_poise = self.full_bar(&self.dummy, self.dummy_poise);
+            extra += &format!("; poise refills ({} / {})", self.hero_poise[i].max, self.dummy_poise.max);
+        }
         let detail = format!(
-            "Focus ticks, guard drops, +{ROUND_AP_REGEN} AP (now {}/{}){}",
+            "Focus ticks, guard drops, +{ROUND_AP_REGEN} AP (now {}/{}){}{extra}",
             self.hero().ap,
             self.hero().max_ap,
             if notes.is_empty() { String::new() } else { format!("; {}", notes.join(", ")) }
@@ -1007,6 +1507,11 @@ impl DojoSession {
             summary.push(format!("+{pts} {st}"));
         }
         h.stats.unallocated = a.free;
+        // RULESET1-G: a rebuild (ruleset toggle, deck) spends them again
+        let spent = &mut self.spent[self.active];
+        for (st, pts) in a.pending.iter().filter(|(_, p)| **p > 0) {
+            *spent.entry(st.clone()).or_insert(0) += pts;
+        }
         self.changed();
         let detail = if summary.is_empty() { "No points spent".to_string() } else { summary.join(", ") };
         let left = self.hero().stats.unallocated;
@@ -1015,6 +1520,28 @@ impl DojoSession {
 
     pub fn cancel_allocation(&mut self) {
         self.alloc = None;
+    }
+}
+
+/// A factor as the breakdowns write it: `2`, `0.5`, `1.25`.
+fn num(v: f64) -> String {
+    let s = format!("{v:.2}");
+    s.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+fn list_or_none(ids: &[String]) -> String {
+    if ids.is_empty() {
+        "none".into()
+    } else {
+        ids.join(", ")
+    }
+}
+
+fn list_or_auto(ids: &[String]) -> String {
+    if ids.is_empty() {
+        "auto".into()
+    } else {
+        ids.join(", ")
     }
 }
 

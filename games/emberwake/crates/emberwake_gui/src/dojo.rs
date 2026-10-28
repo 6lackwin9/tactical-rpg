@@ -9,7 +9,11 @@ use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, GOOD, INFO, SMALL, TEXT, W};
 use aegis_ui::widget_plumbing;
 use aegis_ui::window::{Desk, Frac, Layout, Win};
-use emberwake_battle::dojo::{stance_label, DojoSession, Fx, Tone, PRESETS, SLOTS};
+use crate::party::{DeckTerms, DECK_KINDS};
+use emberwake_battle::dojo::{stance_label, DojoSession, Fx, PlanSetup, PlanView, Tone, PRESETS, SLOTS};
+use emberwake_battle::grid::{V2, GRID_H, GRID_W};
+use emberwake_battle::round_intent::{ManeuverKind, RoundIntent};
+use emberwake_data::Deck;
 use emberwake_data::STATS;
 use emberwake_rules::damage;
 use emberwake_rules::gear::item_fits_slot;
@@ -59,6 +63,33 @@ pub enum DAct {
     AllocConfirm,
     Reset,
     Exit,
+    /// RULESET1-G: "Dummy in windup".
+    DummyWindup,
+    /// The planner view (RULESET1_INTENT UI4): an intent of the ruleset (its index), a Maneuver kind (None: the
+    /// planner's), an opener (0: the planner's, else the order's index + 1), the piece a board click moves, a board
+    /// cell, the second dummy on or off.
+    PlanIntent(usize),
+    PlanKind(Option<ManeuverKind>),
+    PlanOpener(usize),
+    PlanPiece(&'static str),
+    PlanCell(i32, i32),
+    PlanPartner,
+    /// The deck view (RULESET1 9 D6): slot an owned one, take slot `i` of a kind out, move an order entry one place
+    /// up, the automatic deck, the automatic order.
+    DeckSlot(&'static str, String),
+    DeckUnslot(&'static str, usize),
+    OrderUp(String, usize),
+    DeckDefault,
+    OrderAuto,
+}
+
+/// What the planner window shows, computed when its inputs change (each plan compiles a scratch battle).
+#[derive(Clone)]
+struct PlanCache {
+    key: (usize, usize, PlanSetup, Vec<&'static str>),
+    view: PlanView,
+    by_intent: Vec<PlanView>,
+    openers: Vec<(String, String)>,
 }
 
 pub struct Dojo {
@@ -71,8 +102,14 @@ pub struct Dojo {
     /// The newest log entry drawn so far (a newer one scrolls the log to the end).
     seen: usize,
     floats: Vec<(Fx, Instant)>,
+    /// The planner piece a board click moves ("hero", "dummy", "partner").
+    plan_piece: &'static str,
+    plan: Option<PlanCache>,
     w: Vec<Widget<DAct>>,
 }
+
+/// The planner board's cell size (canvas pixels).
+const CELL: i32 = 7;
 
 fn win(id: &str, title: &str) -> Win {
     Win::new(id, title, (110, 60))
@@ -85,6 +122,9 @@ fn layouts() -> Vec<Layout> {
         l("Workbench", &[("inspector", [0.0, 0.0, 0.21, 0.55]), ("derived", [0.0, 0.55, 0.21, 0.45]), ("gear", [0.21, 0.0, 0.25, 1.0]), ("stage", [0.46, 0.0, 0.29, 0.5]), ("console", [0.46, 0.5, 0.29, 0.5]), ("log", [0.75, 0.0, 0.25, 1.0])]),
         l("Combat Focus", &[("stage", [0.0, 0.0, 0.5, 0.62]), ("console", [0.0, 0.62, 0.5, 0.38]), ("log", [0.5, 0.0, 0.5, 0.62]), ("derived", [0.5, 0.62, 0.25, 0.38]), ("inspector", [0.75, 0.62, 0.25, 0.38])]),
         l("Gear Focus", &[("gear", [0.0, 0.0, 0.34, 1.0]), ("inspector", [0.34, 0.0, 0.26, 0.55]), ("derived", [0.34, 0.55, 0.26, 0.45]), ("stage", [0.6, 0.0, 0.4, 0.42]), ("console", [0.6, 0.42, 0.4, 0.3]), ("log", [0.6, 0.72, 0.4, 0.28])]),
+        // RULESET1-G: the planner view and the deck view beside the stage and the console (applied when Timeline is
+        // switched on with the planner closed)
+        l("Timeline", &[("planner", [0.0, 0.0, 0.42, 1.0]), ("deck", [0.42, 0.0, 0.29, 1.0]), ("stage", [0.71, 0.0, 0.29, 0.28]), ("console", [0.71, 0.28, 0.29, 0.34]), ("derived", [0.71, 0.62, 0.29, 0.38])]),
     ]
 }
 
@@ -125,10 +165,36 @@ impl Dojo {
             win("stage", "Stage"),
             win("console", "Console"),
             win("log", "Test Log"),
+            win("planner", "Planner"),
+            win("deck", "Deck"),
         ];
         let mut desk = Desk::new(AREA, wins, layouts());
         desk.restore(&cx.settings.v["desks"][SCREEN_ID]);
-        Self { s: DojoSession::new(cx.data.cat.clone()), desk, log_filter: "ALL", stash_filter: "all", picked: None, seen: 0, floats: Vec::new(), w: Vec::new() }
+        Self { s: DojoSession::new(cx.data.cat.clone()), desk, log_filter: "ALL", stash_filter: "all", picked: None, seen: 0, floats: Vec::new(), plan_piece: "dummy", plan: None, w: Vec::new() }
+    }
+
+    /// The active hero's deck terms (None without the deck rule).
+    fn deck_terms(&self) -> Option<DeckTerms> {
+        let def = self.s.cat.units.get(self.s.hero_ids.get(self.s.active)?)?;
+        DeckTerms::for_unit(&self.s.cat, &self.s.ruleset, def, self.s.hero())
+    }
+
+    /// A deck edit on the terms: the hero is rebuilt with the new deck, or the log says why not.
+    fn deck_edit(&mut self, edit: impl FnOnce(&DeckTerms, &Deck) -> Result<Deck, String>) {
+        let Some(t) = self.deck_terms() else { return };
+        match edit(&t, &self.s.deck_of(self.s.active)) {
+            Ok(d) => self.s.set_deck(d),
+            Err(e) => self.s.log_action("EVENT", "Deck", &e, 0, "FAILED", "", "", false),
+        }
+    }
+
+    /// The planner window's contents when its inputs changed (the log count stands for every change to the heroes).
+    fn refresh_plan(&mut self) {
+        let key = (self.s.log.last().map_or(0, |e| e.n), self.s.active, self.s.planner.clone(), self.s.ruleset.rules.clone());
+        if self.plan.as_ref().is_some_and(|p| p.key == key) {
+            return;
+        }
+        self.plan = Some(PlanCache { view: self.s.plan_view(), by_intent: self.s.plans_by_intent(), openers: self.s.plan_openers(), key });
     }
 
     fn act(&mut self, cx: &mut Cx, a: DAct) {
@@ -166,7 +232,39 @@ impl Dojo {
                     Ok(r) => s.set_ruleset(r),
                     Err(e) => s.log_action("EVENT", "Ruleset", &e, 0, "FAILED", "", "", false),
                 }
+                // RULESET1-G: under timeline the planner and the deck view come up (unless the planner is open)
+                if !s.ruleset.is_classic() && !self.desk.win("planner").is_some_and(|w| w.open) {
+                    self.desk.apply_layout("Timeline");
+                }
             }
+            DAct::DummyWindup => s.toggle_dummy_windup(),
+            DAct::PlanIntent(i) => {
+                if let Some(intent) = s.plan_intents().get(i).copied() {
+                    s.set_plan_intent(intent);
+                }
+            }
+            DAct::PlanKind(k) => s.planner.kind = k,
+            DAct::PlanOpener(i) => s.planner.opener = i.checked_sub(1).and_then(|k| self.plan.as_ref()?.openers.get(k)).map(|o| o.0.clone()),
+            DAct::PlanPiece(p) => self.plan_piece = p,
+            DAct::PlanCell(x, y) => {
+                s.place_plan(self.plan_piece, Some(V2::new(x, y)));
+            }
+            DAct::PlanPartner => {
+                let at = if s.planner.partner.is_some() { None } else { Some(free_beside(&s.planner)) };
+                s.place_plan("partner", at);
+                if at.is_none() && self.plan_piece == "partner" {
+                    self.plan_piece = "dummy";
+                }
+            }
+            DAct::DeckSlot(kind, id) => self.deck_edit(|t, d| t.slot(d, kind, &id)),
+            DAct::DeckUnslot(kind, i) => self.deck_edit(|t, d| t.unslot(d, kind, i)),
+            DAct::OrderUp(intent, k) => self.deck_edit(|t, d| t.after_drop(d, &format!("order.{intent}.{k}"), &format!("order.{intent}.{}", k.saturating_sub(1)))),
+            DAct::DeckDefault => s.set_deck(Deck::default()),
+            DAct::OrderAuto => self.deck_edit(|t, d| {
+                let mut d = t.shown(d);
+                d.order.clear();
+                Ok(d)
+            }),
             DAct::DummyGuard => s.toggle_dummy_defense(),
             DAct::Bench(n) => s.run_benchmark(n),
             DAct::Switch => s.switch_weapon(),
@@ -426,7 +524,16 @@ impl Dojo {
             ui.p.text_fit(x as f32, b.y as f32 + 2.0, &u.name, BODY, w as f32, if i == 0 { GOLD } else { FOE });
             hp_bar(ui, Rect::new(x, b.y + 13, w, 5), u.hp, u.max_hp, if i == 0 { GOOD } else { FOE });
             ui.p.text(x as f32, b.y as f32 + 20.0, &format!("HP {}/{}", u.hp, u.max_hp), SMALL, TEXT);
-            let line2 = if i == 0 { format!("AP {}/{}  {}", u.ap, u.max_ap, stance_label(u.stance)) } else { format!("{}  guard {:.0}%", stance_label(u.stance), u.guard * 100.0) };
+            let mut line2 = if i == 0 { format!("AP {}/{}  {}", u.ap, u.max_ap, stance_label(u.stance)) } else { format!("{}  guard {:.0}%", stance_label(u.stance), u.guard * 100.0) };
+            // RULESET1 5 (rule poise): the poise bar under the HP bar
+            if self.s.poise_on() {
+                let p = if i == 0 { self.s.poise() } else { self.s.dummy_poise };
+                hp_bar(ui, Rect::new(x, b.y + 18, w, 2), p.value, p.max, GOLD);
+                line2 = format!("{}  poise {}/{}{}", if i == 0 { format!("AP {}/{}", u.ap, u.max_ap) } else { format!("guard {:.0}%", u.guard * 100.0) }, p.value, p.max, if p.broken { " BROKEN" } else { "" });
+                if i == 1 && self.s.dummy_windup {
+                    line2 += "  windup";
+                }
+            }
             ui.p.text(x as f32, b.y as f32 + 28.0, &line2, SMALL, DIM);
             let mut effects: Vec<String> = u.st.active.iter().map(|s| emberwake_rules::status::display_name(s)).collect();
             effects.extend(u.st.pending.iter().map(|s| format!("{} next", emberwake_rules::status::display_name(s))));
@@ -482,9 +589,13 @@ impl Dojo {
             ("counter", "Counter", DAct::Counter, self.s.dummy_counter, "The dummy strikes back after every hero skill."),
             ("crit", "Force crit", DAct::ForceCrit, self.s.force_crit, "Every hero hit crits."),
             ("guard", "Dummy guard", DAct::DummyGuard, self.s.dummy.guard > 0.0, "The dummy guards (Defensive stance, hits halved) or drops its guard."),
-            ("ruleset", "Timeline", DAct::Ruleset, !self.s.ruleset.is_classic(), "Timeline rules (on) or classic (off): under timeline the stances are inert (no switch AP, no stance change)."),
+            ("ruleset", "Timeline", DAct::Ruleset, !self.s.ruleset.is_classic(), "Timeline rules (on) or classic (off): under timeline the stances are inert (no switch AP, no stance change), the heroes are rebuilt with their decks, and the Planner and Deck windows plan and edit the round."),
+            ("windup", "Dummy windup", DAct::DummyWindup, self.s.dummy_windup, "The dummy is winding up: hits stagger it by the windup factor and may break it (rule poise)."),
         ];
         for (id, label, act, on, help) in toggles {
+            if id == "windup" && !self.s.poise_on() {
+                continue;
+            }
             let w = ui.p.text_w(label, SMALL).ceil() as i32 + 8;
             if x + w > b.x + b.w {
                 x = b.x + 2;
@@ -523,6 +634,193 @@ impl Dojo {
         ui.button_full("dojo.dummypower.minus", Rect::new(b.x + 2, y, 11, 11), "-", DAct::DummyPower(-5), power > 0, false, SMALL, Vec::new());
         ui.p.text(b.x as f32 + 16.0, y as f32 + 1.5, &format!("Dummy power {}", if power > 0 { power.to_string() } else { "auto (STR + DEX)".into() }), SMALL, DIM);
         ui.button_full("dojo.dummypower.plus", Rect::new(b.x + 110, y, 11, 11), "+", DAct::DummyPower(5), true, false, SMALL, tip("Dummy power", "The dummy's authored strike power (0: from its stats)."));
+    }
+
+    /// RULESET1_INTENT UI4: the hero's intent, kind and opener against the dummy on a small board (click a tile to move
+    /// the picked piece; the second dummy engages the dummy and sets its facing), the planned commands with their
+    /// reasons, AP, estimates and rules, AP before and after, the Rest gain, and the plan each intent would make now.
+    fn draw_planner(&self, ui: &mut Ui<DAct>, b: Rect) {
+        let x0 = b.x + 2;
+        let fit = (b.w - 6) as f32;
+        let intents = self.s.plan_intents();
+        let (Some(pc), false) = (self.plan.as_ref(), intents.is_empty()) else {
+            ui.p.text_fit(x0 as f32, b.y as f32 + 2.0, "Plans timeline rounds: switch Timeline on in the Console.", SMALL, fit, DIM);
+            return;
+        };
+        let content = 120 + pc.view.rows.len() as i32 * 8 + pc.by_intent.len() as i32 * 8 + 24;
+        let off = ui.scroll_begin("dojo.plan_scroll", b, content);
+        let mut y = b.y + 2 - off;
+        let setup = &self.s.planner;
+        let mut x = x0;
+        for (i, it) in intents.iter().enumerate() {
+            let w = ui.p.text_w(it.name(), SMALL).ceil() as i32 + 8;
+            ui.button_full(&format!("dojo.plan.intent.{}", it.id()), Rect::new(x, y, w, 11), it.name(), DAct::PlanIntent(i), true, *it == setup.intent, SMALL, tip(it.name(), "Plan the hero's round with this intent (the target is the dummy, or the hero for Guard and Support)."));
+            x += w + 2;
+        }
+        y += 13;
+        if setup.intent == RoundIntent::Maneuver {
+            x = x0;
+            for (id, label, k) in [("auto", "Auto", None), ("engage", "Engage", Some(ManeuverKind::Engage)), ("disengage", "Disengage", Some(ManeuverKind::Disengage)), ("utility", "Utility", Some(ManeuverKind::Utility))] {
+                let w = ui.p.text_w(label, SMALL).ceil() as i32 + 8;
+                ui.button_full(&format!("dojo.plan.kind.{id}"), Rect::new(x, y, w, 11), label, DAct::PlanKind(k), true, setup.kind == k, SMALL, tip(label, "The Maneuver kind (Auto: Engage, else Disengage, else Utility)."));
+                x += w + 2;
+            }
+            y += 13;
+        }
+        let mut opts = vec!["Opener: the planner's".to_string()];
+        opts.extend(pc.openers.iter().map(|o| format!("Opener: {}", o.1)));
+        let at = setup.opener.as_ref().and_then(|id| pc.openers.iter().position(|o| &o.0 == id)).map_or(0, |k| k + 1);
+        ui.select("dojo.plan.opener", Rect::new(x0, y, b.w - 8, 11), &opts, at, DAct::PlanOpener, true, tip("Opener", "The round's first skill: the planner's pick (the first of the order it can afford and reach) or one of the order."));
+        y += 14;
+        // The board: a click moves the picked piece.
+        let board = Rect::new(x0, y, GRID_W * CELL, GRID_H * CELL);
+        ui.p.fill(board, rgba(22, 28, 42, 255));
+        let path: Vec<V2> = pc.view.rows.iter().map(|r| r.cell).collect();
+        for cy in 0..GRID_H {
+            for cx in 0..GRID_W {
+                let r = Rect::new(board.x + cx * CELL, board.y + cy * CELL, CELL - 1, CELL - 1);
+                let c = V2::new(cx, cy);
+                let (glyph, col) = if c == setup.hero {
+                    ("H", GOLD)
+                } else if c == setup.dummy {
+                    ("D", FOE)
+                } else if setup.partner == Some(c) {
+                    ("2", INFO)
+                } else {
+                    ("", if path.contains(&c) { rgba(60, 90, 70, 255) } else { rgba(34, 42, 60, 255) })
+                };
+                ui.p.fill(r, if glyph.is_empty() { col } else { rgba(40, 48, 66, 255) });
+                if !glyph.is_empty() {
+                    ui.p.text(r.x as f32 + 1.0, r.y as f32, glyph, SMALL, col);
+                }
+                ui.push(format!("dojo.plan.cell.{cx}.{cy}"), "button", format!("{cx},{cy}"), r, true, false, Some(DAct::PlanCell(cx, cy)), Vec::new());
+            }
+        }
+        let bx = board.x + board.w + 4;
+        let mut by = board.y;
+        for (id, label) in [("hero", "Move hero"), ("dummy", "Move dummy"), ("partner", "Move 2nd dummy")] {
+            let enabled = id != "partner" || setup.partner.is_some();
+            ui.button_full(&format!("dojo.plan.piece.{id}"), Rect::new(bx, by, 70, 11), label, DAct::PlanPiece(id), enabled, self.plan_piece == id, SMALL, tip(label, "A click on the board moves it there."));
+            by += 13;
+        }
+        let partner = if setup.partner.is_some() { "2nd dummy: off" } else { "2nd dummy: on" };
+        ui.button_full("dojo.plan.partner", Rect::new(bx, by, 70, 11), partner, DAct::PlanPartner, true, setup.partner.is_some(), SMALL, tip("Second dummy", "A second dummy on the hero's side engages the dummy: the dummy faces it, so the hero may take its flank."));
+        y = board.y + board.h + 4;
+        let v = &pc.view;
+        let head = if v.refused.is_empty() {
+            format!("{}{} on {}: AP {} -> {}", v.intent, if v.kind.is_empty() { String::new() } else { format!(" ({})", v.kind) }, v.target, v.ap_before, v.ap_after)
+        } else {
+            format!("{}: not offered: {}", v.intent, v.refused)
+        };
+        ui.p.text_fit(x0 as f32, y as f32, &head, SMALL, fit, if v.refused.is_empty() { GOLD } else { FOE });
+        y += 9;
+        for (k, r) in v.rows.iter().enumerate() {
+            let blocks = if r.start == r.end { format!("b{}", r.start) } else { format!("b{}-{}", r.start, r.end) };
+            let mut line = format!("{blocks} {}  {} AP", r.name, r.ap);
+            if r.damage > 0 {
+                line += &format!("  ~{}", r.damage);
+            }
+            if !r.reason.is_empty() {
+                line += &format!("  [{}]", r.reason);
+            }
+            if !r.notes.is_empty() {
+                line += &format!("  {}", r.notes.join(", "));
+            }
+            ui.p.text_fit(x0 as f32 + 2.0, y as f32, &line, SMALL, fit - 2.0, TEXT);
+            ui.push(format!("dojo.plan.row.{k}"), "row", line.clone(), Rect::new(x0, y - 1, b.w - 6, 8), true, false, None, tip(&r.name, "A planned command: its blocks, AP, the planner's damage estimate on the dummy, its reason tag (PL6) and the rules that apply."));
+            y += 8;
+        }
+        if v.rest_blocks > 0 {
+            let poise = if v.rest_poise > 0 { format!(", {} poise", v.rest_poise) } else { String::new() };
+            ui.p.text_fit(x0 as f32, y as f32, &format!("Rest: {} AP{poise} ({} block{})", v.rest_ap, v.rest_blocks, if v.rest_blocks == 1 { "" } else { "s" }), SMALL, fit, GOOD);
+            y += 9;
+        }
+        y += 2;
+        ui.p.text(x0 as f32, y as f32, "Each intent now", SMALL, INFO);
+        y += 9;
+        for p in &pc.by_intent {
+            let line = format!("{}: {}", p.intent, plan_line(p));
+            ui.p.text_fit(x0 as f32 + 2.0, y as f32, &line, SMALL, fit - 2.0, if p.refused.is_empty() { TEXT } else { DIM });
+            ui.push(format!("dojo.plan.intent_plan.{}", p.intent.to_lowercase()), "row", line.clone(), Rect::new(x0, y - 1, b.w - 6, 8), true, false, None, Vec::new());
+            y += 8;
+        }
+        ui.scroll_end();
+    }
+
+    /// RULESET1 9 D6 (the Dojo's heroes): the active hero's deck under the deck rule: Actives, Passives and Keystone
+    /// buckets (a click on a slot takes it out), the read-only Basics, the owned list (a click slots it) and the order
+    /// per intent (a click moves an entry one place up); "Use default" and "Auto order". Each edit rebuilds the hero.
+    fn draw_deck(&self, ui: &mut Ui<DAct>, b: Rect) {
+        let x0 = b.x + 2;
+        let fit = (b.w - 8) as f32;
+        let Some(t) = self.deck_terms() else {
+            ui.p.text_fit(x0 as f32, b.y as f32 + 2.0, "The deck applies under timeline rules (rule deck).", SMALL, fit, DIM);
+            return;
+        };
+        let cat = &self.s.cat;
+        let draft = self.s.deck_of(self.s.active);
+        let shown = t.shown(&draft);
+        let name_of = |kind: &str, id: &str| -> String {
+            if kind == "active" {
+                cat.tier_one(id).map(|s| s.name.clone()).unwrap_or_else(|| id.to_string())
+            } else {
+                cat.passives.get(id).map(|p| p.name.clone()).unwrap_or_else(|| id.to_string())
+            }
+        };
+        let owned: Vec<(&'static str, String)> = DECK_KINDS.iter().flat_map(|k| t.owned(k.0).iter().map(move |id| (k.0, id.clone()))).collect();
+        let orders: Vec<(String, Vec<String>)> = t.intents.iter().map(|i| (i.clone(), t.order(&shown, i))).collect();
+        let lines = DECK_KINDS.iter().map(|k| 1 + t.cap(k.0) as i32).sum::<i32>() + 3 + owned.len() as i32 + orders.iter().map(|o| 1 + o.1.len() as i32).sum::<i32>() + 3;
+        let off = ui.scroll_begin("dojo.deck_scroll", b, lines * 9 + 20);
+        let mut y = b.y + 2 - off;
+        for (kind, label, takes) in DECK_KINDS {
+            let list = DeckTerms::list(&shown, kind);
+            ui.p.text(x0 as f32, y as f32, &format!("{label} {} / {}", list.len(), t.cap(kind)), SMALL, INFO);
+            if kind == "active" {
+                ui.p.text_right((b.x + b.w) as f32 - 6.0, y as f32, if draft.is_empty() { "Automatic deck" } else { "Custom deck" }, SMALL, DIM);
+            }
+            y += 9;
+            for i in 0..t.cap(kind) {
+                let r = Rect::new(x0, y, b.w - 8, 8);
+                match list.get(i) {
+                    Some(id) => {
+                        let n = name_of(kind, id);
+                        ui.row(&format!("dojo.deck.{kind}.{i}"), r, &n, TEXT, Some(DAct::DeckUnslot(kind, i)), false, tip(&n, "Slotted: a click takes it out (the last active stays: an empty row is the automatic pick)."));
+                    }
+                    None => ui.row(&format!("dojo.deck.{kind}.{i}"), r, "Empty", DIM, None, false, tip(&format!("Empty {kind} slot"), &format!("Holds one of the hero's {takes}: click one in the owned list."))),
+                }
+                y += 9;
+            }
+        }
+        let basics: Vec<String> = t.basics.iter().map(|f| name_of("active", f)).collect();
+        ui.p.text(x0 as f32, y as f32, "Basics (no slot)", SMALL, INFO);
+        y += 9;
+        ui.p.text_fit(x0 as f32 + 2.0, y as f32, &basics.join(", "), SMALL, fit, DIM);
+        ui.push("dojo.deck.basics", "row", basics.join(", "), Rect::new(x0, y - 1, b.w - 8, 8), true, false, None, tip("Basics", "Open to every unit: they take no slot and cannot be taken out."));
+        y += 10;
+        ui.p.text(x0 as f32, y as f32, "Owned (click to slot)", SMALL, INFO);
+        y += 9;
+        for (kind, id) in &owned {
+            let slotted = DeckTerms::list(&shown, kind).contains(id);
+            let full = !slotted && DeckTerms::list(&shown, kind).len() >= t.cap(kind);
+            let n = name_of(kind, id);
+            let label = format!("{n} [{}]{}", kind, if slotted { " slotted" } else if full { " full" } else { "" });
+            ui.row(&format!("dojo.deck.owned.{kind}.{id}"), Rect::new(x0, y, b.w - 8, 8), &label, if slotted { DIM } else { TEXT }, (!slotted && !full).then(|| DAct::DeckSlot(kind, id.clone())), slotted, tip(&n, "Click to slot it in the first free slot of its bucket."));
+            y += 9;
+        }
+        for (intent, list) in &orders {
+            let name = RoundIntent::parse(intent).map(|i| i.name().to_string()).unwrap_or_else(|| intent.clone());
+            ui.p.text(x0 as f32, y as f32, &format!("{name} order"), SMALL, INFO);
+            y += 9;
+            for (k, f) in list.iter().enumerate() {
+                let n = format!("{}. {}", k + 1, name_of("active", f));
+                ui.row(&format!("dojo.deck.order.{intent}.{k}"), Rect::new(x0, y, b.w - 8, 8), &n, if t.basics.contains(f) { INFO } else { TEXT }, (k > 0).then(|| DAct::OrderUp(intent.clone(), k)), false, tip(&n, "The planner fills the round from the top down: a click moves it one place up."));
+                y += 9;
+            }
+        }
+        y += 2;
+        ui.button_full("dojo.deck.default", Rect::new(x0, y, 56, 11), "Use default", DAct::DeckDefault, !draft.is_empty(), false, SMALL, tip("Use default", "The automatic deck: the first class path skills, no passives, the automatic order."));
+        ui.button_full("dojo.deck.auto_order", Rect::new(x0 + 60, y, 56, 11), "Auto order", DAct::OrderAuto, !shown.order.is_empty(), false, SMALL, tip("Auto order", "Every intent back to the automatic order: the deck's actives in slot order, then the basics."));
+        ui.scroll_end();
     }
 
     fn draw_log(&self, ui: &mut Ui<DAct>, b: Rect) {
@@ -573,6 +871,34 @@ impl Dojo {
 
 }
 
+/// A free tile beside the dummy for the second dummy (east first, then west, north, south; else the first free tile).
+fn free_beside(p: &PlanSetup) -> V2 {
+    let free = |c: V2| c.x >= 0 && c.y >= 0 && c.x < GRID_W && c.y < GRID_H && c != p.hero && c != p.dummy;
+    [V2::new(1, 0), V2::new(-1, 0), V2::new(0, -1), V2::new(0, 1)]
+        .into_iter()
+        .map(|d| V2::new(p.dummy.x + d.x, p.dummy.y + d.y))
+        .find(|c| free(*c))
+        .or_else(|| (0..GRID_W * GRID_H).map(|i| V2::new(i % GRID_W, i / GRID_W)).find(|c| free(*c)))
+        .unwrap_or(p.dummy)
+}
+
+/// A plan in one line: its commands in order (repeats folded: "Rest x2") and the AP left, or why it is not offered.
+fn plan_line(v: &PlanView) -> String {
+    if !v.refused.is_empty() {
+        return format!("not offered: {}", v.refused);
+    }
+    let mut parts: Vec<(String, i32)> = Vec::new();
+    for r in &v.rows {
+        match parts.last_mut() {
+            Some((n, k)) if *n == r.name => *k += 1,
+            _ => parts.push((r.name.clone(), 1)),
+        }
+    }
+    let steps: Vec<String> = parts.into_iter().map(|(n, k)| if k > 1 { format!("{n} x{k}") } else { n }).collect();
+    let kind = if v.kind.is_empty() { String::new() } else { format!("{} ", v.kind) };
+    format!("{kind}{} (AP {} -> {})", steps.join(", "), v.ap_before, v.ap_after)
+}
+
 /// An item's numbers in one line (hover cards).
 fn item_line(item: &emberwake_data::ItemDef) -> String {
     let mut parts: Vec<String> = Vec::new();
@@ -615,6 +941,9 @@ impl Screen<GameCx> for Dojo {
             self.seen = newest;
             g.kit.scroll.insert("dojo.log.rows".into(), i32::MAX / 2);
         }
+        if self.desk.win("planner").is_some_and(|w| w.open) && !self.s.plan_intents().is_empty() {
+            self.refresh_plan();
+        }
         let mut ui: Ui<DAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, aegis_ui::ui::H), rgb(12, 16, 26));
         ui.p.text(4.0, 3.0, "GEAR DOJO", BODY, GOLD);
@@ -636,6 +965,8 @@ impl Screen<GameCx> for Dojo {
             "stash" => self.draw_stash(ui, body),
             "stage" => self.draw_stage(ui, body),
             "console" => self.draw_console(ui, body),
+            "planner" => self.draw_planner(ui, body),
+            "deck" => self.draw_deck(ui, body),
             _ => self.draw_log(ui, body),
         });
         self.w = ui.widgets;
@@ -676,14 +1007,37 @@ impl Screen<GameCx> for Dojo {
 
     fn state(&self, _cx: &Cx) -> Value {
         let h = self.s.hero();
-        json!({
+        let mut out = json!({
             "hero": h.name, "hp": h.hp, "ap": h.ap, "stance": stance_label(h.stance),
             "dummy_hp": self.s.dummy.hp, "round": self.s.round, "skill": self.s.skill, "dummy_skill": self.s.dummy_skill,
             "force_crit": self.s.force_crit, "counter": self.s.dummy_counter, "stash": self.s.stash.len(),
             "gear": SLOTS.iter().map(|(k, s)| (k.to_string(), json!(h.inventory.get(*s).map(|e| e.item.id.clone())))).collect::<serde_json::Map<String, Value>>(),
             "pouch": h.inventory.pouch.iter().map(|i| i.id.clone()).collect::<Vec<_>>(),
             "log": self.s.log.iter().rev().take(5).map(|e| json!({"n": e.n, "title": e.title, "detail": e.detail, "outcome": e.outcome, "value": e.value})).collect::<Vec<_>>(),
-        })
+        });
+        // RULESET1-G: the timeline readouts (classic keeps its shape)
+        if !self.s.ruleset.is_classic() {
+            let deck = self.s.deck_of(self.s.active);
+            out["ruleset"] = json!(self.s.ruleset.id);
+            out["deck"] = crate::party::deck_json(&deck);
+            out["actives"] = json!(h.active_families());
+            if self.s.poise_on() {
+                let (p, d) = (self.s.poise(), self.s.dummy_poise);
+                out["poise"] = json!([p.value, p.max]);
+                out["dummy_poise"] = json!([d.value, d.max, d.broken]);
+                out["dummy_windup"] = json!(self.s.dummy_windup);
+            }
+            if let Some(pc) = &self.plan {
+                let v = &pc.view;
+                out["plan"] = json!({
+                    "intent": v.intent, "kind": v.kind, "target": v.target, "refused": v.refused, "ap_before": v.ap_before, "ap_after": v.ap_after,
+                    "rest": [v.rest_ap, v.rest_poise],
+                    "rows": v.rows.iter().map(|r| json!({"skill": r.skill, "start": r.start, "end": r.end, "ap": r.ap, "reason": r.reason, "damage": r.damage, "notes": r.notes})).collect::<Vec<_>>(),
+                    "by_intent": pc.by_intent.iter().map(|p| (p.intent.to_lowercase(), json!(plan_line(p)))).collect::<serde_json::Map<String, Value>>(),
+                });
+            }
+        }
+        out
     }
 
     widget_plumbing!();
@@ -716,6 +1070,45 @@ mod tests {
             assert_eq!(shown.iter().map(|w| (w.id.as_str(), w.text.clone())).collect::<Vec<_>>(), [("dojo.derived.Nerve", format!("Nerve {v}"))], "the party-only row is not listed");
             assert!(shown[0].tip[1].0.starts_with("Formula: KNOW * 2. KNOW "), "{:?}", shown[0].tip);
         }
+    }
+
+    /// RULESET1-G (tasks 4.1 G): Timeline brings up the Planner (one plan per intent of the ruleset, the planned rows)
+    /// and the Deck window; a click on an owned active slots it (the hero is rebuilt with that deck), a passive alone
+    /// leaves the actives automatic (user 2026-10-29); back to classic the planner plans nothing and the state keeps
+    /// its classic shape.
+    #[test]
+    fn timeline_brings_up_the_planner_and_the_deck_view() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut dojo = Dojo::new(&cx);
+        assert!(dojo.state(&cx).get("plan").is_none());
+        dojo.act(&mut cx, DAct::Ruleset);
+        if dojo.s.ruleset.is_classic() || dojo.s.plan_intents().is_empty() {
+            return; // no timeline row with round intents in this catalog
+        }
+        let mut g = crate::hud::hud_tests::gfx();
+        dojo.draw(&mut cx, &mut g, (-500, -500), true);
+        assert!(dojo.desk.win("planner").is_some_and(|w| w.open) && dojo.desk.win("deck").is_some_and(|w| w.open));
+        let st = dojo.state(&cx);
+        assert_eq!(st["plan"]["by_intent"].as_object().map(|m| m.len()), Some(dojo.s.plan_intents().len()), "one plan per intent");
+        for it in dojo.s.plan_intents() {
+            assert!(dojo.w.iter().any(|w| w.id == format!("dojo.plan.intent.{}", it.id())), "{} button", it.id());
+        }
+        let rows = st["plan"]["rows"].as_array().map_or(0, |r| r.len());
+        assert_eq!(dojo.w.iter().filter(|w| w.id.starts_with("dojo.plan.row.")).count(), rows, "a widget per planned row");
+        if let Some(t) = dojo.deck_terms() {
+            if let Some(p) = t.passives.first().cloned() {
+                dojo.act(&mut cx, DAct::DeckSlot("passive", p.clone()));
+                let d = dojo.s.deck_of(dojo.s.active);
+                assert!(d.passive.contains(&p) && d.active.is_empty(), "a passive alone pins no active: {d:?}");
+            }
+            let shown = t.shown(&dojo.s.deck_of(dojo.s.active));
+            if let Some(f) = t.actives.iter().find(|f| !shown.active.contains(f)).cloned().filter(|_| shown.active.len() < t.cap("active")) {
+                dojo.act(&mut cx, DAct::DeckSlot("active", f.clone()));
+                assert!(dojo.s.hero().active_families().contains(&f), "the slotted active is the hero's");
+            }
+        }
+        dojo.act(&mut cx, DAct::Ruleset);
+        assert!(dojo.s.plan_intents().is_empty() && dojo.state(&cx).get("plan").is_none());
     }
 
     /// DERIVE1 4.4: with several catalog rows the Derived Stats window closes its rows up and scrolls the rest, in

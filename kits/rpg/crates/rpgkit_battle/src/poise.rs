@@ -82,11 +82,15 @@ pub fn state(w: &World, c: UnitId) -> Option<&PoiseState> {
 /// P1, P2: `c`'s Max Poise now: the unit row's fixed `poise` (above 0), none (0), else the ruleset's `poise_stat` row
 /// (0 when the ruleset names no row or the row is not in it).
 pub fn max_poise(w: &World, c: UnitId) -> i32 {
-    let u = &w.units[c];
+    max_poise_of(&w.cat, &w.ruleset, &w.units[c])
+}
+
+/// `max_poise` of unit `u` outside a battle (the Dojo): the same P1, P2 rule under `rules`.
+pub fn max_poise_of(cat: &rpgkit_data::Catalog, rules: &ruleset::Ruleset, u: &rpgkit_rules::Unit) -> i32 {
     match u.poise {
         p if p > 0 => p,
         0 => 0,
-        _ => derived::value_for(&w.cat, &w.ruleset, u, &w.ruleset.numbers.poise_stat).unwrap_or(0).max(0),
+        _ => derived::value_for(cat, rules, u, &rules.numbers.poise_stat).unwrap_or(0).max(0),
     }
 }
 

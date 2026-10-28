@@ -358,6 +358,38 @@ impl DeckTerms {
         Some(Self { slots: rule.slots, intents: rs.numbers.intents.clone(), basics, actives, passives, keystones, intent_of, auto, auto_actives })
     }
 
+    /// RULESET1-G (the Dojo's deck view): a catalog unit's terms under `rs` (None without the deck rule). `u` is the
+    /// unit as it fights now; the actives are the families it owns (no basic); a catalog unit owns the slottable
+    /// passives its deck names (D4), so any catalog passive or keystone may be named; the auto deck is the unit built
+    /// with an empty deck.
+    pub fn for_unit(cat: &emberwake_data::Catalog, rs: &emberwake_rules::ruleset::Ruleset, def: &emberwake_data::UnitDef, u: &emberwake_rules::Unit) -> Option<Self> {
+        let rule = emberwake_rules::DeckRule::of(rs)?;
+        let basics: Vec<String> = rule.basics.iter().filter(|b| cat.tier_one(b).is_some()).cloned().collect();
+        let mut actives: Vec<String> = Vec::new();
+        for s in cat.skills.iter().filter(|s| !s.system && !s.basic && !emberwake_battle::skill::is_item(s)) {
+            let f = s.family_id().to_string();
+            if !actives.contains(&f) && !rule.basics.contains(&f) && !cat.is_basic_family(&f) && !cat.is_system(&f) && cat.tier_one(&f).is_some() && u.owns_skill(cat, &s.id) {
+                actives.push(f);
+            }
+        }
+        let of_slot = |slot: &str| -> Vec<String> { cat.passives.values().filter(|p| p.slot == slot).map(|p| p.id.clone()).collect() };
+        let (passives, keystones) = (of_slot("passive"), of_slot("keystone"));
+        let mut empty = def.clone();
+        empty.deck = Deck::default();
+        let auto_unit = emberwake_rules::build_unit_in(cat, &empty, 0, Some(&rule));
+        let classic = emberwake_rules::build_unit(cat, def, 0);
+        let auto = Deck { active: auto_unit.active_families(), ..Deck::default() };
+        let mut auto_actives: Vec<String> = Vec::new();
+        for f in classic.active_families() {
+            if actives.contains(&f) && !auto_actives.contains(&f) {
+                auto_actives.push(f);
+            }
+        }
+        auto_actives.truncate(rule.slots.active.max(0) as usize);
+        let intent_of = actives.iter().chain(&basics).filter_map(|f| cat.tier_one(f).map(|s| (f.clone(), emberwake_battle::round_intent::skill_intent(s).to_string()))).collect();
+        Some(Self { slots: rule.slots, intents: rs.numbers.intents.clone(), basics, actives, passives, keystones, intent_of, auto, auto_actives })
+    }
+
     /// The slots of `kind`.
     pub fn cap(&self, kind: &str) -> usize {
         (match kind {
@@ -405,6 +437,18 @@ impl DeckTerms {
         d
     }
 
+    /// The deck an edit of `kind` starts from (user 2026-10-29): an actives edit (and the order editor) pins the deck as
+    /// it plays (`shown`); a passive or keystone edit keeps the actives automatic (an empty `active` row stays empty, so
+    /// later class-path actives still join), unless the deck as it plays carries an order list (order entries must be
+    /// in `active`: then it pins).
+    fn base(&self, draft: &Deck, kind: &str) -> Deck {
+        let shown = self.shown(draft);
+        if kind == "active" || !draft.active.is_empty() || !shown.order.is_empty() {
+            return shown;
+        }
+        Deck { active: Vec::new(), passive: shown.passive, keystone: shown.keystone, order: IndexMap::new() }
+    }
+
     /// RULESET1_INTENT FU4: the order the planner fills `intent` by: the deck's `order` list for it (entries still in the
     /// deck), else the deck's actives of the intent in slot order, then the basics of the intent.
     pub fn order(&self, deck: &Deck, intent: &str) -> Vec<String> {
@@ -443,7 +487,7 @@ impl DeckTerms {
         if !self.owned(kind).iter().any(|x| x == id) {
             return Err(format!("'{id}' is not owned."));
         }
-        let mut d = self.shown(draft);
+        let mut d = self.base(draft, kind);
         if Self::list(&d, kind).iter().any(|x| x == id) {
             return Err("Already slotted.".into());
         }
@@ -459,7 +503,7 @@ impl DeckTerms {
 
     /// Takes slot `i` of `kind` out. The last active stays: an empty active row means the automatic pick (D5).
     pub fn unslot(&self, draft: &Deck, kind: &str, i: usize) -> Result<Deck, String> {
-        let mut d = self.shown(draft);
+        let mut d = self.base(draft, kind);
         if i >= Self::list(&d, kind).len() {
             return Err("That slot is empty.".into());
         }
@@ -523,7 +567,7 @@ impl DeckTerms {
             if !self.owned(kind).iter().any(|x| x == id) {
                 return Err(format!("'{id}' is not owned."));
             }
-            let mut d = shown;
+            let mut d = self.base(draft, kind);
             match Self::list(&d, kind).get(i).cloned() {
                 Some(old) => {
                     Self::list_mut(&mut d, kind)[i] = id.to_string();
@@ -538,7 +582,7 @@ impl DeckTerms {
             return Ok(d);
         }
         let (kind, i) = Self::slot_key(from).ok_or("That can't go there.")?;
-        let mut d = self.shown(draft);
+        let mut d = self.base(draft, kind);
         if i >= Self::list(&d, kind).len() {
             return Err("That slot is empty.".into());
         }
@@ -1848,7 +1892,7 @@ impl Character {
 }
 
 /// A deck as the agent link reads it (every key, empty ones too).
-fn deck_json(d: &Deck) -> Value {
+pub(crate) fn deck_json(d: &Deck) -> Value {
     json!({"active": d.active, "passive": d.passive, "keystone": d.keystone, "order": Value::Object(d.order.iter().map(|(k, v)| (k.clone(), json!(v))).collect())})
 }
 
@@ -2259,16 +2303,24 @@ mod tests {
         }
     }
 
-    /// D5, D6: an empty deck plays as the auto deck and the first edit pins it; a bucket holds its slot count and only
-    /// what the hero owns of its kind; an empty active row in a deck with other keys plays as the auto actives.
+    /// D5, D6: an empty deck plays as the auto deck; a passive or keystone edit keeps the actives automatic (user
+    /// 2026-10-29: the empty active row plays as the class path's actives), an actives or order edit pins them; a bucket
+    /// holds its slot count and only what the hero owns of its kind.
     #[test]
-    fn the_first_deck_edit_pins_the_automatic_deck_and_a_bucket_stops_at_its_slots() {
+    fn only_an_actives_or_order_edit_pins_the_automatic_actives_and_a_bucket_stops_at_its_slots() {
         let t = terms();
         let empty = Deck::default();
         assert_eq!(t.shown(&empty), t.auto);
         assert!(t.slot(&empty, "active", "lunge").unwrap_err().contains("full"), "the auto deck fills both active slots");
         let d = t.slot(&empty, "passive", "p1").unwrap();
-        assert_eq!((d.active.clone(), d.passive.clone()), (t.auto.active.clone(), strs(&["p1"])), "the auto actives are pinned");
+        assert_eq!((d.active.clone(), d.passive.clone()), (Vec::<String>::new(), strs(&["p1"])), "a passive edit leaves the actives automatic");
+        assert_eq!(t.shown(&d).active, t.auto_actives, "the shown actives follow the class path");
+        let k = t.slot(&d, "keystone", "k1").unwrap();
+        assert!(k.active.is_empty() && k.order.is_empty(), "a keystone edit pins nothing either");
+        let pinned = t.slot(&d, "active", "cleave").unwrap();
+        assert_eq!(pinned.active, [t.auto_actives.clone(), strs(&["cleave"])].concat(), "an actives edit pins the shown actives");
+        let ordered = t.after_drop(&d, "order.assault.1", "order.assault.0").unwrap();
+        assert_eq!(ordered.active, t.auto_actives, "the order editor pins the actives its entries need");
         assert!(t.slot(&d, "passive", "p2").unwrap_err().contains("full"));
         assert!(t.slot(&d, "passive", "k1").is_err(), "a keystone is not a passive");
         assert!(t.slot(&d, "active", "nope").is_err(), "not owned");
