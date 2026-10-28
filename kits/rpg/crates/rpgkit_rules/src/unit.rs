@@ -77,6 +77,35 @@ pub struct HeldGuard {
     pub last_block: i32,
 }
 
+/// HOOKS1 UM1 (rule `unit_meters`; engine-only): a meter a passive's `meter` effect gives: the `unit_meters` row,
+/// the value it starts at (-1 = the row's `start`) and the lowest value it takes (None = the row's `min`). Read only
+/// under the rule.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HeldMeter {
+    pub meter: String,
+    pub start: i32,
+    pub floor: Option<i32>,
+}
+
+/// HOOKS1 UM4 (rule `unit_meters`; engine-only): what a meter band's `effects` added to a unit while the meter is in
+/// that band, so leaving the band takes exactly that off: the stat modifiers' source, the resists, potencies, status
+/// potency and crit points it added, and the `stagger_taken` rows it pushed.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct BandApplied {
+    pub source: String,
+    pub resist: Vec<(String, i32)>,
+    pub potency_family: Vec<(String, f64)>,
+    pub potency_group: Vec<(String, f64)>,
+    pub status_potency: i32,
+    pub stagger: Vec<StaggerTaken>,
+    pub crit: f64,
+}
+
+/// The source of the stat modifiers `apply_effects` adds for `source` (`passive:<id>`).
+fn band_stat_source(source: &str) -> String {
+    format!("passive:{}", source.trim_start_matches("passive:"))
+}
+
 /// RULESET1 9 D1-D4 (rule `deck`; engine-only, no Godot original): the deck terms a unit is built and fights under:
 /// the ruleset's `basics` (skill families open to every unit, no slot, never removed; every other basic is closed) and
 /// its `deck_slots`. Classic never makes one, so a classic unit keeps today's loadout, basics and passives.
@@ -198,6 +227,11 @@ pub struct Unit {
     pub held_guard: Option<HeldGuard>,
     /// HOOKS1 8.2: crit chance points the trigger effect `crit` added for the battle (0 in classic).
     pub trigger_crit: f64,
+    /// HOOKS1 UM1: the passives' `meter` effects in apply order; read only under the rule unit_meters.
+    pub passive_meters: Vec<HeldMeter>,
+    /// HOOKS1 UM6: the meter skills the battle gave this unit (open without a slot, like a basic; empty outside a
+    /// battle under the rule unit_meters).
+    pub meter_skills: Vec<String>,
     /// Passive ids applied (Passives.apply: each once).
     pub passives: Vec<String>,
     /// Combat state (empty for a freshly built unit).
@@ -274,6 +308,8 @@ impl Unit {
             gear_triggers: Vec::new(),
             held_guard: None,
             trigger_crit: 0.0,
+            passive_meters: Vec::new(),
+            meter_skills: Vec::new(),
             passives: Vec::new(),
             st: StatusState::default(),
             is_withdrawn: false,
@@ -516,9 +552,77 @@ impl Unit {
                     let key = format!("{source}#{}", list.len());
                     list.push(HeldTrigger { source: from, key, row: rpgkit_data::TriggerRow::from_obj(e) });
                 }
+                // HOOKS1 UM1: passives only (HOOKS1-S gives items no meter effect)
+                "meter" if !gear => {
+                    let floor = e.get("floor").filter(|v| v.is_number()).map(|v| to_int(v, 0));
+                    self.passive_meters.push(HeldMeter { meter: value::string(e, "meter", ""), start: value::int(e, "start", -1), floor });
+                }
                 _ => {}
             }
         }
+    }
+
+    /// HOOKS1 UM4: applies a meter band's `effects` (the passive grammar: stat, resist, stagger_taken, skill_potency,
+    /// status_potency; `crit` as the trigger effect) under `source` and returns what they added (`remove_band` takes it
+    /// off again).
+    pub fn apply_band(&mut self, cat: &Catalog, effects: &[Value], source: &str) -> BandApplied {
+        let resist = self.status_resist.clone();
+        let (fam, group) = (self.potency_bonus.clone(), self.potency_group.clone());
+        let (potency, stagger) = (self.passive_status_potency, self.stagger_taken.len());
+        let mut crit = 0.0;
+        let kinds = ["stat", "resist", "stagger_taken", "skill_potency", "status_potency"];
+        let passive: Vec<Value> = effects.iter().filter(|e| e.as_object().is_some_and(|o| kinds.contains(&value::string(o, "type", "").as_str()))).cloned().collect();
+        self.apply_effects(cat, &passive, source, false);
+        for e in effects.iter().filter_map(Value::as_object).filter(|o| value::string(o, "type", "") == "crit") {
+            crit += value::float(e, "value", 0.0);
+        }
+        self.trigger_crit += crit;
+        let diff_i = |now: &IndexMap<String, i32>, was: &IndexMap<String, i32>| -> Vec<(String, i32)> {
+            now.iter().filter_map(|(k, v)| Some((k.clone(), v - was.get(k).copied().unwrap_or(0))).filter(|(_, d)| *d != 0)).collect()
+        };
+        let diff_f = |now: &IndexMap<String, f64>, was: &IndexMap<String, f64>| -> Vec<(String, f64)> {
+            now.iter().filter_map(|(k, v)| Some((k.clone(), v - was.get(k).copied().unwrap_or(0.0))).filter(|(_, d)| *d != 0.0)).collect()
+        };
+        BandApplied {
+            source: band_stat_source(source),
+            resist: diff_i(&self.status_resist, &resist),
+            potency_family: diff_f(&self.potency_bonus, &fam),
+            potency_group: diff_f(&self.potency_group, &group),
+            status_potency: self.passive_status_potency - potency,
+            stagger: self.stagger_taken[stagger..].to_vec(),
+            crit,
+        }
+    }
+
+    /// HOOKS1 UM4: takes off what `apply_band` added (a key the band created goes when it returns to nothing).
+    pub fn remove_band(&mut self, a: &BandApplied) {
+        self.stats.remove_modifier(&a.source);
+        for (k, d) in &a.resist {
+            let v = self.status_resist.get(k).copied().unwrap_or(0) - d;
+            self.status_resist.insert(k.clone(), v);
+        }
+        for (map, list) in [(&mut self.potency_bonus, &a.potency_family), (&mut self.potency_group, &a.potency_group)] {
+            for (k, d) in list {
+                let v = map.get(k).copied().unwrap_or(0.0) - d;
+                if v.abs() < 1e-9 {
+                    map.shift_remove(k);
+                } else {
+                    map.insert(k.clone(), v);
+                }
+            }
+        }
+        self.passive_status_potency -= a.status_potency;
+        for st in &a.stagger {
+            if let Some(i) = self.stagger_taken.iter().rposition(|x| x == st) {
+                self.stagger_taken.remove(i);
+            }
+        }
+        self.trigger_crit -= a.crit;
+    }
+
+    /// HOOKS1 UM6: whether the battle gave this unit `skill_id` as a meter skill.
+    pub fn meter_skill(&self, skill_id: &str) -> bool {
+        self.meter_skills.iter().any(|s| s == skill_id)
     }
 
     // ---- Skills: ownership, unlocks (SK2), loadout ---------------------------------------------------------------
@@ -543,7 +647,11 @@ impl Unit {
     }
 
     /// Catalog.is_always_active, with the deck rule's open and closed basics (D1).
+    /// HOOKS1 UM6: a meter skill the battle gave is open without a slot.
     pub fn always_active(&self, cat: &Catalog, skill_id: &str) -> bool {
+        if self.meter_skill(skill_id) {
+            return true;
+        }
         self.deck_basic(cat, skill_id).unwrap_or_else(|| cat.is_always_active(skill_id))
     }
 
@@ -602,7 +710,11 @@ impl Unit {
         self.active_extra_families = Vec::new();
     }
 
+    /// HOOKS1 UM6: a meter skill the battle gave is owned (before the deck rule's closed basics).
     pub fn owns_skill(&self, cat: &Catalog, skill_id: &str) -> bool {
+        if self.meter_skill(skill_id) {
+            return true;
+        }
         if let Some(open) = self.deck_basic(cat, skill_id) {
             return open;
         }
@@ -1055,10 +1167,10 @@ impl Unit {
         stats::MAX_LEVEL.min(self.family_unlock_level(cat, skill.family_id()) + skill.tier_offset())
     }
 
-    /// The level gate of can_use: basics (under the deck rule the ruleset's basics, D1), engine skills and hand-built
-    /// units are never gated.
+    /// The level gate of can_use: basics (under the deck rule the ruleset's basics, D1), engine skills, meter skills
+    /// (HOOKS1 UM6) and hand-built units are never gated.
     pub fn tier_unlocked(&self, cat: &Catalog, skill: &rpgkit_data::SkillDef) -> bool {
-        if self.path_levels.is_empty() || skill.system || skill.basic || self.deck_basic(cat, &skill.id) == Some(true) {
+        if self.path_levels.is_empty() || skill.system || skill.basic || self.meter_skill(&skill.id) || self.deck_basic(cat, &skill.id) == Some(true) {
             return true;
         }
         self.stats.level >= self.skill_unlock_level(cat, skill)

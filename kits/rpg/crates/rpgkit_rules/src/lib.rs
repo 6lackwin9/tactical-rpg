@@ -1,6 +1,7 @@
 //! Pure game rules ported from the Godot reference: stats, gear, unit building and the damage formula.
 //! No I/O; every function is checked against Godot output by `tests/parity.rs`.
 
+pub mod bands;
 pub mod budget;
 pub mod carry;
 pub mod damage;

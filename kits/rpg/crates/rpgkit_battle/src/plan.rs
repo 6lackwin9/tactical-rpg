@@ -285,6 +285,8 @@ impl PlanEntry {
             cmd.riders = s.riders.clone();
             cmd.hp_cost = command::hp_cost_of(w, s);
             cmd.ignore_guard = command::ignores_guard(w, s);
+            // HOOKS1 UM2: the meter changes (set only under the rule unit_meters)
+            cmd.meters = skill::meters_by(s, &w.ruleset).to_vec();
         }
         // HOOKS1 GH2: the hazard the skill or item leaves (the rule ground_hazards reads it)
         cmd.hazard = match &self.item {
@@ -336,6 +338,8 @@ pub struct SimState {
     pub retreat_step: i32,
     /// HOOKS1 HC1: the unit's HP after the HP costs of the steps so far (rule hp_cost).
     pub hp_left: i32,
+    /// HOOKS1 UM2: the unit's meter values after the meter costs of the steps so far (rule unit_meters; empty without).
+    pub meters_left: Vec<(String, i32)>,
 }
 
 impl SimState {
@@ -347,6 +351,10 @@ impl SimState {
     }
     pub fn est(&self, u: UnitId) -> i32 {
         self.est_hp.get(&u).copied().unwrap_or(0)
+    }
+    /// HOOKS1 UM2: the planned value of `meter` (None when the unit holds none).
+    pub fn meter(&self, meter: &str) -> Option<i32> {
+        self.meters_left.iter().find(|(m, _)| m == meter).map(|(_, v)| *v)
     }
 }
 
@@ -469,6 +477,7 @@ impl Plan {
             round_target: w.round_states.get(&c).and_then(|r| r.target).filter(|_| round_intent::on(w)),
             retreat_step: self.retreat_step(w, c),
             hp_left: u.hp,
+            meters_left: crate::meter::values(w, c),
         };
         for s in &u.st.active {
             for &b in status::blocked_blocks(s) {
@@ -550,6 +559,11 @@ impl Plan {
             }
             // HOOKS1 HC1: a skill is refused while the HP left is at or below its HP cost (rule hp_cost)
             let p = command::hp_cost_problem(st.hp_left, command::hp_cost_of(w, s));
+            if !p.is_empty() {
+                return p;
+            }
+            // HOOKS1 UM2: a skill is refused while the meters left do not cover its meter cost (rule unit_meters)
+            let p = crate::meter::cost_problem(w, skill::meters_by(s, &w.ruleset), |m| st.meter(m));
             if !p.is_empty() {
                 return p;
             }
@@ -1392,6 +1406,8 @@ impl Plan {
         if cost > 0 {
             st.hp_left = (st.hp_left - cost).max(1);
         }
+        // HOOKS1 UM2: the meter changes are paid at the command's start too (rule unit_meters)
+        crate::meter::spend(w, c, &mut st.meters_left, skill::meters_by(s, &w.ruleset));
         // RULESET1_INTENT RS2, FU3: under round_intent Rest pays only at round end, so no AP returns mid-round
         if skill::kind(s) == Kind::Rest && pays && !round_intent::on(w) {
             st.ap_left = st.max_ap.min(st.ap_left + s.recover_ap);

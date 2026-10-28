@@ -179,6 +179,8 @@ pub struct World {
     /// HOOKS1 6 (rule `ground_hazards`): the placements, hazard hits and fades the session has not logged yet (the
     /// overlay itself is `grid.ground`).
     pub ground: crate::ground::Ledger,
+    /// HOOKS1 9 (rule `unit_meters`): the meters the units hold this battle (empty in classic; no save key).
+    pub meters: crate::meter::Meters,
 }
 
 impl World {

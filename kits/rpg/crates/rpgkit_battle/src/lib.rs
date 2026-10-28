@@ -9,6 +9,7 @@ pub mod grid;
 pub mod ground;
 pub mod intent;
 pub mod log;
+pub mod meter;
 pub mod metrics;
 pub mod path;
 pub mod plan;

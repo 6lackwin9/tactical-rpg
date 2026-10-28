@@ -292,7 +292,8 @@ impl HazardRecord {
 /// HOOKS1 4.2 (rule triggers, rule hp_cost; engine-only, timeline keys): one unit's trigger counts for one fight, kept
 /// only for units a trigger, rider or HP cost involved: `fired` (its triggers that did something), `riders` (its riders
 /// that did something), `damage` (HP its trigger and rider effects took, credited to it as hits), `taken` (HP it lost
-/// to trigger and rider effects), `hp_paid` (HP its skills' costs took, HC1).
+/// to trigger and rider effects), `hp_paid` (HP its skills' costs took, HC1), `meters` (its meters' own changes: a
+/// skill's cost, a decay, a cost it could not pay; HOOKS1-M, rule unit_meters).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TriggerRecord {
     pub fired: i32,
@@ -300,11 +301,12 @@ pub struct TriggerRecord {
     pub damage: i32,
     pub taken: i32,
     pub hp_paid: i32,
+    pub meters: i32,
 }
 
 impl TriggerRecord {
     pub fn to_json(&self) -> Value {
-        json!({"fired": self.fired, "riders": self.riders, "damage": self.damage, "taken": self.taken, "hp_paid": self.hp_paid})
+        json!({"fired": self.fired, "riders": self.riders, "damage": self.damage, "taken": self.taken, "hp_paid": self.hp_paid, "meters": self.meters})
     }
 }
 
@@ -730,6 +732,8 @@ impl BattleMetrics {
         let r = self.triggers.entry(name).or_default();
         if f.on == "rider" {
             r.riders += 1;
+        } else if f.on == "meter" {
+            r.meters += 1;
         } else {
             r.fired += 1;
         }

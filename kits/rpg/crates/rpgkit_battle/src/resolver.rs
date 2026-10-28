@@ -156,6 +156,11 @@ impl Resolver {
                 self.notes.push((i, msg.clone()));
                 self.log.push(msg);
             }
+            // HOOKS1 UM2: a meter cost the unit cannot pay now fails the command unpaid (rule unit_meters; nothing in
+            // classic)
+            if crate::meter::unpaid(self, w, i) {
+                continue;
+            }
             let a = &self.scheduled[i];
             let total = a.command.ap_cost + a.command.stance_switch_cost;
             if w.pays_ap(c) {
@@ -168,6 +173,8 @@ impl Resolver {
             }
             // HOOKS1 HC1: the HP cost after the AP (rule hp_cost; nothing in classic)
             self.pay_hp_cost(w, i);
+            // HOOKS1 UM2: then the meter changes (rule unit_meters; nothing in classic)
+            crate::meter::pay(self, w, i);
             let msg = self.scheduled[i].command.on_start(w, &mut self.rng);
             if !msg.is_empty() {
                 self.notes.push((i, msg.clone()));
@@ -322,6 +329,8 @@ impl Resolver {
         self.log.extend(lines);
         // HOOKS1 GH5, GH7: the ground hazards after the terrain's, then the expired ones fade (none in classic)
         crate::ground::round_end(self, w);
+        // HOOKS1 UM3: the meters' decay, while this round's Defends and held guards are still known (rule unit_meters)
+        crate::meter::round_end(self, w);
         // HOOKS1 8.1, 8.3: `hp_below` and `round_end` after the ticks; held guards end (rule triggers; none in classic)
         crate::trigger::round_end(self, w);
         crate::ground::settle(self, w);

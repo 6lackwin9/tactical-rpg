@@ -179,6 +179,9 @@ pub struct Command {
     pub ignore_guard: bool,
     /// HOOKS1 IG1: the last execution's bypass left out a guard (a hit target guarded; the breakdown says so).
     pub guard_bypassed: bool,
+    /// HOOKS1 UM2: the skill's meter changes, paid at the command's start after the AP and HP cost (set only under the
+    /// rule `unit_meters`).
+    pub meters: Vec<rpgkit_data::MeterDelta>,
 }
 
 impl Command {
@@ -224,6 +227,7 @@ impl Command {
             hp_cost: 0,
             ignore_guard: false,
             guard_bypassed: false,
+            meters: Vec::new(),
         }
     }
 
@@ -752,6 +756,7 @@ impl Command {
         self.riders.clear();
         self.hp_cost = 0;
         self.ignore_guard = false;
+        self.meters.clear();
     }
 
     /// After one damaging hit: stance break (Offensive / Defensive target to Tactical), then exploit consume.

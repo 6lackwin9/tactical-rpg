@@ -458,3 +458,13 @@ impl<'a> Book<'a> {
             .collect()
     }
 }
+
+/// HOOKS1 UM2: the meter changes skill `s` pays at its command's start (none without the rule unit_meters; items pay
+/// none).
+pub fn meters_by<'a>(s: &'a SkillDef, rs: &Ruleset) -> &'a [rpgkit_data::MeterDelta] {
+    if rs.has(ruleset::UNIT_METERS) && !is_item(s) {
+        &s.meters
+    } else {
+        &[]
+    }
+}

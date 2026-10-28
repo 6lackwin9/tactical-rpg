@@ -167,6 +167,8 @@ pub struct UnitSnap {
     /// RULESET1 5 (rule poise): poise now and Max Poise at the last refill (0 and 0 in classic or without a bar).
     pub poise: i32,
     pub max_poise: i32,
+    /// HOOKS1 UM7 (rule unit_meters): the unit's meters and their values (empty in classic or without a meter).
+    pub meters: Vec<(String, i32)>,
 }
 
 /// One round as it was played (the round archive: CombatSession.round_actions and round_snapshots): the scheduled
@@ -387,7 +389,7 @@ impl Session {
             fallback_any: sb.fallback_any,
             heroes: (0..n_allies).filter(|c| !guests.contains(c)).collect(),
         });
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default() };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default() };
         w.add_item_skills();
         w.ignore_hazards_when_off();
         let objective = Objectives::create(&def.raw);
@@ -430,6 +432,8 @@ impl Session {
         w.place_leftovers(&deployed, false, &def.deployment);
         // RULESET1_INTENT MV1, TQ23: first facings and starting intents (nothing in classic)
         round_intent::battle_start(&mut w, &default_intents);
+        // HOOKS1 UM1: the units' meters, their meter skills and start bands (rule unit_meters; nothing in classic)
+        crate::meter::battle_start(&mut w);
         let mut resolver = Resolver::new(def.total_blocks, def.rng_seed);
         for &c in allies.iter().chain(enemies.iter()) {
             resolver.register(c);
@@ -490,9 +494,11 @@ impl Session {
         self.events.extend(rest);
         // RULESET1 P3: every poise bar refills before planning (rule poise)
         crate::poise::round_start(&mut self.w);
+        // HOOKS1 UM4: the meters' bands hold their statuses this round (rule unit_meters; nothing in classic)
+        crate::meter::round_start(&mut self.w);
         // HOOKS1 8.1: `round_start` triggers after the refill (rule triggers; nothing in classic)
         crate::trigger::round_start(&mut self.resolver, &mut self.w);
-        if crate::trigger::on(&self.w) {
+        if crate::trigger::on(&self.w) || crate::meter::on(&self.w) {
             self.log_triggers(round, 1);
             self.log_ground(round, 1);
         }
@@ -587,6 +593,7 @@ impl Session {
                 pending: u.st.pending.iter().cloned().collect(),
                 poise: crate::poise::state(&self.w, i).map_or(0, |p| p.value),
                 max_poise: crate::poise::state(&self.w, i).map_or(0, |p| p.max),
+                meters: crate::meter::values(&self.w, i),
             })
             .collect()
     }

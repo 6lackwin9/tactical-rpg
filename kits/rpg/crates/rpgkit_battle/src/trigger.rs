@@ -69,7 +69,7 @@ pub struct Event {
 }
 
 impl Event {
-    fn new(on: &'static str, holder: UnitId, other: Option<UnitId>) -> Self {
+    pub(crate) fn new(on: &'static str, holder: UnitId, other: Option<UnitId>) -> Self {
         Self { on, holder, other, ally: None, ranged: None, family: String::new(), other_hp: None, hp_from: 0.0, hp_to: 0.0 }
     }
 }
@@ -90,12 +90,12 @@ pub struct Fired {
 }
 
 impl Fired {
-    fn new(holder: UnitId, on: &str, other: Option<UnitId>, source: &str) -> Self {
+    pub(crate) fn new(holder: UnitId, on: &str, other: Option<UnitId>, source: &str) -> Self {
         Self { holder, on: on.to_string(), other, source: source.to_string(), lines: Vec::new(), dealt: Vec::new(), rows: Vec::new(), moves: Vec::new() }
     }
 
     /// One effect's log line, the HP it took and its held-back journal rows.
-    fn push(&mut self, line: String, dealt: i32, rows: Vec<(UnitId, i32)>) {
+    pub(crate) fn push(&mut self, line: String, dealt: i32, rows: Vec<(UnitId, i32)>) {
         self.lines.push(line);
         self.dealt.push(dealt);
         self.rows.push(rows);
@@ -259,8 +259,8 @@ fn share_of(w: &World, c: UnitId, hp: i32) -> f64 {
     hp as f64 * 100.0 / max as f64
 }
 
-/// 8.2: every `when` condition of `row` holds for `ev` (the meter condition waits for unit meters, HOOKS1-M: it never
-/// holds yet).
+/// 8.2: every `when` condition of `row` holds for `ev` (`meter` `{id, at_least}`: the holder's value of that meter is at
+/// least `at_least`; never without the rule unit_meters or the meter, HOOKS1-M).
 fn matches(w: &World, ev: &Event, when: &Obj) -> bool {
     if ev.on == "hp_below" {
         let pct = value::float(when, "pct", 0.0);
@@ -301,7 +301,10 @@ fn matches(w: &World, ev: &Event, when: &Obj) -> bool {
     if !intent.is_empty() && crate::round_intent::intent_of(w, ev.holder).map(|i| i.id()) != Some(intent.as_str()) {
         return false;
     }
-    !when.contains_key("meter")
+    match when.get("meter") {
+        None => true,
+        Some(m) => m.as_object().is_some_and(|m| crate::meter::value(w, ev.holder, &value::string(m, "id", "")).is_some_and(|v| v >= value::int(m, "at_least", 0))),
+    }
 }
 
 fn has_redirect(row: &TriggerRow) -> bool {
@@ -458,7 +461,7 @@ pub fn after_action(res: &mut Resolver, w: &mut World, idx: usize, before: &Befo
                 fired.push(l, 0, Vec::new());
             }
             let h = holder.clone();
-            run_effects(res, w, &af.event, &h, &af.rest, block, &mut fired);
+            run_effects(res, w, &af.event, &h, &af.rest, block, true, &mut fired);
             if !fired.lines.is_empty() || !fired.moves.is_empty() {
                 res.triggers.fired.push(fired);
             }
@@ -520,7 +523,7 @@ pub fn riders(res: &mut Resolver, w: &mut World, idx: usize, before: &Before) {
                 })
                 .collect();
             let mut fired = Fired::new(src, "rider", Some(t), &name);
-            run_effects(res, w, &ev, &h, &effects, block, &mut fired);
+            run_effects(res, w, &ev, &h, &effects, block, true, &mut fired);
             if !fired.lines.is_empty() || !fired.moves.is_empty() {
                 res.triggers.fired.push(fired);
             }
@@ -619,7 +622,7 @@ fn dispatch(res: &mut Resolver, w: &mut World, events: Vec<Event>, block: i32) {
             res.triggers.count(h.unit, &h.key);
             let mut fired = Fired::new(h.unit, ev.on, ev.other, &h.source);
             let effects = h.row.effects.clone();
-            run_effects(res, w, &ev, &h, &effects, block, &mut fired);
+            run_effects(res, w, &ev, &h, &effects, block, true, &mut fired);
             if !fired.lines.is_empty() || !fired.moves.is_empty() {
                 res.triggers.fired.push(fired);
             }
@@ -632,16 +635,24 @@ fn dispatch(res: &mut Resolver, w: &mut World, events: Vec<Event>, block: i32) {
     }
 }
 
-/// `[Trigger] <holder>'s <source>: <what>` (a rider: `[Rider] ...`).
-fn line(w: &World, h: &Holder, what: &str) -> String {
-    let tag = if h.key.starts_with(RIDER_KEY) { "Rider" } else { "Trigger" };
+/// `[Trigger] <holder>'s <source>: <what>` (a rider: `[Rider] ...`; a meter's own line, HOOKS1-M: `[Meter] ...`).
+pub(crate) fn line(w: &World, h: &Holder, what: &str) -> String {
+    let tag = if h.key.starts_with(RIDER_KEY) {
+        "Rider"
+    } else if h.key.starts_with(crate::meter::METER_KEY) {
+        "Meter"
+    } else {
+        "Trigger"
+    };
     format!("[{tag}] {}'s {}: {what}", w.units[h.unit].name, h.source)
 }
 
-/// 8.2: runs `effects` of the holder `h` for `ev` in list order (a `redirect` outside `ally_hit` does nothing; a `meter`
-/// waits for unit meters, HOOKS1-M). One log line per effect that did something.
+/// 8.2: runs `effects` of the holder `h` for `ev` in list order (a `redirect` outside `ally_hit` does nothing). One log
+/// line per effect that did something. A `meter` effect (and a meter rule's `meter_set`, UM5) moves `to`'s meter
+/// (`meter::from_effect`, its band and rule lines follow); with `rules` false (a meter rule's own effects) it crosses no
+/// further rule (depth 1).
 #[allow(clippy::too_many_arguments)]
-fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Holder, effects: &[Obj], block: i32, fired: &mut Fired) {
+pub(crate) fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Holder, effects: &[Obj], block: i32, rules: bool, fired: &mut Fired) {
     for e in effects {
         let Some(to) = target_of(e, ev) else { continue };
         if !w.units[to].is_active() {
@@ -763,6 +774,11 @@ fn run_effects(res: &mut Resolver, w: &mut World, ev: &Event, h: &Holder, effect
                     continue;
                 }
                 format!("{name}'s moves this round are cancelled")
+            }
+            // HOOKS1 UM2, UM5: the meter's own lines (rule unit_meters; nothing without it)
+            "meter" | rpgkit_data::METER_SET => {
+                crate::meter::from_effect(res, w, h, to, e, rules, block, fired);
+                continue;
             }
             _ => continue,
         };
