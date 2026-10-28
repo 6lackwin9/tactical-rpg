@@ -55,6 +55,15 @@ impl rpgkit_battle::session::Roster for WorldRoster<'_> {
     }
 
     fn customize(&self, cat: &rpgkit_data::Catalog, r: &str, u: &mut rpgkit_rules::Unit) {
+        // HOOKS1 CN3: a class whose path the world's overlay replaces is rebuilt from the world's catalog (same name,
+        // deck rule and AP; the AP is kept because the session's default AP is not known here)
+        if let Some(mut e) = self.entry(cat, r).filter(|e| json::get(self.d.class_overlay(&self.world, &e.class_id), "skill_path").is_object()) {
+            e.name = u.name.clone();
+            let (max_ap, ap) = (u.max_ap, u.ap);
+            let deck = u.deck_rule.clone();
+            *u = rpgkit_rules::build_unit_in(self.d.cat_in(&self.world), &e, 0, deck.as_ref());
+            (u.max_ap, u.ap) = (max_ap, ap);
+        }
         apply_character(self.d, cat, self.d.resolve(&self.world, "characters", r), &self.world, u);
     }
 

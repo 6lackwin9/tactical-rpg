@@ -1,6 +1,7 @@
 //! Battle simulation ported from the Godot reference: grid, paths, commands, resolver, planner, AI, session.
 
 pub mod ai;
+pub mod arena;
 pub mod command;
 pub mod dojo;
 pub mod encounter;
@@ -9,6 +10,7 @@ pub mod grid;
 pub mod ground;
 pub mod intent;
 pub mod log;
+pub mod meter;
 pub mod metrics;
 pub mod path;
 pub mod plan;
@@ -21,4 +23,5 @@ pub mod round_intent_plan;
 pub mod session;
 pub mod sim;
 pub mod skill;
+pub mod trigger;
 pub mod world;

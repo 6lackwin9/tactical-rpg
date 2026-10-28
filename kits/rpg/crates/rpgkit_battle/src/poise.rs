@@ -82,11 +82,15 @@ pub fn state(w: &World, c: UnitId) -> Option<&PoiseState> {
 /// P1, P2: `c`'s Max Poise now: the unit row's fixed `poise` (above 0), none (0), else the ruleset's `poise_stat` row
 /// (0 when the ruleset names no row or the row is not in it).
 pub fn max_poise(w: &World, c: UnitId) -> i32 {
-    let u = &w.units[c];
+    max_poise_of(&w.cat, &w.ruleset, &w.units[c])
+}
+
+/// `max_poise` of unit `u` outside a battle (the Dojo): the same P1, P2 rule under `rules`.
+pub fn max_poise_of(cat: &rpgkit_data::Catalog, rules: &ruleset::Ruleset, u: &rpgkit_rules::Unit) -> i32 {
     match u.poise {
         p if p > 0 => p,
         0 => 0,
-        _ => derived::value_for(&w.cat, &w.ruleset, u, &w.ruleset.numbers.poise_stat).unwrap_or(0).max(0),
+        _ => derived::value_for(cat, rules, u, &rules.numbers.poise_stat).unwrap_or(0).max(0),
     }
 }
 
@@ -166,7 +170,8 @@ pub fn factors(w: &World, sched: &[ScheduledAction], t: UnitId, block: i32, bloc
     let pick = |on: bool, mult: f64| if on { mult } else { 1.0 };
     Factors {
         windup: pick(in_windup(sched, t, block), n.stagger_windup_mult),
-        guard: pick(guarded(sched, t, block), n.stagger_guard_mult),
+        // HOOKS1 8.3: a held guard counts as guarding (rule triggers; none in classic)
+        guard: pick(crate::trigger::guarding(w, sched, t, block), n.stagger_guard_mult),
         repeat: pick(w.poise.get(&t).is_some_and(|s| s.broken_last), n.stagger_repeat_mult),
         flank: pick(flank, n.flank_stagger_mult),
         passive: w.units[t].stagger_taken.iter().filter(|e| e.matches(blocks)).map(|e| e.mult).product(),
@@ -297,7 +302,11 @@ pub fn resolve_hits(res: &mut Resolver, w: &mut World, idx: usize) {
             continue;
         }
         let windup = in_windup(&res.scheduled, t, block);
-        let f = factors(w, &res.scheduled, t, block, blocks, flank);
+        let mut f = factors(w, &res.scheduled, t, block, blocks, flank);
+        // HOOKS1 IG1: a guard-bypassing hit staggers as if the target did not guard (set only under the rule ignore_guard)
+        if res.scheduled[idx].command.ignore_guard {
+            f.guard = 1.0;
+        }
         let taken = stagger_taken(impact.stagger, &f);
         let mut hit = StaggerHit { target: t, stagger: impact.stagger, factors: f, windup, taken, before: st.value, after: st.value, chance: None, broke: None };
         // P8: a unit broken this round stays at 0 and breaks no further
@@ -367,6 +376,8 @@ pub fn break_unit(res: &mut Resolver, w: &mut World, t: UnitId, block: i32, caus
         a.command.poise_bonus = 0;
     }
     w.units[t].guard = 0.0;
+    // HOOKS1 8.3: a break ends a held guard (rule triggers; none in classic)
+    w.units[t].held_guard = None;
     let b = Break { cause, skill: named.map(|(_, n)| n).unwrap_or_default() };
     res.log.push(break_line(w, t, &b));
     b

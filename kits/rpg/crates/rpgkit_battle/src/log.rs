@@ -144,6 +144,16 @@ pub fn from_action(w: &World, a: &ScheduledAction, round: i32, block: i32) -> En
             if cmd.impact.armor_piercing && w.ruleset.has(rpgkit_rules::ruleset::PIERCE) && *last_damage > 0 {
                 e.detail += " | Armour pierced";
             }
+            // HOOKS1 IG1 (rule ignore_guard): the hit left out the guarding target's guard
+            if cmd.guard_bypassed && *last_damage > 0 {
+                e.detail += " | Ignores guard";
+            }
+            // HOOKS1 EX1 (rule execute): the hit matched the skill's `hp_below` exploit entry
+            if *last_damage > 0 && cmd.exploited.iter().any(|(_, l)| l == skill::EXECUTE) {
+                if let Some((pct, mult)) = skill::execute_entry(&cmd.exploit) {
+                    e.detail += &format!(" | Execute x{mult:.2} (HP {pct}% or less)");
+                }
+            }
             if let Some(st) = cmd.staggers.first() {
                 e.detail += &format!(" | Stagger {} (poise {} -> {})", st.taken, st.before, st.after);
             }
@@ -222,6 +232,10 @@ pub fn from_action(w: &World, a: &ScheduledAction, round: i32, block: i32) -> En
             e.outcome = if *last_hits > 0 { format!("{last_hits} HIT{}", if *last_hits == 1 { "" } else { "S" }) } else { "MISS".into() };
             e.target = format!("{} tiles", cells.len());
             e.detail = trim(&cmd.log, "[Attack] ").into();
+            // HOOKS1 IG1 (rule ignore_guard): the hits left out a guarding target's guard
+            if cmd.guard_bypassed && *last_hits > 0 {
+                e.detail += " | Ignores guard";
+            }
         }
         CmdKind::Item { target, used, last_heal, last_damage, last_boost, .. } => {
             e.category = if *last_damage > 0 { "ATTACK" } else { "BUFF" };
@@ -285,6 +299,34 @@ pub fn from_action(w: &World, a: &ScheduledAction, round: i32, block: i32) -> En
             e.status = "Recovering".into();
         }
     }
+    e
+}
+
+/// HOOKS1 8.1: the subtype of a trigger effect's cell.
+pub const TRIGGER: &str = "Trigger";
+
+/// HOOKS1 8.1 (engine-only): the EVENT cell of one trigger effect: the holder, the trigger's source (skill, passive or
+/// item), the event as the status (`rider` for a rider, RD1), the other unit as the target, the effect's line.
+pub fn trigger_entry(w: &World, f: &crate::trigger::Fired, line: &str, round: i32, block: i32) -> Entry {
+    let what = trim(trim(trim(line, "[Trigger] "), "[Rider] "), "[Meter] ");
+    let mut e = Entry::event(round, block, &w.units[f.holder].name, w.allies.contains(&f.holder), &f.source, TRIGGER, "TRIGGERED", what, &f.on);
+    if let Some(o) = f.other {
+        e.target = w.units[o].name.clone();
+        e.target_is_ally = w.allies.contains(&o);
+    }
+    e
+}
+
+/// HOOKS1 HC1: the subtype of an HP cost's cell (the metrics count it as the payer's own loss).
+pub const HP_COST: &str = "HP Cost";
+
+/// HOOKS1 HC1 (engine-only): the EVENT cell of an HP cost: the payer, the skill, the HP paid (`damage`).
+pub fn hp_cost_entry(w: &World, p: &crate::resolver::HpPaid, round: i32, block: i32) -> Entry {
+    let u = &w.units[p.unit];
+    let line = format!("{} bleeds {} HP (HP {}/{})", u.name, p.paid, u.hp, u.max_hp);
+    let mut e = Entry::event(round, block, &u.name, w.allies.contains(&p.unit), &p.skill, HP_COST, "HP COST", &line, "");
+    e.value = p.paid;
+    e.damage = p.paid;
     e
 }
 
@@ -387,6 +429,43 @@ pub fn ground_entry(w: &World, ev: &crate::ground::Event, round: i32, block: i32
         }
         Event::Faded(f) => Entry::event(round, block, &f.hazard, w.allies.contains(&f.by), &f.hazard, HAZARD, "FADED", trim(&f.line, "[Hazard] "), &format!("{} tiles", f.cells)),
     }
+}
+
+/// HOOKS1 AH2: the subtype of the arena hazards' cells (all EVENT; the hazard's name is the actor, no unit; the metrics
+/// count the HP a cell names as the target's arena loss).
+pub const ARENA: &str = "Arena";
+
+/// HOOKS1 AH2 (engine-only): the EVENT cell of a strike: the hazard as the actor, its line, the units it caught.
+pub fn arena_entry(st: &crate::arena::Strike, round: i32, block: i32) -> Entry {
+    let mut e = Entry::event(round, block, &st.name, false, &st.name, ARENA, "STRIKE", &st.line, &format!("{} tiles", st.cells.len()));
+    e.value = st.hits.len() as i32;
+    e
+}
+
+/// HOOKS1 AH2 (engine-only): the EVENT cell of one struck unit: the hazard hits the unit for the HP it lost (`damage`),
+/// the status that landed, its stagger; DEFEATED when it fell.
+pub fn arena_hit_entry(w: &World, st: &crate::arena::Strike, h: &crate::arena::Hit, round: i32, block: i32) -> Entry {
+    let tu = &w.units[h.unit];
+    let outcome = if tu.is_alive() { "ARENA" } else { "DEFEATED" };
+    let mut e = Entry::event(round, block, &st.name, false, &st.name, ARENA, outcome, trim(&h.line, "[Arena] "), &format!("Target HP: {}/{}", tu.hp, tu.max_hp));
+    e.target = tu.name.clone();
+    e.target_is_ally = w.allies.contains(&h.unit);
+    e.value = h.damage;
+    e.damage = h.damage;
+    e
+}
+
+/// HOOKS1 AH2, FM9 (engine-only): the EVENT cell of one collision hit of an arena push: the hazard hits `h.unit` (the
+/// pushed unit or the one that blocked it) for the HP it lost.
+pub fn arena_collision_entry(w: &World, st: &crate::arena::Strike, h: &crate::forced::CollisionHit, round: i32, block: i32) -> Entry {
+    let tu = &w.units[h.unit];
+    let outcome = if tu.is_alive() { "COLLISION" } else { "DEFEATED" };
+    let mut e = Entry::event(round, block, &st.name, false, &st.name, ARENA, outcome, trim(&h.line, "[Collision] "), &format!("Target HP: {}/{}", tu.hp, tu.max_hp));
+    e.target = tu.name.clone();
+    e.target_is_ally = w.allies.contains(&h.unit);
+    e.value = h.damage;
+    e.damage = h.damage;
+    e
 }
 
 /// CombatLogBuilder.riposte_entry: the defender countered the attack that just resolved.

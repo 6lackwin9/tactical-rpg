@@ -182,9 +182,9 @@ impl NewGameScreen {
                     }
                 }
                 let e = d.entry("units", &base);
-                let cls = d.entry("classes", &s(e, "class_id"));
                 let name = if shown.is_empty() { s_or(e, "name", unit_id) } else { shown };
-                (name, s_or(cls, "name", &s(e, "class_id")), json::i(e, "level", 1))
+                // HOOKS1 CN2: the class name in the world being started
+                (name, d.class_name(world, &s(e, "class_id")), json::i(e, "level", 1))
             })
             .collect()
     }

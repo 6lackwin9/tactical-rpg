@@ -1,10 +1,12 @@
 //! The balance simulator (tools/balance_sim.gd and tools/sim/*, BAL2_SIM.md): headless AI-vs-AI battles on sandbox
 //! units built from class + level + tier, in nine modes (duel, tier, levels, group, stats, party, role, sweep,
 //! campaign). `run` returns the lines the sim prints; `aegis sim <mode> ...` prints them. Scores per fight (left side):
-//! binary (KO, else the HP lead with a 0.02 band) and HP margin (KO 1 / 0, else 0.5 + (l - r) / 2).
+//! binary (KO, else the HP lead with a 0.02 band) and HP margin (KO 1 / 0, else 0.5 + (l - r) / 2). RULESET1-G adds a
+//! tenth, engine-only mode, `feel` (feel.rs): catalog encounters with their party, read for how the rules feel.
 
 pub mod args;
 pub mod campaign;
+pub mod feel;
 pub mod kpi;
 pub mod modes;
 pub mod party;
@@ -27,6 +29,8 @@ pub struct SimGame {
     pub default_world: String,
     /// The story the `campaign` mode plays; None: the mode prints that the game has none.
     pub story: Option<StoryRun>,
+    /// RULESET1-G: the catalog encounters the `feel` mode fights without `enc=` (empty: `feel` needs `enc=`).
+    pub feel_encounters: Vec<String>,
 }
 
 /// The story run of the `campaign` mode: the auto-start quest chain of `world`, played once per branch of the
@@ -58,6 +62,11 @@ pub fn run(d: &Data, argv: &[String], game: &SimGame) -> Vec<String> {
     let mut r = Runner::new(d, &a);
     r.metrics.keep_totals = a.metrics && !args::METRIC_MODES.contains(&a.mode.as_str());
     r.print(a.header());
+    // RULESET1-G: the feel report ends with its FEEL_JSON line (no score footers)
+    if a.mode == "feel" {
+        feel::feel_mode(&mut r);
+        return r.out;
+    }
     match a.mode.as_str() {
         "duel" => modes::duel(&mut r, a.level),
         "tier" => modes::tier(&mut r, a.level),

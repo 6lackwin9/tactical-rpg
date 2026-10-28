@@ -40,3 +40,7 @@ test_*.txt
 /target/
 
 __pycache__/
+# Build folders a review or a cargo run inside a worktree can leave (2026-10-29: two were committed by `git add -A`)
+/target-*/
+/engine/target/
+**/target/

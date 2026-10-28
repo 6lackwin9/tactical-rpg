@@ -3,7 +3,7 @@
 
 use aegis_core::value;
 use indexmap::IndexMap;
-use rpgkit_data::Catalog;
+use rpgkit_data::{Catalog, ZoneDef};
 use std::ops::{Add, Mul, Sub};
 
 pub const GRID_W: i32 = 12;
@@ -151,6 +151,12 @@ pub fn rows_valid(rows: &[String]) -> bool {
     rows.len() == GRID_H as usize && rows.iter().all(|r| r.chars().count() == GRID_W as usize && r.chars().all(|c| GLYPHS.contains(&c)))
 }
 
+/// HOOKS1 ZN2: the data zone row of battle zone `zone` (kind `zones`); None for a code zone (a row reusing a code id
+/// is a check error and never stands in for the code zone) or an unknown id.
+pub fn data_zone<'a>(zone: &str, zones: &'a IndexMap<String, ZoneDef>) -> Option<&'a ZoneDef> {
+    zones.get(zone).filter(|_| !ZONE_IDS.contains(&zone))
+}
+
 #[derive(Debug, Clone)]
 pub struct Grid {
     pub open: bool,
@@ -175,11 +181,14 @@ impl Grid {
         self.apply_rows(zone_rows(zone).into_iter().flatten());
     }
 
-    /// The battle board (ENCOUNTER2 R0): the encounter's authored rows when they are valid (`rows_valid`), else the
-    /// zone's rows; the zone still picks the backdrop and tiles.
-    pub fn apply_board(&mut self, zone: &str, rows: &[String]) {
+    /// The battle board (ENCOUNTER2 R0, HOOKS1 ZN3): the encounter's authored rows when they are valid (`rows_valid`),
+    /// else a code zone's rows (unchanged), else the data zone row's (`zones`, kind `zones`: its rows when valid, else
+    /// 9 rows of floor); an unknown zone is floor. The zone still picks the backdrop and tiles.
+    pub fn apply_board(&mut self, zone: &str, rows: &[String], zones: &IndexMap<String, ZoneDef>) {
         if rows_valid(rows) {
             self.apply_rows(rows.iter().map(String::as_str));
+        } else if let Some(z) = data_zone(zone, zones).filter(|z| rows_valid(&z.rows)) {
+            self.apply_rows(z.rows.iter().map(String::as_str));
         } else {
             self.apply_zone(zone);
         }

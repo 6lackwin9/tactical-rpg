@@ -383,7 +383,8 @@ fn apply(w: &mut World, rng: &mut GodotRng, u: UnitId, cell: V2, round_end: bool
 }
 
 /// GH6 `stop_moves`: cancels the Walks of this round that have not landed of each unit a hazard stopped since the last
-/// call (the resolver calls it after an action starts or lands).
+/// call (the resolver calls it after an action starts or lands). Any other path that moves a unit onto hazards (a
+/// `forced::shove_unit` from a trigger or an arena push) must call it too, then the session's `log_ground`.
 pub fn settle(res: &mut Resolver, w: &mut World) {
     for i in std::mem::take(&mut w.ground.stops) {
         let Some(Event::Hit(h)) = w.ground.events.get_mut(i) else { continue };

@@ -25,7 +25,7 @@ Since 2026-10-19 the game runs on the Aegis engine (Rust, `engine/`); the Godot-
 
 ## Agents and tools (built)
 
-(Skills: engine-checklist, known-issues, rust-conventions, patch-and-seed, planner, planner-ops, pc-launch, patch-notes-write. Agents: design-brainstorm, logic-builder, asset-builder, balance, change-reviewer, housekeeper.)
+(Skills: engine-checklist, known-issues, rust-conventions, patch-and-seed, planner, planner-ops, pc-launch, patch-notes-write, milestone-status, task-landing, game-design-library. Agents: design-brainstorm, logic-builder, asset-builder, balance, change-reviewer, housekeeper.)
 
 | Tool | Use |
 | --- | --- |
@@ -42,6 +42,8 @@ Balance baseline (level 5, 2026-10-15): warrior wins every duel (100%), berserke
 
 ## Iteration loop (agreed 2026-10-15)
 
+Superseded (note 2026-10-29, CLEANUP.md CLN-26): steps 3 and 4 below (a `builder` agent on a `feat/<id>-<slug>` branch, merged to `main`) are the 2026-10-15 loop. Today a `logic-builder` or `asset-builder` works in a worktree `C:/dev/tactical-rpg-<task>` on branch `claude/<task>` branched from the local `staging` branch; a reviewed task lands on `staging` under a partial gate and `staging` is flushed to `develop` under one full gate (decision "Batched gate"); releases go `develop` -> `main` by PR. Steps: `docs/workflow/desktop.md` and the skill `.claude/skills/task-landing/SKILL.md`. The text below is kept unchanged.
+
 1. **Brainstorm** (`design-brainstorm`): options for systems -> `games/emberwake/docs/ROADMAP.md` entries as `proposed`. User approves.
 2. **Plan** (main session, skill `planner`): milestones + change lists; user confirms before any change.
 3. **Build** (`builder` agent, feature branch `feat/<id>-<slug>`): implement + tests, report.
@@ -52,6 +54,8 @@ Balance baseline (level 5, 2026-10-15): warrior wins every duel (100%), berserke
 Sims are parallel-safe (own sandbox per run); builders on separate systems use separate worktrees.
 
 ## Agent run log (append-only; the planner adds a row after each milestone)
+
+Stopped on 2026-10-16 (note 2026-10-29, CLEANUP.md CLN-26): no rows were added after SKILL1. The record of finished tasks is `docs/archive/TASKS_DONE.md` plus `git log` (and the `milestone-status` skill per milestone); `docs/AGENT_MAP.md` keeps only the running agents. The rows below are kept unchanged.
 
 Agent instances are fresh per call and idle once they report, so the agent list grows; this table is the readable record. Tokens and minutes are from the agent's own report.
 

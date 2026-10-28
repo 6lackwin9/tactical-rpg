@@ -12,8 +12,10 @@ use aegis_ui::art::Art;
 use aegis_ui::canvas::{rgb, rgba, Image, Rect, Rgba};
 use aegis_ui::depth::DepthList;
 use aegis_ui::painter::Painter;
-use emberwake_battle::grid::{Grid, V2, GRID_H, GRID_W};
-use emberwake_content::art::{battle_backdrop, battle_prop_dirs, battle_stage_dirs, BATTLE_SETS};
+use emberwake_battle::grid::{data_zone, Grid, V2, GRID_H, GRID_W};
+use indexmap::IndexMap;
+use emberwake_content::art::{battle_backdrop, battle_prop_dirs, battle_stage_dirs, zone_backdrop, BATTLE_SETS};
+use emberwake_data::ZoneDef;
 use serde_json::Value;
 
 /// The grid panel's interior (every stage pass is clipped to it).
@@ -370,13 +372,25 @@ fn scaled(c: Rgba, k: f32) -> Rgba {
     [(c[0] as f32 * k).round() as u8, (c[1] as f32 * k).round() as u8, (c[2] as f32 * k).round() as u8, c[3]]
 }
 
-/// Pass 1: the zone's backdrop, else a gradient from the night sky to the far ground's colour at 40 %.
-pub fn draw_backdrop(p: &mut Painter, art: &mut Art, grid: &Grid, zone: &str) {
-    if let Some(img) = backdrop_art(art, zone).and_then(|rel| art.image(&rel, BACKDROP.w, BACKDROP.h)) {
+/// 3.4, HOOKS1 ZN3: what the backdrop pass draws for zone `zone`: its file (None: the gradient) and the gradient's
+/// ground. A code zone (or an unknown one): `backdrop_art` and the far ground, whatever `zones` holds; a data zone row
+/// (`data_zone` over `zones`): its backdrop key (`zone_backdrop`) when the file exists, and its `ground`.
+pub fn backdrop_source<'a>(art: &mut Art, grid: &Grid, zone: &str, zones: &'a IndexMap<String, ZoneDef>) -> (Option<String>, &'a str) {
+    match data_zone(zone, zones) {
+        Some(z) => (Some(zone_backdrop(zone, Some(z))).filter(|rel| art.has(rel)), z.ground.as_str()),
+        None => (backdrop_art(art, zone), far_ground(grid)),
+    }
+}
+
+/// Pass 1: the zone's backdrop, else a gradient from the night sky to the far ground's colour at 40 % (a data zone
+/// row in `zones`: its backdrop key and `ground`, `backdrop_source`).
+pub fn draw_backdrop(p: &mut Painter, art: &mut Art, grid: &Grid, zone: &str, zones: &IndexMap<String, ZoneDef>) {
+    let (file, ground) = backdrop_source(art, grid, zone, zones);
+    if let Some(img) = file.and_then(|rel| art.image(&rel, BACKDROP.w, BACKDROP.h)) {
         p.image(img, BACKDROP);
         return;
     }
-    let bottom = lerp(NIGHT, terrain_color(far_ground(grid)), 0.4);
+    let bottom = lerp(NIGHT, terrain_color(ground), 0.4);
     for k in 0..BACKDROP.h {
         let t = k as f32 / (BACKDROP.h - 1) as f32;
         p.fill(Rect::new(BACKDROP.x, BACKDROP.y + k, BACKDROP.w, 1), lerp(NIGHT, bottom, t));
@@ -781,6 +795,7 @@ mod tests {
     use super::*;
     use aegis_core::assets::Layers;
     use emberwake_battle::grid::TerrainTable;
+    use serde_json::json;
     use std::path::{Path, PathBuf};
 
     fn zone(id: &str) -> Grid {
@@ -974,6 +989,30 @@ mod tests {
         assert_eq!(far_ground(&zone("forest_clearing")), "grass");
         assert_eq!(far_ground(&zone("frozen_pass")), "snow");
         assert_eq!(far_ground(&zone("lava_cavern")), "grass", "row 0 all walls: none, grass");
+    }
+
+    /// HOOKS1 ZN3: a data zone row draws its backdrop key when the file exists, else the gradient to its `ground`
+    /// (not the far ground of the board); a code zone as before, also when a (bad) row reuses its id.
+    #[test]
+    fn a_data_zone_keys_its_backdrop_and_its_gradient_ground() {
+        let mut art = game_art();
+        // `zz_test_zone`: a test-only zone id with no file under backgrounds/battle/
+        let one = |id: &str, backdrop: &str, ground: &str| {
+            let z = ZoneDef::from_obj(json!({"id": id, "name": "Test", "backdrop": backdrop, "ground": ground}).as_object().unwrap());
+            IndexMap::from([(id.to_string(), z)])
+        };
+        let board = zone("forest_clearing");
+        assert!(!art.has("backgrounds/battle/zz_test_zone.png"), "fixture");
+        let missing = one("zz_test_zone", "", "stone");
+        assert_eq!(backdrop_source(&mut art, &board, "zz_test_zone", &missing), (None, "stone"), "no file: the gradient to the row's ground");
+        let keyed = one("zz_test_zone", "backgrounds/battle/forest_clearing.png", "bridge");
+        assert_eq!(backdrop_source(&mut art, &board, "zz_test_zone", &keyed), (Some("backgrounds/battle/forest_clearing.png".into()), "bridge"), "the row's key");
+        let gone = one("zz_test_zone", "backgrounds/battle/zz_none.png", "sand");
+        assert_eq!(backdrop_source(&mut art, &board, "zz_test_zone", &gone), (None, "sand"), "a missing key file: the gradient");
+        let code = (Some("backgrounds/battle/forest_clearing.png".to_string()), "grass");
+        assert_eq!(backdrop_source(&mut art, &board, "forest_clearing", &IndexMap::new()), code, "a code zone unchanged");
+        let shadow = one("forest_clearing", "backgrounds/battle/zz_none.png", "sand");
+        assert_eq!(backdrop_source(&mut art, &board, "forest_clearing", &shadow), code, "a row reusing a code id is ignored");
     }
 
     #[test]

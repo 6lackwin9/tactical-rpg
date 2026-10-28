@@ -62,7 +62,7 @@ fn campaign_without_a_story_run_says_so() {
 #[test]
 fn usage_and_extra_carry_the_games_values() {
     let d = data();
-    let game = SimGame { default_world: "vale".into(), story: Some(story()) };
+    let game = SimGame { default_world: "vale".into(), story: Some(story()), ..SimGame::default() };
     let out = rpgkit_sim::run(&d, &argv("fly"), &game);
     assert_eq!(out[0], "SIM argument error: unknown mode 'fly'");
     let sweep = out.iter().position(|l| l.trim_start().starts_with("sweep [level]")).expect("the sweep line");

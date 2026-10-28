@@ -4,11 +4,13 @@
 //! a code-drawn backdrop. The model (`Player`) moves only through `advance(ms)`, `press()` and `skip()`, so tests drive
 //! it without a clock; `draw` paints a card on the 640 x 360 stage in the caller's `Palette`; `VignetteScreen` is the
 //! full screen that measures the frame time, plays the cues and runs its `on_done` callback when the reel ends or is
-//! skipped. What a reel holds (which cards, their tokens and conditions) is the game's or its kit's.
+//! skipped. What a reel holds (which cards, their tokens and conditions) is the game's or its kit's. A card may shake the
+//! view (FX1-V, FX1 5.2): its `shake` preset, from the game's table (`with_shakes`), moves the card's picture and texts.
 
 use crate::art::Art;
 use crate::audio::Bus;
 use crate::canvas::{rgb, rgba, Rect, Rgba};
+use crate::fx::{Camera, ShakeLimits, ShakeTable};
 use crate::painter::Painter;
 use crate::screen::{Context, Cx, Key, Screen, Settings};
 use crate::ui::{tip, Gfx, Ui, Widget, BODY, DIM, GOLD, RADIUS, SMALL, TEXT, H, W};
@@ -189,6 +191,8 @@ pub struct Card {
     pub hold_ms: u32,
     /// A sound under `audio/`, played as the card starts.
     pub cue: String,
+    /// A camera shake preset (`fx::SHAKE_PRESETS`) started with the card's fade in; "" none, an unknown name none.
+    pub shake: String,
 }
 
 impl Default for Card {
@@ -208,6 +212,7 @@ impl Default for Card {
             fade_out_ms: 400,
             hold_ms: 0,
             cue: String::new(),
+            shake: String::new(),
         }
     }
 }
@@ -218,7 +223,7 @@ fn ms_of(d: &json::Dict, key: &str, fallback: u32, max: u32) -> u32 {
 
 impl Card {
     /// A card from its JSON form (the keys of STORYUI1 4.2: style, image, top, bottom, ash, title, subtitle, text,
-    /// fade_in_ms, fade_out_ms, hold_ms, cue); bad values fall back to the defaults. `speaker`, `portrait` and `when`
+    /// fade_in_ms, fade_out_ms, hold_ms, cue; FX1's shake); bad values fall back to the defaults. `speaker`, `portrait` and `when`
     /// are the caller's to resolve.
     pub fn from_json(v: &Value) -> Card {
         let d = json::dict(v);
@@ -237,6 +242,7 @@ impl Card {
             fade_out_ms: ms_of(d, "fade_out_ms", base.fade_out_ms, 3000),
             hold_ms: ms_of(d, "hold_ms", base.hold_ms, 20000),
             cue: json::s(d, "cue"),
+            shake: json::s(d, "shake"),
             ..base
         }
     }
@@ -331,6 +337,10 @@ impl Phase {
 pub struct Player {
     pub reel: Reel,
     pub speed: TextSpeed,
+    /// The shake presets a card's `shake` names (the game's table; default the engine's) and their limits (default the
+    /// engine ceiling).
+    pub shakes: ShakeTable,
+    pub shake_limits: ShakeLimits,
     card: usize,
     phase: Phase,
     /// Milliseconds in the current phase.
@@ -345,7 +355,7 @@ pub struct Player {
 impl Player {
     /// The reel at its first card's fade in (its cue queued); an empty reel is done at once.
     pub fn new(reel: Reel, speed: TextSpeed) -> Player {
-        let mut p = Player { reel, speed, card: 0, phase: Phase::Done, t: 0, card_ms: 0, cues: Vec::new(), skipped: false };
+        let mut p = Player { reel, speed, shakes: ShakeTable::default(), shake_limits: ShakeLimits::CEILING, card: 0, phase: Phase::Done, t: 0, card_ms: 0, cues: Vec::new(), skipped: false };
         p.start_card(0);
         p.advance(0);
         p
@@ -509,6 +519,29 @@ impl Player {
         std::mem::take(&mut self.cues)
     }
 
+    /// The shake presets and limits cards play with (FX1 5.2; the game's tuning table).
+    pub fn with_shakes(mut self, table: ShakeTable, limits: ShakeLimits) -> Player {
+        self.shakes = table;
+        self.shake_limits = limits;
+        self
+    }
+
+    /// The current card's camera (FX1 5.2): its `shake` preset, clamped to `shake_limits`, started as the card entered
+    /// its fade in (card ms 0, the moment its cue plays) and seeded by the card's index. None runs once the reel is done
+    /// or skipped, for "" or an unknown preset, or under `reduce_motion`.
+    pub fn camera(&self, reduce_motion: bool) -> Camera {
+        let mut cam = Camera::default();
+        if let Some(shake) = self.card().filter(|_| !self.done()).and_then(|c| self.shakes.get(&c.shake)) {
+            cam.start(shake, 0, self.card as u64 + 1, self.shake_limits, reduce_motion);
+        }
+        cam
+    }
+
+    /// The view offset the card's shake gives now, in whole logical px ((0, 0) when none runs).
+    pub fn shake_offset(&self, reduce_motion: bool) -> (i32, i32) {
+        self.camera(reduce_motion).offset_at(self.card_ms)
+    }
+
     /// The agent link's view (V13).
     pub fn state(&self) -> Value {
         json!({"reel": self.reel.id, "card": self.card, "cards": self.reel.cards.len(), "phase": self.phase.name(), "shown": self.shown(), "total": self.total(), "done": self.done()})
@@ -624,11 +657,19 @@ fn caption<A: Clone>(ui: &mut Ui<A>, x: i32, w: i32, min_h: i32, head: &str, tex
 
 /// Draws the player's card on the whole stage (V9): the frame colour, the backdrop or the picture, the ash (unless
 /// `reduce_motion`), the card's texts, the hint in a hold that waits, and the fade cover. Widgets are the caller's.
+/// While the card's shake runs (FX1 5.2) the picture area, the caption box, the title, line and text-card texts and the
+/// portrait move by its offset; the frame, the stage backdrop gradient, the hint and the fade cover stay put.
 pub fn draw<A: Clone>(ui: &mut Ui<A>, art: &mut Art, pl: &Player, pal: &Palette, reduce_motion: bool) {
     let stage = Rect::new(0, 0, W, H);
     let frame = pl.reel.frame;
     ui.p.fill(stage, frame);
     let Some(c) = pl.card() else { return };
+    let (dx, dy) = pl.shake_offset(reduce_motion);
+    let view = (ui.p.v.ox, ui.p.v.oy);
+    // The picture area shakes with the card; the stage's backdrop does not.
+    if c.style == Style::Image {
+        ui.p.shift(dx, dy);
+    }
     // The backdrop, or the picture letterboxed in the frame colour.
     let area = if c.style == Style::Image { PICTURE } else { stage };
     let picture = (c.style == Style::Image && !c.image.is_empty()).then(|| art.size_of(&c.image)).flatten().filter(|s| s.0 > 0 && s.1 > 0);
@@ -648,6 +689,9 @@ pub fn draw<A: Clone>(ui: &mut Ui<A>, art: &mut Art, pl: &Player, pal: &Palette,
     }
     if c.ash && !reduce_motion {
         ash(&mut ui.p, area, pl.card_index(), pl.card_ms());
+    }
+    if c.style != Style::Image {
+        ui.p.shift(dx, dy);
     }
     let shown = pl.shown();
     match c.style {
@@ -701,6 +745,8 @@ pub fn draw<A: Clone>(ui: &mut Ui<A>, art: &mut Art, pl: &Player, pal: &Palette,
             }
         }
     }
+    // Back to the still view (restored, not shifted back, so no float drift).
+    (ui.p.v.ox, ui.p.v.oy) = view;
     if pl.waiting() {
         ui.p.text_right((W - 12) as f32, (H - 14) as f32, HINT, SMALL, pal.dim);
     }
@@ -757,6 +803,13 @@ impl<G: Context> VignetteScreen<G> {
 
     pub fn ask_first(mut self, ask: bool) -> Self {
         self.ask_first = ask;
+        self
+    }
+
+    /// The game's shake presets and limits for the cards' `shake` (FX1 5.2; default the engine's table and ceiling).
+    pub fn with_shakes(mut self, table: ShakeTable, limits: ShakeLimits) -> Self {
+        self.player.shakes = table;
+        self.player.shake_limits = limits;
         self
     }
 
@@ -860,8 +913,10 @@ impl<G: Context> Screen<G> for VignetteScreen<G> {
         self.take_answer(cx);
     }
 
-    fn state(&self, _cx: &Cx<G>) -> Value {
+    fn state(&self, cx: &Cx<G>) -> Value {
         let mut v = self.player.state();
+        let (dx, dy) = self.player.shake_offset(reduce_motion(&cx.settings));
+        v["shake"] = json!([dx, dy]);
         v["skippable"] = json!(self.player.reel.skippable);
         v["ask_first"] = json!(self.ask_first);
         v

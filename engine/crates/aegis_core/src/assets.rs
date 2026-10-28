@@ -8,6 +8,9 @@
 //! the front or back drawing of the side clip `of`; `Facing` is four-way facing on a square grid (`Facing::toward`), and
 //! `Clips::resolve_view` / `frame_at_view` / `ClipPlayer::frame_facing` pick the row for a view, falling back to the
 //! side clip, then idle in that view, then side idle. Only side rows are ever mirrored. Engine-only (no Godot source).
+//! Wind-ups (WINDUP1-E, spec WINDUP1 section 2): a looping row may play an intro once (`loop_from`) and a row may mark
+//! its `strike` frame; `ClipPlayer::play_from` starts a shot at a frame and `ClipPlayer::set_base_from` starts the base
+//! at a frame, optionally holding it still after the intro.
 //! Face sidecars (PORTRAITFX1-E, spec 4.1): `<portrait>.face.json` beside a portrait PNG holds its anchors in image
 //! px (eye boxes, glow anchors, vein roots, the rim key, idle overlays): `face_file`, `parse_face`, `face_problems`.
 
@@ -226,8 +229,11 @@ impl Facing {
 }
 
 /// One clip of a sheet: its row, frames left to right, each shown `ms[i]` milliseconds. A view clip (DIR4) also names
-/// the side clip it draws (`of`) and its `view`; a side clip has `of` "" and `View::Side`.
-#[derive(Debug, Clone, PartialEq)]
+/// the side clip it draws (`of`) and its `view`; a side clip has `of` "" and `View::Side`. `impact` (FX1-L1, optional)
+/// is the frame where an attack lands or its shot leaves; the caller times the hit at `ms_before(impact)`. WINDUP1:
+/// `loop_from` (0: none) is the first looped frame of a looping clip (the frames before it play once, the intro);
+/// `strike` (0: none) is the first frame after the clip's own wind-up frames, where it starts after a held wind-up.
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Clip {
     pub id: String,
     pub frames: u32,
@@ -235,6 +241,9 @@ pub struct Clip {
     pub looped: bool,
     pub of: String,
     pub view: View,
+    pub impact: Option<u32>,
+    pub loop_from: u32,
+    pub strike: u32,
 }
 
 /// A body's `clips.json`: the frame size, its palette slots and its clips (row order).
@@ -253,7 +262,9 @@ impl Clips {
     /// Reads and checks a clips.json (spec 4.1): frame 8..256 each way, clips with unique snake_case ids and `idle`
     /// among them, 1..64 frames each with one duration 16..2000 ms per frame, `loop` a flag (default true), palette
     /// slots `#rrggbb`. DIR4 3.1: a view row carries `of` and `view` together, `view` is `down` or `up`, `of` names a
-    /// side clip of the list and the id is `<of>_<view>`; `idle` is a side clip. Every problem is listed.
+    /// side clip of the list and the id is `<of>_<view>`; `idle` is a side clip. FX1-L1: `impact`, when present, is a
+    /// frame of the clip (0 to frames - 1). WINDUP1 2: `loop_from` (1 to frames - 1, only with `loop` true) and
+    /// `strike` (0 to frames - 1, at most `impact`), both optional. Every problem is listed.
     pub fn parse(v: &Value) -> Result<Clips, Vec<String>> {
         let mut problems = Vec::new();
         let Some(o) = v.as_object() else { return Err(vec!["clips.json must be an object {frame, palette, clips}.".into()]) };
@@ -297,6 +308,48 @@ impl Clips {
                     true
                 }
             };
+            // FX1-L1: the frame an attack lands on (optional), a frame of the clip.
+            let impact = match c.get("impact") {
+                None => None,
+                Some(v) => match v.as_u64().filter(|i| *i < frames as u64) {
+                    Some(i) => Some(i as u32),
+                    None => {
+                        problems.push(format!("clip '{id}': impact must be 0 to {}.", frames.saturating_sub(1)));
+                        None
+                    }
+                },
+            };
+            // WINDUP1 2 (L1, L2): the first looped frame of a looping clip; the frames before it are its intro.
+            let loop_from = match c.get("loop_from") {
+                None => 0,
+                Some(_) if !looped => {
+                    problems.push(format!("clip '{id}': loop_from needs loop true."));
+                    0
+                }
+                Some(v) => match v.as_u64().filter(|l| *l >= 1 && *l < frames as u64) {
+                    Some(l) => l as u32,
+                    None => {
+                        problems.push(format!("clip '{id}': loop_from must be 1 to {}.", frames.saturating_sub(1)));
+                        0
+                    }
+                },
+            };
+            // WINDUP1 2 (S1, S2): where the clip starts after a held wind-up; never after its impact.
+            let strike = match c.get("strike") {
+                None => 0,
+                Some(v) => match v.as_u64().filter(|f| *f < frames as u64) {
+                    Some(f) => {
+                        if impact.is_some_and(|i| f > i as u64) {
+                            problems.push(format!("clip '{id}': strike must not come after impact."));
+                        }
+                        f as u32
+                    }
+                    None => {
+                        problems.push(format!("clip '{id}': strike must be 0 to {}.", frames.saturating_sub(1)));
+                        0
+                    }
+                },
+            };
             // DIR4 3.1: a view row names its side clip (`of`) and its view (`down`, `up`), both or neither.
             let of = c.get("of").map(|v| v.as_str().unwrap_or("").to_string());
             let view = match c.get("view") {
@@ -313,7 +366,7 @@ impl Clips {
                 problems.push(format!("clip '{id}': of and view go together."));
             }
             views.push((of.is_some() && view.is_some(), view.flatten()));
-            clips.push(Clip { id, frames, ms, looped, of: of.unwrap_or_default(), view: view.flatten().unwrap_or_default() });
+            clips.push(Clip { id, frames, ms, looped, of: of.unwrap_or_default(), view: view.flatten().unwrap_or_default(), impact, loop_from, strike });
         }
         // Rows may come in any order: `of` is checked against the whole list.
         for (c, (both, view)) in clips.iter().zip(&views) {
@@ -376,6 +429,11 @@ impl Clips {
         self.frame_at_view(id, View::Side, ms)
     }
 
+    /// WINDUP1 2: the ms before `frame` in the row played for `id` (fallback as `resolve`; 0 for no clips).
+    pub fn ms_before(&self, id: &str, frame: u32) -> u64 {
+        self.resolve(id).map_or(0, |r| self.clips[r].ms_before(frame))
+    }
+
     /// The view row drawing side clip `of` in `view` (DIR4).
     pub fn view_row(&self, of: &str, view: View) -> Option<usize> {
         self.clips.iter().position(|c| c.view == view && c.view != View::Side && c.of == of)
@@ -393,10 +451,20 @@ impl Clips {
     /// `frame_at` in `view` (DIR4 3.2): the frame of the row `resolve_view` picks; a row of `id` or `idle` (side or
     /// view) animates, any other shows its first frame, still.
     pub fn frame_at_view(&self, id: &str, view: View, ms: u64) -> Option<ClipFrame> {
+        self.frame_at_view_still(id, view, ms, false)
+    }
+
+    /// `frame_at_view`; `still` (WINDUP1 2) plays a looping row's intro, then holds its frame `loop_from` (0 without
+    /// one) instead of looping.
+    pub fn frame_at_view_still(&self, id: &str, view: View, ms: u64, still: bool) -> Option<ClipFrame> {
         let (row, side) = self.resolve_view(id, view)?;
         let c = &self.clips[row];
         let of_view = view != View::Side && c.view == view && (c.of == id || c.of == "idle");
-        let (frame, done) = if c.id == id || c.id == "idle" || of_view { c.frame_at(ms) } else { (0, true) };
+        let (frame, done) = if c.id == id || c.id == "idle" || of_view {
+            if still { c.frame_at_still(ms) } else { c.frame_at(ms) }
+        } else {
+            (0, true)
+        };
         Some(ClipFrame { row, clip: c.id.clone(), frame, done, side })
     }
 }
@@ -419,14 +487,29 @@ impl Clip {
         self.ms.iter().map(|m| *m as u64).sum()
     }
 
-    /// The frame shown `ms` after the clip started and whether it is over: a looping clip wraps around (never over);
-    /// a one-shot clip holds its last frame once its durations have run.
+    /// The ms from the clip's start to frame `frame` (the sum of the durations before it; the whole clip past its end).
+    pub fn ms_before(&self, frame: u32) -> u64 {
+        self.ms.iter().take(frame as usize).map(|m| *m as u64).sum()
+    }
+
+    /// FX1-L1: the ms from the clip's start to its `impact` frame (None: the clip marks none).
+    pub fn impact_ms(&self) -> Option<u64> {
+        self.impact.map(|f| self.ms_before(f))
+    }
+
+    /// The frame shown `ms` after the clip started and whether it is over: a looping clip wraps around (never over;
+    /// with `loop_from` L it plays frames 0..L once, then loops L..frames); a one-shot clip holds its last frame once
+    /// its durations have run.
     pub fn frame_at(&self, ms: u64) -> (u32, bool) {
         let total = self.total_ms();
         if total == 0 || self.ms.is_empty() {
             return (0, !self.looped);
         }
-        let t = if self.looped {
+        let intro = self.intro_ms();
+        let t = if self.looped && intro > 0 {
+            let span = total.saturating_sub(intro);
+            if ms < intro || span == 0 { ms.min(total - 1) } else { intro + (ms - intro) % span }
+        } else if self.looped {
             ms % total
         } else if ms >= total {
             return (self.ms.len() as u32 - 1, true);
@@ -442,6 +525,20 @@ impl Clip {
         }
         (self.ms.len() as u32 - 1, !self.looped)
     }
+
+    /// WINDUP1 2: the ms of a looping clip's intro (the frames before `loop_from`; 0 without one or for a one-shot).
+    pub fn intro_ms(&self) -> u64 {
+        if self.looped && self.loop_from > 0 { self.ms_before(self.loop_from) } else { 0 }
+    }
+
+    /// `frame_at` held still (WINDUP1 2, reduced motion): a looping clip plays its intro, then holds frame
+    /// `loop_from` (0 without one); a one-shot clip plays as `frame_at`.
+    pub fn frame_at_still(&self, ms: u64) -> (u32, bool) {
+        if !self.looped || ms < self.intro_ms() {
+            return self.frame_at(ms);
+        }
+        (self.loop_from.min(self.frames.saturating_sub(1)), false)
+    }
 }
 
 /// What a `ClipPlayer` plays over its base loop.
@@ -453,6 +550,8 @@ struct Shot {
     for_ms: Option<u64>,
     /// Keep the last frame when the clip is over (a death).
     hold: bool,
+    /// WINDUP1: the frame the shot starts at (`play_from`; 0 otherwise).
+    from: u32,
 }
 
 /// Plays a body's clips on a clock the caller keeps (SPRITE1-L; milliseconds, scaled by the caller for animation
@@ -462,6 +561,9 @@ struct Shot {
 pub struct ClipPlayer {
     base: String,
     base_since: u64,
+    /// WINDUP1: the frame the base starts at and whether it holds still after its intro (`set_base_from`).
+    base_from: u32,
+    base_still: bool,
     shot: Option<Shot>,
 }
 
@@ -473,7 +575,7 @@ impl Default for ClipPlayer {
 
 impl ClipPlayer {
     pub fn new(base: &str) -> Self {
-        Self { base: base.to_string(), base_since: 0, shot: None }
+        Self { base: base.to_string(), base_since: 0, base_from: 0, base_still: false, shot: None }
     }
 
     /// The base loop.
@@ -483,25 +585,40 @@ impl ClipPlayer {
 
     /// Loops `clip` between shots from `now` (unchanged when it already does).
     pub fn set_base(&mut self, clip: &str, now: u64) {
+        self.set_base_from(clip, now, 0, false);
+    }
+
+    /// WINDUP1 2: loops `clip` between shots from `now`, starting at frame `from` (its clock offset by the ms before
+    /// it); `still` stops the loop part: the intro plays, then frame `loop_from` (0 without one) holds. An unchanged
+    /// base keeps its clock and start frame (only `still` follows the call).
+    pub fn set_base_from(&mut self, clip: &str, now: u64, from: u32, still: bool) {
         if self.base != clip {
             self.base = clip.to_string();
             self.base_since = now;
+            self.base_from = from;
         }
+        self.base_still = still;
     }
 
     /// Plays `clip` once from `now`, then the base loop again.
     pub fn play(&mut self, clip: &str, now: u64) {
-        self.shot = Some(Shot { clip: clip.to_string(), since: now, for_ms: None, hold: false });
+        self.play_from(clip, now, 0);
+    }
+
+    /// WINDUP1 2: plays `clip` once from `now` starting at frame `frame` (its clock offset by the ms before it; its
+    /// length is the clip's total less that offset), then the base loop again.
+    pub fn play_from(&mut self, clip: &str, now: u64, frame: u32) {
+        self.shot = Some(Shot { clip: clip.to_string(), since: now, for_ms: None, hold: false, from: frame });
     }
 
     /// Plays `clip` (looping) for `ms` from `now`, then the base loop again.
     pub fn play_for(&mut self, clip: &str, now: u64, ms: u64) {
-        self.shot = Some(Shot { clip: clip.to_string(), since: now, for_ms: Some(ms), hold: false });
+        self.shot = Some(Shot { clip: clip.to_string(), since: now, for_ms: Some(ms), hold: false, from: 0 });
     }
 
     /// Plays `clip` once from `now` and keeps its last frame.
     pub fn play_and_hold(&mut self, clip: &str, now: u64) {
-        self.shot = Some(Shot { clip: clip.to_string(), since: now, for_ms: None, hold: true });
+        self.shot = Some(Shot { clip: clip.to_string(), since: now, for_ms: None, hold: true, from: 0 });
     }
 
     /// Drops the shot: the base loop shows.
@@ -518,8 +635,13 @@ impl ClipPlayer {
     }
 
     fn shot_end(clips: &Clips, s: &Shot) -> u64 {
-        let len = s.for_ms.unwrap_or_else(|| clips.resolve(&s.clip).map_or(0, |r| clips.clips[r].total_ms()));
+        let len = s.for_ms.unwrap_or_else(|| clips.resolve(&s.clip).map_or(0, |r| clips.clips[r].total_ms()).saturating_sub(Self::shot_offset(clips, s)));
         s.since.saturating_add(len)
+    }
+
+    /// The ms a `play_from` shot skips (the frames before its start frame).
+    fn shot_offset(clips: &Clips, s: &Shot) -> u64 {
+        if s.from == 0 { 0 } else { clips.ms_before(&s.clip, s.from) }
     }
 
     fn shot_over(&self, clips: &Clips, s: &Shot, now: u64) -> bool {
@@ -543,7 +665,7 @@ impl ClipPlayer {
     /// the clip's clock; view rows have their side clip's frames and durations (DIR4 rule R3).
     pub fn frame_facing(&self, clips: &Clips, now: u64, view: View) -> Option<ClipFrame> {
         if let Some(s) = &self.shot {
-            let t = now.saturating_sub(s.since);
+            let t = now.saturating_sub(s.since) + Self::shot_offset(clips, s);
             if s.hold && self.shot_over(clips, s, now) {
                 let mut f = clips.frame_at_view(&s.clip, view, u64::MAX)?;
                 if let Some(c) = clips.clip(&f.clip).filter(|c| c.looped) {
@@ -559,7 +681,8 @@ impl ClipPlayer {
                 return Some(f);
             }
         }
-        clips.frame_at_view(&self.base, view, now.saturating_sub(self.base_since))
+        let offset = if self.base_from == 0 { 0 } else { clips.ms_before(&self.base, self.base_from) };
+        clips.frame_at_view_still(&self.base, view, now.saturating_sub(self.base_since) + offset, self.base_still)
     }
 }
 

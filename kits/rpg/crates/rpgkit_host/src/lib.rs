@@ -202,6 +202,10 @@ impl Battle {
                 if intent::badges_on(&s.w) {
                     reply["round_intents"] = Value::Array(s.round_intents().iter().map(|r| intel_json(s, r)).collect());
                 }
+                // HOOKS1 AH3: the round's arena hazards (cells, blocks) under the rule arena_hazards (classic keeps the shape)
+                if rpgkit_battle::arena::on(&s.w) {
+                    reply["arena"] = intent::arena_json(&s.arena_tells());
+                }
                 reply
             }
             "intel" => {

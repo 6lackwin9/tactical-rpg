@@ -121,6 +121,10 @@ fn card_errors(v: &View, w: &str, i: usize, raw: &Value) -> Vec<String> {
     } else {
         errors.extend(dialogue::expression_error(c, &label));
     }
+    // FX1 5.1: the card's camera shake ("" = none)
+    if let Some(x) = c.get("shake").filter(|x| !x.as_str().is_some_and(|s| s.is_empty() || rpgkit_data::SHAKE_PRESETS.contains(&s))) {
+        errors.push(format!("{label}: shake '{}' is not one of {} (or \"\").", gstr(x), rpgkit_data::SHAKE_PRESETS.join(", ")));
+    }
     for (key, max) in [("fade_in_ms", FADE_MS_MAX), ("fade_out_ms", FADE_MS_MAX), ("hold_ms", HOLD_MS_MAX)] {
         if c.get(key).is_some_and(|x| !int_in(x, 0, max)) {
             errors.push(format!("{label}: {key} must be a whole number 0..{max}."));

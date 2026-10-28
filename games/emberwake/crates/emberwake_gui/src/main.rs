@@ -9,6 +9,7 @@
 mod battle;
 mod dojo;
 mod forge;
+mod fx;
 mod gallery;
 mod hud;
 mod hub;

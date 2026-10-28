@@ -147,6 +147,11 @@ pushed unit collides with another target of the same area.
   registration order: damage (flat or `damage_pct` of max HP, through guard, not armour), the status roll, stagger
   (P6: a vent into a windup can break it), then `push` (FM9: `dir` east, west, north or south, `tiles`,
   `collide_damage`). One event cell with `line` (actor: the hazard's `name`).
+  As built (user 2026-10-29, HOOKS1-U): the fight ends as soon as one side is wiped out; when the block's actions
+  already wiped a side (every hero down, or no unreserved enemy standing) that block's strikes are skipped (no damage,
+  no log cells, no random draws); with both sides standing they still strike before the verdict. Also as built: the
+  strike cell is logged even with nobody on its cells; arena hits raise no trigger events and give no kill credit; a
+  status from a last-block strike acts next round.
 - AH3. Telegraph: the struck cells and blocks of the round are known at its start; the tells record gains `arena`
   (cells, blocks) under timeline; the battle screen marks them and the strip shows a hazard badge at the blocks; PL4
   counts a cell due this round as a threat (AT3).
@@ -268,6 +273,14 @@ Kaelen's running Intercepting Hook takes the hit and Castellan's Penance only th
   the ref adds `add` to its deck's actives and replaces the named intents' order lists. It applies from that unit's
   next planning, as the `ai` effect does (`b/encounter.rs:390-422`). DU2. Checks: `add` owned (path or
   `extra_skills`) and within `deck_slots`; `order` entries in the actives or that intent's basics; one per unit ref.
+- As built (HOOKS1-U, user 2026-10-29 (b)): an added family always lands. On an automatic deck (no `active` list) the
+  deck first takes its current active slots; when they are full each added family pushes out the last automatic
+  family, keeping the slot count (authored actives keep their order and are never pushed out; an authored deck that is
+  full stays a DU2 error). The content check warns (not an error) when an `add` on an automatic deck pushes families
+  out, naming them; on an automatic deck DU2's `order` check also accepts the automatic actives the `add` keeps (as the
+  run time does; planner 2026-10-29), while a family outside that fill and `add` stays an error; the check reads the
+  automatic list from the battle's own build (`rpgkit_rules::unit::auto_actives`). An order-only effect
+  leaves an automatic deck's actives automatic (a phase is not a player edit).
 
 ### 10.2 Cheat-death (G18; Quell is M2, so M2b: HOOKS1-Q, after the slice)
 
@@ -315,3 +328,24 @@ block start; phase effect `{"type": "heal", "unit", "pct"}` heals that share of 
 G2, G6, G8-G12, G15-G17, G20, G21, G25, G26 (not in the slice; riders can later carry a lethal execute and
 second statuses); hazard overlap reactions (Volatile Catalyst); the Strain crisis table; Ash-Cloud's jump (Q-54); windup
 targeting (HQ2); Content Forge forms for the new fields (raw JSON, as ENCOUNTER2).
+
+## 15. As built (2026-10-29, CLEANUP.md CLN-24)
+
+One line per landed task where the build settled something this spec does not state; the full notes are the task rows
+in `docs/archive/TASKS_DONE.md`, the user's rulings the rows in `games/emberwake/docs/decisions/combat.md`.
+
+- HOOKS1-GF: with the rule off the battle's catalog drops skill hazards at the start (`World::ignore_hazards_when_off`).
+- HOOKS1-Z: data zones for encounters and road fights apply the board and hold tiles through `Grid::apply_board`.
+- HOOKS1-E (user-confirmed): a redirect's leftover counts against the holder; ripostes raise no hit events; area holders
+  take no redirect; the depth-1 rule. `ally_hit` non-hit effects (Intercepting Hook's pull) run after the action
+  (user 2026-10-29, decision "RULESET1-U slice 1 and HOOKS1-E answers"; this line said "pending the user's pick").
+- HOOKS1-K: decision "HOOKS1-K answers (user 2026-10-29)": the AI uses an HP-cost skill whenever it can pay; riders skip
+  a user that died to a riposte.
+- HOOKS1-X: an `exploit` entry `{hp_below, power_mult}` reads the target's HP share before the hit; the best entry wins
+  and nothing is consumed.
+- HOOKS1-M: decision "HOOKS1-M and deck answers (user 2026-10-29)"; meters share `rpgkit_rules::bands` with the
+  campaign meters.
+- HOOKS1-H: decision "HOOKS1-H, RULESET1-G and STATUSFX1-L answers (user 2026-10-29, all as recommended)".
+- HOOKS1-C: members are built in their character's world (`UnitState::path_world`); screens name classes by the world
+  being played.
+- HOOKS1-U (building): decision "HOOKS1-U unlock on an automatic deck (user 2026-10-29)".

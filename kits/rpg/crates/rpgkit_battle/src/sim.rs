@@ -347,6 +347,7 @@ pub fn apply_pouch(w: &mut World, ids: &[String]) {
         w.profiles.insert(a, profile);
     }
     w.add_item_skills();
+    w.ignore_hazards_when_off();
 }
 
 /// SimRunner.is_reach_error / _plan_skip: every invalid ally plan failed because its target is out of reach.

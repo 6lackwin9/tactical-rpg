@@ -229,12 +229,16 @@ pub fn direction(w: &World, by: UnitId, origin: V2, at: V2, pull: bool) -> V2 {
 /// distance 1, or once level with the origin on its axis). A unit whose `forced_move` effects make it immune holds firm
 /// (FM5). The entered tiles roll their hazards (FM6); `stop` cancels its Walks that have not landed (FM7); a step
 /// refused with tiles left is a collision (FM4). Logs one line for the move and one per collision hit.
+///
+/// Callers outside a landed hit (the trigger effect `move`, HOOKS1-H; an arena `push`, HOOKS1-E) must afterwards call
+/// `ground::settle` (a trap's `stop_moves` cancels the moved unit's later Walks) and, in a session, `log_ground` (the
+/// hazard hits of the entered tiles get their log cells and metrics); the resolver does both for hits.
 #[allow(clippy::too_many_arguments)]
 pub fn shove_unit(res: &mut Resolver, w: &mut World, t: UnitId, by: Option<UnitId>, dir: V2, tiles: i32, toward: Option<V2>, stop: bool, collide: &Collide, block: i32) -> Moved {
     let from = w.grid.pos(t).unwrap_or(crate::grid::NO_CELL);
     let mut m = Moved { unit: t, by, pull: toward.is_some(), from, to: from, tiles: 0, held: false, blocked_by: String::new(), blocker: None, hits: Vec::new(), stopped: 0, line: String::new() };
     let traits = w.units[t].forced_traits();
-    if traits.immune_always || (traits.immune_guarding && poise::guarded(&res.scheduled, t, block)) {
+    if traits.immune_always || (traits.immune_guarding && crate::trigger::guarding(w, &res.scheduled, t, block)) {
         m.held = true;
         m.line = format!("[Hold] {} holds firm", w.units[t].name);
         res.log.push(m.line.clone());
@@ -366,8 +370,9 @@ fn collision_hit(res: &mut Resolver, w: &mut World, v: UnitId, c: &Collide, bloc
 
 /// FM4 (rule poise): a collision's stagger on `v`: P6's factors (no flank), P7's break at 0 poise, P12's hold at 1, and
 /// for the moved unit of a `collide_break` collision P14's break of a windup. No break chance is rolled (P13 draws; a
-/// collision draws nothing). None without a bar or anything to apply.
-fn collision_stagger(res: &mut Resolver, w: &mut World, v: UnitId, c: &Collide, block: i32, moved: bool) -> Option<StaggerHit> {
+/// collision draws nothing). None without a bar or anything to apply. The trigger effect `stagger` reuses it (HOOKS1
+/// 8.2: stagger through P6, `moved` false).
+pub(crate) fn collision_stagger(res: &mut Resolver, w: &mut World, v: UnitId, c: &Collide, block: i32, moved: bool) -> Option<StaggerHit> {
     let sure = moved && c.sure_break;
     if !poise::on(w) || (c.stagger <= 0 && !sure) {
         return None;

@@ -175,7 +175,9 @@ pub fn is_area(s: &SkillDef) -> bool {
 }
 
 /// HOOKS1 GH3: an ATTACK with no power and a `hazard` is a placement: it aims at a tile like an area opener, deals no
-/// damage and rolls no status (the AI's attack lists skip it: it deals no damage and counts as an area).
+/// damage and rolls no status (the AI's attack lists skip it: it deals no damage and counts as an area). With the rule
+/// `ground_hazards` off the battle's catalog has no skill hazards (`World::ignore_hazards_when_off`, 4.1), so this is
+/// false there.
 pub fn is_placement(s: &SkillDef) -> bool {
     kind(s) == Kind::Attack && s.power_mult <= 0.0 && s.hazard.is_some() && !is_item(s)
 }
@@ -336,9 +338,42 @@ pub fn exploit_match(entries: &[serde_json::Value], target: &Unit, skip: &[Strin
 /// `exploit_match` where the condition `flanked` (RULESET1_INTENT MV3) also matches when `flanked` is true (a flank
 /// hit under the rule `flank`); classic always passes false.
 pub fn exploit_match_when(entries: &[serde_json::Value], target: &Unit, skip: &[String], flanked: bool) -> (String, f64) {
+    exploit_match_with(entries, target, skip, flanked, false)
+}
+
+/// HOOKS1 EX1: the label an `exploit` entry `{hp_below, power_mult}` matches under (not a status: a consuming skill
+/// removes nothing for it, the planner never marks it used).
+pub const EXECUTE: &str = ruleset::EXECUTE;
+
+/// HOOKS1 EX1: the `exploit` key of an execute entry.
+pub const EXPLOIT_HP_BELOW: &str = "hp_below";
+
+/// HOOKS1 EX1: the skill's execute entry, `(hp_below, power_mult)` (validation allows one).
+pub fn execute_entry(entries: &[serde_json::Value]) -> Option<(i64, f64)> {
+    entries.iter().filter_map(|r| r.as_object()).find(|o| o.contains_key(EXPLOIT_HP_BELOW)).map(|o| (aegis_core::value::int(o, EXPLOIT_HP_BELOW, 0) as i64, aegis_core::value::float(o, "power_mult", 1.0)))
+}
+
+/// `exploit_match_when` under the battle's rules: with the rule `execute` an entry `{hp_below, power_mult}` also matches
+/// when `target`'s HP share is at or below `hp_below` (read before the hit's damage); the best entry wins.
+pub fn exploit_match_by(entries: &[serde_json::Value], target: &Unit, skip: &[String], flanked: bool, rules: &Ruleset) -> (String, f64) {
+    exploit_match_with(entries, target, skip, flanked, rules.has(ruleset::EXECUTE))
+}
+
+/// The best entry: a status ACTIVE on `target` (or `flanked`), or (`execute`) an `hp_below` entry the target's HP share
+/// meets; an `hp_below` entry never matches without `execute` (it names no status).
+fn exploit_match_with(entries: &[serde_json::Value], target: &Unit, skip: &[String], flanked: bool, execute: bool) -> (String, f64) {
     let mut best = (String::new(), 1.0);
     for row in entries {
         let Some(o) = row.as_object() else { continue };
+        let mult = aegis_core::value::float(o, "power_mult", 1.0);
+        if o.contains_key(EXPLOIT_HP_BELOW) {
+            let pct = aegis_core::value::float(o, EXPLOIT_HP_BELOW, 0.0);
+            let share = if target.max_hp > 0 { target.hp as f64 * 100.0 / target.max_hp as f64 } else { 100.0 };
+            if execute && share <= pct && mult > best.1 {
+                best = (EXECUTE.to_string(), mult);
+            }
+            continue;
+        }
         let status = aegis_core::value::string(o, "status", "");
         let mult = aegis_core::value::float(o, "power_mult", 1.0);
         let present = target.has_status(&status) || (flanked && status == ruleset::FLANKED);
@@ -421,5 +456,15 @@ impl<'a> Book<'a> {
                 !deals_damage(s) && !is_area(s) && !s.status_effect.is_empty()
             })
             .collect()
+    }
+}
+
+/// HOOKS1 UM2: the meter changes skill `s` pays at its command's start (none without the rule unit_meters; items pay
+/// none).
+pub fn meters_by<'a>(s: &'a SkillDef, rs: &Ruleset) -> &'a [rpgkit_data::MeterDelta] {
+    if rs.has(ruleset::UNIT_METERS) && !is_item(s) {
+        &s.meters
+    } else {
+        &[]
     }
 }

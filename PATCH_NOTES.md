@@ -2,7 +2,85 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: 3eea397 -->
+<!-- last: cff05616 -->
+
+## 2026-10-29
+
+In the game:
+
+- **Wind-ups**: units now wind up before multi-block skills (heavy, buff and debuff poses per weapon grip), stagger when interrupted and sway dazed while Staggered; every class has them (warrior, ranger, brawler, priest, rogue, mage and their goblin and named variants). In planning, enemies with visible tells hold the pose of what they intend.
+- **Status looks**: statuses show on the battle tokens (stun stars, burn, poison and bleed sparks, rings, tints, stealth fade), appear when the hit lands and cycle when a unit has several; a unit killed by a status tick falls with dust.
+- **For testers (timeline ruleset)**: the Dojo plays under the timeline ruleset (toggle, planner view, poise readouts, deck view); the Combat Arena can switch single rule extensions and reveal enemy plans, and shows the ruleset on its card; `sim feel` reports how timeline fights feel. Arena hazards (scheduled strikes with tells) and boss phases that unlock a capstone skill work in the kit; no shipped encounter uses them yet.
+
+Every change that touched the game:
+
+- HOOKS1-U: phase effect `deck` (capstone unlock) and the arena wipe-out skip (kit) (5814b796)
+- WINDUP1-R2: wind-up, stagger and dazed rows for the ranger, brawler, priest, rogue and mage (art, kit + game) (c8b94631)
+- known-issues: parallel agents overwrote each other's scratchpad output files (name outputs after the task) (89ced7b3)
+- CLN-P2: docs audit pass 2, the planner's status and pointer pass (decision "Docs audit pass 2 answers") (2b39c1bb)
+- STATUSFX1-L: status looks on battle tokens (00921067)
+- RULESET1-G slice 2: Combat Arena rule switches and `sim feel` (078c03d9)
+- WINDUP1-R1: rig core and the warrior's wind-ups, stagger and dazed (art, kit + game) (c5aa944f)
+- HOOKS1-H: arena hazards and their tells (kit) (46858d32)
+- RULESET1-G slice 1: the Dojo under the timeline ruleset (toggle, planner view, poise readouts, the Dojo deck view) (119648dd)
+- Skill task-landing (user 2026-10-29): the planner's checklist for landing a reviewed task (docs needed by change type with docs_needed.py, task-row and commit formats, stage/flush/cleanup and docs-conflict rules); planner skill points to it (4b8f6b19)
+- WINDUP1-L: wind-ups, intent stance poses, stagger and dazed on the battle board (2aca58e8)
+- HOOKS1-M: unit meters (costs, decay, bands, rules, meter skills) and a shared bands helper (057e9c3a)
+- RULESET1-DU slice 1: the party screen's deck view under the timeline ruleset (948082f6)
+- FX1-L2: the rest of the battle effects (skill, support and item looks, falls, misses, the agent-link fx state) (02189d5f)
+- WINDUP1-E: engine clip fields for wind-ups (loop_from, strike) and ClipPlayer::play_from / set_base_from (6f567b9c)
+- HOOKS1-X: execute riders (an exploit entry matching on a low HP share) (a1799037)
+
+Under the hood:
+
+- TASKS: drop 19 rows that docs merges revived after CLN-P2 archived them (they are done in TASKS_DONE) (cff05616)
+- Decisions "RULESET1-U slice 1 and HOOKS1-E answers" and "WINDUP1-R2 art answers" (user 2026-10-29, all as recommended): round controls in the hero panel, chip hidden in plain classic, unplannable intents disabled in auto; ally_hit pulls after the action; R2 art kept as built (7aebacb7)
+- Decision "Front and back views follow the side model" (user 2026-10-29): front and back views keep the side view's headgear, hair, clothing, offhand and weapon; the WINDUP1-R2 review notes go to DIR4-R2 (base classes) and DIR4-R3 (variants) (21465e12)
+- Decision "HOOKS1-U unlock on an automatic deck" (user 2026-10-29): an unlock always lands, pushing out the last automatic active; content warning; later option: enemy/NPC class variants with fixed decks (0b830fb2)
+- Decision "HOOKS1-H, RULESET1-G and STATUSFX1-L answers" (user 2026-10-29, all as recommended): the fight ends before arena strikes once a side is wiped; Rest dropped on a hero switch; ruleset chip on the Arena battle screen; status looks raised and strengthened (1d486666)
+- Decision "WINDUP1-R1 heavy hold, front and back" (user 2026-10-29): the 2H heavy hold rests the weapon over the shoulder in the front and back views; done in WINDUP1-R2 (c00a18d0)
+- Docs audit pass 2 (housekeeper) and the user's answers (2026-10-29, all as recommended) (faf33b42)
+- Decision "WINDUP1-R1 review answers" (user 2026-10-29): buckler sword raised in front and back views, front debuff blade angled, 2H heavy hold lowered into the frame, greatsword tip over the shoulder from behind (1a3d2021)
+- Decision "HOOKS1-M and deck answers" (user 2026-10-29: all as recommended) (ef91d4f9)
+- TASKS: FX1-V and FX1-L2 done (their statuses were lost in conflict merges) (5b36e157)
+
+## 2026-10-28
+
+In the game:
+
+- **Battle effects**: hits land on the attacker's impact frame, with impact looks, sparks, trails, projectiles, camera shakes, falls and misses; story cards can shake.
+- **For testers (timeline ruleset)**: enemies plan whole rounds by intent under the timeline ruleset, and the kit gains triggers and reactions, riders, HP-cost skills, executes, unit meters, ground hazards and data zones (no shipped content uses them yet).
+
+Every change that touched the game:
+
+- known-issues: build folders committed by git add -A (2026-10-29) and the guard against it (16bfef6c)
+- gitignore: worktree build folders (target-*, engine/target, nested target); decision "HOOKS1-K answers" (user 2026-10-29: both as recommended) (11a0171a)
+- FX1-V: vignette card shakes (Card.shake, Player::with_shakes/camera/shake_offset, VignetteScreen::with_shakes; story::vignette_screen passes the game's table) (d83cbf0d)
+- HOOKS1-K: riders, HP-cost skills and guard bypass; trigger metrics; a HOOKS1-E crossing fix (4f74ce0e)
+- FX1-L1 slice 2: battle effects drawn (looks, trails, projectiles, sparks), battle shakes and the board camera (cafd8dd5)
+- STATUSFX1-E: engine looping effects (Orbit, Looped, a closing Ring, Painter::image_alpha) and the Effects page loop (f930e520)
+- FX1-L1 slice 1: the battle effects timeline (hits land on the attacker's clip impact frame) (4796fca2)
+- RULESET1-AI: the round-intent AI for enemies and party tactics (the pick table, positioning tiers, tactics as intents) (6141accd)
+- FX1-S: the shake schema (vignette card shake, encounter phase effect shake) (141904c3)
+- EFFICIENCY: task chains get a fresh builder per task; a small same-file next task continues the previous builder (user 2026-10-28) (68fbad43)
+- HOOKS1-E: events and triggers, held guard, redirect and intercept (rule triggers) (9eb6d42a)
+- HOOKS1-Z: zones as data (encounters and road fights name data zones; board, hold tiles and backdrop) (2a254491)
+- HOOKS1-C: class display names and skill paths per world (the world manifest's classes overlay) (aa69a297)
+- HOOKS1-GF: ground hazards ignored when the rule is off; trap and guard tests (HOOKS1-G review follow-ups) (80525939)
+
+Under the hood:
+
+- Decision "FX1-L2 answers" (user 2026-10-29): no dodge miss for now; status-tick deaths get the fall dust (STATUSFX1-L) (53bad044)
+- AGENT_MAP: wind-down 2026-10-28 (M0 released, M1 progress, tomorrow's 3-lane queue, open questions) (0730aa94)
+- Decision "Batched gate": measured times (partial 26-91 s, full 123 s unloaded, 703 s under load for the first flush) (979de9d5)
+- Decision "RULESET1-AI answers" refined (user 2026-10-28): positioning tiers (active target, then most hostiles for ranged / close quarters with most hostiles for melee, then own safety or escape at low HP) (4803d034)
+- Decision "RULESET1-AI answers" refined (user 2026-10-28): the end-of-approach action is per unit: front line Guards, reckless units have no Guard, supports buff self or an ally (86fda8ae)
+- Decision "RULESET1-AI answers" (user 2026-10-28): approach then Guard, Support only when hurt, cover ranked by range (target in range, near hostiles, own safety), tactics skip Manual members; HOOKS1-E answers (1dc19f88)
+- Decision "Batched gate" (user 2026-10-28): task landings on a local staging branch under a partial gate, staging pushed to develop in batches under one full gate; CLAUDE.md standing rule and desktop.md Ship updated (4e6a28ff)
+- Decision "WINDUP1 and STATUSFX1 spec answers" (user 2026-10-28: all as recommended); WINDUP1-* and STATUSFX1-* approved (48486ddd)
+- Specs WINDUP1 and STATUSFX1 (design-brainstorm, from the user's answers 2026-10-28); TASKS rows WINDUP1-E, -L, -R1, -R2, -R3 and STATUSFX1-E, -L (spec; WQ1-WQ5 and SQ1-SQ5 open); ROADMAP rows; MILESTONES M1 (9c305c08)
+- Decision "WINDUP1 answers" (user 2026-10-28): wind-up for every multi-block skill (not Defend, not Move), per grip, intent stance poses in planning, stagger for interrupts and the Staggered status, first-pass scope; new row STATUSFX1 (status effects on tokens, M1) (d7ce4802)
+- TASKS, ROADMAP: EQ1-EQ9 were answered as recommended (user 2026-10-25; the 'open' note was stale); ENCOUNTER2 L, X, F, R, RA, RU, D2 marked later than the slice (the slice needs T, H, HA, W, U, K, D), so they leave M1 for M2b (3d37c4fa)
 
 ## 2026-10-25
 

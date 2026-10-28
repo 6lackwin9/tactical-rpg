@@ -167,6 +167,8 @@ pub struct UnitSnap {
     /// RULESET1 5 (rule poise): poise now and Max Poise at the last refill (0 and 0 in classic or without a bar).
     pub poise: i32,
     pub max_poise: i32,
+    /// HOOKS1 UM7 (rule unit_meters): the unit's meters and their values (empty in classic or without a meter).
+    pub meters: Vec<(String, i32)>,
 }
 
 /// One round as it was played (the round archive: CombatSession.round_actions and round_snapshots): the scheduled
@@ -376,7 +378,7 @@ impl Session {
         }
         let count = built.len();
         let mut grid = Grid::new(def.open, def.exits.clone(), TerrainTable::from_catalog(&cat), count);
-        grid.apply_board(&def.zone, &def.rows);
+        grid.apply_board(&def.zone, &def.rows, &cat.zones);
         // ENCOUNTER2 S1, H2: the unkillable enemy-side units and the gate of a hold escape (none in classic)
         let unkillable: Vec<UnitId> = value::strings(&def.raw, "unkillable").iter().flat_map(|r| units_by_ref.get(r).cloned().unwrap_or_default()).filter(|&c| c >= n_allies).collect();
         let stay = StayBehind::read(&def.raw);
@@ -387,8 +389,9 @@ impl Session {
             fallback_any: sb.fallback_any,
             heroes: (0..n_allies).filter(|c| !guests.contains(c)).collect(),
         });
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default() };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset) };
         w.add_item_skills();
+        w.ignore_hazards_when_off();
         let objective = Objectives::create(&def.raw);
         // MORALE1 1.2: unit keys, tiers, authored profiles and the starting groups.
         let mut unit_keys = IndexMap::new();
@@ -429,6 +432,8 @@ impl Session {
         w.place_leftovers(&deployed, false, &def.deployment);
         // RULESET1_INTENT MV1, TQ23: first facings and starting intents (nothing in classic)
         round_intent::battle_start(&mut w, &default_intents);
+        // HOOKS1 UM1: the units' meters, their meter skills and start bands (rule unit_meters; nothing in classic)
+        crate::meter::battle_start(&mut w);
         let mut resolver = Resolver::new(def.total_blocks, def.rng_seed);
         for &c in allies.iter().chain(enemies.iter()) {
             resolver.register(c);
@@ -489,6 +494,16 @@ impl Session {
         self.events.extend(rest);
         // RULESET1 P3: every poise bar refills before planning (rule poise)
         crate::poise::round_start(&mut self.w);
+        // HOOKS1 UM4: the meters' bands hold their statuses this round (rule unit_meters; nothing in classic)
+        crate::meter::round_start(&mut self.w);
+        // HOOKS1 AH3: the arena hazards due this round are told before anyone plans (rule arena_hazards)
+        crate::arena::round_start(&mut self.w, round);
+        // HOOKS1 8.1: `round_start` triggers after the refill (rule triggers; nothing in classic)
+        crate::trigger::round_start(&mut self.resolver, &mut self.w);
+        if crate::trigger::on(&self.w) || crate::meter::on(&self.w) {
+            self.log_triggers(round, 1);
+            self.log_ground(round, 1);
+        }
         self.current_round = round;
         self.current_block = 1;
         self.phase = Phase::Planning;
@@ -580,6 +595,7 @@ impl Session {
                 pending: u.st.pending.iter().cloned().collect(),
                 poise: crate::poise::state(&self.w, i).map_or(0, |p| p.value),
                 max_poise: crate::poise::state(&self.w, i).map_or(0, |p| p.max),
+                meters: crate::meter::values(&self.w, i),
             })
             .collect()
     }
@@ -780,6 +796,10 @@ impl Session {
         if p.effects_of("ai").next().is_some() {
             parts.push(if block > 0 { "new tactics from the next round" } else { "new tactics" }.into());
         }
+        // HOOKS1 DU1: the deck changes at the unit's next planning (rule deck; none in classic)
+        if self.w.ruleset.has(rpgkit_rules::ruleset::DECK) && p.effects_of(rpgkit_data::DECK_EFFECT).next().is_some() {
+            parts.push(if block > 0 { "new skills from the next round" } else { "new skills" }.into());
+        }
         let line = p.effects_of("line").last().map(|fx| value::string(fx, "text", "")).unwrap_or_default();
         self.append(crate::log::Entry::event(round, block, &actor, false, &p.name, "Phase", "PHASE", &line, &parts.join(", ")));
         self.events.push(format!("{}: {}{}", p.name, line, if parts.is_empty() { String::new() } else { format!(" ({})", parts.join(", ")) }));
@@ -795,6 +815,8 @@ impl Session {
         }
         let by_ref = self.units_by_ref.clone();
         self.phases.apply_profiles(&mut self.w.profiles, |r| by_ref.get(r).cloned().unwrap_or_default(), round);
+        // HOOKS1 DU1: phase deck effects, from the unit's next planning (rule deck; nothing in classic)
+        self.phases.apply_decks(&mut self.w, |r| by_ref.get(r).cloned().unwrap_or_default(), round);
         if !self.morale.on {
             return;
         }
@@ -884,6 +906,14 @@ impl Session {
     /// CombatEncounter.schedule_enemy_ai: drafts every enemy on the field into one shared plan, re-drafts broken
     /// drafts, trims what is still broken, and commits.
     fn schedule_enemy_ai(&mut self) {
+        // RULESET1_INTENT AI1 (RULESET1-AI): under round_intent every enemy picks its intent and target by the AI table
+        if round_intent::on(&self.w) {
+            let mut enemy_plan = Plan::new();
+            let lines = ai::plan_enemy_intents(&mut self.w, &mut enemy_plan);
+            self.events.extend(lines);
+            enemy_plan.commit(&self.w, &mut self.resolver);
+            return;
+        }
         let w = &self.w;
         let mut enemy_plan = Plan::new();
         let drafted: Vec<UnitId> = w.enemies.iter().copied().filter(|e| w.units[*e].is_active() && w.has(*e)).collect();
@@ -933,6 +963,13 @@ impl Session {
             return;
         }
         let allies = self.w.allies.clone();
+        // RULESET1_INTENT AI5 (RULESET1-AI): under round_intent a tactic picks each member's intent and target
+        if round_intent::on(&self.w) {
+            let presets: Vec<(UnitId, String)> = allies.iter().map(|&a| (a, self.preset_for(a, preset))).collect();
+            let lines = ai::plan_party_intents(&mut self.w, &mut self.plan, &presets);
+            self.events.extend(lines);
+            return;
+        }
         for &a in &allies {
             if self.w.units[a].is_active() {
                 let p = self.w.profile_of(a).with_preset(&self.preset_for(a, preset));
@@ -957,6 +994,11 @@ impl Session {
     /// plan_apply_preset: replaces one ally's steps with an AI draft for `preset`.
     pub fn plan_apply_preset(&mut self, actor: UnitId, preset: &str) {
         if self.phase != Phase::Planning || !self.w.units[actor].is_active() {
+            return;
+        }
+        if round_intent::on(&self.w) {
+            let lines = ai::plan_party_intents(&mut self.w, &mut self.plan, &[(actor, preset.to_string())]);
+            self.events.extend(lines);
             return;
         }
         let p = self.w.profile_of(actor).with_preset(preset);
@@ -1030,11 +1072,19 @@ impl Session {
             self.pending = self.resolver.prepare_block(&mut self.w, self.current_block).into();
             // A chase or dash as an attack started gets its own cell.
             let (round, block) = (self.current_round, self.current_block);
+            // HOOKS1 HC1: each HP cost paid as an action started gets its cell (rule hp_cost; none in classic)
+            for p in std::mem::take(&mut self.resolver.hp_paid) {
+                if let Some(j) = self.w.hp_journal.as_mut() {
+                    j.extend(p.journal.iter().copied());
+                }
+                self.append(crate::log::hp_cost_entry(&self.w, &p, round, block));
+            }
             for (i, note) in std::mem::take(&mut self.resolver.notes) {
                 if let Some(e) = crate::log::move_note_entry(&self.w, &self.resolver.scheduled[i], round, block, &note) {
                     self.append(e);
                 }
             }
+            self.log_triggers(round, block);
             self.log_ground(round, block);
             self.log_spared(round, block);
         }
@@ -1050,6 +1100,10 @@ impl Session {
             // Every popped action gets its cell, also one cancelled before it resolved (as Godot logs it); RULESET1 P9:
             // one its unit's break cancelled has the break's cell instead
             if !a.broken {
+                // HOOKS1 8.4: the metrics hear the redirected parts before the action's cell (rule triggers)
+                if crate::trigger::on(&self.w) {
+                    self.feed(|m, s| m.on_struck(s, idx));
+                }
                 self.append(crate::log::from_action(&self.w, &a, round, block));
             }
             for r in &a.command.reactions {
@@ -1081,15 +1135,20 @@ impl Session {
             if !a.command.pushes.is_empty() {
                 self.feed(|m, s| m.on_forced(s, idx));
             }
+            // HOOKS1 8.1: the triggers the action fired (rule triggers; none in classic)
+            self.log_triggers(round, block);
             self.log_ground(round, block);
             self.log_spared(round, block);
         }
         if self.pending.is_empty() {
             let block = self.current_block;
+            // HOOKS1 AH2: the arena hazards due now strike after the block's actions (rule arena_hazards; none in classic)
+            self.arena_strikes(self.current_round, block);
             self.feed(|m, s| m.on_block_completed(s, block));
             let end_of_round = self.current_block >= self.def.total_blocks;
             if end_of_round {
                 self.resolver.apply_round_end_effects(&mut self.w);
+                self.log_triggers(self.current_round, block);
                 self.log_ground(self.current_round, block);
             }
             self.on_block_end();
@@ -1117,6 +1176,34 @@ impl Session {
         }
     }
 
+    /// HOOKS1 8.1: a cell per trigger or rider effect since the last call (rule triggers, none in classic; the HP the
+    /// effect took as the cell's damage); a trigger's forced move gets its move and collision cells (FM9). The HP rows
+    /// each effect and collision held back reach the metrics with its own cell, which credit them to the holder (HOOKS1-K).
+    /// The caller logs the ground next (HOOKS1-GF: a moved unit's hazard hits).
+    fn log_triggers(&mut self, round: i32, block: i32) {
+        for f in self.resolver.triggers.take() {
+            self.feed(|m, s| m.on_trigger(s, &f));
+            for (i, l) in f.lines.iter().enumerate() {
+                if let (Some(j), Some(rows)) = (self.w.hp_journal.as_mut(), f.rows.get(i)) {
+                    j.extend(rows.iter().copied());
+                }
+                let mut e = crate::log::trigger_entry(&self.w, &f, l, round, block);
+                e.damage = f.dealt.get(i).copied().unwrap_or(0);
+                self.append(e);
+            }
+            for m in &f.moves {
+                self.append(crate::log::forced_entry(&self.w, m, &f.source, round, block));
+                for h in &m.hits {
+                    if let Some(j) = self.w.hp_journal.as_mut() {
+                        j.extend(h.journal.iter().copied());
+                    }
+                    self.append(crate::log::collision_entry(&self.w, m, h, &f.source, round, block));
+                }
+            }
+            self.feed(|m, _| m.trigger_closed());
+        }
+    }
+
     /// HOOKS1 6: a cell per ground event since the last call (placements, hazard hits, fades; rule ground_hazards, none
     /// in classic); a hit on entering hands its held-back HP rows to the metrics with its own cell.
     fn log_ground(&mut self, round: i32, block: i32) {
@@ -1129,6 +1216,51 @@ impl Session {
             self.append(crate::log::ground_entry(&self.w, &ev, round, block));
             self.feed(|m, s| m.on_ground(s, &ev));
         }
+    }
+
+    /// HOOKS1 AH2 (rule arena_hazards; none in classic): the hazards due at the end of `block` strike the units on their
+    /// cells (reserved units are spared). Each strike gets its event cell (the hazard's name as the actor), then each
+    /// struck unit its cell (the HP the hit took, held back until then), the break the stagger caused, and its push
+    /// with its collision cells; the triggers and the ground hits the pushes caused follow (HOOKS1-GF).
+    /// A side the block's actions already wiped out ends the fight first: no strike runs (user 2026-10-29).
+    fn arena_strikes(&mut self, round: i32, block: i32) {
+        if !crate::arena::on(&self.w) || self.w.arena.hazards.is_empty() || self.a_side_is_wiped() {
+            return;
+        }
+        let reserved: Vec<UnitId> = (0..self.w.units.len()).filter(|&c| self.is_reserved(c)).collect();
+        let strikes = crate::arena::block_end(&mut self.resolver, &mut self.w, round, block, &reserved);
+        for st in &strikes {
+            self.feed(|m, s| m.on_arena(s, st));
+            self.append(crate::log::arena_entry(st, round, block));
+            for h in &st.hits {
+                if let Some(j) = self.w.hp_journal.as_mut() {
+                    j.extend(h.journal.iter().copied());
+                }
+                self.append(crate::log::arena_hit_entry(&self.w, st, h, round, block));
+                if let Some(b) = h.stagger.as_ref().and_then(|x| x.broke.as_ref()) {
+                    self.append(crate::log::break_entry(&self.w, h.unit, b, round, block));
+                }
+                let Some(m) = &h.push else { continue };
+                self.append(crate::log::forced_entry(&self.w, m, &st.name, round, block));
+                for c in &m.hits {
+                    if let Some(j) = self.w.hp_journal.as_mut() {
+                        j.extend(c.journal.iter().copied());
+                    }
+                    self.append(crate::log::arena_collision_entry(&self.w, st, c, round, block));
+                }
+            }
+        }
+        self.log_triggers(round, block);
+        self.log_ground(round, block);
+    }
+
+    /// HOOKS1 AH3: the arena hazards due this round, known from its start (empty without the rule arena_hazards or once
+    /// the battle is over).
+    pub fn arena_tells(&self) -> Vec<crate::intent::ArenaTell> {
+        if self.combat_over {
+            return Vec::new();
+        }
+        crate::intent::arena_tells(&self.w)
     }
 
     /// CatalogEncounter.on_block_start: a due phase fires first, then one morale break line, then the arrival (the
@@ -1210,6 +1342,14 @@ impl Session {
         for c in surrendering {
             self.w.withdraw_in_place(c);
         }
+    }
+
+    /// HOOKS1-H follow-up (user 2026-10-29): the verdict's wipe-outs: every hero (guests aside) down, or no enemy that
+    /// is not reserved still standing (alive, not withdrawn).
+    fn a_side_is_wiped(&self) -> bool {
+        let heroes = self.w.allies.iter().filter(|a| !self.guests.contains(a)).any(|&a| self.w.units[a].is_alive());
+        let foes = self.w.enemies.iter().any(|&e| !self.is_reserved(e) && self.w.units[e].is_active());
+        !heroes || !foes
     }
 
     /// OBJ1 rule 3 over the heroes, guests, protected guests and every enemy that is not reserved.

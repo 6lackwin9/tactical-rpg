@@ -118,7 +118,8 @@ reduce-motion check (`kit.fx.reduce`); the stage shakes, the panels around it do
 - Ground-layer effects draw after STAGE1 pass 4 (ground arrows); air-layer effects after pass 8 (outlines through)
   and before the floats of pass 9. The hit flash silhouette draws right after its unit's sprite in the feet pass.
 - The camera offset shifts passes 1-9 (the board, clipped to its interior (128, 30, 384, 288)); the planning strip,
-  the cards, the status bar, the banner and the log never shift.
+  the cards, the status bar, the banner and the log never shift. (As built in FX1-L1 slice 2, 2026-10-28: Flat shifts
+  its whole board and clips it to the board panel only while the camera is off centre, so at rest it draws as before.)
 
 ### 4.2 The impact timeline of an action
 
@@ -128,13 +129,17 @@ FX clock (`Clock`, which replaces `anim_ms`; clips run on it too):
 1. `t0` = now, or the end of the actor's slide when it moved in this step (dash, charge, Engage carry).
 2. Melee: the trail starts at `t0`; impact at `t0 + melee_hit_ms`. Projectile: launch at `t0 + launch_ms`; travel
    = clamp(path px / speed, `travel_min_ms`, `travel_max_ms`); impact at launch + travel. Beam and support: impact
-   at `t0 + launch_ms`.
+   at `t0 + launch_ms`. (As built in FX1-L1, 2026-10-28, per decision "Attack timing on the board" A: a melee hit lands
+   and a shot launches at the attack clip's `impact` (release) frame; `melee_hit_ms` and `launch_ms` only for a clip
+   without one; tuning `shot_from_clip` false restores `launch_ms` for shots.)
 3. At the impact (rule I): the impact effects (sparks, rings, flashes of the table), and everything the player reads
    as the hit on the board: the hit flash and token shake of each unit whose HP fell in this step, the floats, the
    `hurt`, `hurt_guarded`, `defend` and `death` clips, the board HP bars (they show the HP before the step until
    then), the fall (a unit whose fall is pending is drawn standing), the step's log sounds, the hit-stop
    (`hit_stop_ms` when any HP fell) and the heavy shake (4.5). The actor's attack clip and facing start at `t0`.
-4. The HUD (cards, strip, log, message bar) updates at the pop, as today.
+4. The HUD (cards, strip, log, message bar) updates at the pop, as today (the agent link's unit HP too, while the board bar
+   waits for the impact). As built (FX1-L1): a restart or a new battle drops a pending impact instead of firing it (the
+   board resets anyway; its floats and sounds would land on the old battle).
 5. Flush (rule F): any later catch-up (the next pop, a new battle or view, `resolve`, the skip setting turning on)
    first fires every pending impact at once, in order. A step that popped no action (block or round wrap-up,
    status ticks, phases) has no effects and shows its changes at once.
@@ -166,6 +171,28 @@ ring on the aim cell.
 
 The table (code in `fx.rs`, its numbers in the spec) is in [FX1_TASKS.md](FX1_TASKS.md) section 8, numbered 4.4.1
 (melee by weapon family), 4.4.2 (ranged by weapon family), 4.4.3 (skills) and 4.4.4 (support, items, falls).
+
+As built in FX1-L1 slice 2 (2026-10-28): a melee family the table does not name swings as the sword; spark rows
+without a direction fly along the attack (actor to struck unit), with gravity 120 and size 1 unless given; a trail
+starts 60 % of `trail_ms` before the impact (when its head ends its sweep; never before `t0`), which is `t0` with the
+defaults and no clip impact frame; a projectile launches its travel before the impact; a miss drops only the sparks
+(its overshoot and sidestep are FX1-L2's).
+
+As built in FX1-L2 (2026-10-29): the rows of 4.4.3 and 4.4.4 are `fx::skill_style`, `support_style` and `item_style`.
+Where a row is silent the code takes: `arc_lance` sparks spread 360 and speed 50 (the arcane bolt's); `smite` speed 60 and
+tail 2; `shockwave` rings 200 ms and sparks Ash / Ash, spread 120, speed 50; `haymaker` sparks spread 90, speed 70; the
+`aegis` flash 300 ms; a fall's dust flies up (dir -90). The `arc_lance` beam lands at the attack clip's impact frame like a
+shot's release (`launch_ms` without one). A volley's arrows leave 30 ms apart with the arrow to the aim last, landing at
+the impact; a shockwave's rings start at the clip's impact frame, 40 ms apart from the actor out, and the impact comes
+with the last ring. An area's aim is its cell's foot point (4.1); its aim ring draws on the ground layer (a BURST row's
+ring grows 32 x 0.6 px per cell of the area's radius, its flash in the air); an area without an aim row plays its row's
+ring on the aim unless a struck unit stands there. Items: a damage consumable is one with `damage` above 0 (the
+firebomb's impact on its target), any other the mend motes. Falls show at the impact of the action that fells the unit
+(a fall by a status tick has no action, so no dust, 4.2 step 5). The miss sidestep only shows on an attack's target that
+still stands on the board (the kit's misses are "target no longer in combat"; there is no dodge roll yet). A swing at a
+target further above or below than aside turns its trail by the attack's angle (unmirrored). An impact keeps at most
+`MAX_LIVE` - 8 (24) effects: sparks first, then rings (the aim's first), then flashes. A break with no action and a
+fired phase seed their shakes from the round, the block and the break key or the phase's index.
 
 ### 4.5 Shakes in battle
 
@@ -233,7 +260,9 @@ test or an agent can wait for the effects to end. Widget names do not change.
 The content check refuses an unknown preset (the kit check keeps its own copy of the five names, as the content
 crate does not depend on `aegis_ui`; an FX1-L1 test checks that it equals `aegis_ui::fx::SHAKE_PRESETS`);
 `parse_phases` keeps `preset` on `shake` effects; the `phases` help text gains the shape (its rows are already in
-`HELP_CHANGED`, so no parity check changes). The writer stores `shake` on cards only when not "".
+`HELP_CHANGED`, so no parity check changes). The writer stores `shake` on cards only when not "". (As built in FX1-S, 2026-10-28: cards are one JSON field the
+writer stores as given, so a card without `shake` has no key while an explicit `"shake": ""` is kept; the asset lane
+omits the key.)
 
 ### 5.2 The vignette player (FX1-V)
 

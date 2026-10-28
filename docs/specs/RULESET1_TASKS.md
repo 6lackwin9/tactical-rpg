@@ -277,6 +277,23 @@ Paths: `b/` `r/` `w/` = `kits/rpg/crates/rpgkit_{battle,rules,world}/src/` (`rpg
 | RULESET1-E | Timeline widget: marks (glyph, colour, tip at a block) and segment parts (windup, impact, recovery; hatching; links) | engine | logic | - | `engine/crates/aegis_ui/src/{timeline,specimens}.rs`; `aegis_ui/tests/kit_widgets.rs`; `engine/README.md` |
 | RULESET1-U | Battle screen (intent 10, index 12): intent buttons, target, kinds, opener, Manual, reasons, after-moves, flank arc, stealth veil, intent in tells and threat intel, badges, BREAK, poise, forecasts, reach band | game | logic | E, P, K, V, PL | `gui/{battle,intent_text,hud}.rs` |
 | RULESET1-DU | Deck buckets, Basics row and order editor (party screen, Dojo; 9 D6) | game | logic | D | `gui/{party,dojo}.rs` |
+
+RULESET1-DU slice 1 as built (2026-10-29): the party screen's deck view; agent-link widget ids `skills.{active,passive,keystone}.<i>`, `skills.basic.<family>`, `skills.view.{owned,order}`, `skills.slot.<kind>.<id>`, `skills.owned.<kind>.<id>`, `skills.order.<intent>[.<k>]`, `skills.order.auto`; drag keys `deck.<kind>.<i>`, `deck.own.<kind>.<id>`, `deck.list`, `order.<intent>.<k>`; state `deck`, `deck_shown`, `deck_auto`, `deck_view`, `deck_order`, `basics`. The Dojo deck view follows RULESET1-G.
+
+RULESET1-G slice 1 as built (2026-10-29): the Dojo. Kit `DojoSession`: `set_ruleset` rebuilds the heroes with `build_unit_in` (gear, pouch, spent points kept), `set_deck`, `deck_of`, `plan_view` / `plan_view_of` / `plans_by_intent` / `plan_openers` (a scratch `Session`: hero, dummy, optional second dummy engaging it), `set_plan_intent`, `place_plan`, `toggle_dummy_windup`, poise bars `hero_poise` / `dummy_poise`, `rest_blocks`; `poise::max_poise_of`. Game: windows `planner` and `deck`, layout "Timeline"; widget ids `dojo.plan.{intent.<id>,kind.<k>,opener,cell.<x>.<y>,piece.<p>,partner,row.<k>,intent_plan.<intent>}`, `dojo.deck.{<kind>.<i>,basics,owned.<kind>.<id>,order.<intent>.<k>,default,auto_order}`, `dojo.windup`; state (timeline only) `ruleset`, `deck`, `actives`, `poise`, `dummy_poise`, `dummy_windup`, `plan`. `DeckTerms::base` (user 2026-10-29): only an actives or order edit pins the automatic actives. Left: the Arena toggles and chip, the sim `feel` mode.
+
+RULESET1-G slice 2 as built (2026-10-29): the Arena and `feel`. Scene Runner Arena card: widget ids
+`runner.arena.{reveal,chip,rules,rule.<id>}`; the toggles list every register extension (HOOKS1's too) and may switch
+one on over classic as `rules=` may (`Ruleset::adjust`); the chip and the toggles live in the Scene Runner card, not on
+the battle screen; runner state gains `rules`, `rules_on`, `reveal`, `chip`; `BattleScreen::arena_with(cx, world,
+encounter, ruleset, rules, plan_reveal)`; the battle state gains `ruleset` only beyond classic. `feel` (tasks 3) differs
+in its inputs: `seeds=N` is also a key (the positional seeds win); the default encounters come from the game
+(`SimGame.feel_encounters`, the kit names none); "guard blocks" are the blocks of landed Defend commands (hits into a
+guard are counted apart); buffs dropped are read from the session's events (the party's); planner reasons are tallied by
+kind (numbers dropped); a fight skipped for jitter is not counted. Dojo review fixes: `PlanView.ap_before` is the scratch
+battle's round-1 AP; `set_active` drops the pending Rest blocks (documented); the GUI planner cache is keyed on a screen
+revision and `state()["plan"]` is computed when stale (window closed too).
+
 | RULESET1-G | Dojo toggle, planner view and readouts, Arena select and toggles, sim `feel` (index 12, tasks 3) | kit + game | logic | P, K, V, PL | `b/dojo.rs`; `gui/{dojo,runner}.rs`; `rpgkit_sim/src/{args,modes,feel (new)}.rs` |
 | RULESET1-A | Test kit data and the `sunk_ward` field (2) | game | asset | R, S, DERIVE1-S | `data/catalog/{rulesets,derived_stats,classes,item_families,items,skills,passives,units,encounters}.json`; `data/worlds/sunk_ward/world.json` |
 | RULESET1-X | Golden traces and the inert-extensions check (4.2) | kit | logic | A, G, AI | `rpgkit_battle/tests/{timeline_golden.rs,fixtures/*}` |

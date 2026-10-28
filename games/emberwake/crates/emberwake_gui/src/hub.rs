@@ -15,9 +15,9 @@ pub fn member_name(cx: &Cx, m: &UnitState) -> String {
     progression::display_name(&cx.data, m)
 }
 
+/// The member's class name in the world being played (HOOKS1 CN2: the world's `classes` overlay, else the class row's).
 pub fn class_name(cx: &Cx, m: &UnitState) -> String {
-    let cid = m.class_id(&cx.data);
-    s_or(cx.data.entry("classes", &cid), "name", &cid)
+    cx.data.class_name(&cx.gs().world_id, &m.class_id(&cx.data))
 }
 
 /// JournalModel.reward_lines: XP, items, passives, skills, gold.

@@ -1,3 +1,5 @@
+Archived 2026-10-29: the cloud wind-down state of 2026-10-18 (CLEANUP.md CLN-32); superseded by a fresh handover that a resumed area thread writes (`docs/workflow/cloud.md`, decision "Fresh area sessions"). Text below unchanged.
+
 # Balance handover
 
 Updated 2026-10-18 16:35 UTC (project wind-down to interactive mode) by Balance session session_01Lc7tUeurRvdktR4Qtn5PQ9. Read this first, then `docs/workflow/cloud.md` ("Usage caps", "Landing a task") and `planner-ops` (interactive mode: work only on Tushar's request, one thing at a time). Agents: `balance` for runs, `logic-builder` for sim/tools, `asset-builder` for data, `change-reviewer` before each landing. Land with `bash tools/fc.sh gate auto` (per-system gate) plus `tools/fc.sh docs`.

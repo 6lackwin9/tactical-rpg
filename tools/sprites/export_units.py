@@ -11,7 +11,12 @@
 # --clips idle (the pre-SPRITE1-A2 form): a one-frame sheet, the idle pose's first frame (the 48 px figure at 2x,
 #   bottom-aligned in the 104 px square), clips.json frame [104, 104] with one idle clip.
 # --clips all (default since SPRITE1-A2): one row per clip in clips.json order, frames left to right, each 48x48 (nearest, transparent);
-#   every clip with the rig's per-frame ms; loop true for idle, walk and idle_guarded.
+#   every clip with the rig's per-frame ms; loop true for idle, walk and idle_guarded. FX1-L1: an attack clip (ATTACKS)
+#   also has "impact", the index of the frame the rig marked with rig.impact (the blow lands or the shot leaves; the
+#   export exits when one is unmarked); a view row copies its side clip's. WINDUP1: an attack clip also has "strike"
+#   (rig.strike, else exit) and a wind-up row "loop_from" (rig.loop_start); the six wind-up rows of rig.WINDUP_ROWS
+#   come after today's side rows and are checked (check_windups: X1 - X3, X5); --review adds windup_review's board
+#   and GIFs (X6).
 # Palette slots: a class body's are the rig palette's base colours (keys without a _lo / _hi shade suffix) that occur in
 # the sheet; a variant lists its own (shades included, the first key wins when two share a colour); at most 16
 # (aegis_core::assets). A palette file may only name its body's slots (checked here and by content check A4).
@@ -43,9 +48,14 @@ import views  # noqa: E402
 
 WORKSPACE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 LAYERS = {"kit": ("kits", "rpg", "assets"), "game": ("games", "emberwake", "assets")}
-LOOPING = {"idle", "walk", "idle_guarded"}
+LOOPING = {"idle", "walk", "idle_guarded", "dazed"} | set(rig.WINDUPS)
 SLOTS_MAX, MS_MIN, MS_MAX, FRAMES_MAX = 16, 16, 2000, 64
 STANDARD = {"idle", "walk", "hurt", "death", "defend", "idle_guarded", "hurt_guarded", "idle_focus"}
+# FX1-L1: the attack clips, each of which must mark its impact frame (rig.impact)
+ATTACKS = {"attack", "jab", "haymaker", "kick", "sweep_kick", "shield_bash", "spit"}
+# WINDUP1 7.3: X2 the windup hold and the attack frame it strikes from differ in at most this share at 48 px; X3 the held
+# poses, dazed and idle differ pairwise in at least this share at 28 px
+WINDUP_CONTINUITY, WINDUP_APART = 0.15, 0.06
 REVIEW_BG = (46, 52, 44)
 
 
@@ -99,7 +109,26 @@ def body(key: str, mode: str):
         ms = list(times[n]) if isinstance(times[n], (list, tuple)) else [times[n]] * len(frames[n])
         if not 1 <= len(frames[n]) <= FRAMES_MAX or len(ms) != len(frames[n]) or not all(MS_MIN <= t <= MS_MAX for t in ms):
             sys.exit("export_units: %s clip %s: %d frames, ms %s outside the sheet rules" % (key, n, len(frames[n]), ms))
-        clips.append({"id": n, "frames": len(frames[n]), "ms": [int(t) for t in ms], "loop": n in LOOPING})
+        clip = {"id": n, "frames": len(frames[n]), "ms": [int(t) for t in ms], "loop": n in LOOPING}
+        start = rig.loop_frame(frames[n])  # WINDUP1: the first looped frame the rig marked (rig.loop_start)
+        if start is not None:
+            if not clip["loop"] or not 1 <= start < len(frames[n]):
+                sys.exit("export_units: %s clip %s marks loop_from %d (a looping clip, 1 to frames - 1)" % (key, n, start))
+            clip["loop_from"] = start
+        hit = rig.impact_frame(frames[n])  # FX1-L1: the frame the rig marked (rig.impact), written only when marked
+        if hit is not None:
+            clip["impact"] = hit
+        elif n in ATTACKS:
+            sys.exit("export_units: %s clip %s marks no impact frame (rig.impact on the frame the blow lands or the shot leaves)" % (key, n))
+        first = rig.strike_frame(frames[n])  # WINDUP1: the frame after the clip's own wind-up (rig.strike)
+        if first is not None:
+            if n not in ATTACKS or not 1 <= first <= hit:
+                sys.exit("export_units: %s clip %s marks strike %s (an attack clip, 1 to its impact %s)" % (key, n, first, hit))
+            clip["strike"] = first
+        elif n in ATTACKS:
+            sys.exit("export_units: %s clip %s marks no strike frame (rig.strike on the first frame after its wind-up, WINDUP1 7.2)" % (key, n))
+        clips.append(clip)
+    check_windups(key, frames, clips, pal, keys)
     side = paste(frames, names)
     rows = dict(frames)
     for vid, vfr in view_rows(key, clips).items():  # DIR4: the view clips after the side clips, each with of and view
@@ -107,10 +136,23 @@ def body(key: str, mode: str):
         side_clip = next(c for c in clips if c["id"] == base)
         rows[vid] = vfr
         clips.append({"id": vid, "of": base, "view": view, "frames": side_clip["frames"], "ms": side_clip["ms"],
-                      "loop": side_clip["loop"]})
+                      "loop": side_clip["loop"], **{k: side_clip[k] for k in ("loop_from", "impact", "strike") if k in side_clip}})
+        check_view_marks(key, vid, vfr, side_clip)
     sheet = paste(rows, [c["id"] for c in clips])
     if len(clips) > len(names):
         check_view_colours(key, pal, keys, side, sheet)
+        for view in views.VIEWS:  # WINDUP1 X2 and X3 on the view rows too
+            attack = main_attack(frames)
+            if "windup_" + view in rows and attack + "_" + view in rows:
+                s = next(c["strike"] for c in clips if c["id"] == attack)
+                share = views.difference(rows["windup_" + view][rig.LOOP_FROM], rows["%s_%s" % (attack, view)][s - 1], size=rig.W)
+                if share > WINDUP_CONTINUITY:
+                    sys.exit("export_units: %s windup_%s frame %d and %s_%s frame %d differ in %.1f%% (at most %d%%, WINDUP1 X2)"
+                             % (key, view, rig.LOOP_FROM, attack, view, s - 1, share * 100, WINDUP_CONTINUITY * 100))
+            close = told_apart(rows, "_" + view)
+            if close:
+                sys.exit("export_units: %s poses too alike at %d px (at least %d%%, WINDUP1 X3): %s"
+                         % (key, views.TOKEN, WINDUP_APART * 100, "; ".join("%s / %s %.1f%%" % (a, b, s * 100) for a, b, s in close)))
     return layer, folder, rows, sheet, {"frame": [w, w], "palette": look_slots(key, pal, keys, sheet), "clips": clips}
 
 
@@ -167,6 +209,87 @@ def view_rows(key: str, clips: list) -> dict:
     for c in clips:
         order += ["%s_%s" % (c["id"], v) for v in views.VIEWS if "%s_%s" % (c["id"], v) in A]
     return {vid: A[vid] for vid in order}
+
+
+def main_attack(frames: dict):
+    """The clip a body's `windup` holds before (WINDUP1 K2): its attack, or the brawler's jab."""
+    return next((n for n in ("attack", "jab") if n in frames), None)
+
+
+def told_apart(frames: dict, suffix: str = "") -> list:
+    """WINDUP1 X3: the (a, b, share) pairs among the wind-up hold frames (frame rig.LOOP_FROM), dazed frame 0 and idle
+    frame 0 (clip ids + suffix, e.g. '_down') that differ in less than WINDUP_APART of their opaque pixels at 28 px."""
+    shown = [(n, frames[n + suffix][rig.LOOP_FROM]) for n in rig.WINDUPS if n + suffix in frames]
+    shown += [(n, frames[n + suffix][0]) for n in ("dazed", "idle") if n + suffix in frames]
+    out = []
+    for i, (a, fa) in enumerate(shown):
+        for b, fb in shown[i + 1:]:
+            share = views.difference(fa, fb)
+            if share < WINDUP_APART:
+                out.append((a + suffix, b + suffix, share))
+    return out
+
+
+def check_windups(key: str, frames: dict, clips: list, pal: dict, keys) -> None:
+    """WINDUP1 7.3 X1 - X3 and X5 on a body's side rows (exits on a failure): X1 a body of a class with wind-ups
+    (classes.WINDUP_CLASSES; WINDUP1-R2 and R3 add the rest) has the six rows, and any wind-up row has the frames, ms,
+    loop and loop_from of section 4; X2 `windup` frame loop_from and the main attack's frame strike - 1 differ in at
+    most WINDUP_CONTINUITY of their opaque pixels at 48 px; X3 the held poses read apart (told_apart); X5 every new
+    frame draws the figure, the new rows add no colour but the rig's effect colours and no palette slot."""
+    by_id = {c["id"]: c for c in clips}
+    cu = unit_of(key)
+    if cu is not None and cu[0] in classes.WINDUP_CLASSES:
+        lacking = [n for n in rig.WINDUP_ROWS if n not in by_id]
+        if lacking:
+            sys.exit("export_units: %s lacks the wind-up rows %s (WINDUP1 X1)" % (key, ", ".join(lacking)))
+    new = [n for n in rig.WINDUP_ROWS if n in by_id]
+    if not new:
+        if cu is not None or key in variants.CREATURES:
+            print("windup: %s has no wind-up rows yet (WINDUP1-R3)" % key)
+        return
+    want = {n: (7, rig.WINDUP_MS[n], True, rig.LOOP_FROM) for n in rig.WINDUPS}
+    want.update(stagger=(5, rig.STAGGER_MS, False, None), dazed=(8, rig.DAZED_MS, True, None))
+    for n in new:
+        c = by_id[n]
+        got = (c["frames"], c["ms"], c["loop"], c.get("loop_from"))
+        if got != want[n]:
+            sys.exit("export_units: %s clip %s has frames, ms, loop, loop_from %s; WINDUP1 section 4 says %s (X1)" % (key, n, got, want[n]))
+    if [c["id"] for c in clips][-len(new):] != new:
+        sys.exit("export_units: %s: the wind-up rows come after today's rows, in the order %s (K7)" % (key, ", ".join(new)))
+    attack = main_attack(frames)
+    if "windup" in by_id and attack:
+        s = by_id[attack]["strike"]
+        share = views.difference(frames["windup"][rig.LOOP_FROM], frames[attack][s - 1], size=rig.W)
+        print("windup: %s windup hold / %s frame %d differ in %.0f%% at %d px (at most %d%%)"
+              % (key, attack, s - 1, share * 100, rig.W, WINDUP_CONTINUITY * 100))
+        if share > WINDUP_CONTINUITY:
+            sys.exit("export_units: %s windup frame %d and %s frame %d differ in %.1f%% of their opaque pixels (at most %d%%, WINDUP1 X2)"
+                     % (key, rig.LOOP_FROM, attack, s - 1, share * 100, WINDUP_CONTINUITY * 100))
+    close = told_apart(frames)
+    if close:
+        sys.exit("export_units: %s poses too alike at %d px (at least %d%%, WINDUP1 X3): %s"
+                 % (key, views.TOKEN, WINDUP_APART * 100, "; ".join("%s / %s %.1f%%" % (a, b, s * 100) for a, b, s in close)))
+    for n in new:
+        for i, fr in enumerate(frames[n]):
+            if sum(1 for a in fr.getchannel("A").tobytes() if a) < 150:
+                sys.exit("export_units: %s clip %s frame %d is blank (WINDUP1 X5)" % (key, n, i))
+    today = paste(frames, [n for n in frames if n not in new])
+    allowed = colours(today) | {tuple(v[:3]) for v in pal.values()} | {rig.OUT, rig.WHITE, rig.GOLDEN, rig.GOLDEN_HI}
+    added = sorted(colours(paste(frames, new)) - allowed)
+    if added:
+        sys.exit("export_units: %s wind-up rows add colours: %s (WINDUP1 K5)" % (key, ", ".join(hexc(c) for c in added)))
+    before, after = palette_slots(key, pal, keys, today), palette_slots(key, pal, keys, paste(frames, list(frames)))
+    if before != after:
+        sys.exit("export_units: %s wind-up rows add palette slots: %s (WINDUP1 K5)"
+                 % (key, ", ".join("%s %s" % kv for kv in after.items() if before.get(kv[0]) != kv[1])))
+
+
+def check_view_marks(key: str, vid: str, vfr: list, side_clip: dict) -> None:
+    """WINDUP1 X4: a view row marks (rig.loop_start) its side row's loop_from, or nothing."""
+    start = rig.loop_frame(vfr)
+    if start is not None and start != side_clip.get("loop_from"):
+        sys.exit("export_units: %s view clip %s marks loop_from %d; its side clip %s has %s (WINDUP1 X4)"
+                 % (key, vid, start, side_clip["id"], side_clip.get("loop_from")))
 
 
 def colours(sheet: Image.Image) -> set:
@@ -332,6 +455,86 @@ def turnaround(out: str, key: str, frames: dict, times: dict) -> list:
     return paths
 
 
+def windup_review(out: str, key: str, frames: dict, times: dict) -> list:
+    """WINDUP1 X6: per body with wind-up rows a pose board (<body>_windup_board.png: rows idle frame 0, the four held
+    poses (frame rig.LOOP_FROM), the stagger strip and dazed; side, and down and up for a body with views; each frame
+    at 3x and, beside it, at the battle's 28 px token size shown at 3x) and GIFs: <body>_windup_strike.gif (the windup
+    intro, two holds and the attack from its strike frame, as the battle plays it), <body>_windups.gif (the four
+    wind-ups, intro and two holds, side by side) and <body>_stagger_dazed.gif (stagger into two dazed loops); the GIFs
+    show side, down and up side by side when the body has views. Returns the paths written ([] without wind-up rows)."""
+    if "windup" not in frames:
+        return []
+    rows = dict(frames)
+    dirs = [("side", "")]
+    cu = unit_of(key)
+    if cu is not None and views.supports(cu[1], cu[0]):
+        V, VT = views.clips(*cu)
+        rows.update(V)
+        times = dict(times, **VT)
+        dirs += [(v, "_" + v) for v in views.VIEWS]
+    z, w, tk, label = 3, rig.W, views.TOKEN, 170
+    name = key.replace("/", "_")
+    lines = []
+    for dn, sfx in dirs:
+        lines.append(("%s idle" % dn, [rows["idle" + sfx][0]]))
+        lines.append(("%s holds" % dn, [rows[n + sfx][rig.LOOP_FROM] for n in rig.WINDUPS if n + sfx in rows]))
+        lines.append(("%s stagger" % dn, rows["stagger" + sfx]))
+        lines.append(("%s dazed" % dn, rows["dazed" + sfx]))
+    cols = max(len(f) for _, f in lines)
+    cz, tz = w * z, tk * z
+    x_tok = label + cols * cz + 24
+    board = Image.new("RGBA", (x_tok + cols * (tz + 4), 18 + len(lines) * cz), REVIEW_BG + (255,))
+    d = ImageDraw.Draw(board)
+    d.text((label, 4), "48 px frames at 3x", fill=(230, 226, 210))
+    d.text((x_tok, 4), "at the %d px token size, shown at 3x" % tk, fill=(230, 226, 210))
+    for r, (title, frs) in enumerate(lines):
+        y = 18 + r * cz
+        d.text((6, y + 8), title, fill=(230, 226, 210))
+        if title.endswith("holds"):
+            d.text((6, y + 22), "windup, heavy, buff, debuff", fill=(160, 166, 150))
+        for c, fr in enumerate(frs):
+            board.alpha_composite(fr.resize((cz, cz), Image.NEAREST), (label + c * cz, y))
+            board.alpha_composite(views.token(fr).resize((tz, tz), Image.NEAREST), (x_tok + c * (tz + 4), y + cz - tz))
+    paths = [os.path.join(out, "%s_windup_board.png" % name)]
+    board.save(paths[-1])
+
+    def ms_of(clip):
+        t = times[clip]
+        return list(t) if isinstance(t, (list, tuple)) else [t] * len(rows[clip])
+
+    def gif(panels, ms, path):
+        g = []
+        for k in range(len(ms)):
+            b = Image.new("RGBA", (w * len(panels), w), REVIEW_BG + (255,))
+            for p, frs in enumerate(panels):
+                b.alpha_composite(frs[k], (p * w, 0))
+            g.append(b.resize((b.width * 4, w * 4), Image.NEAREST).convert("P", palette=Image.ADAPTIVE))
+        g[0].save(path, save_all=True, append_images=g[1:], duration=ms, loop=0)
+        paths.append(path)
+
+    def held(clip, sfx):  # the intro, then the hold loop twice
+        f, t = rows[clip + sfx], ms_of(clip + sfx)
+        loop = list(range(rig.LOOP_FROM, len(f)))
+        idx = list(range(rig.LOOP_FROM)) + loop + loop
+        return [f[i] for i in idx], [t[i] for i in idx]
+
+    attack = main_attack(frames)
+    strike = rig.strike_frame(frames[attack])
+    seq = []
+    for _, sfx in dirs:
+        hf, hm = held("windup", sfx)
+        af = rows[attack + sfx][strike:]
+        seq.append((hf + af, hm + ms_of(attack)[strike:]))
+    gif([f for f, _ in seq], seq[0][1], os.path.join(out, "%s_windup_strike.gif" % name))
+    for _, sfx in dirs[:1]:
+        panels = [held(n, sfx) for n in rig.WINDUPS if n + sfx in rows]
+        n = min(len(f) for f, _ in panels)
+        gif([f[:n] for f, _ in panels], panels[0][1][:n], os.path.join(out, "%s_windups.gif" % name))
+    seq = [(rows["stagger" + sfx] + rows["dazed" + sfx] * 2, ms_of("stagger") + ms_of("dazed") * 2) for _, sfx in dirs]
+    gif([f for f, _ in seq], seq[0][1], os.path.join(out, "%s_stagger_dazed.gif" % name))
+    return paths
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("bodies", nargs="*", help="class ids or variant keys (default: every class and every variant)")
@@ -368,7 +571,7 @@ def main() -> None:
             pals.append((pid, clips["palette"], {k: colours[k] for k in slots}))
         if args.review:
             _, _, fr, times, _, _ = source(key)
-            for p in review(args.review, key, fr, times, pals) + turnaround(args.review, key, fr, times):
+            for p in review(args.review, key, fr, times, pals) + turnaround(args.review, key, fr, times) + windup_review(args.review, key, fr, times):
                 print("review", p)
 
 

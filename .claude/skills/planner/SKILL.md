@@ -42,6 +42,8 @@ Docs written in the main checkout by a design or cleanup agent are committed by 
 
 ## 3. Review and ship
 
+Landing checklist: skill `task-landing` (which docs a change needs, with `docs_needed.py`; the task-row and commit formats; stage, flush, cleanup and docs-conflict rules).
+
 1. Review each report; run `change-reviewer`, which runs the suites (don't run them a second time yourself unless you changed something after the review). If a builder failed the same thing twice, ask the user rather than retry. Review fixes go to the SAME builder via `SendMessage` while it is resumable (it keeps its context); spawn a fresh one only when it was stopped or failed, and point it at `.agent/progress.md` (in the cloud also at the last pushed commit). If the planner itself changes code or data after a builder's gate (flag flip, seed re-run), re-run the gate before the review.
 2. Apply the builders' "docs delta" (README, GAME_BRIEF, STRUCTURE, new decision rows go to the matching decisions file: `games/emberwake/docs/decisions/<system>.md`, or `docs/decisions/workflow.md` for process; HISTORY append-only), update `games/emberwake/docs/ROADMAP.md` and `docs/TASKS.md` statuses.
 3. Update `docs/AGENT_MAP.md` (desktop: Active section on dispatch and finished agents into their milestone section, newest first; cloud: `AgentMap:` lines in the task commit, written by the Merge & Release thread) and append a row to the "Agent run log" in `docs/WORKFLOW.md` for milestones.

@@ -3,13 +3,14 @@
 //! wraps `KitAct` in its own action and forwards drops and text changes to it. Pages, picked by the tabs at the
 //! page's foot: the widgets, the block timeline with its segment parts, links and marks (RULESET1-E), and the effects
 //! kit (FX1-E: each primitive and shake preset on a small stage, the clock's speed and hit-stop, a local reduce
-//! motion); the Effects page runs on its own clock, fed by `tick` (wall time) or `advance` (tests). PORTRAITFX1-E: a
+//! motion; STATUSFX1-E: the orbit and a loop of the chosen primitive, its still look under reduce motion); the Effects
+//! page runs on its own clock, fed by `tick` (wall time) or `advance` (tests). PORTRAITFX1-E: a
 //! fourth page, Portraits, draws the engine's code-drawn sample face (`portrait_fx::sample`) through a `PortraitFx` at a
 //! chosen size, with toggles for each overlay and state, buttons for the reactions, a local reduce motion and the
 //! anchors check, on its own clock.
 
 use crate::canvas::{rgb, rgba, Image, Rect, Rgba};
-use crate::fx::{Beam, Camera, Clock, Effect, Flash, Fx, Layer, Look, Projectile, Ring, ShakeLimits, ShakeTable, Sparks, Trail, PRIM_KINDS, SHAKE_PRESETS};
+use crate::fx::{Beam, Camera, Clock, Effect, Flash, Fx, Layer, Look, Looped, Orbit, Projectile, Ring, ShakeLimits, ShakeTable, Sparks, Trail, PRIM_KINDS, SHAKE_PRESETS};
 use crate::portrait_fx::{self, Budget, Cue, PortraitFx, PortraitOpts, Tier};
 use aegis_core::assets::Face;
 use std::cell::RefCell;
@@ -40,12 +41,13 @@ pub enum KitAct {
     Track(String),
     Segment(String, String),
     /// The Effects page: a primitive (`fx::PRIM_KINDS`), a shake preset (`fx::SHAKE_PRESETS`), the clock speed
-    /// (`FX_SPEEDS` index), the hit-stop toggle, the page's own reduce-motion check.
+    /// (`FX_SPEEDS` index), the hit-stop toggle, the page's own reduce-motion check, the loop toggle (STATUSFX1-E).
     Effect(&'static str),
     Shake(&'static str),
     FxSpeed(usize),
     HitStop,
     Reduce,
+    Loop,
     /// The Portraits page: an overlay or state toggle (`PORTRAIT_OVERLAYS`, `PORTRAIT_STATES`), a reaction
     /// (`PORTRAIT_REACTIONS`), the size (`PORTRAIT_SIZES` index), its reduce-motion and anchors checks.
     PortraitToggle(&'static str),
@@ -69,6 +71,8 @@ pub const FX_STAGE_W: i32 = 240;
 pub const FX_STAGE_H: i32 = 120;
 pub const FX_SPEEDS: [(&str, f64); 3] = [("0.5x", 0.5), ("1x", 1.0), ("2x", 2.0)];
 pub const FX_HIT_STOP_MS: f64 = 40.0;
+/// STATUSFX1-E: a looped sample repeats every `ms` of its effect plus this gap.
+pub const FX_LOOP_GAP_MS: u64 = 200;
 /// The dummies' chest points and their foot line, in stage px.
 pub const FX_FROM: (f32, f32) = (40.0, 82.0);
 pub const FX_TO: (f32, f32) = (200.0, 82.0);
@@ -189,12 +193,17 @@ pub struct FxDemo {
     pub impacts: Vec<(u64, u64)>,
     /// Seeds handed out so far (each press gets the next).
     pub seeds: u64,
+    /// STATUSFX1-E: the primitive last pressed (`PRIM_KINDS`), whether it loops, and the loop's start and seed.
+    pub chosen: &'static str,
+    pub looping: bool,
+    pub loop_start: u64,
+    pub loop_seed: u64,
     last_wall: Option<std::time::Instant>,
 }
 
 impl Default for FxDemo {
     fn default() -> Self {
-        Self { clock: Clock::default(), fx: Fx::default(), camera: Camera::default(), shakes: ShakeTable::default(), speed: 1, hit_stop: true, reduce: false, impacts: Vec::new(), seeds: 0, last_wall: None }
+        Self { clock: Clock::default(), fx: Fx::default(), camera: Camera::default(), shakes: ShakeTable::default(), speed: 1, hit_stop: true, reduce: false, impacts: Vec::new(), seeds: 0, chosen: "orbit", looping: false, loop_start: 0, loop_seed: 0, last_wall: None }
     }
 }
 
@@ -204,22 +213,18 @@ impl FxDemo {
         self.seeds
     }
 
-    /// Plays primitive `kind` from the left dummy to the right one; what it did.
-    fn play(&mut self, kind: &str) -> String {
+    /// Plays primitive `kind` from the left dummy to the right one (while looping: loops it instead, from now); what it
+    /// did.
+    fn play(&mut self, kind: &'static str) -> String {
         let now = self.clock.now();
         let seed = self.seed();
-        let from = (FX_FROM.0 + 6.0, FX_FROM.1);
-        let (e, impact): (Effect, Option<u64>) = match kind {
-            "projectile" => {
-                let travel = (((FX_TO.0 - from.0) / 560.0) * 1000.0).round() as u32;
-                (Effect::new(Projectile { from, to: FX_TO, travel_ms: travel, arc_px: 6.0, look: Look::Arrow { len: 7.0, shaft: LINEN, head: STEEL } }, now), Some(now + travel as u64))
-            }
-            "beam" => (Effect::new(Beam { from, to: FX_TO, ms: 160, width: 2, core: LINEN, glow: ORCHID }, now), Some(now)),
-            "trail" => (Effect::new(Trail { at: (FX_TO.0 - 14.0, FX_TO.1), radius: 13.0, from_deg: -60.0, to_deg: 50.0, ms: 150, width: 2, col: STEEL, mirror: false, squash: 0.75 }, now), Some(now + 90)),
-            "sparks" => (Effect::new(Sparks { at: FX_TO, ms: 260, count: 10, dir_deg: -90.0, spread_deg: 160.0, speed: 70.0, gravity: 120.0, size: 1, cols: [AMBER, CANDLE] }, now), None),
-            "flash" => (Effect::new(Flash { at: FX_TO, rx: 8.0, ry: 6.0, ms: 140, col: rgba(CANDLE[0], CANDLE[1], CANDLE[2], 160) }, now), None),
-            _ => (Effect::new(Ring { at: (FX_TO.0, FX_FOOT_Y), r0: 3.0, r1: 12.0, ms: 260, col: rgba(ASH[0], ASH[1], ASH[2], 200), squash: 0.75 }, now).on(Layer::Ground), None),
-        };
+        self.chosen = kind;
+        if self.looping {
+            self.loop_start = now;
+            self.loop_seed = seed;
+            return format!("{kind}: looped every {} ms", self.looped().period);
+        }
+        let (e, impact) = fx_sample(kind, now);
         let ms = e.ms();
         self.fx.push(e.seeded(seed));
         if let Some(t) = impact {
@@ -228,6 +233,40 @@ impl FxDemo {
         format!("{kind}: {ms} ms{}", if impact.is_some() { ", then the impact" } else { "" })
     }
 
+    /// Turns the loop of the chosen primitive on or off (on: it starts now).
+    fn toggle_loop(&mut self) {
+        self.looping = !self.looping;
+        if self.looping {
+            self.loop_start = self.clock.now();
+            self.loop_seed = self.seed();
+        }
+    }
+
+    /// The chosen primitive looped (period its `ms` + `FX_LOOP_GAP_MS`), from the loop's start, in stage px.
+    pub fn looped(&self) -> Looped {
+        let e = fx_sample(self.chosen, self.loop_start).0.seeded(self.loop_seed);
+        Looped::new(e, e.ms() + FX_LOOP_GAP_MS)
+    }
+}
+
+/// The page's sample of primitive `kind` starting at `now`, in stage px, and when its impact lands (if it has one).
+fn fx_sample(kind: &str, now: u64) -> (Effect, Option<u64>) {
+    let from = (FX_FROM.0 + 6.0, FX_FROM.1);
+    match kind {
+        "projectile" => {
+            let travel = (((FX_TO.0 - from.0) / 560.0) * 1000.0).round() as u32;
+            (Effect::new(Projectile { from, to: FX_TO, travel_ms: travel, arc_px: 6.0, look: Look::Arrow { len: 7.0, shaft: LINEN, head: STEEL } }, now), Some(now + travel as u64))
+        }
+        "beam" => (Effect::new(Beam { from, to: FX_TO, ms: 160, width: 2, core: LINEN, glow: ORCHID }, now), Some(now)),
+        "trail" => (Effect::new(Trail { at: (FX_TO.0 - 14.0, FX_TO.1), radius: 13.0, from_deg: -60.0, to_deg: 50.0, ms: 150, width: 2, col: STEEL, mirror: false, squash: 0.75 }, now), Some(now + 90)),
+        "sparks" => (Effect::new(Sparks { at: FX_TO, ms: 260, count: 10, dir_deg: -90.0, spread_deg: 160.0, speed: 70.0, gravity: 120.0, size: 1, cols: [AMBER, CANDLE] }, now), None),
+        "flash" => (Effect::new(Flash { at: FX_TO, rx: 8.0, ry: 6.0, ms: 140, col: rgba(CANDLE[0], CANDLE[1], CANDLE[2], 160) }, now), None),
+        "orbit" => (Effect::new(Orbit { at: (FX_TO.0, FX_FOOT_Y - 33.0), rx: 7.0, ry: 2.5, ms: 900, count: 3, size: 2, cols: [CANDLE, LINEN], phase_deg: 0.0, star: true }, now), None),
+        _ => (Effect::new(Ring { at: (FX_TO.0, FX_FOOT_Y), r0: 3.0, r1: 12.0, ms: 260, col: rgba(ASH[0], ASH[1], ASH[2], 200), squash: 0.75 }, now).on(Layer::Ground), None),
+    }
+}
+
+impl FxDemo {
     /// Starts preset `name` at the engine ceiling; what it did.
     fn shake(&mut self, name: &str) -> String {
         let Some(s) = self.shakes.get(name) else { return format!("no preset {name}") };
@@ -310,6 +349,7 @@ impl Specimens {
             KitAct::FxSpeed(i) => format!("speed {}", FX_SPEEDS[*i % FX_SPEEDS.len()].0),
             KitAct::HitStop => format!("hit-stop {}", if self.fx.hit_stop { "off" } else { "on" }),
             KitAct::Reduce => format!("reduce motion {}", if self.fx.reduce { "off" } else { "on" }),
+            KitAct::Loop => format!("loop {} {}", self.fx.chosen, if self.fx.looping { "off" } else { "on" }),
             KitAct::PortraitToggle(e) => self.portrait.toggle(e),
             KitAct::PortraitFire(w) => self.portrait.fire(w),
             KitAct::PortraitSize(i) => format!("portrait size {} px", PORTRAIT_SIZES[*i % PORTRAIT_SIZES.len()]),
@@ -337,6 +377,7 @@ impl Specimens {
                     self.fx.camera.stop();
                 }
             }
+            KitAct::Loop => self.fx.toggle_loop(),
             KitAct::PortraitSize(i) => self.portrait.size = i % PORTRAIT_SIZES.len(),
             KitAct::PortraitReduce => self.portrait.reduce = !self.portrait.reduce,
             KitAct::PortraitAnchors => self.portrait.anchors = !self.portrait.anchors,
@@ -444,8 +485,9 @@ impl Specimens {
 
     /// The Effects page: the stage (`kit.fx.stage`) with its two dummies and the live effects, shaken by the camera
     /// (the panel and the controls stay put); beside it a button per primitive (`kit.fx.<kind>`) and per shake preset
-    /// (`kit.fx.shake.<name>`), the speed (`kit.fx.speed`), the hit-stop (`kit.fx.hitstop`) and reduce motion
-    /// (`kit.fx.reduce`); under it the clock's state.
+    /// (`kit.fx.shake.<name>`), the speed (`kit.fx.speed`), the hit-stop (`kit.fx.hitstop`), reduce motion
+    /// (`kit.fx.reduce`) and the loop of the chosen primitive (`kit.fx.loop`, STATUSFX1-E: drawn every frame outside
+    /// the live list; under reduce motion its still look); under it the clock's state.
     fn draw_effects<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: &impl Fn(KitAct) -> A) {
         let x = r.x + 6;
         let line = ui.p.line_h(SMALL).ceil() as i32;
@@ -456,13 +498,21 @@ impl Specimens {
         let now = d.clock.now();
         ui.p.panel(Rect::new(stage.x - 1, stage.y - 1, stage.w + 2, stage.h + 2), STAGE_BG, crate::ui::BORDER, 2.0);
         let (dx, dy) = d.camera.offset_at(now);
-        ui.push("kit.fx.stage", "stage", format!("effects stage: {} live, shake ({dx}, {dy})", d.fx.kinds(now).len()), stage, true, false, None, Vec::new());
+        let looping = if d.looping { format!(", loop {}{}", d.chosen, if d.reduce { " (still)" } else { "" }) } else { String::new() };
+        ui.push("kit.fx.stage", "stage", format!("effects stage: {} live, shake ({dx}, {dy}){looping}", d.fx.kinds(now).len()), stage, true, false, None, Vec::new());
         let saved = ui.p.c.clip;
         ui.p.clip(Some(stage));
         ui.p.shift(dx, dy);
         let (ox, oy) = (stage.x as f32, stage.y as f32);
         ui.p.fill(Rect::new(stage.x - 8, stage.y + FX_FOOT_Y as i32 + 1, FX_STAGE_W + 16, 1), rgb(44, 48, 60));
         let placed = |layer: Layer| Fx { live: d.fx.live.iter().filter(|e| e.layer == layer).map(|e| e.moved(ox, oy)).collect() };
+        let lp = d.looping.then(|| d.looped().moved(ox, oy));
+        let draw_loop = |p: &mut crate::painter::Painter, layer: Layer| match lp.filter(|l| l.layer() == layer) {
+            Some(l) if d.reduce => l.draw_still(p),
+            Some(l) => l.draw(p, now),
+            None => {}
+        };
+        draw_loop(&mut ui.p, Layer::Ground);
         placed(Layer::Ground).draw(&mut ui.p, now, Layer::Ground);
         for (cx, _) in [FX_FROM, FX_TO] {
             let (fx_, fy) = (ox + cx, oy + FX_FOOT_Y);
@@ -470,6 +520,7 @@ impl Specimens {
             ui.p.fill(Rect::new(fx_ as i32 - 4, fy as i32 - 22, 8, 22), rgb(70, 78, 96));
             ui.p.fill(Rect::new(fx_ as i32 - 3, fy as i32 - 29, 6, 6), rgb(96, 104, 122));
         }
+        draw_loop(&mut ui.p, Layer::Air);
         placed(Layer::Air).draw(&mut ui.p, now, Layer::Air);
         ui.p.shift(-dx, -dy);
         ui.p.c.clip = saved;
@@ -523,6 +574,8 @@ impl Specimens {
         ui.checkbox("kit.fx.hitstop", x2 + 64, yy + 2, &format!("Hit-stop {} ms", FX_HIT_STOP_MS), d.hit_stop, wrap(KitAct::HitStop), true);
         yy += 14 + 5;
         ui.checkbox("kit.fx.reduce", x2, yy + 2, "Reduce motion (this page)", d.reduce, wrap(KitAct::Reduce), true);
+        yy += 14 + 5;
+        ui.checkbox("kit.fx.loop", x2, yy + 2, &format!("Loop {} (every ms + {FX_LOOP_GAP_MS})", d.chosen), d.looping, wrap(KitAct::Loop), true);
     }
 
     /// The Portraits page: the stage (`kit.portrait.face`: the portrait and its jolt room) with the sample face at the

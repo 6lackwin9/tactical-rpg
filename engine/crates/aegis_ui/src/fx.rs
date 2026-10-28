@@ -4,7 +4,10 @@
 //! - `Clock`: the effect clock with hit-stop (a hold eats wall time before the clock moves; speed scales the rest).
 //! - Primitives (`Projectile`, `Beam`, `Trail`, `Sparks`, `Flash`, `Ring`) wrapped in an `Effect` (start, layer,
 //!   seed): every draw is a pure function of the effect and the clock's `now` (no state, no RNG).
+//!   STATUSFX1-E adds `Orbit` (dots circling a point) and lets a `Ring` close (`r0 > r1`).
 //! - `Fx`: the caller's live list, at most `MAX_LIVE`, drawn by layer in push order.
+//! - `Looped` (STATUSFX1-E): an effect repeated every `period`, reseeded per cycle, drawn by the caller every frame
+//!   outside the live list; `draw_still` is its reduce-motion look.
 //! - Camera shake: `Shake` (strength, duration, axis, envelope, step), presets by generic name (`SHAKE_PRESETS`,
 //!   `ShakeTable`), `ShakeLimits` clamped to the engine ceiling, and `Camera`, whose `offset` gives deterministic whole
 //!   logical px for `Painter::shift` (the caller shifts its world layer only; hit rects never move).
@@ -222,7 +225,8 @@ pub struct Flash {
     pub col: Rgba,
 }
 
-/// A growing ellipse outline (radius `r0` to `r1`, height x `squash`) that fades.
+/// An ellipse outline whose radius runs `r0` to `r1` (height x `squash`) as it fades: growing when `r0 < r1`, closing
+/// when `r0 > r1` (STATUSFX1-E).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Ring {
     pub at: Pt,
@@ -231,6 +235,50 @@ pub struct Ring {
     pub ms: u32,
     pub col: Rgba,
     pub squash: f32,
+}
+
+/// The alpha of an orbit's dots in the back half (behind `at`) and the front half, out of 255 (STATUSFX1-E).
+pub const ORBIT_BACK_ALPHA: u8 = 110;
+pub const ORBIT_FRONT_ALPHA: u8 = 255;
+
+/// Dots circling `at` on the ellipse (`rx`, `ry`) once per `ms` (STATUSFX1-E): dot `i` at angle
+/// `360 x (u + i / count) + phase_deg` (0 deg = +x, 90 = down, the front); it does not fade.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Orbit {
+    pub at: Pt,
+    pub rx: f32,
+    pub ry: f32,
+    pub ms: u32,
+    /// 1-8 dots, evenly spaced.
+    pub count: u8,
+    /// 1 or 2 px squares; a star's arm (1: the 3 px plus, 2: a 5 px plus; STATUSFX1-L).
+    pub size: u8,
+    /// Dot i takes `cols[i % 2]`; its alpha is scaled by `ORBIT_BACK_ALPHA` or `ORBIT_FRONT_ALPHA` / 255.
+    pub cols: [Rgba; 2],
+    pub phase_deg: f32,
+    /// A plus (`size` px arms) instead of a square.
+    pub star: bool,
+}
+
+impl Orbit {
+    /// The dots drawn (`count` clamped to 1-8).
+    pub fn dots(&self) -> u8 {
+        self.count.clamp(1, 8)
+    }
+
+    /// Dot `i`'s angle in degrees at `u`.
+    pub fn angle(&self, i: u8, u: f32) -> f32 {
+        360.0 * (u + i as f32 / self.dots() as f32) + self.phase_deg
+    }
+
+    /// Dot `i`'s centre at `u`, its colour with its alpha, and whether it is in the back half (sin < 0: above `at`).
+    pub fn dot(&self, i: u8, u: f32) -> (Pt, Rgba, bool) {
+        let a = self.angle(i, u).to_radians();
+        let (s, c) = a.sin_cos();
+        let back = s < -1e-6;
+        let k = if back { ORBIT_BACK_ALPHA } else { ORBIT_FRONT_ALPHA } as f32 / 255.0;
+        ((self.at.0 + self.rx * c, self.at.1 + self.ry * s), faded(self.cols[i as usize % 2], k), back)
+    }
 }
 
 /// One of the primitives.
@@ -242,15 +290,16 @@ pub enum Prim {
     Sparks(Sparks),
     Flash(Flash),
     Ring(Ring),
+    Orbit(Orbit),
 }
 
 macro_rules! prim_from {
     ($($t:ident),*) => {$(impl From<$t> for Prim { fn from(p: $t) -> Prim { Prim::$t(p) } })*};
 }
-prim_from!(Projectile, Beam, Trail, Sparks, Flash, Ring);
+prim_from!(Projectile, Beam, Trail, Sparks, Flash, Ring, Orbit);
 
 /// The primitives' names (the agent link's `kinds`).
-pub const PRIM_KINDS: [&str; 6] = ["projectile", "beam", "trail", "sparks", "flash", "ring"];
+pub const PRIM_KINDS: [&str; 7] = ["projectile", "beam", "trail", "sparks", "flash", "ring", "orbit"];
 
 /// A primitive placed on the clock: it starts at `start`, draws on `layer` and varies by `seed`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -288,6 +337,7 @@ impl Effect {
             Prim::Sparks(s) => Prim::Sparks(Sparks { at: m(s.at), ..s }),
             Prim::Flash(f) => Prim::Flash(Flash { at: m(f.at), ..f }),
             Prim::Ring(r) => Prim::Ring(Ring { at: m(r.at), ..r }),
+            Prim::Orbit(o) => Prim::Orbit(Orbit { at: m(o.at), ..o }),
         };
         Effect { prim, ..*self }
     }
@@ -301,6 +351,7 @@ impl Effect {
             Prim::Sparks(s) => s.ms,
             Prim::Flash(f) => f.ms,
             Prim::Ring(r) => r.ms,
+            Prim::Orbit(o) => o.ms,
         }) as u64
     }
 
@@ -322,6 +373,7 @@ impl Effect {
             Prim::Sparks(_) => 3,
             Prim::Flash(_) => 4,
             Prim::Ring(_) => 5,
+            Prim::Orbit(_) => 6,
         }]
     }
 
@@ -368,7 +420,104 @@ impl Effect {
                 let rad = lerp(r.r0, r.r1, u);
                 p.ellipse_ring(r.at.0, r.at.1, rad, rad * r.squash, faded(r.col, 1.0 - u));
             }
+            Prim::Orbit(o) => draw_orbit(p, &o, u),
         }
+    }
+}
+
+/// The back dots first, then the front ones over them.
+fn draw_orbit(p: &mut Painter, o: &Orbit, u: f32) {
+    let dots: Vec<(Pt, Rgba, bool)> = (0..o.dots()).map(|i| o.dot(i, u)).collect();
+    for back in [true, false] {
+        for (q, col, _) in dots.iter().filter(|d| d.2 == back) {
+            let (x, y) = (q.0.round() as i32, q.1.round() as i32);
+            if o.star {
+                // STATUSFX1-L: `size` is the arm (1: the 3 px plus, 2: a 5 px plus)
+                let arm = o.size.clamp(1, 2) as i32;
+                p.fill(Rect::new(x - arm, y, 2 * arm + 1, 1), *col);
+                p.fill(Rect::new(x, y - arm, 1, arm), *col);
+                p.fill(Rect::new(x, y + 1, 1, arm), *col);
+            } else {
+                let n = o.size.clamp(1, 2) as i32;
+                p.fill(Rect::new(x - (n - 1) / 2, y - (n - 1) / 2, n, n), *col);
+            }
+        }
+    }
+}
+
+// ---- Looped effects ---------------------------------------------------------------------------------------------
+
+/// An effect that repeats every `period` clock ms from its start (STATUSFX1-E): the caller draws it every frame and
+/// never puts it on a live list (so it never evicts a one-shot). Cycle `k` draws the inner effect at local time
+/// `t mod period` (nothing once that passes the effect's `ms`) with seed `seed_at(k)`: sparks vary from cycle to cycle,
+/// the same way every run.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Looped {
+    pub effect: Effect,
+    pub period: u64,
+}
+
+impl Looped {
+    /// `effect` every `period` ms (at least 1) from `effect.start`.
+    pub fn new(effect: Effect, period: u64) -> Self {
+        Self { effect, period: period.max(1) }
+    }
+
+    /// The seed of cycle `k`: the effect's own for cycle 0 (the first cycle draws as the one-shot would), a hash of
+    /// it and `k` after.
+    pub fn seed_at(&self, k: u64) -> u64 {
+        if k == 0 {
+            return self.effect.seed;
+        }
+        let mut z = (self.effect.seed ^ k.wrapping_mul(0xD6E8_FEB8_6659_FD93)).wrapping_add(0x9E37_79B9_7F4A_7C15);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    /// (cycle, local ms) at `now`; None before the start.
+    pub fn phase(&self, now: u64) -> Option<(u64, u64)> {
+        let t = now.checked_sub(self.effect.start)?;
+        let period = self.period.max(1);
+        Some((t / period, t % period))
+    }
+
+    /// The inner effect as cycle `k` draws it, started at clock 0 (draw it at the local time).
+    pub fn cycle(&self, k: u64) -> Effect {
+        Effect { start: 0, seed: self.seed_at(k), ..self.effect }
+    }
+
+    /// Draws it as it is at `now` (nothing before its start or in a cycle's gap after the effect's `ms`).
+    pub fn draw(&self, p: &mut Painter, now: u64) {
+        if let Some((k, local)) = self.phase(now) {
+            self.cycle(k).draw(p, local);
+        }
+    }
+
+    /// The reduce-motion look: cycle 0 at local time `ms / 2` (its `u` 0.5 for an even `ms`), whatever the clock.
+    pub fn draw_still(&self, p: &mut Painter) {
+        let e = self.cycle(0);
+        e.draw(p, e.ms() / 2);
+    }
+
+    /// Whether it shows anything at `now` (started and inside a cycle's effect).
+    pub fn showing(&self, now: u64) -> bool {
+        self.phase(now).is_some_and(|(_, local)| local < self.effect.ms())
+    }
+
+    /// Its inner primitive's name (`PRIM_KINDS`).
+    pub fn kind(&self) -> &'static str {
+        self.effect.kind()
+    }
+
+    /// Its layer (the caller picks the pass).
+    pub fn layer(&self) -> Layer {
+        self.effect.layer
+    }
+
+    /// The same loop `dx`, `dy` logical px away (`Effect::moved`).
+    pub fn moved(&self, dx: f32, dy: f32) -> Looped {
+        Looped { effect: self.effect.moved(dx, dy), ..*self }
     }
 }
 

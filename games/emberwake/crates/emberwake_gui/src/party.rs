@@ -7,7 +7,7 @@ use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s_or};
-use emberwake_data::{Catalog, DerivedStatDef, STATS};
+use emberwake_data::{Catalog, Deck, DerivedStatDef, STATS};
 use emberwake_rules::damage;
 use emberwake_rules::derived::{self, Breakdown, Cap, InputKind};
 use emberwake_rules::gear::TIER_SOURCE;
@@ -56,6 +56,16 @@ pub enum PAct {
     PouchRemove(usize),
     ResetGear,
     ConfirmGear,
+    /// RULESET1 9 D6 (deck rule): slot an owned (kind, id) in the first free slot of its bucket.
+    DeckSlot(&'static str, String),
+    /// Take slot (kind, index) out.
+    DeckUnslot(&'static str, usize),
+    /// The right column: "owned" or "order".
+    DeckView(&'static str),
+    /// Move entry (intent, index) one place earlier in that intent's order.
+    OrderUp(String, usize),
+    /// Every intent back to the auto order.
+    OrderAuto,
 }
 
 pub struct Character {
@@ -77,6 +87,11 @@ pub struct Character {
     /// First stash row shown on the Gear tab (the wheel scrolls).
     gear_scroll: usize,
     detail: String,
+    /// RULESET1 9 D6: under the deck rule, the member's deck terms (Some while the Skills tab is loaded under it) and
+    /// the deck draft (empty = auto).
+    terms: Option<DeckTerms>,
+    deck: Deck,
+    deck_view: &'static str,
     w: Vec<Widget<PAct>>,
 }
 
@@ -288,13 +303,317 @@ fn fits(item: &emberwake_data::ItemDef, slot: &str) -> bool {
     emberwake_world::state::item_fits_slot(item, slot)
 }
 
+/// RULESET1 9 D6: the deck's slot kinds in bucket order: (kind, bucket header, what its slots take).
+pub(crate) const DECK_KINDS: [(&str, &str, &str); 3] = [("active", "Actives", "active skills"), ("passive", "Passives", "passives"), ("keystone", "Keystone", "keystones")];
+
+/// RULESET1 9 D1-D6 (rule `deck`; engine-only, no Godot original): what a hero may put in its deck: the owned actives
+/// (never a basic) and slottable passives and keystones, the ruleset's basics (open to all, no slot) and intents, each
+/// family's intent, the slot counts, and what an empty deck (D5 auto) or an empty active row stands for. Editing is pure
+/// on these terms (every edit starts from the deck as it plays, so a first edit pins the automatic deck), shared by the
+/// party screen and the Dojo.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct DeckTerms {
+    pub slots: emberwake_rules::ruleset::DeckSlots,
+    pub intents: Vec<String>,
+    pub basics: Vec<String>,
+    pub actives: Vec<String>,
+    pub passives: Vec<String>,
+    pub keystones: Vec<String>,
+    /// Skill family -> its intent (`round_intent`, else its kind's; actives and basics).
+    pub intent_of: IndexMap<String, String>,
+    /// The deck an empty deck plays as (D5 auto: the base unit's deck, else the first class-path families).
+    pub auto: Deck,
+    /// The actives an empty `active` row plays as in a deck with other keys (the loadout's families).
+    pub auto_actives: Vec<String>,
+}
+
+impl DeckTerms {
+    /// A party member's terms under `rs`: None unless the ruleset has the deck rule (classic keeps today's tab).
+    pub fn for_member(d: &Data, m: &UnitState, rs: &emberwake_rules::ruleset::Ruleset) -> Option<Self> {
+        let rule = emberwake_rules::DeckRule::of(rs)?;
+        let cat = &d.cat;
+        let basics: Vec<String> = rule.basics.iter().filter(|b| cat.tier_one(b).is_some()).cloned().collect();
+        let actives: Vec<String> = m.owned_families(d).into_iter().filter(|f| cat.tier_one(f).is_some() && !cat.is_basic_family(f) && !rule.basics.contains(f) && !cat.is_system(f)).collect();
+        let of_slot = |slot: &str| -> Vec<String> { m.passives.iter().filter(|p| cat.passives.get(*p).is_some_and(|x| x.slot == slot)).cloned().collect() };
+        let (passives, keystones) = (of_slot("passive"), of_slot("keystone"));
+        let mut work = m.clone();
+        work.deck = Deck::default();
+        let auto_unit = progression::build_in(d, &work, Some(&rule))?.unit;
+        let classic = progression::build_with(d, &work, false)?.unit;
+        let auto = Deck {
+            active: auto_unit.active_families(),
+            passive: auto_unit.deck.passive.iter().filter(|p| passives.contains(p)).cloned().collect(),
+            keystone: auto_unit.deck.keystone.iter().filter(|p| keystones.contains(p)).cloned().collect(),
+            order: auto_unit.deck.order.clone(),
+        };
+        // apply_deck's auto pick for an empty active row: the loadout's families the member owns, the first `active`
+        let mut auto_actives: Vec<String> = Vec::new();
+        for f in classic.active_families() {
+            if actives.contains(&f) && !auto_actives.contains(&f) {
+                auto_actives.push(f);
+            }
+        }
+        auto_actives.truncate(rule.slots.active.max(0) as usize);
+        let intent_of = actives.iter().chain(&basics).filter_map(|f| cat.tier_one(f).map(|s| (f.clone(), emberwake_battle::round_intent::skill_intent(s).to_string()))).collect();
+        Some(Self { slots: rule.slots, intents: rs.numbers.intents.clone(), basics, actives, passives, keystones, intent_of, auto, auto_actives })
+    }
+
+    /// RULESET1-G (the Dojo's deck view): a catalog unit's terms under `rs` (None without the deck rule). `u` is the
+    /// unit as it fights now; the actives are the families it owns (no basic); a catalog unit owns the slottable
+    /// passives its deck names (D4), so any catalog passive or keystone may be named; the auto deck is the unit built
+    /// with an empty deck.
+    pub fn for_unit(cat: &emberwake_data::Catalog, rs: &emberwake_rules::ruleset::Ruleset, def: &emberwake_data::UnitDef, u: &emberwake_rules::Unit) -> Option<Self> {
+        let rule = emberwake_rules::DeckRule::of(rs)?;
+        let basics: Vec<String> = rule.basics.iter().filter(|b| cat.tier_one(b).is_some()).cloned().collect();
+        let mut actives: Vec<String> = Vec::new();
+        for s in cat.skills.iter().filter(|s| !s.system && !s.basic && !emberwake_battle::skill::is_item(s)) {
+            let f = s.family_id().to_string();
+            if !actives.contains(&f) && !rule.basics.contains(&f) && !cat.is_basic_family(&f) && !cat.is_system(&f) && cat.tier_one(&f).is_some() && u.owns_skill(cat, &s.id) {
+                actives.push(f);
+            }
+        }
+        let of_slot = |slot: &str| -> Vec<String> { cat.passives.values().filter(|p| p.slot == slot).map(|p| p.id.clone()).collect() };
+        let (passives, keystones) = (of_slot("passive"), of_slot("keystone"));
+        let mut empty = def.clone();
+        empty.deck = Deck::default();
+        let auto_unit = emberwake_rules::build_unit_in(cat, &empty, 0, Some(&rule));
+        let classic = emberwake_rules::build_unit(cat, def, 0);
+        let auto = Deck { active: auto_unit.active_families(), ..Deck::default() };
+        let mut auto_actives: Vec<String> = Vec::new();
+        for f in classic.active_families() {
+            if actives.contains(&f) && !auto_actives.contains(&f) {
+                auto_actives.push(f);
+            }
+        }
+        auto_actives.truncate(rule.slots.active.max(0) as usize);
+        let intent_of = actives.iter().chain(&basics).filter_map(|f| cat.tier_one(f).map(|s| (f.clone(), emberwake_battle::round_intent::skill_intent(s).to_string()))).collect();
+        Some(Self { slots: rule.slots, intents: rs.numbers.intents.clone(), basics, actives, passives, keystones, intent_of, auto, auto_actives })
+    }
+
+    /// The slots of `kind`.
+    pub fn cap(&self, kind: &str) -> usize {
+        (match kind {
+            "active" => self.slots.active,
+            "passive" => self.slots.passive,
+            _ => self.slots.keystone,
+        })
+        .max(0) as usize
+    }
+
+    /// What the member owns of `kind`.
+    pub fn owned(&self, kind: &str) -> &[String] {
+        match kind {
+            "active" => &self.actives,
+            "passive" => &self.passives,
+            _ => &self.keystones,
+        }
+    }
+
+    pub fn list<'a>(deck: &'a Deck, kind: &str) -> &'a Vec<String> {
+        match kind {
+            "active" => &deck.active,
+            "passive" => &deck.passive,
+            _ => &deck.keystone,
+        }
+    }
+
+    fn list_mut<'a>(deck: &'a mut Deck, kind: &str) -> &'a mut Vec<String> {
+        match kind {
+            "active" => &mut deck.active,
+            "passive" => &mut deck.passive,
+            _ => &mut deck.keystone,
+        }
+    }
+
+    /// The deck as it plays: an empty deck is the auto deck; an empty active row the auto actives (D5).
+    pub fn shown(&self, draft: &Deck) -> Deck {
+        if draft.is_empty() {
+            return self.auto.clone();
+        }
+        let mut d = draft.clone();
+        if d.active.is_empty() {
+            d.active = self.auto_actives.clone();
+        }
+        d
+    }
+
+    /// The deck an edit of `kind` starts from (user 2026-10-29): an actives edit (and the order editor) pins the deck as
+    /// it plays (`shown`); a passive or keystone edit keeps the actives automatic (an empty `active` row stays empty, so
+    /// later class-path actives still join), unless the deck as it plays carries an order list (order entries must be
+    /// in `active`: then it pins).
+    fn base(&self, draft: &Deck, kind: &str) -> Deck {
+        let shown = self.shown(draft);
+        if kind == "active" || !draft.active.is_empty() || !shown.order.is_empty() {
+            return shown;
+        }
+        Deck { active: Vec::new(), passive: shown.passive, keystone: shown.keystone, order: IndexMap::new() }
+    }
+
+    /// RULESET1_INTENT FU4: the order the planner fills `intent` by: the deck's `order` list for it (entries still in the
+    /// deck), else the deck's actives of the intent in slot order, then the basics of the intent.
+    pub fn order(&self, deck: &Deck, intent: &str) -> Vec<String> {
+        let of = |f: &&String| self.intent_of.get(*f).is_some_and(|i| i == intent);
+        match deck.order.get(intent).filter(|l| !l.is_empty()) {
+            Some(l) => l.iter().filter(|f| of(f) && (deck.active.contains(f) || self.basics.contains(f))).cloned().collect(),
+            None => deck.active.iter().chain(&self.basics).filter(of).cloned().collect(),
+        }
+    }
+
+    /// A new active joins the end of its intent's written order (an auto order takes it by itself).
+    fn ordered_in(&self, d: &mut Deck, fam: &str) {
+        let Some(intent) = self.intent_of.get(fam) else { return };
+        if let Some(l) = d.order.get_mut(intent).filter(|l| !l.is_empty()) {
+            if !l.iter().any(|f| f == fam) {
+                l.push(fam.to_string());
+            }
+        }
+    }
+
+    /// An active that leaves the deck leaves every order list (an emptied list is the auto order again).
+    fn unordered(d: &mut Deck, fam: &str) {
+        for l in d.order.values_mut() {
+            l.retain(|f| f != fam);
+        }
+        d.order.retain(|_, l| !l.is_empty());
+    }
+
+    fn full(kind: &str) -> String {
+        let label = DECK_KINDS.iter().find(|k| k.0 == kind).map(|k| k.1).unwrap_or("Slots");
+        format!("{label} are full: drag onto a slot to replace one, or right click a slot to take it out.")
+    }
+
+    /// The click path: `id` (an owned `kind`) into the first free slot of its bucket.
+    pub fn slot(&self, draft: &Deck, kind: &str, id: &str) -> Result<Deck, String> {
+        if !self.owned(kind).iter().any(|x| x == id) {
+            return Err(format!("'{id}' is not owned."));
+        }
+        let mut d = self.base(draft, kind);
+        if Self::list(&d, kind).iter().any(|x| x == id) {
+            return Err("Already slotted.".into());
+        }
+        if Self::list(&d, kind).len() >= self.cap(kind) {
+            return Err(Self::full(kind));
+        }
+        Self::list_mut(&mut d, kind).push(id.to_string());
+        if kind == "active" {
+            self.ordered_in(&mut d, id);
+        }
+        Ok(d)
+    }
+
+    /// Takes slot `i` of `kind` out. The last active stays: an empty active row means the automatic pick (D5).
+    pub fn unslot(&self, draft: &Deck, kind: &str, i: usize) -> Result<Deck, String> {
+        let mut d = self.base(draft, kind);
+        if i >= Self::list(&d, kind).len() {
+            return Err("That slot is empty.".into());
+        }
+        if kind == "active" && d.active.len() <= 1 {
+            return Err("Keep at least one active (an empty row is the automatic pick: Use default).".into());
+        }
+        let id = Self::list_mut(&mut d, kind).remove(i);
+        Self::unordered(&mut d, &id);
+        Ok(d)
+    }
+
+    /// `deck.<kind>.<i>`: a slot.
+    fn slot_key(key: &str) -> Option<(&'static str, usize)> {
+        let (k, i) = key.strip_prefix("deck.")?.split_once('.')?;
+        Some((DECK_KINDS.iter().find(|x| x.0 == k)?.0, i.parse().ok()?))
+    }
+
+    /// `order.<intent>.<i>`: a place in an intent's order.
+    fn order_key(key: &str) -> Option<(&str, usize)> {
+        let (intent, i) = key.strip_prefix("order.")?.rsplit_once('.')?;
+        Some((intent, i.parse().ok()?))
+    }
+
+    /// The deck after dropping payload `from` (`deck.own.<kind>.<id>` from the owned list, `deck.<kind>.<i>` from a slot,
+    /// `order.<intent>.<i>` from the order editor) on `to` (`deck.<kind>.<i>`, `deck.list`, `order.<intent>.<i>`), or
+    /// why it can't be done: the same rules as the clicks (a bucket takes its own kind; a filled slot swaps or is
+    /// replaced; an order entry moves within its intent).
+    pub fn after_drop(&self, draft: &Deck, from: &str, to: &str) -> Result<Deck, String> {
+        let wrong = |kind: &str| {
+            let k = DECK_KINDS.iter().find(|x| x.0 == kind).unwrap_or(&DECK_KINDS[0]);
+            format!("{} slots take {} only.", k.1, k.2)
+        };
+        if let Some((intent, i)) = Self::order_key(from) {
+            let (to_intent, j) = Self::order_key(to).ok_or("Drop it on a place in the same intent's order.")?;
+            if to_intent != intent {
+                return Err("Each intent keeps its own order.".into());
+            }
+            let mut d = self.shown(draft);
+            let mut list = self.order(&d, intent);
+            if i >= list.len() {
+                return Err("Nothing there.".into());
+            }
+            if i == j {
+                return Err("Same place.".into());
+            }
+            let f = list.remove(i);
+            list.insert(j.min(list.len()), f);
+            d.order.insert(intent.to_string(), list);
+            return Ok(d);
+        }
+        if let Some((kind, id)) = from.strip_prefix("deck.own.").and_then(|r| r.split_once('.')) {
+            let (to_kind, i) = Self::slot_key(to).ok_or("Drop it on a slot.")?;
+            let shown = self.shown(draft);
+            // a slotted one moves from its own slot (swap or move, never a shifted index)
+            if let Some(j) = Self::list(&shown, kind).iter().position(|x| x == id) {
+                return self.after_drop(draft, &format!("deck.{kind}.{j}"), to);
+            }
+            if to_kind != kind {
+                return Err(wrong(to_kind));
+            }
+            if !self.owned(kind).iter().any(|x| x == id) {
+                return Err(format!("'{id}' is not owned."));
+            }
+            let mut d = self.base(draft, kind);
+            match Self::list(&d, kind).get(i).cloned() {
+                Some(old) => {
+                    Self::list_mut(&mut d, kind)[i] = id.to_string();
+                    Self::unordered(&mut d, &old);
+                }
+                None if Self::list(&d, kind).len() >= self.cap(kind) => return Err(Self::full(kind)),
+                None => Self::list_mut(&mut d, kind).push(id.to_string()),
+            }
+            if kind == "active" {
+                self.ordered_in(&mut d, id);
+            }
+            return Ok(d);
+        }
+        let (kind, i) = Self::slot_key(from).ok_or("That can't go there.")?;
+        let mut d = self.base(draft, kind);
+        if i >= Self::list(&d, kind).len() {
+            return Err("That slot is empty.".into());
+        }
+        if to == "deck.list" {
+            return self.unslot(draft, kind, i);
+        }
+        let (to_kind, j) = Self::slot_key(to).ok_or("That can't go there.")?;
+        if to_kind != kind {
+            return Err(wrong(to_kind));
+        }
+        if i == j {
+            return Err("Same slot.".into());
+        }
+        let list = Self::list_mut(&mut d, kind);
+        if j < list.len() {
+            list.swap(i, j);
+        } else {
+            let f = list.remove(i);
+            list.push(f);
+        }
+        Ok(d)
+    }
+}
+
 impl Character {
     pub fn new(cx: &Cx, member: &str, tab: &str) -> Self {
         let gs = cx.gs();
         let first = gs.party.members.first().map(|m| m.id.clone()).unwrap_or_default();
         let member = if gs.party.member(member).is_some() { member.to_string() } else { first };
         let tab = TABS.iter().find(|t| t.0 == tab).map(|t| t.0).unwrap_or("stats");
-        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), w: Vec::new() }
+        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", w: Vec::new() }
     }
 
     fn m<'a>(&self, cx: &'a Cx) -> &'a UnitState {
@@ -304,6 +623,7 @@ impl Character {
     fn has_draft(&self, cx: &Cx) -> bool {
         match self.tab {
             "level_up" => self.draft.values().sum::<i64>() > 0,
+            "skills" if self.terms.is_some() => self.skills_loaded && self.deck != self.m(cx).deck,
             "skills" => {
                 let m = self.m(cx);
                 let (c, e) = if self.using_default { (Vec::new(), Vec::new()) } else { (self.class_slots.clone(), self.extra_slots.clone()) };
@@ -325,6 +645,9 @@ impl Character {
             return;
         }
         let m = self.m(cx).clone();
+        // RULESET1 9 D6: under the deck rule the tab edits the deck (classic: today's slots)
+        self.terms = DeckTerms::for_member(&cx.data, &m, &cx.data.ruleset(&cx.gs().world_id));
+        self.deck = m.deck.clone();
         self.using_default = m.loadout_class.is_empty() && m.loadout_extra.is_empty();
         if self.using_default {
             self.fill_default(cx);
@@ -336,11 +659,11 @@ impl Character {
         self.skills_loaded = true;
     }
 
-    /// The member's class path families (class slots take only these, SKILLUI1 Q3 A).
+    /// The member's class path families (class slots take only these, SKILLUI1 Q3 A); its world's path (HOOKS1 CN3).
     fn path_families(&self, cx: &Cx) -> Vec<String> {
         let d = &cx.data;
         let m = self.m(cx);
-        d.cat.classes.get(&m.class_id(d)).map(|a| emberwake_rules::unit::families_of(&d.cat, &a.path_steps().into_iter().map(|(_, s)| s).collect::<Vec<_>>())).unwrap_or_default()
+        d.cat_in(&m.path_world(d)).classes.get(&m.class_id(d)).map(|a| emberwake_rules::unit::families_of(&d.cat, &a.path_steps().into_iter().map(|(_, s)| s).collect::<Vec<_>>())).unwrap_or_default()
     }
 
     /// The highest rank of `family` the member has unlocked (with confirmed gear): what a newly slotted skill stores.
@@ -617,6 +940,34 @@ impl Character {
                 self.extra_slots.clear();
                 self.ranks.clear();
             }
+            PAct::DeckSlot(kind, id) => self.deck_edit(cx, |t, deck| t.slot(deck, kind, &id)),
+            PAct::DeckUnslot(kind, i) => self.deck_edit(cx, |t, deck| t.unslot(deck, kind, i)),
+            PAct::DeckView(v) => {
+                self.deck_view = v;
+                self.scroll = 0;
+            }
+            PAct::OrderUp(intent, i) if i > 0 => self.deck_edit(cx, |t, deck| t.after_drop(deck, &format!("order.{intent}.{i}"), &format!("order.{intent}.{}", i - 1))),
+            PAct::OrderUp(..) => {}
+            PAct::OrderAuto => self.deck_edit(cx, |t, deck| {
+                let mut d = t.shown(deck);
+                d.order.clear();
+                Ok(d)
+            }),
+            PAct::UseDefault if self.terms.is_some() => self.deck = Deck::default(),
+            PAct::ConfirmSkills if self.terms.is_some() => {
+                let mut work = self.m(cx).clone();
+                work.deck = self.deck.clone();
+                let errors = work.deck_errors(&d, &format!("Unit '{}'", work.id));
+                if errors.is_empty() {
+                    let id = self.member.clone();
+                    if let Some(m) = cx.gs_mut().party.member_mut(&id) {
+                        m.deck = work.deck;
+                    }
+                    self.skills_loaded = false;
+                } else {
+                    show_errors(cx, errors);
+                }
+            }
             PAct::UseDefault => {
                 self.using_default = true;
                 self.fill_default(cx);
@@ -676,6 +1027,16 @@ impl Character {
 }
 
 impl Character {
+    /// RULESET1 9 D6: one deck edit on the draft (loaded first); a refused edit says why in a notice.
+    fn deck_edit(&mut self, cx: &mut Cx, edit: impl FnOnce(&DeckTerms, &Deck) -> Result<Deck, String>) {
+        self.load_skills(cx);
+        let Some(t) = &self.terms else { return };
+        match edit(t, &self.deck) {
+            Ok(d) => self.deck = d,
+            Err(e) => cx.notice.push(e),
+        }
+    }
+
     /// One gear move on the draft (loaded first); a refused move shows its reason.
     fn gear_move(&mut self, cx: &mut Cx, mv: impl FnOnce(&Data, &mut UnitState, &mut Stash) -> Result<(), String>) {
         self.load_gear(cx);
@@ -921,7 +1282,18 @@ impl Screen<GameCx> for Character {
 
     /// A right click: on the Skills tab over a filled slot it takes the skill out (SKILLUI1 Q4); anywhere else it closes.
     fn back(&mut self, cx: &mut Cx) {
-        if self.tab == "skills" {
+        if self.tab == "skills" && self.terms.is_some() {
+            let (mx, my) = self.mouse;
+            let over = self.w.iter().rev().find(|w| w.rect.contains(mx, my) && DECK_KINDS.iter().any(|k| w.id.starts_with(&format!("skills.{}.", k.0))));
+            if let Some(w) = over {
+                let kind = DECK_KINDS.iter().find(|k| w.id.starts_with(&format!("skills.{}.", k.0))).map(|k| k.0).unwrap_or("active");
+                let i: usize = w.id.rsplit('.').next().and_then(|s| s.parse().ok()).unwrap_or(usize::MAX);
+                if self.terms.as_ref().is_some_and(|t| i < DeckTerms::list(&t.shown(&self.deck), kind).len()) {
+                    self.act(cx, PAct::DeckUnslot(kind, i));
+                }
+                return;
+            }
+        } else if self.tab == "skills" {
             let (mx, my) = self.mouse;
             let over = self.w.iter().rev().find(|w| w.rect.contains(mx, my) && (w.id.starts_with("skills.class.") || w.id.starts_with("skills.extra.")));
             if let Some(w) = over {
@@ -945,6 +1317,7 @@ impl Screen<GameCx> for Character {
     fn can_drop(&self, cx: &Cx, from: &str, to: &str) -> bool {
         match self.tab {
             "gear" => self.after_drop(&cx.data, from, to).is_ok(),
+            "skills" if self.terms.is_some() => self.terms.as_ref().is_some_and(|t| t.after_drop(&self.deck, from, to).is_ok()),
             "skills" => self.skills_after_drop(cx, from, to).is_ok(),
             _ => false,
         }
@@ -953,6 +1326,13 @@ impl Screen<GameCx> for Character {
     fn accept_drop(&mut self, cx: &mut Cx, from: &str, to: &str) {
         if self.tab == "skills" {
             self.load_skills(cx);
+            if let Some(t) = &self.terms {
+                match t.after_drop(&self.deck, from, to) {
+                    Ok(d) => self.deck = d,
+                    Err(e) => show_errors(cx, vec![e]),
+                }
+                return;
+            }
             match self.skills_after_drop(cx, from, to) {
                 Ok((class, extra, ranks)) => {
                     (self.class_slots, self.extra_slots, self.ranks) = (class, extra, ranks);
@@ -971,7 +1351,15 @@ impl Screen<GameCx> for Character {
 
     fn state(&self, cx: &Cx) -> Value {
         let mut out = json!({"member": self.member, "tab": self.tab, "draft": self.draft.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<String, Value>>(), "has_draft": self.has_draft(cx)});
-        if self.tab == "skills" {
+        if let (true, Some(t)) = (self.tab == "skills", &self.terms) {
+            let shown = t.shown(&self.deck);
+            out["deck"] = deck_json(&self.deck);
+            out["deck_shown"] = deck_json(&shown);
+            out["deck_auto"] = json!(self.deck.is_empty());
+            out["deck_view"] = json!(self.deck_view);
+            out["deck_order"] = Value::Object(t.intents.iter().map(|i| (i.clone(), json!(t.order(&shown, i)))).collect());
+            out["basics"] = json!(t.basics);
+        } else if self.tab == "skills" {
             out["class"] = json!(self.class_slots);
             out["extra"] = json!(self.extra_slots);
             out["ranks"] = Value::Object(self.ranks.iter().map(|(k, v)| (k.clone(), json!(v))).collect());
@@ -1087,6 +1475,9 @@ impl Character {
 
     fn draw_skills(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState) {
         self.load_skills(cx);
+        if let Some(t) = self.terms.clone() {
+            return self.draw_deck(ui, cx, m, &t);
+        }
         let d = &cx.data;
         let cat = &d.cat;
         let Some(b) = progression::build_with(d, m, false) else { return };
@@ -1201,6 +1592,173 @@ impl Character {
         ui.button("skills.confirm", Rect::new(498, 312, 70, 18), "Confirm", PAct::ConfirmSkills, self.has_draft(cx));
     }
 
+    /// RULESET1 9 D6: the Skills tab under the deck rule. Left: three buckets (Actives, Passives, Keystone; filled by
+    /// click or drag like today's slots, a right click takes one out) and the read-only Basics row. Right: the owned
+    /// list or the order editor (one short list per intent of its actives and basics; drag to reorder, a click moves an
+    /// entry one place up).
+    fn draw_deck(&mut self, ui: &mut Ui<PAct>, cx: &Cx, m: &UnitState, t: &DeckTerms) {
+        let d = &cx.data;
+        let cat = &d.cat;
+        let rs = d.ruleset(&cx.gs().world_id);
+        let built = progression::build_with(d, m, false).map(|b| b.unit);
+        let shown = t.shown(&self.deck);
+        let intent_name = |i: &str| emberwake_battle::round_intent::RoundIntent::parse(i).map(|x| x.name().to_string()).unwrap_or_else(|| title_case(i));
+        // (name, intent, AP, rank, description) of family `f` at the rank the member uses now (its top unlocked)
+        let skill_of = |f: &str| -> (String, String, i32, i32, String) {
+            let top = built.as_ref().and_then(|u| u.selectable_ranks(cat, f).last().copied()).unwrap_or(0);
+            let row = cat.family_rows(f).into_iter().find(|s| s.tier == top).or_else(|| cat.tier_one(f));
+            let name = cat.tier_one(f).map(|s| s.name.clone()).unwrap_or_else(|| f.to_string());
+            let intent = intent_name(t.intent_of.get(f).map(String::as_str).unwrap_or(""));
+            match row {
+                Some(s) => (name, intent, emberwake_battle::skill::ap_cost_by(s, built.as_ref(), &rs), top, json::s(&s.raw, "description")),
+                None => (name, intent, 0, top, String::new()),
+            }
+        };
+        let passive_of = |p: &str| (s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"));
+        let name_of = |kind: &str, id: &str| if kind == "active" { skill_of(id).0 } else { passive_of(id).0 };
+        // Left: the buckets.
+        let mut y = 104;
+        for (kind, label, takes) in DECK_KINDS {
+            let list = DeckTerms::list(&shown, kind);
+            let cap = t.cap(kind);
+            ui.p.text(64.0, y as f32, &format!("{label} {} / {cap}", list.len()), BODY + 1.0, INFO);
+            if kind == "active" {
+                ui.p.text(150.0, y as f32, if self.deck.is_empty() { "Automatic deck" } else { "Custom deck" }, BODY, DIM);
+            }
+            y += 11;
+            for i in 0..cap {
+                let r = Rect::new(64, y, 236, 13);
+                let (id, key) = (format!("skills.{kind}.{i}"), format!("deck.{kind}.{i}"));
+                match list.get(i) {
+                    None => {
+                        ui.p.panel(r, rgba(20, 28, 46, 120), rgba(58, 78, 116, 120), 2.0);
+                        ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, "Empty", BODY, DIM);
+                        let help = if t.owned(kind).is_empty() && kind != "active" {
+                            format!("Holds one of the hero's {takes}; none owned yet: they come from the hero's background, faction, disciplines and named items.")
+                        } else {
+                            format!("Holds one of the hero's {takes}: drag one here, or click it in the owned list.")
+                        };
+                        ui.push(id, "row", "Empty", r, true, false, None, tip(&format!("Empty {kind} slot"), &help));
+                    }
+                    Some(f) => {
+                        ui.p.panel(r, rgba(26, 34, 54, 255), BORDER, 2.0);
+                        let card = if kind == "active" {
+                            let (name, intent, ap, rank, desc) = skill_of(f);
+                            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 2.0, &name, BODY, 140.0, TEXT);
+                            ui.p.text_fit(r.x as f32 + 148.0, r.y as f32 + 3.0, &format!("{intent} {}", roman(rank)), SMALL, 56.0, DIM);
+                            ui.p.text_right(r.x as f32 + 232.0, r.y as f32 + 2.0, &format!("{ap} AP"), BODY, DIM);
+                            vec![(name, GOLD), (format!("{intent} skill, Rank {}, {ap} AP", roman(rank)), INFO), (desc, TEXT), ("Drag to another slot or back to the list. Right click takes it out.".into(), DIM)]
+                        } else {
+                            let (name, desc) = passive_of(f);
+                            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 2.0, &name, BODY, 228.0, TEXT);
+                            vec![(name, GOLD), (desc, TEXT), ("Applies only while slotted. Drag to another slot or back to the list. Right click takes it out.".into(), DIM)]
+                        };
+                        ui.push(id, "row", name_of(kind, f), r, true, false, None, card);
+                        ui.draggable(key.clone());
+                    }
+                }
+                ui.drop_target(key);
+                y += 15;
+            }
+            y += 3;
+        }
+        // The basics: open to every unit, no slot, never removed (D1).
+        ui.p.text(64.0, y as f32, "Basics", BODY + 1.0, INFO);
+        ui.p.text(100.0, y as f32 + 1.0, "open to every unit, no slot", BODY, DIM);
+        for (k, f) in t.basics.iter().enumerate() {
+            let r = Rect::new(64 + (k % 3) as i32 * 79, y + 11 + (k / 3) as i32 * 12, 76, 11);
+            let (name, intent, ap, _, desc) = skill_of(f);
+            ui.p.panel(r, rgba(22, 30, 48, 255), rgba(58, 78, 116, 200), 2.0);
+            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &name, SMALL, 70.0, TEXT);
+            let line = if t.intent_of.get(f).is_some_and(|i| t.intents.contains(i)) { format!("{intent} basic, {ap} AP") } else { format!("Basic for any intent, {ap} AP") };
+            ui.push(format!("skills.basic.{f}"), "row", name.clone(), r, true, false, None, vec![(name, GOLD), (line, INFO), (desc, TEXT), ("Open to every unit: takes no slot and cannot be taken out.".into(), DIM)]);
+        }
+        // Right: the owned list or the order editor.
+        ui.tab("skills.view.owned", Rect::new(310, 100, 70, 14), "Owned", PAct::DeckView("owned"), self.deck_view == "owned");
+        ui.tab("skills.view.order", Rect::new(384, 100, 100, 14), "Order by intent", PAct::DeckView("order"), self.deck_view == "order");
+        if self.deck_view == "order" {
+            let n = t.intents.len().max(1) as i32;
+            let col_w = 294 / n;
+            for (c, intent) in t.intents.iter().enumerate() {
+                let x = 310 + c as i32 * col_w;
+                let name = intent_name(intent);
+                ui.p.text_fit(x as f32 + 2.0, 118.0, &name, BODY + 1.0, (col_w - 6) as f32, INFO);
+                ui.push(format!("skills.order.{intent}"), "row", name.clone(), Rect::new(x, 116, col_w - 4, 15), true, false, None, tip(&name, &format!("In {name} the planner fills each round from the top of this list down (its actives and basics). Drag to reorder; a click moves a skill one place up.")));
+                let list = t.order(&shown, intent);
+                if list.is_empty() {
+                    ui.p.text(x as f32 + 2.0, 134.0, "None", BODY, DIM);
+                }
+                for (k, f) in list.iter().enumerate() {
+                    let r = Rect::new(x, 132 + k as i32 * 15, col_w - 4, 13);
+                    let basic = t.basics.contains(f);
+                    let (fname, _, ap, _, desc) = skill_of(f);
+                    ui.p.panel(r, if basic { rgba(22, 30, 48, 255) } else { rgba(26, 34, 54, 255) }, BORDER, 2.0);
+                    ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &format!("{}. {fname}", k + 1), BODY, (col_w - 10) as f32, if basic { INFO } else { TEXT });
+                    let card = vec![(fname.clone(), GOLD), (format!("{} {name}, {ap} AP: place {} of {}", if basic { "Basic," } else { "Active," }, k + 1, list.len()), INFO), (desc, TEXT), ("Drag to reorder; a click moves it one place up.".into(), DIM)];
+                    ui.push(format!("skills.order.{intent}.{k}"), "row", fname, r, true, false, (k > 0).then(|| PAct::OrderUp(intent.clone(), k)), card);
+                    ui.draggable(format!("order.{intent}.{k}"));
+                    ui.drop_target(format!("order.{intent}.{k}"));
+                }
+            }
+            ui.button_tip("skills.order.auto", Rect::new(310, 254, 70, 15), "Auto order", PAct::OrderAuto, !shown.order.is_empty(), tip("Auto order", "Every intent back to the automatic order: the deck's actives in slot order, then the basics."));
+            ui.p.text(386.0, 258.0, "Each round fills from the top.", SMALL, DIM);
+        } else {
+            let list_area = Rect::new(310, 114, 294, 158);
+            ui.push("skills.list", "panel", "Owned", list_area, true, false, None, tip("Owned", "Drop a slot here to take it out."));
+            ui.drop_target("deck.list");
+            let owned: Vec<(&'static str, String)> = DECK_KINDS.iter().flat_map(|k| t.owned(k.0).iter().map(move |id| (k.0, id.clone()))).collect();
+            const ROWS: usize = 7;
+            self.scroll = self.scroll.min(owned.len().saturating_sub(ROWS));
+            if self.scroll > 0 || owned.len() > ROWS {
+                ui.p.text_right(604.0, 103.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(owned.len()), owned.len()), SMALL, DIM);
+            }
+            for (k, &(kind, ref id)) in owned.iter().skip(self.scroll).take(ROWS).enumerate() {
+                let y = 118 + k as i32 * 22;
+                let slotted = DeckTerms::list(&shown, kind).contains(id);
+                let full = !slotted && DeckTerms::list(&shown, kind).len() >= t.cap(kind);
+                ui.button(&format!("skills.slot.{kind}.{id}"), Rect::new(310, y, 50, 16), if slotted { "Slotted" } else if full { "Full" } else { "Slot" }, PAct::DeckSlot(kind, id.clone()), !slotted && !full);
+                let (name, line, desc) = if kind == "active" {
+                    let (name, intent, ap, rank, desc) = skill_of(id);
+                    (name.clone(), format!("{name}  [{intent}]  Rank {}  {ap} AP", roman(rank)), desc)
+                } else {
+                    let (name, desc) = passive_of(id);
+                    (name.clone(), format!("{name}  [{}]", title_case(kind)), desc)
+                };
+                ui.p.text_fit(366.0, y as f32 + 1.0, &line, BODY, 238.0, TEXT);
+                ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, DIM);
+                ui.push(format!("skills.owned.{kind}.{id}"), "row", name.clone(), Rect::new(366, y, 238, 20), true, slotted, Some(PAct::DeckSlot(kind, id.clone())), tip(&name, &desc));
+                ui.draggable(format!("deck.own.{kind}.{id}"));
+            }
+        }
+        // While something is dragged the pane says where it can go.
+        if let Some(from) = ui.dragging().map(String::from) {
+            let (mx, my) = ui.mouse;
+            let target = ui.widgets.iter().rev().find(|x| x.drop.is_some() && x.rect.contains(mx, my)).and_then(|x| x.drop.clone());
+            self.detail = match target {
+                Some(to) if t.after_drop(&self.deck, &from, &to).is_ok() => {
+                    if let Some((intent, j)) = DeckTerms::order_key(&to) {
+                        format!("Moves it to place {} in the {} order.", j + 1, intent_name(intent))
+                    } else if to == "deck.list" {
+                        "Drop to take it out.".into()
+                    } else {
+                        let (kind, j) = DeckTerms::slot_key(&to).unwrap_or(("active", 0));
+                        let list = DeckTerms::list(&shown, kind);
+                        let from_list = from.strip_prefix("deck.own.").and_then(|r| r.split_once('.')).is_some_and(|(k, id)| !DeckTerms::list(&shown, k).iter().any(|x| x == id));
+                        match list.get(j) {
+                            Some(old) if from_list => format!("Replaces {}.", name_of(kind, old)),
+                            Some(old) => format!("Swaps with {}.", name_of(kind, old)),
+                            None => "Drop to slot it here.".into(),
+                        }
+                    }
+                }
+                _ => "Drop on a slot of its own kind, on the owned list to take it out, or on a place in the same intent's order.".into(),
+            };
+        }
+        ui.button("skills.reset", Rect::new(68, 312, 70, 18), "Reset", PAct::ResetSkills, true);
+        ui.button_tip("skills.default", Rect::new(144, 312, 70, 18), "Use default", PAct::UseDefault, !self.deck.is_empty(), tip("Use default", "The automatic deck: the first class path skills, no passives, the automatic order."));
+        ui.button("skills.confirm", Rect::new(498, 312, 70, 18), "Confirm", PAct::ConfirmSkills, self.has_draft(cx));
+    }
+
     /// GEARUI1: three columns like the Godot gear dojo: the hero's stats with this gear (and the change a hovered or
     /// dragged item would make), the equipped slots with the battle pouch under them, the party stash. Clicks and drag
     /// and drop both ways (stash to a slot or the pouch equips, a slot or pouch item to the stash takes it off).
@@ -1290,7 +1848,7 @@ impl Character {
         let now = sheet(d, &ruleset, &work);
         let then = preview.as_ref().map(|p| sheet(d, &ruleset, p));
         let (lx, lw) = (25, 210);
-        ui.p.text(lx as f32 + 3.0, 102.0, &format!("{}  Lv {}", d.cat.classes.get(&work.class_id(d)).map(|c| c.name.clone()).unwrap_or_default(), work.level(d)), head, INFO);
+        ui.p.text(lx as f32 + 3.0, 102.0, &format!("{}  Lv {}", d.class_name(&cx.gs().world_id, &work.class_id(d)), work.level(d)), head, INFO);
         // DERIVE1 4.4: catalog rows past the built-in ones close the 12 px step up (the last row starts at 260 at most)
         let step = 12f32.min(102.0 / (now.len().saturating_sub(STATS.len()).max(2) - 1) as f32);
         for (i, r) in now.iter().enumerate() {
@@ -1331,6 +1889,11 @@ impl Character {
         };
         ok.then_some(w)
     }
+}
+
+/// A deck as the agent link reads it (every key, empty ones too).
+pub(crate) fn deck_json(d: &Deck) -> Value {
+    json!({"active": d.active, "passive": d.passive, "keystone": d.keystone, "order": Value::Object(d.order.iter().map(|(k, v)| (k.clone(), json!(v))).collect())})
 }
 
 /// The Gear tab's stat list: the core stats with gear, then the derived rows (`derived`).
@@ -1716,5 +2279,242 @@ mod tests {
         c.draft.insert(STATS[0].to_string(), 1);
         let q = ask(&mut c, &mut cx, PAct::ConfirmLevel);
         assert_eq!(q.state(&cx)["default"], json!("yes"), "spending points is not a discard");
+    }
+
+    // ---- RULESET1 9 D6: the deck view ------------------------------------------------------------------------------
+
+    fn strs(v: &[&str]) -> Vec<String> {
+        v.iter().map(|x| x.to_string()).collect()
+    }
+
+    /// Scratch terms for the pure deck rules (test-only ids): three actives over two intents, two passives, a keystone,
+    /// one basic per intent; slots 2 / 1 / 1; the auto deck slots two actives, an empty active row plays as `lunge`.
+    fn terms() -> DeckTerms {
+        DeckTerms {
+            slots: emberwake_rules::ruleset::DeckSlots { active: 2, passive: 1, keystone: 1 },
+            intents: strs(&["assault", "guard"]),
+            basics: strs(&["strike", "hold"]),
+            actives: strs(&["cleave", "lunge", "wall"]),
+            passives: strs(&["p1", "p2"]),
+            keystones: strs(&["k1"]),
+            intent_of: [("cleave", "assault"), ("lunge", "assault"), ("wall", "guard"), ("strike", "assault"), ("hold", "guard")].iter().map(|(a, b)| (a.to_string(), b.to_string())).collect(),
+            auto: Deck { active: strs(&["cleave", "wall"]), ..Default::default() },
+            auto_actives: strs(&["lunge"]),
+        }
+    }
+
+    /// D5, D6: an empty deck plays as the auto deck; a passive or keystone edit keeps the actives automatic (user
+    /// 2026-10-29: the empty active row plays as the class path's actives), an actives or order edit pins them; a bucket
+    /// holds its slot count and only what the hero owns of its kind.
+    #[test]
+    fn only_an_actives_or_order_edit_pins_the_automatic_actives_and_a_bucket_stops_at_its_slots() {
+        let t = terms();
+        let empty = Deck::default();
+        assert_eq!(t.shown(&empty), t.auto);
+        assert!(t.slot(&empty, "active", "lunge").unwrap_err().contains("full"), "the auto deck fills both active slots");
+        let d = t.slot(&empty, "passive", "p1").unwrap();
+        assert_eq!((d.active.clone(), d.passive.clone()), (Vec::<String>::new(), strs(&["p1"])), "a passive edit leaves the actives automatic");
+        assert_eq!(t.shown(&d).active, t.auto_actives, "the shown actives follow the class path");
+        let k = t.slot(&d, "keystone", "k1").unwrap();
+        assert!(k.active.is_empty() && k.order.is_empty(), "a keystone edit pins nothing either");
+        let pinned = t.slot(&d, "active", "cleave").unwrap();
+        assert_eq!(pinned.active, [t.auto_actives.clone(), strs(&["cleave"])].concat(), "an actives edit pins the shown actives");
+        let ordered = t.after_drop(&d, "order.assault.1", "order.assault.0").unwrap();
+        assert_eq!(ordered.active, t.auto_actives, "the order editor pins the actives its entries need");
+        assert!(t.slot(&d, "passive", "p2").unwrap_err().contains("full"));
+        assert!(t.slot(&d, "passive", "k1").is_err(), "a keystone is not a passive");
+        assert!(t.slot(&d, "active", "nope").is_err(), "not owned");
+        assert_eq!(t.slot(&d, "passive", "p1").unwrap_err(), "Already slotted.");
+        let only_passive = Deck { passive: strs(&["p1"]), ..Default::default() };
+        assert_eq!(t.shown(&only_passive).active, t.auto_actives);
+    }
+
+    /// D6 "filled by click or drag like today's slots": a bucket takes its own kind only; a dragged owned entry replaces
+    /// a filled slot, a slotted one swaps or moves; a slot dropped on the list comes out; the last active stays.
+    #[test]
+    fn a_deck_bucket_takes_its_own_kind_and_slots_swap_replace_or_come_out() {
+        let t = terms();
+        let empty = Deck::default();
+        assert!(t.after_drop(&empty, "deck.own.passive.p1", "deck.active.0").unwrap_err().contains("active skills only"));
+        assert!(t.after_drop(&empty, "deck.active.0", "deck.keystone.0").unwrap_err().contains("keystones only"));
+        assert_eq!(t.after_drop(&empty, "deck.own.active.lunge", "deck.active.1").unwrap().active, strs(&["cleave", "lunge"]), "replaces");
+        assert_eq!(t.after_drop(&empty, "deck.active.0", "deck.active.1").unwrap().active, strs(&["wall", "cleave"]), "swaps");
+        assert_eq!(t.after_drop(&empty, "deck.own.active.wall", "deck.active.0").unwrap().active, strs(&["wall", "cleave"]), "a slotted one moves from its slot");
+        let one = t.after_drop(&empty, "deck.active.0", "deck.list").unwrap();
+        assert_eq!(one.active, strs(&["wall"]));
+        assert!(t.after_drop(&one, "deck.active.0", "deck.list").unwrap_err().contains("at least one"));
+        assert!(t.unslot(&one, "active", 0).is_err());
+        let p = t.after_drop(&empty, "deck.own.passive.p2", "deck.passive.0").unwrap();
+        assert_eq!(p.passive, strs(&["p2"]));
+        assert!(t.after_drop(&p, "deck.passive.0", "deck.list").unwrap().passive.is_empty());
+        assert!(t.after_drop(&p, "deck.passive.1", "deck.list").is_err(), "an empty slot");
+    }
+
+    /// D6 order editor and RULESET1_INTENT FU4: the auto order is the deck's actives of the intent in slot order, then
+    /// the basics of the intent; a drag reorders within one intent and writes that intent's list only; a new active
+    /// joins a written list at its end, a removed one leaves it; Auto order clears the written lists only.
+    #[test]
+    fn the_order_editor_reorders_within_an_intent_and_follows_the_slots() {
+        let t = terms();
+        let empty = Deck::default();
+        assert_eq!((t.order(&t.auto, "assault"), t.order(&t.auto, "guard")), (strs(&["cleave", "strike"]), strs(&["wall", "hold"])));
+        let d = t.after_drop(&empty, "order.assault.1", "order.assault.0").unwrap();
+        assert_eq!(d.order.get("assault"), Some(&strs(&["strike", "cleave"])));
+        assert!(!d.order.contains_key("guard"), "the other intents stay automatic");
+        assert_eq!(t.order(&d, "assault"), strs(&["strike", "cleave"]));
+        assert!(t.after_drop(&d, "order.assault.0", "order.guard.0").unwrap_err().contains("own order"));
+        let swapped = t.after_drop(&d, "deck.own.active.lunge", "deck.active.0").unwrap();
+        assert_eq!(swapped.order.get("assault"), Some(&strs(&["strike", "lunge"])), "cleave left the written order, lunge joined its end");
+        let d2 = t.after_drop(&empty, "order.guard.1", "order.guard.0").unwrap();
+        let gone = t.after_drop(&d2, "deck.active.1", "deck.list").unwrap();
+        assert_eq!(gone.order.get("guard"), Some(&strs(&["hold"])), "wall left; the basic stays");
+        let (mut cx, member) = deck_cx(true);
+        let mut c = Character::new(&cx, &member, "skills");
+        c.load_skills(&cx);
+        c.terms = Some(t.clone());
+        c.deck = d.clone();
+        c.act(&mut cx, PAct::OrderAuto);
+        assert!(c.deck.order.is_empty() && c.deck.active == d.active, "Auto order clears the written orders only");
+    }
+
+    /// A game on the shipped data in a world that plays under the deck rule (`deck` true) or without it, and its first
+    /// member.
+    fn deck_cx(deck: bool) -> (Cx, String) {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let w = cx.data.world_ids().into_iter().find(|w| emberwake_rules::DeckRule::of(&cx.data.ruleset(w)).is_some() == deck).expect("a world");
+        cx.gs_mut().world_id = w;
+        let member = cx.gs().party.members[0].id.clone();
+        (cx, member)
+    }
+
+    fn rect_of(c: &Character, id: &str) -> Rect {
+        c.w.iter().find(|w| w.id == id).unwrap_or_else(|| panic!("widget {id}")).rect
+    }
+
+    /// Every `skills.` widget but the owned-list panel sits inside the popup (above the detail pane, the bottom buttons
+    /// aside), none overlapping.
+    fn assert_laid_out(c: &Character, what: &str) {
+        let ws: Vec<(String, Rect)> = c.w.iter().filter(|w| w.id.starts_with("skills.") && w.id != "skills.list").map(|w| (w.id.clone(), w.rect)).collect();
+        for (i, (id, r)) in ws.iter().enumerate() {
+            let below = id == "skills.reset" || id == "skills.default" || id == "skills.confirm";
+            assert!(r.x >= 25 && r.x + r.w <= 615 && r.y >= 96 && (below || r.y + r.h <= 275), "{what}: {id} {r:?} inside the popup, above the detail pane");
+            for (other, o) in &ws[i + 1..] {
+                let x = r.intersect(*o);
+                assert!(x.w == 0 || x.h == 0, "{what}: {id} {r:?} overlaps {other} {o:?}");
+            }
+        }
+    }
+
+    /// "The classic ruleset shows today's screen unchanged": five class and three extra slots, no deck bucket.
+    #[test]
+    fn classic_keeps_the_skills_tab_of_today() {
+        let (mut cx, member) = deck_cx(false);
+        let mut c = Character::new(&cx, &member, "skills");
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
+        assert!(c.terms.is_none());
+        let ids: Vec<&str> = c.w.iter().map(|w| w.id.as_str()).collect();
+        for i in 0..emberwake_rules::stats::MAX_CLASS_SLOTS {
+            assert!(ids.contains(&format!("skills.class.{i}").as_str()));
+        }
+        assert!(!ids.iter().any(|id| id.starts_with("skills.active.") || id.starts_with("skills.basic.") || id.starts_with("skills.view.")));
+        assert!(c.state(&cx).get("deck").is_none());
+    }
+
+    /// D6: under the deck rule the tab shows a bucket per slot kind with the ruleset's slot counts, a read-only chip per
+    /// basic and, on the right, the owned list or one order list per intent; everything fits the popup.
+    #[test]
+    fn under_the_deck_rule_the_skills_tab_shows_buckets_basics_and_the_order_editor() {
+        let (mut cx, member) = deck_cx(true);
+        let rule = emberwake_rules::DeckRule::of(&cx.data.ruleset(&cx.gs().world_id)).unwrap();
+        let mut c = Character::new(&cx, &member, "skills");
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
+        let t = c.terms.clone().expect("deck terms under the deck rule");
+        assert_eq!(t.slots, rule.slots);
+        let ids: Vec<String> = c.w.iter().map(|w| w.id.clone()).collect();
+        for (kind, _, _) in DECK_KINDS {
+            assert_eq!(ids.iter().filter(|id| id.starts_with(&format!("skills.{kind}."))).count(), t.cap(kind), "{kind}: one widget per slot");
+        }
+        assert!(!t.basics.is_empty());
+        for b in &t.basics {
+            assert!(ids.contains(&format!("skills.basic.{b}")), "basic {b}");
+            assert!(!t.actives.contains(b), "a basic is never an active");
+        }
+        let shown = t.shown(&c.deck);
+        assert_eq!(c.state(&cx)["deck_shown"]["active"], json!(shown.active));
+        assert!(shown.active.len() <= t.cap("active") && !shown.active.is_empty());
+        assert_laid_out(&c, "owned view");
+        c.act(&mut cx, PAct::DeckView("order"));
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
+        for intent in &t.intents {
+            assert!(c.w.iter().any(|w| w.id == format!("skills.order.{intent}")), "{intent}");
+            let n = c.w.iter().filter(|w| w.id.starts_with(&format!("skills.order.{intent}."))).count();
+            assert_eq!(n, t.order(&shown, intent).len(), "{intent}: one entry per skill of its order");
+        }
+        assert_laid_out(&c, "order view");
+    }
+
+    /// D3-D6 end to end: the member owns a slottable passive and keystone (shipped rows picked by `slot`); slotting
+    /// one, reordering an intent and Confirm save a deck the member's validation accepts; the battle build applies a
+    /// slottable passive only while slotted; a right click on a filled slot takes it out.
+    #[test]
+    fn a_confirmed_deck_is_valid_and_slots_its_passives_in_battle() {
+        let (mut cx, member) = deck_cx(true);
+        let pick = |slot: &str| cx.data.cat.passives.values().filter(|p| p.slot == slot).map(|p| p.id.clone()).min().unwrap_or_else(|| panic!("a {slot} passive"));
+        let (passive, keystone) = (pick("passive"), pick("keystone"));
+        cx.gs_mut().party.member_mut(&member).unwrap().passives.extend([passive.clone(), keystone.clone()]);
+        let mut c = Character::new(&cx, &member, "skills");
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
+        assert!(!c.has_draft(&cx));
+        c.act(&mut cx, PAct::DeckSlot("passive", passive.clone()));
+        assert_eq!(c.deck.passive, [passive.clone()]);
+        let t = c.terms.clone().unwrap();
+        let shown = t.shown(&c.deck);
+        if let Some(intent) = t.intents.iter().find(|i| t.order(&shown, i).len() > 1).cloned() {
+            let before = t.order(&shown, &intent);
+            c.act(&mut cx, PAct::OrderUp(intent.clone(), 1));
+            let want: Vec<String> = [before[1].clone(), before[0].clone()].into_iter().chain(before[2..].iter().cloned()).collect();
+            assert_eq!(t.order(&c.deck, &intent), want);
+        }
+        assert!(c.has_draft(&cx));
+        let draft = c.deck.clone();
+        c.act(&mut cx, PAct::ConfirmSkills);
+        assert!(cx.notice.is_empty() && cx.nav.is_empty(), "{:?}", cx.notice);
+        let m = cx.gs().party.member(&member).unwrap().clone();
+        assert_eq!(m.deck, draft);
+        assert!(m.validate(&cx.data).is_empty(), "{:?}", m.validate(&cx.data));
+        let rule = emberwake_rules::DeckRule::of(&cx.data.ruleset(&cx.gs().world_id)).unwrap();
+        let u = progression::build_in(&cx.data, &m, Some(&rule)).unwrap().unit;
+        assert!(u.passives.contains(&passive) && !u.passives.contains(&keystone), "only the slotted passive applies");
+        assert_eq!(u.active_families(), draft.active);
+        let back = UnitState::from_dict(m.to_value().as_object().unwrap());
+        assert_eq!(back.deck, draft, "the saved form reads back the same deck");
+        // a right click on the filled passive slot takes it out; the popup stays open
+        c.draw(&mut cx, &mut crate::hud::hud_tests::gfx(), (-500, -500), true);
+        let r = rect_of(&c, "skills.passive.0");
+        c.mouse = (r.x + 2, r.y + 2);
+        c.back(&mut cx);
+        assert!(c.deck.passive.is_empty() && cx.nav.is_empty());
+        c.act(&mut cx, PAct::UseDefault);
+        assert!(c.deck.is_empty() && c.has_draft(&cx));
+    }
+
+    /// TEXTFIT1 on the deck view: at every text size no text leaves the canvas, overlaps another or runs out of its
+    /// control, in both right-hand views (`text_fit` shortening a long description is allowed, as on today's tab).
+    #[test]
+    fn the_deck_view_reads_clean_at_every_text_size() {
+        let (mut cx, member) = deck_cx(true);
+        let mut g = crate::hud::hud_tests::gfx();
+        let mut c = Character::new(&cx, &member, "skills");
+        for view in ["owned", "order"] {
+            c.act(&mut cx, PAct::DeckView(view));
+            for (size, scale) in aegis_ui::screen::TEXT_SIZES {
+                let recs = crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, scale as f32);
+                let boxes: Vec<(String, f32, f32, f32, f32)> = c.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
+                let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+                for k in ["edge", "overlap", "spill"] {
+                    assert_eq!(v["counts"][k], json!(0), "{view} at {size}: {v}");
+                }
+            }
+        }
     }
 }

@@ -137,3 +137,18 @@ fn rewards_on_prints_what_the_defeated_foes_pay() {
     assert!(camp.iter().any(|l| l.trim_start().starts_with("rewards over ")), "a line per run");
     assert!(camp.iter().any(|l| l.contains("rewards per run: xp/hero")), "the per-run totals");
 }
+
+/// RULESET1-G: `feel quick` fights Emberwake's timeline test encounters (the game's default list) under the timeline
+/// ruleset with no PLAN FAIL, a block per encounter and the FEEL_JSON line last.
+#[test]
+fn feel_runs_the_timeline_test_encounters() {
+    let d = data();
+    let out = emberwake_sim::run(&d, &argv("feel quick"));
+    assert!(out.iter().any(|l| l.starts_with("plan checks: 0 PLAN FAIL")), "{out:?}");
+    let last = out.last().and_then(|l| l.strip_prefix(emberwake_sim::feel::JSON_PREFIX)).expect("FEEL_JSON last");
+    let r: serde_json::Value = serde_json::from_str(last).expect("JSON");
+    assert_eq!(r["ruleset"], serde_json::json!("timeline"));
+    for e in emberwake_sim::FEEL_ENCOUNTERS {
+        assert_eq!(r["encounters"][e]["fights"], serde_json::json!(1), "{e}: one fight (quick)");
+    }
+}

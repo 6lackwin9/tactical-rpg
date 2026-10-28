@@ -1,3 +1,5 @@
+Archived 2026-10-29: the cloud wind-down state of 2026-10-18 (CLEANUP.md CLN-32); superseded by a fresh handover that a resumed area thread writes (`docs/workflow/cloud.md`, decision "Fresh area sessions"). Text below unchanged.
+
 # Design handover
 
 Written 2026-10-18 16:30 UTC by the Design session at the project wind-down (Tushar 16:28: move to an "interactive" mode, agents act only on his requests). Read this, then `docs/workflow/cloud.md` and `docs/workflow/design-review.md`. Resume only when Tushar asks for Design work.

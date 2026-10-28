@@ -23,6 +23,8 @@ import views  # noqa: E402
 TEST_BODY = "warrior/_viewtest"
 PILOT = ("warrior", "warrior/2h_sword")   # DIR4-R1 (L5): both warrior grips, the 2H one with the greatsword
 VIEW_IDS = ['idle_down', 'idle_up', 'walk_down', 'walk_up', 'attack_down', 'attack_up']
+# WINDUP1 K6, K7: the pilot bodies' wind-up, stagger and dazed view rows come after today's view rows
+VIEW_IDS += ['%s_%s' % (n, v) for n in rig.WINDUP_ROWS for v in views.VIEWS]
 SPARK = (255, 255, 255)                   # the attack sparks' core (fx only; the rig's own white is rig.WHITE)
 
 
@@ -191,9 +193,11 @@ class Clips(unittest.TestCase):
         for cls, u in classes.UNITS.items():
             A, T = classes.clips(cls)
             VA, VT = views.clips(cls, u, stand_in=True)
-            attack = views.GRIPS.get(views.grip_key(cls, u), {}).get('attack')
+            g = views.GRIPS.get(views.grip_key(cls, u), {})
+            attack = g.get('attack')
             self.assertEqual(sorted(VA), sorted(['idle_down', 'idle_up', 'walk_down', 'walk_up']
-                                                + (['%s_down' % attack[0], '%s_up' % attack[0]] if attack else [])))
+                                                + (['%s_down' % attack[0], '%s_up' % attack[0]] if attack else [])
+                                                + (['%s_%s' % (n, v) for n in rig.WINDUP_ROWS for v in views.VIEWS] if 'windups' in g else [])))
             for vid in VA:
                 base, view = views.of(vid)
                 self.assertIn(view, views.VIEWS)
@@ -344,9 +348,9 @@ class Pilot(Registry):
         cls, u = export_units.unit_of(key)
         return u, views.clips(cls, u)[0]
 
-    def test_six_view_clips_after_the_side_rows(self):
-        # 6.5 check 1, R3: the six view clips after the side clips, each with of, view and its side clip's frames,
-        # ms and loop
+    def test_view_clips_after_the_side_rows(self):
+        # 6.5 check 1, R3: the six view clips after the side clips, then (WINDUP1 K6, K7) the twelve wind-up, stagger
+        # and dazed view clips, each with of, view and its side clip's frames, ms, loop and loop_from
         for key in PILOT:
             clips = quiet(export_units.body, key, 'all')[4]['clips']
             side = [c for c in clips if 'view' not in c]
@@ -354,8 +358,8 @@ class Pilot(Registry):
             by_id = {c['id']: c for c in side}
             for c in clips[len(side):]:
                 s = by_id[c['of']]
-                self.assertEqual((c['view'], c['frames'], c['ms'], c['loop']),
-                                 (c['id'].rsplit('_', 1)[1], s['frames'], s['ms'], s['loop']), (key, c['id']))
+                self.assertEqual((c['view'], c['frames'], c['ms'], c['loop'], c.get('loop_from')),
+                                 (c['id'].rsplit('_', 1)[1], s['frames'], s['ms'], s['loop'], s.get('loop_from')), (key, c['id']))
 
     def test_side_rows_and_palette_unchanged(self):
         # 6.5 checks 2 and 3, R4: the side rows are pixel-identical to the body exported without views and the
@@ -456,6 +460,20 @@ class Pilot(Registry):
         # pilot review: in idle and walk the 1H sword is held upright (as the side view): its blade rises above the
         # shoulder and stays above the pelvis
         u, A = self.views_of('warrior')
+        for view in views.VIEWS:
+            j = views.joints(u, view)
+            for clip in ('idle_', 'walk_'):
+                for n, im in enumerate(A[clip + view]):
+                    ys = [y for _, y in self.blade(u, view, im)]
+                    self.assertLess(min(ys), j['sh_r'][1], (clip + view, n))
+                    self.assertLess(max(ys), j['pelvis'][1], (clip + view, n))
+
+    def test_buckler_sword_raised(self):
+        # WINDUP1-R1 review (user 2026-10-29): the 1H + buckler look holds its sword raised in front and back views as
+        # the kite look does (its review views, drawn with stand-ins while the buckler has no view drawing)
+        cls, u = export_units.unit_of('warrior/1h_buckler')
+        self.assertEqual(views.missing(u, cls), ['offhand buckler'])
+        A = views.clips(cls, u, stand_in=True)[0]
         for view in views.VIEWS:
             j = views.joints(u, view)
             for clip in ('idle_', 'walk_'):

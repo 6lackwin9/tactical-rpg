@@ -95,11 +95,12 @@ class Ctx:
         s.s = u.get('scale', 1.0)
 
 
-def joints(u, view, bob=0.0, head_dy=0.0, lift_r=0.0, lift_l=0.0, hand_r=None, hand_l=None, dy=0.0):
+def joints(u, view, bob=0.0, head_dy=0.0, lift_r=0.0, lift_l=0.0, hand_r=None, hand_l=None, dy=0.0, dx=0.0):
     """The skeleton of one frame in `view`, scaled about the feet as rig.pose: pelvis, hips, knees, feet, shoulders,
     elbows, hands (r = the unit's right, the main hand), neck base and head centre. hand_r / hand_l: hand targets
     (outward, down) from the shoulder (None = the rest pose, hanging at the side); lift_r / lift_l: foot lifts
-    (a lifted foot rises, its knee bends); dy: the body (not the feet) moved down the screen."""
+    (a lifted foot rises, its knee bends); dy: the body (not the feet) moved down the screen; dx (WINDUP1: a sway or a
+    tremble): the whole figure moved across the screen."""
     L, A, T = u['leg'], u['arm'], u['tl']
     s = u.get('scale', 1.0)
     rs = -1.0 if view == 'down' else 1.0
@@ -123,6 +124,8 @@ def joints(u, view, bob=0.0, head_dy=0.0, lift_r=0.0, lift_l=0.0, hand_r=None, h
         j['sh_' + side], j['elbow_' + side], j['hand_' + side] = sh, elbow, hand_p
     j['neck'] = (CX, sh_y)
     j['head'] = (CX, sh_y - u.get('neck', 6) + head_dy)
+    if dx:  # whole pixels: a half-pixel shift of the symmetric figure blurs the legs together
+        j = {k: (p[0] + round(dx * s), p[1]) for k, p in j.items()}
     return j
 
 
@@ -171,14 +174,15 @@ def _neck(f, c):
 
 
 def pose_view(u, view, bob=0.0, head_dy=0.0, lift_r=0.0, lift_l=0.0, hand_r=None, hand_l=None, dy=0.0, hurt=0.0,
-              flash=False, fx=None, tails=0.0, stand_in=False, **e):
+              flash=False, fx=None, tails=0.0, stand_in=False, dx=0.0, **e):
     """One frame of unit `u` in `view` ('down' or 'up'), a W x W RGBA image (R1, R2, R6). The keys are joints'; fx:
     (x, y, r, colour) effect discs at side-frame positions scaled about the feet; e: extra keys for the part drawers
-    (Ctx.e). stand_in: draw STAND_INS for parts without a view drawer (review boards only)."""
+    (Ctx.e). stand_in: draw STAND_INS for parts without a view drawer (review boards only). The frame's info holds
+    the main hand ('hand') and, for a weapon of rig.WEAPON_TIP, its tip ('tip'), as rig.pose's (WINDUP1)."""
     if view not in VIEWS:
         raise ValueError("view must be down or up, not %r" % (view,))
     s = u.get('scale', 1.0)
-    j = joints(u, view, bob, head_dy, lift_r, lift_l, hand_r, hand_l, dy)
+    j = joints(u, view, bob, head_dy, lift_r, lift_l, hand_r, hand_l, dy, dx)
     if e.get('grip2'):  # a two-handed grip: the left hand holds the grip grip2 px below the right, along the weapon
         dx_, dy_ = rig.udir(e.get('wa', 0.0)); g = e['grip2'] * e.get('wk', 1.0) * s; hr = j['hand_r']
         j['elbow_l'], j['hand_l'] = rig.ik(j['sh_l'], u['arm'], u['arm'], (hr[0] - dx_ * g, hr[1] - dy_ * g),
@@ -202,12 +206,16 @@ def pose_view(u, view, bob=0.0, head_dy=0.0, lift_r=0.0, lift_l=0.0, hand_r=None
         f.disc(CX + (x - CX) * s, GY - (GY - y) * s, r, col)
     if flash:
         rig._flash(f)
+    f.im.info['hand'] = j['hand_r']
+    if u.get('weapon') in rig.WEAPON_TIP:
+        d = rig.udir(e.get('wa', 0.0)); k = e.get('wk', 1.0) * rig.WEAPON_TIP[u['weapon']]
+        f.im.info['tip'] = (j['hand_r'][0] + d[0] * k, j['hand_r'][1] + d[1] * k)
     return f.im
 
 
 # ------------------------------------------------------------------ clip shapes (DIR4 6.3)
-def idle(u, view, frames=8, hf_amp=0.8, stand_in=False, **kw):
-    """idle_<view>: rig.idle's bob and breath (8 frames, 160 ms), hands from the grip's ready pose."""
+def idle_keys(u, frames=8, hf_amp=0.8, **kw):
+    """The pose_view keys of each idle frame (idle draws them; WINDUP1's view wind-ups start from frame 0's)."""
     out = []
     for i in range(frames):
         t = i / frames * 2 * math.pi; b = 0.5 + 0.5 * math.sin(t - 0.6); lag = 0.5 + 0.5 * math.sin(t - 1.4)
@@ -216,9 +224,13 @@ def idle(u, view, frames=8, hf_amp=0.8, stand_in=False, **kw):
         hl = None if hl is None else (hl[0], hl[1] + lag * 0.6)
         if hr is None and hl is None:  # rest pose: the hands breathe with the body
             hr = hl = (1.2, 2 * u['arm'] / u.get('scale', 1.0) - 1.0 + lag * 0.4)
-        out.append(pose_view(u, view, bob=k.pop('bob', 0.0) + b * 0.9, head_dy=lag * 0.8 - 0.2, hand_r=hr, hand_l=hl,
-                             tails=t, stand_in=stand_in, **k))
-    return out, [160] * frames
+        out.append(dict(bob=k.pop('bob', 0.0) + b * 0.9, head_dy=lag * 0.8 - 0.2, hand_r=hr, hand_l=hl, tails=t, **k))
+    return out
+
+
+def idle(u, view, frames=8, hf_amp=0.8, stand_in=False, **kw):
+    """idle_<view>: rig.idle's bob and breath (8 frames, 160 ms), hands from the grip's ready pose."""
+    return [pose_view(u, view, stand_in=stand_in, **k) for k in idle_keys(u, frames, hf_amp, **kw)], [160] * frames
 
 
 def walk(u, view, frames=8, stride=6.0, lift=0.45, stand_in=False, **kw):
@@ -256,6 +268,11 @@ def clips(cls, u, stand_in=False):
         name, fn = g['attack']
         for view in VIEWS:
             A['%s_%s' % (name, view)], T['%s_%s' % (name, view)] = fn(u, view, stand_in)
+    if 'windups' in g:  # WINDUP1 K6: the six wind-up, stagger and dazed rows per view
+        for view in VIEWS:
+            W, WT = windup_rows(u, view, g, stand_in)
+            for n in W:
+                A['%s_%s' % (n, view)], T['%s_%s' % (n, view)] = W[n], WT[n]
     return A, T
 
 
@@ -561,6 +578,11 @@ def warrior_attack(u, view, stand_in=False):
     tip spark; the shield stays up. down: the blade points at the camera (foreshortened) by the shield's edge; up:
     the stab goes away from the camera, the forearm and hilt hidden by the body, the tip and spark past his right
     side."""
+    return _frames(u, view, warrior_attack_keys(view), stand_in), [110, 160, 45, 140, 110, 110]
+
+
+def warrior_attack_keys(view):
+    """The keys of attack_<view> of the 1H + kite look (frame 1, pulled back, is the `windup` hold, WINDUP1 K2)."""
     sh = dict(hand_l=(-0.5, 5.0))
     if view == 'down':
         keys = [dict(bob=1.0, hand_r=(1.5, 3.0), wa=180, wk=0.35, hand_l=(-0.5, 5.5)),                # levelled
@@ -576,7 +598,7 @@ def warrior_attack(u, view, stand_in=False):
                 dict(bob=1.8, dy=-1.0, hand_r=(-1.0, 2.0), wa=70, wk=0.8, **dict(hid, **sh)),        # hold
                 dict(bob=1.2, dy=-0.4, hand_r=(1.0, 4.0), wa=15, **sh)]
     keys.append(dict(W1_READY[view], bob=0.3))
-    return _frames(u, view, keys, stand_in), [110, 160, 45, 140, 110, 110]
+    return keys
 
 
 # 2H (WAR2H1 grip '2h', the greatsword): both hands on the grip; down: before the torso, the blade over the screen-left
@@ -590,6 +612,11 @@ def warrior_2h_attack(u, view, stand_in=False):
     """attack_<view> of the 2H look (the side clip's seven keys and ms, the impact on its frame 3): a two-handed cut
     across the chest; the blade lifts, cocks back over the right shoulder, sweeps across (a slash arc) and lands level
     at chest height on the far side with the impact spark. up: the hands, grip and pommel stay behind the body."""
+    return _frames(u, view, warrior_2h_attack_keys(view), stand_in, _impact), [120, 190, 45, 150, 120, 110, 110]
+
+
+def warrior_2h_attack_keys(view):
+    """The keys of attack_<view> of the 2H look (frame 1, cocked, is the `windup` hold, WINDUP1 K2)."""
     g2 = dict(grip2=rig.GRIP2)
     if view == 'down':
         keys = [dict(bob=1.2, dy=-0.5, hand_r=(-2.0, 3.0), wa=345, **g2),                              # lift
@@ -607,10 +634,88 @@ def warrior_2h_attack(u, view, stand_in=False):
                 dict(bob=1.8, dy=-1.0, hand_r=(-6.5, 2.0), wa=265, wk=0.95, **hid),                   # hold
                 dict(bob=1.2, dy=-0.4, hand_r=(-5.0, 3.0), wa=330, **hid)]
     keys.append(dict(W2_READY[view], bob=0.3))
-    return _frames(u, view, keys, stand_in, _impact), [120, 190, 45, 150, 120, 110, 110]
+    return keys
 
+
+# ------------------------------------------------------------------ wind-ups, stagger and dazed (WINDUP1 K6)
+# Every new side clip gets a `_down` and an `_up` row with the side row's frames, ms and loop_from (rig.windup_rows
+# draws them through pose_view). A grip's 'windups' entry holds per view: 'attack' (its attack keys; frame
+# strike - 1 is the `windup` hold, K2), 'holds' (the other wind-ups' held keys), 'stagger' (four keys) and 'dazed'.
+# The side keys turn as DIR4 6.3: a knock-back moves the body 1 px away from the facing (up the screen in `down`,
+# down it in `up`); the dazed sway moves the figure across the screen in whole pixels (dx), the heavy tremble the
+# weapon hand (shake_hand).
+def view_rest(u):
+    """The values pose_view draws for a key it is not given (hands: the rest pose), for rig.lerp_kw."""
+    rest = (1.2, 2 * u['arm'] / u.get('scale', 1.0) - 1.0)
+    return dict(bob=0.0, head_dy=0.0, lift_r=0.0, lift_l=0.0, dy=0.0, dx=0.0, wk=1.0, hand_r=rest, hand_l=rest, tails=0.0)
+
+
+def windup_rows(u, view, g, stand_in=False):
+    """The six WINDUP1 rows of unit `u` in `view` ({side id: frames}, {side id: ms}) from grip keys `g`."""
+    w = g['windups']
+    ready = idle_keys(u, **grip_kw(g, 'idle', view))[0]
+    holds = dict(w['holds'][view], windup=w['attack'](view)[w['strike'] - 1])
+    def draw(kw):
+        return pose_view(u, view, stand_in=stand_in, **kw)
+    return rig.windup_rows(draw, ready, holds, w['stagger'][view], w['dazed'][view], view_rest(u), shake_hand)
+
+
+def shake_hand(kw, d):
+    """The heavy wind-up's tremble in a view: the main hand (and the weapon) moved `d` px across the screen, the
+    body still (a half-pixel shift of the whole figure blurs its legs)."""
+    hx, hy = kw.get('hand_r') or (0.0, 0.0)
+    kw['hand_r'] = (hx + d, hy)
+
+
+# 1H + kite shield: the windup is attack frame 1 (the sword pulled back by the right shoulder)
+W1_LOW = dict(hand_l=(1.0, 8.5))                      # the shield lowered (buff, dazed)
+W1_WINDUPS = dict(attack=warrior_attack_keys, strike=2, holds={
+    'down': {'windup_heavy': dict(bob=3.2, dy=-0.5, hand_r=(3.0, -2.5), wa=335, wk=0.85, hand_l=(-0.5, 5.0)),
+             'windup_buff': dict(bob=0.6, hand_r=(-2.5, 2.5), wa=0, **W1_LOW),
+             'windup_debuff': dict(bob=1.0, dy=0.5, hand_r=(2.0, 2.0), wa=212, wk=0.6, hand_l=(0.5, 7.0))},
+    'up': {'windup_heavy': dict(bob=3.2, dy=0.5, hand_r=(3.0, -2.5), wa=20, wk=0.85, hand_l=(-0.5, 5.0)),
+           'windup_buff': dict(bob=0.6, hand_r=(-1.5, 1.0), wa=12, fore_z={'r': RAISED_BACK}, **W1_LOW),
+           'windup_debuff': dict(bob=1.0, dy=-0.5, hand_r=(2.0, 1.0), wa=40, wk=0.55, hand_l=(0.5, 7.0))}},
+    stagger={
+    'down': [dict(bob=0.5, dy=-1.0, head_dy=-1.0, hand_r=(6.0, 1.0), wa=300, hand_l=(-0.5, 6.0)),
+             dict(bob=1.5, dy=-1.0, head_dy=-0.5, lift_l=1.5, hand_r=(5.0, 3.0), wa=320, hand_l=(0.0, 6.5)),
+             dict(bob=2.5, dy=-0.5, head_dy=1.0, hand_r=(1.5, 8.5), wa=195, wk=0.8, hand_l=(1.0, 8.0)),
+             dict(bob=2.2, dy=-1.0, head_dy=1.5, hand_r=(1.5, 9.0), wa=190, wk=0.8, hand_l=(1.2, 9.0))],
+    'up': [dict(bob=0.5, dy=1.0, head_dy=-1.0, hand_r=(6.0, 1.0), wa=60, hand_l=(-0.5, 6.0)),
+           dict(bob=1.5, dy=1.0, head_dy=-0.5, lift_r=1.5, hand_r=(5.0, 3.0), wa=40, hand_l=(0.0, 6.5)),
+           dict(bob=2.5, dy=0.5, head_dy=1.0, hand_r=(1.5, 8.5), wa=165, wk=0.8, hand_l=(1.0, 8.0)),
+           dict(bob=2.2, dy=1.0, head_dy=1.5, hand_r=(1.5, 9.0), wa=170, wk=0.7, hand_l=(1.2, 9.0))]},
+    dazed={'down': dict(bob=2.0, head_dy=1.5, hand_r=(1.5, 9.5), wa=185, wk=0.8, hand_l=(1.2, 9.0)),
+           'up': dict(bob=2.0, head_dy=1.5, hand_r=(1.5, 9.5), wa=170, wk=0.6, hand_l=(1.2, 9.0))})
+
+# 2H (the greatsword): the windup is attack frame 1 (cocked over the right shoulder); both hands on the grip
+G2 = dict(grip2=rig.GRIP2)
+W2_WINDUPS = dict(attack=warrior_2h_attack_keys, strike=2, holds={
+    'down': {'windup_heavy': dict(bob=3.2, dy=-0.5, hand_r=(3.0, -2.5), wa=318, wk=0.8, wz=RAISED_BACK, **G2),
+             'windup_buff': dict(bob=1.0, head_dy=0.8, hand_r=(-4.0, 8.0), wa=180, wz=FRONT, **G2),
+             'windup_debuff': dict(bob=1.0, dy=0.5, hand_r=(0.5, 2.5), wa=212, wk=0.6, **G2)},
+    'up': {'windup_heavy': dict(bob=3.2, dy=0.5, hand_r=(0.5, -1.0), wa=38, wk=0.75, fore_z=UP_FORE, **G2),
+           'windup_buff': dict(bob=1.0, head_dy=0.8, hand_r=(-2.5, 3.5), wa=10, wk=1.0, fore_z=UP_FORE, **G2),
+           'windup_debuff': dict(bob=1.0, dy=-0.5, hand_r=(2.0, 1.0), wa=40, wk=0.55, fore_z=UP_FORE, **G2)}},
+    stagger={
+    'down': [dict(bob=0.5, dy=-1.0, head_dy=-1.0, hand_r=(5.0, -1.0), wa=315, **G2),
+             dict(bob=1.5, dy=-1.0, head_dy=-0.5, lift_l=1.5, hand_r=(4.0, 2.0), wa=330, **G2),
+             dict(bob=2.5, dy=-0.5, head_dy=1.0, hand_r=(-2.0, 8.0), wa=195, wk=0.8, **G2),
+             dict(bob=2.2, dy=-1.0, head_dy=1.5, hand_r=(-2.0, 8.5), wa=190, wk=0.8, **G2)],
+    'up': [dict(bob=0.5, dy=1.0, head_dy=-1.0, hand_r=(5.0, -1.0), wa=45, **G2),
+           dict(bob=1.5, dy=1.0, head_dy=-0.5, lift_r=1.5, hand_r=(4.0, 2.0), wa=30, **G2),
+           dict(bob=2.5, dy=0.5, head_dy=1.0, hand_r=(-3.5, 8.0), wa=170, wk=0.6, fore_z=UP_FORE, **G2),
+           dict(bob=2.2, dy=1.0, head_dy=1.5, hand_r=(-3.5, 8.5), wa=172, wk=0.6, fore_z=UP_FORE, **G2)]},
+    dazed={'down': dict(bob=2.0, head_dy=1.5, hand_r=(-2.5, 9.0), wa=188, wk=0.75, **G2),
+           'up': dict(bob=2.0, head_dy=1.5, hand_r=(-3.0, 5.0), wa=32, wk=0.85, fore_z=UP_FORE, **G2)})
 
 GRIPS['warrior'] = dict(idle=W1_READY, walk={v: dict(W1_READY[v], swing=0.4) for v in VIEWS},
-                        attack=('attack', warrior_attack))
+                        attack=('attack', warrior_attack), windups=W1_WINDUPS)
+# 1H + buckler (WAR2H1 grip 'buckler'; WINDUP1-R1 review, user 2026-10-29): the sword raised upright in front and
+# back views as the kite look's (the DIR4-R1 review note for a shield or buckler warrior), not hanging along the leg.
+# Idle and walk keys only: the buckler has no view drawing yet, so these bodies keep side rows in the sheets and the
+# keys show on the review boards' stand-in views (the attack and wind-up views come with a buckler drawing).
+WB_READY = {v: dict(W1_READY[v]) for v in VIEWS}
+GRIPS['warrior/buckler'] = dict(idle=WB_READY, walk={v: dict(WB_READY[v], swing=0.4) for v in VIEWS})
 GRIPS['warrior/2h'] = dict(idle=W2_READY, walk={v: dict(W2_READY[v], swing=0.3) for v in VIEWS},
-                           attack=('attack', warrior_2h_attack))
+                           attack=('attack', warrior_2h_attack), windups=W2_WINDUPS)

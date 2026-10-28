@@ -6,7 +6,8 @@ use crate::SimGame;
 use rpgkit_world::Data;
 use indexmap::IndexMap;
 
-pub const MODES: [&str; 9] = ["duel", "tier", "levels", "group", "stats", "party", "role", "sweep", "campaign"];
+/// RULESET1-G: `feel` is engine-only (not in the help text, whose lines are Godot parity: as `rewards`).
+pub const MODES: [&str; 10] = ["duel", "tier", "levels", "group", "stats", "party", "role", "sweep", "campaign", "feel"];
 pub const CLASSES: [&str; 6] = ["warrior", "ranger", "priest", "brawler", "rogue", "mage"];
 pub const SPENDS: [&str; 4] = ["class", "cons", "primary", "mixed"];
 pub const LOADOUTS: [&str; 3] = ["default", "newest", "role"];
@@ -221,6 +222,7 @@ impl SimArgs {
         let mut positional: Vec<String> = Vec::new();
         let mut metrics_set = false;
         let mut distance_set = false;
+        let mut enc_set = false;
         // world= first: enc= ids resolve against it whatever the token order.
         for raw in argv {
             let w = raw.trim();
@@ -244,6 +246,7 @@ impl SimArgs {
             a.key(d, key, value)?;
             metrics_set |= key == "metrics";
             distance_set |= key == "distance";
+            enc_set |= key == "enc";
         }
         if let Some(m) = positional.first() {
             a.mode = m.clone();
@@ -268,6 +271,8 @@ impl SimArgs {
             a.seeds_set = true;
         } else if a.mode == "party" || a.mode == "sweep" {
             a.seed_count = PARTY_SEEDS;
+        } else if a.mode == "feel" && !a.seeds_set {
+            a.seed_count = crate::feel::FEEL_SEEDS;
         }
         if positional.len() > 3 {
             return Err("too many positional arguments".into());
@@ -284,14 +289,45 @@ impl SimArgs {
         if a.quick {
             a.seed_count = 1;
         }
+        if a.mode == "feel" {
+            a.feel_defaults(d, enc_set)?;
+        }
         a.ruleset = rpgkit_rules::ruleset::Ruleset::of(&d.cat, &a.ruleset_id)?;
         a.ruleset.adjust(&a.rules)?;
         Ok(a)
     }
 
+    /// RULESET1-G (RULESET1_TASKS 3): the `feel` mode's defaults: the timeline ruleset unless `ruleset=` is given, the
+    /// game's feel encounters unless `enc=` is given; every encounter must be a catalog encounter with a party.
+    fn feel_defaults(&mut self, d: &Data, enc_set: bool) -> Result<(), String> {
+        if self.ruleset_id.is_empty() {
+            self.ruleset_id = rpgkit_rules::ruleset::TIMELINE.into();
+        }
+        if !enc_set {
+            if self.game.feel_encounters.is_empty() {
+                return Err("feel needs enc=<catalog encounters with a party> (the game names no default)".into());
+            }
+            self.encounters = self.game.feel_encounters.clone();
+        }
+        for e in &self.encounters {
+            if d.cat.encounters.get(e).is_none_or(|row| aegis_core::json::sget(row, "party").is_empty()) {
+                return Err(format!("feel: '{e}' is not a catalog encounter with a party"));
+            }
+        }
+        Ok(())
+    }
+
     fn key(&mut self, d: &Data, key: &str, value: &str) -> Result<(), String> {
         let classes = godot_list(&CLASSES);
         match key {
+            // RULESET1-G: `seeds=N` (the feel mode's spelling; the positional seeds win). Not in the help text.
+            "seeds" => {
+                if !is_int(value) || int(value) < 1 {
+                    return Err(format!("seeds must be a positive number (got '{value}')"));
+                }
+                self.seed_count = int(value) as usize;
+                self.seeds_set = true;
+            }
             "cap" => {
                 if !is_int(value) || int(value) < CAP_MIN || int(value) > CAP_MAX {
                     return Err(format!("cap must be {CAP_MIN}..{CAP_MAX} (got '{value}')"));
@@ -648,6 +684,7 @@ impl SimArgs {
                 }
             }
             "tier" => t += &format!(", tier_foe {}", self.tier_foe),
+            "feel" => t += &format!(", enc {}, ruleset {}{}", self.encounters.join(","), self.ruleset.id, if self.rules.is_empty() { String::new() } else { format!(", rules {}", self.rules) }),
             _ => {}
         }
         if !self.pouch.is_empty() {

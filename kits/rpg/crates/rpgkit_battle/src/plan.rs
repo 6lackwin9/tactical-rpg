@@ -276,6 +276,18 @@ impl PlanEntry {
         cmd.impact = crate::poise::Impact::of(s);
         // HOOKS1 FM1: the push or pull of each unit the hit damages (the rule forced_move reads it)
         cmd.forced = crate::forced::Shove::of(s);
+        // HOOKS1 8.1, 8.2: the skill's own triggers and its family (the rule triggers reads them)
+        cmd.family = s.family_id().to_string();
+        cmd.triggers = if self.item.is_some() { Vec::new() } else { s.triggers.clone() };
+        // HOOKS1 RD1, HC1, IG1: the riders (the rule triggers reads them), the HP cost and the guard bypass (set only
+        // under their rules)
+        if self.item.is_none() {
+            cmd.riders = s.riders.clone();
+            cmd.hp_cost = command::hp_cost_of(w, s);
+            cmd.ignore_guard = command::ignores_guard(w, s);
+            // HOOKS1 UM2: the meter changes (set only under the rule unit_meters)
+            cmd.meters = skill::meters_by(s, &w.ruleset).to_vec();
+        }
         // HOOKS1 GH2: the hazard the skill or item leaves (the rule ground_hazards reads it)
         cmd.hazard = match &self.item {
             Some(item) => crate::ground::Place::of_item(item),
@@ -324,6 +336,10 @@ pub struct SimState {
     pub round_target: Option<RoundTarget>,
     /// RULESET1_INTENT MV8: the step whose Maneuver skill carries the Disengage retreat (-1 = none).
     pub retreat_step: i32,
+    /// HOOKS1 HC1: the unit's HP after the HP costs of the steps so far (rule hp_cost).
+    pub hp_left: i32,
+    /// HOOKS1 UM2: the unit's meter values after the meter costs of the steps so far (rule unit_meters; empty without).
+    pub meters_left: Vec<(String, i32)>,
 }
 
 impl SimState {
@@ -335,6 +351,10 @@ impl SimState {
     }
     pub fn est(&self, u: UnitId) -> i32 {
         self.est_hp.get(&u).copied().unwrap_or(0)
+    }
+    /// HOOKS1 UM2: the planned value of `meter` (None when the unit holds none).
+    pub fn meter(&self, meter: &str) -> Option<i32> {
+        self.meters_left.iter().find(|(m, _)| m == meter).map(|(_, v)| *v)
     }
 }
 
@@ -456,6 +476,8 @@ impl Plan {
             dry_step: -1,
             round_target: w.round_states.get(&c).and_then(|r| r.target).filter(|_| round_intent::on(w)),
             retreat_step: self.retreat_step(w, c),
+            hp_left: u.hp,
+            meters_left: crate::meter::values(w, c),
         };
         for s in &u.st.active {
             for &b in status::blocked_blocks(s) {
@@ -534,6 +556,16 @@ impl Plan {
                 let fam_name = w.cat.tier_one(fam).map(|t| t.name.as_str()).unwrap_or(fam);
                 let rank = u.effective_rank(&w.cat, fam).unwrap_or(0);
                 return format!("{} uses {} at Rank {} (set on the Skills tab).", u.name, fam_name, rpgkit_rules::unit::rank_numeral(rank));
+            }
+            // HOOKS1 HC1: a skill is refused while the HP left is at or below its HP cost (rule hp_cost)
+            let p = command::hp_cost_problem(st.hp_left, command::hp_cost_of(w, s));
+            if !p.is_empty() {
+                return p;
+            }
+            // HOOKS1 UM2: a skill is refused while the meters left do not cover its meter cost (rule unit_meters)
+            let p = crate::meter::cost_problem(w, skill::meters_by(s, &w.ruleset), |m| st.meter(m));
+            if !p.is_empty() {
+                return p;
             }
         }
         // RULESET1_INTENT IN5, TG1, MM1: a unit holding an intent uses only its skills, on one target a round
@@ -1369,6 +1401,13 @@ impl Plan {
             st.dry_entry = st.entries.len() as i32 - 1;
         }
         st.stance = after;
+        // HOOKS1 HC1: the HP cost is paid at the command's start: HP becomes max(1, hp - cost) (rule hp_cost)
+        let cost = command::hp_cost_of(w, s);
+        if cost > 0 {
+            st.hp_left = (st.hp_left - cost).max(1);
+        }
+        // HOOKS1 UM2: the meter changes are paid at the command's start too (rule unit_meters)
+        crate::meter::spend(w, c, &mut st.meters_left, skill::meters_by(s, &w.ruleset));
         // RULESET1_INTENT RS2, FU3: under round_intent Rest pays only at round end, so no AP returns mid-round
         if skill::kind(s) == Kind::Rest && pays && !round_intent::on(w) {
             st.ap_left = st.max_ap.min(st.ap_left + s.recover_ap);
@@ -1382,7 +1421,8 @@ impl Plan {
         if !skill::deals_damage(s) {
             return 0;
         }
-        let exploit_mult = skill::exploit_match(&s.exploit, &w.units[foe], consumed).1;
+        // HOOKS1 EX1: an execute entry counts when the foe's HP share meets it now (rule execute)
+        let exploit_mult = skill::exploit_match_by(&s.exploit, &w.units[foe], consumed, false, &w.ruleset).1;
         expected(w, c, foe, sid, Some(stance), self.estimate_cover(w, c, sid, foe, from), exploit_mult)
     }
 
@@ -1391,8 +1431,8 @@ impl Plan {
         let hit = self.estimate_damage(w, c, sid, stance, foe, from, &used);
         let s = &w.cat.skills[sid];
         if s.exploit_consume && skill::deals_damage(s) {
-            let matched = skill::exploit_match(&s.exploit, &w.units[foe], &used).0;
-            if !matched.is_empty() {
+            let matched = skill::exploit_match_by(&s.exploit, &w.units[foe], &used, false, &w.ruleset).0;
+            if !matched.is_empty() && matched != skill::EXECUTE {
                 used.push(matched);
                 st.consumed.insert(foe, used);
             }

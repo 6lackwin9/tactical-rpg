@@ -12,3 +12,6 @@ Superseded drafts and specs of done tasks, kept for history. Agents should not r
 | ROADMAP_2026-10.md | decided brainstorm options, answered questions, done R1 and milestone plan v2 sections of `docs/ROADMAP.md` (CLN-11, 2026-10-17) |
 | `.context/` (folder, removed from the tree; in git history) | 10-block combat timeline, early game design and coding standards (CLN-4, 2026-10-17): useful parts integrated into `docs/ROADMAP.md` ("Inputs for placeholder systems") and `docs/STRUCTURE.md` ("Code conventions"); the 10-block layer itself is deprecated (HISTORY row 1) |
 | `docs/decisions/archive.md` | superseded DECISIONS rows, moved unchanged with "superseded by" pointers (CLN-10, 2026-10-17) |
+| AGENT_MAP_2026-10.md | `docs/AGENT_MAP.md` keeps only "Active now" (CLN-25, Q-F, 2026-10-29); finished runs in `docs/archive/TASKS_DONE.md` and `git log` |
+| handover/*.md (7 files) | the 2026-10-18 cloud wind-down handovers (CLN-32, 2026-10-29); a resumed area thread writes a fresh `docs/handover/<area>.md` |
+| CLEANUP_PASS1.md | Pass 1 of `docs/specs/CLEANUP.md` (2026-10-17, all candidates done or closed; CLN-32, 2026-10-29) |

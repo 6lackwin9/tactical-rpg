@@ -47,6 +47,18 @@ pub struct RoundEndStep {
     pub source: String,
 }
 
+/// HOOKS1 HC1: an HP cost a command paid at its start (the session logs it): the unit, the skill, the HP paid and the
+/// HP journal rows held back for its own log cell.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HpPaid {
+    pub unit: UnitId,
+    pub skill: String,
+    pub paid: i32,
+    /// The payer's HP before paying (its `hp_below` crossing starts there).
+    pub before: i32,
+    pub journal: Vec<(UnitId, i32)>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Resolver {
     pub scheduled: Vec<ScheduledAction>,
@@ -62,11 +74,15 @@ pub struct Resolver {
     /// The last apply_round_end_effects call's steps, and how many calls there were (a new call = new steps).
     pub round_end_steps: Vec<RoundEndStep>,
     pub round_end_calls: u32,
+    /// HOOKS1 8.1-8.4: the events and triggers state (rule `triggers`; untouched in classic).
+    pub triggers: crate::trigger::State,
+    /// HOOKS1 HC1: the HP costs paid since the session last took them (rule `hp_cost`; none in classic).
+    pub hp_paid: Vec<HpPaid>,
 }
 
 impl Resolver {
     pub fn new(total_blocks: i32, seed: i64) -> Self {
-        Self { scheduled: Vec::new(), registered: Vec::new(), current_round: 1, total_blocks, rng: GodotRng::from_i64(seed), log: Vec::new(), combos: Vec::new(), notes: Vec::new(), round_end_steps: Vec::new(), round_end_calls: 0 }
+        Self { scheduled: Vec::new(), registered: Vec::new(), current_round: 1, total_blocks, rng: GodotRng::from_i64(seed), log: Vec::new(), combos: Vec::new(), notes: Vec::new(), round_end_steps: Vec::new(), round_end_calls: 0, triggers: Default::default(), hp_paid: Vec::new() }
     }
 
     pub fn register(&mut self, u: UnitId) {
@@ -99,6 +115,8 @@ impl Resolver {
         }
         // RULESET1_INTENT MV1: every unit faces its round target, re-read each block
         round_intent::update_facings(w);
+        let paid = self.hp_paid.len();
+        crate::trigger::before_block(self, w);
         self.begin_actions(w, block);
         for a in &self.scheduled {
             if !a.cancelled && w.units[a.unit].is_active() && block >= a.start && block <= a.end {
@@ -109,6 +127,9 @@ impl Resolver {
                 }
             }
         }
+        // HOOKS1 8.3, 8.1: held guards, then the Defends' `guard_start` triggers (rule triggers; nothing in classic)
+        let costs = self.hp_paid[paid..].to_vec();
+        crate::trigger::on_block_start(self, w, block, &costs);
         let mut resolving: Vec<usize> = (0..self.scheduled.len()).filter(|&i| !self.scheduled[i].cancelled && self.scheduled[i].impact == block).collect();
         let inits: Vec<i32> = (0..self.scheduled.len()).map(|i| self.scheduled[i].command.initiative(w)).collect();
         godot_sort(&mut resolving, |a, b| inits[*a] > inits[*b]);
@@ -135,6 +156,11 @@ impl Resolver {
                 self.notes.push((i, msg.clone()));
                 self.log.push(msg);
             }
+            // HOOKS1 UM2: a meter cost the unit cannot pay now fails the command unpaid (rule unit_meters; nothing in
+            // classic)
+            if crate::meter::unpaid(self, w, i) {
+                continue;
+            }
             let a = &self.scheduled[i];
             let total = a.command.ap_cost + a.command.stance_switch_cost;
             if w.pays_ap(c) {
@@ -145,6 +171,10 @@ impl Resolver {
                     w.units[c].set_stance(s);
                 }
             }
+            // HOOKS1 HC1: the HP cost after the AP (rule hp_cost; nothing in classic)
+            self.pay_hp_cost(w, i);
+            // HOOKS1 UM2: then the meter changes (rule unit_meters; nothing in classic)
+            crate::meter::pay(self, w, i);
             let msg = self.scheduled[i].command.on_start(w, &mut self.rng);
             if !msg.is_empty() {
                 self.notes.push((i, msg.clone()));
@@ -159,6 +189,25 @@ impl Resolver {
         crate::ground::settle(self, w);
     }
 
+    /// HOOKS1 HC1: the action `i` starting now pays its HP cost: HP becomes `max(1, hp - cost)` through `World::damage`
+    /// (journaled, the rows held back for the cost's own log cell; no guard, no hit event). Logs `[HP Cost]`.
+    fn pay_hp_cost(&mut self, w: &mut World, i: usize) {
+        let (c, cost) = (self.scheduled[i].unit, self.scheduled[i].command.hp_cost);
+        if cost <= 0 || !w.ruleset.has(rpgkit_rules::ruleset::HP_COST) {
+            return;
+        }
+        let paid = cost.min(w.units[c].hp - 1);
+        if paid <= 0 {
+            return;
+        }
+        let mark = w.hp_journal.as_ref().map_or(0, |j| j.len());
+        let before = w.units[c].hp;
+        w.damage(c, paid, true);
+        let journal = w.hp_journal.as_mut().map(|j| j.split_off(mark.min(j.len()))).unwrap_or_default();
+        self.log.push(format!("[HP Cost] {} bleeds {paid} HP", w.units[c].name));
+        self.hp_paid.push(HpPaid { unit: c, skill: self.scheduled[i].command.name.clone(), paid, before, journal });
+    }
+
     pub fn execute_single(&mut self, w: &mut World, idx: usize) {
         if self.scheduled[idx].cancelled {
             return;
@@ -168,6 +217,8 @@ impl Resolver {
             self.scheduled[idx].cancelled = true;
             return;
         }
+        // HOOKS1 8.4: the `ally_hit` triggers the hits consult, and what the action's events compare with (rule triggers)
+        let before = crate::trigger::before_action(self, w, idx);
         self.scheduled[idx].command.execute(w, &mut self.rng);
         // RULESET1_INTENT MV8: a carried retreat follows the hit (nothing in classic)
         self.scheduled[idx].command.after_impact(w, &mut self.rng);
@@ -186,7 +237,18 @@ impl Resolver {
         // HOOKS1 4.3 step 7: the hazard the action leaves, then the Walks a sprung trap cancels (rule ground_hazards)
         crate::ground::after_impact(self, w, idx);
         crate::ground::settle(self, w);
+        // HOOKS1 4.3 step 8, RD1: the skill's riders on each unit it landed on (rule triggers; nothing in classic)
+        if let Some(b) = &before {
+            crate::trigger::riders(self, w, idx, b);
+            crate::ground::settle(self, w);
+        }
         self.apply_combo(w, idx);
+        // HOOKS1 4.3 step 9, 8.1: the action's events after its combo pass, then the Walks a trap on a trigger's move
+        // cancels (rule triggers; nothing in classic)
+        if let Some(b) = before {
+            crate::trigger::after_action(self, w, idx, &b);
+            crate::ground::settle(self, w);
+        }
         let inactive: Vec<UnitId> = self.registered.iter().copied().filter(|c| !w.units[*c].is_active()).collect();
         for c in inactive {
             for a in self.scheduled.iter_mut() {
@@ -232,6 +294,7 @@ impl Resolver {
     pub fn apply_round_end_effects(&mut self, w: &mut World) {
         self.round_end_steps.clear();
         self.round_end_calls += 1;
+        crate::trigger::before_round_end(self, w);
         for &c in &self.registered.clone() {
             for st in ["bleed", "poison", "burn"] {
                 let u = &w.units[c];
@@ -266,6 +329,11 @@ impl Resolver {
         self.log.extend(lines);
         // HOOKS1 GH5, GH7: the ground hazards after the terrain's, then the expired ones fade (none in classic)
         crate::ground::round_end(self, w);
+        // HOOKS1 UM3: the meters' decay, while this round's Defends and held guards are still known (rule unit_meters)
+        crate::meter::round_end(self, w);
+        // HOOKS1 8.1, 8.3: `hp_below` and `round_end` after the ticks; held guards end (rule triggers; none in classic)
+        crate::trigger::round_end(self, w);
+        crate::ground::settle(self, w);
     }
 
     /// _record_round_end: the step row with the status's recorded source.

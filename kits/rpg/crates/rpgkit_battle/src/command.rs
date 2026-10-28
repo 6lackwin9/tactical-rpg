@@ -160,6 +160,28 @@ pub struct Command {
     pub pushes: Vec<crate::forced::Moved>,
     /// HOOKS1 GH2: the skill's or item's ground hazard (read only under the rule `ground_hazards`; see `ground`).
     pub hazard: Option<crate::ground::Place>,
+    /// HOOKS1 8.2: the skill's family (a trigger's `skills` condition reads it).
+    pub family: String,
+    /// HOOKS1 8.1: the skill's own triggers, held while the command runs (read only under the rule `triggers`).
+    pub triggers: Vec<rpgkit_data::TriggerRow>,
+    /// HOOKS1 8.1: the damaging hits of the last execution, a redirected part included (rule `triggers` reads them).
+    pub struck: Vec<crate::trigger::Struck>,
+    /// HOOKS1 8.1 `evaded`: the locked target the last execution did not find (GD5).
+    pub evaded: Option<UnitId>,
+    /// HOOKS1 8.4: the `ally_hit` triggers the hits consult (set by the resolver before the action lands; rule
+    /// `triggers` only).
+    pub ally: Option<crate::trigger::AllyWatch>,
+    /// HOOKS1 RD1: the skill's riders, run per unit the command landed on (read only under the rule `triggers`).
+    pub riders: Vec<rpgkit_data::Rider>,
+    /// HOOKS1 HC1: the HP the command pays at its start (0 = none; set only under the rule `hp_cost`).
+    pub hp_cost: i32,
+    /// HOOKS1 IG1: the hits skip the target's guard and P6's guard factor (set only under the rule `ignore_guard`).
+    pub ignore_guard: bool,
+    /// HOOKS1 IG1: the last execution's bypass left out a guard (a hit target guarded; the breakdown says so).
+    pub guard_bypassed: bool,
+    /// HOOKS1 UM2: the skill's meter changes, paid at the command's start after the AP and HP cost (set only under the
+    /// rule `unit_meters`).
+    pub meters: Vec<rpgkit_data::MeterDelta>,
 }
 
 impl Command {
@@ -196,6 +218,16 @@ impl Command {
             forced: None,
             pushes: Vec::new(),
             hazard: None,
+            family: String::new(),
+            triggers: Vec::new(),
+            struck: Vec::new(),
+            evaded: None,
+            ally: None,
+            riders: Vec::new(),
+            hp_cost: 0,
+            ignore_guard: false,
+            guard_bypassed: false,
+            meters: Vec::new(),
         }
     }
 
@@ -275,6 +307,9 @@ impl Command {
         self.hits.clear();
         self.staggers.clear();
         self.pushes.clear();
+        self.struck.clear();
+        self.evaded = None;
+        self.guard_bypassed = false;
         self.failed = false;
         let src = self.source;
         let src_name = w.units[src].name.clone();
@@ -294,6 +329,7 @@ impl Command {
                 // RULESET1_INTENT GD5: a stealthed unit that moved this round is not found (AP stays spent)
                 if round_intent::hidden(w, t) {
                     self.failed = true;
+                    self.evaded = Some(t);
                     self.log = format!("[Lost] {src_name} loses {}", w.units[t].name);
                     return;
                 }
@@ -307,17 +343,22 @@ impl Command {
                 let damaging = skill_mult > 0.0;
                 // RULESET1_INTENT MV3: a flank hit (rule flank) matches `flanked`, takes the flank power and no riposte
                 let flank = round_intent::flank_bonus(w, src, t);
-                let matched = if damaging { skill::exploit_match_when(&self.exploit, &w.units[t], &[], flank) } else { (String::new(), 1.0) };
+                // HOOKS1 EX1: an `hp_below` entry matches the target's HP share before the hit (rule execute)
+                let matched = if damaging { skill::exploit_match_by(&self.exploit, &w.units[t], &[], flank, &w.ruleset) } else { (String::new(), 1.0) };
                 let mut taken = 0;
                 let mut crit = false;
+                let mut t = t;
                 if damaging {
                     let ranged = w.units[src].attack_range > 1 && !use_offhand;
                     let cover = cover_between(w, src, t, ranged);
-                    let hit = roll_hit_with(w, rng, src, t, ranged, use_offhand, skill_mult * matched.1 * flank_power(w, flank), cover, self.pierces(w));
-                    taken = w.damage(t, hit.final_dmg, true);
+                    // HOOKS1 8.4: an intercept moves the whole hit to the friend that took it (rule triggers)
+                    let (on, hit, dealt) = self.land(w, rng, src, t, ranged, use_offhand, skill_mult * matched.1 * flank_power(w, flank), cover, &[]);
+                    t = on;
+                    taken = dealt;
                     crit = hit.is_crit;
                     self.set_attack_result(taken, crit, Some(t));
                     self.hits.push((t, flank));
+                    self.struck.push(crate::trigger::Struck { target: t, damage: taken, ranged });
                 }
                 let mut detail = String::new();
                 if !self.status_effect.is_empty() && w.units[t].is_alive() {
@@ -349,6 +390,8 @@ impl Command {
                     return;
                 }
                 let mut parts = Vec::new();
+                // HOOKS1 8.4: a unit the area also strikes takes no redirect (rule triggers)
+                let inside: Vec<UnitId> = if self.ally.is_some() { cells.iter().filter_map(|c| w.occupant(*c)).collect() } else { Vec::new() };
                 for cell in cells {
                     let Some(v) = w.occupant(cell) else { continue };
                     if v == src || skill_mult <= 0.0 {
@@ -357,10 +400,10 @@ impl Command {
                     let ranged = w.units[src].attack_range > 1;
                     let cover = cover_for(&w.grid, w.pos(src), cell, ranged);
                     let flank = round_intent::flank_bonus(w, src, v);
-                    let matched = skill::exploit_match_when(&self.exploit, &w.units[v], &[], flank);
-                    let hit = roll_hit_with(w, rng, src, v, ranged, false, skill_mult * matched.1 * flank_power(w, flank), cover, self.pierces(w));
-                    let taken = w.damage(v, hit.final_dmg, true);
+                    let matched = skill::exploit_match_by(&self.exploit, &w.units[v], &[], flank, &w.ruleset);
+                    let (v, hit, taken) = self.land(w, rng, src, v, ranged, false, skill_mult * matched.1 * flank_power(w, flank), cover, &inside);
                     self.hits.push((v, flank));
+                    self.struck.push(crate::trigger::Struck { target: v, damage: taken, ranged });
                     total += taken;
                     hits += 1;
                     if hit.is_crit {
@@ -376,7 +419,13 @@ impl Command {
                             format!(" [resisted {} ({chance}%)]", status::display_name(&st).to_lowercase())
                         };
                     }
-                    let exploits = if matched.0.is_empty() { String::new() } else { format!(" (exploits {})", status::display_name(&matched.0)) };
+                    let exploits = if matched.0.is_empty() {
+                        String::new()
+                    } else if matched.0 == skill::EXECUTE {
+                        format!(" (execute x{:.2})", matched.1)
+                    } else {
+                        format!(" (exploits {})", status::display_name(&matched.0))
+                    };
                     let vu = &w.units[v];
                     parts.push(format!("{} {taken}{}{}{note}{exploits}", vu.name, if hit.is_crit { " CRIT" } else { "" }, if vu.is_alive() { "" } else { " DEFEATED" }));
                     if let Some(r) = riposte_counter(w, rng, src, v, ranged || flank) {
@@ -594,6 +643,64 @@ impl Command {
         }
     }
 
+    /// HOOKS1 4.3 steps 1-2: one damaging hit of this attack meant for `f`. The `ally_hit` triggers (rule triggers) may
+    /// move part of it or all of it to a friend (8.4: the same crit roll and factors, each through its own armour and
+    /// guard; the holder never drops below 1 HP, the rest goes back to `f`). Without a watch it is today's hit: one crit
+    /// draw, then the damage. Returns the unit the hit lands on (`f`, or the holder of an intercept), the hit and the
+    /// damage dealt to that unit.
+    #[allow(clippy::too_many_arguments)]
+    fn land(&mut self, w: &mut World, rng: &mut GodotRng, src: UnitId, f: UnitId, ranged: bool, offhand: bool, mult: f64, cover: f64, skip: &[UnitId]) -> (UnitId, Hit, i32) {
+        let pierce = self.pierces(w);
+        let claim = match self.ally.as_mut() {
+            Some(watch) => crate::trigger::ally_hit(w, watch, src, f, ranged, &self.family, skip),
+            None => None,
+        };
+        // HOOKS1 IG1: a guard-bypassing hit leaves out the guard part of the guard-and-cover term (cover stays)
+        let include_guard = !self.ignore_guard;
+        let Some(r) = claim else {
+            self.guard_bypassed |= self.ignore_guard && w.units[f].guard > 0.0;
+            // one crit draw, then the damage (roll_hit_with's order)
+            let input = HitInput { ranged, offhand, skill_mult: mult, crit_roll: Some(rng.randf()), cover, ignore_armor: pierce, include_guard, ..HitInput::default() };
+            let hit = damage::compute(&w.units[src], &w.units[f], input);
+            let taken = w.damage(f, hit.final_dmg, true);
+            return (f, hit, taken);
+        };
+        let input = HitInput { ranged, offhand, skill_mult: mult, crit_roll: Some(rng.randf()), cover, ignore_armor: pierce, include_guard, ..HitInput::default() };
+        let own = damage::compute(&w.units[src], &w.units[f], input);
+        let h = r.holder;
+        self.guard_bypassed |= self.ignore_guard && (w.units[f].guard > 0.0 || w.units[h].guard > 0.0);
+        let theirs = damage::compute(&w.units[src], &w.units[h], input);
+        let whole = r.pct >= 100;
+        let h_part = if whole { theirs.final_dmg } else { crate::trigger::part(theirs.final_dmg, r.pct) };
+        let h_take = h_part.min((w.units[h].hp - 1).max(0));
+        let back = h_part - h_take;
+        let h_dealt = if h_take > 0 { w.damage(h, h_take, true) } else { 0 };
+        let (hname, fname) = (w.units[h].name.clone(), w.units[f].name.clone());
+        let mut note = if whole { format!("{hname} takes the hit meant for {fname}: {h_dealt} damage") } else { format!("{hname} takes {}% of the hit meant for {fname}: {h_dealt} damage", r.pct) };
+        if whole {
+            if back > 0 {
+                let b = w.damage(f, back, true);
+                self.struck.push(crate::trigger::Struck { target: f, damage: b, ranged });
+                note += &format!("; {b} goes back to {fname}");
+            }
+            if let Some(watch) = self.ally.as_mut() {
+                watch.note(&r, note);
+            }
+            return (h, theirs, h_dealt);
+        }
+        if back > 0 {
+            note += &format!("; {back} more goes back to {fname}");
+        }
+        if let Some(watch) = self.ally.as_mut() {
+            watch.note(&r, note);
+        }
+        if h_dealt > 0 {
+            self.struck.push(crate::trigger::Struck { target: h, damage: h_dealt, ranged });
+        }
+        let dealt = w.damage(f, crate::trigger::part(own.final_dmg, 100 - r.pct) + back, true);
+        (f, own, dealt)
+    }
+
     fn set_attack_result(&mut self, dmg: i32, crit: bool, tgt: Option<UnitId>) {
         if let CmdKind::Attack { last_damage, last_crit, last_target, .. } = &mut self.kind {
             *last_damage = dmg;
@@ -645,6 +752,11 @@ impl Command {
         self.impact = crate::poise::Impact::default();
         self.forced = None;
         self.hazard = None;
+        self.triggers.clear();
+        self.riders.clear();
+        self.hp_cost = 0;
+        self.ignore_guard = false;
+        self.meters.clear();
     }
 
     /// After one damaging hit: stance break (Offensive / Defensive target to Tactical), then exploit consume.
@@ -655,7 +767,8 @@ impl Command {
             tu.guard = 0.0;
             self.broken_targets.push(t);
         }
-        if self.exploit_consume && !matched.0.is_empty() {
+        // HOOKS1 EX1: an execute match names no status, so nothing is consumed
+        if self.exploit_consume && !matched.0.is_empty() && matched.0 != skill::EXECUTE {
             status::remove_active(&mut w.units[t], &matched.0);
         }
     }
@@ -1075,6 +1188,29 @@ pub fn effective_heal(target: &Unit, amount: i32) -> i32 {
 
 pub fn cleansable(target: &Unit, s: &rpgkit_data::SkillDef) -> Vec<&'static str> {
     skill::cleanse_list(s).into_iter().filter(|st| target.st.has_any(st)).collect()
+}
+
+/// HOOKS1 HC1: the HP skill `s` costs (0 without the rule hp_cost; items pay none).
+pub fn hp_cost_of(w: &World, s: &rpgkit_data::SkillDef) -> i32 {
+    if w.ruleset.has(rpgkit_rules::ruleset::HP_COST) && !skill::is_item(s) {
+        s.hp_cost.max(0)
+    } else {
+        0
+    }
+}
+
+/// HOOKS1 HC1: why a unit at `hp` cannot use a skill costing `cost` HP ("" = it can): HP at or below the cost.
+pub fn hp_cost_problem(hp: i32, cost: i32) -> String {
+    if cost > 0 && hp <= cost {
+        format!("HP {hp} <= cost {cost}")
+    } else {
+        String::new()
+    }
+}
+
+/// HOOKS1 IG1: skill `s`'s hits skip the guard (the rule ignore_guard and the ATTACK flag `ignore_guard`).
+pub fn ignores_guard(w: &World, s: &rpgkit_data::SkillDef) -> bool {
+    s.ignore_guard && w.ruleset.has(rpgkit_rules::ruleset::IGNORE_GUARD) && !skill::is_item(s) && skill::kind(s) == skill::Kind::Attack
 }
 
 /// "" when `target` is legal for `skill` cast by `caster` (distance aside).

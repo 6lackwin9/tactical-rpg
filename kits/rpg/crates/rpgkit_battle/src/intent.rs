@@ -14,6 +14,9 @@
 //! (V1: block and coarse kind only); the battle's `plan_reveal` reveals every enemy (V2) and a foresight `range` reveals
 //! every enemy within it (V4); `round_intents` adds party records from their plans (V5). With the rule off (classic)
 //! none of it is filled and the trace keeps the Godot shape.
+//!
+//! HOOKS1 AH3 (rule `arena_hazards`; engine-only): `arena_tells` adds the round's scheduled arena hazards (cells and
+//! blocks), known from the round's start; none in classic.
 
 use crate::command::{CmdKind, Command};
 use crate::grid::{V2, NO_CELL};
@@ -309,6 +312,29 @@ pub fn round_intents(w: &World, plan: Option<&Plan>, scheduled: &[ScheduledActio
     let mut out: Vec<Intent> = w.allies.iter().copied().filter(|&a| w.units[a].is_active() && w.has(a)).map(|a| party_intent_of(w, a, plan, scheduled)).collect();
     out.extend(intents(w, scheduled, on_grid_at_schedule, enraged));
     out
+}
+
+/// HOOKS1 AH3 (rule `arena_hazards`; engine-only): one scheduled arena hazard due this round, known from its start: its
+/// id, name, struck cells and the blocks at whose end it strikes (the board marks the cells, the strip the blocks).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArenaTell {
+    pub id: String,
+    pub name: String,
+    pub cells: Vec<V2>,
+    pub blocks: Vec<i32>,
+}
+
+/// HOOKS1 AH3: the arena tells of the round, in the encounter's order (empty without the rule, so classic has none).
+/// Both sides see them whatever `plan_reveal` says: the arena hides nothing.
+pub fn arena_tells(w: &World) -> Vec<ArenaTell> {
+    crate::arena::due(w).into_iter().map(|h| ArenaTell { id: h.id.clone(), name: h.name.clone(), cells: h.cells.clone(), blocks: h.blocks.clone() }).collect()
+}
+
+/// HOOKS1 AH3: the arena tells as JSON: [{id, name, cells: [[x, y], ...], blocks: [...]}, ...].
+pub fn arena_json(tells: &[ArenaTell]) -> serde_json::Value {
+    serde_json::Value::Array(
+        tells.iter().map(|t| serde_json::json!({"id": t.id, "name": t.name, "cells": t.cells.iter().map(|c| serde_json::json!([c.x, c.y])).collect::<Vec<_>>(), "blocks": t.blocks})).collect(),
+    )
 }
 
 /// The round target in the trace shape: [kind ("", "self", "unit", "cell"), unit name or "", cell x, cell y].

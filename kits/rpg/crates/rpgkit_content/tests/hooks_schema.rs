@@ -594,6 +594,73 @@ fn a_placement_and_an_hp_cost_warn() {
     drop_scratch(&data);
 }
 
+/// DU1 as built (user 2026-10-29 (b)): a deck `add` on an automatic deck that its class path and extra skills already
+/// fill pushes out the last automatic family at run time: a warning naming it, not an error; an authored deck with room
+/// warns nothing.
+#[test]
+fn a_deck_add_on_a_full_automatic_deck_warns() {
+    let data = scratch("deck_warn");
+    catalog(&data);
+    // brute without its authored deck: the automatic actives are slam, rush (the path's level-1 families fill the 2 slots)
+    write_kind(
+        &data,
+        "units",
+        1,
+        json!([
+            {"id": "brute", "name": "Brute", "side": "enemy", "class_id": "drill", "level": 1, "extra_skills": ["hook", "sweep"]},
+            {"id": "hero", "name": "Hero", "side": "party", "class_id": "drill", "level": 1}
+        ]),
+    );
+    let v = store::view(&data);
+    let mut e = v.get("encounters", "kiln").clone();
+    e.insert("phases".into(), json!([{"id": "pulverize", "name": "Pulverize", "trigger": {"kind": "round", "round": 2}, "effects": [{"type": "deck", "unit": "brute", "add": ["hook"]}]}]));
+    assert_eq!(check::validate_entry(&v, "encounters", &e, "kiln"), Vec::<String>::new(), "no error");
+    let found: Vec<String> = check::warnings_for(&v, "encounters", &e).into_iter().filter(|w| w.contains("deck")).collect();
+    assert_eq!(found, ["Phase 'pulverize': deck add on the automatic deck of 'brute' pushes out 'rush' (the Timeline ruleset's deck slots allow 2)."]);
+    // a family already among the automatic actives pushes nothing out
+    e.insert("phases".into(), json!([{"id": "pulverize", "name": "Pulverize", "trigger": {"kind": "round", "round": 2}, "effects": [{"type": "deck", "unit": "brute", "add": ["rush"]}]}]));
+    assert!(!check::warnings_for(&v, "encounters", &e).iter().any(|w| w.contains("deck")));
+    // planner 2026-10-29: an order on the automatic deck may name its automatic actives (as the run time accepts);
+    // a family outside the automatic fill and the add (an extra skill past the slots, one the add pushed out) stays an error
+    let order = |fx: Value| {
+        let mut e = e.clone();
+        e.insert("phases".into(), json!([{"id": "pulverize", "name": "Pulverize", "trigger": {"kind": "round", "round": 2}, "effects": [fx]}]));
+        check::validate_entry(&v, "encounters", &e, "kiln")
+    };
+    assert_eq!(order(json!({"type": "deck", "unit": "brute", "order": {"assault": ["rush", "slam"]}})), Vec::<String>::new());
+    assert_eq!(order(json!({"type": "deck", "unit": "brute", "order": {"assault": ["sweep", "slam"]}})), ["Phase 'pulverize': deck order assault: 'sweep' is neither an active of the deck nor a basic."]);
+    assert_eq!(order(json!({"type": "deck", "unit": "brute", "add": ["hook"], "order": {"assault": ["rush"]}})), ["Phase 'pulverize': deck order assault: 'rush' is neither an active of the deck nor a basic."]);
+    drop_scratch(&data);
+    // the fixture's authored deck (slam, one short of the slots) takes the add without a warning
+    let data = scratch("deck_warn_authored");
+    catalog(&data);
+    let v = store::view(&data);
+    let e = v.get("encounters", "kiln").clone();
+    assert!(!check::warnings_for(&v, "encounters", &e).iter().any(|w| w.contains("deck")));
+    drop_scratch(&data);
+    // a loadout listing an extra before the class families: the battle fills the slots class families first
+    // (`loadout_of`), so the automatic actives are slam, rush; sweep pushes out rush, and hook (listed first) is no active
+    let data = scratch("deck_warn_loadout");
+    catalog(&data);
+    write_kind(
+        &data,
+        "units",
+        1,
+        json!([
+            {"id": "brute", "name": "Brute", "side": "enemy", "class_id": "drill", "level": 1, "extra_skills": ["hook", "sweep"], "loadout": ["hook", "slam", "rush"]},
+            {"id": "hero", "name": "Hero", "side": "party", "class_id": "drill", "level": 1}
+        ]),
+    );
+    let v = store::view(&data);
+    let mut e = v.get("encounters", "kiln").clone();
+    e.insert("phases".into(), json!([{"id": "pulverize", "name": "Pulverize", "trigger": {"kind": "round", "round": 2}, "effects": [{"type": "deck", "unit": "brute", "add": ["sweep"]}]}]));
+    let found: Vec<String> = check::warnings_for(&v, "encounters", &e).into_iter().filter(|w| w.contains("deck")).collect();
+    assert_eq!(found, ["Phase 'pulverize': deck add on the automatic deck of 'brute' pushes out 'rush' (the Timeline ruleset's deck slots allow 2)."]);
+    e.insert("phases".into(), json!([{"id": "pulverize", "name": "Pulverize", "trigger": {"kind": "round", "round": 2}, "effects": [{"type": "deck", "unit": "brute", "order": {"assault": ["hook"]}}]}]));
+    assert_eq!(check::validate_entry(&v, "encounters", &e, "kiln"), ["Phase 'pulverize': deck order assault: 'hook' is neither an active of the deck nor a basic."]);
+    drop_scratch(&data);
+}
+
 #[test]
 fn world_classes_and_arena_hazards_follow_the_world_and_its_ruleset() {
     let data = scratch("worlds");

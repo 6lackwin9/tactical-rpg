@@ -1,6 +1,6 @@
 //! The encounter rules a battle runs under (scripts/combat/session/): EncounterObjectives (rout, hold, escape, slay,
 //! guests and protect), EncounterPhases (boss phases: hp_below and round triggers, line / wave / status / ai /
-//! enrage effects; PHASEFOLD: the reinforcement wave as an `arrival` phase, and the fold of the retired `wave_*`
+//! enrage effects, and HOOKS1's `deck` effect under the rule deck; PHASEFOLD: the reinforcement wave as an `arrival` phase, and the fold of the retired `wave_*`
 //! fields) and EncounterMorale (enemy groups that break and surrender). Runtime parts only; validation stays
 //! with the content tools. The session calls them at the same points CatalogEncounter does.
 
@@ -427,6 +427,17 @@ pub fn parse_phases(raw: &[Value]) -> Vec<PhaseDef> {
                             out.insert("unit".into(), Value::from(value::string(fx, "unit", "")));
                             out.insert("power".into(), Value::from(value::int(fx, "power", 20)));
                         }
+                        // HOOKS1 10.1 DU1: families added to the deck's actives, intents' order lists replaced
+                        rpgkit_data::DECK_EFFECT => {
+                            out.insert("unit".into(), Value::from(value::string(fx, "unit", "")));
+                            out.insert("add".into(), Value::from(value::strings(fx, "add")));
+                            let order: Obj = value::obj(fx, "order").map(|o| o.keys().map(|k| (k.clone(), Value::from(value::strings(o, k)))).collect()).unwrap_or_default();
+                            out.insert("order".into(), Value::Object(order));
+                        }
+                        // FX1 5.1: kept for the GUI's camera shake; no rule reads it
+                        rpgkit_data::SHAKE_EFFECT => {
+                            out.insert("preset".into(), Value::from(value::string(fx, "preset", "")));
+                        }
                         _ => {}
                     }
                     out
@@ -447,6 +458,11 @@ pub struct Phases {
     pub wave_units: IndexMap<String, Vec<UnitId>>,
     reserved: IndexMap<UnitId, String>,
     base_profiles: IndexMap<UnitId, AiProfile>,
+    /// HOOKS1 DU1: the (phase, unit) deck effects already applied (each once, to a unit active at the time).
+    decks_applied: Vec<(String, UnitId)>,
+    /// HOOKS1 DU1: the families an automatic deck held when a deck effect first named its actives (the ones an added
+    /// family may push out).
+    auto_fill: IndexMap<UnitId, Vec<String>>,
 }
 
 impl Phases {
@@ -578,6 +594,68 @@ impl Phases {
                 }
             }
         }
+    }
+}
+
+impl Phases {
+    /// HOOKS1 10.1 DU1 (rule `deck`; engine-only, no Godot original): the `deck` effects of every phase fired before
+    /// `round` (or at its start), in fire order, each once on each active unit of its ref that fights under the deck
+    /// rule (on the field): each owned, non-basic `add` family joins the deck's actives (an automatic deck first takes
+    /// its current active slots; user 2026-10-29 (b): with the slots full an added family pushes out the last automatic
+    /// one, never an authored one), `order` replaces the named intents' lists (an order alone keeps an automatic deck's
+    /// actives automatic), then the active slots are refilled (D2). The unit's next planning uses them, as the `ai`
+    /// effect's tactics. Returns the units changed. Nothing without the rule or a deck effect.
+    pub fn apply_decks(&mut self, w: &mut World, units_of_ref: impl Fn(&str) -> Vec<UnitId>, round: i32) -> Vec<UnitId> {
+        let mut todo: Vec<(String, Obj)> = Vec::new();
+        for (id, at) in &self.fired {
+            if Self::applies(*at, round) {
+                if let Some(p) = self.phase(id).filter(|p| !p.is_arrival()) {
+                    todo.extend(p.effects_of(rpgkit_data::DECK_EFFECT).map(|fx| (id.clone(), fx.clone())));
+                }
+            }
+        }
+        let mut changed: Vec<UnitId> = Vec::new();
+        let cat = w.cat.clone();
+        for (id, fx) in todo {
+            for c in units_of_ref(&value::string(&fx, "unit", "")) {
+                if !w.has(c) || w.units[c].deck_rule.is_none() || self.decks_applied.iter().any(|(p, d)| *p == id && *d == c) {
+                    continue;
+                }
+                let u = &mut w.units[c];
+                self.decks_applied.push((id.clone(), c));
+                let add = value::strings(&fx, "add");
+                if !add.is_empty() && u.deck.active.is_empty() {
+                    u.deck.active = u.active_families();
+                    self.auto_fill.insert(c, u.deck.active.clone());
+                }
+                let slots = u.deck_rule.as_ref().map_or(0, |r| r.slots.active).max(0) as usize;
+                let basics = u.deck_rule.as_ref().map(|r| r.basics.clone()).unwrap_or_default();
+                for fam in add {
+                    let slottable = !cat.is_basic_family(&fam) && !basics.contains(&fam) && cat.family_rows(&fam).iter().any(|s| u.owns_skill(&cat, &s.id));
+                    if !slottable || u.deck.active.contains(&fam) {
+                        continue;
+                    }
+                    // user 2026-10-29 (b): an unlocked family always lands, pushing out the last automatic family
+                    if slots > 0 && u.deck.active.len() >= slots {
+                        let auto = self.auto_fill.get(&c).cloned().unwrap_or_default();
+                        if let Some(i) = u.deck.active.iter().rposition(|f| auto.contains(f)) {
+                            u.deck.active.remove(i);
+                        }
+                    }
+                    u.deck.active.push(fam);
+                }
+                if let Some(order) = value::obj(&fx, "order") {
+                    for intent in order.keys() {
+                        u.deck.order.insert(intent.clone(), value::strings(order, intent));
+                    }
+                }
+                u.apply_deck(&cat);
+                if !changed.contains(&c) {
+                    changed.push(c);
+                }
+            }
+        }
+        changed
     }
 }
 

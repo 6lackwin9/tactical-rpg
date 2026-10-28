@@ -1,11 +1,13 @@
 //! STORYUI1-E: the vignette player (docs/specs/STORYUI1.md 5.1, tests TE1-TE10 of STORYUI1_TASKS.md 2). The model is
 //! driven without a clock (`advance`, `press`, `skip`); expectations come from the rules: the phase order, the text
 //! speeds' characters a second, the fade formulas, skip and cue rules, the music wish, the wrap-once typewriter and the
-//! layout at every text size (the text audit).
+//! layout at every text size (the text audit). FX1-V (spec FX1 5.2, FX1_TASKS 1.5 V1-V3):
+//! a card's camera shake, its start, its stops and the parts it moves.
 
 use aegis_ui::art::Art;
 use aegis_ui::audio::Audio;
 use aegis_ui::canvas::Canvas;
+use aegis_ui::fx::{ShakeLimits, ShakeTable};
 use aegis_ui::painter::{Fonts, Painter, View};
 use aegis_ui::playtest::Playtests;
 use aegis_ui::screen::{Context, Cx, Nav, Screen, Settings, TEXT_SIZES, TEXT_SPEEDS};
@@ -479,4 +481,126 @@ fn a_reel_reads_from_its_json_form() {
     styles.sort();
     styles.dedup();
     assert_eq!(styles.len(), 4, "the sample reel shows every style");
+}
+
+// ---- FX1-V: card shakes -----------------------------------------------------------------------------------------
+
+/// The offsets of the current card every `step` card ms until `until` card ms (the card must wait in its hold).
+fn offsets(p: &mut Player, step: u32, until: u64, still: bool) -> Vec<(u64, (i32, i32))> {
+    let mut out = vec![(p.card_ms(), p.shake_offset(still))];
+    while p.card_ms() < until {
+        p.advance(step);
+        out.push((p.card_ms(), p.shake_offset(still)));
+    }
+    out
+}
+
+/// The canvas bytes inside `r` (x, y, w, h in physical px).
+fn region(c: &Canvas, r: (i32, i32, i32, i32)) -> Vec<u8> {
+    let mut out = Vec::new();
+    for y in r.1.max(0)..(r.1 + r.3).min(c.h) {
+        let a = ((y * c.w + r.0.max(0)) * 4) as usize;
+        let b = ((y * c.w + (r.0 + r.2).min(c.w)) * 4) as usize;
+        out.extend_from_slice(&c.px[a..b]);
+    }
+    out
+}
+
+/// V1: a card with `shake` `toll` starts it as the card enters its fade in, with its cue, on the card clock: toll starts
+/// at full strength (its `ease_out` envelope is 1 at 0, so the first offset is at least 0.6 x px, rounded, off 0), moves
+/// along x only, never past its whole px, and is still from its `ms` on. The card before it, with no shake, never moves.
+#[test]
+fn v1_a_card_shake_starts_with_its_fade_in_and_cue_and_ends_after_its_time() {
+    let toll = ShakeTable::default().get("toll").expect("toll is an engine preset");
+    let shaken = Card { shake: "toll".into(), cue: "sfx/bell.wav".into(), ..card("The bells.") };
+    let mut p = Player::new(reel(vec![card("Still."), shaken]), TextSpeed::Normal);
+    p.take_cues();
+    assert!(offsets(&mut p, 50, 400, false).iter().all(|o| o.1 == (0, 0)), "a card without a shake does not move");
+    while p.card_index() == 0 {
+        p.press();
+    }
+    assert_eq!((p.phase(), p.card_ms(), p.take_cues()), (Phase::FadeIn, 0, vec!["sfx/bell.wav".to_string()]), "the card enters its fade in with its cue");
+    let first = p.shake_offset(false);
+    assert!(first.0 != 0 && first.1 == 0, "the toll moves the view at once, along x: {first:?}");
+    let seen = offsets(&mut p, 10, toll.ms as u64 + 200, false);
+    let cap = toll.px.floor() as i32;
+    for (t, (dx, dy)) in &seen {
+        assert!(dx.abs() <= cap && *dy == 0, "{t} ms: {dx}, {dy}");
+        if *t >= toll.ms as u64 {
+            assert_eq!((*dx, *dy), (0, 0), "{t} ms: still from {} card ms", toll.ms);
+        }
+    }
+    assert!(seen.iter().any(|o| o.0 < toll.ms as u64 && o.1 .0 < 0) && seen.iter().any(|o| o.1 .0 > 0), "it sways both ways");
+    assert_eq!(p.card_index(), 1, "the card waited in its hold the whole time");
+    assert_eq!(Card::from_json(&json!({"shake": "toll"})).shake, "toll");
+    assert_eq!(Card::from_json(&json!({})).shake, "", "no key: no shake");
+}
+
+/// V2: a skipped reel starts no shake; `reduce_motion` starts none; a card naming an unknown preset draws unshaken
+/// (the same frames as a card without a shake). The limits clamp a preset (a 1 px, 500 ms limit holds the toll to them).
+#[test]
+fn v2_skip_reduce_motion_and_an_unknown_preset_start_no_shake() {
+    let toll = || Card { shake: "toll".into(), ..card("Bells.") };
+    let mut p = Player::new(reel(vec![toll(), toll()]), TextSpeed::Normal);
+    assert_ne!(p.shake_offset(false), (0, 0));
+    assert!(p.skip());
+    assert_eq!(p.shake_offset(false), (0, 0), "skipped: still");
+    p.advance(100);
+    assert!(!p.camera(false).active(0) && p.shake_offset(false) == (0, 0), "no shake after a skip");
+    let mut p = Player::new(reel(vec![toll()]), TextSpeed::Normal);
+    assert!(offsets(&mut p, 10, 1500, true).iter().all(|o| o.1 == (0, 0)), "reduce motion starts none");
+    let mut p = Player::new(reel(vec![Card { shake: "boom".into(), ..card("Bells.") }]), TextSpeed::Normal);
+    assert!(offsets(&mut p, 10, 1500, false).iter().all(|o| o.1 == (0, 0)), "an unknown preset starts none");
+    let frames = |c: Card| {
+        let mut p = Player::new(reel(vec![Card { fade_in_ms: 0, ..c }]), TextSpeed::Normal);
+        p.press();
+        let mut g = gfx();
+        let mut ui: Ui<()> = Ui::new(&mut g, (-1, -1), true);
+        vignette::draw(&mut ui, &mut Art::new(None), &p, &Palette::default(), false);
+        drop(ui);
+        g.canvas.px
+    };
+    assert!(frames(Card { shake: "boom".into(), ..card("Bells.") }) == frames(card("Bells.")), "an unknown preset draws unshaken");
+    assert!(frames(toll()) != frames(card("Bells.")), "a known one moves the card");
+    let limits = ShakeLimits::new(1.0, 500);
+    let mut p = Player::new(reel(vec![toll()]), TextSpeed::Normal).with_shakes(ShakeTable::default(), limits);
+    let seen = offsets(&mut p, 10, 1200, false);
+    assert!(seen.iter().all(|o| o.1 .0.abs() <= 1), "the limit's px holds");
+    assert!(seen.iter().filter(|o| o.0 >= 500).all(|o| o.1 == (0, 0)), "the limit's ms holds");
+    assert!(seen.iter().any(|o| o.1 != (0, 0)));
+}
+
+/// V3: while a card shakes, its caption box moves and the Skip button does not (the frame under reduce motion is the
+/// still reference); a fade cover at full strength hides the shake (the cover does not move: a moved cover would bare a
+/// stripe of the backdrop at the stage's edge).
+#[test]
+fn v3_the_caption_moves_while_the_skip_button_and_the_cover_stay() {
+    let draw = |c: Card, press: bool, still: bool| {
+        let mut cx = cx();
+        cx.settings.v["reduce_motion"] = json!(still);
+        let mut g = gfx();
+        let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![c]), TextSpeed::Normal, |_, _| {}).with_shakes(ShakeTable::default(), ShakeLimits::CEILING);
+        if press {
+            s.player.press();
+        }
+        s.draw(&mut cx, &mut g, (-1, -1), true);
+        let skip = s.widgets().iter().find(|w| w["id"] == "vignette.skip").map(|w| (0..4).map(|i| w["rect"][i].as_f64().unwrap() as i32).collect::<Vec<_>>()).expect("a Skip button");
+        let st = s.state(&cx);
+        assert_eq!(st["shake"], json!([s.player.shake_offset(still).0, s.player.shake_offset(still).1]), "the agent link shows the offset");
+        (g.canvas, (skip[0], skip[1], skip[2], skip[3]), s.player.shake_offset(still))
+    };
+    let captioned = Card { shake: "toll".into(), fade_in_ms: 0, top: [40, 40, 60, 255], bottom: [10, 10, 20, 255], ..card(&words(120)) };
+    let (moving, skip, off) = draw(captioned.clone(), true, false);
+    let (still, skip_still, none) = draw(captioned, true, true);
+    assert!(off != (0, 0) && none == (0, 0), "the toll runs at card ms 0, not under reduce motion");
+    assert_eq!(skip, skip_still);
+    let caption = (0, vignette::PICTURE.y + vignette::PICTURE.h, W, H - vignette::PICTURE.y - vignette::PICTURE.h);
+    assert!(region(&moving, caption) != region(&still, caption), "the caption box moved");
+    assert!(region(&moving, skip) == region(&still, skip), "the Skip button did not");
+    // A text card's backdrop spans the stage and stays; at card ms 0 its fade in covers everything.
+    let covered = Card { style: Style::Text, shake: "toll".into(), top: [90, 30, 30, 255], bottom: [30, 90, 30, 255], ..card("Under the cover.") };
+    let (moving, _, off) = draw(covered.clone(), false, false);
+    let (still, _, _) = draw(covered, false, true);
+    assert!(off != (0, 0), "the shake runs under the cover");
+    assert!(moving.px == still.px, "the full cover hides it all, edges included");
 }

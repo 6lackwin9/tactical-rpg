@@ -1,15 +1,18 @@
 # The six party classes on the shared rig: outfit + standard weapon + palette, and their base clips.
 import math, sys
 import rig
-from rig import pose, idle, walk, hurt, death, arc_pts, export
+from rig import pose, idle, walk, hurt, death, arc_pts, export, impact, strike  # FX1-L1's impact and WINDUP1's strike marks
 
 BASE = dict(leather=(122, 82, 51), leather_lo=(80, 52, 32), wood=(138, 98, 58), wood_lo=(96, 66, 40), trim=(224, 180, 60),
             metal=(154, 166, 180), metal_hi=(214, 224, 235), metal_lo=(92, 102, 120), skin=(217, 166, 121), skin_lo=(176, 126, 88),
             eye=(40, 30, 30), hair=(70, 48, 36), boot=(92, 62, 40), boot_lo=(64, 42, 28))
 def pal(**kw): p = dict(BASE); p.update(kw); return p
 
+# WINDUP1: the classes whose bodies have the six wind-up rows (rig.WINDUP_ROWS): the warrior (R1) and the other five
+# (R2), every body of each (goblin, look and named)
+WINDUP_CLASSES = ('warrior', 'ranger', 'brawler', 'priest', 'rogue', 'mage')
 BLUE, BLUE_HI = (110, 170, 230), (200, 230, 255)
-GOLDEN, GOLDEN_HI = (240, 200, 90), (255, 240, 180)
+GOLDEN, GOLDEN_HI = rig.GOLDEN, rig.GOLDEN_HI
 
 UNITS = {
     'warrior': dict(leg=8.5, arm=5.5, tl=10.0, head='helm', torso='plate', legs='trousers', weapon='sword', offhand='shield',
@@ -74,6 +77,156 @@ def defensive_set(u, g, A, T):
     T['hurt_guarded'] = [60, 100, 110, 140]
 
 
+def warrior_kw(variant, kw):
+    """The 1H + kite warrior's pose keys `kw` in shield variant `variant` ('' as given, 'A' a raised shield carried
+    2.8 px lower, 'B' hunched behind a raised shield); a new dict."""
+    kw = dict(kw)
+    hb = kw.get('hand_b')
+    raised = hb is not None and hb[1] < 3 and hb[0] >= 5
+    if variant == 'A' and raised:
+        kw['hand_b'] = (hb[0], hb[1] + 2.8)
+    if variant == 'B' and raised:
+        kw['bob'] = kw.get('bob', 0) + 1.8; kw['lean'] = kw.get('lean', 0) + 2.2; kw['head_dy'] = kw.get('head_dy', 0) + 1.8
+        kw['hand_b'] = (hb[0] - 0.5, hb[1] + 2.0)
+        if 'hand_f' in kw and kw['hand_f'] is not None: kw['hand_f'] = (kw['hand_f'][0], kw['hand_f'][1] + 0.5)
+    return kw
+
+
+# WINDUP1 (games/emberwake/docs/specs/WINDUP1.md 7.2): the warrior's held poses per grip (rig.windup_rows draws the
+# intro from the idle pose, the breathing hold and the effects). `windup` is the grip's main attack at frame strike - 1
+# (K2, the attack's own keys); heavy pushes it (further back and higher, crouched); buff a salute (the weapon upright
+# before the face, or planted for the 2H grip), motes at the hand; debuff the point levelled at the target at shoulder
+# height. stagger: four keys (K3: head snapped back, then knocked back a step, knees buckling, swaying), then dazed
+# frame 0; dazed (K4): slumped, the weapon tip toward the ground before the feet, the off arm hanging.
+# 1H + kite shield (warrior/base): the attack is a thrust from behind the raised shield (variant A).
+W1_READY = dict(hand_b=(3.5, 5), wa=25)
+W1_DRAWN = dict(bob=2.0, lean=-1.0, dx=-1.5, wa=88, hand_f=(-2.5, 5.5), fb=(-6.5, 0), ff=(4, 0), hand_b=(7.5, 0.5))  # attack 1
+W1_HOLDS = {
+    'windup_heavy': dict(bob=3.2, lean=-2.0, dx=-1.5, wa=62, hand_f=(-2.5, -1.0), hand_b=(7.5, 3.3), fb=(-7.0, 0), ff=(4.5, 0)),
+    'windup_buff': dict(bob=0.6, lean=0.0, wa=0, hand_f=(3.5, 1.0), hand_b=(1.5, 8.5), fb=(-4.0, 0), ff=(4.0, 0)),
+    'windup_debuff': dict(bob=1.0, lean=0.8, dx=0.5, wa=90, hand_f=(7.5, 0.0), hand_b=(5.0, 4.5), fb=(-5.5, 0), ff=(4.5, 0)),
+}
+W1_STAGGER = [dict(bob=0.5, lean=-2.5, dx=-1.5, head_dy=-1.0, wa=-50, hand_f=(-4.5, 1.0), hand_b=(5.0, 3.5), fb=(-4.5, 0), ff=(4.0, 0)),
+              dict(bob=1.5, lean=-2.0, dx=-2.5, head_dy=-0.5, wa=-25, hand_f=(-4.0, 3.0), hand_b=(4.5, 4.5), fb=(-7.5, 0), ff=(3.5, 0)),
+              dict(bob=2.5, lean=1.5, dx=-2.0, head_dy=1.0, wa=150, hand_f=(3.0, 8.0), hand_b=(2.0, 7.5), fb=(-6.5, 0), ff=(4.0, 0)),
+              dict(bob=2.2, lean=1.5, dx=-2.0, head_dy=1.5, wa=158, hand_f=(3.5, 8.5), hand_b=(1.0, 8.5), fb=(-5.5, 0), ff=(4.0, 0))]
+W1_DAZED = dict(bob=2.0, lean=1.5, head_dy=1.5, wa=162, hand_f=(3.5, 8.5), hand_b=(0.5, 9.0), fb=(-5.0, 0), ff=(4.0, 0))
+# 2H (warrior/2h_*, Grakka): the greatsword's attack is a level cut (cocked over the shoulder), the axe's and the
+# hammer's a chop (raised behind the head); both hands on the grip (pose grip2)
+W2_CUT_COCKED = dict(bob=1.6, lean=-2.0, dx=-1.0, wa=-70, hand_f=(0, -2), fb=(-6.5, 0), ff=(4, 0))       # attack 1 (greatsword)
+W2_CHOP_COCKED = dict(bob=1.6, lean=-2.5, dx=-1.5, wa=-95, hand_f=(-0.5, -6.5), fb=(-6.5, 0), ff=(4, 0))  # attack 1 (axe, hammer)
+W2_HOLDS = {
+    'windup_heavy': dict(bob=3.2, lean=-1.5, dx=-1.0, wa=-68, hand_f=(2.5, -2.0), fb=(-7.0, 0), ff=(5.0, 0)),
+    'windup_buff': dict(bob=1.0, lean=0.5, head_dy=0.8, wa=180, hand_f=(5.0, 9.0), fb=(-4.0, 0), ff=(4.0, 0)),
+    'windup_debuff': dict(bob=1.0, lean=0.8, dx=0.5, wa=90, hand_f=(7.0, 1.0), fb=(-5.5, 0), ff=(4.5, 0)),
+}
+W2_STAGGER = [dict(bob=0.5, lean=-2.5, dx=-1.5, head_dy=-1.0, wa=-45, hand_f=(-3.0, -1.0), fb=(-4.5, 0), ff=(4.0, 0)),
+              dict(bob=1.5, lean=-2.0, dx=-2.5, head_dy=-0.5, wa=-20, hand_f=(-2.0, 1.5), fb=(-7.5, 0), ff=(3.5, 0)),
+              dict(bob=2.5, lean=1.5, dx=-2.0, head_dy=1.0, wa=145, hand_f=(4.0, 7.0), fb=(-6.5, 0), ff=(4.0, 0)),
+              dict(bob=2.2, lean=1.5, dx=-2.0, head_dy=1.5, wa=155, hand_f=(4.0, 7.5), fb=(-5.5, 0), ff=(4.0, 0))]
+W2_DAZED = dict(bob=2.0, lean=1.5, head_dy=1.5, wa=160, hand_f=(4.0, 8.0), fb=(-5.0, 0), ff=(4.0, 0))
+# 1H + buckler (warrior/1h_buckler, Brask, Hest, Orsa): the attack is an overhand cut (cocked behind the head)
+WB_COCKED = dict(bob=1.4, lean=-2.0, dx=-1.0, wa=-60, hand_f=(-1, -5.5), hand_b=(6.5, 2.5), fb=(-6.5, 0), ff=(4, 0))  # attack 1
+WB_HOLDS = {
+    'windup_heavy': dict(bob=3.5, lean=-2.5, dx=-1.5, wa=-88, hand_f=(-2.0, -8.0), hand_b=(7.0, 3.5), fb=(-7.5, 0), ff=(5.0, 0)),
+    'windup_buff': dict(bob=0.6, lean=0.0, wa=0, hand_f=(3.5, 1.0), hand_b=(2.5, 8.0), fb=(-4.0, 0), ff=(4.0, 0)),
+    'windup_debuff': dict(bob=1.0, lean=0.8, dx=0.5, wa=90, hand_f=(7.5, 0.0), hand_b=(5.0, 4.5), fb=(-5.5, 0), ff=(4.5, 0)),
+}
+WB_STAGGER = [dict(bob=0.5, lean=-2.5, dx=-1.5, head_dy=-1.0, wa=-50, hand_f=(-4.5, 1.0), hand_b=(5.0, 3.5), fb=(-4.5, 0), ff=(4.0, 0)),
+              dict(bob=1.5, lean=-2.0, dx=-2.5, head_dy=-0.5, wa=-25, hand_f=(-4.0, 3.0), hand_b=(4.5, 4.5), fb=(-7.5, 0), ff=(3.5, 0)),
+              dict(bob=2.5, lean=1.5, dx=-2.0, head_dy=1.0, wa=150, hand_f=(3.0, 8.0), hand_b=(2.0, 7.5), fb=(-6.5, 0), ff=(4.0, 0)),
+              dict(bob=2.2, lean=1.5, dx=-2.0, head_dy=1.5, wa=158, hand_f=(3.5, 8.5), hand_b=(1.0, 8.5), fb=(-5.5, 0), ff=(4.0, 0))]
+WB_DAZED = dict(bob=2.0, lean=1.5, head_dy=1.5, wa=162, hand_f=(3.5, 8.5), hand_b=(0.5, 9.0), fb=(-5.0, 0), ff=(4.0, 0))
+
+# WINDUP1-R2: the other five classes (table 7.2), each one grip shared by its goblin and named bodies (the rig scales
+# the keys by the body's size). `windup` is the main attack's frame strike - 1 (K2: its own keys, below); the stagger
+# (K3) and dazed (K4) follow the warrior's shape: head snapped back and the weapon arm flung wide, knocked back a step,
+# knees buckling, swaying; slumped with the weapon toward the ground before the feet and the off hand hanging.
+# Ranger bow: full draw (attack 3); heavy tilted up 10 degrees, leaning back; buff the bow lowered and the string hand
+# raised palm up (the motes rise from it, motes 'off'); debuff a half draw aimed at the target's feet (the glint at
+# the arrow's head).
+R_DRAW = dict(bob=1.2, lean=-1.2, bow_a=0, hand_f=(10.2, 0.5), pull=1.0, nock=True, hand_b=(-2.0, -0.5), fb=(-5.5, 0), ff=(4.5, 0))  # attack 3
+R_HOLDS = {
+    'windup_heavy': dict(bob=2.4, lean=-2.4, dx=-0.5, bow_a=-10, hand_f=(10.0, -1.6), pull=1.0, nock=True, hand_b=(-2.2, -2.2),
+                         fb=(-6.5, 0), ff=(5.0, 0)),
+    'windup_buff': dict(bob=0.6, lean=0.3, bow_a=50, hand_f=(4.0, 8.0), hand_b=(6.0, -3.5), fb=(-4.0, 0), ff=(4.0, 0)),
+    'windup_debuff': dict(bob=1.0, lean=-0.4, bow_a=22, hand_f=(9.5, 3.5), pull=0.5, nock=True, hand_b=(3.0, 0.0), fb=(-5.5, 0), ff=(4.5, 0)),
+}
+R_STAGGER = [dict(bob=0.5, lean=-2.5, dx=-1.5, head_dy=-1.0, bow_a=-30, hand_f=(-4.0, 1.5), hand_b=(5.0, 3.5), fb=(-4.5, 0), ff=(4.0, 0)),
+             dict(bob=1.5, lean=-2.0, dx=-2.5, head_dy=-0.5, bow_a=-10, hand_f=(-3.0, 4.0), hand_b=(4.5, 4.5), fb=(-7.5, 0), ff=(3.5, 0)),
+             dict(bob=2.5, lean=1.5, dx=-2.0, head_dy=1.0, bow_a=55, hand_f=(3.5, 8.0), hand_b=(2.0, 7.5), fb=(-6.5, 0), ff=(4.0, 0)),
+             dict(bob=2.2, lean=1.5, dx=-2.0, head_dy=1.5, bow_a=60, hand_f=(3.5, 8.5), hand_b=(1.0, 8.5), fb=(-5.5, 0), ff=(4.0, 0))]
+R_DAZED = dict(bob=2.0, lean=1.5, head_dy=1.5, bow_a=62, hand_f=(3.5, 8.5), hand_b=(0.5, 9.0), fb=(-5.0, 0), ff=(4.0, 0))
+# Brawler fists: the power fist cocked at the chest (jab 1); heavy wound far back (haymaker 1, the clip a heavy blow
+# plays from its strike); buff the fists together before the chest, head bowed; debuff the near fist pointed at the
+# target (the glint at its knuckles); stagger the fists flung up and back, dazed the hands hanging open.
+B_GF = (9.5, -6)
+B_FISTS = dict(fb=(-5.5, 0), ff=(5, 0), fist_f=True, fist_b=True)
+B_JAB_COCKED = dict(bob=1.3, lean=1.0, hand_f=(B_GF[0] - 0.5, B_GF[1] + 0.9), hand_b=(3, -0.5), **B_FISTS)  # jab 1
+B_HAY_COCKED = dict(bob=2.0, lean=-3.0, dx=-2.5, hand_f=(B_GF[0], B_GF[1] - 0.3), hand_b=(-8, 3), **B_FISTS)  # haymaker 1
+B_HOLDS = {
+    'windup_heavy': B_HAY_COCKED,
+    'windup_buff': dict(bob=1.2, lean=1.2, head_dy=1.6, hand_f=(5.0, 2.5), hand_b=(6.5, 2.5), fb=(-4.0, 0), ff=(4.0, 0), fist_f=True, fist_b=True),
+    'windup_debuff': dict(bob=1.2, lean=1.8, dx=0.5, hand_f=(11.5, -3.0), hand_b=(6.0, -3.5), **B_FISTS),
+}
+B_STAGGER = [dict(bob=0.5, lean=-2.5, dx=-1.5, head_dy=-1.0, hand_f=(5.5, -6.0), hand_b=(-4.0, -2.5), fb=(-4.5, 0), ff=(4.0, 0), fist_f=True, fist_b=True),
+             dict(bob=1.5, lean=-2.0, dx=-2.5, head_dy=-0.5, hand_f=(4.5, -1.5), hand_b=(-4.5, 2.0), fb=(-7.5, 0), ff=(3.5, 0), fist_f=True, fist_b=True),
+             dict(bob=2.5, lean=1.5, dx=-2.0, head_dy=1.0, hand_f=(3.0, 9.5), hand_b=(0.5, 10.0), fb=(-6.5, 0), ff=(4.0, 0)),
+             dict(bob=2.2, lean=1.5, dx=-2.0, head_dy=1.5, hand_f=(2.5, 10.0), hand_b=(0.0, 10.5), fb=(-5.5, 0), ff=(4.0, 0))]
+B_DAZED = dict(bob=2.0, lean=1.5, head_dy=1.5, hand_f=(2.5, 10.2), hand_b=(0.0, 10.6), fb=(-5.0, 0), ff=(4.0, 0))  # arms hanging straight
+# Priest mace: raised over the head (attack 1); heavy high in both hands, further back, crouched; buff upright before
+# the face, the off hand raised; debuff pointed at the target, the off hand open.
+P_RAISED = dict(bob=1.2, lean=-2.0, dx=-1, wa=-40, hand_f=(-1, -7.5), hand_b=(-2, -4), fb=(-5.5, 0), ff=(4.5, 0))  # attack 1
+P_HOLDS = {
+    'windup_heavy': dict(bob=2.4, lean=-3.0, dx=-1.0, wa=-70, hand_f=(-2.0, -8.5), hand_b=(-2.5, -7.0), fb=(-6.5, 0), ff=(5.0, 0)),
+    'windup_buff': dict(bob=0.6, lean=0.0, wa=0, hand_f=(7.5, 3.0), hand_b=(2.5, -9.5), fb=(-4.0, 0), ff=(4.0, 0)),
+    'windup_debuff': dict(bob=1.0, lean=0.8, dx=0.5, wa=90, hand_f=(8.0, 0.5), hand_b=(6.0, 3.0), fb=(-5.5, 0), ff=(4.5, 0)),
+}
+P_STAGGER = [dict(bob=0.5, lean=-2.5, dx=-1.5, head_dy=-1.0, wa=-50, hand_f=(-4.5, 1.0), hand_b=(5.0, 3.5), fb=(-4.5, 0), ff=(4.0, 0)),
+             dict(bob=1.5, lean=-2.0, dx=-2.5, head_dy=-0.5, wa=-25, hand_f=(-4.0, 3.0), hand_b=(4.5, 4.5), fb=(-7.5, 0), ff=(3.5, 0)),
+             dict(bob=2.5, lean=1.5, dx=-2.0, head_dy=1.0, wa=150, hand_f=(3.0, 8.0), hand_b=(2.0, 7.5), fb=(-6.5, 0), ff=(4.0, 0)),
+             dict(bob=2.2, lean=1.5, dx=-2.0, head_dy=1.5, wa=158, hand_f=(3.5, 8.5), hand_b=(1.0, 8.5), fb=(-5.5, 0), ff=(4.0, 0))]
+P_DAZED = dict(bob=2.0, lean=1.5, head_dy=1.5, wa=162, hand_f=(3.5, 8.5), hand_b=(0.5, 9.0), fb=(-5.0, 0), ff=(4.0, 0))
+# Rogue daggers: crouched with the daggers drawn back low (attack 0, the main attack's frame strike - 1, as K2; table
+# 7.2's "bob +1" read as attack 0's own crouch, 0.8 px below the idle's: a further 1 px breaks X2 continuity); heavy a deeper crouch, the daggers reversed (blades down from the raised fists); buff the
+# daggers lowered, the off hand at the chest; debuff one dagger pointed at the target.
+G_DRAWN = dict(bob=1.6, lean=1.0, dx=-1, wa=100, wb=100, hand_f=(3, 6), hand_b=(0, 6), fb=(-6, 0), ff=(3, 0))  # attack 0
+G_HOLDS = {
+    'windup_heavy': dict(bob=3.4, lean=2.0, dx=-1.5, wa=195, wb=195, hand_f=(6.0, 0.5), hand_b=(4.0, 1.5), fb=(-7.0, 0), ff=(3.5, 0)),
+    'windup_buff': dict(bob=0.6, lean=0.5, wa=165, wb=190, hand_f=(3.0, 8.5), hand_b=(4.5, 2.0), fb=(-4.0, 0), ff=(4.0, 0)),
+    'windup_debuff': dict(bob=1.0, lean=1.5, dx=0.5, wa=90, wb=120, hand_f=(9.0, 1.5), hand_b=(2.0, 6.0), fb=(-5.5, 0), ff=(4.5, 0)),
+}
+G_STAGGER = [dict(bob=0.5, lean=-2.5, dx=-1.5, head_dy=-1.0, wa=-30, wb=60, hand_f=(-4.0, 1.0), hand_b=(5.0, 3.5), fb=(-4.5, 0), ff=(4.0, 0)),
+             dict(bob=1.5, lean=-2.0, dx=-2.5, head_dy=-0.5, wa=0, wb=90, hand_f=(-3.5, 3.0), hand_b=(4.5, 4.5), fb=(-7.5, 0), ff=(3.5, 0)),
+             dict(bob=2.5, lean=1.5, dx=-2.0, head_dy=1.0, wa=150, wb=165, hand_f=(3.0, 8.0), hand_b=(2.0, 7.5), fb=(-6.5, 0), ff=(4.0, 0)),
+             dict(bob=2.2, lean=1.5, dx=-2.0, head_dy=1.5, wa=160, wb=170, hand_f=(3.5, 8.5), hand_b=(1.0, 8.5), fb=(-5.5, 0), ff=(4.0, 0))]
+G_DAZED = dict(bob=2.0, lean=1.5, head_dy=1.5, wa=165, wb=172, hand_f=(3.5, 8.5), hand_b=(0.5, 9.0), fb=(-5.0, 0), ff=(4.0, 0))
+# Mage staff: charging, the gem at full glow (attack 2); heavy high in both hands, the glow pulsing 0.6 - 1.0 over the
+# hold (steps); buff upright, the motes circling the gem (motes 'tip'); debuff pointed at the target, glow 0.5.
+M_CHARGED = dict(bob=1.0, lean=-1.6, wa=-12, hand_f=(2.5, -1.5), hand_b=(4.5, 1.5), glow=1.0)  # attack 2
+M_HOLDS = {
+    'windup_heavy': dict(bob=2.2, lean=-2.6, dx=-0.5, wa=-45, hand_f=(2.0, -6.0), hand_b=(0.5, -4.0), glow=0.6, fb=(-6.0, 0), ff=(4.5, 0)),
+    'windup_buff': dict(bob=0.6, lean=0.0, wa=0, hand_f=(5.0, 2.0), hand_b=(4.0, 5.0), glow=0.3, fb=(-4.0, 0), ff=(4.0, 0)),
+    'windup_debuff': dict(bob=1.0, lean=1.5, dx=0.5, wa=90, hand_f=(8.0, 1.0), hand_b=(5.0, 3.0), glow=0.5, fb=(-5.5, 0), ff=(4.5, 0)),
+}
+M_STEPS = {'windup_heavy': {'glow': (0.6, 0.8, 1.0, 0.8)}}
+M_STAGGER = [dict(bob=0.5, lean=-2.5, dx=-1.5, head_dy=-1.0, wa=-40, hand_f=(-4.0, 1.0), hand_b=(5.0, 3.5), fb=(-4.5, 0), ff=(4.0, 0)),
+             dict(bob=1.5, lean=-2.0, dx=-2.5, head_dy=-0.5, wa=-20, hand_f=(-3.5, 3.0), hand_b=(4.5, 4.5), fb=(-7.5, 0), ff=(3.5, 0)),
+             dict(bob=2.5, lean=1.5, dx=-2.0, head_dy=1.0, wa=150, hand_f=(3.0, 7.5), hand_b=(2.0, 7.5), fb=(-6.5, 0), ff=(4.0, 0)),
+             dict(bob=2.2, lean=1.5, dx=-2.0, head_dy=1.5, wa=156, hand_f=(3.5, 8.0), hand_b=(1.0, 8.5), fb=(-5.5, 0), ff=(4.0, 0))]
+M_DAZED = dict(bob=2.0, lean=1.5, head_dy=1.5, wa=158, hand_f=(3.5, 8.0), hand_b=(0.5, 9.0), fb=(-5.0, 0), ff=(4.0, 0))
+# per class: (the idle keys its intros start from, the holds with `windup`, stagger, dazed, rig.windup_rows options)
+CLASS_WINDUPS = {
+    'ranger': (dict(bow_a=35, hand_f=(5, 7.5)), dict(R_HOLDS, windup=R_DRAW), R_STAGGER, R_DAZED, dict(motes='off')),
+    'brawler': (dict(bob=1.0, lean=0.8, alt=1.3, hand_f=(8.5, -4.5), hand_b=(7, -3.5), fist_f=True, fist_b=True),
+                dict(B_HOLDS, windup=B_JAB_COCKED), B_STAGGER, B_DAZED, {}),
+    'priest': (dict(wa=30, hand_f=(5, 6.5)), dict(P_HOLDS, windup=P_RAISED), P_STAGGER, P_DAZED, {}),
+    'rogue': (dict(bob=0.8, lean=1.5, wa=110, wb=110, hand_f=(5, 5), hand_b=(2, 6)), dict(G_HOLDS, windup=G_DRAWN),
+              G_STAGGER, G_DAZED, {}),
+    'mage': (dict(wa=5, hand_f=(4.5, 4)), dict(M_HOLDS, windup=M_CHARGED), M_STAGGER, M_DAZED, dict(motes='tip', steps=M_STEPS)),
+}
+
+
 def warrior_2h(u):
     """WAR2H1: the warrior's two-handed look (grip '2h', no shield): u['weapon'] is a rig.DRAWERS drawing; both hands
     hold the grip (pose grip2). Clips as the 1H look minus shield_bash: idle, walk, attack (an overhead chop),
@@ -89,10 +242,10 @@ def warrior_2h(u):
                         (x - 1, y - 2.5, 0.7, (255, 220, 160))]
     st = dict(fb=(-5.5, 0), ff=(4.5, 0))
     put('attack', ([p(bob=1.2, lean=-1.0, wa=-55, hand_f=(1.5, -5), **st),
-                    p(bob=1.6, lean=-2.5, dx=-1.5, wa=-95, hand_f=(-0.5, -6.5), fb=(-6.5, 0), ff=(4, 0)),                  # wind-up
-                    p(bob=0.8, lean=2.0, dx=1.0, wa=60, hand_f=(8, -3), fb=(-6.5, 0), ff=(5.5, 0),
-                      slash=arc_pts(23, 19, 17, -60, 58, 14)),                                                          # the swing
-                    p(bob=2.4, lean=4.5, dx=3.0, wa=150, hand_f=(8, 5), fb=(-7, 0), ff=(6.5, 0), fx=tip(43, 40)),     # impact
+                    p(**W2_CHOP_COCKED),                                                                                # wind-up
+                    strike(p(bob=0.8, lean=2.0, dx=1.0, wa=60, hand_f=(8, -3), fb=(-6.5, 0), ff=(5.5, 0),
+                             slash=arc_pts(23, 19, 17, -60, 58, 14))),                                                  # the swing
+                    impact(p(bob=2.4, lean=4.5, dx=3.0, wa=150, hand_f=(8, 5), fb=(-7, 0), ff=(6.5, 0), fx=tip(43, 40))),  # impact
                     p(bob=2.2, lean=4.0, dx=3.0, wa=152, hand_f=(8, 5.5), fb=(-7, 0), ff=(6.5, 0)),                   # hold
                     p(bob=1.2, lean=1.5, dx=1.0, wa=80, hand_f=(6, 4.5), fb=(-5.5, 0), ff=(5, 0)),
                     pose(u, bob=0.3, **ready)], [120, 190, 45, 150, 120, 110, 110]))
@@ -101,10 +254,10 @@ def warrior_2h(u):
         # to the shoulder, cocked back over it, a level sweep, the blade straight out at chest height with the tip
         # spark (the same frame count, ms and impact frame 3 as the chop, for FX1); the axe and hammer keep the chop
         put('attack', ([p(bob=1.2, lean=-0.5, wa=-35, hand_f=(2, 1.5), **st),
-                        p(bob=1.6, lean=-2.0, dx=-1.0, wa=-70, hand_f=(0, -2), fb=(-6.5, 0), ff=(4, 0)),             # cocked
-                        p(bob=1.0, lean=1.5, dx=0.5, wa=75, hand_f=(4, 1), fb=(-6.5, 0), ff=(5.5, 0),
-                          slash=arc_pts(22, 50, 30, -25, 25, 14)),                                                    # the sweep
-                        p(bob=1.8, lean=3.0, dx=2.0, wa=95, hand_f=(3, 2.5), fb=(-7, 0), ff=(6.5, 0), fx=tip(44.5, 21.5)),  # impact
+                        p(**W2_CUT_COCKED),                                                                          # cocked
+                        strike(p(bob=1.0, lean=1.5, dx=0.5, wa=75, hand_f=(4, 1), fb=(-6.5, 0), ff=(5.5, 0),
+                                 slash=arc_pts(22, 50, 30, -25, 25, 14))),                                            # the sweep
+                        impact(p(bob=1.8, lean=3.0, dx=2.0, wa=95, hand_f=(3, 2.5), fb=(-7, 0), ff=(6.5, 0), fx=tip(44.5, 21.5))),  # impact
                         p(bob=1.6, lean=3.0, dx=2.0, wa=95, hand_f=(3, 2.5), fb=(-7, 0), ff=(6.5, 0)),             # hold
                         p(bob=1.2, lean=1.5, dx=1.0, wa=60, hand_f=(5, 3.5), fb=(-5.5, 0), ff=(5, 0)),
                         pose(u, bob=0.3, **ready)], [120, 190, 45, 150, 120, 110, 110]))
@@ -127,6 +280,10 @@ def warrior_2h(u):
                           p(fx=sb(0.8), **dict(gd, dx=-1.8, bob=2.8, lean=1.0, hand_f=(7.5, 2.4), fb=(-7, 0))),
                           p(fx=sb(0.8), **gd)], [60, 100, 110, 140]))
     put('hurt', hurt(u, **ready)); put('death', death(u, drop=(31, 44, 95)))
+    cocked = W2_CUT_COCKED if u['weapon'] == 'greatsword' else W2_CHOP_COCKED
+    W, WT = rig.windup_rows(lambda kw: pose(u, **dict(kw, grip2=g2)), rig.idle_keys(**ready)[0], dict(W2_HOLDS, windup=cocked),
+                            W2_STAGGER, W2_DAZED)
+    A.update(W); T.update(WT)
     return A, T
 
 
@@ -143,17 +300,17 @@ def warrior_buckler(u):
     st = dict(fb=(-5.5, 0), ff=(4.5, 0))
     # attack: raise the weapon behind the head, buckler forward; cut down and across, then back to the ready stance
     put('attack', ([pose(u, bob=1.0, lean=-1.0, wa=-25, hand_f=(0.5, -5), hand_b=(6, 3), **st),
-                    pose(u, bob=1.4, lean=-2.0, dx=-1.0, wa=-60, hand_f=(-1, -5.5), hand_b=(6.5, 2.5), fb=(-6.5, 0), ff=(4, 0)),
-                    pose(u, bob=0.8, lean=2.5, dx=1.5, wa=70, hand_f=(9, -1.5), hand_b=(4, 5), fb=(-6.5, 0), ff=(5.5, 0),
-                         slash=arc_pts(23, 20, 13, -50, 70, 12)),
-                    pose(u, bob=2.0, lean=4.0, dx=2.5, wa=125, hand_f=(9.5, 5), hand_b=(3, 6), fb=(-7, 0), ff=(6.5, 0), fx=spark(43, 31)),
+                    pose(u, **WB_COCKED),
+                    strike(pose(u, bob=0.8, lean=2.5, dx=1.5, wa=70, hand_f=(9, -1.5), hand_b=(4, 5), fb=(-6.5, 0), ff=(5.5, 0),
+                                slash=arc_pts(23, 20, 13, -50, 70, 12))),
+                    impact(pose(u, bob=2.0, lean=4.0, dx=2.5, wa=125, hand_f=(9.5, 5), hand_b=(3, 6), fb=(-7, 0), ff=(6.5, 0), fx=spark(43, 31))),
                     pose(u, bob=1.8, lean=3.8, dx=2.5, wa=128, hand_f=(9.5, 5.5), hand_b=(3, 6), fb=(-7, 0), ff=(6.5, 0)),
                     pose(u, bob=1.0, lean=1.5, dx=1.0, wa=60, hand_f=(6, 4.5), hand_b=(5, 4), fb=(-5.5, 0), ff=(5, 0)),
                     pose(u, bob=0.3, **ready)], [110, 170, 45, 140, 110, 110, 110]))
     # shield bash: weapon held back, punch the buckler straight out at face height
     put('shield_bash', ([pose(u, bob=1.4, lean=-1.5, dx=-1.0, wa=-30, hand_f=(-1, 4), hand_b=(4.5, 3.5), fb=(-6, 0), ff=(4, 0)),
                          pose(u, bob=1.8, lean=-2.0, dx=-1.5, wa=-40, hand_f=(-1.5, 4), hand_b=(3.5, 3), fb=(-6.5, 0), ff=(3.5, 0)),
-                         pose(u, bob=1.2, lean=4.0, dx=3.0, wa=-30, hand_f=(1, 3.5), hand_b=(11, 0), fb=(-7.5, 0), ff=(7, 0), fx=spark(42, 18, 2.2)),
+                         strike(impact(pose(u, bob=1.2, lean=4.0, dx=3.0, wa=-30, hand_f=(1, 3.5), hand_b=(11, 0), fb=(-7.5, 0), ff=(7, 0), fx=spark(42, 18, 2.2)))),
                          pose(u, bob=1.4, lean=4.0, dx=3.0, wa=-30, hand_f=(1, 3.5), hand_b=(10.5, 0.5), fb=(-7.5, 0), ff=(7, 0)),
                          pose(u, bob=0.8, lean=1.5, dx=1.0, wa=10, hand_f=(3, 5), hand_b=(6, 3), fb=(-5.5, 0), ff=(5, 0)),
                          pose(u, bob=0.3, **ready)], [100, 150, 45, 150, 110, 110]))
@@ -175,6 +332,8 @@ def warrior_buckler(u):
                           pose(u, fx=sb(0.8), **dict(gd, dx=-1.8, bob=2.6, lean=1.0, hand_b=(6.5, -0.6), fb=(-7, 0))),
                           pose(u, fx=sb(0.8), **gd)], [60, 100, 110, 140]))
     put('hurt', hurt(u, **ready)); put('death', death(u, drop=(30, 45, 92)))
+    W, WT = rig.windup_rows(lambda kw: pose(u, **kw), rig.idle_keys(**ready)[0], dict(WB_HOLDS, windup=WB_COCKED), WB_STAGGER, WB_DAZED)
+    A.update(W); T.update(WT)
     return A, T
 
 
@@ -189,31 +348,23 @@ def clips(name, variant='', unit=None):
     if name == 'warrior':  # one-handed sword, kite shield on the far arm
         # variant: '' = current, 'A' = shield carried lower, 'B' = hunched behind the shield
         def wp(**kw):
-            hb = kw.get('hand_b')
-            raised = hb is not None and hb[1] < 3 and hb[0] >= 5
-            if variant == 'A' and raised:
-                kw['hand_b'] = (hb[0], hb[1] + 2.8)
-            if variant == 'B' and raised:
-                kw['bob'] = kw.get('bob', 0) + 1.8; kw['lean'] = kw.get('lean', 0) + 2.2; kw['head_dy'] = kw.get('head_dy', 0) + 1.8
-                kw['hand_b'] = (hb[0] - 0.5, hb[1] + 2.0)
-                if 'hand_f' in kw and kw['hand_f'] is not None: kw['hand_f'] = (kw['hand_f'][0], kw['hand_f'][1] + 0.5)
-            return pose(u, **kw)
-        ready = dict(hand_b=(3.5, 5), wa=25)
+            return pose(u, **warrior_kw(variant, kw))
+        ready = dict(W1_READY)
         put('idle', idle(u, **ready)); put('walk', walk(u, wa=30, hand_b=(3.0, 5.5), swing=0.4))
         # attack: a thrust from behind the raised shield; the shield never drops
         sh_up = dict(hand_b=(7.5, 0.5))
         put('attack', ([wp(bob=1.0, lean=0.5, wa=60, hand_f=(3, 5), hand_b=(6, 2), fb=(-5, 0), ff=(4, 0)),
-                        wp(bob=2.0, lean=-1.0, dx=-1.5, wa=88, hand_f=(-2.5, 5.5), fb=(-6.5, 0), ff=(4, 0), **sh_up),          # draw back
-                        wp(bob=1.6, lean=3.5, dx=2.5, wa=92, hand_f=(10.5, 4), fb=(-7, 0), ff=(6.5, 0), **sh_up,
-                             fx=[(45, 24.5, 1.6, (255, 255, 255)), (44, 22.5, 0.6, (230, 236, 245)), (44, 26.5, 0.6, (230, 236, 245))]),  # thrust
+                        wp(**W1_DRAWN),                                                                                         # draw back
+                        strike(impact(wp(bob=1.6, lean=3.5, dx=2.5, wa=92, hand_f=(10.5, 4), fb=(-7, 0), ff=(6.5, 0), **sh_up,
+                                         fx=[(45, 24.5, 1.6, (255, 255, 255)), (44, 22.5, 0.6, (230, 236, 245)), (44, 26.5, 0.6, (230, 236, 245))]))),  # thrust
                         wp(bob=1.8, lean=3.5, dx=2.5, wa=92, hand_f=(10.5, 4), fb=(-7, 0), ff=(6.5, 0), **sh_up),                 # hold
                         wp(bob=1.2, lean=1.5, dx=1.0, wa=80, hand_f=(5, 5), fb=(-5.5, 0), ff=(5, 0), **sh_up),
                         wp(bob=0.3, **ready)], [110, 160, 45, 140, 110, 110]))
         # shield bash: sword pulled back low, drive the shield forward with the whole body
         put('shield_bash', ([wp(bob=1.6, lean=-1.5, dx=-1.5, wa=-110, hand_f=(-0.5, 6.5), hand_b=(4, 2), fb=(-6, 0), ff=(4, 0)),
                              wp(bob=2.2, lean=-2.5, dx=-2.5, wa=-115, hand_f=(-1, 6.5), hand_b=(3, 2.5), fb=(-6.5, 0), ff=(3.5, 0)),
-                             wp(bob=1.4, lean=4.5, dx=3.5, wa=-110, hand_f=(0.5, 6.5), hand_b=(10, 0.5), fb=(-7.5, 0), ff=(7, 0),
-                                  fx=[(43, 19, 2.4, (255, 255, 255)), (45, 15, 1.0, (255, 240, 200)), (45, 24, 1.0, (255, 240, 200)), (41, 13, 0.8, (255, 220, 160))]),
+                             strike(impact(wp(bob=1.4, lean=4.5, dx=3.5, wa=-110, hand_f=(0.5, 6.5), hand_b=(10, 0.5), fb=(-7.5, 0), ff=(7, 0),
+                                              fx=[(43, 19, 2.4, (255, 255, 255)), (45, 15, 1.0, (255, 240, 200)), (45, 24, 1.0, (255, 240, 200)), (41, 13, 0.8, (255, 220, 160))]))),
                              wp(bob=1.6, lean=4.5, dx=3.5, wa=-110, hand_f=(0.5, 6.5), hand_b=(10, 0.5), fb=(-7.5, 0), ff=(7, 0)),
                              wp(bob=1.0, lean=2.0, dx=1.5, wa=-60, hand_f=(1.5, 6), hand_b=(6, 2), fb=(-5.5, 0), ff=(5, 0)),
                              wp(bob=0.3, **ready)], [110, 170, 45, 160, 110, 110]))
@@ -244,7 +395,7 @@ def clips(name, variant='', unit=None):
                         pose(u, bob=0.8, lean=-0.3, bow_a=0, hand_f=(9.5, 0.5), pull=0.2, nock=True, hand_b=(4.5, 0.5), **st),
                         pose(u, bob=1.0, lean=-0.8, bow_a=0, hand_f=(10, 0.5), pull=0.6, nock=True, hand_b=(1.0, 0.0), **st),
                         pose(u, bob=1.2, lean=-1.2, bow_a=0, hand_f=(10.2, 0.5), pull=1.0, nock=True, hand_b=(-2.0, -0.5), **st),
-                        pose(u, bob=1.0, lean=-1.6, dx=-0.6, bow_a=-4, hand_f=(10, 0), hand_b=(-3.5, -1), arrow=(44, 22.0), **st),
+                        strike(impact(pose(u, bob=1.0, lean=-1.6, dx=-0.6, bow_a=-4, hand_f=(10, 0), hand_b=(-3.5, -1), arrow=(44, 22.0), **st))),  # the release
                         pose(u, bob=0.8, lean=-1.0, dx=-0.4, bow_a=-2, hand_f=(9.8, 0.3), hand_b=(-3, 0), **st),
                         pose(u, bob=0.4, bow_a=20, hand_f=(6, 4), **st)], [100, 110, 90, 260, 50, 140, 120]))
         # stance: focus (aim) idle: bow half-raised, eye glint, slow gold motes at the head
@@ -261,9 +412,9 @@ def clips(name, variant='', unit=None):
         st = dict(fb=(-5.5, 0), ff=(4.5, 0))
         put('attack', ([pose(u, bob=0.8, lean=-1.0, wa=-10, hand_f=(1, -6), hand_b=(-1, -3), **st),
                         pose(u, bob=1.2, lean=-2.0, dx=-1, wa=-40, hand_f=(-1, -7.5), hand_b=(-2, -4), **st),
-                        pose(u, bob=0.8, lean=2.0, dx=1, wa=60, hand_f=(7, -2), slash=arc_pts(22, 18, 12, -20, 80, 12), **st),
-                        pose(u, bob=2.2, lean=4.0, dx=2.5, wa=140, hand_f=(8, 5), fb=(-6.5, 0), ff=(6, 0),
-                             fx=[(37, 38, 2.0, (255, 255, 255)), (34, 40, 1.0, GOLDEN_HI), (40, 40, 1.0, GOLDEN_HI), (37, 35, 0.8, GOLDEN)]),
+                        strike(pose(u, bob=0.8, lean=2.0, dx=1, wa=60, hand_f=(7, -2), slash=arc_pts(22, 18, 12, -20, 80, 12), **st)),
+                        impact(pose(u, bob=2.2, lean=4.0, dx=2.5, wa=140, hand_f=(8, 5), fb=(-6.5, 0), ff=(6, 0),
+                                    fx=[(37, 38, 2.0, (255, 255, 255)), (34, 40, 1.0, GOLDEN_HI), (40, 40, 1.0, GOLDEN_HI), (37, 35, 0.8, GOLDEN)])),
                         pose(u, bob=2.0, lean=3.5, dx=2.5, wa=150, hand_f=(8, 5.5), fb=(-6.5, 0), ff=(6, 0)),
                         pose(u, bob=0.4, **rd)], [120, 180, 50, 150, 110, 120]))
         put('hurt', hurt(u, **rd)); put('death', death(u, drop=(31, 44, 95)))
@@ -271,10 +422,10 @@ def clips(name, variant='', unit=None):
         rd = dict(wa=110, wb=110, hand_f=(5, 5), hand_b=(2, 6))
         put('idle', idle(u, bob=0.8, lean=1.5, **rd)); put('walk', walk(u, wa=110, wb=120, hand_f=(5, 5), hand_b=(1, 6.5), lean=2.0))
         put('attack', ([pose(u, bob=1.6, lean=1.0, dx=-1, wa=100, wb=100, hand_f=(3, 6), hand_b=(0, 6), fb=(-6, 0), ff=(3, 0)),
-                        pose(u, bob=1.2, lean=4.0, dx=3, wa=90, wb=110, hand_f=(10, 2.5), hand_b=(1, 6), fb=(-7, 0), ff=(6, 0),
-                             fx=[(40, 22, 1.2, (255, 255, 255))]),
-                        pose(u, bob=1.4, lean=4.0, dx=3.5, wa=110, wb=95, hand_f=(5, 5), hand_b=(8, 3.5), fb=(-7, 0), ff=(6.5, 0),
-                             fx=[(39, 24, 1.2, (255, 255, 255)), (41, 23, 0.7, (255, 200, 200))]),
+                        strike(pose(u, bob=1.2, lean=4.0, dx=3, wa=90, wb=110, hand_f=(10, 2.5), hand_b=(1, 6), fb=(-7, 0), ff=(6, 0),
+                                    fx=[(40, 22, 1.2, (255, 255, 255))])),
+                        impact(pose(u, bob=1.4, lean=4.0, dx=3.5, wa=110, wb=95, hand_f=(5, 5), hand_b=(8, 3.5), fb=(-7, 0), ff=(6.5, 0),
+                                    fx=[(39, 24, 1.2, (255, 255, 255)), (41, 23, 0.7, (255, 200, 200))])),        # the second stab lands (its spark)
                         pose(u, bob=1.0, lean=2.5, dx=1.5, wa=110, wb=110, hand_f=(6, 4.5), hand_b=(3, 5.5), fb=(-5, 0), ff=(4.5, 0)),
                         pose(u, bob=0.8, lean=1.5, **rd)], [120, 50, 70, 120, 120]))
         put('hurt', hurt(u, **rd)); put('death', death(u, drop=(29, 44, 88), drop_b=(15, 44, 95)))
@@ -285,7 +436,7 @@ def clips(name, variant='', unit=None):
         put('attack', ([pose(u, bob=0.4, wa=0, hand_f=(4.5, 2.5), hand_b=(4, 4)),
                         pose(u, bob=0.8, lean=-1.2, wa=-8, hand_f=(3, -0.5), hand_b=(4, 2), glow=0.4),
                         pose(u, bob=1.0, lean=-1.6, wa=-12, hand_f=(2.5, -1.5), hand_b=(4.5, 1.5), glow=1.0),
-                        pose(u, bob=0.8, lean=3.0, dx=1.5, wa=75, hand_f=(9, 1), hand_b=(5, 3), fb=(-6, 0), ff=(5, 0), glow=0.6, fx=bolt(41)),
+                        strike(impact(pose(u, bob=0.8, lean=3.0, dx=1.5, wa=75, hand_f=(9, 1), hand_b=(5, 3), fb=(-6, 0), ff=(5, 0), glow=0.6, fx=bolt(41)))),  # the bolt leaves
                         pose(u, bob=0.6, lean=2.0, dx=1.0, wa=80, hand_f=(8.5, 1.5), hand_b=(5, 3.5), fb=(-6, 0), ff=(5, 0), fx=bolt(52)),
                         pose(u, bob=0.3, **rd)], [120, 140, 220, 60, 120, 140]))
         fr = []
@@ -312,22 +463,22 @@ def clips(name, variant='', unit=None):
         bobf = lambda k: (G_F[0] - 0.5 * (k % 2), G_F[1] + (0.9 if k % 2 else -0.3))
         put('jab', ([pose(u, bob=1.2, lean=0.8, hand_f=bobf(0), hand_b=G_B, **st),
                      pose(u, bob=1.3, lean=1.0, hand_f=bobf(1), hand_b=(3, -0.5), **st),
-                     pose(u, bob=1.0, lean=2.5, dx=1.5, hand_f=(3.5, -3), hand_b=(12, -3.5), fx=spark(39, 13), **st),
+                     strike(impact(pose(u, bob=1.0, lean=2.5, dx=1.5, hand_f=(3.5, -3), hand_b=(12, -3.5), fx=spark(39, 13), **st))),
                      pose(u, bob=1.1, lean=2.2, dx=1.5, hand_f=(3.5, -2.5), hand_b=(11.5, -3.2), **st),
                      pose(u, bob=1.2, lean=1.2, dx=0.5, hand_f=bobf(1), hand_b=(3.5, 0), **st),
                      pose(u, bob=1.0, lean=0.8, hand_f=bobf(0), hand_b=G_B, **st)], [80, 60, 50, 100, 70, 100]))
         # haymaker: far fist winds way back, the body twists, a wide hook swings round and lands
         put('haymaker', ([pose(u, bob=1.6, lean=-2.0, dx=-1.5, hand_f=bobf(1), hand_b=(-6, 5), **st),
                           pose(u, bob=2.0, lean=-3.0, dx=-2.5, hand_f=bobf(2), hand_b=(-8, 3), **st),
-                          pose(u, bob=1.2, lean=1.5, dx=0.5, hand_f=(4, -1.5), hand_b=(2, -1), fx=[(x, y, 0.6, (255, 220, 160)) for x, y in arc_pts(20, 21, 10, -100, 20, 9)], **st),
-                          pose(u, bob=2.0, lean=5.0, dx=3.5, hand_f=(3, -3.5), hand_b=(12, 0), fx=spark(39, 17, 2.4) + [(38, 15, 0.8, (255, 200, 120))], **st),
+                          strike(pose(u, bob=1.2, lean=1.5, dx=0.5, hand_f=(4, -1.5), hand_b=(2, -1), fx=[(x, y, 0.6, (255, 220, 160)) for x, y in arc_pts(20, 21, 10, -100, 20, 9)], **st)),
+                          impact(pose(u, bob=2.0, lean=5.0, dx=3.5, hand_f=(3, -3.5), hand_b=(12, 0), fx=spark(39, 17, 2.4) + [(38, 15, 0.8, (255, 200, 120))], **st)),
                           pose(u, bob=1.6, lean=3.0, dx=2.0, hand_f=(4.5, -2), hand_b=(8, 2.5), **st),
                           pose(u, bob=1.0, lean=0.8, **guard)], [110, 200, 40, 160, 110, 120]))
         # front kick: chamber the knee high, snap the foot out at chest height, recoil
         put('kick', ([pose(u, bob=1.0, ff=(4.5, 0), fb=(-4.5, 0), **gb(1)),
                       pose(u, bob=0.0, lean=-2.0, dx=-1.0, ff=(5, 13), fb=(-3, 0), **gb(2)),
-                      pose(u, bob=-0.5, lean=-4.5, dx=-2.0, ff=(15.5, 21), fb=(-3.5, 0), hand_f=(4, -1), hand_b=(-4, 6), fist_f=True, fist_b=True,
-                           fx=[(37, 21, 2.0, (255, 255, 255)), (39, 19, 0.8, (255, 220, 160)), (39, 24, 0.8, (255, 220, 160))]),
+                      strike(impact(pose(u, bob=-0.5, lean=-4.5, dx=-2.0, ff=(15.5, 21), fb=(-3.5, 0), hand_f=(4, -1), hand_b=(-4, 6), fist_f=True, fist_b=True,
+                                         fx=[(37, 21, 2.0, (255, 255, 255)), (39, 19, 0.8, (255, 220, 160)), (39, 24, 0.8, (255, 220, 160))]))),
                       pose(u, bob=-0.5, lean=-4.5, dx=-2.0, ff=(15.5, 21), fb=(-3.5, 0), hand_f=(4, -1), hand_b=(-4, 6), fist_f=True, fist_b=True),
                       pose(u, bob=0.0, lean=-2.0, dx=-1.0, ff=(5, 13), fb=(-3, 0), **gb(3)),
                       pose(u, bob=1.0, lean=0.8, ff=(5, 0), fb=(-5, 0), **gb(4))], [90, 90, 50, 160, 90, 110]))
@@ -343,11 +494,11 @@ def clips(name, variant='', unit=None):
         tr = lambda *xs: [(x, 1.0) for x in xs]
         put('sweep_kick', ([pose(u, bob=2.0, lean=0.5, ff=(5, 0), fb=(-5, 0), **guard),
                             pose(u, bob=7.0, lean=1.5, ff=(4, 0), fb=(-8, 0), hand_f=(5, 6), hand_b=(4, 8), fist_f=True, fist_b=True),
-                            rig.mirror(pose(u, bob=7.5, lean=2.0, ff=(15, 1), fb=(-5, 0), leg_trail=tr(8, 12), fx=ring(0.3), **low)),   # turned away: leg sweeps behind
+                            strike(rig.mirror(pose(u, bob=7.5, lean=2.0, ff=(15, 1), fb=(-5, 0), leg_trail=tr(8, 12), fx=ring(0.3), **low))),  # turned away: leg sweeps behind
                             rig.mirror(pose(u, bob=7.5, lean=1.0, ff=(9, 1), fb=(-4, 0), leg_trail=tr(15, 13), fx=ring(0.45), **low)),  # coming round
                             pose(u, bob=7.5, lean=0.0, ff=(2, 1), fb=(-2, 0), hand_f=(3, 9), hand_b=(-1, 9), fist_f=True, fist_b=True, leg_trail=tr(-8, -12, -15), fx=ring(0.6)),
                             pose(u, bob=7.5, lean=1.5, ff=(10, 1), fb=(-6, 0), leg_trail=tr(-2, 3, 6), fx=ring(0.8), **low),
-                            pose(u, bob=7.5, lean=2.0, ff=(16, 1.5), fb=(-6, 0), leg_trail=tr(8, 11, 13.5), fx=ring(1.0) + [(38, 41, 2.0, (255, 255, 255)), (41, 39, 0.8, (255, 220, 160))], **low),
+                            impact(pose(u, bob=7.5, lean=2.0, ff=(16, 1.5), fb=(-6, 0), leg_trail=tr(8, 11, 13.5), fx=ring(1.0) + [(38, 41, 2.0, (255, 255, 255)), (41, 39, 0.8, (255, 220, 160))], **low)),
                             pose(u, bob=7.5, lean=2.0, ff=(16, 1.5), fb=(-6, 0), fx=ring(1.0), **low),
                             pose(u, bob=6.0, lean=1.5, ff=(8, 0), fb=(-7, 0), hand_f=(5, 6), hand_b=(3, 8), fist_f=True, fist_b=True),
                             pose(u, bob=1.0, lean=0.8, ff=(5, 0), fb=(-5, 0), **guard)], [110, 80, 50, 50, 50, 40, 60, 140, 110, 120]))
@@ -363,10 +514,18 @@ def clips(name, variant='', unit=None):
                        pose(u, bob=0.0, hurt=1.0, fall=1.0, dx=-1.0, hand_f=(-2.5, 10.5), hand_b=(-4.5, -11))],
                       [200, 60, 90, 130, 100, 90, 90, 600]))
     if name in GUARDS: defensive_set(u, GUARDS[name], A, T)
+    if name in CLASS_WINDUPS:  # WINDUP1-R2: the wind-up rows after today's rows (K7)
+        rd, holds, stagger_keys, dazed_keys, opts = CLASS_WINDUPS[name]
+        W, WT = rig.windup_rows(lambda kw: pose(u, **kw), rig.idle_keys(**rd)[0], holds, stagger_keys, dazed_keys, **opts)
+        A.update(W); T.update(WT)
     if name == 'warrior' and variant == '':
         a_, at_ = clips('warrior', 'A', unit); b_, bt_ = clips('warrior', 'B', unit)
         A['attack'], T['attack'] = a_['attack'], at_['attack']
         for k in ('shield_bash', 'defend', 'idle_guarded', 'hurt_guarded'): A[k], T[k] = b_[k], bt_[k]
+        # WINDUP1: the wind-up rows after today's rows; the attack is variant A's, so its held pose is too (K2)
+        W, WT = rig.windup_rows(lambda kw: pose(u, **kw), rig.idle_keys(**W1_READY)[0], dict(W1_HOLDS, windup=warrior_kw('A', W1_DRAWN)),
+                                W1_STAGGER, W1_DAZED)
+        A.update(W); T.update(WT)
     return A, T
 
 

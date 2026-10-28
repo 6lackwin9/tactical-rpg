@@ -48,7 +48,8 @@ pub fn family_skill(w: &World, c: UnitId, fam: &str) -> Option<SkillId> {
 
 /// The families of FU4's auto order before the intent filter: the deck's actives (under the deck rule the unit's
 /// active slots, RULESET1 9 D2; without a deck: every family the unit can use that is not a basic, in catalog order),
-/// then the basics (the ruleset's `basics` in their order; a row without any: the catalog's basic skills).
+/// then its meter skills (HOOKS1 UM6, rule unit_meters: in the order the battle gave them), then the basics (the
+/// ruleset's `basics` in their order; a row without any: the catalog's basic skills).
 fn auto_families(w: &World, c: UnitId) -> Vec<String> {
     let basics: Vec<String> = if w.ruleset.numbers.basics.is_empty() { w.cat.basic_ids().iter().map(|id| w.cat.family_of(id).to_string()).collect() } else { w.ruleset.numbers.basics.clone() };
     let slots = Some(w.units[c].active_families()).filter(|a| w.units[c].deck_rule.is_some() && !a.is_empty());
@@ -65,6 +66,12 @@ fn auto_families(w: &World, c: UnitId) -> Vec<String> {
             fams
         }
     };
+    for id in &w.units[c].meter_skills {
+        let fam = w.cat.family_of(id).to_string();
+        if !out.contains(&fam) {
+            out.push(fam);
+        }
+    }
     for b in basics {
         if !out.contains(&b) {
             out.push(b);
@@ -708,10 +715,18 @@ impl<'a> Builder<'a> {
                 let need = s.blocks + w.recovery_of(self.c, s);
                 let ap = if pays { skill::ap_cost_by(s, Some(u), &w.ruleset) } else { 0 };
                 let ap_free = st.ap_left - reserve.ap;
+                // HOOKS1 HC1: a skill whose HP cost the unit's HP left does not exceed is refused (rule hp_cost)
+                let hp = command::hp_cost_problem(st.hp_left, command::hp_cost_of(w, s));
+                // HOOKS1 UM2: a skill whose meter cost the planned meters do not cover is refused (rule unit_meters)
+                let meter = crate::meter::cost_problem(w, skill::meters_by(s, &w.ruleset), |m| st.meter(m));
                 if !fits_before(&st, need, limit) {
                     why = format!("blocks {free} < {need}");
                 } else if ap > ap_free {
                     why = format!("AP {} < {ap}", ap_free.max(0));
+                } else if !hp.is_empty() {
+                    why = hp;
+                } else if !meter.is_empty() {
+                    why = meter;
                 } else if let Some(step) = self.follow_step(&st, sid) {
                     let before = st.entries.len();
                     let p = plan.add_step(w, self.c, tagged(step, &format!("follow-up {}", k + 1), ""), false);

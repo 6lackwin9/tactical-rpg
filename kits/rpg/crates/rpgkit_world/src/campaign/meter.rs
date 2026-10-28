@@ -3,6 +3,7 @@
 //! crosses and which inputs a cause moves. Pure: the tick in `campaign/mod.rs` applies what these return.
 
 use aegis_core::json::{self, int, Dict};
+use rpgkit_rules::bands;
 use serde_json::Value;
 
 /// One band of a meter (M2): the value's band is the last band whose `from` is at or below it.
@@ -156,25 +157,22 @@ impl MeterDef {
         value.clamp(self.floor(act), self.max)
     }
 
-    /// M2: the band holding `value` (None when the meter has no band at or below it).
+    /// M2: the band holding `value` (None when the meter has no band at or below it; `rpgkit_rules::bands`, shared with
+    /// the unit meters).
     pub fn band(&self, value: i64) -> Option<&Band> {
-        self.bands.iter().rfind(|b| b.from <= value)
+        bands::band_index(self.bands.iter().map(|b| b.from), value).map(|i| &self.bands[i])
     }
 
     /// M5: the rules a move from `old` to `new` crosses in `act`, in crossing order (rising points for a rise,
-    /// falling for a fall; data order on a tie, K5).
+    /// falling for a fall; data order on a tie, K5; `rpgkit_rules::bands`).
     pub fn crossed(&self, old: i64, new: i64, act: i64) -> Vec<&Rule> {
         let mut out: Vec<&Rule> = self
             .rules
             .iter()
             .filter(|r| r.acts.is_empty() || r.acts.contains(&act))
-            .filter(|r| if r.up { old < r.at && new >= r.at } else { old > r.at && new <= r.at })
+            .filter(|r| bands::crosses(r.at, r.up, old, new))
             .collect();
-        if new >= old {
-            out.sort_by_key(|r| r.at);
-        } else {
-            out.sort_by_key(|r| std::cmp::Reverse(r.at));
-        }
+        bands::crossing_order(&mut out, old, new, |r| r.at);
         out
     }
 
