@@ -90,6 +90,11 @@ pub struct Shown {
     pub hp: i32,
     pub alive: bool,
     pub guarded: bool,
+    /// WINDUP1 W6, W7: its poise is broken this round; it has the Staggered status (active or pending); a wind-up of
+    /// its shows after the step (one that ended waits for the impact).
+    pub broken: bool,
+    pub staggered: bool,
+    pub winding: bool,
 }
 
 /// The board feedback of one step, held until its action lands (rule I) or fired at once.
@@ -102,6 +107,9 @@ pub struct Impact {
     pub delivery: Delivery,
     pub t0: u64,
     pub clips: Vec<&'static str>,
+    /// WINDUP1 W4: the actor's clip starts at its `strike` frame (it struck from a wind-up the board showed), so the
+    /// impact comes the ms between `strike` and `impact` after `t0`.
+    pub strike: bool,
     pub from: V2,
     pub to: V2,
     /// Each unit's state after the step (the tokens react to it at the impact).

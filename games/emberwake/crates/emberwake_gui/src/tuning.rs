@@ -63,6 +63,8 @@ pub struct Tuning {
     pub foot_alpha: u8,
     /// SPRITE1-U: the opacity of the white outline around the hovered unit's sprite.
     pub hover_outline_alpha: u8,
+    /// WINDUP1 W9: the opacity (0-255, 0 = off) of the Tallow Amber outline around a unit showing a wind-up.
+    pub windup_outline_alpha: u8,
 }
 
 impl Default for Tuning {
@@ -100,6 +102,7 @@ impl Default for Tuning {
             death_hold_ms: 600,
             foot_alpha: 110,
             hover_outline_alpha: 110,
+            windup_outline_alpha: 110,
         }
     }
 }
@@ -179,6 +182,7 @@ impl Tuned for Tuning {
             death_hold_ms: u("death_hold_ms", d.death_hold_ms).min(5000),
             foot_alpha: u("foot_alpha", d.foot_alpha as u64).min(255) as u8,
             hover_outline_alpha: u("hover_outline_alpha", d.hover_outline_alpha as u64).min(255) as u8,
+            windup_outline_alpha: u("windup_outline_alpha", d.windup_outline_alpha as u64).min(255) as u8,
         }
     }
 }

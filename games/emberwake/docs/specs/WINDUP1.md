@@ -199,6 +199,27 @@ or null}`. STATUSFX1 adds a key to the same entries (whichever lands first adds 
 11. Classic ruleset: wind-ups the same (blocks); no breaks; planning poses from the first command.
 12. `state.tokens` matches the drawn clips.
 
+### 6.4 As built (WINDUP1-L, 2026-10-29)
+
+`emberwake_gui/src/battle.rs` (`Pose`, `PoseSet`, `command_pose`, `plan_pose`, `windup_of`, `base_of`, `put_base`,
+`Tokens::follow`, `react_unit`, `windup_outline`, `Tokens::state`), `fx.rs` (`Shown.broken`, `staggered`, `winding`;
+`Impact.strike`), `tuning.rs` and `tuning.json` (`windup_outline_alpha` 110). The tests are `battle.rs`
+`windup_tests` (12; items 8 and 11 folded into others), on scratch bodies and synthetic clips.
+
+- The bodies' pose rows are read once a battle's units are known (`BattleScreen::learn_poses` on the next tick, as the
+  catch-ups run where the art cannot be read); until then, and for a body without them, nothing changes.
+- The planning guard pose (5.2) also needs the rows: a body without any pose row stands as before WINDUP1.
+- A break or Staggered without the `stagger` row reacts as before (`hurt` only on HP lost; not `hurt` on every break).
+- An enemy that is Staggered shows `dazed` in planning with the tells hidden too (a status, not a tell; WQ1 hides the
+  intent poses only).
+- A wind-up that a step ends (a break, a cancel) ends at that step's impact (rule I); the actor's own ends at its pop.
+- W5: a buff or debuff wind-up's base returns at the pop (also when its actor slides first).
+- Heavy is read from the skill row found by the command's name (so at its rank); W1a from the scheduled span.
+- Skip turned on while a wind-up base already plays keeps that base's clock (the WINDUP1-E note on `set_base_from`);
+  a base set under skip starts at `loop_from`.
+- `state.tokens[].clip` is the side clip id of the row last drawn (a missing clip's fallback included); the outlines seen
+  through cover (STAGE1-O) are unchanged.
+
 ## 7. Assets: the rig (WINDUP1-R1..R3)
 
 ### 7.1 Rig rules

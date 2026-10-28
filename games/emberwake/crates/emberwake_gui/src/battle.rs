@@ -76,6 +76,8 @@ const GOLD: Rgba = rgb(244, 198, 84);
 const ALLY: Rgba = rgb(110, 170, 255);
 const FOE: Rgba = rgb(240, 100, 92);
 const GOOD: Rgba = rgb(96, 210, 110);
+/// WINDUP1 W9: Tallow Amber (art bible 5), the wind-up outline.
+const AMBER: Rgba = rgb(0xd9, 0x77, 0x06);
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
@@ -139,6 +141,9 @@ struct Seen {
     hp: i32,
     alive: bool,
     guarded: bool,
+    /// WINDUP1: its poise broken this round; the Staggered status (active or pending).
+    broken: bool,
+    staggered: bool,
 }
 
 /// One unit's token animation (SPRITE1-U): its clips, a slide to a new tile, its fall. Times are on the battle's
@@ -160,6 +165,15 @@ struct UnitAnim {
     step: Facing,
     /// FACE1: while the party plans, the facing toward its planned or intended target (None: no target).
     planned: Option<Facing>,
+    /// WINDUP1 W4: the wanted clip starts at its `strike` frame (it struck from the wind-up shown).
+    strike: bool,
+    /// WINDUP1 W2: the action whose wind-up it shows (section 6).
+    windup: Option<Windup>,
+    /// WINDUP1 5: while the party plans, the pose of its round (`plan_pose`; `Pose::None` otherwise).
+    stance: Pose,
+    /// WINDUP1 6.2: the pose its base shows and the clip last drawn (the agent link's `tokens`).
+    pose: Pose,
+    drawn: String,
 }
 
 impl UnitAnim {
@@ -177,6 +191,268 @@ impl UnitAnim {
     }
 }
 
+/// WINDUP1 section 3 (rule W1): the pose a command shows, and the planning poses of section 5 (`Guard`, `Dazed`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum Pose {
+    #[default]
+    None,
+    Attack,
+    Heavy,
+    Buff,
+    Debuff,
+    Guard,
+    Dazed,
+}
+
+impl Pose {
+    /// The agent link's name (6.2; "" for none).
+    fn id(self) -> &'static str {
+        match self {
+            Pose::None => "",
+            Pose::Attack => "attack",
+            Pose::Heavy => "heavy",
+            Pose::Buff => "buff",
+            Pose::Debuff => "debuff",
+            Pose::Guard => "guard",
+            Pose::Dazed => "dazed",
+        }
+    }
+
+    /// Section 4: the clips showing it, best first (the first one the body has; none: the base as before WINDUP1).
+    fn clips(self) -> &'static [&'static str] {
+        match self {
+            Pose::Heavy => &["windup_heavy", "windup"],
+            Pose::Debuff => &["windup_debuff", "windup"],
+            Pose::Buff => &["windup_buff"],
+            Pose::Attack => &["windup"],
+            Pose::Guard => &["idle_guarded"],
+            Pose::Dazed => &["dazed"],
+            Pose::None => &[],
+        }
+    }
+
+    /// A wind-up or the dazed loop (6.1: skip animations starts it at `loop_from`, reduce motion holds it still).
+    fn held(self) -> bool {
+        !matches!(self, Pose::None | Pose::Guard)
+    }
+}
+
+/// WINDUP1 4: the clips the screen looks up on a body (the four wind-ups, the reaction and the dazed loop).
+const POSE_CLIPS: [&str; 6] = ["windup", "windup_heavy", "windup_buff", "windup_debuff", "stagger", "dazed"];
+
+/// WINDUP1: the pose clips one unit's body has (`POSE_CLIPS`), each with its `loop_from`. Empty (no body, or a body
+/// without them, as every body before WINDUP1-R1): the unit shows no pose, reaction or wind-up.
+#[derive(Debug, Clone, Default, PartialEq)]
+struct PoseSet(Vec<(&'static str, u32)>);
+
+impl PoseSet {
+    fn of(clips: &aegis_core::assets::Clips) -> PoseSet {
+        PoseSet(POSE_CLIPS.iter().filter_map(|&c| clips.clip(c).map(|k| (c, k.loop_from))).collect())
+    }
+
+    fn has(&self, clip: &str) -> bool {
+        self.0.iter().any(|(c, _)| *c == clip)
+    }
+
+    fn loop_from(&self, clip: &str) -> u32 {
+        self.0.iter().find(|(c, _)| *c == clip).map_or(0, |(_, l)| *l)
+    }
+
+    /// The clip showing `p` (section 4's fallbacks): the guard is `idle_guarded` (A1, A3), on a body with pose rows
+    /// (one without them stands as before WINDUP1); None for no pose or when the body has none of its clips.
+    fn clip(&self, p: Pose) -> Option<&'static str> {
+        match p {
+            Pose::Guard if !self.0.is_empty() => Some("idle_guarded"),
+            _ => p.clips().iter().copied().find(|c| self.has(c)),
+        }
+    }
+}
+
+/// WINDUP1 W2: the wind-up a unit shows: the scheduled action (this round's index), its pose and clip and its start and
+/// impact blocks.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Windup {
+    round: i32,
+    idx: usize,
+    pose: Pose,
+    clip: &'static str,
+    blocks: (i32, i32),
+}
+
+/// WINDUP1 6.1: how a base is put: `instant` (skip animations) starts a pose at its `loop_from`, `still` (reduce
+/// motion) holds a pose's hold and the dazed loop on one frame.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct Motion {
+    instant: bool,
+    still: bool,
+}
+
+/// W1 rows 4-6: an attack or area skill's pose: debuff-only (`power_mult` 0), Heavy (3 blocks or more), else an
+/// attack (also with no skill row).
+fn attack_pose(def: Option<&emberwake_data::SkillDef>) -> Pose {
+    match def {
+        Some(d) if d.power_mult <= 0.0 => Pose::Debuff,
+        Some(d) if d.blocks >= 3 => Pose::Heavy,
+        _ => Pose::Attack,
+    }
+}
+
+/// W1 row 8 (WQ3): an item aimed at foes (`aims_at_foes`) winds up as a debuff, any other as a buff.
+fn item_pose(item: &emberwake_data::ItemDef) -> Pose {
+    if item.aims_at_foes() { Pose::Debuff } else { Pose::Buff }
+}
+
+/// W1: the pose of a skill row by its kind (a plan step): attacks and areas by `attack_pose`, support and focus a buff,
+/// anything else none (Defend, moves, Disengage, Rest, Target, statuses).
+fn skill_pose(def: &emberwake_data::SkillDef) -> Pose {
+    match emberwake_battle::skill::kind(def) {
+        Kind::Attack => attack_pose(Some(def)),
+        Kind::Support | Kind::Focus => Pose::Buff,
+        _ => Pose::None,
+    }
+}
+
+/// W1: the pose of a scheduled command (its skill row by name, so at its rank; its item); none for Defend, walks,
+/// Disengage, Rest, Target and lost blocks.
+fn command_pose(s: &Session, c: &emberwake_battle::command::Command) -> Pose {
+    match &c.kind {
+        CmdKind::Attack { .. } | CmdKind::Area { .. } => attack_pose(s.w.cat.skills.iter().find(|k| k.name == c.name)),
+        CmdKind::Support { .. } | CmdKind::Focus { .. } => Pose::Buff,
+        CmdKind::Item { item, .. } => item_pose(item),
+        _ => Pose::None,
+    }
+}
+
+/// WINDUP1 6: the block the round's wind-ups are measured at: 1 once the plan is confirmed (block-1 actions wind up at
+/// the confirm), the current block while the round resolves; None while planning, between rounds or after the battle.
+fn windup_block(s: &Session) -> Option<i32> {
+    match s.phase {
+        _ if s.combat_over => None,
+        Phase::Planning if s.plan_confirmed => Some(1),
+        Phase::Resolving => Some(s.current_block.max(1)),
+        _ => None,
+    }
+}
+
+/// WINDUP1 W2, W1a: unit `i`'s action in wind-up at `block` that shows one: this round's scheduled action in wind-up
+/// (`poise::action_in_windup`) spanning more than one block, with a pose its body has a clip for; the earliest start.
+fn windup_of(s: &Session, i: usize, block: i32, ps: &PoseSet) -> Option<Windup> {
+    if !s.w.units[i].is_alive() || s.w.grid.pos(i).is_none() {
+        return None;
+    }
+    s.resolver
+        .scheduled
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| a.unit == i && a.impact > a.start && emberwake_battle::poise::action_in_windup(a, block))
+        .filter_map(|(idx, a)| {
+            let pose = command_pose(s, &a.command);
+            ps.clip(pose).filter(|_| pose.held()).map(|clip| Windup { round: s.current_round, idx, pose, clip, blocks: (a.start, a.impact) })
+        })
+        .min_by_key(|w| w.blocks.0)
+}
+
+/// WINDUP1 5: the pose unit `i` stands in while the party plans, by priority: `Dazed` while Staggered; `Guard` for a
+/// Guard round intent (classic: a first command that is a Defend); the opener's pose (W1, W1b: the first skill or item
+/// command of its round, its span ignored; a hero's from its plan, an enemy's its tell when that is a skill or item
+/// action, else, when its plan is `revealed`, the first such action of it); else by the round intent (Assault an
+/// attack, Support a buff, Maneuver: Engage an attack, Utility a debuff); else none. An enemy shows no pose while the
+/// enemy tells are hidden (WQ1; Staggered is a status, not a tell, and still shows).
+fn plan_pose(s: &Session, i: usize, tells: bool, revealed: &[usize]) -> Pose {
+    use emberwake_battle::round_intent::{self, ManeuverKind, RoundIntent};
+    let u = &s.w.units[i];
+    if !u.is_alive() || s.w.grid.pos(i).is_none() {
+        return Pose::None;
+    }
+    if u.st.has_any("stagger") {
+        return Pose::Dazed;
+    }
+    let enemy = !s.w.allies.contains(&i);
+    if enemy && !tells {
+        return Pose::None;
+    }
+    let (defends, opener) = if enemy {
+        let mut acts: Vec<&emberwake_battle::resolver::ScheduledAction> = s.resolver.scheduled.iter().filter(|a| a.unit == i && !a.cancelled).collect();
+        acts.sort_by_key(|a| a.start);
+        let first = acts.first().map(|a| command_pose(s, &a.command)).unwrap_or_default();
+        let opener = if first != Pose::None || !revealed.contains(&i) {
+            first
+        } else {
+            acts.iter().map(|a| command_pose(s, &a.command)).find(|p| *p != Pose::None).unwrap_or_default()
+        };
+        (acts.first().is_some_and(|a| matches!(a.command.kind, CmdKind::Defend { .. })), opener)
+    } else {
+        use emberwake_battle::plan::{Mode, Step};
+        let steps = s.plan.steps_of(i);
+        let def = |st: &Step| st.skill.and_then(|k| s.w.cat.skills.get(k));
+        let pose = |st: &Step| match st.mode {
+            Mode::Item => s.w.cat.items.get(&st.item_id).map_or(Pose::None, item_pose),
+            _ => def(st).map_or(Pose::None, skill_pose),
+        };
+        let defends = steps.first().filter(|st| st.mode != Mode::Item).and_then(|st| def(st)).is_some_and(|d| emberwake_battle::skill::kind(d) == Kind::Defend);
+        (defends, steps.iter().map(pose).find(|p| *p != Pose::None).unwrap_or_default())
+    };
+    let intent = round_intent::intent_of(&s.w, i);
+    if intent == Some(RoundIntent::Guard) || (intent.is_none() && defends) {
+        return Pose::Guard;
+    }
+    if opener != Pose::None {
+        return opener;
+    }
+    match intent {
+        Some(RoundIntent::Assault) => Pose::Attack,
+        Some(RoundIntent::Support) => Pose::Buff,
+        Some(RoundIntent::Maneuver) => match round_intent::maneuver_of(&s.w, i) {
+            ManeuverKind::Engage => Pose::Attack,
+            ManeuverKind::Utility => Pose::Debuff,
+            ManeuverKind::Disengage => Pose::None,
+        },
+        _ => Pose::None,
+    }
+}
+
+/// WINDUP1 W3 and 5: the base a unit shows and its pose: its wind-up's clip; while planning its stance pose's clip
+/// (when the body has one); `idle_guarded` while it guards; `dazed` while it is Staggered (when the body has it); else
+/// `idle`.
+fn base_of(a: &UnitAnim, guarded: bool, staggered: bool, ps: &PoseSet) -> (&'static str, Pose) {
+    if let Some(w) = a.windup {
+        return (w.clip, w.pose);
+    }
+    if let Some(c) = ps.clip(a.stance).filter(|_| a.stance != Pose::None) {
+        return (c, a.stance);
+    }
+    if guarded {
+        return ("idle_guarded", Pose::Guard);
+    }
+    match ps.clip(Pose::Dazed).filter(|_| staggered) {
+        Some(c) => (c, Pose::Dazed),
+        None => ("idle", Pose::None),
+    }
+}
+
+/// WINDUP1 6.1: `a` loops the base `base_of` gives from `at` (an unchanged base keeps its clock): a pose starts at its
+/// `loop_from` under skip animations and holds still under reduce motion; `idle` and the guard as before.
+fn put_base(a: &mut UnitAnim, guarded: bool, staggered: bool, at: u64, m: Motion, ps: &PoseSet) {
+    let (clip, pose) = base_of(a, guarded, staggered, ps);
+    let from = if m.instant && pose.held() { ps.loop_from(clip) } else { 0 };
+    a.player.set_base_from(clip, at, from, m.still && pose.held());
+    a.pose = pose;
+}
+
+/// WINDUP1 W2: where a scheduled action aims: its target unit's tile (the tile it stood on before this change when it
+/// left the grid), else an area's aim; the command kind `action_clips` reads ("attack", "area", "support"; "" else).
+fn action_aim(s: &Session, act: &emberwake_battle::resolver::ScheduledAction, before: &[Option<V2>]) -> (&'static str, Option<V2>) {
+    let at = |t: usize| s.w.grid.pos(t).or(before.get(t).copied().flatten());
+    let (kind, aim) = match &act.command.kind {
+        CmdKind::Attack { target, .. } => ("attack", target.and_then(at)),
+        CmdKind::Area { aim, .. } => ("area", Some(*aim)),
+        CmdKind::Support { target, .. } => ("support", at(*target)),
+        CmdKind::Item { target, .. } => ("", at(*target)),
+        _ => ("", None),
+    };
+    (kind, aim.filter(|c| *c != emberwake_battle::grid::NO_CELL))
+}
+
 /// DIR4-G: `f` turned to look from `from` toward `to` (`Facing::toward`: up or down when the vertical distance is
 /// larger, keeping `left`; otherwise the side view, left when `to` is left; the same tile keeps `f`).
 fn turn(f: Facing, from: V2, to: V2) -> Facing {
@@ -192,6 +468,10 @@ struct Tokens {
     log_len_seen: usize,
     /// FACE1: the Show enemy tells setting at the last catch-up (hidden tells: enemies do not show their intent).
     tells: bool,
+    /// WINDUP1: the pose clips of each unit's body (`BattleScreen::learn_poses`; none until known: no poses) and the
+    /// reduce motion setting at the last catch-up (6.1).
+    poses: Vec<PoseSet>,
+    still: bool,
 }
 
 impl Tokens {
@@ -205,6 +485,10 @@ impl Tokens {
     /// then toward the target (or the area's aim) of the action it just resolved; while the party plans each unit
     /// shows its planned or intended target (`plan_facing`; an enemy only while `tells`, the Show enemy tells setting,
     /// is on), and the confirm keeps that facing. A new battle faces the party right and the foes left (side view).
+    /// WINDUP1 (bodies with the pose clips, `poses`): while the party plans each unit stands in its round's pose
+    /// (`plan_pose`); an action over one block shows its wind-up from its start (W2, facing its target), strikes from
+    /// its clip's `strike` frame at its pop (W4), and the base is the wind-up, the guard, `dazed` while Staggered or
+    /// `idle` (W3); a break or the Staggered status landing plays `stagger` (W6, W7).
     #[cfg(test)]
     fn catch_up(&mut self, s: &Session, now: u64, instant: bool, walk_ms: u64, tells: bool) {
         self.follow(s, now, instant, walk_ms, tells, false);
@@ -213,7 +497,8 @@ impl Tokens {
     /// `catch_up`, and FX1-L1 rule I: with `defer` the units' reactions to the step (hurt, defend, death, the fall, the
     /// guard's base loop, the HP the board shows) wait for its impact (`react` with the returned state); moves, facing
     /// and the actor's clip start now. The popped action's clip starts at `t0`: the pop, or the end of the actor's
-    /// slide when it moved in this step (FX1 4.2 step 1). Returns each unit's state after the step.
+    /// slide when it moved in this step (FX1 4.2 step 1). Returns each unit's state after the step. WINDUP1: a wind-up
+    /// starts now; one that ended waits for the impact too (a break's `stagger`, W6), but the actor's (its strike).
     fn follow(&mut self, s: &Session, now: u64, instant: bool, walk_ms: u64, tells: bool, defer: bool) -> Vec<Shown> {
         self.tells = tells;
         let n = s.w.units.len();
@@ -221,6 +506,8 @@ impl Tokens {
         if self.anims.len() != n {
             self.anims = vec![UnitAnim::default(); n];
         }
+        let m = Motion { instant, still: self.still };
+        let none = PoseSet::default();
         let mut after = Vec::with_capacity(n);
         // The plan is confirmed (or the battle moved on): each unit keeps the facing its planned target gave it.
         if !s.is_planning() {
@@ -232,12 +519,34 @@ impl Tokens {
         }
         // Where each unit stood before this change (an action's target may have fallen off the grid since).
         let before: Vec<Option<V2>> = self.anims.iter().map(|a| a.seen.pos).collect();
+        // Only this round's pop: `scheduled` is rebuilt each round, so an older index names another action.
+        let popped = s.last_popped.filter(|p| animate && Some(*p) != self.popped_seen && p.0 == s.current_round);
+        let popped_act = popped.and_then(|(_, _, idx)| s.resolver.scheduled.get(idx).map(|a| (idx, a)));
+        // WINDUP1 W4: the popped action is the wind-up its actor showed (it strikes from the held pose)
+        let struck = popped_act.and_then(|(idx, a)| self.anims[a.unit].windup.filter(|w| w.round == s.current_round && w.idx == idx).map(|_| a.unit));
+        // WINDUP1 5: the planning poses (none once the plan is confirmed)
+        let planning = s.is_planning();
+        let revealed: Vec<usize> = if planning && tells { s.enemy_intents().iter().filter(|r| r.revealed).map(|r| r.unit).collect() } else { Vec::new() };
+        let block = windup_block(s);
         for (i, u) in s.w.units.iter().enumerate() {
             let pos = s.w.grid.pos(i);
             let guarded = u.guard > 0.0 || u.stance == Stance::Defensive;
-            let shown = Shown { hp: u.hp, alive: u.is_alive(), guarded };
-            after.push(shown);
+            let staggered = u.st.has_any("stagger");
+            let broken = s.w.poise.get(&i).is_some_and(|p| p.broken);
+            let ps = self.poses.get(i).filter(|_| self.poses.len() == n).unwrap_or(&none);
+            let stance = if planning { plan_pose(s, i, tells, &revealed) } else { Pose::None };
+            let shows = block.and_then(|b| windup_of(s, i, b, ps));
             let a = &mut self.anims[i];
+            a.stance = stance;
+            // W2: a wind-up starts now; W8: one that ended ends now, unless its end waits for the step's impact (rule I)
+            let key = |w: &Option<Windup>| w.map(|w| (w.round, w.idx));
+            if shows.is_some() && key(&shows) != key(&a.windup) {
+                a.windup = shows;
+            } else if shows.is_none() && a.windup.is_some() && (!defer || !animate || struck == Some(i)) {
+                a.windup = None;
+            }
+            let shown = Shown { hp: u.hp, alive: u.is_alive(), guarded, broken, staggered, winding: shows.is_some() };
+            after.push(shown);
             if animate {
                 if let (Some(from), Some(to)) = (a.seen.pos, pos) {
                     a.facing = turn(a.facing, from, to);
@@ -249,7 +558,7 @@ impl Tokens {
                 }
                 a.seen.pos = pos;
                 if !defer {
-                    react_unit(a, shown, now, instant);
+                    react_unit(a, shown, now, m, ps);
                 }
             } else {
                 a.player.stop();
@@ -260,24 +569,24 @@ impl Tokens {
                 a.facing = Facing::side(!s.w.allies.contains(&i));
                 a.step = a.facing;
                 a.planned = None;
-                a.seen = Seen { pos, hp: u.hp, alive: u.is_alive(), guarded };
-                a.player.set_base(if guarded { "idle_guarded" } else { "idle" }, now);
+                a.seen = Seen { pos, hp: u.hp, alive: u.is_alive(), guarded, broken, staggered };
+            }
+            // the base the board shows now (under `defer` the state before the step; an unchanged base keeps its clock)
+            let (g, st) = (a.seen.guarded, a.seen.staggered);
+            put_base(a, g, st, now, m, ps);
+            // W2: a unit winding up faces its action's target (unit tile, else the aim cell) at every catch-up
+            if let Some(act) = a.windup.and_then(|w| s.resolver.scheduled.get(w.idx).filter(|_| w.round == s.current_round)) {
+                if let Some((from, to)) = pos.zip(action_aim(s, act, &before).1) {
+                    a.facing = turn(a.facing, from, to);
+                }
             }
         }
-        // Only this round's pop: `scheduled` is rebuilt each round, so an older index names another action.
-        let popped = s.last_popped.filter(|p| animate && Some(*p) != self.popped_seen && p.0 == s.current_round);
-        if let Some(act) = popped.and_then(|(_, _, idx)| s.resolver.scheduled.get(idx)) {
-            let (kind, aim) = match &act.command.kind {
-                CmdKind::Attack { target, .. } => ("attack", target.and_then(|t| s.w.grid.pos(t).or(before[t]))),
-                CmdKind::Area { aim, .. } => ("area", Some(*aim)),
-                CmdKind::Support { target, .. } => ("support", s.w.grid.pos(*target).or(before[*target])),
-                CmdKind::Item { target, .. } => ("", s.w.grid.pos(*target).or(before[*target])),
-                _ => ("", None),
-            };
+        if let Some((_, act)) = popped_act {
+            let (kind, aim) = action_aim(s, act, &before);
             let u = &s.w.units[act.unit];
             if !act.cancelled && u.is_alive() {
                 let at = s.w.grid.pos(act.unit);
-                if let Some((from, to)) = at.zip(aim.filter(|c| *c != emberwake_battle::grid::NO_CELL)) {
+                if let Some((from, to)) = at.zip(aim) {
                     let a = &mut self.anims[act.unit];
                     a.facing = turn(a.facing, from, to);
                 }
@@ -288,6 +597,7 @@ impl Tokens {
                     // FX1 4.2 step 1: after its slide when it moved in this step (a dash, a charge, an Engage carry)
                     let t0 = if a.slide.is_some_and(|(_, t)| t == now) { now + walk_ms } else { now };
                     a.want = Some((action_clips(skill, kind, weapon), t0));
+                    a.strike = struck == Some(act.unit);
                 }
             }
         }
@@ -298,13 +608,18 @@ impl Tokens {
     }
 
     /// FX1-L1 rule I: the units react at `at` to the step state `after` (`follow` with `defer`): hurt, defend, death,
-    /// the fall, the base loop and the HP and life the board shows.
+    /// the fall, the base loop and the HP and life the board shows; WINDUP1: a break's or the Staggered status's
+    /// `stagger`, and a wind-up that ended in the step ends.
     fn react(&mut self, after: &[Shown], at: u64, instant: bool) {
         if after.len() != self.anims.len() {
             return;
         }
-        for (a, shown) in self.anims.iter_mut().zip(after) {
-            react_unit(a, *shown, at, instant);
+        let m = Motion { instant, still: self.still };
+        let none = PoseSet::default();
+        let n = self.anims.len();
+        for (i, (a, shown)) in self.anims.iter_mut().zip(after).enumerate() {
+            let ps = self.poses.get(i).filter(|_| self.poses.len() == n).unwrap_or(&none);
+            react_unit(a, *shown, at, m, ps);
         }
     }
 
@@ -316,30 +631,51 @@ impl Tokens {
             None => (u.hp, u.is_alive()),
         }
     }
+
+    /// WINDUP1 6.2, the agent link's `state.tokens`: per unit the clip last drawn, the base clip, the pose the base
+    /// shows and the blocks of the wind-up it shows.
+    fn state(&self) -> Value {
+        Value::Array(
+            self.anims
+                .iter()
+                .enumerate()
+                .map(|(i, a)| json!({"unit": i, "clip": a.drawn, "base": a.player.base(), "pose": a.pose.id(), "windup": a.windup.map(|w| [w.blocks.0, w.blocks.1])}))
+                .collect(),
+        )
+    }
 }
 
 /// One unit's reaction to its state `now` at clock `at` (SPRITE1-U): a fall plays `death` (held), a hit `hurt`
 /// (`hurt_guarded` while it guards), a raised guard `defend`; `instant` (skip) plays none. A unit standing again
-/// drops its fall; the base loop is `idle_guarded` while it guards, else `idle`.
-fn react_unit(a: &mut UnitAnim, now: Shown, at: u64, instant: bool) {
+/// drops its fall; the base loop is `put_base`'s (W3: the wind-up, `idle_guarded` while it guards, `dazed` while
+/// Staggered, else `idle`). WINDUP1 W6, W7 (WQ2): a break (its poise newly broken) or the Staggered status newly on it
+/// plays `stagger` instead of a hit's clip (once for both; a body without `stagger` reacts as before); a fall plays
+/// only `death` (W8); a wind-up that no longer shows (`now.winding` false) ends.
+fn react_unit(a: &mut UnitAnim, now: Shown, at: u64, m: Motion, ps: &PoseSet) {
     let was = a.seen.clone();
+    let reels = ps.has("stagger") && ((now.broken && !was.broken) || (now.staggered && !was.staggered));
     if was.alive && !now.alive {
         a.fell = Some(at);
         a.slide = None;
-        if !instant {
+        if !m.instant {
             a.player.play_and_hold("death", at);
         }
-    } else if now.alive && now.hp < was.hp && !instant {
+    } else if now.alive && reels && !m.instant {
+        a.player.play("stagger", at);
+    } else if now.alive && now.hp < was.hp && !m.instant {
         a.player.play(if now.guarded { "hurt_guarded" } else { "hurt" }, at);
-    } else if now.alive && now.guarded && !was.guarded && !instant {
+    } else if now.alive && now.guarded && !was.guarded && !m.instant {
         a.player.play("defend", at);
     }
     if now.alive && a.fell.is_some() {
         a.fell = None;
         a.player.stop();
     }
-    a.player.set_base(if now.guarded { "idle_guarded" } else { "idle" }, at);
-    (a.seen.hp, a.seen.alive, a.seen.guarded) = (now.hp, now.alive, now.guarded);
+    if !now.winding || !now.alive {
+        a.windup = None;
+    }
+    put_base(a, now.guarded, now.staggered, at, m, ps);
+    (a.seen.hp, a.seen.alive, a.seen.guarded, a.seen.broken, a.seen.staggered) = (now.hp, now.alive, now.guarded, now.broken, now.staggered);
 }
 
 impl Tokens {
@@ -922,6 +1258,8 @@ impl BattleScreen {
             delivery,
             t0,
             clips,
+            // WINDUP1 W4: it strikes from the wind-up its actor showed (the tokens have not followed the step yet)
+            strike: t.anims[act.unit].windup.is_some_and(|w| w.round == s.current_round && w.idx == idx),
             from,
             to,
             after: Vec::new(),
@@ -948,9 +1286,12 @@ impl BattleScreen {
         let t = cx.tuning.value.clone();
         let geo = Geom::new(View::of_setting(&cx.settings.v["battle_view"]), &t);
         for i in self.impacts.iter_mut().filter(|i| i.at.is_none()) {
+            // WINDUP1 W4: a strike from a held wind-up starts at the clip's `strike` frame, so it lands that much sooner
             let clip_ms = s.w.units.get(i.actor).and_then(|u| cx.art.first_body(&body_keys(&s.art[i.actor], u))).and_then(|b| {
                 let name = i.clips.iter().copied().find(|c| cx.art.has_clip(&b, c))?;
-                cx.art.clips(&b)?.clip(name)?.impact_ms()
+                let c = cx.art.clips(&b)?.clip(name)?;
+                let skipped = if i.strike { c.ms_before(c.strike) } else { 0 };
+                c.impact_ms().map(|ms| ms.saturating_sub(skipped))
             });
             // FX1-L2: the shot's own flight (a falling orb's from above), a volley's or a shockwave's spread
             let pl = place(&geo, i.from, i.to, i.area);
@@ -1069,6 +1410,7 @@ impl BattleScreen {
 
     fn sync_anims_deferred(&mut self, cx: &Cx, defer: bool) -> Vec<Shown> {
         let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
+        self.tokens.still = cx.settings.reduce_motion();
         match self.host.session.as_ref() {
             Some(s) => {
                 let tells = cx.settings.v["show_tells"].as_bool().unwrap_or(true);
@@ -1076,6 +1418,17 @@ impl BattleScreen {
             }
             None => Vec::new(),
         }
+    }
+
+    /// WINDUP1: looks up the pose clips of each unit's body (`PoseSet`) once a battle's units are known (the catch-ups
+    /// run where the art cannot be read); true when they were new, so the tokens catch up again to show the poses.
+    fn learn_poses(&mut self, cx: &mut Cx) -> bool {
+        let Some(s) = self.host.session.as_ref() else { return false };
+        if self.tokens.poses.len() == s.w.units.len() {
+            return false;
+        }
+        self.tokens.poses = s.w.units.iter().enumerate().map(|(i, u)| cx.art.first_body(&body_keys(&s.art[i], u)).and_then(|b| cx.art.clips(&b).map(PoseSet::of)).unwrap_or_default()).collect();
+        true
     }
 
     /// Starts the arena's encounter through the command host (a world one as "<world>:<id>"), so the session replays.
@@ -1491,8 +1844,11 @@ impl Screen<GameCx> for BattleScreen {
         self.fx.prune(fx_now);
         self.camera.offset(fx_now);
         self.sidesteps.retain(|s| fx_now < s.1 + fx::SIDESTEP_OUT_MS + fx::SIDESTEP_BACK_MS);
-        // FACE1: the Show enemy tells setting changed (I or the settings): the planning facing follows it.
-        if self.tokens.tells != cx.settings.v["show_tells"].as_bool().unwrap_or(true) {
+        // FACE1: the Show enemy tells setting changed (I or the settings): the planning facing follows it. WINDUP1: so
+        // do the planning poses, the bodies' pose clips once known and the reduce motion setting.
+        let tells = self.tokens.tells != cx.settings.v["show_tells"].as_bool().unwrap_or(true);
+        let still = self.tokens.still != cx.settings.reduce_motion();
+        if self.learn_poses(cx) || tells || still {
             self.sync_anims(cx);
         }
         if now.duration_since(self.tuning_checked) > Duration::from_millis(500) {
@@ -1607,7 +1963,7 @@ impl Screen<GameCx> for BattleScreen {
 
     fn state(&self, _cx: &Cx) -> Value {
         json!({"message": self.message, "playing": self.playing, "auto": self.auto, "log_open": self.show_log, "world": self.world_mode(),
-            "fx": self.fx_state(),
+            "fx": self.fx_state(), "tokens": self.tokens.state(),
             "outcome": if self.host.session.is_some() { self.outcome() } else { String::new() },
             "popup": self.popup.as_ref().map(|p| json!({"title": p.title, "rows": p.rows.iter().map(|r| json!({"label": r.label, "detail": r.detail, "valid": r.valid})).collect::<Vec<_>>()}))})
     }
@@ -2069,6 +2425,8 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             None
         }
     };
+    // WINDUP1 6.2: the clip each token drew (the agent link's `tokens`)
+    note_drawn(&mut g.tokens, s, &mut cx.art, g.clock.ms as u64);
 
     // -- Right: hostile cards and the hovered (or first) foe's detail card.
     let right = Rect::new(W - 126, 28, 124, 290);
@@ -2264,15 +2622,34 @@ struct Board<'a> {
 }
 
 /// An action clip a token wants starts with the first candidate its body has (SPRITE1-U), once the clock reaches its
-/// start (FX1-L1: after the actor's slide, so the walk shows until then).
+/// start (FX1-L1: after the actor's slide, so the walk shows until then); WINDUP1 W4: after a held wind-up from the
+/// clip's `strike` frame.
 fn start_wanted(tokens: &mut Tokens, art: &mut Art, i: usize, body: Option<&str>, now: u64) {
     if let (Some(a), Some(b)) = (tokens.anims.get_mut(i), body) {
         if a.want.as_ref().is_some_and(|w| now >= w.1) {
             let (cands, t0) = a.want.take().unwrap_or_default();
             if let Some(c) = cands.into_iter().find(|c| art.has_clip(b, c)) {
-                a.player.play(c, t0);
+                // WINDUP1 W4: from its `strike` frame after a held wind-up (0 when the row marks none)
+                let from = if a.strike { art.clips(b).and_then(|k| k.clip(c)).map_or(0, |k| k.strike) } else { 0 };
+                a.player.play_from(c, t0, from);
             }
+            a.strike = false;
         }
+    }
+}
+
+/// WINDUP1 W9 (WQ5): the Tallow Amber outline of a unit showing a wind-up (resolution only; `windup_outline_alpha`, 0
+/// off); the selected and hovered outlines win (the callers ask this last).
+fn windup_outline(a: &UnitAnim, t: &Tuning) -> Option<Rgba> {
+    (a.windup.is_some() && t.windup_outline_alpha > 0).then(|| with_alpha(AMBER, t.windup_outline_alpha))
+}
+
+/// WINDUP1 6.2: the clip each token shows at `now` (the side clip of the row its player draws, a missing clip's
+/// fallback included; "" without a body), for the agent link's `tokens`.
+fn note_drawn(tokens: &mut Tokens, s: &Session, art: &mut Art, now: u64) {
+    for (i, a) in tokens.anims.iter_mut().enumerate().take(s.w.units.len()) {
+        let body = art.first_body(&body_keys(&s.art[i], &s.w.units[i]));
+        a.drawn = body.and_then(|b| art.clips(&b).and_then(|c| a.player.frame(c, now)).map(|f| f.clip)).unwrap_or_default();
     }
 }
 
@@ -2402,7 +2779,7 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
             ui.p.ellipse(tr.x as f32 + tp as f32 / 2.0, (tr.y + tp) as f32 - 2.5, tp as f32 * 0.36, tp as f32 * 0.11, rgba(ring[0], ring[1], ring[2], tuning.foot_alpha));
         }
         let hover = ui.hover(r) && !popup;
-        let outline = if Some(i) == sel { Some(GOLD) } else if hover { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { None };
+        let outline = if Some(i) == sel { Some(GOLD) } else if hover { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
         let frame = body.as_deref().and_then(|b| token_frame(&mut cx.art, b, palette, &a.player, anim_now, tp, facing).map(|(f, img)| {
             ui.p.image(img, tr);
             f
@@ -2689,7 +3066,7 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                             let Some(t) = unit_of(i) else { continue };
                             let a = tokens.anims.get(i).unwrap_or(&still);
                             let ring = if t.ally { ALLY } else { FOE };
-                            let outline = if Some(i) == sel { Some(GOLD) } else if hovered == Some(i) { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { None };
+                            let outline = if Some(i) == sel { Some(GOLD) } else if hovered == Some(i) { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
                             let frame = t.body.as_deref().and_then(|b| token_frame(&mut cx.art, b, &t.palette, &a.player, anim_now, tp, t.facing).map(|(f, img)| {
                                 ui.p.image(img, t.tr);
                                 f
@@ -3498,7 +3875,7 @@ mod tests {
 
     /// FX1-L1: plays the ambush step by step (the party on the aggressive preset) until a single step leaves a pending
     /// impact `want` accepts; earlier impacts fire before the next step (rule F). False when the battle ends first.
-    fn step_until(cx: &mut crate::screens::Cx, b: &mut BattleScreen, want: impl Fn(&BattleScreen, &crate::fx::Impact) -> bool) -> bool {
+    pub(super) fn step_until(cx: &mut crate::screens::Cx, b: &mut BattleScreen, want: impl Fn(&BattleScreen, &crate::fx::Impact) -> bool) -> bool {
         for _ in 0..600 {
             let (over, phase, planning, can) = {
                 let s = b.host.session.as_ref().unwrap();
@@ -3947,5 +4324,478 @@ mod tests {
             }
             assert_eq!(rects(&b), hit_rects, "{view}: the hit rects stay");
         }
+    }
+}
+
+/// WINDUP1-L, the acceptance of WINDUP1.md 6.3: scratch bodies and synthetic `Clips` with the section 4 rows (no shipped
+/// body has them yet); the battles are the data's own encounters and every expectation comes from a rule (W1, the clip
+/// rows), never from a number of the data.
+#[cfg(test)]
+mod windup_tests {
+    use super::{command_pose, item_pose, plan_pose, skill_pose, start_wanted, windup_outline, BattleScreen, Pose, PoseSet, Tokens, AMBER};
+    use crate::screens::Screen;
+    use crate::tuning::Tuning;
+    use aegis_core::assets::{body_dir, Clips, Layers};
+    use aegis_ui::art::Art;
+    use emberwake_battle::command::CmdKind;
+    use emberwake_battle::plan::PlanStep;
+    use emberwake_battle::session::Session;
+    use emberwake_host::{Battle, Host};
+    use emberwake_world::Data;
+    use serde_json::{json, Value};
+    use std::sync::Arc;
+
+    const WALK: u64 = 300;
+
+    /// Section 4's rows (frames, ms, `loop_from` as the spec), an `attack` with its own wind-up frames (`strike` 2,
+    /// `impact` 3) and the rows every body has; `drop` leaves rows out (a body without them).
+    fn rows(drop: &[&str]) -> Value {
+        let windup = [90, 110, 120, 180, 180, 180, 180];
+        let all = vec![
+            json!({"id": "idle", "frames": 2, "ms": [200, 200], "loop": true}),
+            json!({"id": "walk", "frames": 1, "ms": [100], "loop": true}),
+            json!({"id": "idle_guarded", "frames": 1, "ms": [100], "loop": true}),
+            json!({"id": "attack", "frames": 5, "ms": [80, 90, 100, 120, 140], "loop": false, "strike": 2, "impact": 3}),
+            json!({"id": "hurt", "frames": 1, "ms": [100], "loop": false}),
+            json!({"id": "hurt_guarded", "frames": 1, "ms": [100], "loop": false}),
+            json!({"id": "defend", "frames": 1, "ms": [100], "loop": false}),
+            json!({"id": "death", "frames": 1, "ms": [100], "loop": false}),
+            json!({"id": "windup", "frames": 7, "ms": windup, "loop": true, "loop_from": 3}),
+            json!({"id": "windup_heavy", "frames": 7, "ms": [100, 120, 140, 160, 160, 160, 160], "loop": true, "loop_from": 3}),
+            json!({"id": "windup_buff", "frames": 7, "ms": windup, "loop": true, "loop_from": 3}),
+            json!({"id": "windup_debuff", "frames": 7, "ms": windup, "loop": true, "loop_from": 3}),
+            json!({"id": "stagger", "frames": 5, "ms": [60, 90, 110, 120, 160], "loop": false}),
+            json!({"id": "dazed", "frames": 8, "ms": [150, 150, 150, 150, 150, 150, 150, 150], "loop": true}),
+        ];
+        Value::Array(all.into_iter().filter(|r| !drop.contains(&r["id"].as_str().unwrap_or(""))).collect())
+    }
+
+    fn clips(drop: &[&str]) -> Clips {
+        Clips::parse(&json!({"frame": [8, 8], "clips": rows(drop)})).expect("the scratch rows parse")
+    }
+
+    /// The humanoid set (every row) and the creature set (A7: `windup`, `stagger`, `dazed` only).
+    fn humanoid() -> PoseSet {
+        PoseSet::of(&clips(&[]))
+    }
+
+    fn creature() -> PoseSet {
+        PoseSet::of(&clips(&["windup_heavy", "windup_buff", "windup_debuff"]))
+    }
+
+    /// A scratch body `units/<key>` with `rows` (8 x 8 frames, each a bar in its row's colour).
+    fn write_body(root: &std::path::Path, key: &str, rows: &Value) {
+        const F: u32 = 8;
+        let dir = root.join(body_dir(key));
+        std::fs::create_dir_all(&dir).unwrap();
+        let list = rows.as_array().unwrap();
+        let cols = list.iter().map(|r| r["frames"].as_u64().unwrap() as u32).max().unwrap();
+        let (w, h) = (cols * F, list.len() as u32 * F);
+        let mut px = vec![0u8; (w * h * 4) as usize];
+        for (row, r) in list.iter().enumerate() {
+            for f in 0..r["frames"].as_u64().unwrap() as u32 {
+                for x in [1u32, 2, 3, 6] {
+                    let i = (((row as u32 * F + 4) * w + f * F + x) * 4) as usize;
+                    px[i..i + 4].copy_from_slice(&[30 + 12 * row as u8, 40 + 20 * f as u8, 60, 255]);
+                }
+            }
+        }
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(dir.join("sheet.png")).unwrap()), w, h);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&px).unwrap();
+        std::fs::write(dir.join("clips.json"), json!({"frame": [F, F], "clips": rows}).to_string()).unwrap();
+    }
+
+    fn data() -> Arc<Data> {
+        let dir = Data::find_data_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
+        Arc::new(Data::open(&dir).expect("data").0)
+    }
+
+    /// The data's `goblin_skirmish` (classic) or, with `ruleset`, under that ruleset.
+    fn battle(ruleset: Option<&str>) -> Host {
+        let mut host = Host::new(Battle::with_data(data()));
+        let mut req = json!({"cmd": "new", "encounter": "goblin_skirmish", "seed": 3});
+        if let Some(r) = ruleset {
+            req["ruleset"] = json!(r);
+        }
+        assert_eq!(host.handle(&req)["ok"], json!(true));
+        host
+    }
+
+    /// Plans on the aggressive preset and confirms; the first live action over one block that starts at block 1 with a
+    /// wind-up pose (W1, W1a): (its index, its unit, its pose).
+    fn confirmed(host: &mut Host) -> (usize, usize, Pose) {
+        assert_eq!(host.handle(&json!({"cmd": "preset", "preset": "aggressive"}))["ok"], json!(true));
+        assert_eq!(host.handle(&json!({"cmd": "confirm"}))["ok"], json!(true));
+        let s = host.session.as_ref().unwrap();
+        s.resolver
+            .scheduled
+            .iter()
+            .enumerate()
+            .find_map(|(idx, a)| {
+                let pose = command_pose(s, &a.command);
+                let attack = matches!(a.command.kind, CmdKind::Attack { .. } | CmdKind::Area { .. });
+                (attack && !a.cancelled && a.start == 1 && a.impact > a.start && pose.held()).then_some((idx, a.unit, pose))
+            })
+            .expect("a block-1 attack over one block")
+    }
+
+    /// Tokens whose every unit has the pose set `ps`.
+    fn tokens(s: &Session, ps: &PoseSet) -> Tokens {
+        Tokens { poses: vec![ps.clone(); s.w.units.len()], ..Tokens::default() }
+    }
+
+    /// 6.3.1 and 8: rule W1 gives each command its pose and the bodies' fallbacks pick the clip.
+    #[test]
+    fn rule_w1_gives_each_command_its_pose_and_bodies_fall_back() {
+        let d = data();
+        let cat = &d.cat;
+        let pose = |id: &str| skill_pose(cat.skill(id).unwrap_or_else(|| panic!("the skill {id}")));
+        assert_eq!(pose("strike"), Pose::Attack);
+        assert_eq!((pose("tl_heavy_cleave"), pose("tl_overhead_smash")), (Pose::Heavy, Pose::Heavy));
+        assert_eq!((pose("mend"), pose("focus")), (Pose::Buff, Pose::Buff));
+        assert_eq!((pose("active_guard"), pose("move")), (Pose::None, Pose::None));
+        let mut hex = cat.skill("strike").unwrap().clone();
+        hex.power_mult = 0.0;
+        assert_eq!(skill_pose(&hex), Pose::Debuff, "an attack with power_mult 0 is a debuff");
+        for it in cat.items.values().filter(|i| i.damage > 0 || i.heal > 0) {
+            assert_eq!(item_pose(it), if it.aims_at_foes() { Pose::Debuff } else { Pose::Buff }, "{}", it.id);
+        }
+        let (h, c, bare) = (humanoid(), creature(), PoseSet::default());
+        assert_eq!([h.clip(Pose::Heavy), h.clip(Pose::Debuff), h.clip(Pose::Buff), h.clip(Pose::Dazed)], [Some("windup_heavy"), Some("windup_debuff"), Some("windup_buff"), Some("dazed")]);
+        assert_eq!([c.clip(Pose::Heavy), c.clip(Pose::Debuff), c.clip(Pose::Attack)], [Some("windup"); 3], "no heavy or debuff wind-up: the windup");
+        assert_eq!(c.clip(Pose::Buff), None, "a creature on Support idles");
+        assert!([Pose::Attack, Pose::Heavy, Pose::Buff, Pose::Debuff, Pose::Dazed, Pose::None].iter().all(|p| bare.clip(*p).is_none()), "a body without the rows shows no pose");
+        assert_eq!((h.clip(Pose::Guard), bare.clip(Pose::Guard)), (Some("idle_guarded"), None), "a body without the rows stands as before");
+    }
+
+    /// 6.3.2, 6.3.8, 6.3.11 (classic): from the confirm the actor of a block-1 action over one block loops its wind-up
+    /// from frame 0 (frame `loop_from` once the intro has run); at its pop its attack starts at the `strike` frame at t0.
+    /// A body without the rows idles and strikes from frame 0, as before.
+    #[test]
+    fn a_two_block_action_winds_up_from_the_confirm_and_strikes_from_its_strike_frame() {
+        let mut host = battle(None);
+        let (idx, u, pose) = confirmed(&mut host);
+        let k = clips(&[]);
+        let ps = humanoid();
+        let clip = ps.clip(pose).unwrap();
+        let (mut t, mut bare) = (tokens(host.session.as_ref().unwrap(), &ps), Tokens::default());
+        t.catch_up(host.session.as_ref().unwrap(), 1000, false, WALK, true);
+        bare.catch_up(host.session.as_ref().unwrap(), 1000, false, WALK, true);
+        let a = &t.anims[u];
+        assert_eq!((a.player.base(), a.windup.map(|w| w.idx)), (clip, Some(idx)), "the wind-up from the confirm");
+        let intro = k.ms_before(clip, 3);
+        assert_eq!(a.player.frame(&k, 1000).unwrap().frame, 0);
+        assert_eq!(a.player.frame(&k, 1000 + intro - 1).unwrap().frame, 2);
+        assert_eq!(a.player.frame(&k, 1000 + intro).unwrap().frame, 3, "the hold from loop_from");
+        assert_eq!(bare.anims[u].player.base(), "idle", "no rows: idle as before");
+        // step until the action pops
+        let root = std::env::temp_dir().join(format!("emberwake_windup_strike_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        write_body(&root, "test/windup", &rows(&[]));
+        write_body(&root, "test/bare", &rows(&["windup", "windup_heavy", "windup_buff", "windup_debuff", "stagger", "dazed"]));
+        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        // play on until an action over one block pops live (its wind-up shown) and check its strike
+        let mut now = 1000;
+        let mut struck = None;
+        for _ in 0..600 {
+            let (over, phase, planning) = { let s = host.session.as_ref().unwrap(); (s.combat_over, s.phase, s.is_planning()) };
+            if over {
+                break;
+            }
+            if phase == emberwake_battle::session::Phase::Replay {
+                host.handle(&json!({"cmd": "advance"}));
+                continue;
+            }
+            if planning {
+                host.handle(&json!({"cmd": "preset", "preset": "aggressive"}));
+            }
+            assert_eq!(host.handle(&json!({"cmd": "step"}))["ok"], json!(true));
+            now += 1000;
+            let s = host.session.as_ref().unwrap();
+            let shown: Vec<Option<(i32, usize)>> = t.anims.iter().map(|a| a.windup.map(|w| (w.round, w.idx))).collect();
+            t.catch_up(s, now, false, WALK, true);
+            bare.catch_up(s, now, false, WALK, true);
+            assert!(bare.anims.iter().all(|a| a.windup.is_none() && !a.player.base().starts_with("windup")), "no rows: no wind-up");
+            let Some((round, _, idx)) = s.last_popped else { continue };
+            let act = &s.resolver.scheduled[idx];
+            if round == s.current_round && !act.cancelled && s.w.units[act.unit].is_alive() && t.anims[act.unit].want.is_some() && shown[act.unit] == Some((round, idx)) {
+                struck = Some(act.unit);
+                break;
+            }
+        }
+        let u = struck.expect("an attack over one block pops live after its wind-up");
+        let a = &t.anims[u];
+        assert!(a.strike && a.windup.is_none(), "the strike follows the shown wind-up, which ends");
+        let t0 = a.want.as_ref().unwrap().1;
+        start_wanted(&mut t, &mut art, u, Some("test/windup"), t0);
+        let f = t.anims[u].player.frame(&k, t0).unwrap();
+        assert_eq!((f.clip.as_str(), f.frame), ("attack", k.clip("attack").unwrap().strike), "the attack from its strike frame at t0");
+        assert!(!bare.anims[u].strike);
+        let t0 = bare.anims[u].want.as_ref().unwrap().1;
+        start_wanted(&mut bare, &mut art, u, Some("test/bare"), t0);
+        assert_eq!(bare.anims[u].player.frame(&k, t0).unwrap().frame, 0, "no wind-up shown: the attack from frame 0");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// 6.3.3 (W1a): an action whose span is one block shows no wind-up and strikes from frame 0.
+    #[test]
+    fn a_one_block_action_shows_no_windup_and_strikes_from_frame_0() {
+        let mut host = battle(None);
+        let (idx, u, _) = confirmed(&mut host);
+        let s = host.session.as_mut().unwrap();
+        s.resolver.scheduled[idx].impact = s.resolver.scheduled[idx].start;
+        let mut t = tokens(s, &humanoid());
+        t.catch_up(s, 1000, false, WALK, true);
+        assert!(t.anims[u].windup.is_none() && !t.anims[u].player.base().starts_with("windup"), "one block: no wind-up");
+        s.resolver.scheduled[idx].landed = true;
+        s.last_popped = Some((s.current_round, 1, idx));
+        t.catch_up(s, 2000, false, WALK, true);
+        assert!(t.anims[u].want.is_some() && !t.anims[u].strike, "the attack from frame 0");
+    }
+
+    /// The first unit showing a wind-up after the confirm (`tokens` with every body's rows) at clock 1000.
+    fn winding(host: &mut Host) -> (Tokens, usize, usize) {
+        let (idx, u, _) = confirmed(host);
+        let s = host.session.as_ref().unwrap();
+        let mut t = tokens(s, &humanoid());
+        t.catch_up(s, 1000, false, WALK, true);
+        assert!(t.anims[u].windup.is_some());
+        (t, idx, u)
+    }
+
+    /// 6.3.4 (W6, WQ2): a break mid wind-up plays `stagger` at the breaking impact instead of `hurt`, the wind-up ends
+    /// then (not before) and nothing strikes; a guarding unit's break plays `stagger` too.
+    #[test]
+    fn a_break_staggers_at_its_impact_instead_of_a_hurt_and_never_strikes() {
+        let mut host = battle(None);
+        let (mut t, idx, u) = winding(&mut host);
+        let k = clips(&[]);
+        let s = host.session.as_mut().unwrap();
+        s.resolver.scheduled[idx].cancelled = true;
+        s.resolver.scheduled[idx].broken = true;
+        s.w.poise.entry(u).or_default().broken = true;
+        s.w.units[u].hp -= 1;
+        let after = t.follow(s, 2000, false, WALK, true, true);
+        assert!(t.anims[u].windup.is_some() && t.anims[u].player.base().starts_with("windup"), "the wind-up holds until the impact");
+        t.react(&after, 2100, false);
+        let a = &t.anims[u];
+        assert_eq!(a.player.playing(&k, 2100), "stagger", "the stagger, not hurt");
+        assert!(a.windup.is_none() && !a.player.base().starts_with("windup") && a.want.is_none(), "the wind-up ended, no strike");
+        // a guarding unit that is not winding up
+        let g = (0..s.w.units.len()).find(|&i| i != u && t.anims[i].windup.is_none() && s.w.units[i].is_alive()).expect("another unit");
+        s.w.units[g].guard = 1.0;
+        t.catch_up(s, 3000, false, WALK, true);
+        s.w.poise.entry(g).or_default().broken = true;
+        s.w.units[g].hp -= 1;
+        t.catch_up(s, 4000, false, WALK, true);
+        assert_eq!(t.anims[g].player.playing(&k, 4000), "stagger", "a guard's break staggers too");
+    }
+
+    /// 6.3.5 (W7): the Staggered status landing plays `stagger` once, the base is `dazed` while it lasts, then `idle`.
+    #[test]
+    fn the_staggered_status_reels_then_stands_dazed_until_it_ends() {
+        let mut host = battle(None);
+        let (mut t, _, u) = winding(&mut host);
+        let k = clips(&[]);
+        let s = host.session.as_mut().unwrap();
+        let v = (0..s.w.units.len()).find(|&i| i != u && t.anims[i].windup.is_none() && s.w.units[i].is_alive() && s.w.units[i].guard <= 0.0 && s.w.units[i].stance != emberwake_rules::Stance::Defensive).expect("a unit standing idle");
+        s.w.units[v].st.pending.insert("stagger".into());
+        t.catch_up(s, 2000, false, WALK, true);
+        assert_eq!((t.anims[v].player.playing(&k, 2000), t.anims[v].player.base()), ("stagger", "dazed"));
+        t.catch_up(s, 3000, false, WALK, true);
+        assert_eq!((t.anims[v].player.playing(&k, 3000), t.anims[v].player.base()), ("", "dazed"), "once; dazed while it lasts");
+        s.w.units[v].st.pending.shift_remove("stagger");
+        t.catch_up(s, 4000, false, WALK, true);
+        assert_eq!(t.anims[v].player.base(), "idle", "idle once it is gone");
+    }
+
+    /// 6.3.6 (W8): an actor that falls mid wind-up plays `death`, no `stagger`, even when broken by the same hit.
+    #[test]
+    fn an_actor_that_falls_mid_windup_plays_death_not_stagger() {
+        let mut host = battle(None);
+        let (mut t, idx, u) = winding(&mut host);
+        let k = clips(&[]);
+        let s = host.session.as_mut().unwrap();
+        s.resolver.scheduled[idx].cancelled = true;
+        s.w.poise.entry(u).or_default().broken = true;
+        s.w.units[u].hp = 0;
+        t.catch_up(s, 2000, false, WALK, true);
+        assert_eq!(t.anims[u].player.playing(&k, 2000), "death");
+        assert!(t.anims[u].windup.is_none() && t.anims[u].fell == Some(2000));
+    }
+
+    /// 6.3.7 (section 5, timeline): while planning a Guard intent stands guarded, an Assault with a Heavy Cleave opener in
+    /// the heavy wind-up, Support in the buff wind-up, Staggered dazed; an enemy shows its tell's pose while the tells
+    /// show (a creature body: its `windup`) and idles while they are hidden (WQ1).
+    #[test]
+    fn planning_shows_each_units_round_pose() {
+        let mut host = battle(Some("timeline"));
+        let s = host.session.as_mut().unwrap();
+        let ps = humanoid();
+        let mut t = tokens(s, &ps);
+        for &e in &s.w.enemies.clone() {
+            t.poses[e] = creature();
+        }
+        let h = s.w.allies.iter().copied().find(|&a| s.w.units[a].is_alive() && s.w.grid.pos(a).is_some()).expect("a hero");
+        let foe = s.w.enemies.iter().copied().find(|&e| s.w.grid.pos(e).is_some()).expect("a foe");
+        let cleave = s.w.cat.skills.iter().position(|k| k.id == "tl_heavy_cleave").expect("tl_heavy_cleave");
+        s.set_round_intent(h, "guard").expect("guard");
+        t.catch_up(s, 0, false, WALK, true);
+        assert_eq!(t.anims[h].player.base(), "idle_guarded", "Guard");
+        s.set_round_intent(h, "assault").expect("assault");
+        s.plan.set_steps(h, vec![PlanStep::engage(cleave, foe)]);
+        t.catch_up(s, 100, false, WALK, true);
+        assert_eq!((t.anims[h].player.base(), t.anims[h].pose), ("windup_heavy", Pose::Heavy), "Assault, Heavy Cleave opener");
+        t.catch_up(s, 200, false, WALK, true);
+        assert_eq!(t.anims[h].player.frame(&clips(&[]), 200).unwrap().frame, t.anims[h].player.frame(&clips(&[]), 100).unwrap().frame + 1, "an unchanged pose keeps its clock");
+        s.set_round_intent(h, "support").expect("support");
+        s.plan.set_steps(h, Vec::new());
+        t.catch_up(s, 300, false, WALK, true);
+        assert_eq!(t.anims[h].player.base(), "windup_buff", "Support");
+        s.w.units[h].st.active.insert("stagger".into());
+        t.catch_up(s, 400, false, WALK, true);
+        assert_eq!(t.anims[h].player.base(), "dazed", "Staggered");
+        s.w.units[h].st.active.shift_remove("stagger");
+        // the enemies: their tell's pose with the tells shown, idle with them hidden
+        let shown: Vec<(usize, Pose)> = s.w.enemies.iter().map(|&e| (e, plan_pose(s, e, true, &[]))).collect();
+        let (e, p) = shown.iter().copied().find(|(_, p)| matches!(p, Pose::Attack | Pose::Heavy | Pose::Debuff)).expect("an enemy about to attack");
+        t.catch_up(s, 500, false, WALK, true);
+        assert_eq!((t.anims[e].player.base(), p.held()), ("windup", true), "an attacking enemy with the tells shown");
+        t.catch_up(s, 600, false, WALK, false);
+        assert!(s.w.enemies.iter().all(|&e| t.anims[e].player.base() == "idle" || t.anims[e].player.base() == "idle_guarded"), "the tells hidden: no pose");
+    }
+
+    /// 6.3.11 (classic, no intents): the planning pose comes from the first command: a Defend first stands guarded.
+    #[test]
+    fn classic_planning_poses_come_from_the_first_command() {
+        let mut host = battle(None);
+        let s = host.session.as_mut().unwrap();
+        let mut t = tokens(s, &humanoid());
+        let h = s.w.allies[0];
+        let defend = s.w.cat.skills.iter().position(|k| emberwake_battle::skill::kind(k) == emberwake_battle::skill::Kind::Defend).expect("a defend skill");
+        let strike = s.w.cat.skills.iter().position(|k| k.id == "strike").expect("strike");
+        let foe = s.w.enemies[0];
+        s.plan.set_steps(h, vec![PlanStep::self_skill(defend), PlanStep::engage(strike, foe)]);
+        t.catch_up(s, 0, false, WALK, true);
+        assert_eq!(t.anims[h].player.base(), "idle_guarded", "a Defend first");
+        s.plan.set_steps(h, vec![PlanStep::engage(strike, foe)]);
+        t.catch_up(s, 100, false, WALK, true);
+        assert_eq!(t.anims[h].player.base(), "windup", "an attack first");
+        assert!(windup_outline(&t.anims[h], &Tuning::default()).is_none(), "no amber outline while planning (WQ5)");
+    }
+
+    /// 6.3.9 (6.1): skip animations starts a wind-up at its `loop_from` and plays no `stagger` (the dazed base still
+    /// shows); reduce motion plays the intro and then holds frame `loop_from`.
+    #[test]
+    fn skip_starts_the_hold_and_reduce_motion_holds_it_still() {
+        let k = clips(&[]);
+        let mut host = battle(None);
+        let (idx, u, pose) = confirmed(&mut host);
+        let s = host.session.as_mut().unwrap();
+        let ps = humanoid();
+        let clip = ps.clip(pose).unwrap();
+        let mut skip = tokens(s, &ps);
+        skip.catch_up(s, 1000, true, WALK, true);
+        assert_eq!(skip.anims[u].player.frame(&k, 1000).unwrap().frame, 3, "skip: the hold at once");
+        let mut still = tokens(s, &ps);
+        still.still = true;
+        still.catch_up(s, 1000, false, WALK, true);
+        let intro = k.ms_before(clip, 3);
+        assert_eq!(still.anims[u].player.frame(&k, 1000 + intro - 1).unwrap().frame, 2, "reduce motion: the intro plays");
+        for dt in [0, 300, 900, 2000] {
+            assert_eq!(still.anims[u].player.frame(&k, 1000 + intro + dt).unwrap().frame, 3, "reduce motion: the hold stands still");
+        }
+        s.resolver.scheduled[idx].cancelled = true;
+        s.w.poise.entry(u).or_default().broken = true;
+        s.w.units[u].st.active.insert("stagger".into());
+        skip.catch_up(s, 2000, true, WALK, true);
+        assert_eq!((skip.anims[u].player.playing(&k, 2000), skip.anims[u].player.base()), ("", "dazed"), "skip: no stagger, the dazed base");
+    }
+
+    /// 6.3.10 (W9, WQ5): the amber outline only while a wind-up shows (`windup_outline_alpha`, 0 off).
+    #[test]
+    fn the_amber_outline_shows_only_during_a_windup() {
+        let mut host = battle(None);
+        let (t, _, u) = winding(&mut host);
+        let tu = Tuning::default();
+        assert_eq!(windup_outline(&t.anims[u], &tu), Some([AMBER[0], AMBER[1], AMBER[2], tu.windup_outline_alpha]));
+        let idle = t.anims.iter().find(|a| a.windup.is_none()).expect("a unit not winding up");
+        assert_eq!(windup_outline(idle, &tu), None);
+        assert_eq!(windup_outline(&t.anims[u], &Tuning { windup_outline_alpha: 0, ..Tuning::default() }), None, "0: off");
+    }
+
+    /// The Test Arena on `goblin_ambush` whose every unit's body is a scratch body with the section 4 rows (layered
+    /// over the game's art).
+    fn windup_arena(tag: &str) -> (crate::screens::Cx, aegis_ui::ui::Gfx, BattleScreen, std::path::PathBuf) {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let game = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        cx.art = Art::new(Some(game.clone()));
+        cx.app.encounter = "goblin_ambush".into();
+        cx.app.seed = Some(1);
+        cx.settings.v["battle_view"] = json!("flat");
+        let b = BattleScreen::sandbox(&cx);
+        let root = std::env::temp_dir().join(format!("emberwake_windup_{tag}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let s = b.host.session.as_ref().unwrap();
+        for (i, u) in s.w.units.iter().enumerate() {
+            if let Some(key) = cx.art.first_body(&super::body_keys(&s.art[i], u)) {
+                write_body(&root, &key, &rows(&[]));
+            }
+        }
+        let mut layers = Layers::for_game(&game);
+        layers.roots.insert(0, root.clone());
+        cx.art = Art::layered(layers);
+        (cx, crate::hud::hud_tests::gfx(), b, root)
+    }
+
+    /// 6.3.2 (W4, the screen): a strike from a held wind-up lands `ms_before(impact) - ms_before(strike)` after t0.
+    #[test]
+    fn a_strike_from_the_pose_lands_its_strike_to_impact_ms_after_t0() {
+        let (mut cx, _g, mut b, root) = windup_arena("impact");
+        assert!(b.learn_poses(&mut cx));
+        b.sync_anims(&cx);
+        assert!(b.tokens.poses.iter().any(|p| p.has("windup")), "the bodies' rows are known");
+        let found = super::tests::step_until(&mut cx, &mut b, |_, i| i.strike && i.delivery == crate::fx::Delivery::Melee);
+        assert!(found, "a melee strike from a wind-up");
+        b.resolve_impacts(&mut cx);
+        let i = b.impacts.last().unwrap().clone();
+        let k = clips(&[]);
+        let c = k.clip("attack").unwrap();
+        assert_eq!(i.at, Some(i.t0 + c.impact_ms().unwrap() - c.ms_before(c.strike)), "from the strike frame to the impact frame");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// 6.3.12 (6.2): the agent link's `state.tokens` names, per unit, the clip drawn, the base, the pose and the wind-up.
+    #[test]
+    fn the_agent_link_tokens_match_the_drawn_clips() {
+        let (mut cx, mut g, mut b, root) = windup_arena("state");
+        b.learn_poses(&mut cx);
+        b.send(&cx, json!({"cmd": "preset", "preset": "aggressive"}));
+        b.send(&cx, json!({"cmd": "confirm"}));
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let st = b.state(&cx)["tokens"].clone();
+        let s = b.host.session.as_ref().unwrap();
+        let list = st.as_array().expect("tokens");
+        assert_eq!(list.len(), s.w.units.len());
+        let now = b.clock.now();
+        let mut winding = 0;
+        for (i, e) in list.iter().enumerate() {
+            let a = &b.tokens.anims[i];
+            let body = cx.art.first_body(&super::body_keys(&s.art[i], &s.w.units[i])).expect("a body");
+            let drawn = a.player.frame(cx.art.clips(&body).unwrap(), now).unwrap().clip;
+            assert_eq!((e["unit"].as_u64(), e["clip"].as_str(), e["base"].as_str(), e["pose"].as_str()), (Some(i as u64), Some(drawn.as_str()), Some(a.player.base()), Some(a.pose.id())));
+            match a.windup {
+                Some(w) => {
+                    winding += 1;
+                    assert_eq!(e["windup"], json!([w.blocks.0, w.blocks.1]));
+                    assert!(e["pose"].as_str().is_some_and(|p| !p.is_empty()) && e["base"].as_str().is_some_and(|c| c.starts_with("windup")));
+                }
+                None => assert!(e["windup"].is_null()),
+            }
+        }
+        assert!(winding > 0, "some unit winds up after the confirm");
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

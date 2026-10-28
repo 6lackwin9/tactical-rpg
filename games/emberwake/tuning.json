@@ -37,5 +37,6 @@
   "walk_ms": 360,
   "death_hold_ms": 600,
   "foot_alpha": 110,
-  "hover_outline_alpha": 110
+  "hover_outline_alpha": 110,
+  "windup_outline_alpha": 110
 }
