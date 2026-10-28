@@ -251,12 +251,12 @@ pub struct Orbit {
     pub ms: u32,
     /// 1-8 dots, evenly spaced.
     pub count: u8,
-    /// 1 or 2 px squares (a star is always the 3 px plus).
+    /// 1 or 2 px squares; a star's arm (1: the 3 px plus, 2: a 5 px plus; STATUSFX1-L).
     pub size: u8,
     /// Dot i takes `cols[i % 2]`; its alpha is scaled by `ORBIT_BACK_ALPHA` or `ORBIT_FRONT_ALPHA` / 255.
     pub cols: [Rgba; 2],
     pub phase_deg: f32,
-    /// A 3 px plus instead of a square.
+    /// A plus (`size` px arms) instead of a square.
     pub star: bool,
 }
 
@@ -432,9 +432,11 @@ fn draw_orbit(p: &mut Painter, o: &Orbit, u: f32) {
         for (q, col, _) in dots.iter().filter(|d| d.2 == back) {
             let (x, y) = (q.0.round() as i32, q.1.round() as i32);
             if o.star {
-                p.fill(Rect::new(x - 1, y, 3, 1), *col);
-                p.fill(Rect::new(x, y - 1, 1, 1), *col);
-                p.fill(Rect::new(x, y + 1, 1, 1), *col);
+                // STATUSFX1-L: `size` is the arm (1: the 3 px plus, 2: a 5 px plus)
+                let arm = o.size.clamp(1, 2) as i32;
+                p.fill(Rect::new(x - arm, y, 2 * arm + 1, 1), *col);
+                p.fill(Rect::new(x, y - arm, 1, arm), *col);
+                p.fill(Rect::new(x, y + 1, 1, arm), *col);
             } else {
                 let n = o.size.clamp(1, 2) as i32;
                 p.fill(Rect::new(x - (n - 1) / 2, y - (n - 1) / 2, n, n), *col);

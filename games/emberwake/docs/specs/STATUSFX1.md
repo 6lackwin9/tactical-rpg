@@ -151,3 +151,22 @@ their rows exist, a setting to hide the looks.
 | SQ3 | Debuffs inflicted this round act next round (`pending`) | (a) the look at half alpha from the hit, full when active; (b) only when active; (c) full from the hit | (a): the hit shows something landed, and a half-strength look does not claim a stunned unit cannot act this round |
 | SQ4 | More statuses than slots | (a) one look per slot, cycling every 1.5 s; (b) the top one per slot and a "+n" pip | (a): every status shows within a few seconds without extra marks; the hover card lists them all |
 | SQ5 | Reduce motion | (a) still looks, cycling kept; (b) hide the looks | (a): the looks carry information, as FX1 FQ4 kept the effects |
+
+## As built (STATUSFX1-L, 2026-10-29)
+
+- Stun's star: the engine's orbit star now takes `size` as its arm (1: the 3 px plus, 2: a 5 px plus), so stun's
+  `size 2` draws a 5 px plus (TASKS row, note (a)); every other orbit is unchanged.
+- Stealth has no apply burst (its row has no colour); a pending stealth fades `status_pending_alpha` of the way to 55 %.
+- A status put on in a step whose action has no delivery (nothing to wait for, FX1 4.3 rule 7) shows and bursts at
+  once; a step without an action bursts nothing (S4).
+- Decision "FX1-L2 answers": a unit felled in a change with no impact to land (a status tick) raises FX1-L2's fall
+  dust at once (`BattleScreen::fall_dust`); none under skip animations.
+- Acceptance 4: the shipped data has no `caustic_vomit`, so the test injects a pending poison into the target of the
+  ambush's first landing action just before its step and checks the burst at that impact (none under skip).
+- On the Stage an orbit's `ry` is squashed by 0.75 (a ring's height); a token without a body (the letter plate) has no
+  tint and stealth fades its plate.
+- Review board round 2 (user 2026-10-29, all as recommended): the head anchor is raised to 0.95 x `token_px` above
+  the foot (Flat: 0.5 x its size above the centre; `fx::HEAD_UP_STAGE`, `HEAD_UP_FLAT`), so stun's stars and taunt's
+  ring sit just above the helmet (the table's 0.75 and 0.45 sat at the shoulders); the faint looks are about twice as
+  visible: the drifting sparks are 2 px and burn 7, poison 5, bleed 4, haste 5, regen 4 of them; slow's and expose's
+  rings at alpha 255, steadfast's flash at 160; `status_cycle_ms` stays on wall time.

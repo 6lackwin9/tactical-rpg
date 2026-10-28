@@ -65,6 +65,11 @@ pub struct Tuning {
     pub hover_outline_alpha: u8,
     /// WINDUP1 W9: the opacity (0-255, 0 = off) of the Tallow Amber outline around a unit showing a wind-up.
     pub windup_outline_alpha: u8,
+    /// STATUSFX1 S2, S3, S7: the wall ms each status of a slot shows before the next (600-4000), the alpha factor of a
+    /// pending status's look (0.2-1.0) and the ceiling on a tint's alpha (0-120).
+    pub status_cycle_ms: u64,
+    pub status_pending_alpha: f32,
+    pub status_tint_max: u8,
 }
 
 impl Default for Tuning {
@@ -103,6 +108,9 @@ impl Default for Tuning {
             foot_alpha: 110,
             hover_outline_alpha: 110,
             windup_outline_alpha: 110,
+            status_cycle_ms: 1500,
+            status_pending_alpha: 0.5,
+            status_tint_max: 70,
         }
     }
 }
@@ -183,6 +191,9 @@ impl Tuned for Tuning {
             foot_alpha: u("foot_alpha", d.foot_alpha as u64).min(255) as u8,
             hover_outline_alpha: u("hover_outline_alpha", d.hover_outline_alpha as u64).min(255) as u8,
             windup_outline_alpha: u("windup_outline_alpha", d.windup_outline_alpha as u64).min(255) as u8,
+            status_cycle_ms: u("status_cycle_ms", d.status_cycle_ms).clamp(600, 4000),
+            status_pending_alpha: v.get("status_pending_alpha").and_then(Value::as_f64).map_or(d.status_pending_alpha, |x| x as f32).clamp(0.2, 1.0),
+            status_tint_max: u("status_tint_max", d.status_tint_max as u64).min(120) as u8,
         }
     }
 }

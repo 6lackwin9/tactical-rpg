@@ -9,11 +9,14 @@
 //! a swing up or down turned toward its target, and the impact budget under the live list's cap. Engine-only: Godot
 //! had token tweens in `scripts/ui/combat/fx_presets.gd` (its hit shake is ported here without the bug that kept it
 //! on one side; its miss sidestep smaller). Presentation only: nothing here reads or changes the battle.
+//! STATUSFX1-L (spec STATUSFX1.md sections 3-4): the status looks on the tokens (`STATUS_LOOKS`: looped effects at the
+//! head, body and feet, tints, stealth's alpha), one per slot cycling (`status_frame`), pending at half alpha, the
+//! apply burst at the impact.
 
 use crate::stage::{Geom, View};
 use crate::tuning::Tuning;
 use aegis_ui::canvas::Rgba;
-use aegis_ui::fx::{Beam, Effect, Flash, Layer, Look, Projectile, Pt, Ring, Shake, ShakeTable, Sparks, Trail, MAX_LIVE};
+use aegis_ui::fx::{Beam, Effect, Flash, Layer, Look, Looped, Orbit, Prim, Projectile, Pt, Ring, Shake, ShakeTable, Sparks, Trail, MAX_LIVE};
 use emberwake_battle::grid::V2;
 
 /// Weapon families whose strikes at range read as arcane (4.3 rule 2).
@@ -133,6 +136,8 @@ pub struct Impact {
     pub cells: Vec<V2>,
     pub radius: i32,
     pub target: Option<usize>,
+    /// STATUSFX1-L: each unit's statuses with a look after the step (`marks_of`; they show at the impact, rule I).
+    pub marks: Vec<Vec<Mark>>,
 }
 
 impl Impact {
@@ -821,6 +826,302 @@ pub fn strongest<'a>(presets: impl IntoIterator<Item = &'a str>, table: &ShakeTa
     })
 }
 
+// ---- Status looks (STATUSFX1-L, spec STATUSFX1.md sections 3-4) ---------------------------------------------------
+
+/// The status hues not above (art bible): Arterial (the crit hue), Crimson, Iron and Blight Violet (SQ1).
+pub const ARTERIAL: Rgba = CRIT;
+pub const CRIMSON: Rgba = [0x99, 0x1b, 0x1b, 255];
+pub const IRON: Rgba = [0x4b, 0x55, 0x63, 255];
+pub const VIOLET: Rgba = [0x93, 0x33, 0xea, 255];
+
+/// Where a status look sits on a token (S2: one look per slot and stealth's alpha).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Slot {
+    Head,
+    Body,
+    Feet,
+    Tint,
+    Alpha,
+}
+
+/// The slots that cycle, in the agent link's order (S9; `Alpha` after them).
+pub const SLOTS: [Slot; 4] = [Slot::Head, Slot::Body, Slot::Feet, Slot::Tint];
+
+/// A status look's shape (section 3).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Shape {
+    /// A looped primitive at its slot's anchor (`at` (0, 0), Stage px), lowered `dy` px, repeating every `period` ms.
+    Loop { prim: Prim, dy: f32, period: u64 },
+    /// The body silhouette in `col`, its alpha `lo` to `hi` and back (a sine) every `period` ms.
+    Tint { col: Rgba, lo: u8, hi: u8, period: u64 },
+    /// The token (sprite and outline) at `STEALTH_ALPHA`.
+    Fade,
+}
+
+/// One row of the look table: the status id, its slot and its shape.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StatusLook {
+    pub id: &'static str,
+    pub slot: Slot,
+    pub shape: Shape,
+}
+
+/// Stealth's token alpha (55 %).
+pub const STEALTH_ALPHA: u8 = 140;
+/// S4: the apply burst (a Ring r0 3 to r1 10 at alpha 200 for 220 ms) and the gap between several on one unit.
+pub const BURST_MS: u32 = 220;
+pub const BURST_GAP_MS: u64 = 40;
+
+const O: Pt = (0.0, 0.0);
+
+const fn on(id: &'static str, slot: Slot, prim: Prim, dy: f32, period: u64) -> StatusLook {
+    StatusLook { id, slot, shape: Shape::Loop { prim, dy, period } }
+}
+
+const fn drift(count: u8, dir_deg: f32, spread_deg: f32, speed: f32, gravity: f32, ms: u32, cols: [Rgba; 2]) -> Prim {
+    Prim::Sparks(Sparks { at: O, ms, count, dir_deg, spread_deg, speed, gravity, size: 2, cols })
+}
+
+const fn hoop(r0: f32, r1: f32, a: u8, ms: u32, col: Rgba) -> Prim {
+    Prim::Ring(Ring { at: O, r0, r1, ms, col: alpha(col, a), squash: 1.0 })
+}
+
+const fn tint(id: &'static str, col: Rgba, lo: u8, hi: u8, period: u64) -> StatusLook {
+    StatusLook { id, slot: Slot::Tint, shape: Shape::Tint { col, lo, hi, period } }
+}
+
+/// Section 3's table in its order (the order a slot cycles in, S2); `stagger` has none (WINDUP1's `dazed` loop). As
+/// built (user 2026-10-29, the review board): the drifting sparks are 2 px and about twice as many, slow's and expose's
+/// rings at full alpha, steadfast's flash at 160.
+pub const STATUS_LOOKS: [StatusLook; 16] = [
+    on("stun", Slot::Head, Prim::Orbit(Orbit { at: O, rx: 7.0, ry: 2.5, ms: 900, count: 3, size: 2, cols: [GOLD, LINEN], phase_deg: 0.0, star: true }), 0.0, 900),
+    on("taunt", Slot::Head, hoop(2.0, 7.0, 200, 700, CRIMSON), 0.0, 1100),
+    on("burn", Slot::Body, drift(7, -90.0, 70.0, 25.0, -20.0, 500, [AMBER, GOLD]), 4.0, 600),
+    on("poison", Slot::Body, drift(5, -90.0, 50.0, 12.0, -15.0, 800, [VIOLET, ORCHID]), 0.0, 1000),
+    on("bleed", Slot::Body, drift(4, 90.0, 20.0, 15.0, 90.0, 600, [ARTERIAL, CRIMSON]), 0.0, 900),
+    on("expose", Slot::Body, hoop(9.0, 4.0, 255, 900, CRIMSON), 0.0, 1300),
+    on("riposte", Slot::Body, Prim::Trail(Trail { at: O, radius: 9.0, from_deg: -40.0, to_deg: 40.0, ms: 300, width: 1, col: STEEL, mirror: false, squash: 1.0 }), 0.0, 1500),
+    on("root", Slot::Feet, Prim::Orbit(Orbit { at: O, rx: 8.0, ry: 3.0, ms: 4000, count: 8, size: 1, cols: [IRON, STEEL], phase_deg: 0.0, star: false }), 0.0, 4000),
+    on("slow", Slot::Feet, hoop(4.0, 9.0, 255, 1400, ASH), 0.0, 1400),
+    on("steadfast", Slot::Feet, Prim::Flash(Flash { at: O, rx: 9.0, ry: 3.0, ms: 1200, col: alpha(GOLD, 160) }), 0.0, 1200),
+    on("haste", Slot::Feet, drift(5, -90.0, 30.0, 70.0, 0.0, 220, [CYAN, LINEN]), 0.0, 600),
+    on("regen", Slot::Feet, drift(4, -90.0, 40.0, 18.0, -10.0, 900, [GOLD, LINEN]), 0.0, 1100),
+    tint("weaken", ASH, 40, 70, 1600),
+    tint("empower", AMBER, 30, 70, 900),
+    tint("fortify", CYAN, 25, 50, 1600),
+    StatusLook { id: "stealth", slot: Slot::Alpha, shape: Shape::Fade },
+];
+
+/// The look of status `id` (None: no row in the table, as `stagger`).
+pub fn status_look(id: &str) -> Option<&'static StatusLook> {
+    STATUS_LOOKS.iter().find(|l| l.id == id)
+}
+
+/// A status a unit shows: its id and whether it is only pending (it acts next round, S3).
+pub type Mark = (&'static str, bool);
+
+/// S1: a unit's statuses with a look, active or pending, in table order (pending only: `true`).
+pub fn marks_of(st: &emberwake_rules::unit::StatusState) -> Vec<Mark> {
+    STATUS_LOOKS
+        .iter()
+        .filter_map(|l| {
+            if st.active.contains(l.id) {
+                Some((l.id, false))
+            } else {
+                st.pending.contains(l.id).then_some((l.id, true))
+            }
+        })
+        .collect()
+}
+
+/// The head anchor's height above the foot point in token sizes (Stage) and above the Flat token's centre (user
+/// 2026-10-29: just above the helmet of the 40 px bodies; the spec's 0.75 and 0.45 sat at the shoulders).
+pub const HEAD_UP_STAGE: f32 = 0.95;
+pub const HEAD_UP_FLAT: f32 = 0.5;
+
+/// Section 3's anchors from a token's drawn foot point (Flat: the token's centre): the head raised `HEAD_UP_STAGE` x
+/// `token_px` (Flat: `HEAD_UP_FLAT` x its size), the body at STAGE1's chest (Flat: the centre), the feet at the foot point (Flat: the centre
+/// lowered 0.4 x its size).
+pub fn slot_anchor(geo: &Geom, foot: Pt, slot: Slot) -> Pt {
+    let tp = geo.token_px as f32;
+    let up = match (geo.view, slot) {
+        (View::Stage, Slot::Head) => HEAD_UP_STAGE * tp,
+        (View::Stage, Slot::Body) => (geo.token_px / 3) as f32,
+        (View::Flat, Slot::Head) => HEAD_UP_FLAT * tp,
+        (View::Flat, Slot::Feet) => -0.4 * tp,
+        _ => 0.0,
+    };
+    (foot.0, foot.1 - up)
+}
+
+/// Section 3: the px scale of the looks (Stage 1; Flat `flat_token_px / token_px`) and the squash of rings and orbits
+/// (Stage 0.75, Flat 1).
+pub fn status_scale(geo: &Geom, t: &Tuning) -> (f32, f32) {
+    match geo.view {
+        View::Stage => (1.0, 0.75),
+        View::Flat => (t.flat_token_px as f32 / t.token_px.max(1) as f32, 1.0),
+    }
+}
+
+/// `p` placed at `at`: lengths times `k` (sizes and widths at least 1 px), rings and orbits squashed, a trail mirrored
+/// when `left`, every colour's alpha times `fade` (S3).
+fn placed(p: Prim, at: Pt, k: f32, squash: f32, left: bool, fade: f32) -> Prim {
+    let n = |v: u8| ((v as f32 * k).round() as u8).max(1);
+    let a = |c: Rgba| alpha(c, (c[3] as f32 * fade).round() as u8);
+    match p {
+        Prim::Sparks(s) => Prim::Sparks(Sparks { at, speed: s.speed * k, gravity: s.gravity * k, size: n(s.size), cols: [a(s.cols[0]), a(s.cols[1])], ..s }),
+        Prim::Ring(r) => Prim::Ring(Ring { at, r0: r.r0 * k, r1: r.r1 * k, col: a(r.col), squash, ..r }),
+        Prim::Orbit(o) => Prim::Orbit(Orbit { at, rx: o.rx * k, ry: o.ry * k * squash, size: n(o.size), cols: [a(o.cols[0]), a(o.cols[1])], ..o }),
+        Prim::Flash(f) => Prim::Flash(Flash { at, rx: f.rx * k, ry: f.ry * k, col: a(f.col), ..f }),
+        Prim::Trail(t) => Prim::Trail(Trail { at, radius: t.radius * k, width: n(t.width), col: a(t.col), mirror: left, ..t }),
+        other => other,
+    }
+}
+
+/// The seed of unit `unit`'s loop of status `id` (sparks vary per cycle from it, `Looped`).
+pub fn status_seed(unit: usize, id: &str) -> u64 {
+    let k = STATUS_LOOKS.iter().position(|l| l.id == id).unwrap_or(0) as u64;
+    (unit as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (k << 8) ^ 0x57A7
+}
+
+/// The loop of a `Shape::Loop` look on a token whose drawn foot point is `foot` (S5: it follows the slide), facing left
+/// when `left`, from clock `start`: feet looks on the ground layer, head and body looks in the air; a pending status at
+/// `status_pending_alpha` times its alphas (S3). None for tints and stealth.
+#[allow(clippy::too_many_arguments)]
+pub fn status_loop(look: &StatusLook, geo: &Geom, t: &Tuning, foot: Pt, left: bool, start: u64, seed: u64, pending: bool) -> Option<Looped> {
+    let Shape::Loop { prim, dy, period } = look.shape else { return None };
+    let (k, squash) = status_scale(geo, t);
+    let (x, y) = slot_anchor(geo, foot, look.slot);
+    let fade = if pending { t.status_pending_alpha } else { 1.0 };
+    let layer = if look.slot == Slot::Feet { Layer::Ground } else { Layer::Air };
+    Some(Looped::new(Effect::new(placed(prim, (x, y + dy * k), k, squash, left, fade), start).on(layer).seeded(seed), period))
+}
+
+/// S7: a tint's alpha `t_ms` after its start: `lo` to `hi` and back (a sine over its period; under reduce motion the
+/// middle one, still), at most `status_tint_max`, times `status_pending_alpha` while pending. 0 for other looks.
+pub fn tint_alpha(look: &StatusLook, t_ms: u64, still: bool, pending: bool, t: &Tuning) -> u8 {
+    let Shape::Tint { lo, hi, period, .. } = look.shape else { return 0 };
+    let w = if still { 0.5 } else { (1.0 - (std::f32::consts::TAU * (t_ms % period.max(1)) as f32 / period.max(1) as f32).cos()) / 2.0 };
+    let a = (lo as f32 + (hi as f32 - lo as f32) * w).min(t.status_tint_max as f32);
+    let fade = if pending { t.status_pending_alpha } else { 1.0 };
+    (a * fade).round() as u8
+}
+
+/// The token's alpha: `STEALTH_ALPHA` while stealthed (pending: that much of the way, S3), else 255.
+pub fn token_alpha(drawn: &[Drawn], t: &Tuning) -> u8 {
+    match drawn.iter().find(|d| d.look.shape == Shape::Fade) {
+        Some(d) => {
+            let k = if d.pending { t.status_pending_alpha } else { 1.0 };
+            (255.0 - (255 - STEALTH_ALPHA) as f32 * k).round() as u8
+        }
+        None => 255,
+    }
+}
+
+/// The tint a token draws at clock `now` (its colour at full alpha and the alpha to draw it at), if any.
+pub fn tint_of(drawn: &[Drawn], now: u64, still: bool, t: &Tuning) -> Option<(Rgba, u8)> {
+    drawn.iter().find_map(|d| match d.look.shape {
+        Shape::Tint { col, .. } => Some((col, tint_alpha(d.look, now.saturating_sub(d.start), still, d.pending, t))),
+        _ => None,
+    })
+}
+
+/// S2: which of a slot's `n` statuses shows `elapsed` wall ms after its list was set: each for `cycle_ms`, in table
+/// order, round and round.
+pub fn cycle_pick(n: usize, elapsed: u64, cycle_ms: u64) -> usize {
+    if n == 0 {
+        0
+    } else {
+        (elapsed / cycle_ms.max(1)) as usize % n
+    }
+}
+
+/// S2, one slot of a token: the ids it cycles, the wall ms that list was set, the id it draws and the clock ms its loop
+/// restarted (0: since the list changed, the status's own start).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SlotShow {
+    pub ids: Vec<&'static str>,
+    pub since_wall: u64,
+    pub drawn: Option<&'static str>,
+    pub from: u64,
+}
+
+impl SlotShow {
+    /// The id this slot draws among `ids` (table order) at wall ms `wall` and clock ms `now`, and the clock ms its loop
+    /// restarted: a new list starts the cycle again; a switch by the cycle restarts the loop (SQ4).
+    pub fn pick(&mut self, ids: &[&'static str], wall: u64, now: u64, cycle_ms: u64) -> Option<(&'static str, u64)> {
+        if self.ids != ids {
+            self.ids = ids.to_vec();
+            self.since_wall = wall;
+            if self.drawn != ids.first().copied() {
+                self.drawn = ids.first().copied();
+                self.from = 0;
+            }
+        }
+        let id = *ids.get(cycle_pick(ids.len(), wall.saturating_sub(self.since_wall), cycle_ms))?;
+        if self.drawn != Some(id) {
+            self.drawn = Some(id);
+            self.from = now;
+        }
+        Some((id, self.from))
+    }
+}
+
+/// A status a token shows (`UnitAnim::marks`): its id, pending only, and the clock ms its look starts (S5: its burst's).
+pub type MarkOn = (&'static str, bool, u64);
+
+/// One look a token draws this frame: the row, pending only, the clock ms its loop starts.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Drawn {
+    pub look: &'static StatusLook,
+    pub pending: bool,
+    pub start: u64,
+}
+
+/// S1-S2: the looks a token showing `marks` (table order) draws at wall ms `wall` and clock ms `now`, in slot order
+/// head, body, feet, tint, then stealth's alpha (S9's order): one per slot, cycling every `cycle_ms`.
+pub fn status_frame(marks: &[MarkOn], slots: &mut [SlotShow; 4], wall: u64, now: u64, cycle_ms: u64) -> Vec<Drawn> {
+    let mut out = Vec::new();
+    for (slot, show) in SLOTS.iter().zip(slots.iter_mut()) {
+        let ids: Vec<&'static str> = marks.iter().filter(|m| status_look(m.0).is_some_and(|l| l.slot == *slot)).map(|m| m.0).collect();
+        if let Some((id, from)) = show.pick(&ids, wall, now, cycle_ms) {
+            if let (Some(m), Some(look)) = (marks.iter().find(|m| m.0 == id), status_look(id)) {
+                out.push(Drawn { look, pending: m.1, start: m.2.max(from) });
+            }
+        }
+    }
+    if let Some(m) = marks.iter().find(|m| status_look(m.0).is_some_and(|l| l.slot == Slot::Alpha)) {
+        out.extend(status_look(m.0).map(|look| Drawn { look, pending: m.1, start: m.2 }));
+    }
+    out
+}
+
+/// A look's first colour (the burst's; S4). None for stealth.
+pub fn first_col(look: &StatusLook) -> Option<Rgba> {
+    match look.shape {
+        Shape::Loop { prim, .. } => match prim {
+            Prim::Sparks(s) => Some(s.cols[0]),
+            Prim::Orbit(o) => Some(o.cols[0]),
+            Prim::Ring(r) => Some(r.col),
+            Prim::Flash(f) => Some(f.col),
+            Prim::Trail(t) => Some(t.col),
+            Prim::Beam(b) => Some(b.core),
+            Prim::Projectile(_) => None,
+        },
+        Shape::Tint { col, .. } => Some(col),
+        Shape::Fade => None,
+    }
+}
+
+/// S4: the apply burst of `look` on a token at `foot`, at clock `at`: a Ring r0 3 to r1 10 at alpha 200 for 220 ms at
+/// the chest in its first colour, in the air (scaled and squashed as the looks). None for stealth (no colour).
+pub fn apply_burst(look: &StatusLook, geo: &Geom, t: &Tuning, foot: Pt, at: u64) -> Option<Effect> {
+    let col = first_col(look)?;
+    let (k, squash) = status_scale(geo, t);
+    let ring = Ring { at: slot_anchor(geo, foot, Slot::Body), r0: 3.0 * k, r1: 10.0 * k, ms: BURST_MS, col: alpha(col, 200), squash };
+    Some(Effect::new(ring, at))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1297,5 +1598,165 @@ mod tests {
         assert_ne!(shake_seed(2, 3, 0), shake_seed(2, 3, 1), "another phase");
         assert_ne!(shake_seed(2, 3, 0), shake_seed(2, 4, 0), "another block");
         assert_ne!(shake_seed(2, 3, 0), shake_seed(3, 3, 0), "another round");
+    }
+
+    // ---- STATUSFX1-L (spec section 4 acceptance) ---------------------------------------------------------------------
+
+    fn marks(ids: &[&'static str]) -> Vec<MarkOn> {
+        ids.iter().map(|&id| (id, false, 0)).collect()
+    }
+
+    fn ids(d: &[Drawn]) -> Vec<&'static str> {
+        d.iter().map(|x| x.look.id).collect()
+    }
+
+    fn prim_at(p: Prim) -> Pt {
+        match p {
+            Prim::Sparks(s) => s.at,
+            Prim::Ring(r) => r.at,
+            Prim::Orbit(o) => o.at,
+            Prim::Flash(f) => f.at,
+            Prim::Trail(t) => t.at,
+            Prim::Beam(b) => b.from,
+            Prim::Projectile(p) => p.from,
+        }
+    }
+
+    /// 1: every status row but `stagger` (WINDUP1's `dazed`) has a look, so a new row without one fails here; every look
+    /// names a row and the table holds each id once.
+    #[test]
+    fn every_status_row_but_stagger_has_a_look() {
+        let rows = emberwake_rules::status::ROWS;
+        for r in rows.iter() {
+            assert_eq!(status_look(r.id).is_some(), r.id != "stagger", "{}: a look unless it is stagger", r.id);
+        }
+        assert!(STATUS_LOOKS.iter().all(|l| rows.iter().any(|r| r.id == l.id)), "no look without a status row");
+        assert_eq!(STATUS_LOOKS.len(), rows.len() - 1, "one look per row");
+        assert_eq!(status_look("stealth").map(|l| (l.slot, l.shape)), Some((Slot::Alpha, Shape::Fade)));
+    }
+
+    /// 2 (S2): stun and burn draw both (head and body); burn, poison and bleed share the body: burn, poison at 1500 ms,
+    /// bleed at 3000, burn again at 4500 (wall ms); a switch restarts that look's loop. Every slot draws at once, in the
+    /// order head, body, feet, tint, then stealth's alpha (S9).
+    #[test]
+    fn a_slot_cycles_its_statuses_in_table_order_and_the_slots_draw_together() {
+        let t = tuning();
+        assert_eq!(t.status_cycle_ms, 1500);
+        let mut slots: [SlotShow; 4] = Default::default();
+        assert_eq!(ids(&status_frame(&marks(&["stun", "burn"]), &mut slots, 0, 0, t.status_cycle_ms)), ["stun", "burn"]);
+        let mut slots: [SlotShow; 4] = Default::default();
+        let m = marks(&["burn", "poison", "bleed"]);
+        for (wall, want) in [(0, "burn"), (1499, "burn"), (1500, "poison"), (2999, "poison"), (3000, "bleed"), (4500, "burn")] {
+            assert_eq!(ids(&status_frame(&m, &mut slots, wall, wall, t.status_cycle_ms)), [want], "at {wall} ms");
+        }
+        let d = status_frame(&m, &mut slots, 6000, 7777, t.status_cycle_ms);
+        assert_eq!((d[0].look.id, d[0].start), ("poison", 7777), "the switch restarts the loop on the clock");
+        assert_eq!(status_frame(&m, &mut slots, 6100, 7877, t.status_cycle_ms)[0].start, 7777, "and it runs on");
+        let mut slots: [SlotShow; 4] = Default::default();
+        let all = marks(&["stun", "bleed", "root", "fortify", "stealth"]);
+        assert_eq!(ids(&status_frame(&all, &mut slots, 0, 0, t.status_cycle_ms)), ["stun", "bleed", "root", "fortify", "stealth"]);
+        // S5: a look starts at its status's start (its burst), not before
+        let mut slots: [SlotShow; 4] = Default::default();
+        assert_eq!(status_frame(&[("burn", false, 900)], &mut slots, 0, 500, t.status_cycle_ms)[0].start, 900);
+        assert_eq!((cycle_pick(0, 99, 1500), cycle_pick(3, 99_000, 1500)), (0, 66 % 3));
+    }
+
+    /// 3 (S3): a status only pending draws at `status_pending_alpha` times its alphas (its loop's colours, a tint's alpha,
+    /// stealth half way); active, at full alpha.
+    #[test]
+    fn a_pending_status_draws_at_the_pending_alpha() {
+        let t = tuning();
+        let geo = Geom::new(View::Stage, &t);
+        let poison = status_look("poison").unwrap();
+        let cols = |pending: bool| match status_loop(poison, &geo, &t, (100.0, 100.0), false, 0, 1, pending).unwrap().effect.prim {
+            Prim::Sparks(s) => s.cols,
+            _ => panic!("poison drifts sparks"),
+        };
+        assert_eq!(cols(false), [VIOLET, ORCHID], "active: full alpha");
+        let half = (255.0 * t.status_pending_alpha).round() as u8;
+        assert_eq!(t.status_pending_alpha, 0.5);
+        assert_eq!(cols(true).map(|c| c[3]), [half, half], "pending: half");
+        let weaken = status_look("weaken").unwrap();
+        let mid = tint_alpha(weaken, 0, true, false, &t);
+        assert_eq!(tint_alpha(weaken, 0, true, true, &t), (mid as f32 * t.status_pending_alpha).round() as u8);
+        let stealth = Drawn { look: status_look("stealth").unwrap(), pending: false, start: 0 };
+        assert_eq!(token_alpha(&[stealth], &t), STEALTH_ALPHA);
+        assert_eq!(STEALTH_ALPHA, (0.55f32 * 255.0).round() as u8, "55 %");
+        assert_eq!(token_alpha(&[Drawn { pending: true, ..stealth }], &t), (255.0 - (255 - STEALTH_ALPHA) as f32 * 0.5).round() as u8);
+        assert_eq!(token_alpha(&[], &t), 255);
+    }
+
+    /// 5 (S7): a tint pulses `lo` to `hi` and back over its period (capped at `status_tint_max`); under reduce motion it
+    /// holds its middle alpha.
+    #[test]
+    fn tints_pulse_and_hold_their_middle_alpha_under_reduce_motion() {
+        let t = tuning();
+        for id in ["weaken", "empower", "fortify"] {
+            let l = status_look(id).unwrap();
+            let Shape::Tint { lo, hi, period, .. } = l.shape else { panic!("{id} is a tint") };
+            assert_eq!((tint_alpha(l, 0, false, false, &t), tint_alpha(l, period / 2, false, false, &t), tint_alpha(l, period, false, false, &t)), (lo, hi, lo), "{id} pulses");
+            let mid = ((lo as f32 + hi as f32) / 2.0).round() as u8;
+            assert!((0..period).step_by(97).all(|ms| tint_alpha(l, ms, true, false, &t) == mid), "{id}: still at the middle alpha");
+        }
+        let capped = Tuning { status_tint_max: 45, ..tuning() };
+        assert_eq!(tint_alpha(status_look("weaken").unwrap(), 800, false, false, &capped), 45, "the ceiling");
+    }
+
+    /// 7: the anchors (Stage: head 0.95 x `token_px` up, the chest, the foot; Flat: 0.5 x the token up, the centre, 0.4
+    /// down) with burn lowered 4 px; feet looks on the ground layer, head and body looks in the air; Flat lengths scale by
+    /// `flat_token_px / token_px` (at least 1 px) and rings and orbits squash 0.75 on the Stage only.
+    #[test]
+    fn looks_sit_at_their_slot_anchors_on_their_layers_in_both_views() {
+        let t = tuning();
+        let foot = (200.0, 150.0);
+        let stage = Geom::new(View::Stage, &t);
+        let flat = Geom::new(View::Flat, &t);
+        let tp = t.token_px as f32;
+        let ft = t.flat_token_px as f32;
+        let c = V2::new(3, 4);
+        let (cx_, cy_) = stage.chest(c);
+        let (fx_, fy_) = stage.foot(c);
+        assert_eq!(slot_anchor(&stage, (fx_ as f32, fy_ as f32), Slot::Body), (cx_ as f32, cy_ as f32), "the Stage chest is STAGE1's");
+        assert_eq!((HEAD_UP_STAGE, HEAD_UP_FLAT), (0.95, 0.5), "just above the helmet (user 2026-10-29)");
+        assert_eq!(slot_anchor(&stage, foot, Slot::Head), (200.0, 150.0 - 0.95 * tp));
+        assert_eq!(slot_anchor(&stage, foot, Slot::Feet), foot);
+        assert_eq!(slot_anchor(&flat, foot, Slot::Head), (200.0, 150.0 - 0.5 * ft));
+        assert_eq!(slot_anchor(&flat, foot, Slot::Body), foot);
+        assert_eq!(slot_anchor(&flat, foot, Slot::Feet), (200.0, 150.0 + 0.4 * ft));
+        for geo in [stage, flat] {
+            let (k, squash) = status_scale(&geo, &t);
+            for l in STATUS_LOOKS.iter() {
+                let Some(lp) = status_loop(l, &geo, &t, foot, false, 0, 1, false) else { continue };
+                assert_eq!(lp.layer(), if l.slot == Slot::Feet { Layer::Ground } else { Layer::Air }, "{}", l.id);
+                let dy = if l.id == "burn" { 4.0 * k } else { 0.0 };
+                let a = slot_anchor(&geo, foot, l.slot);
+                assert_eq!(prim_at(lp.effect.prim), (a.0, a.1 + dy), "{} at its anchor", l.id);
+            }
+            let stun = status_loop(status_look("stun").unwrap(), &geo, &t, foot, false, 0, 1, false).unwrap();
+            let Prim::Orbit(o) = stun.effect.prim else { panic!("stun orbits") };
+            assert_eq!((o.rx, o.ry, o.size), (7.0 * k, 2.5 * k * squash, ((2.0 * k).round() as u8).max(1)));
+            let slow = status_loop(status_look("slow").unwrap(), &geo, &t, foot, false, 0, 1, false).unwrap();
+            assert!(matches!(slow.effect.prim, Prim::Ring(r) if r.squash == squash && r.r1 == 9.0 * k));
+        }
+        assert_eq!((status_scale(&stage, &t), status_scale(&flat, &t)), ((1.0, 0.75), (ft / tp, 1.0)));
+        let riposte = |left: bool| match status_loop(status_look("riposte").unwrap(), &stage, &t, foot, left, 0, 1, false).unwrap().effect.prim {
+            Prim::Trail(tr) => tr.mirror,
+            _ => panic!("riposte is a trail"),
+        };
+        assert_eq!((riposte(false), riposte(true)), (false, true), "mirrored when facing left");
+    }
+
+    /// S4: the apply burst is a Ring r0 3 to r1 10 at alpha 200 for 220 ms at the chest in the look's first colour, in
+    /// the air; stealth (no colour) has none.
+    #[test]
+    fn the_apply_burst_rings_the_chest_in_the_first_colour() {
+        let t = tuning();
+        let geo = Geom::new(View::Stage, &t);
+        let foot = (200.0, 150.0);
+        let e = apply_burst(status_look("poison").unwrap(), &geo, &t, foot, 1234).unwrap();
+        assert_eq!((e.start, e.layer, e.ms()), (1234, Layer::Air, 220));
+        assert_eq!(e.prim, Prim::Ring(Ring { at: slot_anchor(&geo, foot, Slot::Body), r0: 3.0, r1: 10.0, ms: 220, col: [VIOLET[0], VIOLET[1], VIOLET[2], 200], squash: 0.75 }));
+        assert!(matches!(apply_burst(status_look("weaken").unwrap(), &geo, &t, foot, 0).unwrap().prim, Prim::Ring(r) if r.col == alpha(ASH, 200)));
+        assert!(apply_burst(status_look("stealth").unwrap(), &geo, &t, foot, 0).is_none());
     }
 }

@@ -38,5 +38,8 @@
   "death_hold_ms": 600,
   "foot_alpha": 110,
   "hover_outline_alpha": 110,
-  "windup_outline_alpha": 110
+  "windup_outline_alpha": 110,
+  "status_cycle_ms": 1500,
+  "status_pending_alpha": 0.5,
+  "status_tint_max": 70
 }

@@ -126,6 +126,13 @@ fn e3_orbit_dots_circle_evenly_and_dim_in_the_back_half() {
         assert_eq!(px(&star, x0 + dx, y0 + dy), GOLD, "a star is a 3 px plus ({dx}, {dy})");
     }
     assert_eq!(px(&star, x0 + 1, y0 + 1), [0; 4], "and no square");
+    assert_eq!((px(&star, x0 + 2, y0), px(&star, x0, y0 - 2)), ([0; 4], [0; 4]), "size 1: arms of 1 px");
+    // STATUSFX1-L (from STATUSFX1-E): a star's size is its arm, so stun's size 2 is a 5 px plus
+    let big = render(&mut fonts, |p| Effect::new(Orbit { star: true, size: 2, ..o }, 0).draw(p, 0));
+    for (dx, dy) in [(0, 0), (-2, 0), (-1, 0), (1, 0), (2, 0), (0, -2), (0, -1), (0, 1), (0, 2)] {
+        assert_eq!(px(&big, x0 + dx, y0 + dy), GOLD, "a size 2 star is a 5 px plus ({dx}, {dy})");
+    }
+    assert_eq!((px(&big, x0 + 3, y0), px(&big, x0 + 1, y0 + 1)), ([0; 4], [0; 4]), "no further, no square");
     let moved = e.moved(5.0, -3.0);
     assert!(matches!(moved.prim, Prim::Orbit(m) if m.at == (o.at.0 + 5.0, o.at.1 - 3.0)));
 }
