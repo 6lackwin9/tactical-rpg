@@ -9,8 +9,9 @@ live view (`docs/workflow/cloud.md` "Area threads"), so this section changes onl
 
 ## Active now
 
-2026-10-29 (desktop): running: the RULESET1-U slice 1 builder (worktree `C:/dev/tactical-rpg-ruleset1u`, branch
-`claude/ruleset1u`), the HOOKS1-U review fix (`C:/dev/tactical-rpg-hooks1u`, `claude/hooks1u`), the WINDUP1-R2 review
-(`C:/dev/tactical-rpg-windup1r2`, `claude/windup1r2`); the planner's docs pass CLN-P2 in `C:/dev/tactical-rpg-plan`.
+2026-10-29 wind-down (desktop, user's auto shutdown): release #51 merged (main = develop = 42989feb). Nothing runs.
+On the local `staging` branch, not yet on develop: HOOKS1-AI (785361a8). Uncommitted in worktrees, each with
+`.agent/progress.md`: RULESET1-U slice 1 (`C:/dev/tactical-rpg-ruleset1u`, reviewed PASS, review lows being fixed),
+DIR4-R2 (`C:/dev/tactical-rpg-dir4r2`, all 7 bodies built; needs the full sprite tests, gate, docs and review).
 Standing worktrees: `C:/dev/tactical-rpg-stage` (branch `staging`, decision "Batched gate") and `C:/dev/tactical-rpg-dev`
 (`run_dev.bat`).
