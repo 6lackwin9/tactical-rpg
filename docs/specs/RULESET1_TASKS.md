@@ -277,6 +277,9 @@ Paths: `b/` `r/` `w/` = `kits/rpg/crates/rpgkit_{battle,rules,world}/src/` (`rpg
 | RULESET1-E | Timeline widget: marks (glyph, colour, tip at a block) and segment parts (windup, impact, recovery; hatching; links) | engine | logic | - | `engine/crates/aegis_ui/src/{timeline,specimens}.rs`; `aegis_ui/tests/kit_widgets.rs`; `engine/README.md` |
 | RULESET1-U | Battle screen (intent 10, index 12): intent buttons, target, kinds, opener, Manual, reasons, after-moves, flank arc, stealth veil, intent in tells and threat intel, badges, BREAK, poise, forecasts, reach band | game | logic | E, P, K, V, PL | `gui/{battle,intent_text,hud}.rs` |
 | RULESET1-DU | Deck buckets, Basics row and order editor (party screen, Dojo; 9 D6) | game | logic | D | `gui/{party,dojo}.rs` |
+
+RULESET1-DU slice 1 as built (2026-10-29): the party screen's deck view; agent-link widget ids `skills.{active,passive,keystone}.<i>`, `skills.basic.<family>`, `skills.view.{owned,order}`, `skills.slot.<kind>.<id>`, `skills.owned.<kind>.<id>`, `skills.order.<intent>[.<k>]`, `skills.order.auto`; drag keys `deck.<kind>.<i>`, `deck.own.<kind>.<id>`, `deck.list`, `order.<intent>.<k>`; state `deck`, `deck_shown`, `deck_auto`, `deck_view`, `deck_order`, `basics`. The Dojo deck view follows RULESET1-G.
+
 | RULESET1-G | Dojo toggle, planner view and readouts, Arena select and toggles, sim `feel` (index 12, tasks 3) | kit + game | logic | P, K, V, PL | `b/dojo.rs`; `gui/{dojo,runner}.rs`; `rpgkit_sim/src/{args,modes,feel (new)}.rs` |
 | RULESET1-A | Test kit data and the `sunk_ward` field (2) | game | asset | R, S, DERIVE1-S | `data/catalog/{rulesets,derived_stats,classes,item_families,items,skills,passives,units,encounters}.json`; `data/worlds/sunk_ward/world.json` |
 | RULESET1-X | Golden traces and the inert-extensions check (4.2) | kit | logic | A, G, AI | `rpgkit_battle/tests/{timeline_golden.rs,fixtures/*}` |
