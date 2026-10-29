@@ -1,7 +1,8 @@
 //! The text audit (TEXTFIT1): what one frame's text does wrong at the current text size. The painter records every
 //! text it draws while `Fonts::audit` is on (`painter::TextRec`); this reads the records: text `text_fit` had to
 //! shorten (cut), text past the canvas (edge), and two texts drawn over each other (overlap). Clipped text (scroll
-//! areas) and text a later panel covers (a dialog over the screen) are never a problem. The shell's agent command `text_audit` runs one frame with the audit on.
+//! areas), text a later panel covers (a dialog over the screen) and transient text (TEXTFIT2: drawn inside
+//! `Painter::transient`, e.g. damage floats) are never a problem. The shell's agent command `text_audit` runs one frame with the audit on.
 
 use crate::painter::TextRec;
 use serde_json::{json, Value};
@@ -21,7 +22,7 @@ fn at(r: &TextRec) -> Value {
 /// cut: [{text, shown, at}], edge: [{text, at}], overlap: [{a, b, at_a, at_b}], spill: [{text, widget, at}], counts}.
 /// A spill is text that starts inside a control (the smallest one holding its first letter) and runs past its edge.
 pub fn issues(recs: &[TextRec], w: f32, h: f32, boxes: &[(String, f32, f32, f32, f32)]) -> Value {
-    let live: Vec<&TextRec> = recs.iter().filter(|r| !r.clipped && !r.covered).collect();
+    let live: Vec<&TextRec> = recs.iter().filter(|r| !r.clipped && !r.covered && !r.transient).collect();
     let mut spill = Vec::new();
     let off_canvas = |r: &TextRec| r.x < -0.5 || r.y < -0.5 || r.x + r.w > w + 0.5 || r.y + r.h > h + 0.5;
     for r in live.iter().filter(|r| !off_canvas(r)) {
@@ -63,7 +64,7 @@ mod tests {
     use super::*;
 
     fn rec(x: f32, y: f32, w: f32, text: &str) -> TextRec {
-        TextRec { x, y, w, h: 9.0, text: text.into(), clipped: false, cut: None, covered: false }
+        TextRec { x, y, w, h: 9.0, text: text.into(), clipped: false, cut: None, covered: false, transient: false }
     }
 
     #[test]

@@ -202,7 +202,9 @@ right / enter / space / esc / a letter; while a field edits also home, end, back
 undo}), `back`, `screenshot {path, max_w}`, `text_audit {scale, shot}` (TEXTFIT1: one
 frame of the top screen at a text size, the mouse off the canvas, reporting the text `text_fit` or a button shortened
 (cut), text past the canvas (edge), texts drawn over each other (overlap) and text running out of its control (spill);
-text in a scroll area or under a later panel is skipped; `shot` saves that frame), `game` (the full game state), and the
+text in a scroll area or under a later panel is skipped, and so is transient text drawn inside `Painter::transient`
+(TEXTFIT2: floats that rise and fade, such as damage numbers; the painter flag `Fonts::transient` marks the record
+`TextRec::transient`); `shot` saves that frame), `game` (the full game state), and the
 battle command API while a battle is open. An agent sees and does exactly what the player sees and does:
 
 ```bash
