@@ -208,3 +208,5 @@ Not asked (kept as decided, re-read in B2): break chance 0.5 (TQ2, issue 6); fla
 
 HISTORY check: nothing here re-proposes a dropped idea. The cut list of 2026-10-25 (no rolls, row 75) keeps the break
 chance as the one roll and this spec leaves it; Rest's +2 AP a block (row 81) is not revisited.
+
+As built (RULESET1-BX, 2026-10-30): case BX4, no rule bug. The 15 / 20 came from `aegis battle` without `ruleset=timeline` (classic: armour 50 keeps 1/2, 25 keeps 2/3 of the 30 hit); under the timeline ruleset Marrow Spike deals 30 to both. Q6 therefore takes power 1.5. The report's engine-driver runs were classic too (see RULESET1-G2).
