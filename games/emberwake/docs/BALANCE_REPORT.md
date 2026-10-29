@@ -1,5 +1,77 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## RULESET1-B 2026-10-30 (timeline ruleset feel sim)
+
+Measured build: `origin/develop` bbd1733f (detached checkout `C:/dev/tactical-rpg-ruleset1b`), no code, data or tuning changed. Ruleset `timeline` (rules round_intent, enemy_moves, deck, poise, ap_cost, pierce, reach, flank, plan_badges; `break_chance_scale` 0.5, cap 50; stagger windup x2, guard x0.5, repeat x0.5, flank x1.5; Rest 0.5 AP and 5 poise per landed block, cap 2 AP). Raw output files are `ruleset1b_*.txt` in that checkout root (not committed).
+
+Commands (all `tools/fc.sh sim feel`, seed i = 11 + 12 i, preset `balanced`): `seeds=100` (the headline, 500 fights, `ruleset1b_feel100_full.txt`); `seeds=40` (`ruleset1b_feel40.txt`); `seeds=40 jitter=off`; `seeds=40 rules=-pierce`, `rules=-flank`, `rules=-poise`, `rules=-reach`, `rules=-reach,-flank` (`ruleset1b_feel_rules_*.txt`); `seeds=40 preset=aggressive|defensive|withdraw`. Probes: `cargo run -q -p emberwake_host -- battle <enc> seed=N log` (the engine's own auto driver), 40 seeds per encounter (`ruleset1b_battles40.txt`). 0 PLAN FAIL and 0 PLAN SKIP in every run.
+
+Limits: the spec asks for pierce at 25/35/50. Armour is a unit field (footman 25, enforcer 35, captain 50) and `sim feel` has no armour key, so a clean A/B at one armour needs a data change; not made. What the existing data gives instead: pierce on/off per encounter (below) and the formula. `rules=-poise/-pierce/-flank/-reach` are the only switches (round_intent is an option and cannot be switched off one by one). `sim feel` does not print the cap-hit count, only median rounds; the mean rounds below are unit-rounds divided by fights.
+
+### Headline (100 seeds, 500 fights)
+
+| Encounter | Won | Median rounds | Mean rounds | Breaks (poise / chance / sure) | Pierce share | Flank share |
+| --- | --- | --- | --- | --- | --- | --- |
+| tl_duel_windup (Vanguard v Enforcer, elite) | 8% | 8 | 6.6 | 59 (0 / 59 / 0) | 0% | 0% |
+| tl_duel_reach (Halberdier v Footman, standard) | 57% | 4 | 4.9 | 179 (110 / 69 / 0) | 0% | 0% |
+| tl_duel_armour (Spiker v Captain, boss) | 2% | 2 | 2.1 | 0 | 82% | 0% |
+| tl_flank (Vanguard + Spiker v Footman + Crossbowman) | 82% | 3 | 3.6 | 178 (84 / 94 / 0) | 38% | 25% |
+| tl_skirmish (4 v 4) | 67% | 7 | 5.8 | 520 (297 / 144 / 79) | 27% | 19% |
+| TOTAL | 43% | 4 | | 936 (491 / 366 / 79) | 29% | 13% |
+
+The 40-seed runs agree within a few points (windup 12.5%, reach 62.5%, armour 5%, flank 77.5%, skirmish 67.5%). Windup's median moves from 6 to 8 between 40 and 100 seeds, so its rounds are bimodal (an early loss or the cap).
+
+### The spec list, item by item
+
+| Item | Number | Reading |
+| --- | --- | --- |
+| Stagger and poise factors | Windup hits 1948, broken 709 (36%); 936 breaks in all: poise 491, chance 366, sure 79. Windup breaks per windup hit: windup duel 21%, reach 35%, flank 34%, skirmish 43%. `rules=-poise` (40 seeds): total 45% to 60%, reach 62.5% to 100%, flank 77.5% to 95%, skirmish 67.5% to 90%, windup 12.5% to 10% | Poise is the party's lever against standards; the Enforcer duel does not care (issue 2). Lock rate (broken two rounds running) is 1.7% (reach 3.1%, others 0-2%), so the repeat x0.5 factor (P10) is rarely exercised |
+| Chance | 1605 rolls, 366 successes (22.8%); 21-25% per encounter. The cap 50 never binds on these stagger values (`floor(100 x taken / poise_before x 0.5)`) | 37% of all breaks are the roll. Windup duel: 282 rolls, 59 breaks, 0 poise breaks in 100 fights, so the Enforcer is only ever broken by chance |
+| Sure break | 79, all in tl_skirmish; 0 in tl_duel_reach, the encounter meant to show it | The Jaw-Breaker needs a windup to land in; the Footman's 1-block snap and 2-block thrust seem to give no window the Halberdier reaches, the Enforcer's 3-block smash in the skirmish does. Hypothesis from where the 79 occur, not probed per block |
+| Pierce at 25 / 35 / 50 | Not runnable without a data change. Formula `r / (r + 50)`: a plain hit keeps 67% / 59% / 50%, so pierce gives +50% / +69% / +100% damage (RULESET1 A3 says "gains 33-100%", which is the armour cut, not the gain). Pierce share of hits: flank 38%, skirmish 27%, armour 82%. Pierce off (`rules=-pierce`, 40 seeds): armour 5% to 0%, flank 77.5% to 70%, skirmish 67.5% to 50%, total 45% to 39% | Pierce matters most where armour 25-35 meets four units. Open: Marrow Spike (power 0.9, pierced) deals 15 against the Captain but 20 against the Footman in the same driver, which a full pierce should not do; unexplained (a guard or tier term on the Captain is the guess) |
+| Rest gain | 5026 party Rest blocks gave 1998 AP: 0.40 AP per block (windup 0.48, reach 0.39, flank 0.35), 0.45 AP per unit-round against the 2 AP cap. The party spends 5.17 AP a round of a 10 AP pool (4 regen) | Real but small; the party leaves about 1.1 Rest blocks per unit-round (19% of its 6 blocks) idle. AP limits nothing (armour duel: 5.45 AP a round) |
+| Flanks | 1100 flank hits of 8504 (13%): flank 25%, skirmish 19%. `rules=-flank` (40 seeds): flank 77.5% to 80%, skirmish 67.5% to 67.5%, total 45% to 45.5% | The rule fires but moves no result; `-reach,-flank` also shows 0-3 points |
+| Carried moves | 0 of 4392 party unit-rounds | Cause found, below (issue 1) |
+| Kiting AP | 32 kite steps for 38 AP in 100 skirmishes (the Archer: "kite: threatened" 28, "in melee" 4); none elsewhere (tl_flank has no archer on the party side) | About one step in three skirmishes at 1.2 AP a step; it decides nothing |
+| Intent variety (OI1) | Rounds whose intent had no active: party 274 of 4392 (6.2%): flank 14.3%, skirmish 6.9%, armour 5.8%; enemy 1043 of 3499 (29.8%): windup 45%, reach 45%, flank 12%, skirmish 28%. Party intent share: assault 70.6%, guard 22.2%, support 7.3%, maneuver 0% | Enemies are the thin ones: their decks hold assaults only, but AI row 3 puts them in Guard at 40% HP (a basic Active Guard covers it, then 1676 Rest blocks). Party gaps are authored: the Spiker and Archer have no Guard active, the Vanguard and Halberdier no Support one |
+| Lock rate | 1.7% overall | See the stagger row |
+| Lost attacks | 63, all in tl_skirmish | Attacks cancelled by a break, 0.6 per skirmish |
+
+### What looks off against RULESET1's targets
+
+RULESET1 states few numbers: "Balance sets the factor" (5.6); a Snap of 12 in windup (24) should break light units while heavies need a second hit, the chance roll or `sure_break`; armour 25/35/50 is the pierce test; OI1 revisits the slot counts after this run. The tier line of the balance brief applies to the rest: standard beats a nothing-special hero 1v1, elite about 50%, boss favoured. Read against them:
+
+- tl_duel_windup 8% is far under "elite about 50%".
+- tl_flank 82% is over: two heroes beat two standards, where a standard should beat a hero 1v1.
+- tl_duel_reach 57% is a hero win against a standard, mildly over the tier line but inside 40-60.
+- tl_duel_armour 2% is a boss duel (boss favoured), but the hero cannot win on any seed (issue 3).
+- tl_skirmish 67% is an even-strength match won by the party by a third.
+- 5.6's "a Snap breaks light units, heavies need a second hit": a windup Snap never broke the Enforcer or the Captain on stagger alone (0 poise breaks in the windup and armour duels), as designed for heavies; only the 22% chance and the Jaw-Breaker break them.
+
+### Known signals, measured and explained
+
+- **tl_duel_armour is lost in round 2 in every seed.** Engine driver: 40 of 40 lost in round 2; sim: 98 of 100. Cause from the log (seed 11): the Captain lands Crushing Judgment (power x2.2, 4 blocks, unbreakable) once a round for 110 on a 210 HP Spiker, so it dies on the second hit in round 2. The Spiker needs 315 HP of damage at about 15 per spike (80-100 a round, 3.2+ rounds), so it is a 2-round clock against a 3.5-round need. Unbreakable removes the Snap answer; the Spiker has no Guard active (guard intent 5.8%, assault 94%), and the AI does not guard. Pierce off makes it 0%.
+- **tl_flank won in round 2 (golden).** Engine driver: 37 of 40 won in round 3 and 3 in round 2; sim median 3, 82%. Seed 11 log: the Spiker kills the Footman (147 HP) by round 2 block 1 with 20-damage pierced spikes while the Vanguard soaks the Crossbowman down to 15 of 210 HP; the Crossbowman dies in round 3. The standards deal too little: a Footman hits for 12-17, the Crossbowman for 17-33, against 210 HP heroes.
+- **7 of 15 fights hit the 8-round cap (golden).** In the sim, mean rounds are 6.6 in the windup duel (with early losses at rounds 3-4 that means well over half its fights run to the cap), 4.9 reach, 3.6 flank, 5.8 skirmish, 2.1 armour. The windup duel is a guard stalemate with a weak hero (party Guard 52.8% of rounds, enemy Guard 45.1%, 299 enemy rounds with no active; the hero's 13-damage hits against a 263 HP elite); the skirmish also runs long (engine driver: 2 of 40 "fled" at round 8, 6 wins on round 7). `sim feel` counts a capped fight as not won, without saying so.
+- **The AI never picks Maneuver (carried moves 0).** AI table row 4 (`kits/rpg/crates/rpgkit_battle/src/ai.rs:1687`, `engage_pick`) fires only for `Role::Skirmisher`. Every timeline unit is `tl_drill` (AGGRESSOR) or `ranger` (SNIPER) with an empty `ai_role`, so none is a Skirmisher and the Spiker's Maneuver deck (Hamstring Cut, Slip Strike, Flank Cut) is never used. Not a bug: no Skirmisher is authored. The Disengage trigger is gated the same way (`ai.rs:152`).
+
+### Issues for the design lane
+
+1. **Maneuver is unreachable by the AI** (carried moves 0, Maneuver share 0%): the tl_ roster needs an authored Skirmisher (or another trigger) before Engage, carried moves, Hamstring Cut and Disengage (MV4-MV9) can be judged. Evidence: `ai.rs:1687` gates row 4 on `Role::Skirmisher`; `tl_drill` is AGGRESSOR.
+2. **The Enforcer duel (tl_duel_windup) does not teach the windup**: 8% wins, the Enforcer is never broken by stagger (0 poise breaks in 100 fights, 59 chance breaks from 282 rolls). The hero hits for 13 against a 263 HP target at armour 35 while the Enforcer deals 29-56 twice a round. Levers: tier multipliers (HP, power), Vanguard damage and Heavy Cleave use (the log shows 13-damage Snaps, rarely the Cleave), stagger values, `windup_poise` 20.
+3. **tl_duel_armour has no winning line** (2%, lost in round 2 in 98-100%): the Captain's one unbreakable 110-damage hit a round is a 2-round clock. Levers: the Captain's power, hero HP, a Guard active for the Spiker; and check that Marrow Spike ignores armour (15 against the Captain, 20 against the Footman).
+4. **The standards are too weak in tl_flank** (82% in the sim, 40 of 40 in the engine driver). Levers: tier multipliers, enemy skill power.
+5. **Enemy turns are thin**: enemy rounds with no active of their intent are 29.8% (45% in the duels); Guard is picked at 40% HP and then rests or uses a basic; enemy Rest blocks 1676. OI1 reads as an enemy-deck problem more than a party one.
+6. **Break chance is a third of all breaks** (366 of 936, 22.8% per roll): review the scale (0.5) against the stagger values; it is the only break source in the Enforcer duel. Lock rate 1.7% means P10 is almost never seen.
+7. **Flank and reach rules move no win rate** (flank on or off: 0-2.5 points; reach on or off: 0-5 points, in reach and skirmish only) although flank is 13-25% of hits. Probably intended as feel rules, but the x1.5 stagger and flank power then buy nothing measurable; test with the elite or boss as the flanked unit.
+8. **The sim and the engine driver disagree**: windup 8-12% (sim) against 0 of 40 (driver), flank 82% against 40 of 40, skirmish 67% against 32% (13 of 40). `preset=aggressive|defensive|withdraw` changes no number (identical to `balanced`) and `jitter=off` does not close the gap. The headline here is the sim's; whichever driver resembles a player should be the one balanced. Not diagnosed.
+9. **RULESET1 A3 wording**: pierce "gains 33-100%"; the damage gain is +50% / +69% / +100% (33% / 41% / 50% is the cut).
+10. **`sim feel` gaps**: no capped-fight count, no armour or tuning key (so no pierce 25/35/50 run), and `preset=` is inert. Candidates: an `armor=` override and a cap column.
+
+### Compared with the previous run
+
+No earlier feel run exists (RULESET1-G is the tool's first release); the numbers above are the baseline. The golden's signals (armour lost in round 2, flank won in round 2, 7 of 15 at the cap, Maneuver 0) all reproduce and are explained above.
+
 ## REWARD1-B 2026-10-22 (rewards per defeated enemy)
 
 Measured build: `main` 18f3893 (REWARD1-L, REWARD1-A and REWARD1-S merged), clean checkout, no code or data changed. Sim: `tools/fc.sh sim party 5 10 comp=<comp> enc=world:<id>,... rewards=on` (10 seeds, authored foe levels, jitter on) and `tools/fc.sh sim campaign 5 3 heal=rally rest=3 extra=4:ash_raiders rewards=on` (the HEAL1 chain, 3 seeds, all ten trios, 300 fights: 0 PLAN FAIL, 0 METRIC FAIL). Rule coverage: `cargo test -p emberwake_world --test rewards` passes (15 of 15).
