@@ -13,6 +13,7 @@ the files are frozen in `legacy/data/seeds/` (and in git history). The tables be
 
 | Seed | Task | Note |
 | --- | --- | --- |
+| `encounter2_d.json` | ENCOUNTER2-D (kit samples `kit_winch_escape` hold escape and `kit_culling` phase kill) | full entries, as above |
 | `reward1.json` | REWARD1-A (loot tables, Ashlands purses, key loot, objective reward) | full entries: regenerate it before a re-run on data other tasks changed since |
 | `assetorg2.json` | ASSETORG2-D (body keys, portrait tiers, item icons) | full entries, as above |
 | `phasefold.json` | PHASEFOLD-A (arrival phases for goblin_ambush, pass_ambush, ashmaw_stand; rewrites the catalog, ashlands and tidewrack encounters without the wave_* keys) | full entries, as above |
