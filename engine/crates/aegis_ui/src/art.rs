@@ -8,7 +8,8 @@
 //! show a frame mirrored (a sheet facing right drawn facing left). PROPS1-E: a file's own size (`size_of`), mirrored images
 //! (`image_mirrored`) and a variant picked over a chain of folders (`varied`, which `tile_in` wraps). DIR4-E: a body
 //! played for a four-way `Facing` (`played_facing`: front and back rows of the sheet, side rows mirrored for left).
-//! STAGE1-E: the solid bounds of a body's fitted idle frame (`body_bounds`, a unit's hit rect on a stage).
+//! STAGE1-E: the solid bounds of a body's fitted idle frame (`body_bounds`, a unit's hit rect on a stage); DIR4-HB: per
+//! view, `body_bounds_facing`).
 //! FX1-E: a frame's filled silhouette (`body_silhouette`, a hit flash), cached like the outline.
 //! PORTRAITFX1-E: the first path of a chain a layer holds (`first_rel`) and a portrait's face sidecar from the PNG's
 //! own layer (`face`), cached.
@@ -48,8 +49,9 @@ pub struct Art {
     /// rel -> whether a layer holds it, and tile folder -> its variant count (asked every frame, looked up once).
     present: HashMap<String, bool>,
     variant_counts: HashMap<String, usize>,
-    /// (body key, palette id, size, flipped) -> the solid bounds of the fitted `idle` frame 0 (`body_bounds`).
-    body_rects: HashMap<(String, String, i32, bool), Option<Rect>>,
+    /// (body key, palette id, size, facing) -> the solid bounds of the fitted `idle` frame 0 in that facing
+    /// (`body_bounds_facing`).
+    body_rects: HashMap<(String, String, i32, Facing), Option<Rect>>,
     /// PNG rel -> its face sidecar from the PNG's own layer (PORTRAITFX1-E `face`).
     faces: HashMap<String, Option<Face>>,
 }
@@ -264,11 +266,26 @@ impl Art {
     /// square as `body_clip` fits it, mirrored left to right when `flip` (STAGE1-E: a unit's hit rect on the stage);
     /// None when the body or frame does not load or the frame holds no solid pixel. Cached.
     pub fn body_bounds(&mut self, key: &str, palette: &str, size: i32, flip: bool) -> Option<Rect> {
-        let k = (key.to_string(), palette.to_string(), size, flip);
+        self.body_bounds_facing(key, palette, size, Facing::side(flip))
+    }
+
+    /// DIR4-HB: `body_bounds` for a four-way `facing`: the bounds of frame 0 of `idle`'s view row in `facing.view`
+    /// (front or back, never mirrored), else (a side facing, or a body without that view row) the side `idle` frame
+    /// mirrored when `facing.left`, as `body_bounds`. Cached.
+    pub fn body_bounds_facing(&mut self, key: &str, palette: &str, size: i32, facing: Facing) -> Option<Rect> {
+        let k = (key.to_string(), palette.to_string(), size, facing);
         if let Some(r) = self.body_rects.get(&k) {
             return *r;
         }
-        let r = self.body_clip_flipped(key, palette, "idle", 0, size, flip).and_then(|f| f.opaque_bounds(OUTLINE_ALPHA));
+        let view_clip = match facing.view {
+            assets::View::Side => None,
+            view => self.clips(key).and_then(|c| c.view_row("idle", view).map(|row| c.clips[row].id.clone())),
+        };
+        let (clip, flip) = match &view_clip {
+            Some(id) => (id.as_str(), false),
+            None => ("idle", facing.left),
+        };
+        let r = self.body_clip_flipped(key, palette, clip, 0, size, flip).and_then(|f| f.opaque_bounds(OUTLINE_ALPHA));
         self.body_rects.insert(k, r);
         r
     }

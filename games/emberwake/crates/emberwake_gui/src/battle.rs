@@ -4489,9 +4489,10 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
         let (flash, shake) = flash_of(flashes, i, now, tuning, reduce || instant);
         let (fx, fy) = geo.foot(pos);
         let rest = geo.token_rect(pos, dx, dy);
-        // 3.8: the body's solid bounds of its idle frame 0 (animation frames do not move it; the side idle with the
-        // facing's left/right, also while it faces up or down); no body: the letter plate.
-        let body_rect = match body.as_deref().and_then(|k| cx.art.body_bounds(k, &palette, tp, facing.left)) {
+        // 3.8: the body's solid bounds of its idle frame 0 (animation frames do not move it); DIR4-HB: in the facing's
+        // view (the front or back idle while it faces down or up, else the side idle with its left/right); no body:
+        // the letter plate.
+        let body_rect = match body.as_deref().and_then(|k| cx.art.body_bounds_facing(k, &palette, tp, facing)) {
             Some(bb) => Rect::new(rest.x + bb.x, rest.y + bb.y, bb.w, bb.h),
             None => rest.inset(4),
         };
@@ -5436,6 +5437,52 @@ mod tests {
         assert!(m.w > 0 && m.h > 0, "the southern unit's head reaches into the northern one's rect");
         assert_eq!(aegis_ui::ui::hit(&b.w, (m.x + m.w / 2, m.y + m.h / 2)), Some(Action::UnitClick(south)), "the unit in front wins");
         assert_eq!(aegis_ui::ui::hit(&b.w, (rn.x + rn.w / 2, rn.y + 1)), Some(Action::UnitClick(north)), "the unit behind still clicks on its head");
+    }
+
+    /// DIR4-HB: on the Stage a unit facing down or up is hit by its front or back `idle` frame (`body_bounds_facing`;
+    /// the side idle for a body without that view row): its widget rect is its cell joined with that frame's solid
+    /// bounds, and the frame's topmost solid pixel clicks it.
+    #[test]
+    fn stage_clicks_follow_a_unit_facing_up_or_down() {
+        use aegis_ui::canvas::{Rect, OUTLINE_ALPHA};
+        let (mut cx, mut g, mut b) = ambush(json!("stage"));
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let geo = Geom::new(View::Stage, &cx.tuning.value);
+        let (h, pos, body, palette) = {
+            let s = b.host.session.as_ref().unwrap();
+            let h = s.w.allies[0];
+            (h, s.w.grid.pos(h).unwrap(), cx.art.first_body(&crate::battle::body_keys(&s.art[h], &s.w.units[h])).expect("the hero has a body"), s.palettes.get(h).cloned().unwrap_or_default())
+        };
+        let viewed = [Look::Down, Look::Up].map(|view| cx.art.clips(&body).and_then(|c| c.view_row("idle", view).map(|r| c.clips[r].id.clone())));
+        assert!(viewed.iter().any(|v| v.is_some()), "the hero's body has a front or back idle (DIR4-R2)");
+        // before the first change the tokens have no animations yet: catch them up to the session
+        let now = b.clock.now();
+        b.tokens.catch_up(b.host.session.as_ref().unwrap(), now, true, 300, false);
+        for (view, row) in [Look::Down, Look::Up].into_iter().zip(viewed) {
+            for left in [false, true] {
+                let f = Facing { view, left };
+                {
+                    let a = &mut b.tokens.anims[h];
+                    a.facing = f;
+                    a.planned = None;
+                    a.slide = None;
+                }
+                b.draw(&mut cx, &mut g, (-500, -500), true);
+                assert_eq!(b.tokens.anims[h].rest(), f, "the hero keeps the facing set");
+                let (clip, flip) = match &row {
+                    Some(id) => (id.clone(), false),
+                    None => ("idle".to_string(), left),
+                };
+                let bb = cx.art.body_bounds_facing(&body, &palette, geo.token_px, f).expect("solid pixels");
+                let frame = cx.art.body_clip_flipped(&body, &palette, &clip, 0, geo.token_px, flip).unwrap().clone();
+                assert_eq!(frame.opaque_bounds(OUTLINE_ALPHA), Some(bb), "{f:?}: the bounds of {clip}");
+                let tr = geo.token_rect(pos, 0, 0);
+                let want = crate::stage::unit_rect(geo.cell_rect(pos), Rect::new(tr.x + bb.x, tr.y + bb.y, bb.w, bb.h));
+                assert_eq!(rect_of(&b, &format!("unit.{h}")), want, "{f:?}: the widget follows the view's silhouette");
+                let top_x = (bb.x..bb.x + bb.w).find(|x| frame.px[((bb.y * frame.w + x) * 4 + 3) as usize] >= OUTLINE_ALPHA).unwrap();
+                assert_eq!(aegis_ui::ui::hit(&b.w, (tr.x + top_x, tr.y + bb.y)), Some(Action::UnitClick(h)), "{f:?}: the top of {clip} clicks the hero");
+            }
+        }
     }
 
     #[test]

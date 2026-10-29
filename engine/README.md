@@ -54,7 +54,9 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
   group has a Vignette player entry on the engine's sample reel.
 * **Stage pieces (STAGE1-E):** `Painter::ellipse_ring` (a 1 px ellipse outline, no fill), `Image::opaque_bounds(min_alpha)`
   (the box of solid pixels), `Art::body_bounds(key, palette, size, flip)` (the solid box of a body's fitted idle frame 0,
-  mirrored with flip, cached; a unit's hit rect on a stage).
+  mirrored with flip, cached; a unit's hit rect on a stage); DIR4-HB: `Art::body_bounds_facing(key, palette, size, facing)`
+  (the box of `idle`'s front or back row for a `Facing` down or up, never mirrored; the side idle, mirrored when left,
+  for a side facing or a body without that view row).
 * **Effects (FX1-E):** `aegis_ui::fx`: the effect clock with hit-stop (`Clock`), six primitives drawn in code as pure
   functions of the clock and a seed (`Projectile`, `Beam`, `Trail`, `Sparks`, `Flash`, `Ring`; `Effect` with start, layer,
   seed), the live list `Fx` (at most 32), the camera shake (`Shake`, presets jolt / heavy / toll / tremor / quake in
