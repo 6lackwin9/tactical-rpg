@@ -8,12 +8,15 @@ use rpgkit_data::Deck;
 use rpgkit_rules::ruleset::Ruleset;
 use rpgkit_rules::DeckRule;
 use rpgkit_world::state::{PartyState, UnitState};
-use rpgkit_world::{progression, save, Data, GameState};
+use rpgkit_world::{dialogue, progression, save, Data, GameState};
 use serde_json::{json, Value};
 
 /// The class path, in path order (every family unlocks at level 1).
 const PATH: [&str; 5] = ["d_one", "d_two", "d_three", "d_four", "d_ward"];
 const SLOTS: (i32, i32, i32) = (3, 2, 1);
+/// The STR the two slottable passives give (the dialogue check's case).
+const BRACED: i64 = 7;
+const SPARE: i64 = 11;
 
 fn with_ids(w: &str, rows: Value) -> Value {
     let rows = rows
@@ -49,8 +52,8 @@ fn data() -> Data {
             {"id": "d_far", "name": "d_far", "kind": "ATTACK", "level": 1, "blocks": 1, "learned_only": true, "target_mode": "ENEMY"}
         ],
         "passives": [
-            {"id": "d_braced", "name": "Braced", "slot": "passive", "effects": []},
-            {"id": "d_spare", "name": "Spare", "slot": "passive", "effects": []},
+            {"id": "d_braced", "name": "Braced", "slot": "passive", "effects": [{"type": "stat", "stat": "STR", "value": BRACED}]},
+            {"id": "d_spare", "name": "Spare", "slot": "passive", "effects": [{"type": "stat", "stat": "STR", "value": SPARE}]},
             {"id": "d_anvil", "name": "Anvil", "slot": "keystone", "effects": []},
             {"id": "d_innate", "name": "Innate", "effects": []}
         ],
@@ -61,9 +64,14 @@ fn data() -> Data {
         "rulesets": [{"id": "timeline", "name": "Timeline", "rules": ["round_intent", "deck"], "basics": ["move", "rest", "strike", "active_guard"],
             "deck_slots": {"active": SLOTS.0, "passive": SLOTS.1, "keystone": SLOTS.2}}]
     });
-    let worlds = json!({"w": {"manifest": {"id": "w", "start_location": "camp", "start_party": ["hero"]}, "own": {
-        "locations": with_ids("w", json!([{"id": "camp", "name": "Camp"}]))
-    }}});
+    let worlds = json!({
+        "w": {"manifest": {"id": "w", "start_location": "camp", "start_party": ["hero"]}, "own": {
+            "locations": with_ids("w", json!([{"id": "camp", "name": "Camp"}]))
+        }},
+        "tw": {"manifest": {"id": "tw", "start_location": "camp", "start_party": ["hero"], "ruleset": "timeline"}, "own": {
+            "locations": with_ids("tw", json!([{"id": "camp", "name": "Camp"}]))
+        }}
+    });
     Data::from_values(&catalog, &worlds, &json!({}))
 }
 
@@ -197,4 +205,25 @@ fn build_in_slots_the_members_passives_and_actives() {
     // None is `build`
     let (a, b) = (progression::build_in(&d, &member("hero"), None).unwrap().unit, progression::build(&d, &member("hero")).unwrap().unit);
     assert_eq!((&a.passives, a.active_families(), &a.known_skills), (&b.passives, b.active_families(), &b.known_skills));
+}
+
+/// The RULESET1-D review (D3 out of battle): a dialogue stat check builds the members as the played world fights, so
+/// under its deck rule an unslotted passive does not count; a classic world counts every passive (`build` exactly).
+#[test]
+fn a_dialogue_stat_check_counts_only_slotted_passives_under_the_deck_rule() {
+    let d = data();
+    assert!(d.ruleset("w").is_classic() && !d.ruleset("tw").is_classic(), "w classic, tw timeline");
+    let mut m = member("hero");
+    m.deck = deck(json!({"passive": ["d_braced"]}));
+    let str_of = |rule: Option<&DeckRule>| {
+        let u = progression::build_in(&d, &m, rule).expect("built").unit;
+        let ctx = u.weapon_context();
+        u.stats.effective("STR", ctx.as_deref(), "") as i64
+    };
+    let (classic, decked) = (str_of(None), str_of(Some(&rule(&d))));
+    assert_eq!(classic - decked, SPARE, "only the unslotted passive's STR is gone under the deck rule");
+    let mut gs = state(&d, m.clone());
+    assert_eq!(dialogue::best_stat(&d, &gs, "STR"), classic, "a classic world counts every passive");
+    gs.world_id = "tw".into();
+    assert_eq!(dialogue::best_stat(&d, &gs, "STR"), decked, "the deck world counts the slotted ones only");
 }

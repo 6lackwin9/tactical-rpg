@@ -73,11 +73,11 @@ fn enraged_enemies_show_their_plan_and_empty_ones_hold_or_arrive() {
     let d = data();
     let s = planned(&d);
     let e = s.enemy_intents()[0].unit;
-    let raged = intent::intent_of(&s.w, e, &s.resolver.scheduled, &s.on_grid_at_schedule, true);
+    let raged = intent::intent_of(&s.w, e, &s.resolver.scheduled, &s.on_grid_at_schedule, &s.range_reveals, true);
     assert!(raged.revealed && raged.enraged && raged.readers.is_empty() && !raged.plan.is_empty());
-    let idle = intent::intent_of(&s.w, e, &[], &[e], false);
+    let idle = intent::intent_of(&s.w, e, &[], &[e], &[], false);
     assert_eq!((idle.line.kind, idle.line.blocks, idle.line.skill.as_str()), (IDLE, (0, 0), ""));
-    let arriving = intent::intent_of(&s.w, e, &[], &[], false);
+    let arriving = intent::intent_of(&s.w, e, &[], &[], &[], false);
     assert_eq!(arriving.line.kind, ARRIVING, "not on the grid when the round was scheduled");
 }
 

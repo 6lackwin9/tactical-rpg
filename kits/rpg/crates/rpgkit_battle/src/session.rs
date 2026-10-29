@@ -221,6 +221,9 @@ pub struct Session {
     pub plan_confirmed: bool,
     /// The active enemies on the grid when this round's enemies were scheduled (IntentRules: idle vs arriving).
     pub on_grid_at_schedule: Vec<UnitId>,
+    /// RULESET1 V4: each enemy a foresight range covered when this round's enemies were scheduled, with its readers
+    /// (`measure_reveals`; empty in classic).
+    pub range_reveals: Vec<(UnitId, Vec<UnitId>)>,
     /// Every round so far, the current one last (the round archive, for reviewing past rounds).
     pub history: Vec<RoundRecord>,
     /// Art key per unit (ContentFactory.art_of: the unit's own art, else its class's, else "unit").
@@ -454,6 +457,7 @@ impl Session {
             outcome: String::new(),
             plan_confirmed: false,
             on_grid_at_schedule: Vec::new(),
+            range_reveals: Vec::new(),
             history: Vec::new(),
             art,
             palettes,
@@ -513,6 +517,7 @@ impl Session {
         self.plan_confirmed = false;
         self.on_grid_at_schedule = self.w.enemies.iter().copied().filter(|&e| self.w.units[e].is_active() && self.w.has(e)).collect();
         self.schedule_enemy_ai();
+        self.measure_reveals();
         let start = self.snapshot();
         self.history.push(RoundRecord { round, actions: self.resolver.scheduled.clone(), snapshots: vec![start] });
         self.feed(|m, s| if m.live { m.round_started(s) });
@@ -625,7 +630,7 @@ impl Session {
             return Vec::new();
         }
         let enraged: Vec<UnitId> = self.w.enemies.iter().copied().filter(|&e| self.is_enraged(e)).collect();
-        let mut out = crate::intent::intents(&self.w, &self.resolver.scheduled, &self.on_grid_at_schedule, &enraged);
+        let mut out = crate::intent::intents(&self.w, &self.resolver.scheduled, &self.on_grid_at_schedule, &self.range_reveals, &enraged);
         for r in out.iter_mut() {
             r.morale_state = self.morale_state_of(r.unit);
             r.morale_group = self.morale_group_of(r.unit);
@@ -642,7 +647,7 @@ impl Session {
         }
         let enraged: Vec<UnitId> = self.w.enemies.iter().copied().filter(|&e| self.is_enraged(e)).collect();
         let plan = self.is_planning().then_some(&self.plan);
-        let mut out = crate::intent::round_intents(&self.w, plan, &self.resolver.scheduled, &self.on_grid_at_schedule, &enraged);
+        let mut out = crate::intent::round_intents(&self.w, plan, &self.resolver.scheduled, &self.on_grid_at_schedule, &self.range_reveals, &enraged);
         for r in out.iter_mut().filter(|r| self.w.enemies.contains(&r.unit)) {
             r.morale_state = self.morale_state_of(r.unit);
             r.morale_group = self.morale_group_of(r.unit);
@@ -900,7 +905,15 @@ impl Session {
         self.resolver.scheduled.clear();
         self.plan = Plan::new();
         self.schedule_enemy_ai();
+        self.measure_reveals();
         self.refresh_archive();
+    }
+
+    /// RULESET1 V4 (the RULESET1-V review): measures the foresight-range reveals as the round's enemy plan is scheduled
+    /// (`intent::range_reveals`); the tells read them for the whole round, so its playback never changes a reveal.
+    /// Called after every scheduling of the enemy side (a test that schedules by hand calls it too).
+    pub fn measure_reveals(&mut self) {
+        self.range_reveals = crate::intent::range_reveals(&self.w);
     }
 
     /// CombatEncounter.schedule_enemy_ai: drafts every enemy on the field into one shared plan, re-drafts broken
