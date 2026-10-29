@@ -1,6 +1,7 @@
 //! The encounter rules a battle runs under (scripts/combat/session/): EncounterObjectives (rout, hold, escape, slay,
 //! guests and protect), EncounterPhases (boss phases: hp_below and round triggers, line / wave / status / ai /
-//! enrage effects, and HOOKS1's `deck` effect under the rule deck; PHASEFOLD: the reinforcement wave as an `arrival` phase, and the fold of the retired `wave_*`
+//! enrage effects, HOOKS1's `deck` effect under the rule deck, ENCOUNTER2's `kill` effect and phase groups; PHASEFOLD:
+//! the reinforcement wave as an `arrival` phase, and the fold of the retired `wave_*`
 //! fields) and EncounterMorale (enemy groups that break and surrender). Runtime parts only; validation stays
 //! with the content tools. The session calls them at the same points CatalogEncounter does.
 
@@ -304,6 +305,19 @@ pub struct PhaseDef {
     pub effects: Vec<Obj>,
 }
 
+/// ENCOUNTER2 P1: the phase effect that kills named units (`units` refs, `by` a ref or "", `within` tiles of `by`, 0 =
+/// anywhere) and its keys.
+pub const KILL_EFFECT: &str = "kill";
+pub const KILL_EFFECT_KEYS: [&str; 4] = ["type", "units", "by", "within"];
+/// P1 (content checks): a kill names 1 to KILL_MAX_UNITS refs; `within` is 0..=KILL_MAX_WITHIN tiles.
+pub const KILL_MAX_UNITS: usize = 6;
+pub const KILL_MAX_WITHIN: i32 = 11;
+/// ENCOUNTER2-K ruling (user-confirmed 2026-10-29, decision "ENCOUNTER2-HA and -K answers"; flip here): a phase `kill`
+/// takes an `unkillable` unit down too (unkillable guards against combat damage; a scripted kill is an authored story
+/// beat). With false, `World::damage`'s S1 rule leaves such a unit at 1 HP (its SPARED cell follows the kill's cell).
+/// Each session starts from it (`Session::kill_past_unkillable`).
+pub const KILL_OVERRIDES_UNKILLABLE: bool = true;
+
 impl PhaseDef {
     pub fn effects_of<'a>(&'a self, kind: &'a str) -> impl Iterator<Item = &'a Obj> + 'a {
         self.effects.iter().filter(move |fx| value::string(fx, "type", "") == kind)
@@ -439,6 +453,12 @@ pub fn parse_phases(raw: &[Value]) -> Vec<PhaseDef> {
                         rpgkit_data::SHAKE_EFFECT => {
                             out.insert("preset".into(), Value::from(value::string(fx, "preset", "")));
                         }
+                        // ENCOUNTER2 P1: the named units fall (within `within` tiles of `by` when > 0)
+                        KILL_EFFECT => {
+                            out.insert("units".into(), Value::from(value::strings(fx, "units")));
+                            out.insert("by".into(), Value::from(value::string(fx, "by", "")));
+                            out.insert("within".into(), Value::from(value::int(fx, "within", 0)));
+                        }
                         _ => {}
                     }
                     out
@@ -464,11 +484,19 @@ pub struct Phases {
     /// HOOKS1 DU1: the families an automatic deck held when a deck effect first named its actives (the ones an added
     /// family may push out).
     auto_fill: IndexMap<UnitId, Vec<String>>,
+    /// ENCOUNTER2 P2: phase id -> its `group` (only phases that name one; empty in classic).
+    groups: IndexMap<String, String>,
 }
 
 impl Phases {
     pub fn create(raw: &[Value]) -> Self {
-        Self { phases: parse_phases(raw), ..Default::default() }
+        let groups = raw.iter().filter_map(Value::as_object).map(|p| (value::string(p, "id", ""), value::string(p, "group", ""))).filter(|(_, g)| !g.is_empty()).collect();
+        Self { phases: parse_phases(raw), groups, ..Default::default() }
+    }
+
+    /// ENCOUNTER2 P2: the group of phase `id` ("" = none).
+    pub fn group_of(&self, id: &str) -> &str {
+        self.groups.get(id).map_or("", String::as_str)
     }
 
     pub fn phase(&self, id: &str) -> Option<&PhaseDef> {
@@ -489,7 +517,7 @@ impl Phases {
     pub fn arrival_due(&self, round: i32, block: i32) -> Option<String> {
         self.phases
             .iter()
-            .find(|p| p.is_arrival() && !self.fired.contains_key(&p.id) && value::int(&p.trigger, "round", 0) == round && value::int(&p.trigger, "block", 0) == block && !self.units_of(&p.id).is_empty())
+            .find(|p| p.is_arrival() && !self.fired.contains_key(&p.id) && !self.dropped.contains(&p.id) && value::int(&p.trigger, "round", 0) == round && value::int(&p.trigger, "block", 0) == block && !self.units_of(&p.id).is_empty())
             .map(|p| p.id.clone())
     }
 
@@ -558,9 +586,17 @@ impl Phases {
         self.phases.iter().find(|p| self.due.contains(&p.id)).map(|p| p.id.clone())
     }
 
+    /// Marks `id` fired; ENCOUNTER2 P2: every unfired phase of its group drops (no longer due, never fires).
     pub fn mark_fired(&mut self, id: &str, round: i32, block: i32) {
         self.due.retain(|d| d != id);
         self.fired.insert(id.to_string(), (round, block));
+        let group = self.group_of(id).to_string();
+        if group.is_empty() {
+            return;
+        }
+        let mates: Vec<String> = self.phases.iter().filter(|p| self.group_of(&p.id) == group && !self.fired.contains_key(&p.id) && !self.dropped.contains(&p.id)).map(|p| p.id.clone()).collect();
+        self.due.retain(|d| !mates.contains(d));
+        self.dropped.extend(mates);
     }
 
     /// Rule 5: live profiles = base + the ai settings of every phase fired before `round` (or at its start).

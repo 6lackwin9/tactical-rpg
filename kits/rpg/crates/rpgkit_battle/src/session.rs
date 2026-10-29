@@ -252,6 +252,9 @@ pub struct Session {
     pub stay: Option<StayBehind>,
     /// ENCOUNTER2 S2: the verdict when the last round ends with none (`timeout_outcome`: fled, or lost).
     pub timeout_outcome: String,
+    /// ENCOUNTER2-K: whether a phase `kill` takes an `unkillable` unit down (from encounter::KILL_OVERRIDES_UNKILLABLE,
+    /// the ruling's one switch; a test may flip it on a session).
+    pub kill_past_unkillable: bool,
     /// S1: how many of `w.spared` have their log cell.
     spared_logged: usize,
     /// Unit -> its hero key (a party member id or a world character), when it has one.
@@ -473,6 +476,7 @@ impl Session {
             last_popped: None,
             stay,
             timeout_outcome,
+            kill_past_unkillable: encounter::KILL_OVERRIDES_UNKILLABLE,
             spared_logged: 0,
             hero_keys,
             unit_keys,
@@ -747,7 +751,8 @@ impl Session {
             .collect()
     }
 
-    /// Fires phase `id` at [round, block] (block 0 = round start): wave, status, enrage, then marked fired.
+    /// Fires phase `id` at [round, block] (block 0 = round start): wave, status, enrage, the phase's cell, then each
+    /// `kill` (ENCOUNTER2 P1); marked fired last (its group's unfired phases drop, P2).
     fn fire_phase(&mut self, id: &str, round: i32, block: i32) {
         let Some(p) = self.phases.phase(id).cloned() else { return };
         // The actor: an hp_below trigger's unit, else the encounter.
@@ -808,7 +813,58 @@ impl Session {
         let line = p.effects_of("line").last().map(|fx| value::string(fx, "text", "")).unwrap_or_default();
         self.append(crate::log::Entry::event(round, block, &actor, false, &p.name, "Phase", "PHASE", &line, &parts.join(", ")));
         self.events.push(format!("{}: {}{}", p.name, line, if parts.is_empty() { String::new() } else { format!(" ({})", parts.join(", ")) }));
+        // ENCOUNTER2 P1: kill effects after the phase's own cell, each with its cell (none in classic)
+        for fx in p.effects_of(encounter::KILL_EFFECT) {
+            self.phase_kill(fx, &p.name, round, block);
+        }
         self.phases.mark_fired(id, round, block);
+    }
+
+    /// ENCOUNTER2 P1: a phase `kill` effect: every active, placed, unreserved unit of its refs (never a hero; with
+    /// `within` > 0 only those at most that many tiles from the `by` unit, the first placed, unreserved unit of its ref,
+    /// none without one) drops to 0 HP through `World::kill` (journaled; past `unkillable` per `kill_past_unkillable`).
+    /// One EVENT cell (log::kill_entry; actor the `by` unit, else the encounter) when the kill took any HP; an
+    /// unkillable unit it left at 1 HP (the switch off) gets its SPARED cell right after. A scripted kill is nobody's:
+    /// no unit is credited (the metrics count the HP as the struck units' `scripted` loss) and no trigger event is
+    /// raised (HOOKS1-E's `kill` and `ally_downed` come only from actions); fates read Killed and morale counts the
+    /// deaths at the block end as any death.
+    fn phase_kill(&mut self, fx: &Obj, phase_name: &str, round: i32, block: i32) {
+        let by_ref = value::string(fx, "by", "");
+        let by = if by_ref.is_empty() { None } else { self.units_of_ref(&by_ref).into_iter().find(|&c| self.w.has(c) && !self.is_reserved(c)) };
+        let within = value::int(fx, "within", 0);
+        let mut victims: Vec<UnitId> = Vec::new();
+        for r in value::strings(fx, "units") {
+            for c in self.units_of_ref(&r) {
+                let hero = self.w.allies.contains(&c) && !self.guests.contains(&c);
+                if hero || !self.w.has(c) || self.is_reserved(c) || victims.contains(&c) {
+                    continue;
+                }
+                if within > 0 && !by.is_some_and(|b| self.w.dist(b, c) <= within) {
+                    continue;
+                }
+                victims.push(c);
+            }
+        }
+        let mut struck: Vec<(UnitId, i32)> = Vec::new();
+        for c in victims {
+            let before = self.w.units[c].hp;
+            self.w.kill(c, self.kill_past_unkillable);
+            let lost = before - self.w.units[c].hp;
+            if lost > 0 {
+                struck.push((c, lost));
+            }
+        }
+        if struck.is_empty() {
+            return;
+        }
+        let (actor, ally) = match by {
+            Some(b) => (self.w.units[b].name.clone(), self.w.allies.contains(&b)),
+            None => (self.def.name.clone(), false),
+        };
+        let entry = crate::log::kill_entry(&self.w, &actor, ally, phase_name, &struck, round, block);
+        self.events.push(entry.detail.clone());
+        self.append(entry);
+        self.log_spared(round, block);
     }
 
     /// Phase ai effects, then the morale flee bonus, on the live profiles (rebuilt from the authored ones).

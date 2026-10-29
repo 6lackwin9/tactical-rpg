@@ -5,7 +5,7 @@
 use super::View;
 use crate::source::content;
 use aegis_core::json::{self, gstr, Dict};
-use rpgkit_battle::encounter::{ARRIVAL, ARRIVAL_BLOCK, ARRIVAL_ROUND, FALLBACKS, PICK_DEFAULTS, STAY_HOLD, STAY_MODES, STAY_STAND, STAY_THEN};
+use rpgkit_battle::encounter::{ARRIVAL, ARRIVAL_BLOCK, ARRIVAL_ROUND, FALLBACKS, KILL_EFFECT, KILL_EFFECT_KEYS, KILL_MAX_UNITS, KILL_MAX_WITHIN, PICK_DEFAULTS, STAY_HOLD, STAY_MODES, STAY_STAND, STAY_THEN};
 use rpgkit_battle::grid::{rows_valid, terrain_walkable, Grid, TerrainTable, GRID_H, GRID_W, V2};
 use rpgkit_rules::status;
 use serde_json::{json, Value};
@@ -168,9 +168,12 @@ const DEFAULT_STATUS_ROUNDS: i64 = 2;
 const ENRAGE_POWER_MIN: i64 = 1;
 const ENRAGE_POWER_MAX: i64 = 25;
 const DEFAULT_ENRAGE_POWER: i64 = 20;
-/// The phase effects (BOSS1; HOOKS1 DU1 adds `deck`; FX1 5.1 `shake`).
-const EFFECTS: [&str; 7] = ["line", "wave", "status", "ai", "enrage", rpgkit_data::DECK_EFFECT, rpgkit_data::SHAKE_EFFECT];
-const PHASE_KEYS: [&str; 5] = ["id", "name", "trigger", "effects", "pause_autoplay"];
+/// The phase effects (BOSS1; HOOKS1 DU1 adds `deck`; FX1 5.1 `shake`; ENCOUNTER2 P1 `kill`).
+const EFFECTS: [&str; 8] = ["line", "wave", "status", "ai", "enrage", rpgkit_data::DECK_EFFECT, rpgkit_data::SHAKE_EFFECT, KILL_EFFECT];
+/// ENCOUNTER2 P2 adds `group`.
+const PHASE_KEYS: [&str; 6] = ["id", "name", "trigger", "effects", "pause_autoplay", "group"];
+/// ENCOUNTER2 P2: a group is 1 to 24 characters a-z, 0-9 or _.
+const MAX_GROUP: usize = 24;
 const AI_ROLES: [&str; 4] = ["AGGRESSOR", "SKIRMISHER", "SNIPER", "SUPPORT"];
 /// HOOKS1 AT1 adds SOFTEST and TOUGHEST (read under the rule ai_tactics).
 const AI_TARGET_PREFS: [&str; 4] = ["NEAREST", "WEAKEST", "SOFTEST", "TOUGHEST"];
@@ -195,6 +198,7 @@ fn effect_keys(kind: &str) -> &'static [&'static str] {
         "ai" => &["type", "unit", "role", "target_pref", "reckless", "flee_ratio", "defend_below", "heal_below", "tactics"],
         rpgkit_data::DECK_EFFECT => &rpgkit_data::DECK_EFFECT_KEYS,
         rpgkit_data::SHAKE_EFFECT => &rpgkit_data::SHAKE_EFFECT_KEYS,
+        KILL_EFFECT => &KILL_EFFECT_KEYS,
         _ => &["type", "unit", "power"],
     }
 }
@@ -277,9 +281,17 @@ pub fn phase_problems(e: &Dict, ref_ok: &dyn Fn(&str) -> bool) -> Vec<String> {
         if phase.get("pause_autoplay").is_some_and(|b| !b.is_boolean()) {
             errors.push(format!("Phase '{tag}': pause_autoplay must be true or false."));
         }
+        if let Some(g) = phase.get("group") {
+            let ok = g.as_str().is_some_and(|s| (1..=MAX_GROUP).contains(&s.len()) && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'));
+            if !ok {
+                errors.push(format!("Phase '{tag}': the group is 1 to {MAX_GROUP} characters a-z, 0-9 or _."));
+            }
+        }
         let arrival = is_arrival(phase);
-        errors.extend(trigger_errors(&tag, json::get(phase, "trigger"), &enemies, max_rounds, total_blocks));
+        // ENCOUNTER2 P5: an hp_below unit may be an enemy or a phase-wave ref (the message is Godot's)
+        errors.extend(trigger_errors(&tag, json::get(phase, "trigger"), &known, max_rounds, total_blocks));
         errors.extend(effects_errors(&tag, json::get(phase, "effects"), &known, ref_ok, arrival));
+        errors.extend(kill_errors(&tag, phase, e, &known));
         errors.extend(enrage_errors(&tag, phase, &enemies));
         if arrival {
             errors.extend(arrival_shape_errors(&tag, phase, index));
@@ -437,6 +449,47 @@ fn wave_errors(tag: &str, fx: &Dict, ref_ok: &dyn Fn(&str) -> bool, arrival: boo
     }
     if fx.get("label").is_some_and(|l| !l.is_string()) {
         errors.push(format!("Phase '{tag}': the wave label must be text."));
+    }
+    errors
+}
+
+/// ENCOUNTER2 P1 and section 6: each `kill` effect of `phase`: 1 to KILL_MAX_UNITS refs, each an enemy, a phase-wave
+/// ref or a guest, never a hero (a `party` ref) or a protected guest; `by` "" or a unit of the encounter; `within`
+/// 0..=KILL_MAX_WITHIN, and above 0 only with a `by`. One error per mistake.
+fn kill_errors(tag: &str, phase: &Dict, e: &Dict, known: &[String]) -> Vec<String> {
+    let mut errors = Vec::new();
+    let (party, guests, protect) = (strings(json::get(e, "party")), strings(json::get(e, "guests")), strings(json::get(e, "protect")));
+    for fx in dicts(json::get(phase, "effects")).into_iter().filter(|fx| json::s(fx, "type") == KILL_EFFECT) {
+        let units = match fx.get("units") {
+            Some(Value::Array(a)) => a.clone(),
+            _ => Vec::new(),
+        };
+        if units.is_empty() || units.len() > KILL_MAX_UNITS {
+            errors.push(format!("Phase '{tag}': a kill names 1 to {KILL_MAX_UNITS} units."));
+        }
+        for u in &units {
+            let r = gstr(u);
+            if !u.is_string() {
+                errors.push(format!("Phase '{tag}': kill unit '{r}' is not in this encounter."));
+            } else if party.contains(&r) {
+                errors.push(format!("Kill names hero '{r}'."));
+            } else if protect.contains(&r) {
+                errors.push(format!("Kill names the protected guest '{r}'."));
+            } else if !known.contains(&r) && !guests.contains(&r) {
+                errors.push(format!("Phase '{tag}': kill unit '{r}' is not in this encounter."));
+            }
+        }
+        let by = fx.get("by").cloned().unwrap_or(Value::from(""));
+        let by_ref = gstr(&by);
+        if !by.is_string() || !(by_ref.is_empty() || party.contains(&by_ref) || known.contains(&by_ref) || guests.contains(&by_ref)) {
+            errors.push(format!("Phase '{tag}': kill by '{by_ref}' is not in this encounter."));
+        }
+        let within = fx.get("within").cloned().unwrap_or(json::int(0));
+        if !whole(&within) || !(0..=KILL_MAX_WITHIN as i64).contains(&json::to_int(&within)) {
+            errors.push(format!("Phase '{tag}': within must be 0..{KILL_MAX_WITHIN}."));
+        } else if json::to_int(&within) > 0 && by_ref.is_empty() {
+            errors.push(format!("Phase '{tag}': a kill within tiles needs a by unit."));
+        }
     }
     errors
 }

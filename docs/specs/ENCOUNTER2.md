@@ -145,6 +145,18 @@ founder kills Nemeth and his guard, then fights the cell alone as a monstrosity.
   group; tells show rogues in their own colour. Node 20 needs it only if `within` leaves survivors.
 - P5. Triggers: an `hp_below` unit may be an enemy, a phase-wave ref or a swap `into` ref.
 
+As built (ENCOUNTER2-K, 2026-10-29): P1, P2 and P5 (the swap `into` part comes with X). A kill also takes an
+`unkillable` unit down (user-confirmed 2026-10-29, decision "ENCOUNTER2-HA and -K answers"; one switch,
+`encounter::KILL_OVERRIDES_UNKILLABLE`, copied to `Session::kill_past_unkillable`; off: the unit keeps 1 HP and its
+SPARED cell follows the kill's); it credits no unit (the metrics count the HP as the struck units' `scripted` loss,
+`BattleMetrics::scripted`, part of the HP balance) and raises no HOOKS1-E event (user-confirmed: `kill` and
+`ally_downed` come only from actions). The kill's cell (subtype `Kill`) follows the phase's own cell; it reads
+"`{name}` falls." for one unit, "A, B and C fall." for more; an effect that takes no HP logs nothing. `by` resolves
+to the first placed, unreserved unit of its ref and `within` measures from it; with no such unit (user-confirmed) a
+`within` > 0 kill takes nobody; the checks add "a kill within tiles needs a by unit", an unknown ref error and the
+`by` ref error. When two phases of a group are due at once, the first in list order fires. Groups live in `Phases`
+(not `PhaseDef`).
+
 ## 5. Connected rooms (Q-60) `[kit hook]`, later than the slice
 
 Room uses the user named (2026-10-25, Q-22): the hub siege (each facility a room; a lost room costs its facility a

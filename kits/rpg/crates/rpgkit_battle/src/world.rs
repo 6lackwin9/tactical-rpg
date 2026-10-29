@@ -304,8 +304,20 @@ impl World {
     /// Combatant.take_damage on unit `c` (journaled). Returns the damage dealt. ENCOUNTER2 S1: an unkillable unit keeps
     /// 1 HP (the first time it would have fallen is recorded in `spared`).
     pub fn damage(&mut self, c: UnitId, amount: i32, mitigated: bool) -> i32 {
+        self.damage_as(c, amount, mitigated, false)
+    }
+
+    /// ENCOUNTER2 P1: a phase `kill` on unit `c`: all its HP through `damage`'s path (journaled); `past_unkillable`
+    /// (encounter::KILL_OVERRIDES_UNKILLABLE) takes an unkillable unit down too, recording nothing in `spared`.
+    /// Returns the HP it lost.
+    pub fn kill(&mut self, c: UnitId, past_unkillable: bool) -> i32 {
+        let hp = self.units[c].hp;
+        self.damage_as(c, hp, true, past_unkillable)
+    }
+
+    fn damage_as(&mut self, c: UnitId, amount: i32, mitigated: bool, past_unkillable: bool) -> i32 {
         let dealt = self.units[c].take_damage(amount, mitigated);
-        if self.units[c].hp == 0 && self.unkillable.contains(&c) {
+        if self.units[c].hp == 0 && !past_unkillable && self.unkillable.contains(&c) {
             self.units[c].hp = 1;
             if !self.spared.contains(&c) {
                 self.spared.push(c);

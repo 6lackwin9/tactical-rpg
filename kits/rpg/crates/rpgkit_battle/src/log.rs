@@ -317,6 +317,36 @@ pub fn trigger_entry(w: &World, f: &crate::trigger::Fired, line: &str, round: i3
     e
 }
 
+/// ENCOUNTER2 P1: the subtype of a phase `kill` effect's cell (the metrics credit no unit: the HP it took is the
+/// struck units' `scripted` loss, part of the HP balance).
+pub const PHASE_KILL: &str = "Kill";
+
+/// ENCOUNTER2 P1 (engine-only): the EVENT cell of a phase `kill` effect over the units it took HP from (`struck`: unit,
+/// HP lost): `actor` (the `by` unit, else the encounter), the phase's name as the skill, "`{names}` fall." over the ones
+/// that fell ("No one falls." when an unkillable unit was all it struck) as the detail, the fallen count as `value` and
+/// all the HP taken as `damage`; one struck unit is also the target.
+pub fn kill_entry(w: &World, actor: &str, actor_is_ally: bool, phase: &str, struck: &[(usize, i32)], round: i32, block: i32) -> Entry {
+    let fallen: Vec<&str> = struck.iter().filter(|&&(c, _)| !w.units[c].is_alive()).map(|&(c, _)| w.units[c].name.as_str()).collect();
+    let detail = if fallen.is_empty() { "No one falls.".to_string() } else { kill_line(&fallen) };
+    let mut e = Entry::event(round, block, actor, actor_is_ally, phase, PHASE_KILL, "KILLED", &detail, &format!("{} killed", fallen.len()));
+    if let [(c, _)] = struck {
+        e.target = w.units[*c].name.clone();
+        e.target_is_ally = w.allies.contains(c);
+    }
+    e.value = fallen.len() as i32;
+    e.damage = struck.iter().map(|&(_, lost)| lost).sum();
+    e
+}
+
+/// ENCOUNTER2 P1: "Nemeth and Guard fall." (a list: "A, B and C fall."; one unit: "Nemeth falls.").
+pub fn kill_line(names: &[&str]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => format!("{one} falls."),
+        [rest @ .., last] => format!("{} and {last} fall.", rest.join(", ")),
+    }
+}
+
 /// HOOKS1 HC1: the subtype of an HP cost's cell (the metrics count it as the payer's own loss).
 pub const HP_COST: &str = "HP Cost";
 
