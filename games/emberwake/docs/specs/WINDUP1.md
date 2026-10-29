@@ -331,6 +331,36 @@ jerked up (neck -55 degrees), dx -2, hind paws splayed; `dazed` head low (neck +
   the body's own rows already do (the priest's `windup` is its attack frame 1, whose mace head already touches the top;
   the mage's hat tip touches the top in every row today).
 
+### 7.6 As built (WINDUP1-R3, 2026-10-29)
+
+- The creatures' three rows (`rig.CREATURE_ROWS`: `windup`, `stagger`, `dazed`; section 4's frames, ms, `loop` and
+  `loop_from`) after today's rows on the four creature bodies: the kit's `crawler/base` and `beast/base`, the game's
+  Ash-Crawler and Render-Beast (`rig.crawler_clips`, `rig.quad_windups`; side rows only, the creatures have no view
+  drawings). Drawn through `rig.windup_rows` with flat pose keys (the crawler's head offset, ground point, neck bow,
+  legs, fangs, bubbles, antennae; the quadruped's body, neck, head, jaw, tail and one key per paw, so the intro lerps
+  every part from idle frame 0).
+- `windup` holds the attack's frame `strike - 1` pixel for pixel (X2 0 %): the crawler rearing, jaws open (attack 1),
+  the acid bubbling and the antennae twitching over the hold; the quadruped coiled on the haunches (attack 0), the tail
+  lashing (phase and +-6 degrees) over the hold. The holds bob as K1 (the crawler's head, the quadruped's body).
+- `stagger`: the crawler's head knocked back and down (-3, +4), jaws wide, the legs scrambling, then falling forward
+  into `dazed`; the quadruped's head jerked up (neck -55 degrees), dx -2, the hind paws splayed, the legs giving.
+  No flash, no effect colour.
+- `dazed`: the crawler's head 3 px above the ground (its underside), swaying dx 0.6 and 0.4 px up and down, the jaws
+  slack at 0.5; the quadruped's head low (neck +15, head +20 degrees, as numbers in the rig's angles, not offsets from
+  the stance), the tail down 30 degrees, bob +2, a sway of dx 0.6 px and the neck 3 degrees.
+- Readings: "bubbles at half speed" is a quarter rise up and back over the 8-frame loop (half the idle's travel per
+  loop; a half rise straight up would jump at the loop's seam); a crawler without a coil (`crawler/base`) lying flat
+  runs its whole length back along the ground, so its slump falls forward by `fit` px (2.2 for the base) to keep the
+  tail and its trailing legs inside the 48 px frame; the Render-Beast's stance already holds its neck at +14, so its
+  `dazed` reads low by bob +2, the head angle, the tail and the pitch rather than the neck.
+- Rig (generic): `dazed` and `windup_rows` take `sway` (the sin and cos keys and amounts; the humanoids' default
+  `rig.SWAY` is K4's dx 0.8, head_dy 0.5) and `steps['dazed']` (a key per frame); `windup` reads the hand only for the
+  buff and debuff effects (a creature's draw puts none in the frame's info).
+- Exporter: X1 binds the creatures (`variants.CREATURES`: the three rows, no other wind-up; else exit); the note "has
+  no wind-up rows yet" is gone (every rig body but the dummy prop has wind-up rows); the review board's holds row names
+  the wind-ups the body has. Checks: today's rows and clip entries pixel-identical to the sheets before the task,
+  palettes and widths unchanged, +3 rows a body; the new frames touch the frame's edge only where today's rows do.
+
 ## 8. Costs
 
 | Task | Size | Sessions |

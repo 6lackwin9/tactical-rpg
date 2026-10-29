@@ -594,6 +594,7 @@ WINDUPS = tuple(WINDUP_MS)
 STAGGER_MS, DAZED_MS = [60, 90, 110, 120, 160], [150] * 8
 REACTIONS = ('stagger', 'dazed')
 WINDUP_ROWS = WINDUPS + REACTIONS     # the six rows, in sheet order (K7)
+CREATURE_ROWS = ('windup',) + REACTIONS  # a creature's rows (section 4, A7: its skills are attacks), WINDUP1-R3
 LOOP_FROM = 3                         # the first looped frame of a wind-up (after its three intro frames)
 INTRO = (0.4, 0.75, 1.0)
 HOLD_BOB = (0.0, 0.5, 1.0, 0.5)
@@ -684,7 +685,7 @@ def windup(kind, ready, hold, draw, rest=SIDE_REST, shake=shake_dx, motes='hand'
         if kind == 'windup_heavy':
             shake(kw, TREMBLE[i])
         im = draw(kw)
-        hx, hy = im.info['hand']
+        hx, hy = im.info.get('hand', (0.0, 0.0))  # the buff and debuff effects need it (a creature's draw sets none)
         if kind == 'windup_buff' and motes == 'tip' and im.info.get('tip'):  # two motes circling the tip, opposite
             tx, ty = im.info['tip']; a = i * math.pi / 2
             overlay(im, [(tx + MOTE_ORBIT * math.cos(a), ty + MOTE_ORBIT * math.sin(a), GOLDEN),
@@ -700,29 +701,39 @@ def windup(kind, ready, hold, draw, rest=SIDE_REST, shake=shake_dx, motes='hand'
     return frames, list(WINDUP_MS[kind])
 
 
-def dazed(keys, draw):
-    """(frames, ms) of `dazed` (K4): the slumped `keys` swaying dx 0.8 sin and head_dy 0.5 cos over 8 frames."""
+SWAY = (('dx', 0.8), ('head_dy', 0.5))  # K4: the dazed sway, a key swinging sin and a key swinging cos (px)
+
+
+def dazed(keys, draw, sway=SWAY, steps=None):
+    """(frames, ms) of `dazed` (K4): the slumped `keys` swaying over 8 frames, sway[0]'s key by its amount times sin
+    and sway[1]'s times cos (the humanoids: dx 0.8 and head_dy 0.5 px; WINDUP1-R3, a creature names its own keys);
+    steps {key: eight values} sets a key per frame (the crawler's acid bubbles)."""
     out = []
+    (ks, a_s), (kc, a_c) = sway
     for i in range(8):
         t = i / 8 * 2 * math.pi
         kw = dict(keys)
-        kw['dx'] = kw.get('dx', 0.0) + 0.8 * math.sin(t)
-        kw['head_dy'] = kw.get('head_dy', 0.0) + 0.5 * math.cos(t)
+        kw[ks] = kw.get(ks, 0.0) + a_s * math.sin(t)
+        kw[kc] = kw.get(kc, 0.0) + a_c * math.cos(t)
+        for key, vals in (steps or {}).items():
+            kw[key] = vals[i]
         out.append(draw(kw))
     return out, list(DAZED_MS)
 
 
-def windup_rows(draw, ready, holds, stagger_keys, dazed_keys, rest=SIDE_REST, shake=shake_dx, motes='hand', steps=None):
+def windup_rows(draw, ready, holds, stagger_keys, dazed_keys, rest=SIDE_REST, shake=shake_dx, motes='hand', steps=None,
+                sway=SWAY):
     """The six WINDUP1 rows of one grip (WINDUP_ROWS order): {id: frames}, {id: ms}. holds: {wind-up id: hold keys}
     (a grip may leave a wind-up out; the screen falls back); stagger_keys: its first four keys (K3; frame 4 is dazed
     frame 0); dazed_keys: the slumped pose (K4); motes: windup's buff motes ('hand', 'off' or 'tip'); steps: {wind-up id:
-    windup's steps}."""
+    windup's steps, 'dazed': dazed's}; sway: dazed's (WINDUP1-R3: the creatures pass their own keys)."""
     A, T = {}, {}
+    steps = steps or {}
     for kind in WINDUPS:
         if kind in holds:
-            A[kind], T[kind] = windup(kind, ready, holds[kind], draw, rest, shake, motes, (steps or {}).get(kind))
-    dz, dzt = dazed(dazed_keys, draw)
-    first = dazed(dazed_keys, lambda k: k)[0][0]  # dazed frame 0's keys: the stagger ends in it
+            A[kind], T[kind] = windup(kind, ready, holds[kind], draw, rest, shake, motes, steps.get(kind))
+    dz, dzt = dazed(dazed_keys, draw, sway, steps.get('dazed'))
+    first = dazed(dazed_keys, lambda k: k, sway, steps.get('dazed'))[0][0]  # dazed frame 0's keys: the stagger ends in it
     A['stagger'], T['stagger'] = [draw(dict(k)) for k in stagger_keys] + [draw(first)], list(STAGGER_MS)
     A['dazed'], T['dazed'] = dz, dzt
     return A, T
@@ -958,7 +969,47 @@ def quad_clips(q):
           paws={n: (v[0] * 0.7, v[1] * 0.7) for n, v in sprawl.items()}),
         P(dx=0.5, bob=lie, pitch=0, neck_a=18, head_a=22, jaw=14, hurt=True, tail_a=0, paws=sprawl),
         P(dx=0.5, bob=lie, pitch=0, neck_a=18, head_a=24, jaw=12, hurt=True, tail_a=0, paws=sprawl)], [60, 140, 110, 100, 100, 600]
+    W, WT = quad_windups(q)  # WINDUP1-R3: windup, stagger, dazed after today's rows (K7)
+    A.update(W); T.update(WT)
     return A, T
+
+
+QUAD_PAWS = ('nf', 'ff', 'nh', 'fh')
+
+
+def quad_windups(q):
+    """WINDUP1-R3 (table 7.2, CREATURE_ROWS): quadruped `q`'s `windup`, `stagger` and `dazed` on windup_rows, as flat
+    pose keys (each paw a key of QUAD_PAWS, so the intro lerps them). windup: coiled on the haunches, the attack's
+    frame 0 exactly (its strike is 1), the tail lashing over the hold; stagger: the head jerked up (neck -55 degrees),
+    dx -2, the hind paws splayed; dazed: the head low (neck +15, head +20 degrees), the tail down, a slow sway."""
+    st = q['stance']; rest = st['paws']; bob, tail_a = st['bob'], q['tail_a']
+
+    def K(paws=None, **kw):
+        k = dict(dx=0.0, bob=bob, pitch=st['pitch'], neck_a=st['neck_a'], head_a=st['head_a'], jaw=0.0, tail=0.0, tail_a=tail_a)
+        k.update({n: tuple(rest.get(n, (0.0, 0.0))) for n in QUAD_PAWS})
+        k.update(paws or {}); k.update(kw)
+        return k
+
+    def draw(kw):
+        return quad_pose(q, dx=kw['dx'], bob=kw['bob'], pitch=kw['pitch'], neck_a=kw['neck_a'], head_a=kw['head_a'],
+                         jaw=kw['jaw'], paws={n: kw[n] for n in QUAD_PAWS}, tail=kw['tail'], tail_a=kw['tail_a'])
+
+    ready = K(bob=bob + 0.5, neck_a=st['neck_a'] - 2 * math.sin(-0.8), jaw=4.5)  # idle frame 0
+    hold = K(dx=-1, bob=bob + 2.0, pitch=st['pitch'] + 6, neck_a=12, head_a=18, jaw=4,
+             paws={'nh': (3.0, 0), 'fh': (3.5, 0), 'nf': (-1.5, 0), 'ff': (-1.0, 0)})        # = attack frame 0
+    splay = {'nh': (-3.5, 0.0), 'fh': (2.5, 0.5)}
+    stagger = [K(dx=-1.0, bob=bob - 0.5, pitch=-4, neck_a=-55, head_a=-10, jaw=30),           # the head jerked up
+               K(dx=-2.0, bob=bob, pitch=-3, neck_a=-55, head_a=-6, jaw=26,
+                 paws=dict(splay, nf=(-1.0, 1.5), ff=(-0.5, 0.5))),                           # hind paws splayed
+               K(dx=-2.0, bob=bob + 1.5, pitch=st['pitch'] + 2, neck_a=-12, head_a=6, jaw=16,
+                 paws=splay, tail_a=tail_a - 15),                                             # the legs give
+               K(dx=-1.5, bob=bob + 2.0, pitch=st['pitch'] + 3, neck_a=8, head_a=16, jaw=12,
+                 paws={'nh': (-2.0, 0.0), 'fh': (1.5, 0.0)}, tail_a=tail_a - 25)]
+    slump = K(dx=-1.0, bob=bob + 2.0, pitch=st['pitch'] + 3, neck_a=15, head_a=20, jaw=10,
+              paws={'nh': (-1.5, 0.0), 'fh': (1.0, 0.0)}, tail_a=tail_a - 30)
+    return windup_rows(draw, ready, {'windup': hold}, stagger, slump, rest={},
+                       steps={'windup': {'tail': [0.0, math.pi / 2, math.pi, 3 * math.pi / 2], 'tail_a': [tail_a, tail_a + 6, tail_a, tail_a - 6]}},
+                       sway=(('dx', 0.6), ('neck_a', 3.0)))
 
 
 # A crawler's proportions (px) and options. head_at: the raised head's rest spot; run: px of body along the ground
@@ -1150,4 +1201,35 @@ def crawler_clips(c):
             pose(path(0.5, 0.0), phase=0.1, jaw=0.4, bubbles=0.9,
                  fx=[(sx(hx + 13.5), hy + 2.5, 1.2, acid), (sx(hx + 12.0), hy + 4.0, 0.7, glow), (sx(hx + 14.1), hy + 0.5, 0.6, acid)]),
             pose(path(), jaw=0.2, bubbles=0.0)], [120, 160, 60, 70, 120, 110]
+    # WINDUP1-R3 (table 7.2, CREATURE_ROWS) on windup_rows, as flat keys: the head's offset (dhx, dhy; bob lowers it),
+    # the ground point (dg), the neck's bow (lift), the legs' phase, the fangs, the bubbles and the antennae's sway.
+    # windup: rearing, jaws open, the attack's frame 1 exactly (its strike is 2), the acid bubbling and the antennae
+    # twitching over the hold; stagger: the head knocked back and down (-3, +4), jaws wide, the legs scrambling;
+    # dazed: the head 3 px above the ground, swaying 0.6 px, the jaws slack at 0.5, the bubbles at half speed (a
+    # quarter rise up and back over the loop, so it loops seamlessly)
+    def keyed(kw):
+        return pose(path(kw['dhx'], kw['dhy'] + kw['bob'], dg=kw['dg'], lift=kw['lift']), phase=kw['phase'], jaw=kw['jaw'],
+                    bubbles=kw['bubbles'], sway=kw['sway'])
+
+    def K(**kw):
+        k = dict(dhx=0.0, dhy=0.0, bob=0.0, dg=0.0, lift=0.0, phase=0.0, jaw=0.2, bubbles=0.0, sway=0.0)
+        k.update(kw)
+        return k
+    low = GY - 3.0 - c['head'] - hy  # the head's underside 3 px above the ground
+    # a body lying flat without a coil runs its whole length back along the ground: the slump falls forward by `fit`
+    # so the tail and its trailing legs stay in the frame (7 px: the trailing legs, the last plate and a margin)
+    fit = 0.0 if coil else max(0.0, (c['n'] - 1) * c['gap'] + 7.0 - (hx + 3.0))
+    loop = [i / 8 * 2 * math.pi for i in range(8)]
+    W, WT = windup_rows(
+        keyed, K(dhy=0.7 * math.sin(0.6), jaw=0.18),                                      # idle frame 0
+        {'windup': K(dhx=-4.0, dhy=-6.0, dg=-1.5, lift=-3.0, phase=0.15, jaw=0.9, bubbles=0.2)},  # = attack frame 1
+        [K(dhx=-3.0, dhy=4.0, dg=-1.0, lift=-1.0, phase=0.25, jaw=1.1, bubbles=0.1, sway=1.0),  # knocked back and down
+         K(dhx=-3.0, dhy=0.45 * low, dg=0.5, lift=-1.5, phase=0.55, jaw=1.0, bubbles=0.15, sway=2.0),  # legs scramble
+         K(dhx=0.5 * fit, dhy=0.75 * low, dg=3.5 + 0.5 * fit, lift=-0.5, phase=0.85, jaw=0.8, bubbles=0.2, sway=2.6),
+         K(dhx=2.0 + fit, dhy=0.95 * low, dg=5.0 + fit, lift=0.5, phase=1.0, jaw=0.6, bubbles=0.25, sway=3.0)],
+        K(dhx=3.0 + fit, dhy=low, dg=5.5 + fit, lift=1.0, jaw=0.5, sway=3.2), rest={},
+        steps={'windup': {'bubbles': [0.2, 0.45, 0.7, 0.95], 'sway': [0.0, math.pi / 2, math.pi, 3 * math.pi / 2]},
+               'dazed': {'bubbles': [0.125 * (1 - math.cos(t)) for t in loop]}},
+        sway=(('dhx', 0.6), ('bob', 0.4)))
+    A.update(W); T.update(WT)
     return A, T

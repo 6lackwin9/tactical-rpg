@@ -1,10 +1,11 @@
-# Tests of the wind-up, stagger and dazed rows (WINDUP1-R1 and R2, games/emberwake/docs/specs/WINDUP1.md sections 4 and 7).
+# Tests of the wind-up, stagger and dazed rows (WINDUP1-R1 to R3, games/emberwake/docs/specs/WINDUP1.md sections 4 and 7).
 # Run from anywhere:
 #   python tools/sprites/test_windup.py
 # The rig core (rig.lerp_kw, rig.windup, rig.dazed, rig.windup_rows, the strike and loop marks) is checked on its own;
 # every humanoid body (the warrior's three grips and the views of warrior/base and warrior/2h_sword, R1; the ranger,
-# brawler, priest, rogue and mage with their goblin and named bodies, R2) against the clip set of section 4, the strike
-# frames of table 7.2 and the exporter checks X1 - X6 of 7.3. Nothing is written outside a temporary folder.
+# brawler, priest, rogue and mage with their goblin and named bodies, R2) and every creature body (the crawler and the
+# quadruped, kit base and named, R3: windup, stagger and dazed) against the clip set of section 4, the strike frames of
+# table 7.2 and the exporter checks X1 - X6 of 7.3. Nothing is written outside a temporary folder.
 import contextlib
 import io
 import json
@@ -51,6 +52,16 @@ def all_bodies():
 def windup_bodies():
     """Every body of a class with wind-up rows (classes.WINDUP_CLASSES): the class bodies, looks, goblins and named."""
     return [k for k in all_bodies() if kind_of(k) in classes.WINDUP_CLASSES]
+
+
+def creature_bodies():
+    """Every creature body (variants.CREATURES): the kit's beast/base and crawler/base and the game's named ones."""
+    return list(variants.CREATURES)
+
+
+def rowed_bodies():
+    """Every body with wind-up rows: the humanoids' six, the creatures' three."""
+    return windup_bodies() + creature_bodies()
 
 
 def kind_of(key):
@@ -142,6 +153,21 @@ class Core(unittest.TestCase):
         for im in A['stagger'] + A['dazed']:                # no flash: the figure keeps its outline colour
             self.assertTrue(pixels(im, rig.OUT))
 
+    def test_dazed_sway_keys_and_steps(self):
+        # WINDUP1-R3: a creature names its sway keys (sin, cos) and sets a key per frame; the humanoids' default is K4's
+        seen = []
+        rig.dazed(dict(a=1.0), lambda kw: seen.append(kw) or kw, sway=(('a', 2.0), ('b', 0.5)), steps={'c': list(range(8))})
+        self.assertEqual([k['c'] for k in seen], list(range(8)))
+        for i, k in enumerate(seen):
+            t = i / 8 * 2 * math.pi
+            self.assertAlmostEqual(k['a'], 1.0 + 2.0 * math.sin(t)); self.assertAlmostEqual(k['b'], 0.5 * math.cos(t))
+        self.assertEqual(rig.SWAY, (('dx', 0.8), ('head_dy', 0.5)))
+
+    def test_windup_without_a_hand(self):
+        # a creature's draw puts no hand in the frame's info: the attack wind-up needs none
+        frames, _ = rig.windup('windup', dict(bob=0.0), dict(bob=1.0), lambda kw: Image.new('RGBA', (rig.W, rig.W)), rest={})
+        self.assertEqual((len(frames), rig.loop_frame(frames)), (7, rig.LOOP_FROM))
+
     def test_marks_are_metadata_only(self):
         im = Image.new("RGBA", (4, 4), (1, 2, 3, 4))
         before = im.tobytes()
@@ -197,7 +223,7 @@ class Bodies(unittest.TestCase):
 
     def test_windup_holds_the_frame_before_the_strike(self):
         # X2, K2: the windup hold is the main attack's frame strike - 1 (pixel for pixel), side and views
-        for key in windup_bodies():
+        for key in rowed_bodies():
             _, _, rows, _, out = exported(key)
             attack = export_units.main_attack(rows)
             strike = next(c['strike'] for c in out['clips'] if c['id'] == attack)
@@ -206,7 +232,7 @@ class Bodies(unittest.TestCase):
 
     def test_poses_read_apart(self):
         # X3: the four holds, dazed and idle differ pairwise in at least 6 % at 28 px (side, and both views)
-        for key in windup_bodies():
+        for key in rowed_bodies():
             rows = exported(key)[2]
             for sfx in [''] + (['_down', '_up'] if key in PILOT else []):
                 self.assertEqual(export_units.told_apart(rows, sfx), [], (key, sfx))
@@ -238,7 +264,7 @@ class Bodies(unittest.TestCase):
 
     def test_no_blank_frame_and_effect_colours_only(self):
         # X5, K5: every new frame draws the figure; the new rows use the palette, OUT, WHITE and the gold motes only
-        for key in windup_bodies():
+        for key in rowed_bodies():
             _, _, rows, _, out = exported(key)
             pal = export_units.source(key)[4]
             allowed = {tuple(v[:3]) for v in pal.values()} | {rig.OUT, rig.WHITE, rig.GOLDEN, rig.GOLDEN_HI}
@@ -264,7 +290,7 @@ class Bodies(unittest.TestCase):
 
     def test_shipped_sheets_are_the_exporters(self):
         # the shipped sheet and clips.json of every body with wind-ups are what the exporter writes
-        for key in windup_bodies():
+        for key in rowed_bodies():
             layer, folder, _, sheet, out = exported(key)
             base = os.path.join(export_units.WORKSPACE, *export_units.LAYERS[layer], 'units', *folder.split('/'))
             with open(os.path.join(base, 'clips.json'), encoding='utf-8') as f:
@@ -331,7 +357,7 @@ class Grips(unittest.TestCase):
 
     def test_new_frames_fit_the_frame_as_today(self):
         # a wind-up or reaction frame touches the 48 px frame's edge only where today's rows of the body already do
-        for key in windup_bodies():
+        for key in rowed_bodies():
             rows = exported(key)[2]
 
             def edges(im):
@@ -359,6 +385,75 @@ class Grips(unittest.TestCase):
                 self.assertGreaterEqual(abs(hx - views.CX), 4.0, (view, i, hx))          # beside the head
                 self.assertGreater(abs(tx - hx), 3.0, (view, i))                         # angled, not upright
                 self.assertTrue(rig.W > tx > 0 and ty > 0, (view, i))
+
+
+class Creatures(unittest.TestCase):
+    """WINDUP1-R3: the crawler and the quadruped (kit base and named bodies), section 4 (A7) and table 7.2."""
+
+    def test_three_rows_with_the_clip_set(self):
+        # X1, K7: windup, stagger and dazed after today's rows, and no other wind-up (their skills are attacks)
+        self.assertEqual({kind_of(k) for k in creature_bodies()}, {'crawler', 'beast'})
+        self.assertGreaterEqual(len(creature_bodies()), 4)
+        for key in creature_bodies():
+            clips = exported(key)[4]['clips']
+            self.assertEqual([c['id'] for c in clips[-3:]], list(rig.CREATURE_ROWS), key)
+            self.assertFalse([c for c in clips if c['id'] in NEW_IDS and c['id'] not in rig.CREATURE_ROWS], key)
+            self.assertFalse([c for c in clips if 'of' in c], key)  # no view rows (creatures have no view drawings)
+            for c in clips[-3:]:
+                self.assertEqual((c['frames'], c['ms'], c['loop'], c.get('loop_from')), CLIP_SET[c['id']], (key, c['id']))
+
+    def test_today_rows_unchanged(self):
+        # X5: today's rows pixel-identical, the clip entries, palette and width the same, +3 rows
+        real, real_rows = rig.windup_rows, rig.CREATURE_ROWS
+        rig.windup_rows = lambda *a, **kw: ({}, {})
+        rig.CREATURE_ROWS = ()
+        try:
+            before = {k: quiet(export_units.body, k, 'all') for k in creature_bodies()}
+        finally:
+            rig.windup_rows, rig.CREATURE_ROWS = real, real_rows
+        for key in creature_bodies():
+            _, _, _, sheet, out = exported(key)
+            _, _, _, old_sheet, old = before[key]
+            old_ids = [c['id'] for c in old['clips']]
+            self.assertEqual([c['id'] for c in out['clips']], old_ids + list(rig.CREATURE_ROWS), key)
+            self.assertEqual(out['clips'][:len(old_ids)], old['clips'], key)
+            self.assertEqual((out['palette'], sheet.width), (old['palette'], old_sheet.width), key)
+            self.assertEqual(sheet.height, old_sheet.height + 3 * rig.W, key)
+            self.assertTrue(same(sheet.crop((0, 0, sheet.width, old_sheet.height)), old_sheet), key)
+
+    def test_stagger_ends_in_dazed_without_a_flash(self):
+        # K3, K4: stagger frame 4 is dazed frame 0; dazed sways; no flash (the outline keeps its colour; the colours
+        # are checked in test_no_blank_frame_and_effect_colours_only)
+        for key in creature_bodies():
+            rows = exported(key)[2]
+            self.assertTrue(same(rows['stagger'][4], rows['dazed'][0]), key)
+            self.assertGreater(len({im.tobytes() for im in rows['dazed']}), 4, key)
+            for im in rows['stagger'] + rows['dazed']:
+                self.assertTrue(pixels(im, rig.OUT), key)
+                self.assertFalse(pixels(im, (255, 255, 255)), key)  # the hit flash's white (rig._flash)
+
+    def test_reactions_as_table_7_2(self):
+        # the crawler's head knocked back and down, then low; the quadruped's head jerked up, then low: measured as the
+        # figure's top edge against idle frame 0's
+        def top(im):
+            return im.getchannel('A').getbbox()[1]
+        for key in creature_bodies():
+            rows = exported(key)[2]
+            idle, hit, slump = top(rows['idle'][0]), top(rows['stagger'][0]), top(rows['dazed'][0])
+            if kind_of(key) == 'beast':
+                self.assertLess(hit, idle, key)               # the head jerked up (neck -55 degrees)
+                self.assertGreater(slump, hit, key)
+            else:
+                self.assertGreater(hit, idle, key)            # the head knocked down
+            self.assertGreaterEqual(slump, idle, key)          # dazed: the head low
+
+    def test_hold_breathes(self):
+        # K1: the four hold frames differ (the bob, the crawler's bubbles and antennae, the quadruped's tail); the
+        # intro starts off the idle pose
+        for key in creature_bodies():
+            rows = exported(key)[2]
+            self.assertEqual(len({im.tobytes() for im in rows['windup'][3:]}), 4, key)
+            self.assertFalse(same(rows['windup'][0], rows['idle'][0]), key)
 
 
 class Checks(unittest.TestCase):
@@ -398,6 +493,27 @@ class Checks(unittest.TestCase):
         finally:
             classes.WB_HOLDS = real
 
+    def test_x1_a_creature_needs_its_three_rows_only(self):
+        # WINDUP1-R3: a creature without its windup, or with a wind-up it has no skill for, exits
+        real = rig.quad_windups
+        for patch in (lambda q: tuple({k: v for k, v in d.items() if k != 'windup'} for d in real(q)),
+                      lambda q: tuple(dict(d, windup_heavy=d['windup']) for d in real(q))):
+            rig.quad_windups = patch
+            try:
+                self.exits('beast/base', 'X1')
+            finally:
+                rig.quad_windups = real
+                _CACHE.pop('beast/base', None)
+
+    def test_no_body_lacks_windups(self):
+        # after WINDUP1-R3 every rig body but the dummy prop has wind-up rows (no "has no wind-up rows yet" note)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            for key in all_bodies():
+                export_units.body(key, 'all')
+        self.assertNotIn('no wind-up rows', out.getvalue())
+        self.assertEqual([k for k in all_bodies() if 'windup' not in exported(k)[2]], list(variants.PROPS))
+
     def test_a_missing_strike_exits(self):
         real = rig.strike_frame
         rig.strike_frame = lambda frames: None
@@ -430,6 +546,11 @@ class Review(unittest.TestCase):
                     ms = CLIP_SET['windup'][1]
                     want = sum(ms[:3]) + 2 * sum(ms[3:]) + sum(times['attack'][rig.strike_frame(frames['attack']):])
                     self.assertLessEqual(abs(total - want), 10 * g.n_frames, key)
+            for key in creature_bodies():  # WINDUP1-R3: rows idle, the windup hold, stagger, dazed; side only
+                paths = export_units.windup_review(tmp, key, *variants.clips(key)[:2])
+                self.assertEqual(len(paths), 4, key)
+                with Image.open(paths[0]) as board:
+                    self.assertEqual(board.height, 18 + 4 * rig.W * 3, key)
             self.assertEqual(export_units.windup_review(tmp, 'dummy/base', *variants.clips('dummy/base')[:2]), [])
 
 

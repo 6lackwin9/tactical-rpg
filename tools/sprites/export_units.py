@@ -15,8 +15,8 @@
 #   also has "impact", the index of the frame the rig marked with rig.impact (the blow lands or the shot leaves; the
 #   export exits when one is unmarked); a view row copies its side clip's. WINDUP1: an attack clip also has "strike"
 #   (rig.strike, else exit) and a wind-up row "loop_from" (rig.loop_start); the six wind-up rows of rig.WINDUP_ROWS
-#   come after today's side rows and are checked (check_windups: X1 - X3, X5); --review adds windup_review's board
-#   and GIFs (X6).
+#   (a creature's three, rig.CREATURE_ROWS; WINDUP1-R3) come after today's side rows and are checked (check_windups:
+#   X1 - X3, X5); --review adds windup_review's board and GIFs (X6).
 # Palette slots: a class body's are the rig palette's base colours (keys without a _lo / _hi shade suffix) that occur in
 # the sheet; a variant lists its own (shades included, the first key wins when two share a colour); at most 16
 # (aegis_core::assets). A palette file may only name its body's slots (checked here and by content check A4).
@@ -253,8 +253,9 @@ def told_apart(frames: dict, suffix: str = "") -> list:
 
 def check_windups(key: str, frames: dict, clips: list, pal: dict, keys) -> None:
     """WINDUP1 7.3 X1 - X3 and X5 on a body's side rows (exits on a failure): X1 a body of a class with wind-ups
-    (classes.WINDUP_CLASSES; WINDUP1-R2 and R3 add the rest) has the six rows, and any wind-up row has the frames, ms,
-    loop and loop_from of section 4; X2 `windup` frame loop_from and the main attack's frame strike - 1 differ in at
+    (classes.WINDUP_CLASSES, every class since WINDUP1-R2) has the six rows, a creature (variants.CREATURES, WINDUP1-R3)
+    the rows of rig.CREATURE_ROWS and no other wind-up, and any wind-up row has the frames, ms, loop and loop_from of
+    section 4; X2 `windup` frame loop_from and the main attack's frame strike - 1 differ in at
     most WINDUP_CONTINUITY of their opaque pixels at 48 px; X3 the held poses read apart (told_apart); X5 every new
     frame draws the figure, the new rows add no colour but the rig's effect colours and no palette slot."""
     by_id = {c["id"]: c for c in clips}
@@ -263,10 +264,14 @@ def check_windups(key: str, frames: dict, clips: list, pal: dict, keys) -> None:
         lacking = [n for n in rig.WINDUP_ROWS if n not in by_id]
         if lacking:
             sys.exit("export_units: %s lacks the wind-up rows %s (WINDUP1 X1)" % (key, ", ".join(lacking)))
+    if key in variants.CREATURES:  # WINDUP1-R3: a creature's skills are attacks (section 4, A7)
+        lacking = [n for n in rig.CREATURE_ROWS if n not in by_id]
+        extra = [n for n in rig.WINDUP_ROWS if n in by_id and n not in rig.CREATURE_ROWS]
+        if lacking or extra:
+            sys.exit("export_units: %s creature rows: lacks %s, has %s (WINDUP1 X1: %s only)"
+                     % (key, ", ".join(lacking) or "none", ", ".join(extra) or "none", ", ".join(rig.CREATURE_ROWS)))
     new = [n for n in rig.WINDUP_ROWS if n in by_id]
-    if not new:
-        if cu is not None or key in variants.CREATURES:
-            print("windup: %s has no wind-up rows yet (WINDUP1-R3)" % key)
+    if not new:  # a body without wind-ups (the dummy prop)
         return
     want = {n: (7, rig.WINDUP_MS[n], True, rig.LOOP_FROM) for n in rig.WINDUPS}
     want.update(stagger=(5, rig.STAGGER_MS, False, None), dazed=(8, rig.DAZED_MS, True, None))
@@ -514,7 +519,7 @@ def windup_review(out: str, key: str, frames: dict, times: dict) -> list:
         y = 18 + r * cz
         d.text((6, y + 8), title, fill=(230, 226, 210))
         if title.endswith("holds"):
-            d.text((6, y + 22), "windup, heavy, buff, debuff", fill=(160, 166, 150))
+            d.text((6, y + 22), ", ".join(n.replace("windup_", "") for n in rig.WINDUPS if n in frames), fill=(160, 166, 150))
         for c, fr in enumerate(frs):
             board.alpha_composite(fr.resize((cz, cz), Image.NEAREST), (label + c * cz, y))
             board.alpha_composite(views.token(fr).resize((tz, tz), Image.NEAREST), (x_tok + c * (tz + 4), y + cz - tz))
