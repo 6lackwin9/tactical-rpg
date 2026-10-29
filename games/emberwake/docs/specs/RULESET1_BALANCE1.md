@@ -210,3 +210,5 @@ HISTORY check: nothing here re-proposes a dropped idea. The cut list of 2026-10-
 chance as the one roll and this spec leaves it; Rest's +2 AP a block (row 81) is not revisited.
 
 As built (RULESET1-BX, 2026-10-30): case BX4, no rule bug. The 15 / 20 came from `aegis battle` without `ruleset=timeline` (classic: armour 50 keeps 1/2, 25 keeps 2/3 of the 30 hit); under the timeline ruleset Marrow Spike deals 30 to both. Q6 therefore takes power 1.5. The report's engine-driver runs were classic too (see RULESET1-G2).
+
+As built (RULESET1-G2, 2026-10-30): with timeline on both sides the five `tl_` fights agree seed for seed (40 seeds, jitter off); the gap was classic `battle` runs plus `sim feel`'s start jitter. One auto driver, `Session::auto_draft` and `resolve_round`; the golden is unchanged. `battle` keeps classic and notes a `tl_` fight. The timed driver uses single-target Attack skills only, with no move of its own: a refused engage keeps the auto plan.
