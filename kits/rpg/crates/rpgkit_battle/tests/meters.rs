@@ -279,6 +279,9 @@ fn a_band_holds_its_effects_and_statuses_only_while_in_it() {
     let u = &w.units[HERO];
     assert_eq!(meter::value(&w, HERO, "fury"), Some(HOT_FROM - 1));
     assert_eq!((u.has_status("empower"), u.trigger_crit, u.status_resist.get("stun").copied().unwrap_or(0)), (false, crit, resist), "left");
+    // HOOKS1-UI (the HOOKS1-M review): a resist key the band created goes with it; one the unit had before stays
+    assert!(!s.w.units[HERO].status_resist.contains_key("stun"), "the fixture hero has no stun resist of its own");
+    assert!(!u.status_resist.contains_key("stun"), "the band's stun resist key went with it: {:?}", u.status_resist);
 }
 
 /// UM5: a rule at 3 `up` over 2, 4, 2, 4 fires on each rise across it; a `once` rule only the first time.

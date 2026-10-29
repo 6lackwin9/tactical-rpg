@@ -2525,6 +2525,10 @@ impl Screen<GameCx> for BattleScreen {
                 out["round_summary"] = json!({"breaks": sum.breaks, "windup_breaks": sum.windup_breaks, "windup_hits": sum.windup_hits, "flanks": sum.flanks, "follow_ups": sum.follow_ups, "rest_ap": sum.rest_ap});
             }
         }
+        // HOOKS1-UI slice 1: the hook marks as drawn, while the battle plays by ground or arena hazards (classic: no key)
+        if let Some(sess) = self.host.session.as_ref().filter(|x| emberwake_battle::ground::on(&x.w) || emberwake_battle::arena::on(&x.w)) {
+            out["hook_marks"] = HookMarks::of(sess, &Layers::of(&cx.settings.v["battle_overlays"])).json();
+        }
         // RULESET1-U slice 3: the board overlays under the round intent (classic: no key)
         if let Some(o) = self.host.session.as_ref().and_then(|s| overlay_of(s, self.selected.filter(|u| s.w.allies.contains(u)), s.phase == Phase::Planning && !s.plan_confirmed)) {
             out["overlay"] = overlay_json(&o);
@@ -2816,6 +2820,8 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let rounds: Vec<Intent> = s.round_intents();
     // RULESET1-U slice 5: each overlay group behind its flag (settings `battle_overlays`; all on by default)
     let layers = Layers::of(&cx.settings.v["battle_overlays"]);
+    // HOOKS1-UI slice 1: the ground hazards and the arena telegraph (empty in classic)
+    let marks = HookMarks::of(s, &layers);
     let round_of = |u: usize| rounds.iter().find(|r| r.unit == u).and_then(|r| r.round_intent).filter(|_| layers.glyphs);
 
     // -- Top strip: the selected hero's six blocks and the round controls.
@@ -2931,6 +2937,8 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             Some(e) if e.0 == b => Rect::new(r.x, r.y, (e.1 - e.0 + 1) * bw - 1, r.h),
             _ => r,
         };
+        // HOOKS1-UI slice 1 (AH3): the arena hazards that strike at the block's end
+        tip.extend(marks.block_tip(b));
         ui.push(format!("strip.block{b}"), "block", entry.map(|e| e.2.clone()).unwrap_or_else(|| "empty".into()), wr, true, live_block == b, None, tip);
     }
     // Each action is one continuous span over its blocks, coloured by kind (COMBAT-UI3).
@@ -2952,6 +2960,10 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             let mr = Rect::new(r.x + 1, 7, (bw - 3).min(r.w - 2), 14);
             aegis_ui::timeline::draw_mark(&mut ui, &format!("strip.mark.{k}"), &mark, mr);
         }
+    }
+    // HOOKS1-UI slice 1 (AH3): a badge on each block at whose end an arena hazard strikes, over the spans
+    for b in (1..=s.def.total_blocks).filter(|b| marks.arena.iter().any(|t| t.blocks.contains(b))) {
+        arena_badge(&mut ui.p, Rect::new(bx + (b - 1) * bw, 6, bw - 1, 16));
     }
     let mut x = bx + blocks * bw + 6;
     ui.dropdown("strip.party", Rect::new(x, 6, party_w, 16), &party_label, Action::PartyMenu, planning, vec![("Party tactic".into(), GOLD), ("AI-drafts every hero with a tactic (you can edit the steps after).".into(), TEXT)]);
@@ -3131,7 +3143,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let shift = g.camera.offset_at(g.clock.now());
     // RULESET1-U slice 3: the round intent's board overlays (None in classic)
     let overlay = overlay_of(s, sel, planning);
-    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.clock.ms, sel, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt };
+    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.clock.ms, sel, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks };
     let board_hover = match view {
         View::Stage => draw_stage(board, &mut ui, cx, &tuning, now),
         View::Flat => {
@@ -3422,7 +3434,7 @@ struct Overlay {
 }
 
 /// RULESET1-U slice 6: the overlay groups as the Settings Battle tab lists them: (id, label, what it shows).
-pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str); 15] = [
+pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str); 17] = [
     ("band", "Reach band", "The selected hero's attack reach around the tile it strikes from (Assault, Maneuver)."),
     ("front", "Maneuver front", "The target's front, where an Engage never stands (Maneuver)."),
     ("valid", "Valid targets", "Rings on the units a click would make the round target."),
@@ -3438,6 +3450,9 @@ pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str); 15] = [
     ("parts", "Wind-up and impact", "The strip's wind-up, impact and recovery shading."),
     ("forecasts", "Hit forecasts", "Stagger and break forecasts in the strip tips and the intel panel."),
     ("summary", "Round summary", "The round summary in the message bar at round end."),
+    // HOOKS1-UI slice 1: the hooks' marks (HOOKS1 GH6, AH3)
+    ("hazards", "Ground hazards", "The hazards skills and items leave on tiles, in their tint, with their glyph (a foe's hidden one stays hidden)."),
+    ("arena", "Arena telegraph", "The cells an arena hazard strikes this round, and a badge on the strip at the blocks it strikes."),
 ];
 
 /// RULESET1-U slice 5 (preference "Battle overlays and the clarity pass", user 2026-10-30): every timeline overlay
@@ -3465,14 +3480,17 @@ struct Layers {
     parts: bool,
     forecasts: bool,
     summary: bool,
+    /// HOOKS1-UI slice 1: ground hazards (GH6), the arena telegraph (AH3).
+    hazards: bool,
+    arena: bool,
 }
 
 impl Layers {
     /// The group ids, as the settings key names them (`OVERLAY_GROUPS`' order).
-    const IDS: [&'static str; 15] = {
-        let mut ids = [""; 15];
+    const IDS: [&'static str; 17] = {
+        let mut ids = [""; 17];
         let mut k = 0;
-        while k < 15 {
+        while k < 17 {
             ids[k] = OVERLAY_GROUPS[k].0;
             k += 1;
         }
@@ -3498,12 +3516,14 @@ impl Layers {
             parts: on("parts"),
             forecasts: on("forecasts"),
             summary: on("summary"),
+            hazards: on("hazards"),
+            arena: on("arena"),
         }
     }
 
     /// The flags by group id (the agent link's state).
     fn json(&self) -> Value {
-        let v = [self.band, self.front, self.valid, self.veils, self.moves, self.target, self.facings, self.walks, self.glyphs, self.badges, self.poise, self.breaks, self.parts, self.forecasts, self.summary];
+        let v = [self.band, self.front, self.valid, self.veils, self.moves, self.target, self.facings, self.walks, self.glyphs, self.badges, self.poise, self.breaks, self.parts, self.forecasts, self.summary, self.hazards, self.arena];
         Value::Object(Self::IDS.iter().zip(v).map(|(k, b)| (k.to_string(), json!(b))).collect())
     }
 }
@@ -3526,6 +3546,216 @@ impl Overlay {
             revealed_moves: self.revealed_moves.iter().filter(|m| l.walks && all_walks && focus != Some(m.0)).cloned().collect(),
         }
     }
+}
+
+// ---- HOOKS1-UI slice 1: ground hazards and the arena telegraph (HOOKS1 GH6, AH3) ------------------------------------
+
+/// The arena telegraph's colour (struck cells and the strip badge).
+const ARENA: Rgba = rgb(255, 146, 48);
+
+/// One ground hazard as the party sees it (GH6: a foe's hidden hazard is left out).
+struct GroundMark {
+    cell: V2,
+    id: String,
+    name: String,
+    tint: Rgba,
+    glyph: String,
+    /// One of the party's own hidden hazards (the foes do not see it): drawn fainter.
+    hidden: bool,
+    last_round: i32,
+    tip: Tip,
+}
+
+/// HOOKS1-UI slice 1: what the hook layers mark on the board and the strip: the ground hazards the party's side sees
+/// (rule ground_hazards, layer `hazards`) and the arena hazards due this round (rule arena_hazards, layer `arena`; the
+/// kit's tells, AH3). Classic has neither rule, so both stay empty whatever the flags say.
+#[derive(Default)]
+struct HookMarks {
+    ground: Vec<GroundMark>,
+    arena: Vec<emberwake_battle::intent::ArenaTell>,
+    /// Each arena hazard's effect in words, aligned with `arena`.
+    arena_effects: Vec<String>,
+}
+
+impl HookMarks {
+    fn of(s: &Session, layers: &Layers) -> HookMarks {
+        let w = &s.w;
+        let mut out = HookMarks::default();
+        if layers.hazards && emberwake_battle::ground::on(w) {
+            // the party's side sees what any of its members sees (GH6 is per side)
+            if let Some(&viewer) = w.allies.first() {
+                out.ground = w.grid.ground.iter().filter(|(_, p)| p.seen_by(w, viewer)).map(|(c, p)| ground_mark(w, *c, p)).collect();
+            }
+        }
+        if layers.arena {
+            out.arena = emberwake_battle::intent::arena_tells(w);
+            out.arena_effects = out.arena.iter().map(|t| w.arena.hazards.iter().find(|h| h.id == t.id).map(arena_effect_text).unwrap_or_default()).collect();
+        }
+        out
+    }
+
+    fn ground_at(&self, c: V2) -> Option<&GroundMark> {
+        self.ground.iter().find(|g| g.cell == c)
+    }
+
+    /// The tile's hover lines: its ground hazard, then each arena hazard that strikes it this round.
+    fn tile_tip(&self, c: V2) -> Tip {
+        let mut tip: Tip = self.ground_at(c).map(|g| g.tip.clone()).unwrap_or_default();
+        for (t, e) in self.arena.iter().zip(&self.arena_effects).filter(|(t, _)| t.cells.contains(&c)) {
+            tip.push((format!("{}: strikes here this round", t.name), ARENA));
+            tip.push((format!("At the end of {}", blocks_text(&t.blocks)), TEXT));
+            if !e.is_empty() {
+                tip.push((e.clone(), TEXT));
+            }
+        }
+        tip
+    }
+
+    /// The strip block's arena lines: each hazard that strikes at the end of block `b` this round.
+    fn block_tip(&self, b: i32) -> Tip {
+        let mut tip: Tip = Vec::new();
+        for (t, e) in self.arena.iter().zip(&self.arena_effects).filter(|(t, _)| t.blocks.contains(&b)) {
+            tip.push((format!("{} strikes at the end of block {b} ({} cell{})", t.name, t.cells.len(), if t.cells.len() == 1 { "" } else { "s" }), ARENA));
+            if !e.is_empty() {
+                tip.push((e.clone(), TEXT));
+            }
+        }
+        tip
+    }
+
+    /// The agent link's state: the marks as drawn (tiles as [x, y]).
+    fn json(&self) -> Value {
+        json!({
+            "ground": self.ground.iter().map(|g| json!({"at": [g.cell.x, g.cell.y], "id": g.id, "name": g.name, "glyph": g.glyph, "hidden": g.hidden, "last_round": g.last_round})).collect::<Vec<_>>(),
+            "arena": emberwake_battle::intent::arena_json(&self.arena),
+        })
+    }
+}
+
+/// "block 3" or "blocks 3 and 6" or "blocks 2, 4 and 6".
+fn blocks_text(blocks: &[i32]) -> String {
+    let b: Vec<String> = blocks.iter().map(|b| b.to_string()).collect();
+    match b.len() {
+        0 => "no block".into(),
+        1 => format!("block {}", b[0]),
+        n => format!("blocks {} and {}", b[..n - 1].join(", "), b[n - 1]),
+    }
+}
+
+/// An arena hazard's effect in words (AH2: damage through guard, not armour; the status roll; stagger; a push).
+fn arena_effect_text(h: &emberwake_battle::arena::Hazard) -> String {
+    let e = &h.effect;
+    let mut bits: Vec<String> = Vec::new();
+    if e.damage > 0 {
+        bits.push(format!("{} damage", e.damage));
+    }
+    if e.damage_pct > 0 {
+        bits.push(format!("{}% of max HP", e.damage_pct));
+    }
+    if !e.status.is_empty() {
+        bits.push(format!("{} ({}% chance)", emberwake_rules::status::display_name(&e.status), e.potency));
+    }
+    if e.stagger > 0 {
+        bits.push(format!("stagger {}", e.stagger));
+    }
+    if let Some(p) = e.push {
+        let dir = match (p.dir.x, p.dir.y) {
+            (1, _) => "east",
+            (-1, _) => "west",
+            (_, -1) => "north",
+            _ => "south",
+        };
+        bits.push(format!("pushes {dir} {} tile{}", p.tiles, if p.tiles == 1 { "" } else { "s" }));
+    }
+    bits.join(", ")
+}
+
+/// A ground hazard's mark and hover lines (GH1: its row's numbers; GH7: the round it lasts through).
+fn ground_mark(w: &World, cell: V2, p: &emberwake_battle::ground::Placed) -> GroundMark {
+    let d = &p.def;
+    let placer = w.units.get(p.by).map(|u| u.name.clone()).unwrap_or_default();
+    let tint = aegis_ui::vignette::hex(&d.tint).unwrap_or(rgb(200, 120, 220));
+    let mut tip: Tip = vec![(d.name.clone(), tint)];
+    if !d.description.is_empty() {
+        tip.push((d.description.clone(), TEXT));
+    }
+    let mut does: Vec<String> = Vec::new();
+    if d.damage > 0 {
+        does.push(format!("{} damage", d.damage));
+    }
+    if !d.status.is_empty() {
+        does.push(format!("{} ({}% chance)", emberwake_rules::status::display_name(&d.status), d.potency));
+    }
+    if !does.is_empty() {
+        let when = match (d.trap, d.on.as_str()) {
+            (true, _) => "When sprung",
+            (_, "round_end") => "At round end",
+            (_, "both") => "On entering and at round end",
+            _ => "On entering",
+        };
+        tip.push((format!("{when}: {}", does.join(", ")), TEXT));
+    }
+    if d.trap {
+        tip.push((format!("Trap: stops the move of the first unit it affects{}, then is gone", if d.stop_moves { " and its later moves this round" } else { "" }), FOE));
+    } else if d.stop_moves {
+        tip.push(("Stops the later moves this round of a unit that enters".into(), TEXT));
+    }
+    if d.cover_guard > 0.0 {
+        tip.push((format!("Cover {:.0}% against ranged hits", d.cover_guard * 100.0), TEXT));
+    }
+    if d.move_cost > 0 {
+        tip.push((format!("Move cost +{}", d.move_cost), TEXT));
+    }
+    let affects = match d.affects.as_str() {
+        "foes" => format!("Affects {placer}'s foes"),
+        "friends" => format!("Affects {placer}'s side"),
+        _ => "Affects every unit".into(),
+    };
+    tip.push((affects, DIM));
+    tip.push((format!("Left by {placer} in round {}; lasts through round {}", p.round, p.last_round), DIM));
+    if d.hidden {
+        tip.push(("Hidden from the foes".into(), DIM));
+    }
+    GroundMark { cell, id: d.id.clone(), name: d.name.clone(), tint, glyph: d.glyph.clone(), hidden: d.hidden, last_round: p.last_round, tip }
+}
+
+/// HOOKS1-UI slice 1: the ground hazards (a tinted plate with the row's glyph; the party's own hidden ones fainter) and
+/// the arena's struck cells (an amber plate with a hatch) on the ground, under the tokens and the round overlays.
+fn draw_hook_marks(p: &mut Painter, m: &HookMarks, geo: &Geom) {
+    let plate_of = |c: V2| match geo.view {
+        View::Stage => inset2(geo.cell_rect(c), 1, 1),
+        View::Flat => geo.cell_rect(c).inset(1),
+    };
+    for g in &m.ground {
+        let r = plate_of(g.cell);
+        let (fill, edge) = if g.hidden { (36, 120) } else { (70, 200) };
+        plate(p, r, with_alpha(g.tint, fill), with_alpha(g.tint, edge));
+        if !g.glyph.is_empty() {
+            let cy = r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0;
+            p.text_center(r.x as f32 + r.w as f32 / 2.0, cy, &g.glyph, SMALL, with_alpha(TEXT, if g.hidden { 150 } else { 235 }));
+        }
+    }
+    let mut struck: Vec<V2> = Vec::new();
+    for c in m.arena.iter().flat_map(|t| &t.cells) {
+        if !struck.contains(c) {
+            struck.push(*c);
+        }
+    }
+    for c in struck {
+        let r = plate_of(c).inset(1);
+        plate(p, r, with_alpha(ARENA, 34), with_alpha(ARENA, 190));
+        // a hatch: two short strokes in the lower right corner, so a tinted ground hazard under it still reads
+        let (x1, y1) = ((r.x + r.w) as f32 - 2.0, (r.y + r.h) as f32 - 2.0);
+        for k in [5.0, 9.0] {
+            p.line(x1 - k, y1, x1, y1 - k * 0.6, with_alpha(ARENA, 200), 1.0);
+        }
+    }
+}
+
+/// HOOKS1-UI slice 1: the arena badge on the strip block `r` (a hazard strikes at its end).
+fn arena_badge(p: &mut Painter, r: Rect) {
+    let b = Rect::new(r.x + r.w - 7, r.y + 1, 6, 6);
+    p.panel(b, ARENA, rgba(60, 26, 6, 255), 1.0);
 }
 
 // ---- RULESET1-U slice 5: poise, breaks, the strip's parts, forecasts, the round summary ----------------------------
@@ -4049,6 +4279,8 @@ struct Board<'a> {
     /// RULESET1-U slice 5: the overlay groups on (`Layers`) and Alt held (every revealed enemy move shows).
     layers: Layers,
     alt: bool,
+    /// HOOKS1-UI slice 1: the ground hazards and the arena telegraph (empty in classic).
+    marks: &'a HookMarks,
 }
 
 /// An action clip a token wants starts with the first candidate its body has (SPRITE1-U), once the clock reaches its
@@ -4183,7 +4415,7 @@ fn scaled(a: u8, k: u8) -> u8 {
 /// the `common` tiles, tree tiles flat, tokens `flat_token_px` on a filled foot ellipse at `foot_alpha`, arrows centre
 /// to centre over the units, the cell widgets.
 fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks } = b;
     let w = &s.w;
     let panel = Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4);
     ui.p.panel(panel, rgb(8, 10, 16), BORDER, RADIUS);
@@ -4209,10 +4441,13 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
             if planning && sel.is_some() && ui.hover(r) && !popup {
                 ui.p.panel(r.inset(1), rgba(255, 255, 255, 30), rgba(255, 255, 255, 160), 1.5);
             }
-            let tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), GOOD), ("A unit that steps here leaves the battle.".into(), TEXT)] } else { Vec::new() };
+            let mut tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), GOOD), ("A unit that steps here leaves the battle.".into(), TEXT)] } else { Vec::new() };
+            tip.extend(marks.tile_tip(c));
             ui.push(format!("tile.{gx}.{gy}"), "tile", tid, r, planning, false, if w.occupant(c).is_none() { Some(Action::TileClick(c)) } else { None }, tip);
         }
     }
+    // HOOKS1-UI slice 1: the ground hazards and the arena's struck cells, under the round overlays
+    draw_hook_marks(&mut ui.p, marks, &Geom::new(View::Flat, tuning));
     let center = |c: V2| ((GRID_X + c.x * TILE + TILE / 2) as f32, (GRID_Y + c.y * TILE + TILE / 2) as f32);
     if let Some(o) = overlay {
         // RULESET1-U slice 3: the round intent's overlays on the ground (they draw the hero's moves); slice 5: a revealed
@@ -4452,7 +4687,7 @@ fn with_alpha(c: Rgba, a: u8) -> Rgba {
 /// covers a unit, the top: HP bars, chips, the exit sign, floats). Cell widgets first, then the units' in feet order
 /// (front-most last, so it takes the click). Returns the unit the mouse is over on the board.
 fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks } = b;
     let w = &s.w;
     let geo = Geom::new(View::Stage, tuning);
     let tp = geo.token_px;
@@ -4539,6 +4774,8 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
             Pass::Backdrop => stage::draw_backdrop(&mut ui.p, &mut cx.art, &w.grid, &s.def.zone, &w.cat.zones),
             Pass::Ground => stage::draw_ground(&mut ui.p, &mut cx.art, &w.grid, tuning.grid_alpha),
             Pass::Markers => {
+                // HOOKS1-UI slice 1: the ground hazards and the arena's struck cells, under the hover and the tells
+                draw_hook_marks(&mut ui.p, marks, &geo);
                 if let Some(c) = hover_cell {
                     plate(&mut ui.p, geo.cell_rect(c), rgba(255, 255, 255, 30), rgba(255, 255, 255, 160));
                 }
@@ -4754,7 +4991,8 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
     for gy in 0..GRID_H {
         for gx in 0..GRID_W {
             let c = V2::new(gx, gy);
-            let tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), GOOD), ("A unit that steps here leaves the battle.".into(), TEXT)] } else { Vec::new() };
+            let mut tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), GOOD), ("A unit that steps here leaves the battle.".into(), TEXT)] } else { Vec::new() };
+            tip.extend(marks.tile_tip(c));
             ui.push(format!("tile.{gx}.{gy}"), "tile", w.grid.terrain_id(c), geo.cell_rect(c), planning, false, if w.occupant(c).is_none() { Some(Action::TileClick(c)) } else { None }, tip);
         }
     }
@@ -7665,4 +7903,138 @@ mod slice6_tests {
             }
         }
     }
+}
+
+/// HOOKS1-UI slice 1 (HOOKS1 GH6, AH3): the ground hazards and the arena telegraph on the board and the strip. A catalog
+/// encounter played by the catalog's timeline row with both hook rules switched on; the hazards and the arena schedule
+/// are test rows put on the battle's world, and every expectation is a kit query (`ground::seen_at`,
+/// `intent::arena_tells`), never a shipped number. Classic marks nothing (no state key).
+#[cfg(test)]
+mod hook_marks_tests {
+    use super::*;
+    use emberwake_battle::arena::{self, Hazard};
+    use emberwake_battle::ground::{self, Placed};
+    use emberwake_data::HazardDef;
+    use emberwake_rules::ruleset::TIMELINE;
+
+    const RULES: &str = "+ground_hazards,+arena_hazards";
+
+    fn arena_screen(ruleset: Option<&str>, rules: &str) -> (Cx, Gfx, BattleScreen) {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        cx.settings.v["battle_view"] = json!("flat");
+        let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+        let b = BattleScreen::arena_with(&cx, None, &encounter, ruleset.map(String::from), rules, false);
+        assert!(b.host.session.is_some(), "the battle starts: {}", b.message);
+        (cx, crate::hud::hud_tests::gfx(), b)
+    }
+
+    fn s(b: &BattleScreen) -> &Session {
+        b.host.session.as_ref().unwrap()
+    }
+
+    /// Free walkable cells, left to right, top to bottom.
+    fn free_cells(w: &World) -> Vec<V2> {
+        (0..GRID_H).flat_map(|y| (0..GRID_W).map(move |x| V2::new(x, y))).filter(|c| w.grid.is_valid(*c) && w.grid.is_walkable(*c) && w.occupant(*c).is_none() && !w.grid.is_exit(*c)).collect()
+    }
+
+    fn hazard(id: &str, hidden: bool) -> HazardDef {
+        let row = json!({"id": id, "name": format!("Test {id}"), "on": "enter", "damage": 5, "status": "root", "potency": 60, "affects": "foes", "trap": hidden, "hidden": hidden, "duration": 2, "tint": "#40c0ff", "glyph": "T"});
+        HazardDef::from_obj(row.as_object().unwrap())
+    }
+
+    /// Puts three hazards down (a foe's visible one, a foe's hidden trap, a hero's hidden trap) and an arena hazard on
+    /// one column at blocks 2 and 4 of this round; returns the three cells and the column.
+    fn mark_up(b: &mut BattleScreen) -> ([V2; 3], i32) {
+        let sess = b.host.session.as_mut().unwrap();
+        let round = sess.current_round;
+        let w = &mut sess.w;
+        let (hero, foe) = (w.allies[0], w.enemies[0]);
+        let free = free_cells(w);
+        let cells = [free[0], free[1], free[2]];
+        for (c, (id, by, hidden)) in cells.iter().zip([("smoke", foe, false), ("wire", foe, true), ("snare", hero, true)]) {
+            w.grid.ground.insert(*c, Placed { def: hazard(id, hidden), by, round, last_round: round + 1 });
+        }
+        let col = free[free.len() / 2].x;
+        let row = json!({"id": "vents", "name": "Test Vents", "columns": [col], "blocks": [2, 4], "effect": {"damage": 9, "stagger": 10}});
+        w.arena.hazards = vec![Hazard::from_obj(row.as_object().unwrap())];
+        arena::round_start(w, round);
+        (cells, col)
+    }
+
+    fn tip_text(b: &BattleScreen, id: &str) -> String {
+        b.w.iter().filter(|x| x.id == id).flat_map(|x| x.tip.iter().map(|(t, _)| t.clone())).collect::<Vec<_>>().join(" | ")
+    }
+
+    /// GH6, AH3: the party sees the foe's visible hazard and its own hidden trap (fainter), not the foe's hidden one;
+    /// the struck cells are the kit's arena tells; the tile and strip hover cards name them; the state lists them.
+    #[test]
+    fn the_marks_follow_the_kit() {
+        let (mut cx, mut g, mut b) = arena_screen(Some(TIMELINE), RULES);
+        let (cells, col) = mark_up(&mut b);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let w = &s(&b).w;
+        assert!(ground::on(w) && arena::on(w), "both hook rules on");
+        let viewer = w.allies[0];
+        let marks = HookMarks::of(s(&b), &Layers::of(&Value::Null));
+        let seen: Vec<V2> = marks.ground.iter().map(|g| g.cell).collect();
+        let want: Vec<V2> = cells.iter().copied().filter(|c| ground::seen_at(w, viewer, *c).is_some()).collect();
+        assert_eq!(seen, want);
+        assert_eq!(seen, vec![cells[0], cells[2]], "the foe's hidden trap stays hidden");
+        assert_eq!(marks.ground.iter().map(|g| g.hidden).collect::<Vec<_>>(), [false, true]);
+        let tells = emberwake_battle::intent::arena_tells(w);
+        assert_eq!(marks.arena, tells);
+        assert!(!tells[0].cells.is_empty() && tells[0].cells.iter().all(|c| c.x == col));
+        // the hover cards
+        let tile = |c: V2| format!("tile.{}.{}", c.x, c.y);
+        assert!(tip_text(&b, &tile(cells[0])).contains("Test smoke"), "{}", tip_text(&b, &tile(cells[0])));
+        assert!(!tip_text(&b, &tile(cells[1])).contains("Test wire"), "the hidden foe trap has no card");
+        assert!(tip_text(&b, &tile(cells[2])).contains("Hidden from the foes"));
+        let struck = tells[0].cells.iter().copied().find(|c| w.occupant(*c).is_none()).expect("a free struck cell");
+        assert!(tip_text(&b, &tile(struck)).contains("Test Vents: strikes here this round"), "{}", tip_text(&b, &tile(struck)));
+        for blk in 1..=s(&b).def.total_blocks {
+            let t = tip_text(&b, &format!("strip.block{blk}"));
+            assert_eq!(t.contains(&format!("Test Vents strikes at the end of block {blk}")), tells[0].blocks.contains(&blk), "block {blk}: {t}");
+        }
+        // the agent link
+        let st = b.state(&cx);
+        assert_eq!(st["hook_marks"]["ground"].as_array().unwrap().len(), 2);
+        assert_eq!(st["hook_marks"]["arena"], emberwake_battle::intent::arena_json(&tells));
+    }
+
+    /// The marks draw on the ground in both views: a frame with them differs from the same frame with both layers off;
+    /// with the layers off the marks, the hover lines and the strip lines are gone.
+    #[test]
+    fn the_layers_switch_the_marks() {
+        for view in ["flat", "stage"] {
+            let (mut cx, mut g, mut b) = arena_screen(Some(TIMELINE), RULES);
+            cx.settings.v["battle_view"] = json!(view);
+            let (cells, _) = mark_up(&mut b);
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            let on = g.canvas.px.clone();
+            cx.settings.v["battle_overlays"] = json!({"hazards": false, "arena": false});
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            assert_ne!(on, g.canvas.px, "{view}: the marks draw");
+            let marks = HookMarks::of(s(&b), &Layers::of(&cx.settings.v["battle_overlays"]));
+            assert!(marks.ground.is_empty() && marks.arena.is_empty());
+            assert!(!tip_text(&b, &format!("tile.{}.{}", cells[0].x, cells[0].y)).contains("Test smoke"));
+            assert!((1..=s(&b).def.total_blocks).all(|blk| !tip_text(&b, &format!("strip.block{blk}")).contains("Test Vents")));
+            assert_eq!(b.state(&cx)["hook_marks"]["ground"], json!([]));
+        }
+    }
+
+    /// Classic (and a timeline battle without the two rules): nothing is marked whatever the flags say, and the state
+    /// has no `hook_marks` key.
+    #[test]
+    fn without_the_rules_nothing_is_marked() {
+        for (ruleset, rules) in [(None, ""), (Some(TIMELINE), "-ground_hazards,-arena_hazards")] {
+            let (mut cx, mut g, mut b) = arena_screen(ruleset, rules);
+            mark_up(&mut b);
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            let marks = HookMarks::of(s(&b), &Layers::of(&Value::Null));
+            assert!(marks.ground.is_empty() && marks.arena.is_empty(), "{ruleset:?} {rules}");
+            assert!(b.state(&cx).get("hook_marks").is_none(), "{ruleset:?} {rules}: the state keeps its shape");
+        }
+    }
+
 }

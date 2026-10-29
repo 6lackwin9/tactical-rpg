@@ -352,3 +352,7 @@ in `docs/archive/TASKS_DONE.md`, the user's rulings the rows in `games/emberwake
 - HOOKS1-AI: AT3's threat (ground and arena) is under `ai_tactics` (the arena part also needs `arena_hazards`); hits
   are remembered per round in `World::hits` (attack hits that took HP); under round intent `flush_cover` picks a tile
   target for an area opener that still holds the first ranked target; SOFTEST and TOUGHEST outrank `reckless`.
+- HOOKS1-UI (building; slice 1): UM7's pip cutoff is the steps from min to max (`max - min` above 10 reads as a bar) in
+  the content check as on the battle screen; leaving a band removes a resist key the band created; the battle report
+  calls an execute finish "executed"; the board marks the ground hazards the party's side sees and the arena's struck
+  cells (overlay groups `hazards`, `arena`).
