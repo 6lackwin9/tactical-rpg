@@ -248,6 +248,18 @@ and AP, flanks, carried moves, kite steps, lost attacks, planner reasons, rounds
   `tests/fixtures/timeline_golden.json`, recorded once when X lands; re-recorded only for an intended rule change
   named in the commit and a HISTORY row.
 
+RULESET1-X as built (2026-10-29): both checks live in the game's façade crate,
+`games/emberwake/crates/emberwake_battle/tests/timeline_golden.rs` with `tests/fixtures/{timeline_kit,timeline_golden}.json`
+(the `tl_` fights are game data and the kit names no game). The frozen catalog is the loader's catalog output; each
+fight keeps the encounter's party, enemies, round limit and board keys (as `feel`), preset `balanced`, no jitter, the
+timeline row; a fight record is `sim::fight`'s trace plus outcome, rounds and plan failure; a failure prints the first
+difference (round, step or the path inside log, metrics or report). Re-record: `RECORD=1 tools/fc.sh test --test
+timeline_golden` (keeps the frozen catalog; delete it to re-freeze). The inert check plays the Ashlands' own encounters
+for seeds 1 and 2 (preset `balanced`) under classic and under classic with every register extension on (HOOKS1's too)
+and compares every step, the RNG draws after each step, events, log, metrics and report, with two allowances:
+`plan_badges` (no data needed) appends columns to each tell, cut before the comparison, and an extension's own readout
+(the `poise` metrics) may be added if it counts nothing; a run under the timeline row must differ (the check is live).
+
 ## 5. Parity plan
 
 - No effect: `trace_parity`, `world_traces`, `journey` (classic, no new keys); `checks_parity`, `sim_parity`,

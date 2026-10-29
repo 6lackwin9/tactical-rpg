@@ -643,7 +643,10 @@ name = "emberwake_battle"
 version = "0.1.0"
 dependencies = [
  "aegis_core",
+ "emberwake_content",
  "emberwake_data",
+ "emberwake_rules",
+ "emberwake_world",
  "indexmap",
  "rpgkit_battle",
  "serde_json",
