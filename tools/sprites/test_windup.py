@@ -37,7 +37,11 @@ STRIKES = {'warrior': {'attack': 2, 'shield_bash': 2}, 'ranger': {'attack': 4}, 
            'mage': {'attack': 3}, 'brawler': {'jab': 2, 'haymaker': 2, 'kick': 2, 'sweep_kick': 2},
            'crawler': {'attack': 2, 'spit': 2}, 'beast': {'attack': 1}}
 # the bodies with views (K6): DIR4-R1's pilot, and DIR4-R2's five classes and the 2H axe and hammer looks
-PILOT = ('warrior', 'warrior/2h_sword', 'warrior/2h_axe', 'warrior/2h_hammer', 'brawler', 'ranger', 'rogue', 'priest', 'mage')
+PILOT = ('warrior', 'warrior/2h_sword', 'warrior/2h_axe', 'warrior/2h_hammer', 'brawler', 'ranger', 'rogue', 'priest', 'mage',
+         # DIR4-R3: the goblin and named variants and the 1H + buckler look
+         'brawler/goblin', 'brawler/goblin_berserker', 'rogue/goblin', 'rogue/goblin_scout', 'ranger/goblin', 'priest/goblin',
+         'brawler/ash_warchief', 'warrior/grakka_ashmaw', 'warrior/brask_toller', 'warrior/hest_the_quartermaster',
+         'warrior/orsa_tallow', 'ranger/wenn_tallow', 'warrior/1h_buckler')
 
 
 def quiet(fn, *a):
@@ -527,8 +531,8 @@ class Review(unittest.TestCase):
     def test_review_board_and_gifs(self):
         # X6: a pose board and three GIFs per body with wind-up rows; nothing for a body without them
         with tempfile.TemporaryDirectory() as tmp:
-            for key, views_too in (('warrior', True), ('warrior/1h_buckler', False)):
-                frames, times = variants.clips(key)[:2] if '/' in key else classes.clips(key)
+            for key, views_too in (('warrior', True), ('crawler/base', False)):   # DIR4-R3: every humanoid has views
+                frames, times = export_units.source(key)[2:4]
                 paths = export_units.windup_review(tmp, key, frames, times)
                 name = key.replace('/', '_')
                 self.assertEqual([os.path.basename(p) for p in paths],

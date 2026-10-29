@@ -50,8 +50,9 @@ kit's `kits/rpg/assets/` or `engine/assets/`). Python 3.12 with Pillow and numpy
   `warrior/hest_the_quartermaster`, `warrior/orsa_tallow`, `ranger/wenn_tallow`) and the palette files on the kit's
   goblin bodies (`units/<class>/<goblin variant>/palettes/ash.json` for the Horde mobs, `<character>.json` for the
   named goblins). `--review OUT` writes contact sheets and GIFs for a review page. DIR4: a body whose parts and grip all
-  have view drawers (`tools/sprites/views.py`; today the six class bases `warrior`, `ranger`, `brawler`, `priest`,
-  `rogue`, `mage` and the warrior's `2h_sword`, `2h_axe` and `2h_hammer` looks) gets its view rows after the side rows;
+  have view drawers (`tools/sprites/views.py`; since DIR4-R3 every body on the humanoid rig: the six class bases, the
+  warrior's looks, the goblin and named variants; the dummy and the creatures keep side rows) gets its view rows after
+  the side rows;
   the exporter exits when a view clip's frames or ms differ from its side clip (R3), a view adds a colour or a palette
   slot (R4), front and back differ in under 10% of the pixels at 28 px (6.4), or the front and back idle frames leave
   out a palette slot colour the side idle frame shows (DIR4-R2, decision "Front and back views follow the side

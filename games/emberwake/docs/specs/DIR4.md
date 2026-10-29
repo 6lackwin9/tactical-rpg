@@ -267,6 +267,29 @@ New rows per body in the first stage: 6 (`idle_down`, `idle_up`, `walk_down`, `w
 - Checks: every row from before the task pixel-identical (389 rows compared), clip entries and palettes unchanged,
   widths unchanged; X2 and X3 and the readability check pass on the new view rows.
 
+### 6.7 As built (DIR4-R3 and DIR4-R1F's buckler part, 2026-10-30)
+
+- Bodies: the 12 variants (`brawler/goblin`, `goblin_berserker`, `ash_warchief`; `rogue/goblin`, `goblin_scout`;
+  `ranger/goblin`, `wenn_tallow`; `priest/goblin`; `warrior/grakka_ashmaw`, `brask_toller`,
+  `hest_the_quartermaster`, `orsa_tallow`) and the warrior's `1h_buckler` look get 18 view rows each (sheets of 32
+  to 35 rows). Every body on the humanoid rig now has views; the dummy and the creatures keep side rows.
+- Parts (`views.py`), each the side rig's own (decision "Front and back views follow the side model"):
+  - the goblin head: bald as in the side view (the stand-in's hair is gone), the long ears standing out to both
+    sides, yellow eyes, the hooked nose, the heavy jaw and two tusks in front, the skull and nape behind; under the
+    goblin hood the ears poke out through it;
+  - the seven hats: `band` (knot and tails), `bandana` (knot and end), `hood`, `mohawk` (a fan of thin spikes in the
+    hair and its shade, not a block), `skull` (eye sockets and snout, horns, feather), `horns` (iron cap and two bone
+    horns; the Ash Warchief has no hair, as in his side view), `crown` (the band of rusted nails, the gold stud);
+  - the named heads `bare` (hair with strands in its shade), `kettle`, `cap` (visor in front) and the flags `beard`,
+    `braid` (down the back) and `pauldron` (on the right shoulder);
+  - weapons `hand_axe` and `double_axe`; the off-hand `buckler` (its face in `down`, its back with the strap in `up`,
+    held a little out so it shows past the body).
+- Grips: the buckler grip gets the side view's overhand cut and the WINDUP1 rows per weapon (sword, hand axe) through
+  its `weapons` table, the windup hold the weapon cocked behind the head; its ready pose carries the buckler a little
+  out. Grakka's double axe chops as the axe; its ready pose leans it further out so its two heads clear the face.
+- Checks: every row from before the task pixel-identical (527 rows compared), clip entries, palettes and palette
+  files unchanged; X2, X3, the readability and the side-model checks pass on every body.
+
 ## 7. Cost per body
 
 Units: one rig session = one asset-lane run with its review export. Rough estimates; the pilot calibrates them.
