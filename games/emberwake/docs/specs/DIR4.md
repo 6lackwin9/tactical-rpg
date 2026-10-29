@@ -240,6 +240,33 @@ New rows per body in the first stage: 6 (`idle_down`, `idle_up`, `walk_down`, `w
 4. No blank frame (`aegis_ui::art::blank_frames`); the body checks and content checks are clean.
 5. The review page shows the turnaround boards; the user's sign-off is recorded for DIR4-R1.
 
+### 6.6 As built (DIR4-R2, 2026-10-29)
+
+- Bodies: `ranger`, `brawler`, `priest`, `rogue`, `mage` (base) and the warrior's `2h_axe` and `2h_hammer` looks get
+  18 view rows each (idle, walk, the main attack and the six WINDUP1 rows, `down` and `up`); sheets of 32 to 35 rows
+  (the brawler 35, 1680 px). The goblin and named variants (DIR4-R3) and the buckler look (DIR4-R1F) keep side rows.
+- Same model (decision "Front and back views follow the side model"): every part has a view drawer made from the side
+  rig's own part, in `views.py`:
+  - heads: `headband` (hair, the band, its knot and tails), `hood` with the `mask` flag, `cowl` (the circlet), `hat`
+    (brim, band, bent cone, white hair in locks and the beard);
+  - garments: `bare` (the sash), `leather` (the cross belt), `robe` and the robe skirt to the ankles;
+  - back gear: `quiver` (fletchings over the left shoulder in `down`, the whole quiver in `up`) and `cape` (behind the
+    legs in `down`, over the back in `up`);
+  - weapons: `fists`, `bow`, the two `dagger`s, `mace`, `staff`, `battle_axe` and `warhammer` (the 2H heads keep
+    their width when foreshortened).
+- Grips: `views.GRIPS` per class. The 2H grip draws the axe and the hammer with the side view's chop through its
+  `weapons` table (`views.grip_of`); the greatsword keeps the cut.
+- Readings: from behind the cape covers the tunic and the arms are drawn over it (layer 5, not 8; back gear now draws
+  after the torso garment within a layer); a belt buckle is gold only with weapons that have gold fittings (sword,
+  greatsword, dagger), else steel, so no view adds a slot; the back-view jab rises beside the head instead of growing;
+  the mage's hat tip bends over his left side (user, decision "DIR4-R2 art answers": keep these, the priest's front
+  wind-up as built; the brawler's guard fists beside the jaw and the ranger's bow further out and tilted were fixed).
+- Exporter: the side-model check (`check_view_model`, exits naming a slot colour the side idle frame shows and neither
+  view idle frame does); the turnaround board adds the four wind-up holds; `--review` writes `models.png` (side, front
+  and back of each body with views, idle and windup hold).
+- Checks: every row from before the task pixel-identical (389 rows compared), clip entries and palettes unchanged,
+  widths unchanged; X2 and X3 and the readability check pass on the new view rows.
+
 ## 7. Cost per body
 
 Units: one rig session = one asset-lane run with its review export. Rough estimates; the pilot calibrates them.

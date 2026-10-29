@@ -35,7 +35,8 @@ CLIP_SET = {'windup': (7, [90, 110, 120, 180, 180, 180, 180], True, 3),
 STRIKES = {'warrior': {'attack': 2, 'shield_bash': 2}, 'ranger': {'attack': 4}, 'priest': {'attack': 2}, 'rogue': {'attack': 1},
            'mage': {'attack': 3}, 'brawler': {'jab': 2, 'haymaker': 2, 'kick': 2, 'sweep_kick': 2},
            'crawler': {'attack': 2, 'spit': 2}, 'beast': {'attack': 1}}
-PILOT = ('warrior', 'warrior/2h_sword')   # the bodies with views (K6)
+# the bodies with views (K6): DIR4-R1's pilot, and DIR4-R2's five classes and the 2H axe and hammer looks
+PILOT = ('warrior', 'warrior/2h_sword', 'warrior/2h_axe', 'warrior/2h_hammer', 'brawler', 'ranger', 'rogue', 'priest', 'mage')
 
 
 def quiet(fn, *a):
@@ -233,7 +234,7 @@ class Bodies(unittest.TestCase):
                 n = ids.index(cid)
                 self.assertTrue(same(sheet.crop((0, n * rig.W, sheet.width, (n + 1) * rig.W)),
                                      old_sheet.crop((0, r * rig.W, sheet.width, (r + 1) * rig.W))), (key, cid))
-            self.assertLessEqual(sheet.height, 33 * rig.W, key)
+            self.assertEqual(sheet.height, (len(old_ids) + (18 if key in PILOT else 6)) * rig.W, key)
 
     def test_no_blank_frame_and_effect_colours_only(self):
         # X5, K5: every new frame draws the figure; the new rows use the palette, OUT, WHITE and the gold motes only

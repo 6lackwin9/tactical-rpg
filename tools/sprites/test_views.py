@@ -22,6 +22,9 @@ import views  # noqa: E402
 
 TEST_BODY = "warrior/_viewtest"
 PILOT = ("warrior", "warrior/2h_sword")   # DIR4-R1 (L5): both warrior grips, the 2H one with the greatsword
+# DIR4-R2: the other five classes and the 2H battle axe and warhammer looks
+R2 = ("brawler", "ranger", "rogue", "priest", "mage", "warrior/2h_axe", "warrior/2h_hammer")
+VIEW_BODIES = PILOT + R2
 VIEW_IDS = ['idle_down', 'idle_up', 'walk_down', 'walk_up', 'attack_down', 'attack_up']
 # WINDUP1 K6, K7: the pilot bodies' wind-up, stagger and dazed view rows come after today's view rows
 VIEW_IDS += ['%s_%s' % (n, v) for n in rig.WINDUP_ROWS for v in views.VIEWS]
@@ -58,15 +61,19 @@ class Registry(unittest.TestCase):
         self._parts = copy.copy({k: dict(v) for k, v in views.PARTS.items()})
         self._grips = dict(views.GRIPS)
         self._bodies = dict(variants.BODIES)
+        self._model_check = export_units.check_view_model
 
     def tearDown(self):
         views.PARTS.clear(); views.PARTS.update(self._parts)
         views.GRIPS.clear(); views.GRIPS.update(self._grips)
         variants.BODIES.clear(); variants.BODIES.update(self._bodies)
+        export_units.check_view_model = self._model_check
 
     def register_test_body(self, head=views.plain_head, torso=views.plain_torso):
         """A warrior with a bare head and a leather torso (both drawn by the side rig), its parts given stand-in view
-        drawings, its sword and shield drawn as nothing, and the warrior grip given the core's rest pose."""
+        drawings, its sword and shield drawn as nothing, and the warrior grip given the core's rest pose. It leaves out
+        the side model's weapon on purpose, so the side-model check (check_view_model) is off for it."""
+        export_units.check_view_model = lambda *a: None
         u = variants.variant('warrior', head='bare', torso='leather')
         variants.BODIES[TEST_BODY] = ('kit', 'warrior', u, None)
         views.PARTS['head']['bare'] = head
@@ -80,11 +87,12 @@ class Registry(unittest.TestCase):
 
 class Support(unittest.TestCase):
     def test_no_shipped_body_has_views_yet(self):
-        # R5: only the pilot bodies (DIR4-R1) have view drawings for every part and their grip; every other body keeps
-        # its side rows only, and the exporter writes no view clip for it
+        # R5: only the DIR4-R1 and R2 bodies have view drawings for every part and their grip; every other body (the
+        # goblin and named variants, DIR4-R3; the buckler look, DIR4-R1F) keeps its side rows only, and the exporter
+        # writes no view clip for it
         for key, cls, u in rig_bodies():
-            self.assertEqual(views.supports(u, cls), key in PILOT, (key, views.missing(u, cls)))
-        clips = quiet(export_units.body, 'ranger', 'all')[4]['clips']
+            self.assertEqual(views.supports(u, cls), key in VIEW_BODIES, (key, views.missing(u, cls)))
+        clips = quiet(export_units.body, 'ranger/goblin', 'all')[4]['clips']
         self.assertFalse([c for c in clips if 'view' in c or 'of' in c])
 
     def test_other_warrior_looks_keep_side_views(self):
@@ -93,7 +101,7 @@ class Support(unittest.TestCase):
         for key, (cls, look) in variants.looks().items():
             u = variants.look_unit(classes.UNITS[cls], look)
             miss = views.missing(u, cls)
-            if key in PILOT:
+            if key in VIEW_BODIES:
                 self.assertEqual(miss, [], key)
                 continue
             self.assertTrue(miss, key)
@@ -103,11 +111,11 @@ class Support(unittest.TestCase):
                 self.assertIn('offhand %s' % u['offhand'], miss)
 
     def test_missing_names_each_part(self):
-        u = classes.UNITS['ranger']
-        miss = views.missing(u, 'ranger')
+        u = dict(classes.UNITS['ranger'], head='bare', torso='vest', weapon='crossbow', back='satchel')
+        miss = views.missing(u, 'nobody')
         for kind, name in (('head', u['head']), ('torso', u['torso']), ('weapon', u['weapon']), ('back', u['back'])):
             self.assertIn('%s %s' % (kind, name), miss)
-        self.assertIn('grip ranger', miss)
+        self.assertIn('grip nobody', miss)
 
     def test_dummy_and_creatures_get_no_views(self):
         for key in list(variants.PROPS) + list(variants.CREATURES):
@@ -324,9 +332,9 @@ class Exporter(Registry):
             paths = export_units.turnaround(tmp, 'warrior', frames, times)
             self.assertEqual([os.path.basename(p) for p in paths],
                              ['warrior_turnaround.png', 'warrior_walk_4dir.gif', 'warrior_attack_views.gif'])
-            frames, times = classes.clips('ranger')
-            paths = export_units.turnaround(tmp, 'ranger', frames, times)   # stand-ins, no attack view yet
-            self.assertEqual([os.path.basename(p) for p in paths], ['ranger_turnaround.png', 'ranger_walk_4dir.gif'])
+            frames, times = export_units.source('ranger/goblin')[2:4]
+            paths = export_units.turnaround(tmp, 'ranger/goblin', frames, times)   # stand-ins on the ranger's grip
+            self.assertEqual([os.path.basename(p) for p in paths], ['ranger_goblin_turnaround.png', 'ranger_goblin_walk_4dir.gif', 'ranger_goblin_attack_views.gif'])
             self.assertTrue(all(os.path.getsize(p) > 0 for p in paths))
             self.assertEqual(export_units.turnaround(tmp, 'dummy/base', *variants.dummy_clips()), [])
 
@@ -491,6 +499,104 @@ class Pilot(Registry):
             for n, im in enumerate(A[vid]):
                 self.assertEqual(pixels(im, trim), [], (vid, n))
         self.assertGreater(mean_x(self.blade(u, 'up', A['idle_up'][0])), views.CX)
+
+
+class Classes(Registry):
+    """DIR4-R2's bodies against 6.5 and decision "Front and back views follow the side model" (user 2026-10-29)."""
+
+    def view_ids(self, key):
+        attack = 'jab' if key == 'brawler' else 'attack'
+        ids = ['idle_down', 'idle_up', 'walk_down', 'walk_up', attack + '_down', attack + '_up']
+        return ids + ['%s_%s' % (n, v) for n in rig.WINDUP_ROWS for v in views.VIEWS]
+
+    def test_view_clips_after_the_side_rows(self):
+        # 6.5 checks 1-3, R3, R4: the view clips after the side clips with their side clip's frames, ms, loop and
+        # loop_from; the side rows pixel-identical to the body without views; the palette unchanged
+        for key in R2:
+            _, _, _, sheet, out = quiet(export_units.body, key, 'all')
+            clips = out['clips']
+            side = [c for c in clips if 'view' not in c]
+            self.assertEqual([c['id'] for c in clips[len(side):]], self.view_ids(key), key)
+            by_id = {c['id']: c for c in side}
+            for c in clips[len(side):]:
+                s = by_id[c['of']]
+                self.assertEqual((c['frames'], c['ms'], c['loop'], c.get('loop_from')),
+                                 (s['frames'], s['ms'], s['loop'], s.get('loop_from')), (key, c['id']))
+            cls, u = export_units.unit_of(key)
+            grips = dict(views.GRIPS)
+            views.GRIPS.pop(views.grip_key(cls, u))
+            _, _, _, side_sheet, side_out = quiet(export_units.body, key, 'all')
+            views.GRIPS.clear(); views.GRIPS.update(grips)
+            self.assertEqual(out['palette'], side_out['palette'], key)
+            self.assertEqual(sheet.crop((0, 0) + side_sheet.size).tobytes(), side_sheet.tobytes(), key)
+
+    def test_views_draw_the_bodys_own_parts(self):
+        # the user's rule: a front or back view is the side view's model, drawn from the body's own parts (its head
+        # and headgear, garment, back gear, weapon and off-hand), never a stand-in: every part has its own view
+        # drawer and that drawer shows in idle frame 0 (left out, the frame changes); the head, the garment and the
+        # weapon show in both views
+        for key in R2:
+            cls, u = export_units.unit_of(key)
+            base = {v: views.clips(cls, u)[0]['idle_' + v][0].tobytes() for v in views.VIEWS}
+            for kind, name in views.parts_of(u):
+                drawer = views.PARTS[kind].get(name)
+                self.assertIsNotNone(drawer, (key, kind, name))
+                self.assertNotIn(drawer, views.STAND_INS.values(), (key, kind, name))
+                views.PARTS[kind][name] = nothing
+                try:
+                    shown = [v for v in views.VIEWS if views.clips(cls, u)[0]['idle_' + v][0].tobytes() != base[v]]
+                finally:
+                    views.PARTS[kind][name] = drawer
+                self.assertTrue(shown, (key, kind, name))
+                if kind in ('head', 'weapon') or (kind == 'torso' and u.get('back') != 'cape'):  # a cape covers the back
+                    self.assertEqual(shown, list(views.VIEWS), (key, kind, name))
+
+    def test_views_keep_the_side_colours(self):
+        # the same model: every palette slot colour the side idle frame shows (hood, hair, headband, cloak, robe,
+        # weapon...) shows in the front or the back idle frame
+        for key in R2:
+            cls, u = export_units.unit_of(key)
+            side = classes.clips(cls, unit=u)[0]['idle'][0]
+            V = views.clips(cls, u)[0]
+            slots = {tuple(v[:3]) for k, v in u['pal'].items() if not k.endswith(('_lo', '_hi'))}
+            want = export_units.colours(side) & slots
+            got = export_units.colours(V['idle_down'][0]) | export_units.colours(V['idle_up'][0])
+            self.assertFalse(want - got, key)
+
+    def test_no_blank_frame(self):
+        for key in R2:
+            cls, u = export_units.unit_of(key)
+            for vid, frames in views.clips(cls, u)[0].items():
+                for n, im in enumerate(frames):
+                    self.assertGreater(len(solid(im)), 150, (key, vid, n))
+
+    def test_exporter_exits_when_a_view_drops_the_side_model(self):
+        # check_view_model: a view that leaves out a part the side shows (here the ranger's bow, its only wood) stops
+        # the export, naming the slot
+        views.PARTS['weapon']['bow'] = nothing
+        with self.assertRaises(SystemExit) as e:
+            quiet(export_units.body, 'ranger', 'all')
+        self.assertIn('wood', str(e.exception))
+        self.assertIn('side model', str(e.exception))
+
+    def test_model_sheet(self):
+        # the review's model sheet: one row per body with views; none without
+        with tempfile.TemporaryDirectory() as tmp:
+            path = export_units.model_sheet(tmp, ['ranger', 'ranger/goblin', 'brawler'])
+            self.assertEqual(os.path.basename(path), 'models.png')
+            from PIL import Image
+            self.assertEqual(Image.open(path).height, 20 + 2 * rig.W * 4)
+            self.assertIsNone(export_units.model_sheet(tmp, ['ranger/goblin', 'dummy/base']))
+
+    def test_two_hand_back_hides_the_grip(self):
+        # the pilot review's rule on the axe and the hammer: from behind no wrapped grip shows below the torso
+        for key in ('warrior/2h_axe', 'warrior/2h_hammer'):
+            cls, u = export_units.unit_of(key)
+            pelvis = views.joints(u, 'up')['pelvis'][1]
+            for vid in ('idle_up', 'walk_up'):
+                for n, im in enumerate(views.clips(cls, u)[0][vid]):
+                    low = [p for p in pixels(im, u['pal']['leather_lo']) if p[1] > pelvis + 1]
+                    self.assertEqual(low, [], (key, vid, n))
 
 
 if __name__ == "__main__":

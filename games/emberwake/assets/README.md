@@ -49,11 +49,14 @@ kit's `kits/rpg/assets/` or `engine/assets/`). Python 3.12 with Pillow and numpy
   `warrior/hest_the_quartermaster`, `warrior/orsa_tallow`, `ranger/wenn_tallow`) and the palette files on the kit's
   goblin bodies (`units/<class>/<goblin variant>/palettes/ash.json` for the Horde mobs, `<character>.json` for the
   named goblins). `--review OUT` writes contact sheets and GIFs for a review page. DIR4: a body whose parts and grip all
-  have view drawers (`tools/sprites/views.py`; today `warrior/base` and `warrior/2h_sword`) gets its view rows after the
-  side rows; the exporter exits when a view clip's frames or ms differ from its side clip (R3), a view adds a colour or
-  a palette slot (R4), or front and back differ in under 10% of the pixels at 28 px (6.4); other bodies keep side rows
-  and the exporter prints what they lack; `--review` adds `<body>_turnaround.png`, `<body>_walk_4dir.gif` and
-  `<body>_<attack>_views.gif`. WINDUP1 (spec `games/emberwake/docs/specs/WINDUP1.md` 7.3): every attack clip marks
+  have view drawers (`tools/sprites/views.py`; today the six class bases `warrior`, `ranger`, `brawler`, `priest`,
+  `rogue`, `mage` and the warrior's `2h_sword`, `2h_axe` and `2h_hammer` looks) gets its view rows after the side rows;
+  the exporter exits when a view clip's frames or ms differ from its side clip (R3), a view adds a colour or a palette
+  slot (R4), front and back differ in under 10% of the pixels at 28 px (6.4), or the front and back idle frames leave
+  out a palette slot colour the side idle frame shows (DIR4-R2, decision "Front and back views follow the side
+  model"); other bodies keep side rows and the exporter prints what they lack; `--review` adds
+  `<body>_turnaround.png` (idle, walk, the attack and the wind-up holds), `<body>_walk_4dir.gif`,
+  `<body>_<attack>_views.gif` and, once per run, `models.png` (side, front and back of each body). WINDUP1 (spec `games/emberwake/docs/specs/WINDUP1.md` 7.3): every attack clip marks
   its `strike` frame (`rig.strike`, else exit); a body of a class in `classes.WINDUP_CLASSES` (all six classes; the
   creatures come with WINDUP1-R3) has the six wind-up rows with section 4's frames, ms, loop and `loop_from` (X1), its `windup`
   hold within 15 % of the attack's frame `strike - 1` at 48 px (X2), the four holds, `dazed` and `idle` 6 % apart at

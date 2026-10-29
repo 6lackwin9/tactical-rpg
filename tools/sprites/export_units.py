@@ -26,12 +26,15 @@
 # --review OUT: per body a contact sheet (every clip's frames at 3x, one row per clip), GIFs of idle and the first attack
 #   clip, and per palette file the idle frame recoloured; for the review page (nothing is written under OUT otherwise);
 #   per rig body also the DIR4 turnaround board (<body>_turnaround.png: idle, walk, the attack in side right, side left,
-#   down and up at 3x and at the 28 px token size) and <body>_walk_4dir.gif (plus <body>_<attack>_views.gif once the
-#   grip has an attack view); a body without view drawings is shown with views.STAND_INS, named on the board.
+#   down and up at 3x and at the 28 px token size; DIR4-R2: plus the four wind-up holds) and <body>_walk_4dir.gif (plus
+#   <body>_<attack>_views.gif once the grip has an attack view); a body without view drawings is shown with
+#   views.STAND_INS, named on the board; and once per run models.png (model_sheet: side, front and back of each body
+#   with views, idle and windup hold, to check they are one model).
 # Views (DIR4, tools/sprites/views.py): a body whose parts and grip all have view drawings (views.supports) gets the
 #   view clips after its side clips, each with "of" and "view", its side clip's frames, ms and loop (R3, else exit);
 #   the view rows add no colour outside the unit's palette, rig OUT and WHITE and no palette slot (R4, else exit naming
-#   it); idle_down and idle_up must differ in 10 % of their opaque pixels at 28 px (6.4, else exit). Other bodies
+#   it); idle_down and idle_up must differ in 10 % of their opaque pixels at 28 px (6.4, else exit); every palette slot
+#   colour of the side idle frame shows in the front or back idle frame (check_view_model, else exit naming it). Other bodies
 #   are written without views and the exporter prints what they lack.
 import argparse
 import json
@@ -131,7 +134,7 @@ def body(key: str, mode: str):
     check_windups(key, frames, clips, pal, keys)
     side = paste(frames, names)
     rows = dict(frames)
-    for vid, vfr in view_rows(key, clips).items():  # DIR4: the view clips after the side clips, each with of and view
+    for vid, vfr in view_rows(key, clips, frames["idle"][0]).items():  # DIR4: the view clips after the side clips (of, view)
         base, view = views.of(vid)
         side_clip = next(c for c in clips if c["id"] == base)
         rows[vid] = vfr
@@ -179,10 +182,26 @@ def unit_of(key: str):
     return None
 
 
-def view_rows(key: str, clips: list) -> dict:
+def check_view_model(key: str, u: dict, side_idle: Image.Image, A: dict) -> None:
+    """Decision "Front and back views follow the side model" (user 2026-10-29): every palette slot colour (a base key
+    of the unit's palette, no _lo / _hi shade) that the side idle frame 0 shows also shows in idle_down or idle_up
+    frame 0 (the hood, the hair, the headband, the cloak, the weapon...); exits naming the slots a view leaves out."""
+    slots = {}
+    for k, v in u["pal"].items():
+        if not k.endswith(("_lo", "_hi")):
+            slots.setdefault(tuple(v[:3]), k)
+    shown = colours(A["idle_down"][0]) | colours(A["idle_up"][0])
+    lost = sorted(slots[c] for c in colours(side_idle) if c in slots and c not in shown)
+    if lost:
+        sys.exit("export_units: %s front and back idle frames leave out the side model's slot colours: %s (decision "
+                 "\"Front and back views follow the side model\")" % (key, ", ".join(lost)))
+
+
+def view_rows(key: str, clips: list, side_idle: Image.Image = None) -> dict:
     """DIR4 view clips of body `key` in sheet order (each side clip's down then up), {} when the body has no views:
-    views.supports (R5; prints what is missing), equal frames and ms to the side clip (R3, exits otherwise) and the
-    readability check (6.4, exits when idle_down and idle_up do not differ enough at the token size)."""
+    views.supports (R5; prints what is missing), equal frames and ms to the side clip (R3, exits otherwise), the
+    readability check (6.4, exits when idle_down and idle_up do not differ enough at the token size) and, given the side
+    idle frame 0, the side-model check (check_view_model)."""
     cu = unit_of(key)
     if cu is None:
         return {}
@@ -205,6 +224,8 @@ def view_rows(key: str, clips: list) -> dict:
     if share < views.READABLE:
         sys.exit("export_units: %s idle_down and idle_up differ in %.1f%% of their opaque pixels at %d px (at least %d%%, DIR4 6.4)"
                  % (key, share * 100, views.TOKEN, views.READABLE * 100))
+    if side_idle is not None:
+        check_view_model(key, u, side_idle, A)
     order = []
     for c in clips:
         order += ["%s_%s" % (c["id"], v) for v in views.VIEWS if "%s_%s" % (c["id"], v) in A]
@@ -383,8 +404,9 @@ def review(out: str, key: str, frames: dict, times: dict, pals: list) -> list:
 
 
 def turnaround(out: str, key: str, frames: dict, times: dict) -> list:
-    """DIR4 6.4 review of a rig body: a turnaround board (rows idle, walk, the attack; columns side right, side left
-    mirrored, down, up) at 3x and at the battle's token size (actual size and 3x), a GIF of walk in the four directions
+    """DIR4 6.4 review of a rig body: a turnaround board (rows idle, walk, the attack and, DIR4-R2, the four WINDUP1
+    holds (frame rig.LOOP_FROM); columns side right, side left mirrored, down, up) at 3x and at the battle's token size
+    (actual size and 3x), a GIF of walk in the four directions
     and one of the attack in down and up. A body without view support is drawn with the views.STAND_INS (named on the
     board); nothing here is written to the sheets. Returns the paths written ([] for the dummy and the creatures)."""
     cu = unit_of(key)
@@ -397,6 +419,7 @@ def turnaround(out: str, key: str, frames: dict, times: dict) -> list:
     name = key.replace("/", "_")
     attack = next((n for n in frames if n not in STANDARD), None)
     rows = [("idle", 0), ("walk", 2)] + ([(attack, len(frames[attack]) // 2)] if attack else [])
+    rows += [(n, rig.LOOP_FROM) for n in rig.WINDUPS if n in frames]
     dirs = ("side right", "side left", "down", "up")
 
     def cell(clip, n, d):
@@ -573,6 +596,44 @@ def main() -> None:
             _, _, fr, times, _, _ = source(key)
             for p in review(args.review, key, fr, times, pals) + turnaround(args.review, key, fr, times) + windup_review(args.review, key, fr, times):
                 print("review", p)
+    if args.review:
+        p = model_sheet(args.review, args.bodies or list(classes.UNITS) + variants.all_bodies())
+        if p:
+            print("review", p)
+
+
+def model_sheet(out: str, keys: list):
+    """DIR4-R2 review (decision "Front and back views follow the side model"): models.png, one row per body of `keys`
+    with view clips: idle frame 0 side, front (down) and back (up), then the windup hold (frame rig.LOOP_FROM) the same
+    way, at 4x, so the three views can be checked as one model. Returns the path written (None: no body has views)."""
+    rows = []
+    for key in keys:
+        cu = unit_of(key)
+        if cu is None or not views.supports(cu[1], cu[0]):
+            continue
+        side = source(key)[2]
+        V = views.clips(*cu)[0]
+        fr = [side["idle"][0], V["idle_down"][0], V["idle_up"][0]]
+        if "windup" in side and "windup_down" in V:
+            fr += [None] + [side["windup"][rig.LOOP_FROM], V["windup_down"][rig.LOOP_FROM], V["windup_up"][rig.LOOP_FROM]]
+        rows.append((key, fr))
+    if not rows:
+        return None
+    z, label = 4, 130
+    cz = rig.W * z
+    board = Image.new("RGBA", (label + 7 * cz, 20 + len(rows) * cz), REVIEW_BG + (255,))
+    d = ImageDraw.Draw(board)
+    for i, t in enumerate(("idle side", "idle front (down)", "idle back (up)", "", "windup side", "windup front", "windup back")):
+        d.text((label + i * cz + 6, 4), t, fill=(230, 226, 210))
+    for r, (key, fr) in enumerate(rows):
+        y = 20 + r * cz
+        d.text((6, y + 8), key, fill=(230, 226, 210))
+        for c, f in enumerate(fr):
+            if f is not None:
+                board.alpha_composite(f.resize((cz, cz), Image.NEAREST), (label + c * cz, y))
+    path = os.path.join(out, "models.png")
+    board.save(path)
+    return path
 
 
 if __name__ == "__main__":
