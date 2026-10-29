@@ -1110,6 +1110,31 @@ impl Session {
         self.w.allies.iter().all(|&a| !self.w.units[a].is_active() || self.plan.is_valid(&self.w, a))
     }
 
+    /// RULESET1-G2 (decision BREPORT1: one source for the report and the sims): the auto driver's round draft, what the
+    /// battle screen's autoplay sends (its tactic as a PlanPresets id, then confirm): a hold escape's holder by
+    /// `pick_default` (round 1 only; returned), then every ally drafted with `preset`. The host's `autoplay`, the CLI's
+    /// `battle`, the balance sims and the timeline golden all draft through it; the caller confirms.
+    pub fn auto_draft(&mut self, preset: &str) -> Option<UnitId> {
+        let holder = self.stay_pick_default();
+        self.plan_apply_preset_all(preset);
+        holder
+    }
+
+    /// RULESET1-G2: the auto driver's resolution: steps to the round's end (at most `sim::MAX_STEPS_PER_ROUND` steps),
+    /// each one fed to an attached sim BattleMetrics (`metrics_step`; a live one follows the session by itself).
+    pub fn resolve_round(&mut self) {
+        let sim_metrics = self.metrics.as_ref().is_some_and(|m| !m.live);
+        for _ in 0..crate::sim::MAX_STEPS_PER_ROUND {
+            if self.phase == Phase::Replay {
+                break;
+            }
+            self.step_next();
+            if sim_metrics {
+                self.metrics_step();
+            }
+        }
+    }
+
     pub fn confirm_plan(&mut self) -> bool {
         // ENCOUNTER2 H1: a hold escape is not planned before someone holds
         if self.phase != Phase::Planning || !self.plan_is_valid() || self.needs_stay_pick() {

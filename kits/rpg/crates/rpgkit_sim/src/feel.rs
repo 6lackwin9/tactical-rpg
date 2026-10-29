@@ -1,12 +1,15 @@
 //! The sim's `feel` mode (RULESET1_TASKS 3, RULESET1-G; engine-only, no Godot original): AI-vs-AI fights of catalog
 //! encounters with their authored party, under the timeline ruleset by default, read for how the rules feel rather
-//! than for balance scores. Per encounter and in total it reports wins and median rounds; poise (breaks by cause,
+//! than for balance scores. Per encounter and in total it reports the outcomes (won, lost, capped: the round limit with
+//! both sides standing, fled; RULESET1-G2) and the median rounds of every fight and of the won ones; poise (breaks by cause,
 //! windup hits and breaks, chance rolls and successes, sure breaks, the lock rate: a unit broken two rounds running);
 //! hits (flank and pierce shares, hits into a guard, lost attacks); per side the AP paid per round, the intent share and
 //! changes, the intent-bound buffs dropped, follow-ups, Rest blocks and their AP, carried moves, guard blocks and the
 //! rounds whose intent had no active (OI1); the party's kite steps and their AP and the planner's reason tags. The last
 //! line is the same numbers as JSON (`FEEL_JSON {...}`) for RULESET1-B. Deterministic: the same arguments print the
-//! same lines.
+//! same lines. RULESET1-G2: the party plays by the auto driver (`Session::auto_draft`, the battle screen's autoplay)
+//! with the `tactic=` tactic, or by the `timed` driver (timed.rs); `party=both` prints a block (and a FEEL_JSON line) per
+//! driver. `armor=` and `tune=` change the run's in-memory units and ruleset only.
 //!
 //! The runner calls the hooks (`start`, `planned`, `round_end`, `end`) while it fights; they only read the session.
 
@@ -102,9 +105,15 @@ impl Side {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Counts {
     pub fights: i64,
+    /// RULESET1-G2: the outcomes, summing to `fights`: won, lost, capped (the round limit, or a refused plan, with both
+    /// sides standing: the session gave no outcome) and fled (the party left).
     pub won: i64,
-    /// Each fight's rounds (the median's input).
+    pub lost: i64,
+    pub capped: i64,
+    pub fled: i64,
+    /// Each fight's rounds (the median's input), and the won fights' (PACE1 reads won-fight medians).
     pub rounds: Vec<i32>,
+    pub won_rounds: Vec<i32>,
     /// Breaks by cause (`poise`, `chance`, `sure`, `collision`: the log's BREAK cells).
     pub breaks: IndexMap<String, i64>,
     /// P5: damaging hits on a unit in windup, and those that broke it.
@@ -131,6 +140,8 @@ pub struct Counts {
     pub kite_ap: i64,
     /// PL6: the party planner's reason tags.
     pub reasons: IndexMap<String, i64>,
+    /// RULESET1-G2 (4.3): party unit-rounds the `timed` driver re-planned into a visible windup (0 under `auto`).
+    pub timed_rounds: i64,
     pub party: Side,
     pub enemy: Side,
 }
@@ -139,7 +150,11 @@ impl Counts {
     fn add(&mut self, o: &Counts) {
         self.fights += o.fights;
         self.won += o.won;
+        self.lost += o.lost;
+        self.capped += o.capped;
+        self.fled += o.fled;
         self.rounds.extend(&o.rounds);
+        self.won_rounds.extend(&o.won_rounds);
         for (k, v) in &o.breaks {
             *self.breaks.entry(k.clone()).or_default() += v;
         }
@@ -160,19 +175,19 @@ impl Counts {
         for (k, v) in &o.reasons {
             *self.reasons.entry(k.clone()).or_default() += v;
         }
+        self.timed_rounds += o.timed_rounds;
         self.party.add(&o.party);
         self.enemy.add(&o.enemy);
     }
 
     /// The median of the fights' rounds (the mean of the middle two for an even count; 0 without fights).
     pub fn median_rounds(&self) -> f64 {
-        let mut r = self.rounds.clone();
-        r.sort_unstable();
-        match r.len() {
-            0 => 0.0,
-            n if n % 2 == 1 => r[n / 2] as f64,
-            n => (r[n / 2 - 1] + r[n / 2]) as f64 / 2.0,
-        }
+        median(&self.rounds)
+    }
+
+    /// RULESET1-G2: the median rounds of the won fights (0 without one).
+    pub fn median_won_rounds(&self) -> f64 {
+        median(&self.won_rounds)
     }
 
     fn total_breaks(&self) -> i64 {
@@ -182,12 +197,13 @@ impl Counts {
     pub fn to_json(&self) -> Value {
         json!({
             "fights": self.fights, "won_pct": round1(pct(self.won, self.fights)), "median_rounds": self.median_rounds(),
+            "won": self.won, "lost": self.lost, "capped": self.capped, "fled": self.fled, "median_rounds_won": self.median_won_rounds(),
             "breaks": self.total_breaks(), "breaks_by_cause": counts_json(&self.breaks), "windup_hits": self.windup_hits, "windup_breaks": self.windup_breaks,
             "chance_rolls": self.chance_rolls, "chance_breaks": self.chance_breaks, "sure_breaks": self.sure_breaks,
             "lock_rate_pct": round1(pct(self.locked, self.bar_rounds)),
             "hits": self.hits, "flank_hits": self.flank_hits, "flank_pct": round1(pct(self.flank_hits, self.hits)),
             "pierce_hits": self.pierce_hits, "pierce_pct": round1(pct(self.pierce_hits, self.hits)), "guarded_hits": self.guarded_hits,
-            "lost_attacks": self.lost_attacks, "kite_steps": self.kite_steps, "kite_ap": self.kite_ap, "reasons": counts_json(&self.reasons),
+            "lost_attacks": self.lost_attacks, "kite_steps": self.kite_steps, "kite_ap": self.kite_ap, "reasons": counts_json(&self.reasons), "timed_rounds": self.timed_rounds,
             "party": self.party.to_json(), "enemy": self.enemy.to_json(),
         })
     }
@@ -196,7 +212,17 @@ impl Counts {
         let causes: Vec<String> = self.breaks.iter().map(|(k, v)| format!("{k} {v}")).collect();
         let reasons: Vec<String> = self.reasons.iter().map(|(k, v)| format!("{k} {v}")).collect();
         vec![
-            format!("FEEL {title}: {} fights, won {}%, median rounds {}", self.fights, round1(pct(self.won, self.fights)), self.median_rounds()),
+            format!(
+                "FEEL {title}: {} fights, won {}% (won {}, lost {}, capped {}, fled {}), median rounds {} (won {})",
+                self.fights,
+                round1(pct(self.won, self.fights)),
+                self.won,
+                self.lost,
+                self.capped,
+                self.fled,
+                self.median_rounds(),
+                self.median_won_rounds()
+            ),
             format!(
                 "  poise: breaks {}{}, windup hits {} (breaks {}), chance rolls {} (breaks {}), sure breaks {}, lock rate {}%",
                 self.total_breaks(),
@@ -222,7 +248,7 @@ impl Counts {
             ),
             self.party.line("party"),
             self.enemy.line("enemy"),
-            format!("  planner reasons: {}", if reasons.is_empty() { "-".to_string() } else { reasons.join(", ") }),
+            format!("  planner reasons: {}; timed rounds {}", if reasons.is_empty() { "-".to_string() } else { reasons.join(", ") }, self.timed_rounds),
         ]
     }
 }
@@ -243,6 +269,17 @@ pub struct Feel {
 /// tally counts kinds.
 fn reason_kind(tag: &str) -> String {
     tag.split(|ch: char| ch.is_ascii_digit()).next().unwrap_or("").trim().to_string()
+}
+
+/// The median of `rounds` (the mean of the middle two for an even count; 0 when empty).
+fn median(rounds: &[i32]) -> f64 {
+    let mut r = rounds.to_vec();
+    r.sort_unstable();
+    match r.len() {
+        0 => 0.0,
+        n if n % 2 == 1 => r[n / 2] as f64,
+        n => (r[n / 2 - 1] + r[n / 2]) as f64 / 2.0,
+    }
 }
 
 /// A tally as a JSON object (its order kept).
@@ -386,11 +423,20 @@ impl Feel {
         self.ap_planned.clear();
     }
 
-    /// The fight is over: its outcome, rounds and the log's breaks by cause.
-    pub fn end(&mut self, s: &Session, won: bool, rounds: i32) {
+    /// The fight is over: its outcome (the session's: won, lost, fled; none = capped), rounds and the log's breaks by
+    /// cause.
+    pub fn end(&mut self, s: &Session, rounds: i32) {
         let c = &mut self.counts;
         c.fights += 1;
-        c.won += won as i64;
+        match s.outcome.as_str() {
+            "won" => {
+                c.won += 1;
+                c.won_rounds.push(rounds);
+            }
+            "lost" => c.lost += 1,
+            "fled" => c.fled += 1,
+            _ => c.capped += 1,
+        }
         c.rounds.push(rounds);
         for e in s.log.iter().filter(|e| e.outcome == "BREAK") {
             *c.breaks.entry(e.status.clone()).or_default() += 1;
@@ -399,40 +445,74 @@ impl Feel {
 }
 
 /// The `feel` mode: each of the arguments' encounters (catalog encounters with a party) fought over every seed with its
-/// authored party, the encounter's round limit and board; a block of lines per encounter, the total, then FEEL_JSON.
+/// authored party, the encounter's round limit and board; per party driver a block of lines per encounter, the total,
+/// then FEEL_JSON.
 pub fn feel_mode(r: &mut Runner) {
+    // RULESET1-G2: the run's armour (in memory), the party's tactic; `preset=` (classic only) drafts both sides
+    for (id, armor) in r.args.armor.clone() {
+        r.set_armor(&id, armor);
+    }
+    r.preset = r.args.preset.clone();
+    r.party_tactic = (r.args.tactic != "balanced").then(|| r.args.tactic_preset().to_string());
+    for driver in r.args.drivers.clone() {
+        r.driver = driver;
+        feel_block(r);
+    }
+    r.driver = crate::timed::Driver::Auto;
+}
+
+/// Catalog encounter `id` fought once per seed with the runner's driver and tactic: its counts. RULESET1-G2: the
+/// encounter as authored (every field: objective, morale, timeout outcome, hazards...) but its round limit and seed,
+/// as the host's `new` and `autoplay` and the CLI `battle` fight it (jitter, distance and the enemy block aside).
+pub fn fight_encounter(r: &mut Runner, id: &str, seeds: &[i64]) -> Counts {
+    let entry = r.d.entry("encounters", id).clone();
+    let party = json::sget(&entry, "party");
+    let enemies = json::sget(&entry, "enemies");
+    let mut base = entry.clone();
+    for key in ["party", "enemies", "max_rounds", "rng_seed"] {
+        base.shift_remove(key);
+    }
+    r.rounds_override = json::i(&entry, "max_rounds", r.args.cap as i64) as i32;
+    r.feel = Some(Feel::default());
+    for &seed in seeds {
+        r.fight(&party, &enemies, seed, &base);
+    }
+    r.rounds_override = 0;
+    r.feel.take().map(|f| f.counts).unwrap_or_default()
+}
+
+/// One party driver's block of the feel mode.
+fn feel_block(r: &mut Runner) {
     let rules = r.fight_ruleset();
     let seeds = r.args.seeds();
-    r.print(format!("FEEL: {} rules [{}], {} seeds per encounter, party AI preset {}", rules.name, rules.rules.join(", "), seeds.len(), r.preset));
+    let driver = r.driver.id();
+    r.print(format!(
+        "FEEL: {} rules [{}], {} seeds per encounter, party driver {driver}, tactic {}, preset {}",
+        rules.name,
+        rules.rules.join(", "),
+        seeds.len(),
+        r.args.tactic,
+        r.preset
+    ));
+    let (fails_before, skips_before, fights_before) = (r.plan_fails, r.plan_skips, r.fights);
     let mut total = Counts::default();
     let mut per: Map<String, Value> = Map::new();
     for id in r.args.encounters.clone() {
-        let entry = r.d.entry("encounters", &id).clone();
-        let party = json::sget(&entry, "party");
-        let enemies = json::sget(&entry, "enemies");
-        // the encounter as authored but its party, enemies, round limit and seed (the runner's)
-        let mut base = Map::new();
-        for key in ["zone", "arena", "exits", "rows", "total_blocks", "unit_ap", "ap_regen", "deployment", "objective", "phases", "guests"] {
-            if let Some(v) = entry.get(key) {
-                base.insert(key.into(), v.clone());
-            }
-        }
-        r.rounds_override = json::i(&entry, "max_rounds", r.args.cap as i64) as i32;
-        r.feel = Some(Feel::default());
-        for &seed in &seeds {
-            r.fight(&party, &enemies, seed, &base);
-        }
-        r.rounds_override = 0;
-        let counts = r.feel.take().map(|f| f.counts).unwrap_or_default();
-        let lines = counts.lines(&format!("{id} ({})", json::s_or(&entry, "name", &id)));
+        let counts = fight_encounter(r, &id, &seeds);
+        let lines = counts.lines(&format!("{id} ({})", json::s_or(r.d.entry("encounters", &id), "name", &id)));
         r.out.extend(lines);
         per.insert(id.clone(), counts.to_json());
         total.add(&counts);
     }
     let lines = total.lines("TOTAL");
     r.out.extend(lines);
-    let (fails, skips) = (r.plan_fails, r.plan_skips);
-    r.print(format!("plan checks: {fails} PLAN FAIL, {skips} PLAN SKIP over {} fights", r.fights));
-    let out = json!({"ruleset": rules.id, "rules": rules.rules, "seeds": seeds.len(), "plan_fails": fails, "plan_skips": skips, "encounters": per, "total": total.to_json()});
+    let (fails, skips, fights) = (r.plan_fails - fails_before, r.plan_skips - skips_before, r.fights - fights_before);
+    r.print(format!("plan checks: {fails} PLAN FAIL, {skips} PLAN SKIP over {fights} fights"));
+    let armor: Map<String, Value> = r.args.armor.iter().map(|(k, v)| (k.clone(), json!(v))).collect();
+    let tune: Map<String, Value> = r.args.tune.iter().map(|(k, v)| (k.clone(), json!(v))).collect();
+    let out = json!({
+        "ruleset": rules.id, "rules": rules.rules, "seeds": seeds.len(), "driver": driver, "tactic": r.args.tactic, "preset": r.preset,
+        "armor": armor, "tune": tune, "plan_fails": fails, "plan_skips": skips, "encounters": per, "total": total.to_json(),
+    });
     r.print(format!("{JSON_PREFIX}{out}"));
 }

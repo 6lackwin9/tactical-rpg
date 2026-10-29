@@ -304,16 +304,14 @@ impl Battle {
                         }
                         s.advance_round();
                     }
+                    // RULESET1-G2: the auto driver (the sims' and the CLI `battle`'s draft and resolution)
                     if !s.plan_confirmed {
-                        s.stay_pick_default();
-                        s.plan_apply_preset_all(&preset);
+                        s.auto_draft(&preset);
                         if !s.confirm_plan() {
                             return err("autoplay: the party plan was refused");
                         }
                     }
-                    while s.phase != Phase::Replay {
-                        s.step_next();
-                    }
+                    s.resolve_round();
                     played += 1;
                 }
                 json!({"ok": true, "rounds": played, "log": s.resolver.log[from..].to_vec(), "state": state_of(s)})

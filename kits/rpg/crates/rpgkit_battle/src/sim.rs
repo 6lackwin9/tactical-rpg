@@ -182,9 +182,8 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
         rounds = round + 1;
         // The tells while planning (INTENT1), before the party's plan is confirmed.
         let intents = record.then(|| crate::intent::trace(&s.w, &s.enemy_intents()));
-        // ENCOUNTER2 H1: a hold escape's holder by `pick_default` (nothing to pick elsewhere)
-        s.stay_pick_default();
-        s.plan_apply_preset_all(&spec.preset);
+        // RULESET1-G2: the auto driver's draft (a hold escape's holder by `pick_default`, then the preset)
+        s.auto_draft(&spec.preset);
         if !s.confirm_plan() {
             if spec.jitter && plan_skip(&s) {
                 return FightResult { skipped: true, ..FightResult::default() };

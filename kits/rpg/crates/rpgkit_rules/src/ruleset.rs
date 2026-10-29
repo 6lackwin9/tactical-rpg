@@ -195,6 +195,27 @@ impl Numbers {
             deck_slots: DeckSlots { active: slot("active"), passive: slot("passive"), keystone: slot("keystone") },
         }
     }
+
+    /// RULESET1-G2 (`sim feel tune=`): sets one tuning number by its row key (the `stagger_*`, `flank_*`,
+    /// `break_chance_*` and `rest_*` numbers); an integer number takes a whole value. The caller checks the schema's
+    /// range. Err: not a tuning number, or a fraction for an integer one.
+    pub fn set(&mut self, key: &str, v: f64) -> Result<(), String> {
+        let whole = |v: f64| if v.fract() == 0.0 { Ok(v as i32) } else { Err(format!("{key} takes a whole number (got {v})")) };
+        match key {
+            "stagger_windup_mult" => self.stagger_windup_mult = v,
+            "stagger_guard_mult" => self.stagger_guard_mult = v,
+            "stagger_repeat_mult" => self.stagger_repeat_mult = v,
+            "flank_stagger_mult" => self.flank_stagger_mult = v,
+            "flank_power_mult" => self.flank_power_mult = v,
+            "break_chance_scale" => self.break_chance_scale = v,
+            "break_chance_cap" => self.break_chance_cap = whole(v)?,
+            "rest_ap_per_block" => self.rest_ap_per_block = v,
+            "rest_ap_cap" => self.rest_ap_cap = whole(v)?,
+            "rest_poise_per_block" => self.rest_poise_per_block = whole(v)?,
+            _ => return Err(format!("'{key}' is not a ruleset tuning number")),
+        }
+        Ok(())
+    }
 }
 
 /// The rules a battle plays by: classic (no rules) or a ruleset row's rules and numbers, possibly with single

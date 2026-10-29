@@ -242,7 +242,8 @@ fn world_fight(d: &Data, id: &str, seed: i64, ruleset: &Ruleset) -> Value {
     let mut rounds = Vec::new();
     for _ in 0..s.def.max_rounds {
         let intents = emberwake_battle::intent::trace(&s.w, &s.enemy_intents());
-        s.plan_apply_preset_all(PRESET);
+        // RULESET1-G2: the auto driver's draft (the sims', the host's and the battle screen's autoplay)
+        s.auto_draft(PRESET);
         if !s.confirm_plan() {
             break;
         }
