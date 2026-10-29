@@ -373,6 +373,44 @@ pub fn forecast(w: &World, sched: &[ScheduledAction], t: UnitId, st: PoiseState,
     Forecast { factors: f, windup, taken, before: st.value, after: after.max(0), verdict }
 }
 
+/// One planned hit for `forecast_hits`: its target, impact block, the skill's impact, the action's blocks, whether it
+/// flanks (with the rule on) and whether it bypasses guard.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PlannedHit {
+    pub target: UnitId,
+    pub block: i32,
+    pub impact: Impact,
+    pub blocks: i32,
+    pub flank: bool,
+    pub ignore_guard: bool,
+}
+
+/// RULESET1-U slice 6 (the battle screen's forecasts): `forecast` of each planned hit in its order, each on the bar the
+/// earlier hits of the sequence leave (poise after it; a break holds the bar broken at 0 for the rest of the round: P7,
+/// P8). A target without a bar (no rule poise, or Max Poise 0) gets None. Nothing changes and nothing is rolled.
+pub fn forecast_hits(w: &World, sched: &[ScheduledAction], hits: &[PlannedHit]) -> Vec<Option<Forecast>> {
+    let mut bars: Vec<(UnitId, PoiseState)> = Vec::new();
+    hits.iter()
+        .map(|h| {
+            let st = match bars.iter().find(|b| b.0 == h.target) {
+                Some(b) => b.1,
+                None => *state(w, h.target).filter(|st| st.max > 0)?,
+            };
+            let fc = forecast(w, sched, h.target, st, h.block, &h.impact, h.blocks, h.flank, h.ignore_guard);
+            let mut next = st;
+            next.value = fc.after;
+            if matches!(fc.verdict, Verdict::Breaks(_)) {
+                (next.value, next.broken) = (0, true);
+            }
+            match bars.iter_mut().find(|b| b.0 == h.target) {
+                Some(b) => b.1 = next,
+                None => bars.push((h.target, next)),
+            }
+            Some(fc)
+        })
+        .collect()
+}
+
 /// One hit's forecast (`forecast`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Forecast {

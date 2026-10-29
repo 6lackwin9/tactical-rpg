@@ -2925,7 +2925,13 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
                 tip.push((format!("Block {b}: nothing planned"), DIM));
             }
         }
-        ui.push(format!("strip.block{b}"), "block", entry.map(|e| e.2.clone()).unwrap_or_else(|| "empty".into()), r, true, live_block == b, None, tip);
+        // RULESET1-U slice 6 (TEXTFIT1): a span's first block holds its whole span, so its label (drawn across the span)
+        // sits in its own widget; the later blocks, pushed after it, keep their own hover cards
+        let wr = match entry {
+            Some(e) if e.0 == b => Rect::new(r.x, r.y, (e.1 - e.0 + 1) * bw - 1, r.h),
+            _ => r,
+        };
+        ui.push(format!("strip.block{b}"), "block", entry.map(|e| e.2.clone()).unwrap_or_else(|| "empty".into()), wr, true, live_block == b, None, tip);
     }
     // Each action is one continuous span over its blocks, coloured by kind (COMBAT-UI3).
     for (k, e) in entries.iter().enumerate() {
@@ -3093,18 +3099,20 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             }
         }
         let mut ly = top as f32;
+        // RULESET1-U slice 6 (TEXTFIT1): the line pitch grows with the text size (8 at Small and Normal, as before)
+        let pitch = ui.p.line_h(SMALL).max(8.0);
         for (n, (text, col)) in lines.into_iter().enumerate() {
             let top = ly;
             for part in ui.p.wrap(&text, SMALL, 108.0) {
-                if ly > (r.y + r.h) as f32 - 9.0 {
+                if ly > (r.y + r.h) as f32 - pitch - 1.0 {
                     break;
                 }
                 ui.p.text(r.x as f32 + 4.0, ly, &part, SMALL, col);
-                ly += 8.0;
+                ly += pitch;
             }
             if Some(n) == derived_at && !derived.is_empty() && ly > top {
                 let tip: Tip = derived.iter().flat_map(|d| [(format!("{} {}", d.label, d.shown), GOLD), (d.desc.clone(), TEXT)]).collect();
-                ui.push("hero.derived", "row", text, Rect::new(r.x + 2, top as i32 - 1, r.w - 4, (ly - top) as i32), true, false, None, tip);
+                ui.push("hero.derived", "row", text, Rect::new(r.x + 2, top as i32 - 1, r.w - 4, (ly - top).ceil() as i32), true, false, None, tip);
             }
         }
         ui.push("hero.panel", "panel", u.name.clone(), r, true, false, None, Vec::new());
@@ -3413,9 +3421,28 @@ struct Overlay {
     revealed_moves: Vec<(usize, Vec<V2>, MoveKind)>,
 }
 
+/// RULESET1-U slice 6: the overlay groups as the Settings Battle tab lists them: (id, label, what it shows).
+pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str); 15] = [
+    ("band", "Reach band", "The selected hero's attack reach around the tile it strikes from (Assault, Maneuver)."),
+    ("front", "Maneuver front", "The target's front, where an Engage never stands (Maneuver)."),
+    ("valid", "Valid targets", "Rings on the units a click would make the round target."),
+    ("veils", "Stealth veils", "A veil under each stealthed unit, filled once it is hidden."),
+    ("moves", "Planned moves", "The selected hero's moves: a walk, a carried move, a step after its commands."),
+    ("target", "Target ring", "The ring on the selected hero's round target."),
+    ("facings", "Enemy facings", "A chevron where each enemy faces (a flank comes from beside or behind)."),
+    ("walks", "Revealed enemy moves", "A revealed enemy's moves for the enemy under the mouse (hold Alt: all)."),
+    ("glyphs", "Intent glyphs", "The round intent's plate on the strip, the cards and the tokens."),
+    ("badges", "Impact badges", "The row of blocks on each hostile card with its impacts."),
+    ("poise", "Poise bars", "The poise bars under the HP bars."),
+    ("breaks", "Breaks", "BREAK over a broken unit and on its cancelled strip span."),
+    ("parts", "Wind-up and impact", "The strip's wind-up, impact and recovery shading."),
+    ("forecasts", "Hit forecasts", "Stagger and break forecasts in the strip tips and the intel panel."),
+    ("summary", "Round summary", "The round summary in the message bar at round end."),
+];
+
 /// RULESET1-U slice 5 (preference "Battle overlays and the clarity pass", user 2026-10-30): every timeline overlay
 /// group behind its own flag, all on by default (they help debugging the fight); the settings key `battle_overlays`
-/// ({<group>: false}) switches a group off. Slice 6 gives them display settings; the clarity pass (VISCLAR1) decides
+/// ({<group>: false}) switches a group off; slice 6 lists them on the Settings Battle tab; the clarity pass (VISCLAR1) decides
 /// what the game view keeps. Classic draws none of them whatever the flags say.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Layers {
@@ -3441,8 +3468,16 @@ struct Layers {
 }
 
 impl Layers {
-    /// The group ids, as the settings key names them.
-    const IDS: [&'static str; 15] = ["band", "front", "valid", "veils", "moves", "target", "facings", "walks", "glyphs", "badges", "poise", "breaks", "parts", "forecasts", "summary"];
+    /// The group ids, as the settings key names them (`OVERLAY_GROUPS`' order).
+    const IDS: [&'static str; 15] = {
+        let mut ids = [""; 15];
+        let mut k = 0;
+        while k < 15 {
+            ids[k] = OVERLAY_GROUPS[k].0;
+            k += 1;
+        }
+        ids
+    };
 
     /// The flags of the settings key `battle_overlays` (a missing group, or no key, is on).
     fn of(v: &Value) -> Layers {
@@ -3486,7 +3521,9 @@ impl Overlay {
             moves: if l.moves { self.moves.clone() } else { Vec::new() },
             facings: if l.facings { self.facings.clone() } else { Vec::new() },
             veils: if l.veils { self.veils.clone() } else { Vec::new() },
-            revealed_moves: self.revealed_moves.iter().filter(|m| l.walks && (all_walks || focus == Some(m.0))).cloned().collect(),
+            // slice 6 (decision "RULESET1-U slice 5 answers"): the hovered enemy's moves draw above the tokens
+            // (`draw_focus_moves`), so the ground keeps only the others Alt shows
+            revealed_moves: self.revealed_moves.iter().filter(|m| l.walks && all_walks && focus != Some(m.0)).cloned().collect(),
         }
     }
 }
@@ -3650,35 +3687,29 @@ fn hit_forecasts(s: &Session, h: usize) -> Vec<Option<HitForecast>> {
     if !poise::on(w) {
         return Vec::new();
     }
-    let mut bars: Vec<(usize, poise::PoiseState)> = Vec::new();
-    s.plan
-        .compile(w, h)
+    // the planned attacks on a unit, in plan order, forecast as a sequence by the kit (each on the bar the earlier
+    // ones leave: slice 6)
+    let st = s.plan.compile(w, h);
+    let planned: Vec<Option<(usize, emberwake_battle::command::Command, i32, bool)>> = st
         .entries
         .iter()
         .map(|e| {
             let t = e.target.filter(|&t| t != h)?;
-            let sk = &w.cat.skills[e.skill];
-            if emberwake_battle::skill::kind(sk) != Kind::Attack {
+            if emberwake_battle::skill::kind(&w.cat.skills[e.skill]) != Kind::Attack {
                 return None;
             }
-            let st = match bars.iter().find(|b| b.0 == t) {
-                Some(b) => b.1,
-                None => *poise::state(w, t).filter(|st| st.max > 0)?,
-            };
-            let cmd = e.build_command(w, h);
-            let block = e.end_block(w);
-            let flank = ri::flank_bonus_from(w, h, strike_tile(e), t);
-            let fc = poise::forecast(w, &s.resolver.scheduled, t, st, block, &cmd.impact, cmd.block_cost, flank, cmd.ignore_guard);
-            let mut next = st;
-            next.value = fc.after;
-            if matches!(fc.verdict, poise::Verdict::Breaks(_)) {
-                (next.value, next.broken) = (0, true);
-            }
-            match bars.iter_mut().find(|b| b.0 == t) {
-                Some(b) => b.1 = next,
-                None => bars.push((t, next)),
-            }
-            let f = HitForecast { target: t, skill: sk.name.clone(), block, stagger: cmd.impact.stagger, fc, flank, pierce: cmd.impact.armor_piercing && w.ruleset.has(emberwake_rules::ruleset::PIERCE) };
+            Some((t, e.build_command(w, h), e.end_block(w), ri::flank_bonus_from(w, h, strike_tile(e), t)))
+        })
+        .collect();
+    let hits: Vec<poise::PlannedHit> = planned.iter().flatten().map(|(t, cmd, block, flank)| poise::PlannedHit { target: *t, block: *block, impact: cmd.impact, blocks: cmd.block_cost, flank: *flank, ignore_guard: cmd.ignore_guard }).collect();
+    let mut fcs = poise::forecast_hits(w, &s.resolver.scheduled, &hits).into_iter();
+    st.entries
+        .iter()
+        .zip(&planned)
+        .map(|(e, p)| {
+            let (t, cmd, block, flank) = p.as_ref()?;
+            let fc = fcs.next()??;
+            let f = HitForecast { target: *t, skill: w.cat.skills[e.skill].name.clone(), block: *block, stagger: cmd.impact.stagger, fc, flank: *flank, pierce: cmd.pierces(w) };
             // a hit with nothing to say (no stagger, no flank, no pierce) has no forecast
             (f.staggers() || f.flank || f.pierce).then_some(f)
         })
@@ -3691,22 +3722,7 @@ fn round_summary_text(s: &Session, layers: &Layers) -> Option<String> {
     if !ri::on(&s.w) || !layers.summary {
         return None;
     }
-    let sum = ri::round_summary(&s.w, &s.resolver.scheduled);
-    let plural = |n: i32, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
-    let mut parts = vec![if sum.breaks == 0 { "no breaks".to_string() } else { plural(sum.breaks, "break", "breaks") }];
-    if sum.windup_hits > 0 {
-        parts[0] += &format!(" ({} of {} into a wind-up)", sum.windup_breaks, plural(sum.windup_hits, "hit", "hits"));
-    }
-    if sum.flanks > 0 {
-        parts.push(plural(sum.flanks, "flank", "flanks"));
-    }
-    if sum.follow_ups > 0 {
-        parts.push(plural(sum.follow_ups, "follow-up", "follow-ups"));
-    }
-    if sum.rest_ap > 0 {
-        parts.push(format!("Rest +{} AP", sum.rest_ap));
-    }
-    Some(parts.join(", "))
+    Some(ri::summary_text(&ri::round_summary(&s.w, &s.resolver.scheduled)))
 }
 
 /// The overlays of the battle now: None without the rule `round_intent` (classic draws none).
@@ -3873,16 +3889,8 @@ fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom, layers: &Layers, focus
         p.ellipse_ring(x, y, rx, ry, rgba(186, 170, 255, if *hidden { 230 } else { 150 }));
     }
     // V2: a revealed enemy's moves, dashed red with an arrow head (a carried or after move dashed wider)
-    for (_, tiles, how) in &o.revealed_moves {
-        let dash = if *how == MoveKind::Walk { 2.0 } else { 3.5 };
-        let pts: Vec<(f32, f32)> = tiles.iter().map(|c| ground_pt(geo, *c)).map(|(x, y)| (x, y - 3.0)).collect();
-        for (k, seg) in pts.windows(2).enumerate() {
-            if k + 2 == pts.len() {
-                stage::wide_arrow(p, seg[0].0, seg[0].1, seg[1].0, seg[1].1, with_alpha(FOE, 200), 1.5, dash, 4.0);
-            } else {
-                stage::wide_line(p, seg[0].0, seg[0].1, seg[1].0, seg[1].1, with_alpha(FOE, 200), 1.5, dash);
-            }
-        }
+    for m in &o.revealed_moves {
+        draw_revealed_move(p, m, geo, with_alpha(FOE, 200));
     }
     for (tiles, how) in &o.moves {
         let (col, dash) = match how {
@@ -3931,6 +3939,35 @@ fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom, layers: &Layers, focus
     }
 }
 
+/// One revealed enemy move (V2) on its tiles' ground points: dashed (a walk finer, a carried or after move wider) with
+/// an arrow head on its last stretch.
+fn draw_revealed_move(p: &mut Painter, m: &(usize, Vec<V2>, MoveKind), geo: &Geom, col: Rgba) {
+    let dash = if m.2 == MoveKind::Walk { 2.0 } else { 3.5 };
+    let pts: Vec<(f32, f32)> = m.1.iter().map(|c| ground_pt(geo, *c)).map(|(x, y)| (x, y - 3.0)).collect();
+    for (k, seg) in pts.windows(2).enumerate() {
+        if k + 2 == pts.len() {
+            stage::wide_arrow(p, seg[0].0, seg[0].1, seg[1].0, seg[1].1, col, 1.5, dash, 4.0);
+        } else {
+            stage::wide_line(p, seg[0].0, seg[0].1, seg[1].0, seg[1].1, col, 1.5, dash);
+        }
+    }
+}
+
+/// RULESET1-U slice 6 (decision "RULESET1-U slice 5 answers"): the hovered enemy's revealed moves above the tokens
+/// (the air layer), over a dark underlay so a short step reads over the sprites; its walks layer on.
+fn draw_focus_moves(p: &mut Painter, o: &Overlay, geo: &Geom, layers: &Layers, focus: Option<usize>) {
+    if !layers.walks {
+        return;
+    }
+    for m in o.revealed_moves.iter().filter(|m| Some(m.0) == focus) {
+        let pts: Vec<(f32, f32)> = m.1.iter().map(|c| ground_pt(geo, *c)).map(|(x, y)| (x, y - 3.0)).collect();
+        for seg in pts.windows(2) {
+            stage::wide_line(p, seg[0].0, seg[0].1, seg[1].0, seg[1].1, rgba(10, 8, 12, 170), 3.4, 0.0);
+        }
+        draw_revealed_move(p, m, geo, FOE);
+    }
+}
+
 /// RULESET1-U (intent UI1): the selected hero's round controls at the top of the hero panel `r` (below its name line):
 /// the ruleset's intent buttons two a row (`hero.intent.<id>`, keys 1-9 in the ruleset's order; lit = the current one; disabled with the
 /// planner's reason, PL7, unless Manual; a red corner and the tip warn of the intent-bound buffs a change drops, IN6),
@@ -3942,8 +3979,11 @@ fn draw_intent_controls(ui: &mut Ui<Action>, w: &World, h: usize, r: Rect, offer
     let manual = rip::manual(w, h);
     let bw = (r.w - 10) / 2;
     let list: &[(RoundIntent, Option<String>)] = offers.filter(|o| o.key.0 == h).map_or(&[], |o| o.intents.as_slice());
+    // RULESET1-U slice 6 (TEXTFIT1): two buttons a row while every name fits, else one a row at the panel's width
+    let per_row = if list.iter().all(|(i, _)| ui.p.text_w(i.name(), SMALL) <= (bw - 6) as f32) { 2 } else { 1 };
+    let ib = if per_row == 2 { bw } else { r.w - 8 };
     for (k, (intent, refused)) in list.iter().enumerate() {
-        let b = Rect::new(r.x + 4 + (k as i32 % 2) * (bw + 2), y + (k as i32 / 2) * 12, bw, 11);
+        let b = Rect::new(r.x + 4 + (k as i32 % per_row) * (ib + 2), y + (k as i32 / per_row) * 12, ib, 11);
         let mut tip: Tip = vec![(format!("{} (key {})", intent.name(), k + 1), GOLD), (intent_help(*intent).into(), TEXT)];
         if let Some(why) = refused {
             tip.push((format!("Not offered: {why}"), FOE));
@@ -3960,7 +4000,7 @@ fn draw_intent_controls(ui: &mut Ui<Action>, w: &World, h: usize, r: Rect, offer
             ui.p.fill(Rect::new(b.x + b.w - 4, b.y + 1, 3, 3), FOE);
         }
     }
-    y += (list.len() as i32 + 1) / 2 * 12;
+    y += (list.len() as i32 + per_row - 1) / per_row * 12;
     if current.is_none() {
         return y + 1;
     }
@@ -4319,6 +4359,11 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
         }
         intent_glyph(&mut ui.p, i, Rect::new(GRID_X + at.x * TILE + TILE - 11, GRID_Y + at.y * TILE + 1, 10, 10));
     }
+    // RULESET1-U slice 6: the hovered enemy's revealed moves above the tokens
+    if let Some(o) = overlay {
+        let focus = card_hover.or_else(|| w.enemies.iter().copied().find(|&e| w.units[e].is_active() && w.grid.pos(e).is_some_and(|p| ui.hover(cell_rect(p)))));
+        draw_focus_moves(&mut ui.p, o, &Geom::new(View::Flat, tuning), &layers, focus);
+    }
     // RULESET1-U slice 5 (P7): a BREAK plate over each unit broken this round
     for i in broken_units(w, &layers) {
         let at = w.pos(i);
@@ -4632,6 +4677,10 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                 }
             }
             Pass::Top => {
+                // RULESET1-U slice 6: the hovered enemy's revealed moves above the tokens
+                if let Some(o) = overlay {
+                    draw_focus_moves(&mut ui.p, o, &geo, &layers, hovered.filter(|u| w.enemies.contains(u)));
+                }
                 for t in &units {
                     let u = &w.units[t.i];
                     let (fx, fy) = t.foot;
@@ -7260,7 +7309,10 @@ mod slice5_tests {
         assert!(o.shown(&l, None, false).revealed_moves.is_empty(), "nothing hovered, no Alt: none");
         assert_eq!(o.shown(&l, None, true).revealed_moves, o.revealed_moves, "Alt: all");
         let e = o.revealed_moves[0].0;
-        assert!(o.shown(&l, Some(e), false).revealed_moves.iter().all(|m| m.0 == e) && !o.shown(&l, Some(e), false).revealed_moves.is_empty());
+        // slice 6: the hovered enemy's moves draw above the tokens (`draw_focus_moves`), not on the ground
+        assert!(o.shown(&l, Some(e), false).revealed_moves.is_empty(), "the hovered one is not on the ground");
+        assert!(o.shown(&l, Some(e), true).revealed_moves.iter().all(|m| m.0 != e), "Alt: the others on the ground");
+        assert_eq!(o.shown(&l, Some(e), true).revealed_moves.len() + o.revealed_moves.iter().filter(|m| m.0 == e).count(), o.revealed_moves.len());
     }
 
     /// The scratch fight of MV8: a dancer next to a footman, Maneuver Disengage with AP for one Slip Strike, which then
@@ -7436,5 +7488,88 @@ mod slice5_tests {
             checked += 1;
         }
         assert!(checked > 0, "the enemies hold intents in the playback");
+    }
+}
+
+/// RULESET1-U slice 6: the overlay groups on the Settings Battle tab, the round summary in the combat log, and the
+/// battle screen's text at the four text sizes (TEXTFIT1: no strip label or hero panel line spills, no intent button
+/// label is cut). Expectations come from `OVERLAY_GROUPS`, the kit's `summary_line` and the text audit.
+#[cfg(test)]
+mod slice6_tests {
+    use super::*;
+    use emberwake_rules::ruleset::TIMELINE;
+
+    fn arena(ruleset: Option<&str>) -> (Cx, Gfx, BattleScreen) {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+        let b = BattleScreen::arena_with(&cx, None, &encounter, ruleset.map(String::from), "", false);
+        assert!(b.host.session.is_some(), "the battle starts: {}", b.message);
+        (cx, crate::hud::hud_tests::gfx(), b)
+    }
+
+    /// The preference (user 2026-10-30): the Settings Battle tab lists every overlay group, on by default; a click
+    /// switches one off in the draft (Apply saves it under `battle_overlays`, which the battle screen reads).
+    #[test]
+    fn the_settings_list_every_overlay_group() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut g = crate::hud::hud_tests::gfx();
+        let defaults = crate::screens::default_settings();
+        assert!(OVERLAY_GROUPS.iter().all(|(id, _, _)| defaults["battle_overlays"][*id] == json!(true)), "all on by default");
+        assert_eq!(Layers::of(&defaults["battle_overlays"]), Layers::of(&Value::Null));
+        let mut st = crate::menus::SettingsScreen::new(&cx);
+        st.draw(&mut cx, &mut g, (-500, -500), true);
+        st.click_id(&mut cx, "settings.tab.battle").unwrap();
+        st.draw(&mut cx, &mut g, (-500, -500), true);
+        let ids: Vec<String> = st.widgets().iter().filter_map(|w| w["id"].as_str().filter(|i| i.starts_with("settings.overlay.")).map(String::from)).collect();
+        assert_eq!(ids, OVERLAY_GROUPS.iter().map(|g| format!("settings.overlay.{}", g.0)).collect::<Vec<_>>());
+        st.click_id(&mut cx, "settings.overlay.band").unwrap();
+        let draft = st.state(&cx)["draft"]["battle_overlays"].clone();
+        assert_eq!(draft["band"], json!(false));
+        assert!(!Layers::of(&draft).band && Layers::of(&draft).front, "the battle screen's reading of it");
+    }
+
+    /// Decision "RULESET1-U slice 5 answers": a timeline round closes the combat log with its `[Round]` summary line;
+    /// a classic round logs none.
+    #[test]
+    fn the_round_summary_closes_the_combat_log() {
+        for (rules, logged) in [(Some(TIMELINE), true), (None, false)] {
+            let (cx, _g, mut b) = arena(rules);
+            let r = b.send(&cx, json!({"cmd": "resolve"}));
+            assert_eq!(r["ok"], json!(true), "{r}");
+            let s = b.host.session.as_ref().unwrap();
+            let lines: Vec<&String> = s.resolver.log.iter().filter(|l| l.starts_with("[Round]")).collect();
+            if logged {
+                assert_eq!(lines, [&ri::summary_line(1, &ri::round_summary(&s.w, &s.resolver.scheduled))]);
+            } else {
+                assert!(lines.is_empty(), "classic: {lines:?}");
+            }
+        }
+    }
+
+    /// TEXTFIT1 at the four text sizes, 1280x720: in a planned and a played timeline round no strip label spills past
+    /// its widget, no hero panel line spills, and no intent button label is cut.
+    #[test]
+    fn the_timeline_screen_fits_at_every_text_size() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE));
+        g.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+        g.view = aegis_ui::painter::View::fit(1280, 720);
+        let h = b.selected.unwrap();
+        let foe = b.host.session.as_ref().unwrap().w.enemies[0];
+        b.send(&cx, json!({"cmd": "round_intent", "unit": h, "intent": "assault", "target": foe}));
+        for played in [false, true] {
+            if played {
+                b.send(&cx, json!({"cmd": "resolve"}));
+            }
+            for scale in [0.85f32, 1.0, 1.15, 1.3] {
+                let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, scale);
+                let boxes: Vec<(String, f32, f32, f32, f32)> = b.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
+                let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+                let ours = |k: &str| v[k].as_array().unwrap().iter().filter(|e| e["widget"].as_str().is_some_and(|w| w.starts_with("strip.") || w.starts_with("hero."))).cloned().collect::<Vec<_>>();
+                assert!(ours("spill").is_empty(), "played {played} scale {scale}: {:?}", ours("spill"));
+                let cut: Vec<&Value> = v["cut"].as_array().unwrap().iter().filter(|e| ["Assault", "Guard", "Support", "Maneuver"].contains(&e["text"].as_str().unwrap_or(""))).collect();
+                assert!(cut.is_empty(), "played {played} scale {scale}: {cut:?}");
+            }
+        }
     }
 }

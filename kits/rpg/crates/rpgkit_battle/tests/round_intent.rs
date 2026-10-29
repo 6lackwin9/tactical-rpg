@@ -568,3 +568,25 @@ fn default_intent_starts_the_battle() {
     assert_eq!(round_intent::intent_of(&c.w, FOE_B), None);
     assert!(c.w.round_states.is_empty(), "classic keeps no round state");
 }
+
+/// RULESET1 12 (decision "RULESET1-U slice 5 answers"): under the round intent a round closes in the log with its
+/// summary (`[Round] <round>: ...`, the kit's `summary_line` of `round_summary`); classic logs no such line.
+#[test]
+fn a_round_closes_with_its_summary_in_the_log() {
+    for (rules, logged) in [(timeline(), true), (Ruleset::classic(), false)] {
+        let mut s = session(rules);
+        place(&mut s.w, HERO, V2::new(2, 4));
+        assert!(s.confirm_plan());
+        while s.phase != Phase::Replay {
+            s.step_next();
+        }
+        let lines: Vec<&String> = s.resolver.log.iter().filter(|l| l.starts_with("[Round]")).collect();
+        if logged {
+            let want = round_intent::summary_line(1, &round_intent::round_summary(&s.w, &s.resolver.scheduled));
+            assert_eq!(lines, [&want], "one line, the round's summary");
+            assert_eq!(s.resolver.log.last(), Some(&want), "it closes the round");
+        } else {
+            assert!(lines.is_empty(), "classic: {lines:?}");
+        }
+    }
+}

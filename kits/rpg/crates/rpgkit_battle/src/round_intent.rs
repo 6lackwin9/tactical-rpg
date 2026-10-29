@@ -602,3 +602,30 @@ pub fn round_summary(w: &World, sched: &[crate::resolver::ScheduledAction]) -> R
     out.rest_ap = w.allies.iter().map(|c| rest_gain(&w.ruleset.numbers, w.round_states.get(c).map_or(0, |r| r.rest_blocks))).sum();
     out
 }
+
+/// RULESET1 12: a round summary in words: "1 break (1 of 2 hits into a wind-up), 1 flank, 3 follow-ups, Rest +1 AP";
+/// "no breaks" leads when nothing broke (the battle screen's round-over message and the log's `[Round]` line).
+pub fn summary_text(sum: &RoundSummary) -> String {
+    let plural = |n: i32, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
+    let mut lead = if sum.breaks == 0 { "no breaks".to_string() } else { plural(sum.breaks, "break", "breaks") };
+    if sum.windup_hits > 0 {
+        lead += &format!(" ({} of {} into a wind-up)", sum.windup_breaks, plural(sum.windup_hits, "hit", "hits"));
+    }
+    let mut parts = vec![lead];
+    if sum.flanks > 0 {
+        parts.push(plural(sum.flanks, "flank", "flanks"));
+    }
+    if sum.follow_ups > 0 {
+        parts.push(plural(sum.follow_ups, "follow-up", "follow-ups"));
+    }
+    if sum.rest_ap > 0 {
+        parts.push(format!("Rest +{} AP", sum.rest_ap));
+    }
+    parts.join(", ")
+}
+
+/// The log's line closing a round under the round intent (decision "RULESET1-U slice 5 answers"): `[Round] <round>:
+/// <summary_text>`.
+pub fn summary_line(round: i32, sum: &RoundSummary) -> String {
+    format!("[Round] {round}: {}", summary_text(sum))
+}

@@ -231,8 +231,9 @@ impl Command {
         }
     }
 
-    /// RULESET1 A2: the hit skips armour (rule `pierce` and the skill's `armor_piercing`).
-    fn pierces(&self, w: &World) -> bool {
+    /// RULESET1 A2: the hit skips armour (rule `pierce` and the skill's `armor_piercing`). Public for the battle
+    /// screen's forecasts (RULESET1-U slice 6).
+    pub fn pierces(&self, w: &World) -> bool {
         self.impact.armor_piercing && w.ruleset.has(rpgkit_rules::ruleset::PIERCE)
     }
 

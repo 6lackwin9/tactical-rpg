@@ -1231,6 +1231,12 @@ impl Session {
             self.outcome = self.verdict(end_of_round);
             let over = !self.outcome.is_empty();
             if over || end_of_round {
+                // RULESET1 12 (decision "RULESET1-U slice 5 answers"): the round's summary closes it in the log, under
+                // the round intent only (classic logs as before)
+                if round_intent::on(&self.w) {
+                    let sum = round_intent::round_summary(&self.w, &self.resolver.scheduled);
+                    self.resolver.log.push(round_intent::summary_line(self.current_round, &sum));
+                }
                 self.combat_over = over;
                 self.phase = Phase::Replay;
                 self.feed(|m, s| {

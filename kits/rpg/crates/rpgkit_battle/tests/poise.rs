@@ -698,3 +698,31 @@ fn the_round_summary_counts_breaks_windups_and_follow_ups() {
     assert_eq!(windup_hits, 1, "the break cancels the windup");
     assert_eq!((sum.flanks, sum.follow_ups), (0, 1), "{sum:?}");
 }
+
+/// RULESET1-U slice 6: `forecast_hits` carries the bar along a sequence: two jabs into a winding-up foe forecast one
+/// after the other on the bar the first leaves, each as `forecast` on that bar; after a break the next hit finds the
+/// foe already broken; the summary reads in words as the log writes it.
+#[test]
+fn a_hit_sequence_forecasts_on_the_bar_the_earlier_hits_leave() {
+    let s = session(poise_rules());
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    book(&mut res, FOE, hit(&w, FOE, HERO, "p_heavy"), 1);
+    set_poise(&mut w, FOE, 30);
+    let jab = hit(&w, HERO, FOE, "p_jab");
+    let one = poise::PlannedHit { target: FOE, block: 2, impact: jab.impact, blocks: jab.block_cost, flank: false, ignore_guard: false };
+    let seq = poise::forecast_hits(&w, &res.scheduled, &[one, poise::PlannedHit { block: 3, ..one }, poise::PlannedHit { block: 3, ..one }]);
+    let first = poise::forecast(&w, &res.scheduled, FOE, bar(&w, FOE), 2, &jab.impact, jab.block_cost, false, false);
+    assert_eq!(seq[0], Some(first));
+    let mut after = bar(&w, FOE);
+    after.value = first.after;
+    let second = poise::forecast(&w, &res.scheduled, FOE, after, 3, &jab.impact, jab.block_cost, false, false);
+    assert_eq!(seq[1], Some(second), "on the bar the first left");
+    assert!(matches!(second.verdict, poise::Verdict::Breaks(BreakCause::Poise)), "12 x 2 twice breaks 30: {second:?}");
+    assert_eq!(seq[2].map(|f| f.verdict), Some(poise::Verdict::AlreadyBroken), "one break a round");
+    let no_bar = poise::PlannedHit { target: NO_BAR, ..one };
+    assert_eq!(poise::forecast_hits(&w, &res.scheduled, &[no_bar]), vec![None], "no bar, no forecast");
+    let sum = round_intent::RoundSummary { breaks: 1, windup_breaks: 1, windup_hits: 2, flanks: 1, follow_ups: 3, rest_ap: 1 };
+    assert_eq!(round_intent::summary_text(&sum), "1 break (1 of 2 hits into a wind-up), 1 flank, 3 follow-ups, Rest +1 AP");
+    assert_eq!(round_intent::summary_text(&round_intent::RoundSummary::default()), "no breaks");
+}
