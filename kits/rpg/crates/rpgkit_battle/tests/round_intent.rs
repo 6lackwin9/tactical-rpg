@@ -300,6 +300,9 @@ fn flanks_come_from_beside_or_behind_an_engaged_unit() {
         place(w, HERO, t_at + offset);
         assert_eq!(round_intent::is_flank(w, HERO, t), flank, "A at {offset}");
         assert_eq!(round_intent::flank_bonus(w, HERO, t), flank, "the bonus under flank");
+        // RULESET1-U slice 5: the forecast's flank from a planned tile, read from anywhere
+        place(w, HERO, V2::new(0, 0));
+        assert_eq!(round_intent::flank_bonus_from(w, HERO, t_at + offset, t), flank, "from {offset}, standing elsewhere");
     }
     let mut off = w.clone();
     off.ruleset.adjust("-flank").unwrap();

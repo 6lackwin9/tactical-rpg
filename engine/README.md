@@ -39,7 +39,9 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
   from, to, colour, tip }`, a bracket from one segment's end to the next one's start, hidden while masked) and `marks`
   (`Mark { key, block, glyph, colour, tip }`, a glyph chip inside its block's cell, shown on masked tracks too). Links
   and marks are info widgets with a hover card and no click; labels leave room for marks; all empty by default. The
-  UI Gallery's Kit widgets entry has a Timeline page (tabs at its foot) showing every part.
+  UI Gallery's Kit widgets entry has a Timeline page (tabs at its foot) showing every part. `timeline::draw_part(ui,
+  style, bar, part_rect)` and `timeline::draw_mark(ui, id, &mark, rect)` draw one part or one mark on their own, so a
+  screen's own block strip shares the widget's look (RULESET1-U slice 5).
 * **Vignette player (STORYUI1-E):** `aegis_ui::vignette` plays a reel of still cards (styles `image`, `text`, `title`,
   `line`) through fade in, typing, hold and fade out: a typewriter at the engine setting `text_speed` (`slow` 30,
   `normal` 60, `fast` 120 characters a second, `instant`; fast halves the fades, instant drops them), a cover fill of the

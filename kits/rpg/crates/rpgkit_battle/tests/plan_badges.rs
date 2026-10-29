@@ -309,3 +309,32 @@ fn the_trace_keys_come_only_with_the_rule() {
         }
     }
 }
+
+/// RULESET1-U slice 5 (V2's board path): a revealed walk is drawn as the kit would walk it now (`walk_preview`): from
+/// its planned start through each step, stopping before a taken or unwalkable tile and at the board's edge; the real
+/// walk (the planned move, resolved) ends on the preview's last tile.
+#[test]
+fn a_walk_preview_stops_where_the_walk_would() {
+    let mut s = session(timeline(), false);
+    let west = [V2::new(-1, 0); 3];
+    place(&mut s.w, FOE, V2::new(6, 3));
+    place(&mut s.w, HERO, V2::new(0, 0));
+    place(&mut s.w, ALLY, V2::new(0, 8));
+    let free = rpgkit_battle::command::walk_preview(&s.w, FOE, &west, V2::new(6, 3));
+    assert_eq!(free, [V2::new(6, 3), V2::new(5, 3), V2::new(4, 3), V2::new(3, 3)], "a free path: every tile");
+    place(&mut s.w, ALLY, V2::new(4, 3));
+    let cut = rpgkit_battle::command::walk_preview(&s.w, FOE, &west, V2::new(6, 3));
+    assert_eq!(cut, [V2::new(6, 3), V2::new(5, 3)], "stops before the taken tile");
+    // the real walk of the same steps ends there too
+    let mut w = s.w.clone();
+    for d in west {
+        if !w.move_unit(FOE, d) {
+            break;
+        }
+    }
+    assert_eq!(w.pos(FOE), *cut.last().unwrap());
+    place(&mut s.w, FOE, V2::new(1, 3));
+    place(&mut s.w, ALLY, V2::new(0, 8));
+    let edge = rpgkit_battle::command::walk_preview(&s.w, FOE, &west, rpgkit_battle::grid::NO_CELL);
+    assert!(edge.iter().all(|c| s.w.grid.is_valid(*c)) && edge.len() <= 2, "the board's edge stops it: {edge:?}");
+}

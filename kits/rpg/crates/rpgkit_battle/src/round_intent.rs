@@ -422,12 +422,23 @@ pub fn is_flank(w: &World, a: UnitId, t: UnitId) -> bool {
     if !on(w) || a == t || !w.has(a) || !w.has(t) || facing(w, t) == ZERO {
         return false;
     }
-    engaged_with(w, t).is_some_and(|e| e != a) && !in_front(w, t, w.pos(a))
+    flank_at(w, a, w.pos(a), t)
+}
+
+/// MV3 from `cell`: `t` is engaged with a unit other than `a` and `cell` lies outside `t`'s front.
+fn flank_at(w: &World, a: UnitId, cell: V2, t: UnitId) -> bool {
+    engaged_with(w, t).is_some_and(|e| e != a) && !in_front(w, t, cell)
 }
 
 /// MV3 with the rule `flank`: no riposte from `t`, `exploit` `flanked` applies, power x `flank_power_mult`.
 pub fn flank_bonus(w: &World, a: UnitId, t: UnitId) -> bool {
     w.ruleset.has(ruleset::FLANK) && is_flank(w, a, t)
+}
+
+/// RULESET1-U slice 5 (the forecasts): `flank_bonus` with `a` striking from `cell`, a planned tile (the hit after a
+/// move), instead of where it stands now.
+pub fn flank_bonus_from(w: &World, a: UnitId, cell: V2, t: UnitId) -> bool {
+    w.ruleset.has(ruleset::FLANK) && on(w) && a != t && w.has(a) && w.has(t) && facing(w, t) != ZERO && flank_at(w, a, cell, t)
 }
 
 // ---- Tiles (MV5, MV6, PL4) -----------------------------------------------------------------------------------------
@@ -545,4 +556,49 @@ pub fn pick(stored: V2, tiles: &[(V2, Vec<V2>)]) -> Option<(V2, Vec<V2>)> {
         }
     }
     tiles.first().cloned()
+}
+
+// ---- The round summary (RULESET1 12; RULESET1-U slice 5) -----------------------------------------------------------
+
+/// RULESET1 12, the battle screen's round summary: what the round's landed actions did.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RoundSummary {
+    /// Breaks by stagger (P7, P13, P14), and how many of them came in a windup.
+    pub breaks: i32,
+    pub windup_breaks: i32,
+    /// Stagger hits that landed on a unit in windup (the "of" of "windups broken of hit").
+    pub windup_hits: i32,
+    /// Hits that were flanks (MV3).
+    pub flanks: i32,
+    /// Party-side commands after each member's first one (follow-ups: FU2; moves, Rest and lock changes not counted).
+    pub follow_ups: i32,
+    /// The AP the party's landed Rest blocks give at round end (RS2).
+    pub rest_ap: i32,
+}
+
+/// `RoundSummary` of the round's actions `sched` (read before the next round start resets the Rest counts).
+pub fn round_summary(w: &World, sched: &[crate::resolver::ScheduledAction]) -> RoundSummary {
+    use crate::command::CmdKind;
+    let mut out = RoundSummary::default();
+    let mut acted: Vec<(UnitId, i32)> = Vec::new();
+    for a in sched.iter().filter(|a| a.landed) {
+        for st in &a.command.staggers {
+            out.windup_hits += st.windup as i32;
+            if st.broke.is_some() {
+                out.breaks += 1;
+                out.windup_breaks += st.windup as i32;
+            }
+        }
+        out.flanks += a.command.hits.iter().filter(|(_, flank)| *flank).count() as i32;
+        let counts = !matches!(a.command.kind, CmdKind::Walk { .. } | CmdKind::Rest { .. } | CmdKind::Target { .. } | CmdKind::StatusBlock { .. });
+        if counts && w.allies.contains(&a.unit) {
+            match acted.iter_mut().find(|x| x.0 == a.unit) {
+                Some(x) => x.1 += 1,
+                None => acted.push((a.unit, 1)),
+            }
+        }
+    }
+    out.follow_ups = acted.iter().map(|x| (x.1 - 1).max(0)).sum();
+    out.rest_ap = w.allies.iter().map(|c| rest_gain(&w.ruleset.numbers, w.round_states.get(c).map_or(0, |r| r.rest_blocks))).sum();
+    out
 }

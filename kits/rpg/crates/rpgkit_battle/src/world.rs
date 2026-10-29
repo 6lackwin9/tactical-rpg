@@ -222,6 +222,15 @@ impl Tactic {
     }
 }
 
+/// Where one step goes (`World::step_from`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StepTo {
+    Blocked,
+    /// Onto an exit, or off an open arena: the unit leaves the battle.
+    Leaves,
+    Enters(V2),
+}
+
 #[derive(Clone)]
 pub struct World {
     pub cat: Arc<Catalog>,
@@ -484,19 +493,35 @@ impl World {
         if !self.units[c].is_active() || self.grid.positions[c].is_none() {
             return false;
         }
-        let target = self.pos(c) + offset;
+        match self.step_from(c, self.pos(c), offset) {
+            StepTo::Blocked => false,
+            StepTo::Leaves => {
+                self.leave(c);
+                true
+            }
+            StepTo::Enters(target) => {
+                self.grid.positions[c] = Some(target);
+                true
+            }
+        }
+    }
+
+    /// `move_unit`'s rule for one step of `c` by `offset` from `from` (nothing changes): the tile it enters, the exit
+    /// it leaves by, or blocked (off the board, not walkable, taken, a shut hold gate). The battle screen's walk preview
+    /// reads it too (`command::walk_preview`).
+    pub fn step_from(&self, c: UnitId, from: V2, offset: V2) -> StepTo {
+        let target = from + offset;
         if self.grid.is_exit(target) || (self.grid.open && !self.grid.is_valid(target)) {
             if self.hold.as_ref().is_some_and(|g| !g.lets_out(self, c)) {
-                return false;
+                return StepTo::Blocked;
             }
-            self.leave(c);
-            return true;
+            return StepTo::Leaves;
         }
-        if !self.grid.is_valid(target) || !self.grid.is_walkable(target) || self.is_occupied(target) {
-            return false;
+        // a step that stays put is blocked by the unit itself, as `is_occupied` has it
+        if target == from || !self.grid.is_valid(target) || !self.grid.is_walkable(target) || self.occupant(target).is_some_and(|o| o != c) {
+            return StepTo::Blocked;
         }
-        self.grid.positions[c] = Some(target);
-        true
+        StepTo::Enters(target)
     }
 
     pub fn jump_unit(&mut self, c: UnitId, cell: V2) -> bool {

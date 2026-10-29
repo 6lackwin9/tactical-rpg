@@ -413,6 +413,50 @@ fn the_break_chance_draws_once_per_qualifying_hit() {
     assert!(successes > 0 && successes < 60, "the seeds cover both outcomes ({successes})");
 }
 
+/// RULESET1-U slice 5: `forecast` reads a hit as `resolve_hits` resolves it (one rule): the same factors, windup,
+/// stagger taken and bar after; a break by poise or `sure_break` named, a chance roll's chance given, a hold held; a
+/// unit broken this round already takes nothing more. Across windups, bars, sure and unbreakable hits and chance scales.
+#[test]
+fn a_forecast_reads_the_hit_as_it_resolves() {
+    let mut seen = std::collections::BTreeSet::new();
+    for scale in [0.0, 0.5] {
+        let s = session(timeline(&[POISE], json!({"break_chance_scale": scale})));
+        for (victim, skill, value, broken) in [
+            (None, "p_jab", 30, false),
+            (Some("p_heavy"), "p_jab", 30, false),
+            (Some("p_heavy"), "p_jab", 10, false),
+            (Some("p_heavy"), "p_sure", 30, false),
+            (Some("p_judgment"), "p_jab", 10, false),
+            (Some("p_heavy"), "p_jab", 0, true),
+        ] {
+            let mut w = s.w.clone();
+            let mut res = Resolver::new(BLOCKS, 7);
+            if let Some(v) = victim {
+                book(&mut res, FOE, hit(&w, FOE, HERO, v), 1);
+            }
+            let cmd = hit(&w, HERO, FOE, skill);
+            let (imp, blocks) = (cmd.impact, cmd.block_cost);
+            let a = book(&mut res, HERO, cmd, 2);
+            set_poise(&mut w, FOE, value);
+            w.poise.get_mut(&FOE).unwrap().broken = broken;
+            let block = res.scheduled[a].impact;
+            let fc = poise::forecast(&w, &res.scheduled, FOE, bar(&w, FOE), block, &imp, blocks, false, false);
+            run(&mut w, &mut res, 1, block);
+            let st = &res.scheduled[a].command.staggers[0];
+            let case = format!("{victim:?} {skill} poise {value} broken {broken} scale {scale}");
+            assert_eq!((fc.factors, fc.windup, fc.taken, fc.before), (st.factors, st.windup, st.taken, st.before), "{case}");
+            match fc.verdict {
+                poise::Verdict::Breaks(c) => assert_eq!(st.broke.as_ref().map(|b| b.cause), Some(c), "{case}"),
+                poise::Verdict::Chance(ch) => assert_eq!(st.chance.map(|x| x.0), Some(ch), "{case}"),
+                poise::Verdict::Holds => assert!(st.broke.is_none() && st.chance.is_none() && st.after == fc.after, "{case}"),
+                poise::Verdict::AlreadyBroken => assert!(st.broke.is_none() && st.after == st.before, "{case}"),
+            }
+            seen.insert(format!("{:?}", fc.verdict).split('(').next().unwrap().to_string());
+        }
+    }
+    assert_eq!(seen.into_iter().collect::<Vec<_>>(), ["AlreadyBroken", "Breaks", "Chance", "Holds"], "every verdict covered");
+}
+
 /// P14: `sure_break` breaks a target in windup whatever its poise, not one out of windup, not an unbreakable windup.
 #[test]
 fn a_sure_break_breaks_a_windup() {
@@ -588,4 +632,24 @@ fn commands_carry_the_skill_impact() {
         assert!(hit(w, HERO, FOE, "p_judgment").impact.unbreakable && hit(w, HERO, FOE, "p_spike").impact.armor_piercing);
         assert!(matches!(own(w, HERO, "p_guard").kind, CmdKind::Defend { .. }) && own(w, HERO, "p_guard").impact == poise::Impact::default());
     }
+}
+
+/// RULESET1 12 (the round summary, RULESET1-U slice 5): a jab that breaks a winding-up foe and a second jab of the
+/// hero count one break, in a windup, of one hit into a windup (the second lands on a broken bar: no windup left), and
+/// one follow-up; the foe's own actions add none (enemy side).
+#[test]
+fn the_round_summary_counts_breaks_windups_and_follow_ups() {
+    let s = session(poise_rules());
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    book(&mut res, FOE, hit(&w, FOE, HERO, "p_heavy"), 1);
+    book(&mut res, HERO, hit(&w, HERO, FOE, "p_jab"), 2);
+    book(&mut res, HERO, hit(&w, HERO, FOE, "p_jab"), 3);
+    set_poise(&mut w, FOE, 10);
+    run(&mut w, &mut res, 1, 3);
+    let sum = round_intent::round_summary(&w, &res.scheduled);
+    let windup_hits: i32 = res.scheduled.iter().flat_map(|a| a.command.staggers.iter()).filter(|s| s.windup).count() as i32;
+    assert_eq!((sum.breaks, sum.windup_breaks, sum.windup_hits), (1, 1, windup_hits), "{sum:?}");
+    assert_eq!(windup_hits, 1, "the break cancels the windup");
+    assert_eq!((sum.flanks, sum.follow_ups), (0, 1), "{sum:?}");
 }
