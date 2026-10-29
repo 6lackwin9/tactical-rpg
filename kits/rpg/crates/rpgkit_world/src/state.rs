@@ -159,22 +159,32 @@ impl UnitState {
         json::s(d.entry("units", &self.base_unit), "class_id")
     }
 
-    /// HOOKS1 CN3: the world the member is built in: its character's (the world of its lore_ref), "" when it plays no
-    /// world character (then no class overlay applies).
-    pub fn path_world(&self, d: &Data) -> String {
-        match aegis_content::split_qid(&self.lore_ref) {
-            Some((w, _)) if d.has_world(&w) => w,
-            _ => String::new(),
-        }
+    /// Non-basic families owned at its level in world `world`: the class path there (HOOKS1 CN3; decision "HOOKS1-UI
+    /// slice 1 answers": the world being played, "" = the base catalog's), the base unit's extras and learned skills.
+    pub fn owned_families(&self, d: &Data, world: &str) -> Vec<String> {
+        self.owned_in(d, &[world.to_string()])
     }
 
-    /// Non-basic families owned at its level: class path (its world's, HOOKS1 CN3), the base unit's extras and learned
-    /// skills.
-    pub fn owned_families(&self, d: &Data) -> Vec<String> {
+    /// The families it owns in some world (the base catalog's path or any world's overlay path): what a saved loadout,
+    /// deck or rank may name (a save is played in more than one world; a build in a world where a slotted family is not
+    /// owned drops it as an unowned loadout entry does).
+    pub fn owned_families_anywhere(&self, d: &Data) -> Vec<String> {
+        let mut worlds = vec![String::new()];
+        worlds.extend(d.world_ids());
+        self.owned_in(d, &worlds)
+    }
+
+    fn owned_in(&self, d: &Data, worlds: &[String]) -> Vec<String> {
         let mut ids: Vec<String> = Vec::new();
-        if let Some(arch) = d.cat_in(&self.path_world(d)).classes.get(&self.class_id(d)) {
-            let lvl = self.level(d) as i32;
-            ids.extend(arch.path_steps().into_iter().filter(|(l, _)| *l <= lvl).map(|(_, s)| s));
+        let lvl = self.level(d) as i32;
+        for w in worlds {
+            if let Some(arch) = d.cat_in(w).classes.get(&self.class_id(d)) {
+                for (_, s) in arch.path_steps().into_iter().filter(|(l, _)| *l <= lvl) {
+                    if !ids.contains(&s) {
+                        ids.push(s);
+                    }
+                }
+            }
         }
         ids.extend(json::sget(d.entry("units", &self.base_unit), "extra_skills"));
         ids.extend(self.learned_skills.iter().cloned());
@@ -366,7 +376,7 @@ impl UnitState {
                 seen.push(id.clone());
             }
         };
-        let owned = self.owned_families(d);
+        let owned = self.owned_families_anywhere(d);
         twice("active", &self.deck.active, &mut Vec::new(), &mut errors);
         for fam in &self.deck.active {
             if d.cat.tier_one(fam).is_none() {
@@ -426,7 +436,7 @@ impl UnitState {
         if self.loadout_extra.len() > rpgkit_rules::stats::MAX_EXTRA_SLOTS {
             errors.push(format!("{at}: at most {} extra families in the loadout.", rpgkit_rules::stats::MAX_EXTRA_SLOTS));
         }
-        let owned = self.owned_families(d);
+        let owned = self.owned_families_anywhere(d);
         let mut seen: Vec<&String> = Vec::new();
         for fam in self.loadout_class.iter().chain(&self.loadout_extra) {
             if seen.contains(&fam) {

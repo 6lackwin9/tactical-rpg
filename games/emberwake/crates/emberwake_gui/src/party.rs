@@ -116,9 +116,10 @@ fn party_ruleset(cx: &Cx) -> String {
     cx.data.ruleset_id(&cx.gs().world_id)
 }
 
-/// PartyPreview.derived: the derived rows of a member built without auto-spend.
-fn derived(d: &Data, ruleset: &str, m: &UnitState) -> Vec<DRow> {
-    progression::build_with(d, m, false).map(|b| derived_of(&d.cat, ruleset, &b.unit)).unwrap_or_default()
+/// PartyPreview.derived: the derived rows of a member built without auto-spend, as it fights in `world` (its class path
+/// and deck rule there; HOOKS1-UI slice 2).
+fn derived(d: &Data, world: &str, ruleset: &str, m: &UnitState) -> Vec<DRow> {
+    progression::build_with(d, m, world, false).map(|b| derived_of(&d.cat, ruleset, &b.unit)).unwrap_or_default()
 }
 
 /// The derived rows of a built unit: the built-in numbers, then the catalog's derived stats shown on the party screen
@@ -329,17 +330,17 @@ pub(crate) struct DeckTerms {
 
 impl DeckTerms {
     /// A party member's terms under `rs`: None unless the ruleset has the deck rule (classic keeps today's tab).
-    pub fn for_member(d: &Data, m: &UnitState, rs: &emberwake_rules::ruleset::Ruleset) -> Option<Self> {
+    pub fn for_member(d: &Data, m: &UnitState, world: &str, rs: &emberwake_rules::ruleset::Ruleset) -> Option<Self> {
         let rule = emberwake_rules::DeckRule::of(rs)?;
         let cat = &d.cat;
         let basics: Vec<String> = rule.basics.iter().filter(|b| cat.tier_one(b).is_some()).cloned().collect();
-        let actives: Vec<String> = m.owned_families(d).into_iter().filter(|f| cat.tier_one(f).is_some() && !cat.is_basic_family(f) && !rule.basics.contains(f) && !cat.is_system(f)).collect();
+        let actives: Vec<String> = m.owned_families(d, world).into_iter().filter(|f| cat.tier_one(f).is_some() && !cat.is_basic_family(f) && !rule.basics.contains(f) && !cat.is_system(f)).collect();
         let of_slot = |slot: &str| -> Vec<String> { m.passives.iter().filter(|p| cat.passives.get(*p).is_some_and(|x| x.slot == slot)).cloned().collect() };
         let (passives, keystones) = (of_slot("passive"), of_slot("keystone"));
         let mut work = m.clone();
         work.deck = Deck::default();
-        let auto_unit = progression::build_in(d, &work, Some(&rule))?.unit;
-        let classic = progression::build_with(d, &work, false)?.unit;
+        let auto_unit = progression::build_in(d, &work, world, Some(&rule))?.unit;
+        let classic = progression::build_as(d, &work, world, false, None)?.unit;
         let auto = Deck {
             active: auto_unit.active_families(),
             passive: auto_unit.deck.passive.iter().filter(|p| passives.contains(p)).cloned().collect(),
@@ -646,7 +647,7 @@ impl Character {
         }
         let m = self.m(cx).clone();
         // RULESET1 9 D6: under the deck rule the tab edits the deck (classic: today's slots)
-        self.terms = DeckTerms::for_member(&cx.data, &m, &cx.data.ruleset(&cx.gs().world_id));
+        self.terms = DeckTerms::for_member(&cx.data, &m, &cx.gs().world_id, &cx.data.ruleset(&cx.gs().world_id));
         self.deck = m.deck.clone();
         self.using_default = m.loadout_class.is_empty() && m.loadout_extra.is_empty();
         if self.using_default {
@@ -659,16 +660,17 @@ impl Character {
         self.skills_loaded = true;
     }
 
-    /// The member's class path families (class slots take only these, SKILLUI1 Q3 A); its world's path (HOOKS1 CN3).
+    /// The member's class path families (class slots take only these, SKILLUI1 Q3 A); the played world's path (HOOKS1
+    /// CN3, decision "HOOKS1-UI slice 1 answers").
     fn path_families(&self, cx: &Cx) -> Vec<String> {
         let d = &cx.data;
         let m = self.m(cx);
-        d.cat_in(&m.path_world(d)).classes.get(&m.class_id(d)).map(|a| emberwake_rules::unit::families_of(&d.cat, &a.path_steps().into_iter().map(|(_, s)| s).collect::<Vec<_>>())).unwrap_or_default()
+        d.cat_in(&cx.gs().world_id).classes.get(&m.class_id(d)).map(|a| emberwake_rules::unit::families_of(&d.cat, &a.path_steps().into_iter().map(|(_, s)| s).collect::<Vec<_>>())).unwrap_or_default()
     }
 
     /// The highest rank of `family` the member has unlocked (with confirmed gear): what a newly slotted skill stores.
     fn top_rank(&self, cx: &Cx, family: &str) -> Option<i64> {
-        progression::build_with(&cx.data, self.m(cx), false).and_then(|b| b.unit.selectable_ranks(&cx.data.cat, family).last().map(|&r| r as i64))
+        progression::build_with(&cx.data, self.m(cx), &cx.gs().world_id, false).and_then(|b| b.unit.selectable_ranks(&cx.data.cat, family).last().map(|&r| r as i64))
     }
 
     /// The draft after dropping payload `from` (`skill.<f>` from the list, `slot.<g>.<i>` from a slot) on target `to`
@@ -752,7 +754,7 @@ impl Character {
         let mut work = self.m(cx).clone();
         work.loadout_class.clear();
         work.loadout_extra.clear();
-        if let Some(b) = progression::build_with(&cx.data, &work, false) {
+        if let Some(b) = progression::build_with(&cx.data, &work, &cx.gs().world_id, false) {
             self.class_slots = b.unit.active_class_families.clone();
             self.extra_slots = b.unit.active_extra_families.clone();
         }
@@ -925,7 +927,7 @@ impl Character {
             PAct::RankStep(class, i, step) => {
                 self.load_skills(cx);
                 let Some(fam) = (if class { &self.class_slots } else { &self.extra_slots }).get(i).cloned() else { return };
-                let Some(b) = progression::build_with(&d, self.m(cx), false) else { return };
+                let Some(b) = progression::build_with(&d, self.m(cx), &cx.gs().world_id, false) else { return };
                 let ranks = b.unit.selectable_ranks(&d.cat, &fam);
                 let now = draft_rank(&ranks, self.ranks.get(&fam).map(|&r| r as i32));
                 let at = ranks.iter().position(|&r| r == now).unwrap_or(ranks.len().saturating_sub(1)) as i32;
@@ -989,7 +991,7 @@ impl Character {
                 work.loadout_ranks = self.ranks.iter().filter(|(f, _)| slotted.contains(f)).map(|(f, r)| (f.clone(), *r)).collect();
                 let errors = work.loadout_errors(&d, &format!("Unit '{}'", work.id));
                 if errors.is_empty() {
-                    progression::pin_ranks(&d, &mut work);
+                    progression::pin_ranks(&d, &mut work, &cx.gs().world_id);
                     let id = self.member.clone();
                     if let Some(m) = cx.gs_mut().party.member_mut(&id) {
                         m.loadout_class = work.loadout_class;
@@ -1109,7 +1111,7 @@ fn equip(d: &Data, work: &mut UnitState, stash: &mut Stash, item: &str, slot: Op
 fn main_weapon(d: &Data, work: &UnitState) -> Option<emberwake_data::ItemDef> {
     match work.equipment.get("main_hand") {
         Some(id) => d.cat.items.get(id).cloned(),
-        None => progression::build_with(d, work, false).and_then(|b| b.unit.inventory.get(emberwake_rules::gear::Slot::MainHand).map(|e| e.item.clone())),
+        None => progression::build_as(d, work, "", false, None).and_then(|b| b.unit.inventory.get(emberwake_rules::gear::Slot::MainHand).map(|e| e.item.clone())),
     }
 }
 
@@ -1403,7 +1405,7 @@ impl Character {
             }
             ui.push(format!("stats.{st}"), "row", format!("{st} {total}"), Rect::new(66, y as i32 - 2, (table_right - 62.0) as i32, 14), true, false, None, tip(st, &stat_desc(st)));
         }
-        let rows = derived(d, &party_ruleset(cx), m);
+        let rows = derived(d, &cx.gs().world_id, &party_ruleset(cx), m);
         let label_x = 250f32.max(table_right + 6.0);
         let value_x = 325f32.max(label_x + rows.iter().map(|r| ui.p.text_w(&r.label, BODY + 1.0)).fold(0.0, f32::max) + 8.0);
         // DERIVE1 4.4: the built-in rows keep their 15 px step; catalog rows past them close the step up to stay above
@@ -1457,7 +1459,8 @@ impl Character {
             *work.spend.entry(k.clone()).or_insert(0) += v;
         }
         let ruleset = party_ruleset(cx);
-        let (before, after) = (derived(d, &ruleset, m), derived(d, &ruleset, &work));
+        let world = &cx.gs().world_id;
+        let (before, after) = (derived(d, world, &ruleset, m), derived(d, world, &ruleset, &work));
         let label_x = 352f32.max((auto_x + 86) as f32);
         let value_x = 427f32.max(label_x + after.iter().map(|r| ui.p.text_w(&r.label, BODY + 1.0)).fold(0.0, f32::max) + 8.0);
         // DERIVE1 4.4: as on the Stats tab, more rows close the step up (the last row starts at 257 at most)
@@ -1480,7 +1483,7 @@ impl Character {
         }
         let d = &cx.data;
         let cat = &d.cat;
-        let Some(b) = progression::build_with(d, m, false) else { return };
+        let Some(b) = progression::build_with(d, m, &cx.gs().world_id, false) else { return };
         let u = &b.unit;
         let fam_name = |f: &str| cat.tier_one(f).map(|s| s.name.clone()).unwrap_or_else(|| f.to_string());
         let row_of = |f: &str, rank: i32| cat.family_rows(f).into_iter().find(|s| s.tier == rank);
@@ -1600,7 +1603,7 @@ impl Character {
         let d = &cx.data;
         let cat = &d.cat;
         let rs = d.ruleset(&cx.gs().world_id);
-        let built = progression::build_with(d, m, false).map(|b| b.unit);
+        let built = progression::build_with(d, m, &cx.gs().world_id, false).map(|b| b.unit);
         let shown = t.shown(&self.deck);
         let intent_name = |i: &str| emberwake_battle::round_intent::RoundIntent::parse(i).map(|x| x.name().to_string()).unwrap_or_else(|| title_case(i));
         // (name, intent, AP, rank, description) of family `f` at the rank the member uses now (its top unlocked)
@@ -1766,7 +1769,7 @@ impl Character {
         self.load_gear(cx);
         let d = &cx.data;
         let (work, stash) = self.gear.clone().unwrap();
-        let built = progression::build_with(d, &work, false);
+        let built = progression::build_with(d, &work, &cx.gs().world_id, false);
         let head = BODY + 1.0;
         // Middle: the equipped slots, then the pouch.
         let (mx, mw) = (243, 185);
@@ -1845,8 +1848,8 @@ impl Character {
         // Left: the stats with this gear, and the change of the dragged item over a target, else of the hovered item.
         let ruleset = party_ruleset(cx);
         let preview = self.gear_preview(ui, d, &work, &stash);
-        let now = sheet(d, &ruleset, &work);
-        let then = preview.as_ref().map(|p| sheet(d, &ruleset, p));
+        let now = sheet(d, &cx.gs().world_id, &ruleset, &work);
+        let then = preview.as_ref().map(|p| sheet(d, &cx.gs().world_id, &ruleset, p));
         let (lx, lw) = (25, 210);
         ui.p.text(lx as f32 + 3.0, 102.0, &format!("{}  Lv {}", d.class_name(&cx.gs().world_id, &work.class_id(d)), work.level(d)), head, INFO);
         // DERIVE1 4.4: catalog rows past the built-in ones close the 12 px step up (the last row starts at 260 at most)
@@ -1896,9 +1899,9 @@ pub(crate) fn deck_json(d: &Deck) -> Value {
     json!({"active": d.active, "passive": d.passive, "keystone": d.keystone, "order": Value::Object(d.order.iter().map(|(k, v)| (k.clone(), json!(v))).collect())})
 }
 
-/// The Gear tab's stat list: the core stats with gear, then the derived rows (`derived`).
-fn sheet(d: &Data, ruleset: &str, m: &UnitState) -> Vec<DRow> {
-    let Some(b) = progression::build_with(d, m, false) else { return Vec::new() };
+/// The Gear tab's stat list: the core stats with gear, then the derived rows (`derived`), as `m` fights in `world`.
+fn sheet(d: &Data, world: &str, ruleset: &str, m: &UnitState) -> Vec<DRow> {
+    let Some(b) = progression::build_with(d, m, world, false) else { return Vec::new() };
     let mut out: Vec<DRow> = STATS.iter().map(|st| DRow::plain(st, b.unit.stats.stat(st, None) as i64, stat_desc(st))).collect();
     out.extend(derived_of(&d.cat, ruleset, &b.unit));
     out
@@ -2083,7 +2086,7 @@ mod tests {
         assert_eq!(st[&shield], shields + 1);
         let err = drop_move(&d, &mut m, &mut st, &format!("stash.{shield}"), "slot.off_hand").unwrap_err();
         assert!(err.contains("both hands"), "{err}");
-        let built = progression::build_with(&d, &m, false).unwrap();
+        let built = progression::build_with(&d, &m, "", false).unwrap();
         assert!(built.unit.inventory.get(emberwake_rules::gear::Slot::OffHand).is_none_or(|o| off_hand_ok(Some(&d.cat.items[&great]), &o.item)), "no default shield under the 2H weapon");
         m.equipment.insert("off_hand".into(), shield);
         assert!(m.validate(&d).iter().any(|e| e.contains("two-handed")), "validation refuses the pair");
@@ -2106,7 +2109,7 @@ mod tests {
         drop_move(&d, &mut m, &mut st, &format!("stash.{staff}"), "slot.main_hand").unwrap();
         assert!(!m.equipment.contains_key("off_hand"), "the focus is stowed");
         assert!(drop_move(&d, &mut m, &mut st, &format!("stash.{focus}"), "slot.off_hand").unwrap_err().contains("both hands"));
-        let built = progression::build_with(&d, &m, false).unwrap();
+        let built = progression::build_with(&d, &m, "", false).unwrap();
         assert!(built.unit.inventory.get(emberwake_rules::gear::Slot::OffHand).is_none(), "no default orb under the staff");
         m.equipment.insert("off_hand".into(), focus);
         assert!(m.validate(&d).iter().any(|e| e.contains("two-handed")));
@@ -2116,16 +2119,16 @@ mod tests {
     fn wearing_an_item_changes_the_stat_sheet_the_preview_shows() {
         let (d, m, mut st) = setup();
         let rs = d.ruleset_id("ashlands");
-        let before = sheet(&d, &rs, &m);
+        let before = sheet(&d, "", &rs, &m);
         let mut changed = false;
         for slot in ["main_hand", "body", "accessory_1"] {
             let mut w = m.clone();
             let item = wearable(&d, &m, slot);
             equip(&d, &mut w, &mut st, &item, Some(slot)).unwrap();
-            changed |= sheet(&d, &rs, &w) != before;
+            changed |= sheet(&d, "", &rs, &w) != before;
         }
         assert!(changed);
-        assert_eq!(before.len(), STATS.len() + derived(&d, &rs, &m).len());
+        assert_eq!(before.len(), STATS.len() + derived(&d, "", &rs, &m).len());
     }
 
     /// A scratch derived-stat row (DERIVE1 4.1 keys; the rest take the schema defaults).
@@ -2136,8 +2139,7 @@ mod tests {
     /// `d` with exactly `rows` as its derived stats (scratch rows in the catalog, the shipped data untouched).
     fn with_rows(d: &Data, rows: Vec<emberwake_data::DerivedStatDef>) -> Data {
         let mut d = d.clone();
-        let cat = std::sync::Arc::make_mut(&mut d.cat);
-        cat.derived_stats = rows.into_iter().map(|r| (r.id.clone(), r)).collect();
+        d.edit_cat(|cat| cat.derived_stats = rows.into_iter().map(|r| (r.id.clone(), r)).collect());
         d
     }
 
@@ -2152,11 +2154,11 @@ mod tests {
     fn catalog_derived_rows_join_the_party_table_by_screen_ruleset_and_order() {
         use emberwake_rules::ruleset::{CLASSIC, TIMELINE};
         let (d, m, _) = setup();
-        let built = progression::build_with(&d, &m, false).unwrap().unit;
+        let built = progression::build_with(&d, &m, "", false).unwrap().unit;
         let today: Vec<String> = builtin_of(&built).iter().map(|r| r.0.to_string()).collect();
         let none = with_rows(&d, Vec::new());
         for rs in [CLASSIC, TIMELINE] {
-            assert_eq!(labels(&derived(&none, rs, &m)), today, "{rs}: no row, the table of today");
+            assert_eq!(labels(&derived(&none, "", rs, &m)), today, "{rs}: no row, the table of today");
         }
         let d = with_rows(&d, vec![
             row(json!({"id": "dread", "name": "Dread", "formula": "100 - KNOW", "rulesets": ["timeline"], "show_on": ["party"]})),
@@ -2165,21 +2167,21 @@ mod tests {
             row(json!({"id": "hush", "name": "Hush", "formula": "INT", "show_on": ["dojo"]})),
         ]);
         let with = |extra: &[&str]| today.iter().cloned().chain(extra.iter().map(|s| s.to_string())).collect::<Vec<String>>();
-        assert_eq!(labels(&derived(&d, CLASSIC, &m)), with(&["Zeal", "Nrv"]), "classic: the timeline row is absent, the dojo row is not on the party screen");
-        assert_eq!(labels(&derived(&d, TIMELINE, &m)), with(&["Dread", "Zeal", "Nrv"]), "timeline: order 0 in catalog order, then order 1");
+        assert_eq!(labels(&derived(&d, "", CLASSIC, &m)), with(&["Zeal", "Nrv"]), "classic: the timeline row is absent, the dojo row is not on the party screen");
+        assert_eq!(labels(&derived(&d, "", TIMELINE, &m)), with(&["Dread", "Zeal", "Nrv"]), "timeline: order 0 in catalog order, then order 1");
         for rs in [CLASSIC, TIMELINE] {
-            let rows = derived(&d, rs, &m);
+            let rows = derived(&d, "", rs, &m);
             for r in &rows[today.len()..] {
                 let id = d.cat.derived_stats.values().find(|x| x.header() == r.label).unwrap();
                 let v = derived::value(&d.cat, rs, &built, &id.id).unwrap();
                 assert_eq!((r.value, r.shown.clone()), (v as i64, format!("{v}{}", id.suffix)), "{rs} {}", r.label);
             }
-            assert_eq!(rows[..today.len()], derived(&none, rs, &m)[..], "{rs}: the built-in rows are unchanged");
+            assert_eq!(rows[..today.len()], derived(&none, "", rs, &m)[..], "{rs}: the built-in rows are unchanged");
         }
         assert_eq!(labels(&data_rows(&d.cat, CLASSIC, &built, "dojo")), ["Hush"]);
         assert_eq!(labels(&data_rows(&d.cat, CLASSIC, &built, "battle")), ["Zeal"]);
         let rs = d.ruleset_id("ashlands");
-        assert_eq!(sheet(&d, &rs, &m).len(), STATS.len() + derived(&d, &rs, &m).len(), "the Gear tab lists the same rows");
+        assert_eq!(sheet(&d, "", &rs, &m).len(), STATS.len() + derived(&d, "", &rs, &m).len(), "the Gear tab lists the same rows");
     }
 
     /// DERIVE1 4.4: a row's detail text is its description, its formula and the breakdown: the formula with its inputs
@@ -2194,10 +2196,10 @@ mod tests {
         ]);
         let detail = |d: &Data, m: &UnitState, id: &str| -> (i64, String) {
             let header = d.cat.derived_stats[id].header().to_string();
-            let r = derived(d, CLASSIC, m).into_iter().find(|r| r.label == header).unwrap();
+            let r = derived(d, "", CLASSIC, m).into_iter().find(|r| r.label == header).unwrap();
             (r.value, r.desc)
         };
-        let built = progression::build_with(&d, &m, false).unwrap().unit;
+        let built = progression::build_with(&d, &m, "", false).unwrap().unit;
         let know = derived::breakdown(&d.cat, CLASSIC, &built, "nerve").unwrap().inputs.iter().find(|i| i.name == "KNOW").unwrap().value;
         let (v, text) = detail(&d, &m, "nerve");
         assert_eq!(v, 3 + know as i64 * 2);
@@ -2209,7 +2211,9 @@ mod tests {
         // and the breakdown names the passive
         let steady = emberwake_data::PassiveDef { id: "test_steady".into(), name: "Steady Test".into(), effects: vec![json!({"type": "stat", "stat": "nerve", "value": 4})], slot: String::new() };
         let mut d = d.clone();
-        std::sync::Arc::make_mut(&mut d.cat).passives.insert(steady.id.clone(), steady.clone());
+        d.edit_cat(|cat| {
+            cat.passives.insert(steady.id.clone(), steady.clone());
+        });
         let mut u = built.clone();
         u.apply_passive(&d.cat, &steady);
         let r = data_rows(&d.cat, CLASSIC, &u, "party").into_iter().find(|r| r.label == "Nerve").unwrap();
@@ -2223,8 +2227,7 @@ mod tests {
     fn many_derived_rows_stay_inside_their_tab_without_overlapping() {
         let mut cx = crate::hud::hud_tests::game_cx();
         let mut data = (*cx.app.data).clone();
-        let cat = std::sync::Arc::make_mut(&mut data.cat);
-        cat.derived_stats = (0..4).map(|i| row(json!({"id": format!("row_{i}"), "name": format!("Row {i}"), "formula": "KNOW + 1", "show_on": ["party"]}))).map(|r| (r.id.clone(), r)).collect();
+        data.edit_cat(|cat| cat.derived_stats = (0..4).map(|i| row(json!({"id": format!("row_{i}"), "name": format!("Row {i}"), "formula": "KNOW + 1", "show_on": ["party"]}))).map(|r| (r.id.clone(), r)).collect());
         cx.app.data = std::sync::Arc::new(data);
         let member = cx.gs().party.members[0].id.clone();
         // (tab, widget prefix of its derived rows, its column: x from, x to); the detail pane starts at y 275
@@ -2483,7 +2486,7 @@ mod tests {
         assert_eq!(m.deck, draft);
         assert!(m.validate(&cx.data).is_empty(), "{:?}", m.validate(&cx.data));
         let rule = emberwake_rules::DeckRule::of(&cx.data.ruleset(&cx.gs().world_id)).unwrap();
-        let u = progression::build_in(&cx.data, &m, Some(&rule)).unwrap().unit;
+        let u = progression::build_in(&cx.data, &m, "", Some(&rule)).unwrap().unit;
         assert!(u.passives.contains(&passive) && !u.passives.contains(&keystone), "only the slotted passive applies");
         assert_eq!(u.active_families(), draft.active);
         let back = UnitState::from_dict(m.to_value().as_object().unwrap());

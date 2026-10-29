@@ -141,29 +141,44 @@ pub struct Built {
     pub warnings: Vec<String>,
 }
 
-/// PartyBuilder.build_report with auto-spend: None when the state is invalid.
+/// PartyBuilder.build_report with auto-spend: None when the state is invalid. World-free and classic: the base
+/// catalog's class path, no deck rule (tools and tests; a screen with a world uses `build_played` or `build_with`).
 pub fn build(d: &Data, state: &UnitState) -> Option<Built> {
-    build_with(d, state, true)
+    build_as(d, state, "", true, None)
 }
 
-/// `build` for a battle under the deck rule when `deck` is Some (RULESET1 9 D1-D5): the member's saved deck (else its
-/// base unit's) slots its passives (a slottable passive the member owns applies only while slotted, D3, D4), the
-/// ruleset's basics are open and the deck fills the active slots (D2). None = `build` exactly (classic).
-pub fn build_in(d: &Data, state: &UnitState, deck: Option<&rpgkit_rules::DeckRule>) -> Option<Built> {
-    build_full(d, state, true, deck)
+/// `build` as world `world` fights under `deck` (RULESET1 9 D1-D5 when Some: the member's saved deck, else its base
+/// unit's, slots its passives (a slottable passive the member owns applies only while slotted, D3, D4), the ruleset's
+/// basics are open and the deck fills the active slots, D2; None: classic). HOOKS1 CN3 (decision "HOOKS1-UI slice 1
+/// answers", user 2026-10-30): the class path is the world's (its `classes` overlay), as the class name is.
+pub fn build_in(d: &Data, state: &UnitState, world: &str, deck: Option<&rpgkit_rules::DeckRule>) -> Option<Built> {
+    build_as(d, state, world, true, deck)
 }
 
-/// `auto_spend` false leaves unspent points unspent (the party screen's preview: confirmed and drafted points only).
-pub fn build_with(d: &Data, state: &UnitState, auto_spend: bool) -> Option<Built> {
-    build_full(d, state, auto_spend, None)
+/// The deck rule of world `world`'s battles (None in classic).
+pub fn deck_rule(d: &Data, world: &str) -> Option<rpgkit_rules::DeckRule> {
+    rpgkit_rules::DeckRule::of(&d.ruleset(world))
 }
 
-fn build_full(d: &Data, state: &UnitState, auto_spend: bool, deck: Option<&rpgkit_rules::DeckRule>) -> Option<Built> {
+/// The member as it fights in world `world`: its class path there and that world's deck rule (RULESET1-U slice 2 review:
+/// out-of-battle max HP, the hub roster, camp rest).
+pub fn build_played(d: &Data, state: &UnitState, world: &str) -> Option<Built> {
+    build_as(d, state, world, true, deck_rule(d, world).as_ref())
+}
+
+/// `build_played` with `auto_spend` false leaving unspent points unspent (the party screen's preview: confirmed and
+/// drafted points only).
+pub fn build_with(d: &Data, state: &UnitState, world: &str, auto_spend: bool) -> Option<Built> {
+    build_as(d, state, world, auto_spend, deck_rule(d, world).as_ref())
+}
+
+/// Every build: the member in world `world` (its class path; "" = the base catalog), auto-spent or not, under `deck`.
+pub fn build_as(d: &Data, state: &UnitState, world: &str, auto_spend: bool, deck: Option<&rpgkit_rules::DeckRule>) -> Option<Built> {
     if !state.validate(d).is_empty() {
         return None;
     }
-    // HOOKS1 CN3: the member's world may replace its class path (the base catalog when it does not)
-    let cat = d.cat_in(&state.path_world(d));
+    // HOOKS1 CN3: the world may replace the class path (the base catalog when it does not)
+    let cat = d.cat_in(world);
     let mut work = state.clone();
     if auto_spend {
         auto_for(d, &mut work);
@@ -233,8 +248,8 @@ fn build_full(d: &Data, state: &UnitState, auto_spend: bool, deck: Option<&rpgki
 /// SKILLUI1 (the user's answer to Q2): every slotted family without a rank entry gets its highest unlocked rank now,
 /// so the slot stays there when new ranks unlock (the Skills tab calls this on slotting and on Confirm). Slotted
 /// means the built unit's active families, so the class default loadout (stored empty) is pinned too.
-pub fn pin_ranks(d: &Data, state: &mut UnitState) {
-    let Some(b) = build_with(d, state, false) else { return };
+pub fn pin_ranks(d: &Data, state: &mut UnitState, world: &str) {
+    let Some(b) = build_with(d, state, world, false) else { return };
     for fam in &b.unit.active_families() {
         if !state.loadout_ranks.contains_key(fam) {
             if let Some(&r) = b.unit.selectable_ranks(&d.cat, fam).last() {
@@ -269,13 +284,15 @@ pub fn start_hp(max_hp: i64, hp_lost: i64) -> i64 {
     (max_hp - hp_lost.max(0)).clamp(1, max_hp.max(1))
 }
 
-pub fn max_hp_of(d: &Data, state: &UnitState) -> i64 {
-    build(d, state).map(|b| b.unit.max_hp as i64).unwrap_or(0)
+/// The member's max HP as it fights in world `world` (`build_played`: under its deck rule an unslotted passive does not
+/// count, as in battle).
+pub fn max_hp_of(d: &Data, state: &UnitState, world: &str) -> i64 {
+    build_played(d, state, world).map(|b| b.unit.max_hp as i64).unwrap_or(0)
 }
 
-/// (hp, max) for a read-out.
-pub fn current_hp(d: &Data, state: &UnitState) -> (i64, i64) {
-    let max = max_hp_of(d, state);
+/// (hp, max) for a read-out in world `world`.
+pub fn current_hp(d: &Data, state: &UnitState, world: &str) -> (i64, i64) {
+    let max = max_hp_of(d, state, world);
     (if max > 0 { start_hp(max, state.hp_lost) } else { 0 }, max)
 }
 
@@ -283,14 +300,14 @@ pub fn hurt(party: &PartyState) -> bool {
     party.members.iter().any(|m| m.hp_lost > 0)
 }
 
-/// Every roster member back to full; the HP restored in total.
-pub fn rest(d: &Data, party: &mut PartyState) -> i64 {
+/// Every roster member back to full; the HP restored in total (max HP as the members fight in world `world`).
+pub fn rest(d: &Data, party: &mut PartyState, world: &str) -> i64 {
     let mut restored = 0;
     for m in party.members.iter_mut() {
         if m.hp_lost <= 0 {
             continue;
         }
-        let max = max_hp_of(d, m);
+        let max = max_hp_of(d, m, world);
         if max > 0 {
             restored += max - start_hp(max, m.hp_lost);
         }
@@ -335,7 +352,7 @@ pub fn make_camp(d: &Data, gs: &mut GameState) -> Dict {
         return out;
     }
     let spent = gs.party.spend_supplies(CAMP_COST);
-    let restored = rest(d, &mut gs.party);
+    let restored = rest(d, &mut gs.party, &gs.world_id.clone());
     let events = vec![
         Value::Object(json::obj([("kind", "camped".into()), ("location", gs.location_id.clone().into()), ("spent", int(spent)), ("restored", int(restored))])),
         Value::Object(json::obj([("kind", "autosave".into())])),

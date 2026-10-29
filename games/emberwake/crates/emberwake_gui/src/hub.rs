@@ -131,7 +131,7 @@ impl Screen<GameCx> for Hub {
         let bx = Rect::new(270, 80, 100, bh);
         ui.p.panel(bx, CARD, BORDER, 2.0);
         for (i, m) in rows.iter().enumerate() {
-            let (hp, max) = progression::current_hp(&cx.data, m);
+            let (hp, max) = progression::current_hp(&cx.data, m, &gs.world_id);
             let y = bx.y as f32 + 3.0 + i as f32 * 42.0;
             let on = active.contains(&m.id);
             ui.p.text_fit(bx.x as f32 + 3.0, y, &member_name(cx, m), BODY + 1.0, 94.0, if on { INFO } else { DIM });

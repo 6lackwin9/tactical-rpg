@@ -356,3 +356,10 @@ in `docs/archive/TASKS_DONE.md`, the user's rulings the rows in `games/emberwake
   the content check as on the battle screen; leaving a band removes a resist key the band created; the battle report
   calls an execute finish "executed"; the board marks the ground hazards the party's side sees and the arena's struck
   cells (overlay groups `hazards`, `arena`).
+- As built (HOOKS1-UI slice 2, decision "HOOKS1-UI slice 1 answers", user 2026-10-30; supersedes the HOOKS1-C line):
+  a member is built with the class path of the world being played (`progression::build_in` / `build_played` /
+  `build_with` take the world; `UnitState::path_world` is gone); a saved loadout, deck or rank validates against the
+  families its class path holds in any world (`owned_families_anywhere`); a build in a world that lacks one ignores
+  that stored loadout there (the member falls back to the default loadout, with a warning) and drops unowned deck entries; out-of-battle max HP, camp rest and the party screen's readouts build under the played
+  world's deck rule; `Data::edit_cat` rebuilds the per-world catalogs; battle hover cards name the class in the
+  battle's world (the Arena: the class row's name).

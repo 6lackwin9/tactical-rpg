@@ -186,7 +186,7 @@ fn build_in_slots_the_members_passives_and_actives() {
     let rule = rule(&d);
     let mut m = member("hero");
     m.deck = deck(json!({"active": ["d_four", "d_two"], "passive": ["d_braced"]}));
-    let u = progression::build_in(&d, &m, Some(&rule)).expect("built").unit;
+    let u = progression::build_in(&d, &m, "", Some(&rule)).expect("built").unit;
     assert_eq!(u.passives, strings(&["d_braced", "d_innate"]), "d_spare is not slotted");
     assert_eq!(u.active_families(), strings(&["d_four", "d_two"]));
     let classic = progression::build(&d, &m).expect("built").unit;
@@ -194,16 +194,16 @@ fn build_in_slots_the_members_passives_and_actives() {
     assert_eq!(classic.active_families(), strings(&PATH));
     assert!(classic.deck_rule.is_none());
     // auto: the first class-path families; an empty member deck takes its base unit's
-    let u = progression::build_in(&d, &member("hero"), Some(&rule)).expect("built").unit;
+    let u = progression::build_in(&d, &member("hero"), "", Some(&rule)).expect("built").unit;
     assert_eq!(u.active_families(), strings(&PATH[..SLOTS.0 as usize]));
     assert_eq!(u.passives, strings(&["d_innate"]));
-    let u = progression::build_in(&d, &member("hero_decked"), Some(&rule)).expect("built").unit;
+    let u = progression::build_in(&d, &member("hero_decked"), "", Some(&rule)).expect("built").unit;
     assert_eq!(u.active_families(), strings(&["d_three"]));
     let mut m = member("hero_decked");
     m.deck = deck(json!({"active": ["d_one"]}));
-    assert_eq!(progression::build_in(&d, &m, Some(&rule)).expect("built").unit.active_families(), strings(&["d_one"]));
+    assert_eq!(progression::build_in(&d, &m, "", Some(&rule)).expect("built").unit.active_families(), strings(&["d_one"]));
     // None is `build`
-    let (a, b) = (progression::build_in(&d, &member("hero"), None).unwrap().unit, progression::build(&d, &member("hero")).unwrap().unit);
+    let (a, b) = (progression::build_in(&d, &member("hero"), "", None).unwrap().unit, progression::build(&d, &member("hero")).unwrap().unit);
     assert_eq!((&a.passives, a.active_families(), &a.known_skills), (&b.passives, b.active_families(), &b.known_skills));
 }
 
@@ -216,7 +216,7 @@ fn a_dialogue_stat_check_counts_only_slotted_passives_under_the_deck_rule() {
     let mut m = member("hero");
     m.deck = deck(json!({"passive": ["d_braced"]}));
     let str_of = |rule: Option<&DeckRule>| {
-        let u = progression::build_in(&d, &m, rule).expect("built").unit;
+        let u = progression::build_in(&d, &m, "", rule).expect("built").unit;
         let ctx = u.weapon_context();
         u.stats.effective("STR", ctx.as_deref(), "") as i64
     };

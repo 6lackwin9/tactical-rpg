@@ -25,7 +25,7 @@ fn data() -> Data {
 /// A priest member at `level` with Mend slotted (once the priest owns it) and `ranks` chosen.
 fn priest(d: &Data, level: i64, ranks: &[(&str, i64)]) -> UnitState {
     let mut m = UnitState::at_level(d, "priest", level, "alda");
-    if m.owned_families(d).iter().any(|f| f == FAM) {
+    if m.owned_families(d, "").iter().any(|f| f == FAM) {
         m.loadout_class = vec![FAM.into()];
     }
     m.loadout_ranks = ranks.iter().map(|(f, r)| (f.to_string(), *r)).collect();
@@ -33,7 +33,7 @@ fn priest(d: &Data, level: i64, ranks: &[(&str, i64)]) -> UnitState {
 }
 
 fn built(d: &Data, m: &UnitState) -> emberwake_rules::Unit {
-    progression::build_with(d, m, false).expect("a valid member").unit
+    progression::build_with(d, m, "", false).expect("a valid member").unit
 }
 
 fn usable(d: &Data, u: &emberwake_rules::Unit, fam: &str) -> Vec<i32> {
@@ -151,7 +151,7 @@ fn slot_keeps_its_rank_on_level_up() {
     let d = data();
     // the user's answer to Q2: a slot never moves up by itself; an entry stays where it was set
     let mut m = priest(&d, 3, &[]);
-    progression::pin_ranks(&d, &mut m);
+    progression::pin_ranks(&d, &mut m, "");
     let pinned = m.loadout_ranks.get(FAM).copied().unwrap();
     m.total_xp = progression::xp_for_level(&d, TOP_LEVEL);
     assert_eq!(built(&d, &m).effective_rank(&d.cat, FAM), Some(pinned as i32), "still at the rank it was slotted with");
@@ -162,11 +162,11 @@ fn slot_keeps_its_rank_on_level_up() {
 fn slotting_stores_the_highest_unlocked_rank() {
     let d = data();
     let mut m = priest(&d, TOP_LEVEL, &[]);
-    progression::pin_ranks(&d, &mut m);
+    progression::pin_ranks(&d, &mut m, "");
     assert_eq!(m.loadout_ranks.get(FAM).copied(), Some(top(&d) as i64));
     // an existing entry is kept
     let mut m = priest(&d, TOP_LEVEL, &[(FAM, 1)]);
-    progression::pin_ranks(&d, &mut m);
+    progression::pin_ranks(&d, &mut m, "");
     assert_eq!(m.loadout_ranks.get(FAM).copied(), Some(1));
 }
 
@@ -259,7 +259,7 @@ fn confirming_the_default_loadout_pins_its_families() {
     // the class default loadout is stored empty; pinning still covers every family the hero takes into battle
     let mut m = priest(&d, TOP_LEVEL, &[]);
     m.loadout_class.clear();
-    progression::pin_ranks(&d, &mut m);
+    progression::pin_ranks(&d, &mut m, "");
     let u = built(&d, &m);
     assert!(!u.active_families().is_empty());
     for fam in u.active_families() {
@@ -288,7 +288,7 @@ fn rank_lines_list_only_changing_fields() {
         assert_eq!(l.ap, emberwake_battle::skill::ap_cost(rows[(l.tier - 1) as usize], Some(&u)));
     }
     // the first level that owns Mend: rank I open, rank III still locked
-    let first = (1..TOP_LEVEL).find(|&l| priest(&d, l, &[]).owned_families(&d).iter().any(|f| f == FAM)).expect("the priest learns Mend");
+    let first = (1..TOP_LEVEL).find(|&l| priest(&d, l, &[]).owned_families(&d, "").iter().any(|f| f == FAM)).expect("the priest learns Mend");
     let low = built(&d, &priest(&d, first, &[]));
     let locked = skill_text::rank_lines(&d.cat, &low, FAM);
     let l3 = locked.iter().find(|l| l.tier == 3).unwrap();

@@ -168,7 +168,7 @@ pub fn rest_refusal(d: &Data, gs: &GameState) -> &'static str {
 fn rest_body(d: &Data, gs: &mut GameState) -> (i64, i64, i64) {
     let rule = rest_rule(d, &gs.world_id);
     let spent = gs.party.spend_supplies(rule.cost as i64);
-    let restored = progression::rest(d, &mut gs.party);
+    let restored = progression::rest(d, &mut gs.party, &gs.world_id.clone());
     let days = (rule.days as i64).max(0);
     gs.time += days;
     (spent, restored, days)

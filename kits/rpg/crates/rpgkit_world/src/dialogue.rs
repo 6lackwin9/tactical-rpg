@@ -163,7 +163,7 @@ pub fn best_stat(d: &Data, gs: &GameState, stat: &str) -> i64 {
     let deck = rpgkit_rules::DeckRule::of(&d.ruleset(&gs.world_id));
     let mut best = 0;
     for m in gs.party.active_members() {
-        if let Some(b) = progression::build_in(d, m, deck.as_ref()) {
+        if let Some(b) = progression::build_in(d, m, &gs.world_id, deck.as_ref()) {
             let ctx = b.unit.weapon_context();
             best = best.max(b.unit.stats.effective(stat, ctx.as_deref(), "") as i64);
         }

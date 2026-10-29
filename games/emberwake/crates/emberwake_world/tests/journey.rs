@@ -169,7 +169,7 @@ impl Journey<'_> {
             .members
             .iter()
             .map(|m| {
-                let (h, max) = progression::current_hp(d, m);
+                let (h, max) = progression::current_hp(d, m, &gs.world_id);
                 Value::Object(json::obj([("hp", int(h)), ("max", int(max))]))
             })
             .collect();

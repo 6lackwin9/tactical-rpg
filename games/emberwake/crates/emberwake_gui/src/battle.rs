@@ -1021,6 +1021,9 @@ pub struct BattleScreen {
     arena_rules: String,
     /// Arena only (RULESET1 V2): "Reveal enemy plans" (the host's `plan_reveal`).
     arena_reveal: bool,
+    /// HOOKS1 CN2 (HOOKS1-UI slice 2): the world whose `classes` overlay names the units' classes on the hover cards: a
+    /// world fight's world; "" (the class rows' names) in the Arena, a catalog screen.
+    class_world: String,
     /// Session events already shown in the message bar.
     events_seen: usize,
     /// Resolver log lines already sounded.
@@ -1096,6 +1099,7 @@ impl BattleScreen {
             arena_ruleset: None,
             arena_rules: String::new(),
             arena_reveal: false,
+            class_world: String::new(),
             events_seen: 0,
             log_seen: 0,
             slot: None,
@@ -1291,7 +1295,7 @@ impl BattleScreen {
         // RULESET1 9 D1-D5: under the deck rule a member fights with its deck (classic: None, built as before)
         let deck = emberwake_rules::DeckRule::of(&def.ruleset);
         for m in active {
-            let Some(built) = progression::build_in(&d, m, deck.as_ref()) else { continue };
+            let Some(built) = progression::build_in(&d, m, &world, deck.as_ref()) else { continue };
             let mut unit = built.unit;
             unit.hp = progression::start_hp(unit.max_hp as i64, m.hp_lost) as i32;
             let base = d.cat.units.get(&m.base_unit).cloned().unwrap_or_else(|| UnitDef::from_obj(&Default::default()));
@@ -1309,6 +1313,7 @@ impl BattleScreen {
         }
         let session = Session::start_with(d.cat.clone(), def, &roster, party);
         let mut b = Self::blank(cx, Mode::World { fight: fight.clone(), runner: runner.to_string(), members });
+        b.class_world = world;
         b.host.begin(session);
         b.host.restart();
         b.after_start(&s(entry, "intro"));
@@ -2735,11 +2740,18 @@ fn derived_line(rows: &[crate::party::DRow]) -> Option<String> {
     (!rows.is_empty()).then(|| rows.iter().map(|r| format!("{} {}", r.label, r.shown)).collect::<Vec<_>>().join("   "))
 }
 
+/// HOOKS1 CN2 (HOOKS1-UI slice 2): each unit's class name in world `world` (its catalog row's class: the world's
+/// `classes` overlay name, else the class row's; "" for a unit without a class).
+fn class_names(d: &emberwake_world::Data, world: &str, w: &World) -> Vec<String> {
+    w.units.iter().map(|u| d.cat.units.get(&u.catalog_id).filter(|def| !def.class_id.is_empty() && d.cat.classes.contains_key(&def.class_id)).map(|def| d.class_name(world, &def.class_id)).unwrap_or_default()).collect()
+}
+
 /// Hover card of unit `i` (`tells`: the enemy intents while planning, INTENT1).
 /// RULESET1-U slice 4 (UI5): `rounds` is every unit's round intent record (`Session::round_intents`; empty in classic):
 /// the card leads with the unit's intent and target (either side) and, during the playback, an enemy's record stands in
 /// for its tell (so a reveal and its readers stay listed, a reader who fell included).
-fn unit_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], rounds: &[Intent]) -> Tip {
+/// HOOKS1-UI slice 2: `classes[i]` is unit `i`'s class name in the battle's world ("" = none shown; `class_names`).
+fn unit_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], rounds: &[Intent], classes: &[String]) -> Tip {
     let w = &s.w;
     let u = &w.units[i];
     let ally = w.allies.contains(&i);
@@ -2750,7 +2762,12 @@ fn unit_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], rounds:
         t.push((head, intent_ink(intent)));
     }
     t.push((format!("HP {}/{}   AP {}/{}   {}", u.hp, u.max_hp, u.ap, u.max_ap, stance_name(u)), TEXT));
-    t.push((format!("Level {} {}   Speed {}   Reach {}", u.stats.level, u.tier, u.speed, reach_text(w, i)), DIM));
+    let level = match classes.get(i).filter(|c| !c.is_empty()) {
+        Some(c) if u.tier.is_empty() => format!("Level {} {c}", u.stats.level),
+        Some(c) => format!("Level {} {c} ({})", u.stats.level, u.tier),
+        None => format!("Level {} {}", u.stats.level, u.tier),
+    };
+    t.push((format!("{level}   Speed {}   Reach {}", u.speed, reach_text(w, i)), DIM));
     if let Some(line) = derived_line(&derived_rows(s, i)) {
         t.push((line, DIM));
     }
@@ -2822,6 +2839,8 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let layers = Layers::of(&cx.settings.v["battle_overlays"]);
     // HOOKS1-UI slice 1: the ground hazards and the arena telegraph (empty in classic)
     let marks = HookMarks::of(s, &layers);
+    // HOOKS1-UI slice 2 (CN2): each unit's class name in the battle's world, for the hover cards
+    let classes = class_names(&cx.data, &g.class_world, w);
     let round_of = |u: usize| rounds.iter().find(|r| r.unit == u).and_then(|r| r.round_intent).filter(|_| layers.glyphs);
 
     // -- Top strip: the selected hero's six blocks and the round controls.
@@ -3005,7 +3024,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         }
         ui.p.text(r.x as f32 + 4.0, r.y as f32 + 18.0, &format!("HP {}/{}", u.hp, u.max_hp), SMALL, TEXT);
         ui.p.text_right(r.x as f32 + r.w as f32 - 4.0, r.y as f32 + 18.0, &format!("AP {}/{}", u.ap, u.max_ap), SMALL, ALLY);
-        let tip = unit_tip(s, a, sel, &tells, &rounds);
+        let tip = unit_tip(s, a, sel, &tells, &rounds, &classes);
         ui.push(format!("party.{a}"), "card", format!("{} HP {}/{} AP {}/{}", u.name, u.hp, u.max_hp, u.ap, u.max_ap), r, true, is_sel, Some(Action::Select(a)), tip);
         y += 33;
     }
@@ -3143,7 +3162,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let shift = g.camera.offset_at(g.clock.now());
     // RULESET1-U slice 3: the round intent's board overlays (None in classic)
     let overlay = overlay_of(s, sel, planning);
-    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.clock.ms, sel, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks };
+    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.clock.ms, sel, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes };
     let board_hover = match view {
         View::Stage => draw_stage(board, &mut ui, cx, &tuning, now),
         View::Flat => {
@@ -3221,7 +3240,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         } else {
             ui.p.text(r.x as f32 + 3.0, r.y as f32 + 11.5, if u.is_withdrawn { "Fled" } else { "Down" }, SMALL, DIM);
         }
-        let tip = unit_tip(s, e, sel, &tells, &rounds);
+        let tip = unit_tip(s, e, sel, &tells, &rounds, &classes);
         ui.push(format!("foe.{e}"), "card", format!("{} {}/{} {}", u.name, u.hp, u.max_hp, next), r, true, hover, Some(Action::UnitClick(e)), tip);
         y += r.h + 2;
     }
@@ -3243,7 +3262,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         g.panels.push(("intel", r));
         ui.p.panel(r, CARD, if w.allies.contains(&e) { ALLY } else { FOE }, RADIUS);
         let mut ly = r.y as f32 + 3.0;
-        let mut lines = unit_tip(s, e, sel, &tells, &rounds);
+        let mut lines = unit_tip(s, e, sel, &tells, &rounds, &classes);
         // RULESET1-U slice 5: the selected hero's planned hits on this unit, forecast (rule poise)
         if let Some(h) = sel.filter(|h| layers.forecasts && planning && ri::on(w) && w.units[*h].is_active()) {
             for f in hit_forecasts(s, h).into_iter().flatten().filter(|f| f.target == e) {
@@ -4281,6 +4300,8 @@ struct Board<'a> {
     alt: bool,
     /// HOOKS1-UI slice 1: the ground hazards and the arena telegraph (empty in classic).
     marks: &'a HookMarks,
+    /// HOOKS1-UI slice 2: each unit's class name for the hover cards (`class_names`).
+    classes: &'a [String],
 }
 
 /// An action clip a token wants starts with the first candidate its body has (SPRITE1-U), once the clock reaches its
@@ -4415,7 +4436,7 @@ fn scaled(a: u8, k: u8) -> u8 {
 /// the `common` tiles, tree tiles flat, tokens `flat_token_px` on a filled foot ellipse at `foot_alpha`, arrows centre
 /// to centre over the units, the cell widgets.
 fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes } = b;
     let w = &s.w;
     let panel = Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4);
     ui.p.panel(panel, rgb(8, 10, 16), BORDER, RADIUS);
@@ -4566,7 +4587,7 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
         if let Some(st) = poise_shown(w, i, &layers) {
             poise_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 6 + dy, TILE - 6, 2), &st);
         }
-        let tip = unit_tip(s, i, sel, tells, rounds);
+        let tip = unit_tip(s, i, sel, tells, rounds, classes);
         ui.push(format!("unit.{i}"), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), r, true, Some(i) == sel, Some(Action::UnitClick(i)), tip);
     }
     if show_tells {
@@ -4687,7 +4708,7 @@ fn with_alpha(c: Rgba, a: u8) -> Rgba {
 /// covers a unit, the top: HP bars, chips, the exit sign, floats). Cell widgets first, then the units' in feet order
 /// (front-most last, so it takes the click). Returns the unit the mouse is over on the board.
 fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes } = b;
     let w = &s.w;
     let geo = Geom::new(View::Stage, tuning);
     let tp = geo.token_px;
@@ -5000,7 +5021,7 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
         let Item::Unit(i) = p.item else { continue };
         let Some(t) = unit_of(i).filter(|t| t.alive) else { continue };
         let u = &w.units[i];
-        let tip = unit_tip(s, i, sel, tells, rounds);
+        let tip = unit_tip(s, i, sel, tells, rounds, classes);
         ui.push(format!("unit.{i}"), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), widget_rect(t), true, Some(i) == sel, Some(Action::UnitClick(i)), tip);
     }
     board_hover
@@ -5571,12 +5592,13 @@ mod tests {
         for shown in [false, true] {
             let mut cx = crate::hud::hud_tests::game_cx();
             let mut data = (*cx.app.data).clone();
-            let cat = Arc::make_mut(&mut data.cat);
-            cat.derived_stats.clear();
-            if shown {
-                let r = emberwake_data::DerivedStatDef::from_obj(json!({"id": "nerve", "name": "Nerve", "formula": "KNOW * 2", "show_on": ["battle"]}).as_object().unwrap()).unwrap();
-                cat.derived_stats.insert(r.id.clone(), r);
-            }
+            data.edit_cat(|cat| {
+                cat.derived_stats.clear();
+                if shown {
+                    let r = emberwake_data::DerivedStatDef::from_obj(json!({"id": "nerve", "name": "Nerve", "formula": "KNOW * 2", "show_on": ["battle"]}).as_object().unwrap()).unwrap();
+                    cat.derived_stats.insert(r.id.clone(), r);
+                }
+            });
             cx.app.data = Arc::new(data);
             cx.app.encounter = "goblin_ambush".into();
             cx.app.seed = Some(1);
@@ -7338,7 +7360,7 @@ mod overlay_tests {
         assert_eq!(overlay(&b).veils, vec![(at, false)], "veiled, not hidden before it moves");
         b.host.session.as_mut().unwrap().w.round_states.entry(h).or_default().moved = true;
         assert_eq!(overlay(&b).veils, vec![(at, true)], "hidden once it moved (GD5)");
-        assert!(unit_tip(s(&b), h, Some(h), &[], &[]).iter().any(|t| t.0.starts_with("Hidden")));
+        assert!(unit_tip(s(&b), h, Some(h), &[], &[], &[]).iter().any(|t| t.0.starts_with("Hidden")));
         let w = &s(&b).w;
         for i in 0..w.units.len() {
             let want = if w.ruleset.has(emberwake_rules::ruleset::REACH) {
@@ -7437,7 +7459,7 @@ mod tells_tests {
         assert_eq!(widget(&b, "intel.unit").text, s(&b).w.units[h].name, "a party card hovered: that member");
         let rounds = s(&b).round_intents();
         let head = intent_text::round_head(&s(&b).w, rounds.iter().find(|r| r.unit == h).unwrap()).expect("the hero's intent");
-        assert!(unit_tip(s(&b), h, Some(h), &[], &rounds).iter().any(|t| t.0 == head), "{head}");
+        assert!(unit_tip(s(&b), h, Some(h), &[], &rounds, &[]).iter().any(|t| t.0 == head), "{head}");
         assert!(head.starts_with("Assault: "), "{head}");
     }
 
@@ -7453,7 +7475,7 @@ mod tells_tests {
         assert!(tells.iter().all(|t| t.revealed), "V2: every enemy");
         for t in &tells {
             let head = intent_text::reveal_head(w, t, passive_name).unwrap();
-            let tip = unit_tip(s(&b), t.unit, b.selected, &tells, &rounds);
+            let tip = unit_tip(s(&b), t.unit, b.selected, &tells, &rounds, &[]);
             assert!(tip.iter().any(|x| x.0 == head), "{head}");
             if t.readers.is_empty() && !t.enraged {
                 assert_eq!(head, "Plan revealed");
@@ -7513,7 +7535,7 @@ mod tells_tests {
         let read: Vec<&Intent> = rounds.iter().filter(|r| sess.w.enemies.contains(&r.unit) && r.readers.contains(&h)).collect();
         assert!(!read.is_empty(), "the range reached a foe at scheduling");
         for r in read {
-            let tip = unit_tip(sess, r.unit, None, &[], &rounds);
+            let tip = unit_tip(sess, r.unit, None, &[], &rounds, &[]);
             let line = intent_text::read_by(&sess.w, r, passive_name);
             assert!(tip.iter().any(|x| x.0 == line) && line.contains(&sess.w.units[h].name), "{line}");
         }
@@ -7671,7 +7693,7 @@ mod slice5_tests {
         b.draw(&mut cx, &mut g, (-500, -500), true);
         let w = &s(&b).w;
         let bar = *emberwake_battle::poise::state(w, foe).unwrap();
-        let tip = unit_tip(s(&b), foe, Some(h), &[], &[]);
+        let tip = unit_tip(s(&b), foe, Some(h), &[], &[], &[]);
         assert!(tip.iter().any(|t| t.0.starts_with(&format!("Poise {}/{}", bar.value, bar.max))), "{tip:?}");
         let st = s(&b).plan.compile(w, h);
         let spans = span_parts(s(&b), h, &st.entries.iter().map(|e| (e.start_block, e.end_block(w), String::new(), String::new(), None, 0, 0)).collect::<Vec<_>>());
@@ -7687,7 +7709,7 @@ mod slice5_tests {
         b.host.session.as_mut().unwrap().w.poise.get_mut(&foe).unwrap().broken = true;
         assert_eq!(broken_units(&s(&b).w, &Layers::of(&Value::Null)), vec![foe]);
         assert!(broken_units(&s(&b).w, &Layers::of(&json!({"breaks": false}))).is_empty(), "behind its flag");
-        assert!(unit_tip(s(&b), foe, Some(h), &[], &[]).iter().any(|t| t.0.contains("BROKEN")));
+        assert!(unit_tip(s(&b), foe, Some(h), &[], &[], &[]).iter().any(|t| t.0.contains("BROKEN")));
     }
 
     /// RULESET1 12 (forecasts) on the scratch fight: two planned Cleaves (stagger 12) into the footman's wind-up: each
@@ -8037,4 +8059,28 @@ mod hook_marks_tests {
         }
     }
 
+
+    /// HOOKS1 CN2 (HOOKS1-UI slice 2): the hover card names each unit's class as `Data::class_name` gives it in the
+    /// battle's world (the Arena, a catalog screen: the class row's name); a unit without a class names none.
+    #[test]
+    fn the_hover_card_names_the_class_in_the_battles_world() {
+        let (mut cx, mut g, mut b) = arena_screen(Some(TIMELINE), "");
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_eq!(b.class_world, "", "the Arena names classes by their rows");
+        let w = &s(&b).w;
+        let names = class_names(&cx.data, &b.class_world, w);
+        let mut seen = 0;
+        for (i, u) in w.units.iter().enumerate() {
+            let class = cx.data.cat.units.get(&u.catalog_id).map(|d| d.class_id.clone()).filter(|c| cx.data.cat.classes.contains_key(c));
+            match class {
+                Some(c) => {
+                    assert_eq!(names[i], cx.data.class_name("", &c));
+                    assert!(unit_tip(s(&b), i, None, &[], &[], &names).iter().any(|t| t.0.starts_with(&format!("Level {} {}", u.stats.level, names[i]))));
+                    seen += 1;
+                }
+                None => assert_eq!(names[i], ""),
+            }
+        }
+        assert!(seen > 0, "a unit with a class");
+    }
 }

@@ -419,7 +419,7 @@ pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, ta
     let (mut notes, mut fx_events, mut events) = (Vec::new(), Vec::new(), Vec::new());
     match rule.as_str() {
         "retry" => {
-            progression::rest(d, &mut gs.party);
+            progression::rest(d, &mut gs.party, &gs.world_id.clone());
             notes.push(RETRY_TEXT.to_string());
         }
         "continue" => {
