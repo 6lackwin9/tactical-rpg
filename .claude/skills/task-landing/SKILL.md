@@ -49,9 +49,13 @@ folders were committed). Docs-only planner commits go straight to `develop` from
 
 ## 3. Stage, flush, clean up
 
+- Start a task in a lane (decision "Builder efficiency"): `bash <planner dir>/lane.sh <1-3> <task>` checks out
+  `claude/<task>` from `staging` in `C:/dev/tactical-rpg-lane<n>`, whose build cache stays warm. Briefs name that path
+  and tell the builder to finish with `bash <planner dir>/pgate.sh` (the partial gate), not the full gate.
 - `bash <planner dir>/stage.sh <worktree> <name>`: rebases onto `staging`, refuses a committed build folder, runs the
   partial gate (type check, the touched crates' tests, layers, docs), fast-forwards `staging`. Read the result first.
-- Clean up ONLY after a `STAGED` line, in a separate command: `bash <planner dir>/cleanup.sh <name>` removes the
+- Clean up ONLY after a `STAGED` line, in a separate command: `bash <planner dir>/cleanup.sh lane<n>` detaches a lane
+  and deletes its task branch (the cache stays); for a one-off worktree `bash <planner dir>/cleanup.sh <name>` removes the
   worktree, its branches (`claude/<name>`, `claude/<name>-land`) and its build cache `%TEMP%/aegis-target-tactical-rpg-<name>`
   (2026-10-29: caches of removed worktrees, 3-16 GB each, filled drive C:). Never chain cleanup after `stage.sh`
   (2026-10-29: a failed stage plus a chained cleanup deleted a branch).

@@ -1,6 +1,6 @@
 # RULESET1_BALANCE1: what the first timeline feel run asks for
 
-Status: proposed (design 2026-10-30, from the RULESET1-B report in `games/emberwake/docs/BALANCE_REPORT.md`, section
+Status: approved (user 2026-10-30, Q1-Q6 as recommended) (design 2026-10-30, from the RULESET1-B report in `games/emberwake/docs/BALANCE_REPORT.md`, section
 "RULESET1-B 2026-10-30")
 Depends on: RULESET1-B (done as a report); the user's answers to section 7
 Lane: logic (RULESET1-BX, RULESET1-G2, RULESET1-AI2), asset (RULESET1-A2), balance (RULESET1-B2)

@@ -92,3 +92,12 @@ Fixes: schema slice is its own logic-builder run that ends with the report; buil
 ### Parallel CPU contention (2026-10-17)
 
 With 3 logic builders plus a reviewer running Godot at once, `check_project.ps1 -Fast -Quiet` took about 10 minutes instead of 32 s (EXP1-L report). Reviewers re-running the full check add another Godot process. Rule: above 3 concurrent builders, expect checks to slow sharply; prefer starting the next builder when one finishes, and let a reviewer trust a fresh builder check when the diff is a small schema slice.
+
+## Lanes and the builder's partial gate (2026-10-30)
+
+- Measured 2026-10-29/30: a builder in a fresh worktree spent 5-10 min compiling a cold build cache (10-16 GB each; 12
+  stale caches filled drive C:) and 5-7 min on a full gate that the staging gate and the flush repeat.
+- Fix (decision "Builder efficiency"): three persistent lane worktrees keep their path and warm cache (cargo keys
+  workspace crates to the source path, so moving a cache to another path does not help); builders end with the partial
+  gate `pgate.sh`; the full gate runs once per flush.
+
