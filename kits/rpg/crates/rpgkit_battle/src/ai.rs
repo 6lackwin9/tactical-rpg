@@ -55,6 +55,11 @@ pub fn build_steps(w: &World, plan: &mut Plan, actor: UnitId, profile: &AiProfil
     }
     plan.path_penalties.insert(actor);
     plan.ai_pressure.shift_remove(&actor);
+    // ENCOUNTER2 H6: a hold escape's keeper walks to its tile and defends, the others leave once the gate opens (none
+    // without a hold escape: nothing below changes)
+    if hold_steps(w, plan, actor, profile) {
+        return plan.steps_of(actor);
+    }
     if incoming_damage(w, plan, actor, w.total_blocks, w.pos(actor), None) >= w.units[actor].hp {
         plan.ai_pressure.insert(actor);
     }
@@ -1470,6 +1475,10 @@ pub const ROW_IDLE_GUARD: &str = "idle guard";
 pub const ROW_REST: &str = "rest";
 /// AI5: a tactic other than Balanced decided the round.
 pub const ROW_TACTIC: &str = "tactic";
+/// ENCOUNTER2 H6: a hold escape's keeper Guards its hold tile (or walks toward it); before the tactic and the table.
+pub const ROW_HOLD: &str = "hold";
+/// ENCOUNTER2 H6: the gate is open (or about to be): a hero of a hold escape withdraws.
+pub const ROW_ESCAPE: &str = "escape";
 
 /// RULESET1_INTENT AI1, AI5: one intent pick: the intent, its round target, the Maneuver kind (None: the planner's MV11
 /// pick), the opener (None: PL3's), Economy's opener-only round (no follow-ups, Rest after) and the advance of row 5
@@ -1504,7 +1513,8 @@ pub struct IntentRound {
 
 enum Choice {
     Pick(&'static str, IntentPick),
-    Withdrawn,
+    /// A Withdraw is planned (the row: flee, or a hold escape's escape).
+    Withdrawn(&'static str),
     Rest,
 }
 
@@ -1523,9 +1533,13 @@ pub fn plan_round_intent(w: &mut World, plan: &mut Plan, c: UnitId, profile: &Ai
             plan.goal_preferences.insert(c, shooters);
         }
     }
-    let choice = match tactic_pick(w, plan, c, profile, tactic) {
-        Some(p) => Choice::Pick(ROW_TACTIC, p),
-        None => table(w, plan, c, profile, 0),
+    // ENCOUNTER2 H6: a hold escape's part comes first (None without one)
+    let choice = match hold_choice(w, plan, c) {
+        Some(ch) => ch,
+        None => match tactic_pick(w, plan, c, profile, tactic) {
+            Some(p) => Choice::Pick(ROW_TACTIC, p),
+            None => table(w, plan, c, profile, 0),
+        },
     };
     resolve(w, plan, c, profile, choice)
 }
@@ -1562,7 +1576,7 @@ fn resolve(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, mut c
                     choice = table(w, plan, c, profile, from);
                 }
             },
-            Choice::Withdrawn => return IntentRound { row: ROW_FLEE, pick: None, lines },
+            Choice::Withdrawn(row) => return IntentRound { row, pick: None, lines },
             Choice::Rest => {
                 plan.clear(c);
                 rest_round(w, plan, c, "rest: nothing usable");
@@ -1647,7 +1661,7 @@ fn table(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, from: u
     let ratio = hp_ratio(w, c);
     // 1: `flee_ratio` reached: today's Withdraw (a neutral move); the intent stays
     if on(ROW_FLEE) && profile.flee_ratio > 0.0 && !profile.reckless && ratio <= profile.flee_ratio && plan.add_step(w, c, PlanStep::withdraw(), true).is_empty() {
-        return Choice::Withdrawn;
+        return Choice::Withdrawn(ROW_FLEE);
     }
     // 2: Support role, or someone below `heal_below`, and a Support skill (or item) reaches
     if on(ROW_SUPPORT) {
@@ -2254,3 +2268,148 @@ fn rest_round(w: &World, plan: &mut Plan, c: UnitId, tag: &str) {
     }
 }
 
+
+// ---- Hold escapes (ENCOUNTER2 H6; kit, no Godot original) ---------------------------------------------------------
+//
+// A hold escape (`stay_behind` mode hold) needs one hero on a hold tile while the others leave through the exits. The
+// party AI (sims, autoplay, the Balanced draft) plays it for every hero: the keeper walks to the nearest free hold tile
+// and defends there; the others withdraw once the gate is open or the keeper reaches a tile with this round's move,
+// and draft by their preset before that. Without a hold escape nothing here applies (`World::hold` is None).
+
+/// ENCOUNTER2 H6: a hero's part in a hold escape this round.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HoldPart {
+    /// Reach (or stay on) this hold tile and Defend there.
+    Hold(V2),
+    /// Withdraw: the gate is open, or the keeper reaches a hold tile with this round's move.
+    Out,
+}
+
+/// ENCOUNTER2 H2, H6: the hero who keeps the hold tiles now: the holder while it is on the field; with it down and
+/// `fallback` any, a hero already on a hold tile, else the hero on the field nearest to one (party order on a tie);
+/// None before the pick, without a hold escape, or with `fallback` none and the holder down.
+pub fn hold_keeper(w: &World) -> Option<UnitId> {
+    let g = w.hold.as_ref()?;
+    let h = g.holder?;
+    if w.has(h) {
+        return Some(h);
+    }
+    if !g.fallback_any {
+        return None;
+    }
+    let field: Vec<UnitId> = g.heroes.iter().copied().filter(|&c| w.has(c)).collect();
+    if let Some(&c) = field.iter().find(|&&c| g.holding(w, c)) {
+        return Some(c);
+    }
+    field.into_iter().min_by_key(|&c| g.tiles.iter().map(|t| t.dist(w.pos(c))).min().unwrap_or(i32::MAX))
+}
+
+/// The route from `from` to the nearest free hold tile for `c` (free: no other unit stands there or plans to end its
+/// move there); empty when `from` is one; None when no free tile can be reached.
+fn hold_route(w: &World, plan: &Plan, c: UnitId, from: V2) -> Option<Vec<V2>> {
+    let g = w.hold.as_ref()?;
+    let blocked = plan.blocked_cells(w, c);
+    let goals: Cells = g.tiles.iter().copied().filter(|t| !blocked.contains(t)).collect();
+    if goals.contains(&from) {
+        return Some(Vec::new());
+    }
+    let route = plan.route(w, c, from, &goals, &blocked, false);
+    (!route.is_empty()).then_some(route)
+}
+
+/// ENCOUNTER2 H6: `c`'s part in the hold escape this round. None: no hold escape, `c` is not a hero on the field, the
+/// keeper has no free hold tile to reach, or the gate stays shut this round (the preset drafts as in any fight).
+pub fn hold_part(w: &World, plan: &Plan, c: UnitId) -> Option<HoldPart> {
+    let g = w.hold.as_ref()?;
+    if !g.heroes.contains(&c) || !w.has(c) {
+        return None;
+    }
+    let keeper = hold_keeper(w)?;
+    if keeper == c {
+        let here = w.pos(c);
+        let route = hold_route(w, plan, c, here)?;
+        return Some(HoldPart::Hold(route.iter().fold(here, |a, d| a + *d)));
+    }
+    if g.is_open(w) {
+        return Some(HoldPart::Out);
+    }
+    let at = w.pos(keeper);
+    let route = hold_route(w, plan, keeper, at)?;
+    plan.fits_move(w, keeper, at, &route).then_some(HoldPart::Out)
+}
+
+/// The tiles the round's standard move reaches along the route to `c`'s hold tile, farthest first (at most the move's
+/// blocks; AP for a unit that pays); empty when `c` is on its tile or cannot move.
+fn hold_walk(w: &World, plan: &Plan, c: UnitId) -> Vec<V2> {
+    let st = plan.compile(w, c);
+    let mut tiles = plan.max_move_tiles(w, c);
+    if w.pays_ap(c) {
+        tiles = tiles.min(st.ap_left.max(0));
+    }
+    if tiles < 1 || st.rooted || st.acted {
+        return Vec::new();
+    }
+    let Some(route) = hold_route(w, plan, c, st.pos) else { return Vec::new() };
+    let reachable = path::fit_blocks(&w.grid, st.pos, &route, w.units[c].move_per_block(), MAX_MOVE_BLOCKS);
+    let mut cells: Vec<V2> = reachable.iter().take(tiles as usize).scan(st.pos, |a, d| {
+        *a = *a + *d;
+        Some(*a)
+    }).collect();
+    cells.reverse();
+    cells
+}
+
+/// ENCOUNTER2 H6 for the step AI (`build_steps`): the keeper walks as far toward its hold tile as the round's move
+/// reaches (the farthest free tile on the route), then Defends and Rests on the blocks left; a hero whose part is Out
+/// plans Withdraw. False when no part applies or the Withdraw is refused (the preset drafts).
+fn hold_steps(w: &World, plan: &mut Plan, c: UnitId, profile: &AiProfile) -> bool {
+    match hold_part(w, plan, c) {
+        None => false,
+        Some(HoldPart::Out) => plan.add_step(w, c, PlanStep::withdraw(), true).is_empty(),
+        Some(HoldPart::Hold(tile)) => {
+            if tile != w.pos(c) {
+                let mv = w.book().lowest(Kind::Move);
+                for dest in hold_walk(w, plan, c) {
+                    if plan.add_step(w, c, PlanStep::go_to(mv, dest), false).is_empty() {
+                        break;
+                    }
+                }
+            }
+            let pos = plan.compile(w, c).pos;
+            let foes: Vec<UnitId> = w.foes_of(c).to_vec();
+            guard_smart(w, plan, c, w.skill_cap_of(c), profile, &foes, pos);
+            rest_round(w, plan, c, "");
+            true
+        }
+    }
+}
+
+/// ENCOUNTER2 H6 under `round_intent`: the keeper's Guard round on its hold tile (GD1: the tile as the Guard target),
+/// or, when the tile is beyond this round's move, the advance toward it with Guard there; on the tile with no Guard
+/// offered, a Rest round (it never leaves the tile). A hero whose part is Out plans Withdraw (the intent stays). None:
+/// no part applies, or the Withdraw is refused (the tactic and the table pick).
+fn hold_choice(w: &mut World, plan: &mut Plan, c: UnitId) -> Option<Choice> {
+    match hold_part(w, plan, c)? {
+        HoldPart::Out => plan.add_step(w, c, PlanStep::withdraw(), true).is_empty().then_some(Choice::Withdrawn(ROW_ESCAPE)),
+        HoldPart::Hold(tile) => {
+            let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Cell(tile));
+            if trial(w, plan, c, &p) {
+                return Some(Choice::Pick(ROW_HOLD, p));
+            }
+            if tile != w.pos(c) {
+                for dest in hold_walk(w, plan, c) {
+                    let mut p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
+                    p.advance_to = Some(dest);
+                    if trial(w, plan, c, &p) {
+                        return Some(Choice::Pick(ROW_HOLD, p));
+                    }
+                }
+            }
+            let p = IntentPick::new(RoundIntent::Guard, RoundTarget::Myself);
+            if trial(w, plan, c, &p) {
+                return Some(Choice::Pick(ROW_HOLD, p));
+            }
+            Some(Choice::Rest)
+        }
+    }
+}

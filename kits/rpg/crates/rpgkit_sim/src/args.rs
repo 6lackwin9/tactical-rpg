@@ -188,9 +188,20 @@ pub fn has_encounter(d: &Data, world: &str, id: &str) -> bool {
     d.world_ids().iter().any(|w| w == world) && d.has_entry(world, "encounters", id)
 }
 
-/// Every encounter of the catalog, in catalog order.
+/// Every balance fight of the catalog, in catalog order (`enc=all`): ENCOUNTER2 S4 skips the stay-behind and room
+/// encounters and the kit's own (`kit_` ids); `enc=<id>` still runs them.
 pub fn catalog_encounters(d: &Data) -> Vec<String> {
-    d.cat.encounters.keys().cloned().collect()
+    d.cat.encounters.iter().filter(|(id, row)| !skipped_by_default(id, row)).map(|(id, _)| id.clone()).collect()
+}
+
+/// ENCOUNTER2 S4: not a balance fight (an id starting `kit_`, a `stay_behind` block or `rooms`).
+pub fn skipped_by_default(id: &str, row: &aegis_core::value::Obj) -> bool {
+    let filled = |key: &str| match row.get(key) {
+        Some(serde_json::Value::Object(o)) => !o.is_empty(),
+        Some(serde_json::Value::Array(a)) => !a.is_empty(),
+        _ => false,
+    };
+    id.starts_with("kit_") || filled("stay_behind") || filled("rooms")
 }
 
 impl SimArgs {

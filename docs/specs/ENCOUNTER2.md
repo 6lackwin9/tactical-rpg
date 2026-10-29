@@ -86,6 +86,12 @@ The theme (user): the first loss is a choice; as losses pile up they become the 
   Defend while on it (under the timeline ruleset: the Guard intent with the hold tile as its target, RULESET1_INTENT
   GD1); the others draft Withdraw once the gate is open or the holder is within its move of a tile; otherwise their
   preset as today.
+  As built (ENCOUNTER2-HA, 2026-10-29): the AI reads the "keeper", the holder while it is on the field; with the
+  holder down and `fallback` any, the hero already on a hold tile, else the one nearest to a hold tile (party order on
+  a tie) takes its part (with `fallback` none nobody does: everyone plays its preset). A keeper beyond one move
+  walks as far as the round's move reaches, then Defends (step AI) or takes the advance with Guard (round intent); on
+  its tile with no Guard offered it Rests and never leaves it. A hold tile taken by a foe gives no part (the preset
+  fights for it). S4 applies to the catalog sweep `enc=all` (the sim's default `enc` is the generated fights).
 - H7. Screen: hold tiles drawn with the objective ring and a winch marker; the gate's exits show "shut" (red) or
   "open" (green); the objective line adds "`{holder}` holds `{tiles_label}`."
 
