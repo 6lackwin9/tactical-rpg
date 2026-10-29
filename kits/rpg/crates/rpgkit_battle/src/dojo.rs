@@ -482,7 +482,6 @@ impl DojoSession {
         };
         let entries = s.plan.entries_for(w, c);
         let reasons = rip::reasons(w, &s.plan, c);
-        let n = &w.ruleset.numbers;
         for (e, reason) in entries.iter().zip(reasons) {
             let sk = &w.cat.skills[e.skill];
             let mut notes = Vec::new();
@@ -500,16 +499,11 @@ impl DojoSession {
                     notes.push(format!("stagger {}", imp.stagger));
                 }
             }
-            if skill::kind(sk) == skill::Kind::Rest {
-                v.rest_blocks += e.end_block(w) - e.start_block + 1;
-            }
             v.ap_after -= e.total_ap();
             v.rows.push(PlanRow { skill: sk.id.clone(), name: sk.name.clone(), start: e.start_block, end: e.end_block(w), ap: e.total_ap(), reason, cell: e.pos_after, damage: e.est_damage, notes });
         }
-        v.rest_ap = round_intent::rest_gain(n, v.rest_blocks);
-        if w.ruleset.has(ruleset::POISE) {
-            v.rest_poise = n.rest_poise_per_block * v.rest_blocks;
-        }
+        let rest = rip::rest_preview(w, &s.plan, c);
+        (v.rest_blocks, v.rest_ap, v.rest_poise) = (rest.blocks, rest.ap, rest.poise);
         v
     }
 

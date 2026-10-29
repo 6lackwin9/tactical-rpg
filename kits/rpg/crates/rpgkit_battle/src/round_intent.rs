@@ -269,6 +269,17 @@ pub fn drop_bound(w: &mut World, c: UnitId) -> Vec<String> {
     names
 }
 
+/// IN6 for the intent buttons (RULESET1_INTENT UI1, "loses Riposte"): the display names of the intent-bound instances
+/// `c` holds that picking `intent` would drop (`drop_bound`'s, in tag order); empty when `intent` is the current one or
+/// the unit holds none yet (the first pick is not a change: IN2). Nothing changes.
+pub fn would_drop(w: &World, c: UnitId, intent: RoundIntent) -> Vec<String> {
+    if intent_of(w, c).is_none_or(|old| old == intent) {
+        return Vec::new();
+    }
+    let st = &w.units[c].st;
+    st.intents.keys().filter(|id| st.has_any(id)).map(|id| status::display_name(id)).collect()
+}
+
 /// RULESET1_INTENT RS2: the AP a unit gains at round end for `blocks` landed Rest blocks.
 pub fn rest_gain(n: &Numbers, blocks: i32) -> i32 {
     ((blocks.max(0) as f64 * n.rest_ap_per_block).floor() as i32).clamp(0, n.rest_ap_cap.max(0))

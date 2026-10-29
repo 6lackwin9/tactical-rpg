@@ -278,6 +278,12 @@ As built (RULESET1-AI, 2026-10-28; `rpgkit_battle/src/ai.rs`; user answers 2026-
   a board click sets the target (valid cells lit); an opener dropdown and the Manual toggle.
 - UI2. The strip shows the plan with reason tags on hover (PL6), after-moves as step glyphs, Rest as dim blocks with
   the Rest gain at the row end ("Rest: 1 AP, 10 poise"), disabled intents with their reasons.
+- As built (RULESET1-U slice 1, 2026-10-29; decision "RULESET1-U slice 1 and HOOKS1-E answers" in
+  `games/emberwake/docs/decisions/combat.md`): UI1's controls live in the selected hero's panel (keys 1-9, one per
+  intent in the ruleset's order; an intent the planner cannot plan is disabled in auto mode) and UI2's Rest gain sits
+  in the Rest blocks' tips and a hero panel line; a whole-party timeline comes later as a collapsible panel over the
+  board; the Arena's ruleset chip stays hidden in plain classic. Details: RULESET1_TASKS 6, "RULESET1-U slice 1 as
+  built".
 - UI3. The board: move paths (a carried move as its skill's path), the target ring, the target's front half shaded
   under Maneuver, enemy facings, a stealth veil.
 - UI4. Dojo (to judge the planner): the hero's intent, target and kind against a movable dummy, a second dummy to

@@ -253,6 +253,28 @@ pub fn preview(w: &World, plan: &Plan, c: UnitId, intent: RoundIntent, kind: Opt
     Ok(p2.steps_of(c))
 }
 
+/// RULESET1_INTENT UI2 ("Rest: 1 AP, 10 poise"): what the Rest blocks of `c`'s plan would give: the AP at round end
+/// (RS2) and the poise their landing restores (RS3, rule `poise`; before the Max Poise cap).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RestGain {
+    pub blocks: i32,
+    pub ap: i32,
+    pub poise: i32,
+}
+
+/// UI2: the Rest gain of `c`'s planned round (its compiled Rest entries; the Dojo's planner view uses it too).
+pub fn rest_preview(w: &World, plan: &Plan, c: UnitId) -> RestGain {
+    let blocks = plan.entries_for(w, c).iter().filter(|e| skill::kind(&w.cat.skills[e.skill]) == Kind::Rest).map(|e| e.end_block(w) - e.start_block + 1).sum();
+    rest_of(w, blocks)
+}
+
+/// The Rest gain of `blocks` Rest blocks under the battle's ruleset.
+pub fn rest_of(w: &World, blocks: i32) -> RestGain {
+    let n = &w.ruleset.numbers;
+    let poise = if w.ruleset.has(rpgkit_rules::ruleset::POISE) { n.rest_poise_per_block * blocks } else { 0 };
+    RestGain { blocks, ap: round_intent::rest_gain(n, blocks), poise }
+}
+
 /// PL6: the reason tag of each of `c`'s compiled entries (aligned with `Plan::entries_for`): a move entry a step
 /// implies takes the step's move tag, every other entry its action tag; a carried move adds "flank tile" (Engage,
 /// Utility) or "retreat" (Disengage). Lost blocks and steps placed by hand: "".

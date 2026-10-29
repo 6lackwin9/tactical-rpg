@@ -184,9 +184,17 @@ fn an_intent_change_drops_only_intent_bound_buffs() {
     }
     let tags: Vec<&String> = s.w.units[HERO].st.intents.keys().collect();
     assert_eq!(tags, ["riposte", "stealth", "fortify"], "bound: the two rows, the intent_buff grant to its user");
+    assert!(round_intent::would_drop(&s.w, HERO, RoundIntent::Guard).is_empty(), "the battle screen warns of nothing on the current intent");
     assert!(s.set_round_intent(HERO, "guard").unwrap().is_empty(), "no change, nothing dropped");
     assert_eq!(held(&s), before);
+    // UI1's "loses Riposte" warning names exactly what the change drops
+    let warned = round_intent::would_drop(&s.w, HERO, RoundIntent::Assault);
+    assert_eq!(held(&s), before, "the warning changes nothing");
     let lines = s.set_round_intent(HERO, "assault").unwrap();
+    assert_eq!(lines.len(), warned.len(), "{lines:?} vs {warned:?}");
+    for (line, name) in lines.iter().zip(&warned) {
+        assert!(line.ends_with(&format!("{name} ends")), "{line} names {name}");
+    }
     assert_eq!(lines.len(), 3, "{lines:?}");
     assert!(lines[0].contains("leaves Guard") && lines[0].contains("Riposte"), "{lines:?}");
     let after = held(&s);
