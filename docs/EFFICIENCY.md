@@ -100,7 +100,9 @@ With 3 logic builders plus a reviewer running Godot at once, `check_project.ps1 
 - Fix (decision "Builder efficiency"): three persistent lane worktrees keep their path and warm cache (cargo keys
   workspace crates to the source path, so moving a cache to another path does not help); builders end with the partial
   gate `pgate.sh`; the full gate runs once per flush.
+
 ## Smaller build caches (BUILDPROF1, user 2026-10-30)
+
 - `Cargo.toml` `[profile.dev]` keeps line tables only and third-party crates build without debug info: a lane cache with
   every test binary is 4.9 GB instead of 14 GB (compiled deps 11 to 3.5 GB, incremental 3.2 to 1.4 GB). A profile change
   rebuilds every cache once.
