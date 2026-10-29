@@ -581,6 +581,51 @@ fn a_piercing_hit_skips_the_armour() {
     assert!(dealt[0].1 > dealt[1].1 && dealt[1].1 == dealt[2].1, "pierce on beats pierce off and classic: {dealt:?}");
 }
 
+/// RULESET1-BX (RULESET1_BALANCE1 BX1-BX4): one attacker's `armor_piercing` hit on two targets that differ only in
+/// armour (25 and 50) lands the same damage under the rule pierce: the armour term is 1.0 and nothing else depends on
+/// the target here (stance matchup 1.0, no guard, no cover, the same crit draw). Without pierce (the timeline without
+/// it, and classic) the armour term `1 - r / (r + 50)` is 2/3 at 25 and 1/2 at 50, so the 50 hit is exactly 0.75 of the
+/// 25 hit before rounding: the "15 against the Captain, 20 against the Footman" of the RULESET1-B report (its probe ran
+/// the battle command's default ruleset, classic, where the skill flag pierces nothing). Prints the terms per target.
+#[test]
+fn a_pierced_hit_ignores_the_target_armour_and_classic_keeps_it() {
+    const ARMOURS: [i32; 2] = [25, 50];
+    for rules in [poise_rules(), timeline(&[POISE], json!({})), Ruleset::classic()] {
+        let pierce = rules.has(PIERCE);
+        let name = if rules.is_classic() { "classic" } else if pierce { "timeline" } else { "timeline -pierce" };
+        let (mut dealt, mut kept) = (Vec::new(), Vec::new());
+        for armour in ARMOURS {
+            let mut s = session(rules.clone());
+            s.w.units[FOE].armor_override = armour;
+            let mut res = Resolver::new(BLOCKS, 5);
+            let i = book(&mut res, HERO, hit(&s.w, HERO, FOE, "p_spike"), 1);
+            let CmdKind::Attack { skill_mult, .. } = res.scheduled[i].command.kind else { panic!("an attack") };
+            let (attacker, target, hp) = (s.w.units[HERO].clone(), s.w.units[FOE].clone(), s.w.units[FOE].hp);
+            run(&mut s.w, &mut res, 1, 1);
+            let taken = hp - s.w.units[FOE].hp;
+            let CmdKind::Attack { last_damage, last_crit, .. } = res.scheduled[i].command.kind else { panic!("an attack") };
+            assert_eq!(last_damage, taken, "{name}: the command records what the target lost");
+            // the formula's terms for this hit (the battle's own crit draw)
+            let h = damage::compute(&attacker, &target, HitInput { skill_mult, force_crit: last_crit, ignore_armor: pierce, ..HitInput::default() });
+            println!(
+                "{name} armour {armour}: power {} x focus {} x skill {} x stance {} x crit {} x guard+cover {} x armour {:.4} (pierced {}) = {}",
+                h.attack_power, h.buff_mult, h.skill_mult, h.stance_factor, h.crit_mult, h.mit_mult, 1.0 - h.armor_ratio, h.armor_pierced, h.final_dmg
+            );
+            assert_eq!(h.final_dmg, taken, "{name} armour {armour}: the battle hit is the formula's");
+            assert_eq!((h.stance_factor, h.mit_mult, h.armor_pierced), (1.0, 1.0, pierce), "{name} armour {armour}: only armour depends on the target");
+            dealt.push(taken);
+            kept.push(1.0 - h.armor_ratio);
+        }
+        if pierce {
+            assert_eq!((dealt[0], kept.clone()), (dealt[1], vec![1.0, 1.0]), "{name}: a pierced hit ignores the armour: {dealt:?}");
+        } else {
+            let (k25, k50) = (1.0 - damage::armor_reduction(ARMOURS[0]), 1.0 - damage::armor_reduction(ARMOURS[1]));
+            assert!(dealt[1] < dealt[0] && kept == vec![k25, k50], "{name}: armour cuts the plain hit: {dealt:?} {kept:?}");
+            assert!((k50 / k25 - 0.75).abs() < 1e-12, "{name}: armour 50 keeps 0.75 of what armour 25 keeps");
+        }
+    }
+}
+
 /// The session: a break gets its EVENT cell (outcome BREAK), the broken unit's cancelled actions get none, the metrics
 /// count it under `poise`; classic logs and records nothing of it (no `poise` key, no stagger detail, no new draw).
 #[test]
