@@ -2432,6 +2432,10 @@ impl Screen<GameCx> for BattleScreen {
         if let Some(o) = &self.offers {
             out["intents"] = json!({"unit": o.key.0, "offers": o.intents.iter().map(|(i, why)| json!({"intent": i.id(), "offered": why.is_none(), "reason": why})).collect::<Vec<_>>()});
         }
+        // RULESET1-U slice 3: the board overlays under the round intent (classic: no key)
+        if let Some(o) = self.host.session.as_ref().and_then(|s| overlay_of(s, self.selected.filter(|u| s.w.allies.contains(u)), s.phase == Phase::Planning && !s.plan_confirmed)) {
+            out["overlay"] = overlay_json(&o);
+        }
         out
     }
 
@@ -2641,9 +2645,13 @@ fn unit_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent]) -> Tip 
     let ally = w.allies.contains(&i);
     let mut t: Tip = vec![(u.name.clone(), if ally { ALLY } else { FOE })];
     t.push((format!("HP {}/{}   AP {}/{}   {}", u.hp, u.max_hp, u.ap, u.max_ap, stance_name(u)), TEXT));
-    t.push((format!("Level {} {}   Speed {}   Reach {}", u.stats.level, u.tier, u.speed, u.attack_range), DIM));
+    t.push((format!("Level {} {}   Speed {}   Reach {}", u.stats.level, u.tier, u.speed, reach_text(w, i)), DIM));
     if let Some(line) = derived_line(&derived_rows(s, i)) {
         t.push((line, DIM));
+    }
+    // RULESET1-U slice 3 (GD5): a stealthed unit that moved this round is lost to attacks locked on it
+    if ri::hidden(w, i) {
+        t.push(("Hidden: an attack locked on it finds nothing this round".into(), GOOD));
     }
     if !u.st.active.is_empty() {
         t.push((format!("Now: {}", u.st.active.iter().map(|x| emberwake_rules::status::display_name(x)).collect::<Vec<_>>().join(", ")), FOE));
@@ -2841,7 +2849,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         let derived = derived_rows(s, h);
         let mut derived_at = None;
         let mut stats = |lines: &mut Vec<(String, Rgba)>| {
-            lines.push((format!("Speed {}  Reach {}", u.speed, u.attack_range), TEXT));
+            lines.push((format!("Speed {}  Reach {}", u.speed, reach_text(w, h)), TEXT));
             if let Some(line) = derived_line(&derived) {
                 derived_at = Some(lines.len());
                 lines.push((line, TEXT));
@@ -2953,7 +2961,9 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     };
     // FX1 4.1: the camera's shake shifts the board's passes (inside its clip); the HUD and every hit rect stay put.
     let shift = g.camera.offset_at(g.clock.now());
-    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.clock.ms, sel, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift, sidesteps: &g.sidesteps };
+    // RULESET1-U slice 3: the round intent's board overlays (None in classic)
+    let overlay = overlay_of(s, sel, planning);
+    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.clock.ms, sel, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref() };
     let board_hover = match view {
         View::Stage => draw_stage(board, &mut ui, cx, &tuning, now),
         View::Flat => {
@@ -3144,6 +3154,239 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     g.w = ui.widgets;
 }
 
+// ---- RULESET1-U slice 3: the board overlays under the round intent (RULESET1_INTENT UI3, RULESET1 K6) -------------
+
+/// How far around the round target the Maneuver front is shaded (tiles, Manhattan).
+const FRONT_RADIUS: i32 = 3;
+
+/// A unit's "Reach" on its hover card and the hero panel: under the rule `reach` its plain attack band ("1-2", K6:
+/// kit `skill::attack_band`), else its `attack_range` (classic, as before).
+fn reach_text(w: &World, i: usize) -> String {
+    if !w.ruleset.has(emberwake_rules::ruleset::REACH) {
+        return w.units[i].attack_range.to_string();
+    }
+    match emberwake_battle::skill::attack_band(&w.units[i], &w.ruleset) {
+        (lo, hi) if lo == hi => lo.to_string(),
+        (lo, hi) => format!("{lo}-{hi}"),
+    }
+}
+
+/// How a planned move of the selected hero is drawn: a plain move before its commands (walk), a move its skill
+/// carries (MV4: an Engage's dash, a chase), or a step after its commands (AS3's kite step, MV8's retreat).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MoveKind {
+    Walk,
+    Carried,
+    After,
+}
+
+impl MoveKind {
+    fn id(self) -> &'static str {
+        match self {
+            MoveKind::Walk => "walk",
+            MoveKind::Carried => "carried",
+            MoveKind::After => "after",
+        }
+    }
+}
+
+/// RULESET1-U slice 3: what the board draws under the round intent, every piece a kit query (none in classic).
+#[derive(Debug, Clone, Default, PartialEq)]
+struct Overlay {
+    /// The selected hero's round target tile (a unit's or the target tile; None for self or none). Planning only.
+    target: Option<V2>,
+    /// The tiles of the units a board click would make the hero's round target (the intent table, PL2; UI1 "valid
+    /// cells lit"), the current target left out. Planning only.
+    valid: Vec<V2>,
+    /// K6: the band of the hero's plain attack (`skill::attack_band`) around the tile its first attack strikes from
+    /// (else where it stands), under Assault and Maneuver. Planning only.
+    band: Vec<V2>,
+    /// UI3: under Maneuver, the target's front within `FRONT_RADIUS` (`round_intent::in_front`: no flank there).
+    front: Vec<V2>,
+    /// The hero's planned moves in order: the tiles each passes (from first) and how it is drawn.
+    moves: Vec<(Vec<V2>, MoveKind)>,
+    /// MV1: every active enemy's tile and facing (a sign vector; units without one left out). Planning and playback.
+    facings: Vec<(V2, V2)>,
+    /// GD5: the tiles of stealthed units, and whether each is hidden now (moved this round). Planning and playback.
+    veils: Vec<(V2, bool)>,
+}
+
+/// The overlays of the battle now: None without the rule `round_intent` (classic draws none).
+fn overlay_of(s: &Session, sel: Option<usize>, planning: bool) -> Option<Overlay> {
+    let w = &s.w;
+    if !ri::on(w) {
+        return None;
+    }
+    let on_field = |u: usize| w.units[u].is_active() && w.has(u);
+    let mut o = Overlay {
+        facings: w.enemies.iter().copied().filter(|&e| on_field(e)).map(|e| (w.pos(e), ri::facing(w, e))).filter(|(_, f)| *f != emberwake_battle::grid::ZERO).collect(),
+        veils: (0..w.units.len()).filter(|&u| on_field(u) && w.units[u].has_status("stealth")).map(|u| (w.pos(u), ri::hidden(w, u))).collect(),
+        ..Overlay::default()
+    };
+    let Some(h) = sel.filter(|&h| planning && on_field(h) && w.allies.contains(&h)) else { return Some(o) };
+    let target = w.round_states.get(&h).and_then(|r| r.target);
+    o.target = match target {
+        Some(RoundTarget::Unit(t)) if on_field(t) => Some(w.pos(t)),
+        Some(RoundTarget::Cell(p)) => Some(p),
+        _ => None,
+    };
+    let st = s.plan.compile(w, h);
+    // the planned moves: a carried move rides in its skill's entry (Engage, a chase), a retreat or a move after the
+    // round's first command is an after-move
+    let mut from = w.pos(h);
+    let mut acted = false;
+    for e in &st.entries {
+        let kind = emberwake_battle::skill::kind(&w.cat.skills[e.skill]);
+        if e.pos_after != from && e.pos_after.x >= 0 {
+            // the entry's path is its steps (direction vectors) from where it starts
+            let mut tiles = vec![from];
+            let mut at = e.pos_before;
+            for d in &e.path {
+                at = at + *d;
+                if tiles.last() != Some(&at) && w.grid.is_valid(at) {
+                    tiles.push(at);
+                }
+            }
+            if tiles.last() != Some(&e.pos_after) {
+                tiles.push(e.pos_after);
+            }
+            let how = match (&e.carry, kind) {
+                (emberwake_battle::command::Carry::Retreat(_), _) => MoveKind::After,
+                (_, Kind::Move) if acted => MoveKind::After,
+                (_, Kind::Move) => MoveKind::Walk,
+                _ => MoveKind::Carried,
+            };
+            o.moves.push((tiles, how));
+            from = e.pos_after;
+        }
+        if !matches!(kind, Kind::Move | Kind::Rest) {
+            acted = true;
+        }
+    }
+    let Some(intent) = ri::intent_of(w, h) else { return Some(o) };
+    o.valid = (0..w.units.len())
+        .filter(|&u| on_field(u) && Some(ri::normalize(h, RoundTarget::Unit(u))) != target)
+        .filter(|&u| ri::target_problem(w, h, intent, RoundTarget::Unit(u)).is_empty())
+        .map(|u| w.pos(u))
+        .collect();
+    let all_cells = || (0..GRID_H).flat_map(|y| (0..GRID_W).map(move |x| V2::new(x, y))).filter(|c| w.grid.is_valid(*c));
+    if matches!(intent, RoundIntent::Assault | RoundIntent::Maneuver) {
+        let (lo, hi) = emberwake_battle::skill::attack_band(&w.units[h], &w.ruleset);
+        let at = st
+            .entries
+            .iter()
+            .find(|e| emberwake_battle::skill::kind(&w.cat.skills[e.skill]) == Kind::Attack)
+            .map(|e| if matches!(e.carry, emberwake_battle::command::Carry::Retreat(_)) { e.pos_before } else { e.pos_after })
+            .unwrap_or_else(|| w.pos(h));
+        o.band = all_cells().filter(|c| (lo..=hi).contains(&c.dist(at))).collect();
+    }
+    if let (RoundIntent::Maneuver, Some(RoundTarget::Unit(t))) = (intent, target) {
+        if on_field(t) {
+            let tp = w.pos(t);
+            o.front = all_cells().filter(|c| c.dist(tp) <= FRONT_RADIUS && *c != tp && ri::in_front(w, t, *c)).collect();
+        }
+    }
+    Some(o)
+}
+
+/// The overlays for the agent link's state: tiles as [x, y].
+fn overlay_json(o: &Overlay) -> Value {
+    let cell = |c: &V2| json!([c.x, c.y]);
+    json!({
+        "target": o.target.as_ref().map(cell),
+        "valid": o.valid.iter().map(cell).collect::<Vec<_>>(),
+        "band": o.band.iter().map(cell).collect::<Vec<_>>(),
+        "front": o.front.iter().map(cell).collect::<Vec<_>>(),
+        "moves": o.moves.iter().map(|(t, k)| json!({"kind": k.id(), "tiles": t.iter().map(cell).collect::<Vec<_>>()})).collect::<Vec<_>>(),
+        "facings": o.facings.iter().map(|(c, f)| json!({"at": cell(c), "facing": [f.x, f.y]})).collect::<Vec<_>>(),
+        "veils": o.veils.iter().map(|(c, hidden)| json!({"at": cell(c), "hidden": hidden})).collect::<Vec<_>>(),
+    })
+}
+
+/// The ground point of a cell in the view: the foot point (Stage), the cell's lower part (Flat, where the token's
+/// foot ellipse sits).
+fn ground_pt(geo: &Geom, c: V2) -> (f32, f32) {
+    let (x, y) = geo.foot(c);
+    match geo.view {
+        View::Stage => (x as f32, y as f32),
+        View::Flat => (x as f32, (geo.cell_rect(c).y + geo.cell_rect(c).h) as f32 - 4.0),
+    }
+}
+
+/// RULESET1-U slice 3: draws the overlays on the ground, under the tokens (Flat: after the tiles; Stage: the markers
+/// pass), in the order back to front: the reach band, the Maneuver front, the valid targets, the stealth veils, the
+/// move paths, the target ring, the enemy facings.
+fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom) {
+    let plate_of = |c: V2| match geo.view {
+        View::Stage => inset2(geo.cell_rect(c), 1, 1),
+        View::Flat => geo.cell_rect(c).inset(1),
+    };
+    for c in &o.band {
+        plate(p, plate_of(*c), rgba(110, 170, 255, 22), rgba(110, 170, 255, 70));
+    }
+    for c in &o.front {
+        plate(p, plate_of(*c), rgba(240, 100, 92, 46), rgba(240, 100, 92, 110));
+    }
+    // a ground ellipse's radii in the view (the Stage squashes it like the foot rings)
+    let (rx, ry) = match geo.view {
+        View::Stage => (0.36 * geo.token_px as f32, 4.2),
+        View::Flat => (13.0, 5.0),
+    };
+    for c in &o.valid {
+        let (x, y) = ground_pt(geo, *c);
+        p.ellipse_ring(x, y, rx + 1.0, ry + 0.8, rgba(255, 255, 255, 150));
+    }
+    for (c, hidden) in &o.veils {
+        let (x, y) = ground_pt(geo, *c);
+        p.ellipse(x, y, rx, ry, rgba(186, 170, 255, if *hidden { 90 } else { 40 }));
+        p.ellipse_ring(x, y, rx, ry, rgba(186, 170, 255, if *hidden { 230 } else { 150 }));
+    }
+    for (tiles, how) in &o.moves {
+        let (col, dash) = match how {
+            MoveKind::Walk => (GOLD, 0.0),
+            MoveKind::Carried => (AMBER, 3.0),
+            MoveKind::After => (GOLD, 2.0),
+        };
+        let pts: Vec<(f32, f32)> = tiles.iter().map(|c| ground_pt(geo, *c)).map(|(x, y)| (x, y - 3.0)).collect();
+        for (k, seg) in pts.windows(2).enumerate() {
+            let last = k + 2 == pts.len();
+            if last && *how == MoveKind::After {
+                stage::wide_arrow(p, seg[0].0, seg[0].1, seg[1].0, seg[1].1, col, 1.5, dash, 4.0);
+            } else {
+                stage::wide_line(p, seg[0].0, seg[0].1, seg[1].0, seg[1].1, col, if *how == MoveKind::Walk { 2.0 } else { 1.5 }, dash);
+            }
+        }
+        if let (Some(end), true) = (tiles.last(), *how != MoveKind::After) {
+            let r = match geo.view {
+                View::Stage => inset2(geo.cell_rect(*end), 3, 2),
+                View::Flat => geo.cell_rect(*end).inset(3),
+            };
+            p.panel(r, with_alpha(col, 40), col, 2.0);
+        }
+    }
+    if let Some(c) = o.target {
+        let (x, y) = ground_pt(geo, c);
+        p.ellipse_ring(x, y, rx + 2.5, ry + 1.6, GOLD);
+        p.ellipse_ring(x, y, rx + 3.5, ry + 2.2, with_alpha(GOLD, 150));
+    }
+    // a chevron on the ground ahead of each enemy, pointing where it faces (the Stage squashes the y part)
+    let squash = if geo.view == View::Stage { 0.6 } else { 1.0 };
+    for (c, f) in &o.facings {
+        let (x, y) = ground_pt(geo, *c);
+        let len = ((f.x * f.x + f.y * f.y) as f32).sqrt().max(1.0);
+        let (dx, dy) = (f.x as f32 / len, f.y as f32 / len * squash);
+        let (tip, base) = (rx + 8.0, rx + 3.0);
+        let (px, py) = (-dy * 4.0, dx * 4.0 * squash.max(0.8));
+        let (tx, ty) = (x + dx * tip, y + dy * tip);
+        let (bx, by) = (x + dx * base, y + dy * base);
+        // a dark underlay keeps it apart from the tells' red arrows and the foot rings
+        for (col, width) in [(rgba(10, 8, 12, 200), 3.2), (FOE, 1.6)] {
+            stage::wide_line(p, bx + px, by + py, tx, ty, col, width, 0.0);
+            stage::wide_line(p, bx - px, by - py, tx, ty, col, width, 0.0);
+        }
+    }
+}
+
 /// RULESET1-U (intent UI1): the selected hero's round controls at the top of the hero panel `r` (below its name line):
 /// the ruleset's intent buttons two a row (`hero.intent.<id>`, keys 1-9 in the ruleset's order; lit = the current one; disabled with the
 /// planner's reason, PL7, unless Manual; a red corner and the tip warn of the intent-bound buffs a change drops, IN6),
@@ -3215,6 +3458,8 @@ struct Board<'a> {
     shift: (i32, i32),
     /// FX1-L2: the miss sidesteps (4.3).
     sidesteps: &'a [fx::Sidestep],
+    /// RULESET1-U slice 3: the round intent's ground overlays (None in classic: the board draws as before).
+    overlay: Option<&'a Overlay>,
 }
 
 /// An action clip a token wants starts with the first candidate its body has (SPRITE1-U), once the clock reaches its
@@ -3349,7 +3594,7 @@ fn scaled(a: u8, k: u8) -> u8 {
 /// the `common` tiles, tree tiles flat, tokens `flat_token_px` on a filled foot ellipse at `foot_alpha`, arrows centre
 /// to centre over the units, the cell widgets.
 fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, fx: live, shift, sidesteps, .. } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, fx: live, shift, sidesteps, overlay, .. } = b;
     let w = &s.w;
     let panel = Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4);
     ui.p.panel(panel, rgb(8, 10, 16), BORDER, RADIUS);
@@ -3380,7 +3625,10 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
         }
     }
     let center = |c: V2| ((GRID_X + c.x * TILE + TILE / 2) as f32, (GRID_Y + c.y * TILE + TILE / 2) as f32);
-    if let Some(h) = sel {
+    if let Some(o) = overlay {
+        // RULESET1-U slice 3: the round intent's overlays on the ground (they draw the hero's moves)
+        draw_overlay(&mut ui.p, o, &Geom::new(View::Flat, tuning));
+    } else if let Some(h) = sel {
         if w.units[h].is_active() && planning {
             let st = s.plan.compile(w, h);
             let mut from = w.pos(h);
@@ -3589,7 +3837,7 @@ fn with_alpha(c: Rgba, a: u8) -> Rgba {
 /// covers a unit, the top: HP bars, chips, the exit sign, floats). Cell widgets first, then the units' in feet order
 /// (front-most last, so it takes the click). Returns the unit the mouse is over on the board.
 fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay } = b;
     let w = &s.w;
     let geo = Geom::new(View::Stage, tuning);
     let tp = geo.token_px;
@@ -3690,7 +3938,10 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                         }
                     }
                 }
-                if let Some(h) = sel.filter(|h| w.units[*h].is_active() && planning) {
+                if let Some(o) = overlay {
+                    // RULESET1-U slice 3: the round intent's overlays on the ground (they draw the hero's moves)
+                    draw_overlay(&mut ui.p, o, &geo);
+                } else if let Some(h) = sel.filter(|h| w.units[*h].is_active() && planning) {
                     let st = s.plan.compile(w, h);
                     let mut from = w.pos(h);
                     for e in &st.entries {
@@ -6010,5 +6261,155 @@ mod intent_ui_tests {
         assert!(b.w.iter().all(|x| !x.id.starts_with("hero.intent") && !["hero.kind", "hero.opener", "hero.manual", "hero.fill", "bar.chip"].contains(&x.id.as_str())), "classic draws no round control");
         let st = b.state(&cx);
         assert!(st.get("intents").is_none() && st.get("ruleset").is_none(), "a classic battle's state keeps its shape");
+    }
+}
+
+/// RULESET1-U slice 3 (RULESET1_INTENT UI3, RULESET1 K6, GD5, MV1): the board overlays under the round intent. A catalog
+/// encounter played by the catalog's timeline row; every expectation is a kit query (`target_problem`, `attack_band`,
+/// `in_front`, `facing`, `hidden`, the compiled plan), never a shipped number. Classic draws none (no state key).
+#[cfg(test)]
+mod overlay_tests {
+    use super::*;
+    use emberwake_rules::ruleset::TIMELINE;
+
+    fn arena(ruleset: Option<&str>) -> (Cx, Gfx, BattleScreen) {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+        let b = BattleScreen::arena_with(&cx, None, &encounter, ruleset.map(String::from), "", false);
+        assert!(b.host.session.is_some(), "the battle starts: {}", b.message);
+        (cx, crate::hud::hud_tests::gfx(), b)
+    }
+
+    fn s(b: &BattleScreen) -> &Session {
+        b.host.session.as_ref().unwrap()
+    }
+
+    fn overlay(b: &BattleScreen) -> Overlay {
+        overlay_of(s(b), b.selected, true).expect("the round intent's overlays")
+    }
+
+    /// The hero and its first foe on the field, the hero set to Assault on that foe through the command API.
+    fn assault(cx: &mut Cx, b: &mut BattleScreen) -> (usize, usize) {
+        let h = b.selected.expect("a hero");
+        let foe = s(b).w.enemies.iter().copied().find(|&e| s(b).w.units[e].is_active() && s(b).w.has(e)).expect("a foe");
+        let r = b.send(cx, json!({"cmd": "round_intent", "unit": h, "intent": "assault", "target": foe}));
+        assert_eq!(r["ok"], json!(true), "{r}");
+        (h, foe)
+    }
+
+    /// Classic: no overlay, no state key, the hover card's Reach is the unit's attack range as before.
+    #[test]
+    fn classic_draws_no_overlay() {
+        let (mut cx, mut g, mut b) = arena(None);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert!(overlay_of(s(&b), b.selected, true).is_none());
+        assert!(b.state(&cx).get("overlay").is_none(), "a classic battle's state keeps its shape");
+        let w = &s(&b).w;
+        for i in 0..w.units.len() {
+            assert_eq!(reach_text(w, i), w.units[i].attack_range.to_string());
+        }
+    }
+
+    /// UI1 (valid cells lit), UI3 (the target ring, move paths), K6 (the reach band), MV1 (enemy facings): under Assault
+    /// on a foe the ring sits on the foe; the lit units are exactly those the intent table takes (the target left out);
+    /// the band is every tile at the plain attack band's distance from the tile the first attack strikes from; the moves
+    /// follow the compiled plan tile by tile from the hero; every enemy with a facing shows it. The state lists the same.
+    #[test]
+    fn the_overlays_follow_the_kit() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE));
+        let (h, foe) = assault(&mut cx, &mut b);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let o = overlay(&b);
+        let w = &s(&b).w;
+        assert_eq!(o.target, Some(w.pos(foe)), "the ring on the round target");
+        let valid: Vec<V2> = (0..w.units.len())
+            .filter(|&u| u != foe && w.units[u].is_active() && w.has(u) && ri::target_problem(w, h, RoundIntent::Assault, ri::normalize(h, RoundTarget::Unit(u))).is_empty())
+            .map(|u| w.pos(u))
+            .collect();
+        assert_eq!(o.valid, valid);
+        assert!(o.valid.iter().all(|c| w.occupant(*c).is_some_and(|u| w.foes_of(h).contains(&u))), "Assault lights foes only");
+        let st = s(&b).plan.compile(w, h);
+        let at = st.entries.iter().find(|e| emberwake_battle::skill::kind(&w.cat.skills[e.skill]) == Kind::Attack).map(|e| e.pos_after).unwrap_or_else(|| w.pos(h));
+        let (lo, hi) = emberwake_battle::skill::attack_band(&w.units[h], &w.ruleset);
+        let band: Vec<V2> = (0..GRID_H).flat_map(|y| (0..GRID_W).map(move |x| V2::new(x, y))).filter(|c| w.grid.is_valid(*c) && c.dist(at) >= lo && c.dist(at) <= hi).collect();
+        assert_eq!(o.band, band, "the band around {at:?}");
+        let mut from = w.pos(h);
+        let mut ends = Vec::new();
+        for e in st.entries.iter().filter(|e| e.pos_after.x >= 0) {
+            if e.pos_after != from {
+                ends.push((from, e.pos_after));
+                from = e.pos_after;
+            }
+        }
+        assert_eq!(o.moves.iter().map(|(t, _)| (t[0], *t.last().unwrap())).collect::<Vec<_>>(), ends, "one drawn move per change of tile");
+        assert!(o.moves.iter().all(|(t, _)| t.windows(2).all(|p| p[0] != p[1])));
+        // the drawn tiles walk the plan's steps: every one on the board, each a step from the last (a carried move's
+        // dash may cover more than one)
+        assert!(o.moves.iter().flat_map(|(t, _)| t.iter()).all(|c| w.grid.is_valid(*c)), "{:?}", o.moves);
+        assert!(o.moves.iter().filter(|(_, k)| *k == MoveKind::Walk).all(|(t, _)| t.windows(2).all(|p| p[0].dist(p[1]) == 1)), "{:?}", o.moves);
+        assert!(o.front.is_empty(), "no front shaded under Assault");
+        let facings: Vec<(V2, V2)> = w.enemies.iter().copied().filter(|&e| w.units[e].is_active() && w.has(e) && ri::facing(w, e) != emberwake_battle::grid::ZERO).map(|e| (w.pos(e), ri::facing(w, e))).collect();
+        assert_eq!(o.facings, facings);
+        assert_eq!(b.state(&cx)["overlay"], overlay_json(&o), "the agent link's state lists the overlays");
+        // playback: no hero overlays, the facings stay
+        let r = b.send(&cx, json!({"cmd": "confirm"}));
+        assert_eq!(r["ok"], json!(true), "{r}");
+        let o = overlay_of(s(&b), b.selected, false).unwrap();
+        assert!(o.target.is_none() && o.valid.is_empty() && o.band.is_empty() && o.moves.is_empty());
+    }
+
+    /// UI3, MV3: under Maneuver the target's front within FRONT_RADIUS is shaded, exactly the tiles `in_front` names
+    /// (dot(tile - target, facing) > 0); no front without a facing.
+    #[test]
+    fn maneuver_shades_the_targets_front() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE));
+        let (h, foe) = assault(&mut cx, &mut b);
+        // Manual: the intent stands even when the planner offers no Maneuver round here
+        for req in [json!({"cmd": "manual", "unit": h, "on": true}), json!({"cmd": "round_intent", "unit": h, "intent": "maneuver", "target": foe})] {
+            let r = b.send(&cx, req);
+            assert_eq!(r["ok"], json!(true), "{r}");
+        }
+        for f in [V2::new(-1, 0), V2::new(0, 1)] {
+            b.host.session.as_mut().unwrap().w.round_states.entry(foe).or_default().facing = f;
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            let o = overlay(&b);
+            let w = &s(&b).w;
+            let tp = w.pos(foe);
+            assert!(!o.front.is_empty(), "facing {f:?}");
+            for c in (0..GRID_H).flat_map(|y| (0..GRID_W).map(move |x| V2::new(x, y))).filter(|c| w.grid.is_valid(*c) && *c != tp && c.dist(tp) <= FRONT_RADIUS) {
+                let d = c - tp;
+                assert_eq!(o.front.contains(&c), d.x * f.x + d.y * f.y > 0, "{c:?} facing {f:?}");
+                assert_eq!(o.front.contains(&c), ri::in_front(w, foe, c));
+            }
+        }
+        b.host.session.as_mut().unwrap().w.round_states.entry(foe).or_default().facing = emberwake_battle::grid::ZERO;
+        assert!(overlay(&b).front.is_empty(), "no facing, no front");
+    }
+
+    /// GD5: a stealthed unit wears a veil, hidden once it moved this round (the hover card says so); K6: the hover card's
+    /// Reach is the kit's plain attack band under the rule `reach`.
+    #[test]
+    fn a_stealthed_unit_wears_a_veil_and_reach_reads_the_band() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE));
+        let h = b.selected.unwrap();
+        let sess = b.host.session.as_mut().unwrap();
+        emberwake_rules::status::grant_now(&mut sess.w.units[h], "stealth", 2, 0, "test");
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let at = s(&b).w.pos(h);
+        assert_eq!(overlay(&b).veils, vec![(at, false)], "veiled, not hidden before it moves");
+        b.host.session.as_mut().unwrap().w.round_states.entry(h).or_default().moved = true;
+        assert_eq!(overlay(&b).veils, vec![(at, true)], "hidden once it moved (GD5)");
+        assert!(unit_tip(s(&b), h, Some(h), &[]).iter().any(|t| t.0.starts_with("Hidden")));
+        let w = &s(&b).w;
+        for i in 0..w.units.len() {
+            let want = if w.ruleset.has(emberwake_rules::ruleset::REACH) {
+                let (lo, hi) = emberwake_battle::skill::attack_band(&w.units[i], &w.ruleset);
+                if lo == hi { lo.to_string() } else { format!("{lo}-{hi}") }
+            } else {
+                w.units[i].attack_range.to_string()
+            };
+            assert_eq!(reach_text(w, i), want, "{}", w.units[i].name);
+        }
     }
 }

@@ -154,6 +154,15 @@ fn a_reach_weapon_widens_the_melee_band_under_the_rule() {
     let mut off = reach_on();
     off.adjust("-reach").unwrap();
     assert_eq!(skill::reach_by(cut, lancer, &off), (1, 1), "switched off by the Arena or the sim");
+    // K6: the unit's plain attack band (the battle screen's reach band, "Reach 1-2") is a plain skill's `reach_by`
+    let strike = &w.cat.skills[sid(w, "strike")];
+    for rules in [reach_on(), Ruleset::classic(), off.clone()] {
+        for u in [lancer, &w.units[SWORD], &archer] {
+            assert_eq!(skill::attack_band(u, &rules), skill::reach_by(strike, u, &rules), "{} in {:?}", u.name, rules.rules);
+        }
+    }
+    assert_eq!(skill::attack_band(lancer, &w.ruleset), (1, REACH_WEAPON_REACH), "the hover card's Reach 1-2");
+    assert_eq!(skill::attack_band(&archer, &w.ruleset), (2, 3.max(archer.attack_range)), "a ranged band");
 }
 
 /// K2, K3: from 2 tiles the lancer plans the strike in place and it lands, over a unit or a wall in between (no line

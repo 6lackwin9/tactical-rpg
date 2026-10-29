@@ -264,10 +264,23 @@ fn band(s: &SkillDef, c: &Unit, melee: i32) -> (i32, i32) {
     if is_off_hand(s) || a == Area::Line || a == Area::Sweep {
         return (1, 1);
     }
+    let (lo, hi) = plain_band(c, melee);
+    (lo, hi + extra)
+}
+
+/// The band of a plain attack (no own reach, no area, no spell bonus): ranged (2, max(3, range)), melee (1, `melee`).
+fn plain_band(c: &Unit, melee: i32) -> (i32, i32) {
     if c.attack_range > 1 {
-        return (2, 3.max(c.attack_range) + extra);
+        (2, 3.max(c.attack_range))
+    } else {
+        (1, melee)
     }
-    (1, melee + extra)
+}
+
+/// RULESET1 K6: the band of `c`'s plain attack under `rules` (`reach_by` of a skill with no reach of its own): the
+/// battle screen's reach band and the hover card's "Reach 1-2".
+pub fn attack_band(c: &Unit, rules: &Ruleset) -> (i32, i32) {
+    plain_band(c, melee_band_max(c, rules))
 }
 
 /// RULESET1 K1: whether `c` fights with a reach weapon in this battle (the rule `reach` on, a melee unit, its main
