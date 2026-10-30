@@ -94,6 +94,14 @@ The theme (user): the first loss is a choice; as losses pile up they become the 
   fights for it). S4 applies to the catalog sweep `enc=all` (the sim's default `enc` is the generated fights).
 - H7. Screen: hold tiles drawn with the objective ring and a winch marker; the gate's exits show "shut" (red) or
   "open" (green); the objective line adds "`{holder}` holds `{tiles_label}`."
+  As built (ENCOUNTER2-U, 2026-10-31): H1's pick is a panel over the board's lower edge ("Who holds the winch?", one
+  button per hero on the field with its HP); Confirm waits for it and the objective line says "Pick who holds the
+  winch first." until it is made, then "`{holder}` holds `{tiles_label}`.". H7's marks sit in two overlay groups, on by
+  default: `hold` (each hold tile with a gold ring and a plate with the label's first letter, "W"; its card names the
+  holder) and `gate` (the exit sign and, in the Stage view, the exit plate read SHUT in red or OPEN in green; the exit's
+  card gives `HoldGate::note`). H3's note shows in the hero panel while the gate is shut. The screen's outcome is
+  `Session::final_outcome` (S2). The combat log panel and the host `battle ... log` print an encounter's phase lines
+  and phase kills (`Session::log_lines`, decision "RULESET1-A3 loose ends"); the resolver log is unchanged.
 
 ### 3.2 The impossible fight and the last stand (`mode: "stand"`; a later mission, not the Crucible)
 

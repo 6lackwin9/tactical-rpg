@@ -149,6 +149,8 @@ fn battle(args: &Args) -> Result<()> {
     let mut s = Session::start(cat.clone(), def, &IndexMap::new());
     let show_log = args.flag("log");
     println!("{} (seed {}): {} rounds max", s.def.name, s.def.rng_seed, s.def.max_rounds);
+    // ENCOUNTER2-U (decision "RULESET1-A3 loose ends"): the encounter's phase and kill lines print with the log
+    let mut said = 0;
     loop {
         // RULESET1-G2: the auto driver (the battle screen's autoplay, the host's `autoplay`, `sim feel`); ENCOUNTER2 H1:
         // a hold escape's holder by the encounter's `pick_default`
@@ -163,9 +165,10 @@ fn battle(args: &Args) -> Result<()> {
         s.resolve_round();
         println!("-- round {} --", s.current_round);
         if show_log {
-            for line in &s.resolver.log[from..] {
+            for line in s.log_lines(from, said) {
                 println!("  {line}");
             }
+            said = s.encounter_lines.len();
         }
         for &u in s.w.allies.iter().chain(s.w.enemies.iter()) {
             let x = &s.w.units[u];

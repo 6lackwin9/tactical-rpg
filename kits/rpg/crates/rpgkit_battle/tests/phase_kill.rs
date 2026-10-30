@@ -301,3 +301,30 @@ fn an_hp_below_trigger_may_watch_a_phase_wave_unit() {
     next_round(&mut s);
     assert!(s.phases.fired.contains_key("watch"));
 }
+
+/// ENCOUNTER2-U (decision "RULESET1-A3 loose ends"): a phase's `line` and its kill reach the combat log a reader sees
+/// (`Session::log_lines`: the battle screen's log panel and the host `battle ... log` print), in that order, before the
+/// round's actions, while the resolver log (host replies, parity) is unchanged; a fight without phase lines reads the
+/// resolver log exactly.
+#[test]
+fn phase_lines_and_kills_reach_the_combat_log() {
+    let phases = json!([at_round_two("cull", json!([{"type": "line", "text": "The cull begins."}, {"type": "kill", "units": ["k_brute"], "by": "k_boss"}]))]);
+    let mut s = session(row(phases, json!({})));
+    next_round(&mut s);
+    let kill = kill_cells(&s)[0].detail.clone();
+    let want = ["[Phase] Cull: The cull begins.".to_string(), format!("[Kill] {kill}")];
+    let lines = s.log_lines(0, 0);
+    let at: Vec<usize> = want.iter().map(|w| lines.iter().position(|l| l == w).unwrap_or_else(|| panic!("{w} in {lines:?}"))).collect();
+    assert_eq!(at[1], at[0] + 1, "the kill follows its phase line");
+    assert_eq!(lines.iter().filter(|l| !want.contains(l)).cloned().collect::<Vec<_>>(), s.resolver.log, "the resolver log is untouched");
+    assert!(!s.resolver.log.iter().any(|l| want.contains(l)));
+    // round 2's slice from where round 1 ended holds both lines (said at round 2's start)
+    let round_one = s.resolver.log.len();
+    assert_eq!(s.log_lines(round_one, 0)[..2], want[..]);
+    assert!(s.log_lines(round_one, s.encounter_lines.len()).is_empty());
+
+    let mut quiet = session(row(json!([]), json!({})));
+    next_round(&mut quiet);
+    assert!(quiet.encounter_lines.is_empty());
+    assert_eq!(quiet.log_lines(0, 0), quiet.resolver.log, "no phase lines: the resolver log exactly");
+}

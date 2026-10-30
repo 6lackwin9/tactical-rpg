@@ -114,6 +114,8 @@ pub enum Action {
     /// MM1: the selected hero's Manual toggle; MM3: "Fill the rest" after its last step.
     Manual,
     Fill,
+    /// ENCOUNTER2 H1: the hero picked to hold a hold escape's tiles.
+    StayPick(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -1779,6 +1781,13 @@ impl BattleScreen {
             (emberwake_battle::encounter::Objectives::text_of(&s.def.raw, |r| s.units_of_ref(r).first().map(|&c| s.w.units[c].name.clone()).unwrap_or_else(|| r.to_string())), s.events.len())
         };
         self.events_seen = n;
+        // ENCOUNTER2 H1, H7: a hold escape asks for its holder first; once picked the line names them
+        let s = self.session();
+        let objective = match &s.w.hold {
+            Some(gate) if gate.holder.is_some() => format!("{objective} {}", hold_line(s)),
+            Some(gate) => format!("{objective} Pick who holds {} first.", gate.label),
+            None => objective,
+        };
         self.message = if intro.is_empty() { format!("{objective} Plan your round, then confirm.") } else { format!("{intro} {objective}") };
     }
 
@@ -1787,21 +1796,10 @@ impl BattleScreen {
         s.phase == Phase::Planning && !s.plan_confirmed
     }
 
-    /// BattleBridge.outcome: the session's verdict, else won / lost / fled by who stands; "" while it can go on.
+    /// BattleBridge.outcome: the session's verdict, else its `timeout_outcome` once the last round is over (ENCOUNTER2
+    /// S2, `Session::final_outcome`; fled by default); "" while it can go on.
     fn outcome(&self) -> String {
-        let s = self.session();
-        if !s.outcome.is_empty() {
-            return s.outcome.clone();
-        }
-        let standing = s.w.allies.iter().any(|a| s.w.units[*a].is_active());
-        let alive = s.w.allies.iter().any(|a| s.w.units[*a].is_alive());
-        if s.combat_over {
-            return if standing { "won" } else if alive { "fled" } else { "lost" }.into();
-        }
-        if s.phase == Phase::Replay && !s.can_advance_round() {
-            return "fled".into();
-        }
-        String::new()
+        self.session().final_outcome()
     }
 
     /// World battle over: HP written back (won / fled), the runner settles the outcome, the results popup opens.
@@ -1918,6 +1916,13 @@ impl BattleScreen {
                 }
             }
             Action::ClosePopup => self.popup = None,
+            Action::StayPick(c) => {
+                let r = self.send(cx, json!({"cmd": "stay_pick", "unit": c}));
+                if r["ok"] == json!(true) {
+                    let line = hold_line(self.session());
+                    self.message = format!("{line} Plan your round, then confirm.");
+                }
+            }
             Action::Confirm => {
                 let r = self.send(cx, json!({"cmd": "confirm"}));
                 if r["ok"] == json!(true) {
@@ -2542,6 +2547,14 @@ impl Screen<GameCx> for BattleScreen {
         if let Some(sess) = self.host.session.as_ref().filter(|x| emberwake_battle::ground::on(&x.w) || emberwake_battle::arena::on(&x.w)) {
             out["hook_marks"] = HookMarks::of(sess, &Layers::of(&cx.settings.v["battle_overlays"])).json();
         }
+        // ENCOUNTER2-U: a hold escape's state (key only in a hold escape)
+        if let Some(sess) = self.host.session.as_ref() {
+            if let Some(gate) = &sess.w.hold {
+                let cell = |c: &V2| json!([c.x, c.y]);
+                out["hold"] = json!({"label": gate.label, "tiles": gate.tiles.iter().map(cell).collect::<Vec<_>>(), "holder": gate.holder, "open": gate.is_open(&sess.w),
+                    "needs_pick": sess.needs_stay_pick(), "note": sess.gate_note(), "pick": hold_pick_ids(sess)});
+            }
+        }
         // HOOKS1-UI slice 4: the selected hero's push forecasts as drawn (key only while forced_move is on)
         if let Some(sess) = self.host.session.as_ref().filter(|x| emberwake_battle::forced::on(&x.w)) {
             let layers = Layers::of(&cx.settings.v["battle_overlays"]);
@@ -2879,6 +2892,8 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let layers = Layers::of(&cx.settings.v["battle_overlays"]);
     // HOOKS1-UI slice 1: the ground hazards and the arena telegraph (empty in classic)
     let marks = HookMarks::of(s, &layers);
+    // ENCOUNTER2-U: a hold escape's tiles and gate (H7; None without a hold escape)
+    let hold = HoldMarks::of(s, &layers);
     // HOOKS1-UI slice 2 (CN2): each unit's class name in the battle's world, for the hover cards
     let classes = class_names(&cx.data, &g.class_world, w);
     let round_of = |u: usize| rounds.iter().find(|r| r.unit == u).and_then(|r| r.round_intent).filter(|_| layers.glyphs);
@@ -2953,7 +2968,8 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let party_label = format!("Party: {}", TACTIC_LABELS[g.party_tactic]);
     let hero_label = format!("Hero: {}", TACTIC_LABELS[g.hero_tactic]);
     let (label, action, enabled) = if planning {
-        ("Confirm round", Action::Confirm, true)
+        // ENCOUNTER2 H1: planning cannot be confirmed before the holder is picked
+        ("Confirm round", Action::Confirm, !s.needs_stay_pick())
     } else if s.phase == Phase::Replay && s.can_advance_round() {
         ("Next round", Action::NextRound, !g.pending_next_round)
     } else {
@@ -3170,6 +3186,11 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
                     lines.push((st.error_text.clone(), FOE));
                 }
             }
+            // ENCOUNTER2 H3: why a Withdraw waits (the gate is shut)
+            let note = s.gate_note();
+            if !note.is_empty() && !s.plan_confirmed {
+                lines.push((note, FOE));
+            }
             lines.push(ap_line);
             statuses(&mut lines);
             stats(&mut lines);
@@ -3187,6 +3208,11 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
                 }
             } else {
                 lines.push(("Plan".into(), TEXT));
+                // ENCOUNTER2 H3: why a Withdraw waits (the gate is shut)
+                let note = s.gate_note();
+                if !note.is_empty() {
+                    lines.push((note, FOE));
+                }
                 if st.entries.iter().all(|e| e.step_index < 0) {
                     lines.push(("No plan yet".into(), GOLD));
                 }
@@ -3238,7 +3264,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     // RULESET1-U slice 3: the round intent's board overlays (None in classic)
     let overlay = overlay_of(s, sel, planning);
     let push_list: Vec<emberwake_battle::forced::Forecast> = pushes.iter().flatten().cloned().collect();
-    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.clock.ms, sel, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list };
+    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.clock.ms, sel, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list, hold: hold.as_ref() };
     let board_hover = match view {
         View::Stage => draw_stage(board, &mut ui, cx, &tuning, now),
         View::Flat => {
@@ -3246,6 +3272,10 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             None
         }
     };
+    // ENCOUNTER2 H1: the hold pick over the board while round 1 waits for it
+    if planning && s.needs_stay_pick() {
+        draw_hold_pick(&mut ui, s);
+    }
     // WINDUP1 6.2: the clip each token drew (the agent link's `tokens`)
     note_drawn(&mut g.tokens, s, &mut cx.art, g.clock.ms as u64);
 
@@ -3422,12 +3452,14 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
 
     if g.show_log {
         let r = Rect::new(GRID_X, GRID_Y + 4, GRID_W * TILE, GRID_H * TILE - 8);
-        ui.push("log.panel", "panel", format!("{} lines", s.resolver.log.len()), r, true, true, Some(Action::Step), Vec::new());
+        // ENCOUNTER2-U (decision "RULESET1-A3 loose ends"): the resolver log with the encounter's phase and kill lines
+        let log = s.log_lines(0, 0);
+        ui.push("log.panel", "panel", format!("{} lines", log.len()), r, true, true, Some(Action::Step), Vec::new());
         ui.p.panel(r, rgba(10, 14, 24, 246), BORDER, 3.0);
-        ui.p.text(r.x as f32 + 6.0, r.y as f32 + 3.0, &format!("Combat log ({} entries)", s.resolver.log.len()), TITLE, GOLD);
+        ui.p.text(r.x as f32 + 6.0, r.y as f32 + 3.0, &format!("Combat log ({} entries)", log.len()), TITLE, GOLD);
         let mut wrapped: Vec<(String, Rgba)> = Vec::new();
-        for l in &s.resolver.log {
-            let col = if l.starts_with("[Attack]") { TEXT } else if l.starts_with("[Support]") { GOOD } else if l.contains("Failed") || l.contains("Out of Range") { FOE } else { DIM };
+        for l in &log {
+            let col = if l.starts_with("[Phase]") { GOLD } else if l.starts_with("[Kill]") { FOE } else if l.starts_with("[Attack]") { TEXT } else if l.starts_with("[Support]") { GOOD } else if l.contains("Failed") || l.contains("Out of Range") { FOE } else { DIM };
             for (k, part) in ui.p.wrap(l, SMALL, (r.w - 22) as f32).into_iter().enumerate() {
                 wrapped.push((if k == 0 { part } else { format!("   {part}") }, col));
             }
@@ -3533,7 +3565,7 @@ struct Overlay {
 }
 
 /// RULESET1-U slice 6: the overlay groups as the Settings Battle tab lists them: (id, label, what it shows).
-pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str); 20] = [
+pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str); 22] = [
     ("band", "Reach band", "The selected hero's attack reach around the tile it strikes from (Assault, Maneuver)."),
     ("front", "Maneuver front", "The target's front, where an Engage never stands (Maneuver)."),
     ("valid", "Valid targets", "Rings on the units a click would make the round target."),
@@ -3557,6 +3589,9 @@ pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str); 20] = [
     ("guard", "Held guard", "A blue edge on the card of a unit holding a guard a trigger gave it (it counts as guarding)."),
     // HOOKS1-UI slice 4: push and pull forecasts (HOOKS1 5)
     ("pushes", "Push forecasts", "Where the selected hero's planned pushes and pulls would move their targets, and what they would collide with."),
+    // ENCOUNTER2-U: a hold escape's marks (ENCOUNTER2 H7)
+    ("hold", "Hold tiles", "The tiles a hold escape's holder keeps, with the holder's name on their card."),
+    ("gate", "Gate state", "A hold escape's exits read SHUT (red) until the holder stands on a hold tile, then OPEN (green)."),
 ];
 
 /// RULESET1-U slice 5 (preference "Battle overlays and the clarity pass", user 2026-10-30): every timeline overlay
@@ -3592,14 +3627,17 @@ struct Layers {
     guard: bool,
     /// HOOKS1-UI slice 4: push and pull forecasts (HOOKS1 5).
     pushes: bool,
+    /// ENCOUNTER2-U: a hold escape's tiles and gate (H7).
+    hold: bool,
+    gate: bool,
 }
 
 impl Layers {
     /// The group ids, as the settings key names them (`OVERLAY_GROUPS`' order).
-    const IDS: [&'static str; 20] = {
-        let mut ids = [""; 20];
+    const IDS: [&'static str; 22] = {
+        let mut ids = [""; 22];
         let mut k = 0;
-        while k < 20 {
+        while k < 22 {
             ids[k] = OVERLAY_GROUPS[k].0;
             k += 1;
         }
@@ -3630,12 +3668,14 @@ impl Layers {
             meters: on("meters"),
             guard: on("guard"),
             pushes: on("pushes"),
+            hold: on("hold"),
+            gate: on("gate"),
         }
     }
 
     /// The flags by group id (the agent link's state).
     fn json(&self) -> Value {
-        let v = [self.band, self.front, self.valid, self.veils, self.moves, self.target, self.facings, self.walks, self.glyphs, self.badges, self.poise, self.breaks, self.parts, self.forecasts, self.summary, self.hazards, self.arena, self.meters, self.guard, self.pushes];
+        let v = [self.band, self.front, self.valid, self.veils, self.moves, self.target, self.facings, self.walks, self.glyphs, self.badges, self.poise, self.breaks, self.parts, self.forecasts, self.summary, self.hazards, self.arena, self.meters, self.guard, self.pushes, self.hold, self.gate];
         Value::Object(Self::IDS.iter().zip(v).map(|(k, b)| (k.to_string(), json!(b))).collect())
     }
 }
@@ -3868,6 +3908,116 @@ fn draw_hook_marks(p: &mut Painter, m: &HookMarks, geo: &Geom) {
 fn arena_badge(p: &mut Painter, r: Rect) {
     let b = Rect::new(r.x + r.w - 7, r.y + 1, 6, 6);
     p.panel(b, ARENA, rgba(60, 26, 6, 255), 1.0);
+}
+
+// ---- ENCOUNTER2-U: the hold escape's pick, tiles and gate (ENCOUNTER2 H1, H3, H7) -----------------------------------
+
+/// A hold escape's marks as drawn: the tiles (layer `hold`), the gate's state (layer `gate`), the holder and the label.
+struct HoldMarks {
+    tiles: Vec<V2>,
+    label: String,
+    holder: Option<usize>,
+    open: bool,
+    show_tiles: bool,
+    show_gate: bool,
+}
+
+impl HoldMarks {
+    /// The session's hold gate (`World::hold`, the kit's `HoldGate`); None without a hold escape (classic and every other
+    /// fight draw as before).
+    fn of(s: &Session, layers: &Layers) -> Option<HoldMarks> {
+        let gate = s.w.hold.as_ref()?;
+        Some(HoldMarks { tiles: gate.tiles.clone(), label: gate.label.clone(), holder: gate.holder, open: gate.is_open(&s.w), show_tiles: layers.hold, show_gate: layers.gate })
+    }
+
+    /// A tile's hover lines: a hold tile names its holder; an exit tells the gate's state (`HoldGate::note`'s words).
+    fn tile_tip(&self, w: &World, c: V2) -> Tip {
+        let mut tip: Tip = Vec::new();
+        if self.show_tiles && self.tiles.contains(&c) {
+            let mut head = self.label.chars();
+            tip.push((head.next().map(|f| f.to_uppercase().collect::<String>() + head.as_str()).unwrap_or_default(), GOLD));
+            tip.push((
+                match self.holder {
+                    Some(h) => format!("{} holds it: the gate is open while they stand here, and they stay behind when the others escape.", w.units[h].name),
+                    None => "Pick who holds it before round 1.".into(),
+                },
+                TEXT,
+            ));
+        }
+        if self.show_gate && w.grid.is_exit(c) {
+            let note = w.hold.as_ref().map(|g| g.note(w)).unwrap_or_default();
+            tip.push(if self.open { ("The gate is open.".into(), GOOD) } else if note.is_empty() { (format!("The gate is shut until someone holds {}.", self.label), FOE) } else { (note, FOE) });
+        }
+        tip
+    }
+}
+
+/// "Kaelen holds the winch." (ENCOUNTER2 H7's objective line; "" before the pick or without a hold escape).
+fn hold_line(s: &Session) -> String {
+    match s.w.hold.as_ref().and_then(|g| g.holder.map(|h| (h, &g.label))) {
+        Some((h, label)) => format!("{} holds {label}.", s.w.units[h].name),
+        None => String::new(),
+    }
+}
+
+/// The heroes a hold pick offers (H1: the hold escape's heroes on the field, party order).
+fn hold_pick_ids(s: &Session) -> Vec<usize> {
+    s.w.hold.as_ref().map(|g| g.heroes.iter().copied().filter(|&c| s.w.has(c)).collect()).unwrap_or_default()
+}
+
+/// An exit's sign: EXIT (green) without a hold escape or with the `gate` layer off; else SHUT (red) or OPEN (green).
+fn exit_sign(hold: Option<&HoldMarks>) -> (&'static str, Rgba, Rgba) {
+    let green = (rgba(70, 200, 90, 230), rgba(200, 255, 210, 255));
+    match hold.filter(|h| h.show_gate) {
+        Some(h) if !h.open => ("SHUT", rgba(200, 60, 56, 235), rgba(255, 210, 200, 255)),
+        Some(_) => ("OPEN", green.0, green.1),
+        None => ("EXIT", green.0, green.1),
+    }
+}
+
+/// H7: each hold tile with a gold objective ring and a plate with the label's first letter ("W" for the winch).
+fn draw_hold_tiles(p: &mut Painter, h: &HoldMarks, geo: &Geom) {
+    if !h.show_tiles {
+        return;
+    }
+    let letter: String = h.label.trim_start_matches("the ").chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_default();
+    for c in &h.tiles {
+        let r = match geo.view {
+            View::Stage => inset2(geo.cell_rect(*c), 1, 1),
+            View::Flat => geo.cell_rect(*c).inset(1),
+        };
+        plate(p, r, rgba(244, 198, 84, 36), rgba(244, 198, 84, 230));
+        plate(p, r.inset(2), rgba(0, 0, 0, 0), rgba(244, 198, 84, 120));
+        if !letter.is_empty() {
+            let b = Rect::new(r.x + 2, r.y + 2, 9, 9);
+            p.panel(b, rgba(60, 44, 12, 235), GOLD, 2.0);
+            p.text_center(b.x as f32 + 4.5, b.y as f32 + (b.h as f32 - p.line_h(SMALL)) / 2.0, &letter, SMALL, GOLD);
+        }
+    }
+}
+
+/// H1: "Who holds the winch?" with a button per hero on the field (the host's `stay_pick`); over the board's lower edge
+/// so the board and the hold tiles stay in view.
+fn draw_hold_pick(ui: &mut Ui<Action>, s: &Session) {
+    let Some(gate) = s.w.hold.as_ref() else { return };
+    let ids = hold_pick_ids(s);
+    let title = format!("Who holds {}?", gate.label);
+    let labels: Vec<String> = ids.iter().map(|&c| format!("{}  HP {}/{}", s.w.units[c].name, s.w.units[c].hp, s.w.units[c].max_hp)).collect();
+    let widths: Vec<i32> = labels.iter().map(|l| (ui.p.text_w(l, BODY) + 12.0).ceil() as i32).collect();
+    let inner = widths.iter().sum::<i32>() + 4 * (ids.len() as i32 - 1).max(0);
+    let w = (inner.max((ui.p.text_w(&title, TITLE) + 12.0).ceil() as i32) + 12).min(GRID_W * TILE - 8);
+    let h = 18 + ui.p.line_h(TITLE).ceil() as i32;
+    let r = Rect::new(GRID_X + (GRID_W * TILE - w) / 2, GRID_Y + GRID_H * TILE - h - 6, w, h);
+    ui.p.panel(r, rgba(14, 18, 30, 240), GOLD, RADIUS);
+    ui.p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + 3.0, &title, TITLE, GOLD);
+    ui.push("hold.pick", "panel", title.clone(), r, true, false, None, vec![(title.clone(), GOLD), (format!("The holder keeps {} so the gate stays open; they stay behind when the others escape.", gate.label), TEXT)]);
+    let mut x = r.x + (r.w - inner) / 2;
+    let y = r.y + r.h - 16;
+    for ((c, label), bw) in ids.iter().zip(&labels).zip(&widths) {
+        let tip = vec![(format!("{} holds {}", s.w.units[*c].name, gate.label), GOLD), ("They walk to it and guard it; the gate is open while they stand on it.".into(), TEXT)];
+        ui.button_full(&format!("hold.pick.{c}"), Rect::new(x, y, *bw, 14), label, Action::StayPick(*c), true, false, BODY, tip);
+        x += bw + 4;
+    }
 }
 
 // ---- HOOKS1-UI slice 5: the intel panel fits its lines ------------------------------------------------------------
@@ -4580,6 +4730,8 @@ struct Board<'a> {
     classes: &'a [String],
     /// HOOKS1-UI slice 4: the selected hero's push and pull forecasts (planning, layer `pushes`).
     pushes: &'a [emberwake_battle::forced::Forecast],
+    /// ENCOUNTER2-U: a hold escape's tiles and gate (None without one).
+    hold: Option<&'a HoldMarks>,
 }
 
 /// An action clip a token wants starts with the first candidate its body has (SPRITE1-U), once the clock reaches its
@@ -4714,7 +4866,7 @@ fn scaled(a: u8, k: u8) -> u8 {
 /// the `common` tiles, tree tiles flat, tokens `flat_token_px` on a filled foot ellipse at `foot_alpha`, arrows centre
 /// to centre over the units, the cell widgets.
 fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
     let w = &s.w;
     let panel = Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4);
     ui.p.panel(panel, rgb(8, 10, 16), BORDER, RADIUS);
@@ -4734,19 +4886,25 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
                 None => ui.p.fill(r, stage::terrain_color(tid)),
             }
             if w.grid.is_exit(c) {
-                ui.p.panel(r.inset(7), rgba(70, 200, 90, 220), rgba(200, 255, 210, 255), 2.0);
-                ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, "EXIT", SMALL, BG);
+                // ENCOUNTER2 H7: a hold escape's exit reads SHUT or OPEN (layer `gate`)
+                let (word, fill, edge) = exit_sign(hold);
+                ui.p.panel(r.inset(7), fill, edge, 2.0);
+                ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, word, SMALL, BG);
             }
             if planning && sel.is_some() && ui.hover(r) && !popup {
                 ui.p.panel(r.inset(1), rgba(255, 255, 255, 30), rgba(255, 255, 255, 160), 1.5);
             }
             let mut tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), GOOD), ("A unit that steps here leaves the battle.".into(), TEXT)] } else { Vec::new() };
             tip.extend(marks.tile_tip(c));
+            tip.extend(hold.map(|h| h.tile_tip(w, c)).unwrap_or_default());
             ui.push(format!("tile.{gx}.{gy}"), "tile", tid, r, planning, false, if w.occupant(c).is_none() { Some(Action::TileClick(c)) } else { None }, tip);
         }
     }
     // HOOKS1-UI slice 1: the ground hazards and the arena's struck cells, under the round overlays
     draw_hook_marks(&mut ui.p, marks, &Geom::new(View::Flat, tuning));
+    if let Some(h) = hold {
+        draw_hold_tiles(&mut ui.p, h, &Geom::new(View::Flat, tuning));
+    }
     let center = |c: V2| ((GRID_X + c.x * TILE + TILE / 2) as f32, (GRID_Y + c.y * TILE + TILE / 2) as f32);
     if let Some(o) = overlay {
         // RULESET1-U slice 3: the round intent's overlays on the ground (they draw the hero's moves); slice 5: a revealed
@@ -4988,7 +5146,7 @@ fn with_alpha(c: Rgba, a: u8) -> Rgba {
 /// covers a unit, the top: HP bars, chips, the exit sign, floats). Cell widgets first, then the units' in feet order
 /// (front-most last, so it takes the click). Returns the unit the mouse is over on the board.
 fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
     let w = &s.w;
     let geo = Geom::new(View::Stage, tuning);
     let tp = geo.token_px;
@@ -5077,6 +5235,9 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
             Pass::Markers => {
                 // HOOKS1-UI slice 1: the ground hazards and the arena's struck cells, under the hover and the tells
                 draw_hook_marks(&mut ui.p, marks, &geo);
+                if let Some(h) = hold {
+                    draw_hold_tiles(&mut ui.p, h, &geo);
+                }
                 if let Some(c) = hover_cell {
                     plate(&mut ui.p, geo.cell_rect(c), rgba(255, 255, 255, 30), rgba(255, 255, 255, 160));
                 }
@@ -5107,8 +5268,10 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                         }
                     }
                 }
+                // ENCOUNTER2 H7: a hold escape's shut gate plates its exits red (layer `gate`)
+                let (_, fill, edge) = exit_sign(hold);
                 for c in w.grid.exits.iter().filter(|c| w.grid.is_valid(**c)) {
-                    plate(&mut ui.p, inset2(geo.cell_rect(*c), 3, 2), rgba(70, 200, 90, 90), rgba(200, 255, 210, 200));
+                    plate(&mut ui.p, inset2(geo.cell_rect(*c), 3, 2), with_alpha(fill, 90), with_alpha(edge, 200));
                 }
             }
             Pass::Arrows => {
@@ -5262,8 +5425,10 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                     let r = geo.cell_rect(*c);
                     let (cx_, cy_) = (r.x + r.w / 2, r.y + r.h / 2);
                     let sign = Rect::new(cx_ - 11, cy_ - 2 - 5, 22, 9);
-                    ui.p.panel(sign, rgba(70, 200, 90, 230), rgba(200, 255, 210, 255), 2.0);
-                    ui.p.text_center(cx_ as f32, sign.y as f32 + (sign.h as f32 - ui.p.line_h(SMALL)) / 2.0, "EXIT", SMALL, BG);
+                    // ENCOUNTER2 H7: a hold escape's exit reads SHUT or OPEN (layer `gate`)
+                    let (word, fill, edge) = exit_sign(hold);
+                    ui.p.panel(sign, fill, edge, 2.0);
+                    ui.p.text_center(cx_ as f32, sign.y as f32 + (sign.h as f32 - ui.p.line_h(SMALL)) / 2.0, word, SMALL, BG);
                 }
                 for f in floats {
                     let Some(pos) = w.grid.pos(f.unit) else { continue };
@@ -5296,6 +5461,7 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
             let c = V2::new(gx, gy);
             let mut tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), GOOD), ("A unit that steps here leaves the battle.".into(), TEXT)] } else { Vec::new() };
             tip.extend(marks.tile_tip(c));
+            tip.extend(hold.map(|h| h.tile_tip(w, c)).unwrap_or_default());
             ui.push(format!("tile.{gx}.{gy}"), "tile", w.grid.terrain_id(c), geo.cell_rect(c), planning, false, if w.occupant(c).is_none() { Some(Action::TileClick(c)) } else { None }, tip);
         }
     }
@@ -8658,11 +8824,18 @@ mod hooks_audit_tests {
         let recs = crate::hud::hud_tests::frame(b, cx, g, scale);
         let boxes: Vec<(String, f32, f32, f32, f32)> = b.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
         let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+        // spills: only out of the widgets the HOOKS1-UI marks live in or add lines to (the strip, the party and hostile
+        // cards, the board tiles, the intel panel); other screens' widgets have their own audits
         let ours = |e: &Value| e["widget"].as_str().is_some_and(|w| ["strip.", "party.", "foe.", "tile.", "intel."].iter().any(|p| w.starts_with(p)));
         let mut out: Vec<Value> = v["spill"].as_array().unwrap().iter().filter(|e| ours(e)).cloned().collect();
-        // cut by design and not HOOKS1-UI's (TEXTFIT1, RULESET1-U): a strip span's label (its block row, y under 26) and
-        // the bar's ruleset chip (y 322 and below)
-        let by_design = |e: &Value| e["at"][1].as_f64().is_some_and(|y| !(26.0..322.0).contains(&y));
+        // cut by design and not HOOKS1-UI's (TEXTFIT1, RULESET1-U): a strip span's label (`strip.block<n>`), the bar's
+        // status line (`bar.status`) and its ruleset chip (`bar.chip`); the cut text's widget is the smallest box
+        // holding its start
+        let widget_at = |x: f32, y: f32| boxes.iter().filter(|b| x >= b.1 && y >= b.2 && x < b.1 + b.3 && y < b.2 + b.4).min_by(|a, b| (a.3 * a.4).total_cmp(&(b.3 * b.4))).map(|b| b.0.as_str());
+        let by_design = |e: &Value| {
+            let (x, y) = (e["at"][0].as_f64().unwrap_or(-1.0) as f32 + 0.5, e["at"][1].as_f64().unwrap_or(-1.0) as f32 + 0.5);
+            widget_at(x, y).is_some_and(|id| id == "bar.status" || id == "bar.chip" || id.starts_with("strip.block"))
+        };
         out.extend(v["cut"].as_array().unwrap().iter().filter(|e| !by_design(e)).cloned());
         out.extend(v["edge"].as_array().unwrap().iter().cloned());
         out
@@ -8735,5 +8908,154 @@ mod hooks_audit_tests {
         let tight = intel_parts(&mut p, &lines, 4.0 * INTEL_LINE + INTEL_HEAD);
         assert_eq!(tight.last().unwrap().0, INTEL_MORE);
         assert!(height(&tight) <= 4.0 * INTEL_LINE + INTEL_HEAD, "{tight:?}");
+    }
+}
+
+/// ENCOUNTER2-U (ENCOUNTER2 H1, H3, H7, S2): the hold escape's screen on the kit sample `kit_winch_escape` (a catalog
+/// encounter). Every expectation is the kit's (`HoldGate`, `Session::needs_stay_pick`, `gate_note`, `final_outcome`);
+/// classic and every fight without a hold escape draw as before.
+#[cfg(test)]
+mod hold_screen_tests {
+    use super::*;
+
+    const ENC: &str = "kit_winch_escape";
+
+    fn screen(encounter: &str) -> (Cx, Gfx, BattleScreen) {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        cx.settings.v["battle_view"] = json!("flat");
+        let b = BattleScreen::arena_with(&cx, None, encounter, None, "", false);
+        assert!(b.host.session.is_some(), "the battle starts: {}", b.message);
+        (cx, crate::hud::hud_tests::gfx(), b)
+    }
+
+    fn s(b: &BattleScreen) -> &Session {
+        b.host.session.as_ref().unwrap()
+    }
+
+    fn widget<'a>(b: &'a BattleScreen, id: &str) -> Option<&'a Widget<Action>> {
+        b.w.iter().find(|x| x.id == id)
+    }
+
+    fn tip_text(b: &BattleScreen, id: &str) -> String {
+        b.w.iter().filter(|x| x.id == id).flat_map(|x| x.tip.iter().map(|(t, _)| t.clone())).collect::<Vec<_>>().join(" | ")
+    }
+
+    fn exit_tile(w: &World) -> V2 {
+        *w.grid.exits.iter().find(|c| w.grid.is_valid(**c)).expect("an exit")
+    }
+
+    /// H1: before the pick the panel offers each hero on the field, Confirm waits, the objective line asks for the pick
+    /// and the gate is shut; a pick names the holder in the objective line and the hold tiles' cards, frees Confirm and
+    /// closes the panel. H3: the hero panel shows the kit's gate note while the gate is shut.
+    #[test]
+    fn the_pick_comes_first_then_names_the_holder() {
+        let (mut cx, mut g, mut b) = screen(ENC);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let gate = s(&b).w.hold.clone().expect("a hold escape");
+        assert!(s(&b).needs_stay_pick());
+        let offered: Vec<usize> = gate.heroes.iter().copied().filter(|&c| s(&b).w.has(c)).collect();
+        for &c in &offered {
+            assert!(widget(&b, &format!("hold.pick.{c}")).is_some_and(|x| x.enabled), "hero {c} offered");
+        }
+        assert!(!widget(&b, "strip.confirm").unwrap().enabled, "Confirm waits for the pick");
+        assert!(b.message.contains(&format!("Pick who holds {} first.", gate.label)), "{}", b.message);
+        let exit = exit_tile(&s(&b).w);
+        assert!(tip_text(&b, &format!("tile.{}.{}", exit.x, exit.y)).contains("shut"));
+        let st = b.state(&cx);
+        assert_eq!((st["hold"]["needs_pick"].clone(), st["hold"]["open"].clone()), (json!(true), json!(false)));
+
+        let pick = offered[0];
+        b.run(&mut cx, Action::StayPick(pick));
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_eq!(s(&b).w.hold.as_ref().unwrap().holder, Some(pick));
+        assert!(b.message.contains(&hold_line(s(&b))) && !hold_line(s(&b)).is_empty(), "{}", b.message);
+        assert!(widget(&b, &format!("hold.pick.{pick}")).is_none() && widget(&b, "hold.pick").is_none());
+        assert!(widget(&b, "strip.confirm").unwrap().enabled);
+        let tile = gate.tiles[0];
+        assert!(tip_text(&b, &format!("tile.{}.{}", tile.x, tile.y)).contains(&format!("{} holds it", s(&b).w.units[pick].name)));
+        let note = s(&b).gate_note();
+        b.selected = Some(pick);
+        let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
+        let words: String = recs.iter().filter(|r| r.x < 126.0).map(|r| r.text.clone()).collect::<Vec<_>>().join(" ");
+        assert_eq!(words.contains("The gate is shut"), !note.is_empty(), "the hero panel shows the kit's note {note:?}: {words}");
+        assert_eq!(b.state(&cx)["hold"]["holder"], json!(pick));
+    }
+
+    /// H2, H7: with the holder on a hold tile the gate opens (the exit's card says so and the sign reads OPEN); with the
+    /// `hold` and `gate` layers off the cards and the frame lose the marks.
+    #[test]
+    fn the_gate_follows_the_holder_and_the_layers_switch_it() {
+        let (mut cx, mut g, mut b) = screen(ENC);
+        let pick = hold_pick_ids(s(&b))[0];
+        b.run(&mut cx, Action::StayPick(pick));
+        let tile = s(&b).w.hold.as_ref().unwrap().tiles[0];
+        {
+            let w = &mut b.host.session.as_mut().unwrap().w;
+            if let Some(o) = w.occupant(tile) {
+                w.grid.positions.swap(o, pick);
+            } else {
+                w.grid.positions[pick] = Some(tile);
+            }
+        }
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let w = &s(&b).w;
+        assert!(w.hold.as_ref().unwrap().is_open(w), "the holder on its tile opens the gate");
+        let exit = exit_tile(w);
+        assert!(tip_text(&b, &format!("tile.{}.{}", exit.x, exit.y)).contains("The gate is open."));
+        assert_eq!(exit_sign(HoldMarks::of(s(&b), &Layers::of(&Value::Null)).as_ref()).0, "OPEN");
+        let on = g.canvas.px.clone();
+        cx.settings.v["battle_overlays"] = json!({"hold": false, "gate": false});
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_ne!(on, g.canvas.px);
+        assert!(!tip_text(&b, &format!("tile.{}.{}", exit.x, exit.y)).contains("gate"));
+        assert!(!tip_text(&b, &format!("tile.{}.{}", tile.x, tile.y)).contains("holds it"));
+        assert_eq!(exit_sign(HoldMarks::of(s(&b), &Layers::of(&cx.settings.v["battle_overlays"])).as_ref()).0, "EXIT");
+    }
+
+    /// S2: the screen's outcome is the session's `final_outcome`: after the last round a `timeout_outcome` of lost is
+    /// honoured (the old screen rule read fled).
+    #[test]
+    fn the_outcome_is_the_sessions_final_outcome() {
+        let (_cx, _g, mut b) = screen(ENC);
+        assert_eq!(b.outcome(), s(&b).final_outcome());
+        let sess = b.host.session.as_mut().unwrap();
+        sess.timeout_outcome = "lost".into();
+        sess.phase = Phase::Replay;
+        sess.current_round = sess.def.max_rounds;
+        assert!(!s(&b).can_advance_round());
+        assert_eq!((b.outcome(), s(&b).final_outcome()), ("lost".to_string(), "lost".to_string()));
+    }
+
+    /// Classic and a fight without a hold escape: no pick panel, no `hold` key, exits read EXIT.
+    #[test]
+    fn without_a_hold_escape_nothing_changes() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let encounter = cx.data.cat.encounters.keys().find(|k| k.as_str() != ENC).cloned().unwrap();
+        cx.settings.v["battle_view"] = json!("flat");
+        let mut b = BattleScreen::arena_with(&cx, None, &encounter, None, "", false);
+        let mut g = crate::hud::hud_tests::gfx();
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        if s(&b).w.hold.is_some() {
+            return;
+        }
+        assert!(widget(&b, "hold.pick").is_none() && b.state(&cx).get("hold").is_none());
+        assert!(HoldMarks::of(s(&b), &Layers::of(&Value::Null)).is_none());
+        assert_eq!(exit_sign(None).0, "EXIT");
+    }
+
+    /// Decision "RULESET1-A3 loose ends": the battle screen's combat log panel reads the kit's `Session::log_lines`, so
+    /// an encounter line (a phase's `line`, a phase kill; the kit test `phase_kill.rs` says them) shows in it where it
+    /// was said, while the resolver log stays as it is.
+    #[test]
+    fn phase_lines_reach_the_combat_log_panel() {
+        let (mut cx, mut g, mut b) = screen(ENC);
+        let line = "[Phase] Test: The first captive falls.".to_string();
+        b.host.session.as_mut().unwrap().encounter_lines.push((0, line.clone()));
+        b.show_log = true;
+        let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
+        assert!(recs.iter().any(|r| r.text.starts_with("[Phase] Test")), "the panel draws the phase line");
+        assert!(widget(&b, "log.panel").is_some_and(|x| x.text == format!("{} lines", s(&b).resolver.log.len() + 1)));
+        assert!(!s(&b).resolver.log.contains(&line));
     }
 }

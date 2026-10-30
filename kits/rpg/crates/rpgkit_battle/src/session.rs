@@ -257,6 +257,11 @@ pub struct Session {
     pub kill_past_unkillable: bool,
     /// S1: how many of `w.spared` have their log cell.
     spared_logged: usize,
+    /// ENCOUNTER2-U (decision "RULESET1-A3 loose ends"): the encounter's own lines for the combat log, each with the
+    /// length of the resolver log when it was said: a phase's `line` ("[Phase] <phase>: <line>") and a phase kill
+    /// ("[Kill] <who> fall."). The resolver log itself is untouched (host replies and parity read it); `log_lines`
+    /// merges the two.
+    pub encounter_lines: Vec<(usize, String)>,
     /// Unit -> its hero key (a party member id or a world character), when it has one.
     hero_keys: IndexMap<UnitId, String>,
     unit_keys: IndexMap<UnitId, String>,
@@ -478,6 +483,7 @@ impl Session {
             timeout_outcome,
             kill_past_unkillable: encounter::KILL_OVERRIDES_UNKILLABLE,
             spared_logged: 0,
+            encounter_lines: Vec::new(),
             hero_keys,
             unit_keys,
             units_by_key,
@@ -812,6 +818,9 @@ impl Session {
         }
         let line = p.effects_of("line").last().map(|fx| value::string(fx, "text", "")).unwrap_or_default();
         self.append(crate::log::Entry::event(round, block, &actor, false, &p.name, "Phase", "PHASE", &line, &parts.join(", ")));
+        if !line.is_empty() {
+            self.encounter_lines.push((self.resolver.log.len(), format!("[Phase] {}: {line}", p.name)));
+        }
         self.events.push(format!("{}: {}{}", p.name, line, if parts.is_empty() { String::new() } else { format!(" ({})", parts.join(", ")) }));
         // ENCOUNTER2 P1: kill effects after the phase's own cell, each with its cell (none in classic)
         for fx in p.effects_of(encounter::KILL_EFFECT) {
@@ -863,6 +872,7 @@ impl Session {
         };
         let entry = crate::log::kill_entry(&self.w, &actor, ally, phase_name, &struck, round, block);
         self.events.push(entry.detail.clone());
+        self.encounter_lines.push((self.resolver.log.len(), format!("[Kill] {}", entry.detail)));
         self.append(entry);
         self.log_spared(round, block);
     }
@@ -1471,6 +1481,22 @@ impl Session {
             return self.timeout_outcome.clone();
         }
         String::new()
+    }
+
+    /// ENCOUNTER2-U (decision "RULESET1-A3 loose ends"): the combat log as a reader sees it: the resolver log from line
+    /// `from`, with the encounter's own lines (`encounter_lines`) from entry `lines_from` placed where they were said
+    /// (one said before resolver line `from` comes first). Without encounter lines it is the resolver log exactly.
+    pub fn log_lines(&self, from: usize, lines_from: usize) -> Vec<String> {
+        let mut extra = self.encounter_lines.iter().skip(lines_from).peekable();
+        let mut out = Vec::new();
+        for (i, l) in self.resolver.log.iter().enumerate().skip(from) {
+            while let Some((_, e)) = extra.next_if(|(at, _)| *at <= i) {
+                out.push(e.clone());
+            }
+            out.push(l.clone());
+        }
+        out.extend(extra.map(|(_, e)| e.clone()));
+        out
     }
 
     /// ENCOUNTER2 S3: each hero (party-side units but guests, ally order) and how the battle left it: stayed (held at
