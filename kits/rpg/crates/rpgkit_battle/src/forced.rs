@@ -160,7 +160,6 @@ pub fn resolve(res: &mut Resolver, w: &mut World, idx: usize, windups: &[UnitId]
         CmdKind::Attack { use_offhand, .. } => (None, ranged_unit && !*use_offhand, *use_offhand),
         _ => return,
     };
-    let tiles = (shove.tiles + w.units[src].forced_traits().bonus_tiles).min(MAX_TILES);
     let collide = Collide { attacker: Some(src), mult: shove.collide_mult, ranged, offhand, flat: 0, stagger: shove.collide_stagger, sure_break: shove.collide_break, blocks: res.scheduled[idx].command.block_cost };
     let mut targets: Vec<UnitId> = Vec::new();
     for (t, _) in &res.scheduled[idx].command.hits {
@@ -173,24 +172,32 @@ pub fn resolve(res: &mut Resolver, w: &mut World, idx: usize, windups: &[UnitId]
         if t == src || !w.has(t) {
             continue;
         }
-        let applies = match shove.when {
-            When::Always => true,
-            When::Moved => moved_this_round(&res.scheduled, t),
-            When::Windup => windups.contains(&t),
-        };
-        if !applies {
-            continue;
-        }
-        let at = w.pos(t);
-        let origin = match aim {
-            Some(a) if shove.from_center && at != a => a,
-            _ => src_pos,
-        };
-        let dir = direction(w, src, origin, at, shove.pull);
-        let toward = shove.pull.then_some(origin);
+        let Some((dir, tiles, toward)) = aim_at(w, src, src_pos, &shove, aim, w.pos(t), moved_this_round(&res.scheduled, t), windups.contains(&t)) else { continue };
         out.push(shove_unit(res, w, t, Some(src), dir, tiles, toward, shove.stop_moves, &collide, block));
     }
     res.scheduled[idx].command.pushes = out;
+}
+
+/// FM1, FM2, FM5: how `src`'s forced move `shove` (striking from `src_pos`; `aim`: an area's aim cell) acts on the unit
+/// at `at`: its step direction, its tiles (with `src`'s bonus tiles, capped) and a pull's origin; None when FM1's `when`
+/// does not hold (`moved`: the unit moved this round; `windup`: it was in windup at the impact). `resolve` and
+/// `forecast` share it, so a forecast reads the same rule the hit lands by.
+#[allow(clippy::too_many_arguments)]
+fn aim_at(w: &World, src: UnitId, src_pos: V2, shove: &Shove, aim: Option<V2>, at: V2, moved: bool, windup: bool) -> Option<(V2, i32, Option<V2>)> {
+    let applies = match shove.when {
+        When::Always => true,
+        When::Moved => moved,
+        When::Windup => windup,
+    };
+    if !applies {
+        return None;
+    }
+    let tiles = (shove.tiles + w.units[src].forced_traits().bonus_tiles).min(MAX_TILES);
+    let origin = match aim {
+        Some(a) if shove.from_center && at != a => a,
+        _ => src_pos,
+    };
+    Some((direction(w, src, origin, at, shove.pull), tiles, shove.pull.then_some(origin)))
 }
 
 /// FM1 `when` moved: a move entry of `t` landed this round (a Walk that moved at least a tile, a Disengage that
@@ -237,36 +244,16 @@ pub fn direction(w: &World, by: UnitId, origin: V2, at: V2, pull: bool) -> V2 {
 pub fn shove_unit(res: &mut Resolver, w: &mut World, t: UnitId, by: Option<UnitId>, dir: V2, tiles: i32, toward: Option<V2>, stop: bool, collide: &Collide, block: i32) -> Moved {
     let from = w.grid.pos(t).unwrap_or(crate::grid::NO_CELL);
     let mut m = Moved { unit: t, by, pull: toward.is_some(), from, to: from, tiles: 0, held: false, blocked_by: String::new(), blocker: None, hits: Vec::new(), stopped: 0, line: String::new() };
-    let traits = w.units[t].forced_traits();
-    if traits.immune_always || (traits.immune_guarding && crate::trigger::guarding(w, &res.scheduled, t, block)) {
+    if holds_firm(w, &res.scheduled, t, block) {
         m.held = true;
         m.line = format!("[Hold] {} holds firm", w.units[t].name);
         res.log.push(m.line.clone());
         return m;
     }
-    let mut entered = Vec::new();
-    let mut refused = None;
-    if dir != ZERO {
-        for _ in 0..tiles {
-            let here = w.pos(t);
-            if let Some(o) = toward {
-                let gap = o - here;
-                if here.dist(o) <= 1 || gap.x * dir.x + gap.y * dir.y <= 0 {
-                    break;
-                }
-            }
-            let next = here + dir;
-            // FM3: the edge, a tile that is not walkable, an exit (a forced move never withdraws) or an active unit
-            if !w.jump_unit(t, next) {
-                refused = Some(next);
-                break;
-            }
-            entered.push(next);
-            // FM6, HOOKS1 GH6: a trap the unit springs stops the move on its tile (no collision; rule ground_hazards)
-            if crate::ground::springs(w, t, next).is_some() {
-                break;
-            }
-        }
+    let (entered, refused) = steps(w, t, dir, tiles, toward);
+    for c in &entered {
+        let moved = w.jump_unit(t, *c);
+        debug_assert!(moved, "`steps` only enters tiles `jump_unit` takes");
     }
     m.to = w.pos(t);
     m.tiles = entered.len() as i32;
@@ -287,6 +274,111 @@ pub fn shove_unit(res: &mut Resolver, w: &mut World, t: UnitId, by: Option<UnitI
         }
     }
     m
+}
+
+/// FM5: `t` holds firm against a forced move at `block`: immune always, or immune while guarding (8.3) and guarding.
+fn holds_firm(w: &World, sched: &[ScheduledAction], t: UnitId, block: i32) -> bool {
+    let traits = w.units[t].forced_traits();
+    traits.immune_always || (traits.immune_guarding && crate::trigger::guarding(w, sched, t, block))
+}
+
+/// FM3: whether `t` can be moved into `cell` now (what `World::jump_unit` takes): `t` on the field, `cell` on the grid,
+/// walkable, not an exit (a forced move never withdraws) and not held by an active unit.
+fn can_enter(w: &World, t: UnitId, cell: V2) -> bool {
+    w.units[t].is_active() && w.grid.positions[t].is_some() && w.grid.is_valid(cell) && w.grid.is_walkable(cell) && !w.grid.is_exit(cell) && !w.is_occupied(cell)
+}
+
+/// FM3, FM6: the step rule of every forced move, on the world as it is (nothing moves): the tiles `t` enters going by
+/// `dir` for up to `tiles` tiles (a pull passes its origin as `toward` and stops at distance 1, or once level with it;
+/// a trap `t` springs, GH6, ends the move on its tile) and the cell of a step refused with tiles left (a collision,
+/// FM4). `shove_unit` moves by it and `preview` reads it, so a forecast cannot drift from the move.
+pub fn steps(w: &World, t: UnitId, dir: V2, tiles: i32, toward: Option<V2>) -> (Vec<V2>, Option<V2>) {
+    let mut entered = Vec::new();
+    if dir == ZERO {
+        return (entered, None);
+    }
+    let mut here = w.pos(t);
+    for _ in 0..tiles {
+        if let Some(o) = toward {
+            let gap = o - here;
+            if here.dist(o) <= 1 || gap.x * dir.x + gap.y * dir.y <= 0 {
+                break;
+            }
+        }
+        let next = here + dir;
+        if !can_enter(w, t, next) {
+            return (entered, Some(next));
+        }
+        entered.push(next);
+        here = next;
+        if crate::ground::trap_at(w, t, next) {
+            break;
+        }
+    }
+    (entered, None)
+}
+
+/// HOOKS1-UI slice 4: a forced move as it would land now, the world unchanged: the unit, its tiles (from where it
+/// stands), where it ends, whether it holds firm (FM5) and what a collision would hit (FM4; "" = none).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Forecast {
+    pub unit: UnitId,
+    pub by: Option<UnitId>,
+    pub pull: bool,
+    /// The one-tile step (FM2; ZERO when it has none).
+    pub dir: V2,
+    pub from: V2,
+    pub path: Vec<V2>,
+    pub to: V2,
+    pub held: bool,
+    pub blocked_by: String,
+    pub blocker: Option<UnitId>,
+}
+
+/// HOOKS1-UI slice 4: `shove_unit`'s move of `t` by `dir` at `block` without making it (no move, no hazard roll, no
+/// collision hit, no log line): the same hold (FM5), steps (FM3, FM6) and obstacle (FM4). Any forced move can be
+/// previewed (a skill's, a trigger's `move`, an arena `push`).
+#[allow(clippy::too_many_arguments)]
+pub fn preview(w: &World, sched: &[ScheduledAction], t: UnitId, by: Option<UnitId>, dir: V2, tiles: i32, toward: Option<V2>, block: i32) -> Forecast {
+    let from = w.grid.pos(t).unwrap_or(crate::grid::NO_CELL);
+    let mut f = Forecast { unit: t, by, pull: toward.is_some(), dir, from, path: Vec::new(), to: from, held: false, blocked_by: String::new(), blocker: None };
+    if holds_firm(w, sched, t, block) {
+        f.held = true;
+        return f;
+    }
+    let (path, refused) = steps(w, t, dir, tiles, toward);
+    f.to = path.last().copied().unwrap_or(from);
+    f.path = path;
+    if let Some(cell) = refused {
+        f.blocked_by = obstacle(w, cell);
+        f.blocker = w.occupant(cell);
+    }
+    f
+}
+
+/// HOOKS1-UI slice 4: the forced moves `src`'s attack `cmd` would make if it struck now from `src_pos` at block
+/// `impact` on each of `targets` (the units it would damage, in hit order): FM1's `when` as the round stands (moved: a
+/// move landed or a Walk or Disengage of the unit is scheduled before the impact; windup: in windup at the impact), then
+/// `aim_at` and `preview`, the rules the hit resolves by. Empty without the rule or a forced move.
+pub fn forecast(w: &World, sched: &[ScheduledAction], src: UnitId, src_pos: V2, cmd: &crate::command::Command, impact: i32, targets: &[UnitId]) -> Vec<Forecast> {
+    let Some(shove) = cmd.forced.filter(|_| on(w)) else { return Vec::new() };
+    let aim = match &cmd.kind {
+        CmdKind::Area { aim, .. } => Some(*aim),
+        CmdKind::Attack { .. } => None,
+        _ => return Vec::new(),
+    };
+    let mut out: Vec<Forecast> = Vec::new();
+    for &t in targets {
+        if t == src || !w.has(t) || out.iter().any(|f| f.unit == t) {
+            continue;
+        }
+        let moves = moved_this_round(sched, t)
+            || sched.iter().any(|a| a.unit == t && !a.cancelled && !a.landed && a.start <= impact && matches!(a.command.kind, CmdKind::Walk { .. } | CmdKind::Disengage { .. }));
+        let windup = poise::in_windup(sched, t, impact);
+        let Some((dir, tiles, toward)) = aim_at(w, src, src_pos, &shove, aim, w.pos(t), moves, windup) else { continue };
+        out.push(preview(w, sched, t, Some(src), dir, tiles, toward, impact));
+    }
+    out
 }
 
 /// FM7: cancels `t`'s Walks of this round that have not landed; how many (also HOOKS1 GH6's `stop_moves`).

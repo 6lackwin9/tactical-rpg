@@ -2542,6 +2542,16 @@ impl Screen<GameCx> for BattleScreen {
         if let Some(sess) = self.host.session.as_ref().filter(|x| emberwake_battle::ground::on(&x.w) || emberwake_battle::arena::on(&x.w)) {
             out["hook_marks"] = HookMarks::of(sess, &Layers::of(&cx.settings.v["battle_overlays"])).json();
         }
+        // HOOKS1-UI slice 4: the selected hero's push forecasts as drawn (key only while forced_move is on)
+        if let Some(sess) = self.host.session.as_ref().filter(|x| emberwake_battle::forced::on(&x.w)) {
+            let layers = Layers::of(&cx.settings.v["battle_overlays"]);
+            let planning = sess.phase == Phase::Planning && !sess.plan_confirmed;
+            let list: Vec<Value> = match self.selected.filter(|u| sess.w.allies.contains(u) && sess.w.units[*u].is_active()) {
+                Some(h) if planning && layers.pushes => push_forecasts(sess, h).into_iter().flatten().map(|f| push_json(&f)).collect(),
+                _ => Vec::new(),
+            };
+            out["push_forecasts"] = Value::Array(list);
+        }
         // HOOKS1-UI slice 3: the meters and held guards as drawn (keys only while their rules are on)
         if let Some(sess) = self.host.session.as_ref() {
             let layers = Layers::of(&cx.settings.v["battle_overlays"]);
@@ -2927,6 +2937,17 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         Some(u) if timeline && layers.forecasts && !s.plan_confirmed && w.units[u].is_active() => hit_forecasts(s, u),
         _ => Vec::new(),
     };
+    // HOOKS1-UI slice 3 review: each span's HP cost from its own skill (the plan entry's) or, once confirmed, its command
+    let costs: Vec<i32> = match sel {
+        Some(u) if s.plan_confirmed => s.resolver.scheduled.iter().filter(|a| a.unit == u).map(|a| a.command.hp_cost).collect(),
+        Some(u) if w.units[u].is_active() => s.plan.compile(w, u).entries.iter().map(|e| emberwake_battle::command::hp_cost_of(w, &w.cat.skills[e.skill])).collect(),
+        _ => Vec::new(),
+    };
+    // HOOKS1-UI slice 4: each planned entry's push and pull forecasts (rule forced_move; planning, layer `pushes`)
+    let pushes: Vec<Vec<emberwake_battle::forced::Forecast>> = match sel {
+        Some(u) if planning && layers.pushes && w.units[u].is_active() => push_forecasts(s, u),
+        _ => Vec::new(),
+    };
     // TEXTFIT1: the controls right of the blocks take their text's width; the blocks give up width first (34 down to
     // 26 each), then the two dropdowns, the wider first (their text cuts).
     let party_label = format!("Party: {}", TACTIC_LABELS[g.party_tactic]);
@@ -2972,7 +2993,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
                     tip.push((format!("Expected damage about {}", e.6), GOLD));
                 }
                 // HOOKS1-UI slice 3 (HC1): the step's HP cost
-                let cost = w.cat.skills.iter().find(|k| k.name == e.2).map(|k| emberwake_battle::command::hp_cost_of(w, k)).unwrap_or(0);
+                let cost = at.and_then(|i| costs.get(i)).copied().unwrap_or(0);
                 if cost > 0 {
                     tip.push((intent_text::hp_cost_text(cost), FOE));
                 }
@@ -2981,6 +3002,9 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
                 }
                 if let Some(gain) = rest.filter(|r| e.3 == "REST" && r.blocks > 0) {
                     tip.push((format!("{} ({} Rest block{}; the AP comes at round end)", rest_text(gain), gain.blocks, if gain.blocks == 1 { "" } else { "s" }), GOOD));
+                }
+                for f in at.and_then(|i| pushes.get(i)).into_iter().flatten() {
+                    tip.push(push_text(w, f));
                 }
                 if let Some(f) = at.and_then(|i| hits.get(i)).and_then(|f| f.as_ref()) {
                     tip.extend(f.lines(w));
@@ -3213,7 +3237,8 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let shift = g.camera.offset_at(g.clock.now());
     // RULESET1-U slice 3: the round intent's board overlays (None in classic)
     let overlay = overlay_of(s, sel, planning);
-    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.clock.ms, sel, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes };
+    let push_list: Vec<emberwake_battle::forced::Forecast> = pushes.iter().flatten().cloned().collect();
+    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.clock.ms, sel, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list };
     let board_hover = match view {
         View::Stage => draw_stage(board, &mut ui, cx, &tuning, now),
         View::Flat => {
@@ -3511,7 +3536,7 @@ struct Overlay {
 }
 
 /// RULESET1-U slice 6: the overlay groups as the Settings Battle tab lists them: (id, label, what it shows).
-pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str); 19] = [
+pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str); 20] = [
     ("band", "Reach band", "The selected hero's attack reach around the tile it strikes from (Assault, Maneuver)."),
     ("front", "Maneuver front", "The target's front, where an Engage never stands (Maneuver)."),
     ("valid", "Valid targets", "Rings on the units a click would make the round target."),
@@ -3533,6 +3558,8 @@ pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str); 19] = [
     // HOOKS1-UI slice 3: unit meters (UM7), held guard (8.3)
     ("meters", "Unit meters", "Each unit's meters as pips or a bar on its card, and the selected hero's under the strip title."),
     ("guard", "Held guard", "A blue edge on the card of a unit holding a guard a trigger gave it (it counts as guarding)."),
+    // HOOKS1-UI slice 4: push and pull forecasts (HOOKS1 5)
+    ("pushes", "Push forecasts", "Where the selected hero's planned pushes and pulls would move their targets, and what they would collide with."),
 ];
 
 /// RULESET1-U slice 5 (preference "Battle overlays and the clarity pass", user 2026-10-30): every timeline overlay
@@ -3566,14 +3593,16 @@ struct Layers {
     /// HOOKS1-UI slice 3: unit meters (UM7), held guard (8.3).
     meters: bool,
     guard: bool,
+    /// HOOKS1-UI slice 4: push and pull forecasts (HOOKS1 5).
+    pushes: bool,
 }
 
 impl Layers {
     /// The group ids, as the settings key names them (`OVERLAY_GROUPS`' order).
-    const IDS: [&'static str; 19] = {
-        let mut ids = [""; 19];
+    const IDS: [&'static str; 20] = {
+        let mut ids = [""; 20];
         let mut k = 0;
-        while k < 19 {
+        while k < 20 {
             ids[k] = OVERLAY_GROUPS[k].0;
             k += 1;
         }
@@ -3603,12 +3632,13 @@ impl Layers {
             arena: on("arena"),
             meters: on("meters"),
             guard: on("guard"),
+            pushes: on("pushes"),
         }
     }
 
     /// The flags by group id (the agent link's state).
     fn json(&self) -> Value {
-        let v = [self.band, self.front, self.valid, self.veils, self.moves, self.target, self.facings, self.walks, self.glyphs, self.badges, self.poise, self.breaks, self.parts, self.forecasts, self.summary, self.hazards, self.arena, self.meters, self.guard];
+        let v = [self.band, self.front, self.valid, self.veils, self.moves, self.target, self.facings, self.walks, self.glyphs, self.badges, self.poise, self.breaks, self.parts, self.forecasts, self.summary, self.hazards, self.arena, self.meters, self.guard, self.pushes];
         Value::Object(Self::IDS.iter().zip(v).map(|(k, b)| (k.to_string(), json!(b))).collect())
     }
 }
@@ -3841,6 +3871,91 @@ fn draw_hook_marks(p: &mut Painter, m: &HookMarks, geo: &Geom) {
 fn arena_badge(p: &mut Painter, r: Rect) {
     let b = Rect::new(r.x + r.w - 7, r.y + 1, 6, 6);
     p.panel(b, ARENA, rgba(60, 26, 6, 255), 1.0);
+}
+
+// ---- HOOKS1-UI slice 4: push and pull forecasts (HOOKS1 5) ---------------------------------------------------------
+
+/// A push forecast's arrow.
+const PUSH: Rgba = rgb(110, 228, 210);
+
+/// HOOKS1-UI slice 4: the forced moves each of hero `h`'s planned entries would make if it struck now (aligned with its
+/// compiled plan): the kit's `forced::forecast` from the tile the entry strikes from at its last block, on the unit
+/// an attack targets or the units an area's cells hold. Empty without the rule forced_move.
+fn push_forecasts(s: &Session, h: usize) -> Vec<Vec<emberwake_battle::forced::Forecast>> {
+    let w = &s.w;
+    if !emberwake_battle::forced::on(w) {
+        return Vec::new();
+    }
+    s.plan
+        .compile(w, h)
+        .entries
+        .iter()
+        .map(|e| {
+            let cmd = e.build_command(w, h);
+            let targets: Vec<usize> = match &cmd.kind {
+                CmdKind::Attack { target, .. } => target.iter().copied().collect(),
+                CmdKind::Area { cells, .. } => cells.iter().filter_map(|c| w.occupant(*c)).collect(),
+                _ => Vec::new(),
+            };
+            emberwake_battle::forced::forecast(w, &s.resolver.scheduled, h, strike_tile(e), &cmd, e.end_block(w), &targets)
+        })
+        .collect()
+}
+
+/// A forecast in words: "Pushes Brawler 2 tiles to (7, 4); then hits the wall", "Brawler holds firm".
+fn push_text(w: &World, f: &emberwake_battle::forced::Forecast) -> (String, Rgba) {
+    let name = &w.units[f.unit].name;
+    if f.held {
+        return (format!("{name} holds firm (no {})", if f.pull { "pull" } else { "push" }), DIM);
+    }
+    let n = f.path.len();
+    let verb = if f.pull { "Pulls" } else { "Pushes" };
+    let mut line = if n == 0 { format!("{verb} {name} into {} at once (collision)", f.blocked_by) } else { format!("{verb} {name} {n} tile{} to {}", if n == 1 { "" } else { "s" }, f.to) };
+    if n > 0 && !f.blocked_by.is_empty() {
+        line += &format!("; then hits {} (collision)", f.blocked_by);
+    }
+    (line, if f.blocked_by.is_empty() { PUSH } else { FOE })
+}
+
+/// The agent link's record of a forecast (tiles as [x, y]).
+fn push_json(f: &emberwake_battle::forced::Forecast) -> Value {
+    let cell = |c: &V2| json!([c.x, c.y]);
+    json!({"unit": f.unit, "pull": f.pull, "from": cell(&f.from), "to": cell(&f.to), "path": f.path.iter().map(cell).collect::<Vec<_>>(), "held": f.held, "blocked_by": f.blocked_by, "blocker": f.blocker})
+}
+
+/// The forecasts over the board: an arrow from the unit along its path with a head at its end; a collision's red cross
+/// at the edge of the refused tile; a hold's HOLD plate.
+fn draw_pushes(p: &mut Painter, list: &[emberwake_battle::forced::Forecast], geo: &Geom) {
+    for f in list {
+        let (fx, fy) = ground_pt(geo, f.from);
+        if f.held {
+            let tw = p.text_w("HOLD", SMALL).ceil() as i32 + 6;
+            let r = Rect::new(fx.round() as i32 - tw / 2, fy.round() as i32 - 5, tw, 9);
+            p.panel(r, rgba(30, 70, 110, 235), HELD, 2.0);
+            p.text_center(fx, r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0, "HOLD", SMALL, TEXT);
+            continue;
+        }
+        let (tx, ty) = ground_pt(geo, f.to);
+        if f.to != f.from {
+            stage::wide_line(p, fx, fy, tx, ty, PUSH, 2.0, 0.0);
+            let (dx, dy) = (tx - fx, ty - fy);
+            let len = (dx * dx + dy * dy).sqrt().max(1.0);
+            let (ux, uy) = (dx / len, dy / len);
+            for s in [1.0f32, -1.0] {
+                stage::wide_line(p, tx, ty, tx - ux * 6.0 - uy * 4.0 * s, ty - uy * 6.0 + ux * 4.0 * s, PUSH, 2.0, 0.0);
+            }
+        }
+        if !f.blocked_by.is_empty() {
+            let (nx, ny) = ground_pt(geo, f.to + f.dir);
+            let (cx, cy) = ((tx + nx) / 2.0, (ty + ny) / 2.0);
+            // a dark-edged cross so it reads over the tokens
+            for (col, wd) in [(rgba(20, 8, 10, 230), 3.0), (FOE, 1.6)] {
+                for s in [1.0f32, -1.0] {
+                    stage::wide_line(p, cx - 6.0, cy - 6.0 * s, cx + 6.0, cy + 6.0 * s, col, wd, 0.0);
+                }
+            }
+        }
+    }
 }
 
 // ---- HOOKS1-UI slice 3: unit meters (UM7), held guard (8.3) ------------------------------------------------------
@@ -4429,6 +4544,8 @@ struct Board<'a> {
     marks: &'a HookMarks,
     /// HOOKS1-UI slice 2: each unit's class name for the hover cards (`class_names`).
     classes: &'a [String],
+    /// HOOKS1-UI slice 4: the selected hero's push and pull forecasts (planning, layer `pushes`).
+    pushes: &'a [emberwake_battle::forced::Forecast],
 }
 
 /// An action clip a token wants starts with the first candidate its body has (SPRITE1-U), once the clock reaches its
@@ -4563,7 +4680,7 @@ fn scaled(a: u8, k: u8) -> u8 {
 /// the `common` tiles, tree tiles flat, tokens `flat_token_px` on a filled foot ellipse at `foot_alpha`, arrows centre
 /// to centre over the units, the cell widgets.
 fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes } = b;
     let w = &s.w;
     let panel = Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4);
     ui.p.panel(panel, rgb(8, 10, 16), BORDER, RADIUS);
@@ -4747,6 +4864,8 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
         let focus = card_hover.or_else(|| w.enemies.iter().copied().find(|&e| w.units[e].is_active() && w.grid.pos(e).is_some_and(|p| ui.hover(cell_rect(p)))));
         draw_focus_moves(&mut ui.p, o, &Geom::new(View::Flat, tuning), &layers, focus);
     }
+    // HOOKS1-UI slice 4: the push forecasts above the tokens (a collision mark sits between two of them)
+    draw_pushes(&mut ui.p, pushes, &Geom::new(View::Flat, tuning));
     // RULESET1-U slice 5 (P7): a BREAK plate over each unit broken this round
     for i in broken_units(w, &layers) {
         let at = w.pos(i);
@@ -4835,7 +4954,7 @@ fn with_alpha(c: Rgba, a: u8) -> Rgba {
 /// covers a unit, the top: HP bars, chips, the exit sign, floats). Cell widgets first, then the units' in feet order
 /// (front-most last, so it takes the click). Returns the unit the mouse is over on the board.
 fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes } = b;
     let w = &s.w;
     let geo = Geom::new(View::Stage, tuning);
     let tp = geo.token_px;
@@ -5069,6 +5188,8 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                 if let Some(o) = overlay {
                     draw_focus_moves(&mut ui.p, o, &geo, &layers, hovered.filter(|u| w.enemies.contains(u)));
                 }
+                // HOOKS1-UI slice 4: the push forecasts above the tokens
+                draw_pushes(&mut ui.p, pushes, &geo);
                 for t in &units {
                     let u = &w.units[t.i];
                     let (fx, fy) = t.foot;
@@ -8355,6 +8476,117 @@ mod meter_guard_tests {
         let st = b.state(&cx);
         assert!(st.get("meters").is_none() && st.get("held_guards").is_none());
         assert!(!b.w.iter().any(|x| x.tip.iter().any(|t| t.0.starts_with("Held guard") || t.0 == intent_text::hp_cost_text(COST))));
+    }
+
+
+    /// The slice 3 review: a timeline battle without unit_meters, triggers and hp_cost shows none of the marks either
+    /// (the kit queries answer nothing without their rules), and its state has no `meters` or `held_guards` key.
+    #[test]
+    fn a_timeline_battle_without_the_rules_shows_none_of_it() {
+        let (mut cx, mut g, mut b) = arena_screen(Some(TIMELINE), "-unit_meters,-triggers,-hp_cost");
+        let (h, f) = hook_up(&mut b);
+        let r = b.send(&cx, json!({"cmd": "round_intent", "unit": h, "intent": "assault", "target": f}));
+        assert_eq!(r["ok"], json!(true), "{r}");
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let w = &s(&b).w;
+        assert!(!meter::on(w) && !emberwake_battle::trigger::on(w));
+        assert!((0..w.units.len()).all(|i| meters_of(w, i, &Layers::of(&Value::Null)).is_empty() && held_guard(s(&b), i).is_none()));
+        assert!(rect(&b, "strip.meters").is_none());
+        assert_eq!(rect(&b, &format!("party.{h}")).unwrap().h, 30);
+        let st = b.state(&cx);
+        assert!(st.get("meters").is_none() && st.get("held_guards").is_none());
+        assert!(!b.w.iter().any(|x| x.tip.iter().any(|t| t.0.starts_with("Held guard") || t.0 == intent_text::hp_cost_text(COST) || t.0.starts_with("Test Phial"))));
+    }
+}
+
+/// HOOKS1-UI slice 4 (HOOKS1 5): the selected hero's push and pull forecasts. A catalog encounter played by the
+/// catalog's timeline row with forced_move switched on; the hero's attack skills get a test push 2 in the battle's
+/// catalog. Every expectation is the kit's `forced::forecast`; the kit test `forced_move.rs` checks that a forecast is
+/// the move the hit makes.
+#[cfg(test)]
+mod push_forecast_tests {
+    use super::*;
+    use emberwake_rules::ruleset::TIMELINE;
+
+    fn arena_screen(rules: &str) -> (Cx, Gfx, BattleScreen) {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        cx.settings.v["battle_view"] = json!("flat");
+        let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+        let b = BattleScreen::arena_with(&cx, None, &encounter, Some(TIMELINE.to_string()), rules, false);
+        assert!(b.host.session.is_some(), "the battle starts: {}", b.message);
+        (cx, crate::hud::hud_tests::gfx(), b)
+    }
+
+    fn s(b: &BattleScreen) -> &Session {
+        b.host.session.as_ref().unwrap()
+    }
+
+    fn tip_text(b: &BattleScreen, id: &str) -> String {
+        b.w.iter().filter(|x| x.id == id).flat_map(|x| x.tip.iter().map(|(t, _)| t.clone())).collect::<Vec<_>>().join(" | ")
+    }
+
+    /// The hero's attack skills push 2 (a test row on the battle's catalog), the hero plans Assault on its first foe.
+    fn plan_push(cx: &Cx, b: &mut BattleScreen) -> (usize, usize) {
+        let h = b.selected.expect("a hero");
+        let sess = b.host.session.as_mut().unwrap();
+        let w = &mut sess.w;
+        let f = w.enemies.iter().copied().find(|&e| w.units[e].is_active() && w.has(e)).expect("a foe");
+        let known = w.units[h].known_skills.clone();
+        let push = emberwake_data::ForcedMove::from_obj(json!({"kind": "push", "tiles": 2, "collide_mult": 0.5}).as_object().unwrap());
+        for sk in std::sync::Arc::make_mut(&mut w.cat).skills.iter_mut().filter(|k| known.contains(&k.id) && k.kind == "ATTACK") {
+            sk.forced_move = push.clone();
+        }
+        let r = b.send(cx, json!({"cmd": "round_intent", "unit": h, "intent": "assault", "target": f}));
+        assert_eq!(r["ok"], json!(true), "{r}");
+        (h, f)
+    }
+
+    /// The forecasts are the kit's for each planned entry; each one shows on its strip card and in the state; the board
+    /// draws them (a frame differs with the layer off, and then no card line and no state entry stays).
+    #[test]
+    fn the_push_forecasts_follow_the_kit() {
+        let (mut cx, mut g, mut b) = arena_screen("+forced_move");
+        let (h, f) = plan_push(&cx, &mut b);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let sess = s(&b);
+        let w = &sess.w;
+        let per_entry = push_forecasts(sess, h);
+        let entries = sess.plan.compile(w, h).entries;
+        assert_eq!(per_entry.len(), entries.len());
+        for (e, got) in entries.iter().zip(&per_entry) {
+            let cmd = e.build_command(w, h);
+            let targets: Vec<usize> = match &cmd.kind {
+                CmdKind::Attack { target, .. } => target.iter().copied().collect(),
+                CmdKind::Area { cells, .. } => cells.iter().filter_map(|c| w.occupant(*c)).collect(),
+                _ => Vec::new(),
+            };
+            assert_eq!(*got, emberwake_battle::forced::forecast(w, &sess.resolver.scheduled, h, strike_tile(e), &cmd, e.end_block(w), &targets));
+        }
+        let all: Vec<&emberwake_battle::forced::Forecast> = per_entry.iter().flatten().collect();
+        assert!(all.iter().any(|x| x.unit == f), "the planned attack on the foe forecasts its push");
+        for x in &all {
+            let line = push_text(w, x).0;
+            assert!((1..=sess.def.total_blocks).any(|blk| tip_text(&b, &format!("strip.block{blk}")).contains(&line)), "{line}");
+        }
+        let st = b.state(&cx);
+        assert_eq!(st["push_forecasts"], Value::Array(all.iter().map(|x| push_json(x)).collect()));
+        let on = g.canvas.px.clone();
+        cx.settings.v["battle_overlays"] = json!({"pushes": false});
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_ne!(on, g.canvas.px, "the arrows draw");
+        assert!(!(1..=s(&b).def.total_blocks).any(|blk| tip_text(&b, &format!("strip.block{blk}")).contains("Pushes ")));
+        assert_eq!(b.state(&cx)["push_forecasts"], json!([]));
+    }
+
+    /// Without the rule nothing is forecast and the state has no `push_forecasts` key.
+    #[test]
+    fn without_the_rule_nothing_is_forecast() {
+        let (mut cx, mut g, mut b) = arena_screen("-forced_move");
+        let (h, _) = plan_push(&cx, &mut b);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert!(push_forecasts(s(&b), h).is_empty());
+        assert!(b.state(&cx).get("push_forecasts").is_none());
     }
 
 }

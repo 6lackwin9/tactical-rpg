@@ -368,3 +368,9 @@ in `docs/archive/TASKS_DONE.md`, the user's rulings the rows in `games/emberwake
   the inspect card lists each with its band; a held guard (8.3) edges its card blue (group `guard`) and reads "Held
   guard 50% through B3" on the inspect card; HC1's cost shows on the strip card and the step popup (the host's `skills`
   reply gains `hp_cost` when a skill costs HP), and the refusal reads "Not enough HP: 9, it costs 10".
+- As built (HOOKS1-UI slice 4): FM3's step rule is one pure function (`forced::steps`) that a forced move resolves
+  by and `forced::preview` / `forced::forecast` read without changing the world (a kit test checks a forecast is the
+  move the hit makes); the battle screen draws the selected hero's planned pushes and pulls (an arrow to the end tile, a
+  cross at a collision, HOLD for a unit that holds firm; overlay group `pushes`) and names them on the strip cards.
+  FM1's `when` moved reads, for a forecast, a move landed this round or a Walk or Disengage of the target scheduled
+  before the impact.

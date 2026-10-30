@@ -505,3 +505,49 @@ fn the_session_logs_and_counts_forced_moves() {
     let m = c.metrics.as_ref().unwrap();
     assert!(m.forced.is_empty() && m.to_json().get("forced").is_none(), "classic keeps the metrics shape");
 }
+
+/// HOOKS1-UI slice 4: `forced::forecast`, read before the hit, is the move the hit then makes (the same steps, end
+/// tile, hold, obstacle and blocker) in every case above: a free push, a wall, a blocking unit, an exit, the arena edge,
+/// a pull, a diagonal tie on the attacker's facing, an immune unit and bonus tiles. Without the rule it forecasts none.
+#[test]
+fn the_forecast_is_the_move_the_hit_makes() {
+    type Prep = Box<dyn Fn(&mut World)>;
+    let s = session(rules());
+    let cases: Vec<(&str, &str, Prep)> = vec![
+        ("free push", "f_shove", Box::new(|_| {})),
+        ("wall", "f_shove", Box::new(|w| set_terrain(w, V2::new(7, 4), WALL))),
+        ("blocker", "f_shove", Box::new(|w| w.grid.positions[FOE_B] = Some(V2::new(7, 4)))),
+        ("exit", "f_shove", Box::new(|w| w.grid.exits = vec![V2::new(7, 4)])),
+        ("edge", "f_heave", Box::new(|w| {
+            w.grid.exits.clear();
+            w.grid.positions[HERO] = Some(V2::new(9, 4));
+            w.grid.positions[FOE] = Some(V2::new(10, 4));
+        })),
+        ("pull", "f_pull", Box::new(|w| w.grid.positions[HERO] = Some(V2::new(2, 4)))),
+        ("tie facing north", "f_shove", Box::new(|w| {
+            w.grid.positions[FOE] = Some(V2::new(5, 3));
+            w.round_states.entry(HERO).or_default().facing = V2::new(0, -1);
+        })),
+        ("immune", "f_shove", Box::new(|w| passive(w, FOE, "f_unyielding"))),
+        ("bonus tiles", "f_shove", Box::new(|w| passive(w, HERO, "f_hypertrophy"))),
+    ];
+    for (name, skill, prep) in cases {
+        let mut w = s.w.clone();
+        prep(&mut w);
+        let mut res = Resolver::new(BLOCKS, 1);
+        let a = book(&mut res, HERO, hit(&w, HERO, FOE, skill), 1);
+        let (cells, hp, log) = (w.grid.positions.clone(), w.units[FOE].hp, res.log.len());
+        let fc = forced::forecast(&w, &res.scheduled, HERO, w.pos(HERO), &res.scheduled[a].command, res.scheduled[a].impact, &[FOE]);
+        assert_eq!((w.grid.positions.clone(), w.units[FOE].hp, res.log.len()), (cells, hp, log), "{name}: the forecast changes nothing");
+        run(&mut w, &mut res, 1, 1);
+        let m = &res.scheduled[a].command.pushes[0];
+        assert_eq!(fc.len(), 1, "{name}");
+        let f = &fc[0];
+        assert_eq!((f.from, f.to, f.path.len() as i32, f.pull, f.held, f.blocked_by.as_str(), f.blocker), (m.from, m.to, m.tiles, m.pull, m.held, m.blocked_by.as_str(), m.blocker), "{name}");
+        assert_eq!(f.to, w.pos(FOE), "{name}");
+    }
+    let off = session(timeline(&[POISE]));
+    let mut res = Resolver::new(BLOCKS, 1);
+    let a = book(&mut res, HERO, hit(&off.w, HERO, FOE, "f_shove"), 1);
+    assert!(forced::forecast(&off.w, &res.scheduled, HERO, off.w.pos(HERO), &res.scheduled[a].command, res.scheduled[a].impact, &[FOE]).is_empty());
+}

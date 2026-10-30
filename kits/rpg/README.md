@@ -88,3 +88,5 @@ HOOKS1-UI slice 1: the meter pip cutoff is max - min in the content check too (a
 HOOKS1-UI slice 2 (decision "HOOKS1-UI slice 1 answers"): a member's class path follows the world being played (`rpgkit_world::progression::build_in(d, m, world, deck)`, `build_played(d, m, world)` with that world's deck rule, `build_with(d, m, world, auto_spend)`, `build_as`; `build` is world-free: the base path, classic); `max_hp_of`, `current_hp`, `rest` and `pin_ranks` take the world; `UnitState::owned_families(d, world)` and `owned_families_anywhere(d)` (save validation); `Data::edit_cat` edits the base catalog and rebuilds the per-world catalogs.
 
 HOOKS1-UI slice 3: the host's `skills` reply gains `hp_cost` (the HP a skill costs, priced from the battle's catalog; only when above 0, so classic replies keep their shape).
+
+HOOKS1-UI slice 4: `forced::steps` (the one step rule of every forced move, pure), `forced::preview` (any forced move as it would land now: path, end tile, hold, obstacle and blocker; the world unchanged) and `forced::forecast` (a planned attack's forced moves on its targets, through the same `aim_at` rule `resolve` uses); `ground::trap_at`.
