@@ -363,3 +363,8 @@ in `docs/archive/TASKS_DONE.md`, the user's rulings the rows in `games/emberwake
   that stored loadout there (the member falls back to the default loadout, with a warning) and drops unowned deck entries; out-of-battle max HP, camp rest and the party screen's readouts build under the played
   world's deck rule; `Data::edit_cat` rebuilds the per-world catalogs; battle hover cards name the class in the
   battle's world (the Arena: the class row's name).
+- As built (HOOKS1-UI slice 3): UM7's meters show as pips (one per step from min to max) or a bar on the party and
+  hostile cards and, for the selected hero, under the strip title (overlay group `meters`; two meters a row at most);
+  the inspect card lists each with its band; a held guard (8.3) edges its card blue (group `guard`) and reads "Held
+  guard 50% through B3" on the inspect card; HC1's cost shows on the strip card and the step popup (the host's `skills`
+  reply gains `hp_cost` when a skill costs HP), and the refusal reads "Not enough HP: 9, it costs 10".

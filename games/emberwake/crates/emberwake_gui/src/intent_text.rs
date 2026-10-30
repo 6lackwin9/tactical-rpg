@@ -107,3 +107,22 @@ pub fn reveal_head(w: &World, i: &Intent, passive_name: impl Fn(&str) -> String)
         "Plan revealed".into()
     })
 }
+
+/// HOOKS1 HC1 (HOOKS1-UI slice 3): a skill's HP cost in words ("" = it costs none).
+pub fn hp_cost_text(cost: i32) -> String {
+    if cost > 0 {
+        format!("Costs {cost} HP at its start (never below 1 HP)")
+    } else {
+        String::new()
+    }
+}
+
+/// HOOKS1 HC1 (HOOKS1-UI slice 3): a planner refusal in words: the HP-cost refusal (`command::hp_cost_problem`,
+/// "HP 9 <= cost 10") reads "Not enough HP: 9, it costs 10"; any other reason as the planner gave it.
+pub fn refusal_text(reason: &str) -> String {
+    let parsed = reason.strip_prefix("HP ").and_then(|r| r.split_once(" <= cost ")).and_then(|(hp, cost)| Some((hp.parse::<i32>().ok()?, cost.parse::<i32>().ok()?)));
+    match parsed {
+        Some((hp, cost)) if emberwake_battle::command::hp_cost_problem(hp, cost) == reason => format!("Not enough HP: {hp}, it costs {cost}"),
+        _ => reason.to_string(),
+    }
+}

@@ -2259,6 +2259,10 @@ impl BattleScreen {
                 tip.push((d.to_string(), TEXT));
             }
             tip.push((format!("{} AP, {} block{}, reach {}-{}", sk["ap"], sk["blocks"], if sk["blocks"] == json!(1) { "" } else { "s" }, sk["reach"][0], sk["reach"][1]), DIM));
+            // HOOKS1-UI slice 3 (HC1): the host's `hp_cost` (only on a skill that costs HP)
+            if let Some(c) = sk["hp_cost"].as_i64().filter(|c| *c > 0) {
+                tip.push((intent_text::hp_cost_text(c as i32), FOE));
+            }
             match what {
                 "foe" => match kind {
                     "ATTACK" if area => steps.push((name, json!({"mode": "area", "skill": id, "cell": target_cell}), tip)),
@@ -2305,6 +2309,9 @@ impl BattleScreen {
                 let last = es.last().map(|e| e["end"].as_i64().unwrap_or(0)).unwrap_or(0);
                 tip.push((format!("Blocks {first}-{last}, AP left after: {}", p["ap_left"]), ALLY));
                 let mut d = format!("{} AP", p["ap"].as_i64().unwrap_or(0));
+                if let Some(c) = skills_hp(&skills, &step) {
+                    d.push_str(&format!("  {c} HP"));
+                }
                 if dmg > 0 {
                     d.push_str(&format!("  ~{dmg} dmg"));
                 }
@@ -2313,7 +2320,8 @@ impl BattleScreen {
                 }
                 d
             } else {
-                let r = p["reason"].as_str().unwrap_or("").to_string();
+                // HOOKS1-UI slice 3: an HP-cost refusal in words
+                let r = intent_text::refusal_text(p["reason"].as_str().unwrap_or(""));
                 tip.push((r.clone(), FOE));
                 r
             };
@@ -2533,6 +2541,19 @@ impl Screen<GameCx> for BattleScreen {
         // HOOKS1-UI slice 1: the hook marks as drawn, while the battle plays by ground or arena hazards (classic: no key)
         if let Some(sess) = self.host.session.as_ref().filter(|x| emberwake_battle::ground::on(&x.w) || emberwake_battle::arena::on(&x.w)) {
             out["hook_marks"] = HookMarks::of(sess, &Layers::of(&cx.settings.v["battle_overlays"])).json();
+        }
+        // HOOKS1-UI slice 3: the meters and held guards as drawn (keys only while their rules are on)
+        if let Some(sess) = self.host.session.as_ref() {
+            let layers = Layers::of(&cx.settings.v["battle_overlays"]);
+            if emberwake_battle::meter::on(&sess.w) {
+                out["meters"] = Value::Array((0..sess.w.units.len()).filter_map(|i| {
+                    let ms = meters_of(&sess.w, i, &layers);
+                    (!ms.is_empty()).then(|| json!({"unit": i, "meters": ms.iter().map(|m| json!({"id": m.id, "value": m.value, "min": m.min, "max": m.max, "show": m.show, "band": m.band})).collect::<Vec<_>>()}))
+                }).collect());
+            }
+            if emberwake_battle::trigger::on(&sess.w) {
+                out["held_guards"] = Value::Array((0..sess.w.units.len()).filter(|_| layers.guard).filter_map(|i| held_guard(sess, i).map(|g| json!({"unit": i, "mitigation": g.mitigation, "last_block": g.last_block}))).collect());
+            }
         }
         // RULESET1-U slice 3: the board overlays under the round intent (classic: no key)
         if let Some(o) = self.host.session.as_ref().and_then(|s| overlay_of(s, self.selected.filter(|u| s.w.allies.contains(u)), s.phase == Phase::Planning && !s.plan_confirmed)) {
@@ -2775,6 +2796,15 @@ fn unit_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], rounds:
     if let Some(st) = emberwake_battle::poise::state(w, i).filter(|st| st.max > 0 && u.is_active()) {
         t.push((format!("Poise {}/{}{}", st.value, st.max, if st.broken { "  BROKEN this round" } else if st.broken_last { "  (broke last round: stagger x repeat)" } else { "" }), if st.broken { FOE } else { POISE }));
     }
+    // HOOKS1-UI slice 3: its meters (UM7; none without the rule, a hidden meter left out) and a held guard (8.3)
+    if u.is_active() {
+        for m in emberwake_battle::meter::shown(w, i) {
+            t.push((meter_text(&m), METER));
+        }
+    }
+    if let Some(g) = held_guard(s, i) {
+        t.push((format!("Held guard {:.0}% through B{}", g.mitigation * 100.0, g.last_block), HELD));
+    }
     // RULESET1-U slice 3 (GD5): a stealthed unit that moved this round is lost to attacks locked on it
     if ri::hidden(w, i) {
         // good news on a hero, a warning on an enemy
@@ -2857,6 +2887,16 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     };
     ui.p.text_fit(8.0, 9.0, &format!("{hero_name} plan"), TITLE, title_w, GOLD);
     ui.push("strip.title", "label", format!("{hero_name} plan"), Rect::new(8, 8, title_w as i32, ui.p.line_h(TITLE).ceil() as i32), true, false, None, Vec::new());
+    // HOOKS1-UI slice 3 (UM7): the selected hero's meters on a thin row under the title
+    if let Some(u) = sel {
+        let ms = meters_of(w, u, &layers);
+        if !ms.is_empty() {
+            let mr = Rect::new(8, 21, 76, 3);
+            meter_row(&mut ui.p, mr, &ms);
+            let tip: Tip = ms.iter().map(|m| (meter_text(m), METER)).collect();
+            ui.push("strip.meters", "meters", tip.iter().map(|t| t.0.clone()).collect::<Vec<_>>().join("; "), Rect::new(mr.x, mr.y - 1, mr.w, mr.h + 2), true, false, None, tip);
+        }
+    }
     let entries: Vec<(i32, i32, String, String, Option<String>, i32, i32)> = match sel {
         Some(u) if s.plan_confirmed => committed(s, u).into_iter().map(|c| (c.0, c.1, c.2, c.3, c.4, 0, 0)).collect(),
         Some(u) if w.units[u].is_active() => s
@@ -2931,6 +2971,11 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
                 if e.6 > 0 {
                     tip.push((format!("Expected damage about {}", e.6), GOLD));
                 }
+                // HOOKS1-UI slice 3 (HC1): the step's HP cost
+                let cost = w.cat.skills.iter().find(|k| k.name == e.2).map(|k| emberwake_battle::command::hp_cost_of(w, k)).unwrap_or(0);
+                if cost > 0 {
+                    tip.push((intent_text::hp_cost_text(cost), FOE));
+                }
                 if let Some(why) = at.and_then(|i| reasons.get(i)).filter(|r| !r.is_empty()) {
                     tip.push((format!("Why: {why}"), DIM));
                 }
@@ -3004,7 +3049,9 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let mut hovered_ally = None;
     for &a in &w.allies {
         let u = &w.units[a];
-        let r = Rect::new(6, y, 116, 30);
+        // HOOKS1-UI slice 3: a meter row grows the card by 4 (UM7)
+        let ms = meters_of(w, a, &layers);
+        let r = Rect::new(6, y, 116, if ms.is_empty() { 30 } else { 34 });
         let is_sel = Some(a) == sel;
         let hover = ui.hover(r);
         if hover {
@@ -3024,9 +3071,13 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         }
         ui.p.text(r.x as f32 + 4.0, r.y as f32 + 18.0, &format!("HP {}/{}", u.hp, u.max_hp), SMALL, TEXT);
         ui.p.text_right(r.x as f32 + r.w as f32 - 4.0, r.y as f32 + 18.0, &format!("AP {}/{}", u.ap, u.max_ap), SMALL, ALLY);
+        meter_row(&mut ui.p, Rect::new(r.x + 4, r.y + 29, 108, 3), &ms);
+        if layers.guard && held_guard(s, a).is_some() {
+            ui.p.panel(r.inset(1), rgba(0, 0, 0, 0), HELD, RADIUS);
+        }
         let tip = unit_tip(s, a, sel, &tells, &rounds, &classes);
         ui.push(format!("party.{a}"), "card", format!("{} HP {}/{} AP {}/{}", u.name, u.hp, u.max_hp, u.ap, u.max_ap), r, true, is_sel, Some(Action::Select(a)), tip);
-        y += 33;
+        y += r.h + 3;
     }
     g.panels.push(("party", Rect::new(2, 28, 124, y - 26)));
     if let Some(h) = sel {
@@ -3198,7 +3249,10 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         // V1: the impact badges on a row of the round's blocks under the line (rule plan_badges, while planning)
         let badges = tell.filter(|_| u.is_active() && emberwake_battle::intent::badges_on(w) && layers.badges);
         let row_h = if badges.is_some() { 6 } else { 0 };
-        let r = Rect::new(right.x + 4, y, 116, if two { 22 + ui.p.line_h(SMALL).ceil() as i32 } else { 22 } + row_h);
+        // HOOKS1-UI slice 3: a meter row grows the card by 5 (UM7)
+        let ms = meters_of(w, e, &layers);
+        let meter_h = if ms.is_empty() { 0 } else { 5 };
+        let r = Rect::new(right.x + 4, y, 116, if two { 22 + ui.p.line_h(SMALL).ceil() as i32 } else { 22 } + row_h + meter_h);
         let on_board = match view {
             View::Stage => board_hover == Some(e),
             View::Flat => w.grid.pos(e).is_some_and(|p| ui.hover(cell_rect(p))),
@@ -3239,6 +3293,10 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             }
         } else {
             ui.p.text(r.x as f32 + 3.0, r.y as f32 + 11.5, if u.is_withdrawn { "Fled" } else { "Down" }, SMALL, DIM);
+        }
+        meter_row(&mut ui.p, Rect::new(r.x + 3, r.y + r.h - row_h - 5, r.w - 6, 3), &ms);
+        if layers.guard && held_guard(s, e).is_some() {
+            ui.p.panel(r.inset(1), rgba(0, 0, 0, 0), HELD, RADIUS);
         }
         let tip = unit_tip(s, e, sel, &tells, &rounds, &classes);
         ui.push(format!("foe.{e}"), "card", format!("{} {}/{} {}", u.name, u.hp, u.max_hp, next), r, true, hover, Some(Action::UnitClick(e)), tip);
@@ -3453,7 +3511,7 @@ struct Overlay {
 }
 
 /// RULESET1-U slice 6: the overlay groups as the Settings Battle tab lists them: (id, label, what it shows).
-pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str); 17] = [
+pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str); 19] = [
     ("band", "Reach band", "The selected hero's attack reach around the tile it strikes from (Assault, Maneuver)."),
     ("front", "Maneuver front", "The target's front, where an Engage never stands (Maneuver)."),
     ("valid", "Valid targets", "Rings on the units a click would make the round target."),
@@ -3472,6 +3530,9 @@ pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str); 17] = [
     // HOOKS1-UI slice 1: the hooks' marks (HOOKS1 GH6, AH3)
     ("hazards", "Ground hazards", "The hazards skills and items leave on tiles, in their tint, with their glyph (a foe's hidden one stays hidden)."),
     ("arena", "Arena telegraph", "The cells an arena hazard strikes this round, and a badge on the strip at the blocks it strikes."),
+    // HOOKS1-UI slice 3: unit meters (UM7), held guard (8.3)
+    ("meters", "Unit meters", "Each unit's meters as pips or a bar on its card, and the selected hero's under the strip title."),
+    ("guard", "Held guard", "A blue edge on the card of a unit holding a guard a trigger gave it (it counts as guarding)."),
 ];
 
 /// RULESET1-U slice 5 (preference "Battle overlays and the clarity pass", user 2026-10-30): every timeline overlay
@@ -3502,14 +3563,17 @@ struct Layers {
     /// HOOKS1-UI slice 1: ground hazards (GH6), the arena telegraph (AH3).
     hazards: bool,
     arena: bool,
+    /// HOOKS1-UI slice 3: unit meters (UM7), held guard (8.3).
+    meters: bool,
+    guard: bool,
 }
 
 impl Layers {
     /// The group ids, as the settings key names them (`OVERLAY_GROUPS`' order).
-    const IDS: [&'static str; 17] = {
-        let mut ids = [""; 17];
+    const IDS: [&'static str; 19] = {
+        let mut ids = [""; 19];
         let mut k = 0;
-        while k < 17 {
+        while k < 19 {
             ids[k] = OVERLAY_GROUPS[k].0;
             k += 1;
         }
@@ -3537,12 +3601,14 @@ impl Layers {
             summary: on("summary"),
             hazards: on("hazards"),
             arena: on("arena"),
+            meters: on("meters"),
+            guard: on("guard"),
         }
     }
 
     /// The flags by group id (the agent link's state).
     fn json(&self) -> Value {
-        let v = [self.band, self.front, self.valid, self.veils, self.moves, self.target, self.facings, self.walks, self.glyphs, self.badges, self.poise, self.breaks, self.parts, self.forecasts, self.summary, self.hazards, self.arena];
+        let v = [self.band, self.front, self.valid, self.veils, self.moves, self.target, self.facings, self.walks, self.glyphs, self.badges, self.poise, self.breaks, self.parts, self.forecasts, self.summary, self.hazards, self.arena, self.meters, self.guard];
         Value::Object(Self::IDS.iter().zip(v).map(|(k, b)| (k.to_string(), json!(b))).collect())
     }
 }
@@ -3775,6 +3841,67 @@ fn draw_hook_marks(p: &mut Painter, m: &HookMarks, geo: &Geom) {
 fn arena_badge(p: &mut Painter, r: Rect) {
     let b = Rect::new(r.x + r.w - 7, r.y + 1, 6, 6);
     p.panel(b, ARENA, rgba(60, 26, 6, 255), 1.0);
+}
+
+// ---- HOOKS1-UI slice 3: unit meters (UM7), held guard (8.3) ------------------------------------------------------
+
+/// A meter's pips and bar.
+const METER: Rgba = rgb(196, 128, 255);
+/// A held guard's card edge and hover line.
+const HELD: Rgba = rgb(110, 190, 255);
+
+/// Unit `i`'s meters while the `meters` layer is on and it is active (`meter::shown`: none without the rule unit_meters,
+/// a `hidden` meter left out).
+fn meters_of(w: &World, i: usize, layers: &Layers) -> Vec<emberwake_battle::meter::Shown> {
+    if !layers.meters || !w.units[i].is_active() {
+        return Vec::new();
+    }
+    emberwake_battle::meter::shown(w, i)
+}
+
+/// "Fury 3/5 (Hot)": a meter's name, value, max and band.
+fn meter_text(m: &emberwake_battle::meter::Shown) -> String {
+    let band = if m.band.is_empty() { String::new() } else { format!(" ({})", m.band) };
+    format!("{} {}/{}{band}", m.name, m.value, m.max)
+}
+
+/// Up to two meters side by side in `r`: pips (one per step from min to max, the value's filled) or a bar.
+fn meter_row(p: &mut Painter, r: Rect, ms: &[emberwake_battle::meter::Shown]) {
+    let n = ms.len().min(2) as i32;
+    if n == 0 {
+        return;
+    }
+    let seg = (r.w - (n - 1) * 4) / n;
+    for (k, m) in ms.iter().take(2).enumerate() {
+        let x = r.x + k as i32 * (seg + 4);
+        let steps = (m.max - m.min).max(1);
+        let filled = (m.value - m.min).clamp(0, steps);
+        if m.show == "pips" {
+            let pw = ((seg - (steps - 1)) / steps).max(1);
+            for j in 0..steps {
+                p.fill(Rect::new(x + j * (pw + 1), r.y, pw, r.h), if j < filled { METER } else { rgb(44, 36, 62) });
+            }
+        } else {
+            p.fill(Rect::new(x, r.y, seg, r.h), rgb(44, 36, 62));
+            p.fill(Rect::new(x, r.y, seg * filled / steps, r.h), METER);
+        }
+    }
+}
+
+/// HOOKS1 8.3: unit `i`'s held guard now (`trigger::held_at` at the session's block; None without the rule triggers,
+/// for a unit not on the field, or once it ends).
+fn held_guard(s: &Session, i: usize) -> Option<emberwake_rules::unit::HeldGuard> {
+    let w = &s.w;
+    if !emberwake_battle::trigger::on(w) || !w.units[i].is_active() {
+        return None;
+    }
+    emberwake_battle::trigger::held_at(w, i, s.current_block)?;
+    w.units[i].held_guard
+}
+
+/// The HP cost of the skill a popup step names (the host's `skills` reply).
+fn skills_hp(skills: &[Value], step: &Value) -> Option<i64> {
+    skills.iter().find(|k| k["skill"] == step["skill"]).and_then(|k| k["hp_cost"].as_i64()).filter(|c| *c > 0)
 }
 
 // ---- RULESET1-U slice 5: poise, breaks, the strip's parts, forecasts, the round summary ----------------------------
@@ -8083,4 +8210,151 @@ mod hook_marks_tests {
         }
         assert!(seen > 0, "a unit with a class");
     }
+}
+
+/// HOOKS1-UI slice 3 (HOOKS1 UM7, 8.3, HC1): unit meters on the cards, the inspect card and the strip; the held-guard
+/// edge; the HP cost in the strip cards and the step popup, and its refusal in words. A catalog encounter played by the
+/// catalog's timeline row with the three hook rules switched on; the meters, the held guard and the HP cost are test
+/// rows put on the battle's world. Every expectation is a kit query (`meter::shown`, `trigger::held_at`,
+/// `command::hp_cost_of`, `command::hp_cost_problem`), never a shipped number. Classic shows none of it.
+#[cfg(test)]
+mod meter_guard_tests {
+    use super::*;
+    use emberwake_battle::meter;
+    use emberwake_data::UnitMeterDef;
+    use emberwake_rules::ruleset::TIMELINE;
+    use emberwake_rules::unit::{HeldGuard, HeldMeter};
+
+    const RULES: &str = "+unit_meters,+triggers,+hp_cost";
+    const COST: i32 = 5;
+
+    fn arena_screen(ruleset: Option<&str>, rules: &str) -> (Cx, Gfx, BattleScreen) {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        cx.settings.v["battle_view"] = json!("flat");
+        let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+        let b = BattleScreen::arena_with(&cx, None, &encounter, ruleset.map(String::from), rules, false);
+        assert!(b.host.session.is_some(), "the battle starts: {}", b.message);
+        (cx, crate::hud::hud_tests::gfx(), b)
+    }
+
+    fn s(b: &BattleScreen) -> &Session {
+        b.host.session.as_ref().unwrap()
+    }
+
+    fn tip_text(b: &BattleScreen, id: &str) -> String {
+        b.w.iter().filter(|x| x.id == id).flat_map(|x| x.tip.iter().map(|(t, _)| t.clone())).collect::<Vec<_>>().join(" | ")
+    }
+
+    fn rect(b: &BattleScreen, id: &str) -> Option<Rect> {
+        b.w.iter().find(|x| x.id == id).map(|x| x.rect)
+    }
+
+    /// The hero holds a pips meter (0-4 from 3, in band Full), the first foe a bar meter (0-20 from 5), the foe a held
+    /// guard 0.5 through block 3, and the hero's attack skills cost COST HP. Returns (hero, foe).
+    fn hook_up(b: &mut BattleScreen) -> (usize, usize) {
+        let h = b.selected.expect("a hero");
+        let sess = b.host.session.as_mut().unwrap();
+        let w = &mut sess.w;
+        let f = w.enemies.iter().copied().find(|&e| w.units[e].is_active() && w.has(e)).expect("a foe");
+        let known = w.units[h].known_skills.clone();
+        let cat = std::sync::Arc::make_mut(&mut w.cat);
+        let phial = json!({"id": "t_phial", "name": "Test Phial", "short": "Phial", "max": 4, "show": "pips", "bands": [{"id": "low", "name": "Low", "from": 0}, {"id": "full", "name": "Full", "from": 3}]});
+        let heat = json!({"id": "t_heat", "name": "Test Heat", "short": "Heat", "max": 20, "show": "bar"});
+        for row in [phial, heat] {
+            let def = UnitMeterDef::from_obj(row.as_object().unwrap());
+            cat.unit_meters.insert(def.id.clone(), def);
+        }
+        for sk in cat.skills.iter_mut().filter(|k| known.contains(&k.id) && k.kind == "ATTACK") {
+            sk.hp_cost = COST;
+        }
+        w.units[h].passive_meters.push(HeldMeter { meter: "t_phial".into(), start: 3, floor: None });
+        w.units[f].passive_meters.push(HeldMeter { meter: "t_heat".into(), start: 5, floor: None });
+        meter::battle_start(w);
+        w.units[f].held_guard = Some(HeldGuard { mitigation: 0.5, last_block: 3 });
+        (h, f)
+    }
+
+    /// UM7: the cards grow a meter row, the inspect card names each meter with its band, the strip row shows the
+    /// selected hero's; the state lists them as `meter::shown` gives them. 8.3: the foe's held guard shows on its card
+    /// and inspect card and in the state.
+    #[test]
+    fn meters_and_the_held_guard_follow_the_kit() {
+        let (mut cx, mut g, mut b) = arena_screen(Some(TIMELINE), RULES);
+        let (h, f) = hook_up(&mut b);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let w = &s(&b).w;
+        let (mh, mf) = (meter::shown(w, h), meter::shown(w, f));
+        assert_eq!(meters_of(w, h, &Layers::of(&Value::Null)), mh);
+        assert_eq!((mh[0].show.as_str(), mf[0].show.as_str()), ("pips", "bar"));
+        assert!(tip_text(&b, &format!("party.{h}")).contains(&meter_text(&mh[0])), "{}", tip_text(&b, &format!("party.{h}")));
+        assert!(meter_text(&mh[0]).ends_with(&format!("({})", mh[0].band)) && !mh[0].band.is_empty());
+        assert!(tip_text(&b, &format!("foe.{f}")).contains(&meter_text(&mf[0])));
+        assert_eq!(rect(&b, &format!("party.{h}")).unwrap().h, 34, "the card grows a meter row");
+        assert!(tip_text(&b, "strip.meters").contains(&meter_text(&mh[0])));
+        let held = emberwake_battle::trigger::held_at(w, f, s(&b).current_block).expect("held");
+        assert!(tip_text(&b, &format!("foe.{f}")).contains(&format!("Held guard {:.0}% through B3", held * 100.0)));
+        let st = b.state(&cx);
+        let units: Vec<i64> = st["meters"].as_array().unwrap().iter().map(|m| m["unit"].as_i64().unwrap()).collect();
+        assert!(units.contains(&(h as i64)) && units.contains(&(f as i64)));
+        assert_eq!(st["held_guards"], json!([{"unit": f, "mitigation": 0.5, "last_block": 3}]));
+    }
+
+    /// The `meters` and `guard` layers: off, the rows, the strip row and the edge go (a frame differs), the cards keep
+    /// their classic height; the inspect lines stay (as the poise line does).
+    #[test]
+    fn the_layers_switch_meters_and_the_guard_edge() {
+        let (mut cx, mut g, mut b) = arena_screen(Some(TIMELINE), RULES);
+        let (h, f) = hook_up(&mut b);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let on = g.canvas.px.clone();
+        cx.settings.v["battle_overlays"] = json!({"meters": false, "guard": false});
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_ne!(on, g.canvas.px);
+        assert!(rect(&b, "strip.meters").is_none());
+        assert_eq!(rect(&b, &format!("party.{h}")).unwrap().h, 30);
+        assert!(tip_text(&b, &format!("foe.{f}")).contains("Held guard"), "the inspect line stays");
+        let st = b.state(&cx);
+        assert_eq!((st["meters"].clone(), st["held_guards"].clone()), (json!([]), json!([])));
+    }
+
+    /// HC1: a planned step that costs HP says so on its strip card and in the step popup (its detail and its card); at
+    /// or below the cost the popup row is refused and reads the refusal in words.
+    #[test]
+    fn the_hp_cost_shows_on_the_strip_and_the_popup() {
+        let (mut cx, mut g, mut b) = arena_screen(Some(TIMELINE), RULES);
+        let (h, f) = hook_up(&mut b);
+        let r = b.send(&cx, json!({"cmd": "round_intent", "unit": h, "intent": "assault", "target": f}));
+        assert_eq!(r["ok"], json!(true), "{r}");
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let w = &s(&b).w;
+        let costly: Vec<String> = s(&b).plan.compile(w, h).entries.iter().map(|e| &w.cat.skills[e.skill]).filter(|k| emberwake_battle::command::hp_cost_of(w, k) > 0).map(|k| k.name.clone()).collect();
+        assert!(!costly.is_empty(), "the plan holds a costly attack");
+        let text = intent_text::hp_cost_text(COST);
+        assert!((1..=s(&b).def.total_blocks).any(|blk| tip_text(&b, &format!("strip.block{blk}")).contains(&text)));
+        let rows = b.options_for(h, "foe", Some(f), None);
+        let row = rows.iter().find(|r| r.tip.iter().any(|t| t.0 == text)).expect("a costly step in the popup");
+        assert!(!row.valid || row.detail.contains(&format!("{COST} HP")), "{}", row.detail);
+        b.host.session.as_mut().unwrap().w.units[h].hp = COST;
+        let rows = b.options_for(h, "foe", Some(f), None);
+        let refused = rows.iter().find(|r| r.tip.iter().any(|t| t.0 == text)).expect("the costly step");
+        assert!(!refused.valid);
+        assert_eq!(refused.detail, intent_text::refusal_text(&emberwake_battle::command::hp_cost_problem(COST, COST)));
+        assert_eq!(intent_text::refusal_text(&emberwake_battle::command::hp_cost_problem(9, 10)), "Not enough HP: 9, it costs 10");
+        assert_eq!(intent_text::refusal_text("Out of reach"), "Out of reach");
+    }
+
+    /// Classic: no meter, no held guard, no HP cost shows and the state has no `meters` or `held_guards` key.
+    #[test]
+    fn classic_shows_none_of_it() {
+        let (mut cx, mut g, mut b) = arena_screen(None, "");
+        let (h, _) = hook_up(&mut b);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert!(meters_of(&s(&b).w, h, &Layers::of(&Value::Null)).is_empty());
+        assert!(rect(&b, "strip.meters").is_none());
+        let st = b.state(&cx);
+        assert!(st.get("meters").is_none() && st.get("held_guards").is_none());
+        assert!(!b.w.iter().any(|x| x.tip.iter().any(|t| t.0.starts_with("Held guard") || t.0 == intent_text::hp_cost_text(COST))));
+    }
+
 }
