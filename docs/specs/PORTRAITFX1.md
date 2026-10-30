@@ -396,3 +396,18 @@ frames for common portraits; animated region-map tokens.
   is `seed ^ now`.
 - A sidecar that parses is kept even with range problems; drawing clamps to the inner rect and the asset check (A11)
   reports the problems. A reduced-tier eye box blinks only when at least 2 px tall after scaling.
+
+## 12. Build notes (PORTRAITFX1-XT, 2026-10-31)
+
+- `generate.py run <model> <id>... --faces [--prompts F]`: the prompts file defaults to
+  `games/emberwake/docs/specs/PORTRAITFX1_FACES.md` (the ART3 layout); each id's section (from its `##` heading that names
+  the id to the next `##` heading) holds one `reference: art_src/<file>.png` line, outside or inside its text block, repo-relative;
+  the line is never prompt text. An id without the line is skipped with a note. The record keeps generate.py's keys in
+  their order and adds `"kind": "faces"`; `reference` is the image sent. `--dry-run` (any run) prints each id's
+  reference, prompt size and output name without a key or an API call.
+- `sheets.py faces`: tier `hero`, `npc`, `elite`, `boss` or the folder name; `--crop l,t,r,b` is in pixels inside a
+  quadrant (default the whole quadrant); an odd last pixel row or column of the sheet is dropped so the quadrants are
+  equal; the mark is cleared on the whole sheet (`clear_mark` then `clear_corner`) and each quadrant goes through
+  `pixelize` with `mark=False`; the backdrop is `--faction`, else the sheet record's `faction`, else
+  `art_src/<id>.json`'s, else hearth; `--root` (default `games/emberwake/assets/portraits`) is for tests; `--contact`
+  shows the portrait as it was before the run (so a `--base` run shows old against new), then the four frames.

@@ -13,6 +13,15 @@
 #   python sheets.py props-prompts <out.md>          writes games/emberwake/docs/specs/PROPS1_PROMPTS.md
 #   python sheets.py props <sheet.png> <sheet_id> [--root R] [--spares DIR] [--contact out.png] [--palette quantize|ramps]
 #       (also `slice-props <sheet.png> <sheet_id> [R]`); prints each prop's path and how much of its box it fills
+# Expression sheets (PORTRAITFX1-XT, spec PORTRAITFX1.md 7): a 2x2 sheet from generate.py --faces (top-left neutral,
+# top-right hurt, bottom-left angry, bottom-right afraid) cut into the four 240 px frames of a unique portrait.
+#   python sheets.py faces <sheet.png> <id> <tier> [--base] [--crop l,t,r,b] [--contact out.png] [--faction F] [--root R]
+#       tier hero|npc|elite|boss (or the folder name); clears the image model's mark on the whole sheet, cuts four equal
+#       quadrants, runs each through pixelize with the same crop (l,t,r,b in pixels inside a quadrant; default the
+#       whole quadrant) and writes R/<folder>/faces/<id>/<expression>.png (R default games/emberwake/assets/portraits);
+#       --base also writes the neutral frame as R/<folder>/<id>.png; --contact writes the four frames beside the
+#       portrait R/<folder>/<id>.png as it was before the run; the backdrop is --faction, else the `faction` of the
+#       sheet's record, else of art_src/<id>.json, else hearth. face.py writes the frames' sidecars afterwards.
 # Standard library and Pillow only, so it can be ported to Rust.
 import pathlib, sys, tempfile
 
@@ -579,6 +588,100 @@ def contact_props(images, out, scale=2, cols=4):
     return out
 
 
+FACE_CELLS = ("neutral", "hurt", "angry", "afraid")   # the sheet's quadrants in reading order (PORTRAITFX1 7)
+FACE_FOLDERS = {"hero": "heroes", "npc": "npcs", "elite": "elites", "boss": "bosses"}   # unique tiers (art.rs)
+PORTRAITS = ROOT / "games/emberwake/assets/portraits"
+
+
+def face_folder(tier):
+    """The portrait folder of a unique tier, given as the tier (`boss`) or its folder (`bosses`)."""
+    if tier in FACE_FOLDERS:
+        return FACE_FOLDERS[tier]
+    if tier in FACE_FOLDERS.values():
+        return tier
+    raise ValueError(f"unknown tier {tier!r} (one of {', '.join(FACE_FOLDERS)}; common portraits have no frames)")
+
+
+def parse_crop(text):
+    """`l,t,r,b` -> a 4-tuple of ints."""
+    parts = [int(v) for v in text.split(",")]
+    if len(parts) != 4:
+        raise ValueError(f"--crop wants l,t,r,b, got {text!r}")
+    return tuple(parts)
+
+
+def face_boxes(size, crop=None):
+    """The four quadrant boxes of a sheet of `size` (equal halves; an odd last pixel row or column is dropped), each
+    narrowed by `crop` (l, t, r, b inside a quadrant), in FACE_CELLS order."""
+    hw, hh = size[0] // 2, size[1] // 2
+    l, t, r, b = crop or (0, 0, hw, hh)
+    if not (0 <= l < r <= hw and 0 <= t < b <= hh):
+        raise ValueError(f"crop {(l, t, r, b)} is not inside a {hw} x {hh} quadrant")
+    return [(qx + l, qy + t, qx + r, qy + b) for qy in (0, hh) for qx in (0, hw)]
+
+
+def face_faction(sheet, cid):
+    """The backdrop faction of a sheet: its record's `faction`, else the character's source record's, else None."""
+    import pixelize as X
+    return X.faction_of(sheet) or X.faction_of(ROOT / "art_src" / f"{cid}.png")
+
+
+def clear_sheet(im):
+    """The image model's mark cleared on the whole sheet (pixelize's clear_mark, then clear_corner): the mark sits in
+    the sheet's bottom-right corner, not in a quadrant's, and pixelize clears nothing in a crop."""
+    import pixelize as X
+    return X.clear_corner(X.clear_mark(im.convert("RGBA")))
+
+
+def slice_faces(sheet, cid, tier, base=False, crop=None, contact_out=None, faction=None, root=PORTRAITS):
+    """Cuts an expression sheet into its four frames (see the header); returns the paths written, frames first."""
+    import pixelize as X
+    from PIL import Image
+    folder = pathlib.Path(root) / face_folder(tier)
+    im = Image.open(sheet).convert("RGBA")
+    boxes = face_boxes(im.size, crop)
+    faction = faction or face_faction(sheet, cid)
+    X.faction_key(faction)   # an unknown faction fails before anything is written
+    current = folder / f"{cid}.png"
+    before = Image.open(current).convert("RGBA") if current.is_file() else None
+    im = clear_sheet(im)
+    out_dir = folder / "faces" / cid
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written = []
+    with tempfile.TemporaryDirectory(prefix="faces_") as tmp:
+        cleared = pathlib.Path(tmp) / "sheet.png"
+        im.save(cleared)
+        frames = {}
+        for name, box in zip(FACE_CELLS, boxes):
+            frames[name], _ = X.pixelize(cleared, crop=box, mark=False, faction=faction)
+    for name in FACE_CELLS:
+        dest = out_dir / f"{name}.png"
+        frames[name].save(dest); written.append(dest)
+    if base:
+        frames["neutral"].save(current); written.append(current)
+    if contact_out:
+        written.append(face_contact([before] + [frames[n] for n in FACE_CELLS], contact_out,
+                                    ["current" if before else "no portrait"] + list(FACE_CELLS)))
+    return written
+
+
+def face_contact(images, out, labels, cell=240, gap=8):
+    """One row: the portrait as it was (None: an empty cell) and the four frames, each `cell` px, captioned."""
+    from PIL import Image, ImageDraw
+    cap = 14
+    sheet = Image.new("RGB", (gap + len(images) * (cell + gap), gap + cell + cap + gap), (26, 22, 30))
+    d = ImageDraw.Draw(sheet)
+    for i, (im, label) in enumerate(zip(images, labels)):
+        x = gap + i * (cell + gap)
+        if im is not None:
+            sheet.paste(im.convert("RGB").resize((cell, cell), Image.NEAREST), (x, gap))
+        else:
+            d.rectangle([x, gap, x + cell - 1, gap + cell - 1], outline=(90, 80, 90))
+        d.text((x + 2, gap + cell + 2), label, fill=(222, 214, 196))
+    sheet.save(out)
+    return pathlib.Path(out)
+
+
 if __name__ == "__main__":
     if sys.argv[1] == "prompts":
         write_md(sys.argv[2]); print(len(SHEETS), "sheets")
@@ -599,6 +702,23 @@ if __name__ == "__main__":
             print("contact", contact([d for _, d in saved], opt["--contact"]))
     elif sys.argv[1] == "props-prompts":
         write_props_md(sys.argv[2]); print(len(PROP_SHEETS), "sheets")
+    elif sys.argv[1] == "faces":
+        args = sys.argv[2:]; opt = {}
+        for flag in ("--crop", "--contact", "--faction", "--root"):
+            if flag in args:
+                i = args.index(flag); opt[flag] = args[i + 1]; del args[i:i + 2]
+        base = "--base" in args
+        if base:
+            args.remove("--base")
+        if len(args) != 3:
+            sys.exit("usage: sheets.py faces <sheet.png> <id> <tier> [--base] [--crop l,t,r,b] [--contact out.png] "
+                     "[--faction F] [--root R]")
+        try:
+            for path in slice_faces(args[0], args[1], args[2], base, parse_crop(opt["--crop"]) if "--crop" in opt else None,
+                                    opt.get("--contact"), opt.get("--faction"), opt.get("--root", PORTRAITS)):
+                print(path)
+        except ValueError as e:
+            sys.exit(f"faces: {e}")
     elif sys.argv[1] in ("props", "slice-props"):
         args = sys.argv[2:]; opt = {}
         for flag in ("--root", "--spares", "--contact", "--palette"):
