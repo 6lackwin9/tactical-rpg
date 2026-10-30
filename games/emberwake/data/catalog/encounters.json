@@ -317,7 +317,7 @@
 			],
 			"rows": [],
 			"arena_hazards": [],
-			"max_rounds": 8,
+			"max_rounds": 10,
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 10,
@@ -488,6 +488,7 @@
 			"enemies": [
 				"goblin_berserker",
 				"goblin_brawler",
+				"goblin_warlord",
 				"goblin_shaman"
 			],
 			"phases": [

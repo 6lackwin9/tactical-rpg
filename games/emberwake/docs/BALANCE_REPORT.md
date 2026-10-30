@@ -1,5 +1,66 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## RULESET1-A3 2026-10-31 (final confirmation after the A3 data; win-rate tuning stopped)
+
+This final run supersedes the round-1 numbers quoted in decision "Timeline test fights after RULESET1-A3": tl_skirmish lands inside its band (69/66 %) and only its capped fights (21/25 %) stay out (decision "RULESET1-A3 loose ends": recorded as known); tl_flank reads 92-98 %; the reach duel 55/48 % at 100 seeds. tl_flank_elite (100 %, won in round 2) has no band and is left as a diagnostic.
+
+Measured build: `C:/dev/tactical-rpg-lane1`, branch `claude/ruleset1a3`, with the uncommitted A3 data (seed `games/emberwake/data/seeds/ruleset1a3.json`). No data, tuning or code changed by the balance run. Jitter on, preset `balanced`, seed i = 11 + 12 i, 0 PLAN FAIL and 0 PLAN SKIP. Commands: `tools/fc.sh sim feel party=both seeds=100` (the five tl_ fights), the same with `enc=tl_flank_elite`, and `battle kit_culling seed=N ruleset=timeline log` for seeds 1-5. Scratch outputs: `ruleset1a3_fin_*.txt` and the round-1 probes `ruleset1a3_bal_*.txt` in the session scratchpad.
+
+Decision "Timeline test fights after RULESET1-A3": win-rate tuning of the tl_ fights stops; they are judged on the mechanic floors; the sure-break floor moves from the reach duel to tl_skirmish; armour, flank and skirmish are known over band and are judged later on CAST1's real encounters.
+
+### A3 changes measured
+
+Crushing Judgment `power_mult` 1.5 to 1.8; `tl_footman`, `tl_footman_b`, `tl_crossbowman` to level 2 with CONS (HP +19-20%); `tl_skirmish` `max_rounds` 10; `tl_footman` assault order back to [tl_snap_jab, tl_hook_thrust] (active [tl_snap_jab, tl_hook_thrust, tl_brace_counter]); `kit_culling` gains a goblin_warlord.
+
+### Final table (100 seeds, won %; capped in brackets)
+
+| Fight | Band | A3 auto | A3 timed | B2 auto / timed | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| tl_duel_windup | 30-70 timed | 5 | 31 | 5 / 31 | timed on the lower edge (about +-9), unchanged |
+| tl_duel_reach | 30-70 | 55 | 48 | 70 / 62 | inside |
+| tl_duel_armour | 15-45 | 89 | 89 | 100 / 100 | over by 44 (known) |
+| tl_flank | 50-85 | 92 [8] | 98 | 98 / 100 | over by 7-13 (known) |
+| tl_skirmish | 40-70 | 69 [21] | 66 [25] | 70 / 72 | inside; the cap rate is the miss |
+| tl_flank_elite | none set | 100, median 2 | 100, median 2 | 100 / 100 | no band, unchanged |
+| TOTAL (five fights) | | 62.0 | 66.4 | 68.6 / 73 | |
+
+### Floors under the moved floors
+
+| Floor | Result | Met |
+| --- | --- | --- |
+| Carried moves > 0 in tl_flank | 222 auto / 224 timed | yes |
+| Carried moves > 0 in tl_skirmish | 478 / 502 | yes |
+| Poise breaks > 0 in tl_duel_windup (timed) | 83 poise breaks, 114 chance breaks timed; auto 0 poise breaks | yes (timed) |
+| Sure breaks > 0 in tl_skirmish (moved floor) | 132 auto / 101 timed | yes |
+| Sure breaks in tl_duel_reach (old floor, retired) | 0 / 0 | not required any more |
+| Capped fights at most 10% | skirmish 21% auto / 25% timed, flank 8% auto; others 0 | NO, tl_skirmish (and tl_flank auto at 8, inside) |
+| Enemy rounds without an action of their intent under 15% | 0% in every fight, both drivers (party side: 159-166 no-active rounds, not part of the floor) | yes |
+
+### Cliff finding (Crushing Judgment)
+
+`tl_duel_armour` (Spiker v Captain) is a threshold, not a slope. 40 seeds auto: `power_mult` 1.8 / 1.9 / 2.0 / 2.03 / 2.06 all 87.5%; 2.1 and 2.2 7.5%; 2.6 2.5%; 3.0 0%. No `power_mult` gives the 15-45 band (the step lies between 2.06 and 2.1, a kill threshold on the Spiker). The Captain's armour is irrelevant here (`armor=tl_captain:60/70/80` all 87.5%): the skill is unbreakable and pierces. Pierce is 83% of hits and the fight is over in round 2. A smooth middle would need the Spiker's HP or the kill threshold to move together with the power (not probed).
+
+### Reach duel orders (40 seeds, before the decision)
+
+Footman assault orders: [snap_jab, hook_thrust] 65% both drivers, sure breaks 0 (the shipped order; 55 / 48% at 100 seeds); [thrust, hook_thrust] and [hook_thrust, snap_jab] 100% with 47-70 sure breaks; hook first with CONS 10 or 20 stays 100%. Hook Thrust early gives the Halberdier's sure break (Jaw Breaker) a wind-up to land on every round; Snap Jab first leaves none. That is why the sure-break floor moved to the skirmish.
+
+### kit_culling (timeline, seeds 1-5, goblin_warlord added)
+
+All five seeds ended "won". The first cull (cull_1, trigger round 3) fires in round 3 in all five seeds: the dojo Warrior is at 0 HP in the round-3 status (in seeds 1, 2 and 5 the Warlord had already taken it to 40-104 HP in round 2). The second cull (cull_2, round 5) fires only when the fight lasts that long: seeds 2 and 5 (5 rounds) lose the Ranger 2 in round 5; seeds 1, 3 and 4 (4 rounds) are won before it. The phase text lines are not printed in the log, so the rounds come from the unit status blocks. The Warlord reaches the captives and strikes Warrior 2 for 60 twice in round 2, so the first captive is lost to the Warlord's hits before the cull in most seeds; the cull only finishes it.
+
+### Known over band (decision reason: tl_ fights are mechanic tests, not tuned encounters)
+
+1. tl_duel_armour 89% against 15-45: the cliff above; judged later on CAST1's real encounters.
+2. tl_flank 92-98% against 50-85: no single rule carries it (see B2 switches); judged later.
+3. tl_skirmish cap rate 21-25% against 10%: stalemates against guarding enemies (0-10 lost); judged later.
+4. tl_duel_windup auto 5% (timed 31% is the band's only driver): the Enforcer beats the auto driver, which does not read tells.
+5. tl_flank_elite 100% in round 2, no band: looks unintended, flagged.
+
+### Issues for the brainstorm agent
+
+1. Decide whether the capped-fights floor (10%) stays for tl_skirmish or moves with the win-rate bands to CAST1.
+2. The cull log prints no phase line; a "[Phase]" line would make the cull round readable.
+
 ## RULESET1-B2 2026-10-31 (timeline feel rerun against the bands and floors)
 
 Measured build: `staging` 013cd955 (RULESET1-AI2 on top of BX, G2 and A2), checkout `C:/dev/tactical-rpg-lane1` (branch `claude/ruleset1b2`), no code, data or tuning changed. Jitter is ON (the feel default, decision "RULESET1-G2 answers"); one `jitter=off` run at 40 seeds is the comparison. Preset `balanced`, tactic default, seed i = 11 + 12 i. 0 PLAN FAIL and 0 PLAN SKIP in every run. Scratch outputs: `ruleset1b2_*.txt` in the session scratchpad (`both100`, `elite100`, `jitteroff40`, `noflank40`, `nopierce40`, `nopoise40`, `armor25|35|50`, `tune0.25`, `tune0`).
