@@ -153,7 +153,7 @@ pub fn rest_refusal(d: &Data, gs: &GameState) -> &'static str {
     if !place.is_empty() {
         return place;
     }
-    // ROSTER1's wounded members count as hurt once that lands (R2)
+    // R2: ROSTER1's wounded members count as hurt (`progression::hurt`)
     if !progression::hurt(&gs.party) {
         return progression::REFUSE_RESTED;
     }
@@ -163,7 +163,7 @@ pub fn rest_refusal(d: &Data, gs: &GameState) -> &'static str {
     ""
 }
 
-/// R2's body without the tick: every member back to full (ROSTER1's rest hook clears the wounded once it lands), the
+/// R2's body without the tick: every member back to full (ROSTER1 W3: `progression::rest` clears the wounded), the
 /// rule's `cost` spent (never below 0) and its `days` added to the clock. Returns (spent, restored, days).
 fn rest_body(d: &Data, gs: &mut GameState) -> (i64, i64, i64) {
     let rule = rest_rule(d, &gs.world_id);
@@ -252,7 +252,9 @@ pub fn retreat_problem(d: &Data, gs: &GameState) -> Option<Value> {
 
 /// R4: the retreat after a lost battle (all three `after_fight` paths, through `explore::wake`, which checks
 /// `retreat_problem` first): the cell moves to the rule's `to` (no heal unless `to` is a rest place with `on_enter`;
-/// ROSTER1 applies the loss once it lands; the encounter stays undone), `days x per_day` upkeep is spent
+/// the loss is already on the party: `roster::settle_party` ran first (ROSTER1 L5) and, under the world's rule row,
+/// brought the members home at the row's HP with their wounds or departures; the encounter stays undone),
+/// `days x per_day` upkeep is spent
 /// (CMQ4), `days` pass (cause days(n, retreat)) and the autosave follows (none once the run is over). Events as
 /// `wake`'s, the `defeat` event with mode `retreat`; `campaign` holds the tick's events when there are some.
 pub fn retreat(d: &Data, gs: &mut GameState) -> Dict {

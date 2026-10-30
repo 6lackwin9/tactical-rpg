@@ -5,7 +5,7 @@
 use crate::data::{Data, PARTY_MAX};
 use crate::progression;
 use aegis_core::json::{self, int, strs, Dict};
-use rpgkit_data::{Deck, STATS};
+use rpgkit_data::{Deck, DEPART_CAUSES, DEPART_LIVES, MEMBER_CONDITIONS, STATS};
 use indexmap::IndexMap;
 
 // The gear rules live in the rules crate (the battle crate's gear dojo uses them too).
@@ -55,6 +55,9 @@ pub struct UnitState {
     /// The saved `deck`'s type problems (not saved; `validate` reports them, so a damaged deck is refused, never
     /// coerced).
     pub deck_problems: Vec<String>,
+    /// ROSTER1 W1, 11.4: the member's conditions (`rpgkit_data::MEMBER_CONDITIONS`: `wounded`), each held once. Saved
+    /// as `conditions` only when not empty (the unreleased save v13 carries it: a save without it reads none).
+    pub conditions: Vec<String>,
 }
 
 /// RULESET1 9 D5: a saved `deck` value: (the deck, its type problems). Absent = the empty deck; anything but an object
@@ -225,6 +228,10 @@ impl UnitState {
         if !self.deck.is_empty() {
             out.insert("deck".into(), deck_value(&self.deck));
         }
+        // ROSTER1 11.4: only a member with a condition saves `conditions`
+        if !self.conditions.is_empty() {
+            out.insert("conditions".into(), strs(&self.conditions));
+        }
         Value::Object(out)
     }
 
@@ -268,7 +275,22 @@ impl UnitState {
             hp_lost: Self::hp_lost_of(d.get("hp_lost")),
             deck,
             deck_problems,
+            conditions: json::sget(d, "conditions"),
         }
+    }
+
+    /// ROSTER1 W1: whether the member carries condition `id`.
+    pub fn has_condition(&self, id: &str) -> bool {
+        self.conditions.iter().any(|c| c == id)
+    }
+
+    /// ROSTER1 W1 (RQ5 a): adds condition `id` once (a second application keeps one). Whether it was added.
+    pub fn add_condition(&mut self, id: &str) -> bool {
+        if self.has_condition(id) {
+            return false;
+        }
+        self.conditions.push(id.to_string());
+        true
     }
 
     pub fn validate(&self, d: &Data) -> Vec<String> {
@@ -294,6 +316,13 @@ impl UnitState {
         }
         if self.hp_lost < 0 {
             errors.push(format!("{at}: hp_lost must be 0 or more."));
+        }
+        for (i, c) in self.conditions.iter().enumerate() {
+            if !MEMBER_CONDITIONS.contains(&c.as_str()) {
+                errors.push(format!("{at}: unknown condition '{c}' (known: {}).", MEMBER_CONDITIONS.join(", ")));
+            } else if self.conditions[..i].contains(c) {
+                errors.push(format!("{at}: condition '{c}' is listed twice."));
+            }
         }
         for (k, v) in &self.spend {
             if !STATS.contains(&k.as_str()) {
@@ -463,6 +492,45 @@ impl UnitState {
 
 // ---- PartyState ----------------------------------------------------------------------------------------------
 
+/// ROSTER1 L1, L2, 11.4: a member who left the party (`party.departed[]`): its whole state at departure (choices and
+/// gear record; the gear itself went to the stash), how and why it left, the encounter ("" outside a battle), the day
+/// (`gs.time`) and the keepsake item paid for it ("" = none).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Departed {
+    pub member: UnitState,
+    /// One of `rpgkit_data::DEPART_LIVES`.
+    pub life: String,
+    /// One of `rpgkit_data::DEPART_CAUSES`.
+    pub cause: String,
+    pub encounter: String,
+    pub day: i64,
+    pub keepsake: String,
+}
+
+impl Departed {
+    pub fn to_value(&self) -> Value {
+        Value::Object(json::obj([
+            ("member", self.member.to_value()),
+            ("life", Value::String(self.life.clone())),
+            ("cause", Value::String(self.cause.clone())),
+            ("encounter", Value::String(self.encounter.clone())),
+            ("day", int(self.day)),
+            ("keepsake", Value::String(self.keepsake.clone())),
+        ]))
+    }
+
+    pub fn from_dict(d: &Dict) -> Self {
+        Self {
+            member: UnitState::from_dict(json::dget(d, "member")),
+            life: json::s(d, "life"),
+            cause: json::s(d, "cause"),
+            encounter: json::s(d, "encounter"),
+            day: json::i(d, "day", 0),
+            keepsake: json::s(d, "keepsake"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PartyState {
     pub members: Vec<UnitState>,
@@ -472,11 +540,14 @@ pub struct PartyState {
     pub stash: IndexMap<String, i64>,
     pub gold: i64,
     pub supplies: i64,
+    /// ROSTER1 L1: the members who left (captured, dead, retired, dismissed, lost), departure order. Saved as
+    /// `departed` only when not empty (the unreleased save v13 carries it: a save without it reads none).
+    pub departed: Vec<Departed>,
 }
 
 impl Default for PartyState {
     fn default() -> Self {
-        Self { members: Vec::new(), active_ids: Vec::new(), max_active: PARTY_MAX, stash: IndexMap::new(), gold: 0, supplies: 0 }
+        Self { members: Vec::new(), active_ids: Vec::new(), max_active: PARTY_MAX, stash: IndexMap::new(), gold: 0, supplies: 0, departed: Vec::new() }
     }
 }
 
@@ -554,13 +625,23 @@ impl PartyState {
         for (k, v) in &self.stash {
             stash.insert(k.clone(), int(*v));
         }
-        Value::Object(json::obj([
+        let mut out = json::obj([
             ("members", Value::Array(self.members.iter().map(UnitState::to_value).collect())),
             ("active_ids", strs(&self.active_ids)),
             ("stash", Value::Object(stash)),
             ("gold", int(self.gold)),
             ("supplies", int(self.supplies)),
-        ]))
+        ]);
+        // ROSTER1 11.4: only a party someone left saves `departed`
+        if !self.departed.is_empty() {
+            out.insert("departed".into(), Value::Array(self.departed.iter().map(Departed::to_value).collect()));
+        }
+        Value::Object(out)
+    }
+
+    /// ROSTER1 L1: the departed record of member `id`.
+    pub fn departed_of(&self, id: &str) -> Option<&Departed> {
+        self.departed.iter().find(|x| x.member.id == id)
     }
 
     pub fn from_dict(d: &Dict) -> Self {
@@ -579,6 +660,7 @@ impl PartyState {
             stash: d.get("stash").map(json::ints).unwrap_or_default(),
             gold: whole("gold"),
             supplies: whole("supplies"),
+            departed: json::aget(d, "departed").iter().map(|x| Departed::from_dict(json::dict(x))).collect(),
         }
     }
 
@@ -594,6 +676,26 @@ impl PartyState {
             }
             seen.push(&m.id);
             errors.extend(m.validate(d));
+        }
+        // ROSTER1 11.4: a departed member's id is never another's; its life and cause are known (its state is a
+        // record, not rebuilt, so its build is not checked)
+        for x in &self.departed {
+            let id = &x.member.id;
+            if !json::id_ok(id) {
+                errors.push(format!("Departed member id '{id}' must be non-empty [a-z0-9_]."));
+            } else if seen.contains(&id) {
+                errors.push(format!("Departed member id '{id}' is also a member or departed twice."));
+            }
+            seen.push(id);
+            if !DEPART_LIVES.contains(&x.life.as_str()) {
+                errors.push(format!("Departed '{id}': unknown life '{}' (known: {}).", x.life, DEPART_LIVES.join(", ")));
+            }
+            if !DEPART_CAUSES.contains(&x.cause.as_str()) {
+                errors.push(format!("Departed '{id}': unknown cause '{}' (known: {}).", x.cause, DEPART_CAUSES.join(", ")));
+            }
+            if x.day < 0 {
+                errors.push(format!("Departed '{id}': day must be 0 or more."));
+            }
         }
         if self.active_ids.len() as i64 > self.max_active {
             errors.push(format!("At most {} active members (got {}).", self.max_active, self.active_ids.len()));

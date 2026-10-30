@@ -232,6 +232,7 @@ fn step(d: &Data, version: i64, state: &Dict, quests_int: bool) -> Option<Dict> 
         // campaign world, none elsewhere). The bump makes an older build refuse such a save instead of dropping it.
         // STORYUI1 4.8 shares this unreleased bump (ROSTER1 11.4): `story` may be saved; absent reads empty.
         // RULESET1 9 D5 shares it too: a party member may save `deck`; absent reads the empty deck (auto).
+        // ROSTER1 11.4 shares it too: a member may save `conditions`, the party `departed`; absent reads none.
         12 => {}
         _ => return None,
     }

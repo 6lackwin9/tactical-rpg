@@ -325,3 +325,27 @@ bleed-out rounds, wounded percent after the baseline).
 - No parity suite builds saved members for a battle (`journey` settles without one, `world_traces` and `replay` play
   the encounter's own party), so `rpgkit_world/tests/roster.rs` keeps the old screen build and write-back as its
   reference; `journey`, `world_traces` and the saves suites stay green.
+
+## As built (ROSTER1-L slice 3, 2026-10-31)
+
+- RQ1-RQ11 as recommended (`games/emberwake/docs/lore/OPEN_QUESTIONS.md`). The rule row is the played world's
+  (`gs.world_id`) for `campaign.act`; `roster::rule(d, gs)`.
+- `settle_party(d, gs, &FightEnd, ends) -> Settled`: `FightEnd` carries the outcome, the encounter id (the departed
+  record's `encounter`), the battle world (where a wounded member's unwounded max is built) and whether the objective
+  is `escape`; `Settled` lists the newly wounded and the departures for ROSTER1-U's lines.
+- Causes: a downed hero left on a won escape or a flee departs with cause `downed`, one taken on a loss with
+  `lost_battle`. `then` is read as `none` (ENCOUNTER2-W adds `capture` and `kill`).
+- With a row, a loss brings the members who come home back to full HP under both `hp_after` values (HEAL1's
+  `hp_after` for `lost` is the wake heal), so a CAMPAIGN1 retreat (R4, no heal) moves a cell that already carries the
+  loss: full HP, wounded by the row. Without a row a loss still leaves HP to the runner's defeat rule (unchanged).
+- The settle call stays in the battle screen before the runner's `after_fight`: L5's order holds without moving it.
+  The battle start passes the game state to `field_unit` (one argument).
+- `depart(d, gs, member, life, cause, encounter)` takes the encounter (L2's signature plus one); the departed record
+  keeps the whole `UnitState` (its equipment as the gear record) while each worn, carried and pouch item that the
+  catalog knows goes to the stash. A departure that empties `active_ids` leaves it empty (the first `max_active`
+  deploy).
+- Saves: member `conditions` and party `departed` (`state::Departed`) share the unreleased v13 step (absent = none),
+  written only when not empty. `PartyState::validate` checks conditions (known, once), departed lives, causes, ids
+  (never a member's or another departed's) and days; slice 4 adds the bunk and crypt warnings.
+- `progression::hurt` counts `wounded`, so Camp and the campaign rest are offered to a party whose only hurt is a
+  wound.

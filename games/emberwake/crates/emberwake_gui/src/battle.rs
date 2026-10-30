@@ -1297,7 +1297,7 @@ impl BattleScreen {
         let mut members = Vec::new();
         // ROSTER1-L: the world fields each member (its class path and deck rule in this world, at its stored HP)
         for m in active {
-            let Some(field) = emberwake_world::roster::field_unit(&d, m, &world) else { continue };
+            let Some(field) = emberwake_world::roster::field_unit(&d, gs, m, &world) else { continue };
             // ASSETORG2: the member's character's body and palette (its base unit's, its class's when it has none)
             let character = d.resolve(&world, "characters", &m.lore_ref);
             let (art, palette, _) = if character.is_empty() {
@@ -1799,8 +1799,8 @@ impl BattleScreen {
         self.session().final_outcome()
     }
 
-    /// World battle over: the world settles the party (ROSTER1-L `roster::settle_party`: pouches, HP), the runner
-    /// settles the outcome, the results popup opens.
+    /// World battle over: the world settles the party (ROSTER1-L `roster::settle_party`: pouches, the world's rule
+    /// row (wounded, departures), HP), the runner settles the outcome, the results popup opens.
     fn settle(&mut self, cx: &mut Cx) {
         let outcome = self.outcome();
         let Mode::World { fight, runner, members } = &self.mode else { return };
@@ -1811,8 +1811,9 @@ impl BattleScreen {
         // REWARD1: how the battle left each enemy, for the rewards per defeated enemy
         let tally = emberwake_world::battle::Tally::from_session(self.session());
         let ends = emberwake_world::roster::hero_ends(self.session(), members);
+        let end = emberwake_world::roster::FightEnd::of(self.session(), &self.class_world);
         let gs = cx.gs_mut();
-        emberwake_world::roster::settle_party(&d, gs, &outcome, &ends);
+        emberwake_world::roster::settle_party(&d, gs, &end, &ends);
         let res = after_fight(&d, gs, runner, fight, &outcome, Some(&tally));
         cx.set_busy(false);
         if !json::b(&res, "ok", false) {
