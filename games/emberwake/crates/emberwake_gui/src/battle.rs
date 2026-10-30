@@ -34,10 +34,9 @@ use aegis_core::json::{self, s, Dict};
 use emberwake_rules::Stance;
 use emberwake_world::battle::WorldRoster;
 use emberwake_battle::skill::Kind;
-use emberwake_battle::world::{AiProfile, World};
-use emberwake_data::UnitDef;
+use emberwake_battle::world::World;
 use emberwake_host::{Battle, Host};
-use emberwake_world::{dialogue, explore, progression, story, travel};
+use emberwake_world::{dialogue, explore, story, travel};
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
@@ -1296,24 +1295,20 @@ impl BattleScreen {
         let roster = WorldRoster { d: &d, world: world.clone() };
         let mut party = Vec::new();
         let mut members = Vec::new();
-        // RULESET1 9 D1-D5: under the deck rule a member fights with its deck (classic: None, built as before)
-        let deck = emberwake_rules::DeckRule::of(&def.ruleset);
+        // ROSTER1-L: the world fields each member (its class path and deck rule in this world, at its stored HP)
         for m in active {
-            let Some(built) = progression::build_in(&d, m, &world, deck.as_ref()) else { continue };
-            let mut unit = built.unit;
-            unit.hp = progression::start_hp(unit.max_hp as i64, m.hp_lost) as i32;
-            let base = d.cat.units.get(&m.base_unit).cloned().unwrap_or_else(|| UnitDef::from_obj(&Default::default()));
+            let Some(field) = emberwake_world::roster::field_unit(&d, m, &world) else { continue };
             // ASSETORG2: the member's character's body and palette (its base unit's, its class's when it has none)
             let character = d.resolve(&world, "characters", &m.lore_ref);
             let (art, palette, _) = if character.is_empty() {
                 let unit = d.entry("units", &m.base_unit);
-                let class = d.entry("classes", &base.class_id);
+                let class = d.entry("classes", &s(unit, "class_id"));
                 (emberwake_content::art::body_of(&Default::default(), unit, class), emberwake_content::art::palette_of(&Default::default(), unit), Vec::new())
             } else {
                 crate::screens::character_art(&d, character)
             };
-            party.push(Prebuilt { unit, art, palette, profile: AiProfile::for_unit(&d.cat, &base), key: m.id.clone() });
-            members.push((m.id.clone(), built.pouch_unloaded));
+            party.push(Prebuilt { unit: field.unit, art, palette, profile: field.profile, key: m.id.clone() });
+            members.push((m.id.clone(), field.pouch_unloaded));
         }
         let session = Session::start_with(d.cat.clone(), def, &roster, party);
         let mut b = Self::blank(cx, Mode::World { fight: fight.clone(), runner: runner.to_string(), members });
@@ -1804,7 +1799,8 @@ impl BattleScreen {
         self.session().final_outcome()
     }
 
-    /// World battle over: HP written back (won / fled), the runner settles the outcome, the results popup opens.
+    /// World battle over: the world settles the party (ROSTER1-L `roster::settle_party`: pouches, HP), the runner
+    /// settles the outcome, the results popup opens.
     fn settle(&mut self, cx: &mut Cx) {
         let outcome = self.outcome();
         let Mode::World { fight, runner, members } = &self.mode else { return };
@@ -1814,26 +1810,9 @@ impl BattleScreen {
         let d = cx.data.clone();
         // REWARD1: how the battle left each enemy, for the rewards per defeated enemy
         let tally = emberwake_world::battle::Tally::from_session(self.session());
-        let units: Vec<(i64, i64, bool, Vec<String>)> = self.session().w.allies.iter().map(|a| {
-            let u = &self.session().w.units[*a];
-            (u.hp as i64, u.max_hp as i64, u.is_alive(), u.inventory.pouch.iter().map(|p| p.id.clone()).collect())
-        }).collect();
+        let ends = emberwake_world::roster::hero_ends(self.session(), members);
         let gs = cx.gs_mut();
-        // ITEMUSE1 rule 7 (GameEncounter.write_back_pouches): the heroes' unused pouch items go back to their saved
-        // pouches on every outcome, then the ids that found no battle slot; guests have no member.
-        for ((id, unloaded), (.., left)) in members.iter().zip(&units) {
-            if let Some(m) = gs.party.member_mut(id) {
-                m.pouch = left.iter().chain(unloaded).cloned().collect();
-            }
-        }
-        if outcome == "won" || outcome == "fled" {
-            for ((id, _), (hp, max, alive, _)) in members.iter().zip(units) {
-                if let Some(m) = gs.party.member_mut(id) {
-                    let hp = progression::hp_after(if alive { hp.min(max) } else { 0 }, max, &outcome);
-                    m.hp_lost = (max - hp).max(0);
-                }
-            }
-        }
+        emberwake_world::roster::settle_party(&d, gs, &outcome, &ends);
         let res = after_fight(&d, gs, runner, fight, &outcome, Some(&tally));
         cx.set_busy(false);
         if !json::b(&res, "ok", false) {

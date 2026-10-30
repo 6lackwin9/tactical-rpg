@@ -14,6 +14,7 @@ pub mod progression;
 pub mod purse;
 pub mod quest;
 pub mod rolls;
+pub mod roster;
 pub mod save;
 pub mod shop;
 pub mod skill_text;

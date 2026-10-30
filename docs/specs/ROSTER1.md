@@ -312,3 +312,16 @@ bleed-out rounds, wounded percent after the baseline).
 - `roster.<member>` in a condition must name a character of the world, a party-side unit or `recruit_<n>`; a
   character whose id is a roster word (`living`, `bunks`, `bunks_free`, `pool`, `open`, `departed`) is refused.
 - One "only the last row may have no acts" error covers both 11.2 cases (two open rows, an open row before another).
+
+## As built (ROSTER1-L slice 2, 2026-10-31)
+
+- `field_unit(d, member, world)` takes the battle's world (the played world, or the connected world whose encounter
+  is fought, as the battle screen picked it before) and no game state yet; the wounded build (W2) adds what it needs
+  in slice 3. `settle_party(d, gs, outcome, ends)` takes `HeroEnd`s from `hero_ends(session, members)`, which pair
+  the fielded members with the session's allies in order (guests follow and have none) and carry ENCOUNTER2 S3's
+  fate; the pouch write-back (ITEMUSE1 rule 7) moved with the HP write-back.
+- The battle screen still calls `settle_party` just before the runner's `after_fight` (L5's order: the settle comes
+  before CAMPAIGN1's tick); moving the call into the runners comes with the rule rows (slice 3) or ENCOUNTER2-W.
+- No parity suite builds saved members for a battle (`journey` settles without one, `world_traces` and `replay` play
+  the encounter's own party), so `rpgkit_world/tests/roster.rs` keeps the old screen build and write-back as its
+  reference; `journey`, `world_traces` and the saves suites stay green.
