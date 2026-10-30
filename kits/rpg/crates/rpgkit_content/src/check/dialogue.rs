@@ -36,7 +36,7 @@ const EFFECTS: [(&str, &[&str]); 9] = [
     ("take", &["items", "gold"]),
     ("open_shop", &["shop"]),
     ("fight", &["encounter"]),
-    ("recruit", &["character"]),
+    ("recruit", &["character", "level"]),
 ];
 const NODE_EFFECTS: [&str; 3] = ["set_flag", "add_flag", "give"];
 /// STORYUI1 4.7: the story effect a node takes besides NODE_EFFECTS (the choice order rules keep NODE_EFFECTS).
@@ -458,11 +458,18 @@ fn effect_errors(v: &View, w: &str, effect: &str, fx: &Dict, el: &str) -> Vec<St
         "vignette" => errors.extend(ref_value_errors(v, w, fx.get("vignette").unwrap_or(&Value::from("")), "vignettes", &format!("{el} vignette"))),
         "sequence" => errors.extend(ref_value_errors(v, w, fx.get("sequence").unwrap_or(&Value::from("")), "sequences", &format!("{el} sequence"))),
         "open_board" => errors.extend(ref_value_errors(v, w, fx.get("board").unwrap_or(&Value::from("")), "boards", &format!("{el} board"))),
-        "recruit" => match fx.get("character").and_then(Value::as_str).filter(|s| !s.is_empty()) {
-            None => errors.push(format!("{el}: choose a character.")),
-            Some(id) if v.worlds.resolve(w, "characters", id).is_empty() => errors.push(format!("{el}: Recruit: unknown character '{id}'.")),
-            Some(id) => errors.extend(party_character_errors(v, w, id).into_iter().map(|why| format!("{el}: {why}"))),
-        },
+        "recruit" => {
+            match fx.get("character").and_then(Value::as_str).filter(|s| !s.is_empty()) {
+                None => errors.push(format!("{el}: choose a character.")),
+                Some(id) if v.worlds.resolve(w, "characters", id).is_empty() => errors.push(format!("{el}: Recruit: unknown character '{id}'.")),
+                Some(id) => errors.extend(party_character_errors(v, w, id).into_iter().map(|why| format!("{el}: {why}"))),
+            }
+            // ROSTER1 BK5: the join level
+            use rpgkit_data::{RECRUIT_LEVELS, RECRUIT_LEVEL_MAX};
+            if let Some(level) = fx.get("level").filter(|l| !(l.as_str().is_some_and(|s| RECRUIT_LEVELS.contains(&s)) || int_in(l, 1, RECRUIT_LEVEL_MAX))) {
+                errors.push(format!("{el}: level '{}' must be {} or a whole number 1..{RECRUIT_LEVEL_MAX}.", gstr(level), RECRUIT_LEVELS.join(", ")));
+            }
+        }
         _ => errors.extend(super::campaign::effect_errors(v, w, effect, fx, el)),
     }
     errors

@@ -298,3 +298,17 @@ and Stage V drift (the Calcification spec); Strain; the Apex organ harvest from 
 keepsake upgrade (Act 3, an exchange recipe); grief traits (Q-40: none); the corrupted-founder encounters (ENCOUNTER2
 4.3, EQ7); rescuing a captured founder (Q-33: never); the doctrine lean (CAMPAIGN1 M9); balance numbers (keepsakes,
 bleed-out rounds, wounded percent after the baseline).
+
+## As built (ROSTER1-L slice 1, 2026-10-31)
+
+- Slice order: the schema lands first (11.1-11.3 and RK1's keys, checks and typed readers, no behaviour), so the asset
+  lane can write ROSTER1-D; the refactor of `ROSTER1_TASKS.md` 2 ("L's first commit") is slice 2, the first code
+  slice, still alone and with no rule change.
+- `world.characters.keepsake` refs a catalog item (`base:items`); the item rule (an `ACCESSORY`, `value` 0, `special`)
+  also applies to each `keepsakes.by_class` item. Like every world entry rule, a bad keepsake is a content-check
+  error, not a refused write.
+- `party_min` carries the schema range 0..4, which clamps on normalize; the check adds "at most the world's party max".
+- `bleed_out_rounds` above 0 is accepted and stays inert until ROSTER1-B.
+- `roster.<member>` in a condition must name a character of the world, a party-side unit or `recruit_<n>`; a
+  character whose id is a roster word (`living`, `bunks`, `bunks_free`, `pool`, `open`, `departed`) is refused.
+- One "only the last row may have no acts" error covers both 11.2 cases (two open rows, an open row before another).

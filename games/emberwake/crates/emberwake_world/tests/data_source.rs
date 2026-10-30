@@ -31,8 +31,9 @@ fn data_dir() -> PathBuf {
 /// HOOKS1-S (2026-10-27): a skill's combat hook fields (`forced_move`, `hazard`, `triggers`, `riders`, `meters`,
 /// `hp_cost`, `ignore_guard`), a consumable's `hazard`, a unit's `tactics`, an encounter's `arena_hazards` (catalog and
 /// world encounters) and a world manifest's `classes`. ENCOUNTER2-H (2026-10-27): an encounter's `unkillable`,
-/// `timeout_outcome` and `stay_behind` (catalog and world encounters).
-const AFTER_GODOT: [(&str, &str, &str); 52] = [
+/// `timeout_outcome` and `stay_behind` (catalog and world encounters). ROSTER1-L (2026-10-31): a world manifest's
+/// `roster`, a world character's `keepsake` and a world encounter's `party_min`.
+const AFTER_GODOT: [(&str, &str, &str); 55] = [
     ("content", "units", "loot"),
     ("world", "encounters", "key_loot"),
     ("world", "encounters", "objective_reward"),
@@ -85,6 +86,9 @@ const AFTER_GODOT: [(&str, &str, &str); 52] = [
     ("world", "encounters", "timeout_outcome"),
     ("world", "encounters", "stay_behind"),
     ("world", "world", "classes"),
+    ("world", "world", "roster"),
+    ("world", "characters", "keepsake"),
+    ("world", "encounters", "party_min"),
 ];
 /// Retired parity, option level: enum and multi-pick options added after the freeze, by (section, kind, key, option);
 /// the option leaves the engine's schema row before comparing (every other option and its order is still compared);

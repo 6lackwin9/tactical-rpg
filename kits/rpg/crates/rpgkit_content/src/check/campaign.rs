@@ -56,7 +56,7 @@ fn input_keys(on: &str) -> &'static [&'static str] {
     }
 }
 
-fn int_in(v: &Value, lo: i64, hi: i64) -> bool {
+pub(super) fn int_in(v: &Value, lo: i64, hi: i64) -> bool {
     json::is_int(v) && (lo..=hi).contains(&json::to_int(v))
 }
 
@@ -65,12 +65,12 @@ fn chars(s: &str) -> usize {
 }
 
 /// An unknown key of `d` (one error each).
-fn unknown_keys(d: &Dict, allowed: &[&str], label: &str) -> Vec<String> {
+pub(super) fn unknown_keys(d: &Dict, allowed: &[&str], label: &str) -> Vec<String> {
     d.keys().filter(|k| !allowed.contains(&k.as_str())).map(|k| format!("{label}: unknown key '{k}'.")).collect()
 }
 
 /// `d[key]`, when present, is a whole number in lo..hi.
-fn int_key(d: &Dict, key: &str, lo: i64, hi: i64, label: &str) -> Option<String> {
+pub(super) fn int_key(d: &Dict, key: &str, lo: i64, hi: i64, label: &str) -> Option<String> {
     d.get(key).filter(|x| !int_in(x, lo, hi)).map(|_| format!("{label}: {key} must be a whole number {lo}..{hi}."))
 }
 
@@ -80,7 +80,7 @@ fn bool_key(d: &Dict, key: &str, label: &str) -> Option<String> {
 }
 
 /// `d[key]`, when present, is text of at most `max` characters (and not blank when `named`).
-fn text_key(d: &Dict, key: &str, max: usize, named: bool, label: &str) -> Option<String> {
+pub(super) fn text_key(d: &Dict, key: &str, max: usize, named: bool, label: &str) -> Option<String> {
     let x = d.get(key)?;
     match x.as_str() {
         None => Some(format!("{label}: {key} must be text.")),
@@ -91,7 +91,7 @@ fn text_key(d: &Dict, key: &str, max: usize, named: bool, label: &str) -> Option
 }
 
 /// `d[key]`, when present, is one of `options`.
-fn enum_key(d: &Dict, key: &str, options: &[&str], label: &str) -> Option<String> {
+pub(super) fn enum_key(d: &Dict, key: &str, options: &[&str], label: &str) -> Option<String> {
     let x = d.get(key)?;
     (!x.as_str().is_some_and(|s| options.contains(&s))).then(|| format!("{label}: {key} '{}' is not one of {}.", gstr(x), options.join(", ")))
 }
@@ -103,13 +103,13 @@ fn strings_key(d: &Dict, key: &str, label: &str) -> Option<String> {
 }
 
 /// `d[key]`, when present, is a list of acts (whole numbers 0..ACT_MAX).
-fn acts_key(d: &Dict, key: &str, label: &str) -> Option<String> {
+pub(super) fn acts_key(d: &Dict, key: &str, label: &str) -> Option<String> {
     let x = d.get(key)?;
     (!x.as_array().is_some_and(|a| a.iter().all(|n| int_in(n, 0, ACT_MAX)))).then(|| format!("{label}: {key} must be a list of acts 0..{ACT_MAX}."))
 }
 
 /// The object a manifest block or a json field holds (None and an error when it holds something else).
-fn object<'a>(raw: &'a Value, label: &str, errors: &mut Vec<String>) -> Option<&'a Dict> {
+pub(super) fn object<'a>(raw: &'a Value, label: &str, errors: &mut Vec<String>) -> Option<&'a Dict> {
     let d = raw.as_object();
     if d.is_none() {
         errors.push(format!("{label} must be an object."));
@@ -118,7 +118,7 @@ fn object<'a>(raw: &'a Value, label: &str, errors: &mut Vec<String>) -> Option<&
 }
 
 /// The list a json field holds (None and an error when it holds something else).
-fn list<'a>(raw: &'a Value, label: &str, errors: &mut Vec<String>) -> Option<&'a [Value]> {
+pub(super) fn list<'a>(raw: &'a Value, label: &str, errors: &mut Vec<String>) -> Option<&'a [Value]> {
     let a = raw.as_array().map(Vec::as_slice);
     if a.is_none() {
         errors.push(format!("{label} must be a list."));
@@ -644,6 +644,10 @@ pub fn read_key_error(v: &View, w: &str, key: &str) -> String {
             Some(id) if v.worlds.resolve(w, "meters", id).is_empty() => format!("'{key}' names no meter of this world."),
             Some(_) => String::new(),
         };
+    }
+    // ROSTER1 RK1: the roster read keys
+    if key.starts_with(rpgkit_data::ROSTER_PREFIX) {
+        return super::world::roster_read_key_error(v, w, key);
     }
     if CAMPAIGN_READ_KEYS.contains(&key) {
         String::new()

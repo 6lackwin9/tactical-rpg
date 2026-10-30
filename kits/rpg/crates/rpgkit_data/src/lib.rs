@@ -873,6 +873,183 @@ impl DefeatRule {
     }
 }
 
+// ---- Roster (ROSTER1 3-6, 9, 11, kit hook; engine-only, no Godot original) ------------------------------------------
+
+/// 3.1: the lives a departed member ends with (`party.departed[].life`).
+pub const DEPART_LIVES: [&str; 5] = ["captured", "dead", "retired", "dismissed", "lost"];
+/// KS1, 11.1: the lives that pay a keepsake (`keepsakes.on`, a rule row's `keepsakes_on`).
+pub const KEEPSAKE_LIVES: [&str; 3] = ["captured", "dead", "lost"];
+/// 11.4: why a member departed (`party.departed[].cause`).
+pub const DEPART_CAUSES: [&str; 7] = ["stayed", "stood", "downed", "bled_out", "lost_battle", "story", "roster"];
+/// L4: the HP of members who come home (`carry` = HEAL1's carry-over, `full` = back to full).
+pub const HP_AFTER: [&str; 2] = ["carry", "full"];
+/// L3: the settle value that keeps today's HEAL1 result.
+pub const SETTLE_CLASSIC: &str = "classic";
+/// 3.2: the values of `downed_won` and `standing_lost`.
+pub const SETTLE_HURT: [&str; 2] = ["classic", "wounded"];
+/// 3.2: the values of `downed_left` and `downed_lost`.
+pub const SETTLE_LOSS: [&str; 4] = ["classic", "wounded", "captured", "dead"];
+/// BK2: where a member lives (`bunk` the default; saved only when not `bunk`).
+pub const HOUSING: [&str; 3] = ["bunk", "crypt", "crypt_only"];
+/// BK5: the named join levels of the `recruit` effect's `level` (else a whole number 1..RECRUIT_LEVEL_MAX).
+pub const RECRUIT_LEVELS: [&str; 2] = ["highest", "average"];
+pub const RECRUIT_LEVEL_MAX: i64 = 20;
+/// 11.1: the most bunks, bunk cap and crypt places a manifest names.
+pub const BUNKS_MAX: i32 = 12;
+/// 11.1: the most rule rows of `roster.rules`.
+pub const ROSTER_RULES_MAX: usize = 4;
+/// 11.2: the longest bleed-out (rounds; 0 = off).
+pub const BLEED_OUT_ROUNDS_MAX: i32 = 6;
+/// W2, 11.2: a wounded member's max HP cut (percent of its unwounded max).
+pub const WOUNDED_PCT_DEFAULT: i32 = 20;
+pub const WOUNDED_PCT_MIN: i32 = 1;
+pub const WOUNDED_PCT_MAX: i32 = 90;
+/// BK6, 11.3: an encounter's `party_min` range top (and at most the world's party max).
+pub const PARTY_MIN_MAX: i64 = 4;
+/// KS3, 11.1: the procedural keepsake's display name (`keepsakes.name`).
+pub const KEEPSAKE_NAME_DEFAULT: &str = "{name}'s {item}";
+pub const KEEPSAKE_NAME_MAX: usize = 40;
+pub const KEEPSAKE_NAME_TOKENS: [&str; 2] = ["{name}", "{item}"];
+/// RK1: the words after `roster.` that are not member ids (a member id equal to one is refused).
+pub const ROSTER_WORDS: [&str; 6] = ["living", "bunks", "bunks_free", "pool", "open", "departed"];
+/// RK1: the read-key prefix the roster answers.
+pub const ROSTER_PREFIX: &str = "roster.";
+
+/// RK1: what a `roster.` read key asks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RosterRead<'a> {
+    /// `roster.living`: members housed in bunks or crypts.
+    Living,
+    /// `roster.bunks`: the bunk cap.
+    Bunks,
+    /// `roster.bunks_free`: the cap less the bunks in use.
+    BunksFree,
+    /// `roster.pool`: pool entries.
+    Pool,
+    /// `roster.open`: the open flag holds.
+    Open,
+    /// `roster.departed.<life>`: departed members of that life.
+    Departed(&'a str),
+    /// `roster.<member id>`: that member's state (`ready` or a departed life; "" when unknown).
+    Member(&'a str),
+}
+
+/// RK1: the question a `roster.` key asks (None: not a roster read key, or malformed).
+pub fn roster_read_key(key: &str) -> Option<RosterRead<'_>> {
+    let rest = key.strip_prefix(ROSTER_PREFIX)?;
+    let id_like = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
+    match rest {
+        "living" => Some(RosterRead::Living),
+        "bunks" => Some(RosterRead::Bunks),
+        "bunks_free" => Some(RosterRead::BunksFree),
+        "pool" => Some(RosterRead::Pool),
+        "open" => Some(RosterRead::Open),
+        _ => match rest.strip_prefix("departed.") {
+            Some(life) => DEPART_LIVES.contains(&life).then_some(RosterRead::Departed(life)),
+            None => (id_like(rest) && !ROSTER_WORDS.contains(&rest)).then_some(RosterRead::Member(rest)),
+        },
+    }
+}
+
+/// 11.2: one rule row of `roster.rules` (the act's lifecycle rules), read with its defaults (every one today's rule).
+#[derive(Debug, Clone, PartialEq)]
+pub struct RosterRule {
+    /// The acts the row covers (empty = every act; only the last row).
+    pub acts: Vec<i32>,
+    pub bleed_out_rounds: i32,
+    /// One of HP_AFTER.
+    pub hp_after: String,
+    /// One of SETTLE_HURT.
+    pub downed_won: String,
+    /// One of SETTLE_LOSS.
+    pub downed_left: String,
+    /// One of SETTLE_LOSS.
+    pub downed_lost: String,
+    /// One of SETTLE_HURT.
+    pub standing_lost: String,
+    pub wounded_max_hp_pct: i32,
+    /// Overrides the manifest's `keepsakes.on` for this row when set.
+    pub keepsakes_on: Option<Vec<String>>,
+}
+
+impl RosterRule {
+    pub fn from_obj(o: &Obj) -> Self {
+        let settle = |key: &str| string(o, key, SETTLE_CLASSIC);
+        Self {
+            acts: array(o, "acts").iter().map(|a| to_int(a, 0)).collect(),
+            bleed_out_rounds: int(o, "bleed_out_rounds", 0),
+            hp_after: string(o, "hp_after", HP_AFTER[0]),
+            downed_won: settle("downed_won"),
+            downed_left: settle("downed_left"),
+            downed_lost: settle("downed_lost"),
+            standing_lost: settle("standing_lost"),
+            wounded_max_hp_pct: int(o, "wounded_max_hp_pct", WOUNDED_PCT_DEFAULT),
+            keepsakes_on: o.get("keepsakes_on").map(|_| strings(o, "keepsakes_on")),
+        }
+    }
+
+    /// L6: whether the row covers `act`.
+    pub fn covers(&self, act: i32) -> bool {
+        self.acts.is_empty() || self.acts.contains(&act)
+    }
+}
+
+/// 11.1: the manifest's `roster` block, read with its defaults ({} = today's rules: bunks = party max, no rule row,
+/// no crypts, no open flag, no keepsakes).
+#[derive(Debug, Clone, PartialEq)]
+pub struct RosterManifest {
+    /// 0 = the party max (BK1).
+    pub bunks: i32,
+    /// An int flag added to the bunks (clamped at 0).
+    pub bunks_flag: String,
+    pub bunks_max: i32,
+    pub crypts: i32,
+    /// "" = always open.
+    pub open_flag: String,
+    pub rules: Vec<RosterRule>,
+    /// KS1: the lives that pay a keepsake (a rule row's `keepsakes_on` overrides).
+    pub keepsakes_on: Vec<String>,
+    /// KS3: class id -> keepsake template item id.
+    pub keepsakes_by_class: IndexMap<String, String>,
+    /// KS3: the procedural keepsake's name, tokens `{name}`, `{item}`.
+    pub keepsake_name: String,
+}
+
+impl RosterManifest {
+    pub fn from_obj(o: &Obj) -> Self {
+        let empty = Obj::new();
+        let ks = obj(o, "keepsakes").unwrap_or(&empty);
+        let by_class = obj(ks, "by_class").map(|m| m.iter().map(|(k, v)| (k.clone(), to_str(v))).collect()).unwrap_or_default();
+        Self {
+            bunks: int(o, "bunks", 0),
+            bunks_flag: string(o, "bunks_flag", ""),
+            bunks_max: int(o, "bunks_max", BUNKS_MAX),
+            crypts: int(o, "crypts", 0),
+            open_flag: string(o, "open_flag", ""),
+            rules: objs(o, "rules").iter().map(RosterRule::from_obj).collect(),
+            keepsakes_on: strings(ks, "on"),
+            keepsakes_by_class: by_class,
+            keepsake_name: string(ks, "name", KEEPSAKE_NAME_DEFAULT),
+        }
+    }
+
+    /// L6: the rule row of `act` (the first row whose `acts` is empty or holds it); None = classic.
+    pub fn rule(&self, act: i32) -> Option<&RosterRule> {
+        self.rules.iter().find(|r| r.covers(act))
+    }
+
+    /// KS1: the lives that pay a keepsake in `act` (the row's `keepsakes_on` when set, else `keepsakes.on`).
+    pub fn keepsake_lives(&self, act: i32) -> &[String] {
+        self.rule(act).and_then(|r| r.keepsakes_on.as_deref()).unwrap_or(&self.keepsakes_on)
+    }
+
+    /// BK1: the bunk cap: `bunks` (0 = `party_max`) plus the bunks flag's value (clamped at 0), at most `bunks_max`.
+    pub fn bunk_cap(&self, party_max: i32, flag_value: i32) -> i32 {
+        let base = if self.bunks == 0 { party_max } else { self.bunks };
+        (base + flag_value.max(0)).min(self.bunks_max.max(base))
+    }
+}
+
 // ---- Story (STORYUI1 4.1-4.8, kit hook; engine-only, no Godot original) ---------------------------------------------
 
 /// STORYUI1 4.1, 4.3, 4.4: the world kinds of the story layer (files `vignettes.json`, `sequences.json`, `boards.json`).
