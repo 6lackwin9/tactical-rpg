@@ -19,7 +19,7 @@ use rpgkit_battle::round_intent::{self, Aim};
 use rpgkit_battle::session::{EncounterDef, Phase, Session};
 use rpgkit_battle::world::{UnitId, World};
 use rpgkit_data::Catalog;
-use rpgkit_rules::ruleset::{Ruleset, ARENA_HAZARDS, FORCED_MOVE, POISE, TIMELINE};
+use rpgkit_rules::ruleset::{Ruleset, AI_TACTICS, ARENA_HAZARDS, FORCED_MOVE, POISE, TIMELINE};
 use rpgkit_rules::status;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -278,10 +278,11 @@ fn tells_list_the_rounds_cells_and_blocks() {
 }
 
 /// AT3: PL4's threat count adds 1 for a cell an arena hazard strikes this round, so of two tiles equal otherwise the
-/// one off the vents ranks first (without the hazard, the lower cell index wins).
+/// one off the vents ranks first (without the hazard, the lower cell index wins). HOOKS1-AI: the threat is AI tactics'
+/// hazard awareness (4.1), so it needs the rule `ai_tactics` too.
 #[test]
 fn pl4_avoids_cells_due_this_round() {
-    let s = session(rules(), json!([vents()]));
+    let s = session(timeline(&[ARENA_HAZARDS, POISE, FORCED_MOVE, AI_TACTICS]), json!([vents()]));
     let mut w = s.w.clone();
     w.grid.positions[FOE] = Some(v(0, 0));
     w.grid.positions[FOE_B] = Some(v(0, 1));

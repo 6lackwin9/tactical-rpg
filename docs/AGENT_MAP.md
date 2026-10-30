@@ -9,8 +9,9 @@ live view (`docs/workflow/cloud.md` "Area threads"), so this section changes onl
 
 ## Active now
 
-2026-10-29 (desktop): running: the RULESET1-U slice 1 builder (worktree `C:/dev/tactical-rpg-ruleset1u`, branch
-`claude/ruleset1u`), the HOOKS1-U review fix (`C:/dev/tactical-rpg-hooks1u`, `claude/hooks1u`), the WINDUP1-R2 review
-(`C:/dev/tactical-rpg-windup1r2`, `claude/windup1r2`); the planner's docs pass CLN-P2 in `C:/dev/tactical-rpg-plan`.
-Standing worktrees: `C:/dev/tactical-rpg-stage` (branch `staging`, decision "Batched gate") and `C:/dev/tactical-rpg-dev`
-(`run_dev.bat`).
+2026-10-30 wind-down (desktop, user's auto shutdown): M1 53/62 on staging. Standing worktrees: three lanes
+`C:/dev/tactical-rpg-lane1..3` (decision "Builder efficiency": a task is a branch in a lane; planner scripts `lane.sh`,
+`cleanup.sh`, `pgate.sh`), `C:/dev/tactical-rpg-stage` (branch `staging`), `C:/dev/tactical-rpg-plan` (docs) and
+`C:/dev/tactical-rpg-dev` (`run_dev.bat`). At shutdown: lane 1 RULESET1-AI2 may be uncommitted (see its
+`.agent/progress.md`); HOOKS1-UI slice 2 and ENCOUNTER2-D land on staging and flush to develop. Next: RULESET1-B2,
+HOOKS1-UI slices 3-5, ENCOUNTER2-U, HOOKS1-D; with the user: VISCLAR1, DIR4-R1F.

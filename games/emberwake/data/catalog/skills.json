@@ -1670,7 +1670,7 @@
 			"description": "Assault, Heavy: an unbreakable crushing blow, {stagger} stagger.",
 			"learned_only": true,
 			"round_intent": "assault",
-			"power_mult": 2.2,
+			"power_mult": 1.8,
 			"stagger": 20,
 			"unbreakable": true
 		}

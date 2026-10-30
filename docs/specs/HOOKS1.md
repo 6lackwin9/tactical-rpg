@@ -349,3 +349,34 @@ in `docs/archive/TASKS_DONE.md`, the user's rulings the rows in `games/emberwake
 - HOOKS1-C: members are built in their character's world (`UnitState::path_world`); screens name classes by the world
   being played.
 - HOOKS1-U (building): decision "HOOKS1-U unlock on an automatic deck (user 2026-10-29)".
+- HOOKS1-AI: AT3's threat (ground and arena) is under `ai_tactics` (the arena part also needs `arena_hazards`); hits
+  are remembered per round in `World::hits` (attack hits that took HP); under round intent `flush_cover` picks a tile
+  target for an area opener that still holds the first ranked target; SOFTEST and TOUGHEST outrank `reckless`.
+- HOOKS1-UI (building; slice 1): UM7's pip cutoff is the steps from min to max (`max - min` above 10 reads as a bar) in
+  the content check as on the battle screen; leaving a band removes a resist key the band created; the battle report
+  calls an execute finish "executed"; the board marks the ground hazards the party's side sees and the arena's struck
+  cells (overlay groups `hazards`, `arena`).
+- As built (HOOKS1-UI slice 2, decision "HOOKS1-UI slice 1 answers", user 2026-10-30; supersedes the HOOKS1-C line):
+  a member is built with the class path of the world being played (`progression::build_in` / `build_played` /
+  `build_with` take the world; `UnitState::path_world` is gone); a saved loadout, deck or rank validates against the
+  families its class path holds in any world (`owned_families_anywhere`); a build in a world that lacks one ignores
+  that stored loadout there (the member falls back to the default loadout, with a warning) and drops unowned deck entries; out-of-battle max HP, camp rest and the party screen's readouts build under the played
+  world's deck rule; `Data::edit_cat` rebuilds the per-world catalogs; battle hover cards name the class in the
+  battle's world (the Arena: the class row's name).
+- As built (HOOKS1-UI slice 3): UM7's meters show as pips (one per step from min to max) or a bar on the party and
+  hostile cards and, for the selected hero, under the strip title (overlay group `meters`; two meters a row at most);
+  the inspect card lists each with its band; a held guard (8.3) edges its card blue (group `guard`) and reads "Held
+  guard 50% through B3" on the inspect card; HC1's cost shows on the strip card and the step popup (the host's `skills`
+  reply gains `hp_cost` when a skill costs HP), and the refusal reads "Not enough HP: 9, it costs 10".
+- As built (HOOKS1-UI slice 4): FM3's step rule is one pure function (`forced::steps`) that a forced move resolves
+  by and `forced::preview` / `forced::forecast` read without changing the world (a kit test checks a forecast is the
+  move the hit makes); the battle screen draws the selected hero's planned pushes and pulls (an arrow to the end tile, a
+  cross at a collision, HOLD for a unit that holds firm; overlay group `pushes`) and names them on the strip cards.
+  FM1's `when` moved reads, for a forecast, a move landed this round or a Walk or Disengage of the target scheduled
+  before the impact.
+- As built (HOOKS1-UI slice 5, done; decision "HOOKS1-UI slice 4 answer"): a forecast is "if it struck now": each
+  planned entry and each target of an area is forecast against the unmoved board (an earlier planned push, another
+  target's push and the enemies' moves before the impact are not applied). The battle screen's intel panel keeps the
+  lines that fit: the Level line gives way first, then it ends with "More on its hover card" (decision "RULESET1-B2
+  tuning and HOOKS1-UI slice 3 answers"). Every HOOKS1-UI addition passes the text audit at 1280 x 720 and the four
+  text sizes.

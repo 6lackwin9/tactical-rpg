@@ -295,42 +295,28 @@ pub fn resolve_hits(res: &mut Resolver, w: &mut World, idx: usize) {
         return;
     }
     let hits = res.scheduled[idx].command.hits.clone();
+    let ignore_guard = res.scheduled[idx].command.ignore_guard;
     let mut out = Vec::new();
     for (t, flank) in hits {
         let Some(st) = w.poise.get(&t).copied() else { continue };
         if !w.units[t].is_alive() || st.max <= 0 {
             continue;
         }
-        let windup = in_windup(&res.scheduled, t, block);
-        let mut f = factors(w, &res.scheduled, t, block, blocks, flank);
-        // HOOKS1 IG1: a guard-bypassing hit staggers as if the target did not guard (set only under the rule ignore_guard)
-        if res.scheduled[idx].command.ignore_guard {
-            f.guard = 1.0;
-        }
-        let taken = stagger_taken(impact.stagger, &f);
-        let mut hit = StaggerHit { target: t, stagger: impact.stagger, factors: f, windup, taken, before: st.value, after: st.value, chance: None, broke: None };
+        let fc = forecast(w, &res.scheduled, t, st, block, &impact, blocks, flank, ignore_guard);
+        let mut hit = StaggerHit { target: t, stagger: impact.stagger, factors: fc.factors, windup: fc.windup, taken: fc.taken, before: st.value, after: st.value, chance: None, broke: None };
         // P8: a unit broken this round stays at 0 and breaks no further
         if !st.broken {
-            let held = unbreakable(w, &res.scheduled, t, block);
-            let mut after = st.value - taken;
-            if held {
-                after = after.max(st.value.min(1));
-            }
-            let mut cause = None;
-            if taken > 0 && after <= 0 && !held {
-                cause = Some(BreakCause::Poise);
-            } else if windup && impact.sure_break && !held {
-                cause = Some(BreakCause::Sure);
-            } else if windup && !held && taken > 0 && after > 0 && w.ruleset.numbers.break_chance_scale > 0.0 {
-                let chance = break_chance(&w.ruleset.numbers, taken, st.value);
-                let roll = res.rng.randi_range(1, 100);
-                hit.chance = Some((chance, roll));
-                if roll <= chance {
-                    cause = Some(BreakCause::Chance);
+            let cause = match fc.verdict {
+                Verdict::Breaks(c) => Some(c),
+                Verdict::Chance(chance) => {
+                    let roll = res.rng.randi_range(1, 100);
+                    hit.chance = Some((chance, roll));
+                    (roll <= chance).then_some(BreakCause::Chance)
                 }
-            }
-            w.poise.get_mut(&t).unwrap().value = after.max(0);
-            hit.after = after.max(0);
+                Verdict::Holds | Verdict::AlreadyBroken => None,
+            };
+            w.poise.get_mut(&t).unwrap().value = fc.after;
+            hit.after = fc.after;
             if let Some(cause) = cause {
                 hit.after = 0;
                 hit.broke = Some(break_unit(res, w, t, block, cause));
@@ -339,6 +325,103 @@ pub fn resolve_hits(res: &mut Resolver, w: &mut World, idx: usize) {
         out.push(hit);
     }
     res.scheduled[idx].command.staggers = out;
+}
+
+/// What a hit's stagger would do, the P13 roll aside (`forecast`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verdict {
+    /// The bar holds (poise left, no chance roll).
+    Holds,
+    /// P7 (poise to 0), P14 (`sure_break` into a windup): the unit breaks.
+    Breaks(BreakCause),
+    /// P13: a hit into a windup that leaves poise: it breaks on a roll at or under this chance (0-100).
+    Chance(i32),
+    /// P8: broken this round already: nothing more.
+    AlreadyBroken,
+}
+
+/// P6-P14 for one hit, without the P13 roll (deterministic, nothing changes): the stagger factors of a hit landing at
+/// `block` from an action `blocks` long (`flank`: a flank hit with the rule on; `ignore_guard`: HOOKS1 IG1), the stagger
+/// taken, the bar after it and the verdict. `st` is the target's bar before the hit. `resolve_hits` resolves every hit
+/// through it (one rule), and the battle screen forecasts a planned hit with it (RULESET1-U slice 5).
+#[allow(clippy::too_many_arguments)]
+pub fn forecast(w: &World, sched: &[ScheduledAction], t: UnitId, st: PoiseState, block: i32, impact: &Impact, blocks: i32, flank: bool, ignore_guard: bool) -> Forecast {
+    let windup = in_windup(sched, t, block);
+    let mut f = factors(w, sched, t, block, blocks, flank);
+    // HOOKS1 IG1: a guard-bypassing hit staggers as if the target did not guard (set only under the rule ignore_guard)
+    if ignore_guard {
+        f.guard = 1.0;
+    }
+    let taken = stagger_taken(impact.stagger, &f);
+    if st.broken {
+        return Forecast { factors: f, windup, taken, before: st.value, after: st.value, verdict: Verdict::AlreadyBroken };
+    }
+    let held = unbreakable(w, sched, t, block);
+    let mut after = st.value - taken;
+    if held {
+        after = after.max(st.value.min(1));
+    }
+    let verdict = if taken > 0 && after <= 0 && !held {
+        Verdict::Breaks(BreakCause::Poise)
+    } else if windup && impact.sure_break && !held {
+        Verdict::Breaks(BreakCause::Sure)
+    } else if windup && !held && taken > 0 && after > 0 && w.ruleset.numbers.break_chance_scale > 0.0 {
+        Verdict::Chance(break_chance(&w.ruleset.numbers, taken, st.value))
+    } else {
+        Verdict::Holds
+    };
+    Forecast { factors: f, windup, taken, before: st.value, after: after.max(0), verdict }
+}
+
+/// One planned hit for `forecast_hits`: its target, impact block, the skill's impact, the action's blocks, whether it
+/// flanks (with the rule on) and whether it bypasses guard.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PlannedHit {
+    pub target: UnitId,
+    pub block: i32,
+    pub impact: Impact,
+    pub blocks: i32,
+    pub flank: bool,
+    pub ignore_guard: bool,
+}
+
+/// RULESET1-U slice 6 (the battle screen's forecasts): `forecast` of each planned hit in its order, each on the bar the
+/// earlier hits of the sequence leave (poise after it; a break holds the bar broken at 0 for the rest of the round: P7,
+/// P8). A target without a bar (no rule poise, or Max Poise 0) gets None. Nothing changes and nothing is rolled.
+pub fn forecast_hits(w: &World, sched: &[ScheduledAction], hits: &[PlannedHit]) -> Vec<Option<Forecast>> {
+    let mut bars: Vec<(UnitId, PoiseState)> = Vec::new();
+    hits.iter()
+        .map(|h| {
+            let st = match bars.iter().find(|b| b.0 == h.target) {
+                Some(b) => b.1,
+                None => *state(w, h.target).filter(|st| st.max > 0)?,
+            };
+            let fc = forecast(w, sched, h.target, st, h.block, &h.impact, h.blocks, h.flank, h.ignore_guard);
+            let mut next = st;
+            next.value = fc.after;
+            if matches!(fc.verdict, Verdict::Breaks(_)) {
+                (next.value, next.broken) = (0, true);
+            }
+            match bars.iter_mut().find(|b| b.0 == h.target) {
+                Some(b) => b.1 = next,
+                None => bars.push((h.target, next)),
+            }
+            Some(fc)
+        })
+        .collect()
+}
+
+/// One hit's forecast (`forecast`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Forecast {
+    pub factors: Factors,
+    /// The target winds up at the hit's block (P5).
+    pub windup: bool,
+    pub taken: i32,
+    pub before: i32,
+    /// Poise after the hit (0 at the least; a break sets it to 0 on top).
+    pub after: i32,
+    pub verdict: Verdict,
 }
 
 /// P7: `t` breaks at `block`: poise 0 until the next refill; every action of it that has not landed is cancelled (also

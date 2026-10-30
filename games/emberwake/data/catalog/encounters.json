@@ -15,6 +15,7 @@
 				]
 			],
 			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 6,
 			"total_blocks": 6,
 			"ap_regen": 4,
@@ -35,6 +36,9 @@
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": false,
 			"purse": {},
@@ -54,6 +58,7 @@
 				]
 			],
 			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 6,
 			"total_blocks": 6,
 			"ap_regen": 4,
@@ -72,6 +77,9 @@
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": false,
 			"purse": {},
@@ -91,6 +99,7 @@
 				]
 			],
 			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 6,
 			"total_blocks": 6,
 			"ap_regen": 4,
@@ -131,6 +140,9 @@
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": false,
 			"purse": {},
@@ -150,6 +162,7 @@
 				]
 			],
 			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 8,
 			"total_blocks": 6,
 			"ap_regen": 4,
@@ -165,6 +178,9 @@
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": false,
 			"purse": {},
@@ -184,6 +200,7 @@
 				]
 			],
 			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 8,
 			"total_blocks": 6,
 			"ap_regen": 4,
@@ -199,6 +216,9 @@
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": false,
 			"purse": {},
@@ -218,6 +238,7 @@
 				]
 			],
 			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 8,
 			"total_blocks": 6,
 			"ap_regen": 4,
@@ -233,6 +254,9 @@
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": false,
 			"purse": {},
@@ -252,6 +276,7 @@
 				]
 			],
 			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 8,
 			"total_blocks": 6,
 			"ap_regen": 4,
@@ -269,6 +294,9 @@
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": false,
 			"purse": {},
@@ -288,7 +316,8 @@
 				]
 			],
 			"rows": [],
-			"max_rounds": 8,
+			"arena_hazards": [],
+			"max_rounds": 10,
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 10,
@@ -309,10 +338,218 @@
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": false,
 			"purse": {},
 			"guests": [],
+			"protect": []
+		},
+		{
+			"id": "tl_flank_elite",
+			"name": "Flank: Elite",
+			"description": "Timeline test: the flank bonus on a heavy target (rules=-flank against on).",
+			"zone": "stone_arena",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"arena_hazards": [],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 10,
+			"rng_seed": 1337,
+			"party": [
+				"tl_vanguard",
+				"tl_spiker"
+			],
+			"enemies": [
+				"tl_enforcer"
+			],
+			"phases": [],
+			"pace": "auto",
+			"objective": "rout",
+			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": false,
+			"purse": {},
+			"guests": [],
+			"protect": []
+		},
+		{
+			"id": "kit_winch_escape",
+			"name": "Winch Escape (kit sample)",
+			"description": "Kit sample: hold the winch while the rest get out through the gate.",
+			"zone": "ruined_courtyard",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					3
+				],
+				[
+					11,
+					4
+				],
+				[
+					11,
+					5
+				]
+			],
+			"rows": [
+				"############",
+				"#.....#....#",
+				"#..r..#....#",
+				"#.........L.",
+				"#...........",
+				"#.........L.",
+				"#..r..#....#",
+				"#.....#..o.#",
+				"############"
+			],
+			"arena_hazards": [],
+			"max_rounds": 8,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 12,
+			"rng_seed": 1337,
+			"party": [
+				"warrior",
+				"ranger",
+				"rogue",
+				"priest"
+			],
+			"enemies": [
+				"goblin_warlord",
+				"goblin_brawler",
+				"goblin_brawler",
+				"goblin_archer",
+				"goblin_archer"
+			],
+			"phases": [],
+			"pace": "auto",
+			"objective": "escape",
+			"objective_count": 3,
+			"objective_text": "Open the gate: one holds the winch, three get out.",
+			"unkillable": [
+				"goblin_warlord"
+			],
+			"timeout_outcome": "lost",
+			"stay_behind": {
+				"mode": "hold",
+				"tiles": [
+					[
+						10,
+						1
+					]
+				],
+				"tiles_label": "the winch",
+				"fallback": "any"
+			},
+			"deployment": "standard",
+			"morale": false,
+			"purse": {},
+			"guests": [],
+			"protect": []
+		},
+		{
+			"id": "kit_culling",
+			"name": "Culling Timer (kit sample)",
+			"description": "Kit sample: free the captives before they are culled.",
+			"zone": "stone_arena",
+			"arena": "CLOSED",
+			"exits": [
+				[
+					11,
+					4
+				]
+			],
+			"rows": [],
+			"arena_hazards": [],
+			"max_rounds": 6,
+			"total_blocks": 6,
+			"ap_regen": 4,
+			"unit_ap": 12,
+			"rng_seed": 1337,
+			"party": [
+				"warrior",
+				"ranger"
+			],
+			"enemies": [
+				"goblin_berserker",
+				"goblin_brawler",
+				"goblin_warlord",
+				"goblin_shaman"
+			],
+			"phases": [
+				{
+					"id": "cull_1",
+					"name": "The first cull",
+					"trigger": {
+						"kind": "round",
+						"round": 3
+					},
+					"effects": [
+						{
+							"type": "line",
+							"text": "The first captive falls."
+						},
+						{
+							"type": "kill",
+							"units": [
+								"dojo_warrior"
+							],
+							"by": "goblin_berserker"
+						}
+					],
+					"pause_autoplay": false
+				},
+				{
+					"id": "cull_2",
+					"name": "The second cull",
+					"trigger": {
+						"kind": "round",
+						"round": 5
+					},
+					"effects": [
+						{
+							"type": "line",
+							"text": "Another falls."
+						},
+						{
+							"type": "kill",
+							"units": [
+								"dojo_ranger"
+							],
+							"by": "goblin_berserker"
+						}
+					],
+					"pause_autoplay": false
+				}
+			],
+			"pace": "auto",
+			"objective": "rout",
+			"objective_text": "Free the captives before they are culled.",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
+			"deployment": "standard",
+			"morale": false,
+			"purse": {},
+			"guests": [
+				"dojo_warrior",
+				"dojo_ranger"
+			],
 			"protect": []
 		}
 	]

@@ -1,9 +1,10 @@
 //! STAGE1-E stage pieces (STAGE1 4.3, check 12): the foot ring (`Painter::ellipse_ring`) touches only pixels near the
 //! ellipse's edge, `Image::opaque_bounds` boxes the pixels at or above an alpha, and `Art::body_bounds` is that box of
 //! a body's fitted `idle` frame 0 (k = floor(size / frame side), centred across, on the bottom edge), mirrored with
-//! `flip`.
+//! `flip`. DIR4-HB: `Art::body_bounds_facing` boxes `idle`'s front or back row for a unit facing down or up (never
+//! mirrored) and falls back to the side `idle` (mirrored when left) for a side facing or a body without that view row.
 
-use aegis_core::assets::Layers;
+use aegis_core::assets::{Facing, Layers, View as Dir};
 use aegis_ui::art::Art;
 use aegis_ui::canvas::{Canvas, Image, Rect, OUTLINE_ALPHA};
 use aegis_ui::painter::{Fonts, Painter, View};
@@ -118,5 +119,70 @@ fn body_bounds_are_the_fitted_idle_frames_solid_box_and_mirror_with_flip() {
         assert_eq!(art.body_bounds("scout", "", size, false), r, "cached the same");
     }
     assert_eq!(art.body_bounds("nobody", "", 16, false), None, "no body, no bounds");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A body `facer` with 8 x 8 rows `idle` (solid x 1..3, y 2..8), `idle_down` (view `down` of `idle`: solid x 2..8,
+/// y 5..8) and `walk_up` (view `up` of `walk`, not of `idle`: solid x 0..8, y 0..8), and a side-only body `plain`
+/// (its `idle` as facer's). Returns the root.
+fn view_tree() -> PathBuf {
+    let root = std::env::temp_dir().join(format!("aegis_stage_pieces_views_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let (w, h) = (8u32, 32u32);
+    let mut px = vec![0u8; (w * h * 4) as usize];
+    let mut fill = |row: u32, xs: std::ops::Range<u32>, ys: std::ops::Range<u32>| {
+        for y in ys {
+            for x in xs.clone() {
+                let i = (((row * 8 + y) * w + x) * 4) as usize;
+                px[i..i + 4].copy_from_slice(&[0xa8, 0x30, 0x28, 255]);
+            }
+        }
+    };
+    fill(0, 1..3, 2..8);
+    fill(1, 1..3, 2..8);
+    fill(2, 2..8, 5..8);
+    fill(3, 0..8, 0..8);
+    let dir = root.join("units/facer/base");
+    write_png(&dir.join("sheet.png"), w, h, &px);
+    let clips = r##"{"frame": [8, 8], "clips": [
+        {"id": "idle", "frames": 1, "ms": [100]},
+        {"id": "walk", "frames": 1, "ms": [100]},
+        {"id": "idle_down", "frames": 1, "ms": [100], "of": "idle", "view": "down"},
+        {"id": "walk_up", "frames": 1, "ms": [100], "of": "walk", "view": "up"}]}"##;
+    std::fs::write(dir.join("clips.json"), clips).unwrap();
+    let plain = root.join("units/plain/base");
+    write_png(&plain.join("sheet.png"), w, 8, &px[..(w * 8 * 4) as usize]);
+    std::fs::write(plain.join("clips.json"), r##"{"frame": [8, 8], "clips": [{"id": "idle", "frames": 1, "ms": [100]}]}"##).unwrap();
+    root
+}
+
+#[test]
+fn body_bounds_follow_the_facing_view_and_fall_back_to_the_side_idle() {
+    let root = view_tree();
+    let mut art = Art::layered(Layers::of(vec![root.clone()]));
+    for size in [8, 16, 20] {
+        let k = size / 8;
+        let (ox, oy) = ((size - 8 * k) / 2, size - 8 * k);
+        let side = Rect::new(ox + k, oy + 2 * k, 2 * k, 6 * k);
+        let mirrored = Rect::new(size - side.x - side.w, side.y, side.w, side.h);
+        let down = Rect::new(ox + 2 * k, oy + 5 * k, 6 * k, 3 * k);
+        for left in [false, true] {
+            let want_side = if left { mirrored } else { side };
+            assert_eq!(art.body_bounds_facing("facer", "", size, Facing::side(left)), Some(want_side), "side, left {left}, size {size}");
+            assert_eq!(art.body_bounds("facer", "", size, left), Some(want_side), "body_bounds is the side facing");
+            // the front row of idle, never mirrored
+            assert_eq!(art.body_bounds_facing("facer", "", size, Facing { view: Dir::Down, left }), Some(down), "down, left {left}, size {size}");
+            // no back row of idle (walk_up draws walk): the side idle, mirrored when left
+            assert_eq!(art.body_bounds_facing("facer", "", size, Facing { view: Dir::Up, left }), Some(want_side), "up falls back, left {left}, size {size}");
+        }
+    }
+    // a side-only body facing up or down: the side idle, mirrored when left
+    for view in [Dir::Up, Dir::Down] {
+        for left in [false, true] {
+            assert_eq!(art.body_bounds_facing("plain", "", 16, Facing { view, left }), art.body_bounds("plain", "", 16, left), "{view:?} left {left}");
+        }
+    }
+    assert_eq!(art.body_bounds("plain", "", 16, true), Some(Rect::new(10, 4, 4, 12)), "the mirrored side idle");
+    assert_eq!(art.body_bounds_facing("nobody", "", 16, Facing { view: Dir::Down, left: false }), None, "no body, no bounds");
     let _ = std::fs::remove_dir_all(&root);
 }

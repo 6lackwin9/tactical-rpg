@@ -232,6 +232,8 @@ impl Resolver {
         if !cmd.log.is_empty() {
             self.log.push(cmd.log.clone());
         }
+        // HOOKS1 AT2: who the action's hits took HP from, for next round's `brace_after_hit` (rule ai_tactics)
+        w.note_hits(&cmd.struck);
         // HOOKS1 4.3 step 6: the forced moves follow the stagger and breaks (rule forced_move; nothing in classic)
         crate::forced::resolve(self, w, idx, &windups);
         // HOOKS1 4.3 step 7: the hazard the action leaves, then the Walks a sprung trap cancels (rule ground_hazards)
@@ -349,6 +351,8 @@ impl Resolver {
             }
         }
         self.scheduled.clear();
+        // HOOKS1 AT2: this round's hits become last round's (rules ai_tactics or round_intent, RULESET1-AI2; nothing in classic)
+        w.roll_hits();
         self.current_round += 1;
     }
 }

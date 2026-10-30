@@ -184,9 +184,17 @@ fn an_intent_change_drops_only_intent_bound_buffs() {
     }
     let tags: Vec<&String> = s.w.units[HERO].st.intents.keys().collect();
     assert_eq!(tags, ["riposte", "stealth", "fortify"], "bound: the two rows, the intent_buff grant to its user");
+    assert!(round_intent::would_drop(&s.w, HERO, RoundIntent::Guard).is_empty(), "the battle screen warns of nothing on the current intent");
     assert!(s.set_round_intent(HERO, "guard").unwrap().is_empty(), "no change, nothing dropped");
     assert_eq!(held(&s), before);
+    // UI1's "loses Riposte" warning names exactly what the change drops
+    let warned = round_intent::would_drop(&s.w, HERO, RoundIntent::Assault);
+    assert_eq!(held(&s), before, "the warning changes nothing");
     let lines = s.set_round_intent(HERO, "assault").unwrap();
+    assert_eq!(lines.len(), warned.len(), "{lines:?} vs {warned:?}");
+    for (line, name) in lines.iter().zip(&warned) {
+        assert!(line.ends_with(&format!("{name} ends")), "{line} names {name}");
+    }
     assert_eq!(lines.len(), 3, "{lines:?}");
     assert!(lines[0].contains("leaves Guard") && lines[0].contains("Riposte"), "{lines:?}");
     let after = held(&s);
@@ -292,6 +300,9 @@ fn flanks_come_from_beside_or_behind_an_engaged_unit() {
         place(w, HERO, t_at + offset);
         assert_eq!(round_intent::is_flank(w, HERO, t), flank, "A at {offset}");
         assert_eq!(round_intent::flank_bonus(w, HERO, t), flank, "the bonus under flank");
+        // RULESET1-U slice 5: the forecast's flank from a planned tile, read from anywhere
+        place(w, HERO, V2::new(0, 0));
+        assert_eq!(round_intent::flank_bonus_from(w, HERO, t_at + offset, t), flank, "from {offset}, standing elsewhere");
     }
     let mut off = w.clone();
     off.ruleset.adjust("-flank").unwrap();
@@ -556,4 +567,26 @@ fn default_intent_starts_the_battle() {
     let c = session(Ruleset::classic());
     assert_eq!(round_intent::intent_of(&c.w, FOE_B), None);
     assert!(c.w.round_states.is_empty(), "classic keeps no round state");
+}
+
+/// RULESET1 12 (decision "RULESET1-U slice 5 answers"): under the round intent a round closes in the log with its
+/// summary (`[Round] <round>: ...`, the kit's `summary_line` of `round_summary`); classic logs no such line.
+#[test]
+fn a_round_closes_with_its_summary_in_the_log() {
+    for (rules, logged) in [(timeline(), true), (Ruleset::classic(), false)] {
+        let mut s = session(rules);
+        place(&mut s.w, HERO, V2::new(2, 4));
+        assert!(s.confirm_plan());
+        while s.phase != Phase::Replay {
+            s.step_next();
+        }
+        let lines: Vec<&String> = s.resolver.log.iter().filter(|l| l.starts_with("[Round]")).collect();
+        if logged {
+            let want = round_intent::summary_line(1, &round_intent::round_summary(&s.w, &s.resolver.scheduled));
+            assert_eq!(lines, [&want], "one line, the round's summary");
+            assert_eq!(s.resolver.log.last(), Some(&want), "it closes the round");
+        } else {
+            assert!(lines.is_empty(), "classic: {lines:?}");
+        }
+    }
 }

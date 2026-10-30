@@ -1056,7 +1056,7 @@
 				}
 			},
 			"default_intent": "",
-			"ai_role": "",
+			"ai_role": "SKIRMISHER",
 			"target_pref": "ROLE",
 			"flee_ratio": 0.0,
 			"defend_below": 0.4,
@@ -1146,9 +1146,11 @@
 			"side": "enemy",
 			"description": "Footman (test) for the timeline test kit.",
 			"class_id": "tl_drill",
-			"level": 1,
+			"level": 2,
 			"tier": "standard",
-			"spend": {},
+			"spend": {
+				"CONS": 5
+			},
 			"stat_mode": "derived",
 			"ap": 0,
 			"power": 0,
@@ -1159,18 +1161,25 @@
 			"portrait_tier": "",
 			"skill_cap": 0,
 			"extra_skills": [
-				"tl_snap_jab"
+				"tl_snap_jab",
+				"tl_hook_thrust",
+				"tl_brace_counter"
 			],
 			"loadout": [],
 			"deck": {
 				"active": [
 					"tl_snap_jab",
-					"tl_thrust"
+					"tl_hook_thrust",
+					"tl_brace_counter"
 				],
 				"order": {
 					"assault": [
 						"tl_snap_jab",
-						"tl_thrust"
+						"tl_hook_thrust"
+					],
+					"guard": [
+						"tl_brace_counter",
+						"active_guard"
 					]
 				}
 			},
@@ -1199,9 +1208,11 @@
 			"side": "enemy",
 			"description": "Footman (test) for the timeline test kit.",
 			"class_id": "tl_drill",
-			"level": 1,
+			"level": 2,
 			"tier": "standard",
-			"spend": {},
+			"spend": {
+				"CONS": 5
+			},
 			"stat_mode": "derived",
 			"ap": 0,
 			"power": 0,
@@ -1212,18 +1223,24 @@
 			"portrait_tier": "",
 			"skill_cap": 0,
 			"extra_skills": [
-				"tl_snap_jab"
+				"tl_snap_jab",
+				"tl_brace_counter"
 			],
 			"loadout": [],
 			"deck": {
 				"active": [
 					"tl_snap_jab",
-					"tl_thrust"
+					"tl_thrust",
+					"tl_brace_counter"
 				],
 				"order": {
 					"assault": [
 						"tl_snap_jab",
 						"tl_thrust"
+					],
+					"guard": [
+						"tl_brace_counter",
+						"active_guard"
 					]
 				}
 			},
@@ -1265,18 +1282,24 @@
 			"portrait_tier": "",
 			"skill_cap": 0,
 			"extra_skills": [
-				"tl_overhead_smash"
+				"tl_overhead_smash",
+				"tl_brace_counter"
 			],
 			"loadout": [],
 			"deck": {
 				"active": [
 					"tl_overhead_smash",
-					"tl_thrust"
+					"tl_thrust",
+					"tl_brace_counter"
 				],
 				"order": {
 					"assault": [
 						"tl_overhead_smash",
 						"tl_thrust"
+					],
+					"guard": [
+						"tl_brace_counter",
+						"active_guard"
 					]
 				}
 			},
@@ -1318,13 +1341,15 @@
 			"portrait_tier": "",
 			"skill_cap": 0,
 			"extra_skills": [
-				"tl_crushing_judgment"
+				"tl_crushing_judgment",
+				"tl_brace_counter"
 			],
 			"loadout": [],
 			"deck": {
 				"active": [
 					"tl_crushing_judgment",
-					"tl_thrust"
+					"tl_thrust",
+					"tl_brace_counter"
 				],
 				"keystone": [
 					"tl_anvil_posture"
@@ -1333,6 +1358,10 @@
 					"assault": [
 						"tl_crushing_judgment",
 						"tl_thrust"
+					],
+					"guard": [
+						"tl_brace_counter",
+						"active_guard"
 					]
 				}
 			},
@@ -1361,9 +1390,12 @@
 			"side": "enemy",
 			"description": "Crossbowman (test) for the timeline test kit.",
 			"class_id": "ranger",
-			"level": 1,
+			"level": 2,
 			"tier": "standard",
-			"spend": {},
+			"spend": {
+				"CONS": 4,
+				"DEX": 1
+			},
 			"stat_mode": "derived",
 			"ap": 0,
 			"power": 0,
@@ -1375,18 +1407,24 @@
 			"skill_cap": 0,
 			"extra_skills": [
 				"tl_aimed_shot",
-				"tl_snap_shot"
+				"tl_snap_shot",
+				"tl_fade"
 			],
 			"loadout": [],
 			"deck": {
 				"active": [
 					"tl_aimed_shot",
-					"tl_snap_shot"
+					"tl_snap_shot",
+					"tl_fade"
 				],
 				"order": {
 					"assault": [
 						"tl_aimed_shot",
 						"tl_snap_shot"
+					],
+					"guard": [
+						"tl_fade",
+						"active_guard"
 					]
 				}
 			},

@@ -106,25 +106,46 @@ fn the_overlay_path_replaces_the_class_path() {
     assert_eq!(path_of("c"), PATH.map(String::from).to_vec());
 }
 
-/// CN3 for members: a founder of world `a` owns only its own skills (extras, basics); in `c` the class path; in `f` the
-/// overlay's one family. The Skills tab's owned families agree with the build.
+/// CN3 for members (decision "HOOKS1-UI slice 1 answers", user 2026-10-30, superseding HOOKS1-C's "the character's
+/// world"): a member builds with the class path of the world being played, whichever world its character comes from.
+/// In `a` it owns only its own skills (extras, basics); in `c` the class path; in `f` the overlay's one family. The
+/// Skills tab's owned families agree with the build. A world-free `build` takes the base catalog's path.
 #[test]
-fn members_build_with_their_world_path() {
+fn members_build_with_the_played_world_path() {
     let d = data();
-    let built = |w: &str| {
-        let m = new_game::hero_from_character(&d, w, "founder").expect("a party character");
-        let u = progression::build(&d, &m).expect("valid").unit;
-        (u.known_skills.clone(), m.owned_families(&d))
-    };
-    let (a, owned_a) = built("a");
-    assert!(PATH.iter().all(|p| !has(&a, p)) && has(&a, EXTRA) && has(&a, "strike"), "a: own skills only: {a:?}");
-    assert!(PATH.iter().all(|p| !has(&owned_a, p)), "a: {owned_a:?}");
-    let (c, owned_c) = built("c");
-    assert!(PATH.iter().all(|p| has(&c, p)) && has(&c, EXTRA), "c: the class path: {c:?}");
-    assert!(PATH.iter().all(|p| has(&owned_c, p)));
-    let (f, owned_f) = built("f");
-    assert!(has(&f, PATH[1]) && !has(&f, PATH[0]), "f: the overlay's family only: {f:?}");
-    assert!(has(&owned_f, PATH[1]) && !has(&owned_f, PATH[0]));
+    for from in ["a", "c", "f"] {
+        let m = new_game::hero_from_character(&d, from, "founder").expect("a party character");
+        let built = |played: &str| (progression::build_in(&d, &m, played, None).expect("valid").unit.known_skills, m.owned_families(&d, played));
+        let (a, owned_a) = built("a");
+        assert!(PATH.iter().all(|p| !has(&a, p)) && has(&a, EXTRA) && has(&a, "strike"), "{from} in a: own skills only: {a:?}");
+        assert!(PATH.iter().all(|p| !has(&owned_a, p)), "{from} in a: {owned_a:?}");
+        let (c, owned_c) = built("c");
+        assert!(PATH.iter().all(|p| has(&c, p)) && has(&c, EXTRA), "{from} in c: the class path: {c:?}");
+        assert!(PATH.iter().all(|p| has(&owned_c, p)));
+        let (f, owned_f) = built("f");
+        assert!(has(&f, PATH[1]) && !has(&f, PATH[0]), "{from} in f: the overlay's family only: {f:?}");
+        assert!(has(&owned_f, PATH[1]) && !has(&owned_f, PATH[0]));
+        let base = progression::build(&d, &m).expect("valid").unit.known_skills;
+        assert!(PATH.iter().all(|p| has(&base, p)), "{from}, world-free: the base path: {base:?}");
+    }
+}
+
+/// A save is played in more than one world: a loadout naming a family the class path holds in some world validates;
+/// built in a world whose path lacks it, the stored loadout is ignored with a warning (as any unowned entry), and the
+/// out-of-battle max HP follows the played world's build.
+#[test]
+fn a_loadout_owned_in_another_world_validates_and_drops_where_unowned() {
+    let d = data();
+    let mut m = new_game::hero_from_character(&d, "a", "founder").expect("a party character");
+    m.loadout_class = vec![PATH[0].to_string()];
+    assert!(m.validate(&d).is_empty(), "{:?}", m.validate(&d));
+    let in_c = progression::build_in(&d, &m, "c", None).expect("valid");
+    assert!(in_c.warnings.is_empty() && has(&in_c.unit.active_families(), PATH[0]), "c: {:?}", in_c.warnings);
+    let in_a = progression::build_in(&d, &m, "a", None).expect("valid");
+    assert!(!in_a.warnings.is_empty() && !has(&in_a.unit.active_families(), PATH[0]), "a: {:?}", in_a.unit.active_families());
+    for w in ["a", "c"] {
+        assert_eq!(progression::max_hp_of(&d, &m, w), progression::build_played(&d, &m, w).unwrap().unit.max_hp as i64);
+    }
 }
 
 /// CN3 for world characters in battle (the world roster's `customize`): the foe in `a` fights without the class path,

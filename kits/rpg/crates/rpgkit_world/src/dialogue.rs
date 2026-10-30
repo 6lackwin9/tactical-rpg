@@ -156,11 +156,14 @@ pub fn fill(text: &str, values: &IndexMap<String, String>) -> String {
     out
 }
 
-/// The highest effective `stat` among the active members (built with gear and passives).
+/// The highest effective `stat` among the active members (built with gear and passives). RULESET1 9 D3 (the RULESET1-D
+/// review): built as the world being played fights, so under its deck rule only slotted passives count (classic: the
+/// deck rule is None, `build` exactly).
 pub fn best_stat(d: &Data, gs: &GameState, stat: &str) -> i64 {
+    let deck = rpgkit_rules::DeckRule::of(&d.ruleset(&gs.world_id));
     let mut best = 0;
     for m in gs.party.active_members() {
-        if let Some(b) = progression::build(d, m) {
+        if let Some(b) = progression::build_in(d, m, &gs.world_id, deck.as_ref()) {
             let ctx = b.unit.weapon_context();
             best = best.max(b.unit.stats.effective(stat, ctx.as_deref(), "") as i64);
         }

@@ -14,6 +14,16 @@ pub const LOADOUTS: [&str; 3] = ["default", "newest", "role"];
 pub const SCORES: [&str; 3] = ["both", "hp", "binary"];
 pub const GENERATED: [&str; 5] = ["mob", "line", "wave", "elite", "boss"];
 pub const PRESETS: [&str; 7] = ["balanced", "aggressive", "focus_weakest", "defensive", "ranged_kite", "economy", "withdraw"];
+/// RULESET1-G2 (RULESET1_BALANCE1 3.1): the feel mode's party tactics (AUTO1) and the PlanPresets id each drafts with
+/// (RULESET1_INTENT AI5 maps them to the round intent table's tactics).
+pub const TACTICS: [(&str, &str); 6] =
+    [("balanced", "balanced"), ("all_out", "aggressive"), ("focus_weakest", "focus_weakest"), ("guard_counter", "defensive"), ("kite", "ranged_kite"), ("economy", "economy")];
+/// RULESET1-G2: the keys only the feel mode reads (any other mode refuses them).
+pub const FEEL_KEYS: [&str; 4] = ["tactic", "party", "armor", "tune"];
+/// RULESET1-G2: the `armor=` range (the unit field's, less -1 = derived).
+pub const ARMOR_MAX: i32 = 200;
+/// RULESET1-G2: the ruleset numbers `tune=` may set (RULESET1_TASKS 1.2), by key prefix; ranges from the kit schema.
+pub const TUNE_PREFIXES: [&str; 4] = ["stagger_", "flank_", "break_chance_", "rest_"];
 pub const REF_PREFIX: &str = "world:";
 /// BAL5-SIM K2: party / sweep cells default to 10 seeds (other modes keep 3).
 pub const PARTY_SEEDS: usize = 10;
@@ -96,6 +106,16 @@ pub struct SimArgs {
     pub ruleset: rpgkit_rules::ruleset::Ruleset,
     ruleset_id: String,
     rules: String,
+    /// RULESET1-G2 (feel only): the party's AUTO1 tactic (a TACTICS name; `balanced`).
+    pub tactic: String,
+    /// RULESET1-G2 (feel only): the party drivers, each run as its own block (`party=auto|timed|both`; auto).
+    pub drivers: Vec<crate::timed::Driver>,
+    /// RULESET1-G2 (feel only): unit id -> the armour it fights with in this run (`armor=<unit>:<0-200>`).
+    pub armor: IndexMap<String, i32>,
+    /// RULESET1-G2 (feel only): ruleset number -> its value in this run (`tune=<key>:<value>`), applied to `ruleset`.
+    pub tune: IndexMap<String, f64>,
+    /// The feel keys given, for the check that no other mode takes them.
+    feel_keys: Vec<String>,
 }
 
 impl Default for SimArgs {
@@ -145,6 +165,11 @@ impl Default for SimArgs {
             ruleset: rpgkit_rules::ruleset::Ruleset::classic(),
             ruleset_id: String::new(),
             rules: String::new(),
+            tactic: "balanced".into(),
+            drivers: vec![crate::timed::Driver::Auto],
+            armor: IndexMap::new(),
+            tune: IndexMap::new(),
+            feel_keys: Vec::new(),
         }
     }
 }
@@ -188,9 +213,20 @@ pub fn has_encounter(d: &Data, world: &str, id: &str) -> bool {
     d.world_ids().iter().any(|w| w == world) && d.has_entry(world, "encounters", id)
 }
 
-/// Every encounter of the catalog, in catalog order.
+/// Every balance fight of the catalog, in catalog order (`enc=all`): ENCOUNTER2 S4 skips the stay-behind and room
+/// encounters and the kit's own (`kit_` ids); `enc=<id>` still runs them.
 pub fn catalog_encounters(d: &Data) -> Vec<String> {
-    d.cat.encounters.keys().cloned().collect()
+    d.cat.encounters.iter().filter(|(id, row)| !skipped_by_default(id, row)).map(|(id, _)| id.clone()).collect()
+}
+
+/// ENCOUNTER2 S4: not a balance fight (an id starting `kit_`, a `stay_behind` block or `rooms`).
+pub fn skipped_by_default(id: &str, row: &aegis_core::value::Obj) -> bool {
+    let filled = |key: &str| match row.get(key) {
+        Some(serde_json::Value::Object(o)) => !o.is_empty(),
+        Some(serde_json::Value::Array(a)) => !a.is_empty(),
+        _ => false,
+    };
+    id.starts_with("kit_") || filled("stay_behind") || filled("rooms")
 }
 
 impl SimArgs {
@@ -291,9 +327,14 @@ impl SimArgs {
         }
         if a.mode == "feel" {
             a.feel_defaults(d, enc_set)?;
+        } else if let Some(k) = a.feel_keys.first() {
+            return Err(format!("{k}= is a feel key (mode feel only)"));
         }
         a.ruleset = rpgkit_rules::ruleset::Ruleset::of(&d.cat, &a.ruleset_id)?;
         a.ruleset.adjust(&a.rules)?;
+        if a.mode == "feel" {
+            a.feel_checks(d)?;
+        }
         Ok(a)
     }
 
@@ -317,9 +358,71 @@ impl SimArgs {
         Ok(())
     }
 
+    /// RULESET1-G2 (RULESET1_BALANCE1 3.1): the feel keys against the parsed ruleset and encounters: `preset=` is
+    /// classic-only (one preset; only `balanced` under timeline), each `armor=` unit is in a fought roster, each
+    /// `tune=` number sits in the kit schema's range and is set on the run's ruleset.
+    fn feel_checks(&mut self, d: &Data) -> Result<(), String> {
+        if self.preset == "both" {
+            return Err("feel takes one preset (got 'both')".into());
+        }
+        if self.ruleset.has(rpgkit_rules::ruleset::ROUND_INTENT) && self.preset != "balanced" {
+            return Err("preset is classic-only; use tactic=".into());
+        }
+        let fought: Vec<String> = self.encounters.iter().flat_map(|e| feel_roster(d, e)).collect();
+        for id in self.armor.keys() {
+            if !fought.contains(id) {
+                return Err(format!("armor: '{id}' is in no fought roster ({})", self.encounters.join(",")));
+            }
+        }
+        for (key, v) in &self.tune {
+            let (lo, hi) = tune_range(key).ok_or_else(|| format!("tune: '{key}' is not a ruleset tuning number (keys {})", tune_keys().join(", ")))?;
+            if *v < lo || *v > hi {
+                return Err(format!("tune: {key} must be {lo}..{hi} (got {v})"));
+            }
+            self.ruleset.numbers.set(key, *v).map_err(|e| format!("tune: {e}"))?;
+        }
+        Ok(())
+    }
+
+    /// The PlanPresets id the party drafts with in the feel mode (its tactic's).
+    pub fn tactic_preset(&self) -> &'static str {
+        TACTICS.iter().find(|(name, _)| *name == self.tactic).map_or("balanced", |(_, p)| p)
+    }
+
     fn key(&mut self, d: &Data, key: &str, value: &str) -> Result<(), String> {
         let classes = godot_list(&CLASSES);
+        if FEEL_KEYS.contains(&key) && !self.feel_keys.iter().any(|k| k == key) {
+            self.feel_keys.push(key.to_string());
+        }
         match key {
+            // RULESET1-G2: the feel mode's keys (RULESET1_BALANCE1 3.1). Not in the help text (Godot parity).
+            "tactic" => {
+                if !TACTICS.iter().any(|(name, _)| *name == value) {
+                    let names: Vec<&str> = TACTICS.iter().map(|(name, _)| *name).collect();
+                    return Err(format!("tactic must be one of {} (got '{value}')", godot_list(&names)));
+                }
+                self.tactic = value.into();
+            }
+            "party" => {
+                self.drivers = match value {
+                    "both" => vec![crate::timed::Driver::Auto, crate::timed::Driver::Timed],
+                    v => vec![crate::timed::Driver::parse(v).ok_or_else(|| format!("party must be one of {} or both (got '{value}')", godot_list(&crate::timed::DRIVERS)))?],
+                };
+            }
+            "armor" => {
+                for part in list(value) {
+                    let parsed = part.split_once(':').filter(|(id, n)| !id.is_empty() && is_int(n) && (0..=ARMOR_MAX).contains(&int(n)));
+                    let Some((id, n)) = parsed else { return Err(format!("armor must be <unit id>:<0-{ARMOR_MAX}>, comma separated (got '{part}')")) };
+                    self.armor.insert(id.to_string(), int(n));
+                }
+            }
+            "tune" => {
+                for part in list(value) {
+                    let parsed = part.split_once(':').and_then(|(k, v)| v.parse::<f64>().ok().filter(|f| f.is_finite()).map(|f| (k, f)));
+                    let Some((k, v)) = parsed else { return Err(format!("tune must be <ruleset number>:<value>, comma separated (got '{part}')")) };
+                    self.tune.insert(k.to_string(), v);
+                }
+            }
             // RULESET1-G: `seeds=N` (the feel mode's spelling; the positional seeds win). Not in the help text.
             "seeds" => {
                 if !is_int(value) || int(value) < 1 {
@@ -684,7 +787,22 @@ impl SimArgs {
                 }
             }
             "tier" => t += &format!(", tier_foe {}", self.tier_foe),
-            "feel" => t += &format!(", enc {}, ruleset {}{}", self.encounters.join(","), self.ruleset.id, if self.rules.is_empty() { String::new() } else { format!(", rules {}", self.rules) }),
+            "feel" => {
+                t += &format!(", enc {}, ruleset {}{}", self.encounters.join(","), self.ruleset.id, if self.rules.is_empty() { String::new() } else { format!(", rules {}", self.rules) });
+                // RULESET1-G2: every feel key that is not its default
+                if self.tactic != "balanced" {
+                    t += &format!(", tactic {}", self.tactic);
+                }
+                if self.drivers != [crate::timed::Driver::Auto] {
+                    t += &format!(", party {}", if self.drivers.len() > 1 { "both" } else { self.drivers[0].id() });
+                }
+                if !self.armor.is_empty() {
+                    t += &format!(", armor {}", self.armor.iter().map(|(u, n)| format!("{u}:{n}")).collect::<Vec<_>>().join(","));
+                }
+                if !self.tune.is_empty() {
+                    t += &format!(", tune {}", self.tune.iter().map(|(k, v)| format!("{k}:{v}")).collect::<Vec<_>>().join(","));
+                }
+            }
             _ => {}
         }
         if !self.pouch.is_empty() {
@@ -692,6 +810,33 @@ impl SimArgs {
         }
         t
     }
+}
+
+/// RULESET1-G2: the unit refs an encounter fights with (party, enemies, guests and phase waves).
+pub fn feel_roster(d: &Data, id: &str) -> Vec<String> {
+    let Some(row) = d.cat.encounters.get(id) else { return Vec::new() };
+    let mut refs: Vec<String> = ["party", "enemies", "guests"].iter().flat_map(|k| aegis_core::json::sget(row, k)).collect();
+    refs.extend(rpgkit_battle::encounter::Phases::create(aegis_core::json::aget(row, "phases")).phases.iter().flat_map(|p| p.wave_refs()));
+    refs
+}
+
+/// RULESET1-G2: the `tune=` keys: the kit schema's numeric ruleset fields with a TUNE_PREFIXES prefix.
+pub fn tune_keys() -> Vec<String> {
+    tune_fields().map(|f| aegis_core::json::s(f, "key")).collect()
+}
+
+/// RULESET1-G2: the schema range (min, max) of the `tune=` number `key` (None: not one).
+pub fn tune_range(key: &str) -> Option<(f64, f64)> {
+    let f = tune_fields().find(|f| aegis_core::json::s(f, "key") == key)?;
+    Some((f.get("min")?.as_f64()?, f.get("max")?.as_f64()?))
+}
+
+fn tune_fields() -> impl Iterator<Item = &'static serde_json::Map<String, serde_json::Value>> {
+    let fields = rpgkit_content::source::schema()["content"]["rulesets"].as_array().map(Vec::as_slice).unwrap_or(&[]);
+    fields.iter().filter_map(serde_json::Value::as_object).filter(|f| {
+        let key = aegis_core::json::s(f, "key");
+        matches!(aegis_core::json::s(f, "type").as_str(), "int" | "float") && TUNE_PREFIXES.iter().any(|p| key.starts_with(p))
+    })
 }
 
 /// The help text printed after an argument error; the campaign line is the game's story run's (KIT1-SIM).

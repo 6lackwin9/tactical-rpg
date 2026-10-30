@@ -159,7 +159,12 @@ pub fn best_moment(rows: &[Row], details: &[Detail]) -> String {
         return format!("{who} healed {} at {} HP, and {} made it through.", s.ally, s.hp, s.ally);
     }
     if let Some((who, f)) = pick(pairs().filter_map(|(r, d)| d.best_finish.clone().map(|f| (0, f.order, r.name.clone(), f)))) {
-        let how = if f.combo == "break" { "broke the guard".to_string() } else { format!("exploited {}", status::display_name(&f.status)) };
+        // HOOKS1 EX1: an execute entry (its label is the rule id, no status) reads "executed"
+        let how = match (f.combo.as_str(), f.status.as_str()) {
+            ("break", _) => "broke the guard".to_string(),
+            (_, crate::skill::EXECUTE) => "executed".to_string(),
+            _ => format!("exploited {}", status::display_name(&f.status)),
+        };
         return format!("{who} finished {} with {} ({how}).", f.target, f.skill);
     }
     if let Some((who, h)) = pick(pairs().filter_map(|(r, d)| d.best_hit.clone().map(|h| (h.amount, h.order, r.name.clone(), h)))) {

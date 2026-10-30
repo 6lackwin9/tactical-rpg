@@ -225,8 +225,9 @@ pub fn readers_of(w: &World, actions: &[&ScheduledAction]) -> Vec<UnitId> {
         .collect()
 }
 
-/// RULESET1 V4: the party's active foresight holders on the grid with a `range` that covers `unit`'s tile at planning
-/// (every enemy within N tiles; only under `plan_badges`).
+/// RULESET1 V4: the party's active foresight holders on the grid with a `range` that covers `unit`'s tile now (every
+/// enemy within N tiles; only under `plan_badges`). The tells read it as measured when the round's enemy plan was
+/// scheduled (`range_reveals`), so the round's playback (units moving, holders falling) never changes a reveal.
 pub fn range_readers(w: &World, unit: UnitId) -> Vec<UnitId> {
     if !badges_on(w) || !w.has(unit) {
         return Vec::new();
@@ -241,8 +242,15 @@ pub fn range_readers(w: &World, unit: UnitId) -> Vec<UnitId> {
         .collect()
 }
 
-/// The record of one enemy (morale filled by the caller).
-pub fn intent_of(w: &World, unit: UnitId, scheduled: &[ScheduledAction], on_grid_at_schedule: &[UnitId], enraged: bool) -> Intent {
+/// RULESET1 V4 at scheduling: each active enemy on the grid that a foresight range covers now, with its range readers
+/// (empty without `plan_badges` or a holder with a range, so classic measures nothing).
+pub fn range_reveals(w: &World) -> Vec<(UnitId, Vec<UnitId>)> {
+    w.enemies.iter().copied().filter(|&e| w.units[e].is_active()).map(|e| (e, range_readers(w, e))).filter(|(_, r)| !r.is_empty()).collect()
+}
+
+/// The record of one enemy (morale filled by the caller). `ranged`: the range reveals measured when the round's enemy
+/// plan was scheduled (`range_reveals`).
+pub fn intent_of(w: &World, unit: UnitId, scheduled: &[ScheduledAction], on_grid_at_schedule: &[UnitId], ranged: &[(UnitId, Vec<UnitId>)], enraged: bool) -> Intent {
     let actions = actions_of(unit, scheduled);
     // RULESET1 V2: the battle's plan_reveal shows every enemy (plan_badges only)
     let reveal_all = badges_on(w) && w.plan_reveal;
@@ -250,9 +258,10 @@ pub fn intent_of(w: &World, unit: UnitId, scheduled: &[ScheduledAction], on_grid
         let kind = if on_grid_at_schedule.contains(&unit) { IDLE } else { ARRIVING };
         Intent { unit, line: Line { kind, target: None, cell: NO_CELL, blocks: (0, 0), recovery: 0, skill: String::new() }, revealed: enraged || reveal_all, enraged, readers: Vec::new(), plan: Vec::new(), morale_state: "", morale_group: -1, round_intent: None, round_target: None, maneuver: None, impacts: Vec::new() }
     } else {
-        // RULESET1 V4: a foresight range reveals on top of today's rule (holders in the allies' order)
+        // RULESET1 V4: a foresight range (as measured at scheduling) reveals on top of today's rule (holders in the
+        // allies' order)
         let mut readers = readers_of(w, &actions);
-        let ranged = range_readers(w, unit);
+        let ranged: &[UnitId] = ranged.iter().find(|r| r.0 == unit).map_or(&[], |r| r.1.as_slice());
         if !ranged.is_empty() {
             readers = w.allies.iter().copied().filter(|h| readers.contains(h) || ranged.contains(h)).collect();
         }
@@ -297,20 +306,20 @@ pub fn party_intent_of(w: &World, unit: UnitId, plan: Option<&Plan>, scheduled: 
     rec
 }
 
-/// One record per active enemy on the grid, in the enemies' order.
-pub fn intents(w: &World, scheduled: &[ScheduledAction], on_grid_at_schedule: &[UnitId], enraged: &[UnitId]) -> Vec<Intent> {
-    w.enemies.iter().copied().filter(|&e| w.units[e].is_active() && w.has(e)).map(|e| intent_of(w, e, scheduled, on_grid_at_schedule, enraged.contains(&e))).collect()
+/// One record per active enemy on the grid, in the enemies' order (`ranged` as `intent_of`).
+pub fn intents(w: &World, scheduled: &[ScheduledAction], on_grid_at_schedule: &[UnitId], ranged: &[(UnitId, Vec<UnitId>)], enraged: &[UnitId]) -> Vec<Intent> {
+    w.enemies.iter().copied().filter(|&e| w.units[e].is_active() && w.has(e)).map(|e| intent_of(w, e, scheduled, on_grid_at_schedule, ranged, enraged.contains(&e))).collect()
 }
 
 /// RULESET1 V5, intent UI5: one record per active unit on the grid, both sides (the threat intel panel, strip rows and
 /// board glyphs): the party in the allies' order (`party_intent_of`), then the enemies as `intents`. Empty without
 /// `plan_badges` (classic).
-pub fn round_intents(w: &World, plan: Option<&Plan>, scheduled: &[ScheduledAction], on_grid_at_schedule: &[UnitId], enraged: &[UnitId]) -> Vec<Intent> {
+pub fn round_intents(w: &World, plan: Option<&Plan>, scheduled: &[ScheduledAction], on_grid_at_schedule: &[UnitId], ranged: &[(UnitId, Vec<UnitId>)], enraged: &[UnitId]) -> Vec<Intent> {
     if !badges_on(w) {
         return Vec::new();
     }
     let mut out: Vec<Intent> = w.allies.iter().copied().filter(|&a| w.units[a].is_active() && w.has(a)).map(|a| party_intent_of(w, a, plan, scheduled)).collect();
-    out.extend(intents(w, scheduled, on_grid_at_schedule, enraged));
+    out.extend(intents(w, scheduled, on_grid_at_schedule, ranged, enraged));
     out
 }
 

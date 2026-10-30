@@ -279,6 +279,29 @@ fn a_band_holds_its_effects_and_statuses_only_while_in_it() {
     let u = &w.units[HERO];
     assert_eq!(meter::value(&w, HERO, "fury"), Some(HOT_FROM - 1));
     assert_eq!((u.has_status("empower"), u.trigger_crit, u.status_resist.get("stun").copied().unwrap_or(0)), (false, crit, resist), "left");
+    // HOOKS1-UI (the HOOKS1-M review): a resist key the band created goes with it; one the unit had before stays
+    assert!(!s.w.units[HERO].status_resist.contains_key("stun"), "the fixture hero has no stun resist of its own");
+    assert!(!u.status_resist.contains_key("stun"), "the band's stun resist key went with it: {:?}", u.status_resist);
+}
+
+/// HOOKS1-UI slice 1 review: a resist key the unit held before the band (even at 0) stays when the band is left, at its
+/// own value.
+#[test]
+fn a_band_on_a_resist_key_the_unit_had_keeps_the_key() {
+    let s = session(rules(&[UNIT_METERS]), vec![("p_hero", holds("fury"))]);
+    for own_value in [0, 7] {
+        let mut w = s.w.clone();
+        w.units[HERO].status_resist.insert("stun".into(), own_value);
+        let mut res = Resolver::new(BLOCKS, 1);
+        book(&mut res, HERO, own(&w, HERO, "t_heat"), 1);
+        run(&mut w, &mut res, 1, 1);
+        assert_eq!(w.units[HERO].status_resist.get("stun").copied(), Some(own_value + HOT_RESIST), "in the band");
+        meter::round_start(&mut w);
+        book(&mut res, HERO, own(&w, HERO, "t_vent"), 2);
+        run(&mut w, &mut res, 2, 2);
+        assert_eq!(meter::value(&w, HERO, "fury"), Some(HOT_FROM - 1));
+        assert_eq!(w.units[HERO].status_resist.get("stun").copied(), Some(own_value), "left: the unit's own key and value");
+    }
 }
 
 /// UM5: a rule at 3 `up` over 2, 4, 2, 4 fires on each rise across it; a `once` rule only the first time.

@@ -68,6 +68,9 @@ fn best_moment_prefers_a_save_then_a_combo_finish_then_the_biggest_hit() {
     assert_eq!(report::best_moment(&rows, &[big.clone(), with_finish]), format!("Striker finished Goblin with Opportune Cut (exploited {}).", status::display_name("bleed")));
     let brk = Detail { best_finish: Some(BestFinish { skill: "Crush".into(), target: "Goblin".into(), combo: "break".into(), status: String::new(), round: 1, order: 3 }), ..Detail::default() };
     assert_eq!(report::best_moment(&[row("A")], &[brk]), "A finished Goblin with Crush (broke the guard).");
+    // HOOKS1 EX1 (HOOKS1-UI): an execute finish (its exploit label is the rule id) reads "executed"
+    let exe = Detail { best_finish: Some(BestFinish { skill: "Throat Cut".into(), target: "Goblin".into(), combo: "exploit".into(), status: emberwake_battle::skill::EXECUTE.into(), round: 1, order: 3 }), ..Detail::default() };
+    assert_eq!(report::best_moment(&[row("A")], &[exe]), "A finished Goblin with Throat Cut (executed).");
     let (early, late) = (hit(40, "Jab", "Wolf", 2), hit(40, "Hook", "Wolf", 9));
     assert_eq!(report::best_moment(&rows, &[late, early.clone()]), "Striker's Jab hit Wolf for 40.", "a tie picks the earlier entry");
     assert_eq!(report::best_moment(&rows, &[big, early]), "Healer's Smash hit Ogre for 90.", "the bigger hit wins");

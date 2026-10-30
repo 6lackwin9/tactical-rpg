@@ -221,6 +221,9 @@ pub struct Session {
     pub plan_confirmed: bool,
     /// The active enemies on the grid when this round's enemies were scheduled (IntentRules: idle vs arriving).
     pub on_grid_at_schedule: Vec<UnitId>,
+    /// RULESET1 V4: each enemy a foresight range covered when this round's enemies were scheduled, with its readers
+    /// (`measure_reveals`; empty in classic).
+    pub range_reveals: Vec<(UnitId, Vec<UnitId>)>,
     /// Every round so far, the current one last (the round archive, for reviewing past rounds).
     pub history: Vec<RoundRecord>,
     /// Art key per unit (ContentFactory.art_of: the unit's own art, else its class's, else "unit").
@@ -249,8 +252,16 @@ pub struct Session {
     pub stay: Option<StayBehind>,
     /// ENCOUNTER2 S2: the verdict when the last round ends with none (`timeout_outcome`: fled, or lost).
     pub timeout_outcome: String,
+    /// ENCOUNTER2-K: whether a phase `kill` takes an `unkillable` unit down (from encounter::KILL_OVERRIDES_UNKILLABLE,
+    /// the ruling's one switch; a test may flip it on a session).
+    pub kill_past_unkillable: bool,
     /// S1: how many of `w.spared` have their log cell.
     spared_logged: usize,
+    /// ENCOUNTER2-U (decision "RULESET1-A3 loose ends"): the encounter's own lines for the combat log, each with the
+    /// length of the resolver log when it was said: a phase's `line` ("[Phase] <phase>: <line>") and a phase kill
+    /// ("[Kill] <who> fall."). The resolver log itself is untouched (host replies and parity read it); `log_lines`
+    /// merges the two.
+    pub encounter_lines: Vec<(usize, String)>,
     /// Unit -> its hero key (a party member id or a world character), when it has one.
     hero_keys: IndexMap<UnitId, String>,
     unit_keys: IndexMap<UnitId, String>,
@@ -389,7 +400,7 @@ impl Session {
             fallback_any: sb.fallback_any,
             heroes: (0..n_allies).filter(|c| !guests.contains(c)).collect(),
         });
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset) };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default() };
         w.add_item_skills();
         w.ignore_hazards_when_off();
         let objective = Objectives::create(&def.raw);
@@ -454,6 +465,7 @@ impl Session {
             outcome: String::new(),
             plan_confirmed: false,
             on_grid_at_schedule: Vec::new(),
+            range_reveals: Vec::new(),
             history: Vec::new(),
             art,
             palettes,
@@ -469,7 +481,9 @@ impl Session {
             last_popped: None,
             stay,
             timeout_outcome,
+            kill_past_unkillable: encounter::KILL_OVERRIDES_UNKILLABLE,
             spared_logged: 0,
+            encounter_lines: Vec::new(),
             hero_keys,
             unit_keys,
             units_by_key,
@@ -513,6 +527,7 @@ impl Session {
         self.plan_confirmed = false;
         self.on_grid_at_schedule = self.w.enemies.iter().copied().filter(|&e| self.w.units[e].is_active() && self.w.has(e)).collect();
         self.schedule_enemy_ai();
+        self.measure_reveals();
         let start = self.snapshot();
         self.history.push(RoundRecord { round, actions: self.resolver.scheduled.clone(), snapshots: vec![start] });
         self.feed(|m, s| if m.live { m.round_started(s) });
@@ -625,7 +640,7 @@ impl Session {
             return Vec::new();
         }
         let enraged: Vec<UnitId> = self.w.enemies.iter().copied().filter(|&e| self.is_enraged(e)).collect();
-        let mut out = crate::intent::intents(&self.w, &self.resolver.scheduled, &self.on_grid_at_schedule, &enraged);
+        let mut out = crate::intent::intents(&self.w, &self.resolver.scheduled, &self.on_grid_at_schedule, &self.range_reveals, &enraged);
         for r in out.iter_mut() {
             r.morale_state = self.morale_state_of(r.unit);
             r.morale_group = self.morale_group_of(r.unit);
@@ -642,7 +657,7 @@ impl Session {
         }
         let enraged: Vec<UnitId> = self.w.enemies.iter().copied().filter(|&e| self.is_enraged(e)).collect();
         let plan = self.is_planning().then_some(&self.plan);
-        let mut out = crate::intent::round_intents(&self.w, plan, &self.resolver.scheduled, &self.on_grid_at_schedule, &enraged);
+        let mut out = crate::intent::round_intents(&self.w, plan, &self.resolver.scheduled, &self.on_grid_at_schedule, &self.range_reveals, &enraged);
         for r in out.iter_mut().filter(|r| self.w.enemies.contains(&r.unit)) {
             r.morale_state = self.morale_state_of(r.unit);
             r.morale_group = self.morale_group_of(r.unit);
@@ -742,7 +757,8 @@ impl Session {
             .collect()
     }
 
-    /// Fires phase `id` at [round, block] (block 0 = round start): wave, status, enrage, then marked fired.
+    /// Fires phase `id` at [round, block] (block 0 = round start): wave, status, enrage, the phase's cell, then each
+    /// `kill` (ENCOUNTER2 P1); marked fired last (its group's unfired phases drop, P2).
     fn fire_phase(&mut self, id: &str, round: i32, block: i32) {
         let Some(p) = self.phases.phase(id).cloned() else { return };
         // The actor: an hp_below trigger's unit, else the encounter.
@@ -802,8 +818,63 @@ impl Session {
         }
         let line = p.effects_of("line").last().map(|fx| value::string(fx, "text", "")).unwrap_or_default();
         self.append(crate::log::Entry::event(round, block, &actor, false, &p.name, "Phase", "PHASE", &line, &parts.join(", ")));
+        if !line.is_empty() {
+            self.encounter_lines.push((self.resolver.log.len(), format!("[Phase] {}: {line}", p.name)));
+        }
         self.events.push(format!("{}: {}{}", p.name, line, if parts.is_empty() { String::new() } else { format!(" ({})", parts.join(", ")) }));
+        // ENCOUNTER2 P1: kill effects after the phase's own cell, each with its cell (none in classic)
+        for fx in p.effects_of(encounter::KILL_EFFECT) {
+            self.phase_kill(fx, &p.name, round, block);
+        }
         self.phases.mark_fired(id, round, block);
+    }
+
+    /// ENCOUNTER2 P1: a phase `kill` effect: every active, placed, unreserved unit of its refs (never a hero; with
+    /// `within` > 0 only those at most that many tiles from the `by` unit, the first placed, unreserved unit of its ref,
+    /// none without one) drops to 0 HP through `World::kill` (journaled; past `unkillable` per `kill_past_unkillable`).
+    /// One EVENT cell (log::kill_entry; actor the `by` unit, else the encounter) when the kill took any HP; an
+    /// unkillable unit it left at 1 HP (the switch off) gets its SPARED cell right after. A scripted kill is nobody's:
+    /// no unit is credited (the metrics count the HP as the struck units' `scripted` loss) and no trigger event is
+    /// raised (HOOKS1-E's `kill` and `ally_downed` come only from actions); fates read Killed and morale counts the
+    /// deaths at the block end as any death.
+    fn phase_kill(&mut self, fx: &Obj, phase_name: &str, round: i32, block: i32) {
+        let by_ref = value::string(fx, "by", "");
+        let by = if by_ref.is_empty() { None } else { self.units_of_ref(&by_ref).into_iter().find(|&c| self.w.has(c) && !self.is_reserved(c)) };
+        let within = value::int(fx, "within", 0);
+        let mut victims: Vec<UnitId> = Vec::new();
+        for r in value::strings(fx, "units") {
+            for c in self.units_of_ref(&r) {
+                let hero = self.w.allies.contains(&c) && !self.guests.contains(&c);
+                if hero || !self.w.has(c) || self.is_reserved(c) || victims.contains(&c) {
+                    continue;
+                }
+                if within > 0 && !by.is_some_and(|b| self.w.dist(b, c) <= within) {
+                    continue;
+                }
+                victims.push(c);
+            }
+        }
+        let mut struck: Vec<(UnitId, i32)> = Vec::new();
+        for c in victims {
+            let before = self.w.units[c].hp;
+            self.w.kill(c, self.kill_past_unkillable);
+            let lost = before - self.w.units[c].hp;
+            if lost > 0 {
+                struck.push((c, lost));
+            }
+        }
+        if struck.is_empty() {
+            return;
+        }
+        let (actor, ally) = match by {
+            Some(b) => (self.w.units[b].name.clone(), self.w.allies.contains(&b)),
+            None => (self.def.name.clone(), false),
+        };
+        let entry = crate::log::kill_entry(&self.w, &actor, ally, phase_name, &struck, round, block);
+        self.events.push(entry.detail.clone());
+        self.encounter_lines.push((self.resolver.log.len(), format!("[Kill] {}", entry.detail)));
+        self.append(entry);
+        self.log_spared(round, block);
     }
 
     /// Phase ai effects, then the morale flee bonus, on the live profiles (rebuilt from the authored ones).
@@ -900,7 +971,15 @@ impl Session {
         self.resolver.scheduled.clear();
         self.plan = Plan::new();
         self.schedule_enemy_ai();
+        self.measure_reveals();
         self.refresh_archive();
+    }
+
+    /// RULESET1 V4 (the RULESET1-V review): measures the foresight-range reveals as the round's enemy plan is scheduled
+    /// (`intent::range_reveals`); the tells read them for the whole round, so its playback never changes a reveal.
+    /// Called after every scheduling of the enemy side (a test that schedules by hand calls it too).
+    pub fn measure_reveals(&mut self) {
+        self.range_reveals = crate::intent::range_reveals(&self.w);
     }
 
     /// CombatEncounter.schedule_enemy_ai: drafts every enemy on the field into one shared plan, re-drafts broken
@@ -1041,6 +1120,31 @@ impl Session {
         self.w.allies.iter().all(|&a| !self.w.units[a].is_active() || self.plan.is_valid(&self.w, a))
     }
 
+    /// RULESET1-G2 (decision BREPORT1: one source for the report and the sims): the auto driver's round draft, what the
+    /// battle screen's autoplay sends (its tactic as a PlanPresets id, then confirm): a hold escape's holder by
+    /// `pick_default` (round 1 only; returned), then every ally drafted with `preset`. The host's `autoplay`, the CLI's
+    /// `battle`, the balance sims and the timeline golden all draft through it; the caller confirms.
+    pub fn auto_draft(&mut self, preset: &str) -> Option<UnitId> {
+        let holder = self.stay_pick_default();
+        self.plan_apply_preset_all(preset);
+        holder
+    }
+
+    /// RULESET1-G2: the auto driver's resolution: steps to the round's end (at most `sim::MAX_STEPS_PER_ROUND` steps),
+    /// each one fed to an attached sim BattleMetrics (`metrics_step`; a live one follows the session by itself).
+    pub fn resolve_round(&mut self) {
+        let sim_metrics = self.metrics.as_ref().is_some_and(|m| !m.live);
+        for _ in 0..crate::sim::MAX_STEPS_PER_ROUND {
+            if self.phase == Phase::Replay {
+                break;
+            }
+            self.step_next();
+            if sim_metrics {
+                self.metrics_step();
+            }
+        }
+    }
+
     pub fn confirm_plan(&mut self) -> bool {
         // ENCOUNTER2 H1: a hold escape is not planned before someone holds
         if self.phase != Phase::Planning || !self.plan_is_valid() || self.needs_stay_pick() {
@@ -1162,6 +1266,12 @@ impl Session {
             self.outcome = self.verdict(end_of_round);
             let over = !self.outcome.is_empty();
             if over || end_of_round {
+                // RULESET1 12 (decision "RULESET1-U slice 5 answers"): the round's summary closes it in the log, under
+                // the round intent only (classic logs as before)
+                if round_intent::on(&self.w) {
+                    let sum = round_intent::round_summary(&self.w, &self.resolver.scheduled);
+                    self.resolver.log.push(round_intent::summary_line(self.current_round, &sum));
+                }
                 self.combat_over = over;
                 self.phase = Phase::Replay;
                 self.feed(|m, s| {
@@ -1371,6 +1481,22 @@ impl Session {
             return self.timeout_outcome.clone();
         }
         String::new()
+    }
+
+    /// ENCOUNTER2-U (decision "RULESET1-A3 loose ends"): the combat log as a reader sees it: the resolver log from line
+    /// `from`, with the encounter's own lines (`encounter_lines`) from entry `lines_from` placed where they were said
+    /// (one said before resolver line `from` comes first). Without encounter lines it is the resolver log exactly.
+    pub fn log_lines(&self, from: usize, lines_from: usize) -> Vec<String> {
+        let mut extra = self.encounter_lines.iter().skip(lines_from).peekable();
+        let mut out = Vec::new();
+        for (i, l) in self.resolver.log.iter().enumerate().skip(from) {
+            while let Some((_, e)) = extra.next_if(|(at, _)| *at <= i) {
+                out.push(e.clone());
+            }
+            out.push(l.clone());
+        }
+        out.extend(extra.map(|(_, e)| e.clone()));
+        out
     }
 
     /// ENCOUNTER2 S3: each hero (party-side units but guests, ally order) and how the battle left it: stayed (held at

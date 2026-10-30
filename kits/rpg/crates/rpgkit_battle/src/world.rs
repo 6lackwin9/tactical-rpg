@@ -25,6 +25,74 @@ pub enum Role {
 pub enum TargetPref {
     Nearest,
     Weakest,
+    /// HOOKS1 AT1 (rule `ai_tactics`): lowest armour rating, then lowest HP, then nearest; unreachable this round last.
+    Softest,
+    /// HOOKS1 AT1 (rule `ai_tactics`): highest max HP among melee foes, then the rest; ties nearest.
+    Toughest,
+}
+
+impl TargetPref {
+    /// A `target_pref` value (`TARGET_PREFS`; ROLE and unknown values: None).
+    pub fn parse(id: &str) -> Option<Self> {
+        match id {
+            "NEAREST" => Some(TargetPref::Nearest),
+            "WEAKEST" => Some(TargetPref::Weakest),
+            "SOFTEST" => Some(TargetPref::Softest),
+            "TOUGHEST" => Some(TargetPref::Toughest),
+            _ => None,
+        }
+    }
+}
+
+/// HOOKS1 AT2 (rule `ai_tactics`): a unit's AI tactics (`rpgkit_data::TACTICS`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnitTactic {
+    /// A row before AI table row 4: Guard when a friend within 2 tiles, or the unit itself, lost HP to an attack hit
+    /// last round (not reckless, a Guard skill usable).
+    BraceAfterHit,
+    /// PL4 for this unit ranks, after threat, tiles next to a friend first, then fewer walkable free neighbours first.
+    HoldLine,
+    /// An area opener's aim scores +1 per foe hit on a tile with cover.
+    FlushCover,
+}
+
+impl UnitTactic {
+    pub fn parse(id: &str) -> Option<Self> {
+        match id {
+            "brace_after_hit" => Some(UnitTactic::BraceAfterHit),
+            "hold_line" => Some(UnitTactic::HoldLine),
+            "flush_cover" => Some(UnitTactic::FlushCover),
+            _ => None,
+        }
+    }
+
+    /// The tactics of a `tactics` list in order (unknown ids and repeats dropped; the content check reports them).
+    pub fn list(ids: &[String]) -> Vec<Self> {
+        let mut out: Vec<Self> = Vec::new();
+        for t in ids.iter().filter_map(|id| Self::parse(id)) {
+            if !out.contains(&t) {
+                out.push(t);
+            }
+        }
+        out
+    }
+}
+
+/// HOOKS1 AT2 `brace_after_hit` (rule `ai_tactics`) and RULESET1-AI2 (rule `round_intent`): the units that lost HP to an
+/// attack hit this round and last round, and the units in the Guard intent as last round ended (rotated as the round
+/// ends; empty in classic; no save key).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct HitMemory {
+    pub this_round: Vec<UnitId>,
+    pub last_round: Vec<UnitId>,
+    pub guarded_last_round: Vec<UnitId>,
+}
+
+impl HitMemory {
+    /// RULESET1-AI2: `c` was in the Guard intent last round and no attack hit took HP from it during that round.
+    pub fn guarded_unhit(&self, c: UnitId) -> bool {
+        self.guarded_last_round.contains(&c) && !self.last_round.contains(&c)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -39,6 +107,9 @@ pub struct AiProfile {
     pub heal_below: f64,
     pub area_min_foes: i32,
     pub use_items: bool,
+    /// HOOKS1 AT2: the unit's tactics (a phase `ai` effect's `tactics` replaces the list); read only under the rule
+    /// `ai_tactics` (`World::has_tactic`).
+    pub tactics: Vec<UnitTactic>,
 }
 
 impl AiProfile {
@@ -54,6 +125,16 @@ impl AiProfile {
             heal_below: DEFAULT_HEAL_BELOW,
             area_min_foes: 2,
             use_items: false,
+            tactics: Vec::new(),
+        }
+    }
+
+    /// The role's own preference (`target_pref` ROLE): nearest for an Aggressor, else weakest.
+    pub fn role_pref(&self) -> TargetPref {
+        if self.role == Role::Aggressor {
+            TargetPref::Nearest
+        } else {
+            TargetPref::Weakest
         }
     }
 
@@ -84,8 +165,10 @@ impl AiProfile {
         p.reckless = e.reckless;
         p.heal_below = e.heal_below;
         if e.target_pref != "ROLE" {
-            p.target_pref = if e.target_pref == "WEAKEST" { TargetPref::Weakest } else { TargetPref::Nearest };
+            // HOOKS1 AT1: SOFTEST and TOUGHEST are kept here and read as ROLE without the rule (`World::target_pref`)
+            p.target_pref = TargetPref::parse(&e.target_pref).unwrap_or(TargetPref::Nearest);
         }
+        p.tactics = UnitTactic::list(&e.tactics);
         p
     }
 
@@ -148,6 +231,15 @@ impl Tactic {
     }
 }
 
+/// Where one step goes (`World::step_from`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StepTo {
+    Blocked,
+    /// Onto an exit, or off an open arena: the unit leaves the battle.
+    Leaves,
+    Enters(V2),
+}
+
 #[derive(Clone)]
 pub struct World {
     pub cat: Arc<Catalog>,
@@ -184,14 +276,76 @@ pub struct World {
     /// HOOKS1 7 (rule `arena_hazards`): the encounter's scheduled arena hazards and the round they are told for (empty
     /// in classic).
     pub arena: crate::arena::Arena,
+    /// HOOKS1 AT2 (rule `ai_tactics`): who lost HP to an attack hit this round and last round (`brace_after_hit`).
+    pub hits: HitMemory,
 }
 
 impl World {
+    /// HOOKS1 4.1: whether the battle plays by AI tactics (target preferences SOFTEST and TOUGHEST, unit tactics,
+    /// hazard-aware tiles).
+    pub fn ai_tactics(&self) -> bool {
+        self.ruleset.has(rpgkit_rules::ruleset::AI_TACTICS)
+    }
+
+    /// AT1: the preference `p` ranks by: without the rule SOFTEST and TOUGHEST read as ROLE (the role's own).
+    pub fn target_pref(&self, p: &AiProfile) -> TargetPref {
+        match p.target_pref {
+            TargetPref::Softest | TargetPref::Toughest if !self.ai_tactics() => p.role_pref(),
+            t => t,
+        }
+    }
+
+    /// AT2: whether `c`'s live profile holds tactic `t` (never without the rule).
+    pub fn has_tactic(&self, c: UnitId, t: UnitTactic) -> bool {
+        self.ai_tactics() && self.profiles.get(&c).is_some_and(|p| p.tactics.contains(&t))
+    }
+
+    /// Whether the hit memory is kept: AT2 `brace_after_hit` (rule ai_tactics) or RULESET1-AI2's Guard memory (rule
+    /// round_intent).
+    fn keeps_hits(&self) -> bool {
+        self.ai_tactics() || self.ruleset.has(rpgkit_rules::ruleset::ROUND_INTENT)
+    }
+
+    /// AT2 `brace_after_hit`, RULESET1-AI2: records the units an action's attack hits took HP from this round.
+    pub fn note_hits(&mut self, struck: &[crate::trigger::Struck]) {
+        if !self.keeps_hits() {
+            return;
+        }
+        for s in struck.iter().filter(|s| s.damage > 0) {
+            if !self.hits.this_round.contains(&s.target) {
+                self.hits.this_round.push(s.target);
+            }
+        }
+    }
+
+    /// AT2, RULESET1-AI2: the round ends: this round's hits become last round's, and the units in the Guard intent now
+    /// are last round's guards.
+    pub fn roll_hits(&mut self) {
+        if self.keeps_hits() {
+            self.hits.last_round = std::mem::take(&mut self.hits.this_round);
+            let guard = crate::round_intent::RoundIntent::Guard;
+            self.hits.guarded_last_round =
+                self.round_states.iter().filter(|(_, r)| r.intent == Some(guard)).map(|(&c, _)| c).collect();
+        }
+    }
+
     /// Combatant.take_damage on unit `c` (journaled). Returns the damage dealt. ENCOUNTER2 S1: an unkillable unit keeps
     /// 1 HP (the first time it would have fallen is recorded in `spared`).
     pub fn damage(&mut self, c: UnitId, amount: i32, mitigated: bool) -> i32 {
+        self.damage_as(c, amount, mitigated, false)
+    }
+
+    /// ENCOUNTER2 P1: a phase `kill` on unit `c`: all its HP through `damage`'s path (journaled); `past_unkillable`
+    /// (encounter::KILL_OVERRIDES_UNKILLABLE) takes an unkillable unit down too, recording nothing in `spared`.
+    /// Returns the HP it lost.
+    pub fn kill(&mut self, c: UnitId, past_unkillable: bool) -> i32 {
+        let hp = self.units[c].hp;
+        self.damage_as(c, hp, true, past_unkillable)
+    }
+
+    fn damage_as(&mut self, c: UnitId, amount: i32, mitigated: bool, past_unkillable: bool) -> i32 {
         let dealt = self.units[c].take_damage(amount, mitigated);
-        if self.units[c].hp == 0 && self.unkillable.contains(&c) {
+        if self.units[c].hp == 0 && !past_unkillable && self.unkillable.contains(&c) {
             self.units[c].hp = 1;
             if !self.spared.contains(&c) {
                 self.spared.push(c);
@@ -358,19 +512,35 @@ impl World {
         if !self.units[c].is_active() || self.grid.positions[c].is_none() {
             return false;
         }
-        let target = self.pos(c) + offset;
+        match self.step_from(c, self.pos(c), offset) {
+            StepTo::Blocked => false,
+            StepTo::Leaves => {
+                self.leave(c);
+                true
+            }
+            StepTo::Enters(target) => {
+                self.grid.positions[c] = Some(target);
+                true
+            }
+        }
+    }
+
+    /// `move_unit`'s rule for one step of `c` by `offset` from `from` (nothing changes): the tile it enters, the exit
+    /// it leaves by, or blocked (off the board, not walkable, taken, a shut hold gate). The battle screen's walk preview
+    /// reads it too (`command::walk_preview`).
+    pub fn step_from(&self, c: UnitId, from: V2, offset: V2) -> StepTo {
+        let target = from + offset;
         if self.grid.is_exit(target) || (self.grid.open && !self.grid.is_valid(target)) {
             if self.hold.as_ref().is_some_and(|g| !g.lets_out(self, c)) {
-                return false;
+                return StepTo::Blocked;
             }
-            self.leave(c);
-            return true;
+            return StepTo::Leaves;
         }
-        if !self.grid.is_valid(target) || !self.grid.is_walkable(target) || self.is_occupied(target) {
-            return false;
+        // a step that stays put is blocked by the unit itself, as `is_occupied` has it
+        if target == from || !self.grid.is_valid(target) || !self.grid.is_walkable(target) || self.occupant(target).is_some_and(|o| o != c) {
+            return StepTo::Blocked;
         }
-        self.grid.positions[c] = Some(target);
-        true
+        StepTo::Enters(target)
     }
 
     pub fn jump_unit(&mut self, c: UnitId, cell: V2) -> bool {

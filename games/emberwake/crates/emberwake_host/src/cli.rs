@@ -3,13 +3,14 @@
 //!   aegis sim <mode> [level] [seeds] [key=value ...]   the balance sim (duel, tier, levels, group, stats, party, role,
 //!                                                      sweep, campaign; `aegis sim help` lists the keys)
 //!   aegis battle <encounter id> [seed=N] [preset=balanced] [log]              autoplay a catalog encounter
-//!                [ruleset=classic|timeline] [rules=-id,+id]               RULESET1: its rules (default classic)
+//!                [ruleset=classic|timeline] [rules=-id,+id]               RULESET1: its rules (default classic; a
+//!                                                                         timeline test fight without ruleset= notes it)
 //! Data: the project's data/ folder (`data=<dir>`), read by the game's loader; `catalog=<path>` (or $AEGIS_CATALOG)
 //! reads a resolved Godot export instead (battle, serve); `sim` reads a Godot export folder with `parity=<dir>`. A sim
 //! key given twice keeps its last value.
 
 use crate::{Battle, Host};
-use emberwake_battle::session::{EncounterDef, Phase, Session};
+use emberwake_battle::session::{EncounterDef, Session};
 use aegis_cli::{Args, Game};
 use emberwake_data::Catalog;
 use anyhow::{bail, Context, Result};
@@ -140,29 +141,34 @@ fn battle(args: &Args) -> Result<()> {
     // RULESET1 3.1.3: a catalog encounter plays classic unless ruleset= picks one; rules= switches single extensions
     def.ruleset = emberwake_rules::ruleset::Ruleset::of(&cat, &args.key("ruleset", "")).map_err(anyhow::Error::msg)?;
     def.ruleset.adjust(&args.key("rules", "")).map_err(anyhow::Error::msg)?;
+    // RULESET1-G2: a timeline test fight stays classic by default (classic parity reads it), with a note on stderr
+    if let Some(note) = classic_test_fight_note(id, &entry, args.keys.contains_key("ruleset")) {
+        eprintln!("{note}");
+    }
     let preset = args.key("preset", "balanced");
     let mut s = Session::start(cat.clone(), def, &IndexMap::new());
     let show_log = args.flag("log");
     println!("{} (seed {}): {} rounds max", s.def.name, s.def.rng_seed, s.def.max_rounds);
+    // ENCOUNTER2-U (decision "RULESET1-A3 loose ends"): the encounter's phase and kill lines print with the log
+    let mut said = 0;
     loop {
-        // ENCOUNTER2 H1: a hold escape's holder by the encounter's `pick_default`
-        if let Some(h) = s.stay_pick_default() {
+        // RULESET1-G2: the auto driver (the battle screen's autoplay, the host's `autoplay`, `sim feel`); ENCOUNTER2 H1:
+        // a hold escape's holder by the encounter's `pick_default`
+        if let Some(h) = s.auto_draft(&preset) {
             println!("{} holds {}", s.w.units[h].name, s.w.hold.as_ref().map(|g| g.label.as_str()).unwrap_or(""));
         }
-        s.plan_apply_preset_all(&preset);
         if !s.confirm_plan() {
             println!("round {}: the party plan was refused", s.current_round);
             break;
         }
         let from = s.resolver.log.len();
-        while s.phase != Phase::Replay {
-            s.step_next();
-        }
+        s.resolve_round();
         println!("-- round {} --", s.current_round);
         if show_log {
-            for line in &s.resolver.log[from..] {
+            for line in s.log_lines(from, said) {
                 println!("  {line}");
             }
+            said = s.encounter_lines.len();
         }
         for &u in s.w.allies.iter().chain(s.w.enemies.iter()) {
             let x = &s.w.units[u];
@@ -186,3 +192,18 @@ fn battle(args: &Args) -> Result<()> {
     Ok(())
 }
 
+
+/// The id prefix of the game's timeline test units (`tl_`, RULESET1_TASKS 2.7: test data CAST1's bestiary replaces).
+pub const TIMELINE_TEST_PREFIX: &str = "tl_";
+
+/// RULESET1-G2: the note `battle` prints (stderr) for a timeline test fight played without `ruleset=`: every party and
+/// enemy ref is a `tl_` unit, so the fight was built for the timeline rules, yet a catalog encounter plays classic by
+/// default (RULESET1 3.1.3; classic parity reads that default). None when `ruleset=` was given or a ref is not a test
+/// unit.
+pub fn classic_test_fight_note(id: &str, entry: &serde_json::Map<String, Value>, ruleset_given: bool) -> Option<String> {
+    let refs: Vec<&str> = ["party", "enemies"].iter().filter_map(|k| entry.get(*k).and_then(Value::as_array)).flatten().filter_map(Value::as_str).collect();
+    if ruleset_given || refs.is_empty() || !refs.iter().all(|r| r.starts_with(TIMELINE_TEST_PREFIX)) {
+        return None;
+    }
+    Some(format!("note: {id} is a timeline test fight ({TIMELINE_TEST_PREFIX} units) played by the classic rules; add ruleset=timeline to play it as `sim feel` does"))
+}

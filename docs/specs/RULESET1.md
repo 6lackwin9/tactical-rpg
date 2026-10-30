@@ -61,6 +61,10 @@ in classic so classic cannot drift when someone adds data; the Arena and the sim
 
 The first draft's `no_stances`, `recovery`, `chains` folded into `round_intent` (was `round_stance`), `enemy_moves`.
 
+HOOKS1 (cross-reference, HOOKS1-D 2026-10-31): the register gains 9 extensions, `forced_move`, `ground_hazards`,
+`arena_hazards`, `triggers`, `unit_meters`, `hp_cost`, `ignore_guard`, `ai_tactics`, `execute` (layer [kit hook],
+inert without data, off in classic); their rows are `docs/specs/HOOKS1.md` 4.1, the authoring guide `engine/docs/authoring/combat_hooks.md`.
+
 ### 3.3 Classic stays byte-identical
 
 - Every new branch reads the flag first; classic builds no poise, draws no extra random number, writes no new trace,

@@ -535,7 +535,10 @@ fn the_hook_kinds_check_their_rows() {
         (UNIT_METERS_KIND, "phial", json!({"start": -1}), "Start must be 0-3 (is -1)."),
         (UNIT_METERS_KIND, "phial", json!({"max": 0}), "Min must be below max"),
         (UNIT_METERS_KIND, "phial", json!({"min": -5}), ""),
-        (UNIT_METERS_KIND, "phial", json!({"max": 12}), "Pips show at most 10 (max is 12); use bar."),
+        (UNIT_METERS_KIND, "phial", json!({"max": 12}), "Pips show at most 10 steps (max - min is 12); use bar."),
+        // UM7 (HOOKS1-UI): the pip cutoff is the steps from min to max, as `meter::shown` draws them
+        (UNIT_METERS_KIND, "phial", json!({"min": -8}), "Pips show at most 10 steps (max - min is 11); use bar."),
+        (UNIT_METERS_KIND, "phial", json!({"min": 2, "max": 12, "start": 2}), ""),
         (UNIT_METERS_KIND, "phial", json!({"skills": ["strike"]}), "Meter skills: 'strike' does not spend phial"),
         (UNIT_METERS_KIND, "phial", json!({"skills": ["nothing"]}), "Meter skills: unknown skill 'nothing'."),
         (UNIT_METERS_KIND, "fury", json!({"decay": [{"delta": -60}]}), "Decay 1: delta must be a whole number -50..50, not 0."),
@@ -548,6 +551,9 @@ fn the_hook_kinds_check_their_rows() {
         (UNIT_METERS_KIND, "fury", json!({"bands": [{"id": "f0", "from": 0, "effects": [{"type": "resist", "status": "stun", "value": 0}]}]}), "Band 'f0': Effect 1: resistance is 1-100."),
         (UNIT_METERS_KIND, "fury", json!({"rules": [{"id": "full", "at": "f9", "effects": [{"type": "ap", "value": 1}]}]}), "Rule 'full': at must be a band id or a whole number 0-5."),
         (UNIT_METERS_KIND, "fury", json!({"rules": [{"id": "full", "at": "f1", "dir": "sideways", "effects": [{"type": "ap", "value": 1}]}]}), "Rule 'full': dir must be up or down."),
+        // UM5 (HOOKS1-UI, the HOOKS1-M review): a `once` rule is remembered by its id, so every rule needs one
+        (UNIT_METERS_KIND, "fury", json!({"rules": [{"at": 5, "once": true, "effects": [{"type": "ap", "value": 1}]}]}), "Rule '1': the id must be lowercase snake_case"),
+        (UNIT_METERS_KIND, "fury", json!({"rules": [{"id": "a", "at": 5, "once": true, "effects": [{"type": "ap", "value": 1}]}, {"id": "a", "at": 4, "once": true, "effects": [{"type": "ap", "value": 1}]}]}), "Rule ids must be unique: 'a'."),
         (UNIT_METERS_KIND, "fury", json!({"rules": [{"id": "full", "at": 5, "effects": [{"type": "meter_set", "meter": "fury", "value": 9}]}]}), "Rule 'full' effect 1: value must be a whole number 0-5."),
         (UNIT_METERS_KIND, "fury", json!({"rules": [{"id": "full", "at": 5, "effects": [{"type": "redirect", "pct": 10}]}]}), "Rule 'full' effect 1: redirect needs an ally_hit trigger."),
         (ZONES_KIND, "alley", json!({}), ""),

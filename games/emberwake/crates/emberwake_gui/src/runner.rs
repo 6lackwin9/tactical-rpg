@@ -53,6 +53,19 @@ fn extensions() -> Vec<&'static str> {
     REGISTER.iter().filter(|r| r.kind == RuleKind::Extension).map(|r| r.id).collect()
 }
 
+/// The ruleset chip's text (the Arena card's and, RULESET1-U, the Arena battle's): the base ruleset's name, the
+/// switches `spec` ("-id,+id") and whether the enemy plans are shown ("Timeline -pierce +reach, plans shown").
+pub(crate) fn chip_text(name: &str, spec: &str, plans_shown: bool) -> String {
+    let mut t = name.to_string();
+    if !spec.is_empty() {
+        t += &format!(" {}", spec.replace(',', " "));
+    }
+    if plans_shown {
+        t += ", plans shown";
+    }
+    t
+}
+
 pub struct SceneRunner {
     encounter: usize,
     /// An index into RULESETS.
@@ -103,15 +116,7 @@ impl SceneRunner {
     /// The ruleset chip: the run's ruleset name, its switches and the reveal ("Timeline -pierce +reach, plans shown").
     fn chip(&self, cx: &Cx) -> String {
         let base = self.base_ruleset(cx);
-        let spec = self.rules_spec(&base).replace(',', " ");
-        let mut t = base.name.clone();
-        if !spec.is_empty() {
-            t += &format!(" {spec}");
-        }
-        if self.reveal && self.effective_ruleset(cx).has(PLAN_BADGES) {
-            t += ", plans shown";
-        }
-        t
+        chip_text(&base.name, &self.rules_spec(&base), self.reveal && self.effective_ruleset(cx).has(PLAN_BADGES))
     }
 
     /// The picked world of Exploration.

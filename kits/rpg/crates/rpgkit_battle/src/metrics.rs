@@ -12,7 +12,8 @@
 //! heal entry or a loss without an attack entry is unexplained. HOOKS1 (timeline keys): a trigger or rider effect's cell
 //! credits the HP it took to its holder as a hit, a redirected part of an attack is a hit on the unit that took it, and
 //! an HP cost is its payer's own loss (`triggers.hp_paid`, part of the HP balance); the HP an arena hazard's cell names
-//! is its target's arena loss (`arena.taken`, part of the HP balance; no unit dealt it).
+//! is its target's arena loss (`arena.taken`, part of the HP balance; no unit dealt it). ENCOUNTER2 P1: the HP a phase
+//! kill's cell took is the struck units' `scripted` loss (part of the HP balance; nobody dealt it or gets the kill).
 //!
 //! The session feeds it (`Session::attach_metrics`): the sim driver calls `Session::metrics_step` / `metrics_round` /
 //! `metrics_end` like SimRunner's observer hooks; a live battle lets the session close each round itself.
@@ -392,6 +393,9 @@ pub struct BattleMetrics {
     /// rule arena_hazards), and how many strikes there were.
     pub arena: IndexMap<String, ArenaRecord>,
     pub arena_strikes: i32,
+    /// ENCOUNTER2 P1: display name -> HP the phase `kill` effects took from it in the last fight (part of the HP
+    /// balance; no unit dealt it, nobody is credited; empty without a kill; not in the JSON).
+    pub scripted: IndexMap<String, i32>,
     /// Set when the fight ends.
     pub fight_record: Option<FightRecord>,
     pub fail_lines: Vec<String>,
@@ -447,6 +451,7 @@ impl BattleMetrics {
         self.triggers.clear();
         self.arena.clear();
         self.arena_strikes = 0;
+        self.scripted.clear();
         self.redirected.clear();
         self.trigger_open = false;
         self.fight_record = None;
@@ -628,6 +633,17 @@ impl BattleMetrics {
             self.check_priority(s);
             return;
         }
+        // ENCOUNTER2 P1: a phase kill's cell (the `by` unit or the encounter as its actor; nobody is credited)
+        if e.category == "EVENT" && e.subtype == crate::log::PHASE_KILL {
+            self.kill_cell(e, &changed);
+            for c in self.ally.keys().copied().collect::<Vec<_>>() {
+                self.credit_statuses(s, None, c);
+                self.remember_statuses(s, c);
+                self.track_tile(s, c);
+            }
+            self.check_priority(s);
+            return;
+        }
         let Some(actor) = actor else {
             self.unexplained(&changed);
             return;
@@ -787,6 +803,26 @@ impl BattleMetrics {
             if let Some(x) = &h.stagger {
                 self.stagger_hit(s, "", x);
             }
+        }
+    }
+
+    /// ENCOUNTER2 P1: a phase kill's cell: the units it struck lost exactly the logged HP (their `scripted` loss; no
+    /// unit dealt it, no kill is credited).
+    fn kill_cell(&mut self, e: &Entry, changed: &IndexMap<UnitId, Buf>) {
+        let mut lost = 0;
+        for (&v, b) in changed {
+            if b.gain > 0 {
+                self.rec(v).other_gain += b.gain;
+            }
+            if b.loss > 0 {
+                lost += b.loss;
+                let name = self.names[&v].clone();
+                *self.scripted.entry(name).or_default() += b.loss;
+            }
+        }
+        self.checks += 1;
+        if lost != e.damage {
+            self.fail(&e.actor, &format!("log_kill {}: {} logged, {lost} HP lost", e.skill, e.damage));
         }
     }
 
@@ -1318,7 +1354,9 @@ impl BattleMetrics {
             let paid = self.triggers.get(&name).map_or(0, |t| t.hp_paid);
             // HOOKS1 AH2: the HP arena hazards took (timeline key; 0 in classic)
             let arena = self.arena.get(&name).map_or(0, |a| a.taken);
-            let expect = rec.hp_start - rec.dmg_taken - rec.ff_taken - rec.dot_taken + rec.heal_received - paid - arena;
+            // ENCOUNTER2 P1: the HP phase kills took (0 without a kill)
+            let scripted = self.scripted.get(&name).copied().unwrap_or(0);
+            let expect = rec.hp_start - rec.dmg_taken - rec.ff_taken - rec.dot_taken + rec.heal_received - paid - arena - scripted;
             if expect != rec.hp_end {
                 self.fail(&name, &format!("hp ({expect} expected, {} at the end)", rec.hp_end));
             }

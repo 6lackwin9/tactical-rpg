@@ -17,6 +17,7 @@ from re-deriving the method each time.
 | [lore_modules.md](lore_modules.md) | Write lore and events as independent modules that can be decided alone and connected later |
 | [campaign_structure.md](campaign_structure.md) | Give the player forks and optional missions while checkpoints with deadlines keep the story on time |
 | [consistency_pass.md](consistency_pass.md) | Turn a brainstormed design library into canon and collect the gaps |
+| [combat_hooks.md](combat_hooks.md) | Use the RPG kit's combat hooks as data: forced moves, hazards, triggers, meters, phase effects, AI tactics |
 | [art_bible.md](art_bible.md) | Fix canvas, board, sprite, palette and pipelines before any art is made |
 | [milestones.md](milestones.md) | Plan the build (foundation, feel prototype, slice on data, playtest, depth, balance and art) and measure throughput |
 

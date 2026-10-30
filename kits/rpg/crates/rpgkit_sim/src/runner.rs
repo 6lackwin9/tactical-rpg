@@ -10,8 +10,8 @@ use aegis_core::rng::GodotRng;
 use rpgkit_battle::encounter::Phases;
 use rpgkit_battle::grid::NO_CELL;
 use rpgkit_battle::metrics::{BattleMetrics, EndResult};
-use rpgkit_battle::session::{EncounterDef, Fate, Phase, Roster, Session};
-use rpgkit_battle::sim::{binary_score, hp_score, jitter_start, plan_skip, shuffled, side_hp_frac, JITTER_SALT, MAX_STEPS_PER_ROUND};
+use rpgkit_battle::session::{EncounterDef, Fate, Roster, Session};
+use rpgkit_battle::sim::{binary_score, hp_score, jitter_start, plan_skip, shuffled, side_hp_frac, JITTER_SALT};
 use rpgkit_data::{Catalog, UnitDef};
 use rpgkit_world::Data;
 use indexmap::IndexMap;
@@ -148,6 +148,11 @@ pub struct Runner<'a> {
     pub world_ruleset: Option<rpgkit_rules::ruleset::Ruleset>,
     /// RULESET1-G: the `feel` mode's observer of the fights (None in every other mode: nothing is read).
     pub feel: Option<crate::feel::Feel>,
+    /// RULESET1-G2: the feel mode's party tactic (a PlanPresets id, AUTO1 under timeline; None: `preset`). Unlike
+    /// `preset` it drafts the party only (enemies keep their AI).
+    pub party_tactic: Option<String>,
+    /// RULESET1-G2 (4.3): the feel mode's party driver (auto: the battle screen's autoplay; timed: the tell reader).
+    pub driver: crate::timed::Driver,
 }
 
 impl<'a> Runner<'a> {
@@ -174,6 +179,8 @@ impl<'a> Runner<'a> {
             out: Vec::new(),
             world_ruleset: None,
             feel: None,
+            party_tactic: None,
+            driver: crate::timed::Driver::Auto,
         }
     }
 
@@ -232,6 +239,15 @@ impl<'a> Runner<'a> {
         }
         self.units.insert(id.into(), UnitDef::from_obj(&entry));
         self.written.insert(id.into(), variant);
+        true
+    }
+
+    /// RULESET1-G2 (`sim feel armor=`): catalog unit `id` fights with `armor` in this run (its in-memory entry only;
+    /// the data is never written). False: no such catalog unit.
+    pub fn set_armor(&mut self, id: &str, armor: i32) -> bool {
+        let Some(mut def) = self.units.get(id).cloned().or_else(|| self.d.cat.units.get(id).cloned()) else { return false };
+        def.armor = armor;
+        self.units.insert(id.into(), def);
         true
     }
 
@@ -295,9 +311,15 @@ impl<'a> Runner<'a> {
         let mut plan_failed = false;
         for round in 0..round_limit {
             rounds = round + 1;
-            // ENCOUNTER2 H1: a hold escape's holder by `pick_default` (nothing to pick elsewhere)
-            s.stay_pick_default();
-            s.plan_apply_preset_all(&self.preset);
+            // RULESET1-G2: the auto driver's draft (a hold escape's holder by `pick_default`, then the party's preset or
+            // the feel mode's tactic), then the feel mode's party driver
+            s.auto_draft(self.party_tactic.as_deref().unwrap_or(&self.preset));
+            if self.driver == crate::timed::Driver::Timed {
+                let timed = crate::timed::adjust(&mut s);
+                if let Some(f) = self.feel.as_mut() {
+                    f.counts.timed_rounds += timed as i64;
+                }
+            }
             if !s.confirm_plan() {
                 if self.args.jitter && self.plan_skip(&s, round + 1) {
                     self.metrics = *s.metrics.take().unwrap_or_default();
@@ -310,13 +332,7 @@ impl<'a> Runner<'a> {
             if let Some(f) = self.feel.as_mut() {
                 f.planned(&s);
             }
-            for _ in 0..MAX_STEPS_PER_ROUND {
-                if s.phase == Phase::Replay {
-                    break;
-                }
-                s.step_next();
-                s.metrics_step();
-            }
+            s.resolve_round();
             if let Some(f) = self.feel.as_mut() {
                 f.round_end(&s);
             }
@@ -348,7 +364,7 @@ impl<'a> Runner<'a> {
             reward: self.reward_of(&s),
         };
         if let Some(f) = self.feel.as_mut() {
-            f.end(&s, won, rounds);
+            f.end(&s, rounds);
         }
         s.metrics_end(EndResult { cleared: res.cleared, rounds, l, r, hp: res.hp });
         self.metrics = *s.metrics.take().unwrap_or_default();

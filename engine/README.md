@@ -39,7 +39,9 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
   from, to, colour, tip }`, a bracket from one segment's end to the next one's start, hidden while masked) and `marks`
   (`Mark { key, block, glyph, colour, tip }`, a glyph chip inside its block's cell, shown on masked tracks too). Links
   and marks are info widgets with a hover card and no click; labels leave room for marks; all empty by default. The
-  UI Gallery's Kit widgets entry has a Timeline page (tabs at its foot) showing every part.
+  UI Gallery's Kit widgets entry has a Timeline page (tabs at its foot) showing every part. `timeline::draw_part(ui,
+  style, bar, part_rect)` and `timeline::draw_mark(ui, id, &mark, rect)` draw one part or one mark on their own, so a
+  screen's own block strip shares the widget's look (RULESET1-U slice 5).
 * **Vignette player (STORYUI1-E):** `aegis_ui::vignette` plays a reel of still cards (styles `image`, `text`, `title`,
   `line`) through fade in, typing, hold and fade out: a typewriter at the engine setting `text_speed` (`slow` 30,
   `normal` 60, `fast` 120 characters a second, `instant`; fast halves the fades, instant drops them), a cover fill of the
@@ -52,7 +54,9 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
   group has a Vignette player entry on the engine's sample reel.
 * **Stage pieces (STAGE1-E):** `Painter::ellipse_ring` (a 1 px ellipse outline, no fill), `Image::opaque_bounds(min_alpha)`
   (the box of solid pixels), `Art::body_bounds(key, palette, size, flip)` (the solid box of a body's fitted idle frame 0,
-  mirrored with flip, cached; a unit's hit rect on a stage).
+  mirrored with flip, cached; a unit's hit rect on a stage); DIR4-HB: `Art::body_bounds_facing(key, palette, size, facing)`
+  (the box of `idle`'s front or back row for a `Facing` down or up, never mirrored; the side idle, mirrored when left,
+  for a side facing or a body without that view row).
 * **Effects (FX1-E):** `aegis_ui::fx`: the effect clock with hit-stop (`Clock`), six primitives drawn in code as pure
   functions of the clock and a seed (`Projectile`, `Beam`, `Trail`, `Sparks`, `Flash`, `Ring`; `Effect` with start, layer,
   seed), the live list `Fx` (at most 32), the camera shake (`Shake`, presets jolt / heavy / toll / tremor / quake in
@@ -200,7 +204,9 @@ right / enter / space / esc / a letter; while a field edits also home, end, back
 undo}), `back`, `screenshot {path, max_w}`, `text_audit {scale, shot}` (TEXTFIT1: one
 frame of the top screen at a text size, the mouse off the canvas, reporting the text `text_fit` or a button shortened
 (cut), text past the canvas (edge), texts drawn over each other (overlap) and text running out of its control (spill);
-text in a scroll area or under a later panel is skipped; `shot` saves that frame), `game` (the full game state), and the
+text in a scroll area or under a later panel is skipped, and so is transient text drawn inside `Painter::transient`
+(TEXTFIT2: floats that rise and fade, such as damage numbers; the painter flag `Fonts::transient` marks the record
+`TextRec::transient`); `shot` saves that frame), `game` (the full game state), and the
 battle command API while a battle is open. An agent sees and does exactly what the player sees and does:
 
 ```bash

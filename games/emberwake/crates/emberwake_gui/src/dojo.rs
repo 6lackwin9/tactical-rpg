@@ -1084,8 +1084,7 @@ mod tests {
         for rows in [json!([]), json!([{"id": "nerve", "name": "Nerve", "formula": "KNOW * 2", "show_on": ["dojo"]}, {"id": "zeal", "name": "Zeal", "formula": "DEX", "show_on": ["party"]}])] {
             let mut cx = crate::hud::hud_tests::game_cx();
             let mut data = (*cx.app.data).clone();
-            let cat = Arc::make_mut(&mut data.cat);
-            cat.derived_stats = rows.as_array().unwrap().iter().filter_map(|r| emberwake_data::DerivedStatDef::from_obj(r.as_object().unwrap())).map(|r| (r.id.clone(), r)).collect();
+            data.edit_cat(|cat| cat.derived_stats = rows.as_array().unwrap().iter().filter_map(|r| emberwake_data::DerivedStatDef::from_obj(r.as_object().unwrap())).map(|r| (r.id.clone(), r)).collect());
             cx.app.data = Arc::new(data);
             let mut dojo = Dojo::new(&cx);
             let mut g = crate::hud::hud_tests::gfx();
@@ -1169,8 +1168,7 @@ mod tests {
         const N: usize = 6;
         let mut cx = crate::hud::hud_tests::game_cx();
         let mut data = (*cx.app.data).clone();
-        let cat = Arc::make_mut(&mut data.cat);
-        cat.derived_stats = (0..N).map(|i| emberwake_data::DerivedStatDef::from_obj(json!({"id": format!("row_{i}"), "name": format!("Row {i}"), "formula": "KNOW", "show_on": ["dojo"]}).as_object().unwrap()).unwrap()).map(|r| (r.id.clone(), r)).collect();
+        data.edit_cat(|cat| cat.derived_stats = (0..N).map(|i| emberwake_data::DerivedStatDef::from_obj(json!({"id": format!("row_{i}"), "name": format!("Row {i}"), "formula": "KNOW", "show_on": ["dojo"]}).as_object().unwrap()).unwrap()).map(|r| (r.id.clone(), r)).collect());
         cx.app.data = Arc::new(data);
         let inside = |r: Rect, b: Rect| r.x >= b.x && r.y >= b.y && r.x + r.w <= b.x + b.w && r.y + r.h <= b.y + b.h;
         for layout in layouts() {

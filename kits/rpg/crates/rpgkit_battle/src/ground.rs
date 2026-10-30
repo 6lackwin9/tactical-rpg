@@ -311,7 +311,12 @@ pub fn on_start(res: &mut Resolver, w: &mut World, idx: usize) {
 /// GH6: the name of the trap on `cell` that `u`, standing there, springs (one that affects it); the move stops there.
 pub fn springs(w: &World, u: UnitId, cell: V2) -> Option<String> {
     let p = w.grid.ground.get(&cell)?;
-    (p.def.trap && w.grid.pos(u) == Some(cell) && on(w) && p.affects(w, u)).then(|| p.def.name.clone())
+    (w.grid.pos(u) == Some(cell) && trap_at(w, u, cell)).then(|| p.def.name.clone())
+}
+
+/// GH6: a trap on `cell` that `u` would spring by entering it (rule on; the forced-move preview reads it before the move).
+pub fn trap_at(w: &World, u: UnitId, cell: V2) -> bool {
+    w.grid.ground.get(&cell).is_some_and(|p| p.def.trap && on(w) && p.affects(w, u))
 }
 
 /// GH5, GH6: the hazard on `cell` meets `u` as it enters (after the terrain's roll; the first tile of each hazard in a

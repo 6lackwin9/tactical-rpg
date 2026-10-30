@@ -41,8 +41,9 @@ REACH = 0.01                          # rig.ik clamps a leg to its length less t
 BEHIND, RAISED_BACK, LEGS, SKIRT, TORSO, ARMS, HEAD, FRONT, TOP = range(1, 10)
 LAYERS = (BEHIND, RAISED_BACK, LEGS, SKIRT, TORSO, ARMS, HEAD, FRONT, TOP)
 
-# part kinds in drawing order within a layer; FLAGS are the unit's boolean extras that need a drawing of their own
-KINDS = ('back', 'legs', 'torso', 'offhand', 'weapon', 'head', 'hat', 'flag')
+# part kinds in drawing order within a layer (back gear after the torso garment, so a cape seen from behind covers
+# the tunic on the same layer); FLAGS are the unit's boolean extras that need a drawing of their own
+KINDS = ('legs', 'torso', 'back', 'offhand', 'weapon', 'head', 'hat', 'flag')
 FLAGS = ('mask', 'beard', 'braid', 'pauldron')
 PARTS = {k: {} for k in KINDS}
 GRIPS = {}
@@ -50,11 +51,9 @@ GRIPS = {}
 
 def parts_of(u):
     """The (kind, name) parts unit `u` uses, in KINDS order."""
-    out = []
+    out = [('legs', u['legs']), ('torso', u['torso'])]
     if u.get('back'):
         out.append(('back', u['back']))
-    out.append(('legs', u['legs']))
-    out.append(('torso', u['torso']))
     if u.get('offhand'):
         out.append(('offhand', u['offhand']))
     if u.get('weapon'):
@@ -69,6 +68,16 @@ def parts_of(u):
 def grip_key(cls, u):
     """The GRIPS key of class `cls` worn as unit `u`: the class id, or '<class>/<grip>' for a WAR2H1 grip."""
     return cls if not u.get('grip') else '%s/%s' % (cls, u['grip'])
+
+
+def grip_of(cls, u):
+    """The view keys of class `cls` worn as unit `u` (None: none): GRIPS[grip_key], with the entries its 'weapons'
+    table gives for u's weapon laid over it (DIR4-R2: the 2H grip's battle axe and warhammer chop, the greatsword
+    cuts)."""
+    g = GRIPS.get(grip_key(cls, u))
+    if g is not None and u.get('weapon') in g.get('weapons', {}):
+        g = dict(g, **g['weapons'][u['weapon']])
+    return g
 
 
 def missing(u, cls):
@@ -93,6 +102,7 @@ class Ctx:
         s.u, s.P, s.view, s.j, s.tails, s.hurt, s.e = u, u['pal'], view, j, tails, hurt, e
         s.rs = -1.0 if view == 'down' else 1.0     # screen x sign of the unit's right side
         s.s = u.get('scale', 1.0)
+        s.tip = None                               # a drawer may set the main weapon's tip (a nocked arrow, a fist)
 
 
 def joints(u, view, bob=0.0, head_dy=0.0, lift_r=0.0, lift_l=0.0, hand_r=None, hand_l=None, dy=0.0, dx=0.0):
@@ -204,13 +214,28 @@ def pose_view(u, view, bob=0.0, head_dy=0.0, lift_r=0.0, lift_l=0.0, hand_r=None
     f.outline()
     for x, y, r, col in fx or []:
         f.disc(CX + (x - CX) * s, GY - (GY - y) * s, r, col)
+    if e.get('arrow'):  # DIR4-R2: a loosed arrow (as rig.pose's, 1 x 5 px plus head and fletching) flying down or up
+        _arrow(f, c, *e['arrow'])
     if flash:
         rig._flash(f)
     f.im.info['hand'] = j['hand_r']
-    if u.get('weapon') in rig.WEAPON_TIP:
+    f.im.info['off'] = j['hand_l']  # the off hand (a ranger's string hand, for the buff motes), as rig.pose's
+    if c.tip is not None:
+        f.im.info['tip'] = c.tip
+    elif u.get('weapon') in rig.WEAPON_TIP:
         d = rig.udir(e.get('wa', 0.0)); k = e.get('wk', 1.0) * rig.WEAPON_TIP[u['weapon']]
         f.im.info['tip'] = (j['hand_r'][0] + d[0] * k, j['hand_r'][1] + d[1] * k)
     return f.im
+
+
+def _arrow(f, c, x, y, sign):
+    """A loosed arrow at frame position (x, y) (scaled about the feet), head `sign` (+1 down the screen, -1 up)."""
+    s, P = c.s, c.P
+    x, y = round(CX + (x - CX) * s), round(GY - (GY - y) * s)
+    for k in range(5):
+        f.dot(x, y - sign * k, P['wood'])
+    f.dot(x, y + sign, P['metal_hi'])
+    f.dot(x - 1, y - sign * 4, P['accent']); f.dot(x + 1, y - sign * 4, P['accent'])
 
 
 # ------------------------------------------------------------------ clip shapes (DIR4 6.3)
@@ -254,7 +279,7 @@ def clips(cls, u, stand_in=False):
     """The view clips of class `cls` worn as unit `u`: {id: frames}, {id: ms} with ids '<side clip>_<view>' (idle,
     walk and, when the grip has one, its attack). stand_in: a body without view support is drawn with STAND_INS and the
     rest pose (review boards only)."""
-    g = GRIPS.get(grip_key(cls, u))
+    g = grip_of(cls, u)
     if g is None:
         if not stand_in:
             raise ValueError("no view keys for grip %s" % grip_key(cls, u))
@@ -383,6 +408,16 @@ def _along(h, d, k, n=(0.0, 0.0)):
     return lambda a, b=0.0: (h[0] + d[0] * a * k + n[0] * b, h[1] + d[1] * a * k + n[1] * b)
 
 
+# the weapons whose side drawing has gold fittings (guard, pommel): a belt buckle in a view matches them (trim); with
+# any other weapon the side rows never show the trim colour (the side's buckle is always covered), so the view's
+# buckle is steel (metal_hi) and adds no palette slot (R4; DIR4-R2: the ranger, the 2H axe and hammer)
+GOLD_FITTINGS = ('sword', 'sword2', 'greatsword', 'dagger')
+
+
+def _buckle(c):
+    return c.P['trim'] if c.u.get('weapon') in GOLD_FITTINGS else c.P['metal_hi']
+
+
 def _regrip(f, c, layer, sides):
     """The hands over a weapon drawn on `layer` (as rig.pose draws the fist over the grip), for the hands drawn below."""
     for side in sides:
@@ -434,7 +469,7 @@ def plate(f, c, layer):
         if c.view == 'down':
             f.dot(px - 2.5, top + 1.5, P['metal_hi']); f.dot(px - 2.0, top + 2.5, P['metal_hi']); f.dot(px - 1.5, top + 3.5, P['metal_hi'])
             f.rect(px - 0.5, low + 1, px + 0.5, py - 1.5, P['accent_lo'])                    # the tabard's centre fold
-            f.rect(px - 4, py - 1.2, px + 4, py - 0.2, P['leather']); f.rect(px - 0.5, py - 1.2, px + 0.5, py - 0.2, P['trim'])
+            f.rect(px - 4, py - 1.2, px + 4, py - 0.2, P['leather']); f.rect(px - 0.5, py - 1.2, px + 0.5, py - 0.2, _buckle(c))
         else:
             f.rect(px, top + 1, px, low - 1, P['metal_lo'])                                   # spine
             f.dot(px - 2.5, top + 1.5, P['metal_hi']); f.dot(px + 2.0, top + 1.5, P['metal_hi'])
@@ -522,10 +557,18 @@ PARTS['offhand']['shield'] = kite_shield
 
 # ------------------------------------------------------------------ the warrior's grips (DIR4-R1 slice 2)
 def _tip(u, view, kw, length):
-    """The screen point `length` px along the main weapon of a frame posed with `kw` (for a spark at the tip)."""
-    j = joints(u, view, **{k: kw[k] for k in ('bob', 'head_dy', 'hand_r', 'dy') if k in kw})
-    d = rig.udir(kw.get('wa', 0.0)); k = kw.get('wk', 1.0); s = u.get('scale', 1.0)
-    h = j['hand_r']
+    """The screen point `length` px along the main weapon of a frame posed with `kw` (for a spark at the tip).
+    DIR4-R2: length ('l', n) is n px along the off-hand weapon (wb, wbk); ('hand', dx, dy) a point dx, dy px from the
+    main hand (a fist's spark)."""
+    j = joints(u, view, **{k: kw[k] for k in ('bob', 'head_dy', 'hand_r', 'hand_l', 'dy', 'dx') if k in kw})
+    s = u.get('scale', 1.0)
+    if isinstance(length, tuple) and length[0] == 'hand':
+        h = j['hand_r']
+        return (CX + (h[0] + length[1] * s - CX) / s, GY - (GY - h[1] - length[2] * s) / s)
+    if isinstance(length, tuple):
+        d = rig.udir(kw.get('wb', 180.0)); k = kw.get('wbk', 1.0); h = j['hand_l']; length = length[1]
+    else:
+        d = rig.udir(kw.get('wa', 0.0)); k = kw.get('wk', 1.0); h = j['hand_r']
     return (CX + (h[0] + d[0] * length * k - CX) / s, GY - (GY - h[1] - d[1] * length * k) / s)  # frame -> fx units
 
 
@@ -647,17 +690,21 @@ def warrior_2h_attack_keys(view):
 def view_rest(u):
     """The values pose_view draws for a key it is not given (hands: the rest pose), for rig.lerp_kw."""
     rest = (1.2, 2 * u['arm'] / u.get('scale', 1.0) - 1.0)
-    return dict(bob=0.0, head_dy=0.0, lift_r=0.0, lift_l=0.0, dy=0.0, dx=0.0, wk=1.0, hand_r=rest, hand_l=rest, tails=0.0)
+    return dict(bob=0.0, head_dy=0.0, lift_r=0.0, lift_l=0.0, dy=0.0, dx=0.0, wk=1.0, hand_r=rest, hand_l=rest, tails=0.0,
+                wbk=1.0, glow=0.0, pull=0.0, bk=1.0, fr=2.0, fl=2.0)
 
 
 def windup_rows(u, view, g, stand_in=False):
-    """The six WINDUP1 rows of unit `u` in `view` ({side id: frames}, {side id: ms}) from grip keys `g`."""
+    """The six WINDUP1 rows of unit `u` in `view` ({side id: frames}, {side id: ms}) from grip keys `g`; the grip's
+    windups 'opts' are rig.windup_rows's motes and steps (WINDUP1-R2: the ranger's motes from the string hand, the
+    mage's circling the gem and its pulsing glow)."""
     w = g['windups']
     ready = idle_keys(u, **grip_kw(g, 'idle', view))[0]
     holds = dict(w['holds'][view], windup=w['attack'](view)[w['strike'] - 1])
     def draw(kw):
         return pose_view(u, view, stand_in=stand_in, **kw)
-    return rig.windup_rows(draw, ready, holds, w['stagger'][view], w['dazed'][view], view_rest(u), shake_hand)
+    return rig.windup_rows(draw, ready, holds, w['stagger'][view], w['dazed'][view], view_rest(u), shake_hand,
+                           **w.get('opts', {}))
 
 
 def shake_hand(kw, d):
@@ -713,9 +760,1055 @@ GRIPS['warrior'] = dict(idle=W1_READY, walk={v: dict(W1_READY[v], swing=0.4) for
                         attack=('attack', warrior_attack), windups=W1_WINDUPS)
 # 1H + buckler (WAR2H1 grip 'buckler'; WINDUP1-R1 review, user 2026-10-29): the sword raised upright in front and
 # back views as the kite look's (the DIR4-R1 review note for a shield or buckler warrior), not hanging along the leg.
-# Idle and walk keys only: the buckler has no view drawing yet, so these bodies keep side rows in the sheets and the
-# keys show on the review boards' stand-in views (the attack and wind-up views come with a buckler drawing).
-WB_READY = {v: dict(W1_READY[v]) for v in VIEWS}
+# DIR4-R3 (DIR4-R1F's buckler part, user 2026-10-29) adds the buckler drawing and, per weapon, the attack and the
+# wind-up rows (GRIPS['warrior/buckler']['weapons'], at the end of this module).
+WB_READY = {v: dict(W1_READY[v], hand_l=(1.0, 6.0)) for v in VIEWS}   # DIR4-R3: the buckler a little out, so it shows from behind
 GRIPS['warrior/buckler'] = dict(idle=WB_READY, walk={v: dict(WB_READY[v], swing=0.4) for v in VIEWS})
 GRIPS['warrior/2h'] = dict(idle=W2_READY, walk={v: dict(W2_READY[v], swing=0.3) for v in VIEWS},
                            attack=('attack', warrior_2h_attack), windups=W2_WINDUPS)
+
+
+# ------------------------------------------------------------------ the other classes' parts (DIR4-R2)
+# Decision "Front and back views follow the side model" (user 2026-10-29): each drawer is the front and back of the side
+# rig's own part (rig.draw_head, draw_torso, draw_back_gear, draw_robe_skirt, draw_weapon, draw_bow): the same shapes,
+# colours and placement (the hood's drape, the cowl's circlet, the hat's band and bent cone, the mage's white hair and
+# beard, the brawler's headband and its tails, the sash, the cross belt, the robe's trim and rope belt, the cape, the
+# quiver, the weapons' parts). Weapon keys beyond the warrior's: wb / wbk / oz the off-hand weapon's angle, length and
+# layer (the rogue's second dagger); bow_a / bk / bs / pull / nock the bow (its tilt, the bulge's foreshortening and
+# side, the draw and the nocked arrow); glow the staff's gem; fr / fl the fists' size (0: an open hand); wn the side a
+# 2H head's edge faces (+1 the unit's right side, the default; -1 the other).
+def _side(c, side):
+    """The screen x sign of the unit's `side` ('r' or 'l') in this view."""
+    return c.rs if side == 'r' else -c.rs
+
+
+def _chest(f, c, colour, widen=0.0):
+    """The torso's twelve rows (as rig.draw_torso's), widening to the shoulders; colour(t) gives a row's colour from the
+    waist (t = 0) to the shoulders (t = 1)."""
+    px, py = c.j['pelvis']; T = c.u['tl']; g = c.u.get('girth', 0.0)
+    for i in range(12):
+        t = i / 11.0; y = py - T * t
+        half = 3.8 + 1.0 * t + g * (0.6 + 0.4 * t) + widen
+        f.rect(px - half, y - 0.5, px + half, y + 0.5, colour(t))
+
+
+def headband(f, c, layer):
+    """The brawler's head (rig 'headband'): short dark hair, the headband round the brow, its tails trailing from the
+    knot at the back and a set jaw. down: the face, the hair over the brow and short at the temples, the band across the
+    forehead, the tails' ends showing past the unit's left side; up: the hair over the skull to the nape, the band round
+    the back, its knot and both tails hanging, swaying."""
+    if layer != HEAD:
+        return
+    P = c.P; hx, hy = c.j['head']; t = c.tails; k = _side(c, 'l')
+    if c.view == 'down':
+        for i in range(3):   # the tails behind the head, their ends past its left side
+            f.dot(hx + k * (3.6 + i * 0.9), hy - 1.4 + i * 0.7 + math.sin(t + i) * 0.5, P['accent'] if i < 2 else P['accent_lo'])
+        f.disc(hx, hy, 3.4, P['skin'])
+        f.rect(hx - 3, hy - 3.6, hx + 3, hy - 2.2, P['hair'])
+        f.rect(hx - 3.5, hy - 2.2, hx - 3.0, hy - 0.4, P['hair']); f.rect(hx + 3.0, hy - 2.2, hx + 3.5, hy - 0.4, P['hair'])
+        f.rect(hx - 3.4, hy - 2.0, hx + 3.4, hy - 1.2, P['accent'])
+        f.dot(hx - 1, hy + 0.2, OUT if c.hurt else P['eye']); f.dot(hx + 1, hy + 0.2, OUT if c.hurt else P['eye'])
+        f.rect(hx - 1, hy + 2.4, hx + 1, hy + 2.4, P['skin_lo'])                              # set jaw
+    else:
+        f.disc(hx, hy, 3.4, P['skin'])
+        f.disc(hx, hy - 0.6, 3.3, P['hair']); f.rect(hx - 3, hy - 0.6, hx + 3, hy + 0.8, P['hair'])
+        f.dot(hx - 3.6, hy + 0.4, P['skin_lo']); f.dot(hx + 3.6, hy + 0.4, P['skin_lo'])   # ears
+        f.rect(hx - 3.4, hy - 2.0, hx + 3.4, hy - 1.2, P['accent'])
+        f.rect(hx - 0.5, hy - 2.2, hx + 0.5, hy - 1.0, P['accent_lo'])                       # the knot
+        for i in range(3):                                                                    # the tails, swaying
+            f.dot(hx + k * (0.6 + 0.5 * i) + math.sin(t + i) * 0.4, hy - 0.4 + i * 0.9, P['accent'] if i < 2 else P['accent_lo'])
+
+
+def hood(f, c, layer):
+    """The ranger's and the rogue's hood (rig 'hood'): the cowl of cloth with its highlights and the drape falling to
+    the shoulders. down: the face deep in the opening, the shadowed brow edge, two eyes; up: the hood's back and its
+    drape coming to a point between the shoulders, a seam."""
+    if layer != HEAD:
+        return
+    P = c.P; hx, hy = c.j['head']
+    if c.view == 'down':
+        f.rect(hx - 4.2, hy + 0.5, hx - 2.8, hy + 3.6, P['main_lo']); f.rect(hx + 2.8, hy + 0.5, hx + 4.2, hy + 3.6, P['main_lo'])
+        f.disc(hx, hy - 0.4, 3.9, P['main'])
+        f.disc(hx, hy + 0.9, 2.5, P['skin'])
+        f.rect(hx - 2, hy - 1.4, hx + 2, hy - 1.4, P['main_lo'])                              # the deep front edge
+        f.dot(hx - 1.6, hy - 3.0, P['main_hi']); f.dot(hx - 0.6, hy - 3.6, P['main_hi'])
+        f.dot(hx - 1, hy + 0.4, OUT if c.hurt else P['eye']); f.dot(hx + 1, hy + 0.4, OUT if c.hurt else P['eye'])
+    else:  # the drape covers the nape down to the shoulders
+        f.poly([(hx - 3.8, hy + 0.2), (hx + 3.8, hy + 0.2), (hx + 2.4, hy + 6.0), (hx - 2.4, hy + 6.0)], P['main_lo'])
+        f.disc(hx, hy - 0.4, 3.9, P['main'])
+        f.rect(hx, hy - 3.4, hx, hy + 1.0, P['main_lo'])                                      # the seam
+        f.dot(hx - 1.6, hy - 3.0, P['main_hi']); f.dot(hx - 0.6, hy - 3.6, P['main_hi'])
+
+
+def mask(f, c, layer):
+    """The rogue's mask (rig 'hood' + mask): the cloth over the lower face, below the eyes (down only; from the back
+    the hood covers its tie)."""
+    if layer != HEAD or c.view != 'down':
+        return
+    hx, hy = c.j['head']
+    f.rect(hx - 2.4, hy + 1.4, hx + 2.4, hy + 3.0, c.P['accent'])
+
+
+def cowl(f, c, layer):
+    """The priest's cowl (rig 'cowl'): cloth over the head and falling over the shoulders, the gold circlet on it.
+    down: the face in the opening, its shaded rim, the circlet across the brow, two eyes; up: the cowl's back, its fold
+    and the circlet's band round the back."""
+    if layer != HEAD:
+        return
+    P = c.P; hx, hy = c.j['head']
+    low = 4.6 if c.view == 'down' else 6.0                                                    # from behind: to the shoulders
+    f.poly([(hx - 3.6, hy + 0.2), (hx + 3.6, hy + 0.2), (hx + 4.6, hy + low), (hx - 4.6, hy + low)], P['main_lo'])
+    f.disc(hx, hy - 0.2, 3.9, P['main'])
+    if c.view == 'down':
+        f.disc(hx, hy + 0.9, 2.4, P['skin'])
+        f.rect(hx - 2.8, hy + 0.8, hx - 2.8, hy + 3.2, P['main_lo']); f.rect(hx + 2.8, hy + 0.8, hx + 2.8, hy + 3.2, P['main_lo'])
+        f.rect(hx - 2.0, hy - 2.8, hx + 2.0, hy - 2.2, P['trim'])
+        f.dot(hx - 1, hy + 0.6, OUT if c.hurt else P['eye']); f.dot(hx + 1, hy + 0.6, OUT if c.hurt else P['eye'])
+    else:
+        f.rect(hx - 3.5, hy - 2.2, hx + 3.5, hy - 1.6, P['trim'])
+        f.rect(hx, hy - 1.6, hx, hy + 3.8, P['main_lo'])                                      # the fold down the back
+
+
+def hat(f, c, layer):
+    """The mage's hat and hair (rig 'hat'): the wide brim, the gold band, the tall cone bent at its tip; long white hair
+    under the brim and the beard. down: the face, the hair falling at both sides, the beard to a point; up: the hair
+    over the back of the head down to the shoulders. The cone's tip bends over the unit's left side (the side view
+    bends it back)."""
+    if layer != HEAD:
+        return
+    P = c.P; hx, hy = c.j['head']; k = _side(c, 'l')
+    lock = P.get('metal_hi', P['hair'])                                                       # the strands' sheen
+    if c.view == 'down':
+        for s in (-1, 1):                                                                     # locks to the shoulders
+            f.poly([(hx + s * 3.9, hy - 2.6), (hx + s * 2.6, hy - 2.6), (hx + s * 2.4, hy + 3.8), (hx + s * 3.7, hy + 3.0)], P['hair'])
+            f.dot(hx + s * 3.2, hy + 0.4, lock)
+        f.disc(hx, hy, 3.2, P['skin'])
+        f.poly([(hx - 2.4, hy + 1.2), (hx + 2.4, hy + 1.2), (hx + 1.8, hy + 4.2), (hx, hy + 5.4), (hx - 1.8, hy + 4.2)], P['hair'])
+        f.dot(hx - 0.6, hy + 3.2, lock); f.dot(hx + 0.6, hy + 2.4, lock)
+        f.dot(hx - 1, hy - 0.4, OUT if c.hurt else P['eye']); f.dot(hx + 1, hy - 0.4, OUT if c.hurt else P['eye'])
+    else:  # the hair falls from under the brim to the shoulders in locks
+        f.disc(hx, hy, 3.4, P['hair'])
+        f.poly([(hx - 3.6, hy - 1.0), (hx + 3.6, hy - 1.0), (hx + 3.4, hy + 4.8), (hx + 1.8, hy + 3.8), (hx, hy + 5.4),
+                (hx - 1.8, hy + 3.8), (hx - 3.4, hy + 4.8)], P['hair'])
+        f.limb((hx - 1.6, hy - 0.6), (hx - 1.9, hy + 3.0), 0.3, lock); f.limb((hx + 1.4, hy - 0.2), (hx + 1.7, hy + 3.4), 0.3, lock)
+    f.rect(hx - 5.2, hy - 3.4, hx + 5.2, hy - 2.6, P['main_lo'])
+    f.poly([(hx - 3.2, hy - 3.2), (hx + 3.2, hy - 3.2), (hx + k * 0.4, hy - 10.5)], P['main'])
+    f.limb((hx + k * 0.4, hy - 10.2), (hx + k * 2.6, hy - 11.4), 0.6, P['main'])
+    f.rect(hx - 3.0, hy - 4.4, hx + 3.0, hy - 3.6, P['trim'])
+
+
+def bare(f, c, layer):
+    """The brawler's bare torso (rig 'bare'): skin to the waist, the trousers' top below, the orange sash with its end
+    hanging at the left hip. down: the chest and belly lines; up: the spine and the shoulder blades."""
+    if layer != TORSO:
+        return
+    P = c.P; px, py = c.j['pelvis']; T = c.u['tl']
+    _chest(f, c, lambda t: P['skin'] if t > 0.22 else P['leg'], 0.6)
+    if c.view == 'down':
+        f.rect(px - 3.2, py - T * 0.62, px - 1.0, py - T * 0.62, P['skin_lo']); f.rect(px + 1.0, py - T * 0.62, px + 3.2, py - T * 0.62, P['skin_lo'])
+        f.dot(px, py - T * 0.5, P['skin_lo']); f.dot(px - 1, py - T * 0.38, P['skin_lo']); f.dot(px + 1, py - T * 0.38, P['skin_lo'])
+    else:
+        f.rect(px, py - T * 0.85, px, py - T * 0.35, P['skin_lo'])
+        f.dot(px - 2.4, py - T * 0.72, P['skin_lo']); f.dot(px + 2.4, py - T * 0.72, P['skin_lo'])
+    f.rect(px - 4.6, py - 2.2, px + 4.6, py - 0.8, P['accent'])
+    k = _side(c, 'l')
+    f.limb((px + k * 3.8, py - 1.5), (px + k * 4.8, py + 3.0), 0.6, P['accent_lo'])
+
+
+def leather(f, c, layer):
+    """The ranger's and the rogue's leather tunic (rig 'leather'): the tunic over the trousers' top, the cross belt
+    from the left shoulder to the right hip (the quiver's strap), the belt; down: its buckle; up: the belt line."""
+    if layer != TORSO:
+        return
+    P = c.P; px, py = c.j['pelvis']; T = c.u['tl']
+    _chest(f, c, lambda t: P['main'] if t > 0.25 else P['leg'])
+    l, r = _side(c, 'l'), _side(c, 'r')
+    for i in range(9):
+        t = i / 8.0
+        f.disc(px + l * 3.2 * (1 - t) + r * 3.0 * t, py - T * (0.95 - 0.6 * t), 0.5, P['leather'])
+    f.rect(px - 4, py - 1.2, px + 4, py - 0.2, P['leather'])
+    if c.view == 'down':
+        f.dot(px, py - 0.7, _buckle(c))
+    else:
+        f.rect(px - 4, py - 0.2, px + 4, py - 0.2, P['leather_lo'])
+
+
+def robe(f, c, layer):
+    """The priest's and the mage's robe (rig 'robe'): the robe to the waist (darker below the rope belt's line), the
+    rope belt; down: the trim down the front and the belt's knot; up: the back seam."""
+    if layer != TORSO:
+        return
+    P = c.P; px, py = c.j['pelvis']; T = c.u['tl']
+    _chest(f, c, lambda t: P['main'] if t > 0.15 else P['main_lo'])
+    if c.view == 'down':
+        f.rect(px, py - T + 1, px, py - 3.4, P['trim'])
+    else:
+        f.rect(px, py - T * 0.9, px, py - T * 0.3, P['main_lo'])
+    f.rect(px - 4, py - 3.2, px + 4, py - 2.4, P['main_lo'])
+    if c.view == 'down':
+        f.dot(px + 1.5, py - 2.8, P['trim'])
+
+
+def robe_skirt(f, c, layer):
+    """The robe's skirt (rig draw_robe_skirt): from the waist to 2.6 px above each foot, its hem line; down: the
+    front trim continues to the hem; up: a fold down the back."""
+    if layer != SKIRT:
+        return
+    P, j = c.P, c.j; px, py = j['pelvis']
+    corner = {}
+    for side in ('r', 'l'):
+        fx_, fy_ = j['foot_' + side]; out = 1.0 if fx_ > CX else -1.0
+        corner[side] = (fx_ + out * 1.8, fy_ - 2.6)
+    lo, hi = (corner['r'], corner['l']) if corner['r'][0] < corner['l'][0] else (corner['l'], corner['r'])
+    mid = ((lo[0] + hi[0]) / 2, max(lo[1], hi[1]) + 0.5)
+    f.poly([(px - 4.2, py - 1), (px + 4.2, py - 1), hi, mid, lo], P['main'])
+    f.limb(lo, mid, 0.5, P['main_lo']); f.limb(mid, hi, 0.5, P['main_lo'])
+    if c.view == 'down':
+        f.rect(px, py - 1, px, mid[1] - 1.2, P['trim'])
+    else:
+        f.rect(px, py + 1, px, mid[1] - 1.5, P['main_lo'])
+
+
+def quiver(f, c, layer):
+    """The ranger's quiver (rig 'quiver') slung on the back from the right hip to the left shoulder. down: behind the
+    body, only its fletchings (white, one red) over the left shoulder; up: the whole quiver over the back, its mouth
+    and the fletchings at the left shoulder."""
+    P, j = c.P, c.j; px, py = j['pelvis']; T = c.u['tl']
+    sl = j['sh_l']; k = _side(c, 'l')
+    top = (sl[0] - k * 1.0, sl[1] - 2.2); bot = (px - k * 2.4, py - T * 0.3)
+    if c.view == 'down' and layer == BEHIND:
+        f.limb(bot, top, 1.1, P['leather_lo'])
+        for i in range(3):
+            f.dot(top[0] - 1 + i, top[1] - 1.5 - (i % 2), rig.WHITE if i != 1 else P['accent'])
+    elif c.view == 'up' and layer == FRONT:
+        f.limb(bot, top, 1.2, P['leather_lo'])
+        f.limb((top[0] - 1.2, top[1] + 0.6), (top[0] + 1.2, top[1] - 0.6), 0.5, P['leather'])
+        for i in range(3):
+            f.dot(top[0] - 1 + i, top[1] - 1.5 - (i % 2), rig.WHITE if i != 1 else P['accent'])
+
+
+def cape(f, c, layer):
+    """The rogue's cape (rig 'cape'), hanging from the shoulders to the thighs. down: behind the body, showing at its
+    sides and between the legs, the cords over the shoulders and the clasp at the throat; up: over the back and the
+    upper legs, two folds, swaying with the walk."""
+    P, j = c.P, c.j; px, py = j['pelvis']; sy = j['neck'][1]; sw = 0.5 * math.sin(c.tails)
+    if c.view == 'down' and layer == BEHIND:
+        f.poly([(px - 5.0, sy + 0.5), (px + 5.0, sy + 0.5), (px + 6.8 + sw, py + 6), (px - 6.8 + sw, py + 6)], P['accent_lo'])
+    elif c.view == 'down' and layer == TORSO:
+        for side in ('r', 'l'):
+            sx, sy_ = j['sh_' + side]
+            f.limb((sx, sy_ - 0.4), (px + (1.4 if sx > px else -1.4), sy + 2.0), 0.6, P['accent_lo'])
+        f.dot(px, sy + 2.2, P['trim'])
+    elif c.view == 'up' and layer == TORSO:
+        f.poly([(px - 4.8, sy - 0.2), (px + 4.8, sy - 0.2), (px + 6.0 + sw, py + 6), (px - 6.0 + sw, py + 6)], P['accent_lo'])
+        f.limb((px - 1.8, sy + 3), (px - 2.6 + sw, py + 5), 0.3, P['accent'])
+        f.limb((px + 1.8, sy + 3), (px + 2.6 + sw, py + 5), 0.3, P['accent'])
+
+
+def fists(f, c, layer):
+    """The brawler's wrapped fists (rig 'fists'), on each hand's layer: a fist of radius fr / fl (default 2, the side's
+    clenched fist; 0 leaves the open hand) with the wrap's highlight. Sets the tip (the right fist's knuckles, along the
+    forearm) for the debuff glint."""
+    P, j = c.P, c.j
+    for side, key in (('r', 'fr'), ('l', 'fl')):
+        r = c.e.get(key, 2.0)
+        if arm_layer(c, side, True) != layer or r <= 0:
+            continue
+        hx, hy = j['hand_' + side]
+        f.disc(hx, hy, r, P['glove']); f.dot(hx + 0.6, hy - 0.8, P.get('glove_hi', P['glove']))
+    if c.tip is None:
+        (ex, ey), (hx, hy) = j['elbow_r'], j['hand_r']; d = math.hypot(hx - ex, hy - ey) or 1.0
+        c.tip = (hx + (hx - ex) / d * 2.0, hy + (hy - ey) / d * 2.0)
+
+
+def bow(f, c, layer):
+    """The ranger's bow (rig draw_bow) in the right hand: the stave's curve (wood, the grip darker) tilted by bow_a (0
+    upright), its bulge foreshortened by bk and toward the screen side bs (default the unit's right: away from the
+    body); the white string, pulled to the left hand by `pull` with a nocked arrow (wood, a steel head at the bow, red
+    fletching at the hand) when `nock`; the arrow's head is the tip."""
+    if layer != _wz(c, 'wz'):
+        return
+    P, j, e = c.P, c.j, c.e
+    bx, by = j['hand_r']; r = math.radians(e.get('bow_a', 0.0)); ca, sa = math.cos(r), math.sin(r)
+    bk, bs = e.get('bk', 1.0), e.get('bs', c.rs)
+
+    def bp(al, out):
+        out *= bs
+        return (bx + out * ca - al * sa, by - al * ca + out * sa)
+    pts = [bp(t, bk * 2.6 * math.cos(t / 9 * math.pi / 2) - 0.3) for t in [x * 0.5 for x in range(-18, 19)]]
+    top, bot = bp(9, -0.3), bp(-9, -0.3)
+    ph = j['hand_l'] if e.get('pull', 0.0) > 0 else None
+    if ph:
+        f.limb(top, ph, 0.3, rig.WHITE); f.limb(bot, ph, 0.3, rig.WHITE)
+    else:
+        f.limb(top, bot, 0.3, rig.WHITE)
+    for i in range(len(pts) - 1):
+        f.limb(pts[i], pts[i + 1], 0.8, P['wood'] if abs(i - 18) > 3 else P['wood_lo'])
+    if e.get('nock') and ph:
+        d = math.hypot(bx - ph[0], by - ph[1]) or 1.0; ux, uy = (bx - ph[0]) / d, (by - ph[1]) / d
+        f.limb(ph, (bx + ux * 1.0, by + uy * 1.0), 0.4, P['wood'])
+        f.dot(bx + ux * 1.8, by + uy * 1.8, P['metal_hi']); f.dot(bx + ux * 2.6, by + uy * 2.6, P['metal_hi'])
+        f.dot(ph[0] - uy * 0.8, ph[1] + ux * 0.8, P['accent']); f.dot(ph[0] + uy * 0.8, ph[1] - ux * 0.8, P['accent'])
+        c.tip = (bx + ux * 2.6, by + uy * 2.6)
+    _regrip(f, c, layer, ('r', 'l') if ph else ('r',))
+
+
+def _dagger(f, c, layer, side, ak, kk, zk, default):
+    if layer != _wz(c, zk):
+        return
+    P = c.P; h = c.j['hand_' + side]; d = rig.udir(c.e.get(ak, default)); n = (-d[1], d[0])
+    at = _along(h, d, c.e.get(kk, 1.0), n)
+    f.limb(at(-1.5), at(0.4), 0.7, P['leather_lo'])
+    f.limb(at(0.9, -1.5), at(0.9, 1.5), 0.5, P['trim'])
+    f.limb(at(1.6), at(6.5), 0.6, P['metal_hi']); f.dot(*at(6.8), rig.WHITE)
+    _regrip(f, c, layer, (side,))
+
+
+def dagger(f, c, layer):
+    """The rogue's main dagger (rig draw_weapon 'dagger': grip, a small guard, the blade and its white point) in the
+    right hand along wa, foreshortened by wk, on layer wz."""
+    _dagger(f, c, layer, 'r', 'wa', 'wk', 'wz', 180.0)
+
+
+def off_dagger(f, c, layer):
+    """The rogue's second dagger in the left hand along wb, foreshortened by wbk, on layer oz."""
+    _dagger(f, c, layer, 'l', 'wb', 'wbk', 'oz', 180.0)
+
+
+def mace(f, c, layer):
+    """The priest's mace (rig draw_weapon 'mace'), gripped a third up the shaft: the shaft and pommel below the fist,
+    the head with its highlight and four flanges, along wa, foreshortened by wk; the smaller fist round the shaft (and
+    the left hand below it with grip2)."""
+    if layer != _wz(c, 'wz'):
+        return
+    P = c.P; h = c.j['hand_r']; wa = c.e.get('wa', 0.0); d = rig.udir(wa)
+    at = _along(h, d, c.e.get('wk', 1.0))
+    f.limb(at(-4), at(7.5), 0.8, P['wood']); f.disc(*at(-4.4), 0.8, P['metal_lo'])
+    cx, cy = at(8.6)
+    f.disc(cx, cy, 2.2, P['metal']); f.dot(cx - 1, cy - 1, P['metal_hi'])
+    for k in range(4):
+        a = math.radians(wa + k * 90 + 45); f.dot(cx + math.sin(a) * 2.8, cy - math.cos(a) * 2.8, P['metal_lo'])
+    if c.e.get('grip2'):
+        _regrip(f, c, layer, ('l',))
+    if arm_layer(c, 'r', True) <= layer:
+        f.disc(h[0], h[1], 1.3, P.get('glove', P['leather'])); f.dot(h[0] + 0.6, h[1] + 0.4, P.get('glove_lo', P['leather_lo']))
+
+
+def staff(f, c, layer):
+    """The mage's staff (rig draw_weapon 'staff'), held near its middle: the shaft, its darker upper end, the gem with
+    its glint and, at `glow`, the glow round it; along wa, foreshortened by wk."""
+    if layer != _wz(c, 'wz'):
+        return
+    P = c.P; h = c.j['hand_r']; d = rig.udir(c.e.get('wa', 0.0))
+    at = _along(h, d, c.e.get('wk', 1.0))
+    f.limb(at(-11), at(10), 0.8, P['wood']); f.limb(at(8.5), at(10), 1.1, P['wood_lo'])
+    gx, gy = at(11.8); glow = c.e.get('glow', 0.0)
+    if glow > 0:
+        f.disc(gx, gy, 2.2 + glow * 1.8, P['magic_lo'])
+    f.disc(gx, gy, 1.6, P['magic']); f.dot(gx - 0.5, gy - 0.6, rig.WHITE)
+    _regrip(f, c, layer, ('r', 'l') if c.e.get('grip2') else ('r',))
+
+
+def _head_side(c, d):
+    """The across-direction of a 2H head (its edge or striking face): toward the unit's right side, or the other with
+    wn = -1."""
+    n = (-d[1], d[0])
+    if n[0] * c.rs < 0 or (abs(n[0]) < 1e-9 and n[1] > 0):
+        n = (-n[0], -n[1])
+    w = c.e.get('wn', 1.0)
+    return (n[0] * w, n[1] * w)
+
+
+def battle_axe(f, c, layer):
+    """The battle axe in both hands (rig._battle_axe: the haft with its wrapped grip and butt cap, the bearded head
+    with its honed edge and the back spike), along wa, foreshortened by wk; the head keeps its width. In `up` behind the
+    body only the head past the body shows (the grip stays hidden, as the greatsword's)."""
+    if layer != _wz(c, 'wz'):
+        return
+    P = c.P; h = c.j['hand_r']; d = rig.udir(c.e.get('wa', 0.0)); n = _head_side(c, d)
+    at = _along(h, d, c.e.get('wk', 1.0), n)
+    f.limb(at(-5), at(13.5), 0.75, P['leather']); f.limb(at(-5), at(-1), 0.75, P['leather_lo']); f.disc(*at(-5.4), 0.8, P['metal_lo'])
+    f.poly([at(8.6, 0.8), at(7.0, 4.6), at(10.8, 5.6), at(14.6, 4.6), at(13.0, 0.8)], P['metal'])
+    f.limb(at(7.0, 4.6), at(10.8, 5.6), 0.45, P['metal_hi']); f.limb(at(10.8, 5.6), at(14.6, 4.6), 0.45, P['metal_hi'])
+    f.limb(at(9.4, 1.4), at(12.2, 1.4), 0.4, P['metal_lo'])
+    f.poly([at(9.8, -0.6), at(11.0, -3.4), at(12.2, -0.6)], P['metal_lo'])
+    f.dot(*at(14.0), P['metal_lo'])
+    _regrip(f, c, layer, ('r', 'l'))
+
+
+def warhammer(f, c, layer):
+    """The warhammer in both hands (rig._warhammer: the haft, the square head with its striking face, the back and
+    top spikes), along wa, foreshortened by wk; the head keeps its width."""
+    if layer != _wz(c, 'wz'):
+        return
+    P = c.P; h = c.j['hand_r']; d = rig.udir(c.e.get('wa', 0.0)); n = _head_side(c, d)
+    at = _along(h, d, c.e.get('wk', 1.0), n)
+    f.limb(at(-5), at(12), 0.75, P['leather']); f.limb(at(-5), at(-1), 0.75, P['leather_lo']); f.disc(*at(-5.4), 0.8, P['metal_lo'])
+    f.poly([at(10.0, -3.0), at(10.0, 3.8), at(13.4, 3.8), at(13.4, -3.0)], P['metal'])
+    f.limb(at(10.0, 4.2), at(13.4, 4.2), 0.5, P['metal_hi'])
+    f.limb(at(10.4, -0.4), at(13.0, -0.4), 0.4, P['metal_lo'])
+    f.poly([at(10.6, -3.0), at(11.7, -5.4), at(12.8, -3.0)], P['metal_lo'])
+    f.limb(at(13.4), at(15.0), 0.6, P['metal'])
+    _regrip(f, c, layer, ('r', 'l'))
+
+
+PARTS['head'].update(headband=headband, hood=hood, cowl=cowl, hat=hat)
+PARTS['flag']['mask'] = mask
+PARTS['torso'].update(bare=bare, leather=leather, robe=robe)
+PARTS['legs']['robe'] = robe_skirt
+PARTS['back'].update(quiver=quiver, cape=cape)
+PARTS['weapon'].update(fists=fists, bow=bow, dagger=dagger, mace=mace, staff=staff, battle_axe=battle_axe, warhammer=warhammer)
+PARTS['offhand']['dagger'] = off_dagger
+
+
+# ------------------------------------------------------------------ the other classes' grips (DIR4-R2)
+# Each grip keys idle and walk per view, its main attack (the side clip's frames and ms; DIR4 6.3: a lunge moves the
+# body 1 to 2 px toward the facing, down the screen in `down` and up it in `up`; a motion along the facing axis shows
+# foreshortened) and the WINDUP1 rows (K6: the windup hold is the attack's frame strike - 1; the heavy holds rest over
+# the shoulder, decision "WINDUP1-R1 heavy hold, front and back"; stagger knocks the body 1 px away from the facing;
+# dazed slumps with the weapon low). The weapon stays visible in both views: held at the side, raised, or showing past
+# the body from behind (decision "Front and back views follow the side model").
+def flip(kw, **over):
+    """The `up` keys of `down` keys `kw` for a pose across the facing (holds, stagger, dazed): screen angles (wa, wb,
+    bow_a) and screen offsets (dx, dy) mirrored, a lifted foot kept on the same screen side, the layer keys dropped
+    (each view's defaults) unless given in `over`, which is laid over the result."""
+    out = {k: v for k, v in kw.items() if k not in ('wz', 'oz', 'fore_z', 'arm_z')}
+    for k in ('wa', 'wb'):
+        if k in out:
+            out[k] = (360.0 - out[k]) % 360.0
+    for k in ('bow_a', 'dx', 'dy'):
+        if k in out:
+            out[k] = -out[k]
+    if 'lift_l' in out:
+        out['lift_r'] = out.pop('lift_l')
+    out.update(over)
+    return out
+
+
+def _qarc(a, ctrl, b, n=14):
+    """A swing's arc for the slash key: n points on the quadratic curve from `a` through control point `ctrl` to `b`."""
+    return [((1 - t) ** 2 * a[0] + 2 * (1 - t) * t * ctrl[0] + t * t * b[0], (1 - t) ** 2 * a[1] + 2 * (1 - t) * t * ctrl[1] + t * t * b[1])
+            for t in (i / (n - 1) for i in range(n))]
+
+
+def _windups(attack, strike, holds, stagger, dazed, opts=None, up=None):
+    """A grip's windups entry: holds, stagger and dazed given for `down`; `up` ({key: up keys}) overrides the flipped
+    `down` keys per hold (by wind-up id), 'stagger' (a list) and 'dazed'."""
+    up = up or {}
+    w = dict(attack=attack, strike=strike,
+             holds={'down': holds, 'up': {k: up.get(k, flip(v)) for k, v in holds.items()}},
+             stagger={'down': stagger, 'up': up.get('stagger', [flip(k) for k in stagger])},
+             dazed={'down': dazed, 'up': up.get('dazed', flip(dazed))})
+    if opts:
+        w['opts'] = opts
+    return w
+
+
+def _attack(keys_fn, ms, *sparks):
+    """An attack entry's draw function: the keys of `keys_fn(view)` with the side clip's ms; a key's spark (a length
+    along its weapon, see _tip) is drawn with sparks[fxk] (the key's fxk, default 0; default _spark)."""
+    fns = sparks or (_spark,)
+
+    def draw(u, view, stand_in=False):
+        out = []
+        for kw in keys_fn(view):
+            kw = dict(kw)
+            sp = kw.pop('spark', None); fn = fns[kw.pop('fxk', 0)]
+            if sp is not None:
+                kw['fx'] = fn(*_tip(u, view, kw, sp))
+            out.append(pose_view(u, view, stand_in=stand_in, **kw))
+        return out, list(ms)
+    return draw
+
+
+# Brawler (fists): the guard holds both fists before the chin (down: in front of the face; up: just showing beside the
+# head); the jab drives the right fist 3 px toward the facing (down: toward the camera, the fist grown by 1 px; up: up
+# beside the head, away from the camera), the left fist bobbing at the chin.
+FZ = {'r': FRONT, 'l': FRONT}
+FB = {'r': RAISED_BACK, 'l': RAISED_BACK}
+B_GUARD = {'down': dict(hand_r=(0.5, -3.5), hand_l=(0.5, -3.5), fore_z=FZ),   # fists beside the jaw
+           'up': dict(hand_r=(0.5, -2.5), hand_l=(0.5, -2.5), fore_z=FB)}
+
+
+def _fist_spark(x, y):
+    """The brawler's jab spark (the side clip's colours)."""
+    return [(x, y, 1.6, (255, 255, 255)), (x - 2, y + 2, 0.7, (255, 220, 160)), (x + 2, y + 2, 0.7, (255, 220, 160))]
+
+
+def brawler_jab_keys(view):
+    """The keys of jab_<view> (frame 1, the fist cocked at the chest, is the `windup` hold)."""
+    if view == 'down':
+        return [dict(bob=1.2, hand_r=(0.5, -3.5), hand_l=(0.5, -3.8), fore_z=FZ),
+                dict(bob=1.3, hand_r=(-0.5, 0.5), hand_l=(0.5, -2.6), fore_z=FZ),                           # cocked
+                dict(bob=1.0, dy=0.8, hand_r=(-3.5, 1.5), fr=3.0, hand_l=(0.5, -3.8), fore_z=FZ, spark=('hand', 0.0, 2.5)),
+                dict(bob=1.1, dy=0.8, hand_r=(-3.5, 1.5), fr=2.8, hand_l=(0.5, -3.5), fore_z=FZ),
+                dict(bob=1.2, dy=0.3, hand_r=(-1.0, -1.0), hand_l=(0.5, -2.6), fore_z=FZ),
+                dict(bob=1.0, hand_r=(0.5, -3.5), hand_l=(0.5, -3.8), fore_z=FZ)]
+    return [dict(bob=1.2, hand_r=(0.5, -2.5), hand_l=(0.5, -2.8), fore_z=FB),
+            dict(bob=1.3, hand_r=(-0.5, 0.5), hand_l=(0.5, -1.6), fore_z=FB),                                # cocked
+            dict(bob=1.0, dy=-0.8, hand_r=(0.0, -5.5), hand_l=(0.5, -2.8), fore_z=FB, spark=('hand', 0.5, -2.5)),
+            dict(bob=1.1, dy=-0.8, hand_r=(0.0, -5.5), hand_l=(0.5, -2.5), fore_z=FB),
+            dict(bob=1.2, dy=-0.3, hand_r=(0.0, -1.5), hand_l=(0.5, -1.6), fore_z=FB),
+            dict(bob=1.0, hand_r=(0.5, -2.5), hand_l=(0.5, -2.8), fore_z=FB)]
+
+
+GRIPS['brawler'] = dict(
+    idle={v: dict(B_GUARD[v], bob=1.0) for v in VIEWS},
+    walk={v: dict(hand_r=(0.8, 8.5), hand_l=(0.8, 8.5), swing=1.5) for v in VIEWS},
+    attack=('jab', _attack(brawler_jab_keys, [80, 60, 50, 100, 70, 100], _fist_spark)),
+    windups=_windups(brawler_jab_keys, 2, {
+        'windup_heavy': dict(bob=2.0, hand_r=(3.5, 0.5), hand_l=(0.5, -3.5), fore_z={'l': FRONT}),   # wound far back
+        'windup_buff': dict(bob=1.2, head_dy=1.6, hand_r=(-3.0, 3.0), hand_l=(-3.0, 3.0), fore_z=FZ),
+        'windup_debuff': dict(bob=1.2, dy=0.5, hand_r=(-3.0, 2.0), fr=2.6, hand_l=(0.5, -3.5), fore_z=FZ)},
+        [dict(bob=0.5, dy=-1.0, head_dy=-1.0, hand_r=(3.5, -3.5), hand_l=(3.0, -2.0)),
+         dict(bob=1.5, dy=-1.0, head_dy=-0.5, lift_l=1.5, hand_r=(3.0, 0.5), hand_l=(3.0, 2.0)),
+         dict(bob=2.5, dy=-0.5, head_dy=1.0, hand_r=(1.0, 9.5), hand_l=(1.0, 10.0), fr=1.6, fl=1.6),
+         dict(bob=2.2, dy=-1.0, head_dy=1.5, hand_r=(1.0, 10.0), hand_l=(1.0, 10.4), fr=0.0, fl=0.0)],
+        dict(bob=2.0, head_dy=1.5, hand_r=(1.0, 10.2), hand_l=(1.0, 10.6), fr=0.0, fl=0.0), up={   # dazed: hands open
+            'windup_heavy': dict(bob=2.0, hand_r=(3.5, 0.5), hand_l=(0.5, -2.5), fore_z={'l': RAISED_BACK}),
+            'windup_buff': dict(bob=1.2, head_dy=1.6, hand_r=(-3.0, 3.0), hand_l=(-3.0, 3.0), fore_z=FB),
+            'windup_debuff': dict(bob=1.2, dy=-0.5, hand_r=(0.0, -5.0), hand_l=(0.5, -2.5), fore_z=FB)}))
+
+
+# Ranger (bow): idle and walk carry the bow low at the right side, its curve showing; the attack raises it before the
+# chest (down) or forward over the right shoulder (up), nocks and draws to the chin, and looses a 1 x 5 px arrow down
+# past the feet (down) or up above the head (up).
+R_BOW = dict(bk=1.0, bow_a=15)
+R_BOW_UP = dict(bk=1.0, bow_a=-10)
+
+
+def ranger_attack_keys(view):
+    """The keys of attack_<view> (frame 3, the full draw, is the `windup` hold)."""
+    if view == 'down':
+        return [dict(bob=0.5, hand_r=(-1.0, 5.0), bow_a=-10, bk=0.8),
+                dict(bob=0.8, hand_r=(-1.0, 3.0), hand_l=(-3.5, 2.0), pull=0.2, nock=True, **R_BOW),
+                dict(bob=1.0, hand_r=(-1.0, 3.0), hand_l=(-3.0, -0.5), pull=0.6, nock=True, **R_BOW),
+                dict(bob=1.2, hand_r=(-1.0, 3.0), hand_l=(-2.5, -2.5), pull=1.0, nock=True, **R_BOW),   # full draw
+                dict(bob=1.0, dy=-0.5, hand_r=(-1.0, 3.0), hand_l=(-1.5, -3.5), arrow=(22, 45, 1), **R_BOW),  # loosed
+                dict(bob=0.8, dy=-0.4, hand_r=(-1.0, 3.2), hand_l=(-1.0, -3.0), **R_BOW),
+                dict(bob=0.4, hand_r=(-1.0, 5.0), bow_a=-10, bk=0.8)]
+    return [dict(bob=0.5, hand_r=(0.5, 3.0), bow_a=10, bk=0.8),
+            dict(bob=0.8, hand_r=(0.5, -1.0), hand_l=(-2.5, 1.0), pull=0.2, nock=True, **R_BOW_UP),
+            dict(bob=1.0, hand_r=(0.5, -1.0), hand_l=(-2.5, -1.0), pull=0.6, nock=True, **R_BOW_UP),
+            dict(bob=1.2, hand_r=(0.5, -1.0), hand_l=(-2.0, -2.5), pull=1.0, nock=True, **R_BOW_UP),       # full draw
+            dict(bob=1.0, dy=0.5, hand_r=(0.5, -1.0), hand_l=(-1.0, -3.5), arrow=(30, 6, -1), **R_BOW_UP),  # loosed
+            dict(bob=0.8, dy=0.4, hand_r=(0.5, -0.8), hand_l=(-1.0, -3.0), **R_BOW_UP),
+            dict(bob=0.4, hand_r=(0.5, 3.0), bow_a=10, bk=0.8)]
+
+
+R_LOW = {'down': dict(hand_r=(3.0, 8.0), bow_a=-25), 'up': dict(hand_r=(3.0, 8.0), bow_a=25)}
+GRIPS['ranger'] = dict(
+    idle=R_LOW, walk={v: dict(R_LOW[v], swing=0.5) for v in VIEWS},
+    attack=('attack', _attack(ranger_attack_keys, [100, 110, 90, 260, 50, 140, 120])),
+    windups=_windups(ranger_attack_keys, 4, {
+        'windup_heavy': dict(bob=2.4, dy=-0.5, hand_r=(-1.0, 0.5), hand_l=(-2.5, -4.5), pull=1.0, nock=True, bow_a=22, bk=1.0),
+        'windup_buff': dict(bob=0.6, hand_r=(1.2, 8.5), bow_a=-30, hand_l=(1.5, -3.5)),
+        'windup_debuff': dict(bob=1.0, dy=0.5, hand_r=(-1.5, 6.0), hand_l=(-3.0, 3.0), pull=0.5, nock=True, **R_BOW)},
+        [dict(bob=0.5, dy=-1.0, head_dy=-1.0, hand_r=(4.0, 1.0), bow_a=-40, hand_l=(2.5, 4.0)),
+         dict(bob=1.5, dy=-1.0, head_dy=-0.5, lift_l=1.5, hand_r=(3.0, 4.0), bow_a=-30, hand_l=(2.0, 6.0)),
+         dict(bob=2.5, dy=-0.5, head_dy=1.0, hand_r=(1.0, 8.5), bow_a=-25, hand_l=(1.0, 8.5)),
+         dict(bob=2.2, dy=-1.0, head_dy=1.5, hand_r=(1.2, 9.0), bow_a=-30, hand_l=(1.2, 9.0))],
+        dict(bob=2.0, head_dy=1.5, hand_r=(1.2, 9.5), bow_a=-35, hand_l=(1.2, 9.0)), dict(motes='off'), up={
+            'windup_heavy': dict(bob=2.4, dy=0.5, hand_r=(0.5, -2.5), hand_l=(-2.0, -4.0), pull=1.0, nock=True, bow_a=12, bk=0.6),
+            'windup_debuff': dict(bob=1.0, dy=-0.5, hand_r=(0.5, 2.0), hand_l=(-2.5, 1.5), pull=0.5, nock=True, **R_BOW_UP)}))
+
+
+# Rogue (two daggers): held low at the sides, the blades angled out past the hips, in both views; the attack stabs the
+# right, then the left dagger toward the facing past the hip (down: toward the camera, foreshortened; up: away, the
+# blade rising beside the hip), a spark each (the side clip's).
+GZ = dict(wz=FRONT, oz=FRONT)
+
+
+def _stab(x, y):
+    return [(x, y, 1.2, (255, 255, 255))]
+
+
+def _stab2(x, y):
+    return [(x, y, 1.2, (255, 255, 255)), (x + 2, y - 1, 0.7, (255, 200, 200))]
+
+
+def rogue_attack_keys(view):
+    """The keys of attack_<view> (frame 0, crouched with the daggers drawn back low, is the `windup` hold)."""
+    if view == 'down':
+        return [dict(bob=1.6, hand_r=(0.5, 7.5), wa=200, hand_l=(0.5, 7.5), wb=160, **GZ),
+                dict(bob=1.2, dy=1.0, hand_r=(-1.5, 6.0), wa=195, wk=0.7, hand_l=(0.5, 7.5), wb=160, spark=6.8, **GZ),
+                dict(bob=1.4, dy=1.5, hand_r=(0.5, 6.5), wa=205, hand_l=(-1.5, 6.0), wb=165, wbk=0.7, spark=('l', 6.8), fxk=1, **GZ),
+                dict(bob=1.0, dy=0.5, hand_r=(0.8, 7.0), wa=210, hand_l=(0.8, 7.0), wb=150, **GZ),
+                dict(bob=0.8, hand_r=(1.0, 6.5), wa=215, hand_l=(1.0, 6.5), wb=145, **GZ)]
+    return [dict(bob=1.6, hand_r=(0.5, 7.5), wa=160, hand_l=(0.5, 7.5), wb=200, **GZ),
+            dict(bob=1.2, dy=-1.0, hand_r=(1.5, 4.5), wa=20, wk=0.7, hand_l=(0.5, 7.5), wb=200, spark=6.8, **GZ),
+            dict(bob=1.4, dy=-1.5, hand_r=(0.5, 6.5), wa=155, hand_l=(1.5, 4.5), wb=340, wbk=0.7, spark=('l', 6.8), fxk=1, **GZ),
+            dict(bob=1.0, dy=-0.5, hand_r=(0.8, 7.0), wa=150, hand_l=(0.8, 7.0), wb=210, **GZ),
+            dict(bob=0.8, hand_r=(1.0, 6.5), wa=145, hand_l=(1.0, 6.5), wb=215, **GZ)]
+
+
+G_READY = {'down': dict(bob=0.8, hand_r=(1.0, 8.5), wa=215, hand_l=(1.0, 8.5), wb=145, **GZ),
+           'up': dict(bob=0.8, hand_r=(1.0, 8.5), wa=145, hand_l=(1.0, 8.5), wb=215, **GZ)}
+G_STAGGER = [dict(bob=0.5, dy=-1.0, head_dy=-1.0, hand_r=(4.0, 2.0), wa=250, hand_l=(2.0, 6.0), wb=140, **GZ),
+             dict(bob=1.5, dy=-1.0, head_dy=-0.5, lift_l=1.5, hand_r=(3.0, 4.5), wa=230, hand_l=(1.5, 7.0), wb=150, **GZ),
+             dict(bob=2.5, dy=-0.5, head_dy=1.0, hand_r=(1.0, 8.5), wa=190, hand_l=(1.0, 8.5), wb=170, **GZ),
+             dict(bob=2.2, dy=-1.0, head_dy=1.5, hand_r=(1.2, 9.0), wa=188, hand_l=(1.2, 9.0), wb=172, **GZ)]
+G_DAZED = dict(bob=2.0, head_dy=1.5, hand_r=(1.2, 9.5), wa=186, hand_l=(1.2, 9.5), wb=174, **GZ)
+GRIPS['rogue'] = dict(
+    idle=G_READY, walk={v: dict(G_READY[v], swing=0.8) for v in VIEWS},
+    attack=('attack', _attack(rogue_attack_keys, [120, 50, 70, 120, 120], _stab, _stab2)),
+    windups=_windups(rogue_attack_keys, 1, {
+        'windup_heavy': dict(bob=3.4, hand_r=(-1.0, 2.0), wa=180, hand_l=(-1.0, 2.0), wb=180, **GZ),     # reversed, raised
+        'windup_buff': dict(bob=0.6, hand_r=(1.2, 9.0), wa=185, hand_l=(-3.0, 2.5), wb=150, **GZ),
+        'windup_debuff': dict(bob=1.0, dy=0.5, hand_r=(-1.5, 4.0), wa=225, wk=0.8, hand_l=(0.5, 7.5), wb=160, **GZ)},
+        G_STAGGER, G_DAZED, up={
+            'windup_heavy': dict(bob=3.4, hand_r=(1.0, 2.0), wa=180, hand_l=(1.0, 2.0), wb=180, **GZ),
+            'windup_buff': dict(bob=0.6, hand_r=(1.2, 9.0), wa=175, hand_l=(-3.0, 2.5), wb=210, wz=FRONT, oz=RAISED_BACK,
+                                fore_z={'l': RAISED_BACK}),
+            'windup_debuff': dict(bob=1.0, dy=-0.5, hand_r=(1.5, 3.0), wa=25, wk=0.8, hand_l=(0.5, 7.5), wb=200, **GZ),
+            'stagger': [flip(k, **GZ) for k in G_STAGGER], 'dazed': flip(G_DAZED, **GZ)}))
+
+
+# Priest (mace): held upright at the right side (as the warrior's sword); the attack raises it over the head (down:
+# behind the head; up: above it), smashes it down in front and flashes before the feet (down) or at both sides of the
+# body (up, the mace hidden in front of him).
+def _flash(x, y):
+    """The priest's smash flash (the side clip's colours), centred at (x, y)."""
+    return [(x, y, 2.0, (255, 255, 255)), (x - 3, y + 1, 1.0, rig.GOLDEN_HI), (x + 3, y + 1, 1.0, rig.GOLDEN_HI), (x, y - 2.5, 0.8, rig.GOLDEN)]
+
+
+def priest_attack_keys(view):
+    """The keys of attack_<view> (frame 1, the mace raised over the head, is the `windup` hold)."""
+    if view == 'down':
+        return [dict(bob=0.8, hand_r=(0.5, 1.0), wa=5, hand_l=(-1.0, 3.0)),
+                dict(bob=1.2, dy=-0.5, hand_r=(0.5, -7.0), wa=10, wk=0.6, wz=RAISED_BACK, hand_l=(-1.5, -3.5)),    # raised
+                dict(bob=0.8, dy=0.5, hand_r=(-2.5, 1.5), wa=195, wk=0.55, slash=_qarc((21, 2), (13, 14), (22, 30))),
+                dict(bob=2.2, dy=1.5, hand_r=(-3.0, 8.5), wa=180, wk=0.9, hand_l=(-2.0, 7.5), fx=_flash(23, 42)),    # smash
+                dict(bob=2.0, dy=1.5, hand_r=(-3.0, 8.5), wa=180, wk=0.9, hand_l=(-2.0, 7.5)),
+                dict(bob=0.4, hand_r=(1.5, 7.0), wa=345)]
+    hid = dict(fore_z={'r': RAISED_BACK, 'l': RAISED_BACK})
+    return [dict(bob=0.8, hand_r=(0.5, 1.0), wa=355, hand_l=(-1.0, 3.0)),
+            dict(bob=1.2, dy=0.5, hand_r=(0.5, -7.0), wa=350, wk=0.6, wz=TOP, hand_l=(-1.5, -3.5)),                # raised
+            dict(bob=0.8, dy=-0.5, hand_r=(-2.5, 1.5), wa=10, wk=0.5, slash=_qarc((27, 1), (35, 8), (28, 16))),
+            dict(bob=2.2, dy=-1.5, hand_r=(-3.0, 8.5), wa=180, wk=0.9, hand_l=(-2.0, 7.5), fx=_flash(15, 41) + _flash(33, 41), **hid),
+            dict(bob=2.0, dy=-1.5, hand_r=(-3.0, 8.5), wa=180, wk=0.9, hand_l=(-2.0, 7.5), **hid),
+            dict(bob=0.4, hand_r=(1.5, 7.0), wa=15)]
+
+
+P_READY = {'down': dict(hand_r=(1.5, 7.0), wa=345), 'up': dict(hand_r=(1.5, 7.0), wa=15)}
+GRIPS['priest'] = dict(
+    idle=P_READY, walk={v: dict(P_READY[v], swing=0.8) for v in VIEWS},
+    attack=('attack', _attack(priest_attack_keys, [120, 180, 50, 150, 110, 120])),
+    windups=_windups(priest_attack_keys, 2, {
+        'windup_heavy': dict(bob=2.4, dy=-0.5, hand_r=(1.5, -3.0), wa=320, wk=0.9, grip2=2.5, wz=RAISED_BACK),  # over the shoulder
+        'windup_buff': dict(bob=0.6, hand_r=(-2.0, 4.0), wa=0, hand_l=(0.5, -4.0)),
+        'windup_debuff': dict(bob=1.0, dy=0.5, hand_r=(-1.0, 3.0), wa=230, wk=0.7, hand_l=(2.5, 4.0))},
+        [dict(bob=0.5, dy=-1.0, head_dy=-1.0, hand_r=(5.0, 1.0), wa=300, hand_l=(1.0, 7.0)),
+         dict(bob=1.5, dy=-1.0, head_dy=-0.5, lift_l=1.5, hand_r=(4.0, 3.0), wa=320, hand_l=(1.2, 8.0)),
+         dict(bob=2.5, dy=-0.5, head_dy=1.0, hand_r=(1.5, 8.5), wa=195, wk=0.8, hand_l=(1.2, 8.5)),
+         dict(bob=2.2, dy=-1.0, head_dy=1.5, hand_r=(1.5, 9.0), wa=190, wk=0.8, hand_l=(1.2, 9.0))],
+        dict(bob=2.0, head_dy=1.5, hand_r=(1.5, 9.5), wa=185, wk=0.8, hand_l=(1.2, 9.0)), up={
+            'windup_buff': dict(bob=0.6, hand_r=(-1.0, 3.0), wa=5, hand_l=(0.5, -4.0), fore_z={'r': RAISED_BACK}),
+            'windup_debuff': dict(bob=1.0, dy=-0.5, hand_r=(0.5, 2.0), wa=40, wk=0.6, hand_l=(2.5, 4.0))}))
+
+
+# Mage (staff): upright at the right side; the attack raises it and charges the gem, then points it toward the facing
+# (down: the gem before the chest, foreshortened; up: forward over the right shoulder) and the bolt leaves down past
+# the feet (down) or up beside the hat (up).
+def _bolt(x, y, sign):
+    """The mage's bolt (the side clip's colours) at (x, y), flying down (sign 1) or up (-1), its trail behind it."""
+    return [(x, y, 2.0, (150, 220, 255)), (x, y - sign * 2.5, 1.3, (80, 140, 230)), (x, y - sign * 4.5, 0.8, (80, 140, 230)),
+            (x, y + sign * 0.5, 0.8, (255, 255, 255))]
+
+
+def mage_attack_keys(view):
+    """The keys of attack_<view> (frame 2, the gem charged, is the `windup` hold)."""
+    if view == 'down':
+        return [dict(bob=0.4, hand_r=(0.5, 4.5), wa=0, hand_l=(-2.0, 5.0)),
+                dict(bob=0.8, dy=-0.3, hand_r=(0.0, 1.5), wa=0, glow=0.4, hand_l=(-2.0, 3.5)),
+                dict(bob=1.0, dy=-0.5, hand_r=(-0.5, 0.0), wa=0, glow=1.0, hand_l=(-2.0, 2.5)),                    # charged
+                dict(bob=0.8, dy=0.8, hand_r=(-3.0, 3.0), wa=180, wk=0.3, glow=0.6, hand_l=(-2.5, 4.5), fx=_bolt(23, 36, 1)),
+                dict(bob=0.6, dy=0.6, hand_r=(-3.0, 3.5), wa=180, wk=0.3, hand_l=(-2.5, 4.5), fx=_bolt(23, 44, 1)),
+                dict(bob=0.3, hand_r=(1.0, 5.5), wa=0)]
+    return [dict(bob=0.4, hand_r=(0.5, 4.5), wa=0, hand_l=(-2.0, 5.0)),
+            dict(bob=0.8, dy=0.3, hand_r=(0.0, 1.5), wa=0, glow=0.4, hand_l=(-2.0, 3.5)),
+            dict(bob=1.0, dy=0.5, hand_r=(-0.5, 0.0), wa=0, glow=1.0, hand_l=(-2.0, 2.5)),                          # charged
+            dict(bob=0.8, dy=-0.8, hand_r=(0.0, 1.5), wa=10, wk=0.5, glow=0.6, hand_l=(-2.0, 3.5), fx=_bolt(30, 6, -1)),
+            dict(bob=0.6, dy=-0.6, hand_r=(0.0, 1.5), wa=10, wk=0.5, hand_l=(-2.0, 3.5), fx=_bolt(31, 2, -1)),
+            dict(bob=0.3, hand_r=(1.0, 5.5), wa=0)]
+
+
+M_READY = {v: dict(hand_r=(1.0, 5.5), wa=0) for v in VIEWS}
+GRIPS['mage'] = dict(
+    idle=M_READY, walk={v: dict(M_READY[v], swing=0.5) for v in VIEWS},
+    attack=('attack', _attack(mage_attack_keys, [120, 140, 220, 60, 120, 140])),
+    windups=_windups(mage_attack_keys, 3, {
+        'windup_heavy': dict(bob=2.2, dy=-0.5, hand_r=(0.5, -3.0), wa=350, grip2=3.0, glow=0.6),
+        'windup_buff': dict(bob=0.6, hand_r=(-2.5, 1.5), wa=0, glow=0.3),
+        'windup_debuff': dict(bob=1.0, dy=0.5, hand_r=(-2.0, 3.5), wa=215, wk=0.6, glow=0.5)},
+        [dict(bob=0.5, dy=-1.0, head_dy=-1.0, hand_r=(4.0, 1.0), wa=330),
+         dict(bob=1.5, dy=-1.0, head_dy=-0.5, lift_l=1.5, hand_r=(3.0, 3.5), wa=345),
+         dict(bob=2.5, dy=-0.5, head_dy=1.0, hand_r=(1.2, 8.0), wa=190, wk=0.7),
+         dict(bob=2.2, dy=-1.0, head_dy=1.5, hand_r=(1.2, 8.5), wa=188, wk=0.7)],
+        dict(bob=2.0, head_dy=1.5, hand_r=(1.2, 8.5), wa=192, wk=0.75),
+        dict(motes='tip', steps={'windup_heavy': {'glow': (0.6, 0.8, 1.0, 0.8)}}), up={
+            'windup_buff': dict(bob=0.6, hand_r=(0.5, 1.0), wa=0, glow=0.3),
+            'windup_debuff': dict(bob=1.0, dy=-0.5, hand_r=(0.5, 1.5), wa=35, wk=0.6, glow=0.5)}))
+
+
+# Warrior 2H, battle axe and warhammer (WAR2H1; DIR4 7.1 L5, DIR4-R2): the greatsword's grip keys (idle, walk and the
+# held poses), with the side view's chop instead of the cut: raised over the right shoulder (the windup hold), swung
+# down in front, the head landing low before the feet (down) or past the right hip (up) with the impact spark.
+def chop_keys(view, tip):
+    """The keys of the axe's and the hammer's attack_<view> (frame 1, raised over the right shoulder, is the `windup`
+    hold); `tip`: the weapon's reach (rig.WEAPON_TIP) for the spark."""
+    if view == 'down':
+        keys = [dict(bob=1.2, dy=-0.5, hand_r=(-1.0, 1.0), wa=340, **G2),
+                dict(bob=1.6, dy=-0.5, hand_r=(1.0, -5.0), wa=330, wk=0.75, wz=RAISED_BACK, **G2),             # raised
+                dict(bob=0.8, dy=0.3, hand_r=(-2.0, 0.5), wa=195, wk=0.6, slash=_qarc((17, 2), (10, 14), (23, 32)), **G2),
+                dict(bob=2.4, dy=1.5, hand_r=(-3.0, 5.5), wa=200, wk=0.9, spark=tip, **G2),                    # impact
+                dict(bob=2.2, dy=1.5, hand_r=(-3.0, 5.5), wa=200, wk=0.9, **G2),
+                dict(bob=1.2, dy=0.5, hand_r=(-3.0, 5.5), wa=300, wk=0.9, **G2)]
+    else:
+        hid = dict(fore_z=UP_FORE, **G2)
+        keys = [dict(bob=1.2, dy=0.5, hand_r=(-1.0, 1.0), wa=20, **hid),
+                dict(bob=1.6, dy=0.5, hand_r=(1.0, -5.0), wa=30, wk=0.75, **G2),                              # raised
+                dict(bob=0.8, dy=-0.3, hand_r=(-2.0, 0.5), wa=345, wk=0.6, slash=_qarc((31, 2), (38, 12), (27, 22)), **hid),
+                dict(bob=2.4, dy=-1.5, hand_r=(-3.0, 6.0), wa=160, wk=0.9, spark=tip, **hid),                  # impact
+                dict(bob=2.2, dy=-1.5, hand_r=(-3.0, 6.0), wa=160, wk=0.9, **hid),
+                dict(bob=1.2, dy=-0.5, hand_r=(-3.0, 4.5), wa=60, wk=0.9, **hid)]
+    keys.append(dict(W2_READY[view], bob=0.3))
+    return keys
+
+
+def _chop(weapon):
+    def keys(view):
+        return chop_keys(view, rig.WEAPON_TIP[weapon])
+    return dict(attack=('attack', _attack(keys, [120, 190, 45, 150, 120, 110, 110], _impact)),
+                windups=dict(W2_WINDUPS, attack=keys))
+
+
+GRIPS['warrior/2h']['weapons'] = {'battle_axe': _chop('battle_axe'), 'warhammer': _chop('warhammer')}
+
+
+# ------------------------------------------------------------------ the variants' parts (DIR4-R3)
+# Decision "Front and back views follow the side model" (user 2026-10-29) on the goblin and named bodies: the goblin
+# head is bald as in the side view (no hair stand-in), its long ears swept out and up, yellow eyes, the hooked nose,
+# the heavy jaw and the tusks; each hat is the side view's (band, bandana, hood, mohawk, skull, horns, crown); the
+# named humans keep their hair, kettle, cap, beard and braid. The buckler (DIR4-R1F, user 2026-10-29) and the hand axe
+# and double axe are the side rig's drawings.
+def _goblin_ears(f, c):
+    P = c.P; hx, hy = c.j['head']
+    for s in (-1, 1):  # swept back and up: from the front and the back they stand out to both sides
+        for k in range(7):
+            f.disc(hx + s * (2.8 + k * 0.95), hy - 0.4 - k * 0.45, 1.4 - k * 0.14, P['skin'] if k < 5 else P['skin_lo'])
+        f.dot(hx + s * 3.6, hy - 0.6, P['skin_lo'])
+
+
+def goblin(f, c, layer):
+    """The goblin head (rig 'goblin'): a bald, big skull and the long ears standing out to both sides. down: the brow,
+    two yellow eyes, the hooked nose, the heavy jaw of the underbite and two tusks; up: the back of the skull and the
+    nape. Under the goblin hood (hat 'hood') the hood goes on first and the ears poke out through it."""
+    if layer != HEAD:
+        return
+    P = c.P; hx, hy = c.j['head']; hood = c.u.get('hat') == 'hood'
+    if hood:
+        low = 3.6 if c.view == 'down' else 6.0
+        f.poly([(hx - 3.8, hy + 0.2), (hx + 3.8, hy + 0.2), (hx + 2.6, hy + low), (hx - 2.6, hy + low)], P['main_lo'])
+        f.disc(hx, hy - 0.5, 3.9, P['main'])
+    _goblin_ears(f, c)
+    if hood and c.view == 'up':
+        f.rect(hx, hy - 3.6, hx, hy + 1.0, P['main_lo'])
+        return
+    if hood:
+        f.disc(hx, hy + 0.6, 2.7, P['skin'])
+    else:
+        f.disc(hx, hy, 3.4, P['skin'])
+    if c.view == 'down':
+        f.rect(hx - 2.2, hy - 1.6, hx + 2.2, hy - 1.6, P['skin_lo'])                         # brow
+        f.dot(hx - 1.2, hy - 0.6, OUT if c.hurt else P['eye']); f.dot(hx + 1.2, hy - 0.6, OUT if c.hurt else P['eye'])
+        f.rect(hx - 0.5, hy - 0.2, hx + 0.5, hy + 1.0, P['skin']); f.dot(hx, hy + 1.2, P['skin_lo'])  # hooked nose
+        f.rect(hx - 2.6, hy + 1.8, hx + 2.6, hy + 3.2, P['skin_lo'])                         # heavy jaw
+        f.dot(hx - 1.6, hy + 1.8, rig.WHITE); f.dot(hx + 1.6, hy + 1.8, rig.WHITE)          # tusks
+    elif not hood:
+        f.rect(hx - 2, hy + 2.6, hx + 2, hy + 3.0, P['skin_lo'])                             # the nape
+
+
+def g_band(f, c, layer):
+    """A goblin's headband (rig hat 'band') with its trailing tails: across the brow and round the back, its knot and
+    tails at the back (their ends past the unit's left side from the front)."""
+    if layer != HEAD:
+        return
+    P = c.P; hx, hy = c.j['head']; t = c.tails; k = _side(c, 'l')
+    f.rect(hx - 3.4, hy - 2.6, hx + 3.4, hy - 1.9, P['accent'])
+    if c.view == 'down':
+        for i in range(2):
+            f.dot(hx + k * (3.8 + i * 0.9), hy - 2.0 + i * 0.7 + math.sin(t + i) * 0.5, P['accent'] if i < 1 else P['accent_lo'])
+    else:
+        f.dot(hx, hy - 2.2, P['accent_lo'])
+        for i in range(3):
+            f.dot(hx + k * (0.6 + 0.5 * i) + math.sin(t + i) * 0.4, hy - 1.4 + i * 0.9, P['accent'] if i < 2 else P['accent_lo'])
+
+
+def g_bandana(f, c, layer):
+    """A goblin's bandana (rig hat 'bandana'): cloth tied over the skull down to the brow, its edge; from the back
+    the knot and its hanging end."""
+    if layer != HEAD:
+        return
+    P = c.P; hx, hy = c.j['head']; k = _side(c, 'l')
+    f.poly([(hx - 3.5, hy - 1.2), (hx - 2.8, hy - 3.4), (hx, hy - 4.3), (hx + 2.8, hy - 3.4), (hx + 3.5, hy - 1.2)], P['accent'])
+    f.rect(hx - 3.4, hy - 1.6, hx + 3.4, hy - 1.2, P['accent_lo'])
+    if c.view == 'up':
+        f.dot(hx, hy - 1.4, P['accent_lo'])
+        f.dot(hx + k * 0.6, hy - 0.4 + math.sin(c.tails) * 0.4, P['accent']); f.dot(hx + k * 1.0, hy + 0.5, P['accent_lo'])
+
+
+def g_hood(f, c, layer):
+    """A goblin's hood (rig hat 'hood'; the goblin head draws the hood itself so the ears poke through): the hood's
+    highlights on top."""
+    if layer != HEAD:
+        return
+    hx, hy = c.j['head']
+    f.dot(hx - 1.2, hy - 3.4, c.P['main_hi']); f.dot(hx - 0.2, hy - 3.9, c.P['main_hi'])
+
+
+def g_mohawk(f, c, layer):
+    """The goblin berserker's mohawk (rig hat 'mohawk'): a crest of spikes front to back, alternating the hair and its
+    shade; seen end-on from the front and the back, a fan of thin spikes over the skull's middle."""
+    if layer != HEAD:
+        return
+    P = c.P; hx, hy = c.j['head']
+    for k in range(5):
+        d = k - 2
+        f.limb((hx + d * 0.3, hy - 2.8), (hx + d * 0.75, hy - 5.8 + abs(d) * 0.7), 0.5, P['hair'] if k % 2 == 0 else P['hair_lo'])
+    f.rect(hx - 0.5, hy - 3.2, hx + 0.5, hy - 1.8, P['hair_lo'])                             # the shaved stripe's root
+
+
+def g_skull(f, c, layer):
+    """The goblin priest's skull cap (rig hat 'skull'): an animal skull worn over the head, its horns sweeping up and
+    out, a feather at the left. down: the skull's face (eye sockets, the snout over the brow); up: its back."""
+    if layer != HEAD:
+        return
+    P = c.P; hx, hy = c.j['head']; k = _side(c, 'l')
+    for s in (-1, 1):
+        f.limb((hx + s * 2.0, hy - 3.4), (hx + s * 4.0, hy - 5.6), 0.6, P['bone']); f.dot(hx + s * 4.3, hy - 6.1, P['bone_lo'])
+    f.limb((hx + k * 2.6, hy - 2.2), (hx + k * 4.8, hy - 1.0), 0.5, P['accent'])
+    f.disc(hx, hy - 2.4, 2.9, P['bone'])
+    if c.view == 'down':
+        f.dot(hx - 1.0, hy - 2.6, OUT); f.dot(hx + 1.0, hy - 2.6, OUT)
+        f.rect(hx - 0.8, hy - 1.8, hx + 0.8, hy - 1.0, P['bone']); f.dot(hx, hy - 1.0, P['bone_lo'])
+    else:
+        f.dot(hx - 0.6, hy - 3.6, P['bone_lo']); f.dot(hx + 0.8, hy - 2.0, P['bone_lo'])
+
+
+def g_horns(f, c, layer):
+    """The Ash Warchief's horned iron cap (rig hat 'horns'): the cap over the skull, its rim and highlight, two bone
+    horns curving out and up."""
+    if layer != HEAD:
+        return
+    P = c.P; hx, hy = c.j['head']
+    for s in (-1, 1):
+        f.limb((hx + s * 2.2, hy - 2.8), (hx + s * 4.6, hy - 4.6), 0.75, P['bone'])
+        f.limb((hx + s * 4.6, hy - 4.6), (hx + s * 4.4, hy - 7.0), 0.55, P['bone'] if s < 0 else P['bone_lo'])
+    f.poly([(hx - 3.6, hy - 1.0), (hx - 2.9, hy - 3.4), (hx, hy - 4.5), (hx + 2.9, hy - 3.4), (hx + 3.6, hy - 1.0)], P['metal'])
+    f.rect(hx - 3.6, hy - 1.6, hx + 3.6, hy - 1.0, P['metal_lo']); f.dot(hx - 0.8, hy - 3.6, P['metal_hi'])
+
+
+def g_crown(f, c, layer):
+    """Grakka's crown (rig hat 'crown'): an iron band with a crown of rusted nails, the gold stud at the front."""
+    if layer != HEAD:
+        return
+    P = c.P; hx, hy = c.j['head']
+    f.rect(hx - 3.3, hy - 2.9, hx + 3.3, hy - 1.9, P['metal_lo'])
+    for k in range(6):
+        x0 = hx - 2.9 + k * 1.16
+        f.limb((x0, hy - 2.9), (x0 + 0.3 * (k - 2.5) / 2.5, hy - 5.2 - (0.6 if k in (2, 3) else 0)), 0.4,
+               P['rust'] if k % 2 else P['metal'])
+    if c.view == 'down':
+        f.dot(hx, hy - 2.4, P['trim'])
+
+
+def _human_hair(f, c, top=True):
+    """The named humans' hair (rig draw_head 'bare'): down, over the brow and short at the temples; up, over the back
+    of the head to the nape, a few strands in the hair's shade when it has one."""
+    P = c.P; hx, hy = c.j['head']; lo = P.get('hair_lo', P['hair'])
+    if c.view == 'down':
+        if top:
+            f.rect(hx - 3, hy - 3.6, hx + 3, hy - 2.2, P['hair'])
+        f.rect(hx - 3.5, hy - 2.6, hx - 2.6, hy + 0.4, P['hair']); f.rect(hx + 2.6, hy - 2.6, hx + 3.5, hy + 0.4, P['hair'])
+    else:
+        f.disc(hx, hy - 0.6, 3.4, P['hair']); f.rect(hx - 3.4, hy - 0.6, hx + 3.4, hy + 0.8, P['hair'])
+        f.dot(hx - 1.4, hy - 1.0, lo); f.dot(hx + 1.2, hy - 0.2, lo); f.dot(hx - 0.2, hy + 0.4, lo)
+        f.dot(hx - 3.6, hy + 0.2, P['skin_lo']); f.dot(hx + 3.6, hy + 0.2, P['skin_lo'])    # ears
+
+
+def _human_face(f, c):
+    P = c.P; hx, hy = c.j['head']
+    f.disc(hx, hy, 3.4, P['skin'])
+    if c.view == 'down':
+        f.dot(hx - 1, hy + 0.2, OUT if c.hurt else P['eye']); f.dot(hx + 1, hy + 0.2, OUT if c.hurt else P['eye'])
+        f.rect(hx - 0.5, hy + 2.0, hx + 0.5, hy + 2.0, P['skin_lo'])
+
+
+def bare_head(f, c, layer):
+    """A named human's bare head (rig 'bare'): the face and the hair."""
+    if layer == HEAD:
+        _human_face(f, c); _human_hair(f, c)
+
+
+def kettle(f, c, layer):
+    """Brask's iron kettle hat (rig 'kettle') over his hair: the dome with its highlight and shade, the wide brim."""
+    if layer != HEAD:
+        return
+    P = c.P; hx, hy = c.j['head']
+    _human_face(f, c); _human_hair(f, c, top=False)
+    f.rect(hx - 2.8, hy - 5.0, hx + 2.8, hy - 2.6, P['metal']); f.dot(hx - 1.2, hy - 4.4, P['metal_hi']); f.dot(hx + 2.2, hy - 3.2, P['metal_lo'])
+    f.rect(hx - 4.8, hy - 2.6, hx + 4.8, hy - 1.9, P['metal_lo'])
+
+
+def cap(f, c, layer):
+    """Hest's leather cap (rig 'cap') over his hair: the crown with its highlight and, from the front, the visor."""
+    if layer != HEAD:
+        return
+    P = c.P; hx, hy = c.j['head']
+    _human_face(f, c); _human_hair(f, c, top=False)
+    f.rect(hx - 3.2, hy - 4.2, hx + 3.2, hy - 2.0, P['cap']); f.dot(hx - 0.8, hy - 3.8, P.get('cap_hi', P['cap']))
+    if c.view == 'down':
+        f.rect(hx - 3.0, hy - 2.4, hx + 3.0, hy - 1.8, P['cap_lo'])
+    else:
+        f.rect(hx - 3.2, hy - 2.2, hx + 3.2, hy - 2.0, P['cap_lo'])
+
+
+def beard(f, c, layer):
+    """A named human's beard (rig flag 'beard'): down, over the jaw and the chin with the sideburns and the mouth's
+    line; up, its edge showing at both sides of the jaw."""
+    if layer != HEAD:
+        return
+    P = c.P; hx, hy = c.j['head']
+    if c.view == 'down':
+        f.rect(hx - 3.0, hy - 0.4, hx - 2.4, hy + 1.6, P['beard']); f.rect(hx + 2.4, hy - 0.4, hx + 3.0, hy + 1.6, P['beard'])
+        f.rect(hx - 2.6, hy + 1.2, hx + 2.6, hy + 3.8, P['beard']); f.dot(hx, hy + 4.4, P['beard'])
+        f.rect(hx - 1, hy + 1.8, hx + 1, hy + 1.8, OUT)
+    else:
+        f.dot(hx - 3.2, hy + 2.0, P['beard']); f.dot(hx + 3.2, hy + 2.0, P['beard'])
+
+
+def braid(f, c, layer):
+    """Orsa's braid (rig flag 'braid'): hanging down the back from the nape, its plaits alternating the hair and its
+    shade; from the front its end shows past the left shoulder."""
+    if layer != HEAD:
+        return
+    P = c.P; hx, hy = c.j['head']; lo = P.get('hair_lo', P['hair'])
+    if c.view == 'up':
+        for k in range(5):
+            f.disc(hx + math.sin(c.tails + k) * 0.2, hy + 1.2 + k * 1.3, 1.0 - k * 0.08, P['hair'] if k % 2 == 0 else lo)
+
+
+def pauldron(f, c, layer):
+    """The Ash Warchief's shoulder plate (rig flag 'pauldron', the side view's near shoulder): an iron plate on the
+    right shoulder, on that arm's layer."""
+    if arm_layer(c, 'r') != layer:
+        return
+    P = c.P; sx, sy = c.j['sh_r']; out = 1.0 if sx > CX else -1.0
+    f.disc(sx + out * 0.3, sy + 0.2, 2.6, P['metal'])
+    f.rect(sx + out * 0.3 - 2, sy + 2.0, sx + out * 0.3 + 2, sy + 2.0, P['metal_lo'])
+    f.dot(sx + out * 0.3 - 0.8, sy - 0.9, P['metal_hi'])
+
+
+def hand_axe(f, c, layer):
+    """The hatchet in the right hand (rig._hand_axe: a short haft, its grip, a small bearded head and the back spur),
+    along wa, foreshortened by wk; the head keeps its width, its edge to the unit's right side."""
+    if layer != _wz(c, 'wz'):
+        return
+    P = c.P; h = c.j['hand_r']; d = rig.udir(c.e.get('wa', 0.0)); n = _head_side(c, d)
+    at = _along(h, d, c.e.get('wk', 1.0), n)
+    f.limb(at(-2.5), at(9.5), 0.7, P['leather']); f.limb(at(-2.5), at(0.5), 0.7, P['leather_lo'])
+    f.poly([at(6.4, 0.6), at(5.2, 3.6), at(7.8, 4.3), at(10.2, 3.6), at(9.2, 0.6)], P['metal'])
+    f.limb(at(5.2, 3.7), at(7.8, 4.4), 0.45, P['metal_hi']); f.limb(at(7.8, 4.4), at(10.2, 3.7), 0.45, P['metal_hi'])
+    f.poly([at(7.2, -0.6), at(7.9, -1.9), at(8.6, -0.6)], P['metal_lo'])
+    _regrip(f, c, layer, ('r',))
+
+
+def double_axe(f, c, layer):
+    """Grakka's two-handed double-bitted axe (rig._double_axe: two broad crescent heads, honed edges, the socket and
+    the top spike), along wa, foreshortened by wk; both heads keep their width."""
+    if layer != _wz(c, 'wz'):
+        return
+    P = c.P; h = c.j['hand_r']; d = rig.udir(c.e.get('wa', 0.0)); n = _head_side(c, d)
+    at = _along(h, d, c.e.get('wk', 1.0), n)
+    f.limb(at(-5), at(15), 0.75, P['leather']); f.limb(at(-5), at(-1), 0.75, P['leather_lo']); f.disc(*at(-5.4), 0.8, P['metal_lo'])
+    for k in (1.0, -1.0):
+        f.poly([at(8.4, 0.8 * k), at(6.4, 5.4 * k), at(10.9, 6.4 * k), at(15.4, 5.4 * k), at(13.4, 0.8 * k)], P['metal'])
+        f.limb(at(6.4, 5.4 * k), at(10.9, 6.5 * k), 0.5, P['metal_hi']); f.limb(at(10.9, 6.5 * k), at(15.4, 5.4 * k), 0.5, P['metal_hi'])
+        f.limb(at(9.4, 2.2 * k), at(12.4, 2.2 * k), 0.4, P['metal_lo'])
+    f.poly([at(9.6, -1.1), at(9.6, 1.1), at(12.2, 1.1), at(12.2, -1.1)], P['metal_lo'])
+    f.limb(at(13.4), at(16.4), 0.6, P['metal'])
+    _regrip(f, c, layer, ('r', 'l'))
+
+
+def buckler(f, c, layer):
+    """The buckler strapped over the left fist (rig draw_weapon 'buckler'), on its own outlined layer. down: its face
+    (the iron rim, the leather face with its shaded far half, the glints and the boss); up: its back (the rim, the
+    leather in shade, the strap), a little outward so it shows past the body."""
+    if layer != _wz(c, 'oz'):
+        return
+    P = c.P; hx, hy = c.j['hand_l']
+    cx, cy = hx + c.rs * (0.5 if c.view == 'down' else -1.5), hy
+    g = F()
+    g.disc(cx, cy, 3.6, P['metal'])
+    if c.view == 'down':
+        g.disc(cx, cy, 2.8, P['leather'])
+        g.poly([(cx + 0.4, cy - 2.6), (cx + 2.6, cy - 1.0), (cx + 2.6, cy + 1.0), (cx + 0.4, cy + 2.6)], P['leather_lo'])
+        g.dot(cx - 2.6, cy - 2.0, P['metal_hi']); g.dot(cx - 3.2, cy - 0.8, P['metal_hi'])
+        g.disc(cx, cy, 1.1, P['metal']); g.dot(cx - 0.4, cy - 0.5, P['metal_hi'])
+    else:
+        g.disc(cx, cy, 2.8, P['leather_lo'])
+        g.limb((cx - 2.2, cy), (cx + 2.2, cy), 0.6, P['leather'])
+        g.dot(cx - 2.6, cy - 2.0, P['metal_hi'])
+    g.outline(); f.im.alpha_composite(g.im); f.px = f.im.load()
+
+
+PARTS['head'].update(goblin=goblin, bare=bare_head, kettle=kettle, cap=cap)
+PARTS['hat'].update(band=g_band, bandana=g_bandana, hood=g_hood, mohawk=g_mohawk, skull=g_skull, horns=g_horns, crown=g_crown)
+PARTS['flag'].update(beard=beard, braid=braid, pauldron=pauldron)
+PARTS['weapon'].update(hand_axe=hand_axe, double_axe=double_axe)
+PARTS['offhand']['buckler'] = buckler
+
+
+# ------------------------------------------------------------------ the buckler grip's attack (DIR4-R3)
+# The side clip's overhand cut (classes.warrior_buckler): the weapon raised behind the head (the windup hold), the
+# buckler forward; cut down and across before the chest, the spark at the tip (down: toward the screen-left, before
+# the chest; up: past the right hip); back to the ready stance (the weapon raised, as the kite look's).
+def _buckler_spark(x, y):
+    """The buckler look's cut spark (the side clip's colours)."""
+    return [(x, y, 2.0, (255, 255, 255)), (x - 2, y + 1.5, 0.8, (255, 240, 200)), (x + 2, y + 1.5, 0.8, (255, 240, 200))]
+
+
+def buckler_attack_keys(view, tip):
+    """The keys of the buckler look's attack_<view> (frame 1, the weapon cocked behind the head, is the `windup`
+    hold); `tip`: the weapon's reach (rig.WEAPON_TIP) for the spark."""
+    if view == 'down':
+        keys = [dict(bob=1.0, dy=-0.3, hand_r=(0.5, -4.0), wa=350, wk=0.8, wz=RAISED_BACK, hand_l=(1.0, 5.5)),
+                dict(bob=1.4, dy=-0.5, hand_r=(-1.0, -6.5), wa=25, wk=0.7, wz=RAISED_BACK, hand_l=(1.0, 5.5)),      # cocked
+                dict(bob=0.8, dy=0.5, hand_r=(-2.5, 1.0), wa=200, wk=0.6, slash=_qarc((25, 3), (14, 10), (17, 28)), hand_l=(1.0, 5.5)),
+                dict(bob=2.0, dy=1.0, hand_r=(-3.0, 3.5), wa=230, wk=0.85, spark=tip, hand_l=(1.0, 6.0)),           # impact
+                dict(bob=1.8, dy=1.0, hand_r=(-3.0, 3.5), wa=230, wk=0.85, hand_l=(1.0, 6.0)),
+                dict(bob=1.0, dy=0.4, hand_r=(-1.0, 4.5), wa=300, hand_l=(1.0, 6.0))]
+    else:
+        keys = [dict(bob=1.0, dy=0.3, hand_r=(0.5, -4.0), wa=10, wk=0.8, wz=TOP, hand_l=(1.0, 5.5)),
+                dict(bob=1.4, dy=0.5, hand_r=(-1.0, -6.5), wa=335, wk=0.7, wz=TOP, hand_l=(1.0, 5.5)),             # cocked
+                dict(bob=0.8, dy=-0.5, hand_r=(-2.5, 1.0), wa=20, wk=0.5, slash=_qarc((23, 2), (34, 8), (30, 20)), hand_l=(1.0, 5.5)),
+                dict(bob=2.0, dy=-1.0, hand_r=(0.5, 3.0), wa=135, wk=0.85, spark=tip, hand_l=(1.0, 6.0)),           # impact
+                dict(bob=1.8, dy=-1.0, hand_r=(0.5, 3.0), wa=135, wk=0.85, hand_l=(1.0, 6.0)),
+                dict(bob=1.0, dy=-0.4, hand_r=(1.0, 4.5), wa=60, hand_l=(1.0, 6.0))]
+    keys.append(dict(WB_READY[view], bob=0.3))
+    return keys
+
+
+def _buckler_look(weapon):
+    def keys(view):
+        return buckler_attack_keys(view, rig.WEAPON_TIP[weapon])
+    return dict(attack=('attack', _attack(keys, [110, 170, 45, 140, 110, 110, 110], _buckler_spark)),
+                windups=dict(W1_WINDUPS, attack=keys, strike=2))
+
+
+GRIPS['warrior/buckler']['weapons'] = {'sword': _buckler_look('sword'), 'hand_axe': _buckler_look('hand_axe')}
+# the double axe's two broad heads would cover the face held as the greatsword's: its ready pose leans it further out
+DA_READY = {'down': dict(W2_READY['down'], hand_r=(-1.5, 6.5), wa=318), 'up': W2_READY['up']}
+GRIPS['warrior/2h']['weapons']['double_axe'] = dict(_chop('double_axe'), idle=DA_READY,
+                                                    walk={v: dict(DA_READY[v], swing=0.3) for v in VIEWS})

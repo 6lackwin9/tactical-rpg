@@ -125,8 +125,21 @@ impl Data {
             xp,
             world_cats: IndexMap::new(),
         };
-        d.world_cats = d.world_ids().into_iter().filter_map(|w| d.overlay_catalog(&w).map(|c| (w, Arc::new(c)))).collect();
+        d.refresh_world_cats();
         d
+    }
+
+    /// Edits the base catalog in place (tools and tests), then rebuilds the per-world catalogs from it so a world with a
+    /// class overlay builds from the edited rows too (HOOKS1-UI slice 2; a direct `Arc::make_mut(&mut d.cat)` leaves them
+    /// stale).
+    pub fn edit_cat(&mut self, f: impl FnOnce(&mut Catalog)) {
+        f(Arc::make_mut(&mut self.cat));
+        self.refresh_world_cats();
+    }
+
+    /// HOOKS1 CN3: the catalogs of the worlds whose `classes` overlay replaces a class path, from `cat`.
+    fn refresh_world_cats(&mut self) {
+        self.world_cats = self.world_ids().into_iter().filter_map(|w| self.overlay_catalog(&w).map(|c| (w, Arc::new(c)))).collect();
     }
 
     // ---- Class names per world (HOOKS1 12) -------------------------------------------------------------------------

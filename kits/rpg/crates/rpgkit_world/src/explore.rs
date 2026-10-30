@@ -470,7 +470,7 @@ pub fn enter(d: &Data, gs: &mut GameState, location_ref: &str, anchor: &str) -> 
         gs.explore.insert("last_rest".into(), qid.clone().into());
         // CAMPAIGN1 R1: a campaign's rest rule may turn the free heal on entering off (`on_enter`)
         if crate::campaign::purse::rest_rule(d, &gs.world_id).on_enter {
-            restored = progression::rest(d, &mut gs.party);
+            restored = progression::rest(d, &mut gs.party, &gs.world_id.clone());
         }
     }
     quest::refresh(d, gs);

@@ -86,8 +86,22 @@ The theme (user): the first loss is a choice; as losses pile up they become the 
   Defend while on it (under the timeline ruleset: the Guard intent with the hold tile as its target, RULESET1_INTENT
   GD1); the others draft Withdraw once the gate is open or the holder is within its move of a tile; otherwise their
   preset as today.
+  As built (ENCOUNTER2-HA, 2026-10-29): the AI reads the "keeper", the holder while it is on the field; with the
+  holder down and `fallback` any, the hero already on a hold tile, else the one nearest to a hold tile (party order on
+  a tie) takes its part (with `fallback` none nobody does: everyone plays its preset). A keeper beyond one move
+  walks as far as the round's move reaches, then Defends (step AI) or takes the advance with Guard (round intent); on
+  its tile with no Guard offered it Rests and never leaves it. A hold tile taken by a foe gives no part (the preset
+  fights for it). S4 applies to the catalog sweep `enc=all` (the sim's default `enc` is the generated fights).
 - H7. Screen: hold tiles drawn with the objective ring and a winch marker; the gate's exits show "shut" (red) or
   "open" (green); the objective line adds "`{holder}` holds `{tiles_label}`."
+  As built (ENCOUNTER2-U, 2026-10-31): H1's pick is a panel over the board's lower edge ("Who holds the winch?", one
+  button per hero on the field with its HP); Confirm waits for it and the objective line says "Pick who holds the
+  winch first." until it is made, then "`{holder}` holds `{tiles_label}`.". H7's marks sit in two overlay groups, on by
+  default: `hold` (each hold tile with a gold ring and a plate with the label's first letter, "W"; its card names the
+  holder) and `gate` (the exit sign and, in the Stage view, the exit plate read SHUT in red or OPEN in green; the exit's
+  card gives `HoldGate::note`). H3's note shows in the hero panel while the gate is shut. The screen's outcome is
+  `Session::final_outcome` (S2). The combat log panel and the host `battle ... log` print an encounter's phase lines
+  and phase kills (`Session::log_lines`, decision "RULESET1-A3 loose ends"); the resolver log is unchanged.
 
 ### 3.2 The impossible fight and the last stand (`mode: "stand"`; a later mission, not the Crucible)
 
@@ -138,6 +152,18 @@ founder kills Nemeth and his guard, then fights the cell alone as a monstrosity.
   rogue every `foes_of` slice is today's. Rout needs no active enemy and no active rogue; a rogue leaves its morale
   group; tells show rogues in their own colour. Node 20 needs it only if `within` leaves survivors.
 - P5. Triggers: an `hp_below` unit may be an enemy, a phase-wave ref or a swap `into` ref.
+
+As built (ENCOUNTER2-K, 2026-10-29): P1, P2 and P5 (the swap `into` part comes with X). A kill also takes an
+`unkillable` unit down (user-confirmed 2026-10-29, decision "ENCOUNTER2-HA and -K answers"; one switch,
+`encounter::KILL_OVERRIDES_UNKILLABLE`, copied to `Session::kill_past_unkillable`; off: the unit keeps 1 HP and its
+SPARED cell follows the kill's); it credits no unit (the metrics count the HP as the struck units' `scripted` loss,
+`BattleMetrics::scripted`, part of the HP balance) and raises no HOOKS1-E event (user-confirmed: `kill` and
+`ally_downed` come only from actions). The kill's cell (subtype `Kill`) follows the phase's own cell; it reads
+"`{name}` falls." for one unit, "A, B and C fall." for more; an effect that takes no HP logs nothing. `by` resolves
+to the first placed, unreserved unit of its ref and `within` measures from it; with no such unit (user-confirmed) a
+`within` > 0 kill takes nobody; the checks add "a kill within tiles needs a by unit", an unknown ref error and the
+`by` ref error. When two phases of a group are due at once, the first in list order fires. Groups live in `Phases`
+(not `PhaseDef`).
 
 ## 5. Connected rooms (Q-60) `[kit hook]`, later than the slice
 
@@ -226,6 +252,11 @@ within` (units 1-6 refs, `by` a ref or "", `within` 0-11; "Kill names hero '`{r}
 1-100); `side` keys `type, unit, to` (`to` = `rogue`); `wave` gains `room`, `entry`; `ai` gains `roam` (`pursue`,
 `guard`). Phase key `group` (`[a-z0-9_]{1,24}`); trigger kinds gain `stand` (only with `stay_behind.mode` `stand`).
 At most one swap and one side effect per unit ref. The 12-unit cap counts swap `into` units.
+
+HOOKS1 encounter fields (cross-reference, HOOKS1-D 2026-10-31; the schema is HOOKS1_TASKS 1.2 and 1.6): `arena_hazards`
+(0-4 scheduled strikes, rule `arena_hazards`, HOOKS1 7), the phase effect `deck` (rule `deck`, HOOKS1 10.1), the
+unit and phase `ai` key `tactics` (HOOKS1 11) and a data `zones` row as the `zone` (HOOKS1 13); later `spare_once`,
+the phase trigger `spared` and the phase effect `heal` (HOOKS1 10.2, HOOKS1-Q).
 
 Content tool path: `tools/fc.sh content upsert encounters @file.json` (catalog) or with `world=<id>` (world
 encounters), or a seed through `tools/fc.sh content apply`; then `tools/fc.sh content check`. The Content Forge edits

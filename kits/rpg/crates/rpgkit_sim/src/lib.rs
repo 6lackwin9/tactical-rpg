@@ -15,6 +15,7 @@ pub mod roles;
 pub mod runner;
 pub mod scenarios;
 pub mod targets;
+pub mod timed;
 pub mod variants;
 pub mod world;
 

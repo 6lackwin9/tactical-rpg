@@ -304,16 +304,14 @@ impl Battle {
                         }
                         s.advance_round();
                     }
+                    // RULESET1-G2: the auto driver (the sims' and the CLI `battle`'s draft and resolution)
                     if !s.plan_confirmed {
-                        s.stay_pick_default();
-                        s.plan_apply_preset_all(&preset);
+                        s.auto_draft(&preset);
                         if !s.confirm_plan() {
                             return err("autoplay: the party plan was refused");
                         }
                     }
-                    while s.phase != Phase::Replay {
-                        s.step_next();
-                    }
+                    s.resolve_round();
                     played += 1;
                 }
                 json!({"ok": true, "rounds": played, "log": s.resolver.log[from..].to_vec(), "state": state_of(s)})
@@ -481,7 +479,14 @@ fn skills_of(cat: &Catalog, s: &Session, u: UnitId) -> Vec<Value> {
                 continue;
             }
             let reach = if k == Kind::Support { skill::support_reach(sk, &w.units[u]) } else { skill::reach_by(sk, &w.units[u], &w.ruleset) };
-            out.push(json!({"skill": sk.id, "name": sk.name, "kind": sk.kind, "ap": if w.pays_ap(u) { skill::ap_cost_by(sk, Some(&w.units[u]), &w.ruleset) } else { 0 }, "blocks": sk.blocks, "reach": [reach.0, reach.1], "area": sk.area, "description": sk.raw.get("description")}));
+            let mut row = json!({"skill": sk.id, "name": sk.name, "kind": sk.kind, "ap": if w.pays_ap(u) { skill::ap_cost_by(sk, Some(&w.units[u]), &w.ruleset) } else { 0 }, "blocks": sk.blocks, "reach": [reach.0, reach.1], "area": sk.area, "description": sk.raw.get("description")});
+            // HOOKS1 HC1 (HOOKS1-UI slice 3): the HP the skill costs, priced from the battle's own catalog as the planner
+            // does, only when it costs some (rule hp_cost; classic rows keep their shape)
+            let hp = w.cat.skill(&sk.id).map_or(0, |k| command::hp_cost_of(w, k));
+            if hp > 0 {
+                row["hp_cost"] = json!(hp);
+            }
+            out.push(row);
         }
     }
     out

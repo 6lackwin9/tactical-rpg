@@ -632,7 +632,7 @@ pub fn reward_apply(d: &Data, gs: &mut GameState, rewards: &Dict, recipient_id: 
             }
         }
         for s in skills {
-            let owned = gs.party.members[i].owned_families(d);
+            let owned = gs.party.members[i].owned_families(d, &gs.world_id);
             let m = &mut gs.party.members[i];
             if owned.contains(&s) || m.learned_skills.contains(&s) {
                 notes.push(format!("{} already owns skill '{s}'.", m.id));

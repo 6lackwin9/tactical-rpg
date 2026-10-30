@@ -240,6 +240,56 @@ New rows per body in the first stage: 6 (`idle_down`, `idle_up`, `walk_down`, `w
 4. No blank frame (`aegis_ui::art::blank_frames`); the body checks and content checks are clean.
 5. The review page shows the turnaround boards; the user's sign-off is recorded for DIR4-R1.
 
+### 6.6 As built (DIR4-R2, 2026-10-29)
+
+- Bodies: `ranger`, `brawler`, `priest`, `rogue`, `mage` (base) and the warrior's `2h_axe` and `2h_hammer` looks get
+  18 view rows each (idle, walk, the main attack and the six WINDUP1 rows, `down` and `up`); sheets of 32 to 35 rows
+  (the brawler 35, 1680 px). The goblin and named variants (DIR4-R3) and the buckler look (DIR4-R1F) keep side rows.
+- Same model (decision "Front and back views follow the side model"): every part has a view drawer made from the side
+  rig's own part, in `views.py`:
+  - heads: `headband` (hair, the band, its knot and tails), `hood` with the `mask` flag, `cowl` (the circlet), `hat`
+    (brim, band, bent cone, white hair in locks and the beard);
+  - garments: `bare` (the sash), `leather` (the cross belt), `robe` and the robe skirt to the ankles;
+  - back gear: `quiver` (fletchings over the left shoulder in `down`, the whole quiver in `up`) and `cape` (behind the
+    legs in `down`, over the back in `up`);
+  - weapons: `fists`, `bow`, the two `dagger`s, `mace`, `staff`, `battle_axe` and `warhammer` (the 2H heads keep
+    their width when foreshortened).
+- Grips: `views.GRIPS` per class. The 2H grip draws the axe and the hammer with the side view's chop through its
+  `weapons` table (`views.grip_of`); the greatsword keeps the cut.
+- Readings: from behind the cape covers the tunic and the arms are drawn over it (layer 5, not 8; back gear now draws
+  after the torso garment within a layer); a belt buckle is gold only with weapons that have gold fittings (sword,
+  greatsword, dagger), else steel, so no view adds a slot; the back-view jab rises beside the head instead of growing;
+  the mage's hat tip bends over his left side (user, decision "DIR4-R2 art answers": keep these, the priest's front
+  wind-up as built; the brawler's guard fists beside the jaw and the ranger's bow further out and tilted were fixed).
+- Exporter: the side-model check (`check_view_model`, exits naming a slot colour the side idle frame shows and neither
+  view idle frame does); the turnaround board adds the four wind-up holds; `--review` writes `models.png` (side, front
+  and back of each body with views, idle and windup hold).
+- Checks: every row from before the task pixel-identical (389 rows compared), clip entries and palettes unchanged,
+  widths unchanged; X2 and X3 and the readability check pass on the new view rows.
+
+### 6.7 As built (DIR4-R3 and DIR4-R1F's buckler part, 2026-10-30)
+
+- Bodies: the 12 variants (`brawler/goblin`, `goblin_berserker`, `ash_warchief`; `rogue/goblin`, `goblin_scout`;
+  `ranger/goblin`, `wenn_tallow`; `priest/goblin`; `warrior/grakka_ashmaw`, `brask_toller`,
+  `hest_the_quartermaster`, `orsa_tallow`) and the warrior's `1h_buckler` look get 18 view rows each (sheets of 32
+  to 35 rows). Every body on the humanoid rig now has views; the dummy and the creatures keep side rows.
+- Parts (`views.py`), each the side rig's own (decision "Front and back views follow the side model"):
+  - the goblin head: bald as in the side view (the stand-in's hair is gone), the long ears standing out to both
+    sides, yellow eyes, the hooked nose, the heavy jaw and two tusks in front, the skull and nape behind; under the
+    goblin hood the ears poke out through it;
+  - the seven hats: `band` (knot and tails), `bandana` (knot and end), `hood`, `mohawk` (a fan of thin spikes in the
+    hair and its shade, not a block), `skull` (eye sockets and snout, horns, feather), `horns` (iron cap and two bone
+    horns; the Ash Warchief has no hair, as in his side view), `crown` (the band of rusted nails, the gold stud);
+  - the named heads `bare` (hair with strands in its shade), `kettle`, `cap` (visor in front) and the flags `beard`,
+    `braid` (down the back) and `pauldron` (on the right shoulder);
+  - weapons `hand_axe` and `double_axe`; the off-hand `buckler` (its face in `down`, its back with the strap in `up`,
+    held a little out so it shows past the body).
+- Grips: the buckler grip gets the side view's overhand cut and the WINDUP1 rows per weapon (sword, hand axe) through
+  its `weapons` table, the windup hold the weapon cocked behind the head; its ready pose carries the buckler a little
+  out. Grakka's double axe chops as the axe; its ready pose leans it further out so its two heads clear the face.
+- Checks: every row from before the task pixel-identical (527 rows compared), clip entries, palettes and palette
+  files unchanged; X2, X3, the readability and the side-model checks pass on every body.
+
 ## 7. Cost per body
 
 Units: one rig session = one asset-lane run with its review export. Rough estimates; the pilot calibrates them.

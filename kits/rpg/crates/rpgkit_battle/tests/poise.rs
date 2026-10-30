@@ -413,6 +413,50 @@ fn the_break_chance_draws_once_per_qualifying_hit() {
     assert!(successes > 0 && successes < 60, "the seeds cover both outcomes ({successes})");
 }
 
+/// RULESET1-U slice 5: `forecast` reads a hit as `resolve_hits` resolves it (one rule): the same factors, windup,
+/// stagger taken and bar after; a break by poise or `sure_break` named, a chance roll's chance given, a hold held; a
+/// unit broken this round already takes nothing more. Across windups, bars, sure and unbreakable hits and chance scales.
+#[test]
+fn a_forecast_reads_the_hit_as_it_resolves() {
+    let mut seen = std::collections::BTreeSet::new();
+    for scale in [0.0, 0.5] {
+        let s = session(timeline(&[POISE], json!({"break_chance_scale": scale})));
+        for (victim, skill, value, broken) in [
+            (None, "p_jab", 30, false),
+            (Some("p_heavy"), "p_jab", 30, false),
+            (Some("p_heavy"), "p_jab", 10, false),
+            (Some("p_heavy"), "p_sure", 30, false),
+            (Some("p_judgment"), "p_jab", 10, false),
+            (Some("p_heavy"), "p_jab", 0, true),
+        ] {
+            let mut w = s.w.clone();
+            let mut res = Resolver::new(BLOCKS, 7);
+            if let Some(v) = victim {
+                book(&mut res, FOE, hit(&w, FOE, HERO, v), 1);
+            }
+            let cmd = hit(&w, HERO, FOE, skill);
+            let (imp, blocks) = (cmd.impact, cmd.block_cost);
+            let a = book(&mut res, HERO, cmd, 2);
+            set_poise(&mut w, FOE, value);
+            w.poise.get_mut(&FOE).unwrap().broken = broken;
+            let block = res.scheduled[a].impact;
+            let fc = poise::forecast(&w, &res.scheduled, FOE, bar(&w, FOE), block, &imp, blocks, false, false);
+            run(&mut w, &mut res, 1, block);
+            let st = &res.scheduled[a].command.staggers[0];
+            let case = format!("{victim:?} {skill} poise {value} broken {broken} scale {scale}");
+            assert_eq!((fc.factors, fc.windup, fc.taken, fc.before), (st.factors, st.windup, st.taken, st.before), "{case}");
+            match fc.verdict {
+                poise::Verdict::Breaks(c) => assert_eq!(st.broke.as_ref().map(|b| b.cause), Some(c), "{case}"),
+                poise::Verdict::Chance(ch) => assert_eq!(st.chance.map(|x| x.0), Some(ch), "{case}"),
+                poise::Verdict::Holds => assert!(st.broke.is_none() && st.chance.is_none() && st.after == fc.after, "{case}"),
+                poise::Verdict::AlreadyBroken => assert!(st.broke.is_none() && st.after == st.before, "{case}"),
+            }
+            seen.insert(format!("{:?}", fc.verdict).split('(').next().unwrap().to_string());
+        }
+    }
+    assert_eq!(seen.into_iter().collect::<Vec<_>>(), ["AlreadyBroken", "Breaks", "Chance", "Holds"], "every verdict covered");
+}
+
 /// P14: `sure_break` breaks a target in windup whatever its poise, not one out of windup, not an unbreakable windup.
 #[test]
 fn a_sure_break_breaks_a_windup() {
@@ -537,6 +581,51 @@ fn a_piercing_hit_skips_the_armour() {
     assert!(dealt[0].1 > dealt[1].1 && dealt[1].1 == dealt[2].1, "pierce on beats pierce off and classic: {dealt:?}");
 }
 
+/// RULESET1-BX (RULESET1_BALANCE1 BX1-BX4): one attacker's `armor_piercing` hit on two targets that differ only in
+/// armour (25 and 50) lands the same damage under the rule pierce: the armour term is 1.0 and nothing else depends on
+/// the target here (stance matchup 1.0, no guard, no cover, the same crit draw). Without pierce (the timeline without
+/// it, and classic) the armour term `1 - r / (r + 50)` is 2/3 at 25 and 1/2 at 50, so the 50 hit is exactly 0.75 of the
+/// 25 hit before rounding: the "15 against the Captain, 20 against the Footman" of the RULESET1-B report (its probe ran
+/// the battle command's default ruleset, classic, where the skill flag pierces nothing). Prints the terms per target.
+#[test]
+fn a_pierced_hit_ignores_the_target_armour_and_classic_keeps_it() {
+    const ARMOURS: [i32; 2] = [25, 50];
+    for rules in [poise_rules(), timeline(&[POISE], json!({})), Ruleset::classic()] {
+        let pierce = rules.has(PIERCE);
+        let name = if rules.is_classic() { "classic" } else if pierce { "timeline" } else { "timeline -pierce" };
+        let (mut dealt, mut kept) = (Vec::new(), Vec::new());
+        for armour in ARMOURS {
+            let mut s = session(rules.clone());
+            s.w.units[FOE].armor_override = armour;
+            let mut res = Resolver::new(BLOCKS, 5);
+            let i = book(&mut res, HERO, hit(&s.w, HERO, FOE, "p_spike"), 1);
+            let CmdKind::Attack { skill_mult, .. } = res.scheduled[i].command.kind else { panic!("an attack") };
+            let (attacker, target, hp) = (s.w.units[HERO].clone(), s.w.units[FOE].clone(), s.w.units[FOE].hp);
+            run(&mut s.w, &mut res, 1, 1);
+            let taken = hp - s.w.units[FOE].hp;
+            let CmdKind::Attack { last_damage, last_crit, .. } = res.scheduled[i].command.kind else { panic!("an attack") };
+            assert_eq!(last_damage, taken, "{name}: the command records what the target lost");
+            // the formula's terms for this hit (the battle's own crit draw)
+            let h = damage::compute(&attacker, &target, HitInput { skill_mult, force_crit: last_crit, ignore_armor: pierce, ..HitInput::default() });
+            println!(
+                "{name} armour {armour}: power {} x focus {} x skill {} x stance {} x crit {} x guard+cover {} x armour {:.4} (pierced {}) = {}",
+                h.attack_power, h.buff_mult, h.skill_mult, h.stance_factor, h.crit_mult, h.mit_mult, 1.0 - h.armor_ratio, h.armor_pierced, h.final_dmg
+            );
+            assert_eq!(h.final_dmg, taken, "{name} armour {armour}: the battle hit is the formula's");
+            assert_eq!((h.stance_factor, h.mit_mult, h.armor_pierced), (1.0, 1.0, pierce), "{name} armour {armour}: only armour depends on the target");
+            dealt.push(taken);
+            kept.push(1.0 - h.armor_ratio);
+        }
+        if pierce {
+            assert_eq!((dealt[0], kept.clone()), (dealt[1], vec![1.0, 1.0]), "{name}: a pierced hit ignores the armour: {dealt:?}");
+        } else {
+            let (k25, k50) = (1.0 - damage::armor_reduction(ARMOURS[0]), 1.0 - damage::armor_reduction(ARMOURS[1]));
+            assert!(dealt[1] < dealt[0] && kept == vec![k25, k50], "{name}: armour cuts the plain hit: {dealt:?} {kept:?}");
+            assert!((k50 / k25 - 0.75).abs() < 1e-12, "{name}: armour 50 keeps 0.75 of what armour 25 keeps");
+        }
+    }
+}
+
 /// The session: a break gets its EVENT cell (outcome BREAK), the broken unit's cancelled actions get none, the metrics
 /// count it under `poise`; classic logs and records nothing of it (no `poise` key, no stagger detail, no new draw).
 #[test]
@@ -588,4 +677,52 @@ fn commands_carry_the_skill_impact() {
         assert!(hit(w, HERO, FOE, "p_judgment").impact.unbreakable && hit(w, HERO, FOE, "p_spike").impact.armor_piercing);
         assert!(matches!(own(w, HERO, "p_guard").kind, CmdKind::Defend { .. }) && own(w, HERO, "p_guard").impact == poise::Impact::default());
     }
+}
+
+/// RULESET1 12 (the round summary, RULESET1-U slice 5): a jab that breaks a winding-up foe and a second jab of the
+/// hero count one break, in a windup, of one hit into a windup (the second lands on a broken bar: no windup left), and
+/// one follow-up; the foe's own actions add none (enemy side).
+#[test]
+fn the_round_summary_counts_breaks_windups_and_follow_ups() {
+    let s = session(poise_rules());
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    book(&mut res, FOE, hit(&w, FOE, HERO, "p_heavy"), 1);
+    book(&mut res, HERO, hit(&w, HERO, FOE, "p_jab"), 2);
+    book(&mut res, HERO, hit(&w, HERO, FOE, "p_jab"), 3);
+    set_poise(&mut w, FOE, 10);
+    run(&mut w, &mut res, 1, 3);
+    let sum = round_intent::round_summary(&w, &res.scheduled);
+    let windup_hits: i32 = res.scheduled.iter().flat_map(|a| a.command.staggers.iter()).filter(|s| s.windup).count() as i32;
+    assert_eq!((sum.breaks, sum.windup_breaks, sum.windup_hits), (1, 1, windup_hits), "{sum:?}");
+    assert_eq!(windup_hits, 1, "the break cancels the windup");
+    assert_eq!((sum.flanks, sum.follow_ups), (0, 1), "{sum:?}");
+}
+
+/// RULESET1-U slice 6: `forecast_hits` carries the bar along a sequence: two jabs into a winding-up foe forecast one
+/// after the other on the bar the first leaves, each as `forecast` on that bar; after a break the next hit finds the
+/// foe already broken; the summary reads in words as the log writes it.
+#[test]
+fn a_hit_sequence_forecasts_on_the_bar_the_earlier_hits_leave() {
+    let s = session(poise_rules());
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    book(&mut res, FOE, hit(&w, FOE, HERO, "p_heavy"), 1);
+    set_poise(&mut w, FOE, 30);
+    let jab = hit(&w, HERO, FOE, "p_jab");
+    let one = poise::PlannedHit { target: FOE, block: 2, impact: jab.impact, blocks: jab.block_cost, flank: false, ignore_guard: false };
+    let seq = poise::forecast_hits(&w, &res.scheduled, &[one, poise::PlannedHit { block: 3, ..one }, poise::PlannedHit { block: 3, ..one }]);
+    let first = poise::forecast(&w, &res.scheduled, FOE, bar(&w, FOE), 2, &jab.impact, jab.block_cost, false, false);
+    assert_eq!(seq[0], Some(first));
+    let mut after = bar(&w, FOE);
+    after.value = first.after;
+    let second = poise::forecast(&w, &res.scheduled, FOE, after, 3, &jab.impact, jab.block_cost, false, false);
+    assert_eq!(seq[1], Some(second), "on the bar the first left");
+    assert!(matches!(second.verdict, poise::Verdict::Breaks(BreakCause::Poise)), "12 x 2 twice breaks 30: {second:?}");
+    assert_eq!(seq[2].map(|f| f.verdict), Some(poise::Verdict::AlreadyBroken), "one break a round");
+    let no_bar = poise::PlannedHit { target: NO_BAR, ..one };
+    assert_eq!(poise::forecast_hits(&w, &res.scheduled, &[no_bar]), vec![None], "no bar, no forecast");
+    let sum = round_intent::RoundSummary { breaks: 1, windup_breaks: 1, windup_hits: 2, flanks: 1, follow_ups: 3, rest_ap: 1 };
+    assert_eq!(round_intent::summary_text(&sum), "1 break (1 of 2 hits into a wind-up), 1 flank, 3 follow-ups, Rest +1 AP");
+    assert_eq!(round_intent::summary_text(&round_intent::RoundSummary::default()), "no breaks");
 }

@@ -2,7 +2,8 @@
 //! rule `round_intent` (with `enemy_moves`, `ap_cost`, `flank` and `plan_badges`). Expectations come from the rules: each
 //! row of the AI1 pick table (flee, Support, Guard and its cover tile, the Skirmisher's Engage, Assault, the idle
 //! Guard and Rest), the AUTO1 tactics of AI5 through the session's preset, the intent change of IN6 (a refused pick
-//! drops nothing), AI2 (enemies pay no AP), AI4 (tells carry the pick), determinism and classic staying inert.
+//! drops nothing), AI2 (enemies pay no AP), AI4 (tells carry the pick), determinism and classic staying inert;
+//! RULESET1-AI2 (no second low-HP Guard round without a hit).
 
 use indexmap::IndexMap;
 use rpgkit_battle::ai::{self, IntentRound};
@@ -11,8 +12,9 @@ use rpgkit_battle::grid::{V2, TERRAIN_IDS};
 use rpgkit_battle::plan::{Mode, Plan};
 use rpgkit_battle::round_intent::{self, ManeuverKind, Opener, RoundIntent, RoundTarget};
 use rpgkit_battle::round_intent_plan as rip;
-use rpgkit_battle::session::{EncounterDef, Session};
+use rpgkit_battle::session::{EncounterDef, Phase, Session};
 use rpgkit_battle::skill::{self, Kind};
+use rpgkit_battle::trigger::Struck;
 use rpgkit_battle::world::{AiProfile, Tactic, TargetPref, UnitId, World};
 use rpgkit_data::Catalog;
 use rpgkit_rules::ruleset::{Ruleset, AP_COST, ENEMY_MOVES, FLANK, PLAN_BADGES, ROUND_INTENT, TIMELINE};
@@ -672,4 +674,80 @@ fn classic_is_inert() {
     let p: AiProfile = w.profile_of(BLADE).with_preset("aggressive");
     assert_eq!(ai::plan_round_intent(w, &mut plan, BLADE, &p, Tactic::parse("aggressive")), IntentRound::default(), "tactics too");
     assert_eq!(Tactic::parse("withdraw"), Tactic::Balanced, "other presets draft by the table");
+}
+
+// ---- RULESET1-AI2: no second low-HP Guard round without a hit ---------------------------------------------------------
+
+/// RULESET1_BALANCE1 AI2-1, AI2-2: row 3 is skipped for a unit that was in the Guard intent last round and lost no HP
+/// to an attack hit during it (the table goes on down: here Assault); a round in Guard that took a hit, or a round not
+/// in Guard, keeps row 3.
+#[test]
+fn row_3_no_second_guard_round_without_a_hit() {
+    let mut s = session(timeline());
+    let w = &mut s.w;
+    place(w, ARCHER, V2::new(6, 4));
+    place(w, BLADE, V2::new(4, 5));
+    hurt(w, ARCHER, 0.3);
+    let guard = (ai::ROW_GUARD, Some((RoundIntent::Guard, RoundTarget::Myself)));
+    let (r, _) = pick(w, ARCHER);
+    assert_eq!((r.row, intent_target(&r)), guard, "the fixture: row 3 fires");
+    // the round in Guard ends without a hit: no Guard this round
+    w.roll_hits();
+    assert_eq!(w.hits.guarded_last_round, vec![ARCHER]);
+    let (r, _) = pick(w, ARCHER);
+    assert_ne!(r.row, ai::ROW_GUARD);
+    assert_eq!(intent_target(&r), Some((RoundIntent::Assault, RoundTarget::Unit(BLADE))), "down the table: Assault");
+    // that round was not in Guard: row 3 may fire again
+    w.roll_hits();
+    assert!(w.hits.guarded_last_round.is_empty());
+    let (r, _) = pick(w, ARCHER);
+    assert_eq!((r.row, intent_target(&r)), guard, "the round after: Guard again");
+    // a round in Guard that took a hit: Guard allowed
+    w.note_hits(&[Struck { target: ARCHER, damage: 5, ranged: false }]);
+    w.roll_hits();
+    assert_eq!((w.hits.guarded_last_round.clone(), w.hits.last_round.clone()), (vec![ARCHER], vec![ARCHER]));
+    let (r, _) = pick(w, ARCHER);
+    assert_eq!((r.row, intent_target(&r)), guard, "hit while guarding: Guard again");
+    // a hit that took no HP is no hit (the hit memory counts HP lost)
+    w.note_hits(&[Struck { target: ARCHER, damage: 0, ranged: false }]);
+    w.roll_hits();
+    let (r, _) = pick(w, ARCHER);
+    assert_ne!(r.row, ai::ROW_GUARD, "a blocked hit bought nothing");
+}
+
+/// The acceptance case through a session: the Brute at 40 % HP (under `defend_below`, over `heal_below`) beside an idle
+/// foe Guards round 1, takes no hit, and does not Guard round 2.
+#[test]
+fn a_session_guard_round_without_a_hit_is_not_repeated() {
+    let mut s = session(timeline());
+    place(&mut s.w, BRUTE, V2::new(5, 4));
+    place(&mut s.w, BLADE, V2::new(4, 4));
+    hurt(&mut s.w, BRUTE, 0.4);
+    s.replan_enemies();
+    assert_eq!(round_intent::intent_of(&s.w, BRUTE), Some(RoundIntent::Guard), "the fixture: round 1 Guards");
+    while s.current_round == 1 && !s.combat_over && s.phase != Phase::Replay {
+        s.step_next();
+    }
+    assert!(s.can_advance_round());
+    s.advance_round();
+    assert!(s.w.hits.guarded_unhit(BRUTE), "{:?}", s.w.hits);
+    s.replan_enemies();
+    assert_ne!(round_intent::intent_of(&s.w, BRUTE), Some(RoundIntent::Guard), "round 2: no second Guard round");
+}
+
+/// Classic is untouched: no Guard memory is kept and the classic draft of a hurt unit is the same with or without one.
+#[test]
+fn classic_keeps_no_guard_memory() {
+    let mut s = session(Ruleset::classic());
+    let w = &mut s.w;
+    place(w, BRUTE, V2::new(6, 4));
+    place(w, BLADE, V2::new(4, 4));
+    hurt(w, BRUTE, 0.4);
+    w.note_hits(&[Struck { target: BRUTE, damage: 5, ranged: false }]);
+    w.roll_hits();
+    assert_eq!(w.hits, Default::default(), "classic: nothing recorded");
+    let draft = |w: &World| format!("{:?}", ai::build_steps(w, &mut Plan::new(), BRUTE, &w.profile_of(BRUTE)));
+    let plain = draft(w);
+    w.hits.guarded_last_round = vec![BRUTE];
+    assert_eq!(draft(w), plain);
 }

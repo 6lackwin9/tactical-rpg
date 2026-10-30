@@ -48,6 +48,9 @@ pub struct Fonts {
     /// TEXTFIT1 text audit: while Some, every text drawn is recorded here (the shell's `text_audit` turns it on for
     /// one frame and reports what is cut, off the canvas or overlapping).
     pub audit: Option<Vec<TextRec>>,
+    /// TEXTFIT2: while on, the texts drawn are transient (a damage float rising over the board) and the audit records
+    /// them as such, so `text_audit::issues` ignores them; set through `Painter::transient`.
+    pub transient: bool,
 }
 
 /// One text drawn during an audited frame, in logical units.
@@ -65,6 +68,8 @@ pub struct TextRec {
     /// A near-opaque fill or panel drawn later covers the text's first letter or most of it (a dialog over the
     /// screen): hidden, so not a layout problem.
     pub covered: bool,
+    /// TEXTFIT2: drawn inside `Painter::transient` (a float that moves and fades on its own): never a layout problem.
+    pub transient: bool,
 }
 
 /// The fill alpha from which a fill or panel hides the audited text beneath it.
@@ -73,7 +78,7 @@ pub const COVER_ALPHA: u8 = 200;
 impl Fonts {
     pub fn new(ttf: &[u8]) -> Self {
         let font = fontdue::Font::from_bytes(ttf, fontdue::FontSettings::default()).expect("valid TTF");
-        Self { font, cache: HashMap::new(), scale: 1.0, audit: None }
+        Self { font, cache: HashMap::new(), scale: 1.0, audit: None, transient: false }
     }
 
     fn glyph(&mut self, c: char, px: u32) -> &(fontdue::Metrics, Vec<u8>) {
@@ -131,6 +136,15 @@ impl<'a> Painter<'a> {
             let shared = (t.x + t.w).min(x1) - t.x.max(x0);
             t.covered = (t.x + 1.0 >= x0 && t.x + 1.0 <= x1) || shared > t.w / 2.0;
         }
+    }
+
+    /// TEXTFIT2: runs `f` with its texts marked transient (floats that rise and fade over the board): they draw as
+    /// usual, but the text audit ignores them. The flag is restored after `f`.
+    pub fn transient<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        let was = std::mem::replace(&mut self.fonts.transient, true);
+        let out = f(self);
+        self.fonts.transient = was;
+        out
     }
 
     /// Draws only inside the logical rect `r` from now on (None: everywhere).
@@ -232,7 +246,7 @@ impl<'a> Painter<'a> {
                 x < cx0 - 0.5 || y < cy0 - 0.5 || end > cx1 + 0.5 || y + h > cy1 + 0.5
             });
             if let Some(a) = self.fonts.audit.as_mut() {
-                a.push(TextRec { x, y, w: end - x, h, text: s.to_string(), clipped, cut: None, covered: false });
+                a.push(TextRec { x, y, w: end - x, h, text: s.to_string(), clipped, cut: None, covered: false, transient: self.fonts.transient });
             }
         }
         end

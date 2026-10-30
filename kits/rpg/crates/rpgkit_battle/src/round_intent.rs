@@ -269,6 +269,17 @@ pub fn drop_bound(w: &mut World, c: UnitId) -> Vec<String> {
     names
 }
 
+/// IN6 for the intent buttons (RULESET1_INTENT UI1, "loses Riposte"): the display names of the intent-bound instances
+/// `c` holds that picking `intent` would drop (`drop_bound`'s, in tag order); empty when `intent` is the current one or
+/// the unit holds none yet (the first pick is not a change: IN2). Nothing changes.
+pub fn would_drop(w: &World, c: UnitId, intent: RoundIntent) -> Vec<String> {
+    if intent_of(w, c).is_none_or(|old| old == intent) {
+        return Vec::new();
+    }
+    let st = &w.units[c].st;
+    st.intents.keys().filter(|id| st.has_any(id)).map(|id| status::display_name(id)).collect()
+}
+
 /// RULESET1_INTENT RS2: the AP a unit gains at round end for `blocks` landed Rest blocks.
 pub fn rest_gain(n: &Numbers, blocks: i32) -> i32 {
     ((blocks.max(0) as f64 * n.rest_ap_per_block).floor() as i32).clamp(0, n.rest_ap_cap.max(0))
@@ -411,12 +422,23 @@ pub fn is_flank(w: &World, a: UnitId, t: UnitId) -> bool {
     if !on(w) || a == t || !w.has(a) || !w.has(t) || facing(w, t) == ZERO {
         return false;
     }
-    engaged_with(w, t).is_some_and(|e| e != a) && !in_front(w, t, w.pos(a))
+    flank_at(w, a, w.pos(a), t)
+}
+
+/// MV3 from `cell`: `t` is engaged with a unit other than `a` and `cell` lies outside `t`'s front.
+fn flank_at(w: &World, a: UnitId, cell: V2, t: UnitId) -> bool {
+    engaged_with(w, t).is_some_and(|e| e != a) && !in_front(w, t, cell)
 }
 
 /// MV3 with the rule `flank`: no riposte from `t`, `exploit` `flanked` applies, power x `flank_power_mult`.
 pub fn flank_bonus(w: &World, a: UnitId, t: UnitId) -> bool {
     w.ruleset.has(ruleset::FLANK) && is_flank(w, a, t)
+}
+
+/// RULESET1-U slice 5 (the forecasts): `flank_bonus` with `a` striking from `cell`, a planned tile (the hit after a
+/// move), instead of where it stands now.
+pub fn flank_bonus_from(w: &World, a: UnitId, cell: V2, t: UnitId) -> bool {
+    w.ruleset.has(ruleset::FLANK) && on(w) && a != t && w.has(a) && w.has(t) && facing(w, t) != ZERO && flank_at(w, a, cell, t)
 }
 
 // ---- Tiles (MV5, MV6, PL4) -----------------------------------------------------------------------------------------
@@ -428,8 +450,9 @@ pub enum Aim {
     Away,
 }
 
-/// PL4 (1): the active foes of `c` whose next-round reach covers `cell` (their 2-block move plus their reach), plus 1
-/// when an arena hazard is due on `cell` this round (HOOKS1 AT3, AH3; rule arena_hazards, never in classic).
+/// PL4 (1): the active foes of `c` whose next-round reach covers `cell` (their 2-block move plus their reach); HOOKS1
+/// AT3 (rule ai_tactics, never in classic): plus 1 for a ground hazard on `cell` that would harm `c` and that its side
+/// can see (`ground::harms`), plus 1 when an arena hazard is due on `cell` this round (AH3, rule arena_hazards too).
 pub fn threat(w: &World, c: UnitId, cell: V2) -> usize {
     let foes = w
         .foes_of(c)
@@ -440,16 +463,35 @@ pub fn threat(w: &World, c: UnitId, cell: V2) -> usize {
             u.is_active() && w.has(f) && w.pos(f).dist(cell) <= u.move_per_block() * 2 + reach
         })
         .count();
-    foes + crate::arena::due_on(w, cell) as usize
+    if !w.ai_tactics() {
+        return foes;
+    }
+    foes + crate::ground::harms(w, c, cell) as usize + crate::arena::due_on(w, cell) as usize
 }
 
-/// PL4: ranks candidate tiles (tile, route) for `c`'s move toward or away from `target`: fewer threats, more cover
-/// toward the target (only when `cover`), fewer path tiles, nearer (Toward) or farther (Away), lower cell index.
+/// HOOKS1 AT2 `hold_line` (rule ai_tactics): PL4's rank right after threat for a unit with the tactic: (0 next to a
+/// friend on the field else 1, the walkable free neighbours of `cell`), fewer first; (0, 0) for every other unit.
+pub fn hold_rank(w: &World, c: UnitId, cell: V2) -> (i32, i32) {
+    if !w.has_tactic(c, crate::world::UnitTactic::HoldLine) {
+        return (0, 0);
+    }
+    let beside = w.friends_of(c).iter().any(|&f| f != c && w.units[f].is_active() && w.has(f) && w.pos(f).dist(cell) == 1);
+    let free = crate::grid::DIRS
+        .iter()
+        .map(|d| cell + *d)
+        .filter(|&n| w.grid.is_valid(n) && w.grid.is_walkable(n) && !w.grid.is_exit(n) && w.occupant(n).is_none_or(|o| o == c))
+        .count() as i32;
+    (i32::from(!beside), free)
+}
+
+/// PL4: ranks candidate tiles (tile, route) for `c`'s move toward or away from `target`: fewer threats, (HOOKS1 AT2,
+/// a `hold_line` unit) next to a friend then fewer free neighbours, more cover toward the target (only when `cover`),
+/// fewer path tiles, nearer (Toward) or farther (Away), lower cell index.
 pub fn rank_tiles(w: &World, c: UnitId, target: V2, cover: bool, aim: Aim, cands: &mut [(V2, Vec<V2>)]) {
     let key = |cell: V2, route: &Vec<V2>| {
         let cov = if cover { cover_for(&w.grid, target, cell, true) } else { 0.0 };
         let d = cell.dist(target);
-        (threat(w, c, cell), cov, route.len(), if aim == Aim::Away { -d } else { d }, cell.y * crate::grid::GRID_W + cell.x)
+        ((threat(w, c, cell), hold_rank(w, c, cell)), cov, route.len(), if aim == Aim::Away { -d } else { d }, cell.y * crate::grid::GRID_W + cell.x)
     };
     cands.sort_by(|a, b| {
         let (ka, kb) = (key(a.0, &a.1), key(b.0, &b.1));
@@ -514,4 +556,76 @@ pub fn pick(stored: V2, tiles: &[(V2, Vec<V2>)]) -> Option<(V2, Vec<V2>)> {
         }
     }
     tiles.first().cloned()
+}
+
+// ---- The round summary (RULESET1 12; RULESET1-U slice 5) -----------------------------------------------------------
+
+/// RULESET1 12, the battle screen's round summary: what the round's landed actions did.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RoundSummary {
+    /// Breaks by stagger (P7, P13, P14), and how many of them came in a windup.
+    pub breaks: i32,
+    pub windup_breaks: i32,
+    /// Stagger hits that landed on a unit in windup (the "of" of "windups broken of hit").
+    pub windup_hits: i32,
+    /// Hits that were flanks (MV3).
+    pub flanks: i32,
+    /// Party-side commands after each member's first one (follow-ups: FU2; moves, Rest and lock changes not counted).
+    pub follow_ups: i32,
+    /// The AP the party's landed Rest blocks give at round end (RS2).
+    pub rest_ap: i32,
+}
+
+/// `RoundSummary` of the round's actions `sched` (read before the next round start resets the Rest counts).
+pub fn round_summary(w: &World, sched: &[crate::resolver::ScheduledAction]) -> RoundSummary {
+    use crate::command::CmdKind;
+    let mut out = RoundSummary::default();
+    let mut acted: Vec<(UnitId, i32)> = Vec::new();
+    for a in sched.iter().filter(|a| a.landed) {
+        for st in &a.command.staggers {
+            out.windup_hits += st.windup as i32;
+            if st.broke.is_some() {
+                out.breaks += 1;
+                out.windup_breaks += st.windup as i32;
+            }
+        }
+        out.flanks += a.command.hits.iter().filter(|(_, flank)| *flank).count() as i32;
+        let counts = !matches!(a.command.kind, CmdKind::Walk { .. } | CmdKind::Rest { .. } | CmdKind::Target { .. } | CmdKind::StatusBlock { .. });
+        if counts && w.allies.contains(&a.unit) {
+            match acted.iter_mut().find(|x| x.0 == a.unit) {
+                Some(x) => x.1 += 1,
+                None => acted.push((a.unit, 1)),
+            }
+        }
+    }
+    out.follow_ups = acted.iter().map(|x| (x.1 - 1).max(0)).sum();
+    out.rest_ap = w.allies.iter().map(|c| rest_gain(&w.ruleset.numbers, w.round_states.get(c).map_or(0, |r| r.rest_blocks))).sum();
+    out
+}
+
+/// RULESET1 12: a round summary in words: "1 break (1 of 2 hits into a wind-up), 1 flank, 3 follow-ups, Rest +1 AP";
+/// "no breaks" leads when nothing broke (the battle screen's round-over message and the log's `[Round]` line).
+pub fn summary_text(sum: &RoundSummary) -> String {
+    let plural = |n: i32, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
+    let mut lead = if sum.breaks == 0 { "no breaks".to_string() } else { plural(sum.breaks, "break", "breaks") };
+    if sum.windup_hits > 0 {
+        lead += &format!(" ({} of {} into a wind-up)", sum.windup_breaks, plural(sum.windup_hits, "hit", "hits"));
+    }
+    let mut parts = vec![lead];
+    if sum.flanks > 0 {
+        parts.push(plural(sum.flanks, "flank", "flanks"));
+    }
+    if sum.follow_ups > 0 {
+        parts.push(plural(sum.follow_ups, "follow-up", "follow-ups"));
+    }
+    if sum.rest_ap > 0 {
+        parts.push(format!("Rest +{} AP", sum.rest_ap));
+    }
+    parts.join(", ")
+}
+
+/// The log's line closing a round under the round intent (decision "RULESET1-U slice 5 answers"): `[Round] <round>:
+/// <summary_text>`.
+pub fn summary_line(round: i32, sum: &RoundSummary) -> String {
+    format!("[Round] {round}: {}", summary_text(sum))
 }

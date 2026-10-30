@@ -174,8 +174,9 @@ fn meter_errors(e: &Dict, ctx: &Ctx, refs: &Refs, out: &mut Vec<String>) {
     let show = json::s(e, "show");
     if !METER_SHOW.contains(&show.as_str()) {
         out.push(format!("Show: '{show}' is not one of {}.", METER_SHOW.join(", ")));
-    } else if show == "pips" && max > METER_PIPS_MAX as i64 {
-        out.push(format!("Pips show at most {METER_PIPS_MAX} (max is {max}); use bar."));
+    } else if show == "pips" && max - min > METER_PIPS_MAX as i64 {
+        // UM7: one pip a step from min to max, as the battle screen draws them (`meter::shown`)
+        out.push(format!("Pips show at most {METER_PIPS_MAX} steps (max - min is {}); use bar.", max - min));
     }
     let list = |key: &str, label: &str, cap: usize, out: &mut Vec<String>| -> Vec<Dict> {
         let raw = json::get(e, key);

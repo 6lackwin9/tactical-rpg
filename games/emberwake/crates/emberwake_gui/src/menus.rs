@@ -484,6 +484,8 @@ pub enum SetAct {
     Set(&'static str, f64),
     /// A choice from CHOICES by index.
     Pick(&'static str, usize),
+    /// RULESET1-U slice 6: a battle overlay group switched (the settings key `battle_overlays`).
+    Overlay(&'static str),
     Apply,
     Defaults,
     Close,
@@ -495,7 +497,7 @@ pub struct SettingsScreen {
     w: Vec<Widget<SetAct>>,
 }
 
-const TABS: [&str; 4] = ["Sound", "Display", "Gameplay", "Controls"];
+const TABS: [&str; 5] = ["Sound", "Display", "Gameplay", "Battle", "Controls"];
 /// The display choices are the engine's (aegis_ui::screen).
 const CHOICES: [(&str, &[&str]); 3] = [("window_mode", &WINDOW_MODES), ("window_size", &WINDOW_SIZES), ("fps_cap", &FPS_CAPS)];
 /// PLAYUI1-M: the region map's marker names (value, label); the first is the default.
@@ -513,7 +515,7 @@ const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
         ],
     ),
     ("Maps", &[("Move the party", "Arrow keys, W A S D"), ("Interact with the marker you face", "E"), ("Game menu", "Escape"), ("Choose a dialogue line", "1-9"), ("Party, journal, stash, help, event log", "P, J, I, ?, L")]),
-    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Screenshot", "F12")]),
+    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Every revealed enemy move (timeline)", "Hold Alt"), ("Screenshot", "F12")]),
 ];
 
 /// A volume slider's sample and bus (scripts/audio/volume_preview.gd: the master sample plays on the interface bus).
@@ -564,6 +566,13 @@ impl SettingsScreen {
                 if let Some(o) = choices(k).get(i) {
                     self.draft[k] = json!(o);
                 }
+            }
+            SetAct::Overlay(k) => {
+                let on = self.draft["battle_overlays"][k].as_bool().unwrap_or(true);
+                if !self.draft["battle_overlays"].is_object() {
+                    self.draft["battle_overlays"] = json!({});
+                }
+                self.draft["battle_overlays"][k] = Value::Bool(!on);
             }
             SetAct::Apply => {
                 cx.settings.v = self.draft.clone();
@@ -667,6 +676,22 @@ impl Screen<GameCx> for SettingsScreen {
                 ui.select("settings.text_speed", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick(TEXT_SPEED, i), true, t);
                 y += 22;
                 ui.checkbox("settings.reduce_motion", x + 3, y, "Reduce motion", d[REDUCE_MOTION].as_bool().unwrap_or(false), SetAct::Toggle(REDUCE_MOTION), true);
+            }
+            3 => {
+                // RULESET1-U slice 6 (preference "Battle overlays and the clarity pass", user 2026-10-30): every
+                // overlay group of a timeline battle, on by default; the clarity pass (VISCLAR1) decides later what
+                // the game view keeps.
+                ui.p.text(x as f32, y as f32, "Battle overlays (timeline battles)", BODY + 1.0, GOLD);
+                y += 14;
+                let col_w = (body.w - 10) / 2;
+                for (k, (id, label, help)) in crate::battle::OVERLAY_GROUPS.iter().enumerate() {
+                    let (cx_, cy_) = (x + 3 + (k as i32 % 2) * col_w, y + (k as i32 / 2) * 17);
+                    let on = d["battle_overlays"][*id].as_bool().unwrap_or(true);
+                    ui.checkbox(&format!("settings.overlay.{id}"), cx_, cy_, label, on, SetAct::Overlay(id), true);
+                    if let Some(wd) = ui.widgets.last_mut() {
+                        wd.tip = tip(label, help);
+                    }
+                }
             }
             _ => {
                 // The list scrolls inside the panel (the wheel over it) once it outgrows it.

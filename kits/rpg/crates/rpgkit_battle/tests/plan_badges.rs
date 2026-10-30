@@ -79,10 +79,12 @@ fn add(plan: &mut Plan, w: &World, c: UnitId, step: rpgkit_battle::plan::Step) {
     assert_eq!(plan.add_step(w, c, step, false), "", "step for {}", w.units[c].name);
 }
 
-/// Replaces the round's enemy actions with `plan` (the session stays in planning).
+/// Replaces the round's enemy actions with `plan` (the session stays in planning); a scheduling, so the foresight
+/// ranges are measured now (V4).
 fn schedule_enemies(s: &mut Session, plan: &Plan) {
     s.resolver.scheduled.clear();
     plan.commit(&s.w, &mut s.resolver);
+    s.measure_reveals();
 }
 
 /// The badges V1 asks for, read off the plan entries: every entry but a move or Rest (user 2026-10-26: "No badge on
@@ -259,6 +261,24 @@ fn a_foresight_range_reveals_every_enemy_within_it() {
         assert_eq!(foe.readers, if reveals { vec![HERO] } else { Vec::new() });
         assert_eq!(foe.plan.len(), if reveals { 1 } else { 0 });
         assert!(!record(&tells, FOE_B).revealed, "5 tiles is out of range");
+        // the RULESET1-V review: the range is measured when the plan is scheduled, so units moving later (the round's
+        // playback) neither hide the foe it revealed nor reveal the one it did not
+        place(&mut s.w, HERO, V2::new(2, 8));
+        place(&mut s.w, FOE_B, V2::new(3, 8));
+        assert!(s.w.dist(HERO, FOE) > range && s.w.dist(HERO, FOE_B) <= 1, "the hero now stands by foe_b, far from foe");
+        for (when, tells) in [("tells", s.enemy_intents()), ("threat intel", s.round_intents())] {
+            if when == "threat intel" && !intent::badges_on(&s.w) {
+                assert!(tells.is_empty(), "classic has no round intents");
+                continue;
+            }
+            let (a, b) = (record(&tells, FOE), record(&tells, FOE_B));
+            assert_eq!((a.revealed, a.readers.clone()), (reveals, if reveals { vec![HERO] } else { Vec::new() }), "{when}: range {range}: the reveal at scheduling holds");
+            assert!(!b.revealed, "{when}: range {range}: a foe that came into range after scheduling stays hidden");
+        }
+        // a new scheduling measures again
+        s.measure_reveals();
+        let tells = s.enemy_intents();
+        assert_eq!((record(&tells, FOE).revealed, record(&tells, FOE_B).revealed), (false, reveals), "range {range}: measured again at the next scheduling");
     }
 }
 
@@ -288,4 +308,33 @@ fn the_trace_keys_come_only_with_the_rule() {
             assert_eq!(rec[1].as_array().unwrap().len(), 7, "the Godot line shape");
         }
     }
+}
+
+/// RULESET1-U slice 5 (V2's board path): a revealed walk is drawn as the kit would walk it now (`walk_preview`): from
+/// its planned start through each step, stopping before a taken or unwalkable tile and at the board's edge; the real
+/// walk (the planned move, resolved) ends on the preview's last tile.
+#[test]
+fn a_walk_preview_stops_where_the_walk_would() {
+    let mut s = session(timeline(), false);
+    let west = [V2::new(-1, 0); 3];
+    place(&mut s.w, FOE, V2::new(6, 3));
+    place(&mut s.w, HERO, V2::new(0, 0));
+    place(&mut s.w, ALLY, V2::new(0, 8));
+    let free = rpgkit_battle::command::walk_preview(&s.w, FOE, &west, V2::new(6, 3));
+    assert_eq!(free, [V2::new(6, 3), V2::new(5, 3), V2::new(4, 3), V2::new(3, 3)], "a free path: every tile");
+    place(&mut s.w, ALLY, V2::new(4, 3));
+    let cut = rpgkit_battle::command::walk_preview(&s.w, FOE, &west, V2::new(6, 3));
+    assert_eq!(cut, [V2::new(6, 3), V2::new(5, 3)], "stops before the taken tile");
+    // the real walk of the same steps ends there too
+    let mut w = s.w.clone();
+    for d in west {
+        if !w.move_unit(FOE, d) {
+            break;
+        }
+    }
+    assert_eq!(w.pos(FOE), *cut.last().unwrap());
+    place(&mut s.w, FOE, V2::new(1, 3));
+    place(&mut s.w, ALLY, V2::new(0, 8));
+    let edge = rpgkit_battle::command::walk_preview(&s.w, FOE, &west, rpgkit_battle::grid::NO_CELL);
+    assert!(edge.iter().all(|c| s.w.grid.is_valid(*c)) && edge.len() <= 2, "the board's edge stops it: {edge:?}");
 }

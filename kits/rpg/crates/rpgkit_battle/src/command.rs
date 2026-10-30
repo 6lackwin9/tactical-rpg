@@ -231,8 +231,9 @@ impl Command {
         }
     }
 
-    /// RULESET1 A2: the hit skips armour (rule `pierce` and the skill's `armor_piercing`).
-    fn pierces(&self, w: &World) -> bool {
+    /// RULESET1 A2: the hit skips armour (rule `pierce` and the skill's `armor_piercing`). Public for the battle
+    /// screen's forecasts (RULESET1-U slice 6).
+    pub fn pierces(&self, w: &World) -> bool {
         self.impact.armor_piercing && w.ruleset.has(rpgkit_rules::ruleset::PIERCE)
     }
 
@@ -989,6 +990,37 @@ fn carried_retreat(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<U
         line += &format!(" {note}");
     }
     line
+}
+
+/// RULESET1-U slice 5 (a revealed walk on the board): the tiles a planned walk of `src` passes through from
+/// `expected_start` (its planned start; NO_CELL: where it stands) along the steps `planned`, as `walk` would take them
+/// now: the start, then each tile it enters, stopping before a step `World::step_from` refuses, on an exit it leaves by
+/// and on a trap it springs. Nothing changes and nothing is drawn at random.
+pub fn walk_preview(w: &World, src: UnitId, planned: &[V2], expected_start: V2) -> Vec<V2> {
+    if !w.units[src].is_active() || !w.has(src) {
+        return Vec::new();
+    }
+    let mut at = if expected_start != NO_CELL { expected_start } else { w.pos(src) };
+    let mut tiles = vec![at];
+    for d in planned {
+        match w.step_from(src, at, *d) {
+            crate::world::StepTo::Blocked => break,
+            crate::world::StepTo::Leaves => {
+                if w.grid.is_valid(at + *d) {
+                    tiles.push(at + *d);
+                }
+                break;
+            }
+            crate::world::StepTo::Enters(next) => {
+                tiles.push(next);
+                at = next;
+                if crate::ground::springs(w, src, next).is_some() {
+                    break;
+                }
+            }
+        }
+    }
+    tiles
 }
 
 /// WalkCommand.execute: follows the planned steps (re-paths when not where the plan expected); unwalked tiles are

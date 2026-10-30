@@ -94,6 +94,8 @@ pub struct HeldMeter {
 pub struct BandApplied {
     pub source: String,
     pub resist: Vec<(String, i32)>,
+    /// The resist keys the band created (none before it): they go again when it is left (HOOKS1-UI).
+    pub resist_new: Vec<String>,
     pub potency_family: Vec<(String, f64)>,
     pub potency_group: Vec<(String, f64)>,
     pub status_potency: i32,
@@ -586,6 +588,7 @@ impl Unit {
         BandApplied {
             source: band_stat_source(source),
             resist: diff_i(&self.status_resist, &resist),
+            resist_new: self.status_resist.keys().filter(|k| !resist.contains_key(*k)).cloned().collect(),
             potency_family: diff_f(&self.potency_bonus, &fam),
             potency_group: diff_f(&self.potency_group, &group),
             status_potency: self.passive_status_potency - potency,
@@ -599,7 +602,12 @@ impl Unit {
         self.stats.remove_modifier(&a.source);
         for (k, d) in &a.resist {
             let v = self.status_resist.get(k).copied().unwrap_or(0) - d;
-            self.status_resist.insert(k.clone(), v);
+            if v == 0 && a.resist_new.contains(k) {
+                // HOOKS1-UI (the HOOKS1-M review): a key the band created goes with it (no stale 0 entry)
+                self.status_resist.shift_remove(k);
+            } else {
+                self.status_resist.insert(k.clone(), v);
+            }
         }
         for (map, list) in [(&mut self.potency_bonus, &a.potency_family), (&mut self.potency_group, &a.potency_group)] {
             for (k, d) in list {

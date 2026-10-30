@@ -304,8 +304,8 @@ const HATCH: Rgba = rgba(0, 0, 0, 120);
 const MARK_BG: Rgba = rgba(10, 14, 24, 235);
 
 /// Part `style` over `bar`, drawn only in the part's rect `pr` (the bar's rounded ends stay rounded, the cuts between
-/// parts straight).
-fn draw_part<A: Clone>(ui: &mut Ui<A>, style: PartStyle, bar: Rect, pr: Rect) {
+/// parts straight). Public so a screen's own strip of blocks draws its spans in the widget's look (RULESET1-U slice 5).
+pub fn draw_part<A: Clone>(ui: &mut Ui<A>, style: PartStyle, bar: Rect, pr: Rect) {
     ui.push_clip(pr);
     match style {
         PartStyle::Windup => ui.p.panel(bar, WINDUP_SHADE, rgba(0, 0, 0, 0), RADIUS),
@@ -335,14 +335,20 @@ fn hatch<A: Clone>(ui: &mut Ui<A>, r: Rect, col: Rgba) {
 fn draw_marks<A: Clone>(ui: &mut Ui<A>, id: &str, t: &Track, rects: &[Option<Rect>]) {
     for (m, r) in t.marks.iter().zip(rects) {
         let Some(r) = *r else { continue };
-        ui.p.panel(r, MARK_BG, m.colour, 2.0);
-        if ui.p.text_w(&m.glyph, SMALL) <= (r.w - 2) as f32 {
-            ui.p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + 1.0, &m.glyph, SMALL, m.colour);
-        } else {
-            ui.p.text_fit(r.x as f32 + 1.0, r.y as f32 + 1.0, &m.glyph, SMALL, (r.w - 2) as f32, m.colour);
-        }
-        ui.push(format!("{id}.mark.{}.{}", t.key, m.key), "mark", m.glyph.clone(), r, true, false, None, m.tip.clone());
+        draw_mark(ui, &format!("{id}.mark.{}.{}", t.key, m.key), m, r);
     }
+}
+
+/// One mark in `r` (a dark chip outlined in its colour, the glyph on it) with its info widget `wid` (hover card, no
+/// click). Public so a screen's own strip of blocks marks a block in the widget's look (RULESET1-U slice 5).
+pub fn draw_mark<A: Clone>(ui: &mut Ui<A>, wid: &str, m: &Mark, r: Rect) {
+    ui.p.panel(r, MARK_BG, m.colour, 2.0);
+    if ui.p.text_w(&m.glyph, SMALL) <= (r.w - 2) as f32 {
+        ui.p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + 1.0, &m.glyph, SMALL, m.colour);
+    } else {
+        ui.p.text_fit(r.x as f32 + 1.0, r.y as f32 + 1.0, &m.glyph, SMALL, (r.w - 2) as f32, m.colour);
+    }
+    ui.push(wid, "mark", m.glyph.clone(), r, true, false, None, m.tip.clone());
 }
 
 /// The stretch of `[x0, x1]` a text `need` wide may take with `marks` kept clear (a pixel either side): the first gap

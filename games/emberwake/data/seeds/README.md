@@ -13,12 +13,15 @@ the files are frozen in `legacy/data/seeds/` (and in git history). The tables be
 
 | Seed | Task | Note |
 | --- | --- | --- |
+| `encounter2_d.json` | ENCOUNTER2-D (kit samples `kit_winch_escape` hold escape and `kit_culling` phase kill) | full entries, as above |
 | `reward1.json` | REWARD1-A (loot tables, Ashlands purses, key loot, objective reward) | full entries: regenerate it before a re-run on data other tasks changed since |
 | `assetorg2.json` | ASSETORG2-D (body keys, portrait tiers, item icons) | full entries, as above |
 | `phasefold.json` | PHASEFOLD-A (arrival phases for goblin_ambush, pass_ambush, ashmaw_stand; rewrites the catalog, ashlands and tidewrack encounters without the wave_* keys) | full entries, as above |
 | `props1_ashlands.json` | PROPS1-A1 (`props` on the four Ashlands map templates: 63 props, spec 6.3) | full template entries, as above |
 | `war2h1_gear.json` | WAR2H1 slice 2 (gear behind the looks: world items `<name>_hatchet` and `<name>_buckler` as the `named_items` of Hest and Brask (ashlands) and Orsa (iron_reaches); `goblin_warlord` `main_hand` `wpn_battle_axe` (2H), no off hand) | world item and character entries, the catalog unit |
 | `sprite2.json` | SPRITE2 (art and palette keys: 4 named Horde elites drop their own art folder for the goblin body + own palette, gruk_smokecaller and 5 ash_* grunts get palettes, orsa_tallow gets art warrior/orsa_tallow) | full entries, as above |
+| `ruleset1a2.json` | RULESET1-A2 (tl_spiker SKIRMISHER; Guard active on every tl_ enemy: tl_brace_counter / tl_fade; tl_crushing_judgment power_mult 2.2 to 1.5; encounter tl_flank_elite) | full entries, as above |
+| `ruleset1a3.json` | RULESET1-A3 (tl_crushing_judgment power_mult 1.5 to 1.8; tl_footman, tl_footman_b, tl_crossbowman level 2 with CONS spend for about +20 % HP; tl_footman deck swaps Snap Jab for tl_hook_thrust; encounter tl_skirmish max_rounds 8 to 10; kit_culling gains a goblin_warlord) | full entries, as above |
 
 ## Godot-era seeds
 
