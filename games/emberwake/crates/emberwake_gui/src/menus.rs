@@ -339,7 +339,7 @@ impl Slots {
             SlotAct::Load(slot) => {
                 if cx.busy() {
                     show_errors(cx, vec!["Finish the fight, conversation or shop first.".into()]);
-                } else if cx.has_game() && cx.is_dirty() {
+                } else if cx.has_game() && cx.is_dirty() && !crate::runover::is_over(cx) {
                     let what = Self::describe(cx, slot);
                     let name = if slot == save::AUTOSAVE_SLOT { "the autosave".to_string() } else { format!("slot {slot}") };
                     cx.ask_no(format!("Load {name} ({what})? Unsaved progress in the current game is lost."), move |cx| load_slot(cx, slot));
@@ -380,14 +380,14 @@ impl Slots {
         }
     }
 
-    /// Why the running game can't be saved now ("" when it can).
+    /// Why the running game can't be saved now ("" when it can; CAMPAIGN1 F3: never while the run is over).
     fn no_save(cx: &Cx) -> &'static str {
         if !cx.has_game() {
             "There is no game to save."
         } else if cx.busy() {
             "You can't save during a battle, a conversation or while a shop is open."
         } else {
-            ""
+            emberwake_world::campaign::save_refusal(cx.gs())
         }
     }
 }
@@ -775,11 +775,10 @@ mod tests {
         let data = emberwake_world::Data::open(&data_dir).expect("data").0;
         let world = new_game::playable_worlds(&data).first().cloned().expect("a playable world");
         let gs = new_game::create_for_world(&data, &world, 1).expect("a new game");
-        let clean = gs.to_value();
         let app = GameCx {
             data: Arc::new(data),
             manifest: Default::default(),
-            game: Some(Game { gs, slot: -1, clean, busy: false, sample: false }),
+            game: Some(Game::new(gs, -1, false)),
             save_dir,
             tuning: aegis_ui::tuning::TuningFile::new(None),
             log: Vec::new(),

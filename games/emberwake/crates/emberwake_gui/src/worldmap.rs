@@ -2,6 +2,9 @@
 //! (TravelRules.view), trips by clicking a node (TravelRunner.travel: clock, supplies, road fights), making camp
 //! (HealRules.make_camp) and entering the location the party stands on. Esc / Back returns to the region map.
 //! STORYUI1-U1: like the region map, it hands over to the story stage and plays queued vignettes (`story::map_tick`).
+//! CAMPAIGN1-U: campaign notices and the run-over screen (`runover::map_tick`); a trip or a camp whose days would end
+//! the run asks first (W3, No as the default); a trip the run ended on stops like an arrival; a road fight that could
+//! end the run gets the notice.
 
 use aegis_ui::canvas::{rgb, rgba, Rect};
 use crate::music;
@@ -54,23 +57,10 @@ impl WorldMap {
                 if self.selected.is_empty() {
                     return;
                 }
-                let to = self.selected.clone();
-                let res = travel::travel(&d, cx.gs_mut(), &to);
-                if !json::b(&res, "ok", false) {
-                    show_errors(cx, json::sget(&res, "errors"));
-                    return;
-                }
-                crate::region::log_events(cx, json::aget(&res, "events"));
-                if json::i(&res, "starved_legs", 0) > 0 {
-                    cx.log("Out of supplies: the roads were more dangerous.");
-                }
-                if s(&res, "status") == "fight" {
-                    let fight = json::dget(&res, "fight").clone();
-                    let name = json::s_or(d.resolve(&cx.gs().world_id, "encounters", &s(&fight, "encounter")), "name", "Enemies");
-                    cx.log(format!("Ambushed on the road: {name}!"));
-                    crate::region::begin_fight(cx, &fight, "travel");
-                } else {
-                    self.selected.clear();
+                let trip = travel::trip(&d, cx.gs(), &cx.gs().location_id, &self.selected);
+                match crate::runover::days_ask(cx, json::i(&trip, "time", 0), "This trip", "Travel") {
+                    Some(q) => cx.ask_tag_no(q, crate::runover::ASK_TRIP),
+                    None => self.travel(cx),
                 }
             }
             WAct::Enter => {
@@ -81,19 +71,60 @@ impl WorldMap {
                     return;
                 }
                 crate::region::log_events(cx, json::aget(&res, "events"));
+                crate::runover::take(cx, &res);
                 cx.nav.push(Nav::Pop);
             }
             WAct::Camp => {
-                let res = progression::make_camp(&d, cx.gs_mut());
-                if !json::b(&res, "ok", false) {
-                    show_errors(cx, json::sget(&res, "errors"));
-                    return;
+                // a refused rest says why at once; an allowed one whose days would end the run asks first
+                let days = emberwake_world::campaign::purse::rest_rule(&d, &cx.gs().world_id).days as i64;
+                let ask = if progression::can_camp(&d, cx.gs()).is_empty() { crate::runover::days_ask(cx, days, "Resting", "Rest") } else { None };
+                match ask {
+                    Some(q) => cx.ask_tag_no(q, crate::runover::ASK_REST),
+                    None => self.camp(cx),
                 }
-                crate::region::log_events(cx, json::aget(&res, "events"));
             }
             WAct::Back => cx.nav.push(Nav::Pop),
             WAct::Hud(h) => hud_open(cx, h, &WORLD_HELP),
         }
+    }
+
+    /// The trip to the selected place (TravelRunner.travel): its log lines and campaign events; a road fight starts the
+    /// battle (with the notice when it could end the run, W3); an arrival or a trip the run ended on (status `over`)
+    /// clears the pick.
+    fn travel(&mut self, cx: &mut Cx) {
+        let d = cx.data.clone();
+        let to = self.selected.clone();
+        let res = travel::travel(&d, cx.gs_mut(), &to);
+        if !json::b(&res, "ok", false) {
+            show_errors(cx, json::sget(&res, "errors"));
+            return;
+        }
+        crate::region::log_events(cx, json::aget(&res, "events"));
+        crate::runover::take(cx, &res);
+        if json::i(&res, "starved_legs", 0) > 0 {
+            cx.log("Out of supplies: the roads were more dangerous.");
+        }
+        if s(&res, "status") == "fight" {
+            let fight = json::dget(&res, "fight").clone();
+            let name = json::s_or(d.resolve(&cx.gs().world_id, "encounters", &s(&fight, "encounter")), "name", "Enemies");
+            cx.log(format!("Ambushed on the road: {name}!"));
+            crate::region::begin_fight(cx, &fight, "travel");
+            crate::runover::warn_fight(cx, &s(&fight, "encounter"));
+        } else {
+            self.selected.clear();
+        }
+    }
+
+    /// Makes camp (HealRules.make_camp; a campaign world's rest rule, CAMPAIGN1 R2): its log lines and campaign events.
+    fn camp(&mut self, cx: &mut Cx) {
+        let d = cx.data.clone();
+        let res = progression::make_camp(&d, cx.gs_mut());
+        if !json::b(&res, "ok", false) {
+            show_errors(cx, json::sget(&res, "errors"));
+            return;
+        }
+        crate::region::log_events(cx, json::aget(&res, "events"));
+        crate::runover::take(cx, &res);
     }
 }
 
@@ -252,8 +283,19 @@ impl Screen<GameCx> for WorldMap {
     }
 
     /// STORYUI1 W2, 5.3: a running sequence takes over and queued vignettes play (the map has nothing of its own open).
+    /// CAMPAIGN1: a Yes to the trip or camp ask goes ahead; campaign notices and the run-over screen come first.
     fn tick(&mut self, cx: &mut Cx) {
-        crate::story::map_tick(cx);
+        if cx.take_answer(crate::runover::ASK_TRIP) {
+            self.travel(cx);
+            return;
+        }
+        if cx.take_answer(crate::runover::ASK_REST) {
+            self.camp(cx);
+            return;
+        }
+        if !crate::runover::map_tick(cx) {
+            crate::story::map_tick(cx);
+        }
     }
 
     fn music(&self, cx: &Cx) -> Option<String> {

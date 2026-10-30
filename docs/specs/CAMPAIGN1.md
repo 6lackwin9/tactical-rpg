@@ -285,3 +285,19 @@ Save: version 13 (or the next free number; sequence with ROSTER1, RULESET1-D, EN
 
 - CAMPAIGN1-C (c9fbd8c): the defeat retreat as R4 in section 8, including its fallback: a `to` hub that cannot be
   entered falls back to the wake (`retreat_failed` log note).
+
+## As built (CAMPAIGN1-U slice 1, 2026-10-31)
+
+- W4: the spec's `campaign::hud` is `campaign::view::hud`, re-exported as `campaign::hud`. A meter chip shows its short
+  name before the value ("Alert 45%"); while a meter's icon is missing a lamp in the band tone's colour stands in.
+- W1: a missed `go_on` checkpoint (`checkpoint_missed`) also gets a notice; `run_over` gets the run-over screen instead
+  of a notice; `act_start` logs "Act N begins."; a trigger's notes are logged. Warnings still waiting when the run ends
+  are dropped (their lines are in the log).
+- W3: a refused marker fight puts the party back on the tile it stepped from and starts the encounter counter over, as
+  a flee (`explore::decline_fight`); after a Yes the party fights from that tile. A dialogue fight is asked about after
+  the choice ran: the talk is closed and the effects the choice already applied stay, whatever the answer. A roaming
+  fight on the region map, like a road fight, cannot be refused and gets the notice.
+- F4: STORYUI1 has no end card with a button row, so the screen plays the end's `card` vignette once and then draws a
+  plain card: "The run is over", the end's `text`, the three buttons. Act 0 has no act-start save (Load the act's start
+  stays off and says why).
+- F5: the act-start save is not written in a debug or sample game, as the autosave.

@@ -1,11 +1,13 @@
 //! The HUD bar of the region map and the world map (PLAYUI1-H, spec PLAYUI1 3.4; engine-only, no Godot file):
 //! the place name at the top left; gold, supplies and the icon buttons Party, Journal, Stash, Help and Menu at the
-//! right.
+//! right. CAMPAIGN1-U (W4, P1): the two counters take the world's purse names, icons and tips, and a campaign's
+//! visible meters follow them as chips (short name, value with its unit in the band tone's colour), all read from the
+//! kit's view (`campaign::hud`).
 
-use aegis_ui::canvas::{rgb, rgba, Rect};
+use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::screens::{show_errors, Cx, Key, Nav};
-use aegis_ui::ui::{tip, Glyph, Tip, Ui, FOE, GOLD, BODY, TEXT, TITLE, W};
-use emberwake_world::state::SUPPLIES_MAX;
+use aegis_ui::ui::{tip, Glyph, Tip, Ui, FOE, GOLD, GOOD, BODY, TEXT, TITLE, W};
+use emberwake_world::campaign::view::{ChipKind, HudChip};
 
 /// The HUD bar's height (logical px).
 pub const HUD_H: i32 = 20;
@@ -71,7 +73,6 @@ pub fn hud_open(cx: &mut Cx, h: Hud, help: &[&str]) {
 #[allow(clippy::too_many_arguments)]
 pub fn hud_bar<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, left: i32, name: &str, menu: (&str, &str), why: &str, help: &[&str], wrap: impl Fn(Hud) -> A) {
     ui.p.fill(Rect::new(0, 0, W, HUD_H), rgba(10, 14, 22, 255));
-    let (gold, supplies) = cx.game.as_ref().map(|g| (g.gs.party.gold, g.gs.party.supplies)).unwrap_or((0, 0));
     let journal = crate::hub::has_quests(cx);
     let px = ui.icon_px(Rect::new(0, 0, HUD_BOX, HUD_BOX));
     let start = W - 3 - HUD_BUTTONS.len() as i32 * (HUD_BOX + 2) + 2;
@@ -94,38 +95,79 @@ pub fn hud_bar<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, left: i32, name: &str, men
         }
         ui.icon_button(id, r, label, cx.art.image(rel, px, px), glyph, wrap(h), off.is_empty(), false, t);
     }
-    // supplies, then gold, right to left: an icon and the amount
+    // the chips right to left (the last meter first, the currency last): an icon, a meter's short name, the amount
     let icon = Ui::<A>::icon_rect(Rect::new(0, 0, HUD_BOX, HUD_BOX)).w;
     let ty = (HUD_H as f32 - ui.p.line_h(BODY)) / 2.0;
     let mut right = start - 6;
-    let counters = [
-        ("hud.supplies", "Supplies", "ui/hud/supplies.png", format!("{supplies}/{SUPPLIES_MAX}"), "Food for the road: each day of travel eats some, and so does making camp."),
-        ("hud.gold", "Gold", "ui/hud/gold.png", gold.to_string(), "Earned from fights, chests and quests; spent in shops."),
-    ];
-    for (id, label, rel, amount, body) in counters {
-        let tw = ui.p.text_w(&amount, BODY).ceil() as i32;
-        let r = Rect::new(right - (icon + 3 + tw), 0, icon + 3 + tw, HUD_H);
+    let chips = chips(cx);
+    for chip in chips.iter().rev() {
+        let id = chip_id(chip);
+        let short = if chip.short.is_empty() { String::new() } else { format!("{} ", chip.short) };
+        let (sw, tw) = (ui.p.text_w(&short, BODY), ui.p.text_w(&chip.value, BODY));
+        let width = icon + 3 + (sw + tw).ceil() as i32;
+        let r = Rect::new(right - width, 0, width, HUD_H);
         let ir = Rect::new(r.x, (HUD_H - icon) / 2, icon, icon);
-        match cx.art.image(rel, px, px) {
-            Some(img) => ui.p.image(img, ir),
-            None => counter_glyph(ui, id, ir),
+        match (chip.icon.is_empty(), cx.art.image(&chip.icon, px, px)) {
+            (false, Some(img)) => ui.p.image(img, ir),
+            _ => counter_glyph(ui, chip, ir),
         }
-        ui.p.text((ir.x + icon + 3) as f32, ty, &amount, BODY, TEXT);
-        ui.push(id, "label", amount.clone(), r, true, false, None, tip(label, body));
+        let x = (ir.x + icon + 3) as f32;
+        if !short.is_empty() {
+            ui.p.text(x, ty, &short, BODY, TEXT);
+        }
+        ui.p.text(x + sw, ty, &chip.value, BODY, if chip.kind == ChipKind::Meter { tone_colour(&chip.tone) } else { TEXT });
+        let mut t = tip(&chip.title, "");
+        t.extend(chip.lines.iter().map(|l| (l.clone(), TEXT)));
+        ui.push(id, "label", format!("{short}{}", chip.value), r, true, false, None, t);
         right = r.x - 8;
     }
     ui.p.text_fit(left as f32, (HUD_H as f32 - ui.p.line_h(TITLE)) / 2.0, name, TITLE, (right - left - 4) as f32, GOLD);
 }
 
-/// The drawn stand-in of the gold or supplies icon: a coin, or a tied sack.
-fn counter_glyph<A>(ui: &mut Ui<A>, id: &str, r: Rect) {
+/// The HUD chips of the game in play (`campaign::hud`: the purse counters, then the visible meters); none without a
+/// game.
+pub fn chips(cx: &Cx) -> Vec<HudChip> {
+    cx.game.as_ref().map(|g| emberwake_world::campaign::hud(&cx.data, &g.gs)).unwrap_or_default()
+}
+
+/// A chip's widget id: `hud.gold` and `hud.supplies` for the purse counters (in every world), `hud.meter.<id>` for a
+/// meter.
+pub fn chip_id(chip: &HudChip) -> String {
+    match chip.kind {
+        ChipKind::Currency => "hud.gold".into(),
+        ChipKind::Upkeep => "hud.supplies".into(),
+        ChipKind::Meter => format!("hud.meter.{}", chip.id),
+    }
+}
+
+/// CAMPAIGN1 M2, W4: the colour of a band tone (`calm`, `warn`, `danger`, `fatal`; anything else is plain text).
+pub fn tone_colour(tone: &str) -> Rgba {
+    match tone {
+        "calm" => GOOD,
+        "warn" => GOLD,
+        "danger" => rgb(244, 146, 60),
+        "fatal" => FOE,
+        _ => TEXT,
+    }
+}
+
+/// The drawn stand-in of a chip's icon while its file is missing: a coin (the currency), a tied sack (the upkeep), or a
+/// lamp in the band tone's colour (a meter).
+fn counter_glyph<A>(ui: &mut Ui<A>, chip: &HudChip, r: Rect) {
     let (cx_, cy_, s) = (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0, r.w as f32);
-    if id == "hud.gold" {
-        ui.p.circle(cx_, cy_, s * 0.42, rgb(150, 110, 30));
-        ui.p.circle(cx_, cy_, s * 0.32, GOLD);
-    } else {
-        ui.p.panel(Rect::new(r.x + r.w / 6, r.y + r.h / 3, r.w - r.w / 3, r.h - r.h / 3), rgb(150, 112, 70), rgb(96, 70, 40), 3.0);
-        ui.p.line(cx_ - s * 0.18, r.y as f32 + s * 0.2, cx_ + s * 0.18, r.y as f32 + s * 0.2, rgb(196, 160, 110), 0.0);
+    match chip.kind {
+        ChipKind::Currency => {
+            ui.p.circle(cx_, cy_, s * 0.42, rgb(150, 110, 30));
+            ui.p.circle(cx_, cy_, s * 0.32, GOLD);
+        }
+        ChipKind::Upkeep => {
+            ui.p.panel(Rect::new(r.x + r.w / 6, r.y + r.h / 3, r.w - r.w / 3, r.h - r.h / 3), rgb(150, 112, 70), rgb(96, 70, 40), 3.0);
+            ui.p.line(cx_ - s * 0.18, r.y as f32 + s * 0.2, cx_ + s * 0.18, r.y as f32 + s * 0.2, rgb(196, 160, 110), 0.0);
+        }
+        ChipKind::Meter => {
+            ui.p.circle(cx_, cy_, s * 0.38, rgb(40, 40, 48));
+            ui.p.circle(cx_, cy_, s * 0.28, tone_colour(&chip.tone));
+        }
     }
 }
 
@@ -140,6 +182,7 @@ pub(crate) mod hud_tests {
     use aegis_core::json::{self, s, s_or};
     use aegis_ui::ui::{Gfx, H};
     use emberwake_world::explore;
+    use emberwake_world::state::SUPPLIES_MAX;
     use serde_json::{json, Value};
     use aegis_ui::painter::{Fonts, TextRec, View};
     use aegis_ui::screen::{Settings, TEXT_SIZES};
@@ -158,11 +201,10 @@ pub(crate) mod hud_tests {
         let data = Arc::new(Data::open(&dir).expect("data").0);
         let world = emberwake_world::new_game::playable_worlds(&data).first().cloned().expect("a playable world");
         let gs = emberwake_world::new_game::create_for_world(&data, &world, 1).expect("a new game");
-        let clean = gs.to_value();
         let app = GameCx {
             data,
             manifest: Default::default(),
-            game: Some(Game { gs, slot: -1, clean, busy: false, sample: true }),
+            game: Some(Game::new(gs, -1, true)),
             save_dir: tmp.join("saves"),
             tuning: aegis_ui::tuning::TuningFile::new(None),
             log: Vec::new(),

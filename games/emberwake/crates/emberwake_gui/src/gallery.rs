@@ -549,8 +549,7 @@ impl Gallery {
         // STORYUI1-U1: the sample game shows the screens, not the world's start sequence (its map hands over to the
         // story stage while one runs)
         gs.story = Default::default();
-        let clean = gs.to_value();
-        cx.game = Some(Game { gs, slot: -1, clean, busy: false, sample: true });
+        cx.game = Some(Game::new(gs, -1, true));
         self.own_game = Some(cx.debug);
         cx.debug = true;
         true

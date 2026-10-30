@@ -129,6 +129,13 @@ pub fn try_fight(cx: &mut Cx, fight: &Dict, runner: &str) -> Result<(), String> 
     Ok(())
 }
 
+/// Logs "Fight: <name>!" and starts world fight `fight` (`begin_fight`).
+pub fn fight_now(cx: &mut Cx, fight: &Dict, runner: &str) {
+    let name = s_or(cx.data.resolve(&cx.gs().world_id, "encounters", &s(fight, "encounter")), "name", "Enemies");
+    cx.log(format!("Fight: {name}!"));
+    begin_fight(cx, fight, runner);
+}
+
 /// Event lines for the log; `autosave` writes the autosave.
 pub fn log_events(cx: &mut Cx, events: &[Value]) {
     for e in events {
@@ -170,6 +177,7 @@ impl RegionMap {
             cx.notice = json::sget(&res, "errors");
         }
         log_events(cx, json::aget(&res, "events"));
+        crate::runover::take(cx, &res);
         Self {
             w: Vec::new(),
             mouse: (0, 0),
@@ -230,13 +238,29 @@ impl RegionMap {
         }
         let events = json::aget(&res, "events").to_vec();
         log_events(cx, &events);
+        crate::runover::take(cx, &res);
         let mut go_on = true;
         for e in &events {
             let e = json::dict(e);
             match s(e, "kind").as_str() {
+                // CAMPAIGN1 W3: a marker fight that could end the run asks first (No: the party steps back); a fight
+                // that cannot be refused gets the notice
                 "fight" => {
-                    self.start_fight(cx, e, "explore");
                     go_on = false;
+                    let enc = s(e, "encounter");
+                    match (s(e, "source") == "marker", crate::runover::fight_ask(cx, &enc)) {
+                        (true, Some(q)) => {
+                            self.walk.clear();
+                            explore::decline_fight(&d, cx.gs_mut(), e);
+                            let f = e.clone();
+                            cx.ask_no(q, move |cx| fight_now(cx, &f, "explore"));
+                        }
+                        (false, Some(_)) => {
+                            self.start_fight(cx, e, "explore");
+                            crate::runover::warn_fight(cx, &enc);
+                        }
+                        _ => self.start_fight(cx, e, "explore"),
+                    }
                 }
                 "exit" if s(e, "to") == explore::WORLD_MAP => {
                     cx.nav.push(Nav::Push(Box::new(crate::worldmap::WorldMap::new())));
@@ -250,10 +274,8 @@ impl RegionMap {
     }
 
     pub fn start_fight(&mut self, cx: &mut Cx, fight: &Dict, runner: &str) {
-        let name = s_or(cx.data.resolve(&cx.gs().world_id, "encounters", &s(fight, "encounter")), "name", "Enemies");
-        cx.log(format!("Fight: {name}!"));
         self.walk.clear();
-        begin_fight(cx, fight, runner);
+        fight_now(cx, fight, runner);
     }
 
     /// Faces `dir` (a step or a use): the sprite turns four ways (DIR4-M, `Facing::toward`): up or down on an up or
@@ -329,6 +351,12 @@ impl RegionMap {
                 cx.log(e);
             }
         }
+        crate::runover::take(cx, &res);
+        // CAMPAIGN1 F3: a choice that ended the run ends the talk (the run-over screen follows)
+        if crate::runover::is_over(cx) {
+            self.end_talk(cx);
+            return;
+        }
         for n in json::sget(&res, "notes") {
             cx.log(n);
         }
@@ -356,7 +384,11 @@ impl RegionMap {
         if let Some(f) = res.get("fight").and_then(Value::as_object).cloned() {
             self.end_talk(cx);
             cx.set_busy(false);
-            self.start_fight(cx, &f, "dialogue");
+            // CAMPAIGN1 W3: a fight that could end the run asks first (No: the talk is over, nothing fought)
+            match crate::runover::fight_ask(cx, &s(&f, "encounter")) {
+                Some(q) => cx.ask_no(q, move |cx| fight_now(cx, &f, "dialogue")),
+                None => self.start_fight(cx, &f, "dialogue"),
+            }
             return;
         }
         if self.runner.as_ref().is_some_and(|r| r.closed) {
@@ -454,6 +486,7 @@ impl RegionMap {
                 }
                 let events = json::aget(&res, "events").to_vec();
                 log_events(cx, &events);
+                crate::runover::take(cx, &res);
                 if to == explore::WORLD_MAP {
                     cx.nav.push(Nav::Push(Box::new(crate::worldmap::WorldMap::new())));
                 }
@@ -812,8 +845,9 @@ impl Screen<GameCx> for RegionMap {
         let speed = cx.settings.v["anim_speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0);
         self.anim_ms += now.duration_since(self.anim_at).as_secs_f64() * 1000.0 * speed;
         self.anim_at = now;
-        // STORYUI1 W2, 5.3: with nothing open, a running sequence takes over and queued vignettes play
-        if !self.modal() && crate::story::map_tick(cx) {
+        // STORYUI1 W2, 5.3: with nothing open, a running sequence takes over and queued vignettes play; CAMPAIGN1 W1,
+        // F3: campaign notices first, then the run-over screen once the run is over
+        if !self.modal() && (crate::runover::map_tick(cx) || crate::story::map_tick(cx)) {
             self.walk.clear();
             self.walk_target = None;
             return;

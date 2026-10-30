@@ -786,6 +786,16 @@ pub fn reset_counter(d: &Data, gs: &mut GameState) {
     gs.explore.insert("next_at".into(), int(next));
 }
 
+/// CAMPAIGN1 W3 (engine-only): the player refused a fight `step` reported (the ask before a run-ending fight): the
+/// party goes back to the tile it stepped from and the encounter counter starts over, as after fleeing; nothing is
+/// settled and the marker stays.
+pub fn decline_fight(d: &Data, gs: &mut GameState, fight: &Dict) {
+    if let [x, y] = json::aget(fight, "from") {
+        gs.position = (json::to_int(x), json::to_int(y));
+    }
+    reset_counter(d, gs);
+}
+
 /// BattleBridge.apply (REWARD1: `tally` from the battle, None = settled without one), then won: done flag and
 /// sets_flags; fled: back a tile; lost: wake. Then the counter reset.
 pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, tally: Option<&crate::battle::Tally>) -> Dict {

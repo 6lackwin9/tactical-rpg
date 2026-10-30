@@ -12,7 +12,7 @@
 //! queued in `pending` and handed on through `pending_head` / `pop_pending` (the GUI plays it; `{vignette}` items at
 //! the head move to the story queue through `story::pull_pending`, which `story::next_scene` calls, STORYUI1-W; a
 //! `{battle}` item is `trigger::fight`). Every effect list (meter rules, checkpoints, triggers) runs through the one
-//! shared effect body, `dialogue::apply_effects`.
+//! shared effect body, `dialogue::apply_effects`. CAMPAIGN1-U: the HUD view (`view.rs`, W4) the game draws.
 
 pub mod checkpoint;
 pub mod clock;
@@ -20,8 +20,10 @@ pub mod meter;
 pub mod preview;
 pub mod purse;
 pub mod trigger;
+pub mod view;
 
 pub use preview::{preview_battle, preview_days};
+pub use view::hud;
 
 use crate::data::Data;
 use crate::quest;

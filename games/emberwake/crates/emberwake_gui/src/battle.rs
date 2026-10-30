@@ -974,9 +974,11 @@ pub fn after_fight(d: &emberwake_world::Data, gs: &mut emberwake_world::GameStat
     }
 }
 
-/// The log lines of a settled world fight: its events, and a story fight's notes ("Try again.", the effects').
+/// The log lines of a settled world fight: its events, and a story fight's notes ("Try again.", the effects'); its
+/// campaign events (CAMPAIGN1 W1: log lines, notices the map shows next, the act-start save).
 pub fn log_settled(cx: &mut Cx, runner: &str, res: &Dict) {
     crate::region::log_events(cx, json::aget(res, "events"));
+    crate::runover::take(cx, res);
     if runner == story::FIGHT_SOURCE {
         for n in json::sget(res, "notes") {
             cx.log(n);

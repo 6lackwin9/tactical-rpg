@@ -47,6 +47,34 @@ pub fn write(d: &Data, dir: &Path, state: &GameState, slot: i64, saved_at: i64) 
     })
 }
 
+/// CAMPAIGN1 F5: writes the keyed save `key` (an act-start save, `campaign::act_save_key`; `aegis_save::write_keyed`:
+/// never a slot, a later write with the key replaces it). Problem strings; empty = written. Refused while the run is
+/// over (F3), like `write`.
+pub fn write_keyed(d: &Data, dir: &Path, state: &GameState, key: &str, saved_at: i64) -> Vec<String> {
+    let over = crate::campaign::save_refusal(state);
+    if !over.is_empty() {
+        return vec![over.to_string()];
+    }
+    aegis_save::write_keyed(&SAVES, dir, key, saved_at, || {
+        let errors = state.validate(d);
+        if errors.is_empty() {
+            Ok(state.to_value())
+        } else {
+            Err(errors)
+        }
+    })
+}
+
+/// CAMPAIGN1 F4: reads the keyed save `key` like `read` (migrate, then validate).
+pub fn read_keyed(d: &Data, dir: &Path, key: &str) -> Result<Loaded, Vec<String>> {
+    decode(d, &aegis_save::read_keyed(dir, key)?)
+}
+
+/// Whether the keyed save `key` exists (a bad key has none).
+pub fn exists_keyed(dir: &Path, key: &str) -> bool {
+    aegis_save::exists_keyed(dir, key)
+}
+
 /// Locks or unlocks a manual slot's save (`aegis_save::set_locked`: the autosave is never locked; a locked slot
 /// refuses `write` and `delete`).
 pub fn set_locked(dir: &Path, slot: i64, on: bool) -> Result<(), String> {

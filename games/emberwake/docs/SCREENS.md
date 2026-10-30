@@ -72,3 +72,22 @@ The rules behind every player screen come from `emberwake_world`, checked agains
 - UI Gallery, Vignette player entry: a reel picker (the engine's sample, then every world's vignettes as written) in the game's card
   palette.
 - Scene Runner, Exploration: a location other than the world's start drops the world's start sequence; the start location and the world map play it (STORYUI1-U1).
+
+## Campaign screens (CAMPAIGN1-U slice 1)
+
+- HUD bar in a campaign world: the gold and supplies counters take the world's purse names, icons and tips; the visible
+  meters follow by `hud.order` as chips (an icon or a lamp in the band tone's colour, the short name, the value with its
+  unit; agent link `hud.meter.<id>`); the hover card names the meter (or its label), the band, the next rule point and
+  the description. The Ashlands bar is unchanged.
+- Campaign notice (`campaign_notice`): one per meter warning, checkpoint warning or missed `go_on` checkpoint, shown one
+  at a time by the region map, the world map and the story stage when nothing else is open; a title in the band tone's
+  colour, the data's text, OK (`campaign_notice.ok`; Enter, Space, Esc or right click close it). Each event also logs a
+  line.
+- Asks before a run-ending step (the engine's `ask`, No as the default): a marker fight (No: the party stands on the tile
+  it stepped from), a dialogue fight (the talk is closed; No fights nothing, the choice's other effects stay), a trip and
+  Camp. A road or roaming fight that could end the run starts with a notice over the battle.
+- Run over (`run_over`): replaces every screen once the run is over (warnings still waiting are dropped; they are in the
+  log). The end card's vignette plays once, then a plain card: "The run is over", the end's text, and Load the act's
+  start (`run_over.load_act`, off with the reason when there is no act-start save), Load a save (`run_over.load_save`,
+  the load menu), Main menu (`run_over.main_menu`). Esc and right click do nothing; no slot or autosave is written
+  while the run is over.

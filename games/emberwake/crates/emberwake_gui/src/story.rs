@@ -93,11 +93,12 @@ pub fn map_tick(cx: &mut Cx) -> bool {
     play_queued(cx).is_some()
 }
 
-/// Logs the notes of a story result (effects, "Try again.").
+/// Logs the notes of a story result (effects, "Try again.") and takes its campaign events (CAMPAIGN1 W1).
 fn log_notes(cx: &mut Cx, res: &Dict) {
     for n in json::sget(res, "notes") {
         cx.log(n);
     }
+    crate::runover::take(cx, res);
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -126,6 +127,10 @@ impl StoryStage {
     /// The next beat: a queued vignette first (Q9), then the step at `running.step`.
     fn run(&mut self, cx: &mut Cx) {
         if self.waiting || !self.error.is_empty() || !cx.has_game() || !cx.nav.is_empty() {
+            return;
+        }
+        // CAMPAIGN1 W1, F3: campaign notices between the beats; the run-over screen once the run is over
+        if crate::runover::map_tick(cx) {
             return;
         }
         if let Some(wish) = play_queued(cx) {
@@ -196,6 +201,7 @@ impl StoryStage {
             return;
         }
         crate::region::log_events(cx, json::aget(&res, "events"));
+        crate::runover::take(cx, &res);
         if s(&res, "to") == "menu" {
             cx.autosave();
             cx.end_game();
