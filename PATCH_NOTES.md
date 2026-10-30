@@ -2,7 +2,83 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: cff05616 -->
+<!-- last: 46926df0 -->
+
+## 2026-10-31
+
+In the game:
+
+- **Timeline battle screen, hooks**: ground hazards and arena strike warnings on the board, unit meters as pips or bars, a held-guard edge, HP costs on the strip, push and pull forecasts (arrows, collisions, HOLD), all switchable in Settings > Battle; long hover cards in the intel panel no longer cut off.
+- **Hold escapes**: a "Who holds the winch?" pick, the hold tile marked, exits read SHUT or OPEN, and a note on why a withdraw waits; an encounter whose timeout counts as a loss now ends in a loss.
+- **Combat log**: phase story lines and scripted kills now show in the combat log.
+- **For testers (timeline)**: the AI no longer guards twice without being hit; the test fights were retuned.
+
+Every change that touched the game:
+
+- ENCOUNTER2-U: the hold-escape screen; phase lines and kills in the combat log (19d4618f)
+- RULESET1-A3: tl_ test-fight tuning pass and the kit_culling fix; the final feel run (77343bd2)
+- HOOKS1-UI slice 5: the text audit of every hook addition; the intel panel keeps what fits (task done) (f3b79757)
+- HOOKS1-UI slice 4: push and pull forecasts; one forced-move step rule for resolution and preview (9316d611)
+
+Under the hood:
+
+- Decision "ENCOUNTER2-U answers" (user 2026-10-31, all as recommended) (46926df0)
+- Decision "RULESET1-A3 loose ends" (user 2026-10-31, as recommended): skirmish caps recorded as known; phase lines in the logs checked in ENCOUNTER2-U; VISCLAR1 takes the intel line step (b6d571d2)
+- Decision "Timeline test fights after RULESET1-A3" (user 2026-10-31, as recommended): stop win-rate tuning of the tl_ fights; floors only; reach snap-first; sure-break floor to the skirmish (91a7ea1e)
+
+## 2026-10-30
+
+In the game:
+
+- **Timeline battle screen**: round intents (Assault, Guard, Support, Maneuver) with keys 1-9, board overlays (target ring, reach band, planned moves, flank arc, facings, stealth veil), enemy intents and impact badges, poise bars and BREAK plates, hit forecasts, a round summary in the log, and a Battle tab in Settings to switch each overlay group.
+- **Front and back views**: every humanoid unit now turns to face up and down with its own model (headgear, hair, clothing, weapon, the buckler); clicks on the Stage follow the view; the crawler and beast wind up, stagger and daze.
+
+Every change that touched the game:
+
+- RULESET1-B2: timeline feel rerun against the bands (BALANCE_REPORT) (907a2fce)
+- HOOKS1-UI slice 3: unit meters, the held-guard marker and HP costs on the battle screen (7e081dd7)
+- HOOKS1-D: the HOOKS1 docs pass and the game-agnostic combat hooks guide (00a471ab)
+- RULESET1-AI2: no second low-HP Guard round without a hit (timeline AI) (c7008bcd)
+- HOOKS1-UI slice 2: the class path follows the played world; out-of-battle HP under the deck rule (38e57942)
+- ENCOUNTER2-D: kit sample encounters kit_winch_escape and kit_culling (695c0599)
+- HOOKS1-UI slice 1: ground hazard and arena telegraph marks on the battle board; kit follow-ups (667ddc21)
+- DIR4-HB: the Stage hit rect follows a unit's front or back view (788186d2)
+- TEXTFIT2: the engine's text audit skips transient float texts (863dd0b9)
+- RULESET1-G2: one auto driver for the sim and the battle command; sim feel outcomes and keys; the timed party driver (2a347e2a)
+- EFFICIENCY: blank lines around the BUILDPROF1 heading (lost in the staging rebase merge) (314a97a3)
+- RULESET1-A2: tl_ test-fight data (Skirmisher Spiker, enemy Guard actives, Crushing Judgment 1.5, tl_flank_elite) (235a5486)
+- RULESET1-U slice 6: overlay settings, the [Round] log line, hovered moves above the tokens, the text audit (task done) (6b77c89e)
+- DIR4-R3: front and back views for the goblin and named variants, and the buckler (art, kit + game) (6e8e0184)
+- BUILDPROF1: smaller dev build caches (line tables only; no debug info for third-party crates) (40e43ea2)
+- RULESET1-BX: no pierce bug; a kit test pins pierced and plain hits against two armours (ee5b12a1)
+- RULESET1-U slice 5: poise bars, breaks, strip parts, forecasts, the round summary, overlay flags (72795dce)
+- RULESET1-U slice 4: round intents in the tells and threat intel, impact badges, full reveal (92bd851b)
+- WINDUP1-R3: wind-up, stagger and dazed rows for the crawler and the quadruped (art, kit + game) (b8f48a45)
+- RULESET1_BALANCE1 as built (RULESET1-BX: no pierce bug; the 15/20 was a classic probe); RULESET1-G2 starts by rerunning the driver probes under timeline (9254a09d)
+- BALANCE_REPORT: RULESET1-B timeline feel report (2026-10-30, 500 fights): Maneuver unreachable by the AI, windup and armour duels unwinnable, standards too weak, sim vs engine driver disagree; baseline numbers (3c1df593)
+- Preference "Battle overlays and the clarity pass" (user 2026-10-30): overlays stay for debugging; new row VISCLAR1 (proposed, M1): a visual clarity pass once the fight logic is built (6832aba8)
+- ENCOUNTER2-K: phase `kill` effect, phase groups and wave-unit hp_below triggers (kit) (bbd1733f)
+- RULESET1-U slice 3: board overlays under the timeline ruleset (476e1c5f)
+- ENCOUNTER2-HA: the party AI plays hold escapes; the sim's catalog sweep skips hold fights (kit) (ec1c827b)
+- task-landing and known-issues: cleanup.sh removes the task's build cache with its worktree (2026-10-29: stale caches filled drive C:) (65d8864e)
+
+Under the hood:
+
+- Decision "HOOKS1-UI slice 4 answer" (user 2026-10-31, as recommended): push forecasts read the board as it stands (a4c53eaf)
+- Decision "RULESET1-B2 tuning and HOOKS1-UI slice 3 answers" (user 2026-10-31, all as recommended); new row RULESET1-A3 (data tuning pass, with the kit_culling fix) (29ece5a9)
+- Decision "RULESET1-AI2 answers" (user 2026-10-31, all as recommended): only the low-HP Guard row is skipped after an unhit guard round; an absorbed hit counts as no hit (1abf02a5)
+- AGENT_MAP: wind-down 2026-10-30 (lanes routine; M1 53/62 on staging; next tasks) (5766cf20)
+- Decision "HOOKS1-UI slice 2 answers" (user 2026-10-30, all as recommended): lenient save validation across worlds; deck-rule numbers on the party screen (127ff6c9)
+- Decision "HOOKS1-UI slice 1 answers" (user 2026-10-30, all as recommended): pip cutoff by span; the class path follows the played world (supersedes HOOKS1-C as built); arena marks stay in playback (fec4413f)
+- Decision "RULESET1-G2 answers" (user 2026-10-30, all as recommended): feel keeps start jitter; the timed driver stays single-target; RULESET1_BALANCE1 as built for G2 (f1612b19)
+- TASKS: one row each for RULESET1-BX and RULESET1-A2 (done), after the staging rebase kept both copies (5420e917)
+- Decision "RULESET1-U slice 6 answers" (user 2026-10-30, all as recommended); new row TEXTFIT2 (M1); VISCLAR1 takes the strip icon for short labels (7e5ea080)
+- Decision "DIR4-R3 art answers" (user 2026-10-30, all as recommended for now; revisited in combat via DIR4-R1F) (c4bd2024)
+- Decision "RULESET1-U slice 5 answers" (user 2026-10-30, all as recommended): poise bar and forecast placement kept; slice 6 logs the round summary and draws hovered revealed moves above the tokens (e7a8ebd7)
+- Decisions "RULESET1_BALANCE1 answers" and "Builder efficiency" (user 2026-10-30, all as recommended): balance follow-up rows approved; lane worktrees with warm caches (lane.sh), builders end with the partial gate (pgate.sh); task-landing and EFFICIENCY updated (2f156992)
+- Spec RULESET1_BALANCE1 (design-brainstorm, from the RULESET1-B report; proposed, Q1-Q6 open); TASKS rows RULESET1-BX, -G2, -AI2, -A2, -B2 (spec); RULESET1-B done (1ec30429)
+- Decision "M1 scope and order" (user 2026-10-30): combat testing first; HOOKS1-A, FX1-A, ENCOUNTER2-W and DIR4-R4 move to M2 (a0096d80)
+- Decision "WINDUP1-R3, ENCOUNTER2-K and RULESET1-U slices 3-4 answers" (user 2026-10-30, all as recommended): creature poses kept, scripted kills raise no reactions, overlay and tell choices kept; revealed walks on hover or Alt; intent icons in the next art batch (2c47a828)
 
 ## 2026-10-29
 
@@ -30,6 +106,11 @@ Every change that touched the game:
 - FX1-L2: the rest of the battle effects (skill, support and item looks, falls, misses, the agent-link fx state) (02189d5f)
 - WINDUP1-E: engine clip fields for wind-ups (loop_from, strike) and ClipPlayer::play_from / set_base_from (6f567b9c)
 - HOOKS1-X: execute riders (an exploit entry matching on a low HP share) (a1799037)
+- RULESET1-X: timeline golden traces and the inert-extensions check (game tests) (d0ccf0a3)
+- RULESET1-U slice 2: foresight range measured at scheduling; dialogue stat checks under the deck rule (65984a86)
+- DIR4-R2: front and back views for the ranger, brawler, priest, rogue and mage, and the warrior's battle axe and warhammer (art, kit) (1e281a97)
+- RULESET1-U slice 1: round controls, board-click target, strip reasons and Rest gain, the Arena ruleset chip (31434d27)
+- HOOKS1-AI: AI target preferences, tactics and hazard-aware tiles (kit, rule ai_tactics) (ccd0ecd3)
 
 Under the hood:
 
@@ -43,6 +124,10 @@ Under the hood:
 - Decision "WINDUP1-R1 review answers" (user 2026-10-29): buckler sword raised in front and back views, front debuff blade angled, 2H heavy hold lowered into the frame, greatsword tip over the shoulder from behind (1a3d2021)
 - Decision "HOOKS1-M and deck answers" (user 2026-10-29: all as recommended) (ef91d4f9)
 - TASKS: FX1-V and FX1-L2 done (their statuses were lost in conflict merges) (5b36e157)
+- Decision "ENCOUNTER2-HA and -K answers" (user 2026-10-29, all as recommended): the hold keeper only defends, nearest hero takes over, others leave once the keeper can reach the tile; a phase kill overrides unkillable (ae30889e)
+- TASKS: RULESET1-U back to "slice 2 done" and RULESET1-X layer game (a docs merge kept stale text) (a8b1bb9c)
+- Decisions "HOOKS1-AI answers" and "DIR4-R2 art answers" (user 2026-10-29, all as recommended): AI tactics kept as built; brawler fists beside the jaw and a wider ranger bow, the rest kept (b173b1b6)
+- AGENT_MAP: wind-down 2026-10-29 (release #51 merged; HOOKS1-AI on staging; RULESET1-U slice 1 and DIR4-R2 uncommitted in their worktrees) (501c6e2a)
 
 ## 2026-10-28
 
