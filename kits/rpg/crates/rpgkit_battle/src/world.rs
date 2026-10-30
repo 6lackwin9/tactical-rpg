@@ -78,12 +78,21 @@ impl UnitTactic {
     }
 }
 
-/// HOOKS1 AT2 `brace_after_hit` (rule `ai_tactics`): the units that lost HP to an attack hit this round and last round
-/// (rotated as the round ends; empty in classic; no save key).
+/// HOOKS1 AT2 `brace_after_hit` (rule `ai_tactics`) and RULESET1-AI2 (rule `round_intent`): the units that lost HP to an
+/// attack hit this round and last round, and the units in the Guard intent as last round ended (rotated as the round
+/// ends; empty in classic; no save key).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct HitMemory {
     pub this_round: Vec<UnitId>,
     pub last_round: Vec<UnitId>,
+    pub guarded_last_round: Vec<UnitId>,
+}
+
+impl HitMemory {
+    /// RULESET1-AI2: `c` was in the Guard intent last round and no attack hit took HP from it during that round.
+    pub fn guarded_unhit(&self, c: UnitId) -> bool {
+        self.guarded_last_round.contains(&c) && !self.last_round.contains(&c)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -291,9 +300,15 @@ impl World {
         self.ai_tactics() && self.profiles.get(&c).is_some_and(|p| p.tactics.contains(&t))
     }
 
-    /// AT2 `brace_after_hit`: records the units an action's attack hits took HP from this round (rule on).
+    /// Whether the hit memory is kept: AT2 `brace_after_hit` (rule ai_tactics) or RULESET1-AI2's Guard memory (rule
+    /// round_intent).
+    fn keeps_hits(&self) -> bool {
+        self.ai_tactics() || self.ruleset.has(rpgkit_rules::ruleset::ROUND_INTENT)
+    }
+
+    /// AT2 `brace_after_hit`, RULESET1-AI2: records the units an action's attack hits took HP from this round.
     pub fn note_hits(&mut self, struck: &[crate::trigger::Struck]) {
-        if !self.ai_tactics() {
+        if !self.keeps_hits() {
             return;
         }
         for s in struck.iter().filter(|s| s.damage > 0) {
@@ -303,10 +318,14 @@ impl World {
         }
     }
 
-    /// AT2: the round ends: this round's hits become last round's (rule on).
+    /// AT2, RULESET1-AI2: the round ends: this round's hits become last round's, and the units in the Guard intent now
+    /// are last round's guards.
     pub fn roll_hits(&mut self) {
-        if self.ai_tactics() {
+        if self.keeps_hits() {
             self.hits.last_round = std::mem::take(&mut self.hits.this_round);
+            let guard = crate::round_intent::RoundIntent::Guard;
+            self.hits.guarded_last_round =
+                self.round_states.iter().filter(|(_, r)| r.intent == Some(guard)).map(|(&c, _)| c).collect();
         }
     }
 

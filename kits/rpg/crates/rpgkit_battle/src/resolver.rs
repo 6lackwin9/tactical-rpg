@@ -351,7 +351,7 @@ impl Resolver {
             }
         }
         self.scheduled.clear();
-        // HOOKS1 AT2: this round's hits become last round's (rule ai_tactics; nothing in classic)
+        // HOOKS1 AT2: this round's hits become last round's (rules ai_tactics or round_intent, RULESET1-AI2; nothing in classic)
         w.roll_hits();
         self.current_round += 1;
     }

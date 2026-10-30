@@ -1669,8 +1669,9 @@ fn table(w: &mut World, plan: &mut Plan, c: UnitId, profile: &AiProfile, from: u
             return Choice::Pick(ROW_SUPPORT, p);
         }
     }
-    // 3: hurt, not reckless, a Guard skill usable: Guard self, or the best cover tile in one move against a shooter
-    if on(ROW_GUARD) && ratio <= profile.defend_below && !profile.reckless {
+    // 3: hurt, not reckless, a Guard skill usable: Guard self, or the best cover tile in one move against a shooter;
+    // RULESET1-AI2: not after a round in Guard that no attack hit took HP in (the table goes on down)
+    if on(ROW_GUARD) && ratio <= profile.defend_below && !profile.reckless && !w.hits.guarded_unhit(c) {
         if let Some(p) = guard_pick(w, plan, c) {
             return Choice::Pick(ROW_GUARD, p);
         }
