@@ -374,3 +374,9 @@ in `docs/archive/TASKS_DONE.md`, the user's rulings the rows in `games/emberwake
   cross at a collision, HOLD for a unit that holds firm; overlay group `pushes`) and names them on the strip cards.
   FM1's `when` moved reads, for a forecast, a move landed this round or a Walk or Disengage of the target scheduled
   before the impact.
+- As built (HOOKS1-UI slice 5, done; decision "HOOKS1-UI slice 4 answer"): a forecast is "if it struck now": each
+  planned entry and each target of an area is forecast against the unmoved board (an earlier planned push, another
+  target's push and the enemies' moves before the impact are not applied). The battle screen's intel panel keeps the
+  lines that fit: the Level line gives way first, then it ends with "More on its hover card" (decision "RULESET1-B2
+  tuning and HOOKS1-UI slice 3 answers"). Every HOOKS1-UI addition passes the text audit at 1280 x 720 and the four
+  text sizes.

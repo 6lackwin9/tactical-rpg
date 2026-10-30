@@ -546,6 +546,20 @@ fn the_forecast_is_the_move_the_hit_makes() {
         assert_eq!((f.from, f.to, f.path.len() as i32, f.pull, f.held, f.blocked_by.as_str(), f.blocker), (m.from, m.to, m.tiles, m.pull, m.held, m.blocked_by.as_str(), m.blocker), "{name}");
         assert_eq!(f.to, w.pos(FOE), "{name}");
     }
+    // HOOKS1-UI slice 5 (the slice 4 review): a trap on the path ends the move on its tile (FM6, GH6), forecast and
+    // resolved alike, with no collision
+    let traps = session(timeline(&[FORCED_MOVE, POISE, rpgkit_rules::ruleset::GROUND_HAZARDS]));
+    let mut w = traps.w.clone();
+    let wire = rpgkit_data::HazardDef::from_obj(json!({"id": "t_wire", "name": "Wire", "on": "enter", "affects": "all", "trap": true, "duration": 2}).as_object().unwrap());
+    w.grid.ground.insert(V2::new(6, 4), rpgkit_battle::ground::Placed { def: wire, by: FOE_B, round: 1, last_round: 2 });
+    let mut res = Resolver::new(BLOCKS, 1);
+    let a = book(&mut res, HERO, hit(&w, HERO, FOE, "f_shove"), 1);
+    let fc = forced::forecast(&w, &res.scheduled, HERO, w.pos(HERO), &res.scheduled[a].command, res.scheduled[a].impact, &[FOE]);
+    assert_eq!((fc[0].path.clone(), fc[0].blocked_by.as_str()), (vec![V2::new(6, 4)], ""), "the trap ends the forecast move");
+    run(&mut w, &mut res, 1, 1);
+    let m = &res.scheduled[a].command.pushes[0];
+    assert_eq!((fc[0].to, fc[0].path.len() as i32, fc[0].blocker), (m.to, m.tiles, m.blocker), "trap");
+    assert_eq!(w.pos(FOE), V2::new(6, 4));
     let off = session(timeline(&[POISE]));
     let mut res = Resolver::new(BLOCKS, 1);
     let a = book(&mut res, HERO, hit(&off.w, HERO, FOE, "f_shove"), 1);

@@ -90,3 +90,5 @@ HOOKS1-UI slice 2 (decision "HOOKS1-UI slice 1 answers"): a member's class path 
 HOOKS1-UI slice 3: the host's `skills` reply gains `hp_cost` (the HP a skill costs, priced from the battle's catalog; only when above 0, so classic replies keep their shape).
 
 HOOKS1-UI slice 4: `forced::steps` (the one step rule of every forced move, pure), `forced::preview` (any forced move as it would land now: path, end tile, hold, obstacle and blocker; the world unchanged) and `forced::forecast` (a planned attack's forced moves on its targets, through the same `aim_at` rule `resolve` uses); `ground::trap_at`.
+
+HOOKS1-UI slice 5: the forced-move forecast test adds a trap case (the trap ends the forecast and the resolved move on its tile); no kit API change.
