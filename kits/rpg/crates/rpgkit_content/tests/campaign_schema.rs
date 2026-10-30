@@ -439,3 +439,32 @@ fn the_writer_stores_the_new_fields_and_kinds() {
     }
     drop_scratch(&data);
 }
+
+/// CAMPAIGN1-TW (user 2026-10-27: rule 1, warn): a repeatable trigger with an empty `when` re-arms never, so it fires
+/// only once; the check warns (it is not an error) and points at meter inputs. A `when` or `once` true (the default)
+/// clears it.
+#[test]
+fn a_repeatable_trigger_without_when_is_a_warning() {
+    let data = campaign_world("tw");
+    let repeatable = |data: &Path| -> Vec<String> {
+        let v = store::view(data);
+        check::world::world_warnings(&v, W).into_iter().filter(|w| w.contains("repeatable trigger")).collect()
+    };
+    let raid = triggers()[2].clone();
+    assert!(!json::b(json::dict(&raid), "once", true), "the fixture: t_raid is repeatable");
+    assert!(json::arr(json::get(json::dict(&raid), "when")).is_empty(), "the fixture: t_raid has no when");
+    let found = repeatable(&data);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].starts_with(&format!("{W}:t_raid:")) && found[0].contains("fires only once") && found[0].contains("meter's inputs"), "{found:?}");
+    let v = store::view(&data);
+    assert!(errors_of(&v, "triggers", &raid).is_empty(), "a warning, not an error");
+    let mut rows = triggers();
+    rows[2] = with(&raid, &["when"], json!([{"key": "ward.raid_open"}]));
+    write_kind(&data, "triggers", rows);
+    assert!(repeatable(&data).is_empty(), "a when clears it");
+    let mut rows = triggers();
+    rows[2] = without(&raid, "once");
+    write_kind(&data, "triggers", rows);
+    assert!(repeatable(&data).is_empty(), "once (default true) clears it");
+    drop_scratch(&data);
+}

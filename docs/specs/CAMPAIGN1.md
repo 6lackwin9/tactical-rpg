@@ -301,3 +301,12 @@ Save: version 13 (or the next free number; sequence with ROSTER1, RULESET1-D, EN
   plain card: "The run is over", the end's `text`, the three buttons. Act 0 has no act-start save (Load the act's start
   stays off and says why).
 - F5: the act-start save is not written in a debug or sample game, as the autosave.
+
+## As built (CAMPAIGN1-TW, 2026-10-31)
+
+- T1 (user 2026-10-27: rule 1, warn): a repeatable trigger (`once` false) with an empty `when` re-arms never (an empty
+  `when` always holds), so it fires only once; the content check warns, not errors
+  (`rpgkit_content::check::campaign::trigger_warning`, in the world warnings), and the text points at a meter's
+  `inputs` for every-battle or every-day effects. No runtime change.
+- Tests: a damaged `campaign.armed` (not a list of text, an empty id, an id listed twice) is refused on load; the
+  `preview_battle` loss includes the defeat retreat's days (a deadline the retreat's day misses lists `lost`).

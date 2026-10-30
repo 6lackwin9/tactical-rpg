@@ -184,9 +184,10 @@ pub fn manifest_errors(v: &View, w: &str, m: &Dict) -> Vec<String> {
     errors
 }
 
-/// The soft problems of world `w`'s campaign data: purse and HUD icons that no asset layer holds.
+/// The soft problems of world `w`'s campaign data: repeatable triggers with no `when` (CAMPAIGN1-TW), purse and HUD
+/// icons that no asset layer holds.
 pub fn warnings(v: &View, w: &str) -> Vec<String> {
-    let mut out = Vec::new();
+    let mut out: Vec<String> = v.worlds.own_entries(w, "triggers").into_iter().filter_map(trigger_warning).collect();
     if v.assets.roots.is_empty() {
         return out;
     }
@@ -510,6 +511,19 @@ pub fn trigger_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors.extend(effects_errors(v, w, effects, "Effects"));
     errors.extend(then_errors(v, w, then, "Then"));
     errors
+}
+
+/// CAMPAIGN1-TW (user 2026-10-27: rule 1, warn): a repeatable trigger (`once` false) re-arms only when its `when`
+/// stops holding; an empty `when` always holds, so it fires only once. Every-battle or every-day effects belong to a
+/// meter's `inputs`.
+pub fn trigger_warning(e: &Dict) -> Option<String> {
+    if json::b(e, "once", true) || !json::arr(json::get(e, "when")).is_empty() {
+        return None;
+    }
+    Some(format!(
+        "{}: a repeatable trigger (once false) with an empty when fires only once (it re-arms only when its when stops holding); put every-battle or every-day effects in a meter's inputs instead.",
+        json::s(e, "_qid")
+    ))
 }
 
 /// T2: a `then` list: items with exactly one of `vignette` (a STORYUI1 vignette), `battle` (an encounter), `dialogue`

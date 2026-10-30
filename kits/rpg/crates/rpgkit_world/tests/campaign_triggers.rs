@@ -51,11 +51,19 @@ fn meters() -> Value {
 /// place), `a` and `b` on a line of 1-day routes, the encounters `enc_x` and `enc_loud` (tagged loud), Clerk and the
 /// dialogue `scene`, the meters above, and the given trigger and checkpoint rows.
 fn data(campaign: bool, triggers: Value, checkpoints: Value) -> Data {
+    data_with(campaign, triggers, checkpoints, json!({}))
+}
+
+/// `data` with the manifest's `defeat` block (R4) set to `defeat` (`{}` = today's rule).
+fn data_with(campaign: bool, triggers: Value, checkpoints: Value, defeat: Value) -> Data {
     let w = "w";
     let mut manifest = json!({"id": w, "start_location": "hub", "start_party": ["hero"],
                               "rest": {"days": 1, "cost": 0, "where": "rest_places", "on_enter": false, "needs_upkeep": false}});
     if campaign {
         manifest["campaign"] = json!({"start_act": 1});
+    }
+    if defeat.as_object().is_some_and(|d| !d.is_empty()) {
+        manifest["defeat"] = defeat;
     }
     let worlds = json!({
         w: {"manifest": manifest, "own": {
@@ -335,6 +343,53 @@ fn preview_days_lists_a_missed_end_run_deadline() {
     let classic = data(false, json!([]), json!([]));
     let gs = state(&classic);
     assert!(campaign::preview_days(&classic, &gs, 99).is_empty() && campaign::preview_battle(&classic, &gs, "enc_loud").is_empty());
+}
+
+#[test]
+fn preview_battle_lost_includes_the_retreat_days() {
+    let retreat_days = 1;
+    let cp = json!([{"id": "cp", "name": "The Job", "act": 1, "met_when": [{"key": "job_done"}], "deadline": DEADLINE, "mode": "end_run", "card": "bad_end_cp"}]);
+    let d = data_with(true, json!([]), cp, json!({"mode": "retreat", "to": "hub", "days": retreat_days}));
+    let mut gs = state(&d);
+    // on the deadline day (campaign.day = time + 1, as preview_days above): in time until a day passes
+    gs.time = DEADLINE - 1;
+    gs.campaign.as_mut().unwrap().sync(gs.time);
+    assert!(campaign::preview_days(&d, &gs, 0).is_empty() && !campaign::preview_days(&d, &gs, retreat_days).is_empty(), "the fixture");
+    let before = gs.clone();
+    let ends = dicts(&campaign::preview_battle(&d, &gs, "enc_x"));
+    assert_eq!((field(&ends, "case"), field(&ends, "card")), (vec!["lost".to_string()], vec!["bad_end_cp".to_string()]), "only a loss retreats; its days miss the deadline");
+    assert_eq!(gs, before, "the state is untouched");
+    // a day earlier the retreat's day lands on the deadline day: in time
+    gs.time = DEADLINE - 1 - retreat_days;
+    gs.campaign.as_mut().unwrap().sync(gs.time);
+    assert!(campaign::preview_battle(&d, &gs, "enc_x").is_empty());
+}
+
+// ---- the save (11.5) ----
+
+#[test]
+fn a_damaged_armed_list_is_refused_on_load() {
+    let hot = json!([{"key": "hot", "value": true}]);
+    let d = data(true, json!([{"id": "t_again", "on": "day", "once": false, "when": hot, "effects": [{"effect": "add_flag", "key": "n", "delta": 1}]}]), json!([]));
+    let mut gs = state(&d);
+    gs.set_flag("hot", json!(true));
+    day_tick(&d, &mut gs);
+    assert_eq!(gs.campaign.as_ref().unwrap().armed, ["t_again"], "the fixture: one armed trigger");
+    let text_of = |v: &Value| json!({"format": save::FORMAT, "version": save::VERSION, "saved_at": 1, "game_state": v}).to_string();
+    let good = gs.to_value();
+    assert_eq!(save::decode(&d, &text_of(&good)).expect("the sound save loads").state, gs);
+    let cases: Vec<(&str, Value, &str)> = vec![
+        ("not a list", json!("t_again"), "campaign.armed must be a list of text."),
+        ("a number in the list", json!(["t_again", 3]), "campaign.armed must be a list of text."),
+        ("an empty id", json!([""]), "campaign.armed: '' must be a trigger id, listed once."),
+        ("an id listed twice", json!(["t_again", "t_again"]), "campaign.armed: 't_again' must be a trigger id, listed once."),
+    ];
+    for (tag, armed, want) in cases {
+        let mut v = good.clone();
+        v["campaign"]["armed"] = armed;
+        let errors = save::decode(&d, &text_of(&v)).err().unwrap_or_else(|| panic!("{tag}: refused"));
+        assert_eq!(errors, vec![want.to_string()], "{tag}");
+    }
 }
 
 // ---- a rest inside a tick (CAMPAIGN1-C edge case) ----
