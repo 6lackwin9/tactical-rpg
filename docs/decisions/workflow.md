@@ -86,3 +86,4 @@ Settled; do not re-litigate without asking the user. Scope: milestone planning, 
 - "Twice-daily releases (user 2026-10-17)": "each release still triggers the web deploy" is paused by "Web deploy paused (user 2026-10-17)".
 
 See also balance.md "Small answers (user 2026-10-17)" for the CLN-15 placeholder-art answer.
+| Engine scope: a rule library (user 2026-10-31) | The engine and kit do not go deep into mechanics that are game-specific; they capture different rule options as a rule library that speeds up building the core game. A custom option for adding one's own rules is on hold: once the full game is done and its rules are in the library, decide what becomes customizable and what must stay fixed so dependent systems do not break. The point where work turns mostly to content is after M2's code, M2b's code rows and INPUT1 (the reorder that pulls M2b's code up was offered, not chosen). | Keeps engine work reusable without designing for unknown games. |
