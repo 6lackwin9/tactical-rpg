@@ -310,3 +310,29 @@ Save: version 13 (or the next free number; sequence with ROSTER1, RULESET1-D, EN
   `inputs` for every-battle or every-day effects. No runtime change.
 - Tests: a damaged `campaign.armed` (not a list of text, an empty id, an id listed twice) is refused on load; the
   `preview_battle` loss includes the defeat retreat's days (a deadline the retreat's day misses lists `lost`).
+
+## As built (CAMPAIGN1-U slice 2, 2026-10-31)
+
+- T2: the maps play `campaign.pending` when nothing is open, after the notices: the leading `{vignette}` items join the
+  story queue (`story::pull_pending`) and play first; then a `{battle}` head leaves the queue and starts as source
+  `trigger` (`Fight: <name>!`); it cannot be refused, so one an outcome of which would end the run gets the notice
+  over it (W3); it settles through `trigger::after_fight`. A `{dialogue}` head opens as the region map's conversation
+  (`DialogueRunner::open_scene`, `You speak with <speaker>.`); the world map has no talk box, so the item (and every
+  item behind it) waits there until the region map shows. A scene that cannot open is dropped, its reason in the log.
+  A running story sequence goes first; the stage does not play the campaign queue.
+- P3, W6: the bridge reads `purse::battle_mods` before the session starts and lowers each party member's round-1 AP
+  after the round's start (not below 0; guests and enemies keep theirs), so the round's start snapshot is retaken; the
+  note ("No Warded Tallow: -2 AP") is logged once and ends the battle's opening message.
+- R3, W3: a dialogue reply whose effects hold `rest` asks first (No as the default) when the rest is allowed and its
+  `days` would end the run (`preview_days`); No leaves the talk open; the kit's `DialogueRunner::choice_effects` reads
+  the reply's effects without picking it.
+- P1: log lines and tips use the purse's short names ("-1 Tallow", "12 Scrap"); the kit's default names keep today's
+  lower-case words, so the Ashlands lines and "Make camp (3 supplies)" are unchanged. The Camp button shows the rest
+  rule's `cost`, its tip the rest's days. `Out of <upkeep>: the roads were more dangerous.` only when zero upkeep
+  raises the road chance (`at_zero.road_pct` above 100), else `Out of <upkeep>.`. A retreat logs
+  `Defeated. The party falls back to <hub> (n days, -n <upkeep>).`; a `retreat_failed` event logs its text. The results popup's reward lines
+  ("Gold +12") still say Gold (open).
+- W5: the Travel tip (and a node's trip line) gives the trip in days in a campaign world, then "Arrive on day 9, 34
+  days left." (the first running visible countdown by HUD order; without one only the day). A node's tip lists its
+  `deadlines` lines ("Checkpoint: by day 14") in Arterial Red. The board pane does not exist yet: its `deadline` line
+  is STORYUI1-U2's.

@@ -528,6 +528,18 @@ impl DialogueRunner {
         self.pending.is_some()
     }
 
+    /// CAMPAIGN1 W3: the effects of choice `index` as the player sees the choices (`view`'s order); empty for no such
+    /// choice or a locked one. Read-only: the game asks before a choice whose `rest` would end the run.
+    pub fn choice_effects(&self, d: &Data, gs: &GameState, index: i64) -> Vec<Dict> {
+        if self.closed || index < 0 {
+            return Vec::new();
+        }
+        match self.visible(d, gs).get(index as usize) {
+            Some((c, false)) => effects_of(c),
+            _ => Vec::new(),
+        }
+    }
+
     /// {speaker, speaker_name, node, text, choices: [{text, locked, reason, service}], end, next, shop, pending,
     /// faction, faction_name, band}, plus `board` while a board pane is open (STORYUI1 B3).
     pub fn view(&self, d: &Data, gs: &GameState) -> Dict {

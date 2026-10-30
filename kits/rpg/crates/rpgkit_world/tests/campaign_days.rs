@@ -444,6 +444,11 @@ fn the_rest_effect_rests_and_its_days_tick_after_the_list() {
     let mut gs = state(&d, 0);
     hurt(&mut gs);
     let mut talk = DialogueRunner::open(&d, &mut gs, "clerk");
+    // CAMPAIGN1-U W3: the game reads a reply's effects before picking it (the ask before a rest that would end the run)
+    let fx = talk.choice_effects(&d, &gs, 0);
+    assert_eq!(fx.iter().map(|e| json::s(e, "effect")).collect::<Vec<_>>(), ["rest"]);
+    assert!(talk.choice_effects(&d, &gs, 1).is_empty() && talk.choice_effects(&d, &gs, -1).is_empty(), "no such reply: none");
+    assert_eq!((gs.party.members[0].hp_lost, gs.time), (HURT, 0), "reading changes nothing");
     let res = talk.choose(&d, &mut gs, 0);
     assert!(json::b(&res, "ok", false), "needs_upkeep false: rests at 0 upkeep: {res:?}");
     assert_eq!((gs.party.members[0].hp_lost, gs.time, value(&gs, "days")), (0, 1, 1));

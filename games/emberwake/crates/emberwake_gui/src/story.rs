@@ -80,7 +80,9 @@ fn play_queued(cx: &mut Cx) -> Option<Option<String>> {
 
 /// A map screen's tick with nothing of its own open (no conversation, shop, board or page; its popups are screens over
 /// it, so it does not tick under them): a running sequence takes over (the story stage), else the oldest queued
-/// vignette plays (W2). True when the map handed over.
+/// vignette plays (W2). CAMPAIGN1 T2: the campaign queue's leading vignettes join the story queue first
+/// (`story::pull_pending`); once the vignettes played, a queued battle starts (`runover::play_pending_fight`; a queued
+/// dialogue is the region map's). True when the map handed over.
 pub fn map_tick(cx: &mut Cx) -> bool {
     if !cx.has_game() || cx.busy() || !cx.nav.is_empty() {
         return false;
@@ -90,7 +92,9 @@ pub fn map_tick(cx: &mut Cx) -> bool {
         cx.nav.push(Nav::Reset(Box::new(stage)));
         return true;
     }
-    play_queued(cx).is_some()
+    let d = cx.data.clone();
+    story::pull_pending(&d, cx.gs_mut());
+    play_queued(cx).is_some() || crate::runover::play_pending_fight(cx)
 }
 
 /// Logs the notes of a story result (effects, "Try again.") and takes its campaign events (CAMPAIGN1 W1).

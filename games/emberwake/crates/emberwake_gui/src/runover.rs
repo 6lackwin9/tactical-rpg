@@ -2,7 +2,8 @@
 //! events of every action's result (`take`: a log line each, a notice for each warning, the act-start save), the
 //! notices the map screens show one by one when nothing else is open (`map_tick`), the run-over screen that replaces
 //! every other screen once the run is over (the card, then Load the act's start, Load a save, Main menu), and the asks
-//! before a step that would end the run (`fight_ask`, `days_ask`; No is the default). The rules are the kit's
+//! before a step that would end the run (`fight_ask`, `days_ask`; No is the default); slice 2: the campaign queue's
+//! battle and dialogue heads (`play_pending_fight`, `pending_talk`; T2). The rules are the kit's
 //! (`emberwake_world::campaign`); this module only shows them. Story-free: every text it shows beyond its own button
 //! labels comes from the data.
 
@@ -12,6 +13,8 @@ use aegis_core::json::{self, s, Dict};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, FOE, H, HEAD, TEXT, TITLE, W};
 use aegis_ui::widget_plumbing;
+use emberwake_world::campaign::trigger;
+use emberwake_world::dialogue::DialogueRunner;
 use emberwake_world::{campaign, save};
 use serde_json::{json, Value};
 
@@ -25,6 +28,8 @@ const PAD: i32 = 10;
 /// The answer tags of the asks the world map takes back (`Cx::ask_tag_no`).
 pub const ASK_TRIP: &str = "campaign.trip";
 pub const ASK_REST: &str = "campaign.rest";
+/// The answer tag of the ask before a dialogue choice whose `rest` would end the run (the region map takes it back).
+pub const ASK_TALK_REST: &str = "campaign.talk_rest";
 
 /// Whether the game in play's run is over (F1).
 pub fn is_over(cx: &Cx) -> bool {
@@ -56,7 +61,7 @@ fn checkpoint_name(cx: &Cx, e: &Dict) -> String {
 }
 
 /// "1 day" or "n days".
-fn days(n: i64) -> String {
+pub fn days(n: i64) -> String {
     if n == 1 {
         "1 day".into()
     } else {
@@ -164,6 +169,41 @@ pub fn map_tick(cx: &mut Cx) -> bool {
         }
     }
     false
+}
+
+/// T2: the campaign queue's head when it is a `{battle}` item and nothing is open: the item leaves the queue and the
+/// battle starts as source `trigger` ("Fight: <name>!"; a queued battle cannot be refused, so one that could end the
+/// run gets the notice, W3). True when it started (or its start failed and said why).
+pub fn play_pending_fight(cx: &mut Cx) -> bool {
+    if !cx.has_game() || cx.busy() || !cx.nav.is_empty() {
+        return false;
+    }
+    let d = cx.data.clone();
+    let Some(fight) = trigger::fight(&d, cx.gs()) else { return false };
+    campaign::pop_pending(cx.gs_mut());
+    crate::region::fight_now(cx, &fight, trigger::FIGHT_SOURCE);
+    warn_fight(cx, &s(&fight, "encounter"));
+    true
+}
+
+/// T2: the campaign queue's head when it is a `{dialogue, speaker}` item: the item leaves the queue and its scene opens
+/// (`DialogueRunner::open_scene`); None for another head, or when the scene cannot open (its reason goes to the log).
+/// The region map shows the talk; the world map leaves the item for it.
+pub fn pending_talk(cx: &mut Cx) -> Option<DialogueRunner> {
+    let item = campaign::pending_head(cx.gs()).filter(|item| item.contains_key("dialogue"))?.clone();
+    campaign::pop_pending(cx.gs_mut());
+    let d = cx.data.clone();
+    let r = DialogueRunner::open_scene(&d, cx.gs_mut(), &s(&item, "dialogue"), &s(&item, "speaker"));
+    if r.closed {
+        for e in &r.errors {
+            cx.log(e.clone());
+        }
+        return None;
+    }
+    if !r.character_name.is_empty() {
+        cx.log(format!("You speak with {}.", r.character_name));
+    }
+    Some(r)
 }
 
 /// "won" -> "Winning", "lost" -> "Losing", "fled" -> "Fleeing".
@@ -492,8 +532,11 @@ impl Screen<GameCx> for RunOverScreen {
 
 /// CAMPAIGN1-U tests (CAMPAIGN1_TASKS 1, U rows; W1, W3, W4, F3-F5) on a scratch campaign world `camp` (Scrap and
 /// Warded Tallow; Alert, a gauge that rises 31 a day and ends the run at 100; the Red Tithing, a countdown with a
-/// warning at 7 days that ends the run at 0; the hub and one node a day away; a loud fight that raises Alert 10 on a
-/// win; the end's card as a vignette). Expectations follow from the rules and the fixture's own numbers.
+/// warning at 7 days that ends the run at 0; the hub and one node a day away; a loud fight at node A that raises Alert
+/// 10 on a win; the end's card as a vignette; Camp and the Keeper's "Rest a day." cost a day and 1 Tallow; zero Tallow
+/// costs 2 AP; the quest `job` (that fight) with a checkpoint on day 60 that goes on when missed). Expectations follow
+/// from the rules and the fixture's own numbers. Slice 2: the campaign queue, the rest ask, the purse words, the
+/// Travel tip's day, the map's deadlines and the start-AP change.
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -509,6 +552,8 @@ pub(crate) mod tests {
     const BREACH: i64 = 100;
     const WEEK: i64 = 7;
     const END_TEXT: &str = "The tithing came for the cell.";
+    const START_AP: i64 = -2;
+    const DEADLINE: i64 = 60;
 
     fn with_ids(w: &str, rows: Value) -> Value {
         let rows = json::arr(&rows)
@@ -540,19 +585,23 @@ pub(crate) mod tests {
              "rules": [{"id": "week", "at": WEEK, "warn": "Seven days to the Red Tithing."},
                        {"id": "zero", "at": 0, "effects": [{"effect": "end", "kind": "fail", "card": "the_end", "text": END_TEXT}]}]}
         ]);
-        let purse = json!({"currency": {"name": "Scrap", "tip": "Salvaged iron."}, "upkeep": {"name": "Warded Tallow", "short": "Tallow", "tip": "1 a day."}});
+        let purse = json!({"currency": {"name": "Scrap", "tip": "Salvaged iron."}, "upkeep": {"name": "Warded Tallow", "short": "Tallow", "tip": "1 a day.", "at_zero": {"road_pct": 100, "start_ap": START_AP}}});
         let worlds = json!({
             w: {"manifest": {"id": w, "name": "Camp", "start_location": "hub", "start_party": ["hero"], "campaign": {"start_act": 1}, "purse": purse,
                              "rest": {"days": 1, "cost": 1, "where": "nodes", "on_enter": false, "needs_upkeep": false}}, "own": {
                 "locations": with_ids(w, json!([{"id": "hub", "name": "Hub", "rest": true, "map": "yard",
                                                   "markers": [{"id": "m_job", "kind": "encounter", "encounter": "loud_job", "anchor": "job"}]},
                                                  {"id": "a", "name": "Node A"}])),
-                "characters": with_ids(w, json!([{"id": "clerk", "name": "Clerk", "role": "npc", "dialogue": "talk"}])),
+                "characters": with_ids(w, json!([{"id": "clerk", "name": "Clerk", "role": "npc", "dialogue": "talk"}, {"id": "keeper", "name": "Keeper", "role": "npc", "dialogue": "bunk"}])),
                 "dialogues": with_ids(w, json!([{"id": "talk", "start": "n", "services": false, "nodes": [{"id": "n", "text": "A loud job?", "choices": [
-                    {"text": "Take it.", "effects": [{"effect": "set_flag", "key": "took_job", "value": true}, {"effect": "fight", "encounter": "loud_job"}]}]}]}])),
+                    {"text": "Take it.", "effects": [{"effect": "set_flag", "key": "took_job", "value": true}, {"effect": "fight", "encounter": "loud_job"}]}]}]},
+                    {"id": "bunk", "start": "n", "services": false, "nodes": [{"id": "n", "text": "Sleep?", "choices": [{"text": "Rest a day.", "effects": [{"effect": "rest"}]}]}]}])),
                 "routes": with_ids(w, json!([{"id": "r_a", "from": "hub", "to": "a", "time": 1}])),
-                "encounters": with_ids(w, json!([{"id": "loud_job", "name": "Loud Job", "tags": ["loud"], "enemies": []}])),
-                "vignettes": with_ids(w, json!([{"id": "the_end", "name": "The end", "cards": [{"style": "title", "title": "Extinguished", "subtitle": "The end"}]}])),
+                "encounters": with_ids(w, json!([{"id": "loud_job", "name": "Loud Job", "tags": ["loud"], "location": "a", "enemies": []}])),
+                "vignettes": with_ids(w, json!([{"id": "the_end", "name": "The end", "cards": [{"style": "title", "title": "Extinguished", "subtitle": "The end"}]},
+                                                {"id": "news", "name": "News", "cards": [{"style": "title", "title": "News"}]}])),
+                "quests": with_ids(w, json!([{"id": "job", "name": "The Job", "template": "clear_site", "steps": [{"text": "Clear A", "encounter": "loud_job"}]}])),
+                "checkpoints": with_ids(w, json!([{"id": "cp", "name": "The Job", "act": 1, "quest": "job", "deadline": DEADLINE, "warn_days": [], "mode": "go_on"}])),
                 "meters": with_ids(w, meters)
             }}
         });
@@ -560,8 +609,9 @@ pub(crate) mod tests {
             "classes": [{"id": "fighter", "name": "Fighter"}],
             "units": [{"id": "hero", "name": "Hero", "side": "party", "class_id": "fighter", "level": 1}]
         });
-        // the hub's map: the spawn, and the job's marker one step to the right
-        let game = json!({"maps": [{"id": "yard", "rows": ["#####", "#...#", "#####"], "anchors": [{"id": "spawn", "x": 1, "y": 1}, {"id": "job", "x": 2, "y": 1}]}]});
+        // the quest template of `job`; the hub's map: the spawn, and the job's marker one step to the right
+        let game = json!({"quests": [{"id": "clear_site", "objectives": [{"kind": "win_encounter"}], "rewards": {}}],
+                          "maps": [{"id": "yard", "rows": ["#####", "#...#", "#####"], "anchors": [{"id": "spawn", "x": 1, "y": 1}, {"id": "job", "x": 2, "y": 1}]}]});
         Data::from_values(&catalog, &worlds, &game)
     }
 
@@ -840,5 +890,190 @@ pub(crate) mod tests {
         frame(&mut over, &mut cx, &mut gfx(), 1.0);
         let rows: Vec<i64> = over.widgets().iter().map(|w| rect(w).1).collect();
         assert!(rows.len() == 3 && rows.iter().all(|y| *y == rows[0]), "{rows:?}");
+    }
+
+    // ---- slice 2 ----
+
+    fn items(rows: Value) -> Vec<Dict> {
+        json::arr(&rows).iter().map(|v| json::dict(v).clone()).collect()
+    }
+
+    /// T2: the region map plays the campaign queue head first when nothing is open: a `{vignette}` through the story
+    /// queue, then a `{battle}` as source `trigger` (it settles like a dialogue fight: the loud win's Alert input), then
+    /// a `{dialogue}` scene as the conversation with its speaker; each item leaves the queue as it starts.
+    #[test]
+    fn the_region_map_plays_the_campaign_queue_head_first() {
+        let mut cx = camp_cx(0, 30);
+        let mut map = crate::region::RegionMap::new(&mut cx);
+        cx.nav.clear();
+        cx.gs_mut().campaign.as_mut().unwrap().pending = items(json!([{"vignette": "news"}, {"battle": "loud_job"}, {"dialogue": "bunk", "speaker": "keeper"}]));
+        map.tick(&mut cx);
+        let (how, v) = take_nav(&mut cx);
+        assert_eq!((how, v.id(), v.state(&cx)["reel"].clone()), ("push", "vignette", json!("camp:news")));
+        assert_eq!(campaign::pending_head(cx.gs()).map(|h| s(h, "battle")), Some("loud_job".to_string()), "the vignette left the queue");
+        // the reel ended: off the story queue
+        emberwake_world::story::vignette_done(cx.gs_mut(), "camp:news");
+        map.tick(&mut cx);
+        let (how, f) = take_nav(&mut cx);
+        let st = f.state(&cx);
+        assert_eq!((how, f.id(), st["source"].clone(), st["encounter"].clone()), ("push", "debug_fight", json!(trigger::FIGHT_SOURCE), json!("camp:loud_job")));
+        assert!(cx.nav.is_empty(), "no outcome would end the run: no notice");
+        assert!(cx.log.iter().any(|l| l == "Fight: Loud Job!"));
+        assert_eq!(campaign::pending_head(cx.gs()).map(|h| s(h, "dialogue")), Some("bunk".to_string()), "the battle left the queue");
+        let d = cx.data.clone();
+        let fight = json::dict(&st).clone();
+        let res = crate::battle::after_fight(&d, cx.gs_mut(), trigger::FIGHT_SOURCE, &fight, "won", None);
+        assert!(json::b(&res, "ok", false), "{res:?}");
+        assert_eq!(cx.gs().campaign.as_ref().unwrap().value("alert", cx.gs().time), LOUD_WON, "settled as a battle: the loud win's input");
+        map.tick(&mut cx);
+        assert!(cx.nav.is_empty() && cx.busy(), "the scene opens as the conversation");
+        let talk = map.state(&cx)["dialogue"].clone();
+        assert_eq!((talk["text"].clone(), talk["speaker_name"].clone()), (json!("Sleep?"), json!("Keeper")));
+        assert!(cx.log.iter().any(|l| l == "You speak with Keeper."));
+        assert!(campaign::pending_head(cx.gs()).is_none());
+    }
+
+    /// T2, W3: a queued battle cannot be refused; when an outcome would end the run it starts with the notice over it.
+    /// The world map plays a queued battle too but leaves a queued dialogue for the region map.
+    #[test]
+    fn a_queued_battle_that_could_end_the_run_gets_the_notice_and_the_world_map_leaves_talks() {
+        let mut cx = camp_cx(BREACH - LOUD_WON / 2, 30);
+        let mut wm = crate::worldmap::WorldMap::new();
+        cx.gs_mut().campaign.as_mut().unwrap().pending = items(json!([{"battle": "loud_job"}, {"dialogue": "bunk", "speaker": "keeper"}]));
+        wm.tick(&mut cx);
+        let (_, notice) = take_nav(&mut cx);
+        assert_eq!((notice.id(), notice.state(&cx)["title"].clone()), ("campaign_notice", json!(FIGHT_WARNING)));
+        assert_eq!(notice.state(&cx)["text"], json!(fight_warning(&cx, "loud_job").unwrap()));
+        assert_eq!(take_nav(&mut cx).1.id(), "debug_fight", "the battle under the notice");
+        wm.tick(&mut cx);
+        assert!(cx.nav.is_empty(), "the world map has no talk box: the scene waits");
+        assert_eq!(campaign::pending_head(cx.gs()).map(|h| s(h, "dialogue")), Some("bunk".to_string()));
+    }
+
+    /// W3, R3: a reply that rests (the `rest` effect) asks first, No as the default, when the rest's day would end the
+    /// run: nothing rests before the answer and the talk stays open; Yes rests (the run ends). With days to spare the
+    /// reply rests at once.
+    #[test]
+    fn a_reply_whose_rest_would_end_the_run_asks_first() {
+        let mut cx = camp_cx(0, 1);
+        cx.gs_mut().party.members[0].hp_lost = 3;
+        let mut map = crate::region::RegionMap::new(&mut cx);
+        cx.nav.clear();
+        map.talk(&mut cx, "keeper");
+        let time = cx.gs().time;
+        map.key(&mut cx, Key::Char('1'));
+        let (how, ask) = take_nav(&mut cx);
+        let st = ask.state(&cx);
+        assert_eq!((how, ask.id(), st["default"].clone()), ("push", "ask", json!("no")));
+        assert_eq!(st["question"], json!(format!("Resting would end the run: {END_TEXT} Rest anyway?")));
+        assert_eq!((cx.gs().time, cx.gs().party.members[0].hp_lost), (time, 3), "nothing rested before the answer");
+        assert!(!map.state(&cx)["dialogue"].is_null(), "the talk stays open");
+        cx.answers.push(ASK_TALK_REST.to_string());
+        map.tick(&mut cx);
+        let days = campaign::purse::rest_rule(&cx.data, "camp").days as i64;
+        assert_eq!(cx.gs().time, time + days, "Yes: the rest");
+        assert!(is_over(&cx));
+        let mut cx = camp_cx(0, 30);
+        cx.gs_mut().party.members[0].hp_lost = 3;
+        let mut map = crate::region::RegionMap::new(&mut cx);
+        cx.nav.clear();
+        map.talk(&mut cx, "keeper");
+        let time = cx.gs().time;
+        map.key(&mut cx, Key::Char('1'));
+        assert!(cx.nav.is_empty(), "no ask");
+        assert_eq!((cx.gs().time, cx.gs().party.members[0].hp_lost), (time + days, 0), "rested at once");
+    }
+
+    /// P1: the purse words of log lines and tips: the camp world's short names; a world without a purse keeps today's
+    /// "gold" and "supplies", and its Camp costs today's 3.
+    #[test]
+    fn purse_words_take_the_worlds_names_and_keep_todays() {
+        let d = data();
+        use crate::hud::{purse_word_in, PurseWord};
+        assert_eq!((purse_word_in(&d, "camp", PurseWord::Currency), purse_word_in(&d, "camp", PurseWord::Upkeep)), ("Scrap".to_string(), "Tallow".to_string()));
+        assert_eq!((purse_word_in(&d, "", PurseWord::Currency), purse_word_in(&d, "", PurseWord::Upkeep)), ("gold".to_string(), "supplies".to_string()));
+        assert_eq!(campaign::purse::rest_rule(&d, "").cost as i64, emberwake_world::progression::CAMP_COST, "the Ashlands Camp reads 'Make camp (3 supplies)'");
+        // a camp's log line names the upkeep and the day
+        let mut cx = camp_cx(0, 30);
+        crate::region::log_events(&mut cx, &[json!({"kind": "camped", "spent": 1, "restored": 4, "days": 1})]);
+        assert_eq!(cx.log.last().map(String::as_str), Some("The party makes camp (-1 Tallow, +4 HP, 1 day)."));
+        crate::region::log_events(&mut cx, &[json!({"kind": "defeat", "mode": "retreat", "spent": 2, "days": 2, "location": "camp:hub"})]);
+        assert_eq!(cx.log.last().map(String::as_str), Some("Defeated. The party falls back to Hub (2 days, -2 Tallow)."));
+    }
+
+    /// P1, R1, W5, B10: the world map's Camp names the rest's cost in the upkeep's name and its day; the Travel tip
+    /// gives the trip in days and upkeep, the arrival day and the Red Tithing's days left then; node A's tip carries the
+    /// checkpoint line of the quest whose node it is.
+    #[test]
+    fn the_world_map_names_the_upkeep_the_arrival_day_and_the_deadlines() {
+        let mut cx = camp_cx(0, 30);
+        let mut g = gfx();
+        let mut wm = crate::worldmap::WorldMap::new();
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let rule = campaign::purse::rest_rule(&cx.data, "camp");
+        let camp = wm.widgets().into_iter().find(|w| w["id"] == "world_map.camp").expect("Camp");
+        assert_eq!(camp["text"], json!(format!("Make camp ({} Tallow)", rule.cost)));
+        let (_, node_tip) = wm.widget_rect("node.camp.a").expect("node A");
+        assert!(node_tip.contains(&emberwake_world::board::checkpoint_text(DEADLINE)), "{node_tip:?}");
+        let (_, hub_tip) = wm.widget_rect("node.camp.hub").expect("the hub");
+        assert!(!hub_tip.iter().any(|l| l.starts_with("Checkpoint")), "{hub_tip:?}");
+        wm.click_id(&mut cx, "node.camp.a").expect("node a");
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let gs = cx.gs().clone();
+        let trip = emberwake_world::travel::trip(&cx.data, &gs, &gs.location_id, "camp:a");
+        let time = json::i(&trip, "time", 0);
+        let (_, travel_tip) = wm.widget_rect("world_map.travel").expect("Travel");
+        let want = format!("{}, {} Tallow. Roads can be ambushed. Arrive on day {}, {} left.", days(time), json::i(&trip, "supplies", 0), gs.time + time + 1, days(30 - time));
+        assert!(travel_tip.iter().any(|l| l.contains(&want)) || travel_tip.join(" ").contains(&want), "{travel_tip:?} wants {want}");
+        let mut cx = camp_cx(0, 30);
+        cx.gs_mut().party.members[0].hp_lost = 3;
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let (_, camp_tip) = wm.widget_rect("world_map.camp").expect("Camp");
+        assert!(camp_tip.join(" ").contains(&format!("Takes {}.", days(rule.days as i64))), "{camp_tip:?}");
+    }
+
+    /// P3, W6: the battle bridge's start-AP change lowers each party unit's round-1 AP by the mods' `start_ap` (never
+    /// below 0) and leaves guests and enemies alone; the round's start snapshot shows it; no mods change nothing.
+    #[test]
+    fn the_start_ap_change_lowers_the_party_ap_not_below_zero() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        cx.app.encounter = "goblin_ambush".into();
+        cx.app.seed = Some(1);
+        let mut b = crate::battle::BattleScreen::sandbox(&cx);
+        let s = b.host.session.as_mut().expect("the ambush starts");
+        let heroes = s.w.allies.len() - s.guests.len();
+        let before: Vec<i32> = s.w.units.iter().map(|u| u.ap).collect();
+        crate::battle::lower_start_ap(s, heroes, &campaign::purse::BattleMods::default());
+        assert_eq!(s.w.units.iter().map(|u| u.ap).collect::<Vec<_>>(), before, "no mods: no change");
+        let mods = campaign::purse::BattleMods { start_ap: START_AP, note: String::new() };
+        s.w.units[0].ap = 1;
+        let before: Vec<i32> = s.w.units.iter().map(|u| u.ap).collect();
+        crate::battle::lower_start_ap(s, heroes, &mods);
+        let want: Vec<i32> = before.iter().enumerate().map(|(i, &ap)| if i < heroes { campaign::purse::start_ap(ap as i64, &mods) as i32 } else { ap }).collect();
+        assert_eq!(s.w.units.iter().map(|u| u.ap).collect::<Vec<_>>(), want);
+        assert_eq!(s.w.units[0].ap, 0, "not below 0");
+        assert_eq!(s.history.last().unwrap().snapshots[0].iter().map(|u| u.ap).collect::<Vec<_>>(), want, "the start snapshot shows it");
+        // at zero Tallow the camp world's mods are the purse's (logged once at the battle's start)
+        let mut cx = camp_cx(0, 30);
+        cx.gs_mut().party.supplies = 0;
+        let mods = campaign::purse::battle_mods(&cx.data, cx.gs());
+        assert_eq!((mods.start_ap, mods.note.clone()), (START_AP, format!("No Warded Tallow: {START_AP} AP")));
+        cx.gs_mut().party.supplies = 1;
+        assert_eq!(campaign::purse::battle_mods(&cx.data, cx.gs()), campaign::purse::BattleMods::default());
+        // the bridge: a world battle at zero Tallow logs the note once and starts the heroes lower than at 1 Tallow
+        let fight = json::dict(&json!({"source": trigger::FIGHT_SOURCE, "encounter": "camp:loud_job"})).clone();
+        let fed = crate::battle::BattleScreen::world(&mut cx, &fight, trigger::FIGHT_SOURCE).expect("the battle starts");
+        let fed_ap: Vec<i32> = fed.host.session.as_ref().unwrap().w.units.iter().map(|u| u.ap).collect();
+        assert!(!cx.log.iter().any(|l| l.starts_with("No Warded Tallow")), "with upkeep: no note");
+        cx.gs_mut().party.supplies = 0;
+        let starved = crate::battle::BattleScreen::world(&mut cx, &fight, trigger::FIGHT_SOURCE).expect("the battle starts");
+        let s = starved.host.session.as_ref().unwrap();
+        let heroes = s.w.allies.len() - s.guests.len();
+        assert!(heroes > 0);
+        let want: Vec<i32> = fed_ap.iter().enumerate().map(|(i, &ap)| if i < heroes { campaign::purse::start_ap(ap as i64, &mods) as i32 } else { ap }).collect();
+        assert_ne!(want, fed_ap, "the hero has AP to lose");
+        assert_eq!(s.w.units.iter().map(|u| u.ap).collect::<Vec<_>>(), want);
+        assert_eq!(cx.log.iter().filter(|l| **l == mods.note).count(), 1, "logged once");
+        assert!(starved.message.ends_with(&format!("{}.", mods.note)), "{}", starved.message);
     }
 }

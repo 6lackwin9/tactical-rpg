@@ -91,3 +91,16 @@ The rules behind every player screen come from `emberwake_world`, checked agains
   start (`run_over.load_act`, off with the reason when there is no act-start save), Load a save (`run_over.load_save`,
   the load menu), Main menu (`run_over.main_menu`). Esc and right click do nothing; no slot or autosave is written
   while the run is over.
+
+## Campaign screens (CAMPAIGN1-U slice 2)
+
+- The campaign queue: with nothing open the region and world maps play its head after the notices: queued vignettes,
+  then a queued battle (`Fight: <name>!`, with the notice over it when it could end the run), then on the region map a
+  queued dialogue scene as the conversation (the world map leaves it for the region map).
+- A battle started at zero upkeep: every party member has the purse's `start_ap` less AP in round 1 (not below 0); the
+  log and the battle's opening line say so ("No Warded Tallow: -2 AP").
+- Dialogue: a reply that rests asks first when the rest's days would end the run (No as the default; No keeps the talk).
+- World map: Camp reads `Make camp (<cost> <upkeep>)` with the rest's days on its hover card ("Make camp (3 supplies)"
+  in the Ashlands); the Travel hover card gives the trip in days and upkeep, then "Arrive on day 9, 34 days left.";
+  a node's hover card lists its checkpoint lines ("Checkpoint: by day 14", red). Log lines name the purse (camp, wake,
+  retreat, quest gold).

@@ -36,6 +36,7 @@ use emberwake_world::battle::WorldRoster;
 use emberwake_battle::skill::Kind;
 use emberwake_battle::world::World;
 use emberwake_host::{Battle, Host};
+use emberwake_world::campaign::{purse, trigger};
 use emberwake_world::{dialogue, explore, story, travel};
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
@@ -962,14 +963,31 @@ fn action_clips(skill: &str, kind: &str, weapon: &str) -> Vec<&'static str> {
 }
 
 /// The runner's settle of a world fight (BattleBridge's after_fight by the fight's source): `travel`, `dialogue`,
-/// `story` (STORYUI1 Q5: the story sequence moves on, retries or aborts), else `explore`. The battle screen and the
-/// debug fight popup both settle through it.
+/// `story` (STORYUI1 Q5: the story sequence moves on, retries or aborts), `trigger` (CAMPAIGN1 T2: a queued battle,
+/// settled like a dialogue fight), else `explore`. The battle screen and the debug fight popup both settle through it.
 pub fn after_fight(d: &emberwake_world::Data, gs: &mut emberwake_world::GameState, runner: &str, fight: &Dict, outcome: &str, tally: Option<&emberwake_world::battle::Tally>) -> Dict {
     match runner {
         "travel" => travel::after_fight(d, gs, fight, outcome, tally),
         "dialogue" => dialogue::after_fight(d, gs, fight, outcome, tally),
         story::FIGHT_SOURCE => story::after_fight(d, gs, fight, outcome, tally),
+        trigger::FIGHT_SOURCE => trigger::after_fight(d, gs, fight, outcome, tally),
         _ => explore::after_fight(d, gs, fight, outcome, tally),
+    }
+}
+
+/// CAMPAIGN1 P3: the battle bridge's start-AP change: each of the first `heroes` units (the party members; guests and
+/// enemies keep theirs) has `mods.start_ap` AP more in round 1 (never below 0, `purse::start_ap`), and the round's
+/// start snapshot shows it. Nothing when the mods change nothing.
+pub fn lower_start_ap(s: &mut Session, heroes: usize, mods: &purse::BattleMods) {
+    if mods.start_ap == 0 {
+        return;
+    }
+    for u in s.w.units.iter_mut().take(heroes) {
+        u.ap = purse::start_ap(u.ap as i64, mods) as i32;
+    }
+    let start = s.snapshot();
+    if let Some(first) = s.history.last_mut().and_then(|r| r.snapshots.first_mut()) {
+        *first = start;
     }
 }
 
@@ -1310,12 +1328,22 @@ impl BattleScreen {
             party.push(Prebuilt { unit: field.unit, art, palette, profile: field.profile, key: m.id.clone() });
             members.push((m.id.clone(), field.pouch_unloaded));
         }
-        let session = Session::start_with(d.cat.clone(), def, &roster, party);
+        // CAMPAIGN1 P3, W6: at zero upkeep the party starts with less AP (read before the session, logged once)
+        let mods = purse::battle_mods(&d, gs);
+        let heroes = party.len();
+        let mut session = Session::start_with(d.cat.clone(), def, &roster, party);
+        lower_start_ap(&mut session, heroes, &mods);
+        if !mods.note.is_empty() {
+            cx.log(mods.note.clone());
+        }
         let mut b = Self::blank(cx, Mode::World { fight: fight.clone(), runner: runner.to_string(), members });
         b.class_world = world;
         b.host.begin(session);
         b.host.restart();
         b.after_start(&s(entry, "intro"));
+        if !mods.note.is_empty() {
+            b.message = format!("{} {}.", b.message, mods.note);
+        }
         cx.set_busy(true);
         Ok(b)
     }

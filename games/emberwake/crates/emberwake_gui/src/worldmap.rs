@@ -4,11 +4,13 @@
 //! STORYUI1-U1: like the region map, it hands over to the story stage and plays queued vignettes (`story::map_tick`).
 //! CAMPAIGN1-U: campaign notices and the run-over screen (`runover::map_tick`); a trip or a camp whose days would end
 //! the run asks first (W3, No as the default); a trip the run ended on stops like an arrival; a road fight that could
-//! end the run gets the notice.
+//! end the run gets the notice. Slice 2: a queued battle plays (`story::map_tick`; a queued dialogue waits for the
+//! region map); the tips, the Camp button and the log name the purse's upkeep (P1, R1); the Travel tip adds the arrival
+//! day and the days left (W5); a node's tip lists its checkpoint lines (`deadlines`, STORYUI1 B10).
 
-use aegis_ui::canvas::{rgb, rgba, Rect};
+use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::music;
-use crate::hud::{hud_bar, hud_key, hud_open, Hud};
+use crate::hud::{hud_bar, hud_key, hud_open, purse_word, Hud, PurseWord};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, H, INFO, SMALL, TEXT, W};
 use aegis_ui::widget_plumbing;
@@ -31,6 +33,39 @@ pub enum WAct {
 
 /// The world map's controls (the Help button's hover card and popup).
 const WORLD_HELP: [&str; 4] = ["Click a place to pick it, then Travel", "Enter (button): go into the place the party is at", "P: party   J: journal   I: stash", "Esc: back to the region map"];
+
+/// The node tooltip's checkpoint lines (STORYUI1 B6's Arterial Red).
+const DEADLINE: Rgba = rgb(0xe1, 0x1d, 0x48);
+
+/// CAMPAIGN1 W5: the arrival of a trip of `time` in a campaign world: "Arrive on day 9, 34 days left." (the days left
+/// of the first running visible countdown by HUD order at arrival; without one only the day); None outside one.
+pub fn arrival(gs: &emberwake_world::GameState, time: i64) -> Option<String> {
+    let c = gs.campaign.as_ref()?;
+    let at = gs.time + time.max(0);
+    let mut clocks: Vec<(i64, usize, i64)> = c
+        .defs
+        .iter()
+        .enumerate()
+        .filter_map(|(i, (id, def))| {
+            let st = c.meters.get(id).filter(|st| def.countdown && st.running && st.visible)?;
+            Some((json::i(json::dget(&def.row, "hud"), "order", 0), i, st.value(def, at)))
+        })
+        .collect();
+    clocks.sort();
+    // X2: day 1 at a new game (`campaign.day` is the clock plus one)
+    let day = at + 1;
+    Some(match clocks.first() {
+        Some((.., left)) => format!("Arrive on day {day}, {} left.", crate::runover::days(*left)),
+        None => format!("Arrive on day {day}."),
+    })
+}
+
+/// A trip's length and upkeep for the tips: "2 time, 2 supplies" (today's), "2 days, 2 Tallow" in a campaign world.
+fn trip_cost(cx: &Cx, gs: &emberwake_world::GameState, trip: &serde_json::Map<String, Value>) -> String {
+    let time = json::i(trip, "time", 0);
+    let length = if gs.campaign.is_some() { crate::runover::days(time) } else { format!("{time} time") };
+    format!("{length}, {} {}", json::i(trip, "supplies", 0), purse_word(cx, PurseWord::Upkeep))
+}
 
 #[derive(Default)]
 pub struct WorldMap {
@@ -102,7 +137,13 @@ impl WorldMap {
         crate::region::log_events(cx, json::aget(&res, "events"));
         crate::runover::take(cx, &res);
         if json::i(&res, "starved_legs", 0) > 0 {
-            cx.log("Out of supplies: the roads were more dangerous.");
+            // CAMPAIGN1 P1, P3: the upkeep's name; the roads are only more dangerous when zero upkeep raises the chance
+            let word = purse_word(cx, PurseWord::Upkeep);
+            if emberwake_world::campaign::purse::purse(&d, &cx.gs().world_id).road_pct > 100 {
+                cx.log(format!("Out of {word}: the roads were more dangerous."));
+            } else {
+                cx.log(format!("Out of {word}."));
+            }
         }
         if s(&res, "status") == "fight" {
             let fight = json::dget(&res, "fight").clone();
@@ -206,10 +247,14 @@ impl Screen<GameCx> for WorldMap {
             let trip = travel::trip(&d, &gs, &here, &q);
             let mut t = tip(&label, &format!("{}{}", s(n, "region"), if json::b(n, "visited", false) { "" } else { " (not visited)" }));
             if json::b(&trip, "ok", false) {
-                t.push((format!("Trip: {} time, {} supplies", json::i(&trip, "time", 0), json::i(&trip, "supplies", 0)), INFO));
+                t.push((format!("Trip: {}", trip_cost(cx, &gs, &trip)), INFO));
             }
             for step in travel::quest_steps_at(&d, &gs, &q) {
                 t.push((format!("Quest: {step}"), GOLD));
+            }
+            // STORYUI1 B10, CAMPAIGN1 W5: the checkpoint lines of the quests whose node this is
+            for due in json::aget(n, "deadlines") {
+                t.push((s(json::dict(due), "text"), DEADLINE));
             }
             let lw = ui.p.text_w(&s(n, "name"), BODY).max(if is_here { ui.p.text_w("You are here", BODY) } else { 0.0 }).ceil() as i32;
             let bottom = (y - 6.0 + line * if is_here { 2.0 } else { 1.0 }).ceil() as i32;
@@ -247,7 +292,12 @@ impl Screen<GameCx> for WorldMap {
             let name = cx.location_name(&gs.world_id, &self.selected);
             let trip = travel::trip(&d, &gs, &here, &self.selected);
             if json::b(&trip, "ok", false) {
-                ui.button_tip("world_map.travel", Rect::new(sx, y, 130, 16), &format!("Travel to {name}"), WAct::Travel, true, tip("Travel", &format!("{} time, {} supplies. Roads can be ambushed.", json::i(&trip, "time", 0), json::i(&trip, "supplies", 0))));
+                // CAMPAIGN1 W5: the arrival day and the days left in a campaign world
+                let mut text = format!("{}. Roads can be ambushed.", trip_cost(cx, &gs, &trip));
+                if let Some(at) = arrival(&gs, json::i(&trip, "time", 0)) {
+                    text = format!("{text} {at}");
+                }
+                ui.button_tip("world_map.travel", Rect::new(sx, y, 130, 16), &format!("Travel to {name}"), WAct::Travel, true, tip("Travel", &text));
             } else {
                 ui.p.text_fit(sx as f32, y as f32 + 3.0, &format!("No known way to {name}."), SMALL, 130.0, FOE);
             }
@@ -255,8 +305,16 @@ impl Screen<GameCx> for WorldMap {
         }
         ui.button("world_map.enter", Rect::new(sx, y, 130, 16), &format!("Enter {}", cx.location_name(&gs.world_id, &here)), WAct::Enter, !travel::current_node(&d, &gs).is_empty());
         y += 20;
+        // CAMPAIGN1 P1, R1: the rest's cost in the upkeep's name ("Make camp (3 supplies)" in the Ashlands) and its days
         let camp = progression::can_camp(&d, &gs);
-        ui.button_tip("world_map.camp", Rect::new(sx, y, 130, 16), "Make camp (3 supplies)", WAct::Camp, camp.is_empty(), tip("Make camp", if camp.is_empty() { "Rest every hero to full HP." } else { camp }));
+        let rule = emberwake_world::campaign::purse::rest_rule(&d, &gs.world_id);
+        let camp_label = format!("Make camp ({} {})", rule.cost, purse_word(cx, PurseWord::Upkeep));
+        let camp_tip = match (camp.is_empty(), rule.days) {
+            (false, _) => camp.to_string(),
+            (true, n) if n > 0 => format!("Rest every hero to full HP. Takes {}.", crate::runover::days(n as i64)),
+            _ => "Rest every hero to full HP.".to_string(),
+        };
+        ui.button_tip("world_map.camp", Rect::new(sx, y, 130, 16), &camp_label, WAct::Camp, camp.is_empty(), tip("Make camp", &camp_tip));
         y += 24;
         let lines: Vec<String> = cx.log.iter().rev().take(16).cloned().collect();
         for l in lines.iter().rev() {

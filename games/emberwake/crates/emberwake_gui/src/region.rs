@@ -8,11 +8,14 @@
 //! left or right step; a person in the conversation faces the party), with today's tokens as the fallback.
 //! STORYUI1-U1: with nothing open the map hands over to the story stage while a sequence runs and plays queued
 //! vignettes (`story::map_tick`); a `sequence` choice ends the talk and the stage takes over; an open board holds the
-//! replies until Esc or a right click closes it (its pane is STORYUI1-U2's).
+//! replies until Esc or a right click closes it (its pane is STORYUI1-U2's). CAMPAIGN1-U: a queued `{dialogue}` scene
+//! opens as the conversation when nothing is open (T2); a reply whose `rest` would end the run asks first (W3); the
+//! log lines name the purse (P1) and a retreat (R4).
 
 use aegis_core::assets::{ClipPlayer, Facing, View};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
-use crate::hud::{hud_bar, hud_key, hud_open, Hud, HUD_H};
+use crate::hud::{hud_bar, hud_key, hud_open, purse_word, Hud, PurseWord, HUD_H};
+use crate::runover::days as day_count;
 use crate::music;
 use crate::props::{Item, PropDraw, BOX_EDGE, BOX_FACE, BOX_FACE_H, BOX_FILL};
 use crate::shop::{ShopAct, ShopPane};
@@ -87,6 +90,8 @@ pub struct RegionMap {
     /// The open shop's trade (PLAYUI1-P).
     shop: ShopPane,
     pending: Option<Dict>,
+    /// CAMPAIGN1 W3: the choice waiting on the ask before its `rest` would end the run (a Yes picks it).
+    rest_ask: Option<i64>,
     picks: Vec<String>,
     recipient: usize,
     pub(crate) lore: Option<(String, String)>,
@@ -152,16 +157,31 @@ pub fn log_events(cx: &mut Cx, events: &[Value]) {
             }
             "rested" => cx.log(format!("The party rests (+{} HP).", json::i(e, "restored", 0))),
             "locked" => cx.log(format!("Locked: {}", s(e, "text"))),
-            "camped" => cx.log(format!("The party makes camp (-{} supplies, +{} HP).", json::i(e, "spent", 0), json::i(e, "restored", 0))),
+            // CAMPAIGN1 P1: the purse's names (the Ashlands lines are today's); R2: a rest's days
+            "camped" => {
+                let days = json::i(e, "days", 0);
+                let took = if days > 0 { format!(", {}", day_count(days)) } else { String::new() };
+                let upkeep = purse_word(cx, PurseWord::Upkeep);
+                cx.log(format!("The party makes camp (-{} {upkeep}, +{} HP{took}).", json::i(e, "spent", 0), json::i(e, "restored", 0)));
+            }
             "defeat" => {
                 let name = cx.location_name(&cx.gs().world_id.clone(), &s(e, "location"));
+                let upkeep = purse_word(cx, PurseWord::Upkeep);
+                // R4: a retreat falls back to the hub, its days and upkeep spent
+                if s(e, "mode") == "retreat" {
+                    let days = json::i(e, "days", 0);
+                    let cost = if days > 0 { format!(" ({}, -{} {upkeep})", day_count(days), json::i(e, "spent", 0)) } else { String::new() };
+                    cx.log(format!("Defeated. The party falls back to {name}{cost}."));
+                    continue;
+                }
                 let how = match s(e, "mode").as_str() {
                     "rest_place" => "rests there for free".to_string(),
-                    "forced_rest" => format!("rests ({} supplies)", json::i(e, "spent", 0)),
+                    "forced_rest" => format!("rests ({} {upkeep})", json::i(e, "spent", 0)),
                     _ => "limps back to town".to_string(),
                 };
                 cx.log(format!("Defeated. The party wakes at {name} and {how}."));
             }
+            "retreat_failed" => cx.log(s(e, "text")),
             "exit" => log_events(cx, json::aget(e, "events")),
             "autosave" => cx.autosave(),
             _ => {}
@@ -185,6 +205,7 @@ impl RegionMap {
             runner: None,
             shop: ShopPane::default(),
             pending: None,
+            rest_ask: None,
             picks: Vec::new(),
             recipient: 0,
             lore: None,
@@ -337,9 +358,41 @@ impl RegionMap {
         self.runner = Some(r);
     }
 
+    /// Picks reply `i` of the conversation.
+    fn choose(&mut self, cx: &mut Cx, i: i64) {
+        let d = cx.data.clone();
+        let Some(r) = self.runner.as_mut() else { return };
+        let res = r.choose(&d, cx.gs_mut(), i);
+        self.dialogue_result(cx, res);
+    }
+
+    /// CAMPAIGN1 W3, R3: the question before reply `i` when it rests (the `rest` effect) and the rest's days would end
+    /// the run; None otherwise (also when the rest is refused: the choice says why).
+    fn rest_question(&self, cx: &Cx, i: i64) -> Option<String> {
+        let r = self.runner.as_ref()?;
+        let d = &cx.data;
+        if !r.choice_effects(d, cx.gs(), i).iter().any(|fx| s(fx, "effect") == "rest") || !emberwake_world::campaign::purse::rest_refusal(d, cx.gs()).is_empty() {
+            return None;
+        }
+        let days = emberwake_world::campaign::purse::rest_rule(d, &cx.gs().world_id).days as i64;
+        crate::runover::days_ask(cx, days, "Resting", "Rest")
+    }
+
+    /// CAMPAIGN1 T2: a queued `{dialogue}` scene opens as the conversation (`runover::pending_talk`). True when it did.
+    fn play_pending_talk(&mut self, cx: &mut Cx) -> bool {
+        if cx.busy() || !cx.nav.is_empty() {
+            return false;
+        }
+        let Some(r) = crate::runover::pending_talk(cx) else { return false };
+        cx.set_busy(true);
+        self.runner = Some(r);
+        true
+    }
+
     fn end_talk(&mut self, cx: &mut Cx) {
         self.runner = None;
         self.pending = None;
+        self.rest_ask = None;
         self.shop = ShopPane::default();
         cx.set_busy(false);
     }
@@ -366,7 +419,7 @@ impl RegionMap {
                 got.push(format!("{} XP", json::i(g, "xp", 0)));
             }
             if json::i(g, "gold", 0) > 0 {
-                got.push(format!("{} gold", json::i(g, "gold", 0)));
+                got.push(format!("{} {}", json::i(g, "gold", 0), purse_word(cx, PurseWord::Currency)));
             }
             for (id, n) in json::ints(json::get(g, "items")) {
                 got.push(format!("{} x{n}", cx.data.item_name(&id)));
@@ -497,9 +550,13 @@ impl RegionMap {
                 hud_open(cx, h, &REGION_HELP);
             }
             RAct::Choose(i) => {
-                let Some(r) = self.runner.as_mut() else { return };
-                let res = r.choose(&d, cx.gs_mut(), i);
-                self.dialogue_result(cx, res);
+                // CAMPAIGN1 W3, R3: a choice whose rest would end the run asks first (No: the talk goes on)
+                if let Some(q) = self.rest_question(cx, i) {
+                    self.rest_ask = Some(i);
+                    cx.ask_tag_no(q, crate::runover::ASK_TALK_REST);
+                    return;
+                }
+                self.choose(cx, i);
             }
             RAct::Advance => {
                 let Some(r) = self.runner.as_mut() else { return };
@@ -845,9 +902,17 @@ impl Screen<GameCx> for RegionMap {
         let speed = cx.settings.v["anim_speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0);
         self.anim_ms += now.duration_since(self.anim_at).as_secs_f64() * 1000.0 * speed;
         self.anim_at = now;
+        // CAMPAIGN1 W3: a Yes to the ask before a resting reply picks it
+        if cx.take_answer(crate::runover::ASK_TALK_REST) {
+            if let Some(i) = self.rest_ask.take() {
+                self.choose(cx, i);
+            }
+            return;
+        }
         // STORYUI1 W2, 5.3: with nothing open, a running sequence takes over and queued vignettes play; CAMPAIGN1 W1,
-        // F3: campaign notices first, then the run-over screen once the run is over
-        if !self.modal() && (crate::runover::map_tick(cx) || crate::story::map_tick(cx)) {
+        // F3: campaign notices first, then the run-over screen once the run is over; T2: the campaign queue's head
+        // plays (vignettes and battles through `story::map_tick`, a dialogue scene here)
+        if !self.modal() && (crate::runover::map_tick(cx) || crate::story::map_tick(cx) || self.play_pending_talk(cx)) {
             self.walk.clear();
             self.walk_target = None;
             return;

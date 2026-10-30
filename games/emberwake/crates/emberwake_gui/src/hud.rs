@@ -130,6 +130,35 @@ pub fn chips(cx: &Cx) -> Vec<HudChip> {
     cx.game.as_ref().map(|g| emberwake_world::campaign::hud(&cx.data, &g.gs)).unwrap_or_default()
 }
 
+/// Which purse counter `purse_word` names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PurseWord {
+    Currency,
+    Upkeep,
+}
+
+/// CAMPAIGN1 P1: a purse counter's name inside a log line or a tip of world `world`: the kit's default names keep
+/// today's lower-case words ("gold", "supplies"; the Ashlands texts are unchanged), any other purse name its short
+/// form as written ("Scrap", "Tallow").
+pub fn purse_word_in(d: &emberwake_world::Data, world: &str, which: PurseWord) -> String {
+    let p = emberwake_world::campaign::purse::purse(d, world);
+    let (c, default) = match which {
+        PurseWord::Currency => (p.currency, emberwake_data::CURRENCY_NAME),
+        PurseWord::Upkeep => (p.upkeep, emberwake_data::UPKEEP_NAME),
+    };
+    if c.name == default {
+        default.to_lowercase()
+    } else {
+        c.short
+    }
+}
+
+/// `purse_word_in` for the game in play (today's word without a game).
+pub fn purse_word(cx: &Cx, which: PurseWord) -> String {
+    let world = cx.game.as_ref().map(|g| g.gs.world_id.clone()).unwrap_or_default();
+    purse_word_in(&cx.data, &world, which)
+}
+
 /// A chip's widget id: `hud.gold` and `hud.supplies` for the purse counters (in every world), `hud.meter.<id>` for a
 /// meter.
 pub fn chip_id(chip: &HudChip) -> String {
