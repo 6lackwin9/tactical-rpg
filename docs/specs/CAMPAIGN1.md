@@ -81,6 +81,9 @@ Extinguished) is data. The code is story-free, in the kit crates (KIT1).
   above) or `down` (old above, new at or below; the default for countdowns), `acts` (empty = every act), `once`.
   A rule may `warn` (a notice), run `effects` immediately, queue `then` items (section 9) and, on a countdown,
   `restart_days` (the clock runs again with that many days left after its effects).
+- As built (cross-reference, HOOKS1-D 2026-10-31): M2's band pick and M5's crossing are one kit helper,
+  `rpgkit_rules::bands` (`band_index`, `point`, `crosses`, `crossing_order`), shared with HOOKS1's battle unit
+  meters (HOOKS1 UM4-UM5, HOOKS1-M).
 - M6. Soft or hard is data: a rule whose effects hold `end` with kind `fail` is hard for its acts. Alert: the Act 1
   Breach rule ends the run; the Acts 2-3 rule queues a siege battle (reserved, Act 2 data). Doom Clock: Acts 1-2 at
   0 a lesser tithing (a vignette, a flag) and a restart; Act 3 at 0 the end.

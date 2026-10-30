@@ -245,6 +245,11 @@ within` (units 1-6 refs, `by` a ref or "", `within` 0-11; "Kill names hero '`{r}
 `guard`). Phase key `group` (`[a-z0-9_]{1,24}`); trigger kinds gain `stand` (only with `stay_behind.mode` `stand`).
 At most one swap and one side effect per unit ref. The 12-unit cap counts swap `into` units.
 
+HOOKS1 encounter fields (cross-reference, HOOKS1-D 2026-10-31; the schema is HOOKS1_TASKS 1.2 and 1.6): `arena_hazards`
+(0-4 scheduled strikes, rule `arena_hazards`, HOOKS1 7), the phase effect `deck` (rule `deck`, HOOKS1 10.1), the
+unit and phase `ai` key `tactics` (HOOKS1 11) and a data `zones` row as the `zone` (HOOKS1 13); later `spare_once`,
+the phase trigger `spared` and the phase effect `heal` (HOOKS1 10.2, HOOKS1-Q).
+
 Content tool path: `tools/fc.sh content upsert encounters @file.json` (catalog) or with `world=<id>` (world
 encounters), or a seed through `tools/fc.sh content apply`; then `tools/fc.sh content check`. The Content Forge edits
 the new json fields as raw JSON (no form work in this spec).

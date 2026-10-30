@@ -62,6 +62,10 @@ intent (UI5).
 | Support | self or an ally | support | a standard approach into reach (SP1) | self and ally items |
 | Maneuver | an enemy (Engage, Disengage); an enemy or a tile (Utility) | maneuver | each skill's carried move (MV4); out of range: MV9 | foe-aimed items (Utility) |
 
+HOOKS1 (cross-reference, HOOKS1-D 2026-10-31): a hazard placement (an ATTACK with `power_mult` 0 and a `hazard`,
+rule `ground_hazards`) is an Assault opener with a tile target, as an area opener (HOOKS1 GH3, HQ12 a); it deals no
+damage and raises no hit event.
+
 ## 3. One target per round
 
 - TG1. The round target is self, an ally, an enemy or a tile, as the intent table allows. Every skill and item command
@@ -201,6 +205,10 @@ Deterministic: the same world, plans and inputs give the same plan; it draws no 
   next-round reach covers the tile (distance at most their 2-block move plus their reach), fewer first; (2) cover
   toward the target's side, more first (Guard and ranged only); (3) path tiles, fewer first; (4) distance to the
   target, farther first for kite and retreat, nearer for none; (5) cell index `y x 12 + x`, lower first.
+- HOOKS1 (cross-reference, HOOKS1-D 2026-10-31): PL4's threat (1) also counts 1 for a harmful ground hazard the
+  unit's side can see on the tile and 1 for an arena hazard due on it this round (HOOKS1 AT3, rules `ground_hazards`,
+  `arena_hazards` and `ai_tactics`); a unit with the tactic `hold_line` ranks, right after threat, tiles next to a
+  friend first, then fewer free walkable neighbours (HOOKS1 AT2; `round_intent.rs` `hold_rank`).
 - PL5. Placement order: before-move (approach, kite, MV9 a), opener with its carried move, reserved after-move blocks
   (AS3), fill (FU2, FU3), after-move, Rest. A Disengage retreat rides in its skill's blocks (MV8).
 - PL6. Reason tags (strip tooltip and the Dojo): `approach`, `approach: out of range`, `kite: in melee`,
@@ -270,6 +278,12 @@ As built (RULESET1-AI, 2026-10-28; `rpgkit_battle/src/ai.rs`; user answers 2026-
   refuses (IN6 dropped a buff it relied on; an Economy round without an opener step) goes on from the next row.
 - Applying a tactic (one member or the party) skips members set to Manual (MM1).
 - An enemy's `default_intent` (TQ23) holds only until its first AI pick at round 1's planning.
+
+HOOKS1 (cross-reference, HOOKS1-D 2026-10-31; rule `ai_tactics`): a unit with the tactic `brace_after_hit` gets the
+row `brace` before row 4: when it or a friend within 2 tiles lost HP to an attack hit last round (`World::hits`),
+it is not reckless and a Guard skill is usable, Guard (self, or its `hold_line` tile). Target preferences
+`SOFTEST` and `TOUGHEST` join row 5's ranking; `flush_cover` lets row 5 pick a tile target for an area opener that
+still covers the first ranked target. Spec `docs/specs/HOOKS1.md` 11 and its section 15.
 
 ## 10. Input, tells and display (RULESET1-U, -V, -G)
 
