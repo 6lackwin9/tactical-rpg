@@ -17,6 +17,7 @@ mod intent_text;
 mod menus;
 mod music;
 mod party;
+mod portraits;
 mod props;
 mod region;
 mod runner;

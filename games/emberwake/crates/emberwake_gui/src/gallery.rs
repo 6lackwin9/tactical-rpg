@@ -3,6 +3,10 @@
 //! - Kit: the engine's widgets in their states (`aegis_ui::specimens`), and the vignette player on the engine's sample
 //!   reel (STORYUI1-E, `aegis_ui::vignette`; the preview plays on and starts over, Open plays it full screen) or any
 //!   world's vignette as written, in the game's card palette (STORYUI1-U1, a reel picker over the preview).
+//! - Art: Portraits (PORTRAITFX1-G 6.3): every portrait of the game and kit layers (expression frames under their
+//!   character) drawn through the game's binding (`portraits::Faces`) with the Kit widgets' portrait controls, its
+//!   sidecar summary, one button per cue row of `portrait_cues.json` and the expression picker; the review page of
+//!   the portrait asset tasks.
 //! - Screens: every screen, drawn shrunk into the pane (`aegis_ui::preview`) on a sample game (a debug game of the
 //!   first playable world that saving refuses); Open shows the screen itself to try it.
 //! - Battle panels: each panel of the battle screen enlarged on its own (the battle records its panels' rects while it
@@ -11,13 +15,16 @@
 
 use crate::battle::{action_rows, kind_color, BattleScreen};
 use crate::intent_text;
+use crate::portraits::{cue_of, hue_name, Faces, Who};
 use crate::screens::{Cx, Game, GameCx, Nav, Screen};
+use aegis_core::assets::Layers;
 use aegis_core::json;
 use aegis_ui::canvas::{rgb, Rect, Rgba};
+use aegis_ui::portrait_fx::{Cue, Tier};
 use aegis_ui::preview;
-use aegis_ui::specimens::{KitAct, Specimens};
+use aegis_ui::specimens::{KitAct, Specimens, PORTRAIT_OVERLAYS, PORTRAIT_REACTIONS, PORTRAIT_SIZES, PORTRAIT_STAGE, PORTRAIT_STATES};
 use aegis_ui::timeline::{Section, Segment, Timeline, Track};
-use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, INFO, SMALL, TEXT, TITLE, W};
+use aegis_ui::ui::{tip, Gfx, Tip, Ui, Widget, BODY, BORDER, DIM, GOLD, INFO, SMALL, TEXT, TITLE, W};
 use aegis_ui::vignette;
 use aegis_ui::widget_plumbing;
 use emberwake_battle::resolver::ScheduledAction;
@@ -26,9 +33,10 @@ use emberwake_host::{Battle, Host};
 use serde_json::{json, Value};
 
 /// (id, name, group, what it shows). Battle panel ids are the battle screen's own panel names.
-const ENTRIES: [(&str, &str, &str, &str); 27] = [
+const ENTRIES: [(&str, &str, &str, &str); 28] = [
     ("kit", "Kit widgets", "Kit", "Every kit widget in its states; use them, the foot of the page says what happened."),
     ("vignette", "Vignette player", "Kit", "The engine's sample reel or a world's vignette: image, text, title and line cards with fades, typing, hold and skip."),
+    ("portraits", "Portraits", "Art", "Every portrait with its sidecar, its effects and the cue rows: the review page of the portrait assets."),
     ("main_menu", "Main menu", "Screens", "The player's front door."),
     ("new_game", "New game", "Screens", "World cards and the start."),
     ("settings", "Settings", "Screens", "Sound, display and gameplay tabs."),
@@ -70,6 +78,8 @@ pub enum GAct {
     Kit(KitAct),
     /// The vignette entry's reel (STORYUI1-U1: the sample, then every world's vignettes).
     Reel(usize),
+    /// The Portraits entry (PORTRAITFX1-G).
+    Portrait(PAct),
     /// Shows the previewed screen itself.
     Open,
     Exit,
@@ -111,12 +121,405 @@ enum Step {
     Service(&'static str),
 }
 
+/// The Portraits entry's controls (PORTRAITFX1-G 6.3; ids `gallery.portraits.*`).
+#[derive(Debug, Clone)]
+pub enum PAct {
+    /// A portrait (an index into the page's files) with an expression (0 = neutral, else its frame `n - 1`).
+    Pick(usize, usize),
+    /// An overlay or state of the Kit widgets' portrait page (`PORTRAIT_OVERLAYS`, `PORTRAIT_STATES`), held on.
+    Toggle(&'static str),
+    /// A reaction of the Kit widgets' portrait page (`PORTRAIT_REACTIONS`).
+    Fire(&'static str),
+    /// A step event (`PORTRAIT_EVENTS`): the data's event rows as the battle panel fires them.
+    Event(&'static str),
+    /// A cue row by id: an event row fires, a state row toggles.
+    Cue(String),
+    Size(usize),
+    Reduce,
+    Anchors,
+    /// The expression picker (0 = neutral, else the picked portrait's frame `n - 1`).
+    Expression(usize),
+}
+
+/// The folders under `portraits/`, in list order.
+const PORTRAIT_FOLDERS: [&str; 5] = ["heroes", "npcs", "elites", "bosses", "common"];
+/// The Portraits entry's event buttons fire the rows as this surface does, under this ruleset.
+const PORTRAIT_EVENT_SURFACE: &str = "panel";
+
+/// One portrait of the list: its file (`portraits/<folder>/<id>.png`; a character with only expression frames keeps
+/// this path), the layer holding it and its expression frames (in `EXPRESSIONS` order).
+#[derive(Debug, Clone, PartialEq)]
+struct PortraitFile {
+    rel: String,
+    folder: String,
+    id: String,
+    layer: String,
+    frames: Vec<String>,
+}
+
+/// Every portrait of `layers` (a file once: the first layer holding it), by folder, with its frames.
+fn portrait_files(layers: &Layers) -> Vec<PortraitFile> {
+    let layer_of = |rel: &str| {
+        let i = layers.roots.iter().position(|r| r.join(rel).is_file());
+        let names = if layers.roots.len() == 3 { ["game", "kit", "engine"] } else { ["", "", ""] };
+        i.map(|i| names.get(i).filter(|n| !n.is_empty()).map_or_else(|| format!("layer {}", i + 1), |n| n.to_string())).unwrap_or_default()
+    };
+    let mut out = Vec::new();
+    for folder in PORTRAIT_FOLDERS {
+        let dir = format!("portraits/{folder}");
+        let mut ids: Vec<String> = layers.list(&dir).iter().filter_map(|f| f.strip_suffix(".png")).map(str::to_string).collect();
+        let faced = if folder == "common" { Vec::new() } else { layers.dirs(&format!("{dir}/faces")) };
+        for id in &faced {
+            if !ids.contains(id) {
+                ids.push(id.clone());
+            }
+        }
+        ids.sort();
+        for id in ids {
+            let rel = format!("{dir}/{id}.png");
+            let listed = layers.list(&format!("{dir}/faces/{id}"));
+            let frames: Vec<String> = emberwake_content::art::EXPRESSIONS.iter().filter(|e| listed.contains(&format!("{e}.png"))).map(|e| e.to_string()).collect();
+            let at = if layers.has(&rel) { rel.clone() } else { frames.first().map(|e| format!("{dir}/faces/{id}/{e}.png")).unwrap_or_default() };
+            out.push(PortraitFile { layer: layer_of(&at), rel, folder: folder.to_string(), id, frames });
+        }
+    }
+    out
+}
+
+/// A sidecar in one paragraph: its eyes, blink, anchors, rim and idle overlays.
+fn face_summary(face: Option<&aegis_core::assets::Face>) -> String {
+    let Some(f) = face else { return "No sidecar: no eyes, no overlays (base breath and rim only).".into() };
+    let mut out = format!("Sidecar {} px, border {}: {} eye box{}", f.size, f.border, f.eyes.len(), if f.eyes.len() == 1 { "" } else { "es" });
+    if !f.eyes.is_empty() {
+        out += if f.blink { ", blinks" } else { ", no blink" };
+    }
+    out += &format!("; {} glow, {} vein root{}", f.glow.len(), f.veins.len(), if f.veins.len() == 1 { "" } else { "s" });
+    if let Some(c) = f.rim {
+        out += &format!("; rim #{:02x}{:02x}{:02x}", c[0], c[1], c[2]);
+    }
+    let idle: Vec<String> = f.idle.iter().map(|o| format!("{} {:.2}", o.effect.replace('_', " "), o.intensity)).collect();
+    out += &if idle.is_empty() { "; no idle overlay.".to_string() } else { format!("; idle: {}.", idle.join(", ")) };
+    out
+}
+
+/// A cue row's hover text: its trigger and match, then its effect and numbers, colour, expression and limits.
+fn cue_text(r: &emberwake_data::PortraitCue) -> String {
+    let when = match r.trigger.as_str() {
+        "event" => format!("on {}", r.event.replace('_', " ")),
+        "status" => format!("while {}", r.status),
+        "condition" => format!("while {}", r.condition),
+        "hp" => format!("below {}% HP", r.below),
+        "derived" if r.below > 0 => format!("{} below {}", r.stat, r.below),
+        "derived" => format!("{} down {}%", r.stat, r.drop_pct),
+        t => format!("while {t}"),
+    };
+    let mut what = format!("{} {:.2}", r.effect.replace('_', " "), r.intensity);
+    if r.ms > 0 {
+        what += &format!(", {} ms", r.ms);
+    }
+    for extra in [&r.preset, &r.expression] {
+        if !extra.is_empty() {
+            what += &format!(", {extra}");
+        }
+    }
+    if !r.color.is_empty() {
+        let name = hue_name(&r.color);
+        what += &format!(", {}", if name.is_empty() { r.color.clone() } else { format!("{name} {}", r.color) });
+    }
+    let only: Vec<String> = r.surfaces.iter().chain(r.rulesets.iter()).cloned().collect();
+    format!("{when}: {what}{}", if only.is_empty() { String::new() } else { format!(" (only {})", only.join(", ")) })
+}
+
+/// The Portraits entry (6.3): the list, the picked portrait and the controls; its portraits draw through `Faces`.
+#[derive(Debug, Clone, Default)]
+struct PortraitPage {
+    /// The portraits of the art layers (read at the first draw).
+    files: Option<Vec<PortraitFile>>,
+    pick: usize,
+    /// 0 = neutral, else the picked portrait's frame `n - 1` (held as a `face` cue under every cue row's priority).
+    expression: usize,
+    faces: Faces,
+    /// The overlays and states toggled on, and the state cue rows toggled on (by id).
+    on: std::collections::BTreeSet<&'static str>,
+    rows_on: std::collections::BTreeSet<String>,
+    /// `PORTRAIT_SIZES` index.
+    size: usize,
+    /// What the last control did (the foot line).
+    last: String,
+}
+
+impl PortraitPage {
+    fn picked(&self) -> Option<&PortraitFile> {
+        self.files.as_ref().and_then(|f| f.get(self.pick))
+    }
+
+    /// The `Faces` key of the picked portrait (its file).
+    fn key(&self) -> String {
+        self.picked().map(|f| f.rel.clone()).unwrap_or_default()
+    }
+
+    /// The cues the page holds on the picked portrait: the toggles, the toggled state rows, the picked expression.
+    fn pins(&self, rows: &[emberwake_data::PortraitCue]) -> Vec<Cue> {
+        let mut out: Vec<Cue> = self.on.iter().filter_map(|e| Cue::parse(e, "").map(|c| c.with_key(&format!("gallery.{e}")))).collect();
+        out.extend(rows.iter().filter(|r| !r.is_event() && self.rows_on.contains(&r.id)).filter_map(cue_of));
+        if let Some(e) = self.picked().and_then(|f| f.frames.get(self.expression.wrapping_sub(1))) {
+            out.extend(Cue::parse("face", "").map(|c| c.with_expression(e).with_priority(0).with_key("gallery.expression")));
+        }
+        out
+    }
+
+    fn act(&mut self, cx: &mut Cx, a: PAct) {
+        let key = self.key();
+        self.last = match a {
+            PAct::Pick(i, e) => {
+                self.pick = i;
+                self.expression = e;
+                format!("picked {}", self.key())
+            }
+            PAct::Toggle(e) => {
+                let on = !self.on.remove(e);
+                if on {
+                    self.on.insert(e);
+                }
+                format!("{} {}", e.replace('_', " "), if on { "on" } else { "off" })
+            }
+            PAct::Fire(what) => {
+                let cue = if what == "flash" { Cue::parse("flash", "") } else { Cue::parse("jolt", what.trim_start_matches("jolt.")) };
+                if let Some(c) = cue {
+                    self.faces.fire(&key, c);
+                }
+                what.replace('.', " ")
+            }
+            PAct::Event(ev) => {
+                let n = self.faces.react(cx, &key, &[ev], PORTRAIT_EVENT_SURFACE, emberwake_rules::ruleset::CLASSIC);
+                let skip = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
+                format!("{}: {n} row{} fired{}", ev.replace('_', " "), if n == 1 { "" } else { "s" }, if skip { " (skip animations is on)" } else { "" })
+            }
+            PAct::Cue(id) => match cx.data.cat.portrait_cues.iter().find(|r| r.id == id) {
+                Some(r) if r.is_event() => {
+                    if let Some(c) = cue_of(r) {
+                        self.faces.fire(&key, c);
+                    }
+                    format!("{id} fired")
+                }
+                Some(_) => {
+                    let on = !self.rows_on.remove(&id);
+                    if on {
+                        self.rows_on.insert(id.clone());
+                    }
+                    format!("{id} {}", if on { "on" } else { "off" })
+                }
+                None => format!("no cue row {id}"),
+            },
+            PAct::Size(i) => {
+                self.size = i % PORTRAIT_SIZES.len();
+                format!("size {} px", PORTRAIT_SIZES[self.size])
+            }
+            PAct::Reduce => {
+                let on = !self.faces.reduce.unwrap_or(false);
+                self.faces.reduce = Some(on);
+                format!("reduce motion {}", if on { "on" } else { "off" })
+            }
+            PAct::Anchors => {
+                self.faces.show_anchors = !self.faces.show_anchors;
+                format!("anchors {}", if self.faces.show_anchors { "on" } else { "off" })
+            }
+            PAct::Expression(e) => {
+                self.expression = e;
+                format!("expression {}", self.picked().and_then(|f| f.frames.get(e.wrapping_sub(1))).map_or("neutral", |s| s.as_str()))
+            }
+        };
+    }
+
+    /// Draws the page into `r`: the list on the left, the stage with the foot line and the sidecar in the middle, the
+    /// controls and the cue rows on the right.
+    fn draw(&mut self, ui: &mut Ui<GAct>, cx: &mut Cx, r: Rect) {
+        let files = self.files.get_or_insert_with(|| portrait_files(cx.art.layers())).clone();
+        let data = cx.data.clone();
+        let rows = &data.cat.portrait_cues;
+        let line = ui.p.line_h(SMALL).ceil() as i32;
+        let row_h = (ui.p.line_h(BODY) + 2.0).ceil() as i32;
+        ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, "Portraits", TITLE, GOLD);
+        let nw = ui.p.text_w("Portraits", TITLE).ceil() as i32;
+        let count = format!("{} portraits (game and kit layers); {} cue rows (portrait_cues.json)", files.len(), rows.len());
+        ui.p.text_fit((r.x + 12 + nw) as f32, r.y as f32 + 3.0, &count, SMALL, (r.w - nw - 16) as f32, DIM);
+        let top = r.y + 4 + ui.p.line_h(TITLE).ceil() as i32 + 3;
+
+        // -- The list: a heading per folder, a row per portrait, its frames indented under it
+        let list = Rect::new(r.x + 2, top, 126, r.y + r.h - top - 2);
+        let mut content = 0;
+        let mut last_folder = "";
+        for f in &files {
+            if f.folder != last_folder {
+                content += line + 2;
+                last_folder = &f.folder;
+            }
+            content += (row_h + 1) * (1 + f.frames.len() as i32);
+        }
+        let off = ui.scroll_begin("gallery.portraits.list", list, content + 4);
+        let mut y = list.y - off;
+        let mut last_folder = "";
+        for (i, f) in files.iter().enumerate() {
+            if f.folder != last_folder {
+                ui.p.text(list.x as f32 + 2.0, y as f32 + 1.0, &f.folder, SMALL, INFO);
+                y += line + 2;
+                last_folder = &f.folder;
+            }
+            let picked = i == self.pick;
+            let about = format!("{} ({} layer){}", f.rel, f.layer, if f.frames.is_empty() { String::new() } else { format!("; faces: {}", f.frames.join(", ")) });
+            ui.row(&format!("gallery.portraits.pick.{}.{}", f.folder, f.id), Rect::new(list.x, y, list.w - 4, row_h), &f.id, if picked { GOLD } else { TEXT }, Some(GAct::Portrait(PAct::Pick(i, 0))), picked && self.expression == 0, tip(&f.id, &about));
+            y += row_h + 1;
+            for (k, e) in f.frames.iter().enumerate() {
+                let on = picked && self.expression == k + 1;
+                ui.row(&format!("gallery.portraits.pick.{}.{}.{e}", f.folder, f.id), Rect::new(list.x + 10, y, list.w - 14, row_h), e, if on { GOLD } else { DIM }, Some(GAct::Portrait(PAct::Pick(i, k + 1))), on, tip(e, &format!("{} as {e}", f.id)));
+                y += row_h + 1;
+            }
+        }
+        ui.scroll_end();
+
+        // -- The stage, the foot line, the sidecar
+        let x2 = list.x + list.w + 8;
+        let col_w = 150;
+        let stage = Rect::new(x2, top, PORTRAIT_STAGE, PORTRAIT_STAGE);
+        ui.p.panel(stage, rgb(14, 15, 20), BORDER, 2.0);
+        let size = PORTRAIT_SIZES[self.size.min(PORTRAIT_SIZES.len() - 1)];
+        let face_r = Rect::new(stage.x + (stage.w - size) / 2, stage.y + (stage.h - size) / 2, size, size);
+        let key = self.key();
+        self.faces.begin();
+        let pins = self.pins(rows);
+        self.faces.pin(&key, pins);
+        let mut text = vec![(String::from("No portrait files in the art layers."), DIM)];
+        if let Some(f) = files.get(self.pick) {
+            let who = Who::file(&f.rel);
+            let look = emberwake_battle::portrait::Look { ruleset: emberwake_rules::ruleset::CLASSIC.into(), ..Default::default() };
+            self.faces.draw(&mut ui.p, cx, &who, &look, PORTRAIT_EVENT_SURFACE, face_r);
+            let now = self.faces.now();
+            let fx = self.faces.get(&key);
+            let tier = fx.and_then(|x| x.tier()).map_or("", Tier::name);
+            let live = fx.map(|x| x.live(now)).unwrap_or_default();
+            let device = (size as f32 * ui.p.v.s).round() as i32;
+            let expression = fx.map(|x| x.expression(now).to_string()).unwrap_or_default();
+            let drawn = cx.art.first_rel(&who.chain(&expression)).unwrap_or_default();
+            let face = crate::portraits::sidecar(&mut cx.art, &drawn);
+            let png = cx.art.size_of(&drawn).map_or(String::new(), |(w, h)| format!(", {w} x {h}"));
+            text = vec![
+                (format!("Tier {tier} ({device} device px). Live: {}", if live.is_empty() { "nothing".to_string() } else { live.join(", ") }), DIM),
+                (format!("{} ({} layer{png}){}", if drawn.is_empty() { f.rel.clone() } else { drawn }, f.layer, if expression.is_empty() { String::new() } else { format!(", face {expression}") }), TEXT),
+                (face_summary(face.as_ref()), TEXT),
+            ];
+        }
+        ui.push("gallery.portraits.face", "portrait", format!("{key}: {size} px"), stage, true, false, None, Vec::new());
+        let mut fy = stage.y + stage.h + 4;
+        for (t, col) in &text {
+            fy = ui.para(x2, fy, col_w, t, SMALL, *col) + 3;
+        }
+        if !self.last.is_empty() {
+            ui.para(x2, fy + 2, col_w, &format!("Last: {}", self.last), SMALL, INFO);
+        }
+
+        // -- The controls
+        let x3 = x2 + col_w + 10;
+        let right = r.x + r.w - 4;
+        let head = |ui: &mut Ui<GAct>, y: i32, t: &str| -> i32 {
+            ui.p.text(x3 as f32, y as f32, t, SMALL, INFO);
+            y + line + 1
+        };
+        let label = |s: &str| {
+            let s = s.replace(['_', '.'], " ");
+            s[..1].to_uppercase() + &s[1..]
+        };
+        let mut yy = top;
+        for (title, names) in [("Overlays (held at full strength)", &PORTRAIT_OVERLAYS[..]), ("States", &PORTRAIT_STATES[..])] {
+            yy = head(ui, yy, title);
+            let mut bx = x3;
+            for name in names.iter().copied() {
+                let l = label(name);
+                let w = 12 + ui.p.text_w(&l, BODY).ceil() as i32 + 4;
+                if bx + w > right && bx > x3 {
+                    bx = x3;
+                    yy += 14;
+                }
+                ui.checkbox(&format!("gallery.portraits.{name}"), bx, yy + 2, &l, self.on.contains(name), GAct::Portrait(PAct::Toggle(name)), true);
+                bx += w + 6;
+            }
+            yy += 14 + 3;
+        }
+        // reactions and step events: a row of buttons each
+        let buttons = |ui: &mut Ui<GAct>, yy: &mut i32, items: Vec<(String, String, GAct, Tip)>| {
+            let mut bx = x3;
+            for (id, l, act, t) in items {
+                let w = (ui.p.text_w(&l, SMALL) + 10.0).ceil() as i32;
+                if bx + w > right && bx > x3 {
+                    bx = x3;
+                    *yy += 14;
+                }
+                ui.button_full(&id, Rect::new(bx, *yy, w, 12), &l, act, true, false, SMALL, t);
+                bx += w + 3;
+            }
+            *yy += 12 + 4;
+        };
+        yy = head(ui, yy, "Reactions");
+        let items = PORTRAIT_REACTIONS.iter().map(|w| (format!("gallery.portraits.{w}"), label(w), GAct::Portrait(PAct::Fire(w)), tip(&label(w), "The engine's reaction at full strength."))).collect();
+        buttons(ui, &mut yy, items);
+        yy = head(ui, yy, "Step events (the cue rows, as the battle panel)");
+        let items = emberwake_data::PORTRAIT_EVENTS.iter().map(|e| (format!("gallery.portraits.event.{e}"), label(e), GAct::Portrait(PAct::Event(e)), tip(&label(e), "Fires every event row of this event, as a battle step does."))).collect();
+        buttons(ui, &mut yy, items);
+        yy = head(ui, yy, "Cue rows (events fire, states toggle)");
+        if rows.is_empty() {
+            yy = ui.para(x3, yy, right - x3, "No cue rows yet (data/catalog/portrait_cues.json, PORTRAITFX1-A).", SMALL, DIM) + 3;
+        } else {
+            let mut bx = x3;
+            for row in rows.iter() {
+                let id = format!("gallery.portraits.cue.{}", row.id);
+                let t = tip(&row.id, &cue_text(row));
+                if row.is_event() {
+                    let w = (ui.p.text_w(&row.id, SMALL) + 10.0).ceil() as i32;
+                    if bx + w > right && bx > x3 {
+                        bx = x3;
+                        yy += 14;
+                    }
+                    ui.button_full(&id, Rect::new(bx, yy, w, 12), &row.id, GAct::Portrait(PAct::Cue(row.id.clone())), true, false, SMALL, t);
+                    bx += w + 3;
+                } else {
+                    let w = 12 + ui.p.text_w(&row.id, BODY).ceil() as i32 + 4;
+                    if bx + w > right && bx > x3 {
+                        bx = x3;
+                        yy += 14;
+                    }
+                    ui.checkbox(&id, bx, yy + 1, &row.id, self.rows_on.contains(&row.id), GAct::Portrait(PAct::Cue(row.id.clone())), true);
+                    if let Some(box_) = ui.widgets.last_mut() {
+                        box_.tip = t;
+                    }
+                    bx += w + 6;
+                }
+            }
+            yy += 14 + 3;
+        }
+        yy = head(ui, yy, "Size, motion, anchors, face");
+        let sizes: Vec<String> = PORTRAIT_SIZES.iter().map(|s| format!("{s} px")).collect();
+        let sw = (ui.p.text_w("96 px", BODY) + 22.0).ceil() as i32;
+        ui.select("gallery.portraits.size", Rect::new(x3, yy, sw, 14), &sizes, self.size, |i| GAct::Portrait(PAct::Size(i)), true, tip("Size", "The portrait's side in logical px; the tier follows the device px."));
+        let reduce = self.faces.reduce.unwrap_or(false);
+        ui.checkbox("gallery.portraits.reduce", x3 + sw + 8, yy + 2, "Reduce motion", reduce, GAct::Portrait(PAct::Reduce), true);
+        yy += 14 + 4;
+        ui.checkbox("gallery.portraits.anchors", x3, yy + 2, "Anchors", self.faces.show_anchors, GAct::Portrait(PAct::Anchors), true);
+        let frames = files.get(self.pick).map(|f| f.frames.clone()).unwrap_or_default();
+        if !frames.is_empty() {
+            let options: Vec<String> = std::iter::once("neutral (portrait)".to_string()).chain(frames.iter().cloned()).collect();
+            let ax = x3 + 12 + ui.p.text_w("Anchors", BODY).ceil() as i32 + 12;
+            let ew = (ui.p.text_w("neutral (portrait)", BODY) + 22.0).ceil() as i32;
+            ui.select("gallery.portraits.expression", Rect::new(ax, yy, ew, 14), &options, self.expression.min(frames.len()), |i| GAct::Portrait(PAct::Expression(i)), true, tip("Expression", "The face frame drawn (a face cue row of a higher priority wins)."));
+        }
+    }
+}
+
 pub struct Gallery {
     entry: usize,
     /// The vignette entry's reel (an index into `story::gallery_reels`).
     reel: usize,
     demo: Option<Demo>,
     kit: Specimens,
+    portraits: PortraitPage,
     shown: Option<Shown>,
     battle: Option<BattleScreen>,
     /// The sample game is the gallery's (it goes when the gallery does), with the debug flag it found.
@@ -132,7 +535,7 @@ impl Default for Gallery {
 
 impl Gallery {
     pub fn new() -> Self {
-        Self { entry: 0, reel: 0, demo: None, kit: Specimens::default(), shown: None, battle: None, own_game: None, w: Vec::new() }
+        Self { entry: 0, reel: 0, demo: None, kit: Specimens::default(), portraits: PortraitPage::default(), shown: None, battle: None, own_game: None, w: Vec::new() }
     }
 
     /// The sample game for the screen entries: a debug game (nothing saved) of the first playable world.
@@ -300,6 +703,7 @@ impl Gallery {
                 self.shown = None;
             }
             GAct::Kit(k) => self.kit.act(k),
+            GAct::Portrait(p) => self.portraits.act(cx, p),
             GAct::Reel(i) => {
                 self.reel = i;
                 self.shown = None;
@@ -309,7 +713,7 @@ impl Gallery {
                 if id == "battle" || ENTRIES[self.entry].2 == "Battle panels" {
                     let b = BattleScreen::arena(cx, None, &cx.encounter.clone());
                     cx.nav.push(Nav::Push(Box::new(b)));
-                } else if id != "kit" && (!NEEDS_GAME.contains(&id) || self.ensure_game(cx)) {
+                } else if id != "kit" && id != "portraits" && (!NEEDS_GAME.contains(&id) || self.ensure_game(cx)) {
                     // a fresh one, so the preview keeps its own state
                     if let Some((screen, _)) = self.build(cx, id) {
                         cx.nav.push(Nav::Push(screen));
@@ -499,6 +903,8 @@ impl Screen<GameCx> for Gallery {
         let (id, name, _, about) = ENTRIES[self.entry];
         if id == "kit" {
             self.kit.draw(&mut ui, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4), GAct::Kit);
+        } else if id == "portraits" {
+            self.portraits.draw(&mut ui, cx, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4));
         } else if id != "timeline" {
             // A screen or a battle panel: its name, what it is, Open, and the preview under them.
             ui.p.text(pane.x as f32 + 6.0, pane.y as f32 + 4.0, name, TITLE, GOLD);
@@ -593,6 +999,8 @@ impl Screen<GameCx> for Gallery {
         json!({
             "entry": ENTRIES[self.entry].0, "shown": self.shown.as_ref().map(|sh| sh.screen.id()), "steps_left": self.shown.as_ref().map(|sh| sh.steps.len()), "kit_last": self.kit.last, "viewed": d.map(|d| d.viewed), "round": s.map(|s| s.current_round), "block": s.map(|s| s.current_block),
             "selected_block": d.and_then(|d| d.block), "planning": s.map(|s| s.phase == Phase::Planning && !s.plan_confirmed), "rounds_archived": s.map(|s| s.history.len()),
+            // PORTRAITFX1-G (4.11): the Portraits entry's pick and its portraits' state
+            "portrait_pick": self.portraits.key(), "portrait_last": self.portraits.last, "portraits": self.portraits.faces.state(),
         })
     }
 
@@ -614,10 +1022,13 @@ impl Screen<GameCx> for Gallery {
     }
 
     /// The vignette preview plays on (only the top screen ticks) and starts over at its end; the Kit widgets' Effects
-    /// page runs its clock (FX1-E).
+    /// page runs its clock (FX1-E), the Portraits entry its portraits' clock (PORTRAITFX1-G).
     fn tick(&mut self, cx: &mut Cx) {
         if ENTRIES[self.entry].0 == "kit" {
             self.kit.tick();
+        }
+        if ENTRIES[self.entry].0 == "portraits" {
+            self.portraits.faces.tick();
         }
         let Some(sh) = self.shown.as_mut().filter(|sh| sh.id == "vignette") else { return };
         sh.screen.tick(cx);
@@ -703,5 +1114,97 @@ mod tests {
         assert!(!cx.has_game(), "no game needed");
         gallery.act(&mut cx, GAct::Open);
         assert!(matches!(cx.nav.last(), Some(Nav::Push(s)) if s.id() == "vignette" && s.state(&cx)["reel"] == json!("tale:v_intro")), "Open plays the picked reel");
+    }
+
+    /// PORTRAITFX1-G G6: the Portraits entry lists every portrait of the game and kit layers (counted here from the
+    /// folders) and one control per cue row; an event row's button changes the portrait's pixels, a state row's box
+    /// toggles its hold; every control of the Kit widgets' portrait page is there, at every text size.
+    #[test]
+    fn the_portraits_entry_lists_every_portrait_and_its_cue_rows() {
+        use crate::hud::hud_tests::{frame, game_cx, gfx};
+        use crate::portraits::tests::row;
+        let (mut cx, mut g) = (game_cx(), gfx());
+        cx.art = aegis_ui::art::Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        // the portraits on disk: each folder's PNGs and each character with only expression frames, once across layers
+        let mut on_disk = std::collections::BTreeSet::new();
+        for root in &cx.art.layers().roots {
+            for folder in PORTRAIT_FOLDERS {
+                let dir = root.join("portraits").join(folder);
+                for e in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+                    let name = e.file_name().to_string_lossy().to_string();
+                    if let Some(id) = name.strip_suffix(".png") {
+                        on_disk.insert(format!("{folder}/{id}"));
+                    }
+                }
+                for e in std::fs::read_dir(dir.join("faces")).into_iter().flatten().flatten().filter(|_| folder != "common") {
+                    on_disk.insert(format!("{folder}/{}", e.file_name().to_string_lossy()));
+                }
+            }
+        }
+        assert!(!on_disk.is_empty(), "the shipped layers hold portraits");
+        // the cue table of PORTRAITFX1_TASKS 2.3 (the asset task's rows), so the layout is audited at its full size
+        let rows = vec![
+            row(json!({"id": "hit_flash", "event": "hit", "effect": "flash", "intensity": 0.6, "ms": 140, "color": "#d9cbb4"})),
+            row(json!({"id": "hit_jolt", "event": "hit", "effect": "jolt", "preset": "hit"})),
+            row(json!({"id": "crit_flash", "event": "crit", "effect": "flash", "intensity": 0.9, "ms": 180, "color": "#e11d48"})),
+            row(json!({"id": "crit_jolt", "event": "crit", "effect": "jolt", "preset": "crit"})),
+            row(json!({"id": "guard_flash", "event": "guard_hit", "effect": "flash", "intensity": 0.4, "ms": 120, "color": "#fbbf24"})),
+            row(json!({"id": "guard_jolt", "event": "guard_hit", "effect": "jolt", "intensity": 0.5, "preset": "hit"})),
+            row(json!({"id": "heal_glow", "event": "heal", "effect": "flash", "intensity": 0.3, "ms": 420, "color": "#fbbf24"})),
+            row(json!({"id": "break_flash", "event": "break", "effect": "flash", "intensity": 0.9, "ms": 120, "color": "#d9cbb4"})),
+            row(json!({"id": "break_jolt", "event": "break", "effect": "jolt", "preset": "crit"})),
+            row(json!({"id": "wounded", "trigger": "condition", "condition": "wounded", "effect": "desaturate", "intensity": 0.35})),
+            row(json!({"id": "hp_half", "trigger": "hp", "below": 50, "effect": "desaturate", "intensity": 0.2})),
+            row(json!({"id": "hp_low", "trigger": "hp", "below": 25, "effect": "desaturate", "intensity": 0.5})),
+            row(json!({"id": "downed", "trigger": "down", "effect": "desaturate"})),
+            row(json!({"id": "downed_still", "trigger": "down", "effect": "still"})),
+            row(json!({"id": "shaken", "trigger": "derived", "stat": "composure", "drop_pct": 25, "effect": "tint", "intensity": 0.5, "color": "#06b6d4"})),
+            row(json!({"id": "stealthed", "trigger": "status", "status": "stealth", "effect": "fade", "intensity": 0.6})),
+        ];
+        let cue_ids: Vec<String> = rows.iter().map(|r| format!("gallery.portraits.cue.{}", r.id)).collect();
+        std::sync::Arc::get_mut(&mut cx.app.data).expect("the test owns the data").edit_cat(|c| c.portrait_cues = rows);
+        let mut gallery = Gallery::new();
+        let i = ENTRIES.iter().position(|e| e.0 == "portraits").expect("a portraits entry");
+        gallery.act(&mut cx, GAct::Entry(i));
+        for &(_, scale) in aegis_ui::screen::TEXT_SIZES.iter() {
+            // TEXTFIT1 over the pane (the gallery's own entry list is the gallery's)
+            let recs: Vec<aegis_ui::painter::TextRec> = frame(&mut gallery, &mut cx, &mut g, scale as f32).into_iter().filter(|r| r.x >= 110.0).collect();
+            let boxes: Vec<(String, f32, f32, f32, f32)> = gallery
+                .widgets()
+                .iter()
+                .filter(|w| w["id"].as_str().is_some_and(|i| i.starts_with("gallery.portraits.")))
+                .map(|w| {
+                    let (x, y, ww, hh) = crate::hud::hud_tests::rect(w);
+                    (w["id"].as_str().unwrap_or("").to_string(), x as f32, y as f32, ww as f32, hh as f32)
+                })
+                .collect();
+            let v = aegis_ui::text_audit::issues(&recs, W as f32, aegis_ui::ui::H as f32, &boxes);
+            assert_eq!(v["counts"], json!({"cut": 0, "edge": 0, "overlap": 0, "spill": 0}), "text size {scale}: {v}");
+            let ids: Vec<String> = gallery.widgets().iter().map(|w| w["id"].as_str().unwrap_or("").to_string()).collect();
+            let listed: std::collections::BTreeSet<String> = ids.iter().filter_map(|id| id.strip_prefix("gallery.portraits.pick.")).filter(|r| r.split('.').count() == 2).map(|r| r.replacen('.', "/", 1)).collect();
+            assert_eq!(listed, on_disk, "every portrait listed once at text size {scale}");
+            let controls = PORTRAIT_OVERLAYS.iter().chain(PORTRAIT_STATES.iter()).chain(PORTRAIT_REACTIONS.iter()).map(|c| format!("gallery.portraits.{c}"));
+            for want in controls.chain(["size", "reduce", "anchors", "face"].iter().map(|c| format!("gallery.portraits.{c}"))).chain(cue_ids.iter().cloned()) {
+                assert!(ids.contains(&want), "{want} at text size {scale}");
+            }
+        }
+        g.fonts.scale = 1.0;
+        let key = gallery.portraits.key();
+        let composed = |gallery: &Gallery| gallery.portraits.faces.get(&key).and_then(|f| f.composed()).cloned().expect("the picked portrait is drawn");
+        gallery.draw(&mut cx, &mut g, (-500, -500), true);
+        let before = composed(&gallery);
+        gallery.click_id(&mut cx, "gallery.portraits.cue.hit_flash").expect("the event row's button");
+        gallery.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_ne!(composed(&gallery).px, before.px, "the flash changes the portrait's pixels");
+        assert!(gallery.portraits.faces.get(&key).unwrap().level("flash", 0).is_some());
+        gallery.click_id(&mut cx, "gallery.portraits.cue.wounded").expect("the state row's box");
+        gallery.draw(&mut cx, &mut g, (-500, -500), true);
+        let boxed = |gallery: &Gallery| gallery.widgets().into_iter().find(|w| w["id"] == "gallery.portraits.cue.wounded").map(|w| w["active"] == json!(true));
+        assert_eq!(boxed(&gallery), Some(true), "the state row is held");
+        assert!(gallery.portraits.pins(&cx.data.cat.portrait_cues).iter().any(|c| c.key == "cue.wounded" && c.effect == "desaturate"));
+        gallery.click_id(&mut cx, "gallery.portraits.cue.wounded").expect("again");
+        gallery.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_eq!(boxed(&gallery), Some(false), "and released");
+        assert_eq!(gallery.state(&cx)["portrait_pick"], json!(key));
     }
 }

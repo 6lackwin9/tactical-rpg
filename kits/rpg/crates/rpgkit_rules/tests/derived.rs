@@ -162,6 +162,25 @@ fn status_modifiers_apply_only_while_the_status_is_active() {
     assert_eq!(nerve(&cat, &u), rule(raw, 0, 0.0, 0, 100));
 }
 
+/// PORTRAITFX1 5.2: `value_without` drops the parts of one source kind (the status modifiers, or the passives) and
+/// keeps the rest, by the same rule and caps as `value`; an unknown kind drops nothing; an absent row is None.
+#[test]
+fn value_without_drops_one_source_kind() {
+    let cat = catalog();
+    let mut u = probe(&cat);
+    passive(&cat, &mut u, "steady");
+    u.st.active.insert("weaken".into());
+    u.st.active.insert("empower".into());
+    let raw = nerve_raw(&u);
+    let without = |src: &str| derived::value_without(&cat, CLASSIC, &u, "nerve", src);
+    assert_eq!(nerve(&cat, &u), rule(raw, 3 - 5, 0.1, 0, 100));
+    assert_eq!(without(derived::STATUS_SOURCE), Some(rule(raw, 3, 0.0, 0, 100)), "no status parts");
+    assert_eq!(without("passive"), Some(rule(raw, -5, 0.1, 0, 100)), "no passive parts");
+    assert_eq!(without("stat"), Some(nerve(&cat, &u)), "a kind no part has (not a prefix of `status`) drops nothing");
+    assert_eq!(derived::value_without(&cat, CLASSIC, &u, "dread", derived::STATUS_SOURCE), None, "a row outside the ruleset");
+    assert_eq!(derived::value_without(&cat, CLASSIC, &u, "tiny", derived::STATUS_SOURCE), derived::value(&cat, CLASSIC, &u, "tiny"), "the caps hold");
+}
+
 #[test]
 fn caps_hold_over_random_stats() {
     let cat = catalog();

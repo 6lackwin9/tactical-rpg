@@ -1581,12 +1581,28 @@ mod tests {
         }
     }
 
+    /// PORTRAITFX1 4.1 and 5.4: a portrait's face sidecar `<id>.face.json` sits beside it (any portrait folder);
+    /// expression frames `faces/<id>/<expression>.png` (and their sidecars) only under the unique folders, named by
+    /// `EXPRESSIONS`.
+    #[test]
+    fn portrait_sidecars_and_expression_frames_follow_the_layout() {
+        for ok in ["portraits/npcs/tess.png", "portraits/npcs/tess.face.json", "portraits/common/beast_render_beast.face.json", "portraits/heroes/faces/kaelen/hurt.png", "portraits/bosses/faces/proctor_quell/neutral.face.json"] {
+            assert!(layout_ok(ok), "{ok}");
+        }
+        for stray in ["portraits/npcs/tess.json", "portraits/heroes/faces/kaelen/smirk.png", "portraits/common/faces/beast/hurt.png", "portraits/npcs/faces/tess.png", "portraits/npcs/faces/tess/hurt/a.png", "portraits/npcs/faces/tess/hurt.jpg"] {
+            assert!(!layout_ok(stray), "{stray}");
+        }
+    }
+
     /// One path of the section 3 tree (game, kit or engine root), plus the PLAYUI1 section 6 icons: toolkit glyphs
-    /// `ui/<id>.png` and the `ui/hud`, `ui/markers` and `ui/services` folders, PROPS1's `props/<set>/<art>/` and the
-    /// story scene pictures `backgrounds/story/<id>.png` (STORYART1, named by a vignette card's `image`).
+    /// `ui/<id>.png` and the `ui/hud`, `ui/markers` and `ui/services` folders, PROPS1's `props/<set>/<art>/`, the
+    /// story scene pictures `backgrounds/story/<id>.png` (STORYART1, named by a vignette card's `image`) and the
+    /// portrait sidecars and expression frames (PORTRAITFX1).
     fn layout_ok(rel: &str) -> bool {
         let p: Vec<&str> = rel.split('/').collect();
         let png = |s: &str| s.ends_with(".png");
+        let face = |s: &str| png(s) || s.ends_with(".face.json");
+        let expression = |s: &str| emberwake_content::art::EXPRESSIONS.iter().any(|e| s == format!("{e}.png") || s == format!("{e}.face.json"));
         let v = |s: &str| s.starts_with('v') && s.trim_start_matches('v').trim_end_matches(".png").parse::<u32>().is_ok() && png(s);
         if p.last() == Some(&"README.md") || matches!(p.as_slice(), ["fonts", ..]) {
             return true;
@@ -1594,7 +1610,8 @@ mod tests {
         match p.as_slice() {
             ["units", _, _, "sheet.png" | "clips.json"] => true,
             ["units", _, _, "palettes", f] => f.ends_with(".json"),
-            ["portraits", "common" | "heroes" | "npcs" | "elites" | "bosses", f] => png(f),
+            ["portraits", "common" | "heroes" | "npcs" | "elites" | "bosses", f] => face(f),
+            ["portraits", "heroes" | "npcs" | "elites" | "bosses", "faces", _, f] => expression(f),
             ["items", _, f] => png(f),
             ["skills", "kinds", f] | ["skills", f] | ["statuses", f] | ["map", "markers", f] => png(f),
             ["ui", "pins" | "badges" | "chips" | "intents" | "hud" | "markers" | "services", f] | ["ui", f] => png(f),
