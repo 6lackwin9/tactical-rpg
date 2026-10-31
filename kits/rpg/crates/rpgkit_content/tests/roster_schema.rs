@@ -214,8 +214,8 @@ fn a_keepsake_is_a_special_unsellable_accessory_on_a_party_character() {
     ];
     for (tag, bad, needle) in cases {
         let found = added(&v, "characters", &k, &bad);
-        // an npc's keepsake may also trip role rules of the base unit; only the keepsake line is this slice's
-        let found: Vec<String> = found.into_iter().filter(|e| e.contains("Keepsake") || e.contains("keepsake") || e.contains("roster") || e.contains("ghost")).collect();
+        // an npc may also trip the role rules of its party base unit; only that case keeps just the keepsake lines
+        let found: Vec<String> = if tag == "on an npc" { found.into_iter().filter(|e| e.contains("Keepsake")).collect() } else { found };
         one(found, needle, tag);
     }
     assert!(errors_of(&v, "characters", &with(&k, &["keepsake"], json!(""))).is_empty(), "no keepsake");
@@ -320,5 +320,17 @@ fn the_writer_stores_the_roster_fields() {
     store::upsert(&data, Some(W), "characters", &dict(with(&kaelen(), &["keepsake"], json!("trinket"))), None).expect("stored");
     let found = keepsake_problems(&data);
     assert!(found.len() == 1 && found[0].contains("ward/characters:kaelen") && found[0].contains("must have value 0"), "{found:?}");
+    drop_scratch(&data);
+}
+
+#[test]
+fn a_party_unit_id_is_never_a_roster_word() {
+    // RK1 (the slice 1 review): a start-party member's id is its catalog unit's, so a party unit named as a roster
+    // word is one error; an enemy unit may use the word
+    let data = roster_world("unit_word", 4);
+    let unit = |id: &str, side: &str| json!({"id": id, "name": id, "side": side, "class_id": "drill", "level": 1});
+    write_catalog(&data, "units", json!([unit("hero", "party"), unit("brute", "enemy"), unit("living", "party"), unit("pool", "enemy")]));
+    let found: Vec<String> = store::check(&data).into_iter().filter(|p| p.contains("roster read word")).collect();
+    one(found, "Id 'living' is a roster read word", "a party unit");
     drop_scratch(&data);
 }

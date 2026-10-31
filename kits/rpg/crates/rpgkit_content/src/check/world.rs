@@ -524,7 +524,8 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     let party_min = e.get("party_min").cloned().unwrap_or(json::int(0));
     let top = rpgkit_data::PARTY_MIN_MAX.min(party_max(v, w));
     if !campaign::int_in(&party_min, 0, top) {
-        errors.push(format!("Party min must be a whole number 0..{top} (the world's party max)."));
+        let why = if top < rpgkit_data::PARTY_MIN_MAX { " (the world's party max)" } else { "" };
+        errors.push(format!("Party min must be a whole number 0..{top}{why}."));
     }
     errors
 }

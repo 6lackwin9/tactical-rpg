@@ -5,7 +5,8 @@
 //! `settle_party` is ITEMUSE1 rule 7's pouch write-back on every outcome and HEAL1's `hp_after` on won and fled;
 //! `hero_ends` pairs the fielded members with the session's allies and carries ENCOUNTER2 S3's fates. Slice 3 (the
 //! tests from `ROSTER1_TASKS.md` 1, rule ids of `ROSTER1.md`): the rule rows (3.2, L3-L6), wounded (W1-W3),
-//! `depart` and the named keepsake (L1, L2, KS1, KS2) and the save keys (11.4).
+//! `depart` and the named keepsake (L1, L2, KS1, KS2) and the save keys (11.4). Slice 4: bunks (BK1-BK4), the join
+//! level (BK5), `party_min` (BK6), the departed recruit (L1), the read keys (RK1) and the load warning (11.4).
 
 use rpgkit_battle::encounter::PartyFate;
 use rpgkit_battle::session::{Prebuilt, Session};
@@ -14,7 +15,9 @@ use rpgkit_rules::DeckRule;
 use rpgkit_world::battle::{self, WorldRoster};
 use rpgkit_world::roster::{self, FightEnd, HeroEnd};
 use rpgkit_world::state::{Departed, PartyState, UnitState};
-use rpgkit_world::{campaign, new_game, progression, save, Data, GameState};
+use rpgkit_world::dialogue::{self, DialogueRunner};
+use rpgkit_world::{campaign, new_game, progression, quest, save, Data, GameState};
+use aegis_core::json::{self, Dict};
 use serde_json::{json, Value};
 
 /// The class path (every family unlocks at level 1); the overlay world `ow` keeps only the second.
@@ -36,16 +39,29 @@ fn with_ids(w: &str, rows: Value) -> Value {
     Value::Array(rows)
 }
 
-/// A world's two founders, a party-side guest, a foe and the fight between them.
+/// A world's two founders, a party-side guest, a foe and the fight between them; slice 4: two later recruits, the
+/// Crucible (`party_min` 4) and one-choice scenes that recruit (by each BK5 `level`) or start the Crucible.
 fn own(w: &str) -> Value {
+    let scene = |id: &str, fx: Value| json!({"id": id, "start": "a", "services": false, "nodes": [{"id": "a", "text": "Well?", "choices": [{"text": "Go.", "effects": [fx]}]}]});
     json!({
         "characters": with_ids(w, json!([
             {"id": "founder", "name": "Founder", "role": "party", "base_unit": "hero"},
             {"id": "second", "name": "Second", "role": "party", "base_unit": "hero"},
             {"id": "guide", "name": "Guide", "role": "npc", "base_unit": "hero"},
-            {"id": "foe", "name": "Foe", "role": "enemy", "base_unit": "brute"}
+            {"id": "foe", "name": "Foe", "role": "enemy", "base_unit": "brute"},
+            {"id": "kaelen", "name": "Kaelen", "role": "party", "base_unit": "hero"},
+            {"id": "dunstan", "name": "Dunstan", "role": "party", "base_unit": "hero"}
         ])),
-        "encounters": with_ids(w, json!([{"id": "fight", "party": ["founder"], "enemies": ["foe"], "guests": ["guide"]}]))
+        "encounters": with_ids(w, json!([
+            {"id": "fight", "party": ["founder"], "enemies": ["foe"], "guests": ["guide"]},
+            {"id": "crucible", "party": ["founder"], "enemies": ["foe"], "party_min": 4}
+        ])),
+        "dialogues": with_ids(w, json!([
+            scene("r_kaelen", json!({"effect": "recruit", "character": "kaelen"})),
+            scene("r_average", json!({"effect": "recruit", "character": "dunstan", "level": "average"})),
+            scene("r_three", json!({"effect": "recruit", "character": "dunstan", "level": 3})),
+            scene("f_crucible", json!({"effect": "fight", "encounter": "crucible"}))
+        ]))
     })
 }
 
@@ -91,13 +107,21 @@ fn data() -> Data {
                  "wounded_max_hp_pct": WOUNDED_PCT}],
             "keepsakes": {"on": ["captured", "dead"]}}}, "own": keepsaker("cw")},
         // one open row with `hp_after` full (no campaign: act 0)
-        "fw": {"manifest": {"id": "fw", "roster": {"rules": [{"hp_after": "full", "downed_won": "wounded", "downed_lost": "dead"}]}}, "own": own("fw")}
+        "fw": {"manifest": {"id": "fw", "roster": {"rules": [{"hp_after": "full", "downed_won": "wounded", "downed_lost": "dead"}]}}, "own": own("fw")},
+        // slice 4: ROSTER1-D's bunks (5.1): six, a flag adds up to eight, an open flag
+        "bw": {"manifest": {"id": "bw", "roster": {"bunks": BUNKS, "bunks_flag": "hub_bunks", "bunks_max": BUNKS_MAX, "open_flag": "roster_open"}}, "own": own("bw")},
+        // a world that switches bunks on with 0 bunks (decision "ROSTER1-L slice 1 ... answers"): the party max plus the flag
+        "zw": {"manifest": {"id": "zw", "party_max": 3, "roster": {"bunks": 0, "bunks_flag": "hub_bunks"}}, "own": own("zw")}
     });
-    Data::from_values(&catalog, &worlds, &json!({}))
+    // a rising XP curve for the join level (BK5)
+    Data::from_values(&catalog, &worlds, &json!({"xp_curve": {"xp_to_next": [10, 20, 30, 40]}}))
 }
 
 /// The row's wounded cut in `cw` (not the default, so the build is seen to read the row).
 const WOUNDED_PCT: i32 = 30;
+/// `bw`'s bunks and bunk cap (ROSTER1_TASKS 5.1's numbers).
+const BUNKS: i64 = 6;
+const BUNKS_MAX: i64 = 8;
 
 /// `own(w)` with the founder's named keepsake (KS2).
 fn keepsaker(w: &str) -> Value {
@@ -457,4 +481,192 @@ fn the_save_keys_round_trip_and_older_saves_read_empty() {
         assert!(errors.iter().any(|e| e.contains(want)), "{want}: {errors:?}");
     }
     assert!(save::decode(&d, &envelope(&bad, save::VERSION)).is_err(), "a damaged roster is refused, never half-loaded");
+}
+
+// ---- slice 4: bunks, the join level, the fight minimum, the departed recruit, read keys, load warnings --------------
+
+/// A game in world `w` with `n` members (the founder, the second, then catalog heroes `m3`..), the first four active.
+fn crew(d: &Data, w: &str, n: usize) -> GameState {
+    let mut party = PartyState::default();
+    for c in ["founder", "second"].iter().take(n) {
+        party.members.push(new_game::hero_from_character(d, w, c).expect("a party character"));
+    }
+    for i in 3..=n {
+        party.members.push(UnitState::create(&format!("m{i}"), "hero"));
+    }
+    party.active_ids = party.members.iter().take(4).map(|m| m.id.clone()).collect();
+    GameState::create(d, w, party)
+}
+
+/// Runs scene `id`'s one choice (spoken by the guide): the reply.
+fn scene(d: &Data, gs: &mut GameState, id: &str) -> Dict {
+    DialogueRunner::open_scene(d, gs, id, "guide").choose(d, gs, 0)
+}
+
+fn errors(res: &Dict) -> Vec<String> {
+    json::sget(res, "errors")
+}
+
+fn ok(res: &Dict) -> bool {
+    json::b(res, "ok", false)
+}
+
+fn cond(key: &str, op: &str, value: Value) -> Dict {
+    json!({"key": key, "op": op, "value": value}).as_object().unwrap().clone()
+}
+
+#[test]
+fn without_bunks_the_party_max_caps_a_recruit() {
+    // BK1, BK3 classic: no roster block: the cap is the party max and the refusal is RECRUIT1's text
+    let d = data();
+    let mut gs = crew(&d, "w", 4);
+    let res = scene(&d, &mut gs, "r_kaelen");
+    assert_eq!(errors(&res), ["The party is full (4 of 4)."]);
+    assert!(gs.party.member("kaelen").is_none());
+    // with a place free the recruit joins and deploys (active_ids has room, BK4)
+    let mut gs = crew(&d, "w", 3);
+    assert!(ok(&scene(&d, &mut gs, "r_kaelen")));
+    assert!(gs.party.member("kaelen").is_some() && has(&gs.party.active_ids, "kaelen"));
+}
+
+#[test]
+fn bunks_apart_from_the_party_max_bench_the_fifth_member() {
+    // BK1, BK3, BK4: six bunks, four members all active: the recruit joins and waits on the bench
+    let d = data();
+    let mut gs = crew(&d, "bw", 4);
+    assert_eq!(gs.party.max_active, 4);
+    assert!(ok(&scene(&d, &mut gs, "r_kaelen")));
+    assert!(gs.party.member("kaelen").is_some() && !has(&gs.party.active_ids, "kaelen"), "benched: {:?}", gs.party.active_ids);
+    assert_eq!(gs.party.active_ids.len(), 4, "active_ids never passes max_active");
+    // six members fill six bunks: the bunk text
+    let mut gs = crew(&d, "bw", BUNKS as usize);
+    assert_eq!(errors(&scene(&d, &mut gs, "r_kaelen")), [format!("Every bunk is taken ({BUNKS} of {BUNKS}).")]);
+    // the bunks flag adds, at most bunks_max; a negative flag counts 0
+    for (flag, cap) in [(2, BUNKS + 2), (5, BUNKS_MAX), (-3, BUNKS)] {
+        gs.flags.insert("hub_bunks".into(), json!(flag));
+        assert_eq!((roster::bunk_cap(&gs), gs.read_flag("roster.bunks")), (cap, Some(json!(cap))), "flag {flag}");
+    }
+    gs.flags.insert("hub_bunks".into(), json!(2));
+    assert!(ok(&scene(&d, &mut gs, "r_kaelen")), "a seventh bunk");
+}
+
+#[test]
+fn a_world_switches_bunks_on_with_0_bunks() {
+    // BK1 with `bunks` 0: the party max (3 here) is the base, the flag adds; the text stays RECRUIT1's (BK3)
+    let d = data();
+    let mut gs = crew(&d, "zw", 3);
+    assert_eq!((gs.party.max_active, roster::bunk_cap(&gs)), (3, 3));
+    assert_eq!(errors(&scene(&d, &mut gs, "r_kaelen")), ["The party is full (3 of 3)."]);
+    gs.flags.insert("hub_bunks".into(), json!(2));
+    assert!(ok(&scene(&d, &mut gs, "r_kaelen")));
+    assert!(gs.party.member("kaelen").is_some() && !has(&gs.party.active_ids, "kaelen"), "past the party max it is benched");
+    gs.party.active_ids.clear();
+    assert!(ok(&scene(&d, &mut gs, "r_average")));
+    assert!(gs.party.active_ids.is_empty(), "BK4: an empty active_ids stays empty (the first max_active deploy)");
+}
+
+#[test]
+fn a_departed_character_is_never_recruited_again() {
+    // L1: member ids are never reused: the precheck refuses, the effect outside a talk notes it
+    let d = data();
+    let mut gs = crew(&d, "bw", 3);
+    assert!(ok(&scene(&d, &mut gs, "r_kaelen")));
+    roster::depart(&d, &mut gs, "kaelen", "captured", "story", "").unwrap();
+    assert_eq!(errors(&scene(&d, &mut gs, "r_kaelen")), ["Kaelen is gone."]);
+    let fx = json!({"effect": "recruit", "character": "kaelen"}).as_object().unwrap().clone();
+    let (mut notes, mut events) = (Vec::new(), Vec::new());
+    dialogue::apply_effects(&d, &mut gs, &[fx], &mut notes, &mut events);
+    assert_eq!(notes, ["Kaelen is gone."]);
+    assert!(gs.party.member("kaelen").is_none());
+}
+
+#[test]
+fn party_min_refuses_a_fight_short_of_heroes() {
+    // BK6: the dialogue `fight` precheck and the battle start (`party_min_text`) refuse with one text; the bench does
+    // not count
+    let d = data();
+    let mut gs = crew(&d, "bw", 3);
+    let want = "Take 4 into this fight (3 in the party).";
+    assert_eq!(errors(&scene(&d, &mut gs, "f_crucible")), [want]);
+    assert_eq!(roster::party_min_text(&d, &gs, "crucible"), want);
+    assert_eq!(roster::party_min_text(&d, &gs, "fight"), "", "no party_min: any party");
+    let mut gs = crew(&d, "bw", 5);
+    gs.party.active_ids.truncate(3);
+    assert_eq!(roster::party_min_text(&d, &gs, "crucible"), want, "two on the bench");
+    let mut gs = crew(&d, "bw", 4);
+    let res = scene(&d, &mut gs, "f_crucible");
+    assert!(ok(&res) && res.contains_key("fight"), "four take the field: {res:?}");
+    assert_eq!(roster::party_min_text(&d, &gs, "crucible"), "");
+}
+
+#[test]
+fn the_join_level_is_highest_average_or_a_number() {
+    // BK5: actives at levels 2, 3, 3: `average` joins at 2 (the mean rounded down), `level` 3 at 3, the default at the
+    // best active member's XP (RECRUIT1)
+    let d = data();
+    let at = |level: i64| progression::xp_for_level(&d, level);
+    assert!(at(2) > 0 && at(3) > at(2), "the curve rises");
+    let party = || {
+        let mut gs = crew(&d, "bw", 3);
+        for (m, level) in gs.party.members.iter_mut().zip([2, 3, 3]) {
+            m.total_xp = at(level) + 1;
+        }
+        gs
+    };
+    let level_of = |gs: &GameState, id: &str| progression::level_for(&d, gs.party.member(id).unwrap().total_xp);
+    let mut gs = party();
+    assert!(ok(&scene(&d, &mut gs, "r_average")));
+    assert_eq!(level_of(&gs, "dunstan"), (2 + 3 + 3) / 3);
+    let mut gs = party();
+    assert!(ok(&scene(&d, &mut gs, "r_three")));
+    assert_eq!(gs.party.member("dunstan").unwrap().total_xp, at(3));
+    let mut gs = party();
+    let best = gs.party.members.iter().map(|m| m.total_xp).max().unwrap();
+    assert!(ok(&scene(&d, &mut gs, "r_kaelen")));
+    assert_eq!(gs.party.member("kaelen").unwrap().total_xp, best);
+}
+
+#[test]
+fn the_roster_read_keys_answer_from_the_party() {
+    // RK1 through `quest::condition_met` (no Data: BK7's settings ride on the party)
+    let d = data();
+    let mut gs = crew(&d, "bw", 4);
+    assert!(ok(&scene(&d, &mut gs, "r_kaelen")));
+    roster::depart(&d, &mut gs, "founder", "captured", "story", "").unwrap();
+    roster::depart(&d, &mut gs, "second", "dead", "story", "").unwrap();
+    assert_eq!(gs.read_flag("roster.living"), Some(json!(3)));
+    assert_eq!(gs.read_flag("roster.bunks"), Some(json!(BUNKS)));
+    assert_eq!(gs.read_flag("roster.bunks_free"), Some(json!(BUNKS - 3)));
+    assert_eq!(gs.read_flag("roster.pool"), Some(json!(0)));
+    let lives: Vec<Option<Value>> = ["captured", "dead", "retired"].iter().map(|l| gs.read_flag(&format!("roster.departed.{l}"))).collect();
+    assert_eq!(lives, [Some(json!(1)), Some(json!(1)), Some(json!(0))]);
+    let states: Vec<Option<Value>> = ["founder", "kaelen", "m3", "nobody"].iter().map(|m| gs.read_flag(&format!("roster.{m}"))).collect();
+    assert_eq!(states, [Some(json!("captured")), Some(json!("ready")), Some(json!("ready")), Some(json!(""))], "a start-party unit reads too");
+    assert!(quest::condition_met(&gs, &cond("roster.founder", "==", json!("captured"))));
+    assert!(quest::condition_met(&gs, &cond("roster.bunks_free", ">=", json!(1))));
+    assert!(!quest::condition_met(&gs, &cond("roster.living", "<", json!(1))));
+    assert_eq!(gs.read_flag("roster.open"), Some(json!(false)), "bw names an open flag that is not set");
+    gs.flags.insert("roster_open".into(), json!(true));
+    assert_eq!(gs.read_flag("roster.open"), Some(json!(true)));
+    assert_eq!(crew(&d, "w", 1).read_flag("roster.open"), Some(json!(true)), "no open flag: open");
+    assert_eq!(gs.read_flag("roster.departed.vanished"), None, "not a read key");
+}
+
+#[test]
+fn bunks_over_the_cap_load_with_a_warning() {
+    // 11.4: the settings are never saved (a bunk party's save has no new key); a save whose members pass the cap
+    // loads with a warning, never a refusal; the loaded state reads its world's bunks
+    let d = data();
+    let gs = crew(&d, "bw", BUNKS as usize + 1);
+    let saved = gs.to_value();
+    assert!(saved["party"].get("roster").is_none());
+    let back = save::decode(&d, &envelope(&gs, save::VERSION)).expect("loads");
+    assert_eq!(back.state.to_value(), saved);
+    assert_eq!(back.state.party.roster, roster::caps(&d, "bw"));
+    assert!(back.warnings.iter().any(|w| w.contains(&format!("{} members for {BUNKS} bunks", BUNKS + 1))), "{:?}", back.warnings);
+    let fine = save::decode(&d, &envelope(&crew(&d, "bw", 4), save::VERSION - 1)).expect("an older save loads");
+    assert!(fine.warnings.is_empty(), "{:?}", fine.warnings);
+    // no roster block: today's rules, so more members than the party max (as Godot saves hold) load without a word
+    let classic = save::decode(&d, &envelope(&crew(&d, "w", 5), save::VERSION)).expect("loads");
+    assert!(classic.warnings.is_empty(), "{:?}", classic.warnings);
 }

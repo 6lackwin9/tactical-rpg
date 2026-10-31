@@ -92,7 +92,7 @@ pub fn read(d: &Data, dir: &Path, slot: i64) -> Result<Loaded, Vec<String>> {
 }
 
 /// A save file's text: parse, format check, migrate, validate (STORYUI1 Q8: a `story.running` the data no longer has
-/// is dropped with a warning first).
+/// is dropped with a warning first; ROSTER1 11.4: bunk use above the cap is a warning, never a refusal).
 pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
     let envelope = aegis_save::open(&SAVES, text)?;
     let (data, mut warnings) = migrate(d, &envelope)?;
@@ -102,6 +102,7 @@ pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
     if !errors.is_empty() {
         return Err(errors);
     }
+    warnings.extend(crate::roster::load_warnings(&state));
     Ok(Loaded { state, warnings, saved_at: json::i(&envelope, "saved_at", 0) })
 }
 

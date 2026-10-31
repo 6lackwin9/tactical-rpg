@@ -5,7 +5,7 @@
 use crate::data::{Data, PARTY_MAX};
 use crate::progression;
 use aegis_core::json::{self, int, strs, Dict};
-use rpgkit_data::{Deck, DEPART_CAUSES, DEPART_LIVES, MEMBER_CONDITIONS, STATS};
+use rpgkit_data::{Deck, RosterManifest, DEPART_CAUSES, DEPART_LIVES, MEMBER_CONDITIONS, STATS};
 use indexmap::IndexMap;
 
 // The gear rules live in the rules crate (the battle crate's gear dojo uses them too).
@@ -531,12 +531,48 @@ impl Departed {
     }
 }
 
+/// ROSTER1 BK7: the played world's resolved roster settings, kept on the party like `max_active` (never saved; set at
+/// create, load and a world change) so the `roster.` read keys need no `Data`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RosterCaps {
+    /// The world's party max (`bunks` 0 means this many bunks, BK1).
+    pub party_max: i64,
+    /// The world's `roster` block (11.1; {} = today's rules).
+    pub manifest: RosterManifest,
+}
+
+impl Default for RosterCaps {
+    fn default() -> Self {
+        Self { party_max: PARTY_MAX, manifest: RosterManifest::from_obj(&Dict::new()) }
+    }
+}
+
+impl RosterCaps {
+    /// BK1: the bunk cap with the bunks flag at `flag_value`.
+    pub fn bunk_cap(&self, flag_value: i64) -> i64 {
+        self.manifest.bunk_cap(self.party_max as i32, flag_value.clamp(0, i32::MAX as i64) as i32) as i64
+    }
+
+    /// BK3: the world sets its own bunks (`bunks` above 0; else the RECRUIT1 "party is full" wording).
+    pub fn has_bunks(&self) -> bool {
+        self.manifest.bunks > 0
+    }
+
+    /// The world has a `roster` block (not {}: today's rules, where a Godot save may hold more members than the party
+    /// max and loads without a word).
+    pub fn has_block(&self) -> bool {
+        self.manifest != RosterManifest::from_obj(&Dict::new())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PartyState {
     pub members: Vec<UnitState>,
     pub active_ids: Vec<String>,
     /// The world's cap on active members (never saved).
     pub max_active: i64,
+    /// ROSTER1 BK7: the world's roster settings (never saved).
+    pub roster: RosterCaps,
     pub stash: IndexMap<String, i64>,
     pub gold: i64,
     pub supplies: i64,
@@ -547,7 +583,7 @@ pub struct PartyState {
 
 impl Default for PartyState {
     fn default() -> Self {
-        Self { members: Vec::new(), active_ids: Vec::new(), max_active: PARTY_MAX, stash: IndexMap::new(), gold: 0, supplies: 0, departed: Vec::new() }
+        Self { members: Vec::new(), active_ids: Vec::new(), max_active: PARTY_MAX, roster: RosterCaps::default(), stash: IndexMap::new(), gold: 0, supplies: 0, departed: Vec::new() }
     }
 }
 
@@ -657,6 +693,7 @@ impl PartyState {
             members: json::aget(d, "members").iter().map(|m| UnitState::from_dict(json::dict(m))).collect(),
             active_ids: json::sget(d, "active_ids"),
             max_active: PARTY_MAX,
+            roster: RosterCaps::default(),
             stash: d.get("stash").map(json::ints).unwrap_or_default(),
             gold: whole("gold"),
             supplies: whole("supplies"),
@@ -815,6 +852,7 @@ impl GameState {
     pub fn create(d: &Data, world_id: &str, party: PartyState) -> Self {
         let mut g = Self { world_id: world_id.into(), party, ..Default::default() };
         g.party.apply_cap(d.party_max(world_id));
+        g.party.roster = crate::roster::caps(d, world_id);
         g.campaign = crate::campaign::Campaign::fresh(d, world_id, g.rng_seed);
         g
     }
@@ -838,10 +876,12 @@ impl GameState {
         self.flags.get(key)
     }
 
-    /// A flag condition's value: a read key (`meter.`, `campaign.`, `roster.`; CAMPAIGN1 11.4) from the campaign,
-    /// any other key from the flags.
+    /// A flag condition's value: a read key (`meter.`, `campaign.`; CAMPAIGN1 11.4) from the campaign, a `roster.` key
+    /// (ROSTER1 RK1) from the party, any other key from the flags.
     pub fn read_flag(&self, key: &str) -> Option<Value> {
-        if rpgkit_data::reserved_key(key) {
+        if key.starts_with(rpgkit_data::ROSTER_PREFIX) {
+            crate::roster::read_key(self, key)
+        } else if rpgkit_data::reserved_key(key) {
             crate::campaign::read_key(self, key)
         } else {
             self.flags.get(key).cloned()
@@ -893,6 +933,7 @@ impl GameState {
         let mut g = Self { world_id: json::s(d, "world_id"), location_id: json::s(d, "location_id"), ..Default::default() };
         g.party = PartyState::from_dict(json::dget(d, "party"));
         g.party.apply_cap(data.party_max(&g.world_id));
+        g.party.roster = crate::roster::caps(data, &g.world_id);
         for (k, v) in json::dict(&json::normalize(d.get("flags").unwrap_or(&Value::Null))) {
             g.flags.insert(k.clone(), v.clone());
         }

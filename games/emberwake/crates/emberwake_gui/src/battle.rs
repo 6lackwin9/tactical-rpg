@@ -1296,6 +1296,11 @@ impl BattleScreen {
         if active.is_empty() {
             return Err("No active party member to fight.".into());
         }
+        // ROSTER1 BK6: the world refuses a fight its encounter's party_min does not allow
+        let short = emberwake_world::roster::party_min_text(&d, gs, &enc_ref);
+        if !short.is_empty() {
+            return Err(short);
+        }
         let hit_world = s(hit, "_world");
         let world = if d.lineage(&gs.world_id).contains(&hit_world) { gs.world_id.clone() } else { hit_world };
         let entry = d.resolve(&world, "encounters", &s(hit, "id"));

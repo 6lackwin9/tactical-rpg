@@ -145,9 +145,11 @@ fn a_world_without_campaign_stays_inert() {
     let res = r.choose(&d, &mut gs, 0);
     assert!(json::b(&res, "ok", false) && !res.contains_key("campaign"), "a campaign effect does nothing: {res:?}");
     assert!(campaign::tick(&d, &mut gs, &Cause::Effects).is_empty());
-    for key in ["meter.alert", "campaign.act", "campaign.day", "roster.living"] {
+    for key in ["meter.alert", "campaign.act", "campaign.day"] {
         assert_eq!(gs.read_flag(key), None, "no read key answered: {key}");
     }
+    // ROSTER1 RK1: the roster's read keys are the party's, answered in every world
+    assert_eq!(gs.read_flag("roster.living"), Some(json!(gs.party.members.len())));
     assert!(campaign::save_refusal(&gs).is_empty());
 }
 

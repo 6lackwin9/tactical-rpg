@@ -349,3 +349,31 @@ bleed-out rounds, wounded percent after the baseline).
   (never a member's or another departed's) and days; slice 4 adds the bunk and crypt warnings.
 - `progression::hurt` counts `wounded`, so Camp and the campaign rest are offered to a party whose only hurt is a
   wound.
+
+## As built (ROSTER1-L slice 4, 2026-11-01)
+
+- BK7: `PartyState.roster` (`state::RosterCaps`: the played world's party max and `roster` block) is set by
+  `roster::caps` at create, at load and when `explore::enter` changes the played world; never saved, so no save key
+  and no version step. `bunk_cap(gs)` reads the flag from the game state.
+- BK1-BK3: bunk use is the member count (housing and crypt places come with ROSTER1-P). A world with `bunks` 0 and a
+  `bunks_flag` (decision "ROSTER1-L slice 1 ... answers") starts at its party max; the refusal text is RECRUIT1's
+  until the block sets `bunks` above 0. With no `roster` block the cap is the party max, as RECRUIT1.
+- BK4: the recruit joins `active_ids` when it is non-empty and shorter than `max_active`; an empty list stays empty.
+- BK5: `highest` keeps RECRUIT1 (the recruit's own XP raised to the best active member's); `average` and a number
+  set the level exactly (`xp_for_level`), so a recruit whose base unit is above it joins lower (open question to the
+  planner).
+- BK6: `roster::party_min_text` counts the active members (the bench does not count); the dialogue `fight` precheck
+  and the battle screen's world fight start read it. Road and roaming fights start through the same battle screen
+  path, so they refuse too.
+- L1: the precheck and the effect refuse a character whose member id or qid is in `party.departed` ("`{name}` is
+  gone."; the precheck names the character, the effect its member).
+- RK1: `roster::read_key` answers through `GameState::read_flag` in every world (a campaign is not needed);
+  `campaign::read_key`'s `roster.living` stand-in is gone. `roster.pool` reads 0 until ROSTER1-P;
+  `roster.<member>` reads `ready` for any member (a start-party unit too), else its departed life, else "".
+- 11.4: `roster::load_warnings` (a `save::decode` warning) flags bunk use above the cap only in a world with a
+  `roster` block: Godot saves hold four members in a world whose party max is 3 and load without a word. The crypt
+  check and the keepsake-instance checks come with ROSTER1-P and ROSTER1-K.
+- The slice 1 review's three items: the `party_min` error names the world's party max only when it binds; a party
+  catalog unit whose id is a roster word is one content-check error; the keepsake check test counts every added
+  error (only the npc case filters).
+- `settle_party` still runs from the battle screen (it moves with ENCOUNTER2-W).

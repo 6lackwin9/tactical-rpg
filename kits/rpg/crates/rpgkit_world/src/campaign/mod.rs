@@ -353,15 +353,14 @@ impl Campaign {
 // ---- read keys (11.4) ----
 
 /// The value of read key `key` (`meter.<id>`, `meter.<id>.band`, `meter.<id>.running`, `campaign.act`,
-/// `campaign.day`, `roster.living`); None outside a campaign world or for an unknown meter.
+/// `campaign.day`); None outside a campaign world or for an unknown meter. The `roster.` keys (`roster.living` among
+/// them) are the roster's (`roster::read_key`, ROSTER1 RK1), answered in every world.
 pub fn read_key(gs: &GameState, key: &str) -> Option<Value> {
     let c = gs.campaign.as_ref()?;
     match key {
         "campaign.act" => return Some(int(c.act)),
         // X2: day 1 at a new game
         "campaign.day" => return Some(int(gs.time + 1)),
-        // until ROSTER1 lands: the member count
-        "roster.living" => return Some(int(gs.party.members.len() as i64)),
         _ => {}
     }
     let id = rpgkit_data::meter_of_read_key(key)?;

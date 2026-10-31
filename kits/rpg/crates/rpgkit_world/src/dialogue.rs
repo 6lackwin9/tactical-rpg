@@ -3,7 +3,7 @@
 
 use crate::data::Data;
 use crate::state::{flag_key_ok, flag_value_ok, GameState};
-use crate::{board, new_game, progression, quest, shop, story};
+use crate::{board, new_game, progression, quest, roster, shop, story};
 use aegis_core::json::{self, int, Dict};
 use indexmap::IndexMap;
 use serde_json::Value;
@@ -763,8 +763,15 @@ impl DialogueRunner {
                     }
                 }
                 "fight" => {
-                    if d.resolve(&gs.world_id, "encounters", &json::s(fx, "encounter")).is_empty() {
-                        out.push(format!("Unknown encounter '{}'.", json::s(fx, "encounter")));
+                    let enc = json::s(fx, "encounter");
+                    if d.resolve(&gs.world_id, "encounters", &enc).is_empty() {
+                        out.push(format!("Unknown encounter '{enc}'."));
+                    } else {
+                        // ROSTER1 BK6: the encounter's fewest heroes
+                        let why = roster::party_min_text(d, gs, &enc);
+                        if !why.is_empty() {
+                            out.push(why);
+                        }
                     }
                 }
                 // STORYUI1 4.7
@@ -790,13 +797,17 @@ impl DialogueRunner {
                 }
                 "recruit" => {
                     let who = json::s(fx, "character");
-                    let cap = d.party_max(&gs.world_id);
+                    let full = roster::full_text(gs);
                     if new_game::hero_from_character(d, &gs.world_id, &who).is_none() {
                         out.push(format!("'{who}' can't join the party."));
                     } else if is_member(d, gs, &who) {
                         out.push(format!("{} is already with you.", self.name_of(d, gs, &who)));
-                    } else if gs.party.members.len() as i64 >= cap {
-                        out.push(format!("The party is full ({} of {cap}).", gs.party.members.len()));
+                    } else if roster::has_departed(d, gs, &who) {
+                        // ROSTER1 L1: member ids are never reused
+                        out.push(roster::gone_text(&self.name_of(d, gs, &who)));
+                    } else if !full.is_empty() {
+                        // ROSTER1 BK1, BK3: the bunk cap (the party max when the world sets no bunks)
+                        out.push(full);
                     }
                 }
                 _ => {}
@@ -959,7 +970,7 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<Str
         "take" => {
             quest::take(d, gs, json::get(fx, "items"), json::i(fx, "gold", 0));
         }
-        "recruit" => recruit(d, gs, &json::s(fx, "character"), notes),
+        "recruit" => recruit(d, gs, &json::s(fx, "character"), fx.get("level").unwrap_or(&Value::Null), notes),
         "vignette" => {
             story::queue(d, gs, &json::s(fx, "vignette"));
         }
@@ -996,24 +1007,28 @@ pub fn apply_effects(d: &Data, gs: &mut GameState, effects: &[Dict], notes: &mut
     }
 }
 
-/// The `recruit` effect: the character joins at the best active member's XP. Outside a conversation (whose precheck
-/// refuses these) a character already in the party or a full party is a note instead.
-fn recruit(d: &Data, gs: &mut GameState, who: &str, notes: &mut Vec<String>) {
+/// The `recruit` effect: the character joins at its `level` (ROSTER1 BK5; default the best active member's XP,
+/// RECRUIT1). Outside a conversation (whose precheck refuses these) a character already in the party, a departed one
+/// (L1) or a party with no free bunk (BK1, BK3) is a note instead. BK4: it deploys when `active_ids` is empty (the
+/// first `max_active` fight) or has room; else it waits on the bench.
+fn recruit(d: &Data, gs: &mut GameState, who: &str, level: &Value, notes: &mut Vec<String>) {
     let Some(mut hero) = new_game::hero_from_character(d, &gs.world_id, who) else { return };
     let name = progression::display_name(d, &hero);
     if is_member(d, gs, who) {
         notes.push(format!("{name} is already with you."));
         return;
     }
-    let cap = d.party_max(&gs.world_id);
-    if gs.party.members.len() as i64 >= cap {
-        notes.push(format!("The party is full ({} of {cap}).", gs.party.members.len()));
+    if roster::has_departed(d, gs, who) {
+        notes.push(roster::gone_text(&name));
         return;
     }
-    for m in gs.party.active_members() {
-        hero.total_xp = hero.total_xp.max(m.total_xp);
+    let full = roster::full_text(gs);
+    if !full.is_empty() {
+        notes.push(full);
+        return;
     }
-    if !gs.party.active_ids.is_empty() {
+    hero.total_xp = roster::join_xp(d, &gs.party, hero.total_xp, level);
+    if !gs.party.active_ids.is_empty() && (gs.party.active_ids.len() as i64) < gs.party.max_active {
         gs.party.active_ids.push(hero.id.clone());
     }
     gs.party.members.push(hero);

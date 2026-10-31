@@ -4,20 +4,24 @@
 //! rule. ROSTER1-L slice 2 moved the build and the settle from the battle screen with no rule change; slice 3 adds the
 //! world's rule rows (3.2: the act's row turns a fate into `wounded`, `captured` or `dead`; no row = HEAL1 classic,
 //! L3), the wounded build (W2), departures with their named keepsake (L1, L2, KS1, KS2) and the rest that clears
-//! `wounded` (W3).
+//! `wounded` (W3). Slice 4 adds bunks (BK1-BK4: the cap the `recruit` effect checks, the bench), the join level (BK5),
+//! the fight minimum (BK6), the departed-recruit refusal (L1), the `roster.` read keys (RK1) and the load warnings.
 
 use crate::data::Data;
 use crate::progression;
-use crate::state::{Departed, GameState, PartyState, UnitState};
+use crate::state::{Departed, GameState, PartyState, RosterCaps, UnitState};
 use aegis_core::json;
 use rpgkit_battle::encounter::PartyFate;
 use rpgkit_battle::session::Session;
 use rpgkit_battle::world::AiProfile;
-use rpgkit_data::{RosterManifest, RosterRule, UnitDef, DEPART_CAUSES, DEPART_LIVES, MEMBER_CONDITIONS, SETTLE_CLASSIC, WOUNDED_PCT_DEFAULT};
+use rpgkit_data::{roster_read_key, RosterManifest, RosterRead, RosterRule, UnitDef, DEPART_CAUSES, DEPART_LIVES, MEMBER_CONDITIONS, RECRUIT_LEVELS, RECRUIT_LEVEL_MAX, SETTLE_CLASSIC, WOUNDED_PCT_DEFAULT};
 use rpgkit_rules::Unit;
+use serde_json::Value;
 
 /// W1: the one condition ROSTER1 defines (the kit's `MEMBER_CONDITIONS`, shared with PORTRAITFX1's checks).
 pub const WOUNDED: &str = MEMBER_CONDITIONS[0];
+/// RK1: the state `roster.<member>` reads for a member in the party.
+pub const READY: &str = "ready";
 /// 3.2: the settle value that departs a member captured, and the one that departs it dead.
 pub const CAPTURED: &str = "captured";
 pub const DEAD: &str = "dead";
@@ -263,5 +267,126 @@ pub fn depart(d: &Data, gs: &mut GameState, id: &str, life: &str, cause: &str, e
 pub fn on_rest(party: &mut PartyState) {
     for m in party.members.iter_mut() {
         m.conditions.retain(|c| c != WOUNDED);
+    }
+}
+
+// ---- bunks, joining, the fight minimum, read keys (slice 4) ----
+
+/// BK7: world `w`'s resolved roster settings (its party max and `roster` block), kept on the party (never saved).
+pub fn caps(d: &Data, w: &str) -> RosterCaps {
+    RosterCaps { party_max: d.party_max(w), manifest: manifest(d, w) }
+}
+
+/// BK1: the bunk cap: `bunks` (0 = the party max) plus the int flag `bunks_flag` (clamped at 0), at most `bunks_max`.
+pub fn bunk_cap(gs: &GameState) -> i64 {
+    let caps = &gs.party.roster;
+    let flag = &caps.manifest.bunks_flag;
+    let value = if flag.is_empty() { 0 } else { gs.flag(flag).filter(|v| json::is_int(v)).map_or(0, json::to_int) };
+    caps.bunk_cap(value)
+}
+
+/// BK2: the bunks in use: every member (housing `bunk` or `crypt`; `crypt_only` and its crypt places come with
+/// ROSTER1-P, so today every member takes one). Departed members free theirs (L2).
+pub fn bunks_used(party: &PartyState) -> i64 {
+    party.members.len() as i64
+}
+
+/// RK1 `roster.open`: the world's `open_flag` holds (true when it names none).
+pub fn is_open(gs: &GameState) -> bool {
+    let flag = &gs.party.roster.manifest.open_flag;
+    flag.is_empty() || gs.flag_true(flag)
+}
+
+/// BK3: why the party takes no new member now ("" = a bunk is free): with `bunks` 0 the RECRUIT1 text, else the bunk
+/// text. Pool entries and hub guests take no bunk (they are not members).
+pub fn full_text(gs: &GameState) -> String {
+    let (n, cap) = (bunks_used(&gs.party), bunk_cap(gs));
+    if n < cap {
+        String::new()
+    } else if gs.party.roster.has_bunks() {
+        format!("Every bunk is taken ({n} of {cap}).")
+    } else {
+        format!("The party is full ({n} of {cap}).")
+    }
+}
+
+/// L1: whether world character `character_ref` left the party (its departed record, by member id or character qid):
+/// a recruit of it is refused, as member ids are never reused.
+pub fn has_departed(d: &Data, gs: &GameState, character_ref: &str) -> bool {
+    let c = d.resolve(&gs.world_id, "characters", character_ref);
+    if c.is_empty() {
+        return false;
+    }
+    let (id, qid) = (json::s(c, "id"), json::s(c, "_qid"));
+    gs.party.departed.iter().any(|x| x.member.id == id || (!qid.is_empty() && x.member.lore_ref == qid))
+}
+
+/// L1: the refusal of recruiting a departed character.
+pub fn gone_text(name: &str) -> String {
+    format!("{name} is gone.")
+}
+
+/// BK5: the total XP a recruit joins with for the `recruit` effect's `level` (absent = `highest`): `highest` keeps
+/// RECRUIT1 (its own XP raised to the best active member's), `average` is the active members' mean level rounded
+/// down, a whole number 1..20 is that level. `own_xp` is the recruit's XP at its base unit's level.
+pub fn join_xp(d: &Data, party: &PartyState, own_xp: i64, level: &Value) -> i64 {
+    let active = party.active_members();
+    let level = json::normalize(level);
+    if json::is_int(&level) {
+        return progression::xp_for_level(d, json::to_int(&level).clamp(1, RECRUIT_LEVEL_MAX));
+    }
+    if level.as_str() == Some(RECRUIT_LEVELS[1]) {
+        if active.is_empty() {
+            return own_xp;
+        }
+        let sum: i64 = active.iter().map(|m| progression::level_for(d, m.total_xp)).sum();
+        return progression::xp_for_level(d, sum / active.len() as i64);
+    }
+    active.iter().fold(own_xp, |xp, m| xp.max(m.total_xp))
+}
+
+/// BK6: the refusal of fighting world encounter `encounter_ref` with the active party ("" = it may start): the
+/// encounter's `party_min` above the active members' count. World encounters only (a catalog encounter has no
+/// minimum). The dialogue `fight` precheck and the battle start read it.
+pub fn party_min_text(d: &Data, gs: &GameState, encounter_ref: &str) -> String {
+    let e = d.resolve(&gs.world_id, "encounters", encounter_ref);
+    let need = json::i(e, "party_min", 0);
+    let have = gs.party.active_members().len() as i64;
+    if e.is_empty() || need <= have {
+        String::new()
+    } else {
+        format!("Take {need} into this fight ({have} in the party).")
+    }
+}
+
+/// RK1: the value of `roster.` read key `key` from the party (None when `key` is not one): `roster.living` (members,
+/// in bunks or crypts), `roster.bunks` (the cap), `roster.bunks_free`, `roster.pool` (0 until ROSTER1-P), `roster.open`,
+/// `roster.departed.<life>` (a count), `roster.<member>` (`ready`, its departed life, or "" when unknown).
+pub fn read_key(gs: &GameState, key: &str) -> Option<Value> {
+    let p = &gs.party;
+    Some(match roster_read_key(key)? {
+        RosterRead::Living => json::int(p.members.len() as i64),
+        RosterRead::Bunks => json::int(bunk_cap(gs)),
+        RosterRead::BunksFree => json::int((bunk_cap(gs) - bunks_used(p)).max(0)),
+        RosterRead::Pool => json::int(0),
+        RosterRead::Open => Value::Bool(is_open(gs)),
+        RosterRead::Departed(life) => json::int(p.departed.iter().filter(|x| x.life == life).count() as i64),
+        RosterRead::Member(id) => Value::String(if p.member(id).is_some() {
+            READY.to_string()
+        } else {
+            p.departed_of(id).map(|x| x.life.clone()).unwrap_or_default()
+        }),
+    })
+}
+
+/// 11.4: the roster warnings of a loaded save (never a refusal): bunk use above the cap (the world's roster block
+/// changed since the save, or a save from before it). A world without a roster block warns of nothing (Godot saves
+/// may hold more members than the party max). Crypt places are checked with ROSTER1-P's housing.
+pub fn load_warnings(gs: &GameState) -> Vec<String> {
+    let (n, cap) = (bunks_used(&gs.party), bunk_cap(gs));
+    if gs.party.roster.has_block() && n > cap {
+        vec![format!("{n} members for {cap} bunks: no one new joins until a bunk is free.")]
+    } else {
+        Vec::new()
     }
 }

@@ -457,6 +457,8 @@ pub fn enter(d: &Data, gs: &mut GameState, location_ref: &str, anchor: &str) -> 
         }
         gs.world_id = loc_world;
     }
+    // ROSTER1 BK7: the roster settings follow the played world
+    gs.party.roster = crate::roster::caps(d, &gs.world_id);
     let qid = json::s(loc, "_qid");
     gs.location_id = qid.clone();
     gs.position = pos;
