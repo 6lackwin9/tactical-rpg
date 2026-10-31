@@ -7,8 +7,8 @@ use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, CARD, DIM, FOE, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
-use emberwake_world::state::UnitState;
-use emberwake_world::{progression, quest, save};
+use emberwake_world::state::{GameState, UnitState};
+use emberwake_world::{progression, quest, roster, save};
 use serde_json::{json, Value};
 
 pub fn member_name(cx: &Cx, m: &UnitState) -> String {
@@ -18,6 +18,33 @@ pub fn member_name(cx: &Cx, m: &UnitState) -> String {
 /// The member's class name in the world being played (HOOKS1 CN2: the world's `classes` overlay, else the class row's).
 pub fn class_name(cx: &Cx, m: &UnitState) -> String {
     cx.data.class_name(&cx.gs().world_id, &m.class_id(&cx.data))
+}
+
+/// ROSTER1-U: member `m`'s HP as it takes the field in the played world, and whether it is wounded: (hp, max, wounded).
+/// W2: a wounded member's max is cut by the act's row (`roster::field_unit`, the battle's own build); any other member
+/// shows its stored HP (`progression::current_hp`), as before.
+pub fn field_hp(cx: &Cx, m: &UnitState) -> (i64, i64, bool) {
+    let world = cx.gs().world_id.clone();
+    let wounded = m.has_condition(roster::WOUNDED);
+    if wounded {
+        if let Some(f) = roster::field_unit(&cx.data, cx.gs(), m, &world) {
+            return (f.unit.hp as i64, f.unit.max_hp as i64, true);
+        }
+    }
+    let (hp, max) = progression::current_hp(&cx.data, m, &world);
+    (hp, max, wounded)
+}
+
+/// ROSTER1-U, BK1-BK2: the bunk chip ("Bunks 5/6"), only in a world with a `roster` block (None: today's screens).
+pub fn bunks_text(gs: &GameState) -> Option<String> {
+    gs.party.roster.has_block().then(|| format!("Bunks {}/{}", roster::bunks_used(&gs.party), roster::bunk_cap(gs)))
+}
+
+/// The hover text of a wounded mark (W2, W3): the field max against the stored max.
+pub fn wounded_tip(cx: &Cx, m: &UnitState) -> String {
+    let (_, full) = progression::current_hp(&cx.data, m, &cx.gs().world_id);
+    let (_, field, _) = field_hp(cx, m);
+    format!("Fights with {field} of {full} max HP until the party rests.")
 }
 
 /// JournalModel.reward_lines: XP, items, passives, skills, gold.
@@ -127,16 +154,43 @@ impl Screen<GameCx> for Hub {
         let active: Vec<String> = gs.party.active_members().iter().map(|m| m.id.clone()).collect();
         let mut rows: Vec<&UnitState> = gs.party.members.iter().filter(|m| active.contains(&m.id)).collect();
         rows.extend(gs.party.members.iter().filter(|m| !active.contains(&m.id)));
-        let bh = 4 + rows.len() as i32 * 42;
-        let bx = Rect::new(270, 80, 100, bh);
+        // ROSTER1-U: the HP a member takes the field with (a wounded one's cut max, W2) and its mark; the box grows with
+        // the widest line and takes a second column past four members (bunks above the party max, BK1)
+        let step = 13f32.max(ui.p.line_h(BODY + 1.0).ceil());
+        let row_h = (step * 3.0 + 3.0) as i32;
+        let lines: Vec<(String, (i64, i64, bool))> = rows.iter().map(|m| (format!("{}  Lv {}", class_name(cx, m), m.level(&cx.data)), field_hp(cx, m))).collect();
+        let mark = "Wounded";
+        let gap = 6.0;
+        let mut col_w = 100f32;
+        for (class_line, (hp, max, wounded)) in &lines {
+            let hp_w = ui.p.text_w(&format!("HP {hp} / {max}"), BODY + 1.0) + if *wounded { gap + ui.p.text_w(mark, BODY + 1.0) } else { 0.0 };
+            col_w = col_w.max(ui.p.text_w(class_line, BODY + 1.0).max(hp_w) + 6.0);
+        }
+        let col_w = col_w.ceil() as i32;
+        let cols = if rows.len() > 4 { 2 } else { 1 };
+        let per_col = rows.len().div_ceil(cols);
+        let bh = 4 + per_col as i32 * row_h;
+        let bx = Rect::new(320 - cols as i32 * col_w / 2, 80, cols as i32 * col_w, bh);
         ui.p.panel(bx, CARD, BORDER, 2.0);
-        for (i, m) in rows.iter().enumerate() {
-            let (hp, max) = progression::current_hp(&cx.data, m, &gs.world_id);
-            let y = bx.y as f32 + 3.0 + i as f32 * 42.0;
+        for (i, (m, (class_line, (hp, max, wounded)))) in rows.iter().zip(&lines).enumerate() {
+            let x = (bx.x + (i / per_col) as i32 * col_w) as f32 + 3.0;
+            let y = bx.y as f32 + 3.0 + (i % per_col) as f32 * row_h as f32;
             let on = active.contains(&m.id);
-            ui.p.text_fit(bx.x as f32 + 3.0, y, &member_name(cx, m), BODY + 1.0, 94.0, if on { INFO } else { DIM });
-            ui.p.text(bx.x as f32 + 3.0, y + 13.0, &format!("{}  Lv {}", class_name(cx, m), m.level(&cx.data)), BODY + 1.0, TEXT);
-            ui.p.text(bx.x as f32 + 3.0, y + 26.0, &format!("HP {hp} / {max}"), BODY + 1.0, TEXT);
+            ui.p.text_fit(x, y, &member_name(cx, m), BODY + 1.0, col_w as f32 - 6.0, if on { INFO } else { DIM });
+            ui.p.text(x, y + step, class_line, BODY + 1.0, TEXT);
+            let hp_line = format!("HP {hp} / {max}");
+            ui.p.text(x, y + step * 2.0, &hp_line, BODY + 1.0, TEXT);
+            if *wounded {
+                let mx = x + ui.p.text_w(&hp_line, BODY + 1.0) + gap;
+                ui.p.text(mx, y + step * 2.0, mark, BODY + 1.0, FOE);
+                let r = Rect::new(mx as i32 - 1, (y + step * 2.0) as i32 - 1, ui.p.text_w(mark, BODY + 1.0) as i32 + 2, step as i32);
+                ui.push(format!("hub.wounded.{}", m.id), "row", mark, r, true, false, None, tip(mark, &wounded_tip(cx, m)));
+            }
+        }
+        let mut below = bx.y + bh;
+        if let Some(bunks) = bunks_text(&gs) {
+            ui.p.text_center(320.0, below as f32 + 3.0, &bunks, BODY + 1.0, DIM);
+            below += step as i32 + 3;
         }
         let pts: i64 = gs.party.members.iter().map(|m| m.unspent(&cx.data).max(0)).sum();
         let entries = [
@@ -147,7 +201,7 @@ impl Screen<GameCx> for Hub {
             (HubAct::Settings, "hub.settings", "Settings".into(), "Sound, display, gameplay and controls."),
             (HubAct::Quit, "hub.quit", "Quit to main menu".into(), "Back to the title; unsaved progress is lost (you are asked first)."),
         ];
-        let top = bx.y + bh + 10;
+        let top = below + 10;
         let mut detail = "Roster, level up, skills and gear.".to_string();
         for (i, (a, id, label, desc)) in entries.iter().enumerate() {
             let r = Rect::new(if i % 2 == 0 { 187 } else { 323 }, top + (i as i32 / 2) * 24, 130, 18);
@@ -316,7 +370,45 @@ pub struct Results {
     rewards: Dict,
     /// ENCOUNTER2 W4: one line per hero who stayed or stood (`battle::apply`'s `stay_lines`).
     stay_lines: Vec<String>,
+    /// ROSTER1 3.2 (`battle::apply`'s `wounded` and `departed`): the members newly wounded and those who left
+    /// (member, life).
+    wounded: Vec<String>,
+    departed: Vec<(String, String)>,
     w: Vec<Widget<ResAct>>,
+}
+
+/// How a party line of the results reads (its colour).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PartyLine {
+    Departed,
+    Keepsake,
+    Wounded,
+}
+
+/// ROSTER1-U: the results' party lines after the stay-behind lines (ROSTER1_TASKS 4, W4): one per departure ("Ash was
+/// captured.", "Ash died."), then its keepsake when one was paid ("Keepsake: Ash's Locket, to the stash." KS1, KS2;
+/// the departed record keeps the item), then one line for the newly wounded. Names come from the departed records
+/// (the member has left `members`) or the members.
+pub fn party_lines(d: &emberwake_world::Data, gs: &GameState, wounded: &[String], departed: &[(String, String)]) -> Vec<(String, PartyLine)> {
+    let mut out = Vec::new();
+    for (member, life) in departed {
+        let rec = gs.party.departed.iter().rev().find(|x| x.member.id == *member);
+        let name = rec.map_or_else(|| member.clone(), |x| progression::display_name(d, &x.member));
+        let text = match life.as_str() {
+            x if x == roster::CAPTURED => format!("{name} was captured."),
+            x if x == roster::DEAD => format!("{name} died."),
+            _ => format!("{name} left the party."),
+        };
+        out.push((text, PartyLine::Departed));
+        if let Some(item) = rec.map(|x| x.keepsake.clone()).filter(|k| !k.is_empty()) {
+            out.push((format!("Keepsake: {}, to the stash.", d.item_name(&item)), PartyLine::Keepsake));
+        }
+    }
+    let names: Vec<String> = wounded.iter().map(|id| gs.party.member(id).map_or_else(|| id.clone(), |m| progression::display_name(d, m))).collect();
+    if !names.is_empty() {
+        out.push((format!("Wounded until the next rest: {}.", names.join(", ")), PartyLine::Wounded));
+    }
+    out
 }
 
 /// REWARD1 section 7: the tally line ("Foes defeated: 3 of 5 (2 slain, 1 surrendered)."), the outcome's note, and the
@@ -391,6 +483,8 @@ impl Results {
             gold: json::i(res, "gold", 0),
             rewards: json::dget(res, "rewards").clone(),
             stay_lines: json::sget(res, "stay_lines"),
+            wounded: json::sget(res, "wounded"),
+            departed: json::aget(res, "departed").iter().filter_map(Value::as_object).map(|x| (s(x, "member"), s(x, "life"))).collect(),
             w: Vec::new(),
         }
     }
@@ -444,6 +538,16 @@ impl Screen<GameCx> for Results {
             ui.p.text(24.0, y as f32, text, BODY + 1.0, INFO);
             y += line;
         }
+        // ROSTER1-U: who left (and the keepsake they left), who came home wounded
+        for (text, kind) in party_lines(&d, &gs, &self.wounded, &self.departed) {
+            let col = match kind {
+                PartyLine::Departed => FOE,
+                PartyLine::Keepsake => GOLD,
+                PartyLine::Wounded => DIM,
+            };
+            ui.p.text(24.0, y as f32, &text, BODY + 1.0, col);
+            y += line;
+        }
         let mut prompt = false;
         for m in &gs.party.members {
             let Some(a) = self.award.get(&m.id).and_then(Value::as_object) else { continue };
@@ -490,7 +594,7 @@ impl Screen<GameCx> for Results {
         }
     }
     fn state(&self, _cx: &Cx) -> Value {
-        json!({"outcome": self.outcome, "xp": self.award, "advanced": self.advanced, "gold": self.gold, "rewards": self.rewards, "stay_lines": self.stay_lines})
+        json!({"outcome": self.outcome, "xp": self.award, "advanced": self.advanced, "gold": self.gold, "rewards": self.rewards, "stay_lines": self.stay_lines, "wounded": self.wounded, "departed": self.departed})
     }
     widget_plumbing!();
 }
@@ -554,5 +658,113 @@ mod tests {
         let res = json::obj([("ok", json!(true)), ("stay_lines", json!(["Ash held the winch."]))]);
         assert_eq!(Results::new(&res, "won", &Dict::new()).stay_lines, ["Ash held the winch."]);
         assert!(Results::new(&json::obj([("ok", json!(true))]), "won", &Dict::new()).stay_lines.is_empty());
+    }
+
+    use crate::hud::hud_tests::{frame, game_cx, gfx};
+    use emberwake_world::state::RosterCaps;
+
+    /// A game whose party has at least `n` members (copies of the first under new ids, test-only members).
+    fn party_of(n: usize) -> Cx {
+        let mut cx = game_cx();
+        let party = &mut cx.gs_mut().party;
+        assert!(!party.members.is_empty());
+        let mut i = 0;
+        while party.members.len() < n {
+            let mut m = party.members[0].clone();
+            m.id = format!("test_member_{i}");
+            i += 1;
+            party.members.push(m);
+        }
+        cx
+    }
+
+    /// The played world gets a `roster` block with `bunks` (BK1: a scratch block on the party's caps, no data edit).
+    fn with_bunks(cx: &mut Cx, bunks: i64) {
+        let max = cx.gs().party.roster.party_max;
+        cx.gs_mut().party.roster = RosterCaps { party_max: max, manifest: emberwake_data::RosterManifest::from_obj(json!({"bunks": bunks}).as_object().unwrap()) };
+    }
+
+    fn texts(recs: &[aegis_ui::painter::TextRec]) -> Vec<String> {
+        recs.iter().map(|r| r.text.clone()).collect()
+    }
+
+    /// TEXTFIT1: no text leaves the canvas, overlaps another or runs out of its control, at every text size.
+    fn assert_clean(screen: &mut dyn Screen<GameCx>, cx: &mut Cx, what: &str) {
+        let mut g = gfx();
+        for (size, scale) in aegis_ui::screen::TEXT_SIZES {
+            let recs = frame(screen, cx, &mut g, scale as f32);
+            let boxes: Vec<(String, f32, f32, f32, f32)> = screen.widgets().into_iter().map(|w| {
+                let (x, y, ww, h) = crate::hud::hud_tests::rect(&w);
+                (w["id"].as_str().unwrap_or("").to_string(), x as f32, y as f32, ww as f32, h as f32)
+            }).collect();
+            let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+            for k in ["edge", "overlap", "spill"] {
+                assert_eq!(v["counts"][k], json!(0), "{what} at {size}: {v}");
+            }
+        }
+    }
+
+    /// ROSTER1-U on the game menu: a classic world shows no bunk chip and no wounded mark; with a roster block the
+    /// chip reads "Bunks used/cap" (BK1, BK2) and a wounded member shows the HP it takes the field with (W2: the cut max,
+    /// the default percent without a rule row) beside its mark; past four members the box takes two columns; the
+    /// menu reads clean at every text size.
+    #[test]
+    fn the_game_menu_marks_the_wounded_and_counts_the_bunks() {
+        let mut cx = party_of(1);
+        let mut hub = Hub::default();
+        let recs = frame(&mut hub, &mut cx, &mut gfx(), 1.0);
+        assert!(!texts(&recs).iter().any(|t| t.starts_with("Bunks") || t == "Wounded"), "classic: no chip, no mark");
+        assert!(!hub.w.iter().any(|w| w.id.starts_with("hub.wounded.")));
+        assert_clean(&mut hub, &mut cx, "classic menu");
+
+        let mut cx = party_of(6);
+        with_bunks(&mut cx, 6);
+        let id = cx.gs().party.members[0].id.clone();
+        let world = cx.gs().world_id.clone();
+        let (_, full) = progression::current_hp(&cx.data, &cx.gs().party.members[0], &world);
+        cx.gs_mut().party.member_mut(&id).unwrap().add_condition(roster::WOUNDED);
+        let cut = roster::wounded_max(full, emberwake_data::WOUNDED_PCT_DEFAULT);
+        let recs = frame(&mut hub, &mut cx, &mut gfx(), 1.0);
+        let t = texts(&recs);
+        assert!(t.contains(&format!("Bunks {}/6", cx.gs().party.members.len())), "{t:?}");
+        assert!(t.contains(&format!("HP {cut} / {cut}")), "the wounded member at full HP shows the cut max: {t:?}");
+        assert_eq!(t.iter().filter(|x| *x == "Wounded").count(), 1);
+        let mark = hub.w.iter().find(|w| w.id == format!("hub.wounded.{id}")).expect("the mark's hover");
+        assert!(mark.tip.iter().any(|(l, _)| l.contains(&format!("{cut} of {full} max HP"))), "{:?}", mark.tip);
+        assert_clean(&mut hub, &mut cx, "six members, bunks 6, one wounded");
+    }
+
+    /// ROSTER1-U on the results: after the stay-behind lines, a line per departure (its life), the keepsake its record
+    /// kept (KS1, KS2), then the newly wounded; none without the keys; the popup reads clean at every text size.
+    #[test]
+    fn the_results_name_the_departed_their_keepsakes_and_the_wounded() {
+        let mut cx = party_of(3);
+        let d = cx.data.clone();
+        let (gone, hurt) = (cx.gs().party.members[0].clone(), cx.gs().party.members[1].clone());
+        let (gone_name, hurt_name) = (progression::display_name(&d, &gone), progression::display_name(&d, &hurt));
+        roster::depart(&d, cx.gs_mut(), &gone.id, roster::CAPTURED, "stayed", "").expect("departs");
+        let item = d.cat.items.keys().next().cloned().expect("a catalog item");
+        cx.gs_mut().party.departed.last_mut().unwrap().keepsake = item.clone();
+        cx.gs_mut().party.member_mut(&hurt.id).unwrap().add_condition(roster::WOUNDED);
+        let res = json::obj([
+            ("ok", json!(true)),
+            ("stay_lines", json!(["Held."])),
+            ("departed", json!([{"member": gone.id, "life": roster::CAPTURED}])),
+            ("wounded", json!([hurt.id])),
+        ]);
+        let mut r = Results::new(&res, "won", &Dict::new());
+        assert_eq!(party_lines(&d, cx.gs(), &r.wounded, &r.departed), [
+            (format!("{gone_name} was captured."), PartyLine::Departed),
+            (format!("Keepsake: {}, to the stash.", d.item_name(&item)), PartyLine::Keepsake),
+            (format!("Wounded until the next rest: {hurt_name}."), PartyLine::Wounded),
+        ]);
+        let t = texts(&frame(&mut r, &mut cx, &mut gfx(), 1.0));
+        let at = |s: &str| t.iter().position(|x| x == s).unwrap_or_else(|| panic!("{s} in {t:?}"));
+        assert!(at("Held.") < at(&format!("{gone_name} was captured.")), "the party lines follow the stay-behind lines");
+        assert_eq!(r.state(&cx)["departed"], json!([[gone.id, roster::CAPTURED]]));
+        assert_clean(&mut r, &mut cx, "results with party lines");
+        assert!(party_lines(&d, cx.gs(), &[], &[]).is_empty(), "no keys, no lines");
+        cx.gs_mut().party.departed.last_mut().unwrap().keepsake.clear();
+        assert_eq!(party_lines(&d, cx.gs(), &[], &[(gone.id.clone(), roster::DEAD.into())]), [(format!("{gone_name} died."), PartyLine::Departed)], "no keepsake paid, no keepsake line");
     }
 }

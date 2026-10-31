@@ -389,3 +389,22 @@ bleed-out rounds, wounded percent after the baseline).
   a rule row; a classic world keeps HEAL1's no-battle path, so `journey` and the saves suites are unchanged.
 - BK6 at the battle start reads the fight world's entry (`roster::party_min_refusal(gs, entry)`, the world from
   `battle::fight_world`); the dialogue precheck keeps `party_min_text`.
+
+## As built (ROSTER1-U, 2026-11-01)
+
+- The GUI only draws (`emberwake_gui/src/hub.rs`: `field_hp`, `bunks_text`, `wounded_tip`, `party_lines`): the HP
+  shown for a wounded member is the battle's own build (`roster::field_unit` in the played world: the act's row cut,
+  the default percent without a row); any other member keeps `progression::current_hp`.
+- Wounded mark: a red "Wounded" after the HP line in the game menu's party box and after the level line on the
+  Character Stats tab ("Wounded HP n / cut"), each with the hover "Fights with `{cut}` of `{max}` max HP until the
+  party rests."; no art.
+- Bunks chip "Bunks `{used}/{cap}`" (`roster::bunks_used`, `roster::bunk_cap`) under the game menu's party box and at
+  the right of the Stats tab's "In party" line, only when `RosterCaps::has_block` (a classic world and the Ashlands
+  show none). The party box grows with its widest line and takes a second column past four members (bunks above the
+  party max), so up to 8 members fit 640x360 at every text size.
+- Results: after ENCOUNTER2 W4's stay-behind lines, one line per `departed` entry ("`{name}` was captured.",
+  "`{name}` died.", any other life "`{name}` left the party."; the name from the departed record), then
+  "Keepsake: `{item}`, to the stash." when the record kept one (KS1, KS2), then "Wounded until the next rest:
+  `{names}`." for the result's `wounded`. The popup state carries `wounded` and `departed`.
+- BK6: no GUI change; the battle start's refusal (ENCOUNTER2-W) reaches the region map's error popup and the
+  dialogue precheck locks the fight choice with the same text.

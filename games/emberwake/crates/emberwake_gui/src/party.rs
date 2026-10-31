@@ -1378,11 +1378,27 @@ impl Character {
         let d = &cx.data;
         let gs = cx.gs();
         let lvl = m.level(d);
-        ui.p.text(68.0, 104.0, &format!("Level {lvl}  ·  XP {} ({} to next)  ·  Gold {}", m.total_xp, progression::xp_to_next(d, m.total_xp), gs.party.gold), BODY + 1.0, TEXT);
+        let end = ui.p.text(68.0, 104.0, &format!("Level {lvl}  ·  XP {} ({} to next)  ·  Gold {}", m.total_xp, progression::xp_to_next(d, m.total_xp), gs.party.gold), BODY + 1.0, TEXT);
+        // ROSTER1-U W2: a wounded member's mark and the HP it takes the field with (the act's cut max)
+        let (hp, max, wounded) = crate::hub::field_hp(cx, m);
+        if wounded {
+            let mark = "Wounded";
+            let x = end + 12.0;
+            let after = ui.p.text(x, 104.0, mark, BODY + 1.0, FOE);
+            ui.p.text(after + 5.0, 104.0, &format!("HP {hp} / {max}"), BODY + 1.0, DIM);
+            let w = ui.p.text_w(&format!("{mark} HP {hp} / {max}"), BODY + 1.0) + 5.0;
+            let lh = (ui.p.line_h(BODY + 1.0) + 2.0).ceil() as i32;
+            ui.push("stats.wounded", "row", format!("{mark} HP {hp} / {max}"), Rect::new(x as i32 - 2, 102, w as i32 + 4, lh), true, false, None, tip(mark, &crate::hub::wounded_tip(cx, m)));
+        }
         let active = gs.party.active_members().iter().any(|a| a.id == m.id);
         let n = gs.party.active_members().len();
         ui.checkbox("character.active", 72, 122, &format!("In party ({n}/{})", gs.party.max_active), active, PAct::ToggleActive, true);
-        ui.p.text(155.0, 122.0, "Keep at least one active member.", BODY + 1.0, DIM);
+        let hint_end = ui.p.text(155.0, 122.0, "Keep at least one active member.", BODY + 1.0, DIM);
+        // ROSTER1-U BK1: the bunk chip in a world with a roster block
+        if let Some(bunks) = crate::hub::bunks_text(gs) {
+            let bw = ui.p.text_w(&bunks, BODY + 1.0);
+            ui.p.text((600.0 - bw).max(hint_end + 12.0), 122.0, &bunks, BODY + 1.0, DIM);
+        }
         let Some(arch) = d.cat.classes.get(&m.class_id(d)) else { return };
         let mut spend: IndexMap<String, i32> = m.spend.iter().map(|(k, v)| (k.clone(), *v as i32)).collect();
         if spend.is_empty() {
@@ -2517,6 +2533,38 @@ mod tests {
                 for k in ["edge", "overlap", "spill"] {
                     assert_eq!(v["counts"][k], json!(0), "{view} at {size}: {v}");
                 }
+            }
+        }
+    }
+
+    /// ROSTER1-U on the Stats tab: a classic world shows no bunk chip and no wounded mark; with a roster block the chip
+    /// reads "Bunks used/cap" and a wounded member shows its mark with the HP it takes the field with (W2, the cut max);
+    /// the tab reads clean at every text size.
+    #[test]
+    fn the_stats_tab_marks_the_wounded_and_counts_the_bunks() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let member = cx.gs().party.members[0].id.clone();
+        let mut g = crate::hud::hud_tests::gfx();
+        let mut c = Character::new(&cx, &member, "stats");
+        let texts = |recs: &[aegis_ui::painter::TextRec]| recs.iter().map(|r| r.text.clone()).collect::<Vec<String>>();
+        let t = texts(&crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0));
+        assert!(!t.iter().any(|x| x.starts_with("Bunks") || x == "Wounded"), "classic: {t:?}");
+        assert!(!c.w.iter().any(|w| w.id == "stats.wounded"));
+        let max = cx.gs().party.roster.party_max;
+        cx.gs_mut().party.roster = emberwake_world::state::RosterCaps { party_max: max, manifest: emberwake_data::RosterManifest::from_obj(json!({"bunks": 6}).as_object().unwrap()) };
+        cx.gs_mut().party.member_mut(&member).unwrap().add_condition(emberwake_world::roster::WOUNDED);
+        let (hp, field, wounded) = crate::hub::field_hp(&cx, cx.gs().party.member(&member).unwrap());
+        assert!(wounded && hp <= field);
+        let t = texts(&crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0));
+        assert!(t.contains(&format!("Bunks {}/6", cx.gs().party.members.len())), "{t:?}");
+        assert!(t.contains(&"Wounded".to_string()) && t.contains(&format!("HP {hp} / {field}")), "{t:?}");
+        assert!(c.w.iter().any(|w| w.id == "stats.wounded"));
+        for (size, scale) in aegis_ui::screen::TEXT_SIZES {
+            let recs = crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, scale as f32);
+            let boxes: Vec<(String, f32, f32, f32, f32)> = c.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
+            let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+            for k in ["edge", "overlap", "spill"] {
+                assert_eq!(v["counts"][k], json!(0), "stats tab at {size}: {v}");
             }
         }
     }
