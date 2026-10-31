@@ -493,6 +493,8 @@ impl<'a> Builder<'a> {
             }
         }
         Err(match self.target {
+            // INPUT1 MR5: every Engage that could open found the target's flank protected
+            RoundTarget::Unit(t) if t != self.c && first.as_deref() == Some(round_intent::FLANK_PROTECTED) => round_intent::FLANK_PROTECTED.to_string(),
             RoundTarget::Unit(t) if t != self.c => format!("No {} skill reaches {} this round.", self.label(), self.target_name()),
             // GD1: a Guard tile the standard move cannot reach is the reason
             _ => format!("No {} skill fits this round: {}", self.label(), first.unwrap_or_default()),
@@ -579,7 +581,7 @@ impl<'a> Builder<'a> {
             // MV8: a lone jump opens (and retreats) only when nothing else can
             return Ok(vec![tagged(PlanStep::engage(sid, foe), RETREAT, "")]);
         }
-        if maneuver && carries(s) {
+        if maneuver && carries(w, s) {
             // MV4-MV9: the carried move rides in the skill (out of range: a plain move first, TQ22 a)
             return Ok(vec![tagged(PlanStep::engage(sid, foe), OPENER, APPROACH_OUT_OF_RANGE)]);
         }
@@ -702,8 +704,8 @@ impl<'a> Builder<'a> {
                 }
                 let foe = self.target_unit().filter(|&t| t != self.c)?;
                 let step = PlanStep::engage(sid, foe);
-                if self.intent == RoundIntent::Maneuver && carries(s) && self.kind != ManeuverKind::Disengage {
-                    // MV7: a follow-up moves only when its tile no longer meets the condition
+                if self.intent == RoundIntent::Maneuver && carries(self.w, s) && self.kind != ManeuverKind::Disengage {
+                    // MV7, INPUT1 MR6: a follow-up moves only when its tile is not a position tile
                     step.cell.set(st.pos);
                 }
                 Some(step)
@@ -763,6 +765,9 @@ impl<'a> Builder<'a> {
                         } else {
                             placed = true;
                         }
+                    } else if p == round_intent::FLANK_PROTECTED {
+                        // PL6: the Rest cause of a follow-up whose flank is protected (INPUT1 MR5)
+                        why = "flank protected".into();
                     } else {
                         why = self.reach_cause();
                     }

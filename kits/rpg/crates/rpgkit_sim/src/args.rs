@@ -112,6 +112,9 @@ pub struct SimArgs {
     pub ruleset: rpgkit_rules::ruleset::Ruleset,
     ruleset_id: String,
     rules: String,
+    /// INPUT1 MR11: `melee_diagonal=none|maneuver|all` over the ruleset row's value (None = the row's). Not in the help
+    /// text either (Godot parity, as `ruleset=`).
+    pub melee_diagonal: Option<rpgkit_rules::ruleset::MeleeDiagonal>,
     /// RULESET1-G2 (feel only): the party's AUTO1 tactic (a TACTICS name; `balanced`).
     pub tactic: String,
     /// RULESET1-G2 (feel only): the party drivers, each run as its own block (`party=auto|timed|both`; auto).
@@ -175,6 +178,7 @@ impl Default for SimArgs {
             ruleset: rpgkit_rules::ruleset::Ruleset::classic(),
             ruleset_id: String::new(),
             rules: String::new(),
+            melee_diagonal: None,
             tactic: "balanced".into(),
             drivers: vec![crate::timed::Driver::Auto],
             armor: IndexMap::new(),
@@ -251,6 +255,9 @@ impl SimArgs {
                 let mut r = w.clone();
                 // the switches were checked at parse; their errors depend on the ids only
                 let _ = r.adjust(&self.rules);
+                if let Some(m) = self.melee_diagonal {
+                    r.numbers.melee_diagonal = m;
+                }
                 r
             }
             _ => self.ruleset.clone(),
@@ -351,6 +358,9 @@ impl SimArgs {
         }
         a.ruleset = rpgkit_rules::ruleset::Ruleset::of(&d.cat, &a.ruleset_id)?;
         a.ruleset.adjust(&a.rules)?;
+        if let Some(m) = a.melee_diagonal {
+            a.ruleset.numbers.melee_diagonal = m;
+        }
         if a.mode == "feel" {
             a.feel_checks(d)?;
         }
@@ -512,6 +522,10 @@ impl SimArgs {
                 self.ruleset_id = value.into();
             }
             "rules" => self.rules = value.into(),
+            "melee_diagonal" => {
+                let ids = rpgkit_rules::ruleset::MeleeDiagonal::IDS;
+                self.melee_diagonal = Some(rpgkit_rules::ruleset::MeleeDiagonal::parse(value).ok_or_else(|| format!("melee_diagonal must be one of {} (got '{value}')", godot_list(&ids)))?);
+            }
             "rewards" => {
                 if value != "on" && value != "off" {
                     return Err(format!("rewards must be on or off (got '{value}')"));

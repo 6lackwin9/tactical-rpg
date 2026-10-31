@@ -44,6 +44,9 @@ use std::time::{Duration, Instant};
 
 /// The Flat view's cell (and the grid panel's: 12 x 9 cells of `TILE` at (`GRID_X`, `GRID_Y`)).
 const TILE: i32 = 32;
+/// INPUT1 MR12: a dash (a skill with a position moving to it at its start) crosses its route in this many ms at 1x
+/// (the FX clock: the animation speed applies), playing the rig's `dash` clip, else its walk (until DASH1's clip).
+const DASH_MS: u64 = 250;
 /// The battle screen's panels by name (`BattleScreen::panels`; the UI Gallery's battle panel entries).
 pub const PANELS: [&str; 7] = ["strip", "party", "hero", "grid", "hostiles", "intel", "bar"];
 const GRID_X: i32 = 128;
@@ -337,6 +340,10 @@ struct UnitAnim {
     want: Option<(Vec<&'static str>, u64)>,
     /// The tile it slides from and when the slide started.
     slide: Option<(V2, u64)>,
+    /// INPUT1 MR12: the slide is a dash (`DASH_MS` long, not the walk's), and its `dash` clip is still to be picked
+    /// once the body is known (`start_wanted`).
+    dash: bool,
+    dash_clip: bool,
     /// When it fell (the death clip plays and holds, then the dead marker shows); None while it stands.
     fell: Option<u64>,
     seen: Seen,
@@ -371,12 +378,18 @@ impl UnitAnim {
         self.planned.unwrap_or(self.facing)
     }
 
-    /// DIR4-G: the facing drawn at `now` (the animation clock): its step's while the slide runs (`walk_ms`), else `rest`.
+    /// DIR4-G: the facing drawn at `now` (the animation clock): its step's while the slide runs (`slide_ms`), else
+    /// `rest`.
     fn faces(&self, now: u64, walk_ms: u64) -> Facing {
         match self.slide {
-            Some((_, t0)) if now.saturating_sub(t0) < walk_ms => self.step,
+            Some((_, t0)) if walk_ms > 0 && now.saturating_sub(t0) < self.slide_ms(walk_ms) => self.step,
             _ => self.rest(),
         }
+    }
+
+    /// How long its slide runs: a dash's `DASH_MS` (INPUT1 MR12), else the walk's `walk_ms`.
+    fn slide_ms(&self, walk_ms: u64) -> u64 {
+        if self.dash { DASH_MS } else { walk_ms }
     }
 }
 
@@ -745,8 +758,11 @@ impl Tokens {
                     a.facing = turn(a.facing, from, to);
                     a.step = a.facing;
                     if from != to && !instant && walk_ms > 0 {
+                        // INPUT1 MR12: a dash (its board event) runs faster than a walk, with its own clip
+                        a.dash = dashed(s, i);
+                        a.dash_clip = a.dash;
                         a.slide = Some((from, now));
-                        a.player.play_for("walk", now, walk_ms);
+                        a.player.play_for("walk", now, a.slide_ms(walk_ms));
                     }
                 }
                 a.seen.pos = pos;
@@ -791,7 +807,7 @@ impl Tokens {
                     let weapon = u.inventory.main_weapon().map_or("", |w| w.weapon_type());
                     let a = &mut self.anims[act.unit];
                     // FX1 4.2 step 1: after its slide when it moved in this step (a dash, a charge, an Engage carry)
-                    let t0 = if a.slide.is_some_and(|(_, t)| t == now) { now + walk_ms } else { now };
+                    let t0 = if a.slide.is_some_and(|(_, t)| t == now) { now + a.slide_ms(walk_ms) } else { now };
                     a.want = Some((action_clips(skill, kind, weapon), t0));
                     a.strike = struck == Some(act.unit);
                 }
@@ -1043,6 +1059,9 @@ pub struct BattleScreen {
     arena_rules: String,
     /// Arena only (RULESET1 V2): "Reveal enemy plans" (the host's `plan_reveal`).
     arena_reveal: bool,
+    /// Arena only (INPUT1 MR11): the "Diagonal melee" pick (none, maneuver, all; "" = the ruleset row's value: the
+    /// host's `melee_diagonal`).
+    arena_diagonal: String,
     /// HOOKS1 CN2 (HOOKS1-UI slice 2): the world whose `classes` overlay names the units' classes on the hover cards: a
     /// world fight's world; "" (the class rows' names) in the Arena, a catalog screen.
     class_world: String,
@@ -1121,6 +1140,7 @@ impl BattleScreen {
             arena_ruleset: None,
             arena_rules: String::new(),
             arena_reveal: false,
+            arena_diagonal: String::new(),
             class_world: String::new(),
             events_seen: 0,
             log_seen: 0,
@@ -1234,11 +1254,18 @@ impl BattleScreen {
     /// `arena` played by `ruleset` (classic or timeline; None = the encounter's own: RULESET1 3.1.3) with the extensions
     /// `rules` switches ("-id,+id"; "" = none: 3.2) and, with `plan_reveal`, every enemy plan shown (V2).
     pub fn arena_with(cx: &Cx, world: Option<String>, encounter: &str, ruleset: Option<String>, rules: &str, plan_reveal: bool) -> Self {
+        Self::arena_full(cx, world, encounter, ruleset, rules, "", plan_reveal)
+    }
+
+    /// `arena_with` with the Scene Runner's "Diagonal melee" pick (INPUT1 MR11: none, maneuver or all; "" = the
+    /// ruleset row's value), kept on Restart.
+    pub fn arena_full(cx: &Cx, world: Option<String>, encounter: &str, ruleset: Option<String>, rules: &str, diagonal: &str, plan_reveal: bool) -> Self {
         let mut b = Self::blank(cx, Mode::Arena);
         b.encounter = encounter.to_string();
         b.arena_world = world;
         b.arena_ruleset = ruleset;
         b.arena_rules = rules.to_string();
+        b.arena_diagonal = diagonal.to_string();
         b.arena_reveal = plan_reveal;
         b.start_battle();
         b
@@ -1260,6 +1287,7 @@ impl BattleScreen {
         b.arena_ruleset = first["ruleset"].as_str().filter(|r| !r.is_empty()).map(String::from);
         b.arena_rules = first["rules"].as_str().unwrap_or("").to_string();
         b.arena_reveal = first["plan_reveal"].as_bool().unwrap_or(false);
+        b.arena_diagonal = first["melee_diagonal"].as_str().unwrap_or("").to_string();
         let until = take_over.as_ref().map(|(_, at)| *at);
         let report = aegis_host::playtest::replay(&mut b.host, session, until);
         if b.host.session.is_none() {
@@ -1573,7 +1601,9 @@ impl BattleScreen {
         let (round, block, _) = s.last_popped?;
         let now = self.clock.now();
         let moved = t.anims[act.unit].seen.pos.is_some_and(|p| p != from);
-        let t0 = if moved && walk_ms > 0 { now + walk_ms } else { now };
+        // INPUT1 MR12: after a dash's shorter slide
+        let slide = if dashed(s, act.unit) { DASH_MS } else { walk_ms };
+        let t0 = if moved && walk_ms > 0 { now + slide } else { now };
         let clips = if kind == "item" { Vec::new() } else { action_clips(skill, kind, family) };
         Some(Impact {
             at: None,
@@ -1776,6 +1806,10 @@ impl BattleScreen {
         }
         if self.arena_reveal {
             req["plan_reveal"] = json!(true);
+        }
+        // INPUT1 MR11: the Arena's diagonal melee pick (absent when the row's value plays)
+        if !self.arena_diagonal.is_empty() {
+            req["melee_diagonal"] = json!(self.arena_diagonal);
         }
         let reply = self.host.handle(&req);
         if reply["ok"] != json!(true) {
@@ -2219,7 +2253,9 @@ impl BattleScreen {
         for sid in rip::order(w, h, intent) {
             let sk = &w.cat.skills[sid];
             let info = skills.iter().find(|x| x["skill"] == json!(sk.id)).map(|x| format!("{} AP, {} bl", x["ap"], x["blocks"])).unwrap_or_default();
-            rows.push(row(sk.name.clone(), info, json!(sk.id), current == Some(ri::Opener::Skill(sid)), "Open the round with this skill; follow-ups come after it."));
+            // INPUT1 MR4: the skill's range on its row tip ("Range 2: dash to a flank, then hit")
+            let help = format!("{}. Open the round with this skill; follow-ups come after it.", intent_text::range_line(w, h, sk));
+            rows.push(row(sk.name.clone(), info, json!(sk.id), current == Some(ri::Opener::Skill(sid)), &help));
         }
         for id in emberwake_battle::command::pouch_ids(w, h) {
             let Some(item) = emberwake_battle::command::pouch_item(w, h, &id).filter(|it| ri::item_intent(it) == intent.id()) else { continue };
@@ -2244,7 +2280,7 @@ impl BattleScreen {
         if self.world_mode() || s.w.ruleset.rules.is_empty() {
             return None;
         }
-        Some(crate::runner::chip_text(&s.w.ruleset.name, &self.arena_rules, s.w.plan_reveal && s.w.ruleset.has(emberwake_rules::ruleset::PLAN_BADGES)))
+        Some(crate::runner::chip_text(&s.w.ruleset.name, &self.arena_rules, &self.arena_diagonal, s.w.plan_reveal && s.w.ruleset.has(emberwake_rules::ruleset::PLAN_BADGES)))
     }
 
     fn open_popup(&mut self, title: String, rows: Vec<Row>) {
@@ -2537,7 +2573,7 @@ impl Screen<GameCx> for BattleScreen {
             "popup": self.popup.as_ref().map(|p| json!({"title": p.title, "rows": p.rows.iter().map(|r| json!({"label": r.label, "detail": r.detail, "valid": r.valid})).collect::<Vec<_>>()}))});
         // RULESET1-G: the rules the battle plays by, beyond classic (a classic battle's state keeps its shape)
         if let Some(s) = self.host.session.as_ref().filter(|s| !s.w.ruleset.rules.is_empty()) {
-            out["ruleset"] = json!({"id": s.w.ruleset.id, "rules": s.w.ruleset.rules, "plan_reveal": s.w.plan_reveal});
+            out["ruleset"] = json!({"id": s.w.ruleset.id, "rules": s.w.ruleset.rules, "plan_reveal": s.w.plan_reveal, "melee_diagonal": s.w.ruleset.melee_diagonal().id()});
             // RULESET1-U: the Arena fight's ruleset chip as drawn
             if let Some(chip) = self.arena_chip() {
                 out["ruleset"]["chip"] = json!(chip);
@@ -4746,11 +4782,23 @@ struct Board<'a> {
     hold: Option<&'a HoldMarks>,
 }
 
+/// INPUT1 MR12: `unit` moved in this step by a dash: a command of its whose start is this block made the dash board event
+/// (`MoveKind::Dash`, the move of a skill with a position).
+fn dashed(s: &Session, unit: usize) -> bool {
+    s.resolver.scheduled.iter().any(|a| a.unit == unit && a.start == s.current_block && a.command.moved == Some(emberwake_battle::command::MoveKind::Dash))
+}
+
 /// An action clip a token wants starts with the first candidate its body has (SPRITE1-U), once the clock reaches its
 /// start (FX1-L1: after the actor's slide, so the walk shows until then); WINDUP1 W4: after a held wind-up from the
 /// clip's `strike` frame.
 fn start_wanted(tokens: &mut Tokens, art: &mut Art, i: usize, body: Option<&str>, now: u64) {
     if let (Some(a), Some(b)) = (tokens.anims.get_mut(i), body) {
+        // INPUT1 MR12: a dash plays the rig's `dash` clip over its slide when the body has one (else its walk shows)
+        if std::mem::take(&mut a.dash_clip) && art.has_clip(b, "dash") {
+            if let Some((_, t0)) = a.slide {
+                a.player.play_for("dash", t0, DASH_MS);
+            }
+        }
         if a.want.as_ref().is_some_and(|w| now >= w.1) {
             let (cands, t0) = a.want.take().unwrap_or_default();
             if let Some(c) = cands.into_iter().find(|c| art.has_clip(b, c)) {
@@ -4828,8 +4876,9 @@ fn flat_status(tokens: &mut Tokens, w: &World, geo: &Geom, t: &Tuning, anim_now:
         let (mut dx, mut dy, mut left) = (0, 0, !w.allies.contains(&i));
         if let Some(a) = tokens.anims.get(i) {
             left = a.faces(anim_now, if instant { 0 } else { t.walk_ms }).left;
-            if let Some((from, t0)) = a.slide.filter(|s| anim_now.saturating_sub(s.1) < t.walk_ms && !instant) {
-                (dx, dy) = geo.slide(from, pos, 1.0 - anim_now.saturating_sub(t0) as f32 / t.walk_ms.max(1) as f32);
+            let ms = a.slide_ms(t.walk_ms);
+            if let Some((from, t0)) = a.slide.filter(|s| anim_now.saturating_sub(s.1) < ms && !instant) {
+                (dx, dy) = geo.slide(from, pos, 1.0 - anim_now.saturating_sub(t0) as f32 / ms.max(1) as f32);
             }
         }
         let looks = status_draws(tokens, i, alive, wall, anim_now, t);
@@ -4986,9 +5035,9 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
         // A moving unit slides from its old tile.
         let (mut dx, mut dy) = (0, 0);
         if let Some((from, t0)) = a.slide {
-            let t = anim_now.saturating_sub(t0);
-            if t < tuning.walk_ms && !instant {
-                (dx, dy) = geo.slide(from, pos, 1.0 - t as f32 / tuning.walk_ms.max(1) as f32);
+            let (t, ms) = (anim_now.saturating_sub(t0), a.slide_ms(tuning.walk_ms));
+            if t < ms && !instant {
+                (dx, dy) = geo.slide(from, pos, 1.0 - t as f32 / ms.max(1) as f32);
             }
         }
         // FX1-L2: a miss's target steps aside and back
@@ -5187,9 +5236,9 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
         let standing = alive || still_dying(&mut cx.art, a, body.as_deref(), anim_now, instant, tuning.death_hold_ms);
         let (mut dx, mut dy) = (0, 0);
         if let Some((from, t0)) = a.slide {
-            let t = anim_now.saturating_sub(t0);
-            if t < tuning.walk_ms && !instant {
-                (dx, dy) = geo.slide(from, pos, 1.0 - t as f32 / tuning.walk_ms.max(1) as f32);
+            let (t, ms) = (anim_now.saturating_sub(t0), a.slide_ms(tuning.walk_ms));
+            if t < ms && !instant {
+                (dx, dy) = geo.slide(from, pos, 1.0 - t as f32 / ms.max(1) as f32);
             }
         }
         let (flash, shake) = flash_of(flashes, i, now, tuning, reduce || instant);
@@ -6350,6 +6399,50 @@ mod tests {
         assert_eq!(t.anims[actor].want.as_ref().map(|w| w.1), Some(5000));
     }
 
+    /// INPUT1 MR12 (`dash_tests`): a unit moved by a dash (its command's start this block made the `MoveKind::Dash`
+    /// board event) slides in `DASH_MS` (a walk takes the tuning's walk), playing the rig's `dash` clip when the body
+    /// has one, else its walk; under skip animations it stands on the position at once.
+    #[test]
+    fn dash_tests_a_dash_plays_its_clip_faster_than_a_walk() {
+        let root = std::env::temp_dir().join(format!("emberwake_dash_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        scratch_body(&root, "test/dash", &["idle", "walk", "dash", "hurt"]);
+        scratch_body(&root, "test/side", &["idle", "walk", "hurt"]);
+        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let mut host = skirmish(3);
+        assert_eq!(host.handle(&json!({"cmd": "confirm"}))["ok"], json!(true));
+        let s = host.session.as_mut().unwrap();
+        let (idx, actor) = s.resolver.scheduled.iter().enumerate().find(|(_, a)| !a.cancelled && s.w.grid.pos(a.unit).is_some()).map(|(i, a)| (i, a.unit)).expect("an action");
+        let walk = 300;
+        let here = s.w.grid.pos(actor).unwrap();
+        let next = [V2::new(1, 0), V2::new(-1, 0), V2::new(0, 1), V2::new(0, -1)].into_iter().map(|d| here + d).find(|c| s.w.grid.is_valid(*c) && s.w.occupant(*c).is_none()).expect("a free neighbour");
+        for (body, clip) in [("test/dash", "dash"), ("test/side", "walk")] {
+            let clips = art.clips(body).unwrap().clone();
+            s.w.grid.positions[actor] = Some(here);
+            s.resolver.scheduled[idx].command.moved = None;
+            let mut t = Tokens::default();
+            t.catch_up(s, 0, false, walk, true);
+            // a plain walk slides the walk's time
+            s.w.grid.positions[actor] = Some(next);
+            t.catch_up(s, 100, false, walk, true);
+            assert_eq!((t.anims[actor].slide, t.anims[actor].slide_ms(walk)), (Some((here, 100)), walk), "{body}: a walk");
+            // the dash back
+            s.resolver.scheduled[idx].start = s.current_block;
+            s.resolver.scheduled[idx].command.moved = Some(emberwake_battle::command::MoveKind::Dash);
+            s.w.grid.positions[actor] = Some(here);
+            t.catch_up(s, 1000, false, walk, true);
+            assert_eq!((t.anims[actor].slide, t.anims[actor].slide_ms(walk)), (Some((next, 1000)), super::DASH_MS), "{body}: a dash runs DASH_MS");
+            super::start_wanted(&mut t, &mut art, actor, Some(body), 1000);
+            assert_eq!(t.anims[actor].player.playing(&clips, 1000 + super::DASH_MS - 1), clip, "{body}: the clip over the dash");
+            assert_eq!(t.anims[actor].player.playing(&clips, 1000 + super::DASH_MS), "", "{body}: over after DASH_MS");
+            // skip animations: on the position at once
+            s.w.grid.positions[actor] = Some(next);
+            t.catch_up(s, 5000, true, walk, true);
+            assert!(t.anims[actor].slide.is_none_or(|(_, t0)| t0 != 5000) && t.anims[actor].seen.pos == Some(next), "{body}: instant");
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     /// FX1-L1 L4: a unit killed by the step is drawn standing until the impact, then plays `death` from it.
     #[test]
     fn a_fall_waits_for_its_impact() {
@@ -7189,6 +7282,30 @@ mod arena_rules_tests {
             b.start_battle();
         }
     }
+
+    /// INPUT1 MR11: the Arena's "Diagonal melee" pick reaches the `new` request (recorded), the battle plays by it and
+    /// keeps it on Restart; the battle's state and chip name it; "" (Ruleset) sends nothing and the row's value plays.
+    #[test]
+    fn the_arena_diagonal_melee_pick_reaches_the_battle_and_survives_restart() {
+        let cx = crate::hud::hud_tests::game_cx();
+        let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+        let mut b = BattleScreen::arena_full(&cx, None, &encounter, Some(TIMELINE.into()), "", "all", false);
+        for start in ["first", "restarted"] {
+            let s = b.host.session.as_ref().expect("the battle starts");
+            assert_eq!(s.w.ruleset.melee_diagonal(), emberwake_rules::ruleset::MeleeDiagonal::All, "{start}");
+            let st = b.state(&cx);
+            assert_eq!(st["ruleset"]["melee_diagonal"], json!("all"), "{start}");
+            assert!(st["ruleset"]["chip"].as_str().unwrap_or("").contains("diagonal: all"), "{start}: {}", st["ruleset"]["chip"]);
+            let history = b.host.handle(&json!({"cmd": "history"}))["history"].as_array().cloned().unwrap_or_default();
+            assert!(history.iter().any(|q| q["cmd"] == json!("new") && q["melee_diagonal"] == json!("all")), "{start}: the request carries it");
+            b.start_battle();
+        }
+        let mut row = BattleScreen::arena_full(&cx, None, &encounter, Some(TIMELINE.into()), "", "", false);
+        let history = row.host.handle(&json!({"cmd": "history"}))["history"].as_array().cloned().unwrap_or_default();
+        assert!(history.iter().all(|q| q.get("melee_diagonal").is_none()), "Ruleset: nothing sent");
+        let timeline = Ruleset::of(&cx.data.cat, TIMELINE).expect("the catalog's timeline row");
+        assert_eq!(row.host.session.as_ref().unwrap().w.ruleset.melee_diagonal(), timeline.melee_diagonal(), "the row's value");
+    }
 }
 
 /// STATUSFX1-L, the acceptance of STATUSFX1.md section 4 on the screen (the pure rules are tested in `fx.rs`): the
@@ -7655,7 +7772,7 @@ mod intent_ui_tests {
         let (mut cx, mut g, mut b) = arena(Some(TIMELINE), &spec, true);
         drawn(&mut cx, &mut g, &mut b);
         let s = b.host.session.as_ref().unwrap();
-        let want = crate::runner::chip_text(&timeline.name, &spec, s.w.ruleset.has(PLAN_BADGES));
+        let want = crate::runner::chip_text(&timeline.name, &spec, "", s.w.ruleset.has(PLAN_BADGES));
         assert_eq!(widget(&b, "bar.chip").text, want);
         assert_eq!(b.state(&cx)["ruleset"]["chip"], json!(want));
         assert!(want.contains(&format!("-{off}")));

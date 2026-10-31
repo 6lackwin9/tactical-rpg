@@ -10,6 +10,8 @@
 //!                                              encounter, the world's for a world one); rules "-id,+id" switches
 //!                                              single extensions
 //!       {plan_reveal?}                         RULESET1 V2: reveal every enemy plan (rule `plan_badges`; default false)
+//!       {melee_diagonal?}                      INPUT1 MR11: none, maneuver or all over the ruleset row's value
+//!                                              (beyond classic the state's `ruleset` names it)
 //!   state                                      round, block, phase, outcome, units, grid; `hold` (tiles, label,
 //!                                              holder, open, note) only for a hold escape (ENCOUNTER2 3.1)
 //!   intents                                    every scheduled action this round (enemies included); under the rule
@@ -60,7 +62,7 @@ use rpgkit_battle::session::{EncounterDef, Phase, Session};
 use rpgkit_battle::skill::{self, Kind};
 use rpgkit_battle::world::UnitId;
 use rpgkit_data::Catalog;
-use rpgkit_rules::ruleset::Ruleset;
+use rpgkit_rules::ruleset::{MeleeDiagonal, Ruleset};
 use indexmap::IndexMap;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -87,6 +89,10 @@ fn picked_ruleset(cat: &Catalog, req: &Value, default: Ruleset) -> Result<Rulese
     };
     if let Some(spec) = req.get("rules").and_then(Value::as_str) {
         r.adjust(spec)?;
+    }
+    // INPUT1 MR11: the diagonal melee to compare (the row's value when absent or "")
+    if let Some(id) = req.get("melee_diagonal").and_then(Value::as_str).filter(|s| !s.is_empty()) {
+        r.numbers.melee_diagonal = MeleeDiagonal::parse(id).ok_or_else(|| format!("melee_diagonal must be one of {} (got '{id}')", MeleeDiagonal::IDS.join(", ")))?;
     }
     Ok(r)
 }
@@ -400,6 +406,10 @@ pub fn state_of(s: &Session) -> Value {
         "outcome": s.outcome, "over": s.combat_over, "units": units,
         "grid": {"w": GRID_W, "h": GRID_H, "rows": rows, "exits": w.grid.exits.iter().map(|e| json!([e.x, e.y])).collect::<Vec<_>>()},
     });
+    // INPUT1 MR11: beyond classic the ruleset and its diagonal melee (classic keeps the state's shape)
+    if !w.ruleset.is_classic() {
+        state["ruleset"] = json!({"id": w.ruleset.id, "melee_diagonal": w.ruleset.melee_diagonal().id()});
+    }
     // ENCOUNTER2 3.1: a hold escape's tiles, holder and gate (other battles keep the state's shape)
     if let Some(g) = &w.hold {
         state["hold"] = json!({"tiles": g.tiles.iter().map(|c| json!([c.x, c.y])).collect::<Vec<_>>(), "label": g.label, "holder": g.holder, "open": g.is_open(w), "note": g.note(w)});

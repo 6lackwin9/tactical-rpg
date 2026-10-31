@@ -1,16 +1,17 @@
 //! The round intent (RULESET1_INTENT 2-6, rule `round_intent`; engine-only, no Godot original): each unit's intent,
 //! which persists across rounds and limits its skills; the round target (one a round, the unit's lock); the intent-bound
 //! buffs that end on an intent change; Rest paid at round end; battle facing, engagement and flanks; Guard stealth; the
-//! carried move of a Maneuver skill and the tile ranking (PL4) its moves and after-moves use. Every function is inert
-//! unless the battle's ruleset has `round_intent` (flank bonuses also need `flank`), so classic never reaches it.
+//! positions a Maneuver skill dashes to (INPUT1 MR1-MR6), diagonal melee (MR10) and the tile ranking (PL4) its moves and
+//! after-moves use. Every function is inert unless the battle's ruleset has `round_intent` (flank bonuses also need
+//! `flank`), so classic never reaches it.
 
 use crate::command::{cover_for, dash_fits};
 use crate::grid::{V2, NO_CELL, ZERO};
 use crate::path::{self, Cells, Hooks};
-use crate::skill;
+use crate::skill::{self, Kind};
 use crate::world::{UnitId, World};
-use rpgkit_data::{ItemDef, SkillDef};
-use rpgkit_rules::ruleset::{self, Numbers};
+use rpgkit_data::{ItemDef, Position, SkillDef};
+use rpgkit_rules::ruleset::{self, MeleeDiagonal, Numbers};
 use rpgkit_rules::status;
 
 /// RULESET1_INTENT IN1: the intents a unit may hold (`channel` only when the ruleset row lists it).
@@ -392,7 +393,8 @@ pub fn melee_reach(w: &World, c: UnitId) -> i32 {
     skill::melee_reach(&w.units[c], &w.ruleset)
 }
 
-/// MV2: the unit `t` is engaged with: its round target (the lock), a foe of `t` on the field within `t`'s melee band.
+/// MV2: the unit `t` is engaged with: its round target (the lock), a foe of `t` on the field within `t`'s melee band
+/// (diagonals in it under `melee_diagonal` all, INPUT1 MR10).
 pub fn engaged_with(w: &World, t: UnitId) -> Option<UnitId> {
     if !on(w) || !w.has(t) {
         return None;
@@ -402,7 +404,9 @@ pub fn engaged_with(w: &World, t: UnitId) -> Option<UnitId> {
         Some(_) => None,
         None => w.units[t].active_target,
     }?;
-    let d = if w.has(e) && w.units[e].is_active() { w.dist(t, e) } else { return None };
+    // INPUT1 MR10: under `melee_diagonal` all a diagonal neighbour is in the melee band
+    let diag = w.ruleset.melee_diagonal() == MeleeDiagonal::All;
+    let d = if w.has(e) && w.units[e].is_active() { band_dist(diag, w.pos(t), w.pos(e)) } else { return None };
     (w.foes_of(t).contains(&e) && d >= 1 && d <= melee_reach(w, t)).then_some(e)
 }
 
@@ -522,27 +526,190 @@ pub fn carry_tiles(w: &World, from: V2, dash_tiles: i32, blocked: &Cells) -> Vec
     out
 }
 
-/// MV5, MV7: the Engage tiles of skill `s` against `t` from `from`: carried-move ends with `t` in the skill's band
-/// and outside `t`'s front, ranked by PL4 (best first).
-pub fn engage_tiles(w: &World, c: UnitId, s: &SkillDef, t: UnitId, from: V2, blocked: &Cells) -> Vec<(V2, Vec<V2>)> {
-    let band = skill::reach_by(s, &w.units[c], &w.ruleset);
+// ---- Positions, range and diagonal melee (INPUT1 MR1-MR10, MR16) ---------------------------------------------------
+
+/// INPUT1 MR5, PL6: the planner's refusal of an Engage whose target has no open position tile, and the Rest cause.
+pub const FLANK_PROTECTED: &str = "Flank protected";
+
+/// INPUT1 MR1: the position skill `s` dashes to in this battle (rule `round_intent`; the transition reads a Maneuver
+/// attack's `dash_tiles` as `flank`); None = it hits from where it stands.
+pub fn position_of(w: &World, s: &SkillDef) -> Option<Position> {
+    skill::position_by(s, &w.ruleset)
+}
+
+/// INPUT1 MR1: how far `c`'s skill `s` dashes to its position (`reach_max`, else the unit's default band max; the
+/// transition's `dash_tiles`); None: `s` has no position and hits from where it stands.
+pub fn dash_range(w: &World, c: UnitId, s: &SkillDef) -> Option<i32> {
+    skill::dash_range_by(s, &w.units[c], &w.ruleset)
+}
+
+/// INPUT1 MR4: the band `c`'s skill `s` hits in: (1, 1) for a skill with a position (it hits from the tile next to its
+/// target), else its reach band (K1-K2).
+pub fn hit_band(w: &World, c: UnitId, s: &SkillDef) -> (i32, i32) {
+    if position_of(w, s).is_some() {
+        (1, 1)
+    } else {
+        skill::reach_by(s, &w.units[c], &w.ruleset)
+    }
+}
+
+/// INPUT1 MR10: whether the band test of `c`'s skill `s` (None: the riposte counter) counts a diagonal neighbour as
+/// distance 1: under `maneuver` a Maneuver attack with a position or a melee band, under `all` every melee attack, every
+/// skill with a position and the counter; never under `none` (classic) nor for a ranged band.
+pub fn diagonal(w: &World, c: UnitId, s: Option<&SkillDef>) -> bool {
+    let melee_attack = |s: &SkillDef| {
+        let band = hit_band(w, c, s);
+        skill::kind(s) == Kind::Attack && !skill::is_area(s) && band.0 <= 1 && band.1 <= 2
+    };
+    match w.ruleset.melee_diagonal() {
+        MeleeDiagonal::None => false,
+        MeleeDiagonal::Maneuver => s.is_some_and(|s| skill_intent(s) == "maneuver" && melee_attack(s)),
+        MeleeDiagonal::All => s.is_none_or(melee_attack),
+    }
+}
+
+/// INPUT1 MR10: the distance a band test reads from `a` to `b`: Manhattan, except that a diagonal neighbour (one step on
+/// each axis) is 1 when `diag`.
+pub fn band_dist(diag: bool, a: V2, b: V2) -> i32 {
+    let d = b - a;
+    if diag && d.x.abs() == 1 && d.y.abs() == 1 {
+        1
+    } else {
+        a.dist(b)
+    }
+}
+
+/// INPUT1 MR10 through one helper: the distance `c`'s skill `s` (None: the riposte counter) reads from `a` to `b`.
+pub fn melee_dist(w: &World, c: UnitId, s: Option<&SkillDef>, a: V2, b: V2) -> i32 {
+    band_dist(diagonal(w, c, s), a, b)
+}
+
+/// INPUT1 MR2-MR3: the open position tiles of a position around a target, each tier in MR4's rank order once
+/// `position_tiles` ranks them (here in ring order).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Positions {
+    pub preferred: Vec<V2>,
+    pub fallback: Vec<V2>,
+}
+
+impl Positions {
+    /// No open tile in either tier: the flank is protected (MR5, MR8 c).
+    pub fn protected(&self) -> bool {
+        self.preferred.is_empty() && self.fallback.is_empty()
+    }
+
+    /// Whether `cell` is a position tile of either tier (MR6).
+    pub fn contains(&self, cell: V2) -> bool {
+        self.preferred.contains(&cell) || self.fallback.contains(&cell)
+    }
+}
+
+/// The 8 neighbour offsets around a circle (45 degrees a step).
+const RING: [V2; 8] = [V2 { x: 1, y: 0 }, V2 { x: 1, y: 1 }, V2 { x: 0, y: 1 }, V2 { x: -1, y: 1 }, V2 { x: -1, y: 0 }, V2 { x: -1, y: -1 }, V2 { x: 0, y: -1 }, V2 { x: 1, y: -1 }];
+
+/// MR2: the number of 45-degree steps (0-4) between the offsets `a` and `b` (both neighbour offsets).
+fn ring_steps(a: V2, b: V2) -> usize {
+    let at = |v: V2| RING.iter().position(|r| *r == v).unwrap_or(0);
+    let d = at(a).abs_diff(at(b));
+    d.min(8 - d)
+}
+
+/// INPUT1 MR2-MR3: the open tiles of `position` around `t` (on its tile now, facing as MV1 reads it; a target with no
+/// facing faces from its tile toward `from`, where `attacker` stands or will start). `behind` prefers the neighbour
+/// straight behind (k 0), `flank` the two beside it (k 2); the fallback of both is the two diagonals between (k 1); the
+/// front (k 3, 4) is never a position. A tile is open on the grid, walkable, not an exit, with no unit but `attacker`
+/// on it and not in `blocked` (other units and, while planning, the earlier members' claims); without diagonal melee
+/// for the skill (`diag` false, MR10) a diagonal neighbour of `t` is never a position.
+pub fn positions(w: &World, t: UnitId, attacker: UnitId, position: Position, from: V2, diag: bool, blocked: &Cells) -> Positions {
+    let mut out = Positions::default();
+    if !w.has(t) {
+        return out;
+    }
     let tp = w.pos(t);
-    let mut out: Vec<(V2, Vec<V2>)> = carry_tiles(w, from, s.dash_tiles, blocked)
-        .into_iter()
-        .filter(|(cell, _)| {
-            let d = cell.dist(tp);
-            d >= band.0 && d <= band.1 && !in_front(w, t, *cell)
-        })
-        .collect();
-    rank_tiles(w, c, tp, w.units[c].attack_range > 1, Aim::Toward, &mut out);
+    let mut f = facing(w, t);
+    if f == ZERO {
+        f = sign(from - tp);
+    }
+    if f == ZERO {
+        f = V2::new(1, 0);
+    }
+    let back = V2::new(-f.x, -f.y);
+    for off in RING {
+        let n = tp + off;
+        let open = w.grid.is_valid(n) && w.grid.is_walkable(n) && !w.grid.is_exit(n) && w.occupant(n).is_none_or(|o| o == attacker) && !blocked.contains(&n);
+        if !open || (!diag && off.x != 0 && off.y != 0) {
+            continue;
+        }
+        match (ring_steps(off, back), position) {
+            (0, Position::Behind) | (2, Position::Flank) => out.preferred.push(n),
+            (1, _) => out.fallback.push(n),
+            _ => {}
+        }
+    }
     out
 }
 
-/// MV8: the retreat tiles of skill `s` from `from` after its hit on `t`: carried-move ends other than `from`, ranked by
-/// PL4 away from `t` (best first).
+/// INPUT1 MR4: the open position tiles of `c`'s skill `s` on `t` that `c` reaches from `from` within `budget` move cost
+/// in one block (`dash_fits`; `from` itself at cost 0; only `from` when `rooted`), with their routes: the preferred
+/// tier in range ranked by PL4, else the fallback tier in range ranked by fewer path tiles, then PL4. Also returns every
+/// open position tile (range aside).
+#[allow(clippy::too_many_arguments)]
+pub fn position_tiles(w: &World, c: UnitId, s: &SkillDef, t: UnitId, from: V2, budget: i32, rooted: bool, blocked: &Cells) -> (Positions, Vec<(V2, Vec<V2>)>) {
+    let Some(position) = position_of(w, s) else { return (Positions::default(), Vec::new()) };
+    let open = positions(w, t, c, position, from, diag_of(w, c, s), blocked);
+    let reach = |cell: V2| -> Option<Vec<V2>> {
+        if cell == from {
+            return Some(Vec::new());
+        }
+        if rooted || cell.dist(from) > budget {
+            return None;
+        }
+        let goals: Cells = [cell].into_iter().collect();
+        let route = path::find_path(&w.grid, from, &goals, blocked, false, &Hooks::default());
+        (!route.is_empty() && dash_fits(&w.grid, from, &route, budget)).then_some(route)
+    };
+    let tp = w.pos(t);
+    let mut tiles: Vec<(V2, Vec<V2>)> = open.preferred.iter().filter_map(|&cell| reach(cell).map(|r| (cell, r))).collect();
+    if !tiles.is_empty() {
+        rank_tiles(w, c, tp, w.units[c].attack_range > 1, Aim::Toward, &mut tiles);
+        return (open, tiles);
+    }
+    tiles = open.fallback.iter().filter_map(|&cell| reach(cell).map(|r| (cell, r))).collect();
+    rank_tiles(w, c, tp, w.units[c].attack_range > 1, Aim::Toward, &mut tiles);
+    // "nearest": fewer path tiles first (a stable sort keeps PL4's order inside each length)
+    tiles.sort_by_key(|(_, route)| route.len());
+    (open, tiles)
+}
+
+/// MR10 for a positioned skill: its hit from a diagonal neighbour counts (`diagonal`).
+fn diag_of(w: &World, c: UnitId, s: &SkillDef) -> bool {
+    diagonal(w, c, Some(s))
+}
+
+/// INPUT1 MR5: `attacker`'s skill `s` on `t` finds no open position tile (`from`: where it stands or will start).
+pub fn flank_protected(w: &World, t: UnitId, attacker: UnitId, s: &SkillDef, from: V2, blocked: &Cells) -> bool {
+    position_of(w, s).is_some_and(|p| positions(w, t, attacker, p, from, diag_of(w, attacker, s), blocked).protected())
+}
+
+/// INPUT1 MR14 (AI table row 4): `c`'s Maneuver attack `s` reaches `t` from `from`: with a position, an open position
+/// tile within its range (MR4); without one, `t` in its band (MR10).
+pub fn engage_reach(w: &World, c: UnitId, s: &SkillDef, t: UnitId, from: V2, blocked: &Cells) -> bool {
+    match dash_range(w, c, s) {
+        Some(n) => !position_tiles(w, c, s, t, from, n, w.units[c].has_status("root"), blocked).1.is_empty(),
+        None => {
+            let band = hit_band(w, c, s);
+            let d = melee_dist(w, c, Some(s), from, w.pos(t));
+            d >= band.0 && d <= band.1
+        }
+    }
+}
+
+/// MV8: the retreat tiles of skill `s` from `from` after its hit on `t`: carried-move ends other than `from` within the
+/// skill's range (INPUT1 MR14: `dash_range`, else its `dash_tiles`), ranked by PL4 away from `t` (best first).
 pub fn retreat_tiles(w: &World, c: UnitId, s: &SkillDef, t: UnitId, from: V2, blocked: &Cells) -> Vec<(V2, Vec<V2>)> {
     let tp = if w.has(t) { w.pos(t) } else { from };
-    let mut out: Vec<(V2, Vec<V2>)> = carry_tiles(w, from, s.dash_tiles, blocked).into_iter().filter(|(cell, _)| *cell != from).collect();
+    let n = dash_range(w, c, s).unwrap_or(s.dash_tiles);
+    let mut out: Vec<(V2, Vec<V2>)> = carry_tiles(w, from, n, blocked).into_iter().filter(|(cell, _)| *cell != from).collect();
     rank_tiles(w, c, tp, w.units[c].attack_range > 1, Aim::Away, &mut out);
     out
 }

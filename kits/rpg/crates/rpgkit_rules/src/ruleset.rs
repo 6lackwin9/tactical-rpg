@@ -84,6 +84,85 @@ pub fn rule(id: &str) -> Option<&'static Rule> {
 
 /// The round intents a ruleset row may list (`channel` is reserved for Act 2: RULESET1_INTENT IN1).
 pub const INTENTS: [&str; 5] = ["assault", "guard", "support", "maneuver", "channel"];
+/// INPUT1 MR10: which melee hits count a diagonal neighbour (one step on each axis) as distance 1: none, the Maneuver
+/// skills (the default of a row; read as none without `round_intent`), or every melee attack, every skill with a
+/// position and the riposte counter. Classic has no row: none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MeleeDiagonal {
+    None,
+    Maneuver,
+    All,
+}
+
+impl MeleeDiagonal {
+    /// The field values, in order.
+    pub const IDS: [&'static str; 3] = ["none", "maneuver", "all"];
+
+    pub fn parse(id: &str) -> Option<Self> {
+        match id {
+            "none" => Some(MeleeDiagonal::None),
+            "maneuver" => Some(MeleeDiagonal::Maneuver),
+            "all" => Some(MeleeDiagonal::All),
+            _ => None,
+        }
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            MeleeDiagonal::None => "none",
+            MeleeDiagonal::Maneuver => "maneuver",
+            MeleeDiagonal::All => "all",
+        }
+    }
+}
+
+/// INPUT1 MR9: what a Maneuver whose flank is protected pays of the AP it paid at its start: all of it, half (rounded
+/// down), at most a fixed number, or nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FlankCost {
+    Full,
+    Half,
+    Fixed(i32),
+    None,
+}
+
+impl FlankCost {
+    /// The `flank_protected_cost` values, in order.
+    pub const IDS: [&'static str; 4] = ["full", "half", "fixed", "none"];
+    /// The `flank_protected_ap` default.
+    pub const FIXED_AP: i32 = 1;
+
+    /// The AP a protected flank pays of `cost` (the rest is refunded).
+    pub fn pays(self, cost: i32) -> i32 {
+        let cost = cost.max(0);
+        match self {
+            FlankCost::Full => cost,
+            FlankCost::Half => cost / 2,
+            FlankCost::Fixed(ap) => cost.min(ap.max(0)),
+            FlankCost::None => 0,
+        }
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            FlankCost::Full => "full",
+            FlankCost::Half => "half",
+            FlankCost::Fixed(_) => "fixed",
+            FlankCost::None => "none",
+        }
+    }
+
+    /// From the row's `flank_protected_cost` and `flank_protected_ap` (an unknown value reads as `full`).
+    pub fn from_ids(cost: &str, ap: i32) -> Self {
+        match cost {
+            "half" => FlankCost::Half,
+            "fixed" => FlankCost::Fixed(ap),
+            "none" => FlankCost::None,
+            _ => FlankCost::Full,
+        }
+    }
+}
+
 /// A row's `intents` when it lists none.
 pub const DEFAULT_INTENTS: [&str; 4] = ["assault", "guard", "support", "maneuver"];
 /// The intent of commands usable in any intent (a plain move, Rest; RULESET1_INTENT IN5).
@@ -149,6 +228,10 @@ pub struct Numbers {
     pub rest_ap_cap: i32,
     pub rest_poise_per_block: i32,
     pub deck_slots: DeckSlots,
+    /// INPUT1 MR10 (`melee_diagonal`; row default `maneuver`, classic `none`).
+    pub melee_diagonal: MeleeDiagonal,
+    /// INPUT1 MR9 (`flank_protected_cost`, `flank_protected_ap`; default `full`).
+    pub flank_protected: FlankCost,
 }
 
 impl Default for Numbers {
@@ -168,6 +251,8 @@ impl Default for Numbers {
             rest_ap_cap: 2,
             rest_poise_per_block: 5,
             deck_slots: DeckSlots::default(),
+            melee_diagonal: MeleeDiagonal::Maneuver,
+            flank_protected: FlankCost::Full,
         }
     }
 }
@@ -193,6 +278,8 @@ impl Numbers {
             rest_ap_cap: value::int(o, "rest_ap_cap", d.rest_ap_cap),
             rest_poise_per_block: value::int(o, "rest_poise_per_block", d.rest_poise_per_block),
             deck_slots: DeckSlots { active: slot("active"), passive: slot("passive"), keystone: slot("keystone") },
+            melee_diagonal: MeleeDiagonal::parse(&value::string(o, "melee_diagonal", "")).unwrap_or(d.melee_diagonal),
+            flank_protected: FlankCost::from_ids(&value::string(o, "flank_protected_cost", ""), value::int(o, "flank_protected_ap", FlankCost::FIXED_AP)),
         }
     }
 
@@ -239,7 +326,8 @@ impl Default for Ruleset {
 impl Ruleset {
     /// The classic ruleset: no rule on, the default numbers (no rule reads them).
     pub fn classic() -> Self {
-        Self { id: CLASSIC.into(), name: "Classic".into(), rules: Vec::new(), numbers: Numbers::default() }
+        // INPUT1 MR10: classic has no row, so no diagonal melee
+        Self { id: CLASSIC.into(), name: "Classic".into(), rules: Vec::new(), numbers: Numbers { melee_diagonal: MeleeDiagonal::None, ..Numbers::default() } }
     }
 
     /// From a (checked) ruleset row: the register's rules it lists, its numbers.
@@ -268,6 +356,14 @@ impl Ruleset {
     /// ruleset without its row).
     pub fn of_or_classic(cat: &Catalog, id: &str) -> Self {
         Self::of(cat, id).unwrap_or_default()
+    }
+
+    /// INPUT1 MR10: the diagonal melee in effect: the row's value, `maneuver` read as `none` without `round_intent`.
+    pub fn melee_diagonal(&self) -> MeleeDiagonal {
+        match self.numbers.melee_diagonal {
+            MeleeDiagonal::Maneuver if !self.has(ROUND_INTENT) => MeleeDiagonal::None,
+            m => m,
+        }
     }
 
     pub fn is_classic(&self) -> bool {

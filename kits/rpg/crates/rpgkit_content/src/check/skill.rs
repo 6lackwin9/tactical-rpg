@@ -23,7 +23,7 @@ const COMMON_FIELDS: [&str; 17] = ["id", "name", "kind", "level", "blocks", "des
 const SECTION_FIELDS: [(&str, &[&str]); 21] = [
     ("damage", &["power_mult", "weapon_hand", "dash_tiles"]),
     ("inflict", &["status_effect", "status_potency", "status_magnitude", "status_rounds"]),
-    ("reach", &["reach_min", "reach_max"]),
+    ("reach", &["reach_min", "reach_max", "position"]),
     ("area", &["area"]),
     ("support", &["target_mode", "heal_stat", "heal_base", "heal_mult", "cleanse_statuses"]),
     ("grant", &["grant_status", "status_magnitude", "status_rounds", "extra_grants"]),
@@ -328,8 +328,8 @@ pub fn fold(head: &str, family_rows: &[Dict]) -> Result<Dict, Vec<String>> {
 
 // ---- SkillText -----------------------------------------------------------------------------------------------------
 
-/// SkillText.TOKEN_KINDS in table order (the last two are RULESET1-S's: `stagger`, `recovery`).
-const TOKENS: [(&str, &[&str]); 25] = [
+/// SkillText.TOKEN_KINDS in table order (then RULESET1-S's `stagger`, `recovery` and INPUT1's `range`, `position`).
+const TOKENS: [(&str, &[&str]); 27] = [
     ("name", &["ALL"]),
     ("ap", &["ALL"]),
     ("blocks", &["ALL"]),
@@ -355,6 +355,9 @@ const TOKENS: [(&str, &[&str]); 25] = [
     ("extra", &["DEFEND", "SUPPORT"]),
     ("stagger", &["ATTACK"]),
     ("recovery", &["ATTACK", "SUPPORT", "FOCUS"]),
+    // INPUT1 MR15 (timeline): the range and the position a skill dashes to
+    ("range", &["ATTACK", "SUPPORT"]),
+    ("position", &["ATTACK"]),
 ];
 /// The tokens that take the `:n` suffix (the bare number); RULESET1-S adds `ap`, `stagger` and `recovery`.
 const COUNTED: [&str; 8] = ["blocks", "dash", "reach", "rounds", "jump", "ap", "stagger", "recovery"];
@@ -965,20 +968,37 @@ fn timeline_problems(v: &View, e: &Dict, kind: &str) -> Vec<String> {
     if kind == "ATTACK" && json::b(e, "sure_break", false) && json::i(e, "stagger", 0) < 1 {
         out.push("Sure break needs a stagger of at least 1 (on every rank).".into());
     }
+    // INPUT1 1.7 (MR1): a position belongs to a single-target Maneuver attack, which dashes by its range, not dash_tiles
+    if !json::s(e, "position").is_empty() {
+        if kind != "ATTACK" || json::s(e, "round_intent") != "maneuver" || json::s(e, "area") != "NONE" {
+            out.push("position: only a Maneuver attack names a position".into());
+        } else if json::i(e, "dash_tiles", 0) > 0 {
+            out.push("position and dash_tiles: a skill with a position dashes by its range; set dash_tiles to 0".into());
+        }
+    }
     out
 }
 
-/// The timeline warnings of a skill's rank rows (RULESET1-S): a Maneuver attack with dash tiles 0 carries no move, its
-/// range is its band (MV5); an unbreakable windup with windup poise (the poise does nothing while it cannot break).
+/// The timeline warnings of a skill's rank rows (RULESET1-S, INPUT1 1.7): `reach_min` on a skill with a position (not
+/// read); the transition: a Maneuver attack with `dash_tiles` and no position reads as position flank with that range
+/// (MR1, until INPUT1-MA moves the data); an unbreakable windup with windup poise (the poise does nothing while it
+/// cannot break). (The first revision's "dash tiles 0 carries no move" warning retired: a Maneuver attack without a
+/// position hits from where it stands by design.)
 fn timeline_warnings(rows: &[Dict]) -> Vec<String> {
     let mut out = Vec::new();
     let Some(first) = rows.first() else { return out };
     let kind = json::s(first, "kind");
     let ranked = rows.len() > 1;
-    if kind == "ATTACK" && json::s(first, "round_intent") == "maneuver" {
-        for (i, _) in rows.iter().enumerate().filter(|(_, r)| json::i(r, "dash_tiles", 0) <= 0) {
-            let at = if ranked { format!("Rank {}: a", i + 1) } else { "A".into() };
-            out.push(format!("{at} Maneuver attack with dash tiles 0 carries no move; its range is its reach band."));
+    let maneuver_attack = kind == "ATTACK" && json::s(first, "round_intent") == "maneuver" && json::s(first, "area") == "NONE";
+    for (i, r) in rows.iter().enumerate() {
+        let at = if ranked { format!("Rank {}: ", i + 1) } else { String::new() };
+        let positioned = !json::s(r, "position").is_empty();
+        if positioned && json::i(r, "reach_min", 0) > 0 {
+            out.push(format!("{at}reach_min is not read on a skill with a position (it hits from the position)"));
+        }
+        let dash = json::i(r, "dash_tiles", 0);
+        if maneuver_attack && !positioned && dash > 0 {
+            out.push(format!("{at}dash_tiles on a Maneuver skill is read as position flank, range {dash}: set reach_max and position (INPUT1-MA)"));
         }
     }
     if json::b(first, "unbreakable", false) && has_field(&kind, "unbreakable") && rows.iter().any(|r| json::i(r, "windup_poise", 0) > 0) {

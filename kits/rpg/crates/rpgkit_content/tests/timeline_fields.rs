@@ -1,8 +1,9 @@
 //! Timeline fields and their checks (RULESET1-S, docs/specs/RULESET1_TASKS.md 1.3-1.6): the schema and the code name
 //! the same fields, kinds and options; the fields load into the typed catalog with defaults that change nothing; each
 //! rule broken alone is one error naming its field (a DEFEND skill set to assault, channel no ruleset lists, an order
-//! entry of another intent, ...); a Maneuver attack without dash tiles is one warning; ranked timeline fields fold and
-//! render through the writer. Scratch data folders only.
+//! entry of another intent, ...); INPUT1 1.7's `position` checks and the `dash_tiles` transition warning (the first
+//! revision's "Maneuver attack without dash tiles" warning retired); ranked timeline fields fold and render through the
+//! writer; the `{range}` and `{position}` tokens (INPUT1 MR15). Scratch data folders only.
 
 use aegis_content::schema::{fields, normalize};
 use aegis_core::json::{self, gstr, Dict};
@@ -290,8 +291,12 @@ fn channel_is_taken_once_a_ruleset_lists_it() {
     drop_scratch(&data);
 }
 
+/// INPUT1 1.7 (MR1): a Maneuver attack with `dash_tiles` and no position is read as position flank with that range
+/// (one warning per rank, until INPUT1-MA moves the data); one without either hits from where it stands (no warning:
+/// the first revision's MV5 warning retired); `reach_min` on a skill with a position is not read (a warning); an
+/// unbreakable windup with windup poise warns as before.
 #[test]
-fn a_maneuver_attack_without_dash_tiles_and_an_unbreakable_windup_with_poise_warn() {
+fn the_dash_tiles_transition_reach_min_with_a_position_and_an_unbreakable_windup_with_poise_warn() {
     let data = scratch("warnings");
     catalog(&data);
     let v = store::view(&data);
@@ -302,15 +307,59 @@ fn a_maneuver_attack_without_dash_tiles_and_an_unbreakable_windup_with_poise_war
         }
         check::warnings_for(&v, "skills", &e)
     };
-    assert_eq!(warnings("flank_cut", json!({})), Vec::<String>::new(), "a carried move of 2 tiles");
-    assert_eq!(warnings("flank_cut", json!({"dash_tiles": 0})), ["A Maneuver attack with dash tiles 0 carries no move; its range is its reach band."]);
+    let transition = |n: i64| format!("dash_tiles on a Maneuver skill is read as position flank, range {n}: set reach_max and position (INPUT1-MA)");
+    assert_eq!(warnings("flank_cut", json!({})), [transition(2)], "the transition");
+    assert_eq!(warnings("flank_cut", json!({"dash_tiles": 0})), Vec::<String>::new(), "no position: it hits from where it stands");
+    assert_eq!(warnings("flank_cut", json!({"dash_tiles": 0, "position": "flank", "reach_max": 2})), Vec::<String>::new(), "the data after INPUT1-MA");
+    assert_eq!(
+        warnings("flank_cut", json!({"dash_tiles": 0, "position": "behind", "reach_min": 1, "reach_max": 3})),
+        ["reach_min is not read on a skill with a position (it hits from the position)"]
+    );
     assert_eq!(warnings("thrust", json!({"dash_tiles": 0})), Vec::<String>::new(), "an Assault attack needs no carried move");
     assert_eq!(warnings("thrust", json!({"unbreakable": true})), Vec::<String>::new());
     assert_eq!(warnings("thrust", json!({"unbreakable": true, "windup_poise": 20})), ["Unbreakable with windup poise: the poise bonus does nothing while the unit cannot break."]);
-    // a ranked entry: the rank whose modifier drops the dash
+    // a ranked entry: the rank that keeps the dash is read in the transition
     let ranked = dict(json!({"id": "hook", "name": "Hook", "kind": "ATTACK", "round_intent": "maneuver", "dash_tiles": 2, "ranks": [{"dash_tiles": 0}]}));
-    assert_eq!(check::warnings_for(&v, "skills", &ranked), ["Rank 2: a Maneuver attack with dash tiles 0 carries no move; its range is its reach band."]);
+    assert_eq!(check::warnings_for(&v, "skills", &ranked), [format!("Rank 1: {}", transition(2))]);
     drop_scratch(&data);
+}
+
+/// INPUT1 1.7: a position belongs to a single-target Maneuver ATTACK (one error elsewhere) and dashes by its range, so
+/// `dash_tiles` with it is one error; a Maneuver attack with a position and `reach_max` is clean.
+#[test]
+fn a_position_needs_a_maneuver_attack_and_no_dash_tiles() {
+    let data = scratch("position");
+    catalog(&data);
+    let v = store::view(&data);
+    let only = "position: only a Maneuver attack names a position";
+    assert_eq!(errors_of(&v, "skills", "flank_cut", &json!({"dash_tiles": 0, "position": "flank", "reach_max": 2})), Vec::<String>::new());
+    assert_eq!(errors_of(&v, "skills", "flank_cut", &json!({"position": "behind"})), ["position and dash_tiles: a skill with a position dashes by its range; set dash_tiles to 0"]);
+    assert_eq!(errors_of(&v, "skills", "thrust", &json!({"position": "flank"})), [only], "an Assault attack");
+    assert_eq!(errors_of(&v, "skills", "flank_cut", &json!({"dash_tiles": 0, "position": "flank", "area": "PLUS"})), [only], "an area attack");
+    assert_eq!(field_of("skills", "position")["options"], json!(["", "flank", "behind"]));
+    drop_scratch(&data);
+}
+
+/// INPUT1 MR15: `{range}` renders a positioned skill's range N (its `reach_max`; the transition's `dash_tiles`), else
+/// the band; `{position}` renders "to a flank" or "behind the target" ("" without a position); `{dash}` keeps the
+/// transition's text, so today's descriptions read as before until INPUT1-MA.
+#[test]
+fn range_and_position_tokens_render_the_dash() {
+    let row = |extra: Value| {
+        let mut r = dict(json!({"id": "x", "name": "X", "kind": "ATTACK", "round_intent": "maneuver"}));
+        for (k, v) in extra.as_object().unwrap() {
+            r.insert(k.clone(), v.clone());
+        }
+        r
+    };
+    let flank = row(json!({"position": "flank", "reach_max": 2}));
+    assert_eq!(source::render("Dashes up to {range} {position}, then hits.", "ATTACK", &flank, 1), "Dashes up to 2 to a flank, then hits.");
+    let behind = row(json!({"position": "behind", "reach_max": 3}));
+    assert_eq!(source::render("Dashes up to {range} {position}.", "ATTACK", &behind, 1), "Dashes up to 3 behind the target.");
+    let transition = row(json!({"dash_tiles": 2}));
+    assert_eq!(source::render("Dashes up to {dash} {position}; {range}.", "ATTACK", &transition, 1), "Dashes up to 2 tiles to a flank; 2.");
+    let band = dict(json!({"id": "y", "name": "Y", "kind": "ATTACK", "reach_min": 2, "reach_max": 4}));
+    assert_eq!(source::render("Range {range}{position}.", "ATTACK", &band, 1), "Range 2-4.");
 }
 
 /// The writer stores the timeline fields as every skill field (family fields once, rank fields as rank modifiers when

@@ -593,6 +593,25 @@ board event is a dash (not a walk) and no regular move counts it (ET5); the tran
 `dash_tiles` 2 as flank, N 2, with the warning; the classic Godot parity suites and the inert-extensions check pass
 unchanged.
 
+As built (INPUT1-M, 2026-11-01; tests `rpgkit_battle/tests/maneuver.rs`):
+
+- A skill with a `position` reads the band (1, 1) in every ruleset (`skill::reach_by`: it hits from the tile next to
+  its target, MR4); the transition's skill (a Maneuver attack with `dash_tiles` and no position) does so under
+  `round_intent` (`round_intent::hit_band`). N is `skill::dash_range_by` (`round_intent::dash_range`).
+- MR16 under `round_intent`: every single-target attack and every Support skill on an ally chases (the planner's
+  "not after a move to a chosen tile" gate is classic's only); root stops the chase (classic keeps its chase as it was).
+  Area skills keep their planned cells and do not chase (open question 1 of the INPUT1-M report).
+- The out-of-range worked example (from (2, 4)) moves 3 tiles, not 2: no tile 2 steps from (2, 4) has a preferred
+  tile within 2 (its own "such as (4, 3)" is 3 tiles away); PL4 picks (5, 4) by distance to the target.
+- Board event: `Command.moved` (`MoveKind::Dash` for the dash, `MoveKind::Chase` for a chase step); the battle screen
+  slides a dash in `DASH_MS` (250 ms on the FX clock) and plays the body's `dash` clip when it has one, else its walk.
+- `{range}` and `{position}` are template tokens of the loader's SkillText (`rpgkit_content/src/source.rs`), not
+  `skill_text.rs` (its rank lines show no range). The sim's `melee_diagonal=` stays out of the help text (Godot
+  parity, as `ruleset=`). The ruleset chip names "diagonal: `<value>`" only when the Arena picks one (Ruleset: the
+  row's value, nothing added). The battle state's `ruleset` (host, beyond classic) is `{id, melee_diagonal}`.
+- A protected flank's impact logs `[Flank Protected] <unit>'s <skill> misses <target>: its flank is protected` (log
+  outcome `FLANK PROTECTED`); the start line is MR8 c's.
+
 ### 11.7 Assets (INPUT1-MA, asset lane, after INPUT1-M merges)
 
 Through `aegis content` (a seed `games/emberwake/data/seeds/input1_ma.json` or upserts; older seeds stay as they

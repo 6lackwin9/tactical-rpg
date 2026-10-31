@@ -32,8 +32,9 @@ fn data_dir() -> PathBuf {
 /// `hp_cost`, `ignore_guard`), a consumable's `hazard`, a unit's `tactics`, an encounter's `arena_hazards` (catalog and
 /// world encounters) and a world manifest's `classes`. ENCOUNTER2-H (2026-10-27): an encounter's `unkillable`,
 /// `timeout_outcome` and `stay_behind` (catalog and world encounters). ROSTER1-L (2026-10-31): a world manifest's
-/// `roster`, a world character's `keepsake` and a world encounter's `party_min`.
-const AFTER_GODOT: [(&str, &str, &str); 55] = [
+/// `roster`, a world character's `keepsake` and a world encounter's `party_min`. INPUT1-M (2026-11-01): a skill's
+/// `position` (the ruleset fields ride the `rulesets` kind, already after Godot).
+const AFTER_GODOT: [(&str, &str, &str); 56] = [
     ("content", "units", "loot"),
     ("world", "encounters", "key_loot"),
     ("world", "encounters", "objective_reward"),
@@ -53,6 +54,7 @@ const AFTER_GODOT: [(&str, &str, &str); 55] = [
     ("content", "skills", "unbreakable"),
     ("content", "skills", "sure_break"),
     ("content", "skills", "armor_piercing"),
+    ("content", "skills", "position"),
     ("content", "units", "poise"),
     ("content", "units", "deck"),
     ("content", "units", "default_intent"),

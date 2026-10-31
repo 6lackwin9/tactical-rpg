@@ -26,6 +26,8 @@ pub enum SAct {
     ToggleRule(usize),
     /// RULESET1 V2, V3: "Reveal enemy plans" for the Arena's run.
     Reveal,
+    /// INPUT1 MR11: the Arena's "Diagonal melee" (an index into DIAGONALS).
+    PickDiagonal(usize),
     ContentForge,
     WorldForge,
     Dojo,
@@ -44,6 +46,9 @@ pub enum SAct {
 /// ruleset picked for the run.
 const RULESETS: [(&str, Option<&str>); 3] = [("World", None), ("Classic", Some("classic")), ("Timeline", Some("timeline"))];
 
+/// INPUT1 MR11: the Arena's "Diagonal melee" picks (label, the host's `melee_diagonal`; None = the ruleset row's value).
+const DIAGONALS: [(&str, Option<&str>); 4] = [("Ruleset", None), ("None", Some("none")), ("Maneuver", Some("maneuver")), ("All", Some("all"))];
+
 /// The Arena's extension toggles: columns and row height.
 const RULE_COLUMNS: usize = 4;
 const RULE_ROW_H: i32 = 13;
@@ -54,11 +59,15 @@ fn extensions() -> Vec<&'static str> {
 }
 
 /// The ruleset chip's text (the Arena card's and, RULESET1-U, the Arena battle's): the base ruleset's name, the
-/// switches `spec` ("-id,+id") and whether the enemy plans are shown ("Timeline -pierce +reach, plans shown").
-pub(crate) fn chip_text(name: &str, spec: &str, plans_shown: bool) -> String {
+/// switches `spec` ("-id,+id"), INPUT1 MR11's diagonal melee pick (`diagonal`, "" = the row's value: not named) and
+/// whether the enemy plans are shown ("Timeline -pierce +reach, diagonal: all, plans shown").
+pub(crate) fn chip_text(name: &str, spec: &str, diagonal: &str, plans_shown: bool) -> String {
     let mut t = name.to_string();
     if !spec.is_empty() {
         t += &format!(" {}", spec.replace(',', " "));
+    }
+    if !diagonal.is_empty() {
+        t += &format!(", diagonal: {diagonal}");
     }
     if plans_shown {
         t += ", plans shown";
@@ -77,6 +86,8 @@ pub struct SceneRunner {
     show_rules: bool,
     /// RULESET1 V2: every enemy plan is revealed (the battle's `plan_reveal`; read under the rule `plan_badges`).
     reveal: bool,
+    /// INPUT1 MR11: an index into DIAGONALS (0 = the ruleset row's value).
+    diagonal: usize,
     world: usize,
     /// Exploration's start: an index into `starts`.
     location: usize,
@@ -85,7 +96,7 @@ pub struct SceneRunner {
 
 impl SceneRunner {
     pub fn new() -> Self {
-        Self { encounter: 0, ruleset: 0, rules: IndexMap::new(), show_rules: false, reveal: false, world: 0, location: 0, w: Vec::new() }
+        Self { encounter: 0, ruleset: 0, rules: IndexMap::new(), show_rules: false, reveal: false, diagonal: 0, world: 0, location: 0, w: Vec::new() }
     }
 
     /// The ruleset the picked encounter plays by before the toggles: the picked one, or for World the ruleset of the
@@ -116,7 +127,12 @@ impl SceneRunner {
     /// The ruleset chip: the run's ruleset name, its switches and the reveal ("Timeline -pierce +reach, plans shown").
     fn chip(&self, cx: &Cx) -> String {
         let base = self.base_ruleset(cx);
-        chip_text(&base.name, &self.rules_spec(&base), self.reveal && self.effective_ruleset(cx).has(PLAN_BADGES))
+        chip_text(&base.name, &self.rules_spec(&base), self.diagonal_pick(), self.reveal && self.effective_ruleset(cx).has(PLAN_BADGES))
+    }
+
+    /// INPUT1 MR11: the run's `melee_diagonal` ("" = the ruleset row's value).
+    fn diagonal_pick(&self) -> &'static str {
+        DIAGONALS[self.diagonal.min(DIAGONALS.len() - 1)].1.unwrap_or("")
     }
 
     /// The picked world of Exploration.
@@ -212,6 +228,7 @@ impl SceneRunner {
                 }
             }
             SAct::Reveal => self.reveal = !self.reveal,
+            SAct::PickDiagonal(i) => self.diagonal = i.min(DIAGONALS.len() - 1),
             SAct::Arena => {
                 let list = Self::encounters(cx);
                 if let Some((_, world, id)) = list.get(self.encounter) {
@@ -219,7 +236,7 @@ impl SceneRunner {
                     let rules = self.rules_spec(&self.base_ruleset(cx));
                     // a reveal ticked under another ruleset stays off where plan_badges is not on (classic stays byte-identical)
                     let reveal = self.reveal && self.effective_ruleset(cx).has(PLAN_BADGES);
-                    let b = crate::battle::BattleScreen::arena_with(cx, world.clone(), id, ruleset, &rules, reveal);
+                    let b = crate::battle::BattleScreen::arena_full(cx, world.clone(), id, ruleset, &rules, self.diagonal_pick(), reveal);
                     cx.nav.push(Nav::Push(Box::new(b)));
                 }
             }
@@ -336,7 +353,11 @@ impl Screen<GameCx> for SceneRunner {
             ui.button(id, Rect::new(r.x + r.w - 50, r.y + 6, 45, 15), "Launch", act.clone(), true);
             if let SAct::Arena = act {
                 let labels: Vec<String> = encounters.iter().map(|e| e.0.clone()).collect();
-                ui.select("runner.arena.encounter", Rect::new(r.x + 5, pick_y, r.w - 144, 14), &labels, self.encounter, SAct::PickEncounter, !encounters.is_empty(), tip("Encounter", "The battle the arena launches."));
+                ui.select("runner.arena.encounter", Rect::new(r.x + 5, pick_y, r.w - 214, 14), &labels, self.encounter, SAct::PickEncounter, !encounters.is_empty(), tip("Encounter", "The battle the arena launches."));
+                // INPUT1 MR11: Diagonal melee to compare (Ruleset: the row's value)
+                let diags: Vec<String> = DIAGONALS.iter().map(|x| x.0.to_string()).collect();
+                let diag_tip = tip("Diagonal melee", "Ruleset: the row's value. None: no diagonal hits. Maneuver: Maneuver skills hit diagonally. All: every melee attack and the riposte do.");
+                ui.select("runner.arena.diagonal", Rect::new(r.x + r.w - 205, pick_y, 66, 14), &diags, self.diagonal, SAct::PickDiagonal, true, diag_tip);
                 let rules: Vec<String> = RULESETS.iter().map(|x| x.0.to_string()).collect();
                 ui.select("runner.arena.ruleset", Rect::new(r.x + r.w - 135, pick_y, 80, 14), &rules, self.ruleset, SAct::PickRuleset, true, tip("Rules", "World: the encounter's world's ruleset (classic for a catalog encounter). Classic or Timeline: play it by those rules."));
                 // RULESET1 12: "Reveal enemy plans" (V2: under the rule plan_badges), the ruleset chip, the toggles
@@ -384,7 +405,7 @@ impl Screen<GameCx> for SceneRunner {
         let start = world.as_deref().map(|w| Self::starts(&cx.data, w)).and_then(|st| st.get(self.location.min(st.len().saturating_sub(1))).cloned());
         let base = self.base_ruleset(cx);
         json!({"encounter": Self::encounters(cx).get(self.encounter).map(|e| e.0.clone()), "ruleset": RULESETS[self.ruleset].0, "world": world, "start": start.map(|p| p.1.unwrap_or_else(|| "world_map".into())),
-            "rules": self.rules_spec(&base), "rules_on": self.effective_ruleset(cx).rules, "reveal": self.reveal, "chip": self.chip(cx)})
+            "rules": self.rules_spec(&base), "rules_on": self.effective_ruleset(cx).rules, "reveal": self.reveal, "melee_diagonal": self.diagonal_pick(), "chip": self.chip(cx)})
     }
 
     widget_plumbing!();
@@ -541,5 +562,26 @@ mod tests {
         assert_eq!(reveal.enabled, r.effective_ruleset(&cx).has(PLAN_BADGES), "the reveal needs plan_badges");
         r.act(&mut cx, SAct::Reveal);
         assert_eq!(r.state(&cx)["reveal"], json!(true));
+    }
+
+    /// INPUT1 MR11: the Arena's "Diagonal melee" select (Ruleset, None, Maneuver, All; default Ruleset: nothing sent)
+    /// names its pick in the state and the chip; the battle it launches carries it (`arena_full`, tested in battle.rs).
+    #[test]
+    fn the_arena_diagonal_melee_select() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut r = SceneRunner::new();
+        assert_eq!(r.state(&cx)["melee_diagonal"], json!(""), "Ruleset by default");
+        r.act(&mut cx, SAct::PickRuleset(2));
+        let plain = r.chip(&cx);
+        assert!(!plain.contains("diagonal"), "{plain}");
+        r.act(&mut cx, SAct::PickDiagonal(3));
+        assert_eq!(r.state(&cx)["melee_diagonal"], json!("all"));
+        assert_eq!(r.chip(&cx), format!("{plain}, diagonal: all"));
+        let mut g = crate::hud::hud_tests::gfx();
+        r.draw(&mut cx, &mut g, (-500, -500), true);
+        let sel = r.w.iter().find(|w| w.id == "runner.arena.diagonal").expect("the select");
+        assert!(sel.enabled && sel.text.contains("All"), "{}", sel.text);
+        r.act(&mut cx, SAct::PickDiagonal(0));
+        assert_eq!(r.chip(&cx), plain, "back to the row's value");
     }
 }

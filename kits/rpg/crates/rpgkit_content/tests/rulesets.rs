@@ -86,6 +86,38 @@ fn the_schema_lists_what_the_code_owns() {
     assert_eq!(options("content", ruleset::KIND, "intents"), strs(&INTENTS));
 }
 
+/// INPUT1 1.7 (MR9, MR10): the schema lists the code's `melee_diagonal` and `flank_protected_cost` values; a row reads
+/// them (classic: none and full); `maneuver` reads as none without `round_intent`; the cost pays as MR9 says (4 AP:
+/// full 4, half 2, fixed 1, none 0); the two soft problems are warnings.
+#[test]
+fn diagonal_melee_and_the_protected_flank_cost_read_and_warn() {
+    use rpgkit_rules::ruleset::{FlankCost, MeleeDiagonal};
+    assert_eq!(options("content", ruleset::KIND, "melee_diagonal"), strs(&MeleeDiagonal::IDS));
+    assert_eq!(options("content", ruleset::KIND, "flank_protected_cost"), strs(&FlankCost::IDS));
+    let row = |extra: Value| {
+        let mut r = dict(good_row());
+        for (k, v) in extra.as_object().unwrap() {
+            r.insert(k.clone(), v.clone());
+        }
+        normalize(fields(source::schema(), "content", ruleset::KIND), &r, false)
+    };
+    let r = Ruleset::from_row(&row(json!({})));
+    assert_eq!((r.numbers.melee_diagonal, r.numbers.flank_protected), (MeleeDiagonal::Maneuver, FlankCost::Full), "the defaults");
+    assert_eq!(r.melee_diagonal(), MeleeDiagonal::Maneuver);
+    let c = Ruleset::classic();
+    assert_eq!((c.melee_diagonal(), c.numbers.flank_protected), (MeleeDiagonal::None, FlankCost::Full), "classic has no row");
+    let r = Ruleset::from_row(&row(json!({"melee_diagonal": "all", "flank_protected_cost": "fixed", "flank_protected_ap": 2})));
+    assert_eq!((r.melee_diagonal(), r.numbers.flank_protected), (MeleeDiagonal::All, FlankCost::Fixed(2)));
+    let no_intent = Ruleset::from_row(&row(json!({"rules": ["poise"]})));
+    assert_eq!(no_intent.melee_diagonal(), MeleeDiagonal::None, "maneuver without round_intent reads as none");
+    let pays: Vec<i32> = [FlankCost::Full, FlankCost::Half, FlankCost::Fixed(FlankCost::FIXED_AP), FlankCost::None].iter().map(|f| f.pays(4)).collect();
+    assert_eq!(pays, [4, 2, 1, 0]);
+    assert_eq!(check::ruleset::warnings(&row(json!({}))), Vec::<String>::new());
+    assert_eq!(check::ruleset::warnings(&row(json!({"rules": ["poise"]}))), ["melee_diagonal maneuver needs round_intent (reads as none)"]);
+    assert_eq!(check::ruleset::warnings(&row(json!({"flank_protected_ap": 3}))), ["flank_protected_ap is read only with fixed"]);
+    assert_eq!(check::ruleset::warnings(&row(json!({"flank_protected_cost": "fixed", "flank_protected_ap": 3}))), Vec::<String>::new());
+}
+
 #[test]
 fn a_row_without_numbers_reads_the_schema_defaults() {
     let row = normalize(fields(source::schema(), "content", ruleset::KIND), &dict(json!({"id": "timeline"})), false);
@@ -210,7 +242,8 @@ fn numbers_past_their_range_load_at_the_schema_bounds() {
         row[&key] = json!(if below { lo - 5.0 } else { hi + 5.0 });
         want.push((key, if below { lo } else { hi }));
     }
-    assert_eq!(want.len(), 10, "every number of 1.2 has its range in the schema");
+    // RULESET1_TASKS 1.2's ten numbers and INPUT1 1.7's `flank_protected_ap`
+    assert_eq!(want.len(), 11, "every number of 1.2 (and INPUT1 1.7) has its range in the schema");
     write_kind(&data, ruleset::KIND, 1, json!([row]));
     let src = source::load(&data);
     assert_eq!(ruleset_errors(&src), Vec::<String>::new());

@@ -76,3 +76,16 @@ fn a_world_encounter_plays_by_its_world_unless_ruleset_is_given() {
     assert_eq!(fight_ruleset(&d, "party", None), Ruleset::classic(), "a catalog or generated fight is classic");
     assert_eq!(fight_ruleset(&d, "party ruleset=timeline", None).id, TIMELINE);
 }
+
+/// INPUT1 MR11: `melee_diagonal=` overrides the row's value (a catalog fight and a world fight alike); an unknown value
+/// is an argument error; without it the row's value stands (the default maneuver).
+#[test]
+fn melee_diagonal_overrides_the_row() {
+    use rpgkit_rules::ruleset::MeleeDiagonal;
+    let d = data(true);
+    assert_eq!(parse(&d, "duel ruleset=timeline").unwrap().ruleset.melee_diagonal(), MeleeDiagonal::Maneuver, "the row's default");
+    assert_eq!(parse(&d, "duel ruleset=timeline melee_diagonal=all").unwrap().ruleset.melee_diagonal(), MeleeDiagonal::All);
+    assert_eq!(parse(&d, "duel melee_diagonal=none ruleset=timeline").unwrap().ruleset.melee_diagonal(), MeleeDiagonal::None, "any token order");
+    assert_eq!(fight_ruleset(&d, "party melee_diagonal=all", Some("vale")).melee_diagonal(), MeleeDiagonal::All, "a world fight");
+    assert_eq!(parse(&d, "duel melee_diagonal=sideways").unwrap_err(), "melee_diagonal must be one of [\"none\", \"maneuver\", \"all\"] (got 'sideways')");
+}

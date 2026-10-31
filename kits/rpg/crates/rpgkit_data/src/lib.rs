@@ -22,6 +22,34 @@ pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "
 /// Unit slot value meaning "leave this slot empty" (no class fallback).
 pub const NO_ITEM: &str = "none";
 
+/// INPUT1 MR1-MR2 (rule round_intent): the spot a Maneuver attack with a `position` dashes to by its target and hits
+/// from: `flank` (beside it) or `behind`. The skill field's "" is no position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Position {
+    Flank,
+    Behind,
+}
+
+impl Position {
+    /// The field values (`""` is none).
+    pub const IDS: [&'static str; 2] = ["flank", "behind"];
+
+    pub fn parse(id: &str) -> Option<Self> {
+        match id {
+            "flank" => Some(Position::Flank),
+            "behind" => Some(Position::Behind),
+            _ => None,
+        }
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Position::Flank => "flank",
+            Position::Behind => "behind",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ProfEntry {
     pub level: i32,
@@ -221,6 +249,9 @@ pub struct SkillDef {
     pub power_mult: f64,
     pub weapon_hand: String,
     pub dash_tiles: i32,
+    /// INPUT1 MR1 (rule round_intent): the position a Maneuver attack dashes to (its `reach_max` is how far) and hits
+    /// from; None = it hits from where it stands.
+    pub position: Option<Position>,
     pub status_effect: String,
     pub status_potency: i32,
     pub status_magnitude: i32,
@@ -305,6 +336,7 @@ impl SkillDef {
             power_mult: float(o, "power_mult", 1.0),
             weapon_hand: string(o, "weapon_hand", "main"),
             dash_tiles: int(o, "dash_tiles", 0),
+            position: Position::parse(&string(o, "position", "")),
             status_effect: string(o, "status_effect", ""),
             status_potency: int(o, "status_potency", 0),
             status_magnitude: int(o, "status_magnitude", 0),

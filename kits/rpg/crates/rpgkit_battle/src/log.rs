@@ -139,6 +139,10 @@ pub fn from_action(w: &World, a: &ScheduledAction, round: i32, block: i32) -> En
                 }
                 None => e.target = "Target".into(),
             }
+            // INPUT1 MR8 c: a Maneuver whose flank was protected missed
+            if cmd.missed {
+                e.outcome = "FLANK PROTECTED".into();
+            }
             e.detail = format!("Dealt {} | Skill x{:.2} | Range {}", last_damage, skill_mult, me.attack_range);
             // RULESET1 A2, P6 (timeline only): the armour pierced and the poise the hit took
             if cmd.impact.armor_piercing && w.ruleset.has(rpgkit_rules::ruleset::PIERCE) && *last_damage > 0 {
@@ -543,7 +547,8 @@ pub fn move_note_entry(w: &World, a: &ScheduledAction, round: i32, block: i32, m
     e.subtype = subtype.into();
     e.outcome = outcome.into();
     e.coord_to = cell_of(w, a.unit);
-    if let CmdKind::Attack { target: Some(t), .. } = &a.command.kind {
+    // INPUT1 MR16: a Support chase names its ally too
+    if let CmdKind::Attack { target: Some(t), .. } | CmdKind::Support { target: t, .. } = &a.command.kind {
         e.target = w.units[*t].name.clone();
         e.target_is_ally = w.allies.contains(t);
     }

@@ -105,6 +105,21 @@ pub fn row_errors(e: &Dict, refs: &Refs) -> Vec<String> {
     out
 }
 
+/// INPUT1 1.7 (MR9, MR10): the soft problems of one row (normalized): `melee_diagonal` maneuver without `round_intent`
+/// (it reads as none) and a `flank_protected_ap` set while the cost is not `fixed` (it is not read).
+pub fn warnings(e: &Dict) -> Vec<String> {
+    let mut out = Vec::new();
+    let rules = json::sget(e, "rules");
+    if json::s(e, "melee_diagonal") == "maneuver" && e.contains_key("melee_diagonal") && !rules.iter().any(|r| r == ROUND_INTENT) {
+        out.push("melee_diagonal maneuver needs round_intent (reads as none)".into());
+    }
+    let ap = e.get("flank_protected_ap").map(|v| json::to_int(v));
+    if ap.is_some_and(|ap| ap != i64::from(ruleset::FlankCost::FIXED_AP)) && json::s(e, "flank_protected_cost") != "fixed" {
+        out.push("flank_protected_ap is read only with fixed".into());
+    }
+    out
+}
+
 fn deck_slot_errors(v: &Value, deck: bool, out: &mut Vec<String>) {
     let Some(slots) = v.as_object() else {
         out.push("Deck slots must be an object of slot kind to count.".into());

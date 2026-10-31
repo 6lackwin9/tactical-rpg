@@ -115,6 +115,15 @@ pub enum Carry {
     Retreat(V2),
 }
 
+/// INPUT1 MR12: how a command moved its unit at its start, so the battle screen can draw it (a dash with its own
+/// animation, apart from a walk): a chase step (MR16, AS1) or the dash of a skill with a position (MR8 a).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MoveKind {
+    Walk,
+    Chase,
+    Dash,
+}
+
 #[derive(Debug, Clone)]
 pub struct Command {
     pub source: UnitId,
@@ -182,6 +191,20 @@ pub struct Command {
     /// HOOKS1 UM2: the skill's meter changes, paid at the command's start after the AP and HP cost (set only under the
     /// rule `unit_meters`).
     pub meters: Vec<rpgkit_data::MeterDelta>,
+    /// INPUT1 MR10: the band test counts a diagonal neighbour of the target as distance 1 (`round_intent::diagonal`).
+    pub diagonal: bool,
+    /// INPUT1 MR1: the position a carried Engage dashes to (None = none, or not a skill with a position).
+    pub position: Option<rpgkit_data::Position>,
+    /// INPUT1 MR1: how far the carried move goes (a skill with a position: its range N; else its `dash_tiles`).
+    pub carry_range: i32,
+    /// INPUT1 MR8: the target's tile when the plan was made (NO_CELL = unknown): a target that left it is chased.
+    pub target_cell: V2,
+    /// INPUT1 MR16: chase tiles of a Support command on an ally (0 = none; set only under `round_intent`).
+    pub follow: i32,
+    /// INPUT1 MR8 c: the target's flank was protected at the start: at its impact the command does nothing.
+    pub missed: bool,
+    /// INPUT1 MR12: the board event of the move the command made at its start (None = it did not move).
+    pub moved: Option<MoveKind>,
 }
 
 impl Command {
@@ -228,6 +251,13 @@ impl Command {
             ignore_guard: false,
             guard_bypassed: false,
             meters: Vec::new(),
+            diagonal: false,
+            position: None,
+            carry_range: 0,
+            target_cell: NO_CELL,
+            follow: 0,
+            missed: false,
+            moved: None,
         }
     }
 
@@ -248,6 +278,7 @@ impl Command {
     /// Runs when the command STARTS (after AP and stance): attack dash / chase, defend grants.
     pub fn on_start(&mut self, w: &mut World, rng: &mut GodotRng) -> String {
         let src = self.source;
+        let diag = self.diagonal;
         match &mut self.kind {
             CmdKind::Attack { target, follow_tiles, dash_tiles, min_range, max_range, .. } => {
                 let tgt = effective_target(w, src, *target);
@@ -256,26 +287,47 @@ impl Command {
                 if tgt.is_some_and(|t| round_intent::hidden(w, t)) {
                     return String::new();
                 }
-                if let Carry::Engage(cell) = self.carry {
-                    return carried_engage(w, rng, src, tgt, band, *dash_tiles, cell);
+                if let (Carry::Engage(cell), Some(position)) = (self.carry, self.position) {
+                    let (line, moved, protected) = carried_engage(w, rng, src, tgt, cell, position, self.carry_range, self.target_cell, diag);
+                    self.moved = moved;
+                    if protected {
+                        // INPUT1 MR8 c, MR9: a miss at its impact; the ruleset's cost decides what of its AP stays paid
+                        self.missed = true;
+                        let paid = self.ap_cost + self.stance_switch_cost;
+                        let pays = if w.pays_ap(src) { w.ruleset.numbers.flank_protected.pays(paid) } else { 0 };
+                        if w.pays_ap(src) {
+                            w.units[src].ap += paid - pays;
+                        }
+                        let t = tgt.map_or_else(String::new, |t| w.units[t].name.clone());
+                        return format!("[Flank Protected] {} finds {t}'s flank protected: {} misses ({pays} AP spent)", w.units[src].name, self.name);
+                    }
+                    return line;
                 }
                 if *dash_tiles > 0 {
                     return dash(w, rng, src, tgt, band, *dash_tiles);
                 }
                 let Some(t) = tgt else { return String::new() };
-                if *follow_tiles <= 0 || !w.units[t].is_active() || !w.units[src].is_active() || in_reach(w, src, t, band) {
+                if *follow_tiles <= 0 || !w.units[t].is_active() || !w.units[src].is_active() || in_reach(w, src, t, band, diag) {
                     return String::new();
                 }
-                let from = w.pos(src);
-                let too_close = from.dist(w.pos(t)) < band.0;
-                follow(w, src, t, band, *follow_tiles);
-                let to = w.pos(src);
-                if to == from {
+                let line = chase_line(w, src, t, band, diag, *follow_tiles);
+                if !line.is_empty() {
+                    self.moved = Some(MoveKind::Chase);
+                }
+                line
+            }
+            // INPUT1 MR16: a Support command on an ally chases it into its reach as an attack does
+            CmdKind::Support { target, skill, .. } if self.follow > 0 => {
+                let (t, sk) = (*target, *skill);
+                if t == src || !w.units[t].is_active() || !w.units[src].is_active() || !w.has(t) || round_intent::hidden(w, t) || support_in_reach(w, src, t, sk) {
                     return String::new();
                 }
-                let verb = if too_close { "backs off from" } else { "closes in on" };
-                let ap = if w.pays_ap(src) { "1 AP" } else { "no AP" };
-                format!("[Chase] {} {verb} {}: {} to {} ({ap})", w.units[src].name, w.units[t].name, from, to)
+                let (lo, hi) = skill::support_reach(&w.cat.skills[sk], &w.units[src]);
+                let line = chase_line(w, src, t, (lo.max(1), hi), false, self.follow);
+                if !line.is_empty() {
+                    self.moved = Some(MoveKind::Chase);
+                }
+                line
             }
             CmdKind::Defend { grant_status, status_rounds, extra_grants, .. } => {
                 if (grant_status.is_empty() && extra_grants.is_empty()) || !w.units[src].is_active() {
@@ -334,8 +386,15 @@ impl Command {
                     self.log = format!("[Lost] {src_name} loses {}", w.units[t].name);
                     return;
                 }
+                // INPUT1 MR8 c: a protected flank does nothing at its impact (no damage, stagger, status, rider, hit event,
+                // riposte, exploit or flank count); the command kept its blocks
+                if self.missed {
+                    self.failed = true;
+                    self.log = format!("[Flank Protected] {src_name}'s {} misses {}: its flank is protected", self.name, w.units[t].name);
+                    return;
+                }
                 let band = reach_band(w, src, min_range, max_range);
-                if !in_reach(w, src, t, band) {
+                if !in_reach(w, src, t, band, self.diagonal) {
                     self.failed = true;
                     self.log = format!("[Attack Out of Range] {src_name} cannot reach {}", w.units[t].name);
                     return;
@@ -711,15 +770,15 @@ impl Command {
     }
 
     /// RULESET1_INTENT MV8: after the impact, a carried retreat moves the unit to its planned tile (re-picked when it no
-    /// longer works, skipped when none does). Classic commands carry nothing.
+    /// longer works, skipped when none does) within the skill's range (INPUT1 MR14). Classic commands carry nothing.
     pub fn after_impact(&mut self, w: &mut World, rng: &mut GodotRng) {
         let Carry::Retreat(cell) = self.carry else { return };
         let src = self.source;
-        let (dash_tiles, target) = match &self.kind {
-            CmdKind::Attack { dash_tiles, target, .. } => (*dash_tiles, effective_target(w, src, *target)),
-            _ => (0, None),
+        let target = match &self.kind {
+            CmdKind::Attack { target, .. } => effective_target(w, src, *target),
+            _ => None,
         };
-        let note = carried_retreat(w, rng, src, target, dash_tiles, cell);
+        let note = carried_retreat(w, rng, src, target, self.carry_range, cell);
         if !note.is_empty() {
             self.log = if self.log.is_empty() { note } else { format!("{} {note}", self.log) };
         }
@@ -797,22 +856,24 @@ pub(crate) fn reach_band(w: &World, src: UnitId, min_range: i32, max_range: i32)
     (if min_range > 0 { min_range } else { u.min_attack_range() }, if max_range > 0 { max_range } else { u.attack_range })
 }
 
-fn in_reach(w: &World, src: UnitId, t: UnitId, band: (i32, i32)) -> bool {
+/// Whether `t` is in the band from where `src` stands (INPUT1 MR10: `diag` counts a diagonal neighbour as 1).
+fn in_reach(w: &World, src: UnitId, t: UnitId, band: (i32, i32), diag: bool) -> bool {
     if !w.has(src) || !w.has(t) {
         return false;
     }
-    let d = w.dist(src, t);
+    let d = round_intent::band_dist(diag, w.pos(src), w.pos(t));
     d >= band.0 && d <= band.1
 }
 
-/// Cells around `target` within the band that a unit could stand on (walkable, not an exit, not blocked).
-fn band_goals(w: &World, target_pos: V2, band: (i32, i32), blocked: &Cells) -> Cells {
+/// Cells around `target` within the band that a unit could stand on (walkable, not an exit, not blocked; INPUT1 MR10:
+/// `diag` counts a diagonal neighbour as 1).
+fn band_goals(w: &World, target_pos: V2, band: (i32, i32), blocked: &Cells, diag: bool) -> Cells {
     let mut goals = Cells::new();
     let hi = band.1;
     for dx in -hi..=hi {
         for dy in -hi..=hi {
             let cell = target_pos + V2::new(dx, dy);
-            let d = dx.abs() + dy.abs();
+            let d = round_intent::band_dist(diag, target_pos, cell);
             if d >= band.0 && d <= hi && w.grid.is_valid(cell) && w.grid.is_walkable(cell) && !w.grid.is_exit(cell) && !blocked.contains(&cell) {
                 goals.insert(cell);
             }
@@ -836,7 +897,7 @@ fn others_blocked(w: &World, src: UnitId, active_only: bool) -> Cells {
 /// Gap-close: route to the nearest tile in reach within `dash_tiles` cost; hazards entered roll their status.
 fn dash(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<UnitId>, band: (i32, i32), dash_tiles: i32) -> String {
     let Some(t) = tgt else { return String::new() };
-    if !w.units[t].is_active() || !w.units[src].is_active() || in_reach(w, src, t, band) {
+    if !w.units[t].is_active() || !w.units[src].is_active() || in_reach(w, src, t, band, false) {
         return String::new();
     }
     let name = w.units[src].name.clone();
@@ -845,7 +906,7 @@ fn dash(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<UnitId>, ban
     }
     let from = w.pos(src);
     let blocked = others_blocked(w, src, true);
-    let goals = band_goals(w, w.pos(t), band, &blocked);
+    let goals = band_goals(w, w.pos(t), band, &blocked, false);
     let route = path::find_path(&w.grid, from, &goals, &blocked, false, &Hooks::default());
     if route.is_empty() || !dash_fits(&w.grid, from, &route, dash_tiles) {
         let why = if route.is_empty() { "no route".to_string() } else { format!("{} tiles, move cost {}, dash covers {dash_tiles}", route.len(), path::path_cost(&w.grid, from, &route)) };
@@ -878,12 +939,30 @@ pub fn dash_fits(grid: &Grid, from: V2, route: &[V2], dash_tiles: i32) -> bool {
     dash_tiles > 0 && path::blocks_needed(grid, from, route, dash_tiles) <= 1
 }
 
+/// The chase (AS1; INPUT1 MR16): `follow`, then its log line ("" when the unit did not move). Under `round_intent` root
+/// stops it (MR16; classic keeps its chase rules).
+fn chase_line(w: &mut World, src: UnitId, t: UnitId, band: (i32, i32), diag: bool, follow_tiles: i32) -> String {
+    if round_intent::on(w) && w.units[src].has_status("root") {
+        return String::new();
+    }
+    let from = w.pos(src);
+    let too_close = round_intent::band_dist(diag, from, w.pos(t)) < band.0;
+    follow(w, src, t, band, diag, follow_tiles);
+    let to = w.pos(src);
+    if to == from {
+        return String::new();
+    }
+    let verb = if too_close { "backs off from" } else { "closes in on" };
+    let ap = if w.pays_ap(src) { "1 AP" } else { "no AP" };
+    format!("[Chase] {} {verb} {}: {} to {} ({ap})", w.units[src].name, w.units[t].name, from, to)
+}
+
 /// Steps toward a target that moved out of reach, 1 AP per tile (AP debt allowed).
-fn follow(w: &mut World, src: UnitId, t: UnitId, band: (i32, i32), follow_tiles: i32) {
+fn follow(w: &mut World, src: UnitId, t: UnitId, band: (i32, i32), diag: bool, follow_tiles: i32) {
     let mut left = follow_tiles;
-    while left > 0 && !in_reach(w, src, t, band) {
+    while left > 0 && !in_reach(w, src, t, band, diag) {
         let blocked = others_blocked(w, src, false);
-        let goals = band_goals(w, w.pos(t), band, &blocked);
+        let goals = band_goals(w, w.pos(t), band, &blocked, diag);
         let route = path::find_path(&w.grid, w.pos(src), &goals, &blocked, false, &Hooks::default());
         if route.is_empty() || !w.move_unit(src, route[0]) {
             return;
@@ -921,44 +1000,83 @@ fn step_along(w: &mut World, src: UnitId, route: &[V2]) -> Vec<V2> {
     entered
 }
 
-/// RULESET1_INTENT MV4, MV6: an Engage's carried move at the skill's start: to the stored tile while it still works
-/// (free, within `dash_tiles` in one block, the target in band, outside its front), else the PL4 re-pick; with none
-/// the move is skipped and the hit lands only if in band.
-fn carried_engage(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<UnitId>, band: (i32, i32), dash_tiles: i32, cell: V2) -> String {
-    let Some(t) = tgt.filter(|t| w.units[*t].is_active() && w.has(*t)) else { return String::new() };
+/// INPUT1 MR8 (RULESET1_INTENT MV4, MV6): the dash of a skill with a position at its start (the wind-up's tick): the
+/// position tiles are read around the target's tile now (its facing re-read, MV1) with the budget `range`, plus 1 when
+/// the target left `planned` (MR16's chase, that tile at the chase's cost). The stored tile `cell` is kept while it is
+/// in the first tier with a tile in the budget, else that tier's best (MR4); a unit already on a position tile stays
+/// (MR6). (a) a tile in the budget: the unit dashes there (hazards on entry); (b) open tiles but none in the budget: no
+/// move (`[Dash Blocked]`; the hit lands only if the target is adjacent, MR10); (c) no open tile: protected (the caller
+/// logs it and the impact misses). Returns the line, the board event and whether the flank is protected.
+#[allow(clippy::too_many_arguments)]
+fn carried_engage(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<UnitId>, cell: V2, position: rpgkit_data::Position, range: i32, planned: V2, diag: bool) -> (String, Option<MoveKind>, bool) {
+    let none = (String::new(), None, false);
+    let Some(t) = tgt.filter(|t| w.units[*t].is_active() && w.has(*t)) else { return none };
     if !w.units[src].is_active() || !w.has(src) {
-        return String::new();
+        return none;
     }
     let name = w.units[src].name.clone();
     let from = w.pos(src);
     let tp = w.pos(t);
-    let fits = |c: V2| c.dist(tp) >= band.0 && c.dist(tp) <= band.1;
-    if from == cell && fits(from) && !round_intent::in_front(w, t, from) {
-        return String::new();
-    }
-    if w.units[src].has_status("root") {
-        return format!("[Dash Blocked] {name} is rooted and can't move on {}.", w.units[t].name);
-    }
+    let chase = planned != NO_CELL && planned != tp;
+    let budget = range + i32::from(chase);
+    let rooted = w.units[src].has_status("root");
     let blocked = others_blocked(w, src, true);
-    let mut tiles: Vec<(V2, Vec<V2>)> = round_intent::carry_tiles(w, from, dash_tiles, &blocked).into_iter().filter(|(c, _)| fits(*c) && !round_intent::in_front(w, t, *c)).collect();
+    let open = round_intent::positions(w, t, src, position, from, diag, &blocked);
+    if open.protected() {
+        return (String::new(), None, true);
+    }
+    // MR6: a unit already on a position tile (a follow-up) hits from there
+    if cell == from && open.contains(from) {
+        return none;
+    }
+    let in_budget = |c: V2| -> Option<Vec<V2>> {
+        if c == from {
+            return Some(Vec::new());
+        }
+        if rooted || c.dist(from) > budget {
+            return None;
+        }
+        let goals: Cells = [c].into_iter().collect();
+        let route = path::find_path(&w.grid, from, &goals, &blocked, false, &Hooks::default());
+        (!route.is_empty() && dash_fits(&w.grid, from, &route, budget)).then_some(route)
+    };
+    let mut tiles: Vec<(V2, Vec<V2>)> = open.preferred.iter().filter_map(|&c| in_budget(c).map(|r| (c, r))).collect();
+    let preferred = !tiles.is_empty();
+    if !preferred {
+        tiles = open.fallback.iter().filter_map(|&c| in_budget(c).map(|r| (c, r))).collect();
+    }
     round_intent::rank_tiles(w, src, tp, w.units[src].attack_range > 1, round_intent::Aim::Toward, &mut tiles);
+    if !preferred {
+        tiles.sort_by_key(|(_, route)| route.len());
+    }
     let Some((dest, route)) = round_intent::pick(cell, &tiles) else {
-        return format!("[Dash Blocked] {name} finds no flank tile on {}.", w.units[t].name);
+        if rooted {
+            return (format!("[Dash Blocked] {name} is rooted and can't move on {}.", w.units[t].name), None, false);
+        }
+        return (format!("[Dash Blocked] {name} can't reach {}'s flank", w.units[t].name), None, false);
     };
     if dest == from {
-        return String::new();
+        return none;
     }
+    let cost = path::path_cost(&w.grid, from, &route);
     let entered = step_along(w, src, &route);
     let to = w.pos(src);
     if to == from {
-        return format!("[Dash Blocked] {name} couldn't move toward {}.", w.units[t].name);
+        return (format!("[Dash Blocked] {name} couldn't move toward {}.", w.units[t].name), None, false);
     }
     round_intent::note_moved(w, src);
     let mut line = format!("[Dash] {name} dashes at {}: {from} to {to}", w.units[t].name);
+    // MR16: the extra tile of a chase costs a party unit 1 AP
+    if chase && cost > range {
+        if w.pays_ap(src) {
+            w.units[src].ap -= 1;
+        }
+        line += if w.pays_ap(src) { " (chase 1 AP)" } else { " (chase no AP)" };
+    }
     for note in hazard_on_enter(w, rng, src, &entered) {
         line += &format!(" {note}");
     }
-    line
+    (line, Some(MoveKind::Dash), false)
 }
 
 /// RULESET1_INTENT MV8: a Disengage's carried retreat after the hit: to the stored tile while it is free and within
@@ -1178,7 +1296,8 @@ pub fn hazard_round_end(w: &mut World, rng: &mut GodotRng, units: &[UnitId]) -> 
     lines
 }
 
-/// RiposteRules.counter: a riposting defender answers an adjacent melee hit it survived, once per attacker per round.
+/// RiposteRules.counter: a riposting defender answers an adjacent melee hit it survived, once per attacker per round
+/// (diagonally adjacent too under `melee_diagonal` all, INPUT1 MR10).
 pub fn riposte_counter(w: &mut World, rng: &mut GodotRng, attacker: UnitId, defender: UnitId, ranged: bool) -> Option<Reaction> {
     if ranged || attacker == defender {
         return None;
@@ -1187,7 +1306,8 @@ pub fn riposte_counter(w: &mut World, rng: &mut GodotRng, attacker: UnitId, defe
     if !d.has_status("riposte") || !d.is_alive() || !w.units[attacker].is_active() || d.riposted.contains(&attacker) {
         return None;
     }
-    if !w.has(attacker) || !w.has(defender) || w.dist(attacker, defender) != 1 {
+    // INPUT1 MR10, GD3: under `melee_diagonal` all the counter answers a diagonal melee hit too
+    if !w.has(attacker) || !w.has(defender) || round_intent::melee_dist(w, defender, None, w.pos(defender), w.pos(attacker)) != 1 {
         return None;
     }
     w.units[defender].riposted.push(attacker);

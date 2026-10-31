@@ -362,6 +362,9 @@ fn token_kinds(token: &str) -> Option<&'static [&'static str]> {
         // RULESET1-S (timeline): poise taken, enemy recovery blocks
         "stagger" => &["ATTACK"],
         "recovery" => &["ATTACK", "SUPPORT", "FOCUS"],
+        // INPUT1 MR15 (timeline): a skill's range and the position it dashes to
+        "range" => &["ATTACK", "SUPPORT"],
+        "position" => &["ATTACK"],
         _ => return None,
     })
 }
@@ -469,6 +472,17 @@ fn exploit_text(r: &Dict) -> String {
     }
 }
 
+/// INPUT1 MR1, MR15: the range N of a skill row with a position (`reach_max`; 0 = the unit's band, unknown here) or, in
+/// the transition, of a Maneuver attack with `dash_tiles` and no position; None: it hits from where it stands.
+fn maneuver_dash(row: &Dict) -> Option<i64> {
+    let maneuver = sget(row, "kind", "") == "ATTACK" && sget(row, "round_intent", "") == "maneuver";
+    if !sget(row, "position", "").is_empty() {
+        return Some(to_int_or(json::get(row, "reach_max"), 0));
+    }
+    let dash = to_int_or(json::get(row, "dash_tiles"), 0);
+    (maneuver && dash > 0).then_some(dash)
+}
+
 /// SkillText.token_value.
 pub(crate) fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize) -> String {
     let bare = suffix == "n";
@@ -506,6 +520,17 @@ pub(crate) fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize) ->
             }
         }
         "reach" => format_reach(i("reach_min", 0), i("reach_max", 0), bare),
+        // INPUT1 MR15: a skill with a position (or the transition's Maneuver dash) renders its range N, else its band
+        "range" => match maneuver_dash(row) {
+            Some(n) if n > 0 => n.to_string(),
+            Some(_) => String::new(),
+            None => format_reach(i("reach_min", 0), i("reach_max", 0), true),
+        },
+        "position" => match (s("position").as_str(), maneuver_dash(row)) {
+            ("behind", _) => "behind the target".into(),
+            (_, Some(_)) => "to a flank".into(),
+            _ => String::new(),
+        },
         "weapons" => json::strings(json::get(row, "weapon_types")).join("/"),
         "proficiency" => {
             let level = i("min_proficiency", 0);

@@ -313,7 +313,7 @@ fn can_strike_in_place(w: &World, actor: UnitId, cap: i32, dist: i32, profile: &
     strikes(w, actor, cap).into_iter().any(|sid| {
         let s = &w.cat.skills[sid];
         let b = skill::reach_by(s, &w.units[actor], &w.ruleset);
-        s.dash_tiles <= 0 && dist >= b.0 && dist <= b.1
+        s.dash_tiles <= 0 && round_intent::position_of(w, s).is_none() && dist >= b.0 && dist <= b.1
     })
 }
 
@@ -2037,8 +2037,9 @@ fn reposition_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId])
     None
 }
 
-/// AI1 row 4: Maneuver Engage on the first ranked target engaged with another unit (MV2) on which one of `c`'s Maneuver
-/// attacks has a flank tile within its carried move (MV5, MV7), when the planner offers the round.
+/// AI1 row 4 (INPUT1 MR14): Maneuver Engage on the first ranked target engaged with another unit (MV2) on which one of
+/// `c`'s Maneuver attacks is in range (MR4) of an open position tile (`round_intent::engage_reach`), when the planner
+/// offers the round.
 fn engage_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId]) -> Option<IntentPick> {
     let attacks: Vec<SkillId> = round_intent_plan::order(w, c, RoundIntent::Maneuver)
         .into_iter()
@@ -2051,7 +2052,7 @@ fn engage_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId]) -> 
     let here = w.pos(c);
     for &t in ranked {
         let engaged = round_intent::engaged_with(w, t).is_some_and(|e| e != c);
-        if !engaged || !attacks.iter().any(|&sid| !round_intent::engage_tiles(w, c, &w.cat.skills[sid], t, here, &blocked).is_empty()) {
+        if !engaged || !attacks.iter().any(|&sid| round_intent::engage_reach(w, c, &w.cat.skills[sid], t, here, &blocked)) {
             continue;
         }
         let mut p = IntentPick::new(RoundIntent::Maneuver, RoundTarget::Unit(t));

@@ -366,6 +366,7 @@ pub fn warnings_for(v: &View, kind: &str, entry: &Dict) -> Vec<String> {
         "items" => item::item_warnings(v, &e),
         "item_families" => item::family_warnings(&crate::source::derive_family(&e)),
         portrait::KIND => portrait::warnings(&e),
+        ruleset::KIND => ruleset::warnings(&e),
         _ => Vec::new(),
     }
 }
@@ -436,6 +437,13 @@ pub fn warnings_all(v: &View) -> Report {
         let missing: Vec<String> = simple::missing_terrain(v.entries("terrain")).iter().map(|id| format!("No terrain row for '{id}': the code defaults apply.")).collect();
         if !missing.is_empty() {
             out.insert("terrain:missing".into(), missing);
+        }
+    }
+    // INPUT1 1.7: the ruleset rows' warnings (`rulesets:<id>`)
+    for e in v.entries(ruleset::KIND) {
+        let found = ruleset::warnings(e);
+        if !found.is_empty() {
+            out.insert(format!("{}:{}", ruleset::KIND, json::s(e, "id")), found);
         }
     }
     for e in v.entries(portrait::KIND) {
