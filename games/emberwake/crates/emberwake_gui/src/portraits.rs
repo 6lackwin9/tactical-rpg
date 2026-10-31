@@ -113,8 +113,8 @@ impl Who {
     }
 }
 
-// The builders the surfaces call (PORTRAITFX1-D: the talk box, -R: the Character screen and the hub list, -P: the
-// battle panels); until each lands only the tests use them.
+// The builders the surfaces call (PORTRAITFX1-D: the talk box, `of_character`; -R: the Character screen and the hub
+// list, -P: the battle panels); until each lands only the tests use them.
 #[cfg_attr(not(test), allow(dead_code))]
 impl Who {
     /// A world character (`screens::character_art`): keyed by its id; its tier, body and name.
@@ -168,8 +168,8 @@ fn derived_of(cat: &Catalog, ruleset: &str, u: &Unit) -> Vec<(String, i32, i32)>
 
 /// Battle unit `i`'s look (5.2): its HP, down (HP 0 and still on the field), its statuses, its member's `conditions`
 /// (the caller's: ROSTER1), the derived stats the cue rows read and the battle's ruleset.
-// The three look builders are for the surfaces (PORTRAITFX1-D talk box, -R Character screen and hub list, -P battle
-// panels); until each lands only the tests call them, hence the dead-code allowance (each surface task removes it).
+// The look builders are for the surfaces (PORTRAITFX1-D talk box: member and character; -R Character screen and hub
+// list, -P battle panels: unit); until -P lands only the tests call this one, hence the dead-code allowance.
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn look_of_unit(s: &Session, i: usize, conditions: &[String]) -> Look {
     let u = &s.w.units[i];
@@ -178,8 +178,7 @@ pub fn look_of_unit(s: &Session, i: usize, conditions: &[String]) -> Look {
 }
 
 /// A party member's look out of battle: the HP the save carries (`hp_lost` against its max in the world it plays), no
-/// statuses, never down; its conditions arrive with ROSTER1 (`wounded`), none before.
-#[cfg_attr(not(test), allow(dead_code))]
+/// statuses, never down; its conditions (ROSTER1 W1: `wounded`).
 pub fn look_of_member(d: &Data, gs: &GameState, m: &UnitState) -> Look {
     let world = &gs.world_id;
     let ruleset = d.ruleset_id(world);
@@ -187,12 +186,11 @@ pub fn look_of_member(d: &Data, gs: &GameState, m: &UnitState) -> Look {
     let max_hp = built.as_ref().map_or(0, |b| b.unit.max_hp);
     let hp = if max_hp > 0 { progression::start_hp(max_hp as i64, m.hp_lost) as i32 } else { 0 };
     let derived = built.map(|b| derived_of(&d.cat, &ruleset, &b.unit)).unwrap_or_default();
-    Look { hp, max_hp, down: false, statuses: Vec::new(), conditions: Vec::new(), derived, ruleset }
+    Look { hp, max_hp, down: false, statuses: Vec::new(), conditions: m.conditions.clone(), derived, ruleset }
 }
 
 /// A world character's look: no HP (so no `hp` or `down` row matches), no statuses; the derived stats of its base unit
 /// as built (no status modifiers out of battle) under the world's ruleset.
-#[cfg_attr(not(test), allow(dead_code))]
 pub fn look_of_character(d: &Data, gs: &GameState, character: &Dict) -> Look {
     let ruleset = d.ruleset_id(&gs.world_id);
     let def = d.cat.units.get(&json::s(character, "base_unit"));

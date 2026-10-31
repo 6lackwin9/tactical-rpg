@@ -31,6 +31,8 @@ pub fn card_of(d: &Data, world: &str, raw: &Dict) -> Card {
         let who = d.resolve(world, "characters", &speaker);
         c.speaker = s_or(raw, "speaker_name", &s_or(who, "name", &speaker));
         c.portrait = if who.is_empty() { Vec::new() } else { crate::screens::character_art(d, who).2 };
+        // PORTRAITFX1-D: the portrait's effects are seeded by the character id, as the talk box's
+        c.portrait_key = s(who, "id");
     }
     c
 }
@@ -50,11 +52,12 @@ pub fn entry_reel(d: &Data, world: &str, entry: &Dict) -> Reel {
     reel
 }
 
-/// A vignette screen over `reel` as the game plays it: the player's text speed, the game's palette, and its tuned shake
-/// presets and limits for the cards' `shake` (FX1 5.2; `tuning.json` `shakes`, `shake_max_px`, `shake_max_ms`).
+/// A vignette screen over `reel` as the game plays it: the player's text speed, the game's palette, its tuned shake
+/// presets and limits for the cards' `shake` (FX1 5.2; `tuning.json` `shakes`, `shake_max_px`, `shake_max_ms`), and
+/// the line cards' portraits lit by the game's rim key (PORTRAITFX1-D, 6.4: Tallow Amber).
 pub fn vignette_screen(cx: &Cx, reel: Reel, on_done: impl FnOnce(&mut Cx, Ended) + 'static) -> VignetteScreen<GameCx> {
     let t = &cx.tuning.value;
-    VignetteScreen::with_settings(&cx.settings, reel, on_done).palette(PALETTE).with_shakes(t.shakes.clone(), t.shake_limits())
+    VignetteScreen::with_settings(&cx.settings, reel, on_done).palette(PALETTE).with_shakes(t.shakes.clone(), t.shake_limits()).portrait_rim(Some(crate::portraits::RIM))
 }
 
 /// The player for `scene` in the game's palette; Skip asks first for a scene not seen yet (W6).

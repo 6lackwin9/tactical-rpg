@@ -20,6 +20,7 @@ use crate::runover::days as day_count;
 use crate::music;
 use crate::props::{Item, PropDraw, BOX_EDGE, BOX_FACE, BOX_FACE_H, BOX_FILL};
 use crate::board::{BoardAct, BoardPane};
+use crate::portraits::{Faces, Who};
 use crate::shop::{ShopAct, ShopPane};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{draw_glyph, tip, Gfx, Glyph, Ui, Widget, BODY, BORDER, CARD, DIM, GOLD, GOOD, H, INFO, PANEL_HI, SMALL, TEXT, W};
@@ -120,6 +121,8 @@ pub struct RegionMap {
     leader_face: Facing,
     /// The sprites drawn last frame (agent link `state.sprites`, tests).
     sprites: Vec<Value>,
+    /// PORTRAITFX1-D: the talk box's animated portrait (its clock moves with the frame's wall time).
+    faces: Faces,
 }
 
 /// Starts a world fight: the battle screen, or the Skip / Fled / Lost popup in a debug game.
@@ -228,6 +231,7 @@ impl RegionMap {
             moved_at: None,
             leader_face: Facing::default(),
             sprites: Vec::new(),
+            faces: Faces::default(),
         }
     }
 
@@ -692,6 +696,8 @@ impl Screen<GameCx> for RegionMap {
         }
         let mut ui: Ui<RAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), rgb(14, 18, 26));
+        // PORTRAITFX1-D: a portrait left out of the last frame (the conversation ended or hid) is dropped
+        self.faces.begin();
         let loc = explore::location(&d, &gs);
         let t = explore::template_of(&d, loc);
         let talking = self.talking();
@@ -911,7 +917,7 @@ impl Screen<GameCx> for RegionMap {
                 let det = if pick.is_empty() { Dict::new() } else { emberwake_world::board::detail(&d, &gs, &pick) };
                 self.board.draw(&mut ui, cx, &bv, &det, RAct::Board);
             } else {
-                draw_talk(&mut ui, cx, view, b, self.pending.is_some());
+                draw_talk(&mut ui, cx, &mut self.faces, view, b, self.pending.is_some());
             }
         }
         if let Some(p) = self.pending.clone().filter(|_| self.talking()) {
@@ -933,6 +939,8 @@ impl Screen<GameCx> for RegionMap {
         let speed = cx.settings.v["anim_speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0);
         self.anim_ms += now.duration_since(self.anim_at).as_secs_f64() * 1000.0 * speed;
         self.anim_at = now;
+        // PORTRAITFX1 4.5: the talk box's portrait clock moves by the frame's wall time (at most 100 ms a frame)
+        self.faces.tick();
         // CAMPAIGN1 W3: a Yes to the ask before a resting reply picks it
         if cx.take_answer(crate::runover::ASK_TALK_REST) {
             if let Some(i) = self.rest_ask.take() {
@@ -1035,7 +1043,9 @@ impl Screen<GameCx> for RegionMap {
             "turn_in": self.pending.as_ref().map(|p| json!({"quest": p["quest"], "offers": p["offers"], "picks": self.picks})),
             "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open,
             "shop": if self.shop_qid().is_empty() { Value::Null } else { self.shop.state() }, "board": Some(self.board_qid()).filter(|b| !b.is_empty()),
-            "board_pane": if self.board_qid().is_empty() { Value::Null } else { self.board.state() }, "sprites": self.sprites})
+            "board_pane": if self.board_qid().is_empty() { Value::Null } else { self.board.state() }, "sprites": self.sprites,
+            // PORTRAITFX1 4.11: the speaker's portrait while the talk box shows (the shop or the board hides it)
+            "portraits": if self.talking() && self.shop_qid().is_empty() && self.board_qid().is_empty() { self.faces.state() } else { json!([]) }})
     }
 
     /// MUSIC2: shop while the shop is open, else the location's kind.
@@ -1591,21 +1601,19 @@ fn text_center_fit(p: &mut Painter, cx: f32, y: f32, text: &str, size: f32, max_
 /// Draws the dialogue box `b` (spec PLAYUI1 3.1): the portrait at the top of the left column with the speaker's name
 /// (GOLD) and faction band (DIM) under it; at the right the NPC's line, a divider and the numbered replies (locked
 /// ones dim with their reason; all off while `busy`, a turn-in picker over it). No key hint line: the numbers show
-/// 1-9, Esc is on the Help button's card.
-fn draw_talk(ui: &mut Ui<RAct>, cx: &mut Cx, view: &Dict, b: &TalkBox, busy: bool) {
+/// 1-9, Esc is on the Help button's card. PORTRAITFX1-D (6.2 row 1): the portrait lives (`portraits::Faces` on surface
+/// `dialogue`: base life, the sidecar's `idle`, the state rows of the speaker's look); the initial letter without a file.
+fn draw_talk(ui: &mut Ui<RAct>, cx: &mut Cx, faces: &mut Faces, view: &Dict, b: &TalkBox, busy: bool) {
     ui.p.panel(b.r, rgba(14, 20, 34, 250), FRAME_LINE, 4.0);
     ui.push("dialogue", "panel", s(view, "speaker_name"), b.r, true, false, None, Vec::new());
     let pr = Rect::new(b.r.x + (b.left - PORTRAIT) / 2, b.r.y + TALK_PAD, PORTRAIT, PORTRAIT);
     ui.p.panel(pr, rgb(22, 30, 48), BORDER, 2.0);
-    let speaker = cx.data.resolve(&cx.gs().world_id, "characters", &s(view, "speaker"));
-    let (_, _, portraits) = crate::screens::character_art(&cx.data, speaker);
-    let px = ui.icon_px(Rect::new(0, 0, PORTRAIT + 4, PORTRAIT + 4));
-    match cx.art.first(&portraits, px, px) {
-        Some(img) => ui.p.image(img, pr),
-        None => {
-            let initial = s(view, "speaker_name").chars().next().unwrap_or('?').to_string();
-            ui.p.text_center(pr.x as f32 + PORTRAIT as f32 / 2.0, pr.y as f32 + (PORTRAIT as f32 - ui.p.line_h(20.0)) / 2.0, &initial, 20.0, GOLD);
-        }
+    let d = cx.data.clone();
+    let speaker = d.resolve(&cx.gs().world_id, "characters", &s(view, "speaker"));
+    let (who, look) = talk_portrait(&d, cx.gs(), speaker, view);
+    if !faces.draw(&mut ui.p, cx, &who, &look, "dialogue", pr) {
+        // the missing art goes to the playtest trail as before (nothing loads)
+        let _ = cx.art.first(&crate::screens::character_art(&d, speaker).2, 1, 1);
     }
     let mid = b.r.x as f32 + b.left as f32 / 2.0;
     let max_w = (b.left - 6) as f32;
@@ -1649,6 +1657,24 @@ fn draw_talk(ui: &mut Ui<RAct>, cx: &mut Cx, view: &Dict, b: &TalkBox, busy: boo
         ry += rep.h + 2;
     }
     ui.scroll_end();
+}
+
+/// The talk box's portrait (PORTRAITFX1-D, 5.2 and 6.2): whose it is (keyed by the character id, the initial letter
+/// from the shown name) and the look its state rows read: a party member's when a member plays the speaker (its carried
+/// HP, its conditions), else the world character's (no HP, so no `hp` or `down` row matches).
+fn talk_portrait(d: &emberwake_world::Data, gs: &emberwake_world::GameState, speaker: &Dict, view: &Dict) -> (Who, emberwake_battle::portrait::Look) {
+    let mut who = Who::of_character(d, speaker);
+    who.name = s(view, "speaker_name");
+    if who.key.is_empty() {
+        who.key = format!("speaker:{}", s(view, "speaker"));
+    }
+    let qid = s(speaker, "_qid");
+    let member = gs.party.members.iter().find(|m| !qid.is_empty() && s(emberwake_world::progression::character_of(d, m), "_qid") == qid);
+    let look = match member {
+        Some(m) => crate::portraits::look_of_member(d, gs, m),
+        None => crate::portraits::look_of_character(d, gs, speaker),
+    };
+    (who, look)
 }
 
 /// The region map's controls (the Help button's hover card and popup).
@@ -2201,7 +2227,7 @@ mod talk_tests {
             g.fonts.audit = Some(Vec::new());
             let mut ui: Ui<RAct> = Ui::new(&mut g, (-500, -500), true);
             let b = talk_layout(&mut ui.p, &view);
-            draw_talk(&mut ui, &mut cx, &view, &b, false);
+            draw_talk(&mut ui, &mut cx, &mut Faces::default(), &view, &b, false);
             let widgets: Vec<Value> = ui.widgets.iter().map(|w| w.info()).collect();
             drop(ui);
             let recs = g.fonts.audit.take().unwrap_or_default();
@@ -2256,6 +2282,174 @@ mod talk_tests {
         });
         if !checked {
             eprintln!("no shop keeper on the world's maps: nothing to check");
+        }
+    }
+}
+
+/// PORTRAITFX1-D (docs/specs/PORTRAITFX1.md 6.2 row 1; PORTRAITFX1_TASKS 1.5 D1, D2, D4, D5): the talk box's portrait
+/// lives, drawn headless over a debug game of the first playable world with a scratch portrait layer (a sidecar with
+/// eyes on a Tallow Amber fill, so the rim and the blink show) and cue rows set by each test, not the shipped ones.
+#[cfg(test)]
+mod portrait_tests {
+    use super::talk_tests::each_talk;
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx, rect};
+    use crate::portraits::tests::{layer, row};
+    use crate::portraits::RIM;
+    use aegis_core::assets::Layers;
+    use aegis_ui::art::Art;
+    use aegis_ui::fx::Clock;
+    use aegis_ui::portrait_fx::{blink_phase, blink_starts, seed_of, tq, BLINK_MS, EASE_MS};
+    use aegis_ui::screen::TEXT_SIZES;
+    use emberwake_data::PortraitCue;
+
+    /// A game whose cue rows are `rows` (none of the shipped data's).
+    fn cx_with(rows: Vec<PortraitCue>) -> Cx {
+        let mut cx = game_cx();
+        std::sync::Arc::get_mut(&mut cx.app.data).expect("the test owns the data").edit_cat(|c| c.portrait_cues = rows);
+        cx
+    }
+
+    /// A scratch layer holding `character`'s portrait (the first file of its chain) with eyes, a dark lid and the
+    /// game's rim key ("").
+    fn portrait_art(cx: &mut Cx, name: &str, character: &Dict) {
+        let rel = crate::screens::character_art(&cx.data, character).2.first().cloned().expect("a portrait chain");
+        let face = json!({"size": 96, "eyes": [[30, 40, 10, 6], [56, 40, 10, 6]], "lid": "#203040", "rim": ""});
+        cx.art = Art::layered(Layers::of(vec![layer(name, &rel, 96, [RIM[0], RIM[1], RIM[2]], Some(face))]));
+    }
+
+    /// The speaker of the open conversation on `map`.
+    fn speaker(map: &RegionMap, cx: &Cx) -> Dict {
+        let view = map.state(cx)["dialogue"].clone();
+        cx.data.resolve(&cx.gs().world_id, "characters", &s(json::dict(&view), "speaker")).clone()
+    }
+
+    /// The talk box portrait composed at clock `t` (one frame of the map).
+    fn composed_at(map: &mut RegionMap, cx: &mut Cx, g: &mut Gfx, key: &str, t: u64) -> Vec<u8> {
+        map.faces.clock = Clock { ms: t as f64, hold: 0.0 };
+        frame(map, cx, g, 1.0);
+        map.faces.get(key).and_then(|f| f.composed()).map(|i| i.px.clone()).expect("the speaker's portrait composed")
+    }
+
+    /// D1 and D5: the talk box portrait changes pixels over 4 s by default (the rim flickers; breath at the full tier);
+    /// under reduce motion the frames differ only where a blink is closed or half closed (4.7). While the conversation
+    /// is open the map's `state` lists the speaker's portrait; with none open, no portrait.
+    #[test]
+    fn d1_d5_the_talk_box_portrait_lives_and_shows_in_the_state() {
+        let mut cx = cx_with(Vec::new());
+        let mut g = gfx();
+        let quiet = RegionMap::new(&mut cx);
+        assert_eq!(quiet.state(&cx)["portraits"], json!([]), "no conversation: no portrait");
+        let mut checked = false;
+        each_talk(&mut cx, |map, cx, _, _| {
+            let character = speaker(map, cx);
+            let key = s(&character, "id");
+            if key.is_empty() {
+                return true;
+            }
+            portrait_art(cx, "talk_d1", &character);
+            let seed = seed_of(&key);
+            // every 100 ms over 4 s, and the middle of the first blink (wherever it falls)
+            let first = blink_starts(seed, 10_000).first().copied().expect("a blink within 10 s");
+            let mut times: Vec<u64> = (0..=40).map(|k| k * 100).collect();
+            times.push(first + BLINK_MS / 2);
+            let open = |t: u64| blink_phase(seed, tq(t)) == 0;
+            for reduce in [false, true] {
+                cx.settings.v["reduce_motion"] = json!(reduce);
+                let frames: Vec<(u64, Vec<u8>)> = times.iter().map(|&t| (t, composed_at(map, cx, &mut g, &key, t))).collect();
+                let still: Vec<&(u64, Vec<u8>)> = frames.iter().filter(|f| open(f.0)).collect();
+                let blinks: Vec<&(u64, Vec<u8>)> = frames.iter().filter(|f| !open(f.0)).collect();
+                assert!(!blinks.is_empty(), "a sample inside a blink");
+                if reduce {
+                    assert!(still.iter().all(|f| f.1 == still[0].1), "reduce motion: the open-eyed frames are equal");
+                    assert!(blinks.iter().all(|f| f.1 != still[0].1), "reduce motion: a blink still shows");
+                } else {
+                    assert!(still.iter().any(|f| f.1 != still[0].1), "by default the open-eyed frames change over 4 s");
+                }
+            }
+            let st = map.state(cx);
+            let listed = st["portraits"].as_array().cloned().unwrap_or_default();
+            assert!(listed.iter().any(|p| p["key"] == json!(key)), "the speaker's portrait is in the state: {st}");
+            assert!(listed.iter().all(|p| p["key"] == json!(key)), "only the speaker's");
+            map.end_talk(cx);
+            frame(map, cx, &mut g, 1.0);
+            assert_eq!(map.state(cx)["portraits"], json!([]), "the conversation ended: no portrait");
+            checked = true;
+            false
+        });
+        assert!(checked, "a conversation with a speaker");
+    }
+
+    /// A view of a conversation with `character` (as `DialogueRunner::view` shapes it).
+    fn view_of(character: &Dict) -> Dict {
+        json::dict(&json!({"speaker": s(character, "_qid"), "speaker_name": s(character, "name"), "node": "n", "text": "A line.", "choices": [{"text": "Farewell.", "locked": false, "reason": "", "service": "farewell"}],
+            "end": false, "next": false, "faction": "", "faction_name": "", "band": "neutral"}))
+        .clone()
+    }
+
+    /// Draws the talk box for `view` at clock `t` into `faces`, at text size `scale`: its widgets and the texts drawn.
+    fn talk_at(cx: &mut Cx, g: &mut Gfx, faces: &mut Faces, view: &Dict, t: u64, scale: f32) -> (Vec<Value>, Vec<aegis_ui::painter::TextRec>) {
+        faces.clock = Clock { ms: t as f64, hold: 0.0 };
+        g.fonts.scale = scale;
+        g.fonts.audit = Some(Vec::new());
+        let mut ui: Ui<RAct> = Ui::new(g, (-500, -500), true);
+        faces.begin();
+        let b = talk_layout(&mut ui.p, view);
+        draw_talk(&mut ui, cx, faces, view, &b, false);
+        let widgets = ui.widgets.iter().map(|w| w.info()).collect();
+        drop(ui);
+        (widgets, g.fonts.audit.take().unwrap_or_default())
+    }
+
+    /// D2 and D4: a speaker played by a wounded party member draws the `wounded` row's desaturate 0.35 (with the rows of
+    /// PORTRAITFX1_TASKS 2.3); a world character no member plays matches no `hp` row (it has no HP); the talk box with a
+    /// drawn portrait reads clean (TEXTFIT1) at every text size.
+    #[test]
+    fn d2_d4_a_wounded_member_speaker_is_desaturated_and_the_box_reads_clean() {
+        let rows = vec![row(json!({"id": "wounded", "trigger": "condition", "condition": "wounded", "effect": "desaturate", "intensity": 0.35})), row(json!({"id": "any_hp", "trigger": "hp", "below": 100, "effect": "tint", "intensity": 0.5}))];
+        let mut cx = cx_with(rows);
+        let mut g = gfx();
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        let at = cx.gs().party.members.iter().position(|m| !emberwake_world::progression::character_of(&d, m).is_empty()).expect("a member who plays a character");
+        cx.gs_mut().party.members[at].conditions = vec!["wounded".to_string()];
+        let character = emberwake_world::progression::character_of(&d, &cx.gs().party.members[at]).clone();
+        portrait_art(&mut cx, "talk_d2", &character);
+        let view = view_of(&character);
+        let key = s(&character, "id");
+        let mut faces = Faces::default();
+        for t in [1000, 1000 + EASE_MS] {
+            talk_at(&mut cx, &mut g, &mut faces, &view, t, 1.0);
+        }
+        let fx = faces.get(&key).expect("the member's portrait");
+        let now = faces.now();
+        assert!(fx.level("desaturate", now).is_some_and(|l| (l.i - 0.35).abs() < 1e-3), "wounded: desaturate 0.35");
+        assert!(fx.level("tint", now).is_none(), "the member's HP is full: the hp row does not match");
+        assert!(fx.live(now).contains(&"desaturate"));
+        // a world character no member plays: no hp row, whatever its HP would be
+        let played: Vec<String> = cx.gs().party.members.iter().map(|m| s(emberwake_world::progression::character_of(&d, m), "_qid")).collect();
+        let other = d.merged_entries(&world, "characters").into_iter().find(|c| !played.contains(&s(c, "_qid"))).expect("a character no member plays").clone();
+        portrait_art(&mut cx, "talk_d2_other", &other);
+        let mut faces = Faces::default();
+        let view = view_of(&other);
+        for t in [1000, 1000 + EASE_MS] {
+            talk_at(&mut cx, &mut g, &mut faces, &view, t, 1.0);
+        }
+        let fx = faces.get(&s(&other, "id")).expect("the character's portrait");
+        assert!(fx.level("tint", faces.now()).is_none() && fx.level("desaturate", faces.now()).is_none(), "a world character matches no hp or condition row");
+        // D4: the box reads clean with the portrait drawn, at every text size
+        for (size, scale) in TEXT_SIZES {
+            let (widgets, recs) = talk_at(&mut cx, &mut g, &mut faces, &view, 2000, scale as f32);
+            assert!(faces.get(&s(&other, "id")).and_then(|f| f.composed()).is_some(), "{size}: the portrait drew");
+            let boxes: Vec<(String, f32, f32, f32, f32)> = widgets
+                .iter()
+                .map(|w| {
+                    let (x, y, ww, hh) = rect(w);
+                    (s(json::dict(w), "id"), x as f32, y as f32, ww as f32, hh as f32)
+                })
+                .collect();
+            let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+            assert_eq!(v["counts"], json!({"cut": 0, "edge": 0, "overlap": 0, "spill": 0}), "{size}: {v}");
         }
     }
 }

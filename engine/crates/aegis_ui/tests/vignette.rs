@@ -604,3 +604,141 @@ fn v3_the_caption_moves_while_the_skip_button_and_the_cover_stay() {
     assert!(off != (0, 0), "the shake runs under the cover");
     assert!(moving.px == still.px, "the full cover hides it all, edges included");
 }
+
+// ---- PORTRAITFX1-D: line card portraits -------------------------------------------------------------------------
+
+const IDA: &str = "portraits/npcs/ida.png";
+
+/// A scratch asset layer holding `IDA`, a 96 px portrait (a 3 px dark border round a warm fill), with `sidecar` beside
+/// it when given.
+fn portrait_layer(name: &str, sidecar: Option<Value>) -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!("aegis_vignette_portrait_{name}_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let path = root.join(IDA);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let side = 96u32;
+    let mut px = Vec::new();
+    for y in 0..side {
+        for x in 0..side {
+            let edge = x < 3 || y < 3 || x >= side - 3 || y >= side - 3;
+            px.extend_from_slice(&if edge { [40, 40, 40, 255] } else { [150, 110, 90, 255] });
+        }
+    }
+    let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(&path).unwrap()), side, side);
+    enc.set_color(png::ColorType::Rgba);
+    enc.set_depth(png::BitDepth::Eight);
+    enc.write_header().unwrap().write_image_data(&px).unwrap();
+    if let Some(s) = sidecar {
+        std::fs::write(root.join(aegis_core::assets::face_file(IDA)), s.to_string()).unwrap();
+    }
+    root
+}
+
+fn line_card(portrait: &[&str]) -> Card {
+    Card { style: Style::Line, speaker: "Ida".into(), text: "A line.".into(), portrait: portrait.iter().map(|p| p.to_string()).collect(), portrait_key: "ida".into(), fade_in_ms: 0, ..Card::default() }
+}
+
+fn art_cx(layer: std::path::PathBuf) -> Cx<App> {
+    let mut cx = cx();
+    cx.art = Art::layered(aegis_core::assets::Layers::of(vec![layer]));
+    cx
+}
+
+/// D3: a line card draws its portrait through `portrait_fx` with its sidecar's `idle` (eased in over `EASE_MS`, on the
+/// screen's clock, moved by the frame time it feeds the reel), keyed by the card's `portrait_key`; the agent link lists
+/// it. A card whose portrait file no layer holds draws the empty frame as before and keeps no portrait; a skipped reel
+/// draws no portrait.
+#[test]
+fn d3_a_line_card_portrait_lives_with_its_sidecar_idle() {
+    use aegis_ui::portrait_fx::EASE_MS;
+    let face = json!({"size": 96, "eyes": [[30, 40, 10, 6], [56, 40, 10, 6]], "idle": [{"effect": "eye_glow", "color": "#c084fc", "intensity": 0.8}]});
+    let mut cx = art_cx(portrait_layer("idle", Some(face)));
+    let mut g = gfx();
+    let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![line_card(&[IDA]), card("After.")]), TextSpeed::Normal, |_, _| {});
+    s.draw(&mut cx, &mut g, (-1, -1), true);
+    s.advance(&mut cx, EASE_MS as u32);
+    assert_eq!(s.portrait.clock.now(), EASE_MS, "the portrait clock moves with the reel's frame time");
+    s.draw(&mut cx, &mut g, (-1, -1), true);
+    let fx = s.portrait.get().expect("the speaker's portrait is kept");
+    assert_eq!(fx.key, "ida", "keyed by the card's portrait key");
+    let now = s.portrait.clock.now();
+    assert!(fx.level("eye_glow", now).is_some_and(|l| (l.i - 0.8).abs() < 1e-3), "the sidecar's idle eye glow, eased in");
+    let live = fx.live(now);
+    assert!(live.contains(&"eye_glow") && live.contains(&"blink"), "{live:?}");
+    assert!(fx.composed().is_some(), "composed");
+    let st = s.state(&cx);
+    assert_eq!(st["portraits"][0]["key"], json!("ida"), "{st}");
+    assert!(st["portraits"][0]["effects"].as_array().unwrap().contains(&json!("eye_glow")), "{st}");
+    // the next card (no portrait): none kept
+    while s.player.card_index() == 0 {
+        s.player.press();
+    }
+    s.draw(&mut cx, &mut g, (-1, -1), true);
+    assert!(s.portrait.get().is_none() && s.state(&cx)["portraits"] == json!([]), "a card without a portrait keeps none");
+    // a skipped reel draws no portrait
+    let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![line_card(&[IDA])]), TextSpeed::Normal, |_, _| {});
+    s.draw(&mut cx, &mut g, (-1, -1), true);
+    assert!(s.portrait.get().is_some());
+    assert!(s.player.skip());
+    s.draw(&mut cx, &mut g, (-1, -1), true);
+    assert!(s.portrait.get().is_none() && s.state(&cx)["portraits"] == json!([]), "skipped: no portrait");
+    // a portrait file no layer holds: the empty frame, the same pixels as a card naming none
+    let frame = |portrait: &[&str]| {
+        let mut cx = art_cx(portrait_layer("missing", None));
+        let mut g = gfx();
+        let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![line_card(portrait)]), TextSpeed::Normal, |_, _| {});
+        s.draw(&mut cx, &mut g, (-1, -1), true);
+        (g.canvas.px, s.portrait.get().is_some())
+    };
+    let (none, kept) = frame(&[]);
+    assert!(!kept);
+    assert!(frame(&["portraits/npcs/nobody.png"]) == (none.clone(), false), "a missing file draws the empty frame");
+    assert!(frame(&["portraits/npcs/nobody.png", IDA]).0 != none, "the chain's first file a layer holds draws");
+}
+
+/// D3: the plain `draw` still draws a line card's portrait (a fresh, still `CardPortrait`); the screen's portrait takes
+/// the rim key it is given (the game's house rim light) when the sidecar names none; a portrait without a sidecar has
+/// its base life only (no overlay, no blink without eyes).
+#[test]
+fn d3_the_plain_draw_and_the_rim_key() {
+    let layer = portrait_layer("plain", None);
+    let plain = |portrait: &[&str]| {
+        let p = Player::new(reel(vec![line_card(portrait)]), TextSpeed::Normal);
+        let mut g = gfx();
+        let mut art = Art::layered(aegis_core::assets::Layers::of(vec![layer.clone()]));
+        let mut ui: Ui<()> = Ui::new(&mut g, (-1, -1), true);
+        vignette::draw(&mut ui, &mut art, &p, &Palette::default(), false);
+        drop(ui);
+        g.canvas.px
+    };
+    assert!(plain(&[IDA]) != plain(&[]), "the portrait draws");
+    let mut cx = art_cx(layer.clone());
+    let mut g = gfx();
+    let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![line_card(&[IDA])]), TextSpeed::Normal, |_, _| {}).portrait_rim(Some([0xd9, 0x77, 0x06, 255]));
+    s.draw(&mut cx, &mut g, (-1, -1), true);
+    let live = s.portrait.get().expect("kept").live(0);
+    assert!(live.contains(&"rim") && !live.contains(&"blink") && !live.contains(&"eye_glow"), "{live:?}");
+    let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![line_card(&[IDA])]), TextSpeed::Normal, |_, _| {});
+    s.draw(&mut cx, &mut g, (-1, -1), true);
+    assert!(!s.portrait.get().expect("kept").live(0).contains(&"rim"), "no rim key: no rim");
+}
+
+/// D4: a line card with a drawn portrait reads clean (TEXTFIT1) at every text size.
+#[test]
+fn d4_a_line_card_with_a_portrait_reads_clean_at_every_text_size() {
+    let layer = portrait_layer("audit", None);
+    for (label, scale) in TEXT_SIZES {
+        let mut cx = art_cx(layer.clone());
+        let mut g = gfx();
+        let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![Card { text: words(360), speaker: "A speaker with a long name".into(), ..line_card(&[IDA]) }]), TextSpeed::Normal, |_, _| {});
+        to_phase(&mut s.player, Phase::Hold);
+        g.fonts.scale = scale as f32;
+        g.fonts.audit = Some(Vec::new());
+        s.draw(&mut cx, &mut g, (-1, -1), true);
+        assert!(s.portrait.get().is_some_and(|f| f.composed().is_some()), "{label}: the portrait drew");
+        let recs = g.fonts.audit.take().unwrap();
+        let boxes: Vec<(String, f32, f32, f32, f32)> = s.widgets().iter().map(|w| (w["id"].as_str().unwrap().to_string(), w["rect"][0].as_f64().unwrap() as f32, w["rect"][1].as_f64().unwrap() as f32, w["rect"][2].as_f64().unwrap() as f32, w["rect"][3].as_f64().unwrap() as f32)).collect();
+        let v = text_audit::issues(&recs, W as f32, H as f32, &boxes);
+        assert_eq!(v["counts"], json!({"cut": 0, "edge": 0, "overlap": 0, "spill": 0}), "{label}: {v}");
+    }
+}

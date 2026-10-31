@@ -51,7 +51,11 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
   `reduce_motion` setting). The model `Player` moves only through `advance(ms)`, `press()`, `skip()`; `vignette::draw`
   paints a card in the caller's `Palette`; `VignetteScreen<G>` measures frame time and runs `on_done` once. Agent link:
   `state` {reel, card, cards, phase, shown, total, done}, widgets `vignette.next`, `vignette.skip`. The UI Gallery's Kit
-  group has a Vignette player entry on the engine's sample reel.
+  group has a Vignette player entry on the engine's sample reel. PORTRAITFX1-D: a `line` card's portrait lives
+  (`CardPortrait`: `portrait_fx` with its base life and its sidecar's `idle` overlays, no state holds or reactions;
+  seeded by `Card.portrait_key`, else the drawn file's path; its clock moves with the frame time `VignetteScreen` feeds
+  the reel; `VignetteScreen::portrait_rim` sets the rim key a sidecar does not name); `vignette::draw` draws it still,
+  `draw_with` animates it; agent state `portraits` (the portrait on view, or none).
 * **Stage pieces (STAGE1-E):** `Painter::ellipse_ring` (a 1 px ellipse outline, no fill), `Image::opaque_bounds(min_alpha)`
   (the box of solid pixels), `Art::body_bounds(key, palette, size, flip)` (the solid box of a body's fitted idle frame 0,
   mirrored with flip, cached; a unit's hit rect on a stage); DIR4-HB: `Art::body_bounds_facing(key, palette, size, facing)`

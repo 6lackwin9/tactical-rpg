@@ -6,12 +6,15 @@
 //! full screen that measures the frame time, plays the cues and runs its `on_done` callback when the reel ends or is
 //! skipped. What a reel holds (which cards, their tokens and conditions) is the game's or its kit's. A card may shake the
 //! view (FX1-V, FX1 5.2): its `shake` preset, from the game's table (`with_shakes`), moves the card's picture and texts.
+//! A line card's portrait lives (PORTRAITFX1-D): `CardPortrait` draws it through `portrait_fx` with its base life and
+//! its sidecar's `idle` overlays, on a clock the screen moves with the reel's frame time.
 
 use crate::art::Art;
 use crate::audio::Bus;
 use crate::canvas::{rgb, rgba, Rect, Rgba};
-use crate::fx::{Camera, ShakeLimits, ShakeTable};
+use crate::fx::{Camera, Clock, ShakeLimits, ShakeTable};
 use crate::painter::Painter;
+use crate::portrait_fx::{idle_cues, Budget, PortraitFx, PortraitOpts};
 use crate::screen::{Context, Cx, Key, Screen, Settings};
 use crate::ui::{tip, Gfx, Ui, Widget, BODY, DIM, GOLD, RADIUS, SMALL, TEXT, H, W};
 use aegis_core::json;
@@ -185,6 +188,9 @@ pub struct Card {
     /// `line`: the speaker's name and portrait chain (the first file a layer holds; none draws an empty frame).
     pub speaker: String,
     pub portrait: Vec<String>,
+    /// `line`: the key the portrait's effects are seeded by (PORTRAITFX1 4.5: the character id; "" the drawn file's
+    /// path).
+    pub portrait_key: String,
     pub fade_in_ms: u32,
     pub fade_out_ms: u32,
     /// 0 waits for a press; above 0 the card moves on by itself that long after its text is out.
@@ -208,6 +214,7 @@ impl Default for Card {
             text: String::new(),
             speaker: String::new(),
             portrait: Vec::new(),
+            portrait_key: String::new(),
             fade_in_ms: 600,
             fade_out_ms: 400,
             hold_ms: 0,
@@ -223,8 +230,8 @@ fn ms_of(d: &json::Dict, key: &str, fallback: u32, max: u32) -> u32 {
 
 impl Card {
     /// A card from its JSON form (the keys of STORYUI1 4.2: style, image, top, bottom, ash, title, subtitle, text,
-    /// fade_in_ms, fade_out_ms, hold_ms, cue; FX1's shake); bad values fall back to the defaults. `speaker`, `portrait` and `when`
-    /// are the caller's to resolve.
+    /// fade_in_ms, fade_out_ms, hold_ms, cue; FX1's shake); bad values fall back to the defaults. `speaker`, `portrait`,
+    /// `portrait_key` and `when` are the caller's to resolve.
     pub fn from_json(v: &Value) -> Card {
         let d = json::dict(v);
         let base = Card::default();
@@ -655,15 +662,81 @@ fn caption<A: Clone>(ui: &mut Ui<A>, x: i32, w: i32, min_h: i32, head: &str, tex
     r
 }
 
+/// The line cards' animated portrait (PORTRAITFX1-D, docs/specs/PORTRAITFX1.md 6.2 row 1): the speaker's portrait
+/// drawn through `portrait_fx` with its base life (breath, rim, blink) and its sidecar's `idle` overlays only (a staged
+/// scene: no state holds, no reactions). One `PortraitFx` for the speaker on view (a new speaker starts a new one), its
+/// clock moved by the frame time the screen feeds the reel, one budget.
+#[derive(Debug, Clone, Default)]
+pub struct CardPortrait {
+    fx: Option<PortraitFx>,
+    budget: Budget,
+    /// The portrait clock (ms).
+    pub clock: Clock,
+    /// The rim key when a sidecar names none (the game's house rim light; None: no rim flicker).
+    pub rim: Option<Rgba>,
+}
+
+impl CardPortrait {
+    /// `ms` of frame time (the screen's, at most `MAX_FRAME_MS`).
+    pub fn advance(&mut self, ms: u32) {
+        self.clock.advance(ms as f64, 1.0);
+    }
+
+    /// The portrait of the speaker on view (None while no line card shows one).
+    pub fn get(&self) -> Option<&PortraitFx> {
+        self.fx.as_ref()
+    }
+
+    /// The agent link's view (PORTRAITFX1 4.11): the portrait on view (`PortraitFx::state`), or none.
+    pub fn state(&self) -> Value {
+        Value::Array(self.fx.iter().map(|f| f.state(self.clock.now())).collect())
+    }
+
+    /// Draws `c`'s portrait into `r`: the first file of its chain with that file's sidecar; false (and no portrait
+    /// kept) when no layer holds any, so the frame stays empty.
+    fn draw(&mut self, p: &mut Painter, art: &mut Art, c: &Card, r: Rect, reduce_motion: bool) -> bool {
+        let Some(rel) = art.first_rel(&c.portrait) else {
+            self.fx = None;
+            // the missing art goes to the playtest trail as before (nothing loads)
+            let _ = art.first(&c.portrait, 1, 1);
+            return false;
+        };
+        let key = if c.portrait_key.is_empty() { rel.clone() } else { c.portrait_key.clone() };
+        let now = self.clock.now();
+        let fx = match &mut self.fx {
+            Some(f) if f.key == key => f,
+            slot => slot.insert(PortraitFx::new(&key)),
+        };
+        let face = art.face(&rel).cloned();
+        fx.hold(&face.as_ref().map(idle_cues).unwrap_or_default(), now);
+        let opts = PortraitOpts { reduce_motion, rim_default: self.rim, show_anchors: false };
+        self.budget.begin();
+        fx.draw(p, art, &rel, face.as_ref(), r, now, &opts, &mut self.budget)
+    }
+}
+
 /// Draws the player's card on the whole stage (V9): the frame colour, the backdrop or the picture, the ash (unless
 /// `reduce_motion`), the card's texts, the hint in a hold that waits, and the fade cover. Widgets are the caller's.
 /// While the card's shake runs (FX1 5.2) the picture area, the caption box, the title, line and text-card texts and the
-/// portrait move by its offset; the frame, the stage backdrop gradient, the hint and the fade cover stay put.
+/// portrait move by its offset; the frame, the stage backdrop gradient, the hint and the fade cover stay put. A line
+/// card's portrait draws still (a fresh `CardPortrait`); `draw_with` animates it.
 pub fn draw<A: Clone>(ui: &mut Ui<A>, art: &mut Art, pl: &Player, pal: &Palette, reduce_motion: bool) {
+    draw_with(ui, art, pl, pal, reduce_motion, &mut CardPortrait::default());
+}
+
+/// `draw` with the line cards' portrait kept in `portrait` (its clock, its effects; PORTRAITFX1-D). With no card on
+/// view (the reel done or skipped) no portrait is kept.
+pub fn draw_with<A: Clone>(ui: &mut Ui<A>, art: &mut Art, pl: &Player, pal: &Palette, reduce_motion: bool, portrait: &mut CardPortrait) {
     let stage = Rect::new(0, 0, W, H);
     let frame = pl.reel.frame;
     ui.p.fill(stage, frame);
-    let Some(c) = pl.card() else { return };
+    let Some(c) = pl.card() else {
+        portrait.fx = None;
+        return;
+    };
+    if c.style != Style::Line {
+        portrait.fx = None;
+    }
     let (dx, dy) = pl.shake_offset(reduce_motion);
     let view = (ui.p.v.ox, ui.p.v.oy);
     // The picture area shakes with the card; the stage's backdrop does not.
@@ -739,10 +812,7 @@ pub fn draw<A: Clone>(ui: &mut Ui<A>, art: &mut Art, pl: &Player, pal: &Palette,
             let r = caption(ui, x, CAPTION_X + CAPTION_W - x, PORTRAIT, &c.speaker, &c.text, shown, frame, pal);
             let face = Rect::new(CAPTION_X, r.y, PORTRAIT, PORTRAIT);
             ui.p.panel(face, with_alpha(lerp(frame, rgb(0, 0, 0), 0.3), 225), with_alpha(pal.dim, 160), RADIUS);
-            let px = (PORTRAIT as f32 * ui.p.v.s).round() as i32;
-            if let Some(img) = art.first(&c.portrait, px, px) {
-                ui.p.image(img, face.inset(2));
-            }
+            portrait.draw(&mut ui.p, art, c, face.inset(2), reduce_motion);
         }
     }
     // Back to the still view (restored, not shifted back, so no float drift).
@@ -781,6 +851,8 @@ pub struct VignetteScreen<G> {
     pub palette: Palette,
     /// Skip asks "Skip this scene?" first (Yes the default); the caller sets it for a scene not yet seen.
     pub ask_first: bool,
+    /// The line cards' animated portrait (PORTRAITFX1-D); its clock moves with the reel's frame time.
+    pub portrait: CardPortrait,
     on_done: Option<OnDone<G>>,
     last: Option<Instant>,
     w: Vec<Widget<VAct>>,
@@ -788,7 +860,13 @@ pub struct VignetteScreen<G> {
 
 impl<G: Context> VignetteScreen<G> {
     pub fn new(reel: Reel, speed: TextSpeed, on_done: impl FnOnce(&mut Cx<G>, Ended) + 'static) -> Self {
-        Self { player: Player::new(reel, speed), palette: Palette::default(), ask_first: false, on_done: Some(Box::new(on_done)), last: None, w: Vec::new() }
+        Self { player: Player::new(reel, speed), palette: Palette::default(), ask_first: false, portrait: CardPortrait::default(), on_done: Some(Box::new(on_done)), last: None, w: Vec::new() }
+    }
+
+    /// The rim key of the line cards' portraits when a sidecar names none (the game's house rim light).
+    pub fn portrait_rim(mut self, rim: Option<Rgba>) -> Self {
+        self.portrait.rim = rim;
+        self
     }
 
     /// The reel at the player's text speed (the settings' `text_speed`).
@@ -828,6 +906,7 @@ impl<G: Context> VignetteScreen<G> {
     /// `ms` of play, as a frame would feed it (for tools and tests that run the screen without a clock).
     pub fn advance(&mut self, cx: &mut Cx<G>, ms: u32) {
         self.player.advance(ms);
+        self.portrait.advance(ms);
         self.settle(cx);
     }
 
@@ -873,7 +952,7 @@ impl<G: Context> Screen<G> for VignetteScreen<G> {
     fn draw(&mut self, cx: &mut Cx<G>, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<VAct> = Ui::new(g, mouse, live);
         let still = reduce_motion(&cx.settings);
-        draw(&mut ui, &mut cx.art, &self.player, &self.palette, still);
+        draw_with(&mut ui, &mut cx.art, &self.player, &self.palette, still, &mut self.portrait);
         let done = self.player.done();
         ui.push("vignette.next", "stage", "", Rect::new(0, 0, W, H), !done, false, Some(VAct::Next), tip("Continue", "A click, Space or Enter moves the scene on."));
         if self.player.reel.skippable && !done {
@@ -919,6 +998,7 @@ impl<G: Context> Screen<G> for VignetteScreen<G> {
         v["shake"] = json!([dx, dy]);
         v["skippable"] = json!(self.player.reel.skippable);
         v["ask_first"] = json!(self.ask_first);
+        v["portraits"] = self.portrait.state();
         v
     }
 

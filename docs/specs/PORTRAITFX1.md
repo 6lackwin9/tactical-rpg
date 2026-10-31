@@ -411,3 +411,24 @@ frames for common portraits; animated region-map tokens.
   `pixelize` with `mark=False`; the backdrop is `--faction`, else the sheet record's `faction`, else
   `art_src/<id>.json`'s, else hearth; `--root` (default `games/emberwake/assets/portraits`) is for tests; `--contact`
   shows the portrait as it was before the run (so a `--base` run shows old against new), then the four frames.
+
+## 13. Build notes (PORTRAITFX1-D, 2026-11-01)
+
+- Talk box (`region.rs` `draw_talk`): one `portraits::Faces` per region map (`begin` at the top of its draw, `tick` in its
+  frame tick); the portrait is the speaker's `Who::of_character` (keyed by the character id; the initial letter from the
+  shown `speaker_name`), its look `look_of_member` when a party member plays the speaker (matched by the character's
+  `_qid`), else `look_of_character`. `look_of_member` now carries the member's ROSTER1 `conditions` (so the `wounded` row
+  holds). The chain is `face_chain` with the engine's expression (with no frames it is today's `portrait_chain`). A
+  speaker with no file draws the initial as before and the missing file still goes to the playtest trail. The map's
+  `state` gains `portraits` while the talk box shows (the shop hides it), `[]` otherwise.
+- Line cards (`aegis_ui::vignette`): `CardPortrait` keeps one `PortraitFx` for the speaker on view (a new key starts a
+  new one; a card of another style, a done or skipped reel keeps none), holds only the sidecar's `idle` (no state rows:
+  a staged scene), its own `Budget`, and a clock `VignetteScreen::advance` moves by the frame time it feeds the reel.
+  `Card.portrait_key` seeds it (the game sets the character id; "" uses the drawn file's path);
+  `VignetteScreen::portrait_rim` sets the rim key (the game passes Tallow Amber). The sidecar is the drawn file's own
+  (`Art::face`): an expression frame without its own sidecar does not fall back to its base portrait's in the engine
+  (the kit's `face_sidecars` rule); PORTRAITFX1-X, which brings the card's expression, resolves that. `vignette::draw`
+  keeps its signature and draws the portrait still (a fresh `CardPortrait`); `draw_with` animates it. The screen's
+  `state` gains `portraits`.
+- At text size Normal on a 1x canvas the 64 px talk box portrait is the reduced tier (no breath: rim flicker and blinks
+  only); from 2x up it is full (4.6).
