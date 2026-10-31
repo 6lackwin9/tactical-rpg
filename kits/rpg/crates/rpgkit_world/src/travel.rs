@@ -142,11 +142,18 @@ pub fn is_visited(gs: &GameState, qid: &str) -> bool {
 
 /// Directed legs over open routes: (route, from, to).
 pub fn legs(d: &Data, gs: &GameState, w: &str) -> Vec<(Dict, String, String)> {
+    directed(graph(d, w).into_iter().filter(|r| is_open(gs, r)))
+}
+
+/// CAMPAIGN1-SIM: every directed leg of `w`'s graph, route gates ignored (the full graph `sim deadlines` plans on).
+pub fn all_legs(d: &Data, w: &str) -> Vec<(Dict, String, String)> {
+    directed(graph(d, w).into_iter())
+}
+
+/// Each route as a leg from `_from` to `_to`, and back when it is two-way: (route, from, to).
+fn directed(routes: impl Iterator<Item = Dict>) -> Vec<(Dict, String, String)> {
     let mut out = Vec::new();
-    for r in graph(d, w) {
-        if !is_open(gs, &r) {
-            continue;
-        }
+    for r in routes {
         let (a, b) = (json::s(&r, "_from"), json::s(&r, "_to"));
         let two = json::b(&r, "two_way", true);
         out.push((r.clone(), a.clone(), b.clone()));
@@ -190,7 +197,13 @@ pub fn path(d: &Data, gs: &GameState, from: &str, to: &str) -> Vec<String> {
     if from == to || !known_nodes.iter().any(|q| q == from) || !known_nodes.iter().any(|q| q == to) {
         return Vec::new();
     }
-    let all = legs(d, gs, &gs.world_id);
+    best_path(&legs(d, gs, &gs.world_id), &known_nodes, from, to).map(|b| b.1).unwrap_or_default()
+}
+
+/// The best path from `from` to `to` over `all` (directed legs, as `legs` returns them) through `nodes` only: the
+/// fewest days (route `time` summed), then the fewest legs, then the smaller route qids. (days, route qids); None when
+/// `to` cannot be reached. `path` plans on the open legs between known nodes, `sim deadlines` on the full graph.
+pub fn best_path(all: &[(Dict, String, String)], nodes: &[String], from: &str, to: &str) -> Option<(i64, Vec<String>)> {
     let mut best: indexmap::IndexMap<String, (i64, Vec<String>)> = indexmap::IndexMap::new();
     best.insert(from.into(), (0, Vec::new()));
     let mut done: Vec<String> = Vec::new();
@@ -207,8 +220,8 @@ pub fn path(d: &Data, gs: &GameState, from: &str, to: &str) -> Vec<String> {
         }
         done.push(cur.clone());
         let label = best[&cur].clone();
-        for (route, lf, lt) in &all {
-            if *lf != cur || done.contains(lt) || !known_nodes.contains(lt) {
+        for (route, lf, lt) in all {
+            if *lf != cur || done.contains(lt) || !nodes.contains(lt) {
                 continue;
             }
             let mut routes = label.1.clone();
@@ -219,7 +232,7 @@ pub fn path(d: &Data, gs: &GameState, from: &str, to: &str) -> Vec<String> {
             }
         }
     }
-    best.get(to).map(|b| b.1.clone()).unwrap_or_default()
+    best.get(to).cloned()
 }
 
 pub fn route_in(d: &Data, w: &str, route_qid: &str) -> Dict {

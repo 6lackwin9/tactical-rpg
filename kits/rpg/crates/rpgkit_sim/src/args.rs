@@ -6,8 +6,9 @@ use crate::SimGame;
 use rpgkit_world::Data;
 use indexmap::IndexMap;
 
-/// RULESET1-G: `feel` is engine-only (not in the help text, whose lines are Godot parity: as `rewards`).
-pub const MODES: [&str; 10] = ["duel", "tier", "levels", "group", "stats", "party", "role", "sweep", "campaign", "feel"];
+/// RULESET1-G: `feel` is engine-only (not in the help text, whose lines are Godot parity: as `rewards`); so is
+/// CAMPAIGN1-SIM's `deadlines` (deadlines.rs, no fights).
+pub const MODES: [&str; 11] = ["duel", "tier", "levels", "group", "stats", "party", "role", "sweep", "campaign", "feel", "deadlines"];
 pub const CLASSES: [&str; 6] = ["warrior", "ranger", "priest", "brawler", "rogue", "mage"];
 pub const SPENDS: [&str; 4] = ["class", "cons", "primary", "mixed"];
 pub const LOADOUTS: [&str; 3] = ["default", "newest", "role"];
@@ -24,6 +25,11 @@ pub const FEEL_KEYS: [&str; 4] = ["tactic", "party", "armor", "tune"];
 pub const ARMOR_MAX: i32 = 200;
 /// RULESET1-G2: the ruleset numbers `tune=` may set (RULESET1_TASKS 1.2), by key prefix; ranges from the kit schema.
 pub const TUNE_PREFIXES: [&str; 4] = ["stagger_", "flank_", "break_chance_", "rest_"];
+/// CAMPAIGN1-SIM: the keys only the deadlines mode reads (any other mode refuses them).
+pub const DEADLINE_KEYS: [&str; 1] = ["losses"];
+/// CAMPAIGN1-SIM: `losses=` (lost tries per mission in the worst case): default and range.
+pub const LOSSES_DEFAULT: i64 = 1;
+pub const LOSSES_MAX: i64 = 9;
 pub const REF_PREFIX: &str = "world:";
 /// BAL5-SIM K2: party / sweep cells default to 10 seeds (other modes keep 3).
 pub const PARTY_SEEDS: usize = 10;
@@ -116,6 +122,10 @@ pub struct SimArgs {
     pub tune: IndexMap<String, f64>,
     /// The feel keys given, for the check that no other mode takes them.
     feel_keys: Vec<String>,
+    /// CAMPAIGN1-SIM (deadlines only): the lost tries per mission in the worst case (`losses=0..9`; 1).
+    pub losses: i64,
+    /// The deadlines keys given, for the check that no other mode takes them.
+    deadline_keys: Vec<String>,
 }
 
 impl Default for SimArgs {
@@ -170,6 +180,8 @@ impl Default for SimArgs {
             armor: IndexMap::new(),
             tune: IndexMap::new(),
             feel_keys: Vec::new(),
+            losses: LOSSES_DEFAULT,
+            deadline_keys: Vec::new(),
         }
     }
 }
@@ -330,6 +342,13 @@ impl SimArgs {
         } else if let Some(k) = a.feel_keys.first() {
             return Err(format!("{k}= is a feel key (mode feel only)"));
         }
+        if a.mode == "deadlines" {
+            if positional.len() > 1 {
+                return Err("deadlines takes no level or seeds".into());
+            }
+        } else if let Some(k) = a.deadline_keys.first() {
+            return Err(format!("{k}= is a deadlines key (mode deadlines only)"));
+        }
         a.ruleset = rpgkit_rules::ruleset::Ruleset::of(&d.cat, &a.ruleset_id)?;
         a.ruleset.adjust(&a.rules)?;
         if a.mode == "feel" {
@@ -394,7 +413,17 @@ impl SimArgs {
         if FEEL_KEYS.contains(&key) && !self.feel_keys.iter().any(|k| k == key) {
             self.feel_keys.push(key.to_string());
         }
+        if DEADLINE_KEYS.contains(&key) && !self.deadline_keys.iter().any(|k| k == key) {
+            self.deadline_keys.push(key.to_string());
+        }
         match key {
+            // CAMPAIGN1-SIM: the deadlines mode's key. Not in the help text (Godot parity).
+            "losses" => {
+                let Some(n) = value.parse::<i64>().ok().filter(|n| (0..=LOSSES_MAX).contains(n)) else {
+                    return Err(format!("losses must be 0..{LOSSES_MAX} (got '{value}')"));
+                };
+                self.losses = n;
+            }
             // RULESET1-G2: the feel mode's keys (RULESET1_BALANCE1 3.1). Not in the help text (Godot parity).
             "tactic" => {
                 if !TACTICS.iter().any(|(name, _)| *name == value) {

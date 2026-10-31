@@ -3,9 +3,12 @@
 //! campaign). `run` returns the lines the sim prints; `aegis sim <mode> ...` prints them. Scores per fight (left side):
 //! binary (KO, else the HP lead with a 0.02 band) and HP margin (KO 1 / 0, else 0.5 + (l - r) / 2). RULESET1-G adds a
 //! tenth, engine-only mode, `feel` (feel.rs): catalog encounters with their party, read for how the rules feel.
+//! CAMPAIGN1-SIM adds an eleventh, engine-only and fightless, `deadlines` (deadlines.rs): the best and worst day each
+//! campaign checkpoint can be met.
 
 pub mod args;
 pub mod campaign;
+pub mod deadlines;
 pub mod feel;
 pub mod kpi;
 pub mod modes;
@@ -60,6 +63,10 @@ pub fn run(d: &Data, argv: &[String], game: &SimGame) -> Vec<String> {
             return out;
         }
     };
+    // CAMPAIGN1-SIM: no fights, so no runner and its own ARGS line
+    if a.mode == "deadlines" {
+        return deadlines::deadlines_mode(d, &a);
+    }
     let mut r = Runner::new(d, &a);
     r.metrics.keep_totals = a.metrics && !args::METRIC_MODES.contains(&a.mode.as_str());
     r.print(a.header());

@@ -311,6 +311,22 @@ Save: version 13 (or the next free number; sequence with ROSTER1, RULESET1-D, EN
 - Tests: a damaged `campaign.armed` (not a list of text, an empty id, an id listed twice) is refused on load; the
   `preview_battle` loss includes the defeat retreat's days (a deadline the retreat's day misses lists `lost`).
 
+## As built (CAMPAIGN1-SIM, 2026-11-01)
+
+- C5: `aegis sim deadlines [world=<id>] [losses=0..9]` (`rpgkit_sim` `deadlines.rs`; engine-only, not in the sim help,
+  no fights). Without `world=` it plans every campaign world with checkpoints; none: `DEADLINES: no world has campaign
+  checkpoints (nothing to plan)`. A world needs the defeat rule `retreat` with a `to` hub, else one line says so.
+- The model is CAMPAIGN1_TASKS 4.3's: the main quests are the world's quests tagged `main` or on the `main` track, in
+  data order, run as one chain from day 1 at the hub; each act's chain ends at the last quest its checkpoints name (the
+  act's last: no travel back). A quest's node is its first step's location, else that step's encounter's location.
+  Legs are planned on the full graph (route gates ignored) by the world map's own path search (`travel::best_path` over
+  `travel::all_legs`); the rest counts only where the rest rule's `where` allows it at the hub.
+- The best and worst day of a checkpoint is the day its quest is won (C1: the win counts); the table also prints each
+  mission's worst day once back at the hub and rested (`worst_home`), which is what section 4.3's hand numbers count
+  (on its graph: won on days 7, 18, 32; home on days 10, 22). Slack is the deadline less the worst day; below 0 the line
+  ends `X MISSED in the worst case`. A `met_when` checkpoint and one on a quest off the main chain are listed as not
+  modelled.
+
 ## As built (CAMPAIGN1-U slice 2, 2026-10-31)
 
 - T2: the maps play `campaign.pending` when nothing is open, after the notices: the leading `{vignette}` items join the
