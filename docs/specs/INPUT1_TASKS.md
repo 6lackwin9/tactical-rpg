@@ -1,11 +1,11 @@
 # INPUT1 tasks: schema, kit and host API, tests, parity and the task split
 
-Status: proposed (spec 2026-10-31, task INPUT1-S; revised 2026-11-01 with "INPUT1 answers", parts 1-3); companion
+Status: proposed (spec 2026-10-31, task INPUT1-S; revised 2026-11-01 with "INPUT1 answers", parts 1-4); companion
 of [INPUT1.md](INPUT1.md), whose rule ids it cites.
 Paths: `rpgkit_*` crates are under `kits/rpg/crates/`, `emberwake_*` under `games/emberwake/crates/`, `aegis_*` under
 `engine/crates/`.
 
-## 1. Schema contract (schema-first: yes for INPUT1-L's field and INPUT1-M's fields; the rest is code and settings)
+## 1. Schema contract (schema-first: yes for INPUT1-L's field and INPUT1-M's `position` and ruleset fields; the rest is code and settings)
 
 ### 1.1 Unit and member `deck.follow_ups` (INPUT1-L, FL1)
 
@@ -103,29 +103,37 @@ to the popup rows.
 
 ### 1.7 Skill and ruleset fields (INPUT1-M, MR1, MR9, MR10)
 
+No new range field (Q12): a skill's range is its reach band, the existing `reach_min` / `reach_max` (0 = the unit's
+default band); a skill with a `position` reads `reach_max` (else the unit's default band max) as N, how far it dashes.
+
 | Kind.key | Type | Default | Validation (content check; message) |
 | --- | --- | --- | --- |
-| `skills.maneuver_range` | int 0-6 | 0 | only on a skill whose round intent is Maneuver: "maneuver_range: only a Maneuver skill has a range"; 0 on a melee Maneuver ATTACK warns "no carried move: range = band" (MV5's `dash_tiles` 0 warning moves here) |
-| `skills.position` | enum "", `flank`, `behind` | "" | only on a melee Maneuver ATTACK (band max 1): "position: only a melee Maneuver attack names a position"; "" reads `flank` |
-| `skills.dash_tiles` on a Maneuver skill | int | 0 | with no `maneuver_range`: warning "dash_tiles on a Maneuver skill is read as maneuver_range (move it)"; with both set: error "set maneuver_range only" |
+| `skills.position` | enum "", `flank`, `behind` | "" | only on an ATTACK whose round intent is Maneuver (melee or ranged): error "position: only a Maneuver attack names a position" |
+| `skills.position` with `dash_tiles` above 0 | - | - | error "position and dash_tiles: a skill with a position dashes by its range; set dash_tiles to 0" |
+| `skills.position` with `reach_min` above 0 | - | - | warning "reach_min is not read on a skill with a position (it hits from the position)" |
+| `skills.dash_tiles` on a Maneuver ATTACK with no `position` | int | 0 | the transition (MR1): warning "dash_tiles on a Maneuver skill is read as position flank, range `<n>`: set reach_max and position (INPUT1-MA)"; gone once INPUT1-MA sets `dash_tiles` 0 |
 | `rulesets.melee_diagonal` | enum `none`, `maneuver`, `all` | `maneuver` | `maneuver` without `round_intent` in `rules`: warning "melee_diagonal maneuver needs round_intent (reads as none)" |
 | `rulesets.flank_protected_cost` | enum `full`, `half`, `fixed`, `none` | `full` | - |
 | `rulesets.flank_protected_ap` | int 0-6 | 1 | set while the cost is not `fixed`: warning "flank_protected_ap is read only with fixed" |
 
-Kit types: `rpgkit_data` skill row `maneuver_range: i32` and `position: Position` (`Flank`, `Behind`; "" = `Flank`);
-`rpgkit_rules::ruleset::Numbers` gains `melee_diagonal: MeleeDiagonal` (`None`, `Maneuver`, `All`) and
-`flank_protected: FlankCost` (`Full`, `Half`, `Fixed(i32)`, `None`); `Ruleset::classic()` gives `None` and `Full`.
-Field help in `kits/rpg/schema.json` (skills: "Maneuver: how far the skill dashes to its position before it hits
-(move cost, one block)"; "Maneuver: where it dashes: flank (beside the target) or behind; taken: the nearest
-diagonal"; rulesets: "Diagonal melee: none, Maneuver skills only, or every melee attack"; "What a Maneuver whose
-flank is protected pays"). `dash_tiles`'s help stays word for word (Godot help comparison).
+The first revision's MV5 warning ("`dash_tiles` 0: no carried move, range = band") retires: a Maneuver skill without a
+position hits from where it stands by design. Kit types: `rpgkit_data` skill row `position: Option<Position>`
+(`Flank`, `Behind`; "" = none); `rpgkit_rules::ruleset::Numbers` gains `melee_diagonal: MeleeDiagonal` (`None`,
+`Maneuver`, `All`) and `flank_protected: FlankCost` (`Full`, `Half`, `Fixed(i32)`, `None`); `Ruleset::classic()` gives
+`None` and `Full`. Field help in `kits/rpg/schema.json` (skills `position`: "Maneuver: dash up to the skill's range
+(Reach max) to this spot by the target and hit from there: flank (beside it) or behind; taken: the nearest diagonal;
+empty: hit from where it stands"; rulesets: "Diagonal melee: none, Maneuver skills only, or every melee attack";
+"What a Maneuver whose flank is protected pays"). The help of `dash_tiles` and of `reach_min` / `reach_max` stays
+word for word (Godot help comparison); the new meaning lives in `position`'s help.
 
 ### 1.8 Kit API (INPUT1-M)
 
 | Item | Contract |
 | --- | --- |
 | `round_intent::positions(w, t, attacker, position) -> Positions { preferred: Vec<V2>, fallback: Vec<V2> }` | MR2-MR3: open tiles only, `melee_diagonal` applied, in MR4's rank order |
-| `round_intent::maneuver_range(skill) -> i32` | MR1: `maneuver_range`, else `dash_tiles` (the transition) |
+| `round_intent::dash_range(w, c, skill) -> Option<i32>` | MR1: `Some(N)` for a skill with a position (`reach_max`, else the unit's default band max) or in the transition (`dash_tiles`, as `flank`); `None`: it hits from where it stands |
+| chase (`follow_tiles` 1) | MR16: every skill command on a unit target under `round_intent` (today: `plan.rs` sets it only for the chase plan without `dash_tiles`) |
+| board event `MoveKind::Dash` | MR12: the carried move's event (log `[Dash]`) is told apart from a walk for the battle screen's draw hook |
 | `round_intent::flank_protected(w, t, attacker, skill) -> bool` | MR5: no open candidate |
 | `command` `carried_engage` | MR8 (a)-(c), MR9; log `[Flank Protected]`; a protected command carries a `missed` flag its impact reads |
 | band test (`in_reach`, the planner's band tiles, the chase) | MR10 through one helper, e.g. `round_intent::melee_dist(w, skill, a, b)` |
@@ -137,8 +145,8 @@ flank is protected pays"). `dash_tiles`'s help stays word for word (Godot help c
 | Layer | What |
 | --- | --- |
 | engine | `aegis_ui::timeline` `Segment.ghost`, `draw_ghost` (1.4a); `aegis_ui::pips` (1.4b) |
-| kit | picks, options, ghost, Auto-fill flag, AP forecast, hotkey order, the one regular move (1.2); host requests (1.3); `deck.follow_ups`, its checks, save and the planner's reader (1.1, FL2); the Maneuver fields, positions, protected flank, `melee_diagonal`, sim arg and skill text (1.7, 1.8) |
-| game | the battle screen's flow, menus, hotkeys, selection, inspect, the AP gauge, timeline view (`timeline_view.rs`), the playback aids, the settings and the Controls list, VISCLAR1-A, the deck screen's lists, the Dojo's Deck window, the Gallery entries, the Arena's "Diagonal melee" select; data: INPUT1-MA |
+| kit | picks, options, ghost, Auto-fill flag, AP forecast, hotkey order, the one regular move (1.2); host requests (1.3); `deck.follow_ups`, its checks, save and the planner's reader (1.1, FL2); `position`, positions, protected flank, the chase for every skill, the dash event, `melee_diagonal`, sim arg and skill text (1.7, 1.8); DASH1's `dash` clip on the kit's humanoid rigs |
+| game | the battle screen's flow, menus, hotkeys, selection, inspect, the dash draw hook (MR12), the AP gauge, timeline view (`timeline_view.rs`), the playback aids, the settings and the Controls list, VISCLAR1-A, the deck screen's lists, the Dojo's Deck window, the Gallery entries, the Arena's "Diagonal melee" select; data: INPUT1-MA |
 
 The setting's name "Auto-fill the rest", every label, `AP_PIPS` and the Gallery panes' sample data are the game's; the
 kit has the bool `autofill` and returns refusal reasons in today's style. The words "flank" and "behind" are the
@@ -148,10 +156,10 @@ kit's neutral position ids (no lore).
 
 | Task | Test file | Checks |
 | --- | --- | --- |
-| INPUT1-M (kit) | `rpgkit_battle/tests/maneuver.rs` (new); `round_intent.rs`, `round_intent_plan.rs`, `intent_ai.rs`, `reach.rs` updated where MV5-MV7 moved | MR2's table for f (1, 0) and (1, 1) and the six rotations; MR3 open tiles, claims, `none` dropping diagonals; MR4 tiers, the worked examples, s itself; MR5 "Flank protected" and PL3 skipping; MR6 follow-ups; MR7 the out-of-range move and no after-move; MR8 (a)-(c) at run time, the chase budget N + 1, no hit event on a miss, the wind-up still breakable, enemy recovery; MR9 each cost value; MR10 a Strike from a diagonal under each value, the riposte under `all` and `maneuver`, MV2 under `all`; MR14 row 4; MR15 texts; the `dash_tiles` fallback warning and the both-set error |
+| INPUT1-M (kit) | `rpgkit_battle/tests/maneuver.rs` (new); `round_intent.rs`, `round_intent_plan.rs`, `intent_ai.rs`, `reach.rs` updated where MV5-MV7 moved | MR2's table for f (1, 0) and (1, 1) and the six rotations; MR3 open tiles, claims, `none` dropping diagonals; MR4 tiers, the worked examples, s itself; MR5 "Flank protected" and PL3 skipping; MR6 follow-ups; MR7 the out-of-range move and no after-move; MR8 (a)-(c) at run time on the start block, the chase budget N + 1 and its 1 AP, no hit event on a miss, the wind-up still breakable, enemy recovery, the dash event kind; MR9 each cost value; MR10 a Strike from a diagonal under each value, the riposte under `all` and `maneuver`, MV2 under `all`; MR1 a ranged skill with a position dashing and hitting from the neighbour, a Maneuver skill without one hitting from its tile; MR14 row 4 and the Disengage retreat within N; MR15 texts; MR16 a ranged attack and a heal chasing 1 tile at 1 AP, not past root or a hidden target, never counted as the regular move; the `dash_tiles` transition warning |
 | INPUT1-M (content, host, sim) | `rpgkit_content` check tests; `rpgkit_host` tests; `rpgkit_sim` args test | 1.7's messages; `new {melee_diagonal}` recorded and replayed; the sim arg overrides the row |
-| INPUT1-M (game) | `runner.rs` tests; `timeline_golden` | MR11 the Arena select reaches the request and survives Restart; the golden re-recorded (5) |
-| INPUT1-MA | the content check | 11.7's acceptance: no fallback warning; the three texts |
+| INPUT1-M (game) | `runner.rs` tests; `battle.rs` `dash_tests`; `timeline_golden` | MR11 the Arena select reaches the request and survives Restart; MR12 a dash event plays the `dash` clip when the rig has one, else the walk in 250 ms at 1x, and places the unit at once under skip animations; the golden re-recorded (5) |
+| INPUT1-MA | the content check | 11.7's acceptance: no transition warning, no `position` with `dash_tiles` error; the three texts |
 | INPUT1-U (kit) | `rpgkit_battle/tests/picks.rs` (new) | IF2 rows by target kind, both forms; IF6 a-e refusals with their texts; IF4 intent and kind from the first pick, neutral picks set none; GH3 a pick replaces the ghost from its block and the fill rebuilds after it; Auto-fill off leaves Rest; GH4 the Step-after block reserved; GH5 atomic refusal, a later member's dropped pick; GH6 picks cleared at round start, the intent kept; HK1 order; ET2-ET5 refusals and the one-move rule; `ap_forecast` on section 4's four examples; `ap_forecast.next` equals the next round's AP on a dummy fight; `preview_pick` leaves `World` and `Plan` equal |
 | INPUT1-U (host) | `rpgkit_host` tests | `pick`, `unpick`, `autofill`, `pick_options`, `round_plan`'s new keys; a refused `pick` leaves the battle unchanged; a recording with `pick` replays to the same state; an old recording with `round_intent` / `manual` / `fill` still replays |
 | INPUT1-U (engine) | `aegis_ui` timeline tests | a ghost segment draws with the ghost style; a default segment draws as before (pixel compare) |
@@ -166,9 +174,10 @@ kit's neutral position ids (no lore).
 
 | Id | Title | Layer | Lane | Depends on | Status | Spec | Touches |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| INPUT1-S | Spec: the one-flow battle input, the Maneuver rework, the AP gauge, playback aids and VISCLAR1 slice A | game + kit | design | RULESET1-U, RULESET1-PL | done (spec 2026-10-31, revised 2026-11-01 with the answers, parts 1-3) | `docs/specs/INPUT1.md` (+ `_TASKS.md`) | `docs/specs/INPUT1*.md` |
-| INPUT1-M | Maneuver rework (INPUT1.md 11): range N as the dash to the skill's position (`maneuver_range`, `position` flank or behind), the nearest diagonal fallback, "Flank protected" (disabled while planning; a miss with its AP at run time, cost a rule value), the chase, `melee_diagonal` (none, maneuver, all; start at maneuver) with the Arena select and sim arg; re-record the timeline golden (HISTORY rows) | kit + game | logic | INPUT1-S | spec | `docs/specs/INPUT1.md` 11 | `kits/rpg/schema.json`; `rpgkit_data/src/lib.rs`; `rpgkit_rules/src/ruleset.rs`; `rpgkit_content/src/check/{skill,ruleset}.rs`; `rpgkit_battle/src/{round_intent,round_intent_plan,command,skill,ai}.rs`, `rpgkit_battle/tests/{maneuver,round_intent,round_intent_plan,intent_ai,reach}.rs`; `rpgkit_world/src/skill_text.rs`; `rpgkit_host/src/lib.rs`; `rpgkit_sim/src/args.rs`; `emberwake_gui/src/{runner,intent_text}.rs`; `emberwake_battle/tests/fixtures/{timeline_kit,timeline_golden}.json`; `emberwake_world/tests/data_source.rs` (only if the Godot data comparison sees the new fields) |
-| INPUT1-MA | Maneuver skill data: `maneuver_range` and `position` on Flank Cut, Hamstring Cut, Slip Strike; the timeline row's `melee_diagonal` and `flank_protected_cost` (INPUT1.md 11.7) | game | asset | INPUT1-M | spec | `docs/specs/INPUT1.md` 11.7 | `games/emberwake/data/catalog/{skills,rulesets}.json` (through `aegis content`), new `games/emberwake/data/seeds/input1_ma.json` |
+| INPUT1-S | Spec: the one-flow battle input, the Maneuver rework, the AP gauge, playback aids and VISCLAR1 slice A | game + kit | design | RULESET1-U, RULESET1-PL | done (spec 2026-10-31, revised 2026-11-01 with the answers, parts 1-4) | `docs/specs/INPUT1.md` (+ `_TASKS.md`) | `docs/specs/INPUT1*.md` |
+| INPUT1-M | Maneuver rework (INPUT1.md 11): one range rule for every skill (the reach band) with a 1-tile chase for all skills; the skill attribute `position` (flank or behind): a skill with one dashes up to its range to that spot and hits from there (melee or ranged), the nearest diagonal fallback, "Flank protected" (disabled while planning; a miss with its AP at run time, cost a rule value); the dash on the wind-up's tick as its own board event with the battle screen's dash draw hook (walk fallback until DASH1); `melee_diagonal` (none, maneuver, all; start at maneuver) with the Arena select and sim arg; re-record the timeline golden (HISTORY rows) | kit + game | logic | INPUT1-S | spec | `docs/specs/INPUT1.md` 11 | `kits/rpg/schema.json`; `rpgkit_data/src/lib.rs`; `rpgkit_rules/src/ruleset.rs`; `rpgkit_content/src/check/{skill,ruleset}.rs`; `rpgkit_battle/src/{round_intent,round_intent_plan,command,skill,plan,ai}.rs`, `rpgkit_battle/tests/{maneuver,round_intent,round_intent_plan,intent_ai,reach}.rs`; `rpgkit_world/src/skill_text.rs`; `rpgkit_host/src/lib.rs`; `rpgkit_sim/src/args.rs`; `emberwake_gui/src/{runner,intent_text,battle}.rs`; `emberwake_battle/tests/fixtures/{timeline_kit,timeline_golden}.json`; `emberwake_world/tests/data_source.rs` (only if the Godot data comparison sees the new fields) |
+| INPUT1-MA | Maneuver skill data: `reach_max` (the range) and `position` on Flank Cut, Hamstring Cut, Slip Strike, their `dash_tiles` to 0 and descriptions; the timeline row's `melee_diagonal` and `flank_protected_cost` (INPUT1.md 11.7) | game | asset | INPUT1-M | spec | `docs/specs/INPUT1.md` 11.7 | `games/emberwake/data/catalog/{skills,rulesets}.json` (through `aegis content`), new `games/emberwake/data/seeds/input1_ma.json` |
+| DASH1 | A dash clip distinct from the walk for the humanoid rigs (front, side, back), played by INPUT1-M's draw hook when a skill with a `position` dashes (decision "INPUT1 answers, part 4" Q19; INPUT1.md MR12) | kit (rig) + game (art) | asset | INPUT1-M (the hook; the clips can be made before) | approved (user 2026-11-01) | `docs/specs/INPUT1.md` MR12 | `tools/sprites/`, `kits/rpg/assets/` or `games/emberwake/assets/` sheets |
 | INPUT1-MB | Feel run after the Maneuver rework (INPUT1.md 11.8) | game | balance | INPUT1-MA (on `main`) | spec | `docs/specs/INPUT1.md` 11.8 | `games/emberwake/docs/BALANCE_REPORT.md` |
 | INPUT1-U | Battle input as one flow (sections 2-6, AP1-AP2's forecast): target then skill, intent from the skill, the re-listed menu after a pick, the tactic ghost, Auto-fill, keys 1-9 as skill hotkeys, empty-tile moves, the one regular move and Step here after for every intent, selection and inspect, the Engage row's position marks | engine + kit + game | logic | INPUT1-S, CAMPAIGN1-U (done), ROSTER1-L, INPUT1-M (shared kit files) | spec | `docs/specs/INPUT1.md` 2-7 | `aegis_ui/src/timeline.rs`; `rpgkit_battle/src/{round_intent_plan,round_intent}.rs`, `rpgkit_battle/tests/picks.rs`; `rpgkit_host/src/lib.rs`; `emberwake_gui/src/{battle,menus,screens,intent_text}.rs` |
 | INPUT1-AP | AP pip gauge (INPUT1.md 7, AP3-AP10): 12 pips, hollow spent, ghost gain, red and debt, numbers on hover, drain in playback; the engine pip widget and the Gallery's `pip_gauge` | engine + game | logic | INPUT1-U | spec | `docs/specs/INPUT1.md` 7 | new `aegis_ui/src/pips.rs`, `aegis_ui/src/lib.rs`; `emberwake_gui/src/{battle,gallery}.rs` |
@@ -179,12 +188,11 @@ kit's neutral position ids (no lore).
 
 Merge order and parallel work:
 
-1. INPUT1-M first: it can start now beside ROSTER1-L (it touches no file ROSTER1-L's Touches name in
-   `emberwake_gui` beyond `runner.rs`, which the planner checks), and INPUT1-U waits on ROSTER1-L anyway. It goes
-   before INPUT1-U because both edit `round_intent.rs` and `round_intent_plan.rs`.
-2. INPUT1-MA (asset) after INPUT1-M merges; INPUT1-MB (balance) once INPUT1-MA is on `main`. Both run beside the
-   INPUT1-U chain (no shared files).
-3. INPUT1-U after ROSTER1-L and INPUT1-M. It may land in three slices: (1) engine and kit with host (1.2-1.4a, kit and
+1. INPUT1-M first (ROSTER1-L is done, so nothing blocks it). It goes before INPUT1-U because both edit
+   `round_intent.rs`, `round_intent_plan.rs` and `battle.rs` (M only the dash draw hook).
+2. INPUT1-MA (asset) after INPUT1-M merges; INPUT1-MB (balance) once INPUT1-MA is on `main`; DASH1 (asset: rig and
+   sheets) any time, visible once INPUT1-M's hook is in. All three run beside the INPUT1-U chain (no shared files).
+3. INPUT1-U after INPUT1-M. It may land in three slices: (1) engine and kit with host (1.2-1.4a, kit and
    host tests); (2) the battle screen's flow, hotkeys, empty tiles, ghost look and the setting; (3) selection and
    inspect.
 4. The `battle.rs` chain, one at a time: INPUT1-AP, then VISCLAR1-A, then INPUT1-T, then INPUT1-PB (INPUT1-AP first so
@@ -193,8 +201,11 @@ Merge order and parallel work:
    `round_intent_plan.rs`, and `party.rs` and `dojo.rs`; none of step 4 edits them). With INPUT1-M merged, nothing
    else edits `round_intent_plan.rs` at that time.
 
-Row changes asked of the planner: INPUT1-S moves to done; INPUT1-M's Layer becomes "kit + game" (its data is
-INPUT1-MA) and its Touches as above; new rows INPUT1-MA (asset) and INPUT1-MB (balance); INPUT1-U's Layer becomes
+Row changes asked of the planner: INPUT1-S moves to done; INPUT1-M's title and Touches as above (no
+`maneuver_range`; `plan.rs` and `battle.rs` added for the chase and the dash draw hook); INPUT1-MA's title as above
+(`reach_max`, not `maneuver_range`); DASH1 becomes asset only (the draw hook moves into INPUT1-M), its Touches drop
+`emberwake_gui/src/battle.rs` and its Spec points to INPUT1.md MR12; TACTIC2 (design) stays as written, after
+INPUT1-U, and INPUT1 does not change the tactics (GH2 uses them as they are); INPUT1-U's Layer becomes
 "engine + kit + game", it depends on INPUT1-M too, and its title adds the re-listed menu, the tactic ghost and the one
 regular move, and drops "the AP readout"; INPUT1-AP's Layer becomes "engine + game" (the pip widget) and its Touches
 add `aegis_ui/src/pips.rs` and `gallery.rs`; INPUT1-T's Layer becomes "game" (the pane is the engine widget INPUT1-U
@@ -220,17 +231,21 @@ same change):
 
 - Retired and re-recorded: `games/emberwake/crates/emberwake_battle/tests/fixtures/timeline_golden.json` (test
   `timeline_golden`, `RECORD=1 tools/fc.sh test --test timeline_golden`), the fights whose Maneuver commands now
-  dash to a position, fall back, miss as protected or hit diagonally. Expected: `tl_flank` and `tl_skirmish` (the
-  SKIRMISHER `tl_spiker` Engages, and `flank_cut` is a basic of every unit) at seeds 1337, 7 and 42; the three duels
-  should not move (no Maneuver round in them today). The builder names every fight and round that moved in the commit
-  and the HISTORY row; a duel that moves is reported with its cause before re-recording.
-- The frozen catalog `timeline_kit.json` gets the same three skill changes as INPUT1-MA (11.7) and the timeline row's
-  `melee_diagonal` `maneuver`, in the same change (an intended input change, named in the HISTORY row), so the golden
-  plays the shipped rules; the `dash_tiles` fallback is covered by its own kit test.
+  dash to a position, fall back, miss as protected or hit diagonally, and those where a ranged or Support skill now
+  chases (MR16). Expected: `tl_flank` and `tl_skirmish` (the SKIRMISHER `tl_spiker` Engages, and `flank_cut` is a
+  basic of every unit) at seeds 1337, 7 and 42; a duel moves only where a target stepped out of a ranged or Support
+  band before the skill's start (MR16), for example the reach duel's crossbowman. The builder names every fight and
+  round that moved and its cause (position, diagonal, protected flank, chase) in the commit and the HISTORY row; a
+  move with any other cause is a bug to report before re-recording.
+- The frozen catalog `timeline_kit.json` gets the same three skill changes as INPUT1-MA (11.7: `reach_max`,
+  `position`, `dash_tiles` 0) and the timeline row's `melee_diagonal` `maneuver`, in the same change (an intended input
+  change, named in the HISTORY row), so the golden plays the shipped rules; the `dash_tiles` transition is covered by
+  its own kit test.
 - Not retired: the classic battle traces, world battles, journeys and saves (classic has no row: `melee_diagonal`
   `none`, no Maneuver intent); the inert-extensions check (classic with every extension on: `maneuver` reads as
-  `none` without `round_intent`); the Godot loader and writer (the new fields are timeline fields, stripped as the
-  others are if the comparison sees them; `dash_tiles`'s help is unchanged).
+  `none` without `round_intent`); the Godot loader and writer (`position` and the ruleset fields are timeline fields,
+  stripped as the others are if the comparison sees them; the help of `dash_tiles`, `reach_min` and `reach_max` is
+  unchanged; classic chases are unchanged, MR16 being under `round_intent` only).
 - The feel sim's numbers move: INPUT1-MB measures them (11.8). INPUT1-MA changes no golden (the fixture is frozen).
 
 ## 6. Wanted HISTORY rows (the planner writes them)
@@ -238,21 +253,25 @@ same change):
 | Date | Idea | Status | Replaced by | Reason |
 | --- | --- | --- | --- | --- |
 | 2026-10-31 | The round controls of RULESET1-U slice 1 (intent buttons, keys 1-9 as intents, the Maneuver kind and opener menus, the Manual toggle, Fill; RULESET1_INTENT UI1, MM1-MM3 as a mode) | replaced | INPUT1: target, then a skill; intent and kind from the skill; ghost fill; the setting Auto-fill the rest; keys 1-9 as skill hotkeys | User decision "Combat input feedback": fewer controls a round, the intent read from the chosen skill |
-| 2026-10-31 | A hand-picked carried-move tile (RULESET1_INTENT MM2, MM4) | dropped | the Maneuver position rule (INPUT1 MR2-MR4) picks the tile | "INPUT1 answers, part 2" Q3: each skill names its position; one input flow |
+| 2026-10-31 | A hand-picked carried-move tile (RULESET1_INTENT MM2, MM4) | dropped | the `position` rule (INPUT1 MR2-MR4) picks the tile | "INPUT1 answers, part 2" Q3: each skill names its position; one input flow |
 | 2026-10-31 | Several lines per unit on the board: tell arrows, the hero's planned-move lines, revealed enemy walks (also the hovered enemy's walk above the tokens, RULESET1-U slices 5-6) | replaced | One quiet dashed target arrow per unit (move leg when the move is visible), the selected unit's by default, all with Alt, while planning only (INPUT1 AR1-AR6) | User addition 2026-10-31 and "INPUT1 answers, part 1" Q6: a calmer Stage, nothing that hides the fight in playback |
 | 2026-10-31 | The enemy first-move chip on tokens by default (INTENT1-U) | narrowed | Behind the debug overlay group `first_move`, off by default | User decision "Combat input feedback" (VISCLAR1 slice A) |
 | 2026-10-31 | The AP text readout at the strip's end (`AP 6 - 4 = 2 · +3 next -> 5`, decision "Combat input feedback"; spec INPUT1 AP1-AP5 first draft) | replaced before it was built | the AP pip gauge (INPUT1 AP6-AP10, 12 pips first) | "INPUT1 answers, part 2" Q7 |
 | 2026-10-31 | A per-opener follow-up list replacing the intent's order (INPUT1 first draft FL2, option a) | not adopted | the list first, then the deck order (FL2, option b) | "INPUT1 answers, part 1" Q2 |
-| 2026-10-31 | The Maneuver Engage destination as any tile outside the target's front within `dash_tiles`, ranked by PL4, and Engage not offered without one (RULESET1_INTENT MV4-MV7) | replaced | a named position (flank or behind, skill field `position`) within `maneuver_range`, the nearest diagonal as fallback, "Flank protected" when all are taken (a miss with its AP at run time; INPUT1 MR1-MR9) | "INPUT1 answers, part 2" Q3 and part 3: repositioning and crossing the line quickly; a protected flank points Maneuver at an unprotected back line |
+| 2026-10-31 | The Maneuver Engage destination as any tile outside the target's front within `dash_tiles`, ranked by PL4, and Engage not offered without one (RULESET1_INTENT MV4-MV7) | replaced | a named position (skill attribute `position`, flank or behind) reached by a dash of up to the skill's range (its reach band's max), the nearest diagonal as fallback, "Flank protected" when all are taken (a miss with its AP at run time); the dash on the wind-up's tick with its own animation (INPUT1 MR1-MR12) | "INPUT1 answers", part 2 Q3, part 3 and part 4 Q12, Q13, Q19: repositioning and crossing the line quickly; one range rule for every skill; a protected flank points Maneuver at an unprotected back line |
+| 2026-10-31 | `dash_tiles` as a Maneuver skill's carried-move distance (RULESET1_INTENT MV4, MV5: Flank Cut, Hamstring Cut, Slip Strike) | retired for Maneuver skills | the skill's range (`reach_max`) with a `position` (INPUT1-MA sets their `dash_tiles` to 0; `dash_tiles` stays classic gap-close) | "INPUT1 answers, part 4" Q12: one range rule for every skill |
+| 2026-11-01 | A separate Maneuver range field (`maneuver_range`) and ranged Maneuver skills that hit from where they stand with a retreat-only range (INPUT1 first revision, Q12 a and Q13 a as proposed) | not adopted | the reach band as every skill's range; `position` makes any skill, ranged too, dash and hit from there | "INPUT1 answers, part 4" Q12, Q13 |
+| 2026-11-01 | The chase for melee attacks only (AS1, `follow_tiles` on the chase plan) | widened | under `round_intent` every skill on a unit target chases up to 1 tile (INPUT1 MR16) | "INPUT1 answers, part 4" Q12 |
 | 2026-10-31 | Orthogonal-only melee under the timeline ruleset (a band of 1 is Manhattan distance 1, so a diagonal neighbour is out of reach) | narrowed | the rule-library option `melee_diagonal` (none, maneuver, all; the timeline row starts at maneuver: Maneuver skills hit diagonally; classic stays none) | "INPUT1 answers, part 2" and "part 3" |
-| (INPUT1-M's date) | The timeline golden's Maneuver rounds (`tl_flank`, `tl_skirmish`, seeds 1337, 7, 42; the builder lists the fights and rounds) and the frozen `timeline_kit.json` rows of Flank Cut, Hamstring Cut, Slip Strike | re-recorded | the same golden re-recorded with INPUT1-M (positions, the diagonal fallback, protected flanks, diagonal Maneuver hits); the fixture rows carry `maneuver_range` and `position` | An intended rule change (decision "INPUT1 answers", parts 2 and 3); classic and Godot parity unchanged |
+| (INPUT1-M's date) | The timeline golden's Maneuver rounds (`tl_flank`, `tl_skirmish`, seeds 1337, 7, 42, and any duel round a new chase moves; the builder lists the fights, rounds and causes) and the frozen `timeline_kit.json` rows of Flank Cut, Hamstring Cut, Slip Strike | re-recorded | the same golden re-recorded with INPUT1-M (positions, the diagonal fallback, protected flanks, diagonal Maneuver hits, the chase for every skill); the fixture rows carry `reach_max`, `position` and `dash_tiles` 0 | An intended rule change (decision "INPUT1 answers", parts 2 to 4); classic and Godot parity unchanged |
 
 Decision rows touched (for the planner): "Combat input feedback" gains the arrow addition (AR1-AR5); it supersedes,
 for arrows, that row's "arrows ... for the selected member, its target and the unit under the cursor" (bars keep
 that focus set) and "RULESET1-U slice 5 answers"' "draws the hovered enemy's revealed moves above the tokens", and
 the RULESET1-U row's "draw a revealed enemy's planned walk only for the hovered enemy or while Alt is held". The AP
 part of "Combat input feedback" ("a readout at the strip's end ... red when a pick cannot be paid") is superseded by
-"INPUT1 answers, part 2" Q7 (the gauge; red stays). Nothing supersedes the classic rows "Gap-close" and "Tuning notes
+"INPUT1 answers, part 2" Q7 (the gauge; red stays). "INPUT1 answers, part 4" Q12-Q13 supersede part 2's reading
+of "range N" as a Maneuver-only number (one reach band for every skill). Nothing supersedes the classic rows "Gap-close" and "Tuning notes
 from M1" (classic keeps `dash_tiles` and distance 2 diagonals).
 
 ## 7. Docs delta (builders report, the planner applies)
@@ -260,10 +279,12 @@ from M1" (classic keeps `dash_tiles` and distance 2 diagonals).
 `games/emberwake/docs/GAME_BRIEF.md`: a line for the one-flow input (kit `round_intent_plan` picks, host `pick`,
 `unpick`, `autofill`, `pick_options`; game `battle.rs`), the AP gauge (`aegis_ui::pips`, `strip.ap`), the timeline
 view (`timeline_view.rs`, key T), the playback aids (speed, tracers, the grouped log), the follow-up lists
-(`deck.follow_ups`), the Maneuver rework (`maneuver_range`, `position`, `melee_diagonal`, `flank_protected_cost`;
+(`deck.follow_ups`), the Maneuver rework (`position` with the reach band as range, the chase for every skill, the dash event and draw
+hook, `melee_diagonal`, `flank_protected_cost`;
 `round_intent::positions`), VISCLAR1-A's groups and the debug toggle; the RULESET1-U slice 1 line marks its controls
 replaced. `docs/specs/RULESET1_INTENT.md` 5.3: a cross-reference line under MV11 ("INPUT1-M, `docs/specs/INPUT1.md`
-11 and 13: MV4-MV7 changed, MV9 b retired") and under UI1-UI3 (INPUT1 13). `engine/docs/authoring/combat_hooks.md`
+11 and 13: MV4-MV7 changed, MV9 b retired, the chase for every skill") and a note under RULESET1.md K4 (its
+carried-move clause, INPUT1 13) and under UI1-UI3 (INPUT1 13). `engine/docs/authoring/combat_hooks.md`
 (or the rule-library page the planner picks, memory "Promote generic methods"): `melee_diagonal` and
 `flank_protected_cost` as rule-library options. `games/emberwake/docs/SCREENS.md` row 23 (Battle), the UI Gallery
 row (`timeline_pane`, `pip_gauge`) and the Scene Runner's Arena card ("Diagonal melee").

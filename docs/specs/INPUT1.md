@@ -1,10 +1,10 @@
 # INPUT1: one-flow battle input, the Maneuver rework, the AP gauge, playback aids and VISCLAR1 slice A
 
 Status: proposed (spec 2026-10-31, task INPUT1-S; revised 2026-11-01 with the user's answers "INPUT1 answers, part 1",
-"part 2" and "part 3" (user 2026-10-31) in `games/emberwake/docs/decisions/combat.md`, on top of "Combat input feedback
+"part 2", "part 3" (user 2026-10-31) and "part 4" (user 2026-11-01) in `games/emberwake/docs/decisions/combat.md`, on top of "Combat input feedback
 (user 2026-10-31, all as recommended)" and the user's arrow addition, section 10.3)
 Depends on: RULESET1-U, RULESET1-PL (done); per task: [INPUT1_TASKS.md](INPUT1_TASKS.md) 4
-Lane: logic (INPUT1-M, -U, -AP, -T, -L, -PB, VISCLAR1-A); asset (INPUT1-MA: the Maneuver skills' new fields, 11.7);
+Lane: logic (INPUT1-M, -U, -AP, -T, -L, -PB, VISCLAR1-A); asset (INPUT1-MA: the Maneuver skills' range and position, 11.7; DASH1: the dash clip, MR12);
 balance (INPUT1-MB, a feel run after INPUT1-MA, 11.8)
 Touches: by task, [INPUT1_TASKS.md](INPUT1_TASKS.md) 4. Schema contract, kit and host API, tests, parity, slices and
 task rows: [INPUT1_TASKS.md](INPUT1_TASKS.md).
@@ -17,9 +17,10 @@ keeps its id marked "retired".
 Answers applied 2026-11-01: Q1 a (GH2, read as written: every hero with no pick); Q2 (IF2, IF10, FL2: the list
 first, then the order); Q3 replaced by the Maneuver rework (section 11); Q4 (ET4, ET5); Q5 a (VC1); Q6 (AR6: arrows
 while planning only); Q7 replaced by the AP pip gauge (section 7, INPUT1-AP); Q8 replaced by the playback aids
-(section 12, INPUT1-PB); Q9 a (FL4). The first draft's Q6 (an after-move in the single arrow) and Q8 (does an
-inspected enemy's arrow show) are not settled by those answers: the text keeps their recommendations and section 15
-asks them again (Q14, Q15).
+(section 12, INPUT1-PB); Q9 a (FL4). Applied 2026-11-01 from part 4: Q10 a (MR2), Q11 a (MR4), Q12 and Q13 (MR1,
+MR16: one range rule for every skill, the `position` attribute, the chase for all skills; no `maneuver_range`), Q14 a
+(AR5), Q15 a (AR3), Q16 a (AR6), Q17 a (11.7), Q18 a (GH2; TACTIC2 revisits the tactics), Q19 a (MR8, MR12: the dash
+on the wind-up's tick with its own animation, DASH1).
 
 History (`docs/HISTORY.md`): row 2026-10-25 "RULESET1 first draft: authored `follow_ups` and chain picks" replaced
 skill-authored chains with per-intent order lists (user: chains for any skill type, fewer clicks, one intent and one
@@ -139,7 +140,8 @@ before; with the menu open a right click on an enemy closes the menu and leaves 
   self: Guard, else Support; a tile: Guard, else Assault for an area or hazard opener, else Maneuver Utility).
   Auto-fill off: Rest on every block (a and b). A hero with no intent yet (battle start without a `default_intent`)
   takes the draft's intent for free (nothing is bound, IN2). Clear and undo back to no pick return to (a) or (b) by
-  whether the target is player-set.
+  whether the target is player-set. Q18 a confirms (a) also for a hero carrying another intent; linking the tactics
+  to the round intents is TACTIC2 (design), not this spec.
 - GH3. A pick goes at the first block after the last pick (it replaces the ghost there); its implied moves belong to it
   (the opener's before-move, PL5; a Maneuver skill's carried move, MR12) and draw solid; then the ghost is rebuilt
   after it. Auto-fill on: FU2/FU3's fill (the opener's follow-up list, then the order, FL2), AS3's reserved
@@ -392,19 +394,20 @@ Wherever the overlay groups apply (not classic; `Layers`, RULESET1-U slice 5).
 - AR2. The move leg shows only when that unit's move is visible to the party: a party member's always; an enemy's
   only when its plan is revealed (V2; VC4 hides foresight reveals in debug). An unrevealed enemy's arrow goes
   straight from its tile to its target. An enemy's arrow draws only while the tells show (I).
-- AR3. Default view: only the selected member's arrow (and, per Q15's recommendation, the inspected unit's). With Alt
+- AR3 (changed 2026-11-01, Q15 a). Default view: the selected member's arrow and the inspected unit's (IS1). With Alt
   held: every unit's single arrow.
 - AR4. Look: dashed (4 px on, 3 off), a 4 px head, low opacity: alpha 90 of 255 (party GOLD, enemy FOE); Flat width
   1.0, Stage width 1.5 on the ground (under the tokens, the Arrows pass). The gold target ring stays as it is.
 - AR5. It replaces every other line of moves and tells: the tell arrows (Flat and Stage), the planned-move lines of
   the `moves` group (walk, carried, after-move), the revealed enemy walks of `walks` (also the hovered enemy's walk
   above the tokens, RULESET1-U slices 5-6). Kept while planning: the `moves` group's destination plates (each move's
-  end tile, so an after-move still shows where it ends; Q14's recommendation) and the area tell plates. The groups
+  end tile, so an after-move shows only as its destination plate, Q14 a) and the area tell plates. The groups
   `moves` and `walks` now switch the move leg (off: the arrow goes straight).
 - AR6 (new 2026-11-01, Q6). Planning only: the arrows and the `moves` group's destination plates draw only while the
   party plans its round; during playback and after the battle the board draws no target arrow, move leg, destination
-  plate or planned-move line. The fight shows itself through its walks, clips, FX and PB1's tracers. The area tell
-  plates during playback: Q16.
+  plate, planned-move line or area tell plate (Q16 a). The fight shows itself through its walks, clips, FX and PB1's
+  tracers. The arena telegraph marks stay through playback (decision "HOOKS1-UI slice 1 answers", until VISCLAR1
+  decides).
 
 ### 10.4 Party foresight off (debug builds only)
 
@@ -435,20 +438,32 @@ the hostile card's badge row unfilled.
 
 ## 11. The Maneuver rework (INPUT1-M)
 
-From "INPUT1 answers, part 2" (Q3) and "part 3" (user 2026-10-31). A Maneuver skill's range N is how far it dashes
-to its position at the target before it hits; the move is inside the skill and is not the round's regular move; the
+From "INPUT1 answers", parts 2, 3 and 4 (user 2026-10-31 and 2026-11-01). One range rule for every skill; a Maneuver
+skill differs only by where it ends up: a skill with a `position` dashes to that spot by its target and hits from
+there, so its range N is how far it dashes; the move is inside the skill and is not the round's regular move; the
 regular move comes first only when the target is beyond range. Kit rules (`rpgkit_battle`), ruleset options
-(`rpgkit_rules`), skill fields (`rpgkit_data`, schema); the game adds the Arena select and the hover text.
+(`rpgkit_rules`), the skill field (`rpgkit_data`, schema); the game adds the Arena select, the hover text and the dash
+draw hook.
 
-### 11.1 Fields
+### 11.1 Range and position
 
-- MR1. Skill family fields (INPUT1_TASKS 1.7): `maneuver_range` (int 0-6, default 0), N, the most move cost the
-  carried move may spend in one block (`dash_fits`); `position` ("", `flank`, `behind`; default ""), the skill's
-  preferred position, "" reading as `flank`. Melee Maneuver ATTACK skills (reach band max 1, K1) use both. A ranged
-  Maneuver skill (band max above 1) hits from where it stands: its Engage has no dash and no position (in range when
-  the target is in its band from the tile at its start) and N is only its Disengage retreat (Q13). Until INPUT1-MA
-  moves the data, a Maneuver skill with no `maneuver_range` reads its `dash_tiles` as N with a content warning (Q12).
-  Classic gap-close (`dash_tiles` on Assault ATTACK skills, decision "Gap-close") is unchanged.
+- MR1 (changed 2026-11-01, Q12 and Q13). No separate Maneuver range field. Every skill's range is its reach band
+  (`reach_min`-`reach_max`, RULESET1 K1-K2; 0 = the unit's default band: melee 1, ranged 2-3, support 0-3), the same
+  targeting rule for every skill, with the chase of MR16. New family field `position` ("", `flank`, `behind`; default
+  ""; INPUT1_TASKS 1.7), allowed on an ATTACK whose round intent is Maneuver, melee or ranged: a skill with a
+  position dashes to that spot by the target (MR2-MR4) and hits from there, so its range N is how far it dashes, N =
+  its `reach_max`, else the unit's default band max (its `reach_min` is not read). A ranged skill with a position
+  dashes too. A skill without a position hits from where it stands, within its band (a Maneuver skill without one
+  included). Transition until INPUT1-MA moves the data: a Maneuver ATTACK with `dash_tiles` above 0 and no position
+  reads as position `flank` with N = `dash_tiles` (content warning, INPUT1_TASKS 1.7). `dash_tiles` stays classic
+  gap-close on Assault skills (decision "Gap-close") and retires on Maneuver skills when INPUT1-MA sets it to 0.
+- MR16 (new 2026-11-01, Q12). The chase, for every skill: under `round_intent`, every skill command on a unit target
+  (attacks, area skills aimed at a unit, Support skills on an ally) chases up to 1 tile: at its start, when the
+  target stands outside the skill's band from the unit's tile, the unit steps 1 tile toward the band (or away when it
+  is too close), today's `follow` with `follow_tiles` 1 (AS1), at today's chase cost (1 AP a tile for a party unit,
+  none for enemies), blocked by root, a hidden target (GD5), units and walls; log `[Chase]` as today. A skill with a
+  position chases inside its dash (MR8: the budget N + 1, the extra tile at the chase's cost). A chase is not the
+  round's regular move (ET5). Classic keeps its chase rules.
 
 ### 11.2 Positions
 
@@ -457,7 +472,8 @@ For each of T's 8 neighbours n, let k be the number of 45-degree steps between t
 
 - MR2. Position tiles: `behind` prefers the neighbour with k = 0; `flank` prefers the two with k = 2 (either side).
   The fallback for both, "the nearest empty diagonal of that position", is the two neighbours with k = 1 (between the
-  sides and the back). Neighbours with k = 3 or 4 are in T's front (MV3) and are never positions (Q10).
+  sides and the back). Neighbours with k = 3 or 4 are in T's front (MV3) and are never positions, not even as a
+  fallback (Q10 a).
 
 | f (T faces) | behind (k 0) | diagonals (k 1) | flanks (k 2) | front, never (k 3, 4) |
 | --- | --- | --- | --- | --- |
@@ -474,29 +490,30 @@ For each of T's 8 neighbours n, let k be the number of 45-degree steps between t
 
 ### 11.3 Range and planning
 
-- MR4. Range: from the tile s the unit stands on at the skill's start (after the round's regular move when one comes
-  first, MR7), a candidate is in range when it is s itself (cost 0) or has a route of move cost at most N in one
-  block (`dash_fits`); the skill is in range when one candidate is. The tile it takes: the open preferred tiles in
-  range, else the open fallback tiles in range (Q11: an open preferred tile out of range does not stop a fallback in
-  range); inside the preferred tier PL4 ranks them, inside the fallback tier fewer path tiles first ("nearest"), then
-  PL4. When the taken tile is s there is no move. It is stored on the step (`Step.cell`, MV6). Row tip and hover
-  card: "Range `<N>`: dash `<to a flank | behind>`, then hit" (replaces MV5's "Range: move N + reach a-b"); N 0:
-  "Hits from where it stands".
+- MR4 (changed 2026-11-01). Range of a skill with a position: from the tile s the unit stands on at the skill's start
+  (after the round's regular move when one comes first, MR7), a candidate is in range when it is s itself (cost 0) or
+  has a route of move cost at most N in one block (`dash_fits`); the skill is in range when one candidate is. The
+  tile it takes: the open preferred tiles in range, else the open fallback tiles in range (Q11 a: an open preferred
+  tile out of range does not stop a fallback in range); inside the preferred tier PL4 ranks them, inside the fallback
+  tier fewer path tiles first ("nearest"), then PL4. When the taken tile is s there is no move. It is stored on the
+  step (`Step.cell`, MV6). The hit is from that neighbour of t, so at distance 1 (a diagonal under MR10), whatever
+  the skill's band. Row tip and hover card: "Range `<N>`: dash `<to a flank | behind>`, then hit" (replaces MV5's
+  "Range: move N + reach a-b"); a skill without a position keeps its band line ("Range 2-4").
 - MR5. Flank protected while planning: an Engage whose target has no open candidate is not planned (PL3 and the AI
   skip it) and its menu row (and today's intent tip until INPUT1-U) is disabled "Flank protected". Disengage and
   Utility rows are not affected.
-- MR6. Follow-ups (MV7's "each moving only when its tile no longer meets the condition"): a later Maneuver skill of
-  the round moves only when the unit's tile at its start is not a position tile (preferred or fallback, MR2-MR3) of
-  that skill around T's tile then; else it hits from there.
+- MR6 (changed 2026-11-01: skills with a position). Follow-ups (MV7's "each moving only when its tile no longer meets
+  the condition"): a later skill with a position moves only when the unit's tile at its start is not a position tile
+  (preferred or fallback, MR2-MR3) of that skill around T's tile then; else it hits from there.
 - MR7. The regular move (MV9 a, TQ22 a, kept): only when the target has open candidates but none in range from the
   unit's tile, a standard plain move comes first (1 AP a tile, at most 2 move blocks, reason `approach: out of range`)
   to the PL4 tile from which a candidate is in range (preferred tier first). It is the round's one regular move
   (ET5). With no open candidate no move is planned (MR5).
 
 Worked examples (Wolf on (6, 4) faces right, engaged with tl_vanguard on (7, 4): behind (5, 4), diagonals (5, 3) and
-(5, 5), flanks (6, 3) and (6, 5); `melee_diagonal` maneuver):
+(5, 5), flanks (6, 3) and (6, 5); `melee_diagonal` maneuver; N is the skill's `reach_max` after INPUT1-MA):
 
-| Attacker, skill (position, N), from | Board | Plan and hit |
+| Attacker, skill (position, range N), from | Board | Plan and hit |
 | --- | --- | --- |
 | tl_spiker, Hamstring Cut (behind, 3), (3, 4) | open | dash (4, 4), (5, 4) (cost 2); hits from behind: a flank (MV3) |
 | same | a goblin on (5, 4) | dash to (5, 3) or (5, 5) (3 tiles each; PL4 ranks); diagonal hit |
@@ -507,18 +524,19 @@ Worked examples (Wolf on (6, 4) faces right, engaged with tl_vanguard on (7, 4):
 
 ### 11.4 Run time
 
-- MR8. At the skill's start (its `on_start`, after its AP, FU6: today's timing, Q19), the candidates are read
-  around T's tile then (T may have moved, and its facing is re-read, MV1) with the budget N, plus 1 when T no longer
-  stands on its tile at planning (the chase: a target that moved follows as melee's `follow_tiles` 1 does, AS1). The
-  stored tile is kept when it is in the first tier with a tile within the budget, else that tier's first by MR4's
-  ranking. (a) A candidate within the budget: the unit dashes there (hazards on entry as today;
+- MR8 (changed 2026-11-01, Q19 a). On the wind-up's tick, the skill's start block (its `on_start`, after its AP,
+  FU6; today's timing), the candidates are read around T's tile then (T may have moved, and its facing is re-read,
+  MV1) with the budget N, plus 1 when T no longer stands on its tile at planning (MR16's chase; that tile at the
+  chase's cost). The stored tile is kept when it is in the first tier with a tile within the budget, else that tier's
+  first by MR4's ranking. (a) A candidate within the budget: the unit dashes there (hazards on entry as today;
   `round_intent::note_moved`), log `[Dash] <unit> dashes at <target>: <from> to <to>`, and the hit lands at the
   impact. (b) Open candidates but none within the budget: no move,
-  `[Dash Blocked] <unit> can't reach <target>'s flank`, and the hit lands at its impact only if T is in band from where the unit stands (MR10), as MV6 today. (c) No
-  open candidate: `[Flank Protected] <unit> finds <target>'s flank protected: <skill> misses (<n> AP spent)`; no move,
-  and at its impact the skill does nothing (no damage, stagger, status, rider, hit event, riposte, `flanked`
-  exploit or flank count). The command keeps its blocks: its wind-up plays and can still be broken, and an enemy
-  books its recovery as after any impact. Rooted and a hidden target (GD5) keep today's lines.
+  `[Dash Blocked] <unit> can't reach <target>'s flank`, and the hit lands at its impact only if T is adjacent (MR10)
+  to where the unit stands, as MV6 today. (c) No open candidate:
+  `[Flank Protected] <unit> finds <target>'s flank protected: <skill> misses (<n> AP spent)`; no move, and at its
+  impact the skill does nothing (no damage, stagger, status, rider, hit event, riposte, `flanked` exploit or flank
+  count). The command keeps its blocks: its wind-up plays and can still be broken, and an enemy books its recovery
+  as after any impact. Rooted and a hidden target (GD5) keep today's lines.
 - MR9. The cost of a protected flank (ruleset field `flank_protected_cost`, a rule value): `full` (default: the AP
   paid at the start stays spent), `half` (it pays `floor(cost / 2)`; the rest is refunded with the log line), `fixed`
   (it pays `min(cost, flank_protected_ap)`, default 1), `none` (refunded). `<n>` in the log is what it pays.
@@ -526,9 +544,10 @@ Worked examples (Wolf on (6, 4) faces right, engaged with tl_vanguard on (7, 4):
 
 ### 11.5 Diagonal melee (rule-library option)
 
-- MR10. Ruleset field `melee_diagonal` (`none`, `maneuver`, `all`; default `maneuver`; classic has no row: `none`;
-  a row without `round_intent` reads `maneuver` as `none`). For the skills it covers (`maneuver`: melee skills whose
-  round intent is Maneuver; `all`: every melee ATTACK skill and the riposte counter), a diagonal neighbour of the
+- MR10 (changed 2026-11-01: skills with a position). Ruleset field `melee_diagonal` (`none`, `maneuver`, `all`;
+  default `maneuver`; classic has no row: `none`; a row without `round_intent` reads `maneuver` as `none`). For the
+  skills it covers (`maneuver`: skills whose round intent is Maneuver, hitting from a position or with a melee band;
+  `all`: every melee ATTACK skill, every skill with a position and the riposte counter), a diagonal neighbour of the
   target (one step on each axis, Manhattan 2) counts as distance 1 in the skill's band test (in reach, the planner's
   band tiles, the chase). Reach 1-2 bands reach diagonals already and do not change; ranged bands do not change.
   Under `all` MV2's engaged test counts diagonals too; PL4's threat estimate stays Manhattan under every value.
@@ -540,49 +559,61 @@ Worked examples (Wolf on (6, 4) faces right, engaged with tl_vanguard on (7, 4):
   `melee_diagonal`; the ruleset chip adds "diagonal: `<value>`"; the host's `new` takes `melee_diagonal`; the sim
   takes `melee_diagonal=none|maneuver|all`; the battle state's `ruleset` gains `melee_diagonal`.
 
-### 11.6 Display and text
+### 11.6 Display, AI and text
 
-- MR12. The carried move plays in the skill's wind-up: at its start block the board walks the unit to the position
-  (walk speed, before the wind-up hold or, for a one-block skill, before the strike), then the wind-up pose holds
-  there until the impact (WINDUP1). It is not the round's regular move (ET5); the strip draws it inside the skill's
-  span, not as a move block.
+- MR12 (changed 2026-11-01, Q19 a). The dash is drawn with its own dash animation, distinct from a regular move: the
+  kit marks the carried move's board event as a dash (`MoveKind::Dash` beside the walk, on the event the battle
+  screen animates; INPUT1_TASKS 1.8), and the battle screen (the draw hook is INPUT1-M's) plays the rig's `dash` clip
+  from the start block's start along the route, faster than a walk (the route in 250 ms at 1x; `anim_speed` and PB3
+  apply), then the wind-up pose holds on the position until the impact (WINDUP1), or the strike follows for a
+  one-block skill. A rig without a `dash` clip (every rig until DASH1 lands) plays its walk at that speed. Skip
+  animations: the unit appears on the position. It is not the round's regular move (ET5); the strip draws it inside
+  the skill's span, not as a move block. Art: DASH1 (the dash clip for the humanoid rigs, front, side and back).
 - MR13. Hovering a Maneuver Engage row (IF5; INPUT1-U, since the menu is its) marks T's open candidates on the board:
   preferred tiles with a GOLD ring plate, fallback tiles with a DIM one; none when the flank is protected (the row
   says so). Group `moves`; planning only (AR6).
-- MR14. AI: AI table row 4 reads "a Maneuver attack in range (MR4) of an open candidate on a ranked target engaged
-  with another unit"; the AUTO1 tactics are unchanged. Disengage (MV8) is unchanged: the hit from the unit's tile
-  (diagonal per MR10), the retreat within N.
-- MR15. Skill text (`rpgkit_world/src/skill_text.rs`): `{range}` renders N, `{position}` renders "to a flank" or
-  "behind the target"; `{dash}` on a Maneuver skill renders N too, so today's descriptions keep working.
+- MR14 (changed 2026-11-01). AI: AI table row 4 reads "a Maneuver attack in range (MR4) of an open candidate on a
+  ranked target engaged with another unit"; the AUTO1 tactics are unchanged here (TACTIC2 revisits them). Disengage
+  (MV8): the hit from the unit's tile (the target in band, or adjacent with a diagonal per MR10 for a skill with a
+  position), then the retreat up to N tiles (the skill's range, MR1).
+- MR15 (changed 2026-11-01). Skill text (`rpgkit_world/src/skill_text.rs`): `{range}` renders N for a skill with a
+  position (else the band, "2-4"), `{position}` renders "to a flank" or "behind the target"; `{dash}` on a Maneuver
+  skill renders the transition's N (MR1), so today's descriptions keep working until INPUT1-MA.
 
 Acceptance (rule-derived; INPUT1_TASKS 3): each row of the worked examples; with Wolf facing (1, 1) a behind skill
 prefers t + (-1, -1); under `none` a Flank Cut never ends on a diagonal of t and the f = (1, 1) case uses only the
 k = 1 tiles; filling the candidates between planning and the start gives `[Flank Protected]` with the AP of each
 `flank_protected_cost` value (4 AP skill: full 4, half 2, fixed 1, none 0) and no hit event; Wolf stepping 1 tile
-before the start is followed with budget N + 1; a Strike from (5, 3) on Wolf does not reach under `maneuver` and does
-under `all`, where a riposte also answers it; under `maneuver` a diagonal Flank Cut draws no riposte; the dash moves
-the unit at the skill's start and no regular move counts it (ET5); the classic Godot parity suites and the
-inert-extensions check pass unchanged.
+before the start is followed with budget N + 1 and the chase's 1 AP when the extra tile is used; a ranged skill with
+a position and `reach_max` 4 dashes up to 4 to the position and hits from that neighbour; a ranged Aimed Shot whose
+target stepped 1 tile out of its band follows 1 tile at 1 AP (MR16), and so does a heal whose ally stepped out of
+support reach; a Strike from (5, 3) on Wolf does not reach under `maneuver` and does under `all`, where a riposte also
+answers it; under `maneuver` a diagonal Flank Cut draws no riposte; the dash moves the unit at the skill's start, its
+board event is a dash (not a walk) and no regular move counts it (ET5); the transition reads a Maneuver skill's
+`dash_tiles` 2 as flank, N 2, with the warning; the classic Godot parity suites and the inert-extensions check pass
+unchanged.
 
 ### 11.7 Assets (INPUT1-MA, asset lane, after INPUT1-M merges)
 
 Through `aegis content` (a seed `games/emberwake/data/seeds/input1_ma.json` or upserts; older seeds stay as they
-are). Positions are proposals (Q17): Hamstring Cut behind, by its name.
+are). Positions as answered (Q17 a). `dash_tiles` is set to 0, its default: the content writer leaves default values
+out of a row, so the key leaves these three rows (the field itself stays for classic gap-close). Ranges: today the
+three rows set no `reach_max` (0: the unit's melee band, 1).
 
 | Row | Field | Today | New |
 | --- | --- | --- | --- |
-| `skills.flank_cut` | `dash_tiles` / `maneuver_range` / `position` | 2 / - / - | 0 (dropped) / 2 / `flank` |
+| `skills.flank_cut` | `dash_tiles` / `reach_max` / `position` | 2 / 0 / "" | 0 / 2 / `flank` |
 | `skills.flank_cut` | `description` | "Maneuver, Snap: {name}: {power} power. Dashes up to {dash} to a flank, {stagger} stagger." | "Maneuver, Snap: {name}: {power} power, {stagger} stagger. Dashes up to {range} {position}, then hits." |
-| `skills.tl_hamstring_cut` | `dash_tiles` / `maneuver_range` / `position` | 3 / - / - | 0 / 3 / `behind` |
+| `skills.tl_hamstring_cut` | `dash_tiles` / `reach_max` / `position` | 3 / 0 / "" | 0 / 3 / `behind` |
 | `skills.tl_hamstring_cut` | `description` | "... Dashes up to {dash}; {exploit}." | "Maneuver, Snap: {name}: {power} power, {stagger} stagger. Dashes up to {range} {position}; {exploit}." |
-| `skills.tl_slip_strike` | `dash_tiles` / `maneuver_range` / `position` | 2 / - / - | 0 / 2 / `flank` |
+| `skills.tl_slip_strike` | `dash_tiles` / `reach_max` / `position` | 2 / 0 / "" | 0 / 2 / `flank` |
 | `skills.tl_slip_strike` | `description` | "... Dashes up to {dash}." | "Maneuver, Standard: {name}: {power} power, {potency} to Slow for {rounds}. Dashes up to {range} {position}." |
 | `rulesets.timeline` | `melee_diagonal` / `flank_protected_cost` | - / - | `maneuver` / `full` (written out, though the defaults) |
 
 No other shipped skill is a Maneuver skill: `lunge`, `pounce`, `charge_in` (Assault by kind, classic gap-close) and
-`backflip`, `leap_back` (DISENGAGE jumps, `jump_tiles`) keep their fields. Acceptance: the content check prints no
-"read as maneuver_range" warning; the three descriptions render "Dashes up to 2 to a flank" and "Dashes up to 3
-behind the target".
+`backflip`, `leap_back` (DISENGAGE jumps, `jump_tiles`) keep their fields. Acceptance: the content check prints none
+of 1.7's transition warnings; the three descriptions render "Dashes up to 2 to a flank" and "Dashes up to 3 behind
+the target".
 
 ### 11.8 Balance (INPUT1-MB, balance lane, after INPUT1-MA on `main`)
 
@@ -590,8 +621,9 @@ A feel run as RULESET1-B's (`tools/fc.sh sim feel seeds=100 party=both` on the f
 `tl_flank_elite`), plus `melee_diagonal=none` and `=all` on `tl_flank` and `tl_skirmish`. Report against the last
 run (BALANCE_REPORT: `tl_flank` 92 auto / 98 timed against its 50-85 band, known over band; carried moves 222 / 224 in
 `tl_flank` and 478 / 502 in `tl_skirmish`): win rates, the carried-move floors (still above 0), protected flanks per
-100 fights and their share of Maneuver commands, diagonal hits, Maneuver rounds. No band is set for the new counts;
-the user judges them (decision "Timeline test fights after RULESET1-A3": the `tl_` fights are judged on floors).
+100 fights and their share of Maneuver commands, diagonal hits, Maneuver rounds, and chases per 100 fights by skill
+kind (MR16 adds ranged and Support chases). No band is set for the new counts; the user judges them (decision
+"Timeline test fights after RULESET1-A3": the `tl_` fights are judged on floors).
 
 ## 12. Playback aids (INPUT1-PB)
 
@@ -652,14 +684,15 @@ playback sets `playback.waiting` at the block's end and closing the view clears 
 | MV1 | stays; positions read the facing (MR2) |
 | MV2 | stays; under `melee_diagonal` `all` a diagonal neighbour is in the melee band (MR10) |
 | MV3 | stays; every position tile is outside the front, so an Engage hit on an engaged target is a flank |
-| MV4 | changes: N is `maneuver_range` (MR1); the Engage move goes to the skill's position (MR2-MR4) and plays in its wind-up (MR12); "not the round's move" stays (ET5); Disengage's retreat unchanged, within N |
-| MV5 | changes: Engage range is an open position tile within move cost N in one block (MR4); the hover line changes; ranged Maneuver skills hit from where they stand (MR1); Disengage's condition stays |
+| MV4 | changes: no carried-move field; a skill with a `position` dashes up to its range N (`reach_max`, MR1) to that position (MR2-MR4) on the wind-up's tick with its own dash animation (MR8, MR12); a skill without one carries no move; "not the round's move" stays (ET5); Disengage's retreat goes up to N (MR14); `dash_tiles` retires on Maneuver skills (INPUT1-MA) |
+| MV5 | changes: one range rule for every skill (the reach band, MR1); a positioned skill is in range when an open position tile is within move cost N in one block (MR4), melee or ranged alike; the hover line changes; Disengage's condition stays |
 | MV6 | changes: the destination is MR4's tier and rank; run time re-reads around the target with the chase (MR8); no open tile is `[Flank Protected]`, a miss with its AP (MR8 c, MR9); none in budget is `[Dash Blocked]` as today |
 | MV7 | changes: "with no flank tile in range, Engage is not offered" becomes "Flank protected" with no open tile (MR5) and MV9 a's move when open tiles are out of range (MR7); follow-ups move only off a position tile (MR6) |
-| MV8 | stays (the hit diagonal per MR10, the retreat within N); Step here after may follow it (ET4, ET5) |
+| MV8 | stays (the hit diagonal per MR10; the retreat within N, the skill's range, MR14); Step here after may follow it (ET4, ET5) |
 | MV9 | stays as decided (TQ22 a, MR7); its option (b) retires |
 | MV10, MV11 | stay |
-| AS1-AS3 | stay; their moves are the round's one regular move (ET5) |
+| AS1-AS3 | stay; their moves are the round's one regular move (ET5); AS1's chase applies to every skill on a unit target (MR16) |
+| K4 (RULESET1 5) | its carried-move clause gives way to MR2-MR4 (a positioned skill ends on a position tile, not the nearest band tile) |
 | GD3 | stays; under `melee_diagonal` `all` the counter answers diagonal melee hits (MR10) |
 | UI1 | retires (the buttons, menus and toggle); its "loses Riposte" warning moves to the menu rows (IF3) |
 | UI2 | stays; ghost spans get GH8's look |
@@ -676,37 +709,10 @@ enemy AI and its order lists beyond MR14; controller input for the battle (UI-RE
 the strip; a block snapshot in the battle's timeline view; VISCLAR1's later slices (badges, forecasts, glyph
 placement, the poise bar's place); showing enemies' known movesets (the user's later idea, Q5); halving the AP scale
 (a balance option the user keeps open, Q7); balance numbers (INPUT1-MB reports, nothing is tuned here); new art (the
-arrow, ghost, pip and tracer looks are drawn); classic gap-close and DISENGAGE jumps; mid-battle dialogue and scripted
+arrow, ghost, pip and tracer looks are drawn; the dash clip is DASH1); the tactics' link to the intents (TACTIC2); classic gap-close and DISENGAGE jumps; mid-battle dialogue and scripted
 rounds (ENCOUNTER2-C); the terms table (TERMS1).
 
 ## 15. Open questions (the planner asks the user; each has a recommendation)
 
-Answered 2026-10-31 (decision rows "INPUT1 answers", parts 1-3): Q1-Q9, applied as listed under the status. New:
-
-- Q10 (MR2). May the fallback use the target's front corners (k = 3)? (a) no (recommended: they are in its front,
-  MV3, so no flank; the protected flank is what turns a Maneuver to the back line); (b) yes, after the k = 1 tiles.
-- Q11 (MR4). A preferred tile is open but out of range while a fallback tile is in range: (a) dash to the fallback
-  (recommended: the hit lands this round); (b) take the regular move to reach the preferred tile.
-- Q12 (MR1). The range field: (a) a new `maneuver_range`, `dash_tiles` read with a warning until INPUT1-MA
-  (recommended: Maneuver range and classic gap-close are different rules; `dash_tiles` and its Godot help stay
-  classic's); (b) keep `dash_tiles` as N and add only `position` (no data move but the field means two things).
-- Q13 (MR1). A ranged Maneuver skill (none shipped): (a) Engage hits from where it stands with no position, N is its
-  Disengage retreat (recommended: "a ranger's skill hits from where it stands"); (b) ranged skills cannot be Maneuver.
-- Q14 (AR5, the first draft's Q6). An after-move (kite after, Step here after, a Disengage retreat) in the single
-  arrow: (a) its destination plate only (recommended); (b) a second, fainter leg after the head.
-- Q15 (AR3, the first draft's Q8). Does an inspected unit's arrow show by default? (a) yes (recommended: inspecting
-  asks about it); (b) only the selected member's.
-- Q16 (AR6). The area tell plates during playback: (a) hidden with the arrows (recommended: "drops everything that
-  hides the fight"; the tracers and FX show the hit), while the arena telegraph marks keep the HOOKS1-UI slice 1
-  answer (visible through playback until VISCLAR1 decides); (b) kept until their impact block.
-- Q17 (11.7). Positions of the shipped Maneuver skills: (a) Flank Cut and Slip Strike `flank`, Hamstring Cut `behind`
-  (recommended); (b) all three `flank`.
-- Q18 (GH2). Q1 a read as written: a hero carrying an intent with no pick and no player-set target shows its
-  tactic's draft, which may be another intent (Balanced re-picks by the AI table). (a) yes, with the "loses Riposte"
-  warning (recommended: the decision's words); (b) only a hero with no intent (the first draft's Q1 case); others
-  keep the carried intent's auto plan.
-- Q19 (MR8, MR12). When the dash resolves: (a) at the skill's start, as today's carried move, the unit then holding
-  its wind-up on the position (recommended: the move "plays in its windup", a multi-block Maneuver stands exposed
-  there, and the protected-flank check is the moment it moves; for a one-block skill start and impact are the same
-  block); (b) at its impact, the unit waiting on its tile through the wind-up (the check then really is "between
-  planning and impact", but the board must walk it before the kit knows the tile).
+All answered: Q1-Q9 by "INPUT1 answers", parts 1-3 (user 2026-10-31), Q10-Q19 by part 4 (user 2026-11-01), applied as
+listed under the status. The questions and their options are in the decision rows; none is open.
