@@ -134,6 +134,10 @@ No rows: Emberwake has picked no lore name for an intent, and the purse names be
   Dunstan, Elyse, Nemeth, Quell, Vane, Grendel, Grakka, Mara Voss, Sunk Ward, Ashlands, Iron Reaches, Tidewrack, The
   Crucible, Castellan, Inquisition, Warded Tallow, Red Tithing.
 - LW5. Today's one hit (`log.rs:341`) is rewritten as "A and B fall." in the same task, so the check lands green.
+- As built (TERMS1-G, 2026-11-01): `layers_check` in `tools/fc.sh` and step [3/3] of `check_project.ps1` run one
+  `git grep --untracked -E` per game folder: a world id becomes a case-folded class (`[Aa][Ss]..`) with G1's
+  boundaries, a lore line an escaped phrase with `_` as a word character, so both lists share one case-sensitive call.
+  A line is reported once, with the first lore word found on it. `games/emberwake/lore_words.txt` holds the LW4 list.
 
 ## 8. Asset layering (the decision's rule, and what moves now)
 

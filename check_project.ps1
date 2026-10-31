@@ -2,7 +2,7 @@
 # Tactical RPG - commit gate on the Aegis engine (transition step 2, 2026-10-19)
 # Builds every crate and target (a compiler warning fails), then runs every test: the rules, battle, world, data-loader, content-writer and Godot
 # parity suites (the parity suites skip themselves when games/emberwake/parity/out is missing; tools/fc.sh parity records it
-# from legacy/), then the layer check (engine and kit crates name no game, KIT1-G). Same steps as `tools/fc.sh gate`. The Godot gate of the frozen Godot copy is legacy/check_project.ps1.
+# from legacy/), then the layer check (engine and kit crates name no game, KIT1-G; kit code names no lore word, TERMS1 G3). Same steps as `tools/fc.sh gate`. The Godot gate of the frozen Godot copy is legacy/check_project.ps1.
 # ==============================================================================
 param (
     [switch]$VerboseOutput,   # print the full cargo output
@@ -94,12 +94,40 @@ foreach ($m in $manifests) {
         elseif ($m -like 'engine/*' -and $full.StartsWith($kitsRoot, [StringComparison]::OrdinalIgnoreCase)) { $layerHits += "${m}:$n engine path dependency into kits/: $p" }
     }
 }
+# TERMS1 G3 (docs/specs/TERMS1.md 7), same as `tools/fc.sh layers`: kit code (src, schema.json, kit.json; not tests or
+# READMEs) names no lore word of a game: its world ids (folders under games/<id>/data/worlds/, any case, `_` as a separator)
+# and the lines of games/<id>/lore_words.txt (fixed phrases, whole word, exact case, `#` comments). One git grep per game.
+foreach ($id in $gameIds) {
+    $gameDir = Join-Path (Join-Path $projectRoot "games") $id
+    $worlds = @(Get-ChildItem -Path (Join-Path $gameDir "data/worlds") -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+        -join ($_.Name.ToCharArray() | ForEach-Object { $c = [string]$_; if ($c -match '[A-Za-z]') { "[$($c.ToUpper())$($c.ToLower())]" } elseif ($c -match '[A-Za-z0-9_-]') { $c } else { "\$c" } }) })
+    $loreFile = Join-Path $gameDir "lore_words.txt"
+    $lore = @(if (Test-Path $loreFile) { Get-Content $loreFile | ForEach-Object { ($_ -replace '#.*$', '').Trim() } | Where-Object { $_ } |
+        ForEach-Object { [regex]::Replace($_, '[\]\[\\.*^$+?(){}|/]', '\$0') } })
+    $ws = $worlds -join '|'; $lw = $lore -join '|'
+    $args3 = @()
+    if ($ws) { $args3 += @('-e', "(^|[^[:alnum:]])($ws)([^[:alnum:]]|$)") }
+    if ($lw) { $args3 += @('-e', "(^|[^[:alnum:]_])($lw)([^[:alnum:]_]|$)") }
+    if ($args3.Count -eq 0) { continue }
+    $hits = & git grep --untracked -n -I -E @args3 -- 'kits/*/crates/*/src/*' 'kits/*/schema.json' 'kits/*/kit.json'
+    foreach ($h in @($hits)) {
+        if ($h -match '^([^:]*):(\d+):(.*)$') {
+            $file = $Matches[1]; $line = $Matches[2]; $text = $Matches[3]
+            $m = $null
+            if ($lw) { $m = [regex]::Match($text, "(?<![A-Za-z0-9_])($lw)(?![A-Za-z0-9_])") }
+            if (-not ($m -and $m.Success) -and $ws) { $m = [regex]::Match($text, "(?<![A-Za-z0-9])($ws)(?![A-Za-z0-9])") }
+            $word = if ($m -and $m.Success) { $m.Groups[1].Value } else { "?" }
+            $at = if ($m -and $m.Success) { [Math]::Max(0, $m.Index - 40) } else { 0 }
+            $layerHits += "${file}:$line names lore word `"$word`" of game ${id}: $($text.Substring($at, [Math]::Min(120, $text.Length - $at)))"
+        }
+    }
+}
 if ($layerHits.Count -gt 0) {
     $layerHits | Select-Object -First 40 | ForEach-Object { Write-Host "  [layers] $_" -ForegroundColor Red }
-    Write-Host "=== [FAILED] layers: engine and kit code must not name a game (CLAUDE.md Layers) ===" -ForegroundColor Red
+    Write-Host "=== [FAILED] layers: engine and kit code must not name a game, kit code no lore word (CLAUDE.md Layers) ===" -ForegroundColor Red
     exit 1
 }
-if (-not $Quiet) { Write-Host "  -> layers ok: engine and kit crates name no game ($($gameIds -join ', '))" -ForegroundColor Green }
+if (-not $Quiet) { Write-Host "  -> layers ok: engine and kit crates name no game ($($gameIds -join ', ')); kit code names no lore word" -ForegroundColor Green }
 
 $passed = 0
 $test.Lines | Select-String -Pattern "test result: ok\. (\d+) passed" | ForEach-Object { $passed += [int]$_.Matches[0].Groups[1].Value }

@@ -338,7 +338,7 @@ pub fn kill_entry(w: &World, actor: &str, actor_is_ally: bool, phase: &str, stru
     e
 }
 
-/// ENCOUNTER2 P1: "Nemeth and Guard fall." (a list: "A, B and C fall."; one unit: "Nemeth falls.").
+/// ENCOUNTER2 P1: "A and B fall." (a list: "A, B and C fall."; one unit: "A falls.").
 pub fn kill_line(names: &[&str]) -> String {
     match names {
         [] => String::new(),
