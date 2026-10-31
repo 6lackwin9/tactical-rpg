@@ -8,7 +8,8 @@
 //!   sidecar summary, one button per cue row of `portrait_cues.json` and the expression picker; the review page of
 //!   the portrait asset tasks.
 //! - Screens: every screen, drawn shrunk into the pane (`aegis_ui::preview`) on a sample game (a debug game of the
-//!   first playable world that saving refuses); Open shows the screen itself to try it.
+//!   first playable world that saving refuses); Open shows the screen itself to try it. The Mission board entry
+//!   (STORYUI1-U2) draws the board pane on a fixture board without a game (`board::BoardSample`).
 //! - Battle panels: each panel of the battle screen enlarged on its own (the battle records its panels' rects while it
 //!   draws), and the battle timeline (TIMELINE1: every unit's track over the round's blocks, fed by a live Test Arena
 //!   battle; past rounds from the round archive, a block's state from its snapshot).
@@ -33,7 +34,7 @@ use emberwake_host::{Battle, Host};
 use serde_json::{json, Value};
 
 /// (id, name, group, what it shows). Battle panel ids are the battle screen's own panel names.
-const ENTRIES: [(&str, &str, &str, &str); 28] = [
+const ENTRIES: [(&str, &str, &str, &str); 29] = [
     ("kit", "Kit widgets", "Kit", "Every kit widget in its states; use them, the foot of the page says what happened."),
     ("vignette", "Vignette player", "Kit", "The engine's sample reel or a world's vignette: image, text, title and line cards with fades, typing, hold and skip."),
     ("portraits", "Portraits", "Art", "Every portrait with its sidecar, its effects and the cue rows: the review page of the portrait assets."),
@@ -45,6 +46,7 @@ const ENTRIES: [(&str, &str, &str, &str); 28] = [
     ("region", "Region map", "Screens", "Walking a location: the map, the Here list, the log."),
     ("dialogue", "Dialogue", "Screens", "A conversation over the region map (the first person met)."),
     ("shop", "Shop", "Screens", "A shop counter over the region map (the first trader met)."),
+    ("board", "Mission board", "Screens", "The board pane on a sample board: every section, a deadline, the picked quest's detail, Accept."),
     ("hub", "Game menu", "Screens", "The in-game menu over the map."),
     ("journal", "Journal", "Screens", "Quests and notes."),
     ("stats", "Character: Stats", "Screens", "The character popup's Stats tab."),
@@ -570,6 +572,8 @@ impl Gallery {
             "load" => Box::new(crate::menus::Slots::new(false)),
             "region" => Box::new(crate::region::RegionMap::new(cx)),
             "dialogue" | "shop" => Box::new(Self::talking(cx, id == "shop")),
+            // STORYUI1-U2: the pane on a fixture board (no game needed)
+            "board" => Box::new(crate::board::BoardSample::new()),
             "hub" => Box::new(crate::hub::Hub::default()),
             "journal" => Box::new(crate::hub::Journal::default()),
             "stats" | "level_up" | "skills" | "gear" => Box::new(crate::party::Character::new(cx, &member, id)),
@@ -1113,6 +1117,32 @@ mod tests {
         assert!(!cx.has_game(), "no game needed");
         gallery.act(&mut cx, GAct::Open);
         assert!(matches!(cx.nav.last(), Some(Nav::Push(s)) if s.id() == "vignette" && s.state(&cx)["reel"] == json!("tale:v_intro")), "Open plays the picked reel");
+    }
+
+    /// STORYUI1-U2: with no game, the Mission board entry previews the board pane on its fixture board (every section,
+    /// a row per quest) and Open shows it full screen.
+    #[test]
+    fn the_board_entry_shows_the_sample_board_without_a_game() {
+        use crate::hud::hud_tests::gfx;
+        use crate::story::tests::{data, story_cx};
+        let (mut cx, mut g) = (story_cx(data()), gfx());
+        let mut gallery = Gallery::new();
+        let i = ENTRIES.iter().position(|e| e.0 == "board").expect("a board entry");
+        assert!(!NEEDS_GAME.contains(&"board"), "the sample needs no game");
+        gallery.act(&mut cx, GAct::Entry(i));
+        gallery.draw(&mut cx, &mut g, (-500, -500), true);
+        let sh = gallery.shown.as_ref().expect("the preview is built");
+        assert_eq!(sh.screen.id(), "board_sample");
+        let (view, _) = crate::board::sample();
+        let ids: Vec<String> = json::aget(&view, "sections").iter().map(|s| json::s(json::dict(s), "id")).collect();
+        assert_eq!(ids, emberwake_world::board::SECTIONS.iter().map(|s| s.0.to_string()).collect::<Vec<_>>(), "every section in order");
+        let ws = sh.screen.widgets();
+        for r in crate::board::rows(&view) {
+            assert!(ws.iter().any(|w| w["id"] == format!("board.row.{}", json::s(&r, "quest"))), "a row for {}", json::s(&r, "quest"));
+        }
+        assert!(!cx.has_game());
+        gallery.act(&mut cx, GAct::Open);
+        assert!(matches!(cx.nav.last(), Some(Nav::Push(s)) if s.id() == "board_sample"), "Open shows the pane");
     }
 
     /// PORTRAITFX1-G G6: the Portraits entry lists every portrait of the game and kit layers (counted here from the

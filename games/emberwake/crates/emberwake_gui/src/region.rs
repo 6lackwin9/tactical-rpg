@@ -7,8 +7,9 @@
 //! people stand on their tiles as body sprites (`walk` while moving, else `idle`; side view, mirrored by the last
 //! left or right step; a person in the conversation faces the party), with today's tokens as the fallback.
 //! STORYUI1-U1: with nothing open the map hands over to the story stage while a sequence runs and plays queued
-//! vignettes (`story::map_tick`); a `sequence` choice ends the talk and the stage takes over; an open board holds the
-//! replies until Esc or a right click closes it (its pane is STORYUI1-U2's). CAMPAIGN1-U: a queued `{dialogue}` scene
+//! vignettes (`story::map_tick`); a `sequence` choice ends the talk and the stage takes over. STORYUI1-U2: an open
+//! board shows its pane (`board.rs`) in the shop's place until Close, Esc or a right click closes it back to the
+//! conversation; the keeper of a board with work wears the quest badge ("New work on the board"). CAMPAIGN1-U: a queued `{dialogue}` scene
 //! opens as the conversation when nothing is open (T2); a reply whose `rest` would end the run asks first (W3); the
 //! log lines name the purse (P1) and a retreat (R4).
 
@@ -18,6 +19,7 @@ use crate::hud::{hud_bar, hud_key, hud_open, purse_word, Hud, PurseWord, HUD_H};
 use crate::runover::days as day_count;
 use crate::music;
 use crate::props::{Item, PropDraw, BOX_EDGE, BOX_FACE, BOX_FACE_H, BOX_FILL};
+use crate::board::{BoardAct, BoardPane};
 use crate::shop::{ShopAct, ShopPane};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{draw_glyph, tip, Gfx, Glyph, Ui, Widget, BODY, BORDER, CARD, DIM, GOLD, GOOD, H, INFO, PANEL_HI, SMALL, TEXT, W};
@@ -69,8 +71,10 @@ pub enum RAct {
     Shop(ShopAct),
     /// Leaves the shop for the conversation (the trade is empty or discarded).
     CloseShop,
-    /// Closes the open board back to the conversation (STORYUI1 B11; the pane itself is STORYUI1-U2's).
+    /// Closes the open board back to the conversation (STORYUI1 B11).
     CloseBoard,
+    /// A click on the board pane (STORYUI1-U2, `board.rs`).
+    Board(BoardAct),
     TogglePick(String),
     PickRecipient(usize),
     ConfirmTurnIn,
@@ -89,6 +93,8 @@ pub struct RegionMap {
     runner: Option<DialogueRunner>,
     /// The open shop's trade (PLAYUI1-P).
     shop: ShopPane,
+    /// The open board's pick and refusals (STORYUI1-U2).
+    board: BoardPane,
     pending: Option<Dict>,
     /// CAMPAIGN1 W3: the choice waiting on the ask before its `rest` would end the run (a Yes picks it).
     rest_ask: Option<i64>,
@@ -204,6 +210,7 @@ impl RegionMap {
             facing: (0, 1),
             runner: None,
             shop: ShopPane::default(),
+            board: BoardPane::default(),
             pending: None,
             rest_ask: None,
             picks: Vec::new(),
@@ -394,6 +401,7 @@ impl RegionMap {
         self.pending = None;
         self.rest_ask = None;
         self.shop = ShopPane::default();
+        self.board = BoardPane::default();
         cx.set_busy(false);
     }
 
@@ -585,10 +593,26 @@ impl RegionMap {
                 self.dialogue_result(cx, res);
             }
             RAct::CloseBoard => {
+                self.board = BoardPane::default();
                 let Some(r) = self.runner.as_mut() else { return };
                 let res = r.close_board(&d, cx.gs_mut());
                 self.dialogue_result(cx, res);
             }
+            RAct::Board(a) => match a {
+                BoardAct::Pick(q) => self.board.pick(q),
+                BoardAct::Close => self.act(cx, RAct::CloseBoard),
+                // B8: the runner's `start_quest` path; a refusal stays on the pane, a taken quest is logged
+                BoardAct::Accept(q) => {
+                    let Some(r) = self.runner.as_mut() else { return };
+                    let res = r.accept(&d, cx.gs_mut(), &q);
+                    if json::b(&res, "ok", false) {
+                        self.board.errors.clear();
+                        self.dialogue_result(cx, res);
+                    } else {
+                        self.board.errors = json::sget(&res, "errors");
+                    }
+                }
+            },
             RAct::TogglePick(id) => {
                 let allowed = self.pending.as_ref().map(|p| json::i(p, "picks_allowed", 0)).unwrap_or(0) as usize;
                 if let Some(i) = self.picks.iter().position(|p| *p == id) {
@@ -873,14 +897,21 @@ impl Screen<GameCx> for RegionMap {
         if !talking {
             self.draw_ticker(&mut ui, cx, modal);
         }
-        // -- The dialogue box (3.1); while the shop is open (3.3) the box hides and the shop sits centred over the dimmed map
+        // -- The dialogue box (3.1); while the shop is open (3.3) the box hides and the shop sits centred over the dimmed
+        // map; an open board (STORYUI1 B11) takes the shop's place
+        let board_qid = self.board_qid();
         if let (Some(view), Some(b)) = (talk_view.as_ref(), talk_box.as_ref()) {
-            if shop_qid.is_empty() {
-                // an open board (its pane is STORYUI1-U2's) holds the replies until Esc or a right click closes it
-                draw_talk(&mut ui, cx, view, b, self.pending.is_some() || view.contains_key("board"));
-            } else {
+            if !shop_qid.is_empty() {
                 ui.p.fill(map_area, SHOP_DIM);
                 self.shop.draw(&mut ui, cx, &shop_qid, RAct::Shop);
+            } else if !board_qid.is_empty() {
+                ui.p.fill(map_area, SHOP_DIM);
+                let bv = emberwake_world::board::view(&d, &gs, &board_qid);
+                let pick = self.board.select(&bv);
+                let det = if pick.is_empty() { Dict::new() } else { emberwake_world::board::detail(&d, &gs, &pick) };
+                self.board.draw(&mut ui, cx, &bv, &det, RAct::Board);
+            } else {
+                draw_talk(&mut ui, cx, view, b, self.pending.is_some());
             }
         }
         if let Some(p) = self.pending.clone().filter(|_| self.talking()) {
@@ -1003,7 +1034,8 @@ impl Screen<GameCx> for RegionMap {
             "dialogue": self.runner.as_ref().filter(|r| !r.closed).map(|r| Value::Object(r.view(&cx.data, gs))),
             "turn_in": self.pending.as_ref().map(|p| json!({"quest": p["quest"], "offers": p["offers"], "picks": self.picks})),
             "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open,
-            "shop": if self.shop_qid().is_empty() { Value::Null } else { self.shop.state() }, "board": Some(self.board_qid()).filter(|b| !b.is_empty()), "sprites": self.sprites})
+            "shop": if self.shop_qid().is_empty() { Value::Null } else { self.shop.state() }, "board": Some(self.board_qid()).filter(|b| !b.is_empty()),
+            "board_pane": if self.board_qid().is_empty() { Value::Null } else { self.board.state() }, "sprites": self.sprites})
     }
 
     /// MUSIC2: shop while the shop is open, else the location's kind.
@@ -1407,22 +1439,24 @@ fn marker_icon(kind: &str, state: &str) -> &'static str {
     }
 }
 
-/// A service's icon (spec PLAYUI1 section 6): `turn_in` and `offer` are the quest badges `ready` and `quest`.
-fn service_icon(service: &str) -> String {
+/// A service's icon (spec PLAYUI1 section 6): `turn_in` and `offer` are the quest badges `ready` and `quest`; a board
+/// with work (STORYUI1 B4) is the quest badge too.
+pub(crate) fn service_icon(service: &str) -> String {
     match service {
         "turn_in" => emberwake_content::art::badge("ready"),
-        "offer" => emberwake_content::art::badge("quest"),
+        "offer" | "board" => emberwake_content::art::badge("quest"),
         _ => format!("ui/services/{service}.png"),
     }
 }
 
 /// "Quest to turn in, Shop" for a hover card.
-fn services_text(services: &[&str]) -> String {
+pub(crate) fn services_text(services: &[&str]) -> String {
     services
         .iter()
         .map(|sv| match *sv {
             "turn_in" => "Quest to turn in",
             "offer" => "New quest",
+            "board" => emberwake_world::board::BADGE_TEXT,
             "shop" => "Shop",
             "recruit" => "Recruits",
             _ => "",
@@ -1431,11 +1465,12 @@ fn services_text(services: &[&str]) -> String {
         .join(", ")
 }
 
-/// The drawn stand-in of a service icon: today's `?` and `!` badges, a coin for a shop, a plus for recruits.
-fn service_glyph(ui: &mut Ui<RAct>, service: &str, r: Rect) {
+/// The drawn stand-in of a service icon: today's `?` and `!` badges (a board with work is the `!`, STORYUI1 B4), a coin
+/// for a shop, a plus for recruits.
+pub(crate) fn service_glyph<A>(ui: &mut Ui<A>, service: &str, r: Rect) {
     let (cx_, cy_, sz) = (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0, r.w as f32);
     match service {
-        "turn_in" | "offer" => {
+        "turn_in" | "offer" | "board" => {
             let (text, col) = if service == "turn_in" { ("?", GOOD) } else { ("!", GOLD) };
             let size = SMALL.max(r.h as f32 * 0.9 / 1.28);
             ui.p.text_center(cx_, cy_ - ui.p.line_h(size) / 2.0, text, size, col);

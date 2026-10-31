@@ -38,7 +38,7 @@ The rules behind every player screen come from `emberwake_world`, checked agains
 | 20 | World Forge (world viewer) | `ui/world/*` | `forge.rs` | read-only viewer: world picker, overview (inheritance, connects, counts), merged entries with origin, used by |
 | 21 | Gear & Skill Dojo | `ui/dojo/*`, `scripts/dojo/*` | `dojo.rs` on `emberwake_battle::dojo` | done (PORT-DOJO): the Godot dojo on a desk of engine windows (party with the carry bar, unit inspector with stat allocation, derived stats, gear with the pouch and quick-setup presets, stash with filters, stage, console, test log with breakdowns), drag and drop between the stash, the slots and the pouch, Godot's three layouts saved per player |
 | 22 | Scene Runner | `ui/runner/*` | `runner.rs` | the engine's launcher (main menu Tools): arena on any encounter, forges, dojo, Exploration (RUNNER2: world and start pickers; fights Skip / Fled / Lost / Fight it), UI Gallery, data reload; the scene list scrolls; playtest recording not yet |
-| - | UI Gallery | none (new) | `gallery.rs` | the UI one element at a time for review (UIGALLERY1), in four groups: Kit widgets (every kit widget in its states, usable); Art: Portraits (PORTRAITFX1-G: every portrait of the game and kit layers with its expression frames, drawn through the game's binding with the effect toggles, reactions, step events, one control per cue row, size, reduce motion, anchors and the expression picker; its sidecar summary); Screens (each screen shrunk into the pane on a sample debug game, dialogue and shop opened on the first person who offers them, Open shows the screen itself); Battle panels (plan strip, party list, hero inspector, battlefield, hostile list, threat intel, status and log, each the battle screen's own panel enlarged), and the battle timeline on a live arena fight (all units' tracks by block, enemies masked while planning as "Plans in secret" with their tell, Reveal to show them, < > through past rounds, a block's snapshot of every unit, a segment's action detail) |
+| - | UI Gallery | none (new) | `gallery.rs` | the UI one element at a time for review (UIGALLERY1), in four groups: Kit widgets (every kit widget in its states, usable); Art: Portraits (PORTRAITFX1-G: every portrait of the game and kit layers with its expression frames, drawn through the game's binding with the effect toggles, reactions, step events, one control per cue row, size, reduce motion, anchors and the expression picker; its sidecar summary); Screens (each screen shrunk into the pane on a sample debug game, dialogue and shop opened on the first person who offers them, the Mission board pane on a sample board (STORYUI1-U2), Open shows the screen itself); Battle panels (plan strip, party list, hero inspector, battlefield, hostile list, threat intel, status and log, each the battle screen's own panel enlarged), and the battle timeline on a live arena fight (all units' tracks by block, enemies masked while planning as "Plans in secret" with their tell, Reveal to show them, < > through past rounds, a block's snapshot of every unit, a segment's action detail) |
 
 ## Known gaps (function over form)
 
@@ -61,13 +61,25 @@ The rules behind every player screen come from `emberwake_world`, checked agains
 4. Screens on a shared widget kit (`ui.rs`, now `aegis_ui::ui`: buttons, tabs, cards, checkboxes, steppers, dropdowns, frames, rows,
    hover cards), menus first, then the play screens, then the dev tools.
 
-## Story stage (STORYUI1-U1)
+## Story screens (STORYUI1-U1, STORYUI1-U2)
 
 - Story stage (`story_stage`): opens on a new game in a world with a start sequence, on a save made during one, and when a sequence
   starts from the maps (a dialogue choice, a campaign trigger). It plays the steps: vignettes full screen (Space, Enter or click to
   continue; Esc, right click or Skip to skip, asking first for an unseen scene), fights with the results popup after, then the region map
   at the `enter` location or the main menu at `end` `menu`. No game menu while it runs. Queued vignettes play over the region and world
-  maps when nothing is open. An open board holds the talk's replies; Esc or right click closes it (pane: STORYUI1-U2).
+  maps when nothing is open.
+- Mission board pane (STORYUI1-U2, `board.rs`): the keeper's board reply opens it in the shop's place (600 x 300 at Normal,
+  grown with the text, over the dimmed map, the dialogue box hidden): the board's name and keeper, the intro, the sections
+  (Main, Jobs, Under way, Locked, Closed) on the left with each quest's name, node, deadline ("By day 14 (6 left)", red) and
+  line, the picked quest's detail on the right (status, description, steps, rewards, loot picks, reputation, where, deadline),
+  Accept (offered quests only; a refusal shows on the pane; `Quest taken: <name>.` in the log) and Close; Esc and right click
+  close it back to the conversation. Agent link `board`, `board.row.<qid>`, `board.accept`, `board.close`, `board.errors`.
+- Keeper badge: a keeper whose open board has work wears the quest badge on the map and in the Here legend ("New work on
+  the board").
+- World map: a node holding jobs of an opened board wears the quest badge at its pin's top left (`node.<qid>.job`) and its
+  hover card lists `Job: <name>` per job.
+- UI Gallery, Mission board entry (Screens): the pane on a sample board without a game (every section, deadlines, Accept moves
+  an offered quest to Under way).
 - Settings, Gameplay tab: Text speed (Slow, Normal, Fast, Instant) and Reduce motion (engine keys `text_speed`, `reduce_motion`).
 - UI Gallery, Vignette player entry: a reel picker (the engine's sample, then every world's vignettes as written) in the game's card
   palette.

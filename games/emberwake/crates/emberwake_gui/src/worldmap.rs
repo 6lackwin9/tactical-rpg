@@ -6,9 +6,11 @@
 //! the run asks first (W3, No as the default); a trip the run ended on stops like an arrival; a road fight that could
 //! end the run gets the notice. Slice 2: a queued battle plays (`story::map_tick`; a queued dialogue waits for the
 //! region map); the tips, the Camp button and the log name the purse's upkeep (P1, R1); the Travel tip adds the arrival
-//! day and the days left (W5); a node's tip lists its checkpoint lines (`deadlines`, STORYUI1 B10).
+//! day and the days left (W5); a node's tip lists its checkpoint lines (`deadlines`, STORYUI1 B10). STORYUI1-U2 (B10):
+//! a node holding jobs of opened boards wears the quest badge at its pin's top left (widget `node.<qid>.job`) and its
+//! tip lists "Job: <name>".
 
-use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
+use aegis_ui::canvas::{rgb, rgba, Rect};
 use crate::music;
 use crate::hud::{hud_bar, hud_key, hud_open, purse_word, Hud, PurseWord};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
@@ -33,9 +35,6 @@ pub enum WAct {
 
 /// The world map's controls (the Help button's hover card and popup).
 const WORLD_HELP: [&str; 4] = ["Click a place to pick it, then Travel", "Enter (button): go into the place the party is at", "P: party   J: journal   I: stash", "Esc: back to the region map"];
-
-/// The node tooltip's checkpoint lines (STORYUI1 B6's Arterial Red).
-const DEADLINE: Rgba = rgb(0xe1, 0x1d, 0x48);
 
 /// CAMPAIGN1 W5: the arrival of a trip of `time` in a campaign world: "Arrive on day 9, 34 days left." (the days left
 /// of the first running visible countdown by HUD order at arrival; without one only the day); None outside one.
@@ -237,6 +236,16 @@ impl Screen<GameCx> for WorldMap {
             if json::b(n, "quest", false) {
                 ui.p.text(x + 5.0, y - 15.0, "!", 8.0, GOLD);
             }
+            // STORYUI1 B10: the jobs of opened boards here: the quest badge (9 px) at the pin's top left
+            let jobs = json::sget(n, "jobs");
+            let job_r = Rect::new(r.x - 4, r.y - 4, 9, 9);
+            if !jobs.is_empty() {
+                let px = ui.icon_px(Rect::new(0, 0, job_r.w + 4, job_r.h + 4));
+                match cx.art.image(&crate::region::service_icon("board"), px, px) {
+                    Some(img) => ui.p.image(img, job_r),
+                    None => crate::region::service_glyph(&mut ui, "board", job_r),
+                }
+            }
             let label = s(n, "name");
             // TEXTFIT1: the second line sits a line below the name at any text size, and the node's box holds both.
             let line = ui.p.line_h(BODY);
@@ -252,14 +261,22 @@ impl Screen<GameCx> for WorldMap {
             for step in travel::quest_steps_at(&d, &gs, &q) {
                 t.push((format!("Quest: {step}"), GOLD));
             }
+            for job in &jobs {
+                t.push((format!("Job: {job}"), GOLD));
+            }
             // STORYUI1 B10, CAMPAIGN1 W5: the checkpoint lines of the quests whose node this is
             for due in json::aget(n, "deadlines") {
-                t.push((s(json::dict(due), "text"), DEADLINE));
+                t.push((s(json::dict(due), "text"), crate::board::DEADLINE));
             }
             let lw = ui.p.text_w(&s(n, "name"), BODY).max(if is_here { ui.p.text_w("You are here", BODY) } else { 0.0 }).ceil() as i32;
             let bottom = (y - 6.0 + line * if is_here { 2.0 } else { 1.0 }).ceil() as i32;
             let top = (r.y - 2).min((y - 6.0).floor() as i32);
+            let job_tip = if jobs.is_empty() { Vec::new() } else { t.clone() };
             ui.push(format!("node.{}", q.replace(':', ".")), "node", label, Rect::new(r.x - 2, top, 18 + lw, (r.y + 16).max(bottom) - top), true, sel, Some(WAct::Node(q.clone())), t);
+            // the badge picks the node too and shows its card
+            if !jobs.is_empty() {
+                ui.push(format!("node.{}.job", q.replace(':', ".")), "badge", format!("Job: {}", jobs.join(", ")), job_r, true, sel, Some(WAct::Node(q.clone())), job_tip);
+            }
         }
         // -- Legend
         let lg = Rect::new(4, 238, 76, 100);

@@ -535,7 +535,8 @@ pub(crate) mod tests {
         assert!(cx.nav.is_empty());
     }
 
-    /// STORYUI1-W gaps: a `board` choice holds the replies (no "Close the board first." dead end) until Esc closes the
+    /// STORYUI1-W gaps: a `board` choice holds the replies (no "Close the board first." dead end; STORYUI1-U2: its pane
+    /// stands in the dialogue box's place) until Esc closes the
     /// board back to the conversation; a `sequence` choice ends the talk and the map hands over to the stage, which
     /// shows its scenes and, at `end` `menu`, ends the game in play (Q7).
     #[test]
@@ -552,8 +553,9 @@ pub(crate) mod tests {
         talk.click_id(&mut cx, "choice.2").expect("the board reply");
         assert_eq!(talk.state(&cx)["board"], json!("tale:b"));
         frame(&mut talk, &mut cx, &mut g, 1.0);
-        let replies: Vec<Value> = talk.widgets().into_iter().filter(|w| w["kind"] == "choice").collect();
-        assert!(!replies.is_empty() && replies.iter().all(|w| w["enabled"] == json!(false)), "the replies wait while the board is open");
+        // STORYUI1-U2: the board pane takes the dialogue box's place (the shop's rule), so no reply is there to click
+        let replies: Vec<Value> = talk.widgets().into_iter().filter(|w| w["kind"] == "choice" && w["enabled"] == json!(true)).collect();
+        assert!(replies.is_empty() && talk.widgets().iter().any(|w| w["id"] == "board"), "the replies wait while the board pane is open");
         talk.back(&mut cx);
         let st = talk.state(&cx);
         assert!(st["board"].is_null() && !st["dialogue"].is_null(), "Esc closes the board back to the conversation");

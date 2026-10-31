@@ -299,3 +299,30 @@ sprites in cards, voice, choices inside vignettes (choices stay dialogue), gener
 Bunks and Facility screens (Q-96), the Extinguished screen and checkpoint logic (CAMPAIGN1), ending cards (Act 3),
 Act 2 content, Tess's reconnaissance (Q-91), abandoning from the board, journal changes, region-map markers for jobs
 inside a location, the main menu's art.
+
+## As built (STORYUI1-U2, 2026-11-01)
+
+- B11: the pane is `emberwake_gui/src/board.rs` (`BoardPane`), drawn by the region map in the shop's place (the
+  dialogue box hides, the map dims, as for the shop) in the shop's frame (`shop::frame_rect`). Header: the board's name
+  and the keeper's name; the intro wrapped under it; the section list (240 px at Normal, x text size) and the detail
+  scroll on their own; Close at the bottom left, Accept at the bottom right. Agent link: widgets `board`,
+  `board.row.<quest qid>`, `board.accept`, `board.close`, `board.errors`, scroll areas `board.list` and
+  `board.detail`; region state `board` (the qid) and `board_pane` ({selected, errors}).
+- B5, B6: a row is the name, then the node (Info blue) with the deadline right-aligned in Arterial Red, then the
+  section's line (dim); shortened texts keep their full text on the row's hover card. The first row is picked when the
+  pick is gone.
+- B7: the detail lists the status (with the row's line), the description, the steps as "Done:", "Now:" and "Then:",
+  "Rewards:" (the journal's `reward_lines`, the currency in the purse's name), "Pick N of:" (loot), "Reputation:",
+  "Where:" and the deadline line in Arterial Red.
+- B8: Accept is on only for an offered quest (its hover card gives the reason otherwise: under way, the lock reason,
+  no longer on offer); a refusal from the kit (another giver's quest) shows in red on the pane; a taken quest is logged
+  (`Quest taken: <name>.`) and moves to Under way.
+- B4: the `board` service's badge and legend icon is the quest badge (`ui/badges/quest.png`; drawn stand-in `!`), its
+  hover line "New work on the board" (`board::BADGE_TEXT`).
+- B10: the world map draws the quest badge (9 px) at the pin's top left (widget `node.<qid>.job`, which picks the node
+  and shows its card) and adds one `Job: <name>` line per job to the node's card; the deadline colour moved to
+  `board::DEADLINE`.
+- UI Gallery: entry Mission board (Screens) shows the pane on a fixture board without a game (`board::BoardSample`:
+  every section, two deadlines, Accept moves an offered row to Under way, Close or Esc goes back).
+- The U1 test that checked the replies stay off while a board is open now checks that the pane replaces the dialogue
+  box (no reply is clickable).

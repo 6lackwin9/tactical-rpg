@@ -7,6 +7,7 @@
 //! in battle.rs. Right click goes back.
 
 mod battle;
+mod board;
 mod dojo;
 mod forge;
 mod fx;
