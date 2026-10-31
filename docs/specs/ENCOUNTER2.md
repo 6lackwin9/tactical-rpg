@@ -18,6 +18,9 @@ History: `docs/HISTORY.md` holds no row on rooms, stay-behind or phase kills. De
 `decisions/combat.md`) kept zone maps in code "until S9 map data"; the new reason to author terrain as data is
 "Slice is data only" (2026-10-25): the Crucible needs a winch and a gate no code zone has (section 5.1).
 
+Mid-battle dialogue (the phase effect `talk` and the triggers `round` at a block, `downed`, `broken`) and scripted
+rounds (the encounter field `script`), ENCOUNTER2-C (M2): [ENCOUNTER2_C.md](ENCOUNTER2_C.md).
+
 ## 1. Goal
 
 Three kit hooks for encounters, each off unless an encounter names it, so the Ashlands "classic" runs byte-identical:
