@@ -490,6 +490,8 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     }
     errors.extend(encounter::arrival_errors(e));
     errors.extend(encounter::phase_problems(e, &|r: &str| check_ref(v, w, encounter::wave_field(true), "characters", r).is_empty()));
+    // ENCOUNTER2-C 5.2: the talks' trees and speakers, and the broken trigger's poise rule
+    errors.extend(encounter::world_talk_problems(v, w, e));
     errors.extend(encounter::objective_problems(v, e, &|r: &str| guest_ok(v, w, r)));
     errors.extend(encounter::morale_problems(e));
     errors.extend(encounter::start_status_problems(e.get("start_status").unwrap_or(&Value::Array(Vec::new()))));

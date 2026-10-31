@@ -1,6 +1,7 @@
 //! The encounter rules a battle runs under (scripts/combat/session/): EncounterObjectives (rout, hold, escape, slay,
 //! guests and protect), EncounterPhases (boss phases: hp_below and round triggers, line / wave / status / ai /
-//! enrage effects, HOOKS1's `deck` effect under the rule deck, ENCOUNTER2's `kill` effect and phase groups; PHASEFOLD:
+//! enrage effects, HOOKS1's `deck` effect under the rule deck, ENCOUNTER2's `kill` effect and phase groups,
+//! ENCOUNTER2-C's `talk` effect and the triggers `round` at a block, `downed` and `broken`; PHASEFOLD:
 //! the reinforcement wave as an `arrival` phase, and the fold of the retired `wave_*`
 //! fields) and EncounterMorale (enemy groups that break and surrender). Runtime parts only; validation stays
 //! with the content tools. The session calls them at the same points CatalogEncounter does.
@@ -299,7 +300,7 @@ impl PartyFate {
 pub struct PhaseDef {
     pub id: String,
     pub name: String,
-    /// kind, unit, pct, or_round | round | round, block (arrival)
+    /// kind, unit, pct, or_round | round, block | round, block (arrival) | unit, count (downed) | unit (broken)
     pub trigger: Obj,
     /// Parsed effects with their defaults.
     pub effects: Vec<Obj>,
@@ -317,6 +318,33 @@ pub const KILL_MAX_WITHIN: i32 = 11;
 /// beat). With false, `World::damage`'s S1 rule leaves such a unit at 1 HP (its SPARED cell follows the kill's cell).
 /// Each session starts from it (`Session::kill_past_unkillable`).
 pub const KILL_OVERRIDES_UNKILLABLE: bool = true;
+
+/// ENCOUNTER2-C DT1: the phase effect that opens a world dialogue tree over the battle (`dialogue` a tree ref, `speaker`
+/// "" or a character ref) and its keys. No rule reads it: the session only lists its cue (`Session::talks`).
+pub const TALK_EFFECT: &str = "talk";
+pub const TALK_EFFECT_KEYS: [&str; 3] = ["type", "dialogue", "speaker"];
+/// ENCOUNTER2-C PT2, PT3: the event triggers (a unit name's `count`-th unit down; a unit of the name broken, rule poise)
+/// and their keys. PT1: a `round` trigger's `block` (0 = the round start).
+pub const DOWNED: &str = "downed";
+pub const BROKEN: &str = "broken";
+pub const ROUND_KEYS: [&str; 3] = ["kind", "round", "block"];
+pub const DOWNED_KEYS: [&str; 3] = ["kind", "unit", "count"];
+pub const BROKEN_KEYS: [&str; 2] = ["kind", "unit"];
+/// ENCOUNTER2-C SN1: the unit names of the party side in an event trigger: `party` (any hero) and `party:<id>` (the
+/// hero whose hero key, or catalog party ref, is `<id>`).
+pub const PARTY_NAME: &str = "party";
+pub const PARTY_PREFIX: &str = "party:";
+
+/// ENCOUNTER2-C DT1: a talk a phase raised: the phase id, the dialogue tree and speaker refs, and when it fired
+/// (`block` 0 = the round start). The GUI opens it; sims, autoplay and the host never wait for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TalkCue {
+    pub phase: String,
+    pub dialogue: String,
+    pub speaker: String,
+    pub round: i32,
+    pub block: i32,
+}
 
 impl PhaseDef {
     pub fn effects_of<'a>(&'a self, kind: &'a str) -> impl Iterator<Item = &'a Obj> + 'a {
@@ -403,6 +431,13 @@ pub fn parse_phases(raw: &[Value]) -> Vec<PhaseDef> {
                 trigger.insert("or_round".into(), Value::from(value::int(&t, "or_round", 0)));
             } else if kind == "round" {
                 trigger.insert("round".into(), Value::from(value::int(&t, "round", 0)));
+                // ENCOUNTER2-C PT1: 0 = the round start (as before), 1.. = that block's start
+                trigger.insert("block".into(), Value::from(value::int(&t, "block", 0)));
+            } else if kind == DOWNED {
+                trigger.insert("unit".into(), Value::from(value::string(&t, "unit", "")));
+                trigger.insert("count".into(), Value::from(value::int(&t, "count", 1)));
+            } else if kind == BROKEN {
+                trigger.insert("unit".into(), Value::from(value::string(&t, "unit", "")));
             } else if kind == ARRIVAL {
                 trigger.insert("round".into(), Value::from(value::int(&t, "round", ARRIVAL_ROUND)));
                 trigger.insert("block".into(), Value::from(value::int(&t, "block", ARRIVAL_BLOCK)));
@@ -458,6 +493,11 @@ pub fn parse_phases(raw: &[Value]) -> Vec<PhaseDef> {
                             out.insert("units".into(), Value::from(value::strings(fx, "units")));
                             out.insert("by".into(), Value::from(value::string(fx, "by", "")));
                             out.insert("within".into(), Value::from(value::int(fx, "within", 0)));
+                        }
+                        // ENCOUNTER2-C DT1: kept for the battle screen's talk box; no rule reads it
+                        TALK_EFFECT => {
+                            out.insert("dialogue".into(), Value::from(value::string(fx, "dialogue", "")));
+                            out.insert("speaker".into(), Value::from(value::string(fx, "speaker", "")));
                         }
                         _ => {}
                     }
@@ -555,10 +595,63 @@ impl Phases {
                 continue;
             }
             let kind = value::string(&p.trigger, "kind", "");
-            if (kind == "round" && value::int(&p.trigger, "round", 0) == round) || (kind == "hp_below" && value::int(&p.trigger, "or_round", 0) == round) {
+            let at_start = value::int(&p.trigger, "block", 0) <= 0;
+            if (kind == "round" && at_start && value::int(&p.trigger, "round", 0) == round) || (kind == "hp_below" && value::int(&p.trigger, "or_round", 0) == round) {
                 self.due.push(p.id.clone());
             }
         }
+    }
+
+    /// ENCOUNTER2-C PT1: round phases with `block` > 0 are due at the start of that block of their round.
+    pub fn mark_block(&mut self, round: i32, block: i32) {
+        for p in &self.phases {
+            if self.fired.contains_key(&p.id) || self.dropped.contains(&p.id) || self.due.contains(&p.id) {
+                continue;
+            }
+            if value::string(&p.trigger, "kind", "") == "round" && block > 0 && value::int(&p.trigger, "round", 0) == round && value::int(&p.trigger, "block", 0) == block {
+                self.due.push(p.id.clone());
+            }
+        }
+    }
+
+    /// ENCOUNTER2-C PT2, PT3: the unit names the unfired `downed` and `broken` triggers watch (empty in classic).
+    pub fn event_names(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for p in &self.phases {
+            let kind = value::string(&p.trigger, "kind", "");
+            if (kind == DOWNED || kind == BROKEN) && !self.fired.contains_key(&p.id) && !self.dropped.contains(&p.id) {
+                let name = value::string(&p.trigger, "unit", "");
+                if !out.contains(&name) {
+                    out.push(name);
+                }
+            }
+        }
+        out
+    }
+
+    /// ENCOUNTER2-C PT2, PT3 at a block end: a `downed` phase is due once `down(unit)` (the units of the name at 0 HP)
+    /// reaches its `count`; a `broken` phase once `broken(unit)` (a unit of the name broken this round; never without
+    /// the rule poise). Due phases fire at the next block start, or the next round start after the last block.
+    pub fn check_events(&mut self, down: impl Fn(&str) -> i32, broken: impl Fn(&str) -> bool) {
+        for p in &self.phases {
+            if self.fired.contains_key(&p.id) || self.dropped.contains(&p.id) || self.due.contains(&p.id) {
+                continue;
+            }
+            let name = value::string(&p.trigger, "unit", "");
+            let met = match value::string(&p.trigger, "kind", "").as_str() {
+                DOWNED => down(&name) >= value::int(&p.trigger, "count", 1).max(1),
+                BROKEN => broken(&name),
+                _ => false,
+            };
+            if met {
+                self.due.push(p.id.clone());
+            }
+        }
+    }
+
+    /// ENCOUNTER2-C DT3: some phase holds a `talk` effect.
+    pub fn has_talk(&self) -> bool {
+        self.phases.iter().any(|p| p.effects_of(TALK_EFFECT).next().is_some())
     }
 
     fn applies(at: (i32, i32), round: i32) -> bool {

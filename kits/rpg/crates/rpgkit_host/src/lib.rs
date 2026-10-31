@@ -404,6 +404,10 @@ pub fn state_of(s: &Session) -> Value {
     if let Some(g) = &w.hold {
         state["hold"] = json!({"tiles": g.tiles.iter().map(|c| json!([c.x, c.y])).collect::<Vec<_>>(), "label": g.label, "holder": g.holder, "open": g.is_open(w), "note": g.note(w)});
     }
+    // ENCOUNTER2-C DT3: the talk cues so far, only when the encounter has a talk effect (the host never waits for one)
+    if s.phases.has_talk() {
+        state["talks"] = Value::Array(s.talks().iter().map(|t| json!({"phase": t.phase, "dialogue": t.dialogue, "speaker": t.speaker, "round": t.round, "block": t.block})).collect());
+    }
     state
 }
 

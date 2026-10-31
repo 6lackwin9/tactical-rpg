@@ -55,7 +55,15 @@ fn at_freeze(message: &str) -> String {
 }
 
 fn retired(message: &str) -> bool {
-    message.starts_with("Purse loot '") || message == "Purse key 'loot' moved to key_loot (REWARD1)." || art_retired(message)
+    message.starts_with("Purse loot '") || message == "Purse key 'loot' moved to key_loot (REWARD1)." || art_retired(message) || round_floor_retired(message)
+}
+
+/// Retired parity (ENCOUNTER2-C1, HISTORY 2026-11-01): a phase `round` trigger may name round 1 (a battle talk opens
+/// round 1, ENCOUNTER2_C PT1), so the range message reads "round must be 1..N." where Godot's read "2..N.". The
+/// "Phase '<p>': round must be ..." message leaves the comparison on both sides (the recorded encounters case
+/// "Bad Id"); the hp_below `or_round` floor stays 2 and its message is still compared.
+fn round_floor_retired(message: &str) -> bool {
+    message.starts_with("Phase ") && message.contains("': round must be ")
 }
 
 /// Retired parity (ASSETORG2, HISTORY 2026-10-22): the art checks read the asset layers now, not Godot's asset manifest

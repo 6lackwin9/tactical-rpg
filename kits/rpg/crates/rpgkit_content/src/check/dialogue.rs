@@ -536,6 +536,26 @@ fn order_errors(names: &[String], label: &str) -> Vec<String> {
     errors
 }
 
+/// ENCOUNTER2-C DT9 (decision "ENCOUNTER2-C answers" Q-C2): the effects a battle talk may run.
+pub const BATTLE_TALK_EFFECTS: [&str; 2] = ["set_flag", "add_flag"];
+
+/// ENCOUNTER2-C 5.2: tree `id` opened by a phase `talk`: every node and choice effect is set_flag or add_flag (one
+/// error per other effect, by node).
+pub fn battle_talk_errors(id: &str, tree: &Dict) -> Vec<String> {
+    let mut errors = Vec::new();
+    for node in json::aget(tree, "nodes").iter().filter_map(Value::as_object) {
+        let nid = json::s(node, "id");
+        let choice_effects = json::aget(node, "choices").iter().filter_map(Value::as_object).flat_map(|c| json::aget(c, "effects").iter());
+        for fx in json::aget(node, "effects").iter().chain(choice_effects).filter_map(Value::as_object) {
+            let effect = json::s(fx, "effect");
+            if !BATTLE_TALK_EFFECTS.contains(&effect.as_str()) {
+                errors.push(format!("Battle talk '{id}' node '{nid}': effect '{effect}' cannot run in a battle."));
+            }
+        }
+    }
+    errors
+}
+
 /// DialogueRules.line_errors: one service line (a known id, text, known tokens).
 pub fn line_errors(id: &str, text: &Value, label: &str) -> Vec<String> {
     let mut errors = Vec::new();

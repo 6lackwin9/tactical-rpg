@@ -6,7 +6,7 @@
 
 use crate::ai;
 use crate::command::CmdKind;
-use crate::encounter::{self, HoldGate, Morale, Objectives, PartyFate, Phases, StayBehind, LEADER_TIERS};
+use crate::encounter::{self, HoldGate, Morale, Objectives, PartyFate, Phases, StayBehind, TalkCue, LEADER_TIERS};
 use crate::grid::{Grid, TerrainTable, V2};
 use crate::plan::Plan;
 use crate::resolver::Resolver;
@@ -262,6 +262,8 @@ pub struct Session {
     /// ("[Kill] <who> fall."). The resolver log itself is untouched (host replies and parity read it); `log_lines`
     /// merges the two.
     pub encounter_lines: Vec<(usize, String)>,
+    /// ENCOUNTER2-C DT1: the talk cues the phases raised, oldest first (`talks`; no rule reads them).
+    talks: Vec<TalkCue>,
     /// Unit -> its hero key (a party member id or a world character), when it has one.
     hero_keys: IndexMap<UnitId, String>,
     unit_keys: IndexMap<UnitId, String>,
@@ -484,6 +486,7 @@ impl Session {
             kill_past_unkillable: encounter::KILL_OVERRIDES_UNKILLABLE,
             spared_logged: 0,
             encounter_lines: Vec::new(),
+            talks: Vec::new(),
             hero_keys,
             unit_keys,
             units_by_key,
@@ -825,6 +828,10 @@ impl Session {
         // ENCOUNTER2 P1: kill effects after the phase's own cell, each with its cell (none in classic)
         for fx in p.effects_of(encounter::KILL_EFFECT) {
             self.phase_kill(fx, &p.name, round, block);
+        }
+        // ENCOUNTER2-C DT1: a talk only adds its cue (no cell, no event line, no draw)
+        for fx in p.effects_of(encounter::TALK_EFFECT) {
+            self.talks.push(TalkCue { phase: id.to_string(), dialogue: value::string(fx, "dialogue", ""), speaker: value::string(fx, "speaker", ""), round, block });
         }
         self.phases.mark_fired(id, round, block);
     }
@@ -1377,6 +1384,8 @@ impl Session {
     /// reinforcement wave) enters; each takes the step (the block resolves on the next one).
     fn on_block_start(&mut self) -> bool {
         let (round, block) = (self.current_round, self.current_block);
+        // ENCOUNTER2-C PT1: round phases set at this block join the due ones (none in classic)
+        self.phases.mark_block(round, block);
         if let Some(id) = self.phases.next_due() {
             self.fire_phase(&id, round, block);
             return true;
@@ -1441,6 +1450,7 @@ impl Session {
     fn on_block_end(&mut self) {
         let by_ref = self.units_by_ref.clone();
         self.phases.check_block_end(&self.w, |r| by_ref.get(r).and_then(|l| l.first().copied()));
+        self.check_phase_events();
         if !self.morale.on {
             return;
         }
@@ -1452,6 +1462,40 @@ impl Session {
         for c in surrendering {
             self.w.withdraw_in_place(c);
         }
+    }
+
+    /// ENCOUNTER2-C PT2, PT3: the `downed` and `broken` triggers at a block end (nothing without them).
+    fn check_phase_events(&mut self) {
+        let names = self.phases.event_names();
+        if names.is_empty() {
+            return;
+        }
+        let units: IndexMap<String, Vec<UnitId>> = names.iter().map(|n| (n.clone(), self.units_named(n))).collect();
+        let w = &self.w;
+        let down = |n: &str| units.get(n).map_or(0, |l| l.iter().filter(|&&c| !w.units[c].is_alive()).count() as i32);
+        let broken = |n: &str| units.get(n).is_some_and(|l| l.iter().any(|&c| crate::poise::state(w, c).is_some_and(|p| p.broken)));
+        self.phases.check_events(down, broken);
+    }
+
+    /// ENCOUNTER2-C SN1 (without `#n`): the units a trigger's unit name covers: `party` every hero (guests aside),
+    /// `party:<id>` the hero whose hero key is `<id>` (or built from the party ref `<id>`), else every unit built from
+    /// the encounter ref.
+    pub fn units_named(&self, name: &str) -> Vec<UnitId> {
+        let heroes = || self.w.allies.iter().copied().filter(|c| !self.guests.contains(c));
+        if name == encounter::PARTY_NAME {
+            return heroes().collect();
+        }
+        if let Some(id) = name.strip_prefix(encounter::PARTY_PREFIX) {
+            let built = self.units_of_ref(id);
+            return heroes().filter(|&c| self.hero_key(c) == id || built.contains(&c)).collect();
+        }
+        self.units_of_ref(name)
+    }
+
+    /// ENCOUNTER2-C DT1: every talk cue the phases raised so far, in fire order (the screen opens each new one once;
+    /// sims, autoplay and the host never wait for one).
+    pub fn talks(&self) -> &[TalkCue] {
+        &self.talks
     }
 
     /// HOOKS1-H follow-up (user 2026-10-29): the verdict's wipe-outs: every hero (guests aside) down, or no enemy that

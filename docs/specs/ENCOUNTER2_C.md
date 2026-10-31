@@ -8,6 +8,21 @@ Lane: logic first (kit schema and rules, then the game screen), then asset (the 
 Touches: by slice, section 8
 Paths: `rpgkit_*` crates are under `kits/rpg/crates/`, `emberwake_*` under `games/emberwake/crates/`.
 
+As built, C1 (2026-11-01; sections 3.1, 3.2, 5.2): `encounter.rs` `TALK_EFFECT`, `TalkCue`, `Phases::mark_block`,
+`event_names`, `check_events`, `has_talk`; `session.rs` `talks()`, `units_named`, `check_phase_events` (after the hp_below
+check at each block end); the host `state` key `talks`; checks `check/encounter.rs` `event_trigger_errors`,
+`talk_effects`, `world_talk_problems` (called from `check/world.rs`) and `check/dialogue.rs` `battle_talk_errors` (node
+and choice effects). Choices the spec left open: a `round` trigger may name round 1 (the check's floor moved from 2 to
+1: "round must be 1..N"; needed by PT1 and section 10; the hp_below `or_round` floor stays 2; checks parity narrowed,
+HISTORY 2026-11-01); the poise-rule check of a `broken` trigger runs for world encounters only (a catalog encounter
+plays classic unless the Arena picks a ruleset, so it is not checked there; without poise it never fires); the texts not given in 5.2 are "Phase '`{p}`': block must be
+0..`{n}`.", "Phase '`{p}`': trigger unit '`{u}`' is not in this encounter.", "Phase '`{p}`': trigger hero '`{id}`' is not
+in this encounter's party.", "Phase '`{p}`': count must be 1..`{n}`.", "Phase '`{p}`': one talk per phase.", "Phase
+'`{p}`': a talk needs a dialogue." and the world ref error for an unknown speaker ("Phase '`{p}`': talk speaker: ...");
+a downed / broken unit name may also be a guest ref. The loader parity needed no list change in C1 (both `phases` rows
+were in HELP_CHANGED already; only its comment names C1); `script` joins AFTER_GODOT with C3. Tests:
+`rpgkit_battle/tests/battle_talk.rs`, `rpgkit_content/tests/battle_talk_checks.rs`, `rpgkit_host/tests/battle_talk.rs`.
+
 History: `docs/HISTORY.md` row "Hand-scripted combat layer (10-block rounds, scripted commands)" (deprecated before
 2026-10: "Scripted battles could not express planning, AP and AI; double maintenance"). That reason does not hold here:
 a scripted round is not a second combat layer. It is data that feeds the same picks the player makes (INPUT1's `pick`)
