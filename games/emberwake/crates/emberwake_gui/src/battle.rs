@@ -2,8 +2,9 @@
 //! panels, text, hover cards and menus are drawn smooth at the window's real resolution (painter.rs). Every change goes
 //! through the command API (emberwake_host on aegis_host), the same one `aegis serve` and the agent link use.
 //! Two modes: the Test Arena (a catalog encounter, Restart / Play again) and a world battle (GameEncounter: the saved
-//! party at its stored HP against a world encounter; on Continue the HP is written back, the runner's after_fight
-//! settles the outcome and the results popup opens over the map).
+//! party at its stored HP against a world encounter; on Continue the runner's after_fight settles the battle's tally
+//! (the kit settles the party: HP, the stay-behind and roster rules; then the rewards) and the results popup opens
+//! over the map).
 //! Mouse: click a hero to select; click a foe, an ally, the hero itself or a tile for its options; hover anything for
 //! details; right click closes a menu or undoes the hero's last step; the wheel scrolls the log. Keys: Enter confirm,
 //! Space step / next round, A autoplay, Z undo, L log, R restart (arena), Esc close; hold Alt to outline every unit,
@@ -1296,14 +1297,13 @@ impl BattleScreen {
         if active.is_empty() {
             return Err("No active party member to fight.".into());
         }
-        // ROSTER1 BK6: the world refuses a fight its encounter's party_min does not allow
-        let short = emberwake_world::roster::party_min_text(&d, gs, &enc_ref);
+        let world = emberwake_world::battle::fight_world(&d, gs, &enc_ref);
+        let entry = d.resolve(&world, "encounters", &s(hit, "id"));
+        // ROSTER1 BK6: the world refuses a fight its encounter's party_min does not allow (the fight world's entry)
+        let short = emberwake_world::roster::party_min_refusal(gs, entry);
         if !short.is_empty() {
             return Err(short);
         }
-        let hit_world = s(hit, "_world");
-        let world = if d.lineage(&gs.world_id).contains(&hit_world) { gs.world_id.clone() } else { hit_world };
-        let entry = d.resolve(&world, "encounters", &s(hit, "id"));
         // RULESET1 3.1.2: the battle plays by the ruleset of the world that resolves the encounter; V3: the world's plan
         // reveal flag in the game state reveals the enemy plans
         let mut def = emberwake_world::battle::encounter_def_in(&d, gs, &world, entry);
@@ -1832,8 +1832,9 @@ impl BattleScreen {
         self.session().final_outcome()
     }
 
-    /// World battle over: the world settles the party (ROSTER1-L `roster::settle_party`: pouches, the world's rule
-    /// row (wounded, departures), HP), the runner settles the outcome, the results popup opens.
+    /// World battle over: the runner settles the fight from the battle's tally (REWARD1's foes and ENCOUNTER2 W1's
+    /// party side: the kit's `battle::apply` settles the party first by `roster::settle_party`: the stay-behind `then`,
+    /// the world's rule row, HP; then the rewards), the results popup opens.
     fn settle(&mut self, cx: &mut Cx) {
         let outcome = self.outcome();
         let Mode::World { fight, runner, members } = &self.mode else { return };
@@ -1841,12 +1842,8 @@ impl BattleScreen {
             return;
         }
         let d = cx.data.clone();
-        // REWARD1: how the battle left each enemy, for the rewards per defeated enemy
-        let tally = emberwake_world::battle::Tally::from_session(self.session());
-        let ends = emberwake_world::roster::hero_ends(self.session(), members);
-        let end = emberwake_world::roster::FightEnd::of(self.session(), &self.class_world);
+        let tally = emberwake_world::battle::Tally::of_world_fight(self.session(), members, &self.class_world);
         let gs = cx.gs_mut();
-        emberwake_world::roster::settle_party(&d, gs, &end, &ends);
         let res = after_fight(&d, gs, runner, fight, &outcome, Some(&tally));
         cx.set_busy(false);
         if !json::b(&res, "ok", false) {

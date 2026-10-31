@@ -1,5 +1,6 @@
 //! REWARD1: rewards per defeated enemy (games/emberwake/docs/specs/REWARD1.md section 11). Scratch copies of the shipped
 //! data get the purses, loot tables, key loot and objective rewards a case needs (written through the content store).
+//! ENCOUNTER2-W: a won hold escape read by the world (the stay flag, the holder captured, the save round trip).
 
 use aegis_core::json::{self, Dict};
 use emberwake_content::store;
@@ -150,7 +151,7 @@ fn fates_read_killed_surrendered_fled_and_standing() {
 
 /// A tally of `qid`'s roster: `fate(key)` per roster foe.
 fn tally(d: &Data, qid: &str, fate: &dyn Fn(&str) -> Fate) -> Tally {
-    Tally { foes: battle::roster(d, "ashlands", qid).into_iter().map(|f| Foe { fate: fate(&f.key), key: f.key, unit_ref: f.unit_ref }).collect() }
+    Tally { foes: battle::roster(d, "ashlands", qid).into_iter().map(|f| Foe { fate: fate(&f.key), key: f.key, unit_ref: f.unit_ref }).collect(), ..Default::default() }
 }
 
 fn game(d: &Data) -> GameState {
@@ -387,4 +388,72 @@ fn the_same_save_and_tally_give_the_same_rewards() {
     let (ra, rb) = (battle::apply(&d, &mut a, qid, "fled", &t), battle::apply(&d, &mut b, qid, "fled", &t));
     assert_eq!(ra, rb);
     assert_eq!(a.to_value(), b.to_value());
+}
+
+// ---- ENCOUNTER2-W: the world reads the hold escape's result ---------------------------------------------------
+
+use emberwake_battle::session::Prebuilt;
+use emberwake_world::roster;
+
+/// The flag the test hold names its holder in (ENCOUNTER2 W2).
+const HOLD_FLAG: &str = "test_winch_held";
+
+#[test]
+fn a_won_hold_battle_captures_the_holder_and_names_it_in_the_flag() {
+    // ENCOUNTER2_TASKS 1, row W (W2, W3; ROSTER1_TASKS 1, row W): a won hold battle with `flag` and `then` capture:
+    // the flag holds the holder's member id; the holder is captured in `party.departed` (cause stayed) through
+    // `roster::depart` and out of `active_ids`; a save round trip keeps both. A test-only encounter in a scratch copy
+    // (the first shipped world encounter's rows as its template), fought by the start party as the battle screen
+    // fields it, settled through the dialogue runner from the battle's tally.
+    let shipped = Data::open(&data_dir()).unwrap().0;
+    let mut row: Dict = shipped.resolve("ashlands", "encounters", "ash_scouts").iter().filter(|(k, _)| !k.starts_with('_')).map(|(k, v)| (k.clone(), v.clone())).collect();
+    for (k, v) in json!({
+        "id": "w_hold_test", "rows": vec![".".repeat(12); 9], "exits": [[11, 3], [11, 4]], "objective": "escape", "objective_count": 1,
+        "stay_behind": {"mode": "hold", "tiles": [[10, 1]], "tiles_label": "the winch", "flag": HOLD_FLAG, "then": "capture"}
+    }).as_object().unwrap() {
+        row.insert(k.clone(), v.clone());
+    }
+    let (_s, d) = scratch("hold", &[(Some("ashlands"), "encounters", "w_hold_test", Value::Object(row))]);
+    let mut gs = game(&d);
+    // a test-only second member (a copy of the first under its own id), so someone escapes while the holder holds
+    let mut escaper = gs.party.members[0].clone();
+    escaper.id = "w_escaper".into();
+    escaper.lore_ref = String::new();
+    gs.party.members.push(escaper);
+    gs.party.active_ids = gs.party.members.iter().map(|m| m.id.clone()).collect();
+    let world = battle::fight_world(&d, &gs, "w_hold_test");
+    let entry = d.resolve(&world, "encounters", "w_hold_test");
+    let def = battle::encounter_def_in(&d, &gs, &world, entry);
+    let (mut party, mut members) = (Vec::new(), Vec::new());
+    for m in gs.party.active_members() {
+        let f = roster::field_unit(&d, &gs, m, &world).expect("a start member takes the field");
+        party.push(Prebuilt { unit: f.unit, art: String::new(), palette: String::new(), profile: f.profile, key: m.id.clone() });
+        members.push((m.id.clone(), f.pouch_unloaded));
+    }
+    assert!(members.len() >= 2, "a holder and someone to escape: {members:?}");
+    let mut s = Session::start_with(d.cat.clone(), def, &WorldRoster { d: &d, world: world.clone() }, party);
+    assert!(s.stay.is_some(), "the scratch row is a hold escape");
+    // the hold's end (H4): the first hero holds the winch, every other hero withdrew through an exit
+    let heroes: Vec<usize> = s.w.allies.iter().copied().take(members.len()).collect();
+    s.objective.stayed = vec![heroes[0]];
+    for &h in &heroes[1..] {
+        s.w.units[h].is_withdrawn = true;
+    }
+    let holder = members[0].0.clone();
+    let name = progression::display_name(&d, gs.party.member(&holder).unwrap());
+    let tally = Tally::of_world_fight(&s, &members, &world);
+    let res = emberwake_world::dialogue::after_fight(&d, &mut gs, &json::obj([("encounter", "w_hold_test".into())]), "won", Some(&tally));
+    assert!(json::b(&res, "ok", false), "{res:?}");
+    assert_eq!(gs.flag(HOLD_FLAG), Some(&json!(holder)), "W2");
+    let rec = gs.party.departed_of(&holder).expect("W3: the holder departed");
+    assert_eq!((rec.life.as_str(), rec.cause.as_str(), rec.encounter.as_str()), ("captured", "stayed", "ashlands:w_hold_test"));
+    assert!(gs.party.member(&holder).is_none() && !gs.party.active_ids.contains(&holder), "out of the party and the deployment");
+    assert!(members[1..].iter().all(|(m, _)| gs.party.member(m).is_some()), "the escapers come home (no rule row: HEAL1 classic)");
+    assert_eq!(res["stay_lines"], json!([emberwake_battle::encounter::DEFAULT_RESULT_LINE.replace("{name}", &name)]), "W4");
+    assert_eq!(res["departed"], json!([{"member": holder, "life": "captured"}]));
+    // the save round trip keeps the departure and the flag (ROSTER1-L's save keys; no key of W's own)
+    let back = GameState::from_dict(&d, gs.to_value().as_object().unwrap());
+    assert_eq!((back.party.departed.clone(), back.flag(HOLD_FLAG).cloned()), (gs.party.departed.clone(), Some(json!(holder))));
+    assert!(back.validate(&d).is_empty(), "{:?}", back.validate(&d));
+    assert_eq!(back.to_value(), gs.to_value());
 }

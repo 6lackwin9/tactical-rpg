@@ -377,3 +377,15 @@ bleed-out rounds, wounded percent after the baseline).
   catalog unit whose id is a roster word is one content-check error; the keepsake check test counts every added
   error (only the npc case filters).
 - `settle_party` still runs from the battle screen (it moves with ENCOUNTER2-W).
+
+## As built (ENCOUNTER2-W, 2026-11-01)
+
+- 3.2 "on every runner": `battle::apply` settles the battle tally's party side (`battle::Tally::of_world_fight`) before
+  the rewards and CAMPAIGN1's tick, so every runner (`explore`, `travel`, `dialogue`, `story`, campaign `trigger`)
+  applies the rules and the battle screen only builds the tally (L5's order kept). `FightEnd` gains `then`; the
+  stayed and stood rows of the 3.2 table depart with `capture` or `kill` in any world (no row needed).
+- A fight settled without a battle (the debug skip, the campaign preview: `battle::settle` with no tally) settles the
+  active members (`roster::default_ends`: standing at the stored HP, every one downed on a loss) only in a world with
+  a rule row; a classic world keeps HEAL1's no-battle path, so `journey` and the saves suites are unchanged.
+- BK6 at the battle start reads the fight world's entry (`roster::party_min_refusal(gs, entry)`, the world from
+  `battle::fight_world`); the dialogue precheck keeps `party_min_text`.

@@ -6,8 +6,9 @@
 
 use crate::data::Data;
 use crate::state::GameState;
-use crate::{progression, purse, quest, rolls};
+use crate::{progression, purse, quest, rolls, roster};
 use aegis_core::json::{self, int, Dict};
+use rpgkit_battle::encounter::{PartyFate, StayBehind};
 use rpgkit_battle::session::{EncounterDef, Fate, Session};
 use serde_json::Value;
 
@@ -213,11 +214,17 @@ pub struct Foe {
     pub fate: Fate,
 }
 
-/// How a fight left each roster enemy. Built from a battle (`from_session`), or `None` in `after_fight` for a fight
+/// How a fight left each roster enemy and, for a world battle, each fielded member. Built from a battle
+/// (`from_session`: the foes; `of_world_fight`: the foes and the party), or `None` in `after_fight` for a fight
 /// settled without one (the default tally).
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Tally {
     pub foes: Vec<Foe>,
+    /// ENCOUNTER2 W1: the fielded members' ends with their S3 fates (member id, fate, HP, pouch); `apply` settles them
+    /// (`roster::settle_party`) before the rewards. Empty = no party side (the party is left as it is).
+    pub party: Vec<roster::HeroEnd>,
+    /// The world whose encounter was fought (`roster::field_unit`'s world; "" = `fight_world`).
+    pub world: String,
 }
 
 impl Tally {
@@ -228,13 +235,20 @@ impl Tally {
             let n = foes.iter().filter(|f| f.unit_ref == r).count();
             foes.push(Foe { key: format!("{r}#{n}"), unit_ref: r, fate });
         }
-        Tally { foes }
+        Tally { foes, ..Default::default() }
+    }
+
+    /// A world battle's tally: the foes (`from_session`) and the party side (`roster::hero_ends` of the fielded
+    /// `members`: member id and unloaded pouch ids, in the order they were fielded), fought in world `world`. Every
+    /// screen or headless runner that plays a world fight passes this to its runner's `after_fight`.
+    pub fn of_world_fight(s: &Session, members: &[(String, Vec<String>)], world: &str) -> Self {
+        Tally { party: roster::hero_ends(s, members), world: world.to_string(), ..Self::from_session(s) }
     }
 
     /// REWARD1 2.5, no battle: won = every roster enemy killed; lost and fled = every one standing.
     pub fn default_for(d: &Data, world: &str, encounter_qid: &str, outcome: &str) -> Self {
         let fate = if outcome == "won" { Fate::Killed } else { Fate::Standing };
-        Tally { foes: roster(d, world, encounter_qid).into_iter().map(|f| Foe { key: f.key, unit_ref: f.unit_ref, fate }).collect() }
+        Tally { foes: roster(d, world, encounter_qid).into_iter().map(|f| Foe { key: f.key, unit_ref: f.unit_ref, fate }).collect(), ..Default::default() }
     }
 
     /// Each roster enemy's fate (a key missing from the tally: standing), and a note per tally foe not in the roster.
@@ -283,7 +297,9 @@ fn claimable(d: &Data, gs: &GameState, world: &str, r: &str) -> String {
 
 /// REWARD1 section 6: {ok, errors, xp: member id -> award, advanced, rewards}. `rewards` = {foes, defeated: {slain,
 /// surrendered, fled}, gold (the purse share), drops: [{item, count, from}], key_loot: [loot qid], key_missed:
-/// [{loot, kill}], objective: {gold, loot}, notes}; `gold` = share + objective gold, paid in one go.
+/// [{loot, kill}], objective: {gold, loot}, notes}; `gold` = share + objective gold, paid in one go. First the party
+/// side (`settle_party_side`: the tally's fielded members settled by `roster::settle_party`, the stay-behind flag) and
+/// its keys `party_fates`, `stay_lines`, `wounded`, `departed` (`PARTY_KEYS`).
 pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, tally: &Tally) -> Dict {
     let done = |ok: bool, errors: &[String], xp: Dict, advanced: &[String]| {
         let mut out = json::ok_result(ok, errors);
@@ -298,8 +314,11 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     let world = gs.world_id.clone();
     let enc = d.resolve(&world, "encounters", encounter_qid).clone();
     let enc_world = json::s_or(&enc, "_world", &world);
+    // 1. the party side first (ROSTER1 3.2 and L5, ENCOUNTER2 W1-W4): before the XP, the quest hook and the tick
+    let (party_keys, party_notes) = settle_party_side(d, gs, &enc, encounter_qid, outcome, tally);
     let roster = roster(d, &world, encounter_qid);
     let (fates, mut notes) = tally.fates_of(&roster);
+    notes.extend(party_notes);
     let defeated: Vec<bool> = fates.iter().map(|f| f.defeated()).collect();
     // 2. XP for the defeated enemies only (none: no award at all). A won fight whose roster does not resolve from the
     // party's world (a road fight on another world's route) gives every member a 0 award, as before REWARD1 (Godot).
@@ -390,6 +409,7 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     ]);
     let mut out = done(true, &[], xp, &advanced);
     out.insert("rewards".into(), Value::Object(rewards));
+    out.extend(party_keys);
     if paid_gold > 0 {
         out.insert("gold".into(), int(paid_gold));
     }
@@ -403,23 +423,110 @@ pub fn apply(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, t
     out
 }
 
-/// `apply` with `tally`, or with the default tally when the fight was settled without a battle (REWARD1 2.5).
+/// The world whose encounter `encounter_ref` is fought from the played world: the played world when the encounter
+/// resolves within its lineage, else the connected world that holds it (a road fight on another world's route). The
+/// battle screen builds the fight there (`roster::field_unit`, the ruleset, `party_min`).
+pub fn fight_world(d: &Data, gs: &GameState, encounter_ref: &str) -> String {
+    let hit_world = json::s(d.resolve(&gs.world_id, "encounters", encounter_ref), "_world");
+    if hit_world.is_empty() || d.lineage(&gs.world_id).contains(&hit_world) {
+        gs.world_id.clone()
+    } else {
+        hit_world
+    }
+}
+
+/// ENCOUNTER2 3.3 and ROSTER1 3.2, the party side of `apply` (step 1): with `tally.party`, `roster::settle_party` (the
+/// stay-behind `then`, the act's rule row, HP, keepsakes) in the fight's world; W2: the encounter's `stay_behind.flag`
+/// set to the first member who stayed or stood ("" when none) on every outcome. Returns the result keys
+/// (`party_fates`: [[member, fate]] (W1); `stay_lines`: one `result_line` per stayed or stood hero (W4), named before
+/// anyone departs; `wounded`: [member]; `departed`: [{member, life}] (ROSTER1-U's lines); each only when not empty) and
+/// the notes (a flag the world refuses). The encounter (its `stay_behind`, objective and qid) is read as the fight's
+/// world sees it (`tally.world`, else `fight_world`), as the battle was built: a road fight on another world's route
+/// may not resolve from the played world (`played_enc`, then only the fallback).
+fn settle_party_side(d: &Data, gs: &mut GameState, played_enc: &Dict, encounter_qid: &str, outcome: &str, tally: &Tally) -> (Dict, Vec<String>) {
+    let (mut out, mut notes) = (Dict::new(), Vec::new());
+    let world = if tally.world.is_empty() { fight_world(d, gs, encounter_qid) } else { tally.world.clone() };
+    let in_world = d.resolve(&world, "encounters", encounter_qid).clone();
+    let enc = if in_world.is_empty() { played_enc } else { &in_world };
+    let stay = StayBehind::read(enc);
+    let stayers: Vec<&roster::HeroEnd> = tally.party.iter().filter(|e| matches!(e.fate, Some(PartyFate::Stayed | PartyFate::Stood))).collect();
+    let lines: Vec<String> = match &stay {
+        Some(b) => stayers
+            .iter()
+            .map(|e| {
+                let name = gs.party.member(&e.member).map_or_else(|| e.member.clone(), |m| progression::display_name(d, m));
+                b.result_line.replace("{name}", &name)
+            })
+            .collect(),
+        None => Vec::new(),
+    };
+    let first_stayer = stayers.first().map(|e| e.member.clone()).unwrap_or_default();
+    if !tally.party.is_empty() {
+        let f = roster::FightEnd {
+            outcome: outcome.to_string(),
+            encounter: json::s_or(enc, "_qid", encounter_qid),
+            world,
+            escape: json::s(enc, "objective") == "escape",
+            then: stay.as_ref().map(|b| b.then.clone()).unwrap_or_default(),
+        };
+        let settled = roster::settle_party(d, gs, &f, &tally.party);
+        let fates: Vec<Value> = tally.party.iter().filter_map(|e| e.fate.map(|x| Value::Array(vec![e.member.clone().into(), x.name().into()]))).collect();
+        if !fates.is_empty() {
+            out.insert("party_fates".into(), Value::Array(fates));
+        }
+        if !settled.wounded.is_empty() {
+            out.insert("wounded".into(), json::strs(&settled.wounded));
+        }
+        if !settled.departed.is_empty() {
+            let departed = settled.departed.iter().map(|(m, life)| json::obj([("member", m.clone().into()), ("life", life.clone().into())]).into()).collect();
+            out.insert("departed".into(), Value::Array(departed));
+        }
+    }
+    if let Some(b) = stay.as_ref().filter(|b| !b.flag.is_empty()) {
+        let err = quest::set_flag(d, gs, &b.flag, Value::String(first_stayer));
+        if !err.is_empty() {
+            notes.push(err);
+        }
+    }
+    if !lines.is_empty() {
+        out.insert("stay_lines".into(), json::strs(&lines));
+    }
+    (out, notes)
+}
+
+/// `apply` with `tally`, or with the default tally when the fight was settled without a battle (REWARD1 2.5). ROSTER1
+/// 3.2 on every runner: in a world with a rule row (`roster::rule`) the default tally also carries the party side
+/// (`roster::default_ends` in `fight_world`), so a fight resolved without a battle still applies the row; a classic
+/// world's default tally has none (the party is left as before).
 pub fn settle(d: &Data, gs: &mut GameState, encounter_qid: &str, outcome: &str, tally: Option<&Tally>) -> Dict {
     match tally {
         Some(t) => apply(d, gs, encounter_qid, outcome, t),
         None => {
-            let t = Tally::default_for(d, &gs.world_id.clone(), encounter_qid, outcome);
+            let mut t = Tally::default_for(d, &gs.world_id.clone(), encounter_qid, outcome);
+            if roster::rule(d, gs).is_some() {
+                t.world = fight_world(d, gs, encounter_qid);
+                t.party = roster::default_ends(d, gs, &t.world, outcome);
+            }
             apply(d, gs, encounter_qid, outcome, &t)
         }
     }
 }
 
-/// The keys an `after_fight` result carries from `apply`: `rewards`, `gold` when some was paid, and `campaign` (the
-/// campaign events, CAMPAIGN1 W1) when there are some.
+/// The party side's result keys (`settle_party_side`), carried by every runner's `after_fight`.
+pub const PARTY_KEYS: [&str; 4] = ["party_fates", "stay_lines", "wounded", "departed"];
+
+/// The keys an `after_fight` result carries from `apply`: `rewards`, `gold` when some was paid, `campaign` (the
+/// campaign events, CAMPAIGN1 W1) when there are some, and the party side's `party_fates`, `stay_lines`, `wounded`
+/// and `departed` when `apply` set them (ENCOUNTER2 W1, W4; ROSTER1 3.2).
 pub fn result_keys(applied: &Dict) -> Dict {
     let mut out = Dict::new();
     if let Some(r) = applied.get("rewards") {
         out.insert("rewards".into(), r.clone());
+    }
+    for key in PARTY_KEYS {
+        if let Some(v) = applied.get(key) {
+            out.insert(key.into(), v.clone());
+        }
     }
     if json::i(applied, "gold", 0) > 0 {
         out.insert("gold".into(), int(json::i(applied, "gold", 0)));

@@ -134,6 +134,18 @@ The theme (user): the first loss is a choice; as losses pile up they become the 
 - W4. The Results popup adds one line per stayed or stood hero ("Kaelen held the winch.", from the encounter's
   `result_line`, default "`{name}` stayed behind.").
 
+As built (ENCOUNTER2-W, 2026-11-01): W1's `Tally.party` holds `roster::HeroEnd`s (member id, S3 fate, HP, pouch;
+`Tally::of_world_fight`), a superset of (member id, fate), and `Tally.world` the fight's world. `battle::apply`, which
+every runner's `after_fight` calls, settles them first (ROSTER1 3.2 and L5: `then`, the table, HP, keepsakes, then
+the XP, the quest hook and CAMPAIGN1's tick), so the battle screen only builds the tally. The results carry
+`party_fates` ([[member, fate]]), `stay_lines` (W4), `wounded` and `departed` (ROSTER1-U), each only when not empty.
+W2: with two holders the flag names the first in party order; the flag is also set ("") when a fight with a
+`stay_behind` block is settled without a battle. W3 departs before the rule table in any world, with or without a
+`roster` row (`capture`: captured, `kill`: dead; cause `stayed` or `stood`). W4's name is the member's display name,
+taken before it departs. The `stay_behind` block, objective and qid are read as the fight's world sees the encounter
+(`Tally.world`, else `battle::fight_world`), as the battle was built, so a road fight on another world's route keeps
+them.
+
 ## 4. Phase hooks for node 20 `[kit hook]`
 
 Node 20 (CANON 3.6, "Nemeth's fight, revised"): the corrupted founder fights at Nemeth's side; on the break the

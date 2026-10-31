@@ -314,6 +314,8 @@ pub struct Results {
     gold: i64,
     /// REWARD1: what the defeated enemies paid (`battle::apply`'s `rewards`).
     rewards: Dict,
+    /// ENCOUNTER2 W4: one line per hero who stayed or stood (`battle::apply`'s `stay_lines`).
+    stay_lines: Vec<String>,
     w: Vec<Widget<ResAct>>,
 }
 
@@ -388,6 +390,7 @@ impl Results {
             outcome: outcome.to_string(),
             gold: json::i(res, "gold", 0),
             rewards: json::dget(res, "rewards").clone(),
+            stay_lines: json::sget(res, "stay_lines"),
             w: Vec::new(),
         }
     }
@@ -436,6 +439,11 @@ impl Screen<GameCx> for Results {
                 y += line;
             }
         }
+        // ENCOUNTER2 W4: who stayed behind ("Kaelen held the winch.")
+        for text in &self.stay_lines {
+            ui.p.text(24.0, y as f32, text, BODY + 1.0, INFO);
+            y += line;
+        }
         let mut prompt = false;
         for m in &gs.party.members {
             let Some(a) = self.award.get(&m.id).and_then(Value::as_object) else { continue };
@@ -482,7 +490,7 @@ impl Screen<GameCx> for Results {
         }
     }
     fn state(&self, _cx: &Cx) -> Value {
-        json!({"outcome": self.outcome, "xp": self.award, "advanced": self.advanced, "gold": self.gold, "rewards": self.rewards})
+        json!({"outcome": self.outcome, "xp": self.award, "advanced": self.advanced, "gold": self.gold, "rewards": self.rewards, "stay_lines": self.stay_lines})
     }
     widget_plumbing!();
 }
@@ -538,5 +546,13 @@ mod tests {
             "Key loot: Warchief's Axe",
             "Missed: Warchief's Axe (slay Horde Warchief and win)",
         ]);
+    }
+
+    /// ENCOUNTER2 W4: the popup keeps the runner's `stay_lines` (one per stayed or stood hero); none without them.
+    #[test]
+    fn the_results_keep_the_stay_behind_lines() {
+        let res = json::obj([("ok", json!(true)), ("stay_lines", json!(["Ash held the winch."]))]);
+        assert_eq!(Results::new(&res, "won", &Dict::new()).stay_lines, ["Ash held the winch."]);
+        assert!(Results::new(&json::obj([("ok", json!(true))]), "won", &Dict::new()).stay_lines.is_empty());
     }
 }

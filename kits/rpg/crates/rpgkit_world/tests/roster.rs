@@ -7,16 +7,19 @@
 //! tests from `ROSTER1_TASKS.md` 1, rule ids of `ROSTER1.md`): the rule rows (3.2, L3-L6), wounded (W1-W3),
 //! `depart` and the named keepsake (L1, L2, KS1, KS2) and the save keys (11.4). Slice 4: bunks (BK1-BK4), the join
 //! level (BK5), `party_min` (BK6), the departed recruit (L1), the read keys (RK1) and the load warning (11.4).
+//! ENCOUNTER2-W (ENCOUNTER2.md 3.3): `then` capture and kill (W3), the stay flag (W2), the result lines (W4), the
+//! fates in the result (W1), and the settle in the kit runners (3.2: every runner, a fight without a battle in a row
+//! world) with the battle start's `party_min` read in the fight's world.
 
 use rpgkit_battle::encounter::PartyFate;
 use rpgkit_battle::session::{Prebuilt, Session};
 use rpgkit_battle::world::AiProfile;
 use rpgkit_rules::DeckRule;
-use rpgkit_world::battle::{self, WorldRoster};
+use rpgkit_world::battle::{self, Tally, WorldRoster};
 use rpgkit_world::roster::{self, FightEnd, HeroEnd};
 use rpgkit_world::state::{Departed, PartyState, UnitState};
 use rpgkit_world::dialogue::{self, DialogueRunner};
-use rpgkit_world::{campaign, new_game, progression, quest, save, Data, GameState};
+use rpgkit_world::{campaign, explore, new_game, progression, quest, save, Data, GameState};
 use aegis_core::json::{self, Dict};
 use serde_json::{json, Value};
 
@@ -54,7 +57,12 @@ fn own(w: &str) -> Value {
         ])),
         "encounters": with_ids(w, json!([
             {"id": "fight", "party": ["founder"], "enemies": ["foe"], "guests": ["guide"]},
-            {"id": "crucible", "party": ["founder"], "enemies": ["foe"], "party_min": 4}
+            {"id": "crucible", "party": ["founder"], "enemies": ["foe"], "party_min": 4},
+            // ENCOUNTER2-W: a hold escape whose holder is captured (W2-W4), and one with the default `then` and line
+            {"id": "winch", "party": ["founder"], "enemies": ["foe"], "objective": "escape", "objective_count": 1,
+             "stay_behind": {"mode": "hold", "tiles": [[10, 1]], "flag": "winch_held", "then": "capture", "result_line": "{name} held the winch."}},
+            {"id": "winch_plain", "party": ["founder"], "enemies": ["foe"], "objective": "escape", "objective_count": 1,
+             "stay_behind": {"mode": "hold", "tiles": [[10, 1]], "flag": "winch_held"}}
         ])),
         "dialogues": with_ids(w, json!([
             scene("r_kaelen", json!({"effect": "recruit", "character": "kaelen"})),
@@ -111,7 +119,12 @@ fn data() -> Data {
         // slice 4: ROSTER1-D's bunks (5.1): six, a flag adds up to eight, an open flag
         "bw": {"manifest": {"id": "bw", "roster": {"bunks": BUNKS, "bunks_flag": "hub_bunks", "bunks_max": BUNKS_MAX, "open_flag": "roster_open"}}, "own": own("bw")},
         // a world that switches bunks on with 0 bunks (decision "ROSTER1-L slice 1 ... answers"): the party max plus the flag
-        "zw": {"manifest": {"id": "zw", "party_max": 3, "roster": {"bunks": 0, "bunks_flag": "hub_bunks"}}, "own": own("zw")}
+        "zw": {"manifest": {"id": "zw", "party_max": 3, "roster": {"bunks": 0, "bunks_flag": "hub_bunks"}}, "own": own("zw")},
+        // ENCOUNTER2-W: a connected world whose route fight is a hold escape (not in any played world's lineage)
+        "rw": {"manifest": {"id": "rw"}, "own": {"encounters": with_ids("rw", json!([
+            {"id": "road_winch", "party": [], "enemies": ["brute"], "objective": "escape", "objective_count": 1,
+             "stay_behind": {"mode": "hold", "tiles": [[10, 1]], "flag": "road_held", "then": "capture", "result_line": "{name} held the road."}}
+        ]))}}
     });
     // a rising XP curve for the join level (BK5)
     Data::from_values(&catalog, &worlds, &json!({"xp_curve": {"xp_to_next": [10, 20, 30, 40]}}))
@@ -669,4 +682,181 @@ fn bunks_over_the_cap_load_with_a_warning() {
     // no roster block: today's rules, so more members than the party max (as Godot saves hold) load without a word
     let classic = save::decode(&d, &envelope(&crew(&d, "w", 5), save::VERSION)).expect("loads");
     assert!(classic.warnings.is_empty(), "{:?}", classic.warnings);
+}
+
+// ---- ENCOUNTER2-W: the world reads stay-behind results; the settle on every runner ---------------------------------
+
+/// `founder` held (`Stayed`, still up) while `second` escaped, both at 9 HP of `max`.
+fn held(max: i64) -> Vec<HeroEnd> {
+    vec![fated("founder", 9, max, PartyFate::Stayed), fated("second", 9, max, PartyFate::Escaped)]
+}
+
+/// The tally of a world battle in `world` whose fielded members ended as `party` (no foes: no rewards).
+fn party_tally(world: &str, party: Vec<HeroEnd>) -> Tally {
+    Tally { party, world: world.into(), ..Tally::default() }
+}
+
+fn dialogue_fight(d: &Data, gs: &mut GameState, encounter: &str, outcome: &str, t: &Tally) -> Dict {
+    dialogue::after_fight(d, gs, &json::obj([("encounter", encounter.into())]), outcome, Some(t))
+}
+
+#[test]
+fn then_capture_and_kill_depart_the_stayer_before_the_table() {
+    // W3, 3.2's first row, L5 (`then` first): `capture` departs the stayer captured, `kill` the stander dead (cause
+    // stayed / stood), in a world with no rule row too; the others settle as before (L3 classic here)
+    let d = data();
+    for (then, fate, life, cause) in [("capture", PartyFate::Stayed, "captured", "stayed"), ("kill", PartyFate::Stood, "dead", "stood")] {
+        let mut gs = cell(&d, "w", 0);
+        let max = max_of(&d, &gs, "founder");
+        let f = FightEnd { encounter: "w:winch".into(), escape: true, then: then.into(), ..FightEnd::new("won", "w") };
+        let settled = roster::settle_party(&d, &mut gs, &f, &[fated("founder", 9, max, fate), fated("second", 9, max, PartyFate::Escaped)]);
+        assert_eq!(settled.departed, [("founder".to_string(), life.to_string())], "{then}");
+        let rec = gs.party.departed_of("founder").expect("recorded");
+        assert_eq!((rec.life.as_str(), rec.cause.as_str(), rec.encounter.as_str()), (life, cause, "w:winch"), "{then}");
+        assert!(gs.party.member("founder").is_none() && !has(&gs.party.active_ids, "founder"), "{then}: out of the party");
+        assert_eq!(gs.party.member("second").unwrap().hp_lost, max - progression::hp_after(9, max, "won"), "{then}: the escaper comes home");
+    }
+    // `then` none (the default): nobody departs; the stayer still up settles as escaped
+    let mut gs = cell(&d, "w", 0);
+    let max = max_of(&d, &gs, "founder");
+    let f = FightEnd { escape: true, then: "none".into(), ..FightEnd::new("won", "w") };
+    assert_eq!(roster::settle_party(&d, &mut gs, &f, &held(max)), roster::Settled::default());
+    assert_eq!(gs.party.member("founder").unwrap().hp_lost, max - progression::hp_after(9, max, "won"));
+    // `then` leaves every other fate to the table: a downed hero on a capture escape in Act 2 departs by downed_left
+    let mut gs = cell(&d, "cw", 2);
+    let f = FightEnd { escape: true, then: "capture".into(), ..FightEnd::new("won", "cw") };
+    roster::settle_party(&d, &mut gs, &f, &[fated("founder", 9, max, PartyFate::Stayed), fated("second", 0, max, PartyFate::Downed)]);
+    let causes: Vec<(&str, &str)> = gs.party.departed.iter().map(|r| (r.member.id.as_str(), r.cause.as_str())).collect();
+    assert_eq!(causes, [("founder", "stayed"), ("second", "downed")]);
+    // KS1: the captured holder pays its named keepsake when the act's row lists the life (cw Act 1: captured)
+    let mut gs = cell(&d, "cw", 1);
+    roster::settle_party(&d, &mut gs, &FightEnd { then: "capture".into(), ..FightEnd::new("won", "cw") }, &held(max));
+    assert_eq!((gs.party.stash.get("ks_founder"), gs.party.departed_of("founder").map(|r| r.keepsake.as_str())), (Some(&1), Some("ks_founder")));
+}
+
+#[test]
+fn fight_end_reads_then_from_the_session() {
+    let d = data();
+    let party = |w: &str| {
+        let m = new_game::hero_from_character(&d, w, "founder").unwrap();
+        let f = roster::field_unit(&d, &gs_of(&d, w), &m, w).unwrap();
+        vec![Prebuilt { unit: f.unit, art: String::new(), palette: String::new(), profile: f.profile, key: m.id.clone() }]
+    };
+    for (enc, then) in [("winch", "capture"), ("winch_plain", "none"), ("fight", "")] {
+        let def = battle::encounter_def(&d, "w", d.resolve("w", "encounters", enc));
+        let s = Session::start_with(d.cat.clone(), def, &WorldRoster { d: &d, world: "w".into() }, party("w"));
+        assert_eq!(FightEnd::of(&s, "w").then, then, "{enc}");
+    }
+}
+
+#[test]
+fn the_runner_settles_the_party_from_the_battle_tally() {
+    // 3.2 "on every runner": `battle::apply` (each runner's after_fight) settles the tally's party first; W1: the result
+    // carries the fates, and the newly wounded and departed for ROSTER1-U
+    let d = data();
+    let mut gs = cell(&d, "cw", 1);
+    let max = max_of(&d, &gs, "founder");
+    let t = party_tally("cw", vec![fated("founder", 0, max, PartyFate::Downed), fated("second", 9, max, PartyFate::Standing)]);
+    let res = dialogue_fight(&d, &mut gs, "cw:fight", "won", &t);
+    assert!(json::b(&res, "ok", false), "{res:?}");
+    assert!(wounded(&gs, "founder") && !wounded(&gs, "second"), "Act 1 row: the downed of a held field are wounded");
+    assert_eq!(res["party_fates"], json!([["founder", "downed"], ["second", "standing"]]));
+    assert_eq!(res["wounded"], json!(["founder"]));
+    assert!(res.get("departed").is_none() && res.get("stay_lines").is_none(), "only keys with something to say");
+    // the explore runner goes through the same settle
+    let mut gs = cell(&d, "cw", 1);
+    let res = explore::after_fight(&d, &mut gs, &json::obj([("encounter", "cw:fight".into())]), "won", Some(&t));
+    assert!(wounded(&gs, "founder") && res["wounded"] == json!(["founder"]), "{res:?}");
+    // a foes-only tally (no party side) leaves the party as it is
+    let mut gs = cell(&d, "cw", 1);
+    let before = gs.party.clone();
+    dialogue_fight(&d, &mut gs, "cw:fight", "won", &Tally::default());
+    assert_eq!(gs.party.members, before.members);
+}
+
+#[test]
+fn a_fight_without_a_battle_applies_the_row_only_in_a_row_world() {
+    // 3.2 on every runner: no battle (REWARD1 2.5's default tally) in a world with a rule row settles the active
+    // members as the outcome leaves them (lost: every one downed, so the Act 1 row wounds each); a classic world's
+    // party is left as before (L3), so its journeys do not change
+    let d = data();
+    let mut gs = cell(&d, "cw", 1);
+    let res = battle::settle(&d, &mut gs, "cw:fight", "lost", None);
+    assert!(wounded(&gs, "founder") && wounded(&gs, "second") && !wounded(&gs, "third"), "the bench did not fight");
+    assert_eq!(res["wounded"], json!(["founder", "second"]));
+    for outcome in ["won", "fled"] {
+        let mut gs = cell(&d, "cw", 1);
+        let max = max_of(&d, &gs, "founder");
+        gs.party.members[0].hp_lost = 4;
+        battle::settle(&d, &mut gs, "cw:fight", outcome, None);
+        assert!(gs.party.members.iter().all(|m| m.conditions.is_empty()), "a {outcome} skip downs nobody");
+        let want = max - progression::hp_after(max - 4, max, outcome);
+        assert_eq!(gs.party.members[0].hp_lost, want, "{outcome}: standing at its stored HP, then HEAL1's carry");
+    }
+    for outcome in ["won", "fled", "lost"] {
+        let mut gs = cell(&d, "w", 0);
+        gs.party.members[0].hp_lost = 4;
+        let hp = |gs: &GameState| gs.party.members.iter().map(|m| (m.id.clone(), m.hp_lost, m.conditions.clone())).collect::<Vec<_>>();
+        let before = hp(&gs);
+        let res = battle::settle(&d, &mut gs, "w:fight", outcome, None);
+        assert_eq!(hp(&gs), before, "{outcome}: classic, no battle: HP and conditions as before (the XP is the rewards')");
+        assert!(battle::PARTY_KEYS.iter().all(|k| res.get(*k).is_none()), "{outcome}: {res:?}");
+    }
+}
+
+#[test]
+fn the_stay_flag_names_the_stayer_on_every_outcome_and_the_results_line_names_it() {
+    // W2: `stay_behind.flag` holds the member who stayed ("" when none) on every outcome; W4: one result line per
+    // stayed hero, named before it departs (`result_line`, else "{name} stayed behind.")
+    let d = data();
+    let mut gs = cell(&d, "w", 0);
+    let max = max_of(&d, &gs, "founder");
+    let res = dialogue_fight(&d, &mut gs, "w:winch", "won", &party_tally("w", held(max)));
+    assert_eq!(gs.flag("winch_held"), Some(&json!("founder")));
+    assert_eq!(res["stay_lines"], json!(["Founder held the winch."]));
+    assert_eq!(res["departed"], json!([{"member": "founder", "life": "captured"}]));
+    assert_eq!(res["party_fates"], json!([["founder", "stayed"], ["second", "escaped"]]));
+    assert_eq!(gs.party.departed_of("founder").map(|r| r.cause.as_str()), Some("stayed"));
+    // fled with nobody held: the flag is cleared to ""
+    let res = dialogue_fight(&d, &mut gs, "w:winch", "fled", &party_tally("w", vec![fated("second", 3, max, PartyFate::Escaped)]));
+    assert_eq!(gs.flag("winch_held"), Some(&json!("")));
+    assert!(res.get("stay_lines").is_none());
+    // the default `then` (none) and line
+    let mut gs = cell(&d, "w", 0);
+    let res = dialogue_fight(&d, &mut gs, "w:winch_plain", "won", &party_tally("w", held(max)));
+    let line = rpgkit_battle::encounter::DEFAULT_RESULT_LINE.replace("{name}", "Founder");
+    assert_eq!((res["stay_lines"].clone(), gs.flag("winch_held").cloned()), (json!([line]), Some(json!("founder"))));
+    assert!(gs.party.departed.is_empty() && res.get("departed").is_none(), "then none: the holder comes home");
+}
+
+#[test]
+fn a_road_fight_in_a_connected_world_reads_its_stay_block_there() {
+    // W2-W4 read the encounter as the fight's world sees it (`Tally.world`, as the battle was built), so a road fight on
+    // another world's route keeps its `then`, flag and line even when its ref does not resolve from the played world
+    // (the runner does not matter: each settles through `battle::apply`; no route fixture, so explore and dialogue)
+    let d = data();
+    for (r, explore_runner) in [("road_winch", true), ("rw:road_winch", false)] {
+        let mut gs = cell(&d, "w", 0);
+        let max = max_of(&d, &gs, "founder");
+        assert!(r.contains(':') || d.resolve("w", "encounters", r).is_empty(), "{r}: not seen from the played world");
+        let t = party_tally("rw", held(max));
+        let fight = json::obj([("encounter", r.into())]);
+        let res = if explore_runner { explore::after_fight(&d, &mut gs, &fight, "won", Some(&t)) } else { dialogue::after_fight(&d, &mut gs, &fight, "won", Some(&t)) };
+        assert_eq!(gs.flag("road_held"), Some(&json!("founder")), "{r}: W2");
+        let rec = gs.party.departed_of("founder").unwrap_or_else(|| panic!("{r}: W3 captures the holder: {res:?}"));
+        assert_eq!((rec.life.as_str(), rec.cause.as_str(), rec.encounter.as_str()), ("captured", "stayed", "rw:road_winch"), "{r}");
+        assert_eq!(res["stay_lines"], json!(["Founder held the road."]), "{r}: W4");
+    }
+}
+
+#[test]
+fn party_min_reads_the_fight_worlds_entry() {
+    // BK6 at the battle start reads the entry of the world the fight is built in (`battle::fight_world`)
+    let d = data();
+    let gs = crew(&d, "w", 3);
+    assert_eq!(roster::party_min_refusal(&gs, d.resolve("w", "encounters", "crucible")), roster::party_min_text(&d, &gs, "crucible"));
+    assert!(!roster::party_min_text(&d, &gs, "crucible").is_empty());
+    assert_eq!(battle::fight_world(&d, &gs, "fight"), "w", "in the lineage: the played world");
+    assert_eq!(battle::fight_world(&d, &gs, "ow:fight"), "ow", "another world's encounter: that world");
+    assert_eq!(battle::fight_world(&d, &gs, "nothing"), "w", "unknown: the played world");
 }

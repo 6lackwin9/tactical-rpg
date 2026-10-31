@@ -11,7 +11,7 @@ use crate::data::Data;
 use crate::progression;
 use crate::state::{Departed, GameState, PartyState, RosterCaps, UnitState};
 use aegis_core::json;
-use rpgkit_battle::encounter::PartyFate;
+use rpgkit_battle::encounter::{PartyFate, STAY_THEN};
 use rpgkit_battle::session::Session;
 use rpgkit_battle::world::AiProfile;
 use rpgkit_data::{roster_read_key, RosterManifest, RosterRead, RosterRule, UnitDef, DEPART_CAUSES, DEPART_LIVES, MEMBER_CONDITIONS, RECRUIT_LEVELS, RECRUIT_LEVEL_MAX, SETTLE_CLASSIC, WOUNDED_PCT_DEFAULT};
@@ -124,12 +124,16 @@ pub struct FightEnd {
     pub world: String,
     /// The objective was `escape` (a won escape does not hold the field).
     pub escape: bool,
+    /// ENCOUNTER2 W3: the encounter's `stay_behind.then` (`none`, `capture`, `kill`; "" = none).
+    pub then: String,
 }
 
 impl FightEnd {
-    /// The end of session `s` fought in world `world` (`Session::final_outcome`, the encounter id, its objective).
+    /// The end of session `s` fought in world `world` (`Session::final_outcome`, the encounter id, its objective, its
+    /// `stay_behind.then`).
     pub fn of(s: &Session, world: &str) -> Self {
-        Self { outcome: s.final_outcome(), encounter: s.def.id.clone(), world: world.to_string(), escape: s.objective.objective == "escape" }
+        let then = s.stay.as_ref().map(|b| b.then.clone()).unwrap_or_default();
+        Self { outcome: s.final_outcome(), encounter: s.def.id.clone(), world: world.to_string(), escape: s.objective.objective == "escape", then }
     }
 
     /// A fight with `outcome` in world `world` (no encounter id, not an escape).
@@ -151,9 +155,24 @@ pub struct Settled {
     pub departed: Vec<(String, String)>,
 }
 
+/// ENCOUNTER2 W3, 3.2's first row: the life `then` gives a stayer or stander (`capture`: captured, `kill`: dead) and its
+/// cause (`stayed`, `stood`); None for any other hero or `then` `none`.
+fn then_departs(f: &FightEnd, e: &HeroEnd) -> Option<(&'static str, &'static str)> {
+    let cause = match e.fate {
+        Some(PartyFate::Stayed) => "stayed",
+        Some(PartyFate::Stood) => "stood",
+        _ => return None,
+    };
+    match f.then.as_str() {
+        x if x == STAY_THEN[1] => Some((CAPTURED, cause)),
+        x if x == STAY_THEN[2] => Some((DEAD, cause)),
+        _ => None,
+    }
+}
+
 /// 3.2: the settle value of a hero's end under row `r` in fight `f`, after `then` `none` (a stayer or stander at 0 HP
-/// settles as `downed`, else as `escaped`; ENCOUNTER2-W adds `capture` and `kill`); `classic` where the table has no
-/// rule key (standing or escaped on a win or a flee). Returns (value, the cause when it departs).
+/// settles as `downed`, else as `escaped`; `capture` and `kill` depart before the table, `then_departs`); `classic`
+/// where the table has no rule key (standing or escaped on a win or a flee). Returns (value, the cause when it departs).
 fn settle_value(r: &RosterRule, f: &FightEnd, e: &HeroEnd) -> (String, &'static str) {
     let fate = e.fate.unwrap_or(if e.alive { PartyFate::Standing } else { PartyFate::Downed });
     let downed = match fate {
@@ -176,9 +195,11 @@ fn settle_value(r: &RosterRule, f: &FightEnd, e: &HeroEnd) -> (String, &'static 
 /// `dead` (`depart`, which pays the keepsake). HP of the members who come home: with no row (L3, classic) won and fled
 /// write HP back against the battle max (HealRules.hp_after: a downed hero rallies on a win, keeps 1 HP on a flee) and
 /// a lost battle leaves HP to the runner's defeat rule; with a row (L4) `full` brings everyone back to full and `carry`
-/// is HEAL1's `hp_after` (a loss heals, as the wake does) written back against the unwounded max (W2). Call it before
-/// the runner's `after_fight` (L5: the settle comes before CAMPAIGN1's battle tick and its retreat, which then moves a
-/// cell that already carries the loss).
+/// is HEAL1's `hp_after` (a loss heals, as the wake does) written back against the unwounded max (W2). Before the table
+/// (L5's `then`, ENCOUNTER2 W3, every world, with or without a row): with `stay_behind.then` `capture` or `kill` each
+/// stayer or stander departs captured or dead (cause `stayed` or `stood`, gear and pouch to the stash, the keepsake).
+/// `battle::apply` calls it first, so every runner's `after_fight` settles the party before the rewards and
+/// CAMPAIGN1's battle tick and its retreat (L5: the retreat then moves a cell that already carries the loss).
 pub fn settle_party(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]) -> Settled {
     let mut out = Settled::default();
     for e in ends {
@@ -186,6 +207,17 @@ pub fn settle_party(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]
             m.pouch = e.pouch.iter().chain(&e.unloaded).cloned().collect();
         }
     }
+    let mut home: Vec<&HeroEnd> = Vec::new();
+    for e in ends {
+        if let Some((life, cause)) = then_departs(f, e) {
+            if depart(d, gs, &e.member, life, cause, &f.encounter).is_ok() {
+                out.departed.push((e.member.clone(), life.to_string()));
+                continue;
+            }
+        }
+        home.push(e);
+    }
+    let ends = home;
     let won_or_fled = f.outcome == "won" || f.outcome == "fled";
     let Some(row) = rule(d, gs) else {
         if won_or_fled {
@@ -222,6 +254,31 @@ pub fn settle_party(d: &Data, gs: &mut GameState, f: &FightEnd, ends: &[HeroEnd]
         };
     }
     out
+}
+
+/// 3.2 on every runner: the ends of a fight settled without a battle (REWARD1 2.5's default tally; the debug skip, the
+/// campaign preview): each active member as it would take the field in world `world` (`field_unit`), standing at its
+/// stored HP on a win or a flee, downed on a loss, its saved pouch unchanged. `battle::settle` uses them only in a
+/// world with a rule row, so a classic world's fight without a battle leaves the party as before.
+pub fn default_ends(d: &Data, gs: &GameState, world: &str, outcome: &str) -> Vec<HeroEnd> {
+    let lost = outcome == "lost";
+    gs.party
+        .active_members()
+        .into_iter()
+        .filter_map(|m| {
+            let f = field_unit(d, gs, m, world)?;
+            let hp = if lost { 0 } else { f.unit.hp as i64 };
+            Some(HeroEnd {
+                member: m.id.clone(),
+                hp,
+                max_hp: f.unit.max_hp as i64,
+                alive: hp > 0,
+                pouch: m.pouch.clone(),
+                unloaded: Vec::new(),
+                fate: Some(if hp > 0 { PartyFate::Standing } else { PartyFate::Downed }),
+            })
+        })
+        .collect()
 }
 
 /// L2, RQ2 (a): member `id` leaves the party with `life` (`DEPART_LIVES`) for `cause` (`DEPART_CAUSES`) in encounter
@@ -349,7 +406,11 @@ pub fn join_xp(d: &Data, party: &PartyState, own_xp: i64, level: &Value) -> i64 
 /// encounter's `party_min` above the active members' count. World encounters only (a catalog encounter has no
 /// minimum). The dialogue `fight` precheck and the battle start read it.
 pub fn party_min_text(d: &Data, gs: &GameState, encounter_ref: &str) -> String {
-    let e = d.resolve(&gs.world_id, "encounters", encounter_ref);
+    party_min_refusal(gs, d.resolve(&gs.world_id, "encounters", encounter_ref))
+}
+
+/// BK6 on a resolved encounter entry `e` (the battle screen reads the entry of the fight's world, `battle::fight_world`).
+pub fn party_min_refusal(gs: &GameState, e: &json::Dict) -> String {
     let need = json::i(e, "party_min", 0);
     let have = gs.party.active_members().len() as i64;
     if e.is_empty() || need <= have {
