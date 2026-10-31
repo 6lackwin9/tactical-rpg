@@ -468,3 +468,69 @@ fn a_repeatable_trigger_without_when_is_a_warning() {
     assert!(repeatable(&data).is_empty(), "once (default true) clears it");
     drop_scratch(&data);
 }
+
+// ---- CAMPAIGN1-TM: travel modes ----
+
+/// A `travel_modes` block (CMQ2's shape: stealth by default, a forced march with a sure fight from Alert 50).
+fn travel_modes() -> Value {
+    json!({"default": "stealth", "modes": [
+        {"id": "stealth", "name": "Stealth", "tip": "Under the soot.", "days": 1, "road_pct": 50},
+        {"id": "forced", "name": "Forced march", "sure_when": [{"key": "meter.alert", "op": ">=", "value": 50}], "road_encounters": [["raid", 1]]}
+    ]})
+}
+
+#[test]
+fn each_bad_travel_mode_field_is_one_error() {
+    let data = campaign_world("modes");
+    let mut m = manifest();
+    m["travel_modes"] = travel_modes();
+    fs::write(aegis_content::world::manifest_path(&data, W), m.to_string()).unwrap();
+    let v = store::view(&data);
+    let errors = |m: &Value| check::campaign::manifest_errors(&v, W, m.as_object().unwrap());
+    let five: Vec<Value> = ["stealth", "b", "c", "d", "e"].iter().map(|id| json!({"id": id, "name": id})).collect();
+    let cases: Vec<(&str, Value, &str)> = vec![
+        ("modes not a list", with(&m, &["travel_modes", "modes"], json!({})), "modes must be a list."),
+        ("five modes", with(&m, &["travel_modes", "modes"], json!(five)), "at most 4 modes (has 5)"),
+        ("an unknown block key", with(&m, &["travel_modes", "speed"], json!(1)), "unknown key 'speed'"),
+        ("an unknown mode key", with(&m, &["travel_modes", "modes", "0", "speed"], json!(1)), "unknown key 'speed'"),
+        ("an id listed twice", with(&m, &["travel_modes", "modes", "1", "id"], json!("stealth")), "listed twice"),
+        ("a bad id", with(&m, &["travel_modes", "modes", "1", "id"], json!("Forced March")), "snake_case id"),
+        ("a name over 24", with(&m, &["travel_modes", "modes", "0", "name"], json!("Under the fog and the soot")), "name is longer than 24"),
+        ("days 6", with(&m, &["travel_modes", "modes", "0", "days"], json!(6)), "days must be a whole number 0..5."),
+        ("road_pct 301", with(&m, &["travel_modes", "modes", "0", "road_pct"], json!(301)), "road_pct must be a whole number 0..300."),
+        ("sure_when not conditions", with(&m, &["travel_modes", "modes", "1", "sure_when"], json!("alert")), "sure_when must be a list"),
+        ("sure_when on no meter", with(&m, &["travel_modes", "modes", "1", "sure_when", "0", "key"], json!("meter.heat")), "names no meter"),
+        ("a roamer that does not resolve", with(&m, &["travel_modes", "modes", "1", "road_encounters"], json!([["ghost", 1]])), "ghost"),
+        ("a default that is no mode", with(&m, &["travel_modes", "default"], json!("gallop")), "default 'gallop' is not one of the modes."),
+    ];
+    assert_eq!(errors(&m), Vec::<String>::new(), "the CMQ2 block");
+    for (tag, bad, needle) in cases {
+        let found = errors(&bad);
+        assert_eq!(found.len(), 1, "{tag}: {found:?}");
+        assert!(found[0].contains(needle), "{tag}: {found:?} (wanted '{needle}')");
+    }
+    // a leg input may name the world's modes, and only those
+    let a = alert();
+    let leg = with(&a, &["inputs", "3", "modes"], json!(["forced"]));
+    assert!(added(&v, "meters", &a, &leg).is_empty(), "a leg input on the forced march");
+    assert_one(&v, "meters", &a, &with(&a, &["inputs", "3", "modes"], json!(["gallop"])), "mode 'gallop' is not a travel mode of this world.", "an unknown mode");
+    assert_one(&v, "meters", &a, &with(&a, &["inputs", "3", "modes"], json!("forced")), "modes must be a list of text.", "modes not a list");
+    assert_one(&v, "meters", &a, &with(&a, &["inputs", "0", "modes"], json!(["forced"])), "unknown key 'modes'", "modes on a battle input");
+    drop_scratch(&data);
+}
+
+#[test]
+fn the_travel_modes_read_with_their_defaults() {
+    let schema = source::schema();
+    let f = fields(schema, "world", "world").iter().map(json::dict).find(|f| json::s(f, "key") == "travel_modes").expect("world.world.travel_modes");
+    assert_eq!((json::s(f, "type").as_str(), json::get(f, "default")), ("json", &json!({})), "{{}} = no modes");
+    assert!(rpgkit_data::TravelModes::from_obj(&Dict::new()).is_empty());
+    let t = rpgkit_data::TravelModes::from_obj(&dict(travel_modes()));
+    assert_eq!(t.default, "stealth");
+    let forced = t.get("forced").unwrap();
+    assert_eq!((forced.days, forced.road_pct, forced.tip.as_str()), (0, 100, ""), "no days, the chance unchanged");
+    let no_default = rpgkit_data::TravelModes::from_obj(&dict(with(&travel_modes(), &["default"], json!(""))));
+    assert_eq!(no_default.default, "stealth", "without a default: the first mode");
+    let unnamed = rpgkit_data::TravelModes::from_obj(&dict(json!({"modes": [{"id": "slow"}]})));
+    assert_eq!(unnamed.get("slow").map(|m| m.name.as_str()), Some("slow"), "the name defaults to the id");
+}

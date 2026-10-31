@@ -2,6 +2,8 @@
 //! manifest's `purse`, `rest` and `defeat` blocks of a campaign world (today's rules elsewhere, X1), upkeep per day,
 //! the road-fight chance of a leg (zero upkeep and the meters' band modifiers), the start-AP change at zero upkeep, a
 //! rest that costs days and upkeep, and the retreat after a lost battle. The travel, Camp and wake code call these.
+//! CAMPAIGN1-TM: the manifest's `travel_modes` block, the party's mode now and its road-fight change (`road_pct`,
+//! `sure_when`, `road_encounters`); the mode's days per leg are travel.rs's (`leg_days`).
 
 use super::{is_on, manifest_block, merge_events, Cause};
 use crate::data::Data;
@@ -9,7 +11,7 @@ use crate::explore::{self, SPAWN};
 use crate::progression;
 use crate::state::GameState;
 use aegis_core::json::{self, int, Dict};
-use rpgkit_data::{DefeatRule, Purse, RestRule};
+use rpgkit_data::{DefeatRule, Purse, RestRule, TravelMode, TravelModes};
 use serde_json::Value;
 
 /// A road-fight chance never goes above this (travel.rs PCT_MAX).
@@ -45,6 +47,49 @@ pub fn defeat_rule(d: &Data, w: &str) -> DefeatRule {
     DefeatRule::from_obj(&block(d, w, "defeat"))
 }
 
+/// CAMPAIGN1-TM: the travel modes of world `w` (none outside a campaign world: travel as before).
+pub fn travel_modes(d: &Data, w: &str) -> TravelModes {
+    TravelModes::from_obj(&block(d, w, "travel_modes"))
+}
+
+/// CAMPAIGN1-TM: the party's travel mode now: the campaign's pick (`campaign.mode`) when it names a mode of the
+/// world, else the world's default; None outside a campaign world and in a world without modes.
+pub fn travel_mode(d: &Data, gs: &GameState) -> Option<TravelMode> {
+    let c = gs.campaign.as_ref()?;
+    let modes = travel_modes(d, &gs.world_id);
+    let id = if modes.get(&c.mode).is_some() { c.mode.clone() } else { modes.default.clone() };
+    modes.get(&id).cloned()
+}
+
+/// CAMPAIGN1-TM: the refusal of a mode pick in a world without modes, and of an unknown mode.
+pub const REFUSE_NO_MODES: &str = "This world has no travel modes.";
+pub fn unknown_mode_text(id: &str) -> String {
+    format!("'{id}' is not a travel mode of this world.")
+}
+
+/// CAMPAIGN1-TM: picks the party's travel mode `id` for the legs to come (the world map's toggle). The default mode is
+/// kept as "" (so a save writes `campaign.mode` only for another mode). {ok, errors, mode}; refused outside a campaign
+/// world, in a world without modes, for an unknown id and once the run is over.
+pub fn set_travel_mode(d: &Data, gs: &mut GameState, id: &str) -> Dict {
+    let over = super::save_refusal(gs);
+    if !over.is_empty() {
+        return json::fail(over);
+    }
+    let modes = travel_modes(d, &gs.world_id);
+    if gs.campaign.is_none() || modes.is_empty() {
+        return json::fail(REFUSE_NO_MODES);
+    }
+    if modes.get(id).is_none() {
+        return json::fail(&unknown_mode_text(id));
+    }
+    if let Some(c) = gs.campaign.as_mut() {
+        c.mode = if id == modes.default { String::new() } else { id.to_string() };
+    }
+    let mut out = json::ok_result(true, &[]);
+    out.insert("mode".into(), id.into());
+    out
+}
+
 /// P2: the upkeep a leg of `time` spends (`time x per_day`).
 pub fn leg_upkeep(d: &Data, w: &str, time: i64) -> i64 {
     time.max(0) * purse(d, w).per_day as i64
@@ -69,15 +114,7 @@ fn modifiers(d: &Data, gs: &GameState, route_tags: &[String]) -> Vec<(i64, Vec<V
             if !json::sget(m, "bands").contains(&band) || !super::meter::tags_match(&json::sget(m, "route_tags"), route_tags) {
                 continue;
             }
-            let encounters = json::aget(m, "road_encounters")
-                .iter()
-                .map(|p| {
-                    let pair = json::arr(p);
-                    let r = pair.first().map(json::gstr).unwrap_or_default();
-                    let qid = json::s_or(d.resolve(&home, "encounters", &r), "_qid", &r);
-                    Value::Array(vec![qid.into(), pair.get(1).cloned().unwrap_or(int(0))])
-                })
-                .collect();
+            let encounters = json::aget(m, "road_encounters").iter().map(|p| pair_qid(d, &home, p)).collect();
             out.push((json::i(m, "road_pct", 100), encounters));
         }
     }
@@ -86,19 +123,44 @@ fn modifiers(d: &Data, gs: &GameState, route_tags: &[String]) -> Vec<(i64, Vec<V
 
 /// P3, M7: a leg's road-fight chance from its base chance (`base`, travel.rs leg's own or repeat chance): at zero
 /// upkeep times `at_zero.road_pct` (today's x1.5 by default), then times each band modifier that holds, capped at 100
-/// after each step. Outside a campaign world: travel.rs starved_chance, unchanged.
+/// after each step; CAMPAIGN1-TM: then times the travel mode's `road_pct` (capped), and 100 while the mode's
+/// `sure_when` holds (a sure road fight whenever the leg's pool holds an encounter). Outside a campaign world:
+/// travel.rs starved_chance, unchanged.
 pub fn road_chance(d: &Data, gs: &GameState, route: &Dict, base: i64, starved: bool) -> i64 {
     let mut chance = if starved { scaled(base, purse(d, &gs.world_id).road_pct as i64) } else { base };
     for (pct, _) in modifiers(d, gs, &json::sget(route, "tags")) {
         chance = scaled(chance, pct);
     }
+    if let Some(mode) = travel_mode(d, gs) {
+        chance = scaled(chance, mode.road_pct as i64);
+        if sure_fight(gs, &mode) {
+            chance = PCT_MAX;
+        }
+    }
     chance
 }
 
-/// M7: the [encounter qid, weight] pairs the band modifiers that hold now add to a leg's road pool on `route` (none
-/// outside a campaign world).
+/// CAMPAIGN1-TM: whether `mode` makes the leg's road fight sure now (its `sure_when` is set and holds).
+pub fn sure_fight(gs: &GameState, mode: &TravelMode) -> bool {
+    !mode.sure_when.is_empty() && crate::quest::all_hold(gs, &Value::Array(mode.sure_when.clone()))
+}
+
+/// M7: the [encounter qid, weight] pairs the band modifiers that hold now add to a leg's road pool on `route`, then
+/// (CAMPAIGN1-TM) the travel mode's `road_encounters` (none outside a campaign world).
 pub fn road_encounters(d: &Data, gs: &GameState, route: &Dict) -> Vec<Value> {
-    modifiers(d, gs, &json::sget(route, "tags")).into_iter().flat_map(|(_, e)| e).collect()
+    let mut out: Vec<Value> = modifiers(d, gs, &json::sget(route, "tags")).into_iter().flat_map(|(_, e)| e).collect();
+    if let Some(mode) = travel_mode(d, gs) {
+        out.extend(mode.road_encounters.iter().map(|p| pair_qid(d, &gs.world_id, p)));
+    }
+    out
+}
+
+/// A road pool pair [ref, weight] with the ref resolved from world `home` to its qid.
+fn pair_qid(d: &Data, home: &str, p: &Value) -> Value {
+    let pair = json::arr(p);
+    let r = pair.first().map(json::gstr).unwrap_or_default();
+    let qid = json::s_or(d.resolve(home, "encounters", &r), "_qid", &r);
+    Value::Array(vec![qid.into(), pair.get(1).cloned().unwrap_or(int(0))])
 }
 
 // ---- battle start (P3) ----

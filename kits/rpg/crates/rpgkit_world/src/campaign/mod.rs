@@ -22,7 +22,7 @@ pub mod purse;
 pub mod trigger;
 pub mod view;
 
-pub use preview::{preview_battle, preview_days};
+pub use preview::{preview_battle, preview_days, preview_trip};
 pub use view::hud;
 
 use crate::data::Data;
@@ -42,8 +42,8 @@ use std::sync::Arc;
 /// as the new baseline. A tick also runs at most this many follow-up ticks (owed rest days, an act change); what is
 /// left of them waits for the next cause.
 pub const REENTRIES_MAX: usize = 8;
-/// 11.5: the keys of the saved campaign block.
-pub const BLOCK_KEYS: [&str; 7] = ["act", "run", "meters", "fired", "armed", "checkpoints", "pending"];
+/// 11.5: the keys of the saved campaign block (CAMPAIGN1-TM: `mode`, written only when not the default).
+pub const BLOCK_KEYS: [&str; 8] = ["act", "run", "meters", "fired", "armed", "checkpoints", "pending", "mode"];
 /// Acts are numbered 0 (before the first) to ACT_MAX.
 pub const ACT_MAX: i64 = 9;
 /// F3: the refusal of every save while the run is over.
@@ -131,6 +131,8 @@ pub struct Campaign {
     pub checkpoints: IndexMap<String, String>,
     /// Queued `then` items, head first (T2).
     pub pending: Vec<Dict>,
+    /// CAMPAIGN1-TM: the travel mode the party picked ("" = the world's default; saved only when set).
+    pub mode: String,
     /// Runtime: the run is over (F1), never saved.
     pub over: Option<RunOver>,
     /// Runtime: the world's meter rows, read when the state was made or loaded.
@@ -147,7 +149,7 @@ pub struct Campaign {
 /// Equal when the saved parts are (the runtime parts follow from them or are never saved).
 impl PartialEq for Campaign {
     fn eq(&self, o: &Self) -> bool {
-        self.act == o.act && self.run == o.run && self.meters == o.meters && self.fired == o.fired && self.armed == o.armed && self.checkpoints == o.checkpoints && self.pending == o.pending
+        self.act == o.act && self.run == o.run && self.meters == o.meters && self.fired == o.fired && self.armed == o.armed && self.checkpoints == o.checkpoints && self.pending == o.pending && self.mode == o.mode
     }
 }
 
@@ -169,6 +171,7 @@ impl Campaign {
             armed: Vec::new(),
             checkpoints: IndexMap::new(),
             pending: Vec::new(),
+            mode: String::new(),
             over: None,
             defs: Arc::new(defs),
             last: IndexMap::new(),
@@ -207,7 +210,7 @@ impl Campaign {
         }
         let mut fired = self.fired.clone();
         fired.sort();
-        Value::Object(json::obj([
+        let mut out = Value::Object(json::obj([
             ("act", int(self.act)),
             ("run", Value::String(self.run.clone())),
             ("meters", Value::Object(meters)),
@@ -215,7 +218,12 @@ impl Campaign {
             ("armed", json::strs(&self.armed)),
             ("checkpoints", Value::Object(self.checkpoints.iter().map(|(k, v)| (k.clone(), Value::String(v.clone()))).collect())),
             ("pending", Value::Array(self.pending.iter().cloned().map(Value::Object).collect())),
-        ]))
+        ]));
+        // CAMPAIGN1-TM: the default mode writes nothing, so saves without a mode pick stay as before
+        if let (Value::Object(o), false) = (&mut out, self.mode.is_empty()) {
+            o.insert("mode".into(), Value::String(self.mode.clone()));
+        }
+        out
     }
 
     /// From a saved `campaign` value in world `w` (time `time`, for the baseline); a missing key keeps the fresh
@@ -279,6 +287,16 @@ impl Campaign {
                     c.checkpoints.insert(id.clone(), st.to_string());
                 }
                 None => problems.push(format!("campaign.checkpoints.{id} must be met or missed.")),
+            }
+        }
+        // CAMPAIGN1-TM: an absent mode is the default (older saves); a mode the world no longer has is a load problem
+        if let Some(v) = o.get("mode") {
+            match v.as_str() {
+                Some(m) if m.is_empty() || purse::travel_modes(d, w).get(m).is_some() => {
+                    c.mode = if m == purse::travel_modes(d, w).default { String::new() } else { m.to_string() };
+                }
+                Some(m) => problems.push(format!("campaign.mode: {}", purse::unknown_mode_text(m))),
+                None => problems.push("campaign.mode must be text.".into()),
             }
         }
         if let Some(v) = o.get("pending") {
@@ -380,8 +398,8 @@ pub fn read_key(gs: &GameState, key: &str) -> Option<Value> {
 pub enum Cause {
     /// `n` days passed (K2); `why` is travel (once per leg), rest or retreat. Day inputs run `n` times.
     Days { n: i64, why: String },
-    /// One travel leg on a route carrying `route_tags` (leg inputs).
-    Leg { route_tags: Vec<String> },
+    /// One travel leg on a route carrying `route_tags`, in travel mode `mode` ("" = none; CAMPAIGN1-TM) (leg inputs).
+    Leg { route_tags: Vec<String>, mode: String },
     /// A settled battle: the encounter's qid and tags, the outcome (won, lost, fled).
     Battle { encounter: String, tags: Vec<String>, outcome: String },
     /// The party entered the location with this qid (`explore::enter`; enter triggers, T1).
@@ -500,7 +518,7 @@ fn inputs(gs: &mut GameState, cause: &Cause) {
         let delta = match cause {
             Cause::Battle { tags, outcome, .. } => def.input_delta("battle", c.act, |x| tags_match(&x.tags, tags) && (x.outcomes.is_empty() || x.outcomes.contains(outcome))),
             Cause::Days { n, .. } => def.input_delta("day", c.act, |_| true) * n,
-            Cause::Leg { route_tags } => def.input_delta("leg", c.act, |x| tags_match(&x.route_tags, route_tags)),
+            Cause::Leg { route_tags, mode } => def.input_delta("leg", c.act, |x| tags_match(&x.route_tags, route_tags) && (x.modes.is_empty() || x.modes.contains(mode))),
             _ => 0,
         };
         if delta != 0 {

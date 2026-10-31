@@ -352,3 +352,33 @@ Save: version 13 (or the next free number; sequence with ROSTER1, RULESET1-D, EN
   days left." (the first running visible countdown by HUD order; without one only the day). A node's tip lists its
   `deadlines` lines ("Checkpoint: by day 14") in Arterial Red. The board pane does not exist yet: its `deadline` line
   is STORYUI1-U2's.
+
+## As built (CAMPAIGN1-TM, 2026-11-01)
+
+- CMQ2 (a), travel modes: the world manifest field `travel_modes` (type `json`, `{}` = no modes; nearest world wins;
+  inert without `campaign`, X1): `{"default": <mode id> (the first mode when empty), "modes": [at most 4 {"id", "name"
+  1-24 (the id), "tip" 0-240, "days" 0-5 (0), "road_pct" 0-300 (100), "sure_when" (flag conditions, read keys
+  included; [] = never), "road_encounters" ([[encounter, weight]...])}]}`. The modes live on the world, not on routes:
+  no route field was added (open question).
+- A leg in mode `m` takes `time + m.days` days: the path search (`travel::path` and `best_path_with`, the fewest days
+  in the mode, then the fewest legs), the trip cost and the Travel tip, the clock, the upkeep (P2: `days x per_day`) and
+  the days tick all count them. The trip reads the mode once at its start. The road chance (`purse::road_chance`): zero
+  upkeep, the band modifiers, then times the mode's `road_pct` (capped at 100), then 100 while its `sure_when` holds (a
+  sure fight on any leg whose pool holds an encounter, even a road with no chance of its own); the mode's
+  `road_encounters` join the leg's pool after the band modifiers'. Scripted fights come first, as before.
+- M3: a leg input may name `modes` (empty = any mode and travel without one): `{"on": "leg", "modes": ["forced"],
+  "delta": 5}` is the forced march's Alert. `Cause::Leg` carries the mode id ("" without one).
+- State: `campaign.mode`, the picked mode; the default is kept as "" and not written, so a save holds the key only
+  for another mode; an older save loads in the default mode; a saved mode the world no longer has is a load problem
+  ("campaign.mode: 'x' is not a travel mode of this world."). No save version step.
+- `purse::travel_modes(d, w)`, `travel_mode(d, gs)` (the party's mode), `set_travel_mode(d, gs, id)` (refused without
+  modes, for an unknown id and once the run is over), `sure_fight`; `travel::mode_days`, `leg_days`. The map view
+  adds `mode` and each route's `days` only in a world with modes.
+- W3: the trip ask runs the trip's legs on a copy (`campaign::preview_trip`: the days, then the leg tick, per leg in the
+  mode now), so a forced leg's Alert that would reach Breach asks before the trip; like `preview_days` it rolls no road
+  fight and enters no node.
+- C5: `sim deadlines` plans every leg in the world's default mode (a fresh campaign travels in it; the first line adds
+  `legs in the travel mode <name> (+n days a leg)`); no `mode=` argument yet.
+- World map (game): the side panel's mode button (`world_map.mode`, "Travel: Stealth") cycles the modes in data order
+  and logs "Travel mode: Forced march."; its tip gives the mode's tip, its days a leg and the ambush change; the Travel
+  tip starts with the mode's name; the road labels show the leg's days in the mode. No button without modes.

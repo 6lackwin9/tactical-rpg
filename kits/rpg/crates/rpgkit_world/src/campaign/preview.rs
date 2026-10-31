@@ -44,6 +44,34 @@ pub fn preview_battle(d: &Data, gs: &GameState, encounter: &str) -> Vec<Value> {
     out
 }
 
+/// W3, CAMPAIGN1-TM: the run over the trip to `to` (a ref or a qid) would cause (`case` "days"): the trip's legs (the
+/// party's travel mode's path and days, `travel::path` and `leg_days`) run on a copy, each as the trip runs it: its
+/// days pass, then the days and the leg tick (meter inputs on legs, the mode's among them). No road roll and no
+/// arrival: like `preview_days`, the listed case is the clock's and the meters'. [] when the run goes on, when there is
+/// no known way, outside a campaign world and once the run is over.
+pub fn preview_trip(d: &Data, gs: &GameState, to: &str) -> Vec<Value> {
+    if !live(gs) {
+        return Vec::new();
+    }
+    let start = crate::travel::current_node(d, gs);
+    let target = json::s(crate::explore::resolve_location(d, gs, to), "_qid");
+    let routes = crate::travel::path(d, gs, &start, &target);
+    let mut g = gs.clone();
+    let extra = crate::travel::mode_days(d, gs);
+    let mode = super::purse::travel_mode(d, gs).map(|m| m.id).unwrap_or_default();
+    for rq in routes {
+        let route = crate::travel::route_in(d, &gs.world_id, &rq);
+        let n = crate::travel::leg_days(&route, extra);
+        g.time += n;
+        super::tick(d, &mut g, &Cause::Days { n, why: "travel".into() });
+        super::tick(d, &mut g, &Cause::Leg { route_tags: json::sget(&route, "tags"), mode: mode.clone() });
+        if let Some(end) = ending(&g, "days") {
+            return vec![end];
+        }
+    }
+    Vec::new()
+}
+
 /// W3: the run over `n` days passing would cause (a trip's, a rest's or a retreat's days; `case` "days"): the clock
 /// moves `n` days on a copy and the campaign ticks days(n). [] when the run goes on, outside a campaign world and once
 /// the run is over.

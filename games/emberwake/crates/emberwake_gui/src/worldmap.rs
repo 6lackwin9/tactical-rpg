@@ -8,7 +8,9 @@
 //! region map); the tips, the Camp button and the log name the purse's upkeep (P1, R1); the Travel tip adds the arrival
 //! day and the days left (W5); a node's tip lists its checkpoint lines (`deadlines`, STORYUI1 B10). STORYUI1-U2 (B10):
 //! a node holding jobs of opened boards wears the quest badge at its pin's top left (widget `node.<qid>.job`) and its
-//! tip lists "Job: <name>".
+//! tip lists "Job: <name>". CAMPAIGN1-TM: in a campaign world with travel modes the side panel's mode button
+//! (`world_map.mode`) cycles the party's mode (`campaign::purse::set_travel_mode`); the trips, their tips and the road
+//! labels count its days, and the trip ask runs the trip's legs in it (`runover::trip_ask`).
 
 use aegis_ui::canvas::{rgb, rgba, Rect};
 use crate::music;
@@ -28,6 +30,8 @@ pub enum WAct {
     Travel,
     Enter,
     Camp,
+    /// CAMPAIGN1-TM: the next travel mode.
+    Mode,
     Back,
     /// A HUD bar button (PLAYUI1-H; Menu is one of them).
     Hud(Hud),
@@ -66,6 +70,24 @@ fn trip_cost(cx: &Cx, gs: &emberwake_world::GameState, trip: &serde_json::Map<St
     format!("{length}, {} {}", json::i(trip, "supplies", 0), purse_word(cx, PurseWord::Upkeep))
 }
 
+/// CAMPAIGN1-TM: the mode button's tip: the mode's own tip, its days a leg and the road-fight change, and how to switch.
+fn mode_tip(m: &emberwake_data::TravelMode, many: bool) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if !m.tip.is_empty() {
+        parts.push(m.tip.clone());
+    }
+    if m.days > 0 {
+        parts.push(format!("Each leg takes {} more.", crate::runover::days(m.days as i64)));
+    }
+    if m.road_pct != 100 {
+        parts.push(format!("Ambush chance x{}%.", m.road_pct));
+    }
+    if many {
+        parts.push("Click for the next mode.".into());
+    }
+    parts.join(" ")
+}
+
 #[derive(Default)]
 pub struct WorldMap {
     w: Vec<Widget<WAct>>,
@@ -91,8 +113,7 @@ impl WorldMap {
                 if self.selected.is_empty() {
                     return;
                 }
-                let trip = travel::trip(&d, cx.gs(), &cx.gs().location_id, &self.selected);
-                match crate::runover::days_ask(cx, json::i(&trip, "time", 0), "This trip", "Travel") {
+                match crate::runover::trip_ask(cx, &self.selected) {
                     Some(q) => cx.ask_tag_no(q, crate::runover::ASK_TRIP),
                     None => self.travel(cx),
                 }
@@ -117,9 +138,25 @@ impl WorldMap {
                     None => self.camp(cx),
                 }
             }
+            WAct::Mode => self.next_mode(cx),
             WAct::Back => cx.nav.push(Nav::Pop),
             WAct::Hud(h) => hud_open(cx, h, &WORLD_HELP),
         }
+    }
+
+    /// CAMPAIGN1-TM: picks the world's next travel mode (data order, round) and logs it.
+    fn next_mode(&mut self, cx: &mut Cx) {
+        let d = cx.data.clone();
+        let modes = emberwake_world::campaign::purse::travel_modes(&d, &cx.gs().world_id);
+        let Some(now) = emberwake_world::campaign::purse::travel_mode(&d, cx.gs()) else { return };
+        let at = modes.modes.iter().position(|m| m.id == now.id).unwrap_or(0);
+        let next = modes.modes[(at + 1) % modes.modes.len()].clone();
+        let res = emberwake_world::campaign::purse::set_travel_mode(&d, cx.gs_mut(), &next.id);
+        if !json::b(&res, "ok", false) {
+            show_errors(cx, json::sget(&res, "errors"));
+            return;
+        }
+        cx.log(format!("Travel mode: {}.", next.name));
     }
 
     /// The trip to the selected place (TravelRunner.travel): its log lines and campaign events; a road fight starts the
@@ -217,7 +254,9 @@ impl Screen<GameCx> for WorldMap {
             let (Some(a), Some(b)) = (find(&s(r, "from")), find(&s(r, "to"))) else { continue };
             let open = json::b(r, "open", true);
             ui.p.line(a.0, a.1, b.0, b.1, if open { rgb(220, 206, 160) } else { rgb(200, 90, 100) }, if open { 0.0 } else { 3.0 });
-            ui.p.text_center((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0 - 8.0, &json::i(r, "time", 0).to_string(), SMALL, rgb(230, 220, 190));
+            // CAMPAIGN1-TM: a leg's days in the party's travel mode (`days`) when the world has modes
+            let leg = if r.contains_key("days") { json::i(r, "days", 0) } else { json::i(r, "time", 0) };
+            ui.p.text_center((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0 - 8.0, &leg.to_string(), SMALL, rgb(230, 220, 190));
         }
         let here = gs.location_id.clone();
         for n in &nodes {
@@ -305,12 +344,22 @@ impl Screen<GameCx> for WorldMap {
         ui.p.text(sx as f32, y as f32, "World map", BODY, INFO);
         ui.p.text_right(W as f32 - 6.0, y as f32, &format!("Time {}", gs.time), BODY, TEXT);
         y += 14;
+        // CAMPAIGN1-TM: the travel mode button (only in a campaign world with modes)
+        let mode = emberwake_world::campaign::purse::travel_mode(&d, &gs);
+        if let Some(m) = &mode {
+            let many = emberwake_world::campaign::purse::travel_modes(&d, &gs.world_id).modes.len() > 1;
+            ui.button_tip("world_map.mode", Rect::new(sx, y, 130, 16), &format!("Travel: {}", m.name), WAct::Mode, many, tip("Travel mode", &mode_tip(m, many)));
+            y += 20;
+        }
         if !self.selected.is_empty() {
             let name = cx.location_name(&gs.world_id, &self.selected);
             let trip = travel::trip(&d, &gs, &here, &self.selected);
             if json::b(&trip, "ok", false) {
                 // CAMPAIGN1 W5: the arrival day and the days left in a campaign world
                 let mut text = format!("{}. Roads can be ambushed.", trip_cost(cx, &gs, &trip));
+                if let Some(m) = &mode {
+                    text = format!("{}: {text}", m.name);
+                }
                 if let Some(at) = arrival(&gs, json::i(&trip, "time", 0)) {
                     text = format!("{text} {at}");
                 }

@@ -117,3 +117,12 @@ The rules behind every player screen come from `emberwake_world`, checked agains
   in the Ashlands); the Travel hover card gives the trip in days and upkeep, then "Arrive on day 9, 34 days left.";
   a node's hover card lists its checkpoint lines ("Checkpoint: by day 14", red). Log lines name the purse (camp, wake,
   retreat, quest gold).
+
+## Travel modes (CAMPAIGN1-TM)
+
+- World map, in a campaign world whose manifest names `travel_modes`: under the title line the mode button
+  (`world_map.mode`, "Travel: Stealth", the default first) cycles the modes in data order and logs "Travel mode:
+  Forced march."; its hover card gives the mode's tip, its days a leg ("Each leg takes 1 day more.") and the ambush
+  change ("Ambush chance x50%."). The Travel hover card starts with the mode's name ("Stealth: 4 days, 4 Tallow.");
+  road labels show each leg's days in the mode. A trip whose forced-march Alert would end the run asks first (No as
+  the default). Without modes there is no button and nothing changes (the Ashlands).

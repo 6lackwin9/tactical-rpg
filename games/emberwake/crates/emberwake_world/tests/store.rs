@@ -53,8 +53,9 @@ const ITEMS_AFTER_GODOT: [&str; 1] = ["\"hazard\": {}"];
 /// Retired parity, world manifests only (world.json): CAMPAIGN1-S (HISTORY 2026-10-25) a manifest's `campaign`,
 /// `purse`, `rest` and `defeat`, written as `{}` (an encounter's `purse` line is still compared); STORYUI1-S (HISTORY
 /// 2026-10-26) its `start_sequence`, written as ""; HOOKS1-S (HISTORY 2026-10-27) its `classes`, written as `{}`;
-/// ROSTER1-L (HISTORY 2026-10-31) its `roster`, written as `{}`.
-const MANIFEST_AFTER_GODOT: [&str; 7] = ["\"campaign\": {}", "\"purse\": {}", "\"rest\": {}", "\"defeat\": {}", "\"start_sequence\": \"\"", "\"classes\": {}", "\"roster\": {}"];
+/// ROSTER1-L (HISTORY 2026-10-31) its `roster`, written as `{}`; CAMPAIGN1-TM (HISTORY 2026-11-01) its `travel_modes`,
+/// written as `{}`.
+const MANIFEST_AFTER_GODOT: [&str; 8] = ["\"campaign\": {}", "\"purse\": {}", "\"rest\": {}", "\"defeat\": {}", "\"start_sequence\": \"\"", "\"classes\": {}", "\"roster\": {}", "\"travel_modes\": {}"];
 
 /// Retired parity, world quests only (worlds/<w>/quests.json): STORYUI1-S (HISTORY 2026-10-26) a quest's board
 /// fields `board`, `track`, `show_locked` and `closed_text`, written with their defaults (a dialogue choice's

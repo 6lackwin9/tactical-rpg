@@ -274,6 +274,16 @@ pub fn days_ask(cx: &Cx, n: i64, what: &str, verb: &str) -> Option<String> {
     Some(format!("{what} would end the run{} {verb} anyway?", sentence_end(&reason(&ends))))
 }
 
+/// W3, CAMPAIGN1-TM: the question before the trip to `to` when its legs would end the run (`campaign::preview_trip`:
+/// the days and the leg inputs of the travel mode now), None when they would not.
+pub fn trip_ask(cx: &Cx, to: &str) -> Option<String> {
+    let ends = campaign::preview_trip(&cx.data, cx.gs(), to);
+    if ends.is_empty() {
+        return None;
+    }
+    Some(format!("This trip would end the run{} Travel anyway?", sentence_end(&reason(&ends))))
+}
+
 /// The wrapped lines of `text` in `w` logical px at `size` (none for "").
 fn lines(ui: &mut Ui<impl Clone>, text: &str, size: f32, w: f32) -> Vec<String> {
     if text.is_empty() {
@@ -554,6 +564,9 @@ pub(crate) mod tests {
     const END_TEXT: &str = "The tithing came for the cell.";
     const START_AP: i64 = -2;
     const DEADLINE: i64 = 60;
+    /// CAMPAIGN1-TM: the stealth mode's days a leg; the forced march's Alert a leg.
+    const STEALTH_DAYS: i64 = 1;
+    const FORCED_ALERT: i64 = 5;
 
     fn with_ids(w: &str, rows: Value) -> Value {
         let rows = json::arr(&rows)
@@ -570,6 +583,11 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn data() -> Data {
+        data_with(Value::Null)
+    }
+
+    /// `data()` with the manifest's `travel_modes` block (none when null; CAMPAIGN1-TM).
+    fn data_with(travel_modes: Value) -> Data {
         let w = "camp";
         let meters = json!([
             {"id": "alert", "name": "Inquisition Alert", "kind": "gauge", "min": 0, "max": BREACH, "unit": "%", "visible": true,
@@ -578,7 +596,8 @@ pub(crate) mod tests {
                        {"id": "breach", "name": "Breach", "from": BREACH, "tone": "fatal"}],
              "rules": [{"id": "a_sus", "at": "suspicious", "warn": "Gates are watched."},
                        {"id": "a_breach", "at": "breach", "effects": [{"effect": "end", "kind": "fail", "card": "the_end", "text": "They found the grate."}]}],
-             "inputs": [{"on": "day", "delta": ALERT_PER_DAY}, {"on": "battle", "tags": ["loud"], "outcomes": ["won"], "delta": LOUD_WON}]},
+             "inputs": [{"on": "day", "delta": ALERT_PER_DAY}, {"on": "battle", "tags": ["loud"], "outcomes": ["won"], "delta": LOUD_WON},
+                        {"on": "leg", "modes": ["forced"], "delta": FORCED_ALERT}]},
             {"id": "clock", "name": "The Red Tithing", "kind": "countdown", "min": 0, "max": 99, "unit": "days", "visible": true,
              "hud": {"short": "Tithing", "order": 1},
              "bands": [{"id": "due", "name": "Due", "from": 0, "tone": "danger"}, {"id": "far", "name": "Far", "from": WEEK + 1, "tone": "calm"}],
@@ -605,6 +624,10 @@ pub(crate) mod tests {
                 "meters": with_ids(w, meters)
             }}
         });
+        let mut worlds = worlds;
+        if !travel_modes.is_null() {
+            worlds[w]["manifest"]["travel_modes"] = travel_modes;
+        }
         let catalog = json!({
             "classes": [{"id": "fighter", "name": "Fighter"}],
             "units": [{"id": "hero", "name": "Hero", "side": "party", "class_id": "fighter", "level": 1}]
@@ -618,7 +641,12 @@ pub(crate) mod tests {
     /// A debug context playing a new game in `camp` at the hub (both nodes known), Alert at `alert`, the Red Tithing
     /// running with `days` left.
     pub(crate) fn camp_cx(alert: i64, days: i64) -> Cx {
-        let mut cx = story_cx(data());
+        camp_cx_in(data(), alert, days)
+    }
+
+    /// `camp_cx` on `d`.
+    fn camp_cx_in(d: Data, alert: i64, days: i64) -> Cx {
+        let mut cx = story_cx(d);
         let d = cx.data.clone();
         let mut gs: GameState = new_game::create_for_world(&d, "camp", 1).expect("a new game");
         for n in ["hub", "a"] {
@@ -1030,6 +1058,57 @@ pub(crate) mod tests {
         frame(&mut wm, &mut cx, &mut g, 1.0);
         let (_, camp_tip) = wm.widget_rect("world_map.camp").expect("Camp");
         assert!(camp_tip.join(" ").contains(&format!("Takes {}.", days(rule.days as i64))), "{camp_tip:?}");
+    }
+
+    /// CAMPAIGN1-TM: the world map's mode button shows only in a world with travel modes; it names the party's mode
+    /// (the default first) and cycles it with a log line; the Travel tip and the road label count the mode's days; a
+    /// forced march whose leg input would reach Breach asks before the trip, though the trip's days alone would not.
+    #[test]
+    fn the_world_map_toggles_the_travel_mode() {
+        let mut g = gfx();
+        let mut cx = camp_cx(0, 30);
+        let mut wm = crate::worldmap::WorldMap::new();
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        assert!(wm.widget_rect("world_map.mode").is_none(), "no modes: no button");
+        let modes = json!({"default": "stealth", "modes": [{"id": "forced", "name": "Forced march"}, {"id": "stealth", "name": "Stealth", "days": STEALTH_DAYS, "road_pct": 50}]});
+        let mut cx = camp_cx_in(data_with(modes), BREACH - ALERT_PER_DAY - FORCED_ALERT, 30);
+        let mut wm = crate::worldmap::WorldMap::new();
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let label = |wm: &crate::worldmap::WorldMap| wm.widgets().into_iter().find(|w| w["id"] == "world_map.mode").map(|w| w["text"].clone());
+        assert_eq!(label(&wm), Some(json!("Travel: Stealth")), "the default");
+        wm.click_id(&mut cx, "node.camp.a").expect("node a");
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        let leg = 1 + STEALTH_DAYS;
+        let (_, travel_tip) = wm.widget_rect("world_map.travel").expect("Travel");
+        assert!(travel_tip.join(" ").contains(&format!("Stealth: {}, {leg} Tallow.", days(leg))), "{travel_tip:?}");
+        assert_eq!(wm.state(&cx)["view"]["routes"][0]["days"], json!(leg), "the road label's days");
+        wm.click_id(&mut cx, "world_map.mode").expect("mode");
+        assert_eq!(cx.log.last().map(String::as_str), Some("Travel mode: Forced march."));
+        assert_eq!(cx.gs().campaign.as_ref().unwrap().mode, "forced");
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        assert_eq!(label(&wm), Some(json!("Travel: Forced march")));
+        // TEXTFIT1: the longer label fits its button at every text size
+        for (size, scale) in TEXT_SIZES {
+            let recs = frame(&mut wm, &mut cx, &mut g, scale as f32);
+            let w = wm.widgets().into_iter().find(|w| w["id"] == "world_map.mode").expect("the mode button");
+            let (x, y, ww, hh) = rect(&w);
+            let (x, y, ww, hh) = (x as f32, y as f32, ww as f32, hh as f32);
+            let inside: Vec<TextRec> = recs.into_iter().filter(|r| r.x + r.w / 2.0 > x && r.x + r.w / 2.0 < x + ww && r.y + r.h / 2.0 > y && r.y + r.h / 2.0 < y + hh).collect();
+            assert!(!inside.is_empty(), "{size}: the label is drawn");
+            let v = aegis_ui::text_audit::issues(&inside, W as f32, H as f32, &[("world_map.mode".to_string(), x, y, ww, hh)]);
+            assert_eq!(v["counts"], json!({"cut": 0, "edge": 0, "overlap": 0, "spill": 0}), "the mode button at {size}: {v}");
+        }
+        frame(&mut wm, &mut cx, &mut g, 1.0);
+        // the forced leg is 1 day: the day input alone stops short of Breach, the leg input reaches it
+        assert!(campaign::preview_days(&cx.data, cx.gs(), 1).is_empty());
+        let time = cx.gs().time;
+        wm.click_id(&mut cx, "world_map.travel").expect("travel");
+        let (how, ask) = take_nav(&mut cx);
+        assert_eq!((how, ask.id()), ("push", "ask"));
+        assert_eq!(ask.state(&cx)["question"], json!("This trip would end the run: They found the grate. Travel anyway?"));
+        assert_eq!(cx.gs().time, time, "nothing moved before the answer");
+        wm.click_id(&mut cx, "world_map.mode").expect("mode");
+        assert_eq!(cx.gs().campaign.as_ref().unwrap().mode, "", "back to the default: kept as none");
     }
 
     /// P3, W6: the battle bridge's start-AP change lowers each party unit's round-1 AP by the mods' `start_ap` (never

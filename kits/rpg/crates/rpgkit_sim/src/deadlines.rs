@@ -12,7 +12,9 @@
 //! Every number comes from the kit's rules: legs and their days from `travel::best_path` over `travel::all_legs` (the
 //! world map's path search, route gates ignored), rest and retreat days from `campaign::purse::rest_rule` /
 //! `defeat_rule` (a rest counts only where `where` allows it at the hub), the day from the campaign's read key
-//! `campaign.day` and the checkpoints from `campaign::checkpoint::defs`.
+//! `campaign.day` and the checkpoints from `campaign::checkpoint::defs`. CAMPAIGN1-TM: in a world with travel modes
+//! every leg is planned in the world's default mode (its `days` on each leg, `travel::best_path_with`), the mode a new
+//! game travels in; the first line names it.
 
 use crate::args::SimArgs;
 use aegis_core::json::{self, Dict};
@@ -69,6 +71,8 @@ pub struct Plan {
     pub rest_days: i64,
     pub retreat_days: i64,
     pub losses: i64,
+    /// CAMPAIGN1-TM: the default travel mode the legs are planned in (name, days per leg); None without modes.
+    pub mode: Option<(String, i64)>,
     pub missions: Vec<Mission>,
     pub checkpoints: Vec<CheckpointLine>,
 }
@@ -143,11 +147,14 @@ pub fn plan(d: &Data, w: &str, losses: i64) -> Result<Plan, String> {
     let retreat_days = (defeat.days as i64).max(0);
     let legs = travel::all_legs(d, w);
     let nodes = travel::nodes(d, w);
+    // CAMPAIGN1-TM: a fresh campaign travels in the default mode
+    let mode = purse::travel_mode(d, &gs).map(|m| (m.name, (m.days as i64).max(0)));
+    let extra = mode.as_ref().map_or(0, |m| m.1);
     let days = |from: &str, to: &str| -> Option<i64> {
         if from == to {
             return Some(0);
         }
-        travel::best_path(&legs, &nodes, from, to).map(|(t, _)| t)
+        travel::best_path_with(&legs, &nodes, from, to, extra).map(|(t, _)| t)
     };
 
     let mains: Vec<&Dict> = d.merged_entries(w, "quests").into_iter().filter(|q| is_main(q)).collect();
@@ -212,7 +219,7 @@ pub fn plan(d: &Data, w: &str, losses: i64) -> Result<Plan, String> {
             CheckpointLine { id: c.id.clone(), act: c.act, quest: c.quest.clone(), deadline: c.deadline, days }
         })
         .collect();
-    Ok(Plan { world: w.to_string(), hub, rest_days, retreat_days, losses, missions, checkpoints })
+    Ok(Plan { world: w.to_string(), hub, rest_days, retreat_days, losses, mode, missions, checkpoints })
 }
 
 /// Why a mission has no day: the first mission up to it whose node the graph does not reach.
@@ -254,6 +261,9 @@ pub fn plan_lines(p: &Plan) -> Vec<String> {
         p.losses,
         if p.losses == 1 { "" } else { "es" }
     )];
+    if let Some((name, days)) = &p.mode {
+        out[0].push_str(&format!(", legs in the travel mode {name} (+{days} day{} a leg)", plural(*days)));
+    }
     out.push(format!("{:<20} {:<28} {:>4} {:>5} {:>5} {:>6} {:>10}", "mission", "node", "out", "back", "best", "worst", "worst_home"));
     for m in &p.missions {
         let back = if m.last_of_act { "last".to_string() } else { opt(m.back) };

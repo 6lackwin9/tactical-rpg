@@ -905,6 +905,67 @@ impl DefeatRule {
     }
 }
 
+/// CAMPAIGN1-TM: the keys of the manifest's `travel_modes` block and of one mode row.
+pub const TRAVEL_MODES_KEYS: [&str; 2] = ["default", "modes"];
+pub const TRAVEL_MODE_KEYS: [&str; 7] = ["id", "name", "tip", "days", "road_pct", "sure_when", "road_encounters"];
+/// CAMPAIGN1-TM: the most modes a world names.
+pub const TRAVEL_MODES_MAX: usize = 4;
+
+/// CAMPAIGN1-TM: one travel mode (a row of the manifest's `travel_modes.modes`), read with its defaults: `days` more
+/// per leg (they pass and cost upkeep as the route's own), `road_pct` times the leg's road-fight chance (100 =
+/// unchanged), `sure_when` flag conditions (read keys included) under which every leg's road fight is sure (empty =
+/// never) and `road_encounters` ([ref, weight] pairs) added to the leg's road pool.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TravelMode {
+    pub id: String,
+    pub name: String,
+    pub tip: String,
+    pub days: i32,
+    pub road_pct: i32,
+    pub sure_when: Vec<Value>,
+    pub road_encounters: Vec<Value>,
+}
+
+impl TravelMode {
+    pub fn from_obj(o: &Obj) -> Self {
+        let id = string(o, "id", "");
+        Self {
+            name: string(o, "name", &id),
+            tip: string(o, "tip", ""),
+            days: int(o, "days", 0),
+            road_pct: int(o, "road_pct", 100),
+            sure_when: array(o, "sure_when").to_vec(),
+            road_encounters: array(o, "road_encounters").to_vec(),
+            id,
+        }
+    }
+}
+
+/// CAMPAIGN1-TM: the manifest's `travel_modes` block: the modes in data order (rows without an id are left out) and
+/// the default's id (`default`, else the first mode). No modes = travel as before.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct TravelModes {
+    pub modes: Vec<TravelMode>,
+    pub default: String,
+}
+
+impl TravelModes {
+    pub fn from_obj(o: &Obj) -> Self {
+        let modes: Vec<TravelMode> = objs(o, "modes").iter().map(TravelMode::from_obj).filter(|m| !m.id.is_empty()).collect();
+        let named = string(o, "default", "");
+        let default = if modes.iter().any(|m| m.id == named) { named } else { modes.first().map(|m| m.id.clone()).unwrap_or_default() };
+        Self { modes, default }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.modes.is_empty()
+    }
+
+    pub fn get(&self, id: &str) -> Option<&TravelMode> {
+        self.modes.iter().find(|m| m.id == id)
+    }
+}
+
 // ---- Roster (ROSTER1 3-6, 9, 11, kit hook; engine-only, no Godot original) ------------------------------------------
 
 /// 3.1: the lives a departed member ends with (`party.departed[].life`).

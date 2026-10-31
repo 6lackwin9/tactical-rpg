@@ -163,3 +163,22 @@ fn deadlines_keys_and_positionals_are_checked() {
     assert_eq!(err("duel losses=2"), "SIM argument error: losses= is a deadlines key (mode deadlines only)");
     assert_eq!(err("deadlines losses=3"), "ARGS mode deadlines, world all, losses 3");
 }
+
+/// CAMPAIGN1-TM: in a world with travel modes every leg is planned in the default mode, so each mission's legs take
+/// the mode's days more (the line world's legs are 1 day: out = legs, in the mode legs x (1 + days)).
+#[test]
+fn legs_are_planned_in_the_default_travel_mode() {
+    const MODE_DAYS: i64 = 1;
+    let plain = plan(&data(json!({"vale": line_world(rest_rule(), 14, 38)})), 1);
+    let mut world = line_world(rest_rule(), 14, 38);
+    world["manifest"]["travel_modes"] = json!({"default": "stealth", "modes": [{"id": "forced", "name": "Forced"}, {"id": "stealth", "name": "Stealth", "days": MODE_DAYS}]});
+    let moded = plan(&data(json!({"vale": world})), 1);
+    assert_eq!(plain.mode, None);
+    assert_eq!(moded.mode, Some(("Stealth".to_string(), MODE_DAYS)));
+    for (a, b) in plain.missions.iter().zip(&moded.missions) {
+        assert_eq!(b.out, a.out.map(|legs| legs * (1 + MODE_DAYS)), "{}", a.id);
+    }
+    let first = deadlines::plan_lines(&moded).remove(0);
+    assert!(first.ends_with("legs in the travel mode Stealth (+1 day a leg)"), "{first}");
+    assert!(!deadlines::plan_lines(&plain)[0].contains("travel mode"), "no modes: the line as before");
+}
