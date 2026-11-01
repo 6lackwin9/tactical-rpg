@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "colors": {
+    "bg": "#0a0b10",
+    "panel": "#0a0b10f0",
+    "panel_edge": "#4b5563",
+    "card": "#14171ffa",
+    "card_hot": "#1e232dfa",
+    "selected": "#2c221efa",
+    "edge": "#4b5563",
+    "edge_live": "#6b7280",
+    "edge_hot": "#d97706",
+    "focus": "#d97706",
+    "text": "#d9cbb4",
+    "dim": "#6b7280",
+    "gold": "#fbbf24",
+    "info": "#06b6d4",
+    "ink": "#2c221e",
+    "ring": "#d97706",
+    "parchment": "#d9cbb4",
+    "tip": "#0a0b10f0"
+  },
+  "fonts": {
+    "body": {"file": "fonts/OpenSans-SemiBold.ttf", "scale": 1.0},
+    "display": {"file": "fonts/AlegreyaSC-Bold.ttf", "scale": 1.08},
+    "mono": {"file": "fonts/JetBrainsMono-wght.ttf", "scale": 1.0}
+  },
+  "layout": {
+    "radius": 0,
+    "frame_radius": 0,
+    "frame_title_h": 26,
+    "grid": 4,
+    "margin": 8,
+    "gutter": 6,
+    "padding": 6,
+    "focus_glow": 1
+  },
+  "frames": true
+}

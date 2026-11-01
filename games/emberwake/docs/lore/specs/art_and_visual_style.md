@@ -103,9 +103,19 @@ asset preferences.
 
 - Panels: hue 01 at 94% opacity, a 1 px border in hue 05, riveted corners.
 - Headers and place titles: a serif face in hue 11. Badges and block numbers: bold monospace in hue 12 or 16. Body
-  text: hue 07. The engine's GUI font stays until a font task says otherwise.
+  text: hue 07. Fonts since LOOK1-G1 (2026-11-02): headers Alegreya SC Bold, badge numbers JetBrains Mono, body OpenSans (decision "LOOK1 fonts").
 - Deck cards: iron-edged cards with parchment centres; Cold Steel cards with steel bevels, Inoculated cards with violet
   bone borders.
+- The theme (LOOK1-G1, `games/emberwake/assets/ui/theme.json`, "Tallow and Iron"): screen ground hue 01, panels hue
+  01 at 94 %, cards hue 02, hover hue 03, selected hue 04, edges hue 05 (enabled buttons hue 08), focus, the hovered
+  card edge and the keyboard ring hue 10, body text hue 07, dim text hue 08, headers hue 11, neutral highlight hue
+  16, text on parchment hue 04 on hue 07; foe red and good green stay the engine's. Faces: Alegreya SC Bold for
+  headers, JetBrains Mono for badges, OpenSans SemiBold for body. Corners square.
+- Frames (`ui/frames/`, code-drawn by `tools/gen_art.py ui_frames` at 2 art px per logical px): `panel` (24 px, a
+  2 px hue 05 edge, a 2 px hue 02 bevel, hue 06 / hue 08 rivets), `tip` (the panel without rivets), `inset` (a sunken
+  well), `parchment` (hue 07 in a hue 04 edge), the buttons, tabs and cards (a hue 08, 05 or 10 edge on hues 02-04),
+  and `ornate` (48 px, iron bosses with a hue 11 stud and lancet, a hue 11 line inside the edge) for the title and
+  the one-time cards only.
 
 ## 7. Character briefs
 

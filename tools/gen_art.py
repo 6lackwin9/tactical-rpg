@@ -4,7 +4,9 @@
 #   python tools/gen_art.py [group ...] [--layer engine|kit|game ...] [--root DIR] [--overwrite] [--list]
 #   python tools/gen_art.py --compare DIR [--spot OUT]
 # Groups: bodies portraits items skills statuses terrain overlays region markers pins chips world_map backdrops menu stage_tiles battle_backdrops
-# story world_card menu_sunless sunk_backdrops family_icons.
+# story world_card menu_sunless sunk_backdrops family_icons ui_frames.
+# ui_frames (LOOK1-G1) = the Tallow and Iron nine-slice frames ui/frames/<role>.png + .json (exact pixels; the ornate
+# corners are code-drawn, or from the A6 corner sheet with --ornate SHEET).
 # The last five (STORYART1) are the Sunk Ward slice's placeholders in the art bible's 16 hues: story = the vignette
 # pictures backgrounds/story/<id>.png (1120 x 472, 2x STORYUI1 V9's 560 x 236 picture area: intro_1-4, meat_market,
 # hearth), world_card = backgrounds/title/sunk_ward.png, menu_sunless = backgrounds/menu/main_menu.png (the game's main menu, MENU2; the
@@ -2834,13 +2836,159 @@ def g_family_icons(out: Out) -> None:
         save(grid_icon(fn), "game", rel, Out(out.root, out.layers, True) if stand_in else out)
 
 
+# ------------------------------------------------------------------------------
+# UI frames (LOOK1-G1, spec games/emberwake/docs/specs/LOOK1_TASKS.md G1): the Tallow and Iron nine-slice frames,
+# ui/frames/<role>.png + <role>.json, exact pixels at scale 2 (2 art px per logical px) in the art bible's hues plus
+# the spec's two inset darks (#050608, #0e1016). Rings count from the outside in art px.
+# ------------------------------------------------------------------------------
+
+INSET_DARK, INSET_FILL = "#050608", "#0e1016"
+ORNATE_SHEET = None   # --ornate SHEET: the A6 corner sheet (magenta key) whose corners go into the ornate frame
+
+
+def fr_ring(w: int, h: int, x: int, y: int) -> int:
+    return min(x, y, w - 1 - x, h - 1 - y)
+
+
+def fr_box(w: int, h: int, rings, centre: str, centre_a: int = 255) -> Image.Image:
+    # rings: one colour per ring from the outside in; everything inside them is the centre
+    img = Image.new("RGBA", (w, h))
+    px = img.load()
+    for y in range(h):
+        for x in range(w):
+            r = fr_ring(w, h, x, y)
+            px[x, y] = rgb(rings[r]) if r < len(rings) else rgb(centre, centre_a)
+    return img
+
+
+def fr_rivets(img: Image.Image) -> None:
+    # a 4 x 4 Cinder Ash rivet with a 2 x 2 Pewter top-left, 2 px in from each corner
+    w, h = img.size
+    for ox, oy in ((2, 2), (w - 6, 2), (2, h - 6), (w - 6, h - 6)):
+        for y in range(4):
+            for x in range(4):
+                img.putpixel((ox + x, oy + y), rgb(PSTEEL if x < 2 and y < 2 else CINDER))
+
+
+def fr_lit(img: Image.Image) -> None:
+    # ring 2's top row in Wet Slate: a lit edge
+    w, _ = img.size
+    for x in range(2, w - 2):
+        img.putpixel((x, 2), rgb(SLATE))
+
+
+def fr_inset() -> Image.Image:
+    # a sunken well: ring 0-1 dark on the top and left, Wet Slate on the bottom and right (split on the diagonal)
+    w = h = 16
+    img = Image.new("RGBA", (w, h))
+    for y in range(h):
+        for x in range(w):
+            if fr_ring(w, h, x, y) >= 2:
+                img.putpixel((x, y), rgb(INSET_FILL, 0xe0))
+            elif x < 2 and y < h - 2 or y < 2 and x < w - 2 or (x < 2 or y < 2) and x + y < w - 1:
+                img.putpixel((x, y), rgb(INSET_DARK))
+            else:
+                img.putpixel((x, y), rgb(SLATE))
+    return img
+
+
+def fr_ornate_corner() -> dict:
+    # the top-left 16 x 16 corner of the code-drawn ornate frame: an 8 x 8 iron boss outlined in Pewter with a Candle
+    # Gold stud, a Tallow-to-Candle lancet pointing inward; the ring-3 Candle Gold line runs from the boss along the edge
+    c = {}
+    for y in range(16):
+        for x in range(16):
+            r = min(x, y)
+            if r < 2:
+                c[x, y] = IRON
+            elif x <= 7 and y <= 7:
+                c[x, y] = PSTEEL if x == 7 or y == 7 else IRON
+            elif r == 3:
+                c[x, y] = CANDLE
+            elif r == 2:
+                c[x, y] = BASALT
+            else:
+                c[x, y] = VOID + "f0"
+    c[3, 3], c[4, 3], c[3, 4], c[4, 4] = CANDLE, CANDLE, CANDLE, TALLOW
+    for i, col in ((8, TALLOW), (9, TALLOW), (10, CANDLE)):
+        c[i, i] = col
+    return c
+
+
+def fr_ornate(sheet) -> Image.Image:
+    # 48 x 48, slice 16: edges ring 0-1 Scavenged Iron, ring 2 Damp Basalt, a Candle Gold line at ring 3, the centre
+    # Void Abyss at 94 %; corners code-drawn, or with --ornate SHEET the sheet's four quadrants' keyed corners (each
+    # quadrant's non-magenta box, nearest-scaled to 16 x 16; the divider is not used here)
+    w = h = 48
+    img = fr_box(w, h, [IRON, IRON, BASALT, CANDLE], VOID, 0xf0)
+    corner = fr_ornate_corner()
+    quads = []
+    if sheet:
+        src = Image.open(sheet).convert("RGBA")
+        a = np.array(src)
+        key = (a[..., 0] > 200) & (a[..., 1] < 60) & (a[..., 2] > 200)
+        a[key] = 0
+        src = Image.fromarray(a, "RGBA")
+        sw, sh = src.size
+        for qx, qy in ((0, 0), (1, 0), (0, 1), (1, 1)):
+            q = src.crop((qx * sw // 2, qy * sh // 2, (qx + 1) * sw // 2, (qy + 1) * sh // 2))
+            box = q.getbbox()
+            quads.append(q.crop(box).resize((16, 16), Image.NEAREST) if box else None)
+    for i, (fx, fy) in enumerate(((False, False), (True, False), (False, True), (True, True))):
+        if quads and quads[i] is not None:
+            img.alpha_composite(quads[i], (32 if fx else 0, 32 if fy else 0))
+            continue
+        for (x, y), col in corner.items():
+            img.putpixel((47 - x if fx else x, 47 - y if fy else y), rgb(col[:7], int(col[7:] or "ff", 16)))
+    return img
+
+
+def ui_frames():
+    # role -> (image, sidecar)
+    def btn(edge, fill, lit):
+        img = fr_box(16, 16, [edge, edge], fill)
+        if lit:
+            fr_lit(img)
+        return img
+    panel = fr_box(24, 24, [IRON, IRON, BASALT, BASALT], VOID, 0xf0)
+    fr_rivets(panel)
+    s4, s8 = {"slice": [4, 4, 4, 4]}, {"slice": [8, 8, 8, 8]}
+    out = {
+        "panel": (panel, s8),
+        "tip": (fr_box(16, 16, [IRON, IRON, BASALT, BASALT], VOID, 0xf0), s4),
+        "inset": (fr_inset(), s4),
+        "parchment": (fr_box(16, 16, [OAK, OAK], LINEN), dict(s4, ink="ink")),
+        "button": (btn(CINDER, BASALT, True), s4),
+        "button_hot": (btn(TALLOW, SLATE, True), s4),
+        "button_down": (btn(TALLOW, OAK, True), s4),
+        "button_off": (btn(IRON, INSET_FILL, False), s4),
+        "card": (btn(IRON, BASALT, False), s4),
+        "card_hot": (btn(TALLOW, SLATE, False), s4),
+        "card_on": (btn(TALLOW, OAK, False), s4),
+        "ornate": (fr_ornate(ORNATE_SHEET), {"slice": [16, 16, 16, 16]}),
+    }
+    out["tab"] = out["button"]
+    out["tab_on"] = out["button_down"]
+    return out
+
+
+def g_ui_frames(out: Out) -> None:
+    for role, (img, side) in sorted(ui_frames().items()):
+        save(img, "game", "ui/frames/%s.png" % role, out)
+        path = out.target("game", "ui/frames/%s.json" % role)
+        if path:
+            with open(path, "w", encoding="utf-8", newline="\n") as f:
+                f.write(json.dumps(dict(side, scale=2)) + "\n")
+            print("wrote game:ui/frames/%s.json" % role)
+
+
 GROUPS = {
     "bodies": g_bodies, "portraits": g_portraits, "items": g_items, "skills": g_skills, "statuses": g_statuses,
     "terrain": g_terrain, "overlays": g_overlays, "region": g_region, "markers": g_markers, "pins": g_pins,
     "chips": g_chips, "world_map": g_world_map, "backdrops": g_backdrops, "menu": g_menu,
     "stage_tiles": g_stage_tiles, "battle_backdrops": g_battle_backdrops,
     "story": g_story, "world_card": g_world_card, "menu_sunless": g_menu_sunless, "sunk_backdrops": g_sunk_backdrops,
-    "family_icons": g_family_icons,
+    "family_icons": g_family_icons, "ui_frames": g_ui_frames,
 }
 
 
@@ -2933,6 +3081,7 @@ def main() -> None:
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--compare", metavar="DIR", help="check a regenerated workspace root against the committed files")
     ap.add_argument("--spot", metavar="OUT", help="with --compare: write committed | regenerated body sheets to OUT")
+    ap.add_argument("--ornate", metavar="SHEET", help="ui_frames: compose the ornate frame's corners from the A6 corner sheet")
     a = ap.parse_args()
     if a.list:
         print(" ".join(GROUPS))
@@ -2941,6 +3090,8 @@ def main() -> None:
         if a.spot:
             spot(a.compare, a.spot)
         sys.exit(compare(a.compare))
+    global ORNATE_SHEET
+    ORNATE_SHEET = a.ornate
     out = Out(a.root, a.layer or list(LAYERS), a.overwrite)
     for g in a.groups or list(GROUPS):
         if g not in GROUPS:
