@@ -155,5 +155,117 @@ class Faces(unittest.TestCase):
         self.assertIn("unknown tier", r.stderr)
 
 
+def figure(size=200):
+    """A lopsided figure (head and a shoulder bump) on the flat background."""
+    im = Image.new("RGBA", (size, size), BG + (255,))
+    d = ImageDraw.Draw(im)
+    d.ellipse([60, 30, 140, 120], fill=(200, 40, 40, 255))
+    d.rectangle([40, 110, 150, 190], fill=(200, 40, 40, 255))
+    d.ellipse([140, 120, 175, 160], fill=(200, 40, 40, 255))
+    return im
+
+
+class Scale(unittest.TestCase):
+    """--reduce scale, --align and --cell (PORTRAITFX1-XA)."""
+
+    def setUp(self):
+        self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="faces_scale_"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.root = self.tmp / "portraits"
+        self.src = self.tmp / "tess_faces_gen1_1.png"
+        sheet().save(self.src)
+
+    def run_faces(self, **kw):
+        return sheets.slice_faces(self.src, "tess", "npc", root=self.root, faction="hearth", **kw)
+
+    def frame(self, name):
+        return Image.open(self.root / "npcs" / "faces" / "tess" / f"{name}.png").convert("RGBA")
+
+    def test_no_palette_pass_and_frame_drawn(self):
+        self.run_faces(reduce="scale")
+        for name in sheets.FACE_CELLS:
+            im = self.frame(name)
+            self.assertEqual(im.size, (240, 240))
+            colours = {c for _, c in im.getcolors(1 << 16)}
+            top = HUES[name]
+            # the head is shaded from 0.55 to 1.0 of its hue; its brightest ring survives a pure scale
+            near = [c for c in colours if all(abs(a - b) <= 24 for a, b in zip(c[:3], top))]
+            self.assertTrue(near, f"{name}: an input colour survives")
+            self.assertEqual(im.getpixel((0, 0))[:3], (24, 16, 18), "the frame border")
+        want = X.finish(Image.new("RGBA", (X.GRID, X.GRID), (0, 0, 0, 0)), faction="hearth")
+        self.assertEqual(self.frame("neutral").getpixel((2, 120)), want.convert("RGBA").getpixel((2, 120)), "backdrop")
+
+    def test_scale_frames_equal_the_review_recipe(self):
+        self.run_faces(reduce="scale")
+        im = sheets.clear_sheet(Image.open(self.src).convert("RGBA"))
+        for name, box in zip(sheets.FACE_CELLS, sheets.face_boxes(im.size)):
+            fig = X.smooth_reduce(X.cut_background(X.clear_corner(im.crop(box))), X.GRID)
+            want = X.finish(fig, faction="hearth").convert("RGBA")
+            self.assertIsNone(ImageChops.difference(self.frame(name), want).getbbox(), name)
+
+    def test_default_is_the_pixelize_path(self):
+        self.run_faces()
+        first = {n: self.frame(n) for n in sheets.FACE_CELLS}
+        self.run_faces(reduce="pixelize")
+        clean = self.tmp / "clean.png"
+        sheet(mark=False).save(clean)
+        for name, box in zip(sheets.FACE_CELLS, sheets.face_boxes((SIZE, SIZE))):
+            want, _ = X.pixelize(clean, crop=box, mark=False, faction="hearth")
+            self.assertIsNone(ImageChops.difference(first[name], want.convert("RGBA")).getbbox(), name)
+            self.assertIsNone(ImageChops.difference(self.frame(name), first[name]).getbbox(), name)
+
+    def test_align_recovers_a_known_scale_and_shift(self):
+        neutral = figure()
+        cell, _ = sheets.place(neutral, 0.9, 9, -9, BG + (255,), Image.LANCZOS)
+        aligned, scale, (dx, dy) = sheets.align_to(cell, neutral)
+        self.assertLess(abs(scale - 1 / 0.9), 0.01)
+        self.assertLessEqual(abs(dx + 10), 1)
+        self.assertLessEqual(abs(dy - 10), 1)
+        a = X.cut_background(aligned.copy()).getchannel("A")
+        n = X.cut_background(neutral.copy()).getchannel("A")
+        self.assertLess(sheets.mask_diff(a.point(lambda v: 255 if v >= 128 else 0), n.point(lambda v: 255 if v >= 128 else 0)),
+                        0.02 * n.point(lambda v: 255 if v >= 128 else 0).histogram()[255])
+        again = sheets.align_to(cell, neutral)
+        self.assertEqual(again[1:], (scale, (dx, dy)), "deterministic")
+
+    def test_align_through_the_sheet_reports_each_cell(self):
+        lines = []
+        self.run_faces(reduce="scale", align=True, report=lines.append)
+        self.assertEqual([l.split(":")[0] for l in lines], ["hurt", "angry", "afraid"])
+        self.assertTrue(all("scale" in l and "offset" in l for l in lines), lines)
+
+    def test_cell_replaces_the_named_cell(self):
+        edit = self.tmp / "afraid_edit.png"
+        img = Image.new("RGB", (333, 333), BG)
+        ImageDraw.Draw(img).ellipse([100, 60, 230, 270], fill=(250, 250, 250))
+        img.save(edit)
+        self.run_faces(reduce="scale", cells={"afraid": edit})
+        afraid = self.frame("afraid")
+        self.assertTrue(any(c[:3] == (250, 250, 250) for _, c in afraid.getcolors(1 << 16)), "the edit's colour")
+        plain = self.tmp / "plain"
+        sheets.slice_faces(self.src, "tess", "npc", root=plain, faction="hearth", reduce="scale")
+        for name in ("neutral", "hurt", "angry"):
+            other = Image.open(plain / "npcs" / "faces" / "tess" / f"{name}.png").convert("RGBA")
+            self.assertIsNone(ImageChops.difference(self.frame(name), other).getbbox(), f"{name} untouched")
+        with self.assertRaises(ValueError):
+            self.run_faces(reduce="scale", cells={"happy": edit})
+
+    def test_flags_need_scale(self):
+        for kw in ({"align": True}, {"cells": {"hurt": self.src}}, {"reduce": "sharp"}):
+            with self.assertRaises(ValueError):
+                self.run_faces(**kw)
+        self.assertFalse(self.root.exists())
+
+    def test_contact_and_cli(self):
+        out = self.tmp / "c.png"
+        r = subprocess.run([sys.executable, str(HERE / "sheets.py"), "faces", str(self.src), "tess", "npc", "--reduce",
+                            "scale", "--align", "--cell", f"afraid={self.src}", "--contact", str(out), "--faction",
+                            "hearth", "--root", str(self.root)], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("hurt: scale", r.stdout)
+        with Image.open(out) as im:
+            self.assertEqual(im.size, (8 + 5 * 248, 8 + 240 + 14 + 8))
+
+
 if __name__ == "__main__":
     unittest.main()

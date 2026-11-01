@@ -211,6 +211,14 @@ exact `prompt_sent`; `prompt_requested` too when it differs), `reference` (the f
 `"source": "antigravity image subagent"`. Route `portrait` is pixelized into the 120 px game portrait (the request's
 `target` when that file does not exist yet, else `pixelized/<art_src name>.png`); `faces` is cut by `sheets.py faces`
 and the rest is left for the asset lane. `output/<name>.ingested.json` lists what went where; a second ingest skips it.
+Expression sheets from this route are already pixel art, so `sheets.py faces` takes `--reduce scale` (decision
+"Expression sheets: scale only and aligned cells", PORTRAITFX1-XA): each cell is only cut from its background
+(`pixelize.cut_background`), scaled to the 120 grid (`smooth_reduce`) and framed on the faction backdrop, with no
+palette pass (the default `--reduce pixelize` is unchanged). `--align` first scales (0.85 to 1.15, steps of 0.01) and
+shifts each non-neutral cell so its figure best covers the neutral cell's, and prints the chosen scale and offset
+(pixels of the cell) per cell. `--cell <name>=<image>` (repeatable) replaces one cell by a 1:1 edit of the neutral cell
+(for example `--cell afraid=art_src/bram_gen1793543824_1.png`), resized to the cell before the alignment. Both
+need `--reduce scale`; `--contact` works as before.
 Commands (from `tools/portraits`, with `$LOCALAPPDATA/Programs/Python/Python312/python.exe`; test
 `test_artqueue.py`):
 

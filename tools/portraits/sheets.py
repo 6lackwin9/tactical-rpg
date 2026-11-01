@@ -22,6 +22,11 @@
 #       --base also writes the neutral frame as R/<folder>/<id>.png; --contact writes the four frames beside the
 #       portrait R/<folder>/<id>.png as it was before the run; the backdrop is --faction, else the `faction` of the
 #       sheet's record, else of art_src/<id>.json, else hearth. face.py writes the frames' sidecars afterwards.
+#       --reduce scale (default pixelize): for art that is already pixel art (the Gemini route) each cell is only cut
+#       from its background, scaled to the 120 grid and framed, with no palette pass; --align (scale only) scales
+#       (0.85 .. 1.15) and shifts each other cell onto the neutral cell's figure and prints the scale and offset;
+#       --cell name=image (repeatable, scale only) replaces one cell by a 1:1 edit of the neutral cell, resized to the
+#       cell, before the alignment.
 # Standard library and Pillow only, so it can be ported to Rust.
 import pathlib, sys, tempfile
 
@@ -633,10 +638,94 @@ def clear_sheet(im):
     return X.clear_corner(X.clear_mark(im.convert("RGBA")))
 
 
-def slice_faces(sheet, cid, tier, base=False, crop=None, contact_out=None, faction=None, root=PORTRAITS):
-    """Cuts an expression sheet into its four frames (see the header); returns the paths written, frames first."""
+ALIGN_SCALES = [round(0.85 + 0.01 * i, 2) for i in range(31)]   # the scales tried when aligning a cell (0.85 .. 1.15)
+ALIGN_WORK = 160    # the longest side of the masks the coarse search compares
+ALIGN_REACH = 3     # work-pixel offsets tried around the bounding-box match
+
+
+def place(im, scale, dx, dy, fill, resample):
+    """`im` scaled by `scale` about its centre and shifted by (dx, dy), on a canvas of its own size filled with `fill`
+    (a point p lands at (p - c) * scale + c + d). Returns the image and the scale actually applied (a whole pixel size)."""
+    from PIL import Image
+    w, h = im.size
+    nw, nh = max(1, round(w * scale)), max(1, round(h * scale))
+    big = im.resize((nw, nh), resample)
+    out = Image.new(im.mode, (w, h), fill)
+    out.paste(big, (round(w / 2 + dx - nw / 2), round(h / 2 + dy - nh / 2)))
+    return out, nw / w
+
+
+def mask_diff(a, b):
+    """The number of pixels in which two 0/255 masks differ."""
+    from PIL import ImageChops
+    return ImageChops.difference(a, b).histogram()[255]
+
+
+def hard(mask):
+    return mask.point(lambda v: 255 if v >= 128 else 0)
+
+
+def align_to(cell, neutral):
+    """`cell` scaled (0.85 .. 1.15, steps of 0.01) and shifted so that its figure best covers the neutral cell's figure
+    (the figure is what pixelize.cut_background leaves); returns (aligned, scale, (dx, dy)) with dx, dy in cell pixels
+    (a point p moves to (p - c) * scale + c + d). Deterministic: a coarse search on small masks (every scale, the
+    bounding-box offset plus or minus ALIGN_REACH), then the offset refined on full-size masks."""
     import pixelize as X
     from PIL import Image
+    bg = cell.getpixel((2, 2))
+    def mask(im):
+        return hard(X.cut_background(im.copy()).getchannel("A"))
+    want, have = mask(neutral), mask(cell)
+    wb, hb = want.getbbox(), have.getbbox()
+    if wb is None or hb is None:
+        return cell, 1.0, (0, 0)
+    w, h = cell.size
+    f = max(1.0, max(w, h) / ALIGN_WORK)
+    size = (max(1, round(w / f)), max(1, round(h / f)))
+    want_s, have_s = hard(want.resize(size, Image.BOX)), hard(have.resize(size, Image.BOX))
+    wcx, wcy, hcx, hcy = (wb[0] + wb[2]) / 2, (wb[1] + wb[3]) / 2, (hb[0] + hb[2]) / 2, (hb[1] + hb[3]) / 2
+    best = None
+    for s in ALIGN_SCALES:
+        # the offset that puts the scaled bounding-box centre on the neutral one, in work pixels
+        ox, oy = (wcx - (hcx - w / 2) * s - w / 2) / f, (wcy - (hcy - h / 2) * s - h / 2) / f
+        for ddy in range(-ALIGN_REACH, ALIGN_REACH + 1):
+            for ddx in range(-ALIGN_REACH, ALIGN_REACH + 1):
+                dx, dy = round(ox) + ddx, round(oy) + ddy
+                m, _ = place(have_s, s, dx, dy, 0, Image.BOX)
+                key = (mask_diff(hard(m), want_s), abs(s - 1), abs(dx) + abs(dy), s, dx, dy)
+                if best is None or key < best:
+                    best = key
+    s, dx, dy = best[3:]
+    fx, fy = round(dx * f), round(dy * f)
+    top = None
+    reach = int(f) + 1
+    for ddy in range(-reach, reach + 1):
+        for ddx in range(-reach, reach + 1):
+            m, _ = place(have, s, fx + ddx, fy + ddy, 0, Image.BOX)
+            key = (mask_diff(hard(m), want), abs(ddx) + abs(ddy), ddx, ddy)
+            if top is None or key < top:
+                top = key
+    fx, fy = fx + top[2], fy + top[3]
+    aligned, applied = place(cell, s, fx, fy, bg, Image.LANCZOS)
+    return aligned, applied, (fx, fy)
+
+
+def slice_faces(sheet, cid, tier, base=False, crop=None, contact_out=None, faction=None, root=PORTRAITS,
+                reduce="pixelize", align=False, cells=None, report=None):
+    """Cuts an expression sheet into its four frames (see the header); returns the paths written, frames first.
+    reduce "scale": each cell is cut from its background, scaled to the grid and framed without the palette pass;
+    `align` (scale only) lines the other three cells up with the neutral one; `cells` maps a cell name to an image
+    that replaces it (resized to the cell, before the alignment); `report(text)` hears each alignment."""
+    import pixelize as X
+    from PIL import Image
+    if reduce not in ("pixelize", "scale"):
+        raise ValueError(f"unknown --reduce {reduce!r} (pixelize or scale)")
+    cells = dict(cells or {})
+    if (align or cells) and reduce != "scale":
+        raise ValueError("--align and --cell need --reduce scale")
+    for name in cells:
+        if name not in FACE_CELLS:
+            raise ValueError(f"unknown cell {name!r} (one of {', '.join(FACE_CELLS)})")
     folder = pathlib.Path(root) / face_folder(tier)
     im = Image.open(sheet).convert("RGBA")
     boxes = face_boxes(im.size, crop)
@@ -648,12 +737,27 @@ def slice_faces(sheet, cid, tier, base=False, crop=None, contact_out=None, facti
     out_dir = folder / "faces" / cid
     out_dir.mkdir(parents=True, exist_ok=True)
     written = []
-    with tempfile.TemporaryDirectory(prefix="faces_") as tmp:
-        cleared = pathlib.Path(tmp) / "sheet.png"
-        im.save(cleared)
-        frames = {}
+    frames = {}
+    if reduce == "scale":
+        raw = {}
         for name, box in zip(FACE_CELLS, boxes):
-            frames[name], _ = X.pixelize(cleared, crop=box, mark=False, faction=faction)
+            cell = im.crop(box)
+            if name in cells:
+                cell = Image.open(cells[name]).convert("RGBA").resize(cell.size, Image.LANCZOS)
+            raw[name] = X.clear_corner(cell)
+        for name in FACE_CELLS:
+            cell = raw[name]
+            if align and name != "neutral":
+                cell, scale, (dx, dy) = align_to(cell, raw["neutral"])
+                if report:
+                    report(f"{name}: scale {scale:.3f} offset {dx},{dy}")
+            frames[name] = X.finish(X.smooth_reduce(X.cut_background(cell), X.GRID), faction=faction)
+    else:
+        with tempfile.TemporaryDirectory(prefix="faces_") as tmp:
+            cleared = pathlib.Path(tmp) / "sheet.png"
+            im.save(cleared)
+            for name, box in zip(FACE_CELLS, boxes):
+                frames[name], _ = X.pixelize(cleared, crop=box, mark=False, faction=faction)
     for name in FACE_CELLS:
         dest = out_dir / f"{name}.png"
         frames[name].save(dest); written.append(dest)
@@ -704,18 +808,25 @@ if __name__ == "__main__":
         write_props_md(sys.argv[2]); print(len(PROP_SHEETS), "sheets")
     elif sys.argv[1] == "faces":
         args = sys.argv[2:]; opt = {}
-        for flag in ("--crop", "--contact", "--faction", "--root"):
+        cells = {}
+        while "--cell" in args:
+            i = args.index("--cell"); name, _, img = args[i + 1].partition("="); cells[name] = img; del args[i:i + 2]
+        for flag in ("--crop", "--contact", "--faction", "--root", "--reduce"):
             if flag in args:
                 i = args.index(flag); opt[flag] = args[i + 1]; del args[i:i + 2]
         base = "--base" in args
         if base:
             args.remove("--base")
+        align = "--align" in args
+        if align:
+            args.remove("--align")
         if len(args) != 3:
             sys.exit("usage: sheets.py faces <sheet.png> <id> <tier> [--base] [--crop l,t,r,b] [--contact out.png] "
-                     "[--faction F] [--root R]")
+                     "[--faction F] [--root R] [--reduce pixelize|scale] [--align] [--cell name=image]...")
         try:
             for path in slice_faces(args[0], args[1], args[2], base, parse_crop(opt["--crop"]) if "--crop" in opt else None,
-                                    opt.get("--contact"), opt.get("--faction"), opt.get("--root", PORTRAITS)):
+                                    opt.get("--contact"), opt.get("--faction"), opt.get("--root", PORTRAITS),
+                                    opt.get("--reduce", "pixelize"), align, cells, print):
                 print(path)
         except ValueError as e:
             sys.exit(f"faces: {e}")
