@@ -1,0 +1,194 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "portrait_cues",
+   "entry": {
+    "id": "hit_flash",
+    "trigger": "event",
+    "effect": "flash",
+    "intensity": 0.6,
+    "ms": 140,
+    "event": "hit",
+    "color": "#d9cbb4"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "portrait_cues",
+   "entry": {
+    "id": "hit_jolt",
+    "trigger": "event",
+    "effect": "jolt",
+    "intensity": 1.0,
+    "event": "hit",
+    "preset": "hit"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "portrait_cues",
+   "entry": {
+    "id": "crit_flash",
+    "trigger": "event",
+    "effect": "flash",
+    "intensity": 0.9,
+    "ms": 180,
+    "event": "crit",
+    "color": "#e11d48"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "portrait_cues",
+   "entry": {
+    "id": "crit_jolt",
+    "trigger": "event",
+    "effect": "jolt",
+    "intensity": 1.0,
+    "event": "crit",
+    "preset": "crit"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "portrait_cues",
+   "entry": {
+    "id": "guard_flash",
+    "trigger": "event",
+    "effect": "flash",
+    "intensity": 0.4,
+    "ms": 120,
+    "event": "guard_hit",
+    "color": "#fbbf24"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "portrait_cues",
+   "entry": {
+    "id": "guard_jolt",
+    "trigger": "event",
+    "effect": "jolt",
+    "intensity": 0.5,
+    "event": "guard_hit",
+    "preset": "hit"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "portrait_cues",
+   "entry": {
+    "id": "heal_glow",
+    "trigger": "event",
+    "effect": "flash",
+    "intensity": 0.3,
+    "ms": 420,
+    "event": "heal",
+    "color": "#fbbf24"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "portrait_cues",
+   "entry": {
+    "id": "break_flash",
+    "trigger": "event",
+    "effect": "flash",
+    "intensity": 0.9,
+    "ms": 120,
+    "event": "break",
+    "color": "#d9cbb4"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "portrait_cues",
+   "entry": {
+    "id": "break_jolt",
+    "trigger": "event",
+    "effect": "jolt",
+    "intensity": 1.0,
+    "event": "break",
+    "preset": "crit"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "portrait_cues",
+   "entry": {
+    "id": "wounded",
+    "trigger": "condition",
+    "effect": "desaturate",
+    "intensity": 0.35,
+    "condition": "wounded"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "portrait_cues",
+   "entry": {
+    "id": "hp_half",
+    "trigger": "hp",
+    "effect": "desaturate",
+    "intensity": 0.2,
+    "below": 50
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "portrait_cues",
+   "entry": {
+    "id": "hp_low",
+    "trigger": "hp",
+    "effect": "desaturate",
+    "intensity": 0.5,
+    "below": 25
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "portrait_cues",
+   "entry": {
+    "id": "downed",
+    "trigger": "down",
+    "effect": "desaturate",
+    "intensity": 1.0
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "portrait_cues",
+   "entry": {
+    "id": "downed_still",
+    "trigger": "down",
+    "effect": "still",
+    "intensity": 1.0
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "portrait_cues",
+   "entry": {
+    "id": "shaken",
+    "trigger": "derived",
+    "effect": "tint",
+    "intensity": 0.5,
+    "stat": "composure",
+    "drop_pct": 25,
+    "color": "#06b6d4"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "portrait_cues",
+   "entry": {
+    "id": "stealthed",
+    "trigger": "status",
+    "effect": "fade",
+    "intensity": 0.6,
+    "status": "stealth"
+   }
+  }
+ ]
+}

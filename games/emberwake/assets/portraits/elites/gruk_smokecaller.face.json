@@ -1,0 +1,12 @@
+{
+  "size": 240,
+  "border": 8,
+  "eyes": [[126, 84, 14, 9], [157, 86, 12, 7]],
+  "blink": true,
+  "lid": "",
+  "glow": [],
+  "veins": [],
+  "mouth": [],
+  "rim": "",
+  "idle": [{"effect": "smoke", "color": "#6b7280", "intensity": 0.7}]
+}

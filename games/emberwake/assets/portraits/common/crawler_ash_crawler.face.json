@@ -1,0 +1,12 @@
+{
+  "size": 240,
+  "border": 8,
+  "eyes": [],
+  "blink": false,
+  "lid": "",
+  "glow": [[47, 100, 30]],
+  "veins": [],
+  "mouth": [],
+  "rim": "",
+  "idle": [{"effect": "glow", "color": "#9333ea", "intensity": 0.7}, {"effect": "ash", "color": "#6b7280", "intensity": 0.3}]
+}

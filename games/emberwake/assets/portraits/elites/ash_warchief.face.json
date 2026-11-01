@@ -1,0 +1,12 @@
+{
+  "size": 240,
+  "border": 8,
+  "eyes": [[123, 79, 17, 10], [160, 84, 12, 8]],
+  "blink": true,
+  "lid": "",
+  "glow": [],
+  "veins": [],
+  "mouth": [],
+  "rim": "",
+  "idle": [{"effect": "ash", "color": "#6b7280", "intensity": 0.6}]
+}
