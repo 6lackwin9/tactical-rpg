@@ -20,6 +20,9 @@ pub const POUCH_MAX: usize = 3;
 pub const NO_POSITION: (i64, i64) = (-1, -1);
 pub const HOME_WORLD_KEY: &str = "home_world";
 pub const EXPLORE_KEYS: [&str; 5] = ["steps", "next_at", "loc_steps", "last_safe", "last_rest"];
+/// MAPNAV1-U: the optional `explore` key naming the member who leads on the maps (`GameState::explore_leader`); absent
+/// = the first standing active member (a save without it loads as before).
+pub const LEADER_KEY: &str = "leader";
 pub const AUTO_IDS: [&str; 6] = ["balanced", "aggressive", "focus_weakest", "defensive", "ranged_kite", "economy"];
 pub const DEFAULT_TACTIC: &str = "balanced";
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
@@ -952,6 +955,44 @@ impl GameState {
         json::i(&self.explore, key, 0)
     }
 
+    /// MAPNAV1-U: the members who can lead on the maps, roster order: the active members `standing` keeps (the caller
+    /// says who is downed).
+    pub fn leader_choices(&self, standing: impl Fn(&UnitState) -> bool) -> Vec<&UnitState> {
+        self.party.active_members().into_iter().filter(|m| standing(m)).collect()
+    }
+
+    /// MAPNAV1-U: the member who leads on the maps: the saved `explore.leader` while that member can lead
+    /// (`leader_choices`), else the first who can, else the first active member (None without one).
+    pub fn explore_leader(&self, standing: impl Fn(&UnitState) -> bool) -> Option<&UnitState> {
+        let choices = self.leader_choices(standing);
+        let saved = json::s(&self.explore, LEADER_KEY);
+        choices.iter().find(|m| m.id == saved).or(choices.first()).copied().or_else(|| self.party.active_members().first().copied())
+    }
+
+    /// MAPNAV1-U: makes member `id` the leader (saved as `explore.leader`); false (nothing changes) when `id` is not one
+    /// of the `leader_choices`.
+    pub fn set_explore_leader(&mut self, id: &str, standing: impl Fn(&UnitState) -> bool) -> bool {
+        if !self.leader_choices(standing).iter().any(|m| m.id == id) {
+            return false;
+        }
+        self.explore.insert(LEADER_KEY.into(), Value::String(id.into()));
+        true
+    }
+
+    /// MAPNAV1-U: passes the lead `by` places along the `leader_choices` (1 the next, -1 the one before, wrapping);
+    /// the new leader's id, None when no one can lead.
+    pub fn cycle_explore_leader(&mut self, by: i64, standing: impl Fn(&UnitState) -> bool) -> Option<String> {
+        let ids: Vec<String> = self.leader_choices(&standing).iter().map(|m| m.id.clone()).collect();
+        if ids.is_empty() {
+            return None;
+        }
+        let now = self.explore_leader(&standing).map(|m| m.id.clone()).unwrap_or_default();
+        let at = ids.iter().position(|i| *i == now).unwrap_or(0) as i64;
+        let next = ids[(at + by).rem_euclid(ids.len() as i64) as usize].clone();
+        self.set_explore_leader(&next, &standing);
+        Some(next)
+    }
+
     pub fn to_value(&self) -> Value {
         let mut loot = self.loot_claimed.clone();
         loot.sort();
@@ -1181,8 +1222,10 @@ pub fn quest_blob_errors(blob: &Dict) -> Vec<String> {
 
 pub fn explore_errors(e: &Dict) -> Vec<String> {
     let has_home = e.contains_key(HOME_WORLD_KEY);
-    let mut ok = e.len() == EXPLORE_KEYS.len() + has_home as usize;
+    let has_leader = e.contains_key(LEADER_KEY);
+    let mut ok = e.len() == EXPLORE_KEYS.len() + has_home as usize + has_leader as usize;
     ok = ok && (!has_home || e.get(HOME_WORLD_KEY).and_then(Value::as_str).is_some_and(json::id_ok));
+    ok = ok && (!has_leader || e.get(LEADER_KEY).and_then(Value::as_str).is_some_and(json::id_ok));
     ok = ok && EXPLORE_KEYS.iter().all(|k| e.contains_key(*k));
     if ok {
         let int_ge = |k: &str, lo: i64| json::is_int(&e[k]) && json::to_int(&e[k]) >= lo;

@@ -48,11 +48,11 @@ pub fn hud_key(k: Key) -> Option<Hud> {
     }
 }
 
-/// What a HUD button opens: Party the Character popup on the first active member's Stats tab, Stash the same popup's
-/// Gear tab (where the party's shared stash lives), Journal the journal (a notice while there are no quests), Help the
-/// controls `help`, Menu the game menu.
+/// What a HUD button opens: Party the Character popup on the leader's (MAPNAV1-U; with no lead chosen the first active
+/// member's) Stats tab, Stash the same popup's Gear tab (where the party's shared stash lives), Journal the journal (a
+/// notice while there are no quests), Help the controls `help`, Menu the game menu.
 pub fn hud_open(cx: &mut Cx, h: Hud, help: &[&str]) {
-    let first = cx.gs().party.active_members().first().map(|m| m.id.clone()).unwrap_or_default();
+    let first = crate::region::leader_id(cx);
     match h {
         Hud::Party => cx.nav.push(Nav::Push(Box::new(crate::party::Character::new(cx, &first, "stats")))),
         Hud::Stash => cx.nav.push(Nav::Push(Box::new(crate::party::Character::new(cx, &first, "gear")))),

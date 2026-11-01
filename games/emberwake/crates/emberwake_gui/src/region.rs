@@ -11,7 +11,9 @@
 //! board shows its pane (`board.rs`) in the shop's place until Close, Esc or a right click closes it back to the
 //! conversation; the keeper of a board with work wears the quest badge ("New work on the board"). CAMPAIGN1-U: a queued `{dialogue}` scene
 //! opens as the conversation when nothing is open (T2); a reply whose `rest` would end the run asks first (W3); the
-//! log lines name the purse (P1) and a retreat (R4).
+//! log lines name the purse (P1) and a retreat (R4). MAPNAV1-U: edge arrows toward the legend's markers out of view, a
+//! legend row or an arrow pans the camera there (a second row click walks), a tile click walks or says it can't, and
+//! Q or a click on the leader passes the lead (`GameState::explore_leader`, saved as `explore.leader`).
 
 use aegis_core::assets::{ClipPlayer, Facing, View};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
@@ -70,6 +72,11 @@ pub enum RAct {
     Legend,
     /// Show the last events in the ticker, or only the latest (L).
     Log,
+    /// MAPNAV1-U: a legend row or an edge arrow: the camera looks at the marker (a second click on the row while it
+    /// looks there walks there, as a marker click).
+    Pan(String),
+    /// MAPNAV1-U: the next standing active member leads (Q, or a click on the leader).
+    Lead,
 }
 
 pub struct RegionMap {
@@ -108,6 +115,13 @@ pub struct RegionMap {
     sprites: Vec<Value>,
     /// PORTRAITFX1-D: the talk box's animated portrait (its clock moves with the frame's wall time).
     faces: Faces,
+    /// MAPNAV1-U: the tile the camera looks at instead of the party (a legend row or an edge arrow); cleared by the
+    /// party's first step (a key step or a walked path's), an arrow key, Esc, an exit or a change of location.
+    pan: Option<Pos>,
+    /// The location `pan` was set in (a pan never carries into another location).
+    pan_loc: String,
+    /// MAPNAV1-U: the edge arrows drawn last frame (agent link `state.arrows`, tests).
+    arrows: Vec<Value>,
 }
 
 /// Starts a world fight: the battle screen, or the Skip / Fled / Lost popup in a debug game.
@@ -217,6 +231,9 @@ impl RegionMap {
             leader_face: Facing::default(),
             sprites: Vec::new(),
             faces: Faces::default(),
+            pan: None,
+            pan_loc: String::new(),
+            arrows: Vec::new(),
         }
     }
 
@@ -246,6 +263,7 @@ impl RegionMap {
         let res = explore::step(&d, cx.gs_mut(), dir);
         if cx.gs().position != from {
             self.moved_at = Some(self.anim_ms);
+            self.pan = None;
         }
         if !json::b(&res, "ok", false) {
             for e in json::sget(&res, "errors") {
@@ -522,13 +540,38 @@ impl RegionMap {
                 let (ox, oy, ts) = self.geo;
                 let tx = ((self.mouse.0 - ox) as f32 / ts as f32).floor() as i64;
                 let ty = ((self.mouse.1 - oy) as f32 / ts as f32).floor() as i64;
-                if let Some(path) = self.path_to(cx, (tx, ty), false) {
-                    self.walk = path;
-                    self.walk_target = None;
+                // MAPNAV1-U: a tile no open path reaches (a wall, water, a tile walled off) says so
+                match self.path_to(cx, (tx, ty), false) {
+                    Some(path) => {
+                        self.walk = path;
+                        self.walk_target = None;
+                    }
+                    None => cx.log("You can't get there."),
                 }
             }
             RAct::Marker(id) => self.walk_to_marker(cx, &id),
+            RAct::Pan(id) => {
+                let Some(at) = marker_tile(cx, &id) else { return };
+                if self.pan == Some(at) {
+                    self.walk_to_marker(cx, &id);
+                } else {
+                    self.pan = Some(at);
+                    self.pan_loc = cx.gs().location_id.clone();
+                }
+            }
+            RAct::Lead => {
+                let d = cx.data.clone();
+                let world = cx.gs().world_id.clone();
+                let before = leader_id(cx);
+                let Some(id) = cx.gs_mut().cycle_explore_leader(1, standing(&d, &world)) else { return };
+                if id != before {
+                    let name = cx.gs().party.member(&id).map(|m| crate::hub::member_name(cx, m)).unwrap_or_default();
+                    cx.log(format!("{name} leads the party."));
+                    self.leader = ClipPlayer::default();
+                }
+            }
             RAct::Exit(to) => {
+                self.pan = None;
                 let res = explore::take_exit(&d, cx.gs_mut(), &to, explore::SPAWN);
                 if !json::b(&res, "ok", false) {
                     show_errors(cx, json::sget(&res, "errors"));
@@ -665,6 +708,11 @@ impl Screen<GameCx> for RegionMap {
 
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         self.mouse = mouse;
+        self.arrows.clear();
+        // MAPNAV1-U: a pan set in another location (an exit, the world map, a fight's wake) is dropped
+        if self.pan.is_some() && self.pan_loc != cx.gs().location_id {
+            self.pan = None;
+        }
         // Yes to "Discard this trade?" (PLAYUI1-P): back to the conversation
         if cx.take_answer(crate::shop::DISCARD) {
             self.act(cx, RAct::CloseShop);
@@ -693,11 +741,18 @@ impl Screen<GameCx> for RegionMap {
         let map_area = Rect::new(0, HUD_H, W, H - HUD_H);
         let focus_area = talk_box.as_ref().map_or(map_area, |b| Rect::new(0, HUD_H, W, b.r.y - HUD_H));
         let names_always = cx.settings.v["map_names"].as_str() == Some("always");
+        // MAPNAV1-U: (id, name, tile) of the legend's markers out of view (their edge arrows follow the legend)
+        let mut off_view: Vec<(String, String, Rect)> = Vec::new();
         if !t.is_empty() {
             let ts = TILE;
-            let other = talk_view.as_ref().and_then(|v| self.speaker_tile(cx, v)).unwrap_or(gs.position);
-            let ox = focus_area.x + focus_area.w / 2 - ((gs.position.0 + other.0) as i32 * ts + ts) / 2;
-            let oy = focus_area.y + focus_area.h / 2 - ((gs.position.1 + other.1) as i32 * ts + ts) / 2;
+            // MAPNAV1-U: outside a talk the camera looks at the panned tile (a legend row or an edge arrow) when set
+            let (one, other) = match (talk_view.as_ref(), self.pan) {
+                (Some(v), _) => (gs.position, self.speaker_tile(cx, v).unwrap_or(gs.position)),
+                (None, Some(p)) => (p, p),
+                (None, None) => (gs.position, gs.position),
+            };
+            let ox = focus_area.x + focus_area.w / 2 - ((one.0 + other.0) as i32 * ts + ts) / 2;
+            let oy = focus_area.y + focus_area.h / 2 - ((one.1 + other.1) as i32 * ts + ts) / 2;
             self.geo = (ox, oy, ts);
             // ASSETORG2 4.5: the world lineage's tile sets, child first, then common
             let mut lineage = d.lineage(&gs.world_id);
@@ -759,13 +814,17 @@ impl Screen<GameCx> for RegionMap {
                     continue;
                 }
                 let r = Rect::new(ox + at.0 as i32 * ts, oy + at.1 as i32 * ts, ts, ts);
-                let seen = r.intersect(map_area);
-                if seen.w <= 0 || seen.h <= 0 {
-                    continue;
-                }
                 let kind = s(&m, "kind");
                 let id = s(&m, "id");
                 let label = s(&view, "label");
+                let seen = r.intersect(map_area);
+                if seen.w <= 0 || seen.h <= 0 {
+                    // MAPNAV1-U: a legend entry out of view gets an edge arrow
+                    if kind != "point" {
+                        off_view.push((id, label, r));
+                    }
+                    continue;
+                }
                 let mut services = Vec::new();
                 let mut npc = None;
                 let mut top = r.y;
@@ -854,7 +913,12 @@ impl Screen<GameCx> for RegionMap {
                     None => service_glyph(&mut ui, first, br),
                 }
             }
-            ui.push("party", "party", format!("Party at {}, {}", gs.position.0, gs.position.1), pr, true, false, None, Vec::new());
+            // MAPNAV1-U: a click on the leader (or Q) passes the lead to the next standing active member
+            let lead = leader_id(cx);
+            let lead_name = gs.party.member(&lead).map(|m| crate::hub::member_name(cx, m)).unwrap_or_default();
+            let can_pass = gs.leader_choices(standing(&d, &gs.world_id)).len() > 1;
+            let lead_tip = tip(&format!("{lead_name} leads"), if can_pass { "Q or click: the next member leads." } else { "No one else can lead." });
+            ui.push("party", "party", format!("Party at {}, {}", gs.position.0, gs.position.1), pr, true, false, (!modal && can_pass).then_some(RAct::Lead), lead_tip);
             // the names over everything on the map, kept inside the map area
             for (r, label, badge) in labels {
                 let w = ui.p.text_w(&label, SMALL);
@@ -878,11 +942,34 @@ impl Screen<GameCx> for RegionMap {
         let why = if modal { "Finish the conversation, shop or page first." } else { "" };
         hud_bar(&mut ui, cx, 4, &name, ("region.menu", "Esc"), why, &REGION_HELP, RAct::Hud);
         // -- The legend (2.1 A) at the top right and the event log ticker (MAPLOG1) at the bottom left; off in a talk
+        let mut panes = Vec::new();
         if !t.is_empty() && !talking {
-            self.draw_legend(&mut ui, cx, modal);
+            panes.push(self.draw_legend(&mut ui, cx, modal));
         }
         if !talking {
-            self.draw_ticker(&mut ui, cx, modal);
+            panes.extend(self.draw_ticker(&mut ui, cx, modal));
+        }
+        // -- MAPNAV1-U (DR2 6 A): an arrow at the map's edge toward each legend entry out of view (off in a talk, as
+        // the legend), moved along the edge off the legend and the ticker; a click looks there
+        if !talking {
+            ui.push_clip(map_area);
+            for (id, label, r) in off_view {
+                let target = (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0);
+                let Some((ax, ay)) = edge_arrow(map_area, target).map(|(x, y, _, _)| clear_of(map_area, (x, y), &panes)) else { continue };
+                let (dx, dy) = (target.0 - ax, target.1 - ay);
+                let len = (dx * dx + dy * dy).sqrt().max(0.5);
+                let (ux, uy) = (dx / len, dy / len);
+                let hr = Rect::new(ax.round() as i32 - ARROW / 2, ay.round() as i32 - ARROW / 2, ARROW, ARROW);
+                let hover = !modal && ui.hover(hr);
+                ui.p.circle(ax, ay, ARROW as f32 / 2.0, rgba(12, 18, 28, 210));
+                let half = ARROW as f32 * 0.3;
+                ui.p.arrow(ax - ux * half, ay - uy * half, ax + ux * half, ay + uy * half, if hover { TEXT } else { GOLD }, 0.0, half * 0.9);
+                self.arrows.push(json!({"id": id, "at": [ax.round() as i64, ay.round() as i64], "dir": [(ux * 100.0).round() / 100.0, (uy * 100.0).round() / 100.0]}));
+                if !modal {
+                    ui.push(format!("arrow.{id}"), "arrow", label.clone(), hr, true, false, Some(RAct::Pan(id)), tip(&label, "Out of view: click to look there."));
+                }
+            }
+            ui.pop_clip();
         }
         // -- The dialogue box (3.1); while the shop is open (3.3) the box hides and the shop sits centred over the dimmed
         // map; an open board (STORYUI1 B11) takes the shop's place
@@ -979,6 +1066,7 @@ impl Screen<GameCx> for RegionMap {
         }
         if let Some(dir) = k.dir() {
             self.walk.clear();
+            self.pan = None;
             let t = explore::template_of(&cx.data, explore::location(&cx.data, cx.gs()));
             if !t.is_empty() {
                 self.step(cx, dir);
@@ -988,6 +1076,8 @@ impl Screen<GameCx> for RegionMap {
             self.interact(cx, dir);
         } else if matches!(k, Key::Char(c) if c.eq_ignore_ascii_case(&'l')) {
             self.act(cx, RAct::Log);
+        } else if matches!(k, Key::Char(c) if c.eq_ignore_ascii_case(&'q')) {
+            self.act(cx, RAct::Lead);
         } else if let Some(h) = hud_key(k) {
             self.act(cx, RAct::Hud(h));
         }
@@ -1004,6 +1094,9 @@ impl Screen<GameCx> for RegionMap {
             self.act(cx, RAct::CloseBoard);
         } else if self.talking() {
             self.act(cx, RAct::Farewell);
+        } else if self.pan.is_some() {
+            // MAPNAV1-U: Esc first brings the camera back to the party
+            self.pan = None;
         } else {
             self.walk.clear();
             self.act(cx, RAct::Menu);
@@ -1019,6 +1112,8 @@ impl Screen<GameCx> for RegionMap {
             "lore": self.lore.as_ref().map(|l| l.0.clone()), "legend_open": cx.settings.v["map_legend_open"].as_bool().unwrap_or(true), "log_open": self.log_open,
             "shop": if self.shop_qid().is_empty() { Value::Null } else { self.shop.state() }, "board": Some(self.board_qid()).filter(|b| !b.is_empty()),
             "board_pane": if self.board_qid().is_empty() { Value::Null } else { self.board.state() }, "sprites": self.sprites,
+            // MAPNAV1-U: who leads, the edge arrows of the last frame and the tile the camera looks at (null: the party)
+            "leader": leader_id(cx), "arrows": self.arrows, "pan": self.pan.filter(|_| self.pan_loc == gs.location_id).map(|p| json!([p.0, p.1])),
             // PORTRAITFX1 4.11: the speaker's portrait while the talk box shows (the shop or the board hides it)
             "portraits": if self.talking() && self.shop_qid().is_empty() && self.board_qid().is_empty() { self.faces.state() } else { json!([]) }})
     }
@@ -1116,8 +1211,10 @@ impl RegionMap {
     /// The legend (spec PLAYUI1 2.1 A, MAPNAV1-U's collapse): a pane floating at the map's top right under the HUD bar.
     /// Its header "Here (N)" with a chevron collapses it to the header (kept in the settings as `map_legend_open`); a
     /// row per marker shows the marker's map icon, its name and (people) their service icons at the right; spent
-    /// markers dim. A row click walks there as before. Width from the texts, at most `LEGEND_MAX` (times the text size).
-    fn draw_legend(&mut self, ui: &mut Ui<RAct>, cx: &mut Cx, modal: bool) {
+    /// markers dim. A row click looks there (MAPNAV1-U: the camera pans to the marker); a second click while it looks
+    /// there walks there as before. Width from the texts, at most `LEGEND_MAX` (times the text size). Its rect (the edge
+    /// arrows keep off it).
+    fn draw_legend(&mut self, ui: &mut Ui<RAct>, cx: &mut Cx, modal: bool) -> Rect {
         let d = cx.data.clone();
         let gs = cx.gs().clone();
         let loc = explore::location(&d, &gs);
@@ -1146,11 +1243,12 @@ impl RegionMap {
         let t = tip(&title, if open { "Click to fold the legend to this line." } else { "Click to open the legend: who and what is here." });
         ui.section("legend", head, &title, "", open, RAct::Legend, t);
         if !open || rows.is_empty() {
-            return;
+            return head;
         }
         let top = head.y + head.h + 1;
         let content = rows.len() as i32 * rh;
         let pane = Rect::new(x, top, w, content.min(H - 4 - top));
+        let whole = Rect::new(x, head.y, w, pane.y + pane.h - head.y);
         ui.p.fill(pane, PANE);
         ui.p.panel(pane, rgba(0, 0, 0, 0), BORDER, 3.0);
         let off = ui.scroll_begin("legend.rows", pane, content);
@@ -1183,15 +1281,18 @@ impl RegionMap {
             if !services.is_empty() {
                 t.push((services_text(&services), INFO));
             }
-            ui.push(format!("here.{id}"), "row", label.clone(), r, true, false, (!modal).then(|| RAct::Marker(id.clone())), t);
+            t.push(("Click to look there; click again to walk there.".to_string(), DIM));
+            ui.push(format!("here.{id}"), "row", label.clone(), r, true, false, (!modal).then(|| RAct::Pan(id.clone())), t);
         }
         ui.scroll_end();
+        whole
     }
 
     /// The event log ticker (MAPLOG1-U, spec PLAYUI1 2.1 A): the latest event on one line at the map's bottom left; L
-    /// or a click opens the last `LOG_OPEN` events (newest at the bottom), and again shows only the latest.
-    fn draw_ticker(&mut self, ui: &mut Ui<RAct>, cx: &Cx, modal: bool) {
-        let Some(latest) = cx.log.last().cloned() else { return };
+    /// or a click opens the last `LOG_OPEN` events (newest at the bottom), and again shows only the latest. Its rect
+    /// (None with an empty log).
+    fn draw_ticker(&mut self, ui: &mut Ui<RAct>, cx: &Cx, modal: bool) -> Option<Rect> {
+        let Some(latest) = cx.log.last().cloned() else { return None };
         let lh = ui.p.line_h(SMALL).ceil() as i32 + 1;
         let max_w = ((TICKER_MAX as f32 * ui.p.fonts.scale).round() as i32).min(W - 8);
         let inner = max_w - 15 - 4;
@@ -1227,6 +1328,7 @@ impl RegionMap {
             t.push((latest.clone(), TEXT));
         }
         ui.push("log", "button", latest, r, !modal, self.log_open, Some(RAct::Log), t);
+        Some(r)
     }
 }
 
@@ -1298,17 +1400,72 @@ fn view_name(v: View) -> &'static str {
     }
 }
 
+/// MAPNAV1-U: an edge arrow's hit box and drawn disc (logical px).
+const ARROW: i32 = 14;
+
+/// MAPNAV1-U: where the edge arrow toward `target` (a point out of `area`) sits and the way it points: on the ray from
+/// the area's centre to the target, where it meets the area inset by `ARROW` (x, y, unit dx, unit dy). None when the
+/// target is the centre.
+fn edge_arrow(area: Rect, target: (f32, f32)) -> Option<(f32, f32, f32, f32)> {
+    let (cx, cy) = (area.x as f32 + area.w as f32 / 2.0, area.y as f32 + area.h as f32 / 2.0);
+    let (dx, dy) = (target.0 - cx, target.1 - cy);
+    let len = (dx * dx + dy * dy).sqrt();
+    if len < 0.5 {
+        return None;
+    }
+    let (hw, hh) = (area.w as f32 / 2.0 - ARROW as f32, area.h as f32 / 2.0 - ARROW as f32);
+    let sx = if dx.abs() > 1e-3 { hw / dx.abs() } else { f32::INFINITY };
+    let sy = if dy.abs() > 1e-3 { hh / dy.abs() } else { f32::INFINITY };
+    let k = sx.min(sy).min(1.0);
+    Some((cx + dx * k, cy + dy * k, dx / len, dy / len))
+}
+
+/// MAPNAV1-U: an edge arrow at `at` moved off the floating panes (the legend, the ticker): to the nearest place beside
+/// the pane it meets that stays in the arrows' band of `area` and clear of every pane (else where it was).
+fn clear_of(area: Rect, at: (f32, f32), panes: &[Rect]) -> (f32, f32) {
+    let half = ARROW as f32 / 2.0;
+    let pad = half + 2.0;
+    let meets = |p: (f32, f32), r: &Rect| p.0 + half > r.x as f32 - 2.0 && p.0 - half < (r.x + r.w) as f32 + 2.0 && p.1 + half > r.y as f32 - 2.0 && p.1 - half < (r.y + r.h) as f32 + 2.0;
+    let inside = |p: (f32, f32)| p.0 >= (area.x + ARROW) as f32 - 0.5 && p.0 <= (area.x + area.w - ARROW) as f32 + 0.5 && p.1 >= (area.y + ARROW) as f32 - 0.5 && p.1 <= (area.y + area.h - ARROW) as f32 + 0.5;
+    let Some(r) = panes.iter().find(|r| meets(at, r)) else { return at };
+    let options = [(r.x as f32 - pad, at.1), ((r.x + r.w) as f32 + pad, at.1), (at.0, r.y as f32 - pad), (at.0, (r.y + r.h) as f32 + pad)];
+    let dist = |p: &(f32, f32)| (p.0 - at.0).abs() + (p.1 - at.1).abs();
+    options.into_iter().filter(|p| inside(*p) && !panes.iter().any(|r| meets(*p, r))).min_by(|a, b| dist(a).total_cmp(&dist(b))).unwrap_or(at)
+}
+
 /// The rect of a character sprite on tile `r` (spec PLAYUI1 2.4): `SPRITE` square, bottom-centred on the tile.
 fn sprite_rect(r: Rect) -> Rect {
     Rect::new(r.x + (r.w - SPRITE) / 2, r.y + r.h - SPRITE, SPRITE, SPRITE)
 }
 
-/// The party leader's body key and palette (spec PLAYUI1 2.4): the first active member's character art (its base
-/// unit's, its class's when it has no character), as the battle draws the member.
+/// MAPNAV1-U: whether a member can lead on the maps in world `world`: not downed (HP lost below the member's max HP;
+/// benched and departed members are not active, so `leader_choices` never sees them).
+pub(crate) fn standing<'a>(d: &'a emberwake_world::Data, world: &str) -> impl Fn(&emberwake_world::state::UnitState) -> bool + 'a {
+    let world = world.to_string();
+    move |m| m.hp_lost <= 0 || m.hp_lost < emberwake_world::progression::max_hp_of(d, m, &world)
+}
+
+/// MAPNAV1-U: the tile of marker `id` of the location (None when it has none here or no place on the map).
+fn marker_tile(cx: &Cx, id: &str) -> Option<Pos> {
+    let gs = cx.gs();
+    let loc = explore::location(&cx.data, gs);
+    let t = explore::template_of(&cx.data, loc);
+    let m = explore::markers_of(loc).into_iter().find(|m| s(m, "id") == id)?;
+    Some(explore::marker_pos(t, &m, gs.explore_int("loc_steps"))).filter(|at| at.0 >= 0)
+}
+
+/// MAPNAV1-U: the id of the member who leads on the maps (`GameState::explore_leader`; "" without a party).
+pub(crate) fn leader_id(cx: &Cx) -> String {
+    let gs = cx.gs();
+    gs.explore_leader(standing(&cx.data, &gs.world_id)).map(|m| m.id.clone()).unwrap_or_default()
+}
+
+/// The party leader's body key and palette (spec PLAYUI1 2.4): the leader's (MAPNAV1-U, `leader_id`) character art
+/// (its base unit's, its class's when it has no character), as the battle draws the member.
 fn leader_art(cx: &Cx) -> (String, String) {
     let d = &cx.data;
     let gs = cx.gs();
-    let Some(m) = gs.party.active_members().first().copied() else { return (String::new(), String::new()) };
+    let Some(m) = gs.party.member(&leader_id(cx)) else { return (String::new(), String::new()) };
     let character = d.resolve(&gs.world_id, "characters", &m.lore_ref);
     if character.is_empty() {
         let unit = d.entry("units", &m.base_unit);
@@ -1486,10 +1643,12 @@ fn talk_act(a: TalkAct) -> RAct {
 }
 
 /// The region map's controls (the Help button's hover card and popup).
-pub const REGION_HELP: [&str; 7] = [
+pub const REGION_HELP: [&str; 9] = [
     "Arrows or WASD: move",
     "E or Enter: use what the party faces",
     "Click: walk there, or on a marker to use it",
+    "Legend row or edge arrow: look there (again: walk there)",
+    "Q or a click on the leader: the next member leads",
     "1-9: pick a reply in a conversation",
     "P: party   J: journal   I: stash",
     "L: the last events, or only the latest",
@@ -2665,5 +2824,266 @@ mod sprite_tests {
         let near = |px: &[u8]| px.iter().zip(crate::props::PARTY.iter()).all(|(a, b)| (*a as i32 - *b as i32).abs() <= 24);
         let ring = (t.y..t.y + t.h).flat_map(|y| (t.x..t.x + t.w).map(move |x| (x, y))).filter(|&(x, y)| near(&g.canvas.px[((y * g.canvas.w + x) * 4) as usize..][..3])).count();
         assert!(ring >= 8, "the token's ring on the party's tile: {ring} pixels");
+    }
+}
+
+/// MAPNAV1-U (spec DESIGN_REVIEW2 6 A, user 2026-11-02): edge arrows toward the legend's markers out of view, a legend
+/// row or an arrow pans the camera there, a tile click walks there or says it can't, and Q or a click on the leader
+/// passes the lead along the standing active members (saved as `explore.leader`). Drawn headless over a debug game of
+/// the first playable world; expectations come from the map, its markers and the camera rule, never shipped numbers.
+#[cfg(test)]
+mod nav_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx, rect};
+
+    fn area() -> Rect {
+        Rect::new(0, HUD_H, W, H - HUD_H)
+    }
+
+    /// The tile `at`'s rect through the last frame's camera.
+    fn tile_rect(map: &RegionMap, at: Pos) -> Rect {
+        let (ox, oy, ts) = map.geo;
+        Rect::new(ox + at.0 as i32 * ts, oy + at.1 as i32 * ts, ts, ts)
+    }
+
+    /// The legend's markers (present, spent or locked, not a bare point) with a map place: (id, tile).
+    fn listed(cx: &Cx) -> Vec<(String, Pos)> {
+        let gs = cx.gs();
+        let loc = explore::location(&cx.data, gs);
+        let t = explore::template_of(&cx.data, loc);
+        explore::markers_of(loc)
+            .into_iter()
+            .filter(|m| s(&explore::marker_view(&cx.data, gs, loc, m), "state") != "absent" && s(m, "kind") != "point")
+            .map(|m| (s(&m, "id"), explore::marker_pos(t, &m, gs.explore_int("loc_steps"))))
+            .filter(|(_, at)| at.0 >= 0)
+            .collect()
+    }
+
+    fn arrow_ids(map: &RegionMap, cx: &Cx) -> Vec<String> {
+        let mut v: Vec<String> = map.state(cx)["arrows"].as_array().cloned().unwrap_or_default().iter().map(|a| s(json::dict(a), "id")).collect();
+        v.sort();
+        v
+    }
+
+    /// Every map location of the world, the party on two opposite corners: exactly the legend's markers whose tile is
+    /// out of the map area have an arrow; each sits inside the area near its edge and points at its marker.
+    #[test]
+    fn an_off_screen_marker_gets_an_edge_arrow_and_an_on_screen_one_none() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        cx.settings.v["map_legend_open"] = json!(false);
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        let (mut arrows, mut in_view) = (0, 0);
+        for loc in d.merged_entries(&world, "locations") {
+            let t = explore::template_of(&d, loc);
+            if t.is_empty() {
+                continue;
+            }
+            let (w, h) = explore::size_of(t);
+            for corner in [(0, 0), (w - 1, h - 1)] {
+                cx.gs_mut().location_id = s(loc, "id");
+                let mut map = RegionMap::new(&mut cx);
+                cx.gs_mut().position = corner;
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                let a = area();
+                let mut want: Vec<String> = Vec::new();
+                for (id, at) in listed(&cx) {
+                    let seen = tile_rect(&map, at).intersect(a);
+                    if seen.w <= 0 || seen.h <= 0 {
+                        want.push(id);
+                    } else {
+                        in_view += 1;
+                    }
+                }
+                want.sort();
+                assert_eq!(arrow_ids(&map, &cx), want, "{} at {corner:?}", s(loc, "id"));
+                let state = map.state(&cx);
+                for arrow in state["arrows"].as_array().cloned().unwrap_or_default() {
+                    let id = s(json::dict(&arrow), "id");
+                    let (x, y) = (arrow["at"][0].as_i64().unwrap() as i32, arrow["at"][1].as_i64().unwrap() as i32);
+                    assert!(a.contains(x, y), "{id}'s arrow inside the map area: ({x}, {y})");
+                    let edge = (x - a.x).min(a.x + a.w - x).min(y - a.y).min(a.y + a.h - y);
+                    assert!(edge <= ARROW + 1, "{id}'s arrow at the edge: {edge} px in");
+                    let at = listed(&cx).into_iter().find(|m| m.0 == id).unwrap().1;
+                    let r = tile_rect(&map, at);
+                    let (tx, ty) = (r.x as f64 + r.w as f64 / 2.0 - x as f64, r.y as f64 + r.h as f64 / 2.0 - y as f64);
+                    let (ux, uy) = (arrow["dir"][0].as_f64().unwrap(), arrow["dir"][1].as_f64().unwrap());
+                    let cos = (tx * ux + ty * uy) / (tx * tx + ty * ty).sqrt();
+                    assert!(cos > 0.95, "{id}'s arrow points at its marker: cos {cos}");
+                    let wd = map.widgets().into_iter().find(|w| w["id"] == format!("arrow.{id}")).expect("the arrow's widget");
+                    assert_eq!(wd["kind"], json!("arrow"));
+                    arrows += 1;
+                }
+            }
+        }
+        assert!(arrows > 0 && in_view > 0, "the world's maps show both cases ({arrows} arrows, {in_view} markers in view)");
+    }
+
+    /// A legend row pans the camera to its marker (the marker's tile at the map area's centre) and its arrow goes; an
+    /// arrow pans the same way; Esc first brings the camera back to the party; a second row click walks there.
+    #[test]
+    fn a_legend_row_or_an_arrow_pans_the_camera_to_its_marker() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let pos = cx.gs().position;
+        let dist = |at: &Pos| (at.0 - pos.0).abs() + (at.1 - pos.1).abs();
+        let (id, at) = listed(&cx).into_iter().filter(|(_, at)| dist(at) > 1).max_by_key(|(_, at)| dist(at)).expect("a marker away from the party");
+        map.click_id(&mut cx, &format!("here.{id}")).expect("the row");
+        assert_eq!(map.state(&cx)["pan"], json!([at.0, at.1]));
+        assert_eq!(map.state(&cx)["walking"], json!(false), "the first click only looks");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let (mx, my, mw, mh) = rect(&map.widgets().into_iter().find(|w| w["id"] == format!("marker.{id}")).expect("the marker in view"));
+        let a = area();
+        assert!(((mx + mw / 2) as i32 - (a.x + a.w / 2)).abs() <= TILE && ((my + mh / 2) as i32 - (a.y + a.h / 2)).abs() <= TILE, "the marker at the centre");
+        assert!(!arrow_ids(&map, &cx).contains(&id), "no arrow for a marker in view");
+        // a pan never carries into another location
+        let here = cx.gs().location_id.clone();
+        cx.gs_mut().location_id = format!("{here}_elsewhere");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert!(map.pan.is_none(), "another location drops the pan");
+        cx.gs_mut().location_id = here;
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        map.click_id(&mut cx, &format!("here.{id}")).expect("the row");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        // Esc recentres before the game menu
+        map.back(&mut cx);
+        assert!(cx.nav.is_empty() && map.state(&cx)["pan"].is_null(), "Esc recentres, no menu");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        // an arrow pans the same way (when the party's view has one)
+        if let Some(aid) = arrow_ids(&map, &cx).first().cloned() {
+            map.click_id(&mut cx, &format!("arrow.{aid}")).expect("the arrow");
+            let want = listed(&cx).into_iter().find(|m| m.0 == aid).unwrap().1;
+            assert_eq!(map.state(&cx)["pan"], json!([want.0, want.1]));
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert!(!arrow_ids(&map, &cx).contains(&aid), "its marker is in view now");
+        }
+        // the row again while the camera looks there walks (when a path is open)
+        map.click_id(&mut cx, &format!("here.{id}")).expect("the row");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let m = explore::markers_of(explore::location(&cx.data, cx.gs())).into_iter().find(|m| s(m, "id") == id).unwrap();
+        let solid = ["npc", "chest", "lore"].contains(&s(&m, "kind").as_str());
+        if map.path_to(&cx, at, solid).is_some() {
+            map.click_id(&mut cx, &format!("here.{id}")).expect("the row again");
+            assert_eq!(map.state(&cx)["walking"], json!(true), "the second click walks to {id}");
+        }
+    }
+
+    /// Near the party: (a free tile two or more steps away by an open path and the path's length, a closed tile).
+    fn targets(map: &RegionMap, cx: &Cx) -> (Option<(Pos, usize)>, Option<Pos>) {
+        let gs = cx.gs();
+        let loc = explore::location(&cx.data, gs);
+        let t = explore::template_of(&cx.data, loc);
+        let marked: Vec<Pos> = explore::markers_of(loc).iter().map(|m| explore::marker_pos(t, m, gs.explore_int("loc_steps"))).collect();
+        let near: Vec<Pos> = (-4..=4).flat_map(|dy| (-4..=4).map(move |dx| (dx, dy))).map(|(dx, dy)| (gs.position.0 + dx, gs.position.1 + dy)).filter(|p| !marked.contains(p) && *p != gs.position).collect();
+        let open = near.iter().filter(|p| explore::is_open(t, p.0, p.1)).find_map(|p| map.path_to(cx, *p, false).filter(|path| path.len() >= 2).map(|path| (*p, path.len())));
+        let closed = near.iter().copied().find(|p| !explore::is_open(t, p.0, p.1));
+        (open, closed)
+    }
+
+    fn click_tile(map: &mut RegionMap, cx: &mut Cx, g: &mut Gfx, at: Pos) {
+        let r = tile_rect(map, at);
+        let pt = (r.x + r.w / 2, r.y + r.h / 2);
+        map.draw(cx, g, pt, true);
+        assert!(map.click(cx, pt), "the map takes the click on {at:?}");
+    }
+
+    /// A click on a free tile walks the open path there (the leader walks while it plays); a click on a closed tile
+    /// walks nowhere and says so.
+    #[test]
+    fn a_tile_click_walks_to_a_reachable_tile_and_refuses_a_blocked_one() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        cx.settings.v["map_legend_open"] = json!(false);
+        let mut map = RegionMap::new(&mut cx);
+        // no random fight in the few steps
+        cx.gs_mut().explore.insert("next_at".into(), json!(99));
+        cx.gs_mut().explore.insert("steps".into(), json!(0));
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let (open, closed) = targets(&map, &cx);
+        let (to, steps) = open.expect("a free tile two steps or more away");
+        click_tile(&mut map, &mut cx, &mut g, to);
+        assert_eq!(map.walk.len(), steps, "the walk is the open path");
+        assert!(map.moving(), "the leader walks while the path plays");
+        for _ in 0..steps {
+            map.next_walk = Instant::now();
+            map.tick(&mut cx);
+        }
+        assert_eq!(cx.gs().position, to, "the walk reaches {to:?}: {:?}", cx.log);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let wall = closed.or_else(|| targets(&map, &cx).1).expect("a closed tile near the party");
+        let at = cx.gs().position;
+        click_tile(&mut map, &mut cx, &mut g, wall);
+        assert!(map.walk.is_empty() && cx.gs().position == at, "no walk onto {wall:?}");
+        assert_eq!(cx.log.last().map(String::as_str), Some("You can't get there."));
+    }
+
+    /// A party of three (test-only members beside the first; the middle one downed): Q and a click on the leader pass
+    /// the lead to the next standing member, wrapping and skipping the downed one; the lead is in the state, the Party
+    /// button opens on it, and it survives a save and a load.
+    #[test]
+    fn the_lead_cycles_the_standing_active_members_and_survives_save_and_load() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        {
+            let gs = cx.gs_mut();
+            gs.party.members.truncate(1);
+            gs.party.active_ids.clear();
+            let first = gs.party.members[0].clone();
+            for id in ["test_down", "test_up"] {
+                let mut m = first.clone();
+                m.id = id.into();
+                gs.party.members.push(m);
+            }
+        }
+        // after `resume` (a rest place heals on arrival): the middle member is down
+        let mut map = RegionMap::new(&mut cx);
+        let max = emberwake_world::progression::max_hp_of(&d, cx.gs().party.member("test_down").unwrap(), &world);
+        assert!(max > 0);
+        cx.gs_mut().party.member_mut("test_down").unwrap().hp_lost = max;
+        let active: Vec<String> = cx.gs().party.active_members().iter().map(|m| m.id.clone()).collect();
+        let up: Vec<String> = active.iter().filter(|i| *i != "test_down").cloned().collect();
+        assert!(up.len() >= 2 && active.contains(&"test_down".to_string()), "the cap keeps three active: {active:?}");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_eq!(map.state(&cx)["leader"], json!(up[0]), "no lead chosen: the first active member");
+        let mut seen = Vec::new();
+        for i in 0..up.len() * 2 {
+            if i % 2 == 0 {
+                map.key(&mut cx, Key::Char('q'));
+            } else {
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                map.click_id(&mut cx, "party").expect("a click on the leader");
+            }
+            seen.push(s(json::dict(&map.state(&cx)), "leader"));
+        }
+        let want: Vec<String> = (1..=up.len() * 2).map(|i| up[i % up.len()].clone()).collect();
+        assert_eq!(seen, want, "the lead passes along the standing members and wraps");
+        assert!(cx.log.last().is_some_and(|l| l.ends_with("leads the party.")), "{:?}", cx.log.last());
+        map.key(&mut cx, Key::Char('q'));
+        let lead = s(json::dict(&map.state(&cx)), "leader");
+        assert_ne!(lead, up[0]);
+        // the Party button opens on the leader
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        map.click_id(&mut cx, "hud.party").expect("party");
+        let opened = match cx.nav.last() {
+            Some(Nav::Push(s)) => s.state(&cx),
+            _ => Value::Null,
+        };
+        cx.nav.clear();
+        assert_eq!(opened["member"], json!(lead));
+        // saved with the game
+        let dir = cx.shot_dir.join("lead_saves");
+        let gs = cx.gs().clone();
+        assert!(emberwake_world::save::write(&d, &dir, &gs, 1, 7).is_empty());
+        let back = emberwake_world::save::read(&d, &dir, 1).expect("reads back");
+        assert_eq!(back.state.explore_leader(standing(&d, &world)).map(|m| m.id.clone()), Some(lead.clone()));
+        assert_eq!(back.state.explore[emberwake_world::state::LEADER_KEY], json!(lead));
+        // one standing member left: no one else can lead (the leader takes no click)
+        for id in up.iter().filter(|i| **i != up[0]) {
+            cx.gs_mut().party.member_mut(id).unwrap().hp_lost = max;
+        }
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_eq!(map.state(&cx)["leader"], json!(up[0]));
+        assert!(map.click_id(&mut cx, "party").is_err(), "no lead to pass");
     }
 }

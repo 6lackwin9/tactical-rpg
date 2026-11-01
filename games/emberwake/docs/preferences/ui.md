@@ -14,6 +14,7 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
 
 - The map legend can be collapsed (2026-10-18 playtest).
 - Click-to-move on region maps; WASD and hold-to-walk (2026-10-18 playtest).
+- Legend rows and edge arrows pan the camera; a second row click walks; Q or a click on the leader switches the exploring leader (user 2026-11-02: "enable the option to switch the active unit for exploration"; MAPNAV1-U).
 
 ## Combat (COMBAT-UI3)
 
