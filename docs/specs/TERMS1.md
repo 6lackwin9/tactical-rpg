@@ -118,6 +118,17 @@ No rows: Emberwake has picked no lore name for an intent, and the purse names be
   screen (the Arena, the Dojo) reads the defaults.
 - TU5. Battle screen and intent texts (`battle.rs`, `intent_text.rs`): intent names through `Catalog::term` (after
   INPUT1-U, which reworks those labels).
+- As built (TERMS1-L, 2026-11-01): the register is `rpgkit_data::terms` (`REGISTER`, `TermDef`, `TermScope`,
+  `Term::resolve`, `TermRow`, `TERMS_KIND`) with `Catalog.terms` and `Catalog::term`; the resolver with a world is
+  `rpgkit_world::terms` (`term`, `name`, `short`, `word`) and the kit sentences are built there
+  (`not_enough_currency`, `currency_capped`, `needs_currency`, `upkeep_carry_max`, `upkeep_capped`). Shop, quest,
+  dialogue (also the gold lock "Needs N gold", which section 2 did not count) and explore read them;
+  `progression::REFUSE_SUPPLIES` stays a const, because only a world without a campaign reaches it, and there the upkeep
+  is always its default (a test ties the text to the register). `RoundIntent::name()` is the register default;
+  `RoundIntent::term_id()` and `label(cat)` read `Catalog::term`. The intent texts in `round_intent.rs`,
+  `round_intent_plan.rs` and `plan.rs` still call `name()` (the same text while the table is empty); they move to
+  `label` with TERMS1-U, after INPUT1-U. No intent name is spelled in `log.rs` or `metrics.rs`. `hud::purse_word_in` now
+  calls `terms::word`. The `terms` kind carries `origin` only (as `hazards`; no catalog kind has `tags`).
 
 ## 7. The layer check gains lore words (G3; `tools/fc.sh layers`, the same step in `check_project.ps1`)
 

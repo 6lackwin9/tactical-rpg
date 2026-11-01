@@ -4,7 +4,7 @@
 //! story effects, limits, the step reader), and the portrait cue rows and vocabulary of PORTRAITFX1 (triggers, events,
 //! effects, surfaces, expressions), and the combat hook rows and vocabulary of HOOKS1 (the hazards, unit meters and
 //! zones kinds; forced moves, hazard placements, trigger rows, riders and meter costs on skills; events, effects,
-//! tactics).
+//! tactics), and the term register of TERMS1 (`terms`: neutral term ids with today's texts as defaults).
 //!
 //! Source today: the resolved catalog the Godot exporter writes (the game's `parity/out/catalog.json`), i.e. exactly the
 //! entries Godot's `ContentCatalog.entries(kind)` returns after item-family resolution and schema normalisation.
@@ -16,6 +16,9 @@ use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use serde_json::Value;
 use std::path::Path;
+
+pub mod terms;
+pub use terms::{Term, TermDef, TermRow, TermScope, TERMS_KIND};
 
 pub const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
@@ -628,6 +631,8 @@ pub struct Catalog {
     pub unit_meters: IndexMap<String, UnitMeterDef>,
     /// Data zone rows (HOOKS1 ZN1, kind `zones`; engine-only; the 8 code zones are not rows).
     pub zones: IndexMap<String, ZoneDef>,
+    /// The game's term rows (TERMS1 5.1, kind `terms`; engine-only; `game`-scope register ids only).
+    pub terms: IndexMap<String, TermRow>,
     skill_index: IndexMap<String, usize>,
     tier_one: IndexMap<String, usize>,
 }
@@ -677,6 +682,7 @@ impl Catalog {
         cat.hazards = rows(HAZARDS_KIND).iter().map(HazardDef::from_obj).map(|h| (h.id.clone(), h)).collect();
         cat.unit_meters = rows(UNIT_METERS_KIND).iter().map(UnitMeterDef::from_obj).map(|m| (m.id.clone(), m)).collect();
         cat.zones = rows(ZONES_KIND).iter().map(ZoneDef::from_obj).map(|z| (z.id.clone(), z)).collect();
+        cat.terms = rows(TERMS_KIND).iter().map(TermRow::from_obj).map(|t| (t.id.clone(), t)).collect();
         cat.skills = rows("skills").iter().map(SkillDef::from_obj).collect();
         cat.index_skills();
         cat
@@ -701,6 +707,15 @@ impl Catalog {
                     self.tier_one.insert(fam, i);
                 }
             }
+        }
+    }
+
+    /// TERMS1 TM3, TM4: term `id` inside a battle: the game's `terms` row, else the default (a `world` term, which the
+    /// catalog cannot name, is its default; with a world use `rpgkit_world::terms::term`).
+    pub fn term(&self, id: &str) -> Term {
+        match self.terms.get(id) {
+            Some(row) => row.term(),
+            None => Term::default_of(id),
         }
     }
 

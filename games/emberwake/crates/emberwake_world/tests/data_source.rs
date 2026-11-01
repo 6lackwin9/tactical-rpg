@@ -116,14 +116,15 @@ const OPTIONS_AFTER_GODOT: [(&str, &str, &str, &str); 8] = [
 /// `checkpoints` and `triggers` (WorldSchema.KINDS had none; every world's `own` lists leave the loader's worlds too).
 /// STORYUI1-S (2026-10-26): the world kinds `vignettes`, `sequences` and `boards` (the same). PORTRAITFX1-S
 /// (2026-10-26): the portrait cue rows (as the derived stats). HOOKS1-S (2026-10-27): the combat hook kinds `hazards`,
-/// `unit_meters` and `zones` (the same).
-const KINDS_AFTER_GODOT: [(&str, &str); 12] = [
+/// `unit_meters` and `zones` (the same). TERMS1-L (2026-11-01): the game's term rows `terms` (the same).
+const KINDS_AFTER_GODOT: [(&str, &str); 13] = [
     ("content", "derived_stats"),
     ("content", "rulesets"),
     ("content", "portrait_cues"),
     ("content", "hazards"),
     ("content", "unit_meters"),
     ("content", "zones"),
+    ("content", "terms"),
     ("world", "meters"),
     ("world", "checkpoints"),
     ("world", "triggers"),

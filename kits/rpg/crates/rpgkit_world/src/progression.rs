@@ -265,6 +265,9 @@ pub const RALLY_PCT: i64 = 25;
 pub const CAMP_COST: i64 = 3;
 pub const REFUSE_NOT_AT_NODE: &str = "Make camp on the world map.";
 pub const REFUSE_RESTED: &str = "Everyone is rested.";
+/// TERMS1: the upkeep's default word (`terms::UPKEEP`) with CAMP_COST: only a world without a campaign refuses a Camp
+/// with it, and there the purse, so the upkeep, has its default name (the campaign rest refuses with
+/// `campaign::purse::REFUSE_UPKEEP`); `tests/terms.rs` checks it against the register.
 pub const REFUSE_SUPPLIES: &str = "Making camp needs 3 supplies.";
 
 pub fn rally(max_hp: i64) -> i64 {

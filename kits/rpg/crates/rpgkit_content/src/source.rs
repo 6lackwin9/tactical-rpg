@@ -36,6 +36,9 @@ pub const PORTRAIT_KIND: &str = crate::check::portrait::KIND;
 /// HOOKS1-S: the combat hook kinds (ground hazards, unit meters, data zones), loaded into the catalog beside
 /// CATALOG_KINDS after the skills the meters name, in this order (Godot had no such kinds).
 pub const HOOK_KINDS: [&str; 3] = [rpgkit_data::HAZARDS_KIND, rpgkit_data::UNIT_METERS_KIND, rpgkit_data::ZONES_KIND];
+/// TERMS1-L: the game's term rows, loaded into the catalog beside CATALOG_KINDS after the hook kinds (Godot had no
+/// such kind).
+pub const TERMS_KIND: &str = crate::check::terms::KIND;
 /// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2) and STORYUI1's `vignettes`,
 /// `sequences` and `boards` (4.1-4.4; Godot had no such kinds).
 pub const WORLD_KINDS: [&str; 19] = [
@@ -121,6 +124,7 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
         let rows = read_hook_kind(&dir, kind, &out, errors);
         out.insert(kind.into(), Value::Array(rows.into_iter().map(Value::Object).collect()));
     }
+    out.insert(TERMS_KIND.into(), Value::Array(read_terms(&dir, errors).into_iter().map(Value::Object).collect()));
     out.insert("item_families".into(), Value::Array(families.into_iter().map(Value::Object).collect()));
     Value::Object(out)
 }
@@ -195,6 +199,31 @@ fn read_portrait_cues(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Ve
             kept.push(row);
         } else {
             errors.extend(found.iter().map(|m| format!("{at}: portrait cue '{}': {m}", sget(&row, "id", ""))));
+        }
+    }
+    kept
+}
+
+/// TERMS1-L 5.1 (engine-only, beside CATALOG_KINDS): the term rows that pass their checks (`check::terms`), in file
+/// order; every problem goes to `errors` and its row is skipped. A missing file is an empty table.
+fn read_terms(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{TERMS_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(TERMS_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let checked = crate::check::terms::check_rows(&rows);
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: term '{}': {m}", sget(&row, "id", ""))));
         }
     }
     kept

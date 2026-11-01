@@ -3,7 +3,7 @@
 
 use crate::data::Data;
 use crate::state::{flag_key_ok, flag_value_ok, GameState};
-use crate::{board, new_game, progression, quest, roster, shop, story};
+use crate::{board, new_game, progression, quest, roster, shop, story, terms};
 use aegis_core::json::{self, int, Dict};
 use indexmap::IndexMap;
 use serde_json::Value;
@@ -221,7 +221,7 @@ fn needs_text(d: &Data, gs: &GameState, cond: &Dict) -> String {
             let item = json::s(cond, "item");
             format!("Needs {} {}", json::i(cond, "count", 1), d.item_name(&item))
         }
-        "gold" => format!("Needs {} gold", json::i(cond, "min", 0)),
+        "gold" => terms::needs_currency(d, &gs.world_id, json::i(cond, "min", 0)),
         "stat" => format!("Needs {} {}", json::s(cond, "stat"), json::i(cond, "min", 0)),
         "quest" => {
             let q = json::s(cond, "quest");
@@ -819,7 +819,7 @@ impl DialogueRunner {
             }
         }
         if take_gold > gs.party.gold {
-            out.push("Not enough gold.".into());
+            out.push(terms::not_enough_currency(d, &gs.world_id));
         }
         out
     }

@@ -42,15 +42,28 @@ impl RoundIntent {
         Self::ALL.into_iter().find(|i| i.id() == id)
     }
 
-    /// The display name ("Assault").
-    pub fn name(self) -> &'static str {
+    /// TERMS1: the intent's term id (`intent_assault`, ...; `rpgkit_data::terms`).
+    pub fn term_id(self) -> &'static str {
+        use rpgkit_data::terms::*;
         match self {
-            RoundIntent::Assault => "Assault",
-            RoundIntent::Guard => "Guard",
-            RoundIntent::Support => "Support",
-            RoundIntent::Maneuver => "Maneuver",
-            RoundIntent::Channel => "Channel",
+            RoundIntent::Assault => INTENT_ASSAULT,
+            RoundIntent::Guard => INTENT_GUARD,
+            RoundIntent::Support => INTENT_SUPPORT,
+            RoundIntent::Maneuver => INTENT_MANEUVER,
+            RoundIntent::Channel => INTENT_CHANNEL,
         }
+    }
+
+    /// The default display name ("Assault"): the term register's default (TERMS1 TM2). The battle's own name for the
+    /// intent (the game's `terms` table) is `label`.
+    pub fn name(self) -> &'static str {
+        rpgkit_data::terms::default_name(self.term_id())
+    }
+
+    /// TERMS1 TM3: the intent's name through `Catalog::term` on `cat` (the battle's catalog): the game's `terms` row,
+    /// else `name`.
+    pub fn label(self, cat: &rpgkit_data::Catalog) -> String {
+        cat.term(self.term_id()).name
     }
 }
 

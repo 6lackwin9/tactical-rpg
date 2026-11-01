@@ -1,11 +1,13 @@
 //! ShopRules runtime (scripts/dialogue/shop_rules.gd): open / closed, integer prices with reputation bands,
 //! offers (stock, loot, travel supplies), buy and sell over GameState. Validation of shop entries is not ported.
-//! PLAYUI1-P adds `trade` (engine-only): a whole trade of buys and sales settled at once, all-or-nothing.
+//! PLAYUI1-P adds `trade` (engine-only): a whole trade of buys and sales settled at once, all-or-nothing. TERMS1: the
+//! refusals and notes name the currency and the upkeep through `terms`.
 
 use crate::data::Data;
 use crate::dialogue::{self, rep};
 use crate::quest;
-use crate::state::{GameState, GOLD_MAX, SUPPLIES_MAX};
+use crate::state::{GameState, SUPPLIES_MAX};
+use crate::terms;
 use aegis_core::json::{self, int, Dict};
 use serde_json::Value;
 
@@ -136,11 +138,11 @@ pub fn buy(d: &Data, gs: &mut GameState, r: &str, kind: &str, id: &str, count: i
     let price = json::i(&offer, "price", 0);
     if kind == SUPPLIES {
         if count > left {
-            return json::fail(&format!("You can carry at most {SUPPLIES_MAX} supplies."));
+            return json::fail(&terms::upkeep_carry_max(d, &gs.world_id));
         }
         let total = price * count;
         if gs.party.gold < total {
-            return json::fail("Not enough gold.");
+            return json::fail(&terms::not_enough_currency(d, &gs.world_id));
         }
         gs.party.gold -= total;
         let added = gs.party.add_supplies(count);
@@ -154,7 +156,7 @@ pub fn buy(d: &Data, gs: &mut GameState, r: &str, kind: &str, id: &str, count: i
     }
     let total = price * count;
     if gs.party.gold < total {
-        return json::fail("Not enough gold.");
+        return json::fail(&terms::not_enough_currency(d, &gs.world_id));
     }
     let item = json::s(&offer, "item");
     let amount = if kind == "loot" { json::i(&offer, "count", 1) } else { count };
@@ -218,7 +220,7 @@ pub fn sell(d: &Data, gs: &mut GameState, r: &str, item: &str, count: i64) -> Di
     let added = gs.party.add_gold(total);
     let mut notes = Vec::new();
     if added < total {
-        notes.push(format!("Gold is capped at {GOLD_MAX} ({} not added).", total - added));
+        notes.push(terms::currency_capped(d, &gs.world_id, total - added));
     }
     let mut out = json::ok_result(true, &[]);
     out.insert("price".into(), int(total));
@@ -282,7 +284,7 @@ pub fn trade(d: &Data, gs: &mut GameState, r: &str, buys: &[(String, String, i64
         let item = json::s(offer, "item");
         if kind == SUPPLIES {
             if count > left {
-                errors.push(format!("You can carry at most {SUPPLIES_MAX} supplies."));
+                errors.push(terms::upkeep_carry_max(d, &gs.world_id));
                 continue;
             }
         } else if left != UNLIMITED && left < count {
@@ -306,7 +308,7 @@ pub fn trade(d: &Data, gs: &mut GameState, r: &str, buys: &[(String, String, i64
         earned += json::i(row, "price", 0) * count;
     }
     if errors.is_empty() && gs.party.gold + earned - spent < 0 {
-        errors.push("Not enough gold.".into());
+        errors.push(terms::not_enough_currency(d, &gs.world_id));
     }
     if !errors.is_empty() {
         return trade_result(&errors, 0, 0, 0, &[]);
@@ -341,7 +343,7 @@ pub fn trade(d: &Data, gs: &mut GameState, r: &str, buys: &[(String, String, i64
     let gold = if net >= 0 {
         let added = work.party.add_gold(net);
         if added < net {
-            notes.push(format!("Gold is capped at {GOLD_MAX} ({} not added).", net - added));
+            notes.push(terms::currency_capped(d, &gs.world_id, net - added));
         }
         added
     } else {

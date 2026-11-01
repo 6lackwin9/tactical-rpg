@@ -21,6 +21,7 @@ pub mod shop;
 pub mod simple;
 pub mod skill;
 pub mod story;
+pub mod terms;
 pub mod travel;
 pub mod unit;
 pub mod world;
@@ -246,6 +247,10 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
     if crate::source::HOOK_KINDS.contains(&kind) {
         // HOOKS1-S: the row checks the loader applies (hazards, unit meters, zones; unique ids)
         return hook_kinds::entry_errors(v, kind, &content(kind, entry), current_id);
+    }
+    if kind == terms::KIND {
+        // TERMS1-L: the row checks the loader applies (a game-scope term id, the lengths, unique ids)
+        return terms::entry_errors(v, &content(kind, entry), current_id);
     }
     let old_id = if current_id.is_empty() { json::s(entry, "id") } else { current_id.to_string() };
     let e = match kind {

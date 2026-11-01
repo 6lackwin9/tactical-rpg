@@ -139,18 +139,10 @@ pub enum PurseWord {
 
 /// CAMPAIGN1 P1: a purse counter's name inside a log line or a tip of world `world`: the kit's default names keep
 /// today's lower-case words ("gold", "supplies"; the Ashlands texts are unchanged), any other purse name its short
-/// form as written ("Scrap", "Tallow").
+/// form as written ("Scrap", "Tallow"). TERMS1 TM5: the rule is the kit resolver's (`terms::word`); this calls it.
 pub fn purse_word_in(d: &emberwake_world::Data, world: &str, which: PurseWord) -> String {
-    let p = emberwake_world::campaign::purse::purse(d, world);
-    let (c, default) = match which {
-        PurseWord::Currency => (p.currency, emberwake_data::CURRENCY_NAME),
-        PurseWord::Upkeep => (p.upkeep, emberwake_data::UPKEEP_NAME),
-    };
-    if c.name == default {
-        default.to_lowercase()
-    } else {
-        c.short
-    }
+    use emberwake_world::terms;
+    terms::word(d, world, if which == PurseWord::Currency { terms::CURRENCY } else { terms::UPKEEP })
 }
 
 /// `purse_word_in` for the game in play (today's word without a game).
