@@ -26,8 +26,9 @@ pub fn default_settings() -> Value {
     // RULESET1-U slice 6: every battle overlay group at its default (`battle::OVERLAY_GROUPS`; VISCLAR1 VC6: on but
     // `first_move` and `all_bars`). VC5: the debug key `debug_party_foresight_off` is never a default.
     let overlays: serde_json::Map<String, Value> = crate::battle::OVERLAY_GROUPS.iter().map(|g| (g.0.to_string(), Value::Bool(g.3))).collect();
-    // INPUT1 GH7: "Auto-fill the rest" on by default
-    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "auto_fill": true, "map_names": "hover", "map_legend_open": true, "battle_view": "stage", "see_through": "selected", "battle_overlays": overlays})
+    // INPUT1 GH7: "Auto-fill the rest" on by default; PB3: the playback speed 1x
+    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "auto_fill": true, "map_names": "hover", "map_legend_open": true, "battle_view": "stage", "see_through": "selected", "battle_overlays": overlays,
+        "playback_speed": "1x"})
 }
 
 /// The game in play (CurrentGame): the state, the slot it came from and its copy at the last save or load.

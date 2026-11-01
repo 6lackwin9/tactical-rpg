@@ -233,7 +233,11 @@ with no hero selected, or outside planning, a click on an enemy inspects it and 
 the menu, then the log, then clears the inspect, then selects nothing, then (Arena) leaves. Full timeline view
 (INPUT1-T, a battle beyond classic): T opens every unit's track over the grid panel (the party's plans with their
 ghosts, an unrevealed enemy masked with its intent, target and tell, during playback only its started actions); T or
-Esc (before the steps above) closes it; a click on a party track selects that hero.
+Esc (before the steps above) closes it; a click on a party track selects that hero. Playback aids (INPUT1-PB, a
+battle beyond classic): each impact draws a short tracer from its actor to what it hit, the strip frames the resolving
+block, P cycles the playback speed (1x, 0.5x, block by block; also Settings, Battle) and N plays the next block, the
+expanded log groups its lines by round and block, and T during playback pauses at the end of the resolving block until
+the view closes.
 
 Feel values (timings, floating numbers, hit flash, colours) live in `games/emberwake/tuning.json` and reload while the game
 runs. The GUI serves an agent link on `127.0.0.1:47800`: `ui_tree` (the screen stack, the music wanted, the top screen's state and every

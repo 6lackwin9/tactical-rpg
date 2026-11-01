@@ -11,7 +11,10 @@
 //! covered or not (STAGE1-O). Timeline battles (INPUT1-U): a click on a target sets the round target and opens the skill
 //! menu (picks through the host's `pick`, the planner's ghost fills the rest), keys 1-9 are the hero's skill hotkeys, S
 //! targets the hero itself, Z undoes the last pick. INPUT1-T: T opens the full timeline view over the grid panel
-//! (`timeline_view.rs`, every unit's track; T or Esc closes it).
+//! (`timeline_view.rs`, every unit's track; T or Esc closes it). INPUT1-PB: during a timeline battle's playback each
+//! impact draws a short tracer from its actor to what it hit, the strip frames the resolving block, P cycles the
+//! playback speed (1x, 0.5x, block by block; N plays the next block), the log groups its lines by round and block, and
+//! an open timeline view pauses the playback at the resolving block's end.
 //! ENCOUNTER2-C2 (docs/specs/ENCOUNTER2_C.md 3.3): each new talk cue of `Session::talks` opens the shared talk box
 //! (`talk.rs`) once its step's impacts have played, over a 35 % veil, the speaker's token in the gold ring; while it is
 //! open the screen sends no request, autoplay waits and every board click and battle key is swallowed; replies run in
@@ -63,6 +66,14 @@ const AP_PIPS: i32 = 12;
 /// AP10: paid pips turn hollow, and regained ones fill, over this many ms (at once with skip animations or reduce
 /// motion).
 const AP_ANIM_MS: f32 = 150.0;
+/// INPUT1 PB1: an impact tracer's life on the FX clock (ms; the animation speed and PB3's 0.5x apply), its alpha at the
+/// impact and how far it stops short of each token centre (px).
+const TRACER_MS: u64 = 400;
+const TRACER_ALPHA: u8 = 200;
+const TRACER_INSET: f32 = 3.0;
+/// INPUT1 PB3: the settings key of the playback speed and its values (setting value, chip label, chip widget id).
+pub(crate) const PLAYBACK_SPEED: &str = "playback_speed";
+pub(crate) const PLAYBACK_SPEEDS: [(&str, &str, &str); 3] = [("1x", "1x", "playback.speed.1"), ("0.5x", "0.5x", "playback.speed.half"), ("block", "Block", "playback.speed.block")];
 /// The battle screen's panels by name (`BattleScreen::panels`; the UI Gallery's battle panel entries).
 pub const PANELS: [&str; 7] = ["strip", "party", "hero", "grid", "hostiles", "intel", "bar"];
 const GRID_X: i32 = 128;
@@ -142,6 +153,37 @@ pub enum Action {
     /// TV5: a click in the open timeline view: a party track (or one of its spans) selects that hero; anything else in
     /// the view (a block, an enemy track, its backdrop) does nothing, so the board under it takes no click.
     TimelinePick(Option<usize>),
+    /// INPUT1 PB3: a playback speed chip (an index of `PLAYBACK_SPEEDS`; key P cycles them).
+    PlaybackSpeed(usize),
+    /// PB3, PB5: Next block (key N): a playback held at a block's end plays the next block.
+    NextBlock,
+}
+
+/// INPUT1 PB3: the playback speed setting (`playback_speed`: "1x", "0.5x", "block"; anything else reads 1x).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PlaySpeed {
+    Full,
+    Half,
+    Block,
+}
+
+impl PlaySpeed {
+    fn of(settings: &Value) -> PlaySpeed {
+        match settings[PLAYBACK_SPEED].as_str() {
+            Some("0.5x") => PlaySpeed::Half,
+            Some("block") => PlaySpeed::Block,
+            _ => PlaySpeed::Full,
+        }
+    }
+
+    /// Its index in `PLAYBACK_SPEEDS`.
+    fn index(self) -> usize {
+        match self {
+            PlaySpeed::Full => 0,
+            PlaySpeed::Half => 1,
+            PlaySpeed::Block => 2,
+        }
+    }
 }
 
 /// ENCOUNTER2-C DT6: an open battle talk: the tree it plays and its runner (a scene: no services).
@@ -430,6 +472,8 @@ struct Float {
     text: String,
     color: Rgba,
     born: Instant,
+    /// How long it shows (wall ms: the tuning's `float_ms`, doubled at PB3's 0.5x).
+    ms: u64,
 }
 
 /// What a unit was when its token last caught up with the battle (SPRITE1-U).
@@ -1266,6 +1310,15 @@ pub struct BattleScreen {
     /// `timeline_view`).
     tv_open: bool,
     tv_shown: Option<aegis_ui::timeline::Timeline>,
+    /// INPUT1 PB1: the live impact tracers with the FX clock ms each started at, and the popped action last traced.
+    tracers: Vec<(fx::Trace, u64)>,
+    traced: Option<(i32, i32, usize)>,
+    /// PB2: the round and block the last playback step resolved (the strip's cursor, the view's playhead).
+    play_block: Option<(i32, i32)>,
+    /// PB3, PB5: the block the last step finished (its end may hold the playback: Block mode, the timeline view open),
+    /// and the block the playback waits after with whether Block mode holds it (the agent link's `playback.waiting`).
+    block_ended: Option<i32>,
+    waiting: Option<(i32, bool)>,
 }
 
 /// INPUT1-AP (AP10): the AP gauge's levels in pips (full, solid outline) moving from `from` to `to` over `AP_ANIM_MS`
@@ -1362,6 +1415,11 @@ impl BattleScreen {
             ap_gauge: None,
             tv_open: false,
             tv_shown: None,
+            tracers: Vec::new(),
+            traced: None,
+            play_block: None,
+            block_ended: None,
+            waiting: None,
         }
     }
 
@@ -1592,6 +1650,7 @@ impl BattleScreen {
     fn send(&mut self, cx: &Cx, req: Value) -> Value {
         self.flush(cx);
         self.req_cmd = req["cmd"].as_str().unwrap_or("").to_string();
+        self.note_step();
         let reply = self.host.handle(&req);
         if cx.playtest.on {
             self.trail_of(&req, &reply);
@@ -1646,10 +1705,15 @@ impl BattleScreen {
             self.events_seen = n;
         }
         self.phase_shakes(cx);
+        // INPUT1 PB1: the popped action's impact tracers (timeline battles): with its impact, else at once
+        let traces = self.new_traces(cx);
+        // PB3, PB5: a step that finished its block may hold the playback at the block's end
+        self.note_block_end();
         let pending = if skip || self.req_cmd != "step" { None } else { self.popped_impact(t.walk_ms) };
         let after = self.sync_anims_deferred(cx, pending.is_some());
         match pending {
             Some(mut i) => {
+                i.traces = traces;
                 i.mods = fx::Mods::of(&lines, !struck.is_empty());
                 i.broke = fx::broke(&lines);
                 (i.after, i.floats, i.struck, i.sounds) = (after, floats, struck, sounds);
@@ -1667,6 +1731,9 @@ impl BattleScreen {
                 if !skip {
                     self.fall_dust(cx, &fell);
                 }
+                // PB1: skip animations (or no delivery): the tracers draw as the step's result shows
+                let now = self.clock.now();
+                self.tracers.extend(traces.into_iter().map(|tr| (tr, now)));
                 self.show(cx, floats, struck, sounds)
             }
         }
@@ -1742,7 +1809,9 @@ impl BattleScreen {
     /// The step feedback shown now: floats, hit flashes (wall clock) and sounds.
     fn show(&mut self, cx: &Cx, floats: Vec<(usize, String, Rgba)>, struck: Vec<usize>, sounds: Vec<String>) {
         let now = Instant::now();
-        self.floats.extend(floats.into_iter().map(|(unit, text, color)| Float { unit, text, color, born: now }));
+        // INPUT1 PB3: a float shows twice as long at 0.5x
+        let ms = cx.tuning.value.float_ms * self.pace(cx);
+        self.floats.extend(floats.into_iter().map(|(unit, text, color)| Float { unit, text, color, born: now, ms }));
         self.flashes.extend(struck.into_iter().map(|i| (i, now)));
         for s in sounds {
             cx.audio.play(Bus::Sfx, &s);
@@ -1829,6 +1898,7 @@ impl BattleScreen {
             radius,
             target,
             marks: Vec::new(),
+            traces: Vec::new(),
         })
     }
 
@@ -1894,7 +1964,9 @@ impl BattleScreen {
         }
         self.tokens.react(&i.after, &i.marks, at, false);
         self.push_bursts(cx);
-        self.gap_until = Some(Instant::now() + Duration::from_millis(t.impact_gap_ms));
+        // INPUT1 PB1: the action's tracers from its impact; PB3: the gap after it doubles at 0.5x
+        self.tracers.extend(i.traces.iter().map(|tr| (*tr, at)));
+        self.gap_until = Some(Instant::now() + Duration::from_millis(t.impact_gap_ms * self.pace(cx)));
         // Slice 2: the impact effects (4.4) on the target, or on each unit an area struck, and the heavy shake of a
         // Heavy hit or a break (4.5 rows 1-2); neither once skip animations is on (4.6). FX1-L2: an area's aim ring
         // (and a BURST's flash), the effects on the actor for `on_actor` rows, the dust of each unit that falls, all
@@ -2046,6 +2118,11 @@ impl BattleScreen {
         self.deferred.clear();
         self.ghosted = 0;
         self.inspect = None;
+        self.tracers.clear();
+        self.traced = self.session().last_popped;
+        self.play_block = None;
+        self.block_ended = None;
+        self.waiting = None;
         let (objective, n) = {
             let s = self.session();
             (emberwake_battle::encounter::Objectives::text_of(&s.def.raw, |r| s.units_of_ref(r).first().map(|&c| s.w.units[c].name.clone()).unwrap_or_else(|| r.to_string())), s.events.len())
@@ -2104,7 +2181,7 @@ impl BattleScreen {
         if self.talk.is_some() != matches!(a, Action::Talk(_)) {
             return;
         }
-        if matches!(a, Action::Confirm | Action::Step | Action::Autoplay | Action::NextRound) {
+        if matches!(a, Action::Confirm | Action::Step | Action::Autoplay | Action::NextRound | Action::PlaybackSpeed(_) | Action::NextBlock) {
             cx.audio.play(Bus::Ui, "sfx/ui_click.wav");
         }
         self.run(cx, a);
@@ -2185,8 +2262,27 @@ impl BattleScreen {
             }
             Action::ClosePopup => self.popup = None,
             Action::TimelineView => {
-                if self.tv_open || self.timeline_view_on() {
-                    self.tv_open = !self.tv_open;
+                if self.tv_open {
+                    self.close_view(cx);
+                } else if self.timeline_view_on() {
+                    self.tv_open = true;
+                }
+            }
+            Action::PlaybackSpeed(k) => {
+                // INPUT1 PB3: the remembered setting (the Settings Battle tab shows it too); leaving Block mode lets a
+                // held playback go on (unless the timeline view holds it)
+                if let Some((v, label, _)) = PLAYBACK_SPEEDS.get(k).filter(|_| self.playback_aids()) {
+                    cx.settings.v[PLAYBACK_SPEED] = json!(v);
+                    self.message = match cx.settings.save() {
+                        Err(e) => format!("Playback speed {label}, but the setting was not saved: {e}"),
+                        Ok(()) => format!("Playback speed: {label} (P cycles)."),
+                    };
+                }
+            }
+            Action::NextBlock => {
+                // PB3, PB5: a held playback plays the next block (it holds again at that block's end while it should)
+                if self.waiting.is_some() {
+                    self.release_block();
                 }
             }
             Action::TimelinePick(Some(u)) => {
@@ -2389,7 +2485,7 @@ impl BattleScreen {
         }
         if closed {
             self.talk = None;
-            self.gap_until = Some(Instant::now() + Duration::from_millis(cx.tuning.value.impact_gap_ms));
+            self.gap_until = Some(Instant::now() + Duration::from_millis(cx.tuning.value.impact_gap_ms * self.pace(cx)));
         }
     }
 
@@ -2490,6 +2586,129 @@ impl BattleScreen {
     /// TV1: the timeline view is open and shown (a classic battle never shows it).
     fn timeline_view_open(&self) -> bool {
         self.tv_open && self.timeline_view_on()
+    }
+
+    /// TV1, PB5: the timeline view closes; a playback it held at a block's end goes on (Block mode keeps holding it).
+    fn close_view(&mut self, cx: &Cx) {
+        self.tv_open = false;
+        if self.waiting.is_some_and(|w| !w.1) && PlaySpeed::of(&cx.settings.v) != PlaySpeed::Block {
+            self.release_block();
+        }
+    }
+
+    /// INPUT1 PB1-PB5: the playback aids are on: a timeline battle (the round intent or any ruleset rule, as TV1).
+    fn playback_aids(&self) -> bool {
+        self.timeline_view_on()
+    }
+
+    /// PB3: a timeline battle's round is playing: from Confirm until the round is over and its last impact has played.
+    fn in_playback(&self) -> bool {
+        let Some(s) = self.host.session.as_ref() else { return false };
+        self.playback_aids() && !(s.phase == Phase::Planning && !s.plan_confirmed) && (s.phase != Phase::Replay || !self.impacts_done(Instant::now()))
+    }
+
+    /// PB3: the playback's pacing factor: 2 at 0.5x while a round plays (every walk, clip, float, tracer and pause
+    /// between steps takes twice as long, on top of the animation speed), else 1; skip animations plays 0.5x as 1x.
+    fn pace(&self, cx: &Cx) -> u64 {
+        let half = PlaySpeed::of(&cx.settings.v) == PlaySpeed::Half && !cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
+        u64::from(half && self.in_playback()) + 1
+    }
+
+    /// PB2: a step request is about to go: the block it resolves (block 1 from planning) is the cursor's from now on.
+    fn note_step(&mut self) {
+        let Some(s) = self.host.session.as_ref().filter(|_| self.req_cmd == "step") else { return };
+        let block = match s.phase {
+            Phase::Planning => 1,
+            Phase::Resolving => s.current_block,
+            Phase::Replay => return,
+        };
+        self.play_block = Some((s.current_round, block));
+    }
+
+    /// PB3, PB5: after a request: the block a step finished (the round's last one too, which holds autoplay before
+    /// the next round); none from the party's planning on.
+    fn note_block_end(&mut self) {
+        let Some(s) = self.host.session.as_ref() else { return };
+        if s.phase == Phase::Planning && !s.plan_confirmed {
+            (self.block_ended, self.waiting) = (None, None);
+            return;
+        }
+        if self.req_cmd != "step" {
+            return;
+        }
+        let Some((_, b)) = self.play_block.filter(|p| p.0 == s.current_round) else { return };
+        let ended = match s.phase {
+            Phase::Resolving => s.current_block > b,
+            Phase::Replay => !s.combat_over,
+            Phase::Planning => false,
+        };
+        self.block_ended = ended.then_some(b);
+    }
+
+    /// PB3, PB5: holds the playback after the block the last step finished while Block mode is on or the timeline view
+    /// is open (the message bar says how to go on); true while it holds.
+    fn hold_at_block_end(&mut self, cx: &Cx) -> bool {
+        let block_mode = PlaySpeed::of(&cx.settings.v) == PlaySpeed::Block;
+        let Some(b) = self.block_ended.filter(|_| self.playback_aids() && (block_mode || self.timeline_view_open())) else {
+            self.waiting = None;
+            return false;
+        };
+        if self.waiting != Some((b, block_mode)) {
+            self.waiting = Some((b, block_mode));
+            let n = self.session().def.total_blocks;
+            self.message = if block_mode {
+                format!("Block {b} of {n}: N for the next")
+            } else {
+                format!("Block {b} of {n}: paused while the timeline view is open (T closes it, N plays the next block)")
+            };
+        }
+        true
+    }
+
+    /// PB3, PB5: the held playback goes on with the next block (and holds again at its end while it should).
+    fn release_block(&mut self) {
+        (self.block_ended, self.waiting) = (None, None);
+        self.next_at = Instant::now();
+        if self.host.session.as_ref().is_some_and(|s| s.phase == Phase::Resolving) {
+            self.message = "Resolving the round...".into();
+        }
+    }
+
+    /// PB2: the block the strip frames and the timeline view's playhead marks: the one the playback resolves, from its
+    /// first step until the next block's; none while the party plans, from Confirm to the first step (the round's
+    /// start) and once the round is over and its last impact has played (its end).
+    fn cursor_block(&self, now: Instant) -> Option<i32> {
+        let s = self.host.session.as_ref()?;
+        if !self.playback_aids() || s.phase == Phase::Planning {
+            return None;
+        }
+        let (_, b) = self.play_block.filter(|p| p.0 == s.current_round)?;
+        (s.phase != Phase::Replay || !self.impacts_done(now) || self.waiting.is_some()).then_some(b)
+    }
+
+    /// PB1: the tracers of the action the last step popped (once each; none outside timeline battles or for any other
+    /// request).
+    fn new_traces(&mut self, cx: &Cx) -> Vec<fx::Trace> {
+        let Some(s) = self.host.session.as_ref() else { return Vec::new() };
+        let popped = s.last_popped;
+        let fresh = popped.filter(|p| self.req_cmd == "step" && Some(*p) != self.traced && p.0 == s.current_round);
+        self.traced = popped;
+        let Some((_, _, idx)) = fresh.filter(|_| self.playback_aids()) else { return Vec::new() };
+        let tokens = &self.tokens;
+        let at = |u: usize| s.w.grid.pos(u).or(tokens.anims.get(u).and_then(|a| a.seen.pos));
+        traces_of(s, idx, &at, cx.tuning.value.heal_color)
+    }
+
+    /// PB1: the live tracers as the agent link reads them (`overlay.tracers`: from, to, alpha now, dashed); none with
+    /// the group `tracers` off.
+    fn tracers_json(&self, cx: &Cx) -> Value {
+        let on = Layers::of(&cx.settings.v["battle_overlays"]).tracers;
+        let (now, still) = (self.clock.now(), cx.settings.reduce_motion());
+        let cell = |c: V2| json!([c.x, c.y]);
+        Value::Array(self.tracers.iter().filter(|_| on).filter_map(|(t, at)| {
+            let a = tracer_alpha(now.saturating_sub(*at), still);
+            (a > 0).then(|| json!({"from": cell(t.from), "to": cell(t.to), "alpha": a, "dashed": t.dashed}))
+        }).collect())
     }
 
     /// SL2: the unit (token or card, either side) under the mouse in the last frame (round intent only).
@@ -2928,7 +3147,8 @@ impl Screen<GameCx> for BattleScreen {
         let now = Instant::now();
         // SPRITE1-U, FX1-L1 3.1: the tokens and effects run on the FX clock at the animation speed setting (FxSettings
         // 0.5-2x; at most 100 wall ms a frame), which a hit-stop holds still.
-        let speed = cx.settings.v["anim_speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0);
+        // INPUT1 PB3: at 0.5x the playback's clock runs at half the animation speed
+        let speed = cx.settings.v["anim_speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0) / self.pace(cx) as f64;
         self.clock.advance((now.duration_since(self.clock_at).as_secs_f64() * 1000.0).min(100.0), speed);
         self.clock_at = now;
         // PORTRAITFX1 4.5: the talk box's portrait clock moves by the frame's wall time
@@ -2947,6 +3167,8 @@ impl Screen<GameCx> for BattleScreen {
         self.fx.prune(fx_now);
         self.camera.offset(fx_now);
         self.sidesteps.retain(|s| fx_now < s.1 + fx::SIDESTEP_OUT_MS + fx::SIDESTEP_BACK_MS);
+        // INPUT1 PB1: a tracer is gone after its time
+        self.tracers.retain(|t| fx_now < t.1 + TRACER_MS);
         // FACE1: the Show enemy tells setting changed (I or the settings): the planning facing follows it. WINDUP1: so
         // do the planning poses, the bodies' pose clips once known and the reduce motion setting.
         let tells = self.tokens.tells != cx.settings.v["show_tells"].as_bool().unwrap_or(true);
@@ -2961,7 +3183,7 @@ impl Screen<GameCx> for BattleScreen {
             }
         }
         let t = cx.tuning.value.clone();
-        self.floats.retain(|f| now.duration_since(f.born) < Duration::from_millis(t.float_ms));
+        self.floats.retain(|f| now.duration_since(f.born) < Duration::from_millis(f.ms));
         self.flashes.retain(|f| now.duration_since(f.1) < Duration::from_millis(t.hit_flash_ms));
         // The playtest session is saved after every concluded round (and once more at the end).
         let ended = self.host.session.as_ref().is_some_and(|s| s.combat_over) && !self.end_logged;
@@ -2989,8 +3211,14 @@ impl Screen<GameCx> for BattleScreen {
         }
         // FX1 rule P: the next step waits for `step_ms` and for the last impact plus `impact_gap_ms`.
         let ready = now >= self.next_at && self.impacts_done(now);
+        // INPUT1 PB3: at 0.5x the pacing between steps and rounds doubles
+        let pace = self.pace(cx);
         if self.pending_next_round {
             if ready && self.session().phase == Phase::Replay {
+                // PB3: Block mode holds autoplay after the round's last block too
+                if self.hold_at_block_end(cx) {
+                    return;
+                }
                 self.pending_next_round = false;
                 self.run(cx, Action::NextRound);
             }
@@ -3001,8 +3229,12 @@ impl Screen<GameCx> for BattleScreen {
                 self.playing = false;
                 return;
             }
+            // PB3, PB5: after a block the playback waits in Block mode and while the timeline view is open
+            if self.hold_at_block_end(cx) {
+                return;
+            }
             self.send(cx, json!({"cmd": "step"}));
-            self.next_at = now + Duration::from_millis(t.step_ms);
+            self.next_at = now + Duration::from_millis(t.step_ms * pace);
             if self.session().phase == Phase::Replay {
                 self.playing = false;
                 let s = self.session();
@@ -3024,7 +3256,7 @@ impl Screen<GameCx> for BattleScreen {
                 };
                 self.message = message;
                 if self.auto && can_advance {
-                    self.next_at = now + Duration::from_millis(t.round_pause_ms);
+                    self.next_at = now + Duration::from_millis(t.round_pause_ms * pace);
                     self.pending_next_round = true;
                 }
             }
@@ -3068,6 +3300,9 @@ impl Screen<GameCx> for BattleScreen {
             Key::Char('s') if self.planning() => self.act(cx, Action::SelfTarget),
             // INPUT1 TV1: T opens and closes the full timeline view (a timeline battle, planning and playback)
             Key::Char('t') => self.act(cx, Action::TimelineView),
+            // INPUT1 PB3: P cycles the playback speed (1x, 0.5x, Block), N plays the next block (timeline battles)
+            Key::Char('p') => self.act(cx, Action::PlaybackSpeed((PlaySpeed::of(&cx.settings.v).index() + 1) % PLAYBACK_SPEEDS.len())),
+            Key::Char('n') => self.act(cx, Action::NextBlock),
             _ => {}
         }
     }
@@ -3097,7 +3332,7 @@ impl Screen<GameCx> for BattleScreen {
         // open timeline view closes first
         let timeline = self.host.session.as_ref().is_some_and(|s| ri::on(&s.w));
         if self.tv_open {
-            self.tv_open = false;
+            self.close_view(cx);
         } else if self.popup.is_some() {
             self.popup = None;
         } else if self.show_log {
@@ -3142,6 +3377,13 @@ impl Screen<GameCx> for BattleScreen {
             out["inspect"] = json!(self.inspected());
             // INPUT1-AP: the AP gauge as last drawn (pips "F H Hg Sg S", red, its "-<n>" label and side; null: hidden)
             out["ap_gauge"] = self.ap_gauge.clone().unwrap_or(Value::Null);
+        }
+        // INPUT1 PB1-PB4: the playback aids (timeline battles): the speed, whether the playback waits at a block's end
+        // and the resolving block; the live tracers; the log by round and block
+        if self.playback_aids() {
+            let sess = self.session();
+            out["playback"] = json!({"speed": PLAYBACK_SPEEDS[PlaySpeed::of(&cx.settings.v).index()].0, "waiting": self.waiting.is_some(), "block": self.cursor_block(Instant::now())});
+            out["log_groups"] = log_groups_json(&sess.log_groups());
         }
         // INPUT1 TV1: the full timeline view as last drawn (null: closed; no key in classic)
         if self.timeline_view_on() {
@@ -3198,6 +3440,13 @@ impl Screen<GameCx> for BattleScreen {
             // VISCLAR1 VC2: the units whose token bars the last frame drew by default
             out["focus"] = json!(self.focus_shown);
         }
+        // INPUT1 PB1: the impact tracers drawing now (any timeline battle)
+        if self.playback_aids() {
+            if !out["overlay"].is_object() {
+                out["overlay"] = json!({});
+            }
+            out["overlay"]["tracers"] = self.tracers_json(cx);
+        }
         // ENCOUNTER2-C DT11: the open talk (key only while one is open), its portrait as drawn and the speaker's token
         if let (Some(t), Some(gs)) = (self.talk.as_ref(), self.talk_state_of(cx)) {
             let view = t.runner.view(&cx.data, &gs);
@@ -3216,6 +3465,7 @@ impl Screen<GameCx> for BattleScreen {
         }
         self.flush(cx);
         self.req_cmd = body["cmd"].as_str().unwrap_or("").to_string();
+        self.note_step();
         let reply = self.host.handle(body);
         if restart && reply["ok"] == json!(true) {
             self.new_session();
@@ -3642,6 +3892,9 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let w = &s.w;
     let planning = s.phase == Phase::Planning && !s.plan_confirmed;
     let sel = g.selected.filter(|u| w.allies.contains(u));
+    // INPUT1 PB1-PB5: the playback aids of a timeline battle; PB2: the block the playback resolves
+    let aids = g.playback_aids();
+    let cursor = g.cursor_block(now);
     // INPUT1 IS1: the inspected unit (the intel panel is pinned on it; its revealed moves show, AR3)
     let pinned = g.inspected();
     // INTENT1: the enemy tells while planning; their chips and arrows on the grid follow the Show enemy tells setting (I).
@@ -3817,7 +4070,8 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         *big -= cut;
         over -= cut;
     }
-    let live_block = if !planning && s.phase == Phase::Resolving { s.current_block } else { 0 };
+    // INPUT1 PB2: a timeline battle's strip follows the playback's resolving block (classic: the current block)
+    let live_block = if aids { cursor.unwrap_or(0) } else if !planning && s.phase == Phase::Resolving { s.current_block } else { 0 };
     for b in 1..=s.def.total_blocks {
         let r = Rect::new(bx + (b - 1) * bw, 6, bw - 1, 16);
         let at = entries.iter().position(|e| b >= e.0 && b <= e.1);
@@ -3909,6 +4163,13 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     for b in (1..=s.def.total_blocks).filter(|b| marks.arena.iter().any(|t| t.blocks.contains(b))) {
         arena_badge(&mut ui.p, Rect::new(bx + (b - 1) * bw, 6, bw - 1, 16));
     }
+    // INPUT1 PB2: a 1 px GOLD frame around the resolving block's column, over the spans
+    if let Some(b) = cursor.filter(|b| (1..=blocks).contains(b)) {
+        let c = Rect::new(bx + (b - 1) * bw - 1, 5, bw + 1, 18);
+        for edge in [Rect::new(c.x, c.y, c.w, 1), Rect::new(c.x, c.y + c.h - 1, c.w, 1), Rect::new(c.x, c.y, 1, c.h), Rect::new(c.x + c.w - 1, c.y, 1, c.h)] {
+            ui.p.fill(edge, GOLD);
+        }
+    }
     let mut x = bx + blocks * bw + 6;
     // AP6: the gauge (`strip.ap`) after the last block, before the tactic menus, centred on the strip lane
     if timeline {
@@ -3922,10 +4183,31 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     } else {
         g.ap_gauge = None;
     }
-    ui.dropdown("strip.party", Rect::new(x, 6, party_w, 16), &party_label, Action::PartyMenu, planning, vec![("Party tactic".into(), GOLD), ("AI-drafts every hero with a tactic (you can edit the steps after).".into(), TEXT)]);
-    x += party_w + 2;
-    ui.dropdown("strip.hero", Rect::new(x, 6, hero_w, 16), &hero_label, Action::HeroMenu, planning && sel.is_some(), vec![("Hero tactic".into(), GOLD), ("AI-drafts the selected hero only.".into(), TEXT)]);
-    x += hero_w + 2;
+    if aids && !planning {
+        // INPUT1 PB3: during playback the speed chips take the tactic menus' place (1x, 0.5x, Block; Next block in
+        // Block mode)
+        let end = x + party_w + 2 + hero_w;
+        let speed = PlaySpeed::of(&cx.settings.v);
+        let tips = [
+            "Playback at full speed (P cycles the speeds).",
+            "Half speed: every walk, clip, float, tracer and pause takes twice as long (P cycles).",
+            "Block by block: the playback waits after each block; N or Next block plays the next one (P cycles).",
+        ];
+        for (k, (_, label, id)) in PLAYBACK_SPEEDS.iter().enumerate() {
+            let cw = ((ui.p.text_w(label, BODY) + 10.0).ceil() as i32).max(18);
+            ui.button_full(id, Rect::new(x, 6, cw, 16), label, Action::PlaybackSpeed(k), true, speed.index() == k, BODY, vec![(format!("Playback speed: {label}"), GOLD), (tips[k].into(), TEXT)]);
+            x += cw + 2;
+        }
+        if speed == PlaySpeed::Block {
+            ui.button_full("playback.next", Rect::new(x, 6, (end - x).max(10), 16), "Next block", Action::NextBlock, g.waiting.is_some(), false, BODY, vec![("Next block (N)".into(), GOLD), ("Plays the next block, then waits again.".into(), TEXT)]);
+        }
+        x = end + 2;
+    } else {
+        ui.dropdown("strip.party", Rect::new(x, 6, party_w, 16), &party_label, Action::PartyMenu, planning, vec![("Party tactic".into(), GOLD), ("AI-drafts every hero with a tactic (you can edit the steps after).".into(), TEXT)]);
+        x += party_w + 2;
+        ui.dropdown("strip.hero", Rect::new(x, 6, hero_w, 16), &hero_label, Action::HeroMenu, planning && sel.is_some(), vec![("Hero tactic".into(), GOLD), ("AI-drafts the selected hero only.".into(), TEXT)]);
+        x += hero_w + 2;
+    }
     ui.button_full("strip.auto", Rect::new(x, 6, auto_w, 16), "Auto", Action::Autoplay, !s.combat_over, g.auto, BODY, vec![("Autoplay".into(), GOLD), ("Drafts with the party tactic, confirms and plays rounds until the battle ends. Click again to stop.".into(), TEXT)]);
     x += auto_w + 2;
     ui.button_full("strip.clear", Rect::new(x, 6, clear_w, 16), "Clear", Action::Clear, planning && sel.is_some(), false, BODY, vec![(if timeline { "Clears the selected hero's picks (the planner fills the round again)." } else { "Clears the selected hero's steps." }.into(), TEXT)]);
@@ -4168,6 +4450,15 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         View::Flat => (None, draw_flat(board, &mut ui, cx, &tuning, now)),
     };
     g.focus_shown = focus_set(w, sel, board_hover.or(flat_hover).or(card_hover), pinned);
+    // INPUT1 PB1: the impact tracers above the tokens (group `tracers`), shaken with the board, inside its panel
+    if aids && layers.tracers && !g.tracers.is_empty() {
+        let geo = Geom::new(view, &tuning);
+        ui.p.clip(Some(Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4)));
+        ui.p.shift(shift.0, shift.1);
+        draw_tracers(&mut ui.p, &g.tracers, &geo, g.clock.now(), cx.settings.reduce_motion());
+        ui.p.shift(-shift.0, -shift.1);
+        ui.p.clip(None);
+    }
     // ENCOUNTER2 H1: the hold pick over the board while round 1 waits for it
     if planning && s.needs_stay_pick() {
         draw_hold_pick(&mut ui, s);
@@ -4322,10 +4613,24 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         ui.push("bar.chip", "label", chip.clone(), cr, true, false, None, vec![(format!("Ruleset: {chip}"), GOLD), (on, TEXT)]);
     }
     let last = s.resolver.log.last().cloned().unwrap_or_else(|| "No actions yet".into());
+    // INPUT1 PB4: a timeline battle's log in its parts (round and block); during playback the compact log shows the
+    // resolving block's part (its last line; the card lists the part)
+    let groups = if aids { s.log_groups() } else { Vec::new() };
+    let (last, mut card): (String, Tip) = match cursor {
+        Some(b) => {
+            let lines = groups.iter().find(|p| (p.round, p.block) == (s.current_round, b)).map(|p| p.lines.clone()).unwrap_or_default();
+            let head = (format!("Round {} block {b}", s.current_round), GOLD);
+            let shown = lines.last().map_or_else(|| format!("Block {b}: nothing logged yet"), |l| format!("Block {b}: {l}"));
+            let start = lines.len().saturating_sub(LOG_CARD_LINES);
+            (shown, std::iter::once(head).chain(lines[start..].iter().map(|l| (l.clone(), TEXT))).collect())
+        }
+        None => (last.clone(), vec![(last, TEXT)]),
+    };
+    card.push(("Click to open the full log.".into(), DIM));
     let log_r = Rect::new(6, 341, W - 64, 14);
     ui.p.panel(log_r, CARD, BORDER, RADIUS);
     ui.p.text_fit(10.0, 342.5, &last, SMALL, (W - 72) as f32, DIM);
-    ui.push("bar.last", "label", last.clone(), log_r, true, false, Some(Action::ToggleLog), vec![(last, TEXT), ("Click to open the full log.".into(), DIM)]);
+    ui.push("bar.last", "label", last, log_r, true, false, Some(Action::ToggleLog), card);
     ui.button_full("bar.log", Rect::new(W - 54, 341, 48, 14), if g.show_log { "Close" } else { "Expand" }, Action::ToggleLog, true, g.show_log, BODY, vec![("Full combat log (L); the wheel scrolls".into(), TEXT)]);
 
     let outcome = g.outcome();
@@ -4354,19 +4659,43 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         ui.push("log.panel", "panel", format!("{} lines", log.len()), r, true, true, Some(Action::Step), Vec::new());
         ui.p.panel(r, rgba(10, 14, 24, 246), BORDER, 3.0);
         ui.p.text(r.x as f32 + 6.0, r.y as f32 + 3.0, &format!("Combat log ({} entries)", log.len()), TITLE, GOLD);
-        let mut wrapped: Vec<(String, Rgba)> = Vec::new();
-        for l in &log {
+        // the rows: text, colour, x offset, a rule after it; INPUT1 PB4: a timeline battle's lines under their round's
+        // "Round <r>" and their part's DIM "Block <b>" ("Round start", "Round end") with a 1 px rule, 6 px in
+        let mut wrapped: Vec<(String, Rgba, f32, bool)> = Vec::new();
+        let wrap_line = |p: &mut Painter, out: &mut Vec<(String, Rgba, f32, bool)>, l: &str, indent: f32| {
             let col = if l.starts_with("[Phase]") { GOLD } else if l.starts_with("[Kill]") { FOE } else if l.starts_with("[Attack]") { TEXT } else if l.starts_with("[Support]") { GOOD } else if l.contains("Failed") || l.contains("Out of Range") { FOE } else { DIM };
-            for (k, part) in ui.p.wrap(l, SMALL, (r.w - 22) as f32).into_iter().enumerate() {
-                wrapped.push((if k == 0 { part } else { format!("   {part}") }, col));
+            for (k, part) in p.wrap(l, SMALL, (r.w - 22) as f32 - indent).into_iter().enumerate() {
+                out.push((if k == 0 { part } else { format!("   {part}") }, col, indent, false));
+            }
+        };
+        if aids {
+            let mut round = 0;
+            for part in &groups {
+                if part.round != round {
+                    round = part.round;
+                    wrapped.push((format!("Round {round}"), GOLD, 0.0, false));
+                }
+                wrapped.push((log_part_name(part.block), DIM, 0.0, true));
+                for l in &part.lines {
+                    wrap_line(&mut ui.p, &mut wrapped, l, LOG_INDENT);
+                }
+            }
+        } else {
+            for l in &log {
+                wrap_line(&mut ui.p, &mut wrapped, l, 0.0);
             }
         }
         let visible = ((r.h - 18) as f32 / 8.0) as i32;
         let max_scroll = (wrapped.len() as i32 - visible).max(0);
         g.log_scroll = g.log_scroll.min(max_scroll);
         let start = (wrapped.len() as i32 - visible - g.log_scroll).max(0) as usize;
-        for (k, (t, col)) in wrapped.iter().skip(start).take(visible as usize).enumerate() {
-            ui.p.text(r.x as f32 + 6.0, r.y as f32 + 15.0 + k as f32 * 8.0, t, SMALL, *col);
+        for (k, (t, col, indent, rule)) in wrapped.iter().skip(start).take(visible as usize).enumerate() {
+            let (x, y) = (r.x as f32 + 6.0 + indent, r.y as f32 + 15.0 + k as f32 * 8.0);
+            ui.p.text(x, y, t, SMALL, *col);
+            if *rule {
+                let x0 = (x + ui.p.text_w(t, SMALL) + 3.0).ceil() as i32;
+                ui.p.fill(Rect::new(x0, y as i32 + 4, (r.x + r.w - 12 - x0).max(0), 1), with_alpha(DIM, 110));
+            }
         }
         if max_scroll > 0 {
             let track = Rect::new(r.x + r.w - 8, r.y + 15, 4, r.h - 19);
@@ -4382,7 +4711,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     // cards from showing through
     if g.timeline_view_open() {
         let r = Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4);
-        let opts = timeline_view::Opts { viewed: s.current_round, reveal_all: false, foresight_off, show_tells, layers, selected: sel, block: None, shown: sel.zip(shown).map(|(u, (pw, pp))| (u, pw, pp)) };
+        let opts = timeline_view::Opts { viewed: s.current_round, reveal_all: false, foresight_off, show_tells, layers, selected: sel, block: None, shown: sel.zip(shown).map(|(u, (pw, pp))| (u, pw, pp)), playhead: cursor };
         let t = timeline_view::build(s, &opts);
         ui.push("timeline.backdrop", "backdrop", "", r, true, false, Some(Action::TimelinePick(None)), Vec::new());
         ui.p.panel(r, rgba(10, 14, 24, 250), BORDER, RADIUS);
@@ -4495,7 +4824,7 @@ struct Overlay {
 
 /// RULESET1-U slice 6: the overlay groups as the Settings Battle tab lists them: (id, label, what it shows, default);
 /// VISCLAR1 VC6: every group on by default but `first_move` and `all_bars`.
-pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str, bool); 24] = [
+pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str, bool); 25] = [
     ("band", "Reach band", "The selected hero's attack reach around the tile it strikes from (Assault, Maneuver).", true),
     ("front", "Maneuver front", "The target's front, where an Engage never stands (Maneuver).", true),
     ("valid", "Valid targets", "Rings on the units a click would make the round target.", true),
@@ -4528,6 +4857,8 @@ pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str, bool); 24] = [
     // ENCOUNTER2-U: a hold escape's marks (ENCOUNTER2 H7)
     ("hold", "Hold tiles", "The tiles a hold escape's holder keeps, with the holder's name on their card.", true),
     ("gate", "Gate state", "A hold escape's exits read SHUT (red) until the holder stands on a hold tile, then OPEN (green).", true),
+    // INPUT1 PB1: the playback's impact tracers
+    ("tracers", "Impact tracers", "A short line from each actor to what its action hit, during playback.", true),
 ];
 
 /// VISCLAR1 VC6: a group's default (`OVERLAY_GROUPS`; an unknown id is on).
@@ -4575,14 +4906,16 @@ pub(crate) struct Layers {
     /// ENCOUNTER2-U: a hold escape's tiles and gate (H7).
     hold: bool,
     gate: bool,
+    /// INPUT1 PB1: the playback's impact tracers.
+    tracers: bool,
 }
 
 impl Layers {
     /// The group ids, as the settings key names them (`OVERLAY_GROUPS`' order).
-    const IDS: [&'static str; 24] = {
-        let mut ids = [""; 24];
+    const IDS: [&'static str; 25] = {
+        let mut ids = [""; 25];
         let mut k = 0;
-        while k < 24 {
+        while k < 25 {
             ids[k] = OVERLAY_GROUPS[k].0;
             k += 1;
         }
@@ -4617,12 +4950,13 @@ impl Layers {
             pushes: on("pushes"),
             hold: on("hold"),
             gate: on("gate"),
+            tracers: on("tracers"),
         }
     }
 
     /// The flags by group id (the agent link's state).
     fn json(&self) -> Value {
-        let v = [self.band, self.front, self.valid, self.veils, self.moves, self.target, self.facings, self.walks, self.glyphs, self.first_move, self.badges, self.poise, self.all_bars, self.breaks, self.parts, self.forecasts, self.summary, self.hazards, self.arena, self.meters, self.guard, self.pushes, self.hold, self.gate];
+        let v = [self.band, self.front, self.valid, self.veils, self.moves, self.target, self.facings, self.walks, self.glyphs, self.first_move, self.badges, self.poise, self.all_bars, self.breaks, self.parts, self.forecasts, self.summary, self.hazards, self.arena, self.meters, self.guard, self.pushes, self.hold, self.gate, self.tracers];
         Value::Object(Self::IDS.iter().zip(v).map(|(k, b)| (k.to_string(), json!(b))).collect())
     }
 }
@@ -4825,6 +5159,23 @@ fn bars_shown(timeline: bool, layers: &Layers, alt: bool, focus: &[usize], i: us
 /// AR4: a polyline of ground points dashed `ARROW_DASH` (the pattern runs on over the corners), its head of
 /// `ARROW_HEAD` at the end.
 fn draw_arrow_line(p: &mut Painter, pts: &[(f32, f32)], col: Rgba, width: f32) {
+    dash_polyline(p, pts, col, width);
+    if let [.., a, b] = pts {
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let len = (dx * dx + dy * dy).sqrt();
+        if len >= 0.5 {
+            let (ux, uy) = (dx / len, dy / len);
+            for side in [-1.0f32, 1.0] {
+                let (c, s) = (0.866f32, 0.5 * side);
+                let (bx, by) = (-(ux * c - uy * s), -(uy * c + ux * s));
+                stage::wide_line(p, b.0, b.1, b.0 + bx * ARROW_HEAD, b.1 + by * ARROW_HEAD, col, width, 0.0);
+            }
+        }
+    }
+}
+
+/// AR4, PB1: a polyline in `ARROW_DASH`'s dash (4 px on, 3 off), the dash running on over each corner.
+fn dash_polyline(p: &mut Painter, pts: &[(f32, f32)], col: Rgba, width: f32) {
     let (on, off) = ARROW_DASH;
     let mut phase = 0.0f32;
     for seg in pts.windows(2) {
@@ -4845,18 +5196,6 @@ fn draw_arrow_line(p: &mut Painter, pts: &[(f32, f32)], col: Rgba, width: f32) {
             d = e;
         }
         phase = (phase + len) % (on + off);
-    }
-    if let [.., a, b] = pts {
-        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
-        let len = (dx * dx + dy * dy).sqrt();
-        if len >= 0.5 {
-            let (ux, uy) = (dx / len, dy / len);
-            for side in [-1.0f32, 1.0] {
-                let (c, s) = (0.866f32, 0.5 * side);
-                let (bx, by) = (-(ux * c - uy * s), -(uy * c + ux * s));
-                stage::wide_line(p, b.0, b.1, b.0 + bx * ARROW_HEAD, b.1 + by * ARROW_HEAD, col, width, 0.0);
-            }
-        }
     }
 }
 
@@ -4881,6 +5220,119 @@ fn draw_arrows(p: &mut Painter, arrows: &[Arrow], geo: &Geom) {
         }
         draw_arrow_line(p, &pts, col, width);
     }
+}
+
+// ---- INPUT1-PB: the impact tracers (INPUT1 PB1) ---------------------------------------------------------------------
+
+/// INPUT1 PB1: the tracers of popped action `idx` (tiles by `at`): from its actor to each unit it landed on (an attack's
+/// or an area's hit, damage or stagger; a support or an item on another unit, in the heal colour `heal` unless the item
+/// harms), dashed to its target when it missed (MR8 c's protected flank, GD5's lost target), to the aim tile an area
+/// left its hazard on, and from each riposting unit back to the actor; party GOLD, enemy FOE. None for a self-only
+/// command, a cancelled one, or one that failed otherwise.
+fn traces_of(s: &Session, idx: usize, at: &dyn Fn(usize) -> Option<V2>, heal: Rgba) -> Vec<fx::Trace> {
+    let w = &s.w;
+    let mut out: Vec<fx::Trace> = Vec::new();
+    let Some(a) = s.resolver.scheduled.get(idx).filter(|a| !a.cancelled) else { return out };
+    let Some(from) = at(a.unit) else { return out };
+    let c = &a.command;
+    let side = |u: usize| if w.allies.contains(&u) { GOLD } else { FOE };
+    let put = |out: &mut Vec<fx::Trace>, from: V2, to: Option<V2>, col: Rgba, dashed: bool| {
+        if let Some(to) = to.filter(|to| *to != from && !out.iter().any(|t| (t.from, t.to) == (from, *to))) {
+            out.push(fx::Trace { from, to, col, dashed });
+        }
+    };
+    let landed: Vec<usize> = c.hits.iter().map(|h| h.0).chain(c.staggers.iter().map(|st| st.target)).filter(|&u| u != a.unit).collect();
+    match &c.kind {
+        CmdKind::Attack { target, .. } => {
+            let missed = c.evaded.or(if c.missed { *target } else { None });
+            if let Some(t) = missed {
+                put(&mut out, from, at(t), side(a.unit), true);
+            }
+            for &u in &landed {
+                put(&mut out, from, at(u), side(a.unit), false);
+            }
+        }
+        CmdKind::Area { aim, .. } => {
+            for &u in &landed {
+                put(&mut out, from, at(u), side(a.unit), false);
+            }
+            // HOOKS1 GH2: the hazard an area leaves lands on its aim tile (rule ground_hazards)
+            if c.hazard.as_ref().is_some_and(|h| !h.at_self) && emberwake_battle::ground::on(w) && !c.failed && w.grid.is_valid(*aim) {
+                put(&mut out, from, Some(*aim), side(a.unit), false);
+            }
+        }
+        CmdKind::Support { target, .. } if *target != a.unit && !c.failed => put(&mut out, from, at(*target), heal, false),
+        CmdKind::Item { target, item, used: true, .. } if *target != a.unit => put(&mut out, from, at(*target), if item.damage > 0 { side(a.unit) } else { heal }, false),
+        _ => {}
+    }
+    for r in &c.reactions {
+        if let Some(back) = at(r.defender) {
+            put(&mut out, back, at(r.attacker), side(r.defender), false);
+        }
+    }
+    out
+}
+
+/// PB1: a tracer's alpha `age` FX-clock ms after its impact: `TRACER_ALPHA` fading to 0 over `TRACER_MS`; under reduce
+/// motion held at `TRACER_ALPHA`, then gone.
+fn tracer_alpha(age: u64, still: bool) -> u8 {
+    if age >= TRACER_MS {
+        0
+    } else if still {
+        TRACER_ALPHA
+    } else {
+        (TRACER_ALPHA as f32 * (1.0 - age as f32 / TRACER_MS as f32)).round() as u8
+    }
+}
+
+/// PB1: the live tracers above the tokens, each a straight line between the two tokens' centres shortened by
+/// `TRACER_INSET` at each end, 1 px on the Flat board and 1.5 px on the Stage, dashed (4 on, 3 off) for a miss.
+fn draw_tracers(p: &mut Painter, tracers: &[(fx::Trace, u64)], geo: &Geom, now: u64, still: bool) {
+    let width = if geo.view == View::Stage { ARROW_W_STAGE } else { ARROW_W_FLAT };
+    for (t, at) in tracers {
+        let a = tracer_alpha(now.saturating_sub(*at), still);
+        let ((x0, y0), (x1, y1)) = (fx::anchor(geo, t.from), fx::anchor(geo, t.to));
+        let len = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt();
+        if a == 0 || len <= 2.0 * TRACER_INSET {
+            continue;
+        }
+        let (ux, uy) = ((x1 - x0) / len, (y1 - y0) / len);
+        let pts = [(x0 + ux * TRACER_INSET, y0 + uy * TRACER_INSET), (x1 - ux * TRACER_INSET, y1 - uy * TRACER_INSET)];
+        let col = with_alpha(t.col, a);
+        if t.dashed {
+            dash_polyline(p, &pts, col, width);
+        } else {
+            stage::wide_line(p, pts[0].0, pts[0].1, pts[1].0, pts[1].1, col, width, 0.0);
+        }
+    }
+}
+
+// ---- INPUT1-PB: the combat log by round and block (INPUT1 PB4) ---------------------------------------------------
+
+/// PB4: how many of the resolving block's lines the compact log's card lists (its last ones), and how far the expanded
+/// log's lines sit in under their part's header (px).
+const LOG_CARD_LINES: usize = 12;
+const LOG_INDENT: f32 = 6.0;
+
+/// PB4: a log part's header: "Round start", "Block <b>", "Round end".
+fn log_part_name(block: i32) -> String {
+    match block {
+        emberwake_battle::session::LOG_ROUND_START => "Round start".into(),
+        emberwake_battle::session::LOG_ROUND_END => "Round end".into(),
+        b => format!("Block {b}"),
+    }
+}
+
+/// PB4: the agent link's `log_groups`: [{round, block (a number, "start" or "end"), lines}].
+fn log_groups_json(groups: &[emberwake_battle::session::LogGroup]) -> Value {
+    Value::Array(groups.iter().map(|g| {
+        let block = match g.block {
+            emberwake_battle::session::LOG_ROUND_START => json!("start"),
+            emberwake_battle::session::LOG_ROUND_END => json!("end"),
+            b => json!(b),
+        };
+        json!({"round": g.round, "block": block, "lines": g.lines})
+    }).collect())
 }
 
 /// The arrows for the agent link's state: [{unit, points [[x, y]], alpha}].
@@ -6203,7 +6655,7 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
     live.draw(&mut ui.p, anim_now, Layer::Air);
     for f in floats {
         if let Some(pos) = w.grid.pos(f.unit) {
-            let t = now.duration_since(f.born).as_millis() as f32 / tuning.float_ms.max(1) as f32;
+            let t = now.duration_since(f.born).as_millis() as f32 / f.ms.max(1) as f32;
             let (cx, cy) = center(pos);
             float_text(ui, &f.text, f.color, cx, cy - 14.0 - tuning.float_rise_px as f32 * t);
         }
@@ -6578,7 +7030,7 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                 }
                 for f in floats {
                     let Some(pos) = w.grid.pos(f.unit) else { continue };
-                    let t = now.duration_since(f.born).as_millis() as f32 / tuning.float_ms.max(1) as f32;
+                    let t = now.duration_since(f.born).as_millis() as f32 / f.ms.max(1) as f32;
                     let (x, y) = geo.chest(pos);
                     float_text(ui, &f.text, f.color, x as f32, y as f32 - 14.0 - tuning.float_rise_px as f32 * t);
                 }
@@ -9592,7 +10044,10 @@ mod overlay_tests {
         assert_eq!(o.facings, facings);
         // (VISCLAR1 AR3: with the target arrows the last frame drew)
         let drawn = Overlay { arrows: b.arrows_shown.clone(), ..o.clone() };
-        assert_eq!(b.state(&cx)["overlay"], overlay_json(&drawn), "the agent link's state lists the overlays");
+        // (INPUT1 PB1: with the impact tracers drawing now: none while planning)
+        let mut want = overlay_json(&drawn);
+        want["tracers"] = json!([]);
+        assert_eq!(b.state(&cx)["overlay"], want, "the agent link's state lists the overlays");
         // the slice 3 review: an attack strikes from after its carried Engage move, from before its Disengage retreat
         let mut e = st.entries[0].clone();
         (e.pos_before, e.pos_after) = (V2::new(1, 1), V2::new(2, 1));
@@ -10190,7 +10645,7 @@ mod slice6_tests {
                     b.floats.clear();
                     if floats {
                         let now = Instant::now();
-                        b.floats.extend(living.iter().zip(&texts).map(|(&unit, text)| Float { unit, text: text.clone(), color: if text.starts_with('-') { damage } else { heal }, born: now }));
+                        b.floats.extend(living.iter().zip(&texts).map(|(&unit, text)| Float { unit, text: text.clone(), color: if text.starts_with('-') { damage } else { heal }, born: now, ms: cx.tuning.value.float_ms }));
                     }
                     let recs = crate::hud::hud_tests::frame(b, cx, g, scale);
                     let boxes: Vec<(String, f32, f32, f32, f32)> = b.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
@@ -10716,7 +11171,8 @@ mod hooks_audit_tests {
                 (w["id"].as_str().unwrap_or("").to_string(), r.0 as f32, r.1 as f32, r.2 as f32, r.3 as f32)
             }).collect();
             let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
-            let spill: Vec<&Value> = v["spill"].as_array().unwrap().iter().filter(|e| e["widget"].as_str().is_some_and(|w| w.starts_with("settings.overlay.") || w.starts_with("settings.debug."))).collect();
+            // (INPUT1-PB: the playback speed select at the heading row's end too)
+            let spill: Vec<&Value> = v["spill"].as_array().unwrap().iter().filter(|e| e["widget"].as_str().is_some_and(|w| w.starts_with("settings.overlay.") || w.starts_with("settings.debug.") || w == "settings.playback_speed")).collect();
             assert!(spill.is_empty() && v["cut"].as_array().unwrap().is_empty() && v["edge"].as_array().unwrap().is_empty(), "scale {scale}: {v}");
             // VISCLAR1-A: the tighter rows (24 groups and the Debug row) do not overlap
             assert_eq!(v["counts"]["overlap"], json!(0), "scale {scale}: {}", v["overlap"]);
@@ -10724,6 +11180,7 @@ mod hooks_audit_tests {
             assert_eq!(ids, OVERLAY_GROUPS.len());
             let debug = st.widgets().iter().filter(|w| w["id"] == json!("settings.debug.party_foresight_off")).count();
             assert_eq!(debug, usize::from(cfg!(debug_assertions)), "VC5: the debug row only in a debug build");
+            assert!(st.widgets().iter().any(|w| w["id"] == json!("settings.playback_speed")), "PB3: the playback speed");
         }
     }
 
@@ -11607,7 +12064,8 @@ mod timeline_view_tests {
     }
 
     /// TV4: during playback an unrevealed enemy's track holds only its actions that have started (block <= the
-    /// playhead); the playhead is the resolving block.
+    /// playhead); the playhead is the resolving block (INPUT1 PB2: the strip's cursor, the block the last step
+    /// resolved; the session's current block before the first step).
     #[test]
     fn during_playback_an_unrevealed_enemy_shows_only_what_has_started() {
         let (mut cx, mut g, mut b) = arena(Some(TIMELINE), false);
@@ -11618,8 +12076,9 @@ mod timeline_view_tests {
         while s(&b).phase != Phase::Replay {
             drawn(&mut cx, &mut g, &mut b);
             let t = view(&b).clone();
+            let at = b.cursor_block(Instant::now()).unwrap_or(s(&b).current_block);
             let sess = s(&b);
-            assert_eq!(t.playhead, sess.current_block);
+            assert_eq!(t.playhead, at);
             let rounds = sess.round_intents();
             for tr in tracks(&t, 1) {
                 let e = unit_of(&tr.key).unwrap();
@@ -11627,8 +12086,8 @@ mod timeline_view_tests {
                 if rounds.iter().find(|r| r.unit == e).is_some_and(|r| r.revealed) {
                     continue;
                 }
-                assert!(tr.segments.iter().all(|x| x.start <= sess.current_block), "block {}: {:?}", sess.current_block, tr.segments);
-                let started = sess.resolver.scheduled.iter().filter(|a| a.unit == e && a.start <= sess.current_block).count();
+                assert!(tr.segments.iter().all(|x| x.start <= at), "block {at}: {:?}", tr.segments);
+                let started = sess.resolver.scheduled.iter().filter(|a| a.unit == e && a.start <= at).count();
                 assert_eq!(tr.segments.len(), started, "every started action");
                 checked += 1;
             }
@@ -11732,6 +12191,464 @@ mod timeline_view_tests {
             assert_eq!(view(&b), &gallery);
             b.act(&mut cx, Action::Confirm);
             b.send(&cx, json!({"cmd": "step"}));
+        }
+    }
+}
+
+/// INPUT1-PB (INPUT1.md 12, PB1-PB5): the playback aids of a timeline battle (the first catalog encounter played by the
+/// timeline ruleset): the impact tracers, the strip's block cursor, the playback speed, the log by round and block and
+/// the timeline view pausing the playback. Every expectation comes from the rules and the kit (the popped commands,
+/// `Session::log_groups`, the tuning's own pacing), never a shipped number; classic is unchanged.
+#[cfg(test)]
+mod playback_tests {
+    use super::*;
+    use emberwake_rules::ruleset::TIMELINE;
+
+    fn arena(ruleset: Option<&str>) -> (Cx, Gfx, BattleScreen) {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        cx.settings.v["battle_view"] = json!("flat");
+        let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+        let mut b = BattleScreen::arena_with(&cx, None, &encounter, ruleset.map(String::from), "", false);
+        assert!(b.host.session.is_some(), "the battle starts: {}", b.message);
+        b.tick(&mut cx);
+        (cx, crate::hud::hud_tests::gfx(), b)
+    }
+
+    fn s(b: &BattleScreen) -> &Session {
+        b.host.session.as_ref().unwrap()
+    }
+
+    fn widget<'a>(b: &'a BattleScreen, id: &str) -> Option<&'a Widget<Action>> {
+        b.w.iter().find(|x| x.id == id)
+    }
+
+    /// One playback tick as soon as it may go: a pending impact fired, the step pacing and the impact gap over.
+    fn tick_now(b: &mut BattleScreen, cx: &mut Cx) {
+        b.flush(cx);
+        b.next_at = Instant::now();
+        b.gap_until = None;
+        b.tick(cx);
+    }
+
+    /// The tile of unit `u` as the tracers use it.
+    fn tile(b: &BattleScreen, u: usize) -> Value {
+        let c = s(b).w.grid.pos(u).or(b.tokens.anims.get(u).and_then(|a| a.seen.pos)).expect("a tile");
+        json!([c.x, c.y])
+    }
+
+    /// Plays on to the next round (planned with the party tactic) once a round is over; false when the battle is.
+    fn next_round(b: &mut BattleScreen, cx: &mut Cx) -> bool {
+        if s(b).combat_over || !s(b).can_advance_round() {
+            return false;
+        }
+        b.run(cx, Action::NextRound);
+        b.act(cx, Action::Confirm);
+        s(b).plan_confirmed
+    }
+
+    /// PB1: a step whose attack landed puts one tracer from the actor's tile to each unit it hit or staggered (solid,
+    /// alpha 200 at its impact, the actor's side colour); a self-only command (Defend, Focus, Rest) puts none. Skip
+    /// animations: the tracers draw as the step's result shows.
+    #[test]
+    fn a_landed_hit_puts_one_tracer_per_unit_and_a_self_command_none() {
+        let (mut cx, _, mut b) = arena(Some(TIMELINE));
+        cx.settings.v["skip_anim"] = json!(true);
+        b.act(&mut cx, Action::Confirm);
+        let (mut hits, mut selfs) = (0, 0);
+        for _ in 0..600 {
+            if s(&b).phase == Phase::Replay && ((hits > 0 && selfs > 0) || !next_round(&mut b, &mut cx)) {
+                break;
+            }
+            b.tracers.clear();
+            let before = s(&b).last_popped;
+            b.send(&cx, json!({"cmd": "step"}));
+            let sess = s(&b);
+            let Some((_, _, idx)) = sess.last_popped.filter(|p| Some(*p) != before) else { continue };
+            let a = sess.resolver.scheduled[idx].clone();
+            let tr = b.state(&cx)["overlay"]["tracers"].as_array().cloned().expect("overlay.tracers");
+            match a.command.kind {
+                CmdKind::Defend { .. } | CmdKind::Focus { .. } | CmdKind::Rest { .. } => {
+                    assert!(tr.is_empty(), "a self command: {tr:?}");
+                    selfs += 1;
+                }
+                CmdKind::Attack { .. } if !a.cancelled && a.command.reactions.is_empty() && !a.command.hits.is_empty() => {
+                    let mut landed: Vec<usize> = a.command.hits.iter().map(|h| h.0).chain(a.command.staggers.iter().map(|st| st.target)).filter(|&u| u != a.unit).collect();
+                    landed.sort_unstable();
+                    landed.dedup();
+                    assert_eq!(tr.len(), landed.len(), "one tracer per unit it landed on: {tr:?}");
+                    for u in landed {
+                        assert!(tr.contains(&json!({"from": tile(&b, a.unit), "to": tile(&b, u), "alpha": TRACER_ALPHA, "dashed": false})), "{u}: {tr:?}");
+                    }
+                    let col = if sess.w.allies.contains(&a.unit) { GOLD } else { FOE };
+                    assert!(b.tracers.iter().all(|t| t.0.col == col && !t.0.dashed));
+                    hits += 1;
+                }
+                _ => {}
+            }
+        }
+        assert!(hits > 0 && selfs > 0, "an attack landed ({hits}) and a self command went ({selfs})");
+    }
+
+    /// PB1 by the rules on a played command: a protected flank (MR8 c) or a lost target (GD5) is one dashed tracer to
+    /// the target; a cancelled action none; a support on another unit draws in the heal colour, on itself none.
+    #[test]
+    fn a_miss_is_one_dashed_tracer_and_a_cancelled_action_none() {
+        let (mut cx, _, mut b) = arena(Some(TIMELINE));
+        cx.settings.v["skip_anim"] = json!(true);
+        b.act(&mut cx, Action::Confirm);
+        while s(&b).phase != Phase::Replay {
+            b.send(&cx, json!({"cmd": "step"}));
+        }
+        let heal = cx.tuning.value.heal_color;
+        let sess = b.host.session.as_mut().unwrap();
+        let idx = sess.resolver.scheduled.iter().position(|a| matches!(a.command.kind, CmdKind::Attack { target: Some(_), .. })).expect("an attack");
+        let CmdKind::Attack { target: Some(t), .. } = sess.resolver.scheduled[idx].command.kind else { unreachable!() };
+        let actor = sess.resolver.scheduled[idx].unit;
+        let at = |u: usize| Some(V2::new(u as i32, 0));
+        let c = &mut sess.resolver.scheduled[idx].command;
+        (c.missed, c.evaded) = (true, None);
+        c.hits.clear();
+        c.staggers.clear();
+        c.reactions.clear();
+        let col = if sess.w.allies.contains(&actor) { GOLD } else { FOE };
+        let want = vec![fx::Trace { from: V2::new(actor as i32, 0), to: V2::new(t as i32, 0), col, dashed: true }];
+        assert_eq!(traces_of(sess, idx, &at, heal), want, "MR8 c: a protected flank");
+        let c = &mut sess.resolver.scheduled[idx].command;
+        (c.missed, c.evaded) = (false, Some(t));
+        assert_eq!(traces_of(sess, idx, &at, heal), want, "GD5: a lost target");
+        sess.resolver.scheduled[idx].cancelled = true;
+        assert!(traces_of(sess, idx, &at, heal).is_empty(), "a cancelled action");
+        sess.resolver.scheduled[idx].cancelled = false;
+        let other = (actor + 1) % sess.w.units.len();
+        let skill = sess.w.cat.skills.iter().position(|k| emberwake_battle::skill::kind(k) == Kind::Support).unwrap_or(0);
+        for (target, want) in [(other, vec![fx::Trace { from: V2::new(actor as i32, 0), to: V2::new(other as i32, 0), col: heal, dashed: false }]), (actor, Vec::new())] {
+            let c = &mut sess.resolver.scheduled[idx].command;
+            (c.evaded, c.failed) = (None, false);
+            c.kind = CmdKind::Support { target, skill, last_heal: 5, last_status: String::new(), last_cleansed: Vec::new() };
+            assert_eq!(traces_of(sess, idx, &at, heal), want, "a support on {target}");
+        }
+    }
+
+    /// PB1: with the group `tracers` off the agent link lists none (and the board draws none); the tracer fades from
+    /// alpha 200 to 0 over 400 ms on the FX clock, and under reduce motion holds 200 for 400 ms, then is gone.
+    #[test]
+    fn the_group_off_lists_no_tracer_and_a_tracer_fades_or_holds() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE));
+        let now = b.clock.now();
+        b.tracers.push((fx::Trace { from: V2::new(1, 1), to: V2::new(3, 1), col: GOLD, dashed: false }, now));
+        assert_eq!(b.state(&cx)["overlay"]["tracers"].as_array().map(Vec::len), Some(1));
+        cx.settings.v["battle_overlays"]["tracers"] = json!(false);
+        assert_eq!(b.state(&cx)["overlay"]["tracers"], json!([]), "the group off");
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_eq!((tracer_alpha(0, false), tracer_alpha(TRACER_MS / 2, false), tracer_alpha(TRACER_MS, false)), (TRACER_ALPHA, TRACER_ALPHA / 2, 0));
+        assert_eq!((tracer_alpha(0, true), tracer_alpha(TRACER_MS - 1, true), tracer_alpha(TRACER_MS, true)), (TRACER_ALPHA, TRACER_ALPHA, 0), "reduce motion: no fade");
+        // classic: no tracer, no playback state
+        let (mut cx, _, mut b) = arena(None);
+        cx.settings.v["skip_anim"] = json!(true);
+        b.act(&mut cx, Action::Confirm);
+        for _ in 0..40 {
+            b.send(&cx, json!({"cmd": "step"}));
+        }
+        let st = b.state(&cx);
+        assert!(b.tracers.is_empty() && st.get("playback").is_none() && st.get("log_groups").is_none(), "classic is unchanged");
+    }
+
+    /// PB1: with animations on a step's tracers wait in its impact and draw from the impact (rule I's moment).
+    #[test]
+    fn the_tracers_wait_for_the_impact() {
+        let (mut cx, _, mut b) = arena(Some(TIMELINE));
+        b.act(&mut cx, Action::Confirm);
+        let mut seen = false;
+        for _ in 0..300 {
+            if s(&b).phase == Phase::Replay && !next_round(&mut b, &mut cx) {
+                break;
+            }
+            b.flush(&cx);
+            b.tracers.clear();
+            b.send(&cx, json!({"cmd": "step"}));
+            let Some(i) = b.impacts.first().filter(|i| !i.traces.is_empty()) else { continue };
+            let traces = i.traces.clone();
+            assert!(b.tracers.is_empty(), "nothing before the impact");
+            b.flush(&cx);
+            assert_eq!(b.tracers.iter().map(|t| t.0).collect::<Vec<_>>(), traces, "the impact's tracers");
+            seen = true;
+            break;
+        }
+        assert!(seen, "an action with tracers had an impact");
+    }
+
+    /// PB2: the strip frames (its block widget active) and `playback.block` names the block the last step resolved,
+    /// from its first step until the next block's; none at the round's start (Confirm, no step yet) and once the round
+    /// is over and its last impact has played.
+    #[test]
+    fn the_strip_cursor_follows_the_resolving_block() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE));
+        cx.settings.v["skip_anim"] = json!(true);
+        b.act(&mut cx, Action::Confirm);
+        assert_eq!(b.state(&cx)["playback"]["block"], Value::Null, "the round's start");
+        let mut seen = Vec::new();
+        while s(&b).phase != Phase::Replay {
+            let resolving = if s(&b).phase == Phase::Planning { 1 } else { s(&b).current_block };
+            b.send(&cx, json!({"cmd": "step"}));
+            if s(&b).phase == Phase::Replay {
+                break;
+            }
+            assert_eq!(b.state(&cx)["playback"]["block"], json!(resolving));
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            for blk in 1..=s(&b).def.total_blocks {
+                assert_eq!(widget(&b, &format!("strip.block{blk}")).unwrap().active, blk == resolving, "block {blk} while {resolving} resolves");
+            }
+            seen.push(resolving);
+        }
+        assert!(seen.windows(2).all(|w| w[0] <= w[1]) && seen.first() == Some(&1), "{seen:?}");
+        b.gap_until = None;
+        assert_eq!(b.state(&cx)["playback"]["block"], Value::Null, "the round's end");
+    }
+
+    /// PB3: P cycles 1x, 0.5x, Block and the setting is kept; during playback the chips take the tactic menus' place
+    /// (Next block in Block mode only), while planning the menus are back; classic: no chip and P changes nothing.
+    #[test]
+    fn p_cycles_the_speeds_and_the_chips_show_during_playback() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE));
+        assert_eq!(cx.settings.v[PLAYBACK_SPEED], json!("1x"), "the default");
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert!(widget(&b, "strip.party").is_some() && widget(&b, "playback.speed.1").is_none(), "planning: the menus");
+        let mut seen = Vec::new();
+        for _ in 0..3 {
+            b.key(&mut cx, Key::Char('p'));
+            seen.push(cx.settings.v[PLAYBACK_SPEED].as_str().unwrap().to_string());
+        }
+        assert_eq!(seen, ["0.5x", "block", "1x"]);
+        let saved: Value = serde_json::from_str(&std::fs::read_to_string(cx.shot_dir.join("settings.json")).expect("saved")).unwrap();
+        assert_eq!(saved[PLAYBACK_SPEED], json!("1x"), "remembered");
+        b.act(&mut cx, Action::Confirm);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert!(widget(&b, "strip.party").is_none() && widget(&b, "strip.hero").is_none());
+        for (k, (v, _, id)) in PLAYBACK_SPEEDS.iter().enumerate() {
+            b.run(&mut cx, Action::PlaybackSpeed(k));
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            assert!(PLAYBACK_SPEEDS.iter().all(|c| widget(&b, c.2).is_some_and(|w| w.active == (c.2 == *id))), "{v} on");
+            assert_eq!(widget(&b, "playback.next").is_some(), *v == "block", "{v}: Next block");
+            assert_eq!(b.state(&cx)["playback"]["speed"], json!(v));
+        }
+        let (mut cx, mut g, mut b) = arena(None);
+        b.key(&mut cx, Key::Char('p'));
+        b.act(&mut cx, Action::Confirm);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_eq!(cx.settings.v[PLAYBACK_SPEED], json!("1x"));
+        assert!(widget(&b, "playback.speed.1").is_none() && widget(&b, "strip.party").is_some(), "classic keeps its menus");
+    }
+
+    /// PB3: during playback the speed chips (and Next block) sit in the tactic menus' place, left of Auto, and their
+    /// labels fit at the four text sizes (no cut, spilled, overlapping or off-canvas label).
+    #[test]
+    fn the_speed_chips_fit_at_every_text_size() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE));
+        cx.settings.v[PLAYBACK_SPEED] = json!("block");
+        b.act(&mut cx, Action::Confirm);
+        g.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+        g.view = aegis_ui::painter::View::fit(1280, 720);
+        let labels = ["1x", "0.5x", "Block", "Next block"];
+        for scale in [0.85f32, 1.0, 1.15, 1.3] {
+            let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, scale);
+            let auto = widget(&b, "strip.auto").expect("Auto").rect;
+            let chips: Vec<Rect> = ["playback.speed.1", "playback.speed.half", "playback.speed.block", "playback.next"].iter().map(|id| widget(&b, id).unwrap_or_else(|| panic!("{id}")).rect).collect();
+            assert!(chips.windows(2).all(|c| c[0].x + c[0].w <= c[1].x) && chips.last().is_some_and(|c| c.x + c.w < auto.x), "scale {scale}: {chips:?} left of Auto {auto:?}");
+            let boxes: Vec<(String, f32, f32, f32, f32)> = b.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
+            let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+            let named = |e: &Value| e["widget"].as_str().is_some_and(|w| w.starts_with("playback.")) || ["text", "shown", "a", "b"].iter().any(|k| e[*k].as_str().is_some_and(|x| labels.contains(&x)));
+            for kind in ["cut", "edge", "overlap", "spill"] {
+                let hits: Vec<&Value> = v[kind].as_array().unwrap().iter().filter(|e| named(e)).collect();
+                assert!(hits.is_empty(), "scale {scale}: {kind} {hits:?}");
+            }
+        }
+    }
+
+    /// PB3 (timed): at 0.5x a block's playback takes twice as long: the wait after a step, the floats, and the FX clock
+    /// (walks, clips, tracers) runs at half the animation speed; while planning and under skip animations it plays as
+    /// 1x.
+    #[test]
+    fn half_speed_doubles_the_playbacks_waits_and_clock() {
+        let measure = |speed: &str| {
+            let (mut cx, _, mut b) = arena(Some(TIMELINE));
+            cx.settings.v[PLAYBACK_SPEED] = json!(speed);
+            let planning_pace = b.pace(&cx);
+            b.act(&mut cx, Action::Confirm);
+            // the FX clock over 80 wall ms (no step goes: the next one is far off)
+            b.next_at = Instant::now() + Duration::from_secs(60);
+            let ms0 = b.clock.ms;
+            let t0 = Instant::now();
+            b.clock_at = t0 - Duration::from_millis(80);
+            b.tick(&mut cx);
+            let clock = (b.clock.ms - ms0, t0.elapsed().as_secs_f64() * 1000.0);
+            // the wait after a step
+            b.gap_until = None;
+            b.impacts.clear();
+            let t1 = Instant::now();
+            b.next_at = t1;
+            b.tick(&mut cx);
+            let wait = (b.next_at.duration_since(t1).as_millis() as u64, t1.elapsed().as_millis() as u64);
+            b.show(&cx, vec![(0, "-1".into(), FOE)], Vec::new(), Vec::new());
+            let float = b.floats.last().unwrap().ms;
+            cx.settings.v["skip_anim"] = json!(true);
+            (planning_pace, clock, wait, float, b.pace(&cx), cx.tuning.value.clone())
+        };
+        let (p1, c1, w1, f1, skip1, t) = measure("1x");
+        let (p2, c2, w2, f2, skip2, _) = measure("0.5x");
+        assert_eq!((p1, p2, skip1, skip2), (1, 1, 1, 1), "planning and skip animations play as 1x");
+        assert!(c1.0 >= 79.5 && c1.0 <= 80.0 + c1.1 + 0.5, "1x clock {c1:?}");
+        assert!(c2.0 >= 39.5 && c2.0 <= (80.0 + c2.1) / 2.0 + 0.5, "0.5x clock {c2:?}");
+        assert!(w1.0 + w1.1 >= t.step_ms && w1.0 <= t.step_ms, "1x step wait {w1:?}");
+        assert!(w2.0 + w2.1 >= 2 * t.step_ms && w2.0 <= 2 * t.step_ms, "0.5x step wait {w2:?}");
+        assert_eq!((f1, f2), (t.float_ms, 2 * t.float_ms), "the floats");
+    }
+
+    /// PB3: Block mode waits after each block (the message bar "Block <b> of <n>: N for the next", nothing sent while it
+    /// waits), N plays the next one; skip animations still waits; autoplay waits after the round's last block too and
+    /// N goes on to the next round.
+    #[test]
+    fn block_mode_waits_after_each_block_and_n_plays_the_next() {
+        let (mut cx, _, mut b) = arena(Some(TIMELINE));
+        cx.settings.v["skip_anim"] = json!(true);
+        cx.settings.v[PLAYBACK_SPEED] = json!("block");
+        b.act(&mut cx, Action::Autoplay);
+        assert!(b.auto && s(&b).plan_confirmed, "{}", b.message);
+        let n = s(&b).def.total_blocks;
+        let mut waits = Vec::new();
+        for _ in 0..800 {
+            if s(&b).current_round > 1 || s(&b).combat_over {
+                break;
+            }
+            tick_now(&mut b, &mut cx);
+            let st = b.state(&cx)["playback"].clone();
+            if st["waiting"] != json!(true) {
+                continue;
+            }
+            assert_eq!(st["speed"], json!("block"));
+            let blk = st["block"].as_i64().expect("the block") as i32;
+            assert_eq!(b.message, format!("Block {blk} of {n}: N for the next"));
+            let sent = b.host.history.len();
+            tick_now(&mut b, &mut cx);
+            assert_eq!(b.host.history.len(), sent, "nothing goes while it waits");
+            waits.push(blk);
+            b.key(&mut cx, Key::Char('n'));
+            assert_eq!(b.state(&cx)["playback"]["waiting"], json!(false), "N lets it go on");
+        }
+        assert!(!waits.is_empty(), "it waited");
+        assert_eq!(waits, (1..=waits.len() as i32).collect::<Vec<_>>(), "each block in turn");
+        if !s(&b).combat_over {
+            assert_eq!(waits.len() as i32, n, "the round's last block waits too under autoplay");
+            assert_eq!(s(&b).current_round, 2, "N went on to the next round");
+        }
+    }
+
+    /// PB5: T during playback pauses it at the end of the resolving block (`playback.waiting`, nothing sent); closing the
+    /// view clears it and the playback goes on; in Block mode N steps the next block while the view stays open, its
+    /// playhead following.
+    #[test]
+    fn t_pauses_the_playback_at_the_block_end_and_closing_resumes() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE));
+        cx.settings.v["skip_anim"] = json!(true);
+        b.act(&mut cx, Action::Confirm);
+        b.key(&mut cx, Key::Char('t'));
+        assert!(b.tv_open);
+        let mut paused = false;
+        for _ in 0..200 {
+            tick_now(&mut b, &mut cx);
+            if b.state(&cx)["playback"]["waiting"] == json!(true) {
+                paused = true;
+                break;
+            }
+        }
+        assert!(paused && s(&b).phase == Phase::Resolving, "paused at a block's end: {}", b.message);
+        assert!(b.message.contains("timeline view"), "{}", b.message);
+        let sent = b.host.history.len();
+        tick_now(&mut b, &mut cx);
+        assert_eq!(b.host.history.len(), sent, "held while open");
+        b.key(&mut cx, Key::Char('t'));
+        assert!(!b.tv_open && b.state(&cx)["playback"]["waiting"] == json!(false), "closing clears it");
+        tick_now(&mut b, &mut cx);
+        assert!(b.host.history.len() > sent, "and the playback goes on");
+        // Block mode: N plays the next block with the view open
+        cx.settings.v[PLAYBACK_SPEED] = json!("block");
+        b.key(&mut cx, Key::Char('t'));
+        let mut steps = 0;
+        for _ in 0..200 {
+            if s(&b).phase == Phase::Replay {
+                break;
+            }
+            tick_now(&mut b, &mut cx);
+            if b.state(&cx)["playback"]["waiting"] == json!(true) {
+                let blk = b.state(&cx)["playback"]["block"].clone();
+                b.draw(&mut cx, &mut g, (-500, -500), true);
+                assert_eq!(json!(b.tv_shown.as_ref().expect("open").playhead), blk, "the playhead follows");
+                b.key(&mut cx, Key::Char('n'));
+                assert!(b.tv_open, "the view stays open");
+                steps += 1;
+            }
+        }
+        assert!(steps > 0, "N stepped with the view open");
+    }
+
+    /// PB4: the log by round and block: the agent link's `log_groups` is the kit's parts (their lines read in order are
+    /// the log); the expanded log draws "Round <r>", then each part's header ("Round start", "Block <b>", "Round end")
+    /// above its lines, 6 px in; during playback the compact log shows the resolving block's part; every header and
+    /// line passes the text audit at the four text sizes.
+    #[test]
+    fn the_log_groups_lines_under_their_round_and_block() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE));
+        cx.settings.v["skip_anim"] = json!(true);
+        b.act(&mut cx, Action::Confirm);
+        let mut compact = 0;
+        while s(&b).phase != Phase::Replay {
+            b.send(&cx, json!({"cmd": "step"}));
+            if let Some(blk) = b.cursor_block(Instant::now()) {
+                b.draw(&mut cx, &mut g, (-500, -500), true);
+                let w = widget(&b, "bar.last").expect("the compact log");
+                assert!(w.text.starts_with(&format!("Block {blk}: ")), "{}", w.text);
+                assert_eq!(w.tip[0].0, format!("Round {} block {blk}", s(&b).current_round));
+                compact += 1;
+            }
+        }
+        assert!(compact > 0);
+        let groups = s(&b).log_groups();
+        assert_eq!(b.state(&cx)["log_groups"], log_groups_json(&groups));
+        assert_eq!(groups.iter().flat_map(|p| p.lines.clone()).collect::<Vec<_>>(), s(&b).log_lines(0, 0), "every line once, in order");
+        assert!(groups.iter().any(|p| p.block >= 1), "a block's part");
+        g.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+        g.view = aegis_ui::painter::View::fit(1280, 720);
+        b.show_log = true;
+        for scale in [0.85f32, 1.0, 1.15, 1.3] {
+            let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, scale);
+            let panel = widget(&b, "log.panel").expect("the log").rect;
+            let rows: Vec<&aegis_ui::painter::TextRec> = recs.iter().filter(|r| r.y > panel.y as f32 + 12.0 && r.y < (panel.y + panel.h) as f32 && r.x >= panel.x as f32 && r.x < (panel.x + panel.w) as f32).collect();
+            assert!(!rows.is_empty(), "scale {scale}: rows drawn");
+            // each line drawn sits below the header of the part it belongs to, 6 px further in
+            let mut part: Option<&emberwake_battle::session::LogGroup> = None;
+            let mut header_x = 0.0;
+            for r in &rows {
+                if let Some(p) = groups.iter().find(|p| log_part_name(p.block) == r.text) {
+                    part = Some(p);
+                    header_x = r.x;
+                } else if r.text.starts_with("Round ") {
+                    part = None;
+                } else if let Some(p) = part {
+                    let t = r.text.trim_start();
+                    assert!(p.lines.iter().any(|l| l.contains(t)), "scale {scale}: {:?} under {}", r.text, log_part_name(p.block));
+                    assert!(r.x >= header_x + LOG_INDENT - 0.6, "scale {scale}: {:?} 6 px in", r.text);
+                }
+            }
+            let boxes: Vec<(String, f32, f32, f32, f32)> = b.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
+            let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+            let texts: Vec<&str> = rows.iter().map(|r| r.text.as_str()).collect();
+            let named = |e: &Value| ["text", "shown", "a", "b"].iter().any(|k| e[*k].as_str().is_some_and(|x| texts.contains(&x)));
+            // (a spill is only the log's own: the panel lies over the board's tile widgets)
+            let ours = |e: &Value| e["widget"].as_str().is_none_or(|w| w.starts_with("log.") || w.starts_with("bar."));
+            for kind in ["cut", "edge", "overlap", "spill"] {
+                let hits: Vec<&Value> = v[kind].as_array().unwrap().iter().filter(|e| named(e) && (kind != "spill" || ours(e))).collect();
+                assert!(hits.is_empty(), "scale {scale}: {kind} {hits:?}");
+            }
         }
     }
 }

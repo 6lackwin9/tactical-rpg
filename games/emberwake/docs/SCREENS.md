@@ -28,7 +28,7 @@ The rules behind every player screen come from `emberwake_world`, checked agains
 | 12-15 | Character: Stats, Level up, Skills, Gear | `party_model.gd`, `stats_model.gd`, `level_up_model.gd`, `loadout_model.gd`, `gear_model.gd` | `party.rs` `Character` | done: the member's 48 px portrait at the frame's top-left, left of the member picker (PORTRAITFX1-R: `portraits::Faces` on surface `roster`: rim flicker and blinks, breath from 96 device px, the state rows of the member's look, e.g. `wounded`; Q / E draw the next member's; agent link `character.portrait`, state `portraits`); active toggle (ROSTER1-U: "Bunks used/cap" at its right only in a world with a `roster` block; a wounded member's "Wounded HP n / cut" after the level line, with a hover), stat table and derived block, level-up draft with before / after and the permanent-spend question, loadout slots, gear and battle pouch drafts, discard questions; the Gear tab in three columns (GEARUI1: stats with this gear and the green / red change a hovered or dragged item would make, equipped slots with the pouch under them, the party stash; drag and drop both ways, clicks kept, item descriptions with their tokens filled; the stash is sorted by item name, Godot sorted by id; gear the class has no training in is refused as in Godot); the Skills tab on fixed slots (SKILLUI1-U: five class and three extra slots, drag and drop between the list and the slots, right click takes a skill out, Clear all, < > rank arrows with rank and AP hover texts) |
 | 16 | Quest journal | `journal_model.gd`, `journal_view.gd` | `hub.rs` `Journal` | done: groups, resolved text, progress, current step, rewards, loot choices |
 | 18 | Battle results | `battle_results_model.gd`, `battle_results_view.gd` | `hub.rs` `Results` | done: headline and note, the stay-behind lines (ENCOUNTER2 W4), the party lines (ROSTER1-U: "`{name}` was captured." / "died." per departure, "Keepsake: `{item}`, to the stash.", "Wounded until the next rest: ..."), XP rows with bars, gold / loot / quest lines, level-up prompt; battle report table not yet |
-| 23 | Battle | `ui/combat/*`, `scenes/combat_arena.gd` | `battle.rs` | done: arena (catalog or world encounter) and world battles with the saved party at stored HP, HP write-back, runner settlement; enemy tells while planning (PORT-INTENT: kind chips and arrows on the grid, "Next:" on the hostile cards, Intent, revealed plan and forecast in the hover card; I toggles, the Show enemy tells setting); the timeline's masked enemy banner is not drawn (the engine's strip shows the selected hero only); units animate (SPRITE1-U): idle, walk while sliding to the new tile, the skill's attack clip, hurt or hurt_guarded, death (held, then the x marker), defend then idle_guarded; each stands on a flat ellipse in its side's colour (ally blue, foe red), the selected hero has a 1px gold outline around its sprite and a hovered unit a faint white one (no disc, no gold cell square); units face their target (FACE1): a unit turns toward the target or area aim of the action it resolves and toward the x of its step (a vertical step or a target in its column keeps the facing); while planning it shows its planned (hero: first targeted step) or intended (enemy tell, only while the tells are shown) target; a battle starts with the party facing right and the foes left; the frame and its outline are mirrored while facing left; animation speed and skip apply (skip ends in the same facing); bodiless units keep the letter panel; a phase talk opens the region map's talk box over a 35 % veil (ENCOUNTER2-C2, section "Battle talk" below); timeline battles take the one-flow input with selection and inspect (INPUT1-U: a right click inspects any unit and pins the threat intel panel; section "One-flow input" below) and the AP pip gauge beside the strip (INPUT1-AP); a calmer board: one quiet target arrow per unit while planning, bars for the units in focus, the first-move chip behind a setting (VISCLAR1-A, section "Calmer board" below); the full timeline view on key T over the grid panel, every unit's track with enemies masked to what the party knows (INPUT1-T, section "Full timeline view" below) |
+| 23 | Battle | `ui/combat/*`, `scenes/combat_arena.gd` | `battle.rs` | done: arena (catalog or world encounter) and world battles with the saved party at stored HP, HP write-back, runner settlement; enemy tells while planning (PORT-INTENT: kind chips and arrows on the grid, "Next:" on the hostile cards, Intent, revealed plan and forecast in the hover card; I toggles, the Show enemy tells setting); the timeline's masked enemy banner is not drawn (the engine's strip shows the selected hero only); units animate (SPRITE1-U): idle, walk while sliding to the new tile, the skill's attack clip, hurt or hurt_guarded, death (held, then the x marker), defend then idle_guarded; each stands on a flat ellipse in its side's colour (ally blue, foe red), the selected hero has a 1px gold outline around its sprite and a hovered unit a faint white one (no disc, no gold cell square); units face their target (FACE1): a unit turns toward the target or area aim of the action it resolves and toward the x of its step (a vertical step or a target in its column keeps the facing); while planning it shows its planned (hero: first targeted step) or intended (enemy tell, only while the tells are shown) target; a battle starts with the party facing right and the foes left; the frame and its outline are mirrored while facing left; animation speed and skip apply (skip ends in the same facing); bodiless units keep the letter panel; a phase talk opens the region map's talk box over a 35 % veil (ENCOUNTER2-C2, section "Battle talk" below); timeline battles take the one-flow input with selection and inspect (INPUT1-U: a right click inspects any unit and pins the threat intel panel; section "One-flow input" below) and the AP pip gauge beside the strip (INPUT1-AP); a calmer board: one quiet target arrow per unit while planning, bars for the units in focus, the first-move chip behind a setting (VISCLAR1-A, section "Calmer board" below); the full timeline view on key T over the grid panel, every unit's track with enemies masked to what the party knows (INPUT1-T, section "Full timeline view" below); playback aids: impact tracers, the strip's block cursor, speed 1x / 0.5x / block by block (P, N), the log by round and block, the open view pausing the playback (INPUT1-PB, section "Playback aids" below) |
 
 ## Dev tools (dev-only, never in the real game)
 
@@ -213,7 +213,7 @@ The round intent's board only (classic and a timeline battle without `round_inte
   the mouse (token or card) and the inspected unit; hold Alt for every unit's. The party and hostile cards keep theirs.
 - Settings, Battle: two new overlay groups, off by default: "Enemy first move" (`first_move`: the tell's kind chip on
   each enemy token, a debug view; the intent glyph and the hostile card's first-action line stay) and "All bars"
-  (`all_bars`: every unit's token bars, today's look). The rows sit at a 15 px pitch so the debug row fits; a debug
+  (`all_bars`: every unit's token bars, today's look). The rows sit at a 14 px pitch (15 before INPUT1-PB's 25th group) so the debug row fits; a debug
   build adds "Debug" with "Party foresight off" (`settings.debug.party_foresight_off`, key
   `debug_party_foresight_off`): every plan a party foresight passive reveals (Hawk Eye) draws as unrevealed on the
   board, the hostile cards, the hover cards and the intel panel, and the arrows' move legs go straight; enrage and the
@@ -229,8 +229,8 @@ A battle beyond classic only (classic keeps its screen; no `timeline_view` key i
 - Key T, planning and playback, opens the view over the grid panel's rect (126, 28, 388, 292): the engine timeline
   widget 4 px inside it on `timeline_view.rs`'s builder. T or Esc closes it (Esc first, before the menu, log, inspect
   and selection steps). While open the board under it takes no click (a backdrop over the panel); planning pauses
-  nothing; T does nothing while a battle talk is open. Pausing the playback at the end of the resolving block while
-  it is open (PB5) is INPUT1-PB's.
+  nothing; T does nothing while a battle talk is open. During playback it pauses the playback at the end of the
+  resolving block while open (PB5, section "Playback aids").
 - The ruler of the round's blocks (the playhead during playback), "Party" (allies in roster order, guests too) above
   "Enemies" (the hostile list's order), one track per unit present or acting this round; a downed unit's lane hatched.
 - A party track: the member's plan while planning (picks solid, the planner's ghost in the ghost look, wind-up,
@@ -249,3 +249,32 @@ A battle beyond classic only (classic keeps its screen; no `timeline_view` key i
   masked, hatched, segments [{key, start, end, label, ghost, hatched}], marks [{block, glyph}]}]}]}; widget ids
   `timeline.backdrop`, `timeline.block.<b>`, `timeline.track.u<unit>`, `timeline.seg.u<unit>.<k>`,
   `timeline.mark.u<unit>.<k>`.
+
+## Playback aids (INPUT1-PB, timeline battles)
+
+A battle beyond classic only (classic plays, paces and logs as before; no `playback` or `log_groups` key).
+
+- Impact tracers: at each impact a straight line from the actor's token to each unit its action landed on (a hit or a
+  stagger, each unit an area caught, a riposte back to the attacker; a support or item on another unit in the heal
+  colour; an area's hazard to its tile), party gold, enemy red, 1 px Flat, 1.5 px Stage, above the tokens; a protected
+  flank or a lost target draws it dashed; none for a self command. 400 ms at alpha 200 fading out (animation speed and
+  0.5x apply; skip animations: when the step shows; reduce motion: no fade). Settings, Battle: group "Impact tracers"
+  (`tracers`, on).
+- Strip cursor: from a block's first step until the next block's, a 1 px gold frame around its column on the strip
+  (its span edged gold); none from Confirm to the first step and once the round is over. The timeline view's
+  playhead marks the same block.
+- Playback speed: during playback the chips "1x", "0.5x", "Block" (and "Next block" in Block mode) sit where the
+  tactic menus are; P cycles them, N plays the next block; setting `playback_speed` (default 1x; Settings, Battle:
+  "Playback speed" at the overlays heading). 0.5x doubles the walks, clips, floats, tracers and the pauses between
+  steps and rounds (skip animations plays it as 1x). Block: after each block the playback waits, "Block `<b>` of
+  `<n>`: N for the next"; autoplay waits too, also before the next round.
+- Combat log: the expanded log lists "Round `<r>`", then "Round start", "Block `<b>`" and "Round end" headers (dim, a
+  1 px rule) with their lines 6 px in; during playback the compact log shows the resolving block's last line ("Block
+  `<b>`: ...", the block's lines on its card).
+- Timeline view (T) during playback: the playback pauses at the end of the resolving block while it is open ("paused
+  while the timeline view is open"); closing it resumes; in Block mode N steps with it open.
+- Text: the chips, the log's headers and lines pass the text audit at the four text sizes. Controls: "Playback speed:
+  1x, 0.5x, block by block (timeline): P", "Next block (timeline): N".
+- Agent link: `playback` {speed, waiting, block}, `overlay.tracers` [{from, to, alpha, dashed}], `log_groups`
+  [{round, block, lines}]; widget ids `playback.speed.1`, `playback.speed.half`, `playback.speed.block`,
+  `playback.next`, `settings.playback_speed`, `settings.overlay.tracers`.

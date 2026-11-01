@@ -515,7 +515,7 @@ const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
         ],
     ),
     ("Maps", &[("Move the party", "Arrow keys, W A S D"), ("Interact with the marker you face", "E"), ("Game menu", "Escape"), ("Choose a dialogue line", "1-9"), ("Party, journal, stash, help, event log", "P, J, I, ?, L")]),
-    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Skills of the selected hero (timeline)", "1-9"), ("Target self (timeline)", "S"), ("Inspect a unit (timeline)", "Right click"), ("Clear inspect, deselect (timeline)", "Escape"), ("Full timeline view, open / close (timeline)", "T, Escape"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Every bar and arrow (timeline)", "Hold Alt"), ("Screenshot", "F12")]),
+    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Skills of the selected hero (timeline)", "1-9"), ("Target self (timeline)", "S"), ("Inspect a unit (timeline)", "Right click"), ("Clear inspect, deselect (timeline)", "Escape"), ("Full timeline view, open / close (timeline)", "T, Escape"), ("Playback speed: 1x, 0.5x, block by block (timeline)", "P"), ("Next block (timeline)", "N"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Every bar and arrow (timeline)", "Hold Alt"), ("Screenshot", "F12")]),
 ];
 
 /// A volume slider's sample and bus (scripts/audio/volume_preview.gd: the master sample plays on the interface bus).
@@ -560,6 +560,11 @@ impl SettingsScreen {
             SetAct::Pick(TEXT_SPEED, i) => {
                 if let Some(v) = TEXT_SPEEDS.get(i) {
                     self.draft[TEXT_SPEED] = json!(v);
+                }
+            }
+            SetAct::Pick(crate::battle::PLAYBACK_SPEED, i) => {
+                if let Some((v, _, _)) = crate::battle::PLAYBACK_SPEEDS.get(i) {
+                    self.draft[crate::battle::PLAYBACK_SPEED] = json!(v);
                 }
             }
             SetAct::Pick(k, i) => {
@@ -688,9 +693,19 @@ impl Screen<GameCx> for SettingsScreen {
                 // overlay group of a timeline battle, on by default; the clarity pass (VISCLAR1) decides later what
                 // the game view keeps.
                 ui.p.text(x as f32, y as f32, "Battle overlays (timeline battles)", BODY + 1.0, GOLD);
+                // INPUT1 PB3: the playback speed (the battle's chips and key P set it too) at the heading row's end
+                let speeds = &crate::battle::PLAYBACK_SPEEDS;
+                let labels: Vec<String> = speeds.iter().map(|v| v.1.to_string()).collect();
+                let at = speeds.iter().position(|v| d[crate::battle::PLAYBACK_SPEED].as_str() == Some(v.0)).unwrap_or(0);
+                let sr = Rect::new(body.x + body.w - 5 - 64, y - 2, 64, 14);
+                let label = "Playback speed";
+                let lw = ui.p.text_w(label, BODY);
+                ui.p.text(sr.x as f32 - 4.0 - lw, y as f32, label, BODY, TEXT);
+                let t = tip("Playback speed", "How a timeline battle plays its round: 1x; 0.5x (every walk, clip, float and pause twice as long); Block (it waits after each block until N or Next block). P cycles it in battle.");
+                ui.select("settings.playback_speed", sr, &labels, at, |i| SetAct::Pick(crate::battle::PLAYBACK_SPEED, i), true, t);
                 y += 14;
                 let col_w = (body.w - 10) / 2;
-                // VISCLAR1-A: 12 rows of two at a 15 px pitch, so the debug row fits under them
+                // VISCLAR1-A, INPUT1-PB: 13 rows of two at a 14 px pitch, so the debug row fits under them
                 let groups = &crate::battle::OVERLAY_GROUPS;
                 for (k, (id, label, help, default)) in groups.iter().enumerate() {
                     let (cx_, cy_) = (x + 3 + (k as i32 % 2) * col_w, y + (k as i32 / 2) * OVERLAY_PITCH);
@@ -741,8 +756,9 @@ impl Screen<GameCx> for SettingsScreen {
     widget_plumbing!();
 }
 
-/// VISCLAR1-A: the row pitch of the Battle tab's overlay checkboxes (24 groups in 12 rows, then the debug row).
-const OVERLAY_PITCH: i32 = 15;
+/// VISCLAR1-A, INPUT1-PB: the row pitch of the Battle tab's overlay checkboxes (25 groups in 13 rows, then the debug
+/// row).
+const OVERLAY_PITCH: i32 = 14;
 
 /// Volume sliders move in steps of 5 (0-100); speed and text-size sliders in quarters (0.5-2.0).
 const VOLUME_STEP: f64 = 5.0;

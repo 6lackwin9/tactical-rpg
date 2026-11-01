@@ -851,6 +851,55 @@ dashed), a `[Flank Protected]` miss one dashed entry, and a self Defend none; wi
 one; at 0.5x a block takes twice the 1x time in a timed test; every log line sits under its block's header; T during
 playback sets `playback.waiting` at the block's end and closing the view clears it.
 
+As built (INPUT1-PB, 2026-11-01: game `battle.rs`, `fx.rs` (`Trace`), `timeline_view.rs` (`Opts.playhead`),
+`menus.rs`, `screens.rs`, `gallery.rs`; kit `rpgkit_battle::session` (`log_marks`, `log_groups`, `LogGroup`,
+`LOG_ROUND_START`, `LOG_ROUND_END`); tests `battle.rs` `playback_tests`, `rpgkit_battle/tests/log_groups.rs`; adapted
+`overlay_tests::the_overlays_follow_the_kit` (the `tracers` key),
+`timeline_view_tests::during_playback_an_unrevealed_enemy_shows_only_what_has_started` (the playhead is PB2's block)
+and `hooks_audit_tests::the_overlay_settings_fit_at_every_text_size` (the speed select); goldens and parity
+unchanged):
+
+- "Timeline battle" is TV1's (`round_intent` or any ruleset rule: `playback_aids`); classic draws, paces and logs as
+  before (no `playback` or `log_groups` key, no tracer).
+- PB1: `traces_of` builds a popped action's `fx::Trace`s once (`traced`): to each unit in its `hits` or `staggers` (an
+  attack or an area), dashed to the target on `missed` (MR8 c) or `evaded` (GD5), to the aim tile of an area's hazard
+  (rule `ground_hazards`), a support or item on another unit in the tuning's `heal_color` (an item that harms in the
+  side's), each riposte from the defender back; cancelled, failed and self-only commands none; one tracer a tile pair.
+  They ride in the step's `Impact` and start when it fires (rule I); with no impact (skip animations, no delivery) at
+  once. Life `TRACER_MS` 400 on the FX clock (the animation speed and 0.5x apply), alpha `TRACER_ALPHA` 200 fading to 0
+  (reduce motion: held, then gone), `TRACER_INSET` 3 px, the arrows' widths and dash; drawn after the board inside the
+  grid panel's clip, shaken with it. Group `tracers` is the 25th of `OVERLAY_GROUPS`; state `overlay.tracers` [{from,
+  to, alpha, dashed}] (an `overlay` key is made when the round intent is off).
+- PB2: `play_block` is set as a `step` request goes (block 1 from planning, else the current block); `cursor_block` is
+  it during the round, none from Confirm to the first step and none once the round is over and its last impact has
+  played (kept while Block mode holds autoplay at the round's end). The strip's live block (span outlines, the block
+  widgets' `active`) follows it and a 1 px GOLD frame (four fills) runs round its column. The battle strip has no ruler,
+  so there is no ruler number to colour (the view's ruler has the playhead). `timeline_view::Opts.playhead` (the
+  Gallery passes None) makes the view's playhead and TV4's started filter the same block.
+- PB3: `PLAYBACK_SPEEDS` ("1x" `playback.speed.1`, "0.5x" `playback.speed.half`, "block" `playback.speed.block`), key
+  `playback_speed` (default "1x" in `default_settings`; Settings Battle: a select `settings.playback_speed` at the
+  "Battle overlays" heading row's end, the group rows now at a 14 px pitch so 25 groups and the debug row fit). P
+  cycles, N or `playback.next` (Block mode only, enabled while waiting) plays the next block; both save the setting
+  and are swallowed while a talk is open. During playback the chips replace `strip.party` and `strip.hero`. `pace` is 2
+  at 0.5x while a round plays (`in_playback`: from Confirm until the round is over and its last impact played; not
+  under skip animations): `step_ms`, `round_pause_ms`, `impact_gap_ms` (impacts and a talk's close) and each float's own
+  `Float.ms` double, and the FX clock runs at the animation speed / 2. Block: a step that finishes block b sets
+  `block_ended`; the next ready tick holds (`waiting`, the message "Block b of n: N for the next") and sends nothing
+  until N; under autoplay the round's last block holds before the next round too. Space while held steps and the
+  playback goes on (as N).
+- PB4: the drawn log is the resolver's text lines, not `log::Entry`, so the kit marks where each part begins
+  (`Session::log_marks`: (resolver log length, round, block) at a round's start, each block's first step and the round
+  end, before the round-end effects or the summary line) and `Session::log_groups` returns the parts in order (encounter
+  lines with the part they were said in; empty parts left out). The expanded log of a timeline battle draws "Round r"
+  (GOLD), each part's DIM header ("Round start", "Block b", "Round end") with a 1 px rule, its lines 6 px in
+  (`LOG_INDENT`); during playback the compact log reads "Block b: `<its last line>`" with the part's last 12 lines on
+  its card ("Round r block b" first). State `log_groups` [{round, block (a number, "start" or "end"), lines}].
+- PB5: while the view is open (T) the hold of PB3 applies in every mode ("Block b of n: paused while the timeline view
+  is open (T closes it, N plays the next block)"); T or Esc closes it and clears the hold unless Block mode holds;
+  in Block mode N steps with the view open, its playhead following.
+- State `playback` {speed, waiting, block} (timeline battles only). Controls: "Playback speed: 1x, 0.5x, block by block
+  (timeline): P", "Next block (timeline): N".
+
 ## 13. RULESET1 rules: stay, change, retire
 
 | Rule | Under INPUT1 |

@@ -138,6 +138,17 @@ pub struct Impact {
     pub target: Option<usize>,
     /// STATUSFX1-L: each unit's statuses with a look after the step (`marks_of`; they show at the impact, rule I).
     pub marks: Vec<Vec<Mark>>,
+    /// INPUT1 PB1: the action's impact tracers (they draw from the impact).
+    pub traces: Vec<Trace>,
+}
+
+/// INPUT1 PB1: one impact tracer, a straight line between two cells' token centres in its colour, dashed for a miss.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Trace {
+    pub from: V2,
+    pub to: V2,
+    pub col: Rgba,
+    pub dashed: bool,
 }
 
 impl Impact {

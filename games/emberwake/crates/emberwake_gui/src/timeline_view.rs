@@ -54,6 +54,8 @@ pub struct Opts<'a> {
     /// The selected member's round as the strip shows it (a hovered menu row's preview or a ghost waiting for
     /// Confirm, on copies); None: the battle's own.
     pub shown: Option<(usize, &'a World, &'a Plan)>,
+    /// INPUT1 PB2: the block the battle's playback resolves (the strip's cursor); None: the session's current block.
+    pub playhead: Option<i32>,
 }
 
 /// The track key of unit `u` (`u<index>`; the widget ids `<id>.track.u<index>`).
@@ -199,7 +201,9 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
     let planning = live && s.phase == Phase::Planning && !s.plan_confirmed;
     let actions: Vec<ScheduledAction> = if live { s.resolver.scheduled.clone() } else { s.round_record(o.viewed).map(|r| r.actions.clone()).unwrap_or_default() };
     let blocks = s.def.total_blocks.max(1);
-    let playhead = if live && !planning && s.phase != Phase::Replay { s.current_block } else { 0 };
+    // PB2: the playhead marks the strip's resolving block (the session's current block without one)
+    let at = o.playhead.unwrap_or(s.current_block);
+    let playhead = if live && !planning && s.phase != Phase::Replay { at } else { 0 };
     // the records the screen shows (VC4): the tells while planning, the round records otherwise
     let tells = if planning { seen_intents(w, s.enemy_intents(), o.foresight_off) } else { Vec::new() };
     let rounds = seen_intents(w, s.round_intents(), o.foresight_off);
@@ -257,7 +261,7 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
                 }
             } else {
                 // playback: an unrevealed enemy's actions that have started (block <= the playhead), a revealed one's all
-                let upto = if live && !revealed && s.phase != Phase::Replay { s.current_block } else { i32::MAX };
+                let upto = if live && !revealed && s.phase != Phase::Replay { at } else { i32::MAX };
                 let (segs, marks) = action_segments(w, &actions, e, &o.layers, |a| a.start <= upto);
                 track.segments = segs;
                 track.marks = marks;

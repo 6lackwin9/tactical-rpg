@@ -876,6 +876,7 @@ pub(crate) fn battle_timeline(cx: &Cx, s: &Session, viewed: i32, reveal: bool, b
         selected: None,
         block,
         shown: None,
+        playhead: None,
     };
     Timeline { selected_track: track, ..timeline_view::build(s, &opts) }
 }

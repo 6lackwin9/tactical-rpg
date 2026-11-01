@@ -181,6 +181,19 @@ pub struct RoundRecord {
     pub snapshots: Vec<Vec<UnitSnap>>,
 }
 
+/// INPUT1 PB4: the block of a combat log part written at a round's start (before its first block resolves).
+pub const LOG_ROUND_START: i32 = 0;
+/// INPUT1 PB4: the block of a combat log part written at a round's end (the round-end effects, the summary line).
+pub const LOG_ROUND_END: i32 = -1;
+
+/// INPUT1 PB4: one part of the combat log (`Session::log_groups`): the round and block that wrote its lines.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogGroup {
+    pub round: i32,
+    pub block: i32,
+    pub lines: Vec<String>,
+}
+
 /// REWARD1 2.2: how a battle left an enemy-side unit. Killed (HP 0, whoever dealt the blow), surrendered (MORALE1: a
 /// broken group withdraws in place), fled (withdrew on its own), standing (still there, or never came).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -262,6 +275,10 @@ pub struct Session {
     /// ("[Kill] <who> fall."). The resolver log itself is untouched (host replies and parity read it); `log_lines`
     /// merges the two.
     pub encounter_lines: Vec<(usize, String)>,
+    /// INPUT1 PB4: where each part of the combat log begins: (resolver log length then, round, block); block
+    /// `LOG_ROUND_START` is the round's start (before its first block), `LOG_ROUND_END` its end (the round-end effects
+    /// and the summary line). Not in Godot; for the screens (`log_groups`); no rule reads it.
+    pub log_marks: Vec<(usize, i32, i32)>,
     /// ENCOUNTER2-C DT1: the talk cues the phases raised, oldest first (`talks`; no rule reads them).
     talks: Vec<TalkCue>,
     /// Unit -> its hero key (a party member id or a world character), when it has one.
@@ -486,6 +503,7 @@ impl Session {
             kill_past_unkillable: encounter::KILL_OVERRIDES_UNKILLABLE,
             spared_logged: 0,
             encounter_lines: Vec::new(),
+            log_marks: Vec::new(),
             talks: Vec::new(),
             hero_keys,
             unit_keys,
@@ -500,6 +518,7 @@ impl Session {
     }
 
     fn begin_round(&mut self, round: i32) {
+        self.mark_log(round, LOG_ROUND_START);
         if round > 1 {
             self.resolver.finish_round(&mut self.w);
         }
@@ -1217,6 +1236,7 @@ impl Session {
             self.pending.clear();
         }
         if self.pending.is_empty() {
+            self.mark_log(self.current_round, self.current_block);
             if self.on_block_start() {
                 return;
             }
@@ -1298,6 +1318,7 @@ impl Session {
             self.feed(|m, s| m.on_block_completed(s, block));
             let end_of_round = self.current_block >= self.def.total_blocks;
             if end_of_round {
+                self.mark_log(self.current_round, LOG_ROUND_END);
                 self.resolver.apply_round_end_effects(&mut self.w);
                 self.log_triggers(self.current_round, block);
                 self.log_ground(self.current_round, block);
@@ -1316,6 +1337,7 @@ impl Session {
                 // RULESET1 12 (decision "RULESET1-U slice 5 answers"): the round's summary closes it in the log, under
                 // the round intent only (classic logs as before)
                 if round_intent::on(&self.w) {
+                    self.mark_log(self.current_round, LOG_ROUND_END);
                     let sum = round_intent::round_summary(&self.w, &self.resolver.scheduled);
                     self.resolver.log.push(round_intent::summary_line(self.current_round, &sum));
                 }
@@ -1580,6 +1602,36 @@ impl Session {
             out.push(l.clone());
         }
         out.extend(extra.map(|(_, e)| e.clone()));
+        out
+    }
+
+    /// INPUT1 PB4: a new part of the combat log begins here (`log_marks`; the same round and block twice is one part).
+    fn mark_log(&mut self, round: i32, block: i32) {
+        if self.log_marks.last().is_none_or(|m| (m.1, m.2) != (round, block)) {
+            self.log_marks.push((self.resolver.log.len(), round, block));
+        }
+    }
+
+    /// INPUT1 PB4: the combat log as `log_lines(0, 0)` reads it, in the parts it was written in: each line under the
+    /// round and block that wrote it (`LOG_ROUND_START`, a block, `LOG_ROUND_END`), oldest first; a part with no line is
+    /// left out. An encounter line goes with the part it was said in; a line before the first mark is round 1's start.
+    pub fn log_groups(&self) -> Vec<LogGroup> {
+        let part_of = |at: usize| self.log_marks.iter().rev().find(|m| m.0 <= at).map_or((1, LOG_ROUND_START), |m| (m.1, m.2));
+        let mut out: Vec<LogGroup> = Vec::new();
+        let mut put = |(round, block): (i32, i32), line: &String| match out.last_mut() {
+            Some(g) if (g.round, g.block) == (round, block) => g.lines.push(line.clone()),
+            _ => out.push(LogGroup { round, block, lines: vec![line.clone()] }),
+        };
+        let mut extra = self.encounter_lines.iter().peekable();
+        for (i, l) in self.resolver.log.iter().enumerate() {
+            while let Some((at, e)) = extra.next_if(|(at, _)| *at <= i) {
+                put(part_of(*at), e);
+            }
+            put(part_of(i), l);
+        }
+        for (at, e) in extra {
+            put(part_of(*at), e);
+        }
         out
     }
 

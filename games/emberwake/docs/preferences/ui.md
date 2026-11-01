@@ -59,3 +59,8 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
   only while planning; `moves` and `walks` now switch its move leg. Debug builds add "Party foresight off" at the foot
   of the Battle tab. The intent glyphs, the destination plates (planning), the facing chevrons and the arena telegraph
   stay.
+- Playback aids, built to be trimmed after playing (INPUT1-PB, 2026-11-01; decision "INPUT1 answers, part 2" Q8): a
+  short tracer from each actor to what its action hit (about 0.4 s, dashed for a miss, none for self; overlay group
+  "Impact tracers"), a gold frame on the strip's resolving block, playback speed 1x / 0.5x / block by block (chips
+  during playback, P, N, remembered), the combat log grouped by round and block, and the full timeline view (T)
+  pausing the playback at the block's end. Nothing else draws on the board during playback.
