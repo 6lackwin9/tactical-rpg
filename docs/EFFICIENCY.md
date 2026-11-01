@@ -45,6 +45,7 @@ The measurements and fixes below are the Godot build's; they stay as the record.
 | Reviewer agent | ~2.5 min, ~30k tokens | cheap, keep |
 | Brainstorm agent | ~1.5 min, ~56k tokens | cheap, keep |
 | gate `godot --headless --import` step (S14-A1/A2) | ~2 s when nothing new, longer on a fresh checkout with new assets | fine; needed so CI loads committed PNG/WAV files |
+| Partial gates of engine-wide changes under three busy lanes (2026-11-02) | aegis_ui changes (LOOK1-ME, LOOK1-G1) pull in every emberwake crate: 722-1095 tests, 824-881 s; kit-only or tool changes 90-200 s; full gate at a flush 276-873 s (1383-1450 tests) | Reviewers skip re-running a gate whose log is newer than every changed file (run the targeted tests instead); keep at most two engine-touching lanes at once |
 
 ### Bottlenecks found and fixes
 
