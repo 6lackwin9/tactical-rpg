@@ -1,0 +1,28 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "hollis",
+  "prompt": "Edit this pixel-art portrait. Keep everything exactly the same: the framing, the head size and position, the pose, hair, beard, clothing, armour, the crossbow and bolts, the background, the lighting, the palette and the pixel style. Change only one thing: make his grafted left eye (on the right side of the picture, the far side of his face) clearly visible and unmistakable: solid black with a thin vertical red slit pupil, ringed by a raised stitched scar, wide open; his own right eye stays as it is.",
+  "reference": "G:/My Drive/image_pipeline/refs/hollis.png",
+  "prompts_file": null,
+  "time": "2026-11-01T18:45:00Z",
+  "n": 1,
+  "references": [
+    "G:/My Drive/image_pipeline/refs/hollis.png"
+  ],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "hollis_base_fix_q1793558458",
+  "metadata": {
+    "asset_id": "hollis",
+    "task": "founderport1",
+    "target": null,
+    "route": "portrait",
+    "record": {
+      "prompts_file": null,
+      "faction": "hearth"
+    }
+  },
+  "mark_cleared": true,
+  "faction": "hearth",
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Conditioned on attached hollis.png reference."
+}
