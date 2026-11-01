@@ -1,0 +1,24 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "props_ashlands",
+  "prompt": "A sheet of 9 pixel-art props for the top-down region maps of a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG map art. Square 1:1 image, an exact 3 by 3 grid of 9 equal square tiles separated by thin straight gutters of pure black (#000000), no outer border beyond the gutters. Every tile is filled edge to edge with flat, solid pure magenta (#FF00FF): square corners, no gradient, no vignette, no texture, no ground, no cast shadow on it, so the background can be keyed out. Each tile holds one single prop drawn as large as the tile allows in the proportions named for it (width by height), in the three-quarter top-down view of a tile map (the top and the south face visible), with clear dark outlines, hand-placed pixel clusters, at most 16 colours per prop with 4 shades per colour, and light from the upper left; no magenta, pink or purple anywhere in the props. A standing prop stands on the bottom edge of its tile, its base as wide as the drawing, anything above the base roof, chimney, banner or canopy; a flat prop is a decal lying on the ground seen from above, filling its proportions, with ragged edges and nothing rising from it. The props are Ashlands pieces (a goblin war camp, a ruined basalt toll arch, a cistern) and flat ground decals of sooty ash country. No text, no letters, no numbers, no runes, no labels, no frame, no watermark. Row by row, left to right:\nRow 1: a goblin warlord's large hide tent on bone poles, red goblin pennants, skulls (standing, 3 wide by 5 tall); the surviving half of a collapsed basalt toll arch: one tall column, a broken stub of the arch leaning west from its top (standing, 2 wide by 6 tall); a rectangular stone rim one unit thick around a dark pool of still water, the water 5 by 3 in the middle (flat, 7 wide by 5 deep).\nRow 2: a ring of stones around glowing embers (flat, 1 wide by 1 deep); a patch of sooty cobblestones (flat, 4 wide by 3 deep); a second patch of sooty cobblestones, other stones and gaps (flat, 4 wide by 3 deep).\nRow 3: burnt ground and ash (flat, 2 wide by 2 deep); a second scorch mark of burnt ground and ash, another shape (flat, 2 wide by 2 deep); a second take of the goblin warlord's war tent: large hide tent, bone poles, red pennants, skulls (standing, 3 wide by 5 tall).",
+  "reference": null,
+  "prompts_file": "C:/Users/tusha/AppData/Local/Temp/claude/c--dev-tactical-rpg/0854ae17-df19-4c7b-8ceb-759c35fe9dc3/scratchpad/props_ashlands.txt",
+  "time": "2026-11-01T17:56:25Z",
+  "n": 2,
+  "references": [],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "props_ashlands_fix_q1793544744",
+  "metadata": {
+    "asset_id": "props_ashlands",
+    "task": "props1",
+    "target": null,
+    "route": "icon_sheet",
+    "record": {
+      "prompts_file": "C:/Users/tusha/AppData/Local/Temp/claude/c--dev-tactical-rpg/0854ae17-df19-4c7b-8ceb-759c35fe9dc3/scratchpad/props_ashlands.txt"
+    }
+  },
+  "mark_cleared": true,
+  "notes": "Verified resolution and aspect ratio within 3% tolerance."
+}

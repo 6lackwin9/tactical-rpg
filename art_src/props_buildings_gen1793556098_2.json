@@ -1,0 +1,24 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "props_buildings",
+  "prompt": "A sheet of 4 pixel-art props for the top-down region maps of a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG map art. Square 1:1 image, an exact 2 by 2 grid of 4 equal square tiles separated by thin straight gutters of pure black (#000000), no outer border beyond the gutters. Every tile is filled edge to edge with flat, solid pure magenta (#FF00FF): square corners, no gradient, no vignette, no texture, no ground, no cast shadow on it, so the background can be keyed out. Each tile holds one single prop drawn as large as the tile allows in the proportions named for it (width by height), in the three-quarter top-down view of a tile map (the top and the south face visible), with clear dark outlines, hand-placed pixel clusters, at most 16 colours per prop with 4 shades per colour, and light from the upper left; no magenta, pink or purple anywhere in the props. A standing prop stands on the bottom edge of its tile, its base as wide as the drawing, anything above the base roof, chimney, banner or canopy; a flat prop is a decal lying on the ground seen from above, filling its proportions, with ragged edges and nothing rising from it. The props are the four buildings of a Warden keep yard in the Ashlands, a land of ash and black basalt: basalt walls, slate roofs, warm ember light, each building filling its tile's width. No text, no letters, no numbers, no runes, no labels, no frame, no watermark. Row by row, left to right:\nRow 1: a squat basalt keep hall with a slate roof, two short corner towers, red Warden banners with a gold ember sun, a glowing hearth door (standing, 10 wide by 8 tall); a long basalt barracks with a timber and slate roof, shuttered windows, weapon racks in front (standing, 10 wide by 7 tall).\nRow 2: a basalt smithy with a tall chimney, an open front with a glowing forge and an anvil (standing, 9 wide by 8.5 tall); a basalt storehouse with wide double doors, crates and sacks in front (standing, 9 wide by 8 tall).",
+  "reference": null,
+  "prompts_file": "C:/Users/tusha/AppData/Local/Temp/claude/c--dev-tactical-rpg/0854ae17-df19-4c7b-8ceb-759c35fe9dc3/scratchpad/props_buildings.txt",
+  "time": "2026-11-01T17:57:35Z",
+  "n": 2,
+  "references": [],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "props_buildings_fix_q1793544738",
+  "metadata": {
+    "asset_id": "props_buildings",
+    "task": "props1",
+    "target": null,
+    "route": "icon_sheet",
+    "record": {
+      "prompts_file": "C:/Users/tusha/AppData/Local/Temp/claude/c--dev-tactical-rpg/0854ae17-df19-4c7b-8ceb-759c35fe9dc3/scratchpad/props_buildings.txt"
+    }
+  },
+  "mark_cleared": true,
+  "notes": "Verified resolution and aspect ratio within 3% tolerance."
+}
