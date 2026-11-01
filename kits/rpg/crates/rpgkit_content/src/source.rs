@@ -33,6 +33,9 @@ pub const RULESET_KIND: &str = crate::check::ruleset::KIND;
 /// PORTRAITFX1-S: the portrait cue rows, loaded into the catalog beside CATALOG_KINDS after the derived stats they name
 /// (Godot had no such kind).
 pub const PORTRAIT_KIND: &str = crate::check::portrait::KIND;
+/// PORTRAITFX1-EX: the expression-effect rows, loaded into the catalog beside CATALOG_KINDS after the portrait cues
+/// (Godot had no such kind).
+pub const EXPRESSION_FX_KIND: &str = crate::check::expression_fx::KIND;
 /// HOOKS1-S: the combat hook kinds (ground hazards, unit meters, data zones), loaded into the catalog beside
 /// CATALOG_KINDS after the skills the meters name, in this order (Godot had no such kinds).
 pub const HOOK_KINDS: [&str; 3] = [rpgkit_data::HAZARDS_KIND, rpgkit_data::UNIT_METERS_KIND, rpgkit_data::ZONES_KIND];
@@ -120,6 +123,7 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
     out.insert(RULESET_KIND.into(), Value::Array(rulesets.into_iter().map(Value::Object).collect()));
     let cues = read_portrait_cues(&dir, &out, errors);
     out.insert(PORTRAIT_KIND.into(), Value::Array(cues.into_iter().map(Value::Object).collect()));
+    out.insert(EXPRESSION_FX_KIND.into(), Value::Array(read_expression_fx(&dir, errors).into_iter().map(Value::Object).collect()));
     for kind in HOOK_KINDS {
         let rows = read_hook_kind(&dir, kind, &out, errors);
         out.insert(kind.into(), Value::Array(rows.into_iter().map(Value::Object).collect()));
@@ -199,6 +203,32 @@ fn read_portrait_cues(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Ve
             kept.push(row);
         } else {
             errors.extend(found.iter().map(|m| format!("{at}: portrait cue '{}': {m}", sget(&row, "id", ""))));
+        }
+    }
+    kept
+}
+
+/// PORTRAITFX1-EX (engine-only, beside CATALOG_KINDS): the expression-effect rows that pass their checks
+/// (`check::expression_fx`), in file order; every problem goes to `errors` and its row is skipped. A missing file is an
+/// empty table.
+fn read_expression_fx(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{EXPRESSION_FX_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(EXPRESSION_FX_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let checked = crate::check::expression_fx::check_rows(&rows);
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: expression effect '{}': {m}", sget(&row, "id", ""))));
         }
     }
     kept

@@ -625,6 +625,8 @@ pub struct Catalog {
     pub rulesets: IndexMap<String, Obj>,
     /// Portrait cue rows (PORTRAITFX1 5.1, kind `portrait_cues`; engine-only) in file order.
     pub portrait_cues: Vec<PortraitCue>,
+    /// Expression-effect rows (PORTRAITFX1-EX, kind `portrait_expressions`; engine-only) in file order.
+    pub portrait_expressions: Vec<PortraitExpression>,
     /// Ground hazard rows (HOOKS1 GH1, kind `hazards`; engine-only).
     pub hazards: IndexMap<String, HazardDef>,
     /// Unit meter rows (HOOKS1 UM1, kind `unit_meters`; engine-only).
@@ -679,6 +681,7 @@ impl Catalog {
             cat.derived_stats.insert(d.id.clone(), d);
         }
         cat.portrait_cues = rows(PORTRAIT_CUES_KIND).iter().map(PortraitCue::from_obj).collect();
+        cat.portrait_expressions = rows(PORTRAIT_EXPRESSIONS_KIND).iter().map(PortraitExpression::from_obj).collect();
         cat.hazards = rows(HAZARDS_KIND).iter().map(HazardDef::from_obj).map(|h| (h.id.clone(), h)).collect();
         cat.unit_meters = rows(UNIT_METERS_KIND).iter().map(UnitMeterDef::from_obj).map(|m| (m.id.clone(), m)).collect();
         cat.zones = rows(ZONES_KIND).iter().map(ZoneDef::from_obj).map(|z| (z.id.clone(), z)).collect();
@@ -1374,6 +1377,61 @@ impl PortraitCue {
     /// Whether the row applies under `ruleset` (none listed = every ruleset).
     pub fn in_ruleset(&self, ruleset: &str) -> bool {
         self.rulesets.is_empty() || self.rulesets.iter().any(|r| r == ruleset)
+    }
+}
+
+// ---- Expression effects (PORTRAITFX1-EX, kit hook; engine-only, no Godot original) ---------------------------------
+
+/// PORTRAITFX1-EX: the catalog kind of the expression-effect rows (file `data/catalog/portrait_expressions.json`,
+/// read beside the catalog kinds); a row's id is the expression it draws for (EXPRESSIONS but `neutral`).
+pub const PORTRAIT_EXPRESSIONS_KIND: &str = "portrait_expressions";
+/// The kit's copy of the engine's mark names (`aegis_ui::portrait_fx::MARKS`; a game test keeps the two equal).
+pub const PORTRAIT_MARKS: [&str; 2] = ["vein", "sweat"];
+/// The boxes a mark's anchor is relative to (`aegis_ui::portrait_fx::MARK_BOXES`).
+pub const PORTRAIT_MARK_BOXES: [&str; 2] = ["face", "eyes"];
+
+/// An expression-effect row (PORTRAITFX1-EX, kind `portrait_expressions`): what a portrait draws while a `face` cue
+/// holds the expression `id`: a tint over the sidecar's face box, a code-drawn mark anchored to the face or eye box, a
+/// short shake. Read from a loaded (checked) row; the defaults are the schema's.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PortraitExpression {
+    /// One of EXPRESSIONS but `neutral`.
+    pub id: String,
+    /// "" (no tint) or `#rrggbb`, its strength 0.05-1.0, its length (0 holds; above 0 fades out over that many ms).
+    pub tint: String,
+    pub tint_strength: f64,
+    pub tint_ms: i32,
+    /// "" (no mark) or one of PORTRAIT_MARKS, its colour ("" the mark's default), its box (PORTRAIT_MARK_BOXES), its
+    /// anchor in units of the box, its width as a share of the portrait's side, its pulse period (0 steady).
+    pub mark: String,
+    pub mark_color: String,
+    pub mark_box: String,
+    pub mark_x: f64,
+    pub mark_y: f64,
+    pub mark_size: f64,
+    pub mark_pulse_ms: i32,
+    /// A shake of `shake_px` logical px over `shake_ms` from the expression's start (0: none).
+    pub shake_px: i32,
+    pub shake_ms: i32,
+}
+
+impl PortraitExpression {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self {
+            id: string(o, "id", ""),
+            tint: string(o, "tint", ""),
+            tint_strength: float(o, "tint_strength", 0.3),
+            tint_ms: int(o, "tint_ms", 0),
+            mark: string(o, "mark", ""),
+            mark_color: string(o, "mark_color", ""),
+            mark_box: string(o, "mark_box", "face"),
+            mark_x: float(o, "mark_x", 0.85),
+            mark_y: float(o, "mark_y", 0.15),
+            mark_size: float(o, "mark_size", 0.12),
+            mark_pulse_ms: int(o, "mark_pulse_ms", 0),
+            shake_px: int(o, "shake_px", 0),
+            shake_ms: int(o, "shake_ms", 0),
+        }
     }
 }
 

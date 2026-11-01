@@ -666,3 +666,207 @@ fn e15_the_kit_portraits_page_has_its_controls_jolts_inside_its_stage_and_names_
     assert_eq!(audit["counts"]["cut"], 0);
     assert_eq!(k.portrait.state()["tier"], "minimal");
 }
+
+// ---- PORTRAITFX1-EX: expression effects ---------------------------------------------------------------------------
+
+const RED: Rgba = [225, 29, 72, 255];
+const GREEN: Rgba = [0, 255, 0, 255];
+
+/// A 96 px sample with a face box (no eyes, so no blink) over a plain skin image.
+fn ex_face() -> (Image, Face) {
+    (framed(96, |_, _| SKIN), Face { face: Some([24, 20, 48, 56]), ..Face::plain(96) })
+}
+
+fn face_cue(e: &str) -> Cue {
+    cue("face").with_expression(e).with_key("line.face")
+}
+
+fn angry() -> ExpressionFx {
+    ExpressionFx { tint: Some(RED), tint_strength: 0.5, ..ExpressionFx::new("angry") }
+}
+
+/// EX1: a held expression tints its face box: the box centre by `tinted` at the row's strength (eased in over
+/// EASE_MS), pixels outside the box (and its soft ellipse's corners) untouched; a timed tint (`tint_ms`) falls from full
+/// to 0; no face box, no sidecar or no row for the expression: no tint and no crash.
+#[test]
+fn ex1_the_expression_tint_covers_the_face_box() {
+    let mut rig = Rig::new();
+    let (src, face) = ex_face();
+    let mut fx = PortraitFx::new("ex1");
+    fx.set_expressions(&[angry()]);
+    fx.hold(&[face_cue("angry")], 0);
+    let out = rig.compose(&mut fx, &src, Some(&face), 96, 1000, reduce());
+    assert_eq!(at(&out, 48, 48), tinted(SKIN, RED, 0.5), "the centre at full strength");
+    assert_eq!(at(&out, 10, 10), SKIN, "outside the box");
+    assert_eq!(at(&out, 24, 20), SKIN, "the box corner is outside the soft ellipse");
+    assert_eq!(face_weight(0.0, 0.0), 1.0);
+    assert_eq!(fx.state(1000)["expression_fx"], json!(["tint"]));
+    let early = rig.compose(&mut fx, &src, Some(&face), 96, 100, reduce());
+    assert_eq!(at(&early, 48, 48), tinted(SKIN, RED, angry().tint_at(tq(100))), "easing in over EASE_MS");
+
+    // a timed tint: the hurt flash over the face
+    let hurt = ExpressionFx { tint: Some(RED), tint_strength: 0.8, tint_ms: 300, ..ExpressionFx::new("hurt") };
+    let mut hit = PortraitFx::new("ex1_hurt");
+    hit.set_expressions(&[hurt.clone()]);
+    hit.fire(face_cue("hurt").with_ms(900), 0);
+    let out = rig.compose(&mut hit, &src, Some(&face), 96, 100, reduce());
+    assert_eq!(at(&out, 48, 48), tinted(SKIN, RED, hurt.tint_at(tq(100))), "fading from its start");
+    assert!(hurt.tint_at(0) == 0.8 && hurt.tint_at(300) == 0.0);
+    assert_eq!(rig.compose(&mut hit, &src, Some(&face), 96, 400, reduce()), src, "gone after tint_ms (the face still holds)");
+    assert_eq!(hit.expression(400), "hurt");
+
+    // the face box from the eye boxes when the sidecar names none
+    let eyes = Face { eyes: vec![[38, 38, 5, 3], [53, 38, 5, 3]], blink: false, ..Face::plain(96) };
+    let fb = eyes.face_box().expect("a box from the eyes");
+    let mut derived = PortraitFx::new("ex1_eyes");
+    derived.set_expressions(&[angry()]);
+    derived.hold(&[face_cue("angry")], 0);
+    let out = rig.compose(&mut derived, &src, Some(&eyes), 96, 1000, reduce());
+    let (cx, cy) = (fb[0] + fb[2] / 2, fb[1] + fb[3] / 2);
+    assert_eq!(at(&out, cx, cy), tinted(SKIN, RED, 0.5), "the derived box's centre");
+
+    // no face box, no sidecar, another expression: nothing
+    for (name, f, e) in [("plain", Some(Face::plain(96)), "angry"), ("none", None, "angry"), ("other", Some(face.clone()), "afraid")] {
+        let mut fx = PortraitFx::new(name);
+        fx.set_expressions(&[angry()]);
+        fx.hold(&[face_cue(e)], 0);
+        assert_eq!(rig.compose(&mut fx, &src, f.as_ref(), 96, 1000, reduce()), src, "{name}: untouched");
+        assert_eq!(fx.state(1000)["expression_fx"], json!([]), "{name}");
+    }
+}
+
+/// The pixels of `out` that differ from `base` and their bounding box (x0, y0, w, h).
+fn changed(out: &Image, base: &Image) -> Option<(i32, i32, i32, i32)> {
+    let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+    for y in 0..out.h {
+        for x in 0..out.w {
+            if at(out, x, y) != at(base, x, y) {
+                (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+            }
+        }
+    }
+    (x0 <= x1).then(|| (x0, y0, x1 - x0 + 1, y1 - y0 + 1))
+}
+
+/// EX2: a mark is drawn centred on its anchor in the face box (or the eye box), its bitmap scaled by nearest to its
+/// width (`mark_width`); the vein's `X` cells take the row's colour and nothing outside its rect changes; the minimal
+/// tier draws no mark (the tint stays); a pulse grows the mark, reduce motion holds it steady.
+#[test]
+fn ex2_the_mark_is_drawn_at_its_anchor() {
+    let mut rig = Rig::new();
+    let (src, face) = ex_face();
+    let vein = ExpressionFx { mark: Some(Mark::Vein), mark_color: Some(GREEN), mark_x: 0.85, mark_y: 0.15, mark_size: 0.12, ..ExpressionFx::new("angry") };
+    let mut fx = PortraitFx::new("ex2");
+    fx.set_expressions(&[vein.clone()]);
+    fx.hold(&[face_cue("angry")], 0);
+    let out = rig.compose(&mut fx, &src, Some(&face), 96, 1000, reduce());
+    let (ax, ay) = vein.anchor(&face, 1.0).unwrap();
+    assert_eq!((ax, ay), (24.0 + 0.85 * 48.0, 20.0 + 0.15 * 56.0), "the anchor in units of the face box");
+    let w = mark_width(Mark::Vein, 0.12, 96, 1.0);
+    let rect = mark_rect(Mark::Vein, w, ax, ay);
+    assert_eq!(changed(&out, &src), Some(rect), "the mark covers its rect and nothing else changes");
+    let bm = Mark::Vein.bitmap();
+    let (bw, bh) = (bm[0].len() as i32, bm.len() as i32);
+    for dy in 0..rect.3 {
+        for dx in 0..rect.2 {
+            let cell = bm[(dy * bh / rect.3) as usize].as_bytes()[(dx * bw / rect.2) as usize];
+            let px = at(&out, rect.0 + dx, rect.1 + dy);
+            assert_eq!(px == GREEN, cell == b'X', "cell ({dx}, {dy})");
+        }
+    }
+    assert_eq!(fx.state(1000)["expression_fx"], json!(["mark"]));
+
+    // the eye box anchor
+    let eyes = Face { eyes: vec![[38, 38, 5, 3], [53, 38, 5, 3]], blink: false, ..Face::plain(96) };
+    let sweat = ExpressionFx { mark: Some(Mark::Sweat), mark_box: MarkBox::Eyes, mark_x: 1.2, mark_y: -1.0, mark_size: 0.08, ..ExpressionFx::new("afraid") };
+    let mut fx = PortraitFx::new("ex2_eyes");
+    fx.set_expressions(&[sweat.clone()]);
+    fx.hold(&[face_cue("afraid")], 0);
+    let out = rig.compose(&mut fx, &src, Some(&eyes), 96, 1000, reduce());
+    let (ax, ay) = sweat.anchor(&eyes, 1.0).unwrap();
+    let eb = eyes.eyes_box().unwrap();
+    assert_eq!((ax, ay), (eb[0] as f32 + 1.2 * eb[2] as f32, eb[1] as f32 - eb[3] as f32));
+    let drop = mark_rect(Mark::Sweat, mark_width(Mark::Sweat, 0.08, 96, 1.0), ax, ay);
+    assert_eq!(changed(&out, &src), Some(drop));
+    assert_eq!(at(&out, drop.0 + drop.2 / 2, drop.1), Mark::cell('O', Mark::Sweat.default_color()).unwrap(), "the drop's tip: the outline in the default colour");
+
+    // the minimal tier: the tint, no mark
+    let both = ExpressionFx { tint: Some(RED), tint_strength: 0.5, ..vein.clone() };
+    let mut small = PortraitFx::new("ex2_small");
+    small.set_expressions(&[both]);
+    small.hold(&[face_cue("angry")], 0);
+    let out = rig.compose(&mut small, &src, Some(&face), 32, 1000, reduce());
+    assert_eq!(small.tier(), Some(Tier::Minimal));
+    assert_eq!(small.state(1000)["expression_fx"], json!(["tint"]), "no mark at the minimal tier");
+    assert!((0..32).all(|y| (0..32).all(|x| at(&out, x, y) != GREEN)));
+
+    // a pulse (reduced tier: no breath) grows the mark; reduce motion keeps it steady
+    let pulsing = ExpressionFx { mark_pulse_ms: 900, mark_size: 0.2, ..vein.clone() };
+    let base = rig.compose(&mut PortraitFx::new("ex2_base"), &src, Some(&face), 64, 0, PortraitOpts::default());
+    let widths = |opts: PortraitOpts, rig: &mut Rig| -> Vec<i32> {
+        let mut fx = PortraitFx::new("ex2_pulse");
+        fx.set_expressions(&[pulsing.clone()]);
+        fx.hold(&[face_cue("angry")], 0);
+        [225u64, 675].iter().map(|&t| changed(&rig.compose(&mut fx, &src, Some(&face), 64, t, opts), &base).map_or(0, |r| r.2)).collect()
+    };
+    let want: Vec<i32> = [225u64, 675].iter().map(|&t| mark_width(Mark::Vein, 0.2, 64, mark_pulse(pulsing.pulse(tq(t))).0)).collect();
+    assert_ne!(want[0], want[1], "the pulse's high and low differ");
+    assert_eq!(widths(PortraitOpts::default(), &mut rig), want, "the pulse grows the mark");
+    let steady = mark_width(Mark::Vein, 0.2, 64, 1.0);
+    assert_eq!(widths(reduce(), &mut rig), [steady, steady], "reduce motion: no pulse");
+}
+
+/// EX3: an expression's shake moves the whole portrait from the expression's start as its `Shake` (axis x, ease-out)
+/// says; halved at the reduced tier (at least 1 px), none at the minimal tier or under reduce motion, none after its
+/// ms; the drawn offset is the jolt plus the shake within the jolt ceiling.
+#[test]
+fn ex3_the_expression_shake_follows_its_row() {
+    let mut rig = Rig::new();
+    let (src, face) = ex_face();
+    let hurt = ExpressionFx { shake_px: 2.0, shake_ms: 200, ..ExpressionFx::new("hurt") };
+    let shake = hurt.shake().unwrap();
+    assert_eq!(shake, Shake { px: 2.0, ms: 200, axis: Axis::X, envelope: Envelope::EaseOut, step_ms: SHAKE_STEP_MS });
+    let run = |side: i32, opts: PortraitOpts, rig: &mut Rig| -> (PortraitFx, Vec<(i32, i32)>) {
+        let mut fx = PortraitFx::new("ex3");
+        fx.set_expressions(&[hurt.clone()]);
+        fx.fire(face_cue("hurt").with_ms(900), 1000);
+        rig.compose(&mut fx, &src, Some(&face), side, 1000, opts);
+        let offs = (1000..1400).map(|t| fx.expression_shake(t)).collect();
+        (fx, offs)
+    };
+    let (fx, full) = run(96, PortraitOpts::default(), &mut rig);
+    let seed = fx.seed ^ 1000;
+    assert_eq!(full, (0..400u64).map(|t| shake.offset(t, seed)).collect::<Vec<_>>(), "the row's shake from the start");
+    assert!(full.iter().any(|o| o.0 != 0) && full[200..].iter().all(|o| *o == (0, 0)), "it moves, then rests after shake_ms");
+    assert_eq!(fx.state(1010)["shake"], json!([full[10].0, full[10].1]));
+    let half = Shake { px: 1.0, ..shake };
+    assert_eq!(run(64, PortraitOpts::default(), &mut rig).1, (0..400u64).map(|t| half.offset(t, seed)).collect::<Vec<_>>(), "halved at the reduced tier");
+    assert!(run(32, PortraitOpts::default(), &mut rig).1.iter().all(|o| *o == (0, 0)), "none at the minimal tier");
+    assert!(run(96, reduce(), &mut rig).1.iter().all(|o| *o == (0, 0)), "none under reduce motion");
+
+    // the jolt and the shake add up within the ceiling
+    let (mut fx, _) = run(96, PortraitOpts::default(), &mut rig);
+    fx.fire(Cue::parse("jolt", "crit").unwrap(), 1000);
+    let m = JOLT_LIMITS.max_px as i32;
+    for t in 1000..1400 {
+        let ((jx, jy), (sx, sy)) = (fx.jolt_offset(t), fx.expression_shake(t));
+        assert_eq!(fx.offset(t), ((jx + sx).clamp(-m, m), (jy + sy).clamp(-m, m)));
+    }
+}
+
+/// EX4: a held face that changes its expression starts again (its effects run from the change), so a line that turns
+/// hurt flashes and shakes then; the mark and box names parse.
+#[test]
+fn ex4_a_held_face_that_changes_starts_again() {
+    let mut fx = PortraitFx::new("ex4");
+    fx.hold(&[face_cue("angry")], 0);
+    fx.hold(&[face_cue("angry")], 300);
+    assert_eq!(fx.expression_since(400), Some(("angry", 0)), "the same face keeps its start");
+    fx.hold(&[face_cue("hurt")], 500);
+    assert_eq!(fx.expression_since(600), Some(("hurt", 500)));
+    fx.set_expressions(&[ExpressionFx::new("hurt")]);
+    assert_eq!(fx.expression_fx(600).map(|(r, s)| (r.expression.as_str(), s)), Some(("hurt", 500)));
+    assert_eq!(MARKS.iter().map(|m| Mark::parse(m).unwrap().name()).collect::<Vec<_>>(), MARKS);
+    assert_eq!(Mark::parse(""), None);
+    assert_eq!((MarkBox::parse("eyes"), MarkBox::parse("face")), (MarkBox::Eyes, MarkBox::Face));
+}

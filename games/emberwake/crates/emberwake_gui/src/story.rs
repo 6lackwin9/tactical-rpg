@@ -56,11 +56,13 @@ pub fn entry_reel(d: &Data, world: &str, entry: &Dict) -> Reel {
 /// A vignette screen over `reel` as the game plays it: the player's text speed, the game's palette, its tuned shake
 /// presets and limits for the cards' `shake` (FX1 5.2; `tuning.json` `shakes`, `shake_max_px`, `shake_max_ms`), and
 /// the line cards' portraits lit by the game's rim key (PORTRAITFX1-D, 6.4: Tallow Amber), an expression frame without
-/// its own sidecar taking its base portrait's (PORTRAITFX1-X: the kit's `face_sidecars`).
+/// its own sidecar taking its base portrait's (PORTRAITFX1-X: the kit's `face_sidecars`) and the data's expression effects
+/// drawn while a card's `expression` holds (PORTRAITFX1-EX).
 pub fn vignette_screen(cx: &Cx, reel: Reel, on_done: impl FnOnce(&mut Cx, Ended) + 'static) -> VignetteScreen<GameCx> {
     let t = &cx.tuning.value;
     VignetteScreen::with_settings(&cx.settings, reel, on_done).palette(PALETTE).with_shakes(t.shakes.clone(), t.shake_limits()).portrait_rim(Some(crate::portraits::RIM))
         .portrait_sidecars(emberwake_content::art::face_sidecars)
+        .portrait_expressions(crate::portraits::expression_fx_of(&cx.data.cat.portrait_expressions))
 }
 
 /// The player for `scene` in the game's palette; Skip asks first for a scene not seen yet (W6).

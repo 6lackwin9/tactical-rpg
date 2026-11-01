@@ -16,7 +16,7 @@ use crate::audio::Bus;
 use crate::canvas::{rgb, rgba, Rect, Rgba};
 use crate::fx::{Camera, Clock, ShakeLimits, ShakeTable};
 use crate::painter::Painter;
-use crate::portrait_fx::{idle_cues, Budget, Cue, PortraitFx, PortraitOpts};
+use crate::portrait_fx::{idle_cues, Budget, Cue, ExpressionFx, PortraitFx, PortraitOpts};
 use crate::screen::{Context, Cx, Key, Screen, Settings};
 use crate::ui::{tip, Gfx, Ui, Widget, BODY, DIM, GOLD, RADIUS, SMALL, TEXT, H, W};
 use aegis_core::json;
@@ -684,6 +684,8 @@ pub struct CardPortrait {
     /// PORTRAITFX1-X: the sidecar files to try for a drawn portrait file, in order (the game's layout: an expression
     /// frame's own, then its base portrait's); None: the drawn file's own sidecar only.
     pub sidecars: Option<fn(&str) -> Vec<String>>,
+    /// PORTRAITFX1-EX: the caller's expression-effect rows, drawn while a card's `expression` holds.
+    pub expressions: Vec<ExpressionFx>,
 }
 
 /// The `face` cue key a line card's `expression` holds under.
@@ -738,6 +740,7 @@ impl CardPortrait {
             cues.extend(Cue::parse("face", "").map(|q| q.with_expression(&c.expression).with_priority(CARD_FACE_PRIORITY).with_key(CARD_FACE_KEY)));
         }
         fx.hold(&cues, now);
+        fx.set_expressions(&self.expressions);
         let opts = PortraitOpts { reduce_motion, rim_default: self.rim, show_anchors: false };
         self.budget.begin();
         fx.draw(p, art, &rel, face.as_ref(), r, now, &opts, &mut self.budget)
@@ -895,6 +898,12 @@ impl<G: Context> VignetteScreen<G> {
     /// PORTRAITFX1-X: where the line cards' portraits take their anchors (`CardPortrait::sidecars`).
     pub fn portrait_sidecars(mut self, sidecars: fn(&str) -> Vec<String>) -> Self {
         self.portrait.sidecars = Some(sidecars);
+        self
+    }
+
+    /// PORTRAITFX1-EX: the expression effects the line cards' portraits draw (`CardPortrait::expressions`).
+    pub fn portrait_expressions(mut self, rows: Vec<ExpressionFx>) -> Self {
+        self.portrait.expressions = rows;
         self
     }
 

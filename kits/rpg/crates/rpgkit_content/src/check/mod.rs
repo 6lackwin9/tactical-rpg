@@ -7,6 +7,7 @@ pub mod assets;
 pub mod board;
 pub mod campaign;
 pub mod derived;
+pub mod expression_fx;
 pub mod dialogue;
 pub mod encounter;
 pub mod hook_kinds;
@@ -244,6 +245,10 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
         // PORTRAITFX1-S: the row checks the loader applies (trigger and match, effect and numbers, unique ids and cues)
         return portrait::entry_errors(v, &content(kind, entry), current_id);
     }
+    if kind == expression_fx::KIND {
+        // PORTRAITFX1-EX: the row checks the loader applies (the expression, tint, mark, shake; unique ids)
+        return expression_fx::entry_errors(v, &content(kind, entry), current_id);
+    }
     if crate::source::HOOK_KINDS.contains(&kind) {
         // HOOKS1-S: the row checks the loader applies (hazards, unit meters, zones; unique ids)
         return hook_kinds::entry_errors(v, kind, &content(kind, entry), current_id);
@@ -371,6 +376,7 @@ pub fn warnings_for(v: &View, kind: &str, entry: &Dict) -> Vec<String> {
         "items" => item::item_warnings(v, &e),
         "item_families" => item::family_warnings(&crate::source::derive_family(&e)),
         portrait::KIND => portrait::warnings(&e),
+        expression_fx::KIND => expression_fx::warnings(&e),
         ruleset::KIND => ruleset::warnings(&e),
         _ => Vec::new(),
     }
@@ -455,6 +461,13 @@ pub fn warnings_all(v: &View) -> Report {
         let found = portrait::warnings(e);
         if !found.is_empty() {
             out.insert(format!("{}:{}", portrait::KIND, json::s(e, "id")), found);
+        }
+    }
+    // PORTRAITFX1-EX: the expression-effect rows' warnings (`portrait_expressions:<id>`)
+    for e in v.entries(expression_fx::KIND) {
+        let found = expression_fx::warnings(e);
+        if !found.is_empty() {
+            out.insert(format!("{}:{}", expression_fx::KIND, json::s(e, "id")), found);
         }
     }
     for root in &v.assets.roots {

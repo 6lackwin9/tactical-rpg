@@ -123,3 +123,12 @@ INPUT1-U slice 1: the picks model (rule `round_intent`). `round_intent::Pick` (`
 INPUT1-U slice 2 (kit helpers for the battle screen): `round_intent_plan::preview_plan` (the world and plan as if a row were picked, on copies) and `copy_plan`; `ai::plan_party_intents` skips members with picks (IF9: the party tactic and autoplay leave them as the player left them); `rpgkit_rules::status::regen_ap` (the round start's AP regen, shared by `roll_over` and `ap_forecast`).
 
 PORTRAITFX1-X (expression keys, `docs/specs/PORTRAITFX1.md` 7): a dialogue node's and a `line` card's `expression` ("" or a name of `rpgkit_data::EXPRESSIONS`; schema, check and writer since PORTRAITFX1-S) now reach the screens: `DialogueRunner::view` carries `expression` only when the node names one (a node without it reads as before, so the journey parity sees nothing new), and `story::card_portrait(d, home, card)` resolves a `line` card's portrait chain (`art::face_chain` over the speaker's portrait tier, id and body with the card's expression; [] without a speaker the world holds). A missing frame falls back to the neutral frame, then the single portrait.
+
+PORTRAITFX1-EX (expression effects, `docs/specs/PORTRAITFX1.md` 16): the catalog kind `portrait_expressions`
+(`data/catalog/portrait_expressions.json`, read beside the catalog kinds; schema rows in `schema.json`): one row per
+expression (`rpgkit_data::EXPRESSIONS` but `neutral`) with a tint over the face box (`tint`, `tint_strength`, `tint_ms`),
+an optional mark (`mark` one of `PORTRAIT_MARKS`, `mark_color`, `mark_box` one of `PORTRAIT_MARK_BOXES`, `mark_x`,
+`mark_y`, `mark_size`, `mark_pulse_ms`) and an optional shake (`shake_px`, `shake_ms`); typed `PortraitExpression`
+(`Catalog::portrait_expressions`), checks `rpgkit_content::check::expression_fx` (a row that draws nothing warns), the
+writer storing only the fields that differ from the defaults. The game's binding turns the rows into the engine's
+`ExpressionFx`.

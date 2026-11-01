@@ -5,8 +5,9 @@
 //!   world's vignette as written, in the game's card palette (STORYUI1-U1, a reel picker over the preview).
 //! - Art: Portraits (PORTRAITFX1-G 6.3): every portrait of the game and kit layers (expression frames under their
 //!   character) drawn through the game's binding (`portraits::Faces`) with the Kit widgets' portrait controls, its
-//!   sidecar summary, one button per cue row of `portrait_cues.json` and the expression picker; the review page of
-//!   the portrait asset tasks.
+//!   sidecar summary, one button per cue row of `portrait_cues.json`, one box per expression-effect row of
+//!   `portrait_expressions.json` (PORTRAITFX1-EX) and the expression picker; the review page of the portrait asset
+//!   tasks.
 //! - Screens: every screen, drawn shrunk into the pane (`aegis_ui::preview`) on a sample game (a debug game of the
 //!   first playable world that saving refuses); Open shows the screen itself to try it. The Mission board entry
 //!   (STORYUI1-U2) draws the board pane on a fixture board without a game (`board::BoardSample`).
@@ -146,6 +147,8 @@ pub enum PAct {
     Anchors,
     /// The expression picker (0 = neutral, else the picked portrait's frame `n - 1`).
     Expression(usize),
+    /// PORTRAITFX1-EX: an expression-effect row by id: holds its expression on the portrait (again: off).
+    ExprFx(String),
 }
 
 /// The folders under `portraits/`, in list order.
@@ -237,6 +240,32 @@ fn cue_text(r: &emberwake_data::PortraitCue) -> String {
     format!("{when}: {what}{}", if only.is_empty() { String::new() } else { format!(" (only {})", only.join(", ")) })
 }
 
+/// An expression-effect row's hover text: its tint, mark and shake.
+fn expr_text(r: &emberwake_data::PortraitExpression) -> String {
+    let mut parts = Vec::new();
+    let colour = |c: &str| {
+        let name = hue_name(c);
+        if name.is_empty() { c.to_string() } else { format!("{name} {c}") }
+    };
+    if !r.tint.is_empty() {
+        let len = if r.tint_ms > 0 { format!(", fading over {} ms", r.tint_ms) } else { String::new() };
+        parts.push(format!("tint {} {:.2} over the face box{len}", colour(&r.tint), r.tint_strength));
+    }
+    if !r.mark.is_empty() {
+        let c = if r.mark_color.is_empty() { String::new() } else { format!(" {}", colour(&r.mark_color)) };
+        let pulse = if r.mark_pulse_ms > 0 { format!(", pulsing every {} ms", r.mark_pulse_ms) } else { String::new() };
+        parts.push(format!("{} mark{c} at ({:.2}, {:.2}) of the {} box{pulse}", r.mark, r.mark_x, r.mark_y, r.mark_box));
+    }
+    if r.shake_px > 0 {
+        parts.push(format!("shake {} px for {} ms", r.shake_px, r.shake_ms));
+    }
+    if parts.is_empty() {
+        format!("{}: nothing.", r.id)
+    } else {
+        format!("While {} holds: {}. Reduce motion stops the shake and the pulse.", r.id, parts.join("; "))
+    }
+}
+
 /// The Portraits entry (6.3): the list, the picked portrait and the controls; its portraits draw through `Faces`.
 #[derive(Debug, Clone, Default)]
 struct PortraitPage {
@@ -249,6 +278,8 @@ struct PortraitPage {
     /// The overlays and states toggled on, and the state cue rows toggled on (by id).
     on: std::collections::BTreeSet<&'static str>,
     rows_on: std::collections::BTreeSet<String>,
+    /// PORTRAITFX1-EX: the expression-effect row held on (its expression over the picked frame).
+    fx_on: Option<String>,
     /// `PORTRAIT_SIZES` index.
     size: usize,
     /// What the last control did (the foot line).
@@ -271,6 +302,10 @@ impl PortraitPage {
         out.extend(rows.iter().filter(|r| !r.is_event() && self.rows_on.contains(&r.id)).filter_map(cue_of));
         if let Some(e) = self.picked().and_then(|f| f.frames.get(self.expression.wrapping_sub(1))) {
             out.extend(Cue::parse("face", "").map(|c| c.with_expression(e).with_priority(0).with_key("gallery.expression")));
+        }
+        // PORTRAITFX1-EX: the held expression-effect row's face, over the picker (its effects run from the click)
+        if let Some(e) = &self.fx_on {
+            out.extend(Cue::parse("face", "").map(|c| c.with_expression(e).with_priority(1).with_key("gallery.expression_fx")));
         }
         out
     }
@@ -334,6 +369,11 @@ impl PortraitPage {
             PAct::Expression(e) => {
                 self.expression = e;
                 format!("expression {}", self.picked().and_then(|f| f.frames.get(e.wrapping_sub(1))).map_or("neutral", |s| s.as_str()))
+            }
+            PAct::ExprFx(id) => {
+                let on = self.fx_on.as_deref() != Some(id.as_str());
+                self.fx_on = on.then(|| id.clone());
+                format!("{id} effect {}", if on { "on" } else { "off" })
             }
         };
     }
@@ -499,6 +539,28 @@ impl PortraitPage {
                     }
                     bx += w + 6;
                 }
+            }
+            yy += 14 + 3;
+        }
+        // PORTRAITFX1-EX: one box per expression-effect row (a click holds its expression, a second click releases it)
+        yy = head(ui, yy, "Expression effects (held as the face)");
+        let fx_rows = &data.cat.portrait_expressions;
+        if fx_rows.is_empty() {
+            yy = ui.para(x3, yy, right - x3, "No expression-effect rows (data/catalog/portrait_expressions.json).", SMALL, DIM) + 3;
+        } else {
+            let mut bx = x3;
+            for row in fx_rows.iter() {
+                let w = 12 + ui.p.text_w(&row.id, BODY).ceil() as i32 + 4;
+                if bx + w > right && bx > x3 {
+                    bx = x3;
+                    yy += 14;
+                }
+                let id = format!("gallery.portraits.fx.{}", row.id);
+                ui.checkbox(&id, bx, yy + 1, &row.id, self.fx_on.as_deref() == Some(row.id.as_str()), GAct::Portrait(PAct::ExprFx(row.id.clone())), true);
+                if let Some(box_) = ui.widgets.last_mut() {
+                    box_.tip = tip(&row.id, &expr_text(row));
+                }
+                bx += w + 6;
             }
             yy += 14 + 3;
         }
@@ -1253,8 +1315,21 @@ mod tests {
             row(json!({"id": "shaken", "trigger": "derived", "stat": "composure", "drop_pct": 25, "effect": "tint", "intensity": 0.5, "color": "#06b6d4"})),
             row(json!({"id": "stealthed", "trigger": "status", "status": "stealth", "effect": "fade", "intensity": 0.6})),
         ];
-        let cue_ids: Vec<String> = rows.iter().map(|r| format!("gallery.portraits.cue.{}", r.id)).collect();
-        std::sync::Arc::get_mut(&mut cx.app.data).expect("the test owns the data").edit_cat(|c| c.portrait_cues = rows);
+        let mut cue_ids: Vec<String> = rows.iter().map(|r| format!("gallery.portraits.cue.{}", r.id)).collect();
+        // PORTRAITFX1-EX: the three expression-effect rows, one box each
+        let fx_rows: Vec<emberwake_data::PortraitExpression> = [
+            json!({"id": "hurt", "tint": "#e11d48", "tint_strength": 0.8, "tint_ms": 240, "shake_px": 2, "shake_ms": 220}),
+            json!({"id": "angry", "tint": "#e11d48", "tint_strength": 0.35, "mark": "vein", "mark_color": "#e11d48", "mark_pulse_ms": 900}),
+            json!({"id": "afraid", "tint": "#06b6d4", "tint_strength": 0.4, "mark": "sweat", "mark_x": 0.12, "mark_y": 0.22}),
+        ]
+        .iter()
+        .map(crate::portraits::tests::ex_row_of)
+        .collect();
+        cue_ids.extend(fx_rows.iter().map(|r| format!("gallery.portraits.fx.{}", r.id)));
+        std::sync::Arc::get_mut(&mut cx.app.data).expect("the test owns the data").edit_cat(|c| {
+            c.portrait_cues = rows;
+            c.portrait_expressions = fx_rows;
+        });
         let mut gallery = Gallery::new();
         let i = ENTRIES.iter().position(|e| e.0 == "portraits").expect("a portraits entry");
         gallery.act(&mut cx, GAct::Entry(i));
@@ -1298,6 +1373,15 @@ mod tests {
         gallery.draw(&mut cx, &mut g, (-500, -500), true);
         assert_eq!(boxed(&gallery), Some(false), "and released");
         assert_eq!(gallery.state(&cx)["portrait_pick"], json!(key));
+        // PORTRAITFX1-EX: an expression-effect box holds its expression on the portrait; a second click releases it
+        gallery.click_id(&mut cx, "gallery.portraits.fx.angry").expect("the angry box");
+        gallery.draw(&mut cx, &mut g, (-500, -500), true);
+        let now = gallery.portraits.faces.now();
+        assert_eq!(gallery.portraits.faces.get(&key).unwrap().expression(now), "angry");
+        assert!(gallery.portraits.faces.get(&key).unwrap().expression_fx(now).is_some(), "its row reaches the portrait");
+        gallery.click_id(&mut cx, "gallery.portraits.fx.angry").expect("again");
+        gallery.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_eq!(gallery.portraits.faces.get(&key).unwrap().expression(gallery.portraits.faces.now()), "");
     }
 
     /// INPUT1 TV7: the Kit group's Timeline pane draws the engine widget alone on its sample round with no game and no

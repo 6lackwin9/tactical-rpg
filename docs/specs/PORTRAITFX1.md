@@ -85,6 +85,7 @@ PNG. All coordinates are image px of the PNG (240 for today's portraits); unknow
 | `glow` | `[x, y, r]` list | [] | 0-3; centre inside the inner rect; `r` 4-`size / 2` |
 | `veins` | `[x, y, deg, len]` list | [] | 0-3 vein roots; root inside; `deg` -180-360 (0 = right, 90 = down); `len` 6-`size / 2` |
 | `mouth` | `[x, y, w, h]` or [] | [] | reserved for (C); parsed and checked, read by nothing |
+| `face` | `[x, y, w, h]` or [] | [] | PORTRAITFX1-EX (section 16): the face box of the expression effects; inside the inner rect, at least `size / 8` a side; [] = taken from the eye boxes |
 | `rim` | `#rrggbb` or "" | "" | the rim light's key colour; "" = the caller's default |
 | `idle` | list of `{effect, color, intensity}` | [] | 0-4; `effect` in `IDLE_OVERLAYS` (`glow`, `veins`, `eye_glow`, `ash`, `smoke`); `glow` needs a `glow` anchor, `veins` a root, `eye_glow` an eye box; `color` `#rrggbb` or "" (the effect's default); `intensity` 0.05-1.0, default 1.0 |
 
@@ -472,3 +473,70 @@ frames for common portraits; animated region-map tokens.
 - X4 is a binding test (`portraits.rs`): a `face` `hurt` cue fired for 900 ms draws the `hurt` frame from its start to
   its last millisecond and the neutral frame after; a missing frame falls back along the chain. With no frames shipped
   (XA makes them) every surface draws as before.
+
+## 16. PORTRAITFX1-EX: expression effects at runtime (2026-11-01)
+
+Decision "Expression effects at runtime" (user 2026-11-01): each expression can carry a runtime effect drawn over the
+sidecar's face and eye boxes from a tunable data table. Display only: no rule, save, sim or trace reads it; goldens and
+parity unchanged (one kind joins the schema compare's after-Godot list, as `portrait_cues` did).
+
+- Sidecar (`aegis_core::assets`, `tools/portraits/face.py` mirrors it): the optional key `face` (`[x, y, w, h]` or [],
+  after `mouth` in `FACE_KEYS`; inside the inner rect, at least `size / 8` a side). `Face::face_box()` is that box, else
+  one from the eye boxes (`FACE_FROM_EYES`: the eyes' union, span = max(its width, round(size / 5)), x from its centre
+  minus 0.9 span, y from its top minus 0.6 span, 1.8 span wide, 1.9 span tall, clamped to the inner rect); with neither,
+  None (the tint is skipped, nothing crashes). `face.py set --face x,y,w,h` writes it (`--face ""` clears it); the
+  writer leaves the key out when unset, so the 42 sidecars keep their bytes.
+- Kit table `content.portrait_expressions` (file `data/catalog/portrait_expressions.json`, beside `CATALOG_KINDS` as
+  `portrait_cues`; typed `rpgkit_data::PortraitExpression`, `Catalog::portrait_expressions`; checks
+  `rpgkit_content::check::expression_fx`; the writer stores only fields that differ from the defaults, comparing a float
+  default as normalize snaps it):
+
+| Key | Type | Default | Validation |
+| --- | --- | --- | --- |
+| `id` | id (key field) | "" | an `EXPRESSIONS` name but `neutral` (the plain face takes no row); unique |
+| `tint` | string | "" | "" (none) or `#rrggbb`: laid over the face box |
+| `tint_strength` | float | 0.3 | 0.05-1.0 |
+| `tint_ms` | int | 0 | 0 (holds, easing in over `EASE_MS`) or 60-3000 (full at the start, fading out: a flash); needs a tint |
+| `mark` | enum | "" | "", `vein` (the anger mark), `sweat` (a drop): `PORTRAIT_MARKS`, the engine's `MARKS` |
+| `mark_color` | string | "" | "" (the mark's default) or `#rrggbb`; needs a mark |
+| `mark_box` | enum | `face` | `face` or `eyes` (the eye boxes' union) |
+| `mark_x`, `mark_y` | float | 0.85, 0.15 | -1.0-2.0: the mark's centre in units of its box (outside allowed: a temple) |
+| `mark_size` | float | 0.12 | 0.04-0.3: the mark's width as a share of the composed side, never under its bitmap's width |
+| `mark_pulse_ms` | int | 0 | 0 (steady) or 300-4000; needs a mark |
+| `shake_px`, `shake_ms` | int | 0, 0 | 0-4 px; 60-600 ms with a shake, else 0 |
+| `origin` | as every catalog kind | system | standard |
+
+A row with no tint, no mark and no shake warns ("draws nothing"). Shipped rows (seed applied, then deleted): `hurt`
+Arterial Red at 0.8 over 240 ms with a 2 px, 220 ms shake (the red flash and the short shake); `angry` Arterial Red at
+0.35 held, the vein mark in Arterial Red at (0.88, 0.12) of the face box pulsing every 900 ms; `afraid` Salt Cyan at 0.4
+held (a cool pallor), the sweat drop in Salt Cyan at (0.12, 0.2), size 0.08.
+
+- Engine (`aegis_ui::portrait_fx`, game-agnostic: the rows are data): `ExpressionFx` (the row), `Mark` (`Vein`, `Sweat`:
+  9 x 9 and 5 x 7 bitmaps, `X` the colour, `H` its highlight, `O` its outline, scaled by nearest), `MarkBox`,
+  `PortraitFx::set_expressions(&[ExpressionFx])`, `expression_since(now)` (the winning face and when its cue started),
+  `expression_fx(now)`, `expression_shake(now)`, `offset(now)` (the jolt plus the shake, each axis within 4 px). The row
+  of the winning face's expression draws from that cue's start; a held face whose expression changes starts again
+  (`hold`), so a line that turns hurt flashes then.
+  - 3b (after the colour step): the tint `tinted(c, colour, strength x w)` over the face box, `w` a soft ellipse
+    (`face_weight`: clamp(2 (1 - d^2), 0, 1), full over its inner half, 0 at the box's corners).
+  - 5b (after the eye glow): the mark centred on its anchor (`ExpressionFx::anchor`, moved with the breath), its width
+    `mark_width`; a pulse grows it by up to 20 % and dims it to 70 % at the low (`mark_pulse`).
+  - The shake is a `Shake` (axis x, ease-out, a flip every 30 ms) from the expression's start, added to the jolt.
+- Tiers and reduce motion: the tint at every tier; the mark from the reduced tier up (none at minimal); the shake halved
+  at reduced (at least 1 px), none at minimal; reduce motion: no shake, no pulse (the mark steady at full size and
+  alpha); the tint's ease and fade stay (information stays). A pulsing mark counts as time-varying for the `Budget`.
+- Cache and agent link: the composed key gains the expression, its tint in 1/32 and the mark's width and alpha;
+  `state(now)` gains `expression_fx` (the parts drawn: `tint`, `mark`) and `shake` ([dx, dy]).
+- Game: `portraits::expression_fx_of(rows)`; `Faces` draws `Catalog::portrait_expressions` on every surface
+  (`Faces::expressions`); the vignette line cards through `VignetteScreen::portrait_expressions` (`story::vignette_screen`).
+  Gallery Portraits page: a box per row (`gallery.portraits.fx.<id>`, hover: the row's effect) holds its expression as
+  the face (priority 1, over the frame picker) so each effect shows on any portrait; a second click releases it.
+- Tests: `aegis_core` `the_face_box_is_its_own_or_the_eyes`; `tools/portraits/test_face.py`
+  `test_ex_set_writes_the_face_box_only_when_given`; `aegis_ui/tests/portrait_fx.rs` EX1 (the tint in the face box,
+  timed, derived, absent), EX2 (the mark at its anchor, cell by cell; the eye box; minimal; pulse and reduce motion), EX3
+  (the shake, tiers, reduce motion, jolt sum), EX4 (a changed face starts again); `rpgkit_content/tests/portrait_expressions.rs`
+  (5: missing file, schema options and defaults, every error text, loader, writer); `portraits.rs`
+  `ex_the_expression_rows_draw_through_the_binding` and the mark-name check; the Gallery G6 test gains the boxes.
+- Open (recommendation taken): the face box comes from the eye boxes until the asset lane writes `face` boxes
+  (`face.py set --face`); the vein and sweat marks are code-drawn bitmaps; the `afraid` tint is Salt Cyan (cool) rather
+  than a whitening pallor.

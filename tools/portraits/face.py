@@ -4,7 +4,7 @@
 #
 #   face.py grid PNG OUT                   the portrait at 4x, a line every 8 image px, a label every 40
 #   face.py set PNG [--eyes x,y,w,h ...] [--no-blink | --blink] [--lid #rrggbb] [--glow x,y,r ...]
-#               [--veins x,y,deg,len ...] [--mouth x,y,w,h] [--rim #rrggbb] [--border n]
+#               [--veins x,y,deg,len ...] [--mouth x,y,w,h] [--face x,y,w,h] [--rim #rrggbb] [--border n]
 #               [--idle effect[:#rrggbb[:intensity]] ...] [--fresh]
 #                                          writes the sidecar beside the PNG (`size` from its width); keys not given
 #                                          keep the existing sidecar's values (--fresh: start from a blank one);
@@ -30,7 +30,7 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 LAYERS = [ROOT / "games" / "emberwake" / "assets", ROOT / "kits" / "rpg" / "assets"]
 
-FACE_KEYS = ["size", "border", "eyes", "blink", "lid", "glow", "veins", "mouth", "rim", "idle"]
+FACE_KEYS = ["size", "border", "eyes", "blink", "lid", "glow", "veins", "mouth", "face", "rim", "idle"]
 IDLE_KEYS = ["effect", "color", "intensity"]
 IDLE_OVERLAYS = ["glow", "veins", "eye_glow", "ash", "smoke"]
 FACE_SIZE_MIN, FACE_SIZE_MAX = 16, 1024
@@ -41,6 +41,7 @@ EYE = (0, 255, 255, 255)
 GLOW = (255, 0, 255, 255)
 VEIN = (255, 255, 0, 255)
 MOUTH = (255, 128, 0, 255)
+FACE = (120, 255, 120, 255)
 INNER = (255, 255, 255, 160)
 GRID = (255, 255, 255, 70)
 GRID_MAJOR = (255, 255, 255, 150)
@@ -122,6 +123,18 @@ def _tuples(o, key, n, shape, p):
     return out
 
 
+def _one_box(v, key, p):
+    """[] or absent: None; else [x, y, w, h] of whole numbers (a problem otherwise)."""
+    if key not in v or v[key] == []:
+        return None
+    m = v[key]
+    nums = [whole(x) for x in m] if isinstance(m, list) and len(m) == 4 else None
+    if nums is None or None in nums:
+        p.append(f"{key} must be [] or [x, y, w, h] of whole numbers.")
+        return None
+    return nums
+
+
 def parse_face(v):
     """(face dict, []) or (None, problems): the keys and their types, as `parse_face` reads them."""
     p = []
@@ -155,14 +168,8 @@ def parse_face(v):
     lid = _colour_or_empty(v, "lid", "lid", p)
     glow = _tuples(v, "glow", 3, "[x, y, r]", p)
     veins = _tuples(v, "veins", 4, "[x, y, deg, len]", p)
-    mouth = None
-    if "mouth" in v and v["mouth"] != []:
-        m = v["mouth"]
-        nums = [whole(x) for x in m] if isinstance(m, list) and len(m) == 4 else None
-        if nums is None or None in nums:
-            p.append("mouth must be [] or [x, y, w, h] of whole numbers.")
-        else:
-            mouth = nums
+    mouth = _one_box(v, "mouth", p)
+    face_box = _one_box(v, "face", p)
     rim = _colour_or_empty(v, "rim", "rim", p)
     idle = []
     if "idle" in v:
@@ -193,7 +200,7 @@ def parse_face(v):
     if p:
         return None, p
     return {"size": size, "border": border, "eyes": eyes, "blink": blink, "lid": lid, "glow": glow, "veins": veins,
-            "mouth": mouth, "rim": rim, "idle": idle}, []
+            "mouth": mouth, "face": face_box, "rim": rim, "idle": idle}, []
 
 
 def face_problems(face, png_w):
@@ -237,6 +244,12 @@ def face_problems(face, png_w):
         x, y, w, h = face["mouth"]
         if x < lo or y < lo or x + w > hi or y + h > hi or w < 1 or h < 1:
             out.append(f"mouth [{x}, {y}, {w}, {h}] must lie inside the inner rect ({lo}-{hi}).")
+    if face["face"] is not None:
+        x, y, w, h = face["face"]
+        if x < lo or y < lo or x + w > hi or y + h > hi:
+            out.append(f"face box [{x}, {y}, {w}, {h}] must lie inside the inner rect ({lo}-{hi}).")
+        if w < tdiv(s, 8) or h < tdiv(s, 8):
+            out.append(f"face box width and height must be at least {tdiv(s, 8)} (is {w} x {h}).")
     if len(face["idle"]) > 4:
         out.append(f"idle holds at most 4 overlays (has {len(face['idle'])}).")
     for o in face["idle"]:
@@ -321,10 +334,13 @@ def hex_of(c):
 
 
 def dump(face):
-    """The sidecar text: every key of FACE_KEYS in order, one per line, lists written flat."""
+    """The sidecar text: every key of FACE_KEYS in order, one per line, lists written flat; `face` only when set
+    (PORTRAITFX1-EX: the sidecars written before it keep their bytes)."""
     data = {"size": face["size"], "border": face["border"], "eyes": face["eyes"], "blink": face["blink"],
-            "lid": hex_of(face["lid"]), "glow": face["glow"], "veins": face["veins"], "mouth": face["mouth"] or [],
-            "rim": hex_of(face["rim"]),
+            "lid": hex_of(face["lid"]), "glow": face["glow"], "veins": face["veins"], "mouth": face["mouth"] or []}
+    if face["face"] is not None:
+        data["face"] = face["face"]
+    data |= {"rim": hex_of(face["rim"]),
             "idle": [{"effect": o["effect"], "color": hex_of(o["color"]), "intensity": float(f32_text(o["intensity"]))}
                      for o in face["idle"]]}
     body = ",\n".join(f"  {json.dumps(k)}: {json.dumps(v, separators=(', ', ': '))}" for k, v in data.items())
@@ -380,6 +396,8 @@ def set_face(png, a):
         raw["veins"] = [_ints(t, 4, "--veins") for t in a.veins]
     if a.mouth is not None:
         raw["mouth"] = [] if a.mouth == "" else _ints(a.mouth, 4, "--mouth")
+    if a.face is not None:
+        raw["face"] = [] if a.face == "" else _ints(a.face, 4, "--face")
     if a.rim is not None:
         raw["rim"] = a.rim
     if a.idle is not None:
@@ -408,8 +426,8 @@ def box(d, x, y, w, h, colour, scale):
 
 
 def draw_anchors(im, face, scale=SCALE):
-    """The inner rect, eye boxes, glow circles (centre dot), vein roots (a dot and a line of `len` along `deg`) and
-    the mouth box over a portrait already scaled by `scale`."""
+    """The inner rect, eye boxes, glow circles (centre dot), vein roots (a dot and a line of `len` along `deg`), the
+    mouth box and the face box over a portrait already scaled by `scale`."""
     ov = Image.new("RGBA", im.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(ov)
     b, s = face["border"], face["size"]
@@ -427,6 +445,8 @@ def draw_anchors(im, face, scale=SCALE):
         box(d, x, y, 1, 1, VEIN, scale)
     if face["mouth"] is not None:
         box(d, *face["mouth"], MOUTH, scale)
+    if face.get("face") is not None:
+        box(d, *face["face"], FACE, scale)
     return Image.alpha_composite(im, ov)
 
 
@@ -513,6 +533,7 @@ def main(argv=None):
     s.add_argument("--glow", nargs="*", metavar="x,y,r")
     s.add_argument("--veins", nargs="*", metavar="x,y,deg,len")
     s.add_argument("--mouth", metavar="x,y,w,h")
+    s.add_argument("--face", metavar="x,y,w,h", help="the face box of the expression effects (\"\": none, derived from the eyes)")
     s.add_argument("--rim", metavar="#rrggbb")
     s.add_argument("--border", type=int)
     s.add_argument("--idle", nargs="*", metavar="effect[:#rrggbb[:intensity]]")

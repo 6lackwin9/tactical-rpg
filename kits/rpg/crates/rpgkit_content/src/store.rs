@@ -25,11 +25,14 @@ fn content_storage(kind: &str, full: &Dict) -> Dict {
     to_storage(source::schema(), "content", kind, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system"))
 }
 
-/// PORTRAITFX1 5.1: a portrait cue row stores its id and only the fields that differ from their schema defaults.
-fn cue_storage(full: &Dict) -> Dict {
-    let kind = source::PORTRAIT_KIND;
+/// PORTRAITFX1 5.1: a portrait cue row (and PORTRAITFX1-EX: an expression-effect row) stores its id and only the
+/// fields that differ from their schema defaults (a float default compared as normalize snaps it too, so 0.85 is the
+/// default whichever way it was read).
+fn cue_storage(kind: &str, full: &Dict) -> Dict {
     let defaults: Dict = fields("content", kind).iter().map(json::dict).map(|f| (json::s(f, "key"), json::get(f, "default").clone())).collect();
-    to_storage(source::schema(), "content", kind, full, |key, v| key != "id" && defaults.get(key).is_some_and(|d| json::deep_equal(d, v)))
+    let snapped = content(kind, &Dict::new());
+    let is_default = |key: &str, v: &Value| defaults.get(key).is_some_and(|d| json::deep_equal(d, v)) || (defaults.contains_key(key) && snapped.get(key).is_some_and(|d| json::deep_equal(d, v)));
+    to_storage(source::schema(), "content", kind, full, |key, v| key != "id" && is_default(key, v))
 }
 
 /// PORTRAITFX1 7: a dialogue node's and a vignette card's `expression` is stored only when it is not "".
@@ -130,7 +133,7 @@ pub fn catalog_storage(kind: &str, entry: &Dict, families: &[Dict]) -> Result<Di
             Ok(row.into_iter().filter(|(k, _)| !(ITEM_DERIVED.contains(&k.as_str()) || (k == "slot" && has_hand) || (k == "hand" && !has_hand))).map(|(k, v)| (k, copy(&v))).collect())
         }
         "item_families" => Ok(content_storage(kind, &source::derive_family(&content(kind, entry)))),
-        k if k == source::PORTRAIT_KIND => Ok(cue_storage(&content(kind, entry))),
+        k if k == source::PORTRAIT_KIND || k == source::EXPRESSION_FX_KIND => Ok(cue_storage(kind, &content(kind, entry))),
         _ => Ok(content_storage(kind, &content(kind, entry))),
     }
 }
@@ -156,10 +159,10 @@ pub const GAME_KINDS: [GameKind; 3] = [
 ];
 
 /// The kinds an upsert takes in the base catalog (catalog kinds, item families, the derived stats (DERIVE1), the
-/// rulesets (RULESET1), the portrait cues (PORTRAITFX1), the combat hook kinds (HOOKS1), the terms (TERMS1),
-/// game-data kinds).
-const BASE_KINDS: [&str; 18] = [
-    "classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain", source::DERIVED_KIND, source::RULESET_KIND, source::PORTRAIT_KIND, source::HOOK_KINDS[0], source::HOOK_KINDS[1], source::HOOK_KINDS[2], source::TERMS_KIND, "maps", "quests", "services",
+/// rulesets (RULESET1), the portrait cues (PORTRAITFX1), the expression effects (PORTRAITFX1-EX), the combat hook
+/// kinds (HOOKS1), the terms (TERMS1), game-data kinds).
+const BASE_KINDS: [&str; 19] = [
+    "classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain", source::DERIVED_KIND, source::RULESET_KIND, source::PORTRAIT_KIND, source::EXPRESSION_FX_KIND, source::HOOK_KINDS[0], source::HOOK_KINDS[1], source::HOOK_KINDS[2], source::TERMS_KIND, "maps", "quests", "services",
 ];
 
 fn game_kind(kind: &str) -> Option<GameKind> {

@@ -8,7 +8,8 @@
 //! - `Faces`: one per screen: a `PortraitFx` per key, the screen's `Budget` and its clock; `draw` holds the sidecar's
 //!   `idle` overlays plus the kit's `holds` for the look, resolves the chain with the engine's expression and draws (the
 //!   initial letter when no file loads); `react` fires the kit's `reactions` for step events (none under `skip_anim`);
-//!   `say` holds a dialogue line's `expression` (PORTRAITFX1-X, 7) over the state rows.
+//!   `say` holds a dialogue line's `expression` (PORTRAITFX1-X, 7) over the state rows; every portrait draws the kit's
+//!   expression-effect rows (PORTRAITFX1-EX, `expression_fx_of`, the catalog kind `portrait_expressions`).
 //! - Colours: the rim key Tallow Amber and the art-bible hues the cue rows and sidecars use (`HUES`).
 //!
 //! Presentation only: no rule, plan, AI, save, trace or sim reads a portrait.
@@ -19,13 +20,13 @@ use aegis_ui::art::Art;
 use aegis_ui::canvas::{rgb, Rect, Rgba};
 use aegis_ui::fx::Clock;
 use aegis_ui::painter::Painter;
-use aegis_ui::portrait_fx::{idle_cues, Budget, Cue, PortraitFx, PortraitOpts};
+use aegis_ui::portrait_fx::{idle_cues, Budget, Cue, ExpressionFx, Mark, MarkBox, PortraitFx, PortraitOpts};
 use aegis_ui::screen::Settings;
 use aegis_ui::ui::{GOLD, SMALL};
 use emberwake_battle::portrait::{self, Look};
 use emberwake_battle::session::Session;
 use emberwake_content::art as kart;
-use emberwake_data::{Catalog, PortraitCue};
+use emberwake_data::{Catalog, PortraitCue, PortraitExpression};
 use emberwake_rules::derived;
 use emberwake_rules::unit::Unit;
 use emberwake_world::state::UnitState;
@@ -57,6 +58,29 @@ pub fn hue_name(hex: &str) -> &'static str {
 pub fn cue_of(row: &PortraitCue) -> Option<Cue> {
     let color = aegis_core::assets::hex_colour(&row.color).map(|c| [c[0], c[1], c[2], 255]);
     Some(Cue::parse(&row.effect, &row.preset)?.with_intensity(row.intensity as f32).with_ms(row.ms.max(0) as u32).with_color(color).with_expression(&row.expression).with_priority(row.priority).with_key(&format!("cue.{}", row.id)))
+}
+
+/// PORTRAITFX1-EX: the kit's expression-effect rows as the engine's (a colour that does not parse is none; the loader
+/// keeps only rows that pass their checks, so that does not happen with loaded rows).
+pub fn expression_fx_of(rows: &[PortraitExpression]) -> Vec<ExpressionFx> {
+    let hex = |s: &str| aegis_core::assets::hex_colour(s).map(|c| [c[0], c[1], c[2], 255]);
+    rows.iter()
+        .map(|r| ExpressionFx {
+            expression: r.id.clone(),
+            tint: hex(&r.tint),
+            tint_strength: r.tint_strength as f32,
+            tint_ms: r.tint_ms.max(0) as u32,
+            mark: Mark::parse(&r.mark),
+            mark_color: hex(&r.mark_color),
+            mark_box: MarkBox::parse(&r.mark_box),
+            mark_x: r.mark_x as f32,
+            mark_y: r.mark_y as f32,
+            mark_size: r.mark_size as f32,
+            mark_pulse_ms: r.mark_pulse_ms.max(0) as u32,
+            shake_px: r.shake_px.max(0) as f32,
+            shake_ms: r.shake_ms.max(0) as u32,
+        })
+        .collect()
 }
 
 /// The portrait tier of a unique folder (`heroes` -> `hero`, ...); `common` for any other.
@@ -226,6 +250,8 @@ pub struct Faces {
     /// The Gallery's anchors check and its own reduce-motion check (None: the setting).
     pub show_anchors: bool,
     pub reduce: Option<bool>,
+    /// PORTRAITFX1-EX: the expression effects every portrait draws (`draw` reads them from the data each frame).
+    pub expressions: Vec<ExpressionFx>,
 }
 
 impl Faces {
@@ -278,12 +304,16 @@ impl Faces {
     pub fn draw(&mut self, p: &mut Painter, cx: &mut Cx, who: &Who, look: &Look, surface: &str, r: Rect) -> bool {
         let data = cx.data.clone();
         let opts = self.opts(&cx.settings);
+        let rows = expression_fx_of(&data.cat.portrait_expressions);
+        if self.expressions != rows {
+            self.expressions = rows;
+        }
         self.draw_parts(p, &mut cx.art, &data.cat.portrait_cues, who, look, surface, r, &opts)
     }
 
     /// `draw` over explicit parts: the holds are the sidecar's `idle`, the state rows of `rows` that hold for `look`
     /// on `surface`, the key's pins and its line's face (`say`); the file is the first of `who`'s chain for the
-    /// expression that wins.
+    /// expression that wins; the expression effects are `self.expressions`.
     #[allow(clippy::too_many_arguments)]
     pub fn draw_parts(&mut self, p: &mut Painter, art: &mut Art, rows: &[PortraitCue], who: &Who, look: &Look, surface: &str, r: Rect, opts: &PortraitOpts) -> bool {
         let now = self.now();
@@ -292,6 +322,7 @@ impl Faces {
         held.extend(self.pins.get(&who.key).cloned().unwrap_or_default());
         held.extend(self.lines.get(&who.key).cloned());
         let fx = self.fx.entry(who.key.clone()).or_insert_with(|| PortraitFx::new(&who.key));
+        fx.set_expressions(&self.expressions);
         // The expression picks the file, the file's sidecar adds idle holds that may change the expression: settle it
         // in at most two passes (holding the same set twice changes nothing).
         let mut expression = fx.expression(now).to_string();
@@ -410,6 +441,68 @@ pub(crate) mod tests {
     fn the_kit_effect_names_are_the_engines() {
         assert_eq!(emberwake_data::PORTRAIT_EFFECTS, aegis_ui::portrait_fx::EFFECTS);
         assert_eq!(emberwake_data::PORTRAIT_JOLTS, aegis_ui::portrait_fx::PORTRAIT_JOLTS);
+        // PORTRAITFX1-EX: the marks and their boxes
+        assert_eq!(emberwake_data::PORTRAIT_MARKS, aegis_ui::portrait_fx::MARKS);
+        assert_eq!(emberwake_data::PORTRAIT_MARK_BOXES, aegis_ui::portrait_fx::MARK_BOXES);
+    }
+
+    /// An expression-effect row from its non-default keys (the loader's typed row).
+    pub(crate) fn ex_row(v: Value) -> PortraitExpression {
+        ex_row_of(&v)
+    }
+
+    pub(crate) fn ex_row_of(v: &Value) -> PortraitExpression {
+        PortraitExpression::from_obj(v.as_object().expect("an object"))
+    }
+
+    /// EX (the binding): the kit's rows reach the engine field for field; a line's `angry` tints the face box the
+    /// sidecar's eye boxes give (its centre by the engine's `tinted` at the row's strength) and draws its mark; a portrait
+    /// with no sidecar draws its picture untouched (no tint, no crash); the agent state names what drew.
+    #[test]
+    fn ex_the_expression_rows_draw_through_the_binding() {
+        let angry = ex_row(json!({"id": "angry", "tint": "#e11d48", "tint_strength": 0.4, "mark": "vein", "mark_color": "#e11d48", "mark_x": 0.9, "mark_y": 0.1, "mark_pulse_ms": 900}));
+        let hurt = ex_row(json!({"id": "hurt", "tint": "#e11d48", "tint_strength": 0.8, "tint_ms": 240, "shake_px": 2, "shake_ms": 220}));
+        let fx = expression_fx_of(&[angry.clone(), hurt]);
+        assert_eq!(fx[0].tint, Some(rgb(0xe1, 0x1d, 0x48)));
+        assert_eq!((fx[0].mark, fx[0].mark_box, fx[0].mark_pulse_ms, fx[0].mark_x), (Some(Mark::Vein), MarkBox::Face, 900, 0.9));
+        assert_eq!((fx[1].tint_ms, fx[1].shake().map(|s| (s.px, s.ms))), (240, Some((2.0, 220))));
+        assert_eq!(fx[1].mark, None);
+
+        let sidecar = json!({"size": 96, "eyes": [[30, 40, 10, 6], [56, 40, 10, 6]], "blink": false});
+        let root = layer("ex", "portraits/npcs/ida.png", 96, [120, 90, 70], Some(sidecar));
+        let mut art = Art::layered(Layers::of(vec![root]));
+        let who = Who { key: "ida".into(), tier: "npc".into(), id: "ida".into(), name: "Ida".into(), ..Who::default() };
+        let plain = Who { key: "zed".into(), tier: "npc".into(), id: "zed".into(), name: "Zed".into(), file: "portraits/npcs/ida.png".into(), ..Who::default() };
+        let mut g = gfx();
+        let opts = PortraitOpts { reduce_motion: true, ..PortraitOpts::default() };
+        let mut faces = Faces { expressions: fx, ..Faces::default() };
+        faces.clock = Clock { ms: 1000.0, hold: 0.0 };
+        let mut ui: Ui<()> = Ui::new(&mut g, (-500, -500), true);
+        faces.begin();
+        faces.say("ida", "angry");
+        assert!(faces.draw_parts(&mut ui.p, &mut art, &[], &who, &Look::default(), "dialogue", Rect::new(0, 0, 96, 96), &opts));
+        // the line's face starts at its first draw; draw again once it has eased in
+        faces.clock = Clock { ms: 2000.0, hold: 0.0 };
+        faces.begin();
+        faces.say("ida", "angry");
+        assert!(faces.draw_parts(&mut ui.p, &mut art, &[], &who, &Look::default(), "dialogue", Rect::new(0, 0, 96, 96), &opts));
+        let face = art.face("portraits/npcs/ida.png").cloned().expect("the sidecar");
+        let fb = face.face_box().expect("a face box from the eyes");
+        let img = faces.get("ida").and_then(|f| f.composed()).expect("composed").clone();
+        let (cx, cy) = (fb[0] + fb[2] / 2, fb[1] + fb[3] / 2);
+        let i = ((cy * img.w + cx) * 4) as usize;
+        let want = aegis_ui::portrait_fx::tinted([120, 90, 70, 255], rgb(0xe1, 0x1d, 0x48), 0.4);
+        assert_eq!(&img.px[i..i + 4], &want[..], "the face box centre at the row's strength");
+        let state = faces.get("ida").unwrap().state(faces.now());
+        assert_eq!(state["expression_fx"], json!(["tint", "mark"]), "{state}");
+
+        // a portrait file with no sidecar: no box, so nothing but the picture
+        let root = layer("ex_plain", "portraits/npcs/ida.png", 96, [120, 90, 70], None);
+        let mut bare = Art::layered(Layers::of(vec![root]));
+        faces.begin();
+        faces.say("zed", "angry");
+        assert!(faces.draw_parts(&mut ui.p, &mut bare, &[], &plain, &Look::default(), "dialogue", Rect::new(0, 0, 96, 96), &opts));
+        assert_eq!(faces.get("zed").unwrap().state(faces.now())["expression_fx"], json!([]), "no sidecar: no tint, no mark");
     }
 
     /// G1: a battle unit's look carries its statuses and its member's conditions; a member's look the HP its save
