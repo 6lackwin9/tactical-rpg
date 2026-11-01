@@ -1,0 +1,30 @@
+{
+  "model": "imagen-3.0-generate-002",
+  "id": "proctor_quell",
+  "prompt": "Edit this pixel-art portrait. Keep everything exactly the same: the framing, the head size and position, the pose, the face and its expression, hair, clothing, every accessory, the background, the lighting, the palette and the pixel style. Change only one thing: remove the small purple smoke wisp beside his chin, painting the dark background behind it.",
+  "reference": "C:/dev/localgen/review/portraitfx1xa/refs/proctor_quell_neutral.png",
+  "prompts_file": null,
+  "time": "2026-11-01T14:31:38.000000+00:00",
+  "n": 1,
+  "references": [
+    "C:/dev/localgen/review/portraitfx1xa/refs/proctor_quell_neutral.png"
+  ],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "quell_face_neutral_q1793542741",
+  "metadata": {
+    "asset_id": "proctor_quell",
+    "task": "portraitfx1xa",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "kind": "face_edit",
+      "cell": "neutral"
+    }
+  },
+  "mark_cleared": true,
+  "kind": "face_edit",
+  "cell": "neutral",
+  "notes": "Verified resolution 1024x1024 and aspect ratio within 3% tolerance."
+}

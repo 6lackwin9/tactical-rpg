@@ -1,0 +1,30 @@
+{
+  "model": "imagen-3.0-generate-002",
+  "id": "aline",
+  "prompt": "Edit this pixel-art portrait. Keep everything exactly the same: the framing, the head size and position, the pose, hair, clothing, every accessory and scar, the background, the lighting, the palette and the pixel style. Change only the facial expression to: Angry: a deep scowl, brows drawn down hard into a V, nostrils flared, teeth bared or jaw clenched, eyes narrowed and glaring, cheeks flushed red; unmistakably furious.",
+  "reference": "C:/dev/localgen/review/portraitfx1xa/refs/aline_neutral.png",
+  "prompts_file": null,
+  "time": "2026-11-01T14:25:53.000000+00:00",
+  "n": 1,
+  "references": [
+    "C:/dev/localgen/review/portraitfx1xa/refs/aline_neutral.png"
+  ],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "aline_face_angry_q1793542734",
+  "metadata": {
+    "asset_id": "aline",
+    "task": "portraitfx1xa",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "kind": "face_edit",
+      "cell": "angry"
+    }
+  },
+  "mark_cleared": true,
+  "kind": "face_edit",
+  "cell": "angry",
+  "notes": "Verified resolution 1024x1024 and aspect ratio within 3% tolerance."
+}

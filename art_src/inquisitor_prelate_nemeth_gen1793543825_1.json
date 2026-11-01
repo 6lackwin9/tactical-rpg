@@ -1,0 +1,30 @@
+{
+  "model": "imagen-3.0-generate-002",
+  "id": "inquisitor_prelate_nemeth",
+  "prompt": "Edit this pixel-art portrait. Keep everything exactly the same: the framing, the head size and position, the pose, hair, clothing, every accessory and scar, the background, the lighting, the palette and the pixel style. Change only the facial expression to: Afraid: eyes wide, brows raised, mouth slightly open, head drawn in.",
+  "reference": "C:/dev/localgen/review/portraitfx1xa/refs/inquisitor_prelate_nemeth_neutral.png",
+  "prompts_file": null,
+  "time": "2026-11-01T14:29:44.000000+00:00",
+  "n": 1,
+  "references": [
+    "C:/dev/localgen/review/portraitfx1xa/refs/inquisitor_prelate_nemeth_neutral.png"
+  ],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "nemeth_face_afraid_q1793542740",
+  "metadata": {
+    "asset_id": "inquisitor_prelate_nemeth",
+    "task": "portraitfx1xa",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "kind": "face_edit",
+      "cell": "afraid"
+    }
+  },
+  "mark_cleared": true,
+  "kind": "face_edit",
+  "cell": "afraid",
+  "notes": "Verified resolution 1024x1024 and aspect ratio within 3% tolerance."
+}
