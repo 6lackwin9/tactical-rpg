@@ -35,7 +35,7 @@ planner (TASKS, ROADMAP, decisions, HISTORY, `.claude/*`, CLAUDE.md), design-bra
 | 13 | CLN-50 | C | Manual planning mode (MM1), superseded by picks; no screen sets it since INPUT1-U slice 2 | S | logic-builder | kit + game | after INPUT1-U | proposed |
 | 14 | CLN-40 | A | Content checks parity: slim engine golden of the broken-entry cases, or delete (Q-A3) | M | logic-builder | game | now | proposed |
 | 15 | CLN-41 | A | Journey parity: engine random-walk golden on the shipped data, or delete (Q-A4) | M | logic-builder | game | now | done |
-| 16 | CLN-51 | C | `deferred_plan` in the battle screen rebuilds the host's round_intent handling (review finding) | S | logic-builder | kit + game | after INPUT1-U (superseded if slice 3 takes it) | proposed |
+| 16 | CLN-51 | C | `deferred_plan` in the battle screen rebuilds the host's round_intent handling (review finding) | S | logic-builder | kit + game | after INPUT1-U (superseded if slice 3 takes it) | done 2026-11-01 (superseded by INPUT1-U slice 3: `Deferred`, `preview_round`) |
 | 17 | CLN-53 | C | Oversized docs: archive built STAGE1 and WINDUP1; split CANON, STORY_GUIDE; split INPUT1, ROSTER1, CAMPAIGN1 once their open rows land | S-M | design-brainstorm | docs | now / after | proposed |
 | 18 | CLN-52 | C | `emberwake_gui/src/battle.rs` (10,148 lines; ~4,100 of them 16 test modules): move tests out, then split the screen | M-L | logic-builder | game | at a flush point after INPUT1-U, -T, -PB, -AP, VISCLAR1-A | proposed |
 
@@ -446,7 +446,7 @@ Manual planning mode. Scope C. Status: proposed. Size S. Lane logic-builder. Lay
 
 ### CLN-51
 
-Duplicated planning in the battle screen. Scope C. Status: proposed. Size S. Lane logic-builder. Layer kit + game.
+Duplicated planning in the battle screen. Scope C. Status: done 2026-11-01 (superseded by INPUT1-U slice 3: `Deferred` previews through `round_intent_plan::preview_round` and `ai::plan_party_intents`, the host's own functions; the lines below are the original finding). Size S. Lane logic-builder. Layer kit + game.
 
 - Where: `emberwake_gui/src/battle.rs:5244-5268` (`deferred_plan` re-implements the host's `preset` and `round_intent`
   requests on copies: `set_intent`, `set_target`, `plan_unit`), the hotkey self-target rule (`battle.rs:2562`); review
