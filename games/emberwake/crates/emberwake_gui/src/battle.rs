@@ -10,7 +10,8 @@
 //! Space step / next round, A autoplay, Z undo, L log, R restart (arena), Esc close; hold Alt to outline every unit,
 //! covered or not (STAGE1-O). Timeline battles (INPUT1-U): a click on a target sets the round target and opens the skill
 //! menu (picks through the host's `pick`, the planner's ghost fills the rest), keys 1-9 are the hero's skill hotkeys, S
-//! targets the hero itself, Z undoes the last pick.
+//! targets the hero itself, Z undoes the last pick. INPUT1-T: T opens the full timeline view over the grid panel
+//! (`timeline_view.rs`, every unit's track; T or Esc closes it).
 //! ENCOUNTER2-C2 (docs/specs/ENCOUNTER2_C.md 3.3): each new talk cue of `Session::talks` opens the shared talk box
 //! (`talk.rs`) once its step's impacts have played, over a 35 % veil, the speaker's token in the gold ring; while it is
 //! open the screen sends no request, autoplay waits and every board click and battle key is swallowed; replies run in
@@ -22,6 +23,7 @@ use crate::intent_text;
 use crate::fx::{self, Impact, Shown};
 use crate::portraits::Faces;
 use crate::talk::{self, TalkAct};
+use crate::timeline_view;
 use aegis_ui::fx::{Camera, Clock, Fx, Layer};
 use crate::stage::{self, Geom, Item, Pass, Through, View};
 use crate::tuning::Tuning;
@@ -64,6 +66,8 @@ const AP_ANIM_MS: f32 = 150.0;
 /// The battle screen's panels by name (`BattleScreen::panels`; the UI Gallery's battle panel entries).
 pub const PANELS: [&str; 7] = ["strip", "party", "hero", "grid", "hostiles", "intel", "bar"];
 const GRID_X: i32 = 128;
+/// INPUT1 TV6: the timeline view's padding inside the grid panel's rect.
+const TV_PAD: i32 = 4;
 const GRID_Y: i32 = 30;
 const TACTICS: [&str; 6] = ["balanced", "aggressive", "focus_weakest", "defensive", "ranged_kite", "economy"];
 const TACTIC_LABELS: [&str; 6] = ["Balanced", "All-out Attack", "Focus Weakest", "Guard & Counter", "Kite at Range", "Economy"];
@@ -133,6 +137,11 @@ pub enum Action {
     StayPick(usize),
     /// ENCOUNTER2-C DT9: a reply or Continue in the open battle talk's box.
     Talk(TalkAct),
+    /// INPUT1 TV1: key T opens and closes the full timeline view.
+    TimelineView,
+    /// TV5: a click in the open timeline view: a party track (or one of its spans) selects that hero; anything else in
+    /// the view (a block, an enemy track, its backdrop) does nothing, so the board under it takes no click.
+    TimelinePick(Option<usize>),
 }
 
 /// ENCOUNTER2-C DT6: an open battle talk: the tree it plays and its runner (a scene: no services).
@@ -1253,6 +1262,10 @@ pub struct BattleScreen {
     round_ap: (i32, Vec<(usize, i32)>),
     /// The AP gauge as last drawn (the agent link's `ap_gauge`; None: hidden).
     ap_gauge: Option<Value>,
+    /// INPUT1 TV1: the full timeline view is open (key T), and the view as last drawn (the agent link's
+    /// `timeline_view`).
+    tv_open: bool,
+    tv_shown: Option<aegis_ui::timeline::Timeline>,
 }
 
 /// INPUT1-AP (AP10): the AP gauge's levels in pips (full, solid outline) moving from `from` to `to` over `AP_ANIM_MS`
@@ -1347,6 +1360,8 @@ impl BattleScreen {
             ap_anim: None,
             round_ap: (0, Vec::new()),
             ap_gauge: None,
+            tv_open: false,
+            tv_shown: None,
         }
     }
 
@@ -2169,6 +2184,19 @@ impl BattleScreen {
                 }
             }
             Action::ClosePopup => self.popup = None,
+            Action::TimelineView => {
+                if self.tv_open || self.timeline_view_on() {
+                    self.tv_open = !self.tv_open;
+                }
+            }
+            Action::TimelinePick(Some(u)) => {
+                // TV5: a party track selects its hero (the view stays open; the selected hero's track selects nothing)
+                if self.session().w.allies.contains(&u) && self.selected != Some(u) {
+                    self.selected = Some(u);
+                    self.popup = None;
+                }
+            }
+            Action::TimelinePick(None) => {}
             Action::StayPick(c) => {
                 let r = self.send(cx, json!({"cmd": "stay_pick", "unit": c}));
                 if r["ok"] == json!(true) {
@@ -2451,6 +2479,17 @@ impl BattleScreen {
     fn inspected(&self) -> Option<usize> {
         let s = self.host.session.as_ref().filter(|s| ri::on(&s.w))?;
         self.inspect.filter(|&(u, r)| r == s.current_round && u < s.w.units.len()).map(|(u, _)| u)
+    }
+
+    /// INPUT1 TV1: whether key T may open the full timeline view: a timeline battle (the rule `round_intent`, or any
+    /// ruleset beyond classic); classic keeps its screen as it was.
+    fn timeline_view_on(&self) -> bool {
+        self.host.session.as_ref().is_some_and(|s| ri::on(&s.w) || !s.w.ruleset.rules.is_empty())
+    }
+
+    /// TV1: the timeline view is open and shown (a classic battle never shows it).
+    fn timeline_view_open(&self) -> bool {
+        self.tv_open && self.timeline_view_on()
     }
 
     /// SL2: the unit (token or card, either side) under the mouse in the last frame (round intent only).
@@ -3027,6 +3066,8 @@ impl Screen<GameCx> for BattleScreen {
             Key::Char(c @ '1'..='9') if self.planning() => self.hotkey(cx, c as usize - '0' as usize),
             // SL4: S targets the selected hero itself (the self menu)
             Key::Char('s') if self.planning() => self.act(cx, Action::SelfTarget),
+            // INPUT1 TV1: T opens and closes the full timeline view (a timeline battle, planning and playback)
+            Key::Char('t') => self.act(cx, Action::TimelineView),
             _ => {}
         }
     }
@@ -3052,9 +3093,12 @@ impl Screen<GameCx> for BattleScreen {
         if self.talk.is_some() {
             return;
         }
-        // INPUT1 SL3 (round intent): the menu, the log, the inspected unit, then the selection; then as before
+        // INPUT1 SL3 (round intent): the menu, the log, the inspected unit, then the selection; then as before. TV1: an
+        // open timeline view closes first
         let timeline = self.host.session.as_ref().is_some_and(|s| ri::on(&s.w));
-        if self.popup.is_some() {
+        if self.tv_open {
+            self.tv_open = false;
+        } else if self.popup.is_some() {
             self.popup = None;
         } else if self.show_log {
             self.show_log = false;
@@ -3098,6 +3142,10 @@ impl Screen<GameCx> for BattleScreen {
             out["inspect"] = json!(self.inspected());
             // INPUT1-AP: the AP gauge as last drawn (pips "F H Hg Sg S", red, its "-<n>" label and side; null: hidden)
             out["ap_gauge"] = self.ap_gauge.clone().unwrap_or(Value::Null);
+        }
+        // INPUT1 TV1: the full timeline view as last drawn (null: closed; no key in classic)
+        if self.timeline_view_on() {
+            out["timeline_view"] = self.tv_shown.as_ref().filter(|_| self.timeline_view_open()).map(timeline_view::json).unwrap_or(Value::Null);
         }
         // RULESET1-U slice 5: the overlay groups' flags and, once the round is over, its summary (round intent only)
         if let Some(sess) = self.host.session.as_ref().filter(|x| ri::on(&x.w)) {
@@ -3396,7 +3444,7 @@ fn inspect_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
 /// AP9 (INPUT1 7): a party member's AP numbers, one line each: "AP <now> of <max>", "Plan: <spent> (picked <picked>,
 /// auto-filled <filled>)", "Left: <left>", "Next round: +<gain> -> <next> (Rest +<rest_gain>)", and with more than one
 /// AP a pip (AP6) "1 pip = <u> AP".
-fn ap_lines(f: &rip::ApForecast) -> Vec<String> {
+pub(crate) fn ap_lines(f: &rip::ApForecast) -> Vec<String> {
     let mut lines = vec![
         format!("AP {} of {}", f.now, f.max),
         format!("Plan: {} (picked {}, auto-filled {})", f.spent, f.picked, f.filled),
@@ -4329,6 +4377,22 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         }
     }
 
+    // INPUT1 TV1-TV6: the full timeline view over the grid panel's rect (key T; T or Esc closes it): the engine widget
+    // on the shared builder (`timeline_view`), 4 px inside the panel; its backdrop keeps the board's clicks and hover
+    // cards from showing through
+    if g.timeline_view_open() {
+        let r = Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4);
+        let opts = timeline_view::Opts { viewed: s.current_round, reveal_all: false, foresight_off, show_tells, layers, selected: sel, block: None, shown: sel.zip(shown).map(|(u, (pw, pp))| (u, pw, pp)) };
+        let t = timeline_view::build(s, &opts);
+        ui.push("timeline.backdrop", "backdrop", "", r, true, false, Some(Action::TimelinePick(None)), Vec::new());
+        ui.p.panel(r, rgba(10, 14, 24, 250), BORDER, RADIUS);
+        let on_track = |k: &str| Action::TimelinePick(timeline_view::unit_of(k));
+        t.draw(&mut ui, "timeline", Rect::new(r.x + TV_PAD, r.y + TV_PAD, r.w - 2 * TV_PAD, r.h - 2 * TV_PAD), |_| Action::TimelinePick(None), on_track, |k, _| on_track(k));
+        g.tv_shown = Some(t);
+    } else {
+        g.tv_shown = None;
+    }
+
     if let Some(pop) = g.popup.clone() {
         let r = pop.rect(g.menu_row);
         ui.push("popup.backdrop", "backdrop", "", Rect::new(0, 0, W, H), true, false, Some(Action::ClosePopup), Vec::new());
@@ -4476,7 +4540,7 @@ pub(crate) fn overlay_default(id: &str) -> bool {
 /// ({<group>: false}) switches a group off; slice 6 lists them on the Settings Battle tab; VISCLAR1 slice A adds
 /// `first_move` and `all_bars`, off by default (VC6). Classic draws none of them whatever the flags say.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Layers {
+pub(crate) struct Layers {
     /// Slice 3: the reach band, the Maneuver front, the valid-target rings, the stealth veils, the hero's moves, the
     /// target ring, the enemy facings.
     band: bool,
@@ -4491,13 +4555,13 @@ struct Layers {
     glyphs: bool,
     /// VISCLAR1 VC1: the tell's kind chip on an enemy's token (off by default).
     first_move: bool,
-    badges: bool,
+    pub(crate) badges: bool,
     /// Slice 5: poise bars, BREAK markers, wind-up / impact / recovery on the strip, hit forecasts, the round summary.
     poise: bool,
     /// VISCLAR1 VC3: every unit's token bars, not only the focus set's (off by default).
     all_bars: bool,
-    breaks: bool,
-    parts: bool,
+    pub(crate) breaks: bool,
+    pub(crate) parts: bool,
     forecasts: bool,
     summary: bool,
     /// HOOKS1-UI slice 1: ground hazards (GH6), the arena telegraph (AH3).
@@ -4526,7 +4590,7 @@ impl Layers {
     };
 
     /// The flags of the settings key `battle_overlays` (a missing group, or no key, takes its default: VC6).
-    fn of(v: &Value) -> Layers {
+    pub(crate) fn of(v: &Value) -> Layers {
         let on = |id: &str| v.get(id).and_then(Value::as_bool).unwrap_or_else(|| overlay_default(id));
         Layers {
             band: on("band"),
@@ -4613,7 +4677,7 @@ pub(crate) fn party_foresight_off(settings: &Value, debug: bool) -> bool {
 /// VC4: the records `v` as the screen shows them; with `off` (Party foresight off) a plan that only a party foresight
 /// passive revealed reads unrevealed (no plan lines, no readers); a reveal by enrage or by the battle's `plan_reveal`
 /// stays. Display only: the kit's records are unchanged.
-fn seen_intents(w: &World, mut v: Vec<Intent>, off: bool) -> Vec<Intent> {
+pub(crate) fn seen_intents(w: &World, mut v: Vec<Intent>, off: bool) -> Vec<Intent> {
     if !off {
         return v;
     }
@@ -5374,21 +5438,8 @@ struct SpanParts {
 /// planning, from its plan (a command that winds up, P5, longer than a block: its wind-up blocks, then its impact
 /// block); once confirmed, from its scheduled actions (start, impact, recovery to its end; broken by a break, P7).
 fn span_parts(s: &Session, u: usize, entries: &[(i32, i32, String, String, Option<String>, i32, i32)]) -> Vec<SpanParts> {
-    use aegis_ui::timeline::{Part, PartStyle};
+    use crate::timeline_view::parts_of;
     let w = &s.w;
-    let parts_of = |start: i32, impact: i32, end: i32, winds: bool| {
-        let mut out = Vec::new();
-        if winds && impact > start {
-            out.push(Part { start, end: impact - 1, style: PartStyle::Windup });
-        }
-        if winds && (impact > start || end > impact) {
-            out.push(Part { start: impact, end: impact, style: PartStyle::Impact });
-        }
-        if end > impact {
-            out.push(Part { start: impact + 1, end, style: PartStyle::Recovery });
-        }
-        out
-    };
     if s.plan_confirmed {
         return entries
             .iter()
@@ -11389,5 +11440,298 @@ mod visclar_tests {
         b.draw(&mut cx, &mut g, (-500, -500), true);
         let a = arrows(&b, &cx);
         assert!(a.iter().filter(|x| read.iter().any(|e| x["unit"] == json!(e))).all(|x| x["points"].as_array().unwrap().len() == 2), "{a:?}");
+    }
+}
+
+#[cfg(test)]
+mod timeline_view_tests {
+    //! INPUT1-T (INPUT1.md 8, TV1-TV7): the full timeline view over the grid panel (key T), built by
+    //! `timeline_view::build`, the Gallery's Battle timeline's builder too.
+    use super::*;
+    use crate::timeline_view::{masked_note, track_key, unit_of};
+    use aegis_ui::timeline::{Timeline, Track, HEADER_H, ROW_H, RULER_H};
+    use emberwake_rules::ruleset::TIMELINE;
+
+    fn arena(ruleset: Option<&str>, reveal: bool) -> (Cx, Gfx, BattleScreen) {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        cx.settings.v["battle_view"] = json!("flat");
+        let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+        let mut b = BattleScreen::arena_with(&cx, None, &encounter, ruleset.map(String::from), "", reveal);
+        assert!(b.host.session.is_some(), "the battle starts: {}", b.message);
+        // the planning start drafts the ghosts (GH2 a)
+        b.tick(&mut cx);
+        (cx, crate::hud::hud_tests::gfx(), b)
+    }
+
+    fn s(b: &BattleScreen) -> &Session {
+        b.host.session.as_ref().unwrap()
+    }
+
+    fn drawn(cx: &mut Cx, g: &mut Gfx, b: &mut BattleScreen) {
+        b.draw(cx, g, (-500, -500), true);
+    }
+
+    /// The view as last drawn (it must be open).
+    fn view(b: &BattleScreen) -> &Timeline {
+        b.tv_shown.as_ref().expect("the view is open")
+    }
+
+    fn tracks(t: &Timeline, section: usize) -> &[Track] {
+        &t.sections[section].tracks
+    }
+
+    fn track(t: &Timeline, u: usize) -> &Track {
+        t.sections.iter().flat_map(|x| &x.tracks).find(|x| x.key == track_key(u)).unwrap_or_else(|| panic!("no track for unit {u}"))
+    }
+
+    /// TV1: T opens the view over the grid panel's rect and closes it; Esc closes it first (the inspected unit stays,
+    /// SL3's steps after); while open the board takes no click (the view's widgets are on top); classic: T does nothing.
+    #[test]
+    fn t_opens_the_view_over_the_grid_and_t_or_esc_closes_it() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), false);
+        drawn(&mut cx, &mut g, &mut b);
+        assert_eq!(b.state(&cx)["timeline_view"], Value::Null, "closed at the start");
+        let foe = s(&b).w.enemies.iter().copied().find(|&e| s(&b).w.has(e)).unwrap();
+        let cell = b.w.iter().find(|x| x.id == format!("unit.{foe}")).map(|x| x.rect).expect("the foe's token");
+        b.key(&mut cx, Key::Char('t'));
+        drawn(&mut cx, &mut g, &mut b);
+        assert!(b.state(&cx)["timeline_view"].is_object());
+        let grid = b.panels.iter().find(|p| p.0 == "grid").unwrap().1;
+        assert_eq!((grid.x, grid.y, grid.w, grid.h), (126, 28, 388, 292), "the grid panel's rect");
+        let back = b.w.iter().find(|x| x.id == "timeline.backdrop").expect("the backdrop").rect;
+        assert_eq!(back, grid, "the view takes the grid panel's rect");
+        assert!(matches!(aegis_ui::ui::hit(&b.w, (cell.x + cell.w / 2, cell.y + cell.h / 2)), Some(Action::TimelinePick(_))), "the board takes no click");
+        b.key(&mut cx, Key::Char('t'));
+        drawn(&mut cx, &mut g, &mut b);
+        assert_eq!(b.state(&cx)["timeline_view"], Value::Null, "T closes it");
+        assert!(b.w.iter().all(|x| !x.id.starts_with("timeline.")));
+        b.key(&mut cx, Key::Char('t'));
+        b.inspect_unit(foe);
+        b.escape(&mut cx);
+        assert!(!b.tv_open && b.inspected() == Some(foe), "Esc closes the view first");
+        b.escape(&mut cx);
+        assert_eq!(b.inspected(), None, "then SL3's steps");
+        let (mut cx, mut g, mut b) = arena(None, false);
+        b.key(&mut cx, Key::Char('t'));
+        drawn(&mut cx, &mut g, &mut b);
+        assert!(!b.tv_open && b.state(&cx).get("timeline_view").is_none(), "classic: no view, no key");
+    }
+
+    /// TV2: "Party" (allies in roster order, present or acting) above "Enemies" (the hostile list's order); the ruler
+    /// is the round's blocks; no playhead while planning.
+    #[test]
+    fn the_sections_hold_one_track_per_unit_in_order() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), false);
+        b.tv_open = true;
+        drawn(&mut cx, &mut g, &mut b);
+        let t = view(&b);
+        let w = &s(&b).w;
+        assert_eq!(t.sections.iter().map(|x| x.title.as_str()).collect::<Vec<_>>(), ["Party", "Enemies"]);
+        let keys = |side: &[usize]| side.iter().copied().filter(|&u| w.has(u) || s(&b).resolver.scheduled.iter().any(|a| a.unit == u)).map(track_key).collect::<Vec<_>>();
+        assert_eq!(tracks(t, 0).iter().map(|x| x.key.clone()).collect::<Vec<_>>(), keys(&w.allies));
+        assert_eq!(tracks(t, 1).iter().map(|x| x.key.clone()).collect::<Vec<_>>(), keys(&w.enemies));
+        assert_eq!((t.blocks, t.playhead), (s(&b).def.total_blocks, 0));
+        assert!(tracks(t, 0).iter().chain(tracks(t, 1)).all(|x| !x.hatched), "nobody is down yet");
+    }
+
+    /// TV3: a party track is the member's plan (each compiled entry a span, the planner's ghost in the ghost style),
+    /// its label leads with the intent's letter, its card holds AP9's lines; the selected hero's track is selected.
+    #[test]
+    fn a_party_track_is_the_plan_with_its_ghost_and_ap_card() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), false);
+        b.tv_open = true;
+        drawn(&mut cx, &mut g, &mut b);
+        let t = view(&b).clone();
+        let sess = s(&b);
+        let h = b.selected.expect("a hero is selected");
+        assert_eq!(t.selected_track, Some(track_key(h)));
+        for &u in sess.w.allies.iter().filter(|&&u| sess.w.has(u)) {
+            let tr = track(&t, u);
+            let entries = sess.plan.compile(&sess.w, u).entries;
+            let ghosts = rip::ghost_entries(&sess.w, &sess.plan, u);
+            let spans: Vec<(i32, i32, bool)> = entries.iter().enumerate().map(|(i, e)| (e.start_block, e.end_block(&sess.w), ghosts[i] && sess.w.cat.skills[e.skill].kind != "REST")).collect();
+            assert_eq!(tr.segments.iter().map(|x| (x.start, x.end, x.ghost)).collect::<Vec<_>>(), spans, "unit {u}");
+            assert!(tr.segments.iter().filter(|x| x.ghost).all(|x| x.tip[0].0.starts_with("Auto-filled")), "GH8: a ghost's card");
+            let i = ri::intent_of(&sess.w, u).expect("the ghost's intent");
+            assert_eq!(tr.label, format!("{} {}", &i.name()[..1], sess.w.units[u].name));
+            let card: Vec<String> = tr.tip.iter().map(|l| l.0.clone()).collect();
+            for l in ap_lines(&rip::ap_forecast(&sess.w, &sess.plan, u)) {
+                assert!(card.contains(&l), "AP9 line {l:?} in {card:?}");
+            }
+        }
+        assert!(t.sections[0].tracks.iter().any(|x| x.segments.iter().any(|g| g.ghost)), "the planner's ghost shows");
+    }
+
+    /// TV4: while planning an unrevealed enemy is masked: its note is the intent and target and the tell (no other
+    /// skill of its plan), its impact badges are marks, it holds no span; with the tells hidden the note drops the tell.
+    #[test]
+    fn an_unrevealed_enemy_is_masked_with_its_intent_tell_and_badges() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), false);
+        b.tv_open = true;
+        drawn(&mut cx, &mut g, &mut b);
+        let t = view(&b).clone();
+        let sess = s(&b);
+        let w = &sess.w;
+        let tells = sess.enemy_intents();
+        let mut masked = 0;
+        for tr in tracks(&t, 1) {
+            let e = unit_of(&tr.key).unwrap();
+            let rec = tells.iter().find(|r| r.unit == e);
+            if rec.is_some_and(|r| r.revealed) {
+                continue;
+            }
+            masked += 1;
+            let note = tr.masked.clone().expect("masked");
+            assert_eq!(note, masked_note(w, rec, true));
+            assert!(tr.segments.is_empty(), "no span of its plan in the value");
+            let r = rec.expect("a tell");
+            if let Some(head) = intent_text::round_head(w, r) {
+                assert!(note.starts_with(&head), "{note}");
+            }
+            for a in sess.resolver.scheduled.iter().filter(|a| a.unit == e && a.command.name != r.line.skill) {
+                assert!(!note.contains(&a.command.name), "{note} names {}", a.command.name);
+            }
+            let impacts: Vec<(i32, String)> = r.impacts.iter().map(|(b, k)| (*b, if *k == emberwake_battle::intent::HIT { "!" } else { "*" }.to_string())).collect();
+            assert_eq!(tr.marks.iter().map(|m| (m.block, m.glyph.clone())).collect::<Vec<_>>(), impacts, "V1's badges as marks");
+            assert!(tr.marks.iter().all(|m| m.colour == if m.glyph == "!" { FOE } else { GOLD }));
+        }
+        assert!(masked > 0, "an enemy plans in secret");
+        cx.settings.v["show_tells"] = json!(false);
+        drawn(&mut cx, &mut g, &mut b);
+        for tr in tracks(view(&b), 1).iter().filter(|x| x.masked.is_some()) {
+            let e = unit_of(&tr.key).unwrap();
+            assert_eq!(tr.masked.clone().unwrap(), masked_note(&s(&b).w, s(&b).enemy_intents().iter().find(|r| r.unit == e), false));
+            assert!(!tr.masked.clone().unwrap().contains("Next:"));
+        }
+    }
+
+    /// TV4: during playback an unrevealed enemy's track holds only its actions that have started (block <= the
+    /// playhead); the playhead is the resolving block.
+    #[test]
+    fn during_playback_an_unrevealed_enemy_shows_only_what_has_started() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), false);
+        b.act(&mut cx, Action::Confirm);
+        b.tv_open = true;
+        let mut checked = 0;
+        assert!(s(&b).plan_confirmed, "{}", b.message);
+        while s(&b).phase != Phase::Replay {
+            drawn(&mut cx, &mut g, &mut b);
+            let t = view(&b).clone();
+            let sess = s(&b);
+            assert_eq!(t.playhead, sess.current_block);
+            let rounds = sess.round_intents();
+            for tr in tracks(&t, 1) {
+                let e = unit_of(&tr.key).unwrap();
+                assert!(tr.masked.is_none(), "no mask during playback");
+                if rounds.iter().find(|r| r.unit == e).is_some_and(|r| r.revealed) {
+                    continue;
+                }
+                assert!(tr.segments.iter().all(|x| x.start <= sess.current_block), "block {}: {:?}", sess.current_block, tr.segments);
+                let started = sess.resolver.scheduled.iter().filter(|a| a.unit == e && a.start <= sess.current_block).count();
+                assert_eq!(tr.segments.len(), started, "every started action");
+                checked += 1;
+            }
+            b.send(&cx, json!({"cmd": "step"}));
+        }
+        assert!(checked > 0, "an unrevealed enemy was checked during playback");
+    }
+
+    /// TV4: a revealed enemy (the battle's plan reveal here) is unmasked with its whole plan and the card "Plan
+    /// revealed (...)"; VC4: a foresight reveal is masked again with Party foresight off (debug builds).
+    #[test]
+    fn a_revealed_enemy_is_unmasked_and_foresight_off_masks_it_again() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), true);
+        b.tv_open = true;
+        drawn(&mut cx, &mut g, &mut b);
+        let t = view(&b).clone();
+        let sess = s(&b);
+        for tr in tracks(&t, 1).iter().filter(|x| sess.w.units[unit_of(&x.key).unwrap()].is_active()) {
+            let e = unit_of(&tr.key).unwrap();
+            assert!(tr.masked.is_none(), "revealed: unmasked");
+            assert_eq!(tr.segments.len(), sess.resolver.scheduled.iter().filter(|a| a.unit == e).count(), "its whole plan");
+            assert!(tr.tip.iter().any(|l| l.0 == "Plan revealed (plan reveal)"), "{:?}", tr.tip);
+        }
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), false);
+        let h = b.selected.unwrap();
+        {
+            let sess = b.host.session.as_mut().unwrap();
+            sess.w.units[h].foresight_source = "t_sight".into();
+            sess.w.units[h].foresight_range = emberwake_rules::unit::FORESIGHT_RANGE_MAX;
+            sess.measure_reveals();
+        }
+        let read: Vec<usize> = s(&b).enemy_intents().iter().filter(|t| t.revealed && !t.readers.is_empty() && !t.enraged).map(|t| t.unit).collect();
+        assert!(!read.is_empty(), "the range reveals a foe");
+        b.tv_open = true;
+        drawn(&mut cx, &mut g, &mut b);
+        for &e in &read {
+            let tr = track(view(&b), e);
+            assert!(tr.masked.is_none() && tr.tip.iter().any(|l| l.0.starts_with("Plan revealed (Read by ")), "{:?}", tr.tip);
+        }
+        cx.settings.v[FORESIGHT_OFF] = json!(true);
+        drawn(&mut cx, &mut g, &mut b);
+        for &e in &read {
+            assert_eq!(track(view(&b), e).masked.is_some(), cfg!(debug_assertions), "VC4 masks it in a debug build");
+        }
+    }
+
+    /// TV5: a click on a party track selects that hero and the view stays open; an enemy track or a block selects
+    /// nothing.
+    #[test]
+    fn a_party_track_click_selects_its_hero() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), false);
+        b.tv_open = true;
+        drawn(&mut cx, &mut g, &mut b);
+        let h = b.selected.unwrap();
+        let other = s(&b).w.allies.iter().copied().find(|&a| a != h && s(&b).w.has(a)).expect("a second hero");
+        b.click_id(&mut cx, &format!("timeline.track.{}", track_key(other))).unwrap();
+        assert_eq!((b.selected, b.tv_open), (Some(other), true));
+        let foe = unit_of(&tracks(view(&b), 1)[0].key).unwrap();
+        b.click_id(&mut cx, &format!("timeline.track.{}", track_key(foe))).unwrap();
+        b.click_id(&mut cx, "timeline.block.1").unwrap();
+        assert_eq!((b.selected, b.tv_open, b.popup.is_none()), (Some(other), true, true), "nothing else happens");
+        drawn(&mut cx, &mut g, &mut b);
+        assert_eq!(view(&b).selected_track, Some(track_key(other)));
+    }
+
+    /// TV6: 16 tracks fit in the view before the widget scrolls; at the four text sizes no label or note spills, and a
+    /// shortened one reads in full on its widget's hover card.
+    #[test]
+    fn the_view_fits_at_every_text_size() {
+        let inner = GRID_H * TILE + 4 - 2 * TV_PAD;
+        assert!(RULER_H + 2 + 2 * (HEADER_H + 3) + 16 * ROW_H <= inner, "16 tracks before the scroll");
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), false);
+        g.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+        g.view = aegis_ui::painter::View::fit(1280, 720);
+        b.tv_open = true;
+        for scale in [0.85f32, 1.0, 1.15, 1.3] {
+            let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, scale);
+            let boxes: Vec<(String, f32, f32, f32, f32)> = b.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
+            let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+            let spills: Vec<&Value> = v["spill"].as_array().unwrap().iter().filter(|e| e["widget"].as_str().is_some_and(|w| w.starts_with("timeline."))).collect();
+            assert!(spills.is_empty(), "scale {scale}: {spills:?}");
+            for c in v["cut"].as_array().unwrap() {
+                let (x, y) = (c["at"][0].as_f64().unwrap() as i32 + 1, c["at"][1].as_f64().unwrap() as i32 + 2);
+                let full = c["text"].as_str().unwrap();
+                let Some(wd) = b.w.iter().rev().find(|w| w.rect.contains(x, y) && w.id.starts_with("timeline.") && w.id != "timeline.backdrop") else { continue };
+                assert!(wd.text == full || wd.tip.iter().any(|l| l.0.contains(full)), "scale {scale}: {full:?} cut on {} without its full text on hover", wd.id);
+            }
+        }
+    }
+
+    /// TV7: the battle's view and the Gallery's Battle timeline build the same tracks for the same session (one
+    /// builder), planning and during playback.
+    #[test]
+    fn the_battle_view_and_the_gallery_build_the_same_timeline() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), false);
+        b.tv_open = true;
+        for _ in 0..2 {
+            drawn(&mut cx, &mut g, &mut b);
+            let sess = s(&b);
+            let gallery = crate::gallery::battle_timeline(&cx, sess, sess.current_round, false, None, b.selected.map(track_key));
+            assert_eq!(view(&b), &gallery);
+            b.act(&mut cx, Action::Confirm);
+            b.send(&cx, json!({"cmd": "step"}));
+        }
     }
 }

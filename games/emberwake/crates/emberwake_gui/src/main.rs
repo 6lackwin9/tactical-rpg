@@ -28,6 +28,7 @@ mod shop;
 mod stage;
 mod story;
 mod talk;
+mod timeline_view;
 mod tuning;
 mod worldmap;
 

@@ -13,6 +13,10 @@
 //! Ghost segments (INPUT1-U, engine-only): a segment can be a ghost, a planned, not chosen, span (what a planner filled
 //! in for the player): its fill at `GHOST_ALPHA`, a dashed outline all round and its label in `DIM`; `draw_ghost` and
 //! `ghost_fill` give a screen's own spans the same look. Off by default.
+//!
+//! Track cards and hatching (INPUT1-T, engine-only): a track's label can carry a hover card (`Track.tip`) and its lane
+//! can be hatched (`Track.hatched`, a unit that is down); `sample` is the standalone pane's round (a screen shows the
+//! widget on it with no data of its own). Both off by default.
 
 use crate::canvas::{rgb, rgba, Rect, Rgba};
 use crate::ui::{tip, Tip, Ui, BODY, BORDER, CARD, DIM, GOLD, PANEL_HI, RADIUS, SMALL, TEXT};
@@ -99,6 +103,10 @@ pub struct Track {
     pub marks: Vec<Mark>,
     /// Links between this track's segments (hidden while masked).
     pub links: Vec<Link>,
+    /// The label's hover card (none: no card, as before).
+    pub tip: Tip,
+    /// Hatched lane (a unit that is down, say): its empty cells drawn hatched under the segments.
+    pub hatched: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -229,11 +237,15 @@ impl Timeline {
             ui.p.panel(label, if selected { rgba(86, 68, 22, 250) } else { PANEL_HI }, if selected { GOLD } else { BORDER }, 2.0);
         }
         ui.p.text_fit(label.x as f32 + 3.0, label.y as f32 + 2.0, &t.label, BODY, label.w as f32 - 6.0, t.colour);
-        ui.push(format!("{id}.track.{}", t.key), "row", t.label.clone(), label, true, selected, Some(on_track(&t.key)), Vec::new());
-        // The lane: one cell per block.
+        ui.push(format!("{id}.track.{}", t.key), "row", t.label.clone(), label, true, selected, Some(on_track(&t.key)), t.tip.clone());
+        // The lane: one cell per block (hatched on a hatched track).
         for b in 1..=self.blocks {
             let (x0, x1) = self.block_span(lane_x, lane_w, b);
-            ui.p.fill(Rect::new(x0 + 1, row.y + 2, x1 - x0 - 2, ROW_H - 4), rgba(24, 30, 44, 255));
+            let cell = Rect::new(x0 + 1, row.y + 2, x1 - x0 - 2, ROW_H - 4);
+            ui.p.fill(cell, rgba(24, 30, 44, 255));
+            if t.hatched {
+                hatch(ui, cell, LANE_HATCH);
+            }
         }
         let marks = self.mark_rects(ui, t, row, lane_x, lane_w);
         let kept: Vec<Rect> = marks.iter().flatten().copied().collect();
@@ -309,6 +321,8 @@ const IMPACT_GLOW: Rgba = rgba(255, 255, 255, 70);
 const IMPACT_EDGE: Rgba = rgba(240, 244, 255, 220);
 const RECOVERY_SHADE: Rgba = rgba(0, 0, 0, 40);
 const HATCH: Rgba = rgba(0, 0, 0, 120);
+/// A hatched track's lane cells (light, so they read on the dark cells).
+const LANE_HATCH: Rgba = rgba(120, 128, 150, 90);
 /// A mark's backing, under its coloured outline and glyph.
 const MARK_BG: Rgba = rgba(10, 14, 24, 235);
 
@@ -404,6 +418,58 @@ pub fn clear_of(x0: i32, x1: i32, marks: &[Rect], need: i32) -> (i32, i32) {
     }
     let widest = gaps.iter().copied().fold(None, |best: Option<(i32, i32)>, g| if best.is_none_or(|b| g.1 - g.0 > b.1 - b.0) { Some(g) } else { best });
     gaps.iter().copied().find(|g| g.1 - g.0 >= need).or(widest).unwrap_or((x0, x0))
+}
+
+/// The timeline pane's sample round (INPUT1 TV7, a standalone pane: a screen shows the widget alone on it, no game
+/// data): six blocks, the playhead on B2, B3 and the track `p1` selected; a "Party" section above an "Enemies" one,
+/// 22 tracks in all (more than fit: the rows scroll); parts, a link, a ghost span, a hatched span, a hatched (downed)
+/// track, label hover cards, a masked track with its note and impact marks.
+pub fn sample() -> Timeline {
+    let part = |start, end, style| Part { start, end, style };
+    let seg = |key: &str, start, end, label: &str, fill: Rgba, card: &str| Segment { key: key.into(), start, end, label: label.into(), fill, tip: tip(label, card), ..Segment::default() };
+    let mark = |key: &str, block, glyph: &str, colour, title: &str, body: &str| Mark { key: key.into(), block, glyph: glyph.into(), colour, tip: tip(title, body) };
+    let (blue, green, grey, red) = (rgb(70, 110, 170), rgb(60, 120, 100), rgb(44, 56, 78), rgb(160, 70, 64));
+    let (ally, foe, hit, other) = (rgb(110, 170, 255), rgb(240, 100, 92), rgb(240, 100, 92), GOLD);
+    let track = |key: &str, label: &str, colour, segments: Vec<Segment>| Track { key: key.into(), label: label.into(), colour, segments, tip: tip(label, "The label's hover card."), ..Track::default() };
+    let mut party = vec![
+        Track {
+            links: vec![Link { from: "strike".into(), to: "follow".into(), colour: GOLD, tip: tip("Link", "Chained: the follow-up starts as the strike lands.") }],
+            ..track(
+                "p1",
+                "A Lead",
+                ally,
+                vec![
+                    Segment { parts: vec![part(1, 1, PartStyle::Windup), part(2, 2, PartStyle::Impact)], ..seg("strike", 1, 2, "Strike", blue, "Windup B1 (shaded), impact B2 (bright, edged).") },
+                    Segment { parts: vec![part(3, 3, PartStyle::Impact), part(4, 4, PartStyle::Recovery)], ..seg("follow", 3, 4, "Follow-up", blue, "Impact B3, recovery B4 (hatched).") },
+                    Segment { ghost: true, ..seg("ghost", 5, 6, "Cleave", blue, "Auto-filled: a ghost span (a planner's, not picked).") },
+                ],
+            )
+        },
+        track("p2", "M Scout", ally, vec![Segment { dashed: true, ..seg("move", 1, 1, "Move", rgb(60, 80, 110), "Dashed: a move.") }, seg("shot", 2, 4, "Shot", blue, "A plain span."), Segment { ghost: true, ..seg("rest", 5, 6, "Rest", grey, "Auto-filled: Rest.") }]),
+        track("p3", "G Warden", ally, vec![seg("hold", 1, 3, "Hold", green, "A plain span."), Segment { hatched: true, ..seg("dropped", 4, 6, "Dropped", green, "Hatched whole: a span that will not happen.") }]),
+        Track { hatched: true, ..track("p4", "Fallen", rgb(132, 146, 172), vec![seg("cut", 1, 1, "Cut", blue, "Done before the fall.")]) },
+    ];
+    for k in 5..=10 {
+        party.push(track(&format!("p{k}"), &format!("S Guest {}", k - 4), ally, vec![seg("aid", 1, 2, "Aid", green, "A support span."), Segment { ghost: true, ..seg("rest", 3, 6, "Rest", grey, "Auto-filled: Rest.") }]));
+    }
+    let mut enemies = vec![
+        track("e1", "Brute", foe, vec![Segment { parts: vec![part(1, 2, PartStyle::Windup), part(3, 3, PartStyle::Impact), part(4, 5, PartStyle::Recovery)], ..seg("smash", 1, 5, "Heavy smash", red, "A revealed plan: windup, impact B3, recovery hatched.") }]),
+        Track {
+            masked: Some("Assault: Lead; Next: Cut B1".into()),
+            marks: vec![mark("i0", 1, "!", hit, "B1", "A hit lands."), mark("i1", 4, "*", other, "B4", "An action lands.")],
+            ..track("e2", "Lurker", foe, Vec::new())
+        },
+    ];
+    for k in 3..=12 {
+        enemies.push(Track { masked: Some("Plans in secret".into()), marks: vec![mark("i0", (k % 6) + 1, "!", hit, "Impact", "A hit lands.")], ..track(&format!("e{k}"), &format!("Raider {}", k - 2), foe, Vec::new()) });
+    }
+    Timeline {
+        blocks: 6,
+        playhead: 2,
+        selected_block: Some(3),
+        selected_track: Some("p1".into()),
+        sections: vec![Section { title: "Party".into(), colour: ally, tracks: party }, Section { title: "Enemies".into(), colour: foe, tracks: enemies }],
+    }
 }
 
 #[cfg(test)]

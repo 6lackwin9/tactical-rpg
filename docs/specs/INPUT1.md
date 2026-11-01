@@ -431,6 +431,45 @@ skill of its plan beyond the tell; during playback at block 3 its track holds no
 a foresight-read enemy's track is unmasked; the Gallery's `timeline_pane` renders with no session; the battle view
 and the Gallery's Battle timeline build the same tracks for the same session (one builder).
 
+As built (INPUT1-T, 2026-11-01: game `timeline_view.rs` (new), `battle.rs`, `gallery.rs`, `menus.rs`; engine
+`aegis_ui::timeline`; tests `battle.rs` `timeline_view_tests`, `gallery.rs`
+`the_timeline_pane_draws_the_engine_widget_with_no_session` and `the_battle_timeline_entry_draws_the_shared_builders_tracks`,
+`aegis_ui/tests/kit_widgets.rs` (the track card and hatched lane, the pane sample); goldens and parity unchanged):
+
+- Engine (no game type): `Track.tip` (the label's hover card) and `Track.hatched` (the lane's cells hatched light under
+  the spans; TV2's downed unit), both off by default; `timeline::sample()` is TV7's round (six blocks, 22 tracks in
+  "Party" and "Enemies", parts, a link, ghosts, a hatched span and a hatched track, masked tracks with notes and marks,
+  the playhead on B2, B3 and `p1` selected).
+- `timeline_view::build(session, Opts)` is the one builder (TV2-TV4); `Opts` holds the round on view, Reveal (the
+  Gallery's), VC4's `foresight_off`, `show_tells`, the overlay groups (`parts`, `breaks`, `badges`), the selected hero
+  and block and the selected hero's round as the strip shows it (a hovered menu row's preview or a ghost waiting for
+  Confirm). Track keys `u<unit>`. Party: allies with `w.has` or an action this round; while planning the compiled plan
+  (ghost flags `rip::ghost_entries`, a Rest dim and never ghost, as on the strip; parts with the impact at the span's
+  end), else the scheduled actions (parts from each action's impact, BREAK marks, a cancelled span hatched); the label
+  "`<letter>` `<name>`" (the intent's initial, the live round only); its card the label, "Intent: ...", AP9's lines
+  while planning (else "AP now of max"). Enemies: the same filter in `w.enemies` order; the record is the screen's
+  (`seen_intents`: the tells while planning, else the round records); masked while planning when active and not
+  revealed, with no spans in the value (TV4's note by `masked_note`: `round_head` or "Plans in secret", then
+  "; Next: `<skill>` `<blocks>`" or "; Holding" while the tells show) and V1's marks (`!` red a hit, `*` gold another,
+  under `plan_badges` and the `badges` group); from Confirm to the round's end an unrevealed enemy holds the actions
+  with `start <= current_block`; a revealed one's card reads "Plan revealed (Read by ...)", "(enraged)" or "(plan
+  reveal)". A past round (the Gallery's archive) shows every track unmasked. A span's card leads with its full label.
+- Battle (TV1, TV5, TV6): `tv_open`; key T (`Action::TimelineView`) toggles it when the battle is beyond classic
+  (`round_intent` on or any ruleset rule), in every phase; the talk guards hold (keys and actions are swallowed while
+  a talk is open); Esc closes it before SL3's steps. It draws after the log and the outcome banner, under the menu and
+  the talk: a backdrop `timeline.backdrop` over the grid panel's rect (its click is `TimelinePick(None)`), the panel,
+  then the widget 4 px inside (`TV_PAD`, id `timeline`). A track or span click is `TimelinePick(unit)`: a party
+  member is selected (the view stays open), anything else does nothing. State `timeline_view` (null: closed; no key
+  in classic). Controls: "Full timeline view, open / close (timeline): T, Escape".
+- PB5 (the pause at the resolving block's end while the view is open) is not built here: it is INPUT1-PB's (its row
+  names "the timeline view pausing playback" and `playback.waiting`); during playback the view opens, follows the
+  playhead and Space still steps.
+- Gallery (TV7): the Kit entry `timeline_pane` ("Timeline pane", no Open) draws `timeline::sample()` with its own
+  block and track selection (`GAct::PaneBlock`, `PaneTrack`); the Battle panels entry `timeline` draws
+  `gallery::battle_timeline` (the builder under the player's settings, Reveal, the clicked block and any clicked
+  track) and keeps its round archive, Reveal and snapshot tools. Its sections are now "Party" and "Enemies" and an
+  unrevealed enemy's playback track holds only its started actions (it showed every action before).
+
 ## 9. Per-opener follow-up lists (INPUT1-L)
 
 - FL1. Field: the unit and member `deck` gains `follow_ups` (object; default {}): opener family -> skill families, in

@@ -14,30 +14,30 @@
 //!   draws), and the battle timeline (TIMELINE1: every unit's track over the round's blocks, fed by a live Test Arena
 //!   battle; past rounds from the round archive, a block's state from its snapshot).
 
-use crate::battle::{action_rows, kind_color, BattleScreen};
-use crate::intent_text;
+use crate::battle::BattleScreen;
 use crate::portraits::{cue_of, hue_name, Faces, Who};
 use crate::screens::{Cx, Game, GameCx, Nav, Screen};
+use crate::timeline_view;
 use aegis_core::assets::Layers;
 use aegis_core::json;
 use aegis_ui::canvas::{rgb, Rect, Rgba};
 use aegis_ui::portrait_fx::{Cue, Tier};
 use aegis_ui::preview;
 use aegis_ui::specimens::{KitAct, Specimens, PORTRAIT_OVERLAYS, PORTRAIT_REACTIONS, PORTRAIT_SIZES, PORTRAIT_STAGE, PORTRAIT_STATES};
-use aegis_ui::timeline::{Section, Segment, Timeline, Track};
+use aegis_ui::timeline::Timeline;
 use aegis_ui::ui::{tip, Gfx, Tip, Ui, Widget, BODY, BORDER, DIM, GOLD, INFO, SMALL, TEXT, TITLE, W};
 use aegis_ui::vignette;
 use aegis_ui::widget_plumbing;
-use emberwake_battle::resolver::ScheduledAction;
 use emberwake_battle::session::{Phase, Session, UnitSnap};
 use emberwake_host::{Battle, Host};
 use serde_json::{json, Value};
 
 /// (id, name, group, what it shows). Battle panel ids are the battle screen's own panel names.
-const ENTRIES: [(&str, &str, &str, &str); 31] = [
+const ENTRIES: [(&str, &str, &str, &str); 32] = [
     ("kit", "Kit widgets", "Kit", "Every kit widget in its states; use them, the foot of the page says what happened."),
     ("vignette", "Vignette player", "Kit", "The engine's sample reel or a world's vignette: image, text, title and line cards with fades, typing, hold and skip."),
     ("pip_gauge", "Pip gauge", "Kit", "The engine pip gauge in its states: kept, spent and next round's gain; red, a debt, two points a pip; numbers on hover."),
+    ("timeline_pane", "Timeline pane", "Kit", "The engine timeline widget alone on sample data: two sections, a masked track, parts, a ghost, the playhead; the rows scroll."),
     ("portraits", "Portraits", "Art", "Every portrait with its sidecar, its effects and the cue rows: the review page of the portrait assets."),
     ("main_menu", "Main menu", "Screens", "The player's front door."),
     ("new_game", "New game", "Screens", "World cards and the start."),
@@ -98,6 +98,9 @@ pub enum GAct {
     Block(i32),
     Track(String),
     Segment(String, String),
+    /// INPUT1 TV7: the Timeline pane entry's block and track (a click selects, again unselects).
+    PaneBlock(i32),
+    PaneTrack(String),
 }
 
 /// The timeline entry's battle and what is selected on it.
@@ -526,6 +529,8 @@ pub struct Gallery {
     portraits: PortraitPage,
     shown: Option<Shown>,
     battle: Option<BattleScreen>,
+    /// INPUT1 TV7: the Timeline pane entry's selected block and track (the sample's to start).
+    pane: (Option<i32>, Option<String>),
     /// The sample game is the gallery's (it goes when the gallery does), with the debug flag it found.
     own_game: Option<bool>,
     w: Vec<Widget<GAct>>,
@@ -539,7 +544,8 @@ impl Default for Gallery {
 
 impl Gallery {
     pub fn new() -> Self {
-        Self { entry: 0, reel: 0, demo: None, kit: Specimens::default(), portraits: PortraitPage::default(), shown: None, battle: None, own_game: None, w: Vec::new() }
+        let s = aegis_ui::timeline::sample();
+        Self { entry: 0, reel: 0, demo: None, kit: Specimens::default(), portraits: PortraitPage::default(), shown: None, battle: None, pane: (s.selected_block, s.selected_track), own_game: None, w: Vec::new() }
     }
 
     /// The sample game for the screen entries: a debug game (nothing saved) of the first playable world.
@@ -733,7 +739,7 @@ impl Gallery {
                 if id == "battle" || ENTRIES[self.entry].2 == "Battle panels" {
                     let b = BattleScreen::arena(cx, None, &cx.encounter.clone());
                     cx.nav.push(Nav::Push(Box::new(b)));
-                } else if !["kit", "portraits", "pip_gauge"].contains(&id) && (!NEEDS_GAME.contains(&id) || self.ensure_game(cx)) {
+                } else if !["kit", "portraits", "pip_gauge", "timeline_pane"].contains(&id) && (!NEEDS_GAME.contains(&id) || self.ensure_game(cx)) {
                     // a fresh one, so the preview keeps its own state
                     if let Some((screen, _)) = self.build(cx, id) {
                         cx.nav.push(Nav::Push(screen));
@@ -742,6 +748,8 @@ impl Gallery {
             }
             GAct::Exit => cx.nav.push(Nav::Pop),
             GAct::Restart => self.demo = None,
+            GAct::PaneBlock(b) => self.pane.0 = if self.pane.0 == Some(b) { None } else { Some(b) },
+            GAct::PaneTrack(k) => self.pane.1 = if self.pane.1.as_deref() == Some(k.as_str()) { None } else { Some(k) },
             a => {
                 let d = self.demo(cx);
                 let Some(s) = d.host.session.as_mut() else { return };
@@ -776,7 +784,7 @@ impl Gallery {
                     GAct::Block(b) => d.block = if d.block == Some(b) { None } else { Some(b) },
                     GAct::Track(t) => d.track = if d.track.as_deref() == Some(t.as_str()) { None } else { Some(t) },
                     GAct::Segment(t, seg) => {
-                        d.detail = segment_detail(s, d.viewed, &t, &seg);
+                        d.detail = segment_detail(cx, s, d.viewed, &t, &seg);
                         d.track = Some(t);
                         d.block = None;
                     }
@@ -792,77 +800,27 @@ impl Gallery {
     }
 }
 
-fn segment_of(name: &str, start: i32, end: i32, kind: &str, target: Option<String>, key: String, extra: String) -> Segment {
-    let mut t = vec![(name.to_string(), GOLD), (format!("Blocks {start}-{end}  {kind}"), DIM)];
-    if let Some(target) = &target {
-        t.push((format!("On {target}"), TEXT));
-    }
-    if !extra.is_empty() {
-        t.push((extra, DIM));
-    }
-    let mut fill = kind_color(kind);
-    fill[3] = 230;
-    Segment { key, start, end, label: target.map(|t| format!("{name} > {t}")).unwrap_or_else(|| name.to_string()), fill, dashed: kind == "MOVE", tip: t, ..Segment::default() }
-}
-
-fn rows(s: &Session, actions: &[ScheduledAction], u: usize) -> Vec<Segment> {
-    action_rows(&s.w, actions, u).into_iter().enumerate().map(|(i, c)| segment_of(&c.2, c.0, c.1, &c.3, c.4, format!("{i}"), String::new())).collect()
-}
-
-/// The units' tracks for round `viewed`: the live round shows the heroes' plan while planning (then their committed
-/// actions) and masks the enemies while planning unless revealed (their tell instead); a past round shows its
-/// archived actions, unmasked.
-fn timeline_of(s: &Session, viewed: i32, reveal: bool, block: Option<i32>, track: Option<String>) -> Timeline {
-    let w = &s.w;
-    let live = viewed == s.current_round;
-    let planning = live && s.phase == Phase::Planning && !s.plan_confirmed;
-    let archived: Vec<ScheduledAction> = if live { s.resolver.scheduled.clone() } else { s.round_record(viewed).map(|r| r.actions.clone()).unwrap_or_default() };
-    let tells = s.enemy_intents();
-    let allies = w
-        .allies
-        .iter()
-        .map(|&u| {
-            let segments = if planning && w.units[u].is_active() {
-                s.plan
-                    .compile(w, u)
-                    .entries
-                    .iter()
-                    .enumerate()
-                    .map(|(i, e)| {
-                        let sk = &w.cat.skills[e.skill];
-                        segment_of(&sk.name, e.start_block, e.end_block(w), &sk.kind, e.target.filter(|t| *t != u).map(|t| w.units[t].name.clone()), format!("{i}"), format!("{} AP", e.total_ap()))
-                    })
-                    .collect()
-            } else {
-                rows(s, &archived, u)
-            };
-            Track { key: format!("u{u}"), label: w.units[u].name.clone(), colour: ALLY, segments, ..Track::default() }
-        })
-        .collect();
-    let enemies = w
-        .enemies
-        .iter()
-        .filter(|&&e| archived.iter().any(|a| a.unit == e) || w.has(e))
-        .map(|&e| {
-            let masked = (planning && !reveal && w.units[e].is_active()).then(|| match tells.iter().find(|t| t.unit == e) {
-                Some(t) => format!("Plans in secret. {}", intent_text::card_line(w, &t.line)),
-                None => "Plans in secret".to_string(),
-            });
-            Track { key: format!("u{e}"), label: w.units[e].name.clone(), colour: FOE, segments: rows(s, &archived, e), masked, ..Track::default() }
-        })
-        .collect();
-    Timeline {
-        blocks: s.def.total_blocks.max(1),
-        playhead: if live && !planning && s.phase != Phase::Replay { s.current_block } else { 0 },
-        selected_block: block,
-        selected_track: track,
-        sections: vec![Section { title: "Allies".into(), colour: ALLY, tracks: allies }, Section { title: "Enemies".into(), colour: FOE, tracks: enemies }],
-    }
+/// INPUT1 TV7: the Battle timeline entry's view: the battle screen's timeline view (`timeline_view::build`, the one
+/// builder) of round `viewed` under the player's settings (overlay groups, tells, VC4's Party foresight off), every
+/// enemy unmasked with Reveal, block and track as clicked (an enemy track too).
+pub(crate) fn battle_timeline(cx: &Cx, s: &Session, viewed: i32, reveal: bool, block: Option<i32>, track: Option<String>) -> Timeline {
+    let v = &cx.settings.v;
+    let opts = timeline_view::Opts {
+        viewed,
+        reveal_all: reveal,
+        foresight_off: crate::battle::party_foresight_off(v, cfg!(debug_assertions)),
+        show_tells: v["show_tells"].as_bool().unwrap_or(true),
+        layers: crate::battle::Layers::of(&v["battle_overlays"]),
+        selected: None,
+        block,
+        shown: None,
+    };
+    Timeline { selected_track: track, ..timeline_view::build(s, &opts) }
 }
 
 /// The hover card lines of a clicked segment, for the detail strip.
-fn segment_detail(s: &Session, viewed: i32, track: &str, seg: &str) -> Vec<(String, Rgba)> {
-    let t = timeline_of(s, viewed, true, None, None);
+fn segment_detail(cx: &Cx, s: &Session, viewed: i32, track: &str, seg: &str) -> Vec<(String, Rgba)> {
+    let t = battle_timeline(cx, s, viewed, true, None, None);
     t.sections
         .iter()
         .flat_map(|x| x.tracks.iter())
@@ -870,6 +828,18 @@ fn segment_detail(s: &Session, viewed: i32, track: &str, seg: &str) -> Vec<(Stri
         .and_then(|x| x.segments.iter().find(|g| g.key == seg).map(|g| (x.label.clone(), g.tip.clone())))
         .map(|(unit, tip)| std::iter::once((unit, TEXT)).chain(tip).collect())
         .unwrap_or_default()
+}
+
+/// INPUT1 TV7: the Timeline pane entry (Kit): the engine timeline widget alone on its sample round
+/// (`aegis_ui::timeline::sample`, no game type and no session) under its name and what it shows; a click on a block or
+/// a track selects it (again: unselects), a span's click selects its track; hover cards are the widget's own.
+fn draw_timeline_pane(ui: &mut Ui<GAct>, r: Rect, name: &str, about: &str, sel: &(Option<i32>, Option<String>)) {
+    ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, name, TITLE, GOLD);
+    let nw = ui.p.text_w(name, TITLE).ceil() as i32;
+    ui.p.text_fit((r.x + 12 + nw) as f32, r.y as f32 + 3.0, about, SMALL, (r.w - nw - 16) as f32, DIM);
+    let top = r.y + 4 + ui.p.line_h(TITLE).ceil() as i32 + 3;
+    let t = Timeline { selected_block: sel.0, selected_track: sel.1.clone(), ..aegis_ui::timeline::sample() };
+    t.draw(ui, "gallery.pane", Rect::new(r.x + 4, top, r.w - 8, r.y + r.h - 4 - top), GAct::PaneBlock, |k| GAct::PaneTrack(k.to_string()), |k, _| GAct::PaneTrack(k.to_string()));
 }
 
 /// INPUT1-AP: the Pip gauge entry (Kit): the engine's pip gauge alone, each sample state (`aegis_ui::pips::samples`)
@@ -948,6 +918,8 @@ impl Screen<GameCx> for Gallery {
             self.portraits.draw(&mut ui, cx, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4));
         } else if id == "pip_gauge" {
             draw_pip_gauges(&mut ui, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4), name, about);
+        } else if id == "timeline_pane" {
+            draw_timeline_pane(&mut ui, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4), name, about, &self.pane);
         } else if id != "timeline" {
             // A screen or a battle panel: its name, what it is, Open, and the preview under them.
             ui.p.text(pane.x as f32 + 6.0, pane.y as f32 + 4.0, name, TITLE, GOLD);
@@ -1008,7 +980,7 @@ impl Screen<GameCx> for Gallery {
                 ui.button_full(&format!("gallery.timeline.{id}"), Rect::new(x, pane.y + 3, w, 12), label, act, enabled, false, SMALL, tip(label, help));
                 x += w + 2;
             }
-            let t = timeline_of(s, d.viewed, d.reveal, d.block, d.track.clone());
+            let t = battle_timeline(cx, s, d.viewed, d.reveal, d.block, d.track.clone());
             t.draw(&mut ui, "gallery.timeline", Rect::new(pane.x + 4, pane.y + 20, pane.w - 8, pane.h - 24 - DETAIL_H), GAct::Block, |k| GAct::Track(k.to_string()), |k, g| GAct::Segment(k.to_string(), g.to_string()));
             // The strip under the timeline: a selected block's snapshot, else the clicked action, else a hint.
             let strip = Rect::new(pane.x + 4, pane.y + pane.h - DETAIL_H, pane.w - 8, DETAIL_H - 4);
@@ -1326,5 +1298,83 @@ mod tests {
         gallery.draw(&mut cx, &mut g, (-500, -500), true);
         assert_eq!(boxed(&gallery), Some(false), "and released");
         assert_eq!(gallery.state(&cx)["portrait_pick"], json!(key));
+    }
+
+    /// INPUT1 TV7: the Kit group's Timeline pane draws the engine widget alone on its sample round with no game and no
+    /// battle (the widgets are the sample's own: a masked track with its marks, a link, every track's label); a block
+    /// or track click selects it and again unselects; its texts read clean at the four text sizes (a cut one is
+    /// whole on its hover card).
+    #[test]
+    fn the_timeline_pane_draws_the_engine_widget_with_no_session() {
+        use crate::hud::hud_tests::{frame, gfx};
+        use crate::story::tests::{data, story_cx};
+        let (mut cx, mut g) = (story_cx(data()), gfx());
+        let mut gallery = Gallery::new();
+        let i = ENTRIES.iter().position(|e| e.0 == "timeline_pane").expect("a timeline pane entry");
+        assert_eq!(ENTRIES[i].2, "Kit");
+        gallery.act(&mut cx, GAct::Entry(i));
+        let sample = aegis_ui::timeline::sample();
+        for &(_, scale) in aegis_ui::screen::TEXT_SIZES.iter() {
+            let recs: Vec<aegis_ui::painter::TextRec> = frame(&mut gallery, &mut cx, &mut g, scale as f32).into_iter().filter(|r| r.x >= 110.0).collect();
+            let ws = gallery.widgets();
+            let ids: Vec<String> = ws.iter().filter_map(|w| w["id"].as_str()).filter(|id| id.starts_with("gallery.pane.")).map(str::to_string).collect();
+            for t in sample.sections.iter().flat_map(|s| &s.tracks).take(12) {
+                assert!(ids.contains(&format!("gallery.pane.track.{}", t.key)), "{} at {scale}", t.key);
+            }
+            assert!(ids.contains(&"gallery.pane.track.e2.masked".to_string()) && ids.contains(&"gallery.pane.mark.e2.i0".to_string()) && ids.contains(&"gallery.pane.link.p1.strike.follow".to_string()));
+            let boxes: Vec<(String, f32, f32, f32, f32)> = ws
+                .iter()
+                .filter(|w| w["id"].as_str().is_some_and(|i| i.starts_with("gallery.pane.")))
+                .map(|w| {
+                    let (x, y, ww, hh) = crate::hud::hud_tests::rect(w);
+                    (w["id"].as_str().unwrap_or("").to_string(), x as f32, y as f32, ww as f32, hh as f32)
+                })
+                .collect();
+            let v = aegis_ui::text_audit::issues(&recs, W as f32, aegis_ui::ui::H as f32, &boxes);
+            assert_eq!((v["counts"]["spill"].clone(), v["counts"]["edge"].clone(), v["counts"]["overlap"].clone()), (json!(0), json!(0), json!(0)), "text size {scale}: {v}");
+            for c in v["cut"].as_array().unwrap() {
+                let full = c["text"].as_str().unwrap();
+                let (x, y) = (c["at"][0].as_f64().unwrap() as i64 + 1, c["at"][1].as_f64().unwrap() as i64 + 2);
+                // the widget's own texts (the entry's line above it is the gallery's, whole on the entry's card)
+                let on = |w: &&Value| {
+                    let (rx, ry, rw, rh) = crate::hud::hud_tests::rect(w);
+                    w["id"].as_str().is_some_and(|i| i.starts_with("gallery.pane.")) && x >= rx && x < rx + rw && y >= ry && y < ry + rh
+                };
+                if !ws.iter().any(|w| on(&w)) {
+                    continue;
+                }
+                let held = ws.iter().filter(on).any(|w| w["text"] == json!(full) || w["tip"].to_string().contains(full));
+                assert!(held, "text size {scale}: {full:?} cut with no whole text on hover");
+            }
+        }
+        assert_eq!(gallery.pane, (sample.selected_block, sample.selected_track.clone()), "the sample's selection to start");
+        gallery.click_id(&mut cx, "gallery.pane.block.5").unwrap();
+        gallery.click_id(&mut cx, "gallery.pane.track.e1").unwrap();
+        assert_eq!(gallery.pane, (Some(5), Some("e1".to_string())));
+        gallery.click_id(&mut cx, "gallery.pane.block.5").unwrap();
+        assert_eq!(gallery.pane.0, None, "again: unselected");
+        assert!(!cx.has_game(), "no game needed");
+    }
+
+    /// TV7: the Battle panels' Battle timeline draws the battle screen's timeline view of its battle (the shared
+    /// builder): a track widget for every track `battle_timeline` builds, a masked note for every masked one.
+    #[test]
+    fn the_battle_timeline_entry_draws_the_shared_builders_tracks() {
+        use crate::hud::hud_tests::{game_cx, gfx};
+        let (mut cx, mut g) = (game_cx(), gfx());
+        cx.encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+        let mut gallery = Gallery::new();
+        let i = ENTRIES.iter().position(|e| e.0 == "timeline").expect("the timeline entry");
+        gallery.act(&mut cx, GAct::Entry(i));
+        gallery.draw(&mut cx, &mut g, (-500, -500), true);
+        let d = gallery.demo.as_ref().unwrap();
+        let s = d.host.session.as_ref().expect("the demo battle");
+        let t = battle_timeline(&cx, s, d.viewed, d.reveal, d.block, d.track.clone());
+        assert_eq!(t.sections.iter().map(|x| x.title.as_str()).collect::<Vec<_>>(), ["Party", "Enemies"]);
+        let ids: Vec<String> = gallery.widgets().iter().filter_map(|w| w["id"].as_str().map(str::to_string)).collect();
+        for tr in t.sections.iter().flat_map(|x| &x.tracks) {
+            assert!(ids.contains(&format!("gallery.timeline.track.{}", tr.key)), "{}", tr.key);
+            assert_eq!(ids.contains(&format!("gallery.timeline.track.{}.masked", tr.key)), tr.masked.is_some(), "{}", tr.key);
+        }
     }
 }

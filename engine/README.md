@@ -44,7 +44,11 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
   screen's own block strip shares the widget's look (RULESET1-U slice 5). INPUT1-U: a segment can be a `ghost` (a
   planned, not chosen, span): its fill at `GHOST_ALPHA` (45% of its alpha), a dashed outline on all four sides and its
   label in `DIM`; `timeline::ghost_fill(fill)` and `timeline::draw_ghost(ui, bar)` give a screen's own spans the same
-  look. Off by default (every existing timeline draws as before).
+  look. Off by default (every existing timeline draws as before). INPUT1-T: a track's label can carry a hover card
+  (`Track.tip`) and its lane can be hatched (`Track.hatched`, a unit that is down); `timeline::sample()` is a
+  standalone pane's round (two sections, 22 tracks that scroll, a masked track with its note and marks, parts, a link,
+  a ghost, hatching, the playhead, a selected block and track), shown alone by the UI Gallery's Kit entry
+  `timeline_pane`. Both off by default.
 * **Pip gauge (INPUT1-AP):** `aegis_ui::pips::PipGauge` draws a budget planned against as a row of 4 x 6 px pips (1 px
   gap; 12 pips take 59 px): a pip a point, or `pips::unit(max, cap)` points above the cap (counts rounded up,
   `pips::count`). `PipGauge::planned(have, keep, next, max, cap)`: full pips up to `keep`, a ghost fill (the timeline's
@@ -226,7 +230,10 @@ closes the menu. Selection and inspect (INPUT1-U slice 3): a right click on any 
 the threat intel panel ("Inspecting `<name>` (Esc clears)") until another inspect, Esc or the next round, with only what
 the party knows (an enemy's unrevealed plan never shows); a click on the selected hero (token or card) selects nothing;
 with no hero selected, or outside planning, a click on an enemy inspects it and one on an ally selects it; Esc closes
-the menu, then the log, then clears the inspect, then selects nothing, then (Arena) leaves.
+the menu, then the log, then clears the inspect, then selects nothing, then (Arena) leaves. Full timeline view
+(INPUT1-T, a battle beyond classic): T opens every unit's track over the grid panel (the party's plans with their
+ghosts, an unrevealed enemy masked with its intent, target and tell, during playback only its started actions); T or
+Esc (before the steps above) closes it; a click on a party track selects that hero.
 
 Feel values (timings, floating numbers, hit flash, colours) live in `games/emberwake/tuning.json` and reload while the game
 runs. The GUI serves an agent link on `127.0.0.1:47800`: `ui_tree` (the screen stack, the music wanted, the top screen's state and every

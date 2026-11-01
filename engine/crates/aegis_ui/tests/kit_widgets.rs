@@ -342,3 +342,48 @@ fn the_kit_timeline_page_shows_parts_links_and_marks_and_takes_its_clicks() {
     assert!(w.iter().any(|x| x.id == "kit.timeline.block.3" && x.active), "a clicked block shows selected");
     assert_eq!((k.block, k.track.as_deref()), (Some(3), Some("scout")));
 }
+
+// INPUT1-T: a track's label hover card and a hatched lane (a unit that is down), both off by default; the standalone
+// pane's sample round (`timeline::sample`).
+
+#[test]
+fn a_track_label_carries_its_card_and_a_hatched_lane_differs_from_a_plain_one() {
+    let (mut plain, mut hatched) = (gfx(), gfx());
+    let a = track("a", vec![seg("s", 1, 1)]);
+    let wp = draw_tl(&mut plain, &one_side(6, vec![a.clone()]));
+    assert!(wp.iter().find(|x| x.id == "tl.track.a").unwrap().tip.is_empty(), "no card by default");
+    let b = Track { tip: tip("A", "Down since round 2."), hatched: true, ..a };
+    let wh = draw_tl(&mut hatched, &one_side(6, vec![b]));
+    let label = wh.iter().find(|x| x.id == "tl.track.a").unwrap();
+    assert_eq!(label.tip, tip("A", "Down since round 2."), "the label's card");
+    assert_eq!(wh.iter().map(|x| x.id.clone()).collect::<Vec<_>>(), wp.iter().map(|x| x.id.clone()).collect::<Vec<_>>(), "no new widget");
+    // an empty cell (B4) of the lane: plain is one flat fill, hatched has lighter lines in it
+    let bar = rect_of(&wp, "tl.seg.a.s").unwrap();
+    let r = rect_of(&wp, "tl.block.4").unwrap();
+    let row: Vec<[u8; 4]> = (r.x + 2..r.x + r.w - 2).map(|x| px(&plain, x, bar.y + bar.h / 2)).collect();
+    assert!(row.windows(2).all(|p| p[0] == p[1]), "a plain lane cell is one fill");
+    let row_h: Vec<[u8; 4]> = (r.x + 2..r.x + r.w - 2).map(|x| px(&hatched, x, bar.y + bar.h / 2)).collect();
+    assert!(row_h.iter().any(|p| brighter(*p, row[0])), "the hatching shows on the dark cell");
+    assert_eq!(px(&hatched, block_mid(&wh, 1), bar.y + bar.h / 2), FILL, "the segment draws over the hatching");
+}
+
+#[test]
+fn the_pane_sample_shows_every_feature_and_scrolls() {
+    use aegis_ui::timeline::{sample, HEADER_H, ROW_H, RULER_H};
+    let t = sample();
+    let titles: Vec<&str> = t.sections.iter().map(|s| s.title.as_str()).collect();
+    assert_eq!(titles, ["Party", "Enemies"]);
+    let tracks: Vec<&Track> = t.sections.iter().flat_map(|s| &s.tracks).collect();
+    let segs: Vec<&Segment> = tracks.iter().flat_map(|x| &x.segments).collect();
+    assert!(tracks.iter().any(|x| x.masked.is_some() && !x.marks.is_empty()), "a masked track with its marks");
+    assert!(tracks.iter().any(|x| !x.links.is_empty()) && tracks.iter().any(|x| x.hatched) && tracks.iter().all(|x| !x.tip.is_empty()));
+    assert!(segs.iter().any(|s| s.ghost) && segs.iter().any(|s| s.hatched) && segs.iter().any(|s| s.parts.iter().any(|p| p.style == PartStyle::Recovery)));
+    assert!(t.playhead > 0 && t.selected_block.is_some() && t.selected_track.is_some());
+    // more tracks than a 292 px pane shows: the rows scroll
+    assert!(RULER_H + 2 + t.content_h() > 292 && tracks.len() > (292 - RULER_H - 2 - 2 * HEADER_H) as usize / ROW_H as usize);
+    let mut g = gfx();
+    let mut ui: Ui<String> = Ui::new(&mut g, (-1, -1), true);
+    t.draw(&mut ui, "pane", Rect::new(4, 4, 388, 292), |b| format!("block {b}"), |k| format!("track {k}"), |k, s| format!("seg {k} {s}"));
+    let w = ui.widgets;
+    assert!(w.iter().any(|x| x.id == "pane.track.e2.masked") && w.iter().any(|x| x.id == "pane.mark.e2.i0") && w.iter().any(|x| x.id == "pane.link.p1.strike.follow"));
+}
