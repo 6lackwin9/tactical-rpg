@@ -9,6 +9,7 @@
 			"description": "Lamp-keepers and pikes of the Tidewrack ports.",
 			"home": "",
 			"relations": {},
+			"grants": [],
 			"tags": []
 		},
 		{
@@ -20,6 +21,7 @@
 			"relations": {
 				"harbour_guard": "enemy"
 			},
+			"grants": [],
 			"override": "ashlands:ashen_horde",
 			"tags": []
 		}

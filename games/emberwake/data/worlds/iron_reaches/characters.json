@@ -21,6 +21,7 @@
 				"orsa_hatchet",
 				"orsa_buckler"
 			],
+			"keepsake": "",
 			"tuning": {},
 			"dialogue": "orsa_talk",
 			"gone_flags": [],

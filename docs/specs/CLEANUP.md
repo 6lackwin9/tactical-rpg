@@ -122,7 +122,7 @@ Writer resave on the shipped data. Scope A. Status: done (2026-11-01; as built: 
 (`resave_text` for base, game-data and world kinds, `world_manifest_text` untouched for manifests), read only, no
 scratch copy needed; 53 files; `seeds/` and `progression/xp_curve.json` skipped (no writer kind); nine world files not
 in writer form (fields added since their last save, defaults only) listed in `PENDING_RESAVE` for an asset-lane
-resave; story_checks.rs deleted whole, its one test covered). Size S. Lane logic-builder. Layer game.
+resave (CLN-37A, 2026-11-01: resaved, list removed, every file compared clean); story_checks.rs deleted whole, its one test covered). Size S. Lane logic-builder. Layer game.
 
 - Where: `emberwake_world/tests/store.rs:14-57` (AFTER_GODOT 20, ITEMS_AFTER_GODOT, MANIFEST_AFTER_GODOT 8,
   QUEST_AFTER_GODOT 4, WORLD_KINDS_AFTER_GODOT 6, `at_freeze`), `:100-114` (`godot_encounters_folded`), `:117-170`

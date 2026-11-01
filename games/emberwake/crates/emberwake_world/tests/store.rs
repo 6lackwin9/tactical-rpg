@@ -43,24 +43,6 @@ fn writer_text(dir: &Path, rel: &Path) -> Option<Result<String, String>> {
 /// `progression/xp_curve.json` is read by the loader (`source::xp_curve`) but is no writer kind (no upsert, no save).
 const NOT_WRITER_OWNED: [&str; 2] = ["seeds", "progression/xp_curve.json"];
 
-/// CLN-37 finding, pending an asset-lane resave (each entry upserted unchanged through `aegis content`): these shipped
-/// world files were last written before world fields were added and lack only those fields at their defaults
-/// (characters `keepsake`, and in tidewrack `palette`, `portrait_tier`, `passives`, `gone_flags`, `dialogue`;
-/// encounters `rows`, `arena_hazards`, `unkillable`, `timeout_outcome`, `stay_behind`, `party_min`; quests `board`,
-/// `track`, `show_locked`, `closed_text`; factions `grants`; locations `map`, `map_pos`, `markers`, `rest`,
-/// `zone_bindings`). The test fails once a listed file re-saves clean, so the list only shrinks; delete it when empty.
-const PENDING_RESAVE: [&str; 9] = [
-    "worlds/ashlands/characters.json",
-    "worlds/ashlands/encounters.json",
-    "worlds/ashlands/quests.json",
-    "worlds/iron_reaches/characters.json",
-    "worlds/iron_reaches/quests.json",
-    "worlds/tidewrack/characters.json",
-    "worlds/tidewrack/encounters.json",
-    "worlds/tidewrack/factions.json",
-    "worlds/tidewrack/locations.json",
-];
-
 /// CLN-37 (replaces the Godot resave comparison and its AFTER_GODOT lists): re-saving any shipped data file without
 /// changes writes it back byte for byte. Every JSON file under data/ must be one the writer owns (catalog kinds, the
 /// engine-only base kinds, game-data kinds, world kinds and world manifests) or one of NOT_WRITER_OWNED. Read-only:
@@ -84,15 +66,7 @@ fn every_shipped_file_resaves_byte_for_byte() {
         };
         compared += 1;
         let want = std::fs::read_to_string(path).unwrap();
-        let pending = PENDING_RESAVE.contains(&key.as_str());
         match text {
-            Ok(t) if pending => {
-                if t == want {
-                    diffs.push(format!("{key}: re-saves clean now; remove it from PENDING_RESAVE"));
-                } else {
-                    eprintln!("pending resave (asset lane): {key}");
-                }
-            }
             Err(e) => diffs.push(format!("{key}: {e}")),
             Ok(t) if t != want => {
                 let line = t.lines().zip(want.lines()).position(|(a, b)| a != b).unwrap_or_else(|| t.lines().count().min(want.lines().count()));
