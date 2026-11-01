@@ -294,6 +294,31 @@ sets `ap_gauge.red` and the label "-1" for a 4 AP row at 3 AP, and leaving it cl
 "-2" before ten DIM slots; a 14 AP hero shows 7 pips at 2 AP each; in playback a command paying 4 AP turns four pips
 hollow; on a dummy fight (no AP effects) `next` equals the hero's AP at the next planning.
 
+As built (INPUT1-U slice 1, 2026-11-01: kit, host and engine; tests `rpgkit_battle/tests/picks.rs`,
+`rpgkit_host/tests/pick_requests.rs`, `aegis_ui/tests/kit_widgets.rs`; the battle screen is unchanged until slice 2):
+
+- `Pick` lives in `round_intent.rs` (beside `RoundState.picks`) and is re-exported by `round_intent_plan`. The ET5 kind
+  is `RegularMove` (`MoveKind` is INPUT1-M's board event) and `regular_move` takes the world: `regular_move(w, plan,
+  c)`. The ghost is a display flag on the step (`PlanStep.ghost`); `ghost_entries` (aligned with `entries_for`) beside
+  `ghost_from`; with no pick every planned entry is ghost (a Manual member's hand steps are not). `World` gains
+  `autofill` and `ap_regen` (the encounter's, for `ap_forecast`). `Session::pick` sets the first pick's intent through
+  `set_round_intent` (IN6's lines to `events`) and restores world, plan and events on a refusal.
+- The after-the-first-pick form (IF2) starts with the first skill or item pick (Rest and Move here keep the first
+  form); a unit other than the round target held by a pick gets no row (the game writes the title). A Maneuver
+  attack's Disengage row is offered only for a skill that carries a move (a position, or the transition's
+  `dash_tiles`). Only the first skill or item pick brings an implied before-move, and only while the round has no
+  regular move; a later pick out of band is refused "Out of reach: d > max" ("Too close: d < min"; "Out of range: d >
+  N" for a skill with a position, d the nearest open position tile). Other refusals as written, plus "Move here comes
+  first in a round" and "Step here after follows a skill or item pick". A Rest pick is tagged `pick <k>`.
+- Unpick or Clear back to no pick resets the opener and Maneuver kind to the planner's (the target and intent stay); a
+  member with no intent and no pick then has no steps (the game drafts GH2 a). `set_autofill` rebuilds members with
+  picks from them and members without from their intent (`plan_unit`, or Rest with Auto-fill off); the game re-applies
+  GH2 a after it. `replan` rebuilds later members with picks from their picks (a member with none: `plan_unit`, as
+  before). A later member's dropped pick reads "`<hero>`: `<skill>` dropped: `<reason>`"; the host's `dropped` lists
+  the members whose picks shrank, `refused` the other refusals.
+- Host: `pick`'s `target` defaults to the member's round target, else self; `clear {unit}` removes the picks only when
+  the member has one (else today's empty steps, the Manual path); `autofill` outside planning only sets the flag.
+
 ## 8. The full timeline view (INPUT1-T)
 
 - TV1 (changed 2026-11-01, PB5). Key T (planning and playback, rule `round_intent` or any timeline battle) toggles an

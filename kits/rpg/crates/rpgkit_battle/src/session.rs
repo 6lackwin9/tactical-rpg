@@ -402,7 +402,7 @@ impl Session {
             fallback_any: sb.fallback_any,
             heroes: (0..n_allies).filter(|c| !guests.contains(c)).collect(),
         });
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default() };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default(), autofill: true, ap_regen: def.ap_regen };
         w.add_item_skills();
         w.ignore_hazards_when_off();
         let objective = Objectives::create(&def.raw);
@@ -1121,6 +1121,29 @@ impl Session {
             return Err("The Maneuver kind is set while planning.".into());
         }
         round_intent::set_maneuver(&mut self.w, c, kind)
+    }
+
+    /// INPUT1 IF4, IF6, GH5 (`round_intent_plan::pick`) while planning: appends `picks` to member `c`'s round on target
+    /// `at`. The first skill or item pick's intent change goes through `set_round_intent` (IN6: its lines go to
+    /// `events`). Atomic: a refused pick leaves the battle (world, plan and events) as it was. Returns the result and the
+    /// later members' dropped picks and refusals (PL8).
+    pub fn pick(&mut self, c: UnitId, at: round_intent::RoundTarget, picks: &[round_intent::Pick]) -> (Result<(), String>, Vec<(UnitId, String)>) {
+        if self.phase != Phase::Planning || self.plan_confirmed {
+            return (Err("Picks are made while planning.".into()), Vec::new());
+        }
+        let (w0, seq0, events0) = (self.w.clone(), self.plan.sequences.clone(), self.events.len());
+        if let Some(i) = crate::round_intent_plan::pick_intent(&self.w, c, picks) {
+            if let Err(e) = self.set_round_intent(c, i.id()) {
+                return (Err(e), Vec::new());
+            }
+        }
+        let out = crate::round_intent_plan::pick(&mut self.w, &mut self.plan, c, at, picks);
+        if out.0.is_err() {
+            self.w = w0;
+            self.plan.sequences = seq0;
+            self.events.truncate(events0);
+        }
+        out
     }
 
     pub fn plan_is_valid(&self) -> bool {

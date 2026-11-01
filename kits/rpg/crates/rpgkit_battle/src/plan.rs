@@ -53,6 +53,9 @@ pub struct PlanStep {
     pub reason: String,
     /// PL6: the tag of the move entries the step implies before its action ("approach", "approach: out of range").
     pub move_reason: String,
+    /// INPUT1 GH1: the planner placed the step after a member's picks (a ghost block: a real step all the same).
+    /// Display only: compiling never reads it.
+    pub ghost: Cell<bool>,
 }
 
 pub type Step = Rc<PlanStep>;
@@ -97,20 +100,20 @@ impl PlanStep {
     }
 
     fn make(mode: Mode, skill: Option<SkillId>, target: Option<UnitId>, cell: V2) -> Step {
-        Rc::new(PlanStep { mode, skill, target, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new(), after: false, reason: String::new(), move_reason: String::new() })
+        Rc::new(PlanStep { mode, skill, target, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false) })
     }
     pub fn engage(skill: SkillId, target: UnitId) -> Step {
         Self::make(Mode::Engage, Some(skill), Some(target), NO_CELL)
     }
     pub fn mv(skill: SkillId, direction: V2, tiles: i32) -> Step {
-        Rc::new(PlanStep { mode: Mode::Move, skill: Some(skill), target: None, direction, tiles, cell: Cell::new(NO_CELL), item_id: String::new(), after: false, reason: String::new(), move_reason: String::new() })
+        Rc::new(PlanStep { mode: Mode::Move, skill: Some(skill), target: None, direction, tiles, cell: Cell::new(NO_CELL), item_id: String::new(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false) })
     }
     pub fn go_to(skill: SkillId, cell: V2) -> Step {
         Self::make(Mode::Goto, Some(skill), None, cell)
     }
     /// RULESET1_INTENT AS3: an after-move to `cell` (a kite step after the attacks; rule `round_intent`).
     pub fn after_move(skill: SkillId, cell: V2) -> Step {
-        Rc::new(PlanStep { mode: Mode::Goto, skill: Some(skill), target: None, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new(), after: true, reason: String::new(), move_reason: String::new() })
+        Rc::new(PlanStep { mode: Mode::Goto, skill: Some(skill), target: None, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new(), after: true, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false) })
     }
     pub fn area_at(skill: SkillId, cell: V2) -> Step {
         Self::make(Mode::Area, Some(skill), None, cell)
@@ -126,7 +129,7 @@ impl PlanStep {
     }
     /// ITEMUSE1 1.3: use pouch item `item_id` on `target` (the user itself for self items). Skill-less step.
     pub fn use_item(item_id: &str, target: UnitId) -> Step {
-        Rc::new(PlanStep { mode: Mode::Item, skill: None, target: Some(target), direction: ZERO, tiles: 1, cell: Cell::new(NO_CELL), item_id: item_id.to_string(), after: false, reason: String::new(), move_reason: String::new() })
+        Rc::new(PlanStep { mode: Mode::Item, skill: None, target: Some(target), direction: ZERO, tiles: 1, cell: Cell::new(NO_CELL), item_id: item_id.to_string(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false) })
     }
 }
 

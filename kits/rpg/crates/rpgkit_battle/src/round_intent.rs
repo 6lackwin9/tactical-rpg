@@ -92,6 +92,28 @@ pub struct RoundState {
     pub maneuver_auto: bool,
     /// TG6: last round's target (the planner proposes it while it is valid).
     pub last_target: Option<RoundTarget>,
+    /// INPUT1 GH1, GH6: the member's picks this round, in order (the planner's ghost fills the rest); cleared at every
+    /// round start; in no trace or save.
+    pub picks: Vec<Pick>,
+}
+
+/// INPUT1 IF4, ET1-ET4 (`round_intent_plan::pick`): one pick of a member's round. A skill (with the Maneuver kind of
+/// its menu row; None = the planner's), a pouch item, Rest, a plain move to a tile first ("Move here") or one move
+/// block at the round's end ("Step here after").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Pick {
+    Skill { skill: usize, kind: Option<ManeuverKind> },
+    Item(String),
+    Rest,
+    MoveHere(V2),
+    StepAfter(V2),
+}
+
+impl Pick {
+    /// A skill or item pick: it holds the round target and its intent (IF4); Rest and the moves are neutral.
+    pub fn holds_target(&self) -> bool {
+        matches!(self, Pick::Skill { .. } | Pick::Item(_))
+    }
 }
 
 /// RULESET1_INTENT FU1, PL1: a round's opener: a skill (catalog index) or a pouch item (its id).
@@ -287,7 +309,8 @@ pub fn rest_gain(n: &Numbers, blocks: i32) -> i32 {
 }
 
 /// Round start (after the status roll-over and `ap_regen`): RS2's Rest gain for the units that pay AP, then the
-/// round's target, kind, opener, move and Rest count reset (the intent, facing and Manual toggle stay: IN2, MV1, MM1).
+/// round's target, kind, opener, picks, move and Rest count reset (the intent, facing and Manual toggle stay: IN2, MV1,
+/// MM1, INPUT1 GH6).
 /// Returns the gain lines.
 pub fn round_start(w: &mut World) -> Vec<String> {
     if !on(w) {
@@ -311,6 +334,8 @@ pub fn round_start(w: &mut World) -> Vec<String> {
         rs.opener = None;
         rs.moved = false;
         rs.rest_blocks = 0;
+        // INPUT1 GH6: the picks go with the target, kind and opener; the intent carries over
+        rs.picks.clear();
     }
     lines
 }

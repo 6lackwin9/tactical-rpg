@@ -41,7 +41,10 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
   and marks are info widgets with a hover card and no click; labels leave room for marks; all empty by default. The
   UI Gallery's Kit widgets entry has a Timeline page (tabs at its foot) showing every part. `timeline::draw_part(ui,
   style, bar, part_rect)` and `timeline::draw_mark(ui, id, &mark, rect)` draw one part or one mark on their own, so a
-  screen's own block strip shares the widget's look (RULESET1-U slice 5).
+  screen's own block strip shares the widget's look (RULESET1-U slice 5). INPUT1-U: a segment can be a `ghost` (a
+  planned, not chosen, span): its fill at `GHOST_ALPHA` (45% of its alpha), a dashed outline on all four sides and its
+  label in `DIM`; `timeline::ghost_fill(fill)` and `timeline::draw_ghost(ui, bar)` give a screen's own spans the same
+  look. Off by default (every existing timeline draws as before).
 * **Vignette player (STORYUI1-E):** `aegis_ui::vignette` plays a reel of still cards (styles `image`, `text`, `title`,
   `line`) through fade in, typing, hold and fade out: a typewriter at the engine setting `text_speed` (`slow` 30,
   `normal` 60, `fast` 120 characters a second, `instant`; fast halves the fades, instant drops them), a cover fill of the
