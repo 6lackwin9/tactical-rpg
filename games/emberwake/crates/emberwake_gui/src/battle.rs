@@ -1298,6 +1298,13 @@ pub struct BattleScreen {
     /// as the panels and reacting at the same impacts, capped at the minimal tier (4.6: flash, tints, fade; no jolt,
     /// no breath) however large the window scales them.
     timeline_faces: Faces,
+    /// PORTRAITFX2 5.3: the battle's own portrait events: `battle_start` (and `ambush`) still to fire on the first
+    /// frame, the round and outcome the last change left (`round_start`, `victory`) and the last popped action whose
+    /// `skill` fired.
+    portrait_start: bool,
+    portrait_round: i32,
+    portrait_outcome: String,
+    portrait_popped: Option<(i32, i32, usize)>,
     /// ENCOUNTER2-C4: the last locked round whose playback the screen started by itself (0: none yet this battle).
     cutscene: i32,
     /// INPUT1 GH2 b: the members whose round target the player set this round (their ghost is the auto plan on it).
@@ -1424,6 +1431,10 @@ impl BattleScreen {
             faces: Faces::default(),
             panel_faces: Faces::default(),
             timeline_faces: Faces::capped(aegis_ui::portrait_fx::Tier::Minimal),
+            portrait_start: false,
+            portrait_round: 0,
+            portrait_outcome: String::new(),
+            portrait_popped: None,
             talk_node: String::new(),
             cutscene: 0,
             player_target: Vec::new(),
@@ -1721,13 +1732,17 @@ impl BattleScreen {
         let log = &self.session().resolver.log;
         let lines: Vec<String> = log.iter().skip(self.log_seen).cloned().collect();
         // PORTRAITFX1-P (5.3): the step's portrait events, fired with its feedback (at the impact, rule I)
-        let portrait = if hp_before.len() == self.last_hp.len() { emberwake_battle::portrait::session_step_events(self.session(), &hp_before, &lines) } else { Vec::new() };
+        let mut portrait = if hp_before.len() == self.last_hp.len() { emberwake_battle::portrait::session_step_events(self.session(), &hp_before, &lines) } else { Vec::new() };
         for line in &lines {
             if let Some(key) = sound_of(line) {
                 sounds.push(format!("sfx/{key}.wav"));
             }
         }
         self.log_seen = log.len();
+        // PORTRAITFX2 5.3: the step that wins the battle shows `victory` with its feedback
+        let outcome_now = self.session().outcome.clone();
+        let outcome_before = std::mem::replace(&mut self.portrait_outcome, outcome_now);
+        portrait.extend(emberwake_battle::portrait::victory_events(self.session(), &outcome_before));
         let (n, last) = { let s = self.session(); (s.events.len(), s.events.last().cloned()) };
         if n > self.events_seen {
             self.message = last.unwrap_or_default();
@@ -1769,7 +1784,58 @@ impl BattleScreen {
                 self.show(cx, floats, struck, sounds)
             }
         }
+        self.react_battle_portraits(cx);
         self.push_bursts(cx);
+    }
+
+    /// PORTRAITFX2 5.3: the portrait events a change fires at once: `round_start` when the round counter rose
+    /// (classic; none under the round intent rule) and `skill` at a popped skill's wind-up (its level against the rows'
+    /// `min_level`). Presentation only.
+    fn react_battle_portraits(&mut self, cx: &Cx) {
+        let Some(s) = self.host.session.as_ref() else { return };
+        let rounds = emberwake_battle::portrait::round_events(s, self.portrait_round);
+        self.portrait_round = s.current_round;
+        let skill = if s.last_popped != self.portrait_popped { emberwake_battle::portrait::skill_event(s) } else { None };
+        self.portrait_popped = s.last_popped;
+        let now = self.clock.now();
+        if !rounds.is_empty() {
+            let all: Vec<usize> = rounds.iter().map(|e| e.0).collect();
+            self.react_portraits_shown(cx, &rounds, now, &all);
+        }
+        if let Some((u, level)) = skill {
+            self.react_portrait_skill(cx, u, level, now);
+        }
+    }
+
+    /// PORTRAITFX2 5.3: unit `u`'s `skill` event at FX clock ms `at` for a skill of level `level`: its panel portrait,
+    /// and its timeline row while the view is open (a party row; an enemy's row reacts to blows only).
+    fn react_portrait_skill(&mut self, cx: &Cx, u: usize, level: i32, at: u64) {
+        let Some(s) = self.host.session.as_ref().filter(|s| u < s.w.units.len()) else { return };
+        let (ruleset, party) = (s.w.ruleset.id.clone(), s.w.allies.contains(&u));
+        let key = self.unit_portrait(cx, u).0.key;
+        let rows = self.timeline_view_open() && party;
+        self.panel_faces.clock = Clock { ms: at as f64, hold: 0.0 };
+        self.timeline_faces.clock = self.panel_faces.clock;
+        let event = [emberwake_battle::portrait::SKILL];
+        self.panel_faces.react_at(cx, &key, &event, level, PANEL_SURFACE, &ruleset);
+        if rows {
+            self.timeline_faces.react_at(cx, &key, &event, level, TIMELINE_SURFACE, &ruleset);
+        }
+        self.panel_faces.clock = self.clock;
+        self.timeline_faces.clock = self.clock;
+    }
+
+    /// PORTRAITFX2 5.3: `battle_start` (and `ambush`) on the battle screen's first frame, before the first step (a
+    /// session that has popped an action or ended fires none).
+    fn react_start_portraits(&mut self, cx: &Cx) {
+        if !std::mem::take(&mut self.portrait_start) {
+            return;
+        }
+        let Some(s) = self.host.session.as_ref().filter(|s| s.last_popped.is_none() && s.outcome.is_empty()) else { return };
+        let events = emberwake_battle::portrait::start_events(s);
+        let all: Vec<usize> = events.iter().map(|e| e.0).collect();
+        let now = self.clock.now();
+        self.react_portraits_shown(cx, &events, now, &all);
     }
 
     /// FX1-L2 4.4.4 for a fall shown at once (decision "FX1-L2 answers": a unit felled by a status tick): each of
@@ -2230,6 +2296,8 @@ impl BattleScreen {
         self.phases_seen = self.session().phases.fired.len();
         self.reset_talks();
         self.last_hp = self.session().w.units.iter().map(|u| u.hp).collect();
+        // PORTRAITFX2 5.3: the start events wait for the first frame; the round, outcome and popped action as they are
+        (self.portrait_start, self.portrait_round, self.portrait_outcome, self.portrait_popped) = (true, self.session().current_round, self.session().outcome.clone(), self.session().last_popped);
         self.log_seen = self.session().resolver.log.len();
         self.selected = self.session().w.allies.first().copied();
         self.popup = None;
@@ -3323,6 +3391,7 @@ impl Screen<GameCx> for BattleScreen {
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         self.mouse = mouse;
         self.resolve_impacts(cx);
+        self.react_start_portraits(cx);
         draw(self, cx, g, mouse, live);
     }
 
@@ -5945,7 +6014,7 @@ fn timeline_row_plain(s: &Session, u: usize, masked: bool) -> bool {
 /// `look` with no state a cue row can hold on but down (the board shows a fall): full HP, no statuses, conditions or
 /// derived stats.
 fn plain_look(look: &emberwake_battle::portrait::Look) -> emberwake_battle::portrait::Look {
-    emberwake_battle::portrait::Look { hp: look.max_hp, max_hp: look.max_hp, down: look.down, statuses: Vec::new(), conditions: Vec::new(), derived: Vec::new(), ruleset: look.ruleset.clone() }
+    emberwake_battle::portrait::Look { hp: look.max_hp, max_hp: look.max_hp, down: look.down, statuses: Vec::new(), conditions: Vec::new(), derived: Vec::new(), ruleset: look.ruleset.clone(), unspent: 0 }
 }
 
 /// PORTRAITFX1-TL (6.2 row 4): `who`'s portrait in a timeline track's icon square `sq` (the widget's
@@ -13315,6 +13384,39 @@ mod portrait_panel_tests {
         }
     }
 
+    /// PORTRAITFX2 5.3: the battle screen's first frame fires `battle_start` on every living unit's panel portrait,
+    /// once, and `ambush` on the player side's only in an ambush deployment (fixture rows: a flash and a tint).
+    #[test]
+    fn fx2_the_first_frame_fires_battle_start_once_and_ambush_on_the_player_side() {
+        let mut fixture = rows();
+        fixture.push(row(json!({"id": "start_flash", "event": "battle_start", "ms": 300, "color": "#fbbf24"})));
+        fixture.push(row(json!({"id": "ambush_tint", "event": "ambush", "effect": "tint", "ms": 300, "color": "#e11d48"})));
+        for deployment in ["standard", emberwake_battle::portrait::AMBUSH_DEPLOYMENT] {
+            let mut cx = cx_with(fixture.clone());
+            cx.settings.v["battle_view"] = json!("flat");
+            let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+            let mut b = BattleScreen::arena_with(&cx, None, &encounter, None, "", false);
+            assert!(b.host.session.is_some(), "{encounter} starts: {}", b.message);
+            // the deployment as the encounter row would set it (only `start_events` reads it after the start)
+            b.host.session.as_mut().expect("a session").def.deployment = deployment.into();
+            let encounter = format!("{encounter} ({deployment})");
+            assert!(b.panel_faces.get(&b.unit_portrait(&cx, 0).0.key).is_none(), "{encounter}: nothing before the first frame");
+            let mut g = crate::hud::hud_tests::gfx();
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            let now = b.clock.now();
+            let s = b.session();
+            let ambush = s.def.deployment == "ambush";
+            for u in (0..s.w.units.len()).filter(|&u| s.w.units[u].hp > 0 && !s.w.units[u].is_withdrawn) {
+                let key = b.unit_portrait(&cx, u).0.key;
+                let f = b.panel_faces.get(&key).unwrap_or_else(|| panic!("{encounter}: unit {u}'s portrait reacted"));
+                assert_eq!(f.level("flash", now).map(|l| l.start), Some(now), "{encounter}: unit {u}'s battle_start flash");
+                let party = s.w.allies.contains(&u);
+                assert_eq!(f.level("tint", now).is_some(), ambush && party, "{encounter}: unit {u} (party {party}, ambush {ambush})");
+            }
+            assert!(!b.portrait_start, "{encounter}: the start events fire once");
+        }
+    }
+
     /// P2 (5.3, 6.2 row 3; FX1 rule I): a step's portrait events wait in its impact: before it lands no struck
     /// portrait reacts; at the impact each fires its event's rows from the impact's ms (the flash in its row's colour,
     /// a jolt for a blow). Each event through the binding: `crit` jolts harder than `hit`, `guard_hit` flashes the
@@ -13334,7 +13436,8 @@ mod portrait_panel_tests {
             let blows = i.portrait.iter().filter(|(v, e)| *v == u && ["hit", "crit", "guard_hit"].contains(e)).count();
             assert_eq!(blows, 1, "{} lost HP: one of hit, crit, guard_hit", s.w.units[u].name);
         }
-        let keys: Vec<(String, &str)> = i.portrait.iter().filter(|(_, e)| *e != "break").map(|&(u, e)| (b.unit_portrait(&cx, u).0.key, e)).collect();
+        // the blows and heals (PORTRAITFX2: a step may carry `ally_down` too, which no flash row answers)
+        let keys: Vec<(String, &str)> = i.portrait.iter().filter(|(_, e)| ["hit", "crit", "guard_hit", "heal"].contains(e)).map(|&(u, e)| (b.unit_portrait(&cx, u).0.key, e)).collect();
         assert!(keys.iter().all(|(k, _)| b.panel_faces.get(k).is_none()), "nothing reacts at the pop");
         b.clock.ms = at as f64;
         b.fire_due(&mut cx);
@@ -13647,7 +13750,8 @@ mod portrait_timeline_tests {
         b.timeline_faces = Faces::capped(Tier::Minimal);
         let i = b.impacts[0].clone();
         let at = i.at.expect("resolved");
-        let keys: Vec<(String, &str)> = i.portrait.iter().filter(|(_, e)| *e != "break").map(|&(u, e)| (b.unit_portrait(&cx, u).0.key, e)).collect();
+        // the blows and heals (PORTRAITFX2: a step may carry `ally_down` too, which no flash row answers)
+        let keys: Vec<(String, &str)> = i.portrait.iter().filter(|(_, e)| ["hit", "crit", "guard_hit", "heal"].contains(e)).map(|&(u, e)| (b.unit_portrait(&cx, u).0.key, e)).collect();
         assert!(keys.iter().all(|(k, _)| b.timeline_faces.get(k).is_none()), "nothing reacts at the pop");
         b.clock.ms = at as f64;
         b.fire_due(&mut cx);

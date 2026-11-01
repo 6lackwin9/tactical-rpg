@@ -119,7 +119,7 @@ fn card_errors(v: &View, w: &str, i: usize, raw: &Value) -> Vec<String> {
     if c.get("expression").is_some_and(|x| x.as_str() != Some("")) && style != "line" && CARD_STYLES.contains(&style.as_str()) {
         errors.push(format!("{label}: expression is for a line card only."));
     } else {
-        errors.extend(dialogue::expression_error(c, &label));
+        errors.extend(dialogue::expression_error(c, &label, &v.faces()));
     }
     // FX1 5.1: the card's camera shake ("" = none)
     if let Some(x) = c.get("shake").filter(|x| !x.as_str().is_some_and(|s| s.is_empty() || rpgkit_data::SHAKE_PRESETS.contains(&s))) {

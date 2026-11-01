@@ -1551,7 +1551,7 @@ mod tests {
 
     /// PORTRAITFX1 4.1 and 5.4: a portrait's face sidecar `<id>.face.json` sits beside it (any portrait folder);
     /// expression frames `faces/<id>/<expression>.png` (and their sidecars) only under the unique folders, named by
-    /// `EXPRESSIONS`.
+    /// the game's faces (PORTRAITFX2 FL4: `Catalog::faces`).
     #[test]
     fn portrait_sidecars_and_expression_frames_follow_the_layout() {
         for ok in ["portraits/npcs/tess.png", "portraits/npcs/tess.face.json", "portraits/common/beast_render_beast.face.json", "portraits/heroes/faces/kaelen/hurt.png", "portraits/bosses/faces/proctor_quell/neutral.face.json"] {
@@ -1562,6 +1562,15 @@ mod tests {
         }
     }
 
+    /// The shipped data's faces (PORTRAITFX2 FL1), read once.
+    fn shipped_faces() -> &'static [String] {
+        static FACES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        FACES.get_or_init(|| {
+            let dir = emberwake_world::Data::find_data_dir(Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
+            emberwake_world::Data::open(&dir).expect("data").0.cat.faces()
+        })
+    }
+
     /// One path of the section 3 tree (game, kit or engine root), plus the PLAYUI1 section 6 icons: toolkit glyphs
     /// `ui/<id>.png` and the `ui/hud`, `ui/markers` and `ui/services` folders, PROPS1's `props/<set>/<art>/`, the
     /// story scene pictures `backgrounds/story/<id>.png` (STORYART1, named by a vignette card's `image`) and the
@@ -1570,7 +1579,7 @@ mod tests {
         let p: Vec<&str> = rel.split('/').collect();
         let png = |s: &str| s.ends_with(".png");
         let face = |s: &str| png(s) || s.ends_with(".face.json");
-        let expression = |s: &str| emberwake_content::art::EXPRESSIONS.iter().any(|e| s == format!("{e}.png") || s == format!("{e}.face.json"));
+        let expression = |s: &str| shipped_faces().iter().any(|e| s == format!("{e}.png") || s == format!("{e}.face.json"));
         let v = |s: &str| s.starts_with('v') && s.trim_start_matches('v').trim_end_matches(".png").parse::<u32>().is_ok() && png(s);
         if p.last() == Some(&"README.md") || matches!(p.as_slice(), ["fonts", ..]) {
             return true;

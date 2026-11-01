@@ -265,9 +265,10 @@ pub fn sidecar_problems(root: &std::path::Path, rel: &str) -> Vec<String> {
 /// A11 and A12 over the `portraits/` of asset layer `root` (warnings, one `<path>: <problem>` line each, paths
 /// relative to the root, in path order; A11 first): every `*.face.json` parses and fits its PNG (`sidecar_problems`);
 /// under `portraits/<folder>/faces/<id>/` (unique tiers only) each file is `<expression>.png` or
-/// `<expression>.face.json` with an expression of `art::EXPRESSIONS`, `<id>` has its unique portrait or a `neutral.png`
-/// (in any of `layers`), and a frame without its own sidecar under a base sidecar with eyes uses the base anchors.
-pub fn portrait_file_warnings(root: &std::path::Path, layers: &assets::Layers) -> Vec<String> {
+/// `<expression>.face.json` with an expression of the game's faces `names` (PORTRAITFX2 FL4: `View::faces`), `<id>` has its
+/// unique portrait or a `neutral.png` (in any of `layers`), and a frame without its own sidecar under a base sidecar
+/// with eyes uses the base anchors.
+pub fn portrait_file_warnings(root: &std::path::Path, layers: &assets::Layers, names: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let portraits = root.join("portraits");
     let files = files_under(root, &portraits);
@@ -309,8 +310,8 @@ pub fn portrait_file_warnings(root: &std::path::Path, layers: &assets::Layers) -
                         continue;
                     }
                 };
-                if !art::EXPRESSIONS.contains(&stem) {
-                    out.push(format!("{rel}: '{stem}' is not one of {}.", art::EXPRESSIONS.join(", ")));
+                if !names.iter().any(|f| f == stem) {
+                    out.push(format!("{rel}: '{stem}' is not one of {}.", names.join(", ")));
                 } else if png && base_eyes && !root.join(assets::face_file(rel)).is_file() {
                     out.push(format!("{rel}: no {stem}.face.json; it uses the base anchors ({}).", assets::face_file(&base)));
                 }

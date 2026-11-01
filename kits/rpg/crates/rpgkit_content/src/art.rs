@@ -194,8 +194,9 @@ pub fn portrait_chain(tier: &str, id: &str, body: &str) -> Vec<String> {
     out
 }
 
-/// PORTRAITFX1 5.4 (PQ2): the expression names of the face frames.
-pub use rpgkit_data::EXPRESSIONS;
+/// PORTRAITFX1 5.4 (PQ2), PORTRAITFX2 FL1: the plain face and the kit's default faces (a game's own list:
+/// `Catalog::faces`).
+pub use rpgkit_data::{DEFAULT_FACES, NEUTRAL};
 
 /// PORTRAITFX1 5.4: the folder of a unique portrait's expression frames, `portraits/<folder>/faces/<id>`.
 pub fn faces_dir(folder: &str, id: &str) -> String {
@@ -209,10 +210,10 @@ pub fn face_chain(tier: &str, id: &str, body: &str, expression: &str) -> Vec<Str
     let mut out = Vec::new();
     if let Some(folder) = tier_folder(tier) {
         let dir = faces_dir(folder, id);
-        if !expression.is_empty() && expression != EXPRESSIONS[0] {
+        if !expression.is_empty() && expression != NEUTRAL {
             out.push(format!("{dir}/{expression}.png"));
         }
-        out.push(format!("{dir}/{}.png", EXPRESSIONS[0]));
+        out.push(format!("{dir}/{NEUTRAL}.png"));
     }
     out.extend(portrait_chain(tier, id, body));
     out

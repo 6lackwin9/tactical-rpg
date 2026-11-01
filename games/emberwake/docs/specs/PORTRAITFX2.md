@@ -1,5 +1,7 @@
 # PORTRAITFX2: motion per face and four more faces
 
+As built (F, 2026-11-01): 5.2-5.3 as written; only a `neutral` row keeps the four; no `round_start` under round intent.
+
 Status: proposed (spec 2026-11-01, from decision "Portrait motion per expression and four more faces" (user
 2026-11-01) in `games/emberwake/docs/decisions/classes-units.md`, with "Expression effects at runtime" in the same file
 and "Expression sheets: scale only and aligned cells" in `docs/decisions/workflow.md`)

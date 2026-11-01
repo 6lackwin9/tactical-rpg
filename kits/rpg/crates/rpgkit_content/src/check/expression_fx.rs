@@ -1,18 +1,24 @@
 //! Expression-effect rows (PORTRAITFX1-EX, docs/specs/PORTRAITFX1.md section 16; engine-only, no Godot original): the
-//! checks of one row of the kind `portrait_expressions` (the expression id, the tint and its strength and length, the
-//! mark and its colour, box, anchor, size and pulse, the shake, origin) and across rows (unique ids). The loader keeps
-//! the rows that pass, in file order. A row that draws nothing is a warning.
+//! checks of one row of the kind `portrait_expressions` (the face id, the tint and its strength and length, the mark
+//! and its colour, box, anchor, size and pulse, the shake, the motion, origin) and across rows (unique ids). The loader
+//! keeps the rows that pass, in file order; their ids are the game's faces after `neutral` (PORTRAITFX2 FL1-FL2,
+//! `rpgkit_data::faces_of`). A row that draws nothing is a warning.
 
 use super::View;
 use crate::source::fields;
 use aegis_core::assets::hex_colour;
 use aegis_core::json::{self, gstr, Dict};
-use rpgkit_data::{EXPRESSIONS, PORTRAIT_MARKS, PORTRAIT_MARK_BOXES};
+use rpgkit_data::{PORTRAIT_MARKS, PORTRAIT_MARK_BOXES};
 
 /// The catalog kind (file data/catalog/portrait_expressions.json; a missing file is an empty table).
 pub const KIND: &str = rpgkit_data::PORTRAIT_EXPRESSIONS_KIND;
-/// The plain face: it takes no effect row.
-pub const NEUTRAL: &str = "neutral";
+/// The plain face: its row (PORTRAITFX2 FL2) carries motion fields only.
+pub const NEUTRAL: &str = rpgkit_data::NEUTRAL;
+/// PORTRAITFX2 FL2: a face id's length range (a letter first, then a-z, 0-9 or _).
+pub const ID_MIN: usize = 2;
+pub const ID_MAX: usize = 24;
+/// PORTRAITFX2 FL2: the refusal of a `neutral` row with a tint, a mark or a shake.
+pub const NEUTRAL_MOTION_ONLY: &str = "neutral is the plain face: motion fields only (no tint, mark or shake).";
 /// The ranges: tint strength, a timed tint's ms, the anchor (in units of its box), the mark's width (a share of the
 /// portrait's side), a pulse period, the shake px (the jolt ceiling) and ms.
 pub const STRENGTH: (f64, f64) = (0.05, 1.0);
@@ -82,16 +88,16 @@ fn colour(e: &Dict, key: &str, label: &str, out: &mut Vec<String>) -> bool {
 pub fn row_errors(e: &Dict) -> Vec<String> {
     let mut out = Vec::new();
     let id = json::s(e, "id");
-    let named: Vec<&str> = EXPRESSIONS.iter().copied().filter(|x| *x != NEUTRAL).collect();
     if id.is_empty() {
-        out.push(format!("ID is required: one of {}.", named.join(", ")));
-    } else if id == NEUTRAL {
-        out.push(format!("'{NEUTRAL}' is the plain face: it takes no effect row (one of {}).", named.join(", ")));
-    } else if !named.contains(&id.as_str()) {
-        out.push(format!("ID '{id}' is not an expression (one of {}).", named.join(", ")));
+        out.push(format!("ID is required: the face's name ({ID_MIN}-{ID_MAX} characters of a-z, 0-9 and _, a letter first)."));
+    } else if !id_ok(&id) {
+        out.push(format!("ID '{id}' must be {ID_MIN}-{ID_MAX} characters of a-z, 0-9 and _, a letter first."));
     }
     // the tint
     let tinted = colour(e, "tint", "Tint", &mut out);
+    if id == NEUTRAL && (tinted || !json::s(e, "mark").is_empty() || json::i(e, "shake_px", 0) != 0) {
+        out.push(NEUTRAL_MOTION_ONLY.into());
+    }
     float_in(e, "tint_strength", "Tint strength", STRENGTH, 0.3, &mut out);
     let tint_ms = json::i(e, "tint_ms", 0);
     if tint_ms != 0 && !(TINT_MS.0..=TINT_MS.1).contains(&tint_ms) {
@@ -139,6 +145,11 @@ pub fn row_errors(e: &Dict) -> Vec<String> {
         out.push(format!("Origin: '{origin}' is not one of {}.", origins.join(", ")));
     }
     out
+}
+
+/// PORTRAITFX2 FL2: `[a-z][a-z0-9_]{ID_MIN - 1, ID_MAX - 1}`.
+fn id_ok(id: &str) -> bool {
+    id.chars().next().is_some_and(|c| c.is_ascii_lowercase()) && (ID_MIN..=ID_MAX).contains(&id.chars().count()) && id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
 /// An int field within `lo..=hi`, else "`label` must be lo-hi (is x)." ("lo to hi" when lo is negative).

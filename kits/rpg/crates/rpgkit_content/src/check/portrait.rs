@@ -8,7 +8,7 @@ use super::View;
 use crate::source::fields;
 use aegis_core::assets::hex_colour;
 use aegis_core::json::{self, gstr, Dict};
-use rpgkit_data::{EXPRESSIONS, MEMBER_CONDITIONS, PORTRAIT_COLOR_EFFECTS, PORTRAIT_EFFECTS, PORTRAIT_EVENTS, PORTRAIT_JOLTS, PORTRAIT_METER_TRIGGER, PORTRAIT_SURFACES, PORTRAIT_TRIGGERS};
+use rpgkit_data::{MEMBER_CONDITIONS, PORTRAIT_COLOR_EFFECTS, PORTRAIT_EFFECTS, PORTRAIT_EVENTS, PORTRAIT_JOLTS, PORTRAIT_METER_TRIGGER, PORTRAIT_SKILL_EVENT, PORTRAIT_SURFACES, PORTRAIT_TRIGGERS};
 use rpgkit_rules::status;
 
 /// The catalog kind (file data/catalog/portrait_cues.json).
@@ -36,9 +36,14 @@ pub const ONE_SHOT_EFFECTS: [&str; 2] = ["flash", "jolt"];
 /// The keys a row matches on besides its trigger (the cross-row check compares them with the effect).
 const MATCH_KEYS: [&str; 6] = ["event", "status", "condition", "stat", "below", "drop_pct"];
 
-/// What a row's checks read from the rest of the catalog: the derived-stat ids.
+/// PORTRAITFX2 5.3: a `skill` row's `min_level` range (0 = any skill).
+pub const MIN_LEVEL_MAX: i64 = 9;
+
+/// What a row's checks read from the rest of the catalog: the derived-stat ids and the game's faces (PORTRAITFX2 FL1,
+/// `View::faces`).
 pub struct Refs<'a> {
     pub derived: &'a [String],
+    pub faces: &'a [String],
 }
 
 fn chars(s: &str) -> usize {
@@ -108,7 +113,7 @@ pub fn row_errors(e: &Dict, refs: &Refs) -> Vec<String> {
         out.push(format!("Effect {effect} is a one-shot reaction: it needs an event row (a {trigger} row holds and never fires it)."));
     } else if PORTRAIT_EFFECTS.contains(&effect.as_str()) {
         // an unknown effect has no numbers to check
-        effect_errors(e, &trigger, &effect, &mut out);
+        effect_errors(e, &trigger, &effect, refs.faces, &mut out);
     } else {
         out.push(format!("Effect: '{effect}' is not one of {}.", PORTRAIT_EFFECTS.join(", ")));
     }
@@ -140,7 +145,7 @@ pub fn row_errors(e: &Dict, refs: &Refs) -> Vec<String> {
 }
 
 /// The fields that depend on a known effect: the duration, the jolt preset, the colour, the expression.
-fn effect_errors(e: &Dict, trigger: &str, effect: &str, out: &mut Vec<String>) {
+fn effect_errors(e: &Dict, trigger: &str, effect: &str, faces: &[String], out: &mut Vec<String>) {
     ms_errors(e, trigger, effect, out);
     let preset = json::s(e, "preset");
     match (effect == "jolt", preset.is_empty()) {
@@ -160,8 +165,8 @@ fn effect_errors(e: &Dict, trigger: &str, effect: &str, out: &mut Vec<String>) {
     }
     let expression = json::s(e, "expression");
     match (effect == "face", expression.is_empty()) {
-        (true, true) => out.push(format!("Expression: a face row needs one of {}.", EXPRESSIONS.join(", "))),
-        (true, false) if !EXPRESSIONS.contains(&expression.as_str()) => out.push(format!("Expression '{expression}' is not one of {}.", EXPRESSIONS.join(", "))),
+        (true, true) => out.push(format!("Expression: a face row needs one of {}.", faces.join(", "))),
+        (true, false) if !faces.contains(&expression) => out.push(format!("Expression '{expression}' is not one of {}.", faces.join(", "))),
         (false, false) => out.push("Expression is for a face row only.".into()),
         _ => {}
     }
@@ -178,6 +183,15 @@ fn match_errors(e: &Dict, trigger: &str, refs: &Refs, out: &mut Vec<String>) {
         }
     } else if !event.is_empty() {
         out.push("Event is for an event row only.".into());
+    }
+    // PORTRAITFX2 5.3: a skill row's least skill level
+    let min_level = json::i(e, "min_level", 0);
+    if trigger == "event" && event == PORTRAIT_SKILL_EVENT {
+        if !(0..=MIN_LEVEL_MAX).contains(&min_level) {
+            out.push(format!("Min level must be 0-{MIN_LEVEL_MAX} on a skill row (is {min_level})."));
+        }
+    } else if min_level != 0 {
+        out.push(format!("Min level is for a {PORTRAIT_SKILL_EVENT} event row only."));
     }
     let st = json::s(e, "status");
     if trigger == "status" {
@@ -263,6 +277,6 @@ pub fn warnings(e: &Dict) -> Vec<String> {
 pub fn entry_errors(v: &View, e: &Dict, current_id: &str) -> Vec<String> {
     let mut rows: Vec<Dict> = v.entries(KIND).iter().filter(|r| current_id.is_empty() || json::s(r, "id") != current_id).cloned().collect();
     rows.push(e.clone());
-    let derived = v.derived_ids();
-    check_rows(&rows, &Refs { derived: &derived }).pop().unwrap_or_default()
+    let (derived, faces) = (v.derived_ids(), v.faces());
+    check_rows(&rows, &Refs { derived: &derived, faces: &faces }).pop().unwrap_or_default()
 }

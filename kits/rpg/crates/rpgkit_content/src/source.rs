@@ -96,9 +96,10 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
     out.insert(DERIVED_KIND.into(), Value::Array(read_derived(&dir, errors).into_iter().map(Value::Object).collect()));
     let rulesets = read_rulesets(&dir, &out, errors);
     out.insert(RULESET_KIND.into(), Value::Array(rulesets.into_iter().map(Value::Object).collect()));
+    // PORTRAITFX2 FL1: the face rows first, so the cue rows check against the game's faces
+    out.insert(EXPRESSION_FX_KIND.into(), Value::Array(read_expression_fx(&dir, errors).into_iter().map(Value::Object).collect()));
     let cues = read_portrait_cues(&dir, &out, errors);
     out.insert(PORTRAIT_KIND.into(), Value::Array(cues.into_iter().map(Value::Object).collect()));
-    out.insert(EXPRESSION_FX_KIND.into(), Value::Array(read_expression_fx(&dir, errors).into_iter().map(Value::Object).collect()));
     for kind in HOOK_KINDS {
         let rows = read_hook_kind(&dir, kind, &out, errors);
         out.insert(kind.into(), Value::Array(rows.into_iter().map(Value::Object).collect()));
@@ -157,8 +158,8 @@ fn read_rulesets(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Vec<Dic
 }
 
 /// PORTRAITFX1-S 5.1 (engine-only, beside CATALOG_KINDS): the portrait cue rows that pass their checks
-/// (`check::portrait`) against the loaded derived stats (`loaded`), in file order; every problem goes to `errors` and
-/// its row is skipped.
+/// (`check::portrait`) against the loaded derived stats and faces (`loaded`; PORTRAITFX2 FL1), in file order; every
+/// problem goes to `errors` and its row is skipped.
 fn read_portrait_cues(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Vec<Dict> {
     let path = dir.join(format!("{PORTRAIT_KIND}.json"));
     let Some(doc) = read(&path, errors) else { return Vec::new() };
@@ -171,7 +172,8 @@ fn read_portrait_cues(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Ve
         }
     }
     let derived: Vec<String> = json::arr(json::get(loaded, DERIVED_KIND)).iter().map(|e| json::s(json::dict(e), "id")).collect();
-    let checked = crate::check::portrait::check_rows(&rows, &crate::check::portrait::Refs { derived: &derived });
+    let faces = rpgkit_data::faces_of(json::arr(json::get(loaded, EXPRESSION_FX_KIND)).iter().map(|e| json::get(json::dict(e), "id").as_str().unwrap_or("")));
+    let checked = crate::check::portrait::check_rows(&rows, &crate::check::portrait::Refs { derived: &derived, faces: &faces });
     let mut kept = Vec::new();
     for (row, found) in rows.into_iter().zip(checked) {
         if found.is_empty() {

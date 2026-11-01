@@ -157,7 +157,7 @@ const PORTRAIT_FOLDERS: [&str; 5] = ["heroes", "npcs", "elites", "bosses", "comm
 const PORTRAIT_EVENT_SURFACE: &str = "panel";
 
 /// One portrait of the list: its file (`portraits/<folder>/<id>.png`; a character with only expression frames keeps
-/// this path), the layer holding it and its expression frames (in `EXPRESSIONS` order).
+/// this path), the layer holding it and its expression frames (in the game's face order, `Catalog::faces`).
 #[derive(Debug, Clone, PartialEq)]
 struct PortraitFile {
     rel: String,
@@ -167,8 +167,9 @@ struct PortraitFile {
     frames: Vec<String>,
 }
 
-/// Every portrait of `layers` (a file once: the first layer holding it), by folder, with its frames.
-fn portrait_files(layers: &Layers) -> Vec<PortraitFile> {
+/// Every portrait of `layers` (a file once: the first layer holding it), by folder, with its frames (of `faces`, in
+/// that order; PORTRAITFX2 FL4).
+fn portrait_files(layers: &Layers, faces: &[String]) -> Vec<PortraitFile> {
     let layer_of = |rel: &str| {
         let i = layers.roots.iter().position(|r| r.join(rel).is_file());
         let names = if layers.roots.len() == 3 { ["game", "kit", "engine"] } else { ["", "", ""] };
@@ -188,7 +189,7 @@ fn portrait_files(layers: &Layers) -> Vec<PortraitFile> {
         for id in ids {
             let rel = format!("{dir}/{id}.png");
             let listed = layers.list(&format!("{dir}/faces/{id}"));
-            let frames: Vec<String> = emberwake_content::art::EXPRESSIONS.iter().filter(|e| listed.contains(&format!("{e}.png"))).map(|e| e.to_string()).collect();
+            let frames: Vec<String> = faces.iter().filter(|e| listed.contains(&format!("{e}.png"))).cloned().collect();
             let at = if layers.has(&rel) { rel.clone() } else { frames.first().map(|e| format!("{dir}/faces/{id}/{e}.png")).unwrap_or_default() };
             out.push(PortraitFile { layer: layer_of(&at), rel, folder: folder.to_string(), id, frames });
         }
@@ -381,7 +382,7 @@ impl PortraitPage {
     /// Draws the page into `r`: the list on the left, the stage with the foot line and the sidecar in the middle, the
     /// controls and the cue rows on the right.
     fn draw(&mut self, ui: &mut Ui<GAct>, cx: &mut Cx, r: Rect) {
-        let files = self.files.get_or_insert_with(|| portrait_files(cx.art.layers())).clone();
+        let files = self.files.get_or_insert_with(|| portrait_files(cx.art.layers(), &cx.data.cat.faces())).clone();
         let data = cx.data.clone();
         let rows = &data.cat.portrait_cues;
         let line = ui.p.line_h(SMALL).ceil() as i32;

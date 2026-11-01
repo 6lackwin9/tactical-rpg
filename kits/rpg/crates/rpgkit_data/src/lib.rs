@@ -654,6 +654,12 @@ pub struct Catalog {
 }
 
 impl Catalog {
+    /// PORTRAITFX2 FL1: the game's faces: `neutral`, then the `portrait_expressions` row ids in file order
+    /// (`faces_of`; no rows: `DEFAULT_FACES`).
+    pub fn faces(&self) -> Vec<String> {
+        faces_of(self.portrait_expressions.iter().map(|r| r.id.as_str()))
+    }
+
     /// Builds the catalog from a resolved `{kind: [entry, ...]}` value.
     pub fn from_value(root: &Value) -> Self {
         let rows = |kind: &str| -> Vec<Obj> {
@@ -1290,12 +1296,15 @@ impl Step {
 /// 5.1: the catalog kind of the cue rows (file `data/catalog/portrait_cues.json`, read beside the catalog kinds).
 pub const PORTRAIT_CUES_KIND: &str = "portrait_cues";
 /// 5.1: what a row answers: `event` rows react to a battle step event; the others are state rows that hold while
-/// their match is true.
-pub const PORTRAIT_TRIGGERS: [&str; 6] = ["event", "status", "condition", "hp", "derived", "down"];
+/// their match is true (PORTRAITFX2 5.3: `unspent` while a party member has unspent points).
+pub const PORTRAIT_TRIGGERS: [&str; 7] = ["event", "status", "condition", "hp", "derived", "down", "unspent"];
 /// 5.1: the trigger reserved for unit-scope meters (refused until CAMPAIGN1-DOC defines them).
 pub const PORTRAIT_METER_TRIGGER: &str = "meter";
-/// 5.1, 5.3: the battle step events an `event` row matches.
-pub const PORTRAIT_EVENTS: [&str; 5] = ["hit", "crit", "guard_hit", "heal", "break"];
+/// 5.1, 5.3: the battle events an `event` row matches (PORTRAITFX2 5.3: the battle's start, an ambush, a round's
+/// start (classic), a skill's wind-up, an ally going down, the player's win).
+pub const PORTRAIT_EVENTS: [&str; 11] = ["hit", "crit", "guard_hit", "heal", "break", "battle_start", "ambush", "round_start", "skill", "ally_down", "victory"];
+/// PORTRAITFX2 5.3: the event whose rows read `min_level` (the skill's level).
+pub const PORTRAIT_SKILL_EVENT: &str = "skill";
 /// 5.1: the kit's copy of the engine's portrait effect names (`aegis_ui::portrait_fx::EFFECTS`, same order; the kit
 /// crates do not depend on the UI, so a game test keeps the two equal).
 pub const PORTRAIT_EFFECTS: [&str; 12] = ["flash", "jolt", "desaturate", "tint", "fade", "still", "glow", "veins", "eye_glow", "ash", "smoke", "face"];
@@ -1305,9 +1314,27 @@ pub const PORTRAIT_JOLTS: [&str; 2] = ["hit", "crit"];
 pub const PORTRAIT_COLOR_EFFECTS: [&str; 7] = ["flash", "tint", "glow", "veins", "eye_glow", "ash", "smoke"];
 /// 5.1, 6.2: the screens that draw portraits (a row's `surfaces`; none listed = all).
 pub const PORTRAIT_SURFACES: [&str; 4] = ["dialogue", "roster", "panel", "timeline"];
-/// 5.4 (PQ2): the expression names of a portrait's face frames (`portraits/<folder>/faces/<id>/<expression>.png`), a
-/// `face` row's `expression`, and a dialogue node's or `line` card's `expression` ("" = neutral).
-pub const EXPRESSIONS: [&str; 4] = ["neutral", "hurt", "angry", "afraid"];
+/// PORTRAITFX2 FL1: the plain face (`face_chain`'s fallback frame; "" draws it too).
+pub const NEUTRAL: &str = "neutral";
+/// PORTRAITFX2 FL1: the faces of a game without `portrait_expressions` rows (other than `neutral`'s): the names of a
+/// portrait's face frames (`portraits/<folder>/faces/<id>/<face>.png`), a `face` row's `expression`, and a dialogue
+/// node's or `line` card's `expression` ("" = neutral). A game's own list is `Catalog::faces` (`faces_of`).
+pub const DEFAULT_FACES: [&str; 4] = [NEUTRAL, "hurt", "angry", "afraid"];
+
+/// PORTRAITFX2 FL1: the face list of the `portrait_expressions` row ids `ids` (file order): `neutral`, then each id
+/// once (a `neutral` row adds nothing); with no id but `neutral`'s, `DEFAULT_FACES`.
+pub fn faces_of<'a>(ids: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let mut out = vec![NEUTRAL.to_string()];
+    for id in ids {
+        if !id.is_empty() && !out.iter().any(|f| f == id) {
+            out.push(id.to_string());
+        }
+    }
+    if out.len() == 1 {
+        return DEFAULT_FACES.iter().map(|f| f.to_string()).collect();
+    }
+    out
+}
 /// ROSTER1 W1: the member conditions the kit knows (a cue row naming another condition warns).
 pub const MEMBER_CONDITIONS: [&str; 1] = ["wounded"];
 
@@ -1339,7 +1366,7 @@ pub struct PortraitCue {
     pub preset: String,
     /// "" (the effect's default) or `#rrggbb`.
     pub color: String,
-    /// `face`: one of EXPRESSIONS.
+    /// `face`: a face of the game (`Catalog::faces`).
     pub expression: String,
     /// `face`: the highest wins.
     pub priority: i32,
@@ -1347,6 +1374,8 @@ pub struct PortraitCue {
     pub surfaces: Vec<String>,
     /// None listed = every ruleset.
     pub rulesets: Vec<String>,
+    /// PORTRAITFX2 5.3: `skill` event rows fire for a skill of at least this level (0 = any skill); else 0.
+    pub min_level: i32,
 }
 
 impl PortraitCue {
@@ -1369,6 +1398,7 @@ impl PortraitCue {
             priority: int(o, "priority", 50),
             surfaces: strings(o, "surfaces"),
             rulesets: strings(o, "rulesets"),
+            min_level: int(o, "min_level", 0),
         }
     }
 
@@ -1391,7 +1421,8 @@ impl PortraitCue {
 // ---- Expression effects (PORTRAITFX1-EX, kit hook; engine-only, no Godot original) ---------------------------------
 
 /// PORTRAITFX1-EX: the catalog kind of the expression-effect rows (file `data/catalog/portrait_expressions.json`,
-/// read beside the catalog kinds); a row's id is the expression it draws for (EXPRESSIONS but `neutral`).
+/// read beside the catalog kinds); a row's id is the face it draws for (PORTRAITFX2 FL1: the rows name the game's
+/// faces; a `neutral` row carries only the plain face's motion).
 pub const PORTRAIT_EXPRESSIONS_KIND: &str = "portrait_expressions";
 /// The kit's copy of the engine's mark names (`aegis_ui::portrait_fx::MARKS`; a game test keeps the two equal).
 pub const PORTRAIT_MARKS: [&str; 2] = ["vein", "sweat"];
@@ -1403,7 +1434,7 @@ pub const PORTRAIT_MARK_BOXES: [&str; 2] = ["face", "eyes"];
 /// short shake. Read from a loaded (checked) row; the defaults are the schema's.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PortraitExpression {
-    /// One of EXPRESSIONS but `neutral`.
+    /// The face (PORTRAITFX2 FL1; `neutral`: motion fields only).
     pub id: String,
     /// "" (no tint) or `#rrggbb`, its strength 0.05-1.0, its length (0 holds; above 0 fades out over that many ms).
     pub tint: String,

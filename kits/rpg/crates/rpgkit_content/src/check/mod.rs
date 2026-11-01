@@ -90,6 +90,12 @@ impl View {
         self.entries(derived::KIND).iter().map(|e| json::s(e, "id")).collect()
     }
 
+    /// PORTRAITFX2 FL1: the game's faces: `neutral`, then the loaded `portrait_expressions` row ids in file order
+    /// (`rpgkit_data::faces_of`; no rows: the kit's `DEFAULT_FACES`).
+    pub fn faces(&self) -> Vec<String> {
+        rpgkit_data::faces_of(self.entries(expression_fx::KIND).iter().map(|e| json::get(e, "id").as_str().unwrap_or("")))
+    }
+
     /// A base stat or a loaded derived stat id.
     pub fn is_stat(&self, stat: &str) -> bool {
         rpgkit_data::STATS.contains(&stat) || self.has(derived::KIND, stat)
@@ -481,8 +487,9 @@ pub fn warnings_all(v: &View) -> Report {
             out.insert(format!("{}:{}", expression_fx::KIND, json::s(e, "id")), found);
         }
     }
+    let faces = v.faces();
     for root in &v.assets.roots {
-        let found = assets::portrait_file_warnings(root, &v.assets);
+        let found = assets::portrait_file_warnings(root, &v.assets, &faces);
         if !found.is_empty() {
             out.insert(format!("assets:{}", assets::layer_name(root)), found);
         }

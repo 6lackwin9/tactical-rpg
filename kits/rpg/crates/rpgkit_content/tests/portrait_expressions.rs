@@ -11,7 +11,7 @@ use rpgkit_content::check::expression_fx::{
     TINT_BREATH, TINT_MS,
 };
 use rpgkit_content::{check, source, store};
-use rpgkit_data::{Catalog, EXPRESSIONS, PORTRAIT_EXPRESSIONS_KIND as KIND, PORTRAIT_MARKS, PORTRAIT_MARK_BOXES, PORTRAIT_MOTION_KEYS};
+use rpgkit_data::{Catalog, PORTRAIT_EXPRESSIONS_KIND as KIND, PORTRAIT_MARKS, PORTRAIT_MARK_BOXES, PORTRAIT_MOTION_KEYS};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -32,11 +32,6 @@ fn drop_scratch(data: &Path) {
 
 fn dict(v: Value) -> Dict {
     json::dict(&v).clone()
-}
-
-/// The expressions a row may name (every one but the plain face).
-fn named() -> String {
-    EXPRESSIONS.iter().filter(|e| **e != expression_fx::NEUTRAL).copied().collect::<Vec<_>>().join(", ")
 }
 
 /// The schema default of `key` in the kind's field table.
@@ -80,9 +75,21 @@ fn each_mistake_has_its_text() {
     assert_eq!(check(json!({"id": "angry", "tint": "#e11d48", "mark": "vein", "mark_pulse_ms": 900})), ok, "an angry row");
     assert_eq!(check(json!({"id": "hurt", "tint": "#e11d48", "tint_ms": 240, "shake_px": 2, "shake_ms": 220})), ok, "a hurt row");
     assert_eq!(check(json!({"id": "afraid", "mark": "sweat", "mark_box": "eyes", "mark_x": ANCHOR.0, "mark_y": ANCHOR.1})), ok, "the anchor's ends");
-    assert_eq!(check(json!({"id": ""})), [format!("ID is required: one of {}.", named())]);
-    assert_eq!(check(json!({"id": "neutral", "tint": "#e11d48"})), [format!("'neutral' is the plain face: it takes no effect row (one of {}).", named())]);
-    assert_eq!(check(json!({"id": "smug", "tint": "#e11d48"})), [format!("ID 'smug' is not an expression (one of {}).", named())]);
+    // PORTRAITFX2 FL2: the id is the game's own face name; `neutral` takes motion fields only
+    let (lo, hi) = (expression_fx::ID_MIN, expression_fx::ID_MAX);
+    assert_eq!(check(json!({"id": ""})), [format!("ID is required: the face's name ({lo}-{hi} characters of a-z, 0-9 and _, a letter first).")]);
+    assert_eq!(check(json!({"id": "smug", "tint": "#e11d48"})), ok, "a game face");
+    let long = "s".repeat(hi + 1);
+    for bad in ["9lives", "Smug", "s", long.as_str(), "smug-face"] {
+        assert_eq!(check(json!({"id": bad, "tint": "#e11d48"})), [format!("ID '{bad}' must be {lo}-{hi} characters of a-z, 0-9 and _, a letter first.")], "{bad}");
+    }
+    assert_eq!(check(json!({"id": "s".repeat(hi), "tint": "#e11d48"})), ok, "{hi} characters");
+    assert_eq!(check(json!({"id": "neutral", "breath_ms": 4000})), ok, "a neutral row with motion");
+    for plain in [json!({"tint": "#e11d48"}), json!({"mark": "vein"}), json!({"shake_px": 1, "shake_ms": 200})] {
+        let mut row = dict(json!({"id": "neutral"}));
+        row.extend(dict(plain.clone()));
+        assert_eq!(check::validate_entry(&v, KIND, &row, ""), [expression_fx::NEUTRAL_MOTION_ONLY], "{plain}");
+    }
     assert_eq!(check(json!({"id": "angry", "tint": "red"})), ["Tint 'red' must be \"\" or #rrggbb."]);
     assert_eq!(check(json!({"id": "angry", "tint": "#e11d48", "tint_strength": 1.5})), [format!("Tint strength must be {:?}-{:?} (is 1.5).", STRENGTH.0, STRENGTH.1)]);
     assert_eq!(check(json!({"id": "angry", "tint": "#e11d48", "tint_ms": 10})), [format!("Tint ms must be 0 (it holds) or {}-{} (is 10).", TINT_MS.0, TINT_MS.1)]);
@@ -110,7 +117,7 @@ fn the_loader_keeps_the_rows_that_pass_and_warns_on_an_empty_row() {
     assert_eq!(kept, ["angry", "afraid"], "the refused rows are skipped");
     let found: Vec<&String> = src.errors.iter().filter(|e| e.contains("expression effect '")).collect();
     assert_eq!(found.len(), 2, "{found:?}");
-    assert!(found[0].contains("expression effect 'neutral': 'neutral' is the plain face"), "{found:?}");
+    assert!(found[0].ends_with(&format!("expression effect 'neutral': {}", expression_fx::NEUTRAL_MOTION_ONLY)), "{found:?}");
     assert!(found[1].ends_with("expression effect 'angry': ID 'angry' is already used by another expression effect."), "{found:?}");
     let v = store::view(&data);
     let warnings = check::warnings_all(&v);
@@ -125,7 +132,7 @@ fn the_writer_stores_what_differs_and_resaves_byte_for_byte() {
     let data = scratch("writer");
     let file = data.join("catalog").join(format!("{KIND}.json"));
     let refused = store::upsert(&data, None, KIND, &dict(json!({"id": "neutral", "tint": "#e11d48"})), None).err().expect("a neutral row is refused");
-    assert!(refused.iter().any(|e| e.contains("'neutral' is the plain face")), "{refused:?}");
+    assert!(refused.iter().any(|e| e.contains(expression_fx::NEUTRAL_MOTION_ONLY)), "{refused:?}");
     assert!(!file.exists(), "a refused first row leaves no file");
     let angry = json!({"id": "angry", "tint": "#e11d48", "tint_strength": 0.35, "mark": "vein", "mark_color": "#e11d48", "mark_pulse_ms": 900});
     store::upsert(&data, None, KIND, &dict(angry.clone()), None).expect("an angry row");
