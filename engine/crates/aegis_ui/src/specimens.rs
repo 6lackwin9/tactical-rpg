@@ -8,7 +8,12 @@
 //! fourth page, Portraits, draws the engine's code-drawn sample face (`portrait_fx::sample`) through a `PortraitFx` at a
 //! chosen size, with toggles for each overlay and state, buttons for the reactions, a local reduce motion and the
 //! anchors check, on its own clock. PORTRAITFX1-TL: the Timeline page's Icons check (`kit.timeline.icons`) gives every
-//! track its icon square (`Track.icon`), drawn by the page through `Timeline::draw_icons`.
+//! track its icon square (`Track.icon`), drawn by the page through `Timeline::draw_icons`. LOOK1-E1: a fifth page,
+//! Theme, shows the theme in force (`theme::th()`): every colour role's swatch, name and value, the LOOK1 8.2 contrast
+//! pairs with pass or fail, the three faces at the four text sizes, the header, badge and inset pieces, every frame
+//! role at 40 x 16 and 120 x 40 and the picked one at 300 x 120, and a switch between the engine default, the layers'
+//! theme (`theme::loaded()`) and that theme with frames off (it sets the theme in force for the whole window until the
+//! page or the gallery is left: `leave_theme`).
 
 use crate::canvas::{rgb, rgba, Image, Rect, Rgba};
 use crate::fx::{Beam, Camera, Clock, Effect, Flash, Fx, Layer, Look, Looped, Orbit, Projectile, Ring, ShakeLimits, ShakeTable, Sparks, Trail, PRIM_KINDS, SHAKE_PRESETS};
@@ -16,6 +21,8 @@ use crate::portrait_fx::{self, Budget, Cue, ExpressionFx, Motion, PortraitFx, Po
 use aegis_core::assets::Face;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use crate::painter::Typeface;
+use crate::theme::{self, Theme, FRAME_ROLES, ROLES};
 use crate::timeline::{Link, Mark, Part, PartStyle, Section, Segment, Timeline, Track};
 use crate::ui::{tip, Glyph, Ui, BODY, DIM, FOE, GOLD, GOOD, INFO, SMALL, TEXT};
 
@@ -60,10 +67,17 @@ pub enum KitAct {
     PortraitAnchors,
     /// PORTRAITFX2-M: the motion profile (`portrait_fx::MOTION_SAMPLES` index).
     PortraitMotion(usize),
+    /// LOOK1-E1: the Theme page's switch (`THEME_VIEWS` index) and the frame role shown large (`FRAME_ROLES` index).
+    ThemeView(usize),
+    ThemeFrame(usize),
 }
 
 pub const TABS: [&str; 3] = ["First", "Second", "Third"];
-pub const PAGES: [&str; 4] = ["Widgets", "Timeline", "Effects", "Portraits"];
+pub const PAGES: [&str; 5] = ["Widgets", "Timeline", "Effects", "Portraits", "Theme"];
+/// The Theme page's switch: the engine default, the theme the asset layers gave, that theme with frames off.
+pub const THEME_VIEWS: [&str; 3] = ["Engine default", "Layers' theme", "Frames off"];
+/// The text sizes the Theme page shows each face at (the settings' four, `screen::TEXT_SIZES`).
+pub const THEME_TEXT_SIZES: [f32; 4] = [0.85, 1.0, 1.15, 1.3];
 /// The Portraits page: the sizes on offer (logical px), the toggles, the reactions and the stage (the largest size
 /// plus the jolt ceiling and a margin on every side).
 pub const PORTRAIT_SIZES: [i32; 6] = [96, 64, 48, 32, 24, 16];
@@ -123,6 +137,9 @@ pub struct Specimens {
     pub fx: FxDemo,
     /// The Portraits page's state.
     pub portrait: PortraitDemo,
+    /// The Theme page's switch (`THEME_VIEWS`) and its large frame role (`FRAME_ROLES` index).
+    pub theme_view: usize,
+    pub theme_frame: usize,
 }
 
 /// The Portraits page's clock, portrait (its cache behind a `RefCell`: the page draws through `&self`), sample face
@@ -351,6 +368,8 @@ impl Default for Specimens {
             icons: false,
             fx: FxDemo::default(),
             portrait: PortraitDemo::default(),
+            theme_view: 1,
+            theme_frame: 0,
         }
     }
 }
@@ -387,6 +406,8 @@ impl Specimens {
             KitAct::PortraitReduce => format!("portrait reduce motion {}", if self.portrait.reduce { "off" } else { "on" }),
             KitAct::PortraitAnchors => format!("portrait anchors {}", if self.portrait.anchors { "off" } else { "on" }),
             KitAct::PortraitMotion(i) => self.portrait.set_motion(*i),
+            KitAct::ThemeView(i) => format!("theme {}", THEME_VIEWS[*i % THEME_VIEWS.len()]),
+            KitAct::ThemeFrame(i) => format!("frame {}", FRAME_ROLES[*i % FRAME_ROLES.len()].0),
         };
         match a {
             KitAct::Tab(i) => self.tab = i % TABS.len(),
@@ -398,7 +419,12 @@ impl Specimens {
             KitAct::Row(i) => self.row = i,
             KitAct::Lock => self.locked = !self.locked,
             KitAct::Fold => self.open = !self.open,
-            KitAct::Page(i) => self.page = i % PAGES.len(),
+            KitAct::Page(i) => {
+                self.page = i % PAGES.len();
+                if self.page != 4 {
+                    self.leave_theme();
+                }
+            }
             KitAct::Block(b) => self.block = Some(b),
             KitAct::Track(t) => self.track = Some(t),
             KitAct::TimelineIcons => self.icons = !self.icons,
@@ -414,7 +440,21 @@ impl Specimens {
             KitAct::PortraitSize(i) => self.portrait.size = i % PORTRAIT_SIZES.len(),
             KitAct::PortraitReduce => self.portrait.reduce = !self.portrait.reduce,
             KitAct::PortraitAnchors => self.portrait.anchors = !self.portrait.anchors,
+            KitAct::ThemeView(i) => {
+                self.theme_view = i % THEME_VIEWS.len();
+                theme::set_theme(theme_view(self.theme_view));
+            }
+            KitAct::ThemeFrame(i) => self.theme_frame = i % FRAME_ROLES.len(),
             KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) | KitAct::Segment(..) | KitAct::Effect(_) | KitAct::Shake(_) | KitAct::PortraitToggle(_) | KitAct::PortraitFire(_) | KitAct::PortraitMotion(_) => {}
+        }
+    }
+
+    /// The Theme page's switch back to the layers' theme (`theme::loaded()`): called when the page or the gallery is
+    /// left, so a comparison never outlives the page (planner decision, LOOK1-E1 review).
+    pub fn leave_theme(&mut self) {
+        if self.theme_view != 1 {
+            self.theme_view = 1;
+            theme::set_theme(theme_view(1));
         }
     }
 
@@ -490,6 +530,8 @@ impl Specimens {
             self.draw_effects(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
         } else if self.page == 3 {
             self.draw_portraits(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
+        } else if self.page == 4 {
+            self.draw_theme(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
         } else {
             self.draw_widgets(ui, r, &wrap);
         }
@@ -834,6 +876,171 @@ impl Specimens {
         }
         ui.scroll_end();
     }
+}
+
+/// The theme the Theme page's switch `view` puts in force: the engine default, the layers' theme, or it with frames
+/// off.
+pub fn theme_view(view: usize) -> Theme {
+    match view {
+        0 => Theme::default(),
+        1 => (*theme::loaded()).clone(),
+        _ => Theme { frames_on: false, ..(*theme::loaded()).clone() },
+    }
+}
+
+impl Specimens {
+    /// The Theme page (LOOK1-E1): the switch and the sources on top, the rest in a scroll area.
+    fn draw_theme<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: &impl Fn(KitAct) -> A) {
+        let t = ui.t.clone();
+        let bw = |ui: &mut Ui<A>, s: &str| (ui.p.text_w(s, BODY) + 12.0).ceil() as i32;
+        let mut x = r.x + 6;
+        for (i, v) in THEME_VIEWS.iter().enumerate() {
+            let w = bw(ui, v);
+            ui.tab(&format!("kit.theme.view.{i}"), Rect::new(x, r.y + 4, w, 14), v, wrap(KitAct::ThemeView(i)), self.theme_view == i);
+            x += w + 2;
+        }
+        let from = if t.sources.is_empty() && t.frames.is_empty() { "no theme file: the engine default".to_string() } else { t.sources.iter().cloned().chain(t.frames.values().map(|f| f.source.clone())).collect::<Vec<_>>().join(", ") };
+        ui.p.text_fit((x + 6) as f32, r.y as f32 + 4.0 + (14.0 - ui.p.line_h(SMALL)) / 2.0, &format!("From: {from}"), SMALL, (r.x + r.w - x - 12) as f32, t.dim);
+        let view = Rect::new(r.x + 4, r.y + 22, r.w - 8, r.h - 24);
+        let content_h = self.theme_content(ui, &t, view, 0, wrap, false);
+        let off = ui.scroll_begin("kit.theme.scroll", view, content_h);
+        self.theme_content(ui, &t, view, off, wrap, true);
+        ui.scroll_end();
+    }
+
+    /// Lays out (and when `draw`, draws) the Theme page's content in `view` scrolled by `off`; returns its height.
+    #[allow(clippy::too_many_arguments)]
+    fn theme_content<A: Clone>(&self, ui: &mut Ui<A>, t: &Theme, view: Rect, off: i32, wrap: &impl Fn(KitAct) -> A, draw: bool) -> i32 {
+        let (x0, w) = (view.x + 2, view.w - 8);
+        let top = view.y - off;
+        let mut y = top + 2;
+        let small_h = ui.p.line_h(SMALL).ceil() as i32;
+        let head = |ui: &mut Ui<A>, y: i32, s: &str| -> i32 {
+            if draw {
+                ui.p.text(x0 as f32, y as f32, s, SMALL, t.info);
+            }
+            y + small_h + 2
+        };
+        // Colour roles: swatch, name, value, three columns.
+        y = head(ui, y, &format!("Colour roles ({}; game colours {})", ROLES.len(), t.game_colors.len()));
+        let cols = 3;
+        let col_w = w / cols;
+        let row_h = small_h + 2;
+        let rows = ROLES.len().div_ceil(cols as usize) as i32;
+        if draw {
+            for (i, name) in ROLES.iter().enumerate() {
+                let (c, rr) = (i as i32 / rows, i as i32 % rows);
+                let (cx, cy) = (x0 + c * col_w, y + rr * row_h);
+                let col = t.role(name).unwrap_or(t.text);
+                ui.p.panel(Rect::new(cx, cy + 1, 10, small_h - 2), col, t.dim, 0.0);
+                ui.p.text_fit((cx + 13) as f32, cy as f32, name, SMALL, (col_w - 62) as f32, t.text);
+                ui.p.text_right((cx + col_w - 6) as f32, cy as f32, &theme::colour_hex(col), SMALL, t.dim);
+                ui.push(format!("kit.theme.role.{name}"), "swatch", *name, Rect::new(cx, cy, col_w - 4, row_h), true, false, None, tip(name, theme::ROLE_DOCS[i]));
+            }
+        }
+        y += rows * row_h + 4;
+        // Contrast pairs (LOOK1 8.2): the text role on its ground, the ratio, pass or fail.
+        y = head(ui, y, "Contrast (LOOK1 8.2: text, gold, info at least 4.5:1, dim 3:1; ink on parchment 4.5:1)");
+        let pairs = theme::contrast_pairs();
+        let prow = small_h + 4;
+        let prows = pairs.len().div_ceil(cols as usize) as i32;
+        if draw {
+            for (i, (fg, bg, least)) in pairs.iter().enumerate() {
+                let (c, rr) = (i as i32 / prows, i as i32 % prows);
+                let (cx, cy) = (x0 + c * col_w, y + rr * prow);
+                let (f, b) = (t.role(fg).unwrap_or(t.text), t.role(bg).unwrap_or(t.bg));
+                let k = t.contrast(f, b);
+                ui.p.panel(Rect::new(cx, cy, col_w - 50, prow - 1), b, b, 0.0);
+                ui.p.text_fit((cx + 3) as f32, cy as f32 + 1.5, &format!("{fg} on {bg}"), SMALL, (col_w - 56) as f32, f);
+                let ok = k >= *least;
+                ui.p.text_right((cx + col_w - 6) as f32, cy as f32 + 1.5, &format!("{k:.1} {}", if ok { "ok" } else { "low" }), SMALL, if ok { t.good } else { t.foe });
+            }
+        }
+        y += prows * prow + 4;
+        // The three faces at the four text sizes.
+        y = head(ui, y, "Faces at the four text sizes (body, display, mono)");
+        for face in Typeface::ALL {
+            let spec = t.face(face);
+            let lh = ui.p.line_h_face(face, BODY * THEME_TEXT_SIZES[3]).ceil() as i32;
+            if draw {
+                let label = format!("{} x{}", face.name(), spec.scale);
+                ui.p.text_fit(x0 as f32, (y + lh - small_h) as f32, &label, SMALL, 60.0, t.dim);
+                ui.push(format!("kit.theme.face.{}", face.name()), "face", face.name(), Rect::new(x0, y, w, lh), true, false, None, tip(face.name(), &spec.file));
+                let mut sx = (x0 + 66) as f32;
+                for k in THEME_TEXT_SIZES {
+                    let size = BODY * k;
+                    let s = format!("Aegis {k}");
+                    let sw = ui.p.text_w_face(face, &s, size);
+                    ui.p.text_face(face, sx, (y + lh) as f32 - ui.p.line_h_face(face, size), &s, size, t.text);
+                    sx += sw + 10.0;
+                }
+            }
+            y += lh + 2;
+        }
+        y += 2;
+        // The new pieces: a header, badges, an inset and a parchment inset.
+        y = head(ui, y, "Pieces: Ui::header, Ui::badge, Ui::inset (plain, parchment)");
+        let piece_h = 40;
+        if draw {
+            ui.header(x0, y, "Header");
+            let mut bx = x0;
+            for (i, role) in ["gold", "info", "good", "foe"].iter().enumerate() {
+                ui.badge(Rect::new(bx, y + piece_h - 14, 18, 11), &(3 + 4 * i).to_string(), role);
+                bx += 22;
+            }
+            for (i, parchment) in [false, true].into_iter().enumerate() {
+                let ir = Rect::new(x0 + 110 + i as i32 * 150, y, 140, piece_h);
+                let inner = ui.inset(ir, parchment);
+                let role = if parchment { "parchment" } else { "inset" };
+                let ink = t.ink_on(role);
+                ui.p.text_fit(inner.x as f32, inner.y as f32, &format!("{role}: {}", t.frame_source(role)), SMALL, inner.w as f32, ink);
+            }
+        }
+        y += piece_h + 6;
+        // Every frame role at 40 x 16 and 120 x 40.
+        y = head(ui, y, "Frame roles at 40 x 16 and 120 x 40 (hover: the file or fallback that draws it)");
+        let per = (w / 44).max(1);
+        let small_rows = (FRAME_ROLES.len() as i32 + per - 1) / per;
+        if draw {
+            for (i, (role, _)) in FRAME_ROLES.iter().enumerate() {
+                let fr = Rect::new(x0 + (i as i32 % per) * 44, y + (i as i32 / per) * 20, 40, 16);
+                draw_frame_role(ui, t, role, fr);
+                ui.push(format!("kit.theme.frame16.{role}"), "frame", *role, fr, true, false, None, tip(role, &t.frame_source(role)));
+            }
+        }
+        y += small_rows * 20 + 2;
+        let per = (w / 126).max(1);
+        let mid_rows = (FRAME_ROLES.len() as i32 + per - 1) / per;
+        if draw {
+            for (i, (role, _)) in FRAME_ROLES.iter().enumerate() {
+                let fr = Rect::new(x0 + (i as i32 % per) * 126, y + (i as i32 / per) * 44, 120, 40);
+                draw_frame_role(ui, t, role, fr);
+                let inner = t.frame(role).map_or(fr.inset(4), |f| f.nine.content(fr));
+                ui.p.text_fit(inner.x as f32, inner.y as f32, role, SMALL, inner.w as f32, t.ink_on(role));
+                ui.push(format!("kit.theme.frame40.{role}"), "frame", *role, fr, true, false, None, tip(role, &t.frame_source(role)));
+            }
+        }
+        y += mid_rows * 44 + 2;
+        // The picked role at 300 x 120, with its picker.
+        y = head(ui, y, "One role at 300 x 120");
+        let names: Vec<String> = FRAME_ROLES.iter().map(|r| r.0.to_string()).collect();
+        if draw {
+            ui.select("kit.theme.frame", Rect::new(x0, y, 100, 14), &names, self.theme_frame, |i| wrap(KitAct::ThemeFrame(i)), true, tip("Frame role", "The role drawn at 300 x 120."));
+            let role = FRAME_ROLES[self.theme_frame % FRAME_ROLES.len()].0;
+            let fr = Rect::new(x0 + 106, y, 300, 120);
+            draw_frame_role(ui, t, role, fr);
+            let inner = t.frame(role).map_or(fr.inset(6), |f| f.nine.content(fr));
+            ui.p.text_fit(inner.x as f32, inner.y as f32, &format!("{role}: {}", t.frame_source(role)), SMALL, inner.w as f32, t.ink_on(role));
+        }
+        y += 120 + 4;
+        y - top
+    }
+}
+
+/// Frame role `role` over `r` (its file, else the vector panel in its colours).
+fn draw_frame_role<A: Clone>(ui: &mut Ui<A>, t: &Theme, role: &str, r: Rect) {
+    let (fill, edge, radius) = t.vector(role);
+    ui.skin(role, r, fill, edge, radius);
 }
 
 /// The timeline specimen's round: 8 blocks, three tracks on one side and two on the other (one masked).

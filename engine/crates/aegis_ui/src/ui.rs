@@ -1,10 +1,14 @@
 //! The widget kit every screen draws with: immediate-mode widgets on the logical 640x360 canvas, each recorded with an
 //! id, kind, text, rect, enabled / active state, an optional action and a hover card, so the agent link can list,
-//! hover and click exactly what the player sees. Colours follow the Godot HUD (dark navy, gold accents).
+//! hover and click exactly what the player sees. Colours follow the Godot HUD (dark navy, gold accents). LOOK1-E1: the
+//! widgets draw through the runtime theme (`theme::th()`: colour roles, layout values, frame roles, the display face
+//! for frame titles); the colour constants below are its defaults (they stay until the game reads the theme, LOOK1-G2).
 
 use crate::canvas::{rgb, rgba, Canvas, Image, Rect, Rgba};
-use crate::painter::{Fonts, Painter, View};
+use crate::painter::{Fonts, Painter, Typeface, View};
+use crate::theme::{self, Theme};
 use serde_json::{json, Value};
+use std::rc::Rc;
 
 pub const W: i32 = 640;
 pub const H: i32 = 360;
@@ -32,9 +36,10 @@ pub const SELECTED: Rgba = rgba(86, 68, 22, 250);
 pub type Tip = Vec<(String, Rgba)>;
 
 pub fn tip(title: &str, body: &str) -> Tip {
-    let mut t = vec![(title.to_string(), GOLD)];
+    let th = theme::th();
+    let mut t = vec![(title.to_string(), th.gold)];
     if !body.is_empty() {
-        t.push((body.to_string(), TEXT));
+        t.push((body.to_string(), th.text));
     }
     t
 }
@@ -126,6 +131,8 @@ pub struct Ui<'a, A> {
     scrolls: usize,
     /// The text field being edited (`Kit::edit`, read at the start of the frame; only the live screen sees it).
     edit: Option<EditView>,
+    /// The theme in force when the frame began (`theme::th()`).
+    pub t: Rc<Theme>,
 }
 
 /// What a frame draws of the text field being edited: its id, text, caret and selection anchor (not its history).
@@ -143,7 +150,48 @@ impl<'a, A: Clone> Ui<'a, A> {
         let (open, drag, scroll) = (g.kit.open.clone(), if live { g.kit.drag.clone() } else { None }, g.kit.scroll.clone());
         let edit = g.kit.edit.as_ref().filter(|_| live).map(|e| EditView { id: e.id.clone(), text: e.text.clone(), caret: e.caret, anchor: e.anchor });
         g.canvas.clip = None;
-        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag, clip: None, clips: Vec::new(), scroll, scrolls: 0, edit }
+        let t = theme::th();
+        g.fonts.sync(&t);
+        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag, clip: None, clips: Vec::new(), scroll, scrolls: 0, edit, t }
+    }
+
+    /// LOOK1-E1: draws frame role `role` (`theme::FRAME_ROLES`) over `r`: its frame file, else the vector panel
+    /// `fill` / `edge` / `radius` exactly as the widget drew it before the theme.
+    pub fn skin(&mut self, role: &str, r: Rect, fill: Rgba, edge: Rgba, radius: f32) {
+        let t = self.t.clone();
+        self.p.skin(t.frame(role), r, fill, edge, radius);
+    }
+
+    /// LOOK1-E1: a header in the display face (`HEAD`, colour role `gold`) at (x, y); returns the y below it.
+    pub fn header(&mut self, x: i32, y: i32, text: &str) -> i32 {
+        let col = self.t.gold;
+        self.p.text_face(Typeface::Display, x as f32, y as f32, text, HEAD, col);
+        y + self.p.line_h_face(Typeface::Display, HEAD).ceil() as i32
+    }
+
+    /// LOOK1-E1: a badge (numbers on a count or a cost): `text` in the mono face centred on a fill in colour role
+    /// `role` (unknown: `card`), the text in whichever of `text` and `ink` stands out more on it. Draws only.
+    pub fn badge(&mut self, r: Rect, text: &str, role: &str) {
+        let t = self.t.clone();
+        let fill = t.role(role).unwrap_or(t.card);
+        let ink = if t.contrast(t.text, fill) >= t.contrast(t.ink, fill) { t.text } else { t.ink };
+        self.p.panel(r, fill, fill, t.layout.radius);
+        let lh = self.p.line_h_face(Typeface::Mono, SMALL);
+        self.p.text_center_face(Typeface::Mono, r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - lh) / 2.0, text, SMALL, ink);
+    }
+
+    /// LOOK1-E1: a section inside a panel (frame role `inset`, or `parchment` when `parchment`; its text colour is
+    /// `Theme::ink_on(role)`); returns the content rect (the frame's pad, else `layout.padding` inside).
+    pub fn inset(&mut self, r: Rect, parchment: bool) -> Rect {
+        let t = self.t.clone();
+        let role = if parchment { "parchment" } else { "inset" };
+        let (fill, edge, radius) = t.vector(role);
+        let frame = t.frame(role);
+        self.p.skin(frame, r, fill, edge, radius);
+        match frame {
+            Some(f) => f.nine.content(r),
+            None => r.inset(t.layout.padding),
+        }
     }
 
     /// A text field (`multiline`: a text area, Enter adds a line). Clicking it starts editing (the caret where the click
@@ -152,10 +200,11 @@ impl<'a, A: Clone> Ui<'a, A> {
     /// scrolls (the wheel, a scroll bar when the text is taller; the shell keeps the caret's line in view); a one-line
     /// field slides to keep the caret in view (PLAYUI1-T).
     pub fn text_field(&mut self, id: &str, r: Rect, value: &str, multiline: bool, enabled: bool) {
+        let t = self.t.clone();
         let editing = self.edit.as_ref().filter(|e| e.id == id).cloned();
         let hover = enabled && self.hover(r);
-        let border = if editing.is_some() { GOLD } else if hover { rgb(110, 140, 196) } else if enabled { rgb(100, 130, 186) } else { BORDER };
-        self.p.panel(r, rgb(22, 30, 48), border, RADIUS);
+        let border = if editing.is_some() { t.focus } else if hover { t.edge_hot } else if enabled { t.edge_live } else { t.edge };
+        self.p.panel(r, t.input, border, t.layout.radius);
         let text = editing.as_ref().map_or(value, |e| e.text.as_str()).to_string();
         let line = self.p.line_h(BODY);
         let lay = field_layout(&mut self.p, &text, r, multiline);
@@ -170,7 +219,7 @@ impl<'a, A: Clone> Ui<'a, A> {
             (field_shift(&lay, caret, r), 0)
         };
         let (tx, ty) = (r.x as f32 + FIELD_PAD_X - dx, r.y as f32 + FIELD_PAD_Y - off as f32);
-        let col = if enabled { TEXT } else { DIM };
+        let col = if enabled { t.text } else { t.dim };
         self.push_clip(Rect::new(r.x + 3, r.y + 2, r.w - 6, r.h - 4));
         for (i, l) in lay.lines.iter().enumerate() {
             let y = ty + i as f32 * line;
@@ -183,7 +232,7 @@ impl<'a, A: Clone> Ui<'a, A> {
                 let tail = if b > l.end && a <= l.end { 3.0 } else { 0.0 };
                 if lo < hi || tail > 0.0 {
                     let (x0, x1) = (l.xs[lo - l.start], l.xs[hi - l.start] + tail);
-                    self.p.fill(Rect::new((tx + x0).floor() as i32, y.floor() as i32, ((x1 - x0).ceil() as i32).max(1), line.ceil() as i32), rgba(74, 110, 180, 170));
+                    self.p.fill(Rect::new((tx + x0).floor() as i32, y.floor() as i32, ((x1 - x0).ceil() as i32).max(1), line.ceil() as i32), t.selection);
                 }
             }
             let s: String = chars[l.start..l.end].iter().collect();
@@ -192,7 +241,7 @@ impl<'a, A: Clone> Ui<'a, A> {
         if editing.is_some() {
             let cx = tx + lay.x_of(caret) + 0.5;
             let cy = ty + lay.line_of(caret) as f32 * line;
-            self.p.line(cx, cy, cx, cy + line - 1.0, GOLD, 0.0);
+            self.p.line(cx, cy, cx, cy + line - 1.0, t.focus, 0.0);
         }
         self.pop_clip();
         if multiline {
@@ -229,11 +278,12 @@ impl<'a, A: Clone> Ui<'a, A> {
         // The area itself, under its content: the shell finds it for the wheel (`text` is the furthest offset).
         self.push(id, "scroll", max.to_string(), view, true, false, None, Vec::new());
         if max > 0 {
+            let (track, knob) = (self.t.scroll_track, self.t.scroll_knob);
             let bar = Rect::new(view.x + view.w - 3, view.y, 3, view.h);
-            self.p.fill(bar, rgba(40, 46, 60, 200));
+            self.p.fill(bar, track);
             let knob_h = (view.h * view.h / content_h.max(1)).max(8);
             let knob_y = view.y + (view.h - knob_h) * at / max;
-            self.p.fill(Rect::new(bar.x, knob_y, 3, knob_h), rgb(150, 160, 180));
+            self.p.fill(Rect::new(bar.x, knob_y, 3, knob_h), knob);
         }
         self.push_clip(view);
         self.scrolls += 1;
@@ -255,7 +305,7 @@ impl<'a, A: Clone> Ui<'a, A> {
         w.drag = Some(key.into());
         let r = w.rect;
         if self.drag.as_ref().is_some_and(|d| d.id == w.id) {
-            self.p.fill(r, rgba(10, 14, 24, 150));
+            self.p.fill(r, self.t.drag_shade);
         }
     }
 
@@ -275,7 +325,8 @@ impl<'a, A: Clone> Ui<'a, A> {
     #[allow(clippy::too_many_arguments)]
     pub fn push(&mut self, id: impl Into<String>, kind: &'static str, text: impl Into<String>, rect: Rect, enabled: bool, active: bool, action: Option<A>, tip: Tip) {
         if kind == "row" && action.is_none() && tip.len() > 1 && self.hover(rect) {
-            self.p.panel(rect, rgba(0, 0, 0, 0), rgb(110, 140, 196), RADIUS);
+            let (edge, radius) = (self.t.edge_hot, self.t.layout.radius);
+            self.p.panel(rect, rgba(0, 0, 0, 0), edge, radius);
         }
         let rect = match self.clip {
             // An open select's options are drawn over everything by the shell: not cut to a window body.
@@ -293,11 +344,31 @@ impl<'a, A: Clone> Ui<'a, A> {
     /// A plain button; `active` draws it selected (gold).
     #[allow(clippy::too_many_arguments)]
     pub fn button_full(&mut self, id: &str, r: Rect, label: &str, action: A, enabled: bool, active: bool, size: f32, t: Tip) {
+        self.button_in(id, r, label, action, enabled, active, size, t, false);
+    }
+
+    /// `button_full` with the button's or (`tab`) the tab's frame roles; `layout.focus_glow` rings a hovered or
+    /// active one in `focus`.
+    #[allow(clippy::too_many_arguments)]
+    fn button_in(&mut self, id: &str, r: Rect, label: &str, action: A, enabled: bool, active: bool, size: f32, t: Tip, tab: bool) {
+        let th = self.t.clone();
         let hover = enabled && self.hover(r);
-        let fill = if active { SELECTED } else if hover { PANEL_HI } else { CARD };
-        let border = if active || (hover && enabled) { GOLD } else if enabled { rgb(100, 130, 186) } else { BORDER };
-        self.p.panel(r, fill, border, RADIUS);
-        let col = if enabled { if active { GOLD } else { TEXT } } else { DIM };
+        let fill = if active { th.selected } else if hover { th.card_hot } else { th.card };
+        let border = if active || (hover && enabled) { th.focus } else if enabled { th.edge_live } else { th.edge };
+        let role = match (tab, enabled, active, hover) {
+            (true, _, true, _) => "tab_on",
+            (true, ..) => "tab",
+            (false, false, ..) => "button_off",
+            (false, true, true, _) => "button_down",
+            (false, true, false, true) => "button_hot",
+            (false, true, false, false) => "button",
+        };
+        let glow = th.layout.focus_glow;
+        if glow > 0 && enabled && (hover || active) {
+            self.p.panel(Rect::new(r.x - glow, r.y - glow, r.w + 2 * glow, r.h + 2 * glow), rgba(0, 0, 0, 0), th.focus, th.layout.radius + glow as f32);
+        }
+        self.p.skin(th.frame(role), r, fill, border, th.layout.radius);
+        let col = if enabled { if active { th.focus } else { th.ink_on(role) } } else { th.dim };
         let line = self.p.line_h(size);
         let txt = self.p.fit(label, size, if r.w < 20 { r.w as f32 } else { r.w as f32 - 6.0 });
         self.p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - line) / 2.0, &txt, size, col);
@@ -315,24 +386,25 @@ impl<'a, A: Clone> Ui<'a, A> {
         self.button_full(id, r, label, action, enabled, false, BODY, t);
     }
 
-    /// A tab: a button drawn selected when it is the open one.
+    /// A tab: a button drawn selected when it is the open one (frame roles `tab`, `tab_on`).
     pub fn tab(&mut self, id: &str, r: Rect, label: &str, action: A, open: bool) {
-        self.button_full(id, r, label, action, true, open, BODY, Vec::new());
+        self.button_in(id, r, label, action, true, open, BODY, Vec::new(), true);
     }
 
     /// A selectable multi-line card (world cards, slot rows, list entries).
     #[allow(clippy::too_many_arguments)]
     pub fn card(&mut self, id: &str, r: Rect, lines: &[(String, Rgba)], action: Option<A>, selected: bool, enabled: bool, t: Tip) {
+        let th = self.t.clone();
         let hover = enabled && action.is_some() && self.hover(r);
-        let fill = if selected { SELECTED } else if hover { PANEL_HI } else { CARD };
-        let border = if selected { GOLD } else if hover { rgb(110, 140, 196) } else { BORDER };
-        self.p.panel(r, fill, border, RADIUS);
+        let fill = if selected { th.selected } else if hover { th.card_hot } else { th.card };
+        let border = if selected { th.focus } else if hover { th.edge_hot } else { th.edge };
+        self.p.skin(th.frame(if selected { "card_on" } else if hover { "card_hot" } else { "card" }), r, fill, border, th.layout.radius);
         let mut y = r.y as f32 + 3.0;
         for (text, col) in lines {
             if y > (r.y + r.h) as f32 - 8.0 {
                 break;
             }
-            self.p.text_fit(r.x as f32 + 5.0, y, text, BODY, r.w as f32 - 10.0, if enabled { *col } else { DIM });
+            self.p.text_fit(r.x as f32 + 5.0, y, text, BODY, r.w as f32 - 10.0, if enabled { *col } else { th.dim });
             y += 10.0;
         }
         let text = lines.iter().map(|l| l.0.clone()).collect::<Vec<_>>().join(" | ");
@@ -342,13 +414,14 @@ impl<'a, A: Clone> Ui<'a, A> {
     pub fn checkbox(&mut self, id: &str, x: i32, y: i32, label: &str, checked: bool, action: A, enabled: bool) {
         let b = Rect::new(x, y, 10, 10);
         let r = Rect::new(x, y - 1, 12 + self.p.text_w(label, BODY).ceil() as i32 + 4, 12);
+        let t = self.t.clone();
         let hover = enabled && self.hover(r);
-        self.p.panel(b, if checked { rgb(40, 62, 110) } else { CARD }, if hover { GOLD } else { TEXT }, 1.5);
+        self.p.panel(b, if checked { t.check_on } else { t.card }, if hover { t.focus } else { t.text }, 1.5);
         if checked {
-            self.p.line(x as f32 + 2.0, y as f32 + 5.0, x as f32 + 4.2, y as f32 + 7.5, GOLD, 0.0);
-            self.p.line(x as f32 + 4.2, y as f32 + 7.5, x as f32 + 8.2, y as f32 + 2.5, GOLD, 0.0);
+            self.p.line(x as f32 + 2.0, y as f32 + 5.0, x as f32 + 4.2, y as f32 + 7.5, t.focus, 0.0);
+            self.p.line(x as f32 + 4.2, y as f32 + 7.5, x as f32 + 8.2, y as f32 + 2.5, t.focus, 0.0);
         }
-        self.p.text(x as f32 + 14.0, y as f32 + 0.5, label, BODY, if enabled { TEXT } else { DIM });
+        self.p.text(x as f32 + 14.0, y as f32 + 0.5, label, BODY, if enabled { t.text } else { t.dim });
         self.push(id, "checkbox", format!("{label}: {}", if checked { "on" } else { "off" }), r, enabled, checked, Some(action), Vec::new());
     }
 
@@ -356,21 +429,23 @@ impl<'a, A: Clone> Ui<'a, A> {
     #[allow(clippy::too_many_arguments)]
     pub fn stepper(&mut self, id: &str, r: Rect, value: f32, text: &str, minus: A, plus: A, enabled: bool) {
         self.button(&format!("{id}.minus"), Rect::new(r.x, r.y, 12, r.h), "-", minus, enabled);
+        let t = self.t.clone();
         let bar = Rect::new(r.x + 15, r.y + r.h / 2 - 2, r.w - 30 - 44, 4);
-        self.p.panel(bar, rgb(40, 46, 60), rgb(40, 46, 60), 2.0);
+        self.p.panel(bar, t.track, t.track, 2.0);
         let fill = Rect::new(bar.x, bar.y, ((bar.w as f32) * value.clamp(0.0, 1.0)) as i32, bar.h);
-        self.p.panel(fill, rgb(200, 204, 214), rgb(200, 204, 214), 2.0);
-        self.p.circle((fill.x + fill.w) as f32, bar.y as f32 + 2.0, 3.0, rgb(240, 242, 248));
+        self.p.panel(fill, t.track_fill, t.track_fill, 2.0);
+        self.p.circle((fill.x + fill.w) as f32, bar.y as f32 + 2.0, 3.0, t.knob);
         self.button(&format!("{id}.plus"), Rect::new(bar.x + bar.w + 3, r.y, 12, r.h), "+", plus, enabled);
-        self.p.text(bar.x as f32 + bar.w as f32 + 19.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, text, BODY, DIM);
+        self.p.text(bar.x as f32 + bar.w as f32 + 19.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, text, BODY, t.dim);
         self.push(id, "slider", text, r, enabled, false, None, Vec::new());
     }
 
     /// A dropdown field: the current value and a chevron; the action opens the choice list.
     pub fn dropdown(&mut self, id: &str, r: Rect, label: &str, action: A, enabled: bool, t: Tip) {
+        let th = self.t.clone();
         let hover = enabled && self.hover(r);
-        self.p.panel(r, if hover { PANEL_HI } else { rgb(30, 44, 74) }, if hover { GOLD } else { rgb(100, 130, 186) }, RADIUS);
-        let col = if enabled { TEXT } else { DIM };
+        self.p.panel(r, if hover { th.card_hot } else { th.field }, if hover { th.focus } else { th.edge_live }, th.layout.radius);
+        let col = if enabled { th.text } else { th.dim };
         self.p.text_fit(r.x as f32 + 5.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, label, BODY, r.w as f32 - 16.0, col);
         let (cx, cy) = (r.x as f32 + r.w as f32 - 7.0, r.y as f32 + r.h as f32 / 2.0);
         self.p.line(cx - 2.5, cy - 1.2, cx, cy + 1.3, col, 0.0);
@@ -384,9 +459,10 @@ impl<'a, A: Clone> Ui<'a, A> {
     pub fn select(&mut self, id: &str, r: Rect, options: &[String], selected: usize, pick: impl Fn(usize) -> A, enabled: bool, t: Tip) {
         let label = options.get(selected).cloned().unwrap_or_default();
         let open = enabled && self.open.as_deref() == Some(id);
+        let th = self.t.clone();
         let hover = enabled && (open || self.hover(r));
-        self.p.panel(r, if hover { PANEL_HI } else { rgb(30, 44, 74) }, if hover { GOLD } else { rgb(100, 130, 186) }, RADIUS);
-        let col = if enabled { TEXT } else { DIM };
+        self.p.panel(r, if hover { th.card_hot } else { th.field }, if hover { th.focus } else { th.edge_live }, th.layout.radius);
+        let col = if enabled { th.text } else { th.dim };
         self.p.text_fit(r.x as f32 + 5.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, &label, BODY, r.w as f32 - 16.0, col);
         let (cx, cy, d) = (r.x as f32 + r.w as f32 - 7.0, r.y as f32 + r.h as f32 / 2.0, if open { -1.0 } else { 1.0 });
         self.p.line(cx - 2.5, cy - 1.2 * d, cx, cy + 1.3 * d, col, 0.0);
@@ -415,12 +491,13 @@ impl<'a, A: Clone> Ui<'a, A> {
         let steps = steps.max(2);
         let area = Rect::new(r.x, r.y, r.w - 44, r.h);
         let bar = Rect::new(area.x + 4, r.y + r.h / 2 - 2, area.w - 8, 4);
+        let t = self.t.clone();
         let hover = enabled && self.hover(area);
         let knob = bar.x as f32 + bar.w as f32 * at.min(steps - 1) as f32 / (steps - 1) as f32;
-        self.p.panel(bar, rgb(40, 46, 60), rgb(40, 46, 60), 2.0);
-        self.p.panel(Rect::new(bar.x, bar.y, (knob as i32 - bar.x).max(0), bar.h), rgb(200, 204, 214), rgb(200, 204, 214), 2.0);
-        self.p.circle(knob, bar.y as f32 + 2.0, if hover { 4.0 } else { 3.0 }, if hover { GOLD } else if enabled { rgb(240, 242, 248) } else { DIM });
-        self.p.text(area.x as f32 + area.w as f32 + 6.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, text, BODY, DIM);
+        self.p.panel(bar, t.track, t.track, 2.0);
+        self.p.panel(Rect::new(bar.x, bar.y, (knob as i32 - bar.x).max(0), bar.h), t.track_fill, t.track_fill, 2.0);
+        self.p.circle(knob, bar.y as f32 + 2.0, if hover { 4.0 } else { 3.0 }, if hover { t.focus } else if enabled { t.knob } else { t.dim });
+        self.p.text(area.x as f32 + area.w as f32 + 6.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, text, BODY, t.dim);
         self.push(id, "slider", text, area, enabled, false, None, Vec::new());
         let seg = bar.w as f32 / (steps - 1) as f32;
         for i in 0..steps {
@@ -433,25 +510,28 @@ impl<'a, A: Clone> Ui<'a, A> {
 
     /// The X close button of a frame.
     pub fn close_x(&mut self, id: &str, r: Rect, action: A) {
+        let t = self.t.clone();
         let hover = self.hover(r);
-        self.p.panel(r, if hover { PANEL_HI } else { CARD }, if hover { GOLD } else { rgb(100, 130, 186) }, RADIUS);
+        self.p.panel(r, if hover { t.card_hot } else { t.card }, if hover { t.focus } else { t.edge_live }, t.layout.radius);
         let (cx, cy, d) = (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0, 3.0);
-        self.p.line(cx - d, cy - d, cx + d, cy + d, TEXT, 0.0);
-        self.p.line(cx - d, cy + d, cx + d, cy - d, TEXT, 0.0);
+        self.p.line(cx - d, cy - d, cx + d, cy + d, t.text, 0.0);
+        self.p.line(cx - d, cy + d, cx + d, cy - d, t.text, 0.0);
         self.push(id, "button", "Close", r, true, false, Some(action), Vec::new());
     }
 
-    /// A modal frame with a gold title; returns the content top y.
+    /// A modal frame with a gold title (the display face; frame role `panel`); returns the content top y
+    /// (`layout.frame_title_h` below the top).
     pub fn frame(&mut self, r: Rect, title: &str, centered: bool) -> i32 {
-        self.p.panel(r, MODAL, FRAME, 4.0);
+        let t = self.t.clone();
+        self.p.skin(t.frame("panel"), r, t.panel, t.panel_edge, t.layout.frame_radius);
         if !title.is_empty() {
             if centered {
-                self.p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + 6.0, title, HEAD, GOLD);
+                self.p.text_center_face(Typeface::Display, r.x as f32 + r.w as f32 / 2.0, r.y as f32 + 6.0, title, HEAD, t.gold);
             } else {
-                self.p.text(r.x as f32 + 9.0, r.y as f32 + 6.0, title, HEAD, GOLD);
+                self.p.text_face(Typeface::Display, r.x as f32 + 9.0, r.y as f32 + 6.0, title, HEAD, t.gold);
             }
         }
-        r.y + 26
+        r.y + t.layout.frame_title_h
     }
 
     /// Wrapped text; returns the y below it.
@@ -471,7 +551,8 @@ impl<'a, A: Clone> Ui<'a, A> {
         let clickable = action.is_some();
         let hover = clickable && self.hover(r);
         if selected || hover {
-            self.p.panel(r, if selected { SELECTED } else { PANEL_HI }, if selected { GOLD } else { rgb(110, 140, 196) }, RADIUS);
+            let t = self.t.clone();
+            self.p.panel(r, if selected { t.selected } else { t.card_hot }, if selected { t.focus } else { t.edge_hot }, t.layout.radius);
         }
         self.p.text_fit(r.x as f32 + 4.0, r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0, label, BODY, r.w as f32 - 8.0, col);
         self.push(id, "row", label, r, true, selected, action, t);
@@ -497,16 +578,17 @@ impl<'a, A: Clone> Ui<'a, A> {
     /// like any button (Enter or Space press it).
     #[allow(clippy::too_many_arguments)]
     pub fn icon_button(&mut self, id: &str, r: Rect, label: &str, image: Option<&Image>, glyph: Glyph, action: A, enabled: bool, toggled: bool, t: Tip) {
+        let th = self.t.clone();
         let hover = enabled && self.hover(r);
         if toggled || hover {
-            self.p.panel(r, if toggled { SELECTED } else { PANEL_HI }, if hover { GOLD } else { rgb(150, 124, 56) }, RADIUS);
+            self.p.panel(r, if toggled { th.selected } else { th.card_hot }, if hover { th.focus } else { th.toggled_edge }, th.layout.radius);
         }
         let ir = Self::icon_rect(r);
         match image {
             Some(img) if enabled => self.p.image(img, ir),
             Some(img) => self.p.image(&faded(img, 0.4), ir),
             None => {
-                let col = if !enabled { DIM } else if toggled { GOLD } else { TEXT };
+                let col = if !enabled { th.dim } else if toggled { th.focus } else { th.text };
                 draw_glyph(&mut self.p, glyph, ir, col);
             }
         }
@@ -519,15 +601,16 @@ impl<'a, A: Clone> Ui<'a, A> {
     /// `toggle`; the screen keeps whether it is open and draws the section's content only then. Returns `open`.
     #[allow(clippy::too_many_arguments)]
     pub fn section(&mut self, id: &str, r: Rect, title: &str, note: &str, open: bool, toggle: A, t: Tip) -> bool {
+        let th = self.t.clone();
         let hover = self.hover(r);
-        self.p.panel(r, if hover { PANEL_HI } else { rgb(26, 38, 64) }, if hover { GOLD } else { BORDER }, RADIUS);
+        self.p.panel(r, if hover { th.card_hot } else { th.section }, if hover { th.focus } else { th.edge }, th.layout.radius);
         let ty = r.y as f32 + (r.h as f32 - self.p.line_h(BODY)) / 2.0;
         let c = Rect::new(r.x + 3, r.y + (r.h - 8) / 2, 8, 8);
-        draw_glyph(&mut self.p, if open { Glyph::ChevronDown } else { Glyph::ChevronRight }, c, if hover { GOLD } else { TEXT });
+        draw_glyph(&mut self.p, if open { Glyph::ChevronDown } else { Glyph::ChevronRight }, c, if hover { th.focus } else { th.text });
         let note_w = if note.is_empty() { 0.0 } else { self.p.text_w(note, SMALL) + 6.0 };
-        self.p.text_fit(r.x as f32 + 14.0, ty, title, BODY, r.w as f32 - 18.0 - note_w, GOLD);
+        self.p.text_fit(r.x as f32 + 14.0, ty, title, BODY, r.w as f32 - 18.0 - note_w, th.gold);
         if !note.is_empty() {
-            self.p.text_right((r.x + r.w) as f32 - 4.0, ty + 0.5, note, SMALL, DIM);
+            self.p.text_right((r.x + r.w) as f32 - 4.0, ty + 0.5, note, SMALL, th.dim);
         }
         self.push(id, "section", title, r, true, open, Some(toggle), t);
         open
@@ -657,7 +740,8 @@ pub fn draw_tip<A>(p: &mut Painter, widgets: &[Widget<A>], mouse: (i32, i32)) {
         ty = mouse.1 - th as i32 - 6;
     }
     let r = Rect::new(tx.max(2), ty.max(2), tw.ceil() as i32, th.ceil() as i32);
-    p.panel(r, rgba(12, 18, 30, 250), rgb(110, 140, 196), 3.0);
+    let t = theme::th();
+    p.skin(t.frame("tip"), r, t.tip, t.edge_hot, 3.0);
     let mut ly = r.y as f32 + 3.0;
     for (t, col, size) in lines {
         p.text(r.x as f32 + 5.0, ly, &t, size, col);

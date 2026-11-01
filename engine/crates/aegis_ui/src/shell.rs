@@ -10,9 +10,10 @@ use crate::focus;
 use crate::canvas::{Canvas, Image};
 use crate::painter::{Fonts, Painter, View};
 use crate::screen::{Context, Cx, Held, Key, Nav, Notice, Screen};
-use crate::canvas::{rgb, rgba, Rect};
+use crate::canvas::{rgba, Rect};
 use crate::window::Grab;
-use crate::ui::{clipboard, field_content_h, field_layout, field_scroll_id, field_shift, reveal_offset, Drag, Edit, EditKey, Gfx, Kit, Layout, BG, BODY, FIELD_PAD_X, FIELD_PAD_Y, GOLD, H, MODAL, PANEL_HI, RADIUS, TEXT, W};
+use crate::theme::th;
+use crate::ui::{clipboard, field_content_h, field_layout, field_scroll_id, field_shift, reveal_offset, Drag, Edit, EditKey, Gfx, Kit, Layout, BODY, FIELD_PAD_X, FIELD_PAD_Y, H, W};
 use anyhow::Result;
 use pixels::{Pixels, SurfaceTexture};
 use serde_json::{json, Value};
@@ -300,7 +301,10 @@ impl<G: Context> Shell<G> {
         let cx = &mut self.cx;
         self.stack.last_mut().unwrap().tick(cx);
         self.settle();
-        self.gfx.canvas.clear(BG);
+        // LOOK1-E1: the theme in force (the faces follow it; the screens' `Ui` sync them too).
+        let theme = th();
+        self.gfx.fonts.sync(&theme);
+        self.gfx.canvas.clear(theme.bg);
         let mut base = self.stack.len() - 1;
         while base > 0 && self.stack[base].overlay() {
             base -= 1;
@@ -324,7 +328,7 @@ impl<G: Context> Shell<G> {
             let infos = self.stack[n - 1].widgets();
             if let Some(w) = focus::live(&infos, self.gfx.kit.focus.as_deref(), false) {
                 let r = info_rect(w);
-                p.panel(Rect::new(r.x - 2, r.y - 2, r.w + 4, r.h + 4), rgba(0, 0, 0, 0), rgb(255, 255, 255), RADIUS + 1.0);
+                p.panel(Rect::new(r.x - 2, r.y - 2, r.w + 4, r.h + 4), rgba(0, 0, 0, 0), theme.ring, theme.layout.radius + 1.0);
             }
         }
         if self.gfx.kit.open.is_some() {
@@ -347,7 +351,7 @@ impl<G: Context> Shell<G> {
                 let covered = infos[i + 1..].iter().any(|o| o["kind"] == "backdrop" && info_rect(o).contains(r.x + r.w / 2, r.y + r.h / 2));
                 if !covered && top.can_drop(&self.cx, &d.key, w["drop"].as_str().unwrap_or("")) {
                     let over = r.contains(self.mouse.0, self.mouse.1) && drop_key_at(&infos, self.mouse) == w["drop"].as_str();
-                    p.panel(r, if over { rgba(244, 198, 84, 40) } else { rgba(0, 0, 0, 0) }, if over { GOLD } else { rgb(110, 140, 196) }, RADIUS);
+                    p.panel(r, if over { theme.drop_hot } else { rgba(0, 0, 0, 0) }, if over { theme.focus } else { theme.edge_hot }, theme.layout.radius);
                 }
             }
             draw_ghost(&mut p, &d.text, self.mouse);
@@ -1389,8 +1393,9 @@ fn draw_ghost(p: &mut Painter, text: &str, mouse: (i32, i32)) {
     let w = (p.text_w(text, BODY).ceil() as i32 + 10).clamp(24, 160);
     let h = p.line_h(BODY).ceil() as i32 + 4;
     let r = Rect::new((mouse.0 + 6).min(W - w - 2), (mouse.1 + 6).min(H - h - 2), w, h);
-    p.panel(r, rgba(18, 26, 44, 220), GOLD, RADIUS);
-    p.text_fit(r.x as f32 + 5.0, r.y as f32 + 2.0, text, BODY, (w - 10) as f32, TEXT);
+    let t = th();
+    p.panel(r, t.ghost, t.focus, t.layout.radius);
+    p.text_fit(r.x as f32 + 5.0, r.y as f32 + 2.0, text, BODY, (w - 10) as f32, t.text);
 }
 
 /// An open select's choice list, over the screen: one row per option, the chosen one in gold, the hovered one lit.
@@ -1399,14 +1404,15 @@ fn draw_options(p: &mut Painter, opts: &[&Value], mouse: (i32, i32), keyed: Opti
     let rects: Vec<Rect> = opts.iter().map(|w| info_rect(w)).collect();
     let (x0, y0) = (rects.iter().map(|r| r.x).min().unwrap_or(0), rects.iter().map(|r| r.y).min().unwrap_or(0));
     let (x1, y1) = (rects.iter().map(|r| r.x + r.w).max().unwrap_or(0), rects.iter().map(|r| r.y + r.h).max().unwrap_or(0));
-    p.panel(Rect::new(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2), MODAL, GOLD, RADIUS);
+    let t = th();
+    p.panel(Rect::new(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2), t.panel, t.focus, t.layout.radius);
     for (w, r) in opts.iter().zip(&rects) {
         let on_key = keyed.is_some_and(|k| w["id"] == k);
         if r.contains(mouse.0, mouse.1) || on_key {
-            p.panel(*r, PANEL_HI, if on_key { rgb(255, 255, 255) } else { rgb(110, 140, 196) }, RADIUS);
+            p.panel(*r, t.card_hot, if on_key { t.ring } else { t.edge_hot }, t.layout.radius);
         }
         let chosen = w["active"] == json!(true);
-        p.text_fit(r.x as f32 + 5.0, r.y as f32 + (r.h as f32 - p.line_h(BODY)) / 2.0, w["text"].as_str().unwrap_or(""), BODY, r.w as f32 - 10.0, if chosen { GOLD } else { TEXT });
+        p.text_fit(r.x as f32 + 5.0, r.y as f32 + (r.h as f32 - p.line_h(BODY)) / 2.0, w["text"].as_str().unwrap_or(""), BODY, r.w as f32 - 10.0, if chosen { t.focus } else { t.text });
     }
 }
 
@@ -1427,8 +1433,10 @@ fn save_png(c: &Canvas, path: &Path, max_w: i32) -> Result<()> {
     Ok(())
 }
 
-/// Opens the window and runs the screens until the window closes or a screen sets `cx.quit`.
-pub fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: Options) -> Result<()> {
+/// Opens the window and runs the screens until the window closes or a screen sets `cx.quit`. The theme is loaded
+/// from the game's asset layers first (LOOK1-E1; its problems show as a notice over the first screen).
+pub fn run<G: Context>(mut cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: Options) -> Result<()> {
+    crate::theme::reload(&mut cx);
     let el: EventLoop<()> = EventLoop::with_user_event().build()?;
     let proxy = el.create_proxy();
     let mut app = App { start: Some((cx, stack)), shell: None, options, window: None, pixels: None, proxy, bridge: None, applied: None, frame_every: Some(Duration::from_millis(16)), walk_keys: Vec::new(), shift: false, ctrl: false, alt: false };
@@ -1440,6 +1448,8 @@ pub fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: Optio
 mod tests {
     use super::*;
     use crate::art::Art;
+    use crate::canvas::rgb;
+    use crate::ui::TEXT;
     use crate::audio::Audio;
     use crate::screen::Settings;
     use crate::ui::{Tip, Ui, Widget};

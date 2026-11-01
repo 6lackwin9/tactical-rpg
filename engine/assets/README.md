@@ -10,6 +10,8 @@ by putting its own at the same relative path.
 - `tilesets/common_stage/<terrain>/v<n>.png` (128x96, 4:3) and `tilesets/common_stage/wall_face/v<n>.png` (128x48): the
   tilted battle stage's tiles (STAGE1-T; `tools/gen_art.py stage_tiles`, at most 16 colours each).
 - `audio/sfx/ui_{click,back,confirm,error}.wav`: interface sounds.
+- `ui/theme.json`, `ui/frames/<role>.png` with `<role>.json`: the runtime theme (LOOK1-E1). The engine ships none (its
+  default is in code); a kit or game adds them (spec LOOK1 section 3).
 - `ui/{lock,unlock,delete,help,chevron}.png`: toolkit glyphs for the kit's icon buttons (PLAYUI1-I; 32x32, made by
   `tools/portraits/sheets.py ui` from `art_src/ui_1.png`; a missing file falls back to a drawn `Glyph`).
 

@@ -788,6 +788,10 @@ impl Gallery {
     fn act(&mut self, cx: &mut Cx, a: GAct) {
         match a {
             GAct::Entry(i) => {
+                if i != self.entry {
+                    // LOOK1-E1: the Kit page's theme switch goes back to the layers' theme.
+                    self.kit.leave_theme();
+                }
                 self.entry = i;
                 self.shown = None;
             }
@@ -1086,6 +1090,7 @@ impl Screen<GameCx> for Gallery {
     /// The sample game goes with the gallery, only while it is still the one in play (a game started or loaded from an
     /// opened screen replaces it before the gallery is left).
     fn leave(&mut self, cx: &mut Cx) {
+        self.kit.leave_theme();
         if let Some(debug) = self.own_game.take() {
             if cx.game.as_ref().is_some_and(|g| g.sample) {
                 cx.game = None;

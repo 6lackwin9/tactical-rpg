@@ -8,7 +8,9 @@
 //! typewriter, skip and cues, and its full screen) and the effects kit (`fx`, FX1-E: the effect clock with hit-stop,
 //! drawn primitives, a live list and the camera shake) and the portrait effects (`portrait_fx`, PORTRAITFX1-E: base
 //! life, overlays, states and reactions over a portrait, by size tier, cached and budgeted) and the pip gauge (`pips`,
-//! INPUT1-AP: a budget planned against, kept, spent and refilled, with an alert and a debt or shortfall label). A game
+//! INPUT1-AP: a budget planned against, kept, spent and refilled, with an alert and a debt or shortfall label) and the
+//! runtime theme (`theme`, LOOK1-E1: colour roles, faces, layout values and nine-slice frames over the asset layers;
+//! the default is the look before it). A game
 //! supplies its screens, its context and the agent replies about its own state.
 
 pub mod art;
@@ -30,8 +32,9 @@ pub mod recordings;
 pub mod screen;
 pub mod shell;
 pub mod specimens;
-pub mod timeline;
 pub mod text_audit;
+pub mod theme;
+pub mod timeline;
 pub mod tuning;
 pub mod ui;
 pub mod vignette;

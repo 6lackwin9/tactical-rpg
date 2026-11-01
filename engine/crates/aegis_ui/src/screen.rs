@@ -7,7 +7,7 @@ use crate::art::Art;
 use crate::audio::Audio;
 use crate::canvas::Rect;
 use crate::painter::Painter;
-use crate::ui::{self, Gfx, Ui, Widget, BODY, GOLD, H, TEXT, W};
+use crate::ui::{self, Gfx, Ui, Widget, BODY, H, W};
 use serde_json::{json, Value};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
@@ -400,14 +400,15 @@ impl<G> Screen<G> for Ask<G> {
     }
     fn draw(&mut self, _cx: &mut Cx<G>, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<bool> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), crate::canvas::rgba(0, 0, 0, 120));
+        let scrim = ui.t.scrim;
+        ui.p.fill(Rect::new(0, 0, W, H), scrim);
         let lines = ui.p.wrap(&self.question, BODY, 250.0);
         let h = 40 + lines.len() as i32 * 10;
         let r = Rect::new(W / 2 - 135, H / 2 - h / 2, 270, h);
         ui.frame(r, "", false);
         let mut y = r.y as f32 + 8.0;
         for l in &lines {
-            ui.p.text(r.x as f32 + 10.0, y, l, BODY, TEXT);
+            ui.p.text(r.x as f32 + 10.0, y, l, BODY, ui.t.text);
             y += 10.0;
         }
         ui.button("ask.yes", Rect::new(r.x + r.w - 120, r.y + r.h - 22, 50, 15), "Yes", true, true);
@@ -471,7 +472,7 @@ impl<G> Screen<G> for Notice {
         ui.frame(r, "", false);
         let mut y = r.y as f32 + 8.0;
         for l in &wrapped {
-            ui.p.text(r.x as f32 + 10.0, y, l, BODY, TEXT);
+            ui.p.text(r.x as f32 + 10.0, y, l, BODY, ui.t.text);
             y += 10.0;
         }
         ui.button("notice.ok", Rect::new(r.x + r.w - 62, r.y + r.h - 22, 50, 15), "OK", (), true);
@@ -497,5 +498,6 @@ pub fn show_errors<G: 'static>(cx: &mut Cx<G>, errors: Vec<String>) {
 
 /// A centred screen title.
 pub fn title(ui: &mut Ui<impl Clone>, text: &str, y: i32) {
-    ui.p.text_center(W as f32 / 2.0, y as f32, text, ui::HEAD + 4.0, GOLD);
+    let gold = ui.t.gold;
+    ui.p.text_center(W as f32 / 2.0, y as f32, text, ui::HEAD + 4.0, gold);
 }

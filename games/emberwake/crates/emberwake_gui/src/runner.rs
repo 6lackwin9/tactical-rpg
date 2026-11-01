@@ -284,14 +284,18 @@ impl SceneRunner {
                 let r = aegis_ui::recordings::Recordings::new(cx, launch, |cx| aegis_content::fingerprint::of(&cx.data_dir), repo);
                 cx.nav.push(Nav::Push(Box::new(r)));
             }
-            SAct::Reload => match emberwake_world::Data::open(&cx.data_dir) {
-                Ok((d, problems)) => {
-                    cx.data = Arc::new(d);
-                    cx.notice.push(format!("Reloaded the data from {}.", cx.data_dir.display()));
-                    cx.notice.extend(problems);
+            SAct::Reload => {
+                match emberwake_world::Data::open(&cx.data_dir) {
+                    Ok((d, problems)) => {
+                        cx.data = Arc::new(d);
+                        cx.notice.push(format!("Reloaded the data from {}.", cx.data_dir.display()));
+                        cx.notice.extend(problems);
+                    }
+                    Err(e) => show_errors(cx, vec![format!("Reload failed: {e:#}")]),
                 }
-                Err(e) => show_errors(cx, vec![format!("Reload failed: {e:#}")]),
-            },
+                // LOOK1-E1: the theme files too (a problem keeps the theme in force and shows a notice).
+                aegis_ui::theme::reload(cx);
+            }
         }
     }
 }

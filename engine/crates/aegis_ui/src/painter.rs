@@ -1,9 +1,12 @@
 //! Two-layer drawing at the window's real resolution. Layout is in logical units (a 640x360 design canvas); `View`
 //! maps them to physical pixels. The battlefield is pixel art scaled with nearest sampling; panels and text are drawn
-//! smooth at full resolution (anti-aliased Open Sans, rounded panels), like the Godot HUD.
+//! smooth at full resolution (anti-aliased Open Sans, rounded panels), like the Godot HUD. LOOK1-E1: three faces
+//! (`Typeface`: body, display, mono; the theme's fonts, `Fonts::sync`) and nine-slice frames (`Painter::nine`).
 
 use crate::canvas::{Canvas, Image, Rect, Rgba};
+use crate::theme::{Frame, Nine, NineFill};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 pub const LW: f32 = 640.0;
 pub const LH: f32 = 360.0;
@@ -39,10 +42,46 @@ impl View {
     }
 }
 
-/// Rasterized glyphs per (char, physical px size).
-pub struct Fonts {
+/// The three faces a theme names (LOOK1-E1, spec LOOK1 3.3): `Body` for every text as before, `Display` for frame
+/// titles and headers, `Mono` for badge numbers. Without a theme file all three are the body font.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Typeface {
+    Body,
+    Display,
+    Mono,
+}
+
+impl Typeface {
+    pub const ALL: [Typeface; 3] = [Typeface::Body, Typeface::Display, Typeface::Mono];
+
+    /// The face's key in `ui/theme.json` `fonts`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Typeface::Body => "body",
+            Typeface::Display => "display",
+            Typeface::Mono => "mono",
+        }
+    }
+
+    pub fn index(self) -> usize {
+        self as usize
+    }
+}
+
+/// One face's font, its size factor and its glyph cache; `src` holds the bytes it was built from (None: the base
+/// font), so a cache is reused only for those very bytes (`Arc::ptr_eq` on a held `Arc`, never a stale address).
+struct FaceCache {
     font: fontdue::Font,
+    scale: f32,
+    src: Option<Arc<Vec<u8>>>,
     cache: HashMap<(char, u32), (fontdue::Metrics, Vec<u8>)>,
+}
+
+/// Rasterized glyphs per (face, char, physical px size).
+pub struct Fonts {
+    /// The font `Fonts::new` was given (the shell's UI font): every face without a font file of its own uses it.
+    base: fontdue::Font,
+    faces: [FaceCache; 3],
     /// The text size factor (settings `text_scale`: 0.85 Small .. 1.3 Extra large); every text size is multiplied by it.
     pub scale: f32,
     /// TEXTFIT1 text audit: while Some, every text drawn is recorded here (the shell's `text_audit` turns it on for
@@ -76,19 +115,64 @@ pub struct TextRec {
 pub const COVER_ALPHA: u8 = 200;
 
 impl Fonts {
+    /// Fonts with `ttf` as every face (body, display and mono alike, each at size factor 1).
     pub fn new(ttf: &[u8]) -> Self {
         let font = fontdue::Font::from_bytes(ttf, fontdue::FontSettings::default()).expect("valid TTF");
-        Self { font, cache: HashMap::new(), scale: 1.0, audit: None, transient: false }
+        let face = || FaceCache { font: font.clone(), scale: 1.0, src: None, cache: HashMap::new() };
+        Self { faces: [face(), face(), face()], base: font.clone(), scale: 1.0, audit: None, transient: false }
     }
 
-    fn glyph(&mut self, c: char, px: u32) -> &(fontdue::Metrics, Vec<u8>) {
-        let font = &self.font;
-        self.cache.entry((c, px)).or_insert_with(|| font.rasterize(c, px as f32))
+    /// Sets `face` to the font in `ttf` (None: the base font) at size factor `scale`; the glyph cache is kept while the
+    /// bytes stay the same `Arc` (`Arc::ptr_eq`). A TTF that does not parse leaves the face as it was (the theme
+    /// loader has checked it).
+    pub fn set_face(&mut self, face: Typeface, ttf: Option<&Arc<Vec<u8>>>, scale: f32) {
+        let base = &self.base;
+        let f = &mut self.faces[face.index()];
+        f.scale = scale;
+        let same = match (&f.src, ttf) {
+            (None, None) => true,
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            _ => false,
+        };
+        if same {
+            return;
+        }
+        let font = match ttf {
+            None => Some(base.clone()),
+            Some(b) => fontdue::Font::from_bytes(b.as_slice(), fontdue::FontSettings::default()).ok(),
+        };
+        if let Some(font) = font {
+            *f = FaceCache { font, scale, src: ttf.cloned(), cache: HashMap::new() };
+        }
     }
 
-    /// Physical advance width of `s` at `px`.
+    /// The faces of `theme` (`set_face` for each; cheap when nothing changed).
+    pub fn sync(&mut self, theme: &crate::theme::Theme) {
+        for face in Typeface::ALL {
+            let spec = theme.face(face);
+            self.set_face(face, spec.bytes.as_ref(), spec.scale);
+        }
+    }
+
+    /// The size factor of `face` (`ui/theme.json` `fonts.<face>.scale`).
+    pub fn face_scale(&self, face: Typeface) -> f32 {
+        self.faces[face.index()].scale
+    }
+
+    fn glyph(&mut self, face: Typeface, c: char, px: u32) -> &(fontdue::Metrics, Vec<u8>) {
+        let f = &mut self.faces[face.index()];
+        let font = &f.font;
+        f.cache.entry((c, px)).or_insert_with(|| font.rasterize(c, px as f32))
+    }
+
+    /// Physical advance width of `s` at `px` in the body face.
     pub fn width_px(&mut self, s: &str, px: u32) -> f32 {
-        s.chars().map(|c| self.glyph(c, px).0.advance_width).sum()
+        self.width_px_face(Typeface::Body, s, px)
+    }
+
+    /// Physical advance width of `s` at `px` in `face`.
+    pub fn width_px_face(&mut self, face: Typeface, s: &str, px: u32) -> f32 {
+        s.chars().map(|c| self.glyph(face, c, px).0.advance_width).sum()
     }
 }
 
@@ -103,19 +187,30 @@ fn mix(c: Rgba, a: f32) -> Rgba {
 }
 
 impl<'a> Painter<'a> {
-    fn px(&self, size: f32) -> u32 {
-        (size * self.fonts.scale * self.v.s).round().max(6.0) as u32
+    /// The physical glyph size of logical `size` in `face` (the text size and the face's size factor applied).
+    fn px(&self, face: Typeface, size: f32) -> u32 {
+        (size * self.fonts.scale * self.fonts.face_scale(face) * self.v.s).round().max(6.0) as u32
     }
 
     /// The logical height of a line of text of `size` (at the current text size), for centering text in a box.
     pub fn line_h(&self, size: f32) -> f32 {
-        size * 1.28 * self.fonts.scale
+        self.line_h_face(Typeface::Body, size)
+    }
+
+    /// `line_h` in `face` (its size factor applied).
+    pub fn line_h_face(&self, face: Typeface, size: f32) -> f32 {
+        size * 1.28 * self.fonts.scale * self.fonts.face_scale(face)
     }
 
     /// Logical width of `s` in a font of logical `size`.
     pub fn text_w(&mut self, s: &str, size: f32) -> f32 {
-        let px = self.px(size);
-        self.fonts.width_px(s, px) / self.v.s
+        self.text_w_face(Typeface::Body, s, size)
+    }
+
+    /// `text_w` in `face`.
+    pub fn text_w_face(&mut self, face: Typeface, s: &str, size: f32) -> f32 {
+        let px = self.px(face, size);
+        self.fonts.width_px_face(face, s, px) / self.v.s
     }
 
     pub fn fill(&mut self, r: Rect, col: Rgba) {
@@ -216,13 +311,18 @@ impl<'a> Painter<'a> {
 
     /// Anti-aliased text; (x, y) is the logical top-left of the line box. Returns the logical end x.
     pub fn text(&mut self, x: f32, y: f32, s: &str, size: f32, col: Rgba) -> f32 {
-        let px = self.px(size);
+        self.text_face(Typeface::Body, x, y, s, size, col)
+    }
+
+    /// `text` in `face` (LOOK1-E1: frame titles and headers in the display face, badge numbers in the mono face).
+    pub fn text_face(&mut self, face: Typeface, x: f32, y: f32, s: &str, size: f32, col: Rgba) -> f32 {
+        let px = self.px(face, size);
         let ascent = px as f32 * 0.95;
         let mut pen = self.v.ox + x * self.v.s;
         let base = self.v.oy + y * self.v.s + ascent;
         for ch in s.chars() {
             let (m, bitmap) = {
-                let g = self.fonts.glyph(ch, px);
+                let g = self.fonts.glyph(face, ch, px);
                 (g.0, g.1.clone())
             };
             let gx = (pen + m.xmin as f32).round() as i32;
@@ -239,7 +339,7 @@ impl<'a> Painter<'a> {
         }
         let end = (pen - self.v.ox) / self.v.s;
         if self.fonts.audit.is_some() && !s.trim().is_empty() {
-            let h = self.line_h(size);
+            let h = self.line_h_face(face, size);
             let clipped = self.c.clip.is_some_and(|c| {
                 let (cx0, cy0) = ((c.x as f32 - self.v.ox) / self.v.s, (c.y as f32 - self.v.oy) / self.v.s);
                 let (cx1, cy1) = (cx0 + c.w as f32 / self.v.s, cy0 + c.h as f32 / self.v.s);
@@ -286,8 +386,79 @@ impl<'a> Painter<'a> {
     }
 
     pub fn text_center(&mut self, cx: f32, y: f32, s: &str, size: f32, col: Rgba) {
-        let w = self.text_w(s, size);
-        self.text(cx - w / 2.0, y, s, size, col);
+        self.text_center_face(Typeface::Body, cx, y, s, size, col);
+    }
+
+    /// `text_center` in `face`.
+    pub fn text_center_face(&mut self, face: Typeface, cx: f32, y: f32, s: &str, size: f32, col: Rgba) {
+        let w = self.text_w_face(face, s, size);
+        self.text_face(face, cx - w / 2.0, y, s, size, col);
+    }
+
+    /// LOOK1-E1 (spec LOOK1 3.5): the nine-slice frame `img` cut by `nine` into logical `r`. The corners are drawn at
+    /// `slice / scale` logical px (nearest sampling), the edges and the centre stretched or tiled between them;
+    /// `center: none` leaves the centre undrawn (the caller fills it with the role's colour first). A rect smaller
+    /// than two corners shrinks the corners to half the rect each way.
+    pub fn nine(&mut self, img: &Image, nine: &Nine, r: Rect) {
+        let pr = self.v.rect(r);
+        if pr.w <= 0 || pr.h <= 0 || img.w <= 0 || img.h <= 0 {
+            return;
+        }
+        let [sl, st, sr, sb] = nine.slice;
+        // Physical px per art px.
+        let k = self.v.s / nine.scale.max(1) as f32;
+        let side = |a: i32, b: i32, room: i32| -> (i32, i32) {
+            let (pa, pb) = (((a as f32) * k).round() as i32, ((b as f32) * k).round() as i32);
+            if pa + pb > room {
+                (room / 2, room - room / 2)
+            } else {
+                (pa, pb)
+            }
+        };
+        let (dl, dr) = side(sl, sr, pr.w);
+        let (dt, db) = side(st, sb, pr.h);
+        let (sw, sh) = (img.w - sl - sr, img.h - st - sb);
+        let (dw, dh) = (pr.w - dl - dr, pr.h - dt - db);
+        // Source spans (x, w) and destination spans (x, w) of the three columns and rows.
+        let cols = [(0, sl, pr.x, dl), (sl, sw, pr.x + dl, dw), (img.w - sr, sr, pr.x + pr.w - dr, dr)];
+        let rows = [(0, st, pr.y, dt), (st, sh, pr.y + dt, dh), (img.h - sb, sb, pr.y + pr.h - db, db)];
+        for (j, &(sy, src_h, dy, dst_h)) in rows.iter().enumerate() {
+            for (i, &(sx, src_w, dx, dst_w)) in cols.iter().enumerate() {
+                let (mid_col, mid_row) = (i == 1, j == 1);
+                let fill = if mid_col && mid_row { nine.center } else if mid_col || mid_row { nine.edges } else { NineFill::Stretch };
+                if fill == NineFill::None || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0 {
+                    continue;
+                }
+                // Stretch maps the destination span onto the whole source span (a shrunk corner is sampled down);
+                // tile repeats the source at its own size along the middle column or row.
+                let tile_x = fill == NineFill::Tile && mid_col;
+                let tile_y = fill == NineFill::Tile && mid_row;
+                for y in 0..dst_h {
+                    let oy = if tile_y { ((y as f32 / k) as i32).rem_euclid(src_h) } else { y * src_h / dst_h };
+                    for x in 0..dst_w {
+                        let ox = if tile_x { ((x as f32 / k) as i32).rem_euclid(src_w) } else { x * src_w / dst_w };
+                        let at = (((sy + oy) * img.w + sx + ox) * 4) as usize;
+                        self.c.blend(dx + x, dy + y, [img.px[at], img.px[at + 1], img.px[at + 2], img.px[at + 3]]);
+                    }
+                }
+            }
+        }
+        if nine.center != NineFill::None {
+            self.cover(r, 255);
+        }
+    }
+
+    /// LOOK1-E1: a themed panel: `frame` (a frame role's file, `Theme::frame`) cut nine ways over `r`, its centre filled
+    /// with `fill` first when the sidecar says `center: none`; without a frame the vector `panel(r, fill, edge,
+    /// radius)` exactly as before.
+    pub fn skin(&mut self, frame: Option<&Frame>, r: Rect, fill: Rgba, edge: Rgba, radius: f32) {
+        let Some(f) = frame else { return self.panel(r, fill, edge, radius) };
+        if f.nine.center == NineFill::None {
+            let k = f.nine.scale.max(1);
+            let [l, t, rr, b] = f.nine.slice.map(|s| s / k);
+            self.fill(Rect::new(r.x + l, r.y + t, (r.w - l - rr).max(0), (r.h - t - b).max(0)), fill);
+        }
+        self.nine(&f.img, &f.nine, r);
     }
 
     /// Word wrap to `max_w` logical units (a word wider than a line breaks across lines, wherever it falls).
