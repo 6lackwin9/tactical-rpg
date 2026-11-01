@@ -42,7 +42,9 @@ const TILE: i32 = 16;
 const SPRITE: i32 = TILE * 3 / 2;
 /// The leader keeps walking this long (animation ms) after a step, so key steps and walked paths play `walk` without
 /// a stop between tiles.
-const WALK_LINGER_MS: f64 = 220.0;
+const WALK_LINGER_MS: f64 = 130.0;
+/// WALK2: the time between steps (wall ms) of a walked path and of a held movement key.
+const STEP_MS: u64 = 90;
 
 #[derive(Debug, Clone)]
 pub enum RAct {
@@ -97,6 +99,8 @@ pub struct RegionMap {
     walk: Vec<Pos>,
     walk_target: Option<String>,
     next_walk: Instant,
+    /// WALK2: a movement key pressed on this map is held: the draw steps every `STEP_MS` until it is let go.
+    hold: bool,
     /// Map geometry of the last frame: (origin x, origin y, tile size).
     geo: (i32, i32, i32),
     /// The ticker shows the last `LOG_OPEN` events (else only the latest).
@@ -221,6 +225,7 @@ impl RegionMap {
             walk: Vec::new(),
             walk_target: None,
             next_walk: Instant::now(),
+            hold: false,
             geo: (0, 0, 1),
             log_open: false,
             talk_node: String::new(),
@@ -702,6 +707,9 @@ impl Screen<GameCx> for RegionMap {
     fn arrow_focus(&self) -> bool {
         false
     }
+    fn hold_walk(&self) -> bool {
+        true
+    }
     fn id(&self) -> &'static str {
         "region_map"
     }
@@ -1024,10 +1032,25 @@ impl Screen<GameCx> for RegionMap {
             self.walk_target = None;
             return;
         }
+        // WALK2: a held movement key keeps stepping at the step rate (the press itself stepped at once; the OS key
+        // repeat is dropped by the shell, `hold_walk`), so the steps chain with the walk clip running.
+        if cx.held.dir.is_none() {
+            self.hold = false;
+        }
+        if self.hold && self.walk.is_empty() && !self.modal() {
+            if let (Some(dir), true) = (cx.held.dir, now >= self.next_walk) {
+                self.next_walk = now + Duration::from_millis(STEP_MS);
+                let t = explore::template_of(&cx.data, explore::location(&cx.data, cx.gs()));
+                if t.is_empty() || !self.step(cx, dir) {
+                    self.hold = false;
+                }
+            }
+            return;
+        }
         if self.walk.is_empty() || self.modal() || now < self.next_walk {
             return;
         }
-        self.next_walk = Instant::now() + Duration::from_millis(90);
+        self.next_walk = Instant::now() + Duration::from_millis(STEP_MS);
         let dir = self.walk.remove(0);
         if !self.step(cx, dir) {
             self.walk.clear();
@@ -1069,7 +1092,8 @@ impl Screen<GameCx> for RegionMap {
             self.pan = None;
             let t = explore::template_of(&cx.data, explore::location(&cx.data, cx.gs()));
             if !t.is_empty() {
-                self.step(cx, dir);
+                self.hold = self.step(cx, dir);
+                self.next_walk = Instant::now() + Duration::from_millis(STEP_MS);
             }
         } else if k == Key::Char('e') || k == Key::Enter {
             let dir = self.facing;
@@ -2543,6 +2567,58 @@ mod sprite_tests {
         let view = drawn_view(&mut cx, &s(json::dict(&sp), "body"), "idle", "up");
         let want = if view == "side" { "idle".to_string() } else { format!("idle_{view}") };
         assert_eq!((sp["clip"].clone(), sp["view"].clone()), (json!(want), json!(view)), "standing still");
+    }
+
+    /// WALK2: a held movement key steps at once on the press (no key-repeat delay), chains a step every `STEP_MS`
+    /// with the leader on one unbroken `walk` clip, turns at once to a newly held direction, and releasing stops on
+    /// the tile and settles to idle once the linger has run out.
+    #[test]
+    fn a_held_key_walks_at_once_and_chains_steps() {
+        let (mut cx, mut g) = (art_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        let d = cx.data.clone();
+        let start = cx.gs().clone();
+        let t = explore::template_of(&d, explore::location(&d, &start)).clone();
+        let (w, h) = explore::size_of(&t);
+        let marked: Vec<Pos> = explore::markers_of(explore::location(&d, &start)).iter().map(|m| explore::marker_pos(&t, m, start.explore_int("loc_steps"))).collect();
+        let free = |p: Pos| explore::is_open(&t, p.0, p.1) && !marked.contains(&p);
+        // a free tile with a free row of three to its right and one free tile below the last of them
+        let at = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|&(x, y)| (0..4).all(|i| free((x + i, y))) && free((x + 3, y + 1))).expect("room for four steps");
+        cx.gs_mut().position = at;
+        // the press steps on the same frame, and the key stays armed
+        map.key(&mut cx, Key::Right);
+        cx.held.dir = Some((1, 0));
+        assert_eq!(cx.gs().position, (at.0 + 1, at.1), "the press steps at once");
+        assert!(map.hold, "held");
+        // a frame before the step interval is up does not step again
+        map.tick(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_eq!(cx.gs().position, (at.0 + 1, at.1), "no second step inside the interval");
+        assert_eq!(map.leader.base(), "walk");
+        // each interval that elapses steps once and the clip never leaves `walk`
+        for n in 2..=3 {
+            map.next_walk = Instant::now() - Duration::from_millis(1);
+            map.tick(&mut cx);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert_eq!(cx.gs().position, (at.0 + n, at.1), "step {n} of the hold");
+            assert!(map.moving());
+            assert_eq!(map.leader.base(), "walk", "no idle frame between steps");
+        }
+        // the key is read from the held state: a new direction held turns the leader on its next step
+        map.key(&mut cx, Key::Down);
+        cx.held.dir = Some((0, 1));
+        assert_eq!(cx.gs().position, (at.0 + 3, at.1 + 1), "the turn steps at once");
+        assert_eq!(map.leader.base(), "walk");
+        // release: the next frame steps no more, the leader keeps the walk only until the linger is out, then idles
+        cx.held.dir = None;
+        map.next_walk = Instant::now() - Duration::from_millis(1);
+        map.tick(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_eq!(cx.gs().position, (at.0 + 3, at.1 + 1), "released: stopped on the tile");
+        assert!(!map.hold);
+        map.anim_ms += WALK_LINGER_MS + 1.0;
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_eq!(map.leader.base(), "idle");
     }
 
     /// 2.4 and DIR4-M: every person with a body is a sprite on their tile (idle, facing right); in a conversation

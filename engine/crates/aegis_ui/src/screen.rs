@@ -170,6 +170,9 @@ pub struct Held {
     pub shift: bool,
     pub ctrl: bool,
     pub alt: bool,
+    /// The step direction (`Key::dir`) of the movement key (arrows, W A S D) held down, the latest pressed when
+    /// several are; None when none is. For screens that walk while a key is held (`Screen::hold_walk`).
+    pub dir: Option<(i64, i64)>,
 }
 
 /// The shared context: the engine's half here, the game's half in `app` (reached through Deref).
@@ -257,6 +260,11 @@ pub trait Screen<G> {
     /// (Tab and Shift+Tab still move it).
     fn arrow_focus(&self) -> bool {
         true
+    }
+    /// Whether the screen walks while a movement key is held (`Held::dir`): the shell then delivers such a key once
+    /// (the press) and drops the operating system's key repeats, whose first comes ~0.5 s late.
+    fn hold_walk(&self) -> bool {
+        false
     }
     /// Whether the first widget takes a visible focus as the screen appears (a menu meant for the keyboard).
     fn auto_focus(&self) -> bool {

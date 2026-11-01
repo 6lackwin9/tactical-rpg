@@ -1054,6 +1054,8 @@ struct App<G> {
     /// unlimited).
     applied: Option<Value>,
     frame_every: Option<Duration>,
+    /// The movement keys held down, in press order (the last one walks).
+    walk_keys: Vec<Key>,
     /// Shift is held (Shift+Tab).
     shift: bool,
     /// Ctrl is held (Ctrl+Enter, the text field's Ctrl keys).
@@ -1199,7 +1201,7 @@ impl<G: Context> ApplicationHandler for App<G> {
                 self.alt = m.state().alt_key();
                 if let Some(s) = self.shell.as_mut() {
                     s.shift = self.shift;
-                    s.cx.held = Held { shift: self.shift, ctrl: self.ctrl, alt: self.alt };
+                    s.cx.held = Held { shift: self.shift, ctrl: self.ctrl, alt: self.alt, dir: s.cx.held.dir };
                 }
             }
             WindowEvent::Focused(false) => {
@@ -1207,6 +1209,15 @@ impl<G: Context> ApplicationHandler for App<G> {
                 if let Some(s) = self.shell.as_mut() {
                     s.cancel_drag();
                     s.cx.held = Held::default();
+                }
+                self.walk_keys.clear();
+            }
+            WindowEvent::KeyboardInput { event: KeyEvent { logical_key, state: ElementState::Released, .. }, .. } => {
+                if let Some(k) = walk_key(&logical_key) {
+                    self.walk_keys.retain(|w| *w != k);
+                    if let Some(s) = self.shell.as_mut() {
+                        s.cx.held.dir = self.walk_keys.last().and_then(|k| k.dir());
+                    }
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
@@ -1237,8 +1248,19 @@ impl<G: Context> ApplicationHandler for App<G> {
                     s.release();
                 }
             }
-            WindowEvent::KeyboardInput { event: KeyEvent { logical_key, text, state: ElementState::Pressed, .. }, .. } => {
+            WindowEvent::KeyboardInput { event: KeyEvent { logical_key, text, state: ElementState::Pressed, repeat, .. }, .. } => {
                 let Some(s) = self.shell.as_mut() else { return };
+                if s.gfx.kit.edit.is_none() {
+                    if let Some(k) = walk_key(&logical_key) {
+                        if !self.walk_keys.contains(&k) {
+                            self.walk_keys.push(k);
+                        }
+                        s.cx.held.dir = self.walk_keys.last().and_then(|k| k.dir());
+                        if repeat && s.stack.last().is_some_and(|t| t.hold_walk()) {
+                            return;
+                        }
+                    }
+                }
                 if s.gfx.kit.edit.is_some() {
                     // A text field types: the editing keys and the typed text go to it, not to the screen. Ctrl+Enter
                     // still submits; Enter (one line), Esc and Tab end the edit and reach the screen.
@@ -1324,6 +1346,19 @@ impl<G: Context> ApplicationHandler for App<G> {
     }
 }
 
+/// The movement key (arrows, W A S D) a logical key is, if it is one.
+fn walk_key(k: &WKey) -> Option<Key> {
+    let key = match k {
+        WKey::Named(NamedKey::ArrowUp) => Key::Up,
+        WKey::Named(NamedKey::ArrowDown) => Key::Down,
+        WKey::Named(NamedKey::ArrowLeft) => Key::Left,
+        WKey::Named(NamedKey::ArrowRight) => Key::Right,
+        WKey::Character(c) => Key::Char(c.chars().next()?.to_ascii_lowercase()),
+        _ => return None,
+    };
+    key.dir().map(|_| key)
+}
+
 /// The dragged widget's text in a small card under the cursor.
 fn draw_ghost(p: &mut Painter, text: &str, mouse: (i32, i32)) {
     let w = (p.text_w(text, BODY).ceil() as i32 + 10).clamp(24, 160);
@@ -1371,7 +1406,7 @@ fn save_png(c: &Canvas, path: &Path, max_w: i32) -> Result<()> {
 pub fn run<G: Context>(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: Options) -> Result<()> {
     let el: EventLoop<()> = EventLoop::with_user_event().build()?;
     let proxy = el.create_proxy();
-    let mut app = App { start: Some((cx, stack)), shell: None, options, window: None, pixels: None, proxy, bridge: None, applied: None, frame_every: Some(Duration::from_millis(16)), shift: false, ctrl: false, alt: false };
+    let mut app = App { start: Some((cx, stack)), shell: None, options, window: None, pixels: None, proxy, bridge: None, applied: None, frame_every: Some(Duration::from_millis(16)), walk_keys: Vec::new(), shift: false, ctrl: false, alt: false };
     el.run_app(&mut app)?;
     Ok(())
 }
