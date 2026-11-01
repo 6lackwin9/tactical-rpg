@@ -1,0 +1,12 @@
+{
+  "size": 240,
+  "border": 8,
+  "eyes": [[123, 87, 18, 12]],
+  "blink": true,
+  "lid": "#a47a5f",
+  "glow": [],
+  "veins": [],
+  "mouth": [],
+  "rim": "",
+  "idle": []
+}
