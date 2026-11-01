@@ -883,3 +883,458 @@ fn tl_a_tier_cap_keeps_a_portrait_no_richer_than_it() {
     let reduced = PortraitOpts { tier_cap: Some(Tier::Reduced), ..PortraitOpts::default() };
     assert_eq!(sides.map(|s| reduced.tier(s)), [Tier::Reduced, Tier::Reduced, Tier::Reduced, Tier::Minimal, Tier::Minimal], "capped at reduced: never full");
 }
+
+// ---- PORTRAITFX2-M: motion per face (PORTRAITFX2.md 4 and 8, MO1-MO11) ---------------------------------------------
+
+/// The motion context of seed `seed` at `t` (face start `since`) on a composed side `side` (its tier), motion seed of
+/// the face `m`.
+fn mctx(seed: u64, t: u64, since: u64, side: i32) -> MotionCtx {
+    MotionCtx { seed, mseed: motion_seed(seed, "m"), t, since, side, tier: Tier::of(side), reduce: false, still: false, tinted: false }
+}
+
+/// A motion with no cycle (only the parts set on it).
+fn steady() -> Motion {
+    Motion { breath_amp: 0.0, ..Motion::default() }
+}
+
+/// (stretch, dx, dy) of an output.
+fn sxy(o: &MotionOut) -> (i32, i32, i32) {
+    (o.stretch, o.dx, o.dy)
+}
+
+/// The agent state's motion (stretch, dx, dy) and parts.
+fn state_motion(fx: &PortraitFx, now: u64) -> ((i64, i64, i64), Vec<String>) {
+    let s = fx.state(now);
+    let m = &s["motion"];
+    let parts = m["parts"].as_array().unwrap().iter().map(|p| p.as_str().unwrap().to_string()).collect();
+    ((m["stretch"].as_i64().unwrap(), m["offset"][0].as_i64().unwrap(), m["offset"][1].as_i64().unwrap()), parts)
+}
+
+/// A face row of `expression` with motion `m` and nothing else.
+fn moving(expression: &str, m: Motion) -> ExpressionFx {
+    ExpressionFx { motion: m, ..ExpressionFx::new(expression) }
+}
+
+/// MO1: no profile and `Motion::default()` give `breath_px` exactly at every `t` and full-tier side (the face's start
+/// plays no part), none below the full tier; a face whose row keeps the default motion, and a face with no row, compose
+/// exactly as the plain portrait.
+#[test]
+fn mo1_the_default_motion_is_the_breath_exactly() {
+    let d = Motion::default();
+    assert_eq!((d.breath_amp, d.breath_ms, d.breath_in, d.breath_jitter, d.blink), (0.012 * MOTION_REF as f32, 3600, 0.5, 0.0, true));
+    for key in ["mo1", "breath", "kit.sample", "a"] {
+        let seed = seed_of(key);
+        for s in FULL_SIDE..=COMPOSE_MAX {
+            assert_eq!(motion_px(d.breath_amp, s), breath_amp(s), "px(2.88) is the breath amplitude at side {s}");
+            for t in (0..12_000u64).step_by(37) {
+                let o = d.eval(&mctx(seed, t, 0, s));
+                assert_eq!(sxy(&o), (breath_px(seed, t, s), 0, 0), "{key} side {s} t {t}");
+            }
+        }
+        assert_eq!(d.eval(&mctx(seed, 5000, 1234, 240)), d.eval(&mctx(seed, 5000, 0, 240)), "the start plays no part");
+        for s in [16, REDUCED_SIDE - 1, REDUCED_SIDE, FULL_SIDE - 1] {
+            assert_eq!(sxy(&d.eval(&mctx(seed, 1800, 0, s))), (0, 0, 0), "no breath below the full tier ({s})");
+        }
+    }
+    let mut rig = Rig::new();
+    let src = rows(240);
+    for t in [0, 900, 1800, 2700, 4000] {
+        let plain = rig.compose(&mut PortraitFx::new("mo1"), &src, None, 240, t, PortraitOpts::default());
+        let mut row = PortraitFx::new("mo1");
+        row.set_expressions(&[ExpressionFx::new("hurt")]);
+        row.hold(&[face_cue("hurt")], 0);
+        assert_eq!(rig.compose(&mut row, &src, None, 240, t, PortraitOpts::default()), plain, "a row at the default motion (t {t})");
+        let mut none = PortraitFx::new("mo1");
+        none.hold(&[face_cue("smug")], 0);
+        assert_eq!(rig.compose(&mut none, &src, None, 240, t, PortraitOpts::default()), plain, "a face without a row takes the base motion (t {t})");
+    }
+}
+
+/// MO2: `breath_in` r puts the peak (b = 1) at r P' with the rise and fall of `cycle_phase`; with no jitter the cycle runs
+/// on the clock (the face's start and the motion seed play no part); with jitter j each cycle n (from the face's start)
+/// lasts P' (1 + j (2 hm(4n) - 1)) and peaks at A (1 - j hm(4n + 1)), within [A (1 - j), A], the same for the same key.
+#[test]
+fn mo2_the_cycle_breathes_in_over_its_share_and_jitter_varies_each_cycle() {
+    let seed = seed_of("mo2");
+    for r in [0.3f32, 0.4, 0.5, 0.7] {
+        let m = Motion { breath_in: r, ..Motion::default() };
+        let p = m.period(seed);
+        assert_eq!(p, 3600.0 * (0.9 + 0.2 * hash01(seed, 1)), "P' as the breath");
+        let peak = (r * p).round() as u64;
+        let (b, a) = m.cycle_at(seed, 0, peak, 0);
+        assert!(b > 0.999 && a == m.breath_amp, "r {r}: the peak at r P' ({b})");
+        assert_eq!(m.cycle_at(seed, 0, 0, 0).0, 0.0, "r {r}: the cycle starts at 0");
+        for t in (0..(2.0 * p) as u64).step_by(53) {
+            let f = ((t as f64 % p as f64) / p as f64) as f32;
+            assert!((m.cycle_at(seed, 0, t, 0).0 - cycle_phase(f, r)).abs() < 1e-4, "r {r} t {t}");
+        }
+        for since in [0, 777, 5000] {
+            assert_eq!(m.cycle_at(seed, 99, 6000, since), m.cycle_at(seed, 1, 6000, 0), "j = 0: the clock's closed form");
+        }
+    }
+    let m = Motion { breath_amp: 4.0, breath_in: 0.4, breath_jitter: 0.35, ..Motion::default() };
+    let mseed = motion_seed(seed, "hurt");
+    let (p, j) = (m.period(seed) as f64, m.breath_jitter);
+    let since = 2500u64;
+    let mut start = 0f64;
+    for n in 0..12u64 {
+        let len = p * (1.0 + j as f64 * (2.0 * hash01(mseed, 4 * n) as f64 - 1.0));
+        let want = m.breath_amp * (1.0 - j * hash01(mseed, 4 * n + 1));
+        assert!(want >= m.breath_amp * (1.0 - j) && want <= m.breath_amp, "cycle {n} amplitude in range");
+        let peak = since + (start + 0.4 * len).round() as u64;
+        let (b, a) = m.cycle_at(seed, mseed, peak, since);
+        assert!(b > 0.999, "cycle {n} peaks at r of its own length ({b})");
+        assert_eq!(a, want, "cycle {n}'s amplitude");
+        let (b0, _) = m.cycle_at(seed, mseed, since + start.ceil() as u64, since);
+        assert!(b0 < 0.01, "cycle {n} starts low ({b0})");
+        start += len;
+    }
+    let c = MotionCtx { mseed, ..mctx(seed, 9000, since, 240) };
+    assert_eq!(m.eval(&c), m.eval(&c), "the same key and time, the same output");
+    assert_eq!(m.cycle_at(seed, mseed, 9000 + 400, since + 400), m.cycle_at(seed, mseed, 9000, since), "counted from the face's start");
+}
+
+/// MO3: `enter_stretch` -2 at side 240 reaches -2 at 0.25 E and 0 at E; the cycle is 0 before E, then grows to full
+/// scale at E + `settle_ms` (half way: half the stretch).
+#[test]
+fn mo3_the_entry_runs_first_and_the_cycle_settles_after_it() {
+    let seed = seed_of("mo3");
+    let m = Motion { breath_amp: 4.0, enter_stretch: -2, enter_ms: 400, settle_ms: 800, ..Motion::default() };
+    let since = 1000;
+    let at = |u: u64| m.eval(&mctx(seed, since + u, since, 240));
+    assert_eq!(at(100).stretch, -2, "the full squeeze at 0.25 E");
+    assert_eq!(at(400).stretch, 0, "nothing at E (the cycle not yet started)");
+    for u in 0..400 {
+        assert_eq!(at(u).stretch, (motion_px(-2.0, 240) as f32 * entry_env(u, 400)).round() as i32, "the cycle is 0 during the entry (u {u})");
+    }
+    assert!(at(100).parts.contains(&"entry") && !at(500).parts.contains(&"entry"));
+    assert!(at(800).parts.contains(&"settle") && !at(1300).parts.contains(&"settle"));
+    let plain = Motion { breath_amp: 4.0, ..Motion::default() };
+    for u in [1200u64, 1500, 2000, 3100] {
+        assert_eq!(at(u).stretch, plain.eval(&mctx(seed, since + u, since, 240)).stretch, "full scale from E + settle (u {u})");
+    }
+    let (b, _) = m.cycle_at(seed, 0, since + 800, since);
+    assert_eq!(at(800).stretch, (motion_px(4.0, 240) as f32 * b * 0.5).round() as i32, "half way through the settle");
+}
+
+/// MO4: lean, bob, rest and shiver follow 4.1 (shiver 0 between bursts, within px(X) in one); the totals clamp to
+/// [-px(3), px(4)] for the stretch and px(3) for each offset axis.
+#[test]
+fn mo4_lean_bob_rest_and_shiver_follow_their_rules_and_the_totals_clamp() {
+    let seed = seed_of("mo4");
+    let lean = Motion { lean_px: 2, ..Motion::default() };
+    let p = lean.period(seed);
+    for t in (0..8000u64).step_by(41) {
+        let (b, _) = lean.cycle_at(seed, 0, t, 0);
+        assert_eq!(lean.eval(&mctx(seed, t, 0, 240)).dx, (2.0 * b).round() as i32, "lean with the cycle (t {t})");
+    }
+    assert_eq!(lean.eval(&mctx(seed, (p / 2.0).round() as u64, 0, 240)).dx, 2, "the full lean at the peak");
+
+    let bob = Motion { bob_px: 2, bob_ms: 1000, ..steady() };
+    for t in (0..3000u64).step_by(29) {
+        let want = -(2.0 * (std::f64::consts::PI * t as f64 / 1000.0).sin().abs() as f32).round() as i32;
+        assert_eq!(bob.eval(&mctx(seed, t, 0, 240)).dy, want, "bob (t {t})");
+    }
+    assert_eq!((bob.eval(&mctx(seed, 500, 0, 240)).dy, bob.eval(&mctx(seed, 1000, 0, 240)).dy), (-2, 0));
+
+    let rest = Motion { rest_dy: 2, rest_ms: 1000, ..steady() };
+    for u in (0..2000u64).step_by(50) {
+        let f = (u as f32 / 1000.0).min(1.0);
+        assert_eq!(rest.eval(&mctx(seed, 300 + u, 300, 240)).dy, (2.0 * (1.0 - (1.0 - f).powi(2))).round() as i32, "rest (u {u})");
+    }
+    assert_eq!(Motion { rest_ms: 0, ..rest }.eval(&mctx(seed, 300, 300, 240)).dy, 2, "rest_ms 0: at once");
+
+    let sh = Motion { shiver_px: 1, shiver_ms: 280, shiver_gap_ms: 1400, ..steady() };
+    let ms = motion_seed(seed, "afraid");
+    let c = |u: u64| MotionCtx { mseed: ms, ..mctx(seed, u, 0, 240) };
+    let s0 = shiver_start(ms, 0, 280, 1400);
+    assert_eq!(s0, (1400.0 * (0.5 + hash01(ms, 1_000_000) as f64)).round() as u64);
+    let s1 = shiver_start(ms, 1, 280, 1400);
+    assert_eq!(s1, s0 + 280 + (1400.0 * (0.5 + hash01(ms, 1_000_001) as f64)).round() as u64);
+    let mut moved = 0;
+    for u in 0..s1 + 280 {
+        let o = sh.eval(&c(u));
+        if u < s0 || (s0 + 280..s1).contains(&u) {
+            assert_eq!((o.dx, o.dy), (0, 0), "still between bursts (u {u})");
+        } else if u < s0 + 280 {
+            let q = (u - s0) / SHIVER_STEP_MS;
+            let step = |k: u64| (3.0 * hash01(ms, k)).floor() as i32 - 1;
+            assert_eq!((o.dx, o.dy), (step(2_000_000 + 2 * q), step(2_000_001 + 2 * q)), "burst 0 step {q}");
+            moved += (o.dx != 0 || o.dy != 0) as i32;
+        } else {
+            assert!(o.dx.abs() <= 1 && o.dy.abs() <= 1, "burst 1 within 1 px");
+        }
+    }
+    assert!(moved > 0, "the burst moves");
+
+    let down = Motion { rest_dy: 3, rest_ms: 0, enter_dy: 3, enter_ms: 400, ..steady() };
+    assert_eq!(down.eval(&mctx(seed, 100, 0, 240)).dy, 3, "6 px down clamps at 3");
+    let up = Motion { rest_dy: -3, enter_dy: -3, ..down };
+    assert_eq!(up.eval(&mctx(seed, 100, 0, 240)).dy, -3, "6 px up clamps at -3");
+    let wide = Motion { enter_stretch: 6, enter_ms: 400, ..steady() };
+    assert_eq!(wide.eval(&mctx(seed, 100, 0, 240)).stretch, 4, "the stretch clamps at 4");
+    assert_eq!(wide.eval(&mctx(seed, 100, 0, 120)).stretch, motion_px(4.0, 120), "at px(4) on a smaller side");
+    let squeeze = Motion { enter_stretch: -6, ..wide };
+    assert_eq!(squeeze.eval(&mctx(seed, 100, 0, 240)).stretch, -3, "the squeeze clamps at -3");
+}
+
+/// MO5: no border pixel changes under any sample profile (no jolt, no shake); content sampled past the inner edge takes
+/// the edge pixel (a 3 px lift repeats the bottom row, a squeeze repeats the top row).
+#[test]
+fn mo5_the_border_never_moves_and_samples_past_the_edge_take_the_edge() {
+    let mut rig = Rig::new();
+    let n = 240;
+    let src = rows(n);
+    let b = Face::plain(n).border;
+    for name in MOTION_SAMPLES {
+        for t in [0u64, 100, 400, 900, 1700, 2600, 5000] {
+            let mut fx = PortraitFx::new("mo5");
+            fx.set_base_motion(Motion::sample(name).unwrap());
+            let out = rig.compose(&mut fx, &src, None, n, t, PortraitOpts::default());
+            for y in 0..n {
+                for x in 0..n {
+                    if in_border(n, b, x, y) {
+                        assert_eq!(at(&out, x, y), at(&src, x, y), "{name} t {t}: the border at ({x}, {y})");
+                    }
+                }
+            }
+        }
+    }
+    let (lo, hi) = (b, n - b);
+    let mut fx = PortraitFx::new("mo5");
+    fx.set_base_motion(Motion { rest_dy: -3, ..steady() });
+    let out = rig.compose(&mut fx, &src, None, n, 500, PortraitOpts::default());
+    for x in [lo, n / 2, hi - 1] {
+        for y in hi - 3..hi {
+            assert_eq!(at(&out, x, y), at(&src, x, hi - 1), "lifted 3 px: the bottom rows repeat the edge ({x}, {y})");
+        }
+        assert_eq!(at(&out, x, lo), at(&src, x, lo + 3), "the top row shows the row 3 px below");
+    }
+    let mut fx = PortraitFx::new("mo5");
+    fx.set_base_motion(Motion { enter_stretch: -3, enter_ms: 400, ..steady() });
+    let out = rig.compose(&mut fx, &src, None, n, 100, PortraitOpts::default());
+    assert_eq!(fx.motion(100).stretch, -3);
+    for x in [lo, n / 2] {
+        assert_eq!(at(&out, x, lo), at(&src, x, lo), "squeezed: the top row repeats the edge");
+        assert_eq!(at(&out, x, hi - 1), at(&src, x, hi - 1), "anchored at the bottom");
+    }
+}
+
+/// MO6: a face with `blink` false draws no lid while it holds (even at a blink's closed phase) and `live` drops `blink`;
+/// blinks return once the face is gone.
+#[test]
+fn mo6_a_face_without_blinks_holds_the_eyes_open() {
+    let mut rig = Rig::new();
+    let (img, face) = eye_face(true);
+    let mut fx = PortraitFx::new("mo6");
+    fx.set_expressions(&[moving("hurt", Motion { blink: false, ..Motion::default() })]);
+    fx.hold(&[face_cue("hurt")], 0);
+    let starts = blink_starts(fx.seed, 60_000);
+    let first = starts[0];
+    assert_eq!(rig.compose(&mut fx, &img, Some(&face), 96, first + 75, reduce()), img, "no lid while hurt holds");
+    assert!(!fx.live(first + 75).contains(&"blink"));
+    fx.hold(&[], first + 200);
+    let next = *starts.iter().find(|s| **s > first + 400).unwrap();
+    let out = rig.compose(&mut fx, &img, Some(&face), 96, next + 75, reduce());
+    assert_ne!(out, img, "the blink returns after the face");
+    assert_eq!(at(&out, 42, 41), SKIN, "the lid over the eye");
+    assert!(fx.live(next + 75).contains(&"blink"));
+}
+
+/// MO7: `tint_breath` 0.5 scales the face tint by (1 - F + F b): half at b = 0, full at b = 1; steady at full under
+/// reduce motion and at the minimal tier.
+#[test]
+fn mo7_the_flush_pulses_with_the_cycle() {
+    let m = Motion { tint_breath: 0.5, ..Motion::default() };
+    let seed = seed_of("mo7");
+    let p = m.period(seed);
+    let tinted_ctx = |t: u64, side: i32| MotionCtx { tinted: true, ..mctx(seed, t, 0, side) };
+    assert_eq!(m.eval(&tinted_ctx(0, 96)).flush, 0.5, "half at b = 0");
+    let top = m.eval(&tinted_ctx((p / 2.0).round() as u64, 96));
+    assert!((top.flush - 1.0).abs() < 1e-4, "full at b = 1 ({})", top.flush);
+    assert!(top.parts.contains(&"flush"));
+    assert_eq!(m.eval(&mctx(seed, 0, 0, 96)).flush, 1.0, "no tint, no flush");
+
+    let mut rig = Rig::new();
+    let (src, face) = ex_face();
+    let row = ExpressionFx { tint: Some(RED), tint_strength: 0.5, motion: m, ..ExpressionFx::new("angry") };
+    let mut fx = PortraitFx::new("mo7");
+    fx.set_expressions(&[row]);
+    fx.hold(&[face_cue("angry")], 0);
+    for t in (300..4000u64).step_by(300) {
+        let out = rig.compose(&mut fx, &src, Some(&face), 96, t, PortraitOpts::default());
+        let o = fx.motion(t);
+        assert!((o.flush - (0.5 + 0.5 * o.b)).abs() < 1e-6, "t {t}");
+        assert_eq!(at(&out, 48, 48), tinted(SKIN, RED, 0.5 * o.flush), "the face box centre at t {t}");
+        let out = rig.compose(&mut fx, &src, Some(&face), 96, t, reduce());
+        assert_eq!((fx.motion(t).flush, at(&out, 48, 48)), (1.0, tinted(SKIN, RED, 0.5)), "steady under reduce motion (t {t})");
+        rig.compose(&mut fx, &src, Some(&face), 32, t, PortraitOpts::default());
+        assert_eq!(fx.motion(t).flush, 1.0, "steady at the minimal tier (t {t})");
+    }
+}
+
+/// MO8: under reduce motion and at the minimal tier every sample profile gives stretch 0 and offset [0, 0]; at the
+/// reduced tier there is no cycle, and the entry and rest are px(v / 2), at least 1 px.
+#[test]
+fn mo8_reduce_motion_and_the_tiers() {
+    let seed = seed_of("mo8");
+    for name in MOTION_SAMPLES {
+        let m = Motion::sample(name).unwrap();
+        for t in (0..6000u64).step_by(23) {
+            assert_eq!(sxy(&m.eval(&MotionCtx { reduce: true, ..mctx(seed, t, 0, 240) })), (0, 0, 0), "{name}: none under reduce motion (t {t})");
+            assert_eq!(sxy(&m.eval(&mctx(seed, t, 0, REDUCED_SIDE - 1))), (0, 0, 0), "{name}: none at the minimal tier (t {t})");
+            let o = m.eval(&mctx(seed, t, 0, 64));
+            let entry = (motion_px(m.enter_stretch as f32 / 2.0, 64) as f32 * entry_env(t, m.enter_ms)).round() as i32;
+            assert_eq!(o.stretch, if m.has_entry() { entry } else { 0 }, "{name}: no cycle at the reduced tier (t {t})");
+            assert!(!o.parts.contains(&"cycle") && !o.parts.contains(&"bob"));
+        }
+    }
+    let lift = Motion::sample("lift").unwrap();
+    assert_eq!(lift.eval(&mctx(seed, 2000, 0, 64)).dy, motion_px(lift.rest_dy as f32 / 2.0, 64), "the rest halved");
+    assert_eq!(motion_px(lift.rest_dy as f32 / 2.0, 64), -1, "at least 1 px");
+    let jolt = Motion::sample("jolt").unwrap();
+    let q = jolt.enter_ms as u64 / 4;
+    assert_eq!(jolt.eval(&mctx(seed, q, 0, 64)).dy, motion_px(jolt.enter_dy as f32 / 2.0, 64), "the entry halved at its peak");
+    let sink = Motion::sample("sink").unwrap();
+    assert_eq!(Motion { breath_amp: 0.0, ..sink }.eval(&mctx(seed, 4000, 0, 240)).dy, sink.rest_dy, "full size: the whole rest");
+    let mut rig = Rig::new();
+    let src = rows(96);
+    let mut fx = PortraitFx::new("mo8");
+    fx.set_base_motion(jolt);
+    assert_eq!(rig.compose(&mut fx, &src, None, 96, q, reduce()), src, "a reduce-motion portrait does not move");
+}
+
+/// MO9: `still` stops every part of every sample; when the face changes its motion blends over MOTION_BLEND_MS: at
+/// 100 ms the output is the rounded midpoint of the two faces' outputs.
+#[test]
+fn mo9_still_stops_the_motion_and_a_face_change_blends() {
+    let mut rig = Rig::new();
+    let src = rows(240);
+    for name in MOTION_SAMPLES {
+        let mut fx = PortraitFx::new("mo9");
+        fx.set_base_motion(Motion::sample(name).unwrap());
+        fx.hold(&[cue("still")], 0);
+        for t in [300u64, 700, 1500, 2600] {
+            assert_eq!(rig.compose(&mut fx, &src, None, 240, t, PortraitOpts::default()), src, "{name}: still (t {t})");
+            assert_eq!(state_motion(&fx, t).0, (0, 0, 0));
+        }
+    }
+    let (a, b) = (Motion { rest_dy: -3, ..steady() }, Motion { rest_dy: 2, ..steady() });
+    let mut fx = PortraitFx::new("mo9");
+    fx.set_expressions(&[moving("lifted", a), moving("sunk", b)]);
+    fx.hold(&[face_cue("lifted")], 0);
+    rig.compose(&mut fx, &src, None, 240, 1000, PortraitOpts::default());
+    assert_eq!(state_motion(&fx, 1000).0, (0, 0, -3));
+    fx.hold(&[face_cue("sunk")], 2000);
+    rig.compose(&mut fx, &src, None, 240, 2000, PortraitOpts::default());
+    assert_eq!(state_motion(&fx, 2000).0, (0, 0, -3), "the blend starts at the old face");
+    rig.compose(&mut fx, &src, None, 240, 2100, PortraitOpts::default());
+    let (m, parts) = state_motion(&fx, 2100);
+    assert_eq!(m, (0, 0, ((-3.0f32 + 2.0) / 2.0).round() as i64), "the rounded midpoint at 100 ms");
+    assert!(parts.contains(&"blend".to_string()), "{parts:?}");
+    rig.compose(&mut fx, &src, None, 240, 2300, PortraitOpts::default());
+    assert_eq!(state_motion(&fx, 2300).0, (0, 0, 2), "the new face after the blend");
+}
+
+/// MO10: the blink lids, the mark and the face tint box follow the motion (shifted by px(3) for a 3 px rest at side
+/// 96); the ash does not.
+#[test]
+fn mo10_the_anchored_layers_follow_the_motion_and_ash_does_not() {
+    let mut rig = Rig::new();
+    let sh = motion_px(3.0, 96);
+    let (calm, down) = (steady(), Motion { rest_dy: 3, ..steady() });
+    let shifted = |b: Option<(i32, i32, i32, i32)>| b.map(|(x, y, w, h)| (x, y + sh, w, h));
+    // the lids
+    let (img, face) = eye_face(true);
+    let first = blink_starts(seed_of("mo10"), 20_000)[0];
+    let lid = |m: Motion, rig: &mut Rig| {
+        let mut fx = PortraitFx::new("mo10");
+        fx.set_base_motion(m);
+        let open = rig.compose(&mut fx, &img, Some(&face), 96, first - 40, PortraitOpts::default());
+        let closed = rig.compose(&mut fx, &img, Some(&face), 96, first + 75, PortraitOpts::default());
+        changed(&closed, &open)
+    };
+    let still_lid = lid(calm, &mut rig);
+    assert!(still_lid.is_some());
+    assert_eq!(lid(down, &mut rig), shifted(still_lid), "the lid moves with the eyes");
+    // the mark and the face tint
+    let (src, face) = ex_face();
+    let vein = ExpressionFx { mark: Some(Mark::Vein), mark_color: Some(GREEN), ..ExpressionFx::new("angry") };
+    let tint = ExpressionFx { tint: Some(RED), tint_strength: 0.5, ..ExpressionFx::new("angry") };
+    for row in [vein, tint] {
+        let drawn = |m: Motion, rig: &mut Rig| {
+            let mut fx = PortraitFx::new("mo10");
+            fx.set_expressions(&[ExpressionFx { motion: m, ..row.clone() }]);
+            fx.hold(&[face_cue("angry")], 0);
+            changed(&rig.compose(&mut fx, &src, Some(&face), 96, 1000, PortraitOpts::default()), &src)
+        };
+        let base = drawn(calm, &mut rig);
+        assert!(base.is_some());
+        assert_eq!(drawn(down, &mut rig), shifted(base), "{:?} / {:?} moves with the motion", row.mark, row.tint);
+    }
+    // the ash stays where it falls
+    let ash = |m: Motion, rig: &mut Rig| {
+        let mut fx = PortraitFx::new("mo10");
+        fx.set_base_motion(m);
+        fx.hold(&[cue("ash")], 0);
+        rig.compose(&mut fx, &src, None, 96, 1000, PortraitOpts::default())
+    };
+    let still_ash = ash(calm, &mut rig);
+    assert_ne!(still_ash, src, "the ash draws");
+    assert_eq!(ash(down, &mut rig), still_ash, "the ash does not follow the motion");
+}
+
+/// MO11: at side 120 each amplitude is px(v) (a 3 px rest is 2 px, a 1 px shiver stays 1 px, as at 96); the Budget
+/// counts a moving face and not a rest-only face once settled.
+#[test]
+fn mo11_amplitudes_scale_and_the_budget_counts_moving_faces() {
+    let seed = seed_of("mo11");
+    let lift = Motion { rest_dy: -3, ..steady() };
+    assert_eq!(lift.eval(&mctx(seed, 100, 0, 120)).dy, -((3.0f32 * 120.0 / MOTION_REF as f32).round() as i32));
+    let sh = Motion { shiver_px: 1, shiver_ms: 280, shiver_gap_ms: 1400, ..steady() };
+    for side in [120, 96] {
+        let mut seen = 0;
+        for u in 0..6000 {
+            let o = sh.eval(&mctx(seed, u, 0, side));
+            assert!(o.dx.abs() <= 1 && o.dy.abs() <= 1, "1 px at side {side}");
+            seen += (o.dx != 0) as i32;
+        }
+        assert!(seen > 0, "the shiver shows at side {side}");
+    }
+    let mut rig = Rig::new();
+    let src = rows(120);
+    let used = |m: Motion, t: u64, rig: &mut Rig| {
+        let mut fx = PortraitFx::new("mo11");
+        fx.set_base_motion(m);
+        let mut budget = Budget::default();
+        budget.begin();
+        rig.draw(&mut fx, &src, None, Rect::new(8, 8, 120, 120), t, &PortraitOpts::default(), &mut budget);
+        budget.used
+    };
+    let rest = Motion { rest_dy: -1, rest_ms: 400, ..steady() };
+    assert_eq!(used(sh, 1000, &mut rig), 1, "a shiver is time-varying");
+    assert_eq!(used(rest, 200, &mut rig), 1, "a rest still moving");
+    assert_eq!(used(rest, 1000, &mut rig), 0, "a settled rest-only face is not");
+    assert_eq!(used(Motion::default(), 1000, &mut rig), 1, "the breath is");
+}
+
+/// The Kit widgets Portraits page offers the sample profiles (`kit.portrait.motion`) and names the live parts.
+#[test]
+fn mo_the_kit_page_offers_the_motion_samples() {
+    assert_eq!(Motion::sample("breath"), Some(Motion::default()));
+    assert!(MOTION_SAMPLES.iter().all(|n| Motion::sample(n).is_some()) && Motion::sample("smug").is_none());
+    let mut k = Specimens::default();
+    let (w, _, _, _) = draw_kit(&k);
+    k.act(by_id(&w, "kit.page.3").unwrap());
+    let (w, _, _, _) = draw_kit(&k);
+    assert!(w.iter().any(|x| x.id == "kit.portrait.motion"), "the motion choice");
+    let wince = MOTION_SAMPLES.iter().position(|n| *n == "wince").unwrap();
+    k.act(KitAct::PortraitMotion(wince));
+    assert_eq!(k.last, "portrait motion wince");
+    k.advance(60.0);
+    let (_, _, recs, audit) = draw_kit(&k);
+    assert_eq!(audit["counts"], json!({"cut": 0, "edge": 0, "overlap": 0, "spill": 0}), "the page reads clean: {audit}");
+    assert!(recs.iter().any(|t| t.text.starts_with("Motion wince:") && t.text.contains("entry")), "the foot names the entry");
+    let (_, parts) = state_motion(&k.portrait.fx.borrow(), k.portrait.clock.now());
+    assert!(parts.contains(&"entry".to_string()), "{parts:?}");
+}

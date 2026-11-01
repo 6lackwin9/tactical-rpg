@@ -168,3 +168,4 @@ round_intent_plan, the Dojo); with `rest_ap` round_end and no `round_intent`, `r
 gain too. `melee_diagonal` reads as the row sets it (the coupling to `round_intent` and its warning are gone; the
 classic row sets `none`; a raw row without the key reads `maneuver` with `round_intent`, else `none`). Checks: a switch
 is "" or one of its values; the writer leaves a "" switch out.
+PORTRAITFX2-M: `portrait_expressions` rows carry the motion fields (`PORTRAIT_MOTION_KEYS`; defaults = the plain breath), checked in `check::expression_fx` (ranges, needs-a-breath, needs-a-tint, a warning when offsets add up past 3 px; a motion-only row draws something).

@@ -12,7 +12,7 @@
 
 use crate::canvas::{rgb, rgba, Image, Rect, Rgba};
 use crate::fx::{Beam, Camera, Clock, Effect, Flash, Fx, Layer, Look, Looped, Orbit, Projectile, Ring, ShakeLimits, ShakeTable, Sparks, Trail, PRIM_KINDS, SHAKE_PRESETS};
-use crate::portrait_fx::{self, Budget, Cue, PortraitFx, PortraitOpts, Tier};
+use crate::portrait_fx::{self, Budget, Cue, ExpressionFx, Motion, PortraitFx, PortraitOpts, Tier, MOTION_SAMPLES};
 use aegis_core::assets::Face;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -58,6 +58,8 @@ pub enum KitAct {
     PortraitSize(usize),
     PortraitReduce,
     PortraitAnchors,
+    /// PORTRAITFX2-M: the motion profile (`portrait_fx::MOTION_SAMPLES` index).
+    PortraitMotion(usize),
 }
 
 pub const TABS: [&str; 3] = ["First", "Second", "Third"];
@@ -136,6 +138,8 @@ pub struct PortraitDemo {
     pub size: usize,
     pub reduce: bool,
     pub anchors: bool,
+    /// PORTRAITFX2-M: the motion profile shown (`MOTION_SAMPLES` index; 0, the breath, holds no face).
+    pub motion: usize,
     pub image: Image,
     pub face: Face,
     last_wall: Option<std::time::Instant>,
@@ -144,7 +148,11 @@ pub struct PortraitDemo {
 impl Default for PortraitDemo {
     fn default() -> Self {
         let (image, face) = portrait_fx::sample();
-        Self { clock: Clock::default(), fx: RefCell::new(PortraitFx::new("kit.sample")), budget: RefCell::new(Budget::default()), on: BTreeSet::new(), size: 0, reduce: false, anchors: false, image, face, last_wall: None }
+        let mut fx = PortraitFx::new("kit.sample");
+        // one face per sample profile (named after it), so choosing one starts its entry and blends from the last
+        let rows: Vec<ExpressionFx> = MOTION_SAMPLES.iter().filter_map(|n| Motion::sample(n).map(|m| ExpressionFx { motion: m, ..ExpressionFx::new(n) })).collect();
+        fx.set_expressions(&rows);
+        Self { clock: Clock::default(), fx: RefCell::new(fx), budget: RefCell::new(Budget::default()), on: BTreeSet::new(), size: 0, reduce: false, anchors: false, motion: 0, image, face, last_wall: None }
     }
 }
 
@@ -155,9 +163,25 @@ impl PortraitDemo {
         if on {
             self.on.insert(e);
         }
-        let cues: Vec<Cue> = self.on.iter().filter_map(|x| Cue::parse(x, "").map(|c| c.with_key(&format!("kit.{x}")))).collect();
-        self.fx.borrow_mut().hold(&cues, self.clock.now());
+        self.hold();
         format!("portrait {} {}", e, if on { "on" } else { "off" })
+    }
+
+    /// Holds the toggled set and the chosen motion's face.
+    fn hold(&mut self) {
+        let mut cues: Vec<Cue> = self.on.iter().filter_map(|x| Cue::parse(x, "").map(|c| c.with_key(&format!("kit.{x}")))).collect();
+        let name = MOTION_SAMPLES[self.motion % MOTION_SAMPLES.len()];
+        if self.motion > 0 {
+            cues.extend(Cue::parse("face", "").map(|c| c.with_expression(name).with_key("kit.motion")));
+        }
+        self.fx.borrow_mut().hold(&cues, self.clock.now());
+    }
+
+    /// PORTRAITFX2-M: shows motion profile `i`; what it did.
+    fn set_motion(&mut self, i: usize) -> String {
+        self.motion = i % MOTION_SAMPLES.len();
+        self.hold();
+        format!("portrait motion {}", MOTION_SAMPLES[self.motion])
     }
 
     /// Fires reaction `what` (`flash`, `jolt.hit`, `jolt.crit`); what it did.
@@ -362,6 +386,7 @@ impl Specimens {
             KitAct::PortraitSize(i) => format!("portrait size {} px", PORTRAIT_SIZES[*i % PORTRAIT_SIZES.len()]),
             KitAct::PortraitReduce => format!("portrait reduce motion {}", if self.portrait.reduce { "off" } else { "on" }),
             KitAct::PortraitAnchors => format!("portrait anchors {}", if self.portrait.anchors { "off" } else { "on" }),
+            KitAct::PortraitMotion(i) => self.portrait.set_motion(*i),
         };
         match a {
             KitAct::Tab(i) => self.tab = i % TABS.len(),
@@ -389,7 +414,7 @@ impl Specimens {
             KitAct::PortraitSize(i) => self.portrait.size = i % PORTRAIT_SIZES.len(),
             KitAct::PortraitReduce => self.portrait.reduce = !self.portrait.reduce,
             KitAct::PortraitAnchors => self.portrait.anchors = !self.portrait.anchors,
-            KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) | KitAct::Segment(..) | KitAct::Effect(_) | KitAct::Shake(_) | KitAct::PortraitToggle(_) | KitAct::PortraitFire(_) => {}
+            KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) | KitAct::Segment(..) | KitAct::Effect(_) | KitAct::Shake(_) | KitAct::PortraitToggle(_) | KitAct::PortraitFire(_) | KitAct::PortraitMotion(_) => {}
         }
     }
 
@@ -602,8 +627,9 @@ impl Specimens {
     /// The Portraits page: the stage (`kit.portrait.face`: the portrait and its jolt room) with the sample face at the
     /// chosen size and, under it, the tier and what is live; beside it a toggle per overlay and state
     /// (`kit.portrait.<effect>`), a button per reaction (`kit.portrait.flash`, `kit.portrait.jolt.hit`,
-    /// `kit.portrait.jolt.crit`), the size (`kit.portrait.size`), reduce motion (`kit.portrait.reduce`) and the
-    /// anchors check (`kit.portrait.anchors`).
+    /// `kit.portrait.jolt.crit`), the size (`kit.portrait.size`), reduce motion (`kit.portrait.reduce`), the
+    /// anchors check (`kit.portrait.anchors`) and (PORTRAITFX2-M) the motion profile (`kit.portrait.motion`, the foot
+    /// line naming its live parts).
     fn draw_portraits<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: &impl Fn(KitAct) -> A) {
         let d = &self.portrait;
         let x = r.x + 6;
@@ -620,15 +646,17 @@ impl Specimens {
             budget.begin();
             d.fx.borrow_mut().draw_image(&mut ui.p, &d.image, "kit.sample", Some(&d.face), face, now, &d.opts(), &mut budget);
         }
-        let (tier, live) = {
+        let (tier, live, parts) = {
             let fx = d.fx.borrow();
-            (fx.tier().map_or("", Tier::name), fx.live(now))
+            (fx.tier().map_or("", Tier::name), fx.live(now), fx.motion(portrait_fx::tq(now)).parts)
         };
         let device = (size as f32 * ui.p.v.s).round() as i32;
         ui.push("kit.portrait.face", "portrait", format!("sample portrait: {size} px, tier {tier}"), stage, true, false, None, Vec::new());
         let col_w = 200;
-        let foot = format!("Tier {tier} ({device} device px). Live: {}", if live.is_empty() { "nothing".to_string() } else { live.join(", ") });
+        let named = |v: &[&str]| if v.is_empty() { "nothing".to_string() } else { v.join(", ") };
+        let foot = format!("Tier {tier} ({device} device px). Live: {}", named(&live));
         let fy = ui.para(x, stage.y + stage.h + 4, col_w, &foot, SMALL, DIM);
+        let fy = ui.para(x, fy, col_w, &format!("Motion {}: {}", MOTION_SAMPLES[d.motion % MOTION_SAMPLES.len()], named(&parts)), SMALL, DIM);
         ui.para(
             x,
             fy + 4,
@@ -675,6 +703,11 @@ impl Specimens {
         ui.checkbox("kit.portrait.reduce", x2 + 64, yy + 2, "Reduce motion (this page)", d.reduce, wrap(KitAct::PortraitReduce), true);
         yy += 14 + 5;
         ui.checkbox("kit.portrait.anchors", x2, yy + 2, "Anchors (eye boxes, glow, vein roots)", d.anchors, wrap(KitAct::PortraitAnchors), true);
+        // PORTRAITFX2-M: the motion profile
+        yy += 14 + 5;
+        let names: Vec<String> = MOTION_SAMPLES.iter().map(|n| cap(n)).collect();
+        ui.select("kit.portrait.motion", Rect::new(x2, yy, 72, 14), &names, d.motion, |i| wrap(KitAct::PortraitMotion(i)), true, tip("Motion", "The face's motion profile: parts combined by one function (cycle, lean, bob, entry, settle, rest, shiver, flush)."));
+        ui.p.text((x2 + 80) as f32, (yy + 2) as f32, "Motion profile", SMALL, DIM);
     }
 
     /// The widgets page: two columns of named groups.

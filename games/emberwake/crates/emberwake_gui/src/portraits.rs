@@ -9,7 +9,8 @@
 //!   `idle` overlays plus the kit's `holds` for the look, resolves the chain with the engine's expression and draws (the
 //!   initial letter when no file loads); `react` fires the kit's `reactions` for step events (none under `skip_anim`);
 //!   `say` holds a dialogue line's `expression` (PORTRAITFX1-X, 7) over the state rows; every portrait draws the kit's
-//!   expression-effect rows (PORTRAITFX1-EX, `expression_fx_of`, the catalog kind `portrait_expressions`).
+//!   expression-effect rows (PORTRAITFX1-EX, `expression_fx_of`, the catalog kind `portrait_expressions`) with each
+//!   face's motion profile (PORTRAITFX2-M, `motion_of`).
 //! - Colours: the rim key Tallow Amber and the art-bible hues the cue rows and sidecars use (`HUES`).
 //!
 //! Presentation only: no rule, plan, AI, save, trace or sim reads a portrait.
@@ -20,7 +21,7 @@ use aegis_ui::art::Art;
 use aegis_ui::canvas::{rgb, Rect, Rgba};
 use aegis_ui::fx::Clock;
 use aegis_ui::painter::Painter;
-use aegis_ui::portrait_fx::{idle_cues, Budget, Cue, ExpressionFx, Mark, MarkBox, PortraitFx, PortraitOpts};
+use aegis_ui::portrait_fx::{idle_cues, Budget, Cue, ExpressionFx, Mark, MarkBox, Motion, PortraitFx, PortraitOpts};
 use aegis_ui::screen::Settings;
 use aegis_ui::ui::{GOLD, SMALL};
 use emberwake_battle::portrait::{self, Look};
@@ -79,8 +80,35 @@ pub fn expression_fx_of(rows: &[PortraitExpression]) -> Vec<ExpressionFx> {
             mark_pulse_ms: r.mark_pulse_ms.max(0) as u32,
             shake_px: r.shake_px.max(0) as f32,
             shake_ms: r.shake_ms.max(0) as u32,
+            motion: motion_of(r),
         })
         .collect()
+}
+
+/// PORTRAITFX2-M: a row's motion fields as the engine's `Motion` (the schema defaults give `Motion::default()`, the
+/// plain breath).
+pub fn motion_of(r: &PortraitExpression) -> Motion {
+    let ms = |v: i32| v.max(0) as u32;
+    Motion {
+        breath_amp: r.breath_amp as f32,
+        breath_ms: ms(r.breath_ms),
+        breath_in: r.breath_in as f32,
+        breath_jitter: r.breath_jitter as f32,
+        lean_px: r.lean_px,
+        bob_px: r.bob_px,
+        bob_ms: ms(r.bob_ms),
+        enter_dy: r.enter_dy,
+        enter_stretch: r.enter_stretch,
+        enter_ms: ms(r.enter_ms),
+        rest_dy: r.rest_dy,
+        rest_ms: ms(r.rest_ms),
+        settle_ms: ms(r.settle_ms),
+        shiver_px: r.shiver_px,
+        shiver_ms: ms(r.shiver_ms),
+        shiver_gap_ms: ms(r.shiver_gap_ms),
+        blink: r.blink,
+        tint_breath: r.tint_breath as f32,
+    }
 }
 
 /// The portrait tier of a unique folder (`heroes` -> `hero`, ...); `common` for any other.
@@ -459,6 +487,16 @@ pub(crate) mod tests {
 
     pub(crate) fn ex_row_of(v: &Value) -> PortraitExpression {
         PortraitExpression::from_obj(v.as_object().expect("an object"))
+    }
+
+    /// PORTRAITFX2-M (the binding): a row with no motion fields maps to `Motion::default()` (the plain breath), and each
+    /// motion field reaches the engine's `Motion`.
+    #[test]
+    fn mo_the_motion_fields_reach_the_engine() {
+        assert_eq!(expression_fx_of(&[ex_row(json!({"id": "hurt", "tint": "#e11d48"}))])[0].motion, Motion::default());
+        let row = ex_row(json!({"id": "angry", "tint": "#e11d48", "breath_amp": 4.0, "breath_ms": 2100, "breath_in": 0.4, "breath_jitter": 0.1, "lean_px": 1, "bob_px": 1, "bob_ms": 1100, "enter_dy": -2, "enter_stretch": -1, "enter_ms": 320, "rest_dy": 2, "rest_ms": 1500, "settle_ms": 900, "shiver_px": 1, "shiver_ms": 280, "shiver_gap_ms": 1400, "blink": false, "tint_breath": 0.5}));
+        let want = Motion { breath_amp: 4.0, breath_ms: 2100, breath_in: 0.4, breath_jitter: 0.1, lean_px: 1, bob_px: 1, bob_ms: 1100, enter_dy: -2, enter_stretch: -1, enter_ms: 320, rest_dy: 2, rest_ms: 1500, settle_ms: 900, shiver_px: 1, shiver_ms: 280, shiver_gap_ms: 1400, blink: false, tint_breath: 0.5 };
+        assert_eq!(expression_fx_of(&[row])[0].motion, want);
     }
 
     /// EX (the binding): the kit's rows reach the engine field for field; a line's `angry` tints the face box the

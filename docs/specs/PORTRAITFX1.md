@@ -96,6 +96,9 @@ which file, and which sidecar, it drew).
 
 ### 4.2 Effects (`aegis_ui::portrait_fx`, PORTRAITFX1-E)
 
+Since PORTRAITFX2-M (2026-11-01) the breath is the default of a per-face motion profile (`Motion`): see
+`games/emberwake/docs/specs/PORTRAITFX2.md` section 4.
+
 `EFFECTS` (the cue vocabulary): `flash`, `jolt`, `desaturate`, `tint`, `fade`, `still`, `glow`, `veins`, `eye_glow`,
 `ash`, `smoke`, `face`. The base life (`breath`, `rim`, `blink`) is not a cue: it runs on every portrait whose size
 tier allows it, unless `still` holds. `PORTRAIT_JOLTS`: `hit`, `crit`. Positions below are sidecar px scaled to the
@@ -272,6 +275,9 @@ by a `[Break]` line gets `break`. Read-only over the step; the game fires them a
 flinches when the arrow lands.
 
 ### 5.4 Expressions and the face chain (`rpgkit_content/src/art.rs`)
+
+PORTRAITFX2 (2026-11-01) gives each face's `portrait_expressions` row its motion fields (PORTRAITFX2-M) and makes the
+face list the game's data (PORTRAITFX2-F): see `games/emberwake/docs/specs/PORTRAITFX2.md` sections 5.1 and 5.2.
 
 - `EXPRESSIONS`: `neutral`, `hurt`, `angry`, `afraid` (PQ2).
 - Frames: `portraits/<folder>/faces/<id>/<expression>.png` (unique tiers only), each with an optional

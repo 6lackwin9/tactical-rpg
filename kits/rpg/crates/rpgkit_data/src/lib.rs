@@ -1421,7 +1421,34 @@ pub struct PortraitExpression {
     /// A shake of `shake_px` logical px over `shake_ms` from the expression's start (0: none).
     pub shake_px: i32,
     pub shake_ms: i32,
+    /// PORTRAITFX2-M: the face's motion profile (px at a 240 px portrait; the defaults are the plain breath): the
+    /// breath's depth, length, share breathing in and jitter; a lean with it; a bob; an entry move (dy, stretch, ms);
+    /// a held rest offset reached over `rest_ms`; the settle after the entry; shiver bursts (px, ms, gap); whether it
+    /// blinks; the tint's pulse with the breath.
+    pub breath_amp: f64,
+    pub breath_ms: i32,
+    pub breath_in: f64,
+    pub breath_jitter: f64,
+    pub lean_px: i32,
+    pub bob_px: i32,
+    pub bob_ms: i32,
+    pub enter_dy: i32,
+    pub enter_stretch: i32,
+    pub enter_ms: i32,
+    pub rest_dy: i32,
+    pub rest_ms: i32,
+    pub settle_ms: i32,
+    pub shiver_px: i32,
+    pub shiver_ms: i32,
+    pub shiver_gap_ms: i32,
+    pub blink: bool,
+    pub tint_breath: f64,
 }
+
+/// PORTRAITFX2-M: the motion fields of a `portrait_expressions` row, in schema order.
+pub const PORTRAIT_MOTION_KEYS: [&str; 18] = [
+    "breath_amp", "breath_ms", "breath_in", "breath_jitter", "lean_px", "bob_px", "bob_ms", "enter_dy", "enter_stretch", "enter_ms", "rest_dy", "rest_ms", "settle_ms", "shiver_px", "shiver_ms", "shiver_gap_ms", "blink", "tint_breath",
+];
 
 impl PortraitExpression {
     pub fn from_obj(o: &Obj) -> Self {
@@ -1439,6 +1466,24 @@ impl PortraitExpression {
             mark_pulse_ms: int(o, "mark_pulse_ms", 0),
             shake_px: int(o, "shake_px", 0),
             shake_ms: int(o, "shake_ms", 0),
+            breath_amp: float(o, "breath_amp", 2.88),
+            breath_ms: int(o, "breath_ms", 3600),
+            breath_in: float(o, "breath_in", 0.5),
+            breath_jitter: float(o, "breath_jitter", 0.0),
+            lean_px: int(o, "lean_px", 0),
+            bob_px: int(o, "bob_px", 0),
+            bob_ms: int(o, "bob_ms", 0),
+            enter_dy: int(o, "enter_dy", 0),
+            enter_stretch: int(o, "enter_stretch", 0),
+            enter_ms: int(o, "enter_ms", 0),
+            rest_dy: int(o, "rest_dy", 0),
+            rest_ms: int(o, "rest_ms", 0),
+            settle_ms: int(o, "settle_ms", 0),
+            shiver_px: int(o, "shiver_px", 0),
+            shiver_ms: int(o, "shiver_ms", 0),
+            shiver_gap_ms: int(o, "shiver_gap_ms", 0),
+            blink: boolean(o, "blink", true),
+            tint_breath: float(o, "tint_breath", 0.0),
         }
     }
 }
