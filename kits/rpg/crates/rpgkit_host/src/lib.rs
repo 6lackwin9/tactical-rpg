@@ -12,6 +12,7 @@
 //!       {plan_reveal?}                         RULESET1 V2: reveal every enemy plan (rule `plan_badges`; default false)
 //!       {melee_diagonal?}                      INPUT1 MR11: none, maneuver or all over the ruleset row's value
 //!                                              (beyond classic the state's `ruleset` names it)
+//!       {tactics?}                             ENCOUNTER2-C4: the players' tactics, as `tactics` below
 //!   state                                      round, block, phase, outcome, units, grid; `hold` (tiles, label,
 //!                                              holder, open, note) only for a hold escape (ENCOUNTER2 3.1)
 //!   intents                                    every scheduled action this round (enemies included); under the rule
@@ -56,6 +57,9 @@
 //!   pick_options {unit, target?}               read-only: the menu rows on a target (picks, intent, kind, ap,
 //!                                              blocks, problem, ap_short, drops)
 //!   log {since?}                               resolution log lines
+//!   tactics {party?, members?}                 ENCOUNTER2-C4: the tactics (PlanPresets ids) the scripted rounds still
+//!                                              to plan draft their auto heroes with: `members` {hero key: id} over
+//!                                              `party`; none = balanced; replaces the last set; allowed while locked
 //! ENCOUNTER2-C SR5: in a scripted, locked round (`state` `script.lock`) the planning requests (preset, plan, add_step,
 //! undo, clear, round_intent, manual, fill, pick, unpick, autofill) are refused with "Round <n> is scripted."; confirm
 //! answers ok; step, resolve, advance and autoplay work as always. `state` carries `script` {round, lock, banner} only
@@ -121,7 +125,7 @@ fn err(msg: impl Into<String>) -> Value {
 
 impl aegis_host::Commands for Battle {
     fn mutating(&self, cmd: &str) -> bool {
-        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "manual" | "fill" | "stay_pick" | "pick" | "unpick" | "autofill")
+        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "manual" | "fill" | "stay_pick" | "pick" | "unpick" | "autofill" | "tactics")
     }
 
     fn restarts(&self, cmd: &str) -> bool {
@@ -187,6 +191,10 @@ impl Battle {
             Err(e) => return err(e),
         }
         def.plan_reveal = req.get("plan_reveal").and_then(Value::as_bool).unwrap_or(false);
+        match tactics_arg(req.get("tactics")) {
+            Ok(t) => def.tactics = t,
+            Err(e) => return err(e),
+        }
         let s = Session::start(self.cat.clone(), def, &IndexMap::new());
         let state = state_of(&s);
         self.begin(s);
@@ -209,6 +217,10 @@ impl Battle {
         }
         // RULESET1 V3: the host has no game state, so the request decides (the world runner reads the flag)
         def.plan_reveal = req.get("plan_reveal").and_then(Value::as_bool).unwrap_or(false);
+        match tactics_arg(req.get("tactics")) {
+            Ok(t) => def.tactics = t,
+            Err(e) => return err(e),
+        }
         def.id = format!("{world}:{local}");
         let roster = rpgkit_world::battle::WorldRoster { d: &d, world: world.to_string() };
         let s = Session::start(d.cat.clone(), def, &roster);
@@ -355,6 +367,13 @@ impl Battle {
             "autofill" => autofill_req(s, req),
             "pick_options" => pick_options_req(s, req),
             "round_plan" => json!({"ok": true, "round_plan": round_plan(s)}),
+            "tactics" => match tactics_arg(Some(req)) {
+                Ok(t) => {
+                    s.set_tactics(t);
+                    json!({"ok": true})
+                }
+                Err(e) => err(e),
+            },
             "log" => {
                 let since = req.get("since").and_then(Value::as_u64).unwrap_or(0) as usize;
                 json!({"ok": true, "log": s.resolver.log.get(since..).unwrap_or(&[]).to_vec(), "next": s.resolver.log.len()})
@@ -368,6 +387,28 @@ impl Battle {
 fn pick_due(s: &Session) -> Option<Value> {
     let label = s.w.hold.as_ref().filter(|_| s.needs_stay_pick())?.label.clone();
     Some(err(format!("pick who holds {label} first: {{\"cmd\": \"stay_pick\", \"unit\": ...}}")))
+}
+
+/// ENCOUNTER2-C4: a `tactics` value ({party?, members?: {hero key: id}}; absent = none); ids are the menus' tactics.
+fn tactics_arg(v: Option<&Value>) -> Result<rpgkit_battle::script::Tactics, String> {
+    let mut t = rpgkit_battle::script::Tactics::default();
+    let Some(v) = v else { return Ok(t) };
+    let known = |id: &str| -> Result<String, String> {
+        if rpgkit_world::state::AUTO_IDS.contains(&id) {
+            Ok(id.to_string())
+        } else {
+            Err(format!("unknown tactic '{id}'; known: {}", rpgkit_world::state::AUTO_IDS.join(", ")))
+        }
+    };
+    if let Some(p) = v.get("party").and_then(Value::as_str).filter(|p| !p.is_empty()) {
+        t.party = known(p)?;
+    }
+    if let Some(m) = v.get("members").and_then(Value::as_object) {
+        for (key, id) in m {
+            t.members.insert(key.clone(), known(id.as_str().unwrap_or_default())?);
+        }
+    }
+    Ok(t)
 }
 
 fn unit_arg(s: &Session, req: &Value, key: &str) -> Option<UnitId> {

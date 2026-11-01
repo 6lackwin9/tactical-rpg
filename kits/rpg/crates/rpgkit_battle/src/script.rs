@@ -40,7 +40,7 @@ pub const PARTY_INDEX: &str = "party#";
 pub const PICK_KEYS: [&str; 4] = ["skill", "item", "move", "step_after"];
 /// SN4: a skill pick's Maneuver kinds.
 pub const KINDS: [&str; 3] = ["engage", "disengage", "utility"];
-/// GH2 a: the tactic a hero with no entry (or a failed one) is drafted with.
+/// GH2 a: the tactic a hero with no entry (or a failed one) is drafted with when the game passes none (`Tactics`).
 pub const AUTO_PRESET: &str = "balanced";
 /// SR8: the one cell under a ruleset without `round_intent`.
 pub const CLASSIC_LINE: &str = "Scripted rounds need the round intent rules; they play unscripted.";
@@ -108,6 +108,27 @@ pub struct RoundScript {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Script {
     pub rounds: Vec<RoundScript>,
+}
+
+/// GH2 a, decision "ENCOUNTER2-C3 answers" (1) (ENCOUNTER2-C4): the tactics (PlanPresets ids) a scripted round drafts
+/// its `others: auto` heroes and the heroes of failed entries with: `members` by hero key (`Session::hero_key`) over
+/// `party` (every member); both empty = `AUTO_PRESET`. Not data: the game passes its players' tactic picks in
+/// (`EncounterDef::tactics`, `Session::set_tactics`); guests always draft with `balanced` (OBJ1 rule 2).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Tactics {
+    pub party: String,
+    pub members: indexmap::IndexMap<String, String>,
+}
+
+impl Tactics {
+    /// The tactic of the hero with key `key`.
+    pub fn of(&self, key: &str) -> &str {
+        match self.members.get(key) {
+            Some(t) if !t.is_empty() => t,
+            _ if !self.party.is_empty() => &self.party,
+            _ => AUTO_PRESET,
+        }
+    }
 }
 
 /// SN1: a unit name.

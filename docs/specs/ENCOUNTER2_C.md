@@ -71,6 +71,30 @@ basics (the catalog's and the ruleset rows') pass the "has no skill" check. `che
 shipped encounter has a script); the shipped encounter files re-saved in the writer's form (`"script": []` only). Tests: `rpgkit_battle/tests/script_round.rs`, `rpgkit_content/tests/
 battle_script_checks.rs`, `rpgkit_host/tests/script_round.rs`.
 
+As built, C4 (2026-11-01; section 8's C4 row, decision "ENCOUNTER2-C3 answers" (1)): `emberwake_gui/src/battle.rs`:
+`Action::Skip`, `locked`, `can_skip`, `round_over` (the round-end message and the auto-advance, shared by the playback
+and Skip), `cutscene` (the locked round whose playback the screen started), `send_tactics`. A locked round: Skip
+(`battle.skip`, tip "Resolves the rest of this scripted round at once.") takes the Confirm slot while the round still
+plays; Confirm (button, Enter, an agent-link click) does nothing; the tactic menus, Clear, the hotkeys, Self and the board
+clicks are off as outside planning; the playback starts by itself at the first tick (after a round-start talk; the
+message is the banner plus "(Skip resolves the round.)", or "Round `{n}`: the round plays out (Skip resolves it)."
+without one) and, at the round's end, the next round starts after `round_pause_ms` without autoplay (not while
+watching a recording); autoplay drafts nothing in it. The banner (`battle.banner`, gold on a card, at the board's top
+edge, centred, cut to the board's width) shows in every round that plays scripted, locked or guided; a guided round
+keeps planning (no Skip, no playback of its own). Agent link: the screen state's `script` {round, lock, banner, skip}
+while a round plays scripted. Tactics: the kit's `script::Tactics` {party, members by hero key} on
+`EncounterDef::tactics` (a caller input like `plan_reveal`, never read from the row; none = `balanced`; guests stay
+`balanced`), `Session::set_tactics` (the scripted rounds still to plan; the current plan is left alone); host
+request `tactics {party?, members?}` (recorded, allowed in a locked round, ids of `AUTO_IDS`) and the `new` key
+`tactics`. The screen sends `tactics` after a party or hero tactic pick only in a battle with a script under the round
+intent (other battles record no new request; members sorted by hero key), and the Arena's `new` carries
+`tactics.party` when the party tactic is not Balanced and the encounter has a script under a round-intent ruleset
+(`arena_scripted`; a world fight's screen starts on Balanced). Choices the spec left open: Skip clears a Block-mode hold;
+Skip shows the round-end message as the playback would. Tests: `battle.rs` `script_screen_tests` (locked controls,
+banner and Skip, the playback by itself and the auto-advance, Skip's `resolve` with the same log as the host's,
+the guided round, the party tactic's draft), `rpgkit_host/tests/script_round.rs`
+(`the_games_tactics_draft_the_heroes_with_no_entry`, `the_tactics_request_drafts_the_later_scripted_rounds_and_replays`).
+
 History: `docs/HISTORY.md` row "Hand-scripted combat layer (10-block rounds, scripted commands)" (deprecated before
 2026-10: "Scripted battles could not express planning, AP and AI; double maintenance"). That reason does not hold here:
 a scripted round is not a second combat layer. It is data that feeds the same picks the player makes (INPUT1's `pick`)

@@ -73,6 +73,9 @@ pub struct EncounterDef {
     /// caller (the world bridge from the world's `plan_reveal_flag`, the Arena and Dojo toggles, the host); never read
     /// from the row (false by default).
     pub plan_reveal: bool,
+    /// ENCOUNTER2-C4: the players' tactics a scripted round drafts its auto heroes with (`script::Tactics`); set by its
+    /// caller (the game's battle screen, the host's `new` key `tactics`); never read from the row (none = balanced).
+    pub tactics: crate::script::Tactics,
     /// The whole entry (objective and morale fields are read from it).
     pub raw: Obj,
 }
@@ -112,6 +115,7 @@ impl EncounterDef {
             start_grant: StartGrant::None,
             ruleset: Ruleset::classic(),
             plan_reveal: false,
+            tactics: Default::default(),
             raw: o.clone(),
         }
     }
@@ -636,7 +640,7 @@ impl Session {
             crate::script::rest_others(self, &planned, &mut plan);
         }
         self.plan = plan;
-        self.plan_apply_preset_all(crate::script::AUTO_PRESET);
+        self.draft_by_tactics();
         self.script_failures(&planned.failures);
         // decision "ENCOUNTER2-C3 answers" (2): a locked round whose plan cannot be confirmed falls back like a failed
         // entry (one Script cell, counted) and plays guided
@@ -654,6 +658,24 @@ impl Session {
             self.script_seen = self.current_round;
             self.script_rounds += 1;
         }
+    }
+
+    /// ENCOUNTER2-C4 (decision "ENCOUNTER2-C3 answers" (1)): the game's tactics for the scripted rounds still to plan
+    /// (`script::Tactics`; the current round's plan is left as it is).
+    pub fn set_tactics(&mut self, tactics: crate::script::Tactics) {
+        self.def.tactics = tactics;
+    }
+
+    /// GH2 a, SR2: a scripted round's heroes with no pick drafted, each with its own tactic (`EncounterDef::tactics`);
+    /// `plan_party_intents` skips the members holding picks, as `plan_apply_preset_all` does.
+    fn draft_by_tactics(&mut self) {
+        if self.phase != Phase::Planning || self.script_lock {
+            return;
+        }
+        let allies = self.w.allies.clone();
+        let presets: Vec<(UnitId, String)> = allies.iter().map(|&a| (a, self.preset_for(a, self.def.tactics.of(&self.hero_key(a))))).collect();
+        let lines = ai::plan_party_intents(&mut self.w, &mut self.plan, &presets);
+        self.events.extend(lines);
     }
 
     /// CombatEncounter.hero_key: a party unit's stable key across battles (the member id, else the world character it

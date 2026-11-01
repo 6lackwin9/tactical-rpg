@@ -12,6 +12,15 @@ use std::sync::Arc;
 const REFUSED: [&str; 11] = ["preset", "plan", "add_step", "undo", "clear", "round_intent", "manual", "fill", "pick", "unpick", "autofill"];
 
 fn catalog() -> Arc<Catalog> {
+    catalog_of(&[1])
+}
+
+/// ENCOUNTER2-C4: the same round script on each of `rounds`.
+fn two_rounds() -> Arc<Catalog> {
+    catalog_of(&[1, 2])
+}
+
+fn catalog_of(rounds: &[i32]) -> Arc<Catalog> {
     let skills = vec![
         json!({"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 1, "basic": true, "target_mode": "ENEMY"}),
         json!({"id": "move", "name": "Move", "kind": "MOVE", "level": 1, "blocks": 1, "system": true, "basic": true}),
@@ -26,10 +35,15 @@ fn catalog() -> Arc<Catalog> {
         json!({"id": id, "name": id, "side": side, "stat_mode": "fixed", "hp": 300, "speed": 12, "attack_range": 1, "skill_cap": 5, "deck": {"order": {"assault": ["t_cleave", "strike"], "guard": ["active_guard"]}}})
     };
     let ruleset = json!({"id": "timeline", "name": "Timeline", "rules": ["round_intent", "ap_cost"], "basics": ["move", "rest", "strike", "active_guard"]});
-    let script = json!([{"round": 1, "lock": true, "others": "auto", "banner": "Watch them", "entries": [
-        {"unit": "party:t_hero", "target": "self", "picks": [{"skill": "active_guard"}], "fill": "rest"},
-        {"unit": "t_foe", "target": "self", "picks": [{"skill": "active_guard"}], "fill": "auto"}
-    ]}]);
+    let script: Vec<Value> = rounds
+        .iter()
+        .map(|r| {
+            json!({"round": r, "lock": true, "others": "auto", "banner": "Watch them", "entries": [
+                {"unit": "party:t_hero", "target": "self", "picks": [{"skill": "active_guard"}], "fill": "rest"},
+                {"unit": "t_foe", "target": "self", "picks": [{"skill": "active_guard"}], "fill": "auto"}
+            ]})
+        })
+        .collect();
     let enc = json!({"id": "t_scripted", "name": "Scripted", "party": ["t_hero", "t_mate"], "enemies": ["t_foe"], "total_blocks": 6, "unit_ap": 8, "ap_regen": 4, "max_rounds": 3, "script": script});
     let units = [unit("t_hero", "party"), unit("t_mate", "party"), unit("t_foe", "enemy")];
     Arc::new(Catalog::from_value(&json!({"skills": skills, "units": units, "rulesets": [ruleset], "encounters": [enc]})))
@@ -99,4 +113,49 @@ fn classic_ignores_the_script() {
     assert_eq!(started["state"]["plan_confirmed"], json!(false));
     ok(&h.handle(&json!({"cmd": "preset", "preset": "balanced"})));
     ok(&h.handle(&json!({"cmd": "autoplay"})));
+}
+
+/// ENCOUNTER2-C4 (decision "ENCOUNTER2-C3 answers" (1)): the round plan's intent of party unit `name`.
+fn intent_of(h: &mut Host, name: &str) -> Value {
+    let plan = h.handle(&json!({"cmd": "round_plan"}))["round_plan"].clone();
+    plan.as_array().unwrap().iter().find(|r| r["name"] == json!(name)).map(|r| r["intent"].clone()).unwrap_or(Value::Null)
+}
+
+#[test]
+fn the_games_tactics_draft_the_heroes_with_no_entry() {
+    // t_mate has no entry (`others: auto`): with no tactics it drafts by the AI table (balanced, at full HP no Guard);
+    // Guard & Counter ("defensive") is Guard on itself (RULESET1_INTENT AI5)
+    let mut plain = Host::new(Battle::new(catalog()));
+    ok(&plain.handle(&json!({"cmd": "new", "encounter": "t_scripted", "ruleset": "timeline"})));
+    let balanced = intent_of(&mut plain, "t_mate");
+    assert_ne!(balanced, json!("guard"), "the balanced draft does not guard at full HP");
+    let mut picked = Host::new(Battle::new(catalog()));
+    ok(&picked.handle(&json!({"cmd": "new", "encounter": "t_scripted", "ruleset": "timeline", "tactics": {"members": {"t_mate": "defensive"}}})));
+    assert_eq!(intent_of(&mut picked, "t_mate"), json!("guard"), "the member's own tactic drafts it");
+    assert_eq!(intent_of(&mut picked, "t_hero"), intent_of(&mut plain, "t_hero"), "an entry's picks are the script's, whatever the tactic");
+    // the party tactic covers every member with no member tactic; a member tactic wins over it
+    let mut party = Host::new(Battle::new(catalog()));
+    ok(&party.handle(&json!({"cmd": "new", "encounter": "t_scripted", "ruleset": "timeline", "tactics": {"party": "defensive", "members": {"t_mate": "balanced"}}})));
+    assert_eq!(intent_of(&mut party, "t_mate"), balanced);
+    let bad = party.handle(&json!({"cmd": "new", "encounter": "t_scripted", "ruleset": "timeline", "tactics": {"party": "nap"}}));
+    assert_eq!(bad["ok"], json!(false), "an unknown tactic is refused");
+}
+
+#[test]
+fn the_tactics_request_drafts_the_later_scripted_rounds_and_replays() {
+    // round 2 scripted too: the request sent in round 1 (allowed while locked, recorded) drafts round 2's t_mate
+    let mut h = Host::new(Battle::new(two_rounds()));
+    ok(&h.handle(&json!({"cmd": "new", "encounter": "t_scripted", "ruleset": "timeline"})));
+    ok(&h.handle(&json!({"cmd": "tactics", "members": {"t_mate": "defensive"}})));
+    ok(&h.handle(&json!({"cmd": "resolve"})));
+    let next = h.handle(&json!({"cmd": "advance"}));
+    assert_eq!(ok(&next)["state"]["script"]["round"], json!(2));
+    assert_eq!(intent_of(&mut h, "t_mate"), json!("guard"));
+    let hist = history(&mut h);
+    assert!(hist.iter().any(|r| r["cmd"] == json!("tactics")), "the request is recorded");
+    let mut again = Host::new(Battle::new(two_rounds()));
+    for req in &hist {
+        ok(&again.handle(req));
+    }
+    assert_eq!(intent_of(&mut again, "t_mate"), json!("guard"), "the history replays the tactics");
 }
