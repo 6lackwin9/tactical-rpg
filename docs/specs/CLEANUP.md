@@ -24,7 +24,7 @@ planner (TASKS, ROADMAP, decisions, HISTORY, `.claude/*`, CLAUDE.md), design-bra
 | 2 | CLN-37 | A | Writer resave check on the shipped data (every file re-saves byte for byte) instead of Godot's resave and its five AFTER_GODOT lists | S | logic-builder | game | now | done (2026-11-01) |
 | 3 | CLN-38 | A | RNG and hash goldens into `aegis_core`; unit and damage goldens on a frozen catalog (the rules' only direct tests) | S-M | logic-builder | engine + game | now | done (2026-11-01) |
 | 4 | CLN-42 | A | Switch Godot off: delete the pure-Godot suites, `games/emberwake/parity/`, `fc.sh parity`, the CI Godot steps, the hook's Godot install, the export-only CLI keys | M | logic-builder | game + kit + tools | after CLN-36..41 | done (2026-11-01) |
-| 5 | CLN-43 | A | Docs and rules: CLAUDE.md "Godot parity", decisions, HISTORY, skills, agents, workflow docs, PORT_NOTES | S-M | planner (+ design-brainstorm for PORT_NOTES) | process | with CLN-42 | proposed |
+| 5 | CLN-43 | A | Docs and rules: CLAUDE.md "Godot parity", decisions, HISTORY, skills, agents, workflow docs, PORT_NOTES | S-M | planner (+ design-brainstorm for PORT_NOTES) | process | with CLN-42 | done (2026-11-01) |
 | 6 | CLN-47 | C | Save migrations v1-v12 and the Godot JSON text emulation (decision "Saves and data edits") | S | logic-builder | kit | with CLN-42 (or before) | done (2026-11-01) |
 | 7 | CLN-49 | C | 20 executed seeds out of `data/seeds/` (the seeds README rule) | S | planner (git rm) | game | now | proposed |
 | 8 | CLN-39 | A | Sim parity: convert to an engine golden on the frozen catalog, or delete (Q-A2) | S | logic-builder | game | now | done (2026-11-01) |
@@ -269,7 +269,7 @@ Switch Godot off. Scope A. Status: done (2026-11-01; the session hook's Godot in
 
 ### CLN-43
 
-Docs and rules for the end of parity. Scope A. Status: proposed. Size S-M. Lane planner (`.claude/*`, CLAUDE.md,
+Docs and rules for the end of parity. Scope A. Status: done (2026-11-01; legacy/LEGACY.md untouched, Q-A6 pending). Size S-M. Lane planner (`.claude/*`, CLAUDE.md,
 decisions, HISTORY, workflow docs); design-brainstorm for PORT_NOTES and ENGINE_SPEC. Lands with CLN-42.
 
 - CLAUDE.md: line 3 ("it is the parity reference the engine is checked against") and the "Godot parity" paragraph

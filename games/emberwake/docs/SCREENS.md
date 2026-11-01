@@ -5,12 +5,12 @@ engine has a working reference for each screen type before the transition. Look 
 (ENGINE_SPEC section 11).
 
 Reference shots: `games/emberwake/docs/screens/` (1280x720, captured from the Godot build by
-`games/emberwake/parity/godot/screen_tour.gd` on a sandbox save folder; re-run it after Godot UI changes). The engine's own
+its screen tour script, retired with `parity/` in CLN-42; kept as the reference shots). The engine's own
 shots of the same screens are in `games/emberwake/docs/screens/engine/` (taken over the agent link).
 
-The rules behind every player screen come from `emberwake_world`, checked against Godot by the journey replay
-(`tests/journey.rs`: result, state and the views these screens read, after every action) and the save fixtures
-(`tests/saves.rs`).
+The rules behind every player screen come from `emberwake_world`, checked by the engine journey golden
+(`tests/journey.rs`: result, state and the views these screens read, after every action) and the store resave
+(`tests/store.rs`).
 
 ## Player screens
 
@@ -54,8 +54,8 @@ The rules behind every player screen come from `emberwake_world`, checked agains
 ## Order (done)
 
 1. Data: the project's `games/emberwake/data/` folder through the engine's own loader (`emberwake_content::source`); the Godot exports
-   (`parity/export.sh`) are only for parity checks.
-2. Game state: GameState, NewGame, SaveGame (Godot saves load unchanged, every migration), party and progression rules.
+   are retired (CLN-42).
+2. Game state: GameState, NewGame, SaveGame (saves below the current version are refused, CLN-47), party and progression rules.
 3. Game loop rules: exploration, travel, dialogue, shop, quests, rest and camp, world battles, results; checked with
    journeys replayed in both engines (state compared after every action).
 4. Screens on a shared widget kit (`ui.rs`, now `aegis_ui::ui`: buttons, tabs, cards, checkboxes, steppers, dropdowns, frames, rows,

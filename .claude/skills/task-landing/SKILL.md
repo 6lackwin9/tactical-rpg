@@ -22,7 +22,7 @@ The rules it applies, so a builder's docs delta can be checked against them:
 | a game system a reader looks for | `games/emberwake/docs/GAME_BRIEF.md` "Where to look for X" |
 | behaviour that differs from its spec | an "As built" note in the spec (never rewrite the spec text) |
 | a user answer or a planner ruling on a rule | a row in the matching `games/emberwake/docs/decisions/<system>.md` (`docs/decisions/workflow.md` for process) |
-| a retired parity check, a re-recorded golden, a dropped idea | `docs/HISTORY.md` (append only) |
+| a re-recorded golden, a dropped idea | `docs/HISTORY.md` (append only) |
 | `games/emberwake/data/seeds/*.json` | `games/emberwake/data/seeds/README.md` |
 | unit art or `tools/sprites/**` | `games/emberwake/assets/README.md` and/or the spec of the rig task |
 | generated art | a prompt record (`.json`) beside each source in `art_src/` |

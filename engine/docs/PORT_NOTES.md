@@ -1,5 +1,7 @@
 # Port Notes (Godot -> Aegis)
 
+> Parity status is history: the Godot parity suites were retired 2026-11-01 by CLN-36..42 and the engine goldens replaced them (CLAUDE.md "Engine goldens"); this file is kept as the port record, its parity tables and notes are not maintained.
+
 Working log for the combat port. One row per Godot file: where it went in Rust and how it is checked.
 Pass bar: statistical parity (ENGINE_SPEC section 6). Dev tool: seeded battles replay step for step,
 because the RNG is bit-exact.
@@ -39,7 +41,7 @@ because the RNG is bit-exact.
 | `combat/session/encounter_objectives.gd`, `encounter_phases.gd`, `encounter_morale.gd`, `world_encounter.gd` (guests, start buffs) | `emberwake_battle::encounter`, `session`; `emberwake_world::battle::WorldRoster` | world traces |
 | `tools/sim/sim_runner.gd` (`fight`, `apply_pouch`), `sim_variants.gd` (jitter) | `emberwake_battle::sim` | battle traces |
 
-## Parity status (2026-10-19)
+## Parity status (2026-10-19; history, retired 2026-11-01 by CLN-36..42; kept as the port record)
 
 - Unit snapshots: 102 rows exact. Damage: 18,216 cases exact. RNG: 180 draws exact.
 - Battle traces: 488 balance-sim fights replay step for step: 360 duels (6 classes, levels 1 / 5 / 10, 2 seeds,

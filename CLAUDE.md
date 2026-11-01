@@ -1,13 +1,13 @@
 # Tactical RPG (Aegis engine, Rust)
 
 The game runs on Aegis, its own Rust engine in `engine/` (since 2026-10-19). The Godot 4.7 build it replaced is frozen in
-`legacy/` (`legacy/LEGACY.md`): never edit it; it is the parity reference the engine is checked against, and the `legacy`
-branch resumes Godot work only if the user asks.
+`legacy/` (`legacy/LEGACY.md`): a frozen archive for reference, never edited; no build, test or tool reads it, and the
+`legacy` branch resumes Godot work only if the user asks.
 
 Layers (SPLIT1, `docs/specs/SPLIT1.md`, done 2026-10-20): the engine (`engine/`, crates `aegis_*`) is game-agnostic; the
 RPG kit is `kits/rpg/` (its genre rules in crates `rpgkit_*`, including the battle command set `rpgkit_host`, and their
 field tables `schema.json`, since KIT1-M/N; the kit names no game; plus kit assets); the game is `games/emberwake/`
-(crates `emberwake_*`, façades over the kit plus game code, `data/`, `assets/`, `tuning.json`, `parity/`, its manifest
+(crates `emberwake_*`, façades over the kit plus game code, `data/`, `assets/`, `tuning.json`, its manifest
 `game.json` and its design docs in `docs/`). Every task row has a Layer (engine, kit, game) and its change lands in that
 layer; the engine never names a game.
 
@@ -26,7 +26,7 @@ Read these instead of crawling the code:
 - `docs/AGENT_MAP.md`: dashboard of active agents on top, finished runs grouped by milestone (planner-maintained; cloud: written by the Merge & Release thread)
 - `docs/WORKFLOW.md`: tools and how to iterate; `docs/workflow/`: desktop vs cloud
 - `docs/EFFICIENCY.md`: measured slow steps, fixes and cheap-path rules (update it when something is slow or floods context)
-- `engine/README.md` (engine layout, CLI, GUI, agent link), `engine/docs/PORT_NOTES.md` (which Godot file each engine module ports, parity status)
+- `engine/README.md` (engine layout, CLI, GUI, agent link), `engine/docs/PORT_NOTES.md` (which Godot file each engine module ports; the port record)
 - Skills `engine-checklist` (short edit checklist), `known-issues` (consult BEFORE debugging), `rust-conventions` (engine code patterns)
 
 ## Roles and lanes (agents cannot message each other; the planner routes via the docs above)
@@ -43,7 +43,7 @@ Read these instead of crawling the code:
 
 Strict static typing (Rust; the build has no compiler warnings, clippy is advisory); README is updated with every change (builders report a docs delta, the planner applies it); push to `develop` or `main` only when `check_project.ps1 -Fast -Quiet` (desktop) or `tools/fc.sh gate` (cloud; same steps: build every crate, run every test) is clean and `tools/fc.sh docs` is clean (desktop: a task may first land on the local `staging` branch after a partial gate, and `staging` reaches `develop` in batches under one full gate; decision "Batched gate"); on desktop also the IDE Problems tab has 0 errors/warnings (markdownlint compliant; see `.agents/rules/engine_workflow.md` Section 6); `main` is always a clean build (features on branches); edit content only through `aegis content` (`tools/fc.sh content`), never raw JSON; never edit `legacy/`; no sed line-range edits; docs history is append-only (mark deprecated with reason, never delete).
 
-Godot parity (user 2026-10-19, a benchmark): the engine's parity suites replay the frozen Godot build step for step (battle traces, world battles, journeys, saves, the data loader and writer). They measure the engine against Godot, show what is missing, and keep the design work reusable without Godot; they are not a contract. An unintended divergence is a bug (fix the engine); an intended design change retires the parity checks it affects in the same change (named in the commit and a `docs/HISTORY.md` row). Never edit recorded traces or expectations to make a parity test pass.
+Engine goldens (the Godot parity suites were retired 2026-11-01, CLN-36..42; `legacy/` is not a test oracle): `aegis_core` rng_hash, `emberwake_rules` rules_golden, `emberwake_sim` sim_golden, `emberwake_content` checks_golden, the `emberwake_world` journey, the store byte-for-byte resave, the timeline golden and the PHASEFOLD golden. A golden is re-recorded only for an intended change, named in the commit and a `docs/HISTORY.md` row; never edit a golden to make a test pass; an unintended divergence is a bug (fix the engine).
 
 ## Feedback rule
 
