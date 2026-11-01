@@ -193,6 +193,11 @@ Quota pause (ARTQUEUE2, 2026-11-01): on HTTP 429 or quota exhaustion the request
 skip until `paused_until`, then it deletes `paused.json`; only real errors go to `failed/`. `artqueue.py status` prints
 `paused until <time> UTC (<n> min): <reason>` (or `pause expired`; a malformed file is reported), `request` and `text`
 still queue during a pause and note it, and `ingest` is unaffected.
+Archive (ARTQUEUE3): once `ingest` writes a request's marker it moves the request's leftover `output/` files (images,
+`<name>.result.json`, `<name>.ingested.json`) into `archive/<UTC date>/output/` and its request from `completed/` into
+`archive/<UTC date>/completed/` (never overwriting: a clash gets `_2`, `_3`); `rejected/` stays; a dry run moves nothing.
+"Ingested already" also looks in `archive/*/output`. `artqueue.py archive [--dry-run]` sweeps earlier ingests that have a
+marker in `output/`; `status` shows `archived N`. Antigravity never reads `archive/`.
 Ingest (a request counts as finished when `output/<name>.result.json` exists and the request is in `completed/`):
 each image is checked (present, a whole PNG, the aspect within 3 %, the long edge at least 1024 px); a refused one
 moves to `rejected/` with a note and the valid variants of the same request are still taken. A request in `failed/`

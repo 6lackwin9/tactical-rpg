@@ -39,6 +39,7 @@ import generate as G
 import pixelize as PX
 
 FOLDERS = ("queue", "processing", "output", "completed", "failed")
+ARCHIVE = "archive"              # ours: archive/<UTC date>/{output,completed}/ of ingested requests (Antigravity never reads it)
 REJECTED = "rejected"            # ours: images ingest refused, each with a .note.txt
 PIXELIZED = "pixelized"          # ours: the game portraits of route portrait requests with no target
 ASPECTS = {"1:1": 1.0, "16:9": 16 / 9, "9:16": 9 / 16, "4:3": 4 / 3, "3:4": 3 / 4}
@@ -203,13 +204,76 @@ def failed_names(pipe):
     return sorted(p.stem for p in f.glob("*.json")) if f.is_dir() else []
 
 
+def archive_dir(pipe, day=None):
+    return pipe / ARCHIVE / (day or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d"))
+
+
+def archive_markers(pipe, name):
+    return sorted((pipe / ARCHIVE).glob(f"*/output/{name}.ingested.json")) if (pipe / ARCHIVE).is_dir() else []
+
+
+def move_unique(src, dest_dir):
+    """Moves src into dest_dir, never overwriting: a name that exists gets _2, _3, ... before the extension(s)."""
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / src.name
+    k = 1
+    while dest.exists():
+        k += 1
+        stem, dot, ext = src.name.partition(".")
+        dest = dest_dir / f"{stem}_{k}{dot}{ext}"
+    shutil.move(str(src), str(dest))
+    return dest
+
+
+def archive_request(pipe, name, files=(), day=None):
+    """Moves a finished request into archive/<day>/: its leftover images, result and marker from output/, its request
+    from completed/. Returns the number of files moved."""
+    base = archive_dir(pipe, day)
+    moved = 0
+    out = pipe / "output"
+    for fname in (*files, f"{name}.result.json", f"{name}.ingested.json"):
+        p = out / fname
+        if p.is_file():
+            move_unique(p, base / "output"); moved += 1
+    req = pipe / "completed" / f"{name}.json"
+    if req.is_file():
+        move_unique(req, base / "completed"); moved += 1
+    return moved
+
+
+def archive_sweep(pipe, dry=False):
+    """Archives every output/ request that has a marker (ingests from before the archive existed)."""
+    out = pipe / "output"
+    total = 0
+    for m in sorted(out.glob("*.ingested.json")) if out.is_dir() else []:
+        name = m.name[:-len(".ingested.json")]
+        files = []
+        try:
+            d = json.loads(m.read_text(encoding="utf-8"))
+            files = [e["file"] for e in (d.get("accepted") or []) + (d.get("rejected") or []) if e.get("file")]
+        except (ValueError, TypeError, AttributeError):
+            pass
+        files = list(dict.fromkeys([*files, *(p.name for p in out.glob(f"{name}.png")),
+                                    *(p.name for p in out.glob(f"{name}_[0-9]*.png"))]))
+        if dry:
+            n = sum(1 for f in (*files, f"{name}.result.json", f"{name}.ingested.json") if (out / f).is_file())
+            n += (pipe / "completed" / f"{name}.json").is_file()
+            print(f"{name}: would archive {n} files")
+            total += n
+        else:
+            n = archive_request(pipe, name, files)
+            print(f"{name}: archived {n} files")
+            total += n
+    return total
+
+
 def ingest_one(pipe, name, dry=False, now=None):
     """Ingests output/<name>.result.json: each accepted image into art_src/ with its record (mark cleared; route
     portrait pixelized), each refused one moved to rejected/ with a note; output/<name>.ingested.json marks it done.
     Returns the marker dict (None when the request is not finished or was ingested already)."""
     out = pipe / "output"
     result_path = out / f"{name}.result.json"
-    if (out / f"{name}.ingested.json").exists():
+    if (out / f"{name}.ingested.json").exists() or archive_markers(pipe, name):
         print(f"{name}: ingested already"); return None
     if (pipe / "failed" / f"{name}.json").exists():
         report_failed(pipe, name); return None
@@ -281,6 +345,7 @@ def ingest_one(pipe, name, dry=False, now=None):
                                                          else ""))
     if not dry:
         write_json(out / f"{name}.ingested.json", marker)
+        archive_request(pipe, name, names)
     return marker
 
 
@@ -298,7 +363,8 @@ def status(pipe):
     s = {"queue": count("queue", "*.json"), "processing": count("processing", "*.json"),
          "output": len(finished(pipe)), "ingested": count("output", "*.ingested.json"),
          "completed": count("completed", "*.json"), "failed": count("failed", "*.json"),
-         "rejected": count(REJECTED, "*.png")}
+         "rejected": count(REJECTED, "*.png"),
+         "archived": len(list((pipe / ARCHIVE).glob("*/output/*.ingested.json"))) if (pipe / ARCHIVE).is_dir() else 0}
     return s
 
 
@@ -355,6 +421,7 @@ def main(argv=None):
     t.add_argument("--text"); t.add_argument("--text-file"); t.add_argument("--id")
     i = sub.add_parser("ingest"); i.add_argument("names", nargs="*"); i.add_argument("--dry-run", action="store_true")
     sub.add_parser("status")
+    ar = sub.add_parser("archive"); ar.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
     pipe = pipeline(a.pipeline)
     if a.cmd == "status":
@@ -365,6 +432,10 @@ def main(argv=None):
             print(p[0])
         for e in sorted((pipe / "failed").glob("*.error.txt")) if (pipe / "failed").is_dir() else []:
             print(f"  failed {e.name[:-len('.error.txt')]}: {e.read_text(encoding='utf-8').strip()[:160]}")
+        return 0
+    if a.cmd == "archive":
+        n = archive_sweep(pipe, a.dry_run)
+        print(f"{'would archive' if a.dry_run else 'archived'} {n} files")
         return 0
     if a.cmd == "ingest":
         for name in a.names or finished(pipe):

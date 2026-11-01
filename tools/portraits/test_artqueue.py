@@ -191,7 +191,7 @@ class Ingest(Base):
         px = self.pipe / Q.PIXELIZED / "bryn_hale.png"
         with Image.open(px) as im:
             self.assertEqual(im.size, (240, 240))
-        marker = json.loads((self.pipe / "output" / f"{name}.ingested.json").read_text(encoding="utf-8"))
+        marker = json.loads(next((self.pipe / "archive").glob(f"*/output/{name}.ingested.json")).read_text(encoding="utf-8"))
         self.assertEqual([a["art_src"] for a in marker["accepted"]], [G.rel(art)])
 
     def test_portrait_target_and_existing_source(self):
@@ -275,7 +275,8 @@ class Ingest(Base):
         (self.pipe / "output" / f"{two}.result.json").write_text("{}", encoding="utf-8")
         self.assertIn("not completed", self.run_cli("ingest", two))
         s = Q.status(self.pipe)
-        self.assertEqual((s["queue"], s["processing"], s["output"], s["ingested"], s["completed"]), (0, 1, 1, 1, 1))
+        self.assertEqual((s["queue"], s["processing"], s["output"], s["ingested"], s["completed"]), (0, 1, 1, 0, 0))
+        self.assertEqual(s["archived"], 1)
 
     def test_prompt_changed_and_dry_run(self):
         path = self.queue_one("text", "chg_q", "--text", "Asked prompt.")
@@ -298,6 +299,69 @@ class Ingest(Base):
         self.assertEqual(list(self.src.iterdir()), [])
         self.assertEqual(Q.status(self.pipe)["failed"], 1)
 
+
+
+class Archive(Base):
+    def ingested(self, base="arc_q"):
+        self.run_cli("text", base, "--text", "Arc.", "--route", "other")
+        [path] = self.queued()
+        name, _ = self.fake_antigravity(path, {f"{path.stem}.png": portrait_png})
+        return name
+
+    def day(self):
+        import datetime
+        return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+
+    def test_ingest_archives_request(self):
+        name = self.ingested()
+        self.run_cli("ingest")
+        arc = self.pipe / "archive" / self.day()
+        self.assertEqual(sorted(p.name for p in (arc / "output").iterdir()),
+                         sorted([f"{name}.png", f"{name}.result.json", f"{name}.ingested.json"]))
+        self.assertEqual([p.name for p in (arc / "completed").iterdir()], [f"{name}.json"])
+        for f in ("output", "completed"):
+            self.assertEqual(list((self.pipe / f).iterdir()), [])
+        self.assertEqual(Q.status(self.pipe)["archived"], 1)
+
+    def test_reingest_says_ingested_already(self):
+        name = self.ingested()
+        self.run_cli("ingest")
+        self.assertIn("ingested already", self.run_cli("ingest", name))
+        self.assertEqual(Q.finished(self.pipe), [])
+
+    def test_sweep_old_marker_and_dry_run(self):
+        name = self.ingested()
+        self.run_cli("ingest")
+        # undo the archive move to look like an earlier ingest
+        arc = self.pipe / "archive" / self.day()
+        for f in (arc / "output").iterdir():
+            shutil.move(str(f), str(self.pipe / "output" / f.name))
+        shutil.move(str(arc / "completed" / f"{name}.json"), str(self.pipe / "completed"))
+        shutil.rmtree(self.pipe / "archive")
+        out = self.run_cli("archive", "--dry-run")
+        self.assertIn("would archive 4", out)
+        self.assertEqual(len(list((self.pipe / "output").iterdir())), 3)
+        self.assertFalse((self.pipe / "archive").exists())
+        self.run_cli("archive")
+        self.assertEqual(list((self.pipe / "output").iterdir()), [])
+        self.assertEqual(list((self.pipe / "completed").iterdir()), [])
+        self.assertTrue((arc / "completed" / f"{name}.json").exists())
+        self.assertEqual(Q.status(self.pipe)["archived"], 1)
+
+    def test_ingest_dry_run_moves_nothing(self):
+        name = self.ingested()
+        self.run_cli("ingest", "--dry-run")
+        self.assertFalse((self.pipe / "archive").exists())
+        self.assertTrue((self.pipe / "completed" / f"{name}.json").exists())
+
+    def test_name_clash_gets_suffix(self):
+        d = self.pipe / "archive" / "2026-01-01" / "output"; d.mkdir(parents=True)
+        (d / "a.result.json").write_text("old", encoding="utf-8")
+        src = self.tmp / "a.result.json"; src.write_text("new", encoding="utf-8")
+        dest = Q.move_unique(src, d)
+        self.assertEqual(dest.name, "a_2.result.json")
+        self.assertEqual((d / "a.result.json").read_text(encoding="utf-8"), "old")
+        self.assertEqual(dest.read_text(encoding="utf-8"), "new")
 
 
 class Pause(Base):
