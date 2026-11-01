@@ -133,6 +133,8 @@ pub fn errors(v: &View, e: &Dict) -> Vec<String> {
     // ENCOUNTER2 S1 and section 6: unkillable refs and the stay-behind block
     errors.extend(unkillable_problems(e));
     errors.extend(stay_behind_problems(v, e, false));
+    // ENCOUNTER2-C 5.1: the scripted rounds
+    errors.extend(script_problems(v, e, &|r: &str| v.get("units", r).clone()));
     // HOOKS1 AH1 and DU2: the arena hazards and the deck phase effects
     errors.extend(super::hooks::arena_hazards_errors(e));
     errors.extend(super::hooks::deck_effect_errors(v, e, None, &|r: &str| v.get("units", r).clone()));
@@ -154,6 +156,8 @@ pub fn rows_problems(e: &Dict) -> Vec<String> {
 pub fn warnings(v: &View, e: &Dict) -> Vec<String> {
     let mut out = pace_warnings(e, &|r: &str| json::s(&content("units", v.get("units", r)), "tier"));
     out.extend(purse_warnings(e));
+    // ENCOUNTER2-C 5.3: a catalog script plays only under the timeline ruleset
+    out.extend(script_warnings(e));
     // HOOKS1 DU1 (user 2026-10-29 (b)): an add that pushes out an automatic deck's families
     out.extend(super::hooks::deck_effect_warnings(v, e, None, &|r: &str| v.get("units", r).clone()));
     out
@@ -1159,4 +1163,172 @@ pub fn purse_warnings(e: &Dict) -> Vec<String> {
         out.push("Empty purse.".into());
     }
     out
+}
+
+// ---- Scripted rounds (ENCOUNTER2-C 5.1) ----
+
+/// ENCOUNTER2-C 5.1 (catalog and world encounters): `script` is empty or 1-3 round scripts (round 1..max_rounds, each
+/// once; `lock` a bool, a locked round 1 refused with a hold escape; `others` and `fill` auto or rest; a banner of at
+/// most 40 characters; 1-16 entries, one per unit), each entry's unit and unit target named as SN1 (`ref`, `ref#n`,
+/// `party:<id>`, `party#n`), its tiles on the grid, its picks 1-4 of SN4's shapes (a known family, which an enemy-side
+/// unit owns; a known item, party side only; a move only first). `unit_of(ref)` is the unit row a ref plays (a world
+/// character's base unit).
+pub fn script_problems(v: &View, e: &Dict, unit_of: &dyn Fn(&str) -> Dict) -> Vec<String> {
+    use rpgkit_battle::script::{self as sc, ScriptPick, ScriptTarget, UnitName};
+    let mut errors = Vec::new();
+    let rounds = match json::get(e, "script") {
+        Value::Null => return errors,
+        Value::Array(list) => list,
+        _ => return vec!["Script must be a list of round scripts.".into()],
+    };
+    if rounds.len() > sc::MAX_SCRIPTED_ROUNDS {
+        errors.push(format!("At most {} scripted rounds.", sc::MAX_SCRIPTED_ROUNDS));
+    }
+    let max_rounds = json::to_int(json::get(e, "max_rounds"));
+    let (party, guests) = (strings(json::get(e, "party")), strings(json::get(e, "guests")));
+    let mut foes = strings(json::get(e, "enemies"));
+    foes.extend(phase_wave_refs(e));
+    let hold = json::s(json::dict(json::get(e, "stay_behind")), "mode") == STAY_HOLD;
+    // SN1: the unit a name covers as (canonical key, enemy side, unit ref) when it is in this encounter
+    let named = |name: &str| -> Result<(String, bool, String), String> {
+        let missing = || format!("Script unit '{name}' is not in this encounter.");
+        match UnitName::parse(name).ok_or_else(missing)? {
+            UnitName::Hero(id) if party.contains(&id) => Ok((format!("party:{id}"), false, id)),
+            UnitName::Hero(id) => Err(format!("Script hero '{id}' is not in this encounter's party.")),
+            UnitName::HeroAt(n) if n <= party.len() => Ok((format!("party#{n}"), false, party[n - 1].clone())),
+            UnitName::HeroAt(_) => Err(missing()),
+            UnitName::Ref(r, n) => {
+                let built = foes.iter().filter(|f| **f == r).count();
+                if n <= built {
+                    Ok((format!("{r}#{n}"), true, r))
+                } else if n == 1 && guests.contains(&r) {
+                    Ok((format!("{r}#1"), false, r))
+                } else {
+                    Err(missing())
+                }
+            }
+        }
+    };
+    let off_grid = |c: V2| format!("Script tile [{}, {}] is off the grid.", c.x, c.y);
+    let basics: Vec<String> = v.typed.basic_ids().iter().map(|id| v.typed.family_of(id).to_string()).chain(v.entries(rpgkit_rules::ruleset::KIND).iter().flat_map(|r| json::sget(r, "basics"))).collect();
+    let mut seen: Vec<i64> = Vec::new();
+    for raw in rounds {
+        let Some(rs) = raw.as_object() else {
+            errors.push("Each round script must be an object.".into());
+            continue;
+        };
+        for key in rs.keys().filter(|k| !sc::ROUND_KEYS.contains(&k.as_str())) {
+            errors.push(format!("Script round: unknown key '{key}'."));
+        }
+        let round = json::get(rs, "round");
+        let n = json::to_int(round);
+        if !whole(round) || !(1..=max_rounds).contains(&n) {
+            errors.push(format!("Script round must be 1..{max_rounds}."));
+        } else if seen.contains(&n) {
+            errors.push(format!("Round {n} is scripted twice."));
+        }
+        seen.push(n);
+        let lock = rs.get("lock").cloned().unwrap_or(Value::Bool(true));
+        if !lock.is_boolean() {
+            errors.push("Script lock must be true or false.".into());
+        } else if lock == Value::Bool(true) && n == 1 && hold {
+            errors.push("A hold escape picks its holder before round 1: script round 2 or later.".into());
+        }
+        if rs.get("others").is_some_and(|o| !o.as_str().is_some_and(|o| sc::MODES.contains(&o))) {
+            errors.push("Script others is auto or rest.".into());
+        }
+        if rs.get("banner").is_some_and(|b| !b.as_str().is_some_and(|b| b.chars().count() <= sc::MAX_BANNER)) {
+            errors.push(format!("A script banner is text of at most {} characters.", sc::MAX_BANNER));
+        }
+        let entries = json::arr(json::get(rs, "entries"));
+        if !(1..=sc::MAX_ENTRIES).contains(&entries.len()) {
+            errors.push(format!("A round script holds 1 to {} entries.", sc::MAX_ENTRIES));
+        }
+        let mut units: Vec<String> = Vec::new();
+        for entry in entries {
+            let Some(en) = entry.as_object() else {
+                errors.push("Each script entry must be an object.".into());
+                continue;
+            };
+            for key in en.keys().filter(|k| !sc::ENTRY_KEYS.contains(&k.as_str())) {
+                errors.push(format!("Script entry: unknown key '{key}'."));
+            }
+            let unit = json::s(en, "unit");
+            let who = match named(&unit) {
+                Ok(w) => Some(w),
+                Err(m) => {
+                    errors.push(m);
+                    None
+                }
+            };
+            if let Some((key, _, _)) = &who {
+                // once per unit and round
+                if units.iter().filter(|u| *u == key).count() == 1 {
+                    errors.push(format!("{unit} has two entries in round {n}."));
+                }
+                units.push(key.clone());
+            }
+            match sc::parse_target(en.get("target")) {
+                Ok(ScriptTarget::Cell(c)) if !on_grid(c) => errors.push(off_grid(c)),
+                Ok(ScriptTarget::Unit(t)) => {
+                    if let Err(m) = named(&t) {
+                        errors.push(m);
+                    }
+                }
+                Ok(_) => {}
+                Err(m) => errors.push(m),
+            }
+            if en.get("fill").is_some_and(|f| !f.as_str().is_some_and(|f| sc::MODES.contains(&f))) {
+                errors.push("Script fill is auto or rest.".into());
+            }
+            let picks = json::arr(json::get(en, "picks"));
+            let parsed: Result<Vec<ScriptPick>, String> = picks.iter().map(sc::parse_pick).collect();
+            let parsed = match parsed {
+                Ok(p) if (1..=sc::MAX_PICKS).contains(&p.len()) => p,
+                _ => {
+                    errors.push(sc::PICKS_TEXT.into());
+                    continue;
+                }
+            };
+            // an enemy-side unit's families: its unit row's (none listed: it knows every skill, as in battle) and the basics
+            let owned: Option<Vec<String>> = who.as_ref().filter(|w| w.1).map(|w| super::unit::owned_families(v, &unit_of(&w.2))).filter(|o| !o.is_empty());
+            for (i, p) in parsed.iter().enumerate() {
+                match p {
+                    ScriptPick::Skill { family, .. } => {
+                        if v.typed.tier_one(family).is_none() {
+                            errors.push(format!("Unknown skill '{family}'."));
+                        } else if owned.as_ref().is_some_and(|o| !o.contains(family) && !basics.contains(family)) {
+                            errors.push(format!("{unit} has no skill '{family}'."));
+                        }
+                    }
+                    ScriptPick::Item(id) => {
+                        if v.get("items", id).is_empty() {
+                            errors.push(format!("Unknown item '{id}'."));
+                        } else if who.as_ref().is_some_and(|w| w.1) {
+                            errors.push(format!("{unit}: items are party picks."));
+                        }
+                    }
+                    ScriptPick::Move(c) | ScriptPick::StepAfter(c) => {
+                        if !on_grid(*c) {
+                            errors.push(off_grid(*c));
+                        }
+                        if matches!(p, ScriptPick::Move(_)) && i > 0 {
+                            errors.push("A move is the first pick.".into());
+                        }
+                    }
+                    ScriptPick::Rest => {}
+                }
+            }
+        }
+    }
+    errors
+}
+
+/// ENCOUNTER2-C 5.3: a catalog encounter's script plays only when the Arena picks the timeline ruleset.
+pub fn script_warnings(e: &Dict) -> Vec<String> {
+    if json::arr(json::get(e, "script")).is_empty() {
+        Vec::new()
+    } else {
+        vec!["Plays scripted only under the timeline ruleset.".into()]
+    }
 }

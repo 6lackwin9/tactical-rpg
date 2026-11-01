@@ -56,6 +56,10 @@
 //!   pick_options {unit, target?}               read-only: the menu rows on a target (picks, intent, kind, ap,
 //!                                              blocks, problem, ap_short, drops)
 //!   log {since?}                               resolution log lines
+//! ENCOUNTER2-C SR5: in a scripted, locked round (`state` `script.lock`) the planning requests (preset, plan, add_step,
+//! undo, clear, round_intent, manual, fill, pick, unpick, autofill) are refused with "Round <n> is scripted."; confirm
+//! answers ok; step, resolve, advance and autoplay work as always. `state` carries `script` {round, lock, banner} only
+//! in a round that plays scripted.
 //!   history                                    the mutating requests so far (feed them back to replay) and the
 //!                                              checkpoints: the round outcome after every concluded round
 //! Step shapes: {"mode": "engage", "skill", "target"}, {"mode": "self", "skill"}, {"mode": "ally", "skill",
@@ -107,6 +111,9 @@ fn picked_ruleset(cat: &Catalog, req: &Value, default: Ruleset) -> Result<Rulese
     }
     Ok(r)
 }
+
+/// ENCOUNTER2-C SR5: the requests a locked round refuses.
+const LOCKED_REFUSES: [&str; 11] = ["preset", "plan", "add_step", "undo", "clear", "round_intent", "manual", "fill", "pick", "unpick", "autofill"];
 
 fn err(msg: impl Into<String>) -> Value {
     json!({"ok": false, "error": msg.into()})
@@ -211,6 +218,9 @@ impl Battle {
     }
 
     fn battle_cmd(cat: &Catalog, s: &mut Session, cmd: &str, req: &Value) -> Value {
+        if s.round_locked() && LOCKED_REFUSES.contains(&cmd) {
+            return err(rpgkit_battle::script::locked_text(s.current_round));
+        }
         match cmd {
             "state" => json!({"ok": true, "state": state_of(s)}),
             "intents" => {
@@ -436,6 +446,11 @@ pub fn state_of(s: &Session) -> Value {
     // ENCOUNTER2-C DT3: the talk cues so far, only when the encounter has a talk effect (the host never waits for one)
     if s.phases.has_talk() {
         state["talks"] = Value::Array(s.talks().iter().map(|t| json!({"phase": t.phase, "dialogue": t.dialogue, "speaker": t.speaker, "round": t.round, "block": t.block})).collect());
+    }
+    // ENCOUNTER2-C SR5, SR6: the current round's script while it plays (every other state keeps its shape); `lock` is
+    // whether it is locked now (a locked round whose plan could not be confirmed plays guided)
+    if let Some(rs) = s.round_script() {
+        state["script"] = json!({"round": rs.round, "lock": s.round_locked(), "banner": rs.banner});
     }
     state
 }

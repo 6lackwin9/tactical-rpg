@@ -34,8 +34,9 @@ fn data_dir() -> PathBuf {
 /// `timeout_outcome` and `stay_behind` (catalog and world encounters). ROSTER1-L (2026-10-31): a world manifest's
 /// `roster`, a world character's `keepsake` and a world encounter's `party_min`. INPUT1-M (2026-11-01): a skill's
 /// `position` (the ruleset fields ride the `rulesets` kind, already after Godot). CAMPAIGN1-TM (2026-11-01): a world
-/// manifest's `travel_modes`.
-const AFTER_GODOT: [(&str, &str, &str); 57] = [
+/// manifest's `travel_modes`. ENCOUNTER2-C3 (2026-11-01): an encounter's scripted rounds `script` (catalog and world
+/// encounters).
+const AFTER_GODOT: [(&str, &str, &str); 59] = [
     ("content", "units", "loot"),
     ("world", "encounters", "key_loot"),
     ("world", "encounters", "objective_reward"),
@@ -93,6 +94,8 @@ const AFTER_GODOT: [(&str, &str, &str); 57] = [
     ("world", "characters", "keepsake"),
     ("world", "encounters", "party_min"),
     ("world", "world", "travel_modes"),
+    ("content", "encounters", "script"),
+    ("world", "encounters", "script"),
 ];
 /// Retired parity, option level: enum and multi-pick options added after the freeze, by (section, kind, key, option);
 /// the option leaves the engine's schema row before comparing (every other option and its order is still compared);

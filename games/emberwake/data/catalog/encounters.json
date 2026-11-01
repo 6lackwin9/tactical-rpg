@@ -33,6 +33,7 @@
 				"goblin_berserker"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -74,6 +75,7 @@
 				"goblin_archer"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -137,6 +139,7 @@
 					"pause_autoplay": false
 				}
 			],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -175,6 +178,7 @@
 				"tl_enforcer"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -213,6 +217,7 @@
 				"tl_footman"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -251,6 +256,7 @@
 				"tl_captain"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -291,6 +297,7 @@
 				"tl_crossbowman"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -335,6 +342,7 @@
 				"tl_crossbowman"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -374,6 +382,7 @@
 				"tl_enforcer"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -437,6 +446,7 @@
 				"goblin_archer"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "escape",
 			"objective_count": 3,
@@ -537,6 +547,7 @@
 					"pause_autoplay": false
 				}
 			],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "Free the captives before they are culled.",

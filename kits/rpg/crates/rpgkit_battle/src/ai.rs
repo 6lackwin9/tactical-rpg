@@ -1593,7 +1593,13 @@ const ROWS: [&str; 8] = [ROW_FLEE, ROW_SUPPORT, ROW_GUARD, ROW_BRACE, ROW_ENGAGE
 /// plans into the shared `plan` in roster order (earlier plans are claims), broken plans are re-picked, what is still
 /// broken is trimmed. Returns the intent change lines.
 pub fn plan_enemy_intents(w: &mut World, plan: &mut Plan) -> Vec<String> {
-    let drafted: Vec<UnitId> = w.enemies.iter().copied().filter(|&e| w.units[e].is_active() && w.has(e)).collect();
+    plan_enemy_intents_except(w, plan, &[])
+}
+
+/// `plan_enemy_intents` for every enemy on the field but `fixed` (ENCOUNTER2-C SR2: a scripted round's enemy entries,
+/// already in `plan`; the AI sees them as it sees earlier plans and never re-picks or trims them).
+pub fn plan_enemy_intents_except(w: &mut World, plan: &mut Plan, fixed: &[UnitId]) -> Vec<String> {
+    let drafted: Vec<UnitId> = w.enemies.iter().copied().filter(|&e| w.units[e].is_active() && w.has(e) && !fixed.contains(&e)).collect();
     let picks: Vec<(UnitId, AiProfile, Tactic)> = drafted.iter().map(|&e| (e, w.profile_of(e), Tactic::Balanced)).collect();
     let lines = plan_side(w, plan, &picks, true);
     let mut trimmed = true;

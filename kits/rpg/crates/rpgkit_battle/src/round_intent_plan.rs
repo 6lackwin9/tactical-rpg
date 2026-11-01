@@ -1482,7 +1482,7 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refu
     }
     let mark = plan.steps_of(c).len();
     let reserved = i32::from(after.is_some());
-    match b.as_ref().filter(|_| w.autofill) {
+    match b.as_ref().filter(|_| fills(w, c)) {
         Some(b) => {
             // GH3: the fill (FU2, FU3), AS3's reserve unless a step after is picked or the round has its move (ET5)
             let reserve = match &after {
@@ -1513,6 +1513,12 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refu
     }
     mark_ghost(plan, c, mark, after.as_ref().map(|a| &a.step));
     Ok(())
+}
+
+/// GH3, ENCOUNTER2-C SR3: whether the ghost after `c`'s picks is the planner's fill: a scripted entry's own `fill`
+/// (`RoundState::fill`), else the Auto-fill setting.
+fn fills(w: &World, c: UnitId) -> bool {
+    w.round_states.get(&c).and_then(|r| r.fill).unwrap_or(w.autofill)
 }
 
 /// The refusal `place` gives for an implied move a pick may not make (the caller words it: IF6 e).

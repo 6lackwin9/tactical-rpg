@@ -281,6 +281,15 @@ pub struct Session {
     pub log_marks: Vec<(usize, i32, i32)>,
     /// ENCOUNTER2-C DT1: the talk cues the phases raised, oldest first (`talks`; no rule reads them).
     talks: Vec<TalkCue>,
+    /// ENCOUNTER2-C SR1: the encounter's scripted rounds (empty = none; played only under `round_intent`, SR8).
+    pub script: crate::script::Script,
+    /// SR5: the current round is scripted and locked (confirmed at its start; planning requests are refused).
+    script_lock: bool,
+    /// The last round whose script was counted and logged (a replanned round counts and logs once).
+    script_seen: i32,
+    /// SR9: the rounds played scripted and the entries that fell back, so far.
+    script_rounds: i32,
+    script_fallbacks: i32,
     /// Unit -> its hero key (a party member id or a world character), when it has one.
     hero_keys: IndexMap<UnitId, String>,
     unit_keys: IndexMap<UnitId, String>,
@@ -472,6 +481,7 @@ impl Session {
             u.loadout_locked = true;
         }
         let timeout_outcome = encounter::timeout_outcome(&def.raw);
+        let script = crate::script::Script::read(&def.raw);
         let mut s = Session {
             def,
             w,
@@ -505,6 +515,11 @@ impl Session {
             encounter_lines: Vec::new(),
             log_marks: Vec::new(),
             talks: Vec::new(),
+            script,
+            script_lock: false,
+            script_seen: 0,
+            script_rounds: 0,
+            script_fallbacks: 0,
             hero_keys,
             unit_keys,
             units_by_key,
@@ -544,15 +559,101 @@ impl Session {
         self.current_block = 1;
         self.phase = Phase::Planning;
         self.pending.clear();
+        self.script_lock = false;
         self.prepare_round(round);
         self.plan = Plan::new();
         self.plan_confirmed = false;
+        // ENCOUNTER2-C SR8: under a ruleset without round intents the script is ignored (one cell at the battle start)
+        if round == 1 && !self.script.is_empty() && !round_intent::on(&self.w) {
+            self.script_cell(None, crate::script::CLASSIC_LINE, round);
+        }
         self.on_grid_at_schedule = self.w.enemies.iter().copied().filter(|&e| self.w.units[e].is_active() && self.w.has(e)).collect();
         self.schedule_enemy_ai();
         self.measure_reveals();
         let start = self.snapshot();
         self.history.push(RoundRecord { round, actions: self.resolver.scheduled.clone(), snapshots: vec![start] });
+        // ENCOUNTER2-C SR2, SR5: a scripted round's party entries, the others, then the lock
+        if let Some(rs) = self.round_script().cloned() {
+            self.script_party(&rs);
+        }
         self.feed(|m, s| if m.live { m.round_started(s) });
+    }
+
+    /// ENCOUNTER2-C SR1, SR8: the current round's script when it plays (None: no script for it, or no round intents).
+    pub fn round_script(&self) -> Option<&crate::script::RoundScript> {
+        self.script.round(self.current_round).filter(|_| round_intent::on(&self.w))
+    }
+
+    /// ENCOUNTER2-C SR5: the current round is scripted and locked (confirmed at its start; the host refuses planning
+    /// requests with `script::locked_text`).
+    pub fn round_locked(&self) -> bool {
+        self.script_lock
+    }
+
+    /// ENCOUNTER2-C SR9: the rounds played scripted so far.
+    pub fn scripted_rounds(&self) -> i32 {
+        self.script_rounds
+    }
+
+    /// ENCOUNTER2-C SR9: the scripted entries that fell back to their unit's own round so far (SR11).
+    pub fn script_fallbacks(&self) -> i32 {
+        self.script_fallbacks
+    }
+
+    /// ENCOUNTER2-C SR8, SR11: one `Script` cell at the current round's start, its `[Script]` combat log line and its
+    /// event line (`unit`: the failed entry's unit; None: the encounter).
+    fn script_cell(&mut self, unit: Option<UnitId>, line: &str, round: i32) {
+        let (actor, ally) = match unit {
+            Some(c) => (self.w.units[c].name.clone(), self.w.allies.contains(&c)),
+            None => (self.def.name.clone(), false),
+        };
+        self.append(crate::log::script_entry(&actor, ally, line, round));
+        self.encounter_lines.push((self.resolver.log.len(), format!("[Script] {}", line.strip_prefix("Script: ").unwrap_or(line))));
+        self.events.push(line.to_string());
+    }
+
+    /// SR11: the cells of a side's failed entries (once per round: a replanned round logs and counts them once).
+    fn script_failures(&mut self, failures: &[(Option<UnitId>, String, String)]) {
+        if self.script_seen == self.current_round {
+            return;
+        }
+        let round = self.current_round;
+        for (c, name, why) in failures {
+            self.script_fallbacks += 1;
+            self.script_cell(*c, &crate::script::fallback_line(name, why), round);
+        }
+    }
+
+    /// ENCOUNTER2-C SR2, SR3, SR5, SR6: the party half of scripted round `rs` (the enemies' is in `schedule_enemy_ai`):
+    /// each party entry in list order through the player's pick, then the members with no entry by `others` (Rest, else
+    /// the auto plan, GH2 a; a failed entry's hero always by its auto plan); a locked round is then confirmed.
+    fn script_party(&mut self, rs: &crate::script::RoundScript) {
+        let allies = self.w.allies.clone();
+        crate::script::clear_side(self, &allies);
+        let mut plan = std::mem::replace(&mut self.plan, Plan::new());
+        let planned = crate::script::plan_entries(self, rs, false, &mut plan);
+        if rs.others_rest {
+            crate::script::rest_others(self, &planned, &mut plan);
+        }
+        self.plan = plan;
+        self.plan_apply_preset_all(crate::script::AUTO_PRESET);
+        self.script_failures(&planned.failures);
+        // decision "ENCOUNTER2-C3 answers" (2): a locked round whose plan cannot be confirmed falls back like a failed
+        // entry (one Script cell, counted) and plays guided
+        if rs.lock {
+            let why = if self.needs_stay_pick() { "a hold escape waits for its holder" } else { "the party plan is refused" };
+            if self.confirm_plan() {
+                self.script_lock = true;
+            } else if self.script_seen != self.current_round {
+                let round = self.current_round;
+                self.script_fallbacks += 1;
+                self.script_cell(None, &crate::script::lock_fallback_line(round, why), round);
+            }
+        }
+        if self.script_seen != self.current_round {
+            self.script_seen = self.current_round;
+            self.script_rounds += 1;
+        }
     }
 
     /// CombatEncounter.hero_key: a party unit's stable key across battles (the member id, else the world character it
@@ -993,11 +1094,17 @@ impl Session {
     }
 
     /// Re-plans the round's enemy side (after the start positions changed, e.g. the sim's jitter).
+    /// A scripted round is planned again whole (ENCOUNTER2-C SR2: both sides, then the lock).
     pub fn replan_enemies(&mut self) {
         self.resolver.scheduled.clear();
         self.plan = Plan::new();
         self.schedule_enemy_ai();
         self.measure_reveals();
+        if let Some(rs) = self.round_script().cloned() {
+            self.plan_confirmed = false;
+            self.script_lock = false;
+            self.script_party(&rs);
+        }
         self.refresh_archive();
     }
 
@@ -1014,9 +1121,20 @@ impl Session {
         // RULESET1_INTENT AI1 (RULESET1-AI): under round_intent every enemy picks its intent and target by the AI table
         if round_intent::on(&self.w) {
             let mut enemy_plan = Plan::new();
-            let lines = ai::plan_enemy_intents(&mut self.w, &mut enemy_plan);
+            // ENCOUNTER2-C SR2: a scripted round's enemy entries first (fixed), then the AI for the others
+            let mut fixed: Vec<UnitId> = Vec::new();
+            let mut failures = Vec::new();
+            if let Some(rs) = self.round_script().cloned() {
+                let enemies = self.w.enemies.clone();
+                crate::script::clear_side(self, &enemies);
+                let planned = crate::script::plan_entries(self, &rs, true, &mut enemy_plan);
+                fixed = planned.units;
+                failures = planned.failures;
+            }
+            let lines = ai::plan_enemy_intents_except(&mut self.w, &mut enemy_plan, &fixed);
             self.events.extend(lines);
             enemy_plan.commit(&self.w, &mut self.resolver);
+            self.script_failures(&failures);
             return;
         }
         let w = &self.w;
@@ -1064,7 +1182,8 @@ impl Session {
 
     /// plan_apply_preset_all: every active ally drafted with `preset`, then broken drafts re-drafted.
     pub fn plan_apply_preset_all(&mut self, preset: &str) {
-        if self.phase != Phase::Planning {
+        // ENCOUNTER2-C SR5: a locked round's plan is the script's
+        if self.phase != Phase::Planning || self.script_lock {
             return;
         }
         let allies = self.w.allies.clone();
@@ -1098,7 +1217,7 @@ impl Session {
 
     /// plan_apply_preset: replaces one ally's steps with an AI draft for `preset`.
     pub fn plan_apply_preset(&mut self, actor: UnitId, preset: &str) {
-        if self.phase != Phase::Planning || !self.w.units[actor].is_active() {
+        if self.phase != Phase::Planning || self.script_lock || !self.w.units[actor].is_active() {
             return;
         }
         if round_intent::on(&self.w) {
@@ -1167,19 +1286,7 @@ impl Session {
         if self.phase != Phase::Planning || self.plan_confirmed {
             return (Err("Picks are made while planning.".into()), Vec::new());
         }
-        let (w0, seq0, events0) = (self.w.clone(), self.plan.sequences.clone(), self.events.len());
-        if let Some(i) = crate::round_intent_plan::pick_intent(&self.w, c, picks) {
-            if let Err(e) = self.set_round_intent(c, i.id()) {
-                return (Err(e), Vec::new());
-            }
-        }
-        let out = crate::round_intent_plan::pick(&mut self.w, &mut self.plan, c, at, picks);
-        if out.0.is_err() {
-            self.w = w0;
-            self.plan.sequences = seq0;
-            self.events.truncate(events0);
-        }
-        out
+        pick_on(&mut self.w, &mut self.plan, &mut self.events, c, at, picks)
     }
 
     pub fn plan_is_valid(&self) -> bool {
@@ -1191,6 +1298,10 @@ impl Session {
     /// `pick_default` (round 1 only; returned), then every ally drafted with `preset`. The host's `autoplay`, the CLI's
     /// `battle`, the balance sims and the timeline golden all draft through it; the caller confirms.
     pub fn auto_draft(&mut self, preset: &str) -> Option<UnitId> {
+        // ENCOUNTER2-C SR5, SR7: a locked round is planned and confirmed by its script
+        if self.script_lock {
+            return None;
+        }
         let holder = self.stay_pick_default();
         self.plan_apply_preset_all(preset);
         holder
@@ -1212,6 +1323,10 @@ impl Session {
     }
 
     pub fn confirm_plan(&mut self) -> bool {
+        // ENCOUNTER2-C SR5: a locked round was confirmed at its start (confirm answers ok)
+        if self.script_lock {
+            return true;
+        }
         // ENCOUNTER2 H1: a hold escape is not planned before someone holds
         if self.phase != Phase::Planning || !self.plan_is_valid() || self.needs_stay_pick() {
             return false;
@@ -1736,6 +1851,27 @@ impl Session {
 /// A unit entry's own tier as written (morale's leader rule reads the raw field; "" when the entry has none).
 fn raw_tier(e: &UnitDef) -> String {
     e.tier.clone()
+}
+
+/// INPUT1 IF4, GH5 and ENCOUNTER2-C SR4 (one function for both sides): `round_intent_plan::pick` of unit `c` on `plan`
+/// (the party's, or a scripted round's enemy plan), the first skill or item pick's intent change set first
+/// (`round_intent_plan::change_intent`, IN6: its lines go to `events`). Atomic: a refused pick leaves `w`, `plan` and
+/// `events` as they were. Returns the result and the later members' dropped picks and refusals (PL8).
+pub(crate) fn pick_on(w: &mut World, plan: &mut Plan, events: &mut Vec<String>, c: UnitId, at: round_intent::RoundTarget, picks: &[round_intent::Pick]) -> (Result<(), String>, Vec<(UnitId, String)>) {
+    let (w0, seq0, events0) = (w.clone(), plan.sequences.clone(), events.len());
+    if let Some(i) = crate::round_intent_plan::pick_intent(w, c, picks) {
+        match crate::round_intent_plan::change_intent(w, plan, c, i) {
+            Ok(lines) => events.extend(lines),
+            Err(e) => return (Err(e), Vec::new()),
+        }
+    }
+    let out = crate::round_intent_plan::pick(w, plan, c, at, picks);
+    if out.0.is_err() {
+        *w = w0;
+        plan.sequences = seq0;
+        events.truncate(events0);
+    }
+    out
 }
 
 fn draft_broken(w: &World, plan: &Plan, e: UnitId) -> bool {

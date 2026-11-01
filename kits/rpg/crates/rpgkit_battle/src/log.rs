@@ -351,6 +351,16 @@ pub fn kill_line(names: &[&str]) -> String {
     }
 }
 
+/// ENCOUNTER2-C SR8, SR11: the subtype of a scripted round's cells (an entry that failed at planning time, a script the
+/// ruleset ignores); no HP moves with them and the metrics skip them.
+pub const SCRIPT: &str = "Script";
+
+/// ENCOUNTER2-C SR8, SR11 (engine-only): the EVENT cell of a scripted round: `actor` (the failed entry's unit, else the
+/// encounter), "Script" as the skill, the line as the detail.
+pub fn script_entry(actor: &str, actor_is_ally: bool, line: &str, round: i32) -> Entry {
+    Entry::event(round, 0, actor, actor_is_ally, SCRIPT, SCRIPT, "SCRIPTED", line, "")
+}
+
 /// HOOKS1 HC1: the subtype of an HP cost's cell (the metrics count it as the payer's own loss).
 pub const HP_COST: &str = "HP Cost";
 

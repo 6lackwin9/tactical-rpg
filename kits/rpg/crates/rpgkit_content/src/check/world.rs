@@ -522,6 +522,8 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors.extend(super::hooks::arena_hazards_errors(e));
     let unit_of = |r: &str| v.get("units", &json::s(v.worlds.resolve(w, "characters", r), "base_unit")).clone();
     errors.extend(super::hooks::deck_effect_errors(v, e, Some(w), &unit_of));
+    // ENCOUNTER2-C 5.1: the scripted rounds (a ref plays as its character's base unit)
+    errors.extend(encounter::script_problems(v, e, &unit_of));
     // ROSTER1 BK6: the fewest heroes the fight takes, at most the world's party max
     let party_min = e.get("party_min").cloned().unwrap_or(json::int(0));
     let top = rpgkit_data::PARTY_MIN_MAX.min(party_max(v, w));

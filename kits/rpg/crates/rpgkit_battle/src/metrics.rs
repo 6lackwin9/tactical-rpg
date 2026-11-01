@@ -396,6 +396,10 @@ pub struct BattleMetrics {
     /// ENCOUNTER2 P1: display name -> HP the phase `kill` effects took from it in the last fight (part of the HP
     /// balance; no unit dealt it, nobody is credited; empty without a kill; not in the JSON).
     pub scripted: IndexMap<String, i32>,
+    /// ENCOUNTER2-C SR9: the rounds the last fight played scripted and its scripted entries that fell back (SR11), read
+    /// from the session when the fight ends (in the JSON only when either is not zero).
+    pub scripted_rounds: i32,
+    pub script_fallbacks: i32,
     /// Set when the fight ends.
     pub fight_record: Option<FightRecord>,
     pub fail_lines: Vec<String>,
@@ -452,6 +456,8 @@ impl BattleMetrics {
         self.arena.clear();
         self.arena_strikes = 0;
         self.scripted.clear();
+        self.scripted_rounds = 0;
+        self.script_fallbacks = 0;
         self.redirected.clear();
         self.trigger_open = false;
         self.fight_record = None;
@@ -502,6 +508,8 @@ impl BattleMetrics {
 
     /// The fight is over: survival, saves, the fight record and the conservation checks.
     pub fn on_end(&mut self, s: &Session, result: EndResult) {
+        self.scripted_rounds = s.scripted_rounds();
+        self.script_fallbacks = s.script_fallbacks();
         self.credit_round_end(s);
         self.flush_hold();
         self.flush_unexplained();
@@ -614,6 +622,10 @@ impl BattleMetrics {
     /// session.log_appended: the entry at `idx` of the session's log was just added.
     pub fn on_log(&mut self, s: &Session, idx: usize) {
         let e = &s.log[idx];
+        // ENCOUNTER2-C SR11: a scripted round's cell moves no HP and credits nobody (the counts come from the session)
+        if e.category == "EVENT" && e.subtype == crate::log::SCRIPT {
+            return;
+        }
         let actor = self.unit(&e.actor);
         if e.category == "ATTACK" && e.skill == "Riposte" && e.subtype == "Counter" {
             let target = self.unit(&e.target);
@@ -1437,6 +1449,10 @@ impl BattleMetrics {
         // HOOKS1 4.2: only when an arena hazard struck (the rule on without one keeps the shape)
         if self.arena_strikes > 0 {
             out["arena"] = json!({"strikes": self.arena_strikes, "units": Value::Object(self.arena.iter().map(|(n, r)| (n.clone(), r.to_json())).collect())});
+        }
+        // ENCOUNTER2-C SR9: only when a round played scripted or an entry fell back (other fights keep the shape)
+        if self.scripted_rounds != 0 || self.script_fallbacks != 0 {
+            out["script"] = json!({"scripted_rounds": self.scripted_rounds, "script_fallbacks": self.script_fallbacks});
         }
         out
     }

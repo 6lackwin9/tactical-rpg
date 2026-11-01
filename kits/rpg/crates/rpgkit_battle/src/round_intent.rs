@@ -108,6 +108,9 @@ pub struct RoundState {
     /// INPUT1 GH1, GH6: the member's picks this round, in order (the planner's ghost fills the rest); cleared at every
     /// round start; in no trace or save.
     pub picks: Vec<Pick>,
+    /// ENCOUNTER2-C SR3: a scripted entry's own ghost fill this round (Some(true) the planner's fill, Some(false) Rest),
+    /// read instead of the Auto-fill setting; None = the setting. Cleared at every round start; in no trace or save.
+    pub fill: Option<bool>,
 }
 
 /// INPUT1 IF4, ET1-ET4 (`round_intent_plan::pick`): one pick of a member's round. A skill (with the Maneuver kind of
@@ -349,6 +352,7 @@ pub fn round_start(w: &mut World) -> Vec<String> {
         rs.rest_blocks = 0;
         // INPUT1 GH6: the picks go with the target, kind and opener; the intent carries over
         rs.picks.clear();
+        rs.fill = None;
     }
     lines
 }

@@ -32,6 +32,7 @@
 				"vex_cutpurse"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "hold",
@@ -115,6 +116,7 @@
 					"pause_autoplay": false
 				}
 			],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "rout",
@@ -174,6 +176,7 @@
 				"ash_archer"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "rout",
@@ -234,6 +237,7 @@
 				"ash_shaman"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "rout",
@@ -293,6 +297,7 @@
 				"ash_berserker"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "rout",
@@ -421,6 +426,7 @@
 					"pause_autoplay": true
 				}
 			],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "slay",
@@ -538,6 +544,7 @@
 					"pause_autoplay": false
 				}
 			],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "slay",
@@ -596,6 +603,7 @@
 				"ash_brawler"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "rout",
@@ -656,6 +664,7 @@
 				"ash_shaman"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "rout",
