@@ -92,12 +92,16 @@ pub fn read(d: &Data, dir: &Path, slot: i64) -> Result<Loaded, Vec<String>> {
 }
 
 /// A save file's text: parse, format check, migrate, validate (STORYUI1 Q8: a `story.running` the data no longer has
-/// is dropped with a warning first; ROSTER1 11.4: bunk use above the cap is a warning, never a refusal).
+/// is dropped with a warning first; ROSTER1 11.4: bunk use above the cap is a warning, never a refusal; CAMPAIGN1-TM2:
+/// a saved travel mode the world no longer has loads in the default mode with a warning).
 pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
     let envelope = aegis_save::open(&SAVES, text)?;
     let (data, mut warnings) = migrate(d, &envelope)?;
     let mut state = GameState::from_dict(d, json::dget(&data, "game_state"));
     warnings.extend(crate::story::check_loaded(d, &mut state));
+    if let Some(c) = state.campaign.as_mut() {
+        warnings.append(&mut c.load_notes);
+    }
     let errors = state.validate(d);
     if !errors.is_empty() {
         return Err(errors);

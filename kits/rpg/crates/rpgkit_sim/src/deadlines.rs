@@ -148,7 +148,7 @@ pub fn plan(d: &Data, w: &str, losses: i64) -> Result<Plan, String> {
     let legs = travel::all_legs(d, w);
     let nodes = travel::nodes(d, w);
     // CAMPAIGN1-TM: a fresh campaign travels in the default mode
-    let mode = purse::travel_mode(d, &gs).map(|m| (m.name, (m.days as i64).max(0)));
+    let mode = purse::travel_mode(d, &gs).map(|m| { let days = m.leg_days(); (m.name, days) });
     let extra = mode.as_ref().map_or(0, |m| m.1);
     let days = |from: &str, to: &str| -> Option<i64> {
         if from == to {

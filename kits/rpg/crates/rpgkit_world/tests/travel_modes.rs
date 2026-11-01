@@ -2,7 +2,8 @@
 //! until it picks another; a mode's `days` are added to every leg (path search, trip cost, the clock, upkeep and the
 //! days tick agree), its `road_pct` scales the road-fight chance, its `sure_when` makes the road fight sure and its
 //! `road_encounters` join the pool; leg inputs may count only some modes. The pick is saved only when it is not the
-//! default (older saves load with the default). A world without modes, and a world without `campaign`, travel as
+//! default (older saves load with the default; CAMPAIGN1-TM2: a saved mode the world no longer has loads in the default
+//! with a load note). A mode's leg days are its `days` floored at 0 (`TravelMode::leg_days`). A world without modes, and a world without `campaign`, travel as
 //! before. Every expectation follows from the rule and the fixture's own numbers.
 
 use aegis_core::json::{self, Dict};
@@ -202,11 +203,35 @@ fn the_pick_is_saved_only_when_it_is_not_the_default() {
     let loaded = save::decode(&d, &text).expect("loads");
     assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
     assert_eq!(mode_id(&d, &loaded.state).as_deref(), Some("stealth"));
-    // a mode the world no longer has is a load problem, not dropped silently
+    // CAMPAIGN1-TM2 (decision "Saves and data edits"): a mode the world no longer has loads in the default mode with
+    // a load note, not dropped silently and not refused
     let mut v = forced.to_value();
     v["campaign"]["mode"] = json!("gallop");
     let text = json!({"format": save::FORMAT, "version": save::VERSION, "saved_at": 1, "game_state": v}).to_string();
-    assert_eq!(save::decode(&d, &text).err(), Some(vec![format!("campaign.mode: {}", purse::unknown_mode_text("gallop"))]));
+    let loaded = save::decode(&d, &text).expect("loads in the default mode");
+    assert_eq!(loaded.warnings, [campaign::mode_dropped_text("gallop")]);
+    assert!(loaded.warnings[0].contains(&purse::unknown_mode_text("gallop")), "the note names the dropped mode");
+    assert_eq!(mode_id(&d, &loaded.state).as_deref(), Some("stealth"));
+    assert!(loaded.state.campaign.as_ref().unwrap().load_notes.is_empty(), "decode takes the notes");
+    assert!(loaded.state.to_value()["campaign"].get("mode").is_none(), "saved again: the default writes no key");
+}
+
+#[test]
+fn a_modes_leg_days_floor_its_days_at_zero_and_every_reader_uses_them() {
+    let row = |days: i64| rpgkit_data::TravelMode::from_obj(json::dict(&json!({"id": "m", "days": days})));
+    assert_eq!((row(-2).leg_days(), row(0).leg_days(), row(STEALTH_DAYS).leg_days()), (0, 0, STEALTH_DAYS));
+    assert_eq!(rpgkit_data::TravelMode::from_obj(json::dict(&json!({"id": "m"}))).leg_days(), 0, "no days: 0");
+    // a mode below zero (the content check refuses it; the runtime floors it): legs take the route's own days
+    let d = data(true, json!({"modes": [{"id": "slack", "days": -2}]}));
+    let mut gs = state(&d);
+    assert_eq!(mode_id(&d, &gs).as_deref(), Some("slack"));
+    assert_eq!(travel::mode_days(&d, &gs), 0);
+    assert_eq!(json::i(&travel::trip(&d, &gs, "w:hub", "w:b"), "time", 0), 2, "hub - a - b, a day each");
+    let view = travel::view(&d, &gs);
+    let r = json::aget(&view, "routes").iter().map(json::dict).find(|r| json::s(r, "qid") == "w:r_direct").cloned().unwrap();
+    assert_eq!(json::i(&r, "days", 0), DIRECT);
+    let res = travel::travel(&d, &mut gs, "b");
+    assert_eq!((json::s(&res, "status").as_str(), gs.time), ("arrived", 2), "{res:?}");
 }
 
 #[test]

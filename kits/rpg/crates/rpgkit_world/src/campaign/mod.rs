@@ -44,6 +44,11 @@ use std::sync::Arc;
 pub const REENTRIES_MAX: usize = 8;
 /// 11.5: the keys of the saved campaign block (CAMPAIGN1-TM: `mode`, written only when not the default).
 pub const BLOCK_KEYS: [&str; 8] = ["act", "run", "meters", "fired", "armed", "checkpoints", "pending", "mode"];
+
+/// CAMPAIGN1-TM2: the load note of a saved mode `id` the world no longer has (the save loads in the default mode).
+pub fn mode_dropped_text(id: &str) -> String {
+    format!("campaign.mode: {} Loaded in the default mode.", purse::unknown_mode_text(id))
+}
 /// Acts are numbered 0 (before the first) to ACT_MAX.
 pub const ACT_MAX: i64 = 9;
 /// F3: the refusal of every save while the run is over.
@@ -144,6 +149,9 @@ pub struct Campaign {
     /// Runtime: days a `rest` effect passed inside an effect list; they run as their own days(n, rest) tick within the
     /// next `tick` call (first, after a dialogue list; right after the tick whose rule, checkpoint or trigger rested).
     pub owed_days: i64,
+    /// Runtime: the load notes `from_value` left (CAMPAIGN1-TM2: a saved mode the world no longer has); `save::decode`
+    /// takes them as load warnings. Never saved.
+    pub load_notes: Vec<String>,
 }
 
 /// Equal when the saved parts are (the runtime parts follow from them or are never saved).
@@ -177,6 +185,7 @@ impl Campaign {
             last: IndexMap::new(),
             last_time: 0,
             owed_days: 0,
+            load_notes: Vec::new(),
         };
         c.sync(0);
         Some(c)
@@ -289,13 +298,14 @@ impl Campaign {
                 None => problems.push(format!("campaign.checkpoints.{id} must be met or missed.")),
             }
         }
-        // CAMPAIGN1-TM: an absent mode is the default (older saves); a mode the world no longer has is a load problem
+        // CAMPAIGN1-TM: an absent mode is the default (older saves); CAMPAIGN1-TM2 (decision "Saves and data edits"): a
+        // mode the world no longer has loads in the default with a load note
         if let Some(v) = o.get("mode") {
             match v.as_str() {
                 Some(m) if m.is_empty() || purse::travel_modes(d, w).get(m).is_some() => {
                     c.mode = if m == purse::travel_modes(d, w).default { String::new() } else { m.to_string() };
                 }
-                Some(m) => problems.push(format!("campaign.mode: {}", purse::unknown_mode_text(m))),
+                Some(m) => c.load_notes.push(mode_dropped_text(m)),
                 None => problems.push("campaign.mode must be text.".into()),
             }
         }

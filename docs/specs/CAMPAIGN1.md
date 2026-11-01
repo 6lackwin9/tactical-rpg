@@ -369,8 +369,9 @@ Save: version 13 (or the next free number; sequence with ROSTER1, RULESET1-D, EN
 - M3: a leg input may name `modes` (empty = any mode and travel without one): `{"on": "leg", "modes": ["forced"],
   "delta": 5}` is the forced march's Alert. `Cause::Leg` carries the mode id ("" without one).
 - State: `campaign.mode`, the picked mode; the default is kept as "" and not written, so a save holds the key only
-  for another mode; an older save loads in the default mode; a saved mode the world no longer has is a load problem
-  ("campaign.mode: 'x' is not a travel mode of this world."). No save version step.
+  for another mode; an older save loads in the default mode; a saved mode the world no longer has was a load problem
+  ("campaign.mode: 'x' is not a travel mode of this world."; since CAMPAIGN1-TM2 it loads in the default mode with a
+  load warning). No save version step.
 - `purse::travel_modes(d, w)`, `travel_mode(d, gs)` (the party's mode), `set_travel_mode(d, gs, id)` (refused without
   modes, for an unknown id and once the run is over), `sure_fight`; `travel::mode_days`, `leg_days`. The map view
   adds `mode` and each route's `days` only in a world with modes.
@@ -382,3 +383,13 @@ Save: version 13 (or the next free number; sequence with ROSTER1, RULESET1-D, EN
 - World map (game): the side panel's mode button (`world_map.mode`, "Travel: Stealth") cycles the modes in data order
   and logs "Travel mode: Forced march."; its tip gives the mode's tip, its days a leg and the ambush change; the Travel
   tip starts with the mode's name; the road labels show the leg's days in the mode. No button without modes.
+
+## As built (CAMPAIGN1-TM2, 2026-11-02)
+
+- Decision "Saves and data edits": a saved `campaign.mode` the world no longer has no longer refuses the load; the
+  save loads in the default mode and `save::decode` returns the load warning `campaign::mode_dropped_text(id)`
+  ("campaign.mode: 'x' is not a travel mode of this world. Loaded in the default mode."). The note rides on the
+  runtime field `Campaign::load_notes` (never saved, not compared) until `decode` takes it. A mode that is not text
+  is still a load problem.
+- The mode-days floor is one helper, `rpgkit_data::TravelMode::leg_days` (`days`, never below 0), used by
+  `travel::mode_days`, `travel::view`, `travel::travel` and `sim deadlines`.

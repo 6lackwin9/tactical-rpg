@@ -954,6 +954,11 @@ impl TravelMode {
             id,
         }
     }
+
+    /// CAMPAIGN1-TM2: the days this mode adds to every leg (`days`, never below 0).
+    pub fn leg_days(&self) -> i64 {
+        (self.days as i64).max(0)
+    }
 }
 
 /// CAMPAIGN1-TM: the manifest's `travel_modes` block: the modes in data order (rows without an id are left out) and

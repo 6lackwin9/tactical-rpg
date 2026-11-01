@@ -77,7 +77,7 @@ fn mode_tip(m: &emberwake_data::TravelMode, many: bool) -> String {
         parts.push(m.tip.clone());
     }
     if m.days > 0 {
-        parts.push(format!("Each leg takes {} more.", crate::runover::days(m.days as i64)));
+        parts.push(format!("Each leg takes {} more.", crate::runover::days(m.leg_days())));
     }
     if m.road_pct != 100 {
         parts.push(format!("Ambush chance x{}%.", m.road_pct));

@@ -195,7 +195,7 @@ fn better(a: &(i64, Vec<String>), b: &(i64, Vec<String>)) -> bool {
 
 /// CAMPAIGN1-TM: the days the party's travel mode adds to every leg (0 outside a campaign world and without modes).
 pub fn mode_days(d: &Data, gs: &GameState) -> i64 {
-    crate::campaign::purse::travel_mode(d, gs).map_or(0, |m| (m.days as i64).max(0))
+    crate::campaign::purse::travel_mode(d, gs).map_or(0, |m| m.leg_days())
 }
 
 /// The days a leg on `route` takes: its `time` plus `extra` (the travel mode's `mode_days`).
@@ -340,7 +340,7 @@ pub fn view(d: &Data, gs: &GameState) -> Dict {
     let jobs = crate::board::jobs(d, gs);
     let deadlines = crate::board::deadlines(d, gs);
     let mode = crate::campaign::purse::travel_mode(d, gs);
-    let extra = mode.as_ref().map_or(0, |m| (m.days as i64).max(0));
+    let extra = mode.as_ref().map_or(0, |m| m.leg_days());
     let mut node_list = Vec::new();
     for q in &known_nodes {
         let loc = explore::resolve_location(d, gs, q);
@@ -453,7 +453,7 @@ pub fn travel(d: &Data, gs: &mut GameState, to_ref: &str) -> Dict {
     let (mut spent, mut supplies_spent, mut starved_legs, mut legs_done) = (0, 0, 0, 0);
     // CAMPAIGN1-TM: the mode is read once: a trip runs in the mode it started in
     let mode = crate::campaign::purse::travel_mode(d, gs);
-    let extra = mode.as_ref().map_or(0, |m| (m.days as i64).max(0));
+    let extra = mode.as_ref().map_or(0, |m| m.leg_days());
     let mode_id = mode.map(|m| m.id).unwrap_or_default();
     for (route, from, to) in plan {
         let leg_time = leg_days(&route, extra);
