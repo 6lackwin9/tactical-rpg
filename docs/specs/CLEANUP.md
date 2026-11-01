@@ -34,7 +34,7 @@ planner (TASKS, ROADMAP, decisions, HISTORY, `.claude/*`, CLAUDE.md), design-bra
 | 12 | CLN-48 | C | The `wave_*` fold shim (PHASEFOLD 1.4) once nothing reads Godot data | S | logic-builder | kit | after CLN-42 | proposed |
 | 13 | CLN-50 | C | Manual planning mode (MM1), superseded by picks; no screen sets it since INPUT1-U slice 2 | S | logic-builder | kit + game | after INPUT1-U | proposed |
 | 14 | CLN-40 | A | Content checks parity: slim engine golden of the broken-entry cases, or delete (Q-A3) | M | logic-builder | game | now | proposed |
-| 15 | CLN-41 | A | Journey parity: engine random-walk golden on the shipped data, or delete (Q-A4) | M | logic-builder | game | now | proposed |
+| 15 | CLN-41 | A | Journey parity: engine random-walk golden on the shipped data, or delete (Q-A4) | M | logic-builder | game | now | done |
 | 16 | CLN-51 | C | `deferred_plan` in the battle screen rebuilds the host's round_intent handling (review finding) | S | logic-builder | kit + game | after INPUT1-U (superseded if slice 3 takes it) | proposed |
 | 17 | CLN-53 | C | Oversized docs: archive built STAGE1 and WINDUP1; split CANON, STORY_GUIDE; split INPUT1, ROSTER1, CAMPAIGN1 once their open rows land | S-M | design-brainstorm | docs | now / after | proposed |
 | 18 | CLN-52 | C | `emberwake_gui/src/battle.rs` (10,148 lines; ~4,100 of them 16 test modules): move tests out, then split the screen | M-L | logic-builder | game | at a flush point after INPUT1-U, -T, -PB, -AP, VISCLAR1-A | proposed |
@@ -219,7 +219,17 @@ passes with `parity/out` absent). Size M. Lane logic-builder. Layer game. Depend
 
 ### CLN-41
 
-Journey parity. Scope A. Status: proposed. Size M. Lane logic-builder. Layer game. Depends on Q-A4.
+Journey parity. Scope A. Status: done (2026-11-01; as built: `emberwake_world/tests/journey.rs` with the walker of
+`journey.gd` ported into the test (plus the quest board's accept and close; the reload is the real save round trip
+`save::write` / `save::read` into a temporary folder, a fixed save time) and `tests/fixtures/journey_golden.json` (775
+KB: 2 playable worlds x seeds 3 and 4 x 700 steps; seeds 3 and 4 picked because seeds 1 and 2 at 300 steps never
+reached a dialogue turn-in or the world map; a line per step with the action, the result and FNV-1a digests of the
+state and the screen views, the full state every 50 steps) on the frozen catalog `timeline_kit.json` and the frozen
+worlds and game data `emberwake_sim/tests/fixtures/sim_data.json` (no new frozen data); recorded with `RECORD=1`;
+`the_golden_covers_the_game_loop` checks every walker op, fight ends through the explore and travel runners, exit,
+entered, fight, defeat and camped events and a valid load (no walk reaches a dialogue-started fight, as no Godot walk
+did; `rewards.rs` covers `dialogue::after_fight`); the walks run on threads (about 3 s); passes with `parity/out`
+absent). Size M. Lane logic-builder. Layer game. Depends on Q-A4.
 
 - Where: `emberwake_world/tests/journey.rs` (241 lines), `parity/journey.sh` and `parity/godot/journey.gd` (Godot's
   seeded random walker), `parity/out/journeys.json` (13.5 MB, 4 seeds x 700 steps).
