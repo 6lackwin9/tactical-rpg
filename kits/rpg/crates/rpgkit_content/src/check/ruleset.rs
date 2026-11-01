@@ -1,7 +1,7 @@
 //! Ruleset rows (RULESET1-R, docs/specs/RULESET1_TASKS.md 1.2; engine-only, no Godot original): the checks of one row
-//! of the kind `rulesets` (a snake_case id, open since CLN-44, name, rules from the register, intents, basics, the poise stat,
-//! deck slots, origin) and across rows (unique ids). The numbers' ranges are the schema's min and max, which normalizing
-//! a row applies (as for every kind). The loader keeps the rows that pass.
+//! of the kind `rulesets` (a snake_case id, open since CLN-44, name, rules from the register, intents, basics, the
+//! poise stat, deck slots, the switches' values (CLN-45), origin) and across rows (unique ids). The numbers' ranges are
+//! the schema's min and max, which normalizing a row applies (as for every kind). The loader keeps the rows that pass.
 
 use super::View;
 use aegis_core::json::{self, gstr, Dict};
@@ -103,6 +103,14 @@ pub fn row_errors(e: &Dict, refs: &Refs) -> Vec<String> {
         out.push(format!("Poise stat: {POISE} needs a derived stat."));
     }
     deck_slot_errors(json::get(e, "deck_slots"), has(DECK), &mut out);
+    // CLN-45: each switch is "" (by the rules) or one of its values
+    for key in ruleset::BY_RULES_FIELDS {
+        let v = json::s(e, key);
+        let values = ruleset::by_rules_values(key);
+        if !v.is_empty() && !values.contains(&v.as_str()) {
+            out.push(format!("{key}: '{v}' is not one of {} (or empty: by the rules).", values.join(", ")));
+        }
+    }
     let origin = json::s(e, "origin");
     if origin != super::ORIGIN_SYSTEM && origin != "user" {
         out.push(format!("Origin: '{origin}' is not one of system, user."));
@@ -135,14 +143,10 @@ pub fn missing_rows(v: &View, e: &Dict) -> Vec<String> {
         .collect()
 }
 
-/// INPUT1 1.7 (MR9, MR10): the soft problems of one row (normalized): `melee_diagonal` maneuver without `round_intent`
-/// (it reads as none) and a `flank_protected_ap` set while the cost is not `fixed` (it is not read).
+/// INPUT1 1.7 (MR9): the soft problem of one row (normalized): a `flank_protected_ap` set while the cost is not `fixed`
+/// (it is not read). CLN-45: `melee_diagonal` maneuver without `round_intent` is no longer a warning (it reads as set).
 pub fn warnings(e: &Dict) -> Vec<String> {
     let mut out = Vec::new();
-    let rules = json::sget(e, "rules");
-    if json::s(e, "melee_diagonal") == "maneuver" && e.contains_key("melee_diagonal") && !rules.iter().any(|r| r == ROUND_INTENT) {
-        out.push("melee_diagonal maneuver needs round_intent (reads as none)".into());
-    }
     let ap = e.get("flank_protected_ap").map(|v| json::to_int(v));
     if ap.is_some_and(|ap| ap != i64::from(ruleset::FlankCost::FIXED_AP)) && json::s(e, "flank_protected_cost") != "fixed" {
         out.push("flank_protected_ap is read only with fixed".into());

@@ -25,6 +25,13 @@ fn content_storage(kind: &str, full: &Dict) -> Dict {
     to_storage(source::schema(), "content", kind, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system"))
 }
 
+/// CLN-45: a ruleset row stores a switch it leaves to the rules (`ruleset::BY_RULES_FIELDS` at "") as no key (the
+/// same value when read), so a row written before the switches were fields re-saves byte for byte.
+fn ruleset_storage(full: &Dict) -> Dict {
+    let by_rules = |key: &str, v: &Value| rpgkit_rules::ruleset::BY_RULES_FIELDS.contains(&key) && gstr(v).is_empty();
+    to_storage(source::schema(), "content", source::RULESET_KIND, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system") || by_rules(key, v))
+}
+
 /// PORTRAITFX1 5.1: a portrait cue row (and PORTRAITFX1-EX: an expression-effect row) stores its id and only the
 /// fields that differ from their schema defaults (a float default compared as normalize snaps it too, so 0.85 is the
 /// default whichever way it was read).
@@ -157,6 +164,7 @@ pub fn catalog_storage(kind: &str, entry: &Dict, families: &[Dict]) -> Result<Di
         }
         "item_families" => Ok(content_storage(kind, &source::derive_family(&content(kind, entry)))),
         k if k == source::PORTRAIT_KIND || k == source::EXPRESSION_FX_KIND => Ok(cue_storage(kind, &content(kind, entry))),
+        k if k == source::RULESET_KIND => Ok(ruleset_storage(&content(kind, entry))),
         _ => Ok(content_storage(kind, &content(kind, entry))),
     }
 }

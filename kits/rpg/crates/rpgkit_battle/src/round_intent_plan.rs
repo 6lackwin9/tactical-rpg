@@ -1776,7 +1776,7 @@ pub fn ap_forecast(w: &World, plan: &Plan, c: UnitId) -> ApForecast {
     }
     let spent = picked + filled;
     let left = u.ap - spent;
-    let rest_gain = if w.pays_ap(c) && round_intent::on(w) { rest_preview(w, plan, c).ap } else { 0 };
+    let rest_gain = if w.pays_ap(c) && w.ruleset.rest_at_round_end() { rest_preview(w, plan, c).ap } else { 0 };
     let regen = rpgkit_rules::status::regen_ap(u, left, w.ap_regen);
     let next = u.max_ap.min(regen + rest_gain);
     ApForecast { now: u.ap, spent, picked, filled, left, gain: next - left, rest_gain, next, max: u.max_ap }

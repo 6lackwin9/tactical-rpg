@@ -1023,7 +1023,7 @@ impl DojoSession {
                 self.log_event("BUFF", &s.name, &format!("Attack x{:.2} for {} rounds • {ap_note}", s.boost, s.boost_rounds), ((s.boost - 1.0) * 100.0).round() as i32, &format!("BUFF x{:.2}", s.boost));
                 self.fx("glow", true, &format!("x{:.2} ATK ({} rds)", s.boost, s.boost_rounds), Tone::Gold);
             }
-            "REST" if self.ruleset.has(ruleset::ROUND_INTENT) => {
+            "REST" if self.ruleset.rest_at_round_end() => {
                 // RULESET1_INTENT RS2, RS3: the Rest blocks pay their AP at the round's end ("Next round"); each one
                 // restores poise now (rule poise)
                 let blocks = s.blocks.max(1);
@@ -1129,9 +1129,10 @@ impl DojoSession {
             }
         }
         self.hero_mut().guard = 0.0;
-        // RULESET1_INTENT RS2: the Rest gain of the round that ended (round_intent); RULESET1 P3: the bars refill (poise)
+        // RULESET1_INTENT RS2: the Rest gain of the round that ended (`rest_ap` round_end, CLN-45); RULESET1 P3: the
+        // bars refill (poise)
         let mut extra = String::new();
-        if self.ruleset.has(ruleset::ROUND_INTENT) {
+        if self.ruleset.rest_at_round_end() {
             let gain = round_intent::rest_gain(&self.ruleset.numbers, self.rest_blocks);
             if gain > 0 {
                 let h = self.hero_mut();

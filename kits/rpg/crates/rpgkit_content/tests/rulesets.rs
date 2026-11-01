@@ -96,8 +96,8 @@ fn the_schema_lists_what_the_code_owns() {
 }
 
 /// INPUT1 1.7 (MR9, MR10): the schema lists the code's `melee_diagonal` and `flank_protected_cost` values; a row reads
-/// them (classic: none and full); `maneuver` reads as none without `round_intent`; the cost pays as MR9 says (4 AP:
-/// full 4, half 2, fixed 1, none 0); the two soft problems are warnings.
+/// them (classic: none and full); CLN-45: `maneuver` reads as set without `round_intent` too (no warning); the cost
+/// pays as MR9 says (4 AP: full 4, half 2, fixed 1, none 0); the soft problem is a warning.
 #[test]
 fn diagonal_melee_and_the_protected_flank_cost_read_and_warn() {
     use rpgkit_rules::ruleset::{FlankCost, MeleeDiagonal};
@@ -118,11 +118,11 @@ fn diagonal_melee_and_the_protected_flank_cost_read_and_warn() {
     let r = Ruleset::from_row(&row(json!({"melee_diagonal": "all", "flank_protected_cost": "fixed", "flank_protected_ap": 2})));
     assert_eq!((r.melee_diagonal(), r.numbers.flank_protected), (MeleeDiagonal::All, FlankCost::Fixed(2)));
     let no_intent = Ruleset::from_row(&row(json!({"rules": ["poise"]})));
-    assert_eq!(no_intent.melee_diagonal(), MeleeDiagonal::None, "maneuver without round_intent reads as none");
+    assert_eq!(no_intent.melee_diagonal(), MeleeDiagonal::Maneuver, "CLN-45: maneuver without round_intent reads as set");
     let pays: Vec<i32> = [FlankCost::Full, FlankCost::Half, FlankCost::Fixed(FlankCost::FIXED_AP), FlankCost::None].iter().map(|f| f.pays(4)).collect();
     assert_eq!(pays, [4, 2, 1, 0]);
     assert_eq!(check::ruleset::warnings(&row(json!({}))), Vec::<String>::new());
-    assert_eq!(check::ruleset::warnings(&row(json!({"rules": ["poise"]}))), ["melee_diagonal maneuver needs round_intent (reads as none)"]);
+    assert_eq!(check::ruleset::warnings(&row(json!({"rules": ["poise"]}))), Vec::<String>::new(), "CLN-45: no coupling, no warning");
     assert_eq!(check::ruleset::warnings(&row(json!({"flank_protected_ap": 3}))), ["flank_protected_ap is read only with fixed"]);
     assert_eq!(check::ruleset::warnings(&row(json!({"flank_protected_cost": "fixed", "flank_protected_ap": 3}))), Vec::<String>::new());
 }
@@ -343,5 +343,64 @@ fn classic_is_a_row_and_the_rulesets_lists_name_rows() {
     let cat = rpgkit_data::Catalog::from_value(&src.catalog);
     assert_eq!(Ruleset::of(&cat, "").unwrap(), Ruleset::classic(), "a classic row with the built-in values reads as them");
     assert_eq!(Ruleset::of_or_classic(&cat, "chess"), Ruleset::classic(), "a missing row: the built-in classic values");
+    drop_scratch(&data);
+}
+
+/// CLN-45 (decision "Godot parity retired and cleanup pass 3 answers" Q-B2): the switches the round intent rule used to
+/// bundle are row fields. The schema lists "" (by the rules) and the code's values; empty, a row reads the round intent
+/// rule's choices when it lists `round_intent` (Rest pays at round end, every skill chases, root stops a chase, no
+/// Switch Target step, no stances) and the legacy ones otherwise (the built-in classic values); a set value reads as set
+/// whatever the rules; a value not in the list is one load error naming its field; the writer leaves an empty switch out
+/// (a row written before the fields re-saves byte for byte) and stores a set one.
+#[test]
+fn the_switches_read_by_the_rules_or_as_set() {
+    use rpgkit_rules::ruleset::{by_rules_values, Chase, RestAp, BY_RULES_FIELDS};
+    for key in BY_RULES_FIELDS {
+        let mut want = vec![String::new()];
+        want.extend(strs(by_rules_values(key)));
+        assert_eq!(options("content", ruleset::KIND, key), want, "{key}");
+    }
+    let read = |v: Value| Ruleset::from_row(&normalize(fields(source::schema(), "content", ruleset::KIND), &dict(v), false));
+    let switches = |r: &Ruleset| (r.rest_ap(), r.chase(), r.root_stops_chase(), r.switch_target_step(), r.stances());
+    let intent_choices = (RestAp::RoundEnd, Chase::EverySkill, true, false, false);
+    let legacy = (RestAp::OnUse, Chase::Classic, false, true, true);
+    assert_eq!(switches(&read(good_row())), intent_choices, "empty, with round_intent");
+    let plain = read(json!({"id": "classic", "name": "Classic", "rules": ["poise", "flank"]}));
+    assert_eq!(switches(&plain), legacy, "empty, without round_intent");
+    assert_eq!(switches(&Ruleset::classic()), legacy, "the built-in classic values");
+    assert_eq!(switches(&Ruleset::from_row(&dict(json!({"rules": ["round_intent"]})))), intent_choices, "a raw row without the keys");
+    let set = |mut row: Value, values: [&str; 5]| {
+        for (k, v) in BY_RULES_FIELDS.iter().zip(values) {
+            row[*k] = json!(v);
+        }
+        row
+    };
+    let flipped = read(set(good_row(), ["on_use", "classic", "off", "on", "on"]));
+    assert_eq!(switches(&flipped), legacy, "set, with round_intent");
+    assert!(flipped.has(ruleset::ROUND_INTENT));
+    let flipped = read(set(json!({"id": "classic", "name": "Classic"}), ["round_end", "every_skill", "on", "off", "off"]));
+    assert_eq!(switches(&flipped), intent_choices, "set, without round_intent");
+    assert!(!flipped.has(ruleset::ROUND_INTENT));
+
+    let data = scratch("switches");
+    base_catalog(&data);
+    for key in BY_RULES_FIELDS {
+        let mut row = good_row();
+        row[key] = json!("maybe");
+        write_kind(&data, ruleset::KIND, 1, json!([row]));
+        let errors = ruleset_errors(&source::load(&data));
+        assert_eq!(errors.len(), 1, "{key}: {errors:?}");
+        assert!(errors[0].ends_with(&format!("{key}: 'maybe' is not one of {} (or empty: by the rules).", by_rules_values(key).join(", "))), "{errors:?}");
+    }
+    let _ = fs::remove_file(data.join("catalog").join("rulesets.json"));
+    let file = data.join("catalog").join("rulesets.json");
+    let stored = || -> Value { serde_json::from_str::<Value>(&fs::read_to_string(&file).unwrap()).unwrap()["entries"][0].clone() };
+    store::upsert(&data, None, ruleset::KIND, &dict(good_row()), None).unwrap();
+    assert!(BY_RULES_FIELDS.iter().all(|k| stored().get(*k).is_none()), "empty switches are left out: {}", stored());
+    store::upsert(&data, None, ruleset::KIND, &dict(set(good_row(), ["round_end", "every_skill", "on", "off", "off"])), None).unwrap();
+    let row = stored();
+    assert_eq!(BY_RULES_FIELDS.map(|k| row[k].clone()), [json!("round_end"), json!("every_skill"), json!("on"), json!("off"), json!("off")], "set switches are stored");
+    let text = fs::read_to_string(&file).unwrap();
+    assert_eq!(store::resave_text(&data, None, ruleset::KIND).unwrap(), text, "a re-save without changes is byte-identical");
     drop_scratch(&data);
 }

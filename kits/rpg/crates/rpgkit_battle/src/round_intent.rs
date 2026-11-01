@@ -327,9 +327,11 @@ pub fn rest_gain(n: &Numbers, blocks: i32) -> i32 {
 /// Round start (after the status roll-over and `ap_regen`): RS2's Rest gain for the units that pay AP, then the
 /// round's target, kind, opener, picks, move and Rest count reset (the intent, facing and Manual toggle stay: IN2, MV1,
 /// MM1, INPUT1 GH6).
-/// Returns the gain lines.
+/// Returns the gain lines. CLN-45: the Rest gain is `rest_ap` round_end's (the Rest blocks are counted only then);
+/// without `round_intent` a unit's state holds only its Rest count, which goes once paid.
 pub fn round_start(w: &mut World) -> Vec<String> {
-    if !on(w) {
+    let intents = on(w);
+    if !intents && !w.ruleset.rest_at_round_end() {
         return Vec::new();
     }
     let mut lines = Vec::new();
@@ -341,6 +343,10 @@ pub fn round_start(w: &mut World) -> Vec<String> {
             let u = &mut w.units[c];
             u.ap = u.max_ap.min(u.ap + gain);
             lines.push(format!("[Rest] {} recovers {gain} AP from {blocks} Rest block{} (AP {}/{})", u.name, if blocks == 1 { "" } else { "s" }, u.ap, u.max_ap));
+        }
+        if !intents {
+            w.round_states.shift_remove(&c);
+            continue;
         }
         let rs = w.round_states.get_mut(&c).unwrap();
         // TG6 (RULESET1-PL): the planner proposes last round's target; the opener and the kind are picked again

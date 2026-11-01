@@ -533,8 +533,8 @@ impl Command {
                 if !w.units[src].is_alive() {
                     return;
                 }
-                // RULESET1_INTENT RS2: under round_intent a landed Rest block pays its AP at round end
-                if round_intent::on(w) {
+                // RULESET1_INTENT RS2, CLN-45: with `rest_ap` round_end a landed Rest block pays its AP at round end
+                if w.ruleset.rest_at_round_end() {
                     w.round_states.entry(src).or_default().rest_blocks += self.block_cost.max(1);
                 }
                 // RULESET1_INTENT RS3: each landed Rest block restores poise (rule poise)
@@ -939,10 +939,10 @@ pub fn dash_fits(grid: &Grid, from: V2, route: &[V2], dash_tiles: i32) -> bool {
     dash_tiles > 0 && path::blocks_needed(grid, from, route, dash_tiles) <= 1
 }
 
-/// The chase (AS1; INPUT1 MR16): `follow`, then its log line ("" when the unit did not move). Under `round_intent` root
-/// stops it (MR16; classic keeps its chase rules).
+/// The chase (AS1; INPUT1 MR16): `follow`, then its log line ("" when the unit did not move). With `root_stops_chase`
+/// root stops it (MR16, CLN-45; the classic row keeps its chase rules).
 fn chase_line(w: &mut World, src: UnitId, t: UnitId, band: (i32, i32), diag: bool, follow_tiles: i32) -> String {
-    if round_intent::on(w) && w.units[src].has_status("root") {
+    if w.ruleset.root_stops_chase() && w.units[src].has_status("root") {
         return String::new();
     }
     let from = w.pos(src);

@@ -13,7 +13,7 @@ use crate::world::{UnitId, World};
 use aegis_core::sort::godot_sort;
 use rpgkit_data::ItemDef;
 use rpgkit_rules::damage::{self, HitInput};
-use rpgkit_rules::ruleset;
+use rpgkit_rules::ruleset::{self, Chase};
 use rpgkit_rules::{status, Stance};
 use indexmap::{IndexMap, IndexSet};
 use std::cell::{Cell, RefCell};
@@ -269,9 +269,9 @@ impl PlanEntry {
             Kind::Move => Command::new(actor, 0, blocks, CmdKind::Walk { path: self.path.clone(), expected_start: self.pos_before, goal: self.goal, approach: self.target, moved_tiles: 0, cut_short: false, blocked_by: String::new() }),
             Kind::Disengage => Command::new(actor, 0, s.blocks, CmdKind::Disengage { dest: self.pos_after, max_tiles: s.jump_tiles, landed: false, moved_tiles: 0 }),
             Kind::Target => Command::new(actor, 2, 1, CmdKind::Target { target: self.target }),
-            // RULESET1 T11: a unit that pays no AP gains none either; RULESET1_INTENT RS2: under round_intent Rest pays
-            // its AP at round end
-            Kind::Rest => Command::new(actor, 0, s.blocks, CmdKind::Rest { recover_ap: if w.pays_ap(actor) && !round_intent::on(w) { s.recover_ap } else { 0 } }),
+            // RULESET1 T11: a unit that pays no AP gains none either; RULESET1_INTENT RS2, CLN-45: with `rest_ap`
+            // round_end Rest pays its AP at round end
+            Kind::Rest => Command::new(actor, 0, s.blocks, CmdKind::Rest { recover_ap: if w.pays_ap(actor) && !w.ruleset.rest_at_round_end() { s.recover_ap } else { 0 } }),
         };
         cmd.recovery = self.recovery;
         cmd.carry = self.carry;
@@ -282,7 +282,7 @@ impl PlanEntry {
             cmd.carry_range = round_intent::dash_range(w, actor, s).unwrap_or(s.dash_tiles);
             cmd.target_cell = self.target.filter(|t| w.has(*t)).map_or(NO_CELL, |t| w.pos(t));
         }
-        if skill::kind(s) == Kind::Support && self.item.is_none() && self.chase && round_intent::on(w) {
+        if skill::kind(s) == Kind::Support && self.item.is_none() && self.chase && w.ruleset.chase() == Chase::EverySkill {
             cmd.follow = 1;
         }
         cmd.intent_buff = s.intent_buff;
@@ -310,7 +310,8 @@ impl PlanEntry {
         cmd.name = s.name.clone();
         cmd.ap_cost = self.skill_ap;
         cmd.stance_switch_cost = self.switch_ap;
-        // RULESET1_INTENT IN3: under round_intent no command enters, ends in or breaks a stance
+        // RULESET1_INTENT IN3, CLN-45: without `stances` (by the rules: under round_intent) no command enters, ends in
+        // or breaks a stance
         let stances = w.ruleset.stances();
         cmd.stance_on_start = if !stances || skill::keeps_stance(s) { None } else { Some(skill::stance(s)) };
         cmd.stance_on_end = if stances { skill::ends_in_stance(s) } else { None };
@@ -928,8 +929,9 @@ impl Plan {
                 return p;
             }
         }
-        // RULESET1_INTENT TG3: under round_intent the target is the lock; Switch Target is never inserted
-        if st.lock.is_some_and(|l| l != foe) && !round_intent::on(w) {
+        // RULESET1_INTENT TG3, CLN-45: without `switch_target_step` the target is the lock; Switch Target is never
+        // inserted
+        if st.lock.is_some_and(|l| l != foe) && w.ruleset.switch_target_step() {
             let sw = w.book().find("switch_target").unwrap();
             let p = self.add_entry(w, c, st, sw, index, Some(foe), &[], 0, &[]);
             if !p.is_empty() {
@@ -939,9 +941,9 @@ impl Plan {
         st.lock = Some(foe);
         let p = self.add_entry(w, c, st, sid, index, Some(foe), &[], 0, &[]);
         if p.is_empty() {
-            // INPUT1 MR16: under round_intent every attack on a unit chases up to 1 tile (classic: not after a move to a
-            // chosen tile)
-            let chase = !st.positioned || round_intent::on(w);
+            // INPUT1 MR16, CLN-45: with `chase` every_skill every attack on a unit chases up to 1 tile (classic: not
+            // after a move to a chosen tile)
+            let chase = !st.positioned || w.ruleset.chase() == Chase::EverySkill;
             let e = st.entries.last_mut().unwrap();
             e.chase = chase;
             let dmg = e.est_damage;
@@ -972,7 +974,7 @@ impl Plan {
         if !dash_fits(&w.grid, st.pos, &route, s.dash_tiles) {
             return "Too far for the dash.".into();
         }
-        if st.lock.is_some_and(|l| l != foe) && !round_intent::on(w) {
+        if st.lock.is_some_and(|l| l != foe) && w.ruleset.switch_target_step() {
             let sw = w.book().find("switch_target").unwrap();
             let p = self.add_entry(w, c, st, sw, index, Some(foe), &[], 0, &[]);
             if !p.is_empty() {
@@ -1272,8 +1274,8 @@ impl Plan {
             let heal = command::effective_heal(&w.units[ally], command::heal_amount(w, c, sid));
             let e = st.entries.last_mut().unwrap();
             e.est_heal = heal;
-            // INPUT1 MR16: a Support skill on an ally chases it up to 1 tile under round_intent
-            e.chase = round_intent::on(w);
+            // INPUT1 MR16, CLN-45: a Support skill on an ally chases it up to 1 tile with `chase` every_skill
+            e.chase = w.ruleset.chase() == Chase::EverySkill;
         }
         p
     }
@@ -1445,8 +1447,9 @@ impl Plan {
         }
         // HOOKS1 UM2: the meter changes are paid at the command's start too (rule unit_meters)
         crate::meter::spend(w, c, &mut st.meters_left, skill::meters_by(s, &w.ruleset));
-        // RULESET1_INTENT RS2, FU3: under round_intent Rest pays only at round end, so no AP returns mid-round
-        if skill::kind(s) == Kind::Rest && pays && !round_intent::on(w) {
+        // RULESET1_INTENT RS2, FU3, CLN-45: with `rest_ap` round_end Rest pays only at round end, so no AP returns
+        // mid-round
+        if skill::kind(s) == Kind::Rest && pays && !w.ruleset.rest_at_round_end() {
             st.ap_left = st.max_ap.min(st.ap_left + s.recover_ap);
         }
         String::new()

@@ -324,7 +324,9 @@ Layer kit + game.
 
 ### CLN-45
 
-Split the switches bundled under `round_intent`. Scope B. Status: proposed. Size M-L. Lane logic-builder. Layer kit.
+Split the switches bundled under `round_intent`. Scope B. Status: done 2026-11-01 (row fields `rest_ap`, `chase`,
+`root_stops_chase`, `switch_target_step`, `stances`, "" = by the rules; the values ship with seed
+`games/emberwake/data/seeds/cln45.json`, asset lane). Size M-L. Lane logic-builder. Layer kit.
 
 - Where: `round_intent::on` (rpgkit_battle/src/round_intent.rs:127) and `Ruleset::stances` (ruleset.rs:380) decide
   behaviours that are not the round intent itself, each a legacy-vs-new choice:
@@ -370,6 +372,7 @@ kit.
 - Risk: host state shape (agents, `engine/README.md` host section). Touches: `kits/rpg/crates/rpgkit_host/src/lib.rs`,
   `kits/rpg/crates/rpgkit_battle/src/dojo.rs`, `games/emberwake/crates/emberwake_gui/src/{dojo,runner}.rs`.
   Dependencies: CLN-44. Spec pointer: `docs/specs/CLEANUP.md#CLN-46`.
+- Also (CLN-45 note, 2026-11-01): `emberwake_gui/src/battle.rs` shows the round-end Rest preview whenever the ruleset is timeline; read `Ruleset::rest_at_round_end()` instead, so a row with `rest_ap: on_use` shows no round-end gain.
 
 ### CLN-47
 

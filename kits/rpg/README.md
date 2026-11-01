@@ -156,3 +156,15 @@ encounters and the Arena's World pick start on the catalog's classic row. Schema
 world's `ruleset` (`options_from: rulesets_inherit`) and a derived stat's or portrait cue's `rulesets`
 (`options_from: rulesets`) offer the rows; a world, derived stat or portrait cue naming a ruleset without its row is a
 content error.
+
+CLN-45 (decision "Godot parity retired and cleanup pass 3 answers" Q-B2): the behaviours the rule `round_intent` used
+to switch as a bundle are ruleset row fields with values (`ruleset::BY_RULES_FIELDS`): `rest_ap` (`on_use` |
+`round_end`, `RestAp`), `chase` (`classic` | `every_skill`, `Chase`), `root_stops_chase`, `switch_target_step` and
+`stances` (`on` | `off`). Each is "" by default: by the rules, the round intent rule's choice when the row lists
+`round_intent` (round_end, every_skill, on, off, off) and the legacy one otherwise (on_use, classic, off, on, on;
+`Numbers::by_rules`), so a row without the fields plays as before. Read through `Ruleset::rest_ap` /
+`rest_at_round_end`, `chase`, `root_stops_chase`, `switch_target_step` and `stances` (plan, command, round_intent,
+round_intent_plan, the Dojo); with `rest_ap` round_end and no `round_intent`, `round_intent::round_start` pays the Rest
+gain too. `melee_diagonal` reads as the row sets it (the coupling to `round_intent` and its warning are gone; the
+classic row sets `none`; a raw row without the key reads `maneuver` with `round_intent`, else `none`). Checks: a switch
+is "" or one of its values; the writer leaves a "" switch out.
