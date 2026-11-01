@@ -742,3 +742,60 @@ fn d4_a_line_card_with_a_portrait_reads_clean_at_every_text_size() {
         assert_eq!(v["counts"], json!({"cut": 0, "edge": 0, "overlap": 0, "spill": 0}), "{label}: {v}");
     }
 }
+
+// ---- PORTRAITFX1-X: a line card's expression and where its anchors come from -------------------------------------
+
+const IDA_ANGRY: &str = "portraits/npcs/faces/ida/angry.png";
+
+/// A test layout's sidecar rule (the game gives its kit's): the drawn file's own, then for `IDA_ANGRY` the base's.
+fn frame_then_base(rel: &str) -> Vec<String> {
+    let mut out = vec![aegis_core::assets::face_file(rel)];
+    if rel == IDA_ANGRY {
+        out.push(aegis_core::assets::face_file(IDA));
+    }
+    out
+}
+
+/// X3 (engine part): `Card::from_json` reads a line card's `expression`; the card portrait holds it as a `face` cue of
+/// `CARD_FACE_PRIORITY` (the agent link shows it); a frame without its own sidecar takes its base portrait's anchors
+/// and idle overlays when the screen is given the layout's sidecar rule (`portrait_sidecars`), and none without it.
+#[test]
+fn x3_a_line_cards_expression_and_its_frames_base_sidecar() {
+    use aegis_ui::portrait_fx::EASE_MS;
+    let c = Card::from_json(&json!({"style": "line", "speaker": "ida", "expression": "angry", "text": "Out!"}));
+    assert_eq!(c.expression, "angry");
+    assert_eq!(Card::from_json(&json!({"style": "line", "text": "Hi."})).expression, "", "no key: neutral");
+    let face = json!({"size": 96, "eyes": [[30, 40, 10, 6], [56, 40, 10, 6]], "idle": [{"effect": "eye_glow", "color": "#c084fc", "intensity": 0.8}]});
+    let layer = portrait_layer("frame", Some(face));
+    std::fs::create_dir_all(layer.join(IDA_ANGRY).parent().unwrap()).unwrap();
+    std::fs::copy(layer.join(IDA), layer.join(IDA_ANGRY)).unwrap();
+    let angry = Card { expression: "angry".into(), ..line_card(&[IDA_ANGRY, IDA]) };
+    let run = |sidecars: Option<fn(&str) -> Vec<String>>| {
+        let mut cx = art_cx(layer.clone());
+        let mut g = gfx();
+        let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![angry.clone()]), TextSpeed::Normal, |_, _| {});
+        if let Some(f) = sidecars {
+            s = s.portrait_sidecars(f);
+        }
+        s.draw(&mut cx, &mut g, (-1, -1), true);
+        s.advance(&mut cx, EASE_MS as u32);
+        s.draw(&mut cx, &mut g, (-1, -1), true);
+        let st = s.state(&cx);
+        let now = s.portrait.clock.now();
+        let fx = s.portrait.get().expect("kept");
+        (fx.expression(now).to_string(), fx.live(now).contains(&"eye_glow"), st["portraits"][0]["expression"].clone())
+    };
+    let (expression, glow, shown) = run(Some(frame_then_base));
+    assert_eq!((expression.as_str(), shown), ("angry", json!("angry")), "the card's expression holds as a face cue");
+    assert!(glow, "the frame takes its base portrait's sidecar");
+    let (_, glow, _) = run(None);
+    assert!(!glow, "without the rule a frame reads only its own sidecar (none here)");
+    // the same file drawn plainly (no expression): no face cue
+    let mut cx = art_cx(layer.clone());
+    let mut g = gfx();
+    let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![line_card(&[IDA])]), TextSpeed::Normal, |_, _| {}).portrait_sidecars(frame_then_base);
+    s.draw(&mut cx, &mut g, (-1, -1), true);
+    let fx = s.portrait.get().expect("kept");
+    assert_eq!(fx.expression(s.portrait.clock.now()), "", "a card without an expression holds none");
+    assert_eq!(vignette::CARD_FACE_PRIORITY, 100, "the top of the cue rows' 0-100 priority range");
+}

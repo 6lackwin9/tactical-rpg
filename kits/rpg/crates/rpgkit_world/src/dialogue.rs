@@ -541,7 +541,8 @@ impl DialogueRunner {
     }
 
     /// {speaker, speaker_name, node, text, choices: [{text, locked, reason, service}], end, next, shop, pending,
-    /// faction, faction_name, band}, plus `board` while a board pane is open (STORYUI1 B3).
+    /// faction, faction_name, band}, plus `board` while a board pane is open (STORYUI1 B3) and `expression` when the
+    /// node names one (PORTRAITFX1 7: the speaker's face for the node).
     pub fn view(&self, d: &Data, gs: &GameState) -> Dict {
         let node = self.node(d, gs, &self.node_id);
         let mut speaker = character_qid(d, gs, &json::s(&node, "speaker"));
@@ -582,6 +583,11 @@ impl DialogueRunner {
         ]);
         if !self.board_qid.is_empty() {
             out.insert("board".into(), self.board_qid.clone().into());
+        }
+        // PORTRAITFX1 7: the speaker's face for this node, only when the node names one (a Godot node never did)
+        let expression = json::s(&node, "expression");
+        if !expression.is_empty() {
+            out.insert("expression".into(), expression.into());
         }
         out
     }

@@ -451,3 +451,24 @@ frames for common portraits; animated region-map tokens.
   `character.portrait` and `hub.portrait.<member id>` (kind `portrait`, no action, no hover); both screens' `state`
   gains `portraits`. A member without a file draws the initial letter (the Character screen on the panel, the menu on
   the box).
+
+## 15. Build notes (PORTRAITFX1-X, 2026-11-01)
+
+- PORTRAITFX1-S had already landed X1 (the schema rows, the check `check::dialogue::expression_error` on nodes and
+  `line` cards, the writer leaving "" out, and the narrowed parity row of 2026-10-26); X adds what reads the keys.
+- Talk box: `DialogueRunner::view` carries `expression` only when the node names one (so a Godot world's views are
+  unchanged and the journey parity stays as it was). `talk.rs` passes it to `Faces::say(key, expression)` after `begin`:
+  a held `face` cue keyed `line.face` at priority 100 (`vignette::CARD_FACE_PRIORITY`, the top of the rows' 0-100), so
+  the line's face wins over the cue rows' faces while the node shows; "" leaves the face to the rows. The frame follows
+  `face_chain` as before. The region map and the battle talk share `draw_talk`, so both get it; `battle.rs` is
+  untouched. `talk_state` (the agent link) gains `expression` ("" none).
+- Line cards: the kit's card resolution is `story::card_portrait(d, home, card)` (the speaker's `face_chain` with the
+  card's `expression`); the game's `card_of` uses it for scenes and the Gallery's entry reels. The engine `Card` reads
+  `expression` and holds it as a `face` cue keyed `card.face` (priority 100, so the agent state shows it); the chain the
+  caller gives already starts at that frame. The sidecar fallback is a resolver: `CardPortrait::sidecars`, an
+  optional `fn(&str) -> Vec<String>` set by `VignetteScreen::portrait_sidecars`; the game passes the kit's
+  `face_sidecars`, so a frame without its own sidecar takes its base portrait's anchors and idle overlays. Without a
+  resolver the drawn file's own sidecar, as in D.
+- X4 is a binding test (`portraits.rs`): a `face` `hurt` cue fired for 900 ms draws the `hurt` frame from its start to
+  its last millisecond and the neutral frame after; a missing frame falls back along the chain. With no frames shipped
+  (XA makes them) every surface draws as before.

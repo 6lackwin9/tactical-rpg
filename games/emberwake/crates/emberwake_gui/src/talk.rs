@@ -1,6 +1,7 @@
 //! The talk box (scripts/ui/overworld/dialogue_panel.gd's layout as PLAYUI1-D's 400 px box): one `DialogueRunner::view`
 //! measured (`talk_layout`), drawn with its living portrait (`draw_talk`, PORTRAITFX1-D: `portraits::Faces`, the
-//! speaker's look from `look_of_member` or `look_of_character`), its keys (`talk_key`) and the agent link's reading of
+//! speaker's look from `look_of_member` or `look_of_character`; PORTRAITFX1-X: the node's `expression` picks the
+//! frame along `face_chain`), its keys (`talk_key`) and the agent link's reading of
 //! it (`talk_state`). Shared by the region map's conversations and the battle's phase talks (ENCOUNTER2-C DT7: moved
 //! out of `region.rs`, the look unchanged); each screen maps `TalkAct` to its own action and owns its runner.
 
@@ -160,6 +161,8 @@ fn text_center_fit(p: &mut Painter, cx: f32, y: f32, text: &str, size: f32, max_
 /// ones dim with their reason; all off while `busy`, a turn-in picker over it). No key hint line: the numbers show
 /// 1-9, Esc is on the Help button's card. PORTRAITFX1-D (6.2 row 1): the portrait lives (`portraits::Faces` on surface
 /// `dialogue`: base life, the sidecar's `idle`, the state rows of the speaker's look); the initial letter without a file.
+/// PORTRAITFX1-X (7): the node's `expression` (the view's, absent = none) is the speaker's face for the node
+/// (`Faces::say`), so its frame draws when it exists, else the neutral frame, else the single portrait.
 /// `gs` is the game state the conversation runs in (the game in play, or the Arena's scratch state); `act` maps a
 /// row's `TalkAct` to the screen's action.
 #[allow(clippy::too_many_arguments)]
@@ -171,6 +174,7 @@ pub(crate) fn draw_talk<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, gs: &GameState, f
     let d = cx.data.clone();
     let speaker = d.resolve(&gs.world_id, "characters", &s(view, "speaker"));
     let (who, look) = talk_portrait(&d, gs, speaker, view);
+    faces.say(&who.key, &s(view, "expression"));
     if !faces.draw(&mut ui.p, cx, &who, &look, "dialogue", pr) {
         // the missing art goes to the playtest trail as before (nothing loads)
         let _ = cx.art.first(&crate::screens::character_art(&d, speaker).2, 1, 1);
@@ -256,8 +260,59 @@ pub(crate) fn follow_node(g: &mut Gfx, seen: &mut String, node: String) {
 }
 
 /// ENCOUNTER2-C DT11: the agent link's reading of an open talk of tree `dialogue`: the node, the speaker (the
-/// character's qualified id), the line and the reply rows as the box draws them (`id` is the widget to click).
+/// character's qualified id), the node's expression ("" none, PORTRAITFX1-X), the line and the reply rows as the box
+/// draws them (`id` is the widget to click).
 pub(crate) fn talk_state(dialogue: &str, view: &Dict) -> Value {
     let replies: Vec<Value> = reply_rows(view).into_iter().map(|(id, text, locked, _)| json!({"id": id, "text": text, "locked": locked})).collect();
-    json!({"dialogue": dialogue, "node": s(view, "node"), "speaker": s(view, "speaker"), "text": s(view, "text"), "replies": replies})
+    json!({"dialogue": dialogue, "node": s(view, "node"), "speaker": s(view, "speaker"), "expression": s(view, "expression"), "text": s(view, "text"), "replies": replies})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hud::hud_tests::{game_cx, gfx};
+    use crate::portraits::tests::{drawn_fill, frame_layers, BASE_FILL, FRAME_FILL, NEUTRAL_FILL};
+    use emberwake_content::art as kart;
+
+    /// X2 (PORTRAITFX1 5.4, 7): a node with `angry` draws the speaker's `faces/<id>/angry.png` when it exists, else its
+    /// `neutral` frame, else its single portrait; a node without the key draws the neutral frame (the frames' plain
+    /// face). The talk box is the region map's and the battle's (one `draw_talk`); the agent link reads the expression.
+    #[test]
+    fn x2_a_nodes_expression_picks_the_speakers_frame() {
+        let mut cx = game_cx();
+        std::sync::Arc::get_mut(&mut cx.app.data).expect("the test owns the data").edit_cat(|c| c.portrait_cues = Vec::new());
+        cx.settings.v["reduce_motion"] = json!(true);
+        let d = cx.data.clone();
+        let gs = cx.gs().clone();
+        // a speaker with a unique portrait tier (it has frames), picked by rule
+        let character = d.merged_entries(&gs.world_id, "characters").into_iter().find(|c| kart::tier_folder(&Who::of_character(&d, c).tier).is_some()).expect("a character with a unique portrait").clone();
+        let who = Who::of_character(&d, &character);
+        let base = kart::portrait_chain(&who.tier, &who.id, &who.body)[0].clone();
+        let view = |expression: Option<&str>| -> Dict {
+            let mut v = json::dict(&json!({"speaker": s(&character, "_qid"), "speaker_name": s(&character, "name"), "node": "n", "text": "A line.", "choices": [], "end": true, "next": false, "faction": "", "faction_name": "", "band": ""})).clone();
+            if let Some(e) = expression {
+                v.insert("expression".into(), e.into());
+            }
+            v
+        };
+        let mut g = gfx();
+        let mut drawn = |cx: &mut Cx, view: &Dict| {
+            let mut faces = Faces::default();
+            let mut ui: Ui<TalkAct> = Ui::new(&mut g, (-500, -500), true);
+            faces.begin();
+            let b = talk_layout(&mut ui.p, view);
+            draw_talk(&mut ui, cx, &gs, &mut faces, view, &b, false, |a| a);
+            drop(ui);
+            drawn_fill(&faces, &who.key)
+        };
+        cx.art = frame_layers("talk_x2_all", &base, true, Some("angry"));
+        assert_eq!(drawn(&mut cx, &view(Some("angry"))), Some(FRAME_FILL), "the angry frame");
+        assert_eq!(drawn(&mut cx, &view(None)), Some(NEUTRAL_FILL), "no expression: the neutral frame");
+        cx.art = frame_layers("talk_x2_neutral", &base, true, None);
+        assert_eq!(drawn(&mut cx, &view(Some("angry"))), Some(NEUTRAL_FILL), "no angry frame: the neutral frame");
+        cx.art = frame_layers("talk_x2_none", &base, false, None);
+        assert_eq!(drawn(&mut cx, &view(Some("angry"))), Some(BASE_FILL), "no frames: the single portrait");
+        assert_eq!(talk_state("w:t", &view(Some("angry")))["expression"], json!("angry"));
+        assert_eq!(talk_state("w:t", &view(None))["expression"], json!(""));
+    }
 }

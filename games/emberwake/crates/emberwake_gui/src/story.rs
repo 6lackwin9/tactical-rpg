@@ -23,14 +23,15 @@ pub const PALETTE: Palette = Palette { text: rgb(0xd9, 0xcb, 0xb4), accent: rgb(
 const STAGE_FILL: Rgba = rgb(0x0a, 0x0b, 0x10);
 
 /// A card of world `world` as the engine plays it (W5): the card keys through `Card::from_json`; a `line` card's speaker
-/// shows the character's name (`speaker_name` when the kit resolved it) and the talk box's portrait chain.
+/// shows the character's name (`speaker_name` when the kit resolved it) and its portrait chain for the card's
+/// `expression` (PORTRAITFX1-X: the kit's `story::card_portrait`, `face_chain`; with no frames today's chain).
 pub fn card_of(d: &Data, world: &str, raw: &Dict) -> Card {
     let mut c = Card::from_json(&Value::Object(raw.clone()));
     let speaker = s(raw, "speaker");
     if !speaker.is_empty() {
         let who = d.resolve(world, "characters", &speaker);
         c.speaker = s_or(raw, "speaker_name", &s_or(who, "name", &speaker));
-        c.portrait = if who.is_empty() { Vec::new() } else { crate::screens::character_art(d, who).2 };
+        c.portrait = story::card_portrait(d, world, raw);
         // PORTRAITFX1-D: the portrait's effects are seeded by the character id, as the talk box's
         c.portrait_key = s(who, "id");
     }
@@ -54,10 +55,12 @@ pub fn entry_reel(d: &Data, world: &str, entry: &Dict) -> Reel {
 
 /// A vignette screen over `reel` as the game plays it: the player's text speed, the game's palette, its tuned shake
 /// presets and limits for the cards' `shake` (FX1 5.2; `tuning.json` `shakes`, `shake_max_px`, `shake_max_ms`), and
-/// the line cards' portraits lit by the game's rim key (PORTRAITFX1-D, 6.4: Tallow Amber).
+/// the line cards' portraits lit by the game's rim key (PORTRAITFX1-D, 6.4: Tallow Amber), an expression frame without
+/// its own sidecar taking its base portrait's (PORTRAITFX1-X: the kit's `face_sidecars`).
 pub fn vignette_screen(cx: &Cx, reel: Reel, on_done: impl FnOnce(&mut Cx, Ended) + 'static) -> VignetteScreen<GameCx> {
     let t = &cx.tuning.value;
     VignetteScreen::with_settings(&cx.settings, reel, on_done).palette(PALETTE).with_shakes(t.shakes.clone(), t.shake_limits()).portrait_rim(Some(crate::portraits::RIM))
+        .portrait_sidecars(emberwake_content::art::face_sidecars)
 }
 
 /// The player for `scene` in the game's palette; Skip asks first for a scene not seen yet (W6).
@@ -598,6 +601,29 @@ pub(crate) mod tests {
         assert_eq!(entry_reel(&d, "tale", raw).cards[0].text, "{flag:began} began.");
         let names: Vec<String> = gallery_reels(&d).into_iter().map(|r| r.0).collect();
         assert_eq!(names, ["Sample reel", "Tale: Intro", "Tale: Line", "Tale: News"], "V15: the sample, then every world's vignettes");
+    }
+
+    /// PORTRAITFX1-X X3: a `line` card's portrait chain is the kit's card resolution for its `expression`
+    /// (`story::card_portrait`: the speaker's frame first, its neutral frame, then today's chain), the card keeps the
+    /// expression for the engine, and the game's vignette screens take an expression frame's anchors from its base
+    /// portrait's sidecar when the frame has none (the kit's `face_sidecars`).
+    #[test]
+    fn a_line_cards_expression_resolves_its_portrait_chain() {
+        let d = data();
+        let raw = json::dict(&json!({"style": "line", "speaker": "clerk", "expression": "angry", "text": "Out!"})).clone();
+        let c = card_of(&d, "tale", &raw);
+        assert_eq!(c.expression, "angry");
+        assert_eq!(c.portrait, story::card_portrait(&d, "tale", &raw));
+        let clerk = d.resolve("tale", "characters", "clerk");
+        let today = crate::screens::character_art(&d, clerk).2;
+        assert_eq!(c.portrait[..2], ["portraits/npcs/faces/clerk/angry.png", "portraits/npcs/faces/clerk/neutral.png"]);
+        assert_eq!(c.portrait[2..], today[..], "then today's chain: a missing frame falls back to the single portrait");
+        let plain = card_of(&d, "tale", &json::dict(&json!({"style": "line", "speaker": "clerk", "text": "Hi."})).clone());
+        assert_eq!((plain.expression.as_str(), plain.portrait[0].as_str()), ("", "portraits/npcs/faces/clerk/neutral.png"));
+        let cx = story_cx(data());
+        let s = vignette_screen(&cx, Reel::default(), |_, _| {});
+        let rule = s.portrait.sidecars.expect("the game's sidecar rule");
+        assert_eq!(rule("portraits/npcs/faces/clerk/angry.png"), emberwake_content::art::face_sidecars("portraits/npcs/faces/clerk/angry.png"));
     }
 
     /// 4.8: the settings' gameplay tab sets the text speed and reduce motion (the engine's keys), inside the tab body at

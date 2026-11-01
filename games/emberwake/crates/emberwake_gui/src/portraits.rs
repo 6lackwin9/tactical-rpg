@@ -7,7 +7,8 @@
 //! - `look_of_unit`, `look_of_member`, `look_of_character`: the kit `Look` the state rows read.
 //! - `Faces`: one per screen: a `PortraitFx` per key, the screen's `Budget` and its clock; `draw` holds the sidecar's
 //!   `idle` overlays plus the kit's `holds` for the look, resolves the chain with the engine's expression and draws (the
-//!   initial letter when no file loads); `react` fires the kit's `reactions` for step events (none under `skip_anim`).
+//!   initial letter when no file loads); `react` fires the kit's `reactions` for step events (none under `skip_anim`);
+//!   `say` holds a dialogue line's `expression` (PORTRAITFX1-X, 7) over the state rows.
 //! - Colours: the rim key Tallow Amber and the art-bible hues the cue rows and sidecars use (`HUES`).
 //!
 //! Presentation only: no rule, plan, AI, save, trace or sim reads a portrait.
@@ -204,6 +205,9 @@ pub fn sidecar(art: &mut Art, found: &str) -> Option<aegis_core::assets::Face> {
     kart::face_sidecars(found).iter().find_map(|f| f.strip_suffix(".face.json").and_then(|stem| art.face(&format!("{stem}.png")).cloned()))
 }
 
+/// The `face` cue key a spoken line's expression holds under (`Faces::say`).
+pub const LINE_FACE_KEY: &str = "line.face";
+
 /// One screen's portraits (6.1): a `PortraitFx` per key, the screen's budget and clock. `begin` at the start of the
 /// screen's draw (a portrait neither drawn nor reacted to since the last `begin` is dropped), then `draw` each.
 #[derive(Debug, Clone, Default)]
@@ -217,6 +221,8 @@ pub struct Faces {
     touched: BTreeSet<String>,
     /// Cues a review page holds on a portrait beside its look (the Gallery's toggles); the surfaces pin none.
     pins: BTreeMap<String, Vec<Cue>>,
+    /// PORTRAITFX1-X: the face of the line each key speaks (`say`).
+    lines: BTreeMap<String, Cue>,
     /// The Gallery's anchors check and its own reduce-motion check (None: the setting).
     pub show_anchors: bool,
     pub reduce: Option<bool>,
@@ -228,6 +234,7 @@ impl Faces {
         let touched = std::mem::take(&mut self.touched);
         self.fx.retain(|k, _| touched.contains(k));
         self.pins.retain(|k, _| touched.contains(k));
+        self.lines.retain(|k, _| touched.contains(k));
         self.budget.begin();
     }
 
@@ -254,6 +261,18 @@ impl Faces {
         self.pins.insert(key.to_string(), cues);
     }
 
+    /// PORTRAITFX1-X (7): `key` speaks a line with `expression` ("" none: the line leaves the face to the cue rows):
+    /// held as a `face` cue of the line cards' priority (`vignette::CARD_FACE_PRIORITY`, the top of the rows' 0-100: the
+    /// line decides) until the next `say`; the drawn frame follows along `face_chain`. Call it after `begin`, as `draw`
+    /// (a key `begin` drops loses its line).
+    pub fn say(&mut self, key: &str, expression: &str) {
+        let line = (!expression.is_empty()).then(|| Cue::parse("face", "")).flatten();
+        match line {
+            Some(c) => self.lines.insert(key.to_string(), c.with_expression(expression).with_priority(aegis_ui::vignette::CARD_FACE_PRIORITY).with_key(LINE_FACE_KEY)),
+            None => self.lines.remove(key),
+        };
+    }
+
     /// Draws `who` into `r` on `surface` with the cue rows of the data, the screen's options and its clock (6.1); false
     /// when no file of its chain loads (the initial letter is drawn instead).
     pub fn draw(&mut self, p: &mut Painter, cx: &mut Cx, who: &Who, look: &Look, surface: &str, r: Rect) -> bool {
@@ -263,13 +282,15 @@ impl Faces {
     }
 
     /// `draw` over explicit parts: the holds are the sidecar's `idle`, the state rows of `rows` that hold for `look`
-    /// on `surface` and the key's pins; the file is the first of `who`'s chain for the expression that wins.
+    /// on `surface`, the key's pins and its line's face (`say`); the file is the first of `who`'s chain for the
+    /// expression that wins.
     #[allow(clippy::too_many_arguments)]
     pub fn draw_parts(&mut self, p: &mut Painter, art: &mut Art, rows: &[PortraitCue], who: &Who, look: &Look, surface: &str, r: Rect, opts: &PortraitOpts) -> bool {
         let now = self.now();
         self.touched.insert(who.key.clone());
         let mut held: Vec<Cue> = portrait::holds(rows, look, surface).into_iter().filter_map(cue_of).collect();
         held.extend(self.pins.get(&who.key).cloned().unwrap_or_default());
+        held.extend(self.lines.get(&who.key).cloned());
         let fx = self.fx.entry(who.key.clone()).or_insert_with(|| PortraitFx::new(&who.key));
         // The expression picks the file, the file's sidecar adds idle holds that may change the expression: settle it
         // in at most two passes (holding the same set twice changes nothing).
@@ -542,5 +563,91 @@ pub(crate) mod tests {
         assert!(faces.get("a").is_some(), "reacted to: kept");
         faces.begin();
         assert!(faces.get("a").is_none(), "left out a frame: dropped");
+    }
+
+    /// PORTRAITFX1-X: the fills of the test frames (one dominant channel each, so the drawn file shows in its pixels).
+    pub(crate) const BASE_FILL: [u8; 3] = [200, 40, 40];
+    pub(crate) const NEUTRAL_FILL: [u8; 3] = [40, 200, 40];
+    pub(crate) const FRAME_FILL: [u8; 3] = [40, 40, 200];
+
+    /// Scratch layers for the unique portrait `base` (`BASE_FILL`) and, when given, its `neutral` frame (`NEUTRAL_FILL`)
+    /// and its frame of `expression` (`FRAME_FILL`), 96 px, no sidecars.
+    pub(crate) fn frame_layers(name: &str, base: &str, neutral: bool, expression: Option<&str>) -> Art {
+        let parts: Vec<&str> = base.trim_end_matches(".png").split('/').collect();
+        let dir = format!("{}/faces/{}", parts[..2].join("/"), parts[2]);
+        let mut roots = Vec::new();
+        if let Some(e) = expression {
+            roots.push(layer(&format!("{name}_x"), &format!("{dir}/{e}.png"), 96, FRAME_FILL, None));
+        }
+        if neutral {
+            roots.push(layer(&format!("{name}_n"), &format!("{dir}/neutral.png"), 96, NEUTRAL_FILL, None));
+        }
+        roots.push(layer(&format!("{name}_b"), base, 96, BASE_FILL, None));
+        Art::layered(Layers::of(roots))
+    }
+
+    /// The fill whose dominant channel the centre of `key`'s composed portrait shows (None: not composed).
+    pub(crate) fn drawn_fill(faces: &Faces, key: &str) -> Option<[u8; 3]> {
+        let img = faces.get(key)?.composed()?;
+        let i = ((img.h / 2 * img.w + img.w / 2) * 4) as usize;
+        let c = &img.px[i..i + 3];
+        let top = (0..3).max_by_key(|&k| c[k]).unwrap_or(0);
+        Some([BASE_FILL, NEUTRAL_FILL, FRAME_FILL][top])
+    }
+
+    /// X4 (4.4, 5.4): a `face` cue `hurt` fired for 900 ms shows the `hurt` frame for its 900 ms and then the frame
+    /// before it (the neutral frame); a missing `hurt` frame falls back to the neutral frame, and without frames the
+    /// single portrait draws all along (today's look).
+    #[test]
+    fn x4_a_face_cue_shows_its_frame_for_its_ms_then_the_frame_before() {
+        let who = Who { key: "ida".into(), tier: "npc".into(), id: "ida".into(), name: "Ida".into(), ..Who::default() };
+        let hurt = cue_of(&row(json!({"id": "face_hit", "event": "hit", "effect": "face", "expression": "hurt", "ms": 900, "priority": 60}))).expect("a face cue");
+        let mut g = gfx();
+        let opts = PortraitOpts { reduce_motion: true, ..PortraitOpts::default() };
+        let run = |art: &mut Art, g: &mut aegis_ui::ui::Gfx| -> Vec<Option<[u8; 3]>> {
+            let mut faces = Faces::default();
+            let mut out = Vec::new();
+            for (t, fire) in [(0u64, false), (100, true), (500, false), (999, false), (1000, false), (1500, false)] {
+                faces.clock = Clock { ms: t as f64, hold: 0.0 };
+                if fire {
+                    faces.fire(&who.key, hurt.clone());
+                }
+                let mut ui: Ui<()> = Ui::new(g, (-500, -500), true);
+                faces.begin();
+                assert!(faces.draw_parts(&mut ui.p, art, &[], &who, &Look::default(), "panel", Rect::new(0, 0, 96, 96), &opts));
+                out.push(drawn_fill(&faces, &who.key));
+            }
+            out
+        };
+        let (n, x, b) = (Some(NEUTRAL_FILL), Some(FRAME_FILL), Some(BASE_FILL));
+        let mut art = frame_layers("x4_all", "portraits/npcs/ida.png", true, Some("hurt"));
+        assert_eq!(run(&mut art, &mut g), [n, x, x, x, n, n], "the hurt frame from 100 ms to 999 ms, then the neutral frame");
+        let mut art = frame_layers("x4_no_hurt", "portraits/npcs/ida.png", true, None);
+        assert_eq!(run(&mut art, &mut g), [n; 6], "no hurt frame: the neutral frame");
+        let mut art = frame_layers("x4_none", "portraits/npcs/ida.png", false, None);
+        assert_eq!(run(&mut art, &mut g), [b; 6], "no frames: the single portrait");
+    }
+
+    /// X2 (the binding part): a spoken line's `expression` (`say`) wins over the cue rows' face (the top priority) and
+    /// draws its frame; `say` with "" leaves the face to the rows again.
+    #[test]
+    fn x2_a_spoken_lines_expression_wins_over_the_face_rows() {
+        let who = Who { key: "ida".into(), tier: "npc".into(), id: "ida".into(), name: "Ida".into(), ..Who::default() };
+        let rows = [row(json!({"id": "face_low_hp", "trigger": "hp", "below": 30, "effect": "face", "expression": "hurt", "priority": 80}))];
+        let look = Look { hp: 1, max_hp: 100, ..Look::default() };
+        let mut art = frame_layers("x2_say", "portraits/npcs/ida.png", true, Some("angry"));
+        let mut g = gfx();
+        let opts = PortraitOpts { reduce_motion: true, ..PortraitOpts::default() };
+        let mut faces = Faces::default();
+        let mut draw = |faces: &mut Faces, line: &str| {
+            let mut ui: Ui<()> = Ui::new(&mut g, (-500, -500), true);
+            faces.begin();
+            faces.say(&who.key, line);
+            assert!(faces.draw_parts(&mut ui.p, &mut art, &rows, &who, &look, "dialogue", Rect::new(0, 0, 96, 96), &opts));
+            (faces.get(&who.key).expect("kept").expression(faces.now()).to_string(), drawn_fill(faces, &who.key))
+        };
+        assert_eq!(draw(&mut faces, "angry"), ("angry".to_string(), Some(FRAME_FILL)), "the line's angry frame over the low-HP hurt row");
+        // the low-HP row asks for `hurt`: no hurt frame here, so its chain falls back to the neutral frame
+        assert_eq!(draw(&mut faces, ""), ("hurt".to_string(), Some(NEUTRAL_FILL)), "no line face: the row's face again");
     }
 }

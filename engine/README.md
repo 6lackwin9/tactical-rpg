@@ -58,7 +58,12 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
   (`CardPortrait`: `portrait_fx` with its base life and its sidecar's `idle` overlays, no state holds or reactions;
   seeded by `Card.portrait_key`, else the drawn file's path; its clock moves with the frame time `VignetteScreen` feeds
   the reel; `VignetteScreen::portrait_rim` sets the rim key a sidecar does not name); `vignette::draw` draws it still,
-  `draw_with` animates it; agent state `portraits` (the portrait on view, or none).
+  `draw_with` animates it; agent state `portraits` (the portrait on view, or none). PORTRAITFX1-X: `Card.expression`
+  (read by `Card::from_json`; "" neutral) holds on the portrait as a `face` cue (`CARD_FACE_KEY`, `CARD_FACE_PRIORITY`
+  100), so the agent state shows it; the caller's `portrait` chain already starts at that frame;
+  `VignetteScreen::portrait_sidecars(fn)` (`CardPortrait::sidecars`) names the sidecar files to try for a drawn file
+  (the game passes its kit's layout, so an expression frame without its own sidecar takes its base portrait's); without
+  it the drawn file's own sidecar.
 * **Stage pieces (STAGE1-E):** `Painter::ellipse_ring` (a 1 px ellipse outline, no fill), `Image::opaque_bounds(min_alpha)`
   (the box of solid pixels), `Art::body_bounds(key, palette, size, flip)` (the solid box of a body's fitted idle frame 0,
   mirrored with flip, cached; a unit's hit rect on a stage); DIR4-HB: `Art::body_bounds_facing(key, palette, size, facing)`

@@ -7,14 +7,16 @@
 //! skipped. What a reel holds (which cards, their tokens and conditions) is the game's or its kit's. A card may shake the
 //! view (FX1-V, FX1 5.2): its `shake` preset, from the game's table (`with_shakes`), moves the card's picture and texts.
 //! A line card's portrait lives (PORTRAITFX1-D): `CardPortrait` draws it through `portrait_fx` with its base life and
-//! its sidecar's `idle` overlays, on a clock the screen moves with the reel's frame time.
+//! its sidecar's `idle` overlays, on a clock the screen moves with the reel's frame time; PORTRAITFX1-X: a card's
+//! `expression` holds as a `face` cue (the caller's chain already starts at that frame) and the caller may name where a
+//! drawn file's anchors come from (`portrait_sidecars`: an expression frame without its own sidecar takes its base's).
 
 use crate::art::Art;
 use crate::audio::Bus;
 use crate::canvas::{rgb, rgba, Rect, Rgba};
 use crate::fx::{Camera, Clock, ShakeLimits, ShakeTable};
 use crate::painter::Painter;
-use crate::portrait_fx::{idle_cues, Budget, PortraitFx, PortraitOpts};
+use crate::portrait_fx::{idle_cues, Budget, Cue, PortraitFx, PortraitOpts};
 use crate::screen::{Context, Cx, Key, Screen, Settings};
 use crate::ui::{tip, Gfx, Ui, Widget, BODY, DIM, GOLD, RADIUS, SMALL, TEXT, H, W};
 use aegis_core::json;
@@ -191,6 +193,9 @@ pub struct Card {
     /// `line`: the key the portrait's effects are seeded by (PORTRAITFX1 4.5: the character id; "" the drawn file's
     /// path).
     pub portrait_key: String,
+    /// `line`: the speaker's face (PORTRAITFX1 7; "" neutral): held on the portrait as a `face` cue; the caller's
+    /// `portrait` chain is already resolved for it (its frame first, then the fallbacks).
+    pub expression: String,
     pub fade_in_ms: u32,
     pub fade_out_ms: u32,
     /// 0 waits for a press; above 0 the card moves on by itself that long after its text is out.
@@ -215,6 +220,7 @@ impl Default for Card {
             speaker: String::new(),
             portrait: Vec::new(),
             portrait_key: String::new(),
+            expression: String::new(),
             fade_in_ms: 600,
             fade_out_ms: 400,
             hold_ms: 0,
@@ -230,8 +236,8 @@ fn ms_of(d: &json::Dict, key: &str, fallback: u32, max: u32) -> u32 {
 
 impl Card {
     /// A card from its JSON form (the keys of STORYUI1 4.2: style, image, top, bottom, ash, title, subtitle, text,
-    /// fade_in_ms, fade_out_ms, hold_ms, cue; FX1's shake); bad values fall back to the defaults. `speaker`, `portrait`,
-    /// `portrait_key` and `when` are the caller's to resolve.
+    /// fade_in_ms, fade_out_ms, hold_ms, cue; FX1's shake; PORTRAITFX1's expression); bad values fall back to the
+    /// defaults. `speaker`, `portrait`, `portrait_key` and `when` are the caller's to resolve.
     pub fn from_json(v: &Value) -> Card {
         let d = json::dict(v);
         let base = Card::default();
@@ -250,6 +256,7 @@ impl Card {
             hold_ms: ms_of(d, "hold_ms", base.hold_ms, 20000),
             cue: json::s(d, "cue"),
             shake: json::s(d, "shake"),
+            expression: json::s(d, "expression"),
             ..base
         }
     }
@@ -674,7 +681,15 @@ pub struct CardPortrait {
     pub clock: Clock,
     /// The rim key when a sidecar names none (the game's house rim light; None: no rim flicker).
     pub rim: Option<Rgba>,
+    /// PORTRAITFX1-X: the sidecar files to try for a drawn portrait file, in order (the game's layout: an expression
+    /// frame's own, then its base portrait's); None: the drawn file's own sidecar only.
+    pub sidecars: Option<fn(&str) -> Vec<String>>,
 }
+
+/// The `face` cue key a line card's `expression` holds under.
+pub const CARD_FACE_KEY: &str = "card.face";
+/// The priority of a card's `face` cue (a staged line: the card decides; the top of the cue rows' 0-100).
+pub const CARD_FACE_PRIORITY: i32 = 100;
 
 impl CardPortrait {
     /// `ms` of frame time (the screen's, at most `MAX_FRAME_MS`).
@@ -692,8 +707,18 @@ impl CardPortrait {
         Value::Array(self.fx.iter().map(|f| f.state(self.clock.now())).collect())
     }
 
-    /// Draws `c`'s portrait into `r`: the first file of its chain with that file's sidecar; false (and no portrait
-    /// kept) when no layer holds any, so the frame stays empty.
+    /// The face sidecar of the drawn file `rel`: the first of `sidecars`' files that parses (each is read beside its
+    /// PNG, `Art::face`), else none; without `sidecars` the file's own.
+    pub fn face_of(&self, art: &mut Art, rel: &str) -> Option<aegis_core::assets::Face> {
+        match self.sidecars {
+            None => art.face(rel).cloned(),
+            Some(f) => f(rel).iter().find_map(|sc| sc.strip_suffix(".face.json").and_then(|stem| art.face(&format!("{stem}.png")).cloned())),
+        }
+    }
+
+    /// Draws `c`'s portrait into `r`: the first file of its chain with its sidecar (`face_of`) and the card's
+    /// `expression` held as a `face` cue; false (and no portrait kept) when no layer holds any, so the frame stays
+    /// empty.
     fn draw(&mut self, p: &mut Painter, art: &mut Art, c: &Card, r: Rect, reduce_motion: bool) -> bool {
         let Some(rel) = art.first_rel(&c.portrait) else {
             self.fx = None;
@@ -703,12 +728,16 @@ impl CardPortrait {
         };
         let key = if c.portrait_key.is_empty() { rel.clone() } else { c.portrait_key.clone() };
         let now = self.clock.now();
+        let face = self.face_of(art, &rel);
         let fx = match &mut self.fx {
             Some(f) if f.key == key => f,
             slot => slot.insert(PortraitFx::new(&key)),
         };
-        let face = art.face(&rel).cloned();
-        fx.hold(&face.as_ref().map(idle_cues).unwrap_or_default(), now);
+        let mut cues = face.as_ref().map(idle_cues).unwrap_or_default();
+        if !c.expression.is_empty() {
+            cues.extend(Cue::parse("face", "").map(|q| q.with_expression(&c.expression).with_priority(CARD_FACE_PRIORITY).with_key(CARD_FACE_KEY)));
+        }
+        fx.hold(&cues, now);
         let opts = PortraitOpts { reduce_motion, rim_default: self.rim, show_anchors: false };
         self.budget.begin();
         fx.draw(p, art, &rel, face.as_ref(), r, now, &opts, &mut self.budget)
@@ -861,6 +890,12 @@ pub struct VignetteScreen<G> {
 impl<G: Context> VignetteScreen<G> {
     pub fn new(reel: Reel, speed: TextSpeed, on_done: impl FnOnce(&mut Cx<G>, Ended) + 'static) -> Self {
         Self { player: Player::new(reel, speed), palette: Palette::default(), ask_first: false, portrait: CardPortrait::default(), on_done: Some(Box::new(on_done)), last: None, w: Vec::new() }
+    }
+
+    /// PORTRAITFX1-X: where the line cards' portraits take their anchors (`CardPortrait::sidecars`).
+    pub fn portrait_sidecars(mut self, sidecars: fn(&str) -> Vec<String>) -> Self {
+        self.portrait.sidecars = Some(sidecars);
+        self
     }
 
     /// The rim key of the line cards' portraits when a sidecar names none (the game's house rim light).
