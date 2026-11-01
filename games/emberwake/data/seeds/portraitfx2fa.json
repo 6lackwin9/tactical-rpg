@@ -1,0 +1,13 @@
+{"steps":[
+{"op":"upsert","kind":"portrait_expressions","entry":{"id":"determined","breath_amp":2.4,"breath_ms":4400,"breath_in":0.5,"rest_dy":-1,"rest_ms":400}},
+{"op":"upsert","kind":"portrait_expressions","entry":{"id":"happy","breath_amp":2.4,"breath_ms":3000,"breath_in":0.5,"enter_dy":-2,"enter_ms":320,"bob_px":1,"bob_ms":1100}},
+{"op":"upsert","kind":"portrait_expressions","entry":{"id":"sad","breath_amp":2.0,"breath_ms":5200,"breath_in":0.3,"rest_dy":2,"rest_ms":1500}},
+{"op":"upsert","kind":"portrait_expressions","entry":{"id":"surprised","breath_amp":1.0,"breath_ms":2600,"breath_in":0.5,"enter_dy":-3,"enter_ms":360,"settle_ms":1600,"blink":false}},
+{"op":"upsert","kind":"portrait_cues","entry":{"id":"face_battle_start","event":"battle_start","effect":"face","ms":1800,"expression":"determined","priority":30}},
+{"op":"upsert","kind":"portrait_cues","entry":{"id":"face_round_start","event":"round_start","effect":"face","ms":1000,"expression":"determined","priority":25}},
+{"op":"upsert","kind":"portrait_cues","entry":{"id":"face_big_skill","event":"skill","min_level":3,"effect":"face","ms":1200,"expression":"determined","priority":55}},
+{"op":"upsert","kind":"portrait_cues","entry":{"id":"face_ambush","event":"ambush","effect":"face","ms":1500,"expression":"surprised","priority":65}},
+{"op":"upsert","kind":"portrait_cues","entry":{"id":"face_ally_down","event":"ally_down","effect":"face","ms":2000,"expression":"sad","priority":65}},
+{"op":"upsert","kind":"portrait_cues","entry":{"id":"face_victory","event":"victory","effect":"face","ms":3000,"expression":"happy","priority":90}},
+{"op":"upsert","kind":"portrait_cues","entry":{"id":"face_level_up","trigger":"unspent","effect":"face","expression":"happy","priority":35,"surfaces":["roster"]}}
+]}

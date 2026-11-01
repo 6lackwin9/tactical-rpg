@@ -155,6 +155,65 @@
 			"effect": "face",
 			"expression": "hurt",
 			"priority": 80
+		},
+		{
+			"id": "face_battle_start",
+			"event": "battle_start",
+			"effect": "face",
+			"ms": 1800,
+			"expression": "determined",
+			"priority": 30
+		},
+		{
+			"id": "face_round_start",
+			"event": "round_start",
+			"effect": "face",
+			"ms": 1000,
+			"expression": "determined",
+			"priority": 25
+		},
+		{
+			"id": "face_big_skill",
+			"event": "skill",
+			"min_level": 3,
+			"effect": "face",
+			"ms": 1200,
+			"expression": "determined",
+			"priority": 55
+		},
+		{
+			"id": "face_ambush",
+			"event": "ambush",
+			"effect": "face",
+			"ms": 1500,
+			"expression": "surprised",
+			"priority": 65
+		},
+		{
+			"id": "face_ally_down",
+			"event": "ally_down",
+			"effect": "face",
+			"ms": 2000,
+			"expression": "sad",
+			"priority": 65
+		},
+		{
+			"id": "face_victory",
+			"event": "victory",
+			"effect": "face",
+			"ms": 3000,
+			"expression": "happy",
+			"priority": 90
+		},
+		{
+			"id": "face_level_up",
+			"trigger": "unspent",
+			"effect": "face",
+			"expression": "happy",
+			"priority": 35,
+			"surfaces": [
+				"roster"
+			]
 		}
 	]
 }

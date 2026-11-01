@@ -48,6 +48,39 @@
 			"shiver_px": 1,
 			"shiver_ms": 280,
 			"shiver_gap_ms": 1400
+		},
+		{
+			"id": "determined",
+			"breath_amp": 2.4,
+			"breath_ms": 4400,
+			"rest_dy": -1,
+			"rest_ms": 400
+		},
+		{
+			"id": "happy",
+			"breath_amp": 2.4,
+			"breath_ms": 3000,
+			"bob_px": 1,
+			"bob_ms": 1100,
+			"enter_dy": -2,
+			"enter_ms": 320
+		},
+		{
+			"id": "sad",
+			"breath_amp": 2.0,
+			"breath_ms": 5200,
+			"breath_in": 0.3,
+			"rest_dy": 2,
+			"rest_ms": 1500
+		},
+		{
+			"id": "surprised",
+			"breath_amp": 1.0,
+			"breath_ms": 2600,
+			"enter_dy": -3,
+			"enter_ms": 360,
+			"settle_ms": 1600,
+			"blink": false
 		}
 	]
 }
