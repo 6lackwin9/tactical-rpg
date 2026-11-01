@@ -82,7 +82,8 @@ pub fn reward_lines(cx: &Cx, rewards: &Dict) -> Vec<String> {
     }
     let gold = json::i(rewards, "gold", 0);
     if gold > 0 {
-        out.push(format!("{gold} gold"));
+        // TERMS1 TU3: the currency's word in the game's world ("12 gold", "12 Scrap")
+        out.push(format!("{gold} {}", crate::hud::term_word(cx, emberwake_world::terms::CURRENCY)));
     }
     out
 }
@@ -447,8 +448,9 @@ pub fn party_lines(d: &emberwake_world::Data, gs: &GameState, wounded: &[String]
 
 /// REWARD1 section 7: the tally line ("Foes defeated: 3 of 5 (2 slain, 1 surrendered)."), the outcome's note, and the
 /// reward lines (share gold, objective bonus, drops merged by item, key loot, missed key loot); `name(kind, id)` gives
-/// an item's, a loot entry's or a character's name.
-pub fn reward_text(rewards: &Dict, outcome: &str, name: &dyn Fn(&str, &str) -> String) -> (String, String, Vec<String>) {
+/// an item's, a loot entry's or a character's name; `currency` is the currency's short form in the battle's world
+/// (TERMS1 TU2: "Gold", "Scrap").
+pub fn reward_text(rewards: &Dict, outcome: &str, currency: &str, name: &dyn Fn(&str, &str) -> String) -> (String, String, Vec<String>) {
     let foes = json::i(rewards, "foes", 0);
     let d = json::dget(rewards, "defeated");
     let (slain, surr, fled) = (json::i(d, "slain", 0), json::i(d, "surrendered", 0), json::i(d, "fled", 0));
@@ -473,12 +475,12 @@ pub fn reward_text(rewards: &Dict, outcome: &str, name: &dyn Fn(&str, &str) -> S
     let mut lines = Vec::new();
     let gold = json::i(rewards, "gold", 0);
     if gold > 0 {
-        lines.push(format!("Gold +{gold}"));
+        lines.push(format!("{currency} +{gold}"));
     }
     let objective = json::dget(rewards, "objective");
     let mut bonus = Vec::new();
     if json::i(objective, "gold", 0) > 0 {
-        bonus.push(format!("Gold +{}", json::i(objective, "gold", 0)));
+        bonus.push(format!("{currency} +{}", json::i(objective, "gold", 0)));
     }
     if !json::s(objective, "loot").is_empty() {
         bonus.push(name("loot", &json::s(objective, "loot")));
@@ -558,7 +560,8 @@ impl Screen<GameCx> for Results {
                 _ => s_or(d.resolve(&world, kind, id), "name", id),
             }
         };
-        let (tally, note, reward_lines) = reward_text(&self.rewards, &self.outcome, &name);
+        let currency = emberwake_world::terms::short(&d, &world, emberwake_world::terms::CURRENCY);
+        let (tally, note, reward_lines) = reward_text(&self.rewards, &self.outcome, &currency, &name);
         let line = (ui.p.line_h(BODY + 1.0) + 3.0).ceil() as i32;
         let mut y = 50;
         for (text, col) in [(&tally, TEXT), (&note, DIM)] {
@@ -659,17 +662,17 @@ mod tests {
     /// REWARD1 section 7: the tally line, each outcome's note, and the reward lines in order.
     #[test]
     fn the_results_say_what_the_defeated_foes_paid() {
-        let (tally, note, lines) = reward_text(&rewards(2, 1, 0, json!({})), "lost", &name);
+        let (tally, note, lines) = reward_text(&rewards(2, 1, 0, json!({})), "lost", "Gold", &name);
         assert_eq!(tally, "Foes defeated: 3 of 5 (2 slain, 1 surrendered).");
         assert_eq!(note, "The party was beaten, but keeps the rewards of the foes it defeated.");
         assert!(lines.is_empty());
-        assert_eq!(reward_text(&rewards(5, 0, 0, json!({})), "won", &name).0, "Foes defeated: 5 of 5.");
-        assert_eq!(reward_text(&rewards(0, 0, 1, json!({})), "fled", &name).0, "Foes defeated: 1 of 5 (1 fled).");
-        assert_eq!(reward_text(&rewards(0, 0, 0, json!({})), "lost", &name).1, "The party was beaten before it defeated a foe. No rewards.");
-        assert_eq!(reward_text(&rewards(1, 0, 0, json!({})), "fled", &name).1, "The party got away with the rewards of the foes it defeated.");
-        assert_eq!(reward_text(&rewards(0, 0, 0, json!({})), "fled", &name).1, "The party got away. No foe was defeated, so no rewards.");
-        assert_eq!(reward_text(&rewards(5, 0, 0, json!({})), "won", &name).1, "");
-        assert_eq!(reward_text(&json::obj([("foes", json!(0))]), "won", &name).0, "", "no roster, no tally line");
+        assert_eq!(reward_text(&rewards(5, 0, 0, json!({})), "won", "Gold", &name).0, "Foes defeated: 5 of 5.");
+        assert_eq!(reward_text(&rewards(0, 0, 1, json!({})), "fled", "Gold", &name).0, "Foes defeated: 1 of 5 (1 fled).");
+        assert_eq!(reward_text(&rewards(0, 0, 0, json!({})), "lost", "Gold", &name).1, "The party was beaten before it defeated a foe. No rewards.");
+        assert_eq!(reward_text(&rewards(1, 0, 0, json!({})), "fled", "Gold", &name).1, "The party got away with the rewards of the foes it defeated.");
+        assert_eq!(reward_text(&rewards(0, 0, 0, json!({})), "fled", "Gold", &name).1, "The party got away. No foe was defeated, so no rewards.");
+        assert_eq!(reward_text(&rewards(5, 0, 0, json!({})), "won", "Gold", &name).1, "");
+        assert_eq!(reward_text(&json::obj([("foes", json!(0))]), "won", "Gold", &name).0, "", "no roster, no tally line");
         let full = rewards(5, 0, 0, json!({
             "gold": 12,
             "objective": {"gold": 10, "loot": "ashlands:keep_ring"},
@@ -677,7 +680,7 @@ mod tests {
             "key_loot": ["ashlands:warchiefs_axe"],
             "key_missed": [{"loot": "ashlands:warchiefs_axe", "kill": "ash_warchief"}],
         }));
-        assert_eq!(reward_text(&full, "won", &name).2, [
+        assert_eq!(reward_text(&full, "won", "Gold", &name).2, [
             "Gold +12",
             "Objective bonus: Gold +10, Keep Ring",
             "Dropped: Shortbow, Healing Potion x2",

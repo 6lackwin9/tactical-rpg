@@ -634,7 +634,7 @@ impl Plan {
             return String::new();
         }
         if of != intent.id() {
-            return format!("Only {} skills this round.", intent.name());
+            return format!("Only {} skills this round.", intent.label(&w.cat));
         }
         let Some(target) = target.map(|t| round_intent::normalize(c, t)) else { return String::new() };
         let self_only = step.mode == Mode::SelfCast;

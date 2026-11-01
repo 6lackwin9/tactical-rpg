@@ -324,10 +324,10 @@ impl RegionMap {
                 } else {
                     let mut got: Vec<String> = json::ints(json::get(&res, "items")).iter().map(|(id, n)| format!("{} x{n}", cx.data.item_name(id))).collect();
                     if json::i(&res, "gold", 0) > 0 {
-                        got.push(format!("{} gold", json::i(&res, "gold", 0)));
+                        got.push(format!("{} {}", json::i(&res, "gold", 0), purse_word(cx, PurseWord::Currency)));
                     }
                     if json::i(&res, "supplies", 0) > 0 {
-                        got.push(format!("{} supplies", json::i(&res, "supplies", 0)));
+                        got.push(format!("{} {}", json::i(&res, "supplies", 0), purse_word(cx, PurseWord::Upkeep)));
                     }
                     cx.log(if got.is_empty() { "The chest holds nothing useful.".to_string() } else { format!("Found: {}.", got.join(", ")) });
                     for n in json::sget(&res, "notes") {

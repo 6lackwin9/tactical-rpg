@@ -147,8 +147,22 @@ pub fn purse_word_in(d: &emberwake_world::Data, world: &str, which: PurseWord) -
 
 /// `purse_word_in` for the game in play (today's word without a game).
 pub fn purse_word(cx: &Cx, which: PurseWord) -> String {
-    let world = cx.game.as_ref().map(|g| g.gs.world_id.clone()).unwrap_or_default();
-    purse_word_in(&cx.data, &world, which)
+    purse_word_in(&cx.data, &play_world(cx), which)
+}
+
+/// The world being played ("" without a game: the terms' defaults).
+pub fn play_world(cx: &Cx) -> String {
+    cx.game.as_ref().map(|g| g.gs.world_id.clone()).unwrap_or_default()
+}
+
+/// TERMS1 TU2, TU4: term `id`'s short form (labels, Results lines: "Gold", "Scrap") in the world being played.
+pub fn term_short(cx: &Cx, id: &str) -> String {
+    emberwake_world::terms::short(&cx.data, &play_world(cx), id)
+}
+
+/// TERMS1 TU3, TU4: term `id`'s word inside a sentence ("gold", "Scrap") in the world being played.
+pub fn term_word(cx: &Cx, id: &str) -> String {
+    emberwake_world::terms::word(&cx.data, &play_world(cx), id)
 }
 
 /// A chip's widget id: `hud.gold` and `hud.supplies` for the purse counters (in every world), `hud.meter.<id>` for a

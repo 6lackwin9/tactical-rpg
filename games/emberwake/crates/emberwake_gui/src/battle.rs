@@ -265,11 +265,12 @@ fn intent_ink(i: RoundIntent) -> Rgba {
     rgb(lift(c[0]), lift(c[1]), lift(c[2]))
 }
 
-/// UI5: the intent glyph the strip, the cards and the board share: a plate in the intent's colour with its initial.
-fn intent_glyph(p: &mut Painter, i: RoundIntent, r: Rect) {
+/// UI5: the intent glyph the strip, the cards and the board share: a plate in the intent's colour with its initial
+/// (TERMS1 TU5: of the intent's name through `cat`'s terms).
+fn intent_glyph(p: &mut Painter, cat: &emberwake_data::Catalog, i: RoundIntent, r: Rect) {
     p.panel(r, intent_color(i), rgba(255, 255, 255, 170), 2.0);
-    let letter = &i.name()[..1];
-    p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0, letter, SMALL, TEXT);
+    let letter: String = i.label(cat).chars().take(1).collect();
+    p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0, &letter, SMALL, TEXT);
 }
 
 /// A tell line's kind as the command colour key (`kind_color`).
@@ -395,14 +396,14 @@ fn pick_label(s: &Session, h: usize, picks: &[rip::Pick]) -> String {
 }
 
 /// A menu row's detail (IF3): "<blocks> blocks, <ap> AP; <Intent>" (a Maneuver row adds its kind), or its refusal.
-fn pick_detail(o: &rip::PickOption) -> String {
+fn pick_detail(cat: &emberwake_data::Catalog, o: &rip::PickOption) -> String {
     if let Some(why) = &o.problem {
         return why.clone();
     }
     let blocks = format!("{} block{}, {} AP", o.blocks, if o.blocks == 1 { "" } else { "s" }, o.ap);
     match (o.intent, o.kind) {
-        (Some(RoundIntent::Maneuver), Some(k)) => format!("{blocks}; Maneuver ({})", kind_name(k)),
-        (Some(i), _) => format!("{blocks}; {}", i.name()),
+        (Some(i @ RoundIntent::Maneuver), Some(k)) => format!("{blocks}; {} ({})", i.label(cat), kind_name(k)),
+        (Some(i), _) => format!("{blocks}; {}", i.label(cat)),
         (None, _) => blocks,
     }
 }
@@ -2853,7 +2854,7 @@ impl BattleScreen {
         let opts = rip::pick_options(w, &s.plan, h, at);
         let mut rows: Vec<Row> = opts
             .iter()
-            .map(|o| Row { label: pick_label(s, h, &o.picks), detail: pick_detail(o), valid: o.problem.is_none(), act: RowAct::Pick(o.picks.clone()), tip: pick_tip(s, h, o), warn: !o.drops.is_empty(), ap_short: o.ap_short })
+            .map(|o| Row { label: pick_label(s, h, &o.picks), detail: pick_detail(&w.cat, o), valid: o.problem.is_none(), act: RowAct::Pick(o.picks.clone()), tip: pick_tip(s, h, o), warn: !o.drops.is_empty(), ap_short: o.ap_short })
             .collect();
         let held = rip::picks_of(w, h).iter().any(|p| p.holds_target());
         let round = w.round_states.get(&h).and_then(|r| r.target);
@@ -3922,7 +3923,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     // UI5: the strip row leads with the hero's intent glyph (the board and the cards share it)
     let title_w = match sel.and_then(round_of) {
         Some(i) => {
-            intent_glyph(&mut ui.p, i, Rect::new(78, 8, 10, 10));
+            intent_glyph(&mut ui.p, &w.cat, i, Rect::new(78, 8, 10, 10));
             68.0
         }
         None => 80.0,
@@ -4235,7 +4236,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         // UI5: the member's intent glyph at the card's top right (the name gives way)
         let glyph = round_of(a).filter(|_| u.is_active());
         if let Some(i) = glyph {
-            intent_glyph(&mut ui.p, i, Rect::new(r.x + r.w - 13, r.y + 2, 10, 10));
+            intent_glyph(&mut ui.p, &w.cat, i, Rect::new(r.x + r.w - 13, r.y + 2, 10, 10));
         }
         ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 1.5, &u.name, BODY, if glyph.is_some() { 94.0 } else { 108.0 }, if u.is_active() { ALLY } else { DIM });
         hp_bar(&mut ui.p, Rect::new(r.x + 4, r.y + 12, 108, 4), u.hp, u.max_hp, GOOD);
@@ -4261,8 +4262,8 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         ui.p.panel(r, CARD, BORDER, RADIUS);
         ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 2.0, &u.name, BODY, 64.0, GOLD);
         // RULESET1-U: under the round intent the corner names the hero's intent (the classic stance is inert: IN3)
-        let corner = if timeline { ri::intent_of(pw, h).map_or("No intent", |i| i.name()) } else { stance_name(u) };
-        ui.p.text_right(r.x as f32 + r.w as f32 - 4.0, r.y as f32 + 2.0, corner, SMALL, DIM);
+        let corner = if timeline { ri::intent_of(pw, h).map_or_else(|| "No intent".to_string(), |i| i.label(&pw.cat)) } else { stance_name(u).to_string() };
+        ui.p.text_right(r.x as f32 + r.w as f32 - 4.0, r.y as f32 + 2.0, &corner, SMALL, DIM);
         // INPUT1 IF8, SL4: under the round intent the panel's one control is the Self button (key S)
         let top = if timeline {
             let tip = vec![("Self (S)".into(), GOLD), (format!("{} targets itself: its Guard and self skills.", u.name), TEXT)];
@@ -4308,7 +4309,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             match intent {
                 Some(i) => {
                     let kind = if i == RoundIntent::Maneuver { pw.round_states.get(&h).and_then(|r| r.maneuver).map(|k| format!(" ({})", kind_name(k))).unwrap_or_default() } else { String::new() };
-                    lines.push((format!("Intent: {}{kind}{from}", i.name()), TEXT));
+                    lines.push((format!("Intent: {}{kind}{from}", i.label(&pw.cat)), TEXT));
                 }
                 None => lines.push(("Intent: none yet (click a target)".into(), GOLD)),
             }
@@ -4509,7 +4510,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         // slice 5: from the round records, as the tokens draw it, so the two agree during the playback too
         let glyph = round_of(e).filter(|_| show_tells && u.is_active());
         if let Some(i) = glyph {
-            intent_glyph(&mut ui.p, i, Rect::new(r.x + 3, r.y + 2, 10, 10));
+            intent_glyph(&mut ui.p, &w.cat, i, Rect::new(r.x + 3, r.y + 2, 10, 10));
         }
         let gx = if glyph.is_some() { 12.0 } else { 0.0 };
         ui.p.text_fit(r.x as f32 + 3.0 + gx, r.y as f32 + 1.5, &short_name(&u.name), BODY, 70.0 - gx, col);
@@ -6641,7 +6642,7 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
         if w.enemies.contains(&r.unit) && !show_tells {
             continue;
         }
-        intent_glyph(&mut ui.p, i, Rect::new(GRID_X + at.x * TILE + TILE - 11, GRID_Y + at.y * TILE + 1, 10, 10));
+        intent_glyph(&mut ui.p, &w.cat, i, Rect::new(GRID_X + at.x * TILE + TILE - 11, GRID_Y + at.y * TILE + 1, 10, 10));
     }
     // HOOKS1-UI slice 4: the push forecasts above the tokens (a collision mark sits between two of them)
     draw_pushes(&mut ui.p, pushes, &Geom::new(View::Flat, tuning));
@@ -7012,7 +7013,7 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                     if w.enemies.contains(&r.unit) && !show_tells {
                         continue;
                     }
-                    intent_glyph(&mut ui.p, i, Rect::new(t.foot.0 + 5, (t.foot.1 as f32 - 0.95 * tp as f32 - 2.0).round() as i32, 10, 10));
+                    intent_glyph(&mut ui.p, &w.cat, i, Rect::new(t.foot.0 + 5, (t.foot.1 as f32 - 0.95 * tp as f32 - 2.0).round() as i32, 10, 10));
                 }
                 // RULESET1-U slice 5 (P7): a BREAK plate over each unit broken this round, above its chips
                 for i in broken_units(w, &layers) {
@@ -10374,6 +10375,11 @@ mod slice5_tests {
 
     /// The scratch fight: Maneuver Disengage (`disengage`) or Assault (with AP for two Cleaves) on the footman.
     fn scratch_session(disengage: bool) -> (Session, usize, usize) {
+        scratch_session_with(disengage, json!([]))
+    }
+
+    /// `scratch_session` with the catalog's `terms` rows (TERMS1 5.1).
+    fn scratch_session_with(disengage: bool, terms: Value) -> (Session, usize, usize) {
         let atk = |id: &str, intent: &str, blocks: i32, ap: i32, dash: i32| json!({"id": id, "name": id, "kind": "ATTACK", "round_intent": intent, "level": 1, "blocks": blocks, "ap_cost": ap, "power_mult": 0.8, "dash_tiles": dash, "target_mode": "ENEMY"});
         let skills = vec![
             json!({"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 1, "basic": true, "target_mode": "ENEMY"}),
@@ -10387,7 +10393,7 @@ mod slice5_tests {
             json!({"id": "g_heavy", "name": "Heavy", "kind": "ATTACK", "round_intent": "assault", "level": 1, "blocks": 4, "ap_cost": 1, "power_mult": 0.5, "target_mode": "ENEMY"}),
         ];
         let unit = |id: &str, side: &str, order: Value| json!({"id": id, "name": id, "side": side, "stat_mode": "fixed", "hp": 400, "speed": 12, "attack_range": 1, "skill_cap": 5, "poise": 40, "deck": {"order": order}});
-        let cat = emberwake_data::Catalog::from_value(&json!({"skills": skills, "units": [unit("g_dancer", "party", json!({"maneuver": ["g_slip"], "assault": ["g_cut"]})), unit("g_footman", "enemy", json!({"assault": ["g_heavy"]}))]}));
+        let cat = emberwake_data::Catalog::from_value(&json!({"skills": skills, "units": [unit("g_dancer", "party", json!({"maneuver": ["g_slip"], "assault": ["g_cut"]})), unit("g_footman", "enemy", json!({"assault": ["g_heavy"]}))], "terms": terms}));
         let rules = Ruleset::from_row(json!({"id": TIMELINE, "name": "Timeline", "rules": [ROUND_INTENT, AP_COST, FLANK, POISE], "basics": ["move", "rest", "strike"]}).as_object().unwrap());
         let row = json!({"id": "g_fight", "name": "Fight", "party": ["g_dancer"], "enemies": ["g_footman"], "total_blocks": 6, "unit_ap": 10, "ap_regen": 0, "max_rounds": 8});
         let mut def = emberwake_battle::session::EncounterDef::from_obj(row.as_object().unwrap());
@@ -10405,6 +10411,33 @@ mod slice5_tests {
         let (w, plan) = (&mut sess.w, &mut sess.plan);
         rip::plan_unit(w, plan, d).unwrap_or_else(|e| panic!("the round: {e}"));
         (sess, d, f)
+    }
+
+    /// TERMS1 TU5: the battle screen's intent names read the game's `terms` table through the battle's catalog (the
+    /// round head of a record, a pick's detail, the glyph's initial, the kit's intent texts); with no row the defaults.
+    #[test]
+    fn intent_names_read_the_games_terms() {
+        let renamed = json!([{"id": "intent_assault", "name": "Onslaught", "origin": "test"}, {"id": "intent_maneuver", "name": "Shift", "origin": "test"}]);
+        for (terms, assault, maneuver) in [(json!([]), "Assault", "Maneuver"), (renamed, "Onslaught", "Shift")] {
+            let (sess, d, f) = scratch_session_with(false, terms);
+            let w = &sess.w;
+            assert_eq!(RoundIntent::Assault.label(&w.cat), assault);
+            assert_eq!(crate::party::intent_names(&w.cat).get("assault").map(String::as_str), Some(assault), "the deck screens' names (party, Dojo)");
+            let line = emberwake_battle::intent::Line { kind: "", target: None, cell: V2::new(0, 0), blocks: (0, 0), recovery: 0, skill: String::new() };
+            let rec = emberwake_battle::intent::Intent { unit: d, line, revealed: false, enraged: false, readers: Vec::new(), plan: Vec::new(), morale_state: "", morale_group: -1,
+                round_intent: Some(RoundIntent::Assault), round_target: Some(RoundTarget::Unit(f)), maneuver: None, impacts: Vec::new() };
+            assert_eq!(intent_text::round_head(w, &rec), Some(format!("{assault}: {}", w.units[f].name)));
+            let opt = |i: RoundIntent, kind: Option<ManeuverKind>| rip::PickOption { picks: Vec::new(), intent: Some(i), kind, ap: 2, blocks: 2, problem: None, ap_short: None, drops: Vec::new() };
+            assert_eq!(pick_detail(&w.cat, &opt(RoundIntent::Assault, None)), format!("2 blocks, 2 AP; {assault}"));
+            assert_eq!(pick_detail(&w.cat, &opt(RoundIntent::Maneuver, Some(ManeuverKind::Engage))), format!("2 blocks, 2 AP; {maneuver} (Engage)"));
+            assert_eq!(ri::target_problem(w, d, RoundIntent::Assault, RoundTarget::Myself), format!("{assault} targets an enemy or a tile."), "the kit's intent text");
+            let mut g = crate::hud::hud_tests::gfx();
+            g.fonts.audit = Some(Vec::new());
+            let view = g.view;
+            intent_glyph(&mut Painter { c: &mut g.canvas, v: view, fonts: &mut g.fonts }, &w.cat, RoundIntent::Assault, Rect::new(0, 0, 10, 10));
+            let letters: Vec<String> = g.fonts.audit.take().unwrap_or_default().into_iter().map(|r| r.text).collect();
+            assert_eq!(letters, [assault[..1].to_string()], "the glyph's initial");
+        }
     }
 
     /// The slice 3 review on a real plan: under a Disengage round the reach band centres on the tile the Slip Strike

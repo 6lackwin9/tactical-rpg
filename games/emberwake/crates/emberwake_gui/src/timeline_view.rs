@@ -222,11 +222,11 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
                 _ => (w, &s.plan),
             };
             let (segments, marks) = if planning && unit.is_active() { (plan_segments(pw, plan, u, &o.layers), Vec::new()) } else { action_segments(w, &actions, u, &o.layers, |_| true) };
-            let letter = ri::intent_of(pw, u).filter(|_| timeline && live && unit.is_active()).map(|i| format!("{} ", i.name().chars().next().unwrap_or(' '))).unwrap_or_default();
+            let letter = ri::intent_of(pw, u).filter(|_| timeline && live && unit.is_active()).map(|i| format!("{} ", i.label(&pw.cat).chars().next().unwrap_or(' '))).unwrap_or_default();
             let label = format!("{letter}{}", unit.name);
             let mut tip: Tip = vec![(label.clone(), GOLD)];
             if let Some(i) = ri::intent_of(pw, u).filter(|_| timeline && live) {
-                tip.push((format!("Intent: {}", i.name()), TEXT));
+                tip.push((format!("Intent: {}", i.label(&pw.cat)), TEXT));
             }
             // TV3: AP9's lines while planning (the gauge's forecast), the live AP otherwise
             if timeline && planning && unit.is_active() {

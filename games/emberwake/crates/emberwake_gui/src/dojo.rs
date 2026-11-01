@@ -684,8 +684,9 @@ impl Dojo {
         let setup = &self.s.planner;
         let mut x = x0;
         for (i, it) in intents.iter().enumerate() {
-            let w = ui.p.text_w(it.name(), SMALL).ceil() as i32 + 8;
-            ui.button_full(&format!("dojo.plan.intent.{}", it.id()), Rect::new(x, y, w, 11), it.name(), DAct::PlanIntent(i), true, *it == setup.intent, SMALL, tip(it.name(), "Plan the hero's round with this intent (the target is the dummy, or the hero for Guard and Support)."));
+            let name = it.label(&self.s.cat);
+            let w = ui.p.text_w(&name, SMALL).ceil() as i32 + 8;
+            ui.button_full(&format!("dojo.plan.intent.{}", it.id()), Rect::new(x, y, w, 11), &name, DAct::PlanIntent(i), true, *it == setup.intent, SMALL, tip(&name, "Plan the hero's round with this intent (the target is the dummy, or the hero for Guard and Support)."));
             x += w + 2;
         }
         y += 13;
@@ -843,7 +844,7 @@ impl Dojo {
             y += 9;
         }
         for (intent, list) in &orders {
-            let name = RoundIntent::parse(intent).map(|i| i.name().to_string()).unwrap_or_else(|| intent.clone());
+            let name = RoundIntent::parse(intent).map(|i| i.label(cat)).unwrap_or_else(|| intent.clone());
             ui.p.text(x0 as f32, y as f32, &format!("{name} order"), SMALL, INFO);
             y += 9;
             for (k, f) in list.iter().enumerate() {

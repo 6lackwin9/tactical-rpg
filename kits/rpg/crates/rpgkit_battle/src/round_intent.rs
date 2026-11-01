@@ -195,7 +195,7 @@ pub fn target_problem(w: &World, c: UnitId, intent: RoundIntent, target: RoundTa
         return String::new();
     }
     match intent {
-        RoundIntent::Assault | RoundIntent::Maneuver => format!("{} targets an enemy or a tile.", intent.name()),
+        RoundIntent::Assault | RoundIntent::Maneuver => format!("{} targets an enemy or a tile.", intent.label(&w.cat)),
         RoundIntent::Guard => "Guard targets yourself or a tile.".into(),
         RoundIntent::Support => "Support targets yourself or an ally.".into(),
         RoundIntent::Channel => String::new(),
@@ -218,7 +218,7 @@ pub fn set_intent(w: &mut World, c: UnitId, intent: RoundIntent) -> Result<Vec<S
         return Err("This battle has no round intents.".into());
     }
     if !w.ruleset.numbers.intents.iter().any(|i| i == intent.id()) {
-        return Err(format!("{} is not an intent of this ruleset.", intent.name()));
+        return Err(format!("{} is not an intent of this ruleset.", intent.label(&w.cat)));
     }
     if !w.units[c].is_active() {
         return Err(format!("{} is not on the field.", w.units[c].name));
@@ -226,7 +226,7 @@ pub fn set_intent(w: &mut World, c: UnitId, intent: RoundIntent) -> Result<Vec<S
     let old = w.round_states.get(&c).and_then(|r| r.intent);
     let mut lines = Vec::new();
     if old.is_some_and(|o| o != intent) {
-        let from = old.unwrap().name();
+        let from = old.unwrap().label(&w.cat);
         for name in drop_bound(w, c) {
             lines.push(format!("{} leaves {from}: {name} ends", w.units[c].name));
         }

@@ -342,6 +342,8 @@ pub(crate) struct DeckTerms {
     pub auto: Deck,
     /// The actives an empty `active` row plays as in a deck with other keys (the loadout's families).
     pub auto_actives: Vec<String>,
+    /// TERMS1 TU5: intent id -> its name through the catalog's `terms` (`intent_names`; empty = the defaults).
+    pub intent_names: IndexMap<String, String>,
 }
 
 impl DeckTerms {
@@ -373,7 +375,7 @@ impl DeckTerms {
         }
         auto_actives.truncate(rule.slots.active.max(0) as usize);
         let intent_of = actives.iter().chain(&basics).filter_map(|f| cat.tier_one(f).map(|s| (f.clone(), emberwake_battle::round_intent::skill_intent(s).to_string()))).collect();
-        Some(Self { slots: rule.slots, intents: rs.numbers.intents.clone(), basics, actives, passives, keystones, intent_of, auto, auto_actives })
+        Some(Self { slots: rule.slots, intents: rs.numbers.intents.clone(), basics, actives, passives, keystones, intent_of, auto, auto_actives, intent_names: intent_names(cat) })
     }
 
     /// RULESET1-G (the Dojo's deck view): a catalog unit's terms under `rs` (None without the deck rule). `u` is the
@@ -405,7 +407,7 @@ impl DeckTerms {
         }
         auto_actives.truncate(rule.slots.active.max(0) as usize);
         let intent_of = actives.iter().chain(&basics).filter_map(|f| cat.tier_one(f).map(|s| (f.clone(), emberwake_battle::round_intent::skill_intent(s).to_string()))).collect();
-        Some(Self { slots: rule.slots, intents: rs.numbers.intents.clone(), basics, actives, passives, keystones, intent_of, auto, auto_actives })
+        Some(Self { slots: rule.slots, intents: rs.numbers.intents.clone(), basics, actives, passives, keystones, intent_of, auto, auto_actives, intent_names: intent_names(cat) })
     }
 
     /// The slots of `kind`.
@@ -544,8 +546,8 @@ impl DeckTerms {
             return Err(format!("Follow-ups after {op}: {fam} is not in the deck."));
         }
         if self.intent_of.get(fam) != Some(&intent) {
-            let has = self.intent_of.get(fam).map(|i| intent_title(i)).unwrap_or_else(|| "no intent".into());
-            return Err(format!("Follow-ups after {op}: {fam} is {has}, not {}.", intent_title(&intent)));
+            let has = self.intent_of.get(fam).map(|i| intent_title(&self.intent_names, i)).unwrap_or_else(|| "no intent".into());
+            return Err(format!("Follow-ups after {op}: {fam} is {has}, not {}.", intent_title(&self.intent_names, &intent)));
         }
         let was = list.iter().position(|f| f == fam);
         if let Some(i) = was {
@@ -1530,7 +1532,7 @@ impl Character {
         let d = &cx.data;
         let gs = cx.gs();
         let lvl = m.level(d);
-        let end = ui.p.text(68.0, 104.0, &format!("Level {lvl}  ·  XP {} ({} to next)  ·  Gold {}", m.total_xp, progression::xp_to_next(d, m.total_xp), gs.party.gold), BODY + 1.0, TEXT);
+        let end = ui.p.text(68.0, 104.0, &format!("Level {lvl}  ·  XP {} ({} to next)  ·  {} {}", m.total_xp, progression::xp_to_next(d, m.total_xp), crate::hud::term_short(cx, emberwake_world::terms::CURRENCY), gs.party.gold), BODY + 1.0, TEXT);
         // ROSTER1-U W2: a wounded member's mark and the HP it takes the field with (the act's cut max)
         let (hp, max, wounded) = crate::hub::field_hp(cx, m);
         if wounded {
@@ -1773,7 +1775,7 @@ impl Character {
         let rs = d.ruleset(&cx.gs().world_id);
         let built = progression::build_with(d, m, &cx.gs().world_id, false).map(|b| b.unit);
         let shown = t.shown(&self.deck);
-        let intent_name = |i: &str| emberwake_battle::round_intent::RoundIntent::parse(i).map(|x| x.name().to_string()).unwrap_or_else(|| title_case(i));
+        let intent_name = |i: &str| emberwake_battle::round_intent::RoundIntent::parse(i).map(|x| x.label(cat)).unwrap_or_else(|| title_case(i));
         // (name, intent, AP, rank, description) of family `f` at the rank the member uses now (its top unlocked)
         let skill_of = |f: &str| -> (String, String, i32, i32, String) {
             let top = built.as_ref().and_then(|u| u.selectable_ranks(cat, f).last().copied()).unwrap_or(0);
@@ -2197,9 +2199,17 @@ fn item_numbers(def: &emberwake_data::ItemDef) -> String {
     c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str() + ".").unwrap_or_default()
 }
 
-/// An intent id's display name ("assault" -> "Assault").
-fn intent_title(id: &str) -> String {
-    emberwake_battle::round_intent::RoundIntent::parse(id).map(|x| x.name().to_string()).unwrap_or_else(|| title_case(id))
+/// TERMS1 TU5: every intent's name through `cat`'s terms (the game's `terms` row, else the default), by intent id.
+pub(crate) fn intent_names(cat: &emberwake_data::Catalog) -> IndexMap<String, String> {
+    emberwake_battle::round_intent::RoundIntent::ALL.into_iter().map(|i| (i.id().to_string(), i.label(cat))).collect()
+}
+
+/// An intent id's display name ("assault" -> "Assault"; a renamed intent its `names` entry, from `intent_names`).
+fn intent_title(names: &IndexMap<String, String>, id: &str) -> String {
+    match names.get(id) {
+        Some(n) => n.clone(),
+        None => emberwake_battle::round_intent::RoundIntent::parse(id).map(|x| x.name().to_string()).unwrap_or_else(|| title_case(id)),
+    }
 }
 
 fn title_case(slot: &str) -> String {
@@ -2559,6 +2569,7 @@ mod tests {
             intent_of: [("cleave", "assault"), ("lunge", "assault"), ("wall", "guard"), ("strike", "assault"), ("hold", "guard")].iter().map(|(a, b)| (a.to_string(), b.to_string())).collect(),
             auto: Deck { active: strs(&["cleave", "wall"]), ..Default::default() },
             auto_actives: strs(&["lunge"]),
+            intent_names: IndexMap::new(),
         }
     }
 
@@ -2650,6 +2661,10 @@ mod tests {
         assert_eq!(t.follow_list(&d2, "cleave"), strs(&["strike", "cleave"]), "the opener in its own list");
         assert_eq!(t.follow_candidates(&d, "cleave"), strs(&["cleave"]), "the intent's actives and basics not yet listed");
         assert!(t.follow_add(&d, "cleave", "wall", None).unwrap_err().contains("is Guard, not Assault"));
+        // TERMS1 TU5: the refusal names the intents through the catalog's terms
+        let mut renamed = t.clone();
+        renamed.intent_names = intent_names(&emberwake_data::Catalog::from_value(&json!({"terms": [{"id": "intent_assault", "name": "Onslaught", "origin": "test"}]})));
+        assert!(renamed.follow_add(&d, "cleave", "wall", None).unwrap_err().contains("is Guard, not Onslaught"));
         assert!(t.follow_add(&d, "cleave", "lunge", None).unwrap_err().contains("not in the deck"));
         assert!(t.follow_add(&d, "lunge", "strike", None).unwrap_err().contains("not an opener"));
         // drag: reorder, add at a place, never across lists

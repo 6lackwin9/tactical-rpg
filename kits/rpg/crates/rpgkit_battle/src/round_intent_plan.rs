@@ -491,7 +491,7 @@ impl<'a> Builder<'a> {
             return Err("Channel rounds are not planned yet.".into());
         }
         let Some(target) = w.round_states.get(&c).and_then(|r| r.target).or_else(|| proposed_target(w, c, intent)) else {
-            return Err(format!("{} has no target.", intent.name()));
+            return Err(format!("{} has no target.", intent.label(&w.cat)));
         };
         let p = round_intent::target_problem(w, c, intent, target);
         if !p.is_empty() {
@@ -529,12 +529,12 @@ impl<'a> Builder<'a> {
     }
 
     /// The label of PL7's refusal: the intent, or under Maneuver the kind.
-    fn label(&self) -> &'static str {
+    fn label(&self) -> String {
         match (self.intent, self.kind) {
-            (RoundIntent::Maneuver, ManeuverKind::Engage) => "Engage",
-            (RoundIntent::Maneuver, ManeuverKind::Disengage) => "Disengage",
-            (RoundIntent::Maneuver, ManeuverKind::Utility) => "Utility",
-            (i, _) => i.name(),
+            (RoundIntent::Maneuver, ManeuverKind::Engage) => "Engage".into(),
+            (RoundIntent::Maneuver, ManeuverKind::Disengage) => "Disengage".into(),
+            (RoundIntent::Maneuver, ManeuverKind::Utility) => "Utility".into(),
+            (i, _) => i.label(&self.w.cat),
         }
     }
 
@@ -607,7 +607,7 @@ impl<'a> Builder<'a> {
             return self.try_opener(plan, &o).map(|()| o);
         }
         if self.order.is_empty() {
-            return Err(format!("{} has no {} skill.", self.w.units[self.c].name, self.intent.name()));
+            return Err(format!("{} has no {} skill.", self.w.units[self.c].name, self.intent.label(&self.w.cat)));
         }
         let mut first: Option<String> = None;
         for &sid in &self.order {
@@ -645,7 +645,7 @@ impl<'a> Builder<'a> {
         let w = self.w;
         let s = self.skill(sid);
         if round_intent::skill_intent(s) != self.intent.id() {
-            return Err(format!("Only {} skills this round.", self.intent.name()));
+            return Err(format!("Only {} skills this round.", self.intent.label(&w.cat)));
         }
         let u = &w.units[self.c];
         let k = skill::kind(s);
@@ -743,7 +743,7 @@ impl<'a> Builder<'a> {
         let Some(item) = command::pouch_item(w, self.c, id) else { return Err(format!("{} carries no {id}.", w.units[self.c].name)) };
         let of = round_intent::item_intent(item);
         if of != self.intent.id() {
-            return Err(format!("{} is not a {} item.", item.name, self.intent.name()));
+            return Err(format!("{} is not a {} item.", item.name, self.intent.label(&w.cat)));
         }
         if self.intent == RoundIntent::Maneuver && self.kind != ManeuverKind::Utility {
             return Err(format!("{} opens only a Utility round.", item.name));
@@ -1237,7 +1237,7 @@ fn set_up_picks(w: &mut World, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Re
                     // IF6 a, b: the pick-set intent and the round target held by a pick
                     let cur = round_intent::intent_of(w, c);
                     if cur != Some(i) {
-                        return Err(format!("Only {} skills this round ({} set it)", cur.map_or("other", |c| c.name()), pick_name(w, &h)));
+                        return Err(format!("Only {} skills this round ({} set it)", cur.map_or_else(|| "other".to_string(), |c| c.label(&w.cat)), pick_name(w, &h)));
                     }
                     let round = w.round_states.get(&c).and_then(|r| r.target);
                     let self_cast = i == RoundIntent::Guard || matches!(p, Pick::Skill { skill, .. } if w.cat.skills[*skill].target_mode == "SELF");
@@ -1591,7 +1591,7 @@ impl Builder<'_> {
             Pick::Skill { skill: sid, .. } => {
                 let s = self.skill(*sid);
                 if round_intent::skill_intent(s) != self.intent.id() {
-                    return Err(format!("Only {} skills this round", self.intent.name()).into());
+                    return Err(format!("Only {} skills this round", self.intent.label(&w.cat)).into());
                 }
                 let need = s.blocks + w.recovery_of(self.c, s);
                 if !fits_before(st, need, room.limit) {
@@ -1622,7 +1622,7 @@ impl Builder<'_> {
             Pick::Item(id) => {
                 let Some(item) = command::pouch_item(w, self.c, id) else { return Err(format!("{} carries no {id}.", u.name).into()) };
                 if round_intent::item_intent(item) != self.intent.id() {
-                    return Err(format!("Only {} skills this round", self.intent.name()).into());
+                    return Err(format!("Only {} skills this round", self.intent.label(&w.cat)).into());
                 }
                 let need = item.use_blocks.max(1);
                 if !fits_before(st, need, room.limit) {

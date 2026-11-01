@@ -588,6 +588,11 @@ pub(crate) mod tests {
 
     /// `data()` with the manifest's `travel_modes` block (none when null; CAMPAIGN1-TM).
     fn data_with(travel_modes: Value) -> Data {
+        data_edit(travel_modes, |_, _| {})
+    }
+
+    /// `data_with` after `edit(worlds, catalog)` (a test's extra rows).
+    fn data_edit(travel_modes: Value, edit: impl FnOnce(&mut Value, &mut Value)) -> Data {
         let w = "camp";
         let meters = json!([
             {"id": "alert", "name": "Inquisition Alert", "kind": "gauge", "min": 0, "max": BREACH, "unit": "%", "visible": true,
@@ -628,10 +633,11 @@ pub(crate) mod tests {
         if !travel_modes.is_null() {
             worlds[w]["manifest"]["travel_modes"] = travel_modes;
         }
-        let catalog = json!({
+        let mut catalog = json!({
             "classes": [{"id": "fighter", "name": "Fighter"}],
             "units": [{"id": "hero", "name": "Hero", "side": "party", "class_id": "fighter", "level": 1}]
         });
+        edit(&mut worlds, &mut catalog);
         // the quest template of `job`; the hub's map: the spawn, and the job's marker one step to the right
         let game = json!({"quests": [{"id": "clear_site", "objectives": [{"kind": "win_encounter"}], "rewards": {}}],
                           "maps": [{"id": "yard", "rows": ["#####", "#...#", "#####"], "anchors": [{"id": "spawn", "x": 1, "y": 1}, {"id": "job", "x": 2, "y": 1}]}]});
@@ -1010,6 +1016,58 @@ pub(crate) mod tests {
         map.key(&mut cx, Key::Char('1'));
         assert!(cx.nav.is_empty(), "no ask");
         assert_eq!((cx.gs().time, cx.gs().party.members[0].hp_lost), (time + days, 0), "rested at once");
+    }
+
+    /// TERMS1 TU2-TU4 (rule TM6: labels and Results lines `short`, sentences `word`): in the camp world the Results
+    /// read "Scrap +N" and "Objective bonus: Scrap +N", the journal's reward line "N Scrap", the party sheet "Scrap N",
+    /// and the shop names the upkeep "Tallow" and the currency "Scrap" (the total, the purse after the trade, the
+    /// refusal); a world without a purse keeps today's "Gold +N" and "N gold".
+    #[test]
+    fn results_journal_and_shop_read_the_worlds_purse_names() {
+        use emberwake_world::terms::{self, CURRENCY, UPKEEP};
+        let d = data_edit(Value::Null, |worlds, _| {
+            let own = &mut worlds["camp"]["own"];
+            let mut chars = json::arr(&own["characters"]).to_vec();
+            chars.extend(json::arr(&with_ids("camp", json!([{"id": "trader", "name": "Trader", "role": "npc", "dialogue": "trade"}]))).iter().cloned());
+            own["characters"] = Value::Array(chars);
+            let mut trees = json::arr(&own["dialogues"]).to_vec();
+            trees.extend(json::arr(&with_ids("camp", json!([{"id": "trade", "start": "n", "nodes": [{"id": "n", "text": "Buying?", "choices": [{"text": "Bye."}]}]}]))).iter().cloned());
+            own["dialogues"] = Value::Array(trees);
+            own["shops"] = with_ids("camp", json!([{"id": "store", "name": "Store", "keeper": "trader", "supply_price": 2}]));
+        });
+        let (cur, word) = (terms::short(&d, "camp", CURRENCY), terms::word(&d, "camp", CURRENCY));
+        assert_eq!((cur.as_str(), word.as_str(), terms::short(&d, "camp", UPKEEP).as_str()), ("Scrap", "Scrap", "Tallow"), "the fixture's purse block");
+        assert_eq!((terms::short(&d, "", CURRENCY), terms::word(&d, "", CURRENCY)), ("Gold".to_string(), "gold".to_string()), "no purse: the defaults");
+        let mut cx = camp_cx_in(d, 0, 30);
+        let mut g = gfx();
+        // TU2: the Results popup in the battle's world
+        let rewards = json!({"foes": 1, "defeated": {"slain": 1}, "gold": 12, "objective": {"gold": 10}});
+        let res = json::obj([("ok", json!(true)), ("rewards", rewards.clone())]);
+        let mut r = crate::hub::Results::new(&res, "won", &json::Dict::new());
+        let t: Vec<String> = frame(&mut r, &mut cx, &mut g, 1.0).into_iter().map(|x| x.text).collect();
+        assert!(t.iter().any(|x| x == "Scrap +12") && t.iter().any(|x| x == "Objective bonus: Scrap +10"), "{t:?}");
+        // TU3: the journal's reward line in the game's world
+        assert_eq!(crate::hub::reward_lines(&cx, json::dict(&json!({"gold": 12}))), ["12 Scrap"]);
+        // TU4: the party sheet's stats line
+        let first = cx.gs().party.members[0].id.clone();
+        let mut sheet = crate::party::Character::new(&mut cx, &first, "stats");
+        let t: Vec<String> = frame(&mut sheet, &mut cx, &mut g, 1.0).into_iter().map(|x| x.text).collect();
+        assert!(t.iter().any(|x| x.ends_with(&format!("·  Scrap {}", cx.gs().party.gold))), "{t:?}");
+        // TU4: the shop: the supply row, the total, the purse after and the refusal
+        cx.gs_mut().party.gold = 0;
+        let mut map = crate::region::RegionMap::new(&mut cx);
+        map.talk(&mut cx, "trader");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let choices = json::aget(json::dict(&map.state(&cx)["dialogue"]), "choices").to_vec();
+        let k = choices.iter().position(|c| s(json::dict(c), "service") == "shop").expect("the trader's shop reply");
+        map.click_id(&mut cx, &format!("choice.{k}")).expect("the shop reply");
+        let t: Vec<String> = frame(&mut map, &mut cx, &mut g, 1.0).into_iter().map(|x| x.text).collect();
+        assert!(t.iter().any(|x| x == "Tallow") && t.iter().any(|x| x == "Total: 0 Scrap") && t.iter().any(|x| x == "Scrap: 0 -> 0"), "{t:?}");
+        let row = map.widgets().into_iter().map(|w| s(json::dict(&w), "id")).find(|id| id.starts_with("shop.row.")).expect("the supply row");
+        map.click_id(&mut cx, &row).expect("adds the supplies");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let card = map.widgets().into_iter().find(|w| w["id"] == "trade.confirm").expect("confirm")["tip"].to_string();
+        assert!(card.contains("Not enough Scrap: 2 more needed."), "{card}");
     }
 
     /// P1: the purse words of log lines and tips: the camp world's short names; a world without a purse keeps today's

@@ -4,13 +4,14 @@
 //! trade line puts the whole line back; Confirm settles the trade at once through `shop::trade` (ShopRules), Close or
 //! Esc with lines in the trade asks first. `RegionMap` draws it while its conversation has a shop open.
 
-use crate::hud::HUD_H;
+use crate::hud::{term_short, term_word, HUD_H};
 use crate::screens::Cx;
 use aegis_core::json::{self, s, s_or, Dict};
 use aegis_ui::canvas::{rgb, Rect, Rgba};
 use aegis_ui::painter::Painter;
 use aegis_ui::ui::{tip, Ui, BODY, BORDER, DIM, FOE, FRAME, GOLD, GOOD, INFO, MODAL, PANEL_HI, RADIUS, SELECTED, SMALL, TEXT, W, H};
 use emberwake_world::shop;
+use emberwake_world::terms::{CURRENCY, UPKEEP};
 use serde_json::{json, Value};
 
 /// The tag of the "Discard this trade?" question (`Cx::ask_tag_no`: No is the default, PLAYUI1 4.3 rule 5); `RegionMap`
@@ -125,7 +126,7 @@ fn of_text(x: i64, n: Option<i64>) -> String {
 /// "+90 HP · Owned 2 · Anyone can use it" style detail of an item ("" = travel supplies).
 pub fn item_line(cx: &Cx, item: &str) -> String {
     if item.is_empty() {
-        return "Travel supplies: one per day on the road.".into();
+        return format!("Travel {}: one per day on the road.", term_word(cx, UPKEEP));
     }
     let e = cx.data.entry("items", item);
     let owned = cx.game.as_ref().map(|g| g.gs.party.stash.get(item).copied().unwrap_or(0)).unwrap_or(0);
@@ -213,11 +214,12 @@ impl ShopPane {
                 if json::b(&res, "ok", false) {
                     let (spent, earned) = (json::i(&res, "spent", 0), json::i(&res, "earned", 0));
                     let mut parts = Vec::new();
+                    let cur = term_word(cx, CURRENCY);
                     if bought > 0 {
-                        parts.push(format!("bought {bought} {} for {spent} gold", if bought == 1 { "item" } else { "items" }));
+                        parts.push(format!("bought {bought} {} for {spent} {cur}", if bought == 1 { "item" } else { "items" }));
                     }
                     if sold > 0 {
-                        parts.push(format!("sold {sold} {} for {earned} gold", if sold == 1 { "item" } else { "items" }));
+                        parts.push(format!("sold {sold} {} for {earned} {cur}", if sold == 1 { "item" } else { "items" }));
                     }
                     cx.log(format!("Trade: {}.", parts.join(", ")));
                     for n in json::sget(&res, "notes") {
@@ -250,6 +252,8 @@ impl ShopPane {
         let sale = shop::sell_list(d, gs, sq);
         let (spent, earned) = self.trade.sums(&offers, &sale);
         let after = gs.party.gold + earned - spent;
+        // TERMS1 TU4: the purse names of the world being played (labels `short`, sentences `word`)
+        let (cur, cur_word, upkeep) = (term_short(cx, CURRENCY), term_word(cx, CURRENCY), term_short(cx, UPKEEP));
         let fr = frame_rect(&ui.p);
         ui.p.panel(fr, MODAL, FRAME, 4.0);
         ui.push("shop", "panel", name.clone(), fr, true, false, None, Vec::new());
@@ -289,7 +293,7 @@ impl ShopPane {
                 let (kind, id) = (s(o, "kind"), s(o, "id"));
                 let supplies = kind == shop::SUPPLIES;
                 let item = if supplies { String::new() } else { s(o, "item") };
-                let mut label = if supplies { "Supplies".to_string() } else { d.item_name(&item) };
+                let mut label = if supplies { upkeep.clone() } else { d.item_name(&item) };
                 if kind == "loot" && json::i(o, "count", 1) > 1 {
                     label = format!("{label} x{}", json::i(o, "count", 1));
                 }
@@ -307,7 +311,7 @@ impl ShopPane {
         let mut lines: Vec<(String, String, i64, String, ShopAct)> = Vec::new();
         for (kind, id, n) in &self.trade.buys {
             let Some(o) = offers.iter().find(|o| s(o, "kind") == *kind && s(o, "id") == *id) else { continue };
-            let label = if kind == shop::SUPPLIES { "Supplies".to_string() } else { d.item_name(&s(o, "item")) };
+            let label = if kind == shop::SUPPLIES { upkeep.clone() } else { d.item_name(&s(o, "item")) };
             let item = if kind == shop::SUPPLIES { String::new() } else { s(o, "item") };
             lines.push((format!("trade.buy.{id}"), format!("{label} x{n}"), -json::i(o, "price", 0) * n, item, ShopAct::ReturnBuy(kind.clone(), id.clone())));
         }
@@ -336,9 +340,9 @@ impl ShopPane {
         ui.scroll_end();
         let net = earned - spent;
         let ty = (top + ch - tot_h + 2) as f32;
-        let net_text = if net == 0 { "Total: 0 gold".to_string() } else { format!("Total: {net:+} gold") };
+        let net_text = if net == 0 { format!("Total: 0 {cur_word}") } else { format!("Total: {net:+} {cur_word}") };
         ui.p.text_fit(cx1 as f32 + 4.0, ty, &net_text, BODY, (w1 - 8) as f32, if net < 0 { WARN } else if net > 0 { GOOD } else { TEXT });
-        ui.p.text_fit(cx1 as f32 + 4.0, ty + lb as f32, &format!("Gold: {} -> {after}", gs.party.gold), BODY, (w1 - 8) as f32, if after < 0 { WARN } else { TEXT });
+        ui.p.text_fit(cx1 as f32 + 4.0, ty + lb as f32, &format!("{cur}: {} -> {after}", gs.party.gold), BODY, (w1 - 8) as f32, if after < 0 { WARN } else { TEXT });
         // -- the stash column: what the shop buys, then (below a divider, dimmed) what it does not
         let stash_rows: Vec<Row> = sale
             .iter()
@@ -353,7 +357,7 @@ impl ShopPane {
         self.list(ui, cx, "stash", Rect::new(cx2, top, w2, ch), &stash_rows, None, &others, &wrap);
         // -- the detail line of the item last under the pointer, the refusals, the action bar
         if let Some(item) = self.detail.clone() {
-            let label = if item.is_empty() { "Supplies".to_string() } else { d.item_name(&item) };
+            let label = if item.is_empty() { upkeep.clone() } else { d.item_name(&item) };
             let text = format!("{label}: {}", item_line(cx, &item));
             let r = Rect::new(x0, detail_y, fr.w - 2 * PAD, lb);
             ui.p.text_fit(r.x as f32, r.y as f32, &text, BODY, r.w as f32, INFO);
@@ -371,14 +375,14 @@ impl ShopPane {
         let why = if empty {
             "Nothing to trade.".to_string()
         } else if after < 0 {
-            format!("Not enough gold: {} more needed.", -after)
+            format!("Not enough {cur_word}: {} more needed.", -after)
         } else {
             String::new()
         };
         let confirm_r = Rect::new(right - confirm_w, bar_y, confirm_w, bh);
         let clear_r = Rect::new(confirm_r.x - 6 - clear_w, bar_y, clear_w, bh);
         ui.button_full("trade.clear", clear_r, "Clear", wrap(ShopAct::Clear), !empty, false, BODY, tip("Clear", "Put every line back."));
-        let confirm_tip = if why.is_empty() { tip("Confirm trade", &format!("Gold: {} -> {after}", gs.party.gold)) } else { tip("Confirm trade", &why) };
+        let confirm_tip = if why.is_empty() { tip("Confirm trade", &format!("{cur}: {} -> {after}", gs.party.gold)) } else { tip("Confirm trade", &why) };
         ui.button_full("trade.confirm", confirm_r, "Confirm trade", wrap(ShopAct::Confirm), why.is_empty(), false, BODY, confirm_tip);
         ui.button_full("shop.close", Rect::new(x0, bar_y, close_w, bh), "Close", wrap(ShopAct::Close), true, false, BODY, tip("Close", "Back to the conversation (Esc)."));
     }

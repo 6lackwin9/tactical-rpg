@@ -80,7 +80,7 @@ pub fn round_head(w: &World, i: &Intent) -> Option<String> {
         Some(RoundTarget::Cell(p)) => format!(": tile {}, {}", p.x, p.y),
         None => String::new(),
     };
-    Some(format!("{}{kind}{target}", intent.name()))
+    Some(format!("{}{kind}{target}", intent.label(&w.cat)))
 }
 
 /// UI5: the hostile card's line under the round intent: the intent first, then the first action ("Assault: Wolf;
