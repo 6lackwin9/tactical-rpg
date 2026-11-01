@@ -126,3 +126,16 @@ pub fn refusal_text(reason: &str) -> String {
         _ => reason.to_string(),
     }
 }
+
+/// INPUT1 MR4: a skill's range in words for its menu row tip and hover card: "Range 2: dash to a flank, then hit" or
+/// "Range 3: dash behind, then hit" for a skill with a position (its range N), else its band ("Range 2-4", "Range 1").
+pub fn range_line(w: &World, c: usize, s: &emberwake_data::SkillDef) -> String {
+    use emberwake_battle::round_intent;
+    match (round_intent::position_of(w, s), round_intent::dash_range(w, c, s)) {
+        (Some(p), Some(n)) => format!("Range {n}: dash {}, then hit", if p == emberwake_data::Position::Behind { "behind" } else { "to a flank" }),
+        _ => {
+            let (lo, hi) = emberwake_battle::skill::reach_by(s, &w.units[c], &w.ruleset);
+            if lo == hi || lo <= 0 { format!("Range {hi}") } else { format!("Range {lo}-{hi}") }
+        }
+    }
+}

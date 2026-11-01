@@ -25,7 +25,8 @@ pub type Nav = aegis_ui::Nav<GameCx>;
 pub fn default_settings() -> Value {
     // RULESET1-U slice 6: every battle overlay group on (`battle::OVERLAY_GROUPS`)
     let overlays: serde_json::Map<String, Value> = crate::battle::OVERLAY_GROUPS.iter().map(|g| (g.0.to_string(), Value::Bool(true))).collect();
-    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "map_names": "hover", "map_legend_open": true, "battle_view": "stage", "see_through": "selected", "battle_overlays": overlays})
+    // INPUT1 GH7: "Auto-fill the rest" on by default
+    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "auto_fill": true, "map_names": "hover", "map_legend_open": true, "battle_view": "stage", "see_through": "selected", "battle_overlays": overlays})
 }
 
 /// The game in play (CurrentGame): the state, the slot it came from and its copy at the last save or load.
@@ -37,6 +38,15 @@ pub struct Game {
     pub busy: bool,
     /// The UI Gallery's sample game (never saved; the gallery drops it when it goes, and only it).
     pub sample: bool,
+    /// CAMPAIGN1 W1: campaign events waiting for their notice (the map screens show them one by one, `runover`).
+    pub notices: Vec<Value>,
+}
+
+impl Game {
+    pub fn new(gs: GameState, slot: i64, sample: bool) -> Self {
+        let clean = gs.to_value();
+        Self { gs, slot, clean, busy: false, sample, notices: Vec::new() }
+    }
 }
 
 /// The game's half of the shared context.
@@ -98,12 +108,16 @@ impl GameCx {
         }
     }
 
-    /// Writes the autosave (slot 0); problems go to the log.
+    /// Writes the autosave (slot 0); problems go to the log. Nothing while the run is over (CAMPAIGN1 F3: no slot holds
+    /// a run-over state).
     pub fn autosave(&mut self) {
         if self.debug {
             return;
         }
         let Some(g) = self.game.as_ref() else { return };
+        if !emberwake_world::campaign::save_refusal(&g.gs).is_empty() {
+            return;
+        }
         let errors = save::write(&self.data, &self.save_dir, &g.gs, save::AUTOSAVE_SLOT, 0);
         if errors.is_empty() {
             self.mark_saved(save::AUTOSAVE_SLOT);
@@ -169,9 +183,8 @@ pub fn character_art(d: &Data, character: &aegis_core::json::Dict) -> (String, S
 /// Starts playing `gs` (a new game or a loaded save) and shows the region map, or the story stage while a story
 /// sequence runs (STORYUI1 5.4: a new game in a world with a start sequence, a save made during one).
 pub fn enter_game(cx: &mut Cx, gs: GameState, slot: i64, warnings: Vec<String>) {
-    let clean = gs.to_value();
     let story = emberwake_world::story::is_running(&gs);
-    cx.game = Some(Game { gs, slot, clean, busy: false, sample: false });
+    cx.game = Some(Game::new(gs, slot, false));
     cx.log.clear();
     if !warnings.is_empty() {
         cx.notice = warnings;

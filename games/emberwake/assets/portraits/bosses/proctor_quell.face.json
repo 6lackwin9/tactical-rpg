@@ -1,0 +1,12 @@
+{
+  "size": 240,
+  "border": 8,
+  "eyes": [[124, 68, 14, 10], [153, 67, 14, 10]],
+  "blink": true,
+  "lid": "",
+  "glow": [[130, 145, 18]],
+  "veins": [[134, 148, 40, 20], [126, 148, 140, 20]],
+  "mouth": [],
+  "rim": "",
+  "idle": [{"effect": "veins", "color": "#9333ea", "intensity": 0.7}, {"effect": "glow", "color": "#9333ea", "intensity": 0.6}]
+}

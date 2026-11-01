@@ -45,7 +45,10 @@
 				"active": 3,
 				"passive": 2,
 				"keystone": 1
-			}
+			},
+			"melee_diagonal": "maneuver",
+			"flank_protected_cost": "full",
+			"flank_protected_ap": 1
 		}
 	]
 }

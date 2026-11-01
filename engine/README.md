@@ -41,7 +41,10 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
   and marks are info widgets with a hover card and no click; labels leave room for marks; all empty by default. The
   UI Gallery's Kit widgets entry has a Timeline page (tabs at its foot) showing every part. `timeline::draw_part(ui,
   style, bar, part_rect)` and `timeline::draw_mark(ui, id, &mark, rect)` draw one part or one mark on their own, so a
-  screen's own block strip shares the widget's look (RULESET1-U slice 5).
+  screen's own block strip shares the widget's look (RULESET1-U slice 5). INPUT1-U: a segment can be a `ghost` (a
+  planned, not chosen, span): its fill at `GHOST_ALPHA` (45% of its alpha), a dashed outline on all four sides and its
+  label in `DIM`; `timeline::ghost_fill(fill)` and `timeline::draw_ghost(ui, bar)` give a screen's own spans the same
+  look. Off by default (every existing timeline draws as before).
 * **Vignette player (STORYUI1-E):** `aegis_ui::vignette` plays a reel of still cards (styles `image`, `text`, `title`,
   `line`) through fade in, typing, hold and fade out: a typewriter at the engine setting `text_speed` (`slow` 30,
   `normal` 60, `fast` 120 characters a second, `instant`; fast halves the fades, instant drops them), a cover fill of the
@@ -51,7 +54,16 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
   `reduce_motion` setting). The model `Player` moves only through `advance(ms)`, `press()`, `skip()`; `vignette::draw`
   paints a card in the caller's `Palette`; `VignetteScreen<G>` measures frame time and runs `on_done` once. Agent link:
   `state` {reel, card, cards, phase, shown, total, done}, widgets `vignette.next`, `vignette.skip`. The UI Gallery's Kit
-  group has a Vignette player entry on the engine's sample reel.
+  group has a Vignette player entry on the engine's sample reel. PORTRAITFX1-D: a `line` card's portrait lives
+  (`CardPortrait`: `portrait_fx` with its base life and its sidecar's `idle` overlays, no state holds or reactions;
+  seeded by `Card.portrait_key`, else the drawn file's path; its clock moves with the frame time `VignetteScreen` feeds
+  the reel; `VignetteScreen::portrait_rim` sets the rim key a sidecar does not name); `vignette::draw` draws it still,
+  `draw_with` animates it; agent state `portraits` (the portrait on view, or none). PORTRAITFX1-X: `Card.expression`
+  (read by `Card::from_json`; "" neutral) holds on the portrait as a `face` cue (`CARD_FACE_KEY`, `CARD_FACE_PRIORITY`
+  100), so the agent state shows it; the caller's `portrait` chain already starts at that frame;
+  `VignetteScreen::portrait_sidecars(fn)` (`CardPortrait::sidecars`) names the sidecar files to try for a drawn file
+  (the game passes its kit's layout, so an expression frame without its own sidecar takes its base portrait's); without
+  it the drawn file's own sidecar.
 * **Stage pieces (STAGE1-E):** `Painter::ellipse_ring` (a 1 px ellipse outline, no fill), `Image::opaque_bounds(min_alpha)`
   (the box of solid pixels), `Art::body_bounds(key, palette, size, flip)` (the solid box of a body's fitted idle frame 0,
   mirrored with flip, cached; a unit's hit rect on a stage); DIR4-HB: `Art::body_bounds_facing(key, palette, size, facing)`
@@ -80,7 +92,7 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 | `../games/emberwake/crates/emberwake_content/` | The game's data loader and writer on `aegis_content` (`source` reads `games/emberwake/data/` like Godot's catalogs, `store` writes it like Godot's saves) |
 | `../games/emberwake/crates/emberwake_world/` | The game loop around battles: game state, new game, saves (Godot format, every migration step, on `aegis_save`), exploration, quests, dialogue, shops, travel, rest, battle bridge |
 | `crates/aegis_host/` | Engine command API protocol, game-agnostic (SPLIT1-6): JSON request in, JSON reply out, history and step counter over the game's command set |
-| `../games/emberwake/crates/emberwake_sim/` | The balance simulator (PORT-SIM): sandbox units, the nine modes (duel, tier, levels, group, stats, party, role, sweep, campaign) and the engine-only `feel` (RULESET1-G), scenarios, roles, targets and KPI tables; `aegis sim <mode>` prints its lines |
+| `../games/emberwake/crates/emberwake_sim/` | The balance simulator (PORT-SIM): sandbox units, the nine modes (duel, tier, levels, group, stats, party, role, sweep, campaign), the engine-only `feel` (RULESET1-G) and the engine-only, fightless `deadlines` (CAMPAIGN1-SIM, in the kit's `rpgkit_sim`), scenarios, roles, targets and KPI tables; `aegis sim <mode>` prints its lines |
 | `../games/emberwake/crates/emberwake_host/` | The game's command set (state, skills, plan, preset, stay_pick, confirm, step, resolve, advance, autoplay) and CLI commands; holds the `aegis` binary (SPLIT1-6) |
 | `crates/aegis_cli/` | Engine command line shell (SPLIT1-6; the binary is built from `emberwake_host`; `content manifest --kit <id>` writes a kit's kit.json, ASSETORG2): the game's `sim <mode>`, `battle <encounter>`, and `serve` (the command API over stdin / stdout), `link` (the GUI's agent link), `content` (edit `games/emberwake/data/`: check, upsert, remove, apply; `content world <id> [<json | @file>] [full]` shows, creates or updates a world manifest `data/worlds/<id>/world.json` (WORLDW1): fields merge over the stored manifest or the schema defaults, values are checked for type and enum options, and the file is kept only when the data folder gains no blocking or manifest problem, else rolled back; without `full`, fields missing from the file stay out while at their default (a resave is byte-identical), `full` writes every field; seed step `{"op": "world", "id", "fields", "full"?}`; a new world is listed in game.json `worlds` first with `content manifest`) |
 | `crates/aegis_ui/` | Engine UI, game-agnostic (SPLIT1-5): canvas and painter, widget kit, art loader over the asset layers (ASSETORG2: the game's `assets/`, its kit's `kits/<kit>/assets/`, the engine's `engine/assets/`, first hit wins; files by relative path, bodies as clip sheets with `clips.json` and palettes, the token = the idle clip's first frame, tiles by the variant files present), audio over the same layers, live tuning files, agent link, screen stack with the game's context, window shell and event loop; clip playback (SPRITE1-L): `aegis_core::assets::ClipPlayer` (a base loop plus one shot, a missing clip falls back to `idle`, then the first frame) drawn by `Art::played` (`flip`: mirrored left to right, cached apart; `body_clip_flipped`; `body_outline` takes the same `flip`, SPRITE2), cached silhouette outlines (`Art::body_outline`, `Image::outline`), body checks frame by frame (`Art::body_problems`), `Painter::ellipse`; PROPS1-E: `aegis_ui::depth::DepthList` (sort by feet, then group, then x, then push order), `Image::mirrored` / `Art::image_mirrored`, `Art::size_of` (a PNG's own size), `Art::varied` / `Art::pick` (the first folder with `v0.png`, an explicit variant or the position pick; `tile_in` wraps it); DIR4-E: `Art::played_facing` (a four-way `Facing`; only side rows mirrored, for left) |
@@ -111,6 +123,9 @@ tools/fc.sh sim feel [enc=a,b] [seeds=N] [ruleset=..] [rules=-id,+id]
     # RULESET1-G, engine-only (not in the sim help): catalog encounters with their party (default the game's five tl_
     # encounters, 10 seeds, timeline): breaks, windups, flanks, pierce, AP, intents, Rest, carried moves, kiting,
     # planner reasons per encounter and in total; last line FEEL_JSON {...} (machine-readable, for RULESET1-B)
+tools/fc.sh sim deadlines [world=<id>] [losses=0..9]
+    # CAMPAIGN1-SIM, engine-only, no fights (not in the sim help): per campaign world with checkpoints, the best and
+    # worst day each checkpoint's quest can be won and the slack (CAMPAIGN1 C5); no checkpoints: one line says so
 ```
 
 Status and the file-by-file map: [docs/PORT_NOTES.md](docs/PORT_NOTES.md).
@@ -194,7 +209,15 @@ a foe, an ally, the hero itself or an empty tile for its options (each shows AP 
 click closes a menu or undoes the last step. Strip: the Party and Hero dropdowns draft a tactic (with its
 description), Auto plays the battle out, Confirm resolves the round. The log (Expand) wraps and scrolls with the wheel
 or PageUp / PageDown. Keys (while no control shows the focus ring): Enter confirm, Space step / next round, A autoplay, Z undo, L log, R restart (arena),
-I enemy tells, F12 screenshot.
+I enemy tells, F12 screenshot. Timeline battles (INPUT1-U): click a target (an enemy, an ally, an empty tile; the hero
+panel's Self button or S for the hero itself), then pick skills from its menu (keys 1-9 are the selected hero's skill
+hotkeys, with or without the menu open); the planner fills the rest of the round as ghost blocks (Settings, Gameplay:
+"Auto-fill the rest"); Z or a right click undoes the last pick, Clear removes them all; a right click or a click outside
+closes the menu. Selection and inspect (INPUT1-U slice 3): a right click on any unit (token or card) inspects it, pinning
+the threat intel panel ("Inspecting `<name>` (Esc clears)") until another inspect, Esc or the next round, with only what
+the party knows (an enemy's unrevealed plan never shows); a click on the selected hero (token or card) selects nothing;
+with no hero selected, or outside planning, a click on an enemy inspects it and one on an ally selects it; Esc closes
+the menu, then the log, then clears the inspect, then selects nothing, then (Arena) leaves.
 
 Feel values (timings, floating numbers, hit flash, colours) live in `games/emberwake/tuning.json` and reload while the game
 runs. The GUI serves an agent link on `127.0.0.1:47800`: `ui_tree` (the screen stack, the music wanted, the top screen's state and every

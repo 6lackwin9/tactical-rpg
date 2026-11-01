@@ -1,0 +1,113 @@
+{
+	"kind": "portrait_cues",
+	"version": 1,
+	"entries": [
+		{
+			"id": "hit_flash",
+			"event": "hit",
+			"intensity": 0.6,
+			"ms": 140,
+			"color": "#d9cbb4"
+		},
+		{
+			"id": "hit_jolt",
+			"event": "hit",
+			"effect": "jolt",
+			"preset": "hit"
+		},
+		{
+			"id": "crit_flash",
+			"event": "crit",
+			"intensity": 0.9,
+			"ms": 180,
+			"color": "#e11d48"
+		},
+		{
+			"id": "crit_jolt",
+			"event": "crit",
+			"effect": "jolt",
+			"preset": "crit"
+		},
+		{
+			"id": "guard_flash",
+			"event": "guard_hit",
+			"intensity": 0.4,
+			"ms": 120,
+			"color": "#fbbf24"
+		},
+		{
+			"id": "guard_jolt",
+			"event": "guard_hit",
+			"effect": "jolt",
+			"intensity": 0.5,
+			"preset": "hit"
+		},
+		{
+			"id": "heal_glow",
+			"event": "heal",
+			"intensity": 0.3,
+			"ms": 420,
+			"color": "#fbbf24"
+		},
+		{
+			"id": "break_flash",
+			"event": "break",
+			"intensity": 0.9,
+			"ms": 120,
+			"color": "#d9cbb4"
+		},
+		{
+			"id": "break_jolt",
+			"event": "break",
+			"effect": "jolt",
+			"preset": "crit"
+		},
+		{
+			"id": "wounded",
+			"trigger": "condition",
+			"condition": "wounded",
+			"effect": "desaturate",
+			"intensity": 0.35
+		},
+		{
+			"id": "hp_half",
+			"trigger": "hp",
+			"below": 50,
+			"effect": "desaturate",
+			"intensity": 0.2
+		},
+		{
+			"id": "hp_low",
+			"trigger": "hp",
+			"below": 25,
+			"effect": "desaturate",
+			"intensity": 0.5
+		},
+		{
+			"id": "downed",
+			"trigger": "down",
+			"effect": "desaturate"
+		},
+		{
+			"id": "downed_still",
+			"trigger": "down",
+			"effect": "still"
+		},
+		{
+			"id": "shaken",
+			"trigger": "derived",
+			"stat": "composure",
+			"drop_pct": 25,
+			"effect": "tint",
+			"intensity": 0.5,
+			"color": "#06b6d4"
+		},
+		{
+			"id": "stealthed",
+			"trigger": "status",
+			"status": "stealth",
+			"effect": "fade",
+			"intensity": 0.6
+		}
+	]
+}

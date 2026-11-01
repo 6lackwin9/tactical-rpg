@@ -1,0 +1,26 @@
+# Lore words of Emberwake for the layer check G3 (docs/specs/TERMS1.md 7; `tools/fc.sh layers`, check_project.ps1).
+# Kit code (kits/*/crates/*/src, kits/*/schema.json, kits/*/kit.json) must not name any of these.
+# One name or phrase per line, matched as a fixed string, whole word, case-sensitive. Proper nouns and coined phrases
+# only: a plain English word is listed only inside its lore phrase ("Warded Tallow", not "Tallow").
+# The world ids (the folders under data/worlds/) are checked as well, case-insensitive; they are not listed here.
+Kaelen
+Vesper
+Maren
+Hollis
+Dunstan
+Elyse
+Nemeth
+Quell
+Vane
+Grendel
+Grakka
+Mara Voss
+Sunk Ward
+Ashlands
+Iron Reaches
+Tidewrack
+The Crucible
+Castellan
+Inquisition
+Warded Tallow
+Red Tithing

@@ -117,3 +117,100 @@ Sprites include:
 
 Compact scale, highly readable, matches the 16-bit dark fantasy aesthetic.
 ```
+
+## Routes by asset type (ARTPROMPT1, 2026-11-01)
+
+Since 2026-11-01 the "Gemini" route runs through the Antigravity queue by default (decision "Antigravity queue as the default
+image route"; Imagen 3; no approval, warn on batches over about 10 images); the user's Gemini web runs are the fallback.
+From the ARTPROMPT1 tests (decision "ARTPROMPT1 routes"; Gemini web results beside Klein 4B, ERNIE-Image Turbo and
+Z-Image Turbo at game size; boards and prompt records in `C:/dev/localgen/review/artprompt1/`). Local runs need no
+approval; a Gemini run follows the image rules (the image API is asked first).
+
+| Asset type | Route | Prompt | Notes |
+| --- | --- | --- | --- |
+| Story scene, no recurring face (places, crowds) | ERNIE-Image Turbo locally (UNet fp8_e4m3fn) | [Story scene](#story-scene) | close to Gemini in style; follows layout less exactly (extra figures) |
+| Story scene with a named character, face in shot | Gemini, the character's portrait attached | [Story scene](#story-scene) | ERNIE plus a Klein whole-image edit restores hair, scars and armour but not the face shape |
+| Story scene, named characters small, far or turned away | ERNIE, then a Klein whole-image edit with the portrait | [Story scene](#story-scene) | the edit also fixes copied hair or armour on others (about 100 s) |
+| Full body front, side and back (rig reference) | Gemini, the portrait attached | [Full body, three views](#full-body-three-views) | no local model kept identity and true views together |
+| Single skill icon (read at 32 px) | Z-Image Turbo locally (2-4 seeds), else Gemini | [Single skill icon](#single-skill-icon) | one icon per run beats a sheet at 32 px; frame and tint added in post |
+| 2x2 icon sheet (settling four ideas) | Gemini | [Icon sheet](#icon-sheet) | keep subjects whole, not close-ups; local models lost colour |
+
+Gemini icon results are saved from the preview (right click, Save image as); the full-size download came back as a
+blurred crop. The model's corner mark is cleared at pixelize (`pixelize.clear_mark`; icons can keep a speck).
+
+### Full body, three views
+
+```text
+The same woman as the attached portrait, drawn full body three times side by side: front view, side view facing right, back view. Identical character in all three: same face, hair tied back, deep red riveted brigandine with brass rivets over mail, steel pauldrons and gorget, dark steel greaves, sword sheathed across her back with the hilt above the right shoulder. Same height, same scale, feet on one baseline, arms relaxed at her sides. 16-bit pixel art, clear dark outlines, limited palette with 4 shades per colour, light dithering on metal. Key light from the upper left, warm orange rim light from the right. Plain flat very dark background (#120e12). No floor, no shadow, no text, no frame.
+```
+
+### Story scene
+
+```text
+Pixel art story illustration for a dark fantasy tactical RPG, detailed 16-bit SNES/GBA-era style, 16:9 wide image. Night in a ruined stone courtyard: Mara Voss (the woman in the attached image, same face, hair and armour) sits by a campfire with two Ember Warden soldiers in red brigandines, one sharpening a sword, one standing watch with a spear. Warm orange firelight on faces and armour, deep blue-black shadows, broken arches and rubble behind them, sparks rising. Clear dark outlines, hand-placed pixel clusters, limited palette, light dithering. No text, no UI, no border, no logo.
+```
+
+### Single skill icon
+
+```text
+A single square pixel art skill icon for a dark fantasy tactical RPG, drawn as a 32x32 pixel icon scaled up (visible large pixels, no anti-aliasing). One bold centred silhouette with a thick dark outline and 3-4 colours plus black: a sword striking from the side with a curved orange motion trail (the skill "Flank Cut"). Plain very dark background (#120e12), no text, no frame.
+```
+
+### Icon sheet
+
+```text
+A 2x2 grid of four square pixel art skill icons for a dark fantasy tactical RPG, 16-bit SNES/GBA style, each icon designed to read clearly at 32x32 pixels. Bold silhouettes, thick dark outlines, high contrast, limited palette, one strong idea per icon, plain very dark background (#120e12) in each cell, no text, no borders between cells beyond a thin dark gap. Top-left: Shoulder Check, an armoured shoulder slamming forward with impact lines. Top-right: Heavy Cleave, a broad axe blade mid-swing with a heavy arc. Bottom-left: Hamstring Cut, a dagger slashing low behind a leg. Bottom-right: Flank Cut, a sword striking from the side with a curved motion trail.
+```
+
+## Antigravity queue (ARTQUEUE1, 2026-11-01)
+
+Decision "Antigravity image queue" (user 2026-11-01): a Gemini image run can go through the Antigravity image subagent
+instead of the image API. This side writes request files and ingests the results with `tools/portraits/artqueue.py`
+(never an API call, never a key); Antigravity makes the images. The contract extends the Antigravity-side spec
+(`image_pipeline_spec.md`, updated by the user 2026-11-01 to match it).
+Folder: `.image_pipeline/` in the main checkout `C:/dev/tactical-rpg` (the same absolute path from every worktree; Git
+ignores it), with `queue/`, `processing/`, `output/`, `completed/` and `failed/`. The ingest adds `rejected/` (refused
+images, each with a `.note.txt`) and `pixelized/` (game portraits of portrait requests without a target).
+Request `queue/<name>.json`, written as `queue/<name>.json.tmp` and then renamed, so a scan never reads half a file.
+`<name>` is unique: `<id>_q<time>` (`<id>_faces_q<time>` for a faces sheet, `<given name>_q<time>` for `text`), a
+second later while the name is taken in any folder. A reference that does not exist refuses the request (nothing is
+queued):
+| Field | Meaning |
+| --- | --- |
+| `prompt` | required; the exact text to send, unchanged |
+| `aspect_ratio` | `1:1` (default), `16:9`, `9:16`, `4:3` or `3:4` |
+| `style_hints` | empty for our prompts (the style is in the prompt) |
+| `references` | absolute image paths, attached in this order |
+| `n` | how many images (variants), default 1 |
+| `metadata` | `asset_id`, `task`, `target` (where the asset lane wants the result), `route` (one of `portrait`, `faces`, `full_body`, `story_scene`, `icon`, `icon_sheet`, `other`; see "Routes by asset type"), `record` (fields for the prompt record, such as `prompts_file`, `kind`, `faction`) |
+Antigravity moves the request to `processing/`, makes `n` images and saves `output/<name>.png` (n = 1) or
+`output/<name>_<k>.png` (k from 1), writes `output/<name>.result.json` (`model`, often the generic
+`image-generator`; `time`; `prompt_sent`, the exact text it sent; `references`; `n`; `files` [{`file` (relative, such
+as `output\<name>.png`), `width`, `height`}]; `notes`), checks each PNG opens, is full size and matches the aspect,
+then moves the request to `completed/`. On a failure: `failed/<name>.json` and `failed/<name>.error.txt`.
+Ingest (a request counts as finished when `output/<name>.result.json` exists and the request is in `completed/`):
+each image is checked (present, a whole PNG, the aspect within 3 %, the long edge at least 1024 px); a refused one
+moves to `rejected/` with a note and the valid variants of the same request are still taken. A request in `failed/`
+is reported with its `error.txt` (and nothing is ingested).
+An accepted one is copied into `art_src/` with the house naming of `generate.py` (`<id>.png` for a single first take,
+else `<id>_gen<time>_<k>.png`; a faces sheet `<id>_faces_gen<time>_<k>.png`), its model mark is cleared
+(`pixelize.clear_mark`) and its prompt record is written beside it: `model` (as the result names it), `"via":
+"antigravity"`, `id`, `prompt` (the
+exact `prompt_sent`; `prompt_requested` too when it differs), `reference` (the first) and `references`,
+`prompts_file`, `time`, `n`, the request's `metadata` and `record` fields, `request`, `mark_cleared` and
+`"source": "antigravity image subagent"`. Route `portrait` is pixelized into the 120 px game portrait (the request's
+`target` when that file does not exist yet, else `pixelized/<art_src name>.png`); `faces` is cut by `sheets.py faces`
+and the rest is left for the asset lane. `output/<name>.ingested.json` lists what went where; a second ingest skips it.
+Commands (from `tools/portraits`, with `$LOCALAPPDATA/Programs/Python/Python312/python.exe`; test
+`test_artqueue.py`):
+
+- `artqueue.py request <id>... [--prompts <file> | --file icons] [--faces] [--no-ref]`, plus the shared options
+  `[--ref <png>]... [--n N] [--aspect A] [--route R] [--task T] [--target <path>] [--record KEY=VALUE]... [--dry-run]`:
+  one request per id, the prompt and the references as `generate.py run` builds them (the section's `reference:`
+  image, else Mara Voss), then each `--ref`
+- `artqueue.py text <name> (--text "..." | --text-file <file>) [--id ID] [same options]`: a template prompt from
+  this file, filled in
+- `artqueue.py ingest [<name>...] [--dry-run]`: every finished request, or the names given
+- `artqueue.py status`: counts per folder and the failed requests' errors
+- `--pipeline <dir>` (or `IMAGE_PIPELINE`) points any command at another queue folder (tests, a scratch run)
+Each Antigravity run is an image run like any other: the image rules still apply (ask first where they say so).

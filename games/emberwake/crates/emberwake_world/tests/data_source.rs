@@ -31,8 +31,11 @@ fn data_dir() -> PathBuf {
 /// HOOKS1-S (2026-10-27): a skill's combat hook fields (`forced_move`, `hazard`, `triggers`, `riders`, `meters`,
 /// `hp_cost`, `ignore_guard`), a consumable's `hazard`, a unit's `tactics`, an encounter's `arena_hazards` (catalog and
 /// world encounters) and a world manifest's `classes`. ENCOUNTER2-H (2026-10-27): an encounter's `unkillable`,
-/// `timeout_outcome` and `stay_behind` (catalog and world encounters).
-const AFTER_GODOT: [(&str, &str, &str); 52] = [
+/// `timeout_outcome` and `stay_behind` (catalog and world encounters). ROSTER1-L (2026-10-31): a world manifest's
+/// `roster`, a world character's `keepsake` and a world encounter's `party_min`. INPUT1-M (2026-11-01): a skill's
+/// `position` (the ruleset fields ride the `rulesets` kind, already after Godot). CAMPAIGN1-TM (2026-11-01): a world
+/// manifest's `travel_modes`.
+const AFTER_GODOT: [(&str, &str, &str); 57] = [
     ("content", "units", "loot"),
     ("world", "encounters", "key_loot"),
     ("world", "encounters", "objective_reward"),
@@ -52,6 +55,7 @@ const AFTER_GODOT: [(&str, &str, &str); 52] = [
     ("content", "skills", "unbreakable"),
     ("content", "skills", "sure_break"),
     ("content", "skills", "armor_piercing"),
+    ("content", "skills", "position"),
     ("content", "units", "poise"),
     ("content", "units", "deck"),
     ("content", "units", "default_intent"),
@@ -85,6 +89,10 @@ const AFTER_GODOT: [(&str, &str, &str); 52] = [
     ("world", "encounters", "timeout_outcome"),
     ("world", "encounters", "stay_behind"),
     ("world", "world", "classes"),
+    ("world", "world", "roster"),
+    ("world", "characters", "keepsake"),
+    ("world", "encounters", "party_min"),
+    ("world", "world", "travel_modes"),
 ];
 /// Retired parity, option level: enum and multi-pick options added after the freeze, by (section, kind, key, option);
 /// the option leaves the engine's schema row before comparing (every other option and its order is still compared);
@@ -108,14 +116,15 @@ const OPTIONS_AFTER_GODOT: [(&str, &str, &str, &str); 8] = [
 /// `checkpoints` and `triggers` (WorldSchema.KINDS had none; every world's `own` lists leave the loader's worlds too).
 /// STORYUI1-S (2026-10-26): the world kinds `vignettes`, `sequences` and `boards` (the same). PORTRAITFX1-S
 /// (2026-10-26): the portrait cue rows (as the derived stats). HOOKS1-S (2026-10-27): the combat hook kinds `hazards`,
-/// `unit_meters` and `zones` (the same).
-const KINDS_AFTER_GODOT: [(&str, &str); 12] = [
+/// `unit_meters` and `zones` (the same). TERMS1-L (2026-11-01): the game's term rows `terms` (the same).
+const KINDS_AFTER_GODOT: [(&str, &str); 13] = [
     ("content", "derived_stats"),
     ("content", "rulesets"),
     ("content", "portrait_cues"),
     ("content", "hazards"),
     ("content", "unit_meters"),
     ("content", "zones"),
+    ("content", "terms"),
     ("world", "meters"),
     ("world", "checkpoints"),
     ("world", "triggers"),
@@ -128,7 +137,8 @@ const KINDS_AFTER_GODOT: [(&str, &str); 12] = [
 /// the item icon rows. PHASEFOLD: the phases rows (the arrival trigger). PORTRAITFX1-S: the dialogue nodes row (a node's
 /// `expression`). HOOKS1-S: a skill's `exploit` (the execute entry), the item and passive `effects` (the hook effect
 /// types) and a unit's `target_pref` (SOFTEST, TOUGHEST); the phases rows (the deck effect, ai tactics) are listed already.
-/// HOOKS1-Z: a route's road fight `zone` (a code zone or a `zones` row).
+/// HOOKS1-Z: a route's road fight `zone` (a code zone or a `zones` row). ENCOUNTER2-C1: the phases rows again (the `talk`
+/// effect, a round trigger's `block`, the `downed` and `broken` triggers), listed already.
 const HELP_CHANGED: [(&str, &str, &str); 15] = [
     ("content", "encounters", "purse"),
     ("world", "encounters", "purse"),

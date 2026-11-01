@@ -156,9 +156,10 @@ pub const GAME_KINDS: [GameKind; 3] = [
 ];
 
 /// The kinds an upsert takes in the base catalog (catalog kinds, item families, the derived stats (DERIVE1), the
-/// rulesets (RULESET1), the portrait cues (PORTRAITFX1), the combat hook kinds (HOOKS1), game-data kinds).
-const BASE_KINDS: [&str; 17] = [
-    "classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain", source::DERIVED_KIND, source::RULESET_KIND, source::PORTRAIT_KIND, source::HOOK_KINDS[0], source::HOOK_KINDS[1], source::HOOK_KINDS[2], "maps", "quests", "services",
+/// rulesets (RULESET1), the portrait cues (PORTRAITFX1), the combat hook kinds (HOOKS1), the terms (TERMS1),
+/// game-data kinds).
+const BASE_KINDS: [&str; 18] = [
+    "classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain", source::DERIVED_KIND, source::RULESET_KIND, source::PORTRAIT_KIND, source::HOOK_KINDS[0], source::HOOK_KINDS[1], source::HOOK_KINDS[2], source::TERMS_KIND, "maps", "quests", "services",
 ];
 
 fn game_kind(kind: &str) -> Option<GameKind> {

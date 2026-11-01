@@ -47,6 +47,34 @@ pub fn write(d: &Data, dir: &Path, state: &GameState, slot: i64, saved_at: i64) 
     })
 }
 
+/// CAMPAIGN1 F5: writes the keyed save `key` (an act-start save, `campaign::act_save_key`; `aegis_save::write_keyed`:
+/// never a slot, a later write with the key replaces it). Problem strings; empty = written. Refused while the run is
+/// over (F3), like `write`.
+pub fn write_keyed(d: &Data, dir: &Path, state: &GameState, key: &str, saved_at: i64) -> Vec<String> {
+    let over = crate::campaign::save_refusal(state);
+    if !over.is_empty() {
+        return vec![over.to_string()];
+    }
+    aegis_save::write_keyed(&SAVES, dir, key, saved_at, || {
+        let errors = state.validate(d);
+        if errors.is_empty() {
+            Ok(state.to_value())
+        } else {
+            Err(errors)
+        }
+    })
+}
+
+/// CAMPAIGN1 F4: reads the keyed save `key` like `read` (migrate, then validate).
+pub fn read_keyed(d: &Data, dir: &Path, key: &str) -> Result<Loaded, Vec<String>> {
+    decode(d, &aegis_save::read_keyed(dir, key)?)
+}
+
+/// Whether the keyed save `key` exists (a bad key has none).
+pub fn exists_keyed(dir: &Path, key: &str) -> bool {
+    aegis_save::exists_keyed(dir, key)
+}
+
 /// Locks or unlocks a manual slot's save (`aegis_save::set_locked`: the autosave is never locked; a locked slot
 /// refuses `write` and `delete`).
 pub fn set_locked(dir: &Path, slot: i64, on: bool) -> Result<(), String> {
@@ -64,16 +92,21 @@ pub fn read(d: &Data, dir: &Path, slot: i64) -> Result<Loaded, Vec<String>> {
 }
 
 /// A save file's text: parse, format check, migrate, validate (STORYUI1 Q8: a `story.running` the data no longer has
-/// is dropped with a warning first).
+/// is dropped with a warning first; ROSTER1 11.4: bunk use above the cap is a warning, never a refusal; CAMPAIGN1-TM2:
+/// a saved travel mode the world no longer has loads in the default mode with a warning).
 pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
     let envelope = aegis_save::open(&SAVES, text)?;
     let (data, mut warnings) = migrate(d, &envelope)?;
     let mut state = GameState::from_dict(d, json::dget(&data, "game_state"));
     warnings.extend(crate::story::check_loaded(d, &mut state));
+    if let Some(c) = state.campaign.as_mut() {
+        warnings.append(&mut c.load_notes);
+    }
     let errors = state.validate(d);
     if !errors.is_empty() {
         return Err(errors);
     }
+    warnings.extend(crate::roster::load_warnings(&state));
     Ok(Loaded { state, warnings, saved_at: json::i(&envelope, "saved_at", 0) })
 }
 
@@ -204,6 +237,7 @@ fn step(d: &Data, version: i64, state: &Dict, quests_int: bool) -> Option<Dict> 
         // campaign world, none elsewhere). The bump makes an older build refuse such a save instead of dropping it.
         // STORYUI1 4.8 shares this unreleased bump (ROSTER1 11.4): `story` may be saved; absent reads empty.
         // RULESET1 9 D5 shares it too: a party member may save `deck`; absent reads the empty deck (auto).
+        // ROSTER1 11.4 shares it too: a member may save `conditions`, the party `departed`; absent reads none.
         12 => {}
         _ => return None,
     }

@@ -36,6 +36,9 @@ pub const PORTRAIT_KIND: &str = crate::check::portrait::KIND;
 /// HOOKS1-S: the combat hook kinds (ground hazards, unit meters, data zones), loaded into the catalog beside
 /// CATALOG_KINDS after the skills the meters name, in this order (Godot had no such kinds).
 pub const HOOK_KINDS: [&str; 3] = [rpgkit_data::HAZARDS_KIND, rpgkit_data::UNIT_METERS_KIND, rpgkit_data::ZONES_KIND];
+/// TERMS1-L: the game's term rows, loaded into the catalog beside CATALOG_KINDS after the hook kinds (Godot had no
+/// such kind).
+pub const TERMS_KIND: &str = crate::check::terms::KIND;
 /// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2) and STORYUI1's `vignettes`,
 /// `sequences` and `boards` (4.1-4.4; Godot had no such kinds).
 pub const WORLD_KINDS: [&str; 19] = [
@@ -121,6 +124,7 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
         let rows = read_hook_kind(&dir, kind, &out, errors);
         out.insert(kind.into(), Value::Array(rows.into_iter().map(Value::Object).collect()));
     }
+    out.insert(TERMS_KIND.into(), Value::Array(read_terms(&dir, errors).into_iter().map(Value::Object).collect()));
     out.insert("item_families".into(), Value::Array(families.into_iter().map(Value::Object).collect()));
     Value::Object(out)
 }
@@ -195,6 +199,31 @@ fn read_portrait_cues(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Ve
             kept.push(row);
         } else {
             errors.extend(found.iter().map(|m| format!("{at}: portrait cue '{}': {m}", sget(&row, "id", ""))));
+        }
+    }
+    kept
+}
+
+/// TERMS1-L 5.1 (engine-only, beside CATALOG_KINDS): the term rows that pass their checks (`check::terms`), in file
+/// order; every problem goes to `errors` and its row is skipped. A missing file is an empty table.
+fn read_terms(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{TERMS_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(TERMS_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let checked = crate::check::terms::check_rows(&rows);
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: term '{}': {m}", sget(&row, "id", ""))));
         }
     }
     kept
@@ -362,6 +391,9 @@ fn token_kinds(token: &str) -> Option<&'static [&'static str]> {
         // RULESET1-S (timeline): poise taken, enemy recovery blocks
         "stagger" => &["ATTACK"],
         "recovery" => &["ATTACK", "SUPPORT", "FOCUS"],
+        // INPUT1 MR15 (timeline): a skill's range and the position it dashes to
+        "range" => &["ATTACK", "SUPPORT"],
+        "position" => &["ATTACK"],
         _ => return None,
     })
 }
@@ -469,6 +501,17 @@ fn exploit_text(r: &Dict) -> String {
     }
 }
 
+/// INPUT1 MR1, MR15: the range N of a skill row with a position (`reach_max`; 0 = the unit's band, unknown here) or, in
+/// the transition, of a Maneuver attack with `dash_tiles` and no position; None: it hits from where it stands.
+fn maneuver_dash(row: &Dict) -> Option<i64> {
+    let maneuver = sget(row, "kind", "") == "ATTACK" && sget(row, "round_intent", "") == "maneuver";
+    if !sget(row, "position", "").is_empty() {
+        return Some(to_int_or(json::get(row, "reach_max"), 0));
+    }
+    let dash = to_int_or(json::get(row, "dash_tiles"), 0);
+    (maneuver && dash > 0).then_some(dash)
+}
+
 /// SkillText.token_value.
 pub(crate) fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize) -> String {
     let bare = suffix == "n";
@@ -506,6 +549,17 @@ pub(crate) fn token_value(token: &str, suffix: &str, row: &Dict, rank: usize) ->
             }
         }
         "reach" => format_reach(i("reach_min", 0), i("reach_max", 0), bare),
+        // INPUT1 MR15: a skill with a position (or the transition's Maneuver dash) renders its range N, else its band
+        "range" => match maneuver_dash(row) {
+            Some(n) if n > 0 => n.to_string(),
+            Some(_) => String::new(),
+            None => format_reach(i("reach_min", 0), i("reach_max", 0), true),
+        },
+        "position" => match (s("position").as_str(), maneuver_dash(row)) {
+            ("behind", _) => "behind the target".into(),
+            (_, Some(_)) => "to a flank".into(),
+            _ => String::new(),
+        },
         "weapons" => json::strings(json::get(row, "weapon_types")).join("/"),
         "proficiency" => {
             let level = i("min_proficiency", 0);

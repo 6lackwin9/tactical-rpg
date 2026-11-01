@@ -11,6 +11,36 @@ the files are frozen in `legacy/data/seeds/` (and in git history). The tables be
 
 ## Engine-era seeds
 
+### Archived seeds (CLN-49, 2026-11-01)
+
+Every engine-era seed below belonged to a finished task and left this folder in cleanup pass 3 (CLN-49); its
+effect is in the data. Restore one with `git show <hash>:games/emberwake/data/seeds/<file>`.
+
+| Seed | Last commit |
+| --- | --- |
+| `assetorg2.json` | `297e11ae` |
+| `cast1_a1.json` | `6f4e4d5b` |
+| `cast1_a1_alt.json` | `6f4e4d5b` |
+| `cast1_a1_pavise_keepsake.json` | `81f23506` |
+| `cast1_a1_talon.json` | `81f23506` |
+| `derive1_d.json` | `83542956` |
+| `encounter2_d.json` | `695c0599` |
+| `input1_ma.json` | `7e3a09d0` |
+| `material_stacks.json` | `81f23506` |
+| `phasefold.json` | `691f2ee6` |
+| `portraitfx1.json` | `8535fe0f` |
+| `props1_ashlands.json` | `ecc9d640` |
+| `rare_materials.json` | `be221e5a` |
+| `reward1.json` | `6cca4c7e` |
+| `ruleset1_a.json` | `512e0def` |
+| `ruleset1_a_interim.json` | `512e0def` |
+| `ruleset1a2.json` | `235a5486` |
+| `ruleset1a3.json` | `77343bd2` |
+| `sprite2.json` | `57c560d6` |
+| `war2h1_gear.json` | `f58532f7` |
+
+### Engine-era seed index
+
 | Seed | Task | Note |
 | --- | --- | --- |
 | `encounter2_d.json` | ENCOUNTER2-D (kit samples `kit_winch_escape` hold escape and `kit_culling` phase kill) | full entries, as above |

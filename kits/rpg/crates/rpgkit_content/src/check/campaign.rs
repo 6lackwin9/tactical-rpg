@@ -3,12 +3,13 @@
 //! campaign effects (called by the dialogue effect checker for every effect list), the `then` items, and the read keys
 //! (`meter.<id>`, `campaign.act`, ...) in any condition of a world entry. Every rule is inert data until a world sets
 //! `campaign` (X1); these checks only fire on the new fields and kinds, so worlds without them report as before.
+//! CAMPAIGN1-TM: the manifest's `travel_modes` block and a leg input's `modes`.
 
 use super::quest::{condition_errors, SET_FLAG_LISTS};
 use super::world::ref_errors;
 use super::{dialogue, map, View};
 use aegis_core::json::{self, gstr, Dict};
-use rpgkit_data::{CAMPAIGN_READ_KEYS, DEFEAT_MODES, END_KINDS, INPUT_ON, METER_TONES, OUTCOMES, REST_WHERE, RULE_DIRS};
+use rpgkit_data::{CAMPAIGN_READ_KEYS, DEFEAT_MODES, END_KINDS, INPUT_ON, METER_TONES, OUTCOMES, REST_WHERE, RULE_DIRS, TRAVEL_MODES_KEYS, TRAVEL_MODES_MAX, TRAVEL_MODE_KEYS};
 use serde_json::Value;
 
 /// Acts are numbered 0 (before the first) to 9.
@@ -25,6 +26,9 @@ const START_AP_MIN: i64 = -5;
 const REST_DAYS_MAX: i64 = 3;
 const REST_COST_MAX: i64 = 10;
 const DEFEAT_DAYS_MAX: i64 = 3;
+/// CAMPAIGN1-TM: a travel mode's extra days per leg and its tip's length.
+const MODE_DAYS_MAX: i64 = 5;
+const MODE_TIP_MAX: usize = 240;
 const BANDS_MAX: usize = 6;
 const RULES_MAX: usize = 12;
 const INPUTS_MAX: usize = 12;
@@ -52,11 +56,11 @@ fn input_keys(on: &str) -> &'static [&'static str] {
     match on {
         "battle" => &["on", "tags", "outcomes", "delta", "acts"],
         "day" => &["on", "delta", "acts"],
-        _ => &["on", "route_tags", "delta", "acts"],
+        _ => &["on", "route_tags", "modes", "delta", "acts"],
     }
 }
 
-fn int_in(v: &Value, lo: i64, hi: i64) -> bool {
+pub(super) fn int_in(v: &Value, lo: i64, hi: i64) -> bool {
     json::is_int(v) && (lo..=hi).contains(&json::to_int(v))
 }
 
@@ -65,12 +69,12 @@ fn chars(s: &str) -> usize {
 }
 
 /// An unknown key of `d` (one error each).
-fn unknown_keys(d: &Dict, allowed: &[&str], label: &str) -> Vec<String> {
+pub(super) fn unknown_keys(d: &Dict, allowed: &[&str], label: &str) -> Vec<String> {
     d.keys().filter(|k| !allowed.contains(&k.as_str())).map(|k| format!("{label}: unknown key '{k}'.")).collect()
 }
 
 /// `d[key]`, when present, is a whole number in lo..hi.
-fn int_key(d: &Dict, key: &str, lo: i64, hi: i64, label: &str) -> Option<String> {
+pub(super) fn int_key(d: &Dict, key: &str, lo: i64, hi: i64, label: &str) -> Option<String> {
     d.get(key).filter(|x| !int_in(x, lo, hi)).map(|_| format!("{label}: {key} must be a whole number {lo}..{hi}."))
 }
 
@@ -80,7 +84,7 @@ fn bool_key(d: &Dict, key: &str, label: &str) -> Option<String> {
 }
 
 /// `d[key]`, when present, is text of at most `max` characters (and not blank when `named`).
-fn text_key(d: &Dict, key: &str, max: usize, named: bool, label: &str) -> Option<String> {
+pub(super) fn text_key(d: &Dict, key: &str, max: usize, named: bool, label: &str) -> Option<String> {
     let x = d.get(key)?;
     match x.as_str() {
         None => Some(format!("{label}: {key} must be text.")),
@@ -91,7 +95,7 @@ fn text_key(d: &Dict, key: &str, max: usize, named: bool, label: &str) -> Option
 }
 
 /// `d[key]`, when present, is one of `options`.
-fn enum_key(d: &Dict, key: &str, options: &[&str], label: &str) -> Option<String> {
+pub(super) fn enum_key(d: &Dict, key: &str, options: &[&str], label: &str) -> Option<String> {
     let x = d.get(key)?;
     (!x.as_str().is_some_and(|s| options.contains(&s))).then(|| format!("{label}: {key} '{}' is not one of {}.", gstr(x), options.join(", ")))
 }
@@ -103,13 +107,13 @@ fn strings_key(d: &Dict, key: &str, label: &str) -> Option<String> {
 }
 
 /// `d[key]`, when present, is a list of acts (whole numbers 0..ACT_MAX).
-fn acts_key(d: &Dict, key: &str, label: &str) -> Option<String> {
+pub(super) fn acts_key(d: &Dict, key: &str, label: &str) -> Option<String> {
     let x = d.get(key)?;
     (!x.as_array().is_some_and(|a| a.iter().all(|n| int_in(n, 0, ACT_MAX)))).then(|| format!("{label}: {key} must be a list of acts 0..{ACT_MAX}."))
 }
 
 /// The object a manifest block or a json field holds (None and an error when it holds something else).
-fn object<'a>(raw: &'a Value, label: &str, errors: &mut Vec<String>) -> Option<&'a Dict> {
+pub(super) fn object<'a>(raw: &'a Value, label: &str, errors: &mut Vec<String>) -> Option<&'a Dict> {
     let d = raw.as_object();
     if d.is_none() {
         errors.push(format!("{label} must be an object."));
@@ -118,7 +122,7 @@ fn object<'a>(raw: &'a Value, label: &str, errors: &mut Vec<String>) -> Option<&
 }
 
 /// The list a json field holds (None and an error when it holds something else).
-fn list<'a>(raw: &'a Value, label: &str, errors: &mut Vec<String>) -> Option<&'a [Value]> {
+pub(super) fn list<'a>(raw: &'a Value, label: &str, errors: &mut Vec<String>) -> Option<&'a [Value]> {
     let a = raw.as_array().map(Vec::as_slice);
     if a.is_none() {
         errors.push(format!("{label} must be a list."));
@@ -181,12 +185,74 @@ pub fn manifest_errors(v: &View, w: &str, m: &Dict) -> Vec<String> {
             }
         }
     }
+    if let Some(t) = m.get("travel_modes").and_then(|raw| object(raw, "Travel modes", &mut errors)) {
+        errors.extend(travel_modes_errors(v, w, t));
+    }
     errors
 }
 
-/// The soft problems of world `w`'s campaign data: purse and HUD icons that no asset layer holds.
+/// CAMPAIGN1-TM: the problems of a manifest's `travel_modes` block: at most TRAVEL_MODES_MAX modes with unique ids,
+/// names 1-24 characters, `days` 0..5, `road_pct` 0..300, `sure_when` conditions (read keys checked), `road_encounters`
+/// pairs that resolve, and a `default` naming one of them.
+fn travel_modes_errors(v: &View, w: &str, t: &Dict) -> Vec<String> {
+    let label = "Travel modes";
+    let mut errors = unknown_keys(t, &TRAVEL_MODES_KEYS, label);
+    let mut ids: Vec<String> = Vec::new();
+    let listed = t.get("modes").is_none_or(Value::is_array);
+    if let Some(modes) = t.get("modes").and_then(|raw| list(raw, "Travel modes: modes", &mut errors)) {
+        if modes.len() > TRAVEL_MODES_MAX {
+            errors.push(format!("{label}: at most {TRAVEL_MODES_MAX} modes (has {}).", modes.len()));
+        }
+        for (i, raw) in modes.iter().enumerate() {
+            let ml = format!("Travel mode {}", i + 1);
+            let Some(m) = object(raw, &ml, &mut errors) else { continue };
+            errors.extend(unknown_keys(m, &TRAVEL_MODE_KEYS, &ml));
+            let id = json::s(m, "id");
+            if !json::id_ok(&id) {
+                errors.push(format!("{ml}: id '{id}' must be a snake_case id."));
+            } else if ids.contains(&id) {
+                errors.push(format!("{ml}: id '{id}' is listed twice."));
+            }
+            ids.push(id);
+            errors.extend(text_key(m, "name", PURSE_NAME_MAX, true, &ml));
+            errors.extend(text_key(m, "tip", MODE_TIP_MAX, false, &ml));
+            errors.extend(int_key(m, "days", 0, MODE_DAYS_MAX, &ml));
+            errors.extend(int_key(m, "road_pct", 0, MODIFIER_PCT_MAX, &ml));
+            if let Some(c) = m.get("sure_when") {
+                errors.extend(condition_errors(c, &format!("{ml}: sure_when")));
+            }
+            if let Some(pool) = m.get("road_encounters") {
+                errors.extend(map::pair_list_errors(v, w, &ml, "road_encounters", pool));
+            }
+        }
+    }
+    match t.get("default") {
+        None => {}
+        // a broken mode list is its own error; the default is checked against a list only
+        _ if !listed => {}
+        Some(Value::String(named)) if named.is_empty() || ids.contains(named) => {}
+        Some(x) => errors.push(format!("{label}: default '{}' is not one of the modes.", gstr(x))),
+    }
+    errors.extend(read_key_errors(v, w, t).into_iter().map(|e| format!("{label}: {e}")));
+    errors
+}
+
+/// CAMPAIGN1-TM: the travel mode ids of world `w` (its lineage's nearest `travel_modes` block that holds anything).
+fn mode_ids(v: &View, w: &str) -> Vec<String> {
+    for lw in v.worlds.lineage(w).iter().rev() {
+        if let Some(Value::Object(t)) = v.worlds.manifest(lw).get("travel_modes") {
+            if !t.is_empty() {
+                return json::aget(t, "modes").iter().map(|m| json::s(json::dict(m), "id")).filter(|id| !id.is_empty()).collect();
+            }
+        }
+    }
+    Vec::new()
+}
+
+/// The soft problems of world `w`'s campaign data: repeatable triggers with no `when` (CAMPAIGN1-TW), purse and HUD
+/// icons that no asset layer holds.
 pub fn warnings(v: &View, w: &str) -> Vec<String> {
-    let mut out = Vec::new();
+    let mut out: Vec<String> = v.worlds.own_entries(w, "triggers").into_iter().filter_map(trigger_warning).collect();
     if v.assets.roots.is_empty() {
         return out;
     }
@@ -260,8 +326,9 @@ pub fn meter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
         if inputs.len() > INPUTS_MAX {
             errors.push(format!("A meter holds at most {INPUTS_MAX} inputs (has {}).", inputs.len()));
         }
+        let modes = mode_ids(v, w);
         for (i, raw) in inputs.iter().enumerate() {
-            errors.extend(input_errors(i, raw, hi - lo));
+            errors.extend(input_errors(i, raw, hi - lo, &modes));
         }
     }
     if let Some(mods) = list(json::get(e, "modifiers"), "Modifiers", &mut errors) {
@@ -405,8 +472,8 @@ fn rule_errors(v: &View, w: &str, i: usize, raw: &Value, bands: &[String], (lo, 
     errors
 }
 
-/// M3: one gauge input (`span`: max - min, the largest move).
-fn input_errors(i: usize, raw: &Value, span: i64) -> Vec<String> {
+/// M3: one gauge input (`span`: max - min, the largest move; `modes`: the world's travel mode ids, CAMPAIGN1-TM).
+fn input_errors(i: usize, raw: &Value, span: i64, modes: &[String]) -> Vec<String> {
     let mut errors = Vec::new();
     let label = format!("Input {}", i + 1);
     let Some(d) = object(raw, &label, &mut errors) else { return errors };
@@ -423,6 +490,10 @@ fn input_errors(i: usize, raw: &Value, span: i64) -> Vec<String> {
     errors.extend(acts_key(d, "acts", &label));
     errors.extend(strings_key(d, "tags", &label));
     errors.extend(strings_key(d, "route_tags", &label));
+    errors.extend(strings_key(d, "modes", &label));
+    for m in json::sget(d, "modes").iter().filter(|m| !modes.contains(m)) {
+        errors.push(format!("{label}: mode '{m}' is not a travel mode of this world."));
+    }
     if let Some(x) = d.get("outcomes") {
         if !x.as_array().is_some_and(|a| a.iter().all(|o| o.as_str().is_some_and(|s| OUTCOMES.contains(&s)))) {
             errors.push(format!("{label}: outcomes must be a list of {}.", OUTCOMES.join(", ")));
@@ -510,6 +581,19 @@ pub fn trigger_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors.extend(effects_errors(v, w, effects, "Effects"));
     errors.extend(then_errors(v, w, then, "Then"));
     errors
+}
+
+/// CAMPAIGN1-TW (user 2026-10-27: rule 1, warn): a repeatable trigger (`once` false) re-arms only when its `when`
+/// stops holding; an empty `when` always holds, so it fires only once. Every-battle or every-day effects belong to a
+/// meter's `inputs`.
+pub fn trigger_warning(e: &Dict) -> Option<String> {
+    if json::b(e, "once", true) || !json::arr(json::get(e, "when")).is_empty() {
+        return None;
+    }
+    Some(format!(
+        "{}: a repeatable trigger (once false) with an empty when fires only once (it re-arms only when its when stops holding); put every-battle or every-day effects in a meter's inputs instead.",
+        json::s(e, "_qid")
+    ))
 }
 
 /// T2: a `then` list: items with exactly one of `vignette` (a STORYUI1 vignette), `battle` (an encounter), `dialogue`
@@ -644,6 +728,10 @@ pub fn read_key_error(v: &View, w: &str, key: &str) -> String {
             Some(id) if v.worlds.resolve(w, "meters", id).is_empty() => format!("'{key}' names no meter of this world."),
             Some(_) => String::new(),
         };
+    }
+    // ROSTER1 RK1: the roster read keys
+    if key.starts_with(rpgkit_data::ROSTER_PREFIX) {
+        return super::world::roster_read_key_error(v, w, key);
     }
     if CAMPAIGN_READ_KEYS.contains(&key) {
         String::new()

@@ -10,6 +10,8 @@
 //!                                              encounter, the world's for a world one); rules "-id,+id" switches
 //!                                              single extensions
 //!       {plan_reveal?}                         RULESET1 V2: reveal every enemy plan (rule `plan_badges`; default false)
+//!       {melee_diagonal?}                      INPUT1 MR11: none, maneuver or all over the ruleset row's value
+//!                                              (beyond classic the state's `ruleset` names it)
 //!   state                                      round, block, phase, outcome, units, grid; `hold` (tiles, label,
 //!                                              holder, open, note) only for a hold escape (ENCOUNTER2 3.1)
 //!   intents                                    every scheduled action this round (enemies included); under the rule
@@ -40,8 +42,19 @@
 //!   manual {unit, on?}                         the member's Manual toggle (default on; off rebuilds the auto plan)
 //!   fill {unit}                                Manual's "fill the rest": follow-ups and Rest after the last step
 //!   round_plan                                 the planner's own state of every active party-side unit: intent,
-//!                                              target, kind, opener, Manual and the reason tag of each planned entry
-//!                                              (never an enemy: threat intel is `intents`' `round_intents`)
+//!                                              target, kind, opener, Manual and the reason tag of each planned entry,
+//!                                              its picks, ghost_from, autofill and the AP forecast `ap` (never an
+//!                                              enemy: threat intel is `intents`' `round_intents`)
+//!   pick {unit, target?, pick, then?}          INPUT1-U (rule round_intent): append a pick to a member's round on
+//!                                              target ("self", a unit or [x, y]; default its round target): {"skill":
+//!                                              id, "kind"?}, {"item": id}, "rest", {"move": [x, y]}, {"step_after":
+//!                                              [x, y]}; `then` a skill pick after a move; the first skill or item pick
+//!                                              sets the intent, kind and target; the ghost fills the rest; refused
+//!                                              picks change nothing (reply: round_intent's plus `dropped`)
+//!   unpick {unit}                              remove the member's last pick (clear {unit} removes them all)
+//!   autofill {on}                              the party's Auto-fill setting (off: the free blocks Rest)
+//!   pick_options {unit, target?}               read-only: the menu rows on a target (picks, intent, kind, ap,
+//!                                              blocks, problem, drops)
 //!   log {since?}                               resolution log lines
 //!   history                                    the mutating requests so far (feed them back to replay) and the
 //!                                              checkpoints: the round outcome after every concluded round
@@ -54,13 +67,13 @@ use rpgkit_battle::command;
 use rpgkit_battle::grid::{V2, GRID_H, GRID_W, NO_CELL, TERRAIN_IDS};
 use rpgkit_battle::intent;
 use rpgkit_battle::plan::{PlanStep, Step};
-use rpgkit_battle::round_intent::{self, ManeuverKind, Opener, RoundTarget};
+use rpgkit_battle::round_intent::{self, ManeuverKind, Opener, Pick, RoundIntent, RoundTarget};
 use rpgkit_battle::round_intent_plan as rip;
 use rpgkit_battle::session::{EncounterDef, Phase, Session};
 use rpgkit_battle::skill::{self, Kind};
 use rpgkit_battle::world::UnitId;
 use rpgkit_data::Catalog;
-use rpgkit_rules::ruleset::Ruleset;
+use rpgkit_rules::ruleset::{MeleeDiagonal, Ruleset};
 use indexmap::IndexMap;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -88,6 +101,10 @@ fn picked_ruleset(cat: &Catalog, req: &Value, default: Ruleset) -> Result<Rulese
     if let Some(spec) = req.get("rules").and_then(Value::as_str) {
         r.adjust(spec)?;
     }
+    // INPUT1 MR11: the diagonal melee to compare (the row's value when absent or "")
+    if let Some(id) = req.get("melee_diagonal").and_then(Value::as_str).filter(|s| !s.is_empty()) {
+        r.numbers.melee_diagonal = MeleeDiagonal::parse(id).ok_or_else(|| format!("melee_diagonal must be one of {} (got '{id}')", MeleeDiagonal::IDS.join(", ")))?;
+    }
     Ok(r)
 }
 
@@ -97,7 +114,7 @@ fn err(msg: impl Into<String>) -> Value {
 
 impl aegis_host::Commands for Battle {
     fn mutating(&self, cmd: &str) -> bool {
-        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "manual" | "fill" | "stay_pick")
+        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "manual" | "fill" | "stay_pick" | "pick" | "unpick" | "autofill")
     }
 
     fn restarts(&self, cmd: &str) -> bool {
@@ -242,7 +259,11 @@ impl Battle {
             "probe" => probe(s, req),
             "add_step" => edit_steps(s, req, "add"),
             "undo" => edit_steps(s, req, "undo"),
-            "clear" => edit_steps(s, req, "clear"),
+            "clear" => match unit_arg(s, req, "unit") {
+                // INPUT1 IF7: under round_intent a member's Clear removes its picks (the planner rebuilds the round)
+                Some(u) if round_intent::on(&s.w) && !rip::picks_of(&s.w, u).is_empty() => clear_picks_req(s, u),
+                _ => edit_steps(s, req, "clear"),
+            },
             "plan_view" => json!({"ok": true, "plan": plan_view(s, unit_arg(s, req, "unit"))}),
             "stay_pick" => match unit_arg(s, req, "unit") {
                 Some(u) => match s.stay_pick(u) {
@@ -319,6 +340,10 @@ impl Battle {
             "round_intent" => round_intent_req(s, req),
             "manual" => manual_req(s, req),
             "fill" => fill_req(s, req),
+            "pick" => pick_req(s, req),
+            "unpick" => unpick_req(s, req),
+            "autofill" => autofill_req(s, req),
+            "pick_options" => pick_options_req(s, req),
             "round_plan" => json!({"ok": true, "round_plan": round_plan(s)}),
             "log" => {
                 let since = req.get("since").and_then(Value::as_u64).unwrap_or(0) as usize;
@@ -400,9 +425,17 @@ pub fn state_of(s: &Session) -> Value {
         "outcome": s.outcome, "over": s.combat_over, "units": units,
         "grid": {"w": GRID_W, "h": GRID_H, "rows": rows, "exits": w.grid.exits.iter().map(|e| json!([e.x, e.y])).collect::<Vec<_>>()},
     });
+    // INPUT1 MR11: beyond classic the ruleset and its diagonal melee (classic keeps the state's shape)
+    if !w.ruleset.is_classic() {
+        state["ruleset"] = json!({"id": w.ruleset.id, "melee_diagonal": w.ruleset.melee_diagonal().id()});
+    }
     // ENCOUNTER2 3.1: a hold escape's tiles, holder and gate (other battles keep the state's shape)
     if let Some(g) = &w.hold {
         state["hold"] = json!({"tiles": g.tiles.iter().map(|c| json!([c.x, c.y])).collect::<Vec<_>>(), "label": g.label, "holder": g.holder, "open": g.is_open(w), "note": g.note(w)});
+    }
+    // ENCOUNTER2-C DT3: the talk cues so far, only when the encounter has a talk effect (the host never waits for one)
+    if s.phases.has_talk() {
+        state["talks"] = Value::Array(s.talks().iter().map(|t| json!({"phase": t.phase, "dialogue": t.dialogue, "speaker": t.speaker, "round": t.round, "block": t.block})).collect());
     }
     state
 }
@@ -683,36 +716,36 @@ fn round_intent_req(s: &mut Session, req: &Value) -> Value {
         Ok(u) => u,
         Err(e) => return e,
     };
-    let (w0, steps0, events0) = (s.w.clone(), s.plan.sequences.clone(), s.events.len());
-    if let Err(e) = set_round_fields(s, u, req) {
-        s.w = w0;
-        s.plan.sequences = steps0;
-        s.events.truncate(events0);
-        return err(e);
+    let set = match round_set_of(s, req) {
+        Ok(set) => set,
+        Err(e) => return err(e),
+    };
+    // INPUT1 GH2 b: the kit's `set_round` (the battle screen previews a waiting change with `preview_round`, the same
+    // source); a refused field leaves the battle as it was
+    match s.set_round(u, &set) {
+        Err(e) => err(e),
+        Ok(done) if done.manual => intent_reply(s, Ok(()), Vec::new()),
+        Ok(done) => intent_reply(s, done.planned, done.refused),
     }
-    if rip::manual(&s.w, u) {
-        return intent_reply(s, Ok(()), Vec::new());
-    }
-    let (result, refused) = rip::replan(&mut s.w, &mut s.plan, u);
-    intent_reply(s, result, refused)
 }
 
-/// The fields of a `round_intent` request, in order; the first refusal stops (the caller restores the battle).
-fn set_round_fields(s: &mut Session, u: UnitId, req: &Value) -> Result<(), String> {
+/// The fields of a `round_intent` request (`intent`, `target`, `maneuver`, `opener`), read in order; the first one that
+/// does not parse stops.
+fn round_set_of(s: &Session, req: &Value) -> Result<rip::RoundSet, String> {
+    let mut set = rip::RoundSet::default();
     if let Some(i) = req.get("intent").and_then(Value::as_str) {
-        s.set_round_intent(u, i)?;
+        set.intent = Some(RoundIntent::parse(i).ok_or_else(|| format!("Unknown intent '{i}'."))?);
     }
     if let Some(v) = req.get("target") {
-        let t = round_target_of(s, v).ok_or("target: \"self\", a unit or a cell [x, y]")?;
-        s.set_round_target(u, t)?;
+        set.target = Some(round_target_of(s, v).ok_or("target: \"self\", a unit or a cell [x, y]")?);
     }
     if let Some(v) = req.get("maneuver") {
-        kind_of(v).and_then(|k| rip::set_kind(&mut s.w, u, k))?;
+        set.kind = Some(kind_of(v)?);
     }
     if let Some(v) = req.get("opener") {
-        opener_of(s, v).and_then(|o| rip::set_opener(&mut s.w, u, o))?;
+        set.opener = Some(opener_of(s, v)?);
     }
-    Ok(())
+    Ok(set)
 }
 
 /// MM1, MM3 `manual {unit, on}`: the Manual toggle (default on); off rebuilds the auto plan.
@@ -740,10 +773,163 @@ fn fill_req(s: &mut Session, req: &Value) -> Value {
     }
 }
 
+// ---- INPUT1-U: picks (rule round_intent) ---------------------------------------------------------------------------
+
+/// INPUT1_TASKS 1.3: a pick: {"skill": id, "kind"?: "engage" | "disengage" | "utility"}, {"item": id}, "rest",
+/// {"move": [x, y]}, {"step_after": [x, y]}.
+fn pick_of(s: &Session, v: &Value) -> Result<Pick, String> {
+    if v.as_str() == Some("rest") {
+        return Ok(Pick::Rest);
+    }
+    let o = v.as_object().ok_or("pick: {\"skill\": id}, {\"item\": id}, \"rest\", {\"move\": [x, y]} or {\"step_after\": [x, y]}")?;
+    if let Some(id) = o.get("skill").and_then(Value::as_str) {
+        let skill = s.w.book().find(id).ok_or_else(|| format!("unknown skill '{id}'"))?;
+        let kind = match o.get("kind") {
+            Some(k) => kind_of(k)?,
+            None => None,
+        };
+        return Ok(Pick::Skill { skill, kind });
+    }
+    if let Some(id) = o.get("item").and_then(Value::as_str) {
+        return Ok(Pick::Item(id.to_string()));
+    }
+    if let Some(c) = o.get("move") {
+        return cell_of(c).map(Pick::MoveHere).ok_or_else(|| "move needs a cell [x, y]".into());
+    }
+    if let Some(c) = o.get("step_after") {
+        return cell_of(c).map(Pick::StepAfter).ok_or_else(|| "step_after needs a cell [x, y]".into());
+    }
+    Err("pick needs a skill, an item, \"rest\", a move or a step_after".into())
+}
+
+/// A pick as the requests write it (`pick_of`'s shapes).
+fn pick_json(s: &Session, p: &Pick) -> Value {
+    match p {
+        Pick::Skill { skill, kind } => {
+            let mut v = json!({"skill": s.w.cat.skills[*skill].id});
+            if let Some(k) = kind {
+                v["kind"] = json!(intent::maneuver_id(*k));
+            }
+            v
+        }
+        Pick::Item(id) => json!({"item": id}),
+        Pick::Rest => json!("rest"),
+        Pick::MoveHere(c) => json!({"move": [c.x, c.y]}),
+        Pick::StepAfter(c) => json!({"step_after": [c.x, c.y]}),
+    }
+}
+
+/// The round target a pick request aims at: its `target`, else the member's round target, else (no target set yet)
+/// the unit itself.
+fn pick_target_arg(s: &Session, u: UnitId, req: &Value) -> Result<RoundTarget, String> {
+    match req.get("target") {
+        Some(v) => round_target_of(s, v).ok_or_else(|| "target: \"self\", a unit or a cell [x, y]".into()),
+        None => Ok(s.w.round_states.get(&u).and_then(|r| r.target).unwrap_or(RoundTarget::Myself)),
+    }
+}
+
+/// The reply after a pick change: `intent_reply`'s shape plus `dropped` [{unit, name, reason}] (GH5: the later
+/// members' picks that no longer fit; their other refusals stay in `refused`).
+fn pick_reply(s: &Session, before: &[(UnitId, usize)], result: Result<(), String>, later: Vec<(UnitId, String)>) -> Value {
+    let shrank = |u: UnitId| before.iter().any(|(m, n)| *m == u && rip::picks_of(&s.w, u).len() < *n);
+    let (dropped, refused): (Vec<_>, Vec<_>) = later.into_iter().partition(|(u, _)| shrank(*u));
+    let mut reply = intent_reply(s, result, refused);
+    reply["dropped"] = Value::Array(dropped.into_iter().map(|(u, r)| json!({"unit": u, "name": s.w.units[u].name, "reason": r})).collect());
+    reply
+}
+
+fn pick_counts(s: &Session) -> Vec<(UnitId, usize)> {
+    s.w.allies.iter().map(|&u| (u, rip::picks_of(&s.w, u).len())).collect()
+}
+
+/// INPUT1_TASKS 1.3 `pick {unit, target, pick, then?}`: appends the pick (and `then`, a skill pick after a move) to the
+/// member's round (IF4, IF6, GH3-GH5). A refused pick is an error and leaves the battle as it was (not recorded).
+fn pick_req(s: &mut Session, req: &Value) -> Value {
+    let u = match planning_member(s, req, "pick") {
+        Ok(u) => u,
+        Err(e) => return e,
+    };
+    if !round_intent::on(&s.w) {
+        return err("pick needs the rule round_intent");
+    }
+    let mut picks = Vec::new();
+    for key in ["pick", "then"] {
+        match req.get(key).map(|v| pick_of(s, v)) {
+            Some(Ok(p)) => picks.push(p),
+            Some(Err(e)) => return err(e),
+            None if key == "pick" => return err("pick needs a pick"),
+            None => {}
+        }
+    }
+    let at = match pick_target_arg(s, u, req) {
+        Ok(t) => t,
+        Err(e) => return err(e),
+    };
+    let before = pick_counts(s);
+    match s.pick(u, at, &picks) {
+        (Err(e), _) => err(e),
+        (Ok(()), later) => pick_reply(s, &before, Ok(()), later),
+    }
+}
+
+/// `unpick {unit}`: removes the member's last pick (IF7); with none left the planner's own plan.
+fn unpick_req(s: &mut Session, req: &Value) -> Value {
+    let u = match planning_member(s, req, "unpick") {
+        Ok(u) => u,
+        Err(e) => return e,
+    };
+    if rip::picks_of(&s.w, u).is_empty() {
+        return err("nothing to unpick");
+    }
+    let before = pick_counts(s);
+    let (result, later) = rip::unpick(&mut s.w, &mut s.plan, u);
+    pick_reply(s, &before, result, later)
+}
+
+/// `clear {unit}` under round_intent with picks: removes every pick (IF7).
+fn clear_picks_req(s: &mut Session, u: UnitId) -> Value {
+    if s.phase != Phase::Planning || s.plan_confirmed {
+        return err("not planning");
+    }
+    let before = pick_counts(s);
+    let (result, later) = rip::clear_picks(&mut s.w, &mut s.plan, u);
+    pick_reply(s, &before, result, later)
+}
+
+/// `autofill {on}` (GH7, recorded so a replay keeps it): the party's Auto-fill setting; while planning every member's
+/// ghost is rebuilt at once.
+fn autofill_req(s: &mut Session, req: &Value) -> Value {
+    let Some(on) = req.get("on").and_then(Value::as_bool) else { return err("autofill needs on: true or false") };
+    if s.phase == Phase::Planning && !s.plan_confirmed {
+        rip::set_autofill(&mut s.w, &mut s.plan, on);
+    } else {
+        s.w.autofill = on;
+    }
+    json!({"ok": true, "autofill": s.w.autofill, "round_plan": round_plan(s)})
+}
+
+/// `pick_options {unit, target}` (read-only): the rows of the member's menu on the target (IF2, ET1).
+fn pick_options_req(s: &Session, req: &Value) -> Value {
+    let Some(u) = unit_arg(s, req, "unit").filter(|u| s.w.allies.contains(u)) else { return err("pick_options needs a party unit") };
+    let at = match pick_target_arg(s, u, req) {
+        Ok(t) => t,
+        Err(e) => return err(e),
+    };
+    let rows: Vec<Value> = rip::pick_options(&s.w, &s.plan, u, at)
+        .iter()
+        .map(|o| {
+            json!({"picks": o.picks.iter().map(|p| pick_json(s, p)).collect::<Vec<_>>(), "intent": o.intent.map(|i| i.id()), "kind": o.kind.map(intent::maneuver_id),
+                "ap": o.ap, "blocks": o.blocks, "problem": o.problem, "drops": o.drops})
+        })
+        .collect();
+    json!({"ok": true, "rows": rows})
+}
+
 /// RULESET1_TASKS 1.8 `round_plan`: the planner's own state of every active party-side unit (round intent, target,
-/// Maneuver kind, opener, Manual toggle and the reason tag of each entry it has planned, PL6); never an enemy (its
-/// opener and target are not shown: the threat intel view is `intents`' `round_intents`, reveals respected); empty
-/// without the rule round_intent.
+/// Maneuver kind, opener, Manual toggle and the reason tag of each entry it has planned, PL6; INPUT1 1.3: its picks,
+/// the first ghost entry's index, the party's Auto-fill and the AP forecast, AP1; `manual` is true with a pick); never
+/// an enemy (its opener and target are not shown: the threat intel view is `intents`' `round_intents`, reveals
+/// respected); empty without the rule round_intent.
 fn round_plan(s: &Session) -> Vec<Value> {
     let w = &s.w;
     if !round_intent::on(w) {
@@ -766,9 +952,12 @@ fn round_plan(s: &Session) -> Vec<Value> {
                 Some(Opener::Item(id)) => json!({"item": id}),
                 None => Value::Null,
             };
+            let ap = rip::ap_forecast(w, &s.plan, c);
             json!({"unit": c, "name": w.units[c].name, "side": "party",
                 "intent": rs.intent.map(|i| i.id()), "target": target, "maneuver": rs.maneuver.map(intent::maneuver_id), "maneuver_auto": rs.maneuver_auto,
-                "opener": opener, "manual": rs.manual, "reasons": rip::reasons(w, &s.plan, c)})
+                "opener": opener, "manual": rs.manual || !rs.picks.is_empty(), "reasons": rip::reasons(w, &s.plan, c),
+                "picks": rs.picks.iter().map(|p| pick_json(s, p)).collect::<Vec<_>>(), "ghost_from": rip::ghost_from(w, &s.plan, c), "autofill": w.autofill,
+                "ap": {"now": ap.now, "spent": ap.spent, "picked": ap.picked, "filled": ap.filled, "left": ap.left, "gain": ap.gain, "rest_gain": ap.rest_gain, "next": ap.next, "max": ap.max}})
         })
         .collect()
 }

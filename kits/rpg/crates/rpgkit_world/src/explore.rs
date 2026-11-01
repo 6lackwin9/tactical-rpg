@@ -3,8 +3,8 @@
 //! battle on a `fight` event and calls after_fight; it writes the save on `autosave` (no I/O here).
 
 use crate::data::Data;
-use crate::state::{GameState, HOME_WORLD_KEY, NO_POSITION, SUPPLIES_MAX};
-use crate::{dialogue, progression, quest, rolls, travel};
+use crate::state::{GameState, HOME_WORLD_KEY, NO_POSITION};
+use crate::{dialogue, progression, quest, rolls, terms, travel};
 use aegis_core::json::{self, int, Dict};
 use serde_json::Value;
 
@@ -457,6 +457,8 @@ pub fn enter(d: &Data, gs: &mut GameState, location_ref: &str, anchor: &str) -> 
         }
         gs.world_id = loc_world;
     }
+    // ROSTER1 BK7: the roster settings follow the played world
+    gs.party.roster = crate::roster::caps(d, &gs.world_id);
     let qid = json::s(loc, "_qid");
     gs.location_id = qid.clone();
     gs.position = pos;
@@ -786,6 +788,16 @@ pub fn reset_counter(d: &Data, gs: &mut GameState) {
     gs.explore.insert("next_at".into(), int(next));
 }
 
+/// CAMPAIGN1 W3 (engine-only): the player refused a fight `step` reported (the ask before a run-ending fight): the
+/// party goes back to the tile it stepped from and the encounter counter starts over, as after fleeing; nothing is
+/// settled and the marker stays.
+pub fn decline_fight(d: &Data, gs: &mut GameState, fight: &Dict) {
+    if let [x, y] = json::aget(fight, "from") {
+        gs.position = (json::to_int(x), json::to_int(y));
+    }
+    reset_counter(d, gs);
+}
+
 /// BattleBridge.apply (REWARD1: `tally` from the battle, None = settled without one), then won: done flag and
 /// sets_flags; fled: back a tile; lost: wake. Then the counter reset.
 pub fn after_fight(d: &Data, gs: &mut GameState, fight: &Dict, outcome: &str, tally: Option<&crate::battle::Tally>) -> Dict {
@@ -937,7 +949,7 @@ fn open_chest(d: &Data, gs: &mut GameState, loc_qid: &str, m: &Dict) -> Dict {
         ("supplies", int(added)),
     ]);
     if added < want {
-        out.insert("notes".into(), json::strs(&[format!("Supplies are capped at {SUPPLIES_MAX} ({} left behind).", want - added)]));
+        out.insert("notes".into(), json::strs(&[terms::upkeep_capped(d, &gs.world_id, want - added)]));
     }
     out
 }

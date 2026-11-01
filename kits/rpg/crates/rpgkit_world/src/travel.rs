@@ -2,7 +2,9 @@
 //! map view, and auto-pathed trips leg by leg (clock, supplies, scripted and road fights). CAMPAIGN1 (engine-only,
 //! inert outside a campaign world): each leg ticks the campaign (days, then leg; K2, M3) and may end the trip (status
 //! `over`, K4); upkeep per day and the zero-upkeep and band modifiers of the road-fight chance (P2, P3, M7); the map
-//! view's checkpoint lines (STORYUI1 B10).
+//! view's checkpoint lines (STORYUI1 B10). CAMPAIGN1-TM: in a campaign world with travel modes, each leg takes the
+//! party's mode's `days` more (`leg_days`: path search, trip cost, the clock, upkeep and the days tick all count them)
+//! and its leg tick names the mode (meter inputs `modes`); the mode's road-fight change is `campaign::purse`'s.
 
 use crate::data::Data;
 use crate::explore::{self, SPAWN};
@@ -142,11 +144,18 @@ pub fn is_visited(gs: &GameState, qid: &str) -> bool {
 
 /// Directed legs over open routes: (route, from, to).
 pub fn legs(d: &Data, gs: &GameState, w: &str) -> Vec<(Dict, String, String)> {
+    directed(graph(d, w).into_iter().filter(|r| is_open(gs, r)))
+}
+
+/// CAMPAIGN1-SIM: every directed leg of `w`'s graph, route gates ignored (the full graph `sim deadlines` plans on).
+pub fn all_legs(d: &Data, w: &str) -> Vec<(Dict, String, String)> {
+    directed(graph(d, w).into_iter())
+}
+
+/// Each route as a leg from `_from` to `_to`, and back when it is two-way: (route, from, to).
+fn directed(routes: impl Iterator<Item = Dict>) -> Vec<(Dict, String, String)> {
     let mut out = Vec::new();
-    for r in graph(d, w) {
-        if !is_open(gs, &r) {
-            continue;
-        }
+    for r in routes {
         let (a, b) = (json::s(&r, "_from"), json::s(&r, "_to"));
         let two = json::b(&r, "two_way", true);
         out.push((r.clone(), a.clone(), b.clone()));
@@ -184,13 +193,36 @@ fn better(a: &(i64, Vec<String>), b: &(i64, Vec<String>)) -> bool {
     false
 }
 
-/// Route qids of the best path over open legs between known nodes ([] when equal, unknown or unreachable).
+/// CAMPAIGN1-TM: the days the party's travel mode adds to every leg (0 outside a campaign world and without modes).
+pub fn mode_days(d: &Data, gs: &GameState) -> i64 {
+    crate::campaign::purse::travel_mode(d, gs).map_or(0, |m| m.leg_days())
+}
+
+/// The days a leg on `route` takes: its `time` plus `extra` (the travel mode's `mode_days`).
+pub fn leg_days(route: &Dict, extra: i64) -> i64 {
+    json::i(route, "time", 0) + extra
+}
+
+/// Route qids of the best path over open legs between known nodes, in the party's travel mode ([] when equal, unknown
+/// or unreachable).
 pub fn path(d: &Data, gs: &GameState, from: &str, to: &str) -> Vec<String> {
     let known_nodes = known(d, gs);
     if from == to || !known_nodes.iter().any(|q| q == from) || !known_nodes.iter().any(|q| q == to) {
         return Vec::new();
     }
-    let all = legs(d, gs, &gs.world_id);
+    best_path_with(&legs(d, gs, &gs.world_id), &known_nodes, from, to, mode_days(d, gs)).map(|b| b.1).unwrap_or_default()
+}
+
+/// The best path from `from` to `to` over `all` (directed legs, as `legs` returns them) through `nodes` only: the
+/// fewest days (route `time` summed), then the fewest legs, then the smaller route qids. (days, route qids); None when
+/// `to` cannot be reached. `path` plans on the open legs between known nodes, `sim deadlines` on the full graph.
+pub fn best_path(all: &[(Dict, String, String)], nodes: &[String], from: &str, to: &str) -> Option<(i64, Vec<String>)> {
+    best_path_with(all, nodes, from, to, 0)
+}
+
+/// `best_path` with `extra` days on every leg (CAMPAIGN1-TM: a travel mode's `days`), so the path and its days are the
+/// ones a trip in that mode takes.
+pub fn best_path_with(all: &[(Dict, String, String)], nodes: &[String], from: &str, to: &str, extra: i64) -> Option<(i64, Vec<String>)> {
     let mut best: indexmap::IndexMap<String, (i64, Vec<String>)> = indexmap::IndexMap::new();
     best.insert(from.into(), (0, Vec::new()));
     let mut done: Vec<String> = Vec::new();
@@ -207,19 +239,19 @@ pub fn path(d: &Data, gs: &GameState, from: &str, to: &str) -> Vec<String> {
         }
         done.push(cur.clone());
         let label = best[&cur].clone();
-        for (route, lf, lt) in &all {
-            if *lf != cur || done.contains(lt) || !known_nodes.contains(lt) {
+        for (route, lf, lt) in all {
+            if *lf != cur || done.contains(lt) || !nodes.contains(lt) {
                 continue;
             }
             let mut routes = label.1.clone();
             routes.push(json::s(route, "_qid"));
-            let cand = (label.0 + json::i(route, "time", 0), routes);
+            let cand = (label.0 + leg_days(route, extra), routes);
             if best.get(lt).map_or(true, |b| better(&cand, b)) {
                 best.insert(lt.clone(), cand);
             }
         }
     }
-    best.get(to).map(|b| b.1.clone()).unwrap_or_default()
+    best.get(to).cloned()
 }
 
 pub fn route_in(d: &Data, w: &str, route_qid: &str) -> Dict {
@@ -286,8 +318,9 @@ pub fn trip(d: &Data, gs: &GameState, from: &str, to: &str) -> Dict {
         return json::obj([("ok", Value::Bool(false)), ("time", int(0)), ("supplies", int(0))]);
     }
     let (mut time, mut spent, mut have) = (0, 0, gs.party.supplies);
+    let extra = mode_days(d, gs);
     for rq in routes {
-        let leg = json::i(&route_in(d, &gs.world_id, &rq), "time", 0);
+        let leg = leg_days(&route_in(d, &gs.world_id, &rq), extra);
         let paid = PartyState::supplies_cost(have, crate::campaign::purse::leg_upkeep(d, &gs.world_id, leg));
         have -= paid;
         spent += paid;
@@ -297,14 +330,17 @@ pub fn trip(d: &Data, gs: &GameState, from: &str, to: &str) -> Dict {
 }
 
 /// {current, supplies, nodes: [{qid, name, visited, kind, region, quest, map_pos, jobs?, deadlines?}], routes: [{qid,
-/// from, to, two_way, open, time}]}. STORYUI1 B10: `jobs` (the names of the available quests of boards opened once
-/// whose node this is) and `deadlines` (the checkpoint lines of the quests whose node this is, CAMPAIGN1) only when
-/// there are some.
+/// from, to, two_way, open, time, days?}], mode?}. STORYUI1 B10: `jobs` (the names of the available quests of boards
+/// opened once whose node this is) and `deadlines` (the checkpoint lines of the quests whose node this is, CAMPAIGN1)
+/// only when there are some. CAMPAIGN1-TM: in a world with travel modes, `mode` (the party's mode id) and each
+/// route's `days` in that mode.
 pub fn view(d: &Data, gs: &GameState) -> Dict {
     let known_nodes = known(d, gs);
     let quest_at = quest_nodes(d, gs);
     let jobs = crate::board::jobs(d, gs);
     let deadlines = crate::board::deadlines(d, gs);
+    let mode = crate::campaign::purse::travel_mode(d, gs);
+    let extra = mode.as_ref().map_or(0, |m| m.leg_days());
     let mut node_list = Vec::new();
     for q in &known_nodes {
         let loc = explore::resolve_location(d, gs, q);
@@ -335,21 +371,29 @@ pub fn view(d: &Data, gs: &GameState) -> Dict {
         if !known_nodes.contains(&a) || !known_nodes.contains(&b) {
             continue;
         }
-        route_list.push(Value::Object(json::obj([
+        let mut entry = json::obj([
             ("qid", json::s(&r, "_qid").into()),
             ("from", a.into()),
             ("to", b.into()),
             ("two_way", Value::Bool(json::b(&r, "two_way", true))),
             ("open", Value::Bool(is_open(gs, &r))),
             ("time", int(json::i(&r, "time", 0))),
-        ])));
+        ]);
+        if mode.is_some() {
+            entry.insert("days".into(), int(leg_days(&r, extra)));
+        }
+        route_list.push(Value::Object(entry));
     }
-    json::obj([
+    let mut out = json::obj([
         ("current", gs.location_id.clone().into()),
         ("supplies", int(gs.party.supplies)),
         ("nodes", Value::Array(node_list)),
         ("routes", Value::Array(route_list)),
-    ])
+    ]);
+    if let Some(m) = mode {
+        out.insert("mode".into(), m.id.into());
+    }
+    out
 }
 
 // ---- TravelRunner --------------------------------------------------------------------------------------------
@@ -374,7 +418,8 @@ fn trip_result(ok: bool, errors: &[String], status: &str, legs_done: i64, time: 
 }
 
 /// Travels towards `to_ref` leg by leg; stops at the first fight. {ok, status: fight | arrived | over, ...,
-/// campaign?}. CAMPAIGN1: after each leg's time the campaign ticks days(time, travel), then leg(route tags); a tick
+/// campaign?}. CAMPAIGN1: after each leg's days (`leg_days`: its time plus the travel mode's days, CAMPAIGN1-TM) the
+/// campaign ticks days(days, travel), then leg(route tags, mode); a tick
 /// that ends the run stops the trip before the leg's road roll (status `over`, no autosave), and so does an arrival's
 /// enter tick (CAMPAIGN1-T: enter triggers) at that node; `campaign` holds the ticks' events when there are some.
 pub fn travel(d: &Data, gs: &mut GameState, to_ref: &str) -> Dict {
@@ -406,8 +451,12 @@ pub fn travel(d: &Data, gs: &mut GameState, to_ref: &str) -> Dict {
     let mut events = Vec::new();
     let mut ticked: Vec<Value> = Vec::new();
     let (mut spent, mut supplies_spent, mut starved_legs, mut legs_done) = (0, 0, 0, 0);
+    // CAMPAIGN1-TM: the mode is read once: a trip runs in the mode it started in
+    let mode = crate::campaign::purse::travel_mode(d, gs);
+    let extra = mode.as_ref().map_or(0, |m| m.leg_days());
+    let mode_id = mode.map(|m| m.id).unwrap_or_default();
     for (route, from, to) in plan {
-        let leg_time = json::i(&route, "time", 0);
+        let leg_time = leg_days(&route, extra);
         let starved = gs.party.supplies == 0;
         gs.time += leg_time;
         spent += leg_time;
@@ -417,7 +466,7 @@ pub fn travel(d: &Data, gs: &mut GameState, to_ref: &str) -> Dict {
         }
         if gs.campaign.is_some() {
             ticked.extend(crate::campaign::tick(d, gs, &crate::campaign::Cause::Days { n: leg_time, why: "travel".into() }));
-            ticked.extend(crate::campaign::tick(d, gs, &crate::campaign::Cause::Leg { route_tags: json::sget(&route, "tags") }));
+            ticked.extend(crate::campaign::tick(d, gs, &crate::campaign::Cause::Leg { route_tags: json::sget(&route, "tags"), mode: mode_id.clone() }));
             if !crate::campaign::save_refusal(gs).is_empty() {
                 let mut out = trip_result(true, &[], "over", legs_done, spent, events, supplies_spent, starved_legs);
                 crate::campaign::merge_events(&mut out, ticked);

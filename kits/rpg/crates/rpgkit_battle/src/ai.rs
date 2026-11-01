@@ -313,7 +313,7 @@ fn can_strike_in_place(w: &World, actor: UnitId, cap: i32, dist: i32, profile: &
     strikes(w, actor, cap).into_iter().any(|sid| {
         let s = &w.cat.skills[sid];
         let b = skill::reach_by(s, &w.units[actor], &w.ruleset);
-        s.dash_tiles <= 0 && dist >= b.0 && dist <= b.1
+        s.dash_tiles <= 0 && round_intent::position_of(w, s).is_none() && dist >= b.0 && dist <= b.1
     })
 }
 
@@ -1613,12 +1613,13 @@ pub fn plan_enemy_intents(w: &mut World, plan: &mut Plan) -> Vec<String> {
 }
 
 /// AI5 for party members (plan_apply_preset_all under `round_intent`): each `(unit, preset)` in order picks by its
-/// tactic with the preset's profile; invalid plans are re-picked. A member set to Manual (MM1) is skipped: its intent,
-/// target and steps stay as the player left them (user 2026-10-28). Returns the intent change lines.
+/// tactic with the preset's profile; invalid plans are re-picked. A member set to Manual (MM1) or holding picks (INPUT1
+/// IF9) is skipped: its intent, target and steps stay as the player left them (user 2026-10-28). Returns the intent
+/// change lines.
 pub fn plan_party_intents(w: &mut World, plan: &mut Plan, presets: &[(UnitId, String)]) -> Vec<String> {
     let picks: Vec<(UnitId, AiProfile, Tactic)> = presets
         .iter()
-        .filter(|(a, _)| w.units[*a].is_active() && !round_intent_plan::manual(w, *a))
+        .filter(|(a, _)| w.units[*a].is_active() && !round_intent_plan::manual(w, *a) && round_intent_plan::picks_of(w, *a).is_empty())
         .map(|(a, p)| (*a, w.profile_of(*a).with_preset(p), Tactic::parse(p)))
         .collect();
     plan_side(w, plan, &picks, false)
@@ -2037,8 +2038,9 @@ fn reposition_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId])
     None
 }
 
-/// AI1 row 4: Maneuver Engage on the first ranked target engaged with another unit (MV2) on which one of `c`'s Maneuver
-/// attacks has a flank tile within its carried move (MV5, MV7), when the planner offers the round.
+/// AI1 row 4 (INPUT1 MR14): Maneuver Engage on the first ranked target engaged with another unit (MV2) on which one of
+/// `c`'s Maneuver attacks is in range (MR4) of an open position tile (`round_intent::engage_reach`), when the planner
+/// offers the round.
 fn engage_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId]) -> Option<IntentPick> {
     let attacks: Vec<SkillId> = round_intent_plan::order(w, c, RoundIntent::Maneuver)
         .into_iter()
@@ -2051,7 +2053,7 @@ fn engage_pick(w: &mut World, plan: &mut Plan, c: UnitId, ranked: &[UnitId]) -> 
     let here = w.pos(c);
     for &t in ranked {
         let engaged = round_intent::engaged_with(w, t).is_some_and(|e| e != c);
-        if !engaged || !attacks.iter().any(|&sid| !round_intent::engage_tiles(w, c, &w.cat.skills[sid], t, here, &blocked).is_empty()) {
+        if !engaged || !attacks.iter().any(|&sid| round_intent::engage_reach(w, c, &w.cat.skills[sid], t, here, &blocked)) {
             continue;
         }
         let mut p = IntentPick::new(RoundIntent::Maneuver, RoundTarget::Unit(t));

@@ -9,6 +9,7 @@ use crate::data::Data;
 use crate::state::{qid_ok, GameState};
 use crate::{battle, campaign, dialogue, explore, progression};
 use aegis_core::json::{self, Dict};
+use rpgkit_content::art;
 use rpgkit_data::Step;
 use serde_json::Value;
 
@@ -220,6 +221,24 @@ pub fn card_now(d: &Data, gs: &GameState, home: &str, card: &Dict) -> Option<Dic
         out.insert("speaker_name".into(), json::s_or(c, "name", &speaker).into());
     }
     Some(out)
+}
+
+/// PORTRAITFX1 7 (X3): the portraits to try for a `line` card's speaker (its `speaker` as written or as `card_now` gave
+/// it, resolved from world `home`): `art::face_chain` over the character's portrait tier, id and body with the card's
+/// `expression` ("" = neutral), so a missing frame falls back to the neutral frame, then the single portrait; [] for a
+/// card with no speaker or one no world holds.
+pub fn card_portrait(d: &Data, home: &str, card: &Dict) -> Vec<String> {
+    let speaker = json::s(card, "speaker");
+    if speaker.is_empty() {
+        return Vec::new();
+    }
+    let c = d.resolve(home, "characters", &speaker);
+    if c.is_empty() {
+        return Vec::new();
+    }
+    let unit = d.entry("units", &json::s(c, "base_unit"));
+    let class = d.entry("classes", &json::s(unit, "class_id"));
+    art::face_chain(&art::portrait_tier(c, unit), &json::s(c, "id"), &art::body_of(c, unit, class), &json::s(card, "expression"))
 }
 
 /// W3: vignette `r` as it plays now: {vignette (qid), name, music, frame, skippable, once, seen (W6: Skip asks only

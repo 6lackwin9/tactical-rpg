@@ -191,6 +191,40 @@ fn a_plain_timeline_draws_its_segments_as_before_with_no_new_widgets() {
     assert_eq!(px(&g, block_mid(&w, 3), bar.y + bar.h / 2), FILL, "a segment without parts is one plain bar of its fill");
 }
 
+// INPUT1-U: a ghost segment (a planned, not chosen, span): its fill at GHOST_ALPHA, a dashed outline all round; a
+// segment that is not a ghost draws exactly as before.
+
+#[test]
+fn a_ghost_segment_draws_in_the_ghost_style_and_a_plain_one_as_before() {
+    use aegis_ui::timeline::{ghost_fill, GHOST_ALPHA, GHOST_DASH};
+    let (mut plain, mut ghost) = (gfx(), gfx());
+    let t = |g: bool| one_side(6, vec![track("a", vec![Segment { ghost: g, ..seg("s", 2, 4) }])]);
+    let wp = draw_tl(&mut plain, &t(false));
+    let wg = draw_tl(&mut ghost, &t(true));
+    let mut reference = gfx();
+    draw_tl(&mut reference, &one_side(6, vec![track("a", vec![seg("s", 2, 4)])]));
+    assert_eq!(plain.canvas.px, reference.canvas.px, "ghost false is the default look, pixel for pixel");
+    let bar = rect_of(&wg, "tl.seg.a.s").unwrap();
+    assert_eq!(rect_of(&wp, "tl.seg.a.s"), Some(bar), "the same bar, the same widget");
+    let mid = (block_mid(&wg, 3), bar.y + bar.h / 2);
+    let lane = [24u8, 30, 44];
+    let a = ghost_fill(FILL)[3] as f32 / 255.0;
+    assert!((a - GHOST_ALPHA).abs() < 0.01, "the fill keeps {GHOST_ALPHA} of its alpha");
+    let want: Vec<i32> = (0..3).map(|k| (lane[k] as f32 + (FILL[k] as f32 - lane[k] as f32) * a).round() as i32).collect();
+    let got = px(&ghost, mid.0, mid.1);
+    assert!((0..3).all(|k| (got[k] as i32 - want[k]).abs() <= 2), "the fill at 45% over the lane: {got:?} vs {want:?}");
+    assert_eq!(px(&plain, mid.0, mid.1), FILL, "the plain bar is its fill");
+    // the outline: dashes on all four sides of the ghost bar, none on the plain one
+    let dashes = |g: &Gfx, pts: Vec<(i32, i32)>| pts.into_iter().filter(|&(x, y)| px(g, x, y) == [TEXT[0], TEXT[1], TEXT[2], 255]).count();
+    let top: Vec<(i32, i32)> = (bar.x + 4..bar.x + bar.w - 4).map(|x| (x, bar.y)).collect();
+    let left: Vec<(i32, i32)> = (bar.y..bar.y + bar.h).map(|y| (bar.x, y)).collect();
+    let n = dashes(&ghost, top.clone());
+    assert!(n > 0 && n < top.len(), "the top edge is dashed ({n} of {} pixels)", top.len());
+    assert!(dashes(&ghost, left.clone()) > 0, "and the sides too");
+    assert_eq!(dashes(&plain, top), 0, "no outline on a plain segment");
+    assert!(GHOST_DASH > 0);
+}
+
 #[test]
 fn parts_shade_brighten_and_hatch_only_their_own_blocks() {
     let mut g = gfx();

@@ -46,6 +46,8 @@ pub struct Input {
     pub outcomes: Vec<String>,
     /// Leg: the route carries one of these tags (empty = every route).
     pub route_tags: Vec<String>,
+    /// Leg (CAMPAIGN1-TM): the leg is travelled in one of these modes (empty = any mode, and travel without one).
+    pub modes: Vec<String>,
     pub delta: i64,
     /// Empty = every act.
     pub acts: Vec<i64>,
@@ -118,6 +120,7 @@ impl MeterDef {
                 tags: json::sget(x, "tags"),
                 outcomes: json::sget(x, "outcomes"),
                 route_tags: json::sget(x, "route_tags"),
+                modes: json::sget(x, "modes"),
                 delta: json::i(x, "delta", 0),
                 acts: ints(json::get(x, "acts")),
             })

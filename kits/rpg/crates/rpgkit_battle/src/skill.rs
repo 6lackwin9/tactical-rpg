@@ -2,7 +2,7 @@
 //! skill_catalog.gd, scripts/content/skill_kinds.gd). Skills are referenced by their index in `Catalog::skills`.
 
 use crate::grid::{V2, DIRS};
-use rpgkit_data::{Catalog, SkillDef};
+use rpgkit_data::{Catalog, Position, SkillDef};
 use rpgkit_rules::ruleset::{self, Ruleset};
 use rpgkit_rules::unit::{skill_in_group, BASE_AP, REACH_WEAPON_REACH};
 use rpgkit_rules::{Stance, Unit};
@@ -254,8 +254,13 @@ pub fn reach_by(s: &SkillDef, c: &Unit, rules: &Ruleset) -> (i32, i32) {
     band(s, c, melee_band_max(c, rules))
 }
 
-/// The attack band with `melee` as the far edge of a plain melee attack.
+/// The attack band with `melee` as the far edge of a plain melee attack. INPUT1 MR4: a skill with a `position` hits from
+/// the tile next to its target whatever its reach, so its band is (1, 1) in every ruleset (its `reach_max` is how far
+/// it dashes: `dash_range_by`).
 fn band(s: &SkillDef, c: &Unit, melee: i32) -> (i32, i32) {
+    if s.position.is_some() && kind(s) == Kind::Attack && !is_area(s) {
+        return (1, 1);
+    }
     let a = area(s);
     let extra = if skill_in_group(s, "spell") && a != Area::Line && a != Area::Sweep { c.spell_reach_bonus() } else { 0 };
     if s.reach_max > 0 {
@@ -274,6 +279,36 @@ fn plain_band(c: &Unit, melee: i32) -> (i32, i32) {
         (2, 3.max(c.attack_range))
     } else {
         (1, melee)
+    }
+}
+
+/// INPUT1 MR1: the position a single-target Maneuver ATTACK dashes to under `rules` (rule `round_intent` only): its
+/// `position`, else, in the transition until the data moves (INPUT1-MA), `flank` for one with `dash_tiles` above 0;
+/// None = it hits from where it stands.
+pub fn position_by(s: &SkillDef, rules: &Ruleset) -> Option<Position> {
+    if !rules.has(ruleset::ROUND_INTENT) || kind(s) != Kind::Attack || is_area(s) || intent_id(s) != "maneuver" {
+        return None;
+    }
+    s.position.or((s.dash_tiles > 0).then_some(Position::Flank))
+}
+
+/// INPUT1 MR1: how far a skill with a position (`position_by`) dashes to it: its `reach_max`, else the unit's default
+/// band max; the transition's `dash_tiles` for one without a `position` field. None: it hits from where it stands.
+pub fn dash_range_by(s: &SkillDef, c: &Unit, rules: &Ruleset) -> Option<i32> {
+    position_by(s, rules)?;
+    Some(match s.position {
+        None => s.dash_tiles,
+        Some(_) if s.reach_max > 0 => s.reach_max,
+        Some(_) => plain_band(c, melee_band_max(c, rules)).1,
+    })
+}
+
+/// RULESET1_INTENT IN4: a skill's intent id (its `round_intent`, else its kind's).
+fn intent_id(s: &SkillDef) -> &str {
+    if s.round_intent.is_empty() {
+        ruleset::kind_intent(&s.kind)
+    } else {
+        &s.round_intent
     }
 }
 

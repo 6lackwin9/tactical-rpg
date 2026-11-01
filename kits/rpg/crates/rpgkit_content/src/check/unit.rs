@@ -235,6 +235,11 @@ pub fn unit_errors(v: &View, e: &Dict) -> Vec<String> {
     errors.extend(default_intent_errors(v, e));
     // HOOKS1 AT2: the unit's AI tactics
     errors.extend(super::hooks::tactics_errors(json::get(e, "tactics"), "Tactics"));
+    // ROSTER1 RK1: a party unit's id is a start-party member's id, never a roster read word
+    let id = json::s(e, "id");
+    if json::s(e, "side") == "party" && rpgkit_data::ROSTER_WORDS.contains(&id.as_str()) {
+        errors.push(format!("Id '{id}' is a roster read word ({}); pick another.", rpgkit_data::ROSTER_WORDS.join(", ")));
+    }
     errors
 }
 

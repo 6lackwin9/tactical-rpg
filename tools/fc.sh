@@ -2,7 +2,8 @@
 # Fast check for the Aegis engine (transition step 2, 2026-10-19): compact, failure-first output. Usage:
 #   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, every test, the layer check
 #                                (parity suites skip themselves when games/emberwake/parity/out is missing); `auto` is accepted and runs everything
-#   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/
+#   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
+#                                kit src, schema.json and kit.json name no lore word (world ids, games/<id>/lore_words.txt)
 #   tools/fc.sh build            cargo build --workspace --all-targets (a compiler warning fails it)
 #   tools/fc.sh test [filter]    cargo test --workspace, optional test-name filter
 #   tools/fc.sh clippy           cargo clippy --workspace --all-targets (advisory: warnings do not fail)
@@ -96,7 +97,32 @@ layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crat
       else if (FILENAME ~ /^engine\// && r ~ /^kits(\/|$)/) printf "[layers] %s:%d engine path dependency into kits/: %s\n", FILENAME, FNR, p
     }')
   [ -n "$hits" ] && { echo "$hits"; bad=1; }
-  if [ $bad -eq 0 ]; then echo "[layers] ok: engine and kit crates name no game (${ids[*]}) and have no path into games/"; else echo "[layers] FAIL: engine and kit code must not name a game (CLAUDE.md Layers)"; status=1; fi
+  # G3 (TERMS1 7): kit code names no lore word of a game: its world ids (folders under games/<id>/data/worlds/, any case,
+  # whole word with `_` as a separator, as G1) and the lines of games/<id>/lore_words.txt (fixed phrases, whole word, exact
+  # case; `#` comments). Scope: kit src, schema.json and kit.json; kit tests and READMEs are not scanned. One git grep per
+  # game (a world id becomes [Aa][Ss].. so both lists share one case-sensitive regex).
+  local w ws lw ex
+  for id in "${ids[@]}"; do
+    ws=$(for w in "games/$id/data/worlds"/*/; do [ -d "$w" ] && basename "$w"; done | awk '{ r = ""
+      for (i = 1; i <= length($0); i++) { c = substr($0, i, 1); r = r (c ~ /[[:alpha:]]/ ? "[" toupper(c) tolower(c) "]" : (c ~ /[[:alnum:]_-]/ ? c : "\\" c)) }
+      printf "%s%s", (NR > 1 ? "|" : ""), r }')
+    lw=$([ -f "games/$id/lore_words.txt" ] && tr -d '\r' < "games/$id/lore_words.txt" | sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' \
+      | sed 's/[][\.*^$+?(){}|/]/\&/g' | paste -sd'|')
+    ex=()
+    [ -n "$ws" ] && ex+=(-e "(^|[^[:alnum:]])($ws)([^[:alnum:]]|\$)")
+    [ -n "$lw" ] && ex+=(-e "(^|[^[:alnum:]_])($lw)([^[:alnum:]_]|\$)")
+    [ ${#ex[@]} -eq 0 ] && continue
+    if hits=$(git grep --untracked -n -I -E "${ex[@]}" -- 'kits/*/crates/*/src/*' 'kits/*/schema.json' 'kits/*/kit.json'); then
+      echo "$hits" | head -20 | awk -v g="$id" -v ws="$ws" -v lw="$lw" '{ split($0, f, ":"); t = $0; sub(/^[^:]*:[^:]*:/, "", t)
+        if (lw != "" && match(t, "(^|[^[:alnum:]_])(" lw ")([^[:alnum:]_]|$)")) x = substr(t, RSTART, RLENGTH)
+        else if (ws != "" && match(t, "(^|[^[:alnum:]])(" ws ")([^[:alnum:]]|$)")) x = substr(t, RSTART, RLENGTH)
+        else x = "?"
+        gsub(/^[^[:alnum:]]+|[^[:alnum:]]+$/, "", x); c = index(t, x); c = c > 40 ? c - 40 : 1
+        printf "[layers] %s:%s names lore word \"%s\" of game %s: %s\n", f[1], f[2], x, g, substr(t, c, 120) }'
+      bad=1
+    fi
+  done
+  if [ $bad -eq 0 ]; then echo "[layers] ok: engine and kit crates name no game (${ids[*]}) and have no path into games/; kit code names no lore word"; else echo "[layers] FAIL: engine and kit code must not name a game, kit code no lore word (CLAUDE.md Layers)"; status=1; fi
 }
 
 gate() {

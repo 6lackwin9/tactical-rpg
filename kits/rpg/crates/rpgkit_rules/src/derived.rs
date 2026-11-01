@@ -125,6 +125,19 @@ pub fn breakdown(cat: &Catalog, ruleset: &str, unit: &Unit, id: &str) -> Option<
     Some(Breakdown { id: d.id.clone(), formula: d.formula.source().to_string(), inputs, raw, parts, flat, percent, uncapped, min: d.min, max: d.max, cap, value })
 }
 
+/// The value of `id` for `unit` without the modifier parts of source kind `source` (a part whose source is `source` or
+/// starts with `<source>:`; e.g. `STATUS_SOURCE`: the value without the row's status modifiers), by the same rule and
+/// caps as `value`; the formula's own inputs (other rows included) stay as they are. None when the row is absent in
+/// `ruleset`. PORTRAITFX1 5.2 reads it for a cue row's `drop_pct` ("shaken": a drop from the value without statuses).
+pub fn value_without(cat: &Catalog, ruleset: &str, unit: &Unit, id: &str, source: &str) -> Option<i32> {
+    let d = row(cat, ruleset, id)?;
+    let mut ev = Eval::new(cat, unit);
+    let raw = ev.raw(d);
+    let kept: Vec<Part> = modifier_parts(unit, d, ev.weapon.as_deref()).into_iter().filter(|p| !(p.source == source || p.source.strip_prefix(source).is_some_and(|r| r.starts_with(':')))).collect();
+    let (flat, percent) = totals(&kept);
+    Some(capped(uncapped(raw, flat, percent), d))
+}
+
 /// The chance (0-100) an effect of `potency` lands on `unit` against derived stat `id`: `clamp(potency − value, 0,
 /// 100)`; an absent row (not in the catalog or not in the ruleset) gives the potency itself, clamped.
 pub fn resist_chance(cat: &Catalog, ruleset: &str, unit: &Unit, id: &str, potency: i32) -> i32 {

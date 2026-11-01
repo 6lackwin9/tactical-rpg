@@ -396,3 +396,79 @@ frames for common portraits; animated region-map tokens.
   is `seed ^ now`.
 - A sidecar that parses is kept even with range problems; drawing clamps to the inner rect and the asset check (A11)
   reports the problems. A reduced-tier eye box blinks only when at least 2 px tall after scaling.
+
+## 12. Build notes (PORTRAITFX1-XT, 2026-10-31)
+
+- `generate.py run <model> <id>... --faces [--prompts F]`: the prompts file defaults to
+  `games/emberwake/docs/specs/PORTRAITFX1_FACES.md` (the ART3 layout); each id's section (from its `##` heading that names
+  the id to the next `##` heading) holds one `reference: art_src/<file>.png` line, outside or inside its text block, repo-relative;
+  the line is never prompt text. An id without the line is skipped with a note. The record keeps generate.py's keys in
+  their order and adds `"kind": "faces"`; `reference` is the image sent. `--dry-run` (any run) prints each id's
+  reference, prompt size and output name without a key or an API call.
+- `sheets.py faces`: tier `hero`, `npc`, `elite`, `boss` or the folder name; `--crop l,t,r,b` is in pixels inside a
+  quadrant (default the whole quadrant); an odd last pixel row or column of the sheet is dropped so the quadrants are
+  equal; the mark is cleared on the whole sheet (`clear_mark` then `clear_corner`) and each quadrant goes through
+  `pixelize` with `mark=False`; the backdrop is `--faction`, else the sheet record's `faction`, else
+  `art_src/<id>.json`'s, else hearth; `--root` (default `games/emberwake/assets/portraits`) is for tests; `--contact`
+  shows the portrait as it was before the run (so a `--base` run shows old against new), then the four frames.
+
+## 13. Build notes (PORTRAITFX1-D, 2026-11-01)
+
+- Talk box (`region.rs` `draw_talk`): one `portraits::Faces` per region map (`begin` at the top of its draw, `tick` in its
+  frame tick); the portrait is the speaker's `Who::of_character` (keyed by the character id; the initial letter from the
+  shown `speaker_name`), its look `look_of_member` when a party member plays the speaker (matched by the character's
+  `_qid`), else `look_of_character`. `look_of_member` now carries the member's ROSTER1 `conditions` (so the `wounded` row
+  holds). The chain is `face_chain` with the engine's expression (with no frames it is today's `portrait_chain`). A
+  speaker with no file draws the initial as before and the missing file still goes to the playtest trail. The map's
+  `state` gains `portraits` while the talk box shows (the shop hides it), `[]` otherwise.
+- Line cards (`aegis_ui::vignette`): `CardPortrait` keeps one `PortraitFx` for the speaker on view (a new key starts a
+  new one; a card of another style, a done or skipped reel keeps none), holds only the sidecar's `idle` (no state rows:
+  a staged scene), its own `Budget`, and a clock `VignetteScreen::advance` moves by the frame time it feeds the reel.
+  `Card.portrait_key` seeds it (the game sets the character id; "" uses the drawn file's path);
+  `VignetteScreen::portrait_rim` sets the rim key (the game passes Tallow Amber). The sidecar is the drawn file's own
+  (`Art::face`): an expression frame without its own sidecar does not fall back to its base portrait's in the engine
+  (the kit's `face_sidecars` rule); PORTRAITFX1-X, which brings the card's expression, resolves that. `vignette::draw`
+  keeps its signature and draws the portrait still (a fresh `CardPortrait`); `draw_with` animates it. The screen's
+  `state` gains `portraits`.
+- At text size Normal on a 1x canvas the 64 px talk box portrait is the reduced tier (no breath: rim flicker and blinks
+  only); from 2x up it is full (4.6).
+
+## 14. Build notes (PORTRAITFX1-R, 2026-11-01)
+
+- Character screen (`party.rs`): the shown member's portrait at (frame x + 10, 44), 48 px (`PORTRAIT`), on the talk
+  box's dark panel: inside the frame below its title, left of the member picker and above every tab's content (no tab
+  draws above y 100), so it overlaps no widget on any tab at any text size. One `portraits::Faces` per screen (`begin`
+  at the top of the draw, `tick` in the screen's tick); Q / E draw the next member's portrait and `begin` drops the old
+  one's `PortraitFx` at the next frame. At text size Normal on a 1x canvas it is the reduced tier (rim flicker and
+  blinks, no breath); from 2x up it is full.
+- Game menu (`hub.rs`): each party row draws a 20 px portrait (`ROW_PORTRAIT`) at its left and its three lines (name,
+  class and level, HP with the wounded mark) start 22 px in (`ROW_INDENT`); the column grows by the indent, so the
+  name fits 22 px shorter than the column and the class and HP lines keep their full width (the portrait is taller than
+  one line, so only moving the name would put it over the class line). The minimal tier: a wounded member's
+  desaturate shows, no motion.
+- Both surfaces use `hub::member_portrait`: `Who::of_member` keyed `member:<id>` (two members playing one character,
+  as test copies do, never share holds) and `look_of_member` (carried HP, the ROSTER1 conditions). Widgets
+  `character.portrait` and `hub.portrait.<member id>` (kind `portrait`, no action, no hover); both screens' `state`
+  gains `portraits`. A member without a file draws the initial letter (the Character screen on the panel, the menu on
+  the box).
+
+## 15. Build notes (PORTRAITFX1-X, 2026-11-01)
+
+- PORTRAITFX1-S had already landed X1 (the schema rows, the check `check::dialogue::expression_error` on nodes and
+  `line` cards, the writer leaving "" out, and the narrowed parity row of 2026-10-26); X adds what reads the keys.
+- Talk box: `DialogueRunner::view` carries `expression` only when the node names one (so a Godot world's views are
+  unchanged and the journey parity stays as it was). `talk.rs` passes it to `Faces::say(key, expression)` after `begin`:
+  a held `face` cue keyed `line.face` at priority 100 (`vignette::CARD_FACE_PRIORITY`, the top of the rows' 0-100), so
+  the line's face wins over the cue rows' faces while the node shows; "" leaves the face to the rows. The frame follows
+  `face_chain` as before. The region map and the battle talk share `draw_talk`, so both get it; `battle.rs` is
+  untouched. `talk_state` (the agent link) gains `expression` ("" none).
+- Line cards: the kit's card resolution is `story::card_portrait(d, home, card)` (the speaker's `face_chain` with the
+  card's `expression`); the game's `card_of` uses it for scenes and the Gallery's entry reels. The engine `Card` reads
+  `expression` and holds it as a `face` cue keyed `card.face` (priority 100, so the agent state shows it); the chain the
+  caller gives already starts at that frame. The sidecar fallback is a resolver: `CardPortrait::sidecars`, an
+  optional `fn(&str) -> Vec<String>` set by `VignetteScreen::portrait_sidecars`; the game passes the kit's
+  `face_sidecars`, so a frame without its own sidecar takes its base portrait's anchors and idle overlays. Without a
+  resolver the drawn file's own sidecar, as in D.
+- X4 is a binding test (`portraits.rs`): a `face` `hurt` cue fired for 900 ms draws the `hurt` frame from its start to
+  its last millisecond and the neutral frame after; a missing frame falls back along the chain. With no frames shipped
+  (XA makes them) every surface draws as before.

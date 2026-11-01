@@ -7,6 +7,7 @@
 //! in battle.rs. Right click goes back.
 
 mod battle;
+mod board;
 mod dojo;
 mod forge;
 mod fx;
@@ -17,13 +18,16 @@ mod intent_text;
 mod menus;
 mod music;
 mod party;
+mod portraits;
 mod props;
 mod region;
 mod runner;
+mod runover;
 mod screens;
 mod shop;
 mod stage;
 mod story;
+mod talk;
 mod tuning;
 mod worldmap;
 

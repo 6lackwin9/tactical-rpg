@@ -5,7 +5,10 @@
 use super::View;
 use crate::source::content;
 use aegis_core::json::{self, gstr, Dict};
-use rpgkit_battle::encounter::{ARRIVAL, ARRIVAL_BLOCK, ARRIVAL_ROUND, FALLBACKS, KILL_EFFECT, KILL_EFFECT_KEYS, KILL_MAX_UNITS, KILL_MAX_WITHIN, PICK_DEFAULTS, STAY_HOLD, STAY_MODES, STAY_STAND, STAY_THEN};
+use rpgkit_battle::encounter::{
+    ARRIVAL, ARRIVAL_BLOCK, ARRIVAL_ROUND, BROKEN, BROKEN_KEYS, DOWNED, DOWNED_KEYS, FALLBACKS, KILL_EFFECT, KILL_EFFECT_KEYS, KILL_MAX_UNITS, KILL_MAX_WITHIN, PARTY_NAME, PARTY_PREFIX, PICK_DEFAULTS, ROUND_KEYS, STAY_HOLD,
+    STAY_MODES, STAY_STAND, STAY_THEN, TALK_EFFECT, TALK_EFFECT_KEYS,
+};
 use rpgkit_battle::grid::{rows_valid, terrain_walkable, Grid, TerrainTable, GRID_H, GRID_W, V2};
 use rpgkit_rules::status;
 use serde_json::{json, Value};
@@ -100,6 +103,10 @@ pub fn errors(v: &View, e: &Dict) -> Vec<String> {
         let target = v.get("units", r);
         !target.is_empty() && super::passes_filter(wave_field(false), target)
     }));
+    // ENCOUNTER2-C DT4: dialogue trees are world rows
+    if !talk_effects(e).is_empty() {
+        errors.push("A talk needs a world encounter (dialogue trees live in worlds).".into());
+    }
     errors.extend(objective_problems(v, e, &|_: &str| true));
     errors.extend(morale_problems(e));
     errors.extend(purse_problems(e));
@@ -161,15 +168,18 @@ const MAX_LINE: usize = 160;
 const MAX_UNITS: usize = 12;
 const PCT_MIN: i64 = 1;
 const PCT_MAX: i64 = 99;
+/// An hp_below trigger's `or_round` floor (Godot's).
 const ROUND_MIN: i64 = 2;
+/// ENCOUNTER2-C PT1: a `round` trigger may name round 1 (it fires before round 1 is planned; Godot's floor was 2).
+const ROUND_TRIGGER_MIN: i64 = 1;
 const STATUS_ROUNDS_MIN: i64 = 1;
 const STATUS_ROUNDS_MAX: i64 = 5;
 const DEFAULT_STATUS_ROUNDS: i64 = 2;
 const ENRAGE_POWER_MIN: i64 = 1;
 const ENRAGE_POWER_MAX: i64 = 25;
 const DEFAULT_ENRAGE_POWER: i64 = 20;
-/// The phase effects (BOSS1; HOOKS1 DU1 adds `deck`; FX1 5.1 `shake`; ENCOUNTER2 P1 `kill`).
-const EFFECTS: [&str; 8] = ["line", "wave", "status", "ai", "enrage", rpgkit_data::DECK_EFFECT, rpgkit_data::SHAKE_EFFECT, KILL_EFFECT];
+/// The phase effects (BOSS1; HOOKS1 DU1 adds `deck`; FX1 5.1 `shake`; ENCOUNTER2 P1 `kill`; ENCOUNTER2-C DT1 `talk`).
+const EFFECTS: [&str; 9] = ["line", "wave", "status", "ai", "enrage", rpgkit_data::DECK_EFFECT, rpgkit_data::SHAKE_EFFECT, KILL_EFFECT, TALK_EFFECT];
 /// ENCOUNTER2 P2 adds `group`.
 const PHASE_KEYS: [&str; 6] = ["id", "name", "trigger", "effects", "pause_autoplay", "group"];
 /// ENCOUNTER2 P2: a group is 1 to 24 characters a-z, 0-9 or _.
@@ -186,7 +196,10 @@ fn trigger_keys(kind: &str) -> &'static [&'static str] {
     match kind {
         "hp_below" => &["kind", "unit", "pct", "or_round"],
         ARRIVAL => &["kind", "round", "block"],
-        _ => &["kind", "round"],
+        // ENCOUNTER2-C PT1-PT3
+        DOWNED => &DOWNED_KEYS,
+        BROKEN => &BROKEN_KEYS,
+        _ => &ROUND_KEYS,
     }
 }
 
@@ -199,6 +212,7 @@ fn effect_keys(kind: &str) -> &'static [&'static str] {
         rpgkit_data::DECK_EFFECT => &rpgkit_data::DECK_EFFECT_KEYS,
         rpgkit_data::SHAKE_EFFECT => &rpgkit_data::SHAKE_EFFECT_KEYS,
         KILL_EFFECT => &KILL_EFFECT_KEYS,
+        TALK_EFFECT => &TALK_EFFECT_KEYS,
         _ => &["type", "unit", "power"],
     }
 }
@@ -290,6 +304,7 @@ pub fn phase_problems(e: &Dict, ref_ok: &dyn Fn(&str) -> bool) -> Vec<String> {
         let arrival = is_arrival(phase);
         // ENCOUNTER2 P5: an hp_below unit may be an enemy or a phase-wave ref (the message is Godot's)
         errors.extend(trigger_errors(&tag, json::get(phase, "trigger"), &known, max_rounds, total_blocks));
+        errors.extend(event_trigger_errors(&tag, json::get(phase, "trigger"), e, &known));
         errors.extend(effects_errors(&tag, json::get(phase, "effects"), &known, ref_ok, arrival));
         errors.extend(kill_errors(&tag, phase, e, &known));
         errors.extend(enrage_errors(&tag, phase, &enemies));
@@ -329,7 +344,7 @@ fn trigger_errors(tag: &str, raw: &Value, enemies: &[String], max_rounds: i64, t
         return errors;
     };
     let kind = json::s(t, "kind");
-    if kind != "hp_below" && kind != "round" && kind != ARRIVAL {
+    if kind != "hp_below" && kind != "round" && kind != ARRIVAL && kind != DOWNED && kind != BROKEN {
         errors.push(format!("Phase '{tag}': unknown trigger '{kind}'."));
         return errors;
     }
@@ -362,10 +377,89 @@ fn trigger_errors(tag: &str, raw: &Value, enemies: &[String], max_rounds: i64, t
                 errors.push(format!("Phase '{tag}': {key} must be 1..{hi}."));
             }
         }
-    } else if !in_range(json::get(t, "round"), ROUND_MIN, max_rounds) {
-        errors.push(format!("Phase '{tag}': round must be {ROUND_MIN}..{max_rounds}."));
+    } else if kind == "round" {
+        if !in_range(json::get(t, "round"), ROUND_TRIGGER_MIN, max_rounds) {
+            errors.push(format!("Phase '{tag}': round must be {ROUND_TRIGGER_MIN}..{max_rounds}."));
+        }
+        // ENCOUNTER2-C PT1: 0 = the round start, else that block's start
+        if !in_range(t.get("block").unwrap_or(&json::int(0)), 0, total_blocks) {
+            errors.push(format!("Phase '{tag}': block must be 0..{total_blocks}."));
+        }
     }
     errors
+}
+
+/// ENCOUNTER2-C PT2, PT3: a `downed` or `broken` trigger's unit name (`party`, `party:<id>` with `<id>` in the party, or a
+/// ref of the encounter: an enemy, a phase-wave ref or a guest; no `#n`) and a `downed` count of 1 to the units the name
+/// covers.
+fn event_trigger_errors(tag: &str, raw: &Value, e: &Dict, known: &[String]) -> Vec<String> {
+    let mut errors = Vec::new();
+    let Some(t) = raw.as_object() else { return errors };
+    let kind = json::s(t, "kind");
+    if kind != DOWNED && kind != BROKEN {
+        return errors;
+    }
+    let (party, guests) = (strings(json::get(e, "party")), strings(json::get(e, "guests")));
+    let unit = json::s(t, "unit");
+    let covered = if unit == PARTY_NAME {
+        party.len()
+    } else if let Some(id) = unit.strip_prefix(PARTY_PREFIX) {
+        if party.iter().any(|p| p == id) {
+            1
+        } else {
+            errors.push(format!("Phase '{tag}': trigger hero '{id}' is not in this encounter's party."));
+            return errors;
+        }
+    } else {
+        known.iter().chain(&guests).filter(|r| **r == unit).count()
+    };
+    if covered == 0 {
+        errors.push(format!("Phase '{tag}': trigger unit '{unit}' is not in this encounter."));
+        return errors;
+    }
+    if kind == DOWNED {
+        let count = t.get("count").cloned().unwrap_or(json::int(1));
+        if !whole(&count) || !(1..=covered as i64).contains(&json::to_int(&count)) {
+            errors.push(format!("Phase '{tag}': count must be 1..{covered}."));
+        }
+    }
+    errors
+}
+
+/// ENCOUNTER2-C DT1: every `talk` effect of an encounter's phases, with its phase id.
+pub fn talk_effects(e: &Dict) -> Vec<(String, &Dict)> {
+    dicts(json::get(e, "phases")).into_iter().flat_map(|p| dicts(json::get(p, "effects")).into_iter().filter(|fx| json::s(fx, "type") == TALK_EFFECT).map(move |fx| (json::s(p, "id"), fx))).collect()
+}
+
+/// ENCOUNTER2-C 5.2 (world encounters, world `w`): each talk's dialogue resolves there and its tree runs in a battle
+/// (only set_flag / add_flag effects, `dialogue::battle_talk_errors`), its speaker is "" or a character there; a
+/// `broken` trigger needs the poise rule in the world's ruleset.
+pub fn world_talk_problems(v: &View, w: &str, e: &Dict) -> Vec<String> {
+    let mut errors = Vec::new();
+    for (phase, fx) in talk_effects(e) {
+        let d = json::s(fx, "dialogue");
+        if !d.is_empty() {
+            let tree = v.worlds.resolve(w, "dialogues", &d);
+            if tree.is_empty() {
+                errors.push(format!("Unknown dialogue '{d}'."));
+            } else {
+                errors.extend(super::dialogue::battle_talk_errors(&d, tree));
+            }
+        }
+        let speaker = json::s(fx, "speaker");
+        if !speaker.is_empty() {
+            errors.extend(super::world::ref_errors(v, w, &format!("Phase '{phase}': talk speaker"), "characters", &speaker));
+        }
+    }
+    if has_broken_trigger(e) && !super::hooks::lists_rule(super::hooks::world_ruleset_row(v, w), rpgkit_rules::ruleset::POISE) {
+        errors.push("A broken trigger needs the poise rule.".into());
+    }
+    errors
+}
+
+/// ENCOUNTER2-C PT3: some phase of the encounter has a `broken` trigger.
+pub fn has_broken_trigger(e: &Dict) -> bool {
+    dicts(json::get(e, "phases")).into_iter().any(|p| json::s(json::dget(p, "trigger"), "kind") == BROKEN)
 }
 
 fn effects_errors(tag: &str, raw: &Value, known: &[String], ref_ok: &dyn Fn(&str) -> bool, arrival: bool) -> Vec<String> {
@@ -374,7 +468,7 @@ fn effects_errors(tag: &str, raw: &Value, known: &[String], ref_ok: &dyn Fn(&str
     if list.is_empty() || list.len() > MAX_EFFECTS {
         errors.push(format!("Phase '{tag}' needs 1 to {MAX_EFFECTS} effects."));
     }
-    let (mut lines, mut waves, mut shakes) = (0, 0, 0);
+    let (mut lines, mut waves, mut shakes, mut talks) = (0, 0, 0, 0);
     for item in list {
         let Some(fx) = item.as_object() else {
             errors.push(format!("Phase '{tag}': each effect must be an object."));
@@ -416,8 +510,20 @@ fn effects_errors(tag: &str, raw: &Value, known: &[String], ref_ok: &dyn Fn(&str
                     errors.push(format!("Phase '{tag}': a shake needs a preset, one of {}.", rpgkit_data::SHAKE_PRESETS.join(", ")));
                 }
             }
+            TALK_EFFECT => {
+                talks += 1;
+                if !fx.get("dialogue").is_some_and(|d| d.as_str().is_some_and(|d| !d.is_empty())) {
+                    errors.push(format!("Phase '{tag}': a talk needs a dialogue."));
+                }
+                if fx.get("speaker").is_some_and(|s| !s.is_string()) {
+                    errors.push(format!("Phase '{tag}': the talk speaker must be a character ref or \"\"."));
+                }
+            }
             _ => {}
         }
+    }
+    if talks > 1 {
+        errors.push(format!("Phase '{tag}': one talk per phase."));
     }
     if lines > 1 {
         errors.push(format!("Phase '{tag}': one line per phase."));

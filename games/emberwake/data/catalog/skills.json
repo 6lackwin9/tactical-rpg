@@ -1436,10 +1436,11 @@
 			"ap_cost": 2,
 			"blocks": 1,
 			"recovery_blocks": 1,
-			"description": "Maneuver, Snap: {name}: {power} power. Dashes up to {dash} to a flank, {stagger} stagger.",
+			"description": "Maneuver, Snap: {name}: {power} power, {stagger} stagger. Dashes up to {range} {position}, then hits.",
 			"round_intent": "maneuver",
+			"reach_max": 2,
+			"position": "flank",
 			"power_mult": 0.6,
-			"dash_tiles": 2,
 			"stagger": 8
 		},
 		{
@@ -1491,11 +1492,12 @@
 			"ap_cost": 2,
 			"blocks": 1,
 			"recovery_blocks": 1,
-			"description": "Maneuver, Snap: {name}: {power} power, {stagger} stagger. Dashes up to {dash}; {exploit}.",
+			"description": "Maneuver, Snap: {name}: {power} power, {stagger} stagger. Dashes up to {range} {position}; {exploit}.",
 			"learned_only": true,
 			"round_intent": "maneuver",
+			"reach_max": 3,
+			"position": "behind",
 			"power_mult": 0.8,
-			"dash_tiles": 3,
 			"exploit": [
 				{
 					"status": "flanked",
@@ -1512,11 +1514,12 @@
 			"ap_cost": 2,
 			"blocks": 2,
 			"recovery_blocks": 1,
-			"description": "Maneuver, Standard: {name}: {power} power, {potency} to Slow for {rounds}. Dashes up to {dash}.",
+			"description": "Maneuver, Standard: {name}: {power} power, {potency} to Slow for {rounds}. Dashes up to {range} {position}.",
 			"learned_only": true,
 			"round_intent": "maneuver",
+			"reach_max": 2,
+			"position": "flank",
 			"power_mult": 0.9,
-			"dash_tiles": 2,
 			"status_effect": "slow",
 			"status_potency": 60,
 			"stagger": 8

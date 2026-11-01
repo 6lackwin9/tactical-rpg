@@ -6,8 +6,9 @@ use crate::SimGame;
 use rpgkit_world::Data;
 use indexmap::IndexMap;
 
-/// RULESET1-G: `feel` is engine-only (not in the help text, whose lines are Godot parity: as `rewards`).
-pub const MODES: [&str; 10] = ["duel", "tier", "levels", "group", "stats", "party", "role", "sweep", "campaign", "feel"];
+/// RULESET1-G: `feel` is engine-only (not in the help text, whose lines are Godot parity: as `rewards`); so is
+/// CAMPAIGN1-SIM's `deadlines` (deadlines.rs, no fights).
+pub const MODES: [&str; 11] = ["duel", "tier", "levels", "group", "stats", "party", "role", "sweep", "campaign", "feel", "deadlines"];
 pub const CLASSES: [&str; 6] = ["warrior", "ranger", "priest", "brawler", "rogue", "mage"];
 pub const SPENDS: [&str; 4] = ["class", "cons", "primary", "mixed"];
 pub const LOADOUTS: [&str; 3] = ["default", "newest", "role"];
@@ -24,6 +25,11 @@ pub const FEEL_KEYS: [&str; 4] = ["tactic", "party", "armor", "tune"];
 pub const ARMOR_MAX: i32 = 200;
 /// RULESET1-G2: the ruleset numbers `tune=` may set (RULESET1_TASKS 1.2), by key prefix; ranges from the kit schema.
 pub const TUNE_PREFIXES: [&str; 4] = ["stagger_", "flank_", "break_chance_", "rest_"];
+/// CAMPAIGN1-SIM: the keys only the deadlines mode reads (any other mode refuses them).
+pub const DEADLINE_KEYS: [&str; 1] = ["losses"];
+/// CAMPAIGN1-SIM: `losses=` (lost tries per mission in the worst case): default and range.
+pub const LOSSES_DEFAULT: i64 = 1;
+pub const LOSSES_MAX: i64 = 9;
 pub const REF_PREFIX: &str = "world:";
 /// BAL5-SIM K2: party / sweep cells default to 10 seeds (other modes keep 3).
 pub const PARTY_SEEDS: usize = 10;
@@ -106,6 +112,9 @@ pub struct SimArgs {
     pub ruleset: rpgkit_rules::ruleset::Ruleset,
     ruleset_id: String,
     rules: String,
+    /// INPUT1 MR11: `melee_diagonal=none|maneuver|all` over the ruleset row's value (None = the row's). Not in the help
+    /// text either (Godot parity, as `ruleset=`).
+    pub melee_diagonal: Option<rpgkit_rules::ruleset::MeleeDiagonal>,
     /// RULESET1-G2 (feel only): the party's AUTO1 tactic (a TACTICS name; `balanced`).
     pub tactic: String,
     /// RULESET1-G2 (feel only): the party drivers, each run as its own block (`party=auto|timed|both`; auto).
@@ -116,6 +125,10 @@ pub struct SimArgs {
     pub tune: IndexMap<String, f64>,
     /// The feel keys given, for the check that no other mode takes them.
     feel_keys: Vec<String>,
+    /// CAMPAIGN1-SIM (deadlines only): the lost tries per mission in the worst case (`losses=0..9`; 1).
+    pub losses: i64,
+    /// The deadlines keys given, for the check that no other mode takes them.
+    deadline_keys: Vec<String>,
 }
 
 impl Default for SimArgs {
@@ -165,11 +178,14 @@ impl Default for SimArgs {
             ruleset: rpgkit_rules::ruleset::Ruleset::classic(),
             ruleset_id: String::new(),
             rules: String::new(),
+            melee_diagonal: None,
             tactic: "balanced".into(),
             drivers: vec![crate::timed::Driver::Auto],
             armor: IndexMap::new(),
             tune: IndexMap::new(),
             feel_keys: Vec::new(),
+            losses: LOSSES_DEFAULT,
+            deadline_keys: Vec::new(),
         }
     }
 }
@@ -239,6 +255,9 @@ impl SimArgs {
                 let mut r = w.clone();
                 // the switches were checked at parse; their errors depend on the ids only
                 let _ = r.adjust(&self.rules);
+                if let Some(m) = self.melee_diagonal {
+                    r.numbers.melee_diagonal = m;
+                }
                 r
             }
             _ => self.ruleset.clone(),
@@ -330,8 +349,18 @@ impl SimArgs {
         } else if let Some(k) = a.feel_keys.first() {
             return Err(format!("{k}= is a feel key (mode feel only)"));
         }
+        if a.mode == "deadlines" {
+            if positional.len() > 1 {
+                return Err("deadlines takes no level or seeds".into());
+            }
+        } else if let Some(k) = a.deadline_keys.first() {
+            return Err(format!("{k}= is a deadlines key (mode deadlines only)"));
+        }
         a.ruleset = rpgkit_rules::ruleset::Ruleset::of(&d.cat, &a.ruleset_id)?;
         a.ruleset.adjust(&a.rules)?;
+        if let Some(m) = a.melee_diagonal {
+            a.ruleset.numbers.melee_diagonal = m;
+        }
         if a.mode == "feel" {
             a.feel_checks(d)?;
         }
@@ -394,7 +423,17 @@ impl SimArgs {
         if FEEL_KEYS.contains(&key) && !self.feel_keys.iter().any(|k| k == key) {
             self.feel_keys.push(key.to_string());
         }
+        if DEADLINE_KEYS.contains(&key) && !self.deadline_keys.iter().any(|k| k == key) {
+            self.deadline_keys.push(key.to_string());
+        }
         match key {
+            // CAMPAIGN1-SIM: the deadlines mode's key. Not in the help text (Godot parity).
+            "losses" => {
+                let Some(n) = value.parse::<i64>().ok().filter(|n| (0..=LOSSES_MAX).contains(n)) else {
+                    return Err(format!("losses must be 0..{LOSSES_MAX} (got '{value}')"));
+                };
+                self.losses = n;
+            }
             // RULESET1-G2: the feel mode's keys (RULESET1_BALANCE1 3.1). Not in the help text (Godot parity).
             "tactic" => {
                 if !TACTICS.iter().any(|(name, _)| *name == value) {
@@ -483,6 +522,10 @@ impl SimArgs {
                 self.ruleset_id = value.into();
             }
             "rules" => self.rules = value.into(),
+            "melee_diagonal" => {
+                let ids = rpgkit_rules::ruleset::MeleeDiagonal::IDS;
+                self.melee_diagonal = Some(rpgkit_rules::ruleset::MeleeDiagonal::parse(value).ok_or_else(|| format!("melee_diagonal must be one of {} (got '{value}')", godot_list(&ids)))?);
+            }
             "rewards" => {
                 if value != "on" && value != "off" {
                     return Err(format!("rewards must be on or off (got '{value}')"));

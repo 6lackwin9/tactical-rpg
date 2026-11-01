@@ -298,3 +298,113 @@ and Stage V drift (the Calcification spec); Strain; the Apex organ harvest from 
 keepsake upgrade (Act 3, an exchange recipe); grief traits (Q-40: none); the corrupted-founder encounters (ENCOUNTER2
 4.3, EQ7); rescuing a captured founder (Q-33: never); the doctrine lean (CAMPAIGN1 M9); balance numbers (keepsakes,
 bleed-out rounds, wounded percent after the baseline).
+
+## As built (ROSTER1-L slice 1, 2026-10-31)
+
+- Slice order: the schema lands first (11.1-11.3 and RK1's keys, checks and typed readers, no behaviour), so the asset
+  lane can write ROSTER1-D; the refactor of `ROSTER1_TASKS.md` 2 ("L's first commit") is slice 2, the first code
+  slice, still alone and with no rule change.
+- `world.characters.keepsake` refs a catalog item (`base:items`); the item rule (an `ACCESSORY`, `value` 0, `special`)
+  also applies to each `keepsakes.by_class` item. Like every world entry rule, a bad keepsake is a content-check
+  error, not a refused write.
+- `party_min` carries the schema range 0..4, which clamps on normalize; the check adds "at most the world's party max".
+- `bleed_out_rounds` above 0 is accepted and stays inert until ROSTER1-B.
+- `roster.<member>` in a condition must name a character of the world, a party-side unit or `recruit_<n>`; a
+  character whose id is a roster word (`living`, `bunks`, `bunks_free`, `pool`, `open`, `departed`) is refused.
+- One "only the last row may have no acts" error covers both 11.2 cases (two open rows, an open row before another).
+
+## As built (ROSTER1-L slice 2, 2026-10-31)
+
+- `field_unit(d, member, world)` takes the battle's world (the played world, or the connected world whose encounter
+  is fought, as the battle screen picked it before) and no game state yet; the wounded build (W2) adds what it needs
+  in slice 3. `settle_party(d, gs, outcome, ends)` takes `HeroEnd`s from `hero_ends(session, members)`, which pair
+  the fielded members with the session's allies in order (guests follow and have none) and carry ENCOUNTER2 S3's
+  fate; the pouch write-back (ITEMUSE1 rule 7) moved with the HP write-back.
+- The battle screen still calls `settle_party` just before the runner's `after_fight` (L5's order: the settle comes
+  before CAMPAIGN1's tick); moving the call into the runners comes with the rule rows (slice 3) or ENCOUNTER2-W.
+- No parity suite builds saved members for a battle (`journey` settles without one, `world_traces` and `replay` play
+  the encounter's own party), so `rpgkit_world/tests/roster.rs` keeps the old screen build and write-back as its
+  reference; `journey`, `world_traces` and the saves suites stay green.
+
+## As built (ROSTER1-L slice 3, 2026-10-31)
+
+- RQ1-RQ11 as recommended (`games/emberwake/docs/lore/OPEN_QUESTIONS.md`). The rule row is the played world's
+  (`gs.world_id`) for `campaign.act`; `roster::rule(d, gs)`.
+- `settle_party(d, gs, &FightEnd, ends) -> Settled`: `FightEnd` carries the outcome, the encounter id (the departed
+  record's `encounter`), the battle world (where a wounded member's unwounded max is built) and whether the objective
+  is `escape`; `Settled` lists the newly wounded and the departures for ROSTER1-U's lines.
+- Causes: a downed hero left on a won escape or a flee departs with cause `downed`, one taken on a loss with
+  `lost_battle`. `then` is read as `none` (ENCOUNTER2-W adds `capture` and `kill`).
+- With a row, a loss brings the members who come home back to full HP under both `hp_after` values (HEAL1's
+  `hp_after` for `lost` is the wake heal), so a CAMPAIGN1 retreat (R4, no heal) moves a cell that already carries the
+  loss: full HP, wounded by the row. Without a row a loss still leaves HP to the runner's defeat rule (unchanged).
+- The settle call stays in the battle screen before the runner's `after_fight`: L5's order holds without moving it.
+  The battle start passes the game state to `field_unit` (one argument).
+- `depart(d, gs, member, life, cause, encounter)` takes the encounter (L2's signature plus one); the departed record
+  keeps the whole `UnitState` (its equipment as the gear record) while each worn, carried and pouch item that the
+  catalog knows goes to the stash. A departure that empties `active_ids` leaves it empty (the first `max_active`
+  deploy).
+- Saves: member `conditions` and party `departed` (`state::Departed`) share the unreleased v13 step (absent = none),
+  written only when not empty. `PartyState::validate` checks conditions (known, once), departed lives, causes, ids
+  (never a member's or another departed's) and days; slice 4 adds the bunk and crypt warnings.
+- `progression::hurt` counts `wounded`, so Camp and the campaign rest are offered to a party whose only hurt is a
+  wound.
+
+## As built (ROSTER1-L slice 4, 2026-11-01)
+
+- BK7: `PartyState.roster` (`state::RosterCaps`: the played world's party max and `roster` block) is set by
+  `roster::caps` at create, at load and when `explore::enter` changes the played world; never saved, so no save key
+  and no version step. `bunk_cap(gs)` reads the flag from the game state.
+- BK1-BK3: bunk use is the member count (housing and crypt places come with ROSTER1-P). A world with `bunks` 0 and a
+  `bunks_flag` (decision "ROSTER1-L slice 1 ... answers") starts at its party max; the refusal text is RECRUIT1's
+  until the block sets `bunks` above 0. With no `roster` block the cap is the party max, as RECRUIT1.
+- BK4: the recruit joins `active_ids` when it is non-empty and shorter than `max_active`; an empty list stays empty.
+- BK5: `highest` keeps RECRUIT1 (the recruit's own XP raised to the best active member's); `average` and a number
+  set the level exactly (`xp_for_level`), so a recruit whose base unit is above it joins lower (open question to the
+  planner).
+- BK6: `roster::party_min_text` counts the active members (the bench does not count); the dialogue `fight` precheck
+  and the battle screen's world fight start read it. Road and roaming fights start through the same battle screen
+  path, so they refuse too.
+- L1: the precheck and the effect refuse a character whose member id or qid is in `party.departed` ("`{name}` is
+  gone."; the precheck names the character, the effect its member).
+- RK1: `roster::read_key` answers through `GameState::read_flag` in every world (a campaign is not needed);
+  `campaign::read_key`'s `roster.living` stand-in is gone. `roster.pool` reads 0 until ROSTER1-P;
+  `roster.<member>` reads `ready` for any member (a start-party unit too), else its departed life, else "".
+- 11.4: `roster::load_warnings` (a `save::decode` warning) flags bunk use above the cap only in a world with a
+  `roster` block: Godot saves hold four members in a world whose party max is 3 and load without a word. The crypt
+  check and the keepsake-instance checks come with ROSTER1-P and ROSTER1-K.
+- The slice 1 review's three items: the `party_min` error names the world's party max only when it binds; a party
+  catalog unit whose id is a roster word is one content-check error; the keepsake check test counts every added
+  error (only the npc case filters).
+- `settle_party` still runs from the battle screen (it moves with ENCOUNTER2-W).
+
+## As built (ENCOUNTER2-W, 2026-11-01)
+
+- 3.2 "on every runner": `battle::apply` settles the battle tally's party side (`battle::Tally::of_world_fight`) before
+  the rewards and CAMPAIGN1's tick, so every runner (`explore`, `travel`, `dialogue`, `story`, campaign `trigger`)
+  applies the rules and the battle screen only builds the tally (L5's order kept). `FightEnd` gains `then`; the
+  stayed and stood rows of the 3.2 table depart with `capture` or `kill` in any world (no row needed).
+- A fight settled without a battle (the debug skip, the campaign preview: `battle::settle` with no tally) settles the
+  active members (`roster::default_ends`: standing at the stored HP, every one downed on a loss) only in a world with
+  a rule row; a classic world keeps HEAL1's no-battle path, so `journey` and the saves suites are unchanged.
+- BK6 at the battle start reads the fight world's entry (`roster::party_min_refusal(gs, entry)`, the world from
+  `battle::fight_world`); the dialogue precheck keeps `party_min_text`.
+
+## As built (ROSTER1-U, 2026-11-01)
+
+- The GUI only draws (`emberwake_gui/src/hub.rs`: `field_hp`, `bunks_text`, `wounded_tip`, `party_lines`): the HP
+  shown for a wounded member is the battle's own build (`roster::field_unit` in the played world: the act's row cut,
+  the default percent without a row); any other member keeps `progression::current_hp`.
+- Wounded mark: a red "Wounded" after the HP line in the game menu's party box and after the level line on the
+  Character Stats tab ("Wounded HP n / cut"), each with the hover "Fights with `{cut}` of `{max}` max HP until the
+  party rests."; no art.
+- Bunks chip "Bunks `{used}/{cap}`" (`roster::bunks_used`, `roster::bunk_cap`) under the game menu's party box and at
+  the right of the Stats tab's "In party" line, only when `RosterCaps::has_block` (a classic world and the Ashlands
+  show none). The party box grows with its widest line and takes a second column past four members (bunks above the
+  party max), so up to 8 members fit 640x360 at every text size.
+- Results: after ENCOUNTER2 W4's stay-behind lines, one line per `departed` entry ("`{name}` was captured.",
+  "`{name}` died.", any other life "`{name}` left the party."; the name from the departed record), then
+  "Keepsake: `{item}`, to the stash." when the record kept one (KS1, KS2), then "Wounded until the next rest:
+  `{names}`." for the result's `wounded`. The popup state carries `wounded` and `departed`.
+- BK6: no GUI change; the battle start's refusal (ENCOUNTER2-W) reaches the region map's error popup and the
+  dialogue precheck locks the fight choice with the same text.

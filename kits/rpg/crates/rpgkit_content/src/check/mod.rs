@@ -21,6 +21,7 @@ pub mod shop;
 pub mod simple;
 pub mod skill;
 pub mod story;
+pub mod terms;
 pub mod travel;
 pub mod unit;
 pub mod world;
@@ -247,6 +248,10 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
         // HOOKS1-S: the row checks the loader applies (hazards, unit meters, zones; unique ids)
         return hook_kinds::entry_errors(v, kind, &content(kind, entry), current_id);
     }
+    if kind == terms::KIND {
+        // TERMS1-L: the row checks the loader applies (a game-scope term id, the lengths, unique ids)
+        return terms::entry_errors(v, &content(kind, entry), current_id);
+    }
     let old_id = if current_id.is_empty() { json::s(entry, "id") } else { current_id.to_string() };
     let e = match kind {
         "items" => item::prepare(v, entry, v.get(kind, &old_id)),
@@ -366,6 +371,7 @@ pub fn warnings_for(v: &View, kind: &str, entry: &Dict) -> Vec<String> {
         "items" => item::item_warnings(v, &e),
         "item_families" => item::family_warnings(&crate::source::derive_family(&e)),
         portrait::KIND => portrait::warnings(&e),
+        ruleset::KIND => ruleset::warnings(&e),
         _ => Vec::new(),
     }
 }
@@ -436,6 +442,13 @@ pub fn warnings_all(v: &View) -> Report {
         let missing: Vec<String> = simple::missing_terrain(v.entries("terrain")).iter().map(|id| format!("No terrain row for '{id}': the code defaults apply.")).collect();
         if !missing.is_empty() {
             out.insert("terrain:missing".into(), missing);
+        }
+    }
+    // INPUT1 1.7: the ruleset rows' warnings (`rulesets:<id>`)
+    for e in v.entries(ruleset::KIND) {
+        let found = ruleset::warnings(e);
+        if !found.is_empty() {
+            out.insert(format!("{}:{}", ruleset::KIND, json::s(e, "id")), found);
         }
     }
     for e in v.entries(portrait::KIND) {

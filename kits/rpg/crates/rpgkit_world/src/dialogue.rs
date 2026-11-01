@@ -3,7 +3,7 @@
 
 use crate::data::Data;
 use crate::state::{flag_key_ok, flag_value_ok, GameState};
-use crate::{board, new_game, progression, quest, shop, story};
+use crate::{board, new_game, progression, quest, roster, shop, story, terms};
 use aegis_core::json::{self, int, Dict};
 use indexmap::IndexMap;
 use serde_json::Value;
@@ -221,7 +221,7 @@ fn needs_text(d: &Data, gs: &GameState, cond: &Dict) -> String {
             let item = json::s(cond, "item");
             format!("Needs {} {}", json::i(cond, "count", 1), d.item_name(&item))
         }
-        "gold" => format!("Needs {} gold", json::i(cond, "min", 0)),
+        "gold" => terms::needs_currency(d, &gs.world_id, json::i(cond, "min", 0)),
         "stat" => format!("Needs {} {}", json::s(cond, "stat"), json::i(cond, "min", 0)),
         "quest" => {
             let q = json::s(cond, "quest");
@@ -528,8 +528,21 @@ impl DialogueRunner {
         self.pending.is_some()
     }
 
+    /// CAMPAIGN1 W3: the effects of choice `index` as the player sees the choices (`view`'s order); empty for no such
+    /// choice or a locked one. Read-only: the game asks before a choice whose `rest` would end the run.
+    pub fn choice_effects(&self, d: &Data, gs: &GameState, index: i64) -> Vec<Dict> {
+        if self.closed || index < 0 {
+            return Vec::new();
+        }
+        match self.visible(d, gs).get(index as usize) {
+            Some((c, false)) => effects_of(c),
+            _ => Vec::new(),
+        }
+    }
+
     /// {speaker, speaker_name, node, text, choices: [{text, locked, reason, service}], end, next, shop, pending,
-    /// faction, faction_name, band}, plus `board` while a board pane is open (STORYUI1 B3).
+    /// faction, faction_name, band}, plus `board` while a board pane is open (STORYUI1 B3) and `expression` when the
+    /// node names one (PORTRAITFX1 7: the speaker's face for the node).
     pub fn view(&self, d: &Data, gs: &GameState) -> Dict {
         let node = self.node(d, gs, &self.node_id);
         let mut speaker = character_qid(d, gs, &json::s(&node, "speaker"));
@@ -570,6 +583,11 @@ impl DialogueRunner {
         ]);
         if !self.board_qid.is_empty() {
             out.insert("board".into(), self.board_qid.clone().into());
+        }
+        // PORTRAITFX1 7: the speaker's face for this node, only when the node names one (a Godot node never did)
+        let expression = json::s(&node, "expression");
+        if !expression.is_empty() {
+            out.insert("expression".into(), expression.into());
         }
         out
     }
@@ -751,8 +769,15 @@ impl DialogueRunner {
                     }
                 }
                 "fight" => {
-                    if d.resolve(&gs.world_id, "encounters", &json::s(fx, "encounter")).is_empty() {
-                        out.push(format!("Unknown encounter '{}'.", json::s(fx, "encounter")));
+                    let enc = json::s(fx, "encounter");
+                    if d.resolve(&gs.world_id, "encounters", &enc).is_empty() {
+                        out.push(format!("Unknown encounter '{enc}'."));
+                    } else {
+                        // ROSTER1 BK6: the encounter's fewest heroes
+                        let why = roster::party_min_text(d, gs, &enc);
+                        if !why.is_empty() {
+                            out.push(why);
+                        }
                     }
                 }
                 // STORYUI1 4.7
@@ -778,13 +803,17 @@ impl DialogueRunner {
                 }
                 "recruit" => {
                     let who = json::s(fx, "character");
-                    let cap = d.party_max(&gs.world_id);
+                    let full = roster::full_text(gs);
                     if new_game::hero_from_character(d, &gs.world_id, &who).is_none() {
                         out.push(format!("'{who}' can't join the party."));
                     } else if is_member(d, gs, &who) {
                         out.push(format!("{} is already with you.", self.name_of(d, gs, &who)));
-                    } else if gs.party.members.len() as i64 >= cap {
-                        out.push(format!("The party is full ({} of {cap}).", gs.party.members.len()));
+                    } else if roster::has_departed(d, gs, &who) {
+                        // ROSTER1 L1: member ids are never reused
+                        out.push(roster::gone_text(&self.name_of(d, gs, &who)));
+                    } else if !full.is_empty() {
+                        // ROSTER1 BK1, BK3: the bunk cap (the party max when the world sets no bunks)
+                        out.push(full);
                     }
                 }
                 _ => {}
@@ -796,7 +825,7 @@ impl DialogueRunner {
             }
         }
         if take_gold > gs.party.gold {
-            out.push("Not enough gold.".into());
+            out.push(terms::not_enough_currency(d, &gs.world_id));
         }
         out
     }
@@ -947,7 +976,7 @@ pub fn apply_effect(d: &Data, gs: &mut GameState, fx: &Dict, notes: &mut Vec<Str
         "take" => {
             quest::take(d, gs, json::get(fx, "items"), json::i(fx, "gold", 0));
         }
-        "recruit" => recruit(d, gs, &json::s(fx, "character"), notes),
+        "recruit" => recruit(d, gs, &json::s(fx, "character"), fx.get("level").unwrap_or(&Value::Null), notes),
         "vignette" => {
             story::queue(d, gs, &json::s(fx, "vignette"));
         }
@@ -984,24 +1013,28 @@ pub fn apply_effects(d: &Data, gs: &mut GameState, effects: &[Dict], notes: &mut
     }
 }
 
-/// The `recruit` effect: the character joins at the best active member's XP. Outside a conversation (whose precheck
-/// refuses these) a character already in the party or a full party is a note instead.
-fn recruit(d: &Data, gs: &mut GameState, who: &str, notes: &mut Vec<String>) {
+/// The `recruit` effect: the character joins at its `level` (ROSTER1 BK5; default the best active member's XP,
+/// RECRUIT1). Outside a conversation (whose precheck refuses these) a character already in the party, a departed one
+/// (L1) or a party with no free bunk (BK1, BK3) is a note instead. BK4: it deploys when `active_ids` is empty (the
+/// first `max_active` fight) or has room; else it waits on the bench.
+fn recruit(d: &Data, gs: &mut GameState, who: &str, level: &Value, notes: &mut Vec<String>) {
     let Some(mut hero) = new_game::hero_from_character(d, &gs.world_id, who) else { return };
     let name = progression::display_name(d, &hero);
     if is_member(d, gs, who) {
         notes.push(format!("{name} is already with you."));
         return;
     }
-    let cap = d.party_max(&gs.world_id);
-    if gs.party.members.len() as i64 >= cap {
-        notes.push(format!("The party is full ({} of {cap}).", gs.party.members.len()));
+    if roster::has_departed(d, gs, who) {
+        notes.push(roster::gone_text(&name));
         return;
     }
-    for m in gs.party.active_members() {
-        hero.total_xp = hero.total_xp.max(m.total_xp);
+    let full = roster::full_text(gs);
+    if !full.is_empty() {
+        notes.push(full);
+        return;
     }
-    if !gs.party.active_ids.is_empty() {
+    hero.total_xp = roster::join_xp(d, &gs.party, hero.total_xp, level);
+    if !gs.party.active_ids.is_empty() && (gs.party.active_ids.len() as i64) < gs.party.max_active {
         gs.party.active_ids.push(hero.id.clone());
     }
     gs.party.members.push(hero);

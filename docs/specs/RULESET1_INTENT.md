@@ -137,6 +137,11 @@ Worked examples (move 2 tiles a block; tasks 4.1 tests them):
 
 ### 5.3 Maneuver
 
+Changed by INPUT1 (built in INPUT1-M, 2026-11-01): MV4-MV7 give way to the `position` rule (a dash of up to the
+skill's range to a named position, its diagonal fallback, "Flank protected"), MV2 and GD3 read `melee_diagonal` and
+AS1's chase covers every skill on a unit; the rule-by-rule map is [INPUT1.md](INPUT1.md) section 13, the rules section
+11 (MR1-MR16). The text below is kept as written.
+
 - MV1. Facing (battle layer, new): a unit faces its round target, unit or tile (the sign vector from its tile to the
   target's, re-read every block); with a self target or none it keeps its last facing (battle start: party right, foes
   left, as FACE1 draws, `emberwake_gui/src/battle.rs:141-188`, which today is GUI-only). FACE1 and DIR4 draw this.

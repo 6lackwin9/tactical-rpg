@@ -4,6 +4,7 @@
 use crate::data::Data;
 use crate::dialogue::rep;
 use crate::progression;
+use crate::terms;
 use crate::state::{flag_key_ok, flag_value_ok, qid_ok, GameState, GOLD_MAX};
 use aegis_core::json::{self, int, strs, Dict};
 use serde_json::Value;
@@ -604,7 +605,7 @@ pub fn reward_apply(d: &Data, gs: &mut GameState, rewards: &Dict, recipient_id: 
         let added = gs.party.add_gold(gold);
         granted.insert("gold".into(), int(added));
         if added < gold {
-            notes.push(format!("Gold is capped at {GOLD_MAX} ({} not added).", gold - added));
+            notes.push(terms::currency_capped(d, &gs.world_id, gold - added));
         }
     }
     if xp > 0 {
@@ -661,7 +662,7 @@ pub fn take(d: &Data, gs: &mut GameState, items: &Value, gold: i64) -> Vec<Strin
     if gold < 0 {
         errors.push("Take gold must be >= 0.".into());
     } else if gs.party.gold < gold {
-        errors.push("Not enough gold.".into());
+        errors.push(terms::not_enough_currency(d, &gs.world_id));
     }
     if errors.is_empty() {
         for (id, n) in &wanted {

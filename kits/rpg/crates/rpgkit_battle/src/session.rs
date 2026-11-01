@@ -6,7 +6,7 @@
 
 use crate::ai;
 use crate::command::CmdKind;
-use crate::encounter::{self, HoldGate, Morale, Objectives, PartyFate, Phases, StayBehind, LEADER_TIERS};
+use crate::encounter::{self, HoldGate, Morale, Objectives, PartyFate, Phases, StayBehind, TalkCue, LEADER_TIERS};
 use crate::grid::{Grid, TerrainTable, V2};
 use crate::plan::Plan;
 use crate::resolver::Resolver;
@@ -262,6 +262,8 @@ pub struct Session {
     /// ("[Kill] <who> fall."). The resolver log itself is untouched (host replies and parity read it); `log_lines`
     /// merges the two.
     pub encounter_lines: Vec<(usize, String)>,
+    /// ENCOUNTER2-C DT1: the talk cues the phases raised, oldest first (`talks`; no rule reads them).
+    talks: Vec<TalkCue>,
     /// Unit -> its hero key (a party member id or a world character), when it has one.
     hero_keys: IndexMap<UnitId, String>,
     unit_keys: IndexMap<UnitId, String>,
@@ -400,7 +402,7 @@ impl Session {
             fallback_any: sb.fallback_any,
             heroes: (0..n_allies).filter(|c| !guests.contains(c)).collect(),
         });
-        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default() };
+        let mut w = World { cat: cat.clone(), units: built, grid, allies: (0..n_allies).collect(), enemies: (n_allies..count).collect(), profiles, total_blocks: def.total_blocks, hp_journal: None, ruleset: def.ruleset.clone(), round_states: IndexMap::new(), plan_reveal: def.plan_reveal, poise: IndexMap::new(), hold, unkillable, spared: Vec::new(), ground: Default::default(), meters: Default::default(), arena: crate::arena::Arena::of(&def.raw, &def.ruleset), hits: Default::default(), autofill: true, ap_regen: def.ap_regen };
         w.add_item_skills();
         w.ignore_hazards_when_off();
         let objective = Objectives::create(&def.raw);
@@ -484,6 +486,7 @@ impl Session {
             kill_past_unkillable: encounter::KILL_OVERRIDES_UNKILLABLE,
             spared_logged: 0,
             encounter_lines: Vec::new(),
+            talks: Vec::new(),
             hero_keys,
             unit_keys,
             units_by_key,
@@ -826,6 +829,10 @@ impl Session {
         for fx in p.effects_of(encounter::KILL_EFFECT) {
             self.phase_kill(fx, &p.name, round, block);
         }
+        // ENCOUNTER2-C DT1: a talk only adds its cue (no cell, no event line, no draw)
+        for fx in p.effects_of(encounter::TALK_EFFECT) {
+            self.talks.push(TalkCue { phase: id.to_string(), dialogue: value::string(fx, "dialogue", ""), speaker: value::string(fx, "speaker", ""), round, block });
+        }
         self.phases.mark_fired(id, round, block);
     }
 
@@ -1091,13 +1098,30 @@ impl Session {
             return Err("The intent changes only at a round start, while planning.".into());
         }
         let Some(i) = round_intent::RoundIntent::parse(intent) else { return Err(format!("Unknown intent '{intent}'.")) };
-        let before = round_intent::intent_of(&self.w, c);
-        let lines = round_intent::set_intent(&mut self.w, c, i)?;
-        if before.is_some_and(|b| b != i) {
-            self.plan.clear(c);
-        }
+        let lines = crate::round_intent_plan::change_intent(&mut self.w, &mut self.plan, c, i)?;
         self.events.extend(lines.iter().cloned());
         Ok(lines)
+    }
+
+    /// RULESET1_TASKS 1.8, INPUT1 GH2 b (`round_intent_plan::set_round`) while the round is planned: sets the given round
+    /// fields of member `c` in order, then rebuilds its round and the later members' (IN6's lines go to `events`).
+    /// Atomic: a refused field leaves the battle (world, plan and events) as it was.
+    pub fn set_round(&mut self, c: UnitId, set: &crate::round_intent_plan::RoundSet) -> Result<crate::round_intent_plan::RoundSetDone, String> {
+        if self.phase != Phase::Planning || self.plan_confirmed {
+            return Err("The intent changes only at a round start, while planning.".into());
+        }
+        let (w0, seq0) = (self.w.clone(), self.plan.sequences.clone());
+        match crate::round_intent_plan::set_round(&mut self.w, &mut self.plan, c, set) {
+            Ok(done) => {
+                self.events.extend(done.lines.iter().cloned());
+                Ok(done)
+            }
+            Err(e) => {
+                self.w = w0;
+                self.plan.sequences = seq0;
+                Err(e)
+            }
+        }
     }
 
     /// RULESET1_INTENT TG1: sets unit `c`'s round target while planning (its intent first; the intent table decides).
@@ -1114,6 +1138,29 @@ impl Session {
             return Err("The Maneuver kind is set while planning.".into());
         }
         round_intent::set_maneuver(&mut self.w, c, kind)
+    }
+
+    /// INPUT1 IF4, IF6, GH5 (`round_intent_plan::pick`) while planning: appends `picks` to member `c`'s round on target
+    /// `at`. The first skill or item pick's intent change goes through `set_round_intent` (IN6: its lines go to
+    /// `events`). Atomic: a refused pick leaves the battle (world, plan and events) as it was. Returns the result and the
+    /// later members' dropped picks and refusals (PL8).
+    pub fn pick(&mut self, c: UnitId, at: round_intent::RoundTarget, picks: &[round_intent::Pick]) -> (Result<(), String>, Vec<(UnitId, String)>) {
+        if self.phase != Phase::Planning || self.plan_confirmed {
+            return (Err("Picks are made while planning.".into()), Vec::new());
+        }
+        let (w0, seq0, events0) = (self.w.clone(), self.plan.sequences.clone(), self.events.len());
+        if let Some(i) = crate::round_intent_plan::pick_intent(&self.w, c, picks) {
+            if let Err(e) = self.set_round_intent(c, i.id()) {
+                return (Err(e), Vec::new());
+            }
+        }
+        let out = crate::round_intent_plan::pick(&mut self.w, &mut self.plan, c, at, picks);
+        if out.0.is_err() {
+            self.w = w0;
+            self.plan.sequences = seq0;
+            self.events.truncate(events0);
+        }
+        out
     }
 
     pub fn plan_is_valid(&self) -> bool {
@@ -1377,6 +1424,8 @@ impl Session {
     /// reinforcement wave) enters; each takes the step (the block resolves on the next one).
     fn on_block_start(&mut self) -> bool {
         let (round, block) = (self.current_round, self.current_block);
+        // ENCOUNTER2-C PT1: round phases set at this block join the due ones (none in classic)
+        self.phases.mark_block(round, block);
         if let Some(id) = self.phases.next_due() {
             self.fire_phase(&id, round, block);
             return true;
@@ -1441,6 +1490,7 @@ impl Session {
     fn on_block_end(&mut self) {
         let by_ref = self.units_by_ref.clone();
         self.phases.check_block_end(&self.w, |r| by_ref.get(r).and_then(|l| l.first().copied()));
+        self.check_phase_events();
         if !self.morale.on {
             return;
         }
@@ -1452,6 +1502,40 @@ impl Session {
         for c in surrendering {
             self.w.withdraw_in_place(c);
         }
+    }
+
+    /// ENCOUNTER2-C PT2, PT3: the `downed` and `broken` triggers at a block end (nothing without them).
+    fn check_phase_events(&mut self) {
+        let names = self.phases.event_names();
+        if names.is_empty() {
+            return;
+        }
+        let units: IndexMap<String, Vec<UnitId>> = names.iter().map(|n| (n.clone(), self.units_named(n))).collect();
+        let w = &self.w;
+        let down = |n: &str| units.get(n).map_or(0, |l| l.iter().filter(|&&c| !w.units[c].is_alive()).count() as i32);
+        let broken = |n: &str| units.get(n).is_some_and(|l| l.iter().any(|&c| crate::poise::state(w, c).is_some_and(|p| p.broken)));
+        self.phases.check_events(down, broken);
+    }
+
+    /// ENCOUNTER2-C SN1 (without `#n`): the units a trigger's unit name covers: `party` every hero (guests aside),
+    /// `party:<id>` the hero whose hero key is `<id>` (or built from the party ref `<id>`), else every unit built from
+    /// the encounter ref.
+    pub fn units_named(&self, name: &str) -> Vec<UnitId> {
+        let heroes = || self.w.allies.iter().copied().filter(|c| !self.guests.contains(c));
+        if name == encounter::PARTY_NAME {
+            return heroes().collect();
+        }
+        if let Some(id) = name.strip_prefix(encounter::PARTY_PREFIX) {
+            let built = self.units_of_ref(id);
+            return heroes().filter(|&c| self.hero_key(c) == id || built.contains(&c)).collect();
+        }
+        self.units_of_ref(name)
+    }
+
+    /// ENCOUNTER2-C DT1: every talk cue the phases raised so far, in fire order (the screen opens each new one once;
+    /// sims, autoplay and the host never wait for one).
+    pub fn talks(&self) -> &[TalkCue] {
+        &self.talks
     }
 
     /// HOOKS1-H follow-up (user 2026-10-29): the verdict's wipe-outs: every hero (guests aside) down, or no enemy that

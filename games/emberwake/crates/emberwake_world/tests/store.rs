@@ -21,8 +21,9 @@ const CATALOG: [&str; 8] = ["classes", "units", "skills", "items", "item_familie
 /// (catalog and world encounters); HOOKS1-S (HISTORY 2026-10-27) a unit's `tactics` and an encounter's `arena_hazards`
 /// (catalog and world encounters; a skill's hook fields are left out at their defaults, a consumable's `hazard` is
 /// ITEMS_AFTER_GODOT); ENCOUNTER2-H (HISTORY 2026-10-27) an encounter's `unkillable`, `timeout_outcome` and
-/// `stay_behind` (catalog and world encounters).
-const AFTER_GODOT: [&str; 18] = [
+/// `stay_behind` (catalog and world encounters); ROSTER1-L (HISTORY 2026-10-31) a character's `keepsake` and a world
+/// encounter's `party_min`.
+const AFTER_GODOT: [&str; 20] = [
     "\"loot\": []",
     "\"key_loot\": []",
     "\"objective_reward\": {}",
@@ -41,6 +42,8 @@ const AFTER_GODOT: [&str; 18] = [
     "\"unkillable\": []",
     "\"timeout_outcome\": \"fled\"",
     "\"stay_behind\": {}",
+    "\"keepsake\": \"\"",
+    "\"party_min\": 0",
 ];
 
 /// Retired parity, the catalog items file only (catalog/items.json): HOOKS1-S (HISTORY 2026-10-27) a consumable's
@@ -49,8 +52,10 @@ const ITEMS_AFTER_GODOT: [&str; 1] = ["\"hazard\": {}"];
 
 /// Retired parity, world manifests only (world.json): CAMPAIGN1-S (HISTORY 2026-10-25) a manifest's `campaign`,
 /// `purse`, `rest` and `defeat`, written as `{}` (an encounter's `purse` line is still compared); STORYUI1-S (HISTORY
-/// 2026-10-26) its `start_sequence`, written as ""; HOOKS1-S (HISTORY 2026-10-27) its `classes`, written as `{}`.
-const MANIFEST_AFTER_GODOT: [&str; 6] = ["\"campaign\": {}", "\"purse\": {}", "\"rest\": {}", "\"defeat\": {}", "\"start_sequence\": \"\"", "\"classes\": {}"];
+/// 2026-10-26) its `start_sequence`, written as ""; HOOKS1-S (HISTORY 2026-10-27) its `classes`, written as `{}`;
+/// ROSTER1-L (HISTORY 2026-10-31) its `roster`, written as `{}`; CAMPAIGN1-TM (HISTORY 2026-11-01) its `travel_modes`,
+/// written as `{}`.
+const MANIFEST_AFTER_GODOT: [&str; 8] = ["\"campaign\": {}", "\"purse\": {}", "\"rest\": {}", "\"defeat\": {}", "\"start_sequence\": \"\"", "\"classes\": {}", "\"roster\": {}", "\"travel_modes\": {}"];
 
 /// Retired parity, world quests only (worlds/<w>/quests.json): STORYUI1-S (HISTORY 2026-10-26) a quest's board
 /// fields `board`, `track`, `show_locked` and `closed_text`, written with their defaults (a dialogue choice's

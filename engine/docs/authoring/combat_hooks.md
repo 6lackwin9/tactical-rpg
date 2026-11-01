@@ -3,7 +3,7 @@
 Status: canon (HOOKS1-D, 2026-10-31). Game-agnostic: this page names no game. It is the authoring guide for the RPG
 kit's combat hooks (`kits/rpg/`, spec `docs/specs/HOOKS1.md` with the field tables in `docs/specs/HOOKS1_TASKS.md`
 section 1): forced moves, ground hazards, arena hazards, triggers and riders, HP costs and guard bypass, execute, unit
-meters, data zones, the encounter phase effects `deck` and `kill` with phase groups, and AI tactics. A game uses them
+meters, data zones, the encounter phase effects `deck`, `kill` and `talk` with phase groups and the event triggers, and AI tactics. A game uses them
 by writing rows; it writes no code for them ([layer_rule.md](layer_rule.md): kit hook plus data).
 
 ## Rules every hook shares
@@ -11,7 +11,7 @@ by writing rows; it writes no code for them ([layer_rule.md](layer_rule.md): kit
 - **Gated by a ruleset rule.** Each hook acts only when the battle's ruleset lists its rule id (the kit's rule
   register, `kits/rpg/crates/rpgkit_rules/src/ruleset.rs`): `forced_move`, `ground_hazards`, `arena_hazards`,
   `triggers`, `unit_meters`, `hp_cost`, `ignore_guard`, `ai_tactics`, `execute` (all extensions, HOOKS1 4.1); the
-  phase effect `deck` rides the `deck` rule; the phase effect `kill`, phase groups and data zones need no rule. A
+  phase effect `deck` rides the `deck` rule (the trigger `broken` the `poise` rule); the phase effects `kill` and `talk`, phase groups, the triggers `round` + `block` and `downed`, and data zones need no rule. A
   ruleset without the rule reads the fields as absent: no random draw, log line or metric key appears, so a classic
   ruleset and recorded goldens do not move (HOOKS1 4.2). With `ground_hazards` off the battle's catalog drops skill
   hazards at the start (`World::ignore_hazards_when_off`).
@@ -221,6 +221,29 @@ Code `rpgkit_battle/src/encounter.rs` (`Phases::apply_decks`, `Phases::mark_fire
 ```json
 {"id": "unleash", "name": "Unleash", "trigger": {"kind": "hp_below", "unit": "boss", "pct": 50}, "group": "end",
  "effects": [{"type": "deck", "unit": "boss", "add": ["earthbreaker"], "order": {"assault": ["earthbreaker"]}}]}
+```
+
+## Battle talk and event triggers
+
+Code `rpgkit_battle/src/encounter.rs` (`TALK_EFFECT`, `TalkCue`, `Phases::mark_block`, `Phases::check_events`),
+`session.rs` (`talks`, `units_named`); spec `docs/specs/ENCOUNTER2_C.md` 3.1, 3.2 and 5.2; tests
+`rpgkit_battle/tests/battle_talk.rs`, `rpgkit_content/tests/battle_talk_checks.rs`, `rpgkit_host/tests/battle_talk.rs`.
+
+- **`talk`**: `{"type": "talk", "dialogue": ref, "speaker": ref}` (at most one per phase, world encounters only: dialogue
+  trees are world rows) adds a cue `{phase, dialogue, speaker, round, block}` to `Session::talks()` when its phase
+  fires. No rule reads it: the battle plays exactly as without it, and sims and the host never wait. The game's battle
+  screen opens the tree over the fight. Its tree may run only `set_flag` and `add_flag` effects.
+- **`round` with `block`**: 0 (the default) fires at the round start, before planning (round 1 included); 1 to
+  `total_blocks` at the start of that block.
+- **`downed`**: `{"kind": "downed", "unit": name, "count": 1}` is due at the end of the block in which the count-th unit
+  of the name is at 0 HP (any cause, phase kills included); **`broken`**: `{"kind": "broken", "unit": name}` once one of
+  them breaks (rule `poise`; never without it). Both fire at the next block start, or the next round start after the
+  last block; a phase due when the battle ends never fires. A name is an encounter ref (every unit built from it),
+  `party` (any hero) or `party:<id>` (one hero).
+
+```json
+{"id": "first_down", "name": "First down", "trigger": {"kind": "downed", "unit": "footman", "count": 1},
+ "effects": [{"type": "talk", "dialogue": "dlg_first_down", "speaker": "captain"}]}
 ```
 
 ## AI tactics (rule `ai_tactics`)

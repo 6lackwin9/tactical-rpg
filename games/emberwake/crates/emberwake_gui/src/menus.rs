@@ -339,7 +339,7 @@ impl Slots {
             SlotAct::Load(slot) => {
                 if cx.busy() {
                     show_errors(cx, vec!["Finish the fight, conversation or shop first.".into()]);
-                } else if cx.has_game() && cx.is_dirty() {
+                } else if cx.has_game() && cx.is_dirty() && !crate::runover::is_over(cx) {
                     let what = Self::describe(cx, slot);
                     let name = if slot == save::AUTOSAVE_SLOT { "the autosave".to_string() } else { format!("slot {slot}") };
                     cx.ask_no(format!("Load {name} ({what})? Unsaved progress in the current game is lost."), move |cx| load_slot(cx, slot));
@@ -380,14 +380,14 @@ impl Slots {
         }
     }
 
-    /// Why the running game can't be saved now ("" when it can).
+    /// Why the running game can't be saved now ("" when it can; CAMPAIGN1 F3: never while the run is over).
     fn no_save(cx: &Cx) -> &'static str {
         if !cx.has_game() {
             "There is no game to save."
         } else if cx.busy() {
             "You can't save during a battle, a conversation or while a shop is open."
         } else {
-            ""
+            emberwake_world::campaign::save_refusal(cx.gs())
         }
     }
 }
@@ -515,7 +515,7 @@ const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
         ],
     ),
     ("Maps", &[("Move the party", "Arrow keys, W A S D"), ("Interact with the marker you face", "E"), ("Game menu", "Escape"), ("Choose a dialogue line", "1-9"), ("Party, journal, stash, help, event log", "P, J, I, ?, L")]),
-    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Every revealed enemy move (timeline)", "Hold Alt"), ("Screenshot", "F12")]),
+    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Skills of the selected hero (timeline)", "1-9"), ("Target self (timeline)", "S"), ("Inspect a unit (timeline)", "Right click"), ("Clear inspect, deselect (timeline)", "Escape"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Every revealed enemy move (timeline)", "Hold Alt"), ("Screenshot", "F12")]),
 ];
 
 /// A volume slider's sample and bus (scripts/audio/volume_preview.gd: the master sample plays on the interface bus).
@@ -654,6 +654,12 @@ impl Screen<GameCx> for SettingsScreen {
                 ui.checkbox("settings.show_tells", x + 3, y, "Show enemy tells", d["show_tells"].as_bool().unwrap_or(true), SetAct::Toggle("show_tells"), true);
                 y += 18;
                 ui.checkbox("settings.warn_missing", x + 3, y, "Warn about missing actions", d["warn_missing"].as_bool().unwrap_or(true), SetAct::Toggle("warn_missing"), true);
+                y += 18;
+                // INPUT1 GH7: the planner fills a hero's free blocks after its picks (timeline battles)
+                ui.checkbox("settings.auto_fill", x + 3, y, "Auto-fill the rest", d["auto_fill"].as_bool().unwrap_or(true), SetAct::Toggle("auto_fill"), true);
+                if let Some(wd) = ui.widgets.last_mut() {
+                    wd.tip = tip("Auto-fill the rest", "After your picks the planner fills the round's free blocks with follow-ups (ghost blocks you can replace). Off: the free blocks Rest.");
+                }
                 y += 20;
                 ui.p.text(x as f32, y as f32 + 3.0, "Map names", BODY, TEXT);
                 let labels: Vec<String> = MAP_NAMES.iter().map(|m| m.1.to_string()).collect();
@@ -775,11 +781,10 @@ mod tests {
         let data = emberwake_world::Data::open(&data_dir).expect("data").0;
         let world = new_game::playable_worlds(&data).first().cloned().expect("a playable world");
         let gs = new_game::create_for_world(&data, &world, 1).expect("a new game");
-        let clean = gs.to_value();
         let app = GameCx {
             data: Arc::new(data),
             manifest: Default::default(),
-            game: Some(Game { gs, slot: -1, clean, busy: false, sample: false }),
+            game: Some(Game::new(gs, -1, false)),
             save_dir,
             tuning: aegis_ui::tuning::TuningFile::new(None),
             log: Vec::new(),

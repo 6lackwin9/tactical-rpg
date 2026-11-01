@@ -140,3 +140,30 @@ fn classic_refuses_round_intents() {
     assert_eq!(h.handle(&json!({"cmd": "manual", "unit": 0}))["ok"], json!(false));
     assert_eq!(h.handle(&json!({"cmd": "round_plan"}))["round_plan"], json!([]));
 }
+
+/// INPUT1 MR11: `new {melee_diagonal}` sets the battle's diagonal melee over the row's value (the state's `ruleset`
+/// names it beyond classic; classic keeps the state's shape), an unknown value is refused, and the request is recorded
+/// and replays to the same battle.
+#[test]
+fn new_takes_melee_diagonal_and_replays() {
+    let mut h = Host::new(Battle::new(catalog()));
+    let r = h.handle(&json!({"cmd": "new", "encounter": "t_duel", "ruleset": "timeline"}));
+    assert_eq!(r["state"]["ruleset"], json!({"id": "timeline", "melee_diagonal": "maneuver"}), "the row's default");
+    let r = h.handle(&json!({"cmd": "new", "encounter": "t_duel", "ruleset": "timeline", "melee_diagonal": "all"}));
+    assert_eq!(r["state"]["ruleset"]["melee_diagonal"], json!("all"), "{r}");
+    let bad = h.handle(&json!({"cmd": "new", "encounter": "t_duel", "ruleset": "timeline", "melee_diagonal": "sideways"}));
+    assert_eq!(bad["error"], json!("melee_diagonal must be one of none, maneuver, all (got 'sideways')"));
+    let classic = h.handle(&json!({"cmd": "new", "encounter": "t_duel"}));
+    assert!(classic["state"].get("ruleset").is_none(), "classic keeps the state's shape");
+    let mut h = Host::new(Battle::new(catalog()));
+    h.handle(&json!({"cmd": "new", "encounter": "t_duel", "ruleset": "timeline", "melee_diagonal": "none"}));
+    let history: Vec<Value> = h.handle(&json!({"cmd": "history"}))["history"].as_array().unwrap().clone();
+    assert_eq!(history[0]["melee_diagonal"], json!("none"), "recorded");
+    let mut again = Host::new(Battle::new(catalog()));
+    for req in &history {
+        again.handle(req);
+    }
+    let state = |h: &mut Host| h.handle(&json!({"cmd": "state"}))["state"].clone();
+    assert_eq!(state(&mut again), state(&mut h), "the request replays");
+    assert_eq!(state(&mut again)["ruleset"]["melee_diagonal"], json!("none"));
+}

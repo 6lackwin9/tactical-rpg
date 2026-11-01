@@ -23,14 +23,17 @@ pub const PALETTE: Palette = Palette { text: rgb(0xd9, 0xcb, 0xb4), accent: rgb(
 const STAGE_FILL: Rgba = rgb(0x0a, 0x0b, 0x10);
 
 /// A card of world `world` as the engine plays it (W5): the card keys through `Card::from_json`; a `line` card's speaker
-/// shows the character's name (`speaker_name` when the kit resolved it) and the talk box's portrait chain.
+/// shows the character's name (`speaker_name` when the kit resolved it) and its portrait chain for the card's
+/// `expression` (PORTRAITFX1-X: the kit's `story::card_portrait`, `face_chain`; with no frames today's chain).
 pub fn card_of(d: &Data, world: &str, raw: &Dict) -> Card {
     let mut c = Card::from_json(&Value::Object(raw.clone()));
     let speaker = s(raw, "speaker");
     if !speaker.is_empty() {
         let who = d.resolve(world, "characters", &speaker);
         c.speaker = s_or(raw, "speaker_name", &s_or(who, "name", &speaker));
-        c.portrait = if who.is_empty() { Vec::new() } else { crate::screens::character_art(d, who).2 };
+        c.portrait = story::card_portrait(d, world, raw);
+        // PORTRAITFX1-D: the portrait's effects are seeded by the character id, as the talk box's
+        c.portrait_key = s(who, "id");
     }
     c
 }
@@ -50,11 +53,14 @@ pub fn entry_reel(d: &Data, world: &str, entry: &Dict) -> Reel {
     reel
 }
 
-/// A vignette screen over `reel` as the game plays it: the player's text speed, the game's palette, and its tuned shake
-/// presets and limits for the cards' `shake` (FX1 5.2; `tuning.json` `shakes`, `shake_max_px`, `shake_max_ms`).
+/// A vignette screen over `reel` as the game plays it: the player's text speed, the game's palette, its tuned shake
+/// presets and limits for the cards' `shake` (FX1 5.2; `tuning.json` `shakes`, `shake_max_px`, `shake_max_ms`), and
+/// the line cards' portraits lit by the game's rim key (PORTRAITFX1-D, 6.4: Tallow Amber), an expression frame without
+/// its own sidecar taking its base portrait's (PORTRAITFX1-X: the kit's `face_sidecars`).
 pub fn vignette_screen(cx: &Cx, reel: Reel, on_done: impl FnOnce(&mut Cx, Ended) + 'static) -> VignetteScreen<GameCx> {
     let t = &cx.tuning.value;
-    VignetteScreen::with_settings(&cx.settings, reel, on_done).palette(PALETTE).with_shakes(t.shakes.clone(), t.shake_limits())
+    VignetteScreen::with_settings(&cx.settings, reel, on_done).palette(PALETTE).with_shakes(t.shakes.clone(), t.shake_limits()).portrait_rim(Some(crate::portraits::RIM))
+        .portrait_sidecars(emberwake_content::art::face_sidecars)
 }
 
 /// The player for `scene` in the game's palette; Skip asks first for a scene not seen yet (W6).
@@ -80,7 +86,9 @@ fn play_queued(cx: &mut Cx) -> Option<Option<String>> {
 
 /// A map screen's tick with nothing of its own open (no conversation, shop, board or page; its popups are screens over
 /// it, so it does not tick under them): a running sequence takes over (the story stage), else the oldest queued
-/// vignette plays (W2). True when the map handed over.
+/// vignette plays (W2). CAMPAIGN1 T2: the campaign queue's leading vignettes join the story queue first
+/// (`story::pull_pending`); once the vignettes played, a queued battle starts (`runover::play_pending_fight`; a queued
+/// dialogue is the region map's). True when the map handed over.
 pub fn map_tick(cx: &mut Cx) -> bool {
     if !cx.has_game() || cx.busy() || !cx.nav.is_empty() {
         return false;
@@ -90,14 +98,17 @@ pub fn map_tick(cx: &mut Cx) -> bool {
         cx.nav.push(Nav::Reset(Box::new(stage)));
         return true;
     }
-    play_queued(cx).is_some()
+    let d = cx.data.clone();
+    story::pull_pending(&d, cx.gs_mut());
+    play_queued(cx).is_some() || crate::runover::play_pending_fight(cx)
 }
 
-/// Logs the notes of a story result (effects, "Try again.").
+/// Logs the notes of a story result (effects, "Try again.") and takes its campaign events (CAMPAIGN1 W1).
 fn log_notes(cx: &mut Cx, res: &Dict) {
     for n in json::sget(res, "notes") {
         cx.log(n);
     }
+    crate::runover::take(cx, res);
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -126,6 +137,10 @@ impl StoryStage {
     /// The next beat: a queued vignette first (Q9), then the step at `running.step`.
     fn run(&mut self, cx: &mut Cx) {
         if self.waiting || !self.error.is_empty() || !cx.has_game() || !cx.nav.is_empty() {
+            return;
+        }
+        // CAMPAIGN1 W1, F3: campaign notices between the beats; the run-over screen once the run is over
+        if crate::runover::map_tick(cx) {
             return;
         }
         if let Some(wish) = play_queued(cx) {
@@ -196,6 +211,7 @@ impl StoryStage {
             return;
         }
         crate::region::log_events(cx, json::aget(&res, "events"));
+        crate::runover::take(cx, &res);
         if s(&res, "to") == "menu" {
             cx.autosave();
             cx.end_game();
@@ -525,7 +541,8 @@ pub(crate) mod tests {
         assert!(cx.nav.is_empty());
     }
 
-    /// STORYUI1-W gaps: a `board` choice holds the replies (no "Close the board first." dead end) until Esc closes the
+    /// STORYUI1-W gaps: a `board` choice holds the replies (no "Close the board first." dead end; STORYUI1-U2: its pane
+    /// stands in the dialogue box's place) until Esc closes the
     /// board back to the conversation; a `sequence` choice ends the talk and the map hands over to the stage, which
     /// shows its scenes and, at `end` `menu`, ends the game in play (Q7).
     #[test]
@@ -542,8 +559,9 @@ pub(crate) mod tests {
         talk.click_id(&mut cx, "choice.2").expect("the board reply");
         assert_eq!(talk.state(&cx)["board"], json!("tale:b"));
         frame(&mut talk, &mut cx, &mut g, 1.0);
-        let replies: Vec<Value> = talk.widgets().into_iter().filter(|w| w["kind"] == "choice").collect();
-        assert!(!replies.is_empty() && replies.iter().all(|w| w["enabled"] == json!(false)), "the replies wait while the board is open");
+        // STORYUI1-U2: the board pane takes the dialogue box's place (the shop's rule), so no reply is there to click
+        let replies: Vec<Value> = talk.widgets().into_iter().filter(|w| w["kind"] == "choice" && w["enabled"] == json!(true)).collect();
+        assert!(replies.is_empty() && talk.widgets().iter().any(|w| w["id"] == "board"), "the replies wait while the board pane is open");
         talk.back(&mut cx);
         let st = talk.state(&cx);
         assert!(st["board"].is_null() && !st["dialogue"].is_null(), "Esc closes the board back to the conversation");
@@ -583,6 +601,29 @@ pub(crate) mod tests {
         assert_eq!(entry_reel(&d, "tale", raw).cards[0].text, "{flag:began} began.");
         let names: Vec<String> = gallery_reels(&d).into_iter().map(|r| r.0).collect();
         assert_eq!(names, ["Sample reel", "Tale: Intro", "Tale: Line", "Tale: News"], "V15: the sample, then every world's vignettes");
+    }
+
+    /// PORTRAITFX1-X X3: a `line` card's portrait chain is the kit's card resolution for its `expression`
+    /// (`story::card_portrait`: the speaker's frame first, its neutral frame, then today's chain), the card keeps the
+    /// expression for the engine, and the game's vignette screens take an expression frame's anchors from its base
+    /// portrait's sidecar when the frame has none (the kit's `face_sidecars`).
+    #[test]
+    fn a_line_cards_expression_resolves_its_portrait_chain() {
+        let d = data();
+        let raw = json::dict(&json!({"style": "line", "speaker": "clerk", "expression": "angry", "text": "Out!"})).clone();
+        let c = card_of(&d, "tale", &raw);
+        assert_eq!(c.expression, "angry");
+        assert_eq!(c.portrait, story::card_portrait(&d, "tale", &raw));
+        let clerk = d.resolve("tale", "characters", "clerk");
+        let today = crate::screens::character_art(&d, clerk).2;
+        assert_eq!(c.portrait[..2], ["portraits/npcs/faces/clerk/angry.png", "portraits/npcs/faces/clerk/neutral.png"]);
+        assert_eq!(c.portrait[2..], today[..], "then today's chain: a missing frame falls back to the single portrait");
+        let plain = card_of(&d, "tale", &json::dict(&json!({"style": "line", "speaker": "clerk", "text": "Hi."})).clone());
+        assert_eq!((plain.expression.as_str(), plain.portrait[0].as_str()), ("", "portraits/npcs/faces/clerk/neutral.png"));
+        let cx = story_cx(data());
+        let s = vignette_screen(&cx, Reel::default(), |_, _| {});
+        let rule = s.portrait.sidecars.expect("the game's sidecar rule");
+        assert_eq!(rule("portraits/npcs/faces/clerk/angry.png"), emberwake_content::art::face_sidecars("portraits/npcs/faces/clerk/angry.png"));
     }
 
     /// 4.8: the settings' gameplay tab sets the text speed and reduce motion (the engine's keys), inside the tab body at

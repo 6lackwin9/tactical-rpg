@@ -9,6 +9,10 @@
 //! landing edge, recovery hatched) or hatched whole; a track can link two of its segments (a chained follow-up) and
 //! carry marks (a glyph in a colour with a hover card, inside one block's cell, also on a masked track). Marks take no
 //! click, so clicks land where they did; labels and mask notes give way to them. All of it is empty by default.
+//!
+//! Ghost segments (INPUT1-U, engine-only): a segment can be a ghost, a planned, not chosen, span (what a planner filled
+//! in for the player): its fill at `GHOST_ALPHA`, a dashed outline all round and its label in `DIM`; `draw_ghost` and
+//! `ghost_fill` give a screen's own spans the same look. Off by default.
 
 use crate::canvas::{rgb, rgba, Rect, Rgba};
 use crate::ui::{tip, Tip, Ui, BODY, BORDER, CARD, DIM, GOLD, PANEL_HI, RADIUS, SMALL, TEXT};
@@ -56,6 +60,9 @@ pub struct Segment {
     pub parts: Vec<Part>,
     /// Hatched whole (a dimmed or cancelled span, say).
     pub hatched: bool,
+    /// A ghost span (a planned, not chosen, span): its fill at `GHOST_ALPHA`, a dashed outline all round and the label
+    /// in `DIM` (`draw_ghost`).
+    pub ghost: bool,
 }
 
 /// A glyph in a colour at one block of a track, with its hover card; it takes no click.
@@ -246,7 +253,7 @@ impl Timeline {
         let bars: Vec<Rect> = t.segments.iter().map(|s| self.bar(s, row, lane_x, lane_w)).collect();
         for (s, &bar) in t.segments.iter().zip(&bars) {
             let hover = ui.hover(bar);
-            let mut fill = s.fill;
+            let mut fill = if s.ghost { ghost_fill(s.fill) } else { s.fill };
             if hover {
                 fill = [fill[0].saturating_add(30), fill[1].saturating_add(30), fill[2].saturating_add(30), fill[3]];
             }
@@ -259,7 +266,9 @@ impl Timeline {
             if s.hatched {
                 hatch(ui, bar, HATCH);
             }
-            if s.dashed {
+            if s.ghost {
+                draw_ghost(ui, bar);
+            } else if s.dashed {
                 for x in (bar.x..bar.x + bar.w).step_by(4) {
                     ui.p.fill(Rect::new(x, bar.y, 2, 1), TEXT);
                     ui.p.fill(Rect::new(x, bar.y + bar.h - 1, 2, 1), TEXT);
@@ -283,7 +292,7 @@ impl Timeline {
             let need = ui.p.text_w(&s.label, SMALL).ceil() as i32;
             let (lx, lx1) = clear_of(bar.x + 3, bar.x + bar.w - 3, &kept, need);
             if (lx, lx1) == (bar.x + 3, bar.x + bar.w - 3) || lx1 - lx >= 6 {
-                ui.p.text_fit(lx as f32, bar.y as f32 + 1.0, &s.label, SMALL, (lx1 - lx) as f32, TEXT);
+                ui.p.text_fit(lx as f32, bar.y as f32 + 1.0, &s.label, SMALL, (lx1 - lx) as f32, if s.ghost { DIM } else { TEXT });
             }
             ui.push(format!("{id}.seg.{}.{}", t.key, s.key), "row", s.label.clone(), bar, true, false, Some(on_segment(&t.key, &s.key)), s.tip.clone());
         }
@@ -319,6 +328,32 @@ pub fn draw_part<A: Clone>(ui: &mut Ui<A>, style: PartStyle, bar: Rect, pr: Rect
         }
     }
     ui.pop_clip();
+}
+
+/// A ghost span's fill opacity (a planned, not chosen, span: INPUT1 GH8), of the segment's own alpha.
+pub const GHOST_ALPHA: f32 = 0.45;
+/// The ghost outline's dash: `GHOST_DASH` pixels drawn, then as many skipped.
+pub const GHOST_DASH: i32 = 2;
+
+/// A ghost span's fill: `fill` at `GHOST_ALPHA` of its alpha.
+pub fn ghost_fill(fill: Rgba) -> Rgba {
+    [fill[0], fill[1], fill[2], (fill[3] as f32 * GHOST_ALPHA).round() as u8]
+}
+
+/// The ghost look's dashed outline round `bar` (all four sides, in `TEXT`). Public so a screen's own strip of blocks
+/// draws its ghost spans in the widget's look (with `ghost_fill` for the fill and `DIM` for the label).
+pub fn draw_ghost<A: Clone>(ui: &mut Ui<A>, bar: Rect) {
+    let step = (GHOST_DASH * 2) as usize;
+    for x in (bar.x..bar.x + bar.w).step_by(step) {
+        let w = GHOST_DASH.min(bar.x + bar.w - x);
+        ui.p.fill(Rect::new(x, bar.y, w, 1), TEXT);
+        ui.p.fill(Rect::new(x, bar.y + bar.h - 1, w, 1), TEXT);
+    }
+    for y in (bar.y..bar.y + bar.h).step_by(step) {
+        let h = GHOST_DASH.min(bar.y + bar.h - y);
+        ui.p.fill(Rect::new(bar.x, y, 1, h), TEXT);
+        ui.p.fill(Rect::new(bar.x + bar.w - 1, y, 1, h), TEXT);
+    }
 }
 
 /// Diagonal hatching over `r`, one line every 4 pixels.

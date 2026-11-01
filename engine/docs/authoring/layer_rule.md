@@ -17,4 +17,10 @@ Status: canon (user 2026-10-25). Every feature of a game sits in exactly one lay
 - Prefer a data stand-in first (for example crafting as dialogue choices that take and give items) and build the kit
   hook when a playtest shows the stand-in hurts.
 - Measure throughput per layer: hours spent on data, kit hooks and game code per milestone.
+- The layer check (`tools/fc.sh layers`, in every gate) enforces it: engine and kit code name no game (G1) and have no
+  path into `games/` (G2); kit code (`src/`, `schema.json`, `kit.json`) names no lore word of a game (G3: its world ids and
+  `games/<id>/lore_words.txt`). A hit is fixed in the code; there is no allow marker.
+- Kit code names a game-system word (the currency, the upkeep, the intents) only by a neutral term id with a plain
+  default, read through the kit's one resolver; the game names the term in its data (a world block or its `terms`
+  table), never in kit code (TERMS1; the RPG kit's register is `rpgkit_data::terms`).
 - Where a kit's code and schema live, and how to extract a kit from a game: [kit_layout.md](kit_layout.md).

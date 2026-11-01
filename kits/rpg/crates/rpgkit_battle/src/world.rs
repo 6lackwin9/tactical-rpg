@@ -278,6 +278,12 @@ pub struct World {
     pub arena: crate::arena::Arena,
     /// HOOKS1 AT2 (rule `ai_tactics`): who lost HP to an attack hit this round and last round (`brace_after_hit`).
     pub hits: HitMemory,
+    /// INPUT1 GH7 (rule `round_intent`): the planner fills a member's free blocks after its picks (off: Rest). Only
+    /// `round_intent_plan::set_autofill` changes it; the sims and the AI never do.
+    pub autofill: bool,
+    /// The AP every unit regains at a round start (`EncounterDef.ap_regen`; below 0: back to full), read by the AP
+    /// forecast (INPUT1 AP1).
+    pub ap_regen: i32,
 }
 
 impl World {

@@ -136,6 +136,16 @@ deadline, best day, worst day, slack. On the full Act 1 graph (all legs 1 day: h
 the slice's M2, M3, M5 worst cases are day 10, 22 and 32, hence the placeholders 14 and 38; the sim recomputes them
 on SUNKWARD1's slice graph.
 
+### 4.4 Travel modes (CAMPAIGN1-TM, CMQ2; `sunk_ward_campaign_map.md` 2.1)
+
+| Row | Values |
+| --- | --- |
+| manifest `travel_modes` | default `stealth`; `stealth` "Stealth", tip (T) "Under fog and chimney soot: fewer patrols, a day more a leg.", `days` 1, `road_pct` 50 (B); `forced` "Forced march", tip (T) "No extra day, but the Inquisition notices.", `sure_when` `[{"key": "meter.alert", "op": ">=", "value": 50}]`, `road_encounters` the roamer packs (B, SUNKWARD1's encounter ids) |
+| `alert` inputs | add `{"on": "leg", "modes": ["forced"], "delta": 5}` (B) |
+
+With stealth the default every slice leg takes 2 days: `sim deadlines` plans in the default mode, so the checkpoint
+placeholders (14, 38) need the balance lane's re-run once these rows land.
+
 ## 5. Slice scope versus later
 
 | In the slice | Later |

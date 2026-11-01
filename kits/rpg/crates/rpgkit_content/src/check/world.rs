@@ -408,6 +408,20 @@ fn character_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
         slots.retain(|(s, _)| *s != slot);
         slots.push((slot, r));
     }
+    // ROSTER1 KS2, 11.3: a party character's keepsake; RK1: a member id is never a roster read word
+    let keepsake = json::s(e, "keepsake");
+    if !keepsake.is_empty() {
+        if json::s(e, "role") != "party" {
+            errors.push("Keepsake: only a party character carries one.".into());
+        }
+        if v.has("items", &keepsake) {
+            errors.extend(keepsake_item_errors(v, &keepsake, "Keepsake"));
+        }
+    }
+    let id = json::s(e, "id");
+    if rpgkit_data::ROSTER_WORDS.contains(&id.as_str()) {
+        errors.push(format!("Id '{id}' is a roster read word ({}); pick another.", rpgkit_data::ROSTER_WORDS.join(", ")));
+    }
     errors
 }
 
@@ -476,6 +490,8 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     }
     errors.extend(encounter::arrival_errors(e));
     errors.extend(encounter::phase_problems(e, &|r: &str| check_ref(v, w, encounter::wave_field(true), "characters", r).is_empty()));
+    // ENCOUNTER2-C 5.2: the talks' trees and speakers, and the broken trigger's poise rule
+    errors.extend(encounter::world_talk_problems(v, w, e));
     errors.extend(encounter::objective_problems(v, e, &|r: &str| guest_ok(v, w, r)));
     errors.extend(encounter::morale_problems(e));
     errors.extend(encounter::start_status_problems(e.get("start_status").unwrap_or(&Value::Array(Vec::new()))));
@@ -506,6 +522,13 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors.extend(super::hooks::arena_hazards_errors(e));
     let unit_of = |r: &str| v.get("units", &json::s(v.worlds.resolve(w, "characters", r), "base_unit")).clone();
     errors.extend(super::hooks::deck_effect_errors(v, e, Some(w), &unit_of));
+    // ROSTER1 BK6: the fewest heroes the fight takes, at most the world's party max
+    let party_min = e.get("party_min").cloned().unwrap_or(json::int(0));
+    let top = rpgkit_data::PARTY_MIN_MAX.min(party_max(v, w));
+    if !campaign::int_in(&party_min, 0, top) {
+        let why = if top < rpgkit_data::PARTY_MIN_MAX { " (the world's party max)" } else { "" };
+        errors.push(format!("Party min must be a whole number 0..{top}{why}."));
+    }
     errors
 }
 
@@ -645,6 +668,8 @@ pub fn manifest_errors(v: &View, w: &str) -> Vec<String> {
     errors.extend(dialogue::service_lines_errors(m.get("service_lines").unwrap_or(&Value::Object(Dict::new())), "Service lines"));
     errors.extend(ruleset_errors(v, m));
     errors.extend(campaign::manifest_errors(v, w, m));
+    // ROSTER1 11.1: the roster block
+    errors.extend(roster_errors(v, w, m));
     errors.extend(story::manifest_errors(v, w, m));
     // HOOKS1 CN1: the class names and paths of the world
     errors.extend(super::hooks::classes_errors(v, m));
@@ -667,6 +692,142 @@ fn ruleset_errors(v: &View, m: &Dict) -> Vec<String> {
         errors.push(format!("Plan reveal flag '{flag}' must be a flag key (a-z, 0-9, _ and .)."));
     }
     errors
+}
+
+// ---- ROSTER1 11.1-11.3 (kit hook; engine-only, no Godot original) ----
+
+const ROSTER_KEYS: [&str; 7] = ["bunks", "bunks_flag", "bunks_max", "crypts", "open_flag", "rules", "keepsakes"];
+const ROSTER_RULE_KEYS: [&str; 9] = ["acts", "bleed_out_rounds", "hp_after", "downed_won", "downed_left", "downed_lost", "standing_lost", "wounded_max_hp_pct", "keepsakes_on"];
+const KEEPSAKES_KEYS: [&str; 3] = ["on", "by_class", "name"];
+
+/// A roster flag key (`bunks_flag`, `open_flag`): a flag key, not a reserved one ("" = fine).
+fn roster_flag_error(m: &Dict, key: &str) -> Option<String> {
+    let flag = json::s(m, key);
+    if flag.is_empty() {
+        return None;
+    }
+    if !quest::flag_key_ok(&flag) {
+        return Some(format!("Roster: {key} '{flag}' must be a flag key (a-z, 0-9, _ and .)."));
+    }
+    let why = campaign::write_key_error(&flag);
+    (!why.is_empty()).then(|| format!("Roster: {key}: {why}"))
+}
+
+/// `d[key]`, when present, is a list of lives that pay a keepsake (KEEPSAKE_LIVES).
+fn lives_key(d: &Dict, key: &str, label: &str) -> Option<String> {
+    use rpgkit_data::KEEPSAKE_LIVES;
+    let x = d.get(key)?;
+    (!x.as_array().is_some_and(|a| a.iter().all(|l| l.as_str().is_some_and(|s| KEEPSAKE_LIVES.contains(&s))))).then(|| format!("{label}: {key} must be a list of {}.", KEEPSAKE_LIVES.join(", ")))
+}
+
+/// KS2, 11.3: the problems of catalog item `id` as a keepsake: an accessory, `value` 0 (never sold), `special`.
+pub fn keepsake_item_errors(v: &View, id: &str, label: &str) -> Vec<String> {
+    let item = v.get("items", id);
+    if item.is_empty() {
+        return vec![format!("{label}: unknown item '{id}'.")];
+    }
+    let mut errors = Vec::new();
+    if json::s(item, "item_type") != "ACCESSORY" {
+        errors.push(format!("{label}: '{id}' must be an accessory."));
+    }
+    if json::i(item, "value", 10) != 0 {
+        errors.push(format!("{label}: '{id}' must have value 0 (a keepsake is never sold)."));
+    }
+    if !json::b(item, "special", false) {
+        errors.push(format!("{label}: '{id}' must be a special item."));
+    }
+    errors
+}
+
+/// 11.1, 11.2: the problems of a world manifest's `roster` block (absent or {} = today's rules).
+pub fn roster_errors(v: &View, w: &str, m: &Dict) -> Vec<String> {
+    use campaign::{acts_key, enum_key, int_key, int_in, list, object, text_key, unknown_keys};
+    use rpgkit_data::{BLEED_OUT_ROUNDS_MAX, BUNKS_MAX, HP_AFTER, KEEPSAKE_NAME_MAX, KEEPSAKE_NAME_TOKENS, ROSTER_RULES_MAX, SETTLE_HURT, SETTLE_LOSS, WOUNDED_PCT_MAX, WOUNDED_PCT_MIN};
+    let mut errors = Vec::new();
+    let Some(r) = m.get("roster").and_then(|raw| object(raw, "Roster", &mut errors)) else { return errors };
+    let top = BUNKS_MAX as i64;
+    errors.extend(unknown_keys(r, &ROSTER_KEYS, "Roster"));
+    let bunks = r.get("bunks").cloned().unwrap_or(json::int(0));
+    if !int_in(&bunks, 0, top) {
+        errors.push(format!("Bunks must be 0 (party max) or 1..{top}."));
+    }
+    // bunks_max is checked against a valid bunks only (0 = the party max)
+    let base = if int_in(&bunks, 1, top) { json::to_int(&bunks) } else { party_max(v, w) };
+    errors.extend(int_key(r, "bunks_max", base, top, "Roster"));
+    errors.extend(int_key(r, "crypts", 0, top, "Roster"));
+    errors.extend(roster_flag_error(r, "bunks_flag"));
+    errors.extend(roster_flag_error(r, "open_flag"));
+    if let Some(rows) = r.get("rules").and_then(|raw| list(raw, "Roster rules", &mut errors)) {
+        if rows.len() > ROSTER_RULES_MAX {
+            errors.push(format!("Roster: rules hold at most {ROSTER_RULES_MAX} rows (has {}).", rows.len()));
+        }
+        let mut open_ended_early = false;
+        for (i, raw) in rows.iter().enumerate() {
+            let label = format!("Roster rule {}", i + 1);
+            let Some(row) = object(raw, &label, &mut errors) else { continue };
+            errors.extend(unknown_keys(row, &ROSTER_RULE_KEYS, &label));
+            errors.extend(acts_key(row, "acts", &label));
+            if json::aget(row, "acts").is_empty() && i + 1 < rows.len() {
+                open_ended_early = true;
+            }
+            errors.extend(int_key(row, "bleed_out_rounds", 0, BLEED_OUT_ROUNDS_MAX as i64, &label));
+            errors.extend(enum_key(row, "hp_after", &HP_AFTER, &label));
+            errors.extend(enum_key(row, "downed_won", &SETTLE_HURT, &label));
+            errors.extend(enum_key(row, "standing_lost", &SETTLE_HURT, &label));
+            errors.extend(enum_key(row, "downed_left", &SETTLE_LOSS, &label));
+            errors.extend(enum_key(row, "downed_lost", &SETTLE_LOSS, &label));
+            errors.extend(int_key(row, "wounded_max_hp_pct", WOUNDED_PCT_MIN as i64, WOUNDED_PCT_MAX as i64, &label));
+            errors.extend(lives_key(row, "keepsakes_on", &label));
+        }
+        if open_ended_early {
+            errors.push("Roster rules: only the last row may have no acts (it covers every other act).".into());
+        }
+    }
+    if let Some(ks) = r.get("keepsakes").and_then(|raw| object(raw, "Roster keepsakes", &mut errors)) {
+        let label = "Roster keepsakes";
+        errors.extend(unknown_keys(ks, &KEEPSAKES_KEYS, label));
+        errors.extend(lives_key(ks, "on", label));
+        if let Some(by_class) = ks.get("by_class").and_then(|raw| object(raw, "Roster keepsakes by_class", &mut errors)) {
+            for (class, item) in by_class {
+                if !v.has("classes", class) {
+                    errors.push(format!("{label} by_class: unknown class '{class}'."));
+                }
+                match item.as_str() {
+                    Some(id) => errors.extend(keepsake_item_errors(v, id, &format!("{label} by_class {class}"))),
+                    None => errors.push(format!("{label} by_class {class}: the item must be an item id.")),
+                }
+            }
+        }
+        errors.extend(text_key(ks, "name", KEEPSAKE_NAME_MAX, true, label));
+        let name = json::s(ks, "name");
+        let mut rest = name.clone();
+        for t in KEEPSAKE_NAME_TOKENS {
+            rest = rest.replace(t, "");
+        }
+        if rest.contains('{') || rest.contains('}') {
+            errors.push(format!("{label}: name takes only the tokens {}.", KEEPSAKE_NAME_TOKENS.join(" and ")));
+        }
+    }
+    errors
+}
+
+/// RK1: the problem of reading `roster.` key `key` in world `w` ("" = fine): a roster word, `departed.<life>`, or a
+/// member id (a character of the world, a party unit or a procedural `recruit_<n>`).
+pub fn roster_read_key_error(v: &View, w: &str, key: &str) -> String {
+    use rpgkit_data::{roster_read_key, RosterRead, DEPART_LIVES};
+    match roster_read_key(key) {
+        None => format!("'{key}' is not a roster read key (roster.living, roster.bunks, roster.bunks_free, roster.pool, roster.open, roster.departed.<{}>, roster.<member>).", DEPART_LIVES.join(" | ")),
+        Some(RosterRead::Member(id)) => {
+            let procedural = id.strip_prefix("recruit_").is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()));
+            let unit = v.get("units", id);
+            if procedural || !v.worlds.resolve(w, "characters", id).is_empty() || json::s(unit, "side") == "party" {
+                String::new()
+            } else {
+                format!("'{key}' names no member of this world (a character, a party unit or recruit_<n>).")
+            }
+        }
+        Some(_) => String::new(),
+    }
 }
 
 // ---- whole worlds ----

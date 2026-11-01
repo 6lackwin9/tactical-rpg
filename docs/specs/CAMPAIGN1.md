@@ -285,3 +285,111 @@ Save: version 13 (or the next free number; sequence with ROSTER1, RULESET1-D, EN
 
 - CAMPAIGN1-C (c9fbd8c): the defeat retreat as R4 in section 8, including its fallback: a `to` hub that cannot be
   entered falls back to the wake (`retreat_failed` log note).
+
+## As built (CAMPAIGN1-U slice 1, 2026-10-31)
+
+- W4: the spec's `campaign::hud` is `campaign::view::hud`, re-exported as `campaign::hud`. A meter chip shows its short
+  name before the value ("Alert 45%"); while a meter's icon is missing a lamp in the band tone's colour stands in.
+- W1: a missed `go_on` checkpoint (`checkpoint_missed`) also gets a notice; `run_over` gets the run-over screen instead
+  of a notice; `act_start` logs "Act N begins."; a trigger's notes are logged. Warnings still waiting when the run ends
+  are dropped (their lines are in the log).
+- W3: a refused marker fight puts the party back on the tile it stepped from and starts the encounter counter over, as
+  a flee (`explore::decline_fight`); after a Yes the party fights from that tile. A dialogue fight is asked about after
+  the choice ran: the talk is closed and the effects the choice already applied stay, whatever the answer. A roaming
+  fight on the region map, like a road fight, cannot be refused and gets the notice.
+- F4: STORYUI1 has no end card with a button row, so the screen plays the end's `card` vignette once and then draws a
+  plain card: "The run is over", the end's `text`, the three buttons. Act 0 has no act-start save (Load the act's start
+  stays off and says why).
+- F5: the act-start save is not written in a debug or sample game, as the autosave.
+
+## As built (CAMPAIGN1-TW, 2026-10-31)
+
+- T1 (user 2026-10-27: rule 1, warn): a repeatable trigger (`once` false) with an empty `when` re-arms never (an empty
+  `when` always holds), so it fires only once; the content check warns, not errors
+  (`rpgkit_content::check::campaign::trigger_warning`, in the world warnings), and the text points at a meter's
+  `inputs` for every-battle or every-day effects. No runtime change.
+- Tests: a damaged `campaign.armed` (not a list of text, an empty id, an id listed twice) is refused on load; the
+  `preview_battle` loss includes the defeat retreat's days (a deadline the retreat's day misses lists `lost`).
+
+## As built (CAMPAIGN1-SIM, 2026-11-01)
+
+- C5: `aegis sim deadlines [world=<id>] [losses=0..9]` (`rpgkit_sim` `deadlines.rs`; engine-only, not in the sim help,
+  no fights). Without `world=` it plans every campaign world with checkpoints; none: `DEADLINES: no world has campaign
+  checkpoints (nothing to plan)`. A world needs the defeat rule `retreat` with a `to` hub, else one line says so.
+- The model is CAMPAIGN1_TASKS 4.3's: the main quests are the world's quests tagged `main` or on the `main` track, in
+  data order, run as one chain from day 1 at the hub; each act's chain ends at the last quest its checkpoints name (the
+  act's last: no travel back). A quest's node is its first step's location, else that step's encounter's location.
+  Legs are planned on the full graph (route gates ignored) by the world map's own path search (`travel::best_path` over
+  `travel::all_legs`); the rest counts only where the rest rule's `where` allows it at the hub.
+- The best and worst day of a checkpoint is the day its quest is won (C1: the win counts); the table also prints each
+  mission's worst day once back at the hub and rested (`worst_home`), which is what section 4.3's hand numbers count
+  (on its graph: won on days 7, 18, 32; home on days 10, 22). Slack is the deadline less the worst day; below 0 the line
+  ends `X MISSED in the worst case`. A `met_when` checkpoint and one on a quest off the main chain are listed as not
+  modelled.
+
+## As built (CAMPAIGN1-U slice 2, 2026-10-31)
+
+- T2: the maps play `campaign.pending` when nothing is open, after the notices: the leading `{vignette}` items join the
+  story queue (`story::pull_pending`) and play first; then a `{battle}` head leaves the queue and starts as source
+  `trigger` (`Fight: <name>!`); it cannot be refused, so one an outcome of which would end the run gets the notice
+  over it (W3); it settles through `trigger::after_fight`. A `{dialogue}` head opens as the region map's conversation
+  (`DialogueRunner::open_scene`, `You speak with <speaker>.`); the world map has no talk box, so the item (and every
+  item behind it) waits there until the region map shows. A scene that cannot open is dropped, its reason in the log.
+  A running story sequence goes first; the stage does not play the campaign queue.
+- P3, W6: the bridge reads `purse::battle_mods` before the session starts and lowers each party member's round-1 AP
+  after the round's start (not below 0; guests and enemies keep theirs), so the round's start snapshot is retaken; the
+  note ("No Warded Tallow: -2 AP") is logged once and ends the battle's opening message.
+- R3, W3: a dialogue reply whose effects hold `rest` asks first (No as the default) when the rest is allowed and its
+  `days` would end the run (`preview_days`); No leaves the talk open; the kit's `DialogueRunner::choice_effects` reads
+  the reply's effects without picking it.
+- P1: log lines and tips use the purse's short names ("-1 Tallow", "12 Scrap"); the kit's default names keep today's
+  lower-case words, so the Ashlands lines and "Make camp (3 supplies)" are unchanged. The Camp button shows the rest
+  rule's `cost`, its tip the rest's days. `Out of <upkeep>: the roads were more dangerous.` only when zero upkeep
+  raises the road chance (`at_zero.road_pct` above 100), else `Out of <upkeep>.`. A retreat logs
+  `Defeated. The party falls back to <hub> (n days, -n <upkeep>).`; a `retreat_failed` event logs its text. The results popup's reward lines
+  ("Gold +12") still say Gold (open).
+- W5: the Travel tip (and a node's trip line) gives the trip in days in a campaign world, then "Arrive on day 9, 34
+  days left." (the first running visible countdown by HUD order; without one only the day). A node's tip lists its
+  `deadlines` lines ("Checkpoint: by day 14") in Arterial Red. The board pane does not exist yet: its `deadline` line
+  is STORYUI1-U2's.
+
+## As built (CAMPAIGN1-TM, 2026-11-01)
+
+- CMQ2 (a), travel modes: the world manifest field `travel_modes` (type `json`, `{}` = no modes; nearest world wins;
+  inert without `campaign`, X1): `{"default": <mode id> (the first mode when empty), "modes": [at most 4 {"id", "name"
+  1-24 (the id), "tip" 0-240, "days" 0-5 (0), "road_pct" 0-300 (100), "sure_when" (flag conditions, read keys
+  included; [] = never), "road_encounters" ([[encounter, weight]...])}]}`. The modes live on the world, not on routes:
+  no route field was added (open question).
+- A leg in mode `m` takes `time + m.days` days: the path search (`travel::path` and `best_path_with`, the fewest days
+  in the mode, then the fewest legs), the trip cost and the Travel tip, the clock, the upkeep (P2: `days x per_day`) and
+  the days tick all count them. The trip reads the mode once at its start. The road chance (`purse::road_chance`): zero
+  upkeep, the band modifiers, then times the mode's `road_pct` (capped at 100), then 100 while its `sure_when` holds (a
+  sure fight on any leg whose pool holds an encounter, even a road with no chance of its own); the mode's
+  `road_encounters` join the leg's pool after the band modifiers'. Scripted fights come first, as before.
+- M3: a leg input may name `modes` (empty = any mode and travel without one): `{"on": "leg", "modes": ["forced"],
+  "delta": 5}` is the forced march's Alert. `Cause::Leg` carries the mode id ("" without one).
+- State: `campaign.mode`, the picked mode; the default is kept as "" and not written, so a save holds the key only
+  for another mode; an older save loads in the default mode; a saved mode the world no longer has was a load problem
+  ("campaign.mode: 'x' is not a travel mode of this world."; since CAMPAIGN1-TM2 it loads in the default mode with a
+  load warning). No save version step.
+- `purse::travel_modes(d, w)`, `travel_mode(d, gs)` (the party's mode), `set_travel_mode(d, gs, id)` (refused without
+  modes, for an unknown id and once the run is over), `sure_fight`; `travel::mode_days`, `leg_days`. The map view
+  adds `mode` and each route's `days` only in a world with modes.
+- W3: the trip ask runs the trip's legs on a copy (`campaign::preview_trip`: the days, then the leg tick, per leg in the
+  mode now), so a forced leg's Alert that would reach Breach asks before the trip; like `preview_days` it rolls no road
+  fight and enters no node.
+- C5: `sim deadlines` plans every leg in the world's default mode (a fresh campaign travels in it; the first line adds
+  `legs in the travel mode <name> (+n days a leg)`); no `mode=` argument yet.
+- World map (game): the side panel's mode button (`world_map.mode`, "Travel: Stealth") cycles the modes in data order
+  and logs "Travel mode: Forced march."; its tip gives the mode's tip, its days a leg and the ambush change; the Travel
+  tip starts with the mode's name; the road labels show the leg's days in the mode. No button without modes.
+
+## As built (CAMPAIGN1-TM2, 2026-11-01)
+
+- Decision "Saves and data edits": a saved `campaign.mode` the world no longer has no longer refuses the load; the
+  save loads in the default mode and `save::decode` returns the load warning `campaign::mode_dropped_text(id)`
+  ("campaign.mode: 'x' is not a travel mode of this world. Loaded in the default mode."). The note rides on the
+  runtime field `Campaign::load_notes` (never saved, not compared) until `decode` takes it. A mode that is not text
+  is still a load problem.
+- The mode-days floor is one helper, `rpgkit_data::TravelMode::leg_days` (`days`, never below 0), used by
+  `travel::mode_days`, `travel::view`, `travel::travel` and `sim deadlines`.

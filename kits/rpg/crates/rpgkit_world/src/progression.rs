@@ -265,6 +265,9 @@ pub const RALLY_PCT: i64 = 25;
 pub const CAMP_COST: i64 = 3;
 pub const REFUSE_NOT_AT_NODE: &str = "Make camp on the world map.";
 pub const REFUSE_RESTED: &str = "Everyone is rested.";
+/// TERMS1: the upkeep's default word (`terms::UPKEEP`) with CAMP_COST: only a world without a campaign refuses a Camp
+/// with it, and there the purse, so the upkeep, has its default name (the campaign rest refuses with
+/// `campaign::purse::REFUSE_UPKEEP`); `tests/terms.rs` checks it against the register.
 pub const REFUSE_SUPPLIES: &str = "Making camp needs 3 supplies.";
 
 pub fn rally(max_hp: i64) -> i64 {
@@ -296,12 +299,16 @@ pub fn current_hp(d: &Data, state: &UnitState, world: &str) -> (i64, i64) {
     (if max > 0 { start_hp(max, state.hp_lost) } else { 0 }, max)
 }
 
+/// Whether a rest would change anything: a member has lost HP or carries `wounded` (ROSTER1 W3, CAMPAIGN1 R2; no
+/// classic member is ever wounded).
 pub fn hurt(party: &PartyState) -> bool {
-    party.members.iter().any(|m| m.hp_lost > 0)
+    party.members.iter().any(|m| m.hp_lost > 0 || m.has_condition(crate::roster::WOUNDED))
 }
 
-/// Every roster member back to full; the HP restored in total (max HP as the members fight in world `world`).
+/// Every roster member back to full; the HP restored in total (max HP as the members fight in world `world`). ROSTER1
+/// W3: every rest path comes here, so `roster::on_rest` clears `wounded` here too.
 pub fn rest(d: &Data, party: &mut PartyState, world: &str) -> i64 {
+    crate::roster::on_rest(party);
     let mut restored = 0;
     for m in party.members.iter_mut() {
         if m.hp_lost <= 0 {

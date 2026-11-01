@@ -312,8 +312,18 @@ pub fn debt_status(debt: i32) -> &'static str {
     }
 }
 
+/// The AP a round start gives `c` from `ap` (its AP at the round's end): `ap_regen` plus its bonus, capped at its
+/// max (`ap_regen` below 0: back to full). `roll_over` applies it; the AP forecast (INPUT1 AP1) reads it.
+pub fn regen_ap(c: &Unit, ap: i32, ap_regen: i32) -> i32 {
+    if ap_regen < 0 {
+        c.max_ap
+    } else {
+        c.max_ap.min(ap + ap_regen + c.ap_regen_bonus)
+    }
+}
+
 /// Round start: last round's statuses expire (multi-round ones count down), queued ones and AP-debt penalties take
-/// effect, then AP recovers. Returns the statuses now active.
+/// effect, then AP recovers (`regen_ap`). Returns the statuses now active.
 pub fn roll_over(c: &mut Unit, ap_regen: i32) -> Vec<String> {
     let st = &mut c.st;
     let carried: Vec<(String, i32)> = st.rounds_left.iter().filter_map(|(k, v)| (v - 1 > 0).then(|| (k.clone(), v - 1))).collect();
@@ -359,6 +369,6 @@ pub fn roll_over(c: &mut Unit, ap_regen: i32) -> Vec<String> {
     if !penalty.is_empty() {
         c.st.active.insert(penalty.to_string());
     }
-    c.ap = if ap_regen < 0 { c.max_ap } else { c.max_ap.min(c.ap + ap_regen + c.ap_regen_bonus) };
+    c.ap = regen_ap(c, c.ap, ap_regen);
     c.st.active.iter().cloned().collect()
 }
