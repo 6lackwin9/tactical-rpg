@@ -45,6 +45,15 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
   planned, not chosen, span): its fill at `GHOST_ALPHA` (45% of its alpha), a dashed outline on all four sides and its
   label in `DIM`; `timeline::ghost_fill(fill)` and `timeline::draw_ghost(ui, bar)` give a screen's own spans the same
   look. Off by default (every existing timeline draws as before).
+* **Pip gauge (INPUT1-AP):** `aegis_ui::pips::PipGauge` draws a budget planned against as a row of 4 x 6 px pips (1 px
+  gap; 12 pips take 59 px): a pip a point, or `pips::unit(max, cap)` points above the cap (counts rounded up,
+  `pips::count`). `PipGauge::planned(have, keep, next, max, cap)`: full pips up to `keep`, a ghost fill (the timeline's
+  `GHOST_ALPHA`) up to `next`, a solid outline up to `have`, dim slots above; `PipGauge::live(start, have, max, cap)`:
+  full up to `have`, hollow up to `start` (what was paid); a debt (`have < 0`) draws every pip as a slot with `-<n>`
+  before them; `.short(n)` turns every outline to the alert colour with `-<n>` after them. Levels are pips and may be
+  fractional while a screen animates them. `draw(ui, id, x, cy)` pushes one info widget (kind `pips`, its reading in
+  pip codes "F H Hg Sg S", the screen's hover card); `reading`, `pips`, `width`; `pips::samples()` are the UI
+  Gallery's states (game entry `pip_gauge`). Tests `aegis_ui/tests/pips.rs`.
 * **Vignette player (STORYUI1-E):** `aegis_ui::vignette` plays a reel of still cards (styles `image`, `text`, `title`,
   `line`) through fade in, typing, hold and fade out: a typewriter at the engine setting `text_speed` (`slow` 30,
   `normal` 60, `fast` 120 characters a second, `instant`; fast halves the fades, instant drops them), a cover fill of the

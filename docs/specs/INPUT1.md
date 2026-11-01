@@ -362,6 +362,37 @@ inspect panel's text audit), kit `rpgkit_battle/tests/picks.rs` (HK3, the round 
   screen's waiting ghost (`battle.rs` `Deferred`), so the preview and Confirm share one source; `hotkey_target` and
   `self_only` hold HK2-HK3's target rule.
 
+As built (INPUT1-AP, 2026-11-01: engine, kit and game; tests `aegis_ui/tests/pips.rs`, `rpgkit_battle/tests/picks.rs` (the AP shortfall), `battle.rs` `input1_tests` (the
+INPUT1-AP section), `gallery.rs` `the_pip_gauge_entry_shows_every_sample_state`; goldens and parity unchanged):
+
+- Engine `aegis_ui::pips`: `PipGauge::planned(now, left, next, max, cap)` is AP7 (counts in pips, rounded up, AP6),
+  `PipGauge::live(start, now, max, cap)` is AP10's look (full to the live AP, hollow to the AP held while the round was
+  planned, slots to `max`), `.short(n)` AP8's red and "`-<n>`" after the pips, a debt's "`-<n>`" before them; levels
+  are fractional pips while animating. Its reading ("F H Hg Sg S") is the widget's text and the agent link's
+  `ap_gauge.pips`. Gallery: `pip_gauge` (Kit) draws `pips::samples()` (the four rows, red, debt, 14 AP at 2 a pip, a
+  spending one) with their readings.
+- Battle screen: `strip.ap` is drawn under the round intent for the selected active party member from the kit's
+  `ap_forecast` (of the hovered row's preview or the waiting ghost's copies while one shows; no second AP rule). The
+  strip keeps the gauge's room (12 pips, `LABEL_GAP`, the width of "-00") whenever the round intent is on, selected
+  hero or not, so the controls do not shift; to fit at Extra large the blocks give up width down to 20 px each (26 in
+  classic) before the tactic menus cut.
+- AP3's shortfall is the kit's: `PickOption.ap_short` (host `pick_options` key `ap_short`) is set on a row refused for
+  its AP (IF6 d) as `n = cost - free`, `free` counted exactly as the refusal counts it (the AP left after the earlier
+  picks less the AP kept for a step after; below 0 with a debt), which is AP8's `-left` of the row's preview; every
+  "AP `<free>` < `<cost>`" refusal of a pick (skill and item rows, Move here, Step here after, and a pick whose steps
+  would eat the step after's AP) is built by one kit constructor that sets it. The gauge shows "`-<n>`" as given; a row
+  refused for another reason has none and does not turn the gauge red. A refused row is listed only before the first
+  target-holding pick (later menus drop refused rows), so a step after's reserve never reaches a menu row. With a debt
+  and an unpayable row both, only the debt's label shows (outlines red).
+- AP10: paid pips turn hollow, and the next planning's regained pips fill, over 150 ms (`AP_ANIM_MS`), linear in
+  pips so the rightmost goes first; picks and hovers while planning and the switch from planning to playback show at
+  once; skip animations or reduce motion: at once. The playback tip reads "AP `<now>` of `<max>`" and "Paid this
+  round: `<n>`".
+- AP9 and IS3: `ap_lines` adds "1 pip = `<u>` AP" when `max_ap` is above 12 (the inspect panel's line IS3 left
+  waiting); TV3 takes the same lines when INPUT1-T lands. State `ap_gauge` {unit, pips, red, label, label_side,
+  per_pip, slots} (null: hidden; no key in classic). The dummy-fight acceptance (`next` equals the next planning's AP)
+  stays the kit's test `rpgkit_battle/tests/picks.rs`.
+
 ## 8. The full timeline view (INPUT1-T)
 
 - TV1 (changed 2026-11-01, PB5). Key T (planning and playback, rule `round_intent` or any timeline battle) toggles an

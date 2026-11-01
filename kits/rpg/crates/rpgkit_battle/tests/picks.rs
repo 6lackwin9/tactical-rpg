@@ -621,3 +621,58 @@ fn a_round_change_previews_what_it_makes() {
     assert!(s.set_round(VANGUARD, &refused).is_err() && rip::preview_round(&s.w, &s.plan, VANGUARD, &refused).is_err(), "Assault takes no self target");
     assert_eq!(snap(&s), after, "a refused field leaves the battle as it was");
 }
+
+/// INPUT1-AP (AP3, AP8): a row refused for its AP carries `ap_short`, its cost less the AP free for it as the refusal
+/// counts it (the AP left after the earlier picks); a row refused for another reason or a payable row carries none.
+/// After a picked Move here the free AP is what the move left, so the shortfall is the cost less that (here 1), not the
+/// cost less the AP held (here 0).
+#[test]
+fn an_ap_refusal_carries_its_shortfall() {
+    let mut s = session();
+    place(&mut s.w, VANGUARD, V2::new(4, 4));
+    place(&mut s.w, FOOTMAN, V2::new(5, 4));
+    let hc_cost = ap_of(&s.w, VANGUARD, "tl_heavy_cleave");
+    s.w.units[VANGUARD].ap = hc_cost;
+    // the first-pick menu at full cost: payable, no shortfall
+    let hc = sk(&s, "tl_heavy_cleave");
+    let row = |s: &Session| rip::pick_options(&s.w, &s.plan, VANGUARD, foe(FOOTMAN)).into_iter().find(|o| o.picks == vec![hc.clone()]).expect("Heavy Cleave listed");
+    let r = row(&s);
+    assert_eq!((r.problem.clone(), r.ap_short), (None, None), "{r:?}");
+    // a picked Move here one tile (off the footman) spends 1 AP: Heavy Cleave is now 1 short
+    let tile = V2::new(4, 5);
+    pick(&mut s, VANGUARD, RoundTarget::Cell(tile), &[Pick::MoveHere(tile)]).unwrap();
+    let f = rip::ap_forecast(&s.w, &s.plan, VANGUARD);
+    assert_eq!(f.picked, 1, "the move is a pick");
+    let r = row(&s);
+    let free = hc_cost - f.picked;
+    assert_eq!(r.problem.as_deref(), Some(format!("AP {free} < {hc_cost}").as_str()));
+    assert_eq!(r.ap_short, Some(hc_cost - free), "cost less the AP free after the move: {r:?}");
+    assert_eq!(r.ap_short, Some(1));
+    assert_ne!(r.ap_short, Some(hc_cost - f.now), "not the cost less the AP held");
+    // a row refused for a reason other than AP: no shortfall
+    let other = rip::pick_options(&s.w, &s.plan, VANGUARD, foe(FOOTMAN)).into_iter().filter(|o| o.problem.as_deref().is_some_and(|p| !p.starts_with("AP "))).collect::<Vec<_>>();
+    assert!(other.iter().all(|o| o.ap_short.is_none()), "{other:?}");
+}
+
+/// INPUT1-AP (AP3, AP8): Move here (a move row) at too little AP carries its shortfall, the route's AP less the AP
+/// free; with an AP debt the debt counts too (the free AP below 0; the words show it from 0), and the "Move here, then"
+/// rows carry the move's shortfall.
+#[test]
+fn a_move_row_carries_its_shortfall_and_a_debt_counts() {
+    let mut s = session();
+    place(&mut s.w, VANGUARD, V2::new(4, 4));
+    let tile = V2::new(4, 2);
+    let menu = |s: &Session| rip::pick_options(&s.w, &s.plan, VANGUARD, RoundTarget::Cell(tile));
+    let route = menu(&s).into_iter().find(|o| o.picks == vec![Pick::MoveHere(tile)] && o.problem.is_none()).expect("Move here payable at full AP").ap;
+    assert!(route >= 1);
+    for now in [route - 1, -2] {
+        s.w.units[VANGUARD].ap = now;
+        let rows = menu(&s);
+        let mv = rows.iter().find(|o| o.picks == vec![Pick::MoveHere(tile)]).expect("Move here listed");
+        assert_eq!(mv.problem.as_deref(), Some(format!("AP {} < {route}", now.max(0)).as_str()), "at {now} AP");
+        assert_eq!(mv.ap_short, Some(route - now), "at {now} AP: {mv:?}");
+        for then in rows.iter().filter(|o| o.picks.len() == 2 && o.picks[0] == Pick::MoveHere(tile)) {
+            assert_eq!(then.ap_short, Some(route - now), "Move here, then: {then:?}");
+        }
+    }
+}

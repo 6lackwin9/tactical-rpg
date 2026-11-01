@@ -34,9 +34,10 @@ use emberwake_host::{Battle, Host};
 use serde_json::{json, Value};
 
 /// (id, name, group, what it shows). Battle panel ids are the battle screen's own panel names.
-const ENTRIES: [(&str, &str, &str, &str); 30] = [
+const ENTRIES: [(&str, &str, &str, &str); 31] = [
     ("kit", "Kit widgets", "Kit", "Every kit widget in its states; use them, the foot of the page says what happened."),
     ("vignette", "Vignette player", "Kit", "The engine's sample reel or a world's vignette: image, text, title and line cards with fades, typing, hold and skip."),
+    ("pip_gauge", "Pip gauge", "Kit", "The engine pip gauge in its states: kept, spent and next round's gain; red, a debt, two points a pip; numbers on hover."),
     ("portraits", "Portraits", "Art", "Every portrait with its sidecar, its effects and the cue rows: the review page of the portrait assets."),
     ("main_menu", "Main menu", "Screens", "The player's front door."),
     ("new_game", "New game", "Screens", "World cards and the start."),
@@ -732,7 +733,7 @@ impl Gallery {
                 if id == "battle" || ENTRIES[self.entry].2 == "Battle panels" {
                     let b = BattleScreen::arena(cx, None, &cx.encounter.clone());
                     cx.nav.push(Nav::Push(Box::new(b)));
-                } else if id != "kit" && id != "portraits" && (!NEEDS_GAME.contains(&id) || self.ensure_game(cx)) {
+                } else if !["kit", "portraits", "pip_gauge"].contains(&id) && (!NEEDS_GAME.contains(&id) || self.ensure_game(cx)) {
                     // a fresh one, so the preview keeps its own state
                     if let Some((screen, _)) = self.build(cx, id) {
                         cx.nav.push(Nav::Push(screen));
@@ -871,6 +872,27 @@ fn segment_detail(s: &Session, viewed: i32, track: &str, seg: &str) -> Vec<(Stri
         .unwrap_or_default()
 }
 
+/// INPUT1-AP: the Pip gauge entry (Kit): the engine's pip gauge alone, each sample state (`aegis_ui::pips::samples`)
+/// in a row with its name, the gauge (`gallery.pip.<k>`, its numbers on hover) and its reading, under a legend.
+fn draw_pip_gauges(ui: &mut Ui<GAct>, r: Rect, name: &str, about: &str) {
+    ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, name, TITLE, GOLD);
+    let nw = ui.p.text_w(name, TITLE).ceil() as i32;
+    ui.p.text_fit((r.x + 12 + nw) as f32, r.y as f32 + 3.0, about, SMALL, (r.w - nw - 16) as f32, DIM);
+    let mut y = r.y + 4 + ui.p.line_h(TITLE).ceil() as i32 + 3;
+    let legend = "F full: kept.  H hollow: spent by the plan.  Hg / Sg: a ghost fill, next round's gain.  S: a slot above what is held now.";
+    ui.p.text_fit(r.x as f32 + 4.0, y as f32, legend, SMALL, (r.w - 8) as f32, TEXT);
+    let row_h = (ui.p.line_h(BODY) + 6.0).ceil() as i32;
+    y += row_h;
+    let (label_w, gauge_w) = (210, 90);
+    for (k, (label, gauge)) in aegis_ui::pips::samples().into_iter().enumerate() {
+        ui.p.text_fit(r.x as f32 + 4.0, y as f32, label, BODY, label_w as f32 - 8.0, TEXT);
+        let cy = y + (ui.p.line_h(BODY) / 2.0).round() as i32;
+        gauge.draw(ui, &format!("gallery.pip.{k}"), r.x + label_w, cy);
+        ui.p.text_fit((r.x + label_w + gauge_w) as f32, y as f32, &gauge.reading(), SMALL, (r.w - label_w - gauge_w - 6) as f32, DIM);
+        y += row_h;
+    }
+}
+
 /// One unit of a snapshot in one line: "Warrior  HP 280/334  AP 8  Offensive  Haste".
 fn snap_line(name: &str, u: &UnitSnap) -> String {
     let mut line = format!("{name}  HP {}/{}  AP {}  {:?}", u.hp, u.max_hp, u.ap, u.stance);
@@ -924,6 +946,8 @@ impl Screen<GameCx> for Gallery {
             self.kit.draw(&mut ui, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4), GAct::Kit);
         } else if id == "portraits" {
             self.portraits.draw(&mut ui, cx, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4));
+        } else if id == "pip_gauge" {
+            draw_pip_gauges(&mut ui, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4), name, about);
         } else if id != "timeline" {
             // A screen or a battle panel: its name, what it is, Open, and the preview under them.
             ui.p.text(pane.x as f32 + 6.0, pane.y as f32 + 4.0, name, TITLE, GOLD);
@@ -1113,6 +1137,32 @@ mod tests {
         assert!(st["talk"]["dialogue"].as_str().is_some_and(|d| !d.is_empty()), "a talk is open: {}", st["message"]);
         let ws = sh.screen.widgets();
         assert!(["dialogue", "talk.backdrop"].iter().all(|id| ws.iter().any(|w| w["id"] == *id)), "the box over the battle");
+    }
+
+    /// INPUT1-AP: the Pip gauge entry (Kit, no game needed) draws every sample state of the engine's gauge with its
+    /// reading and hover card, Open does nothing, and its texts fit the pane at the four text sizes.
+    #[test]
+    fn the_pip_gauge_entry_shows_every_sample_state() {
+        use crate::hud::hud_tests::{frame, game_cx, gfx};
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut gallery = Gallery::new();
+        let i = ENTRIES.iter().position(|e| e.0 == "pip_gauge").expect("a pip gauge entry");
+        assert_eq!(ENTRIES[i].2, "Kit");
+        gallery.act(&mut cx, GAct::Entry(i));
+        let samples = aegis_ui::pips::samples();
+        for &(_, scale) in aegis_ui::screen::TEXT_SIZES.iter() {
+            let recs: Vec<aegis_ui::painter::TextRec> = frame(&mut gallery, &mut cx, &mut g, scale as f32).into_iter().filter(|r| r.x >= 110.0).collect();
+            let ws = gallery.widgets();
+            for (k, (_, gauge)) in samples.iter().enumerate() {
+                let w = ws.iter().find(|w| w["id"] == format!("gallery.pip.{k}")).unwrap_or_else(|| panic!("sample {k} at text size {scale}"));
+                assert_eq!(w["text"], json!(gauge.reading()));
+            }
+            let v = aegis_ui::text_audit::issues(&recs, W as f32, aegis_ui::ui::H as f32, &[]);
+            assert_eq!((v["counts"]["edge"].clone(), v["counts"]["overlap"].clone()), (json!(0), json!(0)), "text size {scale}: {v}");
+        }
+        gallery.act(&mut cx, GAct::Open);
+        assert!(cx.nav.is_empty(), "nothing to open");
+        assert_eq!(gallery.state(&cx)["entry"], json!("pip_gauge"));
     }
 
     /// STORYUI1-E: the vignette entry previews the engine's sample reel (it plays on as the gallery ticks) and Open

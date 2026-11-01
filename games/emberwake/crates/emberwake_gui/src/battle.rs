@@ -55,6 +55,12 @@ const TILE: i32 = 32;
 /// INPUT1 MR12: a dash (a skill with a position moving to it at its start) crosses its route in this many ms at 1x
 /// (the FX clock: the animation speed applies), playing the rig's `dash` clip, else its walk (until DASH1's clip).
 const DASH_MS: u64 = 250;
+/// INPUT1-AP (AP6): the AP gauge's most pips (the user's first try); a `max_ap` above it puts `ceil(max_ap / AP_PIPS)`
+/// AP in a pip.
+const AP_PIPS: i32 = 12;
+/// AP10: paid pips turn hollow, and regained ones fill, over this many ms (at once with skip animations or reduce
+/// motion).
+const AP_ANIM_MS: f32 = 150.0;
 /// The battle screen's panels by name (`BattleScreen::panels`; the UI Gallery's battle panel entries).
 pub const PANELS: [&str; 7] = ["strip", "party", "hero", "grid", "hostiles", "intel", "bar"];
 const GRID_X: i32 = 128;
@@ -383,6 +389,8 @@ struct Row {
     tip: Tip,
     /// IF3, IN6: picking the row changes the intent and drops intent-bound buffs (a red corner).
     warn: bool,
+    /// INPUT1 AP3, AP8: a skill-menu row refused for its AP: how many AP short it is (the kit's `PickOption::ap_short`).
+    ap_short: Option<i32>,
 }
 
 #[derive(Debug, Clone)]
@@ -1233,6 +1241,32 @@ pub struct BattleScreen {
     /// INPUT1 SL2, SL5, SL7, IS1: the inspected unit and the round it was inspected in (the intel panel is pinned on it
     /// until another inspect, Esc or that round's end).
     inspect: Option<(usize, i32)>,
+    /// INPUT1-AP (AP10): the AP gauge's animation (its member, round and look, the levels drawn from and to).
+    ap_anim: Option<ApAnim>,
+    /// AP10: the round and each party member's AP while it was planned (the gauge's hollow pips during playback).
+    round_ap: (i32, Vec<(usize, i32)>),
+    /// The AP gauge as last drawn (the agent link's `ap_gauge`; None: hidden).
+    ap_gauge: Option<Value>,
+}
+
+/// INPUT1-AP (AP10): the AP gauge's levels in pips (full, solid outline) moving from `from` to `to` over `AP_ANIM_MS`
+/// from `at`, for member `unit` in `round`, in the planning look or not.
+#[derive(Debug, Clone, Copy)]
+struct ApAnim {
+    unit: usize,
+    round: i32,
+    planning: bool,
+    from: (f32, f32),
+    to: (f32, f32),
+    at: Instant,
+}
+
+impl ApAnim {
+    /// The levels at `now`.
+    fn level(&self, now: Instant) -> (f32, f32) {
+        let k = (now.saturating_duration_since(self.at).as_secs_f32() * 1000.0 / AP_ANIM_MS).clamp(0.0, 1.0);
+        (self.from.0 + (self.to.0 - self.from.0) * k, self.from.1 + (self.to.1 - self.from.1) * k)
+    }
 }
 
 impl BattleScreen {
@@ -1302,6 +1336,9 @@ impl BattleScreen {
             positions_shown: Vec::new(),
             menu_row: 11,
             inspect: None,
+            ap_anim: None,
+            round_ap: (0, Vec::new()),
+            ap_gauge: None,
         }
     }
 
@@ -2345,6 +2382,7 @@ impl BattleScreen {
                 act: if party { RowAct::PartyTactic(i) } else { RowAct::HeroTactic(i) },
                 tip: vec![(TACTIC_LABELS[i].to_string(), GOLD), (help[i].to_string(), TEXT)],
                 warn: false,
+                ap_short: None,
             })
             .collect();
         let anchor = self.w.iter().find(|w| w.id == if party { "strip.party" } else { "strip.hero" }).map(|w| w.rect).unwrap_or_default();
@@ -2548,13 +2586,13 @@ impl BattleScreen {
         let opts = rip::pick_options(w, &s.plan, h, at);
         let mut rows: Vec<Row> = opts
             .iter()
-            .map(|o| Row { label: pick_label(s, h, &o.picks), detail: pick_detail(o), valid: o.problem.is_none(), act: RowAct::Pick(o.picks.clone()), tip: pick_tip(s, h, o), warn: !o.drops.is_empty() })
+            .map(|o| Row { label: pick_label(s, h, &o.picks), detail: pick_detail(o), valid: o.problem.is_none(), act: RowAct::Pick(o.picks.clone()), tip: pick_tip(s, h, o), warn: !o.drops.is_empty(), ap_short: o.ap_short })
             .collect();
         let held = rip::picks_of(w, h).iter().any(|p| p.holds_target());
         let round = w.round_states.get(&h).and_then(|r| r.target);
         if let RoundTarget::Unit(u) = at {
             if u != h && w.allies.contains(&u) {
-                rows.push(Row { label: format!("Select {}", w.units[u].name), detail: String::new(), valid: true, act: RowAct::SelectAlly(u), tip: vec![(format!("Select {}", w.units[u].name), GOLD), ("Plan this hero's round instead.".into(), TEXT)], warn: false });
+                rows.push(Row { label: format!("Select {}", w.units[u].name), detail: String::new(), valid: true, act: RowAct::SelectAlly(u), tip: vec![(format!("Select {}", w.units[u].name), GOLD), ("Plan this hero's round instead.".into(), TEXT)], warn: false, ap_short: None });
             }
         }
         let skill_rows = rows.iter().any(|r| matches!(r.act, RowAct::Pick(_)));
@@ -2801,7 +2839,7 @@ impl BattleScreen {
                 tip.push((r.clone(), FOE));
                 r
             };
-            rows.push(Row { label, detail, valid, act: RowAct::Step(step), tip, warn: false });
+            rows.push(Row { label, detail, valid, act: RowAct::Step(step), tip, warn: false, ap_short: None });
         }
         rows.sort_by_key(|r| !r.valid);
         rows
@@ -3049,6 +3087,8 @@ impl Screen<GameCx> for BattleScreen {
             out["player_target"] = json!(self.player_target);
             // IS1: the unit the intel panel is pinned on (null: it follows the hover)
             out["inspect"] = json!(self.inspected());
+            // INPUT1-AP: the AP gauge as last drawn (pips "F H Hg Sg S", red, its "-<n>" label and side; null: hidden)
+            out["ap_gauge"] = self.ap_gauge.clone().unwrap_or(Value::Null);
         }
         // RULESET1-U slice 5: the overlay groups' flags and, once the round is over, its summary (round intent only)
         if let Some(sess) = self.host.session.as_ref().filter(|x| ri::on(&x.w)) {
@@ -3342,14 +3382,49 @@ fn inspect_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
 }
 
 /// AP9 (INPUT1 7): a party member's AP numbers, one line each: "AP <now> of <max>", "Plan: <spent> (picked <picked>,
-/// auto-filled <filled>)", "Left: <left>", "Next round: +<gain> -> <next> (Rest +<rest_gain>)".
+/// auto-filled <filled>)", "Left: <left>", "Next round: +<gain> -> <next> (Rest +<rest_gain>)", and with more than one
+/// AP a pip (AP6) "1 pip = <u> AP".
 fn ap_lines(f: &rip::ApForecast) -> Vec<String> {
-    vec![
+    let mut lines = vec![
         format!("AP {} of {}", f.now, f.max),
         format!("Plan: {} (picked {}, auto-filled {})", f.spent, f.picked, f.filled),
         format!("Left: {}", f.left),
         format!("Next round: +{} -> {} (Rest +{})", f.gain, f.next, f.rest_gain),
-    ]
+    ];
+    lines.extend(pip_line(f.max));
+    lines
+}
+
+/// AP6, AP9: "1 pip = <u> AP" when a pip of the AP gauge stands for more than one AP (`max_ap` above `AP_PIPS`).
+fn pip_line(max: i32) -> Option<String> {
+    let u = aegis_ui::pips::unit(max, AP_PIPS);
+    (u > 1).then(|| format!("1 pip = {u} AP"))
+}
+
+/// INPUT1-AP (AP6-AP10): the AP gauge of party member `u`. Planning (`f` its forecast, of the hovered row's preview when
+/// one shows): kept pips full, the plan's hollow, next round's gain as ghost fills, red with "-<n>" after the pips for
+/// a hovered row it cannot pay (`short`); playback: its live AP full, what it paid since `start` hollow. A debt shows
+/// "-<n>" before ten slots. Its hover card: AP9's lines (playback: the live AP), "1 pip = <u> AP" above 12 AP.
+fn ap_gauge_of(w: &World, u: usize, f: Option<&rip::ApForecast>, short: Option<i32>, start: i32) -> aegis_ui::pips::PipGauge {
+    use aegis_ui::pips::PipGauge;
+    let unit = &w.units[u];
+    match f {
+        Some(f) => {
+            let g = PipGauge::planned(f.now, f.left, f.next, f.max, AP_PIPS).with_tip(ap_lines(f).into_iter().map(|l| (l, ALLY)).collect());
+            match short {
+                Some(n) => g.short(n),
+                None => g,
+            }
+        }
+        None => {
+            let mut tip: Tip = vec![(format!("AP {} of {}", unit.ap, unit.max_ap), ALLY)];
+            if start > unit.ap {
+                tip.push((format!("Paid this round: {}", start - unit.ap), TEXT));
+            }
+            tip.extend(pip_line(unit.max_ap).map(|l| (l, TEXT)));
+            PipGauge::live(start, unit.ap, unit.max_ap, AP_PIPS).with_tip(tip)
+        }
+    }
 }
 
 /// IS3: an inspected party member's picks and plan: "Picks: <pick>, ..." (or "Picks: none, the planner's round"), then
@@ -3582,6 +3657,34 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     };
     let (pw, pplan) = shown.unwrap_or((w, &s.plan));
     let previewing = shown.is_some();
+    // INPUT1-AP (AP5, AP10): the selected party member's AP gauge, under the round intent only; while planning each
+    // member's AP is kept for the playback's hollow pips
+    if planning {
+        g.round_ap = (s.current_round, w.allies.iter().map(|&a| (a, w.units[a].ap)).collect());
+    }
+    let gauge = match sel {
+        Some(u) if timeline && w.units[u].is_active() => {
+            let f = planning.then(|| rip::ap_forecast(pw, pplan, u));
+            // AP3: a hovered row the hero cannot pay: the kit's shortfall for it (IF6 d)
+            let short = hovered_pick.as_ref().filter(|((h, _), row)| planning && *h == u && !row.valid).and_then(|(_, row)| row.ap_short);
+            let start = g.round_ap.1.iter().find(|r| r.0 == u && g.round_ap.0 == s.current_round).map_or(w.units[u].ap, |r| r.1);
+            let mut gauge = ap_gauge_of(w, u, f.as_ref(), short, start);
+            // AP10: paid pips go hollow and regained ones fill over AP_ANIM_MS during playback and into the next
+            // round's planning; changes while planning (picks, hovers) and the switch to playback show at once
+            let target = (gauge.fill, gauge.edge);
+            let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false) || cx.settings.reduce_motion();
+            let anim = match g.ap_anim {
+                Some(a) if a.unit == u && a.to == target && a.planning == planning => a,
+                Some(a) if a.unit == u && !instant && ((!planning && !a.planning) || (planning && a.round != s.current_round)) => ApAnim { unit: u, round: s.current_round, planning, from: a.level(now), to: target, at: now },
+                _ => ApAnim { unit: u, round: s.current_round, planning, from: target, to: target, at: now },
+            };
+            g.ap_anim = Some(anim);
+            (gauge.fill, gauge.edge) = anim.level(now);
+            gauge.ghost = if planning { gauge.ghost.max(gauge.fill) } else { gauge.fill };
+            Some(gauge)
+        }
+        _ => None,
+    };
     let entries: Vec<(i32, i32, String, String, Option<String>, i32, i32)> = match sel {
         Some(u) if s.plan_confirmed => committed(s, u).into_iter().map(|c| (c.0, c.1, c.2, c.3, c.4, 0, 0)).collect(),
         Some(u) if w.units[u].is_active() => pplan
@@ -3639,8 +3742,12 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let (auto_w, clear_w, confirm_w) = (fit_w("Auto", 10.0, 34), fit_w("Clear", 10.0, 34), fit_w(label, 12.0, 60));
     let bx = 92;
     let blocks = s.def.total_blocks.max(1);
-    let room = W - 6 - bx - 6 - 8 - auto_w - clear_w - confirm_w;
-    let bw = ((room - party_w - hero_w) / blocks).clamp(26, 34);
+    // INPUT1-AP (AP6): under the round intent the blocks leave the AP gauge its 12 pips and a label ("-<n>") at their
+    // end, kept whether or not a hero is selected, so the strip does not shift
+    let gauge_w = if timeline { aegis_ui::pips::pips_w(AP_PIPS) + aegis_ui::pips::LABEL_GAP + aegis_ui::pips::label_w(&mut ui, "-00") } else { 0 };
+    let room = W - 6 - bx - 6 - 8 - auto_w - clear_w - confirm_w - if timeline { gauge_w + 2 } else { 0 };
+    // AP6: with the gauge the blocks give up width down to 20 each (their span labels cut, TEXTFIT1) before the menus
+    let bw = ((room - party_w - hero_w) / blocks).clamp(if timeline { 20 } else { 26 }, 34);
     let mut over = blocks * bw + party_w + hero_w - room;
     while over > 0 && (party_w > 82 || hero_w > 80) {
         let (big, floor) = if party_w - 82 >= hero_w - 80 { (&mut party_w, 82) } else { (&mut hero_w, 80) };
@@ -3741,6 +3848,18 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         arena_badge(&mut ui.p, Rect::new(bx + (b - 1) * bw, 6, bw - 1, 16));
     }
     let mut x = bx + blocks * bw + 6;
+    // AP6: the gauge (`strip.ap`) after the last block, before the tactic menus, centred on the strip lane
+    if timeline {
+        let gx = bx + blocks * bw + 4;
+        g.ap_gauge = gauge.map(|ga| {
+            ga.draw(&mut ui, "strip.ap", gx, 14);
+            let label = ga.before.clone().map(|l| (l, "before")).or(ga.after.clone().map(|l| (l, "after")));
+            json!({"unit": sel, "pips": ga.reading(), "red": ga.alert, "label": label.as_ref().map(|l| l.0.clone()), "label_side": label.map(|l| l.1), "per_pip": ga.unit, "slots": ga.slots})
+        });
+        x = gx + gauge_w + 4;
+    } else {
+        g.ap_gauge = None;
+    }
     ui.dropdown("strip.party", Rect::new(x, 6, party_w, 16), &party_label, Action::PartyMenu, planning, vec![("Party tactic".into(), GOLD), ("AI-drafts every hero with a tactic (you can edit the steps after).".into(), TEXT)]);
     x += party_w + 2;
     ui.dropdown("strip.hero", Rect::new(x, 6, hero_w, 16), &hero_label, Action::HeroMenu, planning && sel.is_some(), vec![("Hero tactic".into(), GOLD), ("AI-drafts the selected hero only.".into(), TEXT)]);
@@ -8811,6 +8930,262 @@ mod input1_tests {
         }
     }
 
+    // ---- INPUT1-AP: the AP pip gauge (INPUT1 AP3, AP5-AP10) ---------------------------------------------------------
+
+    /// The agent link's `ap_gauge` (null: hidden).
+    fn gauge(b: &BattleScreen, cx: &Cx) -> Value {
+        b.state(cx)["ap_gauge"].clone()
+    }
+
+    /// AP6, AP7 written out from the kit's forecast: `u = ceil(max / 12)` AP a pip above 12, every count divided by it
+    /// and rounded up; pip `i` full when `i <= left`, a ghost fill when `left < i <= next`, outlined when `i <= now`; a
+    /// debt (`now < 0`): every pip an empty slot.
+    fn pips_by_rule(f: &rip::ApForecast) -> String {
+        let u = if f.max > AP_PIPS { (f.max + AP_PIPS - 1) / AP_PIPS } else { 1 };
+        let c = |n: i32| if n <= 0 { 0 } else { (n + u - 1) / u };
+        (1..=c(f.max))
+            .map(|i| match (f.now >= 0, i <= c(f.left), c(f.left) < i && i <= c(f.next), i <= c(f.now)) {
+                (false, ..) => "S",
+                (true, true, _, _) => "F",
+                (true, false, true, true) => "Hg",
+                (true, false, false, true) => "H",
+                (true, false, true, false) => "Sg",
+                _ => "S",
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    fn forecast(b: &BattleScreen, u: usize) -> rip::ApForecast {
+        let s = b.host.session.as_ref().unwrap();
+        rip::ap_forecast(&s.w, &s.plan, u)
+    }
+
+    fn set_ap(cx: &Cx, b: &mut BattleScreen, u: usize, ap: i32, max: Option<i32>) {
+        let unit = &mut b.host.session.as_mut().unwrap().w.units[u];
+        unit.ap = ap;
+        if let Some(m) = max {
+            unit.max_ap = m;
+        }
+        b.after_change(cx);
+    }
+
+    /// AP5-AP7, AP9: while planning the selected party member's gauge (`strip.ap`) reads its kit forecast by AP7's rule,
+    /// its hover card holds AP9's lines; with no hero selected it is hidden.
+    #[test]
+    fn the_gauge_reads_the_kit_forecast_while_planning() {
+        let (mut cx, mut g, mut b) = planning();
+        let h = hero(&b);
+        let f = forecast(&b, h);
+        let st = gauge(&b, &cx);
+        assert_eq!(st["pips"], json!(pips_by_rule(&f)), "{f:?}");
+        assert_eq!((st["unit"].clone(), st["red"].clone(), st["label"].clone()), (json!(h), json!(false), Value::Null));
+        let wg = widget(&b, "strip.ap");
+        assert_eq!(wg.text, pips_by_rule(&f));
+        for l in ap_lines(&f) {
+            assert!(tip_has(wg, &l), "AP9 line {l} in {:?}", wg.tip);
+        }
+        // a pick changes the gauge at once (AP2)
+        let foe = foes_on_field(&b)[0];
+        next_to(&cx, &mut b, foe);
+        b.run(&mut cx, Action::UnitClick(foe));
+        let k = first_valid_pick(&b);
+        b.run(&mut cx, Action::Choose(k));
+        b.run(&mut cx, Action::ClosePopup);
+        drawn(&mut cx, &mut g, &mut b);
+        assert_eq!(gauge(&b, &cx)["pips"], json!(pips_by_rule(&forecast(&b, h))));
+        b.selected = None;
+        drawn(&mut cx, &mut g, &mut b);
+        assert_eq!(gauge(&b, &cx), Value::Null, "no hero selected: hidden");
+        assert!(b.w.iter().all(|x| x.id != "strip.ap"));
+    }
+
+    /// AP5: a classic battle draws no gauge and its state has no `ap_gauge` key.
+    #[test]
+    fn classic_draws_no_gauge() {
+        let (mut cx, mut g, mut b) = arena(None, "", false);
+        b.tick(&mut cx);
+        drawn(&mut cx, &mut g, &mut b);
+        assert!(b.w.iter().all(|x| x.id != "strip.ap"));
+        assert!(b.state(&cx).get("ap_gauge").is_none());
+    }
+
+    /// The hero next to a foe with the skill menu open on it and a skill row it can pay at full AP; the row's index
+    /// and AP (the kit option's).
+    fn payable_row(cx: &mut Cx, b: &mut BattleScreen) -> (usize, usize, i32) {
+        let (h, f) = (hero(b), foes_on_field(b)[0]);
+        next_to(cx, b, f);
+        b.run(cx, Action::UnitClick(f));
+        let s = b.host.session.as_ref().unwrap();
+        let opts = rip::pick_options(&s.w, &s.plan, h, RoundTarget::Unit(f));
+        let k = opts.iter().position(|o| o.problem.is_none() && o.ap >= 1 && matches!(o.picks[..], [rip::Pick::Skill { .. }])).expect("a payable skill row with an AP cost");
+        (f, k, opts[k].ap)
+    }
+
+    /// AP3, AP8: hovering a row the hero cannot pay (its AP one short of the row's) turns the gauge red with "-1" after
+    /// the pips; leaving it restores the gauge.
+    #[test]
+    fn an_unpayable_row_turns_the_gauge_red_with_its_shortfall() {
+        let (mut cx, mut g, mut b) = planning();
+        let h = hero(&b);
+        let (f, k, cost) = payable_row(&mut cx, &mut b);
+        b.run(&mut cx, Action::ClosePopup);
+        set_ap(&cx, &mut b, h, cost - 1, None);
+        b.run(&mut cx, Action::UnitClick(f));
+        let row = b.popup.as_ref().expect("the menu").rows[k].clone();
+        assert!(!row.valid && row.detail.starts_with("AP "), "the row is refused for its AP: {}", row.detail);
+        assert_eq!(row.ap_short, Some(1), "the kit's shortfall: the cost less the AP free");
+        drawn(&mut cx, &mut g, &mut b);
+        let r = widget(&b, &format!("popup.{k}")).rect;
+        b.draw(&mut cx, &mut g, (r.x + r.w / 2, r.y + r.h / 2), true);
+        let st = gauge(&b, &cx);
+        assert_eq!((st["red"].clone(), st["label"].clone(), st["label_side"].clone()), (json!(true), json!("-1"), json!("after")), "{st}");
+        assert_eq!(st["pips"], json!(pips_by_rule(&forecast(&b, h))), "the alert changes colours only");
+        drawn(&mut cx, &mut g, &mut b);
+        let st = gauge(&b, &cx);
+        assert_eq!((st["red"].clone(), st["label"].clone()), (json!(false), Value::Null), "leaving the row clears both");
+    }
+
+    /// AP8: a hero at -2 AP shows "-2" before its slots, every pip an empty slot.
+    #[test]
+    fn a_debt_shows_before_the_slots() {
+        let (mut cx, mut g, mut b) = planning();
+        let h = hero(&b);
+        set_ap(&cx, &mut b, h, -2, None);
+        drawn(&mut cx, &mut g, &mut b);
+        let st = gauge(&b, &cx);
+        let slots = st["slots"].as_i64().unwrap() as usize;
+        assert_eq!((st["label"].clone(), st["label_side"].clone()), (json!("-2"), json!("before")));
+        assert_eq!(st["pips"], json!(vec!["S"; slots].join(" ")));
+        assert_eq!(st["pips"], json!(pips_by_rule(&forecast(&b, h))));
+    }
+
+    /// AP6, AP9, IS3: a 14 AP hero shows 7 pips at 2 AP each; the hover card and the inspect panel say "1 pip = 2 AP".
+    #[test]
+    fn above_twelve_ap_a_pip_holds_two() {
+        let (mut cx, mut g, mut b) = planning();
+        let h = hero(&b);
+        set_ap(&cx, &mut b, h, 14, Some(14));
+        drawn(&mut cx, &mut g, &mut b);
+        let st = gauge(&b, &cx);
+        assert_eq!((st["slots"].clone(), st["per_pip"].clone()), (json!(7), json!(2)));
+        assert_eq!(st["pips"], json!(pips_by_rule(&forecast(&b, h))));
+        assert!(tip_has(widget(&b, "strip.ap"), "1 pip = 2 AP"));
+        let s = b.host.session.as_ref().unwrap();
+        let lines: Vec<String> = inspect_tip(s, h, b.selected, &s.enemy_intents(), &s.round_intents(), &[], true).into_iter().map(|l| l.0).collect();
+        assert!(lines.contains(&"1 pip = 2 AP".to_string()), "IS3: {lines:?}");
+        set_ap(&cx, &mut b, h, 10, Some(10));
+        assert!(!ap_lines(&forecast(&b, h)).iter().any(|l| l.starts_with("1 pip")), "at most 12 AP: no pip line");
+    }
+
+    /// AP10: in playback the gauge shows the live AP full and what the hero paid this round hollow (one pip an AP); a
+    /// payment turns its pips hollow over 150 ms (the frame it shows starts the change), at once with skip animations;
+    /// the next planning reads the forecast again.
+    #[test]
+    fn playback_drains_the_paid_pips() {
+        let (mut cx, mut g, mut b) = planning();
+        let h = hero(&b);
+        let start = w(&b).units[h].ap;
+        b.send(&cx, json!({"cmd": "resolve"}));
+        assert_eq!(b.session().phase, Phase::Replay, "{}", b.message);
+        drawn(&mut cx, &mut g, &mut b);
+        let live = w(&b).units[h].ap;
+        let max = w(&b).units[h].max_ap;
+        let paid: i32 = b.session().resolver.scheduled.iter().filter(|a| a.unit == h && !a.cancelled).map(|a| a.command.ap_cost + a.command.stance_switch_cost).sum();
+        let st = gauge(&b, &cx);
+        assert_eq!(st["pips"], json!(aegis_ui::pips::PipGauge::live(start, live, max, AP_PIPS).reading()));
+        let read = st["pips"].as_str().unwrap().to_string();
+        let count = |code: &str| read.split(' ').filter(|p| *p == code).count() as i32;
+        if max <= AP_PIPS && live >= 0 && live <= start {
+            assert_eq!((count("F"), count("H")), (live, start - live), "full to the live AP, hollow what was paid: {read}");
+            if paid > 0 && live == start - paid {
+                assert_eq!(count("H"), paid, "a command paying {paid} AP turns {paid} pips hollow");
+            }
+        }
+        // a payment shown mid-playback: the frame that sees it starts the change, 150 ms later it is done
+        let ap = w(&b).units[h].ap;
+        let (pay_from, pay_to) = if ap >= 2 { (ap, ap - 2) } else { (ap, ap) };
+        set_ap(&cx, &mut b, h, pay_to, None);
+        drawn(&mut cx, &mut g, &mut b);
+        if pay_from != pay_to {
+            assert_eq!(gauge(&b, &cx)["pips"], json!(read), "the change starts from the shown pips");
+            let a = b.ap_anim.as_mut().unwrap();
+            a.at = a.at.checked_sub(Duration::from_millis(200)).unwrap_or(a.at);
+            drawn(&mut cx, &mut g, &mut b);
+        }
+        let done = aegis_ui::pips::PipGauge::live(start, pay_to, max, AP_PIPS).reading();
+        assert_eq!(gauge(&b, &cx)["pips"], json!(done), "after 150 ms");
+        // skip animations: at once
+        cx.settings.v["skip_anim"] = json!(true);
+        set_ap(&cx, &mut b, h, pay_to.max(1) - 1, None);
+        drawn(&mut cx, &mut g, &mut b);
+        assert_eq!(gauge(&b, &cx)["pips"], json!(aegis_ui::pips::PipGauge::live(start, pay_to.max(1) - 1, max, AP_PIPS).reading()), "skip animations: at once");
+        // the next planning: the forecast again
+        b.run(&mut cx, Action::NextRound);
+        b.tick(&mut cx);
+        drawn(&mut cx, &mut g, &mut b);
+        if b.planning() && w(&b).units[h].is_active() {
+            assert_eq!(gauge(&b, &cx)["pips"], json!(pips_by_rule(&forecast(&b, h))));
+        }
+    }
+
+    /// A frame at text scale `scale` with the mouse at `mouse` (the text records kept).
+    fn frame_at(b: &mut BattleScreen, cx: &mut Cx, g: &mut Gfx, scale: f32, mouse: (i32, i32)) -> Vec<aegis_ui::painter::TextRec> {
+        g.fonts.scale = scale;
+        g.fonts.audit = Some(Vec::new());
+        b.draw(cx, g, mouse, true);
+        g.fonts.audit.take().unwrap_or_default()
+    }
+
+    /// AP6, TEXTFIT1: at 640x360 and the four text sizes the gauge sits inside the strip, after the last block and
+    /// before the tactic menus, with its label (the shortfall's and the debt's), and no strip text spills or is cut
+    /// (the blocks' span labels cut by design).
+    #[test]
+    fn the_strip_with_the_gauge_fits_at_every_text_size() {
+        let (mut cx, mut g, mut b) = planning();
+        let h = hero(&b);
+        let (f, k, cost) = payable_row(&mut cx, &mut b);
+        b.run(&mut cx, Action::ClosePopup);
+        let full = w(&b).units[h].ap;
+        for (state, ap) in [("plain", full), ("red", cost - 1), ("debt", -2)] {
+            set_ap(&cx, &mut b, h, ap, None);
+            b.popup = None;
+            if state == "red" {
+                b.run(&mut cx, Action::UnitClick(f));
+            }
+            for (_, scale) in aegis_ui::screen::TEXT_SIZES {
+                let scale = scale as f32;
+                frame_at(&mut b, &mut cx, &mut g, scale, (-500, -500));
+                let mouse = match (state, b.w.iter().find(|x| x.id == format!("popup.{k}"))) {
+                    ("red", Some(r)) => (r.rect.x + r.rect.w / 2, r.rect.y + r.rect.h / 2),
+                    _ => (-500, -500),
+                };
+                let recs = frame_at(&mut b, &mut cx, &mut g, scale, mouse);
+                let st = gauge(&b, &cx);
+                assert_eq!(st["label"].is_null(), state == "plain", "{state} scale {scale}: {st}");
+                let ga = widget(&b, "strip.ap").rect;
+                let strip = Rect::new(2, 2, W - 4, 24);
+                assert!(ga.x >= strip.x && ga.y >= strip.y && ga.x + ga.w <= strip.x + strip.w && ga.y + ga.h <= strip.y + strip.h, "{state} scale {scale}: the gauge {ga:?} in the strip");
+                let last = (1..=b.session().def.total_blocks).filter_map(|n| b.w.iter().find(|x| x.id == format!("strip.block{n}"))).map(|x| x.rect.x + x.rect.w).max().unwrap();
+                let party = widget(&b, "strip.party").rect;
+                assert!(ga.x >= last && ga.x + ga.w <= party.x, "{state} scale {scale}: blocks end {last}, gauge {ga:?}, party menu {party:?}");
+                let confirm = widget(&b, "strip.confirm").rect;
+                assert!(confirm.x + confirm.w <= W - 4, "{state} scale {scale}: the controls stay on the strip");
+                let boxes: Vec<(String, f32, f32, f32, f32)> = b.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
+                let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+                let widget_at = |x: f32, y: f32| boxes.iter().filter(|b| x >= b.1 && y >= b.2 && x < b.1 + b.3 && y < b.2 + b.4).min_by(|a, b| (a.3 * a.4).total_cmp(&(b.3 * b.4))).map(|b| b.0.clone());
+                let on_strip = |e: &Value| {
+                    let (x, y) = (e["at"][0].as_f64().unwrap_or(-1.0) as f32 + 0.5, e["at"][1].as_f64().unwrap_or(-1.0) as f32 + 0.5);
+                    y < 26.0 && widget_at(x, y).is_none_or(|id| !id.starts_with("strip.block"))
+                };
+                // the open menu's own texts (it may open over the strip) are the menu's audit
+                let menu = b.popup.as_ref().map(|p| p.rect(b.menu_row));
+                let off_menu = |e: &Value| menu.is_none_or(|m| !m.contains(e["at"][0].as_f64().unwrap_or(-1.0) as i32 + 1, e["at"][1].as_f64().unwrap_or(-1.0) as i32 + 1));
+                let ours: Vec<Value> = v["spill"].as_array().unwrap().iter().filter(|e| e["widget"].as_str().is_some_and(|w| w.starts_with("strip."))).chain(v["cut"].as_array().unwrap().iter().filter(|e| on_strip(e))).filter(|e| off_menu(e)).cloned().collect();
+                assert!(ours.is_empty(), "{state} scale {scale}: {ours:?}");
+            }
+        }
+    }
 
     /// User 2026-10-29: an Arena fight beyond classic shows the Scene Runner card's ruleset chip (same text: the
     /// ruleset's name, its switches, the reveal); a classic fight draws neither the chip nor any intent control and its

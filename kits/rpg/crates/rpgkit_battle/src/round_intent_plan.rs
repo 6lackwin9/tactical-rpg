@@ -969,6 +969,8 @@ impl RegularMove {
 /// INPUT1 IF2, ET1: one row of a target's skill menu: the picks it appends (two for "Move here, then X"), the intent and
 /// Maneuver kind it sets (None: neutral), the AP and blocks it adds (its implied moves included), the reason it cannot be
 /// picked now (None: it can) and the intent-bound buffs its intent change would drop (IN6, "Changing loses Riposte.").
+/// `ap_short`: for a row refused for its AP (IF6 d), how many AP it needs beyond what it may spend (its cost less the
+/// AP free for it: the AP left before it less the AP kept for a step after; INPUT1 AP3, AP8); None otherwise.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PickOption {
     pub picks: Vec<Pick>,
@@ -977,7 +979,46 @@ pub struct PickOption {
     pub ap: i32,
     pub blocks: i32,
     pub problem: Option<String>,
+    pub ap_short: Option<i32>,
     pub drops: Vec<String>,
+}
+
+/// A pick's refusal: its words and, for an AP refusal (IF6 d), how many AP short it is (INPUT1 AP3, AP8).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Refusal {
+    text: String,
+    ap_short: Option<i32>,
+}
+
+impl Refusal {
+    /// IF6 d: "AP <free> < <cost>" (the free AP shown from 0), `cost - free` short.
+    fn ap(free: i32, cost: i32) -> Refusal {
+        Refusal { text: format!("AP {} < {cost}", free.max(0)), ap_short: Some(cost - free) }
+    }
+}
+
+impl From<String> for Refusal {
+    fn from(text: String) -> Refusal {
+        Refusal { text, ap_short: None }
+    }
+}
+
+impl From<&str> for Refusal {
+    fn from(text: &str) -> Refusal {
+        Refusal { text: text.to_string(), ap_short: None }
+    }
+}
+
+impl From<Refusal> for String {
+    fn from(r: Refusal) -> String {
+        r.text
+    }
+}
+
+impl std::fmt::Display for Refusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.text)
+    }
 }
 
 /// INPUT1 AP1: a party member's AP for the round planned: `now` its AP, `spent` every planned command's AP (`picked` by
@@ -1116,12 +1157,20 @@ pub fn pick(w: &mut World, plan: &mut Plan, c: UnitId, at: RoundTarget, picks: &
         Err(e) => {
             *w = w0;
             plan.sequences = seq0;
-            (Err(e), Vec::new())
+            (Err(e.text), Vec::new())
         }
     }
 }
 
-fn pick_inner(w: &mut World, plan: &mut Plan, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Result<(), String> {
+/// `pick`'s steps: the picks set (`set_up_picks`), then `c`'s plan built from them.
+fn pick_inner(w: &mut World, plan: &mut Plan, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Result<(), Refusal> {
+    set_up_picks(w, c, at, picks)?;
+    build_picks(w, plan, c).map_err(|(_, e)| e)
+}
+
+/// IF6 a-b: checks `picks` against `c`'s round (intent, target, kind) and appends them, setting the intent, kind and
+/// target the first skill or item pick brings.
+fn set_up_picks(w: &mut World, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Result<(), String> {
     if !round_intent::on(w) {
         return Err("This battle has no round intents.".into());
     }
@@ -1192,7 +1241,7 @@ fn pick_inner(w: &mut World, plan: &mut Plan, c: UnitId, at: RoundTarget, picks:
     // picks replace the Manual mode (MM1-MM3 retire under INPUT1)
     w.round_states.entry(c).or_default().manual = false;
     set_picks(w, c, all);
-    build_picks(w, plan, c).map_err(|(_, e)| e)
+    Ok(())
 }
 
 /// INPUT1 IF7: removes `c`'s last pick and rebuilds (as `pick`); with no pick left the plan is `plan_unit`'s (the game
@@ -1233,7 +1282,7 @@ pub fn set_autofill(w: &mut World, plan: &mut Plan, on: bool) {
 /// Auto-fill off.
 fn rebuild_member(w: &mut World, plan: &mut Plan, c: UnitId) -> Result<(), String> {
     if !picks_of(w, c).is_empty() {
-        return build_picks(w, plan, c).map_err(|(_, e)| e);
+        return build_picks(w, plan, c).map_err(|(_, e)| e.text);
     }
     if !w.autofill {
         plan.set_steps(c, Vec::new());
@@ -1303,7 +1352,7 @@ struct Room<'a> {
 /// GH3, GH4, ET2-ET5, IF6 c-e: `c`'s plan from its picks in order (each with its implied moves), then (Auto-fill on)
 /// the planner's fill from the order and AS3's reserve, Rest on the blocks left, and the step after on the round's last
 /// block; the steps after the picks are ghost (GH1). Err: the first pick that does not fit and why.
-fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, String)> {
+fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refusal)> {
     let picks = picks_of(w, c);
     plan.set_steps(c, Vec::new());
     let b = Builder::new(w, c).ok();
@@ -1324,7 +1373,8 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Stri
         let room = Room { limit, reserve_ap, taken: &taken };
         let ap_free = st.ap_left - reserve_ap;
         let moved = regular_move(w, plan, c);
-        let fail = |e: String| (i, e);
+        let fail = |e: String| (i, Refusal::from(e));
+        let refuse = |r: Refusal| (i, r);
         match p {
             Pick::StepAfter(cell) => {
                 // ET4: one move block at the round's end, after a skill or item pick, while the round has no regular move
@@ -1350,7 +1400,7 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Stri
                 }
                 let ap = if pays { route.len() as i32 } else { 0 };
                 if ap > ap_free {
-                    return Err(fail(format!("AP {} < {ap}", ap_free.max(0))));
+                    return Err(refuse(Refusal::ap(ap_free, ap)));
                 }
                 after = Some(After { index: i, step: tagged(PlanStep::after_move(mv, *cell), STEP_AFTER, ""), ap });
             }
@@ -1372,16 +1422,16 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Stri
                 }
                 let ap = if pays { route.len() as i32 } else { 0 };
                 if ap > ap_free {
-                    return Err(fail(format!("AP {} < {ap}", ap_free.max(0))));
+                    return Err(refuse(Refusal::ap(ap_free, ap)));
                 }
-                place(w, plan, c, vec![tagged(PlanStep::go_to(mv, *cell), MOVE_HERE, "")], true, &room).map_err(fail)?;
+                place(w, plan, c, vec![tagged(PlanStep::go_to(mv, *cell), MOVE_HERE, "")], true, &room).map_err(refuse)?;
             }
             Pick::Rest => {
                 if free < 1 {
                     return Err(fail(taken(1)));
                 }
                 let rest = w.book().lowest(Kind::Rest);
-                place(w, plan, c, vec![tagged(PlanStep::self_skill(rest), &format!("pick {}", i + 1), "")], false, &room).map_err(fail)?;
+                place(w, plan, c, vec![tagged(PlanStep::self_skill(rest), &format!("pick {}", i + 1), "")], false, &room).map_err(refuse)?;
             }
             Pick::Skill { .. } | Pick::Item(_) => {
                 let Some(b) = b.as_ref() else { return Err(fail("Pick a round intent first.".into())) };
@@ -1389,8 +1439,8 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Stri
                 let tag = if opener { OPENER.to_string() } else { format!("pick {}", i + 1) };
                 // the opener brings its before-move (PL5) unless the round already moves (ET5)
                 let may_move = opener && moved.is_none();
-                let steps = b.pick_steps(plan, &st, p, may_move, &tag, ap_free, &room).map_err(fail)?;
-                place(w, plan, c, steps, may_move, &room).map_err(|e| if e == REACH { fail(b.reach_text(plan, &st, p)) } else { fail(e) })?;
+                let steps = b.pick_steps(plan, &st, p, may_move, &tag, ap_free, &room).map_err(refuse)?;
+                place(w, plan, c, steps, may_move, &room).map_err(|e| if e.text == REACH { fail(b.reach_text(plan, &st, p)) } else { refuse(e) })?;
             }
         }
     }
@@ -1416,7 +1466,7 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Stri
         let p = plan.add_step(w, c, a.step.clone(), false);
         if !p.is_empty() {
             plan.set_steps(c, Vec::new());
-            return Err((a.index, p));
+            return Err((a.index, p.into()));
         }
         rest_to(w, plan, c, REST, w.total_blocks);
     }
@@ -1429,7 +1479,7 @@ const REACH: &str = "\u{0}reach";
 
 /// Places a pick's `steps` (atomic): refused when a step does not compile, when it moves and `may_move` is false
 /// (REACH: ET5), when it spills past the room's last block (IF6 c) or leaves less than its AP (IF6 d, PL7).
-fn place(w: &World, plan: &mut Plan, c: UnitId, steps: Vec<Step>, may_move: bool, room: &Room) -> Result<(), String> {
+fn place(w: &World, plan: &mut Plan, c: UnitId, steps: Vec<Step>, may_move: bool, room: &Room) -> Result<(), Refusal> {
     let before = plan.compile(w, c);
     let mark = plan.steps_of(c).len();
     let n = before.entries.len();
@@ -1437,17 +1487,18 @@ fn place(w: &World, plan: &mut Plan, c: UnitId, steps: Vec<Step>, may_move: bool
         let p = plan.add_step(w, c, step, true);
         if !p.is_empty() {
             plan.truncate(c, mark);
-            return Err(p);
+            return Err(p.into());
         }
     }
     let st = plan.compile(w, c);
     let added = &st.entries[n.min(st.entries.len())..];
     let refuse = if !may_move && added.iter().any(|e| skill::kind(&w.cat.skills[e.skill]) == Kind::Move) {
-        Some(REACH.to_string())
+        Some(Refusal::from(REACH))
     } else if added.iter().any(|e| e.last_block(w) > room.limit) {
-        Some((room.taken)(added.iter().map(|e| e.last_block(w) - e.start_block + 1).sum()))
+        Some(Refusal::from((room.taken)(added.iter().map(|e| e.last_block(w) - e.start_block + 1).sum())))
     } else if st.ap_left < room.reserve_ap {
-        Some(format!("AP {} < {}", (before.ap_left - room.reserve_ap).max(0), before.ap_left - st.ap_left))
+        // the AP free before the pick (less the step after's) against what the pick spends
+        Some(Refusal::ap(before.ap_left - room.reserve_ap, before.ap_left - st.ap_left))
     } else {
         None
     };
@@ -1485,7 +1536,7 @@ impl Builder<'_> {
     /// The steps of a skill or item pick from the tile at `st` (IF6 a, c, d first: intent, blocks, AP): the opener's
     /// (with its before-move when `may_move`, PL5) or a follow-up's from where the plan leaves the unit.
     #[allow(clippy::too_many_arguments)]
-    fn pick_steps(&self, plan: &Plan, st: &SimState, p: &Pick, may_move: bool, tag: &str, ap_free: i32, room: &Room) -> Result<Vec<Step>, String> {
+    fn pick_steps(&self, plan: &Plan, st: &SimState, p: &Pick, may_move: bool, tag: &str, ap_free: i32, room: &Room) -> Result<Vec<Step>, Refusal> {
         let w = self.w;
         let u = &w.units[self.c];
         let pays = w.pays_ap(self.c);
@@ -1493,54 +1544,54 @@ impl Builder<'_> {
             Pick::Skill { skill: sid, .. } => {
                 let s = self.skill(*sid);
                 if round_intent::skill_intent(s) != self.intent.id() {
-                    return Err(format!("Only {} skills this round", self.intent.name()));
+                    return Err(format!("Only {} skills this round", self.intent.name()).into());
                 }
                 let need = s.blocks + w.recovery_of(self.c, s);
                 if !fits_before(st, need, room.limit) {
-                    return Err((room.taken)(need));
+                    return Err((room.taken)(need).into());
                 }
                 let ap = if pays { skill::ap_cost_by(s, Some(u), &w.ruleset) } else { 0 };
                 if ap > ap_free {
-                    return Err(format!("AP {} < {ap}", ap_free.max(0)));
+                    return Err(Refusal::ap(ap_free, ap));
                 }
                 let hp = command::hp_cost_problem(st.hp_left, command::hp_cost_of(w, s));
                 if !hp.is_empty() {
-                    return Err(hp);
+                    return Err(hp.into());
                 }
                 let meter = crate::meter::cost_problem(w, skill::meters_by(s, &w.ruleset), |m| st.meter(m));
                 if !meter.is_empty() {
-                    return Err(meter);
+                    return Err(meter.into());
                 }
                 if may_move {
                     // the opener's own steps, tagged as PL5's (only the opener may move)
-                    return self.skill_opener(plan, st, *sid);
+                    return Ok(self.skill_opener(plan, st, *sid)?);
                 }
                 if let Some(e) = self.reach_problem(plan, st, p) {
-                    return Err(e);
+                    return Err(e.into());
                 }
-                let Some(step) = self.follow_step(st, *sid) else { return Err(format!("{} can't act on {}", s.name, self.target_name())) };
+                let Some(step) = self.follow_step(st, *sid) else { return Err(format!("{} can't act on {}", s.name, self.target_name()).into()) };
                 Ok(vec![tagged(step, tag, "")])
             }
             Pick::Item(id) => {
-                let Some(item) = command::pouch_item(w, self.c, id) else { return Err(format!("{} carries no {id}.", u.name)) };
+                let Some(item) = command::pouch_item(w, self.c, id) else { return Err(format!("{} carries no {id}.", u.name).into()) };
                 if round_intent::item_intent(item) != self.intent.id() {
-                    return Err(format!("Only {} skills this round", self.intent.name()));
+                    return Err(format!("Only {} skills this round", self.intent.name()).into());
                 }
                 let need = item.use_blocks.max(1);
                 if !fits_before(st, need, room.limit) {
-                    return Err((room.taken)(need));
+                    return Err((room.taken)(need).into());
                 }
                 let ap = if pays { command::ITEM_AP } else { 0 };
                 if ap > ap_free {
-                    return Err(format!("AP {} < {ap}", ap_free.max(0)));
+                    return Err(Refusal::ap(ap_free, ap));
                 }
                 if may_move {
-                    return self.item_opener(plan, st, id);
+                    return Ok(self.item_opener(plan, st, id)?);
                 }
                 if let Some(e) = self.reach_problem(plan, st, p) {
-                    return Err(e);
+                    return Err(e.into());
                 }
-                let Some(t) = self.target_unit() else { return Err(format!("{} needs a unit to aim at.", item.name)) };
+                let Some(t) = self.target_unit() else { return Err(format!("{} needs a unit to aim at.", item.name).into()) };
                 Ok(vec![tagged(PlanStep::use_item(id, t), tag, "")])
             }
             _ => Ok(Vec::new()),
@@ -1696,14 +1747,14 @@ fn plan_copy(plan: &Plan) -> Plan {
 
 /// INPUT1 IF5: `c`'s steps and AP forecast as if `picks` were picked on `at`, on copies; nothing changes.
 pub fn preview_pick(w: &World, plan: &Plan, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Result<(Vec<Step>, ApForecast), String> {
-    let (w2, p2) = trial(w, plan, c, at, picks)?;
+    let (w2, p2) = trial(w, plan, c, at, picks).map_err(String::from)?;
     Ok((p2.steps_of(c), ap_forecast(&w2, &p2, c)))
 }
 
 /// INPUT1 IF5: copies of the world and the plan as if `picks` were picked on `at` (the battle screen's hover preview
 /// draws the strip from them); nothing changes.
 pub fn preview_plan(w: &World, plan: &Plan, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Result<(World, Plan), String> {
-    trial(w, plan, c, at, picks)
+    trial(w, plan, c, at, picks).map_err(String::from)
 }
 
 /// A scratch copy of `plan` (as `preview` makes): its steps, path penalties, goal preferences and AI pressure.
@@ -1711,7 +1762,7 @@ pub fn copy_plan(plan: &Plan) -> Plan {
     plan_copy(plan)
 }
 
-fn trial(w: &World, plan: &Plan, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Result<(World, Plan), String> {
+fn trial(w: &World, plan: &Plan, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Result<(World, Plan), Refusal> {
     let mut w2 = w.clone();
     let mut p2 = plan_copy(plan);
     pick_inner(&mut w2, &mut p2, c, at, picks)?;
@@ -1829,18 +1880,18 @@ pub fn pick_options(w: &World, plan: &Plan, c: UnitId, at: RoundTarget) -> Vec<P
         if held && (other || other_kind || picks.iter().any(|p| matches!(p, Pick::MoveHere(_)))) {
             continue;
         }
-        let (problem, ap, blocks) = match trial(w, plan, c, row_at, &picks) {
+        let (problem, ap_short, ap, blocks) = match trial(w, plan, c, row_at, &picks) {
             Ok((w2, p2)) => {
                 let now = picked_cost(&w2, &p2, c);
-                (None, now.0 - base.0, now.1 - base.1)
+                (None, None, now.0 - base.0, now.1 - base.1)
             }
-            Err(e) => (Some(e), 0, 0),
+            Err(e) => (Some(e.text), e.ap_short, 0, 0),
         };
         if held && problem.is_some() {
             continue;
         }
         let drops = intent.filter(|_| !held).map(|i| round_intent::would_drop(w, c, i)).unwrap_or_default();
-        out.push(PickOption { picks, intent, kind, ap, blocks, problem, drops });
+        out.push(PickOption { picks, intent, kind, ap, blocks, problem, ap_short, drops });
     }
     out
 }

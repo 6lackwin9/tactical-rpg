@@ -54,7 +54,7 @@
 //!   unpick {unit}                              remove the member's last pick (clear {unit} removes them all)
 //!   autofill {on}                              the party's Auto-fill setting (off: the free blocks Rest)
 //!   pick_options {unit, target?}               read-only: the menu rows on a target (picks, intent, kind, ap,
-//!                                              blocks, problem, drops)
+//!                                              blocks, problem, ap_short, drops)
 //!   log {since?}                               resolution log lines
 //!   history                                    the mutating requests so far (feed them back to replay) and the
 //!                                              checkpoints: the round outcome after every concluded round
@@ -919,7 +919,7 @@ fn pick_options_req(s: &Session, req: &Value) -> Value {
         .iter()
         .map(|o| {
             json!({"picks": o.picks.iter().map(|p| pick_json(s, p)).collect::<Vec<_>>(), "intent": o.intent.map(|i| i.id()), "kind": o.kind.map(intent::maneuver_id),
-                "ap": o.ap, "blocks": o.blocks, "problem": o.problem, "drops": o.drops})
+                "ap": o.ap, "blocks": o.blocks, "problem": o.problem, "ap_short": o.ap_short, "drops": o.drops})
         })
         .collect();
     json!({"ok": true, "rows": rows})
