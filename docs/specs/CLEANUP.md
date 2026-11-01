@@ -4,6 +4,8 @@ Newest pass on top. Candidate statuses: `proposed`, `confirmed (user <date>)`, `
 
 ## Pass 3: Godot parity off, classic as data, code bloat (2026-11-02, develop at 4efb30c)
 
+Confirmed by the user 2026-11-02, all as recommended (decision "Godot parity retired and cleanup pass 3 answers"); rows CLN-36 to CLN-53 in docs/TASKS.md.
+
 Scope (user 2026-11-02, via the planner): A. retire the Godot parity checks ("legacy Godot code can sit in legacy/ but
 legacy should not be part of the test builds anymore"); B. classic special cases (decision "INPUT1-M rule choices and
 the classic ruleset": classic is one ruleset template over the rule library, not a separate code path); C. other
