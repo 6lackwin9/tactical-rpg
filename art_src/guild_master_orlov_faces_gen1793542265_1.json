@@ -1,0 +1,28 @@
+{
+  "model": "imagen-3.0-generate-002",
+  "id": "guild_master_orlov",
+  "prompt": "Use the attached image as the reference: the same person: face, hair, outfit, colours, framing, lighting and pixel-art style; only the expression changes.\nA 2x2 grid of four pixel art character portrait variations for a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG portraits. 1:1 square image. No borders, no frame, no text, no dividers, no logo. Plain flat very dark background (#120e12) behind all figures. Each variation shows the same head-and-shoulders, three-quarter view of the character below, the head the same size and in the same place in every cell. Each variation utilizes a 16-bit pixel art style with clear dark outlines, hand-placed pixel clusters, a limited palette with 4 shades per color, and light dithering on metal and cloth. Strong cool key light from the upper left and a warm amber tallow-lantern rim light (#d97706) from the right. Same outfit, hair and colours in all four.\n\nKeep every accessory, scar, marking and piece of equipment exactly as in the reference in all four cells, including eyepieces, masks and jewellery.\n\nThe four variations are:\n- Top-Left: Neutral: the character's usual expression (the Mood line below), mouth closed, eyes looking right.\n- Top-Right: Hurt: in sharp pain: both eyes squeezed tightly shut with deep dark creases, brows pinched up and together, mouth pulled wide open in a grimace showing clenched teeth, strong dark lines around the eyes and mouth.\n- Bottom-Left: Angry: a deep scowl, brows drawn down hard into a V, nostrils flared, teeth bared or jaw clenched, eyes narrowed and glaring, cheeks flushed red; unmistakably furious, clearly different from Neutral.\n- Bottom-Right: Afraid: eyes wide, brows raised, mouth slightly open, head drawn in.\n\nCharacter: Guild-Master Orlov, the Ash-Crawl Butcher. Stylization pushed far: grotesque, a huge bulk filling the frame, the head small for the vast body, the neck lost in rolls of fat and muscle, massive sloping shoulders, heavy hanging jowls, tiny hard eyes sunk deep in fat, a broad flattened nose. A shaved head shining with grease, and a long, greasy black beard twisted into two thick braids bound with iron rings, hanging down over the harness. An iron-plated butcher's harness of boiled leather straps over a stained leather apron, a brass boiler on his back with a steam hose curling over his shoulder, large barbed iron meat hooks hanging from the harness at his chest. Warm tallow light glistening on his skin.\nMood: greedy, brutal, self-satisfied.\nMain colours: scavenged iron plates, boiled leather brown, tallow amber brass and light.",
+  "reference": "C:/dev/tactical-rpg-lane3/art_src/guild_master_orlov.png",
+  "prompts_file": "games/emberwake/docs/specs/PORTRAITFX1_FACES.md",
+  "time": "2026-11-01T14:01:00.000000+00:00",
+  "n": 1,
+  "references": [
+    "C:/dev/tactical-rpg-lane3/art_src/guild_master_orlov.png"
+  ],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "guild_master_orlov_faces_q1793527506",
+  "metadata": {
+    "asset_id": "guild_master_orlov",
+    "task": "PORTRAITFX1-XA",
+    "target": null,
+    "route": "faces",
+    "record": {
+      "prompts_file": "games/emberwake/docs/specs/PORTRAITFX1_FACES.md",
+      "kind": "faces"
+    }
+  },
+  "mark_cleared": true,
+  "kind": "faces",
+  "notes": "Verified resolution 1024x1024 and aspect ratio within 3% tolerance."
+}

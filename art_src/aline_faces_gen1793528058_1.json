@@ -1,0 +1,28 @@
+{
+  "model": "imagen-3.0-generate-002",
+  "id": "aline",
+  "prompt": "Use the attached image as the reference: the same person: face, hair, outfit, colours, framing, lighting and pixel-art style; only the expression changes.\nA 2x2 grid of four pixel art character portrait variations for a dark fantasy tactical RPG, in the style of detailed 16-bit SNES/GBA-era RPG portraits. 1:1 square image. No borders, no frame, no text, no dividers, no logo. Plain flat very dark background (#120e12) behind all figures. Each variation shows the same head-and-shoulders, three-quarter view of the character below, the head the same size and in the same place in every cell. Each variation utilizes a 16-bit pixel art style with clear dark outlines, hand-placed pixel clusters, a limited palette with 4 shades per color, and light dithering on metal and cloth. Strong cool key light from the upper left and a warm amber tallow-lantern rim light (#d97706) from the right. Same outfit, hair and colours in all four.\n\nKeep every accessory, scar, marking and piece of equipment exactly as in the reference in all four cells, including eyepieces, masks and jewellery.\n\nThe four variations are:\n- Top-Left: Neutral: the character's usual expression (the Mood line below), mouth closed, eyes looking right.\n- Top-Right: Hurt: in sharp pain: both eyes squeezed tightly shut with deep dark creases, brows pinched up and together, mouth pulled wide open in a grimace showing clenched teeth, strong dark lines around the eyes and mouth.\n- Bottom-Left: Angry: a deep scowl, brows drawn down hard into a V, nostrils flared, teeth bared or jaw clenched, eyes narrowed and glaring, cheeks flushed red; unmistakably furious, clearly different from Neutral.\n- Bottom-Right: Afraid: eyes wide, brows raised, mouth slightly open, head drawn in.\n\nCharacter: Sister Aline, Surgeon of the Apothecary's Slab. Stylization readable but cool: a long elegant neck, a long narrow face with high sharp cheekbones and hollow cheeks, large cool calculating eyes under straight dark brows, a small firm mouth. A tall, gaunt woman in her mid-twenties. Cropped soot-black hair, cut short and severe with a razor, ragged at the nape, one longer lock falling over her brow; bareheaded, no veil and no wimple. A clerical habit with its holy emblem cut away and defaced, under a stiff leather embalmer's apron stained with vitriol. A bandolier of silver scalpels and bone cannulas across the chest; sulfur-yellow stained fingertips on one hand raised near the strap. Faint early black-violet veins creeping up the side of her neck.\nMood: cold, pragmatic, unflinching.\nMain colours: bleached linen and damp basalt habit, boiled leather apron, polished steel scalpels, a hint of blight violet.",
+  "reference": "art_src/aline.png",
+  "prompts_file": "games/emberwake/docs/specs/PORTRAITFX1_FACES.md",
+  "time": "2026-11-01T10:07:46.981655+00:00",
+  "n": 1,
+  "references": [
+    "art_src/aline.png"
+  ],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "aline_faces_q1793527506",
+  "metadata": {
+    "asset_id": "aline",
+    "task": "PORTRAITFX1-XA",
+    "target": null,
+    "route": "faces",
+    "record": {
+      "prompts_file": "games/emberwake/docs/specs/PORTRAITFX1_FACES.md",
+      "kind": "faces"
+    }
+  },
+  "mark_cleared": true,
+  "kind": "faces",
+  "notes": "Verified resolution 1024x1024 and aspect ratio within 3% tolerance."
+}
