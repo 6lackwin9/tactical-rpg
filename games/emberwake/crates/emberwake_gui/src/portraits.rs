@@ -114,7 +114,7 @@ impl Who {
 }
 
 // The builders the surfaces call (PORTRAITFX1-D: the talk box, `of_character`; -R: the Character screen and the hub
-// list, -P: the battle panels); until each lands only the tests use them.
+// list, `of_member`; -P: the battle panels, `of_unit`); until each lands only the tests use them.
 #[cfg_attr(not(test), allow(dead_code))]
 impl Who {
     /// A world character (`screens::character_art`): keyed by its id; its tier, body and name.
@@ -363,6 +363,19 @@ pub(crate) mod tests {
             std::fs::write(root.join(aegis_core::assets::face_file(rel)), s.to_string()).unwrap();
         }
         root
+    }
+
+    /// PORTRAITFX1-R: `cx` with cue rows `rows` and its art a scratch layer holding each party member's portrait (the
+    /// first file of its chain), 96 px of `fill`, no sidecar.
+    pub(crate) fn roster_cx(mut cx: Cx, name: &str, rows: Vec<PortraitCue>, fill: [u8; 3]) -> Cx {
+        std::sync::Arc::get_mut(&mut cx.app.data).expect("the test owns the data").edit_cat(|c| c.portrait_cues = rows);
+        let d = cx.data.clone();
+        let mut rels: Vec<String> = cx.gs().party.members.iter().filter_map(|m| Who::of_member(&d, m).chain("").first().cloned()).collect();
+        rels.sort();
+        rels.dedup();
+        let roots = rels.iter().enumerate().map(|(i, rel)| layer(&format!("{name}_{i}"), rel, 96, fill, None)).collect();
+        cx.art = Art::layered(Layers::of(roots));
+        cx
     }
 
     fn arena(cx: &Cx) -> Host {

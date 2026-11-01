@@ -2,7 +2,7 @@
 //! time (Q / E cycle), tabs Stats, Level up, Skills and Gear. Drafts live here until Confirm writes them to the game
 //! state (level-up points are permanent and asked about first); switching member or tab drops a draft after asking.
 
-use aegis_ui::canvas::{rgba, Rect};
+use aegis_ui::canvas::{rgb, rgba, Rect};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
 use aegis_ui::widget_plumbing;
@@ -16,6 +16,10 @@ use emberwake_world::state::{off_hand_ok, UnitState, LOADOUT_SLOTS, POUCH_MAX};
 use emberwake_world::{progression, Data};
 use indexmap::IndexMap;
 use serde_json::{json, Value};
+
+/// PORTRAITFX1-R (6.2 row 2): the member's portrait side on the Character screen, at the frame's top-left (left of
+/// the member picker, above every tab's content).
+pub const PORTRAIT: i32 = 48;
 
 const TABS: [(&str, &str); 4] = [("stats", "Stats"), ("level_up", "Level up"), ("skills", "Skills"), ("gear", "Gear")];
 
@@ -92,6 +96,8 @@ pub struct Character {
     terms: Option<DeckTerms>,
     deck: Deck,
     deck_view: &'static str,
+    /// PORTRAITFX1-R: the shown member's portrait (surface `roster`); cycling members drops the old one's.
+    faces: crate::portraits::Faces,
     w: Vec<Widget<PAct>>,
 }
 
@@ -614,7 +620,7 @@ impl Character {
         let first = gs.party.members.first().map(|m| m.id.clone()).unwrap_or_default();
         let member = if gs.party.member(member).is_some() { member.to_string() } else { first };
         let tab = TABS.iter().find(|t| t.0 == tab).map(|t| t.0).unwrap_or("stats");
-        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", w: Vec::new() }
+        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", faces: crate::portraits::Faces::default(), w: Vec::new() }
     }
 
     fn m<'a>(&self, cx: &'a Cx) -> &'a UnitState {
@@ -1247,6 +1253,14 @@ impl Screen<GameCx> for Character {
         ui.p.text(320.0 - pw as f32 / 2.0 - 10.0, 57.0, "Q", BODY + 1.0, DIM);
         ui.button_full("character.member", Rect::new(320 - pw / 2, 53, pw, 17), &pick, PAct::Member(1), true, true, BODY + 1.0, tip("Next member (E)", "Q / E cycle the party."));
         ui.p.text(320.0 + pw as f32 / 2.0 + 4.0, 57.0, "E", BODY + 1.0, DIM);
+        // PORTRAITFX1-R: the member's portrait (its carried HP and conditions hold the state rows; the initial without a
+        // file)
+        self.faces.begin();
+        let pr = Rect::new(fr.x + 10, 44, PORTRAIT, PORTRAIT);
+        ui.p.panel(pr, rgb(22, 30, 48), BORDER, 2.0);
+        let (who, look) = crate::hub::member_portrait(&d, cx.gs(), &m);
+        self.faces.draw(&mut ui.p, cx, &who, &look, "roster", pr);
+        ui.push("character.portrait", "portrait", crate::hub::member_name(cx, &m), pr, true, false, None, Vec::new());
         for (i, (id, label)) in TABS.iter().enumerate() {
             let label = if *id == "level_up" { format!("{label} ({unspent})") } else { label.to_string() };
             ui.tab(&format!("character.tab.{id}"), Rect::new(174 + i as i32 * 74, 78, 70, 18), &label, PAct::Tab(id), self.tab == *id);
@@ -1267,6 +1281,11 @@ impl Screen<GameCx> for Character {
         let text = hovered.unwrap_or_else(|| if self.detail.is_empty() { "Move to a row to read what it does.".into() } else { self.detail.clone() });
         ui.para(30, 279, 580, &text, BODY, TEXT);
         self.w = ui.widgets;
+    }
+
+    /// PORTRAITFX1 4.5: the portrait's clock moves by the frame's wall time (at most 100 ms a frame).
+    fn tick(&mut self, _cx: &mut Cx) {
+        self.faces.tick();
     }
 
     fn key(&mut self, cx: &mut Cx, k: Key) {
@@ -1352,7 +1371,7 @@ impl Screen<GameCx> for Character {
     }
 
     fn state(&self, cx: &Cx) -> Value {
-        let mut out = json!({"member": self.member, "tab": self.tab, "draft": self.draft.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<String, Value>>(), "has_draft": self.has_draft(cx)});
+        let mut out = json!({"member": self.member, "tab": self.tab, "draft": self.draft.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<String, Value>>(), "has_draft": self.has_draft(cx), "portraits": self.faces.state()});
         if let (true, Some(t)) = (self.tab == "skills", &self.terms) {
             let shown = t.shown(&self.deck);
             out["deck"] = deck_json(&self.deck);
@@ -2567,5 +2586,97 @@ mod tests {
                 assert_eq!(v["counts"][k], json!(0), "stats tab at {size}: {v}");
             }
         }
+    }
+}
+
+/// PORTRAITFX1-R (docs/specs/PORTRAITFX1.md 6.2 row 2, PORTRAITFX1_TASKS 1.6 R1-R3): the Character screen's portrait.
+#[cfg(test)]
+mod portrait_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx};
+    use crate::portraits::tests::{roster_cx, row};
+    use aegis_ui::fx::Clock;
+    use aegis_ui::portrait_fx::EASE_MS;
+    use aegis_ui::screen::TEXT_SIZES;
+
+    /// The shown member's portrait rect.
+    fn portrait_rect(c: &Character) -> Rect {
+        c.w.iter().find(|w| w.id == "character.portrait").expect("the portrait's widget").rect
+    }
+
+    /// R1 and R3: on every tab at every text size the portrait is 48 px inside the frame at its top-left (left of the
+    /// member picker), overlaps no widget and no text, draws the member's file; the screen reads clean (TEXTFIT1).
+    #[test]
+    fn r1_r3_the_member_portrait_sits_clear_on_every_tab() {
+        let mut cx = roster_cx(game_cx(), "party_r1", Vec::new(), [200, 80, 40]);
+        let member = cx.gs().party.members[0].id.clone();
+        let fr = Rect::new(16, 16, 608, 328);
+        let mut g = gfx();
+        for (tab, _) in TABS {
+            let mut c = Character::new(&cx, &member, tab);
+            for (size, scale) in TEXT_SIZES {
+                let recs = frame(&mut c, &mut cx, &mut g, scale as f32);
+                let pr = portrait_rect(&c);
+                assert_eq!((pr.w, pr.h), (PORTRAIT, PORTRAIT), "{tab} at {size}");
+                assert!(pr.x > fr.x && pr.y > fr.y + 24 && pr.x + pr.w < fr.x + fr.w && pr.y + pr.h < fr.y + fr.h, "{tab} at {size}: {pr:?} inside the frame, below its title");
+                let picker = c.w.iter().find(|w| w.id == "character.member").expect("the picker").rect;
+                assert!(pr.x + pr.w < picker.x, "{tab} at {size}: left of the member picker");
+                for w in c.w.iter().filter(|w| w.id != "character.portrait") {
+                    let x = pr.intersect(w.rect);
+                    assert!(x.w <= 0 || x.h <= 0, "{tab} at {size}: the portrait {pr:?} overlaps {} {:?}", w.id, w.rect);
+                }
+                let on = recs.iter().find(|r| !r.clipped && r.x < (pr.x + pr.w) as f32 && r.x + r.w > pr.x as f32 && r.y < (pr.y + pr.h) as f32 && r.y + r.h > pr.y as f32);
+                assert!(on.is_none(), "{tab} at {size}: text on the portrait: {:?}", on.map(|r| &r.text));
+                assert!(c.faces.get(&format!("member:{member}")).and_then(|f| f.composed()).is_some(), "{tab} at {size}: the member's file drew");
+                let boxes: Vec<(String, f32, f32, f32, f32)> = c.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
+                let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+                for k in ["edge", "overlap", "spill"] {
+                    assert_eq!(v["counts"][k], json!(0), "{tab} at {size}: {v}");
+                }
+            }
+        }
+    }
+
+    /// R2: a wounded member's portrait holds the `wounded` row's desaturate 0.35; E draws the next member's portrait (not
+    /// wounded: no desaturate) and the old one's `PortraitFx` is dropped at the next frame; Q goes back. The screen's
+    /// `state` lists only the shown member's portrait.
+    #[test]
+    fn r2_a_wounded_member_desaturates_and_cycling_drops_the_old_portrait() {
+        let rows = vec![row(json!({"id": "wounded", "trigger": "condition", "condition": "wounded", "effect": "desaturate", "intensity": 0.35}))];
+        let mut cx = game_cx();
+        let mut copy = cx.gs().party.members[0].clone();
+        copy.id = "test_member_r2".into();
+        cx.gs_mut().party.members.push(copy);
+        let mut cx = roster_cx(cx, "party_r2", rows, [200, 80, 40]);
+        let first = cx.gs().party.members[0].id.clone();
+        cx.gs_mut().party.member_mut(&first).unwrap().add_condition(emberwake_world::roster::WOUNDED);
+        let mut g = gfx();
+        let mut c = Character::new(&cx, &first, "stats");
+        let mut draw_at = |c: &mut Character, cx: &mut Cx, t: u64| {
+            c.faces.clock = Clock { ms: t as f64, hold: 0.0 };
+            frame(c, cx, &mut g, 1.0);
+        };
+        for t in [1000, 1000 + EASE_MS] {
+            draw_at(&mut c, &mut cx, t);
+        }
+        let now = c.faces.now();
+        let key = format!("member:{first}");
+        assert!(c.faces.get(&key).and_then(|f| f.level("desaturate", now)).is_some_and(|l| (l.i - 0.35).abs() < 1e-3), "wounded: desaturate 0.35");
+        c.key(&mut cx, Key::Char('e'));
+        let next = c.member.clone();
+        assert_ne!(next, first, "E shows the next member");
+        for t in [2000, 2000 + EASE_MS] {
+            draw_at(&mut c, &mut cx, t);
+        }
+        let now = c.faces.now();
+        let next_key = format!("member:{next}");
+        assert!(c.faces.get(&next_key).is_some_and(|f| f.composed().is_some() && f.level("desaturate", now).is_none()), "the new member's portrait, not wounded");
+        assert!(c.faces.get(&key).is_none(), "the old member's portrait is dropped");
+        let listed: Vec<Value> = c.state(&cx)["portraits"].as_array().cloned().unwrap_or_default();
+        assert!(listed.len() == 1 && listed[0]["key"] == json!(next_key), "{listed:?}");
+        c.key(&mut cx, Key::Char('q'));
+        draw_at(&mut c, &mut cx, 3000);
+        assert_eq!(c.member, first, "Q goes back");
+        assert!(c.faces.get(&key).is_some(), "the first member's portrait again");
     }
 }

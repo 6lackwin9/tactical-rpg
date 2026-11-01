@@ -432,3 +432,22 @@ frames for common portraits; animated region-map tokens.
   `state` gains `portraits`.
 - At text size Normal on a 1x canvas the 64 px talk box portrait is the reduced tier (no breath: rim flicker and blinks
   only); from 2x up it is full (4.6).
+
+## 14. Build notes (PORTRAITFX1-R, 2026-11-01)
+
+- Character screen (`party.rs`): the shown member's portrait at (frame x + 10, 44), 48 px (`PORTRAIT`), on the talk
+  box's dark panel: inside the frame below its title, left of the member picker and above every tab's content (no tab
+  draws above y 100), so it overlaps no widget on any tab at any text size. One `portraits::Faces` per screen (`begin`
+  at the top of the draw, `tick` in the screen's tick); Q / E draw the next member's portrait and `begin` drops the old
+  one's `PortraitFx` at the next frame. At text size Normal on a 1x canvas it is the reduced tier (rim flicker and
+  blinks, no breath); from 2x up it is full.
+- Game menu (`hub.rs`): each party row draws a 20 px portrait (`ROW_PORTRAIT`) at its left and its three lines (name,
+  class and level, HP with the wounded mark) start 22 px in (`ROW_INDENT`); the column grows by the indent, so the
+  name fits 22 px shorter than the column and the class and HP lines keep their full width (the portrait is taller than
+  one line, so only moving the name would put it over the class line). The minimal tier: a wounded member's
+  desaturate shows, no motion.
+- Both surfaces use `hub::member_portrait`: `Who::of_member` keyed `member:<id>` (two members playing one character,
+  as test copies do, never share holds) and `look_of_member` (carried HP, the ROSTER1 conditions). Widgets
+  `character.portrait` and `hub.portrait.<member id>` (kind `portrait`, no action, no hover); both screens' `state`
+  gains `portraits`. A member without a file draws the initial letter (the Character screen on the panel, the menu on
+  the box).

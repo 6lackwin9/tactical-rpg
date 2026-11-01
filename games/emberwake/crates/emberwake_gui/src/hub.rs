@@ -10,6 +10,8 @@ use aegis_core::json::{self, s, s_or, Dict};
 use emberwake_world::state::{GameState, UnitState};
 use emberwake_world::{progression, quest, roster, save};
 use serde_json::{json, Value};
+use crate::portraits::{Faces, Who};
+use emberwake_battle::portrait::Look;
 
 pub fn member_name(cx: &Cx, m: &UnitState) -> String {
     progression::display_name(&cx.data, m)
@@ -46,6 +48,20 @@ pub fn wounded_tip(cx: &Cx, m: &UnitState) -> String {
     let (_, field, _) = field_hp(cx, m);
     format!("Fights with {field} of {full} max HP until the party rests.")
 }
+
+/// PORTRAITFX1-R (6.2 row 2, surface `roster`): party member `m`'s portrait and the look its state rows read (the HP
+/// its save carries, its ROSTER1 conditions: a wounded member desaturates). Keyed `member:<id>` (two members never
+/// share a portrait's holds, whichever character they play); the chain and the initial are the member's
+/// (`Who::of_member`).
+pub fn member_portrait(d: &emberwake_world::Data, gs: &GameState, m: &UnitState) -> (Who, Look) {
+    let mut who = Who::of_member(d, m);
+    who.key = format!("member:{}", m.id);
+    (who, crate::portraits::look_of_member(d, gs, m))
+}
+
+/// The hub party list's portrait side (PORTRAITFX1 6.2: 20 px left of each name) and the indent of the row's lines.
+pub const ROW_PORTRAIT: i32 = 20;
+pub const ROW_INDENT: f32 = 22.0;
 
 /// JournalModel.reward_lines: XP, items, passives, skills, gold.
 pub fn reward_lines(cx: &Cx, rewards: &Dict) -> Vec<String> {
@@ -94,6 +110,8 @@ pub enum HubAct {
 #[derive(Default)]
 pub struct Hub {
     w: Vec<Widget<HubAct>>,
+    /// PORTRAITFX1-R: the party list's portraits (surface `roster`), on the menu's own clock.
+    faces: Faces,
 }
 
 impl Hub {
@@ -147,6 +165,7 @@ impl Screen<GameCx> for Hub {
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<HubAct> = Ui::new(g, mouse, live);
         ui.p.fill(Rect::new(0, 0, W, H), rgba(0, 0, 0, 110));
+        self.faces.begin();
         let gs = cx.gs().clone();
         let fr = Rect::new(95, 25, 450, 310);
         ui.frame(fr, &cx.world_name(&gs.world_id), true);
@@ -155,7 +174,9 @@ impl Screen<GameCx> for Hub {
         let mut rows: Vec<&UnitState> = gs.party.members.iter().filter(|m| active.contains(&m.id)).collect();
         rows.extend(gs.party.members.iter().filter(|m| !active.contains(&m.id)));
         // ROSTER1-U: the HP a member takes the field with (a wounded one's cut max, W2) and its mark; the box grows with
-        // the widest line and takes a second column past four members (bunks above the party max, BK1)
+        // the widest line and takes a second column past four members (bunks above the party max, BK1); PORTRAITFX1-R: a
+        // 20 px portrait at the row's left, its three lines indented 22 px (the column grows by the indent, so the name
+        // fits 22 px shorter than the column and the class and HP lines keep their width)
         let step = 13f32.max(ui.p.line_h(BODY + 1.0).ceil());
         let row_h = (step * 3.0 + 3.0) as i32;
         let lines: Vec<(String, (i64, i64, bool))> = rows.iter().map(|m| (format!("{}  Lv {}", class_name(cx, m), m.level(&cx.data)), field_hp(cx, m))).collect();
@@ -166,7 +187,7 @@ impl Screen<GameCx> for Hub {
             let hp_w = ui.p.text_w(&format!("HP {hp} / {max}"), BODY + 1.0) + if *wounded { gap + ui.p.text_w(mark, BODY + 1.0) } else { 0.0 };
             col_w = col_w.max(ui.p.text_w(class_line, BODY + 1.0).max(hp_w) + 6.0);
         }
-        let col_w = col_w.ceil() as i32;
+        let col_w = (col_w + ROW_INDENT).ceil() as i32;
         let cols = if rows.len() > 4 { 2 } else { 1 };
         let per_col = rows.len().div_ceil(cols);
         let bh = 4 + per_col as i32 * row_h;
@@ -176,7 +197,12 @@ impl Screen<GameCx> for Hub {
             let x = (bx.x + (i / per_col) as i32 * col_w) as f32 + 3.0;
             let y = bx.y as f32 + 3.0 + (i % per_col) as f32 * row_h as f32;
             let on = active.contains(&m.id);
-            ui.p.text_fit(x, y, &member_name(cx, m), BODY + 1.0, col_w as f32 - 6.0, if on { INFO } else { DIM });
+            let (who, look) = member_portrait(&cx.data, &gs, m);
+            let pr = Rect::new(x as i32, y as i32, ROW_PORTRAIT, ROW_PORTRAIT);
+            self.faces.draw(&mut ui.p, cx, &who, &look, "roster", pr);
+            ui.push(format!("hub.portrait.{}", m.id), "portrait", member_name(cx, m), pr, true, false, None, Vec::new());
+            let x = x + ROW_INDENT;
+            ui.p.text_fit(x, y, &member_name(cx, m), BODY + 1.0, col_w as f32 - 6.0 - ROW_INDENT, if on { INFO } else { DIM });
             ui.p.text(x, y + step, class_line, BODY + 1.0, TEXT);
             let hp_line = format!("HP {hp} / {max}");
             ui.p.text(x, y + step * 2.0, &hp_line, BODY + 1.0, TEXT);
@@ -216,6 +242,14 @@ impl Screen<GameCx> for Hub {
         self.w = ui.widgets;
     }
     fn resume(&mut self, _cx: &mut Cx) {}
+    /// PORTRAITFX1 4.5: the portraits' clock moves by the frame's wall time (at most 100 ms a frame).
+    fn tick(&mut self, _cx: &mut Cx) {
+        self.faces.tick();
+    }
+    /// The agent link (4.11): the party list's portraits.
+    fn state(&self, _cx: &Cx) -> Value {
+        json!({"portraits": self.faces.state()})
+    }
     widget_plumbing!();
 }
 
@@ -766,5 +800,98 @@ mod tests {
         assert!(party_lines(&d, cx.gs(), &[], &[]).is_empty(), "no keys, no lines");
         cx.gs_mut().party.departed.last_mut().unwrap().keepsake.clear();
         assert_eq!(party_lines(&d, cx.gs(), &[], &[(gone.id.clone(), roster::DEAD.into())]), [(format!("{gone_name} died."), PartyLine::Departed)], "no keepsake paid, no keepsake line");
+    }
+}
+
+/// PORTRAITFX1-R (docs/specs/PORTRAITFX1.md 6.2 row 2, PORTRAITFX1_TASKS 1.6 R1-R3): the party list's portraits.
+#[cfg(test)]
+mod portrait_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx};
+    use crate::portraits::tests::{roster_cx, row};
+    use aegis_ui::fx::Clock;
+    use aegis_ui::portrait_fx::EASE_MS;
+    use aegis_ui::screen::TEXT_SIZES;
+    use emberwake_world::state::RosterCaps;
+
+    /// Whether text `r` and rect `b` share any area.
+    fn meets(r: &aegis_ui::painter::TextRec, b: Rect) -> bool {
+        r.x < (b.x + b.w) as f32 && r.x + r.w > b.x as f32 && r.y < (b.y + b.h) as f32 && r.y + r.h > b.y as f32
+    }
+
+    /// The centre pixel's channel spread (max - min): smaller is greyer.
+    fn spread(hub: &Hub, key: &str) -> i32 {
+        let img = hub.faces.get(key).and_then(|f| f.composed()).expect("composed");
+        let i = ((img.h / 2 * img.w + img.w / 2) * 4) as usize;
+        let c = &img.px[i..i + 3];
+        *c.iter().max().unwrap() as i32 - *c.iter().min().unwrap() as i32
+    }
+
+    /// R1-R3: one or six members (two columns, the bunk chip); every row draws a 20 px portrait inside the menu frame at
+    /// the row's left, overlapping no widget and no text; the name starts 22 px right of it; the wounded member's
+    /// portrait holds the `wounded` row's desaturate 0.35 (its centre pixel greyer than an unwounded copy's), the others
+    /// none; the menu's `state` lists every row's portrait; TEXTFIT1 clean at every text size.
+    #[test]
+    fn r1_r3_the_party_list_rows_draw_member_portraits() {
+        let rows = vec![row(json!({"id": "wounded", "trigger": "condition", "condition": "wounded", "effect": "desaturate", "intensity": 0.35}))];
+        for n in [1, 6] {
+            let mut cx = game_cx();
+            {
+                let party = &mut cx.gs_mut().party;
+                let mut i = 0;
+                while party.members.len() < n {
+                    let mut m = party.members[0].clone();
+                    m.id = format!("test_member_{i}");
+                    i += 1;
+                    party.members.push(m);
+                }
+            }
+            let mut cx = roster_cx(cx, &format!("hub_r{n}"), rows.clone(), [200, 80, 40]);
+            let max = cx.gs().party.roster.party_max;
+            cx.gs_mut().party.roster = RosterCaps { party_max: max, manifest: emberwake_data::RosterManifest::from_obj(json!({"bunks": 6}).as_object().unwrap()) };
+            let members: Vec<UnitState> = cx.gs().party.members.clone();
+            let wounded = members[0].id.clone();
+            cx.gs_mut().party.member_mut(&wounded).unwrap().add_condition(roster::WOUNDED);
+            let fr = Rect::new(95, 25, 450, 310);
+            let mut hub = Hub::default();
+            let mut g = gfx();
+            for (size, scale) in TEXT_SIZES {
+                let mut recs = Vec::new();
+                for t in [1000, 1000 + EASE_MS] {
+                    hub.faces.clock = Clock { ms: t as f64, hold: 0.0 };
+                    recs = frame(&mut hub, &mut cx, &mut g, scale as f32);
+                }
+                for m in &members {
+                    let pid = format!("hub.portrait.{}", m.id);
+                    let pr = hub.w.iter().find(|w| w.id == pid).unwrap_or_else(|| panic!("{size}: {pid}")).rect;
+                    assert_eq!((pr.w, pr.h), (ROW_PORTRAIT, ROW_PORTRAIT), "{size}: 20 px");
+                    assert!(pr.x >= fr.x && pr.y >= fr.y && pr.x + pr.w <= fr.x + fr.w && pr.y + pr.h <= fr.y + fr.h, "{size}: {pid} {pr:?} inside the frame");
+                    for w in hub.w.iter().filter(|w| w.id != pid) {
+                        let x = pr.intersect(w.rect);
+                        assert!(x.w <= 0 || x.h <= 0, "{size}: {pid} {pr:?} overlaps {} {:?}", w.id, w.rect);
+                    }
+                    assert!(!recs.iter().any(|r| !r.clipped && meets(r, pr)), "{size}: no text on {pid}");
+                    let name = member_name(&cx, m);
+                    let at = recs.iter().find(|r| r.cut.as_deref().unwrap_or(&r.text) == name && (r.y - pr.y as f32).abs() < 0.5 && (r.x - (pr.x as f32 + ROW_INDENT)).abs() < 0.5);
+                    assert!(at.is_some(), "{size}: {}'s name starts 22 px right of its portrait", m.id);
+                    let fx = hub.faces.get(&format!("member:{}", m.id)).expect("kept");
+                    let desat = fx.level("desaturate", hub.faces.now());
+                    if m.id == wounded {
+                        assert!(desat.is_some_and(|l| (l.i - 0.35).abs() < 1e-3), "{size}: wounded: desaturate 0.35");
+                    } else {
+                        assert!(desat.is_none(), "{size}: {} is not wounded", m.id);
+                    }
+                }
+                if n > 1 {
+                    assert!(spread(&hub, &format!("member:{wounded}")) < spread(&hub, &format!("member:{}", members[1].id)), "{size}: the wounded portrait is greyer");
+                }
+                assert_eq!(hub.state(&cx)["portraits"].as_array().map(Vec::len), Some(n), "{size}: every row's portrait in the state");
+                let boxes: Vec<(String, f32, f32, f32, f32)> = hub.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
+                let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+                for k in ["edge", "overlap", "spill"] {
+                    assert_eq!(v["counts"][k], json!(0), "{n} members at {size}: {v}");
+                }
+            }
+        }
     }
 }
