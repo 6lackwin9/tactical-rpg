@@ -1,0 +1,82 @@
+{
+	"steps": [
+		{
+			"op": "upsert",
+			"kind": "portrait_cues",
+			"entry": {
+				"id": "face_hit",
+				"effect": "face",
+				"expression": "hurt",
+				"priority": 60,
+				"ms": 900,
+				"trigger": "event",
+				"event": "hit"
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "portrait_cues",
+			"entry": {
+				"id": "face_crit",
+				"effect": "face",
+				"expression": "hurt",
+				"priority": 70,
+				"ms": 1200,
+				"trigger": "event",
+				"event": "crit"
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "portrait_cues",
+			"entry": {
+				"id": "face_low_hp",
+				"effect": "face",
+				"expression": "hurt",
+				"priority": 40,
+				"ms": 0,
+				"trigger": "hp",
+				"below": 30
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "portrait_cues",
+			"entry": {
+				"id": "face_shaken",
+				"effect": "face",
+				"expression": "afraid",
+				"priority": 50,
+				"ms": 0,
+				"trigger": "derived",
+				"stat": "composure",
+				"drop_pct": 25
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "portrait_cues",
+			"entry": {
+				"id": "face_empowered",
+				"effect": "face",
+				"expression": "angry",
+				"priority": 45,
+				"ms": 0,
+				"trigger": "status",
+				"status": "empower"
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "portrait_cues",
+			"entry": {
+				"id": "face_down",
+				"effect": "face",
+				"expression": "hurt",
+				"priority": 80,
+				"ms": 0,
+				"trigger": "down"
+			}
+		}
+	]
+}

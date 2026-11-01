@@ -108,6 +108,53 @@
 			"status": "stealth",
 			"effect": "fade",
 			"intensity": 0.6
+		},
+		{
+			"id": "face_hit",
+			"event": "hit",
+			"effect": "face",
+			"ms": 900,
+			"expression": "hurt",
+			"priority": 60
+		},
+		{
+			"id": "face_crit",
+			"event": "crit",
+			"effect": "face",
+			"ms": 1200,
+			"expression": "hurt",
+			"priority": 70
+		},
+		{
+			"id": "face_low_hp",
+			"trigger": "hp",
+			"below": 30,
+			"effect": "face",
+			"expression": "hurt",
+			"priority": 40
+		},
+		{
+			"id": "face_shaken",
+			"trigger": "derived",
+			"stat": "composure",
+			"drop_pct": 25,
+			"effect": "face",
+			"expression": "afraid"
+		},
+		{
+			"id": "face_empowered",
+			"trigger": "status",
+			"status": "empower",
+			"effect": "face",
+			"expression": "angry",
+			"priority": 45
+		},
+		{
+			"id": "face_down",
+			"trigger": "down",
+			"effect": "face",
+			"expression": "hurt",
+			"priority": 80
 		}
 	]
 }

@@ -1,6 +1,6 @@
 # PORTRAITFX1 expression sheets: prompts
 
-Status: PORTRAITFX1-XA batch 1 (re-queued 2026-11-01 with the accessory rule, a stronger Angry cell and Bram's loupe line) (the seven characters with their own ART3 portraits; the six founders wait for
+Status: PORTRAITFX1-XA batch 1 PLACED 2026-11-01 (the seven aligned sets are in the game's portraits folders with sidecars) (re-queued 2026-11-01 with the accessory rule, a stronger Angry cell and Bram's loupe line) (the seven characters with their own ART3 portraits; the six founders wait for
 FOUNDERPORT1-P). Laid out like [ART3_PROMPTS.md](ART3_PROMPTS.md): the shared style block (the 2x2 template of
 `docs/specs/PORTRAITFX1_TASKS.md` 2.4.2, own-portrait wording, the four cells fixed), then one section per id with
 its character lines from ART3_PROMPTS.md; the sent prompt is the style block, a blank line, the id's block. Each
