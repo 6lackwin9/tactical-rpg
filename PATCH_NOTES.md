@@ -2,7 +2,58 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: 46926df0 -->
+<!-- last: 9e19249a -->
+
+## 2026-11-01
+
+In the game:
+
+- **Battle input (timeline)**: click a target (enemy, ally, empty tile, or your hero with the Self button or S), then pick a skill from the menu; the round's intent follows from the skill, the rest of the round fills in as ghost blocks, and Settings > Gameplay has "Auto-fill the rest". Keys 1-9 pick skills, Z undoes, Clear removes all picks; the intent buttons, Manual and Fill are gone.
+- **Selection and inspect (timeline)**: right click any unit to inspect it (only what your side knows); Esc steps back menu, log, inspect, selection; clicking the selected hero selects nothing.
+- **Maneuver skills**: Flank Cut, Hamstring Cut and Slip Strike dash to the target's flank or back and hit from there; a blocked flank makes the skill miss with its AP spent; every skill chases a target that steps 1 tile away.
+- **Battle talks**: a dialogue can open mid-battle as an overlay; the fight pauses under a veil and the speaker gets a ring.
+- **Portraits**: portraits breathe and blink on the dialogue box, story cards, the Character screen and the party list; a wounded hero's portrait is greyed.
+- **Party and Results (new campaign worlds)**: wounded marks, a bunks chip, and Results lines for captured or fallen heroes, keepsakes and the wounded; a mission board pane with deadlines and job markers on the world map; travel modes (stealth, forced march) on the world map.
+
+Every change that touched the game:
+
+- ARTQUEUE1: our side of the Antigravity image queue (artqueue.py request / text / ingest / status) (9e19249a)
+- CLN-49: remove the 20 executed seeds of finished tasks; the seeds README indexes them with their last commit (df0adbfa)
+- CAMPAIGN1-TM2: a save naming a removed travel mode loads in the default mode with a note; one leg-days helper (cf075e15)
+- INPUT1-U slice 3: selection and inspect (INPUT1-U done); the round-intent preview and the hotkey target rule move into the kit (98b1e455)
+- PORTRAITFX1-X: the screens read the expression keys (dialogue nodes, line cards) through face_chain (fd53135e)
+- TERMS1-L: the terms register, the content.terms kind and one resolver; kit texts read the world's names (50e08c6a)
+- CLEANUP.md Pass 3 (CLN-36..53): retire Godot parity, classic as a ruleset row, other cleanup; questions for the user (51a3bc27)
+- ARTPROMPT1 done: routes by asset type and the winning prompts in ART_PROMPT_TEMPLATES.md (after the Gemini, local and face-fix tests) (79ba432f)
+- INPUT1-U slice 2: the battle screen's one-flow input (target then skill, ghost fill, Auto-fill, keys 1-9, tactic ghost); the old round controls removed (b0c195f9)
+- known-issues: the kit parity tests live in the game façades; landings stop on code conflicts (2026-11-01) (9057c089)
+- ENCOUNTER2-C2: the battle talk overlay (one shared talk box for the region map and the battle; the battle pauses while a talk is open) (f0fae089)
+- PORTRAITFX1-A: sidecars for the 42 portraits (anchors, idle overlays) and the portrait cue rows (8535fe0f)
+- PORTRAITFX1-R: animated member portraits on the Character screen and the game menu's party list (6fd4159f)
+- INPUT1-U slice 1: the one-flow battle input in the kit, host and engine (picks, ghost fill, Auto-fill, one regular move, AP forecast, the ghost segment) (17b6c654)
+- INPUT1-MA: Maneuver skill data on range and position; the timeline ruleset's melee_diagonal and flank_protected_cost (7e3a09d0)
+- CAMPAIGN1-TM: travel modes (stealth by default, forced march) as a world manifest block (db94b5bd)
+- INPUT1-M: the Maneuver rework (position flank or behind, one range rule with a 1-tile chase for every skill, flank protected, the dash event, melee_diagonal) (1e6580ca)
+- ROSTER1-U: wounded marks, the bunks chip and the departure, keepsake and wounded lines on Results (27fc3e6e)
+- ENCOUNTER2-C1: the battle talk phase effect, triggers round.block / downed / broken, Session::talks, checks (bb80e9fa)
+- ENCOUNTER2-W: stay-behind results through the roster (then capture or kill, the flag, result lines); the party settle moves into the kit for every runner (8e8435a0)
+- TERMS1-G: layer check G3, kit code names no lore word (world ids and games/<id>/lore_words.txt) (4e2fa8ee)
+- PORTRAITFX1-D: animated portraits on the dialogue talk box and the vignette line cards (38e51a4b)
+- STORYUI1-U2: the mission board pane, the board service glyph, world-map job markers, the UI Gallery's Mission board (ffd0f277)
+- ROSTER1-L slice 4: bunks and the bench, join level, party_min, departed recruits refused, roster read keys, the over-cap load warning (ROSTER1-L done) (d6775264)
+- CAMPAIGN1-SIM: aegis sim deadlines, best and worst finish day per checkpoint (7dafe18c)
+
+Under the hood:
+
+- Docs: today's rows dated 2026-11-01 (were 2026-11-02 by mistake); decision "Save upgrades at game version updates"; CLN-47 keeps the migration mechanism (5a63096b)
+- Decision "Antigravity queue as the default image route" (user 2026-11-02); ART_PROMPT_TEMPLATES routes note (35e2612f)
+- Decision "Godot parity retired and cleanup pass 3 answers" (user 2026-11-02, all as recommended); rows CLN-36..53 (6f7b8cc1)
+- Decision "Antigravity image queue" (user 2026-11-02); row ARTQUEUE1 (fd7278a5)
+- Decisions "Saves and data edits", "INPUT1-M rule choices and the classic ruleset", "ARTPROMPT1 routes" (user 2026-11-02); row CAMPAIGN1-TM2 (4efb30cc)
+- INPUT1 spec: answers part 4 applied (one range rule with a 1-tile chase for every skill, the position attribute, the dash on the windup tick); rows INPUT1-S done, -M, -MA, -U, DASH1 updated (bb3ef615)
+- Decision "INPUT1 answers, part 4" (user 2026-11-01: one range rule for every skill, position attribute for Maneuver, dash on the windup tick); rows DASH1, TACTIC2 (M1) (0288abcd)
+- Decisions "ENCOUNTER2-C answers", "TERMS1 answers", "ROSTER1-L slice 4 answers" (user 2026-11-01, all as recommended); ENCOUNTER2-C and TERMS1 rows approved (d2d115f3)
+- INPUT1 spec revised for the answers parts 1-3 (Maneuver rework, AP gauge, playback aids; Q10-Q19 open); specs ENCOUNTER2_C.md and TERMS1.md; task rows INPUT1-*, VISCLAR1-A, ENCOUNTER2-C1..CA, TERMS1-G/-L/-U (06062951)
 
 ## 2026-10-31
 
@@ -12,6 +63,7 @@ In the game:
 - **Hold escapes**: a "Who holds the winch?" pick, the hold tile marked, exits read SHUT or OPEN, and a note on why a withdraw waits; an encounter whose timeout counts as a loss now ends in a loss.
 - **Combat log**: phase story lines and scripted kills now show in the combat log.
 - **For testers (timeline)**: the AI no longer guards twice without being hit; the test fights were retuned.
+- **Campaign worlds**: HUD chips, warnings, a confirm before a step that could end the run, a run-over screen, act-start saves, and story events that play from a queue.
 
 Every change that touched the game:
 
@@ -19,12 +71,26 @@ Every change that touched the game:
 - RULESET1-A3: tl_ test-fight tuning pass and the kit_culling fix; the final feel run (77343bd2)
 - HOOKS1-UI slice 5: the text audit of every hook addition; the intel panel keeps what fits (task done) (f3b79757)
 - HOOKS1-UI slice 4: push and pull forecasts; one forced-move step rule for resolution and preview (9316d611)
+- INPUT1-S: the one-flow battle input spec (docs/specs/INPUT1.md, INPUT1_TASKS.md), questions Q1-Q9 open (182a18b3)
+- CAMPAIGN1-U slice 2: the campaign queue player, the battle bridge and start-AP penalty, world-map trip, camp and deadline texts, purse names in logs, the dialogue rest ask (2d748078)
+- ROSTER1-L slice 3: roster rule rows, wounded, depart with keepsakes, the retreat loss, member conditions and party.departed save keys (0ac6eab4)
+- CAMPAIGN1-TW: warn on a repeatable trigger with an empty when; the CAMPAIGN1-T review's test gaps (a57c5755)
+- PORTRAITFX1-XT: expression sheet tools (generate.py per-block reference and --faces records, sheets.py faces) (cb01e647)
+- ROSTER1-L slice 2: the kit fields and settles the party (rpgkit_world::roster), the battle screen calls it (d0f85a36)
+- CAMPAIGN1-U slice 1: campaign HUD chips, notices, asks before run-ending steps, the run-over screen, act-start saves (0a98497e)
+- PORTRAITFX1-G: the game's portrait binding and the Gallery's Portraits page (7ff3f161)
+- ROSTER1-L slice 1: the roster schema, checks and typed readers (no behaviour change) (2fe75314)
 
 Under the hood:
 
 - Decision "ENCOUNTER2-U answers" (user 2026-10-31, all as recommended) (46926df0)
 - Decision "RULESET1-A3 loose ends" (user 2026-10-31, as recommended): skirmish caps recorded as known; phase lines in the logs checked in ENCOUNTER2-U; VISCLAR1 takes the intel line step (b6d571d2)
 - Decision "Timeline test fights after RULESET1-A3" (user 2026-10-31, as recommended): stop win-rate tuning of the tl_ fights; floors only; reach snap-first; sure-break floor to the skirmish (91a7ea1e)
+- Decision "INPUT1 answers, part 3" (user 2026-10-31: melee_diagonal rule option, flank protected spends AP, names and assets layering); TERMS1 row (M2) (955e0d10)
+- Decision "INPUT1 answers, part 2" (user 2026-10-31); rows INPUT1-M, INPUT1-PB, INPUT1-AP, ENCOUNTER2-C (M2) (234765f1)
+- Decisions "INPUT1 answers, part 1" and "Engine scope: a rule library" (user 2026-10-31) (f0421fa5)
+- Decision "Combat input feedback": the target arrow rule (user 2026-10-31: one dashed low-opacity arrow per unit, selected only by default, all on Alt) (2b1485ba)
+- Decisions "Combat input feedback" and "ROSTER1-L slice 1 and CAMPAIGN1-U slice 1 answers" (user 2026-10-31, all as recommended); INPUT1-S/-U/-T/-L rows, VISCLAR1 slice A approved, INPUT1 in M1 (3af3bc1b)
 
 ## 2026-10-30
 
