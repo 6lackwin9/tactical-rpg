@@ -22,7 +22,7 @@ planner (TASKS, ROADMAP, decisions, HISTORY, `.claude/*`, CLAUDE.md), design-bra
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | CLN-36 | A | Tests that use the Godot export only as data: switch to the shipped data (replay, ruleset_requests); drop three one-off "frozen data reports nothing new" checks and timeout_verdict | S | logic-builder | game | now | done (2026-11-01) |
 | 2 | CLN-37 | A | Writer resave check on the shipped data (every file re-saves byte for byte) instead of Godot's resave and its five AFTER_GODOT lists | S | logic-builder | game | now | proposed |
-| 3 | CLN-38 | A | RNG and hash goldens into `aegis_core`; unit and damage goldens on a frozen catalog (the rules' only direct tests) | S-M | logic-builder | engine + game | now | proposed |
+| 3 | CLN-38 | A | RNG and hash goldens into `aegis_core`; unit and damage goldens on a frozen catalog (the rules' only direct tests) | S-M | logic-builder | engine + game | now | done (2026-11-01) |
 | 4 | CLN-42 | A | Switch Godot off: delete the pure-Godot suites, `games/emberwake/parity/`, `fc.sh parity`, the CI Godot steps, the hook's Godot install, the export-only CLI keys | M | logic-builder | game + kit + tools | after CLN-36..41 | proposed |
 | 5 | CLN-43 | A | Docs and rules: CLAUDE.md "Godot parity", decisions, HISTORY, skills, agents, workflow docs, PORT_NOTES | S-M | planner (+ design-brainstorm for PORT_NOTES) | process | with CLN-42 | proposed |
 | 6 | CLN-47 | C | Save migrations v1-v12 and the Godot JSON text emulation (decision "Saves and data edits") | S | logic-builder | kit | with CLN-42 (or before) | proposed |
@@ -136,7 +136,17 @@ Writer resave on the shipped data. Scope A. Status: proposed. Size S. Lane logic
 
 ### CLN-38
 
-RNG, hash, unit and damage goldens. Scope A. Status: proposed. Size S-M. Lane logic-builder. Layer engine + game.
+RNG, hash, unit and damage goldens. Scope A. Status: done (2026-11-01; as built: the engine golden
+`engine/crates/aegis_core/tests/rng_hash.rs` with `tests/fixtures/rng_hash.json` (11 KB: the six seeds of rng.json,
+each with six rounds of `randi`, `randf`, `randi_range(-1, 1)`, `randi_range(0, 99)`, `randf_range(0.5, 2.0)`, their
+bounds written in each row; hash.json's 60 roll keys, 4 strings and 5 ints, the string `ashlands:warden_keep|3|0`
+replaced by the game-agnostic `region:keep|3|0`); the game golden
+`games/emberwake/crates/emberwake_rules/tests/rules_golden.rs` with `tests/fixtures/rules_golden.json` (310 KB: 125 unit
+snapshots, every catalog unit and every class at levels 1-10 and at each other tier at level 5; 1,652 damage cases,
+each pool attacker against two targets with the hand, range, forced and rolled crit, skill, guard, cover and armour
+pierce branches, plus the stance matrix on the level 5 classes) on the reused frozen catalog
+`emberwake_battle/tests/fixtures/timeline_kit.json`; both recorded with `RECORD=1`; the recording matched Godot's rng.json
+and hash.json on every shared input). Size S-M. Lane logic-builder. Layer engine + game.
 
 - Where: `emberwake_rules/tests/parity.rs` (206 lines: `unit_snapshots_match_godot` :64, `damage_cases_match_godot`
   :117, `rng_matches_godot` :157, `godot_hash_matches` :185); `kits/rpg/crates/rpgkit_rules/src/lib.rs:2` ("checked

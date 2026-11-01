@@ -8,11 +8,11 @@ because the RNG is bit-exact.
 
 | Godot behaviour | Rust |
 | :--- | :--- |
-| `RandomNumberGenerator` (PCG32, two-draw `randf`, bounded `randi_range`) | `aegis_core::rng::GodotRng` (tested against exported draws) |
+| `RandomNumberGenerator` (PCG32, two-draw `randf`, bounded `randi_range`) | `aegis_core::rng::GodotRng` (the engine-recorded golden `aegis_core/tests/rng_hash.rs`, CLN-38; once tested against exported draws) |
 | `roundf` / `roundi` round half away from zero | `f64::round` (`stats::roundi`) |
 | `Array.sort_custom` is Godot's `SortArray` introsort (insertion sort at 16 or fewer, so stable there; unstable above) | `aegis_core::sort::godot_sort` (port of `SortArray`) |
 | Dictionary iteration is insertion order | `IndexMap` everywhere order can matter |
-| JSON numbers come back as floats; `x is int` checks fail on parsed data | lenient `aegis_core::value` reads; checked by parity |
+| JSON numbers come back as floats; `x is int` checks fail on parsed data | lenient `aegis_core::value` reads; checked by the goldens |
 | Integer division truncates toward zero, `floori` floors | match per call site |
 | A float total starts at 0.0 (Rust's `Iterator::sum` of no floats is -0.0, which prints "-0.0") | `fold(0.0, ...)` where a total is printed |
 
@@ -20,12 +20,12 @@ because the RNG is bit-exact.
 
 | Godot | Rust | Checked by |
 | :--- | :--- | :--- |
-| `core/specs/stat_rules.gd`, `character_stats.gd`, `proficiency.gd`, `stat_modifier.gd` | `emberwake_rules::stats` | unit snapshots |
-| `core/inventory/equipment.gd`, `inventory.gd` | `emberwake_rules::gear` | unit snapshots |
-| `core/combat/combatant.gd` (build, skills, unlocks) | `emberwake_rules::unit` | unit snapshots |
-| `content/content_factory.gd` (`unit`, `loadout_of`, `_equip`) | `emberwake_rules::unit::build_unit` | unit snapshots |
+| `core/specs/stat_rules.gd`, `character_stats.gd`, `proficiency.gd`, `stat_modifier.gd` | `emberwake_rules::stats` | unit snapshots (`emberwake_rules/tests/rules_golden.rs`, engine-recorded, CLN-38) |
+| `core/inventory/equipment.gd`, `inventory.gd` | `emberwake_rules::gear` | unit snapshots (`rules_golden.rs`) |
+| `core/combat/combatant.gd` (build, skills, unlocks) | `emberwake_rules::unit` | unit snapshots (`rules_golden.rs`) |
+| `content/content_factory.gd` (`unit`, `loadout_of`, `_equip`) | `emberwake_rules::unit::build_unit` | unit snapshots (`rules_golden.rs`) |
 | `core/specs/passives.gd` (`apply_effects`) | `Unit::apply_effects` | unit snapshots (gear effects) |
-| `core/combat/damage_calculator.gd` | `emberwake_rules::damage` | damage cases |
+| `core/combat/damage_calculator.gd` | `emberwake_rules::damage` | damage cases (`rules_golden.rs`, engine-recorded, CLN-38) |
 | `combat/status/status_effects.gd`, `status_registry.gd` | `emberwake_rules::status` | battle traces |
 | `combat/arena/combat_grid.gd`, `terrain.gd`, `combat_zones.gd` | `emberwake_battle::grid`, `world` | battle traces |
 | `combat/arena/grid_path.gd` | `emberwake_battle::path` | battle traces |
