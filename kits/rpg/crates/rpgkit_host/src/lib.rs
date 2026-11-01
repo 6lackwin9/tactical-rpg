@@ -181,14 +181,14 @@ impl Battle {
         let Some(entry) = self.cat.encounters.get(id) else {
             return err(format!("unknown encounter '{id}'; known: {}", self.cat.encounters.keys().cloned().collect::<Vec<_>>().join(", ")));
         };
-        let mut def = EncounterDef::from_obj(entry);
+        // RULESET1 3.1.2: a catalog encounter is classic unless the request picks a ruleset
+        let ruleset = match picked_ruleset(&self.cat, req, Ruleset::of_or_classic(&self.cat, CLASSIC)) {
+            Ok(r) => r,
+            Err(e) => return err(e),
+        };
+        let mut def = EncounterDef::from_obj_with(entry, ruleset);
         if let Some(seed) = req.get("seed").and_then(Value::as_i64) {
             def.rng_seed = seed;
-        }
-        // RULESET1 3.1.2: a catalog encounter is classic unless the request picks a ruleset
-        match picked_ruleset(&self.cat, req, Ruleset::of_or_classic(&self.cat, CLASSIC)) {
-            Ok(r) => def.ruleset = r,
-            Err(e) => return err(e),
         }
         def.plan_reveal = req.get("plan_reveal").and_then(Value::as_bool).unwrap_or(false);
         match tactics_arg(req.get("tactics")) {
@@ -476,10 +476,8 @@ pub fn state_of(s: &Session) -> Value {
         "outcome": s.outcome, "over": s.combat_over, "units": units,
         "grid": {"w": GRID_W, "h": GRID_H, "rows": rows, "exits": w.grid.exits.iter().map(|e| json!([e.x, e.y])).collect::<Vec<_>>()},
     });
-    // INPUT1 MR11: beyond classic the ruleset and its diagonal melee (classic keeps the state's shape)
-    if !w.ruleset.is_classic() {
-        state["ruleset"] = json!({"id": w.ruleset.id, "melee_diagonal": w.ruleset.melee_diagonal().id()});
-    }
+    // INPUT1 MR11, CLN-46: the ruleset and its diagonal melee, always (every ruleset is a row; none is the odd one out)
+    state["ruleset"] = json!({"id": w.ruleset.id, "melee_diagonal": w.ruleset.melee_diagonal().id()});
     // ENCOUNTER2 3.1: a hold escape's tiles, holder and gate (other battles keep the state's shape)
     if let Some(g) = &w.hold {
         state["hold"] = json!({"tiles": g.tiles.iter().map(|c| json!([c.x, c.y])).collect::<Vec<_>>(), "label": g.label, "holder": g.holder, "open": g.is_open(w), "note": g.note(w)});

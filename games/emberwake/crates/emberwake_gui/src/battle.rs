@@ -4289,7 +4289,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     // RULESET1-U (intent UI2, PL6): under the round intent the planned blocks carry the planner's reason tags and the
     // Rest blocks the round's Rest gain; INPUT1 GH1: which are ghost (the planner's, after the picks)
     let (reasons, rest, ghosts) = match sel {
-        Some(u) if timeline && !s.plan_confirmed && w.units[u].is_active() => (rip::reasons(pw, pplan, u), Some(rip::rest_preview(pw, pplan, u)), rip::ghost_entries(pw, pplan, u)),
+        Some(u) if timeline && !s.plan_confirmed && w.units[u].is_active() => (rip::reasons(pw, pplan, u), Some(rip::rest_preview(pw, pplan, u)).filter(|_| w.ruleset.rest_at_round_end()), rip::ghost_entries(pw, pplan, u)),
         _ => (Vec::new(), None, Vec::new()),
     };
     // RULESET1-U slice 5: each span's wind-up, impact and recovery (and a break), the planned hits' forecasts (the

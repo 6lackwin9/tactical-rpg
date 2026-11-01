@@ -161,8 +161,7 @@ pub fn fight(cat: Arc<Catalog>, units: &IndexMap<String, UnitDef>, spec: &FightS
     obj.insert("enemies".into(), json!(spec.right));
     obj.insert("max_rounds".into(), json!(spec.cap));
     obj.insert("rng_seed".into(), json!(spec.seed));
-    let mut def = EncounterDef::from_obj(obj);
-    def.ruleset = spec.ruleset.clone();
+    let def = EncounterDef::from_obj_with(obj, spec.ruleset.clone());
     let mut s = Session::start(cat, def, units);
     if let Some(r) = jitter_rng.as_mut() {
         jitter_start(&mut s.w, r);

@@ -83,6 +83,13 @@ pub struct EncounterDef {
 impl EncounterDef {
     /// ContentSchema "encounters" defaults applied to a (possibly partial) entry.
     pub fn from_obj(o: &Obj) -> Self {
+        // CLN-46: the built-in classic values stand in for a ruleset (tests, fixtures); battles use `from_obj_with`
+        Self::from_obj_with(o, Ruleset::classic())
+    }
+
+    /// `from_obj` playing by `ruleset` (CLN-46: the caller picks it from the catalog, `Ruleset::of`; no placeholder to
+    /// overwrite).
+    pub fn from_obj_with(o: &Obj, ruleset: Ruleset) -> Self {
         let exits = match o.get("exits") {
             Some(Value::Array(a)) => a.iter().filter_map(|p| p.as_array()).filter(|p| p.len() == 2).map(|p| V2::new(value::to_int(&p[0], 0), value::to_int(&p[1], 0))).collect(),
             _ => vec![V2::new(11, 4)],
@@ -109,8 +116,7 @@ impl EncounterDef {
             phases: value::array(o, "phases").to_vec(),
             start_status: value::array(o, "start_status").to_vec(),
             start_grant: StartGrant::None,
-            // CLN-44: a placeholder; every caller overwrites it from the catalog (`Ruleset::of`; CLN-46)
-            ruleset: Ruleset::classic(),
+            ruleset,
             plan_reveal: false,
             tactics: Default::default(),
             raw: o.clone(),

@@ -142,7 +142,7 @@ fn classic_refuses_round_intents() {
 }
 
 /// INPUT1 MR11: `new {melee_diagonal}` sets the battle's diagonal melee over the row's value (the state's `ruleset`
-/// names it beyond classic; classic keeps the state's shape), an unknown value is refused, and the request is recorded
+/// names it, classic too since CLN-46), an unknown value is refused, and the request is recorded
 /// and replays to the same battle.
 #[test]
 fn new_takes_melee_diagonal_and_replays() {
@@ -154,7 +154,9 @@ fn new_takes_melee_diagonal_and_replays() {
     let bad = h.handle(&json!({"cmd": "new", "encounter": "t_duel", "ruleset": "timeline", "melee_diagonal": "sideways"}));
     assert_eq!(bad["error"], json!("melee_diagonal must be one of none, maneuver, all (got 'sideways')"));
     let classic = h.handle(&json!({"cmd": "new", "encounter": "t_duel"}));
-    assert!(classic["state"].get("ruleset").is_none(), "classic keeps the state's shape");
+    // CLN-46: the state always carries the ruleset, classic too
+    assert_eq!(classic["state"]["ruleset"]["id"], json!("classic"), "{classic}");
+    assert_eq!(classic["state"]["ruleset"]["melee_diagonal"], json!("none"), "the built-in classic value");
     let mut h = Host::new(Battle::new(catalog()));
     h.handle(&json!({"cmd": "new", "encounter": "t_duel", "ruleset": "timeline", "melee_diagonal": "none"}));
     let history: Vec<Value> = h.handle(&json!({"cmd": "history"}))["history"].as_array().unwrap().clone();

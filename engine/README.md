@@ -157,6 +157,7 @@ every concluded round), and feeding them to a fresh `serve` replays the battle e
 `new` also takes `ruleset` (`classic` or `timeline`; default classic for a catalog encounter, the world's for a world
 encounter) and `rules` (`"-id,+id"`, extensions only; RULESET1-R); the CLI takes the same as
 `aegis battle <encounter> ruleset=<id> rules=<-id,+id>` and the sim as `ruleset=` / `rules=`.
+The battle state always carries `ruleset` `{id, melee_diagonal}` (CLN-46; it was only beyond classic before).
 `new` also takes `plan_reveal`; under the rule `plan_badges` the `intents` reply gains `round_intents` (both sides: intent, target, Maneuver kind, impact badges, tell, plan) and `intel {unit}` gives one unit's record (RULESET1-V).
 
 ## Playtest recordings and replay (PORT-PLAYTEST)

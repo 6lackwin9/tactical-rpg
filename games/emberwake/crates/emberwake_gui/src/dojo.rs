@@ -43,7 +43,8 @@ pub enum DAct {
     NextRound,
     Stance,
     /// RULESET1-R: Classic / Timeline.
-    Ruleset,
+    /// CLN-46: the ruleset at this index of the catalog's rows.
+    Ruleset(usize),
     DummyGuard,
     Bench(usize),
     Switch,
@@ -252,15 +253,17 @@ impl Dojo {
             DAct::HealDummy => s.heal_dummy(),
             DAct::NextRound => s.next_round(),
             DAct::Stance => s.shift_stance(),
-            DAct::Ruleset => {
-                use emberwake_rules::ruleset::{Ruleset, CLASSIC, TIMELINE};
-                let next = if s.ruleset.is_classic() { TIMELINE } else { CLASSIC };
-                match Ruleset::of(&s.cat, next) {
-                    Ok(r) => s.set_ruleset(r),
-                    Err(e) => s.log_action("EVENT", "Ruleset", &e, 0, "FAILED", "", "", false),
+            DAct::Ruleset(i) => {
+                use emberwake_rules::ruleset::Ruleset;
+                // CLN-46: a pick over the catalog's rows
+                if let Some(id) = Ruleset::ids(&s.cat).get(i) {
+                    match Ruleset::of(&s.cat, id) {
+                        Ok(r) => s.set_ruleset(r),
+                        Err(e) => s.log_action("EVENT", "Ruleset", &e, 0, "FAILED", "", "", false),
+                    }
                 }
-                // RULESET1-G: under timeline the planner and the deck view come up (unless the planner is open)
-                if !s.ruleset.is_classic() && !self.desk.win("planner").is_some_and(|w| w.open) {
+                // RULESET1-G: under rules with round intents the planner and the deck view come up (unless the planner is open)
+                if !s.plan_intents().is_empty() && !self.desk.win("planner").is_some_and(|w| w.open) {
                     self.desk.apply_layout("Timeline");
                 }
             }
@@ -615,12 +618,17 @@ impl Dojo {
         let at = self.s.attack_skills().iter().position(|k| k.id == self.s.dummy_skill).unwrap_or(0);
         ui.select("dojo.dummy_skill", Rect::new(b.x + 2, y, b.w - 4, 11), &attacks, at, DAct::DummySkill, true, tip("Dummy skill", "What the dummy strikes back with."));
         y += 14;
+        // CLN-46: the ruleset, a pick over the catalog's rows (a ruleset with round intents opens the Planner and Deck windows)
+        let ids = emberwake_rules::ruleset::Ruleset::ids(&self.s.cat);
+        let names: Vec<String> = ids.iter().map(|id| format!("Rules: {}", emberwake_rules::ruleset::Ruleset::of_or_classic(&self.s.cat, id).name)).collect();
+        let at = ids.iter().position(|id| *id == self.s.ruleset.id).unwrap_or(0);
+        ui.select("dojo.ruleset", Rect::new(b.x + 2, y, b.w - 4, 11), &names, at, DAct::Ruleset, !ids.is_empty(), tip("Ruleset", "The rules the Dojo plays by (the catalog's rows). Without stances there is no switch AP and no stance change; a deck rule rebuilds the heroes with their decks; round intents bring up the Planner and Deck windows."));
+        y += 14;
         x = b.x + 2;
         let toggles = [
             ("counter", "Counter", DAct::Counter, self.s.dummy_counter, "The dummy strikes back after every hero skill."),
             ("crit", "Force crit", DAct::ForceCrit, self.s.force_crit, "Every hero hit crits."),
             ("guard", "Dummy guard", DAct::DummyGuard, self.s.dummy.guard > 0.0, "The dummy guards (Defensive stance, hits halved) or drops its guard."),
-            ("ruleset", "Timeline", DAct::Ruleset, !self.s.ruleset.is_classic(), "Timeline rules (on) or classic (off): under timeline the stances are inert (no switch AP, no stance change), the heroes are rebuilt with their decks, and the Planner and Deck windows plan and edit the round."),
             ("windup", "Dummy windup", DAct::DummyWindup, self.s.dummy_windup, "The dummy is winding up: hits stagger it by the windup factor and may break it (rule poise)."),
         ];
         for (id, label, act, on, help) in toggles {
@@ -1078,10 +1086,10 @@ impl Screen<GameCx> for Dojo {
             "pouch": h.inventory.pouch.iter().map(|i| i.id.clone()).collect::<Vec<_>>(),
             "log": self.s.log.iter().rev().take(5).map(|e| json!({"n": e.n, "title": e.title, "detail": e.detail, "outcome": e.outcome, "value": e.value})).collect::<Vec<_>>(),
         });
-        // RULESET1-G: the timeline readouts (classic keeps its shape)
-        if !self.s.ruleset.is_classic() {
+        // CLN-46: the ruleset always; RULESET1-G: the deck readouts where the rules have a deck
+        out["ruleset"] = json!(self.s.ruleset.id);
+        if self.s.ruleset.has(emberwake_rules::ruleset::DECK) || self.s.ruleset.has(emberwake_rules::ruleset::ROUND_INTENT) {
             let deck = self.s.deck_of(self.s.active);
-            out["ruleset"] = json!(self.s.ruleset.id);
             out["deck"] = crate::party::deck_json(&deck);
             out["actives"] = json!(h.active_families());
             if self.s.poise_on() {
@@ -1118,7 +1126,14 @@ impl Screen<GameCx> for Dojo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use emberwake_rules::ruleset::{CLASSIC, TIMELINE};
     use std::sync::Arc;
+
+    /// Picks the catalog's ruleset row `id` in the Dojo's picker.
+    fn pick(cx: &mut Cx, dojo: &mut Dojo, id: &str) {
+        let at = emberwake_rules::ruleset::Ruleset::ids(&cx.data.cat).iter().position(|r| r == id).expect("the row");
+        dojo.act(cx, DAct::Ruleset(at));
+    }
 
     /// INPUT1 FL3 (the Dojo's mirror of the party screen's terms): an order entry's toggle opens its follow-up list; a
     /// click adds a skill of the intent (the hero is rebuilt with the list), a click on an entry takes it out, "Use the
@@ -1127,7 +1142,7 @@ mod tests {
     fn the_deck_window_edits_follow_up_lists_and_rebuilds_the_hero() {
         let mut cx = crate::hud::hud_tests::game_cx();
         let mut dojo = Dojo::new(&cx);
-        dojo.act(&mut cx, DAct::Ruleset);
+        pick(&mut cx, &mut dojo, TIMELINE);
         let t = dojo.deck_terms().expect("the timeline row has the deck rule");
         let shown = t.shown(&dojo.s.deck_of(dojo.s.active));
         let order = t.intents.iter().map(|i| t.order(&shown, i)).max_by_key(Vec::len).unwrap_or_default();
@@ -1180,9 +1195,9 @@ mod tests {
         let mut cx = crate::hud::hud_tests::game_cx();
         let mut dojo = Dojo::new(&cx);
         assert!(dojo.state(&cx).get("plan").is_none());
-        dojo.act(&mut cx, DAct::Ruleset);
+        pick(&mut cx, &mut dojo, TIMELINE);
         // a timeline world needs the row (a content error without it), so the data has one with round intents
-        assert!(!dojo.s.ruleset.is_classic() && !dojo.s.plan_intents().is_empty(), "the catalog's timeline row with round intents");
+        assert!(dojo.s.ruleset.id == TIMELINE && !dojo.s.plan_intents().is_empty(), "the catalog's timeline row with round intents");
         let mut g = crate::hud::hud_tests::gfx();
         dojo.draw(&mut cx, &mut g, (-500, -500), true);
         assert!(dojo.desk.win("planner").is_some_and(|w| w.open) && dojo.desk.win("deck").is_some_and(|w| w.open));
@@ -1205,7 +1220,7 @@ mod tests {
                 assert!(dojo.s.hero().active_families().contains(&f), "the slotted active is the hero's");
             }
         }
-        dojo.act(&mut cx, DAct::Ruleset);
+        pick(&mut cx, &mut dojo, CLASSIC);
         assert!(dojo.s.plan_intents().is_empty() && dojo.state(&cx).get("plan").is_none());
     }
 
@@ -1215,7 +1230,7 @@ mod tests {
     fn the_plan_state_follows_changes_that_log_nothing_and_a_closed_window() {
         let mut cx = crate::hud::hud_tests::game_cx();
         let mut dojo = Dojo::new(&cx);
-        dojo.act(&mut cx, DAct::Ruleset);
+        pick(&mut cx, &mut dojo, TIMELINE);
         let intents = dojo.s.plan_intents();
         assert!(intents.len() > 1, "the catalog's timeline row offers several intents");
         let mut g = crate::hud::hud_tests::gfx();
@@ -1267,5 +1282,36 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// CLN-46: the Dojo's ruleset picker lists the catalog's rows (a third appears), picking one plays by it; Reset
+    /// keeps the ruleset and rebuilds the decks only where the rules have a deck; the state names the ruleset always.
+    #[test]
+    fn the_ruleset_picker_lists_the_rows_and_reset_reads_the_deck_rule() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        {
+            let d = Arc::make_mut(&mut cx.data);
+            let mut row = d.cat.rulesets.get(CLASSIC).cloned().expect("the classic row");
+            row.insert("id".into(), json!("plain"));
+            row.insert("name".into(), json!("Plain"));
+            row.insert("rest_ap".into(), json!("on_use"));
+            Arc::make_mut(&mut d.cat).rulesets.insert("plain".into(), row);
+        }
+        let mut dojo = Dojo::new(&cx);
+        let mut g = crate::hud::hud_tests::gfx();
+        dojo.draw(&mut cx, &mut g, (-500, -500), true);
+        let sel = dojo.w.iter().find(|w| w.id == "dojo.ruleset").expect("the picker");
+        assert!(sel.enabled && sel.text.contains("Classic"), "{}", sel.text);
+        assert!(dojo.w.iter().filter(|w| w.id.starts_with("dojo.")).all(|w| w.text != "Timeline"), "no Timeline toggle any more");
+        assert_eq!(dojo.state(&cx)["ruleset"], json!(CLASSIC), "the state names the ruleset in classic too");
+        pick(&mut cx, &mut dojo, "plain");
+        assert_eq!(dojo.s.ruleset.id, "plain");
+        assert!(!dojo.s.ruleset.has(emberwake_rules::ruleset::DECK) && dojo.state(&cx).get("deck").is_none());
+        dojo.act(&mut cx, DAct::HealHero);
+        dojo.s.reset();
+        assert_eq!(dojo.s.ruleset.id, "plain", "reset keeps the ruleset");
+        pick(&mut cx, &mut dojo, TIMELINE);
+        dojo.s.reset();
+        assert!(dojo.s.ruleset.has(emberwake_rules::ruleset::DECK) && dojo.state(&cx).get("deck").is_some(), "a deck rule: decks rebuilt and shown");
     }
 }

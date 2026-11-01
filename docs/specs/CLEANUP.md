@@ -30,7 +30,7 @@ planner (TASKS, ROADMAP, decisions, HISTORY, `.claude/*`, CLAUDE.md), design-bra
 | 8 | CLN-39 | A | Sim parity: convert to an engine golden on the frozen catalog, or delete (Q-A2) | S | logic-builder | game | now | done (2026-11-01) |
 | 9 | CLN-44 | B | Classic as a `rulesets` row: no hard-coded `Ruleset::classic()`, no closed id lists, one fallback | M | logic-builder + asset-builder | kit + game | after INPUT1-U | done 2026-11-01 (the classic row shipped through aegis content) |
 | 10 | CLN-45 | B | Split the legacy-vs-timeline switches bundled under `round_intent` into named rule options | M-L | logic-builder | kit | after CLN-44, INPUT1-U, INPUT1-L | proposed |
-| 11 | CLN-46 | B | Screens and host read rules, not `is_classic()` | S | logic-builder | game + kit | after CLN-44 | proposed |
+| 11 | CLN-46 | B | Screens and host read rules, not `is_classic()` | S | logic-builder | game + kit | after CLN-44 | done (2026-11-01) |
 | 12 | CLN-48 | C | The `wave_*` fold shim (PHASEFOLD 1.4) once nothing reads Godot data | S | logic-builder | kit | after CLN-42 | done |
 | 13 | CLN-50 | C | Manual planning mode (MM1), superseded by picks; no screen sets it since INPUT1-U slice 2 | S | logic-builder | kit + game | after INPUT1-U | proposed |
 | 14 | CLN-40 | A | Content checks parity: slim engine golden of the broken-entry cases, or delete (Q-A3) | M | logic-builder | game | now | proposed |
@@ -358,8 +358,9 @@ Split the switches bundled under `round_intent`. Scope B. Status: done 2026-11-0
 
 ### CLN-46
 
-Screens and host read rules, not `is_classic()`. Scope B. Status: proposed. Size S. Lane logic-builder. Layer game +
-kit.
+Screens and host read rules, not `is_classic()`. Scope B. Status: done (2026-11-01: host state always carries `ruleset`;
+Dojo and Arena pickers over the rows; `EncounterDef::from_obj_with`; `ruleset::DEFAULT`; the battle Rest preview reads
+`rest_at_round_end()`). Size S. Lane logic-builder. Layer game + kit.
 
 - Where: `rpgkit_host/src/lib.rs:428-431` (state carries `ruleset` only beyond classic), `rpgkit_battle/src/dojo.rs:313`
   (reset rebuilds decks unless classic: really "has `deck`"), `emberwake_gui/src/dojo.rs:248-257, 611, 1039` (the

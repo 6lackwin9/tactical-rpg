@@ -312,7 +312,8 @@ impl DojoSession {
         let ruleset = self.ruleset.clone();
         *self = Self::new(self.cat.clone());
         self.ruleset = ruleset;
-        if !self.ruleset.is_classic() {
+        // the heroes are rebuilt where the ruleset has a deck (CLN-46: the rule, not the row's name)
+        if self.ruleset.has(ruleset::DECK) {
             self.rebuild_all();
         }
         self.log_event("EVENT", "Dojo Reset", "Heroes, stash, loadouts and dummy restored to baseline", 0, "RESET");
@@ -403,8 +404,7 @@ impl DojoSession {
         let Some(dummy_def) = self.cat.units.get(DUMMY) else { return Err(format!("no '{DUMMY}' unit in the catalog")) };
         let hero_def = self.hero_def(self.active).unwrap_or_else(|| UnitDef::from_obj(&Default::default()));
         let row = serde_json::json!({"id": "dojo_planner", "name": "Gear Dojo", "party": [], "enemies": [DUMMY], "total_blocks": PLAN_BLOCKS, "unit_ap": HERO_AP, "max_rounds": 1});
-        let mut def = EncounterDef::from_obj(row.as_object().expect("an object"));
-        def.ruleset = self.ruleset.clone();
+        let def = EncounterDef::from_obj_with(row.as_object().expect("an object"), self.ruleset.clone());
         let prebuilt = |unit: Unit, d: &UnitDef, key: &str| Prebuilt { unit, art: String::new(), palette: String::new(), profile: AiProfile::for_unit(&self.cat, d), key: key.into() };
         let mut party = vec![prebuilt(self.hero().clone(), &hero_def, "hero")];
         if setup.partner.is_some() {

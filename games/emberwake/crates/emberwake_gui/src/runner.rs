@@ -42,10 +42,6 @@ pub enum SAct {
     Exit,
 }
 
-/// The Combat Arena's rules (RULESET1-R): the encounter's own (its world's; classic for a catalog encounter), or a
-/// ruleset picked for the run.
-const RULESETS: [(&str, Option<&str>); 3] = [("World", None), ("Classic", Some("classic")), ("Timeline", Some("timeline"))];
-
 /// INPUT1 MR11: the Arena's "Diagonal melee" picks (label, the host's `melee_diagonal`; None = the ruleset row's value).
 const DIAGONALS: [(&str, Option<&str>); 4] = [("Ruleset", None), ("None", Some("none")), ("Maneuver", Some("maneuver")), ("All", Some("all"))];
 
@@ -77,7 +73,7 @@ pub(crate) fn chip_text(name: &str, spec: &str, diagonal: &str, plans_shown: boo
 
 pub struct SceneRunner {
     encounter: usize,
-    /// An index into RULESETS.
+    /// An index into `rulesets`: 0 is World, then the catalog's ruleset rows in file order.
     ruleset: usize,
     /// RULESET1 3.2: the extensions switched for the Arena's run (on or off whatever the picked ruleset has; one equal
     /// to the ruleset's own changes nothing).
@@ -102,8 +98,8 @@ impl SceneRunner {
     /// The ruleset the picked encounter plays by before the toggles: the picked one, or for World the ruleset of the
     /// encounter's world (classic for a catalog encounter: RULESET1 3.1.2).
     fn base_ruleset(&self, cx: &Cx) -> Ruleset {
-        match RULESETS[self.ruleset].1 {
-            Some(id) => Ruleset::of_or_classic(&cx.data.cat, id),
+        match self.picked(cx) {
+            Some(id) => Ruleset::of_or_classic(&cx.data.cat, &id),
             None => match Self::encounters(cx).get(self.encounter).and_then(|e| e.1.clone()) {
                 Some(world) => cx.data.ruleset(&world),
                 None => Ruleset::of_or_classic(&cx.data.cat, emberwake_rules::ruleset::CLASSIC),
@@ -114,6 +110,23 @@ impl SceneRunner {
     /// The `rules` switches of the run ("-id,+id"): the toggles that differ from the base ruleset.
     fn rules_spec(&self, base: &Ruleset) -> String {
         self.rules.iter().filter(|(id, on)| base.has(id) != **on).map(|(id, on)| format!("{}{id}", if *on { '+' } else { '-' })).collect::<Vec<_>>().join(",")
+    }
+
+    /// The Combat Arena's rules (RULESET1-R, CLN-46): the encounter's own (its world's; classic for a catalog encounter),
+    /// or a ruleset picked for the run.
+    /// The picker: "World" (the encounter's world's own), then a row per ruleset of the catalog
+    /// (id, name).
+    fn rulesets(cx: &Cx) -> Vec<(Option<String>, String)> {
+        let rows = Ruleset::ids(&cx.data.cat).into_iter().map(|id| {
+            let name = Ruleset::of_or_classic(&cx.data.cat, &id).name;
+            (Some(id), name)
+        });
+        std::iter::once((None, "World".to_string())).chain(rows).collect()
+    }
+
+    /// The ruleset id the picker names (None = World).
+    fn picked(&self, cx: &Cx) -> Option<String> {
+        Self::rulesets(cx).into_iter().nth(self.ruleset).and_then(|r| r.0)
     }
 
     /// The rules the Arena's run plays by: the base ruleset with the switches.
@@ -219,7 +232,7 @@ impl SceneRunner {
         match a {
             SAct::MainMenu | SAct::Exit => cx.nav.push(Nav::Pop),
             SAct::PickEncounter(i) => self.encounter = i,
-            SAct::PickRuleset(i) => self.ruleset = i.min(RULESETS.len() - 1),
+            SAct::PickRuleset(i) => self.ruleset = i.min(Self::rulesets(cx).len() - 1),
             SAct::ShowRules => self.show_rules = !self.show_rules,
             SAct::ToggleRule(i) => {
                 if let Some(id) = extensions().get(i).copied() {
@@ -232,7 +245,7 @@ impl SceneRunner {
             SAct::Arena => {
                 let list = Self::encounters(cx);
                 if let Some((_, world, id)) = list.get(self.encounter) {
-                    let ruleset = RULESETS[self.ruleset].1.map(String::from);
+                    let ruleset = self.picked(cx);
                     let rules = self.rules_spec(&self.base_ruleset(cx));
                     // a reveal ticked under another ruleset stays off where plan_badges is not on (classic stays byte-identical)
                     let reveal = self.reveal && self.effective_ruleset(cx).has(PLAN_BADGES);
@@ -358,14 +371,14 @@ impl Screen<GameCx> for SceneRunner {
                 let diags: Vec<String> = DIAGONALS.iter().map(|x| x.0.to_string()).collect();
                 let diag_tip = tip("Diagonal melee", "Ruleset: the row's value. None: no diagonal hits. Maneuver: Maneuver skills hit diagonally. All: every melee attack and the riposte do.");
                 ui.select("runner.arena.diagonal", Rect::new(r.x + r.w - 205, pick_y, 66, 14), &diags, self.diagonal, SAct::PickDiagonal, true, diag_tip);
-                let rules: Vec<String> = RULESETS.iter().map(|x| x.0.to_string()).collect();
-                ui.select("runner.arena.ruleset", Rect::new(r.x + r.w - 135, pick_y, 80, 14), &rules, self.ruleset, SAct::PickRuleset, true, tip("Rules", "World: the encounter's world's ruleset (classic for a catalog encounter). Classic or Timeline: play it by those rules."));
+                let rules: Vec<String> = Self::rulesets(cx).into_iter().map(|x| x.1).collect();
+                ui.select("runner.arena.ruleset", Rect::new(r.x + r.w - 135, pick_y, 80, 14), &rules, self.ruleset, SAct::PickRuleset, true, tip("Rules", "World: the encounter's world's ruleset (classic for a catalog encounter). Any other row of the catalog's rulesets: play it by those rules."));
                 // RULESET1 12: "Reveal enemy plans" (V2: under the rule plan_badges), the ruleset chip, the toggles
                 let row_y = pick_y + 17;
                 ui.checkbox("runner.arena.reveal", r.x + 5, row_y + 2, "Reveal enemy plans", self.reveal, SAct::Reveal, effective.has(PLAN_BADGES));
                 let chip_r = Rect::new(r.x + 110, row_y, r.w - 204, 14);
                 ui.p.panel(chip_r, rgba(30, 44, 70, 255), BORDER, 2.0);
-                ui.p.text_fit(chip_r.x as f32 + 4.0, chip_r.y as f32 + 2.0, &chip, SMALL, (chip_r.w - 8) as f32, if effective.is_classic() && effective.rules.is_empty() { DIM } else { GOLD });
+                ui.p.text_fit(chip_r.x as f32 + 4.0, chip_r.y as f32 + 2.0, &chip, SMALL, (chip_r.w - 8) as f32, if effective.id == emberwake_rules::ruleset::DEFAULT && self.rules_spec(&self.base_ruleset(cx)).is_empty() { DIM } else { GOLD });
                 let chip_tip = format!("Rules on: {}.", if effective.rules.is_empty() { "none (classic)".to_string() } else { effective.rules.join(", ") });
                 ui.push("runner.arena.chip", "label", chip.clone(), chip_r, true, false, None, tip(&format!("Ruleset: {chip}"), &chip_tip));
                 ui.button_full("runner.arena.rules", Rect::new(r.x + r.w - 90, row_y, 85, 14), "Extensions", SAct::ShowRules, true, self.show_rules, BODY, tip("Extensions", "Switch single extensions of the ruleset on or off for this run (RULESET1 3.2); options belong to their ruleset."));
@@ -404,7 +417,7 @@ impl Screen<GameCx> for SceneRunner {
         let world = self.world_id(cx);
         let start = world.as_deref().map(|w| Self::starts(&cx.data, w)).and_then(|st| st.get(self.location.min(st.len().saturating_sub(1))).cloned());
         let base = self.base_ruleset(cx);
-        json!({"encounter": Self::encounters(cx).get(self.encounter).map(|e| e.0.clone()), "ruleset": RULESETS[self.ruleset].0, "world": world, "start": start.map(|p| p.1.unwrap_or_else(|| "world_map".into())),
+        json!({"encounter": Self::encounters(cx).get(self.encounter).map(|e| e.0.clone()), "ruleset": Self::rulesets(cx).get(self.ruleset).map(|r| r.1.clone()), "world": world, "start": start.map(|p| p.1.unwrap_or_else(|| "world_map".into())),
             "rules": self.rules_spec(&base), "rules_on": self.effective_ruleset(cx).rules, "reveal": self.reveal, "melee_diagonal": self.diagonal_pick(), "chip": self.chip(cx)})
     }
 
@@ -488,6 +501,39 @@ impl Screen<GameCx> for DebugFight {
 mod tests {
     use super::*;
 
+    /// The picker index of the catalog's ruleset row `id` (0 is World).
+    fn row_of(cx: &Cx, id: &str) -> usize {
+        1 + Ruleset::ids(&cx.data.cat).iter().position(|r| r == id).expect("the ruleset row")
+    }
+
+    /// Adds a scratch ruleset row `plain`: the classic row's numbers, no rules, `rest_ap: on_use`.
+    fn with_third_row(cx: &mut Cx) {
+        let d = std::sync::Arc::make_mut(&mut cx.data);
+        let mut row = d.cat.rulesets.get("classic").cloned().expect("the classic row");
+        row.insert("id".into(), json!("plain"));
+        row.insert("name".into(), json!("Plain"));
+        row.insert("rest_ap".into(), json!("on_use"));
+        std::sync::Arc::make_mut(&mut d.cat).rulesets.insert("plain".into(), row);
+    }
+
+    /// CLN-46: the Arena's picker lists World and one entry per catalog ruleset row (a third row appears), picking it
+    /// plays by it; the chip is dim at the default ruleset with no switches and lit for another row.
+    #[test]
+    fn the_arena_ruleset_picker_lists_the_catalog_rows() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        with_third_row(&mut cx);
+        let mut r = SceneRunner::new();
+        let rows = SceneRunner::rulesets(&cx);
+        assert_eq!(rows.len(), 1 + Ruleset::ids(&cx.data.cat).len());
+        assert!(rows.iter().any(|x| x.1 == "Plain") && rows[0].1 == "World");
+        let at = row_of(&cx, "plain");
+        r.act(&mut cx, SAct::PickRuleset(at));
+        assert_eq!(r.base_ruleset(&cx).id, "plain");
+        assert_eq!(r.state(&cx)["ruleset"], json!("Plain"));
+        r.act(&mut cx, SAct::PickRuleset(99));
+        assert_eq!(r.ruleset, rows.len() - 1, "clamped to the last row");
+    }
+
     fn data() -> emberwake_world::Data {
         let dir = emberwake_world::Data::find_data_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
         emberwake_world::Data::open(&dir).expect("data").0
@@ -543,7 +589,8 @@ mod tests {
         let first_catalog = SceneRunner::encounters(&cx).iter().position(|e| e.1.is_none()).expect("a catalog encounter");
         r.act(&mut cx, SAct::PickEncounter(first_catalog));
         assert!(r.effective_ruleset(&cx).is_classic() && r.rules_spec(&r.base_ruleset(&cx)).is_empty(), "World on a catalog encounter: classic");
-        r.act(&mut cx, SAct::PickRuleset(2));
+        let at = row_of(&cx, "timeline");
+        r.act(&mut cx, SAct::PickRuleset(at));
         let base = r.base_ruleset(&cx);
         assert!(!base.is_classic(), "the catalog has the timeline row");
         let exts = extensions();
@@ -571,7 +618,8 @@ mod tests {
         let mut cx = crate::hud::hud_tests::game_cx();
         let mut r = SceneRunner::new();
         assert_eq!(r.state(&cx)["melee_diagonal"], json!(""), "Ruleset by default");
-        r.act(&mut cx, SAct::PickRuleset(2));
+        let at = row_of(&cx, "timeline");
+        r.act(&mut cx, SAct::PickRuleset(at));
         let plain = r.chip(&cx);
         assert!(!plain.contains("diagonal"), "{plain}");
         r.act(&mut cx, SAct::PickDiagonal(3));

@@ -292,8 +292,7 @@ impl<'a> Runner<'a> {
         let characters: IndexMap<String, (String, String)> =
             left.iter().chain(right).chain(&waves).filter_map(|id| self.defs.get(id).and_then(|d| d.character.clone()).map(|c| (id.clone(), c))).collect();
         let roster = SimRoster { d: self.d, units: &self.units, characters };
-        let mut def = EncounterDef::from_obj(&entry);
-        def.ruleset = self.fight_ruleset();
+        let def = EncounterDef::from_obj_with(&entry, self.fight_ruleset());
         let mut s = Session::start(self.d.cat.clone(), def, &roster);
         self.prepare(&mut s, jitter.as_mut());
         for &a in &s.w.allies.clone() {

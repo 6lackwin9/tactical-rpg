@@ -17,6 +17,8 @@ use std::sync::{Mutex, OnceLock};
 /// The default ruleset id (a world that names none, a catalog encounter, the Dojo's start).
 pub const CLASSIC: &str = "classic";
 pub const TIMELINE: &str = "timeline";
+/// The ruleset a world without its own plays by (CLN-46: screens dim a chip at it, with no switches).
+pub const DEFAULT: &str = CLASSIC;
 /// The catalog kind of the ruleset rows (data/catalog/rulesets.json).
 pub const KIND: &str = "rulesets";
 
