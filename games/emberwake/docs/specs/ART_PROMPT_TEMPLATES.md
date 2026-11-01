@@ -117,3 +117,45 @@ Sprites include:
 
 Compact scale, highly readable, matches the 16-bit dark fantasy aesthetic.
 ```
+
+## Routes by asset type (ARTPROMPT1, 2026-11-02)
+
+From the ARTPROMPT1 tests (decision "ARTPROMPT1 routes"; Gemini web results beside Klein 4B, ERNIE-Image Turbo and
+Z-Image Turbo at game size; boards and prompt records in `C:/dev/localgen/review/artprompt1/`). Local runs need no
+approval; a Gemini run follows the image rules (the image API is asked first).
+
+| Asset type | Route | Prompt | Notes |
+| --- | --- | --- | --- |
+| Story scene, no recurring face (places, crowds) | ERNIE-Image Turbo locally (UNet fp8_e4m3fn) | [Story scene](#story-scene) | close to Gemini in style; follows layout less exactly (extra figures) |
+| Story scene with a named character, face in shot | Gemini, the character's portrait attached | [Story scene](#story-scene) | ERNIE plus a Klein whole-image edit restores hair, scars and armour but not the face shape |
+| Story scene, named characters small, far or turned away | ERNIE, then a Klein whole-image edit with the portrait | [Story scene](#story-scene) | the edit also fixes copied hair or armour on others (about 100 s) |
+| Full body front, side and back (rig reference) | Gemini, the portrait attached | [Full body, three views](#full-body-three-views) | no local model kept identity and true views together |
+| Single skill icon (read at 32 px) | Z-Image Turbo locally (2-4 seeds), else Gemini | [Single skill icon](#single-skill-icon) | one icon per run beats a sheet at 32 px; frame and tint added in post |
+| 2x2 icon sheet (settling four ideas) | Gemini | [Icon sheet](#icon-sheet) | keep subjects whole, not close-ups; local models lost colour |
+
+Gemini icon results are saved from the preview (right click, Save image as); the full-size download came back as a
+blurred crop. The model's corner mark is cleared at pixelize (`pixelize.clear_mark`; icons can keep a speck).
+
+### Full body, three views
+
+```text
+The same woman as the attached portrait, drawn full body three times side by side: front view, side view facing right, back view. Identical character in all three: same face, hair tied back, deep red riveted brigandine with brass rivets over mail, steel pauldrons and gorget, dark steel greaves, sword sheathed across her back with the hilt above the right shoulder. Same height, same scale, feet on one baseline, arms relaxed at her sides. 16-bit pixel art, clear dark outlines, limited palette with 4 shades per colour, light dithering on metal. Key light from the upper left, warm orange rim light from the right. Plain flat very dark background (#120e12). No floor, no shadow, no text, no frame.
+```
+
+### Story scene
+
+```text
+Pixel art story illustration for a dark fantasy tactical RPG, detailed 16-bit SNES/GBA-era style, 16:9 wide image. Night in a ruined stone courtyard: Mara Voss (the woman in the attached image, same face, hair and armour) sits by a campfire with two Ember Warden soldiers in red brigandines, one sharpening a sword, one standing watch with a spear. Warm orange firelight on faces and armour, deep blue-black shadows, broken arches and rubble behind them, sparks rising. Clear dark outlines, hand-placed pixel clusters, limited palette, light dithering. No text, no UI, no border, no logo.
+```
+
+### Single skill icon
+
+```text
+A single square pixel art skill icon for a dark fantasy tactical RPG, drawn as a 32x32 pixel icon scaled up (visible large pixels, no anti-aliasing). One bold centred silhouette with a thick dark outline and 3-4 colours plus black: a sword striking from the side with a curved orange motion trail (the skill "Flank Cut"). Plain very dark background (#120e12), no text, no frame.
+```
+
+### Icon sheet
+
+```text
+A 2x2 grid of four square pixel art skill icons for a dark fantasy tactical RPG, 16-bit SNES/GBA style, each icon designed to read clearly at 32x32 pixels. Bold silhouettes, thick dark outlines, high contrast, limited palette, one strong idea per icon, plain very dark background (#120e12) in each cell, no text, no borders between cells beyond a thin dark gap. Top-left: Shoulder Check, an armoured shoulder slamming forward with impact lines. Top-right: Heavy Cleave, a broad axe blade mid-swing with a heavy arc. Bottom-left: Hamstring Cut, a dagger slashing low behind a leg. Bottom-right: Flank Cut, a sword striking from the side with a curved motion trail.
+```
