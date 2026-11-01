@@ -256,6 +256,50 @@ class Scale(unittest.TestCase):
                 self.run_faces(**kw)
         self.assertFalse(self.root.exists())
 
+    def test_custom_cell_names_write_the_right_files(self):
+        names = ["determined", "happy", "sad", "surprised"]
+        self.run_faces(reduce="scale", names=names)
+        d = self.root / "npcs" / "faces" / "tess"
+        self.assertEqual(sorted(p.stem for p in d.glob("*.png")), sorted(names))
+        plain = self.tmp / "plain"
+        sheets.slice_faces(self.src, "tess", "npc", root=plain, faction="hearth", reduce="scale")
+        for new, old in zip(names, sheets.FACE_CELLS):
+            other = Image.open(plain / "npcs" / "faces" / "tess" / f"{old}.png").convert("RGBA")
+            self.assertIsNone(ImageChops.difference(self.frame(new), other).getbbox(), new)
+        out = self.tmp / "c2.png"
+        self.run_faces(reduce="scale", names=names, contact_out=out)
+        self.assertTrue(out.is_file())
+
+    def test_bad_cell_names_refused_before_writing(self):
+        for names in (["a", "b", "c"], ["a", "a", "b", "c"], ["Happy", "b", "c", "d"], ["a b", "b", "c", "d"]):
+            with self.assertRaises(ValueError):
+                self.run_faces(reduce="scale", names=names)
+        with self.assertRaises(ValueError):
+            self.run_faces(reduce="scale", names=["determined", "happy", "sad", "surprised"], cells={"hurt": self.src})
+        with self.assertRaises(ValueError):
+            self.run_faces(reduce="scale", names=["a", "b", "c", "d"], base=True)
+        self.assertFalse(self.root.exists())
+
+    def test_align_to_recovers_a_known_scale_and_shift(self):
+        neutral = figure()
+        cell, _ = sheets.place(neutral, 0.9, 9, -9, BG + (255,), Image.LANCZOS)
+        sheet_im = Image.new("RGB", (SIZE, SIZE), BG)
+        for box in sheets.face_boxes(sheet_im.size):
+            sheet_im.paste(cell.resize((box[2] - box[0], box[3] - box[1])).convert("RGB"), box[:2])
+        src = self.tmp / "second.png"
+        sheet_im.save(src)
+        ref = self.tmp / "ref.png"
+        neutral.save(ref)
+        lines = []
+        sheets.slice_faces(src, "tess", "npc", root=self.root, faction="hearth", reduce="scale",
+                           names=["determined", "happy", "sad", "surprised"], align_ref=ref, report=lines.append)
+        self.assertEqual([l.split(":")[0] for l in lines], ["determined", "happy", "sad", "surprised"])
+        self.assertTrue(all(abs(float(l.split("scale ")[1].split()[0]) - 1 / 0.9) < 0.02 for l in lines), lines)
+        with self.assertRaises(ValueError):
+            sheets.slice_faces(src, "tess", "npc", root=self.root, reduce="scale", align_ref=self.tmp / "none.png")
+        with self.assertRaises(ValueError):
+            sheets.slice_faces(src, "tess", "npc", root=self.root, align_ref=ref)
+
     def test_contact_and_cli(self):
         out = self.tmp / "c.png"
         r = subprocess.run([sys.executable, str(HERE / "sheets.py"), "faces", str(self.src), "tess", "npc", "--reduce",

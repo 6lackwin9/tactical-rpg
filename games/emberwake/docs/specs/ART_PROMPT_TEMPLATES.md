@@ -218,7 +218,11 @@ palette pass (the default `--reduce pixelize` is unchanged). `--align` first sca
 shifts each non-neutral cell so its figure best covers the neutral cell's, and prints the chosen scale and offset
 (pixels of the cell) per cell. `--cell <name>=<image>` (repeatable) replaces one cell by a 1:1 edit of the neutral cell
 (for example `--cell afraid=art_src/bram_gen1793543824_1.png`), resized to the cell before the alignment. Both
-need `--reduce scale`; `--contact` works as before.
+need `--reduce scale`; `--contact` works as before. The second sheet (PORTRAITFX2-T): the option
+`--cells determined,happy,sad,surprised` names the four cells in sheet order (default `neutral,hurt,angry,afraid`; any
+four distinct snake_case ids, checked before a write; frames, `--cell` keys and contact labels follow), and
+`--align-to IMAGE` aligns all four cells (none is neutral) to that image, resized to the cell, with the same search (use the
+first sheet's raw neutral cell so both sheets share one framing).
 Commands (from `tools/portraits`, with `$LOCALAPPDATA/Programs/Python/Python312/python.exe`; test
 `test_artqueue.py`):
 

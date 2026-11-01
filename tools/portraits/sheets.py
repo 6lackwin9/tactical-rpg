@@ -27,6 +27,11 @@
 #       (0.85 .. 1.15) and shifts each other cell onto the neutral cell's figure and prints the scale and offset;
 #       --cell name=image (repeatable, scale only) replaces one cell by a 1:1 edit of the neutral cell, resized to the
 #       cell, before the alignment.
+#       --cells a,b,c,d (PORTRAITFX2-T): the four cells' names in sheet order (default neutral,hurt,angry,afraid); the
+#       second sheet is --cells determined,happy,sad,surprised. Any four distinct snake_case ids are accepted (the
+#       kit's default faces and those four are ordinary ones); checked before any write; frames, --cell keys and
+#       contact labels follow it. --align-to <image> (scale only): aligns all four cells (none is neutral) to that
+#       image, resized to the cell: the first sheet's raw neutral cell, so the second sheet shares its framing.
 # Standard library and Pillow only, so it can be ported to Rust.
 import pathlib, sys, tempfile
 
@@ -710,22 +715,44 @@ def align_to(cell, neutral):
     return aligned, applied, (fx, fy)
 
 
+def check_cell_names(names):
+    """The four cell names of a sheet (default FACE_CELLS): distinct snake_case ids (the kit's default faces and
+    determined / happy / sad / surprised are ordinary ones); anything else is refused before a write."""
+    import re
+    names = tuple(names) if names else FACE_CELLS
+    if len(names) != 4 or len(set(names)) != 4:
+        raise ValueError(f"--cells needs four distinct names, got {', '.join(names)}")
+    for n in names:
+        if not re.fullmatch(r"[a-z][a-z0-9]*(_[a-z0-9]+)*", n):
+            raise ValueError(f"bad cell name {n!r} (snake_case id)")
+    return names
+
+
 def slice_faces(sheet, cid, tier, base=False, crop=None, contact_out=None, faction=None, root=PORTRAITS,
-                reduce="pixelize", align=False, cells=None, report=None):
+                reduce="pixelize", align=False, cells=None, report=None, names=None, align_ref=None):
     """Cuts an expression sheet into its four frames (see the header); returns the paths written, frames first.
     reduce "scale": each cell is cut from its background, scaled to the grid and framed without the palette pass;
     `align` (scale only) lines the other three cells up with the neutral one; `cells` maps a cell name to an image
-    that replaces it (resized to the cell, before the alignment); `report(text)` hears each alignment."""
+    that replaces it (resized to the cell, before the alignment); `report(text)` hears each alignment; `names` the four
+    cell names in sheet order (default FACE_CELLS); `align_ref` an image (resized to the cell) that all four cells are
+    aligned to, none treated as neutral (scale only)."""
     import pixelize as X
     from PIL import Image
     if reduce not in ("pixelize", "scale"):
         raise ValueError(f"unknown --reduce {reduce!r} (pixelize or scale)")
     cells = dict(cells or {})
-    if (align or cells) and reduce != "scale":
-        raise ValueError("--align and --cell need --reduce scale")
+    names = check_cell_names(names)
+    if (align or cells or align_ref) and reduce != "scale":
+        raise ValueError("--align, --align-to and --cell need --reduce scale")
     for name in cells:
-        if name not in FACE_CELLS:
-            raise ValueError(f"unknown cell {name!r} (one of {', '.join(FACE_CELLS)})")
+        if name not in names:
+            raise ValueError(f"unknown cell {name!r} (one of {', '.join(names)})")
+    if align_ref is not None and not pathlib.Path(align_ref).is_file():
+        raise ValueError(f"--align-to image {str(align_ref)!r} not found")
+    if base and "neutral" not in names:
+        raise ValueError("--base needs a neutral cell")
+    if align and align_ref is None and "neutral" not in names:
+        raise ValueError("--align needs a neutral cell (or use --align-to)")
     folder = pathlib.Path(root) / face_folder(tier)
     im = Image.open(sheet).convert("RGBA")
     boxes = face_boxes(im.size, crop)
@@ -740,14 +767,21 @@ def slice_faces(sheet, cid, tier, base=False, crop=None, contact_out=None, facti
     frames = {}
     if reduce == "scale":
         raw = {}
-        for name, box in zip(FACE_CELLS, boxes):
+        for name, box in zip(names, boxes):
             cell = im.crop(box)
             if name in cells:
                 cell = Image.open(cells[name]).convert("RGBA").resize(cell.size, Image.LANCZOS)
             raw[name] = X.clear_corner(cell)
-        for name in FACE_CELLS:
+        ref = None
+        if align_ref is not None:
+            ref = X.clear_corner(Image.open(align_ref).convert("RGBA").resize(raw[names[0]].size, Image.LANCZOS))
+        for name in names:
             cell = raw[name]
-            if align and name != "neutral":
+            if ref is not None:
+                cell, scale, (dx, dy) = align_to(cell, ref)
+                if report:
+                    report(f"{name}: scale {scale:.3f} offset {dx},{dy}")
+            elif align and name != "neutral":
                 cell, scale, (dx, dy) = align_to(cell, raw["neutral"])
                 if report:
                     report(f"{name}: scale {scale:.3f} offset {dx},{dy}")
@@ -756,16 +790,16 @@ def slice_faces(sheet, cid, tier, base=False, crop=None, contact_out=None, facti
         with tempfile.TemporaryDirectory(prefix="faces_") as tmp:
             cleared = pathlib.Path(tmp) / "sheet.png"
             im.save(cleared)
-            for name, box in zip(FACE_CELLS, boxes):
+            for name, box in zip(names, boxes):
                 frames[name], _ = X.pixelize(cleared, crop=box, mark=False, faction=faction)
-    for name in FACE_CELLS:
+    for name in names:
         dest = out_dir / f"{name}.png"
         frames[name].save(dest); written.append(dest)
     if base:
         frames["neutral"].save(current); written.append(current)
     if contact_out:
-        written.append(face_contact([before] + [frames[n] for n in FACE_CELLS], contact_out,
-                                    ["current" if before else "no portrait"] + list(FACE_CELLS)))
+        written.append(face_contact([before] + [frames[n] for n in names], contact_out,
+                                    ["current" if before else "no portrait"] + list(names)))
     return written
 
 
@@ -811,7 +845,7 @@ if __name__ == "__main__":
         cells = {}
         while "--cell" in args:
             i = args.index("--cell"); name, _, img = args[i + 1].partition("="); cells[name] = img; del args[i:i + 2]
-        for flag in ("--crop", "--contact", "--faction", "--root", "--reduce"):
+        for flag in ("--crop", "--contact", "--faction", "--root", "--reduce", "--cells", "--align-to"):
             if flag in args:
                 i = args.index(flag); opt[flag] = args[i + 1]; del args[i:i + 2]
         base = "--base" in args
@@ -822,11 +856,13 @@ if __name__ == "__main__":
             args.remove("--align")
         if len(args) != 3:
             sys.exit("usage: sheets.py faces <sheet.png> <id> <tier> [--base] [--crop l,t,r,b] [--contact out.png] "
-                     "[--faction F] [--root R] [--reduce pixelize|scale] [--align] [--cell name=image]...")
+                     "[--faction F] [--root R] [--reduce pixelize|scale] [--align] [--cell name=image]... "
+                     "[--cells a,b,c,d] [--align-to image]")
         try:
             for path in slice_faces(args[0], args[1], args[2], base, parse_crop(opt["--crop"]) if "--crop" in opt else None,
                                     opt.get("--contact"), opt.get("--faction"), opt.get("--root", PORTRAITS),
-                                    opt.get("--reduce", "pixelize"), align, cells, print):
+                                    opt.get("--reduce", "pixelize"), align, cells, print,
+                                    opt["--cells"].split(",") if "--cells" in opt else None, opt.get("--align-to")):
                 print(path)
         except ValueError as e:
             sys.exit(f"faces: {e}")
