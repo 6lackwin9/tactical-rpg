@@ -13,7 +13,10 @@
 //! pairs with pass or fail, the three faces at the four text sizes, the header, badge and inset pieces, every frame
 //! role at 40 x 16 and 120 x 40 and the picked one at 300 x 120, and a switch between the engine default, the layers'
 //! theme (`theme::loaded()`) and that theme with frames off (it sets the theme in force for the whole window until the
-//! page or the gallery is left: `leave_theme`).
+//! page or the gallery is left: `leave_theme`). LOOK1-ME: a sixth page, Panes, shows each engine pane (`panes`) on
+//! its own stage, picked by tabs: the backdrop (vignette and veil switches), the menu column under its title block,
+//! the tab rail, three slot cards (a thumbnail, an initial, a long name cut; lock and delete) and the themed ask
+//! (ornate or panel, either default); `Specimens::key` takes the page's keys.
 
 use crate::canvas::{rgb, rgba, Image, Rect, Rgba};
 use crate::fx::{Beam, Camera, Clock, Effect, Flash, Fx, Layer, Look, Looped, Orbit, Projectile, Ring, ShakeLimits, ShakeTable, Sparks, Trail, PRIM_KINDS, SHAKE_PRESETS};
@@ -22,6 +25,8 @@ use aegis_core::assets::Face;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use crate::painter::Typeface;
+use crate::panes::{ask_dialog, ask_key, backdrop, backdrop_pane, menu_column, menu_key, menu_title, slot_card, tab_key, tab_rail, AskView, Corner, MenuItem, SlotView};
+use crate::screen::Key;
 use crate::theme::{self, Theme, FRAME_ROLES, ROLES};
 use crate::timeline::{Link, Mark, Part, PartStyle, Section, Segment, Timeline, Track};
 use crate::ui::{tip, Glyph, Ui, BODY, DIM, FOE, GOLD, GOOD, INFO, SMALL, TEXT};
@@ -70,10 +75,20 @@ pub enum KitAct {
     /// LOOK1-E1: the Theme page's switch (`THEME_VIEWS` index) and the frame role shown large (`FRAME_ROLES` index).
     ThemeView(usize),
     ThemeFrame(usize),
+    /// LOOK1-ME: the Panes page's picker (`PANES` index), its tab rail's tab (`PANE_TABS` index), a slot card, the
+    /// slot's lock, and a pane switch (`vignette`, `veil`, `ornate`, `destructive`).
+    Pane(usize),
+    PaneTab(usize),
+    Slot(usize),
+    SlotLock,
+    PaneToggle(&'static str),
 }
 
 pub const TABS: [&str; 3] = ["First", "Second", "Third"];
-pub const PAGES: [&str; 5] = ["Widgets", "Timeline", "Effects", "Portraits", "Theme"];
+pub const PAGES: [&str; 6] = ["Widgets", "Timeline", "Effects", "Portraits", "Theme", "Panes"];
+/// LOOK1-ME: the Panes page's panes, and its tab rail's sample tabs.
+pub const PANES: [&str; 5] = ["Backdrop", "Menu column", "Tab rail", "Slot card", "Ask"];
+pub const PANE_TABS: [&str; 4] = ["Video", "Audio", "Controls", "Text"];
 /// The Theme page's switch: the engine default, the theme the asset layers gave, that theme with frames off.
 pub const THEME_VIEWS: [&str; 3] = ["Engine default", "Layers' theme", "Frames off"];
 /// The text sizes the Theme page shows each face at (the settings' four, `screen::TEXT_SIZES`).
@@ -140,6 +155,16 @@ pub struct Specimens {
     /// The Theme page's switch (`THEME_VIEWS`) and its large frame role (`FRAME_ROLES` index).
     pub theme_view: usize,
     pub theme_frame: usize,
+    /// The Panes page (LOOK1-ME): the pane on view (`PANES`), the tab rail's open tab, the selected slot card, the
+    /// first slot's lock, and the switches.
+    pub pane: usize,
+    pub pane_tab: usize,
+    pub slot: usize,
+    pub slot_locked: bool,
+    pub vignette: bool,
+    pub veil: bool,
+    pub ask_ornate: bool,
+    pub ask_no_default: bool,
 }
 
 /// The Portraits page's clock, portrait (its cache behind a `RefCell`: the page draws through `&self`), sample face
@@ -370,6 +395,14 @@ impl Default for Specimens {
             portrait: PortraitDemo::default(),
             theme_view: 1,
             theme_frame: 0,
+            pane: 0,
+            pane_tab: 0,
+            slot: 0,
+            slot_locked: false,
+            vignette: true,
+            veil: true,
+            ask_ornate: true,
+            ask_no_default: false,
         }
     }
 }
@@ -408,6 +441,19 @@ impl Specimens {
             KitAct::PortraitMotion(i) => self.portrait.set_motion(*i),
             KitAct::ThemeView(i) => format!("theme {}", THEME_VIEWS[*i % THEME_VIEWS.len()]),
             KitAct::ThemeFrame(i) => format!("frame {}", FRAME_ROLES[*i % FRAME_ROLES.len()].0),
+            KitAct::Pane(i) => format!("pane {}", PANES[*i % PANES.len()]),
+            KitAct::PaneTab(i) => format!("rail tab {}", PANE_TABS[*i % PANE_TABS.len()]),
+            KitAct::Slot(i) => format!("slot {}", i + 1),
+            KitAct::SlotLock => format!("slot lock {}", if self.slot_locked { "off" } else { "on" }),
+            KitAct::PaneToggle(w) => {
+                let on = match *w {
+                    "vignette" => self.vignette,
+                    "veil" => self.veil,
+                    "ornate" => self.ask_ornate,
+                    _ => self.ask_no_default,
+                };
+                format!("{w} {}", if on { "off" } else { "on" })
+            }
         };
         match a {
             KitAct::Tab(i) => self.tab = i % TABS.len(),
@@ -445,6 +491,16 @@ impl Specimens {
                 theme::set_theme(theme_view(self.theme_view));
             }
             KitAct::ThemeFrame(i) => self.theme_frame = i % FRAME_ROLES.len(),
+            KitAct::Pane(i) => self.pane = i % PANES.len(),
+            KitAct::PaneTab(i) => self.pane_tab = i % PANE_TABS.len(),
+            KitAct::Slot(i) => self.slot = i,
+            KitAct::SlotLock => self.slot_locked = !self.slot_locked,
+            KitAct::PaneToggle(w) => match w {
+                "vignette" => self.vignette = !self.vignette,
+                "veil" => self.veil = !self.veil,
+                "ornate" => self.ask_ornate = !self.ask_ornate,
+                _ => self.ask_no_default = !self.ask_no_default,
+            },
             KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) | KitAct::Segment(..) | KitAct::Effect(_) | KitAct::Shake(_) | KitAct::PortraitToggle(_) | KitAct::PortraitFire(_) | KitAct::PortraitMotion(_) => {}
         }
     }
@@ -532,6 +588,8 @@ impl Specimens {
             self.draw_portraits(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
         } else if self.page == 4 {
             self.draw_theme(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
+        } else if self.page == 5 {
+            self.draw_panes(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
         } else {
             self.draw_widgets(ui, r, &wrap);
         }
@@ -875,6 +933,186 @@ impl Specimens {
             ui.p.text((view.x + 4) as f32, (view.y + 2 - off + i * line) as f32, &format!("Line {} of a list taller than its area", i + 1), SMALL, TEXT);
         }
         ui.scroll_end();
+    }
+}
+
+/// LOOK1-ME: the Panes page's menu column items (generic menu words; Credits is disabled to show its reason).
+pub fn pane_menu<A: Clone>(wrap: &impl Fn(KitAct) -> A) -> Vec<MenuItem<A>> {
+    vec![
+        MenuItem::new("continue", "Continue", Some('c'), wrap(KitAct::Press("continue"))).with_tip("Carries on from the last save."),
+        MenuItem::new("new", "New game", Some('n'), wrap(KitAct::Press("new game"))),
+        MenuItem::new("load", "Load", Some('l'), wrap(KitAct::Press("load"))),
+        MenuItem::new("settings", "Settings", Some('s'), wrap(KitAct::Press("settings"))),
+        MenuItem::new("credits", "Credits", None, wrap(KitAct::Press("credits"))).off("Nothing to show yet."),
+        MenuItem::new("quit", "Quit", Some('q'), wrap(KitAct::Press("quit"))),
+    ]
+}
+
+/// LOOK1-ME: the Panes page's sample picture, 320 x 180 (16:9): a dusk sky, a low sun and two hill lines, so the
+/// cover fit's crop and the vignette show.
+pub fn sample_backdrop() -> &'static Image {
+    static IMG: std::sync::OnceLock<Image> = std::sync::OnceLock::new();
+    IMG.get_or_init(|| {
+        let (w, h) = (320, 180);
+        let mut px = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let t = y as f32 / h as f32;
+                let mut c = [(40.0 + 150.0 * t) as u8, (34.0 + 70.0 * t) as u8, (70.0 - 20.0 * t) as u8];
+                let (dx, dy) = (x as f32 - 230.0, y as f32 - 110.0);
+                if dx * dx + dy * dy < 22.0 * 22.0 {
+                    c = [250, 200, 110];
+                }
+                let far = 118.0 + 10.0 * (x as f32 / 30.0).sin();
+                let near = 140.0 + 14.0 * (x as f32 / 47.0 + 1.3).sin();
+                if y as f32 > near {
+                    c = [24, 22, 30];
+                } else if y as f32 > far {
+                    c = [52, 44, 58];
+                }
+                // a marker column at each edge, so the crop of the sides shows
+                if x < 4 || x >= w - 4 {
+                    c = [200, 60, 60];
+                }
+                px[((y * w + x) * 4) as usize..((y * w + x) * 4 + 4) as usize].copy_from_slice(&[c[0], c[1], c[2], 255]);
+            }
+        }
+        Image { w, h, px }
+    })
+}
+
+/// LOOK1-ME: five 20 x 20 sample portraits (a head and shoulders in a hue each).
+pub fn sample_portraits() -> &'static [Image] {
+    static IMGS: std::sync::OnceLock<Vec<Image>> = std::sync::OnceLock::new();
+    IMGS.get_or_init(|| {
+        [STEEL, AMBER, ORCHID, CANDLE, LINEN]
+            .iter()
+            .map(|hue| {
+                let n = 20;
+                let mut px = vec![0u8; (n * n * 4) as usize];
+                for y in 0..n {
+                    for x in 0..n {
+                        let (fx, fy) = (x as f32 - 9.5, y as f32);
+                        let head = fx * fx + (fy - 7.0) * (fy - 7.0) < 20.0;
+                        let body = fy > 13.0 && fx.abs() < 8.0;
+                        let c = if head { [hue[0], hue[1], hue[2], 255] } else if body { [hue[0] / 2, hue[1] / 2, hue[2] / 2, 255] } else { [30, 32, 40, 255] };
+                        px[((y * n + x) * 4) as usize..((y * n + x) * 4 + 4) as usize].copy_from_slice(&c);
+                    }
+                }
+                Image { w: n, h: n, px }
+            })
+            .collect()
+    })
+}
+
+impl Specimens {
+    /// The Panes page's keys (the gallery screen forwards them): the menu column's hotkeys, the tab rail's PageUp /
+    /// PageDown and the ask's Enter, y, n and Esc. True when the key was used.
+    pub fn key(&mut self, k: Key) -> bool {
+        if self.page != 5 {
+            return false;
+        }
+        let a = match self.pane {
+            1 => menu_key(&pane_menu(&|a| a), k),
+            2 => tab_key(PANE_TABS.len(), self.pane_tab, k).map(KitAct::PaneTab),
+            4 => ask_key(self.ask_no_default, k).map(|yes| KitAct::Press(if yes { "yes" } else { "no" })),
+            _ => None,
+        };
+        match a {
+            Some(a) => {
+                self.act(a);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// The Panes page (LOOK1-ME): the pane picker (`kit.pane.<i>`), the pane's switches, then the pane on its stage.
+    fn draw_panes<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: &impl Fn(KitAct) -> A) {
+        let mut x = r.x + 6;
+        for (i, p) in PANES.iter().enumerate() {
+            let w = (ui.p.text_w(p, BODY) + 12.0).ceil() as i32;
+            ui.tab(&format!("kit.pane.{i}"), Rect::new(x, r.y + 4, w, 14), p, wrap(KitAct::Pane(i)), self.pane == i);
+            x += w + 2;
+        }
+        let stage = Rect::new(r.x + 6, r.y + 40, r.w - 12, r.h - 44);
+        let row = r.y + 24;
+        let checks = |ui: &mut Ui<A>, list: &[(&'static str, &str, bool)]| {
+            let mut x = r.x + 6;
+            for (key, label, on) in list {
+                ui.checkbox(&format!("kit.pane.{key}"), x, row, label, *on, wrap(KitAct::PaneToggle(key)), true);
+                x += (ui.p.text_w(label, BODY) + 30.0).ceil() as i32;
+            }
+        };
+        match self.pane {
+            0 => {
+                checks(ui, &[("vignette", "Vignette", self.vignette), ("veil", "Veil 50 %", self.veil)]);
+                // A 4:3 rect (the sides cropped) and a tall one beside it (cropped more), the same 16:9 picture.
+                let (veil, vig) = (if self.veil { 128 } else { 0 }, if self.vignette { 0.8 } else { 0.0 });
+                let wide = Rect::new(stage.x, stage.y, (stage.h * 4 / 3).min(stage.w), stage.h);
+                backdrop_pane(ui, "kit.backdrop", Some(sample_backdrop()), "sample 320 x 180 (16:9) in 4:3", wide, veil, vig);
+                let tall_x = wide.x + wide.w + 6;
+                if stage.x + stage.w - tall_x > 20 {
+                    backdrop_pane(ui, "kit.backdrop.tall", Some(sample_backdrop()), "sample 320 x 180 (16:9), tall", Rect::new(tall_x, stage.y, stage.x + stage.w - tall_x, stage.h), veil, vig);
+                }
+                let note = Rect::new(wide.x + 8, wide.y + wide.h - 40, wide.w - 16, 32);
+                let inner = ui.inset(note, false);
+                let ink = ui.t.text;
+                ui.para(inner.x, inner.y, inner.w, "Cover fit: the 16:9 picture fills each rect, its overflow cropped evenly (the red edge columns fall outside).", SMALL, ink);
+            }
+            1 => {
+                backdrop(&mut ui.p, Some(sample_backdrop()), stage, 128, 0.6);
+                let x = stage.x + 16;
+                let y = menu_title(ui, x, stage.y + 12, 200, "Title", "A subtitle under it");
+                let items = pane_menu(wrap);
+                let hovered = menu_column(ui, "kit.menu", x, y, 160, 18, 22, &items);
+                let dim = ui.t.dim;
+                let said = hovered.map_or("Hovered: none (letters are the hotkeys)".to_string(), |i| format!("Hovered: {}", items[i].label));
+                ui.p.text_fit((r.x + 6) as f32, row as f32, &said, SMALL, (r.w - 12) as f32, dim);
+            }
+            2 => {
+                let content = tab_rail(ui, "kit.rail", stage, &PANE_TABS, self.pane_tab, |i| wrap(KitAct::PaneTab(i)));
+                let y = ui.header(content.x, content.y, PANE_TABS[self.pane_tab]);
+                let ink = ui.t.text;
+                ui.para(content.x, y + 4, content.w, "The open tab's form goes here. The rail takes the focus like any buttons; PageUp and PageDown change the tab.", BODY, ink);
+            }
+            3 => {
+                let portraits: Vec<&Image> = sample_portraits().iter().collect();
+                let cw = 290.min(stage.w);
+                let views = [
+                    SlotView { thumb: Some(sample_backdrop()), title: "First save".into(), lines: vec!["The harbour, day 3".into(), "Evening".into()], portraits: portraits[..3].to_vec(), stamp: "2026-11-02 18:40".into() },
+                    SlotView { thumb: None, title: "A save with a very long name that cannot fit".into(), lines: vec!["A place whose name runs long as well, day 12".into()], portraits: portraits.clone(), stamp: "2026-10-30 09:05".into() },
+                    SlotView { thumb: None, title: "Empty slot".into(), lines: vec!["Nothing saved here".into()], ..SlotView::default() },
+                ];
+                for (i, v) in views.iter().enumerate() {
+                    let cr = Rect::new(stage.x, stage.y + i as i32 * (84 + 6), cw, 84);
+                    let corner = if i == 2 {
+                        Vec::new()
+                    } else {
+                        let locked = i == 0 && self.slot_locked;
+                        vec![
+                            Corner { key: "lock".into(), label: if locked { "Unlock".into() } else { "Lock".into() }, glyph: if locked { Glyph::Lock } else { Glyph::Unlock }, action: wrap(if i == 0 { KitAct::SlotLock } else { KitAct::Press("lock") }), enabled: true, toggled: locked, tip: String::new() },
+                            Corner { key: "delete".into(), label: "Delete".into(), glyph: Glyph::Delete, action: wrap(KitAct::Press("delete")), enabled: !locked, toggled: false, tip: if locked { "Unlock it to delete it.".into() } else { String::new() } },
+                        ]
+                    };
+                    slot_card(ui, &format!("kit.slot.{i}"), cr, v, Some(wrap(KitAct::Slot(i))), self.slot == i, &corner);
+                }
+                let nx = stage.x + cw + 8;
+                if stage.x + stage.w - nx > 60 {
+                    let inner = ui.inset(Rect::new(nx, stage.y, stage.x + stage.w - nx, 84 * 3 + 12), false);
+                    let ink = ui.t.text;
+                    ui.para(inner.x, inner.y, inner.w, "Slot cards: a thumbnail (or the title's initial), the title in the display face, place and time, the party's portraits, the timestamp, lock and delete top right. A cut name shows in full on hover.", SMALL, ink);
+                }
+            }
+            _ => {
+                checks(ui, &[("ornate", "Ornate frame", self.ask_ornate), ("destructive", "No is the default", self.ask_no_default)]);
+                let under = ui.inset(stage, false);
+                let ink = ui.t.text;
+                ui.para(under.x, under.y, under.w, "The screen under the question: the scrim dims it and its widgets take no focus or click.", BODY, ink);
+                let v = AskView { ornate: self.ask_ornate, no_default: self.ask_no_default, ..AskView::new("Leave this place?", "Anything not saved since the last save is lost. Enter answers the default, y and n answer, Esc is No.") };
+                ask_dialog(ui, "kit.ask", stage, &v, wrap(KitAct::Press("yes")), wrap(KitAct::Press("no")));
+            }
+        }
     }
 }
 
