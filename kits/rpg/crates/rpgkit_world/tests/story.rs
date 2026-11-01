@@ -306,10 +306,10 @@ fn the_story_block_saves_only_when_used_and_round_trips() {
     let loaded = save::decode(&d, &envelope(save::VERSION, &v)).expect("loads");
     assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
     assert_eq!(loaded.state.story, gs.story);
-    // a save of the version before the story block reads an empty one
+    // a save without the story block reads an empty one
     let mut old = state(&d, "tale").to_value();
     old.as_object_mut().unwrap().shift_remove("story");
-    let loaded = save::decode(&d, &envelope(save::VERSION - 1, &old)).expect("an older save loads");
+    let loaded = save::decode(&d, &envelope(save::VERSION, &old)).expect("a save without a story block loads");
     assert!(loaded.state.story.is_empty() && loaded.warnings.is_empty());
 }
 

@@ -332,19 +332,19 @@ fn the_campaign_block_saves_and_loads() {
 }
 
 #[test]
-fn a_version_12_save_of_a_campaign_world_gets_a_fresh_campaign() {
+fn a_save_without_campaign_of_a_campaign_world_gets_a_fresh_campaign() {
     let d = data();
     let gs = state(&d, "camp");
     let mut old = gs.to_value();
     old.as_object_mut().unwrap().shift_remove("campaign");
-    let text = json!({"format": save::FORMAT, "version": 12, "saved_at": 1, "game_state": old}).to_string();
+    let text = json!({"format": save::FORMAT, "version": save::VERSION, "saved_at": 1, "game_state": old}).to_string();
     let loaded = save::decode(&d, &text).expect("loads");
     assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
     let fresh = campaign::Campaign::fresh(&d, "camp", gs.rng_seed).unwrap();
     assert_eq!(loaded.state.campaign.as_ref(), Some(&fresh));
-    // and an old save of a classic world loads with none, as before
+    // and a save of a classic world loads with none
     let classic = state(&d, "classic").to_value();
-    let text = json!({"format": save::FORMAT, "version": 12, "saved_at": 1, "game_state": classic}).to_string();
+    let text = json!({"format": save::FORMAT, "version": save::VERSION, "saved_at": 1, "game_state": classic}).to_string();
     assert!(save::decode(&d, &text).expect("loads").state.campaign.is_none());
 }
 

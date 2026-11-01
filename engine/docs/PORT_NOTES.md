@@ -88,7 +88,7 @@ because the RNG is bit-exact.
 | :--- | :--- | :--- |
 | `game_state/game_state.gd`, `progression/party_state.gd`, `unit_state.gd` | `emberwake_world::state` | journeys (state after every action) |
 | `game_state/new_game.gd`, `game_rolls.gd`, `json_util.gd` | `new_game`, `rolls`, `json` | journeys (start state, every roll) |
-| `game_state/save_game.gd`, `save_migrations.gd` (all steps 1 -> 10; the engine adds 10 -> 11, SKILLUI1 rank choice, and 11 -> 12, REWARD1 `reward_paid`, with no Godot counterpart) | `save` (the steps, format and header) on the engine save framework `aegis_save` (slots, envelope, atomic write, migration runner) | `tests/saves.rs`: every Godot save fixture v1..v10 (the loaded state without REWARD1's `reward_paid`) |
+| `game_state/save_game.gd`, `save_migrations.gd` (steps 1 -> 10 ported, then the engine's 10 -> 13; all retired by CLN-47, 2026-11-01: one save version, a save below `save::OLDEST` refused with "older development build") | `rpgkit_world::save` (format, header, the release step table `STEPS`, empty, and `migrate_with`) on the engine save framework `aegis_save` (slots, envelope, atomic write, migration runner) | `rpgkit_world/tests/save_versions.rs` and the `save.rs` unit tests (the hook runs a registered test step); `tests/saves.rs` (Godot fixtures v1..v10) ignored, deleted by CLN-42 |
 | `progression/xp_curve.gd`, `level_up.gd`, `party_builder.gd`, `heal_rules.gd` | `progression` | journeys (HP views, level-ups, camp) |
 | `world/world_catalog.gd` (lineage, merged, resolve, party rules), `world_factory.gd` (unit entry, passives) | `aegis_content::Catalogs` (lineage, merged, resolve), `data` (party rules, unit entry, passives) | journeys |
 | `exploration/map_rules.gd` (runtime), `explore_runner.gd`, `purse_rules.gd`, `battle_bridge.gd` (apply) | `explore`, `purse`, `battle` (REWARD1 replaced the win-only apply and `PurseRules.roll` / `pay` with rewards per defeated enemy: `battle::apply` with a tally, `purse::share`) | journeys (marker views too; they pass no tally, so the default one gives Godot's win-only numbers; the Godot replay skipped the extra keys `rewards` and `reward_paid` until CLN-41) |
@@ -121,8 +121,8 @@ Godot behaviours found on the way:
   (`aegis_core::ghash`); `String.hash()` is djb2.
 - `JSON.stringify` sorts keys by default, so a Godot save round trip re-orders every dictionary (stash, flags,
   quests): engine saves sort keys too (the journey golden's reload goes through the save files).
-- `JSON.parse` makes every number a float and `stringify` writes it back as `3.0`; the 2 -> 3 save step hashes that
-  text (rebuilt by `save::godot_text`).
+- `JSON.parse` makes every number a float and `stringify` writes it back as `3.0`; the 2 -> 3 save step hashed that
+  text (rebuilt by `save::godot_text`; both gone since CLN-47, 2026-11-01: saves below v13 are refused).
 
 Journeys (`emberwake_world/tests/journey.rs`): seeded random play through the game loop, goal-directed walking,
 dialogue biased to quest services, shops, boards, chests, travel, camp, level-ups, abandons, journal turn-ins, save /

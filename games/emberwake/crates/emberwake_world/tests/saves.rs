@@ -12,7 +12,9 @@ fn out_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../parity/out")
 }
 
+/// Retired by CLN-47 (development save migrations v1-v12 dropped: the Godot fixtures v1-v10 are now refused).
 #[test]
+#[ignore = "CLN-42 deletes it"]
 fn godot_saves_load_the_same() {
     let dir = out_dir();
     let path = dir.join("saves.json");

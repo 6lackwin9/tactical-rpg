@@ -194,12 +194,12 @@ fn the_pick_is_saved_only_when_it_is_not_the_default() {
     assert_eq!(mode_id(&d, &back.state).as_deref(), Some("forced"));
     pick(&d, &mut gs, "stealth");
     assert!(gs.to_value()["campaign"].get("mode").is_none(), "back to the default: the key goes");
-    // an older save (no `mode`, version 12) loads in the default mode
+    // a save without `mode` loads in the default mode
     let mut forced = gs.clone();
     pick(&d, &mut forced, "forced");
     let mut old = forced.to_value();
     old["campaign"].as_object_mut().unwrap().shift_remove("mode");
-    let text = json!({"format": save::FORMAT, "version": 12, "saved_at": 1, "game_state": old}).to_string();
+    let text = json!({"format": save::FORMAT, "version": save::VERSION, "saved_at": 1, "game_state": old}).to_string();
     let loaded = save::decode(&d, &text).expect("loads");
     assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
     assert_eq!(mode_id(&d, &loaded.state).as_deref(), Some("stealth"));

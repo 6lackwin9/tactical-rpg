@@ -134,3 +134,10 @@ an optional mark (`mark` one of `PORTRAIT_MARKS`, `mark_color`, `mark_box` one o
 (`Catalog::portrait_expressions`), checks `rpgkit_content::check::expression_fx` (a row that draws nothing warns), the
 writer storing only the fields that differ from the defaults. The game's binding turns the rows into the engine's
 `ExpressionFx`.
+
+CLN-47 (saves, decision "Save upgrades at game version updates"): `rpgkit_world::save` keeps one save version
+(`VERSION` 13). A save below `OLDEST` (= `VERSION`) is refused with `older_build_message`
+(`This save is from an older development build (v<n>); start a new game.`) and its slot header reads `error: "older
+version"` (so `newest_slot` skips it); the development-era steps v1 -> v13 and the Godot JSON text emulation are gone.
+The hook stays for a released game version update: bump `VERSION`, add the previous release's step to `STEPS` (rows
+`(from, Step<Data>)`, run by `migrate_with` over `aegis_save::migrate`) and keep `OLDEST` at that release.

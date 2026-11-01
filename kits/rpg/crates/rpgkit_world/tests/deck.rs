@@ -119,7 +119,7 @@ fn a_member_deck_saves_only_when_used_and_round_trips() {
     assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
     assert_eq!(loaded.state.party.members[0].deck, deck(v["party"]["members"][0]["deck"].clone()));
     let old = state(&d, member("hero")).to_value();
-    let loaded = save::decode(&d, &envelope(save::VERSION - 1, &old)).expect("an older save loads");
+    let loaded = save::decode(&d, &envelope(save::VERSION, &old)).expect("a save without a deck loads");
     assert!(loaded.state.party.members[0].deck.is_empty() && loaded.warnings.is_empty());
 }
 

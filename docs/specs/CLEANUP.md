@@ -25,7 +25,7 @@ planner (TASKS, ROADMAP, decisions, HISTORY, `.claude/*`, CLAUDE.md), design-bra
 | 3 | CLN-38 | A | RNG and hash goldens into `aegis_core`; unit and damage goldens on a frozen catalog (the rules' only direct tests) | S-M | logic-builder | engine + game | now | done (2026-11-01) |
 | 4 | CLN-42 | A | Switch Godot off: delete the pure-Godot suites, `games/emberwake/parity/`, `fc.sh parity`, the CI Godot steps, the hook's Godot install, the export-only CLI keys | M | logic-builder | game + kit + tools | after CLN-36..41 | proposed |
 | 5 | CLN-43 | A | Docs and rules: CLAUDE.md "Godot parity", decisions, HISTORY, skills, agents, workflow docs, PORT_NOTES | S-M | planner (+ design-brainstorm for PORT_NOTES) | process | with CLN-42 | proposed |
-| 6 | CLN-47 | C | Save migrations v1-v12 and the Godot JSON text emulation (decision "Saves and data edits") | S | logic-builder | kit | with CLN-42 (or before) | proposed |
+| 6 | CLN-47 | C | Save migrations v1-v12 and the Godot JSON text emulation (decision "Saves and data edits") | S | logic-builder | kit | with CLN-42 (or before) | done (2026-11-01) |
 | 7 | CLN-49 | C | 20 executed seeds out of `data/seeds/` (the seeds README rule) | S | planner (git rm) | game | now | proposed |
 | 8 | CLN-39 | A | Sim parity: convert to an engine golden on the frozen catalog, or delete (Q-A2) | S | logic-builder | game | now | done (2026-11-01) |
 | 9 | CLN-44 | B | Classic as a `rulesets` row: no hard-coded `Ruleset::classic()`, no closed id lists, one fallback | M | logic-builder + asset-builder | kit + game | after INPUT1-U | proposed |
@@ -371,7 +371,10 @@ kit.
 
 ### CLN-47
 
-Save migrations v1-v12. Scope C. Status: proposed. Size S. Lane logic-builder. Layer kit. Depends on Q-C1.
+Save migrations v1-v12. Scope C. Status: done (2026-11-01; the migration hook kept per decision "Save upgrades at
+game version updates": `OLDEST`, the empty release step table `STEPS`, `migrate_with`; refusal text
+`This save is from an older development build (v<n>); start a new game.`; `saves.rs` ignored, deleted by CLN-42).
+Size S. Lane logic-builder. Layer kit. Depends on Q-C1.
 
 - Where: `rpgkit_world/src/save.rs:109-243` (`quest_entry_ok`, `godot_text` "as Godot writes a value it parsed",
   `state_text`, `step` with 12 arms), :245-266 (`migrate`); test `rpgkit_world/tests/campaign.rs:340` writes a v12 save;

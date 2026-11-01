@@ -474,7 +474,7 @@ fn the_save_keys_round_trip_and_older_saves_read_empty() {
     let mut gs = cell(&d, "cw", 1);
     let plain = gs.to_value();
     assert!(plain["party"].get("departed").is_none() && plain["party"]["members"][0].get("conditions").is_none());
-    let old = save::decode(&d, &envelope(&gs, save::VERSION - 1)).expect("an older save loads");
+    let old = save::decode(&d, &envelope(&gs, save::VERSION)).expect("a save without the keys loads");
     assert_eq!(old.state.to_value(), plain);
     assert!(old.state.party.departed.is_empty() && old.state.party.members.iter().all(|m| m.conditions.is_empty()));
     gs.time = 3;
@@ -677,7 +677,7 @@ fn bunks_over_the_cap_load_with_a_warning() {
     assert_eq!(back.state.to_value(), saved);
     assert_eq!(back.state.party.roster, roster::caps(&d, "bw"));
     assert!(back.warnings.iter().any(|w| w.contains(&format!("{} members for {BUNKS} bunks", BUNKS + 1))), "{:?}", back.warnings);
-    let fine = save::decode(&d, &envelope(&crew(&d, "bw", 4), save::VERSION - 1)).expect("an older save loads");
+    let fine = save::decode(&d, &envelope(&crew(&d, "bw", 4), save::VERSION)).expect("a crew within the bunks loads");
     assert!(fine.warnings.is_empty(), "{:?}", fine.warnings);
     // no roster block: today's rules, so more members than the party max (as Godot saves hold) load without a word
     let classic = save::decode(&d, &envelope(&crew(&d, "w", 5), save::VERSION)).expect("loads");
