@@ -258,19 +258,32 @@ def idle(u, view, frames=8, hf_amp=0.8, stand_in=False, **kw):
     return [pose_view(u, view, stand_in=stand_in, **k) for k in idle_keys(u, frames, hf_amp, **kw)], [160] * frames
 
 
-def walk(u, view, frames=8, stride=6.0, lift=0.45, stand_in=False, **kw):
-    """walk_<view>: rig.walk's gait (8 frames, 90 ms): the feet alternate, each lifting and bending its knee in its
-    half of the gait; the body bobs 0.9 - 1.8 |sin|; the arms swing as 1 px vertical offsets opposite to the legs."""
+def step_height(ph, lift=3.4, rise=1.2):
+    """DIR4-R1F: the height of one foot at gait phase `ph` as the front and back views show it (the stride runs along the
+    view axis, so it reads as height, not as x): in its stance half the foot recedes and rises `rise` px; in its swing half
+    it comes back from `rise` to the ground with a `lift` px arc on top, so one foot is planted (fixed on screen) while
+    the other lifts, clearly, in turn."""
+    ph %= 1.0
+    if ph < 0.5:
+        return rise * (ph / 0.5)
+    v = (ph - 0.5) / 0.5
+    return rise * (1 - v) + lift * math.sin(math.pi * v)
+
+
+def walk(u, view, frames=8, stride=6.0, lift=3.4, rise=1.2, stand_in=False, **kw):
+    """walk_<view>: rig.walk's timing (8 frames, 90 ms), the legs alternating with a visible lift and plant (DIR4-R1F:
+    step_height, the lifted knee bending outward); the body bobs 1.1 - 2.2 |sin| in time with the steps; the arms swing
+    as 1 px vertical offsets opposite to the legs."""
     out = []
     rest = 2 * u['arm'] / u.get('scale', 1.0) - 1.0
     for i in range(frames):
         ph = i / frames; s = math.sin(2 * math.pi * ph)
-        bob = 0.9 - 1.8 * abs(s)
-        _, lr = rig.gait(ph, stride); _, ll = rig.gait(ph + 0.5, stride)
+        bob = 1.1 - 2.2 * abs(s)
         k = dict(kw); hr = k.pop('hand_r', (1.2, rest)); hl = k.pop('hand_l', (1.2, rest)); swing = k.pop('swing', 1.0)
         hr = (hr[0], hr[1] + s * swing)                                 # the right arm swings with the left leg
         hl = (hl[0], hl[1] - s * swing)
-        out.append(pose_view(u, view, bob=k.pop('bob', 0.0) + bob, head_dy=bob * 0.25, lift_r=lr * lift, lift_l=ll * lift,
+        out.append(pose_view(u, view, bob=k.pop('bob', 0.0) + bob, head_dy=bob * 0.25,
+                             lift_r=step_height(ph + 0.5, lift, rise), lift_l=step_height(ph, lift, rise),
                              hand_r=hr, hand_l=hl, tails=ph * 6, stand_in=stand_in, **k))
     return out, [90] * frames
 

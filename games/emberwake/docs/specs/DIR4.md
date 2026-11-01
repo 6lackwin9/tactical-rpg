@@ -290,6 +290,15 @@ New rows per body in the first stage: 6 (`idle_down`, `idle_up`, `walk_down`, `w
 - Checks: every row from before the task pixel-identical (527 rows compared), clip entries, palettes and palette
   files unchanged; X2, X3, the readability and the side-model checks pass on every body.
 
+### 6.8 As built (DIR4-R1F in-combat pass, 2026-11-02)
+
+- Front and back walk (`views.walk`, every humanoid body): user note from a battle with the warrior: the steps did not read.
+  The feet now alternate through `views.step_height`: in its stance half a foot recedes and rises 1.2 px, in its swing half
+  it comes back down with a 3.4 px lift arc (was 1.9 px peak, no stance rise), the lifted knee bending outward, so one foot
+  stays planted (fixed on screen) while the other lifts; the body bob is 1.1 - 2.2 |sin| (was 0.9 - 1.8) in time with the
+  steps. Frame count (8) and timing (90 ms) unchanged, the side walk untouched; only sheet PNGs changed (clips.json and
+  palettes identical). Review board: `C:/dev/localgen/review/dir4r1f/`.
+
 ## 7. Cost per body
 
 Units: one rig session = one asset-lane run with its review export. Rough estimates; the pilot calibrates them.
