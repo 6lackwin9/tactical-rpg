@@ -161,3 +161,56 @@ A single square pixel art skill icon for a dark fantasy tactical RPG, drawn as a
 ```text
 A 2x2 grid of four square pixel art skill icons for a dark fantasy tactical RPG, 16-bit SNES/GBA style, each icon designed to read clearly at 32x32 pixels. Bold silhouettes, thick dark outlines, high contrast, limited palette, one strong idea per icon, plain very dark background (#120e12) in each cell, no text, no borders between cells beyond a thin dark gap. Top-left: Shoulder Check, an armoured shoulder slamming forward with impact lines. Top-right: Heavy Cleave, a broad axe blade mid-swing with a heavy arc. Bottom-left: Hamstring Cut, a dagger slashing low behind a leg. Bottom-right: Flank Cut, a sword striking from the side with a curved motion trail.
 ```
+
+## Antigravity queue (ARTQUEUE1, 2026-11-01)
+
+Decision "Antigravity image queue" (user 2026-11-01): a Gemini image run can go through the Antigravity image subagent
+instead of the image API. This side writes request files and ingests the results with `tools/portraits/artqueue.py`
+(never an API call, never a key); Antigravity makes the images. The contract extends the Antigravity-side spec
+(`image_pipeline_spec.md`, updated by the user 2026-11-01 to match it).
+Folder: `.image_pipeline/` in the main checkout `C:/dev/tactical-rpg` (the same absolute path from every worktree; Git
+ignores it), with `queue/`, `processing/`, `output/`, `completed/` and `failed/`. The ingest adds `rejected/` (refused
+images, each with a `.note.txt`) and `pixelized/` (game portraits of portrait requests without a target).
+Request `queue/<name>.json`, written as `queue/<name>.json.tmp` and then renamed, so a scan never reads half a file.
+`<name>` is unique: `<id>_q<time>` (`<id>_faces_q<time>` for a faces sheet, `<given name>_q<time>` for `text`), a
+second later while the name is taken in any folder. A reference that does not exist refuses the request (nothing is
+queued):
+| Field | Meaning |
+| --- | --- |
+| `prompt` | required; the exact text to send, unchanged |
+| `aspect_ratio` | `1:1` (default), `16:9`, `9:16`, `4:3` or `3:4` |
+| `style_hints` | empty for our prompts (the style is in the prompt) |
+| `references` | absolute image paths, attached in this order |
+| `n` | how many images (variants), default 1 |
+| `metadata` | `asset_id`, `task`, `target` (where the asset lane wants the result), `route` (one of `portrait`, `faces`, `full_body`, `story_scene`, `icon`, `icon_sheet`, `other`; see "Routes by asset type"), `record` (fields for the prompt record, such as `prompts_file`, `kind`, `faction`) |
+Antigravity moves the request to `processing/`, makes `n` images and saves `output/<name>.png` (n = 1) or
+`output/<name>_<k>.png` (k from 1), writes `output/<name>.result.json` (`model`, often the generic
+`image-generator`; `time`; `prompt_sent`, the exact text it sent; `references`; `n`; `files` [{`file` (relative, such
+as `output\<name>.png`), `width`, `height`}]; `notes`), checks each PNG opens, is full size and matches the aspect,
+then moves the request to `completed/`. On a failure: `failed/<name>.json` and `failed/<name>.error.txt`.
+Ingest (a request counts as finished when `output/<name>.result.json` exists and the request is in `completed/`):
+each image is checked (present, a whole PNG, the aspect within 3 %, the long edge at least 1024 px); a refused one
+moves to `rejected/` with a note and the valid variants of the same request are still taken. A request in `failed/`
+is reported with its `error.txt` (and nothing is ingested).
+An accepted one is copied into `art_src/` with the house naming of `generate.py` (`<id>.png` for a single first take,
+else `<id>_gen<time>_<k>.png`; a faces sheet `<id>_faces_gen<time>_<k>.png`), its model mark is cleared
+(`pixelize.clear_mark`) and its prompt record is written beside it: `model` (as the result names it), `"via":
+"antigravity"`, `id`, `prompt` (the
+exact `prompt_sent`; `prompt_requested` too when it differs), `reference` (the first) and `references`,
+`prompts_file`, `time`, `n`, the request's `metadata` and `record` fields, `request`, `mark_cleared` and
+`"source": "antigravity image subagent"`. Route `portrait` is pixelized into the 120 px game portrait (the request's
+`target` when that file does not exist yet, else `pixelized/<art_src name>.png`); `faces` is cut by `sheets.py faces`
+and the rest is left for the asset lane. `output/<name>.ingested.json` lists what went where; a second ingest skips it.
+Commands (from `tools/portraits`, with `$LOCALAPPDATA/Programs/Python/Python312/python.exe`; test
+`test_artqueue.py`):
+
+- `artqueue.py request <id>... [--prompts <file> | --file icons] [--faces] [--no-ref]`, plus the shared options
+  `[--ref <png>]... [--n N] [--aspect A] [--route R] [--task T] [--target <path>] [--record KEY=VALUE]... [--dry-run]`:
+  one request per id, the prompt and the references as `generate.py run` builds them (the section's `reference:`
+  image, else Mara Voss), then each `--ref`
+- `artqueue.py text <name> (--text "..." | --text-file <file>) [--id ID] [same options]`: a template prompt from
+  this file, filled in
+- `artqueue.py ingest [<name>...] [--dry-run]`: every finished request, or the names given
+- `artqueue.py status`: counts per folder and the failed requests' errors
+- `--pipeline <dir>` (or `IMAGE_PIPELINE`) points any command at another queue folder (tests, a scratch run)
+Each Antigravity run is an image run like any other: the image rules still apply (ask first where they say so).

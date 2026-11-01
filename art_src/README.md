@@ -44,6 +44,11 @@ takes), plus variant sheets such as `mara_voss_variant.png`.
   text to image), then `backend` (`comfyui`), `kind` (`text`, `edit` or `face`), `unet`, `clip`, `vae`, `sampler`,
   `steps`, `cfg`, `size` (text) or `megapixels` (edits), `seed`, `tokens_estimate`, `cut` (only the dropped reference
   line), `seconds`, and `change` (vary) or `expression` and `keep` (faces).
+- Antigravity takes (ARTQUEUE1, decision "Antigravity image queue", 2026-11-01): `tools/portraits/artqueue.py`
+  queues requests in `C:/dev/tactical-rpg/.image_pipeline/` and `ingest` copies the results here with the
+  `generate.py` names; their records keep `model` as Antigravity names it and add `"via": "antigravity"`,
+  `references`, `request`, `metadata`, `mark_cleared` and `"source":
+  "antigravity image subagent"` (contract: `games/emberwake/docs/specs/ART_PROMPT_TEMPLATES.md`, "Antigravity queue").
 - `tools/portraits/pixelize.py` turns a source into the 240 px game portrait (120 px grid since PIXEL2, was 96; 4
   shades per colour family); `clear_mark` and `clear_corner` remove the image model's star mark first. Since PIXEL2 a
   small, saturated colour of its own hue (a violet vein glow, a gem, an amber rim light) keeps an accent family of its

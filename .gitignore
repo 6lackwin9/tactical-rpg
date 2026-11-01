@@ -44,3 +44,6 @@ __pycache__/
 /target-*/
 /engine/target/
 **/target/
+
+# The Antigravity image queue (ARTQUEUE1): requests, generated images and results, in the main checkout only
+.image_pipeline/
