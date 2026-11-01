@@ -37,7 +37,7 @@ Every change that touched the game:
 - ROSTER1-U: wounded marks, the bunks chip and the departure, keepsake and wounded lines on Results (27fc3e6e)
 - ENCOUNTER2-C1: the battle talk phase effect, triggers round.block / downed / broken, Session::talks, checks (bb80e9fa)
 - ENCOUNTER2-W: stay-behind results through the roster (then capture or kill, the flag, result lines); the party settle moves into the kit for every runner (8e8435a0)
-- TERMS1-G: layer check G3, kit code names no lore word (world ids and games/<id>/lore_words.txt) (4e2fa8ee)
+- TERMS1-G: layer check G3, kit code names no lore word (world ids and `games/<id>/lore_words.txt`) (4e2fa8ee)
 - PORTRAITFX1-D: animated portraits on the dialogue talk box and the vignette line cards (38e51a4b)
 - STORYUI1-U2: the mission board pane, the board service glyph, world-map job markers, the UI Gallery's Mission board (ffd0f277)
 - ROSTER1-L slice 4: bunks and the bench, join level, party_min, departed recruits refused, roster read keys, the over-cap load warning (ROSTER1-L done) (d6775264)
