@@ -28,6 +28,8 @@ pub enum Key {
     PageDown,
     /// Ctrl+Enter (submit a form, e.g. save a note).
     CtrlEnter,
+    /// Shift with a digit key (0-9, the top row or the keypad), whatever character the layout types for it.
+    ShiftDigit(u8),
     Char(char),
 }
 
@@ -46,6 +48,7 @@ impl Key {
             "pageup" => Key::PageUp,
             "pagedown" => Key::PageDown,
             "ctrl+enter" => Key::CtrlEnter,
+            d if d.len() == 7 && d.starts_with("shift+") && d.as_bytes()[6].is_ascii_digit() => Key::ShiftDigit(d.as_bytes()[6] - b'0'),
             c if c.chars().count() == 1 => Key::Char(c.chars().next().unwrap()),
             _ => return None,
         })
@@ -66,6 +69,7 @@ impl Key {
             Key::PageUp => "pageup".into(),
             Key::PageDown => "pagedown".into(),
             Key::CtrlEnter => "ctrl+enter".into(),
+            Key::ShiftDigit(d) => format!("shift+{d}"),
             Key::Char(c) => c.to_string(),
         }
     }

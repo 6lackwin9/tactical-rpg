@@ -1292,6 +1292,73 @@ pub fn unpick(w: &mut World, plan: &mut Plan, c: UnitId) -> (Result<(), String>,
     (first, rebuild_later(w, plan, c))
 }
 
+/// INPUT2: the picks that accept `c`'s ghost (GH1) up to its compiled entry `upto` (an index of `Plan::entries_for`,
+/// which must be a ghost entry; None: the whole ghost), and the round target they go on (the round's, else the first
+/// target the ghost steps aim at, else self). Each ghost step becomes the pick that plans it: a skill on a unit, a tile
+/// (an area) or self, an item, a Rest block, a step after (an after-move); a move before a skill is the skill's implied
+/// move (no pick), a move with no skill after it in the accepted steps is "Move here" when it comes first.
+pub fn ghost_picks(w: &World, plan: &Plan, c: UnitId, upto: Option<usize>) -> Result<(RoundTarget, Vec<Pick>), String> {
+    let steps = plan.steps_of(c);
+    let ghosts = ghost_entries(w, plan, c);
+    let entries = plan.entries_for(w, c);
+    let last = match upto {
+        Some(k) if ghosts.get(k).copied().unwrap_or(false) => usize::try_from(entries[k].step_index).map_err(|_| "No auto-filled block there.".to_string())?,
+        Some(_) => return Err("No auto-filled block there.".into()),
+        None => steps.len().checked_sub(1).ok_or_else(|| "Nothing auto-filled to accept.".to_string())?,
+    };
+    let none = picks_of(w, c).is_empty() && !manual(w, c);
+    let chosen: Vec<&Step> = steps.iter().take(last + 1).filter(|s| none || s.ghost.get()).collect();
+    if chosen.is_empty() {
+        return Err("Nothing auto-filled to accept.".into());
+    }
+    let maneuver = w.round_states.get(&c).and_then(|r| r.maneuver);
+    let mut aim: Option<RoundTarget> = None;
+    let mut picks: Vec<Pick> = Vec::new();
+    for (i, st) in chosen.iter().enumerate() {
+        let skill = st.skill.filter(|s| *s < w.cat.skills.len());
+        let kind = skill.map(|s| skill::kind(&w.cat.skills[s]));
+        let pick = match st.mode {
+            Mode::Engage | Mode::Ally => skill.map(|s| {
+                aim = aim.or(st.target.map(RoundTarget::Unit));
+                Pick::Skill { skill: s, kind: maneuver }
+            }),
+            Mode::Area => skill.map(|s| {
+                aim = aim.or(Some(RoundTarget::Cell(st.cell.get())));
+                Pick::Skill { skill: s, kind: maneuver }
+            }),
+            Mode::SelfCast if kind == Some(Kind::Rest) => Some(Pick::Rest),
+            Mode::SelfCast | Mode::Withdraw if skill.is_some() && kind != Some(Kind::Move) => skill.map(|s| Pick::Skill { skill: s, kind: maneuver }),
+            Mode::Item => {
+                aim = aim.or(Some(st.target.map_or(RoundTarget::Myself, RoundTarget::Unit)));
+                Some(Pick::Item(st.item_id.clone()))
+            }
+            _ if st.after => Some(Pick::StepAfter(st.cell.get())),
+            // a move: the next accepted skill's implied move, else "Move here" as the round's first pick
+            _ => {
+                let skill_after = chosen[i + 1..].iter().any(|n| n.skill.is_some_and(|s| s < w.cat.skills.len() && skill::kind(&w.cat.skills[s]) != Kind::Move) && !n.after);
+                (!skill_after && picks.is_empty() && picks_of(w, c).is_empty()).then(|| Pick::MoveHere(st.cell.get()))
+            }
+        };
+        picks.extend(pick);
+    }
+    if picks.is_empty() {
+        return Err("Nothing auto-filled to accept.".into());
+    }
+    let round = w.round_states.get(&c).and_then(|r| r.target);
+    Ok((round.or(aim).unwrap_or(RoundTarget::Myself), picks))
+}
+
+/// INPUT2: accepts `c`'s ghost up to entry `upto` (None: all of it) as picks (`ghost_picks`, then `pick`: atomic, the
+/// later members rebuilt); the picks added on success.
+pub fn accept_ghost(w: &mut World, plan: &mut Plan, c: UnitId, upto: Option<usize>) -> (Result<usize, String>, Vec<(UnitId, String)>) {
+    let (at, picks) = match ghost_picks(w, plan, c, upto) {
+        Ok(x) => x,
+        Err(e) => return (Err(e), Vec::new()),
+    };
+    let (r, later) = pick(w, plan, c, at, &picks);
+    (r.map(|()| picks.len()), later)
+}
+
 /// INPUT1 IF7 Clear: removes every pick of `c` and rebuilds (as `unpick`).
 pub fn clear_picks(w: &mut World, plan: &mut Plan, c: UnitId) -> (Result<(), String>, Vec<(UnitId, String)>) {
     set_picks(w, c, Vec::new());

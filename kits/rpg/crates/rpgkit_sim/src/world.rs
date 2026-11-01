@@ -162,7 +162,7 @@ pub fn encounter(r: &mut Runner, id: &str, foe_level: i32, elevel_set: bool, wor
     }
     let ctx = Ctx { world: world.to_string(), level: foe_level, shifted: elevel_set };
     let mut base = Map::new();
-    for key in ["zone", "arena", "exits", "total_blocks", "unit_ap", "ap_regen"] {
+    for key in ["zone", "arena", "exits", "total_blocks", "unit_ap", "start_ap", "ap_regen"] {
         if let Some(v) = entry.get(key) {
             base.insert(key.into(), v.clone());
         }

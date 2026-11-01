@@ -136,3 +136,35 @@ fn unpick_clear_autofill_options_and_replay() {
     }
     assert_eq!(again.handle(&json!({"cmd": "plan_view"}))["plan"], h.handle(&json!({"cmd": "plan_view"}))["plan"]);
 }
+
+/// INPUT2 `accept_ghost {unit, upto?}`: the member's ghost becomes picks with the same plan entries (`added` of them);
+/// it is recorded and replays to the same plan; with nothing auto-filled, or `upto` on a solid entry, it is an error,
+/// changes nothing and is not recorded.
+#[test]
+fn accept_ghost_makes_the_ghost_picks_and_replays() {
+    let mut h = host();
+    h.handle(&json!({"cmd": "pick", "unit": 0, "target": 2, "pick": {"skill": "t_cleave"}}));
+    let skills = |h: &mut Host| h.handle(&json!({"cmd": "plan_view", "unit": 0}))["plan"]["t_hero"]["entries"].as_array().unwrap().iter().map(|e| (e["skill"].clone(), e["start_block"].clone())).collect::<Vec<_>>();
+    let before = skills(&mut h);
+    let from = row(&mut h, 0)["ghost_from"].as_u64().unwrap() as usize;
+    assert!(from < before.len(), "a ghost after the pick: {before:?}");
+    let r = h.handle(&json!({"cmd": "accept_ghost", "unit": 0, "upto": 0}));
+    assert_eq!((r["ok"].clone(), r["error"].as_str()), (json!(false), Some("No auto-filled block there.")), "a solid entry: {r}");
+    let r = h.handle(&json!({"cmd": "accept_ghost", "unit": 0}));
+    assert_eq!(r["ok"], json!(true), "{r}");
+    let added = r["added"].as_u64().unwrap() as usize;
+    assert!(added >= 1);
+    assert_eq!(row(&mut h, 0)["picks"].as_array().unwrap().len(), 1 + added);
+    assert_eq!(skills(&mut h), before, "the same entries, now picks");
+    assert_eq!(row(&mut h, 0)["ghost_from"].as_u64().unwrap() as usize, before.len(), "no ghost entry left");
+    let r = h.handle(&json!({"cmd": "accept_ghost", "unit": 0}));
+    assert_eq!(r["error"].as_str(), Some("Nothing auto-filled to accept."));
+    let hist = history(&mut h);
+    let cmds: Vec<&str> = hist.iter().map(|r| r["cmd"].as_str().unwrap()).collect();
+    assert_eq!(cmds, ["new", "pick", "accept_ghost"], "only the accepted one is recorded");
+    let mut again = Host::new(Battle::new(catalog()));
+    for req in &hist {
+        assert_eq!(again.handle(req)["ok"], json!(true), "{req}");
+    }
+    assert_eq!(row(&mut again, 0), row(&mut h, 0), "the replay reaches the same round plan");
+}

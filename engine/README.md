@@ -53,15 +53,21 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
   `Timeline::draw_icons(.., icon)` calls `icon(ui, track, square)` inside the rows' scroll clip so the caller draws a
   portrait or a glyph there (`draw` is `draw_icons` with none); the Kit widgets Timeline page has an Icons check
   (`kit.timeline.icons`, initial chips). Off by default (a track without it draws exactly as before).
-* **Pip gauge (INPUT1-AP):** `aegis_ui::pips::PipGauge` draws a budget planned against as a row of 4 x 6 px pips (1 px
-  gap; 12 pips take 59 px): a pip a point, or `pips::unit(max, cap)` points above the cap (counts rounded up,
-  `pips::count`). `PipGauge::planned(have, keep, next, max, cap)`: full pips up to `keep`, a ghost fill (the timeline's
-  `GHOST_ALPHA`) up to `next`, a solid outline up to `have`, dim slots above; `PipGauge::live(start, have, max, cap)`:
-  full up to `have`, hollow up to `start` (what was paid); a debt (`have < 0`) draws every pip as a slot with `-<n>`
-  before them; `.short(n)` turns every outline to the alert colour with `-<n>` after them. Levels are pips and may be
-  fractional while a screen animates them. `draw(ui, id, x, cy)` pushes one info widget (kind `pips`, its reading in
-  pip codes "F H Hg Sg S", the screen's hover card); `reading`, `pips`, `width`; `pips::samples()` are the UI
-  Gallery's states (game entry `pip_gauge`). Tests `aegis_ui/tests/pips.rs`.
+* **Pip gauge (INPUT1-AP, style D since INPUT2):** `aegis_ui::pips::PipGauge` draws a budget planned against on fixed
+  5 x 8 px slots (1 px gap; 12 take 71 px) that never move or resize with the plan: a slot a point, or
+  `pips::unit(max, cap)` points above the cap (counts rounded up, `pips::count`). `PipGauge::planned(now, blocks, max,
+  cap)`: each `PipBlock {ap, colour, ghost}` is a capsule over its slots (laid from the running total) in the caller's
+  colour (a ghost at the timeline's `GHOST_ALPHA`), with its own light rim (`RIM_LIGHT`) and dark ticks between its
+  slots (`TICK_DARK`), so same-colour neighbours read as two; free points are dark sockets with a light outline; slots
+  above `now` are dim crossed slots. `PipGauge::live(start, have, paid, max, cap)`: what was paid as one block in
+  `paid`, sockets for `have`. A debt crosses every slot with `-<n>` before them; `.short(n)` turns the outlines to the
+  alert colour with `-<n>` after them. Levels `spent` and `edge` are slots and may be fractional while a screen
+  animates them. `draw(ui, id, x, cy)` pushes one info widget (kind `pips`, its reading "B1 B1 B2 O X": block slots,
+  free sockets, crossed slots; the screen's hover card); `reading`, `pips`, `width`, `pip_rect`; `pips::samples()` are
+  the UI Gallery's states (game entry `pip_gauge`). The widget names no game: the colours are the caller's. Tests
+  `aegis_ui/tests/pips.rs`.
+* **Shift digits (INPUT2):** `Key::ShiftDigit(d)` (agent link "shift+1"): Shift with a digit key (top row or keypad),
+  read by the key's place whatever the layout types for it. Tests `aegis_ui/tests/screen_keys.rs`.
 * **Vignette player (STORYUI1-E):** `aegis_ui::vignette` plays a reel of still cards (styles `image`, `text`, `title`,
   `line`) through fade in, typing, hold and fade out: a typewriter at the engine setting `text_speed` (`slow` 30,
   `normal` 60, `fast` 120 characters a second, `instant`; fast halves the fades, instant drops them), a cover fill of the
@@ -221,9 +227,11 @@ click closes a menu or undoes the last step. Strip: the Party and Hero dropdowns
 description), Auto plays the battle out, Confirm resolves the round. The log (Expand) wraps and scrolls with the wheel
 or PageUp / PageDown. Keys (while no control shows the focus ring): Enter confirm, Space step / next round, A autoplay, Z undo, L log, R restart (arena),
 I enemy tells, F12 screenshot. Timeline battles (INPUT1-U): click a target (an enemy, an ally, an empty tile; the hero
-panel's Self button or S for the hero itself), then pick skills from its menu (keys 1-9 are the selected hero's skill
-hotkeys, with or without the menu open); the planner fills the rest of the round as ghost blocks (Settings, Gameplay:
-"Auto-fill the rest"); Z or a right click undoes the last pick, Clear removes them all; a right click or a click outside
+panel's Self button or S for the hero itself), then pick skills from its menu (Shift+1-9 are the selected hero's skill
+hotkeys, with or without the menu open; INPUT2); keys 1-4 select the party's members; the planner fills the rest of
+the round as ghost blocks (Settings, Gameplay: "Auto-fill the rest"); F accepts the selected hero's ghost as picks and
+a click on a ghost block accepts it up to there; while a hero shows only its ghost, a click on another ally selects it
+and Ctrl+click opens the hero's support menu on it; Z or a right click undoes the last pick, Clear removes them all; a right click or a click outside
 closes the menu. Selection and inspect (INPUT1-U slice 3): a right click on any unit (token or card) inspects it, pinning
 the threat intel panel ("Inspecting `<name>` (Esc clears)") until another inspect, Esc or the next round, with only what
 the party knows (an enemy's unrevealed plan never shows); a click on the selected hero (token or card) selects nothing;

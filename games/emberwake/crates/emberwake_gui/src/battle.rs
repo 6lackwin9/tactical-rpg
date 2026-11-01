@@ -9,8 +9,9 @@
 //! details; right click closes a menu or undoes the hero's last step; the wheel scrolls the log. Keys: Enter confirm,
 //! Space step / next round, A autoplay, Z undo, L log, R restart (arena), Esc close; hold Alt to outline every unit,
 //! covered or not (STAGE1-O). Timeline battles (INPUT1-U): a click on a target sets the round target and opens the skill
-//! menu (picks through the host's `pick`, the planner's ghost fills the rest), keys 1-9 are the hero's skill hotkeys, S
-//! targets the hero itself, Z undoes the last pick. INPUT1-T: T opens the full timeline view over the grid panel
+//! menu (picks through the host's `pick`, the planner's ghost fills the rest), Shift+1-9 are the hero's skill hotkeys
+//! (INPUT2; keys 1-4 select the party's members in every battle), F or a click on a ghost block accepts the ghost as
+//! picks, S targets the hero itself, Z undoes the last pick. INPUT1-T: T opens the full timeline view over the grid panel
 //! (`timeline_view.rs`, every unit's track; T or Esc closes it). INPUT1-PB: during a timeline battle's playback each
 //! impact draws a short tracer from its actor to what it hit, the strip frames the resolving block, P cycles the
 //! playback speed (1x, 0.5x, block by block; N plays the next block), the log groups its lines by round and block, and
@@ -170,6 +171,11 @@ pub enum Action {
     /// ENCOUNTER2-C4 (decision "ENCOUNTER2-C answers" Q-C5): a locked round's Skip (`battle.skip`): resolves the rest of
     /// the round at once (host `resolve`: the same result, no animation).
     Skip,
+    /// INPUT2: key F: the selected hero's whole ghost becomes its picks (host `accept_ghost`).
+    FillGhost,
+    /// INPUT2: a click on a strip block showing a ghost entry (the entry's index in the plan): the ghost up to it becomes
+    /// picks, so that command is the hero's latest pick.
+    GhostSlot(usize),
 }
 
 /// INPUT1 PB3: the playback speed setting (`playback_speed`: "1x", "0.5x", "block"; anything else reads 1x).
@@ -2415,6 +2421,8 @@ impl BattleScreen {
             }
             Action::UnitClick(u) => self.unit_click(cx, u),
             Action::TileClick(c) => self.tile_click(cx, c),
+            Action::FillGhost => self.accept_ghost(cx, None),
+            Action::GhostSlot(k) => self.accept_ghost(cx, Some(k)),
             Action::Choose(i) => {
                 let Some(p) = self.popup.take() else { return };
                 let Some(row) = p.rows.get(i).filter(|r| r.valid).cloned() else {
@@ -2799,6 +2807,12 @@ impl BattleScreen {
             match self.selected {
                 Some(h) if h == u => {
                     self.selected = None;
+                    self.popup = None;
+                }
+                // INPUT2 (decision "Playtest 2026-11-02"): while the hero's round is its ghost (no pick holds a target)
+                // a click on another ally selects that ally; Ctrl+click targets it (SL6: the hero's support menu)
+                Some(h) if self.planning() && is_ally && !cx.held.ctrl && !rip::picks_of(&s.w, h).iter().any(|p| p.holds_target()) => {
+                    self.selected = Some(u);
                     self.popup = None;
                 }
                 Some(h) if self.planning() => self.target_click(cx, h, RoundTarget::Unit(u)),
@@ -3213,7 +3227,55 @@ impl BattleScreen {
         self.reghost_after(cx, h);
     }
 
-    /// HK2, HK3: digit `d` (1-9). With the skill menu open it picks the listed row with that digit (or says why not);
+    /// INPUT2: key `d` (1-4) selects the party's `d`-th member (the party cards' order, `World.allies`); one not on the
+    /// field says so. An open menu closes.
+    fn select_member(&mut self, d: usize) {
+        let w = &self.session().w;
+        let Some(&u) = w.allies.get(d - 1) else {
+            self.message = format!("No party member on key {d}.");
+            return;
+        };
+        if !w.units[u].is_active() {
+            self.message = format!("{} is not on the field.", w.units[u].name);
+            return;
+        }
+        self.selected = Some(u);
+        self.popup = None;
+    }
+
+    /// INPUT2: the selected hero's ghost becomes picks (host `accept_ghost`): all of it (key F) or up to plan entry
+    /// `upto` (a click on a ghost block of the strip). A ghost that waits for Confirm (IN6) sends its change first, as
+    /// Confirm would.
+    fn accept_ghost(&mut self, cx: &Cx, upto: Option<usize>) {
+        let Some(h) = self.selected.filter(|_| self.planning() && ri::on(&self.session().w)) else { return };
+        let w = &self.session().w;
+        if !w.allies.contains(&h) || !w.units[h].is_active() {
+            return;
+        }
+        let name = w.units[h].name.clone();
+        if let Some(d) = self.deferred.iter().find(|d| d.0 == h).map(|d| d.1.clone()) {
+            if self.send(cx, d.req(h))["ok"] != json!(true) {
+                return;
+            }
+            self.deferred.retain(|d| d.0 != h);
+        }
+        let mut req = json!({"cmd": "accept_ghost", "unit": h});
+        if let Some(k) = upto {
+            req["upto"] = json!(k);
+        }
+        let r = self.send(cx, req);
+        if r["ok"] != json!(true) {
+            self.message = format!("{name}: {}", r["error"].as_str().unwrap_or("refused"));
+            return;
+        }
+        self.popup = None;
+        let n = r["added"].as_u64().unwrap_or(0);
+        self.message = format!("{name}: {n} auto-filled pick{} accepted.", if n == 1 { "" } else { "s" });
+        self.reghost_after(cx, h);
+    }
+
+    /// HK2, HK3 (INPUT2: on Shift+digit): digit `d` (1-9). With the skill menu open it picks the listed row with that
+    /// digit (or says why not);
     /// with it closed it picks that hotkey skill on the round target (the proposed one counts, TG6; a self-only skill
     /// picked first targets self).
     fn hotkey(&mut self, cx: &Cx, d: usize) {
@@ -3552,8 +3614,12 @@ impl Screen<GameCx> for BattleScreen {
                 };
             }
             Key::Char('r') => self.act(cx, Action::Restart),
-            // INPUT1 HK1-HK4: keys 1-9 are the selected hero's skill hotkeys (classic: nothing)
-            Key::Char(c @ '1'..='9') if self.planning() => self.hotkey(cx, c as usize - '0' as usize),
+            // INPUT2: keys 1-4 select the party's 1st to 4th member (the party cards' order)
+            Key::Char(c @ '1'..='4') => self.select_member(c as usize - '0' as usize),
+            // INPUT1 HK1-HK4, INPUT2: Shift+1-9 are the selected hero's skill hotkeys (classic: nothing)
+            Key::ShiftDigit(d @ 1..=9) if self.planning() => self.hotkey(cx, d as usize),
+            // INPUT2: F accepts the selected hero's auto-filled blocks as picks
+            Key::Char('f') if self.planning() => self.act(cx, Action::FillGhost),
             // SL4: S targets the selected hero itself (the self menu)
             Key::Char('s') if self.planning() => self.act(cx, Action::SelfTarget),
             // INPUT1 TV1: T opens and closes the full timeline view (a timeline battle, planning and playback)
@@ -3979,16 +4045,26 @@ fn pip_line(max: i32) -> Option<String> {
     (u > 1).then(|| format!("1 pip = {u} AP"))
 }
 
-/// INPUT1-AP (AP6-AP10): the AP gauge of party member `u`. Planning (`f` its forecast, of the hovered row's preview when
-/// one shows): kept pips full, the plan's hollow, next round's gain as ghost fills, red with "-<n>" after the pips for
-/// a hovered row it cannot pay (`short`); playback: its live AP full, what it paid since `start` hollow. A debt shows
-/// "-<n>" before ten slots. Its hover card: AP9's lines (playback: the live AP), "1 pip = <u> AP" above 12 AP.
-fn ap_gauge_of(w: &World, u: usize, f: Option<&rip::ApForecast>, short: Option<i32>, start: i32) -> aegis_ui::pips::PipGauge {
+/// INPUT2: the colour of the AP a party member has paid this round on the playback's gauge (one block at its left).
+const AP_PAID: Rgba = rgb(96, 106, 128);
+
+/// INPUT2 (style D): the gauge's planned blocks from a member's plan entries `(AP, skill kind, ghost)`: one block an
+/// entry that costs AP, in its kind's colour (`kind_color`, the strip's), a ghost entry as a ghost block.
+fn ap_blocks(entries: &[(i32, String, bool)]) -> Vec<aegis_ui::pips::PipBlock> {
+    entries.iter().filter(|e| e.0 > 0).map(|(ap, kind, ghost)| aegis_ui::pips::PipBlock { ap: *ap, colour: kind_color(kind), ghost: *ghost }).collect()
+}
+
+/// INPUT1-AP (AP6-AP10), INPUT2 (style D): the AP gauge of party member `u`. Planning (`f` its forecast, of the hovered
+/// row's preview when one shows; `blocks` its plan's AP blocks, `ap_blocks`): one capsule a planned block in its kind's
+/// colour, free sockets up to its AP, crossed slots up to its max; red with "-<n>" after the slots for a hovered row it
+/// cannot pay (`short`); playback: what it paid since `start` as one block, its live AP as sockets. A debt shows "-<n>"
+/// before crossed slots. Its hover card: AP9's lines (playback: the live AP), "1 pip = <u> AP" above 12 AP.
+fn ap_gauge_of(w: &World, u: usize, f: Option<&rip::ApForecast>, blocks: &[aegis_ui::pips::PipBlock], short: Option<i32>, start: i32) -> aegis_ui::pips::PipGauge {
     use aegis_ui::pips::PipGauge;
     let unit = &w.units[u];
     match f {
         Some(f) => {
-            let g = PipGauge::planned(f.now, f.left, f.next, f.max, AP_PIPS).with_tip(ap_lines(f).into_iter().map(|l| (l, ALLY)).collect());
+            let g = PipGauge::planned(f.now, blocks, f.max, AP_PIPS).with_tip(ap_lines(f).into_iter().map(|l| (l, ALLY)).collect());
             match short {
                 Some(n) => g.short(n),
                 None => g,
@@ -4000,7 +4076,7 @@ fn ap_gauge_of(w: &World, u: usize, f: Option<&rip::ApForecast>, short: Option<i
                 tip.push((format!("Paid this round: {}", start - unit.ap), TEXT));
             }
             tip.extend(pip_line(unit.max_ap).map(|l| (l, TEXT)));
-            PipGauge::live(start, unit.ap, unit.max_ap, AP_PIPS).with_tip(tip)
+            PipGauge::live(start, unit.ap, AP_PAID, unit.max_ap, AP_PIPS).with_tip(tip)
         }
     }
 }
@@ -4250,29 +4326,6 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     if planning {
         g.round_ap = (s.current_round, w.allies.iter().map(|&a| (a, w.units[a].ap)).collect());
     }
-    let gauge = match sel {
-        Some(u) if timeline && w.units[u].is_active() => {
-            let f = planning.then(|| rip::ap_forecast(pw, pplan, u));
-            // AP3: a hovered row the hero cannot pay: the kit's shortfall for it (IF6 d)
-            let short = hovered_pick.as_ref().filter(|((h, _), row)| planning && *h == u && !row.valid).and_then(|(_, row)| row.ap_short);
-            let start = g.round_ap.1.iter().find(|r| r.0 == u && g.round_ap.0 == s.current_round).map_or(w.units[u].ap, |r| r.1);
-            let mut gauge = ap_gauge_of(w, u, f.as_ref(), short, start);
-            // AP10: paid pips go hollow and regained ones fill over AP_ANIM_MS during playback and into the next
-            // round's planning; changes while planning (picks, hovers) and the switch to playback show at once
-            let target = (gauge.fill, gauge.edge);
-            let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false) || cx.settings.reduce_motion();
-            let anim = match g.ap_anim {
-                Some(a) if a.unit == u && a.to == target && a.planning == planning => a,
-                Some(a) if a.unit == u && !instant && ((!planning && !a.planning) || (planning && a.round != s.current_round)) => ApAnim { unit: u, round: s.current_round, planning, from: a.level(now), to: target, at: now },
-                _ => ApAnim { unit: u, round: s.current_round, planning, from: target, to: target, at: now },
-            };
-            g.ap_anim = Some(anim);
-            (gauge.fill, gauge.edge) = anim.level(now);
-            gauge.ghost = if planning { gauge.ghost.max(gauge.fill) } else { gauge.fill };
-            Some(gauge)
-        }
-        _ => None,
-    };
     let entries: Vec<(i32, i32, String, String, Option<String>, i32, i32)> = match sel {
         Some(u) if s.plan_confirmed => committed(s, u).into_iter().map(|c| (c.0, c.1, c.2, c.3, c.4, 0, 0)).collect(),
         Some(u) if w.units[u].is_active() => pplan
@@ -4291,6 +4344,30 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let (reasons, rest, ghosts) = match sel {
         Some(u) if timeline && !s.plan_confirmed && w.units[u].is_active() => (rip::reasons(pw, pplan, u), Some(rip::rest_preview(pw, pplan, u)).filter(|_| w.ruleset.rest_at_round_end()), rip::ghost_entries(pw, pplan, u)),
         _ => (Vec::new(), None, Vec::new()),
+    };
+    let gauge = match sel {
+        Some(u) if timeline && w.units[u].is_active() => {
+            let f = planning.then(|| rip::ap_forecast(pw, pplan, u));
+            // INPUT2: one block a planned entry that costs AP, in its kind's colour (ghost entries as ghost blocks)
+            let blocks = if planning { ap_blocks(&entries.iter().enumerate().map(|(k, e)| (e.5, e.3.clone(), ghosts.get(k).copied().unwrap_or(false))).collect::<Vec<_>>()) } else { Vec::new() };
+            // AP3: a hovered row the hero cannot pay: the kit's shortfall for it (IF6 d)
+            let short = hovered_pick.as_ref().filter(|((h, _), row)| planning && *h == u && !row.valid).and_then(|(_, row)| row.ap_short);
+            let start = g.round_ap.1.iter().find(|r| r.0 == u && g.round_ap.0 == s.current_round).map_or(w.units[u].ap, |r| r.1);
+            let mut gauge = ap_gauge_of(w, u, f.as_ref(), &blocks, short, start);
+            // AP10: paid pips go hollow and regained ones fill over AP_ANIM_MS during playback and into the next
+            // round's planning; changes while planning (picks, hovers) and the switch to playback show at once
+            let target = (gauge.spent, gauge.edge);
+            let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false) || cx.settings.reduce_motion();
+            let anim = match g.ap_anim {
+                Some(a) if a.unit == u && a.to == target && a.planning == planning => a,
+                Some(a) if a.unit == u && !instant && ((!planning && !a.planning) || (planning && a.round != s.current_round)) => ApAnim { unit: u, round: s.current_round, planning, from: a.level(now), to: target, at: now },
+                _ => ApAnim { unit: u, round: s.current_round, planning, from: target, to: target, at: now },
+            };
+            g.ap_anim = Some(anim);
+            (gauge.spent, gauge.edge) = anim.level(now);
+            Some(gauge)
+        }
+        _ => None,
     };
     // RULESET1-U slice 5: each span's wind-up, impact and recovery (and a break), the planned hits' forecasts (the
     // battle's own plan: a preview draws its spans plain)
@@ -4408,7 +4485,12 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         };
         // HOOKS1-UI slice 1 (AH3): the arena hazards that strike at the block's end
         tip.extend(marks.block_tip(b));
-        ui.push(format!("strip.block{b}"), "block", entry.map(|e| e.2.clone()).unwrap_or_else(|| "empty".into()), wr, true, live_block == b, None, tip);
+        // INPUT2: a block showing a ghost entry of a party member (planning, no row previewed) accepts the ghost up to it
+        let accept = at.filter(|_| ghost && planning && hovered_pick.is_none() && sel.is_some_and(|u| w.allies.contains(&u)));
+        if accept.is_some() {
+            tip.push(("Click: accept the auto-fill up to here (F: all of it)".into(), DIM));
+        }
+        ui.push(format!("strip.block{b}"), "block", entry.map(|e| e.2.clone()).unwrap_or_else(|| "empty".into()), wr, true, live_block == b, accept.map(Action::GhostSlot), tip);
     }
     // Each action is one continuous span over its blocks, coloured by kind (COMBAT-UI3).
     for (k, e) in entries.iter().enumerate() {
@@ -6597,6 +6679,10 @@ fn pick_tip(s: &Session, h: usize, o: &rip::PickOption) -> Tip {
             tip.push((d.to_string(), TEXT));
         }
         tip.push((intent_text::range_line(w, h, sk), DIM));
+        // INPUT2: the row's hotkey (the label's digit) is Shift with that digit
+        if let Some(k) = rip::hotkey_skills(w, h).iter().position(|x| x == skill).filter(|k| *k < 9) {
+            tip.push((format!("Key: Shift+{}", k + 1), DIM));
+        }
     }
     if let Some(why) = &o.problem {
         tip.push((why.clone(), FOE));
@@ -9647,8 +9733,8 @@ mod input1_tests {
         assert_eq!(b.popup.as_ref().and_then(|p| p.menu), Some((h, RoundTarget::Myself)));
     }
 
-    /// HK1-HK2: with the menu open a digit picks its row; with it closed the hotkey skill goes on the round target;
-    /// without a target the digit asks for one.
+    /// HK1-HK2, INPUT2: with the menu open Shift+digit picks its row; with it closed the hotkey skill goes on the round
+    /// target; without a target the key asks for one. A plain digit no longer picks a skill.
     #[test]
     fn digits_pick_the_hotkey_skills() {
         let (mut cx, mut g, mut b) = planning();
@@ -9656,12 +9742,16 @@ mod input1_tests {
         next_to(&cx, &mut b, f);
         b.run(&mut cx, Action::UnitClick(f));
         let d = (1..=9).find(|d| b.popup.as_ref().unwrap().rows.iter().any(|r| r.valid && r.label.starts_with(&format!("{d} ")))).expect("a usable hotkey row");
-        b.key(&mut cx, Key::Char(char::from_digit(d as u32, 10).unwrap()));
+        if d > 4 {
+            b.key(&mut cx, Key::Char(char::from_digit(d as u32, 10).unwrap()));
+            assert!(rip::picks_of(w(&b), h).is_empty(), "a plain digit picks nothing: {}", b.message);
+        }
+        b.key(&mut cx, Key::ShiftDigit(d as u8));
         assert_eq!(rip::picks_of(w(&b), h).len(), 1, "{}", b.message);
         b.run(&mut cx, Action::ClosePopup);
         b.run(&mut cx, Action::Clear);
         assert!(rip::picks_of(w(&b), h).is_empty(), "{}", b.message);
-        b.key(&mut cx, Key::Char(char::from_digit(d as u32, 10).unwrap()));
+        b.key(&mut cx, Key::ShiftDigit(d as u8));
         assert_eq!(rip::picks_of(w(&b), h).len(), 1, "menu closed: the skill on the round target: {}", b.message);
         // no target and no intent: the digit of a skill that is not self-only asks for a target
         let keys = rip::hotkey_skills(w(&b), h);
@@ -9672,7 +9762,7 @@ mod input1_tests {
         rs.intent = None;
         b.after_change(&cx);
         drawn(&mut cx, &mut g, &mut b);
-        b.key(&mut cx, Key::Char(char::from_digit(other as u32 + 1, 10).unwrap()));
+        b.key(&mut cx, Key::ShiftDigit(other as u8 + 1));
         assert_eq!(b.message, "Pick a target first (click a unit or a tile)");
     }
 
@@ -10042,6 +10132,177 @@ mod input1_tests {
         }
     }
 
+    // ---- INPUT2: party keys, Shift skill keys, the ghost fill (decision "Playtest 2026-11-02") ---------------------
+
+    /// The selected hero's ghost entries (aligned with its plan entries).
+    fn ghosts_of(b: &BattleScreen, u: usize) -> Vec<bool> {
+        let s = b.host.session.as_ref().unwrap();
+        rip::ghost_entries(&s.w, &s.plan, u)
+    }
+
+    fn rows_of(b: &BattleScreen, u: usize) -> Vec<(usize, i32, Option<usize>, V2)> {
+        let s = b.host.session.as_ref().unwrap();
+        plan_rows(&s.w, &s.plan, u)
+    }
+
+    /// Keys 1-4 select the party's 1st to 4th member (the party cards' order) and close an open menu; a plain digit
+    /// picks no skill.
+    #[test]
+    fn keys_one_to_four_select_the_party_members() {
+        let (mut cx, _g, mut b) = planning();
+        let allies = w(&b).allies.clone();
+        for (k, &a) in allies.iter().enumerate().take(4) {
+            b.key(&mut cx, Key::Char(char::from_digit(k as u32 + 1, 10).unwrap()));
+            if w(&b).units[a].is_active() {
+                assert_eq!(b.selected, Some(a), "key {} selects the party's member {}", k + 1, k + 1);
+            }
+        }
+        let h = allies[0];
+        b.key(&mut cx, Key::Char('1'));
+        let f = foes_on_field(&b)[0];
+        next_to(&cx, &mut b, f);
+        b.run(&mut cx, Action::UnitClick(f));
+        assert!(b.popup.is_some(), "the skill menu on the foe");
+        let picks = rip::picks_of(w(&b), h).len();
+        b.key(&mut cx, Key::Char('1'));
+        assert_eq!((b.selected, b.popup.is_none(), rip::picks_of(w(&b), h).len()), (Some(h), true, picks), "key 1 selects, closes the menu and picks nothing");
+        if allies.len() < 4 {
+            b.key(&mut cx, Key::Char('4'));
+            assert_eq!((b.selected, b.message.clone()), (Some(h), "No party member on key 4.".to_string()));
+        }
+    }
+
+    /// The playtest bug: while the hero's round is its ghost, a click on another party member selects that member; the
+    /// hero's round target and plan stay as they were.
+    #[test]
+    fn a_click_on_another_member_selects_it_while_the_ghost_shows() {
+        let (mut cx, mut g, mut b) = planning();
+        let h = hero(&b);
+        let other = w(&b).allies.iter().copied().find(|&a| a != h && w(&b).units[a].is_active() && w(&b).has(a)).expect("a second party member on the field");
+        assert!(rip::picks_of(w(&b), h).is_empty() && ghosts_of(&b, h).iter().all(|g| *g), "the hero shows its ghost");
+        let (target, rows) = (w(&b).round_states.get(&h).and_then(|r| r.target), rows_of(&b, h));
+        b.run(&mut cx, Action::UnitClick(other));
+        assert_eq!(b.selected, Some(other), "the click selects the member: {}", b.message);
+        assert!(b.popup.is_none());
+        assert_eq!(w(&b).round_states.get(&h).and_then(|r| r.target), target, "not the hero's round target");
+        assert_eq!(rows_of(&b, h), rows, "the hero's plan is unchanged");
+        // through the drawn token too (the hit test reaches the member's unit widget)
+        b.selected = Some(h);
+        drawn(&mut cx, &mut g, &mut b);
+        let r = widget(&b, &format!("unit.{other}")).rect;
+        if let Some(a) = aegis_ui::ui::hit(&b.w, (r.x + r.w / 2, r.y + r.h / 2)) {
+            b.run(&mut cx, a);
+            assert_eq!(b.selected, Some(other));
+        }
+    }
+
+    /// INPUT2 (user 2026-11-02, Q3): while the hero shows only its ghost, Ctrl+click on another member targets it (SL6:
+    /// the skill menu "<hero> -> <ally>" with the hero's support rows and "Select <ally>" last); the hero stays selected.
+    #[test]
+    fn ctrl_click_on_a_member_opens_the_support_menu_while_the_ghost_shows() {
+        let (mut cx, _g, mut b) = planning();
+        let allies: Vec<usize> = w(&b).allies.iter().copied().filter(|&a| w(&b).units[a].is_active() && w(&b).has(a)).collect();
+        // a member with a support row it can pick on another member (the pair found by the kit's menu rows); without one
+        // in the fixture, the first member learns a support skill of the catalog it can use (in memory, a meter skill:
+        // listed after its actives, HK1)
+        let reaches = |b: &BattleScreen, h: usize, o: usize| {
+            let s = b.host.session.as_ref().unwrap();
+            rip::pick_options(&s.w, &s.plan, h, RoundTarget::Unit(o)).iter().any(|r| r.problem.is_none() && r.picks.iter().any(|p| p.holds_target()))
+        };
+        if !allies.iter().any(|&h| allies.iter().any(|&o| o != h && reaches(&b, h, o))) {
+            let support: Vec<String> = w(&b).cat.skills.iter().filter(|s| s.kind == "SUPPORT" && !s.system && ri::skill_intent(s) == "support").map(|s| s.id.clone()).collect();
+            for id in support {
+                let u = &mut b.host.session.as_mut().unwrap().w.units[allies[0]];
+                u.meter_skills.push(id.clone());
+                u.known_skills.push(id);
+                b.after_change(&cx);
+                if reaches(&b, allies[0], allies[1]) {
+                    break;
+                }
+                let u = &mut b.host.session.as_mut().unwrap().w.units[allies[0]];
+                u.meter_skills.pop();
+                u.known_skills.pop();
+            }
+        }
+        let pair = allies.iter().flat_map(|&h| allies.iter().map(move |&o| (h, o))).filter(|(h, o)| h != o).find(|&(h, o)| {
+            let s = b.host.session.as_ref().unwrap();
+            rip::pick_options(&s.w, &s.plan, h, RoundTarget::Unit(o)).iter().any(|r| r.problem.is_none() && r.picks.iter().any(|p| p.holds_target()))
+        });
+        let (h, o) = pair.expect("a member with a support row on another member");
+        b.selected = Some(h);
+        assert!(rip::picks_of(w(&b), h).is_empty(), "only the ghost");
+        cx.held.ctrl = true;
+        b.run(&mut cx, Action::UnitClick(o));
+        {
+            assert_eq!(b.selected, Some(h), "Ctrl+click keeps the hero: {}", b.message);
+            let p = b.popup.as_ref().expect("the support menu");
+            assert_eq!(p.menu, Some((h, RoundTarget::Unit(o))));
+            assert!(p.rows.last().is_some_and(|r| matches!(r.act, RowAct::SelectAlly(x) if x == o)), "Select <ally> last");
+        }
+        // a plain click still selects
+        cx.held.ctrl = false;
+        b.run(&mut cx, Action::ClosePopup);
+        b.selected = Some(h);
+        if rip::picks_of(w(&b), h).iter().all(|p| !p.holds_target()) {
+            b.run(&mut cx, Action::UnitClick(o));
+            assert_eq!(b.selected, Some(o));
+        }
+    }
+
+    /// Key F accepts the selected hero's whole ghost as picks: the same plan entries, none ghost; F again says there is
+    /// nothing auto-filled.
+    #[test]
+    fn f_fills_the_timeline_with_the_ghost() {
+        let (mut cx, mut g, mut b) = planning();
+        let h = hero(&b);
+        let before = rows_of(&b, h);
+        assert!(!before.is_empty() && ghosts_of(&b, h).iter().all(|g| *g));
+        b.key(&mut cx, Key::Char('f'));
+        assert!(!rip::picks_of(w(&b), h).is_empty(), "{}", b.message);
+        assert!(ghosts_of(&b, h).iter().all(|g| !*g), "nothing ghost after F");
+        assert_eq!(rows_of(&b, h), before, "the same plan, solid");
+        b.key(&mut cx, Key::Char('f'));
+        assert!(b.message.ends_with("Nothing auto-filled to accept."), "{}", b.message);
+        drawn(&mut cx, &mut g, &mut b);
+        assert!(b.w.iter().filter(|x| x.id.starts_with("strip.block")).all(|x| !matches!(x.action, Some(Action::GhostSlot(_)))), "no ghost block left to click");
+    }
+
+    /// A click on a strip block showing a ghost entry makes that command a pick (the ghost up to it accepted; the fill
+    /// after it stays ghost).
+    #[test]
+    fn a_click_on_a_ghost_block_picks_its_command() {
+        let (mut cx, mut g, mut b) = planning();
+        let h = hero(&b);
+        let before = rows_of(&b, h);
+        let slots: Vec<(String, usize)> = b.w.iter().filter_map(|x| match x.action {
+            Some(Action::GhostSlot(k)) if x.id.starts_with("strip.block") => Some((x.id.clone(), k)),
+            _ => None,
+        }).collect();
+        assert!(!slots.is_empty(), "the ghost blocks are clickable");
+        let k = slots.iter().map(|s| s.1).max().unwrap().min(1);
+        let id = slots.iter().find(|s| s.1 == k).unwrap().0.clone();
+        let r = widget(&b, &id).rect;
+        assert!(tip_has(widget(&b, &id), "accept the auto-fill up to here"));
+        let a = aegis_ui::ui::hit(&b.w, (r.x + 2, r.y + r.h / 2)).expect("the block takes the click");
+        assert_eq!(a, Action::GhostSlot(k));
+        b.run(&mut cx, a);
+        let ghosts = ghosts_of(&b, h);
+        assert!(ghosts[..=k].iter().all(|g| !*g), "entries up to {k} are picks: {ghosts:?} {}", b.message);
+        assert!(ghosts[k + 1..].iter().all(|g| *g), "the fill after it stays ghost: {ghosts:?}");
+        assert_eq!(rows_of(&b, h)[..=k], before[..=k], "the picked commands keep their place");
+        drawn(&mut cx, &mut g, &mut b);
+        assert!(!matches!(aegis_ui::ui::hit(&b.w, (r.x + 2, r.y + r.h / 2)), Some(Action::GhostSlot(_))), "a solid block is no ghost slot");
+    }
+
+    /// The Help card lists the party keys, the Shift skill keys, F and Ctrl+click.
+    #[test]
+    fn the_help_keys_name_the_input2_keys() {
+        let battle = crate::menus::CONTROLS.iter().find(|(g, _)| *g == "Battle").expect("the battle keys").1;
+        for (what, key) in [("Select party member 1-4", "1-4"), ("Skills of the selected hero (timeline)", "Shift+1-9"), ("Accept the selected hero's auto-fill (timeline)", "F"), ("Support an ally while only the auto-fill shows (timeline)", "Ctrl+click")] {
+            assert!(battle.iter().any(|r| r.0 == what && r.1 == key), "{what}: {key} in {battle:?}");
+        }
+    }
+
     // ---- INPUT1-AP: the AP pip gauge (INPUT1 AP3, AP5-AP10) ---------------------------------------------------------
 
     /// The agent link's `ap_gauge` (null: hidden).
@@ -10049,23 +10310,36 @@ mod input1_tests {
         b.state(cx)["ap_gauge"].clone()
     }
 
-    /// AP6, AP7 written out from the kit's forecast: `u = ceil(max / 12)` AP a pip above 12, every count divided by it
-    /// and rounded up; pip `i` full when `i <= left`, a ghost fill when `left < i <= next`, outlined when `i <= now`; a
-    /// debt (`now < 0`): every pip an empty slot.
-    fn pips_by_rule(f: &rip::ApForecast) -> String {
+    /// AP6 and INPUT2 (style D) written out from the kit's plan and forecast: `u = ceil(max / 12)` AP a slot above 12;
+    /// each plan entry that costs AP is a block (`B<n>`, its slots from the running total, rounded up), free sockets
+    /// (`O`) follow up to the AP held, crossed slots (`X`) up to the max; a debt (`now < 0`): every slot crossed.
+    fn pips_by_rule(b: &BattleScreen, unit: usize) -> String {
+        let f = forecast(b, unit);
+        let s = b.host.session.as_ref().unwrap();
+        let aps: Vec<i32> = s.plan.compile(&s.w, unit).entries.iter().map(|e| e.total_ap()).filter(|ap| *ap > 0).collect();
         let u = if f.max > AP_PIPS { (f.max + AP_PIPS - 1) / AP_PIPS } else { 1 };
         let c = |n: i32| if n <= 0 { 0 } else { (n + u - 1) / u };
-        (1..=c(f.max))
-            .map(|i| match (f.now >= 0, i <= c(f.left), c(f.left) < i && i <= c(f.next), i <= c(f.now)) {
-                (false, ..) => "S",
-                (true, true, _, _) => "F",
-                (true, false, true, true) => "Hg",
-                (true, false, false, true) => "H",
-                (true, false, true, false) => "Sg",
-                _ => "S",
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
+        let slots = c(f.max);
+        if f.now < 0 {
+            return vec!["X"; slots as usize].join(" ");
+        }
+        let mut out: Vec<String> = Vec::new();
+        let (mut sum, mut k) = (0, 0);
+        for ap in aps {
+            sum += ap;
+            let end = c(sum).min(slots) as usize;
+            if end > out.len() {
+                k += 1;
+            }
+            while out.len() < end {
+                out.push(format!("B{k}"));
+            }
+        }
+        let held = c(f.now).min(slots) as usize;
+        while (out.len() as i32) < slots {
+            out.push(if out.len() < held { "O".into() } else { "X".into() });
+        }
+        out.join(" ")
     }
 
     fn forecast(b: &BattleScreen, u: usize) -> rip::ApForecast {
@@ -10090,10 +10364,10 @@ mod input1_tests {
         let h = hero(&b);
         let f = forecast(&b, h);
         let st = gauge(&b, &cx);
-        assert_eq!(st["pips"], json!(pips_by_rule(&f)), "{f:?}");
+        assert_eq!(st["pips"], json!(pips_by_rule(&b, h)), "{f:?}");
         assert_eq!((st["unit"].clone(), st["red"].clone(), st["label"].clone()), (json!(h), json!(false), Value::Null));
         let wg = widget(&b, "strip.ap");
-        assert_eq!(wg.text, pips_by_rule(&f));
+        assert_eq!(wg.text, pips_by_rule(&b, h));
         for l in ap_lines(&f) {
             assert!(tip_has(wg, &l), "AP9 line {l} in {:?}", wg.tip);
         }
@@ -10105,7 +10379,7 @@ mod input1_tests {
         b.run(&mut cx, Action::Choose(k));
         b.run(&mut cx, Action::ClosePopup);
         drawn(&mut cx, &mut g, &mut b);
-        assert_eq!(gauge(&b, &cx)["pips"], json!(pips_by_rule(&forecast(&b, h))));
+        assert_eq!(gauge(&b, &cx)["pips"], json!(pips_by_rule(&b, h)));
         b.selected = None;
         drawn(&mut cx, &mut g, &mut b);
         assert_eq!(gauge(&b, &cx), Value::Null, "no hero selected: hidden");
@@ -10152,13 +10426,13 @@ mod input1_tests {
         b.draw(&mut cx, &mut g, (r.x + r.w / 2, r.y + r.h / 2), true);
         let st = gauge(&b, &cx);
         assert_eq!((st["red"].clone(), st["label"].clone(), st["label_side"].clone()), (json!(true), json!("-1"), json!("after")), "{st}");
-        assert_eq!(st["pips"], json!(pips_by_rule(&forecast(&b, h))), "the alert changes colours only");
+        assert_eq!(st["pips"], json!(pips_by_rule(&b, h)), "the alert changes colours only");
         drawn(&mut cx, &mut g, &mut b);
         let st = gauge(&b, &cx);
         assert_eq!((st["red"].clone(), st["label"].clone()), (json!(false), Value::Null), "leaving the row clears both");
     }
 
-    /// AP8: a hero at -2 AP shows "-2" before its slots, every pip an empty slot.
+    /// AP8: a hero at -2 AP shows "-2" before its slots, every slot crossed (INPUT2).
     #[test]
     fn a_debt_shows_before_the_slots() {
         let (mut cx, mut g, mut b) = planning();
@@ -10168,8 +10442,8 @@ mod input1_tests {
         let st = gauge(&b, &cx);
         let slots = st["slots"].as_i64().unwrap() as usize;
         assert_eq!((st["label"].clone(), st["label_side"].clone()), (json!("-2"), json!("before")));
-        assert_eq!(st["pips"], json!(vec!["S"; slots].join(" ")));
-        assert_eq!(st["pips"], json!(pips_by_rule(&forecast(&b, h))));
+        assert_eq!(st["pips"], json!(vec!["X"; slots].join(" ")));
+        assert_eq!(st["pips"], json!(pips_by_rule(&b, h)));
     }
 
     /// AP6, AP9, IS3: a 14 AP hero shows 7 pips at 2 AP each; the hover card and the inspect panel say "1 pip = 2 AP".
@@ -10181,7 +10455,7 @@ mod input1_tests {
         drawn(&mut cx, &mut g, &mut b);
         let st = gauge(&b, &cx);
         assert_eq!((st["slots"].clone(), st["per_pip"].clone()), (json!(7), json!(2)));
-        assert_eq!(st["pips"], json!(pips_by_rule(&forecast(&b, h))));
+        assert_eq!(st["pips"], json!(pips_by_rule(&b, h)));
         assert!(tip_has(widget(&b, "strip.ap"), "1 pip = 2 AP"));
         let s = b.host.session.as_ref().unwrap();
         let lines: Vec<String> = inspect_tip(s, h, b.selected, &s.enemy_intents(), &s.round_intents(), &[], true).into_iter().map(|l| l.0).collect();
@@ -10205,13 +10479,13 @@ mod input1_tests {
         let max = w(&b).units[h].max_ap;
         let paid: i32 = b.session().resolver.scheduled.iter().filter(|a| a.unit == h && !a.cancelled).map(|a| a.command.ap_cost + a.command.stance_switch_cost).sum();
         let st = gauge(&b, &cx);
-        assert_eq!(st["pips"], json!(aegis_ui::pips::PipGauge::live(start, live, max, AP_PIPS).reading()));
+        assert_eq!(st["pips"], json!(aegis_ui::pips::PipGauge::live(start, live, AP_PAID, max, AP_PIPS).reading()));
         let read = st["pips"].as_str().unwrap().to_string();
         let count = |code: &str| read.split(' ').filter(|p| *p == code).count() as i32;
         if max <= AP_PIPS && live >= 0 && live <= start {
-            assert_eq!((count("F"), count("H")), (live, start - live), "full to the live AP, hollow what was paid: {read}");
+            assert_eq!((count("O"), count("B1")), (live, start - live), "sockets hold the live AP, one block what was paid: {read}");
             if paid > 0 && live == start - paid {
-                assert_eq!(count("H"), paid, "a command paying {paid} AP turns {paid} pips hollow");
+                assert_eq!(count("B1"), paid, "a command paying {paid} AP fills {paid} slots of the paid block");
             }
         }
         // a payment shown mid-playback: the frame that sees it starts the change, 150 ms later it is done
@@ -10225,19 +10499,19 @@ mod input1_tests {
             a.at = a.at.checked_sub(Duration::from_millis(200)).unwrap_or(a.at);
             drawn(&mut cx, &mut g, &mut b);
         }
-        let done = aegis_ui::pips::PipGauge::live(start, pay_to, max, AP_PIPS).reading();
+        let done = aegis_ui::pips::PipGauge::live(start, pay_to, AP_PAID, max, AP_PIPS).reading();
         assert_eq!(gauge(&b, &cx)["pips"], json!(done), "after 150 ms");
         // skip animations: at once
         cx.settings.v["skip_anim"] = json!(true);
         set_ap(&cx, &mut b, h, pay_to.max(1) - 1, None);
         drawn(&mut cx, &mut g, &mut b);
-        assert_eq!(gauge(&b, &cx)["pips"], json!(aegis_ui::pips::PipGauge::live(start, pay_to.max(1) - 1, max, AP_PIPS).reading()), "skip animations: at once");
+        assert_eq!(gauge(&b, &cx)["pips"], json!(aegis_ui::pips::PipGauge::live(start, pay_to.max(1) - 1, AP_PAID, max, AP_PIPS).reading()), "skip animations: at once");
         // the next planning: the forecast again
         b.run(&mut cx, Action::NextRound);
         b.tick(&mut cx);
         drawn(&mut cx, &mut g, &mut b);
         if b.planning() && w(&b).units[h].is_active() {
-            assert_eq!(gauge(&b, &cx)["pips"], json!(pips_by_rule(&forecast(&b, h))));
+            assert_eq!(gauge(&b, &cx)["pips"], json!(pips_by_rule(&b, h)));
         }
     }
 

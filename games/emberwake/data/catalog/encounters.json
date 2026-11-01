@@ -20,6 +20,7 @@
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"warrior",
@@ -64,6 +65,7 @@
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 7,
 			"party": [
 				"dojo_warrior",
@@ -106,6 +108,7 @@
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"warrior",
@@ -169,7 +172,8 @@
 			"max_rounds": 8,
 			"total_blocks": 6,
 			"ap_regen": 4,
-			"unit_ap": 10,
+			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"tl_vanguard"
@@ -208,7 +212,8 @@
 			"max_rounds": 8,
 			"total_blocks": 6,
 			"ap_regen": 4,
-			"unit_ap": 10,
+			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"tl_halberdier"
@@ -247,7 +252,8 @@
 			"max_rounds": 8,
 			"total_blocks": 6,
 			"ap_regen": 4,
-			"unit_ap": 10,
+			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"tl_spiker"
@@ -286,7 +292,8 @@
 			"max_rounds": 8,
 			"total_blocks": 6,
 			"ap_regen": 4,
-			"unit_ap": 10,
+			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"tl_vanguard",
@@ -327,7 +334,8 @@
 			"max_rounds": 10,
 			"total_blocks": 6,
 			"ap_regen": 4,
-			"unit_ap": 10,
+			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"tl_vanguard",
@@ -372,7 +380,8 @@
 			"max_rounds": 8,
 			"total_blocks": 6,
 			"ap_regen": 4,
-			"unit_ap": 10,
+			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"tl_vanguard",
@@ -431,6 +440,7 @@
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"warrior",
@@ -490,6 +500,7 @@
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"warrior",

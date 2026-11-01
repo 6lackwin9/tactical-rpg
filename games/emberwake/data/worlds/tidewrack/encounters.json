@@ -22,6 +22,7 @@
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"ilse_marrow",

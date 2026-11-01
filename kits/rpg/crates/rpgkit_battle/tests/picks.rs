@@ -776,3 +776,64 @@ fn the_follow_up_reader_skips_what_the_unit_cannot_use_here() {
     s.w.units[VANGUARD].deck.follow_ups.insert("tl_heavy_cleave".into(), Vec::new());
     assert_eq!(rip::follow_order(&s.w, VANGUARD, RoundIntent::Assault, Some(&hc)), order);
 }
+
+/// INPUT2: accepting the ghost turns it into picks with the same plan: the whole ghost (no ghost entry left, every
+/// entry where it was), or up to one ghost entry (the entries up to it solid, the fill rebuilt after them); a pick
+/// already made stays first; a non-ghost entry or a hero with nothing auto-filled is refused and changes nothing.
+#[test]
+fn accepting_the_ghost_makes_the_same_plan_solid() {
+    let setup = |vanguard: V2, archer: V2| {
+        let mut s = session();
+        place(&mut s.w, VANGUARD, vanguard);
+        place(&mut s.w, ARCHER, archer);
+        place(&mut s.w, FOOTMAN, V2::new(5, 4));
+        for c in [VANGUARD, ARCHER] {
+            round_intent::set_intent(&mut s.w, c, RoundIntent::Assault).unwrap();
+            round_intent::set_target(&mut s.w, c, foe(FOOTMAN)).unwrap();
+            rip::plan_unit(&mut s.w, &mut s.plan, c).unwrap();
+        }
+        s
+    };
+    let shape = |r: &[Row]| r.iter().map(|x| (x.0.clone(), x.1, x.2, x.3, x.4)).collect::<Vec<_>>();
+    // next to the footman, and an archer that must approach first (its move is the shot's implied move)
+    for c in [VANGUARD, ARCHER] {
+        let mut s = setup(V2::new(4, 4), V2::new(1, 4));
+        let before = rows(&s.w, &s.plan, c);
+        assert!(!before.is_empty() && before.iter().all(|r| r.6), "{c}: no pick, every entry ghost: {before:?}");
+        if c == ARCHER {
+            assert_eq!(names(&before)[0], "move", "the archer approaches first: {before:?}");
+        }
+        let (r, _) = rip::accept_ghost(&mut s.w, &mut s.plan, c, None);
+        let n = r.unwrap_or_else(|e| panic!("{c}: {e}"));
+        let after = rows(&s.w, &s.plan, c);
+        assert_eq!(rip::picks_of(&s.w, c).len(), n);
+        assert!(after.iter().all(|r| !r.6), "{c}: nothing ghost after: {after:?}");
+        assert_eq!(shape(&after), shape(&before), "{c}: the same plan, solid");
+    }
+    // up to one ghost entry: the first two entries solid, the fill after them
+    let mut s = setup(V2::new(4, 4), V2::new(1, 4));
+    let before = rows(&s.w, &s.plan, VANGUARD);
+    if before.len() >= 3 {
+        rip::accept_ghost(&mut s.w, &mut s.plan, VANGUARD, Some(1)).0.unwrap();
+        let after = rows(&s.w, &s.plan, VANGUARD);
+        assert_eq!(shape(&after[..2]), shape(&before[..2]), "the entries up to the clicked one keep their place");
+        assert_eq!(ghosts(&after)[..2], [false, false]);
+        assert!(after[2..].iter().all(|r| r.6), "the fill after them stays ghost: {after:?}");
+        // a solid entry is not a ghost entry: refused, nothing changes
+        let picks = rip::picks_of(&s.w, VANGUARD);
+        let (r, _) = rip::accept_ghost(&mut s.w, &mut s.plan, VANGUARD, Some(0));
+        assert_eq!(r, Err("No auto-filled block there.".into()));
+        assert_eq!(rip::picks_of(&s.w, VANGUARD), picks);
+    }
+    // a pick first, then the rest of the ghost: the pick stays first, the plan keeps its shape
+    let mut s = setup(V2::new(4, 4), V2::new(1, 4));
+    let sc = sk(&s, "tl_shoulder_check");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[sc.clone()]).unwrap();
+    let before = rows(&s.w, &s.plan, VANGUARD);
+    rip::accept_ghost(&mut s.w, &mut s.plan, VANGUARD, None).0.unwrap();
+    assert_eq!(rip::picks_of(&s.w, VANGUARD)[0], sc);
+    assert_eq!(shape(&rows(&s.w, &s.plan, VANGUARD)), shape(&before));
+    // nothing auto-filled left: refused
+    let (r, _) = rip::accept_ghost(&mut s.w, &mut s.plan, VANGUARD, None);
+    assert_eq!(r, Err("Nothing auto-filled to accept.".into()));
+}

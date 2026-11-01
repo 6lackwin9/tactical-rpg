@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
-use winit::keyboard::{Key as WKey, NamedKey};
+use winit::keyboard::{Key as WKey, KeyCode, NamedKey, PhysicalKey};
 use winit::dpi::LogicalSize;
 use winit::window::{Fullscreen, Window, WindowId};
 
@@ -1248,7 +1248,7 @@ impl<G: Context> ApplicationHandler for App<G> {
                     s.release();
                 }
             }
-            WindowEvent::KeyboardInput { event: KeyEvent { logical_key, text, state: ElementState::Pressed, repeat, .. }, .. } => {
+            WindowEvent::KeyboardInput { event: KeyEvent { logical_key, physical_key, text, state: ElementState::Pressed, repeat, .. }, .. } => {
                 let Some(s) = self.shell.as_mut() else { return };
                 if s.gfx.kit.edit.is_none() {
                     if let Some(k) = walk_key(&logical_key) {
@@ -1309,7 +1309,13 @@ impl<G: Context> ApplicationHandler for App<G> {
                     }
                     return;
                 }
+                // Shift with a digit key reads by its place on the keyboard (the layout types "!" or "1" for it)
+                let shift_digit = match physical_key {
+                    PhysicalKey::Code(code) if self.shift && !self.ctrl && !self.alt => shift_digit(code),
+                    _ => None,
+                };
                 let k = match logical_key {
+                    _ if shift_digit.is_some() => shift_digit.map(Key::ShiftDigit),
                     WKey::Named(NamedKey::ArrowUp) => Some(Key::Up),
                     WKey::Named(NamedKey::ArrowDown) => Some(Key::Down),
                     WKey::Named(NamedKey::ArrowLeft) => Some(Key::Left),
@@ -1357,6 +1363,25 @@ fn walk_key(k: &WKey) -> Option<Key> {
         _ => return None,
     };
     key.dir().map(|_| key)
+}
+
+/// The digit of a top-row or keypad digit key.
+fn shift_digit(code: KeyCode) -> Option<u8> {
+    use KeyCode::*;
+    let d = match code {
+        Digit0 | Numpad0 => 0,
+        Digit1 | Numpad1 => 1,
+        Digit2 | Numpad2 => 2,
+        Digit3 | Numpad3 => 3,
+        Digit4 | Numpad4 => 4,
+        Digit5 | Numpad5 => 5,
+        Digit6 | Numpad6 => 6,
+        Digit7 | Numpad7 => 7,
+        Digit8 | Numpad8 => 8,
+        Digit9 | Numpad9 => 9,
+        _ => return None,
+    };
+    Some(d)
 }
 
 /// The dragged widget's text in a small card under the cursor.

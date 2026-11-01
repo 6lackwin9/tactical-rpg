@@ -113,6 +113,9 @@ before; with the menu open a right click on an enemy closes the menu and leaves 
 
 ## 3. Hotkeys (INPUT1-U)
 
+Changed by INPUT2 (2026-11-02, `docs/specs/INPUT2.md` 3): the skill hotkeys are Shift+1-9; keys 1-4 select the
+party's members; key F and a click on a ghost block accept the ghost as picks.
+
 - HK1. Hotkey order, per hero (kit `round_intent_plan::hotkey_skills`): the deck's actives in slot order, then the
   ruleset's `basics` that are not neutral, in `basics` order; without the deck rule, the loadout's slot order then
   the basics. Keys 1-9 are its first nine; later skills and items have no key. The order never changes during a
@@ -239,6 +242,10 @@ an inspected unrevealed enemy's panel text contains none of its plan's skill nam
 action while tells show).
 
 ## 7. The AP forecast (INPUT1-U) and the AP pip gauge (INPUT1-AP)
+
+Changed by INPUT2 (2026-11-02, `docs/specs/INPUT2.md` 1): the gauge's look is style D (fixed slots, a capsule per
+planned block in its skill kind's colour, sockets, crossed slots); AP7's full / hollow / ghost pips and the table's
+readings below are retired (the readings are now "B1 ... O ... X").
 
 The decision's text readout (`AP 6 - 4 = 2 · +3 next -> 5`) gives way to a pip gauge (Q7, user 2026-10-31). INPUT1-U
 builds the kit forecast (AP1, AP2) and the host's `ap` keys and draws no strip readout (today's AP display stays as

@@ -117,7 +117,7 @@ fn picked_ruleset(cat: &Catalog, req: &Value, default: Ruleset) -> Result<Rulese
 }
 
 /// ENCOUNTER2-C SR5: the requests a locked round refuses.
-const LOCKED_REFUSES: [&str; 11] = ["preset", "plan", "add_step", "undo", "clear", "round_intent", "manual", "fill", "pick", "unpick", "autofill"];
+const LOCKED_REFUSES: [&str; 12] = ["preset", "plan", "add_step", "undo", "clear", "round_intent", "manual", "fill", "pick", "unpick", "accept_ghost", "autofill"];
 
 fn err(msg: impl Into<String>) -> Value {
     json!({"ok": false, "error": msg.into()})
@@ -125,7 +125,7 @@ fn err(msg: impl Into<String>) -> Value {
 
 impl aegis_host::Commands for Battle {
     fn mutating(&self, cmd: &str) -> bool {
-        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "manual" | "fill" | "stay_pick" | "pick" | "unpick" | "autofill" | "tactics")
+        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "manual" | "fill" | "stay_pick" | "pick" | "unpick" | "accept_ghost" | "autofill" | "tactics")
     }
 
     fn restarts(&self, cmd: &str) -> bool {
@@ -364,6 +364,7 @@ impl Battle {
             "fill" => fill_req(s, req),
             "pick" => pick_req(s, req),
             "unpick" => unpick_req(s, req),
+            "accept_ghost" => accept_ghost_req(s, req),
             "autofill" => autofill_req(s, req),
             "pick_options" => pick_options_req(s, req),
             "round_plan" => json!({"ok": true, "round_plan": round_plan(s)}),
@@ -938,6 +939,35 @@ fn unpick_req(s: &mut Session, req: &Value) -> Value {
     let before = pick_counts(s);
     let (result, later) = rip::unpick(&mut s.w, &mut s.plan, u);
     pick_reply(s, &before, result, later)
+}
+
+/// INPUT2 `accept_ghost {unit, upto?}`: the member's ghost (all of it, or up to its plan entry `upto`, an index of the
+/// plan's entries that must be a ghost entry) becomes picks (`round_intent_plan::accept_ghost`); the reply is `pick`'s
+/// plus `added`, the picks added. A refusal is an error and leaves the battle as it was (not recorded).
+fn accept_ghost_req(s: &mut Session, req: &Value) -> Value {
+    let u = match planning_member(s, req, "accept_ghost") {
+        Ok(u) => u,
+        Err(e) => return e,
+    };
+    if !round_intent::on(&s.w) {
+        return err("accept_ghost needs the rule round_intent");
+    }
+    let upto = match req.get("upto") {
+        None | Some(Value::Null) => None,
+        Some(v) => match v.as_u64() {
+            Some(k) => Some(k as usize),
+            None => return err("upto: a plan entry index"),
+        },
+    };
+    let before = pick_counts(s);
+    match rip::accept_ghost(&mut s.w, &mut s.plan, u, upto) {
+        (Err(e), _) => err(e),
+        (Ok(n), later) => {
+            let mut reply = pick_reply(s, &before, Ok(()), later);
+            reply["added"] = json!(n);
+            reply
+        }
+    }
 }
 
 /// `clear {unit}` under round_intent with picks: removes every pick (IF7).

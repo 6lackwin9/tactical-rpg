@@ -55,6 +55,8 @@ pub struct EncounterDef {
     pub total_blocks: i32,
     pub ap_regen: i32,
     pub unit_ap: i32,
+    /// INPUT2: every unit's AP when the battle starts (round 1's planning), at most its max; 0 = full (the max).
+    pub start_ap: i32,
     pub rng_seed: i64,
     pub party: Vec<String>,
     pub enemies: Vec<String>,
@@ -106,6 +108,7 @@ impl EncounterDef {
             total_blocks: value::int(o, "total_blocks", 6),
             ap_regen: value::int(o, "ap_regen", 4),
             unit_ap: value::int(o, "unit_ap", 12),
+            start_ap: value::int(o, "start_ap", 0).max(0),
             rng_seed: o.get("rng_seed").and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))).unwrap_or(1337),
             party: value::strings(o, "party"),
             enemies: value::strings(o, "enemies"),
@@ -536,7 +539,25 @@ impl Session {
             pending: VecDeque::new(),
         };
         s.begin_round(1);
+        s.apply_start_ap();
         s
+    }
+
+    /// INPUT2: the encounter's `start_ap` (above 0): every unit starts round 1 with at most that much AP (its max stays,
+    /// so later rounds' `ap_regen` can bank up to it); the round's start snapshot shows it. Applied after round 1's
+    /// start, whose AP refill would otherwise top it back up.
+    fn apply_start_ap(&mut self) {
+        let start = self.def.start_ap;
+        if start <= 0 || self.w.units.iter().all(|u| u.ap <= start) {
+            return;
+        }
+        for u in self.w.units.iter_mut() {
+            u.ap = u.ap.min(start);
+        }
+        let snap = self.snapshot();
+        if let Some(first) = self.history.last_mut().and_then(|r| r.snapshots.first_mut()) {
+            *first = snap;
+        }
     }
 
     fn begin_round(&mut self, round: i32) {

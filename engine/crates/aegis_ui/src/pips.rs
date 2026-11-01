@@ -1,24 +1,31 @@
-//! A pip gauge (INPUT1-AP, engine-only; no Godot original): a row of small pips for a budget planned against, one pip a
-//! point (or `unit` points when the maximum is above the gauge's cap). Each pip has an outline, solid for a point held
-//! now and a dim slot above it, and a fill: full for a point kept, ghost (at the timeline's `GHOST_ALPHA`) for a point
-//! the next refill brings back, none for a point spent. The gauge can turn every outline to its alert colour (a pick the
-//! budget cannot pay) and carries a short label before its first pip (a debt) or after its last (a shortfall). Levels
-//! are counted in pips and may be fractional while a screen animates them (a pip fills or empties by its fraction).
+//! A pip gauge (INPUT1-AP, reworked by INPUT2 to the user's style D; engine-only, no Godot original): a fixed row of
+//! slots for a budget planned against, one slot a point (or `unit` points when the maximum is above the gauge's cap).
+//! The row never moves or resizes with the plan: a slot per point up to the maximum, a uniform gap. Each planned block
+//! is a capsule over its slots, filled with the colour its caller gives (a ghost block at the timeline's
+//! `GHOST_ALPHA`), with its own bright rim (so two neighbouring blocks of one colour read as two) and thin darker ticks
+//! between its slots. The points held and not planned are dark recessed sockets with a light outline; the slots above
+//! the points held (up to the maximum) are dim crossed slots. The gauge can turn the outlines to its alert colour (a pick
+//! the budget cannot pay) and carries a short label before its first slot (a debt) or after its last (a shortfall).
+//! Levels are counted in slots and may be fractional while a screen animates them.
 //! A screen builds a `PipGauge` from its own numbers each frame and draws it; it pushes one info widget (its reading in
-//! pip codes, the hover card the screen's). `samples` are the UI Gallery's states.
+//! pip codes, the hover card the screen's). The widget names no game: the block colours are the caller's. `samples` are
+//! the UI Gallery's states.
 
-use crate::canvas::{Rect, Rgba};
+use crate::canvas::{rgb, rgba, Rect, Rgba};
 use crate::timeline::GHOST_ALPHA;
-use crate::ui::{Tip, Ui, DIM, FOE, GOLD, SMALL, TEXT};
+use crate::ui::{Tip, Ui, DIM, FOE, GOLD, INFO, SMALL, TEXT};
 
-/// One pip's size and the gap between pips (canvas pixels): 12 pips take 59.
-pub const PIP_W: i32 = 4;
-pub const PIP_H: i32 = 6;
+/// One slot's size and the gap between slots (canvas pixels): 12 slots take 71.
+pub const PIP_W: i32 = 5;
+pub const PIP_H: i32 = 8;
 pub const PIP_GAP: i32 = 1;
-/// The gap between a label and the pips.
+/// The gap between a label and the slots.
 pub const LABEL_GAP: i32 = 2;
+/// How far a block's rim goes toward white and its ticks toward black.
+pub const RIM_LIGHT: f32 = 0.55;
+pub const TICK_DARK: f32 = 0.45;
 
-/// The points a pip stands for: one, or `ceil(max / cap)` when `max` is above `cap` (the gauge's most pips).
+/// The points a slot stands for: one, or `ceil(max / cap)` when `max` is above `cap` (the gauge's most slots).
 pub fn unit(max: i32, cap: i32) -> i32 {
     if cap <= 0 || max <= cap {
         1
@@ -27,7 +34,7 @@ pub fn unit(max: i32, cap: i32) -> i32 {
     }
 }
 
-/// `n` points in pips of `unit` points, rounded up (none for `n <= 0`).
+/// `n` points in slots of `unit` points, rounded up (none for `n <= 0`).
 pub fn count(n: i32, unit: i32) -> i32 {
     let u = unit.max(1);
     if n <= 0 {
@@ -37,7 +44,7 @@ pub fn count(n: i32, unit: i32) -> i32 {
     }
 }
 
-/// The width of `slots` pips side by side.
+/// The width of `slots` slots side by side.
 pub fn pips_w(slots: i32) -> i32 {
     if slots <= 0 {
         0
@@ -46,60 +53,91 @@ pub fn pips_w(slots: i32) -> i32 {
     }
 }
 
-/// A pip as read (settled levels): full; hollow (outlined, empty); hollow with a ghost fill; a slot with a ghost fill;
-/// an empty slot.
+/// Slot `k`'s rect (0 = the first) for a row starting at `x`, centred on `cy`: fixed whatever the plan.
+pub fn pip_rect(x: i32, cy: i32, k: i32) -> Rect {
+    Rect::new(x + k * (PIP_W + PIP_GAP), cy - PIP_H / 2, PIP_W, PIP_H)
+}
+
+/// A planned block: its points, its fill colour (the caller's) and whether it is a ghost (drawn at `GHOST_ALPHA`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PipBlock {
+    pub ap: i32,
+    pub colour: Rgba,
+    pub ghost: bool,
+}
+
+impl PipBlock {
+    pub fn new(ap: i32, colour: Rgba) -> PipBlock {
+        PipBlock { ap, colour, ghost: false }
+    }
+
+    pub fn ghost(ap: i32, colour: Rgba) -> PipBlock {
+        PipBlock { ap, colour, ghost: true }
+    }
+}
+
+/// A slot as read (settled levels): in planned block `n` (1 = the first), a free socket (held, not planned), a crossed
+/// slot (above the points held).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pip {
-    Full,
-    Hollow,
-    HollowGhost,
-    SlotGhost,
-    Slot,
+    Block(usize),
+    Free,
+    Crossed,
 }
 
 impl Pip {
-    /// The pip's short code: "F", "H", "Hg", "Sg", "S".
-    pub fn code(self) -> &'static str {
+    /// The slot's short code: "B1", "B2", ... for a block's slot, "O" a free socket, "X" a crossed slot.
+    pub fn code(self) -> String {
         match self {
-            Pip::Full => "F",
-            Pip::Hollow => "H",
-            Pip::HollowGhost => "Hg",
-            Pip::SlotGhost => "Sg",
-            Pip::Slot => "S",
+            Pip::Block(n) => format!("B{n}"),
+            Pip::Free => "O".into(),
+            Pip::Crossed => "X".into(),
         }
     }
 }
 
-/// The gauge's colours: the fill (full and, at `GHOST_ALPHA`, ghost), a solid outline, a slot's outline, the alert
-/// (outlines and labels).
+/// The gauge's colours: a socket's fill and outline, a crossed slot's outline and cross, the alert (outlines and
+/// labels).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Colours {
-    pub fill: Rgba,
-    pub edge: Rgba,
-    pub slot: Rgba,
+    pub socket: Rgba,
+    pub socket_edge: Rgba,
+    pub crossed: Rgba,
     pub alert: Rgba,
 }
 
 impl Default for Colours {
     fn default() -> Self {
-        Colours { fill: GOLD, edge: TEXT, slot: DIM, alert: FOE }
+        Colours { socket: rgb(6, 9, 16), socket_edge: rgba(200, 210, 228, 220), crossed: rgba(132, 146, 172, 110), alert: FOE }
     }
 }
 
-/// A pip gauge. Levels count pips from the left: pips `1..=edge` have a solid outline, `1..=fill` are full, pips above
-/// `fill` up to `ghost` have a ghost fill. `Default` is an empty gauge.
+/// One block as laid out: its first slot (0-based), its slots, its colour and ghost flag.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Laid {
+    pub from: i32,
+    pub slots: i32,
+    pub colour: Rgba,
+    pub ghost: bool,
+}
+
+/// A pip gauge. Slots count from the left: the blocks fill slots `1..=spent` in order, free sockets follow up to
+/// `edge` (the points held), crossed slots above it. `Default` is an empty gauge.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PipGauge {
-    /// Pips drawn (the maximum in pips).
+    /// Slots drawn (the maximum in slots).
     pub slots: i32,
-    /// The points a pip stands for (1 or more).
+    /// The points a slot stands for (1 or more).
     pub unit: i32,
+    /// The blocks as laid out (slots counted from the cumulative points, so rounding never adds slots).
+    pub blocks: Vec<Laid>,
+    /// The slots the blocks show (their total; lower while a screen animates them in).
+    pub spent: f32,
+    /// The slots held (sockets end here, crossed slots follow).
     pub edge: f32,
-    pub fill: f32,
-    pub ghost: f32,
     /// Every outline in the alert colour.
     pub alert: bool,
-    /// A label before the first pip and one after the last, in the alert colour.
+    /// A label before the first slot and one after the last, in the alert colour.
     pub before: Option<String>,
     pub after: Option<String>,
     pub colours: Colours,
@@ -107,37 +145,55 @@ pub struct PipGauge {
     pub tip: Tip,
 }
 
+/// Lays `blocks` out from slot 0 (points in slots of `u`, from the running total, at most `slots`); blocks rounding
+/// to no slot are dropped.
+fn lay(blocks: &[PipBlock], u: i32, slots: i32) -> Vec<Laid> {
+    let (mut sum, mut at) = (0, 0);
+    let mut out = Vec::new();
+    for b in blocks.iter().filter(|b| b.ap > 0) {
+        sum += b.ap;
+        let end = count(sum, u).min(slots);
+        if end > at {
+            out.push(Laid { from: at, slots: end - at, colour: b.colour, ghost: b.ghost });
+            at = end;
+        }
+    }
+    out
+}
+
 impl PipGauge {
-    /// A budget being planned, in points: `have` now, `keep` left after the plan, `next` after the next refill, `max`, at
-    /// most `cap` pips. Pip `i`: full when `i <= keep`, ghost when `keep < i <= next`, outline solid when `i <= have`
-    /// (every count in pips, rounded up). A debt (`have < 0`) draws every pip as an empty slot and "-<debt>" before them.
-    pub fn planned(have: i32, keep: i32, next: i32, max: i32, cap: i32) -> PipGauge {
+    /// A budget being planned, in points: `now` held, `blocks` the plan in order, `max`, at most `cap` slots. The blocks
+    /// fill the first slots, free sockets follow up to `now`, crossed slots to `max`. A debt (`now < 0`) draws every slot
+    /// crossed and "-<debt>" before them.
+    pub fn planned(now: i32, blocks: &[PipBlock], max: i32, cap: i32) -> PipGauge {
         let u = unit(max, cap);
         let slots = count(max, u);
-        if have < 0 {
-            return PipGauge { slots, unit: u, before: Some(format!("-{}", -have)), ..PipGauge::default() };
+        if now < 0 {
+            return PipGauge { slots, unit: u, before: Some(format!("-{}", -now)), ..PipGauge::default() };
         }
-        let edge = count(have, u).min(slots);
-        let fill = count(keep, u).min(edge);
-        let ghost = count(next, u).clamp(fill, slots);
-        PipGauge { slots, unit: u, edge: edge as f32, fill: fill as f32, ghost: ghost as f32, ..PipGauge::default() }
+        let laid = lay(blocks, u, slots);
+        let spent = laid.last().map_or(0, |l| l.from + l.slots);
+        PipGauge { slots, unit: u, blocks: laid, spent: spent as f32, edge: count(now, u).min(slots) as f32, ..PipGauge::default() }
     }
 
-    /// A budget being spent, in points: `start` held when the spending began, `have` now, `max`, at most `cap` pips:
-    /// full pips up to `have`, hollow ones up to `start` (what was paid), slots to `max`. A debt as in `planned`.
-    pub fn live(start: i32, have: i32, max: i32, cap: i32) -> PipGauge {
+    /// A budget being spent, in points: `start` held when the spending began, `have` now, `max`, at most `cap` slots:
+    /// what was paid (`start - have`) is one block in `paid`, free sockets hold `have`, crossed slots go to `max`. A debt
+    /// as in `planned`.
+    pub fn live(start: i32, have: i32, paid: Rgba, max: i32, cap: i32) -> PipGauge {
         let u = unit(max, cap);
         let slots = count(max, u);
         if have < 0 {
             return PipGauge { slots, unit: u, before: Some(format!("-{}", -have)), ..PipGauge::default() };
         }
-        let fill = count(have, u).min(slots);
-        let edge = count(start.max(have), u).min(slots);
-        PipGauge { slots, unit: u, edge: edge as f32, fill: fill as f32, ghost: fill as f32, ..PipGauge::default() }
+        let held = start.max(have);
+        let edge = count(held, u).min(slots);
+        let paid_slots = (edge - count(have, u)).max(0);
+        let blocks = if paid_slots > 0 { vec![Laid { from: 0, slots: paid_slots, colour: paid, ghost: false }] } else { Vec::new() };
+        PipGauge { slots, unit: u, blocks, spent: paid_slots as f32, edge: edge as f32, ..PipGauge::default() }
     }
 
     /// The gauge with a pick `short` points beyond the budget: every outline in the alert colour and "-<short>" after
-    /// the last pip (a debt's label before the pips stays; then no label after).
+    /// the last slot (a debt's label before the slots stays; then no label after).
     pub fn short(mut self, short: i32) -> PipGauge {
         self.alert = true;
         if self.before.is_none() && short > 0 {
@@ -152,23 +208,26 @@ impl PipGauge {
         self
     }
 
-    /// Each pip as read (a fractional level counts from its half).
+    /// The block slot `k` (0-based) lies in (its index), if any.
+    fn block_at(&self, k: i32) -> Option<usize> {
+        self.blocks.iter().position(|b| k >= b.from && k < b.from + b.slots)
+    }
+
+    /// Each slot as read (a fractional level counts from its half).
     pub fn pips(&self) -> Vec<Pip> {
-        (1..=self.slots)
-            .map(|i| {
-                let lit = |level: f32| level >= i as f32 - 0.5;
-                match (lit(self.fill), lit(self.edge), lit(self.ghost)) {
-                    (true, _, _) => Pip::Full,
-                    (false, true, true) => Pip::HollowGhost,
-                    (false, true, false) => Pip::Hollow,
-                    (false, false, true) => Pip::SlotGhost,
-                    (false, false, false) => Pip::Slot,
+        (0..self.slots)
+            .map(|k| {
+                let lit = |level: f32| level >= k as f32 + 0.5;
+                match self.block_at(k) {
+                    Some(n) if lit(self.spent) => Pip::Block(n + 1),
+                    _ if lit(self.edge) => Pip::Free,
+                    _ => Pip::Crossed,
                 }
             })
             .collect()
     }
 
-    /// The pips' codes, space separated ("F F Hg S").
+    /// The slots' codes, space separated ("B1 B1 B2 O X").
     pub fn reading(&self) -> String {
         self.pips().iter().map(|p| p.code()).collect::<Vec<_>>().join(" ")
     }
@@ -182,7 +241,7 @@ impl PipGauge {
         w
     }
 
-    /// Draws the gauge from `x`, its pips centred on `cy`, and pushes the info widget `id` (kind "pips", its reading,
+    /// Draws the gauge from `x`, its slots centred on `cy`, and pushes the info widget `id` (kind "pips", its reading,
     /// the hover card); returns the widget's rect.
     pub fn draw<A: Clone>(&self, ui: &mut Ui<A>, id: &str, x: i32, cy: i32) -> Rect {
         let lh = ui.p.line_h(SMALL).ceil() as i32;
@@ -192,23 +251,44 @@ impl PipGauge {
             ui.p.text(at as f32, (cy - lh / 2) as f32, l, SMALL, self.colours.alert);
             at += label_w(ui, l) + LABEL_GAP;
         }
-        let y = cy - PIP_H / 2;
+        let c = self.colours;
+        // the fixed row: sockets up to the points held, crossed slots above
         for k in 0..self.slots {
-            let r = Rect::new(at + k * (PIP_W + PIP_GAP), y, PIP_W, PIP_H);
-            let part = |level: f32| (level - k as f32).clamp(0.0, 1.0);
-            let inner = Rect::new(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
-            let (full, ghost) = (part(self.fill), part(self.ghost));
-            if ghost > full {
-                ui.p.fill(inner, faded(self.colours.fill, GHOST_ALPHA * ghost));
+            let r = pip_rect(at, cy, k);
+            let held = (self.edge - k as f32).clamp(0.0, 1.0);
+            let edge = if self.alert { c.alert } else { mix(c.crossed, c.socket_edge, held) };
+            if held > 0.0 {
+                ui.p.fill(inner(r), faded(c.socket, held));
             }
-            if full > 0.0 {
-                ui.p.fill(inner, faded(self.colours.fill, full));
+            if held < 1.0 {
+                // the cross: a diagonal from the bottom left to the top right
+                let cross = faded(if self.alert { c.alert } else { c.crossed }, 1.0 - held);
+                for i in 0..(r.h - 2) {
+                    let px = r.x + 1 + i * (r.w - 2) / (r.h - 2);
+                    ui.p.fill(Rect::new(px, r.y + r.h - 2 - i, 1, 1), cross);
+                }
             }
-            let edge = if self.alert { self.colours.alert } else { mix(self.colours.slot, self.colours.edge, part(self.edge)) };
-            ui.p.fill(Rect::new(r.x, r.y, r.w, 1), edge);
-            ui.p.fill(Rect::new(r.x, r.y + r.h - 1, r.w, 1), edge);
-            ui.p.fill(Rect::new(r.x, r.y + 1, 1, r.h - 2), edge);
-            ui.p.fill(Rect::new(r.x + r.w - 1, r.y + 1, 1, r.h - 2), edge);
+            outline(ui, r, edge, false);
+        }
+        // the planned blocks: one capsule each, shown up to `spent`
+        for b in &self.blocks {
+            let shown = (self.spent - b.from as f32).clamp(0.0, b.slots as f32);
+            if shown <= 0.0 {
+                continue;
+            }
+            let full = pip_rect(at, cy, b.from);
+            let w = ((shown * (PIP_W + PIP_GAP) as f32).round() as i32 - PIP_GAP).max(2);
+            let r = Rect::new(full.x, full.y, w, PIP_H);
+            let fill = if b.ghost { faded(b.colour, GHOST_ALPHA) } else { b.colour };
+            ui.p.fill(inner(r), fill);
+            let tick = mix(b.colour, [0, 0, 0, 255], TICK_DARK);
+            for j in 1..b.slots {
+                let tx = full.x + j * (PIP_W + PIP_GAP) - 1;
+                if tx < r.x + r.w - 1 {
+                    ui.p.fill(Rect::new(tx, r.y + 2, 1, r.h - 4), tick);
+                }
+            }
+            outline(ui, r, mix(b.colour, [255, 255, 255, 255], RIM_LIGHT), true);
         }
         at += pips_w(self.slots);
         if let Some(l) = &self.after {
@@ -222,6 +302,20 @@ impl PipGauge {
     }
 }
 
+/// `r` less its 1 px outline.
+fn inner(r: Rect) -> Rect {
+    Rect::new(r.x + 1, r.y + 1, (r.w - 2).max(0), (r.h - 2).max(0))
+}
+
+/// A 1 px outline of `r`; `round` leaves the four corner pixels out (a capsule's rounded look).
+fn outline<A: Clone>(ui: &mut Ui<A>, r: Rect, c: Rgba, round: bool) {
+    let k = i32::from(round);
+    ui.p.fill(Rect::new(r.x + k, r.y, r.w - 2 * k, 1), c);
+    ui.p.fill(Rect::new(r.x + k, r.y + r.h - 1, r.w - 2 * k, 1), c);
+    ui.p.fill(Rect::new(r.x, r.y + 1, 1, r.h - 2), c);
+    ui.p.fill(Rect::new(r.x + r.w - 1, r.y + 1, 1, r.h - 2), c);
+}
+
 /// A label's width.
 pub fn label_w<A: Clone>(ui: &mut Ui<A>, s: &str) -> i32 {
     ui.p.text_w(s, SMALL).ceil() as i32
@@ -233,24 +327,31 @@ fn faded(c: Rgba, k: f32) -> Rgba {
 }
 
 /// From `a` (k = 0) to `b` (k = 1).
-fn mix(a: Rgba, b: Rgba, k: f32) -> Rgba {
+pub fn mix(a: Rgba, b: Rgba, k: f32) -> Rgba {
     let m = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * k.clamp(0.0, 1.0)).round() as u8;
     [m(a[0], b[0]), m(a[1], b[1]), m(a[2], b[2]), m(a[3], b[3])]
 }
 
-/// The UI Gallery's states (name, gauge; at most 12 pips): planned budgets of 10 (kept 3, 4 and 2; nothing kept with a
-/// ghost refill), a pick one short, a debt of 2, and a budget of 14 at 2 points a pip.
+/// The UI Gallery's states (name, gauge; 12 slots, 10 points held unless named): style D's four rows (two attacks and a
+/// move, three attacks and a defend, one long attack, nothing planned), a ghost plan, a pick 1 short, a debt of 2, a
+/// budget of 14 at 2 points a slot and a spending one. Sample colours only (a game passes its own).
 pub fn samples() -> Vec<(&'static str, PipGauge)> {
-    let numbers = |have: i32, keep: i32, next: i32, max: i32| vec![(format!("Now {have} of {max}"), GOLD), (format!("Left {keep}, next {next}"), TEXT)];
-    let planned = |have, keep, next, max| PipGauge::planned(have, keep, next, max, 12).with_tip(numbers(have, keep, next, max));
+    let (attack, moving, defend) = (FOE, INFO, GOLD);
+    let tip = |now: i32, plan: &[PipBlock], max: i32| {
+        let spent: i32 = plan.iter().map(|b| b.ap).sum();
+        vec![(format!("Now {now} of {max}"), GOLD), (format!("Plan {spent}, left {}", now - spent), TEXT)]
+    };
+    let planned = |now: i32, plan: Vec<PipBlock>, max: i32| PipGauge::planned(now, &plan, max, 12).with_tip(tip(now, &plan, max));
+    let a = |ap| PipBlock::new(ap, attack);
     vec![
-        ("Now 10, left 3, next 7", planned(10, 3, 7, 10)),
-        ("Now 10, left 4, next 8", planned(10, 4, 8, 10)),
-        ("Now 10, left 2, next 6", planned(10, 2, 6, 10)),
-        ("Now 3, left 0, next 5", planned(3, 0, 5, 10)),
-        ("A pick 1 short (red)", planned(3, 3, 5, 10).short(1)),
-        ("A debt of 2", planned(-2, -2, 1, 10)),
-        ("Max 14, 2 a pip: now 14, left 9, next 12", planned(14, 9, 12, 14)),
-        ("Spending: 10 held, 6 left", PipGauge::live(10, 6, 10, 12).with_tip(vec![("Spent 4 of 10".into(), GOLD)])),
+        ("Two attacks and a move", planned(10, vec![a(3), a(2), PipBlock::new(2, moving)], 12)),
+        ("Three attacks and a defend", planned(10, vec![a(2), a(2), a(3), PipBlock::new(1, defend)], 12)),
+        ("One long attack", planned(10, vec![a(5)], 12)),
+        ("Nothing planned", planned(10, Vec::new(), 12)),
+        ("A ghost plan", planned(10, vec![PipBlock::ghost(4, attack), PipBlock::ghost(2, attack)], 12)),
+        ("A pick 1 short (red)", planned(3, vec![a(3)], 12).short(1)),
+        ("A debt of 2", planned(-2, Vec::new(), 12)),
+        ("Max 14, 2 a slot: now 14, plan 5", planned(14, vec![a(4), PipBlock::new(1, moving)], 14)),
+        ("Spending: 10 held, 6 left", PipGauge::live(10, 6, DIM, 12, 12).with_tip(vec![("Spent 4 of 10".into(), GOLD)])),
     ]
 }
