@@ -193,7 +193,16 @@ with `RECORD=1`; the sim help now lists the `feel` and `deadlines` modes and the
 
 ### CLN-40
 
-Content checks parity. Scope A. Status: proposed. Size M. Lane logic-builder. Layer game. Depends on Q-A3.
+Content checks parity. Scope A. Status: done (2026-11-01; as built: `emberwake_content/tests/checks_golden.rs` with
+`tests/fixtures/checks_golden.json` (320 KB, 1,012 cases: one per (kind, changed field) and per message shape, quoted
+names and numbers left out, chosen once from the 6,721 Godot cases; stored as 67 base entries plus each case's `set`
+and `drop` fields) on the frozen catalog `emberwake_battle/tests/fixtures/timeline_kit.json` and the frozen worlds and
+game data `emberwake_sim/tests/fixtures/sim_data.json` (no new frozen data); catalog cases compare errors and
+warnings, world cases errors and blocking errors; recorded with `RECORD=1` (842 of the 1,012 cases print Godot's
+errors unchanged, the rest differ only by the shipped data's drift since the freeze); the whole-catalog, world-report
+and lint comparisons dropped; `the_golden_covers_every_check_family` checks every `check::PORTED` kind and the 13 old
+world kinds have an erroring case and names the kit test of the 6 newer world kinds; `checks_parity.rs` deleted;
+passes with `parity/out` absent). Size M. Lane logic-builder. Layer game. Depends on Q-A3.
 
 - Where: `emberwake_content/tests/checks_parity.rs` (228 lines; 4 tests :91, :135, :155, :196), reads
   `legacy/data` and `parity/out/checks.json` (6,721 cases, 6.5 MB).

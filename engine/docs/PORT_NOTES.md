@@ -193,7 +193,7 @@ failing), then hard errors; every `upsert` / `remove` refuses a write that adds 
 
 | Godot | Rust | Checked by |
 | :--- | :--- | :--- |
-| `content/content_catalog.gd` (`validate_entry`, `_prepare`, `warnings_for`, `validate_all`, `warnings_all`), `content_schema.gd` (`field_errors`, `options_of`, `passes_filter`) | `check` (`View`, `validate_entry`, `warnings_for`, `validate_all`, `warnings_all`) | checks parity |
+| `content/content_catalog.gd` (`validate_entry`, `_prepare`, `warnings_for`, `validate_all`, `warnings_all`), `content_schema.gd` (`field_errors`, `options_of`, `passes_filter`) | `check` (`View`, `validate_entry`, `warnings_for`, `validate_all`, `warnings_all`) | checks parity (since CLN-40: the checks golden; same for every "checks parity", "world cases" and "lint" below) |
 | `content/validators/skill_validator.gd`, `skill_kinds.gd`, `skill_ranks.gd` (`fold`, `collapse`), `skill_text.gd` (`validate`, warnings) | `check::skill` | checks parity |
 | `content/validators/class_unit_validator.gd`, `core/specs/stat_rules.gd` (`validate_class`, `validate_spend`) | `check::unit` | checks parity |
 | `content/validators/item_validator.gd`, `core/specs/item_modifiers.gd` (`collapse`, `stored`, `stable_order`), `item_families.gd`, `item_text.gd` | `check::item` | checks parity |
@@ -206,8 +206,14 @@ failing), then hard errors; every `upsert` / `remove` refuses a write that adds 
 | `dialogue/shop_rules.gd`, `travel/travel_rules.gd` (with the route graph), `exploration/map_rules.gd` (location rules, lints) | `check::shop`, `travel`, `map` | world cases, lint |
 | `assets/asset_registry.gd` (`keys` of unit and item: template keys plus the asset manifest) | none since ASSETORG2-G (2026-10-22): the asset checks A1-A6 read the asset layers (`check::assets`) | retired (HISTORY 2026-10-22) |
 
-- Recording: `games/emberwake/parity/checks.sh` runs `parity/godot/checks.gd` on `legacy/` and writes
-  `parity/out/checks.json`; `cargo test -p emberwake_content --test checks_parity` replays it on `legacy/data`.
+- Since CLN-40 (2026-11-01) the Godot comparison below is retired: `cargo test -p emberwake_content --test
+  checks_golden` checks 1,012 of the recorded cases (one per kind and changed field and per message shape) against
+  engine-recorded messages (`emberwake_content/tests/fixtures/checks_golden.json`) on the frozen catalog
+  `timeline_kit.json` and the frozen worlds `emberwake_sim/tests/fixtures/sim_data.json`; the whole-catalog, world
+  report and lint comparisons went (`shipped_data_checks_clean` checks the shipped data). The lines below are the
+  record of the Godot match.
+- Recording (retired): `games/emberwake/parity/checks.sh` ran `parity/godot/checks.gd` on `legacy/` and wrote
+  `parity/out/checks.json`; `checks_parity.rs` (deleted by CLN-40) replayed it on `legacy/data`.
 - Catalog: 5166 cases (three entries of every kind and sub-kind, each field set to a few wrong values in the shape
   it holds, plus hand-made cases for the rules across fields: skill families, combos, item modifiers, tiers and
   text, family changes, encounter phases, objectives, morale and purse) and the shipped catalog's reports (0 errors,
