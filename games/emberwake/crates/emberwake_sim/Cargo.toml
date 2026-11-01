@@ -9,4 +9,5 @@ emberwake_world = { path = "../emberwake_world" }
 
 [dev-dependencies]
 aegis_core = { path = "../../../../engine/crates/aegis_core" }
+emberwake_content = { path = "../emberwake_content" }
 serde_json = { workspace = true }

@@ -6,8 +6,8 @@ use crate::SimGame;
 use rpgkit_world::Data;
 use indexmap::IndexMap;
 
-/// RULESET1-G: `feel` is engine-only (not in the help text, whose lines are Godot parity: as `rewards`); so is
-/// CAMPAIGN1-SIM's `deadlines` (deadlines.rs, no fights).
+/// RULESET1-G: `feel` has no Godot original; nor has CAMPAIGN1-SIM's `deadlines` (deadlines.rs, no fights). Both are in
+/// the help text since CLN-39 (it was Godot parity before).
 pub const MODES: [&str; 11] = ["duel", "tier", "levels", "group", "stats", "party", "role", "sweep", "campaign", "feel", "deadlines"];
 pub const CLASSES: [&str; 6] = ["warrior", "ranger", "priest", "brawler", "rogue", "mage"];
 pub const SPENDS: [&str; 4] = ["class", "cons", "primary", "mixed"];
@@ -68,7 +68,6 @@ pub struct SimArgs {
     pub quick: bool,
     pub metrics: bool,
     /// REWARD1-S: party and campaign print what the defeated enemies pay (fates, XP, purse share, drops, key loot).
-    /// Not in the help text: the help is printed after an argument error, and those lines are Godot parity.
     pub rewards: bool,
     pub band_lo: i32,
     pub band_hi: i32,
@@ -107,13 +106,12 @@ pub struct SimArgs {
     pub boss_phase: bool,
     pub s2: bool,
     /// RULESET1 3.1.3: the fights' rules, from `ruleset=classic|timeline` (default classic) and `rules=-id,+id` (single
-    /// extensions switched). Not in the help text: those lines are Godot parity (as `rewards`). A world encounter
+    /// extensions switched). A world encounter
     /// without `ruleset=` plays by its world's ruleset instead (`ruleset_for`).
     pub ruleset: rpgkit_rules::ruleset::Ruleset,
     ruleset_id: String,
     rules: String,
-    /// INPUT1 MR11: `melee_diagonal=none|maneuver|all` over the ruleset row's value (None = the row's). Not in the help
-    /// text either (Godot parity, as `ruleset=`).
+    /// INPUT1 MR11: `melee_diagonal=none|maneuver|all` over the ruleset row's value (None = the row's).
     pub melee_diagonal: Option<rpgkit_rules::ruleset::MeleeDiagonal>,
     /// RULESET1-G2 (feel only): the party's AUTO1 tactic (a TACTICS name; `balanced`).
     pub tactic: String,
@@ -427,14 +425,14 @@ impl SimArgs {
             self.deadline_keys.push(key.to_string());
         }
         match key {
-            // CAMPAIGN1-SIM: the deadlines mode's key. Not in the help text (Godot parity).
+            // CAMPAIGN1-SIM: the deadlines mode's key.
             "losses" => {
                 let Some(n) = value.parse::<i64>().ok().filter(|n| (0..=LOSSES_MAX).contains(n)) else {
                     return Err(format!("losses must be 0..{LOSSES_MAX} (got '{value}')"));
                 };
                 self.losses = n;
             }
-            // RULESET1-G2: the feel mode's keys (RULESET1_BALANCE1 3.1). Not in the help text (Godot parity).
+            // RULESET1-G2: the feel mode's keys (RULESET1_BALANCE1 3.1).
             "tactic" => {
                 if !TACTICS.iter().any(|(name, _)| *name == value) {
                     let names: Vec<&str> = TACTICS.iter().map(|(name, _)| *name).collect();
@@ -462,7 +460,7 @@ impl SimArgs {
                     self.tune.insert(k.to_string(), v);
                 }
             }
-            // RULESET1-G: `seeds=N` (the feel mode's spelling; the positional seeds win). Not in the help text.
+            // RULESET1-G: `seeds=N` (the feel mode's spelling; the positional seeds win).
             "seeds" => {
                 if !is_int(value) || int(value) < 1 {
                     return Err(format!("seeds must be a positive number (got '{value}')"));
@@ -896,9 +894,9 @@ pub fn usage(game: &SimGame) -> Vec<String> {
 const NO_STORY_USAGE: &str = "       campaign [level]   the story fights of the game's story run (this game has none)";
 /// Where usage() inserts the campaign mode line and the world= key line into USAGE.
 const USAGE_CAMPAIGN_AT: usize = 9;
-const USAGE_WORLD_AT: usize = 21;
+const USAGE_WORLD_AT: usize = 23;
 
-const USAGE: [&str; 23] = [
+const USAGE: [&str; 30] = [
     "usage: tools/fc.sh sim <mode> [level] [seeds] [key=value ...]   (seed i = 11 + 12 i; level default 5, seeds 3; party / sweep 10)",
     "modes: duel [level]       class round robin, hero vs hero (bin/hp matrix, row averages)",
     "       tier [level]       hero vs its class (or tier_foe=) at minion/standard/elite/boss, 1v1 and 1v3",
@@ -908,6 +906,8 @@ const USAGE: [&str; 23] = [
     "       party [level]      comp (1..PARTY_MAX classes) vs generated mob/line/wave/elite/boss or catalog encounters",
     "       role [level]       limit tests per class: tank_hold, ranged_dive, aoe_swarm, support_attrition, striker_priority",
     "       sweep [level]      every size-class composition (size=4; lead= fixes one class) vs enc: ranking, swap delta, top-5 appearances",
+    "       feel [level]       AI-vs-AI catalog encounters with their authored party (enc=, default the game's feel encounters; timeline; seeds 10): outcomes, poise, hits, AP, FEEL_JSON",
+    "       deadlines          no fights: best and worst day each campaign checkpoint can be met, and its slack (world=)",
     "keys:  cap=1..30 (10)  loadout=default|newest|role (default; party side)",
     "       spend=class|cons|primary|mixed|all (class; party side)  preset=<PlanPresets id>|both (balanced; every unit)",
     "       distance=default|2..6 (default; role mode 4)  score=both|hp|binary (both)  quick  metrics=on|off (on in party/role/sweep)",
@@ -922,4 +922,9 @@ const USAGE: [&str; 23] = [
     "       size=1..PARTY_MAX (4) lead=<class> (none): sweep compositions of that size holding the lead (size=3 lead=warrior: the 10 trios)",
     "       tier_foe=mirror|<class> (mirror): tier mode foe class  phase=on|off (on): the generated boss's sim phase  s2=on|off (off): support_attrition S2 foes (authored since BAL5-R1b: no change)",
     "       jitter PLAN FAIL on an unreachable target (no path / too far) is a skipped fight (PLAN SKIP line), not a fail",
+    "       ruleset=classic|timeline (classic; a world encounter: its world's)  rules=+id,-id (none): switch single extensions  melee_diagonal=none|maneuver|all (the row's)",
+    "       rewards=on|off (off): party and campaign print what the defeated enemies pay (fates, XP, purse share, drops, key loot)",
+    "       feel only: seeds=<n> (10)  tactic=balanced|all_out|focus_weakest|guard_counter|kite|economy (balanced)  party=auto|timed|both (auto)",
+    "       feel only: armor=<unit>:<0-200>[,..] (none)  tune=<ruleset number>:<value>[,..] (none; stagger_, flank_, break_chance_, rest_ numbers)",
+    "       deadlines only: losses=0..9 (1): lost tries per mission in the worst case",
 ];

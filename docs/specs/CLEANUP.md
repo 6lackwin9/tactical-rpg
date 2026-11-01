@@ -27,7 +27,7 @@ planner (TASKS, ROADMAP, decisions, HISTORY, `.claude/*`, CLAUDE.md), design-bra
 | 5 | CLN-43 | A | Docs and rules: CLAUDE.md "Godot parity", decisions, HISTORY, skills, agents, workflow docs, PORT_NOTES | S-M | planner (+ design-brainstorm for PORT_NOTES) | process | with CLN-42 | proposed |
 | 6 | CLN-47 | C | Save migrations v1-v12 and the Godot JSON text emulation (decision "Saves and data edits") | S | logic-builder | kit | with CLN-42 (or before) | proposed |
 | 7 | CLN-49 | C | 20 executed seeds out of `data/seeds/` (the seeds README rule) | S | planner (git rm) | game | now | proposed |
-| 8 | CLN-39 | A | Sim parity: convert to an engine golden on the frozen catalog, or delete (Q-A2) | S | logic-builder | game | now | proposed |
+| 8 | CLN-39 | A | Sim parity: convert to an engine golden on the frozen catalog, or delete (Q-A2) | S | logic-builder | game | now | done (2026-11-01) |
 | 9 | CLN-44 | B | Classic as a `rulesets` row: no hard-coded `Ruleset::classic()`, no closed id lists, one fallback | M | logic-builder + asset-builder | kit + game | after INPUT1-U | proposed |
 | 10 | CLN-45 | B | Split the legacy-vs-timeline switches bundled under `round_intent` into named rule options | M-L | logic-builder | kit | after CLN-44, INPUT1-U, INPUT1-L | proposed |
 | 11 | CLN-46 | B | Screens and host read rules, not `is_classic()` | S | logic-builder | game + kit | after CLN-44 | proposed |
@@ -171,7 +171,14 @@ and hash.json on every shared input). Size S-M. Lane logic-builder. Layer engine
 
 ### CLN-39
 
-Sim parity. Scope A. Status: proposed. Size S. Lane logic-builder. Layer game. Depends on Q-A2.
+Sim parity. Scope A. Status: done (2026-11-01; as built: `emberwake_sim/tests/sim_golden.rs` with
+`tests/fixtures/sim_golden.json` (82 KB, 22 runs, 526 lines: the 20 command lines of `sim.sh`, run 11 now naming both
+world encounters with `world:` so it fights them instead of printing an argument error, plus `feel 5 1
+enc=tl_duel_windup,tl_skirmish party=both` and `deadlines`) on the timeline golden's frozen catalog `timeline_kit.json`
+and `tests/fixtures/sim_data.json` (110 KB: the shipped worlds and game data frozen from the loader output); recorded
+with `RECORD=1`; the sim help now lists the `feel` and `deadlines` modes and the keys `ruleset=`, `rules=`,
+`melee_diagonal=`, `rewards=`, `seeds=`, `tactic=`, `party=`, `armor=`, `tune=`, `losses=` (so CLN-42's help item is done);
+`sim_parity.rs` deleted; passes with `parity/out` absent). Size S. Lane logic-builder. Layer game. Depends on Q-A2.
 
 - Where: `emberwake_sim/tests/sim_parity.rs` (41 lines), `games/emberwake/parity/sim.sh` (the 20 RUNS).
 - Why: compares 20 sim command lines with Godot's printout. Beyond Godot it is the only check of the sim's printed

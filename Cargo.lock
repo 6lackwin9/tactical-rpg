@@ -728,6 +728,7 @@ name = "emberwake_sim"
 version = "0.1.0"
 dependencies = [
  "aegis_core",
+ "emberwake_content",
  "emberwake_world",
  "rpgkit_sim",
  "serde_json",
