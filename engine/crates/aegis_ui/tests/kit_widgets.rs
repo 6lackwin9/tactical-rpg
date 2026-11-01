@@ -1,6 +1,7 @@
 //! PLAYUI1-K: the kit's icon button (image or drawn shape, hover card, focus, toggled, disabled) and its collapsible
 //! section header, drawn on a 640x360 canvas with the engine font, and their specimens on the Kit widgets page.
 //! RULESET1-E: the timeline's segment parts, hatching, links and marks, and the Kit page's timeline specimen.
+//! PORTRAITFX1-TL (TL1): the timeline's icon squares and the Kit page's icons check.
 
 use aegis_ui::canvas::{Canvas, Image, Rect};
 use aegis_ui::focus;
@@ -386,4 +387,107 @@ fn the_pane_sample_shows_every_feature_and_scrolls() {
     t.draw(&mut ui, "pane", Rect::new(4, 4, 388, 292), |b| format!("block {b}"), |k| format!("track {k}"), |k, s| format!("seg {k} {s}"));
     let w = ui.widgets;
     assert!(w.iter().any(|x| x.id == "pane.track.e2.masked") && w.iter().any(|x| x.id == "pane.mark.e2.i0") && w.iter().any(|x| x.id == "pane.link.p1.strike.follow"));
+}
+
+// PORTRAITFX1-TL (TL1): a track's icon square (`Track.icon`): a square of the row height left of its label with its
+// widget `<id>.icon.<track>`, filled by `draw_icons`' callback; a track without it draws exactly as before.
+
+/// Draws `t` as `draw_tl` does, through `draw_icons` with a callback that fills each square with `ICON_FILL`; the
+/// widgets and the squares the callback was given.
+fn draw_tl_icons(g: &mut Gfx, t: &Timeline) -> (Vec<Widget<String>>, Vec<(String, Rect)>) {
+    let mut ui: Ui<String> = Ui::new(g, (-1, -1), true);
+    let mut given = Vec::new();
+    t.draw_icons(&mut ui, "tl", Rect::new(10, 10, LABEL_W + 4 + 480, 120), |b| format!("block {b}"), |k| format!("track {k}"), |k, s| format!("seg {k} {s}"), |ui, track, sq| {
+        ui.p.fill(sq, ICON_FILL);
+        given.push((track.key.clone(), sq));
+    });
+    (ui.widgets, given)
+}
+
+const ICON_FILL: [u8; 4] = [200, 40, 160, 255];
+
+fn same_pixels(a: &Gfx, b: &Gfx, r: Rect) -> bool {
+    (r.y..r.y + r.h).all(|y| (r.x..r.x + r.w).all(|x| px(a, x, y) == px(b, x, y)))
+}
+
+#[test]
+fn a_track_with_an_icon_reserves_a_row_height_square_and_one_without_draws_as_before() {
+    use aegis_ui::timeline::{icon_rect, ICON_W, ROW_H};
+    let plain_tl = one_side(6, vec![track("a", vec![seg("s", 2, 4)]), track("b", vec![seg("t", 1, 3)])]);
+    let mut iconed = plain_tl.clone();
+    iconed.sections[0].tracks[1].icon = true;
+    let (mut g0, mut g1, mut g2) = (gfx(), gfx(), gfx());
+    let plain = draw_tl(&mut g0, &plain_tl);
+    let (via_icons, none_given) = draw_tl_icons(&mut g1, &plain_tl);
+    assert!(none_given.is_empty(), "no icon track: the callback is never called");
+    assert_eq!(infos(&plain), infos(&via_icons), "draw_icons on tracks without icons is draw");
+    assert!(same_pixels(&g0, &g1, Rect::new(0, 0, 640, 360)), "and draws the same pixels");
+    let (w, given) = draw_tl_icons(&mut g2, &iconed);
+    let ids: Vec<&str> = w.iter().map(|x| x.id.as_str()).collect();
+    let at = |id: &str| ids.iter().position(|x| *x == id).unwrap();
+    assert_eq!(ids.iter().filter(|x| x.contains(".icon.")).collect::<Vec<_>>(), [&"tl.icon.b"], "only the icon track has a square");
+    assert!(at("tl.icon.b") < at("tl.track.b"), "the square comes before its label");
+    let sq = rect_of(&w, "tl.icon.b").unwrap();
+    let label = rect_of(&w, "tl.track.b").unwrap();
+    let plain_label = rect_of(&plain, "tl.track.b").unwrap();
+    assert_eq!((sq.w, sq.h), (ROW_H, ROW_H), "a square of the row height");
+    assert_eq!(sq, icon_rect(Rect::new(10, sq.y, LABEL_W + 4 + 480, ROW_H)), "1 px in from the row's left edge");
+    assert_eq!(sq.y, plain_label.y - 1, "on the label's row");
+    assert!(sq.x + sq.w <= label.x, "left of the label, clear of it");
+    assert_eq!((label.x, label.x + label.w), (plain_label.x + ICON_W, plain_label.x + plain_label.w), "the label starts ICON_W in and ends where it did");
+    let w_info = w.iter().find(|x| x.id == "tl.icon.b").unwrap().info();
+    assert_eq!((w_info["kind"].as_str(), w_info["clickable"].as_bool()), (Some("icon"), Some(false)), "an icon widget takes no click");
+    assert_eq!(given, vec![("b".to_string(), sq)], "the callback draws into the widget's square");
+    assert_eq!(px(&g2, sq.x + sq.w / 2, sq.y + sq.h / 2), ICON_FILL);
+    for id in ["tl.track.a", "tl.seg.a.s", "tl.seg.b.t", "tl.block.1", "tl.block.6"] {
+        assert_eq!(rect_of(&w, id), rect_of(&plain, id), "{id} is where it was (short labels: the column keeps its least width)");
+    }
+    let row_a = rect_of(&plain, "tl.track.a").unwrap();
+    assert!(same_pixels(&g0, &g2, Rect::new(10, row_a.y - 1, LABEL_W + 4 + 480, ROW_H)), "the track without an icon draws exactly as before");
+}
+
+#[test]
+fn a_long_icon_label_widens_the_label_column_by_the_square() {
+    use aegis_ui::timeline::ICON_W;
+    let long = |icon: bool| one_side(6, vec![Track { key: "a".into(), label: "A rather long track label".into(), colour: TEXT, icon, ..Track::default() }]);
+    let (mut g0, mut g1) = (gfx(), gfx());
+    let plain = draw_tl(&mut g0, &long(false));
+    let (w, _) = draw_tl_icons(&mut g1, &long(true));
+    let lane = |w: &[Widget<String>]| rect_of(w, "tl.block.1").unwrap().x;
+    assert!(lane(&plain) > 10 + LABEL_W, "the label is past the column's least width");
+    assert_eq!(lane(&w), lane(&plain) + ICON_W, "the lanes start ICON_W further right");
+    assert_eq!(rect_of(&w, "tl.track.a").unwrap().w, rect_of(&plain, "tl.track.a").unwrap().w, "the label keeps its width");
+}
+
+#[test]
+fn the_kit_timeline_page_icons_check_gives_every_track_its_square() {
+    let draw = |k: &Specimens| -> (Vec<Widget<KitAct>>, Value) {
+        let mut g = gfx();
+        g.fonts.audit = Some(Vec::new());
+        let w = {
+            let mut ui: Ui<KitAct> = Ui::new(&mut g, (-1, -1), true);
+            k.draw(&mut ui, Rect::new(112, 22, 522, 332), |a| a);
+            ui.widgets
+        };
+        let issues = text_audit::issues(&g.fonts.audit.take().unwrap_or_default(), 640.0, 360.0, &boxes(&w));
+        (w, issues)
+    };
+    let count = |w: &[Widget<KitAct>], prefix: &str| w.iter().filter(|x| x.id.starts_with(prefix)).count();
+    let mut k = Specimens { page: 1, ..Specimens::default() };
+    let (w, _) = draw(&k);
+    assert_eq!(count(&w, "kit.timeline.icon."), 0, "off by default");
+    assert!(w.iter().any(|x| x.id == "kit.timeline.icons" && x.kind == "checkbox" && !x.active));
+    k.act(by_id(&w, "kit.timeline.icons").unwrap());
+    assert_eq!((k.icons, k.last.as_str()), (true, "timeline icons on"));
+    let (w, audit) = draw(&k);
+    let tracks = w.iter().filter(|x| x.id.starts_with("kit.timeline.track.") && !x.id.ends_with(".masked")).count();
+    assert!(tracks > 0 && count(&w, "kit.timeline.icon.") == tracks, "a square per track ({tracks})");
+    for x in w.iter().filter(|x| x.id.starts_with("kit.timeline.icon.")) {
+        let label = rect_of(&w, &x.id.replace(".icon.", ".track.")).unwrap();
+        assert!(x.rect.x + x.rect.w <= label.x && x.rect.y < label.y + label.h && label.y < x.rect.y + x.rect.h, "{} sits left of its label", x.id);
+    }
+    assert_eq!(audit["counts"], json!({"cut": 0, "edge": 0, "overlap": 0, "spill": 0}), "the page reads clean with the icons: {audit}");
+    k.act(by_id(&w, "kit.timeline.icons").unwrap());
+    assert_eq!((k.icons, k.last.as_str()), (false, "timeline icons off"));
+    assert_eq!(count(&draw(&k).0, "kit.timeline.icon."), 0);
 }

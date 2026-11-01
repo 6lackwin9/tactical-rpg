@@ -568,3 +568,38 @@ held (a cool pallor), the sweat drop in Salt Cyan at (0.12, 0.2), size 0.08.
   P3 stealth alpha 0.58, below 25 % desaturate 0.5, down still and desaturate 1.0; P4 hit-stop and animation speed;
   P5 the session state, RNG state, log and request trace equal with portraits drawn and not drawn, and two drawn runs
   with the same portrait pixels.
+
+## 18. Build notes (PORTRAITFX1-TL, 2026-11-01)
+
+- Which rows: the battle's top plan strip is the screen's own one-hero block row, not the timeline widget, so it has no
+  icon square; surface 4 is the full timeline view (key T, INPUT1-T), the only battle use of the widget: every unit's
+  track (Party and Enemies) leads with its portrait. The Gallery's Battle timeline (same builder) keeps plain tracks.
+- Engine (`aegis_ui::timeline`, 6.5): `Track.icon` reserves `icon_rect(row)`, a `ROW_H` (15 px) square 1 px in from the
+  row's left edge, and pushes `<id>.icon.<track>` (kind `icon`, no click); the label starts `ICON_W` (16 px) further in
+  and the label column is that much wider when an icon track's label is the longest. The caller draws through
+  `Timeline::draw_icons(.., icon)`: `icon(ui, track, square)` is called right after the square's widget inside the
+  rows' scroll clip (a half-scrolled square is cut, not squeezed; a widget rect alone would be clipped), `draw` being
+  `draw_icons` with none. The Kit widgets Timeline page has an Icons check (`kit.timeline.icons`): every track's square
+  as a chip in its colour with its label's initial.
+- Tier (4.6): a 15 px square is reduced from a 4x window (60 device px), so `PortraitOpts.tier_cap` (engine,
+  `PortraitOpts::tier(side)`: the side's tier, no richer than the cap) and `Faces::capped(Tier::Minimal)` keep the row
+  portraits minimal at any window size (flash, desaturate, tint, fade, face, eye-glow core; no jolt, no breath).
+- Game (`battle.rs`): a third `Faces`, `timeline_faces` (capped minimal), set to FX1's clock at every draw like
+  `panel_faces`; `react_portraits` fires each step's events on it too, on surface `timeline` (cue rows with empty
+  surfaces apply to both); the look and key are the panels' `unit_portrait` (board HP and life, rule I); the square is
+  drawn on the panels' dark backing with the portrait 1 px inside. State: `timeline_portraits`.
+- Tests: TL1 (`aegis_ui/tests/kit_widgets.rs`): a track with and without an icon (the square, its widget, the label
+  `ICON_W` in, every other widget and the plain row's pixels as before, `draw_icons` on plain tracks equal to `draw`),
+  a long icon label widening the column by `ICON_W`, the Kit page's Icons check (a square per track, TEXTFIT clean);
+  `aegis_ui/tests/portrait_fx.rs` the tier cap. TL2 (`battle.rs` `portrait_timeline_tests`, fixture cue rows, scratch
+  portraits): every track's square and minimal tier at the four text sizes with no timeline text spilled or cut
+  without its hover text; on a 4x window the row stays minimal (flash, no jolt, no breath) while the panel is full and
+  jolts; a struck unit's row flashes from the impact's ms, nothing at the pop; a stealthed row draws at alpha 0.58.
+  `the_battle_view_and_the_gallery_build_the_same_timeline` now compares with the battle's icon flags cleared.
+- Answers (user 2026-11-01): enemy rows show state cues only when the board shows them: an enemy's row is plain (no
+  fade, no wound tint, no other hold; a fall still shows) while the view masks its track (an unrevealed plan, TV4) or
+  it is stealthed (the board's stealth veil, GD5) (`timeline_row_plain`, `plain_look`); its event cues fire only for
+  a blow (`hit`, `crit`, `guard_hit`) the board shows on it (the step's floats and hit flashes,
+  `react_portraits_shown`); party rows unchanged. The rows react only while the view is open. The Gallery's Battle
+  timeline keeps plain tracks. Test `tl2_a_stealthed_enemys_row_is_plain_while_a_stealthed_members_fades` (also: no
+  flash for an unshown blow or an enemy's heal, a shown blow flashes, nothing on the rows while the view is closed).

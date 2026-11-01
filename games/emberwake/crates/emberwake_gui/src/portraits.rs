@@ -247,11 +247,19 @@ pub struct Faces {
     /// The Gallery's anchors check and its own reduce-motion check (None: the setting).
     pub show_anchors: bool,
     pub reduce: Option<bool>,
+    /// PORTRAITFX1-TL: the richest tier these portraits draw at (`PortraitOpts::tier_cap`; the timeline icons:
+    /// minimal); None: the drawn side decides.
+    pub tier_cap: Option<aegis_ui::portrait_fx::Tier>,
     /// PORTRAITFX1-EX: the expression effects every portrait draws (`draw` reads them from the data each frame).
     pub expressions: Vec<ExpressionFx>,
 }
 
 impl Faces {
+    /// PORTRAITFX1-TL: a screen's portraits that never draw richer than `cap` (`tier_cap`).
+    pub fn capped(cap: aegis_ui::portrait_fx::Tier) -> Faces {
+        Faces { tier_cap: Some(cap), ..Faces::default() }
+    }
+
     /// Starts a frame: the budget is fresh; portraits left out since the last frame are dropped.
     pub fn begin(&mut self) {
         let touched = std::mem::take(&mut self.touched);
@@ -274,9 +282,10 @@ impl Faces {
         self.clock.now()
     }
 
-    /// How portraits draw on this screen: the reduce-motion setting (or the page's own check), the rim key, anchors.
+    /// How portraits draw on this screen: the reduce-motion setting (or the page's own check), the rim key, anchors,
+    /// the screen's tier cap (`tier_cap`).
     pub fn opts(&self, settings: &Settings) -> PortraitOpts {
-        PortraitOpts { reduce_motion: self.reduce.unwrap_or_else(|| settings.reduce_motion()), rim_default: Some(RIM), show_anchors: self.show_anchors }
+        PortraitOpts { reduce_motion: self.reduce.unwrap_or_else(|| settings.reduce_motion()), rim_default: Some(RIM), show_anchors: self.show_anchors, tier_cap: self.tier_cap }
     }
 
     /// Holds `cues` on `key` beside its look until the next `pin` (the Gallery's toggles).

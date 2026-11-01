@@ -17,6 +17,10 @@
 //! Track cards and hatching (INPUT1-T, engine-only): a track's label can carry a hover card (`Track.tip`) and its lane
 //! can be hatched (`Track.hatched`, a unit that is down); `sample` is the standalone pane's round (a screen shows the
 //! widget on it with no data of its own). Both off by default.
+//!
+//! Icon squares (PORTRAITFX1-TL, engine-only): a track can reserve a square of the row height left of its label
+//! (`Track.icon`, widget `<id>.icon.<track>`); the caller draws into it (`draw_icons`' callback: a portrait, a glyph).
+//! Off by default: a track without it draws exactly as before.
 
 use crate::canvas::{rgb, rgba, Rect, Rgba};
 use crate::ui::{tip, Tip, Ui, BODY, BORDER, CARD, DIM, GOLD, PANEL_HI, RADIUS, SMALL, TEXT};
@@ -27,6 +31,13 @@ pub const HEADER_H: i32 = 11;
 pub const ROW_H: i32 = 15;
 /// Width of the track labels' column at the least; it grows to the longest label (up to a quarter of the pane).
 pub const LABEL_W: i32 = 74;
+/// What an icon track's label column gains (PORTRAITFX1-TL): its `ROW_H` square and a pixel's gap.
+pub const ICON_W: i32 = ROW_H + 1;
+
+/// The icon square of a track row `row` (`Track.icon`): the row's height, 1 px in from its left edge.
+pub fn icon_rect(row: Rect) -> Rect {
+    Rect::new(row.x + 1, row.y, ROW_H, ROW_H)
+}
 
 /// How a part of a segment is drawn over its fill.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,6 +118,9 @@ pub struct Track {
     pub tip: Tip,
     /// Hatched lane (a unit that is down, say): its empty cells drawn hatched under the segments.
     pub hatched: bool,
+    /// An icon square (PORTRAITFX1-TL): a square of the row height left of the label, widget `<id>.icon.<key>`; the
+    /// caller draws into it (`draw_icons`' callback, or after the widget from the widget's rect).
+    pub icon: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -189,9 +203,18 @@ impl Timeline {
 
     /// Draws the timeline in `r`. Widget ids: `<id>.block.<b>`, `<id>.track.<track>`, `<id>.seg.<track>.<segment>`;
     /// `on_block(b)`, `on_track(track)` and `on_segment(track, segment)` make the actions they carry. Links and marks
-    /// are info widgets (a hover card, no action): `<id>.link.<track>.<from>.<to>`, `<id>.mark.<track>.<mark>`.
+    /// are info widgets (a hover card, no action): `<id>.link.<track>.<from>.<to>`, `<id>.mark.<track>.<mark>`. A track
+    /// with `icon` also pushes `<id>.icon.<track>` (kind `icon`, no action), its square (empty here: see `draw_icons`).
     pub fn draw<A: Clone>(&self, ui: &mut Ui<A>, id: &str, r: Rect, on_block: impl Fn(i32) -> A, on_track: impl Fn(&str) -> A, on_segment: impl Fn(&str, &str) -> A) {
-        let longest = self.sections.iter().flat_map(|s| &s.tracks).map(|t| ui.p.text_w(&t.label, BODY).ceil() as i32 + 9).max().unwrap_or(0);
+        self.draw_icons(ui, id, r, on_block, on_track, on_segment, |_, _, _| {});
+    }
+
+    /// `draw` with the icon squares filled (PORTRAITFX1-TL): `icon(ui, track, square)` is called for every track with
+    /// `icon` right after its square's widget, inside the rows' scroll clip (a square scrolled half out is cut, not
+    /// squeezed), with the whole square in canvas px. The label column is `ICON_W` wider for an icon track's label.
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_icons<A: Clone>(&self, ui: &mut Ui<A>, id: &str, r: Rect, on_block: impl Fn(i32) -> A, on_track: impl Fn(&str) -> A, on_segment: impl Fn(&str, &str) -> A, mut icon: impl FnMut(&mut Ui<A>, &Track, Rect)) {
+        let longest = self.sections.iter().flat_map(|s| &s.tracks).map(|t| ui.p.text_w(&t.label, BODY).ceil() as i32 + 9 + if t.icon { ICON_W } else { 0 }).max().unwrap_or(0);
         let label_w = longest.clamp(LABEL_W, (r.w / 4).max(LABEL_W));
         let lane_x = r.x + label_w;
         let lane_w = (r.w - label_w - 4).max(self.blocks.max(1));
@@ -216,7 +239,7 @@ impl Timeline {
             ui.p.fill(Rect::new(r.x + 3, y + HEADER_H - 1, r.w - 10, 1), rgba(section.colour[0], section.colour[1], section.colour[2], 90));
             y += HEADER_H;
             for t in &section.tracks {
-                self.draw_track(ui, id, t, Rect::new(r.x, y, r.w, ROW_H), lane_x, lane_w, &on_track, &on_segment);
+                self.draw_track(ui, id, t, Rect::new(r.x, y, r.w, ROW_H), lane_x, lane_w, &on_track, &on_segment, &mut icon);
                 y += ROW_H;
             }
             y += 3;
@@ -230,9 +253,17 @@ impl Timeline {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn draw_track<A: Clone>(&self, ui: &mut Ui<A>, id: &str, t: &Track, row: Rect, lane_x: i32, lane_w: i32, on_track: &impl Fn(&str) -> A, on_segment: &impl Fn(&str, &str) -> A) {
+    fn draw_track<A: Clone>(&self, ui: &mut Ui<A>, id: &str, t: &Track, row: Rect, lane_x: i32, lane_w: i32, on_track: &impl Fn(&str) -> A, on_segment: &impl Fn(&str, &str) -> A, icon: &mut impl FnMut(&mut Ui<A>, &Track, Rect)) {
         let selected = self.selected_track.as_deref() == Some(t.key.as_str());
-        let label = Rect::new(row.x + 1, row.y + 1, lane_x - row.x - 3, ROW_H - 2);
+        let lx = if t.icon {
+            let sq = icon_rect(row);
+            ui.push(format!("{id}.icon.{}", t.key), "icon", t.label.clone(), sq, true, false, None, Vec::new());
+            icon(ui, t, sq);
+            row.x + ICON_W
+        } else {
+            row.x
+        };
+        let label = Rect::new(lx + 1, row.y + 1, lane_x - lx - 3, ROW_H - 2);
         if selected || ui.hover(label) {
             ui.p.panel(label, if selected { rgba(86, 68, 22, 250) } else { PANEL_HI }, if selected { GOLD } else { BORDER }, 2.0);
         }

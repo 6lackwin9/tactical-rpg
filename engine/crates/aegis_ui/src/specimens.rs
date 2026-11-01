@@ -7,7 +7,8 @@
 //! page runs on its own clock, fed by `tick` (wall time) or `advance` (tests). PORTRAITFX1-E: a
 //! fourth page, Portraits, draws the engine's code-drawn sample face (`portrait_fx::sample`) through a `PortraitFx` at a
 //! chosen size, with toggles for each overlay and state, buttons for the reactions, a local reduce motion and the
-//! anchors check, on its own clock.
+//! anchors check, on its own clock. PORTRAITFX1-TL: the Timeline page's Icons check (`kit.timeline.icons`) gives every
+//! track its icon square (`Track.icon`), drawn by the page through `Timeline::draw_icons`.
 
 use crate::canvas::{rgb, rgba, Image, Rect, Rgba};
 use crate::fx::{Beam, Camera, Clock, Effect, Flash, Fx, Layer, Look, Looped, Orbit, Projectile, Ring, ShakeLimits, ShakeTable, Sparks, Trail, PRIM_KINDS, SHAKE_PRESETS};
@@ -40,6 +41,8 @@ pub enum KitAct {
     Block(i32),
     Track(String),
     Segment(String, String),
+    /// The timeline specimen's icons check (PORTRAITFX1-TL: every track's icon square, drawn by the page).
+    TimelineIcons,
     /// The Effects page: a primitive (`fx::PRIM_KINDS`), a shake preset (`fx::SHAKE_PRESETS`), the clock speed
     /// (`FX_SPEEDS` index), the hit-stop toggle, the page's own reduce-motion check, the loop toggle (STATUSFX1-E).
     Effect(&'static str),
@@ -112,6 +115,8 @@ pub struct Specimens {
     pub page: usize,
     pub block: Option<i32>,
     pub track: Option<String>,
+    /// The timeline specimen's icon squares on (`Track.icon`, PORTRAITFX1-TL).
+    pub icons: bool,
     /// The Effects page's state.
     pub fx: FxDemo,
     /// The Portraits page's state.
@@ -168,7 +173,7 @@ impl PortraitDemo {
     }
 
     fn opts(&self) -> PortraitOpts {
-        PortraitOpts { reduce_motion: self.reduce, rim_default: None, show_anchors: self.anchors }
+        PortraitOpts { reduce_motion: self.reduce, rim_default: None, show_anchors: self.anchors, tier_cap: None }
     }
 
     /// The portrait's agent state at the page's clock (`PortraitFx::state`).
@@ -319,6 +324,7 @@ impl Default for Specimens {
             page: 0,
             block: None,
             track: None,
+            icons: false,
             fx: FxDemo::default(),
             portrait: PortraitDemo::default(),
         }
@@ -344,6 +350,7 @@ impl Specimens {
             KitAct::Block(b) => format!("block {b}"),
             KitAct::Track(t) => format!("track {t}"),
             KitAct::Segment(t, s) => format!("segment {s} on {t}"),
+            KitAct::TimelineIcons => format!("timeline icons {}", if self.icons { "off" } else { "on" }),
             KitAct::Effect(k) => self.fx.play(k),
             KitAct::Shake(n) => self.fx.shake(n),
             KitAct::FxSpeed(i) => format!("speed {}", FX_SPEEDS[*i % FX_SPEEDS.len()].0),
@@ -369,6 +376,7 @@ impl Specimens {
             KitAct::Page(i) => self.page = i % PAGES.len(),
             KitAct::Block(b) => self.block = Some(b),
             KitAct::Track(t) => self.track = Some(t),
+            KitAct::TimelineIcons => self.icons = !self.icons,
             KitAct::FxSpeed(i) => self.fx.speed = i % FX_SPEEDS.len(),
             KitAct::HitStop => self.fx.hit_stop = !self.fx.hit_stop,
             KitAct::Reduce => {
@@ -468,11 +476,24 @@ impl Specimens {
     fn draw_timeline<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: &impl Fn(KitAct) -> A) {
         let x = r.x + 6;
         let w = r.w - 12;
-        ui.p.text(x as f32, (r.y + 4) as f32, "Timeline: segment parts, hatching, links and marks (hover for the cards; clicks select)", SMALL, INFO);
+        // PORTRAITFX1-TL: the icons check, at the header line's right end; on, every track has its icon square, drawn
+        // here as a chip in the track's colour with its label's first letter (a screen draws a portrait, say).
+        let check_w = (ui.p.text_w("Icons", BODY) + 16.0).ceil() as i32;
+        ui.p.text_fit(x as f32, (r.y + 4) as f32, "Timeline: segment parts, hatching, links and marks (hover for the cards; clicks select)", SMALL, (w - check_w - 6) as f32, INFO);
+        ui.checkbox("kit.timeline.icons", x + w - check_w, r.y + 2, "Icons", self.icons, wrap(KitAct::TimelineIcons), true);
         let y = r.y + 4 + ui.p.line_h(SMALL).ceil() as i32 + 2;
-        let t = sample_timeline(self.block, self.track.clone());
+        let mut t = sample_timeline(self.block, self.track.clone());
+        for track in t.sections.iter_mut().flat_map(|s| s.tracks.iter_mut()) {
+            track.icon = self.icons;
+        }
         let h = (crate::timeline::RULER_H + 2 + t.content_h()).min(r.y + r.h - y - 30);
-        t.draw(ui, "kit.timeline", Rect::new(x, y, w, h), |b| wrap(KitAct::Block(b)), |k| wrap(KitAct::Track(k.to_string())), |k, s| wrap(KitAct::Segment(k.to_string(), s.to_string())));
+        let chip = |ui: &mut Ui<A>, track: &Track, sq: Rect| {
+            let c = track.colour;
+            ui.p.panel(Rect::new(sq.x + 1, sq.y + 1, sq.w - 2, sq.h - 2), rgba(c[0] / 3, c[1] / 3, c[2] / 3, 255), c, 2.0);
+            let initial: String = track.label.chars().take(1).collect();
+            ui.p.text_center((sq.x + sq.w / 2) as f32, sq.y as f32 + 3.0, &initial, SMALL, c);
+        };
+        t.draw_icons(ui, "kit.timeline", Rect::new(x, y, w, h), |b| wrap(KitAct::Block(b)), |k| wrap(KitAct::Track(k.to_string())), |k, s| wrap(KitAct::Segment(k.to_string(), s.to_string())), chip);
         ui.para(
             x,
             y + h + 6,

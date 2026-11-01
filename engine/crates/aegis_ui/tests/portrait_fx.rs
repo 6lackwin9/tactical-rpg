@@ -870,3 +870,16 @@ fn ex4_a_held_face_that_changes_starts_again() {
     assert_eq!(Mark::parse(""), None);
     assert_eq!((MarkBox::parse("eyes"), MarkBox::parse("face")), (MarkBox::Eyes, MarkBox::Face));
 }
+
+/// PORTRAITFX1-TL (4.6, 6.2 row 4): a tier cap keeps a portrait no richer than it (a timeline row's icon stays minimal
+/// however large the window); without one the side decides, as before.
+#[test]
+fn tl_a_tier_cap_keeps_a_portrait_no_richer_than_it() {
+    let sides = [FULL_SIDE + 40, FULL_SIDE, REDUCED_SIDE, REDUCED_SIDE - 1, 8];
+    let plain = PortraitOpts::default();
+    assert!(sides.iter().all(|&s| plain.tier(s) == Tier::of(s)), "no cap: the side decides");
+    let minimal = PortraitOpts { tier_cap: Some(Tier::Minimal), ..PortraitOpts::default() };
+    assert!(sides.iter().all(|&s| minimal.tier(s) == Tier::Minimal), "capped at minimal: minimal at every side");
+    let reduced = PortraitOpts { tier_cap: Some(Tier::Reduced), ..PortraitOpts::default() };
+    assert_eq!(sides.map(|s| reduced.tier(s)), [Tier::Reduced, Tier::Reduced, Tier::Reduced, Tier::Minimal, Tier::Minimal], "capped at reduced: never full");
+}

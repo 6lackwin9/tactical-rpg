@@ -450,12 +450,23 @@ fn draw_mark(img: &mut Image, m: Mark, c: Rgba, w: i32, a: f32, cx: f32, cy: f32
 
 // ---- Drawing options, budget --------------------------------------------------------------------------------------
 
-/// How a portrait draws: reduce motion (the setting), the rim key when the sidecar names none, the anchors check.
+/// How a portrait draws: reduce motion (the setting), the rim key when the sidecar names none, the anchors check, and
+/// the richest tier it may draw at (PORTRAITFX1-TL: a surface that is always small, such as a timeline row's icon,
+/// stays `Minimal` however large the window scales it; None: the side decides, 4.6).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct PortraitOpts {
     pub reduce_motion: bool,
     pub rim_default: Option<Rgba>,
     pub show_anchors: bool,
+    pub tier_cap: Option<Tier>,
+}
+
+impl PortraitOpts {
+    /// The tier a portrait `side` device px across draws at: `Tier::of(side)`, no richer than `tier_cap`.
+    pub fn tier(&self, side: i32) -> Tier {
+        let by_side = Tier::of(side);
+        self.tier_cap.map_or(by_side, |cap| by_side.max(cap))
+    }
 }
 
 /// One per screen: `begin` at the start of its draw; at most `MAX_ANIMATED` time-varying portraits move per frame,
@@ -768,7 +779,7 @@ impl PortraitFx {
     /// What a draw at `side` device px and `now` composes, and the context `state` reads.
     fn plan(&mut self, src: &str, face: Option<&Face>, side: i32, now: u64, opts: &PortraitOpts, budget: &mut Budget) -> Plan {
         self.prune(now);
-        let tier = Tier::of(side);
+        let tier = opts.tier(side);
         let s = side.min(COMPOSE_MAX);
         let reduce = opts.reduce_motion;
         // Every level (eases, fired cues) is read at the 30-a-second step too, so nothing recomposes more often.

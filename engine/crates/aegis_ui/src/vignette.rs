@@ -741,7 +741,7 @@ impl CardPortrait {
         }
         fx.hold(&cues, now);
         fx.set_expressions(&self.expressions);
-        let opts = PortraitOpts { reduce_motion, rim_default: self.rim, show_anchors: false };
+        let opts = PortraitOpts { reduce_motion, rim_default: self.rim, show_anchors: false, tier_cap: None };
         self.budget.begin();
         fx.draw(p, art, &rel, face.as_ref(), r, now, &opts, &mut self.budget)
     }
