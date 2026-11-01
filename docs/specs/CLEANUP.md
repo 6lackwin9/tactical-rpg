@@ -20,7 +20,7 @@ planner (TASKS, ROADMAP, decisions, HISTORY, `.claude/*`, CLAUDE.md), design-bra
 
 | Rank | Id | Scope | What | Size | Lane | Layer | When | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | CLN-36 | A | Tests that use the Godot export only as data: switch to the shipped data (replay, ruleset_requests); drop three one-off "frozen data reports nothing new" checks and timeout_verdict | S | logic-builder | game | now | proposed |
+| 1 | CLN-36 | A | Tests that use the Godot export only as data: switch to the shipped data (replay, ruleset_requests); drop three one-off "frozen data reports nothing new" checks and timeout_verdict | S | logic-builder | game | now | done (2026-11-01) |
 | 2 | CLN-37 | A | Writer resave check on the shipped data (every file re-saves byte for byte) instead of Godot's resave and its five AFTER_GODOT lists | S | logic-builder | game | now | proposed |
 | 3 | CLN-38 | A | RNG and hash goldens into `aegis_core`; unit and damage goldens on a frozen catalog (the rules' only direct tests) | S-M | logic-builder | engine + game | now | proposed |
 | 4 | CLN-42 | A | Switch Godot off: delete the pure-Godot suites, `games/emberwake/parity/`, `fc.sh parity`, the CI Godot steps, the hook's Godot install, the export-only CLI keys | M | logic-builder | game + kit + tools | after CLN-36..41 | proposed |
@@ -96,7 +96,8 @@ about 1-3 MB of committed fixtures in total (CLN-38 to CLN-41).
 
 ### CLN-36
 
-Tests that use the Godot export only as data. Scope A. Status: proposed. Size S. Lane logic-builder. Layer game.
+Tests that use the Godot export only as data. Scope A. Status: done (2026-11-01; the shipped catalog is opened
+through `emberwake_world::Data::open`, already a dev-dependency, instead of `emberwake_content::source::load`). Size S. Lane logic-builder. Layer game.
 
 - Where: `emberwake_host/tests/replay.rs:9-12` (fails without the export), `emberwake_host/tests/ruleset_requests.rs:13-16,
   27-30`, `emberwake_battle/tests/timeout_verdict.rs` (whole file), `emberwake_content/tests/campaign_checks.rs` (whole

@@ -1,4 +1,5 @@
-//! The command log replays a battle exactly: the same requests on a fresh host give the same state.
+//! The command log replays a battle exactly: the same requests on a fresh host give the same state. Runs on the
+//! shipped data (games/emberwake/data, read only; CLN-36: no Godot export).
 
 use emberwake_data::Catalog;
 use emberwake_host::{Battle, Host};
@@ -6,9 +7,10 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+/// The shipped catalog (catalog encounters start through `new` by id).
 fn catalog() -> Arc<Catalog> {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../parity/out/catalog.json");
-    Arc::new(Catalog::load_resolved(&p).expect("missing catalog.json - run games/emberwake/parity/export.sh"))
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data");
+    emberwake_world::Data::open(&dir).expect("the shipped data opens").0.cat.clone()
 }
 
 #[test]
