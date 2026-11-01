@@ -765,7 +765,7 @@ impl Screen<GameCx> for RegionMap {
             // ASSETORG2 4.5: the world lineage's tile sets, child first, then common
             let mut lineage = d.lineage(&gs.world_id);
             lineage.reverse();
-            let sets = emberwake_content::art::region_sets(&lineage);
+            let sets = emberwake_content::art::region_sets(&lineage, "");
             let set_refs: Vec<&str> = sets.iter().map(String::as_str).collect();
             ui.push_clip(map_area);
             let (x0, x1) = ((map_area.x - ox).div_euclid(ts), (map_area.x + map_area.w - ox - 1).div_euclid(ts));

@@ -306,7 +306,7 @@ fn dirs_ref(dirs: &[String]) -> Vec<&str> {
 
 /// 3.2.1: terrain `id`'s tile on cell (x, y), varied by position.
 pub fn tile_art(art: &mut Art, id: &str, x: i32, y: i32) -> TileArt {
-    if let Some(rel) = art.pick(&dirs_ref(&battle_stage_dirs(id)), None, x, y) {
+    if let Some(rel) = art.pick(&dirs_ref(&battle_stage_dirs(id, "")), None, x, y) {
         return TileArt::Stage(rel);
     }
     let common: Vec<String> = BATTLE_SETS.iter().map(|s| format!("tilesets/{s}/{id}")).collect();
@@ -325,7 +325,7 @@ pub fn prop_art(art: &mut Art, prop: &str, x: i32, y: i32) -> Option<(String, (i
 
 /// 3.3: a block's face art on cell (x, y); None: the cap's top rows darkened.
 pub fn face_art(art: &mut Art, x: i32, y: i32) -> Option<String> {
-    art.pick(&dirs_ref(&battle_stage_dirs("wall_face")), None, x, y)
+    art.pick(&dirs_ref(&battle_stage_dirs("wall_face", "")), None, x, y)
 }
 
 /// 3.4: zone `zone`'s backdrop file (None: no zone, or no file: the gradient).

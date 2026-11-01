@@ -164,7 +164,7 @@ pub fn prop_warnings(v: &View, w: &str) -> Vec<String> {
             let dirs = art::prop_dirs(&lineage, &art_name);
             let Some((dir, n)) = dirs.iter().map(|d| (d.clone(), v.assets.variants(d) as i64)).find(|(_, n)| *n > 0) else {
                 // A7; A10 with the footprint alone never fires (a standing footprint lies on walls, P9)
-                let sets = art::region_sets(&lineage).join(",");
+                let sets = art::region_sets(&lineage, "").join(",");
                 push(format!("Map '{map_id}' prop art '{art_name}': no file props/{{{sets}}}/{art_name}/v0.png for world '{w}'; it draws its shape."));
                 continue;
             };
@@ -203,6 +203,134 @@ pub fn prop_warnings(v: &View, w: &str) -> Vec<String> {
                 let hit = json::arr(points).iter().map(json::arr).find(|xy| xy.len() == 2 && covers(fp, size, json::to_int(&xy[0]), json::to_int(&xy[1])));
                 if let Some(xy) = hit {
                     push(format!("Map '{map_id}' prop '{id}' hides '{path}' at ({}, {}) behind its art.", json::to_int(&xy[0]), json::to_int(&xy[1])));
+                }
+            }
+        }
+    }
+    out
+}
+
+// ---- LOOK1 5.4: the tile set binding checks (A13 id and files, A14 transition pieces, A15 sizes) --------------------
+
+/// The pixel sizes of a region tile and of a stage tile (LOOK1 section 3: 16 square or tilted at 2x; a stage cell 64 x 48).
+const REGION_TILE_PX: [(u32, u32); 2] = [(32, 32), (32, 24)];
+const STAGE_TILE_PX: [(u32, u32); 1] = [(64, 48)];
+/// The wall face (LOOK1 5.1) has its own sizes: region 32 x 16 (square) or 32 x 12 (tilted), stage 64 x 24.
+const REGION_FACE_PX: [(u32, u32); 2] = [(32, 16), (32, 12)];
+const STAGE_FACE_PX: [(u32, u32); 1] = [(64, 24)];
+
+/// The world's `stage_set` and the `tileset` of each of its locations, as (label, set id) with empty ids left out.
+fn bound_sets(v: &View, w: &str) -> (Option<String>, Vec<(String, String)>) {
+    let stage = Some(json::s(v.worlds.manifest(w), "stage_set")).filter(|s| !s.is_empty());
+    let mut regions: Vec<(String, String)> = Vec::new();
+    for e in v.worlds.merged_entries(w, "locations") {
+        let set = json::s(e, "tileset");
+        if !set.is_empty() {
+            regions.push((json::s(e, "id"), set));
+        }
+    }
+    (stage, regions)
+}
+
+/// A13 (id rule) and A15 (wrong size) of world `w`: a set id that is not `[a-z0-9_]{2,32}`, and a PNG of a bound set
+/// (`tilesets/<set>/**`) that is not a tile of the set's role. Errors; the size check is skipped without asset layers.
+pub fn tileset_errors(v: &View, w: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let (stage, regions) = bound_sets(v, w);
+    if let Some(set) = &stage {
+        if !art::set_id_ok(set) {
+            out.push(format!("Stage set '{set}' must be 2-32 characters of a-z, 0-9 and _."));
+        }
+    }
+    for (loc, set) in &regions {
+        if !art::set_id_ok(set) {
+            out.push(format!("Location '{loc}' tile set '{set}' must be 2-32 characters of a-z, 0-9 and _."));
+        }
+    }
+    type Role<'a> = (String, &'a [(u32, u32)], &'a [(u32, u32)], &'a str);
+    let mut roles: Vec<Role> = Vec::new();
+    for (_, set) in &regions {
+        roles.push((set.clone(), &REGION_TILE_PX, &REGION_FACE_PX, "region"));
+    }
+    if let Some(set) = stage {
+        roles.push((set, &STAGE_TILE_PX, &STAGE_FACE_PX, "stage"));
+    }
+    let mut seen: Vec<(String, &str)> = Vec::new();
+    for (set, tile_px, face_px, role) in roles {
+        if !art::set_id_ok(&set) || seen.iter().any(|(s, r)| *s == set && *r == role) {
+            continue;
+        }
+        seen.push((set.clone(), role));
+        for root in &v.assets.roots {
+            let dir = root.join(format!("tilesets/{set}"));
+            for rel in files_under(root, &dir).into_iter().filter(|r| r.ends_with(".png")) {
+                if let Some(size) = png_size(&root.join(&rel)) {
+                    let face = rel.starts_with(&format!("tilesets/{set}/wall_face/"));
+                    let (sizes, what) = if face { (face_px, format!("{role} wall face")) } else { (tile_px, format!("{role} tile")) };
+                    if !sizes.contains(&size) {
+                        let wants = sizes.iter().map(|(a, b)| format!("{a}x{b}")).collect::<Vec<_>>().join(" or ");
+                        out.push(format!("Tile art '{rel}' is {}x{} px; a {what} wants {wants}.", size.0, size.1));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// A13 (files) and A14 of world `w`, warnings: a bound set no layer holds (a region set without
+/// `tilesets/<set>/floor/v0.png`, a stage set without a tile), a location's map using a tile its set lacks, and a
+/// transition pair with some of its 14 pieces (`m01`-`m14`) missing. Skipped without asset layers.
+pub fn tileset_warnings(v: &View, w: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    if v.assets.roots.is_empty() {
+        return out;
+    }
+    let (stage, regions) = bound_sets(v, w);
+    let mut push = |line: String| {
+        if !out.contains(&line) {
+            out.push(line);
+        }
+    };
+    let mut sets: Vec<String> = Vec::new();
+    for (loc, set) in &regions {
+        if !art::set_id_ok(set) {
+            continue;
+        }
+        if !v.assets.has(&format!("tilesets/{set}/floor/v0.png")) {
+            push(format!("Location '{loc}' tile set '{set}': no file tilesets/{set}/floor/v0.png in any layer; it draws today's sets."));
+        } else {
+            let map_id = v.worlds.merged_entries(w, "locations").into_iter().find(|e| json::s(e, "id") == *loc).map(|e| json::s(e, "map")).unwrap_or_default();
+            let t = v.get("maps", &map_id);
+            let used: Vec<char> = json::aget(t, "rows").iter().flat_map(|r| json::gstr(r).chars().collect::<Vec<_>>()).collect();
+            for ch in ['.', '#', '~'] {
+                let tile = art::region_tile(ch).unwrap_or("floor");
+                if used.contains(&ch) && v.assets.variants(&format!("tilesets/{set}/{tile}")) == 0 {
+                    push(format!("Location '{loc}' tile set '{set}': its map uses '{ch}' but tilesets/{set}/{tile}/v0.png is missing; that tile draws today's set."));
+                }
+            }
+        }
+        sets.push(set.clone());
+    }
+    if let Some(set) = stage {
+        if art::set_id_ok(&set) {
+            let has_tile = v.assets.dirs(&format!("tilesets/{set}")).iter().any(|d| v.assets.has(&format!("tilesets/{set}/{d}/v0.png")));
+            if !has_tile {
+                push(format!("Stage set '{set}': no tilesets/{set}/<terrain>/v0.png in any layer; the battle draws common_stage."));
+            }
+            sets.push(set);
+        }
+    }
+    sets.sort();
+    sets.dedup();
+    for set in sets {
+        let base = format!("tilesets/{set}");
+        for upper in v.assets.dirs(&base) {
+            for pair in v.assets.dirs(&format!("{base}/{upper}")).into_iter().filter(|p| p.starts_with("over_")) {
+                let dir = format!("{base}/{upper}/{pair}");
+                let missing: Vec<String> = (1..=14u8).map(|n| format!("m{n:02}")).filter(|m| !v.assets.has(&format!("{dir}/{m}.png"))).collect();
+                if !missing.is_empty() && missing.len() < 14 {
+                    push(format!("Tile set '{set}' pair {upper} {pair}: {} of 14 pieces missing ({}); the pair draws no transition.", missing.len(), missing.join(", ")));
                 }
             }
         }

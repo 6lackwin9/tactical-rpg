@@ -675,6 +675,8 @@ pub fn manifest_errors(v: &View, w: &str) -> Vec<String> {
     errors.extend(story::manifest_errors(v, w, m));
     // HOOKS1 CN1: the class names and paths of the world
     errors.extend(super::hooks::classes_errors(v, m));
+    // LOOK1 5.4: the tile set ids and file sizes
+    errors.extend(super::assets::tileset_errors(v, w));
     errors
 }
 
@@ -897,6 +899,7 @@ pub fn world_warnings(v: &View, w: &str) -> Vec<String> {
     out.extend(encounter_warnings(v, w));
     out.extend(character_asset_warnings(v, w));
     out.extend(super::assets::prop_warnings(v, w));
+    out.extend(super::assets::tileset_warnings(v, w));
     out.extend(campaign::warnings(v, w));
     out.extend(story::warnings(v, w));
     out

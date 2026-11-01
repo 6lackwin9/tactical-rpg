@@ -42,8 +42,10 @@ fn default_of(key: &str) -> Value {
     json::get(f, "default").clone()
 }
 
+/// The keys a new manifest holds: every field in schema order except the engine-only `omit_default` ones (LOOK1-K),
+/// which are written only once they hold a value.
 fn schema_keys() -> Vec<String> {
-    fields(source::schema(), "world", "world").iter().map(|f| json::s(json::dict(f), "key")).collect()
+    fields(source::schema(), "world", "world").iter().filter(|f| !json::b(json::dict(f), "omit_default", false)).map(|f| json::s(json::dict(f), "key")).collect()
 }
 
 #[test]
