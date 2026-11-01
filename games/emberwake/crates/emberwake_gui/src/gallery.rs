@@ -34,7 +34,7 @@ use emberwake_host::{Battle, Host};
 use serde_json::{json, Value};
 
 /// (id, name, group, what it shows). Battle panel ids are the battle screen's own panel names.
-const ENTRIES: [(&str, &str, &str, &str); 29] = [
+const ENTRIES: [(&str, &str, &str, &str); 30] = [
     ("kit", "Kit widgets", "Kit", "Every kit widget in its states; use them, the foot of the page says what happened."),
     ("vignette", "Vignette player", "Kit", "The engine's sample reel or a world's vignette: image, text, title and line cards with fades, typing, hold and skip."),
     ("portraits", "Portraits", "Art", "Every portrait with its sidecar, its effects and the cue rows: the review page of the portrait assets."),
@@ -56,6 +56,7 @@ const ENTRIES: [(&str, &str, &str, &str); 29] = [
     ("world_map", "World map", "Screens", "Travel between locations."),
     ("results", "Battle results", "Screens", "After a fight: outcome, XP, rewards."),
     ("battle", "Battle (whole)", "Screens", "The whole battle screen, planning (the Test Arena's encounter)."),
+    ("battle_talk", "Battle talk", "Screens", "A talk over the battle: the veil, the talk box with its portrait, the speaker's ring."),
     ("strip", "Plan strip", "Battle panels", "The selected hero's blocks and the round controls."),
     ("party", "Party list", "Battle panels", "The heroes' cards."),
     ("hero", "Hero inspector", "Battle panels", "The selected hero's details and plan."),
@@ -66,7 +67,7 @@ const ENTRIES: [(&str, &str, &str, &str); 29] = [
     ("timeline", "Battle timeline", "Battle panels", "Every unit's track over the round's blocks (live battle, round archive)."),
 ];
 /// Screens a preview cannot show without a game.
-const NEEDS_GAME: [&str; 12] = ["region", "dialogue", "shop", "hub", "journal", "stats", "level_up", "skills", "gear", "world_map", "results", "save"];
+const NEEDS_GAME: [&str; 13] = ["region", "dialogue", "shop", "hub", "journal", "stats", "level_up", "skills", "gear", "world_map", "results", "save", "battle_talk"];
 /// Where a preview's mouse is (off every widget).
 const OFF: (i32, i32) = (-10_000, -10_000);
 const ALLY: Rgba = [110, 170, 255, 255];
@@ -572,6 +573,7 @@ impl Gallery {
             "load" => Box::new(crate::menus::Slots::new(false)),
             "region" => Box::new(crate::region::RegionMap::new(cx)),
             "dialogue" | "shop" => Box::new(Self::talking(cx, id == "shop")),
+            "battle_talk" => Box::new(Self::battle_talk(cx)),
             // STORYUI1-U2: the pane on a fixture board (no game needed)
             "board" => Box::new(crate::board::BoardSample::new()),
             "hub" => Box::new(crate::hub::Hub::default()),
@@ -617,6 +619,20 @@ impl Gallery {
         // a preview's conversation never ends, so it must not hold the game busy
         cx.set_busy(false);
         found.unwrap_or(first)
+    }
+
+    /// ENCOUNTER2-C2: the Test Arena's battle with the first dialogue tree of the sample game's world that opens as a
+    /// scene shown over it (none opens: the battle, the reason in its message bar).
+    fn battle_talk(cx: &mut Cx) -> BattleScreen {
+        let mut b = BattleScreen::arena(cx, None, &cx.encounter.clone());
+        let world = cx.game.as_ref().map(|g| g.gs.world_id.clone()).unwrap_or_default();
+        let trees: Vec<String> = cx.data.own_entries(&world, "dialogues").iter().map(|t| json::s(t, "id")).collect();
+        for id in trees {
+            if b.preview_talk(cx, &world, &id, "") {
+                break;
+            }
+        }
+        b
     }
 
     /// The services of the open dialogue's choices in a region map's state (none when no dialogue is open).
@@ -1072,6 +1088,31 @@ mod tests {
         ids.dedup();
         assert_eq!(ids.len(), ENTRIES.len(), "entry ids are unique");
         assert!(NEEDS_GAME.iter().all(|n| ENTRIES.iter().any(|e| e.0 == *n)), "every game-needing id is an entry");
+    }
+
+    /// ENCOUNTER2-C2: the Battle talk entry previews the Test Arena's battle with a talk of the sample game's world open
+    /// over it (the box and its backdrop drawn, the agent link's `talk` set) whenever that world has a dialogue tree.
+    #[test]
+    fn the_battle_talk_entry_shows_a_talk_over_the_battle() {
+        use crate::hud::hud_tests::{game_cx, gfx};
+        let (mut cx, mut g) = (game_cx(), gfx());
+        cx.encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+        let world = cx.gs().world_id.clone();
+        let trees = cx.data.own_entries(&world, "dialogues").len();
+        let mut gallery = Gallery::new();
+        let i = ENTRIES.iter().position(|e| e.0 == "battle_talk").expect("a battle talk entry");
+        gallery.act(&mut cx, GAct::Entry(i));
+        gallery.draw(&mut cx, &mut g, (-500, -500), true);
+        let sh = gallery.shown.as_ref().expect("the preview is built");
+        assert_eq!(sh.screen.id(), "test_arena");
+        let st = sh.screen.state(&cx);
+        if trees == 0 {
+            assert!(st.get("talk").is_none());
+            return;
+        }
+        assert!(st["talk"]["dialogue"].as_str().is_some_and(|d| !d.is_empty()), "a talk is open: {}", st["message"]);
+        let ws = sh.screen.widgets();
+        assert!(["dialogue", "talk.backdrop"].iter().all(|id| ws.iter().any(|w| w["id"] == *id)), "the box over the battle");
     }
 
     /// STORYUI1-E: the vignette entry previews the engine's sample reel (it plays on as the gallery ticks) and Open

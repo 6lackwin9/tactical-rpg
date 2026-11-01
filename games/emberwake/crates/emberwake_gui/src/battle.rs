@@ -9,11 +9,17 @@
 //! details; right click closes a menu or undoes the hero's last step; the wheel scrolls the log. Keys: Enter confirm,
 //! Space step / next round, A autoplay, Z undo, L log, R restart (arena), Esc close; hold Alt to outline every unit,
 //! covered or not (STAGE1-O).
+//! ENCOUNTER2-C2 (docs/specs/ENCOUNTER2_C.md 3.3): each new talk cue of `Session::talks` opens the shared talk box
+//! (`talk.rs`) once its step's impacts have played, over a 35 % veil, the speaker's token in the gold ring; while it is
+//! open the screen sends no request, autoplay waits and every board click and battle key is swallowed; replies run in
+//! the game in play (a world fight) or a scratch game state of the Arena's world.
 
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::music;
 use crate::intent_text;
 use crate::fx::{self, Impact, Shown};
+use crate::portraits::Faces;
+use crate::talk::{self, TalkAct};
 use aegis_ui::fx::{Camera, Clock, Fx, Layer};
 use crate::stage::{self, Geom, Item, Pass, Through, View};
 use crate::tuning::Tuning;
@@ -88,6 +94,8 @@ const POISE: Rgba = rgb(150, 190, 235);
 const FACING: Rgba = rgb(250, 226, 160);
 /// WINDUP1 W9: Tallow Amber (art bible 5), the wind-up outline.
 const AMBER: Rgba = rgb(0xd9, 0x77, 0x06);
+/// ENCOUNTER2-C DT7: the veil over the board and panels while a battle talk is open (35 % black).
+const TALK_VEIL: Rgba = rgba(0, 0, 0, 89);
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
@@ -120,6 +128,14 @@ pub enum Action {
     Fill,
     /// ENCOUNTER2 H1: the hero picked to hold a hold escape's tiles.
     StayPick(usize),
+    /// ENCOUNTER2-C DT9: a reply or Continue in the open battle talk's box.
+    Talk(TalkAct),
+}
+
+/// ENCOUNTER2-C DT6: an open battle talk: the tree it plays and its runner (a scene: no services).
+struct BattleTalk {
+    dialogue: String,
+    runner: dialogue::DialogueRunner,
 }
 
 #[derive(Debug, Clone)]
@@ -1110,6 +1126,15 @@ pub struct BattleScreen {
     /// (every request and battle start moves it).
     offers: Option<Offers>,
     rev: u64,
+    /// ENCOUNTER2-C (3.3): the open talk (None = none), how many of the session's talk cues were taken, the Arena's
+    /// scratch game state of its world (made at the first talk, dropped with the battle), autoplay's plan held back
+    /// for a talk (sent when it closes), and the talk box's portraits and node shown.
+    talk: Option<BattleTalk>,
+    talks_seen: usize,
+    talk_gs: Option<emberwake_world::GameState>,
+    auto_after_talk: bool,
+    faces: Faces,
+    talk_node: String,
 }
 
 impl BattleScreen {
@@ -1165,6 +1190,12 @@ impl BattleScreen {
             sidesteps: Vec::new(),
             offers: None,
             rev: 0,
+            talk: None,
+            talks_seen: 0,
+            talk_gs: None,
+            auto_after_talk: false,
+            faces: Faces::default(),
+            talk_node: String::new(),
         }
     }
 
@@ -1831,6 +1862,7 @@ impl BattleScreen {
         self.camera.stop();
         self.sidesteps.clear();
         self.phases_seen = self.session().phases.fired.len();
+        self.reset_talks();
         self.last_hp = self.session().w.units.iter().map(|u| u.hp).collect();
         self.log_seen = self.session().resolver.log.len();
         self.selected = self.session().w.allies.first().copied();
@@ -1894,6 +1926,10 @@ impl BattleScreen {
 
     /// A player's action (a click or a key): the playback controls click (SoundEvents ui_click), then `run`.
     fn act(&mut self, cx: &mut Cx, a: Action) {
+        // ENCOUNTER2-C DT5: while a talk is open only its box acts
+        if self.talk.is_some() != matches!(a, Action::Talk(_)) {
+            return;
+        }
         if matches!(a, Action::Confirm | Action::Step | Action::Autoplay | Action::NextRound) {
             cx.audio.play(Bus::Ui, "sfx/ui_click.wav");
         }
@@ -1989,9 +2025,9 @@ impl BattleScreen {
             }
             Action::Autoplay => {
                 self.auto = !self.auto;
+                self.auto_after_talk = false;
                 if self.auto && self.planning() {
-                    self.send(cx, json!({"cmd": "preset", "preset": TACTICS[self.party_tactic]}));
-                    self.run(cx, Action::Confirm);
+                    self.auto_plan(cx);
                 }
             }
             Action::PartyMenu => self.tactic_menu(true),
@@ -2001,8 +2037,7 @@ impl BattleScreen {
                 if r["ok"] == json!(true) {
                     self.message = format!("Round {}: plan your party.", self.session().current_round);
                     if self.auto {
-                        self.send(cx, json!({"cmd": "preset", "preset": TACTICS[self.party_tactic]}));
-                        self.run(cx, Action::Confirm);
+                        self.auto_plan(cx);
                     }
                 }
             }
@@ -2025,7 +2060,136 @@ impl BattleScreen {
             }
             Action::Continue => self.settle(cx),
             Action::Leave => cx.nav.push(Nav::Pop),
+            Action::Talk(a) => self.talk_reply(cx, a),
         }
+    }
+
+    /// Autoplay's plan for the round (the party tactic, then Confirm); ENCOUNTER2-C DT5: held back while a talk is open
+    /// or waiting to open (a round-start talk), and sent when the last one closes.
+    fn auto_plan(&mut self, cx: &mut Cx) {
+        if self.talk_due() {
+            self.auto_after_talk = true;
+            return;
+        }
+        self.send(cx, json!({"cmd": "preset", "preset": TACTICS[self.party_tactic]}));
+        self.run(cx, Action::Confirm);
+    }
+
+    // ---- ENCOUNTER2-C2: the battle talk (docs/specs/ENCOUNTER2_C.md 3.3) ----------------------------------------
+
+    /// A new battle: no talk open, every cue of the session still to open, the Arena's scratch state dropped.
+    fn reset_talks(&mut self) {
+        self.talk = None;
+        self.talks_seen = 0;
+        self.talk_gs = None;
+        self.auto_after_talk = false;
+    }
+
+    /// A talk is open, or a cue of the session waits to open.
+    fn talk_due(&self) -> bool {
+        self.talk.is_some() || self.host.session.as_ref().is_some_and(|s| s.talks().len() > self.talks_seen)
+    }
+
+    /// DT5: once the impacts of the step that raised it have played (rule P's wait), the next cue opens; true while a
+    /// talk is open or a cue waits (the tick sends nothing). With none left, autoplay's held plan goes out.
+    fn talk_tick(&mut self, cx: &mut Cx, now: Instant) -> bool {
+        if self.session().talks().len() < self.talks_seen {
+            // another battle began under the screen
+            self.reset_talks();
+        }
+        while self.talk.is_none() && self.talks_seen < self.session().talks().len() {
+            if !self.impacts_done(now) {
+                return true;
+            }
+            let cue = self.session().talks()[self.talks_seen].clone();
+            self.talks_seen += 1;
+            self.open_talk(cx, &cue);
+        }
+        if self.talk.is_some() {
+            return true;
+        }
+        if std::mem::take(&mut self.auto_after_talk) && self.auto && self.planning() {
+            self.auto_plan(cx);
+        }
+        false
+    }
+
+    /// DT6: opens `cue`'s scene (`DialogueRunner::open_scene`) in the game in play (a world fight) or the Arena's
+    /// scratch game state of its world (`world_id` set, nothing else); one that cannot open is skipped, its reason in
+    /// the message bar.
+    fn open_talk(&mut self, cx: &mut Cx, cue: &emberwake_battle::encounter::TalkCue) {
+        let d = cx.data.clone();
+        let runner = if self.world_mode() {
+            if !cx.has_game() {
+                return;
+            }
+            dialogue::DialogueRunner::open_scene(&d, cx.gs_mut(), &cue.dialogue, &cue.speaker)
+        } else {
+            let world = self.arena_world.clone().unwrap_or_default();
+            let gs = self.talk_gs.get_or_insert_with(|| emberwake_world::GameState { world_id: world, ..Default::default() });
+            dialogue::DialogueRunner::open_scene(&d, gs, &cue.dialogue, &cue.speaker)
+        };
+        if runner.closed {
+            self.message = if runner.errors.is_empty() { format!("The talk '{}' did not open.", cue.dialogue) } else { runner.errors.join(" ") };
+            return;
+        }
+        self.popup = None;
+        self.talk = Some(BattleTalk { dialogue: cue.dialogue.clone(), runner });
+    }
+
+    /// The UI Gallery's Battle talk entry: opens tree `dialogue` of `world` (speaker `speaker`) over this battle as a
+    /// cue would, in a scratch game state of that world; false (the reason in the message bar) when it cannot open.
+    pub(crate) fn preview_talk(&mut self, cx: &mut Cx, world: &str, dialogue: &str, speaker: &str) -> bool {
+        self.talk_gs = Some(emberwake_world::GameState { world_id: world.to_string(), ..Default::default() });
+        let cue = emberwake_battle::encounter::TalkCue { phase: "preview".into(), dialogue: dialogue.into(), speaker: speaker.into(), round: 1, block: 0 };
+        self.open_talk(cx, &cue);
+        self.talk.is_some()
+    }
+
+    /// The game state the open talk runs in (a clone; None without a talk).
+    fn talk_state_of(&self, cx: &Cx) -> Option<emberwake_world::GameState> {
+        self.talk.as_ref()?;
+        Some(if self.world_mode() { cx.gs().clone() } else { self.talk_gs.clone().unwrap_or_default() })
+    }
+
+    /// The open talk's view in `gs` (None without one).
+    fn talk_view(&self, cx: &Cx, gs: &emberwake_world::GameState) -> Option<Dict> {
+        self.talk.as_ref().map(|t| t.runner.view(&cx.data, gs))
+    }
+
+    /// DT9: a reply or Continue in the talk (its effects, flags only, on the talk's game state); DT10: once the scene
+    /// closes the battle goes on where the cue found it, the playback after `impact_gap_ms`.
+    fn talk_reply(&mut self, cx: &mut Cx, a: TalkAct) {
+        let d = cx.data.clone();
+        let world = self.world_mode();
+        let Some(t) = self.talk.as_mut() else { return };
+        let gs = if world { cx.gs_mut() } else { self.talk_gs.get_or_insert_with(Default::default) };
+        let res = match a {
+            TalkAct::Choose(i) => t.runner.choose(&d, gs, i),
+            TalkAct::Advance => t.runner.advance(&d, gs),
+        };
+        let closed = t.runner.closed;
+        if !json::b(&res, "ok", false) {
+            self.message = json::sget(&res, "errors").join(" ");
+        }
+        if closed {
+            self.talk = None;
+            self.gap_until = Some(Instant::now() + Duration::from_millis(cx.tuning.value.impact_gap_ms));
+        }
+    }
+
+    /// DT8: the token of the open node's speaker (the character's qualified id `speaker`): the unit on the field whose
+    /// hero key is it, names it, or is the party member who plays it.
+    fn speaker_unit(&self, cx: &Cx, gs: &emberwake_world::GameState, speaker: &str) -> Option<usize> {
+        let s = self.host.session.as_ref()?;
+        if speaker.is_empty() {
+            return None;
+        }
+        let qid_of = |r: &str| qid_in(&cx.data, &gs.world_id, r);
+        (0..s.w.units.len()).filter(|&c| s.w.grid.pos(c).is_some()).find(|&c| {
+            let key = s.hero_key(c);
+            !key.is_empty() && (key == speaker || qid_of(&key) == speaker || gs.party.members.iter().any(|m| m.id == key && qid_of(&m.lore_ref) == speaker))
+        })
     }
 
     /// Dropdown of the six tactics under the Party / Hero picker.
@@ -2423,6 +2587,8 @@ impl Screen<GameCx> for BattleScreen {
         let speed = cx.settings.v["anim_speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0);
         self.clock.advance((now.duration_since(self.clock_at).as_secs_f64() * 1000.0).min(100.0), speed);
         self.clock_at = now;
+        // PORTRAITFX1 4.5: the talk box's portrait clock moves by the frame's wall time
+        self.faces.tick();
         // Rule F: the skip setting turning on or another battle view shows the pending impacts at once.
         let view = View::of_setting(&cx.settings.v["battle_view"]);
         if cx.settings.v["skip_anim"].as_bool().unwrap_or(false) || self.view_seen.is_some_and(|v| v != view) {
@@ -2459,6 +2625,10 @@ impl Screen<GameCx> for BattleScreen {
             self.save_session(cx);
         }
         if self.host.session.is_none() {
+            return;
+        }
+        // ENCOUNTER2-C DT5: a talk open (or about to open) holds the playback and autoplay
+        if self.talk_tick(cx, now) {
             return;
         }
         // FX1 rule P: the next step waits for `step_ms` and for the last impact plus `impact_gap_ms`.
@@ -2509,6 +2679,14 @@ impl Screen<GameCx> for BattleScreen {
         if self.host.session.is_none() {
             return;
         }
+        // ENCOUNTER2-C DT5: the talk box's keys (1-9, Enter, Space) only
+        if self.talk.is_some() {
+            let pick = self.talk_state_of(cx).and_then(|gs| self.talk_view(cx, &gs)).and_then(|v| talk::talk_key(k, &v));
+            if let Some(a) = pick {
+                self.act(cx, Action::Talk(a));
+            }
+            return;
+        }
         match k {
             Key::Enter if self.planning() => self.act(cx, Action::Confirm),
             Key::Enter if !self.outcome().is_empty() && self.world_mode() => self.act(cx, Action::Continue),
@@ -2541,6 +2719,9 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     fn back(&mut self, cx: &mut Cx) {
+        if self.talk.is_some() {
+            return;
+        }
         if self.popup.is_some() {
             self.popup = None;
         } else if self.show_log {
@@ -2551,6 +2732,9 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     fn escape(&mut self, cx: &mut Cx) {
+        if self.talk.is_some() {
+            return;
+        }
         if self.popup.is_some() {
             self.popup = None;
         } else if self.show_log {
@@ -2630,6 +2814,13 @@ impl Screen<GameCx> for BattleScreen {
         if let Some(o) = self.host.session.as_ref().and_then(|s| overlay_of(s, self.selected.filter(|u| s.w.allies.contains(u)), s.phase == Phase::Planning && !s.plan_confirmed)) {
             out["overlay"] = overlay_json(&o);
         }
+        // ENCOUNTER2-C DT11: the open talk (key only while one is open), its portrait as drawn and the speaker's token
+        if let (Some(t), Some(gs)) = (self.talk.as_ref(), self.talk_state_of(cx)) {
+            let view = t.runner.view(&cx.data, &gs);
+            out["talk"] = talk::talk_state(&t.dialogue, &view);
+            out["talk"]["portraits"] = self.faces.state();
+            out["talk"]["speaker_unit"] = json!(self.speaker_unit(cx, &gs, &s(&view, "speaker")));
+        }
         out
     }
 
@@ -2645,6 +2836,7 @@ impl Screen<GameCx> for BattleScreen {
         if restart && reply["ok"] == json!(true) {
             self.new_session();
             self.tokens = Tokens::default();
+            self.reset_talks();
         }
         if self.host.session.is_some() {
             self.after_change(cx);
@@ -2663,6 +2855,11 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     aegis_ui::widget_plumbing!();
+}
+
+/// ENCOUNTER2-C DT8: the qualified id of world character `r` in `world` ("" when there is none).
+fn qid_in(d: &emberwake_world::Data, world: &str, r: &str) -> String {
+    s(d.resolve(world, "characters", r), "_qid")
 }
 
 /// Whether any enemy unit has the boss tier (MusicDirector.combat_context). Wave and phase units are built when the
@@ -2921,6 +3118,20 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let now = Instant::now();
     let tuning = cx.tuning.value.clone();
     gfx.canvas.clear(BG);
+    // ENCOUNTER2-C DT7: the open talk's game state and view; a new node starts its line and replies at the top
+    let talk_gs = g.talk_state_of(cx);
+    let talk_view = talk_gs.as_ref().and_then(|gs| g.talk_view(cx, gs));
+    let node = match (g.talk.as_ref(), talk_view.as_ref()) {
+        (Some(t), Some(v)) => format!("{}/{}", t.dialogue, s(v, "node")),
+        _ => String::new(),
+    };
+    talk::follow_node(gfx, &mut g.talk_node, node);
+    g.faces.begin();
+    // DT8: the speaker's token wears the selection ring
+    let talker = match (talk_gs.as_ref(), talk_view.as_ref()) {
+        (Some(gs), Some(v)) => g.speaker_unit(cx, gs, &s(v, "speaker")),
+        _ => None,
+    };
     let mut ui: Ui<Action> = Ui::new(gfx, mouse, live);
     let Some(s) = g.host.session.as_ref() else {
         ui.p.text(8.0, 8.0, &g.message, BODY, FOE);
@@ -3312,7 +3523,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     // RULESET1-U slice 3: the round intent's board overlays (None in classic)
     let overlay = overlay_of(s, sel, planning);
     let push_list: Vec<emberwake_battle::forced::Forecast> = pushes.iter().flatten().cloned().collect();
-    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some(), anim_ms: g.clock.ms, sel, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list, hold: hold.as_ref() };
+    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some() || talk_view.is_some(), anim_ms: g.clock.ms, sel, talker, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list, hold: hold.as_ref() };
     let board_hover = match view {
         View::Stage => draw_stage(board, &mut ui, cx, &tuning, now),
         View::Flat => {
@@ -3545,6 +3756,15 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             ui.p.text_fit(rr.x as f32 + 84.0, rr.y as f32 + 2.0, &row.detail, SMALL, rr.w as f32 - 86.0, if row.valid { GOLD } else { DIM });
             ui.push(format!("popup.{k}"), "option", format!("{} {}", row.label, row.detail), rr, row.valid, hover, Some(Action::Choose(k)), row.tip.clone());
         }
+    }
+
+    // ENCOUNTER2-C DT7: the talk over a 35 % veil, centred at the bottom; its backdrop keeps the board's hover cards
+    // from showing through the box
+    if let (Some(gs), Some(view)) = (talk_gs.as_ref(), talk_view.as_ref()) {
+        ui.p.fill(Rect::new(0, 0, W, H), TALK_VEIL);
+        let b = talk::talk_layout(&mut ui.p, view);
+        ui.push("talk.backdrop", "backdrop", "", b.r, true, false, None, Vec::new());
+        talk::draw_talk(&mut ui, cx, gs, &mut g.faces, view, &b, false, Action::Talk);
     }
 
     g.w = ui.widgets;
@@ -4753,6 +4973,8 @@ struct Board<'a> {
     /// The FX clock (ms; FX1-L1).
     anim_ms: f64,
     sel: Option<usize>,
+    /// ENCOUNTER2-C DT8: the open talk's speaker on the field (wears the selection ring; None without one).
+    talker: Option<usize>,
     planning: bool,
     /// INTENT1: the enemy tells while planning; drawn while `show_tells` (the Show enemy tells setting, I).
     tells: &'a [Intent],
@@ -4927,7 +5149,7 @@ fn scaled(a: u8, k: u8) -> u8 {
 /// the `common` tiles, tree tiles flat, tokens `flat_token_px` on a filled foot ellipse at `foot_alpha`, arrows centre
 /// to centre over the units, the cell widgets.
 fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
     let w = &s.w;
     let panel = Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4);
     ui.p.panel(panel, rgb(8, 10, 16), BORDER, RADIUS);
@@ -5048,7 +5270,7 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
             ui.p.ellipse(tr.x as f32 + tp as f32 / 2.0, (tr.y + tp) as f32 - 2.5, tp as f32 * 0.36, tp as f32 * 0.11, rgba(ring[0], ring[1], ring[2], tuning.foot_alpha));
         }
         let hover = ui.hover(r) && !popup;
-        let outline = if Some(i) == sel { Some(GOLD) } else if hover { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
+        let outline = if Some(i) == sel || Some(i) == talker { Some(GOLD) } else if hover { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
         let looks = status.iter().find(|x| x.unit == i).map_or(&[][..], |x| &x.looks[..]);
         let alpha = fx::token_alpha(looks, tuning);
         let frame = body.as_deref().and_then(|b| token_frame(&mut cx.art, b, palette, &a.player, anim_now, tp, facing).map(|(f, img)| {
@@ -5207,7 +5429,7 @@ fn with_alpha(c: Rgba, a: u8) -> Rgba {
 /// covers a unit, the top: HP bars, chips, the exit sign, floats). Cell widgets first, then the units' in feet order
 /// (front-most last, so it takes the click). Returns the unit the mouse is over on the board.
 fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
     let w = &s.w;
     let geo = Geom::new(View::Stage, tuning);
     let tp = geo.token_px;
@@ -5387,7 +5609,7 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                             let Some(t) = unit_of(i) else { continue };
                             let a = tokens.anims.get(i).unwrap_or(&still);
                             let ring = if t.ally { ALLY } else { FOE };
-                            let outline = if Some(i) == sel { Some(GOLD) } else if hovered == Some(i) { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
+                            let outline = if Some(i) == sel || Some(i) == talker { Some(GOLD) } else if hovered == Some(i) { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
                             // STATUSFX1: a stealthed token (sprite and outline) at 55 % alpha
                             let alpha = fx::token_alpha(&t.looks, tuning);
                             let frame = t.body.as_deref().and_then(|b| token_frame(&mut cx.art, b, &t.palette, &a.player, anim_now, tp, t.facing).map(|(f, img)| {
@@ -9186,5 +9408,282 @@ mod hold_screen_tests {
         assert!(recs.iter().any(|r| r.text.starts_with("[Phase] Test")), "the panel draws the phase line");
         assert!(widget(&b, "log.panel").is_some_and(|x| x.text == format!("{} lines", s(&b).resolver.log.len() + 1)));
         assert!(!s(&b).resolver.log.contains(&line));
+    }
+}
+
+/// ENCOUNTER2-C2 (docs/specs/ENCOUNTER2_C.md 3.3; section 6 "battle.rs tests" and the text audit) on a scratch world
+/// built here (no shipped data): encounter `t_talk` raises a talk at round 1's start (Ash speaks) and one at round 1
+/// block 2 (the Grunt speaks); `t_plain` is the same fight without phases. Expectations come from the rules: while a
+/// talk is open the screen sends no request and autoplay waits (DT5); its replies run in the Arena's scratch state or
+/// the game in play (DT6, DT9); closing resumes the playback after `impact_gap_ms` (DT10); the agent link reads it
+/// (DT11); the speaker's token is the one whose hero key plays the speaker (DT8).
+#[cfg(test)]
+mod talk_screen_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx, rect};
+    use crate::screens::Game;
+    use aegis_ui::screen::TEXT_SIZES;
+    use emberwake_world::Data;
+    use std::sync::Arc;
+
+    const WORLD: &str = "talkw";
+    const LONG_LINE: &str = "The riders took the north road at dusk, and the forge has been cold since; if we hold this alley until the bell, the wardens can close the gate behind us and nobody else has to bleed for it tonight.";
+
+    fn with_ids(rows: Value) -> Value {
+        Value::Array(
+            json::arr(&rows)
+                .iter()
+                .map(|r| {
+                    let mut r = json::dict(r).clone();
+                    let id = s(&r, "id");
+                    r.insert("_world".into(), WORLD.into());
+                    r.insert("_qid".into(), format!("{WORLD}:{id}").into());
+                    Value::Object(r)
+                })
+                .collect(),
+        )
+    }
+
+    fn data() -> Data {
+        let skills = json!([
+            {"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 1, "basic": true, "target_mode": "ENEMY"},
+            {"id": "guard", "name": "Guard", "kind": "DEFEND", "level": 1, "blocks": 2, "basic": true, "mitigation": 0.3},
+            {"id": "move", "name": "Move", "kind": "MOVE", "level": 1, "blocks": 1, "system": true, "basic": true},
+            {"id": "switch_target", "name": "Switch Target", "kind": "TARGET", "level": 1, "blocks": 1, "system": true, "basic": true},
+            {"id": "staggered", "name": "Staggered", "kind": "STATUS", "level": 1, "blocks": 1, "system": true},
+            {"id": "stunned", "name": "Stunned", "kind": "STATUS", "level": 1, "blocks": 1, "system": true},
+            {"id": "rest", "name": "Rest", "kind": "REST", "level": 1, "blocks": 1, "system": true, "basic": true, "recover_ap": 2}
+        ]);
+        let unit = |id: &str, side: &str| json!({"id": id, "name": id, "side": side, "stat_mode": "fixed", "hp": 4000, "speed": 12, "attack_range": 1, "skill_cap": 5});
+        // a party character's base unit is class-derived (the world's new game checks it)
+        let hero = json!({"id": "t_hero", "name": "t_hero", "side": "party", "class_id": "drill", "level": 1});
+        let class = json!({"id": "drill", "name": "Drill", "base_stats": {"STR": 8, "DEX": 10, "INT": 6, "CONS": 30, "PERC": 10, "KNOW": 10}});
+        let catalog = json!({"skills": skills, "classes": [class], "units": [hero, unit("t_foe", "enemy")]});
+        let encounter = |id: &str, phases: Value| {
+            json!({"id": id, "name": id, "rows": vec![".".repeat(12); 9], "party": ["ash"], "enemies": ["grunt"], "total_blocks": 6, "unit_ap": 10, "max_rounds": 3, "phases": phases})
+        };
+        let phases = json!([
+            {"id": "opening", "name": "Opening", "trigger": {"kind": "round", "round": 1}, "effects": [{"type": "talk", "dialogue": "dlg_open", "speaker": "ash"}]},
+            {"id": "mid", "name": "Mid", "trigger": {"kind": "round", "round": 1, "block": 2}, "effects": [{"type": "talk", "dialogue": "dlg_mid", "speaker": "grunt"}]}
+        ]);
+        let dialogues = json!([
+            {"id": "dlg_open", "start": "a", "services": false, "speaker": "ash", "nodes": [
+                {"id": "a", "text": "Hold the line.", "next": "b"},
+                {"id": "b", "text": "Ready?", "choices": [{"text": "Ready.", "effects": [{"effect": "set_flag", "key": "ready", "value": true}]}]}]},
+            {"id": "dlg_mid", "start": "a", "services": false, "speaker": "grunt", "nodes": [{"id": "a", "text": "Again.", "end": true}]},
+            {"id": "dlg_long", "start": "a", "services": false, "speaker": "ash", "nodes": [{"id": "a", "text": LONG_LINE, "choices": [
+                {"text": "We hold the alley until the bell, whatever comes down the north road.", "effects": [{"effect": "set_flag", "key": "hold", "value": true}]},
+                {"text": "Fall back to the gate.", "effects": [{"effect": "add_flag", "key": "fallback", "delta": 1}]},
+                {"text": "Say nothing."}]}]}
+        ]);
+        let worlds = json!({"talkw": {"manifest": {"id": WORLD, "name": "Talk", "start_location": "hub", "start_party": ["ash"]}, "own": {
+            "locations": with_ids(json!([{"id": "hub", "name": "Hub"}])),
+            "characters": with_ids(json!([{"id": "ash", "name": "Ash", "role": "party", "base_unit": "t_hero"}, {"id": "grunt", "name": "Grunt", "role": "enemy", "base_unit": "t_foe"}])),
+            "dialogues": with_ids(dialogues),
+            "encounters": with_ids(json!([encounter("t_talk", phases), encounter("t_plain", json!([]))]))
+        }}});
+        Data::from_values(&catalog, &worlds, &json!({}))
+    }
+
+    /// A debug game of the scratch world (skip animations on, so no impact holds a step).
+    fn talk_cx() -> Cx {
+        let mut cx = game_cx();
+        let d = Arc::new(data());
+        let gs = emberwake_world::new_game::create_for_world(&d, WORLD, 1).expect("the scratch world starts a game");
+        cx.data = d;
+        cx.game = Some(Game::new(gs, -1, true));
+        cx.settings.v["battle_view"] = json!("flat");
+        cx.settings.v["skip_anim"] = json!(true);
+        cx
+    }
+
+    fn arena(cx: &Cx, encounter: &str) -> BattleScreen {
+        let b = BattleScreen::arena_with(cx, Some(WORLD.into()), encounter, None, "", false);
+        assert!(b.host.session.is_some(), "the battle starts: {}", b.message);
+        b
+    }
+
+    /// One tick with the step pause and the impact gap over.
+    fn tick_ready(b: &mut BattleScreen, cx: &mut Cx) {
+        b.next_at = Instant::now();
+        b.gap_until = None;
+        b.tick(cx);
+    }
+
+    fn widget(b: &BattleScreen, id: &str) -> Option<Value> {
+        b.widgets().into_iter().find(|w| w["id"] == id)
+    }
+
+    /// The unit whose hero key plays world character `id`.
+    fn unit_of(b: &BattleScreen, cx: &Cx, id: &str) -> usize {
+        let qid = qid_in(&cx.data, WORLD, id);
+        let s = b.session();
+        (0..s.w.units.len()).find(|&c| s.hero_key(c) == qid).expect("the character fights")
+    }
+
+    /// DT5, DT6, DT8, DT9, DT11: the round-1 talk opens at the first tick, before planning; while it is open no action,
+    /// key, Esc or right click sends a request and autoplay's plan waits; its Continue and reply run in the Arena's
+    /// scratch state; once it closes autoplay's plan goes out.
+    #[test]
+    fn a_round_one_talk_opens_before_planning_and_holds_every_request() {
+        let (mut cx, mut g) = (talk_cx(), gfx());
+        let mut b = arena(&cx, "t_talk");
+        assert_eq!(b.session().talks().len(), 1, "round 1's talk is cued at the start");
+        assert!(b.planning() && b.state(&cx).get("talk").is_none(), "nothing open before the first tick");
+        b.tick(&mut cx);
+        let st = b.state(&cx);
+        let qid = qid_in(&cx.data, WORLD, "ash");
+        assert!(!qid.is_empty());
+        let read = (st["talk"]["dialogue"].clone(), st["talk"]["node"].clone(), st["talk"]["speaker"].clone(), st["talk"]["text"].clone());
+        assert_eq!(read, (json!("dlg_open"), json!("a"), json!(qid), json!("Hold the line.")));
+        assert_eq!(st["talk"]["replies"], json!([{"id": "dialogue.continue", "text": "Continue", "locked": false}]));
+        assert_eq!(st["talk"]["speaker_unit"], json!(unit_of(&b, &cx, "ash")), "Ash's token wears the ring");
+        let sent = b.host.history.len();
+        for a in [Action::Confirm, Action::Step, Action::Autoplay, Action::Undo, Action::ToggleLog, Action::Leave] {
+            b.act(&mut cx, a);
+        }
+        for k in [Key::Char('a'), Key::Char('z'), Key::Char('l'), Key::Char('r')] {
+            b.key(&mut cx, k);
+        }
+        b.escape(&mut cx);
+        b.back(&mut cx);
+        assert_eq!(b.host.history.len(), sent, "no request while the talk is open");
+        assert!(!b.auto && !b.show_log && b.planning() && cx.nav.is_empty(), "every battle action and key is swallowed");
+        frame(&mut b, &mut cx, &mut g, 1.0);
+        for id in ["dialogue", "talk.backdrop", "dialogue.continue"] {
+            assert!(widget(&b, id).is_some(), "{id} drawn");
+        }
+        // autoplay switched on (as the A key does outside a talk) waits for the talk
+        b.run(&mut cx, Action::Autoplay);
+        assert!(b.auto && b.host.history.len() == sent && b.planning(), "autoplay's plan waits");
+        b.click_id(&mut cx, "dialogue.continue").expect("Continue clicks");
+        assert_eq!(b.state(&cx)["talk"]["node"], json!("b"));
+        b.key(&mut cx, Key::Char('1'));
+        assert!(b.talk.is_none() && b.state(&cx).get("talk").is_none(), "the reply ends the talk");
+        assert_eq!(b.talk_gs.as_ref().and_then(|gs| gs.flags.get("ready")), Some(&json!(true)), "the flag lands in the Arena's scratch state");
+        assert!(!cx.gs().flags.contains_key("ready"), "the game in play is not the Arena's");
+        b.tick(&mut cx);
+        assert!(b.host.history.len() > sent && b.session().plan_confirmed, "autoplay's plan goes out once the talk closed");
+    }
+
+    /// DT5, DT10: the block-2 talk opens during the playback and holds it (no step, the block stays); Continue closes it
+    /// and the playback steps on once `impact_gap_ms` is over. DT8: the Grunt's token is the speaker's.
+    #[test]
+    fn the_playback_waits_for_a_block_talk_and_resumes_after_the_gap() {
+        let mut cx = talk_cx();
+        let mut b = arena(&cx, "t_talk");
+        b.tick(&mut cx);
+        b.run(&mut cx, Action::Talk(TalkAct::Advance));
+        b.run(&mut cx, Action::Talk(TalkAct::Choose(0)));
+        assert!(b.talk.is_none());
+        b.act(&mut cx, Action::Confirm);
+        assert!(b.playing, "{}", b.message);
+        for _ in 0..40 {
+            tick_ready(&mut b, &mut cx);
+            if b.talk.is_some() {
+                break;
+            }
+        }
+        assert!(b.talk.is_some(), "the block talk opens during the playback");
+        let cue = b.session().talks()[1].clone();
+        assert_eq!((cue.dialogue.as_str(), cue.round, cue.block), ("dlg_mid", 1, 2));
+        assert_eq!(b.state(&cx)["talk"]["speaker_unit"], json!(unit_of(&b, &cx, "grunt")), "an enemy character speaks from its token");
+        let at = |b: &BattleScreen| (b.host.history.len(), b.session().current_round, b.session().current_block);
+        let held = at(&b);
+        for _ in 0..5 {
+            tick_ready(&mut b, &mut cx);
+        }
+        assert_eq!(at(&b), held, "no step while it is open");
+        assert!(b.playing, "the playback is held, not stopped");
+        b.key(&mut cx, Key::Enter);
+        assert!(b.talk.is_none(), "Continue on an end node closes it");
+        if cx.tuning.value.impact_gap_ms > 0 {
+            assert!(b.gap_until.is_some_and(|g| g > Instant::now()), "the gap starts at the close");
+            b.next_at = Instant::now();
+            b.tick(&mut cx);
+            assert_eq!(b.host.history.len(), held.0, "not before the gap is over");
+        }
+        tick_ready(&mut b, &mut cx);
+        assert_eq!(b.host.history.len(), held.0 + 1, "the playback steps on");
+    }
+
+    /// DT6, DT8, DT9: a world fight's talk runs in the game in play: the reply's flag is the game's; the member who plays
+    /// the speaker wears the ring.
+    #[test]
+    fn a_world_fight_talk_runs_in_the_game_in_play() {
+        let mut cx = talk_cx();
+        let member = cx.gs().party.active_members().first().map(|m| m.id.clone()).expect("a party member");
+        let fight = json::dict(&json!({"encounter": "t_talk"})).clone();
+        let mut b = BattleScreen::world(&mut cx, &fight, "map").expect("the world fight starts");
+        b.tick(&mut cx);
+        let st = b.state(&cx);
+        assert_eq!(st["talk"]["dialogue"], json!("dlg_open"));
+        let s = b.session();
+        let hero = (0..s.w.units.len()).find(|&c| s.hero_key(c) == member).expect("the member fights");
+        assert_eq!(st["talk"]["speaker_unit"], json!(hero), "the member who plays Ash wears the ring");
+        b.run(&mut cx, Action::Talk(TalkAct::Advance));
+        b.run(&mut cx, Action::Talk(TalkAct::Choose(0)));
+        assert!(b.talk.is_none() && b.talk_gs.is_none());
+        assert_eq!(cx.gs().flags.get("ready"), Some(&json!(true)), "the flag is the game's");
+    }
+
+    /// Every battle without a talk: no `talk` key, no veil or box, and autoplay plans at once.
+    #[test]
+    fn without_a_talk_nothing_changes() {
+        let (mut cx, mut g) = (talk_cx(), gfx());
+        let mut b = arena(&cx, "t_plain");
+        b.tick(&mut cx);
+        frame(&mut b, &mut cx, &mut g, 1.0);
+        assert!(b.talk.is_none() && b.state(&cx).get("talk").is_none() && widget(&b, "talk.backdrop").is_none() && widget(&b, "dialogue").is_none());
+        let sent = b.host.history.len();
+        b.act(&mut cx, Action::Autoplay);
+        assert!(b.host.history.len() > sent && b.playing, "autoplay plans and confirms at once");
+    }
+
+    /// DT7 and the text audit (section 6): the box is the region map's (400 wide times the text size, centred, 6 above
+    /// the bottom) over a veil that darkens the board, and its texts read clean (no cut, edge, spill or overlap) at the
+    /// four text sizes, with a long line and three replies.
+    #[test]
+    fn the_battle_talk_box_reads_clean_at_every_text_size() {
+        let (mut cx, mut g) = (talk_cx(), gfx());
+        let mut b = arena(&cx, "t_plain");
+        assert!(b.preview_talk(&mut cx, WORLD, "dlg_long", ""), "{}", b.message);
+        let probe = |g: &Gfx| {
+            let i = (((GRID_Y + 40) * g.canvas.w + GRID_X + 40) * 4) as usize;
+            [g.canvas.px[i] as u32, g.canvas.px[i + 1] as u32, g.canvas.px[i + 2] as u32]
+        };
+        for (size, scale) in TEXT_SIZES {
+            // the frame without the talk first: the talk's texts are the ones drawn after it
+            let open = b.talk.take();
+            let base = frame(&mut b, &mut cx, &mut g, scale as f32).len();
+            let bare = probe(&g);
+            b.talk = open;
+            let recs = frame(&mut b, &mut cx, &mut g, scale as f32);
+            let veiled = probe(&g);
+            assert!(veiled.iter().zip(bare.iter()).all(|(v, o)| v <= o) && veiled != bare, "{size}: the veil darkens the board ({bare:?} to {veiled:?})");
+            let (x, y, w, h) = rect(&widget(&b, "dialogue").expect("the box"));
+            assert_eq!(w, ((W - 40) as i64).min((talk::TALK_W as f64 * scale).round() as i64), "{size}: width");
+            assert!((x - (W as i64 - x - w)).abs() <= 1 && H as i64 - (y + h) == talk::TALK_GAP as i64, "{size}: centred at the bottom");
+            let talk_recs: Vec<aegis_ui::painter::TextRec> = recs[base..].to_vec();
+            assert!(talk_recs.iter().any(|r| !r.text.is_empty() && LONG_LINE.starts_with(r.text.as_str())), "{size}: the line is drawn");
+            let boxes: Vec<(String, f32, f32, f32, f32)> = b
+                .widgets()
+                .iter()
+                .filter(|wd| {
+                    let id = wd["id"].as_str().unwrap_or("");
+                    id == "dialogue" || id.starts_with("dialogue.") || id.starts_with("choice.")
+                })
+                .map(|wd| {
+                    let (bx, by, bw, bh) = rect(wd);
+                    (s(json::dict(wd), "id"), bx as f32, by as f32, bw as f32, bh as f32)
+                })
+                .collect();
+            let v = aegis_ui::text_audit::issues(&talk_recs, W as f32, H as f32, &boxes);
+            let counts: Vec<i64> = ["cut", "edge", "spill", "overlap"].iter().map(|k| v["counts"][*k].as_i64().unwrap_or(-1)).collect();
+            assert_eq!(counts, [0, 0, 0, 0], "{size}: {v}");
+        }
+        // the replies run in the scratch state: add_flag counts up
+        b.run(&mut cx, Action::Talk(TalkAct::Choose(1)));
+        assert_eq!(b.talk_gs.as_ref().map(|gs| json::i(&gs.flags, "fallback", 0)), Some(1));
     }
 }

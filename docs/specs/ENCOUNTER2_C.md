@@ -23,6 +23,21 @@ a downed / broken unit name may also be a guest ref. The loader parity needed no
 were in HELP_CHANGED already; only its comment names C1); `script` joins AFTER_GODOT with C3. Tests:
 `rpgkit_battle/tests/battle_talk.rs`, `rpgkit_content/tests/battle_talk_checks.rs`, `rpgkit_host/tests/battle_talk.rs`.
 
+As built, C2 (2026-11-01; section 3.3): `emberwake_gui/src/talk.rs` holds the box (`talk_layout`, `draw_talk` over a
+given game state with an action map `TalkAct`, `talk_key`, `follow_node`, `talk_state`; the region map's look, ids and
+tests unchanged, its `draw_talk` a wrapper). `battle.rs`: `Action::Talk`, `BattleTalk`, `talk_tick` (each new cue once
+`impacts_done`, i.e. after its step's impacts and their gap), `open_talk`, `talk_reply`, `auto_plan` (autoplay's
+preset and Confirm held while a talk is open or due, sent when the last closes), `speaker_unit` (a unit on the field
+whose `hero_key` is the speaker's qualified id, resolves to it, or is the member who plays it), `TALK_VEIL` (alpha 89),
+`preview_talk` (the UI Gallery entry "Battle talk"). Choices the spec left open: the agent link's `talk` also carries
+`portraits` (the box's portrait state) and `speaker_unit`; `replies` are the rows as drawn (`{id, text, locked}`,
+Continue included); the box pushes a `talk.backdrop` widget so a board hover card does not show through it; Esc and
+right click are swallowed too; agent-link host requests (`command`) are not blocked (DT3: the host never waits); the
+Arena's scratch state is made at the first talk and dropped at the next battle start (Restart included); a playback
+(viewing or take-over) opens the replayed session's cues from the first. Tests: `battle.rs` `talk_screen_tests` (on a
+scratch world: DT5, DT6, DT8-DT11 and the text audit at the four sizes), `gallery.rs`
+`the_battle_talk_entry_shows_a_talk_over_the_battle`.
+
 History: `docs/HISTORY.md` row "Hand-scripted combat layer (10-block rounds, scripted commands)" (deprecated before
 2026-10: "Scripted battles could not express planning, AP and AI; double maintenance"). That reason does not hold here:
 a scripted round is not a second combat layer. It is data that feeds the same picks the player makes (INPUT1's `pick`)

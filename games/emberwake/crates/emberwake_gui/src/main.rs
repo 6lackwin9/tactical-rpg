@@ -27,6 +27,7 @@ mod screens;
 mod shop;
 mod stage;
 mod story;
+mod talk;
 mod tuning;
 mod worldmap;
 
