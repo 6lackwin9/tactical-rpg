@@ -28,7 +28,7 @@ The rules behind every player screen come from `emberwake_world`, checked agains
 | 12-15 | Character: Stats, Level up, Skills, Gear | `party_model.gd`, `stats_model.gd`, `level_up_model.gd`, `loadout_model.gd`, `gear_model.gd` | `party.rs` `Character` | done: the member's 48 px portrait at the frame's top-left, left of the member picker (PORTRAITFX1-R: `portraits::Faces` on surface `roster`: rim flicker and blinks, breath from 96 device px, the state rows of the member's look, e.g. `wounded`; Q / E draw the next member's; agent link `character.portrait`, state `portraits`); active toggle (ROSTER1-U: "Bunks used/cap" at its right only in a world with a `roster` block; a wounded member's "Wounded HP n / cut" after the level line, with a hover), stat table and derived block, level-up draft with before / after and the permanent-spend question, loadout slots, gear and battle pouch drafts, discard questions; the Gear tab in three columns (GEARUI1: stats with this gear and the green / red change a hovered or dragged item would make, equipped slots with the pouch under them, the party stash; drag and drop both ways, clicks kept, item descriptions with their tokens filled; the stash is sorted by item name, Godot sorted by id; gear the class has no training in is refused as in Godot); the Skills tab on fixed slots (SKILLUI1-U: five class and three extra slots, drag and drop between the list and the slots, right click takes a skill out, Clear all, < > rank arrows with rank and AP hover texts) |
 | 16 | Quest journal | `journal_model.gd`, `journal_view.gd` | `hub.rs` `Journal` | done: groups, resolved text, progress, current step, rewards, loot choices |
 | 18 | Battle results | `battle_results_model.gd`, `battle_results_view.gd` | `hub.rs` `Results` | done: headline and note, the stay-behind lines (ENCOUNTER2 W4), the party lines (ROSTER1-U: "`{name}` was captured." / "died." per departure, "Keepsake: `{item}`, to the stash.", "Wounded until the next rest: ..."), XP rows with bars, gold / loot / quest lines, level-up prompt; battle report table not yet |
-| 23 | Battle | `ui/combat/*`, `scenes/combat_arena.gd` | `battle.rs` | done: arena (catalog or world encounter) and world battles with the saved party at stored HP, HP write-back, runner settlement; enemy tells while planning (PORT-INTENT: kind chips and arrows on the grid, "Next:" on the hostile cards, Intent, revealed plan and forecast in the hover card; I toggles, the Show enemy tells setting); the timeline's masked enemy banner is not drawn (the engine's strip shows the selected hero only); units animate (SPRITE1-U): idle, walk while sliding to the new tile, the skill's attack clip, hurt or hurt_guarded, death (held, then the x marker), defend then idle_guarded; each stands on a flat ellipse in its side's colour (ally blue, foe red), the selected hero has a 1px gold outline around its sprite and a hovered unit a faint white one (no disc, no gold cell square); units face their target (FACE1): a unit turns toward the target or area aim of the action it resolves and toward the x of its step (a vertical step or a target in its column keeps the facing); while planning it shows its planned (hero: first targeted step) or intended (enemy tell, only while the tells are shown) target; a battle starts with the party facing right and the foes left; the frame and its outline are mirrored while facing left; animation speed and skip apply (skip ends in the same facing); bodiless units keep the letter panel; a phase talk opens the region map's talk box over a 35 % veil (ENCOUNTER2-C2, section "Battle talk" below); timeline battles take the one-flow input with selection and inspect (INPUT1-U: a right click inspects any unit and pins the threat intel panel; section "One-flow input" below) and the AP pip gauge beside the strip (INPUT1-AP) |
+| 23 | Battle | `ui/combat/*`, `scenes/combat_arena.gd` | `battle.rs` | done: arena (catalog or world encounter) and world battles with the saved party at stored HP, HP write-back, runner settlement; enemy tells while planning (PORT-INTENT: kind chips and arrows on the grid, "Next:" on the hostile cards, Intent, revealed plan and forecast in the hover card; I toggles, the Show enemy tells setting); the timeline's masked enemy banner is not drawn (the engine's strip shows the selected hero only); units animate (SPRITE1-U): idle, walk while sliding to the new tile, the skill's attack clip, hurt or hurt_guarded, death (held, then the x marker), defend then idle_guarded; each stands on a flat ellipse in its side's colour (ally blue, foe red), the selected hero has a 1px gold outline around its sprite and a hovered unit a faint white one (no disc, no gold cell square); units face their target (FACE1): a unit turns toward the target or area aim of the action it resolves and toward the x of its step (a vertical step or a target in its column keeps the facing); while planning it shows its planned (hero: first targeted step) or intended (enemy tell, only while the tells are shown) target; a battle starts with the party facing right and the foes left; the frame and its outline are mirrored while facing left; animation speed and skip apply (skip ends in the same facing); bodiless units keep the letter panel; a phase talk opens the region map's talk box over a 35 % veil (ENCOUNTER2-C2, section "Battle talk" below); timeline battles take the one-flow input with selection and inspect (INPUT1-U: a right click inspects any unit and pins the threat intel panel; section "One-flow input" below) and the AP pip gauge beside the strip (INPUT1-AP); a calmer board: one quiet target arrow per unit while planning, bars for the units in focus, the first-move chip behind a setting (VISCLAR1-A, section "Calmer board" below) |
 
 ## Dev tools (dev-only, never in the real game)
 
@@ -177,7 +177,8 @@ The rules behind every player screen come from `emberwake_world`, checked agains
   unit (token or card, either side, the selected hero too) inspects it and changes nothing else; elsewhere it undoes
   the last pick; with the menu open it only closes the menu. The inspected unit pins the threat intel panel, headed
   "Inspecting `<name>` (Esc clears)", until another inspect, Esc or the next round (playback keeps it), and its
-  revealed moves show as a hovered enemy's do. An enemy shows only what the party knows: its round intent and target,
+  target arrow shows beside the selected hero's (VISCLAR1-A; before it, its revealed moves showed as a hovered enemy's
+  did). An enemy shows only what the party knows: its round intent and target,
   HP, poise, statuses, reach, facing ("Facing west"), Hidden, the tell's first action and its forecast only while the
   tells show (I), its plan only when revealed, the selected hero's planned hits on it; never an unrevealed plan's
   skills (the hover card's classic "Next:" line is left out). A party member adds its AP numbers ("AP 10 of 10",
@@ -192,3 +193,31 @@ The rules behind every player screen come from `emberwake_world`, checked agains
 - Agent link: `state.picks` [{unit, picks}], `state.deferred`, `state.player_target`, `state.inspect` (unit or null),
   `state.ap_gauge` (pips, red, label), the menu as `popup` (rows `popup.<k>`), `overlay.positions` while an Engage row
   is hovered; requests `pick`, `unpick`, `clear`, `autofill`.
+
+## Calmer board (VISCLAR1-A, timeline battles)
+
+The round intent's board only (classic and a timeline battle without `round_intent` keep today's board).
+
+- Target arrows: each unit draws at most one dashed arrow (4 px on, 3 off, a 4 px head, alpha 90; party gold, enemy
+  red; Flat 1 px wide, Stage 1.5 px on the ground under the tokens) from its tile to its round target (an enemy without
+  a round intent: its tell's target); a unit or tile target ends there, a self target at the end of its move (no move:
+  no arrow). A move leg bends it where the unit's moves before its first command end (its walks, then the carried move
+  of its first command): a hero's always (group `moves`), an enemy's only when its plan is revealed (group `walks`);
+  an unrevealed enemy's goes straight. By default only the selected hero's arrow and the inspected unit's show; hold
+  Alt for every unit's; an enemy's only while the tells show (I). Arrows draw only while the party plans.
+- They replace the red tell arrows, the gold planned-move lines (walk, carried, after-move) and the revealed enemy
+  walks (also the hovered enemy's walk above the tokens). The destination plate of each planned move stays while
+  planning (an after-move shows only as its plate); during playback no arrow, plate or area tell plate draws (the arena
+  telegraph stays). The facing chevrons (pale yellow) and the gold target ring stay.
+- Bars in focus: the HP and poise bars under the tokens draw for the selected hero, its round target, the unit under
+  the mouse (token or card) and the inspected unit; hold Alt for every unit's. The party and hostile cards keep theirs.
+- Settings, Battle: two new overlay groups, off by default: "Enemy first move" (`first_move`: the tell's kind chip on
+  each enemy token, a debug view; the intent glyph and the hostile card's first-action line stay) and "All bars"
+  (`all_bars`: every unit's token bars, today's look). The rows sit at a 15 px pitch so the debug row fits; a debug
+  build adds "Debug" with "Party foresight off" (`settings.debug.party_foresight_off`, key
+  `debug_party_foresight_off`): every plan a party foresight passive reveals (Hawk Eye) draws as unrevealed on the
+  board, the hostile cards, the hover cards and the intel panel, and the arrows' move legs go straight; enrage and the
+  world's plan reveal still show. Release builds have no row and never read the key. Controls: "Every bar and arrow
+  (timeline): Hold Alt".
+- Agent link: `overlay.arrows` [{unit, points [[x, y], ...], alpha}] as last drawn (an unrevealed enemy's has two
+  points), `state.focus` [units] (the focus set as last drawn); `overlay.revealed_moves` is gone.

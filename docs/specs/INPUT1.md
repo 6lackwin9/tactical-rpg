@@ -356,7 +356,8 @@ inspect panel's text audit), kit `rpgkit_battle/tests/picks.rs` (HK3, the round 
   lines while planning (the gauge's "1 pip = ..." line waits for INPUT1-AP), "Picks: ..." and one line a planned entry
   ("B2-5 Heavy Cleave on Wolf", ", auto-filled" on a ghost; once confirmed its committed actions). State key `inspect`.
 - AR3's inspected arrow (Q15): until VISCLAR1-A draws the one arrow, the inspected unit's revealed moves (the `walks`
-  group, also above the tokens) show as the hovered enemy's do when no enemy is hovered.
+  group, also above the tokens) show as the hovered enemy's do when no enemy is hovered. (Done 2026-11-01: VISCLAR1-A
+  draws the inspected unit's target arrow, section 10's as-built block.)
 - Kit: `round_intent_plan::set_round` / `preview_round` (a `RoundSet` of intent, target, kind, opener; `change_intent`,
   also behind `Session::set_round_intent`) carry the host's `round_intent` (through `Session::set_round`, atomic) and the
   screen's waiting ghost (`battle.rs` `Deferred`), so the preview and Confirm share one source; `hotkey_target` and
@@ -534,6 +535,34 @@ selected hero's; with Alt one per unit with a target; an unrevealed enemy's entr
 revealed one may have three; every arrow's alpha is 90; during playback `overlay.arrows` is empty and no destination
 plate draws; `party_foresight_off(settings_on, false)` is false; with the debug toggle on a Hawk Eye reveal leaves
 the hostile card's badge row unfilled.
+
+As built (VISCLAR1-A, 2026-11-01: game `battle.rs`, `menus.rs`, `screens.rs`; tests `battle.rs` `visclar_tests`, the
+adapted `tells_tests::the_plan_reveal_shows_every_enemy_plan` and `slice5_tests::each_overlay_group_has_its_flag`, the
+widened `hooks_audit_tests::the_overlay_settings_fit_at_every_text_size`; goldens and parity unchanged):
+
+- `OVERLAY_GROUPS` rows are (id, label, help, default); `first_move` sits after `glyphs`, `all_bars` after `poise`;
+  `overlay_default(id)` is VC6's per-group default, read by `Layers::of`, the Settings checkboxes and
+  `default_settings`. The `moves` and `walks` help texts now name the move leg.
+- AR1-AR3: `arrows_of(s, tells, rounds, layers, show_tells)` builds every unit's arrow while the party plans
+  (`Overlay.arrows`); `Overlay::shown(layers, sel, inspect, alt)` keeps the selected and inspected unit's (Alt: all).
+  A party member's target is its `round_states` target (else its record's); its move leg (`party_leg`) ends after its
+  walks before its first command, at the tile that command strikes from (the carried Engage move; Rest is no command).
+  An enemy's leg (`enemy_leg`) follows its scheduled walks (`command::walk_preview`) up to its first command and a
+  carried Engage dash of that command. A leg that ends on the target tile is the arrow's end (two points). The arrows'
+  first leg leaves the foot ring and the last stops short of the target's (`stage::ground_arrow`); the 4/3 dash runs on
+  over the corner (`draw_arrow_line`, the game's own dash: the engine line dashes on = off).
+- AR5, AR6: `Overlay.revealed_moves`, `draw_revealed_move` and `draw_focus_moves` are gone (agent link
+  `overlay.revealed_moves` too); `draw_overlay` draws the moves' destination plates only (each kind, an after-move
+  included, Q14), planning only as before; the classic `tuning.intent_arrows` lines draw only in classic. The Stage's
+  area tell plates are planning-only already (the tells are empty outside planning).
+- VC2: `focus_set` (selected member, its unit round target, the hovered unit: the Stage's hovered token or card, the
+  Flat board's hovered tile or card, the inspected unit) and `bars_shown`; state `focus` is the set as last drawn and
+  `overlay.arrows` the arrows as last drawn (both only under the round intent).
+- VC4, VC5: `seen_intents(w, records, off)` masks the tells and round records the screen draws (and the planning poses'
+  revealed list, `Tokens.foresight_off`): a record with readers loses them and, unless enraged or under the world's
+  `plan_reveal`, its reveal and plan lines. The Settings row: "Debug" heading and the checkbox in the second column under
+  the groups (the Battle tab's rows at a 15 px pitch so 24 groups and the row fit at the four text sizes).
+- The Controls line "Every revealed enemy move (timeline): Hold Alt" reads "Every bar and arrow (timeline): Hold Alt".
 
 ## 11. The Maneuver rework (INPUT1-M)
 

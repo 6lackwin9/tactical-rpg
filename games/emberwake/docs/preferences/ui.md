@@ -51,3 +51,11 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
 - While the fight logic is built, every battle overlay, badge and readout stays (tells, intents, impact badges, reach band,
   facing chevrons, revealed walks, status looks): they are good to have for debugging. Once the fight logic is built, a
   visual clarity pass decides what the actual game view keeps; the rest stays reachable for debugging (VISCLAR1).
+- Slice A's outcome (VISCLAR1-A, 2026-11-01; decisions "Combat input feedback" and "INPUT1 answers", parts 1 and 4):
+  every overlay group stays on by default but two new ones, off: `first_move` (the enemy's first-move kind chip on its
+  token, a debug view) and `all_bars` (every unit's token bars; by default only the selected hero's, its target's, the
+  hovered unit's and the inspected unit's; Alt shows all). One quiet dashed target arrow per unit (alpha 90) replaces
+  the tell arrows, planned-move lines and revealed walks, the selected and inspected unit's by default, all with Alt,
+  only while planning; `moves` and `walks` now switch its move leg. Debug builds add "Party foresight off" at the foot
+  of the Battle tab. The intent glyphs, the destination plates (planning), the facing chevrons and the arena telegraph
+  stay.

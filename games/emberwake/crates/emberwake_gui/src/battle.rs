@@ -782,6 +782,8 @@ struct Tokens {
     /// `BattleScreen::push_bursts`) and the wall clock's start for the slot cycling (S7: wall ms).
     bursts: Vec<(usize, &'static str, u64)>,
     epoch: Option<Instant>,
+    /// VISCLAR1 VC4: the debug Party foresight off at the last catch-up (a foresight reveal poses as unrevealed).
+    foresight_off: bool,
 }
 
 impl Tokens {
@@ -836,7 +838,7 @@ impl Tokens {
         let struck = popped_act.and_then(|(idx, a)| self.anims[a.unit].windup.filter(|w| w.round == s.current_round && w.idx == idx).map(|_| a.unit));
         // WINDUP1 5: the planning poses (none once the plan is confirmed)
         let planning = s.is_planning();
-        let revealed: Vec<usize> = if planning && tells { s.enemy_intents().iter().filter(|r| r.revealed).map(|r| r.unit).collect() } else { Vec::new() };
+        let revealed: Vec<usize> = if planning && tells { seen_intents(&s.w, s.enemy_intents(), self.foresight_off).iter().filter(|r| r.revealed).map(|r| r.unit).collect() } else { Vec::new() };
         let block = windup_block(s);
         for (i, u) in s.w.units.iter().enumerate() {
             let pos = s.w.grid.pos(i);
@@ -1236,6 +1238,10 @@ pub struct BattleScreen {
     deferred_view: Option<(u64, usize, Option<(World, emberwake_battle::plan::Plan)>)>,
     /// MR13: the position tiles the last frame marked (the agent link's `overlay.positions`).
     positions_shown: Vec<(V2, bool)>,
+    /// VISCLAR1 AR3, VC2: the target arrows and the focus set the last frame drew (the agent link's `overlay.arrows`
+    /// and `focus`).
+    arrows_shown: Vec<Arrow>,
+    focus_shown: Vec<usize>,
     /// TEXTFIT1: the menus' row pitch at the last frame's text size (11 at Normal).
     menu_row: i32,
     /// INPUT1 SL2, SL5, SL7, IS1: the inspected unit and the round it was inspected in (the intel panel is pinned on it
@@ -1334,6 +1340,8 @@ impl BattleScreen {
             preview: None,
             deferred_view: None,
             positions_shown: Vec::new(),
+            arrows_shown: Vec::new(),
+            focus_shown: Vec::new(),
             menu_row: 11,
             inspect: None,
             ap_anim: None,
@@ -1943,6 +1951,7 @@ impl BattleScreen {
     fn sync_anims_deferred(&mut self, cx: &Cx, defer: bool) -> Vec<Shown> {
         let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
         self.tokens.still = cx.settings.reduce_motion();
+        self.tokens.foresight_off = party_foresight_off(&cx.settings.v, cfg!(debug_assertions));
         match self.host.session.as_ref() {
             Some(s) => {
                 let tells = cx.settings.v["show_tells"].as_bool().unwrap_or(true);
@@ -3136,7 +3145,10 @@ impl Screen<GameCx> for BattleScreen {
         // RULESET1-U slice 3: the board overlays under the round intent (classic: no key)
         if let Some(mut o) = self.host.session.as_ref().and_then(|s| overlay_of(s, self.selected.filter(|u| s.w.allies.contains(u)), s.phase == Phase::Planning && !s.plan_confirmed)) {
             o.positions = self.positions_shown.clone();
+            o.arrows = self.arrows_shown.clone();
             out["overlay"] = overlay_json(&o);
+            // VISCLAR1 VC2: the units whose token bars the last frame drew by default
+            out["focus"] = json!(self.focus_shown);
         }
         // ENCOUNTER2-C DT11: the open talk (key only while one is open), its portrait as drawn and the speaker's token
         if let (Some(t), Some(gs)) = (self.talk.as_ref(), self.talk_state_of(cx)) {
@@ -3585,11 +3597,13 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     // INPUT1 IS1: the inspected unit (the intel panel is pinned on it; its revealed moves show, AR3)
     let pinned = g.inspected();
     // INTENT1: the enemy tells while planning; their chips and arrows on the grid follow the Show enemy tells setting (I).
-    let tells: Vec<Intent> = s.enemy_intents();
+    // VISCLAR1 VC4: with the debug Party foresight off a foresight reveal reads unrevealed everywhere on the screen
+    let foresight_off = party_foresight_off(&cx.settings.v, cfg!(debug_assertions));
+    let tells: Vec<Intent> = seen_intents(w, s.enemy_intents(), foresight_off);
     let show_tells = cx.settings.v["show_tells"].as_bool().unwrap_or(true);
     // RULESET1-U slice 4 (UI5, V5): every unit's round intent record, both sides, planning and playback (empty without
     // the rule plan_badges: classic)
-    let rounds: Vec<Intent> = s.round_intents();
+    let rounds: Vec<Intent> = seen_intents(w, s.round_intents(), foresight_off);
     // RULESET1-U slice 5: each overlay group behind its flag (settings `battle_overlays`; all on by default)
     let layers = Layers::of(&cx.settings.v["battle_overlays"]);
     // HOOKS1-UI slice 1: the ground hazards and the arena telegraph (empty in classic)
@@ -4090,17 +4104,22 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     };
     if let Some(o) = overlay.as_mut() {
         o.positions = marked.clone();
+        // VISCLAR1 AR1-AR3: every unit's target arrow; the board draws the selected and inspected unit's (Alt: all)
+        o.arrows = arrows_of(s, &tells, &rounds, &layers, show_tells);
+        g.arrows_shown = o.shown(&layers, sel, pinned, cx.held.alt).arrows;
+    } else {
+        g.arrows_shown = Vec::new();
     }
     g.positions_shown = marked;
     let push_list: Vec<emberwake_battle::forced::Forecast> = pushes.iter().flatten().cloned().collect();
-    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some() || talk_view.is_some(), anim_ms: g.clock.ms, sel, talker, planning, tells: &tells, show_tells, card_hover, inspect: pinned, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list, hold: hold.as_ref() };
-    let board_hover = match view {
-        View::Stage => draw_stage(board, &mut ui, cx, &tuning, now),
-        View::Flat => {
-            draw_flat(board, &mut ui, cx, &tuning, now);
-            None
-        }
+    // VC2: the focus set but the unit under the mouse (each view adds its own hover)
+    let focus = focus_set(w, sel, None, pinned);
+    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some() || talk_view.is_some(), anim_ms: g.clock.ms, sel, talker, planning, tells: &tells, show_tells, card_hover, inspect: pinned, focus: &focus, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list, hold: hold.as_ref() };
+    let (board_hover, flat_hover) = match view {
+        View::Stage => (draw_stage(board, &mut ui, cx, &tuning, now), None),
+        View::Flat => (None, draw_flat(board, &mut ui, cx, &tuning, now)),
     };
+    g.focus_shown = focus_set(w, sel, board_hover.or(flat_hover).or(card_hover), pinned);
     // ENCOUNTER2 H1: the hold pick over the board while round 1 waits for it
     if planning && s.needs_stay_pick() {
         draw_hold_pick(&mut ui, s);
@@ -4401,50 +4420,61 @@ struct Overlay {
     facings: Vec<(V2, V2)>,
     /// GD5: the tiles of stealthed units, and whether each is hidden now (moved this round). Planning and playback.
     veils: Vec<(V2, bool)>,
-    /// RULESET1 V2 (slices 4, 5): the moves of every revealed enemy (foresight, enrage, the battle's plan reveal) in
-    /// its plan's order: its walks as the kit would walk them now (`command::walk_preview`: they stop where the walk
-    /// would), a carried Engage dash, a Disengage retreat or jump; (enemy, tiles from where it starts, kind). The board
-    /// draws one only for the hovered enemy or while Alt is held (user 2026-10-30). Planning only.
-    revealed_moves: Vec<(usize, Vec<V2>, MoveKind)>,
+    /// VISCLAR1 AR1-AR6 (they replace RULESET1-U's tell arrows, planned-move lines and revealed enemy walks): every
+    /// unit's one target arrow (`arrows_of`; the screen fills it, `shown` keeps the selected unit's and the inspected
+    /// unit's, or all while Alt is held). Planning only.
+    arrows: Vec<Arrow>,
     /// INPUT1 MR13: while a Maneuver Engage row of the skill menu is hovered, its target's open position tiles (true:
     /// the preferred tier); none when the flank is protected. Planning only, layer `moves`.
     positions: Vec<(V2, bool)>,
 }
 
-/// RULESET1-U slice 6: the overlay groups as the Settings Battle tab lists them: (id, label, what it shows).
-pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str); 22] = [
-    ("band", "Reach band", "The selected hero's attack reach around the tile it strikes from (Assault, Maneuver)."),
-    ("front", "Maneuver front", "The target's front, where an Engage never stands (Maneuver)."),
-    ("valid", "Valid targets", "Rings on the units a click would make the round target."),
-    ("veils", "Stealth veils", "A veil under each stealthed unit, filled once it is hidden."),
-    ("moves", "Planned moves", "The selected hero's moves: a walk, a carried move, a step after its commands."),
-    ("target", "Target ring", "The ring on the selected hero's round target."),
-    ("facings", "Enemy facings", "A chevron where each enemy faces (a flank comes from beside or behind)."),
-    ("walks", "Revealed enemy moves", "A revealed enemy's moves for the enemy under the mouse (hold Alt: all)."),
-    ("glyphs", "Intent glyphs", "The round intent's plate on the strip, the cards and the tokens."),
-    ("badges", "Impact badges", "The row of blocks on each hostile card with its impacts."),
-    ("poise", "Poise bars", "The poise bars under the HP bars."),
-    ("breaks", "Breaks", "BREAK over a broken unit and on its cancelled strip span."),
-    ("parts", "Wind-up and impact", "The strip's wind-up, impact and recovery shading."),
-    ("forecasts", "Hit forecasts", "Stagger and break forecasts in the strip tips and the intel panel."),
-    ("summary", "Round summary", "The round summary in the message bar at round end."),
+/// RULESET1-U slice 6: the overlay groups as the Settings Battle tab lists them: (id, label, what it shows, default);
+/// VISCLAR1 VC6: every group on by default but `first_move` and `all_bars`.
+pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str, bool); 24] = [
+    ("band", "Reach band", "The selected hero's attack reach around the tile it strikes from (Assault, Maneuver).", true),
+    ("front", "Maneuver front", "The target's front, where an Engage never stands (Maneuver).", true),
+    ("valid", "Valid targets", "Rings on the units a click would make the round target.", true),
+    ("veils", "Stealth veils", "A veil under each stealthed unit, filled once it is hidden.", true),
+    // VISCLAR1 AR5: the moves now draw as destination plates and the move leg of the party's target arrows
+    ("moves", "Planned moves", "A plate where each of the selected hero's moves ends, and the move leg of the party's target arrows (off: straight).", true),
+    ("target", "Target ring", "The ring on the selected hero's round target.", true),
+    ("facings", "Enemy facings", "A chevron where each enemy faces (a flank comes from beside or behind).", true),
+    // VISCLAR1 AR5: a revealed enemy's moves are its target arrow's move leg
+    ("walks", "Revealed enemy moves", "The move leg of a revealed enemy's target arrow (off: the arrow goes straight to its target).", true),
+    ("glyphs", "Intent glyphs", "The round intent's plate on the strip, the cards and the tokens.", true),
+    // VISCLAR1 VC1: the tell's kind chip on an enemy's token, a debug view
+    ("first_move", "Enemy first move", "The kind chip of each enemy's first action on its token (debug).", false),
+    ("badges", "Impact badges", "The row of blocks on each hostile card with its impacts.", true),
+    ("poise", "Poise bars", "The poise bars under the HP bars.", true),
+    // VISCLAR1 VC3: today's look, every unit's bars on the board
+    ("all_bars", "All bars", "Every unit's HP and poise bars on the board; off: only the selected hero, its target and the unit under the mouse (hold Alt: all).", false),
+    ("breaks", "Breaks", "BREAK over a broken unit and on its cancelled strip span.", true),
+    ("parts", "Wind-up and impact", "The strip's wind-up, impact and recovery shading.", true),
+    ("forecasts", "Hit forecasts", "Stagger and break forecasts in the strip tips and the intel panel.", true),
+    ("summary", "Round summary", "The round summary in the message bar at round end.", true),
     // HOOKS1-UI slice 1: the hooks' marks (HOOKS1 GH6, AH3)
-    ("hazards", "Ground hazards", "The hazards skills and items leave on tiles, in their tint, with their glyph (a foe's hidden one stays hidden)."),
-    ("arena", "Arena telegraph", "The cells an arena hazard strikes this round, and a badge on the strip at the blocks it strikes."),
+    ("hazards", "Ground hazards", "The hazards skills and items leave on tiles, in their tint, with their glyph (a foe's hidden one stays hidden).", true),
+    ("arena", "Arena telegraph", "The cells an arena hazard strikes this round, and a badge on the strip at the blocks it strikes.", true),
     // HOOKS1-UI slice 3: unit meters (UM7), held guard (8.3)
-    ("meters", "Unit meters", "Each unit's meters as pips or a bar on its card, and the selected hero's under the strip title."),
-    ("guard", "Held guard", "A blue edge on the card of a unit holding a guard a trigger gave it (it counts as guarding)."),
+    ("meters", "Unit meters", "Each unit's meters as pips or a bar on its card, and the selected hero's under the strip title.", true),
+    ("guard", "Held guard", "A blue edge on the card of a unit holding a guard a trigger gave it (it counts as guarding).", true),
     // HOOKS1-UI slice 4: push and pull forecasts (HOOKS1 5)
-    ("pushes", "Push forecasts", "Where the selected hero's planned pushes and pulls would move their targets, and what they would collide with."),
+    ("pushes", "Push forecasts", "Where the selected hero's planned pushes and pulls would move their targets, and what they would collide with.", true),
     // ENCOUNTER2-U: a hold escape's marks (ENCOUNTER2 H7)
-    ("hold", "Hold tiles", "The tiles a hold escape's holder keeps, with the holder's name on their card."),
-    ("gate", "Gate state", "A hold escape's exits read SHUT (red) until the holder stands on a hold tile, then OPEN (green)."),
+    ("hold", "Hold tiles", "The tiles a hold escape's holder keeps, with the holder's name on their card.", true),
+    ("gate", "Gate state", "A hold escape's exits read SHUT (red) until the holder stands on a hold tile, then OPEN (green).", true),
 ];
 
+/// VISCLAR1 VC6: a group's default (`OVERLAY_GROUPS`; an unknown id is on).
+pub(crate) fn overlay_default(id: &str) -> bool {
+    OVERLAY_GROUPS.iter().find(|g| g.0 == id).is_none_or(|g| g.3)
+}
+
 /// RULESET1-U slice 5 (preference "Battle overlays and the clarity pass", user 2026-10-30): every timeline overlay
-/// group behind its own flag, all on by default (they help debugging the fight); the settings key `battle_overlays`
-/// ({<group>: false}) switches a group off; slice 6 lists them on the Settings Battle tab; the clarity pass (VISCLAR1) decides
-/// what the game view keeps. Classic draws none of them whatever the flags say.
+/// group behind its own flag, on by default (they help debugging the fight); the settings key `battle_overlays`
+/// ({<group>: false}) switches a group off; slice 6 lists them on the Settings Battle tab; VISCLAR1 slice A adds
+/// `first_move` and `all_bars`, off by default (VC6). Classic draws none of them whatever the flags say.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Layers {
     /// Slice 3: the reach band, the Maneuver front, the valid-target rings, the stealth veils, the hero's moves, the
@@ -4459,9 +4489,13 @@ struct Layers {
     /// Slices 4-5: revealed enemy moves, intent glyphs, impact badge rows.
     walks: bool,
     glyphs: bool,
+    /// VISCLAR1 VC1: the tell's kind chip on an enemy's token (off by default).
+    first_move: bool,
     badges: bool,
     /// Slice 5: poise bars, BREAK markers, wind-up / impact / recovery on the strip, hit forecasts, the round summary.
     poise: bool,
+    /// VISCLAR1 VC3: every unit's token bars, not only the focus set's (off by default).
+    all_bars: bool,
     breaks: bool,
     parts: bool,
     forecasts: bool,
@@ -4481,19 +4515,19 @@ struct Layers {
 
 impl Layers {
     /// The group ids, as the settings key names them (`OVERLAY_GROUPS`' order).
-    const IDS: [&'static str; 22] = {
-        let mut ids = [""; 22];
+    const IDS: [&'static str; 24] = {
+        let mut ids = [""; 24];
         let mut k = 0;
-        while k < 22 {
+        while k < 24 {
             ids[k] = OVERLAY_GROUPS[k].0;
             k += 1;
         }
         ids
     };
 
-    /// The flags of the settings key `battle_overlays` (a missing group, or no key, is on).
+    /// The flags of the settings key `battle_overlays` (a missing group, or no key, takes its default: VC6).
     fn of(v: &Value) -> Layers {
-        let on = |id: &str| v.get(id).and_then(Value::as_bool).unwrap_or(true);
+        let on = |id: &str| v.get(id).and_then(Value::as_bool).unwrap_or_else(|| overlay_default(id));
         Layers {
             band: on("band"),
             front: on("front"),
@@ -4504,8 +4538,10 @@ impl Layers {
             facings: on("facings"),
             walks: on("walks"),
             glyphs: on("glyphs"),
+            first_move: on("first_move"),
             badges: on("badges"),
             poise: on("poise"),
+            all_bars: on("all_bars"),
             breaks: on("breaks"),
             parts: on("parts"),
             forecasts: on("forecasts"),
@@ -4522,15 +4558,15 @@ impl Layers {
 
     /// The flags by group id (the agent link's state).
     fn json(&self) -> Value {
-        let v = [self.band, self.front, self.valid, self.veils, self.moves, self.target, self.facings, self.walks, self.glyphs, self.badges, self.poise, self.breaks, self.parts, self.forecasts, self.summary, self.hazards, self.arena, self.meters, self.guard, self.pushes, self.hold, self.gate];
+        let v = [self.band, self.front, self.valid, self.veils, self.moves, self.target, self.facings, self.walks, self.glyphs, self.first_move, self.badges, self.poise, self.all_bars, self.breaks, self.parts, self.forecasts, self.summary, self.hazards, self.arena, self.meters, self.guard, self.pushes, self.hold, self.gate];
         Value::Object(Self::IDS.iter().zip(v).map(|(k, b)| (k.to_string(), json!(b))).collect())
     }
 }
 
 impl Overlay {
-    /// What the board draws of it: the groups whose layer is on; of the revealed enemy moves only `focus`'s (the
-    /// hovered enemy), or all while `all_walks` (Alt held).
-    fn shown(&self, l: &Layers, focus: Option<usize>, all_walks: bool) -> Overlay {
+    /// What the board draws of it: the groups whose layer is on; AR3: the target arrows of the selected unit `sel` and
+    /// the inspected unit `inspect` (decision "INPUT1 answers, part 4" Q15), every unit's while `alt` is held.
+    fn shown(&self, l: &Layers, sel: Option<usize>, inspect: Option<usize>, alt: bool) -> Overlay {
         let keep = |on: bool, v: &Vec<V2>| if on { v.clone() } else { Vec::new() };
         Overlay {
             target: self.target.filter(|_| l.target),
@@ -4540,12 +4576,252 @@ impl Overlay {
             moves: if l.moves { self.moves.clone() } else { Vec::new() },
             facings: if l.facings { self.facings.clone() } else { Vec::new() },
             veils: if l.veils { self.veils.clone() } else { Vec::new() },
-            // slice 6 (decision "RULESET1-U slice 5 answers"): the hovered enemy's moves draw above the tokens
-            // (`draw_focus_moves`), so the ground keeps only the others Alt shows
-            revealed_moves: self.revealed_moves.iter().filter(|m| l.walks && all_walks && focus != Some(m.0)).cloned().collect(),
+            arrows: self.arrows.iter().filter(|a| alt || Some(a.unit) == sel || Some(a.unit) == inspect).cloned().collect(),
             positions: if l.moves { self.positions.clone() } else { Vec::new() },
         }
     }
+}
+
+// ---- VISCLAR1 slice A: the target arrows, the bars in focus, Party foresight off (INPUT1 10) ------------------------
+
+/// VISCLAR1 AR1: one unit's target arrow, a polyline of tiles: its tile, the end of its moves before its first command
+/// when that move shows (AR2), the target (a unit's tile or the target tile; none for a self target, which ends at the
+/// move's end). Two points or more.
+#[derive(Debug, Clone, PartialEq)]
+struct Arrow {
+    unit: usize,
+    points: Vec<V2>,
+    ally: bool,
+}
+
+/// AR4: the arrows' alpha (of 255), dash (px on, px off), head (px) and width (Flat, Stage).
+const ARROW_ALPHA: u8 = 90;
+const ARROW_DASH: (f32, f32) = (4.0, 3.0);
+const ARROW_HEAD: f32 = 4.0;
+const ARROW_W_FLAT: f32 = 1.0;
+const ARROW_W_STAGE: f32 = 1.5;
+
+/// VC4: the debug settings key of "Party foresight off" (in no `default_settings`, VC5).
+pub(crate) const FORESIGHT_OFF: &str = "debug_party_foresight_off";
+
+/// VC5: whether the party's foresight reveals draw as unrevealed: the debug key, read only when `debug` (called with
+/// `cfg!(debug_assertions)`), so a hand-edited settings file cannot turn it on in a release build.
+pub(crate) fn party_foresight_off(settings: &Value, debug: bool) -> bool {
+    debug && settings.get(FORESIGHT_OFF).and_then(Value::as_bool).unwrap_or(false)
+}
+
+/// VC4: the records `v` as the screen shows them; with `off` (Party foresight off) a plan that only a party foresight
+/// passive revealed reads unrevealed (no plan lines, no readers); a reveal by enrage or by the battle's `plan_reveal`
+/// stays. Display only: the kit's records are unchanged.
+fn seen_intents(w: &World, mut v: Vec<Intent>, off: bool) -> Vec<Intent> {
+    if !off {
+        return v;
+    }
+    let reveal_all = emberwake_battle::intent::badges_on(w) && w.plan_reveal;
+    for r in v.iter_mut().filter(|r| !r.readers.is_empty()) {
+        r.readers.clear();
+        if !r.enraged && !reveal_all {
+            r.revealed = false;
+            r.plan.clear();
+        }
+    }
+    v
+}
+
+/// AR1, AR2: every unit's target arrow while the party plans (empty otherwise and in classic): a party member's from
+/// its round target and its compiled plan (the move leg with the group `moves` on); an enemy's while the tells show,
+/// to its round target (without a round intent: its tell's target), with the move leg only when its plan is revealed
+/// (`tells` as the screen shows them, VC4) and the group `walks` is on. An after-move is no part of it (Q14: its
+/// destination plate shows it).
+fn arrows_of(s: &Session, tells: &[Intent], rounds: &[Intent], layers: &Layers, show_tells: bool) -> Vec<Arrow> {
+    let w = &s.w;
+    if !ri::on(w) || !s.is_planning() {
+        return Vec::new();
+    }
+    let on_field = |u: usize| w.units[u].is_active() && w.has(u);
+    let tile_of = |t: RoundTarget, me: usize| match t {
+        RoundTarget::Unit(u) if u != me && on_field(u) => Some(Some(w.pos(u))),
+        RoundTarget::Unit(u) if u == me => Some(None),
+        RoundTarget::Myself => Some(None),
+        RoundTarget::Cell(c) if w.grid.is_valid(c) => Some(Some(c)),
+        _ => None,
+    };
+    let mut out = Vec::new();
+    let mut push = |unit: usize, ally: bool, leg: Option<V2>, to: Option<Option<V2>>| {
+        let from = w.pos(unit);
+        let mut points = vec![from];
+        if let Some(end) = leg.filter(|c| *c != from) {
+            points.push(end);
+        }
+        match to {
+            Some(Some(t)) if points.last() != Some(&t) => points.push(t),
+            // a self target ends at the move's end (nothing without a move); no target draws nothing
+            Some(_) => {}
+            None => return,
+        }
+        if points.len() >= 2 {
+            out.push(Arrow { unit, points, ally });
+        }
+    };
+    for &h in w.allies.iter().filter(|&&h| on_field(h)) {
+        let target = w.round_states.get(&h).and_then(|r| r.target).or_else(|| rounds.iter().find(|r| r.unit == h).and_then(|r| r.round_target));
+        let leg = layers.moves.then(|| party_leg(s, h));
+        push(h, true, leg, target.and_then(|t| tile_of(t, h)));
+    }
+    if show_tells {
+        for t in tells.iter().filter(|t| on_field(t.unit)) {
+            let rec = rounds.iter().find(|r| r.unit == t.unit && r.round_intent.is_some());
+            let to = match rec {
+                Some(r) => r.round_target.and_then(|x| tile_of(x, t.unit)),
+                None => t.line.target.filter(|u| on_field(*u)).map(|u| Some(w.pos(u))).or_else(|| (w.grid.is_valid(t.line.cell)).then_some(Some(t.line.cell))),
+            };
+            let leg = (layers.walks && t.revealed).then(|| enemy_leg(s, t.unit));
+            push(t.unit, false, leg, to);
+        }
+    }
+    out
+}
+
+/// AR1: where party member `h`'s moves before its first command end (its walks, then the carried move its first
+/// command rides; Rest is no command); its own tile without one.
+fn party_leg(s: &Session, h: usize) -> V2 {
+    let w = &s.w;
+    let mut at = w.pos(h);
+    for e in &s.plan.compile(w, h).entries {
+        match emberwake_battle::skill::kind(&w.cat.skills[e.skill]) {
+            Kind::Move => {
+                if w.grid.is_valid(e.pos_after) {
+                    at = e.pos_after;
+                }
+            }
+            Kind::Rest => {}
+            _ => {
+                if w.grid.is_valid(strike_tile(e)) {
+                    at = strike_tile(e);
+                }
+                break;
+            }
+        }
+    }
+    at
+}
+
+/// AR2: where a revealed enemy's moves before its first command end (its walks as the kit would walk them now,
+/// `command::walk_preview`, then a carried Engage dash of its first command); its own tile without one.
+fn enemy_leg(s: &Session, e: usize) -> V2 {
+    let w = &s.w;
+    let mut acts: Vec<&emberwake_battle::resolver::ScheduledAction> = s.resolver.scheduled.iter().filter(|a| a.unit == e && !a.cancelled).collect();
+    acts.sort_by_key(|a| a.start);
+    let mut at = w.pos(e);
+    for a in acts {
+        match (&a.command.kind, a.command.carry) {
+            (CmdKind::Walk { path, expected_start, .. }, _) => {
+                if let Some(end) = emberwake_battle::command::walk_preview(w, e, path, *expected_start).last() {
+                    at = *end;
+                }
+            }
+            (_, emberwake_battle::command::Carry::Engage(c)) => {
+                at = c;
+                break;
+            }
+            _ => break,
+        }
+    }
+    at
+}
+
+/// VC2: the focus set whose token bars draw by default: the selected member, its round target when that is a unit,
+/// the hovered unit (token or card) and the inspected unit.
+fn focus_set(w: &World, sel: Option<usize>, hovered: Option<usize>, inspect: Option<usize>) -> Vec<usize> {
+    let target = sel.and_then(|h| w.round_states.get(&h)).and_then(|r| match r.target {
+        Some(RoundTarget::Unit(t)) => Some(t),
+        _ => None,
+    });
+    let mut out: Vec<usize> = Vec::new();
+    for u in [sel, target, hovered, inspect].into_iter().flatten() {
+        if !out.contains(&u) {
+            out.push(u);
+        }
+    }
+    out
+}
+
+/// VC1: whether the tells' kind chips draw on the enemy tokens (while the tells show): in classic always; under the
+/// round intent only with the group `first_move`.
+fn first_move_chips(timeline: bool, layers: &Layers) -> bool {
+    !timeline || layers.first_move
+}
+
+/// VC2, VC3: whether unit `i`'s token bars draw: in classic always; under the round intent for the focus set, every
+/// unit while Alt is held or the group `all_bars` is on.
+fn bars_shown(timeline: bool, layers: &Layers, alt: bool, focus: &[usize], i: usize) -> bool {
+    !timeline || layers.all_bars || alt || focus.contains(&i)
+}
+
+/// AR4: a polyline of ground points dashed `ARROW_DASH` (the pattern runs on over the corners), its head of
+/// `ARROW_HEAD` at the end.
+fn draw_arrow_line(p: &mut Painter, pts: &[(f32, f32)], col: Rgba, width: f32) {
+    let (on, off) = ARROW_DASH;
+    let mut phase = 0.0f32;
+    for seg in pts.windows(2) {
+        let ((x0, y0), (x1, y1)) = (seg[0], seg[1]);
+        let len = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt();
+        if len < 0.5 {
+            continue;
+        }
+        let (ux, uy) = ((x1 - x0) / len, (y1 - y0) / len);
+        let mut d = 0.0f32;
+        while d < len {
+            let at = (phase + d) % (on + off);
+            let step = if at < on { on - at } else { on + off - at };
+            let e = (d + step).min(len);
+            if at < on {
+                stage::wide_line(p, x0 + ux * d, y0 + uy * d, x0 + ux * e, y0 + uy * e, col, width, 0.0);
+            }
+            d = e;
+        }
+        phase = (phase + len) % (on + off);
+    }
+    if let [.., a, b] = pts {
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let len = (dx * dx + dy * dy).sqrt();
+        if len >= 0.5 {
+            let (ux, uy) = (dx / len, dy / len);
+            for side in [-1.0f32, 1.0] {
+                let (c, s) = (0.866f32, 0.5 * side);
+                let (bx, by) = (-(ux * c - uy * s), -(uy * c + ux * s));
+                stage::wide_line(p, b.0, b.1, b.0 + bx * ARROW_HEAD, b.1 + by * ARROW_HEAD, col, width, 0.0);
+            }
+        }
+    }
+}
+
+/// AR4: the shown arrows on the ground, under the tokens (Flat: after the ground overlays; Stage: the Arrows pass):
+/// party GOLD, enemy FOE at `ARROW_ALPHA`; each leg leaves its tile's token and the last stops short of its target's
+/// (`stage::ground_arrow`).
+fn draw_arrows(p: &mut Painter, arrows: &[Arrow], geo: &Geom) {
+    let width = if geo.view == View::Stage { ARROW_W_STAGE } else { ARROW_W_FLAT };
+    for a in arrows {
+        let col = with_alpha(if a.ally { GOLD } else { FOE }, ARROW_ALPHA);
+        let at: Vec<(f32, f32)> = a.points.iter().map(|c| ground_pt(geo, *c)).map(|(x, y)| (x, y - 3.0)).collect();
+        // the first leg leaves the unit's foot ring, the last stops short of the target's (a leg too short keeps its end)
+        let mut pts = at.clone();
+        let n = at.len();
+        if n >= 2 {
+            if let Some((x0, y0, _, _)) = stage::ground_arrow(at[0], at[1]) {
+                pts[0] = (x0, y0);
+            }
+            if let Some((_, _, x1, y1)) = stage::ground_arrow(at[n - 2], at[n - 1]) {
+                pts[n - 1] = (x1, y1);
+            }
+        }
+        draw_arrow_line(p, &pts, col, width);
+    }
+}
+
+/// The arrows for the agent link's state: [{unit, points [[x, y]], alpha}].
+fn arrows_json(arrows: &[Arrow]) -> Value {
+    Value::Array(arrows.iter().map(|a| json!({"unit": a.unit, "points": a.points.iter().map(|c| json!([c.x, c.y])).collect::<Vec<_>>(), "alpha": ARROW_ALPHA})).collect())
 }
 
 // ---- HOOKS1-UI slice 1: ground hazards and the arena telegraph (HOOKS1 GH6, AH3) ------------------------------------
@@ -5260,29 +5536,6 @@ fn overlay_of(s: &Session, sel: Option<usize>, planning: bool) -> Option<Overlay
         veils: (0..w.units.len()).filter(|&u| on_field(u) && w.units[u].has_status("stealth")).map(|u| (w.pos(u), ri::hidden(w, u))).collect(),
         ..Overlay::default()
     };
-    if planning {
-        let revealed: Vec<usize> = s.enemy_intents().iter().filter(|r| r.revealed).map(|r| r.unit).collect();
-        for &e in &revealed {
-            let mut acts: Vec<&emberwake_battle::resolver::ScheduledAction> = s.resolver.scheduled.iter().filter(|a| a.unit == e && !a.cancelled).collect();
-            acts.sort_by_key(|a| a.start);
-            let mut at = w.pos(e);
-            for a in acts {
-                let (tiles, how) = match (&a.command.kind, a.command.carry) {
-                    (CmdKind::Walk { path, expected_start, .. }, _) => (emberwake_battle::command::walk_preview(w, e, path, *expected_start), MoveKind::Walk),
-                    (CmdKind::Disengage { dest, .. }, _) => (vec![at, *dest], MoveKind::After),
-                    (_, emberwake_battle::command::Carry::Engage(c)) => (vec![at, c], MoveKind::Carried),
-                    (_, emberwake_battle::command::Carry::Retreat(c)) => (vec![at, c], MoveKind::After),
-                    _ => continue,
-                };
-                if let Some(end) = tiles.last() {
-                    at = *end;
-                }
-                if tiles.len() > 1 && tiles[0] != tiles[tiles.len() - 1] {
-                    o.revealed_moves.push((e, tiles, how));
-                }
-            }
-        }
-    }
     let Some(h) = sel.filter(|&h| planning && on_field(h) && w.allies.contains(&h)) else { return Some(o) };
     let target = w.round_states.get(&h).and_then(|r| r.target);
     o.target = match target {
@@ -5367,7 +5620,7 @@ fn overlay_json(o: &Overlay) -> Value {
         "moves": o.moves.iter().map(|(t, k)| json!({"kind": k.id(), "tiles": t.iter().map(cell).collect::<Vec<_>>()})).collect::<Vec<_>>(),
         "facings": o.facings.iter().map(|(c, f)| json!({"at": cell(c), "facing": [f.x, f.y]})).collect::<Vec<_>>(),
         "veils": o.veils.iter().map(|(c, hidden)| json!({"at": cell(c), "hidden": hidden})).collect::<Vec<_>>(),
-        "revealed_moves": o.revealed_moves.iter().map(|(u, t, k)| json!({"unit": u, "kind": k.id(), "tiles": t.iter().map(cell).collect::<Vec<_>>()})).collect::<Vec<_>>(),
+        "arrows": arrows_json(&o.arrows),
         "positions": o.positions.iter().map(|(c, preferred)| json!({"at": cell(c), "preferred": preferred})).collect::<Vec<_>>(),
     })
 }
@@ -5382,12 +5635,11 @@ fn ground_pt(geo: &Geom, c: V2) -> (f32, f32) {
     }
 }
 
-/// RULESET1-U slice 3: draws the overlays on the ground, under the tokens (Flat: after the tiles; Stage: the markers
-/// pass), in the order back to front: the reach band, the Maneuver front, the valid targets, the stealth veils, the
-/// revealed enemy moves (slice 5: only `focus`'s, or every one while `all_walks`: Alt held), the move paths, the target
-/// ring, the enemy facings; each group only while its layer is on.
-fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom, layers: &Layers, focus: Option<usize>, all_walks: bool) {
-    let o = &o.shown(layers, focus, all_walks);
+/// RULESET1-U slice 3: draws the overlays `o` (as `Overlay::shown` keeps them) on the ground, under the tokens (Flat:
+/// after the tiles; Stage: the markers pass), in the order back to front: the reach band, the Maneuver front, the valid
+/// targets, the stealth veils, the moves' destination plates (VISCLAR1 AR5: the lines give way to the target arrows,
+/// `draw_arrows`; Q14: an after-move shows as its plate only), the target ring, the enemy facings.
+fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom) {
     let plate_of = |c: V2| match geo.view {
         View::Stage => inset2(geo.cell_rect(c), 1, 1),
         View::Flat => geo.cell_rect(c).inset(1),
@@ -5412,26 +5664,9 @@ fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom, layers: &Layers, focus
         p.ellipse(x, y, rx, ry, rgba(186, 170, 255, if *hidden { 90 } else { 40 }));
         p.ellipse_ring(x, y, rx, ry, rgba(186, 170, 255, if *hidden { 230 } else { 150 }));
     }
-    // V2: a revealed enemy's moves, dashed red with an arrow head (a carried or after move dashed wider)
-    for m in &o.revealed_moves {
-        draw_revealed_move(p, m, geo, with_alpha(FOE, 200));
-    }
     for (tiles, how) in &o.moves {
-        let (col, dash) = match how {
-            MoveKind::Walk => (GOLD, 0.0),
-            MoveKind::Carried => (AMBER, 3.0),
-            MoveKind::After => (GOLD, 2.0),
-        };
-        let pts: Vec<(f32, f32)> = tiles.iter().map(|c| ground_pt(geo, *c)).map(|(x, y)| (x, y - 3.0)).collect();
-        for (k, seg) in pts.windows(2).enumerate() {
-            let last = k + 2 == pts.len();
-            if last && *how == MoveKind::After {
-                stage::wide_arrow(p, seg[0].0, seg[0].1, seg[1].0, seg[1].1, col, 1.5, dash, 4.0);
-            } else {
-                stage::wide_line(p, seg[0].0, seg[0].1, seg[1].0, seg[1].1, col, if *how == MoveKind::Walk { 2.0 } else { 1.5 }, dash);
-            }
-        }
-        if let (Some(end), true) = (tiles.last(), *how != MoveKind::After) {
+        let col = if *how == MoveKind::Carried { AMBER } else { GOLD };
+        if let Some(end) = tiles.last() {
             let r = match geo.view {
                 View::Stage => inset2(geo.cell_rect(*end), 3, 2),
                 View::Flat => geo.cell_rect(*end).inset(3),
@@ -5459,41 +5694,12 @@ fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom, layers: &Layers, focus
         let (px, py) = (-dy * 4.0, dx * 4.0 * squash.max(0.8));
         let (tx, ty) = (x + dx * tip, y + dy * tip);
         let (bx, by) = (x + dx * base, y + dy * base);
-        // pale over a dark underlay: apart from the tells' red arrows and the foot rings (slice 4: red read as part
-        // of the tell arrows next to the intent glyphs)
+        // pale over a dark underlay: apart from the red target arrows and the foot rings (slice 4: red read as part
+        // of the tell arrows next to the intent glyphs; VISCLAR1 VC6 keeps it on)
         for (col, width) in [(rgba(10, 8, 12, 200), 3.2), (FACING, 1.6)] {
             stage::wide_line(p, bx + px, by + py, tx, ty, col, width, 0.0);
             stage::wide_line(p, bx - px, by - py, tx, ty, col, width, 0.0);
         }
-    }
-}
-
-/// One revealed enemy move (V2) on its tiles' ground points: dashed (a walk finer, a carried or after move wider) with
-/// an arrow head on its last stretch.
-fn draw_revealed_move(p: &mut Painter, m: &(usize, Vec<V2>, MoveKind), geo: &Geom, col: Rgba) {
-    let dash = if m.2 == MoveKind::Walk { 2.0 } else { 3.5 };
-    let pts: Vec<(f32, f32)> = m.1.iter().map(|c| ground_pt(geo, *c)).map(|(x, y)| (x, y - 3.0)).collect();
-    for (k, seg) in pts.windows(2).enumerate() {
-        if k + 2 == pts.len() {
-            stage::wide_arrow(p, seg[0].0, seg[0].1, seg[1].0, seg[1].1, col, 1.5, dash, 4.0);
-        } else {
-            stage::wide_line(p, seg[0].0, seg[0].1, seg[1].0, seg[1].1, col, 1.5, dash);
-        }
-    }
-}
-
-/// RULESET1-U slice 6 (decision "RULESET1-U slice 5 answers"): the hovered enemy's revealed moves above the tokens
-/// (the air layer), over a dark underlay so a short step reads over the sprites; its walks layer on.
-fn draw_focus_moves(p: &mut Painter, o: &Overlay, geo: &Geom, layers: &Layers, focus: Option<usize>) {
-    if !layers.walks {
-        return;
-    }
-    for m in o.revealed_moves.iter().filter(|m| Some(m.0) == focus) {
-        let pts: Vec<(f32, f32)> = m.1.iter().map(|c| ground_pt(geo, *c)).map(|(x, y)| (x, y - 3.0)).collect();
-        for seg in pts.windows(2) {
-            stage::wide_line(p, seg[0].0, seg[0].1, seg[1].0, seg[1].1, rgba(10, 8, 12, 170), 3.4, 0.0);
-        }
-        draw_revealed_move(p, m, geo, FOE);
     }
 }
 
@@ -5558,9 +5764,10 @@ struct Board<'a> {
     show_tells: bool,
     /// STAGE1 3.9: the unit whose party or hostile card the mouse is over.
     card_hover: Option<usize>,
-    /// INPUT1 IS1, AR3 (decision "INPUT1 answers, part 4" Q15): the inspected unit; its revealed moves show as the
-    /// hovered enemy's do when no enemy is hovered.
+    /// INPUT1 IS1, AR3 (decision "INPUT1 answers, part 4" Q15): the inspected unit; its target arrow shows by default.
     inspect: Option<usize>,
+    /// VISCLAR1 VC2: the focus set but the hovered unit (each view adds the unit under the mouse).
+    focus: &'a [usize],
     /// FX1-L1 slice 2: the live effects (drawn at `anim_ms` on the ground and air layers, 4.1) and the camera offset
     /// the board's passes are shifted by.
     fx: &'a Fx,
@@ -5571,7 +5778,7 @@ struct Board<'a> {
     overlay: Option<&'a Overlay>,
     /// RULESET1-U slice 4 (UI5): every unit's round intent record (the board's intent glyphs; empty in classic).
     rounds: &'a [Intent],
-    /// RULESET1-U slice 5: the overlay groups on (`Layers`) and Alt held (every revealed enemy move shows).
+    /// RULESET1-U slice 5: the overlay groups on (`Layers`) and Alt held (VISCLAR1: every bar and target arrow shows).
     layers: Layers,
     alt: bool,
     /// HOOKS1-UI slice 1: the ground hazards and the arena telegraph (empty in classic).
@@ -5728,9 +5935,16 @@ fn scaled(a: u8, k: u8) -> u8 {
 /// STAGE1 4.1, the Flat view (the board as it was before STAGE1, until the user's review): 32 x 32 cells at (128, 30),
 /// the `common` tiles, tree tiles flat, tokens `flat_token_px` on a filled foot ellipse at `foot_alpha`, arrows centre
 /// to centre over the units, the cell widgets.
-fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
+/// The Flat board; returns the unit whose tile the mouse is over (VC2's hovered unit).
+fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, focus, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
     let w = &s.w;
+    // VISCLAR1 VC2: the unit under the mouse (its tile) joins the focus set; AR3: the arrows of the selected and the
+    // inspected unit (Alt: all)
+    let tile_hover = if popup { None } else { (0..w.units.len()).find(|&u| w.units[u].is_active() && w.grid.pos(u).is_some_and(|p| ui.hover(cell_rect(p)))) };
+    let mut focus = focus.to_vec();
+    focus.extend(tile_hover.or(card_hover));
+    let shown = overlay.map(|o| o.shown(&layers, sel, inspect, alt));
     let panel = Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4);
     ui.p.panel(panel, rgb(8, 10, 16), BORDER, RADIUS);
     // FX1 4.1: the board shifted by the camera, kept inside its panel while it shakes (at rest the Flat board draws
@@ -5769,11 +5983,11 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
         draw_hold_tiles(&mut ui.p, h, &Geom::new(View::Flat, tuning));
     }
     let center = |c: V2| ((GRID_X + c.x * TILE + TILE / 2) as f32, (GRID_Y + c.y * TILE + TILE / 2) as f32);
-    if let Some(o) = overlay {
-        // RULESET1-U slice 3: the round intent's overlays on the ground (they draw the hero's moves); slice 5: a revealed
-        // enemy's moves for the enemy under the mouse (its card or its tile)
-        let focus = card_hover.or_else(|| w.enemies.iter().copied().find(|&e| w.units[e].is_active() && w.grid.pos(e).is_some_and(|p| ui.hover(cell_rect(p))))).or(inspect);
-        draw_overlay(&mut ui.p, o, &Geom::new(View::Flat, tuning), &layers, focus, alt);
+    if let Some(o) = &shown {
+        // RULESET1-U slice 3: the round intent's overlays on the ground; VISCLAR1 AR5: the target arrows over them
+        // (under the tokens)
+        draw_overlay(&mut ui.p, o, &Geom::new(View::Flat, tuning));
+        draw_arrows(&mut ui.p, &o.arrows, &Geom::new(View::Flat, tuning));
     } else if let Some(h) = sel {
         if w.units[h].is_active() && planning {
             let st = s.plan.compile(w, h);
@@ -5788,7 +6002,8 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
             }
         }
     }
-    if tuning.intent_arrows && planning {
+    // classic: the tuning's enemy attack lines (VISCLAR1 AR5: the round intent's target arrows replace them)
+    if tuning.intent_arrows && planning && overlay.is_none() {
         let mut seen = Vec::new();
         for a in &s.resolver.scheduled {
             if !w.enemies.contains(&a.unit) || seen.contains(&a.unit) {
@@ -5881,10 +6096,13 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
         if !alive {
             continue;
         }
-        hp_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 3 + dy, TILE - 6, 2), hp, u.max_hp, if ally { GOOD } else { FOE });
-        // RULESET1-U slice 5: the poise bar over the HP bar (rule poise)
-        if let Some(st) = poise_shown(w, i, &layers) {
-            poise_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 6 + dy, TILE - 6, 2), &st);
+        // VISCLAR1 VC2, VC3: under the round intent the bars of the focus set (Alt or `all_bars`: every unit's)
+        if bars_shown(overlay.is_some(), &layers, alt, &focus, i) {
+            hp_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 3 + dy, TILE - 6, 2), hp, u.max_hp, if ally { GOOD } else { FOE });
+            // RULESET1-U slice 5: the poise bar over the HP bar (rule poise)
+            if let Some(st) = poise_shown(w, i, &layers) {
+                poise_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 6 + dy, TILE - 6, 2), &st);
+            }
         }
         let tip = unit_tip(s, i, sel, tells, rounds, classes);
         ui.push(format!("unit.{i}"), "unit", format!("{} {}/{}", u.name, u.hp, u.max_hp), r, true, Some(i) == sel, Some(Action::UnitClick(i)), tip);
@@ -5892,6 +6110,14 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
     if show_tells {
         for r in tells {
             let Some(from) = w.grid.pos(r.unit) else { continue };
+            // VISCLAR1 AR5, VC1: under the round intent no tell arrow (the target arrows replace it) and the kind chip
+            // only with the group `first_move`
+            if overlay.is_some() {
+                if first_move_chips(true, &layers) {
+                    intent_chip(ui, cx, r.line.kind, Rect::new(GRID_X + from.x * TILE + 1, GRID_Y + from.y * TILE + 1, 10, 10));
+                }
+                continue;
+            }
             let (fx, fy) = center(from);
             let to = r.line.target.and_then(|t| w.grid.pos(t)).or((r.line.cell != emberwake_battle::grid::NO_CELL).then_some(r.line.cell));
             if let Some(to) = to.filter(|c| *c != from) {
@@ -5914,11 +6140,6 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
         }
         intent_glyph(&mut ui.p, i, Rect::new(GRID_X + at.x * TILE + TILE - 11, GRID_Y + at.y * TILE + 1, 10, 10));
     }
-    // RULESET1-U slice 6: the hovered enemy's revealed moves above the tokens
-    if let Some(o) = overlay {
-        let focus = card_hover.or_else(|| w.enemies.iter().copied().find(|&e| w.units[e].is_active() && w.grid.pos(e).is_some_and(|p| ui.hover(cell_rect(p))))).or(inspect);
-        draw_focus_moves(&mut ui.p, o, &Geom::new(View::Flat, tuning), &layers, focus);
-    }
     // HOOKS1-UI slice 4: the push forecasts above the tokens (a collision mark sits between two of them)
     draw_pushes(&mut ui.p, pushes, &Geom::new(View::Flat, tuning));
     // RULESET1-U slice 5 (P7): a BREAK plate over each unit broken this round
@@ -5940,6 +6161,7 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
     if shift != (0, 0) {
         ui.p.clip(None);
     }
+    tile_hover
 }
 
 /// An intent chip (INTENT1): the kind's icon, else a lettered plate.
@@ -6009,8 +6231,10 @@ fn with_alpha(c: Rgba, a: u8) -> Rgba {
 /// covers a unit, the top: HP bars, chips, the exit sign, floats). Cell widgets first, then the units' in feet order
 /// (front-most last, so it takes the click). Returns the unit the mouse is over on the board.
 fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, focus, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
     let w = &s.w;
+    // VISCLAR1 AR3: the arrows of the selected and the inspected unit (Alt: all)
+    let shown = overlay.map(|o| o.shown(&layers, sel, inspect, alt));
     let geo = Geom::new(View::Stage, tuning);
     let tp = geo.token_px;
     let anim_now = anim_ms as u64;
@@ -6075,6 +6299,9 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
         None
     };
     let hovered = board_hover.or(card_hover);
+    // VC2: the unit under the mouse joins the focus set
+    let mut focus = focus.to_vec();
+    focus.extend(hovered);
     // The cell a click would reach (the hovered unit's, else the one under the mouse) shows the hover plate.
     let hover_cell = if planning && sel.is_some() && ui.live && !popup {
         board_hover.and_then(|u| w.grid.pos(u)).or_else(|| geo.cell_at(ui.mouse.0, ui.mouse.1))
@@ -6116,9 +6343,9 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                         }
                     }
                 }
-                if let Some(o) = overlay {
-                    // RULESET1-U slice 3: the round intent's overlays on the ground (they draw the hero's moves)
-                    draw_overlay(&mut ui.p, o, &geo, &layers, hovered.filter(|u| w.enemies.contains(u)).or(inspect), alt);
+                if let Some(o) = &shown {
+                    // RULESET1-U slice 3: the round intent's overlays on the ground (the moves' destination plates)
+                    draw_overlay(&mut ui.p, o, &geo);
                 } else if let Some(h) = sel.filter(|h| w.units[*h].is_active() && planning) {
                     let st = s.plan.compile(w, h);
                     let mut from = w.pos(h);
@@ -6135,6 +6362,13 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                 let (_, fill, edge) = exit_sign(hold);
                 for c in w.grid.exits.iter().filter(|c| w.grid.is_valid(**c)) {
                     plate(&mut ui.p, inset2(geo.cell_rect(*c), 3, 2), with_alpha(fill, 90), with_alpha(edge, 200));
+                }
+            }
+            // VISCLAR1 AR4, AR5: under the round intent the target arrows replace the tell arrows and the enemy attack
+            // lines (classic keeps them)
+            Pass::Arrows if shown.is_some() => {
+                if let Some(o) = &shown {
+                    draw_arrows(&mut ui.p, &o.arrows, &geo);
                 }
             }
             Pass::Arrows => {
@@ -6244,10 +6478,6 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                 }
             }
             Pass::Top => {
-                // RULESET1-U slice 6: the hovered enemy's revealed moves above the tokens
-                if let Some(o) = overlay {
-                    draw_focus_moves(&mut ui.p, o, &geo, &layers, hovered.filter(|u| w.enemies.contains(u)).or(inspect));
-                }
                 // HOOKS1-UI slice 4: the push forecasts above the tokens
                 draw_pushes(&mut ui.p, pushes, &geo);
                 for t in &units {
@@ -6255,7 +6485,8 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                     let (fx, fy) = t.foot;
                     if !t.standing {
                         ui.p.text_center(fx as f32, fy as f32 - ui.p.line_h(BODY) / 2.0, "x", BODY, DIM);
-                    } else if t.alive {
+                    } else if t.alive && bars_shown(overlay.is_some(), &layers, alt, &focus, t.i) {
+                        // VISCLAR1 VC2, VC3: under the round intent the focus set's bars (Alt or `all_bars`: all)
                         hp_bar(&mut ui.p, Rect::new(fx - 12, fy + 3, 24, 2), t.hp, u.max_hp, if t.ally { GOOD } else { FOE });
                         // RULESET1-U slice 5: the poise bar under the HP bar (rule poise)
                         if let Some(st) = poise_shown(w, t.i, &layers) {
@@ -6263,7 +6494,8 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                         }
                     }
                 }
-                if show_tells {
+                // VISCLAR1 VC1: under the round intent the tell's kind chip only with the group `first_move`
+                if show_tells && first_move_chips(overlay.is_some(), &layers) {
                     for r in tells {
                         let Some(t) = units.iter().find(|t| t.i == r.unit) else { continue };
                         let chip = Rect::new(t.foot.0 - 15, (t.foot.1 as f32 - 0.95 * tp as f32 - 2.0).round() as i32, 10, 10);
@@ -9307,7 +9539,9 @@ mod overlay_tests {
         assert!(o.front.is_empty(), "no front shaded under Assault");
         let facings: Vec<(V2, V2)> = w.enemies.iter().copied().filter(|&e| w.units[e].is_active() && w.has(e) && ri::facing(w, e) != emberwake_battle::grid::ZERO).map(|e| (w.pos(e), ri::facing(w, e))).collect();
         assert_eq!(o.facings, facings);
-        assert_eq!(b.state(&cx)["overlay"], overlay_json(&o), "the agent link's state lists the overlays");
+        // (VISCLAR1 AR3: with the target arrows the last frame drew)
+        let drawn = Overlay { arrows: b.arrows_shown.clone(), ..o.clone() };
+        assert_eq!(b.state(&cx)["overlay"], overlay_json(&drawn), "the agent link's state lists the overlays");
         // the slice 3 review: an attack strikes from after its carried Engage move, from before its Disengage retreat
         let mut e = st.entries[0].clone();
         (e.pos_before, e.pos_after) = (V2::new(1, 1), V2::new(2, 1));
@@ -9466,8 +9700,9 @@ mod tells_tests {
         assert!(head.starts_with("Assault: "), "{head}");
     }
 
-    /// V2: with the plan reveal every enemy's tip says so and lists its plan; each revealed walk is drawn tile by tile
-    /// from where it starts.
+    /// V2: with the plan reveal every enemy's tip says so and lists its plan; VISCLAR1 AR1, AR2 (they replace slice 5's
+    /// tile-by-tile revealed walks): a revealed enemy whose round opens with a walk has its target arrow's move leg
+    /// end where the kit's walk preview ends; an unrevealed enemy's arrow goes straight (two points).
     #[test]
     fn the_plan_reveal_shows_every_enemy_plan() {
         let (mut cx, mut g, mut b) = arena(Some(TIMELINE), true);
@@ -9487,34 +9722,50 @@ mod tells_tests {
                 assert!(tip.iter().any(|x| x.0 == intent_text::plan_line(w, l)));
             }
         }
-        // slice 5: each revealed walk is the kit's walk preview of its scheduled walk, tile by tile
-        let o = overlay_of(s(&b), b.selected, true).unwrap();
-        let walks: Vec<Vec<V2>> = s(&b)
-            .resolver
-            .scheduled
-            .iter()
-            .filter(|a| w.enemies.contains(&a.unit) && !a.cancelled)
-            .filter_map(|a| match &a.command.kind {
-                CmdKind::Walk { path, expected_start, .. } => Some(emberwake_battle::command::walk_preview(w, a.unit, path, *expected_start)),
-                _ => None,
-            })
-            .filter(|t| t.len() > 1 && t[0] != t[t.len() - 1])
-            .collect();
+        // AR2: each enemy whose round opens with walks, and where the kit's preview of the last of those walks ends
+        // (the walks before its first command)
+        let opening_walks = |sess: &Session| -> Vec<(usize, V2)> {
+            let w = &sess.w;
+            w.enemies
+                .iter()
+                .copied()
+                .filter_map(|e| {
+                    let mut acts: Vec<&emberwake_battle::resolver::ScheduledAction> = sess.resolver.scheduled.iter().filter(|a| a.unit == e && !a.cancelled).collect();
+                    acts.sort_by_key(|a| a.start);
+                    let ends: Vec<V2> = acts
+                        .iter()
+                        .map_while(|a| match &a.command.kind {
+                            CmdKind::Walk { path, expected_start, .. } => emberwake_battle::command::walk_preview(w, e, path, *expected_start).last().copied(),
+                            _ => None,
+                        })
+                        .collect();
+                    // a walk whose command also carries a dash is left out (the dash ends the leg)
+                    let carried = acts.get(ends.len()).is_some_and(|a| matches!(a.command.carry, emberwake_battle::command::Carry::Engage(_)));
+                    ends.last().copied().filter(|end| *end != w.pos(e) && !carried).map(|end| (e, end))
+                })
+                .collect()
+        };
+        let all = |b: &BattleScreen| arrows_of(s(b), &s(b).enemy_intents(), &s(b).round_intents(), &Layers::of(&Value::Null), true);
+        let walks = opening_walks(s(&b));
         assert!(!walks.is_empty(), "the enemies walk at the round start");
-        let drawn: Vec<&Vec<V2>> = o.revealed_moves.iter().filter(|m| m.2 == MoveKind::Walk).map(|m| &m.1).collect();
-        assert_eq!(drawn.len(), walks.len(), "{:?}", o.revealed_moves);
-        for m in &drawn {
-            assert!(walks.contains(m) && m.windows(2).all(|p| p[0].dist(p[1]) == 1) && m.iter().all(|c| w.grid.is_valid(*c)), "{m:?}");
+        let arrows = all(&b);
+        let mut legs = 0;
+        // (an enemy with no target draws no arrow, AR1; a leg that ends on its target tile is the arrow's end)
+        for (e, end) in &walks {
+            let Some(a) = arrows.iter().find(|a| a.unit == *e) else { continue };
+            assert_eq!(a.points[0], w.pos(*e));
+            assert_eq!(a.points[1], *end, "{a:?}");
+            legs += 1;
         }
-        // slice 5 review: an unrevealed enemy's moves are left out (no reveal, no foresight: every walk stays hidden)
+        assert!(legs > 0, "a walking enemy with a target: {arrows:?}");
+        // slice 5 review, AR2: an unrevealed enemy's arrow has no move leg (no reveal, no foresight)
         let (mut cx, mut g, mut b) = arena(Some(TIMELINE), false);
         b.draw(&mut cx, &mut g, (-500, -500), true);
         let tells = s(&b).enemy_intents();
         let hidden: Vec<usize> = tells.iter().filter(|t| !t.revealed).map(|t| t.unit).collect();
-        let hidden_walks = s(&b).resolver.scheduled.iter().filter(|a| hidden.contains(&a.unit) && matches!(&a.command.kind, CmdKind::Walk { path, .. } if !path.is_empty())).count();
-        assert!(hidden_walks > 0, "an unrevealed enemy walks this round");
-        let o = overlay_of(s(&b), b.selected, true).unwrap();
-        assert!(o.revealed_moves.iter().all(|m| !hidden.contains(&m.0)), "{:?}", o.revealed_moves);
+        assert!(opening_walks(s(&b)).iter().any(|(e, _)| hidden.contains(e)), "an unrevealed enemy walks this round");
+        let arrows = all(&b);
+        assert!(arrows.iter().filter(|a| hidden.contains(&a.unit)).all(|a| a.points.len() == 2), "{arrows:?}");
     }
 
     /// The slice 2 review: a foresight reader who falls during the playback stays a reader for that round, and the
@@ -9591,40 +9842,22 @@ mod slice5_tests {
         (h, foe)
     }
 
-    /// The preference (user 2026-10-30): every group is on by default; the settings key switches one off and the board
-    /// stops drawing it; the state lists the flags.
+    /// The preference (user 2026-10-30): every group is at its default (on, but VISCLAR1's `first_move` and
+    /// `all_bars`); the settings key switches one off and the board stops drawing it; the state lists the flags.
     #[test]
     fn each_overlay_group_has_its_flag() {
         let all = Layers::of(&Value::Null);
         assert_eq!(all.json().as_object().unwrap().len(), Layers::IDS.len());
-        assert!(all.json().as_object().unwrap().values().all(|v| *v == json!(true)));
+        assert!(OVERLAY_GROUPS.iter().all(|g| all.json()[g.0] == json!(g.3)));
         let off = Layers::of(&json!({"band": false, "walks": false}));
         assert!(!off.band && !off.walks && off.front && off.poise);
         let (mut cx, mut g, mut b) = arena(false);
         assault(&cx, &mut b);
         b.draw(&mut cx, &mut g, (-500, -500), true);
         let o = overlay_of(s(&b), b.selected, true).unwrap();
-        assert!(!o.band.is_empty() && o.shown(&off, None, true).band.is_empty() && o.shown(&all, None, true).band == o.band);
+        assert!(!o.band.is_empty() && o.shown(&off, None, None, true).band.is_empty() && o.shown(&all, None, None, true).band == o.band);
         cx.settings.v["battle_overlays"] = json!({"band": false});
         assert_eq!(b.state(&cx)["overlay_layers"]["band"], json!(false));
-    }
-
-    /// The slice 4 review (user 2026-10-30): a revealed enemy's moves show only for the hovered enemy, or all while Alt
-    /// is held.
-    #[test]
-    fn revealed_moves_show_for_the_hovered_enemy_or_with_alt() {
-        let (mut cx, mut g, mut b) = arena(true);
-        b.draw(&mut cx, &mut g, (-500, -500), true);
-        let o = overlay_of(s(&b), b.selected, true).unwrap();
-        assert!(!o.revealed_moves.is_empty(), "the revealed enemies move this round");
-        let l = Layers::of(&Value::Null);
-        assert!(o.shown(&l, None, false).revealed_moves.is_empty(), "nothing hovered, no Alt: none");
-        assert_eq!(o.shown(&l, None, true).revealed_moves, o.revealed_moves, "Alt: all");
-        let e = o.revealed_moves[0].0;
-        // slice 6: the hovered enemy's moves draw above the tokens (`draw_focus_moves`), not on the ground
-        assert!(o.shown(&l, Some(e), false).revealed_moves.is_empty(), "the hovered one is not on the ground");
-        assert!(o.shown(&l, Some(e), true).revealed_moves.iter().all(|m| m.0 != e), "Alt: the others on the ground");
-        assert_eq!(o.shown(&l, Some(e), true).revealed_moves.len() + o.revealed_moves.iter().filter(|m| m.0 == e).count(), o.revealed_moves.len());
     }
 
     /// The scratch fight of MV8: a dancer next to a footman, Maneuver Disengage with AP for one Slip Strike, which then
@@ -9820,14 +10053,14 @@ mod slice6_tests {
         (cx, crate::hud::hud_tests::gfx(), b)
     }
 
-    /// The preference (user 2026-10-30): the Settings Battle tab lists every overlay group, on by default; a click
+    /// The preference (user 2026-10-30): the Settings Battle tab lists every overlay group, at its default; a click
     /// switches one off in the draft (Apply saves it under `battle_overlays`, which the battle screen reads).
     #[test]
     fn the_settings_list_every_overlay_group() {
         let mut cx = crate::hud::hud_tests::game_cx();
         let mut g = crate::hud::hud_tests::gfx();
         let defaults = crate::screens::default_settings();
-        assert!(OVERLAY_GROUPS.iter().all(|(id, _, _)| defaults["battle_overlays"][*id] == json!(true)), "all on by default");
+        assert!(OVERLAY_GROUPS.iter().all(|(id, _, _, on)| defaults["battle_overlays"][*id] == json!(on)), "each at its default");
         assert_eq!(Layers::of(&defaults["battle_overlays"]), Layers::of(&Value::Null));
         let mut st = crate::menus::SettingsScreen::new(&cx);
         st.draw(&mut cx, &mut g, (-500, -500), true);
@@ -10414,7 +10647,8 @@ mod hooks_audit_tests {
         }
     }
 
-    /// The Settings Battle tab lists the 20 overlay groups without a cut, spilled or off-canvas label at any size.
+    /// The Settings Battle tab lists the overlay groups (and, in a debug build, VISCLAR1's Debug row) without a cut,
+    /// spilled, overlapping or off-canvas label at any size.
     #[test]
     fn the_overlay_settings_fit_at_every_text_size() {
         let mut cx = crate::hud::hud_tests::game_cx();
@@ -10431,10 +10665,14 @@ mod hooks_audit_tests {
                 (w["id"].as_str().unwrap_or("").to_string(), r.0 as f32, r.1 as f32, r.2 as f32, r.3 as f32)
             }).collect();
             let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
-            let spill: Vec<&Value> = v["spill"].as_array().unwrap().iter().filter(|e| e["widget"].as_str().is_some_and(|w| w.starts_with("settings.overlay."))).collect();
+            let spill: Vec<&Value> = v["spill"].as_array().unwrap().iter().filter(|e| e["widget"].as_str().is_some_and(|w| w.starts_with("settings.overlay.") || w.starts_with("settings.debug."))).collect();
             assert!(spill.is_empty() && v["cut"].as_array().unwrap().is_empty() && v["edge"].as_array().unwrap().is_empty(), "scale {scale}: {v}");
+            // VISCLAR1-A: the tighter rows (24 groups and the Debug row) do not overlap
+            assert_eq!(v["counts"]["overlap"], json!(0), "scale {scale}: {}", v["overlap"]);
             let ids = st.widgets().iter().filter(|w| w["id"].as_str().is_some_and(|i| i.starts_with("settings.overlay."))).count();
             assert_eq!(ids, OVERLAY_GROUPS.len());
+            let debug = st.widgets().iter().filter(|w| w["id"] == json!("settings.debug.party_foresight_off")).count();
+            assert_eq!(debug, usize::from(cfg!(debug_assertions)), "VC5: the debug row only in a debug build");
         }
     }
 
@@ -10889,5 +11127,267 @@ mod talk_screen_tests {
         // the replies run in the scratch state: add_flag counts up
         b.run(&mut cx, Action::Talk(TalkAct::Choose(1)));
         assert_eq!(b.talk_gs.as_ref().map(|gs| json::i(&gs.flags, "fallback", 0)), Some(1));
+    }
+}
+
+/// VISCLAR1 slice A (INPUT1.md 10: VC1-VC6, AR1-AR6): the calmer board of a timeline battle. A catalog encounter on
+/// the catalog's timeline row; every expectation is a rule of the spec or a kit query (the plan, the records, the
+/// positions), never a shipped number. Classic keeps today's board.
+#[cfg(test)]
+mod visclar_tests {
+    use super::*;
+    use emberwake_rules::ruleset::TIMELINE;
+
+    fn arena(ruleset: Option<&str>, view: &str) -> (Cx, Gfx, BattleScreen) {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        cx.settings.v["battle_view"] = json!(view);
+        let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+        let b = BattleScreen::arena_with(&cx, None, &encounter, ruleset.map(String::from), "", false);
+        assert!(b.host.session.is_some(), "the battle starts: {}", b.message);
+        (cx, crate::hud::hud_tests::gfx(), b)
+    }
+
+    fn s(b: &BattleScreen) -> &Session {
+        b.host.session.as_ref().unwrap()
+    }
+
+    /// The selected hero takes the first foe on the field as its Assault target.
+    fn assault(cx: &Cx, b: &mut BattleScreen) -> (usize, usize) {
+        let h = b.selected.unwrap();
+        let foe = s(b).w.enemies.iter().copied().find(|&e| s(b).w.units[e].is_active() && s(b).w.has(e)).unwrap();
+        let r = b.send(cx, json!({"cmd": "round_intent", "unit": h, "intent": "assault", "target": foe}));
+        assert_eq!(r["ok"], json!(true), "{r}");
+        (h, foe)
+    }
+
+    fn arrows(b: &BattleScreen, cx: &Cx) -> Vec<Value> {
+        b.state(cx)["overlay"]["arrows"].as_array().cloned().unwrap_or_default()
+    }
+
+    fn units_of(a: &[Value]) -> Vec<usize> {
+        a.iter().map(|x| x["unit"].as_u64().unwrap() as usize).collect()
+    }
+
+    /// VC6, VC5: `default_settings` holds every group on but `first_move` and `all_bars`, and no debug key; a saved
+    /// `battle_overlays` without a group takes the group's default; Restore defaults returns to them.
+    #[test]
+    fn the_defaults_are_the_calmer_view() {
+        let d = crate::screens::default_settings();
+        for (id, _, _, on) in OVERLAY_GROUPS {
+            assert_eq!(d["battle_overlays"][id], json!(on), "{id}");
+            assert_eq!(on, !matches!(id, "first_move" | "all_bars"), "{id}");
+        }
+        assert!(d.get(FORESIGHT_OFF).is_none());
+        let older = Layers::of(&json!({"band": true, "moves": true}));
+        assert!(!older.first_move && !older.all_bars && older.facings && older.glyphs, "an older file shows the calmer view");
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut g = crate::hud::hud_tests::gfx();
+        let mut st = crate::menus::SettingsScreen::new(&cx);
+        st.draw(&mut cx, &mut g, (-500, -500), true);
+        st.click_id(&mut cx, "settings.tab.battle").unwrap();
+        st.draw(&mut cx, &mut g, (-500, -500), true);
+        st.click_id(&mut cx, "settings.overlay.first_move").unwrap();
+        st.click_id(&mut cx, "settings.overlay.all_bars").unwrap();
+        let draft = st.state(&cx)["draft"].clone();
+        assert!(Layers::of(&draft["battle_overlays"]).first_move && Layers::of(&draft["battle_overlays"]).all_bars, "a click turns each on");
+        st.click_id(&mut cx, "settings.defaults").unwrap();
+        let draft = st.state(&cx)["draft"].clone();
+        let l = Layers::of(&draft["battle_overlays"]);
+        assert!(!l.first_move && !l.all_bars && l.moves && l.walks, "Restore defaults");
+    }
+
+    /// VC4, VC5: the reader is false outside a debug build whatever the file says, and the checkbox (a debug build)
+    /// sets the key.
+    #[test]
+    fn party_foresight_off_is_a_debug_build_reader() {
+        let on = json!({FORESIGHT_OFF: true});
+        assert!(!party_foresight_off(&on, false), "a release build never reads it");
+        assert!(party_foresight_off(&on, true));
+        assert!(!party_foresight_off(&json!({}), true) && !party_foresight_off(&json!({FORESIGHT_OFF: false}), true));
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut g = crate::hud::hud_tests::gfx();
+        let mut st = crate::menus::SettingsScreen::new(&cx);
+        st.draw(&mut cx, &mut g, (-500, -500), true);
+        st.click_id(&mut cx, "settings.tab.battle").unwrap();
+        st.draw(&mut cx, &mut g, (-500, -500), true);
+        let has = st.widgets().iter().any(|w| w["id"] == json!("settings.debug.party_foresight_off"));
+        assert_eq!(has, cfg!(debug_assertions), "VC5: a debug build only");
+        if has {
+            st.click_id(&mut cx, "settings.debug.party_foresight_off").unwrap();
+            assert_eq!(st.state(&cx)["draft"][FORESIGHT_OFF], json!(true));
+        }
+    }
+
+    /// VC1: under the round intent the tells' kind chips need the group `first_move` (off by default); classic keeps
+    /// them. VC2, VC3: the token bars draw for the focus set (the selected hero and its target here, nothing hovered),
+    /// for every unit with Alt or `all_bars`; classic draws every unit's.
+    #[test]
+    fn chips_and_bars_follow_the_focus_set() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), "flat");
+        let (h, foe) = assault(&cx, &mut b);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let l = Layers::of(&cx.settings.v["battle_overlays"]);
+        assert!(!first_move_chips(true, &l) && first_move_chips(true, &Layers::of(&json!({"first_move": true}))) && first_move_chips(false, &l));
+        let st = b.state(&cx);
+        assert_eq!(st["focus"], json!([h, foe]), "the selected hero and its round target");
+        let focus: Vec<usize> = vec![h, foe];
+        let n = s(&b).w.units.len();
+        assert!(n > 2);
+        for i in 0..n {
+            assert_eq!(bars_shown(true, &l, false, &focus, i), focus.contains(&i), "unit {i}");
+            assert!(bars_shown(true, &l, true, &focus, i), "Alt: unit {i}");
+            assert!(bars_shown(true, &Layers::of(&json!({"all_bars": true})), false, &focus, i), "all_bars: unit {i}");
+            assert!(bars_shown(false, &l, false, &[], i), "classic: unit {i}");
+        }
+        // the inspected unit joins it
+        let other = s(&b).w.enemies.iter().copied().find(|&e| e != foe && s(&b).w.units[e].is_active() && s(&b).w.has(e));
+        if let Some(e) = other {
+            b.inspect = Some((e, s(&b).current_round));
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            assert_eq!(b.state(&cx)["focus"], json!([h, foe, e]));
+        }
+        // classic: no focus or overlay key
+        let (mut cx, mut g, mut b) = arena(None, "flat");
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let st = b.state(&cx);
+        assert!(st.get("focus").is_none() && st.get("overlay").is_none());
+    }
+
+    /// AR1-AR4 and the acceptance: by default the agent link's `overlay.arrows` holds the selected hero's arrow only
+    /// (to its target, alpha 90); with Alt one per unit with a target, never two for a unit; an unrevealed enemy's has
+    /// two points (no move leg); the inspected unit's shows by default (Q15); with the tells hidden no enemy's.
+    #[test]
+    fn one_quiet_arrow_per_unit() {
+        for view in ["stage", "flat"] {
+            let (mut cx, mut g, mut b) = arena(Some(TIMELINE), view);
+            let (h, foe) = assault(&cx, &mut b);
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            let a = arrows(&b, &cx);
+            assert_eq!(units_of(&a), vec![h], "{view}: the selected hero's only");
+            let w = &s(&b).w;
+            let fp = w.pos(foe);
+            assert_eq!(a[0]["points"][0], json!([w.pos(h).x, w.pos(h).y]));
+            assert_eq!(*a[0]["points"].as_array().unwrap().last().unwrap(), json!([fp.x, fp.y]), "{view}: it ends at the target");
+            assert_eq!(a[0]["alpha"], json!(90));
+            cx.held.alt = true;
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            let a = arrows(&b, &cx);
+            let mut seen = units_of(&a);
+            let total = seen.len();
+            seen.sort();
+            seen.dedup();
+            assert_eq!(seen.len(), total, "{view}: at most one arrow a unit: {a:?}");
+            assert!(seen.len() > 1 && seen.contains(&h), "{view}: Alt shows every unit's: {a:?}");
+            assert!(a.iter().all(|x| x["alpha"] == json!(90) && x["points"].as_array().unwrap().len() >= 2));
+            let tells = s(&b).enemy_intents();
+            for x in a.iter().filter(|x| tells.iter().any(|t| x["unit"] == json!(t.unit) && !t.revealed)) {
+                assert_eq!(x["points"].as_array().unwrap().len(), 2, "{view}: an unrevealed enemy goes straight: {x}");
+            }
+            // every party member on the field with a unit or tile target has one
+            let w = &s(&b).w;
+            for &m in w.allies.iter().filter(|&&m| w.units[m].is_active() && w.has(m)) {
+                if let Some(RoundTarget::Unit(_) | RoundTarget::Cell(_)) = w.round_states.get(&m).and_then(|r| r.target) {
+                    assert!(seen.contains(&m), "{view}: member {m}: {a:?}");
+                }
+            }
+            // Q15: the inspected unit's arrow beside the selected hero's, without Alt
+            cx.held.alt = false;
+            let enemy_arrow = seen.iter().copied().find(|u| w.enemies.contains(u));
+            if let Some(e) = enemy_arrow {
+                b.inspect = Some((e, s(&b).current_round));
+                b.draw(&mut cx, &mut g, (-500, -500), true);
+                assert_eq!(units_of(&arrows(&b, &cx)), vec![h, e], "{view}");
+            }
+            // the tells hidden: no enemy arrow even with Alt
+            cx.held.alt = true;
+            cx.settings.v["show_tells"] = json!(false);
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            assert!(units_of(&arrows(&b, &cx)).iter().all(|u| s(&b).w.allies.contains(u)), "{view}");
+        }
+    }
+
+    /// AR1, AR5: the move leg: the hero's arrow bends where its moves before its first command end (with the group
+    /// `moves` on; off: straight); an enemy's leg needs `walks`.
+    #[test]
+    fn the_move_leg_follows_the_plan_and_the_groups() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), "stage");
+        let (h, foe) = assault(&cx, &mut b);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let sess = s(&b);
+        let leg = party_leg(sess, h);
+        let tells = sess.enemy_intents();
+        let rounds = sess.round_intents();
+        let on = arrows_of(sess, &tells, &rounds, &Layers::of(&Value::Null), true);
+        let off = arrows_of(sess, &tells, &rounds, &Layers::of(&json!({"moves": false})), true);
+        let mine = |v: &[Arrow]| v.iter().find(|a| a.unit == h).cloned().expect("the hero's arrow");
+        let (hp, fp) = (sess.w.pos(h), sess.w.pos(foe));
+        let want = if leg == hp { vec![hp, fp] } else { vec![hp, leg, fp] };
+        assert_eq!(mine(&on).points, want, "the move leg ends where the moves before the first command end");
+        assert_eq!(mine(&off).points, vec![hp, fp], "moves off: straight");
+        // the leg's end is where a planned move ends or the first command strikes from (or the hero's own tile)
+        let o = overlay_of(sess, Some(h), true).unwrap();
+        let entries = sess.plan.compile(&sess.w, h).entries;
+        assert!(leg == hp || o.moves.iter().any(|(t, _)| t.last() == Some(&leg)) || entries.iter().any(|e| strike_tile(e) == leg), "{leg:?} {:?}", o.moves);
+        let foes_off = arrows_of(sess, &tells, &rounds, &Layers::of(&json!({"walks": false})), true);
+        assert!(foes_off.iter().filter(|a| !a.ally).all(|a| a.points.len() == 2));
+    }
+
+    /// AR6 (Q6, Q16): during playback the board draws no target arrow and no destination plate (the overlay's moves
+    /// are empty), with Alt too; the facing chevrons stay (VC6).
+    #[test]
+    fn playback_draws_no_arrow_and_no_plate() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), "stage");
+        assault(&cx, &mut b);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert!(!arrows(&b, &cx).is_empty());
+        let r = b.send(&cx, json!({"cmd": "confirm"}));
+        assert_eq!(r["ok"], json!(true), "{r}");
+        assert!(!s(&b).is_planning());
+        cx.held.alt = true;
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let st = b.state(&cx);
+        assert_eq!(st["overlay"]["arrows"], json!([]), "{}", st["overlay"]);
+        assert_eq!(st["overlay"]["moves"], json!([]));
+        let w = &s(&b).w;
+        let facing = w.enemies.iter().filter(|&&e| w.units[e].is_active() && w.has(e) && ri::facing(w, e) != emberwake_battle::grid::ZERO).count();
+        assert_eq!(st["overlay"]["facings"].as_array().unwrap().len(), facing, "the chevrons stay");
+        assert!(Layers::of(&cx.settings.v["battle_overlays"]).facings);
+    }
+
+    /// VC4: with Party foresight off a Hawk Eye reveal reads unrevealed on the screen (no "Read by" line on the
+    /// enemy's hover card; its record `revealed` false with no plan lines, so the badge row is not filled) while the
+    /// kit's records keep it; off, the screen shows it. Its arrow goes straight (AR2).
+    #[test]
+    fn party_foresight_off_hides_foresight_reveals() {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), "flat");
+        let h = b.selected.unwrap();
+        {
+            let sess = b.host.session.as_mut().unwrap();
+            sess.w.units[h].foresight_source = "t_sight".into();
+            sess.w.units[h].foresight_range = emberwake_rules::unit::FORESIGHT_RANGE_MAX;
+            sess.measure_reveals();
+        }
+        let tells = s(&b).enemy_intents();
+        let read: Vec<usize> = tells.iter().filter(|t| t.revealed && !t.readers.is_empty() && !t.enraged).map(|t| t.unit).collect();
+        assert!(!read.is_empty(), "the range reveals a foe");
+        let seen = seen_intents(&s(&b).w, tells.clone(), true);
+        for t in seen.iter().filter(|t| read.contains(&t.unit)) {
+            assert!(!t.revealed && t.plan.is_empty() && t.readers.is_empty(), "{t:?}");
+        }
+        assert_eq!(seen_intents(&s(&b).w, tells.clone(), false), tells, "off: unchanged");
+        let tip_of = |b: &BattleScreen, e: usize| b.w.iter().find(|x| x.id == format!("unit.{e}")).map(|x| x.tip.iter().map(|l| l.0.clone()).collect::<Vec<_>>()).unwrap_or_default();
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert!(read.iter().all(|&e| tip_of(&b, e).iter().any(|l| l.starts_with("Read by "))), "the reveal shows");
+        cx.settings.v[FORESIGHT_OFF] = json!(true);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        for &e in &read {
+            assert!(!tip_of(&b, e).iter().any(|l| l.starts_with("Read by ")), "foe {e}: {:?}", tip_of(&b, e));
+        }
+        assert!(s(&b).enemy_intents().iter().filter(|t| read.contains(&t.unit)).all(|t| t.revealed), "display only: the kit still reveals");
+        cx.held.alt = true;
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        let a = arrows(&b, &cx);
+        assert!(a.iter().filter(|x| read.iter().any(|e| x["unit"] == json!(e))).all(|x| x["points"].as_array().unwrap().len() == 2), "{a:?}");
     }
 }

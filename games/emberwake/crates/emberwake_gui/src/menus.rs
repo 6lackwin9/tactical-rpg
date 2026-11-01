@@ -515,7 +515,7 @@ const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
         ],
     ),
     ("Maps", &[("Move the party", "Arrow keys, W A S D"), ("Interact with the marker you face", "E"), ("Game menu", "Escape"), ("Choose a dialogue line", "1-9"), ("Party, journal, stash, help, event log", "P, J, I, ?, L")]),
-    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Skills of the selected hero (timeline)", "1-9"), ("Target self (timeline)", "S"), ("Inspect a unit (timeline)", "Right click"), ("Clear inspect, deselect (timeline)", "Escape"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Every revealed enemy move (timeline)", "Hold Alt"), ("Screenshot", "F12")]),
+    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Skills of the selected hero (timeline)", "1-9"), ("Target self (timeline)", "S"), ("Inspect a unit (timeline)", "Right click"), ("Clear inspect, deselect (timeline)", "Escape"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Every bar and arrow (timeline)", "Hold Alt"), ("Screenshot", "F12")]),
 ];
 
 /// A volume slider's sample and bus (scripts/audio/volume_preview.gd: the master sample plays on the interface bus).
@@ -568,7 +568,7 @@ impl SettingsScreen {
                 }
             }
             SetAct::Overlay(k) => {
-                let on = self.draft["battle_overlays"][k].as_bool().unwrap_or(true);
+                let on = self.draft["battle_overlays"][k].as_bool().unwrap_or_else(|| crate::battle::overlay_default(k));
                 if !self.draft["battle_overlays"].is_object() {
                     self.draft["battle_overlays"] = json!({});
                 }
@@ -690,12 +690,26 @@ impl Screen<GameCx> for SettingsScreen {
                 ui.p.text(x as f32, y as f32, "Battle overlays (timeline battles)", BODY + 1.0, GOLD);
                 y += 14;
                 let col_w = (body.w - 10) / 2;
-                for (k, (id, label, help)) in crate::battle::OVERLAY_GROUPS.iter().enumerate() {
-                    let (cx_, cy_) = (x + 3 + (k as i32 % 2) * col_w, y + (k as i32 / 2) * 17);
-                    let on = d["battle_overlays"][*id].as_bool().unwrap_or(true);
+                // VISCLAR1-A: 12 rows of two at a 15 px pitch, so the debug row fits under them
+                let groups = &crate::battle::OVERLAY_GROUPS;
+                for (k, (id, label, help, default)) in groups.iter().enumerate() {
+                    let (cx_, cy_) = (x + 3 + (k as i32 % 2) * col_w, y + (k as i32 / 2) * OVERLAY_PITCH);
+                    let on = d["battle_overlays"][*id].as_bool().unwrap_or(*default);
                     ui.checkbox(&format!("settings.overlay.{id}"), cx_, cy_, label, on, SetAct::Overlay(id), true);
                     if let Some(wd) = ui.widgets.last_mut() {
                         wd.tip = tip(label, help);
+                    }
+                }
+                // VISCLAR1 VC4, VC5: the debug-build-only Party foresight off (never in a release build), a row under the
+                // groups: the heading, the checkbox in the second column
+                #[cfg(debug_assertions)]
+                {
+                    let y = y + groups.len().div_ceil(2) as i32 * OVERLAY_PITCH + 2;
+                    ui.p.text(x as f32, y as f32, "Debug", BODY + 1.0, GOLD);
+                    let at = x + 3 + col_w;
+                    ui.checkbox("settings.debug.party_foresight_off", at, y, "Party foresight off", d[crate::battle::FORESIGHT_OFF].as_bool().unwrap_or(false), SetAct::Toggle(crate::battle::FORESIGHT_OFF), true);
+                    if let Some(wd) = ui.widgets.last_mut() {
+                        wd.tip = tip("Party foresight off", "Debug: every enemy plan a party foresight passive reveals (Hawk Eye) is drawn as unrevealed. Enrage and the battle's plan reveal still show. Display only.");
                     }
                 }
             }
@@ -726,6 +740,9 @@ impl Screen<GameCx> for SettingsScreen {
     }
     widget_plumbing!();
 }
+
+/// VISCLAR1-A: the row pitch of the Battle tab's overlay checkboxes (24 groups in 12 rows, then the debug row).
+const OVERLAY_PITCH: i32 = 15;
 
 /// Volume sliders move in steps of 5 (0-100); speed and text-size sliders in quarters (0.5-2.0).
 const VOLUME_STEP: f64 = 5.0;
