@@ -143,3 +143,31 @@ The rules behind every player screen come from `emberwake_world`, checked agains
   change ("Ambush chance x50%."). The Travel hover card starts with the mode's name ("Stealth: 4 days, 4 Tallow.");
   road labels show each leg's days in the mode. A trip whose forced-march Alert would end the run asks first (No as
   the default). Without modes there is no button and nothing changes (the Ashlands).
+
+## One-flow input (INPUT1-U, timeline battles)
+
+- Click a target while a hero plans: an enemy, an ally, an empty tile, or the hero itself (the hero panel's Self
+  button, `hero.self`, or S). The click sets the round target at once (the gold ring) unless a pick holds one, then the
+  skill menu opens at the click, titled "`<hero>` -> `<target>`": the hero's skills that could act on that kind of
+  target in hotkey order ("1 Heavy Cleave", detail "4 blocks, 4 AP; Assault"; a Maneuver attack once per kind, "Maneuver
+  (Engage)"), the pouch items of that aim, Rest; a tile adds Move here, "Move here, then" each Guard and self skill,
+  the area skills and, after a skill pick, Step here after. A row that cannot be picked now is dim with its reason
+  ("AP 3 < 4", "Out of reach: 3 > 2", "Flank protected"); a row whose intent change drops an intent-bound buff has a
+  red corner and the tip "Changing loses Riposte.". An ally's menu ends with "Select `<ally>`" (with no usable row the
+  click selects the ally).
+- Picking a row appends the pick; the first skill or item pick sets the round intent and Maneuver kind; the menu stays
+  in place and lists only what can still be picked (it closes when nothing is left). Hovering a row previews it on the
+  strip (and, for a Maneuver Engage row, rings its target's position tiles: gold preferred, dim fallback). A right
+  click, a click outside or Esc closes the menu and does nothing else. Keys 1-9 pick the listed row with that digit,
+  or with the menu closed that hotkey skill on the round target. Z (or a right click with no menu) undoes the last
+  pick, Clear removes them all.
+- The planner fills the free blocks as ghost blocks (the engine's ghost look: lighter fill, dashed outline, dim
+  label; the tip starts "Auto-filled"); Settings, Gameplay: "Auto-fill the rest" (off: the free blocks Rest). A hero
+  with no pick shows its hero tactic's draft as its ghost (the Party / Hero tactic menus set it); after a target click,
+  the auto plan on that target. A ghost that would change the intent and drop an intent-bound buff waits for Confirm
+  (the panel warns "Changing loses ..."). The hero panel reads "Intent: `<Intent>` from `<first pick | tactic>`" (or
+  "(carried over)"), the target, the picks and the planned commands (the ghost dim). The intent buttons, the kind and
+  opener menus, Manual and Fill are gone (the host keeps `round_intent`, `manual` and `fill` for recordings, sims and
+  the Dojo).
+- Agent link: `state.picks` [{unit, picks}], `state.deferred`, `state.player_target`, the menu as `popup` (rows
+  `popup.<k>`), `overlay.positions` while an Engage row is hovered; requests `pick`, `unpick`, `clear`, `autofill`.

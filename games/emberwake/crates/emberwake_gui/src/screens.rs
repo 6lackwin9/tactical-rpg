@@ -25,7 +25,8 @@ pub type Nav = aegis_ui::Nav<GameCx>;
 pub fn default_settings() -> Value {
     // RULESET1-U slice 6: every battle overlay group on (`battle::OVERLAY_GROUPS`)
     let overlays: serde_json::Map<String, Value> = crate::battle::OVERLAY_GROUPS.iter().map(|g| (g.0.to_string(), Value::Bool(true))).collect();
-    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "map_names": "hover", "map_legend_open": true, "battle_view": "stage", "see_through": "selected", "battle_overlays": overlays})
+    // INPUT1 GH7: "Auto-fill the rest" on by default
+    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "auto_fill": true, "map_names": "hover", "map_legend_open": true, "battle_view": "stage", "see_through": "selected", "battle_overlays": overlays})
 }
 
 /// The game in play (CurrentGame): the state, the slot it came from and its copy at the last save or load.

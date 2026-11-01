@@ -8,7 +8,9 @@
 //! Mouse: click a hero to select; click a foe, an ally, the hero itself or a tile for its options; hover anything for
 //! details; right click closes a menu or undoes the hero's last step; the wheel scrolls the log. Keys: Enter confirm,
 //! Space step / next round, A autoplay, Z undo, L log, R restart (arena), Esc close; hold Alt to outline every unit,
-//! covered or not (STAGE1-O).
+//! covered or not (STAGE1-O). Timeline battles (INPUT1-U): a click on a target sets the round target and opens the skill
+//! menu (picks through the host's `pick`, the planner's ghost fills the rest), keys 1-9 are the hero's skill hotkeys, S
+//! targets the hero itself, Z undoes the last pick.
 //! ENCOUNTER2-C2 (docs/specs/ENCOUNTER2_C.md 3.3): each new talk cue of `Session::talks` opens the shared talk box
 //! (`talk.rs`) once its step's impacts have played, over a 35 % veil, the speaker's token in the gold ring; while it is
 //! open the screen sends no request, autoplay waits and every board click and battle key is swallowed; replies run in
@@ -118,14 +120,9 @@ pub enum Action {
     Continue,
     /// Leave the Test Arena.
     Leave,
-    /// RULESET1-U (intent UI1): the selected hero's round intent (a button or keys 1-9, one per intent in the ruleset's order).
-    Intent(RoundIntent),
-    /// The selected hero's Maneuver kind and opener menus (UI1, MV11, PL1).
-    KindMenu,
-    OpenerMenu,
-    /// MM1: the selected hero's Manual toggle; MM3: "Fill the rest" after its last step.
-    Manual,
-    Fill,
+    /// INPUT1 SL4 (round intent): the hero panel's Self button and key S: the selected hero targets itself (the self
+    /// menu).
+    SelfTarget,
     /// ENCOUNTER2 H1: the hero picked to hold a hold escape's tiles.
     StayPick(usize),
     /// ENCOUNTER2-C DT9: a reply or Continue in the open battle talk's box.
@@ -143,27 +140,10 @@ enum RowAct {
     Step(Value),
     PartyTactic(usize),
     HeroTactic(usize),
-    /// RULESET1-U: fields of a `round_intent` request for the selected hero (target, maneuver, opener).
-    Round(Value),
-}
-
-/// RULESET1-U (intent PL7, UI1): the selected hero's intents of the ruleset in order, each with the planner's reason it
-/// is not offered (None = offered; never computed outside planning), kept until the battle changes (`rev`) or another
-/// hero is picked.
-struct Offers {
-    key: (usize, u64),
-    intents: Vec<(RoundIntent, Option<String>)>,
-}
-
-/// One line of help a round intent's button shows (RULESET1_INTENT section 2).
-fn intent_help(i: RoundIntent) -> &'static str {
-    match i {
-        RoundIntent::Assault => "Attack one enemy: an approach or a kite step, an opener, then follow-ups.",
-        RoundIntent::Guard => "Hold yourself or a tile: Active Guard and the Guard skills.",
-        RoundIntent::Support => "Heal or buff yourself or an ally.",
-        RoundIntent::Maneuver => "Engage a flank, Disengage, or use a foe-aimed item.",
-        RoundIntent::Channel => "Channel a meter.",
-    }
+    /// INPUT1 IF2-IF4 (round intent): a row of the skill menu: the picks it appends on the menu's target.
+    Pick(Vec<rip::Pick>),
+    /// SL6: the ally menu's last row, "Select <ally>".
+    SelectAlly(usize),
 }
 
 /// RULESET1_INTENT UI5: a round intent's colour, its commands' colour (Assault an attack's, Guard a Defend's, Support's,
@@ -251,12 +231,80 @@ fn kind_name(k: ManeuverKind) -> &'static str {
     }
 }
 
-/// The intents of the battle's ruleset, in its order (empty without the rule round_intent).
-fn ruleset_intents(w: &World) -> Vec<RoundIntent> {
-    if !ri::on(w) {
-        return Vec::new();
+/// A pick as the host's `pick` request takes it (INPUT1_TASKS 1.3).
+fn pick_json(w: &World, p: &rip::Pick) -> Value {
+    match p {
+        rip::Pick::Skill { skill, kind } => {
+            let mut v = json!({"skill": w.cat.skills[*skill].id});
+            if let Some(k) = kind {
+                v["kind"] = json!(emberwake_battle::intent::maneuver_id(*k));
+            }
+            v
+        }
+        rip::Pick::Item(id) => json!({"item": id}),
+        rip::Pick::Rest => json!("rest"),
+        rip::Pick::MoveHere(c) => json!({"move": [c.x, c.y]}),
+        rip::Pick::StepAfter(c) => json!({"step_after": [c.x, c.y]}),
     }
-    w.ruleset.numbers.intents.iter().filter_map(|i| RoundIntent::parse(i)).collect()
+}
+
+/// INPUT1 GH2 b: the intents a round target of this kind tries, in order (an enemy: Assault, else Maneuver; an ally:
+/// Support; the unit itself: Guard, else Support; a tile: Guard, else Assault, else Maneuver).
+fn intents_for(w: &World, h: usize, at: RoundTarget) -> &'static [RoundIntent] {
+    match at {
+        RoundTarget::Unit(t) if w.foes_of(h).contains(&t) => &[RoundIntent::Assault, RoundIntent::Maneuver],
+        RoundTarget::Unit(_) => &[RoundIntent::Support],
+        RoundTarget::Myself => &[RoundIntent::Guard, RoundIntent::Support],
+        RoundTarget::Cell(_) => &[RoundIntent::Guard, RoundIntent::Assault, RoundIntent::Maneuver],
+    }
+}
+
+/// Whether `intent` on `at` plans a round for `h` (GH2 b: "when it can act on that target"), on copies.
+fn plans_on(s: &Session, h: usize, intent: RoundIntent, at: RoundTarget) -> bool {
+    if !s.w.ruleset.numbers.intents.iter().any(|i| i == intent.id()) || !ri::target_problem(&s.w, h, intent, at).is_empty() {
+        return false;
+    }
+    let mut w2 = s.w.clone();
+    let mut p2 = rip::copy_plan(&s.plan);
+    ri::set_intent(&mut w2, h, intent).is_ok() && ri::set_target(&mut w2, h, at).is_ok() && rip::plan_unit(&mut w2, &mut p2, h).is_ok()
+}
+
+/// A menu row's label (IF3): the skill with its hotkey digit (HK1's first nine), "Use <item> (<n> left)", Rest, the
+/// tile rows (ET1).
+fn pick_label(s: &Session, h: usize, picks: &[rip::Pick]) -> String {
+    let w = &s.w;
+    let skill = |sid: usize| {
+        let name = w.cat.skills[sid].name.clone();
+        match rip::hotkey_skills(w, h).iter().position(|k| *k == sid).filter(|k| *k < 9) {
+            Some(k) => format!("{} {name}", k + 1),
+            None => name,
+        }
+    };
+    match picks {
+        [rip::Pick::Skill { skill: sid, .. }] => skill(*sid),
+        [rip::Pick::Item(id)] => {
+            let name = emberwake_battle::command::pouch_item(w, h, id).map_or(id.clone(), |i| i.name.clone());
+            format!("Use {name} ({} left)", s.plan.items_left(w, h, id, -1))
+        }
+        [rip::Pick::Rest] => "Rest".into(),
+        [rip::Pick::MoveHere(_)] => "Move here".into(),
+        [rip::Pick::MoveHere(_), rip::Pick::Skill { skill: sid, .. }] => format!("Move here, then {}", w.cat.skills[*sid].name),
+        [rip::Pick::StepAfter(_)] => "Step here after".into(),
+        _ => picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", then "),
+    }
+}
+
+/// A menu row's detail (IF3): "<blocks> blocks, <ap> AP; <Intent>" (a Maneuver row adds its kind), or its refusal.
+fn pick_detail(o: &rip::PickOption) -> String {
+    if let Some(why) = &o.problem {
+        return why.clone();
+    }
+    let blocks = format!("{} block{}, {} AP", o.blocks, if o.blocks == 1 { "" } else { "s" }, o.ap);
+    match (o.intent, o.kind) {
+        (Some(RoundIntent::Maneuver), Some(k)) => format!("{blocks}; Maneuver ({})", kind_name(k)),
+        (Some(i), _) => format!("{blocks}; {}", i.name()),
+        (None, _) => blocks,
+    }
 }
 
 /// A round target as the `round_intent` request takes it ("self", a unit index or a cell).
@@ -277,33 +325,6 @@ fn target_name(w: &World, t: RoundTarget) -> String {
     }
 }
 
-/// The Maneuver kind menu's label: the player's kind, or Auto with the planner's pick.
-fn kind_label(w: &World, h: usize) -> String {
-    let rs = w.round_states.get(&h);
-    match (rs.and_then(|r| r.maneuver), rs.is_some_and(|r| r.maneuver_auto)) {
-        (Some(k), false) => kind_name(k).into(),
-        (Some(k), true) => format!("Auto ({})", kind_name(k)),
-        (None, _) => "Auto".into(),
-    }
-}
-
-/// The opener menu's label: the player's opener (a skill or a pouch item), else Auto (the planner's, PL3).
-fn opener_label(w: &World, h: usize) -> String {
-    match w.round_states.get(&h).and_then(|r| r.opener.clone()) {
-        Some(ri::Opener::Skill(i)) => w.cat.skills[i].name.clone(),
-        Some(ri::Opener::Item(id)) => emberwake_battle::command::pouch_item(w, h, &id).map_or(id, |it| it.name.clone()),
-        None => "Auto".into(),
-    }
-}
-
-/// The hero's round in a few words ("Maneuver (Engage) on Wolf").
-fn round_line(w: &World, h: usize) -> String {
-    let Some(i) = ri::intent_of(w, h) else { return "no intent".into() };
-    let kind = if i == RoundIntent::Maneuver { w.round_states.get(&h).and_then(|r| r.maneuver).map(|k| format!(" ({})", kind_name(k))).unwrap_or_default() } else { String::new() };
-    let target = w.round_states.get(&h).and_then(|r| r.target).map(|t| format!(" on {}", target_name(w, t))).unwrap_or_default();
-    format!("{}{kind}{target}", i.name())
-}
-
 /// UI2's Rest gain ("Rest: 1 AP, 10 poise"; the poise only under the rule poise).
 fn rest_text(g: rip::RestGain) -> String {
     let poise = if g.poise > 0 { format!(", {} poise", g.poise) } else { String::new() };
@@ -317,6 +338,8 @@ struct Row {
     valid: bool,
     act: RowAct,
     tip: Tip,
+    /// IF3, IN6: picking the row changes the intent and drops intent-bound buffs (a red corner).
+    warn: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -326,6 +349,20 @@ struct Popup {
     y: i32,
     w: i32,
     rows: Vec<Row>,
+    /// INPUT1 IF1-IF5: the skill menu's hero and target (None: a tactic or step menu).
+    menu: Option<(usize, RoundTarget)>,
+}
+
+impl Popup {
+    /// The menu's rect with rows `row_h` high (TEXTFIT1: the pitch grows with the text size; 11 at Normal).
+    fn rect(&self, row_h: i32) -> Rect {
+        Rect::new(self.x, self.y, self.w, row_h + 4 + self.rows.len() as i32 * row_h)
+    }
+
+    /// Row `k`'s rect (under the title).
+    fn row(&self, row_h: i32, k: usize) -> Rect {
+        Rect::new(self.x + 2, self.y + row_h + 2 + k as i32 * row_h, self.w - 4, row_h)
+    }
 }
 
 struct Float {
@@ -1122,9 +1159,7 @@ pub struct BattleScreen {
     phases_seen: usize,
     /// FX1-L2 (4.3): the targets stepping aside from a miss (unit, clock ms of the impact, direction away).
     sidesteps: Vec<fx::Sidestep>,
-    /// RULESET1-U: the selected hero's intent offers (None in classic) and the battle's revision they were made at
-    /// (every request and battle start moves it).
-    offers: Option<Offers>,
+    /// The battle's revision (every request and battle start moves it): the previews below are kept for one.
     rev: u64,
     /// ENCOUNTER2-C (3.3): the open talk (None = none), how many of the session's talk cues were taken, the Arena's
     /// scratch game state of its world (made at the first talk, dropped with the battle), autoplay's plan held back
@@ -1135,6 +1170,23 @@ pub struct BattleScreen {
     auto_after_talk: bool,
     faces: Faces,
     talk_node: String,
+    /// INPUT1 GH2 b: the members whose round target the player set this round (their ghost is the auto plan on it).
+    player_target: Vec<usize>,
+    /// GH2 a: each member's hero tactic (an index of `TACTICS`; none = the party tactic).
+    member_tactic: std::collections::HashMap<usize, usize>,
+    /// GH2 a, IN6 (decision "INPUT1 answers, part 4" Q18): members whose ghost would change their intent and drop
+    /// intent-bound buffs: the request that realizes it waits for Confirm, the ghost shows on copies meanwhile.
+    deferred: Vec<(usize, Value)>,
+    /// The round whose planning start drafted the ghosts (GH2 a, GH6).
+    ghosted: i32,
+    /// IF5: the hovered menu row's preview (revision, row, the plan as if picked); MR13 reads it too.
+    preview: Option<(u64, usize, Option<(World, emberwake_battle::plan::Plan)>)>,
+    /// GH2 a: the selected deferred member's ghost (revision, member, its plan on copies).
+    deferred_view: Option<(u64, usize, Option<(World, emberwake_battle::plan::Plan)>)>,
+    /// MR13: the position tiles the last frame marked (the agent link's `overlay.positions`).
+    positions_shown: Vec<(V2, bool)>,
+    /// TEXTFIT1: the menus' row pitch at the last frame's text size (11 at Normal).
+    menu_row: i32,
 }
 
 impl BattleScreen {
@@ -1188,7 +1240,6 @@ impl BattleScreen {
             camera: Camera::default(),
             phases_seen: 0,
             sidesteps: Vec::new(),
-            offers: None,
             rev: 0,
             talk: None,
             talks_seen: 0,
@@ -1196,6 +1247,14 @@ impl BattleScreen {
             auto_after_talk: false,
             faces: Faces::default(),
             talk_node: String::new(),
+            player_target: Vec::new(),
+            member_tactic: Default::default(),
+            deferred: Vec::new(),
+            ghosted: 0,
+            preview: None,
+            deferred_view: None,
+            positions_shown: Vec::new(),
+            menu_row: 11,
         }
     }
 
@@ -1339,6 +1398,8 @@ impl BattleScreen {
             Some((parent, _)) => b.parent = parent,
         }
         b.after_start("");
+        // INPUT1 GH2: the replayed round keeps the ghosts it recorded (no new draft)
+        b.ghosted = b.session().current_round;
         b.message = format!("{verdict} {}", if b.viewing { "Watching (not recorded); Restart plays it afresh." } else { "Your battle from here." });
         b
     }
@@ -1872,6 +1933,10 @@ impl BattleScreen {
         self.pending_next_round = false;
         self.floats.clear();
         self.log_scroll = 0;
+        self.player_target.clear();
+        self.member_tactic.clear();
+        self.deferred.clear();
+        self.ghosted = 0;
         let (objective, n) = {
             let s = self.session();
             (emberwake_battle::encounter::Objectives::text_of(&s.def.raw, |r| s.units_of_ref(r).first().map(|&c| s.w.units[c].name.clone()).unwrap_or_else(|| r.to_string())), s.events.len())
@@ -1947,8 +2012,21 @@ impl BattleScreen {
             Action::TileClick(c) => self.tile_click(cx, c),
             Action::Choose(i) => {
                 let Some(p) = self.popup.take() else { return };
-                let Some(row) = p.rows.get(i).filter(|r| r.valid).cloned() else { return };
+                let Some(row) = p.rows.get(i).filter(|r| r.valid).cloned() else {
+                    // a disabled row keeps the menu open (its reason is on the row)
+                    self.popup = Some(p);
+                    return;
+                };
                 match row.act {
+                    RowAct::Pick(picks) => {
+                        if let Some((h, at)) = p.menu {
+                            self.popup = Some(p);
+                            self.choose_pick(cx, h, at, &picks, &row.label);
+                        }
+                    }
+                    RowAct::SelectAlly(u) => {
+                        self.selected = Some(u);
+                    }
                     RowAct::Step(step) => {
                         if let Some(h) = self.selected {
                             let r = self.send(cx, json!({"cmd": "add_step", "unit": h, "step": step}));
@@ -1959,42 +2037,39 @@ impl BattleScreen {
                     }
                     RowAct::PartyTactic(t) => {
                         self.party_tactic = t;
+                        // IF9: the party tactic drafts every member with no pick (the kit skips the others); its
+                        // drafts are the player's own call, so no ghost waits for Confirm
+                        self.member_tactic.clear();
+                        let picked: Vec<usize> = self.session().w.allies.iter().copied().filter(|&a| !rip::picks_of(&self.session().w, a).is_empty()).collect();
+                        self.player_target.retain(|a| picked.contains(a));
+                        self.deferred.clear();
                         self.send(cx, json!({"cmd": "preset", "preset": TACTICS[t]}));
                         self.message = format!("Party drafted: {}", TACTIC_LABELS[t]);
                     }
                     RowAct::HeroTactic(t) => {
                         self.hero_tactic = t;
                         if let Some(h) = self.selected {
+                            // IF9: the hero tactic clears the hero's picks and its player-set target, then drafts it
+                            self.member_tactic.insert(h, t);
+                            if ri::on(&self.session().w) {
+                                self.player_target.retain(|a| *a != h);
+                                self.deferred.retain(|d| d.0 != h);
+                                if !rip::picks_of(&self.session().w, h).is_empty() {
+                                    self.send(cx, json!({"cmd": "clear", "unit": h}));
+                                }
+                            }
                             self.send(cx, json!({"cmd": "preset", "unit": h, "preset": TACTICS[t]}));
                             self.message = format!("{} drafted: {}", self.session().w.units[h].name, TACTIC_LABELS[t]);
+                            if ri::on(&self.session().w) {
+                                self.reghost_after(cx, h);
+                            }
                         }
                     }
-                    RowAct::Round(fields) => self.round_req(cx, fields),
                 }
             }
-            Action::Intent(i) => self.pick_intent(cx, i),
-            Action::KindMenu => self.kind_menu(),
-            Action::OpenerMenu => self.opener_menu(),
-            Action::Manual => {
-                if let Some(h) = self.selected.filter(|_| self.planning()) {
-                    let on = !rip::manual(&self.session().w, h);
-                    let r = self.send(cx, json!({"cmd": "manual", "unit": h, "on": on}));
-                    if r["ok"] == json!(true) {
-                        let name = self.session().w.units[h].name.clone();
-                        self.message = match r["reason"].as_str() {
-                            Some(why) => format!("{name}: {why}"),
-                            None if on => format!("{name} plans by hand: click the board for steps, Fill completes the round."),
-                            None => format!("{name}: the planner's round again."),
-                        };
-                    }
-                }
-            }
-            Action::Fill => {
-                if let Some(h) = self.selected.filter(|_| self.planning()) {
-                    let r = self.send(cx, json!({"cmd": "fill", "unit": h}));
-                    if r["ok"] == json!(true) {
-                        self.message = format!("{}: follow-ups and Rest fill the round.", self.session().w.units[h].name);
-                    }
+            Action::SelfTarget => {
+                if let Some(h) = self.selected.filter(|_| self.planning() && ri::on(&self.session().w)) {
+                    self.target_click(cx, h, RoundTarget::Myself);
                 }
             }
             Action::ClosePopup => self.popup = None,
@@ -2006,6 +2081,12 @@ impl BattleScreen {
                 }
             }
             Action::Confirm => {
+                // GH2 a, IN6: the ghosts that wait for Confirm are drafted now (their intent change drops its buffs)
+                for (m, req) in std::mem::take(&mut self.deferred) {
+                    if self.planning() && rip::picks_of(&self.session().w, m).is_empty() {
+                        self.send(cx, req);
+                    }
+                }
                 let r = self.send(cx, json!({"cmd": "confirm"}));
                 if r["ok"] == json!(true) {
                     self.playing = true;
@@ -2015,12 +2096,20 @@ impl BattleScreen {
             }
             Action::Clear => {
                 if let Some(h) = self.selected {
-                    self.send(cx, json!({"cmd": "clear", "unit": h}));
+                    if ri::on(&self.session().w) {
+                        self.unpick(cx, h, true);
+                    } else {
+                        self.send(cx, json!({"cmd": "clear", "unit": h}));
+                    }
                 }
             }
             Action::Undo => {
                 if let Some(h) = self.selected {
-                    self.send(cx, json!({"cmd": "undo", "unit": h}));
+                    if ri::on(&self.session().w) {
+                        self.unpick(cx, h, false);
+                    } else {
+                        self.send(cx, json!({"cmd": "undo", "unit": h}));
+                    }
                 }
             }
             Action::Autoplay => {
@@ -2071,6 +2160,8 @@ impl BattleScreen {
             self.auto_after_talk = true;
             return;
         }
+        // INPUT1 IF9: autoplay drafts whole rounds (members with picks keep them); no ghost waits for Confirm
+        self.deferred.clear();
         self.send(cx, json!({"cmd": "preset", "preset": TACTICS[self.party_tactic]}));
         self.run(cx, Action::Confirm);
     }
@@ -2194,7 +2285,7 @@ impl BattleScreen {
 
     /// Dropdown of the six tactics under the Party / Hero picker.
     fn tactic_menu(&mut self, party: bool) {
-        let current = if party { self.party_tactic } else { self.hero_tactic };
+        let current = if party { self.party_tactic } else { self.selected.map_or(self.hero_tactic, |h| self.tactic_of(h)) };
         let help = if emberwake_battle::round_intent::on(&self.session().w) { TACTIC_INTENT_HELP } else { TACTIC_HELP };
         let rows = (0..TACTICS.len())
             .map(|i| Row {
@@ -2203,10 +2294,11 @@ impl BattleScreen {
                 valid: true,
                 act: if party { RowAct::PartyTactic(i) } else { RowAct::HeroTactic(i) },
                 tip: vec![(TACTIC_LABELS[i].to_string(), GOLD), (help[i].to_string(), TEXT)],
+                warn: false,
             })
             .collect();
         let anchor = self.w.iter().find(|w| w.id == if party { "strip.party" } else { "strip.hero" }).map(|w| w.rect).unwrap_or_default();
-        self.popup = Some(Popup { title: if party { "Draft the whole party".into() } else { "Draft the selected hero".into() }, x: anchor.x, y: anchor.y + anchor.h + 1, w: 120, rows });
+        self.popup = Some(Popup { title: if party { "Draft the whole party".into() } else { "Draft the selected hero".into() }, x: anchor.x, y: anchor.y + anchor.h + 1, w: 120, rows, menu: None });
     }
 
     fn unit_click(&mut self, cx: &Cx, u: usize) {
@@ -2221,7 +2313,7 @@ impl BattleScreen {
         }
         let h = self.selected.unwrap();
         if ri::on(&s.w) {
-            self.intent_click(cx, h, Some(u), None);
+            self.target_click(cx, h, ri::normalize(h, RoundTarget::Unit(u)));
             return;
         }
         if is_ally && u != h {
@@ -2243,199 +2335,283 @@ impl BattleScreen {
         }
         let Some(h) = self.selected else { return };
         if ri::on(&self.session().w) {
-            self.intent_click(cx, h, None, Some(c));
+            self.target_click(cx, h, RoundTarget::Cell(c));
             return;
         }
         let rows = self.options_for(h, "tile", None, Some(c));
         self.open_popup(format!("Tile {}, {}", c.x, c.y), rows);
     }
 
-    // ---- RULESET1-U: the round intent's controls (RULESET1_INTENT UI1, UI2, MM1-MM3) --------------------------------
+    // ---- INPUT1-U: one input flow under the round intent (INPUT1 2-5: IF, HK, GH, ET) ------------------------------
 
-    /// RULESET1-U: the selected hero's intent offers for this frame (made again when the battle or the hero changed).
-    fn refresh_offers(&mut self) {
-        let Some(s) = self.host.session.as_ref() else {
-            self.offers = None;
-            return;
-        };
-        let Some(h) = self.selected.filter(|h| ri::on(&s.w) && s.w.allies.contains(h)) else {
-            self.offers = None;
-            return;
-        };
-        if self.offers.as_ref().is_some_and(|o| o.key == (h, self.rev)) {
+    /// GH2 a: member `m`'s hero tactic (the party tactic unless the hero tactic menu set one).
+    fn tactic_of(&self, m: usize) -> usize {
+        self.member_tactic.get(&m).copied().unwrap_or(self.party_tactic)
+    }
+
+    /// GH2 a: `m`'s ghost is its tactic's draft: an active party member with no pick, no player-set target this round
+    /// and not planning by hand.
+    fn tactic_ghost(&self, m: usize) -> bool {
+        let w = &self.session().w;
+        ri::on(w) && w.allies.contains(&m) && w.units[m].is_active() && w.has(m) && !rip::manual(w, m) && rip::picks_of(w, m).is_empty() && !self.player_target.contains(&m)
+    }
+
+    /// GH2 a: drafts `m`'s ghost with its tactic (`preset`). A draft whose intent change would drop intent-bound buffs
+    /// waits for Confirm (IN6, Q18 a: the panel warns "Changing loses ..." meanwhile); a draft equal to the plan is not
+    /// sent again. Auto-fill off: nothing (the kit rests every free block).
+    fn draft_ghost(&mut self, cx: &Cx, m: usize) {
+        if !self.tactic_ghost(m) || !self.session().w.autofill {
             return;
         }
-        let planning = s.phase == Phase::Planning && !s.plan_confirmed;
-        let intents = ruleset_intents(&s.w).into_iter().map(|i| (i, if planning { rip::preview(&s.w, &s.plan, h, i, None).err() } else { None })).collect();
-        self.offers = Some(Offers { key: (h, self.rev), intents });
+        let preset = TACTICS[self.tactic_of(m)];
+        let s = self.session();
+        let mut w2 = s.w.clone();
+        let mut p2 = rip::copy_plan(&s.plan);
+        emberwake_battle::ai::plan_party_intents(&mut w2, &mut p2, &[(m, preset.to_string())]);
+        let drops = ri::intent_of(&w2, m).map(|i| ri::would_drop(&s.w, m, i)).unwrap_or_default();
+        let same = ri::intent_of(&w2, m) == ri::intent_of(&s.w, m) && plan_rows(&w2, &p2, m) == plan_rows(&s.w, &s.plan, m) && w2.round_states.get(&m).and_then(|r| r.target) == s.w.round_states.get(&m).and_then(|r| r.target);
+        self.deferred.retain(|d| d.0 != m);
+        let req = json!({"cmd": "preset", "unit": m, "preset": preset});
+        if !drops.is_empty() {
+            self.deferred.push((m, req));
+        } else if !same {
+            self.send(cx, req);
+        }
     }
 
-    /// The planner's reason `h` is not offered `intent` now (None = offered, or no offers made).
-    fn refusal(&self, h: usize, intent: RoundIntent) -> Option<String> {
-        let o = self.offers.as_ref().filter(|o| o.key.0 == h)?;
-        o.intents.iter().find(|x| x.0 == intent).and_then(|x| x.1.clone())
+    /// GH2, GH6, GH7: the planning start of a round: the player-set targets and the waiting ghosts reset, the battle
+    /// takes the Auto-fill setting (host `autofill`, recorded), every member without a pick gets its tactic's ghost.
+    fn plan_start(&mut self, cx: &Cx) {
+        self.ghosted = self.session().current_round;
+        self.player_target.clear();
+        self.deferred.clear();
+        let on = cx.settings.v["auto_fill"].as_bool().unwrap_or(true);
+        if !on || self.session().w.autofill != on {
+            self.send(cx, json!({"cmd": "autofill", "on": on}));
+        }
+        for m in self.session().w.allies.clone() {
+            self.draft_ghost(cx, m);
+        }
     }
 
-    /// UI1: the selected hero picks `intent` (a button or its key). In auto mode an intent the planner cannot plan is
-    /// refused with its reason (PL7); Manual may pick it and place the steps by hand.
-    fn pick_intent(&mut self, cx: &Cx, intent: RoundIntent) {
-        let Some(h) = self.selected.filter(|_| self.planning()) else { return };
-        self.refresh_offers();
-        if !rip::manual(&self.session().w, h) {
-            if let Some(why) = self.refusal(h, intent) {
-                self.message = format!("{}: {} is not offered: {why}", self.session().w.units[h].name, intent.name());
-                return;
+    /// GH7: the setting changed while planning: every member's ghost is rebuilt at once.
+    fn sync_autofill(&mut self, cx: &Cx, on: bool) {
+        self.send(cx, json!({"cmd": "autofill", "on": on}));
+        if !on {
+            self.deferred.clear();
+        }
+        for m in self.session().w.allies.clone() {
+            self.draft_ghost(cx, m);
+        }
+    }
+
+    /// PL8, GH2: after `h`'s round changed, the members after it that show their tactic's ghost draft it again (the kit
+    /// rebuilt them by their intent).
+    fn reghost_after(&mut self, cx: &Cx, h: usize) {
+        let later: Vec<usize> = self.session().w.allies.iter().copied().skip_while(|&m| m != h).skip(1).collect();
+        for m in later {
+            self.draft_ghost(cx, m);
+        }
+    }
+
+    /// IF1, GH2 b: a click names `at` as `h`'s round target (no pick holds one): the hero's intent when it plans a round
+    /// on it, else the first intent of that kind of target that does; an intent change that would drop intent-bound
+    /// buffs waits for Confirm (IN6). The target becomes player-set.
+    fn apply_target(&mut self, cx: &Cx, h: usize, at: RoundTarget) {
+        let s = self.session();
+        let cur = ri::intent_of(&s.w, h);
+        if s.w.round_states.get(&h).and_then(|r| r.target) == Some(at) && self.player_target.contains(&h) {
+            return;
+        }
+        let chosen = cur.filter(|i| plans_on(s, h, *i, at)).or_else(|| intents_for(&s.w, h, at).iter().copied().find(|i| plans_on(s, h, *i, at)));
+        let fits_now = cur.is_some_and(|i| ri::target_problem(&s.w, h, i, at).is_empty());
+        let drops = chosen.filter(|i| Some(*i) != cur).map(|i| ri::would_drop(&s.w, h, i)).unwrap_or_default();
+        self.deferred.retain(|d| d.0 != h);
+        let req = match chosen {
+            None if fits_now => json!({"cmd": "round_intent", "unit": h, "target": target_json(at)}),
+            None => return,
+            Some(i) if Some(i) == cur => json!({"cmd": "round_intent", "unit": h, "target": target_json(at)}),
+            Some(i) => json!({"cmd": "round_intent", "unit": h, "intent": i.id(), "target": target_json(at)}),
+        };
+        if !self.player_target.contains(&h) {
+            self.player_target.push(h);
+        }
+        if drops.is_empty() {
+            self.send(cx, req);
+        } else {
+            self.deferred.push((h, req));
+        }
+    }
+
+    /// IF1: a click on a unit or a tile while `h` plans: the round target first (GH2 b) unless a pick holds it, then the
+    /// skill menu at the click.
+    fn target_click(&mut self, cx: &Cx, h: usize, at: RoundTarget) {
+        let held = rip::picks_of(&self.session().w, h).iter().any(|p| p.holds_target());
+        if !held {
+            self.apply_target(cx, h, at);
+            self.reghost_after(cx, h);
+        }
+        self.open_menu(h, at, None, false);
+    }
+
+    /// IF2: the skill menu's title and rows for `h` on `at` (the kit's `pick_options`, in hotkey order), with "Select
+    /// <ally>" last on another ally (SL6).
+    fn menu_rows(&self, h: usize, at: RoundTarget) -> (String, Vec<Row>) {
+        let s = self.session();
+        let w = &s.w;
+        let opts = rip::pick_options(w, &s.plan, h, at);
+        let mut rows: Vec<Row> = opts
+            .iter()
+            .map(|o| Row { label: pick_label(s, h, &o.picks), detail: pick_detail(o), valid: o.problem.is_none(), act: RowAct::Pick(o.picks.clone()), tip: pick_tip(s, h, o), warn: !o.drops.is_empty() })
+            .collect();
+        let held = rip::picks_of(w, h).iter().any(|p| p.holds_target());
+        let round = w.round_states.get(&h).and_then(|r| r.target);
+        if let RoundTarget::Unit(u) = at {
+            if u != h && w.allies.contains(&u) {
+                rows.push(Row { label: format!("Select {}", w.units[u].name), detail: String::new(), valid: true, act: RowAct::SelectAlly(u), tip: vec![(format!("Select {}", w.units[u].name), GOLD), ("Plan this hero's round instead.".into(), TEXT)], warn: false });
             }
         }
-        self.round_req(cx, json!({"intent": intent.id()}));
+        let skill_rows = rows.iter().any(|r| matches!(r.act, RowAct::Pick(_)));
+        let title = if held && !skill_rows && !matches!(at, RoundTarget::Cell(_)) && round.is_some_and(|r| r != at) {
+            format!("One target per round: {}", target_name(w, round.unwrap()))
+        } else if !rows.iter().any(|r| r.valid && matches!(r.act, RowAct::Pick(_))) {
+            format!("No skill reaches {} this round", target_name(w, at))
+        } else {
+            format!("{} -> {}", w.units[h].name, target_name(w, at))
+        };
+        (title, rows)
     }
 
-    /// A `round_intent` request for the selected hero with `fields`; the message names the planner's refusal (PL7), a
-    /// later member it could not plan (PL8), the buffs the change dropped (IN6, from the battle's events) or the round.
-    fn round_req(&mut self, cx: &Cx, mut req: Value) {
-        let Some(h) = self.selected else { return };
-        req["cmd"] = json!("round_intent");
-        req["unit"] = json!(h);
+    /// IF1, IF4: opens (or, after a pick, re-lists in place) `h`'s skill menu on `at`. Another ally with no usable row
+    /// is selected at once (SL6); after a pick the menu closes when no skill row is left.
+    fn open_menu(&mut self, h: usize, at: RoundTarget, place: Option<(i32, i32)>, after_pick: bool) {
+        let (title, rows) = self.menu_rows(h, at);
+        let ally = match at {
+            RoundTarget::Unit(u) if u != h && self.session().w.allies.contains(&u) => Some(u),
+            _ => None,
+        };
+        let usable = rows.iter().any(|r| r.valid && matches!(r.act, RowAct::Pick(_)));
+        if let Some(u) = ally.filter(|_| !usable && !after_pick) {
+            self.selected = Some(u);
+            self.popup = None;
+            return;
+        }
+        if rows.is_empty() || (after_pick && !rows.iter().any(|r| matches!(r.act, RowAct::Pick(_)))) {
+            self.popup = None;
+            if !after_pick {
+                self.message = title;
+            }
+            return;
+        }
+        let (x, y) = place.unwrap_or(self.mouse);
+        let (pw, ph) = (MENU_W, self.menu_row + 4 + rows.len() as i32 * self.menu_row);
+        self.popup = Some(Popup { title, x: x.clamp(2, W - pw - 2), y: y.clamp(2, H - ph - 2), w: pw, rows, menu: Some((h, at)) });
+    }
+
+    /// IF4: appends `picks` (a menu row or a hotkey) to `h`'s round on `at` through the host's `pick`; the message names
+    /// the pick, a later member's dropped pick (GH5) or, from the battle's events, the buffs an intent change dropped
+    /// (IN6). An open menu stays at its place and re-lists.
+    fn choose_pick(&mut self, cx: &Cx, h: usize, at: RoundTarget, picks: &[rip::Pick], label: &str) {
+        let w = &self.session().w;
+        let mut req = json!({"cmd": "pick", "unit": h, "target": target_json(at), "pick": pick_json(w, &picks[0])});
+        if let Some(then) = picks.get(1) {
+            req["then"] = pick_json(w, then);
+        }
         let events = self.session().events.len();
         let r = self.send(cx, req);
         if r["ok"] != json!(true) {
             return;
         }
-        let w = &self.session().w;
-        let name = w.units[h].name.clone();
-        let message = if let Some(why) = r["reason"].as_str() {
-            format!("{name}: {why}")
-        } else if let Some(f) = r["refused"].as_array().and_then(|a| a.first()) {
-            format!("{}: {}", f["name"].as_str().unwrap_or(""), f["reason"].as_str().unwrap_or(""))
-        } else if self.session().events.len() > events {
-            return; // `after_change` showed the change's line ("Bryn leaves Guard: Riposte ends")
-        } else {
-            format!("{name}: {}", round_line(w, h))
-        };
-        self.message = message;
+        self.deferred.retain(|d| d.0 != h);
+        let name = self.session().w.units[h].name.clone();
+        let shown = label.split_once(' ').filter(|(d, _)| d.len() == 1 && d.chars().all(|c| c.is_ascii_digit())).map_or(label, |(_, rest)| rest);
+        if let Some(d) = r["dropped"].as_array().and_then(|a| a.first()) {
+            self.message = d["reason"].as_str().unwrap_or("").to_string();
+        } else if self.session().events.len() == events {
+            self.message = format!("{name}: {shown}");
+        }
+        self.reghost_after(cx, h);
+        if let Some(place) = self.popup.as_ref().filter(|p| p.menu.is_some()).map(|p| (p.x, p.y)) {
+            self.open_menu(h, at, Some(place), true);
+        }
     }
 
-    /// UI1, MM1-MM2: a board or card click under the round intent. Auto: a unit or tile that fits the hero's intent
-    /// becomes the round target (the planner rebuilds the round), another ally is selected, anything else says why not.
-    /// Manual: the classic step menu (the plan refuses another intent's skill or target), led by a "Round target" row
-    /// when the click names a new target that fits.
-    fn intent_click(&mut self, cx: &Cx, h: usize, unit: Option<usize>, cell: Option<V2>) {
-        let w = &self.session().w;
-        let target = match (unit, cell) {
-            (Some(u), _) => ri::normalize(h, RoundTarget::Unit(u)),
-            (None, Some(c)) => RoundTarget::Cell(c),
-            (None, None) => return,
-        };
-        let other_ally = unit.is_some_and(|u| u != h && w.allies.contains(&u));
-        let Some(intent) = ri::intent_of(w, h) else {
-            if other_ally {
-                self.selected = unit;
-            } else {
-                self.message = format!("{}: pick a round intent first (keys 1-{}).", w.units[h].name, ruleset_intents(w).len());
-            }
-            return;
-        };
-        let problem = ri::target_problem(w, h, intent, target);
-        let is_current = w.round_states.get(&h).and_then(|r| r.target) == Some(target);
-        let name = target_name(w, target);
-        let hero = w.units[h].name.clone();
-        if !rip::manual(w, h) {
-            if !problem.is_empty() {
-                if other_ally {
-                    self.selected = unit;
-                } else {
-                    self.message = problem;
-                }
-            } else if is_current {
-                self.message = format!("{name} is already {hero}'s round target.");
-            } else {
-                self.round_req(cx, json!({"target": target_json(target)}));
-            }
+    /// IF7: undo (Z, a right click) takes `h`'s last pick back, Clear (`all`) every pick; with none left the hero shows
+    /// its ghost again (GH2 a or b).
+    fn unpick(&mut self, cx: &Cx, h: usize, all: bool) {
+        let name = self.session().w.units[h].name.clone();
+        if !self.planning() {
             return;
         }
-        let (what, title) = match (unit, cell) {
-            (Some(u), _) if u == h => ("self", format!("{hero}: own actions")),
-            (Some(u), _) if other_ally => ("ally", format!("{hero} -> {}", w.units[u].name)),
-            (Some(u), _) => ("foe", format!("Attack {}", w.units[u].name)),
-            (None, Some(c)) => ("tile", format!("Tile {}, {}", c.x, c.y)),
-            (None, None) => return,
-        };
-        let mut rows = self.options_for(h, what, unit.filter(|u| *u != h), cell);
-        if problem.is_empty() && !is_current {
-            let tip = vec![("Round target".into(), GOLD), (format!("Every command of {hero}'s round acts on {name} (one target a round)."), TEXT)];
-            rows.insert(0, Row { label: "Round target".into(), detail: name, valid: true, act: RowAct::Round(json!({"target": target_json(target)})), tip });
-        }
-        if other_ally && !rows.iter().any(|r| r.valid) {
-            self.selected = unit;
+        if rip::picks_of(&self.session().w, h).is_empty() {
+            self.message = format!("{name}: no pick to {}.", if all { "clear" } else { "undo" });
             return;
         }
-        self.open_popup(title, rows);
+        let r = self.send(cx, if all { json!({"cmd": "clear", "unit": h}) } else { json!({"cmd": "unpick", "unit": h}) });
+        if r["ok"] != json!(true) {
+            return;
+        }
+        self.message = if all { format!("{name}: picks cleared.") } else { format!("{name}: last pick undone.") };
+        self.draft_ghost(cx, h);
+        self.reghost_after(cx, h);
     }
 
-    /// MV11: the Maneuver kind menu under its dropdown: Auto and the three kinds, each offered or not with the
-    /// planner's reason (PL7).
-    fn kind_menu(&mut self) {
-        let Some(h) = self.selected.filter(|_| self.planning()) else { return };
+    /// HK2, HK3: digit `d` (1-9). With the skill menu open it picks the listed row with that digit (or says why not);
+    /// with it closed it picks that hotkey skill on the round target (the proposed one counts, TG6; a self-only skill
+    /// picked first targets self).
+    fn hotkey(&mut self, cx: &Cx, d: usize) {
+        let Some(h) = self.selected.filter(|_| self.planning() && ri::on(&self.session().w)) else { return };
         let s = self.session();
-        let current = s.w.round_states.get(&h).filter(|r| !r.maneuver_auto).and_then(|r| r.maneuver);
-        let kinds = [("auto", "Auto", None), ("engage", "Engage", Some(ManeuverKind::Engage)), ("disengage", "Disengage", Some(ManeuverKind::Disengage)), ("utility", "Utility", Some(ManeuverKind::Utility))];
-        let rows = kinds
-            .iter()
-            .map(|&(id, label, k)| {
-                let refused = rip::preview(&s.w, &s.plan, h, RoundIntent::Maneuver, k).err();
-                let mut tip: Tip = vec![(label.to_string(), GOLD), (if k.is_none() { "The planner's kind: Engage, else Disengage, else Utility." } else { "Plan the Maneuver round as this kind." }.to_string(), TEXT)];
-                if let Some(why) = &refused {
-                    tip.push((why.clone(), FOE));
-                }
-                let detail = match &refused {
-                    Some(why) => why.clone(),
-                    None if current == k => "current".into(),
-                    None => String::new(),
-                };
-                Row { label: label.into(), detail, valid: refused.is_none(), act: RowAct::Round(json!({"maneuver": id})), tip }
-            })
-            .collect();
-        self.anchored_popup("hero.kind", "Maneuver kind".into(), rows);
-    }
-
-    /// PL1, FU1: the opener menu: the planner's pick, then the hero's order for its intent (FU4) and the pouch items of
-    /// that intent (IN5), with their AP and blocks.
-    fn opener_menu(&mut self) {
-        let Some(h) = self.selected.filter(|_| self.planning()) else { return };
-        let skills = self.host.handle(&json!({"cmd": "skills", "unit": h}))["skills"].as_array().cloned().unwrap_or_default();
-        let w = &self.session().w;
-        let Some(intent) = ri::intent_of(w, h) else { return };
-        let current = w.round_states.get(&h).and_then(|r| r.opener.clone());
-        let row = |label: String, detail: String, opener: Value, is: bool, help: &str| Row {
-            detail: if is { format!("current  {detail}") } else { detail },
-            tip: vec![(label.clone(), GOLD), (help.to_string(), TEXT)],
-            label,
-            valid: true,
-            act: RowAct::Round(json!({"opener": opener})),
+        let w = &s.w;
+        let keys = rip::hotkey_skills(w, h);
+        let skill_name = keys.get(d - 1).map(|k| w.cat.skills[*k].name.clone());
+        if let Some(p) = self.popup.as_ref().filter(|p| p.menu.is_some()) {
+            let prefix = format!("{d} ");
+            match p.rows.iter().position(|r| r.label.starts_with(&prefix)) {
+                Some(k) if p.rows[k].valid => self.run_choose(cx, k),
+                Some(k) => self.message = format!("{}: {}", &p.rows[k].label[prefix.len()..], p.rows[k].detail),
+                None => self.message = skill_name.map_or_else(|| format!("No skill on key {d}."), |n| format!("{n} is not offered on this target now.")),
+            }
+            return;
+        }
+        let Some(&sid) = keys.get(d - 1) else {
+            self.message = format!("No skill on key {d}.");
+            return;
         };
-        let mut rows = vec![row("Auto".into(), String::new(), Value::Null, current.is_none(), "The planner's opener: the first of the order the hero can afford and reach.")];
-        for sid in rip::order(w, h, intent) {
-            let sk = &w.cat.skills[sid];
-            let info = skills.iter().find(|x| x["skill"] == json!(sk.id)).map(|x| format!("{} AP, {} bl", x["ap"], x["blocks"])).unwrap_or_default();
-            // INPUT1 MR4: the skill's range on its row tip ("Range 2: dash to a flank, then hit")
-            let help = format!("{}. Open the round with this skill; follow-ups come after it.", intent_text::range_line(w, h, sk));
-            rows.push(row(sk.name.clone(), info, json!(sk.id), current == Some(ri::Opener::Skill(sid)), &help));
+        let sk = &w.cat.skills[sid];
+        let held = rip::picks_of(w, h).iter().any(|p| p.holds_target());
+        let self_only = sk.target_mode == "SELF" || emberwake_battle::skill::kind(sk) == Kind::Defend;
+        let at = if self_only && !held { Some(RoundTarget::Myself) } else { w.round_states.get(&h).and_then(|r| r.target).or_else(|| ri::intent_of(w, h).and_then(|i| rip::proposed_target(w, h, i))) };
+        let Some(at) = at else {
+            self.message = "Pick a target first (click a unit or a tile)".into();
+            return;
+        };
+        let name = sk.name.clone();
+        let opts = rip::pick_options(w, &s.plan, h, at);
+        match opts.iter().find(|o| matches!(o.picks[..], [rip::Pick::Skill { skill, .. }] if skill == sid)) {
+            Some(o) if o.problem.is_none() => {
+                let picks = o.picks.clone();
+                self.choose_pick(cx, h, at, &picks, &name);
+            }
+            Some(o) => self.message = format!("{name}: {}", o.problem.clone().unwrap_or_default()),
+            None => self.message = format!("{name} can't act on {} this round.", target_name(w, at)),
         }
-        for id in emberwake_battle::command::pouch_ids(w, h) {
-            let Some(item) = emberwake_battle::command::pouch_item(w, h, &id).filter(|it| ri::item_intent(it) == intent.id()) else { continue };
-            let left = emberwake_battle::command::pouch_count(w, h, &id);
-            rows.push(row(format!("Use {}", item.name), format!("{left} left"), json!({"item": id}), current == Some(ri::Opener::Item(id.clone())), "Open the round with this pouch item (the planner spends no other)."));
-        }
-        self.anchored_popup("hero.opener", "Opener".into(), rows);
     }
 
-    /// A menu under the widget `anchor` (the tactic menus' look).
-    fn anchored_popup(&mut self, anchor: &str, title: String, rows: Vec<Row>) {
-        let a = self.w.iter().find(|w| w.id == anchor).map(|w| w.rect).unwrap_or_default();
-        let w = 170;
-        let h = 15 + rows.len() as i32 * 11;
-        self.popup = Some(Popup { title, x: a.x.clamp(2, W - w - 2), y: (a.y + a.h + 1).clamp(2, H - h - 2), w, rows });
+    /// `Action::Choose(k)` from a key (the same path as a click).
+    fn run_choose(&mut self, cx: &Cx, k: usize) {
+        let Some(p) = self.popup.clone() else { return };
+        let Some(row) = p.rows.get(k).filter(|r| r.valid).cloned() else { return };
+        match (row.act, p.menu) {
+            (RowAct::Pick(picks), Some((h, at))) => self.choose_pick(cx, h, at, &picks, &row.label),
+            (RowAct::SelectAlly(u), _) => {
+                self.selected = Some(u);
+                self.popup = None;
+            }
+            _ => {}
+        }
     }
+
 
     /// The ruleset chip of an Arena fight beyond classic (RULESET1-U, user 2026-10-29: the Scene Runner card's text);
     /// None in a world battle and in a plain classic one.
@@ -2454,8 +2630,8 @@ impl BattleScreen {
         }
         let (mx, my) = self.mouse;
         let w = 170;
-        let h = 15 + rows.len() as i32 * 11;
-        self.popup = Some(Popup { title, x: mx.clamp(2, W - w - 2), y: my.clamp(2, H - h - 2), w, rows });
+        let h = self.menu_row + 4 + rows.len() as i32 * self.menu_row;
+        self.popup = Some(Popup { title, x: mx.clamp(2, W - w - 2), y: my.clamp(2, H - h - 2), w, rows, menu: None });
     }
 
     /// Candidate steps for hero `h` (`what`: foe / ally / self / tile), each probed through the API.
@@ -2542,7 +2718,7 @@ impl BattleScreen {
                 tip.push((r.clone(), FOE));
                 r
             };
-            rows.push(Row { label, detail, valid, act: RowAct::Step(step), tip });
+            rows.push(Row { label, detail, valid, act: RowAct::Step(step), tip, warn: false });
         }
         rows.sort_by_key(|r| !r.valid);
         rows
@@ -2561,7 +2737,6 @@ impl Screen<GameCx> for BattleScreen {
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         self.mouse = mouse;
         self.resolve_impacts(cx);
-        self.refresh_offers();
         draw(self, cx, g, mouse, live);
     }
 
@@ -2630,6 +2805,18 @@ impl Screen<GameCx> for BattleScreen {
         // ENCOUNTER2-C DT5: a talk open (or about to open) holds the playback and autoplay
         if self.talk_tick(cx, now) {
             return;
+        }
+        // INPUT1 GH2, GH7: a round's planning start drafts the ghosts; the Auto-fill setting reaches the battle (not
+        // while watching a recording)
+        if !self.viewing && ri::on(&self.session().w) && self.planning() {
+            if self.ghosted != self.session().current_round {
+                self.plan_start(cx);
+            } else {
+                let on = cx.settings.v["auto_fill"].as_bool().unwrap_or(true);
+                if self.session().w.autofill != on {
+                    self.sync_autofill(cx, on);
+                }
+            }
         }
         // FX1 rule P: the next step waits for `step_ms` and for the last impact plus `impact_gap_ms`.
         let ready = now >= self.next_at && self.impacts_done(now);
@@ -2706,14 +2893,10 @@ impl Screen<GameCx> for BattleScreen {
                 };
             }
             Key::Char('r') => self.act(cx, Action::Restart),
-            // RULESET1-U (intent UI1): keys 1-9 pick the selected hero's intent, one per intent in the ruleset's order
-            // (classic: nothing)
-            Key::Char(c @ '1'..='9') if self.planning() => {
-                let k = c as usize - '1' as usize;
-                if let Some(i) = ruleset_intents(&self.session().w).get(k).copied() {
-                    self.act(cx, Action::Intent(i));
-                }
-            }
+            // INPUT1 HK1-HK4: keys 1-9 are the selected hero's skill hotkeys (classic: nothing)
+            Key::Char(c @ '1'..='9') if self.planning() => self.hotkey(cx, c as usize - '0' as usize),
+            // SL4: S targets the selected hero itself (the self menu)
+            Key::Char('s') if self.planning() => self.act(cx, Action::SelfTarget),
             _ => {}
         }
     }
@@ -2763,9 +2946,13 @@ impl Screen<GameCx> for BattleScreen {
                 out["ruleset"]["chip"] = json!(chip);
             }
         }
-        // RULESET1-U (PL7): the selected hero's intents as last drawn, offered or not with the planner's reason
-        if let Some(o) = &self.offers {
-            out["intents"] = json!({"unit": o.key.0, "offers": o.intents.iter().map(|(i, why)| json!({"intent": i.id(), "offered": why.is_none(), "reason": why})).collect::<Vec<_>>()});
+        // INPUT1 1.6: each party member's picks (round intent only), the ghosts waiting for Confirm and the player-set
+        // targets (GH2)
+        if let Some(sess) = self.host.session.as_ref().filter(|x| ri::on(&x.w)) {
+            let w = &sess.w;
+            out["picks"] = Value::Array(w.allies.iter().map(|&a| json!({"unit": a, "picks": rip::picks_of(w, a).iter().map(|p| pick_json(w, p)).collect::<Vec<_>>()})).collect());
+            out["deferred"] = json!(self.deferred.iter().map(|d| d.0).collect::<Vec<_>>());
+            out["player_target"] = json!(self.player_target);
         }
         // RULESET1-U slice 5: the overlay groups' flags and, once the round is over, its summary (round intent only)
         if let Some(sess) = self.host.session.as_ref().filter(|x| ri::on(&x.w)) {
@@ -2811,7 +2998,8 @@ impl Screen<GameCx> for BattleScreen {
             }
         }
         // RULESET1-U slice 3: the board overlays under the round intent (classic: no key)
-        if let Some(o) = self.host.session.as_ref().and_then(|s| overlay_of(s, self.selected.filter(|u| s.w.allies.contains(u)), s.phase == Phase::Planning && !s.plan_confirmed)) {
+        if let Some(mut o) = self.host.session.as_ref().and_then(|s| overlay_of(s, self.selected.filter(|u| s.w.allies.contains(u)), s.phase == Phase::Planning && !s.plan_confirmed)) {
+            o.positions = self.positions_shown.clone();
             out["overlay"] = overlay_json(&o);
         }
         // ENCOUNTER2-C DT11: the open talk (key only while one is open), its portrait as drawn and the speaker's token
@@ -3133,6 +3321,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         _ => None,
     };
     let mut ui: Ui<Action> = Ui::new(gfx, mouse, live);
+    g.menu_row = ((ui.p.line_h(BODY) + 2.5).ceil() as i32).max(11);
     let Some(s) = g.host.session.as_ref() else {
         ui.p.text(8.0, 8.0, &g.message, BODY, FOE);
         g.w = ui.widgets;
@@ -3181,51 +3370,83 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             ui.push("strip.meters", "meters", tip.iter().map(|t| t.0.clone()).collect::<Vec<_>>().join("; "), Rect::new(mr.x, mr.y - 1, mr.w, mr.h + 2), true, false, None, tip);
         }
     }
+    // INPUT1 IF5: a hovered skill-menu row previews the round as if picked (copies of the world and the plan, kept for
+    // the battle's revision); GH2 a: a member whose ghost waits for Confirm shows it from copies too
+    let timeline = ri::on(w);
+    let hovered_row = g.popup.as_ref().filter(|p| p.menu.is_some() && live).and_then(|p| (0..p.rows.len()).find(|&k| p.row(g.menu_row, k).contains(mouse.0, mouse.1)));
+    let hovered_pick = g.popup.as_ref().and_then(|p| Some((p.menu?, p.rows.get(hovered_row?)?.clone())));
+    if let Some(((h, at), row)) = hovered_pick.clone().filter(|_| planning) {
+        let k = hovered_row.unwrap_or(0);
+        if g.preview.as_ref().is_none_or(|p| (p.0, p.1) != (g.rev, k)) {
+            let view = match &row.act {
+                RowAct::Pick(picks) if row.valid => rip::preview_plan(w, &s.plan, h, at, picks).ok(),
+                _ => None,
+            };
+            g.preview = Some((g.rev, k, view));
+        }
+    } else {
+        g.preview = None;
+    }
+    let deferred_req = sel.and_then(|u| g.deferred.iter().find(|d| d.0 == u)).map(|d| (d.0, d.1.clone()));
+    match (&deferred_req, planning) {
+        (Some((m, req)), true) => {
+            if g.deferred_view.as_ref().is_none_or(|v| (v.0, v.1) != (g.rev, *m)) {
+                g.deferred_view = Some((g.rev, *m, deferred_plan(s, *m, req)));
+            }
+        }
+        _ => g.deferred_view = None,
+    }
+    let shown: Option<(&World, &emberwake_battle::plan::Plan)> = match (&g.preview, &g.deferred_view) {
+        (Some((_, _, Some((pw, pp)))), _) => Some((pw, pp)),
+        (_, Some((_, _, Some((pw, pp))))) => Some((pw, pp)),
+        _ => None,
+    };
+    let (pw, pplan) = shown.unwrap_or((w, &s.plan));
+    let previewing = shown.is_some();
     let entries: Vec<(i32, i32, String, String, Option<String>, i32, i32)> = match sel {
         Some(u) if s.plan_confirmed => committed(s, u).into_iter().map(|c| (c.0, c.1, c.2, c.3, c.4, 0, 0)).collect(),
-        Some(u) if w.units[u].is_active() => s
-            .plan
-            .compile(w, u)
+        Some(u) if w.units[u].is_active() => pplan
+            .compile(pw, u)
             .entries
             .iter()
             .map(|e| {
                 let sk = &w.cat.skills[e.skill];
-                (e.start_block, e.end_block(w), sk.name.clone(), sk.kind.clone(), e.target.filter(|t| *t != u).map(|t| w.units[t].name.clone()), e.total_ap(), e.est_damage)
+                (e.start_block, e.end_block(pw), sk.name.clone(), sk.kind.clone(), e.target.filter(|t| *t != u).map(|t| w.units[t].name.clone()), e.total_ap(), e.est_damage)
             })
             .collect(),
         _ => Vec::new(),
     };
     // RULESET1-U (intent UI2, PL6): under the round intent the planned blocks carry the planner's reason tags and the
-    // Rest blocks the round's Rest gain
-    let timeline = ri::on(w);
-    let (reasons, rest) = match sel {
-        Some(u) if timeline && !s.plan_confirmed && w.units[u].is_active() => (rip::reasons(w, &s.plan, u), Some(rip::rest_preview(w, &s.plan, u))),
-        _ => (Vec::new(), None),
+    // Rest blocks the round's Rest gain; INPUT1 GH1: which are ghost (the planner's, after the picks)
+    let (reasons, rest, ghosts) = match sel {
+        Some(u) if timeline && !s.plan_confirmed && w.units[u].is_active() => (rip::reasons(pw, pplan, u), Some(rip::rest_preview(pw, pplan, u)), rip::ghost_entries(pw, pplan, u)),
+        _ => (Vec::new(), None, Vec::new()),
     };
-    // RULESET1-U slice 5: each span's wind-up, impact and recovery (and a break), the planned hits' forecasts
+    // RULESET1-U slice 5: each span's wind-up, impact and recovery (and a break), the planned hits' forecasts (the
+    // battle's own plan: a preview draws its spans plain)
     let spans: Vec<SpanParts> = match sel {
-        Some(u) if timeline && layers.parts => span_parts(s, u, &entries),
+        Some(u) if timeline && layers.parts && !previewing => span_parts(s, u, &entries),
         _ => Vec::new(),
     };
     let hits: Vec<Option<HitForecast>> = match sel {
-        Some(u) if timeline && layers.forecasts && !s.plan_confirmed && w.units[u].is_active() => hit_forecasts(s, u),
+        Some(u) if timeline && layers.forecasts && !s.plan_confirmed && w.units[u].is_active() && !previewing => hit_forecasts(s, u),
         _ => Vec::new(),
     };
     // HOOKS1-UI slice 3 review: each span's HP cost from its own skill (the plan entry's) or, once confirmed, its command
     let costs: Vec<i32> = match sel {
         Some(u) if s.plan_confirmed => s.resolver.scheduled.iter().filter(|a| a.unit == u).map(|a| a.command.hp_cost).collect(),
-        Some(u) if w.units[u].is_active() => s.plan.compile(w, u).entries.iter().map(|e| emberwake_battle::command::hp_cost_of(w, &w.cat.skills[e.skill])).collect(),
+        Some(u) if w.units[u].is_active() => pplan.compile(pw, u).entries.iter().map(|e| emberwake_battle::command::hp_cost_of(pw, &w.cat.skills[e.skill])).collect(),
         _ => Vec::new(),
     };
     // HOOKS1-UI slice 4: each planned entry's push and pull forecasts (rule forced_move; planning, layer `pushes`)
     let pushes: Vec<Vec<emberwake_battle::forced::Forecast>> = match sel {
-        Some(u) if planning && layers.pushes && w.allies.contains(&u) && w.units[u].is_active() => push_forecasts(s, u),
+        Some(u) if planning && layers.pushes && w.allies.contains(&u) && w.units[u].is_active() && !previewing => push_forecasts(s, u),
         _ => Vec::new(),
     };
     // TEXTFIT1: the controls right of the blocks take their text's width; the blocks give up width first (34 down to
     // 26 each), then the two dropdowns, the wider first (their text cuts).
     let party_label = format!("Party: {}", TACTIC_LABELS[g.party_tactic]);
-    let hero_label = format!("Hero: {}", TACTIC_LABELS[g.hero_tactic]);
+    let hero_label = format!("Hero: {}", TACTIC_LABELS[sel.map_or(g.hero_tactic, |u| if timeline { g.tactic_of(u) } else { g.hero_tactic })]);
     let (label, action, enabled) = if planning {
         // ENCOUNTER2 H1: planning cannot be confirmed before the holder is picked
         ("Confirm round", Action::Confirm, !s.needs_stay_pick())
@@ -3254,8 +3475,14 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         let at = entries.iter().position(|e| b >= e.0 && b <= e.1);
         let entry = at.map(|i| &entries[i]);
         let mut tip: Tip = Vec::new();
+        let ghost = at.and_then(|i| ghosts.get(i)).copied().unwrap_or(false);
+        let why = at.and_then(|i| reasons.get(i)).filter(|r| !r.is_empty());
         match entry {
             Some(e) => {
+                // INPUT1 GH8: a ghost block's tip starts "Auto-filled" with its reason tag
+                if ghost {
+                    tip.push((why.map_or_else(|| "Auto-filled".to_string(), |r| format!("Auto-filled: {r}")), DIM));
+                }
                 tip.push((e.2.clone(), GOLD));
                 tip.push((format!("Blocks {}-{}", e.0, e.1), TEXT));
                 if let Some(t) = &e.4 {
@@ -3272,7 +3499,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
                 if cost > 0 {
                     tip.push((intent_text::hp_cost_text(cost), FOE));
                 }
-                if let Some(why) = at.and_then(|i| reasons.get(i)).filter(|r| !r.is_empty()) {
+                if let Some(why) = why.filter(|_| !ghost) {
                     tip.push((format!("Why: {why}"), DIM));
                 }
                 if let Some(gain) = rest.filter(|r| e.3 == "REST" && r.blocks > 0) {
@@ -3310,14 +3537,20 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         let live = live_block >= e.0 && live_block <= e.1;
         // RULESET1-U (UI2): under the round intent Rest blocks are dim (the planner fills every spare block with them)
         let dim = timeline && e.3 == "REST";
-        ui.p.panel(r, if dim { rgb(34, 40, 54) } else { kind_color(&e.3) }, if live { GOLD } else { rgba(255, 255, 255, if dim { 24 } else { 50 }) }, RADIUS);
+        // INPUT1 GH8: a ghost span (the planner's, after the picks) in the engine's ghost look; a ghost Rest stays dim
+        let ghost = ghosts.get(k).copied().unwrap_or(false) && !dim;
+        let fill =if dim { rgb(34, 40, 54) } else if ghost { aegis_ui::timeline::ghost_fill(kind_color(&e.3)) } else { kind_color(&e.3) };
+        ui.p.panel(r, fill, if live { GOLD } else if ghost { rgba(0, 0, 0, 0) } else { rgba(255, 255, 255, if dim { 24 } else { 50 }) }, RADIUS);
+        if ghost {
+            aegis_ui::timeline::draw_ghost(&mut ui, r);
+        }
         // RULESET1-U slice 5: the timeline widget's look: wind-up shaded, impact bright with its edge, recovery hatched
         let sp = spans.get(k);
         for part in sp.map(|sp| sp.parts.as_slice()).unwrap_or(&[]) {
             let pr = Rect::new(bx + (part.start - 1) * bw, 6, (part.end - part.start + 1) * bw - 1, 16);
             aegis_ui::timeline::draw_part(&mut ui, part.style, r, pr);
         }
-        ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 4.0, &e.2, SMALL, r.w as f32 - 6.0, if dim { DIM } else { TEXT });
+        ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 4.0, &e.2, SMALL, r.w as f32 - 6.0, if dim || ghost { DIM } else { TEXT });
         if sp.is_some_and(|sp| sp.broken) && layers.breaks {
             let mark = aegis_ui::timeline::Mark { key: "break".into(), block: e.0, glyph: "BREAK".into(), colour: FOE, tip: vec![("BREAK".into(), FOE), (format!("{}: cancelled by a poise break (AP paid stays spent)", e.2), TEXT)] };
             let mr = Rect::new(r.x + 1, 7, (bw - 3).min(r.w - 2), 14);
@@ -3335,7 +3568,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     x += hero_w + 2;
     ui.button_full("strip.auto", Rect::new(x, 6, auto_w, 16), "Auto", Action::Autoplay, !s.combat_over, g.auto, BODY, vec![("Autoplay".into(), GOLD), ("Drafts with the party tactic, confirms and plays rounds until the battle ends. Click again to stop.".into(), TEXT)]);
     x += auto_w + 2;
-    ui.button_full("strip.clear", Rect::new(x, 6, clear_w, 16), "Clear", Action::Clear, planning && sel.is_some(), false, BODY, vec![("Clears the selected hero's steps.".into(), TEXT)]);
+    ui.button_full("strip.clear", Rect::new(x, 6, clear_w, 16), "Clear", Action::Clear, planning && sel.is_some(), false, BODY, vec![(if timeline { "Clears the selected hero's picks (the planner fills the round again)." } else { "Clears the selected hero's steps." }.into(), TEXT)]);
     x += clear_w + 2;
     ui.button_full("strip.confirm", Rect::new(x, 6, W - 6 - x, 16), label, action, enabled, planning, BODY, vec![(label.into(), GOLD)]);
 
@@ -3386,10 +3619,18 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         ui.p.panel(r, CARD, BORDER, RADIUS);
         ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 2.0, &u.name, BODY, 64.0, GOLD);
         // RULESET1-U: under the round intent the corner names the hero's intent (the classic stance is inert: IN3)
-        let corner = if timeline { ri::intent_of(w, h).map_or("No intent", |i| i.name()) } else { stance_name(u) };
+        let corner = if timeline { ri::intent_of(pw, h).map_or("No intent", |i| i.name()) } else { stance_name(u) };
         ui.p.text_right(r.x as f32 + r.w as f32 - 4.0, r.y as f32 + 2.0, corner, SMALL, DIM);
-        let top = if timeline { draw_intent_controls(&mut ui, w, h, r, g.offers.as_ref(), planning) } else { r.y + 12 };
-        let st = s.plan.compile(w, h);
+        // INPUT1 IF8, SL4: under the round intent the panel's one control is the Self button (key S)
+        let top = if timeline {
+            let tip = vec![("Self (S)".into(), GOLD), (format!("{} targets itself: its Guard and self skills.", u.name), TEXT)];
+            let bw = ((ui.p.text_w("Self", SMALL) + 10.0).ceil() as i32).max(30);
+            ui.button_full("hero.self", Rect::new(r.x + 4, r.y + 12, bw, 11), "Self", Action::SelfTarget, planning, false, SMALL, tip);
+            r.y + 25
+        } else {
+            r.y + 12
+        };
+        let st = pplan.compile(pw, h);
         let weapon = u.inventory.main_weapon().map(|e| e.item.name.clone()).unwrap_or_else(|| "Bare hands".into());
         let mut lines: Vec<(String, Rgba)> = Vec::new();
         // DERIVE1 4.4: the derived-stat line hovers to each row's formula and breakdown
@@ -3412,16 +3653,35 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         };
         let ap_line = (format!("AP left {}/{}", if s.plan_confirmed { u.ap } else { st.ap_left }, u.max_ap), ALLY);
         if timeline {
-            // RULESET1-U (UI1, UI2): the round first (the controls take the panel's top): the target, the planner's refusal
-            // (PL7, auto mode), the planned commands without the Rest blocks, then the Rest gain; the stats after.
-            let intent = ri::intent_of(w, h);
-            match (intent, w.round_states.get(&h).and_then(|r| r.target)) {
-                (None, _) => lines.push((format!("Pick a round intent (keys 1-{}).", ruleset_intents(w).len()), GOLD)),
-                (Some(_), Some(t)) => lines.push((format!("Target: {}", target_name(w, t)), TEXT)),
-                (Some(_), None) => lines.push(("Target: click the board".into(), DIM)),
+            // INPUT1 IF8: the round first: "Intent: <Intent> (<kind>) from <first pick | tactic>" (or carried over), a
+            // ghost's intent change that waits for Confirm (IN6), the target, the picks, the planned commands without
+            // the Rest blocks (the ghost dim), then the Rest gain; the stats after.
+            let intent = ri::intent_of(pw, h);
+            let picks = rip::picks_of(w, h);
+            let from = match picks.iter().find(|p| p.holds_target()) {
+                Some(p) => format!(" from {}", rip::pick_name(w, p)),
+                None if picks.is_empty() && !g.player_target.contains(&h) && !rip::manual(w, h) => format!(" from {}", TACTIC_LABELS[g.tactic_of(h)]),
+                None => " (carried over)".into(),
+            };
+            match intent {
+                Some(i) => {
+                    let kind = if i == RoundIntent::Maneuver { pw.round_states.get(&h).and_then(|r| r.maneuver).map(|k| format!(" ({})", kind_name(k))).unwrap_or_default() } else { String::new() };
+                    lines.push((format!("Intent: {}{kind}{from}", i.name()), TEXT));
+                }
+                None => lines.push(("Intent: none yet (click a target)".into(), GOLD)),
             }
-            if let Some(why) = intent.filter(|_| !s.plan_confirmed && !rip::manual(w, h)).and_then(|i| g.offers.as_ref().filter(|o| o.key.0 == h)?.intents.iter().find(|x| x.0 == i)?.1.clone()) {
-                lines.push((why, FOE));
+            if deferred_req.is_some() && planning {
+                let drops = intent.map(|i| ri::would_drop(w, h, i)).unwrap_or_default();
+                if !drops.is_empty() {
+                    lines.push((format!("Changing loses {}.", drops.join(", ")), FOE));
+                }
+            }
+            match pw.round_states.get(&h).and_then(|r| r.target) {
+                Some(t) => lines.push((format!("Target: {}", target_name(pw, t)), TEXT)),
+                None => lines.push(("Target: click the board".into(), DIM)),
+            }
+            if !picks.is_empty() && !s.plan_confirmed {
+                lines.push((format!("Picks: {}", picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", ")), GOLD));
             }
             if s.plan_confirmed {
                 for (start, _, name, _, tgt) in committed(s, h) {
@@ -3429,15 +3689,15 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
                     lines.push((format!("B{start} {name}{tgt}"), TEXT));
                 }
             } else {
-                for e in st.entries.iter().filter(|e| e.step_index >= 0 && emberwake_battle::skill::kind(&w.cat.skills[e.skill]) != Kind::Rest) {
+                for (k, e) in st.entries.iter().enumerate().filter(|(_, e)| e.step_index >= 0 && emberwake_battle::skill::kind(&w.cat.skills[e.skill]) != Kind::Rest) {
                     let name = &w.cat.skills[e.skill].name;
                     let tgt = e.target.filter(|t| *t != h).map(|t| format!(" > {}", short_name(&w.units[t].name))).unwrap_or_default();
-                    lines.push((format!("B{} {name}{tgt}", e.start_block), TEXT));
+                    lines.push((format!("B{} {name}{tgt}", e.start_block), if ghosts.get(k).copied().unwrap_or(false) { DIM } else { TEXT }));
                 }
                 if let Some(gain) = rest.filter(|r| r.blocks > 0) {
                     lines.push((rest_text(gain), GOOD));
                 }
-                let empty: Vec<String> = (1..=s.def.total_blocks).filter(|b| !st.entries.iter().any(|e| *b >= e.start_block && *b <= e.end_block(w))).map(|b| b.to_string()).collect();
+                let empty: Vec<String> = (1..=s.def.total_blocks).filter(|b| !st.entries.iter().any(|e| *b >= e.start_block && *b <= e.end_block(pw))).map(|b| b.to_string()).collect();
                 if !empty.is_empty() && intent.is_some() && u.is_active() {
                     lines.push((format!("Empty: B{}", empty.join(", B")), GOLD));
                 }
@@ -3521,7 +3781,19 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     // FX1 4.1: the camera's shake shifts the board's passes (inside its clip); the HUD and every hit rect stay put.
     let shift = g.camera.offset_at(g.clock.now());
     // RULESET1-U slice 3: the round intent's board overlays (None in classic)
-    let overlay = overlay_of(s, sel, planning);
+    let mut overlay = overlay_of(s, sel, planning);
+    // INPUT1 MR13: the hovered Engage row marks its target's open position tiles
+    let marked = match &hovered_pick {
+        Some(((h, at), row)) if planning => match &row.act {
+            RowAct::Pick(picks) => engage_positions(s, *h, *at, picks),
+            _ => Vec::new(),
+        },
+        _ => Vec::new(),
+    };
+    if let Some(o) = overlay.as_mut() {
+        o.positions = marked.clone();
+    }
+    g.positions_shown = marked;
     let push_list: Vec<emberwake_battle::forced::Forecast> = pushes.iter().flatten().cloned().collect();
     let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some() || talk_view.is_some(), anim_ms: g.clock.ms, sel, talker, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list, hold: hold.as_ref() };
     let board_hover = match view {
@@ -3740,20 +4012,25 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     }
 
     if let Some(pop) = g.popup.clone() {
-        let h = 15 + pop.rows.len() as i32 * 11;
-        let r = Rect::new(pop.x, pop.y, pop.w, h);
+        let r = pop.rect(g.menu_row);
         ui.push("popup.backdrop", "backdrop", "", Rect::new(0, 0, W, H), true, false, Some(Action::ClosePopup), Vec::new());
         ui.p.panel(r, rgba(14, 20, 34, 252), GOLD, 3.0);
         ui.p.text_fit(r.x as f32 + 5.0, r.y as f32 + 2.0, &pop.title, BODY, r.w as f32 - 10.0, GOLD);
         for (k, row) in pop.rows.iter().enumerate() {
-            let rr = Rect::new(r.x + 2, r.y + 13 + k as i32 * 11, r.w - 4, 11);
+            let rr = pop.row(g.menu_row, k);
             let hover = ui.hover(rr);
             if hover && row.valid {
                 ui.p.panel(rr, PANEL_HI, rgb(110, 140, 196), 1.5);
             }
             let col = if row.valid { TEXT } else { DIM };
-            ui.p.text_fit(rr.x as f32 + 4.0, rr.y as f32 + 1.5, &row.label, BODY, 78.0, col);
-            ui.p.text_fit(rr.x as f32 + 84.0, rr.y as f32 + 2.0, &row.detail, SMALL, rr.w as f32 - 86.0, if row.valid { GOLD } else { DIM });
+            // the label column: 78 px in a 170 px menu, wider in the skill menu (INPUT1 IF3)
+            let label_w = (pop.w - 92) as f32;
+            ui.p.text_fit(rr.x as f32 + 4.0, rr.y as f32 + 1.5, &row.label, BODY, label_w, col);
+            ui.p.text_fit(rr.x as f32 + label_w + 6.0, rr.y as f32 + 2.0, &row.detail, SMALL, rr.w as f32 - label_w - 8.0, if row.valid { GOLD } else { DIM });
+            // IF3, IN6: a pick that changes the intent and drops intent-bound buffs: a red corner
+            if row.warn {
+                ui.p.fill(Rect::new(rr.x + rr.w - 4, rr.y + 1, 3, 3), FOE);
+            }
             ui.push(format!("popup.{k}"), "option", format!("{} {}", row.label, row.detail), rr, row.valid, hover, Some(Action::Choose(k)), row.tip.clone());
         }
     }
@@ -3830,6 +4107,9 @@ struct Overlay {
     /// would), a carried Engage dash, a Disengage retreat or jump; (enemy, tiles from where it starts, kind). The board
     /// draws one only for the hovered enemy or while Alt is held (user 2026-10-30). Planning only.
     revealed_moves: Vec<(usize, Vec<V2>, MoveKind)>,
+    /// INPUT1 MR13: while a Maneuver Engage row of the skill menu is hovered, its target's open position tiles (true:
+    /// the preferred tier); none when the flank is protected. Planning only, layer `moves`.
+    positions: Vec<(V2, bool)>,
 }
 
 /// RULESET1-U slice 6: the overlay groups as the Settings Battle tab lists them: (id, label, what it shows).
@@ -3964,6 +4244,7 @@ impl Overlay {
             // slice 6 (decision "RULESET1-U slice 5 answers"): the hovered enemy's moves draw above the tokens
             // (`draw_focus_moves`), so the ground keeps only the others Alt shows
             revealed_moves: self.revealed_moves.iter().filter(|m| l.walks && all_walks && focus != Some(m.0)).cloned().collect(),
+            positions: if l.moves { self.positions.clone() } else { Vec::new() },
         }
     }
 }
@@ -4788,6 +5069,7 @@ fn overlay_json(o: &Overlay) -> Value {
         "facings": o.facings.iter().map(|(c, f)| json!({"at": cell(c), "facing": [f.x, f.y]})).collect::<Vec<_>>(),
         "veils": o.veils.iter().map(|(c, hidden)| json!({"at": cell(c), "hidden": hidden})).collect::<Vec<_>>(),
         "revealed_moves": o.revealed_moves.iter().map(|(u, t, k)| json!({"unit": u, "kind": k.id(), "tiles": t.iter().map(cell).collect::<Vec<_>>()})).collect::<Vec<_>>(),
+        "positions": o.positions.iter().map(|(c, preferred)| json!({"at": cell(c), "preferred": preferred})).collect::<Vec<_>>(),
     })
 }
 
@@ -4858,6 +5140,11 @@ fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom, layers: &Layers, focus
             p.panel(r, with_alpha(col, 40), col, 2.0);
         }
     }
+    // INPUT1 MR13: the hovered Engage row's open position tiles: a GOLD ring plate (preferred), a DIM one (fallback)
+    for (c, preferred) in &o.positions {
+        let col = if *preferred { GOLD } else { DIM };
+        plate(p, plate_of(*c), with_alpha(col, 36), col);
+    }
     if let Some(c) = o.target {
         let (x, y) = ground_pt(geo, c);
         p.ellipse_ring(x, y, rx + 2.5, ry + 1.6, GOLD);
@@ -4911,56 +5198,71 @@ fn draw_focus_moves(p: &mut Painter, o: &Overlay, geo: &Geom, layers: &Layers, f
     }
 }
 
-/// RULESET1-U (intent UI1): the selected hero's round controls at the top of the hero panel `r` (below its name line):
-/// the ruleset's intent buttons two a row (`hero.intent.<id>`, keys 1-9 in the ruleset's order; lit = the current one; disabled with the
-/// planner's reason, PL7, unless Manual; a red corner and the tip warn of the intent-bound buffs a change drops, IN6),
-/// then with an intent the Maneuver kind menu (`hero.kind`, Maneuver only), the opener menu (`hero.opener`) and the
-/// Manual toggle with Fill (`hero.manual`, `hero.fill`). Returns the y below them.
-fn draw_intent_controls(ui: &mut Ui<Action>, w: &World, h: usize, r: Rect, offers: Option<&Offers>, planning: bool) -> i32 {
-    let mut y = r.y + 12;
-    let current = ri::intent_of(w, h);
-    let manual = rip::manual(w, h);
-    let bw = (r.w - 10) / 2;
-    let list: &[(RoundIntent, Option<String>)] = offers.filter(|o| o.key.0 == h).map_or(&[], |o| o.intents.as_slice());
-    // RULESET1-U slice 6 (TEXTFIT1): two buttons a row while every name fits, else one a row at the panel's width
-    let per_row = if list.iter().all(|(i, _)| ui.p.text_w(i.name(), SMALL) <= (bw - 6) as f32) { 2 } else { 1 };
-    let ib = if per_row == 2 { bw } else { r.w - 8 };
-    for (k, (intent, refused)) in list.iter().enumerate() {
-        let b = Rect::new(r.x + 4 + (k as i32 % per_row) * (ib + 2), y + (k as i32 / per_row) * 12, ib, 11);
-        let mut tip: Tip = vec![(format!("{} (key {})", intent.name(), k + 1), GOLD), (intent_help(*intent).into(), TEXT)];
-        if let Some(why) = refused {
-            tip.push((format!("Not offered: {why}"), FOE));
-            if manual {
-                tip.push(("Manual: you may still pick it and place the steps.".into(), DIM));
-            }
+/// INPUT1 IF1: the skill menu's width (wider than the step menus: "4 blocks, 4 AP; Maneuver (Engage)" on a row).
+const MENU_W: i32 = 214;
+
+/// IF3: a skill-menu row's hover card: the name, the skill's description and its range line (MR4), the refusal, the
+/// buffs an intent change drops (IN6).
+fn pick_tip(s: &Session, h: usize, o: &rip::PickOption) -> Tip {
+    let w = &s.w;
+    let mut tip: Tip = vec![(o.picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", then "), GOLD)];
+    if let Some(rip::Pick::Skill { skill, .. }) = o.picks.iter().find(|p| matches!(p, rip::Pick::Skill { .. })) {
+        let sk = &w.cat.skills[*skill];
+        if let Some(d) = sk.raw.get("description").and_then(Value::as_str).filter(|d| !d.is_empty()) {
+            tip.push((d.to_string(), TEXT));
         }
-        let drops = ri::would_drop(w, h, *intent);
-        if !drops.is_empty() {
-            tip.push((format!("Changing loses {}.", drops.join(", ")), FOE));
+        tip.push((intent_text::range_line(w, h, sk), DIM));
+    }
+    if let Some(why) = &o.problem {
+        tip.push((why.clone(), FOE));
+    }
+    if !o.drops.is_empty() {
+        tip.push((format!("Changing loses {}.", o.drops.join(", ")), FOE));
+    }
+    tip
+}
+
+/// INPUT1 MR13: the open position tiles of a Maneuver Engage pick of `h` on the unit `at` (true: the preferred tier),
+/// read from where `h`'s picks leave it; empty for any other row and for a protected flank.
+fn engage_positions(s: &Session, h: usize, at: RoundTarget, picks: &[rip::Pick]) -> Vec<(V2, bool)> {
+    let w = &s.w;
+    let (RoundTarget::Unit(t), [rip::Pick::Skill { skill, kind: Some(ManeuverKind::Engage) }]) = (at, picks) else { return Vec::new() };
+    let sk = &w.cat.skills[*skill];
+    let Some(position) = ri::position_of(w, sk).filter(|_| w.has(t) && w.has(h)) else { return Vec::new() };
+    let ghost = rip::ghost_entries(w, &s.plan, h);
+    let from = s.plan.entries_for(w, h).iter().zip(&ghost).filter(|(e, g)| !**g && e.step_index >= 0).last().map(|(e, _)| e.pos_after).unwrap_or_else(|| w.pos(h));
+    let blocked = s.plan.blocked_cells(w, h);
+    let p = ri::positions(w, t, h, position, from, ri::diagonal(w, h, Some(sk)), &blocked);
+    p.preferred.iter().map(|c| (*c, true)).chain(p.fallback.iter().map(|c| (*c, false))).collect()
+}
+
+/// `m`'s compiled plan in short (skill, start, target, tile after) to tell two plans apart.
+fn plan_rows(w: &World, plan: &emberwake_battle::plan::Plan, m: usize) -> Vec<(usize, i32, Option<usize>, V2)> {
+    plan.entries_for(w, m).iter().map(|e| (e.skill, e.start_block, e.target, e.pos_after)).collect()
+}
+
+/// GH2: a ghost that waits for Confirm, on copies: the request that realizes it (`preset` for the tactic's draft,
+/// `round_intent` for a player-set target's intent change) applied to a clone of the world and the plan.
+fn deferred_plan(s: &Session, m: usize, req: &Value) -> Option<(World, emberwake_battle::plan::Plan)> {
+    let mut w2 = s.w.clone();
+    let mut p2 = rip::copy_plan(&s.plan);
+    match req["cmd"].as_str()? {
+        "preset" => {
+            emberwake_battle::ai::plan_party_intents(&mut w2, &mut p2, &[(m, req["preset"].as_str()?.to_string())]);
         }
-        ui.button_full(&format!("hero.intent.{}", intent.id()), b, intent.name(), Action::Intent(*intent), planning && (refused.is_none() || manual), current == Some(*intent), SMALL, tip);
-        if !drops.is_empty() && planning {
-            ui.p.fill(Rect::new(b.x + b.w - 4, b.y + 1, 3, 3), FOE);
+        "round_intent" => {
+            ri::set_intent(&mut w2, m, RoundIntent::parse(req["intent"].as_str()?)?).ok()?;
+            let at = match &req["target"] {
+                Value::String(t) if t == "self" => RoundTarget::Myself,
+                Value::Number(n) => RoundTarget::Unit(n.as_u64()? as usize),
+                v => RoundTarget::Cell(V2::new(v[0].as_i64()? as i32, v[1].as_i64()? as i32)),
+            };
+            ri::set_target(&mut w2, m, at).ok()?;
+            rip::plan_unit(&mut w2, &mut p2, m).ok()?;
         }
+        _ => return None,
     }
-    y += (list.len() as i32 + per_row - 1) / per_row * 12;
-    if current.is_none() {
-        return y + 1;
-    }
-    let row = |y: i32| Rect::new(r.x + 4, y, r.w - 8, 11);
-    if current == Some(RoundIntent::Maneuver) {
-        let tip = vec![("Maneuver kind".into(), GOLD), ("Engage a flank tile, Disengage after a hit, or use a foe-aimed item; Auto tries them in that order.".into(), TEXT)];
-        ui.dropdown("hero.kind", row(y), &format!("Kind: {}", kind_label(w, h)), Action::KindMenu, planning, tip);
-        y += 12;
-    }
-    let tip = vec![("Opener".into(), GOLD), ("The round's first skill or item on the target; the planner's pick is the first of the order it can afford and reach.".into(), TEXT)];
-    ui.dropdown("hero.opener", row(y), &format!("Opener: {}", opener_label(w, h)), Action::OpenerMenu, planning, tip);
-    y += 12;
-    let tip = vec![("Manual".into(), GOLD), ("Plan by hand: board clicks open the steps (the intent's skills on the round target, Rest, moves). Off: the planner's round again.".into(), TEXT)];
-    ui.button_full("hero.manual", Rect::new(r.x + 4, y, bw, 11), "Manual", Action::Manual, planning, manual, SMALL, tip);
-    let tip = vec![("Fill".into(), GOLD), ("Manual: follow-ups from the order and Rest after the last step.".into(), TEXT)];
-    ui.button_full("hero.fill", Rect::new(r.x + 6 + bw, y, bw, 11), "Fill", Action::Fill, planning && manual, false, SMALL, tip);
-    y + 13
+    Some((w2, p2))
 }
 
 /// What the board draws from the battle screen in one frame (borrowed apart from the session).
@@ -7773,7 +8075,7 @@ mod status_tests {
 /// from the kit's planner (`round_intent_plan::preview`, `reasons`, `order`, `rest_preview`) and the intent table
 /// (`round_intent::target_problem`, `would_drop`), never from shipped numbers.
 #[cfg(test)]
-mod intent_ui_tests {
+mod input1_tests {
     use super::*;
     use emberwake_rules::ruleset::{rule, RuleKind, Ruleset, PLAN_BADGES, TIMELINE};
 
@@ -7812,176 +8114,333 @@ mod intent_ui_tests {
         (0..GRID_H).flat_map(|y| (0..GRID_W).map(move |x| V2::new(x, y))).find(|c| w.grid.is_valid(*c) && (0..w.units.len()).all(|i| w.grid.pos(i) != Some(*c))).expect("a free tile")
     }
 
-    /// The first intent the planner offers the hero now that targets an enemy (Assault, else Maneuver).
-    fn foe_intent(b: &BattleScreen) -> RoundIntent {
-        let s = b.host.session.as_ref().unwrap();
+    /// A timeline Arena battle at its first planning (the tick drafts the ghosts, GH2 a), drawn.
+    fn planning() -> (Cx, Gfx, BattleScreen) {
+        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), "", false);
+        b.tick(&mut cx);
+        drawn(&mut cx, &mut g, &mut b);
+        (cx, g, b)
+    }
+
+    fn foes_on_field(b: &BattleScreen) -> Vec<usize> {
+        w(b).enemies.iter().copied().filter(|&e| w(b).units[e].is_active() && w(b).grid.pos(e).is_some()).collect()
+    }
+
+    /// Puts the selected hero on a free tile next to `f` (so its melee skills reach), the battle catching up.
+    fn next_to(cx: &Cx, b: &mut BattleScreen, f: usize) {
         let h = hero(b);
-        [RoundIntent::Assault, RoundIntent::Maneuver].into_iter().find(|i| ruleset_intents(&s.w).contains(i) && rip::preview(&s.w, &s.plan, h, *i, None).is_ok()).expect("an offered intent against the foes")
+        let fp = w(b).pos(f);
+        let cell = emberwake_battle::grid::DIRS.iter().map(|d| fp + *d).find(|c| w(b).grid.is_valid(*c) && w(b).grid.is_walkable(*c) && !w(b).grid.is_exit(*c) && w(b).occupant(*c).is_none_or(|o| o == h)).expect("a free tile next to the foe");
+        b.host.session.as_mut().unwrap().w.grid.positions[h] = Some(cell);
+        b.after_change(cx);
     }
 
-    /// UI1, PL7: one button per intent of the ruleset, in its order; a button is enabled exactly when the planner offers
-    /// the intent now (auto mode), a refused one names the planner's reason; the agent link's state lists the same.
-    #[test]
-    fn the_intent_buttons_are_the_rulesets_and_follow_the_planner() {
-        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), "", false);
-        drawn(&mut cx, &mut g, &mut b);
-        let (s, h) = (b.host.session.as_ref().unwrap(), hero(&b));
-        let intents = ruleset_intents(&s.w);
-        assert!(!intents.is_empty(), "the timeline row has round intents");
-        let ids: Vec<String> = b.w.iter().filter(|x| x.id.starts_with("hero.intent.")).map(|x| x.id.clone()).collect();
-        assert_eq!(ids, intents.iter().map(|i| format!("hero.intent.{}", i.id())).collect::<Vec<_>>(), "the ruleset's intents in order");
-        let offers = b.state(&cx)["intents"]["offers"].clone();
-        for (k, i) in intents.iter().enumerate() {
-            let refused = rip::preview(&s.w, &s.plan, h, *i, None).err();
-            let x = widget(&b, &format!("hero.intent.{}", i.id()));
-            assert_eq!(x.enabled, refused.is_none(), "{}: enabled when offered", i.id());
-            if let Some(why) = &refused {
-                assert!(tip_has(x, why), "{}: the tip names the reason {why}", i.id());
-            }
-            assert_eq!((offers[k]["intent"].clone(), offers[k]["offered"].clone()), (json!(i.id()), json!(refused.is_none())));
+    fn round_plan(b: &mut BattleScreen) -> Value {
+        b.host.handle(&json!({"cmd": "round_plan"}))["round_plan"].clone()
+    }
+
+    /// The intent of a skill-menu row (its first skill or item pick's; None: neutral).
+    fn row_intent(b: &BattleScreen, row: &Row) -> Option<String> {
+        match &row.act {
+            RowAct::Pick(picks) => picks.iter().find_map(|p| match p {
+                rip::Pick::Skill { skill, .. } => Some(ri::skill_intent(&w(b).cat.skills[*skill]).to_string()),
+                _ => None,
+            }),
+            _ => None,
         }
-        assert!(b.w.iter().all(|x| x.id != "hero.opener" && x.id != "hero.manual"), "no intent yet: only the intent buttons");
     }
 
-    /// UI1, TG1, PL6, UI2: a click on an offered intent sets it through the command API and the planner builds the round
-    /// (the strip's blocks carry its reason tags); a board click on a tile or a foe that fits the intent becomes the
-    /// round target with no menu; a click on the hero itself under a foe intent says why not and changes nothing; key 1
-    /// picks the ruleset's first intent the same way.
+    fn first_valid_pick(b: &BattleScreen) -> usize {
+        b.popup.as_ref().expect("the skill menu").rows.iter().position(|r| r.valid && matches!(&r.act, RowAct::Pick(p) if p.iter().any(|x| x.holds_target()))).expect("a usable skill row")
+    }
+
+    /// IF1, IF2, IF4: a click on an enemy sets the round target and opens the skill menu at the click, titled "<hero> ->
+    /// <target>", with only skills an enemy takes (no Support or Guard row); a pick appends it and the menu stays open,
+    /// re-listed: only rows that can still be picked, of the round intent.
     #[test]
-    fn an_intent_plans_the_round_and_a_board_click_sets_its_target() {
-        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), "", false);
-        drawn(&mut cx, &mut g, &mut b);
-        let intent = foe_intent(&b);
-        let h = hero(&b);
-        b.click_id(&mut cx, &format!("hero.intent.{}", intent.id())).unwrap();
-        assert_eq!(ri::intent_of(w(&b), h), Some(intent), "{}", b.message);
-        drawn(&mut cx, &mut g, &mut b);
+    fn a_target_click_opens_the_skill_menu_and_a_pick_relists_it() {
+        let (mut cx, mut g, mut b) = planning();
+        let (h, f) = (hero(&b), foes_on_field(&b)[0]);
+        next_to(&cx, &mut b, f);
+        b.run(&mut cx, Action::UnitClick(f));
+        assert_eq!(w(&b).round_states[&h].target, Some(RoundTarget::Unit(f)), "the click sets the target at once: {}", b.message);
+        let p = b.popup.as_ref().expect("the skill menu");
+        assert_eq!((p.menu, p.title.clone()), (Some((h, RoundTarget::Unit(f))), format!("{} -> {}", w(&b).units[h].name, w(&b).units[f].name)));
         let s = b.host.session.as_ref().unwrap();
-        let reasons = rip::reasons(&s.w, &s.plan, h);
-        let entries = s.plan.compile(&s.w, h).entries;
-        assert!(!entries.is_empty() && reasons.iter().any(|r| !r.is_empty()), "the planner's round with its reason tags");
-        for (e, why) in entries.iter().zip(&reasons).filter(|(_, r)| !r.is_empty()) {
-            assert!(tip_has(widget(&b, &format!("strip.block{}", e.start_block)), &format!("Why: {why}")), "block {} names {why}", e.start_block);
+        assert_eq!(p.rows.len(), rip::pick_options(&s.w, &s.plan, h, RoundTarget::Unit(f)).len(), "one row per kit option");
+        for row in &p.rows {
+            assert!(row_intent(&b, row).is_none_or(|i| i == "assault" || i == "maneuver"), "an enemy takes Assault and Maneuver skills: {}", row.label);
         }
-        assert!(widget(&b, &format!("hero.intent.{}", intent.id())).active, "the current intent is lit");
-        // a free tile, then a foe
-        let free = free_tile(&s.w);
-        assert!(ri::target_problem(&s.w, h, intent, RoundTarget::Cell(free)).is_empty(), "a foe intent takes a tile");
-        b.run(&mut cx, Action::TileClick(free));
-        assert!(b.popup.is_none(), "auto mode opens no menu");
-        assert_eq!(w(&b).round_states[&h].target, Some(RoundTarget::Cell(free)), "{}", b.message);
-        let foe = w(&b).enemies.iter().copied().find(|&e| w(&b).units[e].is_active() && w(&b).grid.pos(e).is_some()).expect("a foe on the field");
-        b.run(&mut cx, Action::UnitClick(foe));
-        assert_eq!(w(&b).round_states[&h].target, Some(RoundTarget::Unit(foe)), "{}", b.message);
-        let problem = ri::target_problem(w(&b), h, intent, RoundTarget::Myself);
-        b.run(&mut cx, Action::UnitClick(h));
-        assert_eq!((b.message.clone(), w(&b).round_states[&h].target), (problem, Some(RoundTarget::Unit(foe))), "self does not fit a foe intent");
-        // key 1: the ruleset's first intent, picked as its button would (refused with the reason when not offered)
-        let first = ruleset_intents(w(&b))[0];
-        let s = b.host.session.as_ref().unwrap();
-        let offered = rip::preview(&s.w, &s.plan, h, first, None).is_ok();
-        b.key(&mut cx, Key::Char('1'));
-        assert_eq!(ri::intent_of(w(&b), h) == Some(first), offered || first == intent, "{}", b.message);
+        let k = first_valid_pick(&b);
+        b.run(&mut cx, Action::Choose(k));
+        assert_eq!(rip::picks_of(w(&b), h).len(), 1, "{}", b.message);
+        let intent = ri::intent_of(w(&b), h).map(|i| i.id().to_string());
+        if let Some(p) = b.popup.as_ref() {
+            assert!(p.rows.iter().all(|r| r.valid), "after the first pick no disabled row");
+            assert!(p.rows.iter().all(|r| row_intent(&b, r).is_none_or(|i| Some(i) == intent)), "only the round intent's rows");
+        }
+        let rp = round_plan(&mut b);
+        assert_eq!(rp.as_array().unwrap().iter().find(|r| r["unit"] == json!(h)).unwrap()["picks"].as_array().unwrap().len(), 1);
+        drawn(&mut cx, &mut g, &mut b);
     }
 
-    /// MM1-MM3: Manual keeps the steps for the player: a board click opens the step menu led by a "Round target" row
-    /// for a new target that fits; Fill completes the round (follow-ups and Rest); Manual off is the planner's round.
-    /// UI2: a Rest block's tip names the kit's Rest gain.
+    /// IF2, IF6 b: after a pick on one enemy another enemy offers no skill: "One target per round: <target>".
     #[test]
-    fn manual_mode_opens_the_steps_and_fills_the_rest() {
-        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), "", false);
-        drawn(&mut cx, &mut g, &mut b);
-        let intent = foe_intent(&b);
+    fn another_enemy_after_a_pick_offers_no_skill() {
+        let (mut cx, _g, mut b) = planning();
+        let foes = foes_on_field(&b);
+        assert!(foes.len() >= 2, "the arena fight has two enemies on the field");
         let h = hero(&b);
-        b.click_id(&mut cx, &format!("hero.intent.{}", intent.id())).unwrap();
-        // the round target a free tile first, so every foe is a new target for the Manual click
-        let free = free_tile(w(&b));
-        b.run(&mut cx, Action::TileClick(free));
-        assert_eq!(w(&b).round_states[&h].target, Some(RoundTarget::Cell(free)), "{}", b.message);
+        next_to(&cx, &mut b, foes[0]);
+        b.run(&mut cx, Action::UnitClick(foes[0]));
+        let k = first_valid_pick(&b);
+        b.run(&mut cx, Action::Choose(k));
+        assert!(!rip::picks_of(w(&b), h).is_empty(), "{}", b.message);
+        b.run(&mut cx, Action::ClosePopup);
+        b.run(&mut cx, Action::UnitClick(foes[1]));
+        assert!(b.popup.as_ref().is_none_or(|p| !p.rows.iter().any(|r| matches!(r.act, RowAct::Pick(_)))), "no skill row");
+        assert_eq!(b.message, format!("One target per round: {}", w(&b).units[foes[0]].name));
+    }
+
+    /// IF5: hovering a row previews it on the strip; leaving it restores the strip; the round plan never changes.
+    #[test]
+    fn hovering_a_row_previews_it_and_changes_nothing() {
+        let (mut cx, mut g, mut b) = planning();
+        let f = foes_on_field(&b)[0];
+        next_to(&cx, &mut b, f);
+        b.run(&mut cx, Action::UnitClick(f));
         drawn(&mut cx, &mut g, &mut b);
-        b.click_id(&mut cx, "hero.manual").unwrap();
-        assert!(rip::manual(w(&b), h), "{}", b.message);
-        let foe = w(&b).enemies.iter().copied().find(|&e| w(&b).units[e].is_active() && w(&b).grid.pos(e).is_some()).expect("a foe on the field");
-        b.run(&mut cx, Action::UnitClick(foe));
-        let rows = &b.popup.as_ref().expect("the step menu").rows;
-        assert_eq!(rows[0].label, "Round target", "a new target leads the menu");
-        b.run(&mut cx, Action::Choose(0));
-        assert_eq!(w(&b).round_states[&h].target, Some(RoundTarget::Unit(foe)), "{}", b.message);
-        // Rest by hand (neutral: any intent, IN5), then its tip names the Rest gain
+        let before = round_plan(&mut b);
+        let k = first_valid_pick(&b);
+        let r = widget(&b, &format!("popup.{k}")).rect;
+        b.draw(&mut cx, &mut g, (r.x + r.w / 2, r.y + r.h / 2), true);
+        assert!(b.preview.as_ref().is_some_and(|p| p.1 == k && p.2.is_some()), "the hovered row is previewed");
+        assert_eq!(round_plan(&mut b), before, "a preview changes nothing");
+        drawn(&mut cx, &mut g, &mut b);
+        assert!(b.preview.is_none(), "leaving the row restores the strip");
+        assert_eq!(round_plan(&mut b), before);
+    }
+
+    /// IF10: with the menu open a right click (back) or a click outside it closes it and does nothing else.
+    #[test]
+    fn closing_the_menu_does_nothing_else() {
+        let (mut cx, mut g, mut b) = planning();
+        let (h, f) = (hero(&b), foes_on_field(&b)[0]);
+        b.run(&mut cx, Action::UnitClick(f));
+        drawn(&mut cx, &mut g, &mut b);
+        let p = b.popup.clone().expect("the skill menu");
+        let outside = [(1, 1), (W - 2, H - 2), (1, H - 2)].into_iter().find(|&(x, y)| !p.rect(b.menu_row).contains(x, y)).unwrap();
+        assert_eq!(aegis_ui::ui::hit(&b.w, outside), Some(Action::ClosePopup), "a click outside lands on the backdrop");
+        let before = (round_plan(&mut b), b.selected);
+        b.back(&mut cx);
+        assert!(b.popup.is_none());
+        assert_eq!((round_plan(&mut b), b.selected), before, "the right click only closed the menu");
+        assert_eq!(b.selected, Some(h));
+    }
+
+    /// IF8, SL4: the intent buttons, kind and opener menus, Manual and Fill are gone; the panel names the intent and its
+    /// source; the Self button (and key S) opens the self menu.
+    #[test]
+    fn the_round_controls_are_gone_and_self_opens_the_self_menu() {
+        let (mut cx, mut g, mut b) = planning();
+        let h = hero(&b);
+        assert!(b.w.iter().all(|x| !x.id.starts_with("hero.intent.") && !["hero.kind", "hero.opener", "hero.manual", "hero.fill"].contains(&x.id.as_str())), "the old controls are gone");
+        let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
+        if ri::intent_of(w(&b), h).is_some() {
+            let tactic = TACTIC_LABELS[b.tactic_of(h)];
+            assert!(recs.iter().any(|r| r.text.starts_with("Intent: ") && r.text.ends_with(&format!("from {tactic}"))), "the ghost's intent from the tactic");
+        }
+        b.click_id(&mut cx, "hero.self").unwrap();
+        assert_eq!(b.popup.as_ref().and_then(|p| p.menu), Some((h, RoundTarget::Myself)), "{}", b.message);
+        b.run(&mut cx, Action::ClosePopup);
+        b.key(&mut cx, Key::Char('s'));
+        assert_eq!(b.popup.as_ref().and_then(|p| p.menu), Some((h, RoundTarget::Myself)));
+    }
+
+    /// HK1-HK2: with the menu open a digit picks its row; with it closed the hotkey skill goes on the round target;
+    /// without a target the digit asks for one.
+    #[test]
+    fn digits_pick_the_hotkey_skills() {
+        let (mut cx, mut g, mut b) = planning();
+        let (h, f) = (hero(&b), foes_on_field(&b)[0]);
+        next_to(&cx, &mut b, f);
+        b.run(&mut cx, Action::UnitClick(f));
+        let d = (1..=9).find(|d| b.popup.as_ref().unwrap().rows.iter().any(|r| r.valid && r.label.starts_with(&format!("{d} ")))).expect("a usable hotkey row");
+        b.key(&mut cx, Key::Char(char::from_digit(d as u32, 10).unwrap()));
+        assert_eq!(rip::picks_of(w(&b), h).len(), 1, "{}", b.message);
+        b.run(&mut cx, Action::ClosePopup);
         b.run(&mut cx, Action::Clear);
-        let r = b.send(&cx, json!({"cmd": "add_step", "unit": h, "step": {"mode": "self", "skill": "rest"}}));
-        assert_eq!(r["ok"], json!(true), "{r}");
+        assert!(rip::picks_of(w(&b), h).is_empty(), "{}", b.message);
+        b.key(&mut cx, Key::Char(char::from_digit(d as u32, 10).unwrap()));
+        assert_eq!(rip::picks_of(w(&b), h).len(), 1, "menu closed: the skill on the round target: {}", b.message);
+        // no target and no intent: the digit of a skill that is not self-only asks for a target
+        let keys = rip::hotkey_skills(w(&b), h);
+        let other = keys.iter().position(|k| { let sk = &w(&b).cat.skills[*k]; sk.target_mode != "SELF" && emberwake_battle::skill::kind(sk) != Kind::Defend }).filter(|k| *k < 9).expect("a hotkey skill aimed at others");
+        b.run(&mut cx, Action::Clear);
+        let rs = b.host.session.as_mut().unwrap().w.round_states.entry(h).or_default();
+        rs.target = None;
+        rs.intent = None;
+        b.after_change(&cx);
         drawn(&mut cx, &mut g, &mut b);
-        let s = b.host.session.as_ref().unwrap();
-        let gain = rip::rest_preview(&s.w, &s.plan, h);
-        assert!(gain.blocks > 0, "a planned Rest block");
-        let rest_block = s.plan.compile(&s.w, h).entries.iter().find(|e| emberwake_battle::skill::kind(&s.w.cat.skills[e.skill]) == Kind::Rest).map(|e| e.start_block).unwrap();
-        assert!(tip_has(widget(&b, &format!("strip.block{rest_block}")), &rest_text(gain)), "the Rest gain on its block");
-        b.click_id(&mut cx, "hero.fill").unwrap();
-        let s = b.host.session.as_ref().unwrap();
-        let st = s.plan.compile(&s.w, h);
-        assert!((1..=s.def.total_blocks).all(|k| st.entries.iter().any(|e| k >= e.start_block && k <= e.end_block(&s.w))), "Fill leaves no block empty");
-        b.click_id(&mut cx, "hero.manual").unwrap();
-        assert!(!rip::manual(w(&b), h), "{}", b.message);
+        b.key(&mut cx, Key::Char(char::from_digit(other as u32 + 1, 10).unwrap()));
+        assert_eq!(b.message, "Pick a target first (click a unit or a tile)");
     }
 
-    /// IN6, UI1: with an intent-bound buff held, the other intents' buttons warn of what a change drops (the kit's
-    /// `would_drop`), the current one warns of nothing.
+    /// GH2 a: at the planning start each hero without a pick shows its tactic's draft as ghost; GH2 b: a clicked target
+    /// is player-set, and Clear after a pick returns to the auto plan on it; the hero tactic returns it to (a).
     #[test]
-    fn a_change_that_drops_a_bound_buff_is_warned() {
-        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), "", false);
-        let h = hero(&b);
-        assert!(ruleset_intents(w(&b)).contains(&RoundIntent::Guard), "the timeline row offers Guard");
+    fn heroes_show_their_tactic_ghost_and_clear_returns_to_it() {
+        let (mut cx, _g, mut b) = planning();
+        for a in w(&b).allies.clone().into_iter().filter(|&a| w(&b).units[a].is_active() && w(&b).has(a)) {
+            let s = b.host.session.as_ref().unwrap();
+            assert!(rip::picks_of(&s.w, a).is_empty() && rip::ghost_entries(&s.w, &s.plan, a).iter().all(|g| *g), "{a}: all ghost");
+            let mut w2 = s.w.clone();
+            let mut p2 = rip::copy_plan(&s.plan);
+            emberwake_battle::ai::plan_party_intents(&mut w2, &mut p2, &[(a, TACTICS[b.tactic_of(a)].to_string())]);
+            assert_eq!(plan_rows(&s.w, &s.plan, a), plan_rows(&w2, &p2, a), "{a}: the tactic's draft");
+        }
+        let (h, f) = (hero(&b), foes_on_field(&b)[0]);
+        next_to(&cx, &mut b, f);
+        b.run(&mut cx, Action::UnitClick(f));
+        assert!(b.player_target.contains(&h));
+        let k = first_valid_pick(&b);
+        b.run(&mut cx, Action::Choose(k));
+        b.run(&mut cx, Action::ClosePopup);
+        b.run(&mut cx, Action::Clear);
+        let s = b.host.session.as_ref().unwrap();
+        let mut w2 = s.w.clone();
+        let mut p2 = rip::copy_plan(&s.plan);
+        rip::plan_unit(&mut w2, &mut p2, h).unwrap();
+        assert_eq!(plan_rows(&s.w, &s.plan, h), plan_rows(&w2, &p2, h), "(b): the auto plan on the clicked target");
+        assert_eq!(s.w.round_states[&h].target, Some(RoundTarget::Unit(f)), "the target stays");
+        b.run(&mut cx, Action::HeroMenu);
+        b.run(&mut cx, Action::Choose(b.tactic_of(h)));
+        assert!(!b.player_target.contains(&h), "the hero tactic: back to (a)");
+    }
+
+    /// GH7: Auto-fill off reaches the battle and the free blocks Rest (the ghost of a hero with no pick, the blocks
+    /// after a pick).
+    #[test]
+    fn auto_fill_off_rests_the_free_blocks() {
+        let (mut cx, _g, mut b) = planning();
+        cx.settings.v["auto_fill"] = json!(false);
+        b.tick(&mut cx);
+        assert!(!w(&b).autofill, "the setting reached the battle");
+        let rest_only = |b: &BattleScreen, a: usize, from: usize| {
+            let s = b.host.session.as_ref().unwrap();
+            s.plan.entries_for(&s.w, a).iter().skip(from).filter(|e| e.step_index >= 0).all(|e| emberwake_battle::skill::kind(&s.w.cat.skills[e.skill]) == Kind::Rest)
+        };
+        for a in w(&b).allies.clone().into_iter().filter(|&a| w(&b).units[a].is_active()) {
+            assert!(rest_only(&b, a, 0), "{a}: Rest on every block");
+        }
+        let (h, f) = (hero(&b), foes_on_field(&b)[0]);
+        next_to(&cx, &mut b, f);
+        b.run(&mut cx, Action::UnitClick(f));
+        let k = first_valid_pick(&b);
+        b.run(&mut cx, Action::Choose(k));
+        let s = b.host.session.as_ref().unwrap();
+        let from = rip::ghost_from(&s.w, &s.plan, h);
+        assert!(rest_only(&b, h, from), "after the pick the free blocks Rest");
+    }
+
+    /// GH2, IN6 (Q18 a): a clicked target whose intent change would drop an intent-bound buff waits for Confirm: the
+    /// buff stays, the panel warns "Changing loses ..."; Confirm makes the change.
+    #[test]
+    fn a_ghost_that_drops_a_bound_buff_waits_for_confirm() {
+        let (mut cx, mut g, mut b) = planning();
+        let (h, f) = (hero(&b), foes_on_field(&b)[0]);
         let r = b.send(&cx, json!({"cmd": "round_intent", "unit": h, "intent": "guard", "target": "self"}));
         assert_eq!(r["ok"], json!(true), "{r}");
         let s = b.host.session.as_mut().unwrap();
         emberwake_rules::status::grant_now(&mut s.w.units[h], "riposte", 2, 0, "test");
         ri::bind(&mut s.w, h, h, &["riposte".to_string()], false);
-        b.after_change(&cx);
+        next_to(&cx, &mut b, f);
+        b.run(&mut cx, Action::UnitClick(f));
+        assert!(b.deferred.iter().any(|d| d.0 == h), "the change waits: {}", b.message);
+        assert_eq!(ri::intent_of(w(&b), h), Some(RoundIntent::Guard));
+        assert!(w(&b).units[h].has_status("riposte"), "the buff stays until Confirm");
+        b.run(&mut cx, Action::ClosePopup);
+        let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
+        assert!(recs.iter().any(|r| r.text.starts_with("Changing loses")), "the panel warns");
+        b.run(&mut cx, Action::Confirm);
+        assert_ne!(ri::intent_of(w(&b), h), Some(RoundIntent::Guard), "{}", b.message);
+        assert!(!w(&b).units[h].has_status("riposte"));
+    }
+
+    /// GH8: a ghost block's tip starts "Auto-filled" with its reason tag; a picked block's does not.
+    #[test]
+    fn ghost_blocks_say_auto_filled() {
+        let (mut cx, mut g, mut b) = planning();
+        let (h, f) = (hero(&b), foes_on_field(&b)[0]);
+        next_to(&cx, &mut b, f);
+        b.run(&mut cx, Action::UnitClick(f));
+        let k = first_valid_pick(&b);
+        b.run(&mut cx, Action::Choose(k));
+        b.run(&mut cx, Action::ClosePopup);
         drawn(&mut cx, &mut g, &mut b);
-        for i in ruleset_intents(w(&b)) {
-            let drops = ri::would_drop(w(&b), h, i);
-            assert_eq!(drops.is_empty(), i == RoundIntent::Guard, "{}: {drops:?}", i.id());
-            if !drops.is_empty() {
-                assert!(tip_has(widget(&b, &format!("hero.intent.{}", i.id())), &format!("Changing loses {}", drops.join(", "))), "{}", i.id());
+        let s = b.host.session.as_ref().unwrap();
+        let (entries, ghost, reasons) = (s.plan.entries_for(&s.w, h), rip::ghost_entries(&s.w, &s.plan, h), rip::reasons(&s.w, &s.plan, h));
+        assert!(ghost.iter().any(|g| !*g), "a picked entry");
+        for ((e, gh), why) in entries.iter().zip(&ghost).zip(&reasons).filter(|((e, _), _)| e.step_index >= 0) {
+            let block = widget(&b, &format!("strip.block{}", e.start_block));
+            let first = block.tip.first().map(|t| t.0.clone()).unwrap_or_default();
+            assert_eq!(first.starts_with("Auto-filled"), *gh, "block {}: {first}", e.start_block);
+            if *gh && !why.is_empty() {
+                assert!(tip_has(block, &format!("Auto-filled: {why}")));
             }
         }
     }
 
-    /// PL1, FU1, MV11: the opener menu lists Auto, then the hero's order for its intent (FU4); a pick becomes the opener.
-    /// The Maneuver kind menu offers Auto and the three kinds as the planner does.
+    /// ET1: an empty tile's menu opens with Move here.
     #[test]
-    fn the_opener_and_kind_menus_come_from_the_planner() {
-        let (mut cx, mut g, mut b) = arena(Some(TIMELINE), "", false);
+    fn an_empty_tile_offers_move_here_first() {
+        let (mut cx, _g, mut b) = planning();
+        let free = free_tile(w(&b));
+        b.run(&mut cx, Action::TileClick(free));
+        let p = b.popup.as_ref().expect("the tile menu");
+        assert_eq!((p.menu, p.rows[0].label.as_str()), (Some((hero(&b), RoundTarget::Cell(free))), "Move here"));
+    }
+
+    /// MR13: hovering a Maneuver Engage row marks its target's open position tiles (the kit's `positions`).
+    #[test]
+    fn hovering_an_engage_row_marks_the_position_tiles() {
+        let (mut cx, mut g, mut b) = planning();
+        let (h, f) = (hero(&b), foes_on_field(&b)[0]);
+        b.run(&mut cx, Action::UnitClick(f));
         drawn(&mut cx, &mut g, &mut b);
-        let intent = foe_intent(&b);
-        let h = hero(&b);
-        b.click_id(&mut cx, &format!("hero.intent.{}", intent.id())).unwrap();
+        let p = b.popup.clone().expect("the skill menu");
+        let k = p.rows.iter().position(|r| matches!(&r.act, RowAct::Pick(x) if matches!(x[..], [rip::Pick::Skill { kind: Some(ManeuverKind::Engage), skill }] if ri::position_of(w(&b), &w(&b).cat.skills[skill]).is_some()))).expect("a Maneuver Engage row with a position");
+        let RowAct::Pick(picks) = p.rows[k].act.clone() else { unreachable!() };
+        let want = engage_positions(b.host.session.as_ref().unwrap(), h, RoundTarget::Unit(f), &picks);
+        let r = widget(&b, &format!("popup.{k}")).rect;
+        b.draw(&mut cx, &mut g, (r.x + r.w / 2, r.y + r.h / 2), true);
+        assert_eq!(b.positions_shown, want);
+        assert_eq!(b.state(&cx)["overlay"]["positions"].as_array().unwrap().len(), want.len());
         drawn(&mut cx, &mut g, &mut b);
-        b.click_id(&mut cx, "hero.opener").unwrap();
-        let order = rip::order(w(&b), h, intent);
-        assert!(!order.is_empty(), "an offered intent has an order to open from (PL3)");
-        let names: Vec<String> = b.popup.as_ref().expect("the opener menu").rows.iter().map(|r| r.label.clone()).collect();
-        assert_eq!(names[0], "Auto");
-        assert_eq!(names[1..=order.len()].to_vec(), order.iter().map(|&i| w(&b).cat.skills[i].name.clone()).collect::<Vec<_>>(), "the order");
-        b.run(&mut cx, Action::Choose(1));
-        assert_eq!(w(&b).round_states[&h].opener, Some(ri::Opener::Skill(order[0])), "{}", b.message);
-        assert!(ruleset_intents(w(&b)).contains(&RoundIntent::Maneuver), "the timeline row offers Maneuver");
-        b.run(&mut cx, Action::ClosePopup);
-        let r = b.send(&cx, json!({"cmd": "manual", "unit": h, "on": true}));
-        assert_eq!(r["ok"], json!(true), "{r}");
-        let r = b.send(&cx, json!({"cmd": "round_intent", "unit": h, "intent": "maneuver"}));
-        assert_eq!(r["ok"], json!(true), "{r}");
-        drawn(&mut cx, &mut g, &mut b);
-        b.click_id(&mut cx, "hero.kind").unwrap();
-        let s = b.host.session.as_ref().unwrap();
-        let rows = &b.popup.as_ref().expect("the kind menu").rows;
-        let kinds = [None, Some(ManeuverKind::Engage), Some(ManeuverKind::Disengage), Some(ManeuverKind::Utility)];
-        assert_eq!(rows.len(), kinds.len());
-        for (row, k) in rows.iter().zip(kinds) {
-            assert_eq!(row.valid, rip::preview(&s.w, &s.plan, h, RoundIntent::Maneuver, k).is_ok(), "{}", row.label);
+        assert!(b.positions_shown.is_empty(), "only while hovered");
+    }
+
+    /// TEXTFIT1: the skill menu and the hero panel fit at the four text sizes (no spill), 1280x720.
+    #[test]
+    fn the_menu_and_the_hero_panel_fit_at_every_text_size() {
+        let (mut cx, mut g, mut b) = planning();
+        g.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+        g.view = aegis_ui::painter::View::fit(1280, 720);
+        let f = foes_on_field(&b)[0];
+        next_to(&cx, &mut b, f);
+        b.run(&mut cx, Action::UnitClick(f));
+        let k = first_valid_pick(&b);
+        b.run(&mut cx, Action::Choose(k));
+        b.run(&mut cx, Action::UnitClick(f));
+        for scale in [0.85f32, 1.0, 1.15, 1.3] {
+            let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, scale);
+            let boxes: Vec<(String, f32, f32, f32, f32)> = b.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
+            let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+            let ours: Vec<Value> = v["spill"].as_array().unwrap().iter().filter(|e| e["widget"].as_str().is_some_and(|w| w.starts_with("popup.") || w.starts_with("hero."))).cloned().collect();
+            assert!(ours.is_empty(), "scale {scale}: {ours:?}");
         }
     }
+
 
     /// User 2026-10-29: an Arena fight beyond classic shows the Scene Runner card's ruleset chip (same text: the
     /// ruleset's name, its switches, the reveal); a classic fight draws neither the chip nor any intent control and its
@@ -8001,9 +8460,9 @@ mod intent_ui_tests {
         let (mut cx, mut g, mut b) = arena(None, "", false);
         drawn(&mut cx, &mut g, &mut b);
         assert!(w(&b).ruleset.is_classic());
-        assert!(b.w.iter().all(|x| !x.id.starts_with("hero.intent") && !["hero.kind", "hero.opener", "hero.manual", "hero.fill", "bar.chip"].contains(&x.id.as_str())), "classic draws no round control");
+        assert!(b.w.iter().all(|x| !["hero.self", "bar.chip"].contains(&x.id.as_str())), "classic draws no round control");
         let st = b.state(&cx);
-        assert!(st.get("intents").is_none() && st.get("ruleset").is_none(), "a classic battle's state keeps its shape");
+        assert!(st.get("picks").is_none() && st.get("ruleset").is_none(), "a classic battle's state keeps its shape");
     }
 }
 

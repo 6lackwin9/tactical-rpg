@@ -23,6 +23,9 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
 - Compact party cards plus a selected-hero panel (2026-10-18).
 - Hostile cards show HP beside the name (2026-10-18, his own choice).
 - Strip block labels in a smaller font, the move symbol when a name does not fit, details on hover (2026-10-18, his own choice).
+- Timeline battles: one input flow, target then skill, the intent read from the skill, the planner's ghost fill with an
+  "Auto-fill the rest" setting, keys 1-9 as skill hotkeys; no intent buttons, Manual or Fill (decision "Combat input
+  feedback", 2026-10-31; built INPUT1-U slice 2, 2026-11-01).
 
 ## Test tools
 

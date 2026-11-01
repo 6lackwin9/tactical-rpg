@@ -515,7 +515,7 @@ const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
         ],
     ),
     ("Maps", &[("Move the party", "Arrow keys, W A S D"), ("Interact with the marker you face", "E"), ("Game menu", "Escape"), ("Choose a dialogue line", "1-9"), ("Party, journal, stash, help, event log", "P, J, I, ?, L")]),
-    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Every revealed enemy move (timeline)", "Hold Alt"), ("Screenshot", "F12")]),
+    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Skills of the selected hero (timeline)", "1-9"), ("Target self (timeline)", "S"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Every revealed enemy move (timeline)", "Hold Alt"), ("Screenshot", "F12")]),
 ];
 
 /// A volume slider's sample and bus (scripts/audio/volume_preview.gd: the master sample plays on the interface bus).
@@ -654,6 +654,12 @@ impl Screen<GameCx> for SettingsScreen {
                 ui.checkbox("settings.show_tells", x + 3, y, "Show enemy tells", d["show_tells"].as_bool().unwrap_or(true), SetAct::Toggle("show_tells"), true);
                 y += 18;
                 ui.checkbox("settings.warn_missing", x + 3, y, "Warn about missing actions", d["warn_missing"].as_bool().unwrap_or(true), SetAct::Toggle("warn_missing"), true);
+                y += 18;
+                // INPUT1 GH7: the planner fills a hero's free blocks after its picks (timeline battles)
+                ui.checkbox("settings.auto_fill", x + 3, y, "Auto-fill the rest", d["auto_fill"].as_bool().unwrap_or(true), SetAct::Toggle("auto_fill"), true);
+                if let Some(wd) = ui.widgets.last_mut() {
+                    wd.tip = tip("Auto-fill the rest", "After your picks the planner fills the round's free blocks with follow-ups (ghost blocks you can replace). Off: the free blocks Rest.");
+                }
                 y += 20;
                 ui.p.text(x as f32, y as f32 + 3.0, "Map names", BODY, TEXT);
                 let labels: Vec<String> = MAP_NAMES.iter().map(|m| m.1.to_string()).collect();

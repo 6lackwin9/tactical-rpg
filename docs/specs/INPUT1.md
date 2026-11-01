@@ -319,6 +319,29 @@ As built (INPUT1-U slice 1, 2026-11-01: kit, host and engine; tests `rpgkit_batt
 - Host: `pick`'s `target` defaults to the member's round target, else self; `clear {unit}` removes the picks only when
   the member has one (else today's empty steps, the Manual path); `autofill` outside planning only sets the flag.
 
+As built (INPUT1-U slice 2, 2026-11-01: the battle screen; tests `battle.rs` `input1_tests`, kit
+`rpgkit_battle/tests/picks.rs` IF9):
+
+- The menu is the existing popup (rows `popup.<k>`, 214 px wide; the row pitch grows with the text size); its rows are
+  the kit's `pick_options` (labels IF3: hotkey digit, "Use `<item>` (`<n>` left)", "Move here, then `<skill>`"; detail
+  "`<n>` blocks, `<ap>` AP; `<Intent>`" or the refusal). After a pick the menu re-lists in place and closes with no skill
+  row left. On another enemy after a pick the menu has no row, so it does not open: the message bar reads "One target
+  per round: `<target>`". An ally's menu ends with "Select `<ally>`"; with no usable row the click selects it.
+- GH2 a: at each planning start (and after an undo or Clear back to no pick, the tactic menus, the Auto-fill change and
+  every pick of an earlier member) a member with no pick and no player-set target is drafted with its hero tactic
+  (`preset {unit}`; the screen keeps a tactic per member, the party tactic by default); a draft equal to the plan is not
+  sent. GH2 b: a target click (no pick) sends `round_intent {target}` (the current intent when it plans a round there,
+  else the first intent of the target's kind that does, `intent` too). IN6 timing (Q18 a): a ghost whose intent change
+  would drop an intent-bound buff is not sent; the screen shows it from copies (strip and panel, "Changing loses
+  `<buff>`.") and Confirm sends it first. The party tactic and autoplay draft at once (the player's own call; the kit's
+  `plan_party_intents` now skips members with picks, IF9).
+- The hero panel's intent line reads "from `<tactic>`" for a tactic ghost and "(carried over)" for a player-set target
+  with no pick (also after an intent change by target kind). Clear and Z act on picks only under the round intent
+  ("no pick to clear" otherwise). The setting reaches the battle through `autofill` at each planning start (when off or
+  different) and when it changes during planning; a recording being watched sends nothing, and a take-over keeps the
+  replayed round's ghosts.
+- Clicking the selected hero still opens its self menu (SL4's "selects nothing" is slice 3).
+
 ## 8. The full timeline view (INPUT1-T)
 
 - TV1 (changed 2026-11-01, PB5). Key T (planning and playback, rule `round_intent` or any timeline battle) toggles an

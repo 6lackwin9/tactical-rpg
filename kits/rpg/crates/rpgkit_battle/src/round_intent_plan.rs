@@ -1596,7 +1596,7 @@ pub fn ap_forecast(w: &World, plan: &Plan, c: UnitId) -> ApForecast {
     let spent = picked + filled;
     let left = u.ap - spent;
     let rest_gain = if w.pays_ap(c) && round_intent::on(w) { rest_preview(w, plan, c).ap } else { 0 };
-    let regen = if w.ap_regen < 0 { u.max_ap } else { u.max_ap.min(left + w.ap_regen + u.ap_regen_bonus) };
+    let regen = rpgkit_rules::status::regen_ap(u, left, w.ap_regen);
     let next = u.max_ap.min(regen + rest_gain);
     ApForecast { now: u.ap, spent, picked, filled, left, gain: next - left, rest_gain, next, max: u.max_ap }
 }
@@ -1615,6 +1615,17 @@ fn plan_copy(plan: &Plan) -> Plan {
 pub fn preview_pick(w: &World, plan: &Plan, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Result<(Vec<Step>, ApForecast), String> {
     let (w2, p2) = trial(w, plan, c, at, picks)?;
     Ok((p2.steps_of(c), ap_forecast(&w2, &p2, c)))
+}
+
+/// INPUT1 IF5: copies of the world and the plan as if `picks` were picked on `at` (the battle screen's hover preview
+/// draws the strip from them); nothing changes.
+pub fn preview_plan(w: &World, plan: &Plan, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Result<(World, Plan), String> {
+    trial(w, plan, c, at, picks)
+}
+
+/// A scratch copy of `plan` (as `preview` makes): its steps, path penalties, goal preferences and AI pressure.
+pub fn copy_plan(plan: &Plan) -> Plan {
+    plan_copy(plan)
 }
 
 fn trial(w: &World, plan: &Plan, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Result<(World, Plan), String> {

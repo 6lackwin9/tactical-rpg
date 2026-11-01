@@ -204,7 +204,11 @@ a foe, an ally, the hero itself or an empty tile for its options (each shows AP 
 click closes a menu or undoes the last step. Strip: the Party and Hero dropdowns draft a tactic (with its
 description), Auto plays the battle out, Confirm resolves the round. The log (Expand) wraps and scrolls with the wheel
 or PageUp / PageDown. Keys (while no control shows the focus ring): Enter confirm, Space step / next round, A autoplay, Z undo, L log, R restart (arena),
-I enemy tells, F12 screenshot.
+I enemy tells, F12 screenshot. Timeline battles (INPUT1-U): click a target (an enemy, an ally, an empty tile; the hero
+panel's Self button or S for the hero itself), then pick skills from its menu (keys 1-9 are the selected hero's skill
+hotkeys, with or without the menu open); the planner fills the rest of the round as ghost blocks (Settings, Gameplay:
+"Auto-fill the rest"); Z or a right click undoes the last pick, Clear removes them all; a right click or a click outside
+closes the menu.
 
 Feel values (timings, floating numbers, hit flash, colours) live in `games/emberwake/tuning.json` and reload while the game
 runs. The GUI serves an agent link on `127.0.0.1:47800`: `ui_tree` (the screen stack, the music wanted, the top screen's state and every

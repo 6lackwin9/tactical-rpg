@@ -554,3 +554,18 @@ fn previews_change_nothing() {
     let _ = rip::pick_options(&s.w, &s.plan, VANGUARD, RoundTarget::Cell(V2::new(1, 1)));
     assert_eq!(snap(&s), before);
 }
+
+/// IF9: the party tactic drafts every member with no pick and leaves a member with picks as the player left it.
+#[test]
+fn the_party_tactic_skips_members_with_picks() {
+    let mut s = session();
+    place(&mut s.w, VANGUARD, V2::new(4, 4));
+    place(&mut s.w, ARCHER, V2::new(2, 6));
+    place(&mut s.w, FOOTMAN, V2::new(5, 4));
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[Pick::Rest]).unwrap();
+    let kept = (rows(&s.w, &s.plan, VANGUARD), s.w.round_states[&VANGUARD].clone());
+    assert!(s.plan.steps_of(ARCHER).is_empty(), "the archer has no plan yet");
+    s.plan_apply_preset_all("balanced");
+    assert_eq!((rows(&s.w, &s.plan, VANGUARD), s.w.round_states[&VANGUARD].clone()), kept, "the member with a pick is skipped");
+    assert!(!s.plan.steps_of(ARCHER).is_empty(), "a member with no pick is drafted");
+}
