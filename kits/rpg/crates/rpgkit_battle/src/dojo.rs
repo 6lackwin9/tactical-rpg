@@ -275,6 +275,8 @@ impl DojoSession {
         stash.sort();
         let weight = Self::weight_of(&cat, &stash);
         let carry = carry::apply(&cat, &mut heroes, weight);
+        // CLN-44: the Dojo starts on the catalog's classic row
+        let ruleset = Ruleset::of_or_classic(&cat, ruleset::CLASSIC);
         Self {
             cat,
             heroes,
@@ -293,7 +295,7 @@ impl DojoSession {
             log: Vec::new(),
             counter: 0,
             fx: Vec::new(),
-            ruleset: Ruleset::classic(),
+            ruleset,
             hero_ids,
             spent: vec![IndexMap::new(); n],
             decks: vec![None; n],

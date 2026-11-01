@@ -678,15 +678,12 @@ pub fn manifest_errors(v: &View, w: &str) -> Vec<String> {
     errors
 }
 
-/// RULESET1-R (engine-only): the manifest's `ruleset` ("" inherits) is a ruleset id whose row exists (classic has
-/// none), and its `plan_reveal_flag` is empty or a flag key.
+/// RULESET1-R (engine-only): the manifest's `ruleset` ("" inherits) names a ruleset row (CLN-44: the ids are open,
+/// classic is a row too), and its `plan_reveal_flag` is empty or a flag key.
 fn ruleset_errors(v: &View, m: &Dict) -> Vec<String> {
-    use rpgkit_rules::ruleset::{CLASSIC, RULESETS};
     let mut errors = Vec::new();
     let r = json::s(m, "ruleset");
-    if !r.is_empty() && !RULESETS.contains(&r.as_str()) {
-        errors.push(format!("Ruleset: '{r}' is not one of {} (or empty: inherited).", RULESETS.join(", ")));
-    } else if !r.is_empty() && r != CLASSIC && !v.has(super::ruleset::KIND, &r) {
+    if !r.is_empty() && !v.has(super::ruleset::KIND, &r) {
         errors.push(format!("Ruleset '{r}' needs its row in {} (data/catalog/{}.json).", super::ruleset::KIND, super::ruleset::KIND));
     }
     let flag = json::s(m, "plan_reveal_flag");

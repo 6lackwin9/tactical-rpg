@@ -113,6 +113,7 @@ impl EncounterDef {
             phases: value::array(o, "phases").to_vec(),
             start_status: value::array(o, "start_status").to_vec(),
             start_grant: StartGrant::None,
+            // CLN-44: a placeholder; every caller overwrites it from the catalog (`Ruleset::of`; CLN-46)
             ruleset: Ruleset::classic(),
             plan_reveal: false,
             tactics: Default::default(),

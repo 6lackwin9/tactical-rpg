@@ -6,7 +6,7 @@
 //! Requests (`cmd`; `history` is the protocol's own):
 //!   new {encounter, seed?}                     start a catalog encounter, or a world one ("<world>:<id>", when the
 //!                                              host has the world data)
-//!       {ruleset?, rules?}                     RULESET1: classic or timeline (default: classic for a catalog
+//!       {ruleset?, rules?}                     RULESET1: a ruleset row id (default: classic for a catalog
 //!                                              encounter, the world's for a world one); rules "-id,+id" switches
 //!                                              single extensions
 //!       {plan_reveal?}                         RULESET1 V2: reveal every enemy plan (rule `plan_badges`; default false)
@@ -81,7 +81,7 @@ use rpgkit_battle::session::{EncounterDef, Phase, Session};
 use rpgkit_battle::skill::{self, Kind};
 use rpgkit_battle::world::UnitId;
 use rpgkit_data::Catalog;
-use rpgkit_rules::ruleset::{MeleeDiagonal, Ruleset};
+use rpgkit_rules::ruleset::{MeleeDiagonal, Ruleset, CLASSIC};
 use indexmap::IndexMap;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -99,7 +99,7 @@ pub struct Battle {
 /// The game's command host (the engine protocol over the battle command set; derefs to `Battle`).
 pub type Host = aegis_host::Host<Battle>;
 
-/// RULESET1 3.1.3: the ruleset a `new` request picks (`ruleset`: classic or timeline; absent or "" = `default`), with
+/// RULESET1 3.1.3: the ruleset a `new` request picks (`ruleset`: a ruleset row id; absent or "" = `default`), with
 /// its `rules` ("-id,+id": single extensions switched).
 fn picked_ruleset(cat: &Catalog, req: &Value, default: Ruleset) -> Result<Ruleset, String> {
     let mut r = match req.get("ruleset").and_then(Value::as_str).filter(|s| !s.is_empty()) {
@@ -186,7 +186,7 @@ impl Battle {
             def.rng_seed = seed;
         }
         // RULESET1 3.1.2: a catalog encounter is classic unless the request picks a ruleset
-        match picked_ruleset(&self.cat, req, Ruleset::classic()) {
+        match picked_ruleset(&self.cat, req, Ruleset::of_or_classic(&self.cat, CLASSIC)) {
             Ok(r) => def.ruleset = r,
             Err(e) => return err(e),
         }

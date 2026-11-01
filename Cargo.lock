@@ -656,6 +656,7 @@ dependencies = [
 name = "emberwake_content"
 version = "0.1.0"
 dependencies = [
+ "aegis_content",
  "aegis_core",
  "emberwake_data",
  "emberwake_rules",

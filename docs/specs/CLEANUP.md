@@ -28,7 +28,7 @@ planner (TASKS, ROADMAP, decisions, HISTORY, `.claude/*`, CLAUDE.md), design-bra
 | 6 | CLN-47 | C | Save migrations v1-v12 and the Godot JSON text emulation (decision "Saves and data edits") | S | logic-builder | kit | with CLN-42 (or before) | done (2026-11-01) |
 | 7 | CLN-49 | C | 20 executed seeds out of `data/seeds/` (the seeds README rule) | S | planner (git rm) | game | now | proposed |
 | 8 | CLN-39 | A | Sim parity: convert to an engine golden on the frozen catalog, or delete (Q-A2) | S | logic-builder | game | now | done (2026-11-01) |
-| 9 | CLN-44 | B | Classic as a `rulesets` row: no hard-coded `Ruleset::classic()`, no closed id lists, one fallback | M | logic-builder + asset-builder | kit + game | after INPUT1-U | proposed |
+| 9 | CLN-44 | B | Classic as a `rulesets` row: no hard-coded `Ruleset::classic()`, no closed id lists, one fallback | M | logic-builder + asset-builder | kit + game | after INPUT1-U | done 2026-11-01 (the classic row shipped through aegis content) |
 | 10 | CLN-45 | B | Split the legacy-vs-timeline switches bundled under `round_intent` into named rule options | M-L | logic-builder | kit | after CLN-44, INPUT1-U, INPUT1-L | proposed |
 | 11 | CLN-46 | B | Screens and host read rules, not `is_classic()` | S | logic-builder | game + kit | after CLN-44 | proposed |
 | 12 | CLN-48 | C | The `wave_*` fold shim (PHASEFOLD 1.4) once nothing reads Godot data | S | logic-builder | kit | after CLN-42 | proposed |
@@ -297,7 +297,7 @@ decisions, HISTORY, workflow docs); design-brainstorm for PORT_NOTES and ENGINE_
 
 ### CLN-44
 
-Classic as a ruleset row. Scope B. Status: proposed. Size M. Lanes logic-builder (code) then asset-builder (the row).
+Classic as a ruleset row. Scope B. Status: done 2026-11-01 (the classic row shipped through aegis content, seed `games/emberwake/data/seeds/cln44.json`). Size M. Lanes logic-builder (code) then asset-builder (the row).
 Layer kit + game.
 
 - Where: `rpgkit_rules/src/ruleset.rs:10-16` (`CLASSIC`, closed `RULESETS = [classic, timeline]`, `ROW_IDS =
@@ -364,7 +364,9 @@ kit.
   Timeline toggle flips classic and timeline), `emberwake_gui/src/runner.rs:368` (chip dim when classic and no rules).
 - Change: dojo reset reads `has(DECK)`; the host state always carries `ruleset` (agent docs and any host replay
   expectations updated) or keeps the shape by a documented default; the Dojo toggle becomes a ruleset picker over
-  the catalog's rows (two today); the runner chip dims at the world's default ruleset with no switches.
+  the catalog's rows (two today); the runner chip dims at the world's default ruleset with no switches. Also (from
+  CLN-44): `rpgkit_battle/src/session.rs` `EncounterDef::from_obj` starts on the placeholder `Ruleset::classic()` that
+  every caller overwrites from the catalog (`Ruleset::of`); consider a catalog-aware constructor.
 - Risk: host state shape (agents, `engine/README.md` host section). Touches: `kits/rpg/crates/rpgkit_host/src/lib.rs`,
   `kits/rpg/crates/rpgkit_battle/src/dojo.rs`, `games/emberwake/crates/emberwake_gui/src/{dojo,runner}.rs`.
   Dependencies: CLN-44. Spec pointer: `docs/specs/CLEANUP.md#CLN-46`.

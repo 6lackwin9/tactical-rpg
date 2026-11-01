@@ -163,7 +163,7 @@ fn every_field_rule_has_its_error() {
         (json!({"status_modifiers": [{"status": "weaken", "percent": -1.5}]}), "Status modifier 1: percent must be -1.0..1.0."),
         (json!({"status_modifiers": [{"status": "weaken", "flat": 0, "percent": 0.0}]}), "Status modifier 1: flat and percent are both 0; remove it."),
         (json!({"status_modifiers": [{"status": "weaken", "flat": 1, "rounds": 2}]}), "Status modifier 1: key 'rounds' is not allowed (status, flat, percent)."),
-        (json!({"rulesets": ["hardcore"]}), "Rulesets: 'hardcore' is not one of classic, timeline."),
+        (json!({"rulesets": ["Hard Core"]}), "Rulesets: 'Hard Core' must be a ruleset id (lowercase snake_case)."),
         (json!({"rulesets": ["classic", "classic"]}), "Rulesets lists 'classic' twice."),
         (json!({"show_on": ["menu"]}), "Show on: 'menu' is not one of party, dojo, battle."),
         (json!({"suffix": "pts"}), "Suffix must be empty or '%' (not 'pts')."),

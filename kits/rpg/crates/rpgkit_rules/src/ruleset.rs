@@ -1,19 +1,19 @@
-//! Rulesets (RULESET1 3, docs/specs/RULESET1.md; engine-only, no Godot original): `classic` (the Godot build's rules,
-//! the empty rule set, no data row) and `timeline` (the row `timeline` of the catalog kind `rulesets`: its rules from
-//! the register below and its numbers). A world names its ruleset in its manifest (`ruleset`, "" = the nearest parent's,
-//! else classic); a battle gets it from its caller (`EncounterDef.ruleset`: the world bridge, the Combat Arena, the
-//! Dojo, the sim, the host). Every timeline rule reads its flag here first, so classic battles never change.
+//! Rulesets (RULESET1 3, docs/specs/RULESET1.md; engine-only, no Godot original): every ruleset is a row of the catalog
+//! kind `rulesets` (its rules from the register below and its numbers; CLN-44: the ids are open, `classic` included,
+//! decision "INPUT1-M rule choices and the classic ruleset"). `classic` is the default id (the legacy rules: no rule on,
+//! `melee_diagonal` none); a game without its row plays the built-in classic values (`Ruleset::classic`) with a load
+//! note. A world names its ruleset in its manifest (`ruleset`, "" = the nearest parent's, else classic); a battle gets
+//! it from its caller (`EncounterDef.ruleset`: the world bridge, the Combat Arena, the Dojo, the sim, the host). Every
+//! extension reads its flag here first, so classic battles never change.
 
 use aegis_core::value::{self, Obj};
 use rpgkit_data::Catalog;
+use std::collections::HashSet;
+use std::sync::{Mutex, OnceLock};
 
+/// The default ruleset id (a world that names none, a catalog encounter, the Dojo's start).
 pub const CLASSIC: &str = "classic";
 pub const TIMELINE: &str = "timeline";
-/// Every ruleset id, in order: the options of a world's `ruleset` (beside "" = inherit) and of a derived-stat row's
-/// `rulesets` (the schema lists the same; a test keeps them in agreement).
-pub const RULESETS: [&str; 2] = [CLASSIC, TIMELINE];
-/// The ids a row of the `rulesets` kind may take (classic has no row).
-pub const ROW_IDS: [&str; 1] = [TIMELINE];
 /// The catalog kind of the ruleset rows (data/catalog/rulesets.json).
 pub const KIND: &str = "rulesets";
 
@@ -86,7 +86,7 @@ pub fn rule(id: &str) -> Option<&'static Rule> {
 pub const INTENTS: [&str; 5] = ["assault", "guard", "support", "maneuver", "channel"];
 /// INPUT1 MR10: which melee hits count a diagonal neighbour (one step on each axis) as distance 1: none, the Maneuver
 /// skills (the default of a row; read as none without `round_intent`), or every melee attack, every skill with a
-/// position and the riposte counter. Classic has no row: none.
+/// position and the riposte counter. The built-in classic values: none.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MeleeDiagonal {
     None,
@@ -305,11 +305,11 @@ impl Numbers {
     }
 }
 
-/// The rules a battle plays by: classic (no rules) or a ruleset row's rules and numbers, possibly with single
+/// The rules a battle plays by: a ruleset row's rules and numbers, possibly with single
 /// extensions switched on or off by the caller (`adjust`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ruleset {
-    /// `classic` or a row id.
+    /// The row id (`classic` for the built-in fallback).
     pub id: String,
     pub name: String,
     /// The rules on, in register order.
@@ -324,9 +324,9 @@ impl Default for Ruleset {
 }
 
 impl Ruleset {
-    /// The classic ruleset: no rule on, the default numbers (no rule reads them).
+    /// The built-in classic values: no rule on, the default numbers (no rule reads them), no diagonal melee. CLN-44:
+    /// only the fallback of a game without its `classic` row, and tests; battles read the row (`of`).
     pub fn classic() -> Self {
-        // INPUT1 MR10: classic has no row, so no diagonal melee
         Self { id: CLASSIC.into(), name: "Classic".into(), rules: Vec::new(), numbers: Numbers { melee_diagonal: MeleeDiagonal::None, ..Numbers::default() } }
     }
 
@@ -341,21 +341,33 @@ impl Ruleset {
         }
     }
 
-    /// The ruleset `id` of the catalog: "" or classic is classic; another id needs its row in `rulesets`.
+    /// The ruleset `id` of the catalog ("" is classic): its row in `rulesets`. CLN-44: a missing `classic` row falls back
+    /// to the built-in classic values with a load note (`fallback_note`); any other id without its row is refused.
     pub fn of(cat: &Catalog, id: &str) -> Result<Self, String> {
-        if id.is_empty() || id == CLASSIC {
+        let id = if id.is_empty() { CLASSIC } else { id };
+        if let Some(row) = cat.rulesets.get(id) {
+            return Ok(Self::from_row(row));
+        }
+        if id == CLASSIC {
+            note_fallback(id);
             return Ok(Self::classic());
         }
-        if !RULESETS.contains(&id) {
-            return Err(format!("unknown ruleset '{id}' (one of {})", RULESETS.join(", ")));
-        }
-        cat.rulesets.get(id).map(Self::from_row).ok_or_else(|| format!("ruleset '{id}' has no row in {KIND} (data/catalog/{KIND}.json)"))
+        let known: Vec<&str> = cat.rulesets.keys().map(String::as_str).collect();
+        Err(format!("ruleset '{id}' has no row in {KIND} (data/catalog/{KIND}.json; rows: {})", if known.is_empty() { "none".to_string() } else { known.join(", ") }))
     }
 
-    /// The ruleset `id` of the catalog, classic when it cannot be had (the content check reports a world that names a
-    /// ruleset without its row).
+    /// The ruleset `id` of the catalog, the built-in classic values with a load note when it has no row (the content
+    /// check reports a world that names a ruleset without its row).
     pub fn of_or_classic(cat: &Catalog, id: &str) -> Self {
-        Self::of(cat, id).unwrap_or_default()
+        Self::of(cat, id).unwrap_or_else(|_| {
+            note_fallback(id);
+            Self::classic()
+        })
+    }
+
+    /// The ruleset rows' ids, in file order (the options of a world's `ruleset` and of a row's `rulesets`).
+    pub fn ids(cat: &Catalog) -> Vec<String> {
+        cat.rulesets.keys().cloned().collect()
     }
 
     /// INPUT1 MR10: the diagonal melee in effect: the row's value, `maneuver` read as `none` without `round_intent`.
@@ -404,6 +416,21 @@ impl Ruleset {
             self.rules = REGISTER.iter().map(|x| x.id).filter(|x| set.contains(x)).collect();
         }
         Ok(())
+    }
+}
+
+/// CLN-44: the load note of ruleset `id` played as the built-in classic values for want of its row.
+pub fn fallback_note(id: &str) -> String {
+    let id = if id.is_empty() { CLASSIC } else { id };
+    format!("ruleset '{id}' has no row in {KIND} (data/catalog/{KIND}.json): the built-in classic values apply")
+}
+
+/// Prints the load note of `id` once per process (stderr: a debug convenience, decision "Saves and data edits").
+fn note_fallback(id: &str) {
+    static NOTED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let first = NOTED.get_or_init(|| Mutex::new(HashSet::new())).lock().map(|mut n| n.insert(id.to_string())).unwrap_or(false);
+    if first {
+        eprintln!("note: {}", fallback_note(id));
     }
 }
 

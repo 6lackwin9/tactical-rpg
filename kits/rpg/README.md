@@ -144,3 +144,15 @@ CLN-47 (saves, decision "Save upgrades at game version updates"): `rpgkit_world:
 version"` (so `newest_slot` skips it); the development-era steps v1 -> v13 and the Godot JSON text emulation are gone.
 The hook stays for a released game version update: bump `VERSION`, add the previous release's step to `STEPS` (rows
 `(from, Step<Data>)`, run by `migrate_with` over `aegis_save::migrate`) and keep `OLDEST` at that release.
+
+CLN-44 (rulesets are rows, decisions "INPUT1-M rule choices and the classic ruleset" and "Godot parity retired and
+cleanup pass 3 answers" Q-B1): every ruleset, `classic` included, is a row of the catalog kind `rulesets`; the ids are
+open (snake_case, 2-24 characters; the closed `RULESETS` / `ROW_IDS` lists are gone). `Ruleset::of(cat, id)` reads
+the row ("" is `classic`, the default id); a missing `classic` row falls back to the built-in values
+(`Ruleset::classic()`: no rules, `melee_diagonal` none, the default numbers) with a load note on stderr
+(`ruleset::fallback_note`) and the content warning `rulesets:missing`; any other id without its row is refused
+(`of_or_classic` falls back with the note instead). `Ruleset::ids(cat)` lists the rows. The Dojo, the host's catalog
+encounters and the Arena's World pick start on the catalog's classic row. Schema: the row `id` is an `id` field; a
+world's `ruleset` (`options_from: rulesets_inherit`) and a derived stat's or portrait cue's `rulesets`
+(`options_from: rulesets`) offer the rows; a world, derived stat or portrait cue naming a ruleset without its row is a
+content error.

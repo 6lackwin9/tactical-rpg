@@ -96,7 +96,9 @@ fn the_schema_carries_the_kit_vocabulary() {
     assert_eq!(options("effect"), strs(&PORTRAIT_EFFECTS));
     assert_eq!(options("preset"), [vec![String::new()], strs(&PORTRAIT_JOLTS)].concat());
     assert_eq!(options("surfaces"), strs(&PORTRAIT_SURFACES));
-    assert_eq!(options("rulesets"), strs(&rpgkit_rules::ruleset::RULESETS));
+    // CLN-44: the ruleset ids are open: the field offers the ruleset rows
+    let rulesets = fields(source::schema(), "content", portrait::KIND).iter().map(json::dict).find(|f| json::s(f, "key") == "rulesets").unwrap();
+    assert_eq!((json::s(rulesets, "options_from"), options("rulesets")), ("rulesets".to_string(), Vec::<String>::new()));
     assert_eq!(art::EXPRESSIONS, ["neutral", "hurt", "angry", "afraid"], "PQ2");
     // the typed row's defaults are the schema's
     assert_eq!(PortraitCue::from_obj(&row(&json!({"id": "plain"}))), PortraitCue::from_obj(&dict(json!({"id": "plain"}))));
@@ -142,7 +144,7 @@ fn each_rule_refuses_its_bad_row() {
         (changed("hit_flash", "expression", json!("hurt")), "Expression is for a face row only.".into()),
         (changed("face_hit", "expression", json!("")), format!("Expression: a face row needs one of {}.", EXPRESSIONS.join(", "))),
         (changed("face_hit", "priority", json!(101)), "Priority must be 0-100 (is 101).".into()),
-        (changed("hit_flash", "rulesets", json!(["hardcore"])), "Rulesets: 'hardcore' is not one of classic, timeline.".into()),
+        (changed("hit_flash", "rulesets", json!(["Hard Core"])), "Rulesets: 'Hard Core' must be a ruleset id (lowercase snake_case).".into()),
         (changed("hit_flash", "surfaces", json!(["panel", "panel"])), "Surfaces lists 'panel' twice.".into()),
     ];
     for (bad, want) in cases {

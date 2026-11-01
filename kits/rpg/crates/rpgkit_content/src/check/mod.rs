@@ -129,6 +129,9 @@ pub fn options_of(v: &View, f: &Dict) -> Vec<String> {
     };
     match json::s(f, "options_from").as_str() {
         "zones" => zone_ids(v),
+        // CLN-44: the ruleset rows (a world's `ruleset` may also be "" = inherited)
+        "rulesets" => v.entries(ruleset::KIND).iter().map(|e| json::s(e, "id")).collect(),
+        "rulesets_inherit" => std::iter::once(String::new()).chain(v.entries(ruleset::KIND).iter().map(|e| json::s(e, "id"))).collect(),
         "body" => bodies(false),
         "body_inherit" => bodies(true),
         "status" => std::iter::once(String::new()).chain(rpgkit_rules::status::debuffs().into_iter().map(String::from)).collect(),
@@ -420,6 +423,12 @@ pub fn validate_all(v: &View) -> Report {
     if v.terrain_file {
         add("terrain:missing", simple::missing_terrain(v.entries("terrain")).iter().map(|id| format!("No terrain row for '{id}'.")).collect());
     }
+    // CLN-44: a derived stat's or portrait cue's `rulesets` name ruleset rows (the ids are open)
+    for kind in [derived::KIND, portrait::KIND] {
+        for e in v.entries(kind) {
+            add(&format!("{kind}:{}", json::s(e, "id")), ruleset::missing_rows(v, e));
+        }
+    }
     add("load", v.load_errors.clone());
     problems
 }
@@ -449,6 +458,10 @@ pub fn warnings_all(v: &View) -> Report {
         if !missing.is_empty() {
             out.insert("terrain:missing".into(), missing);
         }
+    }
+    // CLN-44: without the default `classic` row its battles play the built-in classic values
+    if !v.has(ruleset::KIND, rpgkit_rules::ruleset::CLASSIC) {
+        out.insert(format!("{}:missing", ruleset::KIND), vec![rpgkit_rules::ruleset::fallback_note(rpgkit_rules::ruleset::CLASSIC)]);
     }
     // INPUT1 1.7: the ruleset rows' warnings (`rulesets:<id>`)
     for e in v.entries(ruleset::KIND) {

@@ -173,7 +173,8 @@ impl Default for SimArgs {
             tier_foe: MIRROR.into(),
             boss_phase: true,
             s2: false,
-            ruleset: rpgkit_rules::ruleset::Ruleset::classic(),
+            // CLN-44: a placeholder; `parse` reads the picked row (default classic) from the catalog
+            ruleset: rpgkit_rules::ruleset::Ruleset::default(),
             ruleset_id: String::new(),
             rules: String::new(),
             melee_diagonal: None,
@@ -513,12 +514,8 @@ impl SimArgs {
                 }
                 self.metrics = value == "on";
             }
-            "ruleset" => {
-                if !value.is_empty() && !rpgkit_rules::ruleset::RULESETS.contains(&value) {
-                    return Err(format!("ruleset must be one of {} (got '{value}')", godot_list(&rpgkit_rules::ruleset::RULESETS)));
-                }
-                self.ruleset_id = value.into();
-            }
+            // CLN-44: the ids are open; `parse` reads the row (an id without one is refused there)
+            "ruleset" => self.ruleset_id = value.into(),
             "rules" => self.rules = value.into(),
             "melee_diagonal" => {
                 let ids = rpgkit_rules::ruleset::MeleeDiagonal::IDS;

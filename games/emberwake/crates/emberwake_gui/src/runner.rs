@@ -106,7 +106,7 @@ impl SceneRunner {
             Some(id) => Ruleset::of_or_classic(&cx.data.cat, id),
             None => match Self::encounters(cx).get(self.encounter).and_then(|e| e.1.clone()) {
                 Some(world) => cx.data.ruleset(&world),
-                None => Ruleset::classic(),
+                None => Ruleset::of_or_classic(&cx.data.cat, emberwake_rules::ruleset::CLASSIC),
             },
         }
     }

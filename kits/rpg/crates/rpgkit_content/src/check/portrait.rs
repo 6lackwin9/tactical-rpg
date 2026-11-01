@@ -9,7 +9,6 @@ use crate::source::fields;
 use aegis_core::assets::hex_colour;
 use aegis_core::json::{self, gstr, Dict};
 use rpgkit_data::{EXPRESSIONS, MEMBER_CONDITIONS, PORTRAIT_COLOR_EFFECTS, PORTRAIT_EFFECTS, PORTRAIT_EVENTS, PORTRAIT_JOLTS, PORTRAIT_METER_TRIGGER, PORTRAIT_SURFACES, PORTRAIT_TRIGGERS};
-use rpgkit_rules::ruleset::RULESETS;
 use rpgkit_rules::status;
 
 /// The catalog kind (file data/catalog/portrait_cues.json).
@@ -121,20 +120,17 @@ pub fn row_errors(e: &Dict, refs: &Refs) -> Vec<String> {
     if !(0..=PRIORITY_MAX).contains(&priority) {
         out.push(format!("Priority must be 0-{PRIORITY_MAX} (is {priority})."));
     }
-    let surfaces: Vec<String> = PORTRAIT_SURFACES.iter().map(|s| s.to_string()).collect();
-    // RULESET1-R: the ruleset ids are code-owned (rpgkit_rules::ruleset::RULESETS; the schema lists the same)
-    let rulesets: Vec<String> = RULESETS.iter().map(|s| s.to_string()).collect();
-    for (key, label, allowed) in [("surfaces", "Surfaces", &surfaces), ("rulesets", "Rulesets", &rulesets)] {
-        let mut seen: Vec<String> = Vec::new();
-        for v in json::sget(e, key) {
-            if !allowed.contains(&v) {
-                out.push(format!("{label}: '{v}' is not one of {}.", allowed.join(", ")));
-            } else if seen.contains(&v) {
-                out.push(format!("{label} lists '{v}' twice."));
-            }
-            seen.push(v);
+    let mut seen: Vec<String> = Vec::new();
+    for v in json::sget(e, "surfaces") {
+        if !PORTRAIT_SURFACES.contains(&v.as_str()) {
+            out.push(format!("Surfaces: '{v}' is not one of {}.", PORTRAIT_SURFACES.join(", ")));
+        } else if seen.contains(&v) {
+            out.push(format!("Surfaces lists '{v}' twice."));
         }
+        seen.push(v);
     }
+    // CLN-44: the ruleset ids are open (rows of `rulesets`; validate_all checks each names a row)
+    out.extend(super::ruleset::list_errors(e));
     let origin = json::s(e, "origin");
     let origins = options("origin");
     if !origins.contains(&origin) {
