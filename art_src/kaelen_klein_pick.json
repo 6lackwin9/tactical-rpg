@@ -1,0 +1,41 @@
+{
+  "model": "local:flux-2-klein-4b",
+  "id": "kaelen",
+  "prompt": "Turn the person in this portrait into the character below, keeping exactly the same pixel-art style, outline weight, shading, pose, framing, lighting and flat dark background, with the same large, clearly drawn eyes, strong brows and defined mouth: a steadfast young guardsman of twenty-one, an adult, tall and broad-shouldered, with an honest, open face: a broad square jaw with short straw-blond stubble, a strong straight nose, heavy straight brows, large steady grey eyes, a wide mouth set in a hard line. Thick wavy straw-blond hair loose to his shoulders, pushed back off his brow, one lock falling forward. A dented iron breastplate over a quilted linen gambeson, a rough gouged scar in the iron at the centre of the chest where a cross was chiselled away. His left fist grips the long wooden haft of a notched iron billhook in front of his chest, the hooked blade beside his head at the right edge of the frame; his left forearm, wrapped in dirty blood-stained linen, crosses the bottom of the frame, three jagged chalk-white bone spurs breaking out through the wrapping. Head and shoulders, his whole body, shoulders and face turned three-quarters toward the right, looking right, his head filling most of the frame; large, clearly drawn eyes, strong dark brows, a large defined mouth, bold dark outlines. A plain, flat, empty dark background. Lighting: a soft, dim warm amber rim light from the right, its lamp far out of frame and never visible, gentle warm fill, deep warm brown shadows. A plain dark background with no lamp, lantern or light source in the frame.",
+  "reference": "C:/dev/localgen/templates (Gemini base template, user 2026-10-27)",
+  "prompts_file": "games/emberwake/docs/specs/FOUNDER_PORTRAITS.md",
+  "time": "2026-10-27T04:30:44",
+  "n": 1,
+  "source": "local Klein, template route (FOUNDERPORT1-R)",
+  "note": "user pick 2026-10-27; fix-up edits applied, see steps",
+  "steps": [
+    {
+      "take": "kaelen_s2",
+      "model": "local:flux-2-klein-4b (edit of a Gemini base template)",
+      "prompt": "Turn the person in this portrait into the character below, keeping exactly the same pixel-art style, outline weight, shading, pose, framing, lighting and flat dark background, with the same large, clearly drawn eyes, strong brows and defined mouth: a steadfast young guardsman of twenty-one, an adult, tall and broad-shouldered, with an honest, open face: a broad square jaw with short straw-blond stubble, a strong straight nose, heavy straight brows, large steady grey eyes, a wide mouth set in a hard line. Thick wavy straw-blond hair loose to his shoulders, pushed back off his brow, one lock falling forward. A dented iron breastplate over a quilted linen gambeson, a rough gouged scar in the iron at the centre of the chest where a cross was chiselled away. His left fist grips the long wooden haft of a notched iron billhook in front of his chest, the hooked blade beside his head at the right edge of the frame; his left forearm, wrapped in dirty blood-stained linen, crosses the bottom of the frame, three jagged chalk-white bone spurs breaking out through the wrapping. Head and shoulders, his whole body, shoulders and face turned three-quarters toward the right, looking right, his head filling most of the frame; large, clearly drawn eyes, strong dark brows, a large defined mouth, bold dark outlines. A plain, flat, empty dark background. Lighting: a soft, dim warm amber rim light from the right, its lamp far out of frame and never visible, gentle warm fill, deep warm brown shadows. A plain dark background with no lamp, lantern or light source in the frame.",
+      "reference": "C:/dev/localgen/templates/base_man.png",
+      "seed": 2,
+      "steps": 4
+    },
+    {
+      "take": "kaelen_s1",
+      "model": "local:flux-2-klein-4b (edit of a Gemini base template)",
+      "prompt": "Turn the person in this portrait into the character below, keeping exactly the same pixel-art style, outline weight, shading, pose, framing, lighting and flat dark background, with the same large, clearly drawn eyes, strong brows and defined mouth: a steadfast young guardsman of twenty-one, an adult, tall and broad-shouldered, with an honest, open face: a broad square jaw with short straw-blond stubble, a strong straight nose, heavy straight brows, large steady grey eyes, a wide mouth set in a hard line. Thick wavy straw-blond hair loose to his shoulders, pushed back off his brow, one lock falling forward. A dented iron breastplate over a quilted linen gambeson, a rough gouged scar in the iron at the centre of the chest where a cross was chiselled away. His left fist grips the long wooden haft of a notched iron billhook in front of his chest, the hooked blade beside his head at the right edge of the frame; his left forearm, wrapped in dirty blood-stained linen, crosses the bottom of the frame, three jagged chalk-white bone spurs breaking out through the wrapping. Head and shoulders, his whole body, shoulders and face turned three-quarters toward the right, looking right, his head filling most of the frame; large, clearly drawn eyes, strong dark brows, a large defined mouth, bold dark outlines. A plain, flat, empty dark background. Lighting: a soft, dim warm amber rim light from the right, its lamp far out of frame and never visible, gentle warm fill, deep warm brown shadows. A plain dark background with no lamp, lantern or light source in the frame.",
+      "reference": "C:/dev/localgen/templates/base_man.png",
+      "seed": 1,
+      "steps": 4
+    },
+    {
+      "take": "kaelen_merge_s1",
+      "model": "local:flux-2-klein-4b (fix-up edit)",
+      "prompt": "Keep the man in the first image exactly as he is: his armour, breastplate, billhook, pose, pixel-art style, framing, lighting and background. Give him the face of the man in the second image: the same face, eyes, brows, nose, mouth, straw-blond hair and short blond stubble. On his left forearm, wrapped in linen bandage, a few chalk-white bone spurs break through the skin, clearly visible near the bottom of the frame.",
+      "reference": [
+        "C:\\dev\\localgen\\comfyui\\output\\style\\founder_kaelen_s2_00001_.png",
+        "C:\\dev\\localgen\\comfyui\\output\\style\\founder_kaelen_s1_00001_.png"
+      ],
+      "seed": 1,
+      "steps": 4
+    }
+  ],
+  "faction": "hearth"
+}

@@ -1,6 +1,6 @@
 # FOUNDER_PORTRAITS: portrait briefs for the six founders
 
-Status: approved for local draft renders (user 2026-10-27): FPQ1 bareheaded (the helm on the sprite and a later variant), FPQ2 cowl down, FPQ3 graft kept in the left eye, FPQ4 all six Hearth; FPQ5-FPQ9 follow the recommendations for the drafts (the user picks from the renders; nothing is placed until then). Was: proposal (2026-10-27, design lane).
+Status: picks switched to the Gemini route (user 2026-11-01): the open-ended Gemini takes (no reference; R1 prompts with the Hearth line, Gemini web-app queue) are now `art_src/<id>.png`, because they match the cast's Gemini portraits; the Klein picks stay as `art_src/<id>_klein_pick.png`. Was: approved for local draft renders (user 2026-10-27): FPQ1 bareheaded (the helm on the sprite and a later variant), FPQ2 cowl down, FPQ3 graft kept in the left eye, FPQ4 all six Hearth; FPQ5-FPQ9 follow the recommendations for the drafts (the user picks from the renders; nothing is placed until then). Was: proposal (2026-10-27, design lane).
 Depends on: the user's approval of this spec; the LOCALGEN3 tooling (template route, `localgen.py vary`)
 Lane: asset (the planner runs the local renders; the user picks)
 Touches: `art_src/<id>.json` and `art_src/<id>.png` plus their takes (`kaelen`, `vesper`, `maren`, `hollis`,
