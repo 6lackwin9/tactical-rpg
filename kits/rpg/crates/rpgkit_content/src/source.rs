@@ -1,10 +1,10 @@
 //! The game's data loader on the engine content layer (`aegis_content`: file format, schema normalize, world graph):
-//! reads the project's `data/` folder the way Godot's catalogs read it and builds the values the parity exports hold
-//! (catalog.json, worlds.json, game_data.json), so `Data` no longer needs Godot. Read paths only (editing and
+//! reads the project's `data/` folder the way Godot's catalogs read it and builds the resolved values (catalog, worlds,
+//! game data) `Data` is built from. Read paths only (editing and
 //! validation stay out): ContentCatalog.reload_from_disk / _read_kind (SkillRanks.expand with SkillText.render,
 //! ItemModifiers.resolve, ItemFamilies.derive), WorldCatalog.reload_from_disk (the engine's world loader over
 //! WORLD_KINDS), MapCatalog / QuestCatalog / ServiceCatalog (normalize) and XpCurve.load_file. The field tables are
-//! kits/rpg/schema.json, exported once from Godot's ContentSchema / WorldSchema (`parity/export.sh only=schema`).
+//! kits/rpg/schema.json, exported once from Godot's ContentSchema / WorldSchema (the retired parity exporter).
 //! Like Godot, a bad file or entry is reported in `errors` and skipped, never fatal.
 
 use aegis_content::file::{entries_of, read};

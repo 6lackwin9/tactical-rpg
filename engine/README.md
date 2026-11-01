@@ -113,24 +113,16 @@ This directory contains the source code for the **Aegis Engine**, an agent-nativ
 | `crates/aegis_app/` | Retired 2026-10-19 (transition step 2): the old egui demo, superseded by `emberwake_gui`; in git history |
 | `crates/aegis_core/` (old) | Retired 2026-10-19 with `aegis_app` (its only user); in git history. The name is reused by the engine core above (SPLIT1-2) |
 
-## Parity with Godot
+## Goldens (Godot parity retired)
 
-The Godot game is the reference: the frozen copy in `legacy/` (main at 7fa10da, see `legacy/LEGACY.md`; branch
-`legacy` to resume Godot work). `parity/` holds the tools that run it and check the engine against it (new files only;
-no Godot file is edited):
+The Godot game was the reference: the frozen copy in `legacy/` (main at 7fa10da, see `legacy/LEGACY.md`; branch
+`legacy` to resume Godot work). Its parity suites and recorders are retired (CLN-36..42, 2026-11-01): the engine
+goldens recorded from the engine on frozen fixtures replace them, and no test, gate or tool runs Godot:
 
 ```bash
-games/emberwake/parity/export.sh                      # catalog, worlds, game data, schema, unit snapshots, damage cases, RNG, save fixtures (~5 s)
-games/emberwake/parity/trace.sh mode=duel level=5    # record Godot sim fights step by step (duel | group | teams | encounters)
-games/emberwake/parity/trace.sh mode=duel level=5 pouch=con_heal_potion,con_fire_bomb   # the same with battle items (party AI uses them)
-games/emberwake/parity/trace.sh mode=world preset=withdraw   # every world encounter as WorldEncounter plays it (objectives, phases, morale)
-games/emberwake/parity/journey.sh seeds=1,2,3,4 steps=700   # record seeded random game-loop journeys (~4 min)
-games/emberwake/parity/sim.sh                         # record the Godot balance sim's tables for 20 command lines (~25 min)
-games/emberwake/parity/checks.sh                      # record the Godot content checks: broken entries, world lints, reports (~10 s)
-cargo test -p emberwake_rules -p emberwake_battle -p emberwake_host -p emberwake_world -p emberwake_sim -p emberwake_content
-    # exact parity: the data loader, units, damage, RNG, battle, item and world battle traces (with their action logs,
-    # metrics and reports), journeys (result, state and screen views per action), saves, the sim's printed tables,
-    # the content checks (errors and warnings, message for message)
+cargo test -p aegis_core -p emberwake_rules -p emberwake_battle -p emberwake_world -p emberwake_sim -p emberwake_content
+    # the goldens: RNG hashes, units and damage (rules_golden), timeline fights (timeline_golden), journeys (journey),
+    # the sim's printed tables (sim_golden), the content checks (checks_golden), the store's byte-for-byte resave
 cargo run --release -p emberwake_host -- sim duel 1 20   # the balance-sim duel table (sim help: every mode and key)
 tools/fc.sh sim feel [enc=a,b] [seeds=N] [ruleset=..] [rules=-id,+id]
     # RULESET1-G, engine-only (not in the sim help): catalog encounters with their party (default the game's five tl_

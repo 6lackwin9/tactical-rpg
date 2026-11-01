@@ -77,7 +77,7 @@ impl Entry {
         }
     }
 
-    /// The parity traces' row: [round, block, category, actor, actor is ally, target, target is ally, skill, subtype,
+    /// The trace row: [round, block, category, actor, actor is ally, target, target is ally, skill, subtype,
     /// value, damage, outcome, detail, status].
     pub fn trace(&self) -> Value {
         json!([self.round, self.block, self.category, self.actor, self.actor_is_ally, self.target, self.target_is_ally, self.skill, self.subtype, self.value, self.damage, self.outcome, self.detail, self.status])

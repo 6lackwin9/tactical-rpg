@@ -7,4 +7,3 @@ edition = "2021"
 aegis_core = { path = "../../../../engine/crates/aegis_core" }
 serde_json = { workspace = true }
 indexmap = { workspace = true }
-anyhow = { workspace = true }

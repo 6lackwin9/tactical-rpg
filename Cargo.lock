@@ -2111,7 +2111,6 @@ name = "rpgkit_data"
 version = "0.1.0"
 dependencies = [
  "aegis_core",
- "anyhow",
  "indexmap",
  "serde_json",
 ]

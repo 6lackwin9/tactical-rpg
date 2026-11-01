@@ -307,7 +307,7 @@ pub const SERVICES: [&str; 5] = ["turn_in", "offer", "board", "shop", "recruit"]
 /// marker badges `ready` and `quest`; STORYUI1 B4: a board quest is no `offer`), `board` (keeper of an open board with
 /// an available quest, STORYUI1 B4), `shop` (keeper of an open shop), `recruit` (a choice in its dialogue tree with a
 /// `recruit` effect for a character not in the party, the choice's conditions holding). Read-only; `marker_view` stays
-/// as Godot had it (the journey parity compares it).
+/// as Godot had it (the journey golden compares it).
 pub fn npc_services(d: &Data, gs: &GameState, character_qid: &str) -> Vec<&'static str> {
     let mut out = Vec::new();
     if character_qid.is_empty() {

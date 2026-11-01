@@ -244,7 +244,7 @@ fn trade_result(errors: &[String], spent: i64, earned: i64, gold: i64, notes: &[
 /// id and side, then each buy passes `buy`'s checks and each sale `sell`'s against the state before the trade. Sales
 /// pay for purchases: the trade needs `gold + earned - spent >= 0`. Gold changes once, by `earned - spent` (a gain capped
 /// at GOLD_MAX with `sell`'s note). {ok, errors, spent, earned, gold (added or removed), notes}. `buy` and `sell` stay
-/// as they are (the journey parity calls them).
+/// as they are (the journey golden calls them).
 pub fn trade(d: &Data, gs: &mut GameState, r: &str, buys: &[(String, String, i64)], sells: &[(String, i64)]) -> Dict {
     if !is_open(d, gs, r) {
         return trade_result(&["The shop is closed.".into()], 0, 0, 0, &[]);

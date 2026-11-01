@@ -1,9 +1,6 @@
 # Commit gate on the Aegis engine (transition step 2, 2026-10-19), on PRs into main and on pushes to main: the docs lint,
-# the Godot reference recorded from the frozen copy in legacy/ (catalog, worlds, game data, schema, Godot's resave, units,
-# damage, RNG, save fixtures), then every crate and target built (a compiler warning fails, CI1) and every test run (the same steps as tools/fc.sh gate and
-# check_project.ps1, plus the exports those parity suites read). The battle and journey traces are recorded on the
-# desktop (tools/fc.sh parity); their suites skip themselves here. Docs-only pushes to main skip it; `gate` is the
-# required check on main.
+# then every crate and target built (a compiler warning fails, CI1) and every test run (the same steps as tools/fc.sh gate
+# and check_project.ps1; no Godot step since CLN-42). Docs-only pushes to main skip it; `gate` is the required check on main.
 name: gate
 
 on:
@@ -22,7 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      GODOT_VERSION: 4.7.2
       RUSTUP_TOOLCHAIN: stable   # rust-toolchain.toml pins the Windows (gnullvm) toolchain of the desktop
       CARGO_TARGET_DIR: ${{ github.workspace }}/target   # .cargo/config.toml points at a Windows folder
       CARGO_TERM_COLOR: never
@@ -31,29 +27,6 @@ jobs:
 
       - name: Docs lint
         run: bash tools/fc.sh docs
-
-      - name: Cache Godot
-        id: godot-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/godot
-          key: godot-${{ env.GODOT_VERSION }}
-
-      - name: Install Godot
-        if: steps.godot-cache.outputs.cache-hit != 'true'
-        run: |
-          name="Godot_v${GODOT_VERSION}-stable_linux.x86_64"
-          curl -fsSL --retry 3 -o /tmp/godot.zip \
-            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/${name}.zip"
-          unzip -q /tmp/godot.zip -d /tmp/godot
-          mkdir -p "$HOME/godot/${GODOT_VERSION}"
-          install -m 0755 "/tmp/godot/${name}" "$HOME/godot/${GODOT_VERSION}/godot"
-
-      - name: Record the Godot reference from legacy/
-        run: |
-          export GODOT="$HOME/godot/${GODOT_VERSION}/godot"
-          "$GODOT" --headless --path legacy --import > /tmp/import.out 2>&1 || { tail -40 /tmp/import.out; exit 1; }
-          bash games/emberwake/parity/export.sh
 
       - name: System libraries (ALSA, for the audio crate on Linux)
         run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libasound2-dev pkg-config

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fast check for the Aegis engine (transition step 2, 2026-10-19): compact, failure-first output. Usage:
 #   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, every test, the layer check
-#                                (parity suites skip themselves when games/emberwake/parity/out is missing); `auto` is accepted and runs everything
+#                                (`auto` is accepted and runs everything)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
 #                                kit src, schema.json and kit.json name no lore word (world ids, games/<id>/lore_words.txt)
 #   tools/fc.sh build            cargo build --workspace --all-targets (a compiler warning fails it)
@@ -11,7 +11,6 @@
 #   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest (aegis content)
 #   tools/fc.sh sim <args>       balance sim (aegis sim <mode> [level] [seeds] [key=value ...]; sim help: the keys)
 #   tools/fc.sh replay <file> [...] replay a playtest recording (aegis replay: battle=, until=, json, variant=, write=, seeds=, fallback=)
-#   tools/fc.sh parity           re-record the Godot reference from legacy/ (export, traces, journeys, sim runs, content checks; needs Godot 4.7.2)
 # The Godot-only commands (parse, parse-all, arena, dojo, run, safe_delete, export_placeholder, gen_sfx, systems) live on
 # in legacy/tools/fc.sh for the frozen Godot copy (legacy/LEGACY.md).
 # Build output: .cargo/config.toml (desktop) or $CARGO_TARGET_DIR. Exit code 1 when anything failed.
@@ -37,7 +36,7 @@ cargo_test() {
     fi
     break
   done
-  echo "$out" | grep -E "^test result|FAILED|panicked|^error|match Godot|checked|diverge|catalog rows|compared|os error" | grep -v " 0 passed; 0 failed"
+  echo "$out" | grep -E "^test result|FAILED|panicked|^error|checked|diverge|compared|os error" | grep -v " 0 passed; 0 failed"
   echo "$out" | grep -qE "test result: FAILED|^error|os error 4551" && status=1
 }
 
@@ -146,24 +145,8 @@ case "$1" in
   content) aegis content "${@:2}" || status=1 ;;
   sim) aegis sim "${@:2}" || status=1 ;;
   replay) aegis replay "${@:2}" || status=1 ;;
-  parity)
-    games/emberwake/parity/export.sh || status=1
-    for m in duel; do for l in 1 5 10; do games/emberwake/parity/trace.sh mode=$m level=$l || status=1; done; done
-    games/emberwake/parity/trace.sh mode=group level=3 && games/emberwake/parity/trace.sh mode=group level=7 || status=1
-    games/emberwake/parity/trace.sh mode=teams level=3 || status=1
-    games/emberwake/parity/trace.sh mode=teams level=5 seeds=3 || status=1   # the committed teams_l5 and encounters traces use 3 seeds
-    games/emberwake/parity/trace.sh mode=teams level=7 || status=1
-    games/emberwake/parity/trace.sh mode=encounters level=1 seeds=3 || status=1
-    games/emberwake/parity/trace.sh mode=duel level=5 pouch=con_heal_potion,con_fire_bomb,con_focus_elixir || status=1
-    games/emberwake/parity/trace.sh mode=teams level=5 seeds=3 pouch=con_heal_potion,con_fire_bomb,con_heal_potion || status=1
-    games/emberwake/parity/trace.sh mode=group level=7 pouch=con_heal_potion,con_heal_potion,con_fire_bomb || status=1
-    for p in balanced aggressive withdraw defensive; do games/emberwake/parity/trace.sh mode=world seeds=2 preset=$p || status=1; done
-    games/emberwake/parity/journey.sh seeds=1,2,3,4 steps=700 || status=1
-    games/emberwake/parity/sim.sh || status=1
-    games/emberwake/parity/checks.sh || status=1
-    ;;
   parse|parse-all|arena|dojo|run|safe_delete|export_placeholder|gen_sfx|systems|all)
     echo "'$1' is a Godot command: the Godot build is frozen in legacy/ (see legacy/LEGACY.md; legacy/tools/fc.sh, or the legacy branch)."; status=1 ;;
-  *) sed -n '2,14p' "$0"; status=1 ;;
+  *) sed -n '2,13p' "$0"; status=1 ;;
 esac
 exit $status

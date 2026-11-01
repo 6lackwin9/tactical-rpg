@@ -66,15 +66,15 @@ because the RNG is bit-exact.
   `traces_<mode>_l<level>_items.json`): 120 duels at level 5 (potion, bomb, focus elixir), 24 team fights and 36
   group fights at level 7; 250 Healing Draught and 39 Throwing Fire Bomb uses, all step for step. Mutating the
   potion threshold or the bomb damage makes 8 to 12 fights diverge, so both item paths are checked.
-- World battles (`trace.sh mode=world preset=<p>`, `emberwake_world/tests/world_traces.rs`): 240 fights over every
+- World battles (`trace.sh mode=world preset=<p>`, `world_traces.rs`, retired by CLN-42): 240 fights over every
   world encounter plus synthetic variants (escape, centre deployment, morale, custom hold tiles, start buffs) with
   the balanced, aggressive, withdraw and defensive presets: hold, slay, escape, fled, lost and round-limit verdicts,
   boss phases (hp_below, round, waves, status, ai, enrage), morale breaks and surrenders, ambush and centre
   deployments, a protected guest and start buffs, all step for step.
 - Not covered yet: statuses expose, fortify, regen, poison, burn, empower, slow (the shipped classes rarely use
   them in these fights), terrain zones other than the stone arena and the two catalog ones.
-- Suite: `cargo test -p emberwake_battle --test trace_parity` replays every `parity/out/traces*.json` except the world
-  ones (677 fights, about 8 s).
+- Suite (retired by CLN-42, 2026-11-01, with `world_traces` and the recorders): `trace_parity` replayed every
+  `parity/out/traces*.json` except the world ones (677 fights, about 8 s); the timeline golden covers the fights now.
 - Encounters: the three shipped catalog encounters (Ruined Courtyard and Forest Clearing terrain, exits, the
   goblin_ambush reinforcement wave) replay step for step too (`trace.sh mode=encounters`).
 - Until 2026-10-19 Windows Smart App Control blocked built binaries at random (`os error 4551` from cargo test,
@@ -138,7 +138,8 @@ Not ported yet: content validation (`*_errors`, warnings), save import / export.
 
 ## Data loader (emberwake_content::source, 2026-10-19)
 
-The engine reads the project's `games/emberwake/data/` folder itself; the Godot exports are only needed for parity checks.
+The engine reads the project's `games/emberwake/data/` folder itself. The Godot exports and `tests/data_source.rs`, which
+compared the loader with them, are retired (CLN-42, 2026-11-01): the "Checked by" cells naming it record what it checked.
 
 | Godot | Rust | Checked by |
 | :--- | :--- | :--- |
@@ -157,8 +158,8 @@ The engine reads the project's `games/emberwake/data/` folder itself; the Godot 
   with: `0.1 + 0.2` is written `0.3`), and the playable worlds. 239 catalog rows and 3 worlds match.
 - Run on loader-built data instead of the exports, the journeys (5608 actions), save fixtures and world battles (240)
   still match Godot, and the CLI balance sim prints the same table.
-- `kits/rpg/schema.json` (moved from `games/emberwake/schema.json` by KIT1-M) is the committed copy of Godot's field tables (`parity/export.sh only=schema` writes
-  `parity/out/schema.json`; the test fails when they drift). It carries labels, help, options and groups too, for
+- `kits/rpg/schema.json` (moved from `games/emberwake/schema.json` by KIT1-M) is the committed copy of Godot's field tables (`parity/export.sh only=schema` wrote
+  `parity/out/schema.json`; `data_source` failed when they drifted, until CLN-42). It carries labels, help, options and groups too, for
   content editing in the engine later.
 - Not read: version 1 (flat) skills and items files, pre-CLASS1 class `skill_path` lists (the shipped data has none;
   the loader reports them), and the load-time validation messages that only block saving in Godot.

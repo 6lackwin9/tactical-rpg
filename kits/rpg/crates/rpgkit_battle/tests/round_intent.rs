@@ -2,7 +2,7 @@
 //! the rule `round_intent` (and `flank` for the flank bonus). Expectations come from the rules: the intent filter and
 //! one target (IN5, TG1, MM1), persistence and intent-bound buffs (IN2, IN6), Rest paid at round end (RS2, RS4), a lost
 //! target (TG4), facing and flanks (MV1-MV3), carried Engage and Disengage moves (MV4-MV9), after-moves (AS3) and
-//! Guard stealth (GD5). Classic keeps today's rules (the parity suites; the classic cases here).
+//! Guard stealth (GD5). Classic keeps today's rules (the goldens; the classic cases here).
 
 use indexmap::IndexMap;
 use rpgkit_battle::command::{Carry, CmdKind};

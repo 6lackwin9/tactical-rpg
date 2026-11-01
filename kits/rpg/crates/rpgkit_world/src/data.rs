@@ -2,13 +2,12 @@
 //! ContentCatalog entries, WorldCatalog lineage, merged entries, resolve with overrides; `Data` derefs to it), the
 //! typed catalog, region map templates (MapCatalog), quest templates (QuestCatalog), service lines (ServiceCatalog)
 //! and the XP curve, plus the game's world rules (party size, start party, world characters). Read from the
-//! project's data/ folder by the game's loader (`source`), or from the Godot exports (parity/out: catalog.json,
-//! worlds.json, game_data.json) for parity checks.
+//! project's data/ folder by the game's loader (`source`), or built from loaded values (`from_values`).
 
 use aegis_content::Catalogs;
 use aegis_core::json::{self, empty, Dict};
 use rpgkit_data::Catalog;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use indexmap::IndexMap;
 use serde_json::Value;
 use std::path::Path;
@@ -41,11 +40,6 @@ pub struct Data {
     world_cats: IndexMap<String, Arc<Catalog>>,
 }
 
-fn read(path: &Path) -> Result<Value> {
-    let text = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))
-}
-
 /// A data folder: holds catalog/ and worlds/.
 fn is_data_dir(d: &Path) -> bool {
     d.join("catalog").is_dir() && d.join("worlds").is_dir()
@@ -64,13 +58,10 @@ impl std::ops::Deref for Data {
 }
 
 impl Data {
-    /// A data folder read by the engine's own loader (`source`), or a Godot export folder (has catalog.json):
-    /// the data and the load problems (bad files or entries are skipped and reported, like Godot's load_errors).
+    /// A data folder read by the engine's own loader (`source`): the data and the load problems (bad files or
+    /// entries are skipped and reported).
     pub fn open(dir: &Path) -> Result<(Self, Vec<String>)> {
-        if dir.join("catalog.json").is_file() {
-            return Ok((Self::load(dir)?, Vec::new()));
-        }
-        anyhow::ensure!(dir.join("catalog").is_dir(), "{} is neither a data folder (catalog/, worlds/, ...) nor a Godot export folder", dir.display());
+        anyhow::ensure!(dir.join("catalog").is_dir(), "{} is not a data folder (catalog/, worlds/, ...)", dir.display());
         let src = rpgkit_content::source::load(dir);
         Ok((Self::from_values(&src.catalog, &src.worlds, &src.game), src.errors))
     }
@@ -85,16 +76,6 @@ impl Data {
     /// `aegis_content::manifest::find_game_dir`), when it holds catalog/ and worlds/.
     pub fn find_game_data_dir(start: &Path, id: &str) -> Option<std::path::PathBuf> {
         aegis_content::manifest::find_game_dir(start, id).map(|g| g.join("data")).filter(|d| is_data_dir(d))
-    }
-
-    /// From the Godot export folder (catalog.json, worlds.json, game_data.json); encounters with the retired `wave_*`
-    /// fields are folded (PHASEFOLD 1.4), as the loader folds them.
-    pub fn load(dir: &Path) -> Result<Self> {
-        let mut catalog = read(&dir.join("catalog.json"))?;
-        let mut worlds = read(&dir.join("worlds.json"))?;
-        let game = read(&dir.join("game_data.json"))?;
-        rpgkit_content::source::fold_legacy_waves(&mut catalog, &mut worlds);
-        Ok(Self::from_values(&catalog, &worlds, &game))
     }
 
     pub fn from_values(catalog: &Value, worlds: &Value, game: &Value) -> Self {

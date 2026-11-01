@@ -23,7 +23,7 @@ planner (TASKS, ROADMAP, decisions, HISTORY, `.claude/*`, CLAUDE.md), design-bra
 | 1 | CLN-36 | A | Tests that use the Godot export only as data: switch to the shipped data (replay, ruleset_requests); drop three one-off "frozen data reports nothing new" checks and timeout_verdict | S | logic-builder | game | now | done (2026-11-01) |
 | 2 | CLN-37 | A | Writer resave check on the shipped data (every file re-saves byte for byte) instead of Godot's resave and its five AFTER_GODOT lists | S | logic-builder | game | now | done (2026-11-01) |
 | 3 | CLN-38 | A | RNG and hash goldens into `aegis_core`; unit and damage goldens on a frozen catalog (the rules' only direct tests) | S-M | logic-builder | engine + game | now | done (2026-11-01) |
-| 4 | CLN-42 | A | Switch Godot off: delete the pure-Godot suites, `games/emberwake/parity/`, `fc.sh parity`, the CI Godot steps, the hook's Godot install, the export-only CLI keys | M | logic-builder | game + kit + tools | after CLN-36..41 | proposed |
+| 4 | CLN-42 | A | Switch Godot off: delete the pure-Godot suites, `games/emberwake/parity/`, `fc.sh parity`, the CI Godot steps, the hook's Godot install, the export-only CLI keys | M | logic-builder | game + kit + tools | after CLN-36..41 | done (2026-11-01) |
 | 5 | CLN-43 | A | Docs and rules: CLAUDE.md "Godot parity", decisions, HISTORY, skills, agents, workflow docs, PORT_NOTES | S-M | planner (+ design-brainstorm for PORT_NOTES) | process | with CLN-42 | proposed |
 | 6 | CLN-47 | C | Save migrations v1-v12 and the Godot JSON text emulation (decision "Saves and data edits") | S | logic-builder | kit | with CLN-42 (or before) | done (2026-11-01) |
 | 7 | CLN-49 | C | 20 executed seeds out of `data/seeds/` (the seeds README rule) | S | planner (git rm) | game | now | proposed |
@@ -245,7 +245,7 @@ absent). Size M. Lane logic-builder. Layer game. Depends on Q-A4.
 
 ### CLN-42
 
-Switch Godot off. Scope A. Status: proposed. Size M. Lane logic-builder. Layer game + kit + tools.
+Switch Godot off. Scope A. Status: done (2026-11-01; the session hook's Godot install stays for CLN-43, `.claude/` is the planner's). Size M. Lane logic-builder. Layer game + kit + tools.
 
 - Delete: `emberwake_battle/tests/trace_parity.rs`, `emberwake_world/tests/{world_traces,data_source}.rs`,
   `emberwake_world/tests/saves.rs` (with CLN-47; else converted per Q-C1), whichever of CLN-39/40/41 the user drops,

@@ -5,9 +5,8 @@
 //!   aegis battle <encounter id> [seed=N] [preset=balanced] [log]              autoplay a catalog encounter
 //!                [ruleset=classic|timeline] [rules=-id,+id]               RULESET1: its rules (default classic; a
 //!                                                                         timeline test fight without ruleset= notes it)
-//! Data: the project's data/ folder (`data=<dir>`), read by the game's loader; `catalog=<path>` (or $AEGIS_CATALOG)
-//! reads a resolved Godot export instead (battle, serve); `sim` reads a Godot export folder with `parity=<dir>`. A sim
-//! key given twice keeps its last value.
+//! Data: the project's data/ folder (`data=<dir>`), read by the game's loader. A sim key given twice keeps its last
+//! value.
 
 use crate::{Battle, Host};
 use emberwake_battle::session::{EncounterDef, Session};
@@ -59,12 +58,8 @@ impl Game for Emberwake {
     }
 }
 
-/// The battle host: on a resolved Godot export (`catalog=`) catalog encounters only, else on the data folder with its
-/// worlds (world encounters "<world>:<id>" too).
+/// The battle host on the data folder with its worlds (world encounters "<world>:<id>" too).
 fn battle_host(args: &Args) -> Result<Host> {
-    if args.keys.contains_key("catalog") || std::env::var("AEGIS_CATALOG").is_ok() {
-        return Ok(Host::new(Battle::new(load_catalog(args)?)));
-    }
     Ok(Host::new(Battle::with_data(world_data(args)?)))
 }
 
@@ -81,13 +76,9 @@ fn world_data(args: &Args) -> Result<Arc<emberwake_world::Data>> {
     Ok(DATA.get_or_init(|| Arc::new(d)).clone())
 }
 
-/// The catalog: `catalog=<file>` (or $AEGIS_CATALOG) reads a resolved Godot export; otherwise `data=<dir>` or the
-/// project's data/ folder above the working directory, read by the engine's own loader (problems go to stderr).
+/// The catalog: `data=<dir>` or the project's data/ folder above the working directory, read by the engine's own
+/// loader (problems go to stderr).
 fn load_catalog(args: &Args) -> Result<Arc<Catalog>> {
-    if let Some(p) = args.keys.get("catalog").cloned().or_else(|| std::env::var("AEGIS_CATALOG").ok()) {
-        let path = PathBuf::from(p);
-        return Ok(Arc::new(Catalog::load_resolved(&path).with_context(|| format!("loading {}", path.display()))?));
-    }
     let dir = data_dir(args)?;
     let src = emberwake_content::source::load(&dir);
     for e in &src.errors {
@@ -102,26 +93,20 @@ fn data_dir(args: &Args) -> Result<PathBuf> {
         Some(d) => Ok(PathBuf::from(d)),
         None => match emberwake_world::find_data_dir(&std::env::current_dir()?) {
             Some(d) => Ok(d),
-            None => bail!("data folder not found: run from the project or pass data=<dir> (or catalog=<export file>)"),
+            None => bail!("data folder not found: run from the project or pass data=<dir>"),
         },
     }
 }
 
-/// `aegis sim <mode> [level] [seeds] [key=value ...]`: the balance sim (emberwake_sim) on the game's data folder, or
-/// on a Godot export folder with `parity=<dir>` (the parity checks); prints what the sim prints, the time on stderr.
+/// `aegis sim <mode> [level] [seeds] [key=value ...]`: the balance sim (emberwake_sim) on the game's data folder;
+/// prints what the sim prints, the time on stderr.
 fn sim(args: &Args) -> Result<()> {
-    let d = match args.keys.get("parity") {
-        Some(dir) => emberwake_world::Data::load(&PathBuf::from(dir)).with_context(|| format!("loading the exports in {dir}"))?,
-        None => {
-            let (d, problems) = emberwake_world::Data::open(&data_dir(args)?)?;
-            for p in problems {
-                eprintln!("data: {p}");
-            }
-            d
-        }
-    };
+    let (d, problems) = emberwake_world::Data::open(&data_dir(args)?)?;
+    for p in problems {
+        eprintln!("data: {p}");
+    }
     let mut argv: Vec<String> = args.positional[1..].to_vec();
-    argv.extend(args.keys.iter().filter(|(k, _)| !matches!(k.as_str(), "data" | "parity" | "catalog")).map(|(k, v)| format!("{k}={v}")));
+    argv.extend(args.keys.iter().filter(|(k, _)| k.as_str() != "data").map(|(k, v)| format!("{k}={v}")));
     let start = Instant::now();
     for line in emberwake_sim::run(&d, &argv) {
         println!("{line}");
@@ -141,7 +126,7 @@ fn battle(args: &Args) -> Result<()> {
     // RULESET1 3.1.3: a catalog encounter plays classic unless ruleset= picks one; rules= switches single extensions
     def.ruleset = emberwake_rules::ruleset::Ruleset::of(&cat, &args.key("ruleset", "")).map_err(anyhow::Error::msg)?;
     def.ruleset.adjust(&args.key("rules", "")).map_err(anyhow::Error::msg)?;
-    // RULESET1-G2: a timeline test fight stays classic by default (classic parity reads it), with a note on stderr
+    // RULESET1-G2: a timeline test fight stays classic by default (the catalog encounter default), with a note on stderr
     if let Some(note) = classic_test_fight_note(id, &entry, args.keys.contains_key("ruleset")) {
         eprintln!("{note}");
     }
@@ -198,7 +183,7 @@ pub const TIMELINE_TEST_PREFIX: &str = "tl_";
 
 /// RULESET1-G2: the note `battle` prints (stderr) for a timeline test fight played without `ruleset=`: every party and
 /// enemy ref is a `tl_` unit, so the fight was built for the timeline rules, yet a catalog encounter plays classic by
-/// default (RULESET1 3.1.3; classic parity reads that default). None when `ruleset=` was given or a ref is not a test
+/// default (RULESET1 3.1.3). None when `ruleset=` was given or a ref is not a test
 /// unit.
 pub fn classic_test_fight_note(id: &str, entry: &serde_json::Map<String, Value>, ruleset_given: bool) -> Option<String> {
     let refs: Vec<&str> = ["party", "enemies"].iter().filter_map(|k| entry.get(*k).and_then(Value::as_array)).flatten().filter_map(Value::as_str).collect();

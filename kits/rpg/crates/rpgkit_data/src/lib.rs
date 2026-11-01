@@ -6,16 +6,14 @@
 //! zones kinds; forced moves, hazard placements, trigger rows, riders and meter costs on skills; events, effects,
 //! tactics), and the term register of TERMS1 (`terms`: neutral term ids with today's texts as defaults).
 //!
-//! Source today: the resolved catalog the Godot exporter writes (the game's `parity/out/catalog.json`), i.e. exactly the
-//! entries Godot's `ContentCatalog.entries(kind)` returns after item-family resolution and schema normalisation.
-//! Defaults below are the `ContentSchema` field defaults, so hand-written partial entries normalise the same way.
+//! Source: the resolved catalog the game's loader builds (`{kind: [entry, ...]}` after item-family resolution and
+//! schema normalisation; `Catalog::from_value`). Defaults below are the `ContentSchema` field defaults, so
+//! hand-written partial entries normalise the same way.
 
 use aegis_core::formula::Formula;
 use aegis_core::value::*;
-use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use serde_json::Value;
-use std::path::Path;
 
 pub mod terms;
 pub use terms::{Term, TermDef, TermRow, TermScope, TERMS_KIND};
@@ -656,13 +654,7 @@ pub struct Catalog {
 }
 
 impl Catalog {
-    /// Loads a resolved catalog: `{kind: [entry, ...]}` as written by the parity exporter.
-    pub fn load_resolved(path: &Path) -> Result<Self> {
-        let text = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        let root: Value = serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
-        Ok(Self::from_value(&root))
-    }
-
+    /// Builds the catalog from a resolved `{kind: [entry, ...]}` value.
     pub fn from_value(root: &Value) -> Self {
         let rows = |kind: &str| -> Vec<Obj> {
             root.get(kind).and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_object().cloned()).collect()).unwrap_or_default()

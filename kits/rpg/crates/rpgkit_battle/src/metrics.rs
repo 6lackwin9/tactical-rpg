@@ -1424,7 +1424,7 @@ impl BattleMetrics {
         d.best_save = best;
     }
 
-    /// The parity traces' shape: {units: {name: record}, detail: {name: detail}, fight, checks, fails}; RULESET1 P9 adds
+    /// The trace shape: {units: {name: record}, detail: {name: detail}, fight, checks, fails}; RULESET1 P9 adds
     /// `poise: {name: record}` only under the rule poise (classic keeps its shape).
     pub fn to_json(&self) -> Value {
         let units: Map<String, Value> = self.units.iter().map(|(n, r)| (n.clone(), r.to_json())).collect();

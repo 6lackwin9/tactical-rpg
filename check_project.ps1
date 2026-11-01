@@ -1,8 +1,7 @@
 # ==============================================================================
 # Tactical RPG - commit gate on the Aegis engine (transition step 2, 2026-10-19)
-# Builds every crate and target (a compiler warning fails), then runs every test: the rules, battle, world, data-loader, content-writer and Godot
-# parity suites (the parity suites skip themselves when games/emberwake/parity/out is missing; tools/fc.sh parity records it
-# from legacy/), then the layer check (engine and kit crates name no game, KIT1-G; kit code names no lore word, TERMS1 G3). Same steps as `tools/fc.sh gate`. The Godot gate of the frozen Godot copy is legacy/check_project.ps1.
+# Builds every crate and target (a compiler warning fails), then runs every test: the rules, battle, world, data-loader and content-writer
+# suites and the engine goldens, then the layer check (engine and kit crates name no game, KIT1-G; kit code names no lore word, TERMS1 G3). Same steps as `tools/fc.sh gate`. The Godot gate of the frozen Godot copy is legacy/check_project.ps1.
 # ==============================================================================
 param (
     [switch]$VerboseOutput,   # print the full cargo output
@@ -54,7 +53,7 @@ for ($try = 1; $try -le 4; $try++) {
     $blocked | ForEach-Object { Remove-Item -LiteralPath $_ -Force -ErrorAction SilentlyContinue }
 }
 if ($VerboseOutput) { $test.Lines | ForEach-Object { Write-Host $_ } }
-$summary = $test.Lines | Where-Object { $_ -match "match Godot|checked|diverge|catalog rows|compared|^test result: FAILED|panicked|os error" }
+$summary = $test.Lines | Where-Object { $_ -match "checked|diverge|compared|^test result: FAILED|panicked|os error" }
 $failed = ($test.Code -ne 0) -or ($test.Lines -match "os error 4551")
 if ($failed) {
     $test.Lines | Where-Object { $_ -match "FAILED|panicked|^error|os error|differ|diverge" } | Select-Object -First 60 | ForEach-Object { Write-Host $_ -ForegroundColor Red }

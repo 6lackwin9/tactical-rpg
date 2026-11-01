@@ -123,7 +123,7 @@ fn main() -> Result<()> {
         audio: Audio::of_layers(&project.map(|p| aegis_core::assets::Layers::for_game(&p)).unwrap_or_default()),
         nav: Vec::new(),
         notice: notices,
-        shot_dir: home.join("parity/out"),
+        shot_dir: home.join(".shots"),
         quit: false,
         answers: Vec::new(),
         held: Default::default(),
