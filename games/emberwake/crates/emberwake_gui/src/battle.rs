@@ -146,6 +146,49 @@ enum RowAct {
     SelectAlly(usize),
 }
 
+/// INPUT1 GH2, IN6 timing (decision "INPUT1 answers, part 4" Q18): a member's ghost that waits for Confirm because its
+/// intent change would drop intent-bound buffs: its tactic's draft (`preset`) or a player-set target's round change
+/// (`round_intent`). The screen draws it from copies (`view`) and Confirm sends the same change (`req`).
+#[derive(Debug, Clone)]
+enum Deferred {
+    Preset(&'static str),
+    Round(rip::RoundSet),
+}
+
+impl Deferred {
+    /// The host request Confirm sends for member `m`.
+    fn req(&self, m: usize) -> Value {
+        match self {
+            Deferred::Preset(p) => json!({"cmd": "preset", "unit": m, "preset": p}),
+            Deferred::Round(set) => {
+                debug_assert!(set.kind.is_none() && set.opener.is_none(), "the screen defers only an intent and a target");
+                let mut r = json!({"cmd": "round_intent", "unit": m});
+                if let Some(i) = set.intent {
+                    r["intent"] = json!(i.id());
+                }
+                if let Some(t) = set.target {
+                    r["target"] = target_json(t);
+                }
+                r
+            }
+        }
+    }
+
+    /// Member `m`'s round as the change would leave it, on copies (the tactic's draft as the host's `preset` makes it;
+    /// a round change through the kit's `preview_round`, the source of the host's `round_intent`).
+    fn view(&self, s: &Session, m: usize) -> Option<(World, emberwake_battle::plan::Plan)> {
+        match self {
+            Deferred::Preset(p) => {
+                let mut w2 = s.w.clone();
+                let mut p2 = rip::copy_plan(&s.plan);
+                emberwake_battle::ai::plan_party_intents(&mut w2, &mut p2, &[(m, p.to_string())]);
+                Some((w2, p2))
+            }
+            Deferred::Round(set) => rip::preview_round(&s.w, &s.plan, m, set).ok(),
+        }
+    }
+}
+
 /// RULESET1_INTENT UI5: a round intent's colour, its commands' colour (Assault an attack's, Guard a Defend's, Support's,
 /// Maneuver a Disengage's, Channel a Focus's).
 fn intent_color(i: RoundIntent) -> Rgba {
@@ -1175,8 +1218,8 @@ pub struct BattleScreen {
     /// GH2 a: each member's hero tactic (an index of `TACTICS`; none = the party tactic).
     member_tactic: std::collections::HashMap<usize, usize>,
     /// GH2 a, IN6 (decision "INPUT1 answers, part 4" Q18): members whose ghost would change their intent and drop
-    /// intent-bound buffs: the request that realizes it waits for Confirm, the ghost shows on copies meanwhile.
-    deferred: Vec<(usize, Value)>,
+    /// intent-bound buffs: the change that realizes it waits for Confirm, the ghost shows on copies meanwhile.
+    deferred: Vec<(usize, Deferred)>,
     /// The round whose planning start drafted the ghosts (GH2 a, GH6).
     ghosted: i32,
     /// IF5: the hovered menu row's preview (revision, row, the plan as if picked); MR13 reads it too.
@@ -1187,6 +1230,9 @@ pub struct BattleScreen {
     positions_shown: Vec<(V2, bool)>,
     /// TEXTFIT1: the menus' row pitch at the last frame's text size (11 at Normal).
     menu_row: i32,
+    /// INPUT1 SL2, SL5, SL7, IS1: the inspected unit and the round it was inspected in (the intel panel is pinned on it
+    /// until another inspect, Esc or that round's end).
+    inspect: Option<(usize, i32)>,
 }
 
 impl BattleScreen {
@@ -1255,6 +1301,7 @@ impl BattleScreen {
             deferred_view: None,
             positions_shown: Vec::new(),
             menu_row: 11,
+            inspect: None,
         }
     }
 
@@ -1937,6 +1984,7 @@ impl BattleScreen {
         self.member_tactic.clear();
         self.deferred.clear();
         self.ghosted = 0;
+        self.inspect = None;
         let (objective, n) = {
             let s = self.session();
             (emberwake_battle::encounter::Objectives::text_of(&s.def.raw, |r| s.units_of_ref(r).first().map(|&c| s.w.units[c].name.clone()).unwrap_or_else(|| r.to_string())), s.events.len())
@@ -2005,7 +2053,9 @@ impl BattleScreen {
     fn run(&mut self, cx: &mut Cx, a: Action) {
         match a {
             Action::Select(u) => {
-                self.selected = Some(u);
+                // INPUT1 SL4, SL6 (round intent): a party card always selects; the selected hero's card selects nothing
+                let again = self.selected == Some(u) && self.host.session.as_ref().is_some_and(|s| ri::on(&s.w));
+                self.selected = if again { None } else { Some(u) };
                 self.popup = None;
             }
             Action::UnitClick(u) => self.unit_click(cx, u),
@@ -2082,9 +2132,9 @@ impl BattleScreen {
             }
             Action::Confirm => {
                 // GH2 a, IN6: the ghosts that wait for Confirm are drafted now (their intent change drops its buffs)
-                for (m, req) in std::mem::take(&mut self.deferred) {
+                for (m, d) in std::mem::take(&mut self.deferred) {
                     if self.planning() && rip::picks_of(&self.session().w, m).is_empty() {
-                        self.send(cx, req);
+                        self.send(cx, d.req(m));
                     }
                 }
                 let r = self.send(cx, json!({"cmd": "confirm"}));
@@ -2305,6 +2355,24 @@ impl BattleScreen {
         let s = self.session();
         let is_ally = s.w.allies.contains(&u);
         let names: Vec<String> = s.w.units.iter().map(|x| x.name.clone()).collect();
+        // INPUT1 SL1, SL4-SL7 (round intent): with a hero selected and planning a click targets (SL1, SL6) and a click on
+        // the hero itself selects nothing (SL4); with none selected, or outside planning, a click on an ally selects it
+        // and one on an enemy inspects it (SL5, SL7)
+        if ri::on(&s.w) {
+            match self.selected {
+                Some(h) if h == u => {
+                    self.selected = None;
+                    self.popup = None;
+                }
+                Some(h) if self.planning() => self.target_click(cx, h, RoundTarget::Unit(u)),
+                _ if is_ally => {
+                    self.selected = Some(u);
+                    self.popup = None;
+                }
+                _ => self.inspect_unit(u),
+            }
+            return;
+        }
         if !self.planning() || self.selected.is_none() {
             if is_ally {
                 self.selected = Some(u);
@@ -2312,10 +2380,6 @@ impl BattleScreen {
             return;
         }
         let h = self.selected.unwrap();
-        if ri::on(&s.w) {
-            self.target_click(cx, h, ri::normalize(h, RoundTarget::Unit(u)));
-            return;
-        }
         if is_ally && u != h {
             let rows = self.options_for(h, "ally", Some(u), None);
             if rows.iter().any(|r| r.valid) {
@@ -2327,6 +2391,30 @@ impl BattleScreen {
         }
         let (title, rows) = if u == h { (format!("{}: own actions", names[h]), self.options_for(h, "self", None, None)) } else { (format!("Attack {}", names[u]), self.options_for(h, "foe", Some(u), None)) };
         self.open_popup(title, rows);
+    }
+
+    /// INPUT1 IS1: pins the threat intel panel on unit `u` until another inspect, Esc or the round's end.
+    fn inspect_unit(&mut self, u: usize) {
+        let (round, name) = (self.session().current_round, self.session().w.units[u].name.clone());
+        self.inspect = Some((u, round));
+        self.message = format!("Inspecting {name} (Esc clears).");
+    }
+
+    /// IS1: the inspected unit while its round lasts (round intent only; None = the panel follows the hover).
+    fn inspected(&self) -> Option<usize> {
+        let s = self.host.session.as_ref().filter(|s| ri::on(&s.w))?;
+        self.inspect.filter(|&(u, r)| r == s.current_round && u < s.w.units.len()).map(|(u, _)| u)
+    }
+
+    /// SL2: the unit (token or card, either side) under the mouse in the last frame (round intent only).
+    fn unit_under_mouse(&self) -> Option<usize> {
+        if !self.host.session.as_ref().is_some_and(|s| ri::on(&s.w)) {
+            return None;
+        }
+        match aegis_ui::ui::hit(&self.w, self.mouse) {
+            Some(Action::UnitClick(u) | Action::Select(u)) => Some(u),
+            _ => None,
+        }
     }
 
     fn tile_click(&mut self, cx: &Cx, c: V2) {
@@ -2363,19 +2451,16 @@ impl BattleScreen {
         if !self.tactic_ghost(m) || !self.session().w.autofill {
             return;
         }
-        let preset = TACTICS[self.tactic_of(m)];
+        let draft = Deferred::Preset(TACTICS[self.tactic_of(m)]);
         let s = self.session();
-        let mut w2 = s.w.clone();
-        let mut p2 = rip::copy_plan(&s.plan);
-        emberwake_battle::ai::plan_party_intents(&mut w2, &mut p2, &[(m, preset.to_string())]);
+        let Some((w2, p2)) = draft.view(s, m) else { return };
         let drops = ri::intent_of(&w2, m).map(|i| ri::would_drop(&s.w, m, i)).unwrap_or_default();
         let same = ri::intent_of(&w2, m) == ri::intent_of(&s.w, m) && plan_rows(&w2, &p2, m) == plan_rows(&s.w, &s.plan, m) && w2.round_states.get(&m).and_then(|r| r.target) == s.w.round_states.get(&m).and_then(|r| r.target);
         self.deferred.retain(|d| d.0 != m);
-        let req = json!({"cmd": "preset", "unit": m, "preset": preset});
         if !drops.is_empty() {
-            self.deferred.push((m, req));
+            self.deferred.push((m, draft));
         } else if !same {
-            self.send(cx, req);
+            self.send(cx, draft.req(m));
         }
     }
 
@@ -2427,19 +2512,20 @@ impl BattleScreen {
         let fits_now = cur.is_some_and(|i| ri::target_problem(&s.w, h, i, at).is_empty());
         let drops = chosen.filter(|i| Some(*i) != cur).map(|i| ri::would_drop(&s.w, h, i)).unwrap_or_default();
         self.deferred.retain(|d| d.0 != h);
-        let req = match chosen {
-            None if fits_now => json!({"cmd": "round_intent", "unit": h, "target": target_json(at)}),
+        let set = match chosen {
+            None if fits_now => rip::RoundSet { target: Some(at), ..Default::default() },
             None => return,
-            Some(i) if Some(i) == cur => json!({"cmd": "round_intent", "unit": h, "target": target_json(at)}),
-            Some(i) => json!({"cmd": "round_intent", "unit": h, "intent": i.id(), "target": target_json(at)}),
+            Some(i) if Some(i) == cur => rip::RoundSet { target: Some(at), ..Default::default() },
+            Some(i) => rip::RoundSet { intent: Some(i), target: Some(at), ..Default::default() },
         };
         if !self.player_target.contains(&h) {
             self.player_target.push(h);
         }
+        let change = Deferred::Round(set);
         if drops.is_empty() {
-            self.send(cx, req);
+            self.send(cx, change.req(h));
         } else {
-            self.deferred.push((h, req));
+            self.deferred.push((h, change));
         }
     }
 
@@ -2578,15 +2664,12 @@ impl BattleScreen {
             self.message = format!("No skill on key {d}.");
             return;
         };
-        let sk = &w.cat.skills[sid];
-        let held = rip::picks_of(w, h).iter().any(|p| p.holds_target());
-        let self_only = sk.target_mode == "SELF" || emberwake_battle::skill::kind(sk) == Kind::Defend;
-        let at = if self_only && !held { Some(RoundTarget::Myself) } else { w.round_states.get(&h).and_then(|r| r.target).or_else(|| ri::intent_of(w, h).and_then(|i| rip::proposed_target(w, h, i))) };
-        let Some(at) = at else {
+        // HK2, HK3: the kit names the target (self for a self-only skill picked first)
+        let Some(at) = rip::hotkey_target(w, h, sid) else {
             self.message = "Pick a target first (click a unit or a tile)".into();
             return;
         };
-        let name = sk.name.clone();
+        let name = w.cat.skills[sid].name.clone();
         let opts = rip::pick_options(w, &s.plan, h, at);
         match opts.iter().find(|o| matches!(o.picks[..], [rip::Pick::Skill { skill, .. }] if skill == sid)) {
             Some(o) if o.problem.is_none() => {
@@ -2905,10 +2988,14 @@ impl Screen<GameCx> for BattleScreen {
         if self.talk.is_some() {
             return;
         }
+        // INPUT1 IF10, SL2: an open menu only closes; a right click on a unit (token or card) inspects it; elsewhere it
+        // undoes the last pick
         if self.popup.is_some() {
             self.popup = None;
         } else if self.show_log {
             self.show_log = false;
+        } else if let Some(u) = self.unit_under_mouse() {
+            self.inspect_unit(u);
         } else if self.host.session.is_some() && self.planning() {
             self.act(cx, Action::Undo);
         }
@@ -2918,10 +3005,17 @@ impl Screen<GameCx> for BattleScreen {
         if self.talk.is_some() {
             return;
         }
+        // INPUT1 SL3 (round intent): the menu, the log, the inspected unit, then the selection; then as before
+        let timeline = self.host.session.as_ref().is_some_and(|s| ri::on(&s.w));
         if self.popup.is_some() {
             self.popup = None;
         } else if self.show_log {
             self.show_log = false;
+        } else if self.inspected().is_some() {
+            self.inspect = None;
+            self.message = "Inspect cleared.".into();
+        } else if timeline && self.selected.is_some() {
+            self.selected = None;
         } else if !self.world_mode() {
             cx.nav.push(Nav::Pop);
         }
@@ -2953,6 +3047,8 @@ impl Screen<GameCx> for BattleScreen {
             out["picks"] = Value::Array(w.allies.iter().map(|&a| json!({"unit": a, "picks": rip::picks_of(w, a).iter().map(|p| pick_json(w, p)).collect::<Vec<_>>()})).collect());
             out["deferred"] = json!(self.deferred.iter().map(|d| d.0).collect::<Vec<_>>());
             out["player_target"] = json!(self.player_target);
+            // IS1: the unit the intel panel is pinned on (null: it follows the hover)
+            out["inspect"] = json!(self.inspected());
         }
         // RULESET1-U slice 5: the overlay groups' flags and, once the round is over, its summary (round intent only)
         if let Some(sess) = self.host.session.as_ref().filter(|x| ri::on(&x.w)) {
@@ -3229,9 +3325,74 @@ fn class_names(d: &emberwake_world::Data, world: &str, w: &World) -> Vec<String>
 /// for its tell (so a reveal and its readers stay listed, a reader who fell included).
 /// HOOKS1-UI slice 2: `classes[i]` is unit `i`'s class name in the battle's world ("" = none shown; `class_names`).
 fn unit_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], rounds: &[Intent], classes: &[String]) -> Tip {
+    unit_tip_as(s, i, sel, tells, rounds, classes, None)
+}
+
+/// INPUT1 IS1-IS3: the intel panel's lines for the inspected unit `i`, headed "Inspecting <name> (Esc clears)"
+/// (`show_tells`: the Show enemy tells setting, I). An enemy shows only what the party knows (IS2's "Never" list: no
+/// unrevealed plan's skills, blocks or walks, deck, order, AI row or profile): the hover card's lines with its facing,
+/// without the tell's first action and its forecast while the tells are hidden and without the classic "Next:" line;
+/// a party member adds its picks, its plan and its AP numbers (IS3, AP9's lines) while planning under the round intent.
+fn inspect_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], rounds: &[Intent], classes: &[String], show_tells: bool) -> Tip {
+    let mut t = unit_tip_as(s, i, sel, tells, rounds, classes, Some(show_tells));
+    if let Some(head) = t.first_mut() {
+        head.0 = format!("Inspecting {} (Esc clears)", s.w.units[i].name);
+    }
+    t
+}
+
+/// AP9 (INPUT1 7): a party member's AP numbers, one line each: "AP <now> of <max>", "Plan: <spent> (picked <picked>,
+/// auto-filled <filled>)", "Left: <left>", "Next round: +<gain> -> <next> (Rest +<rest_gain>)".
+fn ap_lines(f: &rip::ApForecast) -> Vec<String> {
+    vec![
+        format!("AP {} of {}", f.now, f.max),
+        format!("Plan: {} (picked {}, auto-filled {})", f.spent, f.picked, f.filled),
+        format!("Left: {}", f.left),
+        format!("Next round: +{} -> {} (Rest +{})", f.gain, f.next, f.rest_gain),
+    ]
+}
+
+/// IS3: an inspected party member's picks and plan: "Picks: <pick>, ..." (or "Picks: none, the planner's round"), then
+/// one line a planned entry: "B1-2 Heavy Cleave on Wolf" (", auto-filled" for a ghost entry, GH1); once the round is
+/// confirmed its committed actions.
+fn plan_lines(s: &Session, u: usize) -> Tip {
+    let w = &s.w;
+    let target = |t: Option<usize>| t.filter(|t| *t != u).map(|t| format!(" on {}", w.units[t].name)).unwrap_or_default();
+    if s.plan_confirmed || s.phase != Phase::Planning {
+        return committed(s, u).into_iter().map(|c| (format!("{} {}{}", intent_text::block_text((c.0, c.1)), c.2, c.4.map(|n| format!(" on {n}")).unwrap_or_default()), TEXT)).collect();
+    }
+    let picks = rip::picks_of(w, u);
+    let mut t: Tip = vec![(if picks.is_empty() { "Picks: none, the planner's round".to_string() } else { format!("Picks: {}", picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", ")) }, GOLD)];
+    let ghosts = rip::ghost_entries(w, &s.plan, u);
+    for (k, e) in s.plan.entries_for(w, u).iter().enumerate() {
+        let ghost = ghosts.get(k).copied().unwrap_or(false);
+        let line = format!("{} {}{}{}", intent_text::block_text((e.start_block, e.end_block(w))), w.cat.skills[e.skill].name, target(e.target), if ghost { ", auto-filled" } else { "" });
+        t.push((line, if ghost { DIM } else { TEXT }));
+    }
+    t
+}
+
+/// IS2: a facing in words (the board's top is north); None for no facing.
+fn facing_name(f: V2) -> Option<&'static str> {
+    match (f.x.signum(), f.y.signum()) {
+        (0, -1) => Some("north"),
+        (0, 1) => Some("south"),
+        (1, 0) => Some("east"),
+        (-1, 0) => Some("west"),
+        (1, -1) => Some("north-east"),
+        (-1, -1) => Some("north-west"),
+        (1, 1) => Some("south-east"),
+        (-1, 1) => Some("south-west"),
+        _ => None,
+    }
+}
+
+/// The hover card (`inspect` None) or the inspect lines (`inspect` Some(the Show enemy tells setting), IS2, IS3).
+fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], rounds: &[Intent], classes: &[String], inspect: Option<bool>) -> Tip {
     let w = &s.w;
     let u = &w.units[i];
     let ally = w.allies.contains(&i);
+    let tells_shown = inspect.unwrap_or(true);
     let mut t: Tip = vec![(u.name.clone(), if ally { ALLY } else { FOE })];
     let round = rounds.iter().find(|r| r.unit == i);
     let tell = tells.iter().find(|r| r.unit == i).or(round.filter(|_| !ally));
@@ -3247,6 +3408,10 @@ fn unit_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], rounds:
     t.push((format!("{level}   Speed {}   Reach {}", u.speed, reach_text(w, i)), DIM));
     if let Some(line) = derived_line(&derived_rows(s, i)) {
         t.push((line, DIM));
+    }
+    // IS2: the facing (the round intent's, rule round_intent)
+    if let Some(f) = inspect.filter(|_| u.is_active() && ri::on(w)).and_then(|_| facing_name(ri::facing(w, i))) {
+        t.push((format!("Facing {f}"), DIM));
     }
     // RULESET1-U slice 5: the poise bar in words (rule poise)
     if let Some(st) = emberwake_battle::poise::state(w, i).filter(|st| st.max > 0 && u.is_active()) {
@@ -3272,10 +3437,20 @@ fn unit_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], rounds:
     if !u.st.pending.is_empty() {
         t.push((format!("Next round: {}", u.st.pending.iter().map(|x| emberwake_rules::status::display_name(x)).collect::<Vec<_>>().join(", ")), GOLD));
     }
+    // IS3: an inspected party member's AP numbers, picks and plan (round intent)
+    if ally && u.is_active() && inspect.is_some() && ri::on(w) {
+        if s.phase == Phase::Planning && !s.plan_confirmed {
+            t.extend(ap_lines(&rip::ap_forecast(w, &s.plan, i)).into_iter().map(|l| (l, ALLY)));
+        }
+        t.extend(plan_lines(s, i));
+    }
     if !ally && u.is_active() {
         match tell {
             Some(r) => {
-                t.push((format!("Intent: {}", intent_text::first_line(w, &r.line)), GOLD));
+                // IS2: the tell's first action only while the tells show (I)
+                if tells_shown {
+                    t.push((format!("Intent: {}", intent_text::first_line(w, &r.line)), GOLD));
+                }
                 // V1, V2: who reads the plan (a reader who fell stays listed), the enrage or the battle's plan reveal
                 if let Some(head) = intent_text::reveal_head(w, r, |p| s.w.cat.passives.get(p).map(|x| x.name.clone()).unwrap_or_else(|| p.to_string())) {
                     t.push((head, ALLY));
@@ -3283,10 +3458,12 @@ fn unit_tip(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], rounds:
                         t.push((intent_text::plan_line(w, l), TEXT));
                     }
                 }
-                if let Some(f) = sel.and_then(|h| intent_text::forecast(r, h)) {
+                if let Some(f) = sel.and_then(|h| intent_text::forecast(r, h)).filter(|_| tells_shown) {
                     t.push((f, FOE));
                 }
             }
+            // IS2: an inspect never names an unrevealed next action
+            None if inspect.is_some() => {}
             None => t.push((format!("Next: {}", next_action(s, i)), GOLD)),
         }
         if let Some(h) = sel.filter(|h| w.units[*h].is_active()) {
@@ -3330,6 +3507,8 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let w = &s.w;
     let planning = s.phase == Phase::Planning && !s.plan_confirmed;
     let sel = g.selected.filter(|u| w.allies.contains(u));
+    // INPUT1 IS1: the inspected unit (the intel panel is pinned on it; its revealed moves show, AR3)
+    let pinned = g.inspected();
     // INTENT1: the enemy tells while planning; their chips and arrows on the grid follow the Show enemy tells setting (I).
     let tells: Vec<Intent> = s.enemy_intents();
     let show_tells = cx.settings.v["show_tells"].as_bool().unwrap_or(true);
@@ -3389,9 +3568,9 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     }
     let deferred_req = sel.and_then(|u| g.deferred.iter().find(|d| d.0 == u)).map(|d| (d.0, d.1.clone()));
     match (&deferred_req, planning) {
-        (Some((m, req)), true) => {
+        (Some((m, change)), true) => {
             if g.deferred_view.as_ref().is_none_or(|v| (v.0, v.1) != (g.rev, *m)) {
-                g.deferred_view = Some((g.rev, *m, deferred_plan(s, *m, req)));
+                g.deferred_view = Some((g.rev, *m, change.view(s, *m)));
             }
         }
         _ => g.deferred_view = None,
@@ -3795,7 +3974,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     }
     g.positions_shown = marked;
     let push_list: Vec<emberwake_battle::forced::Forecast> = pushes.iter().flatten().cloned().collect();
-    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some() || talk_view.is_some(), anim_ms: g.clock.ms, sel, talker, planning, tells: &tells, show_tells, card_hover, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list, hold: hold.as_ref() };
+    let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some() || talk_view.is_some(), anim_ms: g.clock.ms, sel, talker, planning, tells: &tells, show_tells, card_hover, inspect: pinned, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list, hold: hold.as_ref() };
     let board_hover = match view {
         View::Stage => draw_stage(board, &mut ui, cx, &tuning, now),
         View::Flat => {
@@ -3900,13 +4079,14 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             View::Flat => w.allies.iter().copied().find(|&a| w.units[a].is_active() && w.grid.pos(a).is_some_and(|p| ui.hover(cell_rect(p)))),
         })
     };
-    let detail_foe = hovered_foe.or(ally_hover).or_else(|| w.enemies.iter().copied().find(|e| w.units[*e].is_active() && w.grid.pos(*e).is_some()));
+    // INPUT1 IS1: an inspected unit pins the panel (until another inspect, Esc or the round's end)
+    let detail_foe = pinned.or(hovered_foe).or(ally_hover).or_else(|| w.enemies.iter().copied().find(|e| w.units[*e].is_active() && w.grid.pos(*e).is_some()));
     if let Some(e) = detail_foe {
         let r = Rect::new(right.x + 4, y + 2, 116, 318 - y - 6);
         g.panels.push(("intel", r));
         ui.p.panel(r, CARD, if w.allies.contains(&e) { ALLY } else { FOE }, RADIUS);
         let mut ly = r.y as f32 + 3.0;
-        let mut lines = unit_tip(s, e, sel, &tells, &rounds, &classes);
+        let mut lines = if pinned.is_some() { inspect_tip(s, e, sel, &tells, &rounds, &classes, show_tells) } else { unit_tip(s, e, sel, &tells, &rounds, &classes) };
         // RULESET1-U slice 5: the selected hero's planned hits on this unit, forecast (rule poise)
         if let Some(h) = sel.filter(|h| layers.forecasts && planning && ri::on(w) && w.units[*h].is_active()) {
             for f in hit_forecasts(s, h).into_iter().flatten().filter(|f| f.target == e) {
@@ -3914,7 +4094,7 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
             }
         }
         // the agent link names the panel's unit (UI5: either side; classic adds no widget)
-        if !rounds.is_empty() {
+        if !rounds.is_empty() || pinned.is_some() {
             ui.push("intel.unit", "panel", lines.first().map(|l| l.0.clone()).unwrap_or_default(), r, true, false, None, Vec::new());
         }
         // HOOKS1-UI slice 5: the lines that fit (the Level/Speed line gives way first, then "More on its hover card")
@@ -5241,30 +5421,6 @@ fn plan_rows(w: &World, plan: &emberwake_battle::plan::Plan, m: usize) -> Vec<(u
     plan.entries_for(w, m).iter().map(|e| (e.skill, e.start_block, e.target, e.pos_after)).collect()
 }
 
-/// GH2: a ghost that waits for Confirm, on copies: the request that realizes it (`preset` for the tactic's draft,
-/// `round_intent` for a player-set target's intent change) applied to a clone of the world and the plan.
-fn deferred_plan(s: &Session, m: usize, req: &Value) -> Option<(World, emberwake_battle::plan::Plan)> {
-    let mut w2 = s.w.clone();
-    let mut p2 = rip::copy_plan(&s.plan);
-    match req["cmd"].as_str()? {
-        "preset" => {
-            emberwake_battle::ai::plan_party_intents(&mut w2, &mut p2, &[(m, req["preset"].as_str()?.to_string())]);
-        }
-        "round_intent" => {
-            ri::set_intent(&mut w2, m, RoundIntent::parse(req["intent"].as_str()?)?).ok()?;
-            let at = match &req["target"] {
-                Value::String(t) if t == "self" => RoundTarget::Myself,
-                Value::Number(n) => RoundTarget::Unit(n.as_u64()? as usize),
-                v => RoundTarget::Cell(V2::new(v[0].as_i64()? as i32, v[1].as_i64()? as i32)),
-            };
-            ri::set_target(&mut w2, m, at).ok()?;
-            rip::plan_unit(&mut w2, &mut p2, m).ok()?;
-        }
-        _ => return None,
-    }
-    Some((w2, p2))
-}
-
 /// What the board draws from the battle screen in one frame (borrowed apart from the session).
 struct Board<'a> {
     s: &'a Session,
@@ -5283,6 +5439,9 @@ struct Board<'a> {
     show_tells: bool,
     /// STAGE1 3.9: the unit whose party or hostile card the mouse is over.
     card_hover: Option<usize>,
+    /// INPUT1 IS1, AR3 (decision "INPUT1 answers, part 4" Q15): the inspected unit; its revealed moves show as the
+    /// hovered enemy's do when no enemy is hovered.
+    inspect: Option<usize>,
     /// FX1-L1 slice 2: the live effects (drawn at `anim_ms` on the ground and air layers, 4.1) and the camera offset
     /// the board's passes are shifted by.
     fx: &'a Fx,
@@ -5451,7 +5610,7 @@ fn scaled(a: u8, k: u8) -> u8 {
 /// the `common` tiles, tree tiles flat, tokens `flat_token_px` on a filled foot ellipse at `foot_alpha`, arrows centre
 /// to centre over the units, the cell widgets.
 fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
     let w = &s.w;
     let panel = Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4);
     ui.p.panel(panel, rgb(8, 10, 16), BORDER, RADIUS);
@@ -5494,7 +5653,7 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
     if let Some(o) = overlay {
         // RULESET1-U slice 3: the round intent's overlays on the ground (they draw the hero's moves); slice 5: a revealed
         // enemy's moves for the enemy under the mouse (its card or its tile)
-        let focus = card_hover.or_else(|| w.enemies.iter().copied().find(|&e| w.units[e].is_active() && w.grid.pos(e).is_some_and(|p| ui.hover(cell_rect(p)))));
+        let focus = card_hover.or_else(|| w.enemies.iter().copied().find(|&e| w.units[e].is_active() && w.grid.pos(e).is_some_and(|p| ui.hover(cell_rect(p))))).or(inspect);
         draw_overlay(&mut ui.p, o, &Geom::new(View::Flat, tuning), &layers, focus, alt);
     } else if let Some(h) = sel {
         if w.units[h].is_active() && planning {
@@ -5638,7 +5797,7 @@ fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: I
     }
     // RULESET1-U slice 6: the hovered enemy's revealed moves above the tokens
     if let Some(o) = overlay {
-        let focus = card_hover.or_else(|| w.enemies.iter().copied().find(|&e| w.units[e].is_active() && w.grid.pos(e).is_some_and(|p| ui.hover(cell_rect(p)))));
+        let focus = card_hover.or_else(|| w.enemies.iter().copied().find(|&e| w.units[e].is_active() && w.grid.pos(e).is_some_and(|p| ui.hover(cell_rect(p))))).or(inspect);
         draw_focus_moves(&mut ui.p, o, &Geom::new(View::Flat, tuning), &layers, focus);
     }
     // HOOKS1-UI slice 4: the push forecasts above the tokens (a collision mark sits between two of them)
@@ -5731,7 +5890,7 @@ fn with_alpha(c: Rgba, a: u8) -> Rgba {
 /// covers a unit, the top: HP bars, chips, the exit sign, floats). Cell widgets first, then the units' in feet order
 /// (front-most last, so it takes the click). Returns the unit the mouse is over on the board.
 fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
-    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
+    let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
     let w = &s.w;
     let geo = Geom::new(View::Stage, tuning);
     let tp = geo.token_px;
@@ -5840,7 +5999,7 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                 }
                 if let Some(o) = overlay {
                     // RULESET1-U slice 3: the round intent's overlays on the ground (they draw the hero's moves)
-                    draw_overlay(&mut ui.p, o, &geo, &layers, hovered.filter(|u| w.enemies.contains(u)), alt);
+                    draw_overlay(&mut ui.p, o, &geo, &layers, hovered.filter(|u| w.enemies.contains(u)).or(inspect), alt);
                 } else if let Some(h) = sel.filter(|h| w.units[*h].is_active() && planning) {
                     let st = s.plan.compile(w, h);
                     let mut from = w.pos(h);
@@ -5968,7 +6127,7 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
             Pass::Top => {
                 // RULESET1-U slice 6: the hovered enemy's revealed moves above the tokens
                 if let Some(o) = overlay {
-                    draw_focus_moves(&mut ui.p, o, &geo, &layers, hovered.filter(|u| w.enemies.contains(u)));
+                    draw_focus_moves(&mut ui.p, o, &geo, &layers, hovered.filter(|u| w.enemies.contains(u)).or(inspect));
                 }
                 // HOOKS1-UI slice 4: the push forecasts above the tokens
                 draw_pushes(&mut ui.p, pushes, &geo);
@@ -8438,6 +8597,217 @@ mod input1_tests {
             let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
             let ours: Vec<Value> = v["spill"].as_array().unwrap().iter().filter(|e| e["widget"].as_str().is_some_and(|w| w.starts_with("popup.") || w.starts_with("hero."))).cloned().collect();
             assert!(ours.is_empty(), "scale {scale}: {ours:?}");
+        }
+    }
+
+    // ---- INPUT1-U slice 3: selection and inspect (INPUT1 SL1-SL7, IS1-IS3) ----------------------------------------
+
+    /// A right click over widget `id` (the mouse there, as the shell's `back`), after a frame so the widgets are known.
+    fn right_click(cx: &mut Cx, g: &mut Gfx, b: &mut BattleScreen, id: &str, unit: usize) {
+        drawn(cx, g, b);
+        let r = widget(b, id).rect;
+        let at = (r.x + r.w / 2, r.y + r.h / 2);
+        assert!(matches!(aegis_ui::ui::hit(&b.w, at), Some(Action::UnitClick(u) | Action::Select(u)) if u == unit), "{id}'s middle is unit {unit}: {:?} {:?}", b.popup.as_ref().map(|p| p.title.clone()), b.w.iter().filter(|w| w.rect.contains(at.0, at.1)).map(|w| (w.id.clone(), w.enabled, w.action.clone())).collect::<Vec<_>>());
+        b.mouse = at;
+        b.back(cx);
+    }
+
+    /// The texts drawn inside the intel panel at the last frame.
+    fn intel_text(cx: &mut Cx, g: &mut Gfx, b: &mut BattleScreen) -> String {
+        let recs = crate::hud::hud_tests::frame(b, cx, g, 1.0);
+        let r = b.panels.iter().find(|p| p.0 == "intel").expect("the intel panel").1;
+        recs.iter().filter(|t| r.contains(t.x as i32 + 1, t.y as i32 + 1)).map(|t| t.text.clone()).collect::<Vec<_>>().join("\n")
+    }
+
+    /// SL1, SL4-SL7: with a hero selected and planning a click on an enemy targets it and a click on the hero itself (its
+    /// token or its card) selects nothing; with none selected a click on an enemy inspects it (no target, no menu) and
+    /// one on an ally selects it; outside planning the same.
+    #[test]
+    fn clicks_select_target_and_inspect() {
+        let (mut cx, _g, mut b) = planning();
+        let (h, f) = (hero(&b), foes_on_field(&b)[0]);
+        b.run(&mut cx, Action::UnitClick(f));
+        assert_eq!(w(&b).round_states[&h].target, Some(RoundTarget::Unit(f)), "SL1: the click targets");
+        b.run(&mut cx, Action::ClosePopup);
+        let before = round_plan(&mut b);
+        b.run(&mut cx, Action::UnitClick(h));
+        assert_eq!((b.selected, b.popup.is_none()), (None, true), "SL4: the hero's token selects nothing");
+        assert_eq!(round_plan(&mut b), before, "and plans nothing");
+        let target = w(&b).round_states[&h].target;
+        b.run(&mut cx, Action::UnitClick(f));
+        assert_eq!((b.inspected(), b.selected, b.popup.is_none()), (Some(f), None, true), "SL5: nothing selected: the enemy is inspected");
+        assert_eq!(w(&b).round_states[&h].target, target, "no target set");
+        b.run(&mut cx, Action::UnitClick(h));
+        assert_eq!(b.selected, Some(h), "SL5: an ally is selected");
+        b.run(&mut cx, Action::Select(h));
+        assert_eq!(b.selected, None, "SL4: the selected hero's card selects nothing");
+        b.run(&mut cx, Action::Select(h));
+        assert_eq!(b.selected, Some(h), "SL6: a card selects");
+        let state = b.state(&cx);
+        assert_eq!(state["inspect"], json!(f), "the agent link's inspect");
+        // SL7: outside planning
+        b.run(&mut cx, Action::Confirm);
+        assert!(!b.planning(), "{}", b.message);
+        b.inspect = None;
+        b.run(&mut cx, Action::UnitClick(f));
+        assert_eq!((b.inspected(), b.selected), (Some(f), Some(h)), "SL7: playback: the enemy is inspected, the hero stays selected");
+        let other = w(&b).allies.iter().copied().find(|&a| a != h);
+        if let Some(a) = other {
+            b.run(&mut cx, Action::UnitClick(a));
+            assert_eq!(b.selected, Some(a), "SL7: playback: an ally is selected");
+        }
+    }
+
+    /// SL2, IS1, IF10: a right click on any unit (token or card) inspects it and changes neither the selection nor the
+    /// plan, also on the selected hero; with the menu open it only closes the menu; elsewhere it undoes the last pick.
+    #[test]
+    fn a_right_click_on_a_unit_inspects_it() {
+        let (mut cx, mut g, mut b) = planning();
+        let (h, f) = (hero(&b), foes_on_field(&b)[0]);
+        let before = (round_plan(&mut b), b.selected);
+        right_click(&mut cx, &mut g, &mut b, &format!("party.{h}"), h);
+        assert_eq!(b.inspected(), Some(h), "{}", b.message);
+        assert_eq!((round_plan(&mut b), b.selected), before, "the selected hero inspected: selection and plan unchanged");
+        right_click(&mut cx, &mut g, &mut b, &format!("unit.{f}"), f);
+        assert_eq!(b.inspected(), Some(f), "the enemy's token");
+        assert_eq!((round_plan(&mut b), b.selected), before, "no target, no select");
+        right_click(&mut cx, &mut g, &mut b, &format!("foe.{f}"), f);
+        assert_eq!(b.inspected(), Some(f), "the enemy's card");
+        // the menu open: the right click only closes it (IF10)
+        next_to(&cx, &mut b, f);
+        b.run(&mut cx, Action::UnitClick(f));
+        assert!(b.popup.is_some());
+        b.inspect = None;
+        drawn(&mut cx, &mut g, &mut b);
+        let r = widget(&b, &format!("party.{h}")).rect;
+        b.mouse = (r.x + r.w / 2, r.y + r.h / 2);
+        b.back(&mut cx);
+        assert_eq!((b.popup.is_none(), b.inspected()), (true, None), "the menu closed, nothing inspected");
+        // elsewhere: undo the last pick
+        b.run(&mut cx, Action::UnitClick(f));
+        let k = first_valid_pick(&b);
+        b.run(&mut cx, Action::Choose(k));
+        b.run(&mut cx, Action::ClosePopup);
+        assert_eq!(rip::picks_of(w(&b), h).len(), 1, "{}", b.message);
+        drawn(&mut cx, &mut g, &mut b);
+        b.mouse = (-500, -500);
+        b.back(&mut cx);
+        assert!(rip::picks_of(w(&b), h).is_empty(), "a right click off every unit undoes: {}", b.message);
+    }
+
+    /// SL3: Esc closes the menu (only), then clears the inspected unit, then selects nothing, then leaves the Arena.
+    #[test]
+    fn escape_steps_back_one_layer_at_a_time() {
+        let (mut cx, mut g, mut b) = planning();
+        let (h, f) = (hero(&b), foes_on_field(&b)[0]);
+        right_click(&mut cx, &mut g, &mut b, &format!("foe.{f}"), f);
+        b.run(&mut cx, Action::UnitClick(f));
+        assert!(b.popup.is_some());
+        b.escape(&mut cx);
+        assert_eq!((b.popup.is_none(), b.inspected(), b.selected), (true, Some(f), Some(h)), "the menu only");
+        b.escape(&mut cx);
+        assert_eq!((b.inspected(), b.selected), (None, Some(h)), "then the inspected unit");
+        assert!(cx.nav.is_empty());
+        b.escape(&mut cx);
+        assert_eq!(b.selected, None, "then the selection");
+        assert!(cx.nav.is_empty(), "nothing left yet");
+        b.escape(&mut cx);
+        assert!(!cx.nav.is_empty(), "then the Arena leaves, as before");
+    }
+
+    /// IS1, IS2: the inspected enemy pins the intel panel ("Inspecting <name> (Esc clears)") over the hovered unit until
+    /// Esc or the round's end; an unrevealed enemy's panel names none of its plan's skills but the tell's first action,
+    /// and that one only while the tells show.
+    #[test]
+    fn the_inspected_enemy_shows_only_what_the_party_knows() {
+        let (mut cx, mut g, mut b) = planning();
+        let f = foes_on_field(&b)[0];
+        right_click(&mut cx, &mut g, &mut b, &format!("foe.{f}"), f);
+        let s = b.host.session.as_ref().unwrap();
+        let name = s.w.units[f].name.clone();
+        let tell = s.enemy_intents().into_iter().find(|r| r.unit == f).expect("the enemy's tell");
+        assert!(!tell.revealed, "the arena fight reveals no plan");
+        let first = intent_text::first_line(&s.w, &tell.line);
+        let skills: Vec<String> = s.resolver.scheduled.iter().filter(|a| a.unit == f).map(|a| a.command.name.clone()).filter(|n| !first.contains(n.as_str())).collect();
+        // another unit under the mouse: the panel stays pinned
+        let other = foes_on_field(&b).into_iter().find(|&e| e != f).unwrap_or(hero(&b));
+        let id = if w(&b).allies.contains(&other) { format!("party.{other}") } else { format!("foe.{other}") };
+        drawn(&mut cx, &mut g, &mut b);
+        let r = widget(&b, &id).rect;
+        b.draw(&mut cx, &mut g, (r.x + 2, r.y + 2), true);
+        assert_eq!(widget(&b, "intel.unit").text, format!("Inspecting {name} (Esc clears)"), "pinned over the hover");
+        let shown = intel_text(&mut cx, &mut g, &mut b);
+        for n in &skills {
+            assert!(!shown.contains(n.as_str()), "the panel names {n} of an unrevealed plan:\n{shown}");
+        }
+        assert!(shown.contains("Intent: "), "the tell's first action while the tells show:\n{shown}");
+        cx.settings.v["show_tells"] = json!(false);
+        let hidden = intel_text(&mut cx, &mut g, &mut b);
+        assert!(!hidden.contains("Intent: "), "tells hidden: no first action:\n{hidden}");
+        for n in s_names(&b, f) {
+            assert!(!hidden.contains(n.as_str()), "tells hidden: no plan skill {n}:\n{hidden}");
+        }
+        cx.settings.v["show_tells"] = json!(true);
+        // the round's end clears it
+        b.send(&cx, json!({"cmd": "resolve"}));
+        assert_eq!(b.inspected(), Some(f), "kept through the playback");
+        b.run(&mut cx, Action::NextRound);
+        assert_eq!(b.inspected(), None, "the next round starts unpinned: {}", b.message);
+    }
+
+    /// The names of `f`'s planned commands this round.
+    fn s_names(b: &BattleScreen, f: usize) -> Vec<String> {
+        b.host.session.as_ref().unwrap().resolver.scheduled.iter().filter(|a| a.unit == f).map(|a| a.command.name.clone()).collect()
+    }
+
+    /// IS3: an inspected party member shows its intent, its picks and plan (one line an entry, ghosts marked) and its AP
+    /// numbers (AP9's lines from the kit's `ap_forecast`); the selected hero stays selected.
+    #[test]
+    fn an_inspected_member_shows_its_plan_and_ap() {
+        let (mut cx, mut g, mut b) = planning();
+        let h = hero(&b);
+        let m = w(&b).allies.iter().copied().find(|&a| a != h && w(&b).units[a].is_active()).unwrap_or(h);
+        right_click(&mut cx, &mut g, &mut b, &format!("party.{m}"), m);
+        assert_eq!((b.inspected(), b.selected), (Some(m), Some(h)), "IS3: the selection stays");
+        drawn(&mut cx, &mut g, &mut b);
+        let s = b.host.session.as_ref().unwrap();
+        let lines: Vec<String> = inspect_tip(s, m, b.selected, &s.enemy_intents(), &s.round_intents(), &[], true).into_iter().map(|l| l.0).collect();
+        for l in ap_lines(&rip::ap_forecast(&s.w, &s.plan, m)) {
+            assert!(lines.contains(&l), "AP9 line {l:?} in {lines:?}");
+        }
+        let entries = s.plan.entries_for(&s.w, m);
+        let ghosts = rip::ghost_entries(&s.w, &s.plan, m);
+        assert!(lines.iter().any(|l| l.starts_with("Picks: ")), "{lines:?}");
+        for (e, gh) in entries.iter().zip(&ghosts) {
+            let name = &s.w.cat.skills[e.skill].name;
+            assert!(lines.iter().any(|l| l.starts_with(&intent_text::block_text((e.start_block, e.end_block(&s.w)))) && l.contains(name.as_str()) && l.ends_with(", auto-filled") == *gh), "entry {name} at B{}: {lines:?}", e.start_block);
+        }
+        let rec = s.round_intents().into_iter().find(|r| r.unit == m);
+        if let Some(head) = rec.as_ref().and_then(|r| intent_text::round_head(&s.w, r)) {
+            assert!(lines.contains(&head), "its intent and target: {head}");
+        }
+        assert_eq!(widget(&b, "intel.unit").text, format!("Inspecting {} (Esc clears)", w(&b).units[m].name));
+    }
+
+    /// TEXTFIT1: the inspect panel's texts (an enemy's, a party member's) stay inside the panel at the four text sizes,
+    /// 1280x720.
+    #[test]
+    fn the_inspect_panel_fits_at_every_text_size() {
+        let (mut cx, mut g, mut b) = planning();
+        g.canvas = aegis_ui::canvas::Canvas::new(1280, 720);
+        g.view = aegis_ui::painter::View::fit(1280, 720);
+        let (h, f) = (hero(&b), foes_on_field(&b)[0]);
+        for u in [f, h] {
+            b.inspect = Some((u, b.session().current_round));
+            for scale in [0.85f32, 1.0, 1.15, 1.3] {
+                let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, scale);
+                let boxes: Vec<(String, f32, f32, f32, f32)> = b.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
+                let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+                let r = b.panels.iter().find(|p| p.0 == "intel").expect("the intel panel").1;
+                let inside = |e: &Value| r.contains(e["at"][0].as_f64().unwrap_or(-1.0) as i32 + 1, e["at"][1].as_f64().unwrap_or(-1.0) as i32 + 1);
+                let ours: Vec<Value> = v["spill"].as_array().unwrap().iter().filter(|e| e["widget"].as_str().is_some_and(|w| w.starts_with("intel."))).chain(v["cut"].as_array().unwrap().iter().filter(|e| inside(e))).cloned().collect();
+                assert!(ours.is_empty(), "unit {u} scale {scale}: {ours:?}");
+            }
         }
     }
 

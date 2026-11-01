@@ -569,3 +569,55 @@ fn the_party_tactic_skips_members_with_picks() {
     assert_eq!((rows(&s.w, &s.plan, VANGUARD), s.w.round_states[&VANGUARD].clone()), kept, "the member with a pick is skipped");
     assert!(!s.plan.steps_of(ARCHER).is_empty(), "a member with no pick is drafted");
 }
+
+/// HK2, HK3 (`hotkey_target`): a self-only skill (a Defend kind, or `target_mode` SELF) picked by its key first aims at
+/// self; once a pick holds the round target it goes on that target; a skill aimed at others takes the round target,
+/// else the proposed one for the intent (TG6), else none.
+#[test]
+fn hotkeys_aim_a_self_only_skill_at_self_first() {
+    let mut s = session();
+    place(&mut s.w, VANGUARD, V2::new(4, 4));
+    place(&mut s.w, FOOTMAN, V2::new(5, 4));
+    let rs = s.w.round_states.entry(VANGUARD).or_default();
+    rs.intent = None;
+    rs.target = None;
+    let (guard, cleave, dressing) = (sid(&s.w, "active_guard"), sid(&s.w, "tl_heavy_cleave"), sid(&s.w, "tl_field_dressing"));
+    assert!(rip::self_only(&s.w.cat.skills[guard]) && !rip::self_only(&s.w.cat.skills[cleave]) && !rip::self_only(&s.w.cat.skills[dressing]), "a Defend kind is self-only; an attack and an ally-or-self heal are not");
+    assert_eq!(rip::hotkey_target(&s.w, VANGUARD, guard), Some(RoundTarget::Myself), "no pick yet: self");
+    assert_eq!(rip::hotkey_target(&s.w, VANGUARD, cleave), None, "no target and no intent: none");
+    s.set_round_intent(VANGUARD, RoundIntent::Assault.id()).unwrap();
+    assert_eq!(rip::hotkey_target(&s.w, VANGUARD, cleave), rip::proposed_target(&s.w, VANGUARD, RoundIntent::Assault), "the proposed target (TG6)");
+    let sc = sk(&s, "tl_shoulder_check");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[sc]).unwrap();
+    assert_eq!(rip::hotkey_target(&s.w, VANGUARD, guard), Some(foe(FOOTMAN)), "a pick holds the target: the self-only skill goes there too (and is refused there)");
+    assert_eq!(rip::hotkey_target(&s.w, VANGUARD, cleave), Some(foe(FOOTMAN)));
+}
+
+/// GH2 b, IN6 timing: `preview_round` makes, on copies, exactly what `Session::set_round` then makes (the battle screen
+/// draws a waiting round change from the one and Confirm sends the other) and changes nothing; a refused field leaves the
+/// battle as it was.
+#[test]
+fn a_round_change_previews_what_it_makes() {
+    let mut s = session();
+    place(&mut s.w, VANGUARD, V2::new(2, 4));
+    place(&mut s.w, ARCHER, V2::new(2, 6));
+    place(&mut s.w, FOOTMAN, V2::new(5, 4));
+    s.set_round_intent(ARCHER, RoundIntent::Assault.id()).unwrap();
+    s.set_round(ARCHER, &rip::RoundSet { target: Some(foe(FOOTMAN)), ..Default::default() }).unwrap();
+    let party = s.w.allies.clone();
+    let snap = |s: &Session| (party.iter().map(|&c| rows(&s.w, &s.plan, c)).collect::<Vec<_>>(), s.w.round_states.clone(), s.events.len());
+    let before = snap(&s);
+    let set = rip::RoundSet { intent: Some(RoundIntent::Assault), target: Some(foe(FOOTMAN)), ..Default::default() };
+    let (w2, p2) = rip::preview_round(&s.w, &s.plan, VANGUARD, &set).unwrap();
+    assert_eq!(snap(&s), before, "the preview changes nothing");
+    let done = s.set_round(VANGUARD, &set).unwrap();
+    assert!(done.planned.is_ok() && !done.manual, "{:?}", done.planned);
+    for &c in &party {
+        assert_eq!(rows(&w2, &p2, c), rows(&s.w, &s.plan, c), "member {c}: the preview is the change");
+    }
+    assert_eq!(w2.round_states, s.w.round_states);
+    let after = snap(&s);
+    let refused = rip::RoundSet { intent: Some(RoundIntent::Assault), target: Some(RoundTarget::Myself), ..Default::default() };
+    assert!(s.set_round(VANGUARD, &refused).is_err() && rip::preview_round(&s.w, &s.plan, VANGUARD, &refused).is_err(), "Assault takes no self target");
+    assert_eq!(snap(&s), after, "a refused field leaves the battle as it was");
+}

@@ -67,7 +67,7 @@ use rpgkit_battle::command;
 use rpgkit_battle::grid::{V2, GRID_H, GRID_W, NO_CELL, TERRAIN_IDS};
 use rpgkit_battle::intent;
 use rpgkit_battle::plan::{PlanStep, Step};
-use rpgkit_battle::round_intent::{self, ManeuverKind, Opener, Pick, RoundTarget};
+use rpgkit_battle::round_intent::{self, ManeuverKind, Opener, Pick, RoundIntent, RoundTarget};
 use rpgkit_battle::round_intent_plan as rip;
 use rpgkit_battle::session::{EncounterDef, Phase, Session};
 use rpgkit_battle::skill::{self, Kind};
@@ -716,36 +716,36 @@ fn round_intent_req(s: &mut Session, req: &Value) -> Value {
         Ok(u) => u,
         Err(e) => return e,
     };
-    let (w0, steps0, events0) = (s.w.clone(), s.plan.sequences.clone(), s.events.len());
-    if let Err(e) = set_round_fields(s, u, req) {
-        s.w = w0;
-        s.plan.sequences = steps0;
-        s.events.truncate(events0);
-        return err(e);
+    let set = match round_set_of(s, req) {
+        Ok(set) => set,
+        Err(e) => return err(e),
+    };
+    // INPUT1 GH2 b: the kit's `set_round` (the battle screen previews a waiting change with `preview_round`, the same
+    // source); a refused field leaves the battle as it was
+    match s.set_round(u, &set) {
+        Err(e) => err(e),
+        Ok(done) if done.manual => intent_reply(s, Ok(()), Vec::new()),
+        Ok(done) => intent_reply(s, done.planned, done.refused),
     }
-    if rip::manual(&s.w, u) {
-        return intent_reply(s, Ok(()), Vec::new());
-    }
-    let (result, refused) = rip::replan(&mut s.w, &mut s.plan, u);
-    intent_reply(s, result, refused)
 }
 
-/// The fields of a `round_intent` request, in order; the first refusal stops (the caller restores the battle).
-fn set_round_fields(s: &mut Session, u: UnitId, req: &Value) -> Result<(), String> {
+/// The fields of a `round_intent` request (`intent`, `target`, `maneuver`, `opener`), read in order; the first one that
+/// does not parse stops.
+fn round_set_of(s: &Session, req: &Value) -> Result<rip::RoundSet, String> {
+    let mut set = rip::RoundSet::default();
     if let Some(i) = req.get("intent").and_then(Value::as_str) {
-        s.set_round_intent(u, i)?;
+        set.intent = Some(RoundIntent::parse(i).ok_or_else(|| format!("Unknown intent '{i}'."))?);
     }
     if let Some(v) = req.get("target") {
-        let t = round_target_of(s, v).ok_or("target: \"self\", a unit or a cell [x, y]")?;
-        s.set_round_target(u, t)?;
+        set.target = Some(round_target_of(s, v).ok_or("target: \"self\", a unit or a cell [x, y]")?);
     }
     if let Some(v) = req.get("maneuver") {
-        kind_of(v).and_then(|k| rip::set_kind(&mut s.w, u, k))?;
+        set.kind = Some(kind_of(v)?);
     }
     if let Some(v) = req.get("opener") {
-        opener_of(s, v).and_then(|o| rip::set_opener(&mut s.w, u, o))?;
+        set.opener = Some(opener_of(s, v)?);
     }
-    Ok(())
+    Ok(set)
 }
 
 /// MM1, MM3 `manual {unit, on}`: the Manual toggle (default on); off rebuilds the auto plan.

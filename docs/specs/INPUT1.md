@@ -342,6 +342,26 @@ As built (INPUT1-U slice 2, 2026-11-01: the battle screen; tests `battle.rs` `in
   replayed round's ghosts.
 - Clicking the selected hero still opens its self menu (SL4's "selects nothing" is slice 3).
 
+As built (INPUT1-U slice 3, 2026-11-01: selection and inspect; tests `battle.rs` `input1_tests` (SL1-SL7, IS1-IS3, the
+inspect panel's text audit), kit `rpgkit_battle/tests/picks.rs` (HK3, the round change preview)):
+
+- SL1-SL7 and IS1 apply under the round intent only (classic keeps today's clicks, Esc and panel). The inspected unit is
+  kept with its round and cleared when the next round starts (playback keeps it: "the round's end" read as the next
+  planning); a battle start clears it. A right click with the log open closes the log first (as `back` did). Esc's
+  last step is unchanged: the Arena leaves, a world battle does nothing. A click on the selected hero (token or card)
+  selects nothing in every phase.
+- IS2: the panel is the hover card's lines (`unit_tip_as`) with a facing line ("Facing west", the round intent's
+  facing), without the tell's first action and its forecast while the tells are hidden and without the classic
+  "Next:" line (an enemy with no tell or round record shows no next action). IS3: a party member adds AP9's four
+  lines while planning (the gauge's "1 pip = ..." line waits for INPUT1-AP), "Picks: ..." and one line a planned entry
+  ("B2-5 Heavy Cleave on Wolf", ", auto-filled" on a ghost; once confirmed its committed actions). State key `inspect`.
+- AR3's inspected arrow (Q15): until VISCLAR1-A draws the one arrow, the inspected unit's revealed moves (the `walks`
+  group, also above the tokens) show as the hovered enemy's do when no enemy is hovered.
+- Kit: `round_intent_plan::set_round` / `preview_round` (a `RoundSet` of intent, target, kind, opener; `change_intent`,
+  also behind `Session::set_round_intent`) carry the host's `round_intent` (through `Session::set_round`, atomic) and the
+  screen's waiting ghost (`battle.rs` `Deferred`), so the preview and Confirm share one source; `hotkey_target` and
+  `self_only` hold HK2-HK3's target rule.
+
 ## 8. The full timeline view (INPUT1-T)
 
 - TV1 (changed 2026-11-01, PB5). Key T (planning and playback, rule `round_intent` or any timeline battle) toggles an

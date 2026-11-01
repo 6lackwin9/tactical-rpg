@@ -213,7 +213,11 @@ I enemy tells, F12 screenshot. Timeline battles (INPUT1-U): click a target (an e
 panel's Self button or S for the hero itself), then pick skills from its menu (keys 1-9 are the selected hero's skill
 hotkeys, with or without the menu open); the planner fills the rest of the round as ghost blocks (Settings, Gameplay:
 "Auto-fill the rest"); Z or a right click undoes the last pick, Clear removes them all; a right click or a click outside
-closes the menu.
+closes the menu. Selection and inspect (INPUT1-U slice 3): a right click on any unit (token or card) inspects it, pinning
+the threat intel panel ("Inspecting `<name>` (Esc clears)") until another inspect, Esc or the next round, with only what
+the party knows (an enemy's unrevealed plan never shows); a click on the selected hero (token or card) selects nothing;
+with no hero selected, or outside planning, a click on an enemy inspects it and one on an ally selects it; Esc closes
+the menu, then the log, then clears the inspect, then selects nothing, then (Arena) leaves.
 
 Feel values (timings, floating numbers, hit flash, colours) live in `games/emberwake/tuning.json` and reload while the game
 runs. The GUI serves an agent link on `127.0.0.1:47800`: `ui_tree` (the screen stack, the music wanted, the top screen's state and every

@@ -209,6 +209,72 @@ pub fn replan(w: &mut World, plan: &mut Plan, c: UnitId) -> (Result<(), String>,
     (first, rebuild_later(w, plan, c))
 }
 
+/// RULESET1_TASKS 1.8, INPUT1 GH2 b: the fields of one round change (the host's `round_intent` request), each optional;
+/// `kind` and `opener` set to Some(None) hand the choice back to the planner.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RoundSet {
+    pub intent: Option<RoundIntent>,
+    pub target: Option<RoundTarget>,
+    pub kind: Option<Option<ManeuverKind>>,
+    pub opener: Option<Option<Opener>>,
+}
+
+/// What `set_round` did: IN6's lines (the buffs an intent change dropped), whether `c` plans by hand (no rebuild then),
+/// `c`'s rebuild result and the later members' refusals (PL8).
+#[derive(Clone, Debug)]
+pub struct RoundSetDone {
+    pub lines: Vec<String>,
+    pub manual: bool,
+    pub planned: Result<(), String>,
+    pub refused: Vec<(UnitId, String)>,
+}
+
+/// IN2, IN6: sets `c`'s round intent; a change of intent drops the intent-bound buffs (the lines name them) and the old
+/// steps (`Session::set_round_intent` goes through here).
+pub fn change_intent(w: &mut World, plan: &mut Plan, c: UnitId, intent: RoundIntent) -> Result<Vec<String>, String> {
+    let before = round_intent::intent_of(w, c);
+    let lines = round_intent::set_intent(w, c, intent)?;
+    if before.is_some_and(|b| b != intent) {
+        plan.clear(c);
+    }
+    Ok(lines)
+}
+
+/// RULESET1_TASKS 1.8 (the host's `round_intent`), INPUT1 GH2 b: sets each given field in order (the intent first,
+/// then the target, the Maneuver kind, the opener); then a member that plans automatically gets its round rebuilt, and
+/// every later member's (`replan`). Err = the first refused field; the world and the plan may be half changed then (the
+/// caller restores them).
+pub fn set_round(w: &mut World, plan: &mut Plan, c: UnitId, set: &RoundSet) -> Result<RoundSetDone, String> {
+    let mut done = RoundSetDone { lines: Vec::new(), manual: false, planned: Ok(()), refused: Vec::new() };
+    if let Some(i) = set.intent {
+        done.lines = change_intent(w, plan, c, i)?;
+    }
+    if let Some(t) = set.target {
+        round_intent::set_target(w, c, t)?;
+    }
+    if let Some(k) = set.kind {
+        set_kind(w, c, k)?;
+    }
+    if let Some(o) = &set.opener {
+        set_opener(w, c, o.clone())?;
+    }
+    done.manual = manual(w, c);
+    if !done.manual {
+        (done.planned, done.refused) = replan(w, plan, c);
+    }
+    Ok(done)
+}
+
+/// INPUT1 GH2 b, IN6 timing (decision "INPUT1 answers, part 4" Q18): copies of the world and the plan as `set_round`
+/// would leave them; nothing changes. The battle screen draws a round change that waits for Confirm from them, and
+/// Confirm sends that change to `set_round`, so both read one source. Err = a refused field.
+pub fn preview_round(w: &World, plan: &Plan, c: UnitId, set: &RoundSet) -> Result<(World, Plan), String> {
+    let mut w2 = w.clone();
+    let mut p2 = plan_copy(plan);
+    set_round(&mut w2, &mut p2, c, set)?;
+    Ok((w2, p2))
+}
+
 /// PL8, INPUT1 GH5: rebuilds every member of `c`'s side after it in roster order: a member with picks from its picks
 /// (a pick that no longer fits is dropped with every pick after it: "<hero>: <skill> dropped: <reason>"), one without
 /// from its intent (`plan_unit`; Auto-fill off: Rest). Manual members and members without an intent are left alone.
@@ -971,6 +1037,23 @@ pub fn hotkey_skills(w: &World, c: UnitId) -> Vec<SkillId> {
         }
     }
     out
+}
+
+/// INPUT1 HK3: a skill a hotkey aims at its user while no pick holds the round target (`target_mode` SELF, or a Defend
+/// kind).
+pub fn self_only(s: &SkillDef) -> bool {
+    s.target_mode == "SELF" || skill::kind(s) == Kind::Defend
+}
+
+/// INPUT1 HK2, HK3: the target a hotkey pick of `skill` aims at while the skill menu is closed: the user itself for a
+/// self-only skill while no pick holds the round target (TG1); else the round target, else the one the planner
+/// proposes for `c`'s intent (TG6). None: no target yet ("Pick a target first").
+pub fn hotkey_target(w: &World, c: UnitId, skill: SkillId) -> Option<RoundTarget> {
+    let held = picks_of(w, c).iter().any(|p| p.holds_target());
+    if self_only(&w.cat.skills[skill]) && !held {
+        return Some(RoundTarget::Myself);
+    }
+    w.round_states.get(&c).and_then(|r| r.target).or_else(|| round_intent::intent_of(w, c).and_then(|i| proposed_target(w, c, i)))
 }
 
 /// The intent of a skill or item pick (None: neutral, or an id the ruleset does not know).

@@ -515,7 +515,7 @@ const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
         ],
     ),
     ("Maps", &[("Move the party", "Arrow keys, W A S D"), ("Interact with the marker you face", "E"), ("Game menu", "Escape"), ("Choose a dialogue line", "1-9"), ("Party, journal, stash, help, event log", "P, J, I, ?, L")]),
-    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Skills of the selected hero (timeline)", "1-9"), ("Target self (timeline)", "S"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Every revealed enemy move (timeline)", "Hold Alt"), ("Screenshot", "F12")]),
+    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Skills of the selected hero (timeline)", "1-9"), ("Target self (timeline)", "S"), ("Inspect a unit (timeline)", "Right click"), ("Clear inspect, deselect (timeline)", "Escape"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Every revealed enemy move (timeline)", "Hold Alt"), ("Screenshot", "F12")]),
 ];
 
 /// A volume slider's sample and bus (scripts/audio/volume_preview.gd: the master sample plays on the interface bus).

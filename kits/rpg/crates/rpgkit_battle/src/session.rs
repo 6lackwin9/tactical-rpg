@@ -1098,13 +1098,30 @@ impl Session {
             return Err("The intent changes only at a round start, while planning.".into());
         }
         let Some(i) = round_intent::RoundIntent::parse(intent) else { return Err(format!("Unknown intent '{intent}'.")) };
-        let before = round_intent::intent_of(&self.w, c);
-        let lines = round_intent::set_intent(&mut self.w, c, i)?;
-        if before.is_some_and(|b| b != i) {
-            self.plan.clear(c);
-        }
+        let lines = crate::round_intent_plan::change_intent(&mut self.w, &mut self.plan, c, i)?;
         self.events.extend(lines.iter().cloned());
         Ok(lines)
+    }
+
+    /// RULESET1_TASKS 1.8, INPUT1 GH2 b (`round_intent_plan::set_round`) while the round is planned: sets the given round
+    /// fields of member `c` in order, then rebuilds its round and the later members' (IN6's lines go to `events`).
+    /// Atomic: a refused field leaves the battle (world, plan and events) as it was.
+    pub fn set_round(&mut self, c: UnitId, set: &crate::round_intent_plan::RoundSet) -> Result<crate::round_intent_plan::RoundSetDone, String> {
+        if self.phase != Phase::Planning || self.plan_confirmed {
+            return Err("The intent changes only at a round start, while planning.".into());
+        }
+        let (w0, seq0) = (self.w.clone(), self.plan.sequences.clone());
+        match crate::round_intent_plan::set_round(&mut self.w, &mut self.plan, c, set) {
+            Ok(done) => {
+                self.events.extend(done.lines.iter().cloned());
+                Ok(done)
+            }
+            Err(e) => {
+                self.w = w0;
+                self.plan.sequences = seq0;
+                Err(e)
+            }
+        }
     }
 
     /// RULESET1_INTENT TG1: sets unit `c`'s round target while planning (its intent first; the intent table decides).
