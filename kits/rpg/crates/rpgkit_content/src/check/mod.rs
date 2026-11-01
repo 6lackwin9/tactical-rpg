@@ -235,7 +235,6 @@ fn is_gear_field(kind: &str, key: &str) -> bool {
 /// ContentCatalog.validate_entry: the hard errors of `entry` (any shape the catalog stores) as entry `current_id`
 /// ("" = a new entry).
 pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> Vec<String> {
-    let entry = &crate::source::folded(kind, entry);
     if kind == derived::KIND {
         // DERIVE1: the row checks the loader applies (fields, names, unique ids and labels, cycles)
         return derived::entry_errors(v, &content(kind, entry), current_id);
@@ -369,7 +368,6 @@ fn no_item_errors(kind: &str, e: &Dict) -> Vec<String> {
 
 /// ContentCatalog.warnings_for: the soft problems of one entry (never blocking).
 pub fn warnings_for(v: &View, kind: &str, entry: &Dict) -> Vec<String> {
-    let entry = &crate::source::folded(kind, entry);
     let e = content(kind, entry);
     match kind {
         "skills" => skill::warnings(entry, &e).into_iter().chain(skill::hook_warnings(v, entry, &e)).collect(),

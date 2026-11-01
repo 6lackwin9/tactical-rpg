@@ -4,11 +4,11 @@
 //! data change, named in docs/HISTORY.md (2026-10-27, WAR2H1: Grakka's battle axe changed ashmaw_stand): the shipped fights
 //! with a wave (goblin_ambush in the catalog, pass_ambush and ashmaw_stand in ashlands), morale off and on, four presets,
 //! three seeds. Each fight is replayed and compared step for step (unit states, schedule, intents), then the outcome,
-//! the log, metrics and report, the events, the fates and the tally keys. Then the fold of legacy rows (1.4), the
-//! arrival checks (1.2, 1.3), the writer storing a legacy row as an arrival, and the win and morale rules (2).
+//! the log, metrics and report, the events, the fates and the tally keys. Then the
+//! arrival checks (1.2, 1.3) and the win and morale rules (2).
 
 use aegis_core::json::{self, Dict};
-use emberwake_battle::encounter::{arrival_phase, fold_legacy_wave, ARRIVAL_LABEL};
+use emberwake_battle::encounter::{arrival_phase, ARRIVAL_LABEL};
 use emberwake_battle::metrics::{BattleMetrics, EndResult};
 use emberwake_battle::session::{EncounterDef, Phase, Session};
 use emberwake_battle::sim::{json_close, metrics_trace};
@@ -200,47 +200,6 @@ fn strs(list: &[&str]) -> Vec<String> {
     list.iter().map(|s| s.to_string()).collect()
 }
 
-#[test]
-fn the_fold_turns_a_legacy_wave_into_the_first_phase() {
-    // the four keys at their defaults and no units: they go, no phase comes
-    let mut row = obj(json!({"id": "a", "enemies": ["x"], "wave_units": [], "wave_round": 1, "wave_block": 4, "wave_label": "Reinforcements arrive!", "phases": []}));
-    fold_legacy_wave(&mut row);
-    assert_eq!(Value::Object(row), json!({"id": "a", "enemies": ["x"], "phases": []}));
-
-    // a wave: the arrival phase at index 0, before the phases already there
-    let boss = json!({"id": "rage", "name": "Rage", "trigger": {"kind": "round", "round": 3}, "effects": [{"type": "line", "text": "Grr."}]});
-    let mut row = obj(json!({"id": "b", "wave_units": ["u1", "u2"], "wave_round": 2, "wave_block": 3, "wave_label": "Here!", "phases": [boss.clone()]}));
-    fold_legacy_wave(&mut row);
-    let want = json!({"id": "reinforcements", "name": "Reinforcements", "trigger": {"kind": "arrival", "round": 2, "block": 3}, "effects": [{"type": "wave", "units": ["u1", "u2"], "label": "Here!"}], "pause_autoplay": false});
-    assert_eq!(want, arrival_phase(&strs(&["u1", "u2"]), 2, 3, "Here!"));
-    assert_eq!(Value::Object(row.clone()), json!({"id": "b", "phases": [want, boss]}));
-
-    // folding twice changes nothing
-    let again = row.clone();
-    fold_legacy_wave(&mut row);
-    assert_eq!(row, again);
-
-    // a taken id gets the next free suffix; missing round, block and label take the old defaults
-    let taken = json!({"id": "reinforcements", "name": "R", "trigger": {"kind": "round", "round": 2}, "effects": [{"type": "line", "text": "x"}]});
-    let mut row = obj(json!({"wave_units": ["u1"], "phases": [taken]}));
-    fold_legacy_wave(&mut row);
-    let phases = json::aget(&row, "phases");
-    assert_eq!(phases[0]["id"], json!("reinforcements_2"));
-    assert_eq!(phases[0]["trigger"], json!({"kind": "arrival", "round": 1, "block": 4}));
-    assert_eq!(phases[0]["effects"][0]["label"], json!(ARRIVAL_LABEL));
-
-    // no phases yet: the list is made
-    let mut row = obj(json!({"wave_units": ["u1"]}));
-    fold_legacy_wave(&mut row);
-    assert_eq!(json::aget(&row, "phases").len(), 1);
-
-    // phases that are not a list: the row is left as it is (its check reports it)
-    let bad = obj(json!({"wave_units": ["u1"], "wave_round": 2, "phases": {"no": "list"}}));
-    let mut row = bad.clone();
-    fold_legacy_wave(&mut row);
-    assert_eq!(row, bad);
-}
-
 // ---- 1.2, 1.3 the checks ------------------------------------------------------------------------------------------
 
 /// The shipped catalog's first party-side unit and first two enemy-side units (picked by rule, read only).
@@ -281,13 +240,6 @@ fn arrival_checks_keep_the_wave_messages() {
     assert_eq!(errors(json!([arrival_with(std::slice::from_ref(&e2), json!({"kind": "arrival", "round": 1, "block": 7}))])), ["The wave block is past the end of the round (6 blocks)."]);
     assert_eq!(errors(json!([arrival_with(std::slice::from_ref(&e2), json!({"kind": "arrival", "round": 0, "block": 0}))])), ["Phase 'reinforcements': round must be 1..6.", "Phase 'reinforcements': block must be 1..6."]);
     assert_eq!(errors(json!([arrival_with(std::slice::from_ref(&e2), json!({"kind": "arrival", "pct": 50}))])), ["Phase 'reinforcements': unknown trigger key 'pct'."]);
-    // the legacy row reads the same: the block message, then the round message, after the party and enemy counts
-    let mut legacy = base.clone();
-    for (k, v) in [("party", json!([])), ("wave_units", json!([e2])), ("wave_round", json!(99)), ("wave_block", json!(99))] {
-        legacy.insert(k.into(), v);
-    }
-    assert_eq!(check::validate_entry(&view, "encounters", &legacy, ""), ["Add at least one party member.", "The wave block is past the end of the round (6 blocks).", "The wave round is after the last round."]);
-
     // 1.3: the shape of an arrival
     let mut two = arrival_phase(std::slice::from_ref(&e2), 1, 4, "x");
     two["effects"].as_array_mut().unwrap().push(json!({"type": "line", "text": "Hi."}));
@@ -324,47 +276,6 @@ fn world_arrival_refs_read_as_the_wave_field() {
     e.insert("phases".into(), json!([arrival_phase(&strs(&["zz_missing"]), 1, 4, "x")]));
     let errors = check::world::validate_entry(&view, "ashlands", "encounters", &e, &json::s(&e, "id"));
     assert_eq!(errors, ["Reinforcements: unknown character 'zz_missing'."]);
-}
-
-// ---- the writer -------------------------------------------------------------------------------------------------
-
-fn copy_dir(from: &Path, to: &Path) {
-    std::fs::create_dir_all(to).unwrap();
-    for e in std::fs::read_dir(from).unwrap() {
-        let e = e.unwrap();
-        let p = e.path();
-        if p.is_dir() {
-            copy_dir(&p, &to.join(e.file_name()));
-        } else if p.extension().is_some_and(|x| x == "json") {
-            std::fs::copy(&p, to.join(e.file_name())).unwrap();
-        }
-    }
-}
-
-#[test]
-fn an_upsert_with_the_legacy_fields_stores_an_arrival_phase() {
-    let tmp = std::env::temp_dir().join(format!("aegis_phasefold_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
-    for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression"] {
-        copy_dir(&data_dir().join(sub), &tmp.join(sub));
-    }
-    let d = Data::open(&tmp).unwrap().0;
-    let (p, e1, e2) = units_by_side(&d);
-    let row = json!({"id": "test_phasefold", "name": "Test Phasefold", "party": [p], "enemies": [e1], "wave_units": [e2], "wave_round": 2, "wave_block": 3, "wave_label": "Here they come!"});
-    store::upsert(&tmp, None, "encounters", row.as_object().unwrap(), None).expect("a legacy row is stored");
-    let file = store::file_of(&tmp, None, "encounters");
-    let stored = aegis_content::file::raw_entries(&file).into_iter().find(|e| json::s(e, "id") == "test_phasefold").expect("stored");
-    assert!(emberwake_battle::encounter::LEGACY_WAVE_KEYS.iter().all(|k| !stored.contains_key(*k)), "{stored:?}");
-    // (the file reader reads every number as a float, as Godot's JSON.parse does)
-    let want = json!([arrival_phase(std::slice::from_ref(&e2), 2, 3, "Here they come!")]);
-    assert!(json_close(json::get(&stored, "phases"), &want), "{:?}", json::get(&stored, "phases"));
-    // the rewrite folded every row of the file: no wave_* key is left in it
-    let text = std::fs::read_to_string(&file).unwrap();
-    assert!(!text.contains("\"wave_units\""), "every row of the file is folded");
-    // (the scratch copy has no asset layers beside it, so only the encounter problems are looked at)
-    let problems: Vec<String> = store::check(&tmp).into_iter().filter(|p| p.contains("encounters")).collect();
-    assert!(problems.is_empty(), "{problems:?}");
-    let _ = std::fs::remove_dir_all(&tmp);
 }
 
 // ---- 2 the battle -------------------------------------------------------------------------------------------------

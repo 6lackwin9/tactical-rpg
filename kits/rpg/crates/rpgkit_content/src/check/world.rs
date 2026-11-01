@@ -79,7 +79,7 @@ fn check_ref(v: &View, w: &str, f: &Dict, ref_kind: &str, r: &str) -> Vec<String
 /// WorldCatalog.validate_entry: every problem of `entry` as a `kind` entry of world `w` (`current_id`: the id it
 /// replaces).
 pub fn validate_entry(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &str) -> Vec<String> {
-    let e = normalize(kind, &crate::source::folded(kind, entry));
+    let e = normalize(kind, entry);
     let mut errors = Vec::new();
     let id = json::s(&e, "id");
     if id.is_empty() {
@@ -133,7 +133,7 @@ pub fn validate_entry(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &
 /// WorldCatalog.blocking_errors: the problems that refuse a world write (id, name, enums, overrides, the shape of the
 /// json fields). Unresolved references and incomplete entries do not block: worlds are full of mutual references.
 pub fn blocking_errors(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &str) -> Vec<String> {
-    let e = normalize(kind, &crate::source::folded(kind, entry));
+    let e = normalize(kind, entry);
     let mut errors = Vec::new();
     let id = json::s(&e, "id");
     if id.is_empty() {

@@ -81,12 +81,8 @@ pub struct EncounterDef {
 }
 
 impl EncounterDef {
-    /// ContentSchema "encounters" defaults applied to a (possibly partial) entry; a row with the retired `wave_*`
-    /// fields is folded first (PHASEFOLD 1.4).
+    /// ContentSchema "encounters" defaults applied to a (possibly partial) entry.
     pub fn from_obj(o: &Obj) -> Self {
-        let mut folded = o.clone();
-        encounter::fold_legacy_wave(&mut folded);
-        let o = &folded;
         let exits = match o.get("exits") {
             Some(Value::Array(a)) => a.iter().filter_map(|p| p.as_array()).filter(|p| p.len() == 2).map(|p| V2::new(value::to_int(&p[0], 0), value::to_int(&p[1], 0))).collect(),
             _ => vec![V2::new(11, 4)],

@@ -230,8 +230,6 @@ fn rewrite(data_dir: &Path, world: Option<&str>, kind: &str, entries: &[Dict]) -
     let families = derived_families(data_dir);
     let mut stored = Vec::new();
     for e in entries {
-        // PHASEFOLD 1.4: an encounter written before PHASEFOLD is stored with its wave as an arrival phase.
-        let e = &source::folded(kind, e);
         stored.push(Value::Object(match (world, game) {
             (Some(_), _) => world_storage(kind, &without_empty_follow_ups(kind, &without_empty_expressions(kind, e))),
             (None, Some(_)) => game_storage(kind, e),
@@ -346,7 +344,6 @@ impl Hooks for RpgContent {
     fn validate(&self, world: Option<&str>, kind: &str, entry: &Dict) -> Result<Dict, Vec<String>> {
         let section = if world.is_some() { "world" } else { "content" };
         let game = world.is_none() && game_kind(kind).is_some();
-        let entry = &source::folded(kind, entry);
         let full = if world.is_some() { normalize(fields("world", kind), entry, true) } else if game { game_storage(kind, entry) } else { content(kind, entry) };
         if world.is_none() && kind == source::PORTRAIT_KIND && sget(&full, "trigger", "") == rpgkit_data::PORTRAIT_METER_TRIGGER {
             // PORTRAITFX1 5.1: the reserved trigger is refused with its reason, not as an unknown option

@@ -2,8 +2,7 @@
 //! guests and protect), EncounterPhases (boss phases: hp_below and round triggers, line / wave / status / ai /
 //! enrage effects, HOOKS1's `deck` effect under the rule deck, ENCOUNTER2's `kill` effect and phase groups,
 //! ENCOUNTER2-C's `talk` effect and the triggers `round` at a block, `downed` and `broken`; PHASEFOLD:
-//! the reinforcement wave as an `arrival` phase, and the fold of the retired `wave_*`
-//! fields) and EncounterMorale (enemy groups that break and surrender). Runtime parts only; validation stays
+//! the reinforcement wave as an `arrival` phase) and EncounterMorale (enemy groups that break and surrender). Runtime parts only; validation stays
 //! with the content tools. The session calls them at the same points CatalogEncounter does.
 
 use crate::grid::V2;
@@ -368,9 +367,6 @@ pub const ARRIVAL_NAME: &str = "Reinforcements";
 pub const ARRIVAL_ROUND: i32 = 1;
 pub const ARRIVAL_BLOCK: i32 = 4;
 pub const ARRIVAL_LABEL: &str = "Reinforcements arrive!";
-/// The retired fields, as the encounter rows wrote them before PHASEFOLD.
-pub const LEGACY_WAVE_KEYS: [&str; 4] = ["wave_units", "wave_round", "wave_block", "wave_label"];
-
 /// PHASEFOLD 1.4: the arrival phase of a reinforcement wave (`units` enter before `block` of `round`).
 pub fn arrival_phase(units: &[String], round: i32, block: i32, label: &str) -> Value {
     serde_json::json!({
@@ -379,40 +375,6 @@ pub fn arrival_phase(units: &[String], round: i32, block: i32, label: &str) -> V
         "effects": [{"type": "wave", "units": units, "label": label}],
         "pause_autoplay": false,
     })
-}
-
-/// PHASEFOLD 1.4: a row written before PHASEFOLD (`wave_units`, `wave_round`, `wave_block`, `wave_label`) as an arrival
-/// phase at the front of `phases`; the four keys are removed (a row without wave units only loses them). Runs on every
-/// encounter before anything reads it; a row already folded is left as it is. The round and block are clamped to the
-/// retired fields' ranges (1..30, 1..10), as the schema normalize clamped them before.
-pub fn fold_legacy_wave(entry: &mut Obj) {
-    if !LEGACY_WAVE_KEYS.iter().any(|k| entry.contains_key(*k)) {
-        return;
-    }
-    if entry.get("phases").is_some_and(|p| !p.is_array()) {
-        return;
-    }
-    let units: Vec<String> = value::strings(entry, "wave_units").into_iter().filter(|u| !u.is_empty()).collect();
-    let round = value::int(entry, "wave_round", ARRIVAL_ROUND).clamp(1, 30);
-    let block = value::int(entry, "wave_block", ARRIVAL_BLOCK).clamp(1, 10);
-    let label = value::string(entry, "wave_label", ARRIVAL_LABEL);
-    for k in LEGACY_WAVE_KEYS {
-        entry.shift_remove(k);
-    }
-    if units.is_empty() {
-        return;
-    }
-    let mut phase = arrival_phase(&units, round, block, &label);
-    let Value::Array(list) = entry.entry("phases").or_insert_with(|| Value::Array(Vec::new())) else { return };
-    let taken = |id: &str| list.iter().any(|p| p.get("id").and_then(Value::as_str) == Some(id));
-    let mut id = ARRIVAL_ID.to_string();
-    let mut n = 2;
-    while taken(&id) {
-        id = format!("{ARRIVAL_ID}_{n}");
-        n += 1;
-    }
-    phase["id"] = Value::from(id);
-    list.insert(0, phase);
 }
 
 /// EncounterPhases.parse: typed phases with defaults (status rounds 2, enrage power 20; an arrival: round 1, block 4,

@@ -62,9 +62,8 @@ pub(crate) fn fields(section: &str, kind: &str) -> &'static [Value] {
 
 pub fn load(data_dir: &Path) -> Source {
     let mut errors = Vec::new();
-    let mut catalog = load_catalog(data_dir, &mut errors);
-    let mut worlds = aegis_content::world::load(data_dir, schema(), &WORLD_KINDS, &mut errors);
-    fold_legacy_waves(&mut catalog, &mut worlds);
+    let catalog = load_catalog(data_dir, &mut errors);
+    let worlds = aegis_content::world::load(data_dir, schema(), &WORLD_KINDS, &mut errors);
     let mut game = Dict::new();
     game.insert("maps".into(), Value::Array(load_list(&data_dir.join("maps/maps.json"), &mut errors, map_template)));
     game.insert("quests".into(), Value::Array(load_list(&data_dir.join("quests/quests.json"), &mut errors, quest_template)));
@@ -83,30 +82,6 @@ pub fn load(data_dir: &Path) -> Source {
 /// ContentSchema.normalize of a catalog entry of `kind`.
 pub(crate) fn content(kind: &str, entry: &Dict) -> Dict {
     normalize(fields("content", kind), entry, false)
-}
-
-/// PHASEFOLD 1.4: an encounter row as the game reads it (`fold_legacy_wave`: the retired `wave_*` fields as an arrival
-/// phase); any other kind as it is.
-pub fn folded(kind: &str, entry: &Dict) -> Dict {
-    let mut e = entry.clone();
-    if kind == "encounters" {
-        rpgkit_battle::encounter::fold_legacy_wave(&mut e);
-    }
-    e
-}
-
-/// PHASEFOLD 1.4: every catalog encounter ({kind: [entry]}) and every world's own encounters ({world: {own: {kind:
-/// [entry]}}}) folded in place (the loader's values and Godot's exports have this shape).
-pub fn fold_legacy_waves(catalog: &mut Value, worlds: &mut Value) {
-    let fold_all = |list: Option<&mut Value>| {
-        for e in list.and_then(Value::as_array_mut).into_iter().flatten().filter_map(Value::as_object_mut) {
-            rpgkit_battle::encounter::fold_legacy_wave(e);
-        }
-    };
-    fold_all(catalog.get_mut("encounters"));
-    for w in worlds.as_object_mut().into_iter().flat_map(|o| o.values_mut()) {
-        fold_all(w.get_mut("own").and_then(|o| o.get_mut("encounters")));
-    }
 }
 
 // ---- ContentCatalog --------------------------------------------------------------------------------------------

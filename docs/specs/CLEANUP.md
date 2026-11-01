@@ -31,7 +31,7 @@ planner (TASKS, ROADMAP, decisions, HISTORY, `.claude/*`, CLAUDE.md), design-bra
 | 9 | CLN-44 | B | Classic as a `rulesets` row: no hard-coded `Ruleset::classic()`, no closed id lists, one fallback | M | logic-builder + asset-builder | kit + game | after INPUT1-U | done 2026-11-01 (the classic row shipped through aegis content) |
 | 10 | CLN-45 | B | Split the legacy-vs-timeline switches bundled under `round_intent` into named rule options | M-L | logic-builder | kit | after CLN-44, INPUT1-U, INPUT1-L | proposed |
 | 11 | CLN-46 | B | Screens and host read rules, not `is_classic()` | S | logic-builder | game + kit | after CLN-44 | proposed |
-| 12 | CLN-48 | C | The `wave_*` fold shim (PHASEFOLD 1.4) once nothing reads Godot data | S | logic-builder | kit | after CLN-42 | proposed |
+| 12 | CLN-48 | C | The `wave_*` fold shim (PHASEFOLD 1.4) once nothing reads Godot data | S | logic-builder | kit | after CLN-42 | done |
 | 13 | CLN-50 | C | Manual planning mode (MM1), superseded by picks; no screen sets it since INPUT1-U slice 2 | S | logic-builder | kit + game | after INPUT1-U | proposed |
 | 14 | CLN-40 | A | Content checks parity: slim engine golden of the broken-entry cases, or delete (Q-A3) | M | logic-builder | game | now | proposed |
 | 15 | CLN-41 | A | Journey parity: engine random-walk golden on the shipped data, or delete (Q-A4) | M | logic-builder | game | now | done |
@@ -396,7 +396,7 @@ Size S. Lane logic-builder. Layer kit. Depends on Q-C1.
 
 ### CLN-48
 
-The `wave_*` fold shim. Scope C. Status: proposed. Size S. Lane logic-builder. Layer kit.
+The `wave_*` fold shim. Scope C. Status: done (2026-11-01; as built: the fold, `source::folded`, their callers, two phasefold tests and ten `wave_*` cases of `checks_golden.json` removed; the PHASEFOLD golden unchanged). Size S. Lane logic-builder. Layer kit.
 
 - Where: `rpgkit_battle/src/encounter.rs:388-` (`fold_legacy_wave`, `LEGACY_WAVE_KEYS`), `rpgkit_battle/src/
   session.rs:85`, `rpgkit_content/src/source.rs:61, 82-101` (`folded`, `fold_legacy_waves`), `rpgkit_world/src/
