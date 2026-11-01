@@ -2,17 +2,17 @@
 
 Newest pass on top. Candidate statuses: `proposed`, `confirmed (user <date>)`, `rejected (user <date>): <reason>`, `done`. Only the user confirms; confirmed candidates become `docs/TASKS.md` rows. Cleanup is never folded into a feature task: "after X" = run once X is merged, "superseded by X" = X deletes it anyway.
 
-## Pass 3: Godot parity off, classic as data, code bloat (2026-11-02, develop at 4efb30c)
+## Pass 3: Godot parity off, classic as data, code bloat (2026-11-01, develop at 4efb30c)
 
-Confirmed by the user 2026-11-02, all as recommended (decision "Godot parity retired and cleanup pass 3 answers"); rows CLN-36 to CLN-53 in docs/TASKS.md.
+Confirmed by the user 2026-11-01, all as recommended (decision "Godot parity retired and cleanup pass 3 answers"); rows CLN-36 to CLN-53 in docs/TASKS.md.
 
-Scope (user 2026-11-02, via the planner): A. retire the Godot parity checks ("legacy Godot code can sit in legacy/ but
+Scope (user 2026-11-01, via the planner): A. retire the Godot parity checks ("legacy Godot code can sit in legacy/ but
 legacy should not be part of the test builds anymore"); B. classic special cases (decision "INPUT1-M rule choices and
 the classic ruleset": classic is one ruleset template over the rule library, not a separate code path); C. other
 cleanup worth starting now. Read-only scan of the planner checkout (detached `origin/develop`), the desktop main
 checkout's `games/emberwake/parity/out` (sizes only), `git log`, `tools/fc.sh docs`. Supporting decisions: "Port goal
 and the end of Godot (user 2026-10-20)" clause (2) ("after the PORT rows are done, Godot is no longer a reference"; no
-PORT row is open in TASKS) and "Saves and data edits (user 2026-11-02)" ("long-term save compatibility is not a goal").
+PORT row is open in TASKS) and "Saves and data edits (user 2026-11-01)" ("long-term save compatibility is not a goal").
 Every candidate is `proposed`. Lanes: logic-builder (code, tests, tools), asset-builder (data through `aegis content`),
 planner (TASKS, ROADMAP, decisions, HISTORY, `.claude/*`, CLAUDE.md), design-brainstorm (spec and lore doc splits).
 
@@ -234,12 +234,12 @@ decisions, HISTORY, workflow docs); design-brainstorm for PORT_NOTES and ENGINE_
   become "legacy/ is frozen for reference; no build or test reads it" plus an engine-golden rule (goldens: timeline,
   PHASEFOLD and CLN-38..41's; re-recorded only for an intended change, named in the commit and a HISTORY row; never
   edited to pass).
-- Decisions: new row "Godot parity retired (user 2026-11-02)" in `docs/decisions/workflow.md` (which suites were
+- Decisions: new row "Godot parity retired (user 2026-11-01)" in `docs/decisions/workflow.md` (which suites were
   converted, which deleted); mark "Port goal and the end of Godot" clause (2) fulfilled; `games/emberwake/docs/decisions/
   lore.md:5, 15` "parity world" becomes "classic reference world".
 - HISTORY row: "The Godot parity suites (trace_parity, world_traces, journey, saves, data_source, store resave,
   checks_parity, sim_parity, rules parity) and the recorders in games/emberwake/parity" | retired | the engine goldens
-  (list) | user 2026-11-02.
+  (list) | user 2026-11-01.
 - Skills and agents: `engine-checklist` description and step 5, step 4's `trace_parity` example; `rust-conventions`
   lines 34, 41, 53; `known-issues` description and rows at lines 23, 24, 25, 27, 28, 33, 44, 58 (mark retired);
   `patch-and-seed` line 25; `task-landing` line 25 (only "re-recorded golden"); agents `logic-builder` lines 13, 22 and
@@ -264,7 +264,7 @@ Layer kit + game.
   (`is_classic`); hard-coded `Ruleset::classic()` as a start value in `rpgkit_battle/src/session.rs:113`,
   `rpgkit_battle/src/dojo.rs:296`, `rpgkit_sim/src/args.rs:178`, `rpgkit_host/src/lib.rs:178`,
   `emberwake_gui/src/runner.rs:109`; content check `rpgkit_content/src/check/world.rs:682-687` (`r != CLASSIC`).
-- Why: decision "INPUT1-M rule choices and the classic ruleset" (user 2026-11-02): classic is one ruleset template over
+- Why: decision "INPUT1-M rule choices and the classic ruleset" (user 2026-11-01): classic is one ruleset template over
   the rule library, every ruleset draws on the same rule rows. Today classic is a code constant; a third ruleset cannot
   be data (the id list is closed).
 - Change: kit: rulesets are rows only (`Ruleset::of` reads `cat.rulesets`; open ids, checked against the rows); the
@@ -334,7 +334,7 @@ Save migrations v1-v12. Scope C. Status: proposed. Size S. Lane logic-builder. L
 - Where: `rpgkit_world/src/save.rs:109-243` (`quest_entry_ok`, `godot_text` "as Godot writes a value it parsed",
   `state_text`, `step` with 12 arms), :245-266 (`migrate`); test `rpgkit_world/tests/campaign.rs:340` writes a v12 save;
   `emberwake_world/tests/saves.rs` (Godot fixtures v1-v10).
-- Why: decision "Saves and data edits (user 2026-11-02)": long-term save compatibility is not a goal, core systems
+- Why: decision "Saves and data edits (user 2026-11-01)": long-term save compatibility is not a goal, core systems
   need not carry migrations for old development saves. Steps 1-2 also emulate Godot's JSON text to derive an RNG seed.
 - Change: `VERSION` stays 13 (or the next bump); a save below it is refused with "save version N is no longer
   supported" (load notes and validation stay); delete `step`, `godot_text`, `state_text`, `quest_entry_ok`; keep

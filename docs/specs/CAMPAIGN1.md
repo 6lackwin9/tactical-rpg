@@ -384,7 +384,7 @@ Save: version 13 (or the next free number; sequence with ROSTER1, RULESET1-D, EN
   and logs "Travel mode: Forced march."; its tip gives the mode's tip, its days a leg and the ambush change; the Travel
   tip starts with the mode's name; the road labels show the leg's days in the mode. No button without modes.
 
-## As built (CAMPAIGN1-TM2, 2026-11-02)
+## As built (CAMPAIGN1-TM2, 2026-11-01)
 
 - Decision "Saves and data edits": a saved `campaign.mode` the world no longer has no longer refuses the load; the
   save loads in the default mode and `save::decode` returns the load warning `campaign::mode_dropped_text(id)`

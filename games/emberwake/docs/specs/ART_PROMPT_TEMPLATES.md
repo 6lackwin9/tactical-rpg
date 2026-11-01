@@ -118,9 +118,9 @@ Sprites include:
 Compact scale, highly readable, matches the 16-bit dark fantasy aesthetic.
 ```
 
-## Routes by asset type (ARTPROMPT1, 2026-11-02)
+## Routes by asset type (ARTPROMPT1, 2026-11-01)
 
-Since 2026-11-02 the "Gemini" route runs through the Antigravity queue by default (decision "Antigravity queue as the default
+Since 2026-11-01 the "Gemini" route runs through the Antigravity queue by default (decision "Antigravity queue as the default
 image route"; Imagen 3; no approval, warn on batches over about 10 images); the user's Gemini web runs are the fallback.
 From the ARTPROMPT1 tests (decision "ARTPROMPT1 routes"; Gemini web results beside Klein 4B, ERNIE-Image Turbo and
 Z-Image Turbo at game size; boards and prompt records in `C:/dev/localgen/review/artprompt1/`). Local runs need no
