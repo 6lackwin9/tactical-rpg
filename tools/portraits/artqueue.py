@@ -18,6 +18,9 @@
 #   python artqueue.py ingest [<name>...] [--dry-run]
 #       every finished request (output/<name>.result.json and completed/<name>.json), or the names given
 #   python artqueue.py status
+#       counts per folder, failed errors, and the quota pause (ARTQUEUE2): Antigravity writes paused.json
+#       {"paused_until": "<ISO UTC>", "reason", "request"} on HTTP 429 and puts the request back in queue/;
+#       request still queues during a pause (and says so)
 # --pipeline <dir> (any command) or IMAGE_PIPELINE picks another queue folder (tests, a scratch run).
 import argparse
 import datetime
@@ -299,6 +302,33 @@ def status(pipe):
     return s
 
 
+def pause_state(pipe, now=None):
+    """The quota pause (ARTQUEUE2): None without paused.json, else (line, active) with a printable line."""
+    path = pipe / "paused.json"
+    if not path.is_file():
+        return None
+    try:
+        d = json.loads(path.read_text(encoding="utf-8"))
+        until = datetime.datetime.fromisoformat(str(d["paused_until"]).replace("Z", "+00:00"))
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=datetime.timezone.utc)
+    except (ValueError, KeyError, TypeError, OSError) as e:
+        return f"paused.json unreadable ({type(e).__name__}: {e})", False
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    shown = until.astimezone(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M")
+    reason = d.get("reason") or "no reason given"
+    if until <= now:
+        return f"pause expired ({shown} UTC): {reason}", False
+    mins = int((until - now).total_seconds() // 60) + 1
+    return f"paused until {shown} UTC ({mins} min): {reason}", True
+
+
+def note_pause(pipe):
+    p = pause_state(pipe)
+    if p and p[1]:
+        print(f"note: Antigravity is {p[0]}; requests wait in queue/ until then")
+
+
 # ---- CLI ----
 
 def common(p):
@@ -330,6 +360,9 @@ def main(argv=None):
     if a.cmd == "status":
         s = status(pipe)
         print(f"{G.rel(pipe)}: " + ", ".join(f"{k} {v}" for k, v in s.items()))
+        p = pause_state(pipe)
+        if p:
+            print(p[0])
         for e in sorted((pipe / "failed").glob("*.error.txt")) if (pipe / "failed").is_dir() else []:
             print(f"  failed {e.name[:-len('.error.txt')]}: {e.read_text(encoding='utf-8').strip()[:160]}")
         return 0
@@ -342,6 +375,8 @@ def main(argv=None):
         return 0
     if a.n < 1:
         sys.exit("--n must be at least 1")
+    if not a.dry_run:
+        note_pause(pipe)
     extra_refs = [pathlib.Path(x).resolve() for x in a.ref]
     fields = {}
     for kv in a.record:

@@ -299,5 +299,39 @@ class Ingest(Base):
         self.assertEqual(Q.status(self.pipe)["failed"], 1)
 
 
+
+class Pause(Base):
+    """ARTQUEUE2: the quota pause Antigravity writes as paused.json."""
+    def pause(self, text):
+        self.pipe.mkdir(parents=True, exist_ok=True)
+        (self.pipe / "paused.json").write_text(text, encoding="utf-8")
+
+    def at(self, minutes):
+        t = Q.datetime.datetime.now(Q.datetime.timezone.utc) + Q.datetime.timedelta(minutes=minutes)
+        return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def test_absent(self):
+        self.assertIsNone(Q.pause_state(self.pipe))
+        self.assertNotIn("pause", self.run_cli("status"))
+
+    def test_active(self):
+        self.pause(json.dumps({"paused_until": self.at(30), "reason": "Error 429", "request": "x_q1"}))
+        out = self.run_cli("status")
+        self.assertRegex(out, r"paused until \S+ \S+ UTC \((30|31) min\): Error 429")
+        out = self.run_cli("text", "p_q", "--text", "P.")
+        self.assertIn("requests wait in queue/", out)
+        self.assertEqual(len(self.queued()), 1)
+
+    def test_expired(self):
+        self.pause(json.dumps({"paused_until": self.at(-5), "reason": "Error 429"}))
+        self.assertIn("pause expired", self.run_cli("status"))
+        self.assertNotIn("note:", self.run_cli("text", "e_q", "--text", "E."))
+
+    def test_malformed(self):
+        for bad in ("{not json", json.dumps({"reason": "no time"}), json.dumps({"paused_until": "soon"})):
+            self.pause(bad)
+            self.assertIn("paused.json unreadable", self.run_cli("status"))
+
+
 if __name__ == "__main__":
     unittest.main()

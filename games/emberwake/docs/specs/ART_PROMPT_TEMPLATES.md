@@ -188,6 +188,11 @@ Antigravity moves the request to `processing/`, makes `n` images and saves `outp
 `image-generator`; `time`; `prompt_sent`, the exact text it sent; `references`; `n`; `files` [{`file` (relative, such
 as `output\<name>.png`), `width`, `height`}]; `notes`), checks each PNG opens, is full size and matches the aspect,
 then moves the request to `completed/`. On a failure: `failed/<name>.json` and `failed/<name>.error.txt`.
+Quota pause (ARTQUEUE2, 2026-11-01): on HTTP 429 or quota exhaustion the request goes back to `queue/` (not
+`failed/`), Antigravity writes `paused.json` {`paused_until` (ISO UTC), `reason`, `request`} and stops the run; runs
+skip until `paused_until`, then it deletes `paused.json`; only real errors go to `failed/`. `artqueue.py status` prints
+`paused until <time> UTC (<n> min): <reason>` (or `pause expired`; a malformed file is reported), `request` and `text`
+still queue during a pause and note it, and `ingest` is unaffected.
 Ingest (a request counts as finished when `output/<name>.result.json` exists and the request is in `completed/`):
 each image is checked (present, a whole PNG, the aspect within 3 %, the long edge at least 1024 px); a refused one
 moves to `rejected/` with a note and the valid variants of the same request are still taken. A request in `failed/`
