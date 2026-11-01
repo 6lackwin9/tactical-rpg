@@ -139,8 +139,7 @@ impl Who {
 }
 
 // The builders the surfaces call (PORTRAITFX1-D: the talk box, `of_character`; -R: the Character screen and the hub
-// list, `of_member`; -P: the battle panels, `of_unit`); until each lands only the tests use them.
-#[cfg_attr(not(test), allow(dead_code))]
+// list, `of_member`; -P: the battle panels, `of_unit`).
 impl Who {
     /// A world character (`screens::character_art`): keyed by its id; its tier, body and name.
     pub fn of_character(d: &Data, character: &Dict) -> Who {
@@ -192,10 +191,8 @@ fn derived_of(cat: &Catalog, ruleset: &str, u: &Unit) -> Vec<(String, i32, i32)>
 }
 
 /// Battle unit `i`'s look (5.2): its HP, down (HP 0 and still on the field), its statuses, its member's `conditions`
-/// (the caller's: ROSTER1), the derived stats the cue rows read and the battle's ruleset.
-// The look builders are for the surfaces (PORTRAITFX1-D talk box: member and character; -R Character screen and hub
-// list, -P battle panels: unit); until -P lands only the tests call this one, hence the dead-code allowance.
-#[cfg_attr(not(test), allow(dead_code))]
+/// (the caller's: ROSTER1), the derived stats the cue rows read and the battle's ruleset (PORTRAITFX1-P: the battle
+/// panels).
 pub fn look_of_unit(s: &Session, i: usize, conditions: &[String]) -> Look {
     let u = &s.w.units[i];
     let ruleset = s.w.ruleset.id.clone();

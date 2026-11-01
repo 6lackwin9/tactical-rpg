@@ -24,7 +24,7 @@ use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::music;
 use crate::intent_text;
 use crate::fx::{self, Impact, Shown};
-use crate::portraits::Faces;
+use crate::portraits::{Faces, Who};
 use crate::talk::{self, TalkAct};
 use crate::timeline_view;
 use aegis_ui::fx::{Camera, Clock, Fx, Layer};
@@ -57,6 +57,12 @@ use std::time::{Duration, Instant};
 
 /// The Flat view's cell (and the grid panel's: 12 x 9 cells of `TILE` at (`GRID_X`, `GRID_Y`)).
 const TILE: i32 = 32;
+/// PORTRAITFX1-P (6.2 row 3): the hero and intel panels' portrait side, its inset from the panel's top-left, where the
+/// text lines beside it start (from the panel's left edge) and the cue rows' surface.
+const PANEL_PORTRAIT: i32 = 32;
+const PANEL_INSET: i32 = 4;
+const PANEL_TEXT_X: i32 = 40;
+const PANEL_SURFACE: &str = "panel";
 /// INPUT1 MR12: a dash (a skill with a position moving to it at its start) crosses its route in this many ms at 1x
 /// (the FX clock: the animation speed applies), playing the rig's `dash` clip, else its walk (until DASH1's clip).
 const DASH_MS: u64 = 250;
@@ -1280,6 +1286,10 @@ pub struct BattleScreen {
     auto_after_talk: bool,
     faces: Faces,
     talk_node: String,
+    /// PORTRAITFX1-P (6.2 row 3, surface `panel`): the hero and intel panels' portraits, on a copy of the FX clock (a
+    /// hit-stop pauses them, the animation speed scales them, 4.5); they react to each step's portrait events at its
+    /// impact (rule I).
+    panel_faces: Faces,
     /// ENCOUNTER2-C4: the last locked round whose playback the screen started by itself (0: none yet this battle).
     cutscene: i32,
     /// INPUT1 GH2 b: the members whose round target the player set this round (their ghost is the auto plan on it).
@@ -1404,6 +1414,7 @@ impl BattleScreen {
             talk_gs: None,
             auto_after_talk: false,
             faces: Faces::default(),
+            panel_faces: Faces::default(),
             talk_node: String::new(),
             cutscene: 0,
             player_target: Vec::new(),
@@ -1697,9 +1708,11 @@ impl BattleScreen {
                 }
             }
         }
-        self.last_hp = hps;
+        let hp_before = std::mem::replace(&mut self.last_hp, hps);
         let log = &self.session().resolver.log;
         let lines: Vec<String> = log.iter().skip(self.log_seen).cloned().collect();
+        // PORTRAITFX1-P (5.3): the step's portrait events, fired with its feedback (at the impact, rule I)
+        let portrait = if hp_before.len() == self.last_hp.len() { emberwake_battle::portrait::session_step_events(self.session(), &hp_before, &lines) } else { Vec::new() };
         for line in &lines {
             if let Some(key) = sound_of(line) {
                 sounds.push(format!("sfx/{key}.wav"));
@@ -1725,6 +1738,7 @@ impl BattleScreen {
                 i.broke = fx::broke(&lines);
                 (i.after, i.floats, i.struck, i.sounds) = (after, floats, struck, sounds);
                 i.marks = self.session().w.units.iter().map(|u| fx::marks_of(&u.st)).collect();
+                i.portrait = portrait;
                 self.impacts.push(i);
             }
             None => {
@@ -1741,6 +1755,7 @@ impl BattleScreen {
                 // PB1: skip animations (or no delivery): the tracers draw as the step's result shows
                 let now = self.clock.now();
                 self.tracers.extend(traces.into_iter().map(|tr| (tr, now)));
+                self.react_portraits(cx, &portrait, now);
                 self.show(cx, floats, struck, sounds)
             }
         }
@@ -1906,6 +1921,7 @@ impl BattleScreen {
             target,
             marks: Vec::new(),
             traces: Vec::new(),
+            portrait: Vec::new(),
         })
     }
 
@@ -1971,6 +1987,8 @@ impl BattleScreen {
         }
         self.tokens.react(&i.after, &i.marks, at, false);
         self.push_bursts(cx);
+        // PORTRAITFX1-P: the panel portraits flinch as the action lands
+        self.react_portraits(cx, &i.portrait, at);
         // INPUT1 PB1: the action's tracers from its impact; PB3: the gap after it doubles at 0.5x
         self.tracers.extend(i.traces.iter().map(|tr| (*tr, at)));
         self.gap_until = Some(Instant::now() + Duration::from_millis(t.impact_gap_ms * self.pace(cx)));
@@ -2018,6 +2036,46 @@ impl BattleScreen {
             self.shake(cx, fx::HEAVY, at, i.seed);
         }
         self.show(cx, i.floats, i.struck, i.sounds);
+    }
+
+    /// PORTRAITFX1-P (5.3, 6.2 row 3): the panel portraits react to a step's events at FX clock ms `at` (its impact, or
+    /// now when the step has none to wait for): each unit's portrait fires the kit's `panel` event rows (none under skip
+    /// animations, `Faces::react`). Presentation only: nothing here reads or moves the battle.
+    fn react_portraits(&mut self, cx: &Cx, events: &[(usize, &'static str)], at: u64) {
+        let Some(s) = self.host.session.as_ref().filter(|_| !events.is_empty()) else { return };
+        let ruleset = s.w.ruleset.id.clone();
+        let fired: Vec<(String, &str)> = events.iter().filter(|(u, _)| *u < s.w.units.len()).map(|&(u, e)| (self.unit_portrait(cx, u).0.key, e)).collect();
+        self.panel_faces.clock = Clock { ms: at as f64, hold: 0.0 };
+        for (key, event) in fired {
+            self.panel_faces.react(cx, &key, &[event], PANEL_SURFACE, &ruleset);
+        }
+        self.panel_faces.clock = self.clock;
+    }
+
+    /// PORTRAITFX1-P: battle unit `c`'s panel portrait and its look. A world fight's party unit is its member
+    /// (`hub::member_portrait`'s key, its ROSTER1 conditions); a unit whose hero key names a character of the battle's
+    /// world draws as it; any other unit as itself (`Who::of_unit`). The look's HP and life are the board's (rule I:
+    /// the state before a step until its impact).
+    fn unit_portrait(&self, cx: &Cx, c: usize) -> (Who, emberwake_battle::portrait::Look) {
+        let s = self.session();
+        let d = &cx.data;
+        let key = s.hero_key(c);
+        let member = if self.world_mode() && !key.is_empty() { cx.gs().party.members.iter().find(|m| m.id == key) } else { None };
+        let (who, conditions) = match member {
+            Some(m) => (Who { key: format!("member:{}", m.id), ..Who::of_member(d, m) }, m.conditions.clone()),
+            None => {
+                let world = if self.world_mode() { self.class_world.clone() } else { self.arena_world.clone().unwrap_or_default() };
+                let empty = Dict::new();
+                let character = if key.is_empty() { &empty } else { d.resolve(&world, "characters", &key) };
+                (Who::of_unit(d, s, c, character), Vec::new())
+            }
+        };
+        let mut look = crate::portraits::look_of_unit(s, c, &conditions);
+        let u = &s.w.units[c];
+        let (hp, alive) = self.tokens.shown(c, u, s.w.units.len());
+        look.hp = hp;
+        look.down = !alive && !u.is_withdrawn;
+        (who, look)
     }
 
     /// Rule P: autoplay may send the next step (no impact pending and its gap over).
@@ -3561,6 +3619,9 @@ impl Screen<GameCx> for BattleScreen {
             out["talk"]["portraits"] = self.faces.state();
             out["talk"]["speaker_unit"] = json!(self.speaker_unit(cx, &gs, &s(&view, "speaker")));
         }
+        // PORTRAITFX1-P (4.11): the panel portraits kept (the hero and intel panels'), so a test or an agent can wait
+        // for a reaction to end
+        out["portraits"] = self.panel_faces.state();
         out
     }
 
@@ -3984,6 +4045,9 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     };
     talk::follow_node(gfx, &mut g.talk_node, node);
     g.faces.begin();
+    // PORTRAITFX1-P: the panel portraits run on the FX clock (4.5)
+    g.panel_faces.begin();
+    g.panel_faces.clock = g.clock;
     // DT8: the speaker's token wears the selection ring
     let talker = match (talk_gs.as_ref(), talk_view.as_ref()) {
         (Some(gs), Some(v)) => g.speaker_unit(cx, gs, &s(v, "speaker")),
@@ -4374,18 +4438,26 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         let r = Rect::new(6, y + 2, 116, 318 - y - 6);
         g.panels.push(("hero", r));
         ui.p.panel(r, CARD, BORDER, RADIUS);
-        ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 2.0, &u.name, BODY, 64.0, GOLD);
-        // RULESET1-U: under the round intent the corner names the hero's intent (the classic stance is inert: IN3)
+        // PORTRAITFX1-P (6.2 row 3): the hero's portrait at the panel's top-left; the name, the corner and the Self
+        // button beside it, 40 px in
+        let (who, look) = g.unit_portrait(cx, h);
+        let face = panel_portrait(&mut ui, cx, &mut g.panel_faces, &who, &look, r, "hero.portrait");
+        let (tx, tw) = (r.x + PANEL_TEXT_X, (r.w - PANEL_TEXT_X - 4) as f32);
+        ui.p.text_fit(tx as f32, r.y as f32 + 2.0, &u.name, BODY, tw, GOLD);
+        // RULESET1-U: under the round intent the corner names the hero's intent (the classic stance is inert: IN3);
+        // PORTRAITFX1-P: on the line under the name
         let corner = if timeline { ri::intent_of(pw, h).map_or_else(|| "No intent".to_string(), |i| i.label(&pw.cat)) } else { stance_name(u).to_string() };
-        ui.p.text_right(r.x as f32 + r.w as f32 - 4.0, r.y as f32 + 2.0, &corner, SMALL, DIM);
+        let row2 = r.y + 2 + (ui.p.line_h(BODY).ceil() as i32).max(10);
+        ui.p.text_fit(tx as f32, row2 as f32, &corner, SMALL, tw, DIM);
+        let row3 = row2 + (ui.p.line_h(SMALL).ceil() as i32).max(8) + 1;
         // INPUT1 IF8, SL4: under the round intent the panel's one control is the Self button (key S)
         let top = if timeline {
             let tip = vec![("Self (S)".into(), GOLD), (format!("{} targets itself: its Guard and self skills.", u.name), TEXT)];
             let bw = ((ui.p.text_w("Self", SMALL) + 10.0).ceil() as i32).max(30);
-            ui.button_full("hero.self", Rect::new(r.x + 4, r.y + 12, bw, 11), "Self", Action::SelfTarget, planning, false, SMALL, tip);
-            r.y + 25
+            ui.button_full("hero.self", Rect::new(tx, row3, bw, 11), "Self", Action::SelfTarget, planning, false, SMALL, tip);
+            row3 + 13
         } else {
-            r.y + 12
+            row3
         };
         let st = pplan.compile(pw, h);
         let weapon = u.inventory.main_weapon().map(|e| e.item.name.clone()).unwrap_or_else(|| "Bare hands".into());
@@ -4510,12 +4582,20 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         // RULESET1-U slice 6 (TEXTFIT1): the line pitch grows with the text size (8 at Small and Normal, as before)
         let pitch = ui.p.line_h(SMALL).max(8.0);
         for (n, (text, col)) in lines.into_iter().enumerate() {
+            // PORTRAITFX1-P: a line whose first row fits beside the portrait starts 40 px in (and wraps to the room
+            // left); the first that does not starts under the portrait
+            let below = (face.y + face.h + 1) as f32;
+            let beside = ly + pitch <= below;
+            if !beside && ly < below {
+                ly = below;
+            }
             let top = ly;
-            for part in ui.p.wrap(&text, SMALL, 108.0) {
+            let (lx, lw) = if beside { (tx as f32, tw) } else { (r.x as f32 + 4.0, 108.0) };
+            for part in ui.p.wrap(&text, SMALL, lw) {
                 if ly > (r.y + r.h) as f32 - pitch - 1.0 {
                     break;
                 }
-                ui.p.text(r.x as f32 + 4.0, ly, &part, SMALL, col);
+                ui.p.text(lx, ly, &part, SMALL, col);
                 ly += pitch;
             }
             if Some(n) == derived_at && !derived.is_empty() && ly > top {
@@ -4689,10 +4769,15 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
         if !rounds.is_empty() || pinned.is_some() {
             ui.push("intel.unit", "panel", lines.first().map(|l| l.0.clone()).unwrap_or_default(), r, true, false, None, Vec::new());
         }
+        // PORTRAITFX1-P (6.2 row 3): the unit's portrait at the panel's top-left, the lines beside it 40 px in
+        let (who, look) = g.unit_portrait(cx, e);
+        let face = panel_portrait(&mut ui, cx, &mut g.panel_faces, &who, &look, r, "intel.portrait");
+        let beside = (face.y + face.h + 1) as f32 - ly;
         // HOOKS1-UI slice 5: the lines that fit (the Level/Speed line gives way first, then "More on its hover card")
-        for (part, col, head) in intel_parts(&mut ui.p, &lines, (r.h - 12) as f32) {
+        for (part, col, head, narrow) in intel_parts_at(&mut ui.p, &lines, (r.h - 12) as f32, beside) {
             let size = if head { BODY } else { SMALL };
-            ui.p.text(r.x as f32 + 4.0, ly, &part, size, col);
+            let x = if narrow { r.x + PANEL_TEXT_X } else { r.x + 4 };
+            ui.p.text(x as f32, ly, &part, size, col);
             ly += if head { INTEL_HEAD } else { INTEL_LINE };
         }
     }
@@ -5784,6 +5869,20 @@ fn draw_hold_pick(ui: &mut Ui<Action>, s: &Session) {
     }
 }
 
+// ---- PORTRAITFX1-P: the panel portraits (6.2 row 3) --------------------------------------------------------------
+
+/// PORTRAITFX1-P: `who`'s portrait at panel `r`'s top-left (`PANEL_PORTRAIT` px, `PANEL_INSET` in) on the talk box's
+/// dark panel, with `look`'s state rows on surface `panel` (the initial letter without a file); its widget `id` (kind
+/// `portrait`, no action). The portrait's rect.
+#[allow(clippy::too_many_arguments)]
+fn panel_portrait(ui: &mut Ui<Action>, cx: &mut Cx, faces: &mut Faces, who: &Who, look: &emberwake_battle::portrait::Look, r: Rect, id: &str) -> Rect {
+    let pr = Rect::new(r.x + PANEL_INSET, r.y + PANEL_INSET, PANEL_PORTRAIT, PANEL_PORTRAIT);
+    ui.p.panel(pr, rgb(22, 30, 48), BORDER, 2.0);
+    faces.draw(&mut ui.p, cx, who, look, PANEL_SURFACE, pr);
+    ui.push(id, "portrait", who.name.clone(), pr, true, false, None, Vec::new());
+    pr
+}
+
 // ---- HOOKS1-UI slice 5: the intel panel fits its lines ------------------------------------------------------------
 
 /// The intel panel's line steps: its head (BODY) and the rest (SMALL), and its text width.
@@ -5796,17 +5895,28 @@ const INTEL_MORE: &str = "More on its hover card";
 /// HOOKS1-UI slice 5 (decision "RULESET1-B2 tuning and HOOKS1-UI slice 3 answers"): the intel panel's wrapped lines
 /// that fit in `room` px ((text, colour, head)): when they run past it the "Level ..." line (level, class, speed, reach)
 /// gives way first; when they still do not fit the panel keeps what fits and ends with `INTEL_MORE`.
+#[cfg(test)]
 fn intel_parts(p: &mut Painter, lines: &[(String, Rgba)], room: f32) -> Vec<(String, Rgba, bool)> {
+    intel_parts_at(p, lines, room, 0.0).into_iter().map(|(t, c, h, _)| (t, c, h)).collect()
+}
+
+/// `intel_parts` beside the panel's portrait (PORTRAITFX1-P): a line that starts within the first `beside` px of the
+/// text wraps to the room right of the portrait and is marked narrow (drawn `PANEL_TEXT_X` in).
+fn intel_parts_at(p: &mut Painter, lines: &[(String, Rgba)], room: f32, beside: f32) -> Vec<(String, Rgba, bool, bool)> {
+    let narrow_w = INTEL_W - (PANEL_TEXT_X - 4) as f32;
     let wrap = |p: &mut Painter, lines: &[(String, Rgba)]| {
         let mut out = Vec::new();
+        let mut at = 0.0;
         for (i, (t, col)) in lines.iter().enumerate() {
-            for part in p.wrap(t, if i == 0 { BODY } else { SMALL }, INTEL_W) {
-                out.push((part, *col, i == 0));
+            let narrow = at < beside;
+            for part in p.wrap(t, if i == 0 { BODY } else { SMALL }, if narrow { narrow_w } else { INTEL_W }) {
+                at += if i == 0 { INTEL_HEAD } else { INTEL_LINE };
+                out.push((part, *col, i == 0, narrow));
             }
         }
         out
     };
-    let height = |parts: &[(String, Rgba, bool)]| parts.iter().map(|x| if x.2 { INTEL_HEAD } else { INTEL_LINE }).sum::<f32>();
+    let height = |parts: &[(String, Rgba, bool, bool)]| parts.iter().map(|x| if x.2 { INTEL_HEAD } else { INTEL_LINE }).sum::<f32>();
     let mut parts = wrap(p, lines);
     if height(&parts) > room {
         let kept: Vec<(String, Rgba)> = lines.iter().enumerate().filter(|(i, l)| *i == 0 || !l.0.starts_with("Level ")).map(|(_, l)| l.clone()).collect();
@@ -5816,7 +5926,8 @@ fn intel_parts(p: &mut Painter, lines: &[(String, Rgba)], room: f32) -> Vec<(Str
         while !parts.is_empty() && height(&parts) + INTEL_LINE > room {
             parts.pop();
         }
-        parts.push((INTEL_MORE.to_string(), DIM, false));
+        let narrow = height(&parts) < beside;
+        parts.push((INTEL_MORE.to_string(), DIM, false, narrow));
     }
     parts
 }
@@ -13005,5 +13116,310 @@ mod script_screen_tests {
             b.start_battle();
             assert!(b.host.history[0].get("tactics").is_none(), "{enc} {ruleset:?}");
         }
+    }
+}
+
+/// PORTRAITFX1-P (docs/specs/PORTRAITFX1.md 6.2 row 3, PORTRAITFX1_TASKS.md P1-P5): the hero and intel panels'
+/// portraits, their state holds and the step events at FX1's impacts. Cue rows are this module's fixtures (the shipped
+/// table's shape), portraits scratch layers where pixels are read.
+#[cfg(test)]
+mod portrait_panel_tests {
+    use super::*;
+    use crate::portraits::tests::{layer, row};
+    use aegis_core::assets::Layers;
+    use aegis_ui::portrait_fx::{PortraitOpts, EASE_MS};
+    use emberwake_data::PortraitCue;
+    use emberwake_rules::ruleset::TIMELINE;
+
+    /// The fixture cue rows: the reactions of 5.3 and the holds P3 names (stealth, low HP, down).
+    fn rows() -> Vec<PortraitCue> {
+        vec![
+            row(json!({"id": "hit_flash", "event": "hit", "intensity": 0.6, "ms": 140, "color": "#d9cbb4"})),
+            row(json!({"id": "hit_jolt", "event": "hit", "effect": "jolt", "preset": "hit"})),
+            row(json!({"id": "crit_flash", "event": "crit", "intensity": 0.9, "ms": 180, "color": "#e11d48"})),
+            row(json!({"id": "crit_jolt", "event": "crit", "effect": "jolt", "preset": "crit"})),
+            row(json!({"id": "guard_flash", "event": "guard_hit", "intensity": 0.4, "ms": 120, "color": "#fbbf24"})),
+            row(json!({"id": "guard_jolt", "event": "guard_hit", "effect": "jolt", "intensity": 0.5, "preset": "hit"})),
+            row(json!({"id": "heal_glow", "event": "heal", "intensity": 0.3, "ms": 420, "color": "#fbbf24"})),
+            row(json!({"id": "stealthed", "trigger": "status", "status": "stealth", "effect": "fade", "intensity": 0.6})),
+            row(json!({"id": "hp_low", "trigger": "hp", "below": 25, "effect": "desaturate", "intensity": 0.5})),
+            row(json!({"id": "downed", "trigger": "down", "effect": "desaturate"})),
+            row(json!({"id": "downed_still", "trigger": "down", "effect": "still"})),
+        ]
+    }
+
+    /// The game's cx with the fixture rows and the repo's art.
+    fn cx_with(rows: Vec<PortraitCue>) -> Cx {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        std::sync::Arc::get_mut(&mut cx.app.data).expect("the test owns the data").edit_cat(|c| c.portrait_cues = rows);
+        cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        cx
+    }
+
+    /// The ambush (FX1's impact tests' battle) with the fixture rows.
+    fn ambush() -> (Cx, Gfx, BattleScreen) {
+        let mut cx = cx_with(rows());
+        cx.app.encounter = "goblin_ambush".into();
+        cx.app.seed = Some(1);
+        cx.settings.v["battle_view"] = json!("stage");
+        let b = BattleScreen::sandbox(&cx);
+        assert!(b.host.session.is_some(), "the ambush starts: {}", b.message);
+        (cx, crate::hud::hud_tests::gfx(), b)
+    }
+
+    /// An Arena battle of the first catalog encounter under `ruleset` (None: classic), ticked and drawn, a hero selected.
+    fn arena(ruleset: Option<&str>) -> (Cx, Gfx, BattleScreen) {
+        let mut cx = cx_with(rows());
+        cx.settings.v["battle_view"] = json!("flat");
+        let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+        let mut b = BattleScreen::arena_with(&cx, None, &encounter, ruleset.map(String::from), "", false);
+        assert!(b.host.session.is_some(), "the battle starts: {}", b.message);
+        let mut g = crate::hud::hud_tests::gfx();
+        b.tick(&mut cx);
+        if b.selected.is_none() {
+            b.selected = b.session().w.allies.first().copied();
+        }
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        (cx, g, b)
+    }
+
+    fn rect_of(b: &BattleScreen, id: &str) -> Rect {
+        b.w.iter().find(|w| w.id == id).unwrap_or_else(|| panic!("no widget {id}")).rect
+    }
+
+    /// The flash colour (rgb) the fixture rows give `event` on the panel.
+    fn flash_of(event: &str) -> [u8; 3] {
+        let rows = rows();
+        let r = emberwake_battle::portrait::reactions(&rows, &[event], PANEL_SURFACE, "classic").into_iter().find(|r| r.effect == "flash").expect("a flash row").clone();
+        let c = aegis_core::assets::hex_colour(&r.color).expect("a colour");
+        [c[0], c[1], c[2]]
+    }
+
+    /// P1 (6.2 row 3, TEXTFIT1): at the four text sizes, classic and timeline, both panels draw a 32 px portrait at
+    /// their top-left (inset 4); every text beside it starts 40 px in, none crosses it, and no text of either panel
+    /// spills or leaves the canvas.
+    #[test]
+    fn p1_the_panels_draw_their_portraits_and_the_lines_beside_start_40_in() {
+        for ruleset in [None, Some(TIMELINE)] {
+            let (mut cx, mut g, mut b) = arena(ruleset);
+            for (_, scale) in aegis_ui::screen::TEXT_SIZES {
+                let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, scale as f32);
+                for (panel, portrait) in [("hero", "hero.portrait"), ("intel", "intel.portrait")] {
+                    let r = b.panels.iter().find(|p| p.0 == panel).unwrap_or_else(|| panic!("{ruleset:?}: the {panel} panel")).1;
+                    let pr = rect_of(&b, portrait);
+                    assert_eq!(pr, Rect::new(r.x + PANEL_INSET, r.y + PANEL_INSET, PANEL_PORTRAIT, PANEL_PORTRAIT), "{ruleset:?} {scale}: the {panel} portrait");
+                    for t in recs.iter().filter(|t| !t.covered && t.x >= r.x as f32 && t.x < (r.x + r.w) as f32 && t.y >= r.y as f32 && t.y < (r.y + r.h) as f32) {
+                        let inside = t.x >= pr.x as f32 && t.x + t.w <= (pr.x + pr.w) as f32 && t.y >= pr.y as f32 && t.y + t.h <= (pr.y + pr.h) as f32;
+                        if inside {
+                            assert_eq!(t.text.chars().count(), 1, "{ruleset:?} {scale}: only the initial letter inside the portrait: {:?}", t.text);
+                            continue;
+                        }
+                        let rows_beside = t.y < (pr.y + pr.h) as f32 && t.y + t.h > pr.y as f32;
+                        if rows_beside {
+                            assert!(t.x >= (r.x + PANEL_TEXT_X) as f32 - 0.5, "{ruleset:?} {scale}: {:?} beside the {panel} portrait starts 40 px in (x {})", t.text, t.x);
+                        }
+                    }
+                }
+                let boxes: Vec<(String, f32, f32, f32, f32)> = b.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();
+                let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+                let ours = |e: &Value| e["widget"].as_str().is_some_and(|w| w.starts_with("hero.") || w.starts_with("intel."));
+                let spills: Vec<&Value> = v["spill"].as_array().unwrap().iter().filter(|e| ours(e)).collect();
+                assert!(spills.is_empty(), "{ruleset:?} {scale}: {spills:?}");
+                let panel_rects: Vec<Rect> = b.panels.iter().filter(|p| p.0 == "hero" || p.0 == "intel").map(|p| p.1).collect();
+                let in_panels = |e: &Value| {
+                    let (x, y) = (e["at"][0].as_f64().unwrap_or(-1.0) as i32, e["at"][1].as_f64().unwrap_or(-1.0) as i32);
+                    panel_rects.iter().any(|r| r.contains(x, y))
+                };
+                let edges: Vec<&Value> = v["edge"].as_array().unwrap().iter().filter(|e| in_panels(e)).collect();
+                assert!(edges.is_empty(), "{ruleset:?} {scale}: {edges:?}");
+            }
+        }
+    }
+
+    /// P2 (5.3, 6.2 row 3; FX1 rule I): a step's portrait events wait in its impact: before it lands no struck
+    /// portrait reacts; at the impact each fires its event's rows from the impact's ms (the flash in its row's colour,
+    /// a jolt for a blow). Each event through the binding: `crit` jolts harder than `hit`, `guard_hit` flashes the
+    /// guard gold, `heal` glows gold without a jolt.
+    #[test]
+    fn p2_the_panel_portraits_react_at_the_impact_not_at_the_pop() {
+        let (mut cx, _g, mut b) = ambush();
+        let found = super::tests::step_until(&mut cx, &mut b, |_, i| !i.portrait.is_empty());
+        assert!(found, "the ambush has a step with portrait events at an impact");
+        b.resolve_impacts(&mut cx);
+        // earlier impacts fired as the steps went (rule F): start the portraits afresh
+        b.panel_faces = Faces::default();
+        let i = b.impacts[0].clone();
+        let at = i.at.expect("resolved");
+        let s = b.host.session.as_ref().unwrap();
+        for &u in &i.struck {
+            let blows = i.portrait.iter().filter(|(v, e)| *v == u && ["hit", "crit", "guard_hit"].contains(e)).count();
+            assert_eq!(blows, 1, "{} lost HP: one of hit, crit, guard_hit", s.w.units[u].name);
+        }
+        let keys: Vec<(String, &str)> = i.portrait.iter().filter(|(_, e)| *e != "break").map(|&(u, e)| (b.unit_portrait(&cx, u).0.key, e)).collect();
+        assert!(keys.iter().all(|(k, _)| b.panel_faces.get(k).is_none()), "nothing reacts at the pop");
+        b.clock.ms = at as f64;
+        b.fire_due(&mut cx);
+        assert!(b.impacts.is_empty());
+        for (k, ev) in &keys {
+            let f = b.panel_faces.get(k).unwrap_or_else(|| panic!("{k} reacted to {ev}"));
+            let flash = f.level("flash", at).unwrap_or_else(|| panic!("{k}: a flash for {ev}"));
+            assert_eq!((flash.start, flash.color[..3].to_vec()), (at, flash_of(ev).to_vec()), "{k}: {ev}'s flash from the impact");
+            assert_eq!(f.jolt_amplitude(at) > 0.0, *ev != "heal", "{k}: {ev}'s jolt");
+        }
+
+        // each event through the binding
+        let u = b.session().w.allies[0];
+        let key = b.unit_portrait(&cx, u).0.key;
+        let mut amp = std::collections::BTreeMap::new();
+        for ev in ["hit", "crit", "guard_hit", "heal"] {
+            b.panel_faces = Faces::default();
+            b.react_portraits(&cx, &[(u, ev)], 5000);
+            let f = b.panel_faces.get(&key).expect("reacted");
+            assert_eq!(f.level("flash", 5000).map(|l| l.color[..3].to_vec()), Some(flash_of(ev).to_vec()), "{ev}");
+            amp.insert(ev, f.jolt_amplitude(5000));
+        }
+        assert!(amp["crit"] > amp["hit"] && amp["hit"] > 0.0 && amp["guard_hit"] > 0.0 && amp["heal"] == 0.0, "{amp:?}");
+        assert_eq!(b.panel_faces.clock, b.clock, "the panel clock is the FX clock again after a reaction");
+    }
+
+    /// Draws unit `u`'s panel portrait at `t` and past `t + EASE_MS` (its holds eased in) from the scratch file in `art`;
+    /// its composed centre pixel.
+    fn settled(cx: &Cx, b: &mut BattleScreen, art: &mut Art, g: &mut Gfx, u: usize, t: u64) -> [u8; 4] {
+        let rows = rows();
+        let opts = PortraitOpts { reduce_motion: true, ..PortraitOpts::default() };
+        // the second draw a frame step past the ease (time-varying effects read the 30 a second steps, 4.5)
+        for ms in [t, t + EASE_MS + 100] {
+            b.panel_faces.clock = Clock { ms: ms as f64, hold: 0.0 };
+            let (who, look) = b.unit_portrait(cx, u);
+            let mut ui: Ui<Action> = Ui::new(g, (-500, -500), true);
+            b.panel_faces.begin();
+            assert!(b.panel_faces.draw_parts(&mut ui.p, art, &rows, &who, &look, PANEL_SURFACE, Rect::new(4, 4, PANEL_PORTRAIT, PANEL_PORTRAIT), &opts));
+        }
+        let key = b.unit_portrait(cx, u).0.key;
+        let img = b.panel_faces.get(&key).and_then(|f| f.composed()).expect("composed").clone();
+        let i = ((img.h / 2 * img.w + img.w / 2) * 4) as usize;
+        [img.px[i], img.px[i + 1], img.px[i + 2], img.px[i + 3]]
+    }
+
+    /// P3 (4.2, 5.2): a unit with `stealth` draws at alpha 0.58 (`fade` 0.6); below 25 % HP `desaturate` 0.5; down:
+    /// `still` and `desaturate` 1.0 (a grey pixel). The HP is the board's (rule I).
+    #[test]
+    fn p3_the_panel_holds_follow_the_units_state() {
+        let (cx, mut g, mut b) = ambush();
+        let u = b.session().w.allies[0];
+        let rel = b.unit_portrait(&cx, u).0.chain("")[0].clone();
+        let mut art = Art::layered(Layers::of(vec![layer("p3", &rel, 32, [180, 90, 40], None)]));
+        let level = |b: &BattleScreen, e: &str| b.panel_faces.get(&b.unit_portrait(&cx, u).0.key).and_then(|f| f.level(e, b.panel_faces.now())).map(|l| l.i);
+        let plain = settled(&cx, &mut b, &mut art, &mut g, u, 1000);
+        assert_eq!((level(&b, "fade"), level(&b, "desaturate"), plain[3]), (None, None, 255), "no state: no hold");
+
+        b.host.session.as_mut().unwrap().w.units[u].st.active.insert("stealth".into());
+        let px = settled(&cx, &mut b, &mut art, &mut g, u, 2000);
+        assert!(level(&b, "fade").is_some_and(|i| (i - 0.6).abs() < 1e-3), "{:?}", level(&b, "fade"));
+        let want = (255.0 * (1.0 - 0.7 * 0.6f32)).round() as i32;
+        assert!((px[3] as i32 - want).abs() <= 1, "stealth draws at alpha 0.58: {} vs {want}", px[3]);
+        b.host.session.as_mut().unwrap().w.units[u].st.active.shift_remove("stealth");
+
+        let max = b.session().w.units[u].max_hp;
+        let low = (max * 25 - 1) / 100;
+        assert!(low > 0, "a max HP the 25 % row can match above 0");
+        b.host.session.as_mut().unwrap().w.units[u].hp = low;
+        b.after_change(&cx);
+        settled(&cx, &mut b, &mut art, &mut g, u, 3000);
+        assert!(level(&b, "desaturate").is_some_and(|i| (i - 0.5).abs() < 1e-3), "below 25 %: {:?}", level(&b, "desaturate"));
+        assert_eq!(level(&b, "still"), None);
+
+        b.host.session.as_mut().unwrap().w.units[u].hp = 0;
+        b.after_change(&cx);
+        let px = settled(&cx, &mut b, &mut art, &mut g, u, 4000);
+        assert!(level(&b, "desaturate").is_some_and(|i| (i - 1.0).abs() < 1e-3), "down: {:?}", level(&b, "desaturate"));
+        assert!(level(&b, "still").is_some(), "down holds still");
+        assert!(px[0] == px[1] && px[1] == px[2], "down draws grey: {px:?}");
+    }
+
+    /// P4 (4.5): the panel portraits run on the FX clock: a hit-stop holds them still (a flash keeps its level), and
+    /// the animation speed 0.5 moves them at half the wall time.
+    #[test]
+    fn p4_hit_stop_pauses_the_panel_clock_and_anim_speed_scales_it() {
+        let (mut cx, mut g, mut b) = ambush();
+        let u = b.session().w.allies[0];
+        let key = b.unit_portrait(&cx, u).0.key;
+        b.selected = Some(u);
+        b.clock = Clock { ms: 1000.0, hold: 0.0 };
+        b.react_portraits(&cx, &[(u, "hit")], 1000);
+        b.clock.advance(40.0, 1.0);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_eq!(b.panel_faces.now(), 1040, "the panels draw at the FX clock");
+        let before = b.panel_faces.get(&key).and_then(|f| f.level("flash", b.panel_faces.now())).expect("the flash runs").i;
+        b.clock.hold(120.0);
+        b.clock.advance(100.0, 1.0);
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_eq!(b.panel_faces.now(), 1040, "a hit-stop holds the portraits");
+        assert_eq!(b.panel_faces.get(&key).and_then(|f| f.level("flash", b.panel_faces.now())).map(|l| l.i), Some(before), "the flash keeps its level");
+
+        // the screen's tick: the FX clock moves by the wall time at the animation speed (at most 100 ms a frame)
+        for (speed, lo, hi) in [(1.0, 60.0, 100.0), (0.5, 30.0, 50.0)] {
+            cx.settings.v["anim_speed"] = json!(speed);
+            b.clock = Clock { ms: 0.0, hold: 0.0 };
+            b.clock_at = Instant::now() - Duration::from_millis(60);
+            b.tick(&mut cx);
+            b.draw(&mut cx, &mut g, (-500, -500), true);
+            let moved = b.panel_faces.now() as f64;
+            assert!(moved >= lo && moved <= hi, "anim_speed {speed}: {moved} ms for 60+ wall ms");
+        }
+    }
+
+    /// P5 (8): presentation only: the session, the battle's RNG state and the request trace after a scripted battle are
+    /// equal with the panel portraits drawn every step and never drawn; two drawn runs give the same portrait pixels
+    /// for the same frames.
+    #[test]
+    fn p5_portraits_never_touch_the_battle_and_replay_the_same_pixels() {
+        let run = |draw: bool| {
+            let (mut cx, mut g, mut b) = ambush();
+            let mut pixels = Vec::new();
+            for k in 0..40u64 {
+                let (over, phase, planning, can) = {
+                    let s = b.host.session.as_ref().unwrap();
+                    (s.combat_over, s.phase, s.is_planning(), s.can_advance_round())
+                };
+                if over || (phase == Phase::Replay && !can) {
+                    break;
+                }
+                if phase == Phase::Replay {
+                    b.send(&cx, json!({"cmd": "advance"}));
+                    continue;
+                }
+                if planning {
+                    b.send(&cx, json!({"cmd": "preset", "preset": "aggressive"}));
+                }
+                b.send(&cx, json!({"cmd": "step"}));
+                if draw {
+                    b.resolve_impacts(&mut cx);
+                    b.clock = Clock { ms: (k * 700 + 600) as f64, hold: 0.0 };
+                    b.fire_due(&mut cx);
+                    b.clock.hold = 0.0;
+                    b.draw(&mut cx, &mut g, (-500, -500), true);
+                    for id in ["hero.portrait", "intel.portrait"] {
+                        if let Some(r) = b.w.iter().find(|w| w.id == id).map(|w| w.rect) {
+                            let c = &g.canvas;
+                            let crop: Vec<u8> = (r.y..r.y + r.h).flat_map(|y| (r.x..r.x + r.w).flat_map(move |x| c.px[((y * c.w + x) * 4) as usize..((y * c.w + x) * 4 + 4) as usize].to_vec())).collect();
+                            pixels.push((k, id, crop));
+                        }
+                    }
+                }
+            }
+            b.flush(&cx);
+            let state = b.host.handle(&json!({"cmd": "state"}));
+            let s = b.host.session.as_ref().unwrap();
+            (state, format!("{:?}", s.resolver.rng), s.resolver.log.clone(), b.host.history.clone(), pixels)
+        };
+        let drawn = run(true);
+        let plain = run(false);
+        assert_eq!(drawn.0, plain.0, "the session state");
+        assert_eq!(drawn.1, plain.1, "the RNG state");
+        assert_eq!((&drawn.2, &drawn.3), (&plain.2, &plain.3), "the log and the request trace");
+        assert!(!drawn.4.is_empty(), "the panels drew portraits");
+        let again = run(true);
+        assert_eq!(drawn.4, again.4, "a replay draws the same portrait pixels for the same frames");
     }
 }

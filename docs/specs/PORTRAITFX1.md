@@ -540,3 +540,31 @@ held (a cool pallor), the sweat drop in Salt Cyan at (0.12, 0.2), size 0.08.
 - Open (recommendation taken): the face box comes from the eye boxes until the asset lane writes `face` boxes
   (`face.py set --face`); the vein and sweat marks are code-drawn bitmaps; the `afraid` tint is Salt Cyan (cool) rather
   than a whitening pallor.
+
+## 17. Build notes (PORTRAITFX1-P, 2026-11-01)
+
+- Panels (`battle.rs`): the hero panel and the intel panel each draw their unit's portrait at (panel x + 4, panel y +
+  4), 32 px (`PANEL_PORTRAIT`, `PANEL_INSET`), on the talk box's dark panel; widgets `hero.portrait` and `intel.portrait`
+  (kind `portrait`, no action). The hero panel's name, its corner (the stance or the intent, now on the line under the
+  name so both fit the 72 px beside the portrait) and the Self button start 40 px in (`PANEL_TEXT_X`); a following line
+  whose first row fits beside the portrait starts 40 px in and wraps to the room left, the first that does not starts
+  under the portrait at the full width. The intel panel does the same through `intel_parts_at` (the parts that start
+  beside the portrait wrap 36 px narrower and draw 40 px in). At text size Normal on a 1x canvas the 32 px portrait is
+  the minimal tier (flash, desaturate, tint, fade, face); reduced at 2x, full at 3x (4.6).
+- Whose portrait (`BattleScreen::unit_portrait`): a world fight's party unit is its member (keyed `member:<id>` as
+  PORTRAITFX1-R, `Who::of_member`, its ROSTER1 conditions in the look); a unit whose hero key names a character of the
+  battle's world draws as it; any other as itself (`Who::of_unit`, keyed `<unit id>#<i>`). The look is
+  `look_of_unit` with the board's HP and life (`Tokens::shown`, rule I), so a wound's desaturate also waits for its
+  impact.
+- Clock: a second `Faces` (`panel_faces`; the talk box keeps its own wall-time one) whose clock is set to FX1's clock
+  at the start of every draw, so a hit-stop holds the portraits and the animation speed scales them (4.5).
+- Step events: `after_change` computes `portrait::session_step_events` over the HP before the step and the step's new
+  log lines; they ride in `fx::Impact.portrait` and `BattleScreen::fire` sends them to `react_portraits` at the
+  impact's FX ms (rule I); a step with no delivery reacts at once. Under skip animations `Faces::react` fires none.
+- State: the screen's `state` gains `portraits` (the panel portraits kept).
+- Tests (`battle.rs` `portrait_panel_tests`, fixture cue rows): P1 placement, lines beside 40 px in, no spill or edge
+  of either panel's texts at the four text sizes, classic and timeline; P2 no reaction at the pop, each event's flash
+  from the impact's ms in its row's colour with a jolt for a blow, crit jolting harder than hit, heal without a jolt;
+  P3 stealth alpha 0.58, below 25 % desaturate 0.5, down still and desaturate 1.0; P4 hit-stop and animation speed;
+  P5 the session state, RNG state, log and request trace equal with portraits drawn and not drawn, and two drawn runs
+  with the same portrait pixels.
