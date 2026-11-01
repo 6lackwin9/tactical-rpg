@@ -171,22 +171,38 @@ pub struct Deck {
     pub keystone: Vec<String>,
     /// Round intent -> skill families, in the order written.
     pub order: IndexMap<String, Vec<String>>,
+    /// INPUT1 FL1 (`follow_ups`): opener family -> the families the planner's fill tries first after it, in the
+    /// player's priority (written order kept; an empty list is no list).
+    pub follow_ups: IndexMap<String, Vec<String>>,
 }
 
 impl Deck {
     /// The deck keys, in their stored order.
-    pub const KEYS: [&'static str; 4] = ["active", "passive", "keystone", "order"];
+    pub const KEYS: [&'static str; 5] = ["active", "passive", "keystone", "order", "follow_ups"];
 
-    /// From a `deck` value (anything but an object is the empty deck; lists keep their strings).
+    /// From a `deck` value (anything but an object is the empty deck; lists keep their strings; an empty
+    /// `follow_ups` list is dropped, FL1).
     pub fn from_value(v: &Value) -> Self {
         let Some(o) = v.as_object() else { return Self::default() };
         let order = obj(o, "order").map(|m| m.keys().map(|k| (k.clone(), strings(m, k))).collect()).unwrap_or_default();
-        Self { active: strings(o, "active"), passive: strings(o, "passive"), keystone: strings(o, "keystone"), order }
+        let follow_ups = obj(o, "follow_ups")
+            .map(|m| m.keys().map(|k| (k.clone(), strings(m, k))).filter(|(_, l)| !l.is_empty()).collect())
+            .unwrap_or_default();
+        Self { active: strings(o, "active"), passive: strings(o, "passive"), keystone: strings(o, "keystone"), order, follow_ups }
     }
 
     /// True when every key is empty (the auto deck).
     pub fn is_empty(&self) -> bool {
-        self.active.is_empty() && self.passive.is_empty() && self.keystone.is_empty() && self.order.values().all(Vec::is_empty)
+        self.active.is_empty()
+            && self.passive.is_empty()
+            && self.keystone.is_empty()
+            && self.order.values().all(Vec::is_empty)
+            && self.follow_ups.values().all(Vec::is_empty)
+    }
+
+    /// INPUT1 FL1: the follow-up list set for opener family `fam` (None: no list, the fill reads the order).
+    pub fn follow_ups_of(&self, fam: &str) -> Option<&Vec<String>> {
+        self.follow_ups.get(fam).filter(|l| !l.is_empty())
     }
 }
 

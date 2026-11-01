@@ -676,3 +676,103 @@ fn a_move_row_carries_its_shortfall_and_a_debt_counts() {
         }
     }
 }
+
+/// The ghost entries' skill ids after the picks (the fill and its Rest).
+fn ghost_names(s: &Session, c: UnitId) -> Vec<String> {
+    rows(&s.w, &s.plan, c).into_iter().filter(|r| r.6).map(|r| r.0).collect()
+}
+
+fn fams(ids: &[&str]) -> Vec<String> {
+    ids.iter().map(|x| x.to_string()).collect()
+}
+
+/// INPUT1 FL2 (INPUT1.md 9's acceptance) on tl_vanguard with `order.assault` ranking Shoulder Check (A) before Heavy
+/// Cleave (B): after a Strike pick the fill takes A from the order; with the list `strike -> [B]` it takes B where the
+/// order would place A; when B cannot be placed (AP, then blocks) the block takes A from the order. The list is the
+/// opener's (a later pick's list is not read), and a ghost-only plan reads the list of PL3's opener.
+#[test]
+fn the_fill_reads_the_openers_follow_up_list_first_then_the_order() {
+    let setup = || {
+        let mut s = session();
+        place(&mut s.w, VANGUARD, V2::new(4, 4));
+        place(&mut s.w, FOOTMAN, V2::new(5, 4));
+        s.w.units[VANGUARD].deck.order.insert("assault".into(), fams(&["tl_shoulder_check", "tl_heavy_cleave", "strike"]));
+        s
+    };
+    let (a, b) = ("tl_shoulder_check", "tl_heavy_cleave");
+    // without a list: the order
+    let mut s = setup();
+    let strike = sk(&s, "strike");
+    assert_eq!(rip::follow_order(&s.w, VANGUARD, RoundIntent::Assault, Some(&round_intent::Opener::Skill(sid(&s.w, "strike")))), rip::order(&s.w, VANGUARD, RoundIntent::Assault), "no list: the order");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), std::slice::from_ref(&strike)).unwrap();
+    let plain = ghost_names(&s, VANGUARD);
+    assert_eq!(plain.first().map(String::as_str), Some(a), "the order's first entry fills: {plain:?}");
+
+    // the list strike -> [B]: B where the order would place A
+    let mut s = setup();
+    s.w.units[VANGUARD].deck.follow_ups.insert("strike".into(), fams(&[b]));
+    let want = [sid(&s.w, b), sid(&s.w, a), sid(&s.w, "strike")];
+    assert_eq!(rip::follow_order(&s.w, VANGUARD, RoundIntent::Assault, Some(&round_intent::Opener::Skill(sid(&s.w, "strike")))), want, "the list, then the order, each once");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), std::slice::from_ref(&strike)).unwrap();
+    let listed = ghost_names(&s, VANGUARD);
+    assert_eq!(listed.first().map(String::as_str), Some(b), "the list's entry fills first: {listed:?}");
+    let r = rows(&s.w, &s.plan, VANGUARD);
+    let first_ghost = r.iter().find(|x| x.6).unwrap();
+    assert_eq!(first_ghost.5, "follow-up 1", "tagged by its place in the list then the order");
+
+    // B unaffordable: the block takes A from the order
+    let mut s = setup();
+    s.w.units[VANGUARD].deck.follow_ups.insert("strike".into(), fams(&[b]));
+    let strike_ap = ap_of(&s.w, VANGUARD, "strike");
+    s.w.units[VANGUARD].ap = strike_ap + ap_of(&s.w, VANGUARD, b) - 1;
+    assert!(ap_of(&s.w, VANGUARD, a) <= ap_of(&s.w, VANGUARD, b) - 1, "A stays affordable");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), std::slice::from_ref(&strike)).unwrap();
+    let poor = ghost_names(&s, VANGUARD);
+    assert_eq!(poor.first().map(String::as_str), Some(a), "AP: B refused, A from the order: {poor:?}");
+
+    // B does not fit the blocks left: A from the order
+    let mut s = setup();
+    s.w.units[VANGUARD].deck.follow_ups.insert("strike".into(), fams(&[b]));
+    let picks = vec![strike.clone(); (BLOCKS - need_of(&s.w, VANGUARD, b) + 1) as usize];
+    assert!(BLOCKS - picks.len() as i32 >= need_of(&s.w, VANGUARD, a), "A fits what is left");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &picks).unwrap();
+    let tight = ghost_names(&s, VANGUARD);
+    assert_eq!(tight.first().map(String::as_str), Some(a), "blocks: B refused, A from the order: {tight:?}");
+
+    // the opener's list, not a later pick's: Shoulder Check's own list is not read after a Strike opener
+    let mut s = setup();
+    s.w.units[VANGUARD].deck.follow_ups.insert(a.into(), fams(&["strike"]));
+    let sc = sk(&s, a);
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[strike.clone(), sc]).unwrap();
+    let later = ghost_names(&s, VANGUARD);
+    assert_eq!(later.first().map(String::as_str), Some(a), "Strike opened: the order, not Shoulder Check's list: {later:?}");
+
+    // a ghost-only plan: PL3's opener (the order's first that fits, A) chooses the list
+    let mut s = setup();
+    s.w.units[VANGUARD].deck.follow_ups.insert(a.into(), fams(&["strike"]));
+    round_intent::set_intent(&mut s.w, VANGUARD, RoundIntent::Assault).unwrap();
+    round_intent::set_target(&mut s.w, VANGUARD, foe(FOOTMAN)).unwrap();
+    rip::plan_unit(&mut s.w, &mut s.plan, VANGUARD).unwrap();
+    let r = rows(&s.w, &s.plan, VANGUARD);
+    assert_eq!((r[0].0.as_str(), r[0].5.as_str()), (a, rip::OPENER), "{r:?}");
+    assert_eq!(r[1].0, "strike", "after A its list's Strike: {r:?}");
+}
+
+/// FL2: the reader keeps only skills of the round intent the unit can use in this battle (an unknown family and a
+/// Guard family in an Assault opener's list are skipped); an item opener and no opener read the order alone.
+#[test]
+fn the_follow_up_reader_skips_what_the_unit_cannot_use_here() {
+    let mut s = session();
+    let order = rip::order(&s.w, VANGUARD, RoundIntent::Assault);
+    s.w.units[VANGUARD].deck.follow_ups.insert("tl_heavy_cleave".into(), fams(&["t_gone", "tl_brace_counter", "strike"]));
+    let hc = round_intent::Opener::Skill(sid(&s.w, "tl_heavy_cleave"));
+    let got = rip::follow_order(&s.w, VANGUARD, RoundIntent::Assault, Some(&hc));
+    let mut want = vec![sid(&s.w, "strike")];
+    want.extend(order.iter().copied().filter(|x| *x != sid(&s.w, "strike")));
+    assert_eq!(got, want);
+    assert_eq!(rip::follow_order(&s.w, VANGUARD, RoundIntent::Assault, None), order);
+    assert_eq!(rip::follow_order(&s.w, VANGUARD, RoundIntent::Assault, Some(&round_intent::Opener::Item("t_potion".into()))), order, "an item opener reads the order");
+    // an empty list is no list
+    s.w.units[VANGUARD].deck.follow_ups.insert("tl_heavy_cleave".into(), Vec::new());
+    assert_eq!(rip::follow_order(&s.w, VANGUARD, RoundIntent::Assault, Some(&hc)), order);
+}

@@ -99,13 +99,29 @@ fn deck_from(raw: Option<&Value>) -> (Deck, Vec<String>) {
                 }
                 None => problems.push("deck.order must be an object {intent: [skill families]}.".into()),
             },
+            // INPUT1 FL4: the opener's follow-up lists (a save without them reads none; an empty list is no list)
+            "follow_ups" => match v.as_object() {
+                Some(lists) => {
+                    for (opener, fams) in lists {
+                        match texts(fams) {
+                            Some(list) if list.is_empty() => {}
+                            Some(list) => {
+                                deck.follow_ups.insert(opener.clone(), list);
+                            }
+                            None => problems.push(format!("deck.follow_ups.{opener} must be a list of text.")),
+                        }
+                    }
+                }
+                None => problems.push("deck.follow_ups must be an object {opener family: [skill families]}.".into()),
+            },
             _ => problems.push(format!("deck: unknown key '{k}'.")),
         }
     }
     (deck, problems)
 }
 
-/// The saved form of a deck: its non-empty keys in `Deck::KEYS` order (order: its non-empty lists).
+/// The saved form of a deck: its non-empty keys in `Deck::KEYS` order (order and follow_ups: their non-empty lists;
+/// INPUT1 FL4: a deck without follow-up lists writes as before).
 fn deck_value(deck: &Deck) -> Value {
     let mut out = Dict::new();
     for (k, list) in [("active", &deck.active), ("passive", &deck.passive), ("keystone", &deck.keystone)] {
@@ -116,6 +132,10 @@ fn deck_value(deck: &Deck) -> Value {
     let order: Dict = deck.order.iter().filter(|(_, l)| !l.is_empty()).map(|(k, l)| (k.clone(), strs(l))).collect();
     if !order.is_empty() {
         out.insert("order".into(), Value::Object(order));
+    }
+    let follow_ups: Dict = deck.follow_ups.iter().filter(|(_, l)| !l.is_empty()).map(|(k, l)| (k.clone(), strs(l))).collect();
+    if !follow_ups.is_empty() {
+        out.insert("follow_ups".into(), Value::Object(follow_ups));
     }
     Value::Object(out)
 }
@@ -451,6 +471,38 @@ impl UnitState {
                 let of = d.cat.tier_one(fam).map(|s| rpgkit_battle::round_intent::skill_intent(s).to_string()).unwrap_or_default();
                 if of != *intent {
                     errors.push(format!("{at}: deck order {intent}: '{fam}' is of intent {}.", if of.is_empty() { "none (unknown family)" } else { &of }));
+                }
+            }
+        }
+        // INPUT1 FL5: each list follows an opener of the deck (an active or a basic, not neutral) with families of the
+        // deck of the opener's intent, none twice (the opener may stand in its own list)
+        let intent_of = |fam: &str| d.cat.tier_one(fam).map(|s| rpgkit_battle::round_intent::skill_intent(s).to_string()).unwrap_or_default();
+        let in_deck = |fam: &str| self.deck.active.iter().chain(&basics).any(|f| f == fam);
+        let label = |id: &str| match rpgkit_battle::round_intent::RoundIntent::parse(id) {
+            Some(i) => i.name().to_string(),
+            None if id.is_empty() => "no intent".into(),
+            None => id.to_string(),
+        };
+        for (key, list) in &self.deck.follow_ups {
+            let of = intent_of(key);
+            if !in_deck(key) || of.is_empty() || of == rpgkit_rules::ruleset::NEUTRAL {
+                errors.push(format!("{at}: Follow-ups for '{key}': not an opener in the deck."));
+                continue;
+            }
+            let mut seen: Vec<&String> = Vec::new();
+            for fam in list {
+                if seen.contains(&fam) {
+                    errors.push(format!("{at}: Follow-ups after '{key}': '{fam}' twice."));
+                    continue;
+                }
+                seen.push(fam);
+                if !in_deck(fam) {
+                    errors.push(format!("{at}: Follow-ups after '{key}': '{fam}' is not in the deck."));
+                    continue;
+                }
+                let has = intent_of(fam);
+                if has != of {
+                    errors.push(format!("{at}: Follow-ups after '{key}': '{fam}' is {}, not {}.", label(&has), label(&of)));
                 }
             }
         }

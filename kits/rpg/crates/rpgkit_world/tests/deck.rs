@@ -129,7 +129,9 @@ fn a_damaged_deck_is_refused() {
     let d = data();
     let base = state(&d, member("hero")).to_value();
     let damaged: Vec<(Value, &str)> = vec![
-        (json!([1]), "deck must be an object {active, passive, keystone, order}."),
+        (json!([1]), "deck must be an object {active, passive, keystone, order, follow_ups}."),
+        (json!({"follow_ups": ["d_one"]}), "deck.follow_ups must be an object {opener family: [skill families]}."),
+        (json!({"follow_ups": {"d_one": "d_two"}}), "deck.follow_ups.d_one must be a list of text."),
         (json!({"active": "d_one"}), "deck.active must be a list of text."),
         (json!({"passive": [1]}), "deck.passive must be a list of text."),
         (json!({"order": ["d_one"]}), "deck.order must be an object {intent: [skill families]}."),
@@ -226,4 +228,51 @@ fn a_dialogue_stat_check_counts_only_slotted_passives_under_the_deck_rule() {
     assert_eq!(dialogue::best_stat(&d, &gs, "STR"), classic, "a classic world counts every passive");
     gs.world_id = "tw".into();
     assert_eq!(dialogue::best_stat(&d, &gs, "STR"), decked, "the deck world counts the slotted ones only");
+}
+
+/// INPUT1 FL4 (Q9 a): `follow_ups` sits inside the saved `deck`, written only when a list is set; a v13 save without it
+/// loads with no lists and re-saves byte-identical; a set list round-trips in its written order; an empty one is no
+/// list (dropped on save).
+#[test]
+fn follow_up_lists_save_inside_the_deck_only_when_set() {
+    let d = data();
+    let mut m = member("hero");
+    m.deck = deck(json!({"active": ["d_one", "d_two"], "order": {"assault": ["d_two", "strike"]}}));
+    let v = state(&d, m.clone()).to_value();
+    assert!(!v["party"]["members"][0]["deck"].as_object().unwrap().contains_key("follow_ups"), "no list, no key");
+    let text = envelope(save::VERSION, &v);
+    let loaded = save::decode(&d, &text).expect("a save without follow_ups loads");
+    assert!(loaded.warnings.is_empty() && loaded.state.party.members[0].deck.follow_ups.is_empty());
+    assert_eq!(envelope(save::VERSION, &loaded.state.to_value()), text, "re-saved byte-identical");
+    m.deck.follow_ups.insert("d_one".into(), strings(&["d_two", "strike", "d_one"]));
+    m.deck.follow_ups.insert("d_two".into(), Vec::new());
+    let v = state(&d, m).to_value();
+    assert_eq!(v["party"]["members"][0]["deck"]["follow_ups"], json!({"d_one": ["d_two", "strike", "d_one"]}), "only the set list");
+    let loaded = save::decode(&d, &envelope(save::VERSION, &v)).expect("loads");
+    assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+    let back = &loaded.state.party.members[0].deck;
+    assert_eq!(back.follow_ups_of("d_one"), Some(&strings(&["d_two", "strike", "d_one"])));
+    assert!(back.follow_ups_of("d_two").is_none());
+}
+
+/// FL5 for a member's deck (the deck screen's Confirm): a list follows an opener of the deck with families of the
+/// deck of the opener's intent, none twice.
+#[test]
+fn the_deck_rules_refuse_a_follow_up_list_of_another_intent_or_outside_the_deck() {
+    let d = data();
+    let cases: Vec<(Value, &str)> = vec![
+        (json!({"active": ["d_one", "d_ward"], "follow_ups": {"d_one": ["d_ward"]}}), "Follow-ups after 'd_one': 'd_ward' is Guard, not Assault."),
+        (json!({"active": ["d_one"], "follow_ups": {"d_one": ["d_two"]}}), "Follow-ups after 'd_one': 'd_two' is not in the deck."),
+        (json!({"active": ["d_one"], "follow_ups": {"d_one": ["strike", "strike"]}}), "Follow-ups after 'd_one': 'strike' twice."),
+        (json!({"active": ["d_one"], "follow_ups": {"d_two": ["strike"]}}), "Follow-ups for 'd_two': not an opener in the deck."),
+        (json!({"active": ["d_one"], "follow_ups": {"move": ["strike"]}}), "Follow-ups for 'move': not an opener in the deck."),
+    ];
+    for (v, want) in cases {
+        let mut m = member("hero");
+        m.deck = deck(v.clone());
+        assert_eq!(m.validate(&d), [format!("Unit 'hero': {want}")], "{v}");
+    }
+    let mut m = member("hero");
+    m.deck = deck(json!({"active": ["d_one", "d_ward"], "follow_ups": {"d_one": ["strike", "d_one"], "d_ward": ["active_guard"]}}));
+    assert!(m.validate(&d).is_empty(), "{:?}", m.validate(&d));
 }

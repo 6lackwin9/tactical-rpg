@@ -104,6 +104,32 @@ pub fn order(w: &World, c: UnitId, intent: RoundIntent) -> Vec<SkillId> {
     out
 }
 
+/// INPUT1 FL2: the fill's order after `opener`: the skills of `c`'s `deck.follow_ups[<opener family>]` (in its order;
+/// only families still in the unit's deck that it can use in this battle, of `intent`), then `order(w, c, intent)`;
+/// a skill in both at its first place. An item opener, no opener or no list for it: `order` alone (so every unit
+/// without lists plans as before).
+pub fn follow_order(w: &World, c: UnitId, intent: RoundIntent, opener: Option<&Opener>) -> Vec<SkillId> {
+    let base = order(w, c, intent);
+    let Some(Opener::Skill(sid)) = opener else { return base };
+    let Some(fam) = w.cat.skills.get(*sid).map(|s| s.family_id().to_string()) else { return base };
+    let Some(list) = deck_of(w, c).and_then(|d| d.follow_ups_of(&fam)) else { return base };
+    let in_deck = auto_families(w, c);
+    let mut out: Vec<SkillId> = Vec::new();
+    for f in list.iter().filter(|f| in_deck.contains(f)) {
+        if let Some(s) = family_skill(w, c, f) {
+            if round_intent::skill_intent(&w.cat.skills[s]) == intent.id() && !out.contains(&s) {
+                out.push(s);
+            }
+        }
+    }
+    for s in base {
+        if !out.contains(&s) {
+            out.push(s);
+        }
+    }
+    out
+}
+
 /// PL1, FU1: sets (Some) or clears (None) the opener of `c`'s round.
 pub fn set_opener(w: &mut World, c: UnitId, opener: Option<Opener>) -> Result<(), String> {
     if !round_intent::on(w) {
@@ -326,7 +352,11 @@ pub fn set_manual(w: &mut World, plan: &mut Plan, c: UnitId, on: bool) -> Result
 /// from the tile the unit stands on then), then Rest on every free block.
 pub fn fill_rest(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), String> {
     let b = Builder::new(w, c)?;
-    let cause = b.fill(plan, &Reserve::default());
+    // FL2: the round's opener (set, else the first planned skill of the intent) chooses the follow-up list
+    let opener = w.round_states.get(&c).and_then(|r| r.opener.clone()).or_else(|| {
+        plan.steps_of(c).iter().filter_map(|st| st.skill).find(|&sid| sid < w.cat.skills.len() && round_intent::skill_intent(&w.cat.skills[sid]) == b.intent.id()).map(Opener::Skill)
+    });
+    let cause = b.fill(plan, &Reserve::default(), &follow_order(w, c, b.intent, opener.as_ref()));
     b.rest(plan, &cause);
     Ok(())
 }
@@ -433,12 +463,16 @@ fn build(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), String> {
     plan.set_steps(c, Vec::new());
     let b = Builder::new(w, c)?;
     let opener = w.round_states.get(&c).and_then(|r| r.opener.clone());
-    if let Err(e) = b.opener(plan, opener) {
-        plan.set_steps(c, Vec::new());
-        return Err(e);
-    }
+    let opener = match b.opener(plan, opener) {
+        Ok(o) => o,
+        Err(e) => {
+            plan.set_steps(c, Vec::new());
+            return Err(e);
+        }
+    };
     let reserve = b.reserve(plan);
-    let cause = b.fill(plan, &reserve);
+    // FL2: the opener placed (given, else PL3's) chooses the follow-up list
+    let cause = b.fill(plan, &reserve, &follow_order(w, c, b.intent, Some(&opener)));
     if let Some(step) = reserve.step {
         // PL5: the after-move (or the Disengage jump) right after the fill; dropped when it no longer fits
         let _ = plan.add_step(w, c, step, false);
@@ -566,10 +600,11 @@ impl<'a> Builder<'a> {
 
     // ---- Opener (FU1, PL3, AS1, AS2, GD1, SP1, MV7-MV10) ----------------------------------------------------------
 
-    /// Places the before-move and the opener: the given one, else the first order entry that fits (PL3).
-    fn opener(&self, plan: &mut Plan, given: Option<Opener>) -> Result<(), String> {
+    /// Places the before-move and the opener: the given one, else the first order entry that fits (PL3); returns the
+    /// opener placed.
+    fn opener(&self, plan: &mut Plan, given: Option<Opener>) -> Result<Opener, String> {
         if let Some(o) = given {
-            return self.try_opener(plan, &o);
+            return self.try_opener(plan, &o).map(|()| o);
         }
         if self.order.is_empty() {
             return Err(format!("{} has no {} skill.", self.w.units[self.c].name, self.intent.name()));
@@ -582,7 +617,7 @@ impl<'a> Builder<'a> {
                 continue;
             }
             match self.try_opener(plan, &Opener::Skill(sid)) {
-                Ok(()) => return Ok(()),
+                Ok(()) => return Ok(Opener::Skill(sid)),
                 Err(e) => {
                     first.get_or_insert(e);
                 }
@@ -802,10 +837,11 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// FU2, FU3: block by block, the first order entry that has the intent, fits before the reserve, is affordable
-    /// without debt (and leaves the reserve's AP), acts on the target from the unit's tile and is a skill. Returns the
-    /// first refused entry's cause at the block where the fill stops ("" when the blocks ran out).
-    fn fill(&self, plan: &mut Plan, reserve: &Reserve) -> String {
+    /// FU2, FU3: block by block, the first entry of `order` (FL2's `follow_order`: the opener's follow-up list, then
+    /// the deck order) that has the intent, fits before the reserve, is affordable without debt (and leaves the
+    /// reserve's AP), acts on the target from the unit's tile and is a skill. Returns the first refused entry's cause
+    /// at the block where the fill stops ("" when the blocks ran out).
+    fn fill(&self, plan: &mut Plan, reserve: &Reserve, order: &[SkillId]) -> String {
         let w = self.w;
         let u = &w.units[self.c];
         let pays = w.pays_ap(self.c);
@@ -818,7 +854,7 @@ impl<'a> Builder<'a> {
             }
             let mut cause = String::new();
             let mut placed = false;
-            for (k, &sid) in self.order.iter().enumerate() {
+            for (k, &sid) in order.iter().enumerate() {
                 let s = self.skill(sid);
                 if k_is_jump(s) {
                     continue;
@@ -1453,7 +1489,12 @@ fn build_picks(w: &World, plan: &mut Plan, c: UnitId) -> Result<(), (usize, Refu
                 Some(a) => Reserve { blocks: 1, ap: a.ap, step: None },
                 None => b.reserve(plan),
             };
-            let cause = b.fill(plan, &reserve);
+            // FL2: the first skill or item pick (the opener) chooses the follow-up list; an item reads the order
+            let opener = opener_at.and_then(|i| match &picks[i] {
+                Pick::Skill { skill, .. } => Some(Opener::Skill(*skill)),
+                _ => None,
+            });
+            let cause = b.fill(plan, &reserve, &follow_order(w, c, b.intent, opener.as_ref()));
             if let Some(step) = reserve.step {
                 let _ = plan.add_step(w, c, step, false);
             }

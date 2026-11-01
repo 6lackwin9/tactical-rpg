@@ -70,6 +70,14 @@ pub enum PAct {
     OrderUp(String, usize),
     /// Every intent back to the auto order.
     OrderAuto,
+    /// INPUT1 FL3: opens (or closes) the follow-up list of an opener family under its order entry.
+    FollowOpen(String),
+    /// Adds family `.1` at the end of opener `.0`'s follow-up list.
+    FollowAdd(String, String),
+    /// Takes place `.1` out of opener `.0`'s list (a right click).
+    FollowRemove(String, usize),
+    /// "Use the <Intent> order": empties opener `.0`'s list.
+    FollowClear(String),
 }
 
 pub struct Character {
@@ -96,6 +104,8 @@ pub struct Character {
     terms: Option<DeckTerms>,
     deck: Deck,
     deck_view: &'static str,
+    /// INPUT1 FL3: the opener family whose follow-up list is open in the order view.
+    follow_open: Option<String>,
     /// PORTRAITFX1-R: the shown member's portrait (surface `roster`); cycling members drops the old one's.
     faces: crate::portraits::Faces,
     w: Vec<Widget<PAct>>,
@@ -352,6 +362,7 @@ impl DeckTerms {
             passive: auto_unit.deck.passive.iter().filter(|p| passives.contains(p)).cloned().collect(),
             keystone: auto_unit.deck.keystone.iter().filter(|p| keystones.contains(p)).cloned().collect(),
             order: auto_unit.deck.order.clone(),
+            follow_ups: IndexMap::new(),
         };
         // apply_deck's auto pick for an empty active row: the loadout's families the member owns, the first `active`
         let mut auto_actives: Vec<String> = Vec::new();
@@ -446,14 +457,14 @@ impl DeckTerms {
 
     /// The deck an edit of `kind` starts from (user 2026-10-29): an actives edit (and the order editor) pins the deck as
     /// it plays (`shown`); a passive or keystone edit keeps the actives automatic (an empty `active` row stays empty, so
-    /// later class-path actives still join), unless the deck as it plays carries an order list (order entries must be
-    /// in `active`: then it pins).
+    /// later class-path actives still join), unless the deck as it plays carries an order or follow-up list (their
+    /// entries must be in `active`: then it pins; INPUT1 FL3).
     fn base(&self, draft: &Deck, kind: &str) -> Deck {
         let shown = self.shown(draft);
-        if kind == "active" || !draft.active.is_empty() || !shown.order.is_empty() {
+        if kind == "active" || !draft.active.is_empty() || !shown.order.is_empty() || !shown.follow_ups.is_empty() {
             return shown;
         }
-        Deck { active: Vec::new(), passive: shown.passive, keystone: shown.keystone, order: IndexMap::new() }
+        Deck { active: Vec::new(), passive: shown.passive, keystone: shown.keystone, order: IndexMap::new(), follow_ups: IndexMap::new() }
     }
 
     /// RULESET1_INTENT FU4: the order the planner fills `intent` by: the deck's `order` list for it (entries still in the
@@ -476,12 +487,102 @@ impl DeckTerms {
         }
     }
 
-    /// An active that leaves the deck leaves every order list (an emptied list is the auto order again).
+    /// An active that leaves the deck leaves every order and follow-up list and drops its own follow-up list (an
+    /// emptied list is the auto order again; INPUT1 FL3).
     fn unordered(d: &mut Deck, fam: &str) {
-        for l in d.order.values_mut() {
+        for l in d.order.values_mut().chain(d.follow_ups.values_mut()) {
             l.retain(|f| f != fam);
         }
         d.order.retain(|_, l| !l.is_empty());
+        d.follow_ups.shift_remove(fam);
+        d.follow_ups.retain(|_, l| !l.is_empty());
+    }
+
+    /// INPUT1 FL1: the follow-up list of opener `op` as it plays (entries still in the deck, of the opener's intent);
+    /// empty when none is set (the fill reads the intent's order).
+    pub fn follow_list(&self, deck: &Deck, op: &str) -> Vec<String> {
+        let Some(intent) = self.intent_of.get(op) else { return Vec::new() };
+        let ok = |f: &&String| self.intent_of.get(*f) == Some(intent) && (deck.active.contains(f) || self.basics.contains(f));
+        deck.follow_ups.get(op).map(|l| l.iter().filter(ok).cloned().collect()).unwrap_or_default()
+    }
+
+    /// FL3: the skills that can join `op`'s list: its intent's actives and basics in the deck (the order's entries),
+    /// those already listed left out.
+    pub fn follow_candidates(&self, deck: &Deck, op: &str) -> Vec<String> {
+        let Some(intent) = self.intent_of.get(op) else { return Vec::new() };
+        let listed = self.follow_list(deck, op);
+        self.order(deck, intent).into_iter().filter(|f| !listed.contains(f)).collect()
+    }
+
+    /// The deck a follow-up edit of `op` starts from (it pins the deck as it plays, as an order edit does) and the list
+    /// as it plays; refused when `op` is not an opener of the deck (FL5).
+    fn follow_base(&self, draft: &Deck, op: &str) -> Result<(Deck, Vec<String>), String> {
+        let d = self.shown(draft);
+        let opener = self.intent_of.get(op).is_some_and(|i| self.intents.contains(i)) && (d.active.iter().any(|f| f == op) || self.basics.iter().any(|f| f == op));
+        if !opener {
+            return Err(format!("Follow-ups for {op}: not an opener in the deck."));
+        }
+        let list = self.follow_list(&d, op);
+        Ok((d, list))
+    }
+
+    fn with_follow(mut d: Deck, op: &str, list: Vec<String>) -> Deck {
+        if list.is_empty() {
+            d.follow_ups.shift_remove(op);
+        } else {
+            d.follow_ups.insert(op.to_string(), list);
+        }
+        d
+    }
+
+    /// FL3: `fam` joins `op`'s list at place `at` (None: the end); a listed one moves there. Only skills of the
+    /// opener's intent in the deck.
+    pub fn follow_add(&self, draft: &Deck, op: &str, fam: &str, at: Option<usize>) -> Result<Deck, String> {
+        let (d, mut list) = self.follow_base(draft, op)?;
+        let intent = self.intent_of.get(op).cloned().unwrap_or_default();
+        if !(d.active.iter().any(|f| f == fam) || self.basics.iter().any(|f| f == fam)) {
+            return Err(format!("Follow-ups after {op}: {fam} is not in the deck."));
+        }
+        if self.intent_of.get(fam) != Some(&intent) {
+            let has = self.intent_of.get(fam).map(|i| intent_title(i)).unwrap_or_else(|| "no intent".into());
+            return Err(format!("Follow-ups after {op}: {fam} is {has}, not {}.", intent_title(&intent)));
+        }
+        let was = list.iter().position(|f| f == fam);
+        if let Some(i) = was {
+            list.remove(i);
+        }
+        let j = at.unwrap_or(list.len()).min(list.len());
+        if was == Some(j) {
+            return Err("Same place.".into());
+        }
+        list.insert(j, fam.to_string());
+        Ok(Self::with_follow(d, op, list))
+    }
+
+    /// FL3: takes place `k` out of `op`'s list (the last one out: the intent's order again).
+    pub fn follow_remove(&self, draft: &Deck, op: &str, k: usize) -> Result<Deck, String> {
+        let (d, mut list) = self.follow_base(draft, op)?;
+        if k >= list.len() {
+            return Err("Nothing there.".into());
+        }
+        list.remove(k);
+        Ok(Self::with_follow(d, op, list))
+    }
+
+    /// FL3 "Use the <Intent> order": empties `op`'s list.
+    pub fn follow_clear(&self, draft: &Deck, op: &str) -> Result<Deck, String> {
+        let (d, list) = self.follow_base(draft, op)?;
+        if list.is_empty() {
+            return Err("No follow-ups set: the intent's order fills.".into());
+        }
+        Ok(Self::with_follow(d, op, Vec::new()))
+    }
+
+    /// `follow.<op>.<k>`: place `k` of opener `op`'s follow-up list (`k` = the list's length: its end).
+    fn follow_key(key: &str) -> Option<(&str, usize)> {
+        let rest = key.strip_prefix("follow.").filter(|r| !r.starts_with("add."))?;
+        let (op, k) = rest.rsplit_once('.')?;
+        Some((op, k.parse().ok()?))
     }
 
     fn full(kind: &str) -> String {
@@ -543,6 +644,23 @@ impl DeckTerms {
             let k = DECK_KINDS.iter().find(|x| x.0 == kind).unwrap_or(&DECK_KINDS[0]);
             format!("{} slots take {} only.", k.1, k.2)
         };
+        // INPUT1 FL3: a follow-up entry moves within its list; an intent skill dragged from the add row joins it there
+        if let Some((op, fam)) = from.strip_prefix("follow.add.").and_then(|r| r.split_once('.')) {
+            let (to_op, j) = Self::follow_key(to).ok_or("Drop it on a place in the same follow-up list.")?;
+            if to_op != op {
+                return Err("Each opener keeps its own follow-ups.".into());
+            }
+            return self.follow_add(draft, op, fam, Some(j));
+        }
+        if let Some((op, i)) = Self::follow_key(from) {
+            let (to_op, j) = Self::follow_key(to).ok_or("Drop it on a place in the same follow-up list.")?;
+            if to_op != op {
+                return Err("Each opener keeps its own follow-ups.".into());
+            }
+            let list = self.follow_base(draft, op)?.1;
+            let fam = list.get(i).cloned().ok_or("Nothing there.")?;
+            return self.follow_add(draft, op, &fam, Some(j.min(list.len() - 1)));
+        }
         if let Some((intent, i)) = Self::order_key(from) {
             let (to_intent, j) = Self::order_key(to).ok_or("Drop it on a place in the same intent's order.")?;
             if to_intent != intent {
@@ -620,7 +738,7 @@ impl Character {
         let first = gs.party.members.first().map(|m| m.id.clone()).unwrap_or_default();
         let member = if gs.party.member(member).is_some() { member.to_string() } else { first };
         let tab = TABS.iter().find(|t| t.0 == tab).map(|t| t.0).unwrap_or("stats");
-        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", faces: crate::portraits::Faces::default(), w: Vec::new() }
+        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", follow_open: None, faces: crate::portraits::Faces::default(), w: Vec::new() }
     }
 
     fn m<'a>(&self, cx: &'a Cx) -> &'a UnitState {
@@ -956,6 +1074,10 @@ impl Character {
             }
             PAct::OrderUp(intent, i) if i > 0 => self.deck_edit(cx, |t, deck| t.after_drop(deck, &format!("order.{intent}.{i}"), &format!("order.{intent}.{}", i - 1))),
             PAct::OrderUp(..) => {}
+            PAct::FollowOpen(op) => self.follow_open = if self.follow_open.as_deref() == Some(op.as_str()) { None } else { Some(op) },
+            PAct::FollowAdd(op, fam) => self.deck_edit(cx, |t, deck| t.follow_add(deck, &op, &fam, None)),
+            PAct::FollowRemove(op, k) => self.deck_edit(cx, |t, deck| t.follow_remove(deck, &op, k)),
+            PAct::FollowClear(op) => self.deck_edit(cx, |t, deck| t.follow_clear(deck, &op)),
             PAct::OrderAuto => self.deck_edit(cx, |t, deck| {
                 let mut d = t.shown(deck);
                 d.order.clear();
@@ -1305,6 +1427,17 @@ impl Screen<GameCx> for Character {
     fn back(&mut self, cx: &mut Cx) {
         if self.tab == "skills" && self.terms.is_some() {
             let (mx, my) = self.mouse;
+            // INPUT1 FL3: a right click on a follow-up entry takes it out of the list
+            let follow = self.w.iter().rev().find(|w| w.rect.contains(mx, my)).and_then(|w| {
+                let (op, k) = w.id.strip_prefix("skills.follow.")?.rsplit_once('.')?;
+                Some((op.to_string(), k.parse::<usize>().ok()?))
+            });
+            if let Some((op, k)) = follow.filter(|(op, _)| !op.starts_with("add.")) {
+                if self.terms.as_ref().is_some_and(|t| k < t.follow_list(&t.shown(&self.deck), &op).len()) {
+                    self.act(cx, PAct::FollowRemove(op, k));
+                }
+                return;
+            }
             let over = self.w.iter().rev().find(|w| w.rect.contains(mx, my) && DECK_KINDS.iter().any(|k| w.id.starts_with(&format!("skills.{}.", k.0))));
             if let Some(w) = over {
                 let kind = DECK_KINDS.iter().find(|k| w.id.starts_with(&format!("skills.{}.", k.0))).map(|k| k.0).unwrap_or("active");
@@ -1717,6 +1850,15 @@ impl Character {
         if self.deck_view == "order" {
             let n = t.intents.len().max(1) as i32;
             let col_w = 294 / n;
+            // INPUT1 FL3: the open follow-up list sits under its opener's entry across the pane; the places after that
+            // row move down by its height (nothing is drawn below the pane's end, y 272)
+            let open: Option<(String, String, usize)> = self.follow_open.clone().and_then(|op| t.intents.iter().find_map(|i| t.order(&shown, i).iter().position(|f| *f == op).map(|k| (op.clone(), i.clone(), k))));
+            let (follow, adds) = open.as_ref().map(|(op, _, _)| (t.follow_list(&shown, op), t.follow_candidates(&shown, op))).unwrap_or_default();
+            let lines = |n: usize| n.div_ceil(FOLLOW_PER) as i32;
+            let ed_h = if open.is_some() { 16 + 15 * (lines(follow.len() + 1) + lines(adds.len())) + 2 } else { 0 };
+            let after = open.as_ref().map(|o| o.2);
+            let y_of = |k: usize| 132 + k as i32 * 15 + if after.is_some_and(|a| k > a) { ed_h } else { 0 };
+            let mut bottom = 132;
             for (c, intent) in t.intents.iter().enumerate() {
                 let x = 310 + c as i32 * col_w;
                 let name = intent_name(intent);
@@ -1727,19 +1869,85 @@ impl Character {
                     ui.p.text(x as f32 + 2.0, 134.0, "None", BODY, DIM);
                 }
                 for (k, f) in list.iter().enumerate() {
-                    let r = Rect::new(x, 132 + k as i32 * 15, col_w - 4, 13);
+                    let r = Rect::new(x, y_of(k), col_w - 4 - FOLLOW_TOGGLE - 1, 13);
+                    if r.y + r.h > 272 {
+                        break;
+                    }
+                    bottom = bottom.max(r.y + r.h);
                     let basic = t.basics.contains(f);
+                    let set = !t.follow_list(&shown, f).is_empty();
                     let (fname, _, ap, _, desc) = skill_of(f);
                     ui.p.panel(r, if basic { rgba(22, 30, 48, 255) } else { rgba(26, 34, 54, 255) }, BORDER, 2.0);
-                    ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &format!("{}. {fname}", k + 1), BODY, (col_w - 10) as f32, if basic { INFO } else { TEXT });
+                    let mark = if set { 7 } else { 0 };
+                    ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &format!("{}. {fname}", k + 1), BODY, (r.w - 6 - mark) as f32, if basic { INFO } else { TEXT });
+                    if set {
+                        // FL3: an entry with a set follow-up list shows a small "+"
+                        ui.p.text((r.x + r.w - 7) as f32, r.y as f32 + 2.0, "+", BODY, GOLD);
+                    }
                     let card = vec![(fname.clone(), GOLD), (format!("{} {name}, {ap} AP: place {} of {}", if basic { "Basic," } else { "Active," }, k + 1, list.len()), INFO), (desc, TEXT), ("Drag to reorder; a click moves it one place up.".into(), DIM)];
-                    ui.push(format!("skills.order.{intent}.{k}"), "row", fname, r, true, false, (k > 0).then(|| PAct::OrderUp(intent.clone(), k)), card);
+                    ui.push(format!("skills.order.{intent}.{k}"), "row", fname.clone(), r, true, false, (k > 0).then(|| PAct::OrderUp(intent.clone(), k)), card);
                     ui.draggable(format!("order.{intent}.{k}"));
                     ui.drop_target(format!("order.{intent}.{k}"));
+                    let is_open = after == Some(k) && open.as_ref().is_some_and(|o| o.0 == *f);
+                    let line = if set { format!("After {fname} the planner tries its follow-up list first, then the {name} order.") } else { format!("After {fname} the planner fills from the {name} order; set a follow-up list to try other skills first.") };
+                    ui.button_tip(&format!("skills.follow.{f}"), Rect::new(r.x + r.w + 1, r.y, FOLLOW_TOGGLE, 13), if is_open { "v" } else { ">" }, PAct::FollowOpen(f.clone()), true, tip("Follow-ups", &line));
                 }
             }
-            ui.button_tip("skills.order.auto", Rect::new(310, 254, 70, 15), "Auto order", PAct::OrderAuto, !shown.order.is_empty(), tip("Auto order", "Every intent back to the automatic order: the deck's actives in slot order, then the basics."));
-            ui.p.text(386.0, 258.0, "Each round fills from the top.", SMALL, DIM);
+            if let Some((op, intent, k)) = &open {
+                let y0 = 132 + (*k as i32 + 1) * 15;
+                let iname = intent_name(intent);
+                let oname = skill_of(op).0;
+                ui.p.panel(Rect::new(310, y0 - 1, 294, (ed_h - 1).min(273 - y0)), rgba(16, 22, 38, 255), BORDER, 2.0);
+                ui.p.text_fit(314.0, y0 as f32 + 2.0, &format!("After {oname}:"), BODY, 168.0, GOLD);
+                ui.button_tip(&format!("skills.follow.clear.{op}"), Rect::new(490, y0, 112, 13), &format!("Use the {iname} order"), PAct::FollowClear(op.clone()), !follow.is_empty(), tip("Use the order", &format!("Empties this list: after {oname} the planner fills from the {iname} order.")));
+                let y = y0 + 16;
+                for j in 0..=follow.len() {
+                    let r = Rect::new(312 + (j % FOLLOW_PER) as i32 * 58, y + (j / FOLLOW_PER) as i32 * 15, 56, 13);
+                    if r.y + r.h > 272 {
+                        break;
+                    }
+                    bottom = bottom.max(r.y + r.h);
+                    match follow.get(j) {
+                        Some(f) => {
+                            let (fname, _, ap, _, desc) = skill_of(f);
+                            ui.p.panel(r, rgba(26, 34, 54, 255), BORDER, 2.0);
+                            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &format!("{}. {fname}", j + 1), BODY, (r.w - 6) as f32, TEXT);
+                            let card = vec![(fname.clone(), GOLD), (format!("Follow-up {} of {} after {oname}, {ap} AP", j + 1, follow.len()), INFO), (desc, TEXT), ("Drag to reorder. Right click takes it out.".into(), DIM)];
+                            ui.push(format!("skills.follow.{op}.{j}"), "row", fname, r, true, false, None, card);
+                            ui.draggable(format!("follow.{op}.{j}"));
+                        }
+                        None => {
+                            ui.p.panel(r, rgba(20, 28, 46, 120), rgba(58, 78, 116, 120), 2.0);
+                            let label = if follow.is_empty() { "None set" } else { "Drop here" };
+                            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, label, BODY, (r.w - 6) as f32, DIM);
+                            ui.push(format!("skills.follow.{op}.end"), "row", label, r, true, false, None, tip("Follow-ups", &format!("Drop one of the {iname} skills here to try it after {oname}; with no list the {iname} order fills.")));
+                        }
+                    }
+                    ui.drop_target(format!("follow.{op}.{j}"));
+                }
+                let y = y + 15 * lines(follow.len() + 1);
+                if !adds.is_empty() && y + 13 <= 272 {
+                    ui.p.text(314.0, y as f32 + 2.0, "Add:", BODY, INFO);
+                }
+                for (j, f) in adds.iter().enumerate() {
+                    let r = Rect::new(340 + (j % FOLLOW_PER) as i32 * 52, y + (j / FOLLOW_PER) as i32 * 15, 50, 13);
+                    if r.y + r.h > 272 {
+                        break;
+                    }
+                    bottom = bottom.max(r.y + r.h);
+                    let (fname, _, ap, _, desc) = skill_of(f);
+                    ui.p.panel(r, rgba(22, 30, 48, 255), rgba(58, 78, 116, 200), 2.0);
+                    ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &fname, BODY, (r.w - 6) as f32, INFO);
+                    let card = vec![(fname.clone(), GOLD), (format!("{iname} skill, {ap} AP"), INFO), (desc, TEXT), (format!("Click to try it after {oname} (at the end of the list), or drag it to a place."), DIM)];
+                    ui.push(format!("skills.follow.add.{op}.{f}"), "row", fname, r, true, false, Some(PAct::FollowAdd(op.clone(), f.clone())), card);
+                    ui.draggable(format!("follow.add.{op}.{f}"));
+                }
+            }
+            let auto_y = 254.max(bottom + 3);
+            if auto_y + 15 <= 273 {
+                ui.button_tip("skills.order.auto", Rect::new(310, auto_y, 70, 15), "Auto order", PAct::OrderAuto, !shown.order.is_empty(), tip("Auto order", "Every intent back to the automatic order: the deck's actives in slot order, then the basics."));
+                ui.p.text(386.0, auto_y as f32 + 4.0, "Each round fills from the top.", SMALL, DIM);
+            }
         } else {
             let list_area = Rect::new(310, 114, 294, 158);
             ui.push("skills.list", "panel", "Owned", list_area, true, false, None, tip("Owned", "Drop a slot here to take it out."));
@@ -1774,7 +1982,9 @@ impl Character {
             let target = ui.widgets.iter().rev().find(|x| x.drop.is_some() && x.rect.contains(mx, my)).and_then(|x| x.drop.clone());
             self.detail = match target {
                 Some(to) if t.after_drop(&self.deck, &from, &to).is_ok() => {
-                    if let Some((intent, j)) = DeckTerms::order_key(&to) {
+                    if let Some((_, j)) = DeckTerms::follow_key(&to) {
+                        format!("Puts it at place {} of the follow-ups.", j + 1)
+                    } else if let Some((intent, j)) = DeckTerms::order_key(&to) {
                         format!("Moves it to place {} in the {} order.", j + 1, intent_name(intent))
                     } else if to == "deck.list" {
                         "Drop to take it out.".into()
@@ -1789,6 +1999,7 @@ impl Character {
                         }
                     }
                 }
+                _ if from.starts_with("follow.") => "Drop on a place in the same follow-up list.".into(),
                 _ => "Drop on a slot of its own kind, on the owned list to take it out, or on a place in the same intent's order.".into(),
             };
         }
@@ -1930,8 +2141,13 @@ impl Character {
 }
 
 /// A deck as the agent link reads it (every key, empty ones too).
+/// INPUT1 FL3: places a line in the follow-up editor, and the width of an order entry's follow-up toggle.
+const FOLLOW_PER: usize = 5;
+const FOLLOW_TOGGLE: i32 = 11;
+
 pub(crate) fn deck_json(d: &Deck) -> Value {
-    json!({"active": d.active, "passive": d.passive, "keystone": d.keystone, "order": Value::Object(d.order.iter().map(|(k, v)| (k.clone(), json!(v))).collect())})
+    let lists = |m: &IndexMap<String, Vec<String>>| Value::Object(m.iter().map(|(k, v)| (k.clone(), json!(v))).collect());
+    json!({"active": d.active, "passive": d.passive, "keystone": d.keystone, "order": lists(&d.order), "follow_ups": lists(&d.follow_ups)})
 }
 
 /// The Gear tab's stat list: the core stats with gear, then the derived rows (`derived`), as `m` fights in `world`.
@@ -1979,6 +2195,11 @@ fn item_numbers(def: &emberwake_data::ItemDef) -> String {
     let line = parts.join("; ");
     let mut c = line.chars();
     c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str() + ".").unwrap_or_default()
+}
+
+/// An intent id's display name ("assault" -> "Assault").
+fn intent_title(id: &str) -> String {
+    emberwake_battle::round_intent::RoundIntent::parse(id).map(|x| x.name().to_string()).unwrap_or_else(|| title_case(id))
 }
 
 fn title_case(slot: &str) -> String {
@@ -2415,6 +2636,105 @@ mod tests {
         assert!(c.deck.order.is_empty() && c.deck.active == d.active, "Auto order clears the written orders only");
     }
 
+    /// INPUT1 FL1, FL3: a follow-up edit pins the deck as it plays; a list takes skills of the opener's intent in the
+    /// deck (the opener may stand in its own list), reorders within itself, loses an entry or empties ("Use the order");
+    /// an actives edit that removes a family takes it out of every list and drops its own list.
+    #[test]
+    fn follow_up_lists_take_the_openers_intent_and_follow_the_slots() {
+        let t = terms();
+        let empty = Deck::default();
+        let d = t.follow_add(&empty, "cleave", "strike", None).unwrap();
+        assert_eq!(d.active, t.auto.active, "a follow-up edit pins the automatic actives");
+        assert_eq!(d.follow_ups.get("cleave"), Some(&strs(&["strike"])));
+        let d2 = t.follow_add(&d, "cleave", "cleave", None).unwrap();
+        assert_eq!(t.follow_list(&d2, "cleave"), strs(&["strike", "cleave"]), "the opener in its own list");
+        assert_eq!(t.follow_candidates(&d, "cleave"), strs(&["cleave"]), "the intent's actives and basics not yet listed");
+        assert!(t.follow_add(&d, "cleave", "wall", None).unwrap_err().contains("is Guard, not Assault"));
+        assert!(t.follow_add(&d, "cleave", "lunge", None).unwrap_err().contains("not in the deck"));
+        assert!(t.follow_add(&d, "lunge", "strike", None).unwrap_err().contains("not an opener"));
+        // drag: reorder, add at a place, never across lists
+        assert_eq!(t.follow_list(&t.after_drop(&d2, "follow.cleave.1", "follow.cleave.0").unwrap(), "cleave"), strs(&["cleave", "strike"]));
+        assert_eq!(t.follow_list(&t.after_drop(&d, "follow.add.cleave.cleave", "follow.cleave.0").unwrap(), "cleave"), strs(&["cleave", "strike"]));
+        assert_eq!(t.follow_list(&t.after_drop(&d, "follow.add.cleave.cleave", "follow.cleave.1").unwrap(), "cleave"), strs(&["strike", "cleave"]), "the end place");
+        let w = t.follow_add(&d2, "wall", "hold", None).unwrap();
+        assert!(t.after_drop(&w, "follow.cleave.0", "follow.wall.0").unwrap_err().contains("own follow-ups"));
+        assert!(t.after_drop(&w, "follow.add.cleave.strike", "order.assault.0").is_err());
+        // remove, clear
+        assert_eq!(t.follow_list(&t.follow_remove(&d2, "cleave", 0).unwrap(), "cleave"), strs(&["cleave"]));
+        assert!(!t.follow_remove(&d, "cleave", 0).unwrap().follow_ups.contains_key("cleave"), "the last one out: no list");
+        let cleared = t.follow_clear(&w, "cleave").unwrap();
+        assert!(!cleared.follow_ups.contains_key("cleave") && cleared.follow_ups.contains_key("wall"), "only that opener's list");
+        assert!(t.follow_clear(&cleared, "cleave").is_err(), "nothing to clear");
+        // an active that leaves the deck leaves every list and drops its own
+        let two = t.after_drop(&empty, "deck.own.active.lunge", "deck.active.1").unwrap();
+        assert_eq!(two.active, strs(&["cleave", "lunge"]));
+        let lists = t.follow_add(&t.follow_add(&t.follow_add(&two, "lunge", "cleave", None).unwrap(), "lunge", "strike", None).unwrap(), "cleave", "lunge", None).unwrap();
+        let gone = t.unslot(&lists, "active", 0).unwrap();
+        assert!(!gone.follow_ups.contains_key("cleave"), "cleave's own list is dropped");
+        assert_eq!(gone.follow_ups.get("lunge"), Some(&strs(&["strike"])), "cleave left lunge's list");
+        let back = t.after_drop(&lists, "deck.own.active.wall", "deck.active.1").unwrap();
+        assert!(!back.follow_ups.contains_key("lunge") && back.follow_ups.get("cleave").is_none(), "replacing lunge drops its list and takes it out of cleave's: {back:?}");
+    }
+
+    /// FL3 on the Skills tab (shipped data, ids picked by rule): an order entry's toggle opens its list under it; a click
+    /// adds a skill of the intent, the entry shows "+", a right click takes an entry out, "Use the order" empties the
+    /// list; the editor fits the popup; Confirm saves a deck the member's validation accepts.
+    #[test]
+    fn the_follow_up_editor_opens_under_its_entry_and_saves_a_valid_list() {
+        let (mut cx, member) = deck_cx(true);
+        let mut g = crate::hud::hud_tests::gfx();
+        let mut c = Character::new(&cx, &member, "skills");
+        c.act(&mut cx, PAct::DeckView("order"));
+        c.draw(&mut cx, &mut g, (-500, -500), true);
+        let t = c.terms.clone().unwrap();
+        let shown = t.shown(&c.deck);
+        let intent = t.intents.iter().find(|i| t.order(&shown, i).len() > 1).or_else(|| t.intents.iter().find(|i| !t.order(&shown, i).is_empty())).cloned().expect("an intent with an order");
+        let order = t.order(&shown, &intent);
+        let op = order[0].clone();
+        assert!(c.w.iter().any(|w| w.id == format!("skills.follow.{op}")), "every order entry has its toggle");
+        assert!(!c.w.iter().any(|w| w.id == format!("skills.follow.clear.{op}")), "closed until toggled");
+        c.act(&mut cx, PAct::FollowOpen(op.clone()));
+        c.draw(&mut cx, &mut g, (-500, -500), true);
+        let ids: Vec<String> = c.w.iter().map(|w| w.id.clone()).collect();
+        assert!(ids.contains(&format!("skills.follow.clear.{op}")) && ids.contains(&format!("skills.follow.{op}.end")), "{ids:?}");
+        for f in &order {
+            assert!(ids.contains(&format!("skills.follow.add.{op}.{f}")), "{f} can be added");
+        }
+        let entry = rect_of(&c, &format!("skills.order.{intent}.0"));
+        assert!(rect_of(&c, &format!("skills.follow.clear.{op}")).y > entry.y, "the list opens under its entry");
+        assert_laid_out(&c, "follow-up editor");
+        let last = order.last().unwrap().clone();
+        c.act(&mut cx, PAct::FollowAdd(op.clone(), last.clone()));
+        assert_eq!(c.deck.follow_ups.get(&op), Some(&vec![last.clone()]));
+        let recs = crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert!(recs.iter().any(|r| r.text == "+"), "a set list marks its entry");
+        assert!(c.w.iter().any(|w| w.id == format!("skills.follow.{op}.0")));
+        if order.len() > 1 {
+            c.act(&mut cx, PAct::FollowAdd(op.clone(), order[0].clone()));
+            assert!(c.can_drop(&cx, &format!("follow.{op}.1"), &format!("follow.{op}.0")));
+            assert_eq!(t.follow_list(&c.deck, &op), [last.clone(), order[0].clone()], "added at the end");
+            c.accept_drop(&mut cx, &format!("follow.{op}.1"), &format!("follow.{op}.0"));
+            assert_eq!(t.follow_list(&c.deck, &op), [order[0].clone(), last.clone()], "a drag reorders");
+        }
+        // a right click on the first entry takes it out
+        c.draw(&mut cx, &mut g, (-500, -500), true);
+        let n = t.follow_list(&c.deck, &op).len();
+        let r = rect_of(&c, &format!("skills.follow.{op}.0"));
+        c.mouse = (r.x + 2, r.y + 2);
+        c.back(&mut cx);
+        assert_eq!(t.follow_list(&c.deck, &op).len(), n - 1);
+        assert!(cx.nav.is_empty(), "the popup stays open");
+        c.act(&mut cx, PAct::FollowAdd(op.clone(), op.clone()));
+        let draft = c.deck.clone();
+        c.act(&mut cx, PAct::ConfirmSkills);
+        assert!(cx.notice.is_empty(), "{:?}", cx.notice);
+        let m = cx.gs().party.member(&member).unwrap().clone();
+        assert_eq!(m.deck, draft);
+        assert!(m.validate(&cx.data).is_empty(), "{:?}", m.validate(&cx.data));
+        c.act(&mut cx, PAct::FollowClear(op.clone()));
+        assert!(!c.deck.follow_ups.contains_key(&op), "Use the order empties the list");
+    }
+
     /// A game on the shipped data in a world that plays under the deck rule (`deck` true) or without it, and its first
     /// member.
     fn deck_cx(deck: bool) -> (Cx, String) {
@@ -2543,8 +2863,18 @@ mod tests {
         let (mut cx, member) = deck_cx(true);
         let mut g = crate::hud::hud_tests::gfx();
         let mut c = Character::new(&cx, &member, "skills");
-        for view in ["owned", "order"] {
-            c.act(&mut cx, PAct::DeckView(view));
+        for view in ["owned", "order", "follow"] {
+            if view == "follow" {
+                // INPUT1 FL3: the follow-up editor open under the first entry of the longest order, a list set
+                let t = c.terms.clone().unwrap();
+                let shown = t.shown(&c.deck);
+                let order = t.intents.iter().map(|i| t.order(&shown, i)).max_by_key(Vec::len).unwrap_or_default();
+                let op = order.first().cloned().expect("an order entry");
+                c.act(&mut cx, PAct::FollowAdd(op.clone(), order.last().cloned().unwrap()));
+                c.act(&mut cx, PAct::FollowOpen(op));
+            } else {
+                c.act(&mut cx, PAct::DeckView(view));
+            }
             for (size, scale) in aegis_ui::screen::TEXT_SIZES {
                 let recs = crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, scale as f32);
                 let boxes: Vec<(String, f32, f32, f32, f32)> = c.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();

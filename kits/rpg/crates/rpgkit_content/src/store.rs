@@ -53,6 +53,29 @@ fn without_empty_expressions(kind: &str, entry: &Dict) -> Dict {
     out
 }
 
+/// INPUT1 FL1: a unit's `deck.follow_ups` stores only its non-empty lists, and not at all when none is left (so a
+/// deck without lists writes as before).
+fn without_empty_follow_ups(kind: &str, entry: &Dict) -> Dict {
+    let mut out = entry.clone();
+    if kind != "units" {
+        return out;
+    }
+    if let Some(Value::Object(deck)) = out.get_mut("deck") {
+        let empty = match deck.get_mut("follow_ups") {
+            None => false,
+            Some(Value::Object(lists)) => {
+                lists.retain(|_, l| !l.as_array().is_some_and(Vec::is_empty));
+                lists.is_empty()
+            }
+            Some(_) => false,
+        };
+        if empty {
+            deck.shift_remove("follow_ups");
+        }
+    }
+    out
+}
+
 /// WorldSchema.to_storage of a raw entry (normalized first; an empty `override` is left out).
 pub fn world_storage(kind: &str, entry: &Dict) -> Dict {
     aegis_content::schema::world_storage(source::schema(), kind, entry)
@@ -202,9 +225,9 @@ fn rewrite(data_dir: &Path, world: Option<&str>, kind: &str, entries: &[Dict]) -
         // PHASEFOLD 1.4: an encounter written before PHASEFOLD is stored with its wave as an arrival phase.
         let e = &source::folded(kind, e);
         stored.push(Value::Object(match (world, game) {
-            (Some(_), _) => world_storage(kind, &without_empty_expressions(kind, e)),
+            (Some(_), _) => world_storage(kind, &without_empty_follow_ups(kind, &without_empty_expressions(kind, e))),
             (None, Some(_)) => game_storage(kind, e),
-            (None, None) => catalog_storage(kind, e, &families)?,
+            (None, None) => catalog_storage(kind, &without_empty_follow_ups(kind, e), &families)?,
         }));
     }
     Ok(file::document(game.map(|g| g.2).unwrap_or(kind), version_of(world, kind), stored))

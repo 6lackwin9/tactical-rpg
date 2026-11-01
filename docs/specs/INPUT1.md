@@ -503,6 +503,35 @@ the order; without the list the fill reads `order.assault`; a Guard family in an
 checks; removing Heavy Cleave from the actives drops its key; a v13 save without `follow_ups` loads and re-saves
 byte-identical; the timeline goldens and feel runs are unchanged by INPUT1-L (no data sets a list).
 
+As built (INPUT1-L, 2026-11-01: kit `rpgkit_data` (`Deck.follow_ups`, `Deck::follow_ups_of`, `Deck::KEYS`),
+`kits/rpg/schema.json` (the unit `deck` help), `rpgkit_content` (`check/unit.rs` `follow_up_errors`, `store.rs`
+`without_empty_follow_ups`), `rpgkit_world/src/state.rs`, `rpgkit_battle/src/round_intent_plan.rs`; game
+`emberwake_gui/src/{party,dojo}.rs`; tests `rpgkit_battle/tests/picks.rs`, `rpgkit_content/tests/timeline_fields.rs`,
+`rpgkit_world/tests/deck.rs`, `party.rs` and `dojo.rs` tests; goldens and parity unchanged):
+
+- FL2: `round_intent_plan::follow_order(w, c, intent, opener)` is the fill's order; `Builder::fill` takes it (the
+  opener search, the Disengage jump and the reserve still read `order`). `build` passes the opener it placed (given, else
+  PL3's; `Builder::opener` now returns it), `build_picks` the first skill pick (an item pick reads the order), and
+  `fill_rest` (MM3) the round's set opener, else the first planned skill of the intent. A list entry counts only while
+  it is in the unit's deck as it fights (its active slots, meter skills or basics; `auto_families`). The reason tag stays
+  "follow-up k", k the place in the list then the order.
+- IF2's re-listed menu after the first pick keeps the hotkey order (HK1) as IF2 says; the lists steer only the fill.
+- FL1: an empty list is dropped where a deck is read (`Deck::from_value`, the save's `deck_from`) and written (the
+  content writer for `units`, catalog and world files; the save's `deck_value`). FL5's words name family ids in quotes
+  ("Follow-ups after 'thrust': 'brace' is Guard, not Assault."); the world's `deck_errors` prefixes the unit as its other
+  deck lines do; a list of the wrong shape is "Deck follow_ups must be an object ..." (content) or
+  "deck.follow_ups must be an object ..." (a refused save).
+- FL3: the toggle is a small ">" button at the right end of each order entry ("v" while open), and a "+" in gold marks an
+  entry with a set list. The open list is a panel across the right pane under its entry's row (later rows of every
+  column move down; nothing is drawn below the pane's end, and the Auto order button hides when it would not fit):
+  "After `<skill>`:" with "Use the `<Intent>` order" at its right, the entries as chips five a line (a last "Drop here"
+  chip, `skills.follow.<family>.end`, takes a drop at the list's end), then "Add:" and the intent's skills not yet
+  listed (click: at the end; drag: at a place). One list is open at a time. The agent state's `deck` and `deck_shown`
+  carry `follow_ups`.
+- The Dojo's Deck window (click only, as its other rows): `dojo.deck.follow.<family>` toggles, the open list's entries
+  (`dojo.deck.follow.<family>.<k>`, a click takes one out), the skills to add (`dojo.deck.follow.add.<family>.<family2>`,
+  a click adds at the end) and `dojo.deck.follow.clear.<family>`; each edit rebuilds the hero.
+
 ## 10. VISCLAR1 slice A: a calmer board (VISCLAR1-A)
 
 Wherever the overlay groups apply (not classic; `Layers`, RULESET1-U slice 5).

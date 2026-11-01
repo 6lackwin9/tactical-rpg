@@ -376,7 +376,59 @@ fn deck_errors(v: &View, e: &Dict) -> Vec<String> {
         }
         Some(_) => errors.push("Deck order must be an object {intent: [skill families]}.".into()),
     }
+    let intent_of = |fam: &str| {
+        let head = v.get("skills", fam);
+        if head.is_empty() { String::new() } else { super::ruleset::intent_of(head) }
+    };
+    follow_up_errors(deck.get("follow_ups"), &active, &basics, &intent_of, &mut errors);
     errors
+}
+
+/// The display form of an intent id ("assault" -> "Assault"; "" -> "no intent").
+fn intent_label(id: &str) -> String {
+    if id.is_empty() { "no intent".into() } else { capitalize(id) }
+}
+
+/// INPUT1 FL1, FL5: a deck's `follow_ups` maps an opener (a family of `active` or the basics whose intent is not
+/// neutral) to families of `active` or the basics with the opener's intent, none twice in a list (the opener may stand
+/// in its own list).
+fn follow_up_errors(raw: Option<&Value>, active: &[String], basics: &[String], intent_of: &dyn Fn(&str) -> String, errors: &mut Vec<String>) {
+    let lists = match raw {
+        None => return,
+        Some(Value::Object(lists)) => lists,
+        Some(_) => {
+            errors.push("Deck follow_ups must be an object {opener family: [skill families]}.".into());
+            return;
+        }
+    };
+    let in_deck = |fam: &str| active.iter().chain(basics).any(|f| f == fam);
+    for (key, fams) in lists {
+        let Some(list) = fams.as_array().filter(|a| a.iter().all(Value::is_string)) else {
+            errors.push(format!("Follow-ups for '{key}' must be a list of skill families."));
+            continue;
+        };
+        let of = intent_of(key);
+        if !in_deck(key) || of.is_empty() || of == ruleset::NEUTRAL {
+            errors.push(format!("Follow-ups for '{key}': not an opener in the deck."));
+            continue;
+        }
+        let mut seen: Vec<String> = Vec::new();
+        for fam in list.iter().map(json::gstr) {
+            if seen.contains(&fam) {
+                errors.push(format!("Follow-ups after '{key}': '{fam}' twice."));
+                continue;
+            }
+            seen.push(fam.clone());
+            if !in_deck(&fam) {
+                errors.push(format!("Follow-ups after '{key}': '{fam}' is not in the deck."));
+                continue;
+            }
+            let has = intent_of(&fam);
+            if has != of {
+                errors.push(format!("Follow-ups after '{key}': '{fam}' is {}, not {}.", intent_label(&has), intent_label(&of)));
+            }
+        }
+    }
 }
 
 /// ContentFactory.families_of: the families of skill ids, always-active ones left out, first-seen order.

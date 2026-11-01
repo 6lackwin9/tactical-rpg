@@ -81,6 +81,12 @@ pub enum DAct {
     OrderUp(String, usize),
     DeckDefault,
     OrderAuto,
+    /// INPUT1 FL3 (the party screen's terms): open or close an opener's follow-up list, add a family at its end, take
+    /// place `k` out (a click), empty it ("Use the <Intent> order").
+    FollowOpen(String),
+    FollowAdd(String, String),
+    FollowRemove(String, usize),
+    FollowClear(String),
 }
 
 /// The planner cache's key: (screen revision, active hero, setup, rules).
@@ -110,6 +116,8 @@ pub struct Dojo {
     plan: Option<PlanCache>,
     /// Counts the screen's actions and drops (the planner cache's key).
     rev: u64,
+    /// INPUT1 FL3: the opener family whose follow-up list is open in the Deck window.
+    follow_open: Option<String>,
     w: Vec<Widget<DAct>>,
 }
 
@@ -175,7 +183,7 @@ impl Dojo {
         ];
         let mut desk = Desk::new(AREA, wins, layouts());
         desk.restore(&cx.settings.v["desks"][SCREEN_ID]);
-        Self { s: DojoSession::new(cx.data.cat.clone()), desk, log_filter: "ALL", stash_filter: "all", picked: None, seen: 0, floats: Vec::new(), plan_piece: "dummy", plan: None, rev: 0, w: Vec::new() }
+        Self { s: DojoSession::new(cx.data.cat.clone()), desk, log_filter: "ALL", stash_filter: "all", picked: None, seen: 0, floats: Vec::new(), plan_piece: "dummy", plan: None, rev: 0, follow_open: None, w: Vec::new() }
     }
 
     /// The active hero's deck terms (None without the deck rule).
@@ -284,6 +292,10 @@ impl Dojo {
                 d.order.clear();
                 Ok(d)
             }),
+            DAct::FollowOpen(op) => self.follow_open = if self.follow_open.as_deref() == Some(op.as_str()) { None } else { Some(op) },
+            DAct::FollowAdd(op, fam) => self.deck_edit(|t, d| t.follow_add(d, &op, &fam, None)),
+            DAct::FollowRemove(op, k) => self.deck_edit(|t, d| t.follow_remove(d, &op, k)),
+            DAct::FollowClear(op) => self.deck_edit(|t, d| t.follow_clear(d, &op)),
             DAct::DummyGuard => s.toggle_dummy_defense(),
             DAct::Bench(n) => s.run_benchmark(n),
             DAct::Switch => s.switch_weapon(),
@@ -788,7 +800,11 @@ impl Dojo {
         };
         let owned: Vec<(&'static str, String)> = DECK_KINDS.iter().flat_map(|k| t.owned(k.0).iter().map(move |id| (k.0, id.clone()))).collect();
         let orders: Vec<(String, Vec<String>)> = t.intents.iter().map(|i| (i.clone(), t.order(&shown, i))).collect();
-        let lines = DECK_KINDS.iter().map(|k| 1 + t.cap(k.0) as i32).sum::<i32>() + 3 + owned.len() as i32 + orders.iter().map(|o| 1 + o.1.len() as i32).sum::<i32>() + 3;
+        // INPUT1 FL3: the open opener's follow-up list (its header, entries, the skills to add, "Use the order")
+        let open = self.follow_open.clone().filter(|op| orders.iter().any(|o| o.1.contains(op)));
+        let (follow, adds) = open.as_ref().map(|op| (t.follow_list(&shown, op), t.follow_candidates(&shown, op))).unwrap_or_default();
+        let follow_lines = if open.is_some() { 3 + follow.len().max(1) as i32 + adds.len() as i32 } else { 0 };
+        let lines = DECK_KINDS.iter().map(|k| 1 + t.cap(k.0) as i32).sum::<i32>() + 3 + owned.len() as i32 + orders.iter().map(|o| 1 + o.1.len() as i32).sum::<i32>() + follow_lines + 3;
         let off = ui.scroll_begin("dojo.deck_scroll", b, lines * 9 + 20);
         let mut y = b.y + 2 - off;
         for (kind, label, takes) in DECK_KINDS {
@@ -831,9 +847,35 @@ impl Dojo {
             ui.p.text(x0 as f32, y as f32, &format!("{name} order"), SMALL, INFO);
             y += 9;
             for (k, f) in list.iter().enumerate() {
-                let n = format!("{}. {}", k + 1, name_of("active", f));
-                ui.row(&format!("dojo.deck.order.{intent}.{k}"), Rect::new(x0, y, b.w - 8, 8), &n, if t.basics.contains(f) { INFO } else { TEXT }, (k > 0).then(|| DAct::OrderUp(intent.clone(), k)), false, tip(&n, "The planner fills the round from the top down: a click moves it one place up."));
+                let set = !t.follow_list(&shown, f).is_empty();
+                let n = format!("{}. {}{}", k + 1, name_of("active", f), if set { " +" } else { "" });
+                ui.row(&format!("dojo.deck.order.{intent}.{k}"), Rect::new(x0, y, b.w - 20, 8), &n, if t.basics.contains(f) { INFO } else { TEXT }, (k > 0).then(|| DAct::OrderUp(intent.clone(), k)), false, tip(&n, "The planner fills the round from the top down: a click moves it one place up."));
+                let is_open = open.as_deref() == Some(f.as_str());
+                let line = format!("After {} the planner tries its follow-up list first, then the {name} order. A click opens it.", name_of("active", f));
+                ui.button_full(&format!("dojo.deck.follow.{f}"), Rect::new(x0 + b.w - 19, y, 11, 8), if is_open { "v" } else { ">" }, DAct::FollowOpen(f.clone()), true, is_open, SMALL, tip("Follow-ups", &line));
                 y += 9;
+                if !is_open {
+                    continue;
+                }
+                let on = name_of("active", f);
+                ui.p.text_fit(x0 as f32 + 4.0, y as f32, &format!("After {on}:"), SMALL, fit - 4.0, GOLD);
+                y += 9;
+                if follow.is_empty() {
+                    ui.p.text_fit(x0 as f32 + 6.0, y as f32, &format!("None set: the {name} order fills"), SMALL, fit - 6.0, DIM);
+                    y += 9;
+                }
+                for (j, g) in follow.iter().enumerate() {
+                    let gn = format!("{}. {}", j + 1, name_of("active", g));
+                    ui.row(&format!("dojo.deck.follow.{f}.{j}"), Rect::new(x0 + 4, y, b.w - 12, 8), &gn, TEXT, Some(DAct::FollowRemove(f.clone(), j)), false, tip(&gn, "A follow-up: a click takes it out of the list."));
+                    y += 9;
+                }
+                for g in &adds {
+                    let gn = format!("+ {}", name_of("active", g));
+                    ui.row(&format!("dojo.deck.follow.add.{f}.{g}"), Rect::new(x0 + 4, y, b.w - 12, 8), &gn, INFO, Some(DAct::FollowAdd(f.clone(), g.clone())), false, tip(&gn, &format!("A click adds it at the end of the follow-ups after {on}.")));
+                    y += 9;
+                }
+                ui.button_full(&format!("dojo.deck.follow.clear.{f}"), Rect::new(x0 + 4, y, 90, 8), &format!("Use the {name} order"), DAct::FollowClear(f.clone()), !follow.is_empty(), false, SMALL, tip("Use the order", &format!("Empties the list: after {on} the planner fills from the {name} order.")));
+                y += 10;
             }
         }
         y += 2;
@@ -1076,6 +1118,34 @@ impl Screen<GameCx> for Dojo {
 mod tests {
     use super::*;
     use std::sync::Arc;
+
+    /// INPUT1 FL3 (the Dojo's mirror of the party screen's terms): an order entry's toggle opens its follow-up list; a
+    /// click adds a skill of the intent (the hero is rebuilt with the list), a click on an entry takes it out, "Use the
+    /// order" empties it.
+    #[test]
+    fn the_deck_window_edits_follow_up_lists_and_rebuilds_the_hero() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut dojo = Dojo::new(&cx);
+        dojo.act(&mut cx, DAct::Ruleset);
+        let t = dojo.deck_terms().expect("the timeline row has the deck rule");
+        let shown = t.shown(&dojo.s.deck_of(dojo.s.active));
+        let order = t.intents.iter().map(|i| t.order(&shown, i)).max_by_key(Vec::len).unwrap_or_default();
+        let op = order.first().cloned().expect("an order entry");
+        let mut g = crate::hud::hud_tests::gfx();
+        dojo.draw(&mut cx, &mut g, (-500, -500), true);
+        assert!(dojo.w.iter().any(|w| w.id == format!("dojo.deck.follow.{op}")), "the entry's toggle");
+        dojo.act(&mut cx, DAct::FollowOpen(op.clone()));
+        dojo.draw(&mut cx, &mut g, (-500, -500), true);
+        let add = format!("dojo.deck.follow.add.{op}.{}", order.last().unwrap());
+        assert!(dojo.w.iter().any(|w| w.id == add) && dojo.w.iter().any(|w| w.id == format!("dojo.deck.follow.clear.{op}")), "the open list");
+        dojo.act(&mut cx, DAct::FollowAdd(op.clone(), order.last().unwrap().clone()));
+        assert_eq!(dojo.s.hero().deck.follow_ups.get(&op), Some(&vec![order.last().unwrap().clone()]), "the hero fights with the list");
+        dojo.act(&mut cx, DAct::FollowAdd(op.clone(), op.clone()));
+        dojo.act(&mut cx, DAct::FollowRemove(op.clone(), 0));
+        assert_eq!(dojo.s.deck_of(dojo.s.active).follow_ups.get(&op), Some(&vec![op.clone()]));
+        dojo.act(&mut cx, DAct::FollowClear(op.clone()));
+        assert!(!dojo.s.hero().deck.follow_ups.contains_key(&op), "Use the order empties it");
+    }
 
     /// DERIVE1 4.4: the Derived Stats window lists the catalog rows shown on the Dojo after the built-in numbers, each
     /// hovering to its formula and breakdown; a row for other screens only, or no row, adds nothing.
