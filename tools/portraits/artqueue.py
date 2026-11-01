@@ -21,7 +21,14 @@
 #       counts per folder, failed errors, and the quota pause (ARTQUEUE2): Antigravity writes paused.json
 #       {"paused_until": "<ISO UTC>", "reason", "request"} on HTTP 429 and puts the request back in queue/;
 #       request still queues during a pause (and says so)
-# --pipeline <dir> (any command) or IMAGE_PIPELINE picks another queue folder (tests, a scratch run).
+#   python artqueue.py attach
+#       the refs/ file names to attach by hand in the Gemini web-app task, for the requests in queue/ (unique, sorted;
+#       requests whose reference is a session reference, --record session_ref=<request name>, are left out)
+# The default queue folder is the Drive folder of artqueue.json ("pipeline"; ARTQUEUE5, the Gemini web app is the
+# primary route), or AEGIS_IMAGE_PIPELINE (IMAGE_PIPELINE too); it must exist. --backup picks the Antigravity folder
+# (.image_pipeline of the main checkout); --pipeline <dir> any other folder (tests, a scratch run; created on use).
+# request and text copy every reference into <queue>/refs/ (a different file of the same name gets a suffix) and list
+# the copies in the request's references; the original paths go to metadata.record.source_refs.
 import argparse
 import datetime
 import json
@@ -66,8 +73,35 @@ def main_checkout():
         return G.ROOT
 
 
-def pipeline(override=None):
-    return pathlib.Path(override or os.environ.get("IMAGE_PIPELINE") or main_checkout() / ".image_pipeline")
+CONFIG = pathlib.Path(__file__).resolve().parent / "artqueue.json"   # {"pipeline": "<Drive folder>"}
+REFS = "refs"                    # the references of the requests, copied beside the queue so the web app can attach them
+SESSION_REF = "session_ref"      # record key: the reference is an image of the web-app session, nothing to attach
+
+
+def pipeline(override=None, backup=False, config=None):
+    """The queue folder: --pipeline, else the Antigravity backup (--backup), else AEGIS_IMAGE_PIPELINE / IMAGE_PIPELINE,
+    else artqueue.json's `pipeline` (the Drive folder). The configured one must exist (no silent fallback)."""
+    if override:
+        return pathlib.Path(override)
+    if backup:
+        return main_checkout() / ".image_pipeline"
+    env = os.environ.get("AEGIS_IMAGE_PIPELINE") or os.environ.get("IMAGE_PIPELINE")
+    where, src = env, "AEGIS_IMAGE_PIPELINE"
+    if not where:
+        cfg = pathlib.Path(config or CONFIG)
+        try:
+            where = json.loads(cfg.read_text(encoding="utf-8")).get("pipeline")
+        except (OSError, ValueError, AttributeError):
+            where = None
+        src = cfg.name
+    if not where:
+        raise SystemExit(f"no image pipeline folder: set \"pipeline\" in {CONFIG}, or AEGIS_IMAGE_PIPELINE, or pass "
+                         f"--pipeline / --backup")
+    path = pathlib.Path(where)
+    if not path.is_dir():
+        raise SystemExit(f"the image pipeline folder {path} (from {src}) does not exist: is the Drive mounted? "
+                         f"(--backup uses the Antigravity folder, --pipeline any other)")
+    return path
 
 
 def ensure(pipe):
@@ -115,6 +149,8 @@ def enqueue(pipe, name, req, dry=False):
         if not pathlib.Path(r).is_file():
             raise FileNotFoundError(f"no reference image {r}")
     path = pipe / "queue" / f"{name}.json"
+    if req["references"]:
+        req["metadata"]["record"]["source_refs"] = list(req["references"])
     if dry:
         print(f"{name}: would queue {G.rel(path)}: prompt {len(req['prompt'])} chars, n {req['n']}, "
               f"aspect {req['aspect_ratio']}, route {req['metadata']['route']}, references "
@@ -123,9 +159,39 @@ def enqueue(pipe, name, req, dry=False):
     ensure(pipe)
     if taken(pipe, name):
         raise FileExistsError(f"request {name} exists")
+    req["references"] = [store_ref(pipe, r) for r in req["references"]]
     write_json(path, req)
     print(f"{name}: queued, n {req['n']}, {len(req['references'])} reference(s)")
     return path
+
+
+def store_ref(pipe, ref):
+    """Copies a reference into <pipe>/refs/ and returns the stored path. The same file again is reused; a different
+    file of the same name is stored as <stem>_2, _3, ... (the stored name is what the request lists)."""
+    src = pathlib.Path(ref)
+    dest_dir = pipe / REFS
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest, k = dest_dir / src.name, 1
+    while dest.exists() and dest.read_bytes() != src.read_bytes():
+        k += 1
+        dest = dest_dir / f"{src.stem}_{k}{src.suffix}"
+    if not dest.exists():
+        shutil.copyfile(src, dest)
+    return dest.resolve().as_posix()
+
+
+def to_attach(pipe):
+    """The refs/ file names the queued requests need attached by hand: unique, sorted, session references left out."""
+    names = set()
+    for p in sorted((pipe / "queue").glob("*.json")) if (pipe / "queue").is_dir() else []:
+        try:
+            req = json.loads(p.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        if (req.get("metadata") or {}).get("record", {}).get(SESSION_REF):
+            continue
+        names.update(re.split(r"[\/]", r)[-1] for r in req.get("references") or [])
+    return sorted(names)
 
 
 # ---- ingest ----
@@ -411,7 +477,8 @@ def common(p):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="The Antigravity image queue (ARTQUEUE1).")
-    ap.add_argument("--pipeline", help="the queue folder (default: .image_pipeline of the main checkout)")
+    ap.add_argument("--pipeline", help="the queue folder (default: artqueue.json's Drive folder)")
+    ap.add_argument("--backup", action="store_true", help="the Antigravity folder (.image_pipeline of the main checkout)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("request"); r.add_argument("ids", nargs="+"); common(r)
     r.add_argument("--prompts"); r.add_argument("--file", choices=("icons",)); r.add_argument("--faces",
@@ -421,9 +488,14 @@ def main(argv=None):
     t.add_argument("--text"); t.add_argument("--text-file"); t.add_argument("--id")
     i = sub.add_parser("ingest"); i.add_argument("names", nargs="*"); i.add_argument("--dry-run", action="store_true")
     sub.add_parser("status")
+    sub.add_parser("attach")
     ar = sub.add_parser("archive"); ar.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
-    pipe = pipeline(a.pipeline)
+    pipe = pipeline(a.pipeline, a.backup)
+    if a.cmd == "attach":
+        names = to_attach(pipe)
+        print(chr(10).join(names) if names else "nothing to attach")
+        return 0
     if a.cmd == "status":
         s = status(pipe)
         print(f"{G.rel(pipe)}: " + ", ".join(f"{k} {v}" for k, v in s.items()))

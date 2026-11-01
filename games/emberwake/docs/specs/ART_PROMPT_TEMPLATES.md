@@ -168,7 +168,18 @@ Decision "Antigravity image queue" (user 2026-11-01): a Gemini image run can go 
 instead of the image API. This side writes request files and ingests the results with `tools/portraits/artqueue.py`
 (never an API call, never a key); Antigravity makes the images. The contract extends the Antigravity-side spec
 (`image_pipeline_spec.md`, updated by the user 2026-11-01 to match it).
-Folder: `.image_pipeline/` in the main checkout `C:/dev/tactical-rpg` (the same absolute path from every worktree; Git
+Primary route (ARTQUEUE5, decision "Gemini web app as the primary image route"): the queue is the Drive folder
+`G:/My Drive/image_pipeline` (same layout and contract as below, plus `refs/`), processed by a Gemini web-app task;
+the default of every command comes from `tools/portraits/artqueue.json` (`pipeline`) or the environment variable
+`AEGIS_IMAGE_PIPELINE`, and a folder that does not exist stops the command with a message (no fallback).
+`request` and `text` copy each reference into `refs/<file name>` (a different file of the same name is stored as
+`<stem>_2.png`, `_3`; the same file is reused) and the request's `references` list those copies; the original paths
+are in `metadata.record.source_refs`. In the web app the user attaches the references by hand: `artqueue.py attach`
+prints the `refs/` file names the requests in `queue/` need (unique, sorted). A request whose reference is an image of
+the web-app session itself is made with `--record session_ref=<request name>` and is left out of `attach`. Records
+are plain JSON (`.json` beside each image). The Antigravity folder below is the unattended backup, chosen with
+`--backup`.
+Backup folder: `.image_pipeline/` in the main checkout `C:/dev/tactical-rpg` (the same absolute path from every worktree; Git
 ignores it), with `queue/`, `processing/`, `output/`, `completed/` and `failed/`. The ingest adds `rejected/` (refused
 images, each with a `.note.txt`) and `pixelized/` (game portraits of portrait requests without a target).
 Request `queue/<name>.json`, written as `queue/<name>.json.tmp` and then renamed, so a scan never reads half a file.
@@ -234,5 +245,7 @@ Commands (from `tools/portraits`, with `$LOCALAPPDATA/Programs/Python/Python312/
   this file, filled in
 - `artqueue.py ingest [<name>...] [--dry-run]`: every finished request, or the names given
 - `artqueue.py status`: counts per folder and the failed requests' errors
-- `--pipeline <dir>` (or `IMAGE_PIPELINE`) points any command at another queue folder (tests, a scratch run)
+- `artqueue.py attach`: the `refs/` names to attach by hand for the queued requests (or "nothing to attach")
+- `--pipeline <dir>` points any command at another queue folder (tests, a scratch run); `--backup` at the Antigravity
+  folder; `AEGIS_IMAGE_PIPELINE` (or `IMAGE_PIPELINE`) replaces the configured default
 Each Antigravity run is an image run like any other: the image rules still apply (ask first where they say so).

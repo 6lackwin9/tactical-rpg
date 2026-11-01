@@ -101,14 +101,15 @@ class Requests(Base):
         req = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(req["prompt"], G.prompts(self.md, True)["tess"])
         self.assertNotIn("reference:", req["prompt"])
-        self.assertEqual(req["references"], [self.ref.resolve().as_posix(), self.extra_ref.resolve().as_posix()])
+        refs = (self.pipe / "refs").resolve()
+        self.assertEqual(req["references"], [(refs / self.ref.name).as_posix(), (refs / self.extra_ref.name).as_posix()])
         self.assertTrue(all(pathlib.Path(r).is_absolute() for r in req["references"]))
         self.assertEqual((req["n"], req["aspect_ratio"], req["style_hints"]), (2, "1:1", ""))
         meta = req["metadata"]
         self.assertEqual((meta["asset_id"], meta["route"], meta["task"]), ("tess", "faces", "PORTRAITFX1-XA"))
         self.assertEqual(meta["record"]["kind"], "faces")
         self.assertEqual(meta["record"]["faction"], "castellan")
-        self.assertEqual(sorted(p.name for p in self.pipe.iterdir()), sorted(Q.FOLDERS))
+        self.assertEqual(sorted(p.name for p in self.pipe.iterdir()), sorted([*Q.FOLDERS, Q.REFS]))
 
     def test_faces_without_reference_line_is_skipped(self):
         out = self.run_cli("request", "bram", "--faces", "--prompts", str(self.md))
@@ -150,12 +151,83 @@ class Requests(Base):
         with self.assertRaises(ValueError):
             Q.build_request("  ", "a")
 
-    def test_default_pipeline_is_the_main_checkout(self):
-        old = os.environ.pop("IMAGE_PIPELINE", None)
-        self.addCleanup(lambda: old is not None and os.environ.__setitem__("IMAGE_PIPELINE", old))
-        pipe = Q.pipeline()
-        self.assertEqual(pipe.name, ".image_pipeline")
-        self.assertTrue((pipe.parent / ".git").is_dir())   # the main checkout, not a worktree (.git is a file there)
+    def clean_env(self):
+        for k in ("AEGIS_IMAGE_PIPELINE", "IMAGE_PIPELINE"):
+            old = os.environ.pop(k, None)
+            self.addCleanup(lambda k=k, old=old: old is not None and os.environ.__setitem__(k, old))
+
+    def test_default_pipeline_from_config_env_and_override(self):
+        self.clean_env()
+        drive = self.tmp / "drive"; drive.mkdir()
+        cfg = self.tmp / "cfg.json"; cfg.write_text(json.dumps({"pipeline": drive.as_posix()}), encoding="utf-8")
+        self.assertEqual(Q.pipeline(config=cfg), drive)
+        env_dir = self.tmp / "envdir"; env_dir.mkdir()
+        os.environ["AEGIS_IMAGE_PIPELINE"] = str(env_dir)
+        self.assertEqual(Q.pipeline(config=cfg), env_dir)
+        other = self.tmp / "other"
+        self.assertEqual(Q.pipeline(str(other), config=cfg), other)       # --pipeline wins, need not exist yet
+        backup = Q.pipeline(backup=True)
+        self.assertEqual(backup.name, ".image_pipeline")
+        self.assertTrue((backup.parent / ".git").is_dir())   # the main checkout, not a worktree (.git is a file there)
+
+    def test_missing_default_folder_fails_clearly(self):
+        self.clean_env()
+        cfg = self.tmp / "cfg.json"
+        cfg.write_text(json.dumps({"pipeline": (self.tmp / "no_drive").as_posix()}), encoding="utf-8")
+        with self.assertRaises(SystemExit) as cm:
+            Q.pipeline(config=cfg)
+        self.assertIn("does not exist", str(cm.exception))
+        self.assertIn("no_drive", str(cm.exception))
+        with self.assertRaises(SystemExit) as cm:
+            Q.pipeline(config=self.tmp / "absent.json")
+        self.assertIn("no image pipeline folder", str(cm.exception))
+
+    def test_shipped_config_names_a_pipeline(self):
+        self.assertTrue(json.loads(Q.CONFIG.read_text(encoding="utf-8"))["pipeline"])
+
+
+class Refs(Base):
+    def req_of(self, path):
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def test_refs_copied_and_listed(self):
+        self.run_cli("text", "a", "--text", "x", "--ref", str(self.ref), "--ref", str(self.extra_ref))
+        [path] = self.queued()
+        req = self.req_of(path)
+        self.assertEqual([pathlib.Path(r).parent for r in req["references"]], [(self.pipe / "refs").resolve()] * 2)
+        self.assertEqual([pathlib.Path(r).name for r in req["references"]], [self.ref.name, self.extra_ref.name])
+        for r in req["references"]:
+            self.assertTrue(pathlib.Path(r).is_file())
+        self.assertEqual(req["metadata"]["record"]["source_refs"],
+                         [self.ref.resolve().as_posix(), self.extra_ref.resolve().as_posix()])
+
+    def test_same_name_different_file_gets_a_suffix(self):
+        other_dir = self.tmp / "o"; other_dir.mkdir()
+        clash = other_dir / self.ref.name
+        portrait_png(clash, size=(1024, 1024), mark=True)       # same name, different bytes
+        self.run_cli("text", "a", "--text", "x", "--ref", str(self.ref))
+        self.run_cli("text", "b", "--text", "x", "--ref", str(clash))
+        self.run_cli("text", "c", "--text", "x", "--ref", str(self.ref))   # the same file again: reused
+        names = [pathlib.Path(self.req_of(p)["references"][0]).name for p in self.queued()]
+        self.assertEqual(sorted(names), sorted([self.ref.name, f"{self.ref.stem}_2.png", self.ref.name]))
+        self.assertEqual(len(list((self.pipe / "refs").glob("*.png"))), 2)
+
+    def test_dry_run_copies_nothing(self):
+        self.run_cli("text", "a", "--text", "x", "--ref", str(self.ref), "--dry-run")
+        self.assertFalse((self.pipe / "refs").exists())
+
+    def test_attach_lists_unique_sorted_without_session_refs(self):
+        self.run_cli("text", "a", "--text", "x", "--ref", str(self.extra_ref), "--ref", str(self.ref))
+        self.run_cli("text", "b", "--text", "x", "--ref", str(self.ref))
+        sess = self.tmp / "sess.png"; portrait_png(sess, mark=False)
+        self.run_cli("text", "s", "--text", "x", "--ref", str(sess), "--record", "session_ref=a_q1")
+        out = self.run_cli("attach").split()
+        self.assertEqual(out, sorted([self.ref.name, self.extra_ref.name]))
+        self.assertNotIn("sess.png", out)
+
+    def test_attach_nothing(self):
+        self.run_cli("text", "a", "--text", "x")
+        self.assertIn("nothing to attach", self.run_cli("attach"))
 
 
 class Ingest(Base):
@@ -182,8 +254,8 @@ class Ingest(Base):
         self.assertEqual(rec["request"], name)
         self.assertEqual(rec["n"], 1)
         self.assertEqual(rec["time"], "2026-11-02T10:00:00+00:00")
-        self.assertEqual(rec["references"], [G.rel(self.extra_ref)])
-        self.assertEqual(rec["reference"], G.rel(self.extra_ref))
+        self.assertEqual(rec["references"], [G.rel(self.pipe / "refs" / self.extra_ref.name)])
+        self.assertEqual(rec["reference"], G.rel(self.pipe / "refs" / self.extra_ref.name))
         self.assertEqual(rec["metadata"], req["metadata"])
         self.assertEqual(rec["faction"], "castellan")
         self.assertTrue(rec["mark_cleared"])
@@ -217,7 +289,7 @@ class Ingest(Base):
             rec = json.loads(art.with_suffix(".json").read_text(encoding="utf-8"))
             self.assertEqual((rec["kind"], rec["n"]), ("faces", k))
             self.assertEqual(rec["prompts_file"], G.rel(self.md))
-            self.assertEqual(rec["reference"], G.rel(self.ref))
+            self.assertEqual(rec["reference"], G.rel(self.pipe / "refs" / self.ref.name))
         self.assertFalse((self.pipe / Q.PIXELIZED).exists())   # faces are cut by sheets.py, not pixelized
 
     def test_bad_images_moved_aside(self):
