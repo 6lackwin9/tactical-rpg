@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Fast check for the Aegis engine (transition step 2, 2026-10-19): compact, failure-first output. Usage:
-#   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, every test, the layer check
+#   tools/fc.sh gate [auto]      the commit gate, same steps as check_project.ps1 -Fast -Quiet: build every crate, every test, the layer check,
+#                                docs --all, tooltests
 #                                (`auto` is accepted and runs everything)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
 #                                kit src, schema.json and kit.json name no lore word (world ids, games/<id>/lore_words.txt)
 #   tools/fc.sh build            cargo build --workspace --all-targets (a compiler warning fails it)
 #   tools/fc.sh test [filter]    cargo test --workspace, optional test-name filter
 #   tools/fc.sh clippy           cargo clippy --workspace --all-targets (advisory: warnings do not fail)
-#   tools/fc.sh docs             warn when an agent-facing doc passes 300 lines / 25 KB; markdown lint
+#   tools/fc.sh docs [--all]     warn when an agent-facing doc passes 300 lines / 25 KB; markdown lint. Files changed against the merge base
+#                                with origin/develop, staged or untracked; --all (the gate and the flush): every file
+#   tools/fc.sh tooltests        the tools/tiles tests, time limit FC_TOOLTESTS_LIMIT (180 s); a visible SKIP when no Python has Pillow
 #   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest (aegis content)
 #   tools/fc.sh sim <args>       balance sim (aegis sim <mode> [level] [seeds] [key=value ...]; sim help: the keys)
 #   tools/fc.sh replay <file> [...] replay a playtest recording (aegis replay: battle=, until=, json, variant=, write=, seeds=, fallback=)
@@ -55,20 +58,84 @@ build() {  # every target (tests included); a compiler warning fails it (cargo r
   fi
 }
 
-docs_check() {  # warn when an agent-facing doc grows past ~300 lines or ~25 KB (split by domain behind an index)
-  local f lines bytes warned=0
+docs_check() {  # warn when an agent-facing doc grows past ~300 lines or ~25 KB (split by domain behind an index); markdown lint.
+  # Every check looks at one file at a time. $1 = --all: every file. Else only *.md changed against the merge base with
+  # origin/develop, staged or untracked (no origin/develop: every file). One wc and one awk for all files: a wc per file
+  # forked 2-3 processes per file and was nearly all of the 80 s (2026-11-02, docs/EFFICIENCY.md).
+  local all=$1 f base lines bytes warned=0 sized=() md=() total=0 out
+  local -A changed=()
+  if [ "$all" != "--all" ]; then
+    if base=$(git merge-base HEAD origin/develop 2>/dev/null); then
+      while IFS= read -r -d '' f; do changed[$f]=1; done < <(git diff --name-only -z "$base" -- '*.md'; git diff --cached --name-only -z -- '*.md'; git ls-files --others --exclude-standard -z -- '*.md')
+    else
+      echo "[docs] no origin/develop to compare with: checking every file"; all=--all
+    fi
+  fi
   for f in CLAUDE.md docs/*.md docs/workflow/*.md docs/specs/*.md games/*/docs/*.md games/*/docs/specs/*.md games/*/docs/lore/*.md games/*/docs/lore/*/*.md; do
     [ -f "$f" ] || continue
     case "$f" in */lore/archive/*) continue ;; esac  # archived exports keep their size
-    lines=$(wc -l < "$f"); bytes=$(wc -c < "$f")
-    if [ "$lines" -gt 300 ] || [ "$bytes" -gt 25000 ]; then echo "[docs] WARN $f is $lines lines / $bytes bytes: split by domain behind an index"; warned=1; fi
+    if [ "$all" = "--all" ] || [ -n "${changed[$f]:-}" ]; then sized+=("$f"); fi
   done
+  if [ ${#sized[@]} -gt 0 ]; then
+    while read -r lines bytes f; do
+      [ "$f" = "total" ] && continue
+      if [ "$lines" -gt 300 ] || [ "$bytes" -gt 25000 ]; then echo "[docs] WARN $f is $lines lines / $bytes bytes: split by domain behind an index"; warned=1; fi
+    done < <(wc -lc "${sized[@]}")
+  fi
   [ $warned -eq 0 ] && echo "[docs] agent-facing docs within size limits (<=300 lines, <=25 KB)"
   # markdownlint subset (MD012/MD022/MD032/MD033) so lint warnings show up before the IDE panel does
-  local md=() out
   for f in CLAUDE.md README.md PATCH_NOTES.md docs/*.md docs/workflow/*.md docs/specs/*.md docs/decisions/*.md games/*/docs/*.md games/*/docs/*/*.md games/*/docs/lore/*/*.md games/*/data/*/README.md \
-    .claude/agents/*.md .claude/skills/*/SKILL.md engine/README.md engine/docs/*.md engine/docs/*/*.md kits/*/README.md kits/*/crates/*/README.md legacy/LEGACY.md; do [ -f "$f" ] && md+=("$f"); done
+    .claude/agents/*.md .claude/skills/*/SKILL.md engine/README.md engine/docs/*.md engine/docs/*/*.md kits/*/README.md kits/*/crates/*/README.md legacy/LEGACY.md; do
+    [ -f "$f" ] || continue
+    total=$((total + 1))
+    if [ "$all" = "--all" ] || [ -n "${changed[$f]:-}" ]; then md+=("$f"); fi
+  done
+  [ "$all" = "--all" ] || echo "[docs] changed files only: ${#md[@]} of $total (tools/fc.sh docs --all checks every file)"
+  if [ ${#md[@]} -eq 0 ]; then echo "[docs] markdown lint clean (0 files)"; return 0; fi  # awk with no file would read stdin
   if out=$(awk -f tools/md_lint.awk "${md[@]}"); then echo "[docs] markdown lint clean (${#md[@]} files)"; else echo "$out" | head -20; echo "[docs] FAIL markdown lint: $(echo "$out" | wc -l) issue(s)"; return 1; fi
+}
+
+tools_python() {  # prints a Python that imports Pillow, or nothing; the WindowsApps `python` aliases are stubs, never probed
+  local c p
+  for c in "${LOCALAPPDATA//\//}"/Programs/Python/Python3*/python.exe python3 python py; do
+    p=$(command -v "$c") || continue
+    case "$p" in *WindowsApps*) continue ;; esac
+    if "$p" -c "import PIL" >/dev/null 2>&1; then echo "$p"; return 0; fi
+  done
+  return 1
+}
+
+kill_tree() {  # $1 = a background job started by tooltests. Windows: taskkill /T /F ends the native process and every descendant
+  # (a shell `kill` would end one process and leave its children); elsewhere the job leads its own process group (setsid).
+  if [ -r "/proc/$1/winpid" ]; then taskkill //T //F //PID "$(cat "/proc/$1/winpid")" >/dev/null 2>&1; else kill -KILL -- "-$1" 2>/dev/null; fi
+  kill -KILL "$1" 2>/dev/null
+}
+
+tooltests() {  # the tools/tiles tests, with a time limit (FC_TOOLTESTS_LIMIT seconds); no Python with Pillow: a visible SKIP, not a failure
+  local py limit=${FC_TOOLTESTS_LIMIT:-180} log pid code start=$SECONDS run=()
+  if ! py=$(tools_python); then echo "[tooltests] SKIP: no Python with Pillow found, tools/tiles tests did not run"; return 0; fi
+  log=$(mktemp)
+  [ -r "/proc/$$/winpid" ] || run=(setsid)
+  (cd tools/tiles && exec "${run[@]}" "$py" -m unittest test_tiles) > "$log" 2>&1 &
+  pid=$!
+  # shellcheck disable=SC2064  # the pid is known now
+  trap "kill_tree $pid; rm -f '$log'; exit 130" INT TERM
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ $((SECONDS - start)) -ge "$limit" ]; then
+      kill_tree "$pid"; wait "$pid" 2>/dev/null; trap - INT TERM
+      tail -n 20 "$log"; rm -f "$log"
+      echo "[tooltests] FAIL: tools/tiles tests hung: time limit of $limit s reached, process tree killed"; status=1
+      return
+    fi
+    sleep 0.2
+  done
+  wait "$pid"; code=$?; trap - INT TERM
+  if [ $code -eq 0 ]; then
+    echo "[tooltests] ok: $(grep -E '^Ran [0-9]+ test' "$log") (tools/tiles)"
+  else
+    tail -n 40 "$log"; echo "[tooltests] FAIL: tools/tiles tests, exit code $code"; status=1
+  fi
+  rm -f "$log"
 }
 
 layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crates name no game and have no path into games/
@@ -128,6 +195,13 @@ gate() {
   build; [ $status -ne 0 ] && return
   cargo_test; [ $status -ne 0 ] && return
   layers_check; [ $status -ne 0 ] && return
+  # the whole docs check; the size warnings, which are many, as one count (tools/fc.sh docs --all lists them)
+  local out
+  out=$(docs_check --all) || status=1
+  echo "$out" | grep -v '^\[docs\] WARN'
+  [ "$(echo "$out" | grep -c '^\[docs\] WARN')" -eq 0 ] || echo "[docs] $(echo "$out" | grep -c '^\[docs\] WARN') size warning(s)"
+  [ $status -ne 0 ] && return
+  tooltests; [ $status -ne 0 ] && return
   echo "[gate] ALL CHECKS PASSED"
 }
 
@@ -140,13 +214,18 @@ case "$1" in
   build) build ;;
   test) cargo_test "${@:2}" ;;
   clippy) cargo clippy --workspace --all-targets 2>&1 | grep -E "^(warning|error)" -A4 | head -80 ;;
-  docs) docs_check || status=1 ;;
+  docs)
+    case "${2:-}" in
+      ""|--all) docs_check "${2:-}" || status=1 ;;
+      *) echo "usage: tools/fc.sh docs [--all]"; status=1 ;;
+    esac ;;
+  tooltests) tooltests ;;
   layers) layers_check ;;
   content) aegis content "${@:2}" || status=1 ;;
   sim) aegis sim "${@:2}" || status=1 ;;
   replay) aegis replay "${@:2}" || status=1 ;;
   parse|parse-all|arena|dojo|run|safe_delete|export_placeholder|gen_sfx|systems|all)
     echo "'$1' is a Godot command: the Godot build is frozen in legacy/ (see legacy/LEGACY.md; legacy/tools/fc.sh, or the legacy branch)."; status=1 ;;
-  *) sed -n '2,13p' "$0"; status=1 ;;
+  *) sed -n '2,16p' "$0"; status=1 ;;
 esac
 exit $status

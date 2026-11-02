@@ -1,7 +1,7 @@
 # ==============================================================================
 # Tactical RPG - commit gate on the Aegis engine (transition step 2, 2026-10-19)
 # Builds every crate and target (a compiler warning fails), then runs every test: the rules, battle, world, data-loader and content-writer
-# suites and the engine goldens, then the layer check (engine and kit crates name no game, KIT1-G; kit code names no lore word, TERMS1 G3). Same steps as `tools/fc.sh gate`. The Godot gate of the frozen Godot copy is legacy/check_project.ps1.
+# suites and the engine goldens, then the layer check (engine and kit crates name no game, KIT1-G; kit code names no lore word, TERMS1 G3), the whole docs check and the tools/tiles tests (both run by tools/fc.sh, so one copy of each). Same steps as `tools/fc.sh gate`. The Godot gate of the frozen Godot copy is legacy/check_project.ps1.
 # ==============================================================================
 param (
     [switch]$VerboseOutput,   # print the full cargo output
@@ -28,9 +28,27 @@ function Invoke-Cargo([string[]]$CargoArgs) {
     return @{ Code = $LASTEXITCODE; Lines = @($out) }
 }
 
+# The bash that comes with git (tools/fc.sh steps): bin/bash.exe sets up its own PATH; a `bash` on PATH may be the WSL one.
+function Find-Bash {
+    $gitRoot = Split-Path (Split-Path (Split-Path (& git --exec-path)))
+    foreach ($c in @("bin/bash.exe", "usr/bin/bash.exe", "bin/bash")) {
+        $p = Join-Path $gitRoot $c
+        if (Test-Path $p -PathType Leaf) { return $p }
+    }
+    $onPath = Get-Command bash -ErrorAction SilentlyContinue | Where-Object { $_.Source -notmatch 'System32' } | Select-Object -First 1
+    if ($onPath) { return $onPath.Source }
+    return $null
+}
+
+function Invoke-Fc([string[]]$FcArgs) {
+    $global:LASTEXITCODE = 1   # a bash that did not start must not read as the last command's success
+    $out = & $script:bash tools/fc.sh @FcArgs 2>&1
+    return @{ Code = $global:LASTEXITCODE; Lines = @($out | ForEach-Object { "$_" }) }
+}
+
 Write-Host "=== AEGIS: COMMIT GATE ===" -ForegroundColor Cyan
 
-Write-Host "[1/3] Building every crate..."
+Write-Host "[1/5] Building every crate..."
 # Every target (tests included); a compiler warning fails the gate like an error (cargo replays cached warnings, CI1).
 $build = Invoke-Cargo @("build", "--workspace", "--all-targets")
 if ($VerboseOutput) { $build.Lines | ForEach-Object { Write-Host $_ } }
@@ -42,7 +60,7 @@ if ($build.Code -ne 0 -or $warned) {
 }
 if (-not $Quiet) { Write-Host "  -> build ok" -ForegroundColor Green }
 
-Write-Host "[2/3] Running every test..."
+Write-Host "[2/5] Running every test..."
 # Windows Smart App Control sometimes blocks a freshly linked test binary (os error 4551): delete it and retry.
 $test = $null
 for ($try = 1; $try -le 4; $try++) {
@@ -62,7 +80,7 @@ if ($failed) {
 }
 if (-not $Quiet) { $summary | ForEach-Object { Write-Host "  $_" } }
 
-Write-Host "[3/3] Checking the layers..."
+Write-Host "[3/5] Checking the layers..."
 # KIT1-G (docs/specs/KIT1_TASKS.md 4), same check as `tools/fc.sh layers`: the engine and kit crates name no game (every
 # folder under games/, whole word with `_` as a separator, any case; tracked or new files) and no engine or kit manifest
 # has a path dependency into games/ (an engine manifest none into kits/ either).
@@ -127,6 +145,38 @@ if ($layerHits.Count -gt 0) {
     exit 1
 }
 if (-not $Quiet) { Write-Host "  -> layers ok: engine and kit crates name no game ($($gameIds -join ', ')); kit code names no lore word" -ForegroundColor Green }
+
+$script:bash = Find-Bash
+if (-not $script:bash) {
+    Write-Host "=== [FAILED] no bash found next to git: the docs check and the tool tests need it ===" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "[4/5] Checking every doc..."
+# Same check as `tools/fc.sh docs --all`; the size warnings as one count unless -VerboseOutput.
+$docs = Invoke-Fc @("docs", "--all")
+$docWarnings = @($docs.Lines | Where-Object { $_ -match '^\[docs\] WARN' })
+if ($VerboseOutput) { $docWarnings | ForEach-Object { Write-Host $_ } }
+if ($docs.Code -ne 0) {
+    $docs.Lines | Where-Object { $_ -notmatch '^\[docs\] WARN' } | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    Write-Host "=== [FAILED] docs ===" -ForegroundColor Red
+    exit 1
+}
+if (-not $Quiet) {
+    $docs.Lines | Where-Object { $_ -notmatch '^\[docs\] WARN' } | ForEach-Object { Write-Host "  $_" }
+    if ($docWarnings.Count -gt 0) { Write-Host "  [docs] $($docWarnings.Count) size warning(s)" }
+}
+
+Write-Host "[5/5] Running the tool tests..."
+# Same step as `tools/fc.sh tooltests`: it holds the time limit and kills the whole process tree on a timeout.
+$tools = Invoke-Fc @("tooltests")
+if ($tools.Code -ne 0) {
+    $tools.Lines | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    Write-Host "=== [FAILED] tooltests ===" -ForegroundColor Red
+    exit 1
+}
+# A SKIP always shows: it means these tests did not run.
+if (-not $Quiet -or ($tools.Lines -match 'SKIP')) { $tools.Lines | ForEach-Object { Write-Host "  $_" -ForegroundColor $(if ($_ -match 'SKIP') { 'Yellow' } else { 'Green' }) } }
 
 $passed = 0
 $test.Lines | Select-String -Pattern "test result: ok\. (\d+) passed" | ForEach-Object { $passed += [int]$_.Matches[0].Groups[1].Value }

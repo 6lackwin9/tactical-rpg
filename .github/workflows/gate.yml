@@ -39,6 +39,9 @@ jobs:
         with:
           workspaces: . -> target
 
+      - name: Pillow for the tool tests
+        run: python3 -m pip install --quiet pillow
+
       - name: Build and test
         run: bash tools/fc.sh gate
 

@@ -10,7 +10,7 @@ Living file: measure, fix, record. Add a row whenever a step feels slow or a run
 | Layer check (KIT1-G, in the gate) | about 0.7 s in bash (0.24 s of it one `git grep` per game id), 0.75 s in PowerShell | fine; note a git pathspec glob must match the whole path (`kits/*/crates/*`, not `kits/*/crates`) |
 | First build of a checkout or worktree (debug, every crate) | a few minutes; `run.bat` release build of the GUI and CLI likewise | once per folder; each worktree has its own build folder (fc.sh) |
 | Per-worktree build folders (`<target-dir>-<worktree>`, 2026-10-25) | 5-10 GB each; 33 stale ones filled C: (about 200 GB) | `tools/wt_remove.ps1` removes a worktree's folder with it; `-Targets -WhatIf` is the cheap disk audit (WTCLEAN1) |
-| `tools/fc.sh docs` | 16 s (129 files) | fine |
+| `tools/fc.sh docs` | 16 s (129 files); 80 s (272 files, 2026-11-02); now 0.7 s changed files, 0.9 s `--all` (EFF1) | fine |
 | `aegis sim duel <level> 2` (120 fights, debug build) | 0.6 s | the Godot sim took ~90 s for the same table |
 | `aegis sim <mode>` (release build), the 20 recorded parity runs (`emberwake_sim` test `sim_parity`; since CLN-39 `sim_golden`, 22 runs, about 16 s in the test profile, the old test took 22 s there) | about 6 s in all | Godot took about 25 minutes for the same runs (`games/emberwake/parity/sim.sh`) |
 | `tools/fc.sh parity` (Godot 4.7.2 on `legacy/`) | export ~5 s, each trace mode about a minute or less, journeys ~4 min | only when the reference must be re-recorded (a fresh checkout, CI records the exports only) (retired 2026-11-01, CLN-42: `fc.sh parity` and the recorders are gone) |
@@ -123,6 +123,14 @@ Builder self-check, the findings reviews kept repeating:
 - A rule's test fails when the rule is broken: break the code once and see it fail (mutation).
 - New paths run on real art or data, not only fixtures; say what was viewed, from the final files.
 - Docs that describe what changed are updated, and specs get an as-built note where the build differs.
+
+Docs check (EFF1, 2026-11-02): of the 80 s, the size loop's `wc` per file took 66-141 s when timed alone (2-3 forks per
+file on Windows, where a fork is slow under load); one `wc -lc` on all files takes 0.13-0.19 s, the lint 0.5-0.8 s and the
+list of changed files 0.3-0.6 s. `tools/fc.sh docs` now reads changed files only and `--all` every file; the gate runs
+`--all`. On Windows a fork in a shell loop is the first thing to suspect in a slow script.
+
+Tool tests (EFF1): `tools/fc.sh tooltests` takes about 30 s (120 tests) and joins the gate; 180 s is the limit because the
+gate can take four times as long under load.
 
 ## Ground composer (REGIONGROUND1-E1, 2026-11-02)
 

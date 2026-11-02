@@ -13,6 +13,7 @@ Look the failure up here first. Only debug from scratch if nothing matches, then
 | Markdown heading/list blanks (`MD022`, `MD032`) | Missing blank line immediately before/after `#` heading or list | Add exactly 1 blank line above and below |
 | Markdown multiple blank lines (`MD012`) | Consecutive blank lines in `.md` file | Reduce to single blank line |
 | `sed` line edits corrupt blocks | Line numbers shifted | Never use sed ranges; use Edit |
+| `tools/fc.sh docs` is clean but the gate's docs step fails | `docs` reads changed files only, the gate `--all`: an unchanged file breaks the lint, usually after a merge | `tools/fc.sh docs --all` lists it |
 | A commit lands although `tools/fc.sh docs` printed `FAIL` | Piping `fc.sh docs` into `tail` before `&& git commit` takes the exit code of `tail` | Capture the output and test it, or run `fc.sh docs` on its own first |
 | An append-only table (`docs/archive/TASKS_DONE.md`, HISTORY, decisions) shrinks after a merge | A conflict was resolved by taking one side | Keep both sides' rows; compare `wc -l` with the base before committing |
 | (desktop) `git worktree remove` fails with "Permission denied" | OneDrive marks folders read-only and Git for Windows cannot remove them | `powershell -NoProfile -File tools/wt_remove.ps1 ../tactical-rpg-<task> claude/<task>` (also deletes its build folder, WTCLEAN1); if an entry survives, clear attributes on `.git/worktrees/<name>`, delete it, `git worktree prune` |
