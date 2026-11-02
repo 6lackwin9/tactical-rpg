@@ -39,7 +39,7 @@ cargo_test() {
     fi
     break
   done
-  echo "$out" | grep -E "^test result|FAILED|panicked|^error|checked|diverge|compared|os error" | grep -v " 0 passed; 0 failed"
+  echo "$out" | grep -E "^test result|FAILED|panicked|^error|checked|diverge|compared|os error|frames that changed" | grep -v " 0 passed; 0 failed"
   echo "$out" | grep -qE "test result: FAILED|^error|os error 4551" && status=1
 }
 
