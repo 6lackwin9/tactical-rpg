@@ -1,0 +1,28 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "ground2_ashlands_ash",
+  "prompt": "A top-down seamless ground texture for a dark fantasy RPG map, as pixel art drawn at 128 x 128 pixels scaled up (visible square pixels, no anti-aliasing). Material: fine grey ash over dry ground, soft even dust with tiny flecks of grit. Seen from straight above, no perspective, no horizon. Even light across the image, no vignette. It wraps seamlessly on all four sides. No footprints, no long lines, no large stains or dark patches, no text. Muted colours around #2a2622.",
+  "reference": null,
+  "prompts_file": null,
+  "time": "2026-11-02T14:16:59Z",
+  "n": 1,
+  "references": [],
+  "source": "gemini web app task",
+  "via": "gemini_web",
+  "request": "ground2_ash_q1793629018",
+  "metadata": {
+    "asset_id": "ground2_ashlands_ash",
+    "task": "regionground1a1",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "set": "ashlands",
+      "ground": "ash"
+    }
+  },
+  "mark_cleared": true,
+  "set": "ashlands",
+  "ground": "ash",
+  "notes": "Verified resolution and aspect ratio within 3% tolerance."
+}
