@@ -22,7 +22,7 @@ stands dazed while it lasts. Presentation only: no rule, plan, AI, save or trace
 
 ## 1. Survey (what the build does today)
 
-- `Tokens::catch_up` (`emberwake_gui/src/battle.rs`) plays the attack clip from frame 0 when a step pops the action at
+- `Tokens::catch_up` (`emberwake_gui/src/battle/tokens.rs`) plays the attack clip from frame 0 when a step pops the action at
   its impact block (`last_popped`, `action_clips`); the actor idles through its wind-up blocks. FX1-L1 moves the hit to
   the clip's `impact` frame.
 - `plan_facing` turns units toward their target while the party plans (enemies only with Show enemy tells on).
@@ -201,10 +201,9 @@ or null}`. STATUSFX1 adds a key to the same entries (whichever lands first adds 
 
 ### 6.4 As built (WINDUP1-L, 2026-10-29)
 
-`emberwake_gui/src/battle.rs` (`Pose`, `PoseSet`, `command_pose`, `plan_pose`, `windup_of`, `base_of`, `put_base`,
+`emberwake_gui/src/battle/tokens.rs` (`Pose`, `PoseSet`, `command_pose`, `plan_pose`, `windup_of`, `base_of`, `put_base`,
 `Tokens::follow`, `react_unit`, `windup_outline`, `Tokens::state`), `fx.rs` (`Shown.broken`, `staggered`, `winding`;
-`Impact.strike`), `tuning.rs` and `tuning.json` (`windup_outline_alpha` 110). The tests are `battle.rs`
-`windup_tests` (12; items 8 and 11 folded into others), on scratch bodies and synthetic clips.
+`Impact.strike`), `tuning.rs` and `tuning.json` (`windup_outline_alpha` 110). The tests are `battle/tests/windup_tests.rs` (12; items 8 and 11 folded into others), on scratch bodies and synthetic clips.
 
 - The bodies' pose rows are read once a battle's units are known (`BattleScreen::learn_poses` on the next tick, as the
   catch-ups run where the art cannot be read); until then, and for a body without them, nothing changes.

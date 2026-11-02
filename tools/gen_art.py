@@ -4,7 +4,9 @@
 #   python tools/gen_art.py [group ...] [--layer engine|kit|game ...] [--root DIR] [--overwrite] [--list]
 #   python tools/gen_art.py --compare DIR [--spot OUT]
 # Groups: bodies portraits items skills statuses terrain overlays region markers pins chips world_map backdrops menu stage_tiles battle_backdrops
-# story world_card menu_sunless sunk_backdrops family_icons.
+# story world_card menu_sunless sunk_backdrops family_icons ui_frames.
+# ui_frames (LOOK1-G1) = the Tallow and Iron nine-slice frames ui/frames/<role>.png + .json (exact pixels; the ornate
+# frame is high-resolution, its corner and tip from the picked LOOK1-A8 kit, or --ornate SHEET; no sheet, no ornate file written).
 # The last five (STORYART1) are the Sunk Ward slice's placeholders in the art bible's 16 hues: story = the vignette
 # pictures backgrounds/story/<id>.png (1120 x 472, 2x STORYUI1 V9's 560 x 236 picture area: intro_1-4, meat_market,
 # hearth), world_card = backgrounds/title/sunk_ward.png, menu_sunless = backgrounds/menu/main_menu.png (the game's main menu, MENU2; the
@@ -34,7 +36,7 @@ import os
 import sys
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, UnidentifiedImageError
 
 OUT = "#14110f"
 CHAR = "#1d1c22"
@@ -2834,13 +2836,374 @@ def g_family_icons(out: Out) -> None:
         save(grid_icon(fn), "game", rel, Out(out.root, out.layers, True) if stand_in else out)
 
 
+# ------------------------------------------------------------------------------
+# UI frames (LOOK1-G1, spec games/emberwake/docs/specs/LOOK1_TASKS.md G1): the Tallow and Iron nine-slice frames,
+# ui/frames/<role>.png + <role>.json, exact pixels at scale 2 (2 art px per logical px) in the art bible's hues plus
+# the spec's two inset darks (#050608, #0e1016). Rings count from the outside in art px.
+# ------------------------------------------------------------------------------
+
+INSET_DARK, INSET_FILL = "#050608", "#0e1016"
+# The ornate frame's kit (LOOK1-A8, the user's pick, on magenta), or --ornate SHEET. The old A6 sheet stays in art_src.
+ORNATE_SHEET = os.path.join(WORKSPACE, "art_src", "frame_kit_ref_gen1793628366_2.png")
+# Art px are the kit's own px, never resampled here, so the engine's reduction is the only one: ORNATE_SCALE 8 per logical
+# px is 4 per physical px at 720p, the arm's section about 8 px there. ORNATE_STUB: art px of arm kept past the corner point,
+# the cut close to the ornament (20 px at 720p). ORNATE_LAP: the tip's head laps the stub by 1 px at 720p. ORNATE_ERODE:
+# key_magenta's erosion in source px; the kit's ornament is 2-3 px thin, so the default 3 breaks it and 1 takes the fringe.
+# ORNATE_MID: edge and centre px between the corners. ORNATE_RIM: rings of the tip's slanted faces, in art px: the spikes'
+# dark outline, then their bright gold (decision "Ornate frame kit": one light on tip and spikes).
+ORNATE_SCALE, ORNATE_STUB, ORNATE_LAP, ORNATE_ERODE, ORNATE_MID, ORNATE_RIM = 8, 80, 4, 1, 32, (1, 2)
+# The kit's layout: the corner in the sheet's top-left quarter, the tip alone in this share of it (left, top, right, bottom);
+# the spikes the tip takes its light from: the outermost art px of the corner along each axis, which hold nothing else.
+ORNATE_TIP_AREA, ORNATE_SPIKE = (0.8, 0.4, 1.0, 0.6), 30
+ORNATE_SIDECAR = {"scale": ORNATE_SCALE, "pad": [2, 2, 2, 2], "reduce": "average", "straddle": True, "sharpen": 0.6}
+# `ornate_full`, the kit's edge as a whole frame (user 2026-11-02): the same corner without tips, its arm kept ORNATE_FULL_STUB
+# past the corner point, whole filigree included, fading over its last ORNATE_FULL_FADE px into the kit's plain edge. That edge,
+# ORNATE_FULL_SEG px of its middle made to repeat, tiles along every side at the corner's own art scale. The fade keeps the
+# edge's section at the join; an even count of logical px in the slice keeps edge and corner on one pixel grid at whole views.
+ORNATE_FULL_STUB, ORNATE_FULL_FADE, ORNATE_FULL_SEG = 128, 16, 64
+
+
+def luma(px):
+    return px[..., :3].astype(float) @ np.array([0.3, 0.59, 0.11])
+
+
+def ornate_lit_tip(head: Image.Image, corner: Image.Image) -> Image.Image:
+    # the head keeps its shape and takes the light of the corner's spikes: each pixel the spike colour of its own brightness
+    # rank, then on the slanted faces (not the back, which meets the stub) the spikes' dark outline and bright gold
+    spikes = np.concatenate([np.array(corner)[:ORNATE_SPIKE].reshape(-1, 4), np.array(corner)[:, :ORNATE_SPIKE].reshape(-1, 4)])
+    spikes = spikes[spikes[..., 3] > 128]
+    spikes = spikes[np.argsort(luma(spikes), kind="stable")][..., :3]
+    a = np.array(head)
+    shown = a[..., 3] > 0
+    ranks = luma(a[shown]).argsort(kind="stable").argsort(kind="stable") / max(shown.sum() - 1, 1)
+    a[..., :3][shown] = spikes[(ranks * (len(spikes) - 1)).astype(int)]
+    tenth = max(len(spikes) // 10, 1)
+    dark, bright = spikes[:tenth].mean(axis=0).astype(np.uint8), spikes[-tenth:].mean(axis=0).astype(np.uint8)
+    # past the back the shape runs on, so the back is no edge
+    outline, glow = ORNATE_RIM
+    back = sum(ORNATE_RIM) + 1
+    inside = np.pad(a[..., 3] > 128, ((0, 0), (back, 0)), mode="edge")
+    for ring in range(1, outline + glow + 1):
+        smaller = np.array(Image.fromarray(inside.astype(np.uint8) * 255, "L").filter(ImageFilter.MinFilter(3))) > 0
+        a[(inside & ~smaller)[:, back:], :3] = dark if ring <= outline else bright
+        inside = smaller
+    return Image.fromarray(a, "RGBA")
+
+
+def ornate_inner(q: Image.Image, x: int, y: int):
+    # the tightest rect corner past the art (`corner_inner`): the column from which on the art stays above some row, the
+    # one where the two insets from the anchor are most even, so screens' content starts clear of the corner
+    drawn = np.array(q)[..., 3] > 0
+
+    def inset(col):
+        below = np.nonzero(drawn[:, col:].any(axis=1))[0]
+        return [col - x, int(below.max()) + 1 - y if len(below) else 0]
+    return min((inset(col) for col in range(x, q.width)), key=max)
+
+
+def ornate_corner_piece(src: Image.Image):
+    # the kit's top-left corner, and the middle of its arms' whole section across each axis
+    w, h = src.size
+    corner = largest_piece(src.crop((0, 0, w // 2, h // 2)))
+    corner = corner.crop(corner.getbbox())
+    opaque = np.array(corner)[..., 3] > 0
+    across = opaque[:, int(corner.width * 0.92)].nonzero()[0]
+    along = opaque[int(corner.height * 0.92), :].nonzero()[0]
+    return corner, (int(along[0]) + int(along[-1]) + 1) // 2, (int(across[0]) + int(across[-1]) + 1) // 2
+
+
+def ornate_kit(sheet):
+    # the kit's top-left corner, cut ORNATE_STUB past the corner point, with only the head of the kit's tip on each stub,
+    # pointing along its edge. Returns the corner on a transparent square, the art px on the panel's corner point (the
+    # arms' centres, moved to a whole logical px so the reduction keeps its grid), and the corner's reach into the panel.
+    src = key_magenta(Image.open(sheet), ORNATE_ERODE)
+    w, h = src.size
+    corner, ax, ay = ornate_corner_piece(src)
+    area = ORNATE_TIP_AREA
+    tip = largest_piece(src.crop((int(w * area[0]), int(h * area[1]), int(w * area[2]), int(h * area[3]))))
+    tip = tip.crop(tip.getbbox())
+    # the head: from the tip's widest column in its front half on
+    shown = np.array(tip)[..., 3] > 0
+    half = tip.width // 2
+    head = tip.crop((half + int(np.argmax(shown.sum(axis=0)[half:])), 0, tip.width, tip.height))
+    head = ornate_lit_tip(head.crop(head.getbbox()), corner)
+    # whole logical px for the anchor, an odd count of them for the slice: the line then lands on whole px at whole views
+    grid = ORNATE_SCALE
+    x, y = (ax + grid - 1) // grid * grid, (ay + grid - 1) // grid * grid
+    side = max(x, y) + ORNATE_STUB - ORNATE_LAP + head.width
+    side = ((side + grid - 1) // grid | 1) * grid
+    q = Image.new("RGBA", (side, side))
+    q.alpha_composite(corner.crop((0, 0, ax + ORNATE_STUB, ay + ORNATE_STUB)), (x - ax, y - ay))
+    q.alpha_composite(head, (x + ORNATE_STUB - ORNATE_LAP, y - head.height // 2))
+    q.alpha_composite(head.transpose(Image.ROTATE_270), (x - head.height // 2, y + ORNATE_STUB - ORNATE_LAP))
+    return q, [x, y], ornate_inner(q, x, y)
+
+
+def ornate_rail(src: Image.Image) -> np.ndarray:
+    # the kit's plain edge, its section's rows by ORNATE_FULL_SEG columns from its middle; the last columns fade into the
+    # first, so the piece repeats without a seam
+    w, h = src.size
+    edge = largest_piece(src.crop((0, int(h * ORNATE_TIP_AREA[1]), int(w * ORNATE_TIP_AREA[0]), int(h * ORNATE_TIP_AREA[3]))))
+    edge = np.array(edge.crop(edge.getbbox()))
+    mid, fade, seg = edge.shape[1] // 2, ORNATE_FULL_FADE, ORNATE_FULL_SEG
+    rows = np.nonzero(edge[:, mid, 3] > 128)[0]
+    piece = edge[rows[0]:rows[-1] + 1, mid - (seg + fade) // 2:mid - (seg + fade) // 2 + seg + fade].astype(float)
+    t = ((np.arange(fade) + 0.5) / fade)[None, :, None]
+    out = piece[:, :seg].copy()
+    out[:, :fade] = piece[:, seg:] * (1 - t) + piece[:, :fade] * t
+    return np.round(out).astype(np.uint8)
+
+
+def ornate_spine(section: np.ndarray, rail: np.ndarray) -> int:
+    # where along `section` (one brightness per art px, across an arm) the rail's profile fits best: the px on its middle
+    want = luma(rail).mean(axis=1)
+    n = len(want)
+    return n // 2 + min(range(len(section) - n + 1), key=lambda o: float(np.abs(section[o:o + n] - want).sum()))
+
+
+def ornate_full_kit(sheet):
+    # the kit's corner without tips, its arms running into the plain edge: the corner on a transparent square, the art px on
+    # the panel's corner point (the edge's spine, so that the edge sits centred on the boundary), the corner's reach into the
+    # panel and the repeating edge
+    src = key_magenta(Image.open(sheet), ORNATE_ERODE)
+    corner, ax, ay = ornate_corner_piece(src)
+    rail = ornate_rail(src)
+    stub, fade, seg = ORNATE_FULL_STUB, ORNATE_FULL_FADE, ORNATE_FULL_SEG
+    bright = luma(np.array(corner)) * (np.array(corner)[..., 3] > 128)
+    ay = ornate_spine(bright[:, ax + stub:ax + stub + 32].mean(axis=1), rail)
+    ax = ornate_spine(bright[ay + stub:ay + stub + 32, :].mean(axis=0), rail)
+    # whole counts of two logical px for the anchor and the slice: corner and edge share one pixel grid at views of 1.5 too
+    grid = 2 * ORNATE_SCALE
+    x, y = (ax + grid - 1) // grid * grid, (ay + grid - 1) // grid * grid
+    side = (max(x, y) + stub + fade + grid - 1) // grid * grid
+    q = Image.new("RGBA", (side, side))
+    q.alpha_composite(corner.crop((0, 0, ax + stub, ay + stub)), (x - ax, y - ay))
+    a = np.array(q).astype(float)
+    half, reach = rail.shape[0] // 2, rail.shape[0]
+    for cross, start, at in ((y, x, lambda c, l: (c, l)), (x, y, lambda c, l: (l, c))):
+        for along in range(start + stub - fade, side):
+            t = min((along - (start + stub - fade) + 0.5) / fade, 1.0)
+            for off in range(-reach, reach):
+                i = off + half
+                # the piece's phase ends on its last column at the corner's end, where the engine starts the band's first
+                over = rail[i, (along - side) % seg].astype(float) if 0 <= i < rail.shape[0] else np.zeros(4)
+                under = a[at(cross + off, along)]
+                mix = over.copy() if under[3] == 0 else under.copy() if over[3] == 0 else under + (over - under) * t
+                mix[3] = under[3] + (over[3] - under[3]) * t
+                a[at(cross + off, along)] = mix
+    q = Image.fromarray(np.round(a).astype(np.uint8), "RGBA")
+    return q, [x, y], ornate_inner(q, x, y), rail
+
+
+def frame_line() -> str:
+    # the one shade of every frame's thin accent line: the theme role `frame_line`, so frames and theme cannot part
+    with open(os.path.join(WORKSPACE, "games", GAME, "assets", "ui", "theme.json"), encoding="utf-8") as f:
+        return json.load(f)["colors"]["frame_line"]
+
+
+def fr_ring(w: int, h: int, x: int, y: int) -> int:
+    return min(x, y, w - 1 - x, h - 1 - y)
+
+
+def fr_box(w: int, h: int, rings, centre: str, centre_a: int = 255) -> Image.Image:
+    # rings: one colour per ring from the outside in; everything inside them is the centre
+    img = Image.new("RGBA", (w, h))
+    px = img.load()
+    for y in range(h):
+        for x in range(w):
+            r = fr_ring(w, h, x, y)
+            px[x, y] = rgb(rings[r]) if r < len(rings) else rgb(centre, centre_a)
+    return img
+
+
+def fr_rivets(img: Image.Image) -> None:
+    # a 4 x 4 Cinder Ash rivet with a 2 x 2 Pewter top-left, 2 px in from each corner
+    w, h = img.size
+    for ox, oy in ((2, 2), (w - 6, 2), (2, h - 6), (w - 6, h - 6)):
+        for y in range(4):
+            for x in range(4):
+                img.putpixel((ox + x, oy + y), rgb(PSTEEL if x < 2 and y < 2 else CINDER))
+
+
+def fr_lit(img: Image.Image) -> None:
+    # ring 2's top row in Wet Slate: a lit edge
+    w, _ = img.size
+    for x in range(2, w - 2):
+        img.putpixel((x, 2), rgb(SLATE))
+
+
+def fr_inset() -> Image.Image:
+    # a sunken well: ring 0-1 dark on the top and left, Wet Slate on the bottom and right (split on the diagonal)
+    w = h = 16
+    img = Image.new("RGBA", (w, h))
+    for y in range(h):
+        for x in range(w):
+            if fr_ring(w, h, x, y) >= 2:
+                img.putpixel((x, y), rgb(INSET_FILL, 0xe0))
+            elif x < 2 and y < h - 2 or y < 2 and x < w - 2 or (x < 2 or y < 2) and x + y < w - 1:
+                img.putpixel((x, y), rgb(INSET_DARK))
+            else:
+                img.putpixel((x, y), rgb(SLATE))
+    return img
+
+
+def key_magenta(img: Image.Image, erode: int = 3) -> Image.Image:
+    # a pixel is magenta when R-G and B-G both exceed 35 (the model's soft edges, not only the flat ground); the alpha
+    # is then eroded by `erode` px at source size, which takes the pink fringe the soft edges leave. It also erases
+    # #9333ea and #e11d48, so it is only for sheets whose prompt bans them.
+    a = np.array(img.convert("RGBA"))
+    r, g, b = a[..., 0].astype(int), a[..., 1].astype(int), a[..., 2].astype(int)
+    a[..., 3] = np.where((r - g > 35) & (b - g > 35), 0, a[..., 3])
+    alpha = Image.fromarray(a[..., 3], "L").filter(ImageFilter.MinFilter(2 * erode + 1))
+    a[..., 3] = np.array(alpha)
+    a[a[..., 3] == 0] = 0
+    return Image.fromarray(a, "RGBA")
+
+
+def largest_piece(img: Image.Image) -> Image.Image:
+    # only the largest 8-connected opaque piece of `img`
+    a = np.array(img)
+    h, w = a.shape[:2]
+    seen = a[..., 3] == 0
+    best = []
+    for sy, sx in zip(*np.nonzero(~seen)):
+        if seen[sy, sx]:
+            continue
+        seen[sy, sx] = True
+        piece, stack = [], [(int(sy), int(sx))]
+        while stack:
+            y, x = stack.pop()
+            piece.append((y, x))
+            for ny in range(max(y - 1, 0), min(y + 2, h)):
+                for nx in range(max(x - 1, 0), min(x + 2, w)):
+                    if not seen[ny, nx]:
+                        seen[ny, nx] = True
+                        stack.append((ny, nx))
+        if len(piece) > len(best):
+            best = piece
+    out = np.zeros_like(a)
+    for y, x in best:
+        out[y, x] = a[y, x]
+    return Image.fromarray(out, "RGBA")
+
+
+def fr_corners(px: np.ndarray, q: Image.Image) -> Image.Image:
+    # the corner `q` over `px`, mirrored for the other three
+    n = px.shape[0]
+    img = Image.fromarray(px, "RGBA")
+    far = n - q.width
+    img.paste(q, (0, 0))
+    img.paste(q.transpose(Image.FLIP_LEFT_RIGHT), (far, 0))
+    img.paste(q.transpose(Image.FLIP_TOP_BOTTOM), (0, far))
+    img.paste(q.transpose(Image.ROTATE_180), (far, far))
+    return img
+
+
+def fr_ornate(q: Image.Image) -> Image.Image:
+    # see-through but for the centre (Void Abyss at 94 %), the line and the corners. The line is 1 logical px wide, centred in
+    # its slice, which the engine centres on the panel's boundary; nothing else on the edge.
+    c, n = q.width, 2 * q.width + ORNATE_MID
+    px = np.zeros((n, n, 4), dtype=np.uint8)
+    px[c:n - c, c:n - c] = rgb(VOID, 0xf0)
+    lo, hi, col = c // 2 - ORNATE_SCALE // 2, c // 2 + ORNATE_SCALE // 2, rgb(frame_line())
+    px[lo:hi, c:n - c] = col
+    px[n - hi:n - lo, c:n - c] = col
+    px[c:n - c, lo:hi] = col
+    px[c:n - c, n - hi:n - lo] = col
+    return fr_corners(px, q)
+
+
+def fr_ornate_full(q: Image.Image, rail: np.ndarray) -> Image.Image:
+    # as `fr_ornate` with the kit's edge for the line: outer rows outward on every side, centred in its slice
+    c, n = q.width, 2 * q.width + rail.shape[1]
+    px = np.zeros((n, n, 4), dtype=np.uint8)
+    px[c:n - c, c:n - c] = rgb(VOID, 0xf0)
+    lo, hi = c // 2 - rail.shape[0] // 2, c // 2 - rail.shape[0] // 2 + rail.shape[0]
+    px[lo:hi, c:n - c] = rail
+    px[n - hi:n - lo, c:n - c] = rail[::-1]
+    px[c:n - c, lo:hi] = rail.swapaxes(0, 1)
+    px[c:n - c, n - hi:n - lo] = rail.swapaxes(0, 1)[:, ::-1]
+    return fr_corners(px, q)
+
+
+def ui_frames():
+    # role -> (image, sidecar)
+    def btn(edge, fill, lit):
+        img = fr_box(16, 16, [edge, edge], fill)
+        if lit:
+            fr_lit(img)
+        return img
+    panel = fr_box(24, 24, [IRON, IRON, BASALT, BASALT], VOID, 0xf0)
+    fr_rivets(panel)
+    s4, s8 = {"slice": [4, 4, 4, 4]}, {"slice": [8, 8, 8, 8]}
+    out = {
+        "panel": (panel, s8),
+        "tip": (fr_box(16, 16, [IRON, IRON, BASALT, BASALT], VOID, 0xf0), s4),
+        "inset": (fr_inset(), s4),
+        "parchment": (fr_box(16, 16, [OAK, OAK], LINEN), dict(s4, ink="ink")),
+        "button": (btn(CINDER, BASALT, True), s4),
+        "button_hot": (btn(TALLOW, SLATE, True), s4),
+        "button_down": (btn(TALLOW, OAK, True), s4),
+        "button_off": (btn(IRON, INSET_FILL, False), s4),
+        "card": (btn(IRON, BASALT, False), s4),
+        "card_hot": (btn(TALLOW, SLATE, False), s4),
+        "card_on": (btn(TALLOW, OAK, False), s4),
+    }
+    try:
+        q, anchor, inner = ornate_kit(ORNATE_SHEET)
+        out["ornate"] = (fr_ornate(q), {"slice": [q.width] * 4, "corner_anchor": anchor, "corner_inner": inner, **ORNATE_SIDECAR})
+        q, anchor, inner, rail = ornate_full_kit(ORNATE_SHEET)
+        out["ornate_full"] = (fr_ornate_full(q, rail), {"slice": [q.width] * 4, "edges": "tile", "corner_anchor": anchor, "corner_inner": inner, **ORNATE_SIDECAR})
+    except (FileNotFoundError, UnidentifiedImageError):  # no file, or an unsmudged LFS pointer
+        print("ornate: no sheet at %s, its files are left as they are (--ornate SHEET)" % ORNATE_SHEET)
+    out["tab"] = out["button"]
+    out["tab_on"] = out["button_down"]
+    return out
+
+
+# The sidecar keys the UI Gallery's frame tuner saves (LOOK1-FT): a regenerate keeps what the file says for them.
+TUNED_KEYS = ("pad", "straddle", "corner_size", "tip", "tip_size", "line_width", "line_color")
+
+
+def with_tuned_keys(side: dict, path: str) -> tuple:
+    # `side` with the tuned keys as the sidecar at `path` has them, and the names that differ from the table. A new cut (other
+    # slices) starts from the table, as those values were tuned on the old art; so does a file that is not there or not JSON.
+    try:
+        with open(path, encoding="utf-8") as f:
+            old = json.load(f)
+    except (OSError, ValueError):
+        return side, []
+    if not isinstance(old, dict) or old.get("slice") != side.get("slice"):
+        return side, []
+    out, kept = dict(side), []
+    for key in TUNED_KEYS:
+        if old.get(key) != side.get(key):
+            kept.append(key)
+        if key in old:
+            out[key] = old[key]
+        else:
+            out.pop(key, None)
+    return out, kept
+
+
+def g_ui_frames(out: Out) -> None:
+    for role, (img, side) in sorted(ui_frames().items()):
+        save(img, "game", "ui/frames/%s.png" % role, out)
+        path = out.target("game", "ui/frames/%s.json" % role)
+        if path:
+            side, kept = with_tuned_keys(dict(side, scale=side.get("scale", 2)), path)
+            with open(path, "w", encoding="utf-8", newline="\n") as f:
+                f.write(json.dumps(side) + "\n")
+            print("wrote game:ui/frames/%s.json%s" % (role, ", the tuned keys kept: " + ", ".join(kept) if kept else ""))
+
+
 GROUPS = {
     "bodies": g_bodies, "portraits": g_portraits, "items": g_items, "skills": g_skills, "statuses": g_statuses,
     "terrain": g_terrain, "overlays": g_overlays, "region": g_region, "markers": g_markers, "pins": g_pins,
     "chips": g_chips, "world_map": g_world_map, "backdrops": g_backdrops, "menu": g_menu,
     "stage_tiles": g_stage_tiles, "battle_backdrops": g_battle_backdrops,
     "story": g_story, "world_card": g_world_card, "menu_sunless": g_menu_sunless, "sunk_backdrops": g_sunk_backdrops,
-    "family_icons": g_family_icons,
+    "family_icons": g_family_icons, "ui_frames": g_ui_frames,
 }
 
 
@@ -2933,6 +3296,7 @@ def main() -> None:
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--compare", metavar="DIR", help="check a regenerated workspace root against the committed files")
     ap.add_argument("--spot", metavar="OUT", help="with --compare: write committed | regenerated body sheets to OUT")
+    ap.add_argument("--ornate", metavar="SHEET", help="ui_frames: another frame kit than the picked one")
     a = ap.parse_args()
     if a.list:
         print(" ".join(GROUPS))
@@ -2941,6 +3305,8 @@ def main() -> None:
         if a.spot:
             spot(a.compare, a.spot)
         sys.exit(compare(a.compare))
+    global ORNATE_SHEET
+    ORNATE_SHEET = a.ornate or ORNATE_SHEET
     out = Out(a.root, a.layer or list(LAYERS), a.overwrite)
     for g in a.groups or list(GROUPS):
         if g not in GROUPS:

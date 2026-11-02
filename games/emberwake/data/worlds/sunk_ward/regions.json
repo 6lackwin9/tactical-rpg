@@ -1,0 +1,15 @@
+{
+	"kind": "regions",
+	"version": 1,
+	"entries": [
+		{
+			"id": "sunk_ward_quarter",
+			"name": "The Sunk Ward",
+			"description": "The lowest industrial quarter of Cinderreach: drains, tenements, kilns and church posts.",
+			"climate": "soot, fog and slag runoff",
+			"parent": "",
+			"faction": "iron_inquisition",
+			"tags": []
+		}
+	]
+}

@@ -7,7 +7,7 @@
 use crate::canvas::Rect;
 use crate::playtest::TAGS;
 use crate::screen::{Cx, Key, Nav, Screen};
-use crate::ui::{Gfx, Ui, Widget, BODY, DIM, H, TEXT, W};
+use crate::ui::{Gfx, Ui, Widget, BODY, H, W};
 use crate::widget_plumbing;
 use serde_json::{json, Value};
 
@@ -85,7 +85,7 @@ impl<G> Screen<G> for NoteBox {
             ui.checkbox(&format!("note.tag.{tag}"), r.x + 10 + i as i32 * 62, tags_y, tag, self.tags[i], Act::Tag(i), true);
         }
         let hint = if self.message.is_empty() { "Ctrl+Enter saves, Esc cancels; Ctrl+C, X, V copy, cut, paste; Ctrl+Z undoes." } else { self.message.as_str() };
-        ui.p.text_fit(r.x as f32 + 10.0, (tags_y + 18) as f32, hint, BODY, (r.w - 20) as f32, if self.message.is_empty() { DIM } else { TEXT });
+        ui.p.text_fit(r.x as f32 + 10.0, (tags_y + 18) as f32, hint, BODY, (r.w - 20) as f32, if self.message.is_empty() { ui.t.dim } else { ui.t.text });
         ui.button("note.cancel", Rect::new(r.x + r.w - 124, r.y + r.h - 22, 54, 15), "Cancel", Act::Cancel, true);
         ui.button("note.save", Rect::new(r.x + r.w - 64, r.y + r.h - 22, 54, 15), "Save", Act::Save, true);
         self.w = ui.widgets;

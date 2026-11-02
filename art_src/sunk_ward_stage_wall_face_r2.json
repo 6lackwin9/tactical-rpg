@@ -1,0 +1,32 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "sunk_ward_stage_wall_face_r2",
+  "prompt": "In the same pixel-art style, pixel size and palette family as the first image, and the same flat straight-down view. A wall texture for a dark fantasy tactical RPG, seen flat-on from directly in front: an orthographic front elevation with no perspective, no horizon, no floor and no sky, as a square tile of 64 x 64 pixels scaled up (visible large square pixels, no anti-aliasing). Staggered horizontal courses of soot-black basalt blocks of one colour and uneven length with thin, faint joints, low contrast, filling the whole image edge to edge and wrapping without a seam on all four sides. Even, flat lighting: no vignette, no lighting gradient, no border, no frame, no text. Limited palette of 3-4 close colours from #14171f #1e232d #2c3340 #4b5563.",
+  "reference": "output/stage_floor_q1793617333.png",
+  "prompts_file": null,
+  "time": "2026-11-02T11:27:00Z",
+  "n": 1,
+  "references": [
+    "output/stage_floor_q1793617333.png"
+  ],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "stage_wall_face_q1793617334",
+  "metadata": {
+    "asset_id": "sunk_ward_stage_wall_face_r2",
+    "task": "look1a",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "set": "sunk_ward_stage",
+      "kind": "wall_face",
+      "session_ref": "stage_floor_q1793617333"
+    }
+  },
+  "mark_cleared": true,
+  "set": "sunk_ward_stage",
+  "kind": "wall_face",
+  "session_ref": "stage_floor_q1793617333",
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Conditioned on in-session stage_floor_q1793617333 reference."
+}

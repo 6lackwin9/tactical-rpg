@@ -85,6 +85,25 @@ class Face(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(face.face_file(png).read_text(encoding="utf-8"), before)
 
+    def test_ex_set_writes_the_face_box_only_when_given(self):
+        # PORTRAITFX1-EX: `--face` stores the box (the engine's rules: inside the inner rect, at least size / 8 a side);
+        # without it the key stays out, so the sidecars written before keep their bytes.
+        png = self.copy()
+        run("set", png, *GOOD_ARGS)
+        self.assertNotIn('"face"', face.face_file(png).read_text(encoding="utf-8"))
+        w = img(png).size[0]
+        b = face.default_border(w)
+        side = face.tdiv(w, 8)
+        code, _, _ = run("set", png, "--face", f"{b},{b},{side},{side}")
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(face.face_file(png).read_text(encoding="utf-8"))["face"], [b, b, side, side])
+        code, _, err = run("set", png, "--face", f"{b},{b},{side - 1},{side}")
+        self.assertEqual(code, 1)
+        self.assertIn(f"{png.stem}.face.json: face box width and height must be at least {side} (is {side - 1} x {side}).", err)
+        code, _, _ = run("set", png, "--face", "")
+        self.assertEqual(code, 0)
+        self.assertNotIn('"face"', face.face_file(png).read_text(encoding="utf-8"), "\"\" clears the box")
+
     def test_t2_check_prints_the_committed_a11_lines(self):
         want = [l for l in (FIX / "expected_check.txt").read_text(encoding="utf-8").splitlines() if l]
         code, out, err = run("check", FIX)

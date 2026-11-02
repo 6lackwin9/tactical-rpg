@@ -50,7 +50,11 @@
 			"reputation": {
 				"forge_guild": 10
 			},
-			"tags": []
+			"tags": [],
+			"board": "",
+			"track": "side",
+			"show_locked": false,
+			"closed_text": ""
 		}
 	]
 }

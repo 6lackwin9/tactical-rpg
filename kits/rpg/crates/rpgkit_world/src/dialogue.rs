@@ -134,6 +134,12 @@ pub fn start_gold(d: &Data, world_id: &str) -> i64 {
     0
 }
 
+/// LOOK1 5.4: the world's battle stage set (`stage_set`; the nearest world in the lineage naming one wins, "" = none:
+/// the kit's default stage set).
+pub fn stage_set(d: &Data, world_id: &str) -> String {
+    d.lineage(world_id).iter().rev().map(|w| json::s(d.manifest(w), "stage_set")).find(|s| !s.is_empty()).unwrap_or_default()
+}
+
 /// The base line with the manifest `service_lines` merged along the lineage (nearest wins).
 pub fn service_line(d: &Data, world_id: &str, id: &str) -> String {
     let mut text = d.service_text(id);

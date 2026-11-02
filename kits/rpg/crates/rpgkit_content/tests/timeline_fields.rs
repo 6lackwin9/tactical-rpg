@@ -257,7 +257,16 @@ fn each_broken_rule_is_one_error_naming_its_field() {
         ("units", "drillman", json!({"deck": {"active": ["thrust"], "order": {"support": ["mend"]}}}), "Deck order support: 'mend' is neither an active of the deck nor a basic."),
         ("units", "drillman", json!({"deck": {"order": {"dance": ["strike"]}}}), "Deck order: 'dance' is not an intent"),
         ("units", "drillman", json!({"deck": {"order": {"assault": ["strike", "strike"]}}}), "Deck order lists 'strike' twice."),
-        ("units", "drillman", json!({"deck": {"relic": []}}), "Deck: 'relic' is not one of active, passive, keystone, order."),
+        // INPUT1 FL1, FL5: per-opener follow-up lists (the opener may stand in its own list)
+        ("units", "drillman", json!({"deck": {"active": ["thrust", "brace"], "follow_ups": {"thrust": ["strike", "thrust"], "brace": ["brace"]}}}), ""),
+        ("units", "drillman", json!({"deck": {"active": ["thrust", "brace"], "follow_ups": {"thrust": ["brace"]}}}), "Follow-ups after 'thrust': 'brace' is Guard, not Assault."),
+        ("units", "drillman", json!({"deck": {"active": ["thrust"], "follow_ups": {"thrust": ["jab"]}}}), "Follow-ups after 'thrust': 'jab' is not in the deck."),
+        ("units", "drillman", json!({"deck": {"active": ["thrust"], "follow_ups": {"thrust": ["strike", "strike"]}}}), "Follow-ups after 'thrust': 'strike' twice."),
+        ("units", "drillman", json!({"deck": {"active": ["thrust"], "follow_ups": {"mend": ["strike"]}}}), "Follow-ups for 'mend': not an opener in the deck."),
+        ("units", "drillman", json!({"deck": {"active": ["thrust"], "follow_ups": {"move": ["strike"]}}}), "Follow-ups for 'move': not an opener in the deck."),
+        ("units", "drillman", json!({"deck": {"follow_ups": ["strike"]}}), "Deck follow_ups must be an object"),
+        ("units", "drillman", json!({"deck": {"active": ["thrust"], "follow_ups": {"thrust": "strike"}}}), "Follow-ups for 'thrust' must be a list of skill families."),
+        ("units", "drillman", json!({"deck": {"relic": []}}), "Deck: 'relic' is not one of active, passive, keystone, order, follow_ups."),
         ("units", "drillman", json!({"deck": []}), "Deck must be an object"),
         // item families (1.6)
         ("item_families", "polearm", json!({"engine_rules": ["reach", "always_ranged"]}), "reach is for melee families; it can't go with always_ranged."),
@@ -420,4 +429,32 @@ fn an_intent_bound_buff_is_no_start_buff() {
     assert_eq!(start("steadfast"), Vec::<String>::new());
     assert_eq!(start("stealth"), ["Start buff 'stealth' must be a buff other than taunt or an intent-bound one (riposte, stealth)."]);
     assert_eq!(start("riposte"), ["Start buff 'riposte' must be a buff other than taunt or riposte."], "the Godot text, unchanged");
+}
+
+/// INPUT1 FL1: the writer drops an empty follow-up list (and `follow_ups` with none left), so a deck without lists writes
+/// byte-identical; a set list is stored in its written order and reads back into the typed deck.
+#[test]
+fn the_writer_keeps_only_set_follow_up_lists() {
+    let data = scratch("follow_ups");
+    catalog(&data);
+    let file = data.join("catalog").join("units.json");
+    let up = |deck: Value| {
+        let mut e = store::view(&data).get("units", "drillman").clone();
+        e.insert("deck".into(), deck);
+        store::upsert(&data, None, "units", &e, None).map(|_| fs::read_to_string(&file).unwrap())
+    };
+    let plain = up(good_deck()).expect("the good deck");
+    assert_eq!(store::resave_text(&data, None, "units").unwrap(), plain, "a resave writes the same text");
+    let mut emptied = good_deck();
+    emptied["follow_ups"] = json!({"thrust": []});
+    assert_eq!(up(emptied).expect("an empty list is no list"), plain, "an empty list is dropped: byte-identical");
+    let mut set = good_deck();
+    set["follow_ups"] = json!({"thrust": ["strike", "thrust"], "brace": []});
+    let text = up(set).expect("a set list");
+    let stored: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(stored["entries"][0]["deck"]["follow_ups"], json!({"thrust": ["strike", "thrust"]}), "only the set list");
+    let typed = rpgkit_data::Deck::from_value(&stored["entries"][0]["deck"]);
+    assert_eq!(typed.follow_ups_of("thrust"), Some(&vec!["strike".to_string(), "thrust".to_string()]));
+    assert!(typed.follow_ups_of("brace").is_none());
+    drop_scratch(&data);
 }

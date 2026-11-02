@@ -79,7 +79,7 @@ fn check_ref(v: &View, w: &str, f: &Dict, ref_kind: &str, r: &str) -> Vec<String
 /// WorldCatalog.validate_entry: every problem of `entry` as a `kind` entry of world `w` (`current_id`: the id it
 /// replaces).
 pub fn validate_entry(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &str) -> Vec<String> {
-    let e = normalize(kind, &crate::source::folded(kind, entry));
+    let e = normalize(kind, entry);
     let mut errors = Vec::new();
     let id = json::s(&e, "id");
     if id.is_empty() {
@@ -133,7 +133,7 @@ pub fn validate_entry(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &
 /// WorldCatalog.blocking_errors: the problems that refuse a world write (id, name, enums, overrides, the shape of the
 /// json fields). Unresolved references and incomplete entries do not block: worlds are full of mutual references.
 pub fn blocking_errors(v: &View, w: &str, kind: &str, entry: &Dict, current_id: &str) -> Vec<String> {
-    let e = normalize(kind, &crate::source::folded(kind, entry));
+    let e = normalize(kind, entry);
     let mut errors = Vec::new();
     let id = json::s(&e, "id");
     if id.is_empty() {
@@ -522,6 +522,8 @@ fn encounter_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     errors.extend(super::hooks::arena_hazards_errors(e));
     let unit_of = |r: &str| v.get("units", &json::s(v.worlds.resolve(w, "characters", r), "base_unit")).clone();
     errors.extend(super::hooks::deck_effect_errors(v, e, Some(w), &unit_of));
+    // ENCOUNTER2-C 5.1: the scripted rounds (a ref plays as its character's base unit)
+    errors.extend(encounter::script_problems(v, e, &unit_of));
     // ROSTER1 BK6: the fewest heroes the fight takes, at most the world's party max
     let party_min = e.get("party_min").cloned().unwrap_or(json::int(0));
     let top = rpgkit_data::PARTY_MIN_MAX.min(party_max(v, w));
@@ -673,18 +675,19 @@ pub fn manifest_errors(v: &View, w: &str) -> Vec<String> {
     errors.extend(story::manifest_errors(v, w, m));
     // HOOKS1 CN1: the class names and paths of the world
     errors.extend(super::hooks::classes_errors(v, m));
+    // LOOK1 5.4: the tile set ids and file sizes; REGIONGROUND1 A17: the ground files' size; G10: the material family
+    errors.extend(super::assets::tileset_errors(v, w));
+    errors.extend(super::assets::ground_errors(v, w));
+    errors.extend(super::ground::family_errors(m));
     errors
 }
 
-/// RULESET1-R (engine-only): the manifest's `ruleset` ("" inherits) is a ruleset id whose row exists (classic has
-/// none), and its `plan_reveal_flag` is empty or a flag key.
+/// RULESET1-R (engine-only): the manifest's `ruleset` ("" inherits) names a ruleset row (CLN-44: the ids are open,
+/// classic is a row too), and its `plan_reveal_flag` is empty or a flag key.
 fn ruleset_errors(v: &View, m: &Dict) -> Vec<String> {
-    use rpgkit_rules::ruleset::{CLASSIC, RULESETS};
     let mut errors = Vec::new();
     let r = json::s(m, "ruleset");
-    if !r.is_empty() && !RULESETS.contains(&r.as_str()) {
-        errors.push(format!("Ruleset: '{r}' is not one of {} (or empty: inherited).", RULESETS.join(", ")));
-    } else if !r.is_empty() && r != CLASSIC && !v.has(super::ruleset::KIND, &r) {
+    if !r.is_empty() && !v.has(super::ruleset::KIND, &r) {
         errors.push(format!("Ruleset '{r}' needs its row in {} (data/catalog/{}.json).", super::ruleset::KIND, super::ruleset::KIND));
     }
     let flag = json::s(m, "plan_reveal_flag");
@@ -886,7 +889,8 @@ fn encounter_warnings(v: &View, w: &str) -> Vec<String> {
 }
 
 /// WorldCatalog.world_warnings: the map, route, dialogue, gone-NPC, quest link and reward, reputation key and
-/// encounter lints of one world; the character asset checks and the map prop asset checks (PROPS1 A7-A10).
+/// encounter lints of one world; the character asset checks, the map prop asset checks (PROPS1 A7-A10) and the ground
+/// asset checks (REGIONGROUND1 A16, A18-A20).
 pub fn world_warnings(v: &View, w: &str) -> Vec<String> {
     let mut out = map::warnings(v, w);
     out.extend(travel::warnings(v, w));
@@ -898,6 +902,8 @@ pub fn world_warnings(v: &View, w: &str) -> Vec<String> {
     out.extend(encounter_warnings(v, w));
     out.extend(character_asset_warnings(v, w));
     out.extend(super::assets::prop_warnings(v, w));
+    out.extend(super::assets::tileset_warnings(v, w));
+    out.extend(super::assets::ground_warnings(v, w));
     out.extend(campaign::warnings(v, w));
     out.extend(story::warnings(v, w));
     out

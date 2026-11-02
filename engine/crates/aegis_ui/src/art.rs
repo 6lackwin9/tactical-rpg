@@ -13,11 +13,14 @@
 //! FX1-E: a frame's filled silhouette (`body_silhouette`, a hit flash), cached like the outline.
 //! PORTRAITFX1-E: the first path of a chain a layer holds (`first_rel`) and a portrait's face sidecar from the PNG's
 //! own layer (`face`), cached.
+//! SPRITEFIT1: a body's frame fills the size asked for at any scale (`Image::fit_square`), so a sprite grows with the
+//! window instead of stopping at the last whole multiple.
 
 use crate::canvas::{Image, Rect, Rgba, OUTLINE_ALPHA};
 use aegis_core::assets::{self, ClipFrame, ClipPlayer, Clips, Face, Facing, Layers};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// A body's sheet (palette applied) and its clips.
 struct Body {
@@ -34,6 +37,8 @@ pub struct Art {
     layers: Layers,
     /// (rel, w, h) -> the scaled image.
     files: HashMap<(String, i32, i32), Option<Image>>,
+    /// rel -> a picture sized to the window: its one size and that image (`image_fit`).
+    fits: HashMap<String, ((i32, i32), Option<Image>)>,
     /// (body key, palette id) -> the body.
     bodies: HashMap<(String, String), Option<Body>>,
     /// (body key, palette id, clip, frame, size, flipped) -> the scaled frame (mirrored left to right when flipped).
@@ -54,7 +59,12 @@ pub struct Art {
     body_rects: HashMap<(String, String, i32, Facing), Option<Rect>>,
     /// PNG rel -> its face sidecar from the PNG's own layer (PORTRAITFX1-E `face`).
     faces: HashMap<String, Option<Face>>,
+    /// Which `Art` this is (`generation`).
+    generation: u64,
 }
+
+/// The next `Art::generation`.
+static GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// Decodes a PNG into RGBA (palette, grey and RGB inputs are expanded).
 pub fn load_png(path: &Path) -> Option<Image> {
@@ -83,11 +93,18 @@ impl Art {
     }
 
     pub fn layered(layers: Layers) -> Self {
-        Self { layers, files: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), silhouettes: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new(), body_rects: HashMap::new(), faces: HashMap::new() }
+        Self { layers, files: HashMap::new(), fits: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), silhouettes: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new(), body_rects: HashMap::new(), faces: HashMap::new(), generation: GENERATION.fetch_add(1, Ordering::Relaxed) }
     }
 
     pub fn layers(&self) -> &Layers {
         &self.layers
+    }
+
+    /// Different for every `Art` made in this run. This cache never re-reads a file, so an edited file reaches a running
+    /// build only through a new `Art`: something made from its pictures and kept (a composed ground's key) compares this
+    /// each frame instead of asking for the pictures again.
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
 
     /// Whether a layer holds `rel` (cached: screens ask every frame).
@@ -113,14 +130,34 @@ impl Art {
     pub fn image(&mut self, rel: &str, w: i32, h: i32) -> Option<&Image> {
         let key = (rel.to_string(), w, h);
         if !self.files.contains_key(&key) {
-            let path = self.layers.find(rel);
-            let img = path.as_ref().and_then(|p| load_png(p)).map(|i| i.downsample(w, h));
-            if img.is_none() && !self.layers.roots.is_empty() {
-                crate::playtest::report_asset("file", rel, "", if path.is_some() { "load_failed" } else { "missing_file" });
-            }
+            let img = self.scaled(rel, w, h);
             self.files.insert(key.clone(), img);
         }
         self.files.get(&key).and_then(|i| i.as_ref())
+    }
+
+    /// `image` for a picture sized to the window: only the latest size of each file is kept, so a window drag does not
+    /// pile up a copy per size (a new size reads the file again).
+    pub fn image_fit(&mut self, rel: &str, w: i32, h: i32) -> Option<&Image> {
+        if self.fits.get(rel).is_none_or(|(size, _)| *size != (w, h)) {
+            let img = self.scaled(rel, w, h);
+            self.fits.insert(rel.to_string(), ((w, h), img));
+        }
+        self.fits.get(rel).and_then(|(_, i)| i.as_ref())
+    }
+
+    /// The pictures `image_fit` holds, one per file.
+    pub fn fit_count(&self) -> usize {
+        self.fits.len()
+    }
+
+    fn scaled(&self, rel: &str, w: i32, h: i32) -> Option<Image> {
+        let path = self.layers.find(rel);
+        let img = path.as_ref().and_then(|p| load_png(p)).map(|i| i.downsample(w, h));
+        if img.is_none() && !self.layers.roots.is_empty() {
+            crate::playtest::report_asset("file", rel, "", if path.is_some() { "load_failed" } else { "missing_file" });
+        }
+        img
     }
 
     /// `image` mirrored left to right (cached apart).
@@ -226,8 +263,9 @@ impl Art {
         Some(b.sheet.crop(n as i32 * w, row as i32 * h, w, h))
     }
 
-    /// Frame `n` of `clip` fitted to a `size` square (spec 4.1): scaled by k = floor(size / max(w, h)) with nearest
-    /// pixels (downsampled when k is 0), centred across and standing on the bottom edge.
+    /// Frame `n` of `clip` fitted to a `size` square (`Image::fit_square`, SPRITEFIT1): its longer side is exactly
+    /// `size` at any scale (plain nearest at an exact multiple, softly reduced between them, downsampled below 1x),
+    /// centred across and standing on the bottom edge.
     pub fn body_clip(&mut self, key: &str, palette: &str, clip: &str, n: u32, size: i32) -> Option<&Image> {
         self.body_clip_flipped(key, palette, clip, n, size, false)
     }
@@ -242,16 +280,7 @@ impl Art {
                 self.frames.insert(k.clone(), img);
                 return self.frames.get(&k).and_then(|i| i.as_ref());
             }
-            let img = self.body_frame(key, palette, clip, n).map(|f| {
-                let scale = size / f.w.max(f.h).max(1);
-                let fitted = if scale >= 1 {
-                    f.scale_nearest(scale)
-                } else {
-                    let m = f.w.max(f.h).max(1);
-                    f.downsample((f.w * size / m).max(1), (f.h * size / m).max(1))
-                };
-                fitted.on_square(size)
-            });
+            let img = self.body_frame(key, palette, clip, n).map(|f| f.fit_square(size));
             self.frames.insert(k.clone(), img);
         }
         self.frames.get(&k).and_then(|i| i.as_ref())
@@ -433,6 +462,32 @@ pub fn find_project(start: &Path) -> Option<PathBuf> {
 }
 
 #[cfg(test)]
+mod fit_tests {
+    use super::*;
+
+    /// `image_fit` answers at the asked size and holds one size per file however many sizes a window drag asks for.
+    #[test]
+    fn a_window_sized_picture_keeps_one_size() {
+        let root = std::env::temp_dir().join(format!("aegis_art_fit_{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let file = std::fs::File::create(root.join("p.png")).unwrap();
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 64, 32);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&[200u8; 64 * 32 * 4]).unwrap();
+        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        for w in 10..40 {
+            let img = art.image_fit("p.png", w, w / 2).expect("the file");
+            assert_eq!((img.w, img.h), (w, w / 2));
+        }
+        assert_eq!(art.fit_count(), 1);
+        assert!(art.files.is_empty(), "the size-keyed cache takes none of them");
+        assert!(art.image_fit("missing.png", 4, 4).is_none());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -478,9 +533,11 @@ mod tests {
         assert_eq!((&blue.px[0..4], &blue.px[4..8]), (&[0xe0, 0xb4, 0x3c, 255][..], &[0x20, 0x40, 0xc0, 255][..]), "only the main slot's colour changes");
         let t = art.body_token("knight", "", 20).unwrap().clone();
         assert_eq!((t.w, t.h), (20, 20));
-        // k = 20 / 8 = 2: a 16x16 frame centred across (x 2..18) on the bottom (y 4..20)
-        let at = |x: i32, y: i32| &t.px[((y * 20 + x) * 4) as usize..((y * 20 + x) * 4 + 4) as usize];
-        assert_eq!((at(0, 19)[3], at(2, 4), at(3, 5), at(10, 3)[3]), (0, &[0xe0, 0xb4, 0x3c, 255][..], &[0xe0, 0xb4, 0x3c, 255][..], 0));
+        // 16 is 2x the 8x8 frame (SPRITEFIT1 fills every size; the sizes between are in tests/sprite_fit.rs): the gold
+        // pixel takes the top-left 2x2 exactly
+        let d = art.body_token("knight", "", 16).unwrap().clone();
+        let at = |x: i32, y: i32| &d.px[((y * 16 + x) * 4) as usize..((y * 16 + x) * 4 + 4) as usize];
+        assert_eq!((at(0, 0), at(1, 1), at(2, 2), at(15, 15)), (&[0xe0, 0xb4, 0x3c, 255][..], &[0xe0, 0xb4, 0x3c, 255][..], &[0xa8, 0x30, 0x28, 255][..], &[0xa8, 0x30, 0x28, 255][..]));
         assert!(art.has_body("knight") && !art.has_body("rogue"));
         let _ = std::fs::remove_dir_all(&root);
     }

@@ -1,0 +1,359 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "regions",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "sunk_ward_quarter",
+    "name": "The Sunk Ward",
+    "description": "The lowest industrial quarter of Cinderreach: drains, tenements, kilns and church posts.",
+    "climate": "soot, fog and slag runoff",
+    "parent": "",
+    "faction": "iron_inquisition",
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "factions",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "iron_inquisition",
+    "name": "Iron Inquisition",
+    "motto": "",
+    "description": "PLACEHOLDER motto. The church's hunters; the Castellan Watch is its city arm.",
+    "home": "",
+    "relations": {
+     "castellan_watch": "ally",
+     "tallow_guild": "ally"
+    },
+    "grants": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "factions",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "castellan_watch",
+    "name": "Castellan Watch",
+    "motto": "",
+    "description": "PLACEHOLDER motto. The city watch: Footmen and Watch Crossbowmen.",
+    "home": "",
+    "relations": {
+     "iron_inquisition": "ally"
+    },
+    "grants": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "factions",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "tallow_guild",
+    "name": "Tallow Guild",
+    "motto": "",
+    "description": "PLACEHOLDER motto. Renders the district's tallow; its mercenaries scour the cellars.",
+    "home": "",
+    "relations": {
+     "iron_inquisition": "ally"
+    },
+    "grants": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "factions",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "fourth_kiln_syndicate",
+    "name": "Fourth Kiln Syndicate",
+    "motto": "",
+    "description": "PLACEHOLDER motto. The Guild's foundry arm; runs the bone-mill.",
+    "home": "",
+    "relations": {
+     "tallow_guild": "ally"
+    },
+    "grants": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "locations",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "sluice_undercroft",
+    "name": "The Sluice Undercroft",
+    "description": "The hub: a flooded undercroft with six bunks and a hearth, below the Sunk Ward.",
+    "kind": "town",
+    "region": "sunk_ward_quarter",
+    "exits": [
+     {
+      "to": "drowned_runoff_grate",
+      "label": "the submerged sluice gate"
+     }
+    ],
+    "encounters": [],
+    "map": "",
+    "zone_bindings": {},
+    "markers": [],
+    "map_pos": [],
+    "rest": true,
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "locations",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "drowned_runoff_grate",
+    "name": "Drowned Runoff Grate",
+    "description": "Node 01: the egress and checkpoint where the drains meet the streets.",
+    "kind": "wild",
+    "region": "sunk_ward_quarter",
+    "exits": [
+     {
+      "to": "sluice_undercroft",
+      "label": "down the sluice gate"
+     },
+     {
+      "to": "ash_crawl_crossroads",
+      "label": "the drain flue"
+     },
+     {
+      "to": "fourth_kiln",
+      "label": "toward the kiln (PLACEHOLDER link; the lore route runs via Alleyway Junction 7)"
+     }
+    ],
+    "encounters": [],
+    "map": "",
+    "zone_bindings": {},
+    "markers": [],
+    "map_pos": [],
+    "rest": false,
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "locations",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "ash_crawl_crossroads",
+    "name": "Ash-Crawl Crossroads",
+    "description": "Node 03: an open-air culling station where the slum alleys meet.",
+    "kind": "wild",
+    "region": "sunk_ward_quarter",
+    "exits": [
+     {
+      "to": "drowned_runoff_grate",
+      "label": "the drain flue"
+     },
+     {
+      "to": "crucible_watchpost",
+      "label": "toward the Watchpost (PLACEHOLDER link; the lore route runs via the Tallow Vats)"
+     }
+    ],
+    "encounters": [],
+    "map": "",
+    "zone_bindings": {},
+    "markers": [],
+    "map_pos": [],
+    "rest": false,
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "locations",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "fourth_kiln",
+    "name": "The Fourth Kiln",
+    "description": "Node 04: the bone-mill that mortars the Inquisition's watch-posts.",
+    "kind": "wild",
+    "region": "sunk_ward_quarter",
+    "exits": [
+     {
+      "to": "drowned_runoff_grate",
+      "label": "back to the grate"
+     },
+     {
+      "to": "crucible_watchpost",
+      "label": "the flue climb"
+     }
+    ],
+    "encounters": [],
+    "map": "",
+    "zone_bindings": {},
+    "markers": [],
+    "map_pos": [],
+    "rest": false,
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "locations",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "crucible_watchpost",
+    "name": "Crucible Watchpost",
+    "description": "Node 06: the fortified post above the Slag Gate.",
+    "kind": "fortress",
+    "region": "sunk_ward_quarter",
+    "exits": [
+     {
+      "to": "fourth_kiln",
+      "label": "the flue climb"
+     },
+     {
+      "to": "ash_crawl_crossroads",
+      "label": "back to the crossroads"
+     }
+    ],
+    "encounters": [],
+    "map": "",
+    "zone_bindings": {},
+    "markers": [],
+    "map_pos": [],
+    "rest": false,
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "routes",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "sluice_gate",
+    "name": "The submerged sluice gate",
+    "from": "sluice_undercroft",
+    "to": "drowned_runoff_grate",
+    "two_way": true,
+    "time": 1,
+    "zone": "",
+    "encounter_pct": 15,
+    "repeat_pct": -1,
+    "encounters": [],
+    "elites": [],
+    "elite_pct": 5,
+    "scripted": [],
+    "requires_flags": [],
+    "unless_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "routes",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "drain_flue",
+    "name": "The drain flue",
+    "from": "drowned_runoff_grate",
+    "to": "ash_crawl_crossroads",
+    "two_way": true,
+    "time": 1,
+    "zone": "",
+    "encounter_pct": 15,
+    "repeat_pct": -1,
+    "encounters": [],
+    "elites": [],
+    "elite_pct": 5,
+    "scripted": [],
+    "requires_flags": [],
+    "unless_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "routes",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "kiln_link",
+    "name": "PLACEHOLDER kiln link",
+    "from": "drowned_runoff_grate",
+    "to": "fourth_kiln",
+    "two_way": true,
+    "time": 1,
+    "zone": "",
+    "encounter_pct": 15,
+    "repeat_pct": -1,
+    "encounters": [],
+    "elites": [],
+    "elite_pct": 5,
+    "scripted": [],
+    "requires_flags": [],
+    "unless_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "routes",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "flue_climb",
+    "name": "The flue climb",
+    "from": "fourth_kiln",
+    "to": "crucible_watchpost",
+    "two_way": true,
+    "time": 1,
+    "zone": "",
+    "encounter_pct": 15,
+    "repeat_pct": -1,
+    "encounters": [],
+    "elites": [],
+    "elite_pct": 5,
+    "scripted": [],
+    "requires_flags": [],
+    "unless_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "routes",
+   "world": "sunk_ward",
+   "entry": {
+    "id": "crossroads_link",
+    "name": "PLACEHOLDER crossroads link",
+    "from": "ash_crawl_crossroads",
+    "to": "crucible_watchpost",
+    "two_way": true,
+    "time": 1,
+    "zone": "",
+    "encounter_pct": 15,
+    "repeat_pct": -1,
+    "encounters": [],
+    "elites": [],
+    "elite_pct": 5,
+    "scripted": [],
+    "requires_flags": [],
+    "unless_flags": [],
+    "tags": []
+   }
+  },
+  {
+   "op": "world",
+   "id": "sunk_ward",
+   "fields": {
+    "tagline": "PLACEHOLDER: the lowest quarter of Cinderreach.",
+    "description": "Act 1, The Young Vanguard: the cell fights up from the Sluice Undercroft through the Sunk Ward to the Slag Gate.",
+    "start_location": "sluice_undercroft",
+    "party_max": 4,
+    "start_gold": 60,
+    "start_supplies": 10
+   }
+  }
+ ]
+}

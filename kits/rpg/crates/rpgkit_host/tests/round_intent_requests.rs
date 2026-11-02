@@ -1,9 +1,10 @@
 //! RULESET1-PL host requests on a scratch catalog (no shipped data): `round_intent` sets a member's intent, target,
-//! kind and opener and rebuilds its auto plan (RULESET1_TASKS 1.8), `manual` and `fill` (MM1, MM3), `round_plan`
+//! kind and opener and rebuilds its auto plan (RULESET1_TASKS 1.8), `round_plan`
 //! reports every party-side unit's choice with the reason tags (PL6) and never an enemy; the requests replay from the
 //! history; classic refuses them.
 
 use rpgkit_battle::round_intent::RoundTarget;
+use rpgkit_battle::round_intent_plan::fill_rest;
 use rpgkit_data::Catalog;
 use rpgkit_host::{Battle, Host};
 use serde_json::{json, Value};
@@ -47,7 +48,7 @@ fn round_intent_plans_and_reports() {
     let entries = r["plan"]["t_hero"]["entries"].as_array().unwrap();
     assert_eq!(entries.iter().map(|e| e["skill"].as_str().unwrap()).collect::<Vec<_>>(), ["active_guard"; 3]);
     let row = hero_row(&mut h);
-    assert_eq!((row["intent"].as_str(), row["target"].as_str(), row["manual"].as_bool()), (Some("guard"), Some("self"), Some(false)));
+    assert_eq!((row["intent"].as_str(), row["target"].as_str()), (Some("guard"), Some("self")));
     assert_eq!(row["reasons"], json!(["opener", "follow-up 1", "follow-up 1"]));
     let r = h.handle(&json!({"cmd": "round_intent", "unit": 0, "opener": "strike"}));
     assert_eq!((r["planned"].clone(), r["reason"].as_str()), (json!(false), Some("Only Guard skills this round.")), "{r}");
@@ -58,29 +59,31 @@ fn round_intent_plans_and_reports() {
     assert!(h.handle(&json!({"cmd": "round_intent", "unit": 1, "intent": "guard"}))["error"].as_str().unwrap_or("").contains("party unit"));
 }
 
-/// MM1, MM3: Manual keeps the steps (cleared here, a Rest added by hand), `fill` places the follow-ups after it, Manual
-/// off rebuilds the auto plan; the history replays to the same choices and tags.
+/// Steps placed by hand (cleared here, a Rest added) replay from the history to the same choices and tags; `fill_rest`
+/// (MM3, the kit's function) places the follow-ups after them; a `round_intent` request rebuilds the auto plan.
 #[test]
-fn manual_and_fill_replay() {
+fn hand_steps_replay_and_fill_rest_follows_them() {
     let mut h = host("timeline");
     h.handle(&json!({"cmd": "round_intent", "unit": 0, "intent": "guard", "target": "self"}));
-    let r = h.handle(&json!({"cmd": "manual", "unit": 0}));
-    assert_eq!(r["round_plan"][0]["manual"], json!(true), "{r}");
     h.handle(&json!({"cmd": "clear", "unit": 0}));
     assert_eq!(h.handle(&json!({"cmd": "add_step", "unit": 0, "step": {"mode": "self", "skill": "rest"}}))["ok"], json!(true));
-    let r = h.handle(&json!({"cmd": "fill", "unit": 0}));
-    let names: Vec<&str> = r["plan"]["t_hero"]["entries"].as_array().unwrap().iter().map(|e| e["skill"].as_str().unwrap()).collect();
-    assert_eq!(names, ["rest", "active_guard", "active_guard", "rest"], "{r}");
-    let tags = hero_row(&mut h)["reasons"].clone();
-    // the last free block: Active Guard needs 2 blocks (checked before its AP, FU2 b then c)
-    assert_eq!(tags, json!(["", "follow-up 1", "follow-up 1", "rest: blocks 1 < 2"]));
     let history: Vec<Value> = h.handle(&json!({"cmd": "history"}))["history"].as_array().unwrap().clone();
     let mut again = Host::new(Battle::new(catalog()));
     for req in &history {
         again.handle(req);
     }
     assert_eq!(hero_row(&mut again), hero_row(&mut h), "the requests replay");
-    let r = h.handle(&json!({"cmd": "manual", "unit": 0, "on": false}));
+    {
+        let s = h.commands.session.as_mut().unwrap();
+        fill_rest(&s.w, &mut s.plan, 0).expect("the fill");
+    }
+    let r = h.handle(&json!({"cmd": "plan_view"}));
+    let names: Vec<&str> = r["plan"]["t_hero"]["entries"].as_array().unwrap().iter().map(|e| e["skill"].as_str().unwrap()).collect();
+    assert_eq!(names, ["rest", "active_guard", "active_guard", "rest"], "{r}");
+    let tags = hero_row(&mut h)["reasons"].clone();
+    // the last free block: Active Guard needs 2 blocks (checked before its AP, FU2 b then c)
+    assert_eq!(tags, json!(["", "follow-up 1", "follow-up 1", "rest: blocks 1 < 2"]));
+    let r = h.handle(&json!({"cmd": "round_intent", "unit": 0}));
     assert_eq!((r["planned"].clone(), r["round_plan"][0]["reasons"].clone()), (json!(true), json!(["opener", "follow-up 1", "follow-up 1"])), "{r}");
 }
 
@@ -137,12 +140,11 @@ fn a_refused_round_intent_changes_nothing() {
 fn classic_refuses_round_intents() {
     let mut h = host("classic");
     assert!(h.handle(&json!({"cmd": "round_intent", "unit": 0, "intent": "guard"}))["error"].as_str().unwrap_or("").contains("no round intents"));
-    assert_eq!(h.handle(&json!({"cmd": "manual", "unit": 0}))["ok"], json!(false));
     assert_eq!(h.handle(&json!({"cmd": "round_plan"}))["round_plan"], json!([]));
 }
 
 /// INPUT1 MR11: `new {melee_diagonal}` sets the battle's diagonal melee over the row's value (the state's `ruleset`
-/// names it beyond classic; classic keeps the state's shape), an unknown value is refused, and the request is recorded
+/// names it, classic too since CLN-46), an unknown value is refused, and the request is recorded
 /// and replays to the same battle.
 #[test]
 fn new_takes_melee_diagonal_and_replays() {
@@ -154,7 +156,9 @@ fn new_takes_melee_diagonal_and_replays() {
     let bad = h.handle(&json!({"cmd": "new", "encounter": "t_duel", "ruleset": "timeline", "melee_diagonal": "sideways"}));
     assert_eq!(bad["error"], json!("melee_diagonal must be one of none, maneuver, all (got 'sideways')"));
     let classic = h.handle(&json!({"cmd": "new", "encounter": "t_duel"}));
-    assert!(classic["state"].get("ruleset").is_none(), "classic keeps the state's shape");
+    // CLN-46: the state always carries the ruleset, classic too
+    assert_eq!(classic["state"]["ruleset"]["id"], json!("classic"), "{classic}");
+    assert_eq!(classic["state"]["ruleset"]["melee_diagonal"], json!("none"), "the built-in classic value");
     let mut h = Host::new(Battle::new(catalog()));
     h.handle(&json!({"cmd": "new", "encounter": "t_duel", "ruleset": "timeline", "melee_diagonal": "none"}));
     let history: Vec<Value> = h.handle(&json!({"cmd": "history"}))["history"].as_array().unwrap().clone();

@@ -29,7 +29,7 @@ R3 = ("brawler/goblin", "brawler/goblin_berserker", "rogue/goblin", "rogue/gobli
       "brawler/ash_warchief", "warrior/grakka_ashmaw", "warrior/brask_toller", "warrior/hest_the_quartermaster",
       "warrior/orsa_tallow", "ranger/wenn_tallow", "warrior/1h_buckler")
 VIEW_BODIES = PILOT + R2 + R3
-VIEW_IDS = ['idle_down', 'idle_up', 'walk_down', 'walk_up', 'attack_down', 'attack_up']
+VIEW_IDS = ['idle_down', 'idle_up', 'walk_down', 'walk_up', 'attack_down', 'attack_up', 'dash_down', 'dash_up']   # DASH1
 # WINDUP1 K6, K7: the pilot bodies' wind-up, stagger and dazed view rows come after today's view rows
 VIEW_IDS += ['%s_%s' % (n, v) for n in rig.WINDUP_ROWS for v in views.VIEWS]
 SPARK = (255, 255, 255)                   # the attack sparks' core (fx only; the rig's own white is rig.WHITE)
@@ -208,6 +208,7 @@ class Clips(unittest.TestCase):
             attack = g.get('attack')
             self.assertEqual(sorted(VA), sorted(['idle_down', 'idle_up', 'walk_down', 'walk_up']
                                                 + (['%s_down' % attack[0], '%s_up' % attack[0]] if attack else [])
+                                                + (['dash_down', 'dash_up'] if 'dash' in g else [])
                                                 + (['%s_%s' % (n, v) for n in rig.WINDUP_ROWS for v in views.VIEWS] if 'windups' in g else [])))
             for vid in VA:
                 base, view = views.of(vid)
@@ -509,7 +510,7 @@ class Classes(Registry):
 
     def view_ids(self, key):
         attack = 'jab' if key.startswith('brawler') else 'attack'
-        ids = ['idle_down', 'idle_up', 'walk_down', 'walk_up', attack + '_down', attack + '_up']
+        ids = ['idle_down', 'idle_up', 'walk_down', 'walk_up', attack + '_down', attack + '_up', 'dash_down', 'dash_up']
         return ids + ['%s_%s' % (n, v) for n in rig.WINDUP_ROWS for v in views.VIEWS]
 
     def test_view_clips_after_the_side_rows(self):

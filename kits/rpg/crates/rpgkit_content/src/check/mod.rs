@@ -7,8 +7,10 @@ pub mod assets;
 pub mod board;
 pub mod campaign;
 pub mod derived;
+pub mod expression_fx;
 pub mod dialogue;
 pub mod encounter;
+pub mod ground;
 pub mod hook_kinds;
 pub mod hooks;
 pub mod item;
@@ -89,6 +91,12 @@ impl View {
         self.entries(derived::KIND).iter().map(|e| json::s(e, "id")).collect()
     }
 
+    /// PORTRAITFX2 FL1: the game's faces: `neutral`, then the loaded `portrait_expressions` row ids in file order
+    /// (`rpgkit_data::faces_of`; no rows: the kit's `DEFAULT_FACES`).
+    pub fn faces(&self) -> Vec<String> {
+        rpgkit_data::faces_of(self.entries(expression_fx::KIND).iter().map(|e| json::get(e, "id").as_str().unwrap_or("")))
+    }
+
     /// A base stat or a loaded derived stat id.
     pub fn is_stat(&self, stat: &str) -> bool {
         rpgkit_data::STATS.contains(&stat) || self.has(derived::KIND, stat)
@@ -128,6 +136,9 @@ pub fn options_of(v: &View, f: &Dict) -> Vec<String> {
     };
     match json::s(f, "options_from").as_str() {
         "zones" => zone_ids(v),
+        // CLN-44: the ruleset rows (a world's `ruleset` may also be "" = inherited)
+        "rulesets" => v.entries(ruleset::KIND).iter().map(|e| json::s(e, "id")).collect(),
+        "rulesets_inherit" => std::iter::once(String::new()).chain(v.entries(ruleset::KIND).iter().map(|e| json::s(e, "id"))).collect(),
         "body" => bodies(false),
         "body_inherit" => bodies(true),
         "status" => std::iter::once(String::new()).chain(rpgkit_rules::status::debuffs().into_iter().map(String::from)).collect(),
@@ -231,7 +242,6 @@ fn is_gear_field(kind: &str, key: &str) -> bool {
 /// ContentCatalog.validate_entry: the hard errors of `entry` (any shape the catalog stores) as entry `current_id`
 /// ("" = a new entry).
 pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> Vec<String> {
-    let entry = &crate::source::folded(kind, entry);
     if kind == derived::KIND {
         // DERIVE1: the row checks the loader applies (fields, names, unique ids and labels, cycles)
         return derived::entry_errors(v, &content(kind, entry), current_id);
@@ -244,6 +254,10 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
         // PORTRAITFX1-S: the row checks the loader applies (trigger and match, effect and numbers, unique ids and cues)
         return portrait::entry_errors(v, &content(kind, entry), current_id);
     }
+    if kind == expression_fx::KIND {
+        // PORTRAITFX1-EX: the row checks the loader applies (the expression, tint, mark, shake; unique ids)
+        return expression_fx::entry_errors(v, &content(kind, entry), current_id);
+    }
     if crate::source::HOOK_KINDS.contains(&kind) {
         // HOOKS1-S: the row checks the loader applies (hazards, unit meters, zones; unique ids)
         return hook_kinds::entry_errors(v, kind, &content(kind, entry), current_id);
@@ -251,6 +265,10 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
     if kind == terms::KIND {
         // TERMS1-L: the row checks the loader applies (a game-scope term id, the lengths, unique ids)
         return terms::entry_errors(v, &content(kind, entry), current_id);
+    }
+    if kind == ground::KIND {
+        // REGIONGROUND1 KT 1.3: the row checks the loader applies (the fields' limits, unknown keys, unique ids and orders)
+        return ground::entry_errors(v, &content(kind, entry), current_id);
     }
     let old_id = if current_id.is_empty() { json::s(entry, "id") } else { current_id.to_string() };
     let e = match kind {
@@ -361,7 +379,6 @@ fn no_item_errors(kind: &str, e: &Dict) -> Vec<String> {
 
 /// ContentCatalog.warnings_for: the soft problems of one entry (never blocking).
 pub fn warnings_for(v: &View, kind: &str, entry: &Dict) -> Vec<String> {
-    let entry = &crate::source::folded(kind, entry);
     let e = content(kind, entry);
     match kind {
         "skills" => skill::warnings(entry, &e).into_iter().chain(skill::hook_warnings(v, entry, &e)).collect(),
@@ -371,6 +388,7 @@ pub fn warnings_for(v: &View, kind: &str, entry: &Dict) -> Vec<String> {
         "items" => item::item_warnings(v, &e),
         "item_families" => item::family_warnings(&crate::source::derive_family(&e)),
         portrait::KIND => portrait::warnings(&e),
+        expression_fx::KIND => expression_fx::warnings(&e),
         ruleset::KIND => ruleset::warnings(&e),
         _ => Vec::new(),
     }
@@ -382,7 +400,8 @@ pub const KINDS: [&str; 8] = ["skills", "items", "item_families", "passives", "c
 /// A whole-catalog report: {"kind:id" (or "kind:required", "skills:fold", "terrain:missing", "load"): [messages]}.
 pub type Report = IndexMap<String, Vec<String>>;
 
-/// ContentCatalog.validate_all: every entry's errors, the map templates' prop checks (PROPS1, `maps:<id>`), then the
+/// ContentCatalog.validate_all: every entry's errors, the map templates' prop and ground checks (PROPS1, REGIONGROUND1,
+/// `maps:<id>`), then the
 /// rules across entries (required skills, one family per gear token, skill families that fold, a row per terrain
 /// type) and the load problems.
 pub fn validate_all(v: &View) -> Report {
@@ -396,9 +415,10 @@ pub fn validate_all(v: &View) -> Report {
             }
         }
     }
-    // PROPS1 2: the map templates' prop checks (engine-only; Godot's MapCatalog had no props)
+    // PROPS1 2, REGIONGROUND1 KT 1.3: the map templates' prop and ground checks (engine-only; Godot's MapCatalog had neither)
     for t in v.entries("maps") {
-        let errors = map::prop_errors(t);
+        let mut errors = map::prop_errors(t);
+        errors.extend(ground::map_errors(v, t));
         if !errors.is_empty() {
             problems.insert(format!("maps:{}", json::s(t, "id")), errors);
         }
@@ -413,6 +433,12 @@ pub fn validate_all(v: &View) -> Report {
     add("skills:fold", skill::collapse(v.entries("skills")).1);
     if v.terrain_file {
         add("terrain:missing", simple::missing_terrain(v.entries("terrain")).iter().map(|id| format!("No terrain row for '{id}'.")).collect());
+    }
+    // CLN-44: a derived stat's or portrait cue's `rulesets` name ruleset rows (the ids are open)
+    for kind in [derived::KIND, portrait::KIND] {
+        for e in v.entries(kind) {
+            add(&format!("{kind}:{}", json::s(e, "id")), ruleset::missing_rows(v, e));
+        }
     }
     add("load", v.load_errors.clone());
     problems
@@ -444,6 +470,10 @@ pub fn warnings_all(v: &View) -> Report {
             out.insert("terrain:missing".into(), missing);
         }
     }
+    // CLN-44: without the default `classic` row its battles play the built-in classic values
+    if !v.has(ruleset::KIND, rpgkit_rules::ruleset::CLASSIC) {
+        out.insert(format!("{}:missing", ruleset::KIND), vec![rpgkit_rules::ruleset::fallback_note(rpgkit_rules::ruleset::CLASSIC)]);
+    }
     // INPUT1 1.7: the ruleset rows' warnings (`rulesets:<id>`)
     for e in v.entries(ruleset::KIND) {
         let found = ruleset::warnings(e);
@@ -457,8 +487,23 @@ pub fn warnings_all(v: &View) -> Report {
             out.insert(format!("{}:{}", portrait::KIND, json::s(e, "id")), found);
         }
     }
+    // PORTRAITFX1-EX: the expression-effect rows' warnings (`portrait_expressions:<id>`)
+    for e in v.entries(expression_fx::KIND) {
+        let found = expression_fx::warnings(e);
+        if !found.is_empty() {
+            out.insert(format!("{}:{}", expression_fx::KIND, json::s(e, "id")), found);
+        }
+    }
+    // REGIONGROUND1 KT 1.3: a legend entry no cell uses
+    for t in v.entries("maps") {
+        let found = ground::legend_warnings(t);
+        if !found.is_empty() {
+            out.insert(format!("maps:{}", json::s(t, "id")), found);
+        }
+    }
+    let faces = v.faces();
     for root in &v.assets.roots {
-        let found = assets::portrait_file_warnings(root, &v.assets);
+        let found = assets::portrait_file_warnings(root, &v.assets, &faces);
         if !found.is_empty() {
             out.insert(format!("assets:{}", assets::layer_name(root)), found);
         }

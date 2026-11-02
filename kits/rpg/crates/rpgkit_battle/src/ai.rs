@@ -1593,7 +1593,13 @@ const ROWS: [&str; 8] = [ROW_FLEE, ROW_SUPPORT, ROW_GUARD, ROW_BRACE, ROW_ENGAGE
 /// plans into the shared `plan` in roster order (earlier plans are claims), broken plans are re-picked, what is still
 /// broken is trimmed. Returns the intent change lines.
 pub fn plan_enemy_intents(w: &mut World, plan: &mut Plan) -> Vec<String> {
-    let drafted: Vec<UnitId> = w.enemies.iter().copied().filter(|&e| w.units[e].is_active() && w.has(e)).collect();
+    plan_enemy_intents_except(w, plan, &[])
+}
+
+/// `plan_enemy_intents` for every enemy on the field but `fixed` (ENCOUNTER2-C SR2: a scripted round's enemy entries,
+/// already in `plan`; the AI sees them as it sees earlier plans and never re-picks or trims them).
+pub fn plan_enemy_intents_except(w: &mut World, plan: &mut Plan, fixed: &[UnitId]) -> Vec<String> {
+    let drafted: Vec<UnitId> = w.enemies.iter().copied().filter(|&e| w.units[e].is_active() && w.has(e) && !fixed.contains(&e)).collect();
     let picks: Vec<(UnitId, AiProfile, Tactic)> = drafted.iter().map(|&e| (e, w.profile_of(e), Tactic::Balanced)).collect();
     let lines = plan_side(w, plan, &picks, true);
     let mut trimmed = true;
@@ -1613,13 +1619,12 @@ pub fn plan_enemy_intents(w: &mut World, plan: &mut Plan) -> Vec<String> {
 }
 
 /// AI5 for party members (plan_apply_preset_all under `round_intent`): each `(unit, preset)` in order picks by its
-/// tactic with the preset's profile; invalid plans are re-picked. A member set to Manual (MM1) or holding picks (INPUT1
-/// IF9) is skipped: its intent, target and steps stay as the player left them (user 2026-10-28). Returns the intent
-/// change lines.
+/// tactic with the preset's profile; invalid plans are re-picked. A member holding picks (INPUT1 IF9) is skipped: its
+/// intent, target and steps stay as the player left them (user 2026-10-28). Returns the intent change lines.
 pub fn plan_party_intents(w: &mut World, plan: &mut Plan, presets: &[(UnitId, String)]) -> Vec<String> {
     let picks: Vec<(UnitId, AiProfile, Tactic)> = presets
         .iter()
-        .filter(|(a, _)| w.units[*a].is_active() && !round_intent_plan::manual(w, *a) && round_intent_plan::picks_of(w, *a).is_empty())
+        .filter(|(a, _)| w.units[*a].is_active() && round_intent_plan::picks_of(w, *a).is_empty())
         .map(|(a, p)| (*a, w.profile_of(*a).with_preset(p), Tactic::parse(p)))
         .collect();
     plan_side(w, plan, &picks, false)

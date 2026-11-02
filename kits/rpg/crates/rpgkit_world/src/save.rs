@@ -1,12 +1,13 @@
 //! SaveGame and SaveMigrations (scripts/game_state/), the game's side: the engine save framework (`aegis_save`) keeps
 //! the slot files, the envelope ({format: "fc_save", version, saved_at, game_state}), the atomic write and the
-//! migration runner; this module supplies the format, the GameState shape and every migration step (1 -> 13). Slot
-//! 0 = autosave, 1..5 manual; reads migrate then validate and never return a half-loaded state. 2 -> 3 seeds
-//! rng_seed from Godot's sorted JSON text, rebuilt by godot_text.
+//! migration runner; this module supplies the format, the GameState shape and the release upgrade table (`STEPS`,
+//! empty while the game keeps one save version; CLN-47 dropped the development-era steps v1 -> v13). Slot 0 =
+//! autosave, 1..5 manual; reads migrate then validate and never return a half-loaded state; a save older than
+//! `OLDEST` is refused.
 
 use crate::data::Data;
 use crate::progression;
-use crate::state::{default_autoplay, GameState, SUPPLIES_START};
+use crate::state::GameState;
 use aegis_core::json::{self, int, Dict};
 use aegis_save::{Format, Peek};
 use serde_json::Value;
@@ -110,167 +111,43 @@ pub fn decode(d: &Data, text: &str) -> Result<Loaded, Vec<String>> {
     Ok(Loaded { state, warnings, saved_at: json::i(&envelope, "saved_at", 0) })
 }
 
-fn quest_entry_ok(key: &str, v: &Value) -> bool {
-    let mut one = Dict::new();
-    one.insert(key.into(), v.clone());
-    crate::state::quest_blob_errors(&one).is_empty()
+/// One release upgrade step: turns a game_state of its table row's `from` version into `from + 1` (None: refuse the
+/// save) and may add load warnings. `C` is what the step reads besides the state (the game's `Data` in `STEPS`).
+pub type Step<C> = fn(&C, &Dict, &mut Vec<String>) -> Option<Dict>;
+
+/// The oldest save version this build reads (CLN-47, decision "Save upgrades at game version updates"). The
+/// development-era steps v1 -> v13 are gone: a save below this is refused (`older_build_message`). At a released game
+/// version update, bump `VERSION`, add the previous release's step to `STEPS` and leave this at that release's version.
+pub const OLDEST: i64 = VERSION;
+
+/// The release upgrade table: (from version, step), one row per version from `OLDEST` up to `VERSION - 1`. Empty while
+/// the game keeps one save version.
+const STEPS: &[(i64, Step<Data>)] = &[];
+
+/// The refusal for a save older than `OLDEST`.
+pub fn older_build_message(version: i64) -> String {
+    format!("This save is from an older development build (v{version}); start a new game.")
 }
 
-/// JSON.stringify(v, "", true) as Godot writes a value it parsed from a save: keys sorted, no spaces, every number a
-/// float ("3.0"; Godot's JSON parser makes all numbers floats), except the quest blob after the 1 -> 2 step, which
-/// JsonUtil.normalize turned back into ints (`ints`).
-fn godot_text(v: &Value, ints: bool) -> String {
-    match v {
-        Value::Null => "null".into(),
-        Value::Bool(b) => b.to_string(),
-        Value::Number(n) => {
-            let f = n.as_f64().unwrap_or(0.0);
-            if f == f.floor() && f.abs() < 1e15 {
-                if ints && (n.is_i64() || n.is_u64()) {
-                    format!("{}", f as i64)
-                } else {
-                    format!("{}.0", f as i64)
-                }
-            } else {
-                format!("{f}")
-            }
-        }
-        Value::String(s) => serde_json::to_string(s).unwrap_or_default(),
-        Value::Array(a) => format!("[{}]", a.iter().map(|x| godot_text(x, ints)).collect::<Vec<_>>().join(",")),
-        Value::Object(o) => {
-            let mut keys: Vec<&String> = o.keys().collect();
-            keys.sort();
-            format!("{{{}}}", keys.iter().map(|k| format!("{}:{}", serde_json::to_string(k).unwrap_or_default(), godot_text(&o[*k], ints))).collect::<Vec<_>>().join(","))
-        }
-    }
-}
-
-fn state_text(state: &Dict, quests_int: bool) -> String {
-    let mut keys: Vec<&String> = state.keys().collect();
-    keys.sort();
-    let parts: Vec<String> = keys.iter().map(|k| format!("{}:{}", serde_json::to_string(k).unwrap_or_default(), godot_text(&state[*k], quests_int && k.as_str() == "quests"))).collect();
-    format!("{{{}}}", parts.join(","))
-}
-
-fn step(d: &Data, version: i64, state: &Dict, quests_int: bool) -> Option<Dict> {
-    let mut out = state.clone();
-    let party = |out: &mut Dict, f: &dyn Fn(&mut Dict)| {
-        if let Some(Value::Object(p)) = out.get_mut("party") {
-            f(p);
-        }
-    };
-    let members = |out: &mut Dict, f: &dyn Fn(&mut Dict)| {
-        if let Some(Value::Object(p)) = out.get_mut("party") {
-            if let Some(Value::Array(ms)) = p.get_mut("members") {
-                for m in ms.iter_mut() {
-                    if let Value::Object(m) = m {
-                        f(m);
-                    }
-                }
-            }
-        }
-    };
-    match version {
-        1 => {
-            let quests = json::normalize(state.get("quests").unwrap_or(&Value::Null));
-            let kept: Dict = json::dict(&quests).iter().filter(|(k, v)| quest_entry_ok(k, v)).map(|(k, v)| (k.clone(), v.clone())).collect();
-            out.insert("quests".into(), Value::Object(kept));
-            out.insert("loot_claimed".into(), Value::Array(Vec::new()));
-        }
-        2 => {
-            let seed = (aegis_core::ghash::string_hash(&state_text(state, quests_int)) & 0x7FFF_FFFF) as i64;
-            out.insert("rng_seed".into(), int(seed));
-            out.insert("position".into(), Value::Array(vec![int(-1), int(-1)]));
-            out.insert("explore".into(), Value::Object(crate::state::default_explore()));
-            out.insert("rolls".into(), Value::Object(Dict::new()));
-            let (world, loc) = (json::s(state, "world_id"), json::s(state, "location_id"));
-            let hit = if world.is_empty() || loc.is_empty() { json::empty() } else { d.resolve(&world, "locations", &loc) };
-            out.insert("location_id".into(), json::s(hit, "_qid").into());
-        }
-        3 => {
-            party(&mut out, &|p| {
-                p.insert("gold".into(), int(0));
-            });
-            out.insert("shops".into(), Value::Object(Dict::new()));
-        }
-        4 => {
-            out.insert("time".into(), int(0));
-        }
-        5 => party(&mut out, &|p| {
-            p.insert("supplies".into(), int(SUPPLIES_START));
-        }),
-        6 => {
-            out.insert("autoplay".into(), Value::Object(default_autoplay()));
-        }
-        7 => members(&mut out, &|m| {
-            m.insert("pouch".into(), Value::Array(Vec::new()));
-        }),
-        8 => {
-            members(&mut out, &|m| {
-                m.insert("hp_lost".into(), int(0));
-            });
-            if let Some(Value::Object(e)) = out.get_mut("explore") {
-                e.insert("last_rest".into(), "".into());
-            }
-        }
-        9 => {
-            out.insert("purses".into(), Value::Object(Dict::new()));
-        }
-        // SKILLUI1: members may carry `loadout.ranks`; nothing to add (absent = the highest unlocked rank). The
-        // bump makes an older build refuse such a save ("newer version") instead of dropping the ranks.
-        10 => {}
-        // REWARD1: `reward_paid` = {}, then every roster key of a `once` purse already paid (a story fight won before
-        // REWARD1 does not pay again).
-        11 => {
-            let mut paid = Dict::new();
-            for (qid, wins) in json::dget(&out, "purses").clone() {
-                let enc = d.resolve("", "encounters", &qid);
-                if json::to_int(&wins) < 1 || enc.is_empty() || !crate::purse::read(enc).is_some_and(|p| p.2) {
-                    continue;
-                }
-                let keys: Vec<String> = crate::battle::roster(d, &json::s(enc, "_world"), &qid).into_iter().map(|f| f.key).collect();
-                paid.insert(qid, json::strs(&keys));
-            }
-            out.insert("reward_paid".into(), Value::Object(paid));
-        }
-        // CAMPAIGN1 11.5: a campaign world may save `campaign`; nothing to add (absent = a fresh campaign in a
-        // campaign world, none elsewhere). The bump makes an older build refuse such a save instead of dropping it.
-        // STORYUI1 4.8 shares this unreleased bump (ROSTER1 11.4): `story` may be saved; absent reads empty.
-        // RULESET1 9 D5 shares it too: a party member may save `deck`; absent reads the empty deck (auto).
-        // ROSTER1 11.4 shares it too: a member may save `conditions`, the party `departed`; absent reads none.
-        12 => {}
-        _ => return None,
-    }
-    Some(out)
-}
-
-/// Brings an envelope to VERSION: (envelope, warnings) or the refusal. Each step reports the quest entries it dropped
-/// and a location_id it could not resolve.
+/// Brings an envelope to VERSION: (envelope, warnings) or the refusal (older than `OLDEST`, newer than `VERSION`, no
+/// version, or a version `STEPS` has no step for).
 pub fn migrate(d: &Data, envelope: &Dict) -> Result<(Dict, Vec<String>), Vec<String>> {
-    let mut quests_int = false;
-    aegis_save::migrate(&SAVES, envelope, |version, state, warnings| {
-        if !state.get("quests").map_or(true, Value::is_object) {
-            warnings.push("dropped invalid quests blob (not an object)".into());
-        }
-        let before: Vec<String> = json::dget(state, "quests").keys().cloned().collect();
-        let loc_before = json::s(state, "location_id");
-        let next = step(d, version, state, quests_int)?;
-        quests_int = quests_int || version == 1;
-        let after = json::dget(&next, "quests");
-        for k in before {
-            if !after.contains_key(&k) {
-                warnings.push(format!("dropped invalid quest entry '{k}'"));
-            }
-        }
-        if !loc_before.is_empty() && json::s(&next, "location_id").is_empty() {
-            warnings.push(format!("cleared unresolved location_id '{loc_before}'"));
-        }
-        Some(next)
-    })
+    migrate_with(&SAVES, OLDEST, STEPS, d, envelope)
+}
+
+/// `migrate` over any format, oldest version and step table (the hook `migrate` runs; unit-tested with a test step).
+fn migrate_with<C>(fmt: &Format, oldest: i64, steps: &[(i64, Step<C>)], cx: &C, envelope: &Dict) -> Result<(Dict, Vec<String>), Vec<String>> {
+    let raw = json::get(envelope, "version");
+    let version = json::to_int(raw);
+    if raw.is_number() && (1..oldest).contains(&version) {
+        return Err(vec![older_build_message(version)]);
+    }
+    aegis_save::migrate(fmt, envelope, |from, state, warnings| steps.iter().find(|(v, _)| *v == from).and_then(|(_, step)| step(cx, state, warnings)))
 }
 
 /// A slot header without loading: {exists, ok, slot, saved_at, version, world_id, location_id, party: [{id, base_unit,
-/// level}], error ("unreadable" | "newer version" | "")}.
+/// level}], error ("unreadable" | "newer version" |
+/// "older version" | "")}.
 pub fn peek(d: &Data, dir: &Path, slot: i64) -> Dict {
     let mut out = json::obj([
         ("exists", Value::Bool(exists(dir, slot))),
@@ -308,6 +185,10 @@ pub fn peek(d: &Data, dir: &Path, slot: i64) -> Dict {
         out.insert("error".into(), "newer version".into());
         return out;
     }
+    if version < OLDEST {
+        out.insert("error".into(), "older version".into());
+        return out;
+    }
     out.insert("ok".into(), Value::Bool(true));
     out
 }
@@ -318,4 +199,54 @@ pub fn newest_slot(d: &Data, dir: &Path) -> i64 {
         let head = peek(d, dir, slot);
         json::b(&head, "ok", false).then(|| json::i(&head, "saved_at", 0))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// A test release: version 3 reads version 2 saves through one step and refuses version 1.
+    const TEST_KEYS: [&str; 2] = ["gold", "badge"];
+    const TEST: Format = Format { tag: "test_save", version: 3, first_slot: 0, last_slot: 1, keys: &TEST_KEYS };
+
+    fn add_badge(badge: &String, state: &Dict, warnings: &mut Vec<String>) -> Option<Dict> {
+        let mut out = state.clone();
+        out.insert("badge".into(), badge.as_str().into());
+        warnings.push("added a badge".into());
+        Some(out)
+    }
+
+    fn envelope(version: i64) -> Dict {
+        json::dict(&json!({"format": "test_save", "version": version, "saved_at": 1, "game_state": {"gold": 5}})).clone()
+    }
+
+    #[test]
+    fn the_hook_runs_a_registered_release_step() {
+        let steps: &[(i64, Step<String>)] = &[(2, add_badge)];
+        let badge = "gilt".to_string();
+        let (out, warnings) = migrate_with(&TEST, 2, steps, &badge, &envelope(2)).expect("a v2 save upgrades");
+        assert_eq!(out["version"], json!(3));
+        assert_eq!(out["game_state"], json!({"gold": 5, "badge": "gilt"}));
+        assert_eq!(warnings, vec!["added a badge".to_string()]);
+        let (same, none) = migrate_with(&TEST, 2, steps, &badge, &envelope(3)).expect("the current version reads as is");
+        assert_eq!(same["game_state"], json!({"gold": 5}));
+        assert!(none.is_empty());
+    }
+
+    #[test]
+    fn the_hook_refuses_below_oldest_and_a_missing_step() {
+        let steps: &[(i64, Step<String>)] = &[(2, add_badge)];
+        let badge = String::new();
+        assert_eq!(migrate_with(&TEST, 2, steps, &badge, &envelope(1)).err(), Some(vec![older_build_message(1)]));
+        assert_eq!(migrate_with(&TEST, 1, steps, &badge, &envelope(1)).err(), Some(vec!["no migration from save version 1".to_string()]));
+        assert!(migrate_with(&TEST, 2, steps, &badge, &envelope(4)).is_err(), "a newer save is refused");
+    }
+
+    #[test]
+    fn the_shipped_table_covers_oldest_to_version() {
+        assert!(OLDEST <= VERSION);
+        let froms: Vec<i64> = STEPS.iter().map(|(v, _)| *v).collect();
+        assert_eq!(froms, (OLDEST..VERSION).collect::<Vec<_>>(), "one step per version from OLDEST to VERSION - 1");
+    }
 }

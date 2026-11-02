@@ -356,7 +356,7 @@ fn target_trace(w: &World, t: Option<RoundTarget>) -> serde_json::Value {
     }
 }
 
-/// The tells in the trace shape the Godot recorder writes (parity/godot/trace.gd `intents_state`): per enemy
+/// The tells in the trace shape the retired Godot recorder wrote (trace.gd `intents_state`): per enemy
 /// [name, line, revealed, enraged, [reader names], [plan lines], morale state, morale group]; a line is
 /// [kind, target name or "", cell x, cell y, start block, end block, skill]. RULESET1 V5: under `plan_badges` each
 /// record adds [round intent id or "", Maneuver kind id or "", round target (`target_trace`), [[impact block, badge

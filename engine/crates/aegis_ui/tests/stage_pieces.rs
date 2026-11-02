@@ -107,11 +107,10 @@ fn body_tree() -> PathBuf {
 fn body_bounds_are_the_fitted_idle_frames_solid_box_and_mirror_with_flip() {
     let root = body_tree();
     let mut art = Art::layered(Layers::of(vec![root.clone()]));
-    for size in [8, 16, 20] {
-        // k = floor(size / 8); the k x frame is centred across ((size - 8k) / 2) and stands on the bottom (size - 8k).
+    for size in [8, 16, 24] {
+        // Whole multiples (SPRITEFIT1 fills every size; the sizes between are in sprite_fit.rs): k x the solid box.
         let k = size / 8;
-        let (ox, oy) = ((size - 8 * k) / 2, size - 8 * k);
-        let want = Rect::new(ox + k, oy + 2 * k, 2 * k, 6 * k);
+        let want = Rect::new(k, 2 * k, 2 * k, 6 * k);
         let r = art.body_bounds("scout", "", size, false);
         assert_eq!(r, Some(want), "size {size}");
         let f = art.body_bounds("scout", "", size, true).expect("flipped");
@@ -160,12 +159,11 @@ fn view_tree() -> PathBuf {
 fn body_bounds_follow_the_facing_view_and_fall_back_to_the_side_idle() {
     let root = view_tree();
     let mut art = Art::layered(Layers::of(vec![root.clone()]));
-    for size in [8, 16, 20] {
+    for size in [8, 16, 24] {
         let k = size / 8;
-        let (ox, oy) = ((size - 8 * k) / 2, size - 8 * k);
-        let side = Rect::new(ox + k, oy + 2 * k, 2 * k, 6 * k);
+        let side = Rect::new(k, 2 * k, 2 * k, 6 * k);
         let mirrored = Rect::new(size - side.x - side.w, side.y, side.w, side.h);
-        let down = Rect::new(ox + 2 * k, oy + 5 * k, 6 * k, 3 * k);
+        let down = Rect::new(2 * k, 5 * k, 6 * k, 3 * k);
         for left in [false, true] {
             let want_side = if left { mirrored } else { side };
             assert_eq!(art.body_bounds_facing("facer", "", size, Facing::side(left)), Some(want_side), "side, left {left}, size {size}");

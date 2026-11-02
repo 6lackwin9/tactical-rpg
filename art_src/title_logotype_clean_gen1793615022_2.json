@@ -1,0 +1,32 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "title_logotype_clean",
+  "prompt": "Edit this pixel-art image and return it with only this change: take out every flame, spark and red or orange fleck on and around the letters, so each letter has a clean dark outline against the flat background. Same words, same lettering, same letter shapes, same gold and linen colours, same size and position, same pixel size. Every background pixel stays flat solid pure magenta (#FF00FF). No other text, no watermark.",
+  "reference": "refs/title_logotype_gen1793612839_2.png",
+  "prompts_file": null,
+  "time": "2026-11-02T10:22:00Z",
+  "n": 2,
+  "references": [
+    "refs/title_logotype_gen1793612839_2.png"
+  ],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "title_logotype_clean_q1793614225",
+  "metadata": {
+    "asset_id": "title_logotype_clean",
+    "task": "look1a",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "source_refs": [
+        "C:/dev/tactical-rpg-plan/art_src/title_logotype_gen1793612839_2.png"
+      ]
+    }
+  },
+  "mark_cleared": true,
+  "source_refs": [
+    "C:/dev/tactical-rpg-plan/art_src/title_logotype_gen1793612839_2.png"
+  ],
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Generated 2 variations from reference."
+}

@@ -3,12 +3,13 @@
 //! the engine's vignette player (`aegis_ui::vignette::VignetteScreen`), a `fight` step as a world fight with runner
 //! `story`, the `enter` and `end` steps by leaving for the region map or the main menu; queued vignettes play first
 //! (Q9). On the maps, `map_tick` hands over to the stage while a sequence runs and plays the vignette queue (W2). The
-//! card text takes the art bible's hues (`PALETTE`). Story-free: it names no place, person or flag (KIT2-UI moves the
+//! card text takes the theme's colours (`palette`). Story-free: it names no place, person or flag (KIT2-UI moves the
 //! screens to the kit later, KIT1 KQ4).
 
 use crate::screens::{show_errors, Cx, GameCx, Nav, Screen};
 use aegis_core::json::{self, s, s_or, Dict};
-use aegis_ui::canvas::{rgb, Rect, Rgba};
+use aegis_ui::canvas::{rgb, Rect};
+use aegis_ui::theme::th;
 use aegis_ui::ui::{Gfx, Ui, Widget, BODY, H, W};
 use aegis_ui::vignette::{self, Card, Ended, Palette, Reel, VignetteScreen};
 use aegis_ui::widget_plumbing;
@@ -16,11 +17,12 @@ use emberwake_data::Step;
 use emberwake_world::{story, Data};
 use serde_json::{json, Value};
 
-/// The card colours (STORYUI1 3, game code): Bleached Linen text, Candle Gold accent, Polished Steel dim (the art
-/// bible's hues 07, 11 and 06).
-pub const PALETTE: Palette = Palette { text: rgb(0xd9, 0xcb, 0xb4), accent: rgb(0xfb, 0xbf, 0x24), dim: rgb(0x9c, 0xa3, 0xaf) };
-/// The stage's own backdrop between cards (Void Abyss, hue 01).
-const STAGE_FILL: Rgba = rgb(0x0a, 0x0b, 0x10);
+/// The card colours (STORYUI1 3, LOOK1-G2: from the theme): `text`, `gold` as the accent, and a dim of the card's own
+/// (Polished Steel, hue 06: a card's dim lines sit on art, whatever the theme's `dim` is).
+pub fn palette() -> Palette {
+    let t = th();
+    Palette { text: t.text, accent: t.gold, dim: t.game("story_dim", rgb(0x9c, 0xa3, 0xaf)) }
+}
 
 /// A card of world `world` as the engine plays it (W5): the card keys through `Card::from_json`; a `line` card's speaker
 /// shows the character's name (`speaker_name` when the kit resolved it) and its portrait chain for the card's
@@ -56,11 +58,13 @@ pub fn entry_reel(d: &Data, world: &str, entry: &Dict) -> Reel {
 /// A vignette screen over `reel` as the game plays it: the player's text speed, the game's palette, its tuned shake
 /// presets and limits for the cards' `shake` (FX1 5.2; `tuning.json` `shakes`, `shake_max_px`, `shake_max_ms`), and
 /// the line cards' portraits lit by the game's rim key (PORTRAITFX1-D, 6.4: Tallow Amber), an expression frame without
-/// its own sidecar taking its base portrait's (PORTRAITFX1-X: the kit's `face_sidecars`).
+/// its own sidecar taking its base portrait's (PORTRAITFX1-X: the kit's `face_sidecars`) and the data's expression effects
+/// drawn while a card's `expression` holds (PORTRAITFX1-EX).
 pub fn vignette_screen(cx: &Cx, reel: Reel, on_done: impl FnOnce(&mut Cx, Ended) + 'static) -> VignetteScreen<GameCx> {
     let t = &cx.tuning.value;
-    VignetteScreen::with_settings(&cx.settings, reel, on_done).palette(PALETTE).with_shakes(t.shakes.clone(), t.shake_limits()).portrait_rim(Some(crate::portraits::RIM))
+    VignetteScreen::with_settings(&cx.settings, reel, on_done).palette(palette()).with_shakes(t.shakes.clone(), t.shake_limits()).portrait_rim(Some(crate::portraits::RIM))
         .portrait_sidecars(emberwake_content::art::face_sidecars)
+        .portrait_expressions(crate::portraits::expression_fx_of(&cx.data.cat.portrait_expressions))
 }
 
 /// The player for `scene` in the game's palette; Skip asks first for a scene not seen yet (W6).
@@ -239,13 +243,13 @@ impl Screen<GameCx> for StoryStage {
 
     fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<StAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), STAGE_FILL);
+        ui.p.fill(Rect::new(0, 0, W, H), th().stage);
         if !self.error.is_empty() {
             let r = Rect::new(120, 100, 400, 160);
             ui.frame(r, "The story cannot go on", false);
             let mut y = r.y + 30;
             for e in &self.error {
-                y = ui.para(r.x + 10, y, r.w - 20, e, BODY, PALETTE.text) + 4;
+                y = ui.para(r.x + 10, y, r.w - 20, e, BODY, th().text) + 4;
             }
             let bw = (ui.p.text_w("Main menu", BODY) + 16.0).ceil() as i32;
             ui.button("story.main_menu", Rect::new(r.x + r.w - bw - 10, r.y + r.h - 26, bw, 16), "Main menu", StAct::MainMenu, true);

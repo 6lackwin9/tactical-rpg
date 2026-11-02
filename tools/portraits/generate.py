@@ -60,16 +60,29 @@ HEADING = re.compile(r"^## .*\(`([a-z_0-9]+)`\)", re.M)
 
 
 def prompts(path=PROMPTS, styled=None):
-    """id -> the full prompt. ART2_PROMPTS.md (and any `styled` file): the shared style block + each character
-    block; ART2_ICONS.md: each block is a whole sheet prompt. A `reference:` line inside a block is not prompt text
-    (references reads it)."""
+    """id -> the full prompt: the first ```text block inside the id's own `## ... (`id`)` section (up to the next
+    `#` or `##` heading). A `styled` file (ART2_PROMPTS.md and the like) prefixes the shared style block, a text block
+    before the first id heading, when there is one; ART2_ICONS.md and PROPS1_PROMPTS.md blocks are whole sheet
+    prompts. A `reference:` line inside a block is not prompt text (references reads it)."""
     text = path.read_text(encoding="utf-8")
-    blocks = [REF_LINE.sub("", b) for b in re.findall(r"```text\n(.*?)```", text, re.S)]
-    ids = re.findall(r"^## .*\(`([a-z_0-9]+)`\)", text, re.M)
-    if styled if styled is not None else path == PROMPTS:
-        style, rest = blocks[0].strip(), blocks[1:]
-        return {i: f"{style}\n\n{b.strip()}" for i, b in zip(ids, rest)}
-    return {i: b.strip() for i, b in zip(ids, blocks)}
+    heads = list(HEADING.finditer(text))
+    block = re.compile(r"```text\n(.*?)```", re.S)
+    style = None
+    if heads:
+        pre = block.search(text, 0, heads[0].start())
+        style = REF_LINE.sub("", pre.group(1)).strip() if pre else None
+    use_style = styled if styled is not None else path == PROMPTS
+    out = {}
+    for h in heads:
+        # a section runs from its heading to the next heading of the same or higher level (# or ##)
+        nxt = re.search(r"^#{1,2} ", text[h.end():], re.M)
+        end = h.end() + nxt.start() if nxt else len(text)
+        m = block.search(text, h.end(), end)
+        if not m:
+            continue
+        body = REF_LINE.sub("", m.group(1)).strip()
+        out[h.group(1)] = f"{style}\n\n{body}" if use_style and style else body
+    return out
 
 
 def references(path):

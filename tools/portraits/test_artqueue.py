@@ -101,14 +101,15 @@ class Requests(Base):
         req = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(req["prompt"], G.prompts(self.md, True)["tess"])
         self.assertNotIn("reference:", req["prompt"])
-        self.assertEqual(req["references"], [self.ref.resolve().as_posix(), self.extra_ref.resolve().as_posix()])
+        refs = (self.pipe / "refs").resolve()
+        self.assertEqual(req["references"], [(refs / self.ref.name).as_posix(), (refs / self.extra_ref.name).as_posix()])
         self.assertTrue(all(pathlib.Path(r).is_absolute() for r in req["references"]))
         self.assertEqual((req["n"], req["aspect_ratio"], req["style_hints"]), (2, "1:1", ""))
         meta = req["metadata"]
         self.assertEqual((meta["asset_id"], meta["route"], meta["task"]), ("tess", "faces", "PORTRAITFX1-XA"))
         self.assertEqual(meta["record"]["kind"], "faces")
         self.assertEqual(meta["record"]["faction"], "castellan")
-        self.assertEqual(sorted(p.name for p in self.pipe.iterdir()), sorted(Q.FOLDERS))
+        self.assertEqual(sorted(p.name for p in self.pipe.iterdir()), sorted([*Q.FOLDERS, Q.REFS]))
 
     def test_faces_without_reference_line_is_skipped(self):
         out = self.run_cli("request", "bram", "--faces", "--prompts", str(self.md))
@@ -150,12 +151,83 @@ class Requests(Base):
         with self.assertRaises(ValueError):
             Q.build_request("  ", "a")
 
-    def test_default_pipeline_is_the_main_checkout(self):
-        old = os.environ.pop("IMAGE_PIPELINE", None)
-        self.addCleanup(lambda: old is not None and os.environ.__setitem__("IMAGE_PIPELINE", old))
-        pipe = Q.pipeline()
-        self.assertEqual(pipe.name, ".image_pipeline")
-        self.assertTrue((pipe.parent / ".git").is_dir())   # the main checkout, not a worktree (.git is a file there)
+    def clean_env(self):
+        for k in ("AEGIS_IMAGE_PIPELINE", "IMAGE_PIPELINE"):
+            old = os.environ.pop(k, None)
+            self.addCleanup(lambda k=k, old=old: old is not None and os.environ.__setitem__(k, old))
+
+    def test_default_pipeline_from_config_env_and_override(self):
+        self.clean_env()
+        drive = self.tmp / "drive"; drive.mkdir()
+        cfg = self.tmp / "cfg.json"; cfg.write_text(json.dumps({"pipeline": drive.as_posix()}), encoding="utf-8")
+        self.assertEqual(Q.pipeline(config=cfg), drive)
+        env_dir = self.tmp / "envdir"; env_dir.mkdir()
+        os.environ["AEGIS_IMAGE_PIPELINE"] = str(env_dir)
+        self.assertEqual(Q.pipeline(config=cfg), env_dir)
+        other = self.tmp / "other"
+        self.assertEqual(Q.pipeline(str(other), config=cfg), other)       # --pipeline wins, need not exist yet
+        backup = Q.pipeline(backup=True)
+        self.assertEqual(backup.name, ".image_pipeline")
+        self.assertTrue((backup.parent / ".git").is_dir())   # the main checkout, not a worktree (.git is a file there)
+
+    def test_missing_default_folder_fails_clearly(self):
+        self.clean_env()
+        cfg = self.tmp / "cfg.json"
+        cfg.write_text(json.dumps({"pipeline": (self.tmp / "no_drive").as_posix()}), encoding="utf-8")
+        with self.assertRaises(SystemExit) as cm:
+            Q.pipeline(config=cfg)
+        self.assertIn("does not exist", str(cm.exception))
+        self.assertIn("no_drive", str(cm.exception))
+        with self.assertRaises(SystemExit) as cm:
+            Q.pipeline(config=self.tmp / "absent.json")
+        self.assertIn("no image pipeline folder", str(cm.exception))
+
+    def test_shipped_config_names_a_pipeline(self):
+        self.assertTrue(json.loads(Q.CONFIG.read_text(encoding="utf-8"))["pipeline"])
+
+
+class Refs(Base):
+    def req_of(self, path):
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def test_refs_copied_and_listed(self):
+        self.run_cli("text", "a", "--text", "x", "--ref", str(self.ref), "--ref", str(self.extra_ref))
+        [path] = self.queued()
+        req = self.req_of(path)
+        self.assertEqual([pathlib.Path(r).parent for r in req["references"]], [(self.pipe / "refs").resolve()] * 2)
+        self.assertEqual([pathlib.Path(r).name for r in req["references"]], [self.ref.name, self.extra_ref.name])
+        for r in req["references"]:
+            self.assertTrue(pathlib.Path(r).is_file())
+        self.assertEqual(req["metadata"]["record"]["source_refs"],
+                         [self.ref.resolve().as_posix(), self.extra_ref.resolve().as_posix()])
+
+    def test_same_name_different_file_gets_a_suffix(self):
+        other_dir = self.tmp / "o"; other_dir.mkdir()
+        clash = other_dir / self.ref.name
+        portrait_png(clash, size=(1024, 1024), mark=True)       # same name, different bytes
+        self.run_cli("text", "a", "--text", "x", "--ref", str(self.ref))
+        self.run_cli("text", "b", "--text", "x", "--ref", str(clash))
+        self.run_cli("text", "c", "--text", "x", "--ref", str(self.ref))   # the same file again: reused
+        names = [pathlib.Path(self.req_of(p)["references"][0]).name for p in self.queued()]
+        self.assertEqual(sorted(names), sorted([self.ref.name, f"{self.ref.stem}_2.png", self.ref.name]))
+        self.assertEqual(len(list((self.pipe / "refs").glob("*.png"))), 2)
+
+    def test_dry_run_copies_nothing(self):
+        self.run_cli("text", "a", "--text", "x", "--ref", str(self.ref), "--dry-run")
+        self.assertFalse((self.pipe / "refs").exists())
+
+    def test_attach_lists_unique_sorted_without_session_refs(self):
+        self.run_cli("text", "a", "--text", "x", "--ref", str(self.extra_ref), "--ref", str(self.ref))
+        self.run_cli("text", "b", "--text", "x", "--ref", str(self.ref))
+        sess = self.tmp / "sess.png"; portrait_png(sess, mark=False)
+        self.run_cli("text", "s", "--text", "x", "--ref", str(sess), "--record", "session_ref=a_q1")
+        out = self.run_cli("attach").split()
+        self.assertEqual(out, sorted([self.ref.name, self.extra_ref.name]))
+        self.assertNotIn("sess.png", out)
+
+    def test_attach_nothing(self):
+        self.run_cli("text", "a", "--text", "x")
+        self.assertIn("nothing to attach", self.run_cli("attach"))
 
 
 class Ingest(Base):
@@ -175,15 +247,15 @@ class Ingest(Base):
         with Image.open(art) as im:
             self.assertEqual(im.convert("RGB").getpixel(spot["xy"]), BG)   # the mark cleared
         rec = json.loads(art.with_suffix(".json").read_text(encoding="utf-8"))
-        self.assertEqual((rec["model"], rec["via"]), ("image-generator", "antigravity"))
+        self.assertEqual((rec["model"], rec["via"]), ("image-generator", Q.WEB_VIA))
         self.assertEqual(rec["id"], "bryn_hale")
         self.assertEqual(rec["prompt"], "Bryn, a scarred sergeant.")
-        self.assertEqual(rec["source"], Q.SOURCE)
+        self.assertEqual(rec["source"], Q.WEB_SOURCE)
         self.assertEqual(rec["request"], name)
         self.assertEqual(rec["n"], 1)
         self.assertEqual(rec["time"], "2026-11-02T10:00:00+00:00")
-        self.assertEqual(rec["references"], [G.rel(self.extra_ref)])
-        self.assertEqual(rec["reference"], G.rel(self.extra_ref))
+        self.assertEqual(rec["references"], [G.rel(self.pipe / "refs" / self.extra_ref.name)])
+        self.assertEqual(rec["reference"], G.rel(self.pipe / "refs" / self.extra_ref.name))
         self.assertEqual(rec["metadata"], req["metadata"])
         self.assertEqual(rec["faction"], "castellan")
         self.assertTrue(rec["mark_cleared"])
@@ -191,8 +263,42 @@ class Ingest(Base):
         px = self.pipe / Q.PIXELIZED / "bryn_hale.png"
         with Image.open(px) as im:
             self.assertEqual(im.size, (240, 240))
-        marker = json.loads((self.pipe / "output" / f"{name}.ingested.json").read_text(encoding="utf-8"))
+        marker = json.loads(next((self.pipe / "archive").glob(f"*/output/{name}.ingested.json")).read_text(encoding="utf-8"))
         self.assertEqual([a["art_src"] for a in marker["accepted"]], [G.rel(art)])
+
+    def ingest_record(self, cid, model="image-generator"):
+        """Queues, fakes and ingests one `other` image in self.pipe; the record written."""
+        path = self.queue_one("text", cid, "--text", "A tile.", "--route", "other")
+        self.fake_antigravity(path, {f"{path.stem}.png": portrait_png}, model=model)
+        self.run_cli("ingest")
+        return json.loads((self.src / f"{cid}.json").read_text(encoding="utf-8"))
+
+    def test_record_says_the_web_queue(self):
+        rec = self.ingest_record("web_tile")
+        self.assertEqual((rec["source"], rec["via"]), (Q.WEB_SOURCE, Q.WEB_VIA))
+
+    def test_record_says_antigravity_for_the_backup_queue(self):
+        self.pipe = self.tmp / Q.BACKUP_FOLDER                     # a temp folder of that name, never the real queue
+        rec = self.ingest_record("backup_tile")
+        self.assertEqual((rec["source"], rec["via"]), ("antigravity image subagent", "antigravity"))
+
+    def test_backup_flag_resolves_to_the_antigravity_origin(self):
+        self.assertEqual(Q.queue_origin(Q.pipeline(backup=True)), (Q.SOURCE, Q.VIA))
+
+    def test_origin_however_the_folder_is_named(self):
+        backup = self.tmp / Q.BACKUP_FOLDER; backup.mkdir()
+        for named in (backup, f"{backup}/", f"{backup}\\", self.tmp / ".IMAGE_Pipeline",
+                      self.tmp / "pipe" / ".." / Q.BACKUP_FOLDER):
+            self.assertEqual(Q.queue_origin(named), (Q.SOURCE, Q.VIA), named)
+        self.addCleanup(os.chdir, os.getcwd())                     # runs before the temp folder is removed
+        os.chdir(backup)
+        self.assertEqual(Q.queue_origin("."), (Q.SOURCE, Q.VIA))
+        self.assertEqual(Q.queue_origin(pathlib.Path(".")), (Q.SOURCE, Q.VIA))
+        for other in (self.tmp / "pipe", self.tmp / ".image_pipeline_old", self.tmp / Q.BACKUP_FOLDER / "sub"):
+            self.assertEqual(Q.queue_origin(other), (Q.WEB_SOURCE, Q.WEB_VIA), other)
+
+    def test_model_falls_back_to_the_queue(self):
+        self.assertEqual(self.ingest_record("no_model", model=None)["model"], Q.WEB_VIA)
 
     def test_portrait_target_and_existing_source(self):
         portrait_png(self.src / "bryn_hale.png")      # a first take exists: the new one is a _gen take
@@ -217,7 +323,7 @@ class Ingest(Base):
             rec = json.loads(art.with_suffix(".json").read_text(encoding="utf-8"))
             self.assertEqual((rec["kind"], rec["n"]), ("faces", k))
             self.assertEqual(rec["prompts_file"], G.rel(self.md))
-            self.assertEqual(rec["reference"], G.rel(self.ref))
+            self.assertEqual(rec["reference"], G.rel(self.pipe / "refs" / self.ref.name))
         self.assertFalse((self.pipe / Q.PIXELIZED).exists())   # faces are cut by sheets.py, not pixelized
 
     def test_bad_images_moved_aside(self):
@@ -275,7 +381,8 @@ class Ingest(Base):
         (self.pipe / "output" / f"{two}.result.json").write_text("{}", encoding="utf-8")
         self.assertIn("not completed", self.run_cli("ingest", two))
         s = Q.status(self.pipe)
-        self.assertEqual((s["queue"], s["processing"], s["output"], s["ingested"], s["completed"]), (0, 1, 1, 1, 1))
+        self.assertEqual((s["queue"], s["processing"], s["output"], s["ingested"], s["completed"]), (0, 1, 1, 0, 0))
+        self.assertEqual(s["archived"], 1)
 
     def test_prompt_changed_and_dry_run(self):
         path = self.queue_one("text", "chg_q", "--text", "Asked prompt.")
@@ -293,10 +400,111 @@ class Ingest(Base):
         (self.pipe / "failed" / f"{path.stem}.error.txt").write_text("reference refused by the model\n",
                                                                      encoding="utf-8")
         out = self.run_cli("ingest")
-        self.assertIn(f"{path.stem}: failed in Antigravity: reference refused by the model", out)
-        self.assertIn("failed in Antigravity", self.run_cli("ingest", path.stem))
+        self.assertIn(f"{path.stem}: failed in the Gemini web app: reference refused by the model", out)
+        self.assertIn("failed in the Gemini web app", self.run_cli("ingest", path.stem))
         self.assertEqual(list(self.src.iterdir()), [])
         self.assertEqual(Q.status(self.pipe)["failed"], 1)
+        self.pipe = self.tmp / Q.BACKUP_FOLDER
+        path = self.queue_one("text", "bad_b", "--text", "Bad.")
+        (self.pipe / "failed" / path.name).write_bytes(path.read_bytes()); path.unlink()
+        self.assertIn("failed in Antigravity", self.run_cli("ingest", path.stem))
+
+
+
+class Archive(Base):
+    def ingested(self, base="arc_q"):
+        self.run_cli("text", base, "--text", "Arc.", "--route", "other")
+        [path] = self.queued()
+        name, _ = self.fake_antigravity(path, {f"{path.stem}.png": portrait_png})
+        return name
+
+    def day(self):
+        import datetime
+        return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+
+    def test_ingest_archives_request(self):
+        name = self.ingested()
+        self.run_cli("ingest")
+        arc = self.pipe / "archive" / self.day()
+        self.assertEqual(sorted(p.name for p in (arc / "output").iterdir()),
+                         sorted([f"{name}.png", f"{name}.result.json", f"{name}.ingested.json"]))
+        self.assertEqual([p.name for p in (arc / "completed").iterdir()], [f"{name}.json"])
+        for f in ("output", "completed"):
+            self.assertEqual(list((self.pipe / f).iterdir()), [])
+        self.assertEqual(Q.status(self.pipe)["archived"], 1)
+
+    def test_reingest_says_ingested_already(self):
+        name = self.ingested()
+        self.run_cli("ingest")
+        self.assertIn("ingested already", self.run_cli("ingest", name))
+        self.assertEqual(Q.finished(self.pipe), [])
+
+    def test_sweep_old_marker_and_dry_run(self):
+        name = self.ingested()
+        self.run_cli("ingest")
+        # undo the archive move to look like an earlier ingest
+        arc = self.pipe / "archive" / self.day()
+        for f in (arc / "output").iterdir():
+            shutil.move(str(f), str(self.pipe / "output" / f.name))
+        shutil.move(str(arc / "completed" / f"{name}.json"), str(self.pipe / "completed"))
+        shutil.rmtree(self.pipe / "archive")
+        out = self.run_cli("archive", "--dry-run")
+        self.assertIn("would archive 4", out)
+        self.assertEqual(len(list((self.pipe / "output").iterdir())), 3)
+        self.assertFalse((self.pipe / "archive").exists())
+        self.run_cli("archive")
+        self.assertEqual(list((self.pipe / "output").iterdir()), [])
+        self.assertEqual(list((self.pipe / "completed").iterdir()), [])
+        self.assertTrue((arc / "completed" / f"{name}.json").exists())
+        self.assertEqual(Q.status(self.pipe)["archived"], 1)
+
+    def test_ingest_dry_run_moves_nothing(self):
+        name = self.ingested()
+        self.run_cli("ingest", "--dry-run")
+        self.assertFalse((self.pipe / "archive").exists())
+        self.assertTrue((self.pipe / "completed" / f"{name}.json").exists())
+
+    def test_name_clash_gets_suffix(self):
+        d = self.pipe / "archive" / "2026-01-01" / "output"; d.mkdir(parents=True)
+        (d / "a.result.json").write_text("old", encoding="utf-8")
+        src = self.tmp / "a.result.json"; src.write_text("new", encoding="utf-8")
+        dest = Q.move_unique(src, d)
+        self.assertEqual(dest.name, "a_2.result.json")
+        self.assertEqual((d / "a.result.json").read_text(encoding="utf-8"), "old")
+        self.assertEqual(dest.read_text(encoding="utf-8"), "new")
+
+
+class Pause(Base):
+    """ARTQUEUE2: the quota pause Antigravity writes as paused.json."""
+    def pause(self, text):
+        self.pipe.mkdir(parents=True, exist_ok=True)
+        (self.pipe / "paused.json").write_text(text, encoding="utf-8")
+
+    def at(self, minutes):
+        t = Q.datetime.datetime.now(Q.datetime.timezone.utc) + Q.datetime.timedelta(minutes=minutes)
+        return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def test_absent(self):
+        self.assertIsNone(Q.pause_state(self.pipe))
+        self.assertNotIn("pause", self.run_cli("status"))
+
+    def test_active(self):
+        self.pause(json.dumps({"paused_until": self.at(30), "reason": "Error 429", "request": "x_q1"}))
+        out = self.run_cli("status")
+        self.assertRegex(out, r"paused until \S+ \S+ UTC \((30|31) min\): Error 429")
+        out = self.run_cli("text", "p_q", "--text", "P.")
+        self.assertIn("requests wait in queue/", out)
+        self.assertEqual(len(self.queued()), 1)
+
+    def test_expired(self):
+        self.pause(json.dumps({"paused_until": self.at(-5), "reason": "Error 429"}))
+        self.assertIn("pause expired", self.run_cli("status"))
+        self.assertNotIn("note:", self.run_cli("text", "e_q", "--text", "E."))
+
+    def test_malformed(self):
+        for bad in ("{not json", json.dumps({"reason": "no time"}), json.dumps({"paused_until": "soon"})):
+            self.pause(bad)
+            self.assertIn("paused.json unreadable", self.run_cli("status"))
 
 
 if __name__ == "__main__":

@@ -129,6 +129,15 @@ No rows: Emberwake has picked no lore name for an intent, and the purse names be
   `round_intent_plan.rs` and `plan.rs` still call `name()` (the same text while the table is empty); they move to
   `label` with TERMS1-U, after INPUT1-U. No intent name is spelled in `log.rs` or `metrics.rs`. `hud::purse_word_in` now
   calls `terms::word`. The `terms` kind carries `origin` only (as `hazards`; no catalog kind has `tags`).
+- As built (TERMS1-U, 2026-11-01): the screens read the resolver through `hud::{play_world, term_short, term_word}`
+  (the world being played; "" without a game, so the catalog screens read the defaults); the Results take the
+  currency's short form in the game's world (`reward_text(.., currency, ..)`). Beyond section 2's rows the shop's trade
+  log ("bought N items for M gold"), its supply detail ("Travel supplies: ...") and the region chest line ("N gold",
+  "N supplies") read the purse too. The intent names read `RoundIntent::label(cat)` on the battle screen, in
+  `intent_text::round_head`, `timeline_view` (not in the touches list; same labels), the deck screen and the kit texts
+  of `round_intent.rs`, `round_intent_plan.rs` (its refusal label now a `String`) and `plan.rs`. The intents are
+  `game` terms, so the deck screens read them too: `DeckTerms.intent_names` (`party::intent_names(cat)`) names them in
+  the deck refusals, and the Dojo's order headings read `label` on its catalog.
 
 ## 7. The layer check gains lore words (G3; `tools/fc.sh layers`, the same step in `check_project.ps1`)
 

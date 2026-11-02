@@ -1,0 +1,24 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "ornate_corners",
+  "prompt": "A sheet of ornamental frame pieces for a gothic dark fantasy game's UI in a 2 x 2 grid plus nothing else: four gilt and black basalt gothic panel corners, one per quadrant, each filling its quadrant's outer corner (top-left piece in the top-left quadrant, and so on, mirrored), with a small straight divider ornament along the sheet's centre line. Every background pixel is flat solid pure magenta (#FF00FF); no magenta in the art, no shadow on it. Candle gold #fbbf24, tallow #d97706, iron #4b5563, basalt #14171f. Clear dark outlines, hand-placed pixel clusters. Square 1:1. No text, no watermark.",
+  "reference": null,
+  "prompts_file": null,
+  "time": "2026-11-02T09:44:00Z",
+  "n": 1,
+  "references": [],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "ornate_corners_q1793611390",
+  "metadata": {
+    "asset_id": "ornate_corners",
+    "task": "look1a",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null
+    }
+  },
+  "mark_cleared": true,
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Generated 2 variations."
+}

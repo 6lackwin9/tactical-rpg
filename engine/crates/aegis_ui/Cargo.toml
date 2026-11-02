@@ -3,9 +3,15 @@ name = "aegis_ui"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "ground_compose"
+path = "src/bin/ground_compose.rs"
+test = false
+
 [dependencies]
 aegis_host = { path = "../aegis_host" }
 aegis_core = { path = "../aegis_core" }
+aegis_layout = { path = "../aegis_layout" }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 winit = "0.30.5"

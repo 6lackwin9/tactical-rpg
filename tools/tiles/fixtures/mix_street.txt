@@ -1,0 +1,15 @@
+# REGIONGROUND1.md section 6, after mock_b_street: x, then y, inclusive; later over earlier.
+size 40 22
+default soot_yard
+flagstone 14-25 3-9
+flagstone 1-9 5-9
+cobble_road 0-39 10-12
+tallow 30-38 4-9
+mud 10-11 3-9
+mud 28-29 3-9
+mud 5-6 13-15
+mud 32-33 13-15
+moss 0-39 14-15
+moss 0-39 20-21
+water 0-39 16-19
+iron_catwalk 19-21 13-21

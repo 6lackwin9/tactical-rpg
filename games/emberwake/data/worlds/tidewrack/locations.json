@@ -15,6 +15,11 @@
 				}
 			],
 			"encounters": [],
+			"map": "",
+			"zone_bindings": {},
+			"markers": [],
+			"map_pos": [],
+			"rest": false,
 			"tags": []
 		},
 		{
@@ -30,6 +35,11 @@
 				}
 			],
 			"encounters": [],
+			"map": "",
+			"zone_bindings": {},
+			"markers": [],
+			"map_pos": [],
+			"rest": false,
 			"tags": []
 		}
 	]

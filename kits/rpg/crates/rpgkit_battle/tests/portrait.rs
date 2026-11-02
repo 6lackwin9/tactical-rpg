@@ -1,10 +1,14 @@
 //! Portrait cue evaluation (PORTRAITFX1-S, docs/specs/PORTRAITFX1.md 5.2-5.3; checks S3-S5 of PORTRAITFX1_TASKS.md
 //! 1.2) on rows and a scratch catalog built here: which state rows hold for a look on a surface and under a ruleset,
 //! which event rows a step's events fire and in what order, and the events of one step read from the HP before and
-//! after and the step's log lines (the resolver's own line formats), without touching the session.
+//! after and the step's log lines (the resolver's own line formats), without touching the session. PORTRAITFX2 5.3:
+//! who gets each battle event and when (`battle_start`, `ambush`, `round_start`, `skill` with `min_level`,
+//! `ally_down`, `victory`) and the `unspent` state.
 
 use indexmap::IndexMap;
-use rpgkit_battle::portrait::{holds, matches, reactions, session_step_events, step_events, Look, StepUnit};
+use rpgkit_battle::command::{CmdKind, Command};
+use rpgkit_battle::portrait::{ally_down_events, holds, matches, reactions, reactions_at, round_events, session_step_events, skill_event, start_events, step_events, victory_events, Look, StepUnit, ALLY_DOWN, AMBUSH, AMBUSH_DEPLOYMENT, BATTLE_START, ROUND_START, SKILL, VICTORY};
+use rpgkit_battle::resolver::ScheduledAction;
 use rpgkit_battle::session::{EncounterDef, Session};
 use rpgkit_data::{Catalog, PortraitCue};
 use rpgkit_rules::unit::Stance;
@@ -158,4 +162,150 @@ fn session_step_events_read_the_session_only() {
     s.w.units[1].stance = Stance::default();
     assert_eq!(session_step_events(&s, &before, &step)[1], (1, "hit"));
     assert_eq!(session_step_events(&s, &before[..1], &step), [(0, "crit")], "units past hp_before are left out");
+}
+
+// ---- PORTRAITFX2 5.3: the battle events and the `unspent` state ----------------------------------------------------
+
+/// A two-against-two fight on the scratch catalog of `session` plus a level-3 focus skill, with `deployment`.
+fn fight(deployment: &str) -> Session {
+    let skills = vec![
+        json!({"id": "strike", "name": "Strike", "kind": "ATTACK", "level": 1, "blocks": 1, "basic": true, "target_mode": "ENEMY"}),
+        json!({"id": "guard", "name": "Guard", "kind": "DEFEND", "level": 1, "blocks": 2, "basic": true, "mitigation": 0.3}),
+        json!({"id": "rally", "name": "Rally", "kind": "FOCUS", "level": 3, "blocks": 1}),
+        json!({"id": "move", "name": "Move", "kind": "MOVE", "level": 1, "blocks": 1, "system": true, "basic": true}),
+        json!({"id": "switch_target", "name": "Switch Target", "kind": "TARGET", "level": 1, "blocks": 1, "system": true, "basic": true}),
+        json!({"id": "staggered", "name": "Staggered", "kind": "STATUS", "level": 1, "blocks": 1, "system": true}),
+        json!({"id": "stunned", "name": "Stunned", "kind": "STATUS", "level": 1, "blocks": 1, "system": true}),
+    ];
+    let unit = |id: &str, side: &str| json!({"id": id, "name": id, "side": side, "stat_mode": "fixed", "hp": 40, "speed": 10, "attack_range": 1, "skill_cap": 5});
+    let units = [unit("pf_hero", "party"), unit("pf_ally", "party"), unit("pf_foe", "enemy"), unit("pf_foe2", "enemy")];
+    let cat = Catalog::from_value(&json!({"skills": skills, "units": units}));
+    let row = json!({"id": "pf_fight", "name": "Fight", "party": ["pf_hero", "pf_ally"], "enemies": ["pf_foe", "pf_foe2"], "deployment": deployment, "total_blocks": 6, "unit_ap": 10, "ap_regen": 0, "max_rounds": 4, "rng_seed": 7});
+    let s = Session::start(Arc::new(cat), EncounterDef::from_obj(row.as_object().unwrap()), &IndexMap::new());
+    assert_eq!((s.w.units.len(), s.w.allies.len()), (4, 2), "fixture: two a side");
+    s
+}
+
+/// The player side's and the enemy side's unit indices.
+fn sides(s: &Session) -> (Vec<usize>, Vec<usize>) {
+    (0..s.w.units.len()).partition(|i| s.w.allies.contains(i))
+}
+
+fn each(units: &[usize], event: &'static str) -> Vec<(usize, &'static str)> {
+    units.iter().map(|&i| (i, event)).collect()
+}
+
+#[test]
+fn battle_start_goes_to_every_living_unit_and_ambush_to_the_player_side_in_an_ambush_only() {
+    let mut s = fight("standard");
+    let all: Vec<usize> = (0..s.w.units.len()).collect();
+    assert_eq!(start_events(&s), each(&all, BATTLE_START), "no ambush in a standard deployment");
+    let mut s2 = fight(AMBUSH_DEPLOYMENT);
+    let (party, _) = sides(&s2);
+    assert_eq!(start_events(&s2), [each(&all, BATTLE_START), each(&party, AMBUSH)].concat(), "the ambush goes to the player side");
+    // a unit down at the start gets neither
+    let (fallen, rest) = (party[0], party[1]);
+    s2.w.units[fallen].hp = 0;
+    let living: Vec<usize> = all.iter().copied().filter(|&i| i != fallen).collect();
+    assert_eq!(start_events(&s2), [each(&living, BATTLE_START), each(&[rest], AMBUSH)].concat());
+    s.def.deployment = "centre".into();
+    assert!(!start_events(&s).iter().any(|e| e.1 == AMBUSH), "only the ambush deployment");
+}
+
+#[test]
+fn round_start_fires_when_the_round_rises_and_never_under_the_round_intent_rule() {
+    let mut s = fight("standard");
+    let all: Vec<usize> = (0..s.w.units.len()).collect();
+    let now = s.current_round;
+    assert!(round_events(&s, now).is_empty(), "the same round");
+    assert_eq!(round_events(&s, now - 1), each(&all, ROUND_START), "every living unit");
+    s.w.units[all[3]].hp = 0;
+    assert_eq!(round_events(&s, now - 1), each(&all[..3], ROUND_START), "not a downed unit");
+    s.w.ruleset.rules.push(rpgkit_rules::ruleset::ROUND_INTENT);
+    assert!(rpgkit_battle::round_intent::on(&s.w), "fixture: the rule is on");
+    assert!(round_events(&s, now - 1).is_empty(), "decision Q7: no round_start under the timeline's round intent");
+}
+
+/// Schedules `kind` named `name` for unit `unit` and marks it as the last popped action of this round.
+fn popped(s: &mut Session, unit: usize, name: &str, kind: CmdKind, cancelled: bool) {
+    let mut command = Command::new(unit, 0, 1, kind);
+    command.name = name.into();
+    s.resolver.scheduled.push(ScheduledAction { unit, command, start: 1, impact: 1, end: 1, cancelled, landed: false, broken: false });
+    s.last_popped = Some((s.current_round, 1, s.resolver.scheduled.len() - 1));
+}
+
+fn focus() -> CmdKind {
+    CmdKind::Focus { boost: 0.2, rounds: 1 }
+}
+
+#[test]
+fn skill_goes_to_the_actor_with_its_skill_level_and_rows_read_min_level() {
+    let mut s = fight("standard");
+    assert_eq!(skill_event(&s), None, "nothing popped yet");
+    let level = |s: &Session, name: &str| s.w.cat.skills.iter().find(|k| k.name == name).map(|k| k.level).expect("a skill row");
+    popped(&mut s, 1, "Rally", focus(), false);
+    assert_eq!(skill_event(&s), Some((1, level(&s, "Rally"))), "the acting unit, at its skill's level");
+    popped(&mut s, 1, "Guard", CmdKind::Defend { mitigation: 0.3, grant_status: String::new(), status_rounds: 0, extra_grants: Vec::new(), guard_broken: false }, false);
+    assert_eq!(skill_event(&s), None, "a defend is not a skill command");
+    popped(&mut s, 0, "Rally", focus(), true);
+    assert_eq!(skill_event(&s), None, "a cancelled action");
+    popped(&mut s, 0, "Rally", focus(), false);
+    s.last_popped = s.last_popped.map(|(r, b, i)| (r - 1, b, i));
+    assert_eq!(skill_event(&s), None, "a past round's action");
+    // the rows: min_level 0 = any skill; above 0 the skill's level must reach it; `reactions` is level 0
+    let rows = vec![cue(json!({"id": "any_skill", "event": "skill", "ms": 140})), cue(json!({"id": "big_skill", "event": "skill", "min_level": 3, "effect": "face", "expression": "angry", "ms": 1200}))];
+    assert_eq!(ids(&reactions_at(&rows, &[SKILL], 2, "panel", "classic")), ["any_skill"]);
+    assert_eq!(ids(&reactions_at(&rows, &[SKILL], 3, "panel", "classic")), ["any_skill", "big_skill"]);
+    assert_eq!(ids(&reactions_at(&rows, &[SKILL], 4, "panel", "classic")), ["any_skill", "big_skill"]);
+    assert_eq!(ids(&reactions(&rows, &[SKILL], "panel", "classic")), ["any_skill"]);
+    let hit = vec![cue(json!({"id": "hit_flash", "event": "hit", "ms": 140}))];
+    assert_eq!(ids(&reactions_at(&hit, &["hit"], 0, "panel", "classic")), ["hit_flash"], "other events do not read the level");
+}
+
+#[test]
+fn ally_down_goes_to_the_other_living_units_of_the_fallen_side_once() {
+    let mut s = fight("standard");
+    let (party, foes) = sides(&s);
+    let before: Vec<i32> = s.w.units.iter().map(|u| u.hp).collect();
+    assert!(ally_down_events(&s, &before).is_empty(), "nobody fell");
+    s.w.units[party[1]].hp = 0;
+    assert_eq!(ally_down_events(&s, &before), each(&party[..1], ALLY_DOWN), "the fallen's side, not the fallen unit, not the foes");
+    assert!(session_step_events(&s, &before, &[]).contains(&(party[0], ALLY_DOWN)), "with the step's events (at the impact)");
+    // both foes fall in the same step: the hero still gets one, the side with nobody standing none
+    s.w.units[foes[0]].hp = 0;
+    s.w.units[foes[1]].hp = 0;
+    assert_eq!(ally_down_events(&s, &before), each(&party[..1], ALLY_DOWN), "once per unit per step");
+    // a unit down before the step does not fall in it
+    let after: Vec<i32> = s.w.units.iter().map(|u| u.hp).collect();
+    assert!(ally_down_events(&s, &after).is_empty(), "already down before the step");
+    let mut s = fight("standard");
+    let before: Vec<i32> = s.w.units.iter().map(|u| u.hp).collect();
+    s.w.units[foes[0]].hp = 0;
+    s.w.units[party[0]].hp = 0;
+    assert_eq!(ally_down_events(&s, &before), [(party[1], ALLY_DOWN), (foes[1], ALLY_DOWN)], "both sides, index order");
+}
+
+#[test]
+fn victory_goes_to_the_player_side_on_the_winning_step_only() {
+    let mut s = fight("standard");
+    let (party, _) = sides(&s);
+    assert!(victory_events(&s, "").is_empty(), "the battle goes on");
+    s.outcome = "won".into();
+    assert_eq!(victory_events(&s, ""), each(&party, VICTORY));
+    assert!(victory_events(&s, "won").is_empty(), "only the step that ended it");
+    s.w.units[party[0]].hp = 0;
+    assert_eq!(victory_events(&s, ""), each(&party[1..], VICTORY), "the living only");
+    s.outcome = "lost".into();
+    assert!(victory_events(&s, "").is_empty(), "not a loss");
+}
+
+#[test]
+fn unspent_rows_hold_while_points_are_unspent() {
+    let row = cue(json!({"id": "face_level_up", "trigger": "unspent", "effect": "face", "expression": "angry", "surfaces": ["roster"]}));
+    let mut l = look(10, 10);
+    assert!(!matches(&row, &l), "0 points");
+    l.unspent = 2;
+    assert!(matches(&row, &l));
+    assert_eq!(ids(&holds(std::slice::from_ref(&row), &l, "roster")), ["face_level_up"]);
+    assert!(holds(std::slice::from_ref(&row), &l, "panel").is_empty(), "the roster surfaces only");
 }

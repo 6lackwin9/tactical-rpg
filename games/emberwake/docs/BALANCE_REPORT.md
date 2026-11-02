@@ -1,5 +1,98 @@
 # Balance report (written by the balance agent; read by the brainstorm agent)
 
+## INPUT1-MB 2026-11-02 (feel run after the Maneuver rework, against RULESET1-A3)
+
+Measured build: `develop` a39ccb56 (checkout `C:/dev/tactical-rpg-dev`), no code, data or tuning changed. Jitter on, preset `balanced`, tactic `balanced`, seed i = 11 + 12 i, 100 seeds, 0 PLAN FAIL and 0 PLAN SKIP. Commands: `tools/fc.sh sim feel seeds=100 party=both` (five `tl_` fights), the same with `enc=tl_flank_elite`, and `enc=tl_flank,tl_skirmish melee_diagonal=none|all|maneuver` (`maneuver` is the shipped value and reproduces the main run exactly). Attribution builds came from a throwaway worktree of the same repo (removed afterwards): 7e3a09d0 (INPUT1-MA), 1cda9103 (INPUT1-L), 0a668f8d^ (just before INPUT2), and a39ccb56 with the six `tl_` `start_ap` values set to 12 (a no-op start, "start 12" below). Scratch outputs: `mb_*.txt` and `logs/` in the session scratchpad.
+
+### Finding 1: the Maneuver rework did not move the win rates; INPUT2 did
+
+Three builds before INPUT2 (MA, INPUT1-L, 0a668f8d^) print the A3 numbers exactly in windup, reach, armour and flank (5/31, 55/48, 89/89, 92/98) and within 4 points in skirmish (65/62 against 69/66). INPUT2 (0a668f8d) is the step that moves them, and it did more than the start AP: it raised `unit_ap` of every `tl_` fight from 10 to 12 (the AP cap; `ap_regen` 4 unchanged) and set `start_ap` 10. Reading `tl_duel_reach`: A3 55 / 48; cap 12 with round 1 at 10 (shipped now) 61 / 56; cap 12 with round 1 at 12 (the start 12 copy) 83 / 77. So the larger cap is worth a few points and the 10-AP first round costs the party about 22 points in the reach duel. The skirmish drops 74 to 68 (auto) and 72 to 64 (timed) for the same reason; flank and windup move within noise.
+
+### Win rates (100 seeds, won %; capped in brackets)
+
+| Fight | Band | A3 auto / timed | MB auto / timed | Start 12 copy auto / timed |
+| --- | --- | --- | --- | --- |
+| tl_duel_windup | 30-70 timed | 5 / 31 | 5 / 31 | 6 / 28 |
+| tl_duel_reach | 30-70 | 55 / 48 | 61 / 56 | 83 / 77 |
+| tl_duel_armour | 15-45 | 89 / 89 | 89 / 89 | 89 / 89 |
+| tl_flank | 50-85 | 92 [8] / 98 | 94 [6] / 98 | 93 [7] / 99 |
+| tl_skirmish | 40-70 | 69 [21] / 66 [25] | 68 [24] / 64 [25] | 74 [19] / 72 [22] |
+| tl_flank_elite | none | 100 / 100 (median 2) | 100 / 100 (median 2) | not run |
+| TOTAL (five) | | 62.0 / 66.4 | 63.4 / 67.6 | 69 / 73 |
+
+Out of band: armour (+44, known), flank (+9 auto, +13 timed, known), skirmish cap rate 24-25% against the 10% floor (known, was 21-25%), windup auto 5%. The reach duel is inside the band as shipped; it would leave it (83 / 77) if the first round started at 12.
+
+### Floors and Maneuver counts
+
+| Measure | A3 (auto / timed) | MB (auto / timed) | Met |
+| --- | --- | --- | --- |
+| Carried moves, tl_flank | 222 / 224 | 198 / 216 | yes (above 0) |
+| Carried moves, tl_skirmish | 478 / 502 | 552 / 570 | yes |
+| Carried moves, tl_flank_elite | n/a | 34 / 31 | yes |
+| Maneuver rounds (party unit-rounds in the Maneuver intent), tl_flank | not recorded (share 10.5% in B) | 78 (10.4%) / 72 (9.8%) | n/a |
+| Maneuver rounds, tl_skirmish | not recorded (share 7% in B) | 210 (8.0%) / 216 (8.4%) | n/a |
+| Maneuver rounds, tl_flank_elite | n/a | 11 / 10 | n/a |
+| Sure breaks, tl_skirmish | 132 / 101 | 107 / 84 | yes |
+| Capped fights at most 10% | skirmish 21 / 25 | skirmish 24 / 25, flank 6 / 0 | NO (known) |
+
+Enemy carried moves are 0 in every fight (the enemies never choose Maneuver). The Maneuver intent share is about what it was before (10% and 8%).
+
+### Switch melee_diagonal (100 seeds; won %, carried moves, Maneuver rounds)
+
+| Fight and driver | none | maneuver (shipped) | all |
+| --- | --- | --- | --- |
+| tl_flank auto | 94; 207; 81 | 94; 198; 78 | 91; 207; 75 |
+| tl_flank timed | 98; 212; 71 | 98; 216; 72 | 97; 246; 78 |
+| tl_skirmish auto | 66; 472; 192 | 68; 552; 210 | 68; 572; 211 |
+| tl_skirmish timed | 60; 492; 199 | 64; 570; 216 | 65; 530; 192 |
+
+Hits per skirmish run (auto): 4623 none, 4641 maneuver, 4627 all; flank-hit share 23.0 / 25.7 / 22.8%. The three values sit within the noise of 100 seeds (about +-5 points): diagonal hits do not move the result. `all` costs tl_flank a few points (91 auto, 4 losses against 0) and `none` about 4-5 timed skirmish points (60 against 64-65), both at the edge of noise.
+
+### Protected flanks, diagonal hits and chases: not counted by the sim
+
+`feel` prints none of these (its FEEL_JSON has no protected, diagonal or chase key), so section 11.8's counts could not be taken from it without code. The only source was `aegis battle <enc> seed=N ruleset=timeline log` over the same 100 seeds (11 + 12 i), jitter off, its default driver. It ignores `melee_diagonal` (none, maneuver and all print identical logs), so it gives the shipped setting only and is a probe, not the sim. Counted from the log lines `[Flank Protected]`, `[Dash]`, `[Chase]`:
+
+| Count per 100 fights (battle probe) | tl_flank | tl_skirmish |
+| --- | --- | --- |
+| Protected flanks (`[Flank Protected]`) | 0 | 16 |
+| Dashes (a resolved Maneuver command) | 100 (exactly one a fight, the same Spiker dash `(8, 3) to (7, 4)` every seed) | 106 |
+| Protected share of Maneuver commands, protected / (dashes + protected) | 0% | 13% |
+| Dashes ending diagonal to the target (target position from the last status block, approximate) | 0 | 35 (33%) |
+| Chases | 0 | 1421 (party 1085, enemy 336) |
+| Chases at an ally (Support) | 0 | 16 |
+| Chases at an enemy | 0 | 1405 |
+
+Chases by skill kind: the `[Chase]` line does not name the skill, so melee, ranged and Support cannot be split exactly. By actor: Spiker 642, Vanguard 259, Halberdier 91, Footman 91, Enforcer 117 (melee, 1200), Archer 93 and Crossbowman 128 (the two ranged units, 221 or 16%), and 16 at an ally (Support). Ranged chases exist (MR16) and are small next to melee ones. tl_flank has no chase at all in the probe (its units start in reach).
+
+### What stands out
+
+1. The 11.8 counts (protected flanks, diagonal hits, chases by kind) are not instrumented; the values above come from a jitter-off log probe and are approximate.
+2. The reach duel is sensitive to the first round's AP: 10 against 12 is 22 points (61 against 83). INPUT2's "a round starts at 10 (try)" is a bigger lever on the `tl_` fights than the Maneuver rework was. The party pays it; enemies show 0 AP per round in the feel output (they are not AP-limited), so only the party is slowed.
+3. Maneuver is chosen in 8-10% of party unit-rounds by the balanced auto driver and the timed driver alike (carried moves 198-570); no enemy ever picks it. Protected flanks are rare (16 in 100 skirmish fights); the diagonal rule does not change win rates.
+4. `tl_skirmish` still caps in 24-25% of fights, flank is 94-98%, armour 89%: unchanged from A3 and known.
+
+### Tactics and auto-play against timed play (for the TACTIC2 decision)
+
+Auto against timed (tactic `balanced`): windup 5 against 31 (timed gains 26: it reads tells), reach 61 against 56, armour 89 / 89, flank 94 / 98, skirmish 68 / 64; total 63.4 against 67.6. Timed play helps only where tells matter; elsewhere the two are equal within noise. Then the tactic (auto driver, 100 seeds, four fights, won %):
+
+| Tactic | windup | reach | flank | skirmish | Party intents (tl_flank) |
+| --- | --- | --- | --- | --- | --- |
+| balanced (default) | 5 | 61 | 94 | 68 | assault 81, maneuver 10, guard 9 |
+| all_out | 48 | 93 | 95 | 85 | assault 100 |
+| focus_weakest | 48 | 93 | 98 | 81 | assault 100 |
+| kite | 93 | 84 | 97 | 70 | maneuver 56, assault 45 |
+| guard_counter | 0 | 0 | 0 | 0 | guard 100 (21,393 guard blocks, 8,464 hits into a guard over the four fights) |
+| economy | 0 | 41 | 0 | 0 | assault 100, 1.8-2.2 AP a round, no follow-ups |
+
+What this says: the tactic changes the result by up to 90 points, far more than any ruleset or Maneuver switch. `balanced` (which changes intent per round) is the weakest working tactic in the duels (5 against 48-93), so a tactic tied to the round intents has large headroom. `guard_counter` and `economy` lose nearly every fight: guard_counter never attacks (Guard intent 100%), economy plans no follow-ups. Whether that is intended (tactics written for classic) is not known from these runs: flagged. `kite` is the only tactic that picks Maneuver at scale (44-56% of unit-rounds, 261 carried moves in tl_flank) and wins the windup duel 93%, so it is where the Maneuver rework shows in play. The tactic runs were not repeated with a first round at 12 AP, and the timed driver was not run with tactics.
+
+### Issues for the brainstorm agent
+
+1. Decide whether the 10-AP first round (INPUT2, "try") stays: it is worth about 22 points in the reach duel and 6 to 8 in the skirmish, and it is the only change that moved the `tl_` numbers since A3.
+2. The sim needs counters for protected flanks, diagonal hits and chases by skill kind (and `[Chase]` lines naming the skill) if the 11.8 numbers are to be judged on 100 seeds with jitter; today they come from a probe.
+3. TACTIC2: `balanced` loses the duels that the other attacking tactics win (windup 5 against 48-93); `guard_counter` and `economy` never win on the `tl_` fights: check their intent against the round intents.
+4. Enemies never pick Maneuver, and `tl_flank` exercises no chase or protected flank at all; those mechanics are tested only by `tl_skirmish`.
+
 ## RULESET1-A3 2026-10-31 (final confirmation after the A3 data; win-rate tuning stopped)
 
 This final run supersedes the round-1 numbers quoted in decision "Timeline test fights after RULESET1-A3": tl_skirmish lands inside its band (69/66 %) and only its capped fights (21/25 %) stay out (decision "RULESET1-A3 loose ends": recorded as known); tl_flank reads 92-98 %; the reach duel 55/48 % at 100 seeds. tl_flank_elite (100 %, won in round 2) has no band and is left as a diagnostic.

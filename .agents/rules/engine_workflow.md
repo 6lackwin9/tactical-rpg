@@ -14,7 +14,7 @@ Whenever creating, deleting or renaming modules or crates:
 
 1. **Register them**: a new module gets its `pub mod` line in the crate's `lib.rs`; a new crate goes into `members` in the root `Cargo.toml`; a new test file in `crates/<crate>/tests/` is found by cargo on its own.
 2. **Put them where `docs/STRUCTURE.md` says**; if a path is not listed, ask the planner first.
-3. **Audit Diagnostics**: build, run the tests, and verify the IDE reports 0 errors and 0 warnings (rust-analyzer; Godot language-server errors on `games/emberwake/parity/godot/*.gd` are stale: those scripts run inside `legacy/`).
+3. **Audit Diagnostics**: build, run the tests, and verify the IDE reports 0 errors and 0 warnings (rust-analyzer; Godot language-server errors on `legacy/` are stale: close any Godot editor open on the old root).
 
 ## 3. Mandatory Post-Code Error Resolution Protocol
 
@@ -23,15 +23,15 @@ After making any code edits (`*.rs`, `Cargo.toml`, tools or configuration files)
 1. **Run the per-edit checks**: `tools/fc.sh build` after each edit, `tools/fc.sh test <filter>` for the behaviour you touched, and `check_project.ps1 -Fast -Quiet` (or `tools/fc.sh gate`) before handing work back.
 2. **Verify the check stages**:
    - Every crate builds with 0 errors and 0 compiler warnings.
-   - Every test passes, including the Godot parity suites (they skip themselves only when `games/emberwake/parity/out` is missing; record it with `tools/fc.sh parity`).
+   - Every test passes, including the engine goldens (never edited to pass; re-recorded only for an intended change, named in the commit and a `docs/HISTORY.md` row).
    - Data edits leave `aegis content check` clean.
-3. **Auto-Remediate All Current Problems**: If any compile errors, warnings, markdownlint diagnostics, IDE diagnostics (IDE Problems tab), or test failures occur, the agent MUST diagnose the root cause, fix the code/docs, and rerun the checks until **all current problems are completely resolved (0 errors, 0 warnings, 0 test failures)** before proceeding to documentation or committing. A Godot parity divergence caused by an intended, approved rule change is not fixed by editing the traces: the task retires the check it breaks (CLAUDE.md "Godot parity").
+3. **Auto-Remediate All Current Problems**: If any compile errors, warnings, markdownlint diagnostics, IDE diagnostics (IDE Problems tab), or test failures occur, the agent MUST diagnose the root cause, fix the code/docs, and rerun the checks until **all current problems are completely resolved (0 errors, 0 warnings, 0 test failures)** before proceeding to documentation or committing. A golden divergence caused by an intended, approved rule change is not fixed by editing the golden: the task re-records it, named in the commit and a HISTORY row (CLAUDE.md "Engine goldens").
 
 ## 4. Mandatory Documentation & Commit Protocol
 
 Only after all current problems and verification checks have passed cleanly:
 
-1. **Synchronize the READMEs** (`README.md` for the project, `engine/README.md` for the engine's crates, tools, tests and screens, `engine/docs/PORT_NOTES.md` for parity status): builders report a docs delta and the planner applies it, so they are updated with every change to reflect:
+1. **Synchronize the READMEs** (`README.md` for the project, `engine/README.md` for the engine's crates, tools, tests and screens, `engine/docs/PORT_NOTES.md` for the port record): builders report a docs delta and the planner applies it, so they are updated with every change to reflect:
    - Any new, extracted, or relocated files in the codebase architecture directory breakdown.
    - Newly implemented features, mechanics, or UI capabilities.
    - Updated assertion counts and test coverage in the testing section.

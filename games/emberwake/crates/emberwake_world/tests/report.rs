@@ -1,7 +1,7 @@
 //! Battle metrics and the battle report (BattleMetrics, BattleReport; BREPORT1-L rules 4-7): the report's columns,
 //! tips, best moment and validation, and the collector on real world battles (no self-check fails, live and sim
-//! modes agree, following a fight never changes it). The Godot comparison of every recorded fight is in the parity
-//! tests (trace_parity, world_traces).
+//! modes agree, following a fight never changes it). The recorded fights are checked by the timeline golden
+//! (emberwake_battle/tests/timeline_golden.rs).
 
 use emberwake_battle::metrics::{BattleMetrics, BestFinish, BestHit, Detail, EndResult, Save};
 use emberwake_battle::report::{self, Report, Row};

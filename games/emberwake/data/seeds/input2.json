@@ -1,0 +1,1434 @@
+{
+	"steps": [
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "goblin_skirmish",
+				"name": "Goblin Skirmish",
+				"description": "The default player-planned battle: Warrior & Ranger vs five goblins in the Ruined Courtyard.",
+				"zone": "ruined_courtyard",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 6,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"warrior",
+					"ranger"
+				],
+				"enemies": [
+					"goblin_brawler",
+					"goblin_skirmisher",
+					"goblin_archer",
+					"goblin_shaman",
+					"goblin_berserker"
+				],
+				"phases": [],
+				"script": [],
+				"pace": "auto",
+				"objective": "rout",
+				"objective_text": "",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"purse": {},
+				"guests": [],
+				"protect": [],
+				"start_ap": 10
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "veterans_drill",
+				"name": "Veterans' Drill",
+				"description": "Geared, class-derived heroes (the Gear Dojo pair) against a brawler and two archers.",
+				"zone": "stone_arena",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 6,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 7,
+				"party": [
+					"dojo_warrior",
+					"dojo_ranger"
+				],
+				"enemies": [
+					"goblin_brawler",
+					"goblin_archer",
+					"goblin_archer"
+				],
+				"phases": [],
+				"script": [],
+				"pace": "auto",
+				"objective": "rout",
+				"objective_text": "",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"purse": {},
+				"guests": [],
+				"protect": [],
+				"start_ap": 10
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "goblin_ambush",
+				"name": "Goblin Ambush",
+				"description": "A brawler covers a fleeing scout; at Round 1 Block 4 the goblin pack ambushes the party from the east.",
+				"zone": "forest_clearing",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 6,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"warrior",
+					"ranger"
+				],
+				"enemies": [
+					"enemy_brawler",
+					"fleeing_scout"
+				],
+				"phases": [
+					{
+						"id": "reinforcements",
+						"name": "Reinforcements",
+						"trigger": {
+							"kind": "arrival",
+							"round": 1,
+							"block": 4
+						},
+						"effects": [
+							{
+								"type": "wave",
+								"units": [
+									"ambush_berserker",
+									"goblin_skirmisher",
+									"goblin_archer",
+									"goblin_shaman"
+								],
+								"label": "Ambush! The goblin pack"
+							}
+						],
+						"pause_autoplay": false
+					}
+				],
+				"script": [],
+				"pace": "auto",
+				"objective": "rout",
+				"objective_text": "",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"purse": {},
+				"guests": [],
+				"protect": [],
+				"start_ap": 10
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "tl_duel_windup",
+				"name": "Duel: Windup",
+				"description": "Timeline test: a Snap into a Heavy, follow-ups, Guard and riposte, Rest gain.",
+				"zone": "stone_arena",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 8,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"tl_vanguard"
+				],
+				"enemies": [
+					"tl_enforcer"
+				],
+				"phases": [],
+				"script": [],
+				"pace": "auto",
+				"objective": "rout",
+				"objective_text": "",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"purse": {},
+				"guests": [],
+				"protect": [],
+				"start_ap": 10
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "tl_duel_reach",
+				"name": "Duel: Reach",
+				"description": "Timeline test: reach 2 against reach 1, the sure break, Fade.",
+				"zone": "stone_arena",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 8,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"tl_halberdier"
+				],
+				"enemies": [
+					"tl_footman"
+				],
+				"phases": [],
+				"script": [],
+				"pace": "auto",
+				"objective": "rout",
+				"objective_text": "",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"purse": {},
+				"guests": [],
+				"protect": [],
+				"start_ap": 10
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "tl_duel_armour",
+				"name": "Duel: Armour",
+				"description": "Timeline test: pierce against armour 50, an unbreakable windup, enemy recovery.",
+				"zone": "stone_arena",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 8,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"tl_spiker"
+				],
+				"enemies": [
+					"tl_captain"
+				],
+				"phases": [],
+				"script": [],
+				"pace": "auto",
+				"objective": "rout",
+				"objective_text": "",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"purse": {},
+				"guests": [],
+				"protect": [],
+				"start_ap": 10
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "tl_flank",
+				"name": "Flank",
+				"description": "Timeline test: Engage with a carried move, Disengage, Utility fire bomb, kiting.",
+				"zone": "stone_arena",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 8,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"tl_vanguard",
+					"tl_spiker"
+				],
+				"enemies": [
+					"tl_footman",
+					"tl_crossbowman"
+				],
+				"phases": [],
+				"script": [],
+				"pace": "auto",
+				"objective": "rout",
+				"objective_text": "",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"purse": {},
+				"guests": [],
+				"protect": [],
+				"start_ap": 10
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "tl_skirmish",
+				"name": "Skirmish",
+				"description": "Timeline test: the 4-on-4 loop and the AI table.",
+				"zone": "stone_arena",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 10,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"tl_vanguard",
+					"tl_halberdier",
+					"tl_spiker",
+					"tl_archer"
+				],
+				"enemies": [
+					"tl_footman",
+					"tl_footman_b",
+					"tl_enforcer",
+					"tl_crossbowman"
+				],
+				"phases": [],
+				"script": [],
+				"pace": "auto",
+				"objective": "rout",
+				"objective_text": "",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"purse": {},
+				"guests": [],
+				"protect": [],
+				"start_ap": 10
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "tl_flank_elite",
+				"name": "Flank: Elite",
+				"description": "Timeline test: the flank bonus on a heavy target (rules=-flank against on).",
+				"zone": "stone_arena",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 8,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"tl_vanguard",
+					"tl_spiker"
+				],
+				"enemies": [
+					"tl_enforcer"
+				],
+				"phases": [],
+				"script": [],
+				"pace": "auto",
+				"objective": "rout",
+				"objective_text": "",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"purse": {},
+				"guests": [],
+				"protect": [],
+				"start_ap": 10
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "kit_winch_escape",
+				"name": "Winch Escape (kit sample)",
+				"description": "Kit sample: hold the winch while the rest get out through the gate.",
+				"zone": "ruined_courtyard",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						3
+					],
+					[
+						11,
+						4
+					],
+					[
+						11,
+						5
+					]
+				],
+				"rows": [
+					"############",
+					"#.....#....#",
+					"#..r..#....#",
+					"#.........L.",
+					"#...........",
+					"#.........L.",
+					"#..r..#....#",
+					"#.....#..o.#",
+					"############"
+				],
+				"arena_hazards": [],
+				"max_rounds": 8,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"warrior",
+					"ranger",
+					"rogue",
+					"priest"
+				],
+				"enemies": [
+					"goblin_warlord",
+					"goblin_brawler",
+					"goblin_brawler",
+					"goblin_archer",
+					"goblin_archer"
+				],
+				"phases": [],
+				"script": [],
+				"pace": "auto",
+				"objective": "escape",
+				"objective_count": 3,
+				"objective_text": "Open the gate: one holds the winch, three get out.",
+				"unkillable": [
+					"goblin_warlord"
+				],
+				"timeout_outcome": "lost",
+				"stay_behind": {
+					"mode": "hold",
+					"tiles": [
+						[
+							10,
+							1
+						]
+					],
+					"tiles_label": "the winch",
+					"fallback": "any"
+				},
+				"deployment": "standard",
+				"morale": false,
+				"purse": {},
+				"guests": [],
+				"protect": [],
+				"start_ap": 10
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "kit_culling",
+				"name": "Culling Timer (kit sample)",
+				"description": "Kit sample: free the captives before they are culled.",
+				"zone": "stone_arena",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 6,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"warrior",
+					"ranger"
+				],
+				"enemies": [
+					"goblin_berserker",
+					"goblin_brawler",
+					"goblin_warlord",
+					"goblin_shaman"
+				],
+				"phases": [
+					{
+						"id": "cull_1",
+						"name": "The first cull",
+						"trigger": {
+							"kind": "round",
+							"round": 3
+						},
+						"effects": [
+							{
+								"type": "line",
+								"text": "The first captive falls."
+							},
+							{
+								"type": "kill",
+								"units": [
+									"dojo_warrior"
+								],
+								"by": "goblin_berserker"
+							}
+						],
+						"pause_autoplay": false
+					},
+					{
+						"id": "cull_2",
+						"name": "The second cull",
+						"trigger": {
+							"kind": "round",
+							"round": 5
+						},
+						"effects": [
+							{
+								"type": "line",
+								"text": "Another falls."
+							},
+							{
+								"type": "kill",
+								"units": [
+									"dojo_ranger"
+								],
+								"by": "goblin_berserker"
+							}
+						],
+						"pause_autoplay": false
+					}
+				],
+				"script": [],
+				"pace": "auto",
+				"objective": "rout",
+				"objective_text": "Free the captives before they are culled.",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"purse": {},
+				"guests": [
+					"dojo_warrior",
+					"dojo_ranger"
+				],
+				"protect": [],
+				"start_ap": 10
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "courtyard_skirmish",
+				"name": "Holding the Courtyard",
+				"description": "Bryn against two Horde raiders in the Ruined Courtyard.",
+				"intro": "The Horde has come early this year. Two raiders drop from the Courtyard wall, blades out.",
+				"location": "ruined_courtyard",
+				"zone": "ruined_courtyard",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 6,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"mara_voss",
+					"tev_quill"
+				],
+				"enemies": [
+					"skarn_ironjaw",
+					"vex_cutpurse"
+				],
+				"phases": [],
+				"script": [],
+				"pace": "auto",
+				"start_status": [],
+				"objective": "hold",
+				"objective_tiles": [],
+				"objective_rounds": 3,
+				"objective_unit": "",
+				"objective_count": 1,
+				"objective_text": "Hold the Courtyard: keep the ring for 3 rounds, or drive them off.",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"morale_break": 50,
+				"morale_leader": "",
+				"morale_groups": [],
+				"morale_text": "",
+				"purse": {
+					"gold_min": 15,
+					"gold_max": 20,
+					"once": true
+				},
+				"key_loot": [],
+				"objective_reward": {
+					"gold": 10,
+					"once": true
+				},
+				"guests": [],
+				"party_min": 0,
+				"protect": [],
+				"tags": [],
+				"start_ap": 10
+			},
+			"world": "ashlands"
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "pass_ambush",
+				"name": "Ambush at the Cinder Gate",
+				"description": "A brawler and a skirmisher bait the party; at Round 1 Block 4 an archer and a smokecaller fall on them.",
+				"intro": "Too quiet. Bryn raises a hand: smoke, upwind, much too close.",
+				"location": "cinder_gate",
+				"zone": "forest_clearing",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 6,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"mara_voss",
+					"tev_quill"
+				],
+				"enemies": [
+					"skarn_ironjaw",
+					"vex_cutpurse"
+				],
+				"phases": [
+					{
+						"id": "reinforcements",
+						"name": "Reinforcements",
+						"trigger": {
+							"kind": "arrival",
+							"round": 1,
+							"block": 4
+						},
+						"effects": [
+							{
+								"type": "wave",
+								"units": [
+									"nok_flamebow",
+									"gruk_smokecaller"
+								],
+								"label": "The warband springs the ambush!"
+							}
+						],
+						"pause_autoplay": false
+					}
+				],
+				"script": [],
+				"pace": "auto",
+				"start_status": [],
+				"objective": "rout",
+				"objective_tiles": [],
+				"objective_rounds": 3,
+				"objective_unit": "",
+				"objective_count": 1,
+				"objective_text": "",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"morale_break": 50,
+				"morale_leader": "",
+				"morale_groups": [],
+				"morale_text": "",
+				"purse": {
+					"gold_min": 25,
+					"gold_max": 30,
+					"once": true
+				},
+				"key_loot": [],
+				"objective_reward": {},
+				"guests": [],
+				"party_min": 0,
+				"protect": [],
+				"tags": [],
+				"start_ap": 10
+			},
+			"world": "ashlands"
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "ash_scouts",
+				"name": "Horde Scouts",
+				"description": "Two scouts testing the Wardens' patrols; drop one and the other yields.",
+				"intro": "Movement in the rubble: scouts.",
+				"location": "ruined_courtyard",
+				"zone": "ruined_courtyard",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 6,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"mara_voss",
+					"tev_quill"
+				],
+				"enemies": [
+					"ash_skirmisher",
+					"ash_archer"
+				],
+				"phases": [],
+				"script": [],
+				"pace": "auto",
+				"start_status": [],
+				"objective": "rout",
+				"objective_tiles": [],
+				"objective_rounds": 3,
+				"objective_unit": "",
+				"objective_count": 1,
+				"objective_text": "",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": true,
+				"morale_break": 50,
+				"morale_leader": "",
+				"morale_groups": [],
+				"morale_text": "The last scout drops its blade in the ash.",
+				"purse": {
+					"gold_min": 3,
+					"gold_max": 6,
+					"once": false
+				},
+				"key_loot": [],
+				"objective_reward": {},
+				"guests": [],
+				"party_min": 0,
+				"protect": [],
+				"tags": [],
+				"start_ap": 10
+			},
+			"world": "ashlands"
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "ash_raiders",
+				"name": "Horde Raiders",
+				"description": "A small raiding party looking for easy prey; their smokecaller holds them together.",
+				"intro": "Raiders spill out of the ruins.",
+				"location": "ruined_courtyard",
+				"zone": "ruined_courtyard",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 6,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"mara_voss",
+					"tev_quill"
+				],
+				"enemies": [
+					"ash_brawler",
+					"ash_skirmisher",
+					"ash_shaman"
+				],
+				"phases": [],
+				"script": [],
+				"pace": "auto",
+				"start_status": [],
+				"objective": "rout",
+				"objective_tiles": [],
+				"objective_rounds": 3,
+				"objective_unit": "",
+				"objective_count": 1,
+				"objective_text": "",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": true,
+				"morale_break": 50,
+				"morale_leader": "ash_shaman",
+				"morale_groups": [],
+				"morale_text": "With the smokecaller down, the raiders throw down their arms.",
+				"purse": {
+					"gold_min": 5,
+					"gold_max": 9,
+					"once": false
+				},
+				"key_loot": [],
+				"objective_reward": {},
+				"guests": [],
+				"party_min": 0,
+				"protect": [],
+				"tags": [],
+				"start_ap": 10
+			},
+			"world": "ashlands"
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "ash_patrol",
+				"name": "Horde Patrol",
+				"description": "A warchief and his berserker on their rounds.",
+				"intro": "The patrol has seen you.",
+				"location": "ruined_courtyard",
+				"zone": "ruined_courtyard",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 6,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"mara_voss",
+					"tev_quill"
+				],
+				"enemies": [
+					"ash_warchief",
+					"ash_berserker"
+				],
+				"phases": [],
+				"script": [],
+				"pace": "auto",
+				"start_status": [],
+				"objective": "rout",
+				"objective_tiles": [],
+				"objective_rounds": 3,
+				"objective_unit": "",
+				"objective_count": 1,
+				"objective_text": "",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"morale_break": 50,
+				"morale_leader": "",
+				"morale_groups": [],
+				"morale_text": "",
+				"purse": {
+					"gold_min": 12,
+					"gold_max": 18,
+					"once": false
+				},
+				"key_loot": [
+					{
+						"loot": "warchiefs_axe",
+						"kill": "ash_warchief"
+					}
+				],
+				"objective_reward": {},
+				"guests": [],
+				"party_min": 0,
+				"protect": [],
+				"tags": [],
+				"start_ap": 10
+			},
+			"world": "ashlands"
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "ashmaw_stand",
+				"name": "Stand at the Ashmaw Camp",
+				"description": "Grakka and his guard make a stand; the flankers pour out of the gorge at Round 2; at half strength Grakka throws off his crown.",
+				"intro": "Grakka rises from the fire, nail-crown glinting.",
+				"location": "ashmaw_camp",
+				"zone": "desert_outpost",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 8,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"mara_voss",
+					"tev_quill"
+				],
+				"enemies": [
+					"grakka_ashmaw",
+					"ash_shaman",
+					"ash_archer"
+				],
+				"phases": [
+					{
+						"id": "reinforcements",
+						"name": "Reinforcements",
+						"trigger": {
+							"kind": "arrival",
+							"round": 2,
+							"block": 1
+						},
+						"effects": [
+							{
+								"type": "wave",
+								"units": [
+									"ash_berserker",
+									"ash_brawler",
+									"ash_skirmisher"
+								],
+								"label": "The flankers pour out of the gorge!"
+							}
+						],
+						"pause_autoplay": false
+					},
+					{
+						"id": "crown_of_nails",
+						"name": "Crown of Nails",
+						"trigger": {
+							"kind": "hp_below",
+							"unit": "grakka_ashmaw",
+							"pct": 50
+						},
+						"effects": [
+							{
+								"type": "line",
+								"text": "Grakka tears the nail-crown from his head and hurls it into the fire. The smokecallers begin to chant."
+							},
+							{
+								"type": "status",
+								"unit": "grakka_ashmaw",
+								"status": "fortify",
+								"rounds": 3,
+								"magnitude": 5
+							},
+							{
+								"type": "status",
+								"unit": "grakka_ashmaw",
+								"status": "regen",
+								"rounds": 3,
+								"magnitude": 4
+							},
+							{
+								"type": "ai",
+								"unit": "grakka_ashmaw",
+								"reckless": true,
+								"target_pref": "WEAKEST"
+							},
+							{
+								"type": "ai",
+								"unit": "ash_shaman",
+								"heal_below": 0.9
+							}
+						],
+						"pause_autoplay": true
+					}
+				],
+				"script": [],
+				"pace": "auto",
+				"start_status": [],
+				"objective": "slay",
+				"objective_tiles": [],
+				"objective_rounds": 3,
+				"objective_unit": "grakka_ashmaw",
+				"objective_count": 1,
+				"objective_text": "Break Grakka Ashmaw; the Horde scatters when he falls.",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"morale_break": 50,
+				"morale_leader": "",
+				"morale_groups": [],
+				"morale_text": "",
+				"purse": {
+					"gold_min": 50,
+					"gold_max": 60,
+					"once": true
+				},
+				"key_loot": [],
+				"objective_reward": {},
+				"guests": [],
+				"party_min": 0,
+				"protect": [],
+				"tags": [],
+				"start_ap": 10
+			},
+			"world": "ashlands"
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "ashmaw_stand_barred",
+				"name": "Stand at the Ashmaw Camp (barred gate)",
+				"description": "Grakka and his guard stand alone; the barred gate cut off the flankers; at half strength Grakka throws off his crown.",
+				"intro": "Grakka looks past you to the gorge. Nobody comes.",
+				"location": "ashmaw_camp",
+				"zone": "desert_outpost",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 8,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"mara_voss",
+					"tev_quill"
+				],
+				"enemies": [
+					"grakka_ashmaw",
+					"ash_shaman",
+					"ash_archer"
+				],
+				"phases": [
+					{
+						"id": "crown_of_nails",
+						"name": "Crown of Nails",
+						"trigger": {
+							"kind": "hp_below",
+							"unit": "grakka_ashmaw",
+							"pct": 50
+						},
+						"effects": [
+							{
+								"type": "line",
+								"text": "Grakka tears the nail-crown from his head and hurls it into the fire. The smokecallers begin to chant."
+							},
+							{
+								"type": "status",
+								"unit": "grakka_ashmaw",
+								"status": "fortify",
+								"rounds": 3,
+								"magnitude": 5
+							},
+							{
+								"type": "status",
+								"unit": "grakka_ashmaw",
+								"status": "regen",
+								"rounds": 3,
+								"magnitude": 4
+							},
+							{
+								"type": "ai",
+								"unit": "grakka_ashmaw",
+								"reckless": true,
+								"target_pref": "WEAKEST"
+							},
+							{
+								"type": "ai",
+								"unit": "ash_shaman",
+								"heal_below": 0.9
+							}
+						],
+						"pause_autoplay": true
+					},
+					{
+						"id": "empty_gorge",
+						"name": "The Empty Gorge",
+						"trigger": {
+							"kind": "round",
+							"round": 4
+						},
+						"effects": [
+							{
+								"type": "line",
+								"text": "Grakka bellows at the gorge. Nothing answers."
+							}
+						],
+						"pause_autoplay": false
+					}
+				],
+				"script": [],
+				"pace": "auto",
+				"start_status": [],
+				"objective": "slay",
+				"objective_tiles": [],
+				"objective_rounds": 3,
+				"objective_unit": "grakka_ashmaw",
+				"objective_count": 1,
+				"objective_text": "Break Grakka Ashmaw; the Horde scatters when he falls.",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"morale_break": 50,
+				"morale_leader": "",
+				"morale_groups": [],
+				"morale_text": "",
+				"purse": {
+					"gold_min": 50,
+					"gold_max": 60,
+					"once": true
+				},
+				"key_loot": [],
+				"objective_reward": {},
+				"guests": [],
+				"party_min": 0,
+				"protect": [],
+				"tags": [],
+				"start_ap": 10
+			},
+			"world": "ashlands"
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "ash_straggler",
+				"name": "A Horde Straggler",
+				"description": "A lone Horde brawler cut off from his warband.",
+				"intro": "A straggler lurches out of the rubble.",
+				"location": "ruined_courtyard",
+				"zone": "ruined_courtyard",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 6,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"mara_voss",
+					"tev_quill"
+				],
+				"enemies": [
+					"ash_brawler"
+				],
+				"phases": [],
+				"script": [],
+				"pace": "auto",
+				"start_status": [],
+				"objective": "rout",
+				"objective_tiles": [],
+				"objective_rounds": 3,
+				"objective_unit": "",
+				"objective_count": 1,
+				"objective_text": "",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"morale_break": 50,
+				"morale_leader": "",
+				"morale_groups": [],
+				"morale_text": "",
+				"purse": {
+					"gold_min": 2,
+					"gold_max": 4,
+					"once": false
+				},
+				"key_loot": [],
+				"objective_reward": {},
+				"guests": [],
+				"party_min": 0,
+				"protect": [],
+				"tags": [],
+				"start_ap": 10
+			},
+			"world": "ashlands"
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "wagon_raid",
+				"name": "Raid on the Steel Wagon",
+				"description": "Raiders hit Orsa's wagon on the south road; Wenn must live to drive it home.",
+				"intro": "The wagon lurches. Goblins come out of the ditch on both sides.",
+				"location": "ruined_courtyard",
+				"zone": "ruined_courtyard",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 6,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"mara_voss",
+					"tev_quill"
+				],
+				"enemies": [
+					"ash_brawler",
+					"ash_skirmisher",
+					"ash_shaman"
+				],
+				"phases": [],
+				"script": [],
+				"pace": "auto",
+				"start_status": [],
+				"objective": "rout",
+				"objective_tiles": [],
+				"objective_rounds": 3,
+				"objective_unit": "",
+				"objective_count": 1,
+				"objective_text": "",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "ambush",
+				"morale": false,
+				"morale_break": 50,
+				"morale_leader": "",
+				"morale_groups": [],
+				"morale_text": "",
+				"purse": {
+					"gold_min": 25,
+					"gold_max": 30,
+					"once": true
+				},
+				"key_loot": [],
+				"objective_reward": {},
+				"guests": [
+					"wenn_tallow"
+				],
+				"party_min": 0,
+				"protect": [
+					"wenn_tallow"
+				],
+				"tags": [],
+				"start_ap": 10
+			},
+			"world": "ashlands"
+		},
+		{
+			"op": "upsert",
+			"kind": "encounters",
+			"entry": {
+				"id": "strand_clash",
+				"name": "Clash at Wreck Strand",
+				"description": "The Harbour Guard meet the raiders on the tide flats.",
+				"intro": "The tide is going out and the raiders are coming in.",
+				"location": "wreck_strand",
+				"zone": "river_crossing",
+				"arena": "CLOSED",
+				"exits": [
+					[
+						11,
+						4
+					]
+				],
+				"rows": [],
+				"arena_hazards": [],
+				"max_rounds": 6,
+				"total_blocks": 6,
+				"ap_regen": 4,
+				"unit_ap": 12,
+				"rng_seed": 1337,
+				"party": [
+					"ilse_marrow",
+					"pell_driftwood"
+				],
+				"enemies": [
+					"brannoch_saltfist",
+					"gull_skirmisher",
+					"salt_archer",
+					"captain_dredge"
+				],
+				"phases": [],
+				"script": [],
+				"pace": "auto",
+				"start_status": [],
+				"objective": "rout",
+				"objective_tiles": [],
+				"objective_rounds": 3,
+				"objective_unit": "",
+				"objective_count": 1,
+				"objective_text": "",
+				"unkillable": [],
+				"timeout_outcome": "fled",
+				"stay_behind": {},
+				"deployment": "standard",
+				"morale": false,
+				"morale_break": 50,
+				"morale_leader": "",
+				"morale_groups": [],
+				"morale_text": "",
+				"purse": {},
+				"key_loot": [],
+				"objective_reward": {},
+				"guests": [],
+				"party_min": 0,
+				"protect": [],
+				"tags": [],
+				"start_ap": 10
+			},
+			"world": "tidewrack"
+		}
+	]
+}

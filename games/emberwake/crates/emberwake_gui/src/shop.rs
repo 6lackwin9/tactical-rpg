@@ -4,13 +4,15 @@
 //! trade line puts the whole line back; Confirm settles the trade at once through `shop::trade` (ShopRules), Close or
 //! Esc with lines in the trade asks first. `RegionMap` draws it while its conversation has a shop open.
 
-use crate::hud::HUD_H;
+use crate::hud::{term_short, term_word, HUD_H};
 use crate::screens::Cx;
 use aegis_core::json::{self, s, s_or, Dict};
+use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, Rect, Rgba};
 use aegis_ui::painter::Painter;
-use aegis_ui::ui::{tip, Ui, BODY, BORDER, DIM, FOE, FRAME, GOLD, GOOD, INFO, MODAL, PANEL_HI, RADIUS, SELECTED, SMALL, TEXT, W, H};
+use aegis_ui::ui::{tip, Ui, BODY, RADIUS, SMALL, W, H};
 use emberwake_world::shop;
+use emberwake_world::terms::{CURRENCY, UPKEEP};
 use serde_json::{json, Value};
 
 /// The tag of the "Discard this trade?" question (`Cx::ask_tag_no`: No is the default, PLAYUI1 4.3 rule 5); `RegionMap`
@@ -31,7 +33,6 @@ const ICON: i32 = 12;
 /// The columns' fill.
 const COL_BG: Rgba = rgb(14, 20, 34);
 /// Buy lines and prices above the gold left: the kit has no warning colour of its own, its problem red stands in.
-const WARN: Rgba = FOE;
 
 /// A click in the shop.
 #[derive(Debug, Clone)]
@@ -125,7 +126,7 @@ fn of_text(x: i64, n: Option<i64>) -> String {
 /// "+90 HP · Owned 2 · Anyone can use it" style detail of an item ("" = travel supplies).
 pub fn item_line(cx: &Cx, item: &str) -> String {
     if item.is_empty() {
-        return "Travel supplies: one per day on the road.".into();
+        return format!("Travel {}: one per day on the road.", term_word(cx, UPKEEP));
     }
     let e = cx.data.entry("items", item);
     let owned = cx.game.as_ref().map(|g| g.gs.party.stash.get(item).copied().unwrap_or(0)).unwrap_or(0);
@@ -213,11 +214,12 @@ impl ShopPane {
                 if json::b(&res, "ok", false) {
                     let (spent, earned) = (json::i(&res, "spent", 0), json::i(&res, "earned", 0));
                     let mut parts = Vec::new();
+                    let cur = term_word(cx, CURRENCY);
                     if bought > 0 {
-                        parts.push(format!("bought {bought} {} for {spent} gold", if bought == 1 { "item" } else { "items" }));
+                        parts.push(format!("bought {bought} {} for {spent} {cur}", if bought == 1 { "item" } else { "items" }));
                     }
                     if sold > 0 {
-                        parts.push(format!("sold {sold} {} for {earned} gold", if sold == 1 { "item" } else { "items" }));
+                        parts.push(format!("sold {sold} {} for {earned} {cur}", if sold == 1 { "item" } else { "items" }));
                     }
                     cx.log(format!("Trade: {}.", parts.join(", ")));
                     for n in json::sget(&res, "notes") {
@@ -250,8 +252,10 @@ impl ShopPane {
         let sale = shop::sell_list(d, gs, sq);
         let (spent, earned) = self.trade.sums(&offers, &sale);
         let after = gs.party.gold + earned - spent;
+        // TERMS1 TU4: the purse names of the world being played (labels `short`, sentences `word`)
+        let (cur, cur_word, upkeep) = (term_short(cx, CURRENCY), term_word(cx, CURRENCY), term_short(cx, UPKEEP));
         let fr = frame_rect(&ui.p);
-        ui.p.panel(fr, MODAL, FRAME, 4.0);
+        ui.p.panel(fr, th().panel, th().panel_edge, 4.0);
         ui.push("shop", "panel", name.clone(), fr, true, false, None, Vec::new());
         let (lb, ls) = (ui.p.line_h(BODY).ceil() as i32, ui.p.line_h(SMALL).ceil() as i32);
         let rh = ROW_H.max(lb + 3);
@@ -260,10 +264,10 @@ impl ShopPane {
         let fq = shop::keeper_faction(d, gs, sh);
         let band = if fq.is_empty() { String::new() } else { format!("{}: {}", s(d.resolve(&gs.world_id, "factions", &fq), "name"), shop::keeper_band(d, gs, sh)) };
         let band_w = if band.is_empty() { 0.0 } else { ui.p.text_w(&band, BODY) + 12.0 };
-        ui.p.text_fit(x0 as f32, fr.y as f32 + 5.0, &name, 10.0, (fr.w - 2 * PAD) as f32 - band_w, GOLD);
+        ui.p.text_fit(x0 as f32, fr.y as f32 + 5.0, &name, 10.0, (fr.w - 2 * PAD) as f32 - band_w, th().gold);
         let head_h = ui.p.line_h(10.0).ceil() as i32;
         if !band.is_empty() {
-            ui.p.text_right(right as f32, (fr.y + 5 + head_h - lb) as f32, &band, BODY, DIM);
+            ui.p.text_right(right as f32, (fr.y + 5 + head_h - lb) as f32, &band, BODY, th().dim);
         }
         // -- the columns' place: under the headings, over the detail line, the refusals and the action bar
         let bh = 17.max(lb + 6);
@@ -280,7 +284,7 @@ impl ShopPane {
         let w2 = avail - w0 - w1;
         let (cx0, cx1, cx2) = (x0, x0 + w0 + GAP, x0 + w0 + GAP + w1 + GAP);
         for (x, label) in [(cx0, "Shop"), (cx1, "Trade"), (cx2, "Stash")] {
-            ui.p.text(x as f32 + 2.0, heading_y as f32, label, SMALL, DIM);
+            ui.p.text(x as f32 + 2.0, heading_y as f32, label, SMALL, th().dim);
         }
         // -- the shop column: one row per offer
         let shop_rows: Vec<Row> = offers
@@ -289,7 +293,7 @@ impl ShopPane {
                 let (kind, id) = (s(o, "kind"), s(o, "id"));
                 let supplies = kind == shop::SUPPLIES;
                 let item = if supplies { String::new() } else { s(o, "item") };
-                let mut label = if supplies { "Supplies".to_string() } else { d.item_name(&item) };
+                let mut label = if supplies { upkeep.clone() } else { d.item_name(&item) };
                 if kind == "loot" && json::i(o, "count", 1) > 1 {
                     label = format!("{label} x{}", json::i(o, "count", 1));
                 }
@@ -303,11 +307,11 @@ impl ShopPane {
         // -- the trade column: buy lines, then sale lines; the totals under them
         let tot_h = 2 * lb + 4;
         let lines_r = Rect::new(cx1, top, w1, ch - tot_h);
-        ui.p.panel(Rect::new(cx1, top, w1, ch), COL_BG, BORDER, RADIUS);
+        ui.p.panel(Rect::new(cx1, top, w1, ch), th().game("column", COL_BG), th().edge, RADIUS);
         let mut lines: Vec<(String, String, i64, String, ShopAct)> = Vec::new();
         for (kind, id, n) in &self.trade.buys {
             let Some(o) = offers.iter().find(|o| s(o, "kind") == *kind && s(o, "id") == *id) else { continue };
-            let label = if kind == shop::SUPPLIES { "Supplies".to_string() } else { d.item_name(&s(o, "item")) };
+            let label = if kind == shop::SUPPLIES { upkeep.clone() } else { d.item_name(&s(o, "item")) };
             let item = if kind == shop::SUPPLIES { String::new() } else { s(o, "item") };
             lines.push((format!("trade.buy.{id}"), format!("{label} x{n}"), -json::i(o, "price", 0) * n, item, ShopAct::ReturnBuy(kind.clone(), id.clone())));
         }
@@ -317,28 +321,28 @@ impl ShopPane {
         }
         let off = ui.scroll_begin("trade.list", lines_r, lines.len() as i32 * (rh + 1) + 2);
         if lines.is_empty() {
-            ui.p.text_fit(lines_r.x as f32 + 4.0, lines_r.y as f32 + 3.0, "Click a row to add it.", SMALL, (lines_r.w - 8) as f32, DIM);
+            ui.p.text_fit(lines_r.x as f32 + 4.0, lines_r.y as f32 + 3.0, "Click a row to add it.", SMALL, (lines_r.w - 8) as f32, th().dim);
         }
         for (k, (id, label, gold, item, act)) in lines.into_iter().enumerate() {
             let r = Rect::new(lines_r.x + 1, lines_r.y + 1 - off + k as i32 * (rh + 1), lines_r.w - 5, rh);
             let hover = ui.hover(r);
             if hover {
-                ui.p.panel(r, PANEL_HI, rgb(110, 140, 196), RADIUS);
+                ui.p.panel(r, th().card_hot, th().edge_hot, RADIUS);
                 self.detail = Some(item.clone());
             }
             let amount = format!("{gold:+}");
             let aw = ui.p.text_w(&amount, BODY);
             let ty = r.y as f32 + (r.h as f32 - ui.p.line_h(BODY)) / 2.0;
-            ui.p.text_fit(r.x as f32 + 3.0, ty, &label, BODY, r.w as f32 - aw - 10.0, TEXT);
-            ui.p.text_right((r.x + r.w) as f32 - 3.0, ty, &amount, BODY, if gold < 0 { WARN } else { GOOD });
+            ui.p.text_fit(r.x as f32 + 3.0, ty, &label, BODY, r.w as f32 - aw - 10.0, th().text);
+            ui.p.text_right((r.x + r.w) as f32 - 3.0, ty, &amount, BODY, if gold < 0 { th().foe } else { th().good });
             ui.push(id, "row", format!("{label} {amount}"), r, true, false, Some(wrap(act)), tip(&label, "Click to put the whole line back."));
         }
         ui.scroll_end();
         let net = earned - spent;
         let ty = (top + ch - tot_h + 2) as f32;
-        let net_text = if net == 0 { "Total: 0 gold".to_string() } else { format!("Total: {net:+} gold") };
-        ui.p.text_fit(cx1 as f32 + 4.0, ty, &net_text, BODY, (w1 - 8) as f32, if net < 0 { WARN } else if net > 0 { GOOD } else { TEXT });
-        ui.p.text_fit(cx1 as f32 + 4.0, ty + lb as f32, &format!("Gold: {} -> {after}", gs.party.gold), BODY, (w1 - 8) as f32, if after < 0 { WARN } else { TEXT });
+        let net_text = if net == 0 { format!("Total: 0 {cur_word}") } else { format!("Total: {net:+} {cur_word}") };
+        ui.p.text_fit(cx1 as f32 + 4.0, ty, &net_text, BODY, (w1 - 8) as f32, if net < 0 { th().foe } else if net > 0 { th().good } else { th().text });
+        ui.p.text_fit(cx1 as f32 + 4.0, ty + lb as f32, &format!("{cur}: {} -> {after}", gs.party.gold), BODY, (w1 - 8) as f32, if after < 0 { th().foe } else { th().text });
         // -- the stash column: what the shop buys, then (below a divider, dimmed) what it does not
         let stash_rows: Vec<Row> = sale
             .iter()
@@ -353,16 +357,16 @@ impl ShopPane {
         self.list(ui, cx, "stash", Rect::new(cx2, top, w2, ch), &stash_rows, None, &others, &wrap);
         // -- the detail line of the item last under the pointer, the refusals, the action bar
         if let Some(item) = self.detail.clone() {
-            let label = if item.is_empty() { "Supplies".to_string() } else { d.item_name(&item) };
+            let label = if item.is_empty() { upkeep.clone() } else { d.item_name(&item) };
             let text = format!("{label}: {}", item_line(cx, &item));
             let r = Rect::new(x0, detail_y, fr.w - 2 * PAD, lb);
-            ui.p.text_fit(r.x as f32, r.y as f32, &text, BODY, r.w as f32, INFO);
+            ui.p.text_fit(r.x as f32, r.y as f32, &text, BODY, r.w as f32, th().info);
             ui.push("shop.detail", "label", text.clone(), r, true, false, None, Vec::new());
         }
         if !self.errors.is_empty() {
             let text = self.errors.join(" ");
             let r = Rect::new(x0, err_y, fr.w - 2 * PAD, lb);
-            ui.p.text_fit(r.x as f32, r.y as f32, &text, BODY, r.w as f32, FOE);
+            ui.p.text_fit(r.x as f32, r.y as f32, &text, BODY, r.w as f32, th().foe);
             ui.push("trade.errors", "label", text.clone(), r, true, false, None, Vec::new());
         }
         let bw = |ui: &mut Ui<A>, t: &str| (ui.p.text_w(t, BODY).ceil() as i32 + 16).max(44);
@@ -371,14 +375,14 @@ impl ShopPane {
         let why = if empty {
             "Nothing to trade.".to_string()
         } else if after < 0 {
-            format!("Not enough gold: {} more needed.", -after)
+            format!("Not enough {cur_word}: {} more needed.", -after)
         } else {
             String::new()
         };
         let confirm_r = Rect::new(right - confirm_w, bar_y, confirm_w, bh);
         let clear_r = Rect::new(confirm_r.x - 6 - clear_w, bar_y, clear_w, bh);
         ui.button_full("trade.clear", clear_r, "Clear", wrap(ShopAct::Clear), !empty, false, BODY, tip("Clear", "Put every line back."));
-        let confirm_tip = if why.is_empty() { tip("Confirm trade", &format!("Gold: {} -> {after}", gs.party.gold)) } else { tip("Confirm trade", &why) };
+        let confirm_tip = if why.is_empty() { tip("Confirm trade", &format!("{cur}: {} -> {after}", gs.party.gold)) } else { tip("Confirm trade", &why) };
         ui.button_full("trade.confirm", confirm_r, "Confirm trade", wrap(ShopAct::Confirm), why.is_empty(), false, BODY, confirm_tip);
         ui.button_full("shop.close", Rect::new(x0, bar_y, close_w, bh), "Close", wrap(ShopAct::Close), true, false, BODY, tip("Close", "Back to the conversation (Esc)."));
     }
@@ -393,7 +397,7 @@ impl ShopPane {
             (lb, ROW_H.max(lb + 3))
         };
         let step = rh + 1;
-        ui.p.panel(area, COL_BG, BORDER, RADIUS);
+        ui.p.panel(area, th().game("column", COL_BG), th().edge, RADIUS);
         let divider = if others.is_empty() { 0 } else { 6 };
         let content = (rows.len() + others.len()) as i32 * step + divider + 2;
         let off = ui.scroll_begin(&format!("{side}.list"), area, content);
@@ -413,24 +417,24 @@ impl ShopPane {
             let on = free > 0;
             let hover = ui.hover(rr);
             if r.x > 0 || (hover && on) {
-                ui.p.panel(rr, if r.x > 0 { SELECTED } else { PANEL_HI }, if hover && on { GOLD } else { rgb(110, 140, 196) }, RADIUS);
+                ui.p.panel(rr, if r.x > 0 { th().selected } else { th().card_hot }, if hover && on { th().gold } else { th().edge_hot }, RADIUS);
             }
             if hover {
                 self.detail = Some(r.item.clone());
             }
             let ty = rr.y as f32 + (rh as f32 - ui.p.line_h(BODY)) / 2.0;
             let price = format!("{}g", r.price);
-            let price_col = if gold_left.is_some_and(|g| r.price > g) { WARN } else if on { GOLD } else { DIM };
+            let price_col = if gold_left.is_some_and(|g| r.price > g) { th().foe } else if on { th().gold } else { th().dim };
             let count = of_text(r.x, r.n);
             let name_x = rr.x + 2 + ICON + 3;
             let price_right = count_right - count_w - 6;
-            ui.p.text_fit(name_x as f32, ty, &r.label, BODY, (price_right - price_w - 6 - name_x) as f32, if on || r.x > 0 { TEXT } else { DIM });
+            ui.p.text_fit(name_x as f32, ty, &r.label, BODY, (price_right - price_w - 6 - name_x) as f32, if on || r.x > 0 { th().text } else { th().dim });
             ui.p.text_right(price_right as f32, ty, &price, BODY, price_col);
             if !count.is_empty() {
-                ui.p.text_right(count_right as f32, ty, &count, BODY, INFO);
+                ui.p.text_right(count_right as f32, ty, &count, BODY, th().info);
             }
             let mut t = tip(&r.label, &item_line(cx, &r.item));
-            t.push((format!("{price} each"), GOLD));
+            t.push((format!("{price} each"), th().gold));
             ui.push(format!("{side}.row.{}", r.id), "row", format!("{}, {price}, {count}", r.label), rr, on, r.x > 0, Some(wrap((r.add)(1))), t);
             if r.more {
                 let r5 = Rect::new(rr.x + rr.w + 2, y + 1, b5, rh - 2);
@@ -441,7 +445,7 @@ impl ShopPane {
             y += step;
         }
         if !others.is_empty() {
-            ui.p.fill(Rect::new(area.x + 4, y + 2, full_w - 6, 1), BORDER);
+            ui.p.fill(Rect::new(area.x + 4, y + 2, full_w - 6, 1), th().edge);
             y += divider;
             for (item, n) in others {
                 let rr = Rect::new(area.x + 1, y, full_w, rh);
@@ -450,8 +454,8 @@ impl ShopPane {
                 let count = format!("x{n}");
                 let cw = ui.p.text_w(&count, BODY).ceil() as i32;
                 let name_x = rr.x + 2 + ICON + 3;
-                ui.p.text_fit(name_x as f32, ty, &label, BODY, (rr.x + rr.w - 3 - cw - 6 - name_x) as f32, DIM);
-                ui.p.text_right((rr.x + rr.w - 3) as f32, ty, &count, BODY, DIM);
+                ui.p.text_fit(name_x as f32, ty, &label, BODY, (rr.x + rr.w - 3 - cw - 6 - name_x) as f32, th().dim);
+                ui.p.text_right((rr.x + rr.w - 3) as f32, ty, &count, BODY, th().dim);
                 if ui.hover(rr) {
                     self.detail = Some(item.clone());
                 }

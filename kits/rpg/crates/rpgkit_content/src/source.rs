@@ -1,10 +1,10 @@
 //! The game's data loader on the engine content layer (`aegis_content`: file format, schema normalize, world graph):
-//! reads the project's `data/` folder the way Godot's catalogs read it and builds the values the parity exports hold
-//! (catalog.json, worlds.json, game_data.json), so `Data` no longer needs Godot. Read paths only (editing and
+//! reads the project's `data/` folder the way Godot's catalogs read it and builds the resolved values (catalog, worlds,
+//! game data) `Data` is built from. Read paths only (editing and
 //! validation stay out): ContentCatalog.reload_from_disk / _read_kind (SkillRanks.expand with SkillText.render,
 //! ItemModifiers.resolve, ItemFamilies.derive), WorldCatalog.reload_from_disk (the engine's world loader over
 //! WORLD_KINDS), MapCatalog / QuestCatalog / ServiceCatalog (normalize) and XpCurve.load_file. The field tables are
-//! kits/rpg/schema.json, exported once from Godot's ContentSchema / WorldSchema (`parity/export.sh only=schema`).
+//! kits/rpg/schema.json, exported once from Godot's ContentSchema / WorldSchema (the retired parity exporter).
 //! Like Godot, a bad file or entry is reported in `errors` and skipped, never fatal.
 
 use aegis_content::file::{entries_of, read};
@@ -33,12 +33,18 @@ pub const RULESET_KIND: &str = crate::check::ruleset::KIND;
 /// PORTRAITFX1-S: the portrait cue rows, loaded into the catalog beside CATALOG_KINDS after the derived stats they name
 /// (Godot had no such kind).
 pub const PORTRAIT_KIND: &str = crate::check::portrait::KIND;
+/// PORTRAITFX1-EX: the expression-effect rows, loaded into the catalog beside CATALOG_KINDS after the portrait cues
+/// (Godot had no such kind).
+pub const EXPRESSION_FX_KIND: &str = crate::check::expression_fx::KIND;
 /// HOOKS1-S: the combat hook kinds (ground hazards, unit meters, data zones), loaded into the catalog beside
 /// CATALOG_KINDS after the skills the meters name, in this order (Godot had no such kinds).
 pub const HOOK_KINDS: [&str; 3] = [rpgkit_data::HAZARDS_KIND, rpgkit_data::UNIT_METERS_KIND, rpgkit_data::ZONES_KIND];
 /// TERMS1-L: the game's term rows, loaded into the catalog beside CATALOG_KINDS after the hook kinds (Godot had no
 /// such kind).
 pub const TERMS_KIND: &str = crate::check::terms::KIND;
+/// REGIONGROUND1 KT 1.1: the ground rows, loaded into the catalog beside CATALOG_KINDS after the terms (Godot had no
+/// such kind).
+pub const GROUNDS_KIND: &str = crate::check::ground::KIND;
 /// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2) and STORYUI1's `vignettes`,
 /// `sequences` and `boards` (4.1-4.4; Godot had no such kinds).
 pub const WORLD_KINDS: [&str; 19] = [
@@ -59,9 +65,8 @@ pub(crate) fn fields(section: &str, kind: &str) -> &'static [Value] {
 
 pub fn load(data_dir: &Path) -> Source {
     let mut errors = Vec::new();
-    let mut catalog = load_catalog(data_dir, &mut errors);
-    let mut worlds = aegis_content::world::load(data_dir, schema(), &WORLD_KINDS, &mut errors);
-    fold_legacy_waves(&mut catalog, &mut worlds);
+    let catalog = load_catalog(data_dir, &mut errors);
+    let worlds = aegis_content::world::load(data_dir, schema(), &WORLD_KINDS, &mut errors);
     let mut game = Dict::new();
     game.insert("maps".into(), Value::Array(load_list(&data_dir.join("maps/maps.json"), &mut errors, map_template)));
     game.insert("quests".into(), Value::Array(load_list(&data_dir.join("quests/quests.json"), &mut errors, quest_template)));
@@ -82,30 +87,6 @@ pub(crate) fn content(kind: &str, entry: &Dict) -> Dict {
     normalize(fields("content", kind), entry, false)
 }
 
-/// PHASEFOLD 1.4: an encounter row as the game reads it (`fold_legacy_wave`: the retired `wave_*` fields as an arrival
-/// phase); any other kind as it is.
-pub fn folded(kind: &str, entry: &Dict) -> Dict {
-    let mut e = entry.clone();
-    if kind == "encounters" {
-        rpgkit_battle::encounter::fold_legacy_wave(&mut e);
-    }
-    e
-}
-
-/// PHASEFOLD 1.4: every catalog encounter ({kind: [entry]}) and every world's own encounters ({world: {own: {kind:
-/// [entry]}}}) folded in place (the loader's values and Godot's exports have this shape).
-pub fn fold_legacy_waves(catalog: &mut Value, worlds: &mut Value) {
-    let fold_all = |list: Option<&mut Value>| {
-        for e in list.and_then(Value::as_array_mut).into_iter().flatten().filter_map(Value::as_object_mut) {
-            rpgkit_battle::encounter::fold_legacy_wave(e);
-        }
-    };
-    fold_all(catalog.get_mut("encounters"));
-    for w in worlds.as_object_mut().into_iter().flat_map(|o| o.values_mut()) {
-        fold_all(w.get_mut("own").and_then(|o| o.get_mut("encounters")));
-    }
-}
-
 // ---- ContentCatalog --------------------------------------------------------------------------------------------
 
 fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
@@ -118,6 +99,8 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
     out.insert(DERIVED_KIND.into(), Value::Array(read_derived(&dir, errors).into_iter().map(Value::Object).collect()));
     let rulesets = read_rulesets(&dir, &out, errors);
     out.insert(RULESET_KIND.into(), Value::Array(rulesets.into_iter().map(Value::Object).collect()));
+    // PORTRAITFX2 FL1: the face rows first, so the cue rows check against the game's faces
+    out.insert(EXPRESSION_FX_KIND.into(), Value::Array(read_expression_fx(&dir, errors).into_iter().map(Value::Object).collect()));
     let cues = read_portrait_cues(&dir, &out, errors);
     out.insert(PORTRAIT_KIND.into(), Value::Array(cues.into_iter().map(Value::Object).collect()));
     for kind in HOOK_KINDS {
@@ -125,6 +108,7 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
         out.insert(kind.into(), Value::Array(rows.into_iter().map(Value::Object).collect()));
     }
     out.insert(TERMS_KIND.into(), Value::Array(read_terms(&dir, errors).into_iter().map(Value::Object).collect()));
+    out.insert(GROUNDS_KIND.into(), Value::Array(read_grounds(&dir, errors).into_iter().map(Value::Object).collect()));
     out.insert("item_families".into(), Value::Array(families.into_iter().map(Value::Object).collect()));
     Value::Object(out)
 }
@@ -178,8 +162,8 @@ fn read_rulesets(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Vec<Dic
 }
 
 /// PORTRAITFX1-S 5.1 (engine-only, beside CATALOG_KINDS): the portrait cue rows that pass their checks
-/// (`check::portrait`) against the loaded derived stats (`loaded`), in file order; every problem goes to `errors` and
-/// its row is skipped.
+/// (`check::portrait`) against the loaded derived stats and faces (`loaded`; PORTRAITFX2 FL1), in file order; every
+/// problem goes to `errors` and its row is skipped.
 fn read_portrait_cues(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Vec<Dict> {
     let path = dir.join(format!("{PORTRAIT_KIND}.json"));
     let Some(doc) = read(&path, errors) else { return Vec::new() };
@@ -192,13 +176,40 @@ fn read_portrait_cues(dir: &Path, loaded: &Dict, errors: &mut Vec<String>) -> Ve
         }
     }
     let derived: Vec<String> = json::arr(json::get(loaded, DERIVED_KIND)).iter().map(|e| json::s(json::dict(e), "id")).collect();
-    let checked = crate::check::portrait::check_rows(&rows, &crate::check::portrait::Refs { derived: &derived });
+    let faces = rpgkit_data::faces_of(json::arr(json::get(loaded, EXPRESSION_FX_KIND)).iter().map(|e| json::get(json::dict(e), "id").as_str().unwrap_or("")));
+    let checked = crate::check::portrait::check_rows(&rows, &crate::check::portrait::Refs { derived: &derived, faces: &faces });
     let mut kept = Vec::new();
     for (row, found) in rows.into_iter().zip(checked) {
         if found.is_empty() {
             kept.push(row);
         } else {
             errors.extend(found.iter().map(|m| format!("{at}: portrait cue '{}': {m}", sget(&row, "id", ""))));
+        }
+    }
+    kept
+}
+
+/// PORTRAITFX1-EX (engine-only, beside CATALOG_KINDS): the expression-effect rows that pass their checks
+/// (`check::expression_fx`), in file order; every problem goes to `errors` and its row is skipped. A missing file is an
+/// empty table.
+fn read_expression_fx(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{EXPRESSION_FX_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(EXPRESSION_FX_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let checked = crate::check::expression_fx::check_rows(&rows);
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: expression effect '{}': {m}", sget(&row, "id", ""))));
         }
     }
     kept
@@ -224,6 +235,31 @@ fn read_terms(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
             kept.push(row);
         } else {
             errors.extend(found.iter().map(|m| format!("{at}: term '{}': {m}", sget(&row, "id", ""))));
+        }
+    }
+    kept
+}
+
+/// REGIONGROUND1 KT 1.1 (engine-only, beside CATALOG_KINDS): the ground rows that pass their checks (`check::ground`), in
+/// file order; every problem goes to `errors` and its row is skipped. A missing file is an empty table.
+fn read_grounds(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{GROUNDS_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(GROUNDS_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let checked = crate::check::ground::check_rows(&rows);
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: ground '{}': {m}", sget(&row, "id", ""))));
         }
     }
     kept
@@ -943,15 +979,51 @@ fn template(entry: &Dict, keys: &[(&str, Value)]) -> Dict {
     out
 }
 
-/// MapRules.normalize_template; PROPS1 1: `props` (after `paths`), each prop with its defaults (`prop_full`).
+/// MapRules.normalize_template; PROPS1 1: `props` (after `paths`), each prop with its defaults (`prop_full`);
+/// REGIONGROUND1 KT 1.2 and SC: `ground`, `ground_legend`, `ground_patches` (each patch with its default strength,
+/// `ground_patch_full`) and `wall_storeys` (after `props`). `rows` alone decide walking: nothing in the world or battle
+/// crates reads these four.
 pub(crate) fn map_template(e: &Dict) -> Dict {
     let (s, a, d) = (Value::from(""), Value::Array(Vec::new()), Value::Object(Map::new()));
-    let mut t = template(e, &[("id", s.clone()), ("name", s), ("rows", a.clone()), ("zones", a.clone()), ("zone_legend", d.clone()), ("anchors", a.clone()), ("paths", d), ("props", a.clone()), ("tags", a)]);
+    let mut t = template(e, &[("id", s.clone()), ("name", s), ("rows", a.clone()), ("zones", a.clone()), ("zone_legend", d.clone()), ("anchors", a.clone()), ("paths", d.clone()), ("props", a.clone()), ("ground", a.clone()), ("ground_legend", d), ("ground_patches", a.clone()), ("wall_storeys", a.clone()), ("tags", a)]);
     if let Some(Value::Array(list)) = t.get("props") {
         let full = list.iter().map(|p| p.as_object().map_or_else(|| p.clone(), |o| Value::Object(prop_full(o)))).collect();
         t.insert("props".into(), Value::Array(full));
     }
+    if let Some(Value::Array(list)) = t.get("ground_patches") {
+        let full = list.iter().map(|p| p.as_object().map_or_else(|| p.clone(), |o| Value::Object(ground_patch_full(o)))).collect();
+        t.insert("ground_patches".into(), Value::Array(full));
+    }
     t
+}
+
+/// A placed ground patch's keys in stored order (KT 1.2).
+pub const GROUND_PATCH_KEYS: [&str; 6] = ["id", "x", "y", "w", "h", "strength"];
+/// KT 1.2: a placed patch's default strength.
+pub const GROUND_PATCH_STRENGTH: f64 = 0.12;
+
+/// A placed ground patch with its default strength in `GROUND_PATCH_KEYS` order; the other keys stay missing when
+/// missing and unknown keys follow (the checks name both).
+pub fn ground_patch_full(p: &Dict) -> Dict {
+    let p = json::normalize_dict(p);
+    let mut out = Dict::new();
+    for k in GROUND_PATCH_KEYS {
+        match p.get(k) {
+            Some(v) => {
+                out.insert(k.to_string(), v.clone());
+            }
+            None if k == "strength" => {
+                out.insert(k.to_string(), Value::from(GROUND_PATCH_STRENGTH));
+            }
+            None => {}
+        }
+    }
+    for (k, v) in &p {
+        if !out.contains_key(k) {
+            out.insert(k.clone(), v.clone());
+        }
+    }
+    out
 }
 
 /// A map prop's keys in stored order (PROPS1 1).

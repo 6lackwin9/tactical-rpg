@@ -1,0 +1,498 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "grounds",
+   "entry": {
+    "id": "water",
+    "name": "Water",
+    "order": 5,
+    "kind": "water",
+    "colour": "#0e1018",
+    "wear": 0,
+    "strays": false,
+    "tone": 0.04,
+    "patches": 0.0
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "grounds",
+   "entry": {
+    "id": "ash",
+    "name": "Ash",
+    "order": 10,
+    "kind": "land",
+    "colour": "#2a2622",
+    "wear": 0.03,
+    "strays": false,
+    "tone": 0.13,
+    "patches": 0.1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "grounds",
+   "entry": {
+    "id": "soot_yard",
+    "name": "Soot yard",
+    "order": 12,
+    "kind": "land",
+    "colour": "#1e1e23",
+    "wear": 0.03,
+    "strays": false,
+    "tone": 0.13,
+    "patches": 0.1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "grounds",
+   "entry": {
+    "id": "scrub",
+    "name": "Scrub",
+    "order": 20,
+    "kind": "land",
+    "colour": "#2b2d22",
+    "wear": 0.03,
+    "strays": false,
+    "tone": 0.13,
+    "patches": 0.0
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "grounds",
+   "entry": {
+    "id": "moss",
+    "name": "Moss",
+    "order": 22,
+    "kind": "land",
+    "colour": "#20261f",
+    "wear": 0.03,
+    "strays": false,
+    "tone": 0.13,
+    "patches": 0.0
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "grounds",
+   "entry": {
+    "id": "scorched",
+    "name": "Scorched ground",
+    "order": 30,
+    "kind": "land",
+    "colour": "#1c1917",
+    "wear": 0.03,
+    "strays": false,
+    "tone": 0.13,
+    "patches": 0.0
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "grounds",
+   "entry": {
+    "id": "tallow",
+    "name": "Tallow-stained ground",
+    "order": 32,
+    "kind": "land",
+    "colour": "#2a251e",
+    "wear": 0.03,
+    "strays": false,
+    "tone": 0.13,
+    "patches": 0.0
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "grounds",
+   "entry": {
+    "id": "mud",
+    "name": "Mud",
+    "order": 40,
+    "kind": "land",
+    "colour": "#231d18",
+    "wear": 0.03,
+    "strays": false,
+    "tone": 0.13,
+    "patches": 0.075
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "grounds",
+   "entry": {
+    "id": "packed_dirt",
+    "name": "Packed dirt",
+    "order": 50,
+    "kind": "land",
+    "colour": "#352c23",
+    "wear": 0.05,
+    "strays": false,
+    "tone": 0.13,
+    "patches": 0.1
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "grounds",
+   "entry": {
+    "id": "dirt_road",
+    "name": "Dirt road",
+    "order": 60,
+    "kind": "land",
+    "colour": "#3c3126",
+    "wear": 0.05,
+    "strays": false,
+    "tone": 0.13,
+    "patches": 0.075
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "grounds",
+   "entry": {
+    "id": "flagstone",
+    "name": "Flagstones",
+    "order": 70,
+    "kind": "land",
+    "colour": "#373636",
+    "wear": 0.05,
+    "strays": false,
+    "tone": 0.08,
+    "patches": 0.0
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "grounds",
+   "entry": {
+    "id": "cobble_road",
+    "name": "Cobbled road",
+    "order": 78,
+    "kind": "land",
+    "colour": "#2e3137",
+    "wear": 0.05,
+    "strays": false,
+    "tone": 0.08,
+    "patches": 0.0
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "grounds",
+   "entry": {
+    "id": "paved_road",
+    "name": "Paved road",
+    "order": 80,
+    "kind": "land",
+    "colour": "#3e3f42",
+    "wear": 0.05,
+    "strays": false,
+    "tone": 0.08,
+    "patches": 0.0
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "grounds",
+   "entry": {
+    "id": "iron_catwalk",
+    "name": "Iron catwalk",
+    "order": 90,
+    "kind": "land",
+    "colour": "#303032",
+    "wear": 0.03,
+    "strays": false,
+    "tone": 0.08,
+    "patches": 0.0
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "maps",
+   "entry": {
+    "id": "ashlands_warden_keep",
+    "name": "Ashlands: Warden Keep yard",
+    "rows": [
+     "################################################",
+     "#..............................................#",
+     "#..............................................#",
+     "#...##########....................##########...#",
+     "#...##########....................##########...#",
+     "#...##########....................##########...#",
+     "#...##########....................##########...#",
+     "#...##########....................##########...#",
+     "#...##########....................##########...#",
+     "#..............................................#",
+     "#..............................................#",
+     "#..............................................#",
+     "#..............................................#",
+     "#..............................................#",
+     "#.....................~~~~~....................#",
+     "#.....................~~~~~....................#",
+     "#.....................~~~~~....................#",
+     "#...#########......................#########...#",
+     "#...#########......................#########...#",
+     "#...#########......................#########...#",
+     "#...#########......................#########...#",
+     "#...#########......................#########...#",
+     "#...#########......................#########...#",
+     "#...#########......................#########...#",
+     "#..............................................#",
+     "#..............................................#",
+     "#..............................................#",
+     "#..............................................#",
+     "#..............................................#",
+     "########################.#######################"
+    ],
+    "zones": [
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss",
+     "ssssssssssssssssssssssssssssssssssssssssssssssss"
+    ],
+    "zone_legend": {
+     "s": {
+      "id": "town",
+      "kind": "safe"
+     }
+    },
+    "anchors": [
+     {
+      "id": "spawn",
+      "x": 24,
+      "y": 27
+     },
+     {
+      "id": "gate",
+      "x": 24,
+      "y": 29
+     },
+     {
+      "id": "road",
+      "x": 2,
+      "y": 27
+     },
+     {
+      "id": "npc_a",
+      "x": 14,
+      "y": 12
+     },
+     {
+      "id": "npc_b",
+      "x": 33,
+      "y": 12
+     },
+     {
+      "id": "npc_c",
+      "x": 24,
+      "y": 2
+     },
+     {
+      "id": "npc_d",
+      "x": 45,
+      "y": 12
+     },
+     {
+      "id": "chest_a",
+      "x": 2,
+      "y": 2
+     },
+     {
+      "id": "lore_a",
+      "x": 24,
+      "y": 12
+     }
+    ],
+    "paths": {},
+    "props": [
+     {
+      "id": "keep_hall",
+      "art": "keep_hall",
+      "x": 4,
+      "y": 3,
+      "w": 10,
+      "h": 6,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "barracks",
+      "art": "barracks",
+      "x": 34,
+      "y": 3,
+      "w": 10,
+      "h": 6,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "forge",
+      "art": "forge",
+      "x": 4,
+      "y": 17,
+      "w": 9,
+      "h": 7,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "storehouse",
+      "art": "storehouse",
+      "x": 35,
+      "y": 17,
+      "w": 9,
+      "h": 7,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "cistern",
+      "art": "cistern",
+      "x": 21,
+      "y": 13,
+      "w": 7,
+      "h": 5,
+      "layer": "ground",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "gatepost_w",
+      "art": "gatepost",
+      "x": 23,
+      "y": 29,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "gatepost_e",
+      "art": "gatepost",
+      "x": 25,
+      "y": 29,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": true
+     },
+     {
+      "id": "road_sign",
+      "art": "signpost",
+      "x": 0,
+      "y": 27,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "stores_crates",
+      "art": "crate_stack",
+      "x": 1,
+      "y": 0,
+      "w": 2,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     },
+     {
+      "id": "muster_banner",
+      "art": "banner_pole",
+      "x": 47,
+      "y": 11,
+      "w": 1,
+      "h": 1,
+      "layer": "sort",
+      "variant": -1,
+      "flip": false
+     }
+    ],
+    "ground": [
+     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaffffffffffffffffffaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaffffffffffffffffffaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaffffffffffffffffffaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaffffffffffffffffffaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaffffffffffffffffffaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaffffffffffffffffffaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaffffffffffffffffffaaaaaaaaaaaaaaa",
+     "aaakkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkaaa",
+     "aaakkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkaaa",
+     "aaakkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkaaa",
+     "aaakkkkkkkkkkkkkkkkmmmmmmmmmmmkkkkkkkkkkkkkkkaaa",
+     "aaaaaaaaaaaaaaaaaaammmmmmmmmmmaaaaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaaaaammmwwwwwmmmaaaaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaaaaammmwwwwwmmmaaaaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaaaaammmwwwwwmmmaaaaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaaaaammmmmmmmmmmaaaaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaaaaammmmmmmmmmmaaaaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaaaaammmmmmmmmmmaaaaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaddddddddddddddddddddddaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaddddddddddddddddddddddaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaaaaaaaaaddddaaaaaaaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaaaaaaaaaddddaaaaaaaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaaaaaaaaappppaaaaaaaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaaaaaaaaappppaaaaaaaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaaaaaaaaappppaaaaaaaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaaaaaaaaappppaaaaaaaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaaaaaaaaappppaaaaaaaaaaaaaaaaaaaaa",
+     "aaaaaaaaaaaaaaaaaaaaaaaapaaaaaaaaaaaaaaaaaaaaaaa"
+    ],
+    "ground_legend": {
+     "a": "ash",
+     "k": "packed_dirt",
+     "f": "flagstone",
+     "d": "dirt_road",
+     "m": "mud",
+     "p": "paved_road",
+     "w": "water"
+    },
+    "ground_patches": [],
+    "wall_storeys": [],
+    "tags": [
+     "ashlands"
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,24 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "title_logotype",
+  "prompt": "A title logotype for a gothic dark fantasy tactical RPG, as a single piece of game art: the word EMBERWAKE in large carved gothic capitals of gilt candle gold (#fbbf24) with tallow amber (#d97706) lower edges and a black basalt (#14171f) outline, ember sparks along the letters; under it, much smaller and centred, the words A SCARLET LULLABY in the same lettering in bleached linen (#d9cbb4). Spell the words exactly as written, every letter clear and readable. Detailed 16-bit SNES/GBA-era pixel art with visible large pixels and no anti-aliasing. Every background pixel is flat solid pure magenta (#FF00FF) so it can be keyed out; no magenta in the lettering, no scene, no shadow on the background, no frame, no other text, no watermark.",
+  "reference": null,
+  "prompts_file": null,
+  "time": "2026-11-02T09:45:00Z",
+  "n": 3,
+  "references": [],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "title_logotype_q1793612173",
+  "metadata": {
+    "asset_id": "title_logotype",
+    "task": "look1a",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null
+    }
+  },
+  "mark_cleared": true,
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Generated 3 variations."
+}

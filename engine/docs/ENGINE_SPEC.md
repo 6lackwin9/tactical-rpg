@@ -1,5 +1,7 @@
 # Aegis Engine Spec (agent-native engine, parallel to Godot)
 
+Parity note: the Godot parity suites were retired 2026-11-01 by CLN-36..42 (engine goldens replace them, CLAUDE.md "Engine goldens"); the parity sections below (section 6, the `aegis_parity` row, E1 to E7 parity bars) are history, kept as the port record.
+
 Status: draft, branch `engine` only (2026-10-18). Not merged to `main`; not in
 `games/emberwake/docs/ROADMAP.md` or `docs/DECISIONS.md` until the user approves it.
 Supersedes the Markdown-as-language direction in `../ENGINE_PROPOSAL.md`.
@@ -113,7 +115,7 @@ user sees. Screenshots are for visual bugs only.
 | Feel metrics | Input-to-feedback latency, animation durations, "every action has a visible response" checks | Measurable rules the agent can test |
 | Feel vocabulary | User words ("snappy", "heavy") mapped to parameter sets, kept in `engine/docs/FEEL.md` | Shared language that improves over time |
 
-## 6. Parity with Godot
+## 6. Parity with Godot (history, retired 2026-11-01 by CLN-36..42)
 
 Parity is measured on **behaviour**, not pixels. Godot defines what is
 acceptable. Where the engine should do better, that is a design choice the user

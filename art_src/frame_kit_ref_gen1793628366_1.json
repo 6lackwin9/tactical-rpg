@@ -1,0 +1,32 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "frame_kit_ref",
+  "prompt": "In the same gilt and black basalt gothic style as the first image, with its arches and spires made thin and simple. A kit of matching frame pieces for a gothic dark fantasy game's UI, laid out with wide gaps between them on a flat background. Three pieces: (1) one corner piece for the top left of a panel: an L shape with two thin arms of equal thickness meeting at a small ornate gothic elbow; (2) one straight horizontal edge segment of the same thin arm, plain and simple, whose left and right ends join seamlessly so it can repeat; (3) one small end cap that finishes a thin arm in a neat pointed tip. Every piece has one thin centre spine running along its whole length, with its ornament equal on both sides of that spine, so all pieces line up on one straight line. Thin and delicate, with bold simple shapes that stay readable when shrunk small; the arm is about one tenth as thick as the corner is wide. Candle gold #fbbf24, tallow #d97706, iron #4b5563, basalt #14171f. Clear dark outlines, hand-placed pixel clusters, no anti-aliasing. Every background pixel is flat solid pure magenta (#FF00FF); no magenta in the art and no shadow on it. Square 1:1. No text, no watermark.",
+  "reference": "G:/My Drive/image_pipeline/refs/ornate_corners_gen1793612836_1.png",
+  "prompts_file": null,
+  "time": "2026-11-02T13:57:48Z",
+  "n": 1,
+  "references": [
+    "G:/My Drive/image_pipeline/refs/ornate_corners_gen1793612836_1.png"
+  ],
+  "source": "gemini web app task",
+  "via": "gemini_web",
+  "request": "frame_kit_ref_q1793627868",
+  "metadata": {
+    "asset_id": "frame_kit_ref",
+    "task": "look1a8",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "source_refs": [
+        "C:/dev/tactical-rpg-plan/art_src/ornate_corners_gen1793612836_1.png"
+      ]
+    }
+  },
+  "mark_cleared": true,
+  "source_refs": [
+    "C:/dev/tactical-rpg-plan/art_src/ornate_corners_gen1793612836_1.png"
+  ],
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Generated 2 variations conditioned on reference image ornate_corners_gen1793612836_1.png."
+}

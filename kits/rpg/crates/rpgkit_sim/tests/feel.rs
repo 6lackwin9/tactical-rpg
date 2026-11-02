@@ -1,7 +1,7 @@
 //! RULESET1-G (RULESET1_TASKS 3, 4.1 G): the sim's `feel` mode on a scratch catalog built here (no shipped data). Its
 //! defaults come from the tasks (timeline, 10 seeds, the game's encounters); it is deterministic (the same arguments
 //! print the same lines) and ends with one FEEL_JSON line; its counts follow the rules: every planned unit-round has
-//! one intent, classic has no intents, no poise bars and no breaks; the help text (Godot parity) does not name it.
+//! one intent, classic has no intents, no poise bars and no breaks; the help text names it and its keys (CLN-39).
 //! RULESET1-G2 (RULESET1_BALANCE1 3.1, 4.2, 4.3): the feel keys and their refusals, the outcome columns, the tactics,
 //! the run's armour, and the `timed` party driver (TD1-TD4).
 
@@ -66,7 +66,8 @@ fn feel_defaults_to_timeline_ten_seeds_and_the_games_encounters() {
     assert_eq!(parse(&d, "feel 5 3 seeds=7", &game()).unwrap().seed_count, 3, "the positional seeds win");
     assert!(parse(&d, "feel", &SimGame::default()).unwrap_err().contains("feel needs enc="), "a game without feel encounters");
     assert_eq!(parse(&d, "feel enc=t_empty", &game()).unwrap_err(), "feel: 't_empty' is not a catalog encounter with a party");
-    assert!(!args::usage(&game()).iter().any(|l| l.contains("feel") || l.contains("seeds=")), "the help text (Godot parity) is unchanged");
+    let help = args::usage(&game());
+    assert!(["feel [level]", "seeds="].iter().all(|k| help.iter().any(|l| l.contains(k))), "the help text lists the feel mode and seeds= (CLN-39)");
 }
 
 #[test]
@@ -134,7 +135,8 @@ fn feel_keys_parse_and_refuse_by_the_spec() {
     assert!(parse(&d, "feel preset=aggressive ruleset=classic", &g).is_ok(), "preset= still works under classic");
     assert!(parse(&d, "feel preset=balanced", &g).is_ok(), "balanced is the timeline's one preset");
     assert!(SimArgs::parse_for(&d, &argv("duel tactic=all_out"), &g).unwrap_err().contains("feel key"), "no other mode takes a feel key");
-    assert!(!args::usage(&g).iter().any(|l| ["tactic=", "party=", "armor=", "tune="].iter().any(|k| l.contains(k))), "the help text (Godot parity) is unchanged");
+    let help = args::usage(&g);
+    assert!(args::FEEL_KEYS.iter().all(|k| help.iter().any(|l| l.contains(&format!("{k}=")))), "the help text lists every feel key (CLN-39)");
 }
 
 #[test]

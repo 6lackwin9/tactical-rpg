@@ -12,6 +12,13 @@
 //!   steps a second; periodic motion takes `t mod period` before any f32 (`cycle`), so it stays smooth for hours.
 //! - Size tiers (`Tier`), reduce motion (`PortraitOpts`), the per-screen `Budget` (at most `MAX_ANIMATED`
 //!   time-varying portraits a frame), the agent state (`state`) and the code-drawn sample face (`sample`).
+//! - Expression effects (PORTRAITFX1-EX, `ExpressionFx`): the caller's table of what an expression adds while a `face`
+//!   cue holds it (a tint over the sidecar's face box, a code-drawn mark anchored to the face or eye box, a short
+//!   shake); rows are data the game passes (`set_expressions`), the engine names no expression.
+//! - Motion (PORTRAITFX2-M, the PORTRAITFX2 spec section 4, `Motion`): each face's motion profile
+//!   (cycle, lean, bob, entry, rest, settle, shiver, blink rule, flush) combined by one function (`Motion::eval`) into
+//!   a stretch and an offset of the inner rect; the anchored layers follow it; a face change blends over
+//!   `MOTION_BLEND_MS`. The default profile is the breath exactly; `set_base_motion` sets the plain face's.
 
 use crate::art::Art;
 use crate::canvas::{Image, Rect, Rgba};
@@ -246,14 +253,522 @@ impl Held {
     }
 }
 
+// ---- Expression effects (PORTRAITFX1-EX) ----------------------------------------------------------------------------
+
+/// The marks an expression effect may draw: code-drawn pixel shapes (`vein` the anger mark, `sweat` a drop).
+pub const MARKS: [&str; 2] = ["vein", "sweat"];
+/// The boxes a mark's anchor is relative to: the sidecar's face box (`Face::face_box`) or the union of its eye boxes.
+pub const MARK_BOXES: [&str; 2] = ["face", "eyes"];
+/// A pulsing mark grows by up to this share of its width and its alpha falls to this share at the pulse's low.
+pub const MARK_GROW: f32 = 0.2;
+pub const MARK_ALPHA_LOW: f32 = 0.7;
+/// An expression shake flips every this many ms (as a jolt).
+pub const SHAKE_STEP_MS: u32 = 30;
+
+/// A mark's shape. Each is a small bitmap (`X` the colour, `H` its highlight, `O` its outline) scaled by nearest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mark {
+    Vein,
+    Sweat,
+}
+
+/// The anger mark: four corners whose bends point at the centre.
+const VEIN_BITMAP: [&str; 9] = ["..X...X..", "..X...X..", "XXX...XXX", ".........", ".........", ".........", "XXX...XXX", "..X...X..", "..X...X.."];
+/// A sweat drop with a highlight and an outline.
+const SWEAT_BITMAP: [&str; 7] = ["..O..", ".OXO.", ".OXO.", "OHXXO", "OXXXO", "OXXXO", ".OOO."];
+
+impl Mark {
+    /// The mark named `name` (`MARKS`); None for "" or an unknown name.
+    pub fn parse(name: &str) -> Option<Mark> {
+        match name {
+            "vein" => Some(Mark::Vein),
+            "sweat" => Some(Mark::Sweat),
+            _ => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Mark::Vein => "vein",
+            Mark::Sweat => "sweat",
+        }
+    }
+
+    /// The bitmap rows (all of one width).
+    pub fn bitmap(self) -> &'static [&'static str] {
+        match self {
+            Mark::Vein => &VEIN_BITMAP,
+            Mark::Sweat => &SWEAT_BITMAP,
+        }
+    }
+
+    /// The engine's default colour (plain numbers; the game's rows name their own).
+    pub fn default_color(self) -> Rgba {
+        match self {
+            Mark::Vein => [0xe1, 0x1d, 0x48, 255],
+            Mark::Sweat => [0x7d, 0xd3, 0xfc, 255],
+        }
+    }
+
+    /// The colour of bitmap cell `ch` for colour `c` (None: clear): `X` c, `H` c toward white by 0.7, `O` c x 0.45.
+    pub fn cell(ch: char, c: Rgba) -> Option<Rgba> {
+        let f = |k: usize, g: &dyn Fn(f32) -> f32| g(c[k] as f32).round().clamp(0.0, 255.0) as u8;
+        match ch {
+            'X' => Some(c),
+            'H' => Some([f(0, &|v| v + (255.0 - v) * 0.7), f(1, &|v| v + (255.0 - v) * 0.7), f(2, &|v| v + (255.0 - v) * 0.7), 255]),
+            'O' => Some([f(0, &|v| v * 0.45), f(1, &|v| v * 0.45), f(2, &|v| v * 0.45), 255]),
+            _ => None,
+        }
+    }
+}
+
+/// The box a mark's anchor is relative to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkBox {
+    Face,
+    Eyes,
+}
+
+impl MarkBox {
+    /// `face` or `eyes` (`MARK_BOXES`); anything else is the face box.
+    pub fn parse(name: &str) -> MarkBox {
+        if name == "eyes" {
+            MarkBox::Eyes
+        } else {
+            MarkBox::Face
+        }
+    }
+}
+
+/// One expression's runtime effect (a row of the caller's table): drawn while a `face` cue holds `expression`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExpressionFx {
+    pub expression: String,
+    /// The tint over the face box (None: no tint), its strength 0-1 (`tinted` at strength x the soft-ellipse weight)
+    /// and its length: 0 holds while the expression holds (easing in over `EASE_MS`), above 0 fades out over that
+    /// many ms from the expression's start (a flash).
+    pub tint: Option<Rgba>,
+    pub tint_strength: f32,
+    pub tint_ms: u32,
+    /// The mark (None: none), its colour (None: the mark's default), the box its anchor is in, the anchor in units of
+    /// that box (0-1 inside it; outside allowed, as a temple beside the face), its width as a share of the composed
+    /// side (at least the bitmap's own width) and its pulse period (0: steady).
+    pub mark: Option<Mark>,
+    pub mark_color: Option<Rgba>,
+    pub mark_box: MarkBox,
+    pub mark_x: f32,
+    pub mark_y: f32,
+    pub mark_size: f32,
+    pub mark_pulse_ms: u32,
+    /// A shake of the whole portrait from the expression's start (0: none): `shake_px` logical px over `shake_ms`.
+    pub shake_px: f32,
+    pub shake_ms: u32,
+    /// PORTRAITFX2-M: the face's motion while it shows (default: the breath).
+    pub motion: Motion,
+}
+
+impl ExpressionFx {
+    /// A row for `expression` that draws nothing (set the parts it draws).
+    pub fn new(expression: &str) -> Self {
+        Self { expression: expression.to_string(), tint: None, tint_strength: 0.0, tint_ms: 0, mark: None, mark_color: None, mark_box: MarkBox::Face, mark_x: 0.5, mark_y: 0.5, mark_size: 0.1, mark_pulse_ms: 0, shake_px: 0.0, shake_ms: 0, motion: Motion::default() }
+    }
+
+    /// The tint's strength `since` ms after the expression started: `tint_ms` 0 eases in over `EASE_MS` and holds;
+    /// above 0 it falls from full to 0 over `tint_ms`.
+    pub fn tint_at(&self, since: u64) -> f32 {
+        let s = self.tint_strength.clamp(0.0, 1.0);
+        if self.tint_ms == 0 {
+            s * (since as f32 / EASE_MS as f32).min(1.0)
+        } else if since < self.tint_ms as u64 {
+            s * (1.0 - since as f32 / self.tint_ms as f32)
+        } else {
+            0.0
+        }
+    }
+
+    /// The pulse at `t`: 0.5 + 0.5 sin(2 pi t / `mark_pulse_ms`), in 0-1 (1 with no pulse).
+    pub fn pulse(&self, t: u64) -> f32 {
+        if self.mark_pulse_ms == 0 {
+            return 1.0;
+        }
+        0.5 + 0.5 * cycle(t, self.mark_pulse_ms as f64).sin()
+    }
+
+    /// The shake (axis x, ease-out, a flip every `SHAKE_STEP_MS`, within `JOLT_LIMITS`); None without one.
+    pub fn shake(&self) -> Option<Shake> {
+        (self.shake_px > 0.0 && self.shake_ms > 0).then(|| Shake { px: self.shake_px, ms: self.shake_ms, axis: Axis::X, envelope: Envelope::EaseOut, step_ms: SHAKE_STEP_MS }.clamped(JOLT_LIMITS))
+    }
+
+    /// The box the mark's anchor is in, in image px of `face` (None: the sidecar has no such box).
+    pub fn anchor_box(&self, face: &Face) -> Option<[i32; 4]> {
+        match self.mark_box {
+            MarkBox::Face => face.face_box(),
+            MarkBox::Eyes => face.eyes_box(),
+        }
+    }
+
+    /// The mark's centre in composed px (`k` = composed side / sidecar size), before the breath moves it.
+    pub fn anchor(&self, face: &Face, k: f32) -> Option<(f32, f32)> {
+        let b = self.anchor_box(face)?;
+        Some(((b[0] as f32 + self.mark_x * b[2] as f32) * k, (b[1] as f32 + self.mark_y * b[3] as f32) * k))
+    }
+}
+
+/// A mark's width in composed px at side `s`: round(`size` x `s` x `grow`), at least its bitmap's width.
+pub fn mark_width(m: Mark, size: f32, s: i32, grow: f32) -> i32 {
+    let w = m.bitmap()[0].len() as i32;
+    ((size * s as f32 * grow).round() as i32).max(w)
+}
+
+/// A pulse `p` (0-1) as the mark's growth and alpha factor: 1 + `MARK_GROW` p, `MARK_ALPHA_LOW` + (1 - low) p.
+pub fn mark_pulse(p: f32) -> (f32, f32) {
+    (1.0 + MARK_GROW * p, MARK_ALPHA_LOW + (1.0 - MARK_ALPHA_LOW) * p)
+}
+
+/// The tint's weight at (dx, dy) in units of the face box's half sides from its centre: a soft ellipse, 1 inside half
+/// its area (d^2 <= 0.5), falling to 0 at its edge: clamp(2 (1 - d^2), 0, 1).
+pub fn face_weight(dx: f32, dy: f32) -> f32 {
+    (2.0 * (1.0 - (dx * dx + dy * dy))).clamp(0.0, 1.0)
+}
+
+/// The rect a mark of width `w` covers, centred on (cx, cy) in composed px: (x0, y0, w, h).
+pub fn mark_rect(m: Mark, w: i32, cx: f32, cy: f32) -> (i32, i32, i32, i32) {
+    let bm = m.bitmap();
+    let h = ((w as f32 * bm.len() as f32 / bm[0].len() as f32).round() as i32).max(1);
+    ((cx - w as f32 / 2.0).round() as i32, (cy - h as f32 / 2.0).round() as i32, w, h)
+}
+
+/// Draws mark `m` in colour `c` at alpha factor `a`, `w` px wide, centred on (cx, cy), clipped to [lo, hi).
+#[allow(clippy::too_many_arguments)]
+fn draw_mark(img: &mut Image, m: Mark, c: Rgba, w: i32, a: f32, cx: f32, cy: f32, lo: i32, hi: i32) {
+    let bm = m.bitmap();
+    let (bw, bh) = (bm[0].len() as i32, bm.len() as i32);
+    let (x0, y0, w, h) = mark_rect(m, w, cx, cy);
+    for dy in 0..h {
+        let row = bm[(dy * bh / h) as usize].as_bytes();
+        for dx in 0..w {
+            if let Some(col) = Mark::cell(row[(dx * bw / w) as usize] as char, c) {
+                over(img, x0 + dx, y0 + dy, alpha(col, 255.0 * a), lo, hi);
+            }
+        }
+    }
+}
+
+// ---- Motion (PORTRAITFX2-M) -----------------------------------------------------------------------------------------
+
+/// Motion distances are px at this reference side, scaled to the composed side (`motion_px`).
+pub const MOTION_REF: i32 = 240;
+/// When the winning face changes, its motion blends from the old one over this long.
+pub const MOTION_BLEND_MS: u64 = 200;
+/// The totals' limits at the reference side: stretch -3 to 4 px, each offset axis within 3 px.
+pub const MOTION_SQUEEZE_MAX: f32 = 3.0;
+pub const MOTION_STRETCH_MAX: f32 = 4.0;
+pub const MOTION_OFFSET_MAX: f32 = 3.0;
+/// A shiver burst takes a new offset every this many ms.
+pub const SHIVER_STEP_MS: u64 = 40;
+/// The parts `Motion::eval` names live (`MotionOut::parts`), in this order.
+pub const MOTION_PARTS: [&str; 8] = ["cycle", "lean", "bob", "entry", "settle", "rest", "shiver", "flush"];
+/// The sample profiles (`Motion::sample`; the Kit widgets Portraits page offers them), generic names.
+pub const MOTION_SAMPLES: [&str; 8] = ["breath", "wince", "heave", "shiver", "lift", "bounce", "sink", "jolt"];
+
+/// A face's motion profile (PORTRAITFX2 4.1): parts combined by `eval`, distances in px at `MOTION_REF` (scaled to
+/// whole device px by `motion_px`), times in ms. The default is PORTRAITFX1's breath exactly.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Motion {
+    /// The cycle (breath, heave): amplitude A (0: none), period P (scaled by the portrait seed as the breath), the
+    /// share r of a cycle spent breathing in, the jitter j (0: a closed form on the clock; above 0 each cycle's period
+    /// and amplitude vary by the motion seed, counted from the face's start).
+    pub breath_amp: f32,
+    pub breath_ms: u32,
+    pub breath_in: f32,
+    pub breath_jitter: f32,
+    /// A lean with the cycle (dx, positive toward the picture's right).
+    pub lean_px: i32,
+    /// A bounce: dy up by `bob_px` x |sin(pi t / bob_ms)|.
+    pub bob_px: i32,
+    pub bob_ms: u32,
+    /// The entry move from the face's start (wince, hop, jolt): dy and stretch (negative squeezes) over `enter_ms`.
+    pub enter_dy: i32,
+    pub enter_stretch: i32,
+    pub enter_ms: u32,
+    /// A held offset reached over `rest_ms` (lift, sink; 0 at once).
+    pub rest_dy: i32,
+    pub rest_ms: u32,
+    /// The cycle, lean and bob are 0 during the entry, then grow to full over `settle_ms` (0: at once).
+    pub settle_ms: u32,
+    /// Shiver bursts: `shiver_px` jitter for `shiver_ms`, a gap of about `shiver_gap_ms` between them.
+    pub shiver_px: i32,
+    pub shiver_ms: u32,
+    pub shiver_gap_ms: u32,
+    /// false: no blinks while the face shows.
+    pub blink: bool,
+    /// The face tint's strength pulses with the cycle: x (1 - F + F b).
+    pub tint_breath: f32,
+}
+
+impl Default for Motion {
+    /// PORTRAITFX1's breath: 2.88 px at 240 (`breath_amp`), 3600 ms, a plain cosine, no other part.
+    fn default() -> Self {
+        Self { breath_amp: 2.88, breath_ms: 3600, breath_in: 0.5, breath_jitter: 0.0, lean_px: 0, bob_px: 0, bob_ms: 0, enter_dy: 0, enter_stretch: 0, enter_ms: 0, rest_dy: 0, rest_ms: 0, settle_ms: 0, shiver_px: 0, shiver_ms: 0, shiver_gap_ms: 0, blink: true, tint_breath: 0.0 }
+    }
+}
+
+/// What `Motion::eval` reads: the portrait seed, the motion seed (`motion_seed`), the clock `t`, the face's start
+/// `since`, the composed side, the tier, reduce motion, `still`, and whether the face has a tint (the flush).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MotionCtx {
+    pub seed: u64,
+    pub mseed: u64,
+    pub t: u64,
+    pub since: u64,
+    pub side: i32,
+    pub tier: Tier,
+    pub reduce: bool,
+    pub still: bool,
+    pub tinted: bool,
+}
+
+/// A motion's output at a moment: the stretch of the inner rect (negative compresses), its offset, the cycle phase b
+/// (0-1), the flush factor for the face tint, whether anything still moves (the `Budget`) and the live parts.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct MotionOut {
+    pub stretch: i32,
+    pub dx: i32,
+    pub dy: i32,
+    pub b: f32,
+    pub flush: f32,
+    pub moving: bool,
+    pub parts: Vec<&'static str>,
+}
+
+/// A motion amplitude `v` (px at `MOTION_REF`) at composed side `side`: sign(v) max(1, round(|v| side / 240)); 0 for 0.
+pub fn motion_px(v: f32, side: i32) -> i32 {
+    if v == 0.0 {
+        return 0;
+    }
+    let n = ((v.abs() * side as f32 / MOTION_REF as f32).round() as i32).max(1);
+    if v < 0.0 {
+        -n
+    } else {
+        n
+    }
+}
+
+/// The motion seed of a face: the portrait seed ^ `seed_of(expression)`.
+pub fn motion_seed(seed: u64, expression: &str) -> u64 {
+    seed ^ seed_of(expression)
+}
+
+/// The entry envelope at `u` ms of a move `e` ms long: up to 1 over its first quarter, then (1 - x)^2 down to 0.
+pub fn entry_env(u: u64, e: u32) -> f32 {
+    if e == 0 || u >= e as u64 {
+        return 0.0;
+    }
+    let (u, e) = (u as f32, e as f32);
+    if u < 0.25 * e {
+        u / (0.25 * e)
+    } else {
+        (1.0 - (u - 0.25 * e) / (0.75 * e)).powi(2)
+    }
+}
+
+/// The phase b at fraction `f` of a cycle that breathes in over its first share `r`: (1 - cos(pi f / r)) / 2 rising,
+/// then (1 + cos(pi (f - r) / (1 - r))) / 2 falling.
+pub fn cycle_phase(f: f32, r: f32) -> f32 {
+    let r = r.clamp(0.01, 0.99);
+    if f < r {
+        (1.0 - (PI * f / r).cos()) / 2.0
+    } else {
+        (1.0 + (PI * (f - r) / (1.0 - r)).cos()) / 2.0
+    }
+}
+
+/// The start of shiver burst `j` (ms from the face's start) for a profile of `ms` bursts and `gap` ms gaps.
+pub fn shiver_start(mseed: u64, j: u64, ms: u32, gap: u32) -> u64 {
+    let g = gap as f64;
+    let mut at = (g * (0.5 + hash01(mseed, 1_000_000) as f64)).round() as u64;
+    for i in 0..j {
+        at += ms as u64 + (g * (0.5 + hash01(mseed, 1_000_001 + i) as f64)).round() as u64;
+    }
+    at
+}
+
+impl Motion {
+    /// The sample profile `name` of `MOTION_SAMPLES` (PORTRAITFX2 6.1 under generic names); None for another name.
+    pub fn sample(name: &str) -> Option<Motion> {
+        let d = Motion::default();
+        let cyc = |a: f32, ms: u32, r: f32, j: f32| Motion { breath_amp: a, breath_ms: ms, breath_in: r, breath_jitter: j, ..d };
+        Some(match name {
+            "breath" => d,
+            "wince" => Motion { enter_stretch: -2, enter_ms: 280, blink: false, ..cyc(1.5, 1700, 0.4, 0.35) },
+            "heave" => Motion { lean_px: 1, tint_breath: 0.5, ..cyc(4.0, 2100, 0.4, 0.1) },
+            "shiver" => Motion { shiver_px: 1, shiver_ms: 280, shiver_gap_ms: 1400, ..cyc(1.2, 1300, 0.5, 0.2) },
+            "lift" => Motion { rest_dy: -1, rest_ms: 400, ..cyc(2.4, 4400, 0.5, 0.0) },
+            "bounce" => Motion { enter_dy: -2, enter_ms: 320, bob_px: 1, bob_ms: 1100, ..cyc(2.4, 3000, 0.5, 0.0) },
+            "sink" => Motion { rest_dy: 2, rest_ms: 1500, ..cyc(2.0, 5200, 0.3, 0.0) },
+            "jolt" => Motion { enter_dy: -3, enter_ms: 360, settle_ms: 1600, blink: false, ..cyc(1.0, 2600, 0.5, 0.0) },
+            _ => return None,
+        })
+    }
+
+    /// The cycle's period for the portrait `seed`: `breath_ms` x (0.9 + 0.2 h(1)) (the breath's `breath_period`).
+    pub fn period(&self, seed: u64) -> f32 {
+        self.breath_ms as f32 * (0.9 + 0.2 * hash01(seed, 1))
+    }
+
+    /// The cycle at `t` (face start `since`): 2 b (twice the phase, so the default is 1 - cos exactly as the breath)
+    /// and this cycle's amplitude.
+    fn cycle(&self, seed: u64, mseed: u64, t: u64, since: u64) -> (f32, f32) {
+        let p = self.period(seed);
+        let (j, r) = (self.breath_jitter, self.breath_in);
+        if j <= 0.0 {
+            if r == 0.5 {
+                return (1.0 - cycle(t, p as f64).cos(), self.breath_amp);
+            }
+            let f = ((t as f64 % p as f64) / p as f64) as f32;
+            return (2.0 * cycle_phase(f, r), self.breath_amp);
+        }
+        let u = t.saturating_sub(since) as f64;
+        let (mut acc, mut n) = (0f64, 0u64);
+        loop {
+            let pn = (p as f64 * (1.0 + j as f64 * (2.0 * hash01(mseed, 4 * n) as f64 - 1.0))).max(1.0);
+            if u < acc + pn {
+                let f = ((u - acc) / pn) as f32;
+                return (2.0 * cycle_phase(f, r), self.breath_amp * (1.0 - j * hash01(mseed, 4 * n + 1)));
+            }
+            acc += pn;
+            n += 1;
+        }
+    }
+
+    /// The cycle's phase b (0-1) and this cycle's amplitude A_n at `t` (face start `since`; the motion seed `mseed`).
+    pub fn cycle_at(&self, seed: u64, mseed: u64, t: u64, since: u64) -> (f32, f32) {
+        let (w, a) = self.cycle(seed, mseed, t, since);
+        (w / 2.0, a)
+    }
+
+    /// Whether the profile has an entry move.
+    pub fn has_entry(&self) -> bool {
+        (self.enter_dy != 0 || self.enter_stretch != 0) && self.enter_ms > 0
+    }
+
+    /// The shiver offset at `u` ms from the face's start (0 between bursts), `x` px a step (already scaled).
+    fn shiver(&self, mseed: u64, u: u64, x: i32) -> (i32, i32) {
+        let (ms, gap) = (self.shiver_ms as u64, self.shiver_gap_ms as f64);
+        let mut at = (gap * (0.5 + hash01(mseed, 1_000_000) as f64)).round() as u64;
+        let mut j = 0u64;
+        loop {
+            if u < at {
+                return (0, 0);
+            }
+            if u < at + ms {
+                let q = (u - at) / SHIVER_STEP_MS;
+                let k = 2_000_000 + 64 * j + 2 * q;
+                let step = |k: u64| (3.0 * hash01(mseed, k)).floor() as i32 - 1;
+                return (x * step(k), x * step(k + 1));
+            }
+            at += ms + (gap * (0.5 + hash01(mseed, 1_000_001 + j) as f64)).round() as u64;
+            j += 1;
+        }
+    }
+
+    /// The motion's output (PORTRAITFX2 4.1 and 4.3): cycle, lean and bob at the full tier only; entry, rest and
+    /// shiver from the reduced tier up (halved there, at least 1 px); nothing at the minimal tier, under reduce motion
+    /// or `still`; the flush pulses from the reduced tier up and is steady (b = 1) otherwise.
+    pub fn eval(&self, c: &MotionCtx) -> MotionOut {
+        let full = c.tier == Tier::Full && !c.reduce && !c.still;
+        let others = c.tier != Tier::Minimal && !c.reduce && !c.still;
+        let half = c.tier == Tier::Reduced;
+        let s = c.side;
+        let px = |v: f32| motion_px(v, s);
+        let pxe = |v: i32| if half { motion_px(v as f32 / 2.0, s) } else { motion_px(v as f32, s) };
+        let u = c.t.saturating_sub(c.since);
+        let e = self.enter_ms as u64;
+        let settle = if u < e {
+            0.0
+        } else if self.settle_ms == 0 {
+            1.0
+        } else {
+            ((u - e) as f32 / self.settle_ms as f32).min(1.0)
+        };
+        let (w, an) = self.cycle(c.seed, c.mseed, c.t, c.since);
+        let b = w / 2.0;
+        let mut parts: Vec<&'static str> = Vec::new();
+        let (mut stretch, mut dx, mut dy) = (0i32, 0i32, 0i32);
+        let mut moving = false;
+        let cyc = full && self.breath_amp > 0.0;
+        if cyc {
+            stretch += (px(an) as f32 * w / 2.0 * settle).round() as i32;
+            parts.push("cycle");
+            moving = true;
+            if self.lean_px != 0 {
+                dx += (px(self.lean_px as f32) as f32 * b * settle).round() as i32;
+                parts.push("lean");
+            }
+        }
+        if full && self.bob_px != 0 && self.bob_ms > 0 {
+            let q = self.bob_ms as f64;
+            let sn = (std::f64::consts::PI * (c.t as f64 % q) / q).sin().abs() as f32;
+            dy -= (px(self.bob_px as f32) as f32 * sn * settle).round() as i32;
+            parts.push("bob");
+            moving = true;
+        }
+        if others && self.has_entry() && u < e {
+            let env = entry_env(u, self.enter_ms);
+            dy += (pxe(self.enter_dy) as f32 * env).round() as i32;
+            stretch += (pxe(self.enter_stretch) as f32 * env).round() as i32;
+            parts.push("entry");
+            moving = true;
+        }
+        if cyc && self.settle_ms > 0 && u >= e && u < e + self.settle_ms as u64 {
+            parts.push("settle");
+        }
+        if others && self.rest_dy != 0 {
+            let f = if self.rest_ms == 0 { 1.0 } else { (u as f32 / self.rest_ms as f32).min(1.0) };
+            dy += (pxe(self.rest_dy) as f32 * (1.0 - (1.0 - f).powi(2))).round() as i32;
+            parts.push("rest");
+            moving |= u < self.rest_ms as u64;
+        }
+        if others && self.shiver_px > 0 && self.shiver_ms > 0 {
+            let (sx, sy) = self.shiver(c.mseed, u, pxe(self.shiver_px));
+            dx += sx;
+            dy += sy;
+            parts.push("shiver");
+            moving = true;
+        }
+        let pulse = c.tinted && self.tint_breath > 0.0 && c.tier != Tier::Minimal && !c.reduce && !c.still;
+        let flush = if pulse {
+            let f = self.tint_breath.clamp(0.0, 1.0);
+            parts.push("flush");
+            moving = true;
+            1.0 - f + f * b
+        } else {
+            1.0
+        };
+        let (lo, hi, off) = (-px(MOTION_SQUEEZE_MAX), px(MOTION_STRETCH_MAX), px(MOTION_OFFSET_MAX));
+        MotionOut { stretch: stretch.clamp(lo, hi), dx: dx.clamp(-off, off), dy: dy.clamp(-off, off), b, flush, moving, parts }
+    }
+}
+
 // ---- Drawing options, budget --------------------------------------------------------------------------------------
 
-/// How a portrait draws: reduce motion (the setting), the rim key when the sidecar names none, the anchors check.
+/// How a portrait draws: reduce motion (the setting), the rim key when the sidecar names none, the anchors check, and
+/// the richest tier it may draw at (PORTRAITFX1-TL: a surface that is always small, such as a timeline row's icon,
+/// stays `Minimal` however large the window scales it; None: the side decides, 4.6).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct PortraitOpts {
     pub reduce_motion: bool,
     pub rim_default: Option<Rgba>,
     pub show_anchors: bool,
+    pub tier_cap: Option<Tier>,
+}
+
+impl PortraitOpts {
+    /// The tier a portrait `side` device px across draws at: `Tier::of(side)`, no richer than `tier_cap`.
+    pub fn tier(&self, side: i32) -> Tier {
+        let by_side = Tier::of(side);
+        self.tier_cap.map_or(by_side, |cap| by_side.max(cap))
+    }
 }
 
 /// One per screen: `begin` at the start of its draw; at most `MAX_ANIMATED` time-varying portraits move per frame,
@@ -297,16 +812,36 @@ struct Key {
     still: bool,
     /// Every live effect's intensity in 1/32 and its colour.
     levels: Vec<(&'static str, u32, Rgba)>,
+    /// PORTRAITFX1-EX: the expression effect drawn (its tint in 1/32, its mark's width and alpha in 1/32).
+    expr: Option<ExprKey>,
+    /// PORTRAITFX2-M: the motion's stretch and offset.
+    motion: (i32, i32, i32),
+}
+
+/// The cache key part of an expression effect.
+#[derive(Debug, Clone, PartialEq)]
+struct ExprKey {
+    expression: String,
+    tint: Option<(Rgba, u32)>,
+    mark: Option<(Mark, Rgba, i32, u32)>,
+}
+
+/// What a composition draws of an expression effect: the row, its tint (colour, strength now) and its mark (shape,
+/// colour, width in composed px, alpha factor).
+struct ExprDraw {
+    row: ExpressionFx,
+    tint: Option<(Rgba, f32)>,
+    mark: Option<(Mark, Rgba, i32, f32)>,
 }
 
 /// What one draw composes: the key, the time it reads and the exact levels.
 struct Plan {
     key: Key,
     t: u64,
-    breath: bool,
     rim_f: f32,
     blinking: bool,
     levels: BTreeMap<&'static str, Level>,
+    expr: Option<ExprDraw>,
 }
 
 /// The context of the last draw (for `state`).
@@ -316,6 +851,8 @@ struct Last {
     reduce: bool,
     rim: bool,
     blink: bool,
+    /// The composed side (the motion's scale).
+    s: i32,
 }
 
 /// One portrait's effects, timing and cache (spec 4.9).
@@ -332,6 +869,15 @@ pub struct PortraitFx {
     last: Option<Last>,
     /// How many times it composed (the budget and cache checks).
     pub composes: u64,
+    /// PORTRAITFX1-EX: the caller's expression-effect rows (`set_expressions`).
+    exprs: Vec<ExpressionFx>,
+    /// The expression-effect parts the last draw drew (`tint`, `mark`; for `state`).
+    ex_live: Vec<&'static str>,
+    /// PORTRAITFX2-M: the motion of "" (`set_base_motion`), the face the last draw showed (expression, start) and the
+    /// face its motion blends from (expression, start, the change's time).
+    base_motion: Motion,
+    mface: Option<(String, u64)>,
+    mblend: Option<(String, u64, u64)>,
 }
 
 /// The effects a composition draws from cues, in order.
@@ -340,7 +886,78 @@ const DRAWN: [&str; 10] = ["still", "desaturate", "tint", "glow", "veins", "eye_
 impl PortraitFx {
     /// A portrait keyed by `key` (the character id, else the unit id, else the path): its seed is FNV-1a 64 of it.
     pub fn new(key: &str) -> Self {
-        Self { key: key.to_string(), seed: seed_of(key), holds: BTreeMap::new(), timed: Vec::new(), jolt: Camera::default(), cache: None, frozen: None, last: None, composes: 0 }
+        Self { key: key.to_string(), seed: seed_of(key), holds: BTreeMap::new(), timed: Vec::new(), jolt: Camera::default(), cache: None, frozen: None, last: None, composes: 0, exprs: Vec::new(), ex_live: Vec::new(), base_motion: Motion::default(), mface: None, mblend: None }
+    }
+
+    /// PORTRAITFX2-M: the motion of the plain face "" and of any face without a row (default `Motion::default()`,
+    /// PORTRAITFX1's breath).
+    pub fn set_base_motion(&mut self, m: Motion) {
+        self.base_motion = m;
+    }
+
+    /// The base motion.
+    pub fn base_motion(&self) -> &Motion {
+        &self.base_motion
+    }
+
+    /// The motion of `expression`: its row's, else the base motion.
+    pub fn motion_of(&self, expression: &str) -> &Motion {
+        self.exprs.iter().find(|r| !expression.is_empty() && r.expression == expression).map_or(&self.base_motion, |r| &r.motion)
+    }
+
+    /// The face's motion output at `t` for side `s`, tier and options, blended from the previous face over
+    /// `MOTION_BLEND_MS` after a change (lerp of the outputs, rounded).
+    #[allow(clippy::too_many_arguments)]
+    fn motion_out(&self, t: u64, s: i32, tier: Tier, reduce: bool, still: bool, tinted: bool) -> MotionOut {
+        let (e, since) = self.mface.clone().unwrap_or_default();
+        let ctx = |e: &str, since: u64| MotionCtx { seed: self.seed, mseed: motion_seed(self.seed, e), t, since, side: s, tier, reduce, still, tinted };
+        let mut out = self.motion_of(&e).eval(&ctx(&e, since));
+        if let Some((oe, osince, at)) = &self.mblend {
+            if t < at + MOTION_BLEND_MS && !still && !reduce {
+                let old = self.motion_of(oe).eval(&ctx(oe, *osince));
+                let w = (t.saturating_sub(*at) as f32 / MOTION_BLEND_MS as f32).clamp(0.0, 1.0);
+                let lerp = |a: i32, b: i32| (a as f32 + (b - a) as f32 * w).round() as i32;
+                out = MotionOut { stretch: lerp(old.stretch, out.stretch), dx: lerp(old.dx, out.dx), dy: lerp(old.dy, out.dy), moving: true, ..out };
+                if !out.parts.contains(&"blend") {
+                    out.parts.push("blend");
+                }
+            }
+        }
+        out
+    }
+
+    /// Notes the winning face at `now` (a change starts a blend from the face shown before).
+    fn track_face(&mut self, now: u64) {
+        let cur = self.expression_since(now).map_or((String::new(), 0), |(e, s)| (e.to_string(), s));
+        if let Some(prev) = &self.mface {
+            if prev.0 != cur.0 {
+                self.mblend = Some((prev.0.clone(), prev.1, now));
+            } else if prev.1 == cur.1 {
+                return;
+            }
+        }
+        self.mface = Some(cur);
+    }
+
+    /// PORTRAITFX2-M: the motion at `now` for the last draw's side, tier and options (stretch 0 and no offset before
+    /// the first draw).
+    pub fn motion(&self, now: u64) -> MotionOut {
+        let Some(l) = self.last else { return MotionOut { flush: 1.0, ..MotionOut::default() } };
+        let still = self.level("still", now).is_some();
+        let tinted = self.expression_fx(now).is_some_and(|(r, _)| r.tint.is_some());
+        self.motion_out(now, l.s, l.tier, l.reduce, still, tinted)
+    }
+
+    /// PORTRAITFX1-EX: the expression-effect rows this portrait draws (the caller's table; replaces the previous one).
+    pub fn set_expressions(&mut self, rows: &[ExpressionFx]) {
+        if self.exprs != rows {
+            self.exprs = rows.to_vec();
+        }
+    }
+
+    /// The expression-effect rows set.
+    pub fn expressions(&self) -> &[ExpressionFx] {
+        &self.exprs
     }
 
     /// Sets the state cues that hold from `now` (the sidecar's `idle`, the game's state rows), replacing the previous
@@ -357,6 +974,10 @@ impl PortraitFx {
             seen.insert(key.clone());
             match self.holds.get_mut(&key) {
                 Some(h) => {
+                    // PORTRAITFX1-EX: a held face that changes its expression starts again (its effects run from now)
+                    if h.cue.effect == "face" && h.gone.is_none() && h.cue.expression != c.expression {
+                        h.since = now;
+                    }
                     if h.gone.is_some() {
                         let lv = h.ease(now);
                         h.since = now.saturating_sub((lv * EASE_MS as f32).round() as u64);
@@ -436,6 +1057,11 @@ impl PortraitFx {
     /// The winning `face` cue's expression at `now` (held, or fired and within its `ms`): the highest priority, then
     /// the latest started; "" with none.
     pub fn expression(&self, now: u64) -> &str {
+        self.expression_since(now).map_or("", |(e, _)| e)
+    }
+
+    /// The winning `face` cue's expression and when that cue started (None: no face cue).
+    pub fn expression_since(&self, now: u64) -> Option<(&str, u64)> {
         let held = self.holds.values().filter(|h| h.cue.effect == "face" && h.gone.is_none() && h.since <= now).map(|h| (&h.cue, h.since));
         let fired = self.timed.iter().filter(|(c, s)| c.effect == "face" && now >= *s && now < s + c.ms as u64).map(|(c, s)| (c, *s));
         let mut best: Option<(&Cue, u64)> = None;
@@ -444,7 +1070,30 @@ impl PortraitFx {
                 best = Some((c, s));
             }
         }
-        best.map_or("", |(c, _)| c.expression.as_str())
+        best.map(|(c, s)| (c.expression.as_str(), s))
+    }
+
+    /// PORTRAITFX1-EX: the expression-effect row of the expression at `now` and when it started (None: no face cue, or
+    /// no row for its expression).
+    pub fn expression_fx(&self, now: u64) -> Option<(&ExpressionFx, u64)> {
+        let (e, since) = self.expression_since(now)?;
+        self.exprs.iter().find(|r| !e.is_empty() && r.expression == e).map(|r| (r, since))
+    }
+
+    /// The expression shake's offset at `now` in whole logical px for the last draw's tier (halved at reduced, at
+    /// least 1 px; none at minimal or under reduce motion), from the expression's start.
+    pub fn expression_shake(&self, now: u64) -> (i32, i32) {
+        let Some(l) = self.last else { return (0, 0) };
+        if l.reduce || l.tier == Tier::Minimal {
+            return (0, 0);
+        }
+        match self.expression_fx(now).and_then(|(r, since)| Some((r.shake()?, since))) {
+            Some((s, since)) if now >= since => {
+                let s = if l.tier == Tier::Reduced { Shake { px: (s.px / 2.0).max(1.0), ..s } } else { s };
+                s.offset(now - since, self.seed ^ since)
+            }
+            _ => (0, 0),
+        }
     }
 
     /// Draws the portrait at `rel` (the path the caller's chain resolved to, `Art::first_rel`) into the logical rect
@@ -499,7 +1148,7 @@ impl PortraitFx {
     /// What a draw at `side` device px and `now` composes, and the context `state` reads.
     fn plan(&mut self, src: &str, face: Option<&Face>, side: i32, now: u64, opts: &PortraitOpts, budget: &mut Budget) -> Plan {
         self.prune(now);
-        let tier = Tier::of(side);
+        let tier = opts.tier(side);
         let s = side.min(COMPOSE_MAX);
         let reduce = opts.reduce_motion;
         // Every level (eases, fired cues) is read at the 30-a-second step too, so nothing recomposes more often.
@@ -515,20 +1164,52 @@ impl PortraitFx {
         }
         let still = levels.contains_key("still");
         let rim = face.and_then(|f| f.rim).map(rgb3).or(opts.rim_default);
-        let breath = tier == Tier::Full && !still && !reduce;
         let rim_live = rim.is_some() && tier.allows("rim") && !still && !reduce;
         let k = face.map_or(1.0, |f| s as f32 / f.size.max(1) as f32);
+        // PORTRAITFX2-M: the face's motion (its blink rule, its parts; a moving one is time-varying)
+        self.track_face(now_q);
+        let face_blinks = self.motion_of(&self.mface.as_ref().map_or(String::new(), |m| m.0.clone())).blink;
         let can_blink = face.is_some_and(|f| f.blink && !f.eyes.is_empty() && tier.allows("blink") && (tier == Tier::Full || f.eyes.iter().any(|e| (e[3] as f32 * k).round() >= 2.0)));
-        let blinking = can_blink && !still;
+        let blinking = can_blink && !still && face_blinks;
         let moving = |e: &str| levels.contains_key(e) && !reduce;
-        let animated = breath || rim_live || moving("glow") || moving("veins") || (moving("eye_glow") && tier != Tier::Minimal) || moving("ash") || moving("smoke");
+        // PORTRAITFX1-EX: the expression's row (its tint at every tier, its mark from reduced up; a pulse moves it)
+        let ex = self.expression_fx(now_q).map(|(r, since)| (r.clone(), since));
+        let pulsing = ex.as_ref().is_some_and(|(r, _)| r.mark.is_some() && r.mark_pulse_ms > 0 && tier != Tier::Minimal && !reduce);
+        let tinted = ex.as_ref().is_some_and(|(r, _)| r.tint.is_some());
+        let mo = self.motion_out(now_q, s, tier, reduce, still, tinted);
+        let animated = mo.moving || rim_live || moving("glow") || moving("veins") || (moving("eye_glow") && tier != Tier::Minimal) || moving("ash") || moving("smoke") || pulsing;
         let t = if (animated || blinking) && !budget.take() { self.frozen.unwrap_or(now_q) } else { now_q };
+        let mo = if t == now_q { mo } else { self.motion_out(t, s, tier, reduce, still, tinted) };
+        let expr = ex.map(|(row, since)| {
+            let tint = row.tint.map(|c| (c, row.tint_at(now_q.saturating_sub(since)) * mo.flush)).filter(|(_, i)| *i > 0.0);
+            let mark = row.mark.filter(|_| tier != Tier::Minimal).map(|m| {
+                let (grow, a) = if pulsing { mark_pulse(row.pulse(t)) } else { (1.0, 1.0) };
+                (m, row.mark_color.unwrap_or_else(|| m.default_color()), mark_width(m, row.mark_size, s, grow), a)
+            });
+            ExprDraw { row, tint, mark }
+        });
+        let face_box = face.and_then(Face::face_box).is_some();
+        self.ex_live = expr.as_ref().map_or(Vec::new(), |x| {
+            let mut v = Vec::new();
+            if x.tint.is_some() && face_box {
+                v.push("tint");
+            }
+            if x.mark.is_some() && face.and_then(|f| x.row.anchor_box(f)).is_some() {
+                v.push("mark");
+            }
+            v
+        });
         let rim_f = if rim_live { rim_factor(self.seed, t) } else { 1.0 };
         let blink = if blinking { blink_phase(self.seed, t) } else { 0 };
-        self.last = Some(Last { tier, reduce, rim: rim.is_some(), blink: can_blink });
+        self.last = Some(Last { tier, reduce, rim: rim.is_some(), blink: can_blink, s });
         let q = levels.iter().filter(|(e, _)| **e != "still").map(|(e, l)| (*e, (l.i * 32.0).round() as u32, l.color)).collect();
-        let key = Key { src: src.to_string(), s, tier, reduce, anchors: opts.show_anchors, rim: if rim_live { rim } else { None }, face: face.cloned(), t: animated.then_some(t), blink, still, levels: q };
-        Plan { key, t, breath, rim_f, blinking, levels }
+        let ex_key = expr.as_ref().map(|x| ExprKey {
+            expression: x.row.expression.clone(),
+            tint: x.tint.map(|(c, i)| (c, (i * 32.0).round() as u32)),
+            mark: x.mark.map(|(m, c, w, a)| (m, c, w, (a * 32.0).round() as u32)),
+        });
+        let key = Key { src: src.to_string(), s, tier, reduce, anchors: opts.show_anchors, rim: if rim_live { rim } else { None }, face: face.cloned(), t: animated.then_some(t), blink, still, levels: q, expr: ex_key, motion: (mo.stretch, mo.dx, mo.dy) };
+        Plan { key, t, rim_f, blinking, levels, expr }
     }
 
     /// The jolt offset at `now` in whole logical px for the last draw's tier (halved at reduced, at least 1 px; none at
@@ -549,8 +1230,15 @@ impl PortraitFx {
 
     fn blit(&self, p: &mut Painter, r: Rect, now: u64) {
         let Some((_, img)) = &self.cache else { return };
-        let (dx, dy) = self.jolt_offset(now);
+        let (dx, dy) = self.offset(now);
         p.image(img, Rect::new(r.x + dx, r.y + dy, r.w, r.h));
+    }
+
+    /// The portrait's offset at `now`: the jolt plus the expression shake, each axis within the jolt ceiling.
+    pub fn offset(&self, now: u64) -> (i32, i32) {
+        let ((jx, jy), (sx, sy)) = (self.jolt_offset(now), self.expression_shake(now));
+        let m = JOLT_LIMITS.max_px as i32;
+        ((jx + sx).clamp(-m, m), (jy + sy).clamp(-m, m))
     }
 
     /// The effects live at `now` for the last draw's tier and options: base life first, then `EFFECTS` order.
@@ -558,13 +1246,15 @@ impl PortraitFx {
         let Some(l) = self.last else { return Vec::new() };
         let still = l.tier.allows("still") && self.level("still", now).is_some();
         let mut out = Vec::new();
-        if l.tier == Tier::Full && !still && !l.reduce {
+        // PORTRAITFX2-M: `breath` is the face's cycle (none when its profile has none); `blink` keeps its blink rule
+        let m = self.motion_of(self.mface.as_ref().map_or("", |m| m.0.as_str()));
+        if l.tier == Tier::Full && !still && !l.reduce && m.breath_amp > 0.0 {
             out.push("breath");
         }
         if l.rim && l.tier.allows("rim") && !still && !l.reduce {
             out.push("rim");
         }
-        if l.blink && !still {
+        if l.blink && !still && m.blink {
             out.push("blink");
         }
         for e in EFFECTS {
@@ -585,10 +1275,15 @@ impl PortraitFx {
         self.last.map(|l| l.tier)
     }
 
-    /// The agent link's view (spec 4.11): `{key, expression, tier, effects, jolt: [dx, dy]}`.
+    /// The agent link's view (spec 4.11): `{key, expression, tier, effects, jolt: [dx, dy]}`; PORTRAITFX1-EX adds
+    /// `expression_fx` (the parts the last draw drew: `tint`, `mark`) and `shake` ([dx, dy] of the expression shake);
+    /// PORTRAITFX2-M adds `motion` ({stretch, offset: [dx, dy], parts: the live `MOTION_PARTS`, and `blend` while one
+    /// face's motion blends into the next}).
     pub fn state(&self, now: u64) -> Value {
         let (dx, dy) = self.jolt_offset(now);
-        json!({"key": self.key, "expression": self.expression(now), "tier": self.tier().map_or("", Tier::name), "effects": self.live(now), "jolt": [dx, dy]})
+        let (sx, sy) = self.expression_shake(now);
+        let m = self.motion(tq(now));
+        json!({"key": self.key, "expression": self.expression(now), "tier": self.tier().map_or("", Tier::name), "effects": self.live(now), "jolt": [dx, dy], "expression_fx": self.ex_live, "shake": [sx, sy], "motion": {"stretch": m.stretch, "offset": [m.dx, m.dy], "parts": m.parts}})
     }
 }
 
@@ -856,21 +1551,24 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
     let reduce = key.reduce;
     let tier = key.tier;
 
-    // 2. breath: the inner rect stretched up from its bottom edge (nearest rows).
-    let a = if plan.breath { breath_px(seed, t, s) } else { 0 };
-    if a > 0 {
+    // 2. motion (PORTRAITFX2-M; the breath is its default): the inner rect stretched by `a` from its bottom edge
+    // (negative compresses), then shifted by (mx, my), nearest rows; a sample outside the inner rect takes its edge.
+    let (a, mx, my) = key.motion;
+    let a = a.max(1 - h_in);
+    if a != 0 || mx != 0 || my != 0 {
         let orig = img.clone();
         for yd in lo..hi {
-            let d = (hi - 1 - yd) as i64;
+            let d = (hi - 1 - (yd - my)) as i64;
             let ds = (d * h_in as i64 / (h_in + a) as i64) as i32;
-            let ys = hi - 1 - ds;
+            let ys = (hi - 1 - ds).clamp(lo, hi - 1);
             for x in lo..hi {
-                put(&mut img, x, yd, get(&orig, x, ys));
+                put(&mut img, x, yd, get(&orig, (x - mx).clamp(lo, hi - 1), ys));
             }
         }
     }
-    // Anchors follow the breath: y' = bottom - (bottom - y) (H + a) / H.
-    let by = |y: f32| hi as f32 - (hi as f32 - y) * (h_in + a) as f32 / h_in as f32;
+    // Anchors follow the motion: y' = bottom - (bottom - y) (H + a) / H + my, x' = x + mx.
+    let by = |y: f32| hi as f32 - (hi as f32 - y) * (h_in + a) as f32 / h_in as f32 + my as f32;
+    let bx = |x: f32| x + mx as f32;
 
     // 3. colour: rim, desaturate, tint.
     let rim = key.rim.filter(|_| plan.rim_f != 1.0);
@@ -897,13 +1595,29 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
         }
     }
 
+    // 3b. PORTRAITFX1-EX: the expression's tint over the face box (a soft ellipse inside it; no box, no tint).
+    if let (Some((col, i)), Some(fb)) = (plan.expr.as_ref().and_then(|x| x.tint), face.face_box()) {
+        let (x0, x1) = (bx(fb[0] as f32 * k), bx((fb[0] + fb[2]) as f32 * k));
+        let (y0, y1) = (by(fb[1] as f32 * k), by((fb[1] + fb[3]) as f32 * k));
+        let (cx, cy, rx, ry) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0, ((x1 - x0) / 2.0).max(0.5), ((y1 - y0) / 2.0).max(0.5));
+        for y in (y0.floor() as i32).max(lo)..(y1.ceil() as i32).min(hi) {
+            for x in (x0.floor() as i32).max(lo)..(x1.ceil() as i32).min(hi) {
+                let w = face_weight((x as f32 + 0.5 - cx) / rx, (y as f32 + 0.5 - cy) / ry);
+                let c = get(&img, x, y);
+                if w > 0.0 && c[3] > 0 {
+                    put(&mut img, x, y, tinted(c, col, i * w));
+                }
+            }
+        }
+    }
+
     // The eye boxes in composed px: [x0, x1) x [y0, y1).
     let eyes: Vec<(i32, i32, i32, i32)> = face
         .eyes
         .iter()
         .map(|e| {
-            let x0 = (e[0] as f32 * k).round() as i32;
-            let x1 = ((e[0] + e[2]) as f32 * k).round() as i32;
+            let x0 = (e[0] as f32 * k).round() as i32 + mx;
+            let x1 = ((e[0] + e[2]) as f32 * k).round() as i32 + mx;
             let y0 = by(e[1] as f32 * k).round() as i32;
             let y1 = by((e[1] + e[3]) as f32 * k).round() as i32;
             (x0, y0, x1.max(x0 + 1), y1.max(y0 + 1))
@@ -940,7 +1654,7 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
         let anchors: Vec<(f32, f32, f32)> = if face.glow.is_empty() {
             vec![(lo as f32 + 0.5 * h_in as f32, lo as f32 + 0.7 * h_in as f32, 0.15 * s as f32)]
         } else {
-            face.glow.iter().map(|g| (g[0] as f32 * k, by(g[1] as f32 * k), g[2] as f32 * k)).collect()
+            face.glow.iter().map(|g| (bx(g[0] as f32 * k), by(g[1] as f32 * k), g[2] as f32 * k)).collect()
         };
         for (cx, cy, r) in anchors {
             for (f, a) in [(1.0, 40.0), (0.66, 60.0), (0.33, 90.0)] {
@@ -954,7 +1668,7 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
         let wide = tier == Tier::Full && s > 192;
         let step = (3.0 * k).max(1.0);
         for (ri, v) in face.veins.iter().enumerate() {
-            let root = (v[0] as f32 * k, by(v[1] as f32 * k));
+            let root = (bx(v[0] as f32 * k), by(v[1] as f32 * k));
             let len = v[3] as f32 * k;
             let segs = (v[3] as f32 / 3.0).ceil().max(1.0) as usize;
             let k0 = 400 + ri as u64 * 1000;
@@ -997,6 +1711,13 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
                 fill_ellipse(&mut img, cx, cy, 0.9 * w, 1.1 * h, alpha(l.color, 70.0 * l.i * flare), lo, hi);
             }
             fill_ellipse(&mut img, cx, cy, w / 2.0, h / 2.0, alpha(l.color, 200.0 * l.i * flare), lo, hi);
+        }
+    }
+
+    // 5b. PORTRAITFX1-EX: the expression's mark, centred on its anchor in the face or eye box (no box, no mark).
+    if let Some(ExprDraw { row, mark: Some((m, col, w, a)), .. }) = plan.expr.as_ref() {
+        if let Some((ax, ay)) = row.anchor(face, k) {
+            draw_mark(&mut img, *m, *col, *w, *a, bx(ax), by(ay), lo, hi);
         }
     }
 
@@ -1056,11 +1777,11 @@ fn compose(src: &Image, face: Option<&Face>, plan: &Plan, seed: u64) -> Image {
             ring(&mut img, x0, y0, x1, y1, ANCHOR_EYE);
         }
         for v in &face.veins {
-            let (x, y) = ((v[0] as f32 * k).round() as i32, by(v[1] as f32 * k).round() as i32);
+            let (x, y) = ((v[0] as f32 * k).round() as i32 + mx, by(v[1] as f32 * k).round() as i32);
             ring(&mut img, x - 1, y - 1, x + 2, y + 2, ANCHOR_VEIN);
         }
         for g in &face.glow {
-            let (cx, cy, r) = (g[0] as f32 * k, by(g[1] as f32 * k), g[2] as f32 * k);
+            let (cx, cy, r) = (bx(g[0] as f32 * k), by(g[1] as f32 * k), g[2] as f32 * k);
             let n = (r * 8.0).ceil().max(8.0) as i32;
             for j in 0..n {
                 let a = 2.0 * PI * j as f32 / n as f32;
@@ -1128,6 +1849,6 @@ pub fn sample() -> (Image, Face) {
             }
         }
     }
-    let face = Face { size: N, border: 3, eyes: vec![[38, 38, 5, 3], [53, 38, 5, 3]], blink: true, lid: None, glow: vec![[48, 80, 10]], veins: vec![[57, 47, 100, 14]], mouth: None, rim: Some([217, 119, 6]), idle: Vec::new() };
+    let face = Face { size: N, border: 3, eyes: vec![[38, 38, 5, 3], [53, 38, 5, 3]], blink: true, lid: None, glow: vec![[48, 80, 10]], veins: vec![[57, 47, 100, 14]], mouth: None, face: None, rim: Some([217, 119, 6]), idle: Vec::new() };
     (img, face)
 }

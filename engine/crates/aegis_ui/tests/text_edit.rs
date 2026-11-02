@@ -200,10 +200,10 @@ fn undo_groups_a_typing_run_until_a_pause_a_move_or_a_delete() {
 fn the_scroll_keeps_the_caret_line_in_view() {
     // Lines 10 apart, a 50 tall view, 20 lines (content 206).
     let content = 20 * 10 + 6;
-    assert_eq!(reveal_offset(0, 0, 10.0, 50, content), 0, "a line in view keeps the offset");
-    let down = reveal_offset(0, 10, 10.0, 50, content);
+    assert_eq!(reveal_offset(0, 0, 10.0, 50, content, 1), 0, "a line in view keeps the offset");
+    let down = reveal_offset(0, 10, 10.0, 50, content, 1);
     assert!(down > 0 && (3 + 10 * 10 - down) + 10 + 3 <= 50, "line 10 is brought up to the bottom edge: {down}");
-    assert_eq!(reveal_offset(down, 10, 10.0, 50, content), down, "and stays");
-    assert_eq!(reveal_offset(80, 2, 10.0, 50, content), 20, "a line above the view scrolls up to it");
-    assert_eq!(reveal_offset(0, 19, 10.0, 50, content), content - 50, "never past the end");
+    assert_eq!(reveal_offset(down, 10, 10.0, 50, content, 1), down, "and stays");
+    assert_eq!(reveal_offset(80, 2, 10.0, 50, content, 1), 20, "a line above the view scrolls up to it");
+    assert_eq!(reveal_offset(0, 19, 10.0, 50, content, 1), content - 50, "never past the end");
 }

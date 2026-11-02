@@ -1,0 +1,30 @@
+{
+  "model": "imagen-3.0-generate-002",
+  "id": "bram",
+  "prompt": "Edit this pixel-art portrait. Keep everything exactly the same: the framing, the head size and position, the pose, hair, clothing, every accessory and scar, the background, the lighting, the palette and the pixel style. Change only the facial expression to: Afraid: eyes wide, brows raised, mouth slightly open, head drawn in. The iron loupe stays strapped over his right eye, exactly as in the reference.",
+  "reference": "C:/dev/localgen/review/portraitfx1xa/refs/bram_neutral.png",
+  "prompts_file": null,
+  "time": "2026-11-01T14:24:17.000000+00:00",
+  "n": 1,
+  "references": [
+    "C:/dev/localgen/review/portraitfx1xa/refs/bram_neutral.png"
+  ],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "bram_face_afraid_q1793542733",
+  "metadata": {
+    "asset_id": "bram",
+    "task": "portraitfx1xa",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "kind": "face_edit",
+      "cell": "afraid"
+    }
+  },
+  "mark_cleared": true,
+  "kind": "face_edit",
+  "cell": "afraid",
+  "notes": "Verified resolution 1024x1024 and aspect ratio within 3% tolerance."
+}

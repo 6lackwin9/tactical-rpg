@@ -99,8 +99,6 @@ pub struct RoundState {
     pub rest_blocks: i32,
     /// PL1, FU1 (RULESET1-PL): the opener the player picked for this round (None = the planner's, PL3).
     pub opener: Option<Opener>,
-    /// MM1: the member plans by hand (the auto planner leaves its steps alone); persists across rounds.
-    pub manual: bool,
     /// MV11: `maneuver` was picked by the auto planner (Engage, else Disengage, else Utility), not by the player.
     pub maneuver_auto: bool,
     /// TG6: last round's target (the planner proposes it while it is valid).
@@ -108,6 +106,9 @@ pub struct RoundState {
     /// INPUT1 GH1, GH6: the member's picks this round, in order (the planner's ghost fills the rest); cleared at every
     /// round start; in no trace or save.
     pub picks: Vec<Pick>,
+    /// ENCOUNTER2-C SR3: a scripted entry's own ghost fill this round (Some(true) the planner's fill, Some(false) Rest),
+    /// read instead of the Auto-fill setting; None = the setting. Cleared at every round start; in no trace or save.
+    pub fill: Option<bool>,
 }
 
 /// INPUT1 IF4, ET1-ET4 (`round_intent_plan::pick`): one pick of a member's round. A skill (with the Maneuver kind of
@@ -192,7 +193,7 @@ pub fn target_problem(w: &World, c: UnitId, intent: RoundIntent, target: RoundTa
         return String::new();
     }
     match intent {
-        RoundIntent::Assault | RoundIntent::Maneuver => format!("{} targets an enemy or a tile.", intent.name()),
+        RoundIntent::Assault | RoundIntent::Maneuver => format!("{} targets an enemy or a tile.", intent.label(&w.cat)),
         RoundIntent::Guard => "Guard targets yourself or a tile.".into(),
         RoundIntent::Support => "Support targets yourself or an ally.".into(),
         RoundIntent::Channel => String::new(),
@@ -215,7 +216,7 @@ pub fn set_intent(w: &mut World, c: UnitId, intent: RoundIntent) -> Result<Vec<S
         return Err("This battle has no round intents.".into());
     }
     if !w.ruleset.numbers.intents.iter().any(|i| i == intent.id()) {
-        return Err(format!("{} is not an intent of this ruleset.", intent.name()));
+        return Err(format!("{} is not an intent of this ruleset.", intent.label(&w.cat)));
     }
     if !w.units[c].is_active() {
         return Err(format!("{} is not on the field.", w.units[c].name));
@@ -223,7 +224,7 @@ pub fn set_intent(w: &mut World, c: UnitId, intent: RoundIntent) -> Result<Vec<S
     let old = w.round_states.get(&c).and_then(|r| r.intent);
     let mut lines = Vec::new();
     if old.is_some_and(|o| o != intent) {
-        let from = old.unwrap().name();
+        let from = old.unwrap().label(&w.cat);
         for name in drop_bound(w, c) {
             lines.push(format!("{} leaves {from}: {name} ends", w.units[c].name));
         }
@@ -322,11 +323,12 @@ pub fn rest_gain(n: &Numbers, blocks: i32) -> i32 {
 }
 
 /// Round start (after the status roll-over and `ap_regen`): RS2's Rest gain for the units that pay AP, then the
-/// round's target, kind, opener, picks, move and Rest count reset (the intent, facing and Manual toggle stay: IN2, MV1,
-/// MM1, INPUT1 GH6).
-/// Returns the gain lines.
+/// round's target, kind, opener, picks, move and Rest count reset (the intent and facing stay: IN2, MV1, INPUT1 GH6).
+/// Returns the gain lines. CLN-45: the Rest gain is `rest_ap` round_end's (the Rest blocks are counted only then);
+/// without `round_intent` a unit's state holds only its Rest count, which goes once paid.
 pub fn round_start(w: &mut World) -> Vec<String> {
-    if !on(w) {
+    let intents = on(w);
+    if !intents && !w.ruleset.rest_at_round_end() {
         return Vec::new();
     }
     let mut lines = Vec::new();
@@ -339,6 +341,10 @@ pub fn round_start(w: &mut World) -> Vec<String> {
             u.ap = u.max_ap.min(u.ap + gain);
             lines.push(format!("[Rest] {} recovers {gain} AP from {blocks} Rest block{} (AP {}/{})", u.name, if blocks == 1 { "" } else { "s" }, u.ap, u.max_ap));
         }
+        if !intents {
+            w.round_states.shift_remove(&c);
+            continue;
+        }
         let rs = w.round_states.get_mut(&c).unwrap();
         // TG6 (RULESET1-PL): the planner proposes last round's target; the opener and the kind are picked again
         rs.last_target = rs.target.take();
@@ -349,6 +355,7 @@ pub fn round_start(w: &mut World) -> Vec<String> {
         rs.rest_blocks = 0;
         // INPUT1 GH6: the picks go with the target, kind and opener; the intent carries over
         rs.picks.clear();
+        rs.fill = None;
     }
     lines
 }

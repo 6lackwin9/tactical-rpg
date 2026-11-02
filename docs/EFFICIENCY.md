@@ -10,10 +10,11 @@ Living file: measure, fix, record. Add a row whenever a step feels slow or a run
 | Layer check (KIT1-G, in the gate) | about 0.7 s in bash (0.24 s of it one `git grep` per game id), 0.75 s in PowerShell | fine; note a git pathspec glob must match the whole path (`kits/*/crates/*`, not `kits/*/crates`) |
 | First build of a checkout or worktree (debug, every crate) | a few minutes; `run.bat` release build of the GUI and CLI likewise | once per folder; each worktree has its own build folder (fc.sh) |
 | Per-worktree build folders (`<target-dir>-<worktree>`, 2026-10-25) | 5-10 GB each; 33 stale ones filled C: (about 200 GB) | `tools/wt_remove.ps1` removes a worktree's folder with it; `-Targets -WhatIf` is the cheap disk audit (WTCLEAN1) |
-| `tools/fc.sh docs` | 16 s (129 files) | fine |
+| `tools/fc.sh docs` | 16 s (129 files); 80 s (272 files, 2026-11-02); now 0.7 s changed files, 0.9 s `--all` (EFF1) | fine |
 | `aegis sim duel <level> 2` (120 fights, debug build) | 0.6 s | the Godot sim took ~90 s for the same table |
-| `aegis sim <mode>` (release build), the 20 recorded parity runs (`emberwake_sim` test `sim_parity`) | about 6 s in all | Godot took about 25 minutes for the same runs (`games/emberwake/parity/sim.sh`) |
-| `tools/fc.sh parity` (Godot 4.7.2 on `legacy/`) | export ~5 s, each trace mode about a minute or less, journeys ~4 min | only when the reference must be re-recorded (a fresh checkout, CI records the exports only) |
+| `aegis sim <mode>` (release build), the 20 recorded parity runs (`emberwake_sim` test `sim_parity`; since CLN-39 `sim_golden`, 22 runs, about 16 s in the test profile, the old test took 22 s there) | about 6 s in all | Godot took about 25 minutes for the same runs (`games/emberwake/parity/sim.sh`) |
+| `tools/fc.sh parity` (Godot 4.7.2 on `legacy/`) | export ~5 s, each trace mode about a minute or less, journeys ~4 min | only when the reference must be re-recorded (a fresh checkout, CI records the exports only) (retired 2026-11-01, CLN-42: `fc.sh parity` and the recorders are gone) |
+| Full gate after CLN-42 (2026-11-01 flush) | about 5 min, 1335 tests | the Godot-only suites are gone; the engine goldens replace them |
 | Windows Smart App Control blocking freshly built binaries (2026-10-19) | random test exes and GUI launches refused (`os error 4551`); retries and relinks did not always clear it | turned off by the user; the gates still relink a blocked exe (skill `known-issues`) |
 | Battle screen ghost drafts (INPUT1 GH2 a, measured 2026-11-01 in the test profile on the two 4-member fights, `tl_skirmish` and `kit_winch_escape`) | one member's draft on copies (world clone 0.15-0.2 ms, the rest the tactic's AI draft) 1.2-1.6 ms; a round's planning start 5-7 ms; a pick redrafts the later members (up to 3 drafts, about 5 ms) | fine, not optimised (under one frame; the preview views are cached for the battle's revision) |
 | Local image generation (LOCALGEN1, 2026-10-26; LCM Dreamshaper int8, 512 px, 6 steps) | GPU (Arc 140V) 0.8-1.0 s an image, first compile seconds; NPU 2.1 s an image, but its first compile is 3.5-16 min for each new size or LoRA (cached in `C:/dev/localgen/cache`); img2img on the GPU 3.5-4.5 s | default device GPU; NPU only for long batches at one fixed size, never for LoRA trials |
@@ -44,6 +45,7 @@ The measurements and fixes below are the Godot build's; they stay as the record.
 | Reviewer agent | ~2.5 min, ~30k tokens | cheap, keep |
 | Brainstorm agent | ~1.5 min, ~56k tokens | cheap, keep |
 | gate `godot --headless --import` step (S14-A1/A2) | ~2 s when nothing new, longer on a fresh checkout with new assets | fine; needed so CI loads committed PNG/WAV files |
+| Partial gates of engine-wide changes under three busy lanes (2026-11-02) | aegis_ui changes (LOOK1-ME, LOOK1-G1) pull in every emberwake crate: 722-1095 tests, 824-881 s; kit-only or tool changes 90-200 s; full gate at a flush 276-873 s (1383-1450 tests) | Reviewers skip re-running a gate whose log is newer than every changed file (run the targeted tests instead); keep at most two engine-touching lanes at once |
 
 ### Bottlenecks found and fixes
 
@@ -108,3 +110,43 @@ With 3 logic builders plus a reviewer running Godot at once, `check_project.ps1 
   every test binary is 4.9 GB instead of 14 GB (compiled deps 11 to 3.5 GB, incremental 3.2 to 1.4 GB). A profile change
   rebuilds every cache once.
 
+## Efficiency pass (user 2026-11-02)
+
+Measured on 2026-11-02: a builder's first pass 13-30 min, review 4-17 min, a fix round 4-15 min, usually 1-2 per task; full
+gate under 2 min with idle lanes, 7.5 min with three lanes building; `fc.sh docs` 85 s under load. The biggest cost was
+iterating on visuals through builders: the frame took 8 rounds and over 2 hours. Rules in decision "Efficiency pass".
+
+Builder self-check, the findings reviews kept repeating:
+
+- Inputs from files or the public API are bounded, refused rather than truncated or wrapped.
+- A cache key holds everything the result depends on, by content; a resize or drag cannot grow a cache.
+- A rule's test fails when the rule is broken: break the code once and see it fail (mutation).
+- New paths run on real art or data, not only fixtures; say what was viewed, from the final files.
+- Docs that describe what changed are updated, and specs get an as-built note where the build differs.
+
+Docs check (EFF1, 2026-11-02): of the 80 s, the size loop's `wc` per file took 66-141 s when timed alone (2-3 forks per
+file on Windows, where a fork is slow under load); one `wc -lc` on all files takes 0.13-0.19 s, the lint 0.5-0.8 s and the
+list of changed files 0.3-0.6 s. `tools/fc.sh docs` now reads changed files only and `--all` every file; the gate runs
+`--all`. On Windows a fork in a shell loop is the first thing to suspect in a slow script.
+
+Tool tests (EFF1): `tools/fc.sh tooltests` takes about 30 s (120 tests) and joins the gate; 180 s is the limit because the
+gate can take four times as long under load.
+
+## Ground composer (REGIONGROUND1-E1, 2026-11-02)
+
+Budget (spec `docs/specs/REGIONGROUND1_ENGINE.md` section 4.3): compose at most 100 ms, a copy at most 20 ms at 4K, in
+release, for a 48 x 30, 8-layer job. Measured with `ground_compose --timing` (10 runs each, best to worst, while other
+lanes built on the same machine):
+| Form | Compose | Copy at 720p | Copy at 1080p | Copy at 4K | Blit of a 4K frame | Cache holds at 4K |
+| --- | --- | --- | --- | --- | --- | --- |
+| Square, 768 x 480 art px | 21-25 ms | 1.3-1.6 ms | 2.7-3.6 ms | 11-12 ms | 2.4-4.2 ms | 54.6 MB |
+| Tilted, 768 x 360 art px | 16-20 ms | 1.0-1.1 ms | 2.0-2.9 ms | 8.1-12 ms | 2.5-3.6 ms | 42.4 MB |
+The cheap path: an x blur runs once per cell row, not per pixel row, and a y blur is a few weights per cell row (a cell
+row's pixels are alike), so the integers match full running sums at a fraction of the work. Only the noise a job reads is
+made. Compose runs once on a map's first frame; a frame only blits what shows. `GroundKey::of` hashes every texture
+pixel: 0.14 ms for that job, so it runs when the job changes, never each frame.
+
+Patches and marks (REGIONGROUND1-E2, 2026-11-02), same budget, `ground_compose --timing` in release, 10 runs, best to worst,
+every layer with `patches` .2 and 10 mark tries per 100 cells, other lanes building: square 38-50 ms on the many-borders job
+(25-36 ms without them), 17-23 ms on one open ground with 16 placed patches; tilted 31-47 ms and 14-24 ms (17-23 ms without). A
+job that asks for none reads no patch noise and no extra blur, so its cost and bytes do not move.

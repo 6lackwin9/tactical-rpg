@@ -6,7 +6,8 @@
 //! (start, schedule, tells, every step, then outcome, rounds, log, metrics and report). The golden is the engine-only
 //! reference of the timeline ruleset (section 5): it was recorded once when RULESET1-X landed and is re-recorded only for
 //! an intended rule change, named in the commit and a docs/HISTORY.md row; never edited by hand. Re-record (the frozen
-//! catalog is kept; delete `timeline_kit.json` first to re-freeze it from the shipped data):
+//! catalog is kept; delete `timeline_kit.json` first to re-freeze it from the shipped data, then re-record
+//! `emberwake_rules/tests/rules_golden.rs` too, which builds its units on the same frozen catalog):
 //!
 //! `RECORD=1 tools/fc.sh test --test timeline_golden`
 //!

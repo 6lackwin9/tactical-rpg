@@ -16,9 +16,10 @@ use crate::audio::Bus;
 use crate::canvas::{rgb, rgba, Rect, Rgba};
 use crate::fx::{Camera, Clock, ShakeLimits, ShakeTable};
 use crate::painter::Painter;
-use crate::portrait_fx::{idle_cues, Budget, Cue, PortraitFx, PortraitOpts};
+use crate::portrait_fx::{idle_cues, Budget, Cue, ExpressionFx, PortraitFx, PortraitOpts};
 use crate::screen::{Context, Cx, Key, Screen, Settings};
-use crate::ui::{tip, Gfx, Ui, Widget, BODY, DIM, GOLD, RADIUS, SMALL, TEXT, H, W};
+use crate::theme::th;
+use crate::ui::{tip, Gfx, Ui, Widget, BODY, RADIUS, SMALL, H, W};
 use aegis_core::json;
 use serde_json::{json, Value};
 use std::time::Instant;
@@ -49,8 +50,10 @@ pub const HINT: &str = "Click to continue";
 /// Ash (V11): specks per card and their fall in logical px per second.
 pub const ASH_SPECKS: u32 = 24;
 pub const ASH_FALL: f32 = 6.0;
-/// The engine's frame colour when a reel names none (a near-black).
-pub const DEFAULT_FRAME: Rgba = rgb(10, 11, 16);
+/// The frame and backdrop colour when a reel or card names none: the theme's `stage`.
+pub fn default_frame() -> Rgba {
+    th().stage
+}
 
 /// `#rrggbb` as a colour (None for anything else).
 pub fn hex(s: &str) -> Option<Rgba> {
@@ -211,8 +214,8 @@ impl Default for Card {
         Card {
             style: Style::Image,
             image: String::new(),
-            top: DEFAULT_FRAME,
-            bottom: DEFAULT_FRAME,
+            top: default_frame(),
+            bottom: default_frame(),
             ash: false,
             title: String::new(),
             subtitle: String::new(),
@@ -277,7 +280,7 @@ pub struct Reel {
 
 impl Default for Reel {
     fn default() -> Self {
-        Reel { id: String::new(), music: String::new(), frame: DEFAULT_FRAME, skippable: true, cards: Vec::new() }
+        Reel { id: String::new(), music: String::new(), frame: default_frame(), skippable: true, cards: Vec::new() }
     }
 }
 
@@ -289,7 +292,7 @@ impl Reel {
         Reel {
             id: json::s(d, "id"),
             music: json::s(d, "music"),
-            frame: hex(&json::s(d, "frame")).unwrap_or(DEFAULT_FRAME),
+            frame: hex(&json::s(d, "frame")).unwrap_or_else(default_frame),
             skippable: json::b(d, "skippable", true),
             cards: json::aget(d, "cards").iter().map(Card::from_json).collect(),
         }
@@ -307,8 +310,9 @@ impl Reel {
 
 /// The engine's sample reel (the UI Gallery's vignette entry): one card of each style on code-drawn backdrops.
 pub fn sample_reel() -> Reel {
-    let dusk = (rgb(10, 11, 16), rgb(44, 21, 70));
-    let slate = (rgb(30, 35, 45), rgb(10, 11, 16));
+    let stage = default_frame();
+    let dusk = (stage, rgb(44, 21, 70));
+    let slate = (rgb(30, 35, 45), stage);
     Reel {
         id: "sample".into(),
         cards: vec![
@@ -564,7 +568,7 @@ impl Player {
 
 // ---- Drawing ----------------------------------------------------------------------------------------------------
 
-/// The card colours (V10): the game passes its own; the defaults are the kit's neutral ones.
+/// The card colours (V10): the game passes its own; the defaults are the theme's `text`, `gold` and `dim`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Palette {
     pub text: Rgba,
@@ -574,7 +578,8 @@ pub struct Palette {
 
 impl Default for Palette {
     fn default() -> Self {
-        Palette { text: TEXT, accent: GOLD, dim: DIM }
+        let t = th();
+        Palette { text: t.text, accent: t.gold, dim: t.dim }
     }
 }
 
@@ -633,6 +638,7 @@ fn mixed(seed: u64) -> u64 {
 /// Ash (V11): `ASH_SPECKS` specks seeded by the card index, falling `ASH_FALL` px a second, wrapping inside `r`.
 fn ash(p: &mut Painter, r: Rect, card: usize, card_ms: u64) {
     let fall = card_ms as f32 / 1000.0 * ASH_FALL;
+    let mote = th().mote;
     for i in 0..ASH_SPECKS as u64 {
         let h = mixed(((card as u64) << 8) | i);
         let x = r.x + (h % r.w.max(1) as u64) as i32;
@@ -640,7 +646,7 @@ fn ash(p: &mut Painter, r: Rect, card: usize, card_ms: u64) {
         let y = r.y + ((y0 + fall) % r.h.max(1) as f32) as i32;
         let size = 1 + ((h >> 32) % 2) as i32;
         let a = 90 + ((h >> 40) % 90) as u8;
-        p.fill(Rect::new(x, y, size, size), rgba(206, 204, 200, a));
+        p.fill(Rect::new(x, y, size, size), with_alpha(mote, a));
     }
 }
 
@@ -684,6 +690,8 @@ pub struct CardPortrait {
     /// PORTRAITFX1-X: the sidecar files to try for a drawn portrait file, in order (the game's layout: an expression
     /// frame's own, then its base portrait's); None: the drawn file's own sidecar only.
     pub sidecars: Option<fn(&str) -> Vec<String>>,
+    /// PORTRAITFX1-EX: the caller's expression-effect rows, drawn while a card's `expression` holds.
+    pub expressions: Vec<ExpressionFx>,
 }
 
 /// The `face` cue key a line card's `expression` holds under.
@@ -738,7 +746,8 @@ impl CardPortrait {
             cues.extend(Cue::parse("face", "").map(|q| q.with_expression(&c.expression).with_priority(CARD_FACE_PRIORITY).with_key(CARD_FACE_KEY)));
         }
         fx.hold(&cues, now);
-        let opts = PortraitOpts { reduce_motion, rim_default: self.rim, show_anchors: false };
+        fx.set_expressions(&self.expressions);
+        let opts = PortraitOpts { reduce_motion, rim_default: self.rim, show_anchors: false, tier_cap: None };
         self.budget.begin();
         fx.draw(p, art, &rel, face.as_ref(), r, now, &opts, &mut self.budget)
     }
@@ -895,6 +904,12 @@ impl<G: Context> VignetteScreen<G> {
     /// PORTRAITFX1-X: where the line cards' portraits take their anchors (`CardPortrait::sidecars`).
     pub fn portrait_sidecars(mut self, sidecars: fn(&str) -> Vec<String>) -> Self {
         self.portrait.sidecars = Some(sidecars);
+        self
+    }
+
+    /// PORTRAITFX1-EX: the expression effects the line cards' portraits draw (`CardPortrait::expressions`).
+    pub fn portrait_expressions(mut self, rows: Vec<ExpressionFx>) -> Self {
+        self.portrait.expressions = rows;
         self
     }
 

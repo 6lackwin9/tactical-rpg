@@ -113,6 +113,9 @@ before; with the menu open a right click on an enemy closes the menu and leaves 
 
 ## 3. Hotkeys (INPUT1-U)
 
+Changed by INPUT2 (2026-11-02, `docs/specs/INPUT2.md` 3): the skill hotkeys are Shift+1-9; keys 1-4 select the
+party's members; key F and a click on a ghost block accept the ghost as picks.
+
 - HK1. Hotkey order, per hero (kit `round_intent_plan::hotkey_skills`): the deck's actives in slot order, then the
   ruleset's `basics` that are not neutral, in `basics` order; without the deck rule, the loadout's slot order then
   the basics. Keys 1-9 are its first nine; later skills and items have no key. The order never changes during a
@@ -240,6 +243,10 @@ action while tells show).
 
 ## 7. The AP forecast (INPUT1-U) and the AP pip gauge (INPUT1-AP)
 
+Changed by INPUT2 (2026-11-02, `docs/specs/INPUT2.md` 1): the gauge's look is style D (fixed slots, a capsule per
+planned block in its skill kind's colour, sockets, crossed slots); AP7's full / hollow / ghost pips and the table's
+readings below are retired (the readings are now "B1 ... O ... X").
+
 The decision's text readout (`AP 6 - 4 = 2 · +3 next -> 5`) gives way to a pip gauge (Q7, user 2026-10-31). INPUT1-U
 builds the kit forecast (AP1, AP2) and the host's `ap` keys and draws no strip readout (today's AP display stays as
 it is until then); INPUT1-AP draws the gauge.
@@ -319,7 +326,7 @@ As built (INPUT1-U slice 1, 2026-11-01: kit, host and engine; tests `rpgkit_batt
 - Host: `pick`'s `target` defaults to the member's round target, else self; `clear {unit}` removes the picks only when
   the member has one (else today's empty steps, the Manual path); `autofill` outside planning only sets the flag.
 
-As built (INPUT1-U slice 2, 2026-11-01: the battle screen; tests `battle.rs` `input1_tests`, kit
+As built (INPUT1-U slice 2, 2026-11-01: the battle screen; tests `battle/tests/input1_tests.rs`, kit
 `rpgkit_battle/tests/picks.rs` IF9):
 
 - The menu is the existing popup (rows `popup.<k>`, 214 px wide; the row pitch grows with the text size); its rows are
@@ -342,7 +349,7 @@ As built (INPUT1-U slice 2, 2026-11-01: the battle screen; tests `battle.rs` `in
   replayed round's ghosts.
 - Clicking the selected hero still opens its self menu (SL4's "selects nothing" is slice 3).
 
-As built (INPUT1-U slice 3, 2026-11-01: selection and inspect; tests `battle.rs` `input1_tests` (SL1-SL7, IS1-IS3, the
+As built (INPUT1-U slice 3, 2026-11-01: selection and inspect; tests `battle/tests/input1_tests.rs` (SL1-SL7, IS1-IS3, the
 inspect panel's text audit), kit `rpgkit_battle/tests/picks.rs` (HK3, the round change preview)):
 
 - SL1-SL7 and IS1 apply under the round intent only (classic keeps today's clicks, Esc and panel). The inspected unit is
@@ -356,11 +363,43 @@ inspect panel's text audit), kit `rpgkit_battle/tests/picks.rs` (HK3, the round 
   lines while planning (the gauge's "1 pip = ..." line waits for INPUT1-AP), "Picks: ..." and one line a planned entry
   ("B2-5 Heavy Cleave on Wolf", ", auto-filled" on a ghost; once confirmed its committed actions). State key `inspect`.
 - AR3's inspected arrow (Q15): until VISCLAR1-A draws the one arrow, the inspected unit's revealed moves (the `walks`
-  group, also above the tokens) show as the hovered enemy's do when no enemy is hovered.
+  group, also above the tokens) show as the hovered enemy's do when no enemy is hovered. (Done 2026-11-01: VISCLAR1-A
+  draws the inspected unit's target arrow, section 10's as-built block.)
 - Kit: `round_intent_plan::set_round` / `preview_round` (a `RoundSet` of intent, target, kind, opener; `change_intent`,
   also behind `Session::set_round_intent`) carry the host's `round_intent` (through `Session::set_round`, atomic) and the
-  screen's waiting ghost (`battle.rs` `Deferred`), so the preview and Confirm share one source; `hotkey_target` and
+  screen's waiting ghost (`battle/input.rs` `Deferred`), so the preview and Confirm share one source; `hotkey_target` and
   `self_only` hold HK2-HK3's target rule.
+
+As built (INPUT1-AP, 2026-11-01: engine, kit and game; tests `aegis_ui/tests/pips.rs`, `rpgkit_battle/tests/picks.rs` (the AP shortfall), `battle/tests/input1_tests.rs` (the
+INPUT1-AP section), `gallery.rs` `the_pip_gauge_entry_shows_every_sample_state`; goldens and parity unchanged):
+
+- Engine `aegis_ui::pips`: `PipGauge::planned(now, left, next, max, cap)` is AP7 (counts in pips, rounded up, AP6),
+  `PipGauge::live(start, now, max, cap)` is AP10's look (full to the live AP, hollow to the AP held while the round was
+  planned, slots to `max`), `.short(n)` AP8's red and "`-<n>`" after the pips, a debt's "`-<n>`" before them; levels
+  are fractional pips while animating. Its reading ("F H Hg Sg S") is the widget's text and the agent link's
+  `ap_gauge.pips`. Gallery: `pip_gauge` (Kit) draws `pips::samples()` (the four rows, red, debt, 14 AP at 2 a pip, a
+  spending one) with their readings.
+- Battle screen: `strip.ap` is drawn under the round intent for the selected active party member from the kit's
+  `ap_forecast` (of the hovered row's preview or the waiting ghost's copies while one shows; no second AP rule). The
+  strip keeps the gauge's room (12 pips, `LABEL_GAP`, the width of "-00") whenever the round intent is on, selected
+  hero or not, so the controls do not shift; to fit at Extra large the blocks give up width down to 20 px each (26 in
+  classic) before the tactic menus cut.
+- AP3's shortfall is the kit's: `PickOption.ap_short` (host `pick_options` key `ap_short`) is set on a row refused for
+  its AP (IF6 d) as `n = cost - free`, `free` counted exactly as the refusal counts it (the AP left after the earlier
+  picks less the AP kept for a step after; below 0 with a debt), which is AP8's `-left` of the row's preview; every
+  "AP `<free>` < `<cost>`" refusal of a pick (skill and item rows, Move here, Step here after, and a pick whose steps
+  would eat the step after's AP) is built by one kit constructor that sets it. The gauge shows "`-<n>`" as given; a row
+  refused for another reason has none and does not turn the gauge red. A refused row is listed only before the first
+  target-holding pick (later menus drop refused rows), so a step after's reserve never reaches a menu row. With a debt
+  and an unpayable row both, only the debt's label shows (outlines red).
+- AP10: paid pips turn hollow, and the next planning's regained pips fill, over 150 ms (`AP_ANIM_MS`), linear in
+  pips so the rightmost goes first; picks and hovers while planning and the switch from planning to playback show at
+  once; skip animations or reduce motion: at once. The playback tip reads "AP `<now>` of `<max>`" and "Paid this
+  round: `<n>`".
+- AP9 and IS3: `ap_lines` adds "1 pip = `<u>` AP" when `max_ap` is above 12 (the inspect panel's line IS3 left
+  waiting); TV3 takes the same lines when INPUT1-T lands. State `ap_gauge` {unit, pips, red, label, label_side,
+  per_pip, slots} (null: hidden; no key in classic). The dummy-fight acceptance (`next` equals the next planning's AP)
+  stays the kit's test `rpgkit_battle/tests/picks.rs`.
 
 ## 8. The full timeline view (INPUT1-T)
 
@@ -399,6 +438,45 @@ skill of its plan beyond the tell; during playback at block 3 its track holds no
 a foresight-read enemy's track is unmasked; the Gallery's `timeline_pane` renders with no session; the battle view
 and the Gallery's Battle timeline build the same tracks for the same session (one builder).
 
+As built (INPUT1-T, 2026-11-01: game `timeline_view.rs` (new), `battle.rs`, `gallery.rs`, `menus.rs`; engine
+`aegis_ui::timeline`; tests `battle/tests/timeline_view_tests.rs`, `gallery.rs`
+`the_timeline_pane_draws_the_engine_widget_with_no_session` and `the_battle_timeline_entry_draws_the_shared_builders_tracks`,
+`aegis_ui/tests/kit_widgets.rs` (the track card and hatched lane, the pane sample); goldens and parity unchanged):
+
+- Engine (no game type): `Track.tip` (the label's hover card) and `Track.hatched` (the lane's cells hatched light under
+  the spans; TV2's downed unit), both off by default; `timeline::sample()` is TV7's round (six blocks, 22 tracks in
+  "Party" and "Enemies", parts, a link, ghosts, a hatched span and a hatched track, masked tracks with notes and marks,
+  the playhead on B2, B3 and `p1` selected).
+- `timeline_view::build(session, Opts)` is the one builder (TV2-TV4); `Opts` holds the round on view, Reveal (the
+  Gallery's), VC4's `foresight_off`, `show_tells`, the overlay groups (`parts`, `breaks`, `badges`), the selected hero
+  and block and the selected hero's round as the strip shows it (a hovered menu row's preview or a ghost waiting for
+  Confirm). Track keys `u<unit>`. Party: allies with `w.has` or an action this round; while planning the compiled plan
+  (ghost flags `rip::ghost_entries`, a Rest dim and never ghost, as on the strip; parts with the impact at the span's
+  end), else the scheduled actions (parts from each action's impact, BREAK marks, a cancelled span hatched); the label
+  "`<letter>` `<name>`" (the intent's initial, the live round only); its card the label, "Intent: ...", AP9's lines
+  while planning (else "AP now of max"). Enemies: the same filter in `w.enemies` order; the record is the screen's
+  (`seen_intents`: the tells while planning, else the round records); masked while planning when active and not
+  revealed, with no spans in the value (TV4's note by `masked_note`: `round_head` or "Plans in secret", then
+  "; Next: `<skill>` `<blocks>`" or "; Holding" while the tells show) and V1's marks (`!` red a hit, `*` gold another,
+  under `plan_badges` and the `badges` group); from Confirm to the round's end an unrevealed enemy holds the actions
+  with `start <= current_block`; a revealed one's card reads "Plan revealed (Read by ...)", "(enraged)" or "(plan
+  reveal)". A past round (the Gallery's archive) shows every track unmasked. A span's card leads with its full label.
+- Battle (TV1, TV5, TV6): `tv_open`; key T (`Action::TimelineView`) toggles it when the battle is beyond classic
+  (`round_intent` on or any ruleset rule), in every phase; the talk guards hold (keys and actions are swallowed while
+  a talk is open); Esc closes it before SL3's steps. It draws after the log and the outcome banner, under the menu and
+  the talk: a backdrop `timeline.backdrop` over the grid panel's rect (its click is `TimelinePick(None)`), the panel,
+  then the widget 4 px inside (`TV_PAD`, id `timeline`). A track or span click is `TimelinePick(unit)`: a party
+  member is selected (the view stays open), anything else does nothing. State `timeline_view` (null: closed; no key
+  in classic). Controls: "Full timeline view, open / close (timeline): T, Escape".
+- PB5 (the pause at the resolving block's end while the view is open) is not built here: it is INPUT1-PB's (its row
+  names "the timeline view pausing playback" and `playback.waiting`); during playback the view opens, follows the
+  playhead and Space still steps.
+- Gallery (TV7): the Kit entry `timeline_pane` ("Timeline pane", no Open) draws `timeline::sample()` with its own
+  block and track selection (`GAct::PaneBlock`, `PaneTrack`); the Battle panels entry `timeline` draws
+  `gallery::battle_timeline` (the builder under the player's settings, Reveal, the clicked block and any clicked
+  track) and keeps its round archive, Reveal and snapshot tools. Its sections are now "Party" and "Enemies" and an
+  unrevealed enemy's playback track holds only its started actions (it showed every action before).
+
 ## 9. Per-opener follow-up lists (INPUT1-L)
 
 - FL1. Field: the unit and member `deck` gains `follow_ups` (object; default {}): opener family -> skill families, in
@@ -431,6 +509,35 @@ fills with B where the order would place A, and when B cannot be placed (AP, blo
 the order; without the list the fill reads `order.assault`; a Guard family in an Assault opener's list fails both
 checks; removing Heavy Cleave from the actives drops its key; a v13 save without `follow_ups` loads and re-saves
 byte-identical; the timeline goldens and feel runs are unchanged by INPUT1-L (no data sets a list).
+
+As built (INPUT1-L, 2026-11-01: kit `rpgkit_data` (`Deck.follow_ups`, `Deck::follow_ups_of`, `Deck::KEYS`),
+`kits/rpg/schema.json` (the unit `deck` help), `rpgkit_content` (`check/unit.rs` `follow_up_errors`, `store.rs`
+`without_empty_follow_ups`), `rpgkit_world/src/state.rs`, `rpgkit_battle/src/round_intent_plan.rs`; game
+`emberwake_gui/src/{party,dojo}.rs`; tests `rpgkit_battle/tests/picks.rs`, `rpgkit_content/tests/timeline_fields.rs`,
+`rpgkit_world/tests/deck.rs`, `party.rs` and `dojo.rs` tests; goldens and parity unchanged):
+
+- FL2: `round_intent_plan::follow_order(w, c, intent, opener)` is the fill's order; `Builder::fill` takes it (the
+  opener search, the Disengage jump and the reserve still read `order`). `build` passes the opener it placed (given, else
+  PL3's; `Builder::opener` now returns it), `build_picks` the first skill pick (an item pick reads the order), and
+  `fill_rest` (MM3) the round's set opener, else the first planned skill of the intent. A list entry counts only while
+  it is in the unit's deck as it fights (its active slots, meter skills or basics; `auto_families`). The reason tag stays
+  "follow-up k", k the place in the list then the order.
+- IF2's re-listed menu after the first pick keeps the hotkey order (HK1) as IF2 says; the lists steer only the fill.
+- FL1: an empty list is dropped where a deck is read (`Deck::from_value`, the save's `deck_from`) and written (the
+  content writer for `units`, catalog and world files; the save's `deck_value`). FL5's words name family ids in quotes
+  ("Follow-ups after 'thrust': 'brace' is Guard, not Assault."); the world's `deck_errors` prefixes the unit as its other
+  deck lines do; a list of the wrong shape is "Deck follow_ups must be an object ..." (content) or
+  "deck.follow_ups must be an object ..." (a refused save).
+- FL3: the toggle is a small ">" button at the right end of each order entry ("v" while open), and a "+" in gold marks an
+  entry with a set list. The open list is a panel across the right pane under its entry's row (later rows of every
+  column move down; nothing is drawn below the pane's end, and the Auto order button hides when it would not fit):
+  "After `<skill>`:" with "Use the `<Intent>` order" at its right, the entries as chips five a line (a last "Drop here"
+  chip, `skills.follow.<family>.end`, takes a drop at the list's end), then "Add:" and the intent's skills not yet
+  listed (click: at the end; drag: at a place). One list is open at a time. The agent state's `deck` and `deck_shown`
+  carry `follow_ups`.
+- The Dojo's Deck window (click only, as its other rows): `dojo.deck.follow.<family>` toggles, the open list's entries
+  (`dojo.deck.follow.<family>.<k>`, a click takes one out), the skills to add (`dojo.deck.follow.add.<family>.<family2>`,
+  a click adds at the end) and `dojo.deck.follow.clear.<family>`; each edit rebuilds the hero.
 
 ## 10. VISCLAR1 slice A: a calmer board (VISCLAR1-A)
 
@@ -503,6 +610,34 @@ selected hero's; with Alt one per unit with a target; an unrevealed enemy's entr
 revealed one may have three; every arrow's alpha is 90; during playback `overlay.arrows` is empty and no destination
 plate draws; `party_foresight_off(settings_on, false)` is false; with the debug toggle on a Hawk Eye reveal leaves
 the hostile card's badge row unfilled.
+
+As built (VISCLAR1-A, 2026-11-01: game `battle.rs`, `menus.rs`, `screens.rs`; tests `battle/tests/visclar_tests.rs`, the
+adapted `tells_tests::the_plan_reveal_shows_every_enemy_plan` and `slice5_tests::each_overlay_group_has_its_flag`, the
+widened `hooks_audit_tests::the_overlay_settings_fit_at_every_text_size`; goldens and parity unchanged):
+
+- `OVERLAY_GROUPS` rows are (id, label, help, default); `first_move` sits after `glyphs`, `all_bars` after `poise`;
+  `overlay_default(id)` is VC6's per-group default, read by `Layers::of`, the Settings checkboxes and
+  `default_settings`. The `moves` and `walks` help texts now name the move leg.
+- AR1-AR3: `arrows_of(s, tells, rounds, layers, show_tells)` builds every unit's arrow while the party plans
+  (`Overlay.arrows`); `Overlay::shown(layers, sel, inspect, alt)` keeps the selected and inspected unit's (Alt: all).
+  A party member's target is its `round_states` target (else its record's); its move leg (`party_leg`) ends after its
+  walks before its first command, at the tile that command strikes from (the carried Engage move; Rest is no command).
+  An enemy's leg (`enemy_leg`) follows its scheduled walks (`command::walk_preview`) up to its first command and a
+  carried Engage dash of that command. A leg that ends on the target tile is the arrow's end (two points). The arrows'
+  first leg leaves the foot ring and the last stops short of the target's (`stage::ground_arrow`); the 4/3 dash runs on
+  over the corner (`draw_arrow_line`, the game's own dash: the engine line dashes on = off).
+- AR5, AR6: `Overlay.revealed_moves`, `draw_revealed_move` and `draw_focus_moves` are gone (agent link
+  `overlay.revealed_moves` too); `draw_overlay` draws the moves' destination plates only (each kind, an after-move
+  included, Q14), planning only as before; the classic `tuning.intent_arrows` lines draw only in classic. The Stage's
+  area tell plates are planning-only already (the tells are empty outside planning).
+- VC2: `focus_set` (selected member, its unit round target, the hovered unit: the Stage's hovered token or card, the
+  Flat board's hovered tile or card, the inspected unit) and `bars_shown`; state `focus` is the set as last drawn and
+  `overlay.arrows` the arrows as last drawn (both only under the round intent).
+- VC4, VC5: `seen_intents(w, records, off)` masks the tells and round records the screen draws (and the planning poses'
+  revealed list, `Tokens.foresight_off`): a record with readers loses them and, unless enraged or under the world's
+  `plan_reveal`, its reveal and plan lines. The Settings row: "Debug" heading and the checkbox in the second column under
+  the groups (the Battle tab's rows at a 15 px pitch so 24 groups and the row fit at the four text sizes).
+- The Controls line "Every revealed enemy move (timeline): Hold Alt" reads "Every bar and arrow (timeline): Hold Alt".
 
 ## 11. The Maneuver rework (INPUT1-M)
 
@@ -634,7 +769,7 @@ Worked examples (Wolf on (6, 4) faces right, engaged with tl_vanguard on (7, 4):
   screen animates; INPUT1_TASKS 1.8), and the battle screen (the draw hook is INPUT1-M's) plays the rig's `dash` clip
   from the start block's start along the route, faster than a walk (the route in 250 ms at 1x; `anim_speed` and PB3
   apply), then the wind-up pose holds on the position until the impact (WINDUP1), or the strike follows for a
-  one-block skill. A rig without a `dash` clip (every rig until DASH1 lands) plays its walk at that speed. Skip
+  one-block skill. A rig without a `dash` clip (every rig without a `dash` clip (DASH1 landed 2026-11-03; beast, crawler, dummy)) plays its walk at that speed. Skip
   animations: the unit appears on the position. It is not the round's regular move (ET5); the strip draws it inside
   the skill's span, not as a move block. Art: DASH1 (the dash clip for the humanoid rigs, front, side and back).
 - MR13. Hovering a Maneuver Engage row (IF5; INPUT1-U, since the menu is its) marks T's open candidates on the board:
@@ -751,6 +886,55 @@ dashed), a `[Flank Protected]` miss one dashed entry, and a self Defend none; wi
 {speed, waiting, block} reads "block", true and the block number after a block in Block mode, and N advances it by
 one; at 0.5x a block takes twice the 1x time in a timed test; every log line sits under its block's header; T during
 playback sets `playback.waiting` at the block's end and closing the view clears it.
+
+As built (INPUT1-PB, 2026-11-01: game `battle.rs`, `fx.rs` (`Trace`), `timeline_view.rs` (`Opts.playhead`),
+`menus.rs`, `screens.rs`, `gallery.rs`; kit `rpgkit_battle::session` (`log_marks`, `log_groups`, `LogGroup`,
+`LOG_ROUND_START`, `LOG_ROUND_END`); tests `battle/tests/playback_tests.rs`, `rpgkit_battle/tests/log_groups.rs`; adapted
+`overlay_tests::the_overlays_follow_the_kit` (the `tracers` key),
+`timeline_view_tests::during_playback_an_unrevealed_enemy_shows_only_what_has_started` (the playhead is PB2's block)
+and `hooks_audit_tests::the_overlay_settings_fit_at_every_text_size` (the speed select); goldens and parity
+unchanged):
+
+- "Timeline battle" is TV1's (`round_intent` or any ruleset rule: `playback_aids`); classic draws, paces and logs as
+  before (no `playback` or `log_groups` key, no tracer).
+- PB1: `traces_of` builds a popped action's `fx::Trace`s once (`traced`): to each unit in its `hits` or `staggers` (an
+  attack or an area), dashed to the target on `missed` (MR8 c) or `evaded` (GD5), to the aim tile of an area's hazard
+  (rule `ground_hazards`), a support or item on another unit in the tuning's `heal_color` (an item that harms in the
+  side's), each riposte from the defender back; cancelled, failed and self-only commands none; one tracer a tile pair.
+  They ride in the step's `Impact` and start when it fires (rule I); with no impact (skip animations, no delivery) at
+  once. Life `TRACER_MS` 400 on the FX clock (the animation speed and 0.5x apply), alpha `TRACER_ALPHA` 200 fading to 0
+  (reduce motion: held, then gone), `TRACER_INSET` 3 px, the arrows' widths and dash; drawn after the board inside the
+  grid panel's clip, shaken with it. Group `tracers` is the 25th of `OVERLAY_GROUPS`; state `overlay.tracers` [{from,
+  to, alpha, dashed}] (an `overlay` key is made when the round intent is off).
+- PB2: `play_block` is set as a `step` request goes (block 1 from planning, else the current block); `cursor_block` is
+  it during the round, none from Confirm to the first step and none once the round is over and its last impact has
+  played (kept while Block mode holds autoplay at the round's end). The strip's live block (span outlines, the block
+  widgets' `active`) follows it and a 1 px GOLD frame (four fills) runs round its column. The battle strip has no ruler,
+  so there is no ruler number to colour (the view's ruler has the playhead). `timeline_view::Opts.playhead` (the
+  Gallery passes None) makes the view's playhead and TV4's started filter the same block.
+- PB3: `PLAYBACK_SPEEDS` ("1x" `playback.speed.1`, "0.5x" `playback.speed.half`, "block" `playback.speed.block`), key
+  `playback_speed` (default "1x" in `default_settings`; Settings Battle: a select `settings.playback_speed` at the
+  "Battle overlays" heading row's end, the group rows now at a 14 px pitch so 25 groups and the debug row fit). P
+  cycles, N or `playback.next` (Block mode only, enabled while waiting) plays the next block; both save the setting
+  and are swallowed while a talk is open. During playback the chips replace `strip.party` and `strip.hero`. `pace` is 2
+  at 0.5x while a round plays (`in_playback`: from Confirm until the round is over and its last impact played; not
+  under skip animations): `step_ms`, `round_pause_ms`, `impact_gap_ms` (impacts and a talk's close) and each float's own
+  `Float.ms` double, and the FX clock runs at the animation speed / 2. Block: a step that finishes block b sets
+  `block_ended`; the next ready tick holds (`waiting`, the message "Block b of n: N for the next") and sends nothing
+  until N; under autoplay the round's last block holds before the next round too. Space while held steps and the
+  playback goes on (as N).
+- PB4: the drawn log is the resolver's text lines, not `log::Entry`, so the kit marks where each part begins
+  (`Session::log_marks`: (resolver log length, round, block) at a round's start, each block's first step and the round
+  end, before the round-end effects or the summary line) and `Session::log_groups` returns the parts in order (encounter
+  lines with the part they were said in; empty parts left out). The expanded log of a timeline battle draws "Round r"
+  (GOLD), each part's DIM header ("Round start", "Block b", "Round end") with a 1 px rule, its lines 6 px in
+  (`LOG_INDENT`); during playback the compact log reads "Block b: `<its last line>`" with the part's last 12 lines on
+  its card ("Round r block b" first). State `log_groups` [{round, block (a number, "start" or "end"), lines}].
+- PB5: while the view is open (T) the hold of PB3 applies in every mode ("Block b of n: paused while the timeline view
+  is open (T closes it, N plays the next block)"); T or Esc closes it and clears the hold unless Block mode holds;
+  in Block mode N steps with the view open, its playhead following.
+- State `playback` {speed, waiting, block} (timeline battles only). Controls: "Playback speed: 1x, 0.5x, block by block
+  (timeline): P", "Next block (timeline): N".
 
 ## 13. RULESET1 rules: stay, change, retire
 

@@ -1,18 +1,15 @@
 #!/bin/bash
 # SessionStart hook for Claude Code cloud sessions: installs the tools the commit gate needs (Rust stable for the Aegis
-# engine; Godot 4.7 Linux editor binary for the parity reference in legacy/; PowerShell 7 for check_project.ps1) so
+# engine; PowerShell 7 for check_project.ps1) so
 # tools/fc.sh gate and check_project.ps1 run. Local (Windows) sessions skip it. Idempotent: every step is skipped when
 # already done, so when the cloud environment's setup script already installed the tools (preferred: done once and
-# cached), this hook only links godot, exports $GODOT and imports a fresh legacy/ checkout.
+# cached), this hook installs only what is missing (no Godot: the parity suites were retired, CLN-42).
 set -euo pipefail
 
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
-GODOT_VERSION="${GODOT_VERSION:-4.7.2}"
-GODOT_DIR="/opt/godot/${GODOT_VERSION}"
-GODOT_BIN="${GODOT_DIR}/godot"
 SUDO=""
 [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 
@@ -57,44 +54,4 @@ if ! command -v xvfb-run >/dev/null 2>&1; then
     xvfb xauth libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers libxcursor1 libxinerama1 libxi6 libxrandr2 libxkbcommon-x11-0 >/dev/null
 fi
 
-# --- Godot editor (official Linux build): the frozen reference in legacy/ ------
-if [ ! -x "$GODOT_BIN" ]; then
-  log "installing Godot ${GODOT_VERSION}"
-  name="Godot_v${GODOT_VERSION}-stable_linux.x86_64"
-  urls=(
-    "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/${name}.zip"
-    "https://downloads.godotengine.org/?version=${GODOT_VERSION}&flavor=stable&slug=linux.x86_64.zip&platform=linux.64"
-  )
-  tmp="$(mktemp -d)"
-  ok=0
-  for u in "${urls[@]}"; do
-    if curl -fsSL --retry 3 -o "$tmp/godot.zip" "$u"; then ok=1; break; fi
-  done
-  if [ "$ok" -ne 1 ]; then
-    rm -rf "$tmp"
-    log "WARNING: could not download Godot (github.com release assets and downloads.godotengine.org"
-    log "         are blocked by this environment's network policy). The engine gate still runs; the Godot parity"
-    log "         reference (tools/fc.sh parity, games/emberwake/parity/*.sh) needs one of those hosts allowed."
-    exit 0
-  fi
-  python3 -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$tmp/godot.zip" "$tmp"
-  $SUDO mkdir -p "$GODOT_DIR"
-  $SUDO install -m 0755 "$tmp/${name}" "$GODOT_BIN"
-  rm -rf "$tmp"
-fi
-
-# games/emberwake/parity/*.sh read $GODOT (else godot on PATH).
-$SUDO ln -sf "$GODOT_BIN" /usr/local/bin/godot
-if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
-  echo "export GODOT=\"${GODOT_BIN}\"" >> "$CLAUDE_ENV_FILE"
-fi
-
-# The parity tools run the frozen Godot copy in legacy/; its first headless run builds legacy/.godot (class cache).
-LEGACY="${CLAUDE_PROJECT_DIR:-.}/legacy"
-if [ -f "$LEGACY/project.godot" ] && [ ! -d "$LEGACY/.godot" ]; then
-  log "importing legacy/ (first run)"
-  timeout 300 "$GODOT_BIN" --headless --path "$LEGACY" --import >/dev/null 2>&1 || \
-    log "WARNING: initial import of legacy/ exited non-zero; run games/emberwake/parity/export.sh to see why"
-fi
-
-log "ready: $("$GODOT_BIN" --version 2>/dev/null | head -1), $(pwsh -v), $("$HOME/.cargo/bin/cargo" --version 2>/dev/null || cargo --version 2>/dev/null || echo 'no cargo')"
+log "ready: $(pwsh -v), $("$HOME/.cargo/bin/cargo" --version 2>/dev/null || cargo --version 2>/dev/null || echo 'no cargo')"

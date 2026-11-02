@@ -1,0 +1,24 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "logo_crest",
+  "prompt": "A heraldic crest for a gothic dark fantasy RPG title: the weeping cathedral eye, a single stylised eye with a falling tear, in gilt candle gold and black basalt, a pointed gothic arch around it, centred on a flat solid very dark background (#0a0b10). Symmetric, bold readable silhouette. Square 1:1. Detailed 16-bit SNES/GBA-era pixel art with visible large pixels and no anti-aliasing, limited palette from the hues #0a0b10 #14171f #4b5563 #2c221e #d97706 #fbbf24 #d9cbb4. No text, no letters, no logo, no watermark.",
+  "reference": null,
+  "prompts_file": null,
+  "time": "2026-11-02T09:43:00Z",
+  "n": 2,
+  "references": [],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "logo_crest_q1793611390",
+  "metadata": {
+    "asset_id": "logo_crest",
+    "task": "look1a",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null
+    }
+  },
+  "mark_cleared": true,
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Generated 2 variations."
+}

@@ -1,7 +1,7 @@
 //! A game's manifest, `games/<id>/game.json` (docs/specs/SPLIT1.md section 5): the stable `id` (folder, crate prefix,
 //! save folder, qualified ids), the display `title` and `subtitle` (window title, main menu), the version, the kit and
 //! engine it needs, its worlds and start worlds, and the games it references. Written through `aegis content
-//! manifest` (`set`), never by hand.
+//! manifest` (`set`), never by hand. `icon` (ICON1, optional): the window icon, a PNG path over the asset layers.
 
 use crate::file::{read, stringify};
 use crate::schema::is_id;
@@ -11,13 +11,15 @@ use std::path::{Path, PathBuf};
 
 pub const FILE: &str = "game.json";
 /// The manifest's keys, in the order the file holds them.
-pub const KEYS: [&str; 9] = ["id", "title", "subtitle", "version", "kit", "engine", "worlds", "start_worlds", "references"];
+pub const KEYS: [&str; 10] = ["id", "title", "subtitle", "icon", "version", "kit", "engine", "worlds", "start_worlds", "references"];
 
 #[derive(Debug, Clone, Default)]
 pub struct Manifest {
     pub id: String,
     pub title: String,
     pub subtitle: String,
+    /// The window icon: a PNG path relative to the asset layers; "" none, and the file then has no such key.
+    pub icon: String,
     pub version: String,
     pub kit: String,
     pub engine: String,
@@ -33,6 +35,7 @@ impl Manifest {
             id: json::s(d, "id"),
             title: json::s(d, "title"),
             subtitle: json::s(d, "subtitle"),
+            icon: json::s(d, "icon"),
             version: json::s(d, "version"),
             kit: json::s(d, "kit"),
             engine: json::s(d, "engine"),
@@ -47,6 +50,9 @@ impl Manifest {
         d.insert("id".into(), self.id.clone().into());
         d.insert("title".into(), self.title.clone().into());
         d.insert("subtitle".into(), self.subtitle.clone().into());
+        if !self.icon.is_empty() {
+            d.insert("icon".into(), self.icon.clone().into());
+        }
         d.insert("version".into(), self.version.clone().into());
         d.insert("kit".into(), self.kit.clone().into());
         d.insert("engine".into(), self.engine.clone().into());
@@ -66,7 +72,7 @@ impl Manifest {
         }
     }
 
-    /// What keeps the manifest from being valid: id, title, world ids, start worlds among the worlds.
+    /// What keeps the manifest from being valid: id, title, the icon's path form, world ids, start worlds among the worlds.
     pub fn problems(&self) -> Vec<String> {
         let mut out = Vec::new();
         if !is_id(&self.id) {
@@ -74,6 +80,9 @@ impl Manifest {
         }
         if self.title.trim().is_empty() {
             out.push("game.json: title is required.".into());
+        }
+        if !self.icon.is_empty() && (self.icon.starts_with(['/', '\\']) || self.icon.contains(':') || self.icon.split(['/', '\\']).any(|part| part == "..") || !self.icon.ends_with(".png")) {
+            out.push(format!("game.json: icon '{}' must be a .png path inside the asset layers.", self.icon));
         }
         for w in self.worlds.iter().filter(|w| !is_id(w)) {
             out.push(format!("game.json: world '{w}' is not a world id."));
@@ -186,7 +195,8 @@ mod tests {
         assert!(Manifest::set(&path, &patch(serde_json::json!({"start_worlds": ["two"]}))).unwrap_err()[0].contains("start world 'two'"));
         let back = Manifest::read(&path).unwrap();
         assert_eq!(back.to_dict(), m.to_dict());
-        assert_eq!(back.to_dict().keys().cloned().collect::<Vec<_>>(), KEYS.to_vec());
+        // Every key but the optional icon, which this manifest does not set.
+        assert_eq!(back.to_dict().keys().cloned().collect::<Vec<_>>(), KEYS.iter().filter(|k| **k != "icon").copied().collect::<Vec<_>>());
         assert_eq!(find_game_dir(&game.join("data"), "demo").as_deref(), Some(game.as_path()));
         assert_eq!(find_game_dir(&root, "demo").as_deref(), Some(game.as_path()));
         assert_eq!(find_game_dir(&root, "other"), None);

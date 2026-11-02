@@ -1,32 +1,28 @@
 {
-  "model": "local:flux-2-klein-4b",
+  "model": "gemini-3.1-flash-image",
   "id": "hollis",
-  "prompt": "Turn the person in this portrait into the character below, keeping exactly the same pixel-art style, outline weight, shading, pose, framing, lighting and flat dark background, with the same large, clearly drawn eyes, strong brows and defined mouth: a watchful young poacher of twenty, an adult, lean and rangy, with a hungry, wind-weathered face: high cheekbones, a long crooked nose, a sparse young dark beard, a wry lopsided mouth. Short, ragged dark-brown hair hacked unevenly, sticking up in tufts, pale dust in it. His near eye is a large narrowed squint with a thick dark upper-lid line, a bright hazel iris and a single bright catchlight; his far eye is a crude graft, a too-large glossy jet-black eye with a thin glowing red slit pupil, ringed by puckered pink stitched scar tissue. A stiff boiled-leather brigandine studded with rivets, a heavy curved shoulder plate of pale polished horn strapped over his near shoulder, the steel arms of a large crossbow rising over his far shoulder beside pale bone-fletched bolts. Head and shoulders, his whole body, shoulders and face turned three-quarters toward the right, looking right, his head filling most of the frame; large, clearly drawn eyes, strong dark brows, a large defined mouth, bold dark outlines. A plain, flat, empty dark background. Lighting: a soft, dim warm amber rim light from the right, its lamp far out of frame and never visible, gentle warm fill, deep warm brown shadows. A plain dark background with no lamp, lantern or light source in the frame.",
-  "reference": "C:/dev/localgen/templates (Gemini base template, user 2026-10-27)",
-  "prompts_file": "games/emberwake/docs/specs/FOUNDER_PORTRAITS.md",
-  "time": "2026-10-27T04:30:44",
+  "prompt": "Edit this pixel-art portrait. Keep everything exactly the same: the framing, the head size and position, the pose, hair, beard, clothing, armour, the crossbow and bolts, the background, the lighting, the palette and the pixel style. Change only one thing: the eye that already glows red in the reference (the eye nearer the right edge of the picture) becomes an unmistakable graft: solid black with a thin vertical red slit pupil, ringed by a raised stitched scar, wide open. The other eye (nearer the left edge of the picture) stays exactly as it is, his own normal eye.",
+  "reference": "G:/My Drive/image_pipeline/refs/hollis.png",
+  "prompts_file": null,
+  "time": "2026-11-01T18:52:00Z",
   "n": 1,
-  "source": "local Klein, template route (FOUNDERPORT1-R)",
-  "note": "user pick 2026-10-27; fix-up edits applied, see steps",
-  "steps": [
-    {
-      "take": "hollis_s1",
-      "model": "local:flux-2-klein-4b (edit of a Gemini base template)",
-      "prompt": "Turn the person in this portrait into the character below, keeping exactly the same pixel-art style, outline weight, shading, pose, framing, lighting and flat dark background, with the same large, clearly drawn eyes, strong brows and defined mouth: a watchful young poacher of twenty, an adult, lean and rangy, with a hungry, wind-weathered face: high cheekbones, a long crooked nose, a sparse young dark beard, a wry lopsided mouth. Short, ragged dark-brown hair hacked unevenly, sticking up in tufts, pale dust in it. His near eye is a large narrowed squint with a thick dark upper-lid line, a bright hazel iris and a single bright catchlight; his far eye is a crude graft, a too-large glossy jet-black eye with a thin glowing red slit pupil, ringed by puckered pink stitched scar tissue. A stiff boiled-leather brigandine studded with rivets, a heavy curved shoulder plate of pale polished horn strapped over his near shoulder, the steel arms of a large crossbow rising over his far shoulder beside pale bone-fletched bolts. Head and shoulders, his whole body, shoulders and face turned three-quarters toward the right, looking right, his head filling most of the frame; large, clearly drawn eyes, strong dark brows, a large defined mouth, bold dark outlines. A plain, flat, empty dark background. Lighting: a soft, dim warm amber rim light from the right, its lamp far out of frame and never visible, gentle warm fill, deep warm brown shadows. A plain dark background with no lamp, lantern or light source in the frame.",
-      "reference": "C:/dev/localgen/templates/base_lean.png",
-      "seed": 1,
-      "steps": 4
-    },
-    {
-      "take": "hollis_graft_s1",
-      "model": "local:flux-2-klein-4b (fix-up edit)",
-      "prompt": "Keep this exact man, face, hair, beard, clothes, crossbow, pose, pixel-art style, framing, lighting and background. Change only his left eye, the far one: replace it with a glossy jet-black graft orb with a thin glowing red vertical slit pupil, ringed by a thin stitched scar. His right eye, the near one, stays a normal human eye.",
-      "reference": [
-        "C:\\dev\\localgen\\comfyui\\output\\style\\founder_hollis_s1_00001_.png"
-      ],
-      "seed": 1,
-      "steps": 4
-    }
+  "references": [
+    "G:/My Drive/image_pipeline/refs/hollis.png"
   ],
-  "faction": "hearth"
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "hollis_base2_q1793558944",
+  "metadata": {
+    "asset_id": "hollis",
+    "task": "founderport1",
+    "target": null,
+    "route": "portrait",
+    "record": {
+      "prompts_file": null,
+      "faction": "hearth"
+    }
+  },
+  "mark_cleared": true,
+  "faction": "hearth",
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Conditioned on attached reference."
 }

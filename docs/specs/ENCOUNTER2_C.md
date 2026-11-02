@@ -25,7 +25,7 @@ were in HELP_CHANGED already; only its comment names C1); `script` joins AFTER_G
 
 As built, C2 (2026-11-01; section 3.3): `emberwake_gui/src/talk.rs` holds the box (`talk_layout`, `draw_talk` over a
 given game state with an action map `TalkAct`, `talk_key`, `follow_node`, `talk_state`; the region map's look, ids and
-tests unchanged, its `draw_talk` a wrapper). `battle.rs`: `Action::Talk`, `BattleTalk`, `talk_tick` (each new cue once
+tests unchanged, its `draw_talk` a wrapper). `battle.rs`, `battle/talks.rs`: `Action::Talk`, `BattleTalk`, `talk_tick` (each new cue once
 `impacts_done`, i.e. after its step's impacts and their gap), `open_talk`, `talk_reply`, `auto_plan` (autoplay's
 preset and Confirm held while a talk is open or due, sent when the last closes), `speaker_unit` (a unit on the field
 whose `hero_key` is the speaker's qualified id, resolves to it, or is the member who plays it), `TALK_VEIL` (alpha 89),
@@ -34,9 +34,66 @@ whose `hero_key` is the speaker's qualified id, resolves to it, or is the member
 Continue included); the box pushes a `talk.backdrop` widget so a board hover card does not show through it; Esc and
 right click are swallowed too; agent-link host requests (`command`) are not blocked (DT3: the host never waits); the
 Arena's scratch state is made at the first talk and dropped at the next battle start (Restart included); a playback
-(viewing or take-over) opens the replayed session's cues from the first. Tests: `battle.rs` `talk_screen_tests` (on a
+(viewing or take-over) opens the replayed session's cues from the first. Tests: `battle/tests/talk_screen_tests.rs` (on a
 scratch world: DT5, DT6, DT8-DT11 and the text audit at the four sizes), `gallery.rs`
 `the_battle_talk_entry_shows_a_talk_over_the_battle`.
+
+As built, C3 (2026-11-01; sections 4, 5.1, 5.3): `rpgkit_battle/src/script.rs` (`Script::read` over the row, lenient:
+what does not parse is left out; `RoundScript`, `ScriptEntry`, `ScriptPick`, `ScriptTarget`, `UnitName`, `unit_of`,
+`plan_entries`, `rest_others`); `session.rs` `round_script` (the current round's script, None without `round_intent`),
+`round_locked`, `scripted_rounds`, `script_fallbacks`, `script_party` and the free `pick_on` (SR4's one pick function:
+`Session::pick` and both sides of a script call it); `schedule_enemy_ai` plans the enemy entries into the enemy plan,
+then `ai::plan_enemy_intents_except` (the AI skips the scripted units, sees their plans, never re-picks or trims them).
+SR3's fill is a per-unit override `RoundState.fill` read by `round_intent_plan` `build_picks` (one line; cleared at the
+round start), so the player's Auto-fill is not read. `others: auto` is the GH2 a draft with the `balanced` tactic
+(`plan_apply_preset_all`, which skips members holding picks); `others: rest` is one Rest pick with the Rest fill. A
+locked round: `confirm_plan` at its start; `auto_draft`, the presets and a second `confirm_plan` leave it alone (the
+sims and autoplay play it as scripted). Host: the 11 requests of SR5 refused before any other check (nothing recorded);
+`state` gains `script` {round, lock, banner} while a round plays scripted (for C4's banner). Choices the spec left
+open: SR11's reasons are "is not on the field", "is not in this battle", "has no target: `{t}` is not on the field",
+"has no skill '`{s}`'" and "cannot plan its picks: `{refusal}`" (the refusal's full stop dropped); a pick a later
+member's rebuild drops (GH5) fails its entry too; the cells' actor is the failed unit (the encounter for SR8's), each
+with a `[Script] ...` combat log line; the metrics skip Script cells and read both counts from the session at the
+fight's end (round 1 is planned before a sim attaches its metrics); a locked round whose confirm fails logs a fallback
+like a failed entry (decision "ENCOUNTER2-C3 answers" (2): one `Script` cell "Script: round `{n}` cannot be locked:
+`{reason}`; it plays as a guided round.", its `[Script]` line, counted in `script_fallbacks`; `script::lock_fallback_line`)
+and plays guided (no check reaches it: the hold escape's locked round 1 is refused; test
+`a_locked_round_that_cannot_be_confirmed_falls_back_to_a_guided_round` builds the row without the check); `others:
+auto` drafts with `balanced` until ENCOUNTER2-C4 brings the member's own tactic (the same decision, (1)); the data
+re-save was accepted (3); `replan_enemies` (the sim's jitter) plans a scripted
+round again whole, its cells and counts once. Check texts beyond 5.1: "Script must be a list of round scripts.",
+"Script round must be 1..`{n}`.", "Script lock must be true or false.", "Script others is auto or rest.", "A script
+banner is text of at most 40 characters.", "A round script holds 1 to 16 entries.", "Script round: unknown key
+'`{k}`'.", "Script entry: unknown key '`{k}`'.", "Script fill is auto or rest.", 'A script target is "self", a unit or
+[x, y].', "`{unit}`: items are party picks."; a unit row with no skill list (it knows every skill in battle) and the
+basics (the catalog's and the ruleset rows') pass the "has no skill" check. `check/world.rs` calls `script_problems`
+(one line). Parity: `script` joins AFTER_GODOT in `emberwake_world/tests/data_source.rs`; every golden unchanged (no
+shipped encounter has a script); the shipped encounter files re-saved in the writer's form (`"script": []` only). Tests: `rpgkit_battle/tests/script_round.rs`, `rpgkit_content/tests/
+battle_script_checks.rs`, `rpgkit_host/tests/script_round.rs`.
+
+As built, C4 (2026-11-01; section 8's C4 row, decision "ENCOUNTER2-C3 answers" (1)): `emberwake_gui/src/battle.rs`:
+`Action::Skip`, `locked`, `can_skip`, `round_over` (the round-end message and the auto-advance, shared by the playback
+and Skip), `cutscene` (the locked round whose playback the screen started), `send_tactics`. A locked round: Skip
+(`battle.skip`, tip "Resolves the rest of this scripted round at once.") takes the Confirm slot while the round still
+plays; Confirm (button, Enter, an agent-link click) does nothing; the tactic menus, Clear, the hotkeys, Self and the board
+clicks are off as outside planning; the playback starts by itself at the first tick (after a round-start talk; the
+message is the banner plus "(Skip resolves the round.)", or "Round `{n}`: the round plays out (Skip resolves it)."
+without one) and, at the round's end, the next round starts after `round_pause_ms` without autoplay (not while
+watching a recording); autoplay drafts nothing in it. The banner (`battle.banner`, gold on a card, at the board's top
+edge, centred, cut to the board's width) shows in every round that plays scripted, locked or guided; a guided round
+keeps planning (no Skip, no playback of its own). Agent link: the screen state's `script` {round, lock, banner, skip}
+while a round plays scripted. Tactics: the kit's `script::Tactics` {party, members by hero key} on
+`EncounterDef::tactics` (a caller input like `plan_reveal`, never read from the row; none = `balanced`; guests stay
+`balanced`), `Session::set_tactics` (the scripted rounds still to plan; the current plan is left alone); host
+request `tactics {party?, members?}` (recorded, allowed in a locked round, ids of `AUTO_IDS`) and the `new` key
+`tactics`. The screen sends `tactics` after a party or hero tactic pick only in a battle with a script under the round
+intent (other battles record no new request; members sorted by hero key), and the Arena's `new` carries
+`tactics.party` when the party tactic is not Balanced and the encounter has a script under a round-intent ruleset
+(`arena_scripted`; a world fight's screen starts on Balanced). Choices the spec left open: Skip clears a Block-mode hold;
+Skip shows the round-end message as the playback would. Tests: `battle/tests/script_screen_tests.rs` (locked controls,
+banner and Skip, the playback by itself and the auto-advance, Skip's `resolve` with the same log as the host's,
+the guided round, the party tactic's draft), `rpgkit_host/tests/script_round.rs`
+(`the_games_tactics_draft_the_heroes_with_no_entry`, `the_tactics_request_drafts_the_later_scripted_rounds_and_replays`).
 
 History: `docs/HISTORY.md` row "Hand-scripted combat layer (10-block rounds, scripted commands)" (deprecated before
 2026-10: "Scripted battles could not express planning, AP and AI; double maintenance"). That reason does not hold here:

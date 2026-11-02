@@ -20,6 +20,7 @@
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"warrior",
@@ -33,6 +34,7 @@
 				"goblin_berserker"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -63,6 +65,7 @@
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 7,
 			"party": [
 				"dojo_warrior",
@@ -74,6 +77,7 @@
 				"goblin_archer"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -104,6 +108,7 @@
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"warrior",
@@ -137,6 +142,7 @@
 					"pause_autoplay": false
 				}
 			],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -166,7 +172,8 @@
 			"max_rounds": 8,
 			"total_blocks": 6,
 			"ap_regen": 4,
-			"unit_ap": 10,
+			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"tl_vanguard"
@@ -175,6 +182,7 @@
 				"tl_enforcer"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -204,7 +212,8 @@
 			"max_rounds": 8,
 			"total_blocks": 6,
 			"ap_regen": 4,
-			"unit_ap": 10,
+			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"tl_halberdier"
@@ -213,6 +222,7 @@
 				"tl_footman"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -242,7 +252,8 @@
 			"max_rounds": 8,
 			"total_blocks": 6,
 			"ap_regen": 4,
-			"unit_ap": 10,
+			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"tl_spiker"
@@ -251,6 +262,7 @@
 				"tl_captain"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -280,7 +292,8 @@
 			"max_rounds": 8,
 			"total_blocks": 6,
 			"ap_regen": 4,
-			"unit_ap": 10,
+			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"tl_vanguard",
@@ -291,6 +304,7 @@
 				"tl_crossbowman"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -320,7 +334,8 @@
 			"max_rounds": 10,
 			"total_blocks": 6,
 			"ap_regen": 4,
-			"unit_ap": 10,
+			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"tl_vanguard",
@@ -335,6 +350,7 @@
 				"tl_crossbowman"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -364,7 +380,8 @@
 			"max_rounds": 8,
 			"total_blocks": 6,
 			"ap_regen": 4,
-			"unit_ap": 10,
+			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"tl_vanguard",
@@ -374,6 +391,7 @@
 				"tl_enforcer"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "",
@@ -422,6 +440,7 @@
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"warrior",
@@ -437,6 +456,7 @@
 				"goblin_archer"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"objective": "escape",
 			"objective_count": 3,
@@ -480,6 +500,7 @@
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"warrior",
@@ -537,6 +558,7 @@
 					"pause_autoplay": false
 				}
 			],
+			"script": [],
 			"pace": "auto",
 			"objective": "rout",
 			"objective_text": "Free the captives before they are culled.",

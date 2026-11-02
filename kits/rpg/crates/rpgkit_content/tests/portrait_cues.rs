@@ -11,7 +11,7 @@ use aegis_core::assets::Layers;
 use aegis_core::json::{self, gstr, Dict};
 use rpgkit_content::check::{self, assets, portrait};
 use rpgkit_content::{art, source, store};
-use rpgkit_data::{PortraitCue, EXPRESSIONS, PORTRAIT_EFFECTS, PORTRAIT_EVENTS, PORTRAIT_JOLTS, PORTRAIT_SURFACES, PORTRAIT_TRIGGERS};
+use rpgkit_data::{PortraitCue, DEFAULT_FACES, PORTRAIT_EFFECTS, PORTRAIT_EVENTS, PORTRAIT_JOLTS, PORTRAIT_SURFACES, PORTRAIT_TRIGGERS};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -45,6 +45,11 @@ fn strs(list: &[&str]) -> Vec<String> {
     list.iter().map(|s| s.to_string()).collect()
 }
 
+/// The kit's default faces (a catalog without `portrait_expressions` rows: PORTRAITFX2 FL1).
+fn faces() -> Vec<String> {
+    strs(&DEFAULT_FACES)
+}
+
 /// A row as the loader normalizes it.
 fn row(v: &Value) -> Dict {
     normalize(fields(source::schema(), "content", portrait::KIND), v.as_object().unwrap(), false)
@@ -53,7 +58,7 @@ fn row(v: &Value) -> Dict {
 /// The own problems of one row (the scratch catalog's derived stat known).
 fn errors(v: &Value) -> Vec<String> {
     let derived = vec![STAT.to_string()];
-    portrait::row_errors(&row(v), &portrait::Refs { derived: &derived })
+    portrait::row_errors(&row(v), &portrait::Refs { derived: &derived, faces: &faces() })
 }
 
 /// A status id of the kit's status table.
@@ -90,14 +95,16 @@ fn options(key: &str) -> Vec<String> {
 #[test]
 fn the_schema_carries_the_kit_vocabulary() {
     let keys: Vec<String> = fields(source::schema(), "content", portrait::KIND).iter().map(|f| json::s(json::dict(f), "key")).collect();
-    assert_eq!(keys, strs(&["id", "trigger", "event", "status", "condition", "stat", "below", "drop_pct", "effect", "intensity", "ms", "preset", "color", "expression", "priority", "surfaces", "rulesets", "origin"]));
+    assert_eq!(keys, strs(&["id", "trigger", "event", "min_level", "status", "condition", "stat", "below", "drop_pct", "effect", "intensity", "ms", "preset", "color", "expression", "priority", "surfaces", "rulesets", "origin"]));
     assert_eq!(options("trigger"), strs(&PORTRAIT_TRIGGERS), "the meter trigger is not offered");
     assert_eq!(options("event"), [vec![String::new()], strs(&PORTRAIT_EVENTS)].concat());
     assert_eq!(options("effect"), strs(&PORTRAIT_EFFECTS));
     assert_eq!(options("preset"), [vec![String::new()], strs(&PORTRAIT_JOLTS)].concat());
     assert_eq!(options("surfaces"), strs(&PORTRAIT_SURFACES));
-    assert_eq!(options("rulesets"), strs(&rpgkit_rules::ruleset::RULESETS));
-    assert_eq!(art::EXPRESSIONS, ["neutral", "hurt", "angry", "afraid"], "PQ2");
+    // CLN-44: the ruleset ids are open: the field offers the ruleset rows
+    let rulesets = fields(source::schema(), "content", portrait::KIND).iter().map(json::dict).find(|f| json::s(f, "key") == "rulesets").unwrap();
+    assert_eq!((json::s(rulesets, "options_from"), options("rulesets")), ("rulesets".to_string(), Vec::<String>::new()));
+    assert_eq!(art::DEFAULT_FACES, ["neutral", "hurt", "angry", "afraid"], "PQ2, PORTRAITFX2 FL1");
     // the typed row's defaults are the schema's
     assert_eq!(PortraitCue::from_obj(&row(&json!({"id": "plain"}))), PortraitCue::from_obj(&dict(json!({"id": "plain"}))));
 }
@@ -119,7 +126,7 @@ fn each_rule_refuses_its_bad_row() {
         (changed("hp_half", "ms", json!(200)), "Duration ms must be 0 on a state row (it holds while its hp matches; is 200).".into()),
         (changed("marked", "color", json!("#ffffff")), format!("Colour is only for {colours} (not fade).")),
         (changed("hit_jolt", "preset", json!("")), "Jolt preset: a jolt needs one of hit, crit.".into()),
-        (changed("face_hit", "expression", json!("smirk")), format!("Expression 'smirk' is not one of {}.", EXPRESSIONS.join(", "))),
+        (changed("face_hit", "expression", json!("smirk")), format!("Expression 'smirk' is not one of {}.", DEFAULT_FACES.join(", "))),
         (changed("hit_flash", "surfaces", json!(["menu"])), format!("Surfaces: 'menu' is not one of {}.", PORTRAIT_SURFACES.join(", "))),
         (changed("hit_flash", "trigger", json!("meter")), portrait::METER_MESSAGE.into()),
         // the other rules of 5.1
@@ -140,9 +147,9 @@ fn each_rule_refuses_its_bad_row() {
         (changed("hit_jolt", "preset", json!("shove")), "Jolt preset: 'shove' is not one of hit, crit.".into()),
         (changed("hit_flash", "color", json!("amber")), "Colour 'amber' must be \"\" or #rrggbb.".into()),
         (changed("hit_flash", "expression", json!("hurt")), "Expression is for a face row only.".into()),
-        (changed("face_hit", "expression", json!("")), format!("Expression: a face row needs one of {}.", EXPRESSIONS.join(", "))),
+        (changed("face_hit", "expression", json!("")), format!("Expression: a face row needs one of {}.", DEFAULT_FACES.join(", "))),
         (changed("face_hit", "priority", json!(101)), "Priority must be 0-100 (is 101).".into()),
-        (changed("hit_flash", "rulesets", json!(["hardcore"])), "Rulesets: 'hardcore' is not one of classic, timeline.".into()),
+        (changed("hit_flash", "rulesets", json!(["Hard Core"])), "Rulesets: 'Hard Core' must be a ruleset id (lowercase snake_case).".into()),
         (changed("hit_flash", "surfaces", json!(["panel", "panel"])), "Surfaces lists 'panel' twice.".into()),
     ];
     for (bad, want) in cases {
@@ -172,7 +179,7 @@ fn an_unknown_condition_warns_and_duplicates_are_errors_on_both() {
     assert_eq!(warned, ["Condition 'frostbite' is not a kit condition (wounded); no member carries it."]);
     assert_eq!(portrait::warnings(&row(&changed("wounded", "id", json!("hurt_bad")))), Vec::<String>::new(), "wounded is a kit condition");
     let rows: Vec<Dict> = [good_rows(), vec![changed("hit_flash", "id", json!("hit_flash_2"))]].concat().iter().map(row).collect();
-    let checked = portrait::check_rows(&rows, &portrait::Refs { derived: &[STAT.to_string()] });
+    let checked = portrait::check_rows(&rows, &portrait::Refs { derived: &[STAT.to_string()], faces: &faces() });
     let dupes: Vec<(String, Vec<String>)> = rows.iter().zip(&checked).filter(|(_, e)| !e.is_empty()).map(|(r, e)| (json::s(r, "id"), e.clone())).collect();
     assert_eq!(
         dupes,
@@ -182,7 +189,7 @@ fn an_unknown_condition_warns_and_duplicates_are_errors_on_both() {
         ]
     );
     let again: Vec<Dict> = vec![row(&good_rows()[0]), row(&changed("hit_flash", "ms", json!(200)))];
-    let checked = portrait::check_rows(&again, &portrait::Refs { derived: &[] });
+    let checked = portrait::check_rows(&again, &portrait::Refs { derived: &[], faces: &faces() });
     assert_eq!(checked[1], ["ID 'hit_flash' is already used by another portrait cue.", "Portrait cue 'hit_flash' has the same trigger, match and effect."]);
 }
 
@@ -296,7 +303,7 @@ fn a11_reports_what_the_face_tool_reports() {
     let root = tool_fixtures();
     let want: Vec<String> = fs::read_to_string(root.join("expected_check.txt")).unwrap().lines().filter(|l| !l.trim().is_empty()).map(String::from).collect();
     assert!(!want.is_empty());
-    assert_eq!(assets::portrait_file_warnings(&root, &Layers::of(vec![root.clone()])), want, "T2: the kit's A11 and face.py check print the same lines");
+    assert_eq!(assets::portrait_file_warnings(&root, &Layers::of(vec![root.clone()]), &faces()), want, "T2: the kit's A11 and face.py check print the same lines");
 }
 
 #[test]
@@ -321,7 +328,7 @@ fn a12_warns_once_per_misplaced_frame() {
     copy("heroes/good.png", "portraits/heroes/faces/ghost/hurt.png");
     copy("common/plain.png", "portraits/common/faces/grunt/neutral.png");
     let layers = Layers::of(vec![root.clone()]);
-    let found = assets::portrait_file_warnings(&root, &layers);
+    let found = assets::portrait_file_warnings(&root, &layers, &faces());
     assert_eq!(
         found,
         [
@@ -336,7 +343,7 @@ fn a12_warns_once_per_misplaced_frame() {
     assert_eq!(check::warnings_all(&v).get("assets:layer").cloned().unwrap_or_default(), found);
     // a neutral frame stands in for a missing portrait
     copy("heroes/good.png", "portraits/heroes/faces/ghost/neutral.png");
-    assert!(!assets::portrait_file_warnings(&root, &Layers::of(vec![root.clone()])).iter().any(|l| l.contains("/ghost/:")));
+    assert!(!assets::portrait_file_warnings(&root, &Layers::of(vec![root.clone()]), &faces()).iter().any(|l| l.contains("/ghost/:")));
     let _ = fs::remove_dir_all(&t);
 }
 
@@ -372,11 +379,11 @@ fn a_node_and_a_line_card_take_an_expression() {
         let before = world_errors(&v, kind, base);
         world_errors(&v, kind, entry).into_iter().filter(|e| !before.contains(e)).collect()
     };
-    for x in EXPRESSIONS {
+    for x in DEFAULT_FACES {
         assert_eq!(added("dialogues", &talk(json!("")), &talk(json!(x))), Vec::<String>::new(), "node expression '{x}'");
         assert_eq!(added("vignettes", &reel(json!("")), &reel(json!(x))), Vec::<String>::new(), "card expression '{x}'");
     }
-    let names = EXPRESSIONS.join(", ");
+    let names = DEFAULT_FACES.join(", ");
     assert_eq!(added("dialogues", &talk(json!("")), &talk(json!("smirk"))), [format!("Node 'start': expression 'smirk' is not one of {names} (or \"\").")]);
     assert_eq!(added("vignettes", &reel(json!("")), &reel(json!("smirk"))), [format!("Card 1: expression 'smirk' is not one of {names} (or \"\").")]);
     let title = |x: &str| json!({"id": "reel_b", "name": "Reel", "cards": [{"style": "title", "title": "T", "expression": x}]});

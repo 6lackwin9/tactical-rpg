@@ -1,0 +1,30 @@
+{
+	"steps": [
+		{
+			"op": "upsert",
+			"kind": "rulesets",
+			"entry": {
+				"id": "classic",
+				"name": "Classic",
+				"rules": [],
+				"intents": ["assault", "guard", "support", "maneuver"],
+				"basics": [],
+				"poise_stat": "",
+				"stagger_windup_mult": 2.0,
+				"stagger_guard_mult": 0.5,
+				"stagger_repeat_mult": 0.5,
+				"flank_stagger_mult": 1.5,
+				"flank_power_mult": 1.0,
+				"break_chance_scale": 0.0,
+				"break_chance_cap": 50,
+				"rest_ap_per_block": 0.5,
+				"rest_ap_cap": 2,
+				"rest_poise_per_block": 5,
+				"deck_slots": {},
+				"melee_diagonal": "none",
+				"flank_protected_cost": "full",
+				"flank_protected_ap": 1
+			}
+		}
+	]
+}

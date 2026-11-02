@@ -5,8 +5,9 @@
 //!   world's vignette as written, in the game's card palette (STORYUI1-U1, a reel picker over the preview).
 //! - Art: Portraits (PORTRAITFX1-G 6.3): every portrait of the game and kit layers (expression frames under their
 //!   character) drawn through the game's binding (`portraits::Faces`) with the Kit widgets' portrait controls, its
-//!   sidecar summary, one button per cue row of `portrait_cues.json` and the expression picker; the review page of
-//!   the portrait asset tasks.
+//!   sidecar summary, one button per cue row of `portrait_cues.json`, one box per expression-effect row of
+//!   `portrait_expressions.json` (PORTRAITFX1-EX) and the expression picker; the review page of the portrait asset
+//!   tasks.
 //! - Screens: every screen, drawn shrunk into the pane (`aegis_ui::preview`) on a sample game (a debug game of the
 //!   first playable world that saving refuses); Open shows the screen itself to try it. The Mission board entry
 //!   (STORYUI1-U2) draws the board pane on a fixture board without a game (`board::BoardSample`).
@@ -14,29 +15,32 @@
 //!   draws), and the battle timeline (TIMELINE1: every unit's track over the round's blocks, fed by a live Test Arena
 //!   battle; past rounds from the round archive, a block's state from its snapshot).
 
-use crate::battle::{action_rows, kind_color, BattleScreen};
-use crate::intent_text;
+use crate::battle::BattleScreen;
 use crate::portraits::{cue_of, hue_name, Faces, Who};
-use crate::screens::{Cx, Game, GameCx, Nav, Screen};
+use crate::screens::{Cx, Game, GameCx, Key, Nav, Screen};
+use crate::timeline_view;
 use aegis_core::assets::Layers;
 use aegis_core::json;
+use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, Rect, Rgba};
 use aegis_ui::portrait_fx::{Cue, Tier};
 use aegis_ui::preview;
 use aegis_ui::specimens::{KitAct, Specimens, PORTRAIT_OVERLAYS, PORTRAIT_REACTIONS, PORTRAIT_SIZES, PORTRAIT_STAGE, PORTRAIT_STATES};
-use aegis_ui::timeline::{Section, Segment, Timeline, Track};
-use aegis_ui::ui::{tip, Gfx, Tip, Ui, Widget, BODY, BORDER, DIM, GOLD, INFO, SMALL, TEXT, TITLE, W};
+use aegis_ui::timeline::Timeline;
+use aegis_ui::ui::{tip, Gfx, Tip, Ui, Widget, BODY, SMALL, TITLE, W};
 use aegis_ui::vignette;
 use aegis_ui::widget_plumbing;
-use emberwake_battle::resolver::ScheduledAction;
 use emberwake_battle::session::{Phase, Session, UnitSnap};
 use emberwake_host::{Battle, Host};
 use serde_json::{json, Value};
 
 /// (id, name, group, what it shows). Battle panel ids are the battle screen's own panel names.
-const ENTRIES: [(&str, &str, &str, &str); 30] = [
+const ENTRIES: [(&str, &str, &str, &str); 33] = [
     ("kit", "Kit widgets", "Kit", "Every kit widget in its states; use them, the foot of the page says what happened."),
+    ("frame_tuner", "Frame tuner", "Kit", "A frame's corner, tip, line and padding on a live panel; Save in a debug build."),
     ("vignette", "Vignette player", "Kit", "The engine's sample reel or a world's vignette: image, text, title and line cards with fades, typing, hold and skip."),
+    ("pip_gauge", "Pip gauge", "Kit", "The engine pip gauge in its states: kept, spent and next round's gain; red, a debt, two points a pip; numbers on hover."),
+    ("timeline_pane", "Timeline pane", "Kit", "The engine timeline widget alone on sample data: two sections, a masked track, parts, a ghost, the playhead; the rows scroll."),
     ("portraits", "Portraits", "Art", "Every portrait with its sidecar, its effects and the cue rows: the review page of the portrait assets."),
     ("main_menu", "Main menu", "Screens", "The player's front door."),
     ("new_game", "New game", "Screens", "World cards and the start."),
@@ -71,7 +75,6 @@ const NEEDS_GAME: [&str; 13] = ["region", "dialogue", "shop", "hub", "journal", 
 /// Where a preview's mouse is (off every widget).
 const OFF: (i32, i32) = (-10_000, -10_000);
 const ALLY: Rgba = [110, 170, 255, 255];
-const FOE: Rgba = [240, 100, 92, 255];
 /// The strip under the timeline: an action's details or a block's snapshot.
 const DETAIL_H: i32 = 64;
 
@@ -97,6 +100,9 @@ pub enum GAct {
     Block(i32),
     Track(String),
     Segment(String, String),
+    /// INPUT1 TV7: the Timeline pane entry's block and track (a click selects, again unselects).
+    PaneBlock(i32),
+    PaneTrack(String),
 }
 
 /// The timeline entry's battle and what is selected on it.
@@ -142,6 +148,8 @@ pub enum PAct {
     Anchors,
     /// The expression picker (0 = neutral, else the picked portrait's frame `n - 1`).
     Expression(usize),
+    /// PORTRAITFX1-EX: an expression-effect row by id: holds its expression on the portrait (again: off).
+    ExprFx(String),
 }
 
 /// The folders under `portraits/`, in list order.
@@ -150,7 +158,7 @@ const PORTRAIT_FOLDERS: [&str; 5] = ["heroes", "npcs", "elites", "bosses", "comm
 const PORTRAIT_EVENT_SURFACE: &str = "panel";
 
 /// One portrait of the list: its file (`portraits/<folder>/<id>.png`; a character with only expression frames keeps
-/// this path), the layer holding it and its expression frames (in `EXPRESSIONS` order).
+/// this path), the layer holding it and its expression frames (in the game's face order, `Catalog::faces`).
 #[derive(Debug, Clone, PartialEq)]
 struct PortraitFile {
     rel: String,
@@ -160,8 +168,9 @@ struct PortraitFile {
     frames: Vec<String>,
 }
 
-/// Every portrait of `layers` (a file once: the first layer holding it), by folder, with its frames.
-fn portrait_files(layers: &Layers) -> Vec<PortraitFile> {
+/// Every portrait of `layers` (a file once: the first layer holding it), by folder, with its frames (of `faces`, in
+/// that order; PORTRAITFX2 FL4).
+fn portrait_files(layers: &Layers, faces: &[String]) -> Vec<PortraitFile> {
     let layer_of = |rel: &str| {
         let i = layers.roots.iter().position(|r| r.join(rel).is_file());
         let names = if layers.roots.len() == 3 { ["game", "kit", "engine"] } else { ["", "", ""] };
@@ -181,7 +190,7 @@ fn portrait_files(layers: &Layers) -> Vec<PortraitFile> {
         for id in ids {
             let rel = format!("{dir}/{id}.png");
             let listed = layers.list(&format!("{dir}/faces/{id}"));
-            let frames: Vec<String> = emberwake_content::art::EXPRESSIONS.iter().filter(|e| listed.contains(&format!("{e}.png"))).map(|e| e.to_string()).collect();
+            let frames: Vec<String> = faces.iter().filter(|e| listed.contains(&format!("{e}.png"))).cloned().collect();
             let at = if layers.has(&rel) { rel.clone() } else { frames.first().map(|e| format!("{dir}/faces/{id}/{e}.png")).unwrap_or_default() };
             out.push(PortraitFile { layer: layer_of(&at), rel, folder: folder.to_string(), id, frames });
         }
@@ -233,6 +242,32 @@ fn cue_text(r: &emberwake_data::PortraitCue) -> String {
     format!("{when}: {what}{}", if only.is_empty() { String::new() } else { format!(" (only {})", only.join(", ")) })
 }
 
+/// An expression-effect row's hover text: its tint, mark and shake.
+fn expr_text(r: &emberwake_data::PortraitExpression) -> String {
+    let mut parts = Vec::new();
+    let colour = |c: &str| {
+        let name = hue_name(c);
+        if name.is_empty() { c.to_string() } else { format!("{name} {c}") }
+    };
+    if !r.tint.is_empty() {
+        let len = if r.tint_ms > 0 { format!(", fading over {} ms", r.tint_ms) } else { String::new() };
+        parts.push(format!("tint {} {:.2} over the face box{len}", colour(&r.tint), r.tint_strength));
+    }
+    if !r.mark.is_empty() {
+        let c = if r.mark_color.is_empty() { String::new() } else { format!(" {}", colour(&r.mark_color)) };
+        let pulse = if r.mark_pulse_ms > 0 { format!(", pulsing every {} ms", r.mark_pulse_ms) } else { String::new() };
+        parts.push(format!("{} mark{c} at ({:.2}, {:.2}) of the {} box{pulse}", r.mark, r.mark_x, r.mark_y, r.mark_box));
+    }
+    if r.shake_px > 0 {
+        parts.push(format!("shake {} px for {} ms", r.shake_px, r.shake_ms));
+    }
+    if parts.is_empty() {
+        format!("{}: nothing.", r.id)
+    } else {
+        format!("While {} holds: {}. Reduce motion stops the shake and the pulse.", r.id, parts.join("; "))
+    }
+}
+
 /// The Portraits entry (6.3): the list, the picked portrait and the controls; its portraits draw through `Faces`.
 #[derive(Debug, Clone, Default)]
 struct PortraitPage {
@@ -245,6 +280,8 @@ struct PortraitPage {
     /// The overlays and states toggled on, and the state cue rows toggled on (by id).
     on: std::collections::BTreeSet<&'static str>,
     rows_on: std::collections::BTreeSet<String>,
+    /// PORTRAITFX1-EX: the expression-effect row held on (its expression over the picked frame).
+    fx_on: Option<String>,
     /// `PORTRAIT_SIZES` index.
     size: usize,
     /// What the last control did (the foot line).
@@ -267,6 +304,10 @@ impl PortraitPage {
         out.extend(rows.iter().filter(|r| !r.is_event() && self.rows_on.contains(&r.id)).filter_map(cue_of));
         if let Some(e) = self.picked().and_then(|f| f.frames.get(self.expression.wrapping_sub(1))) {
             out.extend(Cue::parse("face", "").map(|c| c.with_expression(e).with_priority(0).with_key("gallery.expression")));
+        }
+        // PORTRAITFX1-EX: the held expression-effect row's face, over the picker (its effects run from the click)
+        if let Some(e) = &self.fx_on {
+            out.extend(Cue::parse("face", "").map(|c| c.with_expression(e).with_priority(1).with_key("gallery.expression_fx")));
         }
         out
     }
@@ -331,21 +372,26 @@ impl PortraitPage {
                 self.expression = e;
                 format!("expression {}", self.picked().and_then(|f| f.frames.get(e.wrapping_sub(1))).map_or("neutral", |s| s.as_str()))
             }
+            PAct::ExprFx(id) => {
+                let on = self.fx_on.as_deref() != Some(id.as_str());
+                self.fx_on = on.then(|| id.clone());
+                format!("{id} effect {}", if on { "on" } else { "off" })
+            }
         };
     }
 
     /// Draws the page into `r`: the list on the left, the stage with the foot line and the sidecar in the middle, the
     /// controls and the cue rows on the right.
     fn draw(&mut self, ui: &mut Ui<GAct>, cx: &mut Cx, r: Rect) {
-        let files = self.files.get_or_insert_with(|| portrait_files(cx.art.layers())).clone();
+        let files = self.files.get_or_insert_with(|| portrait_files(cx.art.layers(), &cx.data.cat.faces())).clone();
         let data = cx.data.clone();
         let rows = &data.cat.portrait_cues;
         let line = ui.p.line_h(SMALL).ceil() as i32;
         let row_h = (ui.p.line_h(BODY) + 2.0).ceil() as i32;
-        ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, "Portraits", TITLE, GOLD);
+        ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, "Portraits", TITLE, th().gold);
         let nw = ui.p.text_w("Portraits", TITLE).ceil() as i32;
         let count = format!("{} portraits (game and kit layers); {} cue rows (portrait_cues.json)", files.len(), rows.len());
-        ui.p.text_fit((r.x + 12 + nw) as f32, r.y as f32 + 3.0, &count, SMALL, (r.w - nw - 16) as f32, DIM);
+        ui.p.text_fit((r.x + 12 + nw) as f32, r.y as f32 + 3.0, &count, SMALL, (r.w - nw - 16) as f32, th().dim);
         let top = r.y + 4 + ui.p.line_h(TITLE).ceil() as i32 + 3;
 
         // -- The list: a heading per folder, a row per portrait, its frames indented under it
@@ -364,17 +410,17 @@ impl PortraitPage {
         let mut last_folder = "";
         for (i, f) in files.iter().enumerate() {
             if f.folder != last_folder {
-                ui.p.text(list.x as f32 + 2.0, y as f32 + 1.0, &f.folder, SMALL, INFO);
+                ui.p.text(list.x as f32 + 2.0, y as f32 + 1.0, &f.folder, SMALL, th().info);
                 y += line + 2;
                 last_folder = &f.folder;
             }
             let picked = i == self.pick;
             let about = format!("{} ({} layer){}", f.rel, f.layer, if f.frames.is_empty() { String::new() } else { format!("; faces: {}", f.frames.join(", ")) });
-            ui.row(&format!("gallery.portraits.pick.{}.{}", f.folder, f.id), Rect::new(list.x, y, list.w - 4, row_h), &f.id, if picked { GOLD } else { TEXT }, Some(GAct::Portrait(PAct::Pick(i, 0))), picked && self.expression == 0, tip(&f.id, &about));
+            ui.row(&format!("gallery.portraits.pick.{}.{}", f.folder, f.id), Rect::new(list.x, y, list.w - 4, row_h), &f.id, if picked { th().gold } else { th().text }, Some(GAct::Portrait(PAct::Pick(i, 0))), picked && self.expression == 0, tip(&f.id, &about));
             y += row_h + 1;
             for (k, e) in f.frames.iter().enumerate() {
                 let on = picked && self.expression == k + 1;
-                ui.row(&format!("gallery.portraits.pick.{}.{}.{e}", f.folder, f.id), Rect::new(list.x + 10, y, list.w - 14, row_h), e, if on { GOLD } else { DIM }, Some(GAct::Portrait(PAct::Pick(i, k + 1))), on, tip(e, &format!("{} as {e}", f.id)));
+                ui.row(&format!("gallery.portraits.pick.{}.{}.{e}", f.folder, f.id), Rect::new(list.x + 10, y, list.w - 14, row_h), e, if on { th().gold } else { th().dim }, Some(GAct::Portrait(PAct::Pick(i, k + 1))), on, tip(e, &format!("{} as {e}", f.id)));
                 y += row_h + 1;
             }
         }
@@ -384,14 +430,14 @@ impl PortraitPage {
         let x2 = list.x + list.w + 8;
         let col_w = 150;
         let stage = Rect::new(x2, top, PORTRAIT_STAGE, PORTRAIT_STAGE);
-        ui.p.panel(stage, rgb(14, 15, 20), BORDER, 2.0);
+        ui.p.panel(stage, th().game("gallery_stage", rgb(14, 15, 20)), th().edge, 2.0);
         let size = PORTRAIT_SIZES[self.size.min(PORTRAIT_SIZES.len() - 1)];
         let face_r = Rect::new(stage.x + (stage.w - size) / 2, stage.y + (stage.h - size) / 2, size, size);
         let key = self.key();
         self.faces.begin();
         let pins = self.pins(rows);
         self.faces.pin(&key, pins);
-        let mut text = vec![(String::from("No portrait files in the art layers."), DIM)];
+        let mut text = vec![(String::from("No portrait files in the art layers."), th().dim)];
         if let Some(f) = files.get(self.pick) {
             let who = Who::file(&f.rel);
             let look = emberwake_battle::portrait::Look { ruleset: emberwake_rules::ruleset::CLASSIC.into(), ..Default::default() };
@@ -406,9 +452,9 @@ impl PortraitPage {
             let face = crate::portraits::sidecar(&mut cx.art, &drawn);
             let png = cx.art.size_of(&drawn).map_or(String::new(), |(w, h)| format!(", {w} x {h}"));
             text = vec![
-                (format!("Tier {tier} ({device} device px). Live: {}", if live.is_empty() { "nothing".to_string() } else { live.join(", ") }), DIM),
-                (format!("{} ({} layer{png}){}", if drawn.is_empty() { f.rel.clone() } else { drawn }, f.layer, if expression.is_empty() { String::new() } else { format!(", face {expression}") }), TEXT),
-                (face_summary(face.as_ref()), TEXT),
+                (format!("Tier {tier} ({device} device px). Live: {}", if live.is_empty() { "nothing".to_string() } else { live.join(", ") }), th().dim),
+                (format!("{} ({} layer{png}){}", if drawn.is_empty() { f.rel.clone() } else { drawn }, f.layer, if expression.is_empty() { String::new() } else { format!(", face {expression}") }), th().text),
+                (face_summary(face.as_ref()), th().text),
             ];
         }
         ui.push("gallery.portraits.face", "portrait", format!("{key}: {size} px"), stage, true, false, None, Vec::new());
@@ -417,14 +463,14 @@ impl PortraitPage {
             fy = ui.para(x2, fy, col_w, t, SMALL, *col) + 3;
         }
         if !self.last.is_empty() {
-            ui.para(x2, fy + 2, col_w, &format!("Last: {}", self.last), SMALL, INFO);
+            ui.para(x2, fy + 2, col_w, &format!("Last: {}", self.last), SMALL, th().info);
         }
 
         // -- The controls
         let x3 = x2 + col_w + 10;
         let right = r.x + r.w - 4;
         let head = |ui: &mut Ui<GAct>, y: i32, t: &str| -> i32 {
-            ui.p.text(x3 as f32, y as f32, t, SMALL, INFO);
+            ui.p.text(x3 as f32, y as f32, t, SMALL, th().info);
             y + line + 1
         };
         let label = |s: &str| {
@@ -469,7 +515,7 @@ impl PortraitPage {
         buttons(ui, &mut yy, items);
         yy = head(ui, yy, "Cue rows (events fire, states toggle)");
         if rows.is_empty() {
-            yy = ui.para(x3, yy, right - x3, "No cue rows yet (data/catalog/portrait_cues.json, PORTRAITFX1-A).", SMALL, DIM) + 3;
+            yy = ui.para(x3, yy, right - x3, "No cue rows yet (data/catalog/portrait_cues.json, PORTRAITFX1-A).", SMALL, th().dim) + 3;
         } else {
             let mut bx = x3;
             for row in rows.iter() {
@@ -495,6 +541,28 @@ impl PortraitPage {
                     }
                     bx += w + 6;
                 }
+            }
+            yy += 14 + 3;
+        }
+        // PORTRAITFX1-EX: one box per expression-effect row (a click holds its expression, a second click releases it)
+        yy = head(ui, yy, "Expression effects (held as the face)");
+        let fx_rows = &data.cat.portrait_expressions;
+        if fx_rows.is_empty() {
+            yy = ui.para(x3, yy, right - x3, "No expression-effect rows (data/catalog/portrait_expressions.json).", SMALL, th().dim) + 3;
+        } else {
+            let mut bx = x3;
+            for row in fx_rows.iter() {
+                let w = 12 + ui.p.text_w(&row.id, BODY).ceil() as i32 + 4;
+                if bx + w > right && bx > x3 {
+                    bx = x3;
+                    yy += 14;
+                }
+                let id = format!("gallery.portraits.fx.{}", row.id);
+                ui.checkbox(&id, bx, yy + 1, &row.id, self.fx_on.as_deref() == Some(row.id.as_str()), GAct::Portrait(PAct::ExprFx(row.id.clone())), true);
+                if let Some(box_) = ui.widgets.last_mut() {
+                    box_.tip = tip(&row.id, &expr_text(row));
+                }
+                bx += w + 6;
             }
             yy += 14 + 3;
         }
@@ -525,6 +593,8 @@ pub struct Gallery {
     portraits: PortraitPage,
     shown: Option<Shown>,
     battle: Option<BattleScreen>,
+    /// INPUT1 TV7: the Timeline pane entry's selected block and track (the sample's to start).
+    pane: (Option<i32>, Option<String>),
     /// The sample game is the gallery's (it goes when the gallery does), with the debug flag it found.
     own_game: Option<bool>,
     w: Vec<Widget<GAct>>,
@@ -538,7 +608,8 @@ impl Default for Gallery {
 
 impl Gallery {
     pub fn new() -> Self {
-        Self { entry: 0, reel: 0, demo: None, kit: Specimens::default(), portraits: PortraitPage::default(), shown: None, battle: None, own_game: None, w: Vec::new() }
+        let s = aegis_ui::timeline::sample();
+        Self { entry: 0, reel: 0, demo: None, kit: Specimens::default(), portraits: PortraitPage::default(), shown: None, battle: None, pane: (s.selected_block, s.selected_track), own_game: None, w: Vec::new() }
     }
 
     /// The sample game for the screen entries: a debug game (nothing saved) of the first playable world.
@@ -682,7 +753,7 @@ impl Gallery {
             let k = (r.w as f32 / src.w.max(1) as f32).min(r.h as f32 / src.h.max(1) as f32).min(2.0);
             let (w, h) = ((src.w as f32 * k) as i32, (src.h as f32 * k) as i32);
             let target = Rect::new(r.x + (r.w - w) / 2, r.y + (r.h - h) / 2, w, h);
-            preview::region_in(g, target, src, |g| b.draw(cx, g, OFF, false));
+            preview::region_in(g, target, src, b.grid(), |g| b.draw(cx, g, OFF, false));
             return;
         }
         if NEEDS_GAME.contains(&id) && !self.ensure_game(cx) {
@@ -698,7 +769,7 @@ impl Gallery {
             };
         }
         if let Some(sh) = self.shown.as_mut() {
-            preview::screen_in(g, r, |g| sh.screen.draw(cx, g, OFF, false));
+            preview::screen_in(g, r, sh.screen.grid(), |g| sh.screen.draw(cx, g, OFF, false));
         }
         self.script(cx);
     }
@@ -718,6 +789,10 @@ impl Gallery {
     fn act(&mut self, cx: &mut Cx, a: GAct) {
         match a {
             GAct::Entry(i) => {
+                if i != self.entry {
+                    // LOOK1-E1: the Kit page's theme switch goes back to the layers' theme.
+                    self.kit.leave_theme();
+                }
                 self.entry = i;
                 self.shown = None;
             }
@@ -732,7 +807,7 @@ impl Gallery {
                 if id == "battle" || ENTRIES[self.entry].2 == "Battle panels" {
                     let b = BattleScreen::arena(cx, None, &cx.encounter.clone());
                     cx.nav.push(Nav::Push(Box::new(b)));
-                } else if id != "kit" && id != "portraits" && (!NEEDS_GAME.contains(&id) || self.ensure_game(cx)) {
+                } else if !["kit", "portraits", "pip_gauge", "timeline_pane"].contains(&id) && (!NEEDS_GAME.contains(&id) || self.ensure_game(cx)) {
                     // a fresh one, so the preview keeps its own state
                     if let Some((screen, _)) = self.build(cx, id) {
                         cx.nav.push(Nav::Push(screen));
@@ -741,6 +816,8 @@ impl Gallery {
             }
             GAct::Exit => cx.nav.push(Nav::Pop),
             GAct::Restart => self.demo = None,
+            GAct::PaneBlock(b) => self.pane.0 = if self.pane.0 == Some(b) { None } else { Some(b) },
+            GAct::PaneTrack(k) => self.pane.1 = if self.pane.1.as_deref() == Some(k.as_str()) { None } else { Some(k) },
             a => {
                 let d = self.demo(cx);
                 let Some(s) = d.host.session.as_mut() else { return };
@@ -775,7 +852,7 @@ impl Gallery {
                     GAct::Block(b) => d.block = if d.block == Some(b) { None } else { Some(b) },
                     GAct::Track(t) => d.track = if d.track.as_deref() == Some(t.as_str()) { None } else { Some(t) },
                     GAct::Segment(t, seg) => {
-                        d.detail = segment_detail(s, d.viewed, &t, &seg);
+                        d.detail = segment_detail(cx, s, d.viewed, &t, &seg);
                         d.track = Some(t);
                         d.block = None;
                     }
@@ -791,84 +868,68 @@ impl Gallery {
     }
 }
 
-fn segment_of(name: &str, start: i32, end: i32, kind: &str, target: Option<String>, key: String, extra: String) -> Segment {
-    let mut t = vec![(name.to_string(), GOLD), (format!("Blocks {start}-{end}  {kind}"), DIM)];
-    if let Some(target) = &target {
-        t.push((format!("On {target}"), TEXT));
-    }
-    if !extra.is_empty() {
-        t.push((extra, DIM));
-    }
-    let mut fill = kind_color(kind);
-    fill[3] = 230;
-    Segment { key, start, end, label: target.map(|t| format!("{name} > {t}")).unwrap_or_else(|| name.to_string()), fill, dashed: kind == "MOVE", tip: t, ..Segment::default() }
-}
-
-fn rows(s: &Session, actions: &[ScheduledAction], u: usize) -> Vec<Segment> {
-    action_rows(&s.w, actions, u).into_iter().enumerate().map(|(i, c)| segment_of(&c.2, c.0, c.1, &c.3, c.4, format!("{i}"), String::new())).collect()
-}
-
-/// The units' tracks for round `viewed`: the live round shows the heroes' plan while planning (then their committed
-/// actions) and masks the enemies while planning unless revealed (their tell instead); a past round shows its
-/// archived actions, unmasked.
-fn timeline_of(s: &Session, viewed: i32, reveal: bool, block: Option<i32>, track: Option<String>) -> Timeline {
-    let w = &s.w;
-    let live = viewed == s.current_round;
-    let planning = live && s.phase == Phase::Planning && !s.plan_confirmed;
-    let archived: Vec<ScheduledAction> = if live { s.resolver.scheduled.clone() } else { s.round_record(viewed).map(|r| r.actions.clone()).unwrap_or_default() };
-    let tells = s.enemy_intents();
-    let allies = w
-        .allies
-        .iter()
-        .map(|&u| {
-            let segments = if planning && w.units[u].is_active() {
-                s.plan
-                    .compile(w, u)
-                    .entries
-                    .iter()
-                    .enumerate()
-                    .map(|(i, e)| {
-                        let sk = &w.cat.skills[e.skill];
-                        segment_of(&sk.name, e.start_block, e.end_block(w), &sk.kind, e.target.filter(|t| *t != u).map(|t| w.units[t].name.clone()), format!("{i}"), format!("{} AP", e.total_ap()))
-                    })
-                    .collect()
-            } else {
-                rows(s, &archived, u)
-            };
-            Track { key: format!("u{u}"), label: w.units[u].name.clone(), colour: ALLY, segments, ..Track::default() }
-        })
-        .collect();
-    let enemies = w
-        .enemies
-        .iter()
-        .filter(|&&e| archived.iter().any(|a| a.unit == e) || w.has(e))
-        .map(|&e| {
-            let masked = (planning && !reveal && w.units[e].is_active()).then(|| match tells.iter().find(|t| t.unit == e) {
-                Some(t) => format!("Plans in secret. {}", intent_text::card_line(w, &t.line)),
-                None => "Plans in secret".to_string(),
-            });
-            Track { key: format!("u{e}"), label: w.units[e].name.clone(), colour: FOE, segments: rows(s, &archived, e), masked, ..Track::default() }
-        })
-        .collect();
-    Timeline {
-        blocks: s.def.total_blocks.max(1),
-        playhead: if live && !planning && s.phase != Phase::Replay { s.current_block } else { 0 },
-        selected_block: block,
-        selected_track: track,
-        sections: vec![Section { title: "Allies".into(), colour: ALLY, tracks: allies }, Section { title: "Enemies".into(), colour: FOE, tracks: enemies }],
-    }
+/// INPUT1 TV7: the Battle timeline entry's view: the battle screen's timeline view (`timeline_view::build`, the one
+/// builder) of round `viewed` under the player's settings (overlay groups, tells, VC4's Party foresight off), every
+/// enemy unmasked with Reveal, block and track as clicked (an enemy track too).
+pub(crate) fn battle_timeline(cx: &Cx, s: &Session, viewed: i32, reveal: bool, block: Option<i32>, track: Option<String>) -> Timeline {
+    let v = &cx.settings.v;
+    let opts = timeline_view::Opts {
+        viewed,
+        reveal_all: reveal,
+        foresight_off: crate::battle::party_foresight_off(v, cfg!(debug_assertions)),
+        show_tells: v["show_tells"].as_bool().unwrap_or(true),
+        layers: crate::battle::Layers::of(&v["battle_overlays"]),
+        selected: None,
+        block,
+        shown: None,
+        playhead: None,
+    };
+    Timeline { selected_track: track, ..timeline_view::build(s, &opts) }
 }
 
 /// The hover card lines of a clicked segment, for the detail strip.
-fn segment_detail(s: &Session, viewed: i32, track: &str, seg: &str) -> Vec<(String, Rgba)> {
-    let t = timeline_of(s, viewed, true, None, None);
+fn segment_detail(cx: &Cx, s: &Session, viewed: i32, track: &str, seg: &str) -> Vec<(String, Rgba)> {
+    let t = battle_timeline(cx, s, viewed, true, None, None);
     t.sections
         .iter()
         .flat_map(|x| x.tracks.iter())
         .find(|x| x.key == track)
         .and_then(|x| x.segments.iter().find(|g| g.key == seg).map(|g| (x.label.clone(), g.tip.clone())))
-        .map(|(unit, tip)| std::iter::once((unit, TEXT)).chain(tip).collect())
+        .map(|(unit, tip)| std::iter::once((unit, th().text)).chain(tip).collect())
         .unwrap_or_default()
+}
+
+/// INPUT1 TV7: the Timeline pane entry (Kit): the engine timeline widget alone on its sample round
+/// (`aegis_ui::timeline::sample`, no game type and no session) under its name and what it shows; a click on a block or
+/// a track selects it (again: unselects), a span's click selects its track; hover cards are the widget's own.
+fn draw_timeline_pane(ui: &mut Ui<GAct>, r: Rect, name: &str, about: &str, sel: &(Option<i32>, Option<String>)) {
+    ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, name, TITLE, th().gold);
+    let nw = ui.p.text_w(name, TITLE).ceil() as i32;
+    ui.p.text_fit((r.x + 12 + nw) as f32, r.y as f32 + 3.0, about, SMALL, (r.w - nw - 16) as f32, th().dim);
+    let top = r.y + 4 + ui.p.line_h(TITLE).ceil() as i32 + 3;
+    let t = Timeline { selected_block: sel.0, selected_track: sel.1.clone(), ..aegis_ui::timeline::sample() };
+    t.draw(ui, "gallery.pane", Rect::new(r.x + 4, top, r.w - 8, r.y + r.h - 4 - top), GAct::PaneBlock, |k| GAct::PaneTrack(k.to_string()), |k, _| GAct::PaneTrack(k.to_string()));
+}
+
+/// INPUT1-AP: the Pip gauge entry (Kit): the engine's pip gauge alone, each sample state (`aegis_ui::pips::samples`)
+/// in a row with its name, the gauge (`gallery.pip.<k>`, its numbers on hover) and its reading, under a legend.
+fn draw_pip_gauges(ui: &mut Ui<GAct>, r: Rect, name: &str, about: &str) {
+    ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, name, TITLE, th().gold);
+    let nw = ui.p.text_w(name, TITLE).ceil() as i32;
+    ui.p.text_fit((r.x + 12 + nw) as f32, r.y as f32 + 3.0, about, SMALL, (r.w - nw - 16) as f32, th().dim);
+    let mut y = r.y + 4 + ui.p.line_h(TITLE).ceil() as i32 + 3;
+    let legend = "F full: kept.  H hollow: spent by the plan.  Hg / Sg: a ghost fill, next round's gain.  S: a slot above what is held now.";
+    ui.p.text_fit(r.x as f32 + 4.0, y as f32, legend, SMALL, (r.w - 8) as f32, th().text);
+    let row_h = (ui.p.line_h(BODY) + 6.0).ceil() as i32;
+    y += row_h;
+    let (label_w, gauge_w) = (210, 90);
+    for (k, (label, gauge)) in aegis_ui::pips::samples().into_iter().enumerate() {
+        ui.p.text_fit(r.x as f32 + 4.0, y as f32, label, BODY, label_w as f32 - 8.0, th().text);
+        let cy = y + (ui.p.line_h(BODY) / 2.0).round() as i32;
+        gauge.draw(ui, &format!("gallery.pip.{k}"), r.x + label_w, cy);
+        ui.p.text_fit((r.x + label_w + gauge_w) as f32, y as f32, &gauge.reading(), SMALL, (r.w - label_w - gauge_w - 6) as f32, th().dim);
+        y += row_h;
+    }
 }
 
 /// One unit of a snapshot in one line: "Warrior  HP 280/334  AP 8  Offensive  Haste".
@@ -897,8 +958,8 @@ impl Screen<GameCx> for Gallery {
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         self.demo(cx);
         let mut ui: Ui<GAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, aegis_ui::ui::H), rgb(12, 16, 26));
-        ui.p.text(6.0, 4.0, "UI GALLERY", BODY, GOLD);
+        ui.p.fill(Rect::new(0, 0, W, aegis_ui::ui::H), th().tool_bg);
+        ui.p.text(6.0, 4.0, "UI GALLERY", BODY, th().gold);
         ui.button("gallery.exit", Rect::new(W - 36, 3, 32, 12), "Exit", GAct::Exit, true);
         // The entries by group; the list scrolls (the wheel over it).
         let list = Rect::new(4, 20, 102, aegis_ui::ui::H - 24);
@@ -910,26 +971,32 @@ impl Screen<GameCx> for Gallery {
         let mut y = list.y - off;
         for (i, (id, name, group, about)) in ENTRIES.iter().enumerate() {
             if i == 0 || ENTRIES[i - 1].2 != *group {
-                ui.p.text(list.x as f32 + 2.0, y as f32 + 2.0, group, SMALL, INFO);
+                ui.p.text(list.x as f32 + 2.0, y as f32 + 2.0, group, SMALL, th().info);
                 y += head_h;
             }
-            ui.row(&format!("gallery.entry.{id}"), Rect::new(list.x, y, list.w - 4, row_h), name, if i == self.entry { GOLD } else { TEXT }, Some(GAct::Entry(i)), i == self.entry, tip(name, about));
+            ui.row(&format!("gallery.entry.{id}"), Rect::new(list.x, y, list.w - 4, row_h), name, if i == self.entry { th().gold } else { th().text }, Some(GAct::Entry(i)), i == self.entry, tip(name, about));
             y += row_h + 1;
         }
         ui.scroll_end();
         let pane = Rect::new(110, 20, W - 114, aegis_ui::ui::H - 24);
-        ui.p.panel(pane, rgb(18, 24, 38), BORDER, 2.0);
+        ui.p.panel(pane, th().tool_pane, th().edge, 2.0);
         let (id, name, _, about) = ENTRIES[self.entry];
         if id == "kit" {
             self.kit.draw(&mut ui, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4), GAct::Kit);
+        } else if id == "frame_tuner" {
+            self.kit.tuner.draw(&mut ui, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4), &|a| GAct::Kit(KitAct::Tuner(a)));
         } else if id == "portraits" {
             self.portraits.draw(&mut ui, cx, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4));
+        } else if id == "pip_gauge" {
+            draw_pip_gauges(&mut ui, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4), name, about);
+        } else if id == "timeline_pane" {
+            draw_timeline_pane(&mut ui, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4), name, about, &self.pane);
         } else if id != "timeline" {
             // A screen or a battle panel: its name, what it is, Open, and the preview under them.
-            ui.p.text(pane.x as f32 + 6.0, pane.y as f32 + 4.0, name, TITLE, GOLD);
+            ui.p.text(pane.x as f32 + 6.0, pane.y as f32 + 4.0, name, TITLE, th().gold);
             let ow = (ui.p.text_w("Open", SMALL) + 12.0).ceil() as i32;
             let nw = ui.p.text_w(name, TITLE).ceil() as i32;
-            ui.p.text_fit((pane.x + 14 + nw) as f32, pane.y as f32 + 5.0, about, SMALL, (pane.w - nw - ow - 28) as f32, DIM);
+            ui.p.text_fit((pane.x + 14 + nw) as f32, pane.y as f32 + 5.0, about, SMALL, (pane.w - nw - ow - 28) as f32, th().dim);
             ui.button_full("gallery.open", Rect::new(pane.x + pane.w - ow - 4, pane.y + 3, ow, 12), "Open", GAct::Open, true, false, SMALL, tip("Open", "Shows the screen itself to try it."));
             let mut top = pane.y + 4 + ui.p.line_h(TITLE).ceil() as i32 + 3;
             if id == "vignette" {
@@ -941,7 +1008,7 @@ impl Screen<GameCx> for Gallery {
                 top += h + 3;
             }
             let shown = Rect::new(pane.x + 4, top, pane.w - 8, pane.y + pane.h - 4 - top);
-            ui.p.fill(shown, rgb(6, 8, 14));
+            ui.p.fill(shown, th().game("gallery_well", rgb(6, 8, 14)));
             self.w = std::mem::take(&mut ui.widgets);
             drop(ui);
             self.preview(cx, g, id, shown);
@@ -950,7 +1017,7 @@ impl Screen<GameCx> for Gallery {
         if id == "timeline" {
             let d = self.demo.as_ref().unwrap();
             let Some(s) = d.host.session.as_ref() else {
-                ui.p.text(pane.x as f32 + 6.0, pane.y as f32 + 6.0, "No battle (the arena encounter did not start).", BODY, DIM);
+                ui.p.text(pane.x as f32 + 6.0, pane.y as f32 + 6.0, "No battle (the arena encounter did not start).", BODY, th().dim);
                 self.w = ui.widgets;
                 return;
             };
@@ -968,7 +1035,7 @@ impl Screen<GameCx> for Gallery {
                 format!("resolving block {}", s.current_block)
             };
             ui.button_full("gallery.timeline.prev", Rect::new(pane.x + 4, pane.y + 3, 14, 12), "<", GAct::View(-1), d.viewed > 1, false, SMALL, tip("Previous round", "View the round before (the round archive)."));
-            ui.p.text_fit(pane.x as f32 + 21.0, pane.y as f32 + 4.0, &format!("Round {}/{}  {phase}", d.viewed, s.current_round), TITLE, 120.0, if live_round { TEXT } else { GOLD });
+            ui.p.text_fit(pane.x as f32 + 21.0, pane.y as f32 + 4.0, &format!("Round {}/{}  {phase}", d.viewed, s.current_round), TITLE, 120.0, if live_round { th().text } else { th().gold });
             ui.button_full("gallery.timeline.next", Rect::new(pane.x + 144, pane.y + 3, 14, 12), ">", GAct::View(1), d.viewed < s.current_round, false, SMALL, tip("Next round", "View the round after (back to the live one)."));
             let mut x = pane.x + 164;
             let buttons = [
@@ -984,19 +1051,19 @@ impl Screen<GameCx> for Gallery {
                 ui.button_full(&format!("gallery.timeline.{id}"), Rect::new(x, pane.y + 3, w, 12), label, act, enabled, false, SMALL, tip(label, help));
                 x += w + 2;
             }
-            let t = timeline_of(s, d.viewed, d.reveal, d.block, d.track.clone());
+            let t = battle_timeline(cx, s, d.viewed, d.reveal, d.block, d.track.clone());
             t.draw(&mut ui, "gallery.timeline", Rect::new(pane.x + 4, pane.y + 20, pane.w - 8, pane.h - 24 - DETAIL_H), GAct::Block, |k| GAct::Track(k.to_string()), |k, g| GAct::Segment(k.to_string(), g.to_string()));
             // The strip under the timeline: a selected block's snapshot, else the clicked action, else a hint.
             let strip = Rect::new(pane.x + 4, pane.y + pane.h - DETAIL_H, pane.w - 8, DETAIL_H - 4);
-            ui.p.fill(Rect::new(strip.x, strip.y - 2, strip.w, 1), BORDER);
+            ui.p.fill(Rect::new(strip.x, strip.y - 2, strip.w, 1), th().edge);
             let snap = d.block.and_then(|b| s.round_record(d.viewed).and_then(|r| r.snapshots.get(b as usize)).map(|sn| (b, sn)));
             let lines: Vec<(String, Rgba)> = match (d.block, snap) {
-                (Some(_), Some((b, sn))) => std::iter::once((format!("After block {b} of round {}", d.viewed), GOLD))
-                    .chain(s.w.allies.iter().chain(s.w.enemies.iter()).filter_map(|&u| sn.get(u).filter(|x| x.pos.is_some() || x.hp <= 0 || x.withdrawn).map(|x| (snap_line(&s.w.units[u].name, x), if s.w.allies.contains(&u) { ALLY } else { FOE }))))
+                (Some(_), Some((b, sn))) => std::iter::once((format!("After block {b} of round {}", d.viewed), th().gold))
+                    .chain(s.w.allies.iter().chain(s.w.enemies.iter()).filter_map(|&u| sn.get(u).filter(|x| x.pos.is_some() || x.hp <= 0 || x.withdrawn).map(|x| (snap_line(&s.w.units[u].name, x), if s.w.allies.contains(&u) { ALLY } else { th().foe }))))
                     .collect(),
-                (Some(b), None) => vec![(format!("Block {b} has not resolved yet."), DIM)],
+                (Some(b), None) => vec![(format!("Block {b} has not resolved yet."), th().dim)],
                 _ if !d.detail.is_empty() => d.detail.clone(),
-                _ => vec![("Click an action for its details, a resolved block for the state after it; < > page through the rounds.".to_string(), DIM)],
+                _ => vec![("Click an action for its details, a resolved block for the state after it; < > page through the rounds.".to_string(), th().dim)],
             };
             // Snapshot lines go in two columns.
             let (cols, col_w) = if lines.len() > 6 { (2, (strip.w - 8) / 2) } else { (1, strip.w - 8) };
@@ -1016,7 +1083,7 @@ impl Screen<GameCx> for Gallery {
         let d = self.demo.as_ref();
         let s = d.and_then(|d| d.host.session.as_ref());
         json!({
-            "entry": ENTRIES[self.entry].0, "shown": self.shown.as_ref().map(|sh| sh.screen.id()), "steps_left": self.shown.as_ref().map(|sh| sh.steps.len()), "kit_last": self.kit.last, "viewed": d.map(|d| d.viewed), "round": s.map(|s| s.current_round), "block": s.map(|s| s.current_block),
+            "entry": ENTRIES[self.entry].0, "shown": self.shown.as_ref().map(|sh| sh.screen.id()), "steps_left": self.shown.as_ref().map(|sh| sh.steps.len()), "kit_last": self.kit.last, "tuner": self.kit.tuner.state(), "viewed": d.map(|d| d.viewed), "round": s.map(|s| s.current_round), "block": s.map(|s| s.current_block),
             "selected_block": d.and_then(|d| d.block), "planning": s.map(|s| s.phase == Phase::Planning && !s.plan_confirmed), "rounds_archived": s.map(|s| s.history.len()),
             // PORTRAITFX1-G (4.11): the Portraits entry's pick and its portraits' state
             "portrait_pick": self.portraits.key(), "portrait_last": self.portraits.last, "portraits": self.portraits.faces.state(),
@@ -1026,12 +1093,30 @@ impl Screen<GameCx> for Gallery {
     /// The sample game goes with the gallery, only while it is still the one in play (a game started or loaded from an
     /// opened screen replaces it before the gallery is left).
     fn leave(&mut self, cx: &mut Cx) {
+        self.kit.leave_theme();
         if let Some(debug) = self.own_game.take() {
             if cx.game.as_ref().is_some_and(|g| g.sample) {
                 cx.game = None;
                 cx.debug = debug;
                 cx.log.clear();
             }
+        }
+    }
+
+    /// The Kit widgets entry takes its Panes page's keys (hotkeys, PageUp / PageDown, the ask's Enter, y and n).
+    fn key(&mut self, _cx: &mut Cx, k: Key) {
+        if ENTRIES[self.entry].0 == "kit" {
+            self.kit.key(k);
+        }
+        if ENTRIES[self.entry].0 == "frame_tuner" {
+            self.kit.tuner.key(k);
+        }
+    }
+
+    /// Esc answers the Panes page's ask (No) there; anywhere else it leaves the gallery.
+    fn escape(&mut self, cx: &mut Cx) {
+        if !(ENTRIES[self.entry].0 == "kit" && self.kit.key(Key::Esc)) && !(ENTRIES[self.entry].0 == "frame_tuner" && self.kit.tuner.key(Key::Esc)) {
+            self.back(cx);
         }
     }
 
@@ -1075,6 +1160,46 @@ impl Screen<GameCx> for Gallery {
 mod tests {
     use super::*;
 
+    /// LOOK1-M1: the real Gallery forwards keys to the Kit widgets' Panes page: the menu column's hotkey, the tab rail's
+    /// PageUp / PageDown, the ask's y and Esc (Esc answers there and leaves the gallery elsewhere); another entry takes none.
+    #[test]
+    fn the_gallery_forwards_keys_to_the_panes_page() {
+        use crate::hud::hud_tests::{game_cx, gfx};
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut gallery = Gallery::new();
+        let at = |id: &str| ENTRIES.iter().position(|e| e.0 == id).unwrap();
+        gallery.act(&mut cx, GAct::Entry(at("kit")));
+        let page = aegis_ui::specimens::PAGES.iter().position(|p| *p == "Panes").expect("a Panes page");
+        let pane = |name: &str| aegis_ui::specimens::PANES.iter().position(|p| *p == name).unwrap_or_else(|| panic!("a pane {name}"));
+        let open = |gallery: &mut Gallery, cx: &mut Cx, g: &mut Gfx, id: String| {
+            gallery.draw(cx, g, (-500, -500), true);
+            gallery.click_id(cx, &id).unwrap();
+            gallery.draw(cx, g, (-500, -500), true);
+        };
+        let last = |gallery: &Gallery, cx: &Cx| gallery.state(cx)["kit_last"].as_str().unwrap_or("").to_string();
+        open(&mut gallery, &mut cx, &mut g, format!("kit.page.{page}"));
+        open(&mut gallery, &mut cx, &mut g, format!("kit.pane.{}", pane("Menu column")));
+        gallery.key(&mut cx, Key::Char('q'));
+        assert_eq!(last(&gallery, &cx), "pressed quit", "the menu column's hotkey");
+        open(&mut gallery, &mut cx, &mut g, format!("kit.pane.{}", pane("Tab rail")));
+        gallery.key(&mut cx, Key::PageDown);
+        assert!(last(&gallery, &cx).starts_with("rail tab "), "PageDown: {}", last(&gallery, &cx));
+        open(&mut gallery, &mut cx, &mut g, format!("kit.pane.{}", pane("Ask")));
+        gallery.key(&mut cx, Key::Char('y'));
+        assert_eq!(last(&gallery, &cx), "pressed yes");
+        gallery.escape(&mut cx);
+        assert_eq!(last(&gallery, &cx), "pressed no");
+        assert!(cx.nav.is_empty(), "Esc answered the ask and stayed");
+        open(&mut gallery, &mut cx, &mut g, format!("kit.pane.{}", pane("Backdrop")));
+        gallery.escape(&mut cx);
+        assert!(matches!(cx.nav.as_slice(), [Nav::Pop]), "no key to take: Esc leaves");
+        cx.nav.clear();
+        gallery.act(&mut cx, GAct::Entry(at("pip_gauge")));
+        let before = last(&gallery, &cx);
+        gallery.key(&mut cx, Key::Char('q'));
+        assert_eq!(last(&gallery, &cx), before, "another entry takes no key");
+    }
+
     /// Every battle panel entry names a panel the battle screen records, and every recorded panel has an entry.
     #[test]
     fn the_battle_panel_entries_are_the_battle_screens_panels() {
@@ -1113,6 +1238,32 @@ mod tests {
         assert!(st["talk"]["dialogue"].as_str().is_some_and(|d| !d.is_empty()), "a talk is open: {}", st["message"]);
         let ws = sh.screen.widgets();
         assert!(["dialogue", "talk.backdrop"].iter().all(|id| ws.iter().any(|w| w["id"] == *id)), "the box over the battle");
+    }
+
+    /// INPUT1-AP: the Pip gauge entry (Kit, no game needed) draws every sample state of the engine's gauge with its
+    /// reading and hover card, Open does nothing, and its texts fit the pane at the four text sizes.
+    #[test]
+    fn the_pip_gauge_entry_shows_every_sample_state() {
+        use crate::hud::hud_tests::{frame, game_cx, gfx};
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut gallery = Gallery::new();
+        let i = ENTRIES.iter().position(|e| e.0 == "pip_gauge").expect("a pip gauge entry");
+        assert_eq!(ENTRIES[i].2, "Kit");
+        gallery.act(&mut cx, GAct::Entry(i));
+        let samples = aegis_ui::pips::samples();
+        for &(_, scale) in aegis_ui::screen::TEXT_SIZES.iter() {
+            let recs: Vec<aegis_ui::painter::TextRec> = frame(&mut gallery, &mut cx, &mut g, scale as f32).into_iter().filter(|r| r.x >= 110.0).collect();
+            let ws = gallery.widgets();
+            for (k, (_, gauge)) in samples.iter().enumerate() {
+                let w = ws.iter().find(|w| w["id"] == format!("gallery.pip.{k}")).unwrap_or_else(|| panic!("sample {k} at text size {scale}"));
+                assert_eq!(w["text"], json!(gauge.reading()));
+            }
+            let v = aegis_ui::text_audit::issues(&recs, W as f32, aegis_ui::ui::H as f32, &[]);
+            assert_eq!((v["counts"]["edge"].clone(), v["counts"]["overlap"].clone()), (json!(0), json!(0)), "text size {scale}: {v}");
+        }
+        gallery.act(&mut cx, GAct::Open);
+        assert!(cx.nav.is_empty(), "nothing to open");
+        assert_eq!(gallery.state(&cx)["entry"], json!("pip_gauge"));
     }
 
     /// STORYUI1-E: the vignette entry previews the engine's sample reel (it plays on as the gallery ticks) and Open
@@ -1231,8 +1382,21 @@ mod tests {
             row(json!({"id": "shaken", "trigger": "derived", "stat": "composure", "drop_pct": 25, "effect": "tint", "intensity": 0.5, "color": "#06b6d4"})),
             row(json!({"id": "stealthed", "trigger": "status", "status": "stealth", "effect": "fade", "intensity": 0.6})),
         ];
-        let cue_ids: Vec<String> = rows.iter().map(|r| format!("gallery.portraits.cue.{}", r.id)).collect();
-        std::sync::Arc::get_mut(&mut cx.app.data).expect("the test owns the data").edit_cat(|c| c.portrait_cues = rows);
+        let mut cue_ids: Vec<String> = rows.iter().map(|r| format!("gallery.portraits.cue.{}", r.id)).collect();
+        // PORTRAITFX1-EX: the three expression-effect rows, one box each
+        let fx_rows: Vec<emberwake_data::PortraitExpression> = [
+            json!({"id": "hurt", "tint": "#e11d48", "tint_strength": 0.8, "tint_ms": 240, "shake_px": 2, "shake_ms": 220}),
+            json!({"id": "angry", "tint": "#e11d48", "tint_strength": 0.35, "mark": "vein", "mark_color": "#e11d48", "mark_pulse_ms": 900}),
+            json!({"id": "afraid", "tint": "#06b6d4", "tint_strength": 0.4, "mark": "sweat", "mark_x": 0.12, "mark_y": 0.22}),
+        ]
+        .iter()
+        .map(crate::portraits::tests::ex_row_of)
+        .collect();
+        cue_ids.extend(fx_rows.iter().map(|r| format!("gallery.portraits.fx.{}", r.id)));
+        std::sync::Arc::get_mut(&mut cx.app.data).expect("the test owns the data").edit_cat(|c| {
+            c.portrait_cues = rows;
+            c.portrait_expressions = fx_rows;
+        });
         let mut gallery = Gallery::new();
         let i = ENTRIES.iter().position(|e| e.0 == "portraits").expect("a portraits entry");
         gallery.act(&mut cx, GAct::Entry(i));
@@ -1276,5 +1440,92 @@ mod tests {
         gallery.draw(&mut cx, &mut g, (-500, -500), true);
         assert_eq!(boxed(&gallery), Some(false), "and released");
         assert_eq!(gallery.state(&cx)["portrait_pick"], json!(key));
+        // PORTRAITFX1-EX: an expression-effect box holds its expression on the portrait; a second click releases it
+        gallery.click_id(&mut cx, "gallery.portraits.fx.angry").expect("the angry box");
+        gallery.draw(&mut cx, &mut g, (-500, -500), true);
+        let now = gallery.portraits.faces.now();
+        assert_eq!(gallery.portraits.faces.get(&key).unwrap().expression(now), "angry");
+        assert!(gallery.portraits.faces.get(&key).unwrap().expression_fx(now).is_some(), "its row reaches the portrait");
+        gallery.click_id(&mut cx, "gallery.portraits.fx.angry").expect("again");
+        gallery.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_eq!(gallery.portraits.faces.get(&key).unwrap().expression(gallery.portraits.faces.now()), "");
+    }
+
+    /// INPUT1 TV7: the Kit group's Timeline pane draws the engine widget alone on its sample round with no game and no
+    /// battle (the widgets are the sample's own: a masked track with its marks, a link, every track's label); a block
+    /// or track click selects it and again unselects; its texts read clean at the four text sizes (a cut one is
+    /// whole on its hover card).
+    #[test]
+    fn the_timeline_pane_draws_the_engine_widget_with_no_session() {
+        use crate::hud::hud_tests::{frame, gfx};
+        use crate::story::tests::{data, story_cx};
+        let (mut cx, mut g) = (story_cx(data()), gfx());
+        let mut gallery = Gallery::new();
+        let i = ENTRIES.iter().position(|e| e.0 == "timeline_pane").expect("a timeline pane entry");
+        assert_eq!(ENTRIES[i].2, "Kit");
+        gallery.act(&mut cx, GAct::Entry(i));
+        let sample = aegis_ui::timeline::sample();
+        for &(_, scale) in aegis_ui::screen::TEXT_SIZES.iter() {
+            let recs: Vec<aegis_ui::painter::TextRec> = frame(&mut gallery, &mut cx, &mut g, scale as f32).into_iter().filter(|r| r.x >= 110.0).collect();
+            let ws = gallery.widgets();
+            let ids: Vec<String> = ws.iter().filter_map(|w| w["id"].as_str()).filter(|id| id.starts_with("gallery.pane.")).map(str::to_string).collect();
+            for t in sample.sections.iter().flat_map(|s| &s.tracks).take(12) {
+                assert!(ids.contains(&format!("gallery.pane.track.{}", t.key)), "{} at {scale}", t.key);
+            }
+            assert!(ids.contains(&"gallery.pane.track.e2.masked".to_string()) && ids.contains(&"gallery.pane.mark.e2.i0".to_string()) && ids.contains(&"gallery.pane.link.p1.strike.follow".to_string()));
+            let boxes: Vec<(String, f32, f32, f32, f32)> = ws
+                .iter()
+                .filter(|w| w["id"].as_str().is_some_and(|i| i.starts_with("gallery.pane.")))
+                .map(|w| {
+                    let (x, y, ww, hh) = crate::hud::hud_tests::rect(w);
+                    (w["id"].as_str().unwrap_or("").to_string(), x as f32, y as f32, ww as f32, hh as f32)
+                })
+                .collect();
+            let v = aegis_ui::text_audit::issues(&recs, W as f32, aegis_ui::ui::H as f32, &boxes);
+            assert_eq!((v["counts"]["spill"].clone(), v["counts"]["edge"].clone(), v["counts"]["overlap"].clone()), (json!(0), json!(0), json!(0)), "text size {scale}: {v}");
+            for c in v["cut"].as_array().unwrap() {
+                let full = c["text"].as_str().unwrap();
+                let (x, y) = (c["at"][0].as_f64().unwrap() as i64 + 1, c["at"][1].as_f64().unwrap() as i64 + 2);
+                // the widget's own texts (the entry's line above it is the gallery's, whole on the entry's card)
+                let on = |w: &&Value| {
+                    let (rx, ry, rw, rh) = crate::hud::hud_tests::rect(w);
+                    w["id"].as_str().is_some_and(|i| i.starts_with("gallery.pane.")) && x >= rx && x < rx + rw && y >= ry && y < ry + rh
+                };
+                if !ws.iter().any(|w| on(&w)) {
+                    continue;
+                }
+                let held = ws.iter().filter(on).any(|w| w["text"] == json!(full) || w["tip"].to_string().contains(full));
+                assert!(held, "text size {scale}: {full:?} cut with no whole text on hover");
+            }
+        }
+        assert_eq!(gallery.pane, (sample.selected_block, sample.selected_track.clone()), "the sample's selection to start");
+        gallery.click_id(&mut cx, "gallery.pane.block.5").unwrap();
+        gallery.click_id(&mut cx, "gallery.pane.track.e1").unwrap();
+        assert_eq!(gallery.pane, (Some(5), Some("e1".to_string())));
+        gallery.click_id(&mut cx, "gallery.pane.block.5").unwrap();
+        assert_eq!(gallery.pane.0, None, "again: unselected");
+        assert!(!cx.has_game(), "no game needed");
+    }
+
+    /// TV7: the Battle panels' Battle timeline draws the battle screen's timeline view of its battle (the shared
+    /// builder): a track widget for every track `battle_timeline` builds, a masked note for every masked one.
+    #[test]
+    fn the_battle_timeline_entry_draws_the_shared_builders_tracks() {
+        use crate::hud::hud_tests::{game_cx, gfx};
+        let (mut cx, mut g) = (game_cx(), gfx());
+        cx.encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+        let mut gallery = Gallery::new();
+        let i = ENTRIES.iter().position(|e| e.0 == "timeline").expect("the timeline entry");
+        gallery.act(&mut cx, GAct::Entry(i));
+        gallery.draw(&mut cx, &mut g, (-500, -500), true);
+        let d = gallery.demo.as_ref().unwrap();
+        let s = d.host.session.as_ref().expect("the demo battle");
+        let t = battle_timeline(&cx, s, d.viewed, d.reveal, d.block, d.track.clone());
+        assert_eq!(t.sections.iter().map(|x| x.title.as_str()).collect::<Vec<_>>(), ["Party", "Enemies"]);
+        let ids: Vec<String> = gallery.widgets().iter().filter_map(|w| w["id"].as_str().map(str::to_string)).collect();
+        for tr in t.sections.iter().flat_map(|x| &x.tracks) {
+            assert!(ids.contains(&format!("gallery.timeline.track.{}", tr.key)), "{}", tr.key);
+            assert_eq!(ids.contains(&format!("gallery.timeline.track.{}.masked", tr.key)), tr.masked.is_some(), "{}", tr.key);
+        }
     }
 }

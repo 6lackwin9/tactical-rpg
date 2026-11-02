@@ -16,10 +16,13 @@
 					4
 				]
 			],
+			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 6,
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"mara_voss",
@@ -30,6 +33,7 @@
 				"vex_cutpurse"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "hold",
@@ -38,6 +42,9 @@
 			"objective_unit": "",
 			"objective_count": 1,
 			"objective_text": "Hold the Courtyard: keep the ring for 3 rounds, or drive them off.",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": false,
 			"morale_break": 50,
@@ -55,6 +62,7 @@
 				"once": true
 			},
 			"guests": [],
+			"party_min": 0,
 			"protect": [],
 			"tags": []
 		},
@@ -72,10 +80,13 @@
 					4
 				]
 			],
+			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 6,
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"mara_voss",
@@ -107,6 +118,7 @@
 					"pause_autoplay": false
 				}
 			],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "rout",
@@ -115,6 +127,9 @@
 			"objective_unit": "",
 			"objective_count": 1,
 			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": false,
 			"morale_break": 50,
@@ -129,6 +144,7 @@
 			"key_loot": [],
 			"objective_reward": {},
 			"guests": [],
+			"party_min": 0,
 			"protect": [],
 			"tags": []
 		},
@@ -146,10 +162,13 @@
 					4
 				]
 			],
+			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 6,
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"mara_voss",
@@ -160,6 +179,7 @@
 				"ash_archer"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "rout",
@@ -168,6 +188,9 @@
 			"objective_unit": "",
 			"objective_count": 1,
 			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": true,
 			"morale_break": 50,
@@ -182,6 +205,7 @@
 			"key_loot": [],
 			"objective_reward": {},
 			"guests": [],
+			"party_min": 0,
 			"protect": [],
 			"tags": []
 		},
@@ -199,10 +223,13 @@
 					4
 				]
 			],
+			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 6,
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"mara_voss",
@@ -214,6 +241,7 @@
 				"ash_shaman"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "rout",
@@ -222,6 +250,9 @@
 			"objective_unit": "",
 			"objective_count": 1,
 			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": true,
 			"morale_break": 50,
@@ -236,6 +267,7 @@
 			"key_loot": [],
 			"objective_reward": {},
 			"guests": [],
+			"party_min": 0,
 			"protect": [],
 			"tags": []
 		},
@@ -253,10 +285,13 @@
 					4
 				]
 			],
+			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 6,
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"mara_voss",
@@ -267,6 +302,7 @@
 				"ash_berserker"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "rout",
@@ -275,6 +311,9 @@
 			"objective_unit": "",
 			"objective_count": 1,
 			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": false,
 			"morale_break": 50,
@@ -294,6 +333,7 @@
 			],
 			"objective_reward": {},
 			"guests": [],
+			"party_min": 0,
 			"protect": [],
 			"tags": []
 		},
@@ -311,10 +351,13 @@
 					4
 				]
 			],
+			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 8,
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"mara_voss",
@@ -389,6 +432,7 @@
 					"pause_autoplay": true
 				}
 			],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "slay",
@@ -397,6 +441,9 @@
 			"objective_unit": "grakka_ashmaw",
 			"objective_count": 1,
 			"objective_text": "Break Grakka Ashmaw; the Horde scatters when he falls.",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": false,
 			"morale_break": 50,
@@ -411,6 +458,7 @@
 			"key_loot": [],
 			"objective_reward": {},
 			"guests": [],
+			"party_min": 0,
 			"protect": [],
 			"tags": []
 		},
@@ -428,10 +476,13 @@
 					4
 				]
 			],
+			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 8,
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"mara_voss",
@@ -500,6 +551,7 @@
 					"pause_autoplay": false
 				}
 			],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "slay",
@@ -508,6 +560,9 @@
 			"objective_unit": "grakka_ashmaw",
 			"objective_count": 1,
 			"objective_text": "Break Grakka Ashmaw; the Horde scatters when he falls.",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": false,
 			"morale_break": 50,
@@ -522,6 +577,7 @@
 			"key_loot": [],
 			"objective_reward": {},
 			"guests": [],
+			"party_min": 0,
 			"protect": [],
 			"tags": []
 		},
@@ -539,10 +595,13 @@
 					4
 				]
 			],
+			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 6,
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"mara_voss",
@@ -552,6 +611,7 @@
 				"ash_brawler"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "rout",
@@ -560,6 +620,9 @@
 			"objective_unit": "",
 			"objective_count": 1,
 			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": false,
 			"morale_break": 50,
@@ -574,6 +637,7 @@
 			"key_loot": [],
 			"objective_reward": {},
 			"guests": [],
+			"party_min": 0,
 			"protect": [],
 			"tags": []
 		},
@@ -591,10 +655,13 @@
 					4
 				]
 			],
+			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 6,
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"mara_voss",
@@ -606,6 +673,7 @@
 				"ash_shaman"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "rout",
@@ -614,6 +682,9 @@
 			"objective_unit": "",
 			"objective_count": 1,
 			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "ambush",
 			"morale": false,
 			"morale_break": 50,
@@ -630,6 +701,7 @@
 			"guests": [
 				"wenn_tallow"
 			],
+			"party_min": 0,
 			"protect": [
 				"wenn_tallow"
 			],

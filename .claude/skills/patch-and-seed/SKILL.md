@@ -22,4 +22,4 @@ description: Safe editing recipe for the Aegis project. Use when changing engine
 
 ## Tests after data changes
 
-- Numbers in tests derive from rules; print real values (`aegis battle <encounter> seed=N log`, `aegis serve` requests) before changing an expectation. The Godot parity suites read `legacy/data` and the frozen traces, so a data edit in `games/emberwake/data/` never changes them; `tests/store.rs` checks the live `games/emberwake/data/` loads and its references resolve.
+- Numbers in tests derive from rules; print real values (`aegis battle <encounter> seed=N log`, `aegis serve` requests) before changing an expectation. The golden suites read frozen fixtures, so a data edit in `games/emberwake/data/` never changes them; `tests/store.rs` checks the live `games/emberwake/data/` loads and its references resolve.

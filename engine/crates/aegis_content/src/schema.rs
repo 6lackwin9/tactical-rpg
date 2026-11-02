@@ -167,13 +167,19 @@ pub fn to_storage(schema: &Value, section: &str, kind: &str, full: &Dict, omit: 
     out
 }
 
-/// WorldSchema.to_storage of a raw entry (normalized first; an empty `override` is left out).
+/// WorldSchema.to_storage of a raw entry (normalized first; an empty `override` and a default `omit_default` field are
+/// left out).
 pub fn world_storage(schema: &Value, kind: &str, entry: &Dict) -> Dict {
     let full = normalize(fields(schema, "world", kind), entry, true);
     let mut out = Dict::new();
     for f in fields(schema, "world", kind) {
         let key = json::s(json::dict(f), "key");
         if key == "override" && sget(&full, &key, "").is_empty() {
+            continue;
+        }
+        // an engine-only field (`omit_default`, LOOK1-K) is left out while it holds its default, so
+        // data written before the field existed re-saves byte for byte
+        if json::b(json::dict(f), "omit_default", false) && json::get(&full, &key) == json::get(json::dict(f), "default") {
             continue;
         }
         out.insert(key.clone(), json::get(&full, &key).clone());

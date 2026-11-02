@@ -337,14 +337,41 @@ def warrior_buckler(u):
     return A, T
 
 
+# DASH1: what the hands carry through rig.dash, per grip key (class, or <class>/<grip>): the weapon swept back and low, a
+# shield or buckler kept forward, the brawler's guard fist up
+DASH_CARRY = {
+    'warrior': dict(hand_f=(-3.0, 7.5), hand_b=(6.5, 3.0), wa=255),
+    'warrior/buckler': dict(hand_f=(-3.0, 7.5), hand_b=(7.0, 3.5), wa=255),
+    'warrior/2h': dict(hand_f=(-2.0, 7.0), wa=-105, grip2=rig.GRIP2),
+    'ranger': dict(hand_f=(-2.5, 7.5), hand_b=(3.0, 6.0), bow_a=70),
+    'brawler': dict(hand_f=(6.5, 1.5), hand_b=(-3.0, 7.0), fist_f=True, fist_b=True),
+    'priest': dict(hand_f=(-2.5, 7.0), hand_b=(3.0, 6.5), wa=250),
+    'rogue': dict(hand_f=(-3.0, 6.5), hand_b=(-5.0, 7.0), wa=250, wb=250),
+    'mage': dict(hand_f=(-2.5, 7.0), hand_b=(3.0, 6.5), wa=250),
+}
+
+
+def with_dash(name, u, clip_set):
+    """`clip_set` (frames, ms) with the side `dash` row just before its wind-up rows (DASH1; they stay last, WINDUP1 K7); a
+    class without a carry: unchanged."""
+    A, T = clip_set
+    carry = DASH_CARRY.get('%s/%s' % (name, u['grip']) if u.get('grip') else name)
+    if carry:
+        A['dash'], T['dash'] = rig.dash(u, **carry)
+        for n in rig.WINDUP_ROWS:
+            if n in A:
+                A[n] = A.pop(n); T[n] = T.pop(n)
+    return A, T
+
+
 def clips(name, variant='', unit=None):
     # unit: a body variant of class `name` (tools/sprites/variants.py: goblins, named bodies); default the class's own
     u = unit or UNITS[name]; A, T = {}, {}
     def put(k, v): A[k], T[k] = v
     if name == 'warrior' and u.get('grip') == '2h':  # WAR2H1: the two-handed look (the class base keeps 1H + shield)
-        return warrior_2h(u)
+        return with_dash(name, u, warrior_2h(u))
     if name == 'warrior' and u.get('grip') == 'buckler':  # WAR2H1: one hand + buckler
-        return warrior_buckler(u)
+        return with_dash(name, u, warrior_buckler(u))
     if name == 'warrior':  # one-handed sword, kite shield on the far arm
         # variant: '' = current, 'A' = shield carried lower, 'B' = hunched behind the shield
         def wp(**kw):
@@ -526,7 +553,7 @@ def clips(name, variant='', unit=None):
         W, WT = rig.windup_rows(lambda kw: pose(u, **kw), rig.idle_keys(**W1_READY)[0], dict(W1_HOLDS, windup=warrior_kw('A', W1_DRAWN)),
                                 W1_STAGGER, W1_DAZED)
         A.update(W); T.update(WT)
-    return A, T
+    return with_dash(name, u, (A, T))
 
 
 if __name__ == "__main__":

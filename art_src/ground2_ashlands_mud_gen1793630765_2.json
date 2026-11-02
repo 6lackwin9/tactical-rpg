@@ -1,0 +1,28 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "ground2_ashlands_mud",
+  "prompt": "A top-down seamless ground texture for a dark fantasy RPG map, as pixel art drawn at 128 x 128 pixels scaled up (visible square pixels, no anti-aliasing). Material: dark wet mud with small even pits and a dull sheen, no puddles. Seen from straight above, no perspective, no horizon. Even light across the image, no vignette. It wraps seamlessly on all four sides. No footprints, no long lines, no large stains or dark patches, no text. Muted colours around #231d18.",
+  "reference": null,
+  "prompts_file": null,
+  "time": "2026-11-02T14:17:02Z",
+  "n": 2,
+  "references": [],
+  "source": "gemini web app task",
+  "via": "gemini_web",
+  "request": "ground2_mud_q1793629022",
+  "metadata": {
+    "asset_id": "ground2_ashlands_mud",
+    "task": "regionground1a1",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "set": "ashlands",
+      "ground": "mud"
+    }
+  },
+  "mark_cleared": true,
+  "set": "ashlands",
+  "ground": "mud",
+  "notes": "Verified resolution and aspect ratio within 3% tolerance."
+}

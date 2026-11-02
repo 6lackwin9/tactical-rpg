@@ -1,0 +1,13 @@
+# REGIONGROUND1.md section 6, after mock_a_outdoor: x, then y, inclusive; later over earlier.
+size 40 22
+default ash
+flagstone 4-13 2-8
+paved_road 17-21 3-10
+dirt_road 19-22 11-21
+dirt_road 13-18 13-14
+packed_dirt 24-36 11-18
+mud 3-12 11-18
+water 5-10 13-16
+scorched 27-34 3-7
+scrub 1-2 19-21
+scrub 37-39 17-21

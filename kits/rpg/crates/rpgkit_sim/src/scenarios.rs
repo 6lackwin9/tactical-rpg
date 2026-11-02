@@ -175,7 +175,7 @@ pub fn encounter(r: &mut Runner, id: &str, level: i32, elevel: i32, elevel_set: 
     }
     let entry = r.d.entry("encounters", id).clone();
     let mut base = Map::new();
-    for key in ["zone", "arena", "exits", "total_blocks", "unit_ap", "ap_regen"] {
+    for key in ["zone", "arena", "exits", "total_blocks", "unit_ap", "start_ap", "ap_regen"] {
         if let Some(v) = entry.get(key) {
             base.insert(key.into(), v.clone());
         }

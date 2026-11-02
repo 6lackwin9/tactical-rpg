@@ -1,13 +1,13 @@
 //! Ruleset rows and the world field (RULESET1-R, docs/specs/RULESET1_TASKS.md 1.1-1.2): the schema lists what the code
-//! owns (ruleset ids, row ids, the rule register, the intents); a valid row loads and reads as its numbers, a row
-//! without them reads the schema defaults; every rule of 1.2 broken alone is one load error naming its field; the
-//! writer takes the kind; a world naming a ruleset without its row, or an unknown ruleset or flag, is a content error.
-//! Scratch data folders only.
+//! owns (the rule register, the intents) and offers the ruleset rows for the ids (CLN-44: open ids, classic a row too);
+//! a valid row loads and reads as its numbers, a row without them reads the schema defaults; every rule of 1.2 broken
+//! alone is one load error naming its field; the writer takes the kind; a world naming a ruleset without its row, or a
+//! bad flag, is a content error. Scratch data folders only.
 
 use aegis_content::schema::{fields, normalize};
 use aegis_core::json::{self, gstr, Dict};
 use rpgkit_content::{check, source, store};
-use rpgkit_rules::ruleset::{self, Numbers, Ruleset, INTENTS, REGISTER, ROW_IDS, RULESETS};
+use rpgkit_rules::ruleset::{self, Numbers, Ruleset, INTENTS, REGISTER};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -71,24 +71,33 @@ fn options(section: &str, kind: &str, key: &str) -> Vec<String> {
     json::aget(f, "options").iter().map(gstr).collect()
 }
 
+/// A field's type and `options_from`.
+fn field(section: &str, kind: &str, key: &str) -> (String, String) {
+    let f = fields(source::schema(), section, kind).iter().map(json::dict).find(|f| json::s(f, "key") == key).unwrap_or_else(|| panic!("{section}.{kind}.{key}"));
+    (json::s(f, "type"), json::s(f, "options_from"))
+}
+
 fn strs(list: &[&str]) -> Vec<String> {
     list.iter().map(|s| s.to_string()).collect()
 }
 
 #[test]
 fn the_schema_lists_what_the_code_owns() {
-    assert_eq!(options("content", "derived_stats", "rulesets"), strs(&RULESETS), "a derived row's rulesets");
-    let mut world = vec![String::new()];
-    world.extend(strs(&RULESETS));
-    assert_eq!(options("world", "world", "ruleset"), world, "a world's ruleset: empty (inherited) or a ruleset id");
-    assert_eq!(options("content", ruleset::KIND, "id"), strs(&ROW_IDS), "row ids: classic has no row");
+    // CLN-44: no closed id list: the fields offer the ruleset rows (a world's also "" = inherited)
+    assert_eq!(field("content", "derived_stats", "rulesets"), ("strings".into(), "rulesets".into()), "a derived row's rulesets");
+    assert_eq!(field("content", "portrait_cues", "rulesets"), ("strings".into(), "rulesets".into()), "a portrait cue's rulesets");
+    assert_eq!(field("world", "world", "ruleset"), ("enum".into(), "rulesets_inherit".into()), "a world's ruleset: empty (inherited) or a row id");
+    assert_eq!(field("content", ruleset::KIND, "id"), ("id".into(), String::new()), "row ids are open");
+    for (section, kind, key) in [("content", "derived_stats", "rulesets"), ("content", "portrait_cues", "rulesets"), ("world", "world", "ruleset"), ("content", ruleset::KIND, "id")] {
+        assert_eq!(options(section, kind, key), Vec::<String>::new(), "{kind}.{key} lists no ids");
+    }
     assert_eq!(options("content", ruleset::KIND, "rules"), REGISTER.iter().map(|r| r.id.to_string()).collect::<Vec<_>>(), "the rule register");
     assert_eq!(options("content", ruleset::KIND, "intents"), strs(&INTENTS));
 }
 
 /// INPUT1 1.7 (MR9, MR10): the schema lists the code's `melee_diagonal` and `flank_protected_cost` values; a row reads
-/// them (classic: none and full); `maneuver` reads as none without `round_intent`; the cost pays as MR9 says (4 AP:
-/// full 4, half 2, fixed 1, none 0); the two soft problems are warnings.
+/// them (classic: none and full); CLN-45: `maneuver` reads as set without `round_intent` too (no warning); the cost
+/// pays as MR9 says (4 AP: full 4, half 2, fixed 1, none 0); the soft problem is a warning.
 #[test]
 fn diagonal_melee_and_the_protected_flank_cost_read_and_warn() {
     use rpgkit_rules::ruleset::{FlankCost, MeleeDiagonal};
@@ -105,15 +114,15 @@ fn diagonal_melee_and_the_protected_flank_cost_read_and_warn() {
     assert_eq!((r.numbers.melee_diagonal, r.numbers.flank_protected), (MeleeDiagonal::Maneuver, FlankCost::Full), "the defaults");
     assert_eq!(r.melee_diagonal(), MeleeDiagonal::Maneuver);
     let c = Ruleset::classic();
-    assert_eq!((c.melee_diagonal(), c.numbers.flank_protected), (MeleeDiagonal::None, FlankCost::Full), "classic has no row");
+    assert_eq!((c.melee_diagonal(), c.numbers.flank_protected), (MeleeDiagonal::None, FlankCost::Full), "the built-in classic values");
     let r = Ruleset::from_row(&row(json!({"melee_diagonal": "all", "flank_protected_cost": "fixed", "flank_protected_ap": 2})));
     assert_eq!((r.melee_diagonal(), r.numbers.flank_protected), (MeleeDiagonal::All, FlankCost::Fixed(2)));
     let no_intent = Ruleset::from_row(&row(json!({"rules": ["poise"]})));
-    assert_eq!(no_intent.melee_diagonal(), MeleeDiagonal::None, "maneuver without round_intent reads as none");
+    assert_eq!(no_intent.melee_diagonal(), MeleeDiagonal::Maneuver, "CLN-45: maneuver without round_intent reads as set");
     let pays: Vec<i32> = [FlankCost::Full, FlankCost::Half, FlankCost::Fixed(FlankCost::FIXED_AP), FlankCost::None].iter().map(|f| f.pays(4)).collect();
     assert_eq!(pays, [4, 2, 1, 0]);
     assert_eq!(check::ruleset::warnings(&row(json!({}))), Vec::<String>::new());
-    assert_eq!(check::ruleset::warnings(&row(json!({"rules": ["poise"]}))), ["melee_diagonal maneuver needs round_intent (reads as none)"]);
+    assert_eq!(check::ruleset::warnings(&row(json!({"rules": ["poise"]}))), Vec::<String>::new(), "CLN-45: no coupling, no warning");
     assert_eq!(check::ruleset::warnings(&row(json!({"flank_protected_ap": 3}))), ["flank_protected_ap is read only with fixed"]);
     assert_eq!(check::ruleset::warnings(&row(json!({"flank_protected_cost": "fixed", "flank_protected_ap": 3}))), Vec::<String>::new());
 }
@@ -156,14 +165,16 @@ fn without_a_file_there_is_no_row_and_timeline_cannot_be_had() {
     let cat = rpgkit_data::Catalog::from_value(&src.catalog);
     assert!(Ruleset::of(&cat, "timeline").is_err());
     assert_eq!(Ruleset::of_or_classic(&cat, "timeline"), Ruleset::classic());
-    assert!(Ruleset::of(&cat, "chess").unwrap_err().contains("unknown ruleset 'chess'"));
+    assert!(Ruleset::of(&cat, "chess").unwrap_err().contains("ruleset 'chess' has no row in rulesets"));
+    // CLN-44: classic without its row: the built-in values (with a load note), not a refusal
+    assert_eq!(Ruleset::of(&cat, "classic").unwrap(), Ruleset::classic());
     drop_scratch(&data);
 }
 
 #[test]
 fn each_broken_rule_is_one_error_naming_its_field() {
     let cases: [(&str, Value, &str); 11] = [
-        ("id", json!("classic"), "ID: 'classic' is not one of timeline"),
+        ("id", json!("Classic Rules"), "ID 'Classic Rules' must be lowercase snake_case"),
         ("name", json!(""), "Name is required."),
         ("name", json!("A name that runs past the limit"), "Name is 31 characters (max 24)."),
         ("rules", json!(["round_intent", "chains"]), "Rules: 'chains' is not one of"),
@@ -268,9 +279,14 @@ fn the_writer_takes_the_kind_and_refuses_a_row_that_adds_a_problem() {
     up(good_row()).unwrap();
     let text = fs::read_to_string(&file).unwrap();
     assert_eq!(store::resave_text(&data, None, ruleset::KIND).unwrap(), text, "a re-save without changes is byte-identical");
-    let unknown = up(json!({"id": "freeform", "name": "Freeform"})).err().expect("the write is refused");
-    assert!(unknown.iter().any(|e| e.contains("'freeform' is not one of timeline")), "{unknown:?}");
+    let unknown = up(json!({"id": "Free Form", "name": "Freeform"})).err().expect("the write is refused");
+    assert!(unknown.iter().any(|e| e.contains("'Free Form' must be lowercase snake_case")), "{unknown:?}");
     assert_eq!(fs::read_to_string(&file).unwrap(), text, "a refused write puts the file back");
+    // CLN-44: the ids are open: a third ruleset is data
+    up(json!({"id": "freeform", "name": "Freeform"})).unwrap();
+    let cat = rpgkit_data::Catalog::from_value(&source::load(&data).catalog);
+    assert_eq!(Ruleset::ids(&cat), strs(&["timeline", "freeform"]));
+    assert_eq!(Ruleset::of(&cat, "freeform").map(|r| (r.id, r.rules.len())), Ok(("freeform".to_string(), 0)));
     drop_scratch(&data);
 }
 
@@ -290,12 +306,101 @@ fn a_world_names_a_known_ruleset_with_its_row_and_a_flag_key() {
     let need = "Ruleset 'timeline' needs its row in rulesets (data/catalog/rulesets.json).";
     assert_eq!(world_problems(&data, "vale"), [need], "a timeline world without the row");
     assert_eq!(world_problems(&data, "glen"), Vec::<String>::new(), "the world that inherits is fixed with its parent");
-    assert_eq!(world_problems(&data, "fen"), Vec::<String>::new(), "classic needs no row; a dotted flag key");
+    // CLN-44: classic is a row too (the content check against the rows; battles fall back with a load note)
+    assert_eq!(world_problems(&data, "fen"), ["Ruleset 'classic' needs its row in rulesets (data/catalog/rulesets.json)."], "classic without its row; a dotted flag key");
     assert_eq!(
         world_problems(&data, "moor"),
-        ["Ruleset: 'chess' is not one of classic, timeline (or empty: inherited).", "Plan reveal flag 'Moor Spies' must be a flag key (a-z, 0-9, _ and .)."]
+        ["Ruleset 'chess' needs its row in rulesets (data/catalog/rulesets.json).", "Plan reveal flag 'Moor Spies' must be a flag key (a-z, 0-9, _ and .)."]
     );
-    write_kind(&data, ruleset::KIND, 1, json!([good_row()]));
+    write_kind(&data, ruleset::KIND, 1, json!([good_row(), {"id": "classic", "name": "Classic", "melee_diagonal": "none"}]));
     assert_eq!(world_problems(&data, "vale"), Vec::<String>::new(), "with the row");
+    assert_eq!(world_problems(&data, "fen"), Vec::<String>::new(), "with the classic row");
+    drop_scratch(&data);
+}
+
+/// CLN-44: classic is a row like any other: without it the content check warns (its battles play the built-in classic
+/// values); a row with classic's values reads as them; a derived stat or portrait cue naming a ruleset without its row is
+/// a content error, and with the row it is clean.
+#[test]
+fn classic_is_a_row_and_the_rulesets_lists_name_rows() {
+    let data = scratch("classic_row");
+    base_catalog(&data);
+    write_kind(&data, ruleset::KIND, 1, json!([good_row()]));
+    write_kind(&data, "derived_stats", 1, json!([{"id": "max_poise", "name": "Max Poise", "formula": "CONS * 2", "rulesets": ["timeline", "hardcore"]}]));
+    let v = store::view(&data);
+    let missing = check::warnings_all(&v).get("rulesets:missing").cloned().unwrap_or_default();
+    assert_eq!(missing, [ruleset::fallback_note(ruleset::CLASSIC)], "no classic row: a warning");
+    let problems = check::validate_all(&v).get("derived_stats:max_poise").cloned().unwrap_or_default();
+    assert_eq!(problems, ["Rulesets: 'hardcore' has no row in rulesets (data/catalog/rulesets.json)."]);
+    let classic = json!({"id": "classic", "name": "Classic", "rules": [], "melee_diagonal": "none"});
+    let hardcore = json!({"id": "hardcore", "name": "Hardcore", "melee_diagonal": "none"});
+    write_kind(&data, ruleset::KIND, 1, json!([good_row(), classic, hardcore]));
+    let src = source::load(&data);
+    assert_eq!(ruleset_errors(&src), Vec::<String>::new());
+    let v = store::view(&data);
+    assert!(!check::warnings_all(&v).contains_key("rulesets:missing"), "with the classic row");
+    assert!(!check::validate_all(&v).contains_key("derived_stats:max_poise"), "every listed ruleset has its row");
+    let cat = rpgkit_data::Catalog::from_value(&src.catalog);
+    assert_eq!(Ruleset::of(&cat, "").unwrap(), Ruleset::classic(), "a classic row with the built-in values reads as them");
+    assert_eq!(Ruleset::of_or_classic(&cat, "chess"), Ruleset::classic(), "a missing row: the built-in classic values");
+    drop_scratch(&data);
+}
+
+/// CLN-45 (decision "Godot parity retired and cleanup pass 3 answers" Q-B2): the switches the round intent rule used to
+/// bundle are row fields. The schema lists "" (by the rules) and the code's values; empty, a row reads the round intent
+/// rule's choices when it lists `round_intent` (Rest pays at round end, every skill chases, root stops a chase, no
+/// Switch Target step, no stances) and the legacy ones otherwise (the built-in classic values); a set value reads as set
+/// whatever the rules; a value not in the list is one load error naming its field; the writer leaves an empty switch out
+/// (a row written before the fields re-saves byte for byte) and stores a set one.
+#[test]
+fn the_switches_read_by_the_rules_or_as_set() {
+    use rpgkit_rules::ruleset::{by_rules_values, Chase, RestAp, BY_RULES_FIELDS};
+    for key in BY_RULES_FIELDS {
+        let mut want = vec![String::new()];
+        want.extend(strs(by_rules_values(key)));
+        assert_eq!(options("content", ruleset::KIND, key), want, "{key}");
+    }
+    let read = |v: Value| Ruleset::from_row(&normalize(fields(source::schema(), "content", ruleset::KIND), &dict(v), false));
+    let switches = |r: &Ruleset| (r.rest_ap(), r.chase(), r.root_stops_chase(), r.switch_target_step(), r.stances());
+    let intent_choices = (RestAp::RoundEnd, Chase::EverySkill, true, false, false);
+    let legacy = (RestAp::OnUse, Chase::Classic, false, true, true);
+    assert_eq!(switches(&read(good_row())), intent_choices, "empty, with round_intent");
+    let plain = read(json!({"id": "classic", "name": "Classic", "rules": ["poise", "flank"]}));
+    assert_eq!(switches(&plain), legacy, "empty, without round_intent");
+    assert_eq!(switches(&Ruleset::classic()), legacy, "the built-in classic values");
+    assert_eq!(switches(&Ruleset::from_row(&dict(json!({"rules": ["round_intent"]})))), intent_choices, "a raw row without the keys");
+    let set = |mut row: Value, values: [&str; 5]| {
+        for (k, v) in BY_RULES_FIELDS.iter().zip(values) {
+            row[*k] = json!(v);
+        }
+        row
+    };
+    let flipped = read(set(good_row(), ["on_use", "classic", "off", "on", "on"]));
+    assert_eq!(switches(&flipped), legacy, "set, with round_intent");
+    assert!(flipped.has(ruleset::ROUND_INTENT));
+    let flipped = read(set(json!({"id": "classic", "name": "Classic"}), ["round_end", "every_skill", "on", "off", "off"]));
+    assert_eq!(switches(&flipped), intent_choices, "set, without round_intent");
+    assert!(!flipped.has(ruleset::ROUND_INTENT));
+
+    let data = scratch("switches");
+    base_catalog(&data);
+    for key in BY_RULES_FIELDS {
+        let mut row = good_row();
+        row[key] = json!("maybe");
+        write_kind(&data, ruleset::KIND, 1, json!([row]));
+        let errors = ruleset_errors(&source::load(&data));
+        assert_eq!(errors.len(), 1, "{key}: {errors:?}");
+        assert!(errors[0].ends_with(&format!("{key}: 'maybe' is not one of {} (or empty: by the rules).", by_rules_values(key).join(", "))), "{errors:?}");
+    }
+    let _ = fs::remove_file(data.join("catalog").join("rulesets.json"));
+    let file = data.join("catalog").join("rulesets.json");
+    let stored = || -> Value { serde_json::from_str::<Value>(&fs::read_to_string(&file).unwrap()).unwrap()["entries"][0].clone() };
+    store::upsert(&data, None, ruleset::KIND, &dict(good_row()), None).unwrap();
+    assert!(BY_RULES_FIELDS.iter().all(|k| stored().get(*k).is_none()), "empty switches are left out: {}", stored());
+    store::upsert(&data, None, ruleset::KIND, &dict(set(good_row(), ["round_end", "every_skill", "on", "off", "off"])), None).unwrap();
+    let row = stored();
+    assert_eq!(BY_RULES_FIELDS.map(|k| row[k].clone()), [json!("round_end"), json!("every_skill"), json!("on"), json!("off"), json!("off")], "set switches are stored");
+    let text = fs::read_to_string(&file).unwrap();
+    assert_eq!(store::resave_text(&data, None, ruleset::KIND).unwrap(), text, "a re-save without changes is byte-identical");
     drop_scratch(&data);
 }

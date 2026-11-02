@@ -1,0 +1,32 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "hollis",
+  "prompt": "Edit this pixel-art portrait. Keep everything exactly the same: the framing, the head size and position, the pose, hair, beard, clothing, armour, the crossbow and bolts, the background, the lighting, the palette and the pixel style. The black graft eye with its red slit pupil and stitched scar ring (the eye nearer the right edge of the picture) stays exactly as it is in the reference: open, black, unchanged, whatever the expression. Change only his face's expression (his own eye, brows, mouth and face around them) to: Hurt: in sharp pain: both eyes squeezed tightly shut with deep dark creases, brows pinched up and together, mouth pulled wide open in a grimace showing clenched teeth, strong dark lines around the eyes and mouth.",
+  "reference": "output/hollis_base2_q1793558944.png",
+  "prompts_file": null,
+  "time": "2026-11-01T18:53:00Z",
+  "n": 1,
+  "references": [
+    "output/hollis_base2_q1793558944.png"
+  ],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "hollis_hurt_q1793558944",
+  "metadata": {
+    "asset_id": "hollis",
+    "task": "founderport1",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "faction": "hearth",
+      "face": "hurt",
+      "session_ref": "hollis_base2_q1793558944"
+    }
+  },
+  "mark_cleared": true,
+  "faction": "hearth",
+  "face": "hurt",
+  "session_ref": "hollis_base2_q1793558944",
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Conditioned on in-session hollis_base2_q1793558944 reference."
+}

@@ -204,16 +204,15 @@ fn member_without_ranks_saves_no_ranks_key() {
 }
 
 #[test]
-fn version_10_save_loads_unchanged() {
+fn save_without_ranks_loads_unchanged() {
     let d = data();
     let gs = emberwake_world::new_game::create_for_world(&d, "ashlands", 7).expect("a new game");
     let member = gs.party.members[0].clone();
-    let env = serde_json::json!({"format": emberwake_world::save::FORMAT, "version": 10, "saved_at": 0, "game_state": gs.to_value()});
-    let (out, warnings) = emberwake_world::save::migrate(&d, env.as_object().unwrap()).expect("a version 10 save migrates");
+    let env = serde_json::json!({"format": emberwake_world::save::FORMAT, "version": emberwake_world::save::VERSION, "saved_at": 0, "game_state": gs.to_value()});
+    let (out, warnings) = emberwake_world::save::migrate(&d, env.as_object().unwrap()).expect("a current save reads");
     assert!(warnings.is_empty(), "{warnings:?}");
-    assert_eq!(out["version"], serde_json::json!(emberwake_world::save::VERSION));
     let back = emberwake_world::state::GameState::from_dict(&d, out["game_state"].as_object().unwrap());
-    assert_eq!(back.party.members[0], member, "the no-op step keeps the member as it was");
+    assert_eq!(back.party.members[0], member, "a member without ranks loads as it was saved");
     assert!(member.loadout_ranks.is_empty());
 }
 

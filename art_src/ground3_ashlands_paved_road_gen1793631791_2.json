@@ -1,0 +1,28 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "ground3_ashlands_paved_road",
+  "prompt": "A top-down seamless ground texture for a dark fantasy RPG map, as pixel art drawn at 128 x 128 pixels scaled up (visible square pixels, no anti-aliasing). Material: a worn road of grey paving stones, each stone about one eighth of the image wide, irregular shapes fitted closely with narrow dark joints, in no rows. Seen from straight above, no perspective, no horizon. Even light and even tone across the whole image, no vignette, no lighter or darker areas. It wraps seamlessly on all four sides, with no visible edge when tiled. No footprints, no long lines, no large stains or dark patches, no text. Muted colours around #3e3f42.",
+  "reference": null,
+  "prompts_file": null,
+  "time": "2026-11-02T14:50:59Z",
+  "n": 2,
+  "references": [],
+  "source": "gemini web app task",
+  "via": "gemini_web",
+  "request": "ground3_paved_road_q1793631059",
+  "metadata": {
+    "asset_id": "ground3_ashlands_paved_road",
+    "task": "regionground1a1",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "set": "ashlands",
+      "ground": "paved_road"
+    }
+  },
+  "mark_cleared": true,
+  "set": "ashlands",
+  "ground": "paved_road",
+  "notes": "Verified resolution and aspect ratio within 3% tolerance."
+}

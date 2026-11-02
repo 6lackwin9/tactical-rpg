@@ -14,11 +14,21 @@
 #       <name>_q<time>; the asset id is --id, else <name>
 # Every request name is unique (<id>_q<time>, a second later while taken in any folder); a reference that does not
 # exist refuses the request. Ingest refuses an image that is missing, corrupt, off the aspect by more than 3 % or
-# under 1024 px on its long edge, and reports a request Antigravity moved to failed/ with its error.txt.
+# under 1024 px on its long edge, and reports a request moved to failed/ with its error.txt.
 #   python artqueue.py ingest [<name>...] [--dry-run]
 #       every finished request (output/<name>.result.json and completed/<name>.json), or the names given
 #   python artqueue.py status
-# --pipeline <dir> (any command) or IMAGE_PIPELINE picks another queue folder (tests, a scratch run).
+#       counts per folder, failed errors, and the quota pause (ARTQUEUE2): Antigravity writes paused.json
+#       {"paused_until": "<ISO UTC>", "reason", "request"} on HTTP 429 and puts the request back in queue/;
+#       request still queues during a pause (and says so)
+#   python artqueue.py attach
+#       the refs/ file names to attach by hand in the Gemini web-app task, for the requests in queue/ (unique, sorted;
+#       requests whose reference is a session reference, --record session_ref=<request name>, are left out)
+# The default queue folder is the Drive folder of artqueue.json ("pipeline"; ARTQUEUE5, the Gemini web app is the
+# primary route), or AEGIS_IMAGE_PIPELINE (IMAGE_PIPELINE too); it must exist. --backup picks the Antigravity folder
+# (.image_pipeline of the main checkout); --pipeline <dir> any other folder (tests, a scratch run; created on use).
+# request and text copy every reference into <queue>/refs/ (a different file of the same name gets a suffix) and list
+# the copies in the request's references; the original paths go to metadata.record.source_refs.
 import argparse
 import datetime
 import json
@@ -36,6 +46,7 @@ import generate as G
 import pixelize as PX
 
 FOLDERS = ("queue", "processing", "output", "completed", "failed")
+ARCHIVE = "archive"              # ours: archive/<UTC date>/{output,completed}/ of ingested requests (Antigravity never reads it)
 REJECTED = "rejected"            # ours: images ingest refused, each with a .note.txt
 PIXELIZED = "pixelized"          # ours: the game portraits of route portrait requests with no target
 ASPECTS = {"1:1": 1.0, "16:9": 16 / 9, "9:16": 9 / 16, "4:3": 4 / 3, "3:4": 3 / 4}
@@ -45,8 +56,13 @@ MIN_EDGE = 1024                  # the long edge of a full-size image (a smaller
 # Routes (ART_PROMPT_TEMPLATES.md "Routes by asset type"): only a portrait is pixelized at ingest; a faces sheet is cut
 # by sheets.py faces and the rest is left for the asset lane.
 ROUTES = ("portrait", "faces", "full_body", "story_scene", "icon", "icon_sheet", "other")
+# The record's `source` and `via` follow the queue the request went through (queue_origin); `model` keeps what the result
+# names (often "image-generator"). Records written before LOOK1-T2 keep what they say.
 SOURCE = "antigravity image subagent"
-VIA = "antigravity"              # the record's `via`; `model` keeps what the result names (often "image-generator")
+VIA = "antigravity"
+WEB_SOURCE = "gemini web app task"
+WEB_VIA = "gemini_web"
+BACKUP_FOLDER = ".image_pipeline"  # the Antigravity queue's folder, in the main checkout
 # Record keys the ingest writes itself; a request's metadata.record cannot replace them.
 RESERVED = {"model", "id", "cid", "prompt", "use_ref", "prompts_file", "n", "time", "when", "reference", "image",
             "references", "source", "via", "request", "metadata", "mark_cleared"}
@@ -62,8 +78,52 @@ def main_checkout():
         return G.ROOT
 
 
-def pipeline(override=None):
-    return pathlib.Path(override or os.environ.get("IMAGE_PIPELINE") or main_checkout() / ".image_pipeline")
+CONFIG = pathlib.Path(__file__).resolve().parent / "artqueue.json"   # {"pipeline": "<Drive folder>"}
+REFS = "refs"                    # the references of the requests, copied beside the queue so the web app can attach them
+SESSION_REF = "session_ref"      # record key: the reference is an image of the web-app session, nothing to attach
+
+
+def pipeline(override=None, backup=False, config=None):
+    """The queue folder: --pipeline, else the Antigravity backup (--backup), else AEGIS_IMAGE_PIPELINE / IMAGE_PIPELINE,
+    else artqueue.json's `pipeline` (the Drive folder). The configured one must exist (no silent fallback)."""
+    if override:
+        return pathlib.Path(override)
+    if backup:
+        return main_checkout() / BACKUP_FOLDER
+    env = os.environ.get("AEGIS_IMAGE_PIPELINE") or os.environ.get("IMAGE_PIPELINE")
+    where, src = env, "AEGIS_IMAGE_PIPELINE"
+    if not where:
+        cfg = pathlib.Path(config or CONFIG)
+        try:
+            where = json.loads(cfg.read_text(encoding="utf-8")).get("pipeline")
+        except (OSError, ValueError, AttributeError):
+            where = None
+        src = cfg.name
+    if not where:
+        raise SystemExit(f"no image pipeline folder: set \"pipeline\" in {CONFIG}, or AEGIS_IMAGE_PIPELINE, or pass "
+                         f"--pipeline / --backup")
+    path = pathlib.Path(where)
+    if not path.is_dir():
+        raise SystemExit(f"the image pipeline folder {path} (from {src}) does not exist: is the Drive mounted? "
+                         f"(--backup uses the Antigravity folder, --pipeline any other)")
+    return path
+
+
+def is_backup(pipe):
+    """Whether a queue folder is the Antigravity one, however it was named on the command line (`.`, a trailing slash,
+    another case)."""
+    return pathlib.Path(pipe).resolve().name.casefold() == BACKUP_FOLDER
+
+
+def queue_origin(pipe):
+    """The record's (source, via) for a queue folder: the Antigravity values for the backup folder, the web-app values
+    for any other."""
+    return (SOURCE, VIA) if is_backup(pipe) else (WEB_SOURCE, WEB_VIA)
+
+
+def queue_label(pipe):
+    """The worker of a queue folder, for messages."""
+    return "Antigravity" if is_backup(pipe) else "the Gemini web app"
 
 
 def ensure(pipe):
@@ -111,6 +171,8 @@ def enqueue(pipe, name, req, dry=False):
         if not pathlib.Path(r).is_file():
             raise FileNotFoundError(f"no reference image {r}")
     path = pipe / "queue" / f"{name}.json"
+    if req["references"]:
+        req["metadata"]["record"]["source_refs"] = list(req["references"])
     if dry:
         print(f"{name}: would queue {G.rel(path)}: prompt {len(req['prompt'])} chars, n {req['n']}, "
               f"aspect {req['aspect_ratio']}, route {req['metadata']['route']}, references "
@@ -119,9 +181,39 @@ def enqueue(pipe, name, req, dry=False):
     ensure(pipe)
     if taken(pipe, name):
         raise FileExistsError(f"request {name} exists")
+    req["references"] = [store_ref(pipe, r) for r in req["references"]]
     write_json(path, req)
     print(f"{name}: queued, n {req['n']}, {len(req['references'])} reference(s)")
     return path
+
+
+def store_ref(pipe, ref):
+    """Copies a reference into <pipe>/refs/ and returns the stored path. The same file again is reused; a different
+    file of the same name is stored as <stem>_2, _3, ... (the stored name is what the request lists)."""
+    src = pathlib.Path(ref)
+    dest_dir = pipe / REFS
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest, k = dest_dir / src.name, 1
+    while dest.exists() and dest.read_bytes() != src.read_bytes():
+        k += 1
+        dest = dest_dir / f"{src.stem}_{k}{src.suffix}"
+    if not dest.exists():
+        shutil.copyfile(src, dest)
+    return dest.resolve().as_posix()
+
+
+def to_attach(pipe):
+    """The refs/ file names the queued requests need attached by hand: unique, sorted, session references left out."""
+    names = set()
+    for p in sorted((pipe / "queue").glob("*.json")) if (pipe / "queue").is_dir() else []:
+        try:
+            req = json.loads(p.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        if (req.get("metadata") or {}).get("record", {}).get(SESSION_REF):
+            continue
+        names.update(re.split(r"[\/]", r)[-1] for r in req.get("references") or [])
+    return sorted(names)
 
 
 # ---- ingest ----
@@ -192,12 +284,75 @@ def failed_error(pipe, name):
 
 
 def report_failed(pipe, name):
-    print(f"{name}: failed in Antigravity: {failed_error(pipe, name)[:300]}")
+    print(f"{name}: failed in {queue_label(pipe)}: {failed_error(pipe, name)[:300]}")
 
 
 def failed_names(pipe):
     f = pipe / "failed"
     return sorted(p.stem for p in f.glob("*.json")) if f.is_dir() else []
+
+
+def archive_dir(pipe, day=None):
+    return pipe / ARCHIVE / (day or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d"))
+
+
+def archive_markers(pipe, name):
+    return sorted((pipe / ARCHIVE).glob(f"*/output/{name}.ingested.json")) if (pipe / ARCHIVE).is_dir() else []
+
+
+def move_unique(src, dest_dir):
+    """Moves src into dest_dir, never overwriting: a name that exists gets _2, _3, ... before the extension(s)."""
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / src.name
+    k = 1
+    while dest.exists():
+        k += 1
+        stem, dot, ext = src.name.partition(".")
+        dest = dest_dir / f"{stem}_{k}{dot}{ext}"
+    shutil.move(str(src), str(dest))
+    return dest
+
+
+def archive_request(pipe, name, files=(), day=None):
+    """Moves a finished request into archive/<day>/: its leftover images, result and marker from output/, its request
+    from completed/. Returns the number of files moved."""
+    base = archive_dir(pipe, day)
+    moved = 0
+    out = pipe / "output"
+    for fname in (*files, f"{name}.result.json", f"{name}.ingested.json"):
+        p = out / fname
+        if p.is_file():
+            move_unique(p, base / "output"); moved += 1
+    req = pipe / "completed" / f"{name}.json"
+    if req.is_file():
+        move_unique(req, base / "completed"); moved += 1
+    return moved
+
+
+def archive_sweep(pipe, dry=False):
+    """Archives every output/ request that has a marker (ingests from before the archive existed)."""
+    out = pipe / "output"
+    total = 0
+    for m in sorted(out.glob("*.ingested.json")) if out.is_dir() else []:
+        name = m.name[:-len(".ingested.json")]
+        files = []
+        try:
+            d = json.loads(m.read_text(encoding="utf-8"))
+            files = [e["file"] for e in (d.get("accepted") or []) + (d.get("rejected") or []) if e.get("file")]
+        except (ValueError, TypeError, AttributeError):
+            pass
+        files = list(dict.fromkeys([*files, *(p.name for p in out.glob(f"{name}.png")),
+                                    *(p.name for p in out.glob(f"{name}_[0-9]*.png"))]))
+        if dry:
+            n = sum(1 for f in (*files, f"{name}.result.json", f"{name}.ingested.json") if (out / f).is_file())
+            n += (pipe / "completed" / f"{name}.json").is_file()
+            print(f"{name}: would archive {n} files")
+            total += n
+        else:
+            n = archive_request(pipe, name, files)
+            print(f"{name}: archived {n} files")
+            total += n
+    return total
 
 
 def ingest_one(pipe, name, dry=False, now=None):
@@ -206,7 +361,7 @@ def ingest_one(pipe, name, dry=False, now=None):
     Returns the marker dict (None when the request is not finished or was ingested already)."""
     out = pipe / "output"
     result_path = out / f"{name}.result.json"
-    if (out / f"{name}.ingested.json").exists():
+    if (out / f"{name}.ingested.json").exists() or archive_markers(pipe, name):
         print(f"{name}: ingested already"); return None
     if (pipe / "failed" / f"{name}.json").exists():
         report_failed(pipe, name); return None
@@ -252,7 +407,8 @@ def ingest_one(pipe, name, dry=False, now=None):
             G.SRC.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, dest)
             clear_model_mark(dest)
-            extra = {"references": [G.rel(r) for r in refs], "source": SOURCE, "via": VIA, "request": name,
+            source, via = queue_origin(pipe)
+            extra = {"references": [G.rel(r) for r in refs], "source": source, "via": via, "request": name,
                      "metadata": meta, "mark_cleared": True}
             extra.update({key: v for key, v in (meta.get("record") or {}).items() if key not in RESERVED})
             if kind:
@@ -262,7 +418,7 @@ def ingest_one(pipe, name, dry=False, now=None):
             if result.get("notes"):
                 extra["notes"] = result["notes"]
             pf = (meta.get("record") or {}).get("prompts_file")
-            G.record(dest, result.get("model") or "antigravity", cid,
+            G.record(dest, result.get("model") or via, cid,
                      prompt_sent if prompt_sent is not None else req.get("prompt"), bool(refs),
                      G.ROOT / pf if pf else None, k + 1, when=result.get("time"),
                      reference=refs[0] if refs else None, **extra)
@@ -278,6 +434,7 @@ def ingest_one(pipe, name, dry=False, now=None):
                                                          else ""))
     if not dry:
         write_json(out / f"{name}.ingested.json", marker)
+        archive_request(pipe, name, names)
     return marker
 
 
@@ -295,8 +452,36 @@ def status(pipe):
     s = {"queue": count("queue", "*.json"), "processing": count("processing", "*.json"),
          "output": len(finished(pipe)), "ingested": count("output", "*.ingested.json"),
          "completed": count("completed", "*.json"), "failed": count("failed", "*.json"),
-         "rejected": count(REJECTED, "*.png")}
+         "rejected": count(REJECTED, "*.png"),
+         "archived": len(list((pipe / ARCHIVE).glob("*/output/*.ingested.json"))) if (pipe / ARCHIVE).is_dir() else 0}
     return s
+
+
+def pause_state(pipe, now=None):
+    """The quota pause (ARTQUEUE2): None without paused.json, else (line, active) with a printable line."""
+    path = pipe / "paused.json"
+    if not path.is_file():
+        return None
+    try:
+        d = json.loads(path.read_text(encoding="utf-8"))
+        until = datetime.datetime.fromisoformat(str(d["paused_until"]).replace("Z", "+00:00"))
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=datetime.timezone.utc)
+    except (ValueError, KeyError, TypeError, OSError) as e:
+        return f"paused.json unreadable ({type(e).__name__}: {e})", False
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    shown = until.astimezone(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M")
+    reason = d.get("reason") or "no reason given"
+    if until <= now:
+        return f"pause expired ({shown} UTC): {reason}", False
+    mins = int((until - now).total_seconds() // 60) + 1
+    return f"paused until {shown} UTC ({mins} min): {reason}", True
+
+
+def note_pause(pipe):
+    p = pause_state(pipe)
+    if p and p[1]:
+        print(f"note: Antigravity is {p[0]}; requests wait in queue/ until then")
 
 
 # ---- CLI ----
@@ -315,7 +500,8 @@ def common(p):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="The Antigravity image queue (ARTQUEUE1).")
-    ap.add_argument("--pipeline", help="the queue folder (default: .image_pipeline of the main checkout)")
+    ap.add_argument("--pipeline", help="the queue folder (default: artqueue.json's Drive folder)")
+    ap.add_argument("--backup", action="store_true", help="the Antigravity folder (.image_pipeline of the main checkout)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("request"); r.add_argument("ids", nargs="+"); common(r)
     r.add_argument("--prompts"); r.add_argument("--file", choices=("icons",)); r.add_argument("--faces",
@@ -325,13 +511,26 @@ def main(argv=None):
     t.add_argument("--text"); t.add_argument("--text-file"); t.add_argument("--id")
     i = sub.add_parser("ingest"); i.add_argument("names", nargs="*"); i.add_argument("--dry-run", action="store_true")
     sub.add_parser("status")
+    sub.add_parser("attach")
+    ar = sub.add_parser("archive"); ar.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
-    pipe = pipeline(a.pipeline)
+    pipe = pipeline(a.pipeline, a.backup)
+    if a.cmd == "attach":
+        names = to_attach(pipe)
+        print(chr(10).join(names) if names else "nothing to attach")
+        return 0
     if a.cmd == "status":
         s = status(pipe)
         print(f"{G.rel(pipe)}: " + ", ".join(f"{k} {v}" for k, v in s.items()))
+        p = pause_state(pipe)
+        if p:
+            print(p[0])
         for e in sorted((pipe / "failed").glob("*.error.txt")) if (pipe / "failed").is_dir() else []:
             print(f"  failed {e.name[:-len('.error.txt')]}: {e.read_text(encoding='utf-8').strip()[:160]}")
+        return 0
+    if a.cmd == "archive":
+        n = archive_sweep(pipe, a.dry_run)
+        print(f"{'would archive' if a.dry_run else 'archived'} {n} files")
         return 0
     if a.cmd == "ingest":
         for name in a.names or finished(pipe):
@@ -342,6 +541,8 @@ def main(argv=None):
         return 0
     if a.n < 1:
         sys.exit("--n must be at least 1")
+    if not a.dry_run:
+        note_pause(pipe)
     extra_refs = [pathlib.Path(x).resolve() for x in a.ref]
     fields = {}
     for kv in a.record:

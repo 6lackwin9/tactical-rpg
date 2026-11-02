@@ -275,6 +275,8 @@ impl DojoSession {
         stash.sort();
         let weight = Self::weight_of(&cat, &stash);
         let carry = carry::apply(&cat, &mut heroes, weight);
+        // CLN-44: the Dojo starts on the catalog's classic row
+        let ruleset = Ruleset::of_or_classic(&cat, ruleset::CLASSIC);
         Self {
             cat,
             heroes,
@@ -293,7 +295,7 @@ impl DojoSession {
             log: Vec::new(),
             counter: 0,
             fx: Vec::new(),
-            ruleset: Ruleset::classic(),
+            ruleset,
             hero_ids,
             spent: vec![IndexMap::new(); n],
             decks: vec![None; n],
@@ -310,7 +312,8 @@ impl DojoSession {
         let ruleset = self.ruleset.clone();
         *self = Self::new(self.cat.clone());
         self.ruleset = ruleset;
-        if !self.ruleset.is_classic() {
+        // the heroes are rebuilt where the ruleset has a deck (CLN-46: the rule, not the row's name)
+        if self.ruleset.has(ruleset::DECK) {
             self.rebuild_all();
         }
         self.log_event("EVENT", "Dojo Reset", "Heroes, stash, loadouts and dummy restored to baseline", 0, "RESET");
@@ -401,8 +404,7 @@ impl DojoSession {
         let Some(dummy_def) = self.cat.units.get(DUMMY) else { return Err(format!("no '{DUMMY}' unit in the catalog")) };
         let hero_def = self.hero_def(self.active).unwrap_or_else(|| UnitDef::from_obj(&Default::default()));
         let row = serde_json::json!({"id": "dojo_planner", "name": "Gear Dojo", "party": [], "enemies": [DUMMY], "total_blocks": PLAN_BLOCKS, "unit_ap": HERO_AP, "max_rounds": 1});
-        let mut def = EncounterDef::from_obj(row.as_object().expect("an object"));
-        def.ruleset = self.ruleset.clone();
+        let def = EncounterDef::from_obj_with(row.as_object().expect("an object"), self.ruleset.clone());
         let prebuilt = |unit: Unit, d: &UnitDef, key: &str| Prebuilt { unit, art: String::new(), palette: String::new(), profile: AiProfile::for_unit(&self.cat, d), key: key.into() };
         let mut party = vec![prebuilt(self.hero().clone(), &hero_def, "hero")];
         if setup.partner.is_some() {
@@ -1021,7 +1023,7 @@ impl DojoSession {
                 self.log_event("BUFF", &s.name, &format!("Attack x{:.2} for {} rounds • {ap_note}", s.boost, s.boost_rounds), ((s.boost - 1.0) * 100.0).round() as i32, &format!("BUFF x{:.2}", s.boost));
                 self.fx("glow", true, &format!("x{:.2} ATK ({} rds)", s.boost, s.boost_rounds), Tone::Gold);
             }
-            "REST" if self.ruleset.has(ruleset::ROUND_INTENT) => {
+            "REST" if self.ruleset.rest_at_round_end() => {
                 // RULESET1_INTENT RS2, RS3: the Rest blocks pay their AP at the round's end ("Next round"); each one
                 // restores poise now (rule poise)
                 let blocks = s.blocks.max(1);
@@ -1127,9 +1129,10 @@ impl DojoSession {
             }
         }
         self.hero_mut().guard = 0.0;
-        // RULESET1_INTENT RS2: the Rest gain of the round that ended (round_intent); RULESET1 P3: the bars refill (poise)
+        // RULESET1_INTENT RS2: the Rest gain of the round that ended (`rest_ap` round_end, CLN-45); RULESET1 P3: the
+        // bars refill (poise)
         let mut extra = String::new();
-        if self.ruleset.has(ruleset::ROUND_INTENT) {
+        if self.ruleset.rest_at_round_end() {
             let gain = round_intent::rest_gain(&self.ruleset.numbers, self.rest_blocks);
             if gain > 0 {
                 let h = self.hero_mut();

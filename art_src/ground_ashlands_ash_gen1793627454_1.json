@@ -1,0 +1,28 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "ground_ashlands_ash",
+  "prompt": "One large seamless ground texture for a dark fantasy tactical RPG, seen from directly overhead: a flat, straight-down orthographic view of the surface, drawn as a square texture of 128 x 128 pixels scaled up (visible square pixels, no anti-aliasing). It sits quietly behind small characters and must never draw the eye. Muted and low contrast: one main colour, #2a2622, with at most 3 close shades of it. Even tone across the whole image: no lighter or darker areas, no dark patches, no stains, no blotches, no vignette, no lighting gradient. Fine even grain only, the same in all directions: no direction, no streaks, no diagonal marks, no brush strokes, no lines, no footprints, no tracks, no ruts, nothing that stands out or could be recognised when repeated. It repeats across a large map, so it wraps on all four edges with no seam, and has no grid, rows, tiles, checker or plaid; no shape lines up with the image's edges or with any other shape. No perspective, no horizon, no objects, no border, no frame, no text. Material: fine grey ash over dry ground, soft even dust.",
+  "reference": null,
+  "prompts_file": null,
+  "time": "2026-11-02T13:30:00Z",
+  "n": 1,
+  "references": [],
+  "source": "gemini web app task",
+  "via": "gemini_web",
+  "request": "ground_ash_q1793625803",
+  "metadata": {
+    "asset_id": "ground_ashlands_ash",
+    "task": "regionground1a1",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "set": "ashlands",
+      "ground": "ash"
+    }
+  },
+  "mark_cleared": true,
+  "set": "ashlands",
+  "ground": "ash",
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Generated base reference for Ashlands region ground textures."
+}

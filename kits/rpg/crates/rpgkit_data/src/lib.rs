@@ -6,16 +6,14 @@
 //! zones kinds; forced moves, hazard placements, trigger rows, riders and meter costs on skills; events, effects,
 //! tactics), and the term register of TERMS1 (`terms`: neutral term ids with today's texts as defaults).
 //!
-//! Source today: the resolved catalog the Godot exporter writes (the game's `parity/out/catalog.json`), i.e. exactly the
-//! entries Godot's `ContentCatalog.entries(kind)` returns after item-family resolution and schema normalisation.
-//! Defaults below are the `ContentSchema` field defaults, so hand-written partial entries normalise the same way.
+//! Source: the resolved catalog the game's loader builds (`{kind: [entry, ...]}` after item-family resolution and
+//! schema normalisation; `Catalog::from_value`). Defaults below are the `ContentSchema` field defaults, so
+//! hand-written partial entries normalise the same way.
 
 use aegis_core::formula::Formula;
 use aegis_core::value::*;
-use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use serde_json::Value;
-use std::path::Path;
 
 pub mod terms;
 pub use terms::{Term, TermDef, TermRow, TermScope, TERMS_KIND};
@@ -171,22 +169,38 @@ pub struct Deck {
     pub keystone: Vec<String>,
     /// Round intent -> skill families, in the order written.
     pub order: IndexMap<String, Vec<String>>,
+    /// INPUT1 FL1 (`follow_ups`): opener family -> the families the planner's fill tries first after it, in the
+    /// player's priority (written order kept; an empty list is no list).
+    pub follow_ups: IndexMap<String, Vec<String>>,
 }
 
 impl Deck {
     /// The deck keys, in their stored order.
-    pub const KEYS: [&'static str; 4] = ["active", "passive", "keystone", "order"];
+    pub const KEYS: [&'static str; 5] = ["active", "passive", "keystone", "order", "follow_ups"];
 
-    /// From a `deck` value (anything but an object is the empty deck; lists keep their strings).
+    /// From a `deck` value (anything but an object is the empty deck; lists keep their strings; an empty
+    /// `follow_ups` list is dropped, FL1).
     pub fn from_value(v: &Value) -> Self {
         let Some(o) = v.as_object() else { return Self::default() };
         let order = obj(o, "order").map(|m| m.keys().map(|k| (k.clone(), strings(m, k))).collect()).unwrap_or_default();
-        Self { active: strings(o, "active"), passive: strings(o, "passive"), keystone: strings(o, "keystone"), order }
+        let follow_ups = obj(o, "follow_ups")
+            .map(|m| m.keys().map(|k| (k.clone(), strings(m, k))).filter(|(_, l)| !l.is_empty()).collect())
+            .unwrap_or_default();
+        Self { active: strings(o, "active"), passive: strings(o, "passive"), keystone: strings(o, "keystone"), order, follow_ups }
     }
 
     /// True when every key is empty (the auto deck).
     pub fn is_empty(&self) -> bool {
-        self.active.is_empty() && self.passive.is_empty() && self.keystone.is_empty() && self.order.values().all(Vec::is_empty)
+        self.active.is_empty()
+            && self.passive.is_empty()
+            && self.keystone.is_empty()
+            && self.order.values().all(Vec::is_empty)
+            && self.follow_ups.values().all(Vec::is_empty)
+    }
+
+    /// INPUT1 FL1: the follow-up list set for opener family `fam` (None: no list, the fill reads the order).
+    pub fn follow_ups_of(&self, fam: &str) -> Option<&Vec<String>> {
+        self.follow_ups.get(fam).filter(|l| !l.is_empty())
     }
 }
 
@@ -625,6 +639,8 @@ pub struct Catalog {
     pub rulesets: IndexMap<String, Obj>,
     /// Portrait cue rows (PORTRAITFX1 5.1, kind `portrait_cues`; engine-only) in file order.
     pub portrait_cues: Vec<PortraitCue>,
+    /// Expression-effect rows (PORTRAITFX1-EX, kind `portrait_expressions`; engine-only) in file order.
+    pub portrait_expressions: Vec<PortraitExpression>,
     /// Ground hazard rows (HOOKS1 GH1, kind `hazards`; engine-only).
     pub hazards: IndexMap<String, HazardDef>,
     /// Unit meter rows (HOOKS1 UM1, kind `unit_meters`; engine-only).
@@ -633,18 +649,21 @@ pub struct Catalog {
     pub zones: IndexMap<String, ZoneDef>,
     /// The game's term rows (TERMS1 5.1, kind `terms`; engine-only; `game`-scope register ids only).
     pub terms: IndexMap<String, TermRow>,
+    /// Ground rows of a region map's picture (REGIONGROUND1 KT 1.1, kind `grounds`; engine-only; presentation only: no
+    /// rule reads them).
+    pub grounds: IndexMap<String, GroundDef>,
     skill_index: IndexMap<String, usize>,
     tier_one: IndexMap<String, usize>,
 }
 
 impl Catalog {
-    /// Loads a resolved catalog: `{kind: [entry, ...]}` as written by the parity exporter.
-    pub fn load_resolved(path: &Path) -> Result<Self> {
-        let text = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        let root: Value = serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
-        Ok(Self::from_value(&root))
+    /// PORTRAITFX2 FL1: the game's faces: `neutral`, then the `portrait_expressions` row ids in file order
+    /// (`faces_of`; no rows: `DEFAULT_FACES`).
+    pub fn faces(&self) -> Vec<String> {
+        faces_of(self.portrait_expressions.iter().map(|r| r.id.as_str()))
     }
 
+    /// Builds the catalog from a resolved `{kind: [entry, ...]}` value.
     pub fn from_value(root: &Value) -> Self {
         let rows = |kind: &str| -> Vec<Obj> {
             root.get(kind).and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_object().cloned()).collect()).unwrap_or_default()
@@ -679,10 +698,12 @@ impl Catalog {
             cat.derived_stats.insert(d.id.clone(), d);
         }
         cat.portrait_cues = rows(PORTRAIT_CUES_KIND).iter().map(PortraitCue::from_obj).collect();
+        cat.portrait_expressions = rows(PORTRAIT_EXPRESSIONS_KIND).iter().map(PortraitExpression::from_obj).collect();
         cat.hazards = rows(HAZARDS_KIND).iter().map(HazardDef::from_obj).map(|h| (h.id.clone(), h)).collect();
         cat.unit_meters = rows(UNIT_METERS_KIND).iter().map(UnitMeterDef::from_obj).map(|m| (m.id.clone(), m)).collect();
         cat.zones = rows(ZONES_KIND).iter().map(ZoneDef::from_obj).map(|z| (z.id.clone(), z)).collect();
         cat.terms = rows(TERMS_KIND).iter().map(TermRow::from_obj).map(|t| (t.id.clone(), t)).collect();
+        cat.grounds = rows(GROUNDS_KIND).iter().map(GroundDef::from_obj).map(|g| (g.id.clone(), g)).collect();
         cat.skills = rows("skills").iter().map(SkillDef::from_obj).collect();
         cat.index_skills();
         cat
@@ -1279,12 +1300,15 @@ impl Step {
 /// 5.1: the catalog kind of the cue rows (file `data/catalog/portrait_cues.json`, read beside the catalog kinds).
 pub const PORTRAIT_CUES_KIND: &str = "portrait_cues";
 /// 5.1: what a row answers: `event` rows react to a battle step event; the others are state rows that hold while
-/// their match is true.
-pub const PORTRAIT_TRIGGERS: [&str; 6] = ["event", "status", "condition", "hp", "derived", "down"];
+/// their match is true (PORTRAITFX2 5.3: `unspent` while a party member has unspent points).
+pub const PORTRAIT_TRIGGERS: [&str; 7] = ["event", "status", "condition", "hp", "derived", "down", "unspent"];
 /// 5.1: the trigger reserved for unit-scope meters (refused until CAMPAIGN1-DOC defines them).
 pub const PORTRAIT_METER_TRIGGER: &str = "meter";
-/// 5.1, 5.3: the battle step events an `event` row matches.
-pub const PORTRAIT_EVENTS: [&str; 5] = ["hit", "crit", "guard_hit", "heal", "break"];
+/// 5.1, 5.3: the battle events an `event` row matches (PORTRAITFX2 5.3: the battle's start, an ambush, a round's
+/// start (classic), a skill's wind-up, an ally going down, the player's win).
+pub const PORTRAIT_EVENTS: [&str; 11] = ["hit", "crit", "guard_hit", "heal", "break", "battle_start", "ambush", "round_start", "skill", "ally_down", "victory"];
+/// PORTRAITFX2 5.3: the event whose rows read `min_level` (the skill's level).
+pub const PORTRAIT_SKILL_EVENT: &str = "skill";
 /// 5.1: the kit's copy of the engine's portrait effect names (`aegis_ui::portrait_fx::EFFECTS`, same order; the kit
 /// crates do not depend on the UI, so a game test keeps the two equal).
 pub const PORTRAIT_EFFECTS: [&str; 12] = ["flash", "jolt", "desaturate", "tint", "fade", "still", "glow", "veins", "eye_glow", "ash", "smoke", "face"];
@@ -1294,9 +1318,27 @@ pub const PORTRAIT_JOLTS: [&str; 2] = ["hit", "crit"];
 pub const PORTRAIT_COLOR_EFFECTS: [&str; 7] = ["flash", "tint", "glow", "veins", "eye_glow", "ash", "smoke"];
 /// 5.1, 6.2: the screens that draw portraits (a row's `surfaces`; none listed = all).
 pub const PORTRAIT_SURFACES: [&str; 4] = ["dialogue", "roster", "panel", "timeline"];
-/// 5.4 (PQ2): the expression names of a portrait's face frames (`portraits/<folder>/faces/<id>/<expression>.png`), a
-/// `face` row's `expression`, and a dialogue node's or `line` card's `expression` ("" = neutral).
-pub const EXPRESSIONS: [&str; 4] = ["neutral", "hurt", "angry", "afraid"];
+/// PORTRAITFX2 FL1: the plain face (`face_chain`'s fallback frame; "" draws it too).
+pub const NEUTRAL: &str = "neutral";
+/// PORTRAITFX2 FL1: the faces of a game without `portrait_expressions` rows (other than `neutral`'s): the names of a
+/// portrait's face frames (`portraits/<folder>/faces/<id>/<face>.png`), a `face` row's `expression`, and a dialogue
+/// node's or `line` card's `expression` ("" = neutral). A game's own list is `Catalog::faces` (`faces_of`).
+pub const DEFAULT_FACES: [&str; 4] = [NEUTRAL, "hurt", "angry", "afraid"];
+
+/// PORTRAITFX2 FL1: the face list of the `portrait_expressions` row ids `ids` (file order): `neutral`, then each id
+/// once (a `neutral` row adds nothing); with no id but `neutral`'s, `DEFAULT_FACES`.
+pub fn faces_of<'a>(ids: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let mut out = vec![NEUTRAL.to_string()];
+    for id in ids {
+        if !id.is_empty() && !out.iter().any(|f| f == id) {
+            out.push(id.to_string());
+        }
+    }
+    if out.len() == 1 {
+        return DEFAULT_FACES.iter().map(|f| f.to_string()).collect();
+    }
+    out
+}
 /// ROSTER1 W1: the member conditions the kit knows (a cue row naming another condition warns).
 pub const MEMBER_CONDITIONS: [&str; 1] = ["wounded"];
 
@@ -1328,7 +1370,7 @@ pub struct PortraitCue {
     pub preset: String,
     /// "" (the effect's default) or `#rrggbb`.
     pub color: String,
-    /// `face`: one of EXPRESSIONS.
+    /// `face`: a face of the game (`Catalog::faces`).
     pub expression: String,
     /// `face`: the highest wins.
     pub priority: i32,
@@ -1336,6 +1378,8 @@ pub struct PortraitCue {
     pub surfaces: Vec<String>,
     /// None listed = every ruleset.
     pub rulesets: Vec<String>,
+    /// PORTRAITFX2 5.3: `skill` event rows fire for a skill of at least this level (0 = any skill); else 0.
+    pub min_level: i32,
 }
 
 impl PortraitCue {
@@ -1358,6 +1402,7 @@ impl PortraitCue {
             priority: int(o, "priority", 50),
             surfaces: strings(o, "surfaces"),
             rulesets: strings(o, "rulesets"),
+            min_level: int(o, "min_level", 0),
         }
     }
 
@@ -1374,6 +1419,107 @@ impl PortraitCue {
     /// Whether the row applies under `ruleset` (none listed = every ruleset).
     pub fn in_ruleset(&self, ruleset: &str) -> bool {
         self.rulesets.is_empty() || self.rulesets.iter().any(|r| r == ruleset)
+    }
+}
+
+// ---- Expression effects (PORTRAITFX1-EX, kit hook; engine-only, no Godot original) ---------------------------------
+
+/// PORTRAITFX1-EX: the catalog kind of the expression-effect rows (file `data/catalog/portrait_expressions.json`,
+/// read beside the catalog kinds); a row's id is the face it draws for (PORTRAITFX2 FL1: the rows name the game's
+/// faces; a `neutral` row carries only the plain face's motion).
+pub const PORTRAIT_EXPRESSIONS_KIND: &str = "portrait_expressions";
+/// The kit's copy of the engine's mark names (`aegis_ui::portrait_fx::MARKS`; a game test keeps the two equal).
+pub const PORTRAIT_MARKS: [&str; 2] = ["vein", "sweat"];
+/// The boxes a mark's anchor is relative to (`aegis_ui::portrait_fx::MARK_BOXES`).
+pub const PORTRAIT_MARK_BOXES: [&str; 2] = ["face", "eyes"];
+
+/// An expression-effect row (PORTRAITFX1-EX, kind `portrait_expressions`): what a portrait draws while a `face` cue
+/// holds the expression `id`: a tint over the sidecar's face box, a code-drawn mark anchored to the face or eye box, a
+/// short shake. Read from a loaded (checked) row; the defaults are the schema's.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PortraitExpression {
+    /// The face (PORTRAITFX2 FL1; `neutral`: motion fields only).
+    pub id: String,
+    /// "" (no tint) or `#rrggbb`, its strength 0.05-1.0, its length (0 holds; above 0 fades out over that many ms).
+    pub tint: String,
+    pub tint_strength: f64,
+    pub tint_ms: i32,
+    /// "" (no mark) or one of PORTRAIT_MARKS, its colour ("" the mark's default), its box (PORTRAIT_MARK_BOXES), its
+    /// anchor in units of the box, its width as a share of the portrait's side, its pulse period (0 steady).
+    pub mark: String,
+    pub mark_color: String,
+    pub mark_box: String,
+    pub mark_x: f64,
+    pub mark_y: f64,
+    pub mark_size: f64,
+    pub mark_pulse_ms: i32,
+    /// A shake of `shake_px` logical px over `shake_ms` from the expression's start (0: none).
+    pub shake_px: i32,
+    pub shake_ms: i32,
+    /// PORTRAITFX2-M: the face's motion profile (px at a 240 px portrait; the defaults are the plain breath): the
+    /// breath's depth, length, share breathing in and jitter; a lean with it; a bob; an entry move (dy, stretch, ms);
+    /// a held rest offset reached over `rest_ms`; the settle after the entry; shiver bursts (px, ms, gap); whether it
+    /// blinks; the tint's pulse with the breath.
+    pub breath_amp: f64,
+    pub breath_ms: i32,
+    pub breath_in: f64,
+    pub breath_jitter: f64,
+    pub lean_px: i32,
+    pub bob_px: i32,
+    pub bob_ms: i32,
+    pub enter_dy: i32,
+    pub enter_stretch: i32,
+    pub enter_ms: i32,
+    pub rest_dy: i32,
+    pub rest_ms: i32,
+    pub settle_ms: i32,
+    pub shiver_px: i32,
+    pub shiver_ms: i32,
+    pub shiver_gap_ms: i32,
+    pub blink: bool,
+    pub tint_breath: f64,
+}
+
+/// PORTRAITFX2-M: the motion fields of a `portrait_expressions` row, in schema order.
+pub const PORTRAIT_MOTION_KEYS: [&str; 18] = [
+    "breath_amp", "breath_ms", "breath_in", "breath_jitter", "lean_px", "bob_px", "bob_ms", "enter_dy", "enter_stretch", "enter_ms", "rest_dy", "rest_ms", "settle_ms", "shiver_px", "shiver_ms", "shiver_gap_ms", "blink", "tint_breath",
+];
+
+impl PortraitExpression {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self {
+            id: string(o, "id", ""),
+            tint: string(o, "tint", ""),
+            tint_strength: float(o, "tint_strength", 0.3),
+            tint_ms: int(o, "tint_ms", 0),
+            mark: string(o, "mark", ""),
+            mark_color: string(o, "mark_color", ""),
+            mark_box: string(o, "mark_box", "face"),
+            mark_x: float(o, "mark_x", 0.85),
+            mark_y: float(o, "mark_y", 0.15),
+            mark_size: float(o, "mark_size", 0.12),
+            mark_pulse_ms: int(o, "mark_pulse_ms", 0),
+            shake_px: int(o, "shake_px", 0),
+            shake_ms: int(o, "shake_ms", 0),
+            breath_amp: float(o, "breath_amp", 2.88),
+            breath_ms: int(o, "breath_ms", 3600),
+            breath_in: float(o, "breath_in", 0.5),
+            breath_jitter: float(o, "breath_jitter", 0.0),
+            lean_px: int(o, "lean_px", 0),
+            bob_px: int(o, "bob_px", 0),
+            bob_ms: int(o, "bob_ms", 0),
+            enter_dy: int(o, "enter_dy", 0),
+            enter_stretch: int(o, "enter_stretch", 0),
+            enter_ms: int(o, "enter_ms", 0),
+            rest_dy: int(o, "rest_dy", 0),
+            rest_ms: int(o, "rest_ms", 0),
+            settle_ms: int(o, "settle_ms", 0),
+            shiver_px: int(o, "shiver_px", 0),
+            shiver_ms: int(o, "shiver_ms", 0),
+            shiver_gap_ms: int(o, "shiver_gap_ms", 0),
+            blink: boolean(o, "blink", true),
+            tint_breath: float(o, "tint_breath", 0.0),
+        }
     }
 }
 
@@ -1666,6 +1812,51 @@ impl UnitMeterDef {
             rules: objs(o, "rules"),
             skills: strings(o, "skills"),
         }
+    }
+}
+
+/// REGIONGROUND1 KT 1.1: the catalog kind of the ground rows (file `data/catalog/grounds.json`).
+pub const GROUNDS_KIND: &str = "grounds";
+/// KT 1.1: a ground's `kind` that is sunken and belongs on `~` cells.
+pub const GROUND_WATER: &str = "water";
+
+/// KT 1.1: a ground row (kind `grounds`): what a layer of a region map's picture is. Presentation only: its art comes
+/// from the location's tile sets (`art::ground_dirs`), its numbers go to the engine's ground composer.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GroundDef {
+    pub id: String,
+    pub name: String,
+    pub order: i32,
+    pub kind: String,
+    pub colour: String,
+    pub wear: f64,
+    pub strays: bool,
+    pub tone: f64,
+    pub patches: f64,
+    pub marks: Vec<String>,
+    pub marks_per_100: i32,
+}
+
+impl GroundDef {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self {
+            id: string(o, "id", ""),
+            name: string(o, "name", ""),
+            order: int(o, "order", -1),
+            kind: string(o, "kind", "land"),
+            colour: string(o, "colour", ""),
+            wear: float(o, "wear", 0.1),
+            strays: boolean(o, "strays", false),
+            tone: float(o, "tone", 0.13),
+            patches: float(o, "patches", 0.0),
+            marks: strings(o, "marks"),
+            marks_per_100: int(o, "marks_per_100", 0),
+        }
+    }
+
+    /// A water ground: sunken (a rim on its edge), and only on `~` cells (G7).
+    pub fn is_water(&self) -> bool {
+        self.kind == GROUND_WATER
     }
 }
 

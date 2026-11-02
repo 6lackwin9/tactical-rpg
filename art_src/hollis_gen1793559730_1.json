@@ -1,0 +1,30 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "hollis",
+  "prompt": "Edit this pixel-art portrait. Keep everything exactly the same: the framing, the head size and position, the pose, hair, beard, clothing and armour exactly as in the reference (one single pauldron, only on the shoulder at the left of the picture; the other shoulder has no armour), the crossbow and bolts, the background, the lighting, the palette and the pixel style. The black graft eye with its red slit pupil and stitched scar ring (the eye nearer the right edge of the picture) stays exactly as it is: open, black, unchanged. Change only his face's expression (his own eye, brows, mouth and face around them) to: Afraid: eyes wide, brows raised, mouth slightly open, head drawn in.",
+  "reference": "G:/My Drive/image_pipeline/refs/hollis_base2.png",
+  "prompts_file": null,
+  "time": "2026-11-01T19:00:00Z",
+  "n": 1,
+  "references": [
+    "G:/My Drive/image_pipeline/refs/hollis_base2.png"
+  ],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "hollis_afraid2_q1793559477",
+  "metadata": {
+    "asset_id": "hollis",
+    "task": "founderport1",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "faction": "hearth",
+      "face": "afraid"
+    }
+  },
+  "mark_cleared": true,
+  "faction": "hearth",
+  "face": "afraid",
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Conditioned on attached hollis_base2.png reference."
+}

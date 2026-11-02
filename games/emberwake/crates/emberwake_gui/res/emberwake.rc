@@ -1,0 +1,2 @@
+// ICON1: the game .exe's icon (build.rs); the first icon resource is the one Explorer shows.
+1 ICON "emberwake.ico"

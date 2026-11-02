@@ -8,9 +8,10 @@
 use crate::portraits::{Faces, Who};
 use crate::screens::{Cx, Key};
 use aegis_core::json::{self, s, Dict};
+use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use aegis_ui::painter::Painter;
-use aegis_ui::ui::{Gfx, Ui, BODY, BORDER, CARD, DIM, GOLD, H, PANEL_HI, SMALL, TEXT, W};
+use aegis_ui::ui::{Gfx, Ui, BODY, H, SMALL, W};
 use emberwake_world::GameState;
 use serde_json::{json, Value};
 
@@ -33,7 +34,6 @@ const REPLY_H: i32 = 14;
 const TEXT_VIEW: &str = "dialogue.text";
 const ROWS_VIEW: &str = "dialogue.choices";
 /// The box's frame line.
-const FRAME_LINE: Rgba = rgb(140, 196, 236);
 
 /// What a click or a key on the box asks for: reply `i` (0-based), or Continue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -167,10 +167,10 @@ fn text_center_fit(p: &mut Painter, cx: f32, y: f32, text: &str, size: f32, max_
 /// row's `TalkAct` to the screen's action.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_talk<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, gs: &GameState, faces: &mut Faces, view: &Dict, b: &TalkBox, busy: bool, act: fn(TalkAct) -> A) {
-    ui.p.panel(b.r, rgba(14, 20, 34, 250), FRAME_LINE, 4.0);
+    ui.p.panel(b.r, th().game("talk_box", rgba(14, 20, 34, 250)), th().panel_edge, 4.0);
     ui.push("dialogue", "panel", s(view, "speaker_name"), b.r, true, false, None, Vec::new());
     let pr = Rect::new(b.r.x + (b.left - PORTRAIT) / 2, b.r.y + TALK_PAD, PORTRAIT, PORTRAIT);
-    ui.p.panel(pr, rgb(22, 30, 48), BORDER, 2.0);
+    ui.p.panel(pr, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
     let d = cx.data.clone();
     let speaker = d.resolve(&gs.world_id, "characters", &s(view, "speaker"));
     let (who, look) = talk_portrait(&d, gs, speaker, view);
@@ -184,23 +184,23 @@ pub(crate) fn draw_talk<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, gs: &GameState, f
     let (lb, ls) = (ui.p.line_h(BODY).ceil(), ui.p.line_h(SMALL).ceil());
     let mut y = (pr.y + PORTRAIT + 3) as f32;
     for l in &b.name {
-        text_center_fit(&mut ui.p, mid, y, l, BODY, max_w, GOLD);
+        text_center_fit(&mut ui.p, mid, y, l, BODY, max_w, th().gold);
         y += lb;
     }
     y += 1.0;
     for l in &b.band {
-        text_center_fit(&mut ui.p, mid, y, l, SMALL, max_w, DIM);
+        text_center_fit(&mut ui.p, mid, y, l, SMALL, max_w, th().dim);
         y += ls;
     }
     // the NPC's line (scrolls past TALK_LINES lines)
     let tv = b.text_view;
     let off = ui.scroll_begin(TEXT_VIEW, tv, b.text.len() as i32 * lb as i32);
     for (i, l) in b.text.iter().enumerate() {
-        ui.p.text(tv.x as f32, (tv.y - off) as f32 + i as f32 * lb, l, BODY, TEXT);
+        ui.p.text(tv.x as f32, (tv.y - off) as f32 + i as f32 * lb, l, BODY, th().text);
     }
     ui.scroll_end();
     let dy = (tv.y + tv.h + 4) as f32 + 0.5;
-    ui.p.line(tv.x as f32, dy, (tv.x + tv.w) as f32, dy, BORDER, 0.0);
+    ui.p.line(tv.x as f32, dy, (tv.x + tv.w) as f32, dy, th().edge, 0.0);
     // the replies (scroll past TALK_ROWS rows)
     let rv = b.rows_view;
     let off = ui.scroll_begin(ROWS_VIEW, rv, b.rows_h);
@@ -209,13 +209,13 @@ pub(crate) fn draw_talk<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, gs: &GameState, f
         let rr = Rect::new(rv.x, ry, rv.w - 4, rep.h);
         let on = !rep.locked && !busy;
         let hover = on && ui.hover(rr);
-        ui.p.panel(rr, if hover { PANEL_HI } else { CARD }, if hover { GOLD } else if rep.locked { BORDER } else { rgb(100, 130, 186) }, 2.0);
+        ui.p.panel(rr, if hover { th().card_hot } else { th().card }, if hover { th().gold } else if rep.locked { th().edge } else { th().edge_live }, 2.0);
         let ty = rr.y as f32 + (rep.h as f32 - rep.lines.len() as f32 * lb) / 2.0;
         if !rep.num.is_empty() {
-            ui.p.text(rr.x as f32 + 4.0, ty, &rep.num, BODY, if on { GOLD } else { DIM });
+            ui.p.text(rr.x as f32 + 4.0, ty, &rep.num, BODY, if on { th().gold } else { th().dim });
         }
         for (i, l) in rep.lines.iter().enumerate() {
-            ui.p.text_fit((rr.x + 4 + b.num_w) as f32, ty + i as f32 * lb, l, BODY, (rr.w - 8 - b.num_w) as f32, if rep.locked { DIM } else { TEXT });
+            ui.p.text_fit((rr.x + 4 + b.num_w) as f32, ty + i as f32 * lb, l, BODY, (rr.w - 8 - b.num_w) as f32, if rep.locked { th().dim } else { th().text });
         }
         ui.push(rep.id.clone(), "choice", rep.label.clone(), rr, on, false, Some(act(rep.act)), Vec::new());
         ry += rep.h + 2;

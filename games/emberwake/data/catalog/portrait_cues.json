@@ -108,6 +108,112 @@
 			"status": "stealth",
 			"effect": "fade",
 			"intensity": 0.6
+		},
+		{
+			"id": "face_hit",
+			"event": "hit",
+			"effect": "face",
+			"ms": 900,
+			"expression": "hurt",
+			"priority": 60
+		},
+		{
+			"id": "face_crit",
+			"event": "crit",
+			"effect": "face",
+			"ms": 1200,
+			"expression": "hurt",
+			"priority": 70
+		},
+		{
+			"id": "face_low_hp",
+			"trigger": "hp",
+			"below": 30,
+			"effect": "face",
+			"expression": "hurt",
+			"priority": 40
+		},
+		{
+			"id": "face_shaken",
+			"trigger": "derived",
+			"stat": "composure",
+			"drop_pct": 25,
+			"effect": "face",
+			"expression": "afraid"
+		},
+		{
+			"id": "face_empowered",
+			"trigger": "status",
+			"status": "empower",
+			"effect": "face",
+			"expression": "angry",
+			"priority": 45
+		},
+		{
+			"id": "face_down",
+			"trigger": "down",
+			"effect": "face",
+			"expression": "hurt",
+			"priority": 80
+		},
+		{
+			"id": "face_battle_start",
+			"event": "battle_start",
+			"effect": "face",
+			"ms": 1800,
+			"expression": "determined",
+			"priority": 30
+		},
+		{
+			"id": "face_round_start",
+			"event": "round_start",
+			"effect": "face",
+			"ms": 1000,
+			"expression": "determined",
+			"priority": 25
+		},
+		{
+			"id": "face_big_skill",
+			"event": "skill",
+			"min_level": 3,
+			"effect": "face",
+			"ms": 1200,
+			"expression": "determined",
+			"priority": 55
+		},
+		{
+			"id": "face_ambush",
+			"event": "ambush",
+			"effect": "face",
+			"ms": 1500,
+			"expression": "surprised",
+			"priority": 65
+		},
+		{
+			"id": "face_ally_down",
+			"event": "ally_down",
+			"effect": "face",
+			"ms": 2000,
+			"expression": "sad",
+			"priority": 65
+		},
+		{
+			"id": "face_victory",
+			"event": "victory",
+			"effect": "face",
+			"ms": 3000,
+			"expression": "happy",
+			"priority": 90
+		},
+		{
+			"id": "face_level_up",
+			"trigger": "unspent",
+			"effect": "face",
+			"expression": "happy",
+			"priority": 35,
+			"surfaces": [
+				"roster"
+			]
 		}
 	]
 }

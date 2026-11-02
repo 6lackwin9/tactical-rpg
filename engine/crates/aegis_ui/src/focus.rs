@@ -42,6 +42,41 @@ pub fn focusable(w: &Value, options: bool) -> bool {
     }
 }
 
+/// Whether the shell draws its focus ring around `w`. A `text_button` (a menu row without a panel,
+/// `panes::MenuStyle::Text`) shows its own focus instead: a box would be the panel it has none of.
+pub fn shows_ring(w: &Value) -> bool {
+    w["kind"] != "text_button"
+}
+
+/// Whether a click leaves the focus showing: it is on a row without a panel (the last active item stays lit, and Enter
+/// presses it) and the click does not move it to a widget of another kind. `clicked` is the widget clicked, if any.
+pub fn click_keeps_focus(infos: &[Value], current: Option<&str>, clicked: Option<&Value>) -> bool {
+    let on_row = live(infos, current, false).is_some_and(|w| !shows_ring(w));
+    on_row && clicked.is_none_or(|w| !focusable(w, false) || !shows_ring(w))
+}
+
+/// The `text_button` a mouse move to `mouse` makes the active one: the topmost widget there, when it is such a row and
+/// can take the focus. A row without a panel shows one active item, so the mouse moves the focus onto it (a mouse that
+/// only rests there does not take it back from the keyboard, and leaving keeps the last one lit).
+pub fn hover_target(infos: &[Value], mouse: (i32, i32)) -> Option<String> {
+    let top = infos.iter().rev().find(|w| rect(w).contains(mouse.0, mouse.1))?;
+    let id = id(top);
+    (top["kind"] == "text_button" && ring(infos, false).iter().any(|w| w["id"] == id)).then(|| id.to_string())
+}
+
+/// Where a hover card is read from (LAYOUT720 section 11, so a tip is not for the mouse only): the mouse while it is over a
+/// widget with a card; else, with `focus` showing, the middle of that widget when it has one; else the mouse.
+pub fn tip_point(infos: &[Value], mouse: (i32, i32), focus: Option<&str>) -> (i32, i32) {
+    let has_tip = |w: &Value| w["tip"].as_array().is_some_and(|t| !t.is_empty());
+    if infos.iter().any(|w| rect(w).contains(mouse.0, mouse.1) && has_tip(w)) {
+        return mouse;
+    }
+    live(infos, focus, false).filter(|w| has_tip(w)).map_or(mouse, |w| {
+        let r = rect(w);
+        (r.x + r.w / 2, r.y + r.h / 2)
+    })
+}
+
 /// The focusable widgets in drawing order (a widget drawn twice keeps its first place); a widget whose centre a later
 /// popup or window covers (its `backdrop`) is out of reach, as it is for the mouse.
 pub fn ring(infos: &[Value], options: bool) -> Vec<&Value> {
@@ -79,18 +114,23 @@ pub fn step(infos: &[Value], current: Option<&str>, m: Move, options: bool) -> O
     Some(id(ring[pick]).to_string())
 }
 
-/// The nearest widget whose centre lies in direction (dx, dy) from widget `from` (Godot's closest neighbour): the
+/// Where a widget stands for the arrow keys, doubled to stay whole: its centre. A `text_button`'s rect is as wide as its
+/// label, so rows of one column have different centres: it stands at its left edge, which they share.
+fn anchor(w: &Value) -> (i32, i32) {
+    let r = rect(w);
+    (if w["kind"] == "text_button" { r.x * 2 } else { r.x * 2 + r.w }, r.y * 2 + r.h)
+}
+
+/// The nearest widget whose `anchor` lies in direction (dx, dy) from widget `from` (Godot's closest neighbour): the
 /// distance along the direction plus twice the sideways offset, so a widget in line wins over a nearer one aside.
 fn toward(ring: &[&Value], from: usize, dx: i32, dy: i32) -> Option<String> {
-    let a = rect(ring[from]);
-    let (ax, ay) = (a.x * 2 + a.w, a.y * 2 + a.h);
+    let (ax, ay) = anchor(ring[from]);
     let mut best: Option<(i64, usize)> = None;
     for (i, w) in ring.iter().enumerate() {
         if i == from {
             continue;
         }
-        let b = rect(w);
-        let (bx, by) = (b.x * 2 + b.w, b.y * 2 + b.h);
+        let (bx, by) = anchor(w);
         let (along, aside) = ((bx - ax) * dx + (by - ay) * dy, ((bx - ax) * dy).abs() + ((by - ay) * dx).abs());
         if along <= 0 {
             continue;

@@ -1,0 +1,63 @@
+{
+	"steps": [
+		{
+			"op": "upsert",
+			"kind": "portrait_expressions",
+			"entry": {
+				"id": "hurt",
+				"tint": "#e11d48",
+				"tint_strength": 0.8,
+				"tint_ms": 240,
+				"shake_px": 2,
+				"shake_ms": 220,
+				"breath_amp": 1.5,
+				"breath_ms": 1700,
+				"breath_in": 0.4,
+				"breath_jitter": 0.35,
+				"enter_stretch": -2,
+				"enter_ms": 280,
+				"blink": false
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "portrait_expressions",
+			"entry": {
+				"id": "angry",
+				"tint": "#e11d48",
+				"tint_strength": 0.35,
+				"mark": "vein",
+				"mark_color": "#e11d48",
+				"mark_x": 0.88,
+				"mark_y": 0.12,
+				"mark_pulse_ms": 900,
+				"breath_amp": 4.0,
+				"breath_ms": 2100,
+				"breath_in": 0.4,
+				"breath_jitter": 0.1,
+				"lean_px": 1,
+				"tint_breath": 0.5
+			}
+		},
+		{
+			"op": "upsert",
+			"kind": "portrait_expressions",
+			"entry": {
+				"id": "afraid",
+				"tint": "#06b6d4",
+				"tint_strength": 0.4,
+				"mark": "sweat",
+				"mark_color": "#06b6d4",
+				"mark_x": 0.12,
+				"mark_y": 0.2,
+				"mark_size": 0.08,
+				"breath_amp": 1.2,
+				"breath_ms": 1300,
+				"breath_jitter": 0.2,
+				"shiver_px": 1,
+				"shiver_ms": 280,
+				"shiver_gap_ms": 1400
+			}
+		}
+	]
+}

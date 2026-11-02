@@ -2,9 +2,10 @@
 //! time (Q / E cycle), tabs Stats, Level up, Skills and Gear. Drafts live here until Confirm writes them to the game
 //! state (level-up points are permanent and asked about first); switching member or tab drops a draft after asking.
 
+use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, rgba, Rect};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
-use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s_or};
 use emberwake_data::{Catalog, Deck, DerivedStatDef, STATS};
@@ -70,6 +71,14 @@ pub enum PAct {
     OrderUp(String, usize),
     /// Every intent back to the auto order.
     OrderAuto,
+    /// INPUT1 FL3: opens (or closes) the follow-up list of an opener family under its order entry.
+    FollowOpen(String),
+    /// Adds family `.1` at the end of opener `.0`'s follow-up list.
+    FollowAdd(String, String),
+    /// Takes place `.1` out of opener `.0`'s list (a right click).
+    FollowRemove(String, usize),
+    /// "Use the <Intent> order": empties opener `.0`'s list.
+    FollowClear(String),
 }
 
 pub struct Character {
@@ -96,6 +105,8 @@ pub struct Character {
     terms: Option<DeckTerms>,
     deck: Deck,
     deck_view: &'static str,
+    /// INPUT1 FL3: the opener family whose follow-up list is open in the order view.
+    follow_open: Option<String>,
     /// PORTRAITFX1-R: the shown member's portrait (surface `roster`); cycling members drops the old one's.
     faces: crate::portraits::Faces,
     w: Vec<Widget<PAct>>,
@@ -332,6 +343,8 @@ pub(crate) struct DeckTerms {
     pub auto: Deck,
     /// The actives an empty `active` row plays as in a deck with other keys (the loadout's families).
     pub auto_actives: Vec<String>,
+    /// TERMS1 TU5: intent id -> its name through the catalog's `terms` (`intent_names`; empty = the defaults).
+    pub intent_names: IndexMap<String, String>,
 }
 
 impl DeckTerms {
@@ -352,6 +365,7 @@ impl DeckTerms {
             passive: auto_unit.deck.passive.iter().filter(|p| passives.contains(p)).cloned().collect(),
             keystone: auto_unit.deck.keystone.iter().filter(|p| keystones.contains(p)).cloned().collect(),
             order: auto_unit.deck.order.clone(),
+            follow_ups: IndexMap::new(),
         };
         // apply_deck's auto pick for an empty active row: the loadout's families the member owns, the first `active`
         let mut auto_actives: Vec<String> = Vec::new();
@@ -362,7 +376,7 @@ impl DeckTerms {
         }
         auto_actives.truncate(rule.slots.active.max(0) as usize);
         let intent_of = actives.iter().chain(&basics).filter_map(|f| cat.tier_one(f).map(|s| (f.clone(), emberwake_battle::round_intent::skill_intent(s).to_string()))).collect();
-        Some(Self { slots: rule.slots, intents: rs.numbers.intents.clone(), basics, actives, passives, keystones, intent_of, auto, auto_actives })
+        Some(Self { slots: rule.slots, intents: rs.numbers.intents.clone(), basics, actives, passives, keystones, intent_of, auto, auto_actives, intent_names: intent_names(cat) })
     }
 
     /// RULESET1-G (the Dojo's deck view): a catalog unit's terms under `rs` (None without the deck rule). `u` is the
@@ -394,7 +408,7 @@ impl DeckTerms {
         }
         auto_actives.truncate(rule.slots.active.max(0) as usize);
         let intent_of = actives.iter().chain(&basics).filter_map(|f| cat.tier_one(f).map(|s| (f.clone(), emberwake_battle::round_intent::skill_intent(s).to_string()))).collect();
-        Some(Self { slots: rule.slots, intents: rs.numbers.intents.clone(), basics, actives, passives, keystones, intent_of, auto, auto_actives })
+        Some(Self { slots: rule.slots, intents: rs.numbers.intents.clone(), basics, actives, passives, keystones, intent_of, auto, auto_actives, intent_names: intent_names(cat) })
     }
 
     /// The slots of `kind`.
@@ -446,14 +460,14 @@ impl DeckTerms {
 
     /// The deck an edit of `kind` starts from (user 2026-10-29): an actives edit (and the order editor) pins the deck as
     /// it plays (`shown`); a passive or keystone edit keeps the actives automatic (an empty `active` row stays empty, so
-    /// later class-path actives still join), unless the deck as it plays carries an order list (order entries must be
-    /// in `active`: then it pins).
+    /// later class-path actives still join), unless the deck as it plays carries an order or follow-up list (their
+    /// entries must be in `active`: then it pins; INPUT1 FL3).
     fn base(&self, draft: &Deck, kind: &str) -> Deck {
         let shown = self.shown(draft);
-        if kind == "active" || !draft.active.is_empty() || !shown.order.is_empty() {
+        if kind == "active" || !draft.active.is_empty() || !shown.order.is_empty() || !shown.follow_ups.is_empty() {
             return shown;
         }
-        Deck { active: Vec::new(), passive: shown.passive, keystone: shown.keystone, order: IndexMap::new() }
+        Deck { active: Vec::new(), passive: shown.passive, keystone: shown.keystone, order: IndexMap::new(), follow_ups: IndexMap::new() }
     }
 
     /// RULESET1_INTENT FU4: the order the planner fills `intent` by: the deck's `order` list for it (entries still in the
@@ -476,12 +490,102 @@ impl DeckTerms {
         }
     }
 
-    /// An active that leaves the deck leaves every order list (an emptied list is the auto order again).
+    /// An active that leaves the deck leaves every order and follow-up list and drops its own follow-up list (an
+    /// emptied list is the auto order again; INPUT1 FL3).
     fn unordered(d: &mut Deck, fam: &str) {
-        for l in d.order.values_mut() {
+        for l in d.order.values_mut().chain(d.follow_ups.values_mut()) {
             l.retain(|f| f != fam);
         }
         d.order.retain(|_, l| !l.is_empty());
+        d.follow_ups.shift_remove(fam);
+        d.follow_ups.retain(|_, l| !l.is_empty());
+    }
+
+    /// INPUT1 FL1: the follow-up list of opener `op` as it plays (entries still in the deck, of the opener's intent);
+    /// empty when none is set (the fill reads the intent's order).
+    pub fn follow_list(&self, deck: &Deck, op: &str) -> Vec<String> {
+        let Some(intent) = self.intent_of.get(op) else { return Vec::new() };
+        let ok = |f: &&String| self.intent_of.get(*f) == Some(intent) && (deck.active.contains(f) || self.basics.contains(f));
+        deck.follow_ups.get(op).map(|l| l.iter().filter(ok).cloned().collect()).unwrap_or_default()
+    }
+
+    /// FL3: the skills that can join `op`'s list: its intent's actives and basics in the deck (the order's entries),
+    /// those already listed left out.
+    pub fn follow_candidates(&self, deck: &Deck, op: &str) -> Vec<String> {
+        let Some(intent) = self.intent_of.get(op) else { return Vec::new() };
+        let listed = self.follow_list(deck, op);
+        self.order(deck, intent).into_iter().filter(|f| !listed.contains(f)).collect()
+    }
+
+    /// The deck a follow-up edit of `op` starts from (it pins the deck as it plays, as an order edit does) and the list
+    /// as it plays; refused when `op` is not an opener of the deck (FL5).
+    fn follow_base(&self, draft: &Deck, op: &str) -> Result<(Deck, Vec<String>), String> {
+        let d = self.shown(draft);
+        let opener = self.intent_of.get(op).is_some_and(|i| self.intents.contains(i)) && (d.active.iter().any(|f| f == op) || self.basics.iter().any(|f| f == op));
+        if !opener {
+            return Err(format!("Follow-ups for {op}: not an opener in the deck."));
+        }
+        let list = self.follow_list(&d, op);
+        Ok((d, list))
+    }
+
+    fn with_follow(mut d: Deck, op: &str, list: Vec<String>) -> Deck {
+        if list.is_empty() {
+            d.follow_ups.shift_remove(op);
+        } else {
+            d.follow_ups.insert(op.to_string(), list);
+        }
+        d
+    }
+
+    /// FL3: `fam` joins `op`'s list at place `at` (None: the end); a listed one moves there. Only skills of the
+    /// opener's intent in the deck.
+    pub fn follow_add(&self, draft: &Deck, op: &str, fam: &str, at: Option<usize>) -> Result<Deck, String> {
+        let (d, mut list) = self.follow_base(draft, op)?;
+        let intent = self.intent_of.get(op).cloned().unwrap_or_default();
+        if !(d.active.iter().any(|f| f == fam) || self.basics.iter().any(|f| f == fam)) {
+            return Err(format!("Follow-ups after {op}: {fam} is not in the deck."));
+        }
+        if self.intent_of.get(fam) != Some(&intent) {
+            let has = self.intent_of.get(fam).map(|i| intent_title(&self.intent_names, i)).unwrap_or_else(|| "no intent".into());
+            return Err(format!("Follow-ups after {op}: {fam} is {has}, not {}.", intent_title(&self.intent_names, &intent)));
+        }
+        let was = list.iter().position(|f| f == fam);
+        if let Some(i) = was {
+            list.remove(i);
+        }
+        let j = at.unwrap_or(list.len()).min(list.len());
+        if was == Some(j) {
+            return Err("Same place.".into());
+        }
+        list.insert(j, fam.to_string());
+        Ok(Self::with_follow(d, op, list))
+    }
+
+    /// FL3: takes place `k` out of `op`'s list (the last one out: the intent's order again).
+    pub fn follow_remove(&self, draft: &Deck, op: &str, k: usize) -> Result<Deck, String> {
+        let (d, mut list) = self.follow_base(draft, op)?;
+        if k >= list.len() {
+            return Err("Nothing there.".into());
+        }
+        list.remove(k);
+        Ok(Self::with_follow(d, op, list))
+    }
+
+    /// FL3 "Use the <Intent> order": empties `op`'s list.
+    pub fn follow_clear(&self, draft: &Deck, op: &str) -> Result<Deck, String> {
+        let (d, list) = self.follow_base(draft, op)?;
+        if list.is_empty() {
+            return Err("No follow-ups set: the intent's order fills.".into());
+        }
+        Ok(Self::with_follow(d, op, Vec::new()))
+    }
+
+    /// `follow.<op>.<k>`: place `k` of opener `op`'s follow-up list (`k` = the list's length: its end).
+    fn follow_key(key: &str) -> Option<(&str, usize)> {
+        let rest = key.strip_prefix("follow.").filter(|r| !r.starts_with("add."))?;
+        let (op, k) = rest.rsplit_once('.')?;
+        Some((op, k.parse().ok()?))
     }
 
     fn full(kind: &str) -> String {
@@ -543,6 +647,23 @@ impl DeckTerms {
             let k = DECK_KINDS.iter().find(|x| x.0 == kind).unwrap_or(&DECK_KINDS[0]);
             format!("{} slots take {} only.", k.1, k.2)
         };
+        // INPUT1 FL3: a follow-up entry moves within its list; an intent skill dragged from the add row joins it there
+        if let Some((op, fam)) = from.strip_prefix("follow.add.").and_then(|r| r.split_once('.')) {
+            let (to_op, j) = Self::follow_key(to).ok_or("Drop it on a place in the same follow-up list.")?;
+            if to_op != op {
+                return Err("Each opener keeps its own follow-ups.".into());
+            }
+            return self.follow_add(draft, op, fam, Some(j));
+        }
+        if let Some((op, i)) = Self::follow_key(from) {
+            let (to_op, j) = Self::follow_key(to).ok_or("Drop it on a place in the same follow-up list.")?;
+            if to_op != op {
+                return Err("Each opener keeps its own follow-ups.".into());
+            }
+            let list = self.follow_base(draft, op)?.1;
+            let fam = list.get(i).cloned().ok_or("Nothing there.")?;
+            return self.follow_add(draft, op, &fam, Some(j.min(list.len() - 1)));
+        }
         if let Some((intent, i)) = Self::order_key(from) {
             let (to_intent, j) = Self::order_key(to).ok_or("Drop it on a place in the same intent's order.")?;
             if to_intent != intent {
@@ -620,7 +741,7 @@ impl Character {
         let first = gs.party.members.first().map(|m| m.id.clone()).unwrap_or_default();
         let member = if gs.party.member(member).is_some() { member.to_string() } else { first };
         let tab = TABS.iter().find(|t| t.0 == tab).map(|t| t.0).unwrap_or("stats");
-        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", faces: crate::portraits::Faces::default(), w: Vec::new() }
+        Self { member, tab, draft: IndexMap::new(), class_slots: Vec::new(), extra_slots: Vec::new(), ranks: IndexMap::new(), using_default: true, mouse: (0, 0), skills_loaded: false, gear: None, pending_switch: None, scroll: 0, gear_scroll: 0, detail: String::new(), terms: None, deck: Deck::default(), deck_view: "owned", follow_open: None, faces: crate::portraits::Faces::default(), w: Vec::new() }
     }
 
     fn m<'a>(&self, cx: &'a Cx) -> &'a UnitState {
@@ -956,6 +1077,10 @@ impl Character {
             }
             PAct::OrderUp(intent, i) if i > 0 => self.deck_edit(cx, |t, deck| t.after_drop(deck, &format!("order.{intent}.{i}"), &format!("order.{intent}.{}", i - 1))),
             PAct::OrderUp(..) => {}
+            PAct::FollowOpen(op) => self.follow_open = if self.follow_open.as_deref() == Some(op.as_str()) { None } else { Some(op) },
+            PAct::FollowAdd(op, fam) => self.deck_edit(cx, |t, deck| t.follow_add(deck, &op, &fam, None)),
+            PAct::FollowRemove(op, k) => self.deck_edit(cx, |t, deck| t.follow_remove(deck, &op, k)),
+            PAct::FollowClear(op) => self.deck_edit(cx, |t, deck| t.follow_clear(deck, &op)),
             PAct::OrderAuto => self.deck_edit(cx, |t, deck| {
                 let mut d = t.shown(deck);
                 d.order.clear();
@@ -1243,21 +1368,21 @@ impl Screen<GameCx> for Character {
         }
         let m = self.m(cx).clone();
         let mut ui: Ui<PAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), rgba(0, 0, 0, 110));
+        ui.p.fill(Rect::new(0, 0, W, H), th().game("popup_veil", rgba(0, 0, 0, 110)));
         let fr = Rect::new(16, 16, 608, 328);
         ui.frame(fr, "Character", true);
         ui.close_x("character.close", Rect::new(fr.x + fr.w - 26, fr.y + 8, 19, 18), PAct::Close);
         let unspent = m.unspent(&d);
         let pick = format!("{}  Lv {}{}", crate::hub::member_name(cx, &m), m.level(&d), if unspent > 0 { format!("  +{unspent}") } else { String::new() });
         let pw = ui.p.text_w(&pick, BODY + 1.0) as i32 + 12;
-        ui.p.text(320.0 - pw as f32 / 2.0 - 10.0, 57.0, "Q", BODY + 1.0, DIM);
+        ui.p.text(320.0 - pw as f32 / 2.0 - 10.0, 57.0, "Q", BODY + 1.0, th().dim);
         ui.button_full("character.member", Rect::new(320 - pw / 2, 53, pw, 17), &pick, PAct::Member(1), true, true, BODY + 1.0, tip("Next member (E)", "Q / E cycle the party."));
-        ui.p.text(320.0 + pw as f32 / 2.0 + 4.0, 57.0, "E", BODY + 1.0, DIM);
+        ui.p.text(320.0 + pw as f32 / 2.0 + 4.0, 57.0, "E", BODY + 1.0, th().dim);
         // PORTRAITFX1-R: the member's portrait (its carried HP and conditions hold the state rows; the initial without a
         // file)
         self.faces.begin();
         let pr = Rect::new(fr.x + 10, 44, PORTRAIT, PORTRAIT);
-        ui.p.panel(pr, rgb(22, 30, 48), BORDER, 2.0);
+        ui.p.panel(pr, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
         let (who, look) = crate::hub::member_portrait(&d, cx.gs(), &m);
         self.faces.draw(&mut ui.p, cx, &who, &look, "roster", pr);
         ui.push("character.portrait", "portrait", crate::hub::member_name(cx, &m), pr, true, false, None, Vec::new());
@@ -1274,12 +1399,12 @@ impl Screen<GameCx> for Character {
             _ => self.draw_gear(&mut ui, cx, &m),
         }
         let dbox = Rect::new(25, 275, 590, 31);
-        ui.p.panel(dbox, rgba(20, 28, 46, 255), BORDER, 2.0);
+        ui.p.panel(dbox, th().game("party_box", rgba(20, 28, 46, 255)), th().edge, 2.0);
         // while dragging on the Skills tab the pane says where the skill can go (SKILLUI1), not the hovered card
         let dragging_skill = self.tab == "skills" && ui.dragging().is_some() && !self.detail.is_empty();
         let hovered = ui.widgets.iter().rev().find(|w| !dragging_skill && w.rect.contains(mouse.0, mouse.1) && w.tip.len() > 1).map(|w| w.tip[1].0.clone());
         let text = hovered.unwrap_or_else(|| if self.detail.is_empty() { "Move to a row to read what it does.".into() } else { self.detail.clone() });
-        ui.para(30, 279, 580, &text, BODY, TEXT);
+        ui.para(30, 279, 580, &text, BODY, th().text);
         self.w = ui.widgets;
     }
 
@@ -1305,6 +1430,17 @@ impl Screen<GameCx> for Character {
     fn back(&mut self, cx: &mut Cx) {
         if self.tab == "skills" && self.terms.is_some() {
             let (mx, my) = self.mouse;
+            // INPUT1 FL3: a right click on a follow-up entry takes it out of the list
+            let follow = self.w.iter().rev().find(|w| w.rect.contains(mx, my)).and_then(|w| {
+                let (op, k) = w.id.strip_prefix("skills.follow.")?.rsplit_once('.')?;
+                Some((op.to_string(), k.parse::<usize>().ok()?))
+            });
+            if let Some((op, k)) = follow.filter(|(op, _)| !op.starts_with("add.")) {
+                if self.terms.as_ref().is_some_and(|t| k < t.follow_list(&t.shown(&self.deck), &op).len()) {
+                    self.act(cx, PAct::FollowRemove(op, k));
+                }
+                return;
+            }
             let over = self.w.iter().rev().find(|w| w.rect.contains(mx, my) && DECK_KINDS.iter().any(|k| w.id.starts_with(&format!("skills.{}.", k.0))));
             if let Some(w) = over {
                 let kind = DECK_KINDS.iter().find(|k| w.id.starts_with(&format!("skills.{}.", k.0))).map(|k| k.0).unwrap_or("active");
@@ -1397,14 +1533,14 @@ impl Character {
         let d = &cx.data;
         let gs = cx.gs();
         let lvl = m.level(d);
-        let end = ui.p.text(68.0, 104.0, &format!("Level {lvl}  ·  XP {} ({} to next)  ·  Gold {}", m.total_xp, progression::xp_to_next(d, m.total_xp), gs.party.gold), BODY + 1.0, TEXT);
+        let end = ui.p.text(68.0, 104.0, &format!("Level {lvl}  ·  XP {} ({} to next)  ·  {} {}", m.total_xp, progression::xp_to_next(d, m.total_xp), crate::hud::term_short(cx, emberwake_world::terms::CURRENCY), gs.party.gold), BODY + 1.0, th().text);
         // ROSTER1-U W2: a wounded member's mark and the HP it takes the field with (the act's cut max)
         let (hp, max, wounded) = crate::hub::field_hp(cx, m);
         if wounded {
             let mark = "Wounded";
             let x = end + 12.0;
-            let after = ui.p.text(x, 104.0, mark, BODY + 1.0, FOE);
-            ui.p.text(after + 5.0, 104.0, &format!("HP {hp} / {max}"), BODY + 1.0, DIM);
+            let after = ui.p.text(x, 104.0, mark, BODY + 1.0, th().foe);
+            ui.p.text(after + 5.0, 104.0, &format!("HP {hp} / {max}"), BODY + 1.0, th().dim);
             let w = ui.p.text_w(&format!("{mark} HP {hp} / {max}"), BODY + 1.0) + 5.0;
             let lh = (ui.p.line_h(BODY + 1.0) + 2.0).ceil() as i32;
             ui.push("stats.wounded", "row", format!("{mark} HP {hp} / {max}"), Rect::new(x as i32 - 2, 102, w as i32 + 4, lh), true, false, None, tip(mark, &crate::hub::wounded_tip(cx, m)));
@@ -1412,11 +1548,11 @@ impl Character {
         let active = gs.party.active_members().iter().any(|a| a.id == m.id);
         let n = gs.party.active_members().len();
         ui.checkbox("character.active", 72, 122, &format!("In party ({n}/{})", gs.party.max_active), active, PAct::ToggleActive, true);
-        let hint_end = ui.p.text(155.0, 122.0, "Keep at least one active member.", BODY + 1.0, DIM);
+        let hint_end = ui.p.text(155.0, 122.0, "Keep at least one active member.", BODY + 1.0, th().dim);
         // ROSTER1-U BK1: the bunk chip in a world with a roster block
         if let Some(bunks) = crate::hub::bunks_text(gs) {
             let bw = ui.p.text_w(&bunks, BODY + 1.0);
-            ui.p.text((600.0 - bw).max(hint_end + 12.0), 122.0, &bunks, BODY + 1.0, DIM);
+            ui.p.text((600.0 - bw).max(hint_end + 12.0), 122.0, &bunks, BODY + 1.0, th().dim);
         }
         let Some(arch) = d.cat.classes.get(&m.class_id(d)) else { return };
         let mut spend: IndexMap<String, i32> = m.spend.iter().map(|(k, v)| (k.clone(), *v as i32)).collect();
@@ -1426,7 +1562,7 @@ impl Character {
         let cs = emberwake_rules::stats::CharacterStats::new(arch, lvl as i32, &spend);
         let cols = columns(ui, &[(68.0, "Stat"), (112.0, "Base"), (148.0, "Growth"), (190.0, "Spent"), (226.0, "Total")], 10.0);
         for (&(x, _), h) in cols.iter().zip(["Stat", "Base", "Growth", "Spent", "Total"]) {
-            ui.p.text(x, 143.0, h, BODY + 1.0, DIM);
+            ui.p.text(x, 143.0, h, BODY + 1.0, th().dim);
         }
         let table_right = cols[4].1;
         for (i, st) in STATS.iter().enumerate() {
@@ -1434,9 +1570,9 @@ impl Character {
             let base = arch.base_stats.get(*st).copied().unwrap_or(0);
             let sp = m.spend.get(*st).copied().unwrap_or(0) as i32;
             let total = cs.base(st);
-            ui.p.text(68.0, y, st, BODY + 1.0, TEXT);
+            ui.p.text(68.0, y, st, BODY + 1.0, th().text);
             for (c, v) in cols[1..].iter().zip([base, total - base - sp, sp, total]) {
-                ui.p.text_right(c.1, y, &v.to_string(), BODY + 1.0, TEXT);
+                ui.p.text_right(c.1, y, &v.to_string(), BODY + 1.0, th().text);
             }
             ui.push(format!("stats.{st}"), "row", format!("{st} {total}"), Rect::new(66, y as i32 - 2, (table_right - 62.0) as i32, 14), true, false, None, tip(st, &stat_desc(st)));
         }
@@ -1448,13 +1584,13 @@ impl Character {
         let step = 15f32.min(120.0 / (rows.len().max(2) - 1) as f32);
         for (i, r) in rows.iter().enumerate() {
             let y = 143.0 + i as f32 * step;
-            ui.p.text(label_x, y, &r.label, BODY + 1.0, DIM);
-            ui.p.text(value_x, y, &r.shown, BODY + 1.0, TEXT);
+            ui.p.text(label_x, y, &r.label, BODY + 1.0, th().dim);
+            ui.p.text(value_x, y, &r.shown, BODY + 1.0, th().text);
             ui.push(format!("stats.derived.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(label_x as i32 - 2, y as i32 - 2, (value_x - label_x) as i32 + 26, step.min(14.0) as i32), true, false, None, tip(&r.label, &r.desc));
         }
         let names: Vec<String> = m.passives.iter().map(|p| s_or(d.entry("passives", p), "name", p)).collect();
         let line = format!("Passives: {}", if names.is_empty() { "none".into() } else { names.join(", ") });
-        ui.p.text_fit(68.0, 258.0, &line, BODY + 1.0, label_x - 78.0, DIM);
+        ui.p.text_fit(68.0, 258.0, &line, BODY + 1.0, label_x - 78.0, th().dim);
         let about: Vec<String> = m.passives.iter().map(|p| format!("{}: {}", s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"))).collect();
         let line_h = (ui.p.line_h(BODY + 1.0) + 2.0).ceil().max(13.0) as i32;
         ui.push("stats.passives", "row", line, Rect::new(66, 256, (label_x - 74.0) as i32, line_h), true, false, None, tip("Passives", &if about.is_empty() { "None yet: passives come from the hero's background, faction, disciplines and named items.".into() } else { about.join(" ") }));
@@ -1464,14 +1600,14 @@ impl Character {
         let d = &cx.data;
         let drafted: i64 = self.draft.values().sum();
         let left = m.unspent(d) - drafted;
-        ui.p.text(70.0, 104.0, &format!("Points left: {left}   (confirmed points are permanent)"), BODY + 1.0, DIM);
+        ui.p.text(70.0, 104.0, &format!("Points left: {left}   (confirmed points are permanent)"), BODY + 1.0, th().dim);
         let Some(arch) = d.cat.classes.get(&m.class_id(d)) else { return };
         let mut spend: IndexMap<String, i32> = m.spend.iter().map(|(k, v)| (k.clone(), *v as i32)).collect();
         spend.entry(STATS[0].into()).or_insert(0);
         let cs = emberwake_rules::stats::CharacterStats::new(arch, m.level(d) as i32, &spend);
         let cols = columns(ui, &[(70.0, "Stat"), (105.0, "Now"), (132.0, "Added"), (165.0, "New")], 8.0);
         for (&(x, _), h) in cols.iter().zip(["Stat", "Now", "Added", "New"]) {
-            ui.p.text(x, 122.0, h, BODY + 1.0, DIM);
+            ui.p.text(x, 122.0, h, BODY + 1.0, th().dim);
         }
         let minus_x = 195.max(cols[3].1 as i32 + 8);
         let auto_x = 266.max(minus_x + 71);
@@ -1479,10 +1615,10 @@ impl Character {
             let y = 136 + i as i32 * 21;
             let now = cs.base(st) as i64;
             let add = self.draft.get(*st).copied().unwrap_or(0);
-            ui.p.text(70.0, y as f32 + 4.0, st, BODY + 1.0, TEXT);
-            ui.p.text_right(cols[1].1, y as f32 + 4.0, &now.to_string(), BODY + 1.0, TEXT);
-            ui.p.text_right(cols[2].1, y as f32 + 4.0, &add.to_string(), BODY + 1.0, if add > 0 { GOLD } else { DIM });
-            ui.p.text_right(cols[3].1, y as f32 + 4.0, &(now + add).to_string(), BODY + 1.0, TEXT);
+            ui.p.text(70.0, y as f32 + 4.0, st, BODY + 1.0, th().text);
+            ui.p.text_right(cols[1].1, y as f32 + 4.0, &now.to_string(), BODY + 1.0, th().text);
+            ui.p.text_right(cols[2].1, y as f32 + 4.0, &add.to_string(), BODY + 1.0, if add > 0 { th().gold } else { th().dim });
+            ui.p.text_right(cols[3].1, y as f32 + 4.0, &(now + add).to_string(), BODY + 1.0, th().text);
             ui.push(format!("level.{st}"), "row", format!("{st} {now} + {add}"), Rect::new(68, y, minus_x - 73, 17), true, false, None, tip(st, &stat_desc(st)));
             ui.button_tip(&format!("level.{st}.minus"), Rect::new(minus_x, y, 23, 17), "-", PAct::Remove(st), add > 0, tip(&format!("-1 {st}"), "Take back a drafted point. Nothing is spent until you Confirm."));
             ui.button_tip(&format!("level.{st}.plus"), Rect::new(minus_x + 31, y, 23, 17), "+", PAct::Add(st), left > 0, tip(&format!("+1 {st}"), &stat_desc(st)));
@@ -1504,8 +1640,8 @@ impl Character {
             let y = 122.0 + i as f32 * step;
             let old = before.get(i).filter(|b| b.value != r.value);
             let text = old.map_or_else(|| r.shown.clone(), |b| format!("{} -> {}", b.shown, r.shown));
-            ui.p.text(label_x, y, &r.label, BODY + 1.0, DIM);
-            ui.p.text(value_x, y, &text, BODY + 1.0, if old.is_some() { GOLD } else { TEXT });
+            ui.p.text(label_x, y, &r.label, BODY + 1.0, th().dim);
+            ui.p.text(value_x, y, &text, BODY + 1.0, if old.is_some() { th().gold } else { th().text });
             ui.push(format!("level.derived.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(label_x as i32 - 2, y as i32 - 2, (value_x - label_x) as i32 + 55, step.min(14.0) as i32), true, false, None, tip(&r.label, &r.desc));
         }
         ui.button("level.confirm", Rect::new(500, 312, 70, 18), "Confirm", PAct::ConfirmLevel, drafted > 0);
@@ -1526,9 +1662,9 @@ impl Character {
         let max_class = emberwake_rules::stats::MAX_CLASS_SLOTS;
         let max_extra = emberwake_rules::stats::MAX_EXTRA_SLOTS;
         // Left: the fixed slots, five class and three extra (SKILLUI1 section 4).
-        ui.p.text(64.0, 104.0, &format!("Class slots {} / {max_class}", self.class_slots.len()), BODY + 1.0, INFO);
-        ui.p.text(150.0, 104.0, if self.using_default { "Default loadout" } else { "Custom loadout" }, BODY, DIM);
-        ui.p.text(64.0, 205.0, &format!("Extra slots {} / {max_extra}", self.extra_slots.len()), BODY + 1.0, INFO);
+        ui.p.text(64.0, 104.0, &format!("Class slots {} / {max_class}", self.class_slots.len()), BODY + 1.0, th().info);
+        ui.p.text(150.0, 104.0, if self.using_default { "Default loadout" } else { "Custom loadout" }, BODY, th().dim);
+        ui.p.text(64.0, 205.0, &format!("Extra slots {} / {max_extra}", self.extra_slots.len()), BODY + 1.0, th().info);
         for (class, top_y, count) in [(true, 116, max_class), (false, 216, max_extra)] {
             let list = if class { self.class_slots.clone() } else { self.extra_slots.clone() };
             let g = if class { "class" } else { "extra" };
@@ -1536,8 +1672,8 @@ impl Character {
                 let r = Rect::new(64, top_y + i as i32 * 17, 236, 15);
                 let id = format!("skills.{g}.{i}");
                 let Some(f) = list.get(i) else {
-                    ui.p.panel(r, rgba(20, 28, 46, 120), rgba(58, 78, 116, 120), 2.0);
-                    ui.p.text(r.x as f32 + 4.0, r.y as f32 + 3.0, "Empty", BODY, DIM);
+                    ui.p.panel(r, th().game("slot_empty", rgba(20, 28, 46, 120)), th().game("slot_empty_edge", rgba(58, 78, 116, 120)), 2.0);
+                    ui.p.text(r.x as f32 + 4.0, r.y as f32 + 3.0, "Empty", BODY, th().dim);
                     let label = if class { "class" } else { "extra" };
                     ui.push(id, "row", "Empty", r, true, false, None, tip(&format!("Empty {label} slot"), "Drag a skill here, or click a skill in the list."));
                     ui.drop_target(format!("slot.{g}.{i}"));
@@ -1551,9 +1687,9 @@ impl Character {
                 let row = row_of(f, rank);
                 let ap = row.map(|s| emberwake_battle::skill::ap_cost(s, Some(u))).unwrap_or(0);
                 let desc = row.map(|s| json::s(&s.raw, "description")).unwrap_or_default();
-                ui.p.panel(r, rgba(26, 34, 54, 255), BORDER, 2.0);
-                ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &fam_name(f), BODY, 112.0, TEXT);
-                let card = vec![(fam_name(f), GOLD), (desc.clone(), TEXT), ("Drag to another slot or back to the list. Right click takes it out.".into(), DIM)];
+                ui.p.panel(r, th().game("slot_filled", rgba(26, 34, 54, 255)), th().edge, 2.0);
+                ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &fam_name(f), BODY, 112.0, th().text);
+                let card = vec![(fam_name(f), th().gold), (desc.clone(), th().text), ("Drag to another slot or back to the list. Right click takes it out.".into(), th().dim)];
                 ui.push(id, "row", fam_name(f), r, true, false, None, card);
                 ui.draggable(format!("slot.{g}.{i}"));
                 ui.drop_target(format!("slot.{g}.{i}"));
@@ -1568,30 +1704,30 @@ impl Character {
                         std::cmp::Ordering::Greater => format!("Stronger: {to_ap} AP (now {ap})"),
                         std::cmp::Ordering::Equal => format!("Same cost: {ap} AP"),
                     };
-                    vec![(format!("Rank {}", roman(t)), GOLD), (line, TEXT), (cost, DIM)]
+                    vec![(format!("Rank {}", roman(t)), th().gold), (line, th().text), (cost, th().dim)]
                 };
                 let down = at.checked_sub(1).and_then(|k| ranks.get(k).copied());
                 let up = ranks.get(at + 1).copied();
                 ui.button_full(&format!("skills.rank.{g}.{i}.down"), Rect::new(r.x + 120, r.y + 1, 13, 13), "<", PAct::RankStep(class, i, -1), down.is_some(), false, BODY, step_tip(down));
-                let mut num_tip = vec![(format!("{}: Rank {} of {}", fam_name(f), roman(rank), roman(top)), GOLD)];
-                num_tip.extend(lines.iter().map(|l| (format!("{}: {}{}", roman(l.tier), l.text, if l.tier == rank { " (chosen)" } else { "" }), if l.unlocked { TEXT } else { DIM })));
-                num_tip.push((if chosen.is_some() { "Stays at this rank when new ranks unlock; change it with < and >." } else { "Follows the top rank until you confirm; from then on it stays put." }.into(), DIM));
-                ui.p.text(r.x as f32 + 136.0, r.y as f32 + 3.0, roman(rank), BODY, if rank < top { GOLD } else { TEXT });
+                let mut num_tip = vec![(format!("{}: Rank {} of {}", fam_name(f), roman(rank), roman(top)), th().gold)];
+                num_tip.extend(lines.iter().map(|l| (format!("{}: {}{}", roman(l.tier), l.text, if l.tier == rank { " (chosen)" } else { "" }), if l.unlocked { th().text } else { th().dim })));
+                num_tip.push((if chosen.is_some() { "Stays at this rank when new ranks unlock; change it with < and >." } else { "Follows the top rank until you confirm; from then on it stays put." }.into(), th().dim));
+                ui.p.text(r.x as f32 + 136.0, r.y as f32 + 3.0, roman(rank), BODY, if rank < top { th().gold } else { th().text });
                 ui.push(format!("skills.rank.{g}.{i}"), "row", roman(rank), Rect::new(r.x + 134, r.y, 22, 15), true, false, None, num_tip);
                 ui.button_full(&format!("skills.rank.{g}.{i}.up"), Rect::new(r.x + 157, r.y + 1, 13, 13), ">", PAct::RankStep(class, i, 1), up.is_some(), false, BODY, step_tip(up));
-                ui.p.text(r.x as f32 + 176.0, r.y as f32 + 3.0, &format!("{ap} AP"), BODY, DIM);
+                ui.p.text(r.x as f32 + 176.0, r.y as f32 + 3.0, &format!("{ap} AP"), BODY, th().dim);
             }
         }
         // Right: the owned skills; the whole column takes slots dropped back (recorded under the rows).
         let list_area = Rect::new(310, 114, 294, 156);
-        ui.p.text(310.0, 104.0, "Owned skills (drag onto a slot or click)", BODY + 1.0, INFO);
+        ui.p.text(310.0, 104.0, "Owned skills (drag onto a slot or click)", BODY + 1.0, th().info);
         ui.push("skills.list", "panel", "Owned skills", list_area, true, false, None, tip("Owned skills", "Drop a slot here to take the skill out."));
         ui.drop_target("list");
         let owned: Vec<String> = u.owned_families(cat).into_iter().filter(|f| !cat.is_basic_family(f)).collect();
         const ROWS: usize = 6;
         self.scroll = self.scroll.min(owned.len().saturating_sub(ROWS));
         if self.scroll > 0 || owned.len() > ROWS {
-            ui.p.text_right(604.0, 104.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(owned.len()), owned.len()), SMALL, DIM);
+            ui.p.text_right(604.0, 104.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(owned.len()), owned.len()), SMALL, th().dim);
         }
         for (k, f) in owned.iter().skip(self.scroll).take(ROWS).enumerate() {
             let y = 118 + k as i32 * 22;
@@ -1603,8 +1739,8 @@ impl Character {
             ui.button(&format!("skills.slot.{f}"), Rect::new(310, y, 50, 16), if slotted { "Slotted" } else if full { "Full" } else { "Slot" }, PAct::Slot(f.clone()), !slotted && !full);
             let grade: String = cat.family_rows(f).first().map(|s| { let mut c = s.grade.chars(); c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default() }).unwrap_or_default();
             let desc = row.map(|s| json::s(&s.raw, "description")).unwrap_or_default();
-            ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{}  [{}]  Rank {}", fam_name(f), grade, roman(top)), BODY, 238.0, TEXT);
-            ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, DIM);
+            ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{}  [{}]  Rank {}", fam_name(f), grade, roman(top)), BODY, 238.0, th().text);
+            ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
             ui.push(format!("skills.family.{f}"), "row", fam_name(f), Rect::new(366, y, 238, 20), true, slotted, Some(PAct::Slot(f.clone())), tip(&fam_name(f), &desc));
             ui.draggable(format!("skill.{f}"));
         }
@@ -1640,7 +1776,7 @@ impl Character {
         let rs = d.ruleset(&cx.gs().world_id);
         let built = progression::build_with(d, m, &cx.gs().world_id, false).map(|b| b.unit);
         let shown = t.shown(&self.deck);
-        let intent_name = |i: &str| emberwake_battle::round_intent::RoundIntent::parse(i).map(|x| x.name().to_string()).unwrap_or_else(|| title_case(i));
+        let intent_name = |i: &str| emberwake_battle::round_intent::RoundIntent::parse(i).map(|x| x.label(cat)).unwrap_or_else(|| title_case(i));
         // (name, intent, AP, rank, description) of family `f` at the rank the member uses now (its top unlocked)
         let skill_of = |f: &str| -> (String, String, i32, i32, String) {
             let top = built.as_ref().and_then(|u| u.selectable_ranks(cat, f).last().copied()).unwrap_or(0);
@@ -1659,9 +1795,9 @@ impl Character {
         for (kind, label, takes) in DECK_KINDS {
             let list = DeckTerms::list(&shown, kind);
             let cap = t.cap(kind);
-            ui.p.text(64.0, y as f32, &format!("{label} {} / {cap}", list.len()), BODY + 1.0, INFO);
+            ui.p.text(64.0, y as f32, &format!("{label} {} / {cap}", list.len()), BODY + 1.0, th().info);
             if kind == "active" {
-                ui.p.text(150.0, y as f32, if self.deck.is_empty() { "Automatic deck" } else { "Custom deck" }, BODY, DIM);
+                ui.p.text(150.0, y as f32, if self.deck.is_empty() { "Automatic deck" } else { "Custom deck" }, BODY, th().dim);
             }
             y += 11;
             for i in 0..cap {
@@ -1669,8 +1805,8 @@ impl Character {
                 let (id, key) = (format!("skills.{kind}.{i}"), format!("deck.{kind}.{i}"));
                 match list.get(i) {
                     None => {
-                        ui.p.panel(r, rgba(20, 28, 46, 120), rgba(58, 78, 116, 120), 2.0);
-                        ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, "Empty", BODY, DIM);
+                        ui.p.panel(r, th().game("slot_empty", rgba(20, 28, 46, 120)), th().game("slot_empty_edge", rgba(58, 78, 116, 120)), 2.0);
+                        ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, "Empty", BODY, th().dim);
                         let help = if t.owned(kind).is_empty() && kind != "active" {
                             format!("Holds one of the hero's {takes}; none owned yet: they come from the hero's background, faction, disciplines and named items.")
                         } else {
@@ -1679,17 +1815,17 @@ impl Character {
                         ui.push(id, "row", "Empty", r, true, false, None, tip(&format!("Empty {kind} slot"), &help));
                     }
                     Some(f) => {
-                        ui.p.panel(r, rgba(26, 34, 54, 255), BORDER, 2.0);
+                        ui.p.panel(r, th().game("slot_filled", rgba(26, 34, 54, 255)), th().edge, 2.0);
                         let card = if kind == "active" {
                             let (name, intent, ap, rank, desc) = skill_of(f);
-                            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 2.0, &name, BODY, 140.0, TEXT);
-                            ui.p.text_fit(r.x as f32 + 148.0, r.y as f32 + 3.0, &format!("{intent} {}", roman(rank)), SMALL, 56.0, DIM);
-                            ui.p.text_right(r.x as f32 + 232.0, r.y as f32 + 2.0, &format!("{ap} AP"), BODY, DIM);
-                            vec![(name, GOLD), (format!("{intent} skill, Rank {}, {ap} AP", roman(rank)), INFO), (desc, TEXT), ("Drag to another slot or back to the list. Right click takes it out.".into(), DIM)]
+                            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 2.0, &name, BODY, 140.0, th().text);
+                            ui.p.text_fit(r.x as f32 + 148.0, r.y as f32 + 3.0, &format!("{intent} {}", roman(rank)), SMALL, 56.0, th().dim);
+                            ui.p.text_right(r.x as f32 + 232.0, r.y as f32 + 2.0, &format!("{ap} AP"), BODY, th().dim);
+                            vec![(name, th().gold), (format!("{intent} skill, Rank {}, {ap} AP", roman(rank)), th().info), (desc, th().text), ("Drag to another slot or back to the list. Right click takes it out.".into(), th().dim)]
                         } else {
                             let (name, desc) = passive_of(f);
-                            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 2.0, &name, BODY, 228.0, TEXT);
-                            vec![(name, GOLD), (desc, TEXT), ("Applies only while slotted. Drag to another slot or back to the list. Right click takes it out.".into(), DIM)]
+                            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 2.0, &name, BODY, 228.0, th().text);
+                            vec![(name, th().gold), (desc, th().text), ("Applies only while slotted. Drag to another slot or back to the list. Right click takes it out.".into(), th().dim)]
                         };
                         ui.push(id, "row", name_of(kind, f), r, true, false, None, card);
                         ui.draggable(key.clone());
@@ -1701,15 +1837,15 @@ impl Character {
             y += 3;
         }
         // The basics: open to every unit, no slot, never removed (D1).
-        ui.p.text(64.0, y as f32, "Basics", BODY + 1.0, INFO);
-        ui.p.text(100.0, y as f32 + 1.0, "open to every unit, no slot", BODY, DIM);
+        ui.p.text(64.0, y as f32, "Basics", BODY + 1.0, th().info);
+        ui.p.text(100.0, y as f32 + 1.0, "open to every unit, no slot", BODY, th().dim);
         for (k, f) in t.basics.iter().enumerate() {
             let r = Rect::new(64 + (k % 3) as i32 * 79, y + 11 + (k / 3) as i32 * 12, 76, 11);
             let (name, intent, ap, _, desc) = skill_of(f);
-            ui.p.panel(r, rgba(22, 30, 48, 255), rgba(58, 78, 116, 200), 2.0);
-            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &name, SMALL, 70.0, TEXT);
+            ui.p.panel(r, th().game("slot_open", rgba(22, 30, 48, 255)), th().game("slot_open_edge", rgba(58, 78, 116, 200)), 2.0);
+            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &name, SMALL, 70.0, th().text);
             let line = if t.intent_of.get(f).is_some_and(|i| t.intents.contains(i)) { format!("{intent} basic, {ap} AP") } else { format!("Basic for any intent, {ap} AP") };
-            ui.push(format!("skills.basic.{f}"), "row", name.clone(), r, true, false, None, vec![(name, GOLD), (line, INFO), (desc, TEXT), ("Open to every unit: takes no slot and cannot be taken out.".into(), DIM)]);
+            ui.push(format!("skills.basic.{f}"), "row", name.clone(), r, true, false, None, vec![(name, th().gold), (line, th().info), (desc, th().text), ("Open to every unit: takes no slot and cannot be taken out.".into(), th().dim)]);
         }
         // Right: the owned list or the order editor.
         ui.tab("skills.view.owned", Rect::new(310, 100, 70, 14), "Owned", PAct::DeckView("owned"), self.deck_view == "owned");
@@ -1717,29 +1853,104 @@ impl Character {
         if self.deck_view == "order" {
             let n = t.intents.len().max(1) as i32;
             let col_w = 294 / n;
+            // INPUT1 FL3: the open follow-up list sits under its opener's entry across the pane; the places after that
+            // row move down by its height (nothing is drawn below the pane's end, y 272)
+            let open: Option<(String, String, usize)> = self.follow_open.clone().and_then(|op| t.intents.iter().find_map(|i| t.order(&shown, i).iter().position(|f| *f == op).map(|k| (op.clone(), i.clone(), k))));
+            let (follow, adds) = open.as_ref().map(|(op, _, _)| (t.follow_list(&shown, op), t.follow_candidates(&shown, op))).unwrap_or_default();
+            let lines = |n: usize| n.div_ceil(FOLLOW_PER) as i32;
+            let ed_h = if open.is_some() { 16 + 15 * (lines(follow.len() + 1) + lines(adds.len())) + 2 } else { 0 };
+            let after = open.as_ref().map(|o| o.2);
+            let y_of = |k: usize| 132 + k as i32 * 15 + if after.is_some_and(|a| k > a) { ed_h } else { 0 };
+            let mut bottom = 132;
             for (c, intent) in t.intents.iter().enumerate() {
                 let x = 310 + c as i32 * col_w;
                 let name = intent_name(intent);
-                ui.p.text_fit(x as f32 + 2.0, 118.0, &name, BODY + 1.0, (col_w - 6) as f32, INFO);
+                ui.p.text_fit(x as f32 + 2.0, 118.0, &name, BODY + 1.0, (col_w - 6) as f32, th().info);
                 ui.push(format!("skills.order.{intent}"), "row", name.clone(), Rect::new(x, 116, col_w - 4, 15), true, false, None, tip(&name, &format!("In {name} the planner fills each round from the top of this list down (its actives and basics). Drag to reorder; a click moves a skill one place up.")));
                 let list = t.order(&shown, intent);
                 if list.is_empty() {
-                    ui.p.text(x as f32 + 2.0, 134.0, "None", BODY, DIM);
+                    ui.p.text(x as f32 + 2.0, 134.0, "None", BODY, th().dim);
                 }
                 for (k, f) in list.iter().enumerate() {
-                    let r = Rect::new(x, 132 + k as i32 * 15, col_w - 4, 13);
+                    let r = Rect::new(x, y_of(k), col_w - 4 - FOLLOW_TOGGLE - 1, 13);
+                    if r.y + r.h > 272 {
+                        break;
+                    }
+                    bottom = bottom.max(r.y + r.h);
                     let basic = t.basics.contains(f);
+                    let set = !t.follow_list(&shown, f).is_empty();
                     let (fname, _, ap, _, desc) = skill_of(f);
-                    ui.p.panel(r, if basic { rgba(22, 30, 48, 255) } else { rgba(26, 34, 54, 255) }, BORDER, 2.0);
-                    ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &format!("{}. {fname}", k + 1), BODY, (col_w - 10) as f32, if basic { INFO } else { TEXT });
-                    let card = vec![(fname.clone(), GOLD), (format!("{} {name}, {ap} AP: place {} of {}", if basic { "Basic," } else { "Active," }, k + 1, list.len()), INFO), (desc, TEXT), ("Drag to reorder; a click moves it one place up.".into(), DIM)];
-                    ui.push(format!("skills.order.{intent}.{k}"), "row", fname, r, true, false, (k > 0).then(|| PAct::OrderUp(intent.clone(), k)), card);
+                    ui.p.panel(r, if basic { th().game("slot_open", rgba(22, 30, 48, 255)) } else { th().game("slot_filled", rgba(26, 34, 54, 255)) }, th().edge, 2.0);
+                    let mark = if set { 7 } else { 0 };
+                    ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &format!("{}. {fname}", k + 1), BODY, (r.w - 6 - mark) as f32, if basic { th().info } else { th().text });
+                    if set {
+                        // FL3: an entry with a set follow-up list shows a small "+"
+                        ui.p.text((r.x + r.w - 7) as f32, r.y as f32 + 2.0, "+", BODY, th().gold);
+                    }
+                    let card = vec![(fname.clone(), th().gold), (format!("{} {name}, {ap} AP: place {} of {}", if basic { "Basic," } else { "Active," }, k + 1, list.len()), th().info), (desc, th().text), ("Drag to reorder; a click moves it one place up.".into(), th().dim)];
+                    ui.push(format!("skills.order.{intent}.{k}"), "row", fname.clone(), r, true, false, (k > 0).then(|| PAct::OrderUp(intent.clone(), k)), card);
                     ui.draggable(format!("order.{intent}.{k}"));
                     ui.drop_target(format!("order.{intent}.{k}"));
+                    let is_open = after == Some(k) && open.as_ref().is_some_and(|o| o.0 == *f);
+                    let line = if set { format!("After {fname} the planner tries its follow-up list first, then the {name} order.") } else { format!("After {fname} the planner fills from the {name} order; set a follow-up list to try other skills first.") };
+                    ui.button_tip(&format!("skills.follow.{f}"), Rect::new(r.x + r.w + 1, r.y, FOLLOW_TOGGLE, 13), if is_open { "v" } else { ">" }, PAct::FollowOpen(f.clone()), true, tip("Follow-ups", &line));
                 }
             }
-            ui.button_tip("skills.order.auto", Rect::new(310, 254, 70, 15), "Auto order", PAct::OrderAuto, !shown.order.is_empty(), tip("Auto order", "Every intent back to the automatic order: the deck's actives in slot order, then the basics."));
-            ui.p.text(386.0, 258.0, "Each round fills from the top.", SMALL, DIM);
+            if let Some((op, intent, k)) = &open {
+                let y0 = 132 + (*k as i32 + 1) * 15;
+                let iname = intent_name(intent);
+                let oname = skill_of(op).0;
+                ui.p.panel(Rect::new(310, y0 - 1, 294, (ed_h - 1).min(273 - y0)), th().game("editor_pane", rgba(16, 22, 38, 255)), th().edge, 2.0);
+                ui.p.text_fit(314.0, y0 as f32 + 2.0, &format!("After {oname}:"), BODY, 168.0, th().gold);
+                ui.button_tip(&format!("skills.follow.clear.{op}"), Rect::new(490, y0, 112, 13), &format!("Use the {iname} order"), PAct::FollowClear(op.clone()), !follow.is_empty(), tip("Use the order", &format!("Empties this list: after {oname} the planner fills from the {iname} order.")));
+                let y = y0 + 16;
+                for j in 0..=follow.len() {
+                    let r = Rect::new(312 + (j % FOLLOW_PER) as i32 * 58, y + (j / FOLLOW_PER) as i32 * 15, 56, 13);
+                    if r.y + r.h > 272 {
+                        break;
+                    }
+                    bottom = bottom.max(r.y + r.h);
+                    match follow.get(j) {
+                        Some(f) => {
+                            let (fname, _, ap, _, desc) = skill_of(f);
+                            ui.p.panel(r, th().game("slot_filled", rgba(26, 34, 54, 255)), th().edge, 2.0);
+                            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &format!("{}. {fname}", j + 1), BODY, (r.w - 6) as f32, th().text);
+                            let card = vec![(fname.clone(), th().gold), (format!("Follow-up {} of {} after {oname}, {ap} AP", j + 1, follow.len()), th().info), (desc, th().text), ("Drag to reorder. Right click takes it out.".into(), th().dim)];
+                            ui.push(format!("skills.follow.{op}.{j}"), "row", fname, r, true, false, None, card);
+                            ui.draggable(format!("follow.{op}.{j}"));
+                        }
+                        None => {
+                            ui.p.panel(r, th().game("slot_empty", rgba(20, 28, 46, 120)), th().game("slot_empty_edge", rgba(58, 78, 116, 120)), 2.0);
+                            let label = if follow.is_empty() { "None set" } else { "Drop here" };
+                            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, label, BODY, (r.w - 6) as f32, th().dim);
+                            ui.push(format!("skills.follow.{op}.end"), "row", label, r, true, false, None, tip("Follow-ups", &format!("Drop one of the {iname} skills here to try it after {oname}; with no list the {iname} order fills.")));
+                        }
+                    }
+                    ui.drop_target(format!("follow.{op}.{j}"));
+                }
+                let y = y + 15 * lines(follow.len() + 1);
+                if !adds.is_empty() && y + 13 <= 272 {
+                    ui.p.text(314.0, y as f32 + 2.0, "Add:", BODY, th().info);
+                }
+                for (j, f) in adds.iter().enumerate() {
+                    let r = Rect::new(340 + (j % FOLLOW_PER) as i32 * 52, y + (j / FOLLOW_PER) as i32 * 15, 50, 13);
+                    if r.y + r.h > 272 {
+                        break;
+                    }
+                    bottom = bottom.max(r.y + r.h);
+                    let (fname, _, ap, _, desc) = skill_of(f);
+                    ui.p.panel(r, th().game("slot_open", rgba(22, 30, 48, 255)), th().game("slot_open_edge", rgba(58, 78, 116, 200)), 2.0);
+                    ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &fname, BODY, (r.w - 6) as f32, th().info);
+                    let card = vec![(fname.clone(), th().gold), (format!("{iname} skill, {ap} AP"), th().info), (desc, th().text), (format!("Click to try it after {oname} (at the end of the list), or drag it to a place."), th().dim)];
+                    ui.push(format!("skills.follow.add.{op}.{f}"), "row", fname, r, true, false, Some(PAct::FollowAdd(op.clone(), f.clone())), card);
+                    ui.draggable(format!("follow.add.{op}.{f}"));
+                }
+            }
+            let auto_y = 254.max(bottom + 3);
+            if auto_y + 15 <= 273 {
+                ui.button_tip("skills.order.auto", Rect::new(310, auto_y, 70, 15), "Auto order", PAct::OrderAuto, !shown.order.is_empty(), tip("Auto order", "Every intent back to the automatic order: the deck's actives in slot order, then the basics."));
+                ui.p.text(386.0, auto_y as f32 + 4.0, "Each round fills from the top.", SMALL, th().dim);
+            }
         } else {
             let list_area = Rect::new(310, 114, 294, 158);
             ui.push("skills.list", "panel", "Owned", list_area, true, false, None, tip("Owned", "Drop a slot here to take it out."));
@@ -1748,7 +1959,7 @@ impl Character {
             const ROWS: usize = 7;
             self.scroll = self.scroll.min(owned.len().saturating_sub(ROWS));
             if self.scroll > 0 || owned.len() > ROWS {
-                ui.p.text_right(604.0, 103.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(owned.len()), owned.len()), SMALL, DIM);
+                ui.p.text_right(604.0, 103.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(owned.len()), owned.len()), SMALL, th().dim);
             }
             for (k, &(kind, ref id)) in owned.iter().skip(self.scroll).take(ROWS).enumerate() {
                 let y = 118 + k as i32 * 22;
@@ -1762,8 +1973,8 @@ impl Character {
                     let (name, desc) = passive_of(id);
                     (name.clone(), format!("{name}  [{}]", title_case(kind)), desc)
                 };
-                ui.p.text_fit(366.0, y as f32 + 1.0, &line, BODY, 238.0, TEXT);
-                ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, DIM);
+                ui.p.text_fit(366.0, y as f32 + 1.0, &line, BODY, 238.0, th().text);
+                ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
                 ui.push(format!("skills.owned.{kind}.{id}"), "row", name.clone(), Rect::new(366, y, 238, 20), true, slotted, Some(PAct::DeckSlot(kind, id.clone())), tip(&name, &desc));
                 ui.draggable(format!("deck.own.{kind}.{id}"));
             }
@@ -1774,7 +1985,9 @@ impl Character {
             let target = ui.widgets.iter().rev().find(|x| x.drop.is_some() && x.rect.contains(mx, my)).and_then(|x| x.drop.clone());
             self.detail = match target {
                 Some(to) if t.after_drop(&self.deck, &from, &to).is_ok() => {
-                    if let Some((intent, j)) = DeckTerms::order_key(&to) {
+                    if let Some((_, j)) = DeckTerms::follow_key(&to) {
+                        format!("Puts it at place {} of the follow-ups.", j + 1)
+                    } else if let Some((intent, j)) = DeckTerms::order_key(&to) {
                         format!("Moves it to place {} in the {} order.", j + 1, intent_name(intent))
                     } else if to == "deck.list" {
                         "Drop to take it out.".into()
@@ -1789,6 +2002,7 @@ impl Character {
                         }
                     }
                 }
+                _ if from.starts_with("follow.") => "Drop on a place in the same follow-up list.".into(),
                 _ => "Drop on a slot of its own kind, on the owned list to take it out, or on a place in the same intent's order.".into(),
             };
         }
@@ -1808,7 +2022,7 @@ impl Character {
         let head = BODY + 1.0;
         // Middle: the equipped slots, then the pouch.
         let (mx, mw) = (243, 185);
-        ui.p.text(mx as f32 + 2.0, 102.0, "Equipped", head, INFO);
+        ui.p.text(mx as f32 + 2.0, 102.0, "Equipped", head, th().info);
         for (i, slot) in LOADOUT_SLOTS.iter().enumerate() {
             let y = 116 + i as i32 * 15;
             let explicit = work.equipment.get(*slot).cloned();
@@ -1823,13 +2037,13 @@ impl Character {
                 (None, Some(item)) => item_tip(d, item, "Class default gear: drag an item from the stash onto this slot to replace it."),
                 (None, None) => tip(&label, "Empty: drag an item from the stash onto this slot."),
             };
-            ui.row(&format!("gear.slot.{slot}"), Rect::new(mx, y, mw, 14), &label, if explicit.is_some() { TEXT } else { DIM }, explicit.as_ref().map(|_| PAct::Unequip(slot.to_string())), false, card);
+            ui.row(&format!("gear.slot.{slot}"), Rect::new(mx, y, mw, 14), &label, if explicit.is_some() { th().text } else { th().dim }, explicit.as_ref().map(|_| PAct::Unequip(slot.to_string())), false, card);
             if explicit.is_some() {
                 ui.draggable(format!("equip.{slot}"));
             }
             ui.drop_target(format!("slot.{slot}"));
         }
-        ui.p.text(mx as f32 + 2.0, 210.0, "Battle pouch", head, INFO);
+        ui.p.text(mx as f32 + 2.0, 210.0, "Battle pouch", head, th().info);
         for i in 0..POUCH_MAX {
             let y = 224 + i as i32 * 15;
             let item = work.pouch.get(i);
@@ -1841,7 +2055,7 @@ impl Character {
                 Some(item) => item_tip(d, item, "Click or drag it to the stash to take it out; drag it onto another pouch slot to reorder."),
                 None => tip(&label, "Drag a consumable from the stash here; the hero can use it in battle."),
             };
-            ui.row(&format!("gear.pouch.{i}"), Rect::new(mx, y, mw, 14), &label, if item.is_some() { TEXT } else { DIM }, item.map(|_| PAct::PouchRemove(i)), false, card);
+            ui.row(&format!("gear.pouch.{i}"), Rect::new(mx, y, mw, 14), &label, if item.is_some() { th().text } else { th().dim }, item.map(|_| PAct::PouchRemove(i)), false, card);
             if item.is_some() {
                 ui.draggable(format!("pouch.{i}"));
             }
@@ -1849,9 +2063,9 @@ impl Character {
         }
         // Right: the party stash (the whole column takes items dropped back).
         let (sx, sw) = (436, 179);
-        ui.p.text(sx as f32 + 2.0, 102.0, "Party stash", head, INFO);
+        ui.p.text(sx as f32 + 2.0, 102.0, "Party stash", head, th().info);
         let area = Rect::new(sx, 114, sw, 156);
-        ui.p.panel(area, rgba(20, 28, 46, 160), BORDER, 2.0);
+        ui.p.panel(area, th().game("party_area", rgba(20, 28, 46, 160)), th().edge, 2.0);
         ui.push("gear.stash", "panel", "Party stash", area, true, false, None, tip("Party stash", "Drop a worn or pouch item here to take it off."));
         ui.drop_target("stash");
         let mut ids: Vec<&String> = stash.keys().filter(|id| d.cat.items.contains_key(*id)).collect();
@@ -1859,7 +2073,7 @@ impl Character {
         const ROWS: usize = 10;
         self.gear_scroll = self.gear_scroll.min(ids.len().saturating_sub(ROWS));
         if ids.is_empty() {
-            ui.p.text(sx as f32 + 4.0, 118.0, "Empty", head, DIM);
+            ui.p.text(sx as f32 + 4.0, 118.0, "Empty", head, th().dim);
         }
         for (row, id) in ids.iter().skip(self.gear_scroll).take(ROWS).enumerate() {
             let def = &d.cat.items[*id];
@@ -1871,14 +2085,14 @@ impl Character {
                 (None, "Not wearable.")
             };
             let movable = act.is_some();
-            ui.row(&format!("gear.stash.{id}"), Rect::new(sx + 2, 116 + row as i32 * 15, sw - 4, 14), &format!("{} x{}", def.name, stash[*id]), TEXT, act, false, item_tip(d, id, help));
+            ui.row(&format!("gear.stash.{id}"), Rect::new(sx + 2, 116 + row as i32 * 15, sw - 4, 14), &format!("{} x{}", def.name, stash[*id]), th().text, act, false, item_tip(d, id, help));
             if movable {
                 ui.draggable(format!("stash.{id}"));
             }
         }
         if ids.len() > ROWS {
             let shown = format!("{}-{} of {} (wheel)", self.gear_scroll + 1, (self.gear_scroll + ROWS).min(ids.len()), ids.len());
-            ui.p.text_right((sx + sw - 4) as f32, 262.0, &shown, SMALL, DIM);
+            ui.p.text_right((sx + sw - 4) as f32, 262.0, &shown, SMALL, th().dim);
         }
         // Left: the stats with this gear, and the change of the dragged item over a target, else of the hovered item.
         let ruleset = party_ruleset(cx);
@@ -1886,18 +2100,18 @@ impl Character {
         let now = sheet(d, &cx.gs().world_id, &ruleset, &work);
         let then = preview.as_ref().map(|p| sheet(d, &cx.gs().world_id, &ruleset, p));
         let (lx, lw) = (25, 210);
-        ui.p.text(lx as f32 + 3.0, 102.0, &format!("{}  Lv {}", d.class_name(&cx.gs().world_id, &work.class_id(d)), work.level(d)), head, INFO);
+        ui.p.text(lx as f32 + 3.0, 102.0, &format!("{}  Lv {}", d.class_name(&cx.gs().world_id, &work.class_id(d)), work.level(d)), head, th().info);
         // DERIVE1 4.4: catalog rows past the built-in ones close the 12 px step up (the last row starts at 260 at most)
         let step = 12f32.min(102.0 / (now.len().saturating_sub(STATS.len()).max(2) - 1) as f32);
         for (i, r) in now.iter().enumerate() {
             let core = i < STATS.len();
             let (x, y, w) = if core { (lx + 3 + (i as i32 % 2) * 104, 117 + (i as i32 / 2) * 12, 100) } else { (lx + 3, 158 + ((i - STATS.len()) as f32 * step) as i32, lw - 6) };
-            ui.p.text(x as f32, y as f32, &r.label, BODY, DIM);
+            ui.p.text(x as f32, y as f32, &r.label, BODY, th().dim);
             let right = (x + w - 26) as f32;
-            ui.p.text_right(right, y as f32, &r.shown, BODY, TEXT);
+            ui.p.text_right(right, y as f32, &r.shown, BODY, th().text);
             let delta = then.as_ref().and_then(|t| t.get(i)).map(|t| t.value - r.value).unwrap_or(0);
             if delta != 0 {
-                ui.p.text(right + 3.0, y as f32, &format!("{delta:+}"), BODY, if delta > 0 { GOOD } else { FOE });
+                ui.p.text(right + 3.0, y as f32, &format!("{delta:+}"), BODY, if delta > 0 { th().good } else { th().foe });
             }
             ui.push(format!("gear.stat.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(x - 2, y - 1, w, if core { 12 } else { step.min(12.0) as i32 }), true, false, None, tip(&r.label, &r.desc));
         }
@@ -1930,8 +2144,13 @@ impl Character {
 }
 
 /// A deck as the agent link reads it (every key, empty ones too).
+/// INPUT1 FL3: places a line in the follow-up editor, and the width of an order entry's follow-up toggle.
+const FOLLOW_PER: usize = 5;
+const FOLLOW_TOGGLE: i32 = 11;
+
 pub(crate) fn deck_json(d: &Deck) -> Value {
-    json!({"active": d.active, "passive": d.passive, "keystone": d.keystone, "order": Value::Object(d.order.iter().map(|(k, v)| (k.clone(), json!(v))).collect())})
+    let lists = |m: &IndexMap<String, Vec<String>>| Value::Object(m.iter().map(|(k, v)| (k.clone(), json!(v))).collect());
+    json!({"active": d.active, "passive": d.passive, "keystone": d.keystone, "order": lists(&d.order), "follow_ups": lists(&d.follow_ups)})
 }
 
 /// The Gear tab's stat list: the core stats with gear, then the derived rows (`derived`), as `m` fights in `world`.
@@ -1979,6 +2198,19 @@ fn item_numbers(def: &emberwake_data::ItemDef) -> String {
     let line = parts.join("; ");
     let mut c = line.chars();
     c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str() + ".").unwrap_or_default()
+}
+
+/// TERMS1 TU5: every intent's name through `cat`'s terms (the game's `terms` row, else the default), by intent id.
+pub(crate) fn intent_names(cat: &emberwake_data::Catalog) -> IndexMap<String, String> {
+    emberwake_battle::round_intent::RoundIntent::ALL.into_iter().map(|i| (i.id().to_string(), i.label(cat))).collect()
+}
+
+/// An intent id's display name ("assault" -> "Assault"; a renamed intent its `names` entry, from `intent_names`).
+fn intent_title(names: &IndexMap<String, String>, id: &str) -> String {
+    match names.get(id) {
+        Some(n) => n.clone(),
+        None => emberwake_battle::round_intent::RoundIntent::parse(id).map(|x| x.name().to_string()).unwrap_or_else(|| title_case(id)),
+    }
 }
 
 fn title_case(slot: &str) -> String {
@@ -2338,6 +2570,7 @@ mod tests {
             intent_of: [("cleave", "assault"), ("lunge", "assault"), ("wall", "guard"), ("strike", "assault"), ("hold", "guard")].iter().map(|(a, b)| (a.to_string(), b.to_string())).collect(),
             auto: Deck { active: strs(&["cleave", "wall"]), ..Default::default() },
             auto_actives: strs(&["lunge"]),
+            intent_names: IndexMap::new(),
         }
     }
 
@@ -2413,6 +2646,109 @@ mod tests {
         c.deck = d.clone();
         c.act(&mut cx, PAct::OrderAuto);
         assert!(c.deck.order.is_empty() && c.deck.active == d.active, "Auto order clears the written orders only");
+    }
+
+    /// INPUT1 FL1, FL3: a follow-up edit pins the deck as it plays; a list takes skills of the opener's intent in the
+    /// deck (the opener may stand in its own list), reorders within itself, loses an entry or empties ("Use the order");
+    /// an actives edit that removes a family takes it out of every list and drops its own list.
+    #[test]
+    fn follow_up_lists_take_the_openers_intent_and_follow_the_slots() {
+        let t = terms();
+        let empty = Deck::default();
+        let d = t.follow_add(&empty, "cleave", "strike", None).unwrap();
+        assert_eq!(d.active, t.auto.active, "a follow-up edit pins the automatic actives");
+        assert_eq!(d.follow_ups.get("cleave"), Some(&strs(&["strike"])));
+        let d2 = t.follow_add(&d, "cleave", "cleave", None).unwrap();
+        assert_eq!(t.follow_list(&d2, "cleave"), strs(&["strike", "cleave"]), "the opener in its own list");
+        assert_eq!(t.follow_candidates(&d, "cleave"), strs(&["cleave"]), "the intent's actives and basics not yet listed");
+        assert!(t.follow_add(&d, "cleave", "wall", None).unwrap_err().contains("is Guard, not Assault"));
+        // TERMS1 TU5: the refusal names the intents through the catalog's terms
+        let mut renamed = t.clone();
+        renamed.intent_names = intent_names(&emberwake_data::Catalog::from_value(&json!({"terms": [{"id": "intent_assault", "name": "Onslaught", "origin": "test"}]})));
+        assert!(renamed.follow_add(&d, "cleave", "wall", None).unwrap_err().contains("is Guard, not Onslaught"));
+        assert!(t.follow_add(&d, "cleave", "lunge", None).unwrap_err().contains("not in the deck"));
+        assert!(t.follow_add(&d, "lunge", "strike", None).unwrap_err().contains("not an opener"));
+        // drag: reorder, add at a place, never across lists
+        assert_eq!(t.follow_list(&t.after_drop(&d2, "follow.cleave.1", "follow.cleave.0").unwrap(), "cleave"), strs(&["cleave", "strike"]));
+        assert_eq!(t.follow_list(&t.after_drop(&d, "follow.add.cleave.cleave", "follow.cleave.0").unwrap(), "cleave"), strs(&["cleave", "strike"]));
+        assert_eq!(t.follow_list(&t.after_drop(&d, "follow.add.cleave.cleave", "follow.cleave.1").unwrap(), "cleave"), strs(&["strike", "cleave"]), "the end place");
+        let w = t.follow_add(&d2, "wall", "hold", None).unwrap();
+        assert!(t.after_drop(&w, "follow.cleave.0", "follow.wall.0").unwrap_err().contains("own follow-ups"));
+        assert!(t.after_drop(&w, "follow.add.cleave.strike", "order.assault.0").is_err());
+        // remove, clear
+        assert_eq!(t.follow_list(&t.follow_remove(&d2, "cleave", 0).unwrap(), "cleave"), strs(&["cleave"]));
+        assert!(!t.follow_remove(&d, "cleave", 0).unwrap().follow_ups.contains_key("cleave"), "the last one out: no list");
+        let cleared = t.follow_clear(&w, "cleave").unwrap();
+        assert!(!cleared.follow_ups.contains_key("cleave") && cleared.follow_ups.contains_key("wall"), "only that opener's list");
+        assert!(t.follow_clear(&cleared, "cleave").is_err(), "nothing to clear");
+        // an active that leaves the deck leaves every list and drops its own
+        let two = t.after_drop(&empty, "deck.own.active.lunge", "deck.active.1").unwrap();
+        assert_eq!(two.active, strs(&["cleave", "lunge"]));
+        let lists = t.follow_add(&t.follow_add(&t.follow_add(&two, "lunge", "cleave", None).unwrap(), "lunge", "strike", None).unwrap(), "cleave", "lunge", None).unwrap();
+        let gone = t.unslot(&lists, "active", 0).unwrap();
+        assert!(!gone.follow_ups.contains_key("cleave"), "cleave's own list is dropped");
+        assert_eq!(gone.follow_ups.get("lunge"), Some(&strs(&["strike"])), "cleave left lunge's list");
+        let back = t.after_drop(&lists, "deck.own.active.wall", "deck.active.1").unwrap();
+        assert!(!back.follow_ups.contains_key("lunge") && back.follow_ups.get("cleave").is_none(), "replacing lunge drops its list and takes it out of cleave's: {back:?}");
+    }
+
+    /// FL3 on the Skills tab (shipped data, ids picked by rule): an order entry's toggle opens its list under it; a click
+    /// adds a skill of the intent, the entry shows "+", a right click takes an entry out, "Use the order" empties the
+    /// list; the editor fits the popup; Confirm saves a deck the member's validation accepts.
+    #[test]
+    fn the_follow_up_editor_opens_under_its_entry_and_saves_a_valid_list() {
+        let (mut cx, member) = deck_cx(true);
+        let mut g = crate::hud::hud_tests::gfx();
+        let mut c = Character::new(&cx, &member, "skills");
+        c.act(&mut cx, PAct::DeckView("order"));
+        c.draw(&mut cx, &mut g, (-500, -500), true);
+        let t = c.terms.clone().unwrap();
+        let shown = t.shown(&c.deck);
+        let intent = t.intents.iter().find(|i| t.order(&shown, i).len() > 1).or_else(|| t.intents.iter().find(|i| !t.order(&shown, i).is_empty())).cloned().expect("an intent with an order");
+        let order = t.order(&shown, &intent);
+        let op = order[0].clone();
+        assert!(c.w.iter().any(|w| w.id == format!("skills.follow.{op}")), "every order entry has its toggle");
+        assert!(!c.w.iter().any(|w| w.id == format!("skills.follow.clear.{op}")), "closed until toggled");
+        c.act(&mut cx, PAct::FollowOpen(op.clone()));
+        c.draw(&mut cx, &mut g, (-500, -500), true);
+        let ids: Vec<String> = c.w.iter().map(|w| w.id.clone()).collect();
+        assert!(ids.contains(&format!("skills.follow.clear.{op}")) && ids.contains(&format!("skills.follow.{op}.end")), "{ids:?}");
+        for f in &order {
+            assert!(ids.contains(&format!("skills.follow.add.{op}.{f}")), "{f} can be added");
+        }
+        let entry = rect_of(&c, &format!("skills.order.{intent}.0"));
+        assert!(rect_of(&c, &format!("skills.follow.clear.{op}")).y > entry.y, "the list opens under its entry");
+        assert_laid_out(&c, "follow-up editor");
+        let last = order.last().unwrap().clone();
+        c.act(&mut cx, PAct::FollowAdd(op.clone(), last.clone()));
+        assert_eq!(c.deck.follow_ups.get(&op), Some(&vec![last.clone()]));
+        let recs = crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, 1.0);
+        assert!(recs.iter().any(|r| r.text == "+"), "a set list marks its entry");
+        assert!(c.w.iter().any(|w| w.id == format!("skills.follow.{op}.0")));
+        if order.len() > 1 {
+            c.act(&mut cx, PAct::FollowAdd(op.clone(), order[0].clone()));
+            assert!(c.can_drop(&cx, &format!("follow.{op}.1"), &format!("follow.{op}.0")));
+            assert_eq!(t.follow_list(&c.deck, &op), [last.clone(), order[0].clone()], "added at the end");
+            c.accept_drop(&mut cx, &format!("follow.{op}.1"), &format!("follow.{op}.0"));
+            assert_eq!(t.follow_list(&c.deck, &op), [order[0].clone(), last.clone()], "a drag reorders");
+        }
+        // a right click on the first entry takes it out
+        c.draw(&mut cx, &mut g, (-500, -500), true);
+        let n = t.follow_list(&c.deck, &op).len();
+        let r = rect_of(&c, &format!("skills.follow.{op}.0"));
+        c.mouse = (r.x + 2, r.y + 2);
+        c.back(&mut cx);
+        assert_eq!(t.follow_list(&c.deck, &op).len(), n - 1);
+        assert!(cx.nav.is_empty(), "the popup stays open");
+        c.act(&mut cx, PAct::FollowAdd(op.clone(), op.clone()));
+        let draft = c.deck.clone();
+        c.act(&mut cx, PAct::ConfirmSkills);
+        assert!(cx.notice.is_empty(), "{:?}", cx.notice);
+        let m = cx.gs().party.member(&member).unwrap().clone();
+        assert_eq!(m.deck, draft);
+        assert!(m.validate(&cx.data).is_empty(), "{:?}", m.validate(&cx.data));
+        c.act(&mut cx, PAct::FollowClear(op.clone()));
+        assert!(!c.deck.follow_ups.contains_key(&op), "Use the order empties the list");
     }
 
     /// A game on the shipped data in a world that plays under the deck rule (`deck` true) or without it, and its first
@@ -2543,8 +2879,18 @@ mod tests {
         let (mut cx, member) = deck_cx(true);
         let mut g = crate::hud::hud_tests::gfx();
         let mut c = Character::new(&cx, &member, "skills");
-        for view in ["owned", "order"] {
-            c.act(&mut cx, PAct::DeckView(view));
+        for view in ["owned", "order", "follow"] {
+            if view == "follow" {
+                // INPUT1 FL3: the follow-up editor open under the first entry of the longest order, a list set
+                let t = c.terms.clone().unwrap();
+                let shown = t.shown(&c.deck);
+                let order = t.intents.iter().map(|i| t.order(&shown, i)).max_by_key(Vec::len).unwrap_or_default();
+                let op = order.first().cloned().expect("an order entry");
+                c.act(&mut cx, PAct::FollowAdd(op.clone(), order.last().cloned().unwrap()));
+                c.act(&mut cx, PAct::FollowOpen(op));
+            } else {
+                c.act(&mut cx, PAct::DeckView(view));
+            }
             for (size, scale) in aegis_ui::screen::TEXT_SIZES {
                 let recs = crate::hud::hud_tests::frame(&mut c, &mut cx, &mut g, scale as f32);
                 let boxes: Vec<(String, f32, f32, f32, f32)> = c.w.iter().map(|w| (w.id.clone(), w.rect.x as f32, w.rect.y as f32, w.rect.w as f32, w.rect.h as f32)).collect();

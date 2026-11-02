@@ -3,7 +3,7 @@
 //! come from the rules: the four worked examples of section 4, determinism and reason tags (PL1, PL6), refusals (MV7,
 //! MV8, PL7), the reserved kite step (AS3), Guard and Support rounds (GD1, GD2, SP1, SP2), the order lists (FU4), the
 //! Disengage retreat and jump (MV8), the auto kind (MV11), the rebuild of later members (PL8), the proposed target
-//! (TG6) and manual mode (MM1-MM4).
+//! (TG6) and steps placed by hand with `fill_rest` (MM3).
 
 use indexmap::IndexMap;
 use rpgkit_battle::command::Carry;
@@ -498,8 +498,8 @@ fn the_auto_kind_is_engage_else_disengage() {
     assert_eq!(s.w.round_states[&SPIKER].maneuver, None);
 }
 
-/// PL8: rebuilding a member rebuilds every later member of its side that plans automatically, in roster order, so a
-/// later approach never ends on an earlier claim; a manual member keeps its steps.
+/// PL8: rebuilding a member rebuilds every later member of its side, in roster order, so a later approach never ends
+/// on an earlier claim; a member without an intent keeps its steps.
 #[test]
 fn later_members_are_rebuilt_around_earlier_claims() {
     let mut s = session(timeline());
@@ -511,11 +511,9 @@ fn later_members_are_rebuilt_around_earlier_claims() {
     for c in [VANGUARD, SPIKER] {
         intent(&mut s.w, c, RoundIntent::Assault, RoundTarget::Unit(FOOTMAN));
     }
-    intent(&mut s.w, DANCER, RoundIntent::Maneuver, RoundTarget::Unit(FOOTMAN));
     let (w, plan) = (&mut s.w, &mut s.plan);
-    rip::set_manual(w, plan, DANCER, true).unwrap();
     plan.set_steps(DANCER, vec![PlanStep::self_skill(sid(w, "rest"))]);
-    let manual_steps = plan.steps_of(DANCER);
+    let hand_steps = plan.steps_of(DANCER);
     let (first, refused) = rip::replan(w, plan, VANGUARD);
     assert!(first.is_ok() && refused.is_empty(), "{first:?} {refused:?}");
     let w = &s.w;
@@ -523,7 +521,7 @@ fn later_members_are_rebuilt_around_earlier_claims() {
     let (a, b) = (end(VANGUARD).expect("vanguard approaches"), end(SPIKER).expect("spiker approaches"));
     assert!(a != b && a.dist(foe_at) == 1 && b.dist(foe_at) == 1, "{a} {b}");
     let kept = s.plan.steps_of(DANCER);
-    assert!(kept.len() == manual_steps.len() && Rc::ptr_eq(&kept[0], &manual_steps[0]), "the manual member is left alone");
+    assert!(kept.len() == hand_steps.len() && Rc::ptr_eq(&kept[0], &hand_steps[0]), "the member without an intent is left alone");
 }
 
 /// TG6: the planner proposes last round's target while it is valid.
@@ -541,16 +539,15 @@ fn last_rounds_target_is_proposed() {
     assert_eq!(rip::proposed_target(&s.w, VANGUARD, RoundIntent::Guard), Some(RoundTarget::Myself));
 }
 
-/// MM1-MM4: a manual member keeps its steps (a delayed opener: Rest, Rest, then Heavy Cleave landing in b6); "fill the
-/// rest" places follow-ups and Rest after the last manual step; Manual off rebuilds the auto plan.
+/// MM3: steps placed by hand (a delayed opener: Rest, Rest, then Heavy Cleave landing in b6); `fill_rest` places
+/// follow-ups and Rest after the last of them; `replan` rebuilds the auto plan.
 #[test]
-fn manual_mode_keeps_the_steps_and_fills_on_request() {
+fn hand_steps_stand_and_fill_rest_follows_them() {
     let mut s = session(timeline());
     place(&mut s.w, VANGUARD, V2::new(4, 4));
     place(&mut s.w, FOOTMAN, V2::new(5, 4));
     intent(&mut s.w, VANGUARD, RoundIntent::Assault, RoundTarget::Unit(FOOTMAN));
     let (w, plan) = (&mut s.w, &mut s.plan);
-    rip::set_manual(w, plan, VANGUARD, true).unwrap();
     let rest = sid(w, "rest");
     for _ in 0..2 {
         assert_eq!(plan.add_step(w, VANGUARD, PlanStep::self_skill(rest), false), "");
@@ -559,13 +556,13 @@ fn manual_mode_keeps_the_steps_and_fills_on_request() {
     assert_eq!(plan.add_step(w, VANGUARD, PlanStep::engage(sid(w, "tl_heavy_cleave"), FOOTMAN), false), "");
     let heavy = plan.entries_for(w, VANGUARD).pop().unwrap();
     assert_eq!(heavy.end_block(w), BLOCKS, "a delayed opener lands in b6");
-    // fill the rest after two manual Rests
+    // fill the rest after two Rests placed by hand
     plan.set_steps(VANGUARD, plan.steps_of(VANGUARD)[..2].to_vec());
     rip::fill_rest(w, plan, VANGUARD).unwrap();
     let r = rows(w, plan, VANGUARD);
     assert_eq!(r.iter().map(|x| (x.0.as_str(), x.1, x.5.as_str())).collect::<Vec<_>>(), [("rest", 1, ""), ("rest", 2, ""), ("tl_heavy_cleave", 3, "follow-up 1")]);
-    // Manual off: the auto plan
-    rip::set_manual(w, plan, VANGUARD, false).unwrap();
+    // a rebuild: the auto plan
+    rip::replan(w, plan, VANGUARD).0.unwrap();
     let r = rows(w, plan, VANGUARD);
     assert_eq!(r.iter().map(|x| (x.0.as_str(), x.5.as_str())).collect::<Vec<_>>(), [("tl_heavy_cleave", rip::OPENER), ("tl_shoulder_check", "follow-up 2"), ("tl_shoulder_check", "follow-up 2")]);
 }
@@ -576,6 +573,5 @@ fn classic_has_no_planner() {
     let mut s = session(Ruleset::classic());
     let (w, plan) = (&mut s.w, &mut s.plan);
     assert!(rip::plan_unit(w, plan, VANGUARD).is_err());
-    assert!(rip::set_manual(w, plan, VANGUARD, true).is_err());
     assert!(s.w.round_states.is_empty());
 }

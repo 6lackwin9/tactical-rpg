@@ -2,7 +2,178 @@
 
 Every change to the codebase, newest first, one section per day (UTC). "In the game" is written for players and testers; the lists below it are the commit subjects. Kept by the `patch-notes-write` skill: `python3 tools/patch_notes.py` prints the commits on `develop` since the marker below, and whoever runs it (Merge & Release at each release cut, or anyone asked for patch notes) writes the new section and moves the marker.
 
-<!-- last: 9e19249a -->
+<!-- last: 767ef4ed -->
+
+## 2026-11-03
+
+In the game:
+
+- **Walking and running**: the party walks at a calmer pace on region maps, and holding Shift runs. The Animation speed setting scales both.
+- **Dash**: humanoid units now have their own dash animation in battle, with dust, and speed lines from the side.
+- **Testers' keys** (debug builds): F6 cycles the map zoom, F9 the window size, F11 the walk step.
+
+Every change that touched the game:
+
+- WALKRUN1: the region map walks at 200 ms a step and runs at 130 ms while Shift is held, in every build, each / anim_speed, on held-key and path walks; letting go walks from the next step; a step glides in the time it started with; F11 and the debug slider set the walk only; Run: Hold Shift joins the Maps keys (767ef4ed)
+- LAYOUT720-E3: Metrics (Ui::m, Metrics::of, hair), Env, theme metrics (no key = today's value doubled, layout included), Ui::{screen, image_in, frame_body, corner_size}, every widget and draw_tip right on all grids, carets on Native fields right; a tip follows the focus on Native screens only; T1 unedited, T3 in tests/widgets_native.rs, shipped art zero pixels different (106c3221)
+- VIEWKEYS2: debug-build F11 cycles the walk step 90, 110, 130, 160, 200 ms on the region map, applied at once and saved; the shell drops key repeats of F6, F9 and F11 (119796e5)
+- DASH1: side dash, dash_down, dash_up on the 22 humanoid sheets (5 frames, 40-50-60-50-50 ms = DASH_MS, not looped; speed lines on the side view only, dust on all views); the side row sits before the wind-up rows; export_units check_dash; tools/sprites test_dash.py and dash_board.py; existing rows pixel-identical; no Rust change; seen in game right, left, up and down, warrior only (cbdbc077)
+- VIEWKEYS1: debug-build hotkeys: F6 cycles the map zoom 1x, 1.5x, 2x on the region map; F9 cycles the window 1280x720, 1600x900, 1920x1080 in Windowed mode on the region and world maps, battle, game menu and main menu, in Borderless or Fullscreen only a note; each saves and shows a note. Walk speed: step = base / anim_speed, base 130 ms (was a fixed 90), a debug Walk step slider 60-240 ms; the walk linger follows the step; a release-build unused import warning fixed (0c459186)
+- LAYOUT720-E1: View.g, GRID, Grid, Screen::grid() (default Old, exactly today's view); shell per-screen view, the mouse derived from the physical position when the view changes; ring, lists, ghost, scroll and drag thresholds in the top screen's units; ui_tree reports canvas and grid; s * g strokes and nine scale; View::nine_content; screen_in and region_in take the shown screen's grid. No screen moved, no golden edited; stage.rs wide_line deferred to the Stage's move (5c9855a5)
+- SUNKWARD1: the sunk_ward world shell: manifest, region, 4 factions, the hub sluice_undercroft, nodes 01, 03, 04, 06, 5 routes (two marked placeholder links) through seed sunkward1.json; start_party empty until CAST1-A4, so the world stays hidden from New Game; encounters arrive with CAST1-A6 (dbb5cbbb)
+
+Under the hood:
+
+- Docs: kit done measure and UI authored by a design agent; LAYOUTDATA1 proposed (8d6acbb2)
+- Docs: WALKRUN1 as built (41eab430)
+- Docs: WALKRUN1, TURNFEEL1 rows; HOOKS1-A parked on its branch (a7cf7396)
+- Docs: LAYOUT720-E3 and VIEWKEYS2 as built (162ec350)
+- Docs: DASH1 as built; TOOLTESTS2 proposed (a0702993)
+- Docs: decision "Engine goal: agents build, humans judge feel" (08b3c38a)
+- Docs: human mockup and feel tools are worth keeping (user 2026-11-03) (23a3edab)
+- Docs: the test for a debug feature (user 2026-11-03) (5f162a72)
+- Docs: decision "No upkeep on unused debug tools"; CLN-71 idea (dcec0f5c)
+- Docs: VIEWKEYS1 and WALK2 as built (864f041a)
+- Docs: LAYOUT720-E1 as built; E3 adds shell.rs, Q clips the quadrant (9ecca2f1)
+- Docs: NPCFACE1 row and preference: NPCs face down by default (e66691da)
+- Docs: DISPLAY2 row: Borderless and Fullscreen as toggles (user 2026-11-03) (4921e478)
+- Docs: SUNKWARD1 as built; CAST1-A4 warned about New Game and journeys (7ed59a06)
+- Docs: VIEWKEYS1 row (246814a2)
+- Docs: plan strip mock C picked (VISCLAR1-B, preferences/ui.md) (2e79c883)
+- Docs: decision "Feel run answers"; TACTIC2 approved by role and class; SIMCOUNT1 row (981cb621)
+- Docs: decision "Ashlands is a test bed"; backlog pass applied: classic balance rows dropped, rewrites and merges, OBJ1-U joins M2; LEVERS1-K idea (83e8fc35)
+
+## 2026-11-02
+
+In the game:
+
+- **Title screen**: a new backdrop and logotype, with the crest's eye as the A in the name.
+- **Game icon**: the crest is now the window, taskbar and .exe icon.
+- **New look**: screens and battle use the new palette and fonts, with lighter secondary text that is easier to read.
+- **Region map ground**: maps can mix ground types with natural edges, first on Warden Keep.
+- **Region map camera**: the party glides between tiles and the camera follows smoothly; it stops close to the map's edge, and props stay inside the map.
+- **Map zoom**: a Map zoom setting in Settings > Gameplay, 1x to 3x, zooms the whole scene.
+- **Sprite size**: units now stay the right size at every resolution; at 1080p they used to draw too small.
+- **Battle AP**: rounds start at 10 of 12 AP, the pip gauge groups AP by planned skill in its kind's colour, keys 1-4 select party members, and Shift+1-9 pick skills.
+- **Frames**: panels and popups can use the new ornate frames, tunable in the Gallery's Frame tuner.
+
+Every change that touched the game:
+
+- LAYOUT720-E2: aegis_layout (no_std, no dependencies): Rect moved and re-exported by aegis_ui::canvas; relative layout by shared edges over any area (Part, resolve, Stack, pick, Rect::{pad, place, at, offset, cut_*, split_x, split_y, grid}); aegis_ui::shot_diff; authoring note reactive_layout.md. No screen moved, no caller changed; wasm32 not compiled (target not installed) (ec66d73c)
+- Warden Keep: stores_crates moves to (38, 29) on the south wall, so its art stays inside the map in both views (user 2026-11-02: props stay inside the map; REGIONVIEW1's commit named this move, which lands here) (01472b61)
+- REGIONVIEW1: the region map's camera, edges and zoom: the party glides between tiles on the step's schedule (a real 90 ms step), the camera follows in whole physical px; clamp with a margin of 1 cell, 2 rows of wall past the last walkable row; a map that fits centres; pans and the talk camera ease 260 ms, none under reduce motion; the outer ring and past the map are a flat border under everything; prop art past the map cut on its edge; arrows never stack; map zoom map_zoom, 1x to 3x in 0.25 steps, default 1x, the whole scene from its cell; engine ground.rs blit_scaled for maps past PHYSICAL_MAX; Warden Keep's crates moved inside the map (38, 29) (7ee7c2ae)
+- SPRITEFIT1: a unit sprite fills its exact size at any scale: nearest at an exact multiple, between multiples nearest at the next whole number then a true area average (Image::fit_square, Image::reduce_box); region sprites now keep about 5.8 % of the window height at 720p, 1080p and 1440p (1080p drew them at about 4 %); battle draws as before; floor expectations retired in art.rs and stage_pieces.rs (decision "Fixed canvas, map zoom and exact sprite size") (d31f658b)
+- LOOK1-G2: emberwake_gui reads the theme: 13 colour constants and chrome literals migrated, 46 game_colors by use with today's literal as fallback; 15 minor and 14 E1B roles set; new role grip; playing raised to 4.87:1; dim #9ca3af (user); mono ships the static JetBrains Mono Bold v2.304; contrast_pairs 40; story::palette() follows the theme (a69d32b8)
+- ICON1: the game's window, taskbar and .exe icon from the crest, set per game: game.json `icon` (optional .png path over the layers); aegis_ui::icon averages and sharpens to at most 256 px (Windows: 32 px window, 64 px taskbar); a missing or bad file is a notice, not a crash; the .exe icon comes from emberwake_gui/build.rs with windres or rc.exe, no new crate; tools/game_icon.py writes the committed res/emberwake.ico (6 sizes; whole crest down to 32, arch at 24, eye at 16) (b7fb090d)
+- LOOK1-FT: the frame tuner: an engine pane in the Gallery: frame role, panel size, corner size, tip size, line width and colour, padding and straddle on a live preview, a read-out of the values, Save and Revert in debug builds; new generic sidecar keys; gen_art.py keeps tuned keys unless the slices changed (1f47d05e)
+- REGIONGROUND1-D1: the 14 ground rows and Warden Keep's ground layer (ash, packed dirt, flagstone, dirt road, mud, paved road, water), the 9 Ashlands textures; wear halved, strays off and patches halved after the approved scene (712e1ead)
+- REGIONGROUND1-T2: board.py --mix and the pair sheets go through ground_compose (legend in the kit plan's order, patches included), the Python edge deleted; --wear scales the table's wear, --props draws props and units sorted by feet; the table follows the first map's softer values; tooltests limit 300 s (037adb5e)
+- REGIONGROUND1-L: the region map draws a map's ground in both views: job and key only when map, view, sets, data or art change, a flat colour with no art, the location's tileset wired; Art::generation; Reload data opens a new Art (75c9266a)
+- REGIONGROUND1-E2: aegis_ui::ground draws random patches (dropped whole near another ground or a blocked cell or past the cap, fainter as they grow), placed patches and random marks; E1 pins unchanged (81990a56)
+- LOOK1-A8: the ornate frame kit: one corner mirrored to four, the kit tip's head at 2/3 lit from the corner's spikes, a red line the whole edge, corners following the window; ornate_full, the kit's edge tiled as a whole frame, unused so far; the arm keys removed (f8ba5bc5)
+- EFF1: tools/fc.sh docs reads changed files only, --all reads every file (one wc call, 80 s to under 1 s); tools/fc.sh tooltests with a time limit and a visible skip; both gates gain docs --all and tooltests; CI installs Pillow (a332fd8e)
+- REGIONGROUND1-K: the grounds kind, map keys ground, ground_legend, ground_patches and wall_storeys, a location's boundary and a world's material_family, checks G1-G10 and A16-A20, art lookups and a pure ground plan; maps.json re-saved through the writer with empty keys (ae422797)
+- REGIONGROUND1-T3: flatten.py --colour sets a texture's mean to its ground's colour; groundcheck.py pair fails grounds too alike, a stones warning for built grounds; named colour caps for the dirt grounds and tallow; board.py --mix, a one-picture map (406d3f02)
+- REGIONGROUND1 art: the test terrain and frame kit takes, and the second Ashlands ground batch (Drive queue, prompts beside them) (877856a1)
+- EFFICIENCY: blank lines around a heading after a docs merge (0f7467b5)
+- engine README: one theme line, 50 colour roles (a merge kept both counts) (1128cf11)
+- LOOK1-R1: place the title art: title backdrop, title mark, crest, banner assets; the high-resolution ornate frame straddling its panel (arms per edge with limits, one red frame_line, content rects from the frame); image_steps and whole_steps removed (a6735545)
+- REGIONGROUND1-E1: aegis_ui::ground: the ground composer (edges, wear, strays, bites, sunken rims, a map-wide tone), its cache and blit, soft_ellipse, the Tiles page's Ground switch, the ground_compose tool (adc1a394)
+- REGIONGROUND1-T: tools/tiles flatten.py, groundcheck.py (broad tone, banding, direction, blotch, contrast, colour), cut.py --form ground and region_tall_face, ground boards, read_contrast, the Ground texture prompt template (37a5fa00)
+- CLN-50: remove the Manual planning mode (RoundState.manual, set_manual) and the host's manual and fill requests; readers use picks; fill_rest stays; goldens unchanged (e32f81cb)
+- CLN-52: emberwake_gui battle.rs split as a pure move: a 1,107-line battle.rs (screen and wiring), battle/{board,draw,flow,input,marks,overlays,playback,talks,tips,tokens}.rs and battle/tests/ (21 test modules); 412 tests before and after, only the test module paths change (23120f87)
+- LOOK1-A4 art: re-rolled stage tiles, low contrast with no grid (prompts beside them) (47eb7494)
+- LOOK1-E1B: the desk windows, timeline, recordings, vignette, note box and pip gauge read the theme: 14 new generic roles defaulting to the values drawn before; 99 frame hashes recorded before the first edit stay unchanged (6568257f)
+- LOOK1-T2: tools/tiles/cut.py box reduce, --form for the stage and region tiles and faces, optional --colours; artqueue records and failures name the queue used (7017cbc1)
+- LOOK1-A6 art: the crest letter A takes and the final title mark; decision "Title mark: crest letter A"; row LOOK1-R1 (0fcae468)
+- LOOK1-A6 art: card banner takes and the crest-in-the-name concepts (Drive queue, prompts beside them) (eafcbb04)
+- EXPLOREVIEW1-L: the region_view debug setting and the tilted region map (mapview geometry, squashed tiles, wall blocks in one feet-sorted pass, Developer select and a debug-build F7), square unchanged and forced outside the Scene Runner (899afcf0)
+- LOOK1-M1: title and main menu: backdrop composed once and blitted, text-only menu rows (label-wide hit area, one active item, no arrow), the Continue peek on hover or a keyboard move, ui/logo_title.png with a text fallback (35d01659)
+- LOOK1-L1: battle stage sets: tiles and the wall face from the world's stage_set, transition pieces on two-ground corners after the ground pass, clipped to the board; an empty set draws today's frame (5321586f)
+- LOOK1-A6 art: backdrop B and logotype B with the scattered fire taken out (Drive queue, prompts beside them) (f28a18ec)
+- LOOK1-A4 art: second stage tile chain, straight down (prompts beside them); decision: tiles must not show a grid when repeated; row LOOK1-T2 (3b28ece6)
+- LOOK1-A6 art: title backdrop, logotype, crest and ornate corner takes (Drive queue, prompts beside them); Tile template, tiles prompted square and straight down (1ecd0255)
+- PROPS1-A2 fix: the kit's sample prop takes move to props/sample_camp_black and props/sample_camp_tan (the layered tree's props/`<set>/<art>/v<n>.png;` one folder too deep failed the_assets_follow_the_layered_tree) (204dfd51)
+- PROPS1-A2 (S1, S3): the first Gemini prop sheets cut into the kit and game (the user's black war tent set), both camp takes kept as kit samples; sheets.py props --reduce scale (ca9d43c6)
+- LOOK1-E2: aegis_ui::autotile (corner masks, block edges) and the Gallery Tiles page (c7e5a959)
+- LOOK1-T: tools/tiles (cut, seam, masks, compose, board): the scale-only tile cut, seam check and fix, deterministic transition pieces and review boards (8c477274)
+- LOOK1-G1: the Tallow and Iron game theme (ui/theme.json), 14 code-generated frames, the picked fonts with their OFL licences (07b2e76a)
+- LOOK1-ME: engine menu panes (aegis_ui::panes: Backdrop, MenuColumn, TabRail, SlotCard, themed ask) and the Gallery Kit widgets Panes page (a242f801)
+- LOOK1-K: tile set binding (tileset on world locations, stage_set on the world, lookups, checks A13-A15, schema flag omit_default) (d6eab816)
+- LOOK1-E1: the engine runtime theme (aegis_ui::theme: layered ui/theme.json, 35 colour roles with today's values as defaults, body/display/mono faces, layout values, nine-slice frames with sidecars), the Gallery Theme page (d198a191)
+- INPUT2: playtest battle input: style D AP pips (fixed slots, a capsule per skill block by kind), battles start at 10 of 12 AP, keys 1-4 select members (skills on Shift+1-9), the ghost-click fix, F accepts the ghost, a ghost block click accepts up to it, Ctrl+click supports an ally (0a668f8d)
+- DIR4-R1F: the front and back walk show their steps (visible foot lift and plant, an outward knee, a stronger bob) for every humanoid body (78f89618)
+- WALK2: region map hold-to-walk steps at once and chains steps while a direction is held (engine Held.dir and Screen::hold_walk; the shell drops OS key repeats for hold-walk screens) (0734ad7c)
+- CLN-46: screens and host read the ruleset rows, not is_classic() (Dojo rules picker, Arena lists the rows, host state always names the ruleset, Dojo reset by the deck rule, Rest preview by rest_at_round_end) (b654ad21)
+- MAPNAV1-U: region map edge arrows, legend-row pan (a second click walks), the click-to-walk refusal, and switching the exploring leader (Q or a click on the leader; saved as explore.leader) (fab92d8c)
+- PORTRAITFX2-FA: the four new face rows (determined, happy, sad, surprised with their motion) and seven face cue rows (battle start, round start, big skills, ambush, ally down, victory, unspent on the roster) (9c290349)
+- FOUNDERPORT1-P and the founders' expression frames: six Gemini portraits on the Hearth backdrop and 48 aligned faces with sidecars (55a5fde4)
+- ARTQUEUE5: the Drive queue is artqueue.py's default (artqueue.json; --backup for .image_pipeline), references copied into refs/, artqueue.py attach lists what to attach (2e686b46)
+- PORTRAITFX2-F: the face list is game data (DEFAULT_FACES as kit defaults) and the battle and roster triggers for the new faces (d6feced1)
+- PORTRAITFX2-T: sheets.py faces --cells a,b,c,d (any four snake_case face names) and --align-to IMAGE (every cell aligned to a given raw neutral cell) for the second expression sheet (4f993356)
+- CLN-51: closed, superseded by INPUT1-U slice 3 (the battle screen's Deferred previews through the host's own round_intent_plan::preview_round and ai::plan_party_intents) (edfcd36e)
+- FOUNDERPORT1 art: Hollis's graft fix (a new base with the graft eye unmistakable, now his pick) and his eight faces as single edits of it (6d4eb9c5)
+- FOUNDERPORT1 / PORTRAITFX2-A art: both expression sheets for the six founders (Gemini web-app queue, the founders' picks attached as references) (70aa8de8)
+
+Under the hood:
+
+- Docs: INPUT1-MB feel run report; REGIONVIEW1, LAYOUT720-E2, PROPS1-A2 as built; VISCLAR1-B with the user's strip colours; STRUCTURE and LAYOUT720 notes (ada01bdd)
+- Docs: CLEANUP: Later backlog pass, CLN-54 to CLN-70 proposed (05c62901)
+- Docs: decision "Battle view answers"; DIR4-R1F closed; VISCLAR1-B, POISE1, HOLDART1, BATTLEMAP1 rows (74bebe80)
+- Docs: decision "Priorities after the visual pass"; MILESTONES: the visuals the slice uses join M2, DIR4-R4 and ENCOUNTER2-CA to M2, TACTIC2 out of M1; SUNKWARD1's dependency loop removed; stale rows corrected (a39ccb56)
+- Docs: ROADMAP: the LAYOUT720 row in the table's columns (ff71e815)
+- Docs: LAYOUT720 approved (option B); decision "Engine layout is relative"; slice rows; ROADMAP and HISTORY rows (3d0b87ca)
+- Docs: LAYOUT720 screen table: only the main menu is finalized (user 2026-11-02) (586ef31f)
+- Docs: LAYOUT720: the confirmed relative model; images, minimum caps and space priority named as later work (930a10d3)
+- Docs: LAYOUT720 spec, proposed (screen table, options, slices) (c9e277ae)
+- Docs: SPRITEFIT1 as built; HISTORY row for the floor fit (cd895dc6)
+- Docs: LOOK1-G2 as built; mono is the static Bold of v2.304 (f552c0f3)
+- Docs: WEBPROBE1 not scheduled; PC build with hotkeys first, touch later (c910605d)
+- Docs: LAYOUT720-S widened to reactive layout; WEBPROBE1 proposed (77f7babe)
+- Docs: dim text is #9ca3af (user 2026-11-02) (1c983548)
+- Docs: decision "Layout grid moves to 1280 x 720"; LAYOUT720-S and ARTSCALE1 rows (b944e827)
+- Docs: ICON1 as built; STRUCTURE rows for the icon, the frame tuner and ground.rs (70675e9d)
+- Docs: map zoom is an accessibility option, default 1x (decision "Fixed canvas, map zoom and exact sprite size") (602a3399)
+- Docs: decision "Fixed canvas, map zoom and exact sprite size"; SPRITEFIT1 row; zoom in REGIONVIEW1; resolution rules in LOOK1-M2 (738ce0e9)
+- Docs: LOOK1-FT and REGIONGROUND1-E2, -L, -T2, -D1 as built (c25b13fb)
+- Docs: decision "Region camera and terrain use"; rows REGIONVIEW1 and ICON1 (e8bfbdda)
+- Docs: decision "Compact frame for side-by-side panes"; LOOK1-M2 takes it (016f177a)
+- Docs: a compact frame style for side-by-side panes (preferences) (2c1f5bfd)
+- Docs: which screens take the full frame (preferences, LOOK1-M2) (a47942d6)
+- Docs and art: decision "Ashlands ground set: first picks"; the re-rolled grounds (a2d77257)
+- Docs: decision "Ornate frame kit", HISTORY row, LOOK1-FT re-scoped (7d155f07)
+- Docs and art: LOOK1-R1, REGIONGROUND1-T, -E1 as built; ornate rule corrected; frame_line in LOOK1 3.2; test terrain and frame kit takes (9fe1de52)
+- Docs and art: row LOOK1-A8, a new frame kit; the first A1 ground takes kept for reference (c8c61c54)
+- Docs: decisions "Efficiency pass" and "Ground textures: pattern from art, colour from code"; EFFICIENCY section; rows REGIONGROUND1-T3, GROUNDTUNE1, EFF1 (df18a423)
+- Docs: decision "Two kinds of wall"; material families and doorways in REGIONGROUND1_SCENE; row REVEAL1 (5c132d80)
+- Docs: REGIONGROUND1 as built notes from the tools review: natural gain steps, two dirt hexes, calibration (07a0b813)
+- Docs: region boundary walls are their own art (REGIONGROUND1_SCENE, decision) (eb4f167a)
+- Docs: decision "Wall storeys and walls beside props"; REGIONGROUND1_SCENE takes it (f7b1ae0e)
+- Docs: row LOOK1-FT, a frame tuner in the UI Gallery (5ee3d25f)
+- Docs: decision "REGIONGROUND1 answers"; REGIONGROUND1 rows approved, ROADMAP row, HISTORY rows; PROPS1-A3 split; LOOK1-L2 narrowed; Tilted is the pick (5c030677)
+- Docs: REGIONGROUND1 spec: region maps with several ground types, natural blends, tall walls and the terrain hierarchy (status spec, questions open) (b5b3e92d)
+- Docs: decision "Ornate frame rules"; LOOK1-M2 takes the story card banner and alternate corners for wide panels (7dc12b40)
+- Docs: CLN-50 as built; HISTORY row for the Manual planning mode (a8afce84)
+- Docs: decisions "Art scaling by asset type" and "Ground blends: a generated edge with light wear" (ce76c0a0)
+- Docs: decision "Tiles must connect naturally on all sides" (e2840326)
+- Docs: decision "Region maps mix ground types; layout before tile sets"; CLN-52 as built (7ee78a16)
+- Docs: LOOK1-E1B as built and its 14 roles in LOOK1 3.2; LOOK1-G2 takes their game values and two contrast notes (7790a6e6)
+- Docs: decisions on the story card banner, EXPLOREVIEW1-L click areas and LOOK1-L1 corners; LOOK1-T2 as built; spec notes (7dbb500a)
+- Docs: decision "Title backdrop and its fire layer"; row LOOK1-M1F (3703c5ff)
+- Docs: decision "LOOK1-A6 picks: corners, crest, story card banner, title"; main menu preferences from the second M1 playtest (label-only hit area, one active item, peek stays while Continue is active) (851345a3)
+- Docs: art preference: fire in generated art must look placed (user review of the title takes) (d1e1df71)
+- Docs: decision "Prop sheets by size class; tile textures straight-down"; row PROPS1-A3 (a2c1dfb8)
+- Docs: main menu preferences from the user's M1 review (text-only items, the title as an image, the peek waits for hover); LOOK1-A gains the logotype (02e6c8ff)
+- Docs: decision "LOOK1-G1 points and the first prop picks"; PROPS1-A2 row updated (the black tent set for the game, both takes as kit samples, a scale-only cut) (7dabb97f)
+- Docs: TASKS tidy after the LOOK1 landings (stale LOOK1-M and LOOK1-L rows gone, G1 row restored; ME and G1 follow-ups placed on M1, M2 and G2) (4fc4b759)
+- Docs: EFFICIENCY row for engine-wide partial gates under three busy lanes (wind-down 2026-11-02) (683a308b)
+- Docs: decision "LOOK1 fonts" (Alegreya SC Bold headers, JetBrains Mono Bold badges); LOOK1-F done (ae3379da)
+- Docs: decision "LOOK1 and EXPLOREVIEW1 spec answers" (all as recommended) (2607f81c)
+- LOOK1 revised to the answers (LOOK1_TASKS slice briefs) and the EXPLOREVIEW1 spec; LOOK1 rows split (F, G1/G2, M1/M2, L1/L2), EXPLOREVIEW1 -L/-R; HISTORY row for the options not adopted (dff405e2)
+- Docs: decision "LOOK1 answers" (all as recommended); LOOK1 rows and ROADMAP approved; HISTORY (the navy palette replaced); assets-world preference (Sunk Ward tiles first) (11c29695)
+- Docs: decision "Playtest 2026-11-02: AP gauge, party hotkeys, ghost fill"; rows INPUT2, WALK2; DIR4-R1F in-combat notes (b457e379)
+- LOOK1 options spec (design lane): visual pass (theme, menus, Sunk Ward tile sets); ROADMAP row and LOOK1 task rows (spec, waiting for the user's answers) (6becfc14)
+- Docs: ARTQUEUE5 done (45c31b1e)
 
 ## 2026-11-01
 
@@ -42,6 +213,43 @@ Every change that touched the game:
 - STORYUI1-U2: the mission board pane, the board service glyph, world-map job markers, the UI Gallery's Mission board (ffd0f277)
 - ROSTER1-L slice 4: bunks and the bench, join level, party_min, departed recruits refused, roster read keys, the over-cap load warning (ROSTER1-L done) (d6775264)
 - CAMPAIGN1-SIM: aegis sim deadlines, best and worst finish day per checkpoint (7dafe18c)
+- Founders: the Gemini takes become the portrait picks (Klein picks kept as `<id>_klein_pick);` decision "Founder portraits from the Gemini route"; FOUNDERPORT1-P updated, PIXEL4 superseded (7f0c09a8)
+- FOUNDERPORT1 and PROPS1 art: the first Gemini web-app batch (open-ended founder takes, the buildings and Ashlands prop sheets) (e5f17332)
+- CLN-48: the legacy wave_* fold shim goes (fold_legacy_wave, LEGACY_WAVE_KEYS, source::folded and fold_legacy_waves and their call sites) (fe3f51a7)
+- PORTRAITFX2-M: motion profiles per face (engine Motion, kit fields on portrait_expressions, game binding); hurt, angry and afraid move as winces, heaves and shivers (91fc9bcc)
+- PORTRAITFX1-TL: the timeline widget's icon square (engine) and unit portraits on the full timeline view's tracks, minimal tier (9dcddd6a)
+- CLN-45: the switches bundled under round_intent become ruleset row fields (rest_ap, chase, root_stops_chase, switch_target_step, stances); melee_diagonal reads as set (f6e0fb5a)
+- PORTRAITFX1-XA (7 of 13): expression frames and sidecars for tess, bram, aline, captain_vane, proctor_quell, guild_master_orlov and inquisitor_prelate_nemeth; the six face cue rows (dde61706)
+- PORTRAITFX1-P: portraits on the battle hero and intel panels, reacting at FX1's impacts (5e40661c)
+- PORTRAITFX1-XA tool slice: sheets.py faces --reduce scale (no palette pass, faction backdrop), --align (cells scaled and shifted onto the neutral figure) and --cell name=image (20811b47)
+- known-issues: parallel agents and the shared shell cwd reset (1a11fff3)
+- CLN-44: classic is a rulesets row (the closed ruleset lists go; a missing classic row falls back with a load note); the classic row shipped through aegis content (876964f2)
+- ARTQUEUE4: the prompts-file reader takes each id's own section (the props file had sent each sheet the wrong block) (6f96564b)
+- ENCOUNTER2-C4: the cutscene screen for scripted rounds (locked controls, banner, Skip sends resolve, auto-advance) and the game's tactics for the scripted-round draft (0eb227cc)
+- CLN-43: docs and rules after the end of Godot parity (CLAUDE.md engine-golden rule, skills, agents, workflow docs, the session hook without Godot) (a78fdf41)
+- ARTQUEUE3: artqueue.py ingest archives what it ingested (archive/`<date>/{output,completed});` archive sweeps leftovers; status counts the archive (d6b55864)
+- PROPS1 art: first prop sheet takes from the Antigravity queue (kit props, a buildings take, and a kit-like take); row ARTQUEUE4 (the prompts-file reader mixed sections) (e4414a03)
+- PORTRAITFX1-XA art: six single-cell edits of the neutral cell (Bram angry and afraid with the loupe, Aline angry, Nemeth angry and afraid, Quell neutral without the smoke) (9f5e8f06)
+- TERMS1-U: the screens read the terms (Results, journal, shop, party sheet, region chest, HUD helpers; intent names through label everywhere) (2897a7cf)
+- CLN-42: Godot switched off (the Godot-only parity suites, the parity/ recorders, fc.sh parity, the CI Godot steps and the export-only CLI keys and loaders go) (10f71aed)
+- ENCOUNTER2-C3: scripted rounds (the encounter `script` field: planned at round start, locked or guided, per-entry fill, fallbacks, metrics, content checks) (2bae8eeb)
+- CLN-47: saves below the current version are refused; the development migration steps and the Godot JSON text emulation go, the release step hook stays (f5159a37)
+- PORTRAITFX1-XA art: expression sheets for the seven story faces (Antigravity queue, batch 2) and the prompts file (923e7cd9)
+- INPUT1-L: per-opener follow-up lists in the deck (the list first, then the deck order) and their editor (1cda9103)
+- CLN-41: journeys become an engine-owned random-walk golden (seeded walks through the whole game loop with a real save round trip) (c2b60b6d)
+- CLN-40: the content-checks parity becomes an engine-owned golden (1,012 representative broken-entry cases on frozen data) (70accd92)
+- INPUT1-PB: the playback aids (impact tracers, the strip's block cursor, 1x / 0.5x / Block speed, the log grouped by block, T holds playback for the timeline view) (52b17336)
+- CLN-39: sim parity becomes an engine-owned golden (22 sim runs on frozen data); the sim help lists its engine-only modes and keys (b03fd894)
+- ARTQUEUE2: artqueue.py shows the Antigravity quota pause (paused.json); the contract's quota rule documented (968dcf8c)
+- PORTRAITFX1-EX: runtime expression effects (a face tint, a mark and a shake per expression) from a data table (80b9338c)
+- INPUT1-T: the full timeline view (key T) and the UI Gallery's timeline pane, built by one shared builder (aead07b8)
+- Row ARTQUEUE2: the image queue's quota pause (user 2026-11-01) (3675fc2a)
+- CLN-37A: re-save the nine world files saved before newer fields existed; store.rs compares every shipped file (f58f40af)
+- VISCLAR1-A: the calmer default board (one quiet target arrow per unit while planning, bars for the focus set, Alt shows all; the first-move chip behind a setting; debug-only Party foresight off) (2a9d4802)
+- CLN-37: the writer check becomes "every shipped file re-saves byte for byte" (the Godot resave comparison and its AFTER_GODOT lists gone) (2adba00e)
+- CLN-38: engine-owned RNG and hash golden (aegis_core) and the rules golden on a frozen catalog; emberwake_rules parity test gone (4f9771b1)
+- INPUT1-AP: the AP pip gauge beside the strip (engine pips widget, the kit's structured AP shortfall) (afaf45b8)
+- CLN-36: the host tests read the shipped data instead of the Godot export; one-off Godot-data checks and timeout_verdict deleted (6414b3ba)
 
 Under the hood:
 
@@ -54,6 +262,21 @@ Under the hood:
 - Decision "INPUT1 answers, part 4" (user 2026-11-01: one range rule for every skill, position attribute for Maneuver, dash on the windup tick); rows DASH1, TACTIC2 (M1) (0288abcd)
 - Decisions "ENCOUNTER2-C answers", "TERMS1 answers", "ROSTER1-L slice 4 answers" (user 2026-11-01, all as recommended); ENCOUNTER2-C and TERMS1 rows approved (d2d115f3)
 - INPUT1 spec revised for the answers parts 1-3 (Maneuver rework, AP gauge, playback aids; Q10-Q19 open); specs ENCOUNTER2_C.md and TERMS1.md; task rows INPUT1-*, VISCLAR1-A, ENCOUNTER2-C1..CA, TERMS1-G/-L/-U (06062951)
+- Docs: decision "Gemini web app as the primary image route" (Antigravity as the unattended backup); row ARTQUEUE5 (8ad6633e)
+- Docs: decision "Gemini web app as a second image queue" (text-only requests; references stay on Antigravity) (84177a4c)
+- Docs: ARTQUEUE4 done (a0ed7c27)
+- Docs: decisions "PORTRAITFX2 answers" and "ENCOUNTER2-C4 answers"; PORTRAITFX2 rows (-S done, -M/-F/-A updated, new -FA and -T), ROADMAP row, two HISTORY rows (6232759a)
+- PORTRAITFX2 spec (design lane): motion profiles per face, the face list as game data, triggers for Determined / Happy / Sad / Surprised, the second sheet; open questions Q1-Q10 for the user (a8dcfa05)
+- Docs: row ARTQUEUE3 (ingest archives what it ingested) (f2953438)
+- Docs: decision "Portrait motion per expression and four more faces"; rows PORTRAITFX2-S, -M, -F, -A (7c8c001e)
+- Docs: decision "Expression sheets: scale only and aligned cells"; PORTRAITFX1-XA row gains the scale-only reduction and cell alignment (081324f6)
+- Docs: decision "ENCOUNTER2-C3 answers" (own tactic for others: auto via ENCOUNTER2-C4, a fallback cell when a locked confirm fails, the schema re-save accepted) (26e73296)
+- Decision "Art goes straight to develop from the planner worktree": review boards from the pixelized game-size versions, existing tools only (user 2026-11-01) (1cec434b)
+- Decision "Art goes straight to develop from the planner worktree": generation only in the main session; rigging into the game stays an asset task through staging (user 2026-11-01) (3fefa177)
+- Decision "Art goes straight to develop from the planner worktree" (user 2026-11-01) (3d2d9851)
+- Decision "Expression effects at runtime" (user 2026-11-01); rows PORTRAITFX1-EX, CLN-37A (2645adf5)
+- PATCH-NOTES: wrap a path in backticks (markdown lint) (2c6a8582)
+- PATCH-NOTES: ROSTER1-L s1-s4, ROSTER1-U, CAMPAIGN1-U s1-s2, -TW, -SIM, -TM, -TM2, STORYUI1-U2, PORTRAITFX1-G, -D, -R, -XT, -A, -X, TERMS1-G, -L, ENCOUNTER2-W, -C1, -C2, INPUT1-M, -MA, -U s1-s3, ARTQUEUE1, CLN-49 (2026-10-31 to 11-01) (e6cdb04b)
 
 ## 2026-10-31
 

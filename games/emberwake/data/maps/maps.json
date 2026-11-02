@@ -84,6 +84,10 @@
 			],
 			"paths": {},
 			"props": [],
+			"ground": [],
+			"ground_legend": {},
+			"ground_patches": [],
+			"wall_storeys": [],
 			"tags": []
 		},
 		{
@@ -222,6 +226,10 @@
 				]
 			},
 			"props": [],
+			"ground": [],
+			"ground_legend": {},
+			"ground_patches": [],
+			"wall_storeys": [],
 			"tags": []
 		},
 		{
@@ -437,8 +445,8 @@
 				{
 					"id": "stores_crates",
 					"art": "crate_stack",
-					"x": 1,
-					"y": 0,
+					"x": 38,
+					"y": 29,
 					"w": 2,
 					"h": 1,
 					"layer": "sort",
@@ -457,6 +465,49 @@
 					"flip": false
 				}
 			],
+			"ground": [
+				"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaffffffffffffffffffaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaffffffffffffffffffaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaffffffffffffffffffaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaffffffffffffffffffaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaffffffffffffffffffaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaffffffffffffffffffaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaffffffffffffffffffaaaaaaaaaaaaaaa",
+				"aaakkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkaaa",
+				"aaakkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkaaa",
+				"aaakkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkaaa",
+				"aaakkkkkkkkkkkkkkkkmmmmmmmmmmmkkkkkkkkkkkkkkkaaa",
+				"aaaaaaaaaaaaaaaaaaammmmmmmmmmmaaaaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaaaaammmwwwwwmmmaaaaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaaaaammmwwwwwmmmaaaaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaaaaammmwwwwwmmmaaaaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaaaaammmmmmmmmmmaaaaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaaaaammmmmmmmmmmaaaaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaaaaammmmmmmmmmmaaaaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaddddddddddddddddddddddaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaddddddddddddddddddddddaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaaaaaaaaaddddaaaaaaaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaaaaaaaaaddddaaaaaaaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaaaaaaaaappppaaaaaaaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaaaaaaaaappppaaaaaaaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaaaaaaaaappppaaaaaaaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaaaaaaaaappppaaaaaaaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaaaaaaaaappppaaaaaaaaaaaaaaaaaaaaa",
+				"aaaaaaaaaaaaaaaaaaaaaaaapaaaaaaaaaaaaaaaaaaaaaaa"
+			],
+			"ground_legend": {
+				"a": "ash",
+				"k": "packed_dirt",
+				"f": "flagstone",
+				"d": "dirt_road",
+				"m": "mud",
+				"p": "paved_road",
+				"w": "water"
+			},
+			"ground_patches": [],
+			"wall_storeys": [],
 			"tags": [
 				"ashlands"
 			]
@@ -839,6 +890,10 @@
 					"flip": false
 				}
 			],
+			"ground": [],
+			"ground_legend": {},
+			"ground_patches": [],
+			"wall_storeys": [],
 			"tags": [
 				"ashlands"
 			]
@@ -1282,6 +1337,10 @@
 					"flip": false
 				}
 			],
+			"ground": [],
+			"ground_legend": {},
+			"ground_patches": [],
+			"wall_storeys": [],
 			"tags": [
 				"ashlands"
 			]
@@ -1691,6 +1750,10 @@
 					"flip": false
 				}
 			],
+			"ground": [],
+			"ground_legend": {},
+			"ground_patches": [],
+			"wall_storeys": [],
 			"tags": [
 				"ashlands"
 			]

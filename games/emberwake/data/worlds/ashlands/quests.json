@@ -80,7 +80,11 @@
 			"reputation": {
 				"ember_wardens": 10
 			},
-			"tags": []
+			"tags": [],
+			"board": "",
+			"track": "side",
+			"show_locked": false,
+			"closed_text": ""
 		},
 		{
 			"id": "cinder_gate_watch",
@@ -156,7 +160,11 @@
 				"ember_wardens": 10,
 				"ashen_horde": -10
 			},
-			"tags": []
+			"tags": [],
+			"board": "",
+			"track": "side",
+			"show_locked": false,
+			"closed_text": ""
 		},
 		{
 			"id": "warden_oath",
@@ -255,7 +263,11 @@
 			"reputation": {
 				"ember_wardens": 15
 			},
-			"tags": []
+			"tags": [],
+			"board": "",
+			"track": "side",
+			"show_locked": false,
+			"closed_text": ""
 		},
 		{
 			"id": "ember_patrol",
@@ -309,7 +321,11 @@
 			"reputation": {
 				"ember_wardens": 5
 			},
-			"tags": []
+			"tags": [],
+			"board": "",
+			"track": "side",
+			"show_locked": false,
+			"closed_text": ""
 		},
 		{
 			"id": "steel_for_the_gate",
@@ -378,7 +394,11 @@
 			"reputation": {
 				"ember_wardens": 10
 			},
-			"tags": []
+			"tags": [],
+			"board": "",
+			"track": "side",
+			"show_locked": false,
+			"closed_text": ""
 		},
 		{
 			"id": "keep_one_fire_lit",
@@ -473,7 +493,11 @@
 				"ember_wardens": 15,
 				"ashen_horde": -20
 			},
-			"tags": []
+			"tags": [],
+			"board": "",
+			"track": "side",
+			"show_locked": false,
+			"closed_text": ""
 		}
 	]
 }

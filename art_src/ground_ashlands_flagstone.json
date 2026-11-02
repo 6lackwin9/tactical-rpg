@@ -1,0 +1,32 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "ground_ashlands_flagstone",
+  "prompt": "In the same pixel size, palette family and flat straight-down view as the first image. One large seamless ground texture for a dark fantasy tactical RPG, seen from directly overhead: a flat, straight-down orthographic view of the surface, drawn as a square texture of 128 x 128 pixels scaled up (visible square pixels, no anti-aliasing). It sits quietly behind small characters and must never draw the eye. Muted and low contrast: one main colour, #373636, with at most 3 close shades of it. Even tone across the whole image: no lighter or darker areas, no dark patches, no stains, no blotches, no vignette, no lighting gradient. Small irregular stones of different sizes, in no rows and no direction, with narrow joints only slightly darker than the stones: no direction, no streaks, no diagonal marks, no brush strokes, no lines, no footprints, no tracks, no ruts, nothing that stands out or could be recognised when repeated. It repeats across a large map, so it wraps on all four edges with no seam, and has no grid, rows, tiles, checker or plaid; no shape lines up with the image's edges or with any other shape. No perspective, no horizon, no objects, no border, no frame, no text. Material: old grey-brown flagstones, chipped, of many sizes.",
+  "reference": "output/ground_ash_q1793625803_1.png",
+  "prompts_file": null,
+  "time": "2026-11-02T13:41:00Z",
+  "n": 1,
+  "references": [
+    "output/ground_ash_q1793625803_1.png"
+  ],
+  "source": "gemini web app task",
+  "via": "gemini_web",
+  "request": "ground_flagstone_q1793625838",
+  "metadata": {
+    "asset_id": "ground_ashlands_flagstone",
+    "task": "regionground1a1",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "set": "ashlands",
+      "ground": "flagstone",
+      "session_ref": "ground_ash_q1793625803"
+    }
+  },
+  "mark_cleared": true,
+  "set": "ashlands",
+  "ground": "flagstone",
+  "session_ref": "ground_ash_q1793625803",
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Conditioned on in-session ground_ash_q1793625803 reference."
+}

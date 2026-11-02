@@ -1,0 +1,1 @@
+{"slice": [200, 200, 200, 200], "corner_anchor": [72, 80], "corner_inner": [19, 18], "scale": 8, "pad": [2, 2, 2, 2], "reduce": "average", "straddle": true, "sharpen": 0.6}

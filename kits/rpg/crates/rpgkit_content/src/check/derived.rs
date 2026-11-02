@@ -9,7 +9,6 @@ use aegis_content::schema::is_id;
 use aegis_core::formula::{self, Formula};
 use aegis_core::json::{self, gstr, Dict};
 use rpgkit_data::{GEAR_MITIGATION_INPUT, LEVEL_INPUT, STATS};
-use rpgkit_rules::ruleset::RULESETS;
 use rpgkit_rules::status;
 use serde_json::Value;
 use std::collections::VecDeque;
@@ -39,7 +38,7 @@ fn is_base_stat(s: &str) -> bool {
     STATS.iter().any(|b| b.eq_ignore_ascii_case(s))
 }
 
-/// The schema options of a field of the kind (rulesets, show_on, suffix, origin).
+/// The schema options of a field of the kind (show_on, suffix, origin).
 fn options(key: &str) -> Vec<String> {
     fields("content", KIND).iter().map(json::dict).find(|f| json::s(f, "key") == key).map(|f| json::aget(f, "options").iter().map(gstr).collect()).unwrap_or_default()
 }
@@ -189,18 +188,17 @@ fn row_errors(rows: &[Dict], ids: &[String], i: usize) -> (Vec<String>, Option<F
         out.push(format!("Min {min} is above max {max}."));
     }
     status_modifier_errors(json::get(e, "status_modifiers"), &mut out);
-    for (key, label) in [("rulesets", "Rulesets"), ("show_on", "Show on")] {
-        // RULESET1-R: the ruleset ids are code-owned (rpgkit_rules::ruleset::RULESETS; the schema lists the same)
-        let allowed = if key == "rulesets" { RULESETS.iter().map(|s| s.to_string()).collect() } else { options(key) };
-        let mut seen: Vec<String> = Vec::new();
-        for v in json::sget(e, key) {
-            if !allowed.contains(&v) {
-                out.push(format!("{label}: '{v}' is not one of {}.", allowed.join(", ")));
-            } else if seen.contains(&v) {
-                out.push(format!("{label} lists '{v}' twice."));
-            }
-            seen.push(v);
+    // CLN-44: the ruleset ids are open (rows of `rulesets`; validate_all checks each names a row)
+    out.extend(super::ruleset::list_errors(e));
+    let screens = options("show_on");
+    let mut seen: Vec<String> = Vec::new();
+    for v in json::sget(e, "show_on") {
+        if !screens.contains(&v) {
+            out.push(format!("Show on: '{v}' is not one of {}.", screens.join(", ")));
+        } else if seen.contains(&v) {
+            out.push(format!("Show on lists '{v}' twice."));
         }
+        seen.push(v);
     }
     let suffix = json::s(e, "suffix");
     if !options("suffix").contains(&suffix) {

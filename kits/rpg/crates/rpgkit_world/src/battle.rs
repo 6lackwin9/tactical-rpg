@@ -17,9 +17,7 @@ pub const OUTCOMES: [&str; 3] = ["won", "lost", "fled"];
 /// GameEncounter / WorldEncounter: the battle of encounter row `entry` resolved in `world`, with the ruleset of that
 /// world (RULESET1 3.1.2: a battle plays by the world that owns the encounter; ENCOUNTER2's linked rooms too).
 pub fn encounter_def(d: &Data, world: &str, entry: &Dict) -> EncounterDef {
-    let mut def = EncounterDef::from_obj(entry);
-    def.ruleset = d.ruleset(world);
-    def
+    EncounterDef::from_obj_with(entry, d.ruleset(world))
 }
 
 /// RULESET1 V3: the plan reveal flag of `world`: the nearest non-empty `plan_reveal_flag` of its lineage (the world,

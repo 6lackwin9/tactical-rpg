@@ -26,6 +26,40 @@ Tree (section 3 of the spec; a test keeps every file on these patterns):
 - `ui/{pins,intents,badges,chips}/<id>.png`; `backgrounds/{menu,title,world_map,location,battle,story}/<id>.png` (`story`: vignette card pictures, STORYART1; `tools/gen_art.py` groups `story`, `world_card`, `menu_sunless`, `sunk_backdrops`, `family_icons` draw the Sunk Ward slice's story scenes at 1120 x 472 under a starless Shroud sky (`shroud_sky`, ash in `ASH_COLS`, never white), the `sunk_ward` world card, `menu/main_menu.png` (the sunless main menu, MENU2; the old sunny menu drawing is retired, so the `menu` group now draws only the Ashlands title card), the seven zone backdrops and the scourge and sprayer family icons in the ART2 icon look).
 - `tilesets/<set>/<tile>/v<n>.png` (set = a world id, or `common`; variants are the files present).
 - `audio/sfx/<key>.wav`, `audio/music/<key>.ogg` (played by `aegis_ui::audio`).
+- `ui/theme.json` `game_colors` (LOOK1-G2): screen fills and veils the engine roles do not cover, named by use and read with
+  `th().game(name, fallback)`; a new name goes in the code and here together (`emberwake_gui/tests/theme.rs` checks both ways).
+- `ui/theme.json` and `ui/frames/<role>.{png,json}`: the Tallow and Iron theme (LOOK1-G1, spec
+  `games/emberwake/docs/specs/LOOK1.md` sections 2-3, read by `aegis_ui::theme`): the colour roles, the faces, the
+  layout values and the nine-slice frames (`tools/gen_art.py ui_frames`, exact pixels at scale 2 in the art bible's
+  hues). `ornate` alone is high-resolution, 432 x 432 with slice 200 at scale 8, `reduce` `average`, `straddle`,
+  `corner_anchor`, `corner_inner` and `sharpen` 0.6 (LOOK1-A8): from the picked kit
+  `art_src/frame_kit_ref_gen1793628366_2.png` (`art_src/ornate_corners_gen1793612836_1.png` is the old sheet, kept), its
+  top-left corner cut close to the ornament and mirrored for all four (art outside the frame palette), only the head of
+  the kit's tip on each stub, in the spikes' light; art px are the kit's own, reduced only by the engine; the anchor and
+  inner reach measured from the art; see-through edge bands but for the 1 logical px line in the theme role
+  `frame_line` (`gen_art.py` reads it from `ui/theme.json`; `ornate` is the only frame with one); `ornate_full`, the
+  same corner without tips and the kit's plain edge tiled along every side (512 x 512, slice 224, `edges` `tile`; nothing
+  uses it yet); no sheet, their files are left alone. Not content: no `aegis content` row. Test `emberwake_gui/tests/theme.rs`.
+- The title's picked art (LOOK1-R1; Gemini art, scaled only, no palette pass; picks in `docs/decisions/workflow.md`; not
+  content; made by `tools/title_art.py`, each file's recipe in its header): `backgrounds/menu/title.png` (1920 x 1080, cover crop of `art_src/title_backdrop_clean_gen1793615014_1.png`;
+  fire goes on it as an effects layer, never into the picture), `ui/logo_title.png` (the 1246 x 325 master, an unscaled
+  copy of `art_src/title_logo_final.png`, which the menu sizes to the window: averaged down, enlarged above about 3393 px
+  of window width), `ui/logo_crest.png` (963 x 963, crest
+  B keyed from its ground, the typeset fallback's crest; ICON1: also the window icon, `game.json` `icon`, and the source
+  of the `.exe` icon, `tools/game_icon.py` writing `emberwake_gui/res/emberwake.ico`: rerun it when the crest changes), and for LOOK1-M2's story cards, not drawn yet,
+  `ui/banner_full.png` (1329 x 243, take 1 of `art_src/card_banner_gen1793616575_*.png` with its finials) and
+  `ui/banner_bar.png` (716 x 152, the plain middle of take 2, opaque, no finials; it tiles when every other copy is
+  mirrored, its ends cut on the arches' axes).
+- `fonts/<file>.ttf` with `<Family>-OFL.txt`: the theme's faces beyond the engine's body face (OpenSans SemiBold in
+  `engine/assets/fonts/`). Shipped unmodified under the SIL Open Font License 1.1 (decision "LOOK1 fonts"):
+
+| File | Face | Version | Copyright | Reserved Font Name | Source |
+| --- | --- | --- | --- | --- | --- |
+| `AlegreyaSC-Bold.ttf` | `display` (headers; old-style digits, so numbers use the body or mono face) | Version 2.003 | Copyright 2011 The Alegreya Project Authors (`https://github.com/huertatipografica/Alegreya`) | none | `https://github.com/google/fonts/tree/main/ofl/alegreyasc` (upstream commit d6aedcbb5a82a09dedb07ab99bb91803db8e02af) |
+| `JetBrainsMono-Bold.ttf` (static, weight 700) | `mono` (badge numbers) | Version 2.304 | Copyright 2020 The JetBrains Mono Project Authors (`https://github.com/JetBrains/JetBrainsMono`) | none | `https://github.com/JetBrains/JetBrainsMono/blob/v2.304/fonts/ttf/JetBrainsMono-Bold.ttf` (tag v2.304, commit cd5227bd1f61dff3bbd6c814ceaf7ffd95e947d9) |
+
+The engine's font loader (fontdue) draws a variable font at its default instance, so the picked Bold ships as the
+upstream static file (LOOK1-G2), unmodified, not as the variable file of the pick board.
 
 Which file an entry shows is decided by the lookup chains in `kits/rpg/crates/rpgkit_content/src/art.rs` and
 checked by the asset checks A1-A6 (`check/assets.rs`). The Godot-era asset manifest is retired (the folders are the

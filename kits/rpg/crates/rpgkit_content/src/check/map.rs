@@ -34,8 +34,8 @@ pub const PROPS_MAX: usize = 128;
 pub const PROP_SIDE_MAX: i64 = 16;
 pub const PROP_VARIANT_MAX: i64 = 15;
 const PROP_LAYERS: [&str; 2] = ["sort", "ground"];
-const PROP_ID_MAX: usize = 24;
-const PROP_ART_MAX: usize = 32;
+pub(crate) const PROP_ID_MAX: usize = 24;
+pub(crate) const PROP_ART_MAX: usize = 32;
 
 /// MapRules.MARKER_KINDS: kind -> its own keys with defaults.
 fn marker_kind(kind: &str) -> Option<Dict> {
@@ -449,12 +449,12 @@ pub fn warnings(v: &View, w: &str) -> Vec<String> {
 }
 
 /// A prop's id or art name: lowercase [a-z0-9_], 2 to `max` characters.
-fn prop_name_ok(v: Option<&Value>, max: usize) -> bool {
+pub(crate) fn prop_name_ok(v: Option<&Value>, max: usize) -> bool {
     v.and_then(Value::as_str).is_some_and(|s| json::id_ok(s) && (2..=max).contains(&s.chars().count()))
 }
 
 /// The template's rows as a grid of tiles when they are text rows of one non-zero width (None: no usable grid).
-fn grid(t: &Dict) -> Option<Vec<Vec<char>>> {
+pub(crate) fn grid(t: &Dict) -> Option<Vec<Vec<char>>> {
     let rows = json::aget(t, "rows");
     if rows.is_empty() || !rows.iter().all(Value::is_string) {
         return None;

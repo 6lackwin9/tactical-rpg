@@ -258,21 +258,64 @@ def idle(u, view, frames=8, hf_amp=0.8, stand_in=False, **kw):
     return [pose_view(u, view, stand_in=stand_in, **k) for k in idle_keys(u, frames, hf_amp, **kw)], [160] * frames
 
 
-def walk(u, view, frames=8, stride=6.0, lift=0.45, stand_in=False, **kw):
-    """walk_<view>: rig.walk's gait (8 frames, 90 ms): the feet alternate, each lifting and bending its knee in its
-    half of the gait; the body bobs 0.9 - 1.8 |sin|; the arms swing as 1 px vertical offsets opposite to the legs."""
+def step_height(ph, lift=3.4, rise=1.2):
+    """DIR4-R1F: the height of one foot at gait phase `ph` as the front and back views show it (the stride runs along the
+    view axis, so it reads as height, not as x): in its stance half the foot recedes and rises `rise` px; in its swing half
+    it comes back from `rise` to the ground with a `lift` px arc on top, so one foot is planted (fixed on screen) while
+    the other lifts, clearly, in turn."""
+    ph %= 1.0
+    if ph < 0.5:
+        return rise * (ph / 0.5)
+    v = (ph - 0.5) / 0.5
+    return rise * (1 - v) + lift * math.sin(math.pi * v)
+
+
+def walk(u, view, frames=8, stride=6.0, lift=3.4, rise=1.2, stand_in=False, **kw):
+    """walk_<view>: rig.walk's timing (8 frames, 90 ms), the legs alternating with a visible lift and plant (DIR4-R1F:
+    step_height, the lifted knee bending outward); the body bobs 1.1 - 2.2 |sin| in time with the steps; the arms swing
+    as 1 px vertical offsets opposite to the legs."""
     out = []
     rest = 2 * u['arm'] / u.get('scale', 1.0) - 1.0
     for i in range(frames):
         ph = i / frames; s = math.sin(2 * math.pi * ph)
-        bob = 0.9 - 1.8 * abs(s)
-        _, lr = rig.gait(ph, stride); _, ll = rig.gait(ph + 0.5, stride)
+        bob = 1.1 - 2.2 * abs(s)
         k = dict(kw); hr = k.pop('hand_r', (1.2, rest)); hl = k.pop('hand_l', (1.2, rest)); swing = k.pop('swing', 1.0)
         hr = (hr[0], hr[1] + s * swing)                                 # the right arm swings with the left leg
         hl = (hl[0], hl[1] - s * swing)
-        out.append(pose_view(u, view, bob=k.pop('bob', 0.0) + bob, head_dy=bob * 0.25, lift_r=lr * lift, lift_l=ll * lift,
+        out.append(pose_view(u, view, bob=k.pop('bob', 0.0) + bob, head_dy=bob * 0.25,
+                             lift_r=step_height(ph + 0.5, lift, rise), lift_l=step_height(ph, lift, rise),
                              hand_r=hr, hand_l=hl, tails=ph * 6, stand_in=stand_in, **k))
     return out, [90] * frames
+
+
+# DASH1: rig.dash's five frames seen along the run: the stride reads as height, so the coil and the plant sit low and the
+# flight has both feet off the ground; `lean` tips the head toward the run (down the screen in `down`, up it in `up`).
+DASH_KEYS = (dict(bob=4.0, dy=0.5, head=2.0, lift_r=0.0, lift_l=0.0, arm=(0.0, 1.0)),
+             dict(bob=1.5, dy=0.0, head=1.5, lift_r=0.0, lift_l=6.5, arm=(0.0, 0.0)),
+             dict(bob=-1.5, dy=0.0, head=1.0, lift_r=4.5, lift_l=7.5, arm=(0.5, -0.5)),
+             dict(bob=0.5, dy=0.0, head=1.0, lift_r=7.0, lift_l=2.5, arm=(0.0, 0.0)),
+             dict(bob=4.0, dy=0.5, head=2.0, lift_r=1.5, lift_l=0.0, arm=(0.0, 1.0)))
+
+
+def dash_trail(P, view, f):
+    """Frame `f`'s dash marks in `view`: a puff on both sides of the feet at the drive and the plant, as rig.dash_trail's;
+    no speed lines (user 2026-11-02: the side view's only)."""
+    lo = P['metal_lo']
+    if f in (1, 4):
+        return [(CX + 8.0, 41.5, 1.8, lo), (CX - 8.0, 41.5, 1.8, lo), (CX + 12.0, 40.0, 1.0, lo), (CX - 12.0, 40.0, 1.0, lo)]
+    return []
+
+
+def dash(u, view, stand_in=False, hand_r=None, hand_l=None, **kw):
+    """dash_<view>: rig.dash's frames and ms; `hand_r`, `hand_l` and `kw` are the grip's carry (grip_kw's form)."""
+    rest = 2 * u['arm'] / u.get('scale', 1.0) - 1.0
+    hr, hl = hand_r or (1.2, rest), hand_l or (1.2, rest)
+    out = []
+    for i, key in enumerate(DASH_KEYS):
+        k = dict(kw, **key); ax, ay = k.pop('arm'); k['head_dy'] = k.pop('head')   # the key's body beats a carry's
+        out.append(pose_view(u, view, hand_r=(hr[0] + ax, hr[1] + ay), hand_l=(hl[0] + ax, hl[1] + ay), tails=i * 2.0,
+                             fx=dash_trail(u['pal'], view, i), stand_in=stand_in, **k))
+    return out, list(rig.DASH_MS)
 
 
 def clips(cls, u, stand_in=False):
@@ -298,6 +341,9 @@ def clips(cls, u, stand_in=False):
             W, WT = windup_rows(u, view, g, stand_in)
             for n in W:
                 A['%s_%s' % (n, view)], T['%s_%s' % (n, view)] = W[n], WT[n]
+    if 'dash' in g:  # DASH1: the dash per view
+        for view in VIEWS:
+            A['dash_' + view], T['dash_' + view] = dash(u, view, stand_in, **grip_kw(g, 'dash', view))
     return A, T
 
 
@@ -1812,3 +1858,20 @@ GRIPS['warrior/buckler']['weapons'] = {'sword': _buckler_look('sword'), 'hand_ax
 DA_READY = {'down': dict(W2_READY['down'], hand_r=(-1.5, 6.5), wa=318), 'up': W2_READY['up']}
 GRIPS['warrior/2h']['weapons']['double_axe'] = dict(_chop('double_axe'), idle=DA_READY,
                                                     walk={v: dict(DA_READY[v], swing=0.3) for v in VIEWS})
+
+
+# ------------------------------------------------------------------ the dash's carry (DASH1)
+# Per grip, what the hands hold during dash_<view>: the warrior looks sweep the weapon out and back, foreshortened, with the
+# shield or buckler kept up; the other classes run in their ready pose. dash() applies its own body keys over these.
+W_SWEEP = {'down': dict(hand_r=(4.0, 6.0), wa=235, wk=0.75), 'up': dict(hand_r=(4.0, 6.0), wa=125, wk=0.75)}
+GRIPS['warrior']['dash'] = {'down': dict(W_SWEEP['down'], hand_l=(-3.0, 3.0), oz=FRONT), 'up': dict(W_SWEEP['up'], hand_l=(4.0, 3.5))}
+GRIPS['warrior/buckler']['dash'] = {'down': dict(W_SWEEP['down'], hand_l=(-2.0, 4.0), oz=FRONT), 'up': dict(W_SWEEP['up'], hand_l=(4.0, 3.5))}
+# 2H from the back: carried higher and flatter, so the hilt stays off the legs even in the coil (pilot review, 2026-10-28)
+GRIPS['warrior/2h']['dash'] = {'down': dict(W_SWEEP['down'], **G2), 'up': dict(hand_r=(4.5, 1.0), wa=105, wk=0.75, **G2)}
+# the double axe's broad heads on its large bearer run off the frame at that reach: held closer and shorter
+GRIPS['warrior/2h']['weapons']['double_axe']['dash'] = {'down': dict(W_SWEEP['down'], **G2), 'up': dict(hand_r=(2.5, 1.0), wa=105, wk=0.6, **G2)}
+GRIPS['brawler']['dash'] = {v: dict(B_GUARD[v]) for v in VIEWS}
+GRIPS['ranger']['dash'] = {v: dict(R_LOW[v]) for v in VIEWS}
+GRIPS['rogue']['dash'] = {v: dict(G_READY[v]) for v in VIEWS}
+GRIPS['priest']['dash'] = {v: dict(P_READY[v]) for v in VIEWS}
+GRIPS['mage']['dash'] = {v: dict(M_READY[v]) for v in VIEWS}

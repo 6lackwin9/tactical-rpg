@@ -177,7 +177,7 @@ fn node_errors(v: &View, w: &str, index: usize, raw: &Value, by_id: &IndexMap<St
         Value::String(s) => errors.extend(ref_errors(v, w, &format!("{label} speaker"), "characters", s)),
         _ => errors.push(format!("{label}: speaker must be a character ref or \"\".")),
     }
-    errors.extend(expression_error(node, &label));
+    errors.extend(expression_error(node, &label, &v.faces()));
     errors.extend(text_errors(node.get("text").unwrap_or(&Value::from("")), &label));
     let choices_raw = node.get("choices").cloned().unwrap_or(Value::Array(Vec::new()));
     let next_raw = node.get("next").cloned().unwrap_or(Value::from(""));
@@ -210,11 +210,12 @@ fn node_errors(v: &View, w: &str, index: usize, raw: &Value, by_id: &IndexMap<St
     errors
 }
 
-/// PORTRAITFX1 7: a node's or a `line` card's `expression`, when present: "" (neutral) or a name of `EXPRESSIONS`.
-pub fn expression_error(d: &Dict, label: &str) -> Option<String> {
+/// PORTRAITFX1 7: a node's or a `line` card's `expression`, when present: "" (neutral) or one of the game's `faces`
+/// (PORTRAITFX2 FL4: `View::faces`).
+pub fn expression_error(d: &Dict, label: &str, faces: &[String]) -> Option<String> {
     let x = d.get("expression")?;
-    let ok = x.as_str().is_some_and(|s| s.is_empty() || rpgkit_data::EXPRESSIONS.contains(&s));
-    (!ok).then(|| format!("{label}: expression '{}' is not one of {} (or \"\").", gstr(x), rpgkit_data::EXPRESSIONS.join(", ")))
+    let ok = x.as_str().is_some_and(|s| s.is_empty() || faces.iter().any(|f| f == s));
+    (!ok).then(|| format!("{label}: expression '{}' is not one of {} (or \"\").", gstr(x), faces.join(", ")))
 }
 
 fn text_errors(raw: &Value, label: &str) -> Vec<String> {

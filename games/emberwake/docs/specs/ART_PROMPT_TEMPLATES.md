@@ -118,6 +118,32 @@ Sprites include:
 Compact scale, highly readable, matches the 16-bit dark fantasy aesthetic.
 ```
 
+## Tile
+
+One ground texture per image, square and straight down (LOOK1, decision "Prop sheets by size class; tile textures
+straight-down"). Size: 32 x 32 (region) or 64 x 64 (stage). Never prompt an angle: a 4:3 tile is squashed from the
+square in code. Chain the rest of a set from its `floor` with `--record session_ref=<floor request>`, opening with "In
+the same pixel-art style, pixel size and palette family as the first image, and the same flat straight-down view."
+
+```text
+A single seamless ground texture tile for a dark fantasy tactical RPG, seen from directly overhead: a flat, straight-down orthographic view of the surface, as a floor plan, drawn as a square tile of {size} pixels scaled up (visible large square pixels, no anti-aliasing). No perspective, no horizon, no vanishing lines, no depth, no walls, no objects standing on it. This tile repeats many times across a battle map, so it must read as one continuous surface: low contrast, one main colour, nothing in it stands out, and no grid, rows or checker pattern. Irregular shapes of different sizes, none lined up with the tile's edges or with each other, with shapes and cracks running off all four edges so it wraps without a seam. Even, flat lighting across the whole tile: no vignette, no lighting gradient, no dark corners, no border, no frame, no text. Limited palette of 3-4 close colours from {the set's hex list}. {setting line}. Material: {material}.
+```
+
+## Ground texture
+
+One texture per ground of a region map (REGIONGROUND1 section 7); "Tile" stays for walls and the stage. Gemini route,
+scale only, a record beside each image, a `session_ref` chain from the set's base. Chain the rest from the base with "In
+the same pixel size, palette family and flat straight-down view as the first image." A built ground (`flagstone`,
+`cobble_road`, `paved_road`, `iron_catwalk`) replaces "Fine even grain only, the same in all directions" with "Small
+irregular stones of different sizes, in no rows and no direction, with narrow joints only slightly darker than the
+stones". The batches' `{hex}` and `{material}`: the spec's section 7. Then `tools/tiles`: `cut.py --form ground`, `seam.py`,
+`flatten.py`, `groundcheck.py score` (a failure: re-roll once naming it in the prompt, then show the user), `board.py
+--ground`.
+
+```text
+One large seamless ground texture for a dark fantasy tactical RPG, seen from directly overhead: a flat, straight-down orthographic view of the surface, drawn as a square texture of 128 x 128 pixels scaled up (visible square pixels, no anti-aliasing). It sits quietly behind small characters and must never draw the eye. Muted and low contrast: one main colour, {hex}, with at most 3 close shades of it. Even tone across the whole image: no lighter or darker areas, no dark patches, no stains, no blotches, no vignette, no lighting gradient. Fine even grain only, the same in all directions: no direction, no streaks, no diagonal marks, no brush strokes, no lines, no footprints, no tracks, no ruts, nothing that stands out or could be recognised when repeated. It repeats across a large map, so it wraps on all four edges with no seam, and has no grid, rows, tiles, checker or plaid; no shape lines up with the image's edges or with any other shape. No perspective, no horizon, no objects, no border, no frame, no text. Material: {material}.
+```
+
 ## Routes by asset type (ARTPROMPT1, 2026-11-01)
 
 Since 2026-11-01 the "Gemini" route runs through the Antigravity queue by default (decision "Antigravity queue as the default
@@ -168,7 +194,18 @@ Decision "Antigravity image queue" (user 2026-11-01): a Gemini image run can go 
 instead of the image API. This side writes request files and ingests the results with `tools/portraits/artqueue.py`
 (never an API call, never a key); Antigravity makes the images. The contract extends the Antigravity-side spec
 (`image_pipeline_spec.md`, updated by the user 2026-11-01 to match it).
-Folder: `.image_pipeline/` in the main checkout `C:/dev/tactical-rpg` (the same absolute path from every worktree; Git
+Primary route (ARTQUEUE5, decision "Gemini web app as the primary image route"): the queue is the Drive folder
+`G:/My Drive/image_pipeline` (same layout and contract as below, plus `refs/`), processed by a Gemini web-app task;
+the default of every command comes from `tools/portraits/artqueue.json` (`pipeline`) or the environment variable
+`AEGIS_IMAGE_PIPELINE`, and a folder that does not exist stops the command with a message (no fallback).
+`request` and `text` copy each reference into `refs/<file name>` (a different file of the same name is stored as
+`<stem>_2.png`, `_3`; the same file is reused) and the request's `references` list those copies; the original paths
+are in `metadata.record.source_refs`. In the web app the user attaches the references by hand: `artqueue.py attach`
+prints the `refs/` file names the requests in `queue/` need (unique, sorted). A request whose reference is an image of
+the web-app session itself is made with `--record session_ref=<request name>` and is left out of `attach`. Records
+are plain JSON (`.json` beside each image). The Antigravity folder below is the unattended backup, chosen with
+`--backup`.
+Backup folder: `.image_pipeline/` in the main checkout `C:/dev/tactical-rpg` (the same absolute path from every worktree; Git
 ignores it), with `queue/`, `processing/`, `output/`, `completed/` and `failed/`. The ingest adds `rejected/` (refused
 images, each with a `.note.txt`) and `pixelized/` (game portraits of portrait requests without a target).
 Request `queue/<name>.json`, written as `queue/<name>.json.tmp` and then renamed, so a scan never reads half a file.
@@ -188,19 +225,42 @@ Antigravity moves the request to `processing/`, makes `n` images and saves `outp
 `image-generator`; `time`; `prompt_sent`, the exact text it sent; `references`; `n`; `files` [{`file` (relative, such
 as `output\<name>.png`), `width`, `height`}]; `notes`), checks each PNG opens, is full size and matches the aspect,
 then moves the request to `completed/`. On a failure: `failed/<name>.json` and `failed/<name>.error.txt`.
+Quota pause (ARTQUEUE2, 2026-11-01): on HTTP 429 or quota exhaustion the request goes back to `queue/` (not
+`failed/`), Antigravity writes `paused.json` {`paused_until` (ISO UTC), `reason`, `request`} and stops the run; runs
+skip until `paused_until`, then it deletes `paused.json`; only real errors go to `failed/`. `artqueue.py status` prints
+`paused until <time> UTC (<n> min): <reason>` (or `pause expired`; a malformed file is reported), `request` and `text`
+still queue during a pause and note it, and `ingest` is unaffected.
+Archive (ARTQUEUE3): once `ingest` writes a request's marker it moves the request's leftover `output/` files (images,
+`<name>.result.json`, `<name>.ingested.json`) into `archive/<UTC date>/output/` and its request from `completed/` into
+`archive/<UTC date>/completed/` (never overwriting: a clash gets `_2`, `_3`); `rejected/` stays; a dry run moves nothing.
+"Ingested already" also looks in `archive/*/output`. `artqueue.py archive [--dry-run]` sweeps earlier ingests that have a
+marker in `output/`; `status` shows `archived N`. Antigravity never reads `archive/`.
 Ingest (a request counts as finished when `output/<name>.result.json` exists and the request is in `completed/`):
 each image is checked (present, a whole PNG, the aspect within 3 %, the long edge at least 1024 px); a refused one
 moves to `rejected/` with a note and the valid variants of the same request are still taken. A request in `failed/`
 is reported with its `error.txt` (and nothing is ingested).
 An accepted one is copied into `art_src/` with the house naming of `generate.py` (`<id>.png` for a single first take,
 else `<id>_gen<time>_<k>.png`; a faces sheet `<id>_faces_gen<time>_<k>.png`), its model mark is cleared
-(`pixelize.clear_mark`) and its prompt record is written beside it: `model` (as the result names it), `"via":
-"antigravity"`, `id`, `prompt` (the
-exact `prompt_sent`; `prompt_requested` too when it differs), `reference` (the first) and `references`,
-`prompts_file`, `time`, `n`, the request's `metadata` and `record` fields, `request`, `mark_cleared` and
-`"source": "antigravity image subagent"`. Route `portrait` is pixelized into the 120 px game portrait (the request's
-`target` when that file does not exist yet, else `pixelized/<art_src name>.png`); `faces` is cut by `sheets.py faces`
-and the rest is left for the asset lane. `output/<name>.ingested.json` lists what went where; a second ingest skips it.
+(`pixelize.clear_mark`) and its prompt record is written beside it: `model` (as the result names it, else the value of
+`via`), `via`, `id`, `prompt` (the exact `prompt_sent`; `prompt_requested` too when it differs), `reference` (the first)
+and `references`, `prompts_file`, `time`, `n`, the request's `metadata` and `record` fields, `request`, `mark_cleared`
+and `source`. `via` and `source` follow the queue (LOOK1-T2): `"antigravity"` and `"antigravity image subagent"` for the
+folder `.image_pipeline` (`--backup`), `"gemini_web"` and `"gemini web app task"` for any other; records written before
+LOOK1-T2 say antigravity whichever queue made them. Route `portrait` is pixelized into the 120 px game portrait (the
+request's `target` when that file does not exist yet, else `pixelized/<art_src name>.png`); `faces` is cut by
+`sheets.py faces` and the rest is left for the asset lane. `output/<name>.ingested.json` lists what went where; a second ingest skips it.
+Expression sheets from this route are already pixel art, so `sheets.py faces` takes `--reduce scale` (decision
+"Expression sheets: scale only and aligned cells", PORTRAITFX1-XA): each cell is only cut from its background
+(`pixelize.cut_background`), scaled to the 120 grid (`smooth_reduce`) and framed on the faction backdrop, with no
+palette pass (the default `--reduce pixelize` is unchanged). `--align` first scales (0.85 to 1.15, steps of 0.01) and
+shifts each non-neutral cell so its figure best covers the neutral cell's, and prints the chosen scale and offset
+(pixels of the cell) per cell. `--cell <name>=<image>` (repeatable) replaces one cell by a 1:1 edit of the neutral cell
+(for example `--cell afraid=art_src/bram_gen1793543824_1.png`), resized to the cell before the alignment. Both
+need `--reduce scale`; `--contact` works as before. The second sheet (PORTRAITFX2-T): the option
+`--cells determined,happy,sad,surprised` names the four cells in sheet order (default `neutral,hurt,angry,afraid`; any
+four distinct snake_case ids, checked before a write; frames, `--cell` keys and contact labels follow), and
+`--align-to IMAGE` aligns all four cells (none is neutral) to that image, resized to the cell, with the same search (use the
+first sheet's raw neutral cell so both sheets share one framing).
 Commands (from `tools/portraits`, with `$LOCALAPPDATA/Programs/Python/Python312/python.exe`; test
 `test_artqueue.py`):
 
@@ -212,5 +272,7 @@ Commands (from `tools/portraits`, with `$LOCALAPPDATA/Programs/Python/Python312/
   this file, filled in
 - `artqueue.py ingest [<name>...] [--dry-run]`: every finished request, or the names given
 - `artqueue.py status`: counts per folder and the failed requests' errors
-- `--pipeline <dir>` (or `IMAGE_PIPELINE`) points any command at another queue folder (tests, a scratch run)
+- `artqueue.py attach`: the `refs/` names to attach by hand for the queued requests (or "nothing to attach")
+- `--pipeline <dir>` points any command at another queue folder (tests, a scratch run); `--backup` at the Antigravity
+  folder; `AEGIS_IMAGE_PIPELINE` (or `IMAGE_PIPELINE`) replaces the configured default
 Each Antigravity run is an image run like any other: the image rules still apply (ask first where they say so).

@@ -8,24 +8,27 @@
 //! - `Faces`: one per screen: a `PortraitFx` per key, the screen's `Budget` and its clock; `draw` holds the sidecar's
 //!   `idle` overlays plus the kit's `holds` for the look, resolves the chain with the engine's expression and draws (the
 //!   initial letter when no file loads); `react` fires the kit's `reactions` for step events (none under `skip_anim`);
-//!   `say` holds a dialogue line's `expression` (PORTRAITFX1-X, 7) over the state rows.
+//!   `say` holds a dialogue line's `expression` (PORTRAITFX1-X, 7) over the state rows; every portrait draws the kit's
+//!   expression-effect rows (PORTRAITFX1-EX, `expression_fx_of`, the catalog kind `portrait_expressions`) with each
+//!   face's motion profile (PORTRAITFX2-M, `motion_of`).
 //! - Colours: the rim key Tallow Amber and the art-bible hues the cue rows and sidecars use (`HUES`).
 //!
 //! Presentation only: no rule, plan, AI, save, trace or sim reads a portrait.
 
 use crate::screens::Cx;
 use aegis_core::json::{self, Dict};
+use aegis_ui::theme::th;
 use aegis_ui::art::Art;
 use aegis_ui::canvas::{rgb, Rect, Rgba};
 use aegis_ui::fx::Clock;
 use aegis_ui::painter::Painter;
-use aegis_ui::portrait_fx::{idle_cues, Budget, Cue, PortraitFx, PortraitOpts};
+use aegis_ui::portrait_fx::{idle_cues, Budget, Cue, ExpressionFx, Mark, MarkBox, Motion, PortraitFx, PortraitOpts};
 use aegis_ui::screen::Settings;
-use aegis_ui::ui::{GOLD, SMALL};
+use aegis_ui::ui::{SMALL};
 use emberwake_battle::portrait::{self, Look};
 use emberwake_battle::session::Session;
 use emberwake_content::art as kart;
-use emberwake_data::{Catalog, PortraitCue};
+use emberwake_data::{Catalog, PortraitCue, PortraitExpression};
 use emberwake_rules::derived;
 use emberwake_rules::unit::Unit;
 use emberwake_world::state::UnitState;
@@ -57,6 +60,63 @@ pub fn hue_name(hex: &str) -> &'static str {
 pub fn cue_of(row: &PortraitCue) -> Option<Cue> {
     let color = aegis_core::assets::hex_colour(&row.color).map(|c| [c[0], c[1], c[2], 255]);
     Some(Cue::parse(&row.effect, &row.preset)?.with_intensity(row.intensity as f32).with_ms(row.ms.max(0) as u32).with_color(color).with_expression(&row.expression).with_priority(row.priority).with_key(&format!("cue.{}", row.id)))
+}
+
+/// PORTRAITFX1-EX: the kit's expression-effect rows as the engine's (a colour that does not parse is none; the loader
+/// keeps only rows that pass their checks, so that does not happen with loaded rows). PORTRAITFX2 FL2: the `neutral`
+/// row is the plain face's motion (`base_motion_of`), not an expression effect.
+pub fn expression_fx_of(rows: &[PortraitExpression]) -> Vec<ExpressionFx> {
+    let hex = |s: &str| aegis_core::assets::hex_colour(s).map(|c| [c[0], c[1], c[2], 255]);
+    rows.iter()
+        .filter(|r| r.id != kart::NEUTRAL)
+        .map(|r| ExpressionFx {
+            expression: r.id.clone(),
+            tint: hex(&r.tint),
+            tint_strength: r.tint_strength as f32,
+            tint_ms: r.tint_ms.max(0) as u32,
+            mark: Mark::parse(&r.mark),
+            mark_color: hex(&r.mark_color),
+            mark_box: MarkBox::parse(&r.mark_box),
+            mark_x: r.mark_x as f32,
+            mark_y: r.mark_y as f32,
+            mark_size: r.mark_size as f32,
+            mark_pulse_ms: r.mark_pulse_ms.max(0) as u32,
+            shake_px: r.shake_px.max(0) as f32,
+            shake_ms: r.shake_ms.max(0) as u32,
+            motion: motion_of(r),
+        })
+        .collect()
+}
+
+/// PORTRAITFX2 FL2: the plain face's motion: the `neutral` row's (`motion_of`), else `Motion::default()` (the breath).
+pub fn base_motion_of(rows: &[PortraitExpression]) -> Motion {
+    rows.iter().find(|r| r.id == kart::NEUTRAL).map(motion_of).unwrap_or_default()
+}
+
+/// PORTRAITFX2-M: a row's motion fields as the engine's `Motion` (the schema defaults give `Motion::default()`, the
+/// plain breath).
+pub fn motion_of(r: &PortraitExpression) -> Motion {
+    let ms = |v: i32| v.max(0) as u32;
+    Motion {
+        breath_amp: r.breath_amp as f32,
+        breath_ms: ms(r.breath_ms),
+        breath_in: r.breath_in as f32,
+        breath_jitter: r.breath_jitter as f32,
+        lean_px: r.lean_px,
+        bob_px: r.bob_px,
+        bob_ms: ms(r.bob_ms),
+        enter_dy: r.enter_dy,
+        enter_stretch: r.enter_stretch,
+        enter_ms: ms(r.enter_ms),
+        rest_dy: r.rest_dy,
+        rest_ms: ms(r.rest_ms),
+        settle_ms: ms(r.settle_ms),
+        shiver_px: r.shiver_px,
+        shiver_ms: ms(r.shiver_ms),
+        shiver_gap_ms: ms(r.shiver_gap_ms),
+        blink: r.blink,
+        tint_breath: r.tint_breath as f32,
+    }
 }
 
 /// The portrait tier of a unique folder (`heroes` -> `hero`, ...); `common` for any other.
@@ -115,8 +175,7 @@ impl Who {
 }
 
 // The builders the surfaces call (PORTRAITFX1-D: the talk box, `of_character`; -R: the Character screen and the hub
-// list, `of_member`; -P: the battle panels, `of_unit`); until each lands only the tests use them.
-#[cfg_attr(not(test), allow(dead_code))]
+// list, `of_member`; -P: the battle panels, `of_unit`).
 impl Who {
     /// A world character (`screens::character_art`): keyed by its id; its tier, body and name.
     pub fn of_character(d: &Data, character: &Dict) -> Who {
@@ -168,18 +227,17 @@ fn derived_of(cat: &Catalog, ruleset: &str, u: &Unit) -> Vec<(String, i32, i32)>
 }
 
 /// Battle unit `i`'s look (5.2): its HP, down (HP 0 and still on the field), its statuses, its member's `conditions`
-/// (the caller's: ROSTER1), the derived stats the cue rows read and the battle's ruleset.
-// The look builders are for the surfaces (PORTRAITFX1-D talk box: member and character; -R Character screen and hub
-// list, -P battle panels: unit); until -P lands only the tests call this one, hence the dead-code allowance.
-#[cfg_attr(not(test), allow(dead_code))]
+/// (the caller's: ROSTER1), the derived stats the cue rows read and the battle's ruleset (PORTRAITFX1-P: the battle
+/// panels).
 pub fn look_of_unit(s: &Session, i: usize, conditions: &[String]) -> Look {
     let u = &s.w.units[i];
     let ruleset = s.w.ruleset.id.clone();
-    Look { hp: u.hp, max_hp: u.max_hp, down: u.hp <= 0 && !u.is_withdrawn, statuses: u.st.active.iter().cloned().collect(), conditions: conditions.to_vec(), derived: derived_of(&s.w.cat, &ruleset, u), ruleset }
+    Look { hp: u.hp, max_hp: u.max_hp, down: u.hp <= 0 && !u.is_withdrawn, statuses: u.st.active.iter().cloned().collect(), conditions: conditions.to_vec(), derived: derived_of(&s.w.cat, &ruleset, u), ruleset, unspent: 0 }
 }
 
 /// A party member's look out of battle: the HP the save carries (`hp_lost` against its max in the world it plays), no
-/// statuses, never down; its conditions (ROSTER1 W1: `wounded`).
+/// statuses, never down; its conditions (ROSTER1 W1: `wounded`); its unspent points (PORTRAITFX2 5.3, decision Q6:
+/// `unspent` rows hold while there are any).
 pub fn look_of_member(d: &Data, gs: &GameState, m: &UnitState) -> Look {
     let world = &gs.world_id;
     let ruleset = d.ruleset_id(world);
@@ -187,7 +245,7 @@ pub fn look_of_member(d: &Data, gs: &GameState, m: &UnitState) -> Look {
     let max_hp = built.as_ref().map_or(0, |b| b.unit.max_hp);
     let hp = if max_hp > 0 { progression::start_hp(max_hp as i64, m.hp_lost) as i32 } else { 0 };
     let derived = built.map(|b| derived_of(&d.cat, &ruleset, &b.unit)).unwrap_or_default();
-    Look { hp, max_hp, down: false, statuses: Vec::new(), conditions: m.conditions.clone(), derived, ruleset }
+    Look { hp, max_hp, down: false, statuses: Vec::new(), conditions: m.conditions.clone(), derived, ruleset, unspent: m.unspent(d).max(0) }
 }
 
 /// A world character's look: no HP (so no `hp` or `down` row matches), no statuses; the derived stats of its base unit
@@ -226,9 +284,21 @@ pub struct Faces {
     /// The Gallery's anchors check and its own reduce-motion check (None: the setting).
     pub show_anchors: bool,
     pub reduce: Option<bool>,
+    /// PORTRAITFX1-TL: the richest tier these portraits draw at (`PortraitOpts::tier_cap`; the timeline icons:
+    /// minimal); None: the drawn side decides.
+    pub tier_cap: Option<aegis_ui::portrait_fx::Tier>,
+    /// PORTRAITFX1-EX: the expression effects every portrait draws (`draw` reads them from the data each frame).
+    pub expressions: Vec<ExpressionFx>,
+    /// PORTRAITFX2 FL2: the plain face's motion every portrait draws (`draw` reads the `neutral` row each frame).
+    pub base_motion: Motion,
 }
 
 impl Faces {
+    /// PORTRAITFX1-TL: a screen's portraits that never draw richer than `cap` (`tier_cap`).
+    pub fn capped(cap: aegis_ui::portrait_fx::Tier) -> Faces {
+        Faces { tier_cap: Some(cap), ..Faces::default() }
+    }
+
     /// Starts a frame: the budget is fresh; portraits left out since the last frame are dropped.
     pub fn begin(&mut self) {
         let touched = std::mem::take(&mut self.touched);
@@ -251,9 +321,10 @@ impl Faces {
         self.clock.now()
     }
 
-    /// How portraits draw on this screen: the reduce-motion setting (or the page's own check), the rim key, anchors.
+    /// How portraits draw on this screen: the reduce-motion setting (or the page's own check), the rim key, anchors,
+    /// the screen's tier cap (`tier_cap`).
     pub fn opts(&self, settings: &Settings) -> PortraitOpts {
-        PortraitOpts { reduce_motion: self.reduce.unwrap_or_else(|| settings.reduce_motion()), rim_default: Some(RIM), show_anchors: self.show_anchors }
+        PortraitOpts { reduce_motion: self.reduce.unwrap_or_else(|| settings.reduce_motion()), rim_default: Some(RIM), show_anchors: self.show_anchors, tier_cap: self.tier_cap }
     }
 
     /// Holds `cues` on `key` beside its look until the next `pin` (the Gallery's toggles).
@@ -278,12 +349,17 @@ impl Faces {
     pub fn draw(&mut self, p: &mut Painter, cx: &mut Cx, who: &Who, look: &Look, surface: &str, r: Rect) -> bool {
         let data = cx.data.clone();
         let opts = self.opts(&cx.settings);
+        let rows = expression_fx_of(&data.cat.portrait_expressions);
+        if self.expressions != rows {
+            self.expressions = rows;
+        }
+        self.base_motion = base_motion_of(&data.cat.portrait_expressions);
         self.draw_parts(p, &mut cx.art, &data.cat.portrait_cues, who, look, surface, r, &opts)
     }
 
     /// `draw` over explicit parts: the holds are the sidecar's `idle`, the state rows of `rows` that hold for `look`
     /// on `surface`, the key's pins and its line's face (`say`); the file is the first of `who`'s chain for the
-    /// expression that wins.
+    /// expression that wins; the expression effects are `self.expressions`, the plain face's motion `self.base_motion`.
     #[allow(clippy::too_many_arguments)]
     pub fn draw_parts(&mut self, p: &mut Painter, art: &mut Art, rows: &[PortraitCue], who: &Who, look: &Look, surface: &str, r: Rect, opts: &PortraitOpts) -> bool {
         let now = self.now();
@@ -292,6 +368,10 @@ impl Faces {
         held.extend(self.pins.get(&who.key).cloned().unwrap_or_default());
         held.extend(self.lines.get(&who.key).cloned());
         let fx = self.fx.entry(who.key.clone()).or_insert_with(|| PortraitFx::new(&who.key));
+        fx.set_expressions(&self.expressions);
+        if *fx.base_motion() != self.base_motion {
+            fx.set_base_motion(self.base_motion);
+        }
         // The expression picks the file, the file's sidecar adds idle holds that may change the expression: settle it
         // in at most two passes (holding the same set twice changes nothing).
         let mut expression = fx.expression(now).to_string();
@@ -311,7 +391,7 @@ impl Faces {
         let drawn = found.is_some_and(|rel| fx.draw(p, art, &rel, face.as_ref(), r, now, opts, &mut self.budget));
         if !drawn {
             let size = (r.h as f32 * 0.32).clamp(SMALL, 20.0);
-            p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - p.line_h(size)) / 2.0, &who.initial(), size, GOLD);
+            p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - p.line_h(size)) / 2.0, &who.initial(), size, th().gold);
         }
         drawn
     }
@@ -319,10 +399,16 @@ impl Faces {
     /// Fires the event rows of the data for `events` on `key` (`reactions` on `surface` under `ruleset`); none under
     /// the `skip_anim` setting. How many cues fired.
     pub fn react(&mut self, cx: &Cx, key: &str, events: &[&str], surface: &str, ruleset: &str) -> usize {
+        self.react_at(cx, key, events, 0, surface, ruleset)
+    }
+
+    /// `react` for the events of a skill of level `level` (PORTRAITFX2 5.3: `reactions_at`, a `skill` row's
+    /// `min_level`).
+    pub fn react_at(&mut self, cx: &Cx, key: &str, events: &[&str], level: i32, surface: &str, ruleset: &str) -> usize {
         if cx.settings.v["skip_anim"].as_bool().unwrap_or(false) {
             return 0;
         }
-        let rows = portrait::reactions(&cx.data.cat.portrait_cues, events, surface, ruleset);
+        let rows = portrait::reactions_at(&cx.data.cat.portrait_cues, events, level, surface, ruleset);
         rows.into_iter().filter_map(cue_of).map(|c| self.fire(key, c)).count()
     }
 
@@ -410,6 +496,78 @@ pub(crate) mod tests {
     fn the_kit_effect_names_are_the_engines() {
         assert_eq!(emberwake_data::PORTRAIT_EFFECTS, aegis_ui::portrait_fx::EFFECTS);
         assert_eq!(emberwake_data::PORTRAIT_JOLTS, aegis_ui::portrait_fx::PORTRAIT_JOLTS);
+        // PORTRAITFX1-EX: the marks and their boxes
+        assert_eq!(emberwake_data::PORTRAIT_MARKS, aegis_ui::portrait_fx::MARKS);
+        assert_eq!(emberwake_data::PORTRAIT_MARK_BOXES, aegis_ui::portrait_fx::MARK_BOXES);
+    }
+
+    /// An expression-effect row from its non-default keys (the loader's typed row).
+    pub(crate) fn ex_row(v: Value) -> PortraitExpression {
+        ex_row_of(&v)
+    }
+
+    pub(crate) fn ex_row_of(v: &Value) -> PortraitExpression {
+        PortraitExpression::from_obj(v.as_object().expect("an object"))
+    }
+
+    /// PORTRAITFX2-M (the binding): a row with no motion fields maps to `Motion::default()` (the plain breath), and each
+    /// motion field reaches the engine's `Motion`.
+    #[test]
+    fn mo_the_motion_fields_reach_the_engine() {
+        assert_eq!(expression_fx_of(&[ex_row(json!({"id": "hurt", "tint": "#e11d48"}))])[0].motion, Motion::default());
+        let row = ex_row(json!({"id": "angry", "tint": "#e11d48", "breath_amp": 4.0, "breath_ms": 2100, "breath_in": 0.4, "breath_jitter": 0.1, "lean_px": 1, "bob_px": 1, "bob_ms": 1100, "enter_dy": -2, "enter_stretch": -1, "enter_ms": 320, "rest_dy": 2, "rest_ms": 1500, "settle_ms": 900, "shiver_px": 1, "shiver_ms": 280, "shiver_gap_ms": 1400, "blink": false, "tint_breath": 0.5}));
+        let want = Motion { breath_amp: 4.0, breath_ms: 2100, breath_in: 0.4, breath_jitter: 0.1, lean_px: 1, bob_px: 1, bob_ms: 1100, enter_dy: -2, enter_stretch: -1, enter_ms: 320, rest_dy: 2, rest_ms: 1500, settle_ms: 900, shiver_px: 1, shiver_ms: 280, shiver_gap_ms: 1400, blink: false, tint_breath: 0.5 };
+        assert_eq!(expression_fx_of(&[row])[0].motion, want);
+    }
+
+    /// EX (the binding): the kit's rows reach the engine field for field; a line's `angry` tints the face box the
+    /// sidecar's eye boxes give (its centre by the engine's `tinted` at the row's strength) and draws its mark; a portrait
+    /// with no sidecar draws its picture untouched (no tint, no crash); the agent state names what drew.
+    #[test]
+    fn ex_the_expression_rows_draw_through_the_binding() {
+        let angry = ex_row(json!({"id": "angry", "tint": "#e11d48", "tint_strength": 0.4, "mark": "vein", "mark_color": "#e11d48", "mark_x": 0.9, "mark_y": 0.1, "mark_pulse_ms": 900}));
+        let hurt = ex_row(json!({"id": "hurt", "tint": "#e11d48", "tint_strength": 0.8, "tint_ms": 240, "shake_px": 2, "shake_ms": 220}));
+        let fx = expression_fx_of(&[angry.clone(), hurt]);
+        assert_eq!(fx[0].tint, Some(rgb(0xe1, 0x1d, 0x48)));
+        assert_eq!((fx[0].mark, fx[0].mark_box, fx[0].mark_pulse_ms, fx[0].mark_x), (Some(Mark::Vein), MarkBox::Face, 900, 0.9));
+        assert_eq!((fx[1].tint_ms, fx[1].shake().map(|s| (s.px, s.ms))), (240, Some((2.0, 220))));
+        assert_eq!(fx[1].mark, None);
+
+        let sidecar = json!({"size": 96, "eyes": [[30, 40, 10, 6], [56, 40, 10, 6]], "blink": false});
+        let root = layer("ex", "portraits/npcs/ida.png", 96, [120, 90, 70], Some(sidecar));
+        let mut art = Art::layered(Layers::of(vec![root]));
+        let who = Who { key: "ida".into(), tier: "npc".into(), id: "ida".into(), name: "Ida".into(), ..Who::default() };
+        let plain = Who { key: "zed".into(), tier: "npc".into(), id: "zed".into(), name: "Zed".into(), file: "portraits/npcs/ida.png".into(), ..Who::default() };
+        let mut g = gfx();
+        let opts = PortraitOpts { reduce_motion: true, ..PortraitOpts::default() };
+        let mut faces = Faces { expressions: fx, ..Faces::default() };
+        faces.clock = Clock { ms: 1000.0, hold: 0.0 };
+        let mut ui: Ui<()> = Ui::new(&mut g, (-500, -500), true);
+        faces.begin();
+        faces.say("ida", "angry");
+        assert!(faces.draw_parts(&mut ui.p, &mut art, &[], &who, &Look::default(), "dialogue", Rect::new(0, 0, 96, 96), &opts));
+        // the line's face starts at its first draw; draw again once it has eased in
+        faces.clock = Clock { ms: 2000.0, hold: 0.0 };
+        faces.begin();
+        faces.say("ida", "angry");
+        assert!(faces.draw_parts(&mut ui.p, &mut art, &[], &who, &Look::default(), "dialogue", Rect::new(0, 0, 96, 96), &opts));
+        let face = art.face("portraits/npcs/ida.png").cloned().expect("the sidecar");
+        let fb = face.face_box().expect("a face box from the eyes");
+        let img = faces.get("ida").and_then(|f| f.composed()).expect("composed").clone();
+        let (cx, cy) = (fb[0] + fb[2] / 2, fb[1] + fb[3] / 2);
+        let i = ((cy * img.w + cx) * 4) as usize;
+        let want = aegis_ui::portrait_fx::tinted([120, 90, 70, 255], rgb(0xe1, 0x1d, 0x48), 0.4);
+        assert_eq!(&img.px[i..i + 4], &want[..], "the face box centre at the row's strength");
+        let state = faces.get("ida").unwrap().state(faces.now());
+        assert_eq!(state["expression_fx"], json!(["tint", "mark"]), "{state}");
+
+        // a portrait file with no sidecar: no box, so nothing but the picture
+        let root = layer("ex_plain", "portraits/npcs/ida.png", 96, [120, 90, 70], None);
+        let mut bare = Art::layered(Layers::of(vec![root]));
+        faces.begin();
+        faces.say("zed", "angry");
+        assert!(faces.draw_parts(&mut ui.p, &mut bare, &[], &plain, &Look::default(), "dialogue", Rect::new(0, 0, 96, 96), &opts));
+        assert_eq!(faces.get("zed").unwrap().state(faces.now())["expression_fx"], json!([]), "no sidecar: no tint, no mark");
     }
 
     /// G1: a battle unit's look carries its statuses and its member's conditions; a member's look the HP its save
@@ -649,5 +807,111 @@ pub(crate) mod tests {
         assert_eq!(draw(&mut faces, "angry"), ("angry".to_string(), Some(FRAME_FILL)), "the line's angry frame over the low-HP hurt row");
         // the low-HP row asks for `hurt`: no hurt frame here, so its chain falls back to the neutral frame
         assert_eq!(draw(&mut faces, ""), ("hurt".to_string(), Some(NEUTRAL_FILL)), "no line face: the row's face again");
+    }
+
+    /// PORTRAITFX2 (decision Q10): a `sad` face on a speaker with no `sad` frame draws its neutral frame along
+    /// `face_chain`, with the face's motion: sunk by `motion_px(rest_dy)` once `rest_ms` has passed (the 6.1 row's
+    /// shape; reduce motion off).
+    #[test]
+    fn fx2_a_sad_face_without_frames_draws_the_neutral_frame_sunk() {
+        let who = Who { key: "ida".into(), tier: "npc".into(), id: "ida".into(), name: "Ida".into(), ..Who::default() };
+        let sad = ex_row(json!({"id": "sad", "breath_amp": 2.0, "breath_ms": 5200, "breath_in": 0.3, "rest_dy": 2, "rest_ms": 1500}));
+        let rest = (sad.rest_dy, sad.rest_ms as u64);
+        let cue = cue_of(&row(json!({"id": "face_ally_down", "event": "ally_down", "effect": "face", "expression": "sad", "ms": 3000, "priority": 65}))).expect("a face cue");
+        let mut art = frame_layers("fx2_sad", "portraits/npcs/ida.png", true, None);
+        let mut g = gfx();
+        let opts = PortraitOpts { reduce_motion: false, ..PortraitOpts::default() };
+        let mut faces = Faces { expressions: expression_fx_of(&[sad]), ..Faces::default() };
+        let start = 1000;
+        let mut draw_at = |faces: &mut Faces, t: u64| {
+            faces.clock = Clock { ms: t as f64, hold: 0.0 };
+            let mut ui: Ui<()> = Ui::new(&mut g, (-500, -500), true);
+            faces.begin();
+            assert!(faces.draw_parts(&mut ui.p, &mut art, &[], &who, &Look::default(), "dialogue", Rect::new(0, 0, 96, 96), &opts));
+        };
+        draw_at(&mut faces, start);
+        faces.fire(&who.key, cue);
+        // the screen draws every frame: the face change is seen (its 200 ms blend starts) on the next one
+        draw_at(&mut faces, start + 16);
+        draw_at(&mut faces, start + rest.1 + 100);
+        let f = faces.get(&who.key).expect("kept");
+        assert_eq!(f.expression(faces.now()), "sad");
+        assert_eq!(drawn_fill(&faces, &who.key), Some(NEUTRAL_FILL), "no sad frame: the neutral frame");
+        let side = f.composed().expect("composed").w as i32;
+        assert_eq!(f.motion(faces.now()).dy, aegis_ui::portrait_fx::motion_px(rest.0 as f32, side), "sunk by the rest offset at side {side}");
+    }
+
+    /// PORTRAITFX2 6.2 (the shape of FA's rows): `face_victory` (priority 90) wins over the low-HP hold `face_low_hp`
+    /// (80) for its ms, then the hold shows again.
+    #[test]
+    fn fx2_a_victory_face_wins_over_the_low_hp_hold() {
+        let who = Who { key: "ida".into(), tier: "npc".into(), id: "ida".into(), name: "Ida".into(), ..Who::default() };
+        let rows = [
+            row(json!({"id": "face_low_hp", "trigger": "hp", "below": 30, "effect": "face", "expression": "hurt", "priority": 80})),
+            row(json!({"id": "face_victory", "event": "victory", "effect": "face", "expression": "happy", "ms": 3000, "priority": 90})),
+        ];
+        let look = Look { hp: 1, max_hp: 100, ..Look::default() };
+        let mut art = frame_layers("fx2_victory", "portraits/npcs/ida.png", true, None);
+        let mut g = gfx();
+        let opts = PortraitOpts { reduce_motion: true, ..PortraitOpts::default() };
+        let mut faces = Faces::default();
+        let mut draw_at = |faces: &mut Faces, t: u64| -> String {
+            faces.clock = Clock { ms: t as f64, hold: 0.0 };
+            let mut ui: Ui<()> = Ui::new(&mut g, (-500, -500), true);
+            faces.begin();
+            assert!(faces.draw_parts(&mut ui.p, &mut art, &rows, &who, &look, "panel", Rect::new(0, 0, 96, 96), &opts));
+            faces.get(&who.key).expect("kept").expression(faces.now()).to_string()
+        };
+        assert_eq!(draw_at(&mut faces, 1000), "hurt", "the low-HP hold");
+        let fired = portrait::reactions(&rows, &[portrait::VICTORY], "panel", "classic");
+        let ms = fired[0].ms as u64;
+        for c in fired.into_iter().filter_map(cue_of) {
+            faces.fire(&who.key, c);
+        }
+        assert_eq!(draw_at(&mut faces, 1100), "happy", "the victory face over the hold");
+        assert_eq!(draw_at(&mut faces, 1000 + ms - 100), "happy");
+        assert_eq!(draw_at(&mut faces, 1000 + ms + 100), "hurt", "the hold again after its ms");
+    }
+
+    /// PORTRAITFX2 FL2: the `neutral` row is the plain face's motion (`base_motion_of`), not an expression effect; a
+    /// drawn portrait takes it as its base motion; with no `neutral` row the base is the breath.
+    #[test]
+    fn fx2_the_neutral_row_sets_the_base_motion() {
+        let neutral = ex_row(json!({"id": "neutral", "breath_ms": 4400, "rest_dy": -1, "rest_ms": 400}));
+        let hurt = ex_row(json!({"id": "hurt", "tint": "#e11d48"}));
+        let rows = [neutral.clone(), hurt];
+        assert_eq!(expression_fx_of(&rows).iter().map(|r| r.expression.as_str()).collect::<Vec<_>>(), ["hurt"]);
+        assert_eq!(base_motion_of(&rows), motion_of(&neutral));
+        assert_eq!(base_motion_of(&rows[1..]), Motion::default());
+        let who = Who { key: "ida".into(), tier: "npc".into(), id: "ida".into(), name: "Ida".into(), ..Who::default() };
+        let mut art = frame_layers("fx2_base", "portraits/npcs/ida.png", true, None);
+        let mut g = gfx();
+        let mut faces = Faces { expressions: expression_fx_of(&rows), base_motion: base_motion_of(&rows), ..Faces::default() };
+        let mut ui: Ui<()> = Ui::new(&mut g, (-500, -500), true);
+        faces.begin();
+        assert!(faces.draw_parts(&mut ui.p, &mut art, &[], &who, &Look::default(), "dialogue", Rect::new(0, 0, 96, 96), &PortraitOpts::default()));
+        assert_eq!(*faces.get(&who.key).expect("kept").base_motion(), motion_of(&neutral));
+    }
+
+    /// PORTRAITFX2 5.3 (decision Q6): a member's look carries its unspent points (an `unspent` row on the roster
+    /// surfaces holds while there are any); none once they are spent.
+    #[test]
+    fn fx2_a_members_look_carries_its_unspent_points() {
+        let cx = game_cx();
+        let d = cx.data.clone();
+        let gs = cx.gs().clone();
+        let mut m = gs.party.members[0].clone();
+        m.spend.clear();
+        m.total_xp += 100_000;
+        let points = m.unspent(&d);
+        assert!(points > 0, "fixture: a level gained, nothing spent");
+        assert_eq!(look_of_member(&d, &gs, &m).unspent, points);
+        let rows = [row(json!({"id": "face_level_up", "trigger": "unspent", "effect": "face", "expression": "angry", "surfaces": ["roster"]}))];
+        assert_eq!(portrait::holds(&rows, &look_of_member(&d, &gs, &m), "roster").len(), 1);
+        m.spend.insert("STR".into(), points);
+        assert_eq!(look_of_member(&d, &gs, &m).unspent, 0, "spent");
+        assert!(portrait::holds(&rows, &look_of_member(&d, &gs, &m), "roster").is_empty());
+        let character = progression::character_of(&d, &m).clone();
+        assert_eq!(look_of_character(&d, &gs, &character).unspent, 0, "a world character has none");
     }
 }

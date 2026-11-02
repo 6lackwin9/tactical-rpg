@@ -9,11 +9,14 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
 - Popups over full screens where possible. The level-up popup shows current stats, with Auto and Revert next to the allocation and Confirm kept separate (2026-10-18).
 - Dialogue sits in a bottom dock (2026-10-18). Refined: a 400 px box centred at the bottom, portrait and name on the left, the NPC's line above the
   replies (user playtest 2026-10-22, PLAYUI1-D).
+- Main menu (user 2026-11-02): the items blend into the picture as text only, dimmer by default and brighter on hover or keyboard focus, with no button panels; the title is an image rather than typeset text (title cards use art); the Continue peek waits for hover or a keyboard move, not the menu opening; "Day N" there may become the act or mission name later. The label alone takes the mouse, not the column; no arrow, and one active item only, which hover moves and which stays lit when the mouse leaves. Continue is lit on opening, without its peek; once shown, the peek stays while Continue is the active item.
+- Frames (user 2026-11-02): `ornate_full`, the rail along the whole edge, suits static UI elements such as full menu screens and large panels; small popup boxes such as the Continue peek use `ornate`, corners with a thin red line, because the full frame is overkill there. Panes that sit side by side need a compact style with less spiked corners that stay inside the panel, so frames do not overlap; one screen uses one corner size throughout, so corners never mismatch (decision "Compact frame for side-by-side panes").
 
 ## Maps
 
 - The map legend can be collapsed (2026-10-18 playtest).
 - Click-to-move on region maps; WASD and hold-to-walk (2026-10-18 playtest).
+- Legend rows and edge arrows pan the camera; a second row click walks; Q or a click on the leader switches the exploring leader (user 2026-11-02: "enable the option to switch the active unit for exploration"; MAPNAV1-U).
 
 ## Combat (COMBAT-UI3)
 
@@ -51,3 +54,18 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
 - While the fight logic is built, every battle overlay, badge and readout stays (tells, intents, impact badges, reach band,
   facing chevrons, revealed walks, status looks): they are good to have for debugging. Once the fight logic is built, a
   visual clarity pass decides what the actual game view keeps; the rest stays reachable for debugging (VISCLAR1).
+- Slice A's outcome (VISCLAR1-A, 2026-11-01; decisions "Combat input feedback" and "INPUT1 answers", parts 1 and 4):
+  every overlay group stays on by default but two new ones, off: `first_move` (the enemy's first-move kind chip on its
+  token, a debug view) and `all_bars` (every unit's token bars; by default only the selected hero's, its target's, the
+  hovered unit's and the inspected unit's; Alt shows all). One quiet dashed target arrow per unit (alpha 90) replaces
+  the tell arrows, planned-move lines and revealed walks, the selected and inspected unit's by default, all with Alt,
+  only while planning; `moves` and `walks` now switch its move leg. Debug builds add "Party foresight off" at the foot
+  of the Battle tab. The intent glyphs, the destination plates (planning), the facing chevrons and the arena telegraph
+  stay.
+- Playback aids, built to be trimmed after playing (INPUT1-PB, 2026-11-01; decision "INPUT1 answers, part 2" Q8): a
+  short tracer from each actor to what its action hit (about 0.4 s, dashed for a miss, none for self; overlay group
+  "Impact tracers"), a gold frame on the strip's resolving block, playback speed 1x / 0.5x / block by block (chips
+  during playback, P, N, remembered), the combat log grouped by round and block, and the full timeline view (T)
+  pausing the playback at the block's end. Nothing else draws on the board during playback.
+- Secondary text carries real information (levels, stats, labels), so it stays comfortable to read: `dim` is #9ca3af, about 6-8:1, not the darker Cinder Ash #6b7280 (user 2026-11-02).
+- Battle plan strip blocks: filled in the skill kind's colour, the icon and the name centred together (icon alone when the name does not fit), a thin light border on the icon, near-white text with a 1 px dark outline (user 2026-11-03, mock C).

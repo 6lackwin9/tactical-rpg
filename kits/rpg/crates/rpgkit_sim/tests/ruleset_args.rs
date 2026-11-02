@@ -46,7 +46,7 @@ fn rules_switch_single_extensions_in_any_token_order() {
 #[test]
 fn bad_picks_are_argument_errors() {
     let d = data(true);
-    assert_eq!(parse(&d, "duel ruleset=chess").unwrap_err(), "ruleset must be one of [\"classic\", \"timeline\"] (got 'chess')");
+    assert!(parse(&d, "duel ruleset=chess").unwrap_err().contains("ruleset 'chess' has no row in rulesets"), "CLN-44: open ids, checked against the rows");
     assert!(parse(&d, "duel ruleset=timeline rules=-round_intent").unwrap_err().contains("'round_intent' is an option"));
     assert!(parse(&d, "duel rules=+chains").unwrap_err().contains("unknown rule 'chains'"));
     assert!(parse(&d, "duel rules=poise").unwrap_err().contains("must be +<rule> or -<rule>"));
@@ -88,4 +88,16 @@ fn melee_diagonal_overrides_the_row() {
     assert_eq!(parse(&d, "duel melee_diagonal=none ruleset=timeline").unwrap().ruleset.melee_diagonal(), MeleeDiagonal::None, "any token order");
     assert_eq!(fight_ruleset(&d, "party melee_diagonal=all", Some("vale")).melee_diagonal(), MeleeDiagonal::All, "a world fight");
     assert_eq!(parse(&d, "duel melee_diagonal=sideways").unwrap_err(), "melee_diagonal must be one of [\"none\", \"maneuver\", \"all\"] (got 'sideways')");
+}
+
+/// CLN-44: classic is a row: the default pick reads the catalog's `classic` row (its numbers), and the built-in classic
+/// values stand in only when the row is missing.
+#[test]
+fn the_default_reads_the_classic_row() {
+    let rows = json!([{"id": "classic", "name": "Legacy", "rest_ap_cap": 3, "melee_diagonal": "none"}]);
+    let d = Data::from_values(&json!({"rulesets": rows}), &json!({}), &json!({}));
+    let a = parse(&d, "duel").unwrap();
+    assert_eq!((a.ruleset.id.as_str(), a.ruleset.name.as_str(), a.ruleset.numbers.rest_ap_cap), (CLASSIC, "Legacy", 3), "the row, not the built-in values");
+    assert!(a.ruleset.rules.is_empty() && a.ruleset.stances());
+    assert_eq!(parse(&data(false), "duel").unwrap().ruleset, Ruleset::classic(), "no row: the built-in classic values");
 }

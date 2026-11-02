@@ -194,8 +194,9 @@ pub fn portrait_chain(tier: &str, id: &str, body: &str) -> Vec<String> {
     out
 }
 
-/// PORTRAITFX1 5.4 (PQ2): the expression names of the face frames.
-pub use rpgkit_data::EXPRESSIONS;
+/// PORTRAITFX1 5.4 (PQ2), PORTRAITFX2 FL1: the plain face and the kit's default faces (a game's own list:
+/// `Catalog::faces`).
+pub use rpgkit_data::{DEFAULT_FACES, NEUTRAL};
 
 /// PORTRAITFX1 5.4: the folder of a unique portrait's expression frames, `portraits/<folder>/faces/<id>`.
 pub fn faces_dir(folder: &str, id: &str) -> String {
@@ -209,10 +210,10 @@ pub fn face_chain(tier: &str, id: &str, body: &str, expression: &str) -> Vec<Str
     let mut out = Vec::new();
     if let Some(folder) = tier_folder(tier) {
         let dir = faces_dir(folder, id);
-        if !expression.is_empty() && expression != EXPRESSIONS[0] {
+        if !expression.is_empty() && expression != NEUTRAL {
             out.push(format!("{dir}/{expression}.png"));
         }
-        out.push(format!("{dir}/{}.png", EXPRESSIONS[0]));
+        out.push(format!("{dir}/{NEUTRAL}.png"));
     }
     out.extend(portrait_chain(tier, id, body));
     out
@@ -263,17 +264,40 @@ pub fn status_icon(status: &str) -> String {
     format!("statuses/{status}.png")
 }
 
-/// The region map's tile sets (4.5): the world lineage child first, then `common`.
-pub fn region_sets(lineage_child_first: &[String]) -> Vec<String> {
-    let mut out: Vec<String> = lineage_child_first.to_vec();
+/// The region map's tile sets (4.5; LOOK1 5.4): the location's `tileset` first when it names one, then the world
+/// lineage child first, then `common`. An empty `tileset` gives today's chain.
+pub fn region_sets(lineage_child_first: &[String], tileset: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    if !tileset.is_empty() {
+        out.push(tileset.to_string());
+    }
+    out.extend(lineage_child_first.iter().filter(|s| s.as_str() != tileset).cloned());
     out.push("common".into());
     out
+}
+
+/// REGIONGROUND1 KT 1.4: a ground's art folders over the region sets (`region_sets`), `tilesets/<set>/ground/<ground>`:
+/// the file is `v0.png` in the first that holds it, and only `v0` is read, since a ground has one texture.
+pub fn ground_dirs(sets: &[String], ground: &str) -> Vec<String> {
+    sets.iter().map(|set| format!("tilesets/{set}/ground/{ground}")).collect()
+}
+
+/// KT 1.4: the side of a ground's `v0.png` in art px (4 per logical px of a 64 x 64 texture; REGIONGROUND1 4.2).
+pub fn ground_px() -> u32 {
+    256
+}
+
+/// REGIONGROUND1_SCENE (region boundary walls): the folders of a map's boundary `tile` (`wall` or `wall_face`) over the
+/// region sets, `tilesets/<set>/boundary/<boundary>/<tile>`: a set of its own inside the tile set, so a location can
+/// choose it. Keeps the short south and side borders of the scene's 1.1.
+pub fn boundary_dirs(sets: &[String], boundary: &str, tile: &str) -> Vec<String> {
+    sets.iter().map(|set| format!("tilesets/{set}/boundary/{boundary}/{tile}")).collect()
 }
 
 /// The folders of a map prop's art (PROPS1 3.1): `props/<set>/<art>` over the region sets (the world lineage child
 /// first, then `common`); the first holding `v0.png` in any layer gives the prop.
 pub fn prop_dirs(lineage_child_first: &[String], art: &str) -> Vec<String> {
-    region_sets(lineage_child_first).into_iter().map(|set| format!("props/{set}/{art}")).collect()
+    region_sets(lineage_child_first, "").into_iter().map(|set| format!("props/{set}/{art}")).collect()
 }
 
 /// The pixel size a map prop's PNG may have (PROPS1 3.1, 32 px of art per tile): ((min w, max w), (min h, max h)). A
@@ -300,13 +324,29 @@ pub fn region_tile(ch: char) -> Option<&'static str> {
 /// Battle tile sets: `common` until a map names a set (ASSETORG2 open question 5).
 pub const BATTLE_SETS: [&str; 1] = ["common"];
 
-/// STAGE1 4.4: the battle stage's tile sets (tiles redrawn at 4:3 for the tilted board, 128 x 96 drawn 32 x 24).
+/// STAGE1 4.4: the battle stage's tile sets (tiles redrawn at 4:3 for the tilted board, 64 x 48 drawn 32 x 24).
 pub const BATTLE_STAGE_SETS: [&str; 1] = ["common_stage"];
 
 /// STAGE1 4.4: the folders of a terrain's stage tile (`tilesets/<set>/<terrain>`, over `BATTLE_STAGE_SETS`); also the
-/// wall face (`wall_face`).
-pub fn battle_stage_dirs(terrain: &str) -> Vec<String> {
-    BATTLE_STAGE_SETS.iter().map(|set| format!("tilesets/{set}/{terrain}")).collect()
+/// wall face (`wall_face`). LOOK1 5.4: the world's `stage_set` comes first when it names one; empty gives today's list.
+pub fn battle_stage_dirs(terrain: &str, stage_set: &str) -> Vec<String> {
+    let named = (!stage_set.is_empty()).then_some(stage_set);
+    named.into_iter().chain(BATTLE_STAGE_SETS.iter().copied().filter(|s| Some(*s) != named)).map(|set| format!("tilesets/{set}/{terrain}")).collect()
+}
+
+/// LOOK1 5.4: whether `id` is a tile set id (`[a-z0-9_]{2,32}`); the empty id (no set named) is checked by the caller.
+pub fn set_id_ok(id: &str) -> bool {
+    (2..=32).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+}
+
+/// LOOK1 5.2: the folder of a transition piece, `tilesets/<set>/<upper>/over_<lower>/m<NN>.png` (mask 1-14).
+pub fn transition_piece(set: &str, upper: &str, lower: &str, mask: u8) -> String {
+    format!("tilesets/{set}/{upper}/over_{lower}/m{mask:02}.png")
+}
+
+/// LOOK1 5.4: the folders holding a transition's pieces over the region sets, location set first.
+pub fn transition_dirs(sets: &[String], upper: &str, lower: &str) -> Vec<String> {
+    sets.iter().map(|set| format!("tilesets/{set}/{upper}/over_{lower}")).collect()
 }
 
 /// STAGE1 4.4: the folders of a battle prop's art (`props/<set>/<art>` over `BATTLE_SETS`: the tree and the stones).
@@ -402,13 +442,13 @@ mod tests {
         assert_eq!(item_icon_chain(&oddity, &d(json!({"art": "hammer"})))[0], "items/hammer/base.png", "the family's art names the folder");
         assert_eq!(skill_icon_chain("shield_bash", "ATTACK"), ["skills/shield_bash.png", "skills/kinds/attack.png"]);
         assert_eq!(intent("idle"), "ui/intents/rest.png");
-        assert_eq!(region_sets(&["world_a".into(), "world_b".into()]), ["world_a", "world_b", "common"]);
+        assert_eq!(region_sets(&["world_a".into(), "world_b".into()], ""), ["world_a", "world_b", "common"]);
     }
 
     #[test]
     fn battle_stage_art_follows_its_chains() {
-        assert_eq!(battle_stage_dirs("grass"), ["tilesets/common_stage/grass"]);
-        assert_eq!(battle_stage_dirs("wall_face"), ["tilesets/common_stage/wall_face"]);
+        assert_eq!(battle_stage_dirs("grass", ""), ["tilesets/common_stage/grass"]);
+        assert_eq!(battle_stage_dirs("wall_face", ""), ["tilesets/common_stage/wall_face"]);
         assert_eq!(battle_prop_dirs("tree"), ["props/common/tree"]);
         assert_eq!(battle_backdrop("forest_clearing"), "backgrounds/battle/forest_clearing.png");
     }

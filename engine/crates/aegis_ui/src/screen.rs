@@ -6,8 +6,9 @@
 use crate::art::Art;
 use crate::audio::Audio;
 use crate::canvas::Rect;
+pub use crate::painter::Grid;
 use crate::painter::Painter;
-use crate::ui::{self, Gfx, Ui, Widget, BODY, GOLD, H, TEXT, W};
+use crate::ui::{self, Gfx, Ui, Widget, BODY, H, W};
 use serde_json::{json, Value};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
@@ -28,6 +29,10 @@ pub enum Key {
     PageDown,
     /// Ctrl+Enter (submit a form, e.g. save a note).
     CtrlEnter,
+    /// Shift with a digit key (0-9, the top row or the keypad), whatever character the layout types for it.
+    ShiftDigit(u8),
+    /// A function key a screen may use for debugging (F6, F7, F9, F11; the shell keeps F8 and F12 for itself).
+    Fn(u8),
     Char(char),
 }
 
@@ -46,6 +51,11 @@ impl Key {
             "pageup" => Key::PageUp,
             "pagedown" => Key::PageDown,
             "ctrl+enter" => Key::CtrlEnter,
+            d if d.len() == 7 && d.starts_with("shift+") && d.as_bytes()[6].is_ascii_digit() => Key::ShiftDigit(d.as_bytes()[6] - b'0'),
+            "f6" => Key::Fn(6),
+            "f7" => Key::Fn(7),
+            "f9" => Key::Fn(9),
+            "f11" => Key::Fn(11),
             c if c.chars().count() == 1 => Key::Char(c.chars().next().unwrap()),
             _ => return None,
         })
@@ -66,6 +76,8 @@ impl Key {
             Key::PageUp => "pageup".into(),
             Key::PageDown => "pagedown".into(),
             Key::CtrlEnter => "ctrl+enter".into(),
+            Key::ShiftDigit(d) => format!("shift+{d}"),
+            Key::Fn(n) => format!("f{n}"),
             Key::Char(c) => c.to_string(),
         }
     }
@@ -170,6 +182,9 @@ pub struct Held {
     pub shift: bool,
     pub ctrl: bool,
     pub alt: bool,
+    /// The step direction (`Key::dir`) of the movement key (arrows, W A S D) held down, the latest pressed when
+    /// several are; None when none is. For screens that walk while a key is held (`Screen::hold_walk`).
+    pub dir: Option<(i64, i64)>,
 }
 
 /// The shared context: the engine's half here, the game's half in `app` (reached through Deref).
@@ -242,6 +257,11 @@ impl<G: Context> Cx<G> {
 
 pub trait Screen<G> {
     fn id(&self) -> &'static str;
+    /// The units this screen writes its rects in, for as long as it lives (LAYOUT720-E1; the shell gives it the view
+    /// and the mouse in them). The default keeps today's picture.
+    fn grid(&self) -> Grid {
+        Grid::Old
+    }
     /// Drawn over the screen below it (popups, menus over the map).
     fn overlay(&self) -> bool {
         false
@@ -257,6 +277,11 @@ pub trait Screen<G> {
     /// (Tab and Shift+Tab still move it).
     fn arrow_focus(&self) -> bool {
         true
+    }
+    /// Whether the screen walks while a movement key is held (`Held::dir`): the shell then delivers such a key once
+    /// (the press) and drops the operating system's key repeats, whose first comes ~0.5 s late.
+    fn hold_walk(&self) -> bool {
+        false
     }
     /// Whether the first widget takes a visible focus as the screen appears (a menu meant for the keyboard).
     fn auto_focus(&self) -> bool {
@@ -388,14 +413,15 @@ impl<G> Screen<G> for Ask<G> {
     }
     fn draw(&mut self, _cx: &mut Cx<G>, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<bool> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), crate::canvas::rgba(0, 0, 0, 120));
+        let scrim = ui.t.scrim;
+        ui.p.fill(Rect::new(0, 0, W, H), scrim);
         let lines = ui.p.wrap(&self.question, BODY, 250.0);
         let h = 40 + lines.len() as i32 * 10;
         let r = Rect::new(W / 2 - 135, H / 2 - h / 2, 270, h);
         ui.frame(r, "", false);
         let mut y = r.y as f32 + 8.0;
         for l in &lines {
-            ui.p.text(r.x as f32 + 10.0, y, l, BODY, TEXT);
+            ui.p.text(r.x as f32 + 10.0, y, l, BODY, ui.t.text);
             y += 10.0;
         }
         ui.button("ask.yes", Rect::new(r.x + r.w - 120, r.y + r.h - 22, 50, 15), "Yes", true, true);
@@ -459,7 +485,7 @@ impl<G> Screen<G> for Notice {
         ui.frame(r, "", false);
         let mut y = r.y as f32 + 8.0;
         for l in &wrapped {
-            ui.p.text(r.x as f32 + 10.0, y, l, BODY, TEXT);
+            ui.p.text(r.x as f32 + 10.0, y, l, BODY, ui.t.text);
             y += 10.0;
         }
         ui.button("notice.ok", Rect::new(r.x + r.w - 62, r.y + r.h - 22, 50, 15), "OK", (), true);
@@ -485,5 +511,6 @@ pub fn show_errors<G: 'static>(cx: &mut Cx<G>, errors: Vec<String>) {
 
 /// A centred screen title.
 pub fn title(ui: &mut Ui<impl Clone>, text: &str, y: i32) {
-    ui.p.text_center(W as f32 / 2.0, y as f32, text, ui::HEAD + 4.0, GOLD);
+    let gold = ui.t.gold;
+    ui.p.text_center(W as f32 / 2.0, y as f32, text, ui::HEAD + 4.0, gold);
 }

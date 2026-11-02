@@ -3,9 +3,10 @@
 //! world map without saving, a fight skipped (settled as a win at no cost) or fought (DebugFight). Reload re-reads the
 //! data folder from disk.
 
-use aegis_ui::canvas::{rgb, rgba, Rect};
+use aegis_ui::theme::th;
+use aegis_ui::canvas::{rgba, Rect};
 use crate::screens::{enter_game, show_errors, Cx, GameCx, Nav, Screen};
-use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
 use emberwake_rules::ruleset::{RuleKind, Ruleset, PLAN_BADGES, REGISTER};
@@ -39,12 +40,10 @@ pub enum SAct {
     Playtests,
     /// STAGE1-C: the battle view (an index into `stage::VIEWS`), a debug setting kept out of the player's settings.
     PickView(usize),
+    /// EXPLOREVIEW1: the region map's view.
+    PickRegionView(usize),
     Exit,
 }
-
-/// The Combat Arena's rules (RULESET1-R): the encounter's own (its world's; classic for a catalog encounter), or a
-/// ruleset picked for the run.
-const RULESETS: [(&str, Option<&str>); 3] = [("World", None), ("Classic", Some("classic")), ("Timeline", Some("timeline"))];
 
 /// INPUT1 MR11: the Arena's "Diagonal melee" picks (label, the host's `melee_diagonal`; None = the ruleset row's value).
 const DIAGONALS: [(&str, Option<&str>); 4] = [("Ruleset", None), ("None", Some("none")), ("Maneuver", Some("maneuver")), ("All", Some("all"))];
@@ -77,7 +76,7 @@ pub(crate) fn chip_text(name: &str, spec: &str, diagonal: &str, plans_shown: boo
 
 pub struct SceneRunner {
     encounter: usize,
-    /// An index into RULESETS.
+    /// An index into `rulesets`: 0 is World, then the catalog's ruleset rows in file order.
     ruleset: usize,
     /// RULESET1 3.2: the extensions switched for the Arena's run (on or off whatever the picked ruleset has; one equal
     /// to the ruleset's own changes nothing).
@@ -102,11 +101,11 @@ impl SceneRunner {
     /// The ruleset the picked encounter plays by before the toggles: the picked one, or for World the ruleset of the
     /// encounter's world (classic for a catalog encounter: RULESET1 3.1.2).
     fn base_ruleset(&self, cx: &Cx) -> Ruleset {
-        match RULESETS[self.ruleset].1 {
-            Some(id) => Ruleset::of_or_classic(&cx.data.cat, id),
+        match self.picked(cx) {
+            Some(id) => Ruleset::of_or_classic(&cx.data.cat, &id),
             None => match Self::encounters(cx).get(self.encounter).and_then(|e| e.1.clone()) {
                 Some(world) => cx.data.ruleset(&world),
-                None => Ruleset::classic(),
+                None => Ruleset::of_or_classic(&cx.data.cat, emberwake_rules::ruleset::CLASSIC),
             },
         }
     }
@@ -114,6 +113,23 @@ impl SceneRunner {
     /// The `rules` switches of the run ("-id,+id"): the toggles that differ from the base ruleset.
     fn rules_spec(&self, base: &Ruleset) -> String {
         self.rules.iter().filter(|(id, on)| base.has(id) != **on).map(|(id, on)| format!("{}{id}", if *on { '+' } else { '-' })).collect::<Vec<_>>().join(",")
+    }
+
+    /// The Combat Arena's rules (RULESET1-R, CLN-46): the encounter's own (its world's; classic for a catalog encounter),
+    /// or a ruleset picked for the run.
+    /// The picker: "World" (the encounter's world's own), then a row per ruleset of the catalog
+    /// (id, name).
+    fn rulesets(cx: &Cx) -> Vec<(Option<String>, String)> {
+        let rows = Ruleset::ids(&cx.data.cat).into_iter().map(|id| {
+            let name = Ruleset::of_or_classic(&cx.data.cat, &id).name;
+            (Some(id), name)
+        });
+        std::iter::once((None, "World".to_string())).chain(rows).collect()
+    }
+
+    /// The ruleset id the picker names (None = World).
+    fn picked(&self, cx: &Cx) -> Option<String> {
+        Self::rulesets(cx).into_iter().nth(self.ruleset).and_then(|r| r.0)
     }
 
     /// The rules the Arena's run plays by: the base ruleset with the switches.
@@ -219,7 +235,7 @@ impl SceneRunner {
         match a {
             SAct::MainMenu | SAct::Exit => cx.nav.push(Nav::Pop),
             SAct::PickEncounter(i) => self.encounter = i,
-            SAct::PickRuleset(i) => self.ruleset = i.min(RULESETS.len() - 1),
+            SAct::PickRuleset(i) => self.ruleset = i.min(Self::rulesets(cx).len() - 1),
             SAct::ShowRules => self.show_rules = !self.show_rules,
             SAct::ToggleRule(i) => {
                 if let Some(id) = extensions().get(i).copied() {
@@ -232,7 +248,7 @@ impl SceneRunner {
             SAct::Arena => {
                 let list = Self::encounters(cx);
                 if let Some((_, world, id)) = list.get(self.encounter) {
-                    let ruleset = RULESETS[self.ruleset].1.map(String::from);
+                    let ruleset = self.picked(cx);
                     let rules = self.rules_spec(&self.base_ruleset(cx));
                     // a reveal ticked under another ruleset stays off where plan_badges is not on (classic stays byte-identical)
                     let reveal = self.reveal && self.effective_ruleset(cx).has(PLAN_BADGES);
@@ -264,6 +280,14 @@ impl SceneRunner {
                     }
                 }
             }
+            SAct::PickRegionView(i) => {
+                if let Some((v, _)) = crate::mapview::VIEWS.get(i) {
+                    cx.settings.v["region_view"] = serde_json::json!(v);
+                    if let Err(e) = cx.settings.save() {
+                        show_errors(cx, vec![format!("Settings could not be saved: {e}")]);
+                    }
+                }
+            }
             SAct::Playtests => {
                 let home = cx.data_dir.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
                 let repo = vec![home.join("playtests/inbox"), home.join("playtests/repro")];
@@ -271,14 +295,20 @@ impl SceneRunner {
                 let r = aegis_ui::recordings::Recordings::new(cx, launch, |cx| aegis_content::fingerprint::of(&cx.data_dir), repo);
                 cx.nav.push(Nav::Push(Box::new(r)));
             }
-            SAct::Reload => match emberwake_world::Data::open(&cx.data_dir) {
-                Ok((d, problems)) => {
-                    cx.data = Arc::new(d);
-                    cx.notice.push(format!("Reloaded the data from {}.", cx.data_dir.display()));
-                    cx.notice.extend(problems);
+            SAct::Reload => {
+                match emberwake_world::Data::open(&cx.data_dir) {
+                    Ok((d, problems)) => {
+                        cx.data = Arc::new(d);
+                        cx.notice.push(format!("Reloaded the data from {}.", cx.data_dir.display()));
+                        cx.notice.extend(problems);
+                    }
+                    Err(e) => show_errors(cx, vec![format!("Reload failed: {e:#}")]),
                 }
-                Err(e) => show_errors(cx, vec![format!("Reload failed: {e:#}")]),
-            },
+                // REGIONGROUND1-L: an edited art file shows after this (`Art` never re-reads a file it holds).
+                cx.art = aegis_ui::art::Art::layered(cx.art.layers().clone());
+                // LOOK1-E1: the theme files too (a problem keeps the theme in force and shows a notice).
+                aegis_ui::theme::reload(cx);
+            }
         }
     }
 }
@@ -290,15 +320,15 @@ impl Screen<GameCx> for SceneRunner {
 
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<SAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), rgb(12, 16, 26));
-        ui.p.text(12.0, 8.0, &format!("{}  ·  SCENE RUNNER", cx.manifest.title.to_uppercase()), 10.0, GOLD);
-        ui.p.text(12.0, 27.0, "Launch any scene; Esc returns here.", SMALL, DIM);
+        ui.p.fill(Rect::new(0, 0, W, H), th().tool_bg);
+        ui.p.text(12.0, 8.0, &format!("{}  ·  SCENE RUNNER", cx.manifest.title.to_uppercase()), 10.0, th().gold);
+        ui.p.text(12.0, 27.0, "Launch any scene; Esc returns here.", SMALL, th().dim);
         ui.button("runner.exit", Rect::new(W - 40, 6, 34, 13), "Exit", SAct::Exit, true);
         let left = Rect::new(12, 41, 383, 300);
         let right = Rect::new(402, 41, 235, 128);
-        ui.p.panel(left, rgba(18, 24, 38, 255), BORDER, 2.0);
-        ui.p.panel(right, rgba(18, 24, 38, 255), BORDER, 2.0);
-        ui.p.text(left.x as f32 + 6.0, left.y as f32 + 4.0, "SCENES", SMALL, INFO);
+        ui.p.panel(left, th().tool_pane, th().edge, 2.0);
+        ui.p.panel(right, th().tool_pane, th().edge, 2.0);
+        ui.p.text(left.x as f32 + 6.0, left.y as f32 + 4.0, "SCENES", SMALL, th().info);
         let encounters = Self::encounters(cx);
         self.encounter = self.encounter.min(encounters.len().saturating_sub(1));
         let worlds = new_game::playable_worlds(&cx.data);
@@ -343,11 +373,11 @@ impl Screen<GameCx> for SceneRunner {
         let mut y = view.y - off;
         for ((id, name, _, act), (lines, extra, h)) in scenes.into_iter().zip(cards) {
             let r = Rect::new(left.x + 5, y, left.w - 10, h);
-            ui.p.panel(r, rgba(26, 34, 54, 255), BORDER, 2.0);
-            ui.p.text(r.x as f32 + 5.0, r.y as f32 + 3.0, name, BODY, INFO);
+            ui.p.panel(r, th().game("slot_filled", rgba(26, 34, 54, 255)), th().edge, 2.0);
+            ui.p.text(r.x as f32 + 5.0, r.y as f32 + 3.0, name, BODY, th().info);
             let top = r.y as f32 + 3.0 + name_h + 1.0;
             for (i, line) in lines.iter().enumerate() {
-                ui.p.text(r.x as f32 + 5.0, top + i as f32 * line_h, line, SMALL, TEXT);
+                ui.p.text(r.x as f32 + 5.0, top + i as f32 * line_h, line, SMALL, th().text);
             }
             let pick_y = (top + lines.len() as f32 * line_h + 1.0).round() as i32;
             ui.button(id, Rect::new(r.x + r.w - 50, r.y + 6, 45, 15), "Launch", act.clone(), true);
@@ -358,14 +388,14 @@ impl Screen<GameCx> for SceneRunner {
                 let diags: Vec<String> = DIAGONALS.iter().map(|x| x.0.to_string()).collect();
                 let diag_tip = tip("Diagonal melee", "Ruleset: the row's value. None: no diagonal hits. Maneuver: Maneuver skills hit diagonally. All: every melee attack and the riposte do.");
                 ui.select("runner.arena.diagonal", Rect::new(r.x + r.w - 205, pick_y, 66, 14), &diags, self.diagonal, SAct::PickDiagonal, true, diag_tip);
-                let rules: Vec<String> = RULESETS.iter().map(|x| x.0.to_string()).collect();
-                ui.select("runner.arena.ruleset", Rect::new(r.x + r.w - 135, pick_y, 80, 14), &rules, self.ruleset, SAct::PickRuleset, true, tip("Rules", "World: the encounter's world's ruleset (classic for a catalog encounter). Classic or Timeline: play it by those rules."));
+                let rules: Vec<String> = Self::rulesets(cx).into_iter().map(|x| x.1).collect();
+                ui.select("runner.arena.ruleset", Rect::new(r.x + r.w - 135, pick_y, 80, 14), &rules, self.ruleset, SAct::PickRuleset, true, tip("Rules", "World: the encounter's world's ruleset (classic for a catalog encounter). Any other row of the catalog's rulesets: play it by those rules."));
                 // RULESET1 12: "Reveal enemy plans" (V2: under the rule plan_badges), the ruleset chip, the toggles
                 let row_y = pick_y + 17;
                 ui.checkbox("runner.arena.reveal", r.x + 5, row_y + 2, "Reveal enemy plans", self.reveal, SAct::Reveal, effective.has(PLAN_BADGES));
                 let chip_r = Rect::new(r.x + 110, row_y, r.w - 204, 14);
-                ui.p.panel(chip_r, rgba(30, 44, 70, 255), BORDER, 2.0);
-                ui.p.text_fit(chip_r.x as f32 + 4.0, chip_r.y as f32 + 2.0, &chip, SMALL, (chip_r.w - 8) as f32, if effective.is_classic() && effective.rules.is_empty() { DIM } else { GOLD });
+                ui.p.panel(chip_r, th().game("chip", rgba(30, 44, 70, 255)), th().edge, 2.0);
+                ui.p.text_fit(chip_r.x as f32 + 4.0, chip_r.y as f32 + 2.0, &chip, SMALL, (chip_r.w - 8) as f32, if effective.id == emberwake_rules::ruleset::DEFAULT && self.rules_spec(&self.base_ruleset(cx)).is_empty() { th().dim } else { th().gold });
                 let chip_tip = format!("Rules on: {}.", if effective.rules.is_empty() { "none (classic)".to_string() } else { effective.rules.join(", ") });
                 ui.push("runner.arena.chip", "label", chip.clone(), chip_r, true, false, None, tip(&format!("Ruleset: {chip}"), &chip_tip));
                 ui.button_full("runner.arena.rules", Rect::new(r.x + r.w - 90, row_y, 85, 14), "Extensions", SAct::ShowRules, true, self.show_rules, BODY, tip("Extensions", "Switch single extensions of the ruleset on or off for this run (RULESET1 3.2); options belong to their ruleset."));
@@ -385,18 +415,23 @@ impl Screen<GameCx> for SceneRunner {
             y += h + 4;
         }
         ui.scroll_end();
-        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 4.0, "DEVELOPER", SMALL, INFO);
-        ui.button_tip("runner.reload", Rect::new(right.x + 6, right.y + 16, 70, 14), "Reload data", SAct::Reload, true, tip("Reload data", "Re-reads the data folder (catalog, worlds, maps, quests, services, XP curve)."));
-        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 36.0, "Parity checks (headless):", SMALL, DIM);
-        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 46.0, "cargo test -p emberwake_world -p emberwake_battle", SMALL, TEXT);
+        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 4.0, "DEVELOPER", SMALL, th().info);
+        ui.button_tip("runner.reload", Rect::new(right.x + 6, right.y + 16, 70, 14), "Reload data", SAct::Reload, true, tip("Reload data", "Re-reads the data folder (catalog, worlds, maps, quests, services, XP curve) and the art files."));
+        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 36.0, "Parity checks (headless):", SMALL, th().dim);
+        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 46.0, "cargo test -p emberwake_world -p emberwake_battle", SMALL, th().text);
         ui.button_tip("runner.playtests", Rect::new(right.x + 6, right.y + 58, 70, 14), "Playtests", SAct::Playtests, true, tip("Playtests", "Recordings of played battles with their notes (F8): play back, take over at a round, copy to the repo inbox; the recording toggle."));
-        ui.p.text(right.x as f32 + 82.0, right.y as f32 + 61.0, if cx.playtest.on { "Recording on" } else { "Recording off" }, SMALL, if cx.playtest.on { GOOD } else { DIM });
-        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 78.0, &format!("Data: {}", cx.data_dir.display()), SMALL, DIM);
+        ui.p.text(right.x as f32 + 82.0, right.y as f32 + 61.0, if cx.playtest.on { "Recording on" } else { "Recording off" }, SMALL, if cx.playtest.on { th().good } else { th().dim });
+        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 78.0, &format!("Data: {}", cx.data_dir.display()), SMALL, th().dim);
         // STAGE1-C: the battle view for testing (Stage ships; Flat is the board seen from above)
-        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 96.0, "Battle view", SMALL, TEXT);
+        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 96.0, "Battle view", SMALL, th().text);
         let views: Vec<String> = crate::stage::VIEWS.iter().map(|v| v.1.to_string()).collect();
         let at = crate::stage::VIEWS.iter().position(|v| cx.settings.v["battle_view"].as_str() == Some(v.0)).unwrap_or(0);
         ui.select("runner.battle_view", Rect::new(right.x + 82, right.y + 93, 90, 14), &views, at, SAct::PickView, true, tip("Battle view (debug)", crate::stage::VIEW_TIP));
+        // EXPLOREVIEW1: the region map's view for testing (Square ships until the review picks one)
+        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 114.0, "Region view", SMALL, th().text);
+        let views: Vec<String> = crate::mapview::VIEWS.iter().map(|v| v.1.to_string()).collect();
+        let at = crate::mapview::VIEWS.iter().position(|v| v.0 == crate::mapview::View::of_setting(&cx.settings.v["region_view"]).name()).unwrap_or(0);
+        ui.select("runner.region_view", Rect::new(right.x + 82, right.y + 111, 90, 14), &views, at, SAct::PickRegionView, true, tip("Region view (debug)", crate::mapview::VIEW_TIP));
         self.w = ui.widgets;
     }
 
@@ -404,7 +439,7 @@ impl Screen<GameCx> for SceneRunner {
         let world = self.world_id(cx);
         let start = world.as_deref().map(|w| Self::starts(&cx.data, w)).and_then(|st| st.get(self.location.min(st.len().saturating_sub(1))).cloned());
         let base = self.base_ruleset(cx);
-        json!({"encounter": Self::encounters(cx).get(self.encounter).map(|e| e.0.clone()), "ruleset": RULESETS[self.ruleset].0, "world": world, "start": start.map(|p| p.1.unwrap_or_else(|| "world_map".into())),
+        json!({"encounter": Self::encounters(cx).get(self.encounter).map(|e| e.0.clone()), "ruleset": Self::rulesets(cx).get(self.ruleset).map(|r| r.1.clone()), "world": world, "start": start.map(|p| p.1.unwrap_or_else(|| "world_map".into())),
             "rules": self.rules_spec(&base), "rules_on": self.effective_ruleset(cx).rules, "reveal": self.reveal, "melee_diagonal": self.diagonal_pick(), "chip": self.chip(cx)})
     }
 
@@ -459,12 +494,12 @@ impl Screen<GameCx> for DebugFight {
     }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<DFAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), rgba(0, 0, 0, 120));
+        ui.p.fill(Rect::new(0, 0, W, H), th().scrim);
         let r = Rect::new(W / 2 - 130, H / 2 - 50, 260, 100);
         ui.frame(r, "Fight (debug)", false);
         let name = s_or(cx.data.resolve(&cx.gs().world_id, "encounters", &s(&self.fight, "encounter")), "name", "Enemies");
-        ui.p.text(r.x as f32 + 10.0, r.y as f32 + 30.0, &format!("{name} ({})", s(&self.fight, "source")), BODY, TEXT);
-        ui.p.text_fit(r.x as f32 + 10.0, r.y as f32 + 44.0, "Skip settles it as a win at no cost; Fight it plays the battle.", SMALL, (r.w - 20) as f32, DIM);
+        ui.p.text(r.x as f32 + 10.0, r.y as f32 + 30.0, &format!("{name} ({})", s(&self.fight, "source")), BODY, th().text);
+        ui.p.text_fit(r.x as f32 + 10.0, r.y as f32 + 44.0, "Skip settles it as a win at no cost; Fight it plays the battle.", SMALL, (r.w - 20) as f32, th().dim);
         // RUNNER2 (decision "Skipped fights"): Skip settles the fight as a win at no cost; Fled and Lost test those paths.
         let outcomes = [
             ("Skip", "won", "Settles as a win: every enemy's XP, the purse, quest progress and the marker's flags; no HP lost, nothing spent."),
@@ -487,6 +522,39 @@ impl Screen<GameCx> for DebugFight {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The picker index of the catalog's ruleset row `id` (0 is World).
+    fn row_of(cx: &Cx, id: &str) -> usize {
+        1 + Ruleset::ids(&cx.data.cat).iter().position(|r| r == id).expect("the ruleset row")
+    }
+
+    /// Adds a scratch ruleset row `plain`: the classic row's numbers, no rules, `rest_ap: on_use`.
+    fn with_third_row(cx: &mut Cx) {
+        let d = std::sync::Arc::make_mut(&mut cx.data);
+        let mut row = d.cat.rulesets.get("classic").cloned().expect("the classic row");
+        row.insert("id".into(), json!("plain"));
+        row.insert("name".into(), json!("Plain"));
+        row.insert("rest_ap".into(), json!("on_use"));
+        std::sync::Arc::make_mut(&mut d.cat).rulesets.insert("plain".into(), row);
+    }
+
+    /// CLN-46: the Arena's picker lists World and one entry per catalog ruleset row (a third row appears), picking it
+    /// plays by it; the chip is dim at the default ruleset with no switches and lit for another row.
+    #[test]
+    fn the_arena_ruleset_picker_lists_the_catalog_rows() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        with_third_row(&mut cx);
+        let mut r = SceneRunner::new();
+        let rows = SceneRunner::rulesets(&cx);
+        assert_eq!(rows.len(), 1 + Ruleset::ids(&cx.data.cat).len());
+        assert!(rows.iter().any(|x| x.1 == "Plain") && rows[0].1 == "World");
+        let at = row_of(&cx, "plain");
+        r.act(&mut cx, SAct::PickRuleset(at));
+        assert_eq!(r.base_ruleset(&cx).id, "plain");
+        assert_eq!(r.state(&cx)["ruleset"], json!("Plain"));
+        r.act(&mut cx, SAct::PickRuleset(99));
+        assert_eq!(r.ruleset, rows.len() - 1, "clamped to the last row");
+    }
 
     fn data() -> emberwake_world::Data {
         let dir = emberwake_world::Data::find_data_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))).expect("data folder");
@@ -543,7 +611,8 @@ mod tests {
         let first_catalog = SceneRunner::encounters(&cx).iter().position(|e| e.1.is_none()).expect("a catalog encounter");
         r.act(&mut cx, SAct::PickEncounter(first_catalog));
         assert!(r.effective_ruleset(&cx).is_classic() && r.rules_spec(&r.base_ruleset(&cx)).is_empty(), "World on a catalog encounter: classic");
-        r.act(&mut cx, SAct::PickRuleset(2));
+        let at = row_of(&cx, "timeline");
+        r.act(&mut cx, SAct::PickRuleset(at));
         let base = r.base_ruleset(&cx);
         assert!(!base.is_classic(), "the catalog has the timeline row");
         let exts = extensions();
@@ -571,7 +640,8 @@ mod tests {
         let mut cx = crate::hud::hud_tests::game_cx();
         let mut r = SceneRunner::new();
         assert_eq!(r.state(&cx)["melee_diagonal"], json!(""), "Ruleset by default");
-        r.act(&mut cx, SAct::PickRuleset(2));
+        let at = row_of(&cx, "timeline");
+        r.act(&mut cx, SAct::PickRuleset(at));
         let plain = r.chip(&cx);
         assert!(!plain.contains("diagonal"), "{plain}");
         r.act(&mut cx, SAct::PickDiagonal(3));
@@ -583,5 +653,29 @@ mod tests {
         assert!(sel.enabled && sel.text.contains("All"), "{}", sel.text);
         r.act(&mut cx, SAct::PickDiagonal(0));
         assert_eq!(r.chip(&cx), plain, "back to the row's value");
+    }
+
+    /// EXPLOREVIEW1 check 9: the Developer panel's select shows and saves `region_view`, and offers both views.
+    #[test]
+    fn the_region_view_select_saves_the_setting() {
+        let dir = std::env::temp_dir().join(format!("emberwake_runner_view_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a scratch folder");
+        let path = dir.join("settings.json");
+        let mut cx = crate::hud::hud_tests::game_cx();
+        cx.settings = aegis_ui::screen::Settings::load(path.clone(), crate::screens::default_settings());
+        let mut g = crate::hud::hud_tests::gfx();
+        let mut r = SceneRunner::new();
+        crate::hud::hud_tests::frame(&mut r, &mut cx, &mut g, 1.0);
+        assert!(r.widgets().iter().any(|w| w["id"] == "runner.region_view"), "the select");
+        assert_eq!(cx.settings.v["region_view"], json!("square"), "the default");
+        r.act(&mut cx, SAct::PickRegionView(1));
+        assert_eq!(cx.settings.v["region_view"], json!(crate::mapview::VIEWS[1].0));
+        let saved: Value = serde_json::from_str(&std::fs::read_to_string(&path).expect("saved")).expect("json");
+        assert_eq!(saved["region_view"], json!("tilted"), "saved to the settings");
+        crate::hud::hud_tests::frame(&mut r, &mut cx, &mut g, 1.0);
+        let shown = r.widgets().into_iter().find(|w| w["id"] == "runner.region_view").expect("the select");
+        assert_eq!(shown["text"], json!("Tilted"), "the select shows the pick: {shown}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -9,10 +9,13 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-/// The Godot export's catalog: it has no ruleset rows.
-fn catalog() -> Option<Arc<Catalog>> {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../parity/out/catalog.json");
-    Catalog::load_resolved(&p).ok().map(Arc::new)
+/// The shipped catalog with its ruleset rows removed in memory (CLN-36: no Godot export), so a ruleset request
+/// without its row is refused; the shipped data is only read.
+fn catalog() -> Arc<Catalog> {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data");
+    let mut cat = (*emberwake_world::Data::open(&dir).expect("the shipped data opens").0.cat).clone();
+    cat.rulesets.clear();
+    Arc::new(cat)
 }
 
 fn first_encounter(cat: &Catalog) -> String {
@@ -25,10 +28,7 @@ fn ruleset_of(host: &Host) -> Ruleset {
 
 #[test]
 fn new_picks_the_ruleset_and_switches_extensions() {
-    let Some(cat) = catalog() else {
-        eprintln!("no parity/out/catalog.json: run games/emberwake/parity/export.sh");
-        return;
-    };
+    let cat = catalog();
     let enc = first_encounter(&cat);
     let mut host = Host::new(Battle::new(cat.clone()));
     assert_eq!(host.handle(&json!({"cmd": "new", "encounter": enc}))["ok"], json!(true));

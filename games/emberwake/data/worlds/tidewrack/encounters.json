@@ -16,10 +16,13 @@
 					4
 				]
 			],
+			"rows": [],
+			"arena_hazards": [],
 			"max_rounds": 6,
 			"total_blocks": 6,
 			"ap_regen": 4,
 			"unit_ap": 12,
+			"start_ap": 10,
 			"rng_seed": 1337,
 			"party": [
 				"ilse_marrow",
@@ -32,6 +35,7 @@
 				"captain_dredge"
 			],
 			"phases": [],
+			"script": [],
 			"pace": "auto",
 			"start_status": [],
 			"objective": "rout",
@@ -40,6 +44,9 @@
 			"objective_unit": "",
 			"objective_count": 1,
 			"objective_text": "",
+			"unkillable": [],
+			"timeout_outcome": "fled",
+			"stay_behind": {},
 			"deployment": "standard",
 			"morale": false,
 			"morale_break": 50,
@@ -50,6 +57,7 @@
 			"key_loot": [],
 			"objective_reward": {},
 			"guests": [],
+			"party_min": 0,
 			"protect": [],
 			"tags": []
 		}

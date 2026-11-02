@@ -7,28 +7,44 @@
 //! (`shell`), a feet-sorted draw list (`depth`) and the vignette player (`vignette`: still cards with fades, a
 //! typewriter, skip and cues, and its full screen) and the effects kit (`fx`, FX1-E: the effect clock with hit-stop,
 //! drawn primitives, a live list and the camera shake) and the portrait effects (`portrait_fx`, PORTRAITFX1-E: base
-//! life, overlays, states and reactions over a portrait, by size tier, cached and budgeted). A game supplies its screens, its context and the agent replies about its own state.
+//! life, overlays, states and reactions over a portrait, by size tier, cached and budgeted) and the pip gauge (`pips`,
+//! INPUT1-AP: a budget planned against, kept, spent and refilled, with an alert and a debt or shortfall label) and the
+//! runtime theme (`theme`, LOOK1-E1: colour roles, faces, layout values and nine-slice frames over the asset layers;
+//! the default is the look before it) and the menu panes (`panes`, LOOK1-ME: backdrop, menu column, tab rail, slot
+//! card and the themed ask, standalone pieces on the theme) and the tile masks (`autotile`, LOOK1-E2: corner masks for
+//! transition pieces, a block's open edges) and the ground composer (`ground`, REGIONGROUND1-E1: a cell grid to one
+//! opaque image with generated edges, cached and blitted) and two shots compared with a tolerance (`shot_diff`,
+//! LAYOUT720-E2). `Rect` lives in `aegis_layout` and `canvas` re-exports it. A game
+//! supplies its screens, its context and the agent replies about its own state.
 
 pub mod art;
 pub mod audio;
+pub mod autotile;
 pub mod bridge;
 pub mod canvas;
 pub mod depth;
 pub mod edit;
 pub mod focus;
+pub mod frame_tuner;
 pub mod fx;
+pub mod ground;
+pub mod icon;
 pub mod jpeg;
 pub mod notes;
 pub mod painter;
+pub mod panes;
+pub mod pips;
 pub mod playtest;
 pub mod portrait_fx;
 pub mod preview;
 pub mod recordings;
 pub mod screen;
 pub mod shell;
+pub mod shot_diff;
 pub mod specimens;
-pub mod timeline;
 pub mod text_audit;
+pub mod theme;
+pub mod timeline;
 pub mod tuning;
 pub mod ui;
 pub mod vignette;

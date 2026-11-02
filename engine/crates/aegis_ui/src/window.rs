@@ -7,13 +7,15 @@
 //! and keeps its desk. Geometry is kept as fractions of the area, so a layout survives a different area; the shell saves
 //! the desk in the settings under `desks.<screen id>` after every change; the screen reads it back when it builds the
 //! desk (`restore(&settings.v["desks"][id])`). Ports UiWindow (`_clamp_to_parent`, `commit_fraction`) and
-//! DojoWorkspace (`apply_layout`, `save_layout`, `_load_layout`).
+//! DojoWorkspace (`apply_layout`, `save_layout`, `_load_layout`). LAYOUT720-E4: a desk draws in the units of the grid it is
+//! on (`Desk::on_grid`, old units by default); the settings hold fractions, so `desks.<id>` means the same on every grid.
 
-use crate::canvas::{rgb, rgba, Rect};
-use crate::ui::{tip, Ui, BODY, BORDER, CARD, DIM, FRAME, GOLD, PANEL_HI, RADIUS, SMALL, TEXT};
+use crate::canvas::{rgba, Rect};
+use crate::painter::Grid;
+use crate::ui::{tip, Ui, RADIUS};
 use serde_json::{json, Value};
 
-/// Height of a window's title bar (canvas pixels).
+/// Height of a window's title bar (old units).
 pub const TITLE_H: i32 = 13;
 const GRIP: i32 = 8;
 const BUTTON: i32 = 11;
@@ -41,7 +43,7 @@ pub struct Win {
     pub frac: Frac,
     pub open: bool,
     pub collapsed: bool,
-    /// The smallest size (canvas pixels) a resize leaves.
+    /// The smallest size (old units) a resize leaves.
     pub min: (i32, i32),
 }
 
@@ -76,17 +78,26 @@ pub struct Desk {
     pub layout: String,
     /// The windows in the order they were given (the toolbar's order).
     order: Vec<String>,
+    /// Units per old unit (`View::g`) of the grid `area` and the rects are in.
+    g: i32,
 }
 
 impl Desk {
     /// The windows over `area`, arranged by the first layout.
     pub fn new(area: Rect, wins: Vec<Win>, layouts: Vec<Layout>) -> Self {
         let order = wins.iter().map(|w| w.id.clone()).collect();
-        let mut d = Self { area, wins, layouts, layout: String::new(), order };
+        let mut d = Self { area, wins, layouts, layout: String::new(), order, g: 1 };
         if let Some(first) = d.layouts.first().map(|l| l.name.clone()) {
             d.apply_layout(&first);
         }
         d
+    }
+
+    /// The desk on `grid`: `area`, every rect and a drag are in its units, as the screen drawing it is (`Screen::grid`). Sizes
+    /// in old units (`Win::min`, the title bar) follow; the fractions, and so the saved desk, do not change.
+    pub fn on_grid(mut self, grid: Grid) -> Self {
+        self.g = grid.g();
+        self
     }
 
     pub fn win(&self, id: &str) -> Option<&Win> {
@@ -122,13 +133,14 @@ impl Desk {
         let x = a.x + (w.frac.x * a.w as f32).round() as i32;
         let y = a.y + (w.frac.y * a.h as f32).round() as i32;
         let r = Rect::new(x, y, (w.frac.w * a.w as f32).round() as i32, (w.frac.h * a.h as f32).round() as i32);
-        Some(if w.collapsed { Rect::new(r.x, r.y, r.w, TITLE_H) } else { r })
+        Some(if w.collapsed { Rect::new(r.x, r.y, r.w, TITLE_H * self.g) } else { r })
     }
 
     /// The rect a window's content is drawn in.
     pub fn body(&self, id: &str) -> Option<Rect> {
         let r = self.rect(id)?;
-        Some(Rect::new(r.x + 2, r.y + TITLE_H + 1, (r.w - 4).max(0), (r.h - TITLE_H - 3).max(0)))
+        let g = self.g;
+        Some(Rect::new(r.x + 2 * g, r.y + (TITLE_H + 1) * g, (r.w - 4 * g).max(0), (r.h - (TITLE_H + 3) * g).max(0)))
     }
 
     /// The topmost open window under `pos`.
@@ -164,9 +176,9 @@ impl Desk {
         }
     }
 
-    /// Moves or resizes a window by (dx, dy) canvas pixels, kept inside the area and at least its minimum size.
+    /// Moves or resizes a window by (dx, dy) units of its grid, kept inside the area and at least its minimum size.
     pub fn drag(&mut self, id: &str, grab: Grab, dx: i32, dy: i32) {
-        let (a, Some(cur)) = (self.area, self.rect(id)) else { return };
+        let (a, g, Some(cur)) = (self.area, self.g, self.rect(id)) else { return };
         if a.w <= 0 || a.h <= 0 {
             return;
         }
@@ -181,8 +193,9 @@ impl Desk {
             }
             Grab::Resize => {
                 // The minimum size wins over the room left: a window near the far edge moves back inside.
-                r.w = fit(r.w + dx, w.min.0.min(a.w), a.x + a.w - r.x).max(w.min.0.min(a.w));
-                r.h = fit(r.h + dy, w.min.1.min(a.h), a.y + a.h - r.y).max(w.min.1.min(a.h));
+                let (least_w, least_h) = ((w.min.0 * g).min(a.w), (w.min.1 * g).min(a.h));
+                r.w = fit(r.w + dx, least_w, a.x + a.w - r.x).max(least_w);
+                r.h = fit(r.h + dy, least_h, a.y + a.h - r.y).max(least_h);
                 r.x = fit(r.x, a.x, a.x + a.w - r.w);
                 r.y = fit(r.y, a.y, a.y + a.h - r.h);
             }
@@ -242,23 +255,24 @@ impl Desk {
         let mouse = ui.mouse;
         let top = self.top_at(mouse).map(String::from);
         let front = self.wins.iter().rev().find(|w| w.open).map(|w| w.id.clone());
+        let (t, m) = (ui.t.clone(), ui.m());
         for w in self.wins.iter().filter(|w| w.open) {
             let Some(r) = self.rect(&w.id) else { continue };
             ui.mouse = if top.as_deref() == Some(w.id.as_str()) { mouse } else { (-1, -1) };
             let lit = front.as_deref() == Some(w.id.as_str());
-            ui.p.panel(r, CARD, if lit { FRAME } else { BORDER }, RADIUS);
+            ui.p.panel(r, t.card, if lit { t.panel_edge } else { t.edge }, m.uf(RADIUS));
             // The window blocks what is under it: a backdrop over the whole rect, its controls on top.
             ui.push(format!("win.{}.body", w.id), "backdrop", w.title.clone(), r, true, false, None, Vec::new());
-            let bar = Rect::new(r.x + 1, r.y + 1, r.w - 2, TITLE_H - 1);
-            ui.p.fill(bar, if lit { PANEL_HI } else { rgba(26, 36, 58, 255) });
-            ui.p.text_fit(bar.x as f32 + 4.0, bar.y as f32 + 1.5, &w.title, BODY, (bar.w - 2 * BUTTON - 10) as f32, if lit { GOLD } else { TEXT });
-            ui.push(format!("win.{}.title", w.id), "win_title", w.title.clone(), Rect::new(bar.x, bar.y, bar.w - 2 * BUTTON - 4, bar.h), true, false, None, tip(&w.title, "Drag to move; click to bring it to the front."));
+            let bar = Rect::new(r.x + m.u(1), r.y + m.u(1), r.w - m.u(2), m.u(TITLE_H - 1));
+            ui.p.fill(bar, if lit { t.card_hot } else { t.title_idle });
+            ui.p.text_fit(bar.x as f32 + m.uf(4.0), bar.y as f32 + m.uf(1.5), &w.title, m.body, (bar.w - m.u(2 * BUTTON + 10)) as f32, if lit { t.gold } else { t.text });
+            ui.push(format!("win.{}.title", w.id), "win_title", w.title.clone(), Rect::new(bar.x, bar.y, bar.w - m.u(2 * BUTTON + 4), bar.h), true, false, None, tip(&w.title, "Drag to move; click to bring it to the front."));
             for (i, (part, label, help)) in [("close", "x", "Close (the toolbar opens it again)"), ("collapse", if w.collapsed { "+" } else { "-" }, if w.collapsed { "Expand" } else { "Collapse to the title bar" })].into_iter().enumerate() {
-                let b = Rect::new(bar.x + bar.w - (i as i32 + 1) * (BUTTON + 1), bar.y + 1, BUTTON, BUTTON - 1);
+                let b = Rect::new(bar.x + bar.w - m.u((i as i32 + 1) * (BUTTON + 1)), bar.y + m.u(1), m.u(BUTTON), m.u(BUTTON - 1));
                 let hover = ui.hover(b);
-                ui.p.panel(b, if hover { PANEL_HI } else { rgba(0, 0, 0, 0) }, if hover { GOLD } else { rgba(0, 0, 0, 0) }, 2.0);
+                ui.p.panel(b, if hover { t.card_hot } else { rgba(0, 0, 0, 0) }, if hover { t.focus } else { rgba(0, 0, 0, 0) }, m.uf(2.0));
                 // Drawn as strokes, not text, so the text size never pushes them out of the bar (TEXTFIT1).
-                let (col, cx, cy, d) = (if hover { GOLD } else { DIM }, b.x as f32 + b.w as f32 / 2.0, b.y as f32 + b.h as f32 / 2.0, 2.5);
+                let (col, cx, cy, d) = (if hover { t.focus } else { t.dim }, b.x as f32 + b.w as f32 / 2.0, b.y as f32 + b.h as f32 / 2.0, m.uf(2.5));
                 match label {
                     "x" => {
                         ui.p.line(cx - d, cy - d, cx + d, cy + d, col, 0.0);
@@ -279,11 +293,11 @@ impl Desk {
                     body(ui, &w.id, b);
                     ui.pop_clip();
                 }
-                let g = Rect::new(r.x + r.w - GRIP, r.y + r.h - GRIP, GRIP, GRIP);
-                let col = if ui.hover(g) { GOLD } else { rgb(110, 140, 196) };
+                let g = Rect::new(r.x + r.w - m.u(GRIP), r.y + r.h - m.u(GRIP), m.u(GRIP), m.u(GRIP));
+                let col = if ui.hover(g) { t.focus } else { t.grip };
                 for k in [2, 5] {
-                    ui.p.fill(Rect::new(g.x + g.w - 2, g.y + g.h - k - 1, 1, k), col);
-                    ui.p.fill(Rect::new(g.x + g.w - k - 1, g.y + g.h - 2, k, 1), col);
+                    ui.p.fill(Rect::new(g.x + g.w - m.u(2), g.y + g.h - m.u(k + 1), m.u(1), m.u(k)), col);
+                    ui.p.fill(Rect::new(g.x + g.w - m.u(k + 1), g.y + g.h - m.u(2), m.u(k), m.u(1)), col);
                 }
                 ui.push(format!("win.{}.grip", w.id), "win_grip", "resize", g, true, false, None, tip("Resize", "Drag to resize the window."));
             }
@@ -298,7 +312,7 @@ impl Desk {
             let Some(w) = self.win(id) else { continue };
             x = desk_button(ui, x, y, format!("desk.toggle.{id}"), &w.title, w.open, "Open or close this window.");
         }
-        x += 6;
+        x += ui.m().u(6);
         for l in &self.layouts {
             x = desk_button(ui, x, y, format!("desk.layout.{}", l.name), &l.name, self.layout == l.name, "Arrange the windows by this layout (it reopens its windows).");
         }
@@ -313,13 +327,14 @@ fn fit(v: i32, lo: i32, hi: i32) -> i32 {
 
 /// One toolbar button (a shell-handled `desk_button`); returns the next x.
 fn desk_button<A: Clone>(ui: &mut Ui<A>, x: i32, y: i32, id: String, label: &str, active: bool, help: &str) -> i32 {
-    let w = ui.p.text_w(label, SMALL).ceil() as i32 + 10;
-    let r = Rect::new(x, y, w, 12);
+    let (t, m) = (ui.t.clone(), ui.m());
+    let w = ui.p.text_w(label, m.small).ceil() as i32 + m.u(10);
+    let r = Rect::new(x, y, w, m.u(12));
     let hover = ui.hover(r);
-    ui.p.panel(r, if active { rgba(86, 68, 22, 250) } else if hover { PANEL_HI } else { CARD }, if active || hover { GOLD } else { BORDER }, 2.0);
-    ui.p.text_center((r.x + r.w / 2) as f32, r.y as f32 + 2.0, label, SMALL, if active { GOLD } else { TEXT });
+    ui.p.panel(r, if active { t.selected } else if hover { t.card_hot } else { t.card }, if active || hover { t.focus } else { t.edge }, m.uf(2.0));
+    ui.p.text_center((r.x + r.w / 2) as f32, r.y as f32 + m.uf(2.0), label, m.small, if active { t.focus } else { t.text });
     ui.push(id, "desk_button", label, r, true, active, None, tip(label, help));
-    x + w + 2
+    x + w + m.u(2)
 }
 
 #[cfg(test)]
