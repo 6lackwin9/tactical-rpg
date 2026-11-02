@@ -16,7 +16,8 @@
 #   export exits when one is unmarked); a view row copies its side clip's. WINDUP1: an attack clip also has "strike"
 #   (rig.strike, else exit) and a wind-up row "loop_from" (rig.loop_start); the six wind-up rows of rig.WINDUP_ROWS
 #   (a creature's three, rig.CREATURE_ROWS; WINDUP1-R3) come after today's side rows and are checked (check_windups:
-#   X1 - X3, X5); --review adds windup_review's board and GIFs (X6).
+#   X1 - X3, X5); --review adds windup_review's board and GIFs (X6). DASH1: a side `dash` row just before them and
+#   dash_<view> rows: not looped, rig.DASH_MS, adding no palette slot (check_dash, else exit).
 # Palette slots: a class body's are the rig palette's base colours (keys without a _lo / _hi shade suffix) that occur in
 # the sheet; a variant lists its own (shades included, the first key wins when two share a colour); at most 16
 # (aegis_core::assets). A palette file may only name its body's slots (checked here and by content check A4).
@@ -132,6 +133,7 @@ def body(key: str, mode: str):
             sys.exit("export_units: %s clip %s marks no strike frame (rig.strike on the first frame after its wind-up, WINDUP1 7.2)" % (key, n))
         clips.append(clip)
     check_windups(key, frames, clips, pal, keys)
+    check_dash(key, frames, clips, pal, keys)
     side = paste(frames, names)
     rows = dict(frames)
     for vid, vfr in view_rows(key, clips, frames["idle"][0]).items():  # DIR4: the view clips after the side clips (of, view)
@@ -308,6 +310,21 @@ def check_windups(key: str, frames: dict, clips: list, pal: dict, keys) -> None:
     if before != after:
         sys.exit("export_units: %s wind-up rows add palette slots: %s (WINDUP1 K5)"
                  % (key, ", ".join("%s %s" % kv for kv in after.items() if before.get(kv[0]) != kv[1])))
+
+
+def check_dash(key: str, frames: dict, clips: list, pal: dict, keys) -> None:
+    """DASH1: the side `dash` row has rig.DASH_MS (the battle screen plays it unstretched over its 250 ms slide), does not
+    loop, and leaves the palette slots as they are without it (dust and speed lines add none); exits on a failure."""
+    if "dash" not in frames:
+        return
+    clip = next(c for c in clips if c["id"] == "dash")
+    if clip["ms"] != rig.DASH_MS or clip["loop"]:
+        sys.exit("export_units: %s dash: ms %s, loop %s (rig.DASH_MS, not looped)" % (key, clip["ms"], clip["loop"]))
+    others = [n for n in frames if n != "dash"]
+    before, after = palette_slots(key, pal, keys, paste(frames, others)), palette_slots(key, pal, keys, paste(frames, others + ["dash"]))
+    if before != after:
+        extra = {k: v for k, v in after.items() if before.get(k) != v}
+        sys.exit("export_units: %s dash adds palette slots: %s" % (key, ", ".join("%s %s" % kv for kv in extra.items())))
 
 
 def check_view_marks(key: str, vid: str, vfr: list, side_clip: dict) -> None:

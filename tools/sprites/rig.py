@@ -544,6 +544,44 @@ def walk(u, frames=8, stride=6.0, hf_amp=0.5, **kw):
     return out, [90] * frames
 
 
+# DASH1 (games/emberwake INPUT1 MR12): a dash, not a fast walk. The battle screen slides the token along the route in
+# DASH_MS (250 ms at 1x) and plays this clip over the slide, unstretched, so DASH_MS adds up to that. Frames: coil, drive,
+# flight (both feet off the ground, the longest frame), reach, plant.
+DASH_MS = [40, 50, 60, 50, 50]
+DASH_KEYS = (dict(bob=2.8, lean=3.5, head_dy=0.8, dx=-1.0, fb=(-5.0, 0.0), ff=(3.0, 0.0), arm=(0.0, 1.0)),
+             dict(bob=1.0, lean=6.0, head_dy=0.5, dx=0.0, fb=(-9.5, 0.5), ff=(5.5, 4.0), arm=(0.0, 0.0)),
+             dict(bob=0.2, lean=7.0, head_dy=0.5, dx=1.0, fb=(-10.0, 4.5), ff=(9.0, 3.5), arm=(-0.5, -0.5)),
+             dict(bob=1.2, lean=5.5, head_dy=0.5, dx=2.0, fb=(-7.0, 4.0), ff=(9.5, 1.0), arm=(0.0, 0.0)),
+             dict(bob=3.0, lean=2.5, head_dy=0.8, dx=2.0, fb=(-5.5, 0.0), ff=(7.0, 0.0), arm=(0.5, 1.0)))
+
+
+def dash_trail(P, f):
+    """Frame `f`'s dash marks behind a body facing right, in the sheet's palette: (x, y, r, colour) effect discs. Speed
+    lines at the flight (metal_hi), a kicked-up puff at the drive and the plant (metal_lo)."""
+    hi, lo = P['metal_hi'], P['metal_lo']
+    line = lambda x0, x1, y, c: [(x, y, 0.4, c) for x in range(x0, x1 + 1)]
+    if f == 1:
+        return [(6.0, 41.5, 1.8, lo), (2.5, 40.0, 1.1, lo), (9.5, 39.0, 0.7, lo)]
+    if f == 2:
+        return line(1, 7, 22, hi) + line(3, 9, 28, hi) + line(1, 7, 34, hi)
+    if f == 3:
+        return line(4, 8, 24, hi) + line(2, 6, 32, hi)
+    if f == 4:
+        return [(34.5, 41.5, 1.8, lo), (38.5, 40.0, 1.1, lo), (32.0, 39.0, 0.7, lo)]
+    return []
+
+
+def dash(u, hand_f=(4.0, 6.5), hand_b=(-2.5, 8.5), **kw):
+    """The dash clip (DASH_KEYS, DASH_MS): `hand_f`, `hand_b` and `kw` (weapon angles and the like) are the grip's carry;
+    each key moves the hands by its `arm` offset. Not looped: the last frame holds until the slide ends."""
+    out = []
+    for i, key in enumerate(DASH_KEYS):
+        k = dict(key); ax, ay = k.pop('arm')
+        out.append(pose(u, hand_f=(hand_f[0] + ax, hand_f[1] + ay), hand_b=(hand_b[0] + ax, hand_b[1] + ay), tails=i * 2.0,
+                        fx=dash_trail(u['pal'], i), **k, **kw))
+    return out, list(DASH_MS)
+
+
 def hurt(u, **kw):
     k = dict(kw)
     return ([pose(u, bob=1.2, hurt=1.0, lean=-1.5, dx=-1.0, flash=True, head_dy=0.8, fb=(-4, 0), ff=(4, 0), **k),

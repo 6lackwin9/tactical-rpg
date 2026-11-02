@@ -288,6 +288,36 @@ def walk(u, view, frames=8, stride=6.0, lift=3.4, rise=1.2, stand_in=False, **kw
     return out, [90] * frames
 
 
+# DASH1: rig.dash's five frames seen along the run: the stride reads as height, so the coil and the plant sit low and the
+# flight has both feet off the ground; `lean` tips the head toward the run (down the screen in `down`, up it in `up`).
+DASH_KEYS = (dict(bob=4.0, dy=0.5, head=2.0, lift_r=0.0, lift_l=0.0, arm=(0.0, 1.0)),
+             dict(bob=1.5, dy=0.0, head=1.5, lift_r=0.0, lift_l=6.5, arm=(0.0, 0.0)),
+             dict(bob=-1.5, dy=0.0, head=1.0, lift_r=4.5, lift_l=7.5, arm=(0.5, -0.5)),
+             dict(bob=0.5, dy=0.0, head=1.0, lift_r=7.0, lift_l=2.5, arm=(0.0, 0.0)),
+             dict(bob=4.0, dy=0.5, head=2.0, lift_r=1.5, lift_l=0.0, arm=(0.0, 1.0)))
+
+
+def dash_trail(P, view, f):
+    """Frame `f`'s dash marks in `view`: a puff on both sides of the feet at the drive and the plant, as rig.dash_trail's;
+    no speed lines (user 2026-11-02: the side view's only)."""
+    lo = P['metal_lo']
+    if f in (1, 4):
+        return [(CX + 8.0, 41.5, 1.8, lo), (CX - 8.0, 41.5, 1.8, lo), (CX + 12.0, 40.0, 1.0, lo), (CX - 12.0, 40.0, 1.0, lo)]
+    return []
+
+
+def dash(u, view, stand_in=False, hand_r=None, hand_l=None, **kw):
+    """dash_<view>: rig.dash's frames and ms; `hand_r`, `hand_l` and `kw` are the grip's carry (grip_kw's form)."""
+    rest = 2 * u['arm'] / u.get('scale', 1.0) - 1.0
+    hr, hl = hand_r or (1.2, rest), hand_l or (1.2, rest)
+    out = []
+    for i, key in enumerate(DASH_KEYS):
+        k = dict(kw, **key); ax, ay = k.pop('arm'); k['head_dy'] = k.pop('head')   # the key's body beats a carry's
+        out.append(pose_view(u, view, hand_r=(hr[0] + ax, hr[1] + ay), hand_l=(hl[0] + ax, hl[1] + ay), tails=i * 2.0,
+                             fx=dash_trail(u['pal'], view, i), stand_in=stand_in, **k))
+    return out, list(rig.DASH_MS)
+
+
 def clips(cls, u, stand_in=False):
     """The view clips of class `cls` worn as unit `u`: {id: frames}, {id: ms} with ids '<side clip>_<view>' (idle,
     walk and, when the grip has one, its attack). stand_in: a body without view support is drawn with STAND_INS and the
@@ -311,6 +341,9 @@ def clips(cls, u, stand_in=False):
             W, WT = windup_rows(u, view, g, stand_in)
             for n in W:
                 A['%s_%s' % (n, view)], T['%s_%s' % (n, view)] = W[n], WT[n]
+    if 'dash' in g:  # DASH1: the dash per view
+        for view in VIEWS:
+            A['dash_' + view], T['dash_' + view] = dash(u, view, stand_in, **grip_kw(g, 'dash', view))
     return A, T
 
 
@@ -1825,3 +1858,20 @@ GRIPS['warrior/buckler']['weapons'] = {'sword': _buckler_look('sword'), 'hand_ax
 DA_READY = {'down': dict(W2_READY['down'], hand_r=(-1.5, 6.5), wa=318), 'up': W2_READY['up']}
 GRIPS['warrior/2h']['weapons']['double_axe'] = dict(_chop('double_axe'), idle=DA_READY,
                                                     walk={v: dict(DA_READY[v], swing=0.3) for v in VIEWS})
+
+
+# ------------------------------------------------------------------ the dash's carry (DASH1)
+# Per grip, what the hands hold during dash_<view>: the warrior looks sweep the weapon out and back, foreshortened, with the
+# shield or buckler kept up; the other classes run in their ready pose. dash() applies its own body keys over these.
+W_SWEEP = {'down': dict(hand_r=(4.0, 6.0), wa=235, wk=0.75), 'up': dict(hand_r=(4.0, 6.0), wa=125, wk=0.75)}
+GRIPS['warrior']['dash'] = {'down': dict(W_SWEEP['down'], hand_l=(-3.0, 3.0), oz=FRONT), 'up': dict(W_SWEEP['up'], hand_l=(4.0, 3.5))}
+GRIPS['warrior/buckler']['dash'] = {'down': dict(W_SWEEP['down'], hand_l=(-2.0, 4.0), oz=FRONT), 'up': dict(W_SWEEP['up'], hand_l=(4.0, 3.5))}
+# 2H from the back: carried higher and flatter, so the hilt stays off the legs even in the coil (pilot review, 2026-10-28)
+GRIPS['warrior/2h']['dash'] = {'down': dict(W_SWEEP['down'], **G2), 'up': dict(hand_r=(4.5, 1.0), wa=105, wk=0.75, **G2)}
+# the double axe's broad heads on its large bearer run off the frame at that reach: held closer and shorter
+GRIPS['warrior/2h']['weapons']['double_axe']['dash'] = {'down': dict(W_SWEEP['down'], **G2), 'up': dict(hand_r=(2.5, 1.0), wa=105, wk=0.6, **G2)}
+GRIPS['brawler']['dash'] = {v: dict(B_GUARD[v]) for v in VIEWS}
+GRIPS['ranger']['dash'] = {v: dict(R_LOW[v]) for v in VIEWS}
+GRIPS['rogue']['dash'] = {v: dict(G_READY[v]) for v in VIEWS}
+GRIPS['priest']['dash'] = {v: dict(P_READY[v]) for v in VIEWS}
+GRIPS['mage']['dash'] = {v: dict(M_READY[v]) for v in VIEWS}
