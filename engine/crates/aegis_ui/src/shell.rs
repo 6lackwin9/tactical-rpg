@@ -1399,9 +1399,11 @@ impl<G: Context> ApplicationHandler for App<G> {
                     WKey::Named(NamedKey::ArrowLeft) => Some(Key::Left),
                     WKey::Named(NamedKey::ArrowRight) => Some(Key::Right),
                     WKey::Named(NamedKey::Enter) if self.ctrl => Some(Key::CtrlEnter),
+                    WKey::Named(NamedKey::F6 | NamedKey::F9 | NamedKey::F11) if repeat => None,
                     WKey::Named(NamedKey::F6) => Some(Key::Fn(6)),
                     WKey::Named(NamedKey::F7) => Some(Key::Fn(7)),
                     WKey::Named(NamedKey::F9) => Some(Key::Fn(9)),
+                    WKey::Named(NamedKey::F11) => Some(Key::Fn(11)),
                     WKey::Named(NamedKey::F8) => {
                         s.note();
                         None

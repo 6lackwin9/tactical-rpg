@@ -2,9 +2,9 @@
 //! region map, F9 cycles the window size on the screens that call `window_key` (the region and world maps, the battle,
 //! the game menu, the main menu). Each press saves like a normal setting and shows the new value; the shell applies a
 //! window size when it sees the setting change. A release build ignores both keys. The Settings screen does not call
-//! them: its draft would overwrite the key's value on Apply.
+//! them: its draft would overwrite the key's value on Apply. VIEWKEYS2: F11 cycles the walk step on the region map.
 
-use crate::mapview::{zoom_of, WalkStep};
+use crate::mapview::{zoom_of, WalkStep, WALK_STEP_KEY};
 use crate::screens::{show_errors, Cx, Key};
 use serde_json::{json, Value};
 
@@ -12,6 +12,9 @@ use serde_json::{json, Value};
 pub const ZOOM_CYCLE: [i32; 3] = [4, 6, 8];
 /// F9's steps, as `window_size` values.
 pub const SIZE_CYCLE: [&str; 3] = ["1280x720", "1600x900", "1920x1080"];
+
+/// F11's steps, as `walk_step_ms` values.
+pub const WALK_CYCLE: [f64; 5] = [90.0, 110.0, 130.0, 160.0, 200.0];
 
 /// Where a screen shows the key's note: the region map's log ticker, or a notice on a screen with no log in view.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -28,6 +31,12 @@ fn next_above<T: Copy + PartialOrd>(steps: &[T], now: T) -> T {
 /// The zoom setting F6 goes to from `now` (read as the map reads it, so it steps from the zoom on screen).
 pub fn next_zoom(now: &Value) -> f64 {
     next_above(&ZOOM_CYCLE, zoom_of(now)) as f64 / 4.0
+}
+
+/// The step F11 goes to from `now`: the first step above it; past the last step, or from no number, the first (a value
+/// out of `WALK_STEP_MS` also lands on the first: below it the first step is above, over it the steps are past).
+pub fn next_walk(now: &Value) -> f64 {
+    now.as_f64().map_or(WALK_CYCLE[0], |b| next_above(&WALK_CYCLE, b))
 }
 
 /// A `window_size` value's pixel count (None: not a size).
@@ -72,13 +81,18 @@ pub fn window_key(cx: &mut Cx, k: Key, shown: Shown) -> bool {
     press_window(cx, k, shown, cfg!(debug_assertions))
 }
 
-/// The walk's step time for F6's note, so it reads while comparing zoom levels: the base and, when the Animation speed
+/// F11 on the region map: whether `k` was the key (a release build takes it and does nothing).
+pub fn walk_key(cx: &mut Cx, k: Key) -> bool {
+    press_walk(cx, k, cfg!(debug_assertions))
+}
+
+/// The walk's step time for the F6 and F11 notes, so it reads while comparing zoom levels: the base and, when the Animation speed
 /// changes it, the time it makes.
 fn walk_words(step: WalkStep) -> String {
     if step.wall == step.base {
-        format!("walk step {:.0} ms", step.base)
+        format!("{:.0} ms", step.base)
     } else {
-        format!("walk step {:.0} ms ({:.0} ms at this Animation speed)", step.base, step.wall)
+        format!("{:.0} ms ({:.0} ms at this Animation speed)", step.base, step.wall)
     }
 }
 
@@ -90,7 +104,21 @@ fn press_zoom(cx: &mut Cx, k: Key, debug: bool) -> bool {
         let to = next_zoom(&cx.settings.v["map_zoom"]);
         cx.settings.v["map_zoom"] = json!(to);
         save(cx);
-        let line = format!("Map zoom {to}x, {} (F6).", walk_words(WalkStep::of(&cx.settings.v)));
+        let line = format!("Map zoom {to}x, walk step {} (F6).", walk_words(WalkStep::of(&cx.settings.v)));
+        cx.log(line);
+    }
+    true
+}
+
+fn press_walk(cx: &mut Cx, k: Key, debug: bool) -> bool {
+    if k != Key::Fn(11) {
+        return false;
+    }
+    if debug {
+        let to = next_walk(&cx.settings.v[WALK_STEP_KEY]);
+        cx.settings.v[WALK_STEP_KEY] = json!(to);
+        save(cx);
+        let line = format!("Walk step {} (F11).", walk_words(WalkStep::of(&cx.settings.v)));
         cx.log(line);
     }
     true
@@ -118,7 +146,7 @@ fn press_window(cx: &mut Cx, k: Key, shown: Shown, debug: bool) -> bool {
 mod tests {
     use super::*;
     use crate::hud::hud_tests::game_cx;
-    use crate::mapview::{zoom_steps, ZOOM_QUARTERS};
+    use crate::mapview::{zoom_steps, WALK_STEP_MS, ZOOM_QUARTERS};
     use crate::screens::Screen;
     use aegis_ui::screen::{Settings, WINDOW_MODES, WINDOW_SIZES};
 
@@ -235,6 +263,53 @@ mod tests {
         }
     }
 
+    /// F11 walks its steps in order and comes back to the first; each is a value the Walk step slider offers.
+    #[test]
+    fn f11_cycles_in_order() {
+        let (least, most, default) = WALK_STEP_MS;
+        assert!(WALK_CYCLE.contains(&default), "the default is a step");
+        for (i, step) in WALK_CYCLE.into_iter().enumerate() {
+            assert!((least..=most).contains(&step) && (step - least) % 10.0 == 0.0, "{step}");
+            assert_eq!(next_walk(&json!(step)), WALK_CYCLE[(i + 1) % WALK_CYCLE.len()], "from {step}");
+        }
+        assert_eq!(WALK_CYCLE, [90.0, 110.0, 130.0, 160.0, 200.0]);
+    }
+
+    /// An off-cycle value goes to the next step above; past the last, or from a bad value, to the first.
+    #[test]
+    fn f11_from_an_off_cycle_or_bad_value() {
+        for (now, want) in [(60.0, 90.0), (100.0, 110.0), (120.0, 130.0), (140.0, 160.0), (199.0, 200.0), (210.0, 90.0), (240.0, 90.0)] {
+            assert_eq!(next_walk(&json!(now)), want, "from {now}");
+        }
+        for bad in [json!("slow"), Value::Null, json!(true), json!(59), json!(241), json!(-5), json!(1e300)] {
+            assert_eq!(next_walk(&bad), WALK_CYCLE[0], "{bad}");
+        }
+    }
+
+    /// F11 saves the step and the note gives it, plus the effective time off 1x; other keys pass; with the debug gate
+    /// shut it is taken and changes nothing.
+    #[test]
+    fn f11_saves_and_notes_the_value_in_a_debug_build_only() {
+        let mut cx = game_cx();
+        let before = cx.settings.v.clone();
+        assert!(press_walk(&mut cx, Key::Fn(11), false));
+        assert_eq!(cx.settings.v, before);
+        assert!(!file_of(&cx).exists() && cx.log.is_empty(), "the gate shut: nothing");
+        assert!(!press_walk(&mut cx, Key::Fn(6), true), "not its key");
+        assert!(press_walk(&mut cx, Key::Fn(11), true));
+        assert_eq!(cx.settings.v[WALK_STEP_KEY], json!(160.0), "from the default");
+        assert_eq!(saved(&cx, WALK_STEP_KEY), json!(160.0), "the file");
+        if cfg!(debug_assertions) {
+            assert_eq!(cx.log.last().map(String::as_str), Some("Walk step 160 ms (F11)."));
+            cx.settings.v["anim_speed"] = json!(2.0);
+            press_walk(&mut cx, Key::Fn(11), true);
+            assert_eq!(cx.log.last().map(String::as_str), Some("Walk step 200 ms (100 ms at this Animation speed) (F11)."));
+        }
+        let was = cx.settings.v[WALK_STEP_KEY].clone();
+        assert!(walk_key(&mut cx, Key::Fn(11)), "the public key takes it");
+        assert_eq!(cx.settings.v[WALK_STEP_KEY] != was, cfg!(debug_assertions), "and follows the build");
+    }
+
     /// With the debug gate shut the keys are taken and change, save and show nothing.
     #[test]
     fn a_release_build_ignores_the_keys() {
@@ -263,7 +338,6 @@ mod tests {
     #[test]
     fn the_walk_step_slider_tunes_the_step_on_apply() {
         use crate::hud::hud_tests::gfx;
-        use crate::mapview::{WALK_STEP_KEY, WALK_STEP_MS};
         let (mut cx, mut g) = (game_cx(), gfx());
         let mut s = crate::menus::SettingsScreen::new(&cx);
         s.draw(&mut cx, &mut g, (-500, -500), true);
@@ -314,7 +388,7 @@ mod tests {
             assert_eq!(cx.notice.len(), cfg!(debug_assertions) as usize, "{id}");
             assert!(cx.nav.is_empty(), "{id}: no screen change");
         }
-        for (name, k) in [("f6", Key::Fn(6)), ("f9", Key::Fn(9))] {
+        for (name, k) in [("f6", Key::Fn(6)), ("f9", Key::Fn(9)), ("f11", Key::Fn(11))] {
             assert_eq!(Key::parse(name), Some(k));
             assert_eq!(k.name(), name);
         }

@@ -31,7 +31,7 @@ pub enum Key {
     CtrlEnter,
     /// Shift with a digit key (0-9, the top row or the keypad), whatever character the layout types for it.
     ShiftDigit(u8),
-    /// A function key a screen may use for debugging (F6, F7, F9; the shell keeps F8 and F12 for itself).
+    /// A function key a screen may use for debugging (F6, F7, F9, F11; the shell keeps F8 and F12 for itself).
     Fn(u8),
     Char(char),
 }
@@ -55,6 +55,7 @@ impl Key {
             "f6" => Key::Fn(6),
             "f7" => Key::Fn(7),
             "f9" => Key::Fn(9),
+            "f11" => Key::Fn(11),
             c if c.chars().count() == 1 => Key::Char(c.chars().next().unwrap()),
             _ => return None,
         })

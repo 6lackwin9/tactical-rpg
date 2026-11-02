@@ -1248,8 +1248,8 @@ impl Screen<GameCx> for RegionMap {
     }
 
     fn key(&mut self, cx: &mut Cx, k: Key) {
-        // VIEWKEYS1: a debug build's F6 (map zoom) and F9 (window size), whatever is open
-        if crate::viewkeys::zoom_key(cx, k) || crate::viewkeys::window_key(cx, k, crate::viewkeys::Shown::Log) {
+        // VIEWKEYS1, VIEWKEYS2: a debug build's F6 (map zoom), F11 (walk step) and F9 (window size), whatever is open
+        if crate::viewkeys::zoom_key(cx, k) || crate::viewkeys::walk_key(cx, k) || crate::viewkeys::window_key(cx, k, crate::viewkeys::Shown::Log) {
             return;
         }
         // EXPLOREVIEW1: a debug build's F7 flips the region view live, whatever is open
@@ -4166,6 +4166,11 @@ mod view_tests {
         assert_eq!(cx.settings.v["window_size"], json!(if debug { "1600x900" } else { "1280x720" }));
         assert_eq!(cx.log.last().is_some_and(|l| l.contains("1600x900")), debug);
         assert!(cx.notice.is_empty(), "the map's log ticker shows them");
+        assert_eq!(cx.gs().position, start, "no step");
+        // VIEWKEYS2: F11 takes effect on the next frame's tick, without Settings
+        map.key(&mut cx, Key::Fn(11));
+        map.tick(&mut cx);
+        assert_eq!(map.step.base, if debug { 160.0 } else { mapview::WALK_STEP_MS.2 });
         assert_eq!(cx.gs().position, start, "no step");
     }
 }
