@@ -16,6 +16,8 @@
 //! Q or a click on the leader passes the lead (`GameState::explore_leader`, saved as `explore.leader`). EXPLOREVIEW1:
 //! the debug setting `region_view` draws the map square (as above) or tilted (`mapview.rs`: squashed ground, water lips,
 //! walls as blocks in one feet-sorted pass, click areas in draw order); F7 flips it in a debug build.
+//! REGIONGROUND1-L: a map with a `ground` layer draws its composed picture (`ground.rs`) in place of the `.` and `~` tiles
+//! (and the tilted water lips); everything else draws over it as before, and `rows` alone still decide walking.
 
 use aegis_core::assets::{ClipPlayer, Facing, View};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
@@ -25,6 +27,7 @@ use crate::music;
 use crate::mapview::{self, MapGeom, CELL_W, FACE_H, SPRITE};
 use crate::props::{Block, Item, PropDraw, ART_TILE, BOX_EDGE, BOX_FACE, BOX_FACE_H, BOX_FILL};
 use crate::board::{BoardAct, BoardPane};
+use crate::ground::MapGround;
 use crate::portraits::Faces;
 use crate::shop::{ShopAct, ShopPane};
 use crate::talk::{self, talk_layout, TalkAct, TalkBox};
@@ -124,6 +127,8 @@ pub struct RegionMap {
     pan_loc: String,
     /// MAPNAV1-U: the edge arrows drawn last frame (agent link `state.arrows`, tests).
     arrows: Vec<Value>,
+    /// REGIONGROUND1-L: the map's composed ground, kept while its job stands.
+    ground: MapGround,
 }
 
 /// Starts a world fight: the battle screen, or the Skip / Fled / Lost popup in a debug game.
@@ -237,6 +242,7 @@ impl RegionMap {
             pan: None,
             pan_loc: String::new(),
             arrows: Vec::new(),
+            ground: MapGround::default(),
         }
     }
 
@@ -760,12 +766,15 @@ impl Screen<GameCx> for RegionMap {
             };
             let geo = MapGeom::centred(view, focus_area, one, other);
             self.geo = geo;
-            // ASSETORG2 4.5: the world lineage's tile sets, child first, then common
+            // ASSETORG2 4.5, LOOK1 5.4: the location's `tileset`, the world lineage's tile sets child first, then common
             let mut lineage = d.lineage(&gs.world_id);
             lineage.reverse();
-            let sets = emberwake_content::art::region_sets(&lineage, "");
+            let sets = emberwake_content::art::region_sets(&lineage, &s(loc, "tileset"));
             let set_refs: Vec<&str> = sets.iter().map(String::as_str).collect();
             ui.push_clip(map_area);
+            // REGIONGROUND1-L: the composed ground under everything; it stands in for the `.` and `~` tiles below
+            self.ground.sync(cx, t, &sets, view);
+            let has_ground = self.ground.draw(&mut ui.p, &geo);
             let (x0, x1) = geo.cols(map_area);
             let (y0, y1) = geo.rows(map_area);
             // the art's size: the tile at the cell (square), or the 32 x 32 art the painter squashes by nearest
@@ -779,6 +788,9 @@ impl Screen<GameCx> for RegionMap {
                     let ch = ch_at(x, y);
                     // tilted: a wall is a block in the sorted pass below
                     if tilted && ch == '#' {
+                        continue;
+                    }
+                    if has_ground && matches!(ch, '.' | '~') {
                         continue;
                     }
                     let tile = emberwake_content::art::region_tile(ch);
@@ -1197,7 +1209,7 @@ impl Screen<GameCx> for RegionMap {
             "shop": if self.shop_qid().is_empty() { Value::Null } else { self.shop.state() }, "board": Some(self.board_qid()).filter(|b| !b.is_empty()),
             "board_pane": if self.board_qid().is_empty() { Value::Null } else { self.board.state() }, "sprites": self.sprites,
             // MAPNAV1-U: who leads, the edge arrows of the last frame and the tile the camera looks at (null: the party)
-            "view": mapview::View::of_setting(&cx.settings.v["region_view"]).name(), "leader": leader_id(cx), "arrows": self.arrows, "pan": self.pan.filter(|_| self.pan_loc == gs.location_id).map(|p| json!([p.0, p.1])),
+            "view": mapview::View::of_setting(&cx.settings.v["region_view"]).name(), "ground": self.ground.state(), "leader": leader_id(cx), "arrows": self.arrows, "pan": self.pan.filter(|_| self.pan_loc == gs.location_id).map(|p| json!([p.0, p.1])),
             // PORTRAITFX1 4.11: the speaker's portrait while the talk box shows (the shop or the board hides it)
             "portraits": if self.talking() && self.shop_qid().is_empty() && self.board_qid().is_empty() { self.faces.state() } else { json!([]) }})
     }
@@ -1880,6 +1892,17 @@ mod tests {
         stray
     }
 
+    /// REGIONGROUND1: a ground's one texture and a boundary's tiles are in the tree; a ground's other file is a stray.
+    #[test]
+    fn ground_and_boundary_art_follow_their_patterns() {
+        for ok in ["tilesets/ashlands/ground/mud/v0.png", "tilesets/common/boundary/keep/wall/v0.png", "tilesets/common/boundary/keep/wall_face/v2.png"] {
+            assert!(layout_ok(ok), "{ok}");
+        }
+        for stray in ["tilesets/ashlands/ground/mud/v1.png", "tilesets/ashlands/ground/mud.png", "tilesets/ashlands/ground/mud/over_ash/m01.png", "tilesets/common/boundary/keep/roof/v0.png", "tilesets/common/boundary/keep/wall/face.png"] {
+            assert!(!layout_ok(stray), "{stray}");
+        }
+    }
+
     /// PROPS1 3.1: map prop art is `props/<set>/<art>/v<n>.png` (a variant run, as tile sets); anything else under
     /// `props/` is a stray.
     #[test]
@@ -1939,6 +1962,9 @@ mod tests {
             ["ui", "frames", f] => png(f) || f.ends_with(".json"),
             ["ui", "pins" | "badges" | "chips" | "intents" | "hud" | "markers" | "services", f] | ["ui", f] => png(f),
             ["tilesets", _, _, f] | ["props", _, _, f] => v(f),
+            // REGIONGROUND1: a ground's one texture (only `v0` is read), and a boundary's tiles
+            ["tilesets", _, "ground", _, "v0.png"] => true,
+            ["tilesets", _, "boundary", _, "wall" | "wall_face", f] => v(f),
             ["backgrounds", "menu" | "title" | "world_map" | "location" | "battle" | "story", f] => png(f),
             ["audio", "sfx", f] => f.ends_with(".wav"),
             ["audio", "music", f] => f.ends_with(".ogg"),
@@ -2178,8 +2204,13 @@ mod map_tests {
 
     fn the_region_map_reads_clean_at_every_text_size_in(view: &str) {
         let (mut cx, mut g) = (game_cx(), gfx());
+        reads_clean(&mut cx, &mut g, view);
+    }
+
+    /// The map on `cx` in `view` under every names, legend and log state at the four text sizes.
+    pub(super) fn reads_clean(cx: &mut Cx, g: &mut Gfx, view: &str) {
         cx.settings.v["region_view"] = json!(view);
-        let mut map = RegionMap::new(&mut cx);
+        let mut map = RegionMap::new(cx);
         let place = cx.location_name(&cx.gs().world_id.clone(), &cx.gs().location_id.clone());
         for line in ["The party rests (+40 HP).".to_string(), format!("Entered {place}."), "The party makes camp (-3 supplies, +40 HP).".into(), "Found: Healing Draught x2, 15 gold.".into()] {
             cx.log(line);
@@ -2191,7 +2222,7 @@ mod map_tests {
                 for log_open in [false, true] {
                     map.log_open = log_open;
                     for (size, scale) in TEXT_SIZES {
-                        let recs = frame(&mut map, &mut cx, &mut g, scale as f32);
+                        let recs = frame(&mut map, cx, g, scale as f32);
                         let boxes: Vec<(String, f32, f32, f32, f32)> = map
                             .widgets()
                             .iter()
@@ -3800,5 +3831,593 @@ mod view_tests {
         assert_eq!(cx.settings.v["region_view"], json!("square"));
         assert_eq!(Key::parse("f7"), Some(Key::Fn(7)), "the agent link's name");
         assert_eq!(Key::Fn(7).name(), "f7");
+    }
+}
+
+/// REGIONGROUND1-L (spec section 8, checks L1-L6), under both views, on a test-only world and map, so no check reads
+/// shipped ground rows: art off unless a check makes scratch art, every fixture ground flat, with wear and tone 0 unless a
+/// check sets them, so a pixel well inside a ground is exactly its colour.
+#[cfg(test)]
+mod ground_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx};
+    use crate::screens::Game;
+    use aegis_ui::canvas::Canvas;
+    use aegis_ui::ground::{ground_composes, ground_expands};
+    use emberwake_world::{new_game, Data};
+    use std::path::{Path, PathBuf};
+    use std::sync::Arc;
+
+    const WORLD: &str = "zz_world";
+    /// Letter, id, order, kind, colour; the list is out of `order` on purpose.
+    const GROUNDS: [(&str, &str, i32, &str, [u8; 3]); 5] =
+        [("r", "zz_road", 60, "land", [150, 140, 90]), ("a", "zz_ash", 10, "land", [120, 60, 60]), ("w", "zz_water", 5, "water", [10, 30, 60]), ("b", "zz_moss", 20, "land", [60, 120, 60]), ("c", "zz_slate", 30, "land", [60, 60, 120])];
+    /// Three more, for the large map's 8 layers.
+    const MORE: [(&str, &str, i32, &str, [u8; 3]); 3] = [("d", "zz_d", 40, "land", [90, 90, 40]), ("e", "zz_e", 50, "land", [40, 90, 90]), ("f", "zz_f", 70, "land", [90, 40, 90])];
+    const WALL: [u8; 3] = [200, 100, 40];
+    const FACE: [u8; 3] = [170, 80, 30];
+    const MAT: [u8; 3] = [230, 230, 20];
+    const POST: [u8; 3] = [20, 230, 230];
+
+    #[derive(Clone, Copy)]
+    struct Fixture {
+        cols: i64,
+        rows: i64,
+        layer: bool,
+        tileset: &'static str,
+        tone: f64,
+        many: bool,
+    }
+
+    const PLAIN: Fixture = Fixture { cols: 40, rows: 40, layer: false, tileset: "", tone: 0.0, many: false };
+    const LAYER: Fixture = Fixture { layer: true, ..PLAIN };
+
+    impl Fixture {
+        fn tile(&self, x: i64, y: i64) -> char {
+            if x <= 0 || y <= 0 || x >= self.cols - 1 || y >= self.rows - 1 || ((8..=11).contains(&x) && (self.rows - 8..=self.rows - 7).contains(&y)) {
+                '#'
+            } else if (28..=32).contains(&x) && (4..=7).contains(&y) {
+                '~'
+            } else {
+                '.'
+            }
+        }
+
+        /// A wall takes the letter around it; `a` | `b` meet at column 13, `b` | `c` at 26, a road crosses at rows 10-12.
+        fn letter(&self, x: i64, y: i64) -> char {
+            if self.tile(x, y) == '~' {
+                'w'
+            } else if self.many {
+                ['a', 'b', 'c', 'd', 'e', 'r', 'f'][((x / 6 + y / 5) % 7) as usize]
+            } else if (10..=12).contains(&y) {
+                'r'
+            } else if x < 13 {
+                'a'
+            } else if x < 26 {
+                'b'
+            } else {
+                'c'
+            }
+        }
+
+        fn colour_of(&self, x: i64, y: i64) -> [u8; 3] {
+            let l = self.letter(x, y).to_string();
+            GROUNDS.iter().chain(&MORE).find(|g| g.0 == l).expect("a fixture letter").4
+        }
+
+        fn spawn(&self) -> Pos {
+            (20, self.rows - 4)
+        }
+
+        fn mat(&self) -> Pos {
+            (17, self.rows - 9)
+        }
+
+        fn post(&self) -> Pos {
+            (23, self.rows - 9)
+        }
+
+        /// Open and at least one cell away from another letter, a wall and water (so its centre is plain ground), and
+        /// clear of the party, the markers and the props.
+        fn plain_cell(&self, at: Pos, party: Pos) -> bool {
+            let same = (-1..=1).all(|dy| (-1..=1).all(|dx| self.letter(at.0 + dx, at.1 + dy) == self.letter(at.0, at.1) && self.tile(at.0 + dx, at.1 + dy) == '.'));
+            let taken = [party, self.spawn(), (3, 3), (36, 3), self.mat(), self.post()];
+            same && !taken.iter().any(|t| (t.0 - at.0).abs() <= 2 && (t.1 - at.1).abs() <= 2)
+        }
+
+        fn data(&self, edit: impl FnOnce(&mut Value)) -> Data {
+            let lines = |f: &dyn Fn(i64, i64) -> char| -> Vec<String> { (0..self.rows).map(|y| (0..self.cols).map(|x| f(x, y)).collect()).collect() };
+            let spawn = self.spawn();
+            let (mat, post) = (self.mat(), self.post());
+            let mut map = json!({"id": "zz_yard", "rows": lines(&|x, y| self.tile(x, y)),
+                "anchors": [{"id": "spawn", "x": spawn.0, "y": spawn.1}, {"id": "job", "x": 3, "y": 3}, {"id": "far", "x": 36, "y": 3}],
+                "props": [{"id": "mat", "art": "zz_mat", "x": mat.0, "y": mat.1, "w": 1, "h": 1, "layer": "ground", "variant": -1, "flip": false},
+                          {"id": "post", "art": "zz_post", "x": post.0, "y": post.1, "w": 1, "h": 1, "layer": "sort", "variant": -1, "flip": false}]});
+            if self.layer {
+                map["ground"] = json!(lines(&|x, y| self.letter(x, y)));
+                let mut legend: serde_json::Map<String, Value> = GROUNDS.iter().chain(&MORE).map(|g| (g.0.to_string(), json!(g.1))).collect();
+                legend.insert("z".into(), json!("zz_unused"));
+                map["ground_legend"] = Value::Object(legend);
+            }
+            edit(&mut map);
+            let row = |g: &(&str, &str, i32, &str, [u8; 3]), tone: f64| json!({"id": g.1, "name": g.1, "order": g.2, "kind": g.3, "colour": format!("#{:02x}{:02x}{:02x}", g.4[0], g.4[1], g.4[2]), "wear": 0, "tone": tone});
+            let mut grounds: Vec<Value> = GROUNDS.iter().chain(&MORE).map(|g| row(g, self.tone)).collect();
+            grounds.push(json!({"id": "zz_unused", "name": "Unused", "order": 99, "colour": "#ffffff"}));
+            let catalog = json!({"classes": [{"id": "fighter", "name": "Fighter"}], "units": [{"id": "hero", "name": "Hero", "side": "party", "class_id": "fighter", "level": 1}], "grounds": grounds});
+            let owned = |rows: Value| -> Value {
+                let list = rows.as_array().expect("rows").iter().map(|r| {
+                    let mut r = r.clone();
+                    r["_world"] = json!(WORLD);
+                    r["_qid"] = json!(format!("{WORLD}:{}", r["id"].as_str().unwrap_or("")));
+                    r
+                });
+                Value::Array(list.collect())
+            };
+            let worlds = json!({WORLD: {"manifest": {"id": WORLD, "name": "Yard", "start_location": "hub", "start_party": ["hero"]}, "own": {
+                "locations": owned(json!([{"id": "hub", "name": "Hub", "map": "zz_yard", "tileset": self.tileset, "markers": [
+                    {"id": "m_job", "kind": "encounter", "encounter": "job", "anchor": "job"},
+                    {"id": "m_far", "kind": "encounter", "encounter": "job", "anchor": "far", "unless_flags": [{"key": "zz_gone"}]}]}])),
+                "encounters": owned(json!([{"id": "job", "name": "Job", "location": "hub", "enemies": []}]))
+            }}});
+            Data::from_values(&catalog, &worlds, &json!({"maps": [map]}))
+        }
+
+        fn cx(&self, view: &str) -> Cx {
+            self.cx_on(self.data(|_| ()), view)
+        }
+
+        fn cx_on(&self, data: Data, view: &str) -> Cx {
+            let mut cx = game_cx();
+            let d = Arc::new(data);
+            let mut gs = new_game::create_for_world(&d, WORLD, 1).expect("a new game");
+            explore::enter(&d, &mut gs, "hub", explore::SPAWN);
+            // no random fight in a few steps
+            gs.explore.insert("next_at".into(), json!(9999));
+            gs.explore.insert("steps".into(), json!(0));
+            cx.app.data = d;
+            cx.app.game = Some(Game::new(gs, -1, true));
+            cx.settings.v["region_view"] = json!(view);
+            cx.settings.v["map_legend_open"] = json!(false);
+            cx
+        }
+    }
+
+    fn views() -> impl Iterator<Item = &'static str> {
+        mapview::VIEWS.iter().map(|v| v.0)
+    }
+
+    fn px(g: &Gfx, x: i32, y: i32) -> [u8; 3] {
+        let i = ((y * g.canvas.w + x) * 4) as usize;
+        [g.canvas.px[i], g.canvas.px[i + 1], g.canvas.px[i + 2]]
+    }
+
+    fn mid(map: &RegionMap, at: Pos) -> (i32, i32) {
+        let c = map.geo.cell_of(at);
+        (c.x + c.w / 2, c.y + c.h / 2)
+    }
+
+    /// The cells whose centres show well inside the map area (away from the ticker and the bar).
+    fn seen_cells(f: &Fixture, map: &RegionMap) -> Vec<Pos> {
+        let inner = Rect::new(40, HUD_H + 16, W - 80, H - HUD_H - 64);
+        let inside = |p: (i32, i32)| p.0 >= inner.x && p.1 >= inner.y && p.0 < inner.x + inner.w && p.1 < inner.y + inner.h;
+        (0..f.rows).flat_map(|y| (0..f.cols).map(move |x| (x, y))).filter(|at| inside(mid(map, *at))).collect()
+    }
+
+    fn scratch(tag: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("emberwake_ground_{tag}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    fn solid(root: &Path, rel: &str, w: u32, h: u32, c: [u8; 3]) {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(path).unwrap()), w, h);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        let row: Vec<u8> = (0..w * h).flat_map(|_| [c[0], c[1], c[2], 255]).collect();
+        enc.write_header().unwrap().write_image_data(&row).unwrap();
+    }
+
+    fn art_of(root: &Path) -> aegis_ui::art::Art {
+        aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.to_path_buf()]))
+    }
+
+    /// L1: no ground keeps every tile (their stand-in fills with the art off), composes nothing and says null, and a layer
+    /// the plan refuses draws those same bytes, so a bad row never takes a map's tiles away.
+    #[test]
+    fn a_map_without_ground_draws_its_tiles_and_composes_nothing() {
+        for view in views() {
+            let f = PLAIN;
+            let (mut cx, mut g) = (f.cx(view), gfx());
+            let start = ground_composes();
+            let mut map = RegionMap::new(&mut cx);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert_eq!(map.state(&cx)["ground"], Value::Null, "{view}");
+            assert_eq!(ground_composes(), start, "{view}: nothing composed");
+            let tilted = view == "tilted";
+            let mut probed = 0;
+            for at in seen_cells(&f, &map) {
+                let ch = f.tile(at.0, at.1);
+                let want = match ch {
+                    '.' if f.plain_cell(at, cx.gs().position) => [70, 90, 64],
+                    '~' => [40, 90, 100],
+                    '#' if !tilted => [WALL_FILL[0], WALL_FILL[1], WALL_FILL[2]],
+                    _ => continue,
+                };
+                let p = mid(&map, at);
+                assert_eq!(px(&g, p.0, p.1), want, "{view}: {at:?} '{ch}'");
+                probed += 1;
+            }
+            assert!(probed > 50, "{view}: only {probed} cells probed");
+            let today = g.canvas.px.clone();
+            let refused: [fn(&mut Value); 3] = [|m| m["ground_legend"] = json!({"a": "zz_ash"}), |m| m["ground_legend"]["a"] = json!("zz_no_such_row"), |m| m["ground"] = json!(["ab"])];
+            for (i, edit) in refused.into_iter().enumerate() {
+                let (mut cx, mut g) = (f.cx_on(LAYER.data(edit), view), gfx());
+                let mut map = RegionMap::new(&mut cx);
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                assert_eq!(map.state(&cx)["ground"], Value::Null, "{view}: refused {i}");
+                assert!(g.canvas.px == today, "{view}: refused layer {i} draws today's frame");
+            }
+            assert_eq!(ground_composes(), start, "{view}: still nothing composed");
+        }
+    }
+
+    /// L2: everything that walks or clicks reads `rows`: the camera, the click areas, the state, every path and a walk
+    /// equal the same map without the layer.
+    #[test]
+    fn walking_clicks_arrows_and_pans_equal_the_map_without_ground() {
+        for view in views() {
+            let (mut plain, mut layered) = (PLAIN.cx(view), LAYER.cx(view));
+            let (mut g1, mut g2) = (gfx(), gfx());
+            let (mut a, mut b) = (RegionMap::new(&mut plain), RegionMap::new(&mut layered));
+            let same = |a: &RegionMap, b: &RegionMap, c1: &Cx, c2: &Cx, step: &str| {
+                assert_eq!(a.geo, b.geo, "{view} {step}: the camera");
+                assert_eq!(a.widgets(), b.widgets(), "{view} {step}: the click areas");
+                let drop_ground = |m: &RegionMap, c: &Cx| {
+                    let mut v = m.state(c);
+                    v.as_object_mut().expect("a state").remove("ground");
+                    v
+                };
+                assert_eq!(drop_ground(a, c1), drop_ground(b, c2), "{view} {step}: the state");
+                for y in 0..PLAIN.rows {
+                    for x in 0..PLAIN.cols {
+                        assert_eq!(a.path_to(c1, (x, y), false), b.path_to(c2, (x, y), false), "{view} {step}: a path to ({x}, {y})");
+                    }
+                }
+            };
+            frame(&mut a, &mut plain, &mut g1, 1.0);
+            frame(&mut b, &mut layered, &mut g2, 1.0);
+            same(&a, &b, &plain, &layered, "first frame");
+            assert_eq!(b.state(&layered)["ground"], json!({"layers": GROUNDS.len()}), "{view}: an unused legend entry adds no layer");
+            assert!(!b.arrows.is_empty(), "{view}: a marker out of view has its arrow");
+            // a click on an edge arrow pans; the same widgets, so the same click
+            let arrow = b.widgets().iter().find(|w| s(json::dict(w), "id").contains("arrow")).cloned().expect("the arrow's widget");
+            let (x, y, ww, hh) = crate::hud::hud_tests::rect(&arrow);
+            let pt = ((x + ww / 2) as i32, (y + hh / 2) as i32);
+            for (m, c, g) in [(&mut a, &mut plain, &mut g1), (&mut b, &mut layered, &mut g2)] {
+                m.draw(c, g, pt, true);
+                assert!(m.click(c, pt), "{view}: the arrow takes the click");
+                assert!(m.pan.is_some(), "{view}: the arrow pans");
+                frame(m, c, g, 1.0);
+            }
+            same(&a, &b, &plain, &layered, "after a pan");
+            for (m, c, g) in [(&mut a, &mut plain, &mut g1), (&mut b, &mut layered, &mut g2)] {
+                m.pan = None;
+                frame(m, c, g, 1.0);
+            }
+            // a walk by a tile click: the same path and the same end
+            let to = (PLAIN.spawn().0 - 3, PLAIN.spawn().1 - 1);
+            for (m, c, g) in [(&mut a, &mut plain, &mut g1), (&mut b, &mut layered, &mut g2)] {
+                let pt = mid(m, to);
+                m.draw(c, g, pt, true);
+                assert!(m.click(c, pt), "{view}: the map takes the click");
+                while !m.walk.is_empty() {
+                    m.next_walk = Instant::now();
+                    m.tick(c);
+                }
+                assert_eq!(c.gs().position, to, "{view}: the walk ends on the cell");
+                frame(m, c, g, 1.0);
+            }
+            same(&a, &b, &plain, &layered, "after a walk");
+        }
+    }
+
+    /// L2: a pixel showing the neighbour's ground (the edge wanders over cells) still clicks its own cell.
+    #[test]
+    fn a_click_where_the_neighbours_ground_shows_walks_to_that_cell() {
+        for view in views() {
+            let f = LAYER;
+            let (mut cx, mut g) = (f.cx(view), gfx());
+            let mut map = RegionMap::new(&mut cx);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            let (mut found, mut clicked) = (0, 0);
+            for y in f.rows - 12..f.rows - 2 {
+                for (x, other) in [(12, 13), (13, 12)] {
+                    if f.tile(x, y) != '.' || f.tile(other, y) != '.' {
+                        continue;
+                    }
+                    let c = map.geo.cell(x as i32, y as i32);
+                    let theirs = f.colour_of(other, y);
+                    let at = (c.y..c.y + c.h).flat_map(|py| (c.x..c.x + c.w).map(move |x| (x, py))).find(|p| px(&g, p.0, p.1) == theirs);
+                    let Some(pt) = at else { continue };
+                    found += 1;
+                    if map.path_to(&cx, (x, y), false).is_none() {
+                        continue;
+                    }
+                    map.draw(&mut cx, &mut g, pt, true);
+                    assert!(map.click(&mut cx, pt), "{view}: the map takes the click");
+                    let end = map.walk.iter().fold(cx.gs().position, |p, d| (p.0 + d.0, p.1 + d.1));
+                    assert_eq!(end, (x, y), "{view}: a pixel of ({other}, {y})'s ground in ({x}, {y})");
+                    map.walk.clear();
+                    map.walk_target = None;
+                    clicked += 1;
+                    frame(&mut map, &mut cx, &mut g, 1.0);
+                }
+            }
+            assert!(found > 0 && clicked > 0, "{view}: no edge crossed a cell ({found} found, {clicked} clicked)");
+        }
+    }
+
+    /// L3: a hundred frames with steps, a flag and a marker going compose once and make one copy; a view flip (F7)
+    /// composes once and flipping back only copies. No frame makes a job or a key (`builds`, so no texture hashed or file
+    /// read: making one is the only path to either).
+    #[test]
+    fn a_map_composes_once_and_a_view_flip_once_more() {
+        let f = LAYER;
+        let (mut cx, mut g) = (f.cx("square"), gfx());
+        let (c0, e0) = (ground_composes(), ground_expands());
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let key = map.ground.key().cloned().expect("a key");
+        let arrows = map.arrows.len();
+        for i in 0..100 {
+            if i % 10 == 0 {
+                map.step(&mut cx, if i % 20 == 0 { (1, 0) } else { (-1, 0) });
+            }
+            if i == 50 {
+                cx.gs_mut().set_flag("zz_gone", json!(true));
+            }
+            frame(&mut map, &mut cx, &mut g, 1.0);
+        }
+        assert_eq!(map.arrows.len() + 1, arrows, "the marker went");
+        assert_eq!((ground_composes() - c0, ground_expands() - e0, map.ground.builds), (1, 1, 1), "100 frames");
+        assert_eq!(map.ground.key(), Some(&key), "the same key");
+        let flip = |map: &mut RegionMap, cx: &mut Cx| {
+            if cfg!(debug_assertions) {
+                map.key(cx, Key::Fn(7));
+            } else {
+                flip_view(cx);
+            }
+        };
+        flip(&mut map, &mut cx);
+        for _ in 0..3 {
+            frame(&mut map, &mut cx, &mut g, 1.0);
+        }
+        assert_eq!(map.geo.view, mapview::View::Tilted);
+        assert_eq!((ground_composes() - c0, ground_expands() - e0, map.ground.builds), (2, 2, 2), "a flip composes once");
+        assert_ne!(map.ground.key(), Some(&key), "each view its own key");
+        flip(&mut map, &mut cx);
+        for _ in 0..3 {
+            frame(&mut map, &mut cx, &mut g, 1.0);
+        }
+        assert_eq!((ground_composes() - c0, ground_expands() - e0, map.ground.builds), (2, 3, 3), "flipping back only copies");
+        assert_eq!(map.ground.key(), Some(&key), "the same key again");
+    }
+
+    /// L3, EN 4.3: new data or new art makes a new job, and only what really changed composes; a file edited under a
+    /// running `Art` is not seen (a frame reads no file) until a new `Art`.
+    #[test]
+    fn a_data_or_art_edit_recomposes_only_when_the_picture_changes() {
+        for view in views() {
+            let f = LAYER;
+            let (mut cx, mut g) = (f.cx(view), gfx());
+            let root = scratch(&format!("edit_{view}"));
+            cx.art = art_of(&root);
+            let mut map = RegionMap::new(&mut cx);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            let probe = (f.spawn().0 + 4, f.spawn().1 - 1);
+            assert!(f.plain_cell(probe, f.spawn()) && f.letter(probe.0, probe.1) == 'b', "{view}: the probe");
+            let seen = |map: &RegionMap, g: &Gfx| {
+                let p = mid(map, probe);
+                px(g, p.0, p.1)
+            };
+            assert_eq!(seen(&map, &g), [60, 120, 60], "{view}: the flat colour");
+            let c0 = ground_composes();
+            let b0 = map.ground.builds;
+            // the same data read again: a new job, the same key, nothing composed
+            cx.app.data = Arc::new((*cx.app.data).clone());
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert_eq!((ground_composes() - c0, map.ground.builds - b0), (0, 1), "{view}: the same data");
+            // a row's colour: one compose
+            let mut data = (*cx.app.data).clone();
+            data.edit_cat(|cat| cat.grounds.get_mut("zz_moss").expect("the row").colour = "#3c5a78".into());
+            cx.app.data = Arc::new(data);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert_eq!((ground_composes() - c0, map.ground.builds - b0), (1, 2), "{view}: a colour edit");
+            assert_eq!(seen(&map, &g), [0x3c, 0x5a, 0x78], "{view}: the new colour");
+            // new art over the chain: one compose; the same file through another `Art`: none
+            let rel = "tilesets/common/ground/zz_moss/v0.png";
+            solid(&root, rel, 256, 256, [33, 66, 99]);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert_eq!(seen(&map, &g), [0x3c, 0x5a, 0x78], "{view}: a frame looks for no new file");
+            assert_eq!((ground_composes() - c0, map.ground.builds - b0), (1, 2), "{view}: a frame reads no file");
+            cx.art = art_of(&root);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert_eq!((ground_composes() - c0, map.ground.builds - b0), (2, 3), "{view}: new art");
+            assert_eq!(seen(&map, &g), [33, 66, 99], "{view}: the texture");
+            cx.art = art_of(&root);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert_eq!((ground_composes() - c0, map.ground.builds - b0), (2, 4), "{view}: the same file reduced the same way");
+            solid(&root, rel, 256, 256, [99, 66, 33]);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert_eq!(seen(&map, &g), [33, 66, 99], "{view}: a file edited under a running `Art`");
+            cx.art = art_of(&root);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert_eq!((ground_composes() - c0, map.ground.builds - b0), (3, 5), "{view}: a retouched file");
+            assert_eq!(seen(&map, &g), [99, 66, 33], "{view}: the retouched texture");
+            let _ = std::fs::remove_dir_all(&root);
+        }
+    }
+
+    /// Spec section 3, LOOK1 5.4: a ground's art comes from the location's `tileset`, then the world lineage, then `common`.
+    #[test]
+    fn a_grounds_art_follows_the_tile_set_chain() {
+        for view in views() {
+            let root = scratch(&format!("chain_{view}"));
+            let rel = |set: &str| format!("tilesets/{set}/ground/zz_moss/v0.png");
+            let probe = (LAYER.spawn().0 + 4, LAYER.spawn().1 - 1);
+            let shown = |f: Fixture| {
+                let (mut cx, mut g) = (f.cx(view), gfx());
+                cx.art = art_of(&root);
+                let mut map = RegionMap::new(&mut cx);
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                let p = mid(&map, probe);
+                px(&g, p.0, p.1)
+            };
+            let bound = Fixture { tileset: "zz_bound", ..LAYER };
+            assert_eq!(shown(bound), [60, 120, 60], "{view}: no art: the colour");
+            solid(&root, &rel("common"), 256, 256, [11, 22, 33]);
+            assert_eq!(shown(bound), [11, 22, 33], "{view}: common");
+            solid(&root, &rel(WORLD), 256, 256, [44, 55, 66]);
+            assert_eq!(shown(bound), [44, 55, 66], "{view}: the world over common");
+            solid(&root, &rel("zz_bound"), 256, 256, [77, 88, 99]);
+            assert_eq!(shown(bound), [77, 88, 99], "{view}: the location's tile set first");
+            assert_eq!(shown(LAYER), [44, 55, 66], "{view}: no `tileset`: the world");
+            let _ = std::fs::remove_dir_all(&root);
+        }
+    }
+
+    /// The opaque things on a map at exact colours, and where they stand.
+    fn solid_things(g: &Gfx) -> Vec<(i32, i32, [u8; 3])> {
+        let party = [crate::props::PARTY[0], crate::props::PARTY[1], crate::props::PARTY[2]];
+        let mut out = Vec::new();
+        for y in 0..H {
+            for x in 0..W {
+                let c = px(g, x, y);
+                if [WALL, FACE, MAT, POST, party].contains(&c) {
+                    out.push((x, y, c));
+                }
+            }
+        }
+        out
+    }
+
+    /// L4: a wall, a ground prop, a standing prop and the party stand on exactly the same pixels with ground and without,
+    /// so ground is under them all, the tilted block still sorts with the party, and the bar is untouched. The party north
+    /// of a wall makes the sort matter in the tilted view.
+    #[test]
+    fn walls_props_and_the_party_draw_over_the_ground_in_todays_order() {
+        for view in views() {
+            let root = scratch(&format!("over_{view}"));
+            solid(&root, "tilesets/common/wall/v0.png", 32, 32, WALL);
+            solid(&root, "tilesets/common/wall_face/v0.png", 128, 48, FACE);
+            solid(&root, "props/common/zz_mat/v0.png", 32, 32, MAT);
+            solid(&root, "props/common/zz_post/v0.png", 32, 64, POST);
+            let shot = |f: Fixture| {
+                let (mut cx, mut g) = (f.cx(view), gfx());
+                cx.art = art_of(&root);
+                let mut map = RegionMap::new(&mut cx);
+                cx.gs_mut().position = (10, f.rows - 9);
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                (map.geo, g)
+            };
+            let ((geo_a, a), (geo_b, b)) = (shot(PLAIN), shot(LAYER));
+            assert_eq!(geo_a, geo_b, "{view}");
+            let (seen_a, seen_b) = (solid_things(&a), solid_things(&b));
+            for c in [WALL, MAT, POST] {
+                assert!(seen_a.iter().any(|p| p.2 == c), "{view}: {c:?} is on the map");
+            }
+            assert!(seen_a == seen_b, "{view}: {} and {} pixels of walls, props and party", seen_a.len(), seen_b.len());
+            let bar = (HUD_H * W * 4) as usize;
+            assert!(a.canvas.px[..bar] == b.canvas.px[..bar], "{view}: the map's clip keeps the ground off the bar");
+            assert_ne!(a.canvas.px, b.canvas.px, "{view}: the ground did draw");
+            let _ = std::fs::remove_dir_all(&root);
+        }
+    }
+
+    /// L5: every ground without art shows its `colour` deep in its own cells: exact with tone 0, within tone with tone on.
+    #[test]
+    fn a_ground_without_art_draws_its_colour_within_tone() {
+        for view in views() {
+            for tone in [0.0, 0.13] {
+                let f = Fixture { tone, ..LAYER };
+                let (mut cx, mut g) = (f.cx(view), gfx());
+                let mut map = RegionMap::new(&mut cx);
+                let mut seen: std::collections::HashSet<[u8; 3]> = Default::default();
+                let mut letters: std::collections::HashSet<char> = Default::default();
+                for at in [f.spawn(), (6, 8), (20, 8), (34, 16), (20, 11)] {
+                    cx.gs_mut().position = at;
+                    frame(&mut map, &mut cx, &mut g, 1.0);
+                    for cell in seen_cells(&f, &map).into_iter().filter(|c| f.plain_cell(*c, at)) {
+                        let want = f.colour_of(cell.0, cell.1);
+                        let p = mid(&map, cell);
+                        let got = px(&g, p.0, p.1);
+                        for i in 0..3 {
+                            let room = want[i] as f64 * tone / 2.0 + 1.0;
+                            assert!((got[i] as f64 - want[i] as f64).abs() <= room, "{view} tone {tone}: {cell:?} is {got:?}, its colour {want:?}");
+                        }
+                        seen.insert(got);
+                        letters.insert(f.letter(cell.0, cell.1));
+                    }
+                }
+                assert_eq!(letters.len(), 4, "{view}: all the land grounds probed: {letters:?}");
+                // the water's centre, sunken: its own colour, no `~` tile and no lip
+                cx.gs_mut().position = (30, 9);
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                let p = mid(&map, (30, 5));
+                let (got, want) = (px(&g, p.0, p.1), f.colour_of(30, 5));
+                assert!((0..3).all(|i| (got[i] as f64 - want[i] as f64).abs() <= want[i] as f64 * tone / 2.0 + 1.0), "{view} tone {tone}: water {got:?}, its colour {want:?}");
+                if tone == 0.0 {
+                    assert_eq!(seen.len(), 4, "{view}: exact colours: {seen:?}");
+                } else {
+                    assert!(seen.len() > 4, "{view}: tone varies a ground: {seen:?}");
+                }
+            }
+        }
+    }
+
+    /// L5: the text sizes read clean over a map with ground.
+    #[test]
+    fn the_region_map_with_ground_reads_clean_at_every_text_size() {
+        for view in views() {
+            let (mut cx, mut g) = (LAYER.cx(view), gfx());
+            super::map_tests::reads_clean(&mut cx, &mut g, view);
+        }
+    }
+
+    /// EN 4.2 and 4.3's frame on the largest shipped size (48 x 30, 8 layers): prints a first frame and a frame while the
+    /// camera pans, with ground and without, at the spec's three window sizes.
+    /// `cargo test --release -p emberwake_gui ground_frame_time -- --ignored --nocapture`
+    #[test]
+    #[ignore = "a measurement; run by hand in a release build"]
+    fn ground_frame_time_on_a_large_map() {
+        for view in views() {
+            for (w, h) in [(1280, 720), (1920, 1080), (3840, 2160)] {
+                for layer in [false, true] {
+                    let f = Fixture { cols: 48, rows: 30, layer, tone: 0.13, many: true, ..PLAIN };
+                    let (mut cx, mut g) = (f.cx(view), gfx());
+                    cx.art = aegis_ui::art::Art::new(Some(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+                    g.canvas = Canvas::new(w, h);
+                    g.view = aegis_ui::painter::View::fit(w as u32, h as u32);
+                    let mut map = RegionMap::new(&mut cx);
+                    let t0 = Instant::now();
+                    frame(&mut map, &mut cx, &mut g, 1.0);
+                    let first = t0.elapsed();
+                    frame(&mut map, &mut cx, &mut g, 1.0);
+                    let mut times = Vec::new();
+                    for i in 0..120 {
+                        map.pan = Some((10 + i % 28, 6 + i % 18));
+                        map.pan_loc = "hub".into();
+                        let t = Instant::now();
+                        frame(&mut map, &mut cx, &mut g, 1.0);
+                        times.push(t.elapsed().as_secs_f64() * 1000.0);
+                    }
+                    times.sort_by(f64::total_cmp);
+                    println!("{view} {w}x{h} ground={layer}: first {:.1} ms, frame median {:.2} ms, p95 {:.2} ms, composes so far {}", first.as_secs_f64() * 1000.0, times[60], times[114], ground_composes());
+                }
+            }
+        }
     }
 }

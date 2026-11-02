@@ -18,6 +18,7 @@ use crate::canvas::{Image, Rect, Rgba, OUTLINE_ALPHA};
 use aegis_core::assets::{self, ClipFrame, ClipPlayer, Clips, Face, Facing, Layers};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// A body's sheet (palette applied) and its clips.
 struct Body {
@@ -56,7 +57,12 @@ pub struct Art {
     body_rects: HashMap<(String, String, i32, Facing), Option<Rect>>,
     /// PNG rel -> its face sidecar from the PNG's own layer (PORTRAITFX1-E `face`).
     faces: HashMap<String, Option<Face>>,
+    /// Which `Art` this is (`generation`).
+    generation: u64,
 }
+
+/// The next `Art::generation`.
+static GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// Decodes a PNG into RGBA (palette, grey and RGB inputs are expanded).
 pub fn load_png(path: &Path) -> Option<Image> {
@@ -85,11 +91,18 @@ impl Art {
     }
 
     pub fn layered(layers: Layers) -> Self {
-        Self { layers, files: HashMap::new(), fits: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), silhouettes: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new(), body_rects: HashMap::new(), faces: HashMap::new() }
+        Self { layers, files: HashMap::new(), fits: HashMap::new(), bodies: HashMap::new(), frames: HashMap::new(), outlines: HashMap::new(), silhouettes: HashMap::new(), mirrors: HashMap::new(), sizes: HashMap::new(), present: HashMap::new(), variant_counts: HashMap::new(), body_rects: HashMap::new(), faces: HashMap::new(), generation: GENERATION.fetch_add(1, Ordering::Relaxed) }
     }
 
     pub fn layers(&self) -> &Layers {
         &self.layers
+    }
+
+    /// Different for every `Art` made in this run. This cache never re-reads a file, so an edited file reaches a running
+    /// build only through a new `Art`: something made from its pictures and kept (a composed ground's key) compares this
+    /// each frame instead of asking for the pictures again.
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
 
     /// Whether a layer holds `rel` (cached: screens ask every frame).

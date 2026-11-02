@@ -12,6 +12,7 @@ mod dojo;
 mod forge;
 mod fx;
 mod gallery;
+mod ground;
 mod hud;
 mod hub;
 mod intent_text;

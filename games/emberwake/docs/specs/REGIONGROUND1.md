@@ -232,6 +232,15 @@ Slice L: `ground.rs` is glue: `plan` from the kit, each layer's `ground_dirs` th
 or 64 x 48, `draw` over the whole map's rect inside the map area's clip, before ground props. `region.rs`'s ground pass
 skips `.` and `~` (and the tilted lips) when the map has a plan. Agent link: `state.ground` is `{"layers": n}`, or null.
 
+As built (REGIONGROUND1-L, 2026-11-02): the module is registered in `main.rs` (`emberwake_gui` is a bin, with no
+`lib.rs`). `MapGround` compares the map, the view, the sets, the data and the art each frame and makes the job and key only
+when one changed; for the art it reads `Art::generation` (new in `aegis_ui::art`), and the Scene Runner's Reload data now
+opens a new `Art`, since `Art` never re-reads a file and an art edit could not otherwise reach a running build. A layer's
+`marks` stay empty until the mark rows (E2, D2) need them. A row whose `colour` is not `#rrggbb`, or a map past the
+composer's `ART_PX_MAX`, draws as if it had no ground. Check L1's hash was a one-off (every shipped map, both views, art on
+and off, identical before and after); the kept test probes every tile's colour on a fixture map instead, so another lane's
+HUD change cannot fail it.
+
 Acceptance checks (E: EN 5; K: KT 2).
 
 T (`test_tiles.py`, fixtures only):

@@ -303,6 +303,8 @@ impl SceneRunner {
                     }
                     Err(e) => show_errors(cx, vec![format!("Reload failed: {e:#}")]),
                 }
+                // REGIONGROUND1-L: an edited art file shows after this (`Art` never re-reads a file it holds).
+                cx.art = aegis_ui::art::Art::layered(cx.art.layers().clone());
                 // LOOK1-E1: the theme files too (a problem keeps the theme in force and shows a notice).
                 aegis_ui::theme::reload(cx);
             }
@@ -413,7 +415,7 @@ impl Screen<GameCx> for SceneRunner {
         }
         ui.scroll_end();
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 4.0, "DEVELOPER", SMALL, INFO);
-        ui.button_tip("runner.reload", Rect::new(right.x + 6, right.y + 16, 70, 14), "Reload data", SAct::Reload, true, tip("Reload data", "Re-reads the data folder (catalog, worlds, maps, quests, services, XP curve)."));
+        ui.button_tip("runner.reload", Rect::new(right.x + 6, right.y + 16, 70, 14), "Reload data", SAct::Reload, true, tip("Reload data", "Re-reads the data folder (catalog, worlds, maps, quests, services, XP curve) and the art files."));
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 36.0, "Parity checks (headless):", SMALL, DIM);
         ui.p.text(right.x as f32 + 6.0, right.y as f32 + 46.0, "cargo test -p emberwake_world -p emberwake_battle", SMALL, TEXT);
         ui.button_tip("runner.playtests", Rect::new(right.x + 6, right.y + 58, 70, 14), "Playtests", SAct::Playtests, true, tip("Playtests", "Recordings of played battles with their notes (F8): play back, take over at a round, copy to the repo inbox; the recording toggle."));
