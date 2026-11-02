@@ -215,12 +215,11 @@ pond's corners; a location without `tileset` draws today's frame (hash); journey
 ## A1-A7: art batches (game art, planner worktree; T; A1-A3 after EXPLOREVIEW1-R; A6 after F)
 
 Chain per set (`metadata.record.session_ref`, no attachments): the base `floor` first (n 2, the user picks), then
-each other tile "in the same style and palette as the first image"; stage tiles chain from the region base of the
-same terrain ("the same texture seen at a low angle, 4:3"). A1 adds the "Tile" template to `ART_PROMPT_TEMPLATES.md`:
-"A single seamless ground texture tile for a dark fantasy tactical RPG, top-down, drawn as a 32 x 32 pixel tile
-scaled up (visible large pixels, no anti-aliasing), edges that wrap without a seam, no border, no frame, no vignette,
-no lighting gradient, limited palette of 4-6 colours from {the set's hex list}, light from the upper left", plus the
-material line (LOOK1 5.2) and the size: "32 x 32", "4:3, 32 x 24" (tilted region) or "4:3, 64 x 48" (stage).
+each other tile "in the same style and palette as the first image". Every tile is prompted square and straight down,
+never at an angle (decision "Prop sheets by size class; tile textures straight-down"; the first A4 chain said "low
+angle" and came back unusable); the 4:3 forms are squashed from the square in code. The "Tile" template is in
+`ART_PROMPT_TEMPLATES.md`, with the material line (LOOK1 5.2) and the size: 32 x 32 (region) or 64 x 64 (stage,
+squashed to 64 x 48; the wall face is a flat front elevation, cropped to 64 x 24).
 
 Per batch: `tools/portraits/artqueue.py request` per image with its record; the user runs the Gemini web app;
 `artqueue.py ingest` into `art_src/look1/<set>/`; `tools/tiles/cut.py` (scale only), `seam.py` (score at most 1.5,

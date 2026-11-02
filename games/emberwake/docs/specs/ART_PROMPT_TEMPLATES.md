@@ -118,6 +118,17 @@ Sprites include:
 Compact scale, highly readable, matches the 16-bit dark fantasy aesthetic.
 ```
 
+## Tile
+
+One ground texture per image, square and straight down (LOOK1, decision "Prop sheets by size class; tile textures
+straight-down"). Size: 32 x 32 (region) or 64 x 64 (stage). Never prompt an angle: a 4:3 tile is squashed from the
+square in code. Chain the rest of a set from its `floor` with `--record session_ref=<floor request>`, opening with "In
+the same pixel-art style, pixel size and palette family as the first image, and the same flat straight-down view."
+
+```text
+A single seamless ground texture tile for a dark fantasy tactical RPG, seen from directly overhead: a flat, straight-down orthographic view of the surface, as a floor plan, drawn as a square tile of {size} pixels scaled up (visible large square pixels, no anti-aliasing). No perspective, no horizon, no vanishing lines, no depth, no walls, no objects standing on it. A few large simple shapes per tile, not many small ones. The texture fills the whole image edge to edge and wraps without a seam on all four sides, with shapes running off the edges. Even, flat lighting across the whole tile: no vignette, no lighting gradient, no dark corners, no border, no frame, no text. Limited palette of 4-6 colours from {the set's hex list}. {setting line}. Material: {material}.
+```
+
 ## Routes by asset type (ARTPROMPT1, 2026-11-01)
 
 Since 2026-11-01 the "Gemini" route runs through the Antigravity queue by default (decision "Antigravity queue as the default

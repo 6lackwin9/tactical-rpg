@@ -1,0 +1,24 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "title_backdrop",
+  "prompt": "The title screen backdrop of a gothic dark fantasy tactical RPG. A sunless church city seen at dusk with no sun and no stars: on the left a huge weeping cathedral rises in black basalt with buttresses and a great stained-glass eye, tiny tallow lanterns along its flanks and rooftops below; on the right open, empty, dark smoky sky with soft ember haze, left clear for a title and a menu. Warm amber tallow light from below, deep cold shadow above. Wide cinematic 16:9. Detailed 16-bit SNES/GBA-era pixel art with visible large pixels and no anti-aliasing, limited palette from the hues #0a0b10 #14171f #4b5563 #2c221e #d97706 #fbbf24 #d9cbb4. No text, no letters, no logo, no watermark.",
+  "reference": null,
+  "prompts_file": null,
+  "time": "2026-11-02T09:42:00Z",
+  "n": 1,
+  "references": [],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "title_backdrop_q1793611390",
+  "metadata": {
+    "asset_id": "title_backdrop",
+    "task": "look1a",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null
+    }
+  },
+  "mark_cleared": true,
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Generated 3 variations."
+}
