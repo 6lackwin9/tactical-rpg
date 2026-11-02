@@ -445,8 +445,8 @@
 				{
 					"id": "stores_crates",
 					"art": "crate_stack",
-					"x": 1,
-					"y": 0,
+					"x": 38,
+					"y": 29,
 					"w": 2,
 					"h": 1,
 					"layer": "sort",
