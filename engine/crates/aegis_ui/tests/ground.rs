@@ -1,10 +1,10 @@
-//! REGIONGROUND1-E1: the ground composer (`aegis_ui::ground`, `docs/specs/REGIONGROUND1_ENGINE.md` section 5), checked from
+//! REGIONGROUND1-E1 and -E2: the ground composer (`aegis_ui::ground`, `docs/specs/REGIONGROUND1_ENGINE.md` section 5), checked from
 //! its rules on fixtures of flat-colour and two-tone layers: determinism, the edge bound, lanes, no cell lattice, the
 //! tone, paint order, wear, strays, bites, sunken rims, the two cache levels, `soft_ellipse`, the Gallery view and the
-//! tools' job file.
+//! tools' job file; then random and placed patches and marks.
 
 use aegis_ui::canvas::{Canvas, Image, Rect, Rgba};
-use aegis_ui::ground::{self, GroundJob, GroundKey, GroundLayer, CELL_MAX, CELL_PX, LAYERS_MAX, PHYSICAL_MAX, TEX_CELLS, TILTED_CELL};
+use aegis_ui::ground::{self, GroundJob, GroundKey, GroundLayer, GroundMark, PlacedPatch, CELL_MAX, CELL_PX, LAYERS_MAX, MARKS_PER_100_MAX, MARK_PX_MAX, PATCHES_MAX, PHYSICAL_MAX, TEX_CELLS, TILTED_CELL};
 use aegis_ui::painter::{Fonts, Painter, View};
 use aegis_ui::specimens::{KitAct, Specimens, TILE_VIEWS, TILE_ZOOMS};
 use aegis_ui::text_audit;
@@ -1013,6 +1013,569 @@ fn the_job_file_composes_the_games_picture() {
         (json!({"cells": ["a"], "legend": {"a": {"colour": [1, 2, 3], "order": 1.5}}}), "order must be"),
         (json!({"cells": ["a"], "legend": {"a": {"colour": [1, 2, 3], "marks_per_100": 11}}}), "marks_per_100 must be"),
         (json!({"cell": [32, 32], "cells": ["a".repeat(20_000)], "legend": {"a": {"colour": [1, 2, 3]}}}), "too large"),
+    ] {
+        std::fs::write(dir.join("bad.json"), bad.to_string()).unwrap();
+        let e = ground::compose_file(&dir.join("bad.json"), &dir.join("bad.png")).unwrap_err();
+        assert!(format!("{e:#}").contains(says), "{e:#}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// REGIONGROUND1-E2: patches and marks.
+
+const YARD: Rgba = [200, 180, 160, 255];
+const ROAD: Rgba = [60, 70, 90, 255];
+const INK: Rgba = [0, 255, 0, 255];
+const FUZZ_SEEDS: u64 = 20;
+const FUZZ_COLS: i32 = 32;
+const FUZZ_ROWS: i32 = 20;
+
+/// A road across and a road down, over a yard, with a walled block in the yard: 0 yard, 1 road.
+fn road_and_yard() -> (Vec<u8>, Vec<bool>) {
+    let cells: Vec<u8> = (0..FUZZ_ROWS).flat_map(|y| (0..FUZZ_COLS).map(move |x| ((8..10).contains(&y) || (20..22).contains(&x)) as u8)).collect();
+    let blocked = (0..FUZZ_ROWS).flat_map(|y| (0..FUZZ_COLS).map(move |x| (14..16).contains(&y) && (5..8).contains(&x))).collect();
+    (cells, blocked)
+}
+
+fn yard_and_road(patches: f32) -> [GroundLayer<'static>; 2] {
+    [GroundLayer { patches, ..GroundLayer::flat(0, YARD) }, GroundLayer::flat(1, ROAD)]
+}
+
+/// `compose`'s other-ground field worked out the slow way, from the spec's words: the mask of art pixels that are not `g`
+/// or are blocked, three box passes each way (edge cells clamped), over the box's full weight.
+fn other_field_by_rule(cells: &[u8], blocked: &[bool], cols: i32, rows: i32, cell: (i32, i32), g: u8) -> Vec<f64> {
+    let (w, h) = (cols * cell.0, rows * cell.1);
+    let (wx, wy): (i32, i32) = if cell == SQUARE { (11, 11) } else { (11, 9) };
+    let (rx, ry) = (wx / 2, wy / 2);
+    let at = |ax: i32, ay: i32| {
+        let i = (ay.div_euclid(cell.1).clamp(0, rows - 1) * cols + ax.div_euclid(cell.0).clamp(0, cols - 1)) as usize;
+        (cells[i] != g || blocked[i]) as i64
+    };
+    let pad = 3 * rx.max(ry);
+    let (pw, ph) = (w + 2 * pad, h + 2 * pad);
+    let mut v: Vec<i64> = (0..ph).flat_map(|y| (0..pw).map(move |x| (x, y))).map(|(x, y)| at(x - pad, y - pad)).collect();
+    for _ in 0..3 {
+        let from = v.clone();
+        for y in 0..ph {
+            for x in rx..pw - rx {
+                v[(y * pw + x) as usize] = (-rx..=rx).map(|d| from[(y * pw + x + d) as usize]).sum();
+            }
+        }
+        let from = v.clone();
+        for y in ry..ph - ry {
+            for x in 0..pw {
+                v[(y * pw + x) as usize] = (-ry..=ry).map(|d| from[((y + d) * pw + x) as usize]).sum();
+            }
+        }
+    }
+    let den = (wx as f64).powi(3) * (wy as f64).powi(3);
+    (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).map(|(x, y)| v[((y + pad) * pw + x + pad) as usize] as f64 / den).collect()
+}
+
+/// The 4-connected groups of pixels where `set` holds.
+fn components(w: i32, h: i32, set: impl Fn(i32, i32) -> bool) -> Vec<Vec<(i32, i32)>> {
+    let mut seen = vec![false; (w * h) as usize];
+    let mut out = Vec::new();
+    for y in 0..h {
+        for x in 0..w {
+            if seen[(y * w + x) as usize] || !set(x, y) {
+                continue;
+            }
+            seen[(y * w + x) as usize] = true;
+            let mut stack = vec![(x, y)];
+            let mut group = Vec::new();
+            while let Some((a, b)) = stack.pop() {
+                group.push((a, b));
+                for (c, d) in [(a + 1, b), (a - 1, b), (a, b + 1), (a, b - 1)] {
+                    if c >= 0 && d >= 0 && c < w && d < h && !seen[(d * w + c) as usize] && set(c, d) {
+                        seen[(d * w + c) as usize] = true;
+                        stack.push((c, d));
+                    }
+                }
+            }
+            group.sort_unstable();
+            out.push(group);
+        }
+    }
+    out
+}
+
+/// Check 1: on a road-and-yard map, every candidate is one connected group of one ground; it is kept exactly when it fits
+/// the cap and clears the other-ground field (worked out independently here); a kept one darkens all its pixels and a
+/// dropped one none, and nothing else darkens.
+#[test]
+fn a_random_patch_is_kept_or_dropped_whole() {
+    for cell in CELLS {
+        let (cells, blocked) = road_and_yard();
+        let (w, h) = (FUZZ_COLS * cell.0, FUZZ_ROWS * cell.1);
+        let cap = ground::patch_cap(cell) as usize;
+        let oracle = other_field_by_rule(&cells, &blocked, FUZZ_COLS, FUZZ_ROWS, cell, 0);
+        let (mut kept, mut near) = (0, 0);
+        let (plain_layers, layers) = (yard_and_road(0.0), yard_and_road(0.2));
+        for seed in 0..FUZZ_SEEDS {
+            let job = |layers| GroundJob { seed, cols: FUZZ_COLS, rows: FUZZ_ROWS, cell, cells: &cells, blocked: &blocked, layers, placed: &[] };
+            let plain = ground::compose(&job(&plain_layers));
+            let img = ground::compose(&job(&layers));
+            let mut owner = vec![None; (w * h) as usize];
+            for (n, group) in ground::patch_groups(&job(&layers)).iter().enumerate() {
+                assert_eq!(group.layer, 0, "only the yard has patches");
+                let inside: std::collections::HashSet<(i32, i32)> = group.px.iter().copied().collect();
+                assert_eq!(components(w, h, |x, y| inside.contains(&(x, y))).len(), 1, "seed {seed}: one connected group");
+                let reaches = group.px.iter().any(|(x, y)| oracle[(y * w + x) as usize] > 0.05);
+                let too_large = group.px.len() > cap;
+                assert_eq!(group.kept, !reaches && !too_large, "seed {seed}: group of {} px, reaches {reaches}", group.px.len());
+                (kept, near) = (kept + group.kept as i32, near + (reaches && !too_large) as i32);
+                for (x, y) in &group.px {
+                    assert_eq!(at(&plain, *x, *y), rgb3(YARD), "seed {seed}: a candidate's pixel ({x}, {y}) is on the yard");
+                    assert_eq!(at(&img, *x, *y) != rgb3(YARD), group.kept, "seed {seed}: ({x}, {y}) of a group kept {}", group.kept);
+                    owner[(y * w + x) as usize] = Some(n);
+                }
+            }
+            for y in 0..h {
+                for x in 0..w {
+                    if at(&img, x, y) != at(&plain, x, y) {
+                        assert!(owner[(y * w + x) as usize].is_some(), "seed {seed}: ({x}, {y}) darkened outside any group");
+                        assert_eq!(at(&plain, x, y), rgb3(YARD), "seed {seed}: ({x}, {y}) darkened off the yard");
+                    }
+                }
+            }
+        }
+        assert!(kept > 50 && near > 50, "{cell:?}: the fixture exercises both: {kept} kept, {near} near another ground");
+    }
+}
+
+/// Never clipped, read from the pictures alone: the same seed with no road and no wall has the same noise, so a road that
+/// clipped a patch would leave a piece of one of those patches. Every patch beside the road is a patch of the open map, the
+/// same pixels and the same colours.
+#[test]
+fn a_patch_near_a_road_is_never_a_piece_of_a_patch() {
+    for cell in CELLS {
+        let (cells, blocked) = road_and_yard();
+        let open = vec![0u8; cells.len()];
+        let none = vec![false; cells.len()];
+        let (w, h) = (FUZZ_COLS * cell.0, FUZZ_ROWS * cell.1);
+        let (layers, bare) = (yard_and_road(0.2), yard_and_road(0.0));
+        let mut compared = 0;
+        for seed in 0..FUZZ_SEEDS {
+            let road = ground::compose(&GroundJob { seed, cols: FUZZ_COLS, rows: FUZZ_ROWS, cell, cells: &cells, blocked: &blocked, layers: &layers, placed: &[] });
+            let road_bare = ground::compose(&GroundJob { seed, cols: FUZZ_COLS, rows: FUZZ_ROWS, cell, cells: &cells, blocked: &blocked, layers: &bare, placed: &[] });
+            let wide = ground::compose(&GroundJob { seed, cols: FUZZ_COLS, rows: FUZZ_ROWS, cell, cells: &open, blocked: &none, layers: &layers, placed: &[] });
+            let open_groups: std::collections::HashSet<Vec<(i32, i32)>> = components(w, h, |x, y| at(&wide, x, y) != rgb3(YARD)).into_iter().collect();
+            for group in components(w, h, |x, y| at(&road, x, y) != at(&road_bare, x, y)) {
+                assert!(open_groups.contains(&group), "seed {seed}: a patch of {} px at {:?} is a piece of a larger one", group.len(), group[0]);
+                compared += 1;
+                for (x, y) in &group {
+                    assert_eq!(at(&road, *x, *y), at(&wide, *x, *y), "seed {seed}: ({x}, {y})");
+                }
+            }
+        }
+        assert!(compared > 50, "{cell:?}: {compared} patches compared");
+    }
+}
+
+/// At the cap and past it, read on an open map where nothing else can drop one: nothing drawn is larger than the cap,
+/// across many seeds, and candidates past the cap do exist, so the cap is what stopped them.
+#[test]
+fn a_random_patch_never_passes_the_cap() {
+    for cell in CELLS {
+        let open = vec![0u8; (FUZZ_COLS * FUZZ_ROWS) as usize];
+        let none = vec![false; open.len()];
+        let (w, h) = (FUZZ_COLS * cell.0, FUZZ_ROWS * cell.1);
+        let cap = ground::patch_cap(cell) as usize;
+        let layers = yard_and_road(0.2);
+        let (mut past, mut largest) = (0, 0);
+        for seed in 0..60 {
+            let job = GroundJob { seed, cols: FUZZ_COLS, rows: FUZZ_ROWS, cell, cells: &open, blocked: &none, layers: &layers, placed: &[] };
+            let img = ground::compose(&job);
+            for group in components(w, h, |x, y| at(&img, x, y) != rgb3(YARD)) {
+                assert!(group.len() <= cap, "seed {seed}: a patch of {} px, past {cap}", group.len());
+                largest = largest.max(group.len());
+            }
+            past += ground::patch_groups(&job).iter().filter(|g| g.px.len() > cap).count();
+        }
+        assert!(past > 0 && largest > cap / 2, "{cell:?}: candidates past the cap {past}, the largest drawn {largest} of {cap}");
+    }
+    assert_eq!(ground::patch_cap(SQUARE), ground::PATCH_CAP);
+    assert_eq!(ground::patch_cap(TILTED_CELL), 195, "the spec's tilted cap");
+}
+
+/// Check 2: the larger, the fainter. The two tones of a patch follow the formula exactly, and neither darkens as size rises.
+#[test]
+fn a_larger_patch_is_fainter() {
+    let bright: Rgba = [250, 250, 250, 255];
+    let layers = [GroundLayer { patches: 0.3, ..GroundLayer::flat(0, bright) }];
+    let open = vec![0u8; (FUZZ_COLS * FUZZ_ROWS) as usize];
+    let none = vec![false; open.len()];
+    let mut seen: Vec<(usize, Option<u8>, Option<u8>)> = Vec::new();
+    for cell in CELLS {
+        seen.clear();
+        let cap = ground::patch_cap(cell) as f32;
+        for seed in 0..FUZZ_SEEDS {
+            let job = GroundJob { seed, cols: FUZZ_COLS, rows: FUZZ_ROWS, cell, cells: &open, blocked: &none, layers: &layers, placed: &[] };
+            let img = ground::compose(&job);
+            for group in ground::patch_groups(&job).iter().filter(|g| g.kept) {
+                let a = group.px.len();
+                let f = 1.0 - 0.45 * a as f32 / cap;
+                let (core, rim) = (by(bright, 1.0 - 0.3 * f)[0], by(bright, 1.0 - 0.45 * 0.3 * f)[0]);
+                let (mut has_core, mut has_rim) = (None, None);
+                for (x, y) in &group.px {
+                    let v = at(&img, *x, *y)[0];
+                    assert!(v == core || v == rim, "a pixel of a {a} px patch is {v}, not its core {core} or rim {rim}");
+                    if v == core {
+                        has_core = Some(v);
+                    } else {
+                        has_rim = Some(v);
+                    }
+                }
+                seen.push((a, has_core, has_rim));
+            }
+        }
+        seen.sort_by_key(|s| s.0);
+        assert!(seen.len() > 100 && seen.last().unwrap().0 > seen[0].0 * 4, "{cell:?}: a range of sizes, {} patches", seen.len());
+        for tone in [|s: &(usize, Option<u8>, Option<u8>)| s.1, |s: &(usize, Option<u8>, Option<u8>)| s.2] {
+            let row: Vec<(usize, u8)> = seen.iter().filter_map(|s| tone(s).map(|v| (s.0, v))).collect();
+            assert!(row.windows(2).all(|p| p[1].1 >= p[0].1), "{cell:?}: a larger patch got darker: {row:?}");
+            assert!(row.last().unwrap().1 > row[0].1, "{cell:?}: the largest is fainter than the smallest");
+        }
+    }
+}
+
+/// Check 3: `patches` 0 changes nothing; a bad `patches` is no patches, not a brightening or a wrap.
+#[test]
+fn no_patches_leaves_a_ground_unchanged() {
+    let (cells, blocked) = road_and_yard();
+    let compose_with = |layers: &[GroundLayer]| ground::compose(&GroundJob { seed: 3, cols: FUZZ_COLS, rows: FUZZ_ROWS, cell: SQUARE, cells: &cells, blocked: &blocked, layers, placed: &[] });
+    let plain = compose_with(&[GroundLayer::flat(0, YARD), GroundLayer::flat(1, ROAD)]);
+    for bad in [0.0, -0.2, PATCHES_MAX + 0.01, f32::NAN, f32::INFINITY] {
+        assert!(compose_with(&yard_and_road(bad)) == plain, "patches {bad}");
+    }
+    // Patches on the yard only: the road keeps every pixel, the yard changes.
+    let yard_only = compose_with(&yard_and_road(0.3));
+    assert!(yard_only != plain);
+    let road_only = compose_with(&[GroundLayer::flat(0, YARD), GroundLayer { patches: 0.3, ..GroundLayer::flat(1, ROAD) }]);
+    for y in 0..plain.h {
+        for x in 0..plain.w {
+            if at(&plain, x, y) == rgb3(ROAD) {
+                assert_eq!(at(&yard_only, x, y), rgb3(ROAD), "({x}, {y})");
+            }
+            if at(&plain, x, y) == rgb3(YARD) {
+                assert_eq!(at(&road_only, x, y), rgb3(YARD), "({x}, {y})");
+            }
+        }
+    }
+}
+
+fn open_with_placed(seed: u64, cell: (i32, i32), placed: &[PlacedPatch]) -> Image {
+    let open = vec![0u8; 400];
+    let none = vec![false; 400];
+    ground::compose(&GroundJob { seed, cols: 20, rows: 20, cell, cells: &open, blocked: &none, layers: &[GroundLayer::flat(0, YARD)], placed })
+}
+
+/// Check 3: a placed patch passes the cap and draws only inside its rect, in its two tones, its core the darker; its shape
+/// closes before the rect's sides instead of being cut straight by them.
+#[test]
+fn a_placed_patch_is_large_and_stays_in_its_rect() {
+    for cell in CELLS {
+        for seed in 0..FUZZ_SEEDS {
+            let (x, y, pw, ph) = (6, 5, 8, 7);
+            let img = open_with_placed(seed, cell, &[PlacedPatch { x, y, w: pw, h: ph, strength: 0.2 }]);
+            let (core, rim) = (by(YARD, 0.8), by(YARD, 1.0 - 0.45 * 0.2));
+            let (x0, y0, x1, y1) = (x * cell.0, y * cell.1, (x + pw) * cell.0, (y + ph) * cell.1);
+            let (mut cores, mut rims) = (0, 0);
+            for ay in 0..img.h {
+                for ax in 0..img.w {
+                    let p = at(&img, ax, ay);
+                    if p == rgb3(YARD) {
+                        continue;
+                    }
+                    assert!((x0..x1).contains(&ax) && (y0..y1).contains(&ay), "seed {seed}: ({ax}, {ay}) outside the rect");
+                    assert!(p == core || p == rim, "seed {seed}: ({ax}, {ay}) is {p:?}");
+                    if p == core {
+                        cores += 1;
+                    } else {
+                        rims += 1;
+                    }
+                }
+            }
+            assert!(cores + rims > ground::patch_cap(cell), "seed {seed}: {cores} + {rims} px, past the random cap");
+            assert!(cores > rims, "seed {seed}: mostly core: {cores} and {rims}");
+            let run = |n: i32, f: &dyn Fn(i32) -> bool| (0..n).filter(|i| f(*i)).count() as i32;
+            let (rw, rh) = (x1 - x0, y1 - y0);
+            for (side, count, of) in [
+                ("north", run(rw, &|i| at(&img, x0 + i, y0) != rgb3(YARD)), rw),
+                ("south", run(rw, &|i| at(&img, x0 + i, y1 - 1) != rgb3(YARD)), rw),
+                ("west", run(rh, &|i| at(&img, x0, y0 + i) != rgb3(YARD)), rh),
+                ("east", run(rh, &|i| at(&img, x1 - 1, y0 + i) != rgb3(YARD)), rh),
+            ] {
+                assert!(count * 4 < of, "seed {seed} {cell:?}: {count} of {of} px on the {side} side: cut straight by the rect");
+            }
+        }
+    }
+}
+
+/// Check 3: `compose` ignores a placed patch the kit's G8 would refuse: on or beside another ground or a wall, off the map,
+/// a bad strength, sizes that would overflow.
+#[test]
+fn a_placed_patch_that_breaks_the_rule_is_ignored() {
+    let (cells, blocked) = road_and_yard();
+    let layers = [GroundLayer::flat(0, YARD), GroundLayer::flat(1, ROAD)];
+    let with = |placed: &[PlacedPatch]| ground::compose(&GroundJob { seed: 3, cols: FUZZ_COLS, rows: FUZZ_ROWS, cell: SQUARE, cells: &cells, blocked: &blocked, layers: &layers, placed });
+    let plain = with(&[]);
+    let good = PlacedPatch { x: 1, y: 1, w: 3, h: 3, strength: 0.2 };
+    assert!(with(&[good]) != plain, "a good one draws");
+    assert!(with(&[PlacedPatch { x: 0, y: 0, w: 4, h: 4, ..good }]) != plain, "the ring is cut off at the map's edge");
+    let edge = PlacedPatch { x: 1, y: 1, w: 3, h: 6, ..good };
+    assert!(with(&[edge]) != plain, "the row before the ring reaches the road");
+    for (bad, why) in [
+        (PlacedPatch { h: 7, ..edge }, "its ring on the road"),
+        (PlacedPatch { h: 8, ..edge }, "on the road"),
+        (PlacedPatch { x: 5, y: 12, w: 2, h: 2, ..good }, "its ring on a wall"),
+        (PlacedPatch { x: 30, w: 3, ..good }, "off the map"),
+        (PlacedPatch { x: -1, ..good }, "off the map"),
+        (PlacedPatch { w: 0, ..good }, "no width"),
+        (PlacedPatch { h: -3, ..good }, "negative"),
+        (PlacedPatch { x: i32::MAX, w: i32::MAX, ..good }, "an overflow"),
+        (PlacedPatch { strength: PATCHES_MAX + 0.01, ..good }, "too strong"),
+        (PlacedPatch { strength: -0.1, ..good }, "negative strength"),
+        (PlacedPatch { strength: f32::NAN, ..good }, "NaN strength"),
+    ] {
+        assert!(with(&[bad]) == plain, "{why}: {bad:?}");
+    }
+}
+
+/// An L that reads differently flipped: `xx.`, `x..`, `xxx`.
+fn ell() -> Image {
+    let mut px = Vec::new();
+    for row in ["xx.", "x..", "xxx"] {
+        for c in row.chars() {
+            px.extend_from_slice(&if c == 'x' { INK } else { [0, 0, 0, 0] });
+        }
+    }
+    Image { w: 3, h: 3, px }
+}
+
+/// Where `changed` holds, finds each whole L (plain or flipped), raster first; panics on a pixel that is part of none. The
+/// number of plain and of flipped ones.
+fn count_ells(w: i32, h: i32, changed: &[bool]) -> (i32, i32) {
+    const PLAIN: [(i32, i32); 6] = [(0, 0), (1, 0), (0, 1), (0, 2), (1, 2), (2, 2)];
+    const FLIPPED: [(i32, i32); 6] = [(1, 0), (2, 0), (2, 1), (0, 2), (1, 2), (2, 2)];
+    let mut left = changed.to_vec();
+    let (mut plain, mut flipped) = (0, 0);
+    for y in 0..h {
+        for x in 0..w {
+            if !left[(y * w + x) as usize] {
+                continue;
+            }
+            let fits = |shape: &[(i32, i32); 6], ox: i32| shape.iter().all(|(a, b)| x + a - ox >= 0 && x + a - ox < w && y + b < h && left[((y + b) * w + x + a - ox) as usize]);
+            let (shape, ox) = if fits(&PLAIN, 0) {
+                plain += 1;
+                (PLAIN, 0)
+            } else if fits(&FLIPPED, 1) {
+                flipped += 1;
+                (FLIPPED, 1)
+            } else {
+                panic!("({x}, {y}) is part of no whole mark");
+            };
+            for (a, b) in shape {
+                left[((y + b) * w + x + a - ox) as usize] = false;
+            }
+        }
+    }
+    (plain, flipped)
+}
+
+/// Check 4: a mark is all on its own open ground or not there. Against the same job with no marks: every changed pixel was
+/// plain yard (no road, no patch, no worn band), past the clearance, blended at 60 %, and belongs to a whole mark.
+#[test]
+fn a_mark_is_whole_on_its_own_ground_or_dropped() {
+    let mark = ell();
+    for cell in CELLS {
+        let (cells, blocked) = road_and_yard();
+        let (w, h) = (FUZZ_COLS * cell.0, FUZZ_ROWS * cell.1);
+        let oracle = other_field_by_rule(&cells, &blocked, FUZZ_COLS, FUZZ_ROWS, cell, 0);
+        let road = GroundLayer { wear: 0.1, strays: true, ..GroundLayer::flat(1, ROAD) };
+        let bare = [GroundLayer { patches: 0.2, ..GroundLayer::flat(0, YARD) }, road.clone()];
+        let marked = [GroundLayer { patches: 0.2, marks: vec![GroundMark { img: &mark }], marks_per_100: 10, ..GroundLayer::flat(0, YARD) }, road.clone()];
+        let yard_cells = cells.iter().filter(|c| **c == 0).count() as i32;
+        let tries = 10 * yard_cells / 100;
+        let ink = [(YARD[0] as f32 * 0.4 + 0.5) as u8, (YARD[1] as f32 * 0.4 + 255.0 * 0.6 + 0.5) as u8, (YARD[2] as f32 * 0.4 + 0.5) as u8];
+        let (mut plain, mut flipped, mut dropped) = (0, 0, 0);
+        for seed in 0..FUZZ_SEEDS {
+            let job = |layers| GroundJob { seed, cols: FUZZ_COLS, rows: FUZZ_ROWS, cell, cells: &cells, blocked: &blocked, layers, placed: &[] };
+            let (without, with) = (ground::compose(&job(&bare)), ground::compose(&job(&marked)));
+            let mut changed = vec![false; (w * h) as usize];
+            for y in 0..h {
+                for x in 0..w {
+                    if at(&with, x, y) != at(&without, x, y) {
+                        changed[(y * w + x) as usize] = true;
+                        assert_eq!(at(&without, x, y), rgb3(YARD), "seed {seed}: a mark's pixel ({x}, {y}) is on a road, a band or a patch");
+                        assert_eq!(at(&with, x, y), ink, "seed {seed}: ({x}, {y}) blends at 60 %");
+                        assert!(oracle[(y * w + x) as usize] <= 0.05, "seed {seed}: ({x}, {y}) is too near another ground");
+                    }
+                }
+            }
+            let (p, f) = count_ells(w, h, &changed);
+            assert!(p + f <= tries, "seed {seed}: {p} + {f} marks from {tries} tries");
+            (plain, flipped, dropped) = (plain + p, flipped + f, dropped + tries - p - f);
+        }
+        assert!(plain > 0 && flipped > 0, "{cell:?}: both ways round: {plain} and {flipped}");
+        assert!(dropped > 0, "{cell:?}: some tries are dropped");
+    }
+}
+
+/// A mark never lands on a placed patch or a blocked cell's surroundings, and an earlier mark holds its place: read from
+/// a large mark on a dense job, where every drop rule fires.
+#[test]
+fn a_mark_keeps_off_placed_patches_and_earlier_marks() {
+    let mark = Image { w: 12, h: 12, px: INK.repeat(144) };
+    let open = vec![0u8; 900];
+    let none = vec![false; 900];
+    let (w, h) = (30 * CELL_PX, 30 * CELL_PX);
+    let layers = [GroundLayer { marks: vec![GroundMark { img: &mark }], marks_per_100: 10, ..GroundLayer::flat(0, YARD) }];
+    let bare = [GroundLayer::flat(0, YARD)];
+    let placed = [PlacedPatch { x: 4, y: 4, w: 22, h: 22, strength: 0.2 }];
+    let job = |layers, placed| GroundJob { seed: 5, cols: 30, rows: 30, cell: SQUARE, cells: &open, blocked: &none, layers, placed };
+    let (with, without) = (ground::compose(&job(&layers, &placed)), ground::compose(&job(&bare, &placed)));
+    let mut whole = 0;
+    for group in components(w, h, |x, y| at(&with, x, y) != at(&without, x, y)) {
+        assert_eq!(group.len() % 144, 0, "a whole number of marks, or an overlap: {} px", group.len());
+        whole += group.len() / 144;
+        for (x, y) in group {
+            assert_eq!(at(&without, x, y), rgb3(YARD), "({x}, {y}) on the placed patch");
+        }
+    }
+    assert!(whole > 0, "marks land around the patch");
+    // No patch: 90 tries of a 12 px mark on an open map, and overlaps would break the whole number above.
+    let free = ground::compose(&job(&layers, &[]));
+    let kept: usize = components(w, h, |x, y| at(&free, x, y) != rgb3(YARD)).iter().map(|g| { assert_eq!(g.len() % 144, 0, "an overlap"); g.len() / 144 }).sum();
+    assert!(kept > whole && kept < 90, "{kept} of 90 tries kept: some overlap and drop; {whole} with the patch");
+}
+
+/// Tries follow the rule; a mark that cannot be placed draws nothing, and a transparent pixel holds no ground.
+#[test]
+fn marks_have_bounded_inputs() {
+    let dot = Image { w: 1, h: 1, px: INK.to_vec() };
+    let huge = Image { w: MARK_PX_MAX + 1, h: 1, px: INK.repeat(MARK_PX_MAX as usize + 1) };
+    let torn = Image { w: 4, h: 4, px: INK.to_vec() };
+    let clear = Image { w: 4, h: 4, px: vec![0; 64] };
+    let open = vec![0u8; 400];
+    let none = vec![false; 400];
+    let with = |img: &'_ Image, per: i32| {
+        let layers = [GroundLayer { marks: vec![GroundMark { img }], marks_per_100: per, ..GroundLayer::flat(0, YARD) }];
+        ground::compose(&GroundJob { seed: 8, cols: 20, rows: 20, cell: SQUARE, cells: &open, blocked: &none, layers: &layers, placed: &[] })
+    };
+    let plain = with(&dot, 0);
+    let count = |img: &Image| (0..img.h).flat_map(|y| (0..img.w).map(move |x| (x, y))).filter(|(x, y)| at(img, *x, *y) != rgb3(YARD)).count() as i32;
+    assert_eq!(count(&plain), 0);
+    for per in [1, 5, 10] {
+        // 400 cells: `per` x 4 tries, a dot in 102,400 px, so all of them land.
+        assert_eq!(count(&with(&dot, per)), per * 4, "{per} per 100 cells");
+    }
+    for per in [-1, MARKS_PER_100_MAX + 1, i32::MAX] {
+        assert!(with(&dot, per) == plain, "{per} per 100 is refused");
+    }
+    for bad in [&huge, &torn, &clear] {
+        assert!(with(bad, 10) == plain, "a {} x {} mark", bad.w, bad.h);
+    }
+    // A mark larger than the map draws nothing and does not panic.
+    let tiny = ground::compose(&GroundJob { seed: 1, cols: 1, rows: 1, cell: (8, 8), cells: &[0; 1], blocked: &[false; 1], layers: &[GroundLayer { marks: vec![GroundMark { img: &clear }, GroundMark { img: &dot }], marks_per_100: 10, ..GroundLayer::flat(0, YARD) }], placed: &[] });
+    assert_eq!((tiny.w, tiny.h), (8, 8));
+}
+
+/// Lists and flags past their limits compose nothing, as the size limits do; a key tells every input apart.
+#[test]
+fn patch_and_mark_inputs_are_bounded_and_in_the_key() {
+    let dot = Image { w: 1, h: 1, px: INK.to_vec() };
+    let dot2 = Image { w: 1, h: 1, px: [INK[0], INK[1], 1, 255].to_vec() };
+    let flags = [false; 4];
+    let flat = [GroundLayer::flat(0, YARD)];
+    fn job<'a>(layers: &'a [GroundLayer<'a>], blocked: &'a [bool], placed: &'a [PlacedPatch]) -> GroundJob<'a> {
+        GroundJob { seed: 1, cols: 2, rows: 2, cell: SQUARE, cells: &[0; 4], blocked, layers, placed }
+    }
+    assert_eq!(ground::compose(&job(&flat, &flags, &[])).w, 32);
+    assert_eq!(ground::compose(&job(&flat, &flags[..3], &[])).w, 0, "blocked short of the grid");
+    let p = PlacedPatch { x: 0, y: 0, w: 1, h: 1, strength: 0.1 };
+    assert_eq!(ground::compose(&job(&flat, &flags, &vec![p; ground::PLACED_MAX])).w, 32);
+    assert_eq!(ground::compose(&job(&flat, &flags, &vec![p; ground::PLACED_MAX + 1])).w, 0, "too many placed");
+    let many = |n: usize| [GroundLayer { marks: vec![GroundMark { img: &dot }; n], ..GroundLayer::flat(0, YARD) }];
+    assert_eq!(ground::compose(&job(&many(ground::MARKS_MAX), &flags, &[])).w, 32);
+    assert_eq!(ground::compose(&job(&many(ground::MARKS_MAX + 1), &flags, &[])).w, 0, "too many marks");
+
+    let key = |j: &GroundJob| GroundKey::of("t", j).hash;
+    let base = key(&job(&flat, &flags, &[]));
+    let marked = |img, per| [GroundLayer { marks: vec![GroundMark { img }], marks_per_100: per, ..GroundLayer::flat(0, YARD) }];
+    let hashes = [
+        ("patches", key(&job(&[GroundLayer { patches: 0.2, ..GroundLayer::flat(0, YARD) }], &flags, &[]))),
+        ("a mark", key(&job(&marked(&dot, 0), &flags, &[]))),
+        ("a mark's pixels", key(&job(&marked(&dot2, 0), &flags, &[]))),
+        ("marks per 100", key(&job(&marked(&dot, 5), &flags, &[]))),
+        ("blocked", key(&job(&flat, &[true, false, false, false], &[]))),
+        ("placed", key(&job(&flat, &flags, &[p]))),
+        ("placed's strength", key(&job(&flat, &flags, &[PlacedPatch { strength: 0.2, ..p }]))),
+    ];
+    let mut all: Vec<u64> = hashes.iter().map(|h| h.1).chain([base]).collect();
+    all.sort_unstable();
+    all.dedup();
+    assert_eq!(all.len(), hashes.len() + 1, "every input is in the key: {hashes:?}");
+}
+
+/// Everything at once, pinned as the E1 pins are; asking for none of it reads no noise, so those pins stand.
+#[test]
+fn pins_patches_and_marks() {
+    let cells: Vec<u8> = (0..14).flat_map(|y| (0..22).map(move |x| ((6..8).contains(&y) || (14..16).contains(&x)) as u8)).collect();
+    let tex = ground::two_tone(64, 64, [90, 80, 70, 255], [84, 74, 64, 255], 1);
+    let mark = ell();
+    let blocked: Vec<bool> = (0..14 * 22).map(|i| i == 12 * 22 + 3).collect();
+    let layers = [GroundLayer { tex: Some(&tex), tone: 0.13, patches: 0.2, marks: vec![GroundMark { img: &mark }], marks_per_100: 10, ..GroundLayer::flat(0, LOW) }, GroundLayer { wear: 0.1, strays: true, ..GroundLayer::flat(1, UP) }];
+    let placed = [PlacedPatch { x: 2, y: 1, w: 6, h: 4, strength: 0.12 }];
+    for (name, cell) in [("patches_marks_square", SQUARE), ("patches_marks_tilted", TILTED_CELL)] {
+        let job = GroundJob { seed: 7, cols: 22, rows: 14, cell, cells: &cells, blocked: &blocked, layers: &layers, placed: &placed };
+        let img = ground::compose(&job);
+        assert!(img == ground::compose(&job), "{name}: the same job, the same bytes");
+        assert!(img != ground::compose(&GroundJob { seed: 8, ..job.clone() }), "{name}: another seed differs");
+        pin(name, &img);
+    }
+}
+
+/// The tools' way in draws patches, marks and placed patches as `compose` does and refuses what is out of range.
+#[test]
+fn the_job_file_takes_patches_and_marks() {
+    let dir = scratch("dress");
+    let mark = ell();
+    write_png(&dir.join("mark.png"), &mark);
+    let oversize = Image { w: MARK_PX_MAX + 1, h: 1, px: INK.repeat(MARK_PX_MAX as usize + 1) };
+    write_png(&dir.join("large.png"), &oversize);
+    let row = "a".repeat(20);
+    let rows: Vec<&str> = (0..20).map(|_| row.as_str()).collect();
+    let job = json!({
+        "seed": 4, "cells": rows,
+        "legend": {"a": {"colour": YARD[..3], "patches": 0.2, "marks": ["mark.png"], "marks_per_100": 10}},
+        "placed": [{"x": 3, "y": 3, "w": 6, "h": 6, "strength": 0.12}],
+    });
+    std::fs::write(dir.join("job.json"), job.to_string()).unwrap();
+    let out = dir.join("out.png");
+    ground::compose_file(&dir.join("job.json"), &out).unwrap();
+    let cells = vec![0u8; 400];
+    let blocked = vec![false; 400];
+    let layers = [GroundLayer { patches: 0.2, marks: vec![GroundMark { img: &mark }], marks_per_100: 10, ..GroundLayer::flat(0, YARD) }];
+    let placed = [PlacedPatch { x: 3, y: 3, w: 6, h: 6, strength: 0.12 }];
+    let want = ground::compose(&GroundJob { seed: 4, cols: 20, rows: 20, cell: SQUARE, cells: &cells, blocked: &blocked, layers: &layers, placed: &placed });
+    assert!(aegis_ui::art::load_png(&out).unwrap() == want, "the file is the game's picture");
+
+    let c = [1, 2, 3];
+    let rect = |x: i32, y: i32, w: i32, h: i32, s: f32| json!({"x": x, "y": y, "w": w, "h": h, "strength": s});
+    let many: Vec<&str> = vec!["mark.png"; ground::MARKS_MAX + 1];
+    let far: Vec<Value> = vec![rect(0, 0, 1, 1, 0.1); ground::PLACED_MAX + 1];
+    for (bad, says) in [
+        (json!({"cells": ["a"], "legend": {"a": {"colour": c, "patches": 0.5}}}), "patches must be"),
+        (json!({"cells": ["a"], "legend": {"a": {"colour": c, "patches": -0.1}}}), "patches must be"),
+        (json!({"cells": ["a"], "legend": {"a": {"colour": c, "marks": ["large.png"]}}}), "at most 32 a side"),
+        (json!({"cells": ["a"], "legend": {"a": {"colour": c, "marks": many}}}), "at most 64 marks"),
+        (json!({"cells": ["a"], "legend": {"a": {"colour": c}}, "placed": far}), "at most 64 placed"),
+        (json!({"cells": ["aa"], "legend": {"a": {"colour": c}}, "placed": [rect(1, 0, 2, 1, 0.1)]}), "ring of one cell"),
+        (json!({"cells": ["a"], "legend": {"a": {"colour": c}}, "placed": [rect(0, 0, 1, 1, 0.9)]}), "strength"),
+        (json!({"cells": ["ab"], "legend": {"a": {"colour": c}, "b": {"colour": c}}, "placed": [rect(0, 0, 1, 1, 0.1)]}), "ring of one cell"),
+        (json!({"cells": ["aa"], "blocked": [".#"], "legend": {"a": {"colour": c}}, "placed": [rect(0, 0, 1, 1, 0.1)]}), "ring of one cell"),
     ] {
         std::fs::write(dir.join("bad.json"), bad.to_string()).unwrap();
         let e = ground::compose_file(&dir.join("bad.json"), &dir.join("bad.png")).unwrap_err();

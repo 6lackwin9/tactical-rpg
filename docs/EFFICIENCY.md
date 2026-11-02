@@ -145,3 +145,8 @@ The cheap path: an x blur runs once per cell row, not per pixel row, and a y blu
 row's pixels are alike), so the integers match full running sums at a fraction of the work. Only the noise a job reads is
 made. Compose runs once on a map's first frame; a frame only blits what shows. `GroundKey::of` hashes every texture
 pixel: 0.14 ms for that job, so it runs when the job changes, never each frame.
+
+Patches and marks (REGIONGROUND1-E2, 2026-11-02), same budget, `ground_compose --timing` in release, 10 runs, best to worst,
+every layer with `patches` .2 and 10 mark tries per 100 cells, other lanes building: square 38-50 ms on the many-borders job
+(25-36 ms without them), 17-23 ms on one open ground with 16 placed patches; tilted 31-47 ms and 14-24 ms (17-23 ms without). A
+job that asks for none reads no patch noise and no extra blur, so its cost and bytes do not move.

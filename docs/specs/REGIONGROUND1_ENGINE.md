@@ -159,6 +159,10 @@ For a ground g with `patches` above 0:
 
 Size is capped, so a large cluster cannot occur at random whatever the noise.
 
+As built (REGIONGROUND1-E2): the cap scales with the cell's area (`patch_cap`: 260 square, 195 tilted, 1040 at 32 x 32). A
+`patches` past `PATCHES_MAX` .3, below 0 or NaN counts as 0. `patch_groups(job)` returns every candidate whole with its
+`kept` flag, the one code path `compose` draws from, so a test or tool reads what was dropped.
+
 ### 3.2 Placed patches
 
 Large ones exist only where a map asks (`ground_patches`, kit part 1.2). In the rect's art px, with centre (cx, cy) and
@@ -166,6 +170,12 @@ half sizes (rx, ry), `e = 1 - ((ax - cx) / rx)^2 - ((ay - cy) / ry)^2`; the shap
 `e + (q - .5) x .6 > .18`, darkened x (1 - strength) and the rim x (1 - .45 strength). The shape stays in its rect. The
 kit's check G8 keeps the rect and a ring of one cell on one ground, so it needs no drop rule; `compose` ignores one that
 breaks it (the check refuses it first).
+
+As built (REGIONGROUND1-E2): `ax`, `ay` are pixel centres (+.5), so a shape is symmetric in its rect. The outward push is
+`min((q - .5) x .6, 2 x inside)`, `inside = 1 - max(|ax - cx| / rx, |ay - cy| / ry)`: the formula read literally is stopped by
+the rect's side wherever `q` is above .5, a straight cut up to a third of a side, which is the clipped look the rule forbids;
+now the shape closes before the side. Only the outer tenth of a half size differs. The ring is cut off at the map's edge, as
+G8's is. `compose` takes a strength of 0-.3 (G8's .02-.25 is narrower).
 
 ### 3.3 Paint order
 
@@ -184,6 +194,15 @@ One-off marks (footprints, ruts, scuffs) are small transparent images, placed un
   at 50 %). At most 32 x 32 art px after reduction (2 x 2 cells): larger is refused by A18.
 
 A mark placed on purpose (ruts along a road) is a PROPS1 `ground` prop in the map's `props`: no new field.
+
+As built (REGIONGROUND1-E2): g in the hash is the layer's index in the job's list, shifted (`seed ^ g << 32 ^ i`), so one
+ground's try i is not another's try i + 1. A pixel with any alpha holds its place and blends at alpha x 60 %. A placed patch
+counts as a kept patch. A mark always fits the map (the position is drawn inside it), so a map's border never clips one. Art
+that is larger than 32 a side, torn or fully transparent, or a `marks_per_100` outside 0-10, draws nothing.
+
+Limits (REGIONGROUND1-E2): `PLACED_MAX` and `MARKS_MAX` (a layer's list) are 64 each, the kit's 16 and 4 being narrower; past
+either, or with `blocked` shorter than the grid, a job composes nothing, like the size limits. `ground_compose`'s job file
+refuses all of these with a message rather than ignoring them, a placed patch that breaks the ring rule included.
 
 ## 4. Cache, memory and states
 
@@ -264,7 +283,7 @@ E2:
 | Row | Files |
 | --- | --- |
 | E1 | `engine/crates/aegis_ui/src/{ground.rs (new), panes.rs (`picture_id` visibility), specimens.rs, lib.rs}`, `src/bin/ground_compose.rs` (new), `tests/ground.rs` (new), `engine/README.md`, `docs/EFFICIENCY.md` |; `engine/crates/aegis_ui/src/{ground.rs (new), specimens.rs, lib.rs}`, `src/bin/ground_compose.rs` (new), `tests/ground.rs` (new), `engine/README.md`, `docs/EFFICIENCY.md` |
-| E2 | `engine/crates/aegis_ui/src/ground.rs`, `tests/ground.rs` |
+| E2 | `engine/crates/aegis_ui/src/{ground.rs, bin/ground_compose.rs}`, `tests/ground.rs`, `tests/fixtures/ground/` (two new pins), `docs/EFFICIENCY.md` |
 
 `ground_compose`: `cargo run -q -p aegis_ui --bin ground_compose -- JOB.json OUT.png`. The job names cells, a legend of
 layer fields with texture paths, cell size and seed. It is the one implementation, so the review board's picture is the

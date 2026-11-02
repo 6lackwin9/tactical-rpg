@@ -11,7 +11,10 @@
 //! the IEEE operations only (no libm); the blurs are integers. So the same job gives the same bytes on every run and
 //! platform, whatever the view's scale, the camera, the frame or the party.
 //!
-//! Random patches, placed patches and marks are slice E2: `compose` takes their fields and ignores them today.
+//! Over that composite, quiet and never in a texture, so they never repeat with it (REGIONGROUND1-E2): random dark patches,
+//! placed patches and one-off marks. A random patch or mark that would reach a road, another ground or a blocked cell is
+//! dropped whole, never clipped; a random patch has a size cap and fades as it grows, so large ones exist only where a map
+//! places them.
 
 use crate::canvas::{Canvas, Image, Rect, Rgba};
 use crate::painter::Painter;
@@ -39,8 +42,24 @@ pub const LAYERS_MAX: usize = 255;
 pub const PHYSICAL_MAX: usize = 64_000_000;
 /// How many art images are kept, the oldest dropped first.
 pub const ART_MAX: usize = 4;
+/// The largest random patch, in art px at `CELL_PX` x `CELL_PX` (about one cell); `patch_cap` scales it with the cell.
+pub const PATCH_CAP: i32 = 260;
+/// The most a `patches` or a placed patch's `strength` darkens; past it (or NaN) the layer or patch is ignored.
+pub const PATCHES_MAX: f32 = 0.3;
+/// The most tries per 100 cells; past it (or below 0) a layer has no marks.
+pub const MARKS_PER_100_MAX: i32 = 10;
+/// A mark's largest side in art px (2 x 2 cells); a larger mark is never placed.
+pub const MARK_PX_MAX: i32 = 32;
+/// The most marks a layer lists and the most placed patches a job holds: past either a job composes nothing. (The kit
+/// allows 4 and 16.)
+pub const MARKS_MAX: usize = 64;
+pub const PLACED_MAX: usize = 64;
+/// `o_g` past this means a patch or mark would reach another ground: about 9 art px of clearance.
+const CLEARANCE: f32 = 0.05;
+/// A mark's blend at full alpha, so it stays quiet.
+const MARK_ALPHA: f32 = 0.6;
 
-/// A one-off mark's art at the job's density (slice E2).
+/// A one-off mark's art at the job's density, at most `MARK_PX_MAX` a side.
 #[derive(Debug, Clone, Copy)]
 pub struct GroundMark<'a> {
     pub img: &'a Image,
@@ -60,13 +79,13 @@ pub struct GroundLayer<'a> {
     pub strays: bool,
     /// 0.0-0.2: amplitude of the map-wide tone.
     pub tone: f32,
-    /// 0.0-0.3: darkening of a random patch's core; 0 none (slice E2).
+    /// 0.0-`PATCHES_MAX`: darkening of a random patch's core; 0 none.
     pub patches: f32,
     /// A rim on its edge.
     pub sunken: bool,
-    /// Random one-off marks (slice E2).
+    /// Random one-off marks.
     pub marks: Vec<GroundMark<'a>>,
-    /// Tries per 100 cells of this ground, 0-10 (slice E2).
+    /// Tries per 100 cells of this ground, 0-`MARKS_PER_100_MAX`.
     pub marks_per_100: i32,
 }
 
@@ -77,7 +96,9 @@ impl<'a> GroundLayer<'a> {
     }
 }
 
-/// A large patch a map asks for, in cells (slice E2).
+/// A large patch a map asks for, in cells. Its rect and a ring of one cell (cut off at the map's edge) must be one ground
+/// and free of blocked cells, its strength 0-`PATCHES_MAX`: `compose` ignores one that is not (the kit's G8 refuses it
+/// first).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PlacedPatch {
     pub x: i32,
@@ -97,7 +118,7 @@ pub struct GroundJob<'a> {
     pub cell: (i32, i32),
     /// Layer index per cell, row by row.
     pub cells: &'a [u8],
-    /// Cells a patch or mark may not reach (slice E2).
+    /// Cells a patch or mark may not reach; one per cell (fewer composes nothing).
     pub blocked: &'a [bool],
     /// A texture's offset comes from its layer's place in this list, so keep the game's order: reordering the list moves
     /// the textures (paint order comes from `order` alone).
@@ -415,26 +436,51 @@ fn times(c: [f32; 3], k: f32) -> [f32; 3] {
 }
 
 /// The art size of a job `compose` can make: every part positive, a cell of at most `CELL_MAX`, at most `LAYERS_MAX`
-/// layers and `ART_PX_MAX` art px, and cells that fill the grid. None composes nothing.
+/// layers, `ART_PX_MAX` art px, `PLACED_MAX` placed patches and `MARKS_MAX` marks a layer, and cells and blocked flags that
+/// fill the grid. None composes nothing.
 fn art_size(job: &GroundJob) -> Option<(i32, i32)> {
     let (cw, ch) = job.cell;
     if job.cells.is_empty() || job.layers.is_empty() || job.layers.len() > LAYERS_MAX || job.cols <= 0 || job.rows <= 0 || !(1..=CELL_MAX).contains(&cw) || !(1..=CELL_MAX).contains(&ch) {
         return None;
     }
     let (w, h) = (job.cols.checked_mul(cw)?, job.rows.checked_mul(ch)?);
-    if job.cols as i64 * job.rows as i64 > job.cells.len() as i64 || w as i64 * h as i64 > ART_PX_MAX {
+    let n = job.cols as i64 * job.rows as i64;
+    if n > job.cells.len() as i64 || n > job.blocked.len() as i64 || w as i64 * h as i64 > ART_PX_MAX {
+        return None;
+    }
+    if job.placed.len() > PLACED_MAX || job.layers.iter().any(|l| l.marks.len() > MARKS_MAX) {
         return None;
     }
     Some((w, h))
 }
 
 /// The whole map's ground: `cols x cell.0` by `rows x cell.1` art px, opaque, a pure function of the job. A job with
-/// empty cells, cells that do not fill the grid, no layers, or a size past the limits (`CELL_MAX`, `LAYERS_MAX`,
-/// `ART_PX_MAX`) composes nothing: a 0 x 0 image.
+/// empty cells, cells or blocked flags that do not fill the grid, no layers, or a size past the limits (`CELL_MAX`,
+/// `LAYERS_MAX`, `ART_PX_MAX`, `PLACED_MAX`, `MARKS_MAX`) composes nothing: a 0 x 0 image.
 pub fn compose(job: &GroundJob) -> Image {
     let Some((w, h)) = art_size(job) else {
         return Image { w: 0, h: 0, px: Vec::new() };
     };
+    let mut b = grounds(job, w, h);
+    dress(job, &mut b);
+    Image { w, h, px: b.px }
+}
+
+/// What section 2 of the spec makes and the dressing reads.
+struct Base {
+    w: i32,
+    h: i32,
+    px: Vec<u8>,
+    /// The rank of each art pixel's top ground.
+    top: Vec<u8>,
+    /// Layer index by rank.
+    by_rank: Vec<usize>,
+    /// Rank by cell.
+    cell_rank: Vec<u8>,
+}
+
+/// The grounds alone: textures, tone, edges, worn bands, strays, bites and sunken rims.
+fn grounds(job: &GroundJob, w: i32, h: i32) -> Base {
     let (cw, ch) = job.cell;
     let n = job.cols as i64 * job.rows as i64;
     let (uw, uh) = (w as usize, h as usize);
@@ -563,7 +609,274 @@ pub fn compose(job: &GroundJob) -> Image {
             }
         }
     }
-    Image { w, h, px }
+    Base { w, h, px, top, by_rank, cell_rank }
+}
+
+/// A layer's `patches`, 0 when it is off or past `PATCHES_MAX`.
+fn patch_strength(layer: &GroundLayer) -> f32 {
+    if layer.patches > 0.0 && layer.patches <= PATCHES_MAX {
+        layer.patches
+    } else {
+        0.0
+    }
+}
+
+/// The patch noise `q`: `.7 N(14, 5) + .3 N(5, 6)`.
+fn patch_noise(job: &GroundJob, w: i32, h: i32) -> Vec<f32> {
+    let mut q = vec![0.0f32; w as usize * h as usize];
+    add_noise(&mut q, w, h, job.seed, 5, steps(14, job.cell), 0.7);
+    add_noise(&mut q, w, h, job.seed, 6, steps(5, job.cell), 0.3);
+    q
+}
+
+/// `o_g` of each rank `wanted` says: the blurred mask of cells that are not that ground or are blocked. None also means no
+/// such cell, so 0 everywhere.
+fn other_fields(job: &GroundJob, b: &Base, wanted: impl Fn(usize) -> bool) -> Vec<Option<Field>> {
+    let (w, h, cols) = (b.w, b.h, job.cols);
+    (0..b.by_rank.len())
+        .map(|g| {
+            if !wanted(g) {
+                return None;
+            }
+            let other = |x: i32, y: i32| {
+                let i = (y * cols + x) as usize;
+                b.cell_rank[i] as usize != g || job.blocked[i]
+            };
+            Field::blur(other, cols, job.rows, job.cell, w, h)
+        })
+        .collect()
+}
+
+#[inline]
+fn other_at(field: &Option<Field>, ax: i32, ay: i32) -> f32 {
+    field.as_ref().and_then(|f| f.at(ax, ay)).unwrap_or(0.0)
+}
+
+/// The largest random patch at this cell size: `PATCH_CAP` by the cell's area (260 art px square, 195 tilted, the same
+/// share of a cell).
+pub fn patch_cap(cell: (i32, i32)) -> i32 {
+    PATCH_CAP * cell.0 * cell.1 / (CELL_PX * CELL_PX)
+}
+
+/// A candidate for a random patch: one 4-connected group of art pixels of one ground where the patch noise is high.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PatchGroup {
+    /// The ground, as an index into the job's layers.
+    pub layer: usize,
+    /// Its art pixels, all of them, whether kept or not.
+    pub px: Vec<(i32, i32)>,
+    /// Kept: drawn whole. Otherwise too large or too near another ground: not one pixel is drawn.
+    pub kept: bool,
+}
+
+/// What `compose` decides about random patches, for tests and tools.
+pub fn patch_groups(job: &GroundJob) -> Vec<PatchGroup> {
+    let Some((w, h)) = art_size(job) else {
+        return Vec::new();
+    };
+    let b = grounds(job, w, h);
+    let strengths: Vec<f32> = b.by_rank.iter().map(|i| patch_strength(&job.layers[*i])).collect();
+    if strengths.iter().all(|s| *s == 0.0) {
+        return Vec::new();
+    }
+    let q = patch_noise(job, w, h);
+    let others = other_fields(job, &b, |g| strengths[g] > 0.0);
+    find_groups(job, &b, &q, &strengths, &others)
+}
+
+/// Section 3.1 steps 1 to 3: the candidates of every ground with patches, each whole, kept or dropped.
+fn find_groups(job: &GroundJob, b: &Base, q: &[f32], strengths: &[f32], others: &[Option<Field>]) -> Vec<PatchGroup> {
+    const SHAPE: f32 = 0.70;
+    let cap = patch_cap(job.cell) as usize;
+    let (w, h) = (b.w, b.h);
+    let mut seen = vec![false; b.top.len()];
+    let mut groups = Vec::new();
+    let mut stack: Vec<(i32, i32)> = Vec::new();
+    for ay in 0..h {
+        for ax in 0..w {
+            let i = (ay * w + ax) as usize;
+            let g = b.top[i];
+            if seen[i] || q[i] <= SHAPE || strengths[g as usize] == 0.0 {
+                continue;
+            }
+            seen[i] = true;
+            stack.push((ax, ay));
+            let mut px = Vec::new();
+            while let Some((x, y)) = stack.pop() {
+                px.push((x, y));
+                for (nx, ny) in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] {
+                    if nx < 0 || ny < 0 || nx >= w || ny >= h {
+                        continue;
+                    }
+                    let n = (ny * w + nx) as usize;
+                    if !seen[n] && b.top[n] == g && q[n] > SHAPE {
+                        seen[n] = true;
+                        stack.push((nx, ny));
+                    }
+                }
+            }
+            let other = &others[g as usize];
+            let kept = px.len() <= cap && px.iter().all(|(x, y)| other_at(other, *x, *y) <= CLEARANCE);
+            groups.push(PatchGroup { layer: b.by_rank[g as usize], px, kept });
+        }
+    }
+    groups
+}
+
+/// Is this placed patch one `compose` draws? Inside the grid, a strength in range, and its rect and a ring of one cell (cut
+/// off at the map's edge) all one ground and free of blocked cells.
+fn placed_fits(p: &PlacedPatch, cols: i32, rows: i32, cells: &[u8], blocked: &[bool]) -> bool {
+    let (x, y, pw, ph) = (p.x as i64, p.y as i64, p.w as i64, p.h as i64);
+    if x < 0 || y < 0 || pw < 1 || ph < 1 || x + pw > cols as i64 || y + ph > rows as i64 || !(0.0..=PATCHES_MAX).contains(&p.strength) {
+        return false;
+    }
+    let (cols, rows) = (cols as i64, rows as i64);
+    let ground = cells[(y * cols + x) as usize];
+    for ty in (y - 1).max(0)..(y + ph + 1).min(rows) {
+        for tx in (x - 1).max(0)..(x + pw + 1).min(cols) {
+            let i = (ty * cols + tx) as usize;
+            if cells[i] != ground || blocked[i] {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+#[inline]
+fn dim(px: &mut [u8], i: usize, k: f32) {
+    for c in &mut px[i * 4..i * 4 + 3] {
+        *c = (*c as f32 * k + 0.5) as u8;
+    }
+}
+
+/// One pixel of a mark that shows: x, y, its colour, its alpha 0-1.
+type MarkPixel = (i32, i32, [f32; 3], f32);
+
+/// A mark's pixels that show; None for art `compose` cannot place.
+fn mark_pixels(img: &Image) -> Option<Vec<MarkPixel>> {
+    if img.w < 1 || img.h < 1 || img.w > MARK_PX_MAX || img.h > MARK_PX_MAX || img.px.len() != (img.w * img.h * 4) as usize {
+        return None;
+    }
+    let mut out = Vec::new();
+    for y in 0..img.h {
+        for x in 0..img.w {
+            let p = &img.px[((y * img.w + x) * 4) as usize..((y * img.w + x + 1) * 4) as usize];
+            if p[3] > 0 {
+                out.push((x, y, [p[0] as f32, p[1] as f32, p[2] as f32], p[3] as f32 / 255.0));
+            }
+        }
+    }
+    Some(out)
+}
+
+/// Section 3 of the spec, on the composite: random patches, placed patches, marks. A job that asks for none reads no noise
+/// and changes no pixel.
+fn dress(job: &GroundJob, b: &mut Base) {
+    let (w, h) = (b.w, b.h);
+    let strengths: Vec<f32> = b.by_rank.iter().map(|i| patch_strength(&job.layers[*i])).collect();
+    let placed: Vec<&PlacedPatch> = job.placed.iter().filter(|p| placed_fits(p, job.cols, job.rows, &b.cell_rank, job.blocked)).collect();
+    let tries: Vec<i64> = (0..b.by_rank.len())
+        .map(|rank| {
+            let l = &job.layers[b.by_rank[rank]];
+            if l.marks.is_empty() || !(0..=MARKS_PER_100_MAX).contains(&l.marks_per_100) {
+                return 0;
+            }
+            l.marks_per_100 as i64 * b.cell_rank.iter().filter(|r| **r as usize == rank).count() as i64 / 100
+        })
+        .collect();
+    let any_patches = strengths.iter().any(|s| *s > 0.0);
+    let any_marks = tries.iter().any(|t| *t > 0);
+    if !any_patches && placed.is_empty() && !any_marks {
+        return;
+    }
+    let q = if any_patches || !placed.is_empty() { patch_noise(job, w, h) } else { Vec::new() };
+    let others = other_fields(job, b, |g| strengths[g] > 0.0 || tries[g] > 0);
+    let mut patched = vec![false; b.top.len()];
+
+    // Random patches: the larger, the fainter.
+    if any_patches {
+        let cap = patch_cap(job.cell) as f32;
+        let mut rank_of = vec![0usize; job.layers.len()];
+        for (rank, i) in b.by_rank.iter().enumerate() {
+            rank_of[*i] = rank;
+        }
+        for group in find_groups(job, b, &q, &strengths, &others) {
+            if !group.kept {
+                continue;
+            }
+            let strong = strengths[rank_of[group.layer]] * (1.0 - 0.45 * group.px.len() as f32 / cap);
+            for (x, y) in group.px {
+                let i = (y * w + x) as usize;
+                dim(&mut b.px, i, if q[i] > 0.74 { 1.0 - strong } else { 1.0 - 0.45 * strong });
+                patched[i] = true;
+            }
+        }
+    }
+
+    // Placed patches: an ellipse in the rect, its edge pushed by the patch noise. Near the rect's side the outward push
+    // gives way, so the shape closes before the side rather than being cut straight by it.
+    for p in placed {
+        let (cw, ch) = job.cell;
+        let (x0, y0, x1, y1) = (p.x * cw, p.y * ch, (p.x + p.w) * cw, (p.y + p.h) * ch);
+        let (rx, ry) = ((x1 - x0) as f32 * 0.5, (y1 - y0) as f32 * 0.5);
+        let (cx, cy) = (x0 as f32 + rx, y0 as f32 + ry);
+        for ay in y0..y1 {
+            let dy = (ay as f32 + 0.5 - cy) / ry;
+            for ax in x0..x1 {
+                let dx = (ax as f32 + 0.5 - cx) / rx;
+                let e = 1.0 - dx * dx - dy * dy;
+                let i = (ay * w + ax) as usize;
+                let inside = 1.0 - dx.abs().max(dy.abs());
+                let shape = e + ((q[i] - 0.5) * 0.6).min(inside * 2.0);
+                if shape > 0.0 {
+                    dim(&mut b.px, i, if shape > 0.18 { 1.0 - p.strength } else { 1.0 - 0.45 * p.strength });
+                    patched[i] = true;
+                }
+            }
+        }
+    }
+
+    // Marks, each try on its own hash; dropped whole when any pixel would fall on another ground, near one, on a patch or
+    // on an earlier mark.
+    if any_marks {
+        let mut used = patched;
+        for (g, count) in tries.iter().enumerate() {
+            let layer = b.by_rank[g];
+            let marks: Vec<Option<Vec<MarkPixel>>> = job.layers[layer].marks.iter().map(|m| mark_pixels(m.img)).collect();
+            for t in 0..*count {
+                // The layer's index goes high, so one ground's try i is not another's try i + 1.
+                let hash = splitmix64(job.seed ^ ((layer as u64) << 32) ^ t as u64);
+                let which = ((hash >> 48) & 0xff) as usize % marks.len();
+                let Some(art) = &marks[which] else { continue };
+                let img = job.layers[layer].marks[which].img;
+                if img.w > w || img.h > h || art.is_empty() {
+                    continue;
+                }
+                let left = ((hash & 0xff_ffff) % (w - img.w + 1) as u64) as i32;
+                let up = (((hash >> 24) & 0xff_ffff) % (h - img.h + 1) as u64) as i32;
+                let flip = hash >> 63 == 1;
+                let place = |x: i32, y: i32| (left + if flip { img.w - 1 - x } else { x }, up + y);
+                let clear = art.iter().all(|(x, y, _, _)| {
+                    let (ax, ay) = place(*x, *y);
+                    let i = (ay * w + ax) as usize;
+                    b.top[i] as usize == g && !used[i] && other_at(&others[g], ax, ay) <= CLEARANCE
+                });
+                if !clear {
+                    continue;
+                }
+                for (x, y, c, alpha) in art {
+                    let (ax, ay) = place(*x, *y);
+                    let i = (ay * w + ax) as usize;
+                    used[i] = true;
+                    let a = alpha * MARK_ALPHA;
+                    for (d, s) in b.px[i * 4..i * 4 + 3].iter_mut().zip(c) {
+                        *d = (*d as f32 + (*s - *d as f32) * a + 0.5) as u8;
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// A soft blob, `2 rx + 1` by `2 ry + 1` px, its centre the middle pixel: `col`'s colour at alpha `alpha x (1 - d^2)^2`,
@@ -754,8 +1067,10 @@ pub struct ComposedFile {
 /// - `legend`: char to layer, in the game's layer order (a texture's offset comes from its place here, so another order
 ///   moves the textures): `colour` whole `[r, g, b]`, each 0 to 255, and/or `tex` (a PNG path, relative to the job file;
 ///   another size is box-reduced to `TEX_CELLS` x cell), and optional `order` (default its place in the legend; unique),
-///   `wear`, `strays`, `tone`, `sunken`, `patches`, `marks` (PNG paths), `marks_per_100` (whole, 0 to 10);
-/// - `blocked` (optional): rows, `#` a blocked cell; `placed` (optional): `{x, y, w, h, strength}` in cells.
+///   `wear`, `strays`, `tone`, `sunken`, `patches` (0 to `PATCHES_MAX`), `marks` (PNG paths at the job's density, at most
+///   `MARKS_MAX`, each at most `MARK_PX_MAX` a side), `marks_per_100` (whole, 0 to 10);
+/// - `blocked` (optional): rows, `#` a blocked cell; `placed` (optional, at most `PLACED_MAX`): `{x, y, w, h, strength}` in
+///   cells, strength 0 to `PATCHES_MAX`, the rect and a ring of one cell on one ground and free of blocked cells.
 pub fn compose_file(job_path: &Path, out_path: &Path) -> Result<ComposedFile> {
     let text = std::fs::read_to_string(job_path).with_context(|| format!("reading {}", job_path.display()))?;
     let job: Value = serde_json::from_str(&text).with_context(|| format!("parsing {}", job_path.display()))?;
@@ -925,8 +1240,16 @@ fn load_job(job: &Value, dir: &Path) -> Result<LoadedJob> {
         };
         let mut marks = Vec::new();
         if let Some(v) = o.get("marks") {
-            for m in v.as_array().ok_or_else(|| anyhow!("legend {k}: marks must be paths"))? {
-                marks.push(load(m.as_str().ok_or_else(|| anyhow!("legend {k}: marks must be paths"))?)?);
+            let list = v.as_array().ok_or_else(|| anyhow!("legend {k}: marks must be paths"))?;
+            if list.len() > MARKS_MAX {
+                bail!("legend {k}: at most {MARKS_MAX} marks");
+            }
+            for m in list {
+                let img = load(m.as_str().ok_or_else(|| anyhow!("legend {k}: marks must be paths"))?)?;
+                if img.w > MARK_PX_MAX || img.h > MARK_PX_MAX {
+                    bail!("legend {k}: a mark is {} x {}, at most {MARK_PX_MAX} a side at the job's density", img.w, img.h);
+                }
+                marks.push(img);
             }
         }
         layers.push(LoadedLayer {
@@ -936,7 +1259,10 @@ fn load_job(job: &Value, dir: &Path) -> Result<LoadedJob> {
             wear: f("wear")?,
             strays: flag("strays")?,
             tone: f("tone")?,
-            patches: f("patches")?,
+            patches: match f("patches")? {
+                n if (0.0..=PATCHES_MAX).contains(&n) => n,
+                n => bail!("legend {k}: patches must be 0 to {PATCHES_MAX}, not {n}"),
+            },
             sunken: flag("sunken")?,
             marks,
             marks_per_100: o.get("marks_per_100").map_or(Ok(0), |v| whole(v, "marks_per_100", 0, 10))?,
@@ -947,13 +1273,22 @@ fn load_job(job: &Value, dir: &Path) -> Result<LoadedJob> {
     if let Some(same) = orders.windows(2).find(|w| w[0] == w[1]) {
         bail!("duplicate order {} in the legend", same[0]);
     }
+    let grid = cells;
     let mut placed = Vec::new();
     if let Some(v) = root.get("placed") {
-        for p in v.as_array().ok_or_else(|| anyhow!("placed must be an array"))? {
+        let list = v.as_array().ok_or_else(|| anyhow!("placed must be an array"))?;
+        if list.len() > PLACED_MAX {
+            bail!("at most {PLACED_MAX} placed patches");
+        }
+        for p in list {
             let part = |name: &str| p.get(name).ok_or_else(|| anyhow!("placed: no {name}"));
             let cells = |name: &str| part(name).and_then(|v| whole(v, name, 0, i32::MAX as i64));
-            placed.push(PlacedPatch { x: cells("x")?, y: cells("y")?, w: cells("w")?, h: cells("h")?, strength: number(part("strength")?, "strength")? as f32 });
+            let patch = PlacedPatch { x: cells("x")?, y: cells("y")?, w: cells("w")?, h: cells("h")?, strength: number(part("strength")?, "strength")? as f32 };
+            if !placed_fits(&patch, cols as i32, rows.len() as i32, &grid, &blocked) {
+                bail!("placed {patch:?}: needs a strength of 0 to {PATCHES_MAX}, and its rect and a ring of one cell inside the map, on one ground and free of blocked cells");
+            }
+            placed.push(patch);
         }
     }
-    Ok(LoadedJob { seed, cols: cols as i32, rows: rows.len() as i32, cell, cells, blocked, layers, placed })
+    Ok(LoadedJob { seed, cols: cols as i32, rows: rows.len() as i32, cell, cells: grid, blocked, layers, placed })
 }

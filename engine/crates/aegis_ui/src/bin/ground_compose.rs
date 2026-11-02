@@ -8,7 +8,7 @@
 //! copy at 720p, 1080p and 4K, a frame's blit and the bytes the cache holds.
 
 use aegis_ui::canvas::{Canvas, Image, Rect};
-use aegis_ui::ground::{self, GroundJob, GroundKey, GroundLayer, TEX_CELLS, TILTED_CELL};
+use aegis_ui::ground::{self, GroundJob, GroundKey, GroundLayer, GroundMark, PlacedPatch, MARKS_PER_100_MAX, TEX_CELLS, TILTED_CELL};
 use aegis_ui::painter::{Fonts, Painter, View};
 use std::path::Path;
 use std::time::Instant;
@@ -58,6 +58,24 @@ fn timing() {
             (best, worst) = (best.min(ms), worst.max(ms));
         }
         println!("{name}: {cols} x {rows}, {LAYERS} layers, art {} x {} ({:.1} MB): compose {best:.1} to {worst:.1} ms (10 runs), key {key_ms:.2} ms", art.w, art.h, art.px.len() as f64 / 1e6);
+        // The same with patches, marks and placed patches on every layer: many borders, then one open ground (its whole
+        // area holds candidates and tries, the most a patch pass can read).
+        let mark = ground::soft_ellipse(5, 3, [30, 26, 22, 255], 255);
+        let dressed: Vec<GroundLayer> = layers.iter().map(|l| GroundLayer { patches: 0.2, marks: vec![GroundMark { img: &mark }], marks_per_100: MARKS_PER_100_MAX, ..l.clone() }).collect();
+        let open = vec![0u8; cells.len()];
+        let placed: Vec<PlacedPatch> = (0..16).map(|i| PlacedPatch { x: 1 + i * 3 % (cols - 8), y: 1 + i * 2 % (rows - 8), w: 6, h: 6, strength: 0.12 }).collect();
+        for (what, cells, placed) in [("many borders", &cells, &[][..]), ("one open ground, 16 placed", &open, &placed[..])] {
+            let job = GroundJob { seed: 7, cols, rows, cell, cells, blocked: &blocked, layers: &dressed, placed };
+            let (mut best, mut worst) = (f64::MAX, 0.0f64);
+            for _ in 0..10 {
+                let t0 = Instant::now();
+                std::hint::black_box(ground::compose(&job));
+                let ms = t0.elapsed().as_secs_f64() * 1000.0;
+                (best, worst) = (best.min(ms), worst.max(ms));
+            }
+            let groups = ground::patch_groups(&job);
+            println!("  with patches and marks, {what}: compose {best:.1} to {worst:.1} ms (10 runs), {} of {} patches kept", groups.iter().filter(|g| g.kept).count(), groups.len());
+        }
         for (win, (pw, ph)) in [("1280 x 720", (1280u32, 720u32)), ("1920 x 1080", (1920, 1080)), ("3840 x 2160", (3840, 2160))] {
             let v = View::fit(pw, ph);
             let r = Rect::new(0, 0, cols * 16, rows * cell.1 * 16 / cell.0);
