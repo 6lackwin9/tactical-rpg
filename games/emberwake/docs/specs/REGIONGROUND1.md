@@ -69,8 +69,8 @@ one id. `colour` is the mock's swatch. Fields not listed take their defaults (KT
 | `scorched` | Scorched ground | 30 | land | #1c1917 | .06 | no | .13 | 0 | natural, .55 |
 | `tallow` | Tallow-stained ground | 32 | land | #2a251e | .06 | no | .13 | 0 | natural, .55 |
 | `mud` | Mud | 40 | land | #231d18 | .06 | no | .13 | .15 | natural, .55 |
-| `packed_dirt` | Packed dirt | 50 | land | #332e28 | .10 | no | .13 | .20 | natural, .55 |
-| `dirt_road` | Dirt road | 60 | land | #39342e | .10 | no | .13 | .15 | natural, .55 |
+| `packed_dirt` | Packed dirt | 50 | land | #352c23 | .10 | no | .13 | .20 | natural, .55 |
+| `dirt_road` | Dirt road | 60 | land | #3c3126 | .10 | no | .13 | .15 | natural, .55 |
 | `flagstone` | Flagstones | 70 | land | #373636 | .10 | yes | .08 | 0 | built, .45 |
 | `cobble_road` | Cobbled road | 78 | land | #2e3137 | .10 | yes | .08 | 0 | built, .45 |
 | `paved_road` | Paved road | 80 | land | #3e3f42 | .10 | yes | .08 | 0 | built, .45 |
@@ -178,8 +178,8 @@ different sizes, in no rows and no direction, with narrow joints only slightly d
 | --- | --- | --- | --- |
 | A1 | `ash` base, n 2 (`ashlands`) | #2a2622 | fine grey ash over dry ground, soft even dust |
 | A1 | `scrub` | #2b2d22 | dry ground with sparse tiny flecks of dead grass, nothing taller than a few pixels |
-| A1 | `dirt_road` | #39342e | hard trodden brown dirt with tiny pebbles |
-| A1 | `packed_dirt` | #332e28 | pressed dry earth, smooth and fine |
+| A1 | `dirt_road` | #3c3126 | hard trodden brown dirt with tiny pebbles |
+| A1 | `packed_dirt` | #352c23 | pressed dry earth, smooth and fine |
 | A1 | `paved_road` | #3e3f42 | worn grey paving stones |
 | A1 | `flagstone` | #373636 | old grey-brown flagstones, chipped, of many sizes |
 | A1 | `mud` | #231d18 | dark wet mud with small even pits |
@@ -199,6 +199,11 @@ different sizes, in no rows and no direction, with narrow joints only slightly d
 Images: A1 10, A3 9, A2 3: 22, no batch above the warning line of about 10. The mocks list 8 grounds an area; `water` is
 the Ashlands' ninth because `~` cells need a water ground (G7). Named, not scheduled: `sunk_undercroft` and
 `sunk_foundry` (LOOK1 5.2), about 6 images each once their maps have layouts.
+
+As built after the first A1 run (2026-11-02): grounds are no longer chained and the long template above gives way to a short
+material-first prompt (`queue_rg1_probe.py`'s form), because all grounds came out alike. Colour is set in code from the table
+above (slice T3), the dirt grounds keep their mock colours with a named colour cap, and a pair check fails neighbours that do
+not clearly differ. A prompt is tested on 2-3 images before a batch (decision "Efficiency pass").
 
 ## 8. Slices (status `spec`; each ends with its gate)
 

@@ -110,3 +110,16 @@ With 3 logic builders plus a reviewer running Godot at once, `check_project.ps1 
   every test binary is 4.9 GB instead of 14 GB (compiled deps 11 to 3.5 GB, incremental 3.2 to 1.4 GB). A profile change
   rebuilds every cache once.
 
+## Efficiency pass (user 2026-11-02)
+
+Measured on 2026-11-02: a builder's first pass 13-30 min, review 4-17 min, a fix round 4-15 min, usually 1-2 per task; full
+gate under 2 min with idle lanes, 7.5 min with three lanes building; `fc.sh docs` 85 s under load. The biggest cost was
+iterating on visuals through builders: the frame took 8 rounds and over 2 hours. Rules in decision "Efficiency pass".
+
+Builder self-check, the findings reviews kept repeating:
+
+- Inputs from files or the public API are bounded, refused rather than truncated or wrapped.
+- A cache key holds everything the result depends on, by content; a resize or drag cannot grow a cache.
+- A rule's test fails when the rule is broken: break the code once and see it fail (mutation).
+- New paths run on real art or data, not only fixtures; say what was viewed, from the final files.
+- Docs that describe what changed are updated, and specs get an as-built note where the build differs.
