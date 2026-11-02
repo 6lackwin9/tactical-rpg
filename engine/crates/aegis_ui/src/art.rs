@@ -13,6 +13,8 @@
 //! FX1-E: a frame's filled silhouette (`body_silhouette`, a hit flash), cached like the outline.
 //! PORTRAITFX1-E: the first path of a chain a layer holds (`first_rel`) and a portrait's face sidecar from the PNG's
 //! own layer (`face`), cached.
+//! SPRITEFIT1: a body's frame fills the size asked for at any scale (`Image::fit_square`), so a sprite grows with the
+//! window instead of stopping at the last whole multiple.
 
 use crate::canvas::{Image, Rect, Rgba, OUTLINE_ALPHA};
 use aegis_core::assets::{self, ClipFrame, ClipPlayer, Clips, Face, Facing, Layers};
@@ -261,8 +263,9 @@ impl Art {
         Some(b.sheet.crop(n as i32 * w, row as i32 * h, w, h))
     }
 
-    /// Frame `n` of `clip` fitted to a `size` square (spec 4.1): scaled by k = floor(size / max(w, h)) with nearest
-    /// pixels (downsampled when k is 0), centred across and standing on the bottom edge.
+    /// Frame `n` of `clip` fitted to a `size` square (`Image::fit_square`, SPRITEFIT1): its longer side is exactly
+    /// `size` at any scale (plain nearest at an exact multiple, softly reduced between them, downsampled below 1x),
+    /// centred across and standing on the bottom edge.
     pub fn body_clip(&mut self, key: &str, palette: &str, clip: &str, n: u32, size: i32) -> Option<&Image> {
         self.body_clip_flipped(key, palette, clip, n, size, false)
     }
@@ -277,16 +280,7 @@ impl Art {
                 self.frames.insert(k.clone(), img);
                 return self.frames.get(&k).and_then(|i| i.as_ref());
             }
-            let img = self.body_frame(key, palette, clip, n).map(|f| {
-                let scale = size / f.w.max(f.h).max(1);
-                let fitted = if scale >= 1 {
-                    f.scale_nearest(scale)
-                } else {
-                    let m = f.w.max(f.h).max(1);
-                    f.downsample((f.w * size / m).max(1), (f.h * size / m).max(1))
-                };
-                fitted.on_square(size)
-            });
+            let img = self.body_frame(key, palette, clip, n).map(|f| f.fit_square(size));
             self.frames.insert(k.clone(), img);
         }
         self.frames.get(&k).and_then(|i| i.as_ref())
@@ -539,9 +533,11 @@ mod tests {
         assert_eq!((&blue.px[0..4], &blue.px[4..8]), (&[0xe0, 0xb4, 0x3c, 255][..], &[0x20, 0x40, 0xc0, 255][..]), "only the main slot's colour changes");
         let t = art.body_token("knight", "", 20).unwrap().clone();
         assert_eq!((t.w, t.h), (20, 20));
-        // k = 20 / 8 = 2: a 16x16 frame centred across (x 2..18) on the bottom (y 4..20)
-        let at = |x: i32, y: i32| &t.px[((y * 20 + x) * 4) as usize..((y * 20 + x) * 4 + 4) as usize];
-        assert_eq!((at(0, 19)[3], at(2, 4), at(3, 5), at(10, 3)[3]), (0, &[0xe0, 0xb4, 0x3c, 255][..], &[0xe0, 0xb4, 0x3c, 255][..], 0));
+        // 16 is 2x the 8x8 frame (SPRITEFIT1 fills every size; the sizes between are in tests/sprite_fit.rs): the gold
+        // pixel takes the top-left 2x2 exactly
+        let d = art.body_token("knight", "", 16).unwrap().clone();
+        let at = |x: i32, y: i32| &d.px[((y * 16 + x) * 4) as usize..((y * 16 + x) * 4 + 4) as usize];
+        assert_eq!((at(0, 0), at(1, 1), at(2, 2), at(15, 15)), (&[0xe0, 0xb4, 0x3c, 255][..], &[0xe0, 0xb4, 0x3c, 255][..], &[0xa8, 0x30, 0x28, 255][..], &[0xa8, 0x30, 0x28, 255][..]));
         assert!(art.has_body("knight") && !art.has_body("rogue"));
         let _ = std::fs::remove_dir_all(&root);
     }

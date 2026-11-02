@@ -175,6 +175,61 @@ impl Image {
         (x0 <= x1).then(|| Rect::new(x0, y0, x1 - x0 + 1, y1 - y0 + 1))
     }
 
+    /// A true area-weighted box reduce to `w` x `h` (SPRITEFIT1): each new pixel is the average of the source area it
+    /// covers, fractions of a source pixel included, with alpha-weighted colour, so a solid colour stays exactly itself
+    /// and any ratio softens evenly. (`downsample` takes whole source pixels only, so between 1x and 2x it picks pixels
+    /// instead of averaging them.)
+    pub fn reduce_box(&self, w: i32, h: i32) -> Image {
+        let (w, h) = (w.max(0), h.max(0));
+        let mut px = vec![0u8; (w * h * 4) as usize];
+        if self.w <= 0 || self.h <= 0 {
+            return Image { w, h, px };
+        }
+        let xs: Vec<Vec<(i32, u64)>> = (0..w).map(|x| box_span(x, w, self.w)).collect();
+        let total = self.w as u64 * self.h as u64;
+        for y in 0..h {
+            let row = box_span(y, h, self.h);
+            for (x, cols) in xs.iter().enumerate() {
+                let (mut r, mut g, mut b, mut a) = (0u64, 0u64, 0u64, 0u64);
+                for &(sy, wy) in &row {
+                    for &(sx, wx) in cols {
+                        let i = ((sy * self.w + sx) * 4) as usize;
+                        let weight = wx * wy * self.px[i + 3] as u64;
+                        r += self.px[i] as u64 * weight;
+                        g += self.px[i + 1] as u64 * weight;
+                        b += self.px[i + 2] as u64 * weight;
+                        a += weight;
+                    }
+                }
+                if a > 0 {
+                    let o = (y as usize * w as usize + x) * 4;
+                    px[o] = ((r + a / 2) / a) as u8;
+                    px[o + 1] = ((g + a / 2) / a) as u8;
+                    px[o + 2] = ((b + a / 2) / a) as u8;
+                    px[o + 3] = ((a + total / 2) / total) as u8;
+                }
+            }
+        }
+        Image { w, h, px }
+    }
+
+    /// `self` fitted to a `size` square whatever the ratio (SPRITEFIT1): its longer side becomes exactly `size`. An
+    /// exact multiple is the plain nearest scale; between multiples, nearest up to the next whole multiple, then
+    /// `reduce_box` to the exact size; below 1x, `downsample`. Proportions are kept, and it is placed as `on_square`
+    /// places it.
+    pub fn fit_square(&self, size: i32) -> Image {
+        let m = self.w.max(self.h).max(1);
+        let fitted = if size < m {
+            self.downsample((self.w * size / m).max(1), (self.h * size / m).max(1))
+        } else if size % m == 0 {
+            self.scale_nearest(size / m)
+        } else {
+            let exact = |side: i32| ((side * size + m / 2) / m).max(1);
+            self.scale_nearest(size / m + 1).reduce_box(exact(self.w), exact(self.h))
+        };
+        fitted.on_square(size)
+    }
+
     /// `self` on a transparent `size` x `size` square: centred across, standing on the bottom edge.
     pub fn on_square(&self, size: i32) -> Image {
         let mut px = vec![0u8; (size * size * 4) as usize];
@@ -191,6 +246,13 @@ impl Image {
         }
         Image { w: size, h: size, px }
     }
+}
+
+/// The source pixels new pixel `i` of `n` covers along a side of `src` pixels, each with its overlap in units of 1/`n`
+/// source pixel (the overlaps add up to `src`).
+fn box_span(i: i32, n: i32, src: i32) -> Vec<(i32, u64)> {
+    let (from, to, n) = (i as i64 * src as i64, (i as i64 + 1) * src as i64, n as i64);
+    (from / n..(to + n - 1) / n).map(|s| (s as i32, (to.min((s + 1) * n) - from.max(s * n)) as u64)).collect()
 }
 
 pub struct Canvas {
