@@ -277,7 +277,7 @@ fn the_default_theme_draws_the_six_panes_exactly_as_before() {
 /// The roles each pane draws with itself (the kit widgets it holds have their own suite). A role that stops changing
 /// its pane has gone back to a literal.
 const PANE_ROLES: [(&str, &[&str]); 6] = [
-    ("window", &["card", "panel_edge", "edge", "card_hot", "title_idle", "gold", "text", "dim", "focus", "edge_hot", "selected"]),
+    ("window", &["card", "panel_edge", "edge", "card_hot", "title_idle", "gold", "text", "dim", "focus", "grip", "selected"]),
     ("timeline", &["ruler", "dim", "playing", "playing_edge", "card_hot", "card", "focus", "text", "edge", "selected", "lane", "lane_hatch", "lane_stripe", "impact_edge", "bg", "foe", "gold"]),
     ("recordings", &["tool_bg", "tool_pane", "gold", "dim", "edge", "text", "foe", "info", "good", "scrim", "input"]),
     ("vignette", &["stage", "mote", "text", "gold", "dim"]),

@@ -9,8 +9,9 @@
 use crate::hud::{purse_word, PurseWord};
 use crate::screens::{Cx, GameCx, Nav, Screen};
 use aegis_core::json::{self, s, s_or, Dict};
+use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
-use aegis_ui::ui::{tip, Gfx, Tip, Ui, Widget, BODY, BORDER, DIM, FOE, FRAME, GOLD, GOOD, H, INFO, MODAL, PANEL_HI, RADIUS, SELECTED, SMALL, TEXT, W};
+use aegis_ui::ui::{tip, Gfx, Tip, Ui, Widget, BODY, H, RADIUS, SMALL, W};
 use aegis_ui::widget_plumbing;
 use emberwake_world::board;
 use serde_json::{json, Value};
@@ -117,17 +118,17 @@ impl BoardPane {
         let mut out = Vec::new();
         let status = s_or(det, "status", &s(row, "status"));
         let line = s(row, "line");
-        out.push((if line.is_empty() { status_text(&status).to_string() } else { format!("{}: {line}", status_text(&status)) }, SMALL, DIM));
+        out.push((if line.is_empty() { status_text(&status).to_string() } else { format!("{}: {line}", status_text(&status)) }, SMALL, th().dim));
         let desc = s(det, "description");
         if !desc.is_empty() {
-            out.push((desc, BODY, TEXT));
+            out.push((desc, BODY, th().text));
         }
         for st in json::aget(det, "steps") {
             let st = json::dict(st);
             let (mark, col) = match s(st, "state").as_str() {
-                "done" => ("Done", DIM),
-                "current" => ("Now", GOOD),
-                _ => ("Then", TEXT),
+                "done" => ("Done", th().dim),
+                "current" => ("Now", th().good),
+                _ => ("Then", th().text),
             };
             out.push((format!("{mark}: {}", s(st, "text")), BODY, col));
         }
@@ -139,12 +140,12 @@ impl BoardPane {
             lines.push(format!("{gold} {}", purse_word(cx, PurseWord::Currency)));
         }
         if !lines.is_empty() {
-            out.push((format!("Rewards: {}", lines.join(", ")), BODY, TEXT));
+            out.push((format!("Rewards: {}", lines.join(", ")), BODY, th().text));
         }
         let loot: Vec<String> = json::sget(det, "loot").iter().map(|l| s_or(d.resolve(&world, "loot", l), "name", l)).collect();
         let picks = json::i(det, "loot_picks", 0);
         if picks > 0 && !loot.is_empty() {
-            out.push((format!("Pick {picks} of: {}", loot.join(", ")), BODY, TEXT));
+            out.push((format!("Pick {picks} of: {}", loot.join(", ")), BODY, th().text));
         }
         let rep: Vec<String> = json::dict(json::get(det, "reputation"))
             .iter()
@@ -152,11 +153,11 @@ impl BoardPane {
             .map(|(f, v)| format!("{} {:+}", s_or(d.resolve(&world, "factions", f), "name", f), json::to_int(v)))
             .collect();
         if !rep.is_empty() {
-            out.push((format!("Reputation: {}", rep.join(", ")), BODY, TEXT));
+            out.push((format!("Reputation: {}", rep.join(", ")), BODY, th().text));
         }
         let node = s_or(det, "node_name", &s(row, "node_name"));
         if !node.is_empty() {
-            out.push((format!("Where: {node}"), BODY, INFO));
+            out.push((format!("Where: {node}"), BODY, th().info));
         }
         let due = json::dict(det.get("deadline").or_else(|| row.get("deadline")).unwrap_or(&Value::Null)).clone();
         if !due.is_empty() {
@@ -171,7 +172,7 @@ impl BoardPane {
     pub fn draw<A: Clone>(&mut self, ui: &mut Ui<A>, cx: &Cx, view: &Dict, det: &Dict, wrap: impl Fn(BoardAct) -> A) {
         let fr = crate::shop::frame_rect(&ui.p);
         let name = s_or(view, "name", "Board");
-        ui.p.panel(fr, MODAL, FRAME, 4.0);
+        ui.p.panel(fr, th().panel, th().panel_edge, 4.0);
         ui.push("board", "panel", name.clone(), fr, true, false, None, Vec::new());
         let sc = ui.p.fonts.scale;
         let (lb, ls) = (ui.p.line_h(BODY).ceil() as i32, ui.p.line_h(SMALL).ceil() as i32);
@@ -180,16 +181,16 @@ impl BoardPane {
         let keeper = s(view, "keeper_name");
         let keeper_w = if keeper.is_empty() { 0.0 } else { ui.p.text_w(&keeper, BODY) + 12.0 };
         let head_h = ui.p.line_h(HEAD).ceil() as i32;
-        ui.p.text_fit(x0 as f32, fr.y as f32 + 5.0, &name, HEAD, inner as f32 - keeper_w, GOLD);
+        ui.p.text_fit(x0 as f32, fr.y as f32 + 5.0, &name, HEAD, inner as f32 - keeper_w, th().gold);
         if !keeper.is_empty() {
-            ui.p.text_right(right as f32, (fr.y + 5 + head_h - lb) as f32, &keeper, BODY, DIM);
+            ui.p.text_right(right as f32, (fr.y + 5 + head_h - lb) as f32, &keeper, BODY, th().dim);
         }
         let mut top = fr.y + 5 + head_h + 4;
         // -- the keeper's intro (B11), wrapped
         let intro = s(view, "intro");
         if !intro.is_empty() {
             for l in ui.p.wrap(&intro, BODY, inner as f32) {
-                ui.p.text(x0 as f32, top as f32, &l, BODY, TEXT);
+                ui.p.text(x0 as f32, top as f32, &l, BODY, th().text);
                 top += lb;
             }
             top += 3;
@@ -210,7 +211,7 @@ impl BoardPane {
         if !self.errors.is_empty() {
             let text = self.errors.join(" ");
             let r = Rect::new(x0, err_y, inner, lb);
-            ui.p.text_fit(r.x as f32, r.y as f32, &text, BODY, r.w as f32, FOE);
+            ui.p.text_fit(r.x as f32, r.y as f32, &text, BODY, r.w as f32, th().foe);
             ui.push("board.errors", "label", text.clone(), r, true, false, None, Vec::new());
         }
         let bw = |ui: &mut Ui<A>, t: &str| (ui.p.text_w(t, BODY).ceil() as i32 + 16).max(44);
@@ -225,7 +226,7 @@ impl BoardPane {
     /// section's line), in a scroll area.
     #[allow(clippy::too_many_arguments)]
     fn list<A: Clone>(&self, ui: &mut Ui<A>, all: &[Dict], view: &Dict, area: Rect, lb: i32, ls: i32, wrap: &impl Fn(BoardAct) -> A) {
-        ui.p.panel(area, COL_BG, BORDER, RADIUS);
+        ui.p.panel(area, th().game("column", COL_BG), th().edge, RADIUS);
         let row_h = |r: &Dict| {
             let second = !s(r, "node_name").is_empty() || r.contains_key("deadline");
             4 + lb + if second { ls } else { 0 } + if s(r, "line").is_empty() { 0 } else { ls }
@@ -235,13 +236,13 @@ impl BoardPane {
         let content = sections.len() as i32 * head_h + all.iter().map(|r| row_h(r) + 1).sum::<i32>() + 4;
         let off = ui.scroll_begin("board.list", area, content);
         if all.is_empty() {
-            ui.p.text_fit(area.x as f32 + 4.0, area.y as f32 + 3.0, "Nothing on the board.", SMALL, (area.w - 8) as f32, DIM);
+            ui.p.text_fit(area.x as f32 + 4.0, area.y as f32 + 3.0, "Nothing on the board.", SMALL, (area.w - 8) as f32, th().dim);
         }
         let w = area.w - 5;
         let mut y = area.y + 2 - off;
         for sec in sections {
             let sec = json::dict(sec);
-            ui.p.text(area.x as f32 + 4.0, y as f32 + 2.0, &s(sec, "title"), SMALL, INFO);
+            ui.p.text(area.x as f32 + 4.0, y as f32 + 2.0, &s(sec, "title"), SMALL, th().info);
             y += head_h;
             for r in all.iter().filter(|r| s(r, "_section") == s(sec, "id")) {
                 let q = s(r, "quest");
@@ -250,12 +251,12 @@ impl BoardPane {
                 let picked = q == self.selected;
                 let hover = ui.hover(rr);
                 if picked || hover {
-                    ui.p.panel(rr, if picked { SELECTED } else { PANEL_HI }, if picked { GOLD } else { rgb(110, 140, 196) }, RADIUS);
+                    ui.p.panel(rr, if picked { th().selected } else { th().card_hot }, if picked { th().gold } else { th().edge_hot }, RADIUS);
                 }
                 let (tx, tw) = (rr.x as f32 + 4.0, (rr.w - 8) as f32);
                 let name = s(r, "name");
                 let mut ty = rr.y as f32 + 2.0;
-                ui.p.text_fit(tx, ty, &name, BODY, tw, if picked { GOLD } else { TEXT });
+                ui.p.text_fit(tx, ty, &name, BODY, tw, if picked { th().gold } else { th().text });
                 ty += lb as f32;
                 let node = s(r, "node_name");
                 let due = r.get("deadline").map(|v| s(json::dict(v), "text")).unwrap_or_default();
@@ -265,17 +266,17 @@ impl BoardPane {
                         ui.p.text_right(tx + tw, ty, &due, SMALL, DEADLINE);
                     }
                     if !node.is_empty() {
-                        ui.p.text_fit(tx, ty, &node, SMALL, tw - dw - if due.is_empty() { 0.0 } else { 6.0 }, INFO);
+                        ui.p.text_fit(tx, ty, &node, SMALL, tw - dw - if due.is_empty() { 0.0 } else { 6.0 }, th().info);
                     }
                     ty += ls as f32;
                 }
                 let line = s(r, "line");
                 if !line.is_empty() {
-                    ui.p.text_fit(tx, ty, &line, SMALL, tw, DIM);
+                    ui.p.text_fit(tx, ty, &line, SMALL, tw, th().dim);
                 }
                 let mut t = tip(&name, &line);
                 if !node.is_empty() {
-                    t.push((node.clone(), INFO));
+                    t.push((node.clone(), th().info));
                 }
                 if !due.is_empty() {
                     t.push((due.clone(), DEADLINE));
@@ -289,7 +290,7 @@ impl BoardPane {
 
     /// B7: the picked quest's name and paragraphs, wrapped, in a scroll area.
     fn detail<A: Clone>(ui: &mut Ui<A>, cx: &Cx, det: &Dict, row: &Dict, area: Rect) {
-        ui.p.panel(area, COL_BG, BORDER, RADIUS);
+        ui.p.panel(area, th().game("column", COL_BG), th().edge, RADIUS);
         if det.is_empty() && row.is_empty() {
             ui.scroll_begin("board.detail", area, 0);
             ui.scroll_end();
@@ -299,7 +300,7 @@ impl BoardPane {
         let mut lines: Vec<(String, f32, Rgba)> = Vec::new();
         let name = s_or(det, "name", &s(row, "name"));
         for l in ui.p.wrap(&name, BODY + 1.0, tw) {
-            lines.push((l, BODY + 1.0, GOLD));
+            lines.push((l, BODY + 1.0, th().gold));
         }
         let paras = Self::detail_paras(cx, det, row);
         for (text, size, col) in paras {
@@ -445,8 +446,8 @@ impl Screen<GameCx> for BoardSample {
 
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<BoardAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), rgb(14, 18, 26));
-        ui.p.fill(Rect::new(0, 0, W, H), DIM_FILL);
+        ui.p.fill(Rect::new(0, 0, W, H), th().game("map_ground", rgb(14, 18, 26)));
+        ui.p.fill(Rect::new(0, 0, W, H), th().game("board_veil", DIM_FILL));
         let sel = self.pane.select(&self.view);
         let det = self.details.iter().find(|d| s(d, "quest") == sel).cloned().unwrap_or_default();
         let view = self.view.clone();

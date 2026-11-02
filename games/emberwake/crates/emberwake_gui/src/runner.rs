@@ -3,9 +3,10 @@
 //! world map without saving, a fight skipped (settled as a win at no cost) or fought (DebugFight). Reload re-reads the
 //! data folder from disk.
 
-use aegis_ui::canvas::{rgb, rgba, Rect};
+use aegis_ui::theme::th;
+use aegis_ui::canvas::{rgba, Rect};
 use crate::screens::{enter_game, show_errors, Cx, GameCx, Nav, Screen};
-use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
 use emberwake_rules::ruleset::{RuleKind, Ruleset, PLAN_BADGES, REGISTER};
@@ -319,15 +320,15 @@ impl Screen<GameCx> for SceneRunner {
 
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<SAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), rgb(12, 16, 26));
-        ui.p.text(12.0, 8.0, &format!("{}  ·  SCENE RUNNER", cx.manifest.title.to_uppercase()), 10.0, GOLD);
-        ui.p.text(12.0, 27.0, "Launch any scene; Esc returns here.", SMALL, DIM);
+        ui.p.fill(Rect::new(0, 0, W, H), th().tool_bg);
+        ui.p.text(12.0, 8.0, &format!("{}  ·  SCENE RUNNER", cx.manifest.title.to_uppercase()), 10.0, th().gold);
+        ui.p.text(12.0, 27.0, "Launch any scene; Esc returns here.", SMALL, th().dim);
         ui.button("runner.exit", Rect::new(W - 40, 6, 34, 13), "Exit", SAct::Exit, true);
         let left = Rect::new(12, 41, 383, 300);
         let right = Rect::new(402, 41, 235, 128);
-        ui.p.panel(left, rgba(18, 24, 38, 255), BORDER, 2.0);
-        ui.p.panel(right, rgba(18, 24, 38, 255), BORDER, 2.0);
-        ui.p.text(left.x as f32 + 6.0, left.y as f32 + 4.0, "SCENES", SMALL, INFO);
+        ui.p.panel(left, th().tool_pane, th().edge, 2.0);
+        ui.p.panel(right, th().tool_pane, th().edge, 2.0);
+        ui.p.text(left.x as f32 + 6.0, left.y as f32 + 4.0, "SCENES", SMALL, th().info);
         let encounters = Self::encounters(cx);
         self.encounter = self.encounter.min(encounters.len().saturating_sub(1));
         let worlds = new_game::playable_worlds(&cx.data);
@@ -372,11 +373,11 @@ impl Screen<GameCx> for SceneRunner {
         let mut y = view.y - off;
         for ((id, name, _, act), (lines, extra, h)) in scenes.into_iter().zip(cards) {
             let r = Rect::new(left.x + 5, y, left.w - 10, h);
-            ui.p.panel(r, rgba(26, 34, 54, 255), BORDER, 2.0);
-            ui.p.text(r.x as f32 + 5.0, r.y as f32 + 3.0, name, BODY, INFO);
+            ui.p.panel(r, th().game("slot_filled", rgba(26, 34, 54, 255)), th().edge, 2.0);
+            ui.p.text(r.x as f32 + 5.0, r.y as f32 + 3.0, name, BODY, th().info);
             let top = r.y as f32 + 3.0 + name_h + 1.0;
             for (i, line) in lines.iter().enumerate() {
-                ui.p.text(r.x as f32 + 5.0, top + i as f32 * line_h, line, SMALL, TEXT);
+                ui.p.text(r.x as f32 + 5.0, top + i as f32 * line_h, line, SMALL, th().text);
             }
             let pick_y = (top + lines.len() as f32 * line_h + 1.0).round() as i32;
             ui.button(id, Rect::new(r.x + r.w - 50, r.y + 6, 45, 15), "Launch", act.clone(), true);
@@ -393,8 +394,8 @@ impl Screen<GameCx> for SceneRunner {
                 let row_y = pick_y + 17;
                 ui.checkbox("runner.arena.reveal", r.x + 5, row_y + 2, "Reveal enemy plans", self.reveal, SAct::Reveal, effective.has(PLAN_BADGES));
                 let chip_r = Rect::new(r.x + 110, row_y, r.w - 204, 14);
-                ui.p.panel(chip_r, rgba(30, 44, 70, 255), BORDER, 2.0);
-                ui.p.text_fit(chip_r.x as f32 + 4.0, chip_r.y as f32 + 2.0, &chip, SMALL, (chip_r.w - 8) as f32, if effective.id == emberwake_rules::ruleset::DEFAULT && self.rules_spec(&self.base_ruleset(cx)).is_empty() { DIM } else { GOLD });
+                ui.p.panel(chip_r, th().game("chip", rgba(30, 44, 70, 255)), th().edge, 2.0);
+                ui.p.text_fit(chip_r.x as f32 + 4.0, chip_r.y as f32 + 2.0, &chip, SMALL, (chip_r.w - 8) as f32, if effective.id == emberwake_rules::ruleset::DEFAULT && self.rules_spec(&self.base_ruleset(cx)).is_empty() { th().dim } else { th().gold });
                 let chip_tip = format!("Rules on: {}.", if effective.rules.is_empty() { "none (classic)".to_string() } else { effective.rules.join(", ") });
                 ui.push("runner.arena.chip", "label", chip.clone(), chip_r, true, false, None, tip(&format!("Ruleset: {chip}"), &chip_tip));
                 ui.button_full("runner.arena.rules", Rect::new(r.x + r.w - 90, row_y, 85, 14), "Extensions", SAct::ShowRules, true, self.show_rules, BODY, tip("Extensions", "Switch single extensions of the ruleset on or off for this run (RULESET1 3.2); options belong to their ruleset."));
@@ -414,20 +415,20 @@ impl Screen<GameCx> for SceneRunner {
             y += h + 4;
         }
         ui.scroll_end();
-        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 4.0, "DEVELOPER", SMALL, INFO);
+        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 4.0, "DEVELOPER", SMALL, th().info);
         ui.button_tip("runner.reload", Rect::new(right.x + 6, right.y + 16, 70, 14), "Reload data", SAct::Reload, true, tip("Reload data", "Re-reads the data folder (catalog, worlds, maps, quests, services, XP curve) and the art files."));
-        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 36.0, "Parity checks (headless):", SMALL, DIM);
-        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 46.0, "cargo test -p emberwake_world -p emberwake_battle", SMALL, TEXT);
+        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 36.0, "Parity checks (headless):", SMALL, th().dim);
+        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 46.0, "cargo test -p emberwake_world -p emberwake_battle", SMALL, th().text);
         ui.button_tip("runner.playtests", Rect::new(right.x + 6, right.y + 58, 70, 14), "Playtests", SAct::Playtests, true, tip("Playtests", "Recordings of played battles with their notes (F8): play back, take over at a round, copy to the repo inbox; the recording toggle."));
-        ui.p.text(right.x as f32 + 82.0, right.y as f32 + 61.0, if cx.playtest.on { "Recording on" } else { "Recording off" }, SMALL, if cx.playtest.on { GOOD } else { DIM });
-        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 78.0, &format!("Data: {}", cx.data_dir.display()), SMALL, DIM);
+        ui.p.text(right.x as f32 + 82.0, right.y as f32 + 61.0, if cx.playtest.on { "Recording on" } else { "Recording off" }, SMALL, if cx.playtest.on { th().good } else { th().dim });
+        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 78.0, &format!("Data: {}", cx.data_dir.display()), SMALL, th().dim);
         // STAGE1-C: the battle view for testing (Stage ships; Flat is the board seen from above)
-        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 96.0, "Battle view", SMALL, TEXT);
+        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 96.0, "Battle view", SMALL, th().text);
         let views: Vec<String> = crate::stage::VIEWS.iter().map(|v| v.1.to_string()).collect();
         let at = crate::stage::VIEWS.iter().position(|v| cx.settings.v["battle_view"].as_str() == Some(v.0)).unwrap_or(0);
         ui.select("runner.battle_view", Rect::new(right.x + 82, right.y + 93, 90, 14), &views, at, SAct::PickView, true, tip("Battle view (debug)", crate::stage::VIEW_TIP));
         // EXPLOREVIEW1: the region map's view for testing (Square ships until the review picks one)
-        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 114.0, "Region view", SMALL, TEXT);
+        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 114.0, "Region view", SMALL, th().text);
         let views: Vec<String> = crate::mapview::VIEWS.iter().map(|v| v.1.to_string()).collect();
         let at = crate::mapview::VIEWS.iter().position(|v| v.0 == crate::mapview::View::of_setting(&cx.settings.v["region_view"]).name()).unwrap_or(0);
         ui.select("runner.region_view", Rect::new(right.x + 82, right.y + 111, 90, 14), &views, at, SAct::PickRegionView, true, tip("Region view (debug)", crate::mapview::VIEW_TIP));
@@ -493,12 +494,12 @@ impl Screen<GameCx> for DebugFight {
     }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<DFAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), rgba(0, 0, 0, 120));
+        ui.p.fill(Rect::new(0, 0, W, H), th().scrim);
         let r = Rect::new(W / 2 - 130, H / 2 - 50, 260, 100);
         ui.frame(r, "Fight (debug)", false);
         let name = s_or(cx.data.resolve(&cx.gs().world_id, "encounters", &s(&self.fight, "encounter")), "name", "Enemies");
-        ui.p.text(r.x as f32 + 10.0, r.y as f32 + 30.0, &format!("{name} ({})", s(&self.fight, "source")), BODY, TEXT);
-        ui.p.text_fit(r.x as f32 + 10.0, r.y as f32 + 44.0, "Skip settles it as a win at no cost; Fight it plays the battle.", SMALL, (r.w - 20) as f32, DIM);
+        ui.p.text(r.x as f32 + 10.0, r.y as f32 + 30.0, &format!("{name} ({})", s(&self.fight, "source")), BODY, th().text);
+        ui.p.text_fit(r.x as f32 + 10.0, r.y as f32 + 44.0, "Skip settles it as a win at no cost; Fight it plays the battle.", SMALL, (r.w - 20) as f32, th().dim);
         // RUNNER2 (decision "Skipped fights"): Skip settles the fight as a win at no cost; Fled and Lost test those paths.
         let outcomes = [
             ("Skip", "won", "Settles as a win: every enemy's XP, the purse, quest progress and the marker's flags; no HP lost, nothing spent."),

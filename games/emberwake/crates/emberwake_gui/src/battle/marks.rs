@@ -1,8 +1,9 @@
 //! Board marks and their data: target arrows and focus (VISCLAR1), impact tracers (INPUT1-PB), ground hazards and the arena telegraph, the hold escape, push forecasts, unit meters, poise, break plates and hit forecasts.
 
+use aegis_ui::theme::th;
 use super::board::{inset2, plate, with_alpha};
 use super::overlays::{ground_pt, strike_tile, Layers};
-use super::{Action, DIM, FOE, GOLD, GOOD, GRID_X, GRID_Y, POISE, TEXT, TILE, TRACER_ALPHA, TRACER_INSET, TRACER_MS};
+use super::{Action, GRID_X, GRID_Y, POISE, TILE, TRACER_ALPHA, TRACER_INSET, TRACER_MS};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::fx;
 use crate::stage::{self, Geom, View};
@@ -242,7 +243,7 @@ fn dash_polyline(p: &mut Painter, pts: &[(f32, f32)], col: Rgba, width: f32) {
 pub(super) fn draw_arrows(p: &mut Painter, arrows: &[Arrow], geo: &Geom) {
     let width = if geo.view == View::Stage { ARROW_W_STAGE } else { ARROW_W_FLAT };
     for a in arrows {
-        let col = with_alpha(if a.ally { GOLD } else { FOE }, ARROW_ALPHA);
+        let col = with_alpha(if a.ally { th().gold } else { th().foe }, ARROW_ALPHA);
         let at: Vec<(f32, f32)> = a.points.iter().map(|c| ground_pt(geo, *c)).map(|(x, y)| (x, y - 3.0)).collect();
         // the first leg leaves the unit's foot ring, the last stops short of the target's (a leg too short keeps its end)
         let mut pts = at.clone();
@@ -272,7 +273,7 @@ pub(super) fn traces_of(s: &Session, idx: usize, at: &dyn Fn(usize) -> Option<V2
     let Some(a) = s.resolver.scheduled.get(idx).filter(|a| !a.cancelled) else { return out };
     let Some(from) = at(a.unit) else { return out };
     let c = &a.command;
-    let side = |u: usize| if w.allies.contains(&u) { GOLD } else { FOE };
+    let side = |u: usize| if w.allies.contains(&u) { th().gold } else { th().foe };
     let put = |out: &mut Vec<fx::Trace>, from: V2, to: Option<V2>, col: Rgba, dashed: bool| {
         if let Some(to) = to.filter(|to| *to != from && !out.iter().any(|t| (t.from, t.to) == (from, *to))) {
             out.push(fx::Trace { from, to, col, dashed });
@@ -404,9 +405,9 @@ impl HookMarks {
         let mut tip: Tip = self.ground_at(c).map(|g| g.tip.clone()).unwrap_or_default();
         for (t, e) in self.arena.iter().zip(&self.arena_effects).filter(|(t, _)| t.cells.contains(&c)) {
             tip.push((format!("{}: strikes here this round", t.name), ARENA));
-            tip.push((format!("At the end of {}", blocks_text(&t.blocks)), TEXT));
+            tip.push((format!("At the end of {}", blocks_text(&t.blocks)), th().text));
             if !e.is_empty() {
-                tip.push((e.clone(), TEXT));
+                tip.push((e.clone(), th().text));
             }
         }
         tip
@@ -418,7 +419,7 @@ impl HookMarks {
         for (t, e) in self.arena.iter().zip(&self.arena_effects).filter(|(t, _)| t.blocks.contains(&b)) {
             tip.push((format!("{} strikes at the end of block {b} ({} cell{})", t.name, t.cells.len(), if t.cells.len() == 1 { "" } else { "s" }), ARENA));
             if !e.is_empty() {
-                tip.push((e.clone(), TEXT));
+                tip.push((e.clone(), th().text));
             }
         }
         tip
@@ -478,7 +479,7 @@ fn ground_mark(w: &World, cell: V2, p: &emberwake_battle::ground::Placed) -> Gro
     let tint = aegis_ui::vignette::hex(&d.tint).unwrap_or(rgb(200, 120, 220));
     let mut tip: Tip = vec![(d.name.clone(), tint)];
     if !d.description.is_empty() {
-        tip.push((d.description.clone(), TEXT));
+        tip.push((d.description.clone(), th().text));
     }
     let mut does: Vec<String> = Vec::new();
     if d.damage > 0 {
@@ -494,28 +495,28 @@ fn ground_mark(w: &World, cell: V2, p: &emberwake_battle::ground::Placed) -> Gro
             (_, "both") => "On entering and at round end",
             _ => "On entering",
         };
-        tip.push((format!("{when}: {}", does.join(", ")), TEXT));
+        tip.push((format!("{when}: {}", does.join(", ")), th().text));
     }
     if d.trap {
-        tip.push((format!("Trap: stops the move of the first unit it affects{}, then is gone", if d.stop_moves { " and its later moves this round" } else { "" }), FOE));
+        tip.push((format!("Trap: stops the move of the first unit it affects{}, then is gone", if d.stop_moves { " and its later moves this round" } else { "" }), th().foe));
     } else if d.stop_moves {
-        tip.push(("Stops the later moves this round of a unit that enters".into(), TEXT));
+        tip.push(("Stops the later moves this round of a unit that enters".into(), th().text));
     }
     if d.cover_guard > 0.0 {
-        tip.push((format!("Cover {:.0}% against ranged hits", d.cover_guard * 100.0), TEXT));
+        tip.push((format!("Cover {:.0}% against ranged hits", d.cover_guard * 100.0), th().text));
     }
     if d.move_cost > 0 {
-        tip.push((format!("Move cost +{}", d.move_cost), TEXT));
+        tip.push((format!("Move cost +{}", d.move_cost), th().text));
     }
     let affects = match d.affects.as_str() {
         "foes" => format!("Affects {placer}'s foes"),
         "friends" => format!("Affects {placer}'s side"),
         _ => "Affects every unit".into(),
     };
-    tip.push((affects, DIM));
-    tip.push((format!("Left by {placer} in round {}; lasts through round {}", p.round, p.last_round), DIM));
+    tip.push((affects, th().dim));
+    tip.push((format!("Left by {placer} in round {}; lasts through round {}", p.round, p.last_round), th().dim));
     if d.hidden {
-        tip.push(("Hidden from the foes".into(), DIM));
+        tip.push(("Hidden from the foes".into(), th().dim));
     }
     GroundMark { cell, id: d.id.clone(), name: d.name.clone(), tint, glyph: d.glyph.clone(), hidden: d.hidden, last_round: p.last_round, tip }
 }
@@ -533,7 +534,7 @@ pub(super) fn draw_hook_marks(p: &mut Painter, m: &HookMarks, geo: &Geom) {
         plate(p, r, with_alpha(g.tint, fill), with_alpha(g.tint, edge));
         if !g.glyph.is_empty() {
             let cy = r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0;
-            p.text_center(r.x as f32 + r.w as f32 / 2.0, cy, &g.glyph, SMALL, with_alpha(TEXT, if g.hidden { 150 } else { 235 }));
+            p.text_center(r.x as f32 + r.w as f32 / 2.0, cy, &g.glyph, SMALL, with_alpha(th().text, if g.hidden { 150 } else { 235 }));
         }
     }
     let mut struck: Vec<V2> = Vec::new();
@@ -584,18 +585,18 @@ impl HoldMarks {
         let mut tip: Tip = Vec::new();
         if self.show_tiles && self.tiles.contains(&c) {
             let mut head = self.label.chars();
-            tip.push((head.next().map(|f| f.to_uppercase().collect::<String>() + head.as_str()).unwrap_or_default(), GOLD));
+            tip.push((head.next().map(|f| f.to_uppercase().collect::<String>() + head.as_str()).unwrap_or_default(), th().gold));
             tip.push((
                 match self.holder {
                     Some(h) => format!("{} holds it: the gate is open while they stand here, and they stay behind when the others escape.", w.units[h].name),
                     None => "Pick who holds it before round 1.".into(),
                 },
-                TEXT,
+                th().text,
             ));
         }
         if self.show_gate && w.grid.is_exit(c) {
             let note = w.hold.as_ref().map(|g| g.note(w)).unwrap_or_default();
-            tip.push(if self.open { ("The gate is open.".into(), GOOD) } else if note.is_empty() { (format!("The gate is shut until someone holds {}.", self.label), FOE) } else { (note, FOE) });
+            tip.push(if self.open { ("The gate is open.".into(), th().good) } else if note.is_empty() { (format!("The gate is shut until someone holds {}.", self.label), th().foe) } else { (note, th().foe) });
         }
         tip
     }
@@ -639,8 +640,8 @@ pub(super) fn draw_hold_tiles(p: &mut Painter, h: &HoldMarks, geo: &Geom) {
         plate(p, r.inset(2), rgba(0, 0, 0, 0), rgba(244, 198, 84, 120));
         if !letter.is_empty() {
             let b = Rect::new(r.x + 2, r.y + 2, 9, 9);
-            p.panel(b, rgba(60, 44, 12, 235), GOLD, 2.0);
-            p.text_center(b.x as f32 + 4.5, b.y as f32 + (b.h as f32 - p.line_h(SMALL)) / 2.0, &letter, SMALL, GOLD);
+            p.panel(b, rgba(60, 44, 12, 235), th().gold, 2.0);
+            p.text_center(b.x as f32 + 4.5, b.y as f32 + (b.h as f32 - p.line_h(SMALL)) / 2.0, &letter, SMALL, th().gold);
         }
     }
 }
@@ -657,13 +658,13 @@ pub(super) fn draw_hold_pick(ui: &mut Ui<Action>, s: &Session) {
     let w = (inner.max((ui.p.text_w(&title, TITLE) + 12.0).ceil() as i32) + 12).min(GRID_W * TILE - 8);
     let h = 18 + ui.p.line_h(TITLE).ceil() as i32;
     let r = Rect::new(GRID_X + (GRID_W * TILE - w) / 2, GRID_Y + GRID_H * TILE - h - 6, w, h);
-    ui.p.panel(r, rgba(14, 18, 30, 240), GOLD, RADIUS);
-    ui.p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + 3.0, &title, TITLE, GOLD);
-    ui.push("hold.pick", "panel", title.clone(), r, true, false, None, vec![(title.clone(), GOLD), (format!("The holder keeps {} so the gate stays open; they stay behind when the others escape.", gate.label), TEXT)]);
+    ui.p.panel(r, th().game("hold_pick_fill", rgba(14, 18, 30, 240)), th().gold, RADIUS);
+    ui.p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + 3.0, &title, TITLE, th().gold);
+    ui.push("hold.pick", "panel", title.clone(), r, true, false, None, vec![(title.clone(), th().gold), (format!("The holder keeps {} so the gate stays open; they stay behind when the others escape.", gate.label), th().text)]);
     let mut x = r.x + (r.w - inner) / 2;
     let y = r.y + r.h - 16;
     for ((c, label), bw) in ids.iter().zip(&labels).zip(&widths) {
-        let tip = vec![(format!("{} holds {}", s.w.units[*c].name, gate.label), GOLD), ("They walk to it and guard it; the gate is open while they stand on it.".into(), TEXT)];
+        let tip = vec![(format!("{} holds {}", s.w.units[*c].name, gate.label), th().gold), ("They walk to it and guard it; the gate is open while they stand on it.".into(), th().text)];
         ui.button_full(&format!("hold.pick.{c}"), Rect::new(x, y, *bw, 14), label, Action::StayPick(*c), true, false, BODY, tip);
         x += bw + 4;
     }
@@ -702,7 +703,7 @@ pub(super) fn push_forecasts(s: &Session, h: usize) -> Vec<Vec<emberwake_battle:
 pub(super) fn push_text(w: &World, f: &emberwake_battle::forced::Forecast) -> (String, Rgba) {
     let name = &w.units[f.unit].name;
     if f.held {
-        return (format!("{name} holds firm (no {})", if f.pull { "pull" } else { "push" }), DIM);
+        return (format!("{name} holds firm (no {})", if f.pull { "pull" } else { "push" }), th().dim);
     }
     let n = f.path.len();
     let verb = if f.pull { "Pulls" } else { "Pushes" };
@@ -710,7 +711,7 @@ pub(super) fn push_text(w: &World, f: &emberwake_battle::forced::Forecast) -> (S
     if n > 0 && !f.blocked_by.is_empty() {
         line += &format!("; then hits {} (collision)", f.blocked_by);
     }
-    (line, if f.blocked_by.is_empty() { PUSH } else { FOE })
+    (line, if f.blocked_by.is_empty() { PUSH } else { th().foe })
 }
 
 /// The agent link's record of a forecast (tiles as [x, y]).
@@ -728,7 +729,7 @@ pub(super) fn draw_pushes(p: &mut Painter, list: &[emberwake_battle::forced::For
             let tw = p.text_w("HOLD", SMALL).ceil() as i32 + 6;
             let r = Rect::new(fx.round() as i32 - tw / 2, fy.round() as i32 - 5, tw, 9);
             p.panel(r, rgba(30, 70, 110, 235), HELD, 2.0);
-            p.text_center(fx, r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0, "HOLD", SMALL, TEXT);
+            p.text_center(fx, r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0, "HOLD", SMALL, th().text);
             continue;
         }
         let (tx, ty) = ground_pt(geo, f.to);
@@ -745,7 +746,7 @@ pub(super) fn draw_pushes(p: &mut Painter, list: &[emberwake_battle::forced::For
             let (nx, ny) = ground_pt(geo, f.to + f.dir);
             let (cx, cy) = ((tx + nx) / 2.0, (ty + ny) / 2.0);
             // a dark-edged cross so it reads over the tokens
-            for (col, wd) in [(rgba(20, 8, 10, 230), 3.0), (FOE, 1.6)] {
+            for (col, wd) in [(rgba(20, 8, 10, 230), 3.0), (th().foe, 1.6)] {
                 for s in [1.0f32, -1.0] {
                     stage::wide_line(p, cx - 6.0, cy - 6.0 * s, cx + 6.0, cy + 6.0 * s, col, wd, 0.0);
                 }
@@ -832,7 +833,7 @@ pub(super) fn poise_bar(p: &mut Painter, r: Rect, st: &emberwake_battle::poise::
     let w = (r.w * st.value.clamp(0, st.max) + st.max - 1) / st.max;
     p.fill(Rect::new(r.x, r.y, w.min(r.w), r.h), POISE);
     if st.value > st.max {
-        p.fill(Rect::new(r.x + r.w - 2, r.y, 2, r.h), GOLD);
+        p.fill(Rect::new(r.x + r.w - 2, r.y, 2, r.h), th().gold);
     }
 }
 
@@ -849,7 +850,7 @@ pub(super) fn break_plate(p: &mut Painter, x: f32, y: f32) {
     let tw = p.text_w("BREAK", SMALL).ceil() as i32 + 6;
     let r = Rect::new(x.round() as i32 - tw / 2, y.round() as i32, tw, 9);
     p.panel(r, rgba(150, 36, 40, 235), rgba(255, 220, 210, 230), 2.0);
-    p.text_center(x, r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0, "BREAK", SMALL, TEXT);
+    p.text_center(x, r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0, "BREAK", SMALL, th().text);
 }
 
 /// A strip span's parts in the timeline widget's look (wind-up, impact, recovery) and whether a break cancelled it.
@@ -897,16 +898,16 @@ impl HitForecast {
                 why += &format!(" x {name} {m}");
             }
         }
-        let mut out = vec![(format!("Forecast on {}", w.units[self.target].name), GOLD)];
+        let mut out = vec![(format!("Forecast on {}", w.units[self.target].name), th().gold)];
         if self.staggers() {
-            out.push((format!("Stagger {}{why} = {}", self.stagger, self.fc.taken), TEXT));
+            out.push((format!("Stagger {}{why} = {}", self.stagger, self.fc.taken), th().text));
             out.push(self.verdict());
         }
         if self.flank {
-            out.push(("Flank".into(), GOOD));
+            out.push(("Flank".into(), th().good));
         }
         if self.pierce {
-            out.push(("Armour pierced".into(), GOOD));
+            out.push(("Armour pierced".into(), th().good));
         }
         out
     }
@@ -916,11 +917,11 @@ impl HitForecast {
         use emberwake_battle::poise::{BreakCause, Verdict};
         let (b, a) = (self.fc.before, self.fc.after);
         match self.fc.verdict {
-            Verdict::Breaks(BreakCause::Sure) => ("Breaks: a sure break into its wind-up".into(), FOE),
-            Verdict::Breaks(_) => (format!("Breaks: poise {b} -> 0"), FOE),
-            Verdict::Chance(c) => (format!("May break: {c}% (poise {b} -> {a})"), GOLD),
-            Verdict::Holds => (format!("Poise {b} -> {a}"), TEXT),
-            Verdict::AlreadyBroken => ("Already broken this round".into(), DIM),
+            Verdict::Breaks(BreakCause::Sure) => ("Breaks: a sure break into its wind-up".into(), th().foe),
+            Verdict::Breaks(_) => (format!("Breaks: poise {b} -> 0"), th().foe),
+            Verdict::Chance(c) => (format!("May break: {c}% (poise {b} -> {a})"), th().gold),
+            Verdict::Holds => (format!("Poise {b} -> {a}"), th().text),
+            Verdict::AlreadyBroken => ("Already broken this round".into(), th().dim),
         }
     }
 
@@ -932,7 +933,7 @@ impl HitForecast {
     /// One intel panel line: "Your Jab B3: in wind-up, breaks: poise 20 -> 0, flank" style.
     pub(super) fn short(&self, _w: &World) -> (String, Rgba) {
         let mut bits: Vec<String> = Vec::new();
-        let mut col = TEXT;
+        let mut col = th().text;
         if self.staggers() {
             let (v, c) = self.verdict();
             col = c;

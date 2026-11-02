@@ -10,8 +10,9 @@
 use crate::hud::tone_colour;
 use crate::screens::{Cx, GameCx, Key, Nav, Screen};
 use aegis_core::json::{self, s, Dict};
+use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
-use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, FOE, H, HEAD, TEXT, TITLE, W};
+use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, H, HEAD, TITLE, W};
 use aegis_ui::widget_plumbing;
 use emberwake_world::campaign::trigger;
 use emberwake_world::dialogue::DialogueRunner;
@@ -329,7 +330,7 @@ impl Screen<GameCx> for CampaignNotice {
 
     fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<()> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), rgba(0, 0, 0, 120));
+        ui.p.fill(Rect::new(0, 0, W, H), th().scrim);
         let scale = ui.p.fonts.scale.max(1.0);
         let inner = ((NOTICE_W as f32 * scale).ceil() as i32).max(ui.p.text_w(&self.title, TITLE).ceil() as i32).min(W - 40 - 2 * PAD);
         let (tl, bl) = (ui.p.line_h(TITLE), ui.p.line_h(BODY));
@@ -338,7 +339,7 @@ impl Screen<GameCx> for CampaignNotice {
         let bh = (bl + 6.0).ceil() as i32;
         let h = PAD + (title.len() as f32 * tl + 4.0 + body.len() as f32 * bl).ceil() as i32 + 8 + bh + PAD;
         let r = Rect::new((W - inner - 2 * PAD) / 2, (H - h) / 2, inner + 2 * PAD, h);
-        ui.p.panel(r, rgba(18, 26, 44, 255), tone_colour(&self.tone), 4.0);
+        ui.p.panel(r, th().panel, tone_colour(&self.tone), 4.0);
         let mut y = (r.y + PAD) as f32;
         for l in &title {
             ui.p.text((r.x + PAD) as f32, y, l, TITLE, tone_colour(&self.tone));
@@ -346,7 +347,7 @@ impl Screen<GameCx> for CampaignNotice {
         }
         y += 4.0;
         for l in &body {
-            ui.p.text((r.x + PAD) as f32, y, l, BODY, TEXT);
+            ui.p.text((r.x + PAD) as f32, y, l, BODY, th().text);
             y += bl;
         }
         let ok = button_w(&mut ui, "OK");
@@ -472,7 +473,7 @@ impl Screen<GameCx> for RunOverScreen {
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let missing = self.act_save_missing(cx);
         let mut ui: Ui<OverAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), OVER_FILL);
+        ui.p.fill(Rect::new(0, 0, W, H), th().game("over_fill", OVER_FILL));
         let labels = [LOAD_ACT, LOAD_SAVE, MAIN_MENU];
         let widths: Vec<i32> = labels.iter().map(|l| button_w(&mut ui, l)).collect();
         let row = widths.iter().sum::<i32>() + 6 * (widths.len() as i32 - 1);
@@ -486,11 +487,11 @@ impl Screen<GameCx> for RunOverScreen {
         let buttons_h = if stacked { 3 * bh + 2 * 4 } else { bh };
         let h = PAD + hl.ceil() as i32 + 8 + (body.len() as f32 * bl).ceil() as i32 + 12 + buttons_h + PAD;
         let r = Rect::new((W - inner - 2 * PAD) / 2, (H - h) / 2, inner + 2 * PAD, h);
-        ui.p.panel(r, rgba(24, 16, 22, 255), FOE, 4.0);
-        ui.p.text_center((r.x + r.w / 2) as f32, (r.y + PAD) as f32, OVER_TITLE, HEAD, FOE);
+        ui.p.panel(r, th().game("defeat_card", rgba(24, 16, 22, 255)), th().foe, 4.0);
+        ui.p.text_center((r.x + r.w / 2) as f32, (r.y + PAD) as f32, OVER_TITLE, HEAD, th().foe);
         let mut y = (r.y + PAD) as f32 + hl.ceil() + 8.0;
         for l in &body {
-            ui.p.text_center((r.x + r.w / 2) as f32, y, l, BODY, TEXT);
+            ui.p.text_center((r.x + r.w / 2) as f32, y, l, BODY, th().text);
             y += bl;
         }
         let acts = [OverAct::LoadAct, OverAct::LoadSave, OverAct::MainMenu];

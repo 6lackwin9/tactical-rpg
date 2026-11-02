@@ -1,6 +1,7 @@
 //! Main menu, New game, Load / Save slots and Settings (scripts/ui/menus: main_menu_model, new_game_model,
 //! save_slots_model, settings_model). Placeholder logic as in Godot; file import / export of saves is not ported yet.
 
+use aegis_ui::theme::th;
 use aegis_ui::audio::Bus;
 use aegis_ui::canvas::{rgba, Rect};
 use crate::music;
@@ -9,7 +10,7 @@ use crate::screens::{default_settings, enter_game, show_errors, title, Cx, GameC
 use aegis_ui::painter::Typeface;
 use aegis_ui::panes::{self, MenuItem, MenuStyle};
 use emberwake_battle::portrait::Look;
-use aegis_ui::ui::{tip, Gfx, Glyph, Ui, Widget, BODY, DIM, GOLD, H, INFO, PANEL_HI, SMALL, TEXT, TITLE, W};
+use aegis_ui::ui::{tip, Gfx, Glyph, Ui, Widget, BODY, H, SMALL, TITLE, W};
 use aegis_ui::screen::{Settings, FPS_CAPS, TEXT_SIZES, TEXT_SPEEDS, WINDOW_MODES, WINDOW_SIZES};
 use aegis_ui::vignette::{TextSpeed, REDUCE_MOTION, TEXT_SPEED};
 use aegis_ui::widget_plumbing;
@@ -425,7 +426,7 @@ impl Screen<GameCx> for NewGameScreen {
         let mut y = 54;
         for w in new_game::playable_worlds(&cx.data) {
             let m = cx.data.manifest(&w);
-            let lines = vec![(s_or(m, "name", &w), TEXT), (s(m, "tagline"), TEXT), (party_line(&Self::party_of(cx, &w)), TEXT)];
+            let lines = vec![(s_or(m, "name", &w), th().text), (s(m, "tagline"), th().text), (party_line(&Self::party_of(cx, &w)), th().text)];
             ui.card(&format!("world.{w}"), Rect::new(70, y, 500, 44), &lines, Some(NgAct::Pick(w.clone())), w == self.selected, true, Vec::new());
             y += 50;
         }
@@ -632,10 +633,10 @@ impl Screen<GameCx> for Slots {
             let locked = save::is_locked(&cx.save_dir, slot);
             let row = slot_row(self.saving, slot, exists, ok, locked, Self::no_save(cx));
             let hover = row.action.is_some() && ui.hover(r);
-            ui.p.panel(r, if hover { PANEL_HI } else { rgba(26, 36, 58, 250) }, if hover { GOLD } else { aegis_ui::ui::BORDER }, 2.0);
+            ui.p.panel(r, if hover { th().card_hot } else { th().game("menu_row", rgba(26, 36, 58, 250)) }, if hover { th().gold } else { th().edge }, 2.0);
             let text_w = (r.w - 8 - if row.delete { 40 } else { 0 }) as f32;
-            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &label, BODY, text_w, if ok { TEXT } else { DIM });
-            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 16.0, &status, BODY, text_w, if ok { INFO } else { DIM });
+            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &label, BODY, text_w, if ok { th().text } else { th().dim });
+            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 16.0, &status, BODY, text_w, if ok { th().info } else { th().dim });
             let enabled = row.action.is_some();
             ui.push(format!("slot.{slot}"), "card", format!("{label}: {status}"), r, enabled, false, row.action, tip(&label, &row.why));
             let del = Rect::new(r.x + r.w - 4 - 16, r.y + 4, 16, 16);
@@ -790,7 +791,7 @@ impl Screen<GameCx> for SettingsScreen {
         // The draft levels play while the popup is open; the shell puts the saved ones back each frame.
         cx.audio.set_levels(&self.draft);
         let mut ui: Ui<SetAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), rgba(0, 0, 0, 140));
+        ui.p.fill(Rect::new(0, 0, W, H), th().game("settings_veil", rgba(0, 0, 0, 140)));
         let r = Rect::new(95, 25, 450, 310);
         ui.frame(r, "Settings", false);
         ui.close_x("settings.close", Rect::new(r.x + r.w - 28, r.y + 9, 19, 18), SetAct::Close);
@@ -802,7 +803,7 @@ impl Screen<GameCx> for SettingsScreen {
             tx += tw + 2;
         }
         let body = Rect::new(r.x + 9, r.y + 55, r.w - 18, 222);
-        ui.p.panel(body, rgba(24, 26, 32, 255), rgba(24, 26, 32, 255), 1.0);
+        ui.p.panel(body, th().game("settings_body", rgba(24, 26, 32, 255)), th().game("settings_body", rgba(24, 26, 32, 255)), 1.0);
         let (x, mut y) = (body.x + 5, body.y + 6);
         let d = self.draft.clone();
         let pct = |k: &str| d[k].as_f64().unwrap_or(0.0);
@@ -811,7 +812,7 @@ impl Screen<GameCx> for SettingsScreen {
                 ui.checkbox("settings.mute", x + 3, y, "Mute", d["mute"].as_bool().unwrap_or(false), SetAct::Toggle("mute"), true);
                 y += 20;
                 for (k, label) in [("master", "Master volume"), ("music", "Music volume"), ("effects", "Effects volume"), ("interface", "Interface volume")] {
-                    ui.p.text(x as f32, y as f32 + 2.0, label, BODY, TEXT);
+                    ui.p.text(x as f32, y as f32 + 2.0, label, BODY, th().text);
                     let key = static_key(k);
                     ui.slider(&format!("settings.{k}"), Rect::new(x + 125, y, 200, 13), (pct(k) / VOLUME_STEP).round() as usize, 21, &format!("{}%", pct(k)), |i| SetAct::Set(key, i as f64 * VOLUME_STEP), true);
                     y += 18;
@@ -819,19 +820,19 @@ impl Screen<GameCx> for SettingsScreen {
             }
             1 => {
                 for (k, label) in [("window_mode", "Window mode"), ("window_size", "Window size")] {
-                    ui.p.text(x as f32, y as f32 + 3.0, label, BODY, TEXT);
+                    ui.p.text(x as f32, y as f32 + 3.0, label, BODY, th().text);
                     choice(&mut ui, static_key(k), Rect::new(x + 125, y, 150, 16), d[k].as_str().unwrap_or(""));
                     y += 22;
                 }
-                ui.p.text(x as f32, y as f32, "In use", BODY, TEXT);
-                ui.p.text(x as f32 + 125.0, y as f32, &format!("{} {}", d["window_mode"].as_str().unwrap_or(""), d["window_size"].as_str().unwrap_or("")), BODY, DIM);
+                ui.p.text(x as f32, y as f32, "In use", BODY, th().text);
+                ui.p.text(x as f32 + 125.0, y as f32, &format!("{} {}", d["window_mode"].as_str().unwrap_or(""), d["window_size"].as_str().unwrap_or("")), BODY, th().dim);
                 y += 18;
                 ui.checkbox("settings.vsync", x + 3, y, "Vertical sync", d["vsync"].as_bool().unwrap_or(true), SetAct::Toggle("vsync"), true);
                 y += 20;
-                ui.p.text(x as f32, y as f32 + 3.0, "Frame rate cap", BODY, TEXT);
+                ui.p.text(x as f32, y as f32 + 3.0, "Frame rate cap", BODY, th().text);
                 choice(&mut ui, "fps_cap", Rect::new(x + 125, y, 150, 16), d["fps_cap"].as_str().unwrap_or(""));
                 y += 24;
-                ui.p.text(x as f32, y as f32 + 3.0, "Text size", BODY, TEXT);
+                ui.p.text(x as f32, y as f32 + 3.0, "Text size", BODY, th().text);
                 // The engine's four levels (Godot TEXT_LEVELS); a saved value off the levels shows the nearest one.
                 let ts = pct("text_scale");
                 let labels: Vec<String> = TEXT_SIZES.iter().map(|t| t.0.to_string()).collect();
@@ -839,7 +840,7 @@ impl Screen<GameCx> for SettingsScreen {
                 ui.select("settings.text_scale", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Set("text_scale", TEXT_SIZES[i].1), true, Vec::new());
             }
             2 => {
-                ui.p.text(x as f32, y as f32 + 2.0, "Animation speed", BODY, TEXT);
+                ui.p.text(x as f32, y as f32 + 2.0, "Animation speed", BODY, th().text);
                 let a = pct("anim_speed");
                 ui.slider("settings.anim_speed", Rect::new(x + 125, y, 200, 13), ((a - 0.5) / SCALE_STEP).round() as usize, 7, &format!("{a:.2}x"), |i| SetAct::Set("anim_speed", 0.5 + i as f64 * SCALE_STEP), true);
                 ui.checkbox("settings.skip_anim", x + 300, y + 1, "Skip animations", d["skip_anim"].as_bool().unwrap_or(false), SetAct::Toggle("skip_anim"), true);
@@ -854,7 +855,7 @@ impl Screen<GameCx> for SettingsScreen {
                     wd.tip = tip("Auto-fill the rest", "After your picks the planner fills the round's free blocks with follow-ups (ghost blocks you can replace). Off: the free blocks Rest.");
                 }
                 y += 20;
-                ui.p.text(x as f32, y as f32 + 3.0, "Map names", BODY, TEXT);
+                ui.p.text(x as f32, y as f32 + 3.0, "Map names", BODY, th().text);
                 let labels: Vec<String> = MAP_NAMES.iter().map(|m| m.1.to_string()).collect();
                 let at = MAP_NAMES.iter().position(|m| d["map_names"].as_str() == Some(m.0)).unwrap_or(0);
                 let t = tip("Map names", "On hover: a marker's name shows while you point at it, its legend row, or face it. Always: every person and exit is named.");
@@ -862,13 +863,13 @@ impl Screen<GameCx> for SettingsScreen {
                 y += 22;
                 // STAGE1-O: when units hidden behind others or cover are outlined in battle (the Flat view is a Scene
                 // Runner debug setting since STAGE1-C, not a player choice).
-                ui.p.text(x as f32, y as f32 + 3.0, "Units behind", BODY, TEXT);
+                ui.p.text(x as f32, y as f32 + 3.0, "Units behind", BODY, th().text);
                 let labels: Vec<String> = crate::stage::SEE_THROUGH.iter().map(|v| v.1.to_string()).collect();
                 let at = crate::stage::SEE_THROUGH.iter().position(|v| d["see_through"].as_str() == Some(v.0)).unwrap_or(0);
                 ui.select("settings.see_through", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick("see_through", i), true, tip("Units behind", crate::stage::SEE_THROUGH_TIP));
                 y += 22;
                 // STORYUI1 4.8: the story cards' typewriter speed and the shared reduce-motion switch (engine keys)
-                ui.p.text(x as f32, y as f32 + 3.0, "Text speed", BODY, TEXT);
+                ui.p.text(x as f32, y as f32 + 3.0, "Text speed", BODY, th().text);
                 let labels: Vec<String> = TEXT_SPEEDS.iter().map(|v| TextSpeed::parse(v).label().to_string()).collect();
                 let at = TEXT_SPEEDS.iter().position(|v| d[TEXT_SPEED].as_str() == Some(*v)).unwrap_or(1);
                 let t = tip("Text speed", "How fast story captions type out: Slow, Normal, Fast, or Instant (the whole text at once). A click shows the rest at any speed.");
@@ -880,7 +881,7 @@ impl Screen<GameCx> for SettingsScreen {
                 // RULESET1-U slice 6 (preference "Battle overlays and the clarity pass", user 2026-10-30): every
                 // overlay group of a timeline battle, on by default; the clarity pass (VISCLAR1) decides later what
                 // the game view keeps.
-                ui.p.text(x as f32, y as f32, "Battle overlays (timeline battles)", BODY + 1.0, GOLD);
+                ui.p.text(x as f32, y as f32, "Battle overlays (timeline battles)", BODY + 1.0, th().gold);
                 // INPUT1 PB3: the playback speed (the battle's chips and key P set it too) at the heading row's end
                 let speeds = &crate::battle::PLAYBACK_SPEEDS;
                 let labels: Vec<String> = speeds.iter().map(|v| v.1.to_string()).collect();
@@ -888,7 +889,7 @@ impl Screen<GameCx> for SettingsScreen {
                 let sr = Rect::new(body.x + body.w - 5 - 64, y - 2, 64, 14);
                 let label = "Playback speed";
                 let lw = ui.p.text_w(label, BODY);
-                ui.p.text(sr.x as f32 - 4.0 - lw, y as f32, label, BODY, TEXT);
+                ui.p.text(sr.x as f32 - 4.0 - lw, y as f32, label, BODY, th().text);
                 let t = tip("Playback speed", "How a timeline battle plays its round: 1x; 0.5x (every walk, clip, float and pause twice as long); Block (it waits after each block until N or Next block). P cycles it in battle.");
                 ui.select("settings.playback_speed", sr, &labels, at, |i| SetAct::Pick(crate::battle::PLAYBACK_SPEED, i), true, t);
                 y += 14;
@@ -908,7 +909,7 @@ impl Screen<GameCx> for SettingsScreen {
                 #[cfg(debug_assertions)]
                 {
                     let y = y + groups.len().div_ceil(2) as i32 * OVERLAY_PITCH + 2;
-                    ui.p.text(x as f32, y as f32, "Debug", BODY + 1.0, GOLD);
+                    ui.p.text(x as f32, y as f32, "Debug", BODY + 1.0, th().gold);
                     let at = x + 3 + col_w;
                     ui.checkbox("settings.debug.party_foresight_off", at, y, "Party foresight off", d[crate::battle::FORESIGHT_OFF].as_bool().unwrap_or(false), SetAct::Toggle(crate::battle::FORESIGHT_OFF), true);
                     if let Some(wd) = ui.widgets.last_mut() {
@@ -922,11 +923,11 @@ impl Screen<GameCx> for SettingsScreen {
                 let off = ui.scroll_begin("settings.controls", body, content);
                 y -= off;
                 for (head, rows) in CONTROLS {
-                    ui.p.text(x as f32, y as f32, head, BODY + 2.0, GOLD);
+                    ui.p.text(x as f32, y as f32, head, BODY + 2.0, th().gold);
                     y += 14;
                     for (what, keys) in rows {
-                        ui.p.text(x as f32, y as f32, what, BODY, TEXT);
-                        ui.p.text(x as f32 + 195.0, y as f32, keys, BODY, DIM);
+                        ui.p.text(x as f32, y as f32, what, BODY, th().text);
+                        ui.p.text(x as f32 + 195.0, y as f32, keys, BODY, th().dim);
                         y += 11;
                     }
                     y += 3;

@@ -20,6 +20,7 @@
 //! (and the tilted water lips); everything else draws over it as before, and `rows` alone still decide walking.
 
 use aegis_core::assets::{ClipPlayer, Facing, View};
+use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::hud::{hud_bar, hud_key, hud_open, purse_word, Hud, PurseWord, HUD_H};
 use crate::runover::days as day_count;
@@ -32,7 +33,7 @@ use crate::portraits::Faces;
 use crate::shop::{ShopAct, ShopPane};
 use crate::talk::{self, talk_layout, TalkAct, TalkBox};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
-use aegis_ui::ui::{draw_glyph, tip, Gfx, Glyph, Ui, Widget, BODY, BORDER, DIM, GOLD, GOOD, H, INFO, PANEL_HI, SMALL, TEXT, W};
+use aegis_ui::ui::{draw_glyph, tip, Gfx, Glyph, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
 use emberwake_world::dialogue::DialogueRunner;
@@ -734,7 +735,7 @@ impl Screen<GameCx> for RegionMap {
         let node = self.runner.as_ref().filter(|r| !r.closed).map(|r| format!("{}/{}", r.character_qid, r.node_id)).unwrap_or_default();
         talk::follow_node(g, &mut self.talk_node, node);
         let mut ui: Ui<RAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), rgb(14, 18, 26));
+        ui.p.fill(Rect::new(0, 0, W, H), th().game("map_ground", rgb(14, 18, 26)));
         // PORTRAITFX1-D: a portrait left out of the last frame (the conversation ended or hid) is dropped
         self.faces.begin();
         let loc = explore::location(&d, &gs);
@@ -887,7 +888,7 @@ impl Screen<GameCx> for RegionMap {
                 }
                 let mut t = tip(&label, &s(&view, "verb"));
                 if !services.is_empty() {
-                    t.push((services_text(&services), INFO));
+                    t.push((services_text(&services), th().info));
                 }
                 hits.push(MarkHit { id, label, hit, foot: r.y + r.h, tip: t, named, name_rect, badge: !services.is_empty() });
             }
@@ -998,12 +999,12 @@ impl Screen<GameCx> for RegionMap {
                 let lx = (r.x as f32 + ts as f32 / 2.0 - w / 2.0).min((map_area.x + map_area.w) as f32 - 2.0 - w).max(map_area.x as f32 + 2.0);
                 let ly = (r.y as f32 - if badge { 5.0 } else { 1.0 } - ui.p.line_h(SMALL)).max(map_area.y as f32 + 1.0);
                 ui.p.text(lx + 0.5, ly + 0.5, &label, SMALL, rgba(0, 0, 0, 200));
-                ui.p.text(lx, ly, &label, SMALL, TEXT);
+                ui.p.text(lx, ly, &label, SMALL, th().text);
             }
             ui.pop_clip();
         } else {
-            ui.p.text(20.0, 40.0, &s_or(loc, "name", "Nowhere"), 11.0, GOLD);
-            let y = ui.para(20, 58, 440, &s(loc, "description"), BODY, TEXT);
+            ui.p.text(20.0, 40.0, &s_or(loc, "name", "Nowhere"), 11.0, th().gold);
+            let y = ui.para(20, 58, 440, &s(loc, "description"), BODY, th().text);
             for (i, ex) in explore::menu(&d, &gs).iter().enumerate() {
                 let to = s(ex, "to");
                 let label = s(ex, "label");
@@ -1034,9 +1035,9 @@ impl Screen<GameCx> for RegionMap {
                 let (ux, uy) = (dx / len, dy / len);
                 let hr = Rect::new(ax.round() as i32 - ARROW / 2, ay.round() as i32 - ARROW / 2, ARROW, ARROW);
                 let hover = !modal && ui.hover(hr);
-                ui.p.circle(ax, ay, ARROW as f32 / 2.0, rgba(12, 18, 28, 210));
+                ui.p.circle(ax, ay, ARROW as f32 / 2.0, th().game("map_arrow", rgba(12, 18, 28, 210)));
                 let half = ARROW as f32 * 0.3;
-                ui.p.arrow(ax - ux * half, ay - uy * half, ax + ux * half, ay + uy * half, if hover { TEXT } else { GOLD }, 0.0, half * 0.9);
+                ui.p.arrow(ax - ux * half, ay - uy * half, ax + ux * half, ay + uy * half, if hover { th().text } else { th().gold }, 0.0, half * 0.9);
                 self.arrows.push(json!({"id": id, "at": [ax.round() as i64, ay.round() as i64], "dir": [(ux * 100.0).round() / 100.0, (uy * 100.0).round() / 100.0]}));
                 if !modal {
                     ui.push(format!("arrow.{id}"), "arrow", label.clone(), hr, true, false, Some(RAct::Pan(id)), tip(&label, "Out of view: click to look there."));
@@ -1049,10 +1050,10 @@ impl Screen<GameCx> for RegionMap {
         let board_qid = self.board_qid();
         if let (Some(view), Some(b)) = (talk_view.as_ref(), talk_box.as_ref()) {
             if !shop_qid.is_empty() {
-                ui.p.fill(map_area, SHOP_DIM);
+                ui.p.fill(map_area, th().game("shop_veil", SHOP_DIM));
                 self.shop.draw(&mut ui, cx, &shop_qid, RAct::Shop);
             } else if !board_qid.is_empty() {
-                ui.p.fill(map_area, SHOP_DIM);
+                ui.p.fill(map_area, th().game("shop_veil", SHOP_DIM));
                 let bv = emberwake_world::board::view(&d, &gs, &board_qid);
                 let pick = self.board.select(&bv);
                 let det = if pick.is_empty() { Dict::new() } else { emberwake_world::board::detail(&d, &gs, &pick) };
@@ -1065,10 +1066,10 @@ impl Screen<GameCx> for RegionMap {
             self.draw_turn_in(&mut ui, cx, &p);
         }
         if let Some((name, text)) = self.lore.clone() {
-            ui.p.fill(Rect::new(0, 0, W, H), rgba(0, 0, 0, 120));
+            ui.p.fill(Rect::new(0, 0, W, H), th().scrim);
             let fr = Rect::new(150, 60, 340, 220);
             ui.frame(fr, &name, false);
-            ui.para(fr.x + 10, fr.y + 30, fr.w - 20, &text, BODY, TEXT);
+            ui.para(fr.x + 10, fr.y + 30, fr.w - 20, &text, BODY, th().text);
             ui.button("lore.close", Rect::new(fr.x + fr.w - 60, fr.y + fr.h - 24, 50, 16), "Close", RAct::CloseLore, true);
         }
         self.w = ui.widgets;
@@ -1267,18 +1268,18 @@ impl RegionMap {
         let qid = s(p, "quest");
         let q = quest::resolved(d, gs, &qid);
         let fr = Rect::new(160, 60, 320, 230);
-        ui.p.fill(Rect::new(0, 0, W, H), rgba(0, 0, 0, 100));
+        ui.p.fill(Rect::new(0, 0, W, H), th().game("map_veil", rgba(0, 0, 0, 100)));
         ui.frame(fr, &format!("Turn in: {}", s_or(&q, "name", &qid)), false);
         let mut y = fr.y + 30;
         let rewards = crate::hub::reward_lines(cx, json::dget(&q, "rewards"));
         if !rewards.is_empty() {
-            ui.p.text_fit(fr.x as f32 + 10.0, y as f32, &format!("Rewards: {}", rewards.join(", ")), BODY, (fr.w - 20) as f32, TEXT);
+            ui.p.text_fit(fr.x as f32 + 10.0, y as f32, &format!("Rewards: {}", rewards.join(", ")), BODY, (fr.w - 20) as f32, th().text);
             y += 14;
         }
         let allowed = json::i(p, "picks_allowed", 0);
         let offers = json::sget(p, "offers");
         if allowed > 0 {
-            ui.p.text(fr.x as f32 + 10.0, y as f32, &format!("Choose {allowed} of:"), BODY, GOLD);
+            ui.p.text(fr.x as f32 + 10.0, y as f32, &format!("Choose {allowed} of:"), BODY, th().gold);
             y += 13;
             for lq in offers {
                 let loot = d.resolve(&gs.world_id, "loot", &lq);
@@ -1288,7 +1289,7 @@ impl RegionMap {
             }
         }
         let names: Vec<String> = gs.party.members.iter().map(|m| crate::hub::member_name(cx, m)).collect();
-        ui.p.text(fr.x as f32 + 10.0, y as f32 + 5.0, "Passive / skill rewards go to", BODY, DIM);
+        ui.p.text(fr.x as f32 + 10.0, y as f32 + 5.0, "Passive / skill rewards go to", BODY, th().dim);
         ui.select("turn_in.recipient", Rect::new(fr.x + 150, y + 2, 120, 15), &names, self.recipient, RAct::PickRecipient, gs.party.members.len() > 1, Vec::new());
         ui.button("turn_in.cancel", Rect::new(fr.x + fr.w - 120, fr.y + fr.h - 24, 52, 16), "Cancel", RAct::CancelTurnIn, true);
         ui.button("turn_in.confirm", Rect::new(fr.x + fr.w - 62, fr.y + fr.h - 24, 52, 16), "Confirm", RAct::ConfirmTurnIn, self.picks.len() as i64 <= allowed);
@@ -1335,7 +1336,7 @@ impl RegionMap {
         let w = w.min((LEGEND_MAX as f32 * ui.p.fonts.scale).round() as i32);
         let x = W - 4 - w;
         let head = Rect::new(x, HUD_H + 4, w, rh);
-        ui.p.fill(head, PANE);
+        ui.p.fill(head, th().game("map_pane", PANE));
         let t = tip(&title, if open { "Click to fold the legend to this line." } else { "Click to open the legend: who and what is here." });
         ui.section("legend", head, &title, "", open, RAct::Legend, t);
         if !open || rows.is_empty() {
@@ -1345,8 +1346,8 @@ impl RegionMap {
         let content = rows.len() as i32 * rh;
         let pane = Rect::new(x, top, w, content.min(H - 4 - top));
         let whole = Rect::new(x, head.y, w, pane.y + pane.h - head.y);
-        ui.p.fill(pane, PANE);
-        ui.p.panel(pane, rgba(0, 0, 0, 0), BORDER, 3.0);
+        ui.p.fill(pane, th().game("map_pane", PANE));
+        ui.p.panel(pane, rgba(0, 0, 0, 0), th().edge, 3.0);
         let off = ui.scroll_begin("legend.rows", pane, content);
         let px = ui.icon_px(Rect::new(0, 0, ICON + 4, ICON + 4));
         let spx = ui.icon_px(Rect::new(0, 0, SERVICE + 4, SERVICE + 4));
@@ -1354,7 +1355,7 @@ impl RegionMap {
             let r = Rect::new(x, top - off + i as i32 * rh, w, rh);
             let hover = !modal && ui.hover(r);
             if hover {
-                ui.p.panel(r, PANEL_HI, rgb(110, 140, 196), 3.0);
+                ui.p.panel(r, th().card_hot, th().edge_hot, 3.0);
             }
             let ir = Rect::new(r.x + 4, r.y + (rh - ICON) / 2, ICON, ICON);
             match cx.art.image(&emberwake_content::art::marker(marker_icon(&kind, &state)), px, px) {
@@ -1363,7 +1364,7 @@ impl RegionMap {
             }
             let sw = services.len() as i32 * (SERVICE + 1);
             let tx = ir.x + ICON + 4;
-            ui.p.text_fit(tx as f32, r.y as f32 + (rh as f32 - ui.p.line_h(BODY)) / 2.0, &label, BODY, (r.x + r.w - 4 - sw - tx) as f32, if state == "spent" { DIM } else { TEXT });
+            ui.p.text_fit(tx as f32, r.y as f32 + (rh as f32 - ui.p.line_h(BODY)) / 2.0, &label, BODY, (r.x + r.w - 4 - sw - tx) as f32, if state == "spent" { th().dim } else { th().text });
             let mut sx = r.x + r.w - 4 - sw;
             for sv in &services {
                 let sr = Rect::new(sx, r.y + (rh - SERVICE) / 2, SERVICE, SERVICE);
@@ -1375,9 +1376,9 @@ impl RegionMap {
             }
             let mut t = tip(&label, &verb);
             if !services.is_empty() {
-                t.push((services_text(&services), INFO));
+                t.push((services_text(&services), th().info));
             }
-            t.push(("Click to look there; click again to walk there.".to_string(), DIM));
+            t.push(("Click to look there; click again to walk there.".to_string(), th().dim));
             ui.push(format!("here.{id}"), "row", label.clone(), r, true, false, (!modal).then(|| RAct::Pan(id.clone())), t);
         }
         ui.scroll_end();
@@ -1411,17 +1412,17 @@ impl RegionMap {
         let h = lines.len() as i32 * lh + 5;
         let r = Rect::new(4, H - 4 - h, w, h);
         let hover = !modal && ui.hover(r);
-        ui.p.fill(r, PANE);
-        ui.p.panel(r, rgba(0, 0, 0, 0), if hover { GOLD } else { BORDER }, 3.0);
+        ui.p.fill(r, th().game("map_pane", PANE));
+        ui.p.panel(r, rgba(0, 0, 0, 0), if hover { th().gold } else { th().edge }, 3.0);
         let last_y = r.y + 3 + (lines.len() as i32 - 1) * lh;
-        draw_glyph(&mut ui.p, if self.log_open { Glyph::ChevronDown } else { Glyph::ChevronRight }, Rect::new(r.x + 4, last_y + (lh - 8) / 2, 8, 8), if hover { GOLD } else { DIM });
+        draw_glyph(&mut ui.p, if self.log_open { Glyph::ChevronDown } else { Glyph::ChevronRight }, Rect::new(r.x + 4, last_y + (lh - 8) / 2, 8, 8), if hover { th().gold } else { th().dim });
         for (i, l) in lines.iter().enumerate() {
             let ly = (r.y + 3 + i as i32 * lh) as f32;
-            ui.p.text_fit((r.x + 15) as f32, ly, l, SMALL, inner as f32, if i + 1 == lines.len() { TEXT } else { DIM });
+            ui.p.text_fit((r.x + 15) as f32, ly, l, SMALL, inner as f32, if i + 1 == lines.len() { th().text } else { th().dim });
         }
         let mut t = tip("Event log (L)", if self.log_open { "Click or press L to show only the latest event." } else { "Click or press L for the last 12 events." });
         if !self.log_open && ui.p.text_w(&latest, SMALL) > inner as f32 {
-            t.push((latest.clone(), TEXT));
+            t.push((latest.clone(), th().text));
         }
         ui.push("log", "button", latest, r, !modal, self.log_open, Some(RAct::Log), t);
         Some(r)
@@ -1808,17 +1809,17 @@ pub(crate) fn service_glyph<A>(ui: &mut Ui<A>, service: &str, r: Rect) {
     let (cx_, cy_, sz) = (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0, r.w as f32);
     match service {
         "turn_in" | "offer" | "board" => {
-            let (text, col) = if service == "turn_in" { ("?", GOOD) } else { ("!", GOLD) };
+            let (text, col) = if service == "turn_in" { ("?", th().good) } else { ("!", th().gold) };
             let size = SMALL.max(r.h as f32 * 0.9 / 1.28);
             ui.p.text_center(cx_, cy_ - ui.p.line_h(size) / 2.0, text, size, col);
         }
         "shop" => {
             ui.p.circle(cx_, cy_, sz * 0.45, rgb(150, 110, 30));
-            ui.p.circle(cx_, cy_, sz * 0.33, GOLD);
+            ui.p.circle(cx_, cy_, sz * 0.33, th().gold);
         }
         _ => {
-            ui.p.line(cx_ - sz * 0.4, cy_, cx_ + sz * 0.4, cy_, GOOD, 0.0);
-            ui.p.line(cx_, cy_ - sz * 0.4, cx_, cy_ + sz * 0.4, GOOD, 0.0);
+            ui.p.line(cx_ - sz * 0.4, cy_, cx_ + sz * 0.4, cy_, th().good, 0.0);
+            ui.p.line(cx_, cy_ - sz * 0.4, cx_, cy_ + sz * 0.4, th().good, 0.0);
         }
     }
 }

@@ -2,10 +2,11 @@
 //! `timeline_view::build`, the Gallery's Battle timeline's builder too.
 
 use crate::battle::marks::FORESIGHT_OFF;
-use crate::battle::{Action, BattleScreen, FOE, GOLD, TILE, TV_PAD};
+use crate::battle::{Action, BattleScreen, TILE, TV_PAD};
 use crate::battle::tips::ap_lines;
 use crate::intent_text;
 use crate::screens::{Cx, Key, Screen};
+use aegis_ui::theme::th;
 use aegis_ui::ui::{Gfx, H, W};
 use emberwake_battle::grid::GRID_H;
 use emberwake_battle::round_intent::{self as ri};
@@ -160,7 +161,7 @@ fn an_unrevealed_enemy_is_masked_with_its_intent_tell_and_badges() {
         }
         let impacts: Vec<(i32, String)> = r.impacts.iter().map(|(b, k)| (*b, if *k == emberwake_battle::intent::HIT { "!" } else { "*" }.to_string())).collect();
         assert_eq!(tr.marks.iter().map(|m| (m.block, m.glyph.clone())).collect::<Vec<_>>(), impacts, "V1's badges as marks");
-        assert!(tr.marks.iter().all(|m| m.colour == if m.glyph == "!" { FOE } else { GOLD }));
+        assert!(tr.marks.iter().all(|m| m.colour == if m.glyph == "!" { th().foe } else { th().gold }));
     }
     assert!(masked > 0, "an enemy plans in secret");
     cx.settings.v["show_tells"] = json!(false);

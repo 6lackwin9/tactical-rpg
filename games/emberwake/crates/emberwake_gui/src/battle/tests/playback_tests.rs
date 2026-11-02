@@ -5,10 +5,11 @@
 
 use crate::battle::draw::{log_groups_json, log_part_name, LOG_INDENT};
 use crate::battle::marks::{tracer_alpha, traces_of};
-use crate::battle::{Action, BattleScreen, FOE, GOLD, PLAYBACK_SPEED, PLAYBACK_SPEEDS, TRACER_ALPHA, TRACER_MS};
+use crate::battle::{Action, BattleScreen, PLAYBACK_SPEED, PLAYBACK_SPEEDS, TRACER_ALPHA, TRACER_MS};
 use aegis_ui::canvas::Rect;
 use crate::fx;
 use crate::screens::{Cx, Key, Screen};
+use aegis_ui::theme::th;
 use aegis_ui::ui::{Gfx, Widget, H, W};
 use emberwake_battle::command::CmdKind;
 use emberwake_battle::grid::V2;
@@ -95,7 +96,7 @@ fn a_landed_hit_puts_one_tracer_per_unit_and_a_self_command_none() {
                 for u in landed {
                     assert!(tr.contains(&json!({"from": tile(&b, a.unit), "to": tile(&b, u), "alpha": TRACER_ALPHA, "dashed": false})), "{u}: {tr:?}");
                 }
-                let col = if sess.w.allies.contains(&a.unit) { GOLD } else { FOE };
+                let col = if sess.w.allies.contains(&a.unit) { th().gold } else { th().foe };
                 assert!(b.tracers.iter().all(|t| t.0.col == col && !t.0.dashed));
                 hits += 1;
             }
@@ -126,7 +127,7 @@ fn a_miss_is_one_dashed_tracer_and_a_cancelled_action_none() {
     c.hits.clear();
     c.staggers.clear();
     c.reactions.clear();
-    let col = if sess.w.allies.contains(&actor) { GOLD } else { FOE };
+    let col = if sess.w.allies.contains(&actor) { th().gold } else { th().foe };
     let want = vec![fx::Trace { from: V2::new(actor as i32, 0), to: V2::new(t as i32, 0), col, dashed: true }];
     assert_eq!(traces_of(sess, idx, &at, heal), want, "MR8 c: a protected flank");
     let c = &mut sess.resolver.scheduled[idx].command;
@@ -151,7 +152,7 @@ fn a_miss_is_one_dashed_tracer_and_a_cancelled_action_none() {
 fn the_group_off_lists_no_tracer_and_a_tracer_fades_or_holds() {
     let (mut cx, mut g, mut b) = arena(Some(TIMELINE));
     let now = b.clock.now();
-    b.tracers.push((fx::Trace { from: V2::new(1, 1), to: V2::new(3, 1), col: GOLD, dashed: false }, now));
+    b.tracers.push((fx::Trace { from: V2::new(1, 1), to: V2::new(3, 1), col: th().gold, dashed: false }, now));
     assert_eq!(b.state(&cx)["overlay"]["tracers"].as_array().map(Vec::len), Some(1));
     cx.settings.v["battle_overlays"]["tracers"] = json!(false);
     assert_eq!(b.state(&cx)["overlay"]["tracers"], json!([]), "the group off");
@@ -304,7 +305,7 @@ fn half_speed_doubles_the_playbacks_waits_and_clock() {
         b.next_at = t1;
         b.tick(&mut cx);
         let wait = (b.next_at.duration_since(t1).as_millis() as u64, t1.elapsed().as_millis() as u64);
-        b.show(&cx, vec![(0, "-1".into(), FOE)], Vec::new(), Vec::new());
+        b.show(&cx, vec![(0, "-1".into(), th().foe)], Vec::new(), Vec::new());
         let float = b.floats.last().unwrap().ms;
         cx.settings.v["skip_anim"] = json!(true);
         (planning_pace, clock, wait, float, b.pace(&cx), cx.tuning.value.clone())

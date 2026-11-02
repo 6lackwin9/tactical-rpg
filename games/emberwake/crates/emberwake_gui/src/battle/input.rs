@@ -1,8 +1,9 @@
 //! Round input: clicks on units and tiles, the popup and skill menu rows, targets, picks and ghosts, member and skill hotkeys.
 
+use aegis_ui::theme::th;
 use super::marks::skills_hp;
 use super::playback::PlaySpeed;
-use super::{Action, BattleScreen, ALLY, DIM, FOE, GOLD, TACTICS, TACTIC_HELP, TACTIC_INTENT_HELP, TACTIC_LABELS, TEXT};
+use super::{Action, BattleScreen, ALLY, TACTICS, TACTIC_HELP, TACTIC_INTENT_HELP, TACTIC_LABELS};
 use aegis_ui::canvas::Rect;
 use crate::intent_text;
 use crate::screens::Cx;
@@ -223,7 +224,7 @@ impl BattleScreen {
                 detail: if i == current { "current".into() } else { String::new() },
                 valid: true,
                 act: if party { RowAct::PartyTactic(i) } else { RowAct::HeroTactic(i) },
-                tip: vec![(TACTIC_LABELS[i].to_string(), GOLD), (help[i].to_string(), TEXT)],
+                tip: vec![(TACTIC_LABELS[i].to_string(), th().gold), (help[i].to_string(), th().text)],
                 warn: false,
                 ap_short: None,
             })
@@ -460,7 +461,7 @@ impl BattleScreen {
         let round = w.round_states.get(&h).and_then(|r| r.target);
         if let RoundTarget::Unit(u) = at {
             if u != h && w.allies.contains(&u) {
-                rows.push(Row { label: format!("Select {}", w.units[u].name), detail: String::new(), valid: true, act: RowAct::SelectAlly(u), tip: vec![(format!("Select {}", w.units[u].name), GOLD), ("Plan this hero's round instead.".into(), TEXT)], warn: false, ap_short: None });
+                rows.push(Row { label: format!("Select {}", w.units[u].name), detail: String::new(), valid: true, act: RowAct::SelectAlly(u), tip: vec![(format!("Select {}", w.units[u].name), th().gold), ("Plan this hero's round instead.".into(), th().text)], warn: false, ap_short: None });
             }
         }
         let skill_rows = rows.iter().any(|r| matches!(r.act, RowAct::Pick(_)));
@@ -684,14 +685,14 @@ impl BattleScreen {
             let name = sk["name"].as_str().unwrap_or("").to_string();
             let kind = sk["kind"].as_str().unwrap_or("");
             let area = sk["area"].as_str().unwrap_or("NONE") != "NONE";
-            let mut tip: Tip = vec![(name.clone(), GOLD)];
+            let mut tip: Tip = vec![(name.clone(), th().gold)];
             if let Some(d) = sk["description"].as_str().filter(|d| !d.is_empty()) {
-                tip.push((d.to_string(), TEXT));
+                tip.push((d.to_string(), th().text));
             }
-            tip.push((format!("{} AP, {} block{}, reach {}-{}", sk["ap"], sk["blocks"], if sk["blocks"] == json!(1) { "" } else { "s" }, sk["reach"][0], sk["reach"][1]), DIM));
+            tip.push((format!("{} AP, {} block{}, reach {}-{}", sk["ap"], sk["blocks"], if sk["blocks"] == json!(1) { "" } else { "s" }, sk["reach"][0], sk["reach"][1]), th().dim));
             // HOOKS1-UI slice 3 (HC1): the host's `hp_cost` (only on a skill that costs HP)
             if let Some(c) = sk["hp_cost"].as_i64().filter(|c| *c > 0) {
-                tip.push((intent_text::hp_cost_text(c as i32), FOE));
+                tip.push((intent_text::hp_cost_text(c as i32), th().foe));
             }
             match what {
                 "foe" => match kind {
@@ -710,21 +711,21 @@ impl BattleScreen {
             let items = self.host.handle(&json!({"cmd": "items", "unit": h, "target": t}))["items"].as_array().cloned().unwrap_or_default();
             for it in items {
                 let name = it["name"].as_str().unwrap_or("").to_string();
-                let mut tip: Tip = vec![(name.clone(), GOLD)];
+                let mut tip: Tip = vec![(name.clone(), th().gold)];
                 if let Some(d) = it["description"].as_str().filter(|d| !d.is_empty()) {
-                    tip.push((d.to_string(), TEXT));
+                    tip.push((d.to_string(), th().text));
                 }
                 let reach = match it["reach"].as_i64().unwrap_or(0) {
                     0 => "self only".to_string(),
                     r => format!("reach {r}"),
                 };
-                tip.push((format!("{} AP, {} block{}, {reach}; used when the action resolves", it["ap"], it["blocks"], if it["blocks"] == json!(1) { "" } else { "s" }), DIM));
+                tip.push((format!("{} AP, {} block{}, {reach}; used when the action resolves", it["ap"], it["blocks"], if it["blocks"] == json!(1) { "" } else { "s" }), th().dim));
                 steps.push((format!("Use {name} ({} left)", it["left"]), json!({"mode": "item", "item": it["item"], "target": t}), tip));
             }
         }
         if what == "tile" {
             if let Some(c) = cell {
-                steps.insert(0, ("Move here".into(), json!({"mode": "goto", "cell": [c.x, c.y]}), vec![("Move here".into(), GOLD), ("1 AP per tile; moving must come first in a round.".into(), TEXT)]));
+                steps.insert(0, ("Move here".into(), json!({"mode": "goto", "cell": [c.x, c.y]}), vec![("Move here".into(), th().gold), ("1 AP per tile; moving must come first in a round.".into(), th().text)]));
             }
         }
         let mut rows = Vec::new();
@@ -752,7 +753,7 @@ impl BattleScreen {
             } else {
                 // HOOKS1-UI slice 3: an HP-cost refusal in words
                 let r = intent_text::refusal_text(p["reason"].as_str().unwrap_or(""));
-                tip.push((r.clone(), FOE));
+                tip.push((r.clone(), th().foe));
                 r
             };
             rows.push(Row { label, detail, valid, act: RowAct::Step(step), tip, warn: false, ap_short: None });
@@ -769,23 +770,23 @@ const MENU_W: i32 = 214;
 /// buffs an intent change drops (IN6).
 fn pick_tip(s: &Session, h: usize, o: &rip::PickOption) -> Tip {
     let w = &s.w;
-    let mut tip: Tip = vec![(o.picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", then "), GOLD)];
+    let mut tip: Tip = vec![(o.picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", then "), th().gold)];
     if let Some(rip::Pick::Skill { skill, .. }) = o.picks.iter().find(|p| matches!(p, rip::Pick::Skill { .. })) {
         let sk = &w.cat.skills[*skill];
         if let Some(d) = sk.raw.get("description").and_then(Value::as_str).filter(|d| !d.is_empty()) {
-            tip.push((d.to_string(), TEXT));
+            tip.push((d.to_string(), th().text));
         }
-        tip.push((intent_text::range_line(w, h, sk), DIM));
+        tip.push((intent_text::range_line(w, h, sk), th().dim));
         // INPUT2: the row's hotkey (the label's digit) is Shift with that digit
         if let Some(k) = rip::hotkey_skills(w, h).iter().position(|x| x == skill).filter(|k| *k < 9) {
-            tip.push((format!("Key: Shift+{}", k + 1), DIM));
+            tip.push((format!("Key: Shift+{}", k + 1), th().dim));
         }
     }
     if let Some(why) = &o.problem {
-        tip.push((why.clone(), FOE));
+        tip.push((why.clone(), th().foe));
     }
     if !o.drops.is_empty() {
-        tip.push((format!("Changing loses {}.", o.drops.join(", ")), FOE));
+        tip.push((format!("Changing loses {}.", o.drops.join(", ")), th().foe));
     }
     tip
 }

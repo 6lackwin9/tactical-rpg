@@ -17,13 +17,14 @@
 
 use crate::screens::Cx;
 use aegis_core::json::{self, Dict};
+use aegis_ui::theme::th;
 use aegis_ui::art::Art;
 use aegis_ui::canvas::{rgb, Rect, Rgba};
 use aegis_ui::fx::Clock;
 use aegis_ui::painter::Painter;
 use aegis_ui::portrait_fx::{idle_cues, Budget, Cue, ExpressionFx, Mark, MarkBox, Motion, PortraitFx, PortraitOpts};
 use aegis_ui::screen::Settings;
-use aegis_ui::ui::{GOLD, SMALL};
+use aegis_ui::ui::{SMALL};
 use emberwake_battle::portrait::{self, Look};
 use emberwake_battle::session::Session;
 use emberwake_content::art as kart;
@@ -390,7 +391,7 @@ impl Faces {
         let drawn = found.is_some_and(|rel| fx.draw(p, art, &rel, face.as_ref(), r, now, opts, &mut self.budget));
         if !drawn {
             let size = (r.h as f32 * 0.32).clamp(SMALL, 20.0);
-            p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - p.line_h(size)) / 2.0, &who.initial(), size, GOLD);
+            p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - p.line_h(size)) / 2.0, &who.initial(), size, th().gold);
         }
         drawn
     }

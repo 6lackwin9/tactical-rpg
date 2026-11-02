@@ -2,9 +2,10 @@
 //! entries on the left, every field of the selected entry in the middle, an engine summary on the right (built units,
 //! skill costs, world inheritance and who uses the entry). Validation and editing stay in Godot for now.
 
-use aegis_ui::canvas::{rgb, rgba, Rect};
+use aegis_ui::theme::th;
+use aegis_ui::canvas::Rect;
 use crate::screens::{Cx, GameCx, Nav, Screen};
-use aegis_ui::ui::{Gfx, Ui, Widget, BODY, BORDER, DIM, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::ui::{Gfx, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
 use serde_json::{json, Value};
@@ -136,85 +137,85 @@ impl Forge {
         match (self.world_forge, self.kind()) {
             (false, "skills") => {
                 if let Some(sk) = cat.skill(id) {
-                    line(format!("{} [{}]", sk.name, sk.grade), GOLD);
-                    line(format!("Cost: {} AP, {} block{}", sk.level, sk.blocks, if sk.blocks == 1 { "" } else { "s" }), TEXT);
-                    line(format!("Kind: {}   Stance: {}", sk.kind, sk.stance), TEXT);
-                    line(format!("Family: {}, tier {}", cat.family_of(id), sk.tier), TEXT);
-                    line(format!("Targets: {}, reach {}-{}", sk.target_mode, sk.reach_min, sk.reach_max), TEXT);
+                    line(format!("{} [{}]", sk.name, sk.grade), th().gold);
+                    line(format!("Cost: {} AP, {} block{}", sk.level, sk.blocks, if sk.blocks == 1 { "" } else { "s" }), th().text);
+                    line(format!("Kind: {}   Stance: {}", sk.kind, sk.stance), th().text);
+                    line(format!("Family: {}, tier {}", cat.family_of(id), sk.tier), th().text);
+                    line(format!("Targets: {}, reach {}-{}", sk.target_mode, sk.reach_min, sk.reach_max), th().text);
                     if !sk.grant_status.is_empty() {
-                        line(format!("Grants: {}", sk.grant_status), TEXT);
+                        line(format!("Grants: {}", sk.grant_status), th().text);
                     }
                     if !sk.status_effect.is_empty() {
-                        line(format!("Status: {} ({}% potency, {} rounds)", sk.status_effect, sk.status_potency, sk.status_rounds), TEXT);
+                        line(format!("Status: {} ({}% potency, {} rounds)", sk.status_effect, sk.status_potency, sk.status_rounds), th().text);
                     }
                 }
             }
             (false, "units") => {
                 if let Some(def) = cat.units.get(id) {
                     let u = emberwake_rules::build_unit(cat, def, 0);
-                    line(format!("{}  Lv {} {}", u.name, def.level, def.tier), GOLD);
-                    line(format!("HP {}   Speed {}   Reach {}   AP {}", u.max_hp, u.speed, u.attack_range, u.max_ap), TEXT);
-                    line(format!("Power {} melee / {} ranged", emberwake_rules::damage::power_of(&u, false, false), emberwake_rules::damage::power_of(&u, true, false)), TEXT);
-                    line(format!("Armor rating {}   Crit {:.0}%", emberwake_rules::damage::armor_rating(&u), emberwake_rules::damage::crit_chance(&u)), TEXT);
+                    line(format!("{}  Lv {} {}", u.name, def.level, def.tier), th().gold);
+                    line(format!("HP {}   Speed {}   Reach {}   AP {}", u.max_hp, u.speed, u.attack_range, u.max_ap), th().text);
+                    line(format!("Power {} melee / {} ranged", emberwake_rules::damage::power_of(&u, false, false), emberwake_rules::damage::power_of(&u, true, false)), th().text);
+                    line(format!("Armor rating {}   Crit {:.0}%", emberwake_rules::damage::armor_rating(&u), emberwake_rules::damage::crit_chance(&u)), th().text);
                     let gear: Vec<String> = u.inventory.gear().map(|g| g.item.name.clone()).collect();
-                    line(format!("Gear: {}", if gear.is_empty() { "none".into() } else { gear.join(", ") }), TEXT);
-                    line(format!("Skills: {}", u.active_families().join(", ")), TEXT);
+                    line(format!("Gear: {}", if gear.is_empty() { "none".into() } else { gear.join(", ") }), th().text);
+                    line(format!("Skills: {}", u.active_families().join(", ")), th().text);
                 }
             }
             (false, "items") => {
                 if let Some(it) = cat.items.get(id) {
-                    line(format!("{} ({})", it.name, it.item_type), GOLD);
+                    line(format!("{} ({})", it.name, it.item_type), th().gold);
                     if it.is_equipment() {
-                        line(format!("Slot {}   Power {}   Mitigation {}   Burden {}", it.slot, it.base_power, it.mitigation, it.burden), TEXT);
+                        line(format!("Slot {}   Power {}   Mitigation {}   Burden {}", it.slot, it.base_power, it.mitigation, it.burden), th().text);
                     }
                     if it.item_type == "CONSUMABLE" {
-                        line(format!("Heal {}   Damage {}   Use {} block(s)", it.heal, it.damage, it.use_blocks), TEXT);
+                        line(format!("Heal {}   Damage {}   Use {} block(s)", it.heal, it.damage, it.use_blocks), th().text);
                     }
-                    line(format!("Value {}", json::i(e, "value", 0)), TEXT);
+                    line(format!("Value {}", json::i(e, "value", 0)), th().text);
                 }
             }
             (false, "classes") => {
                 if let Some(c) = cat.classes.get(id) {
-                    line(c.name.clone(), GOLD);
-                    line(format!("Base: {}", c.base_stats.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", ")), TEXT);
-                    line(format!("Growth: {}", c.growth.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", ")), TEXT);
-                    line(format!("Path: {}", c.path_steps().iter().map(|(l, s)| format!("{s} (Lv {l})")).collect::<Vec<_>>().join(", ")), TEXT);
+                    line(c.name.clone(), th().gold);
+                    line(format!("Base: {}", c.base_stats.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", ")), th().text);
+                    line(format!("Growth: {}", c.growth.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", ")), th().text);
+                    line(format!("Path: {}", c.path_steps().iter().map(|(l, s)| format!("{s} (Lv {l})")).collect::<Vec<_>>().join(", ")), th().text);
                 }
             }
             (true, "overview") => {
                 let m = d.manifest(id);
-                line(format!("{}  {}", s_or(m, "name", id), s(m, "tagline")), GOLD);
+                line(format!("{}  {}", s_or(m, "name", id), s(m, "tagline")), th().gold);
                 let ext = json::sget(m, "extends");
-                line(format!("Inheritance: {}", if ext.is_empty() { "none (a root world)".into() } else { ext.join(", ") }), TEXT);
+                line(format!("Inheritance: {}", if ext.is_empty() { "none (a root world)".into() } else { ext.join(", ") }), th().text);
                 let con = json::sget(m, "connects");
-                line(format!("Connects to: {}", if con.is_empty() { "-".into() } else { con.join(", ") }), TEXT);
+                line(format!("Connects to: {}", if con.is_empty() { "-".into() } else { con.join(", ") }), th().text);
                 let below: Vec<String> = d.world_ids().into_iter().filter(|w| w != id && d.lineage(w).iter().any(|x| x == id)).collect();
-                line(format!("Extended by: {}", if below.is_empty() { "-".into() } else { below.join(", ") }), TEXT);
+                line(format!("Extended by: {}", if below.is_empty() { "-".into() } else { below.join(", ") }), th().text);
                 let counts: Vec<String> = WORLD_TABS[1..].iter().map(|(k, _)| format!("{k} {}", d.own_entries(id, k).len())).collect();
-                line(format!("Entries: {}", counts.join(", ")), TEXT);
-                line(String::new(), TEXT);
-                line(s(m, "description"), TEXT);
+                line(format!("Entries: {}", counts.join(", ")), th().text);
+                line(String::new(), th().text);
+                line(s(m, "description"), th().text);
             }
             (true, _) => {
-                line(format!("{}  [{}]", s_or(e, "name", &s(e, "id")), s(e, "_qid")), GOLD);
-                line(format!("Defined in {}", s(e, "_world")), TEXT);
+                line(format!("{}  [{}]", s_or(e, "name", &s(e, "id")), s(e, "_qid")), th().gold);
+                line(format!("Defined in {}", s(e, "_world")), th().text);
                 let ov = s(e, "override");
                 if !ov.is_empty() {
-                    line(format!("Overrides {ov}"), TEXT);
+                    line(format!("Overrides {ov}"), th().text);
                 }
                 if self.kind() == "characters" {
                     let unit = d.character_unit_entry(e);
                     if let Some(def) = (!unit.is_empty()).then(|| emberwake_data::UnitDef::from_obj(&unit)) {
                         let u = emberwake_rules::build_unit(cat, &def, 0);
-                        line(format!("Plays as {}: Lv {} {}, HP {}, speed {}", s(e, "base_unit"), def.level, def.tier, u.max_hp, u.speed), TEXT);
+                        line(format!("Plays as {}: Lv {} {}, HP {}, speed {}", s(e, "base_unit"), def.level, def.tier, u.max_hp, u.speed), th().text);
                     }
                     let passives = d.character_passives(e, &self.world);
                     if !passives.is_empty() {
-                        line(format!("Passives: {}", passives.join(", ")), TEXT);
+                        line(format!("Passives: {}", passives.join(", ")), th().text);
                     }
                 }
             }
-            _ => line(s_or(e, "name", id), GOLD),
+            _ => line(s_or(e, "name", id), th().gold),
         }
         // Used by: entries that mention this id (content: any kind; world: this world's merged entries).
         let needle = format!("\"{}\"", if self.world_forge { s(e, "id") } else { id.to_string() });
@@ -239,8 +240,8 @@ impl Forge {
             }
         }
         if !users.is_empty() || (self.world_forge && self.kind() != "overview") || !self.world_forge {
-            out.push((String::new(), TEXT));
-            out.push((format!("Used by: {}", if users.is_empty() { "nothing".into() } else { users.into_iter().take(12).collect::<Vec<_>>().join(", ") }), DIM));
+            out.push((String::new(), th().text));
+            out.push((format!("Used by: {}", if users.is_empty() { "nothing".into() } else { users.into_iter().take(12).collect::<Vec<_>>().join(", ") }), th().dim));
         }
         out
     }
@@ -269,9 +270,9 @@ impl Screen<GameCx> for Forge {
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         self.mouse = mouse;
         let mut ui: Ui<FAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), rgb(12, 16, 26));
+        ui.p.fill(Rect::new(0, 0, W, H), th().tool_bg);
         let head = if self.world_forge { "WORLD FORGE (viewer)" } else { "CONTENT FORGE (viewer)" };
-        let mut x = ui.p.text(6.0, 4.0, head, BODY, GOLD) as i32 + 6;
+        let mut x = ui.p.text(6.0, 4.0, head, BODY, th().gold) as i32 + 6;
         if self.world_forge {
             let ids = cx.data.world_ids();
             let names: Vec<String> = ids.iter().map(|w| format!("{}  [{w}]", cx.world_name(w))).collect();
@@ -300,7 +301,7 @@ impl Screen<GameCx> for Forge {
         self.list_w = list_w;
         let (list, mid, right) = (Rect::new(5, top, list_w, H - top - 5), Rect::new(list_w + 9, top, mid_w, H - top - 5), Rect::new(434, top, 201, H - top - 5));
         for r in [list, mid, right] {
-            ui.p.panel(r, rgba(18, 24, 38, 255), BORDER, 2.0);
+            ui.p.panel(r, th().tool_pane, th().edge, 2.0);
         }
         if self.selected.is_empty() || !rows.iter().any(|r| r.0 == self.selected) {
             self.selected = rows.first().map(|r| r.0.clone()).unwrap_or_default();
@@ -310,10 +311,10 @@ impl Screen<GameCx> for Forge {
         self.list_scroll = self.list_scroll.min(rows.len().saturating_sub(fit));
         for (i, (id, label, _)) in rows.iter().enumerate().skip(self.list_scroll).take(fit) {
             let r = Rect::new(list.x + 3, list.y + 4 + (i - self.list_scroll) as i32 * (row_h + 1), list.w - 6, row_h);
-            ui.row(&format!("forge.entry.{}", id.replace(':', ".")), r, label, if *id == self.selected { GOLD } else { TEXT }, Some(FAct::Select(id.clone())), *id == self.selected, Vec::new());
+            ui.row(&format!("forge.entry.{}", id.replace(':', ".")), r, label, if *id == self.selected { th().gold } else { th().text }, Some(FAct::Select(id.clone())), *id == self.selected, Vec::new());
         }
         if let Some((id, label, e)) = rows.iter().find(|r| r.0 == self.selected) {
-            ui.p.text_fit(mid.x as f32 + 5.0, mid.y as f32 + 4.0, &format!("{label}  [{}]", s(e, "id")), BODY, mid.w as f32 - 10.0, INFO);
+            ui.p.text_fit(mid.x as f32 + 5.0, mid.y as f32 + 4.0, &format!("{label}  [{}]", s(e, "id")), BODY, mid.w as f32 - 10.0, th().info);
             let mut lines: Vec<(String, String)> = Vec::new();
             for (k, v) in e {
                 if !k.starts_with('_') {
@@ -333,10 +334,10 @@ impl Screen<GameCx> for Forge {
             self.field_scroll = self.field_scroll.min(wrapped.len().saturating_sub(fit));
             for (i, (k, v)) in wrapped.iter().skip(self.field_scroll).take(fit).enumerate() {
                 let y = mid.y as f32 + head_h + i as f32 * line_h;
-                ui.p.text_fit(mid.x as f32 + 5.0, y, k, SMALL, key_w, DIM);
-                ui.p.text(mid.x as f32 + value_x, y, v, SMALL, if v == "(none)" { DIM } else { TEXT });
+                ui.p.text_fit(mid.x as f32 + 5.0, y, k, SMALL, key_w, th().dim);
+                ui.p.text(mid.x as f32 + value_x, y, v, SMALL, if v == "(none)" { th().dim } else { th().text });
             }
-            ui.p.text(right.x as f32 + 5.0, right.y as f32 + 4.0, if self.world_forge { "WHAT IT MEANS" } else { "ENGINE SUMMARY" }, SMALL, INFO);
+            ui.p.text(right.x as f32 + 5.0, right.y as f32 + 4.0, if self.world_forge { "WHAT IT MEANS" } else { "ENGINE SUMMARY" }, SMALL, th().info);
             let step = ui.p.line_h(SMALL).max(8.5);
             let foot = (right.y + right.h) as f32 - 4.0 - step;
             let mut y = right.y as f32 + 4.0 + step + 3.0;
@@ -352,7 +353,7 @@ impl Screen<GameCx> for Forge {
                     y += 4.0;
                 }
             }
-            ui.p.text_fit(right.x as f32 + 5.0, foot, "Validation: run it in Godot's Forge for now.", SMALL, (right.w - 10) as f32, GOOD);
+            ui.p.text_fit(right.x as f32 + 5.0, foot, "Validation: run it in Godot's Forge for now.", SMALL, (right.w - 10) as f32, th().good);
         }
         self.w = ui.widgets;
     }

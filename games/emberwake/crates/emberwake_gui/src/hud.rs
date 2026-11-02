@@ -4,9 +4,10 @@
 //! visible meters follow them as chips (short name, value with its unit in the band tone's colour), all read from the
 //! kit's view (`campaign::hud`).
 
+use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::screens::{show_errors, Cx, Key, Nav};
-use aegis_ui::ui::{tip, Glyph, Tip, Ui, FOE, GOLD, GOOD, BODY, TEXT, TITLE, W};
+use aegis_ui::ui::{tip, Glyph, Tip, Ui, BODY, TITLE, W};
 use emberwake_world::campaign::view::{ChipKind, HudChip};
 
 /// The HUD bar's height (logical px).
@@ -72,7 +73,7 @@ pub fn hud_open(cx: &mut Cx, h: Hud, help: &[&str]) {
 /// `help` lists the controls; `wrap` makes the screen's action of a button.
 #[allow(clippy::too_many_arguments)]
 pub fn hud_bar<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, left: i32, name: &str, menu: (&str, &str), why: &str, help: &[&str], wrap: impl Fn(Hud) -> A) {
-    ui.p.fill(Rect::new(0, 0, W, HUD_H), rgba(10, 14, 22, 255));
+    ui.p.fill(Rect::new(0, 0, W, HUD_H), th().game("hud_bar", rgba(10, 14, 22, 255)));
     let journal = crate::hub::has_quests(cx);
     let px = ui.icon_px(Rect::new(0, 0, HUD_BOX, HUD_BOX));
     let start = W - 3 - HUD_BUTTONS.len() as i32 * (HUD_BOX + 2) + 2;
@@ -82,7 +83,7 @@ pub fn hud_bar<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, left: i32, name: &str, men
         let title = if key.is_empty() { label.to_string() } else { format!("{label} ({key})") };
         let mut t: Tip = tip(&title, body);
         if h == Hud::Help {
-            t.extend(help.iter().map(|l| (l.to_string(), TEXT)));
+            t.extend(help.iter().map(|l| (l.to_string(), th().text)));
         }
         let off = match h {
             Hud::Help => "",
@@ -91,7 +92,7 @@ pub fn hud_bar<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, left: i32, name: &str, men
             _ => "",
         };
         if !off.is_empty() {
-            t.push((off.to_string(), FOE));
+            t.push((off.to_string(), th().foe));
         }
         ui.icon_button(id, r, label, cx.art.image(rel, px, px), glyph, wrap(h), off.is_empty(), false, t);
     }
@@ -113,15 +114,15 @@ pub fn hud_bar<A: Clone>(ui: &mut Ui<A>, cx: &mut Cx, left: i32, name: &str, men
         }
         let x = (ir.x + icon + 3) as f32;
         if !short.is_empty() {
-            ui.p.text(x, ty, &short, BODY, TEXT);
+            ui.p.text(x, ty, &short, BODY, th().text);
         }
-        ui.p.text(x + sw, ty, &chip.value, BODY, if chip.kind == ChipKind::Meter { tone_colour(&chip.tone) } else { TEXT });
+        ui.p.text(x + sw, ty, &chip.value, BODY, if chip.kind == ChipKind::Meter { tone_colour(&chip.tone) } else { th().text });
         let mut t = tip(&chip.title, "");
-        t.extend(chip.lines.iter().map(|l| (l.clone(), TEXT)));
+        t.extend(chip.lines.iter().map(|l| (l.clone(), th().text)));
         ui.push(id, "label", format!("{short}{}", chip.value), r, true, false, None, t);
         right = r.x - 8;
     }
-    ui.p.text_fit(left as f32, (HUD_H as f32 - ui.p.line_h(TITLE)) / 2.0, name, TITLE, (right - left - 4) as f32, GOLD);
+    ui.p.text_fit(left as f32, (HUD_H as f32 - ui.p.line_h(TITLE)) / 2.0, name, TITLE, (right - left - 4) as f32, th().gold);
 }
 
 /// The HUD chips of the game in play (`campaign::hud`: the purse counters, then the visible meters); none without a
@@ -178,11 +179,11 @@ pub fn chip_id(chip: &HudChip) -> String {
 /// CAMPAIGN1 M2, W4: the colour of a band tone (`calm`, `warn`, `danger`, `fatal`; anything else is plain text).
 pub fn tone_colour(tone: &str) -> Rgba {
     match tone {
-        "calm" => GOOD,
-        "warn" => GOLD,
+        "calm" => th().good,
+        "warn" => th().gold,
         "danger" => rgb(244, 146, 60),
-        "fatal" => FOE,
-        _ => TEXT,
+        "fatal" => th().foe,
+        _ => th().text,
     }
 }
 
@@ -193,7 +194,7 @@ fn counter_glyph<A>(ui: &mut Ui<A>, chip: &HudChip, r: Rect) {
     match chip.kind {
         ChipKind::Currency => {
             ui.p.circle(cx_, cy_, s * 0.42, rgb(150, 110, 30));
-            ui.p.circle(cx_, cy_, s * 0.32, GOLD);
+            ui.p.circle(cx_, cy_, s * 0.32, th().gold);
         }
         ChipKind::Upkeep => {
             ui.p.panel(Rect::new(r.x + r.w / 6, r.y + r.h / 3, r.w - r.w / 3, r.h - r.h / 3), rgb(150, 112, 70), rgb(96, 70, 40), 3.0);

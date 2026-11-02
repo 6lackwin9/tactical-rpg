@@ -130,6 +130,7 @@ theme_roles! {
     tool_pane = rgb(18, 24, 38), "A tool screen's pane fill (the recordings).";
     stage = rgb(10, 11, 16), "A vignette reel's frame and backdrop when it names none.";
     mote = rgb(206, 204, 200), "The drifting specks over a vignette card (their alpha is the card's).";
+    grip = rgb(110, 140, 196), "A window's resize grip with the mouse off it (`focus` on it).";
 }
 
 /// A face: its font file (layer-relative) and size factor; `bytes` None is the shell's UI font.
@@ -572,7 +573,9 @@ pub fn contrast(fg: Rgba, bg: Rgba) -> f32 {
     th().contrast(fg, bg)
 }
 
-/// The contrast pairs LOOK1 8.2 checks: (text role, ground role, the least ratio). `ink` is checked on `parchment`.
+/// The contrast pairs LOOK1 8.2 checks: (text role, ground role, the least ratio): text at 4.5:1, `dim` at 3:1, a check
+/// mark (not text) at 3:1. `ink` is checked on `parchment`. The later grounds are the widgets' own (LOOK1-G2), each with
+/// the roles the widget draws on it; a theme file is held to all of them, the code defaults show their ratios only.
 pub fn contrast_pairs() -> Vec<(&'static str, &'static str, f32)> {
     let mut out = Vec::new();
     for ground in ["panel", "card", "selected"] {
@@ -581,6 +584,26 @@ pub fn contrast_pairs() -> Vec<(&'static str, &'static str, f32)> {
         }
     }
     out.push(("ink", "parchment", 4.5));
+    for (ground, fgs) in [
+        ("card_hot", &["text", "gold", "dim"][..]),
+        ("input", &["text", "dim"]),
+        ("field", &["text"]),
+        ("section", &["text", "dim"]),
+        ("selection", &["text"]),
+        ("tip", &["text", "gold", "dim"]),
+        ("ghost", &["text"]),
+        ("title_idle", &["text", "dim"]),
+        ("ruler", &["text", "dim"]),
+        ("playing", &["focus"]),
+        ("tool_bg", &["text", "dim"]),
+        ("tool_pane", &["text", "gold", "dim"]),
+        ("stage", &["text", "gold", "dim"]),
+    ] {
+        for fg in fgs {
+            out.push((*fg, ground, if *fg == "dim" { 3.0 } else { 4.5 }));
+        }
+    }
+    out.push(("text", "check_on", 3.0));
     out
 }
 

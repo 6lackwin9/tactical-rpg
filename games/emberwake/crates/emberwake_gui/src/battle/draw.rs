@@ -1,11 +1,12 @@
 //! One frame of the battle screen (`draw`: the strip, party cards and hero panel, the board's call, hostile cards and intel, the bottom bar and log, the timeline view and talk), the panel portraits and the intel fit.
 
+use aegis_ui::theme::th;
 use super::board::{cell_rect, draw_flat, draw_stage, hp_bar, note_drawn, with_alpha, Board};
 use super::input::{engage_positions, kind_name, rest_text, target_name, RowAct};
 use super::marks::{arena_badge, arrows_of, draw_hold_pick, draw_tracers, focus_set, held_guard, hit_forecasts, meter_row, meter_text, meters_of, party_foresight_off, poise_bar, poise_shown, push_forecasts, push_text, seen_intents, span_parts, HitForecast, HoldMarks, HookMarks, SpanParts, HELD, METER};
 use super::overlays::{overlay_of, reach_text, Layers};
 use super::playback::PlaySpeed;
-use super::{Action, BattleScreen, ALLY, AP_PIPS, BG, BORDER, CARD, DIM, FOE, GOLD, GOOD, GRID_X, GRID_Y, PANEL, PANELS, PANEL_HI, PANEL_INSET, PANEL_PORTRAIT, PANEL_SURFACE, PANEL_TEXT_X, PLAYBACK_SPEEDS, TACTIC_LABELS, TALK_VEIL, TEXT, TILE, TIMELINE_SURFACE, TV_PAD};
+use super::{Action, BattleScreen, ALLY, AP_PIPS, GRID_X, GRID_Y, PANEL, PANELS, PANEL_INSET, PANEL_PORTRAIT, PANEL_SURFACE, PANEL_TEXT_X, PLAYBACK_SPEEDS, TACTIC_LABELS, TALK_VEIL, TILE, TIMELINE_SURFACE, TV_PAD};
 use super::tips::{ap_blocks, ap_gauge_of, class_names, committed, derived_line, derived_rows, draw_badge_row, inspect_tip, intent_glyph, kind_color, next_action, short_name, stance_name, unit_tip, ApAnim};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::intent_text;
@@ -30,7 +31,7 @@ use std::time::Instant;
 pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), live: bool) {
     let now = Instant::now();
     let tuning = cx.tuning.value.clone();
-    gfx.canvas.clear(BG);
+    gfx.canvas.clear(th().bg);
     // ENCOUNTER2-C DT7: the open talk's game state and view; a new node starts its line and replies at the top
     let talk_gs = g.talk_state_of(cx);
     let talk_view = talk_gs.as_ref().and_then(|gs| g.talk_view(cx, gs));
@@ -53,7 +54,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     let mut ui: Ui<Action> = Ui::new(gfx, mouse, live);
     g.menu_row = ((ui.p.line_h(BODY) + 2.5).ceil() as i32).max(11);
     let Some(s) = g.host.session.as_ref() else {
-        ui.p.text(8.0, 8.0, &g.message, BODY, FOE);
+        ui.p.text(8.0, 8.0, &g.message, BODY, th().foe);
         g.w = ui.widgets;
         return;
     };
@@ -85,7 +86,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
 
     // -- Top strip: the selected hero's six blocks and the round controls.
     g.panels = vec![("strip", Rect::new(2, 2, W - 4, 24)), ("grid", Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4)), ("bar", Rect::new(2, 322, W - 4, 36))];
-    ui.p.panel(Rect::new(2, 2, W - 4, 24), PANEL, BORDER, RADIUS);
+    ui.p.panel(Rect::new(2, 2, W - 4, 24), th().game("battle_panel", PANEL), th().edge, RADIUS);
     let hero_name = sel.map(|u| w.units[u].name.clone()).unwrap_or_else(|| "No hero".into());
     // UI5: the strip row leads with the hero's intent glyph (the board and the cards share it)
     let title_w = match sel.and_then(round_of) {
@@ -95,7 +96,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         }
         None => 80.0,
     };
-    ui.p.text_fit(8.0, 9.0, &format!("{hero_name} plan"), TITLE, title_w, GOLD);
+    ui.p.text_fit(8.0, 9.0, &format!("{hero_name} plan"), TITLE, title_w, th().gold);
     ui.push("strip.title", "label", format!("{hero_name} plan"), Rect::new(8, 8, title_w as i32, ui.p.line_h(TITLE).ceil() as i32), true, false, None, Vec::new());
     // HOOKS1-UI slice 3 (UM7): the selected hero's meters on a thin row under the title
     if let Some(u) = sel {
@@ -256,29 +257,29 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             Some(e) => {
                 // INPUT1 GH8: a ghost block's tip starts "Auto-filled" with its reason tag
                 if ghost {
-                    tip.push((why.map_or_else(|| "Auto-filled".to_string(), |r| format!("Auto-filled: {r}")), DIM));
+                    tip.push((why.map_or_else(|| "Auto-filled".to_string(), |r| format!("Auto-filled: {r}")), th().dim));
                 }
-                tip.push((e.2.clone(), GOLD));
-                tip.push((format!("Blocks {}-{}", e.0, e.1), TEXT));
+                tip.push((e.2.clone(), th().gold));
+                tip.push((format!("Blocks {}-{}", e.0, e.1), th().text));
                 if let Some(t) = &e.4 {
-                    tip.push((format!("Target: {t}"), FOE));
+                    tip.push((format!("Target: {t}"), th().foe));
                 }
                 if e.5 > 0 {
                     tip.push((format!("{} AP", e.5), ALLY));
                 }
                 if e.6 > 0 {
-                    tip.push((format!("Expected damage about {}", e.6), GOLD));
+                    tip.push((format!("Expected damage about {}", e.6), th().gold));
                 }
                 // HOOKS1-UI slice 3 (HC1): the step's HP cost
                 let cost = at.and_then(|i| costs.get(i)).copied().unwrap_or(0);
                 if cost > 0 {
-                    tip.push((intent_text::hp_cost_text(cost), FOE));
+                    tip.push((intent_text::hp_cost_text(cost), th().foe));
                 }
                 if let Some(why) = why.filter(|_| !ghost) {
-                    tip.push((format!("Why: {why}"), DIM));
+                    tip.push((format!("Why: {why}"), th().dim));
                 }
                 if let Some(gain) = rest.filter(|r| e.3 == "REST" && r.blocks > 0) {
-                    tip.push((format!("{} ({} Rest block{}; the AP comes at round end)", rest_text(gain), gain.blocks, if gain.blocks == 1 { "" } else { "s" }), GOOD));
+                    tip.push((format!("{} ({} Rest block{}; the AP comes at round end)", rest_text(gain), gain.blocks, if gain.blocks == 1 { "" } else { "s" }), th().good));
                 }
                 for f in at.and_then(|i| pushes.get(i)).into_iter().flatten() {
                     tip.push(push_text(w, f));
@@ -287,13 +288,13 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                     tip.extend(f.lines(w));
                 }
                 if at.and_then(|i| spans.get(i)).is_some_and(|sp| sp.broken) {
-                    tip.push(("BREAK: cancelled by a poise break".into(), FOE));
+                    tip.push(("BREAK: cancelled by a poise break".into(), th().foe));
                 }
             }
             None => {
-                ui.p.panel(r, rgba(14, 20, 34, 255), if live_block == b { GOLD } else { BORDER }, RADIUS);
-                ui.p.text(r.x as f32 + 3.0, r.y as f32 + 4.0, &format!("{b} Idle"), SMALL, DIM);
-                tip.push((format!("Block {b}: nothing planned"), DIM));
+                ui.p.panel(r, th().game("strip_cell", rgba(14, 20, 34, 255)), if live_block == b { th().gold } else { th().edge }, RADIUS);
+                ui.p.text(r.x as f32 + 3.0, r.y as f32 + 4.0, &format!("{b} Idle"), SMALL, th().dim);
+                tip.push((format!("Block {b}: nothing planned"), th().dim));
             }
         }
         // RULESET1-U slice 6 (TEXTFIT1): a span's first block holds its whole span, so its label (drawn across the span)
@@ -307,7 +308,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         // INPUT2: a block showing a ghost entry of a party member (planning, no row previewed) accepts the ghost up to it
         let accept = at.filter(|_| ghost && planning && hovered_pick.is_none() && sel.is_some_and(|u| w.allies.contains(&u)));
         if accept.is_some() {
-            tip.push(("Click: accept the auto-fill up to here (F: all of it)".into(), DIM));
+            tip.push(("Click: accept the auto-fill up to here (F: all of it)".into(), th().dim));
         }
         ui.push(format!("strip.block{b}"), "block", entry.map(|e| e.2.clone()).unwrap_or_else(|| "empty".into()), wr, true, live_block == b, accept.map(Action::GhostSlot), tip);
     }
@@ -320,7 +321,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         // INPUT1 GH8: a ghost span (the planner's, after the picks) in the engine's ghost look; a ghost Rest stays dim
         let ghost = ghosts.get(k).copied().unwrap_or(false) && !dim;
         let fill =if dim { rgb(34, 40, 54) } else if ghost { aegis_ui::timeline::ghost_fill(kind_color(&e.3)) } else { kind_color(&e.3) };
-        ui.p.panel(r, fill, if live { GOLD } else if ghost { rgba(0, 0, 0, 0) } else { rgba(255, 255, 255, if dim { 24 } else { 50 }) }, RADIUS);
+        ui.p.panel(r, fill, if live { th().gold } else if ghost { rgba(0, 0, 0, 0) } else { rgba(255, 255, 255, if dim { 24 } else { 50 }) }, RADIUS);
         if ghost {
             aegis_ui::timeline::draw_ghost(&mut ui, r);
         }
@@ -330,9 +331,9 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             let pr = Rect::new(bx + (part.start - 1) * bw, 6, (part.end - part.start + 1) * bw - 1, 16);
             aegis_ui::timeline::draw_part(&mut ui, part.style, r, pr);
         }
-        ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 4.0, &e.2, SMALL, r.w as f32 - 6.0, if dim || ghost { DIM } else { TEXT });
+        ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 4.0, &e.2, SMALL, r.w as f32 - 6.0, if dim || ghost { th().dim } else { th().text });
         if sp.is_some_and(|sp| sp.broken) && layers.breaks {
-            let mark = aegis_ui::timeline::Mark { key: "break".into(), block: e.0, glyph: "BREAK".into(), colour: FOE, tip: vec![("BREAK".into(), FOE), (format!("{}: cancelled by a poise break (AP paid stays spent)", e.2), TEXT)] };
+            let mark = aegis_ui::timeline::Mark { key: "break".into(), block: e.0, glyph: "BREAK".into(), colour: th().foe, tip: vec![("BREAK".into(), th().foe), (format!("{}: cancelled by a poise break (AP paid stays spent)", e.2), th().text)] };
             let mr = Rect::new(r.x + 1, 7, (bw - 3).min(r.w - 2), 14);
             aegis_ui::timeline::draw_mark(&mut ui, &format!("strip.mark.{k}"), &mark, mr);
         }
@@ -345,7 +346,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     if let Some(b) = cursor.filter(|b| (1..=blocks).contains(b)) {
         let c = Rect::new(bx + (b - 1) * bw - 1, 5, bw + 1, 18);
         for edge in [Rect::new(c.x, c.y, c.w, 1), Rect::new(c.x, c.y + c.h - 1, c.w, 1), Rect::new(c.x, c.y, 1, c.h), Rect::new(c.x + c.w - 1, c.y, 1, c.h)] {
-            ui.p.fill(edge, GOLD);
+            ui.p.fill(edge, th().gold);
         }
     }
     let mut x = bx + blocks * bw + 6;
@@ -373,31 +374,31 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         ];
         for (k, (_, label, id)) in PLAYBACK_SPEEDS.iter().enumerate() {
             let cw = ((ui.p.text_w(label, BODY) + 10.0).ceil() as i32).max(18);
-            ui.button_full(id, Rect::new(x, 6, cw, 16), label, Action::PlaybackSpeed(k), true, speed.index() == k, BODY, vec![(format!("Playback speed: {label}"), GOLD), (tips[k].into(), TEXT)]);
+            ui.button_full(id, Rect::new(x, 6, cw, 16), label, Action::PlaybackSpeed(k), true, speed.index() == k, BODY, vec![(format!("Playback speed: {label}"), th().gold), (tips[k].into(), th().text)]);
             x += cw + 2;
         }
         if speed == PlaySpeed::Block {
-            ui.button_full("playback.next", Rect::new(x, 6, (end - x).max(10), 16), "Next block", Action::NextBlock, g.waiting.is_some(), false, BODY, vec![("Next block (N)".into(), GOLD), ("Plays the next block, then waits again.".into(), TEXT)]);
+            ui.button_full("playback.next", Rect::new(x, 6, (end - x).max(10), 16), "Next block", Action::NextBlock, g.waiting.is_some(), false, BODY, vec![("Next block (N)".into(), th().gold), ("Plays the next block, then waits again.".into(), th().text)]);
         }
         x = end + 2;
     } else {
-        ui.dropdown("strip.party", Rect::new(x, 6, party_w, 16), &party_label, Action::PartyMenu, planning, vec![("Party tactic".into(), GOLD), ("AI-drafts every hero with a tactic (you can edit the steps after).".into(), TEXT)]);
+        ui.dropdown("strip.party", Rect::new(x, 6, party_w, 16), &party_label, Action::PartyMenu, planning, vec![("Party tactic".into(), th().gold), ("AI-drafts every hero with a tactic (you can edit the steps after).".into(), th().text)]);
         x += party_w + 2;
-        ui.dropdown("strip.hero", Rect::new(x, 6, hero_w, 16), &hero_label, Action::HeroMenu, planning && sel.is_some(), vec![("Hero tactic".into(), GOLD), ("AI-drafts the selected hero only.".into(), TEXT)]);
+        ui.dropdown("strip.hero", Rect::new(x, 6, hero_w, 16), &hero_label, Action::HeroMenu, planning && sel.is_some(), vec![("Hero tactic".into(), th().gold), ("AI-drafts the selected hero only.".into(), th().text)]);
         x += hero_w + 2;
     }
-    ui.button_full("strip.auto", Rect::new(x, 6, auto_w, 16), "Auto", Action::Autoplay, !s.combat_over, g.auto, BODY, vec![("Autoplay".into(), GOLD), ("Drafts with the party tactic, confirms and plays rounds until the battle ends. Click again to stop.".into(), TEXT)]);
+    ui.button_full("strip.auto", Rect::new(x, 6, auto_w, 16), "Auto", Action::Autoplay, !s.combat_over, g.auto, BODY, vec![("Autoplay".into(), th().gold), ("Drafts with the party tactic, confirms and plays rounds until the battle ends. Click again to stop.".into(), th().text)]);
     x += auto_w + 2;
-    ui.button_full("strip.clear", Rect::new(x, 6, clear_w, 16), "Clear", Action::Clear, planning && sel.is_some(), false, BODY, vec![(if timeline { "Clears the selected hero's picks (the planner fills the round again)." } else { "Clears the selected hero's steps." }.into(), TEXT)]);
+    ui.button_full("strip.clear", Rect::new(x, 6, clear_w, 16), "Clear", Action::Clear, planning && sel.is_some(), false, BODY, vec![(if timeline { "Clears the selected hero's picks (the planner fills the round again)." } else { "Clears the selected hero's steps." }.into(), th().text)]);
     x += clear_w + 2;
     if skip {
-        ui.button_full("battle.skip", Rect::new(x, 6, W - 6 - x, 16), label, action, enabled, true, BODY, vec![("Skip".into(), GOLD), ("Resolves the rest of this scripted round at once.".into(), TEXT)]);
+        ui.button_full("battle.skip", Rect::new(x, 6, W - 6 - x, 16), label, action, enabled, true, BODY, vec![("Skip".into(), th().gold), ("Resolves the rest of this scripted round at once.".into(), th().text)]);
     } else {
-        ui.button_full("strip.confirm", Rect::new(x, 6, W - 6 - x, 16), label, action, enabled, planning, BODY, vec![(label.into(), GOLD)]);
+        ui.button_full("strip.confirm", Rect::new(x, 6, W - 6 - x, 16), label, action, enabled, planning, BODY, vec![(label.into(), th().gold)]);
     }
 
     // -- Left: party cards and the selected hero.
-    ui.p.panel(Rect::new(2, 28, 124, 290), PANEL, BORDER, RADIUS);
+    ui.p.panel(Rect::new(2, 28, 124, 290), th().game("battle_panel", PANEL), th().edge, RADIUS);
     let alive = w.allies.iter().filter(|a| w.units[**a].is_active()).count();
     ui.p.text(8.0, 32.0, &format!("Party {alive}/{}", w.allies.len()), TITLE, ALLY);
     let mut y = 44;
@@ -413,19 +414,19 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         if hover {
             hovered_ally = Some(a);
         }
-        ui.p.panel(r, if is_sel { PANEL_HI } else if hover { rgba(28, 40, 66, 255) } else { CARD }, if is_sel { GOLD } else { BORDER }, RADIUS);
+        ui.p.panel(r, if is_sel { th().card_hot } else if hover { th().game("roster_hot", rgba(28, 40, 66, 255)) } else { th().card }, if is_sel { th().gold } else { th().edge }, RADIUS);
         // UI5: the member's intent glyph at the card's top right (the name gives way)
         let glyph = round_of(a).filter(|_| u.is_active());
         if let Some(i) = glyph {
             intent_glyph(&mut ui.p, &w.cat, i, Rect::new(r.x + r.w - 13, r.y + 2, 10, 10));
         }
-        ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 1.5, &u.name, BODY, if glyph.is_some() { 94.0 } else { 108.0 }, if u.is_active() { ALLY } else { DIM });
-        hp_bar(&mut ui.p, Rect::new(r.x + 4, r.y + 12, 108, 4), u.hp, u.max_hp, GOOD);
+        ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 1.5, &u.name, BODY, if glyph.is_some() { 94.0 } else { 108.0 }, if u.is_active() { ALLY } else { th().dim });
+        hp_bar(&mut ui.p, Rect::new(r.x + 4, r.y + 12, 108, 4), u.hp, u.max_hp, th().good);
         // RULESET1-U slice 5: the member's poise bar under its HP bar (rule poise)
         if let Some(st) = poise_shown(w, a, &layers) {
             poise_bar(&mut ui.p, Rect::new(r.x + 4, r.y + 16, 108, 2), &st);
         }
-        ui.p.text(r.x as f32 + 4.0, r.y as f32 + 18.0, &format!("HP {}/{}", u.hp, u.max_hp), SMALL, TEXT);
+        ui.p.text(r.x as f32 + 4.0, r.y as f32 + 18.0, &format!("HP {}/{}", u.hp, u.max_hp), SMALL, th().text);
         ui.p.text_right(r.x as f32 + r.w as f32 - 4.0, r.y as f32 + 18.0, &format!("AP {}/{}", u.ap, u.max_ap), SMALL, ALLY);
         meter_row(&mut ui.p, Rect::new(r.x + 4, r.y + 29, 108, 3), &ms);
         if layers.guard && held_guard(s, a).is_some() {
@@ -440,22 +441,22 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         let u = &w.units[h];
         let r = Rect::new(6, y + 2, 116, 318 - y - 6);
         g.panels.push(("hero", r));
-        ui.p.panel(r, CARD, BORDER, RADIUS);
+        ui.p.panel(r, th().card, th().edge, RADIUS);
         // PORTRAITFX1-P (6.2 row 3): the hero's portrait at the panel's top-left; the name, the corner and the Self
         // button beside it, 40 px in
         let (who, look) = g.unit_portrait(cx, h);
         let face = panel_portrait(&mut ui, cx, &mut g.panel_faces, &who, &look, r, "hero.portrait");
         let (tx, tw) = (r.x + PANEL_TEXT_X, (r.w - PANEL_TEXT_X - 4) as f32);
-        ui.p.text_fit(tx as f32, r.y as f32 + 2.0, &u.name, BODY, tw, GOLD);
+        ui.p.text_fit(tx as f32, r.y as f32 + 2.0, &u.name, BODY, tw, th().gold);
         // RULESET1-U: under the round intent the corner names the hero's intent (the classic stance is inert: IN3);
         // PORTRAITFX1-P: on the line under the name
         let corner = if timeline { ri::intent_of(pw, h).map_or_else(|| "No intent".to_string(), |i| i.label(&pw.cat)) } else { stance_name(u).to_string() };
         let row2 = r.y + 2 + (ui.p.line_h(BODY).ceil() as i32).max(10);
-        ui.p.text_fit(tx as f32, row2 as f32, &corner, SMALL, tw, DIM);
+        ui.p.text_fit(tx as f32, row2 as f32, &corner, SMALL, tw, th().dim);
         let row3 = row2 + (ui.p.line_h(SMALL).ceil() as i32).max(8) + 1;
         // INPUT1 IF8, SL4: under the round intent the panel's one control is the Self button (key S)
         let top = if timeline {
-            let tip = vec![("Self (S)".into(), GOLD), (format!("{} targets itself: its Guard and self skills.", u.name), TEXT)];
+            let tip = vec![("Self (S)".into(), th().gold), (format!("{} targets itself: its Guard and self skills.", u.name), th().text)];
             let bw = ((ui.p.text_w("Self", SMALL) + 10.0).ceil() as i32).max(30);
             ui.button_full("hero.self", Rect::new(tx, row3, bw, 11), "Self", Action::SelfTarget, planning, false, SMALL, tip);
             row3 + 13
@@ -469,18 +470,18 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         let derived = derived_rows(s, h);
         let mut derived_at = None;
         let mut stats = |lines: &mut Vec<(String, Rgba)>| {
-            lines.push((format!("Speed {}  Reach {}", u.speed, reach_text(w, h)), TEXT));
+            lines.push((format!("Speed {}  Reach {}", u.speed, reach_text(w, h)), th().text));
             if let Some(line) = derived_line(&derived) {
                 derived_at = Some(lines.len());
-                lines.push((line, TEXT));
+                lines.push((line, th().text));
             }
         };
         let statuses = |lines: &mut Vec<(String, Rgba)>| {
             if !u.st.active.is_empty() {
-                lines.push((format!("Now: {}", u.st.active.iter().map(|x| emberwake_rules::status::display_name(x)).collect::<Vec<_>>().join(", ")), FOE));
+                lines.push((format!("Now: {}", u.st.active.iter().map(|x| emberwake_rules::status::display_name(x)).collect::<Vec<_>>().join(", ")), th().foe));
             }
             if !u.st.pending.is_empty() {
-                lines.push((format!("Next: {}", u.st.pending.iter().map(|x| emberwake_rules::status::display_name(x)).collect::<Vec<_>>().join(", ")), DIM));
+                lines.push((format!("Next: {}", u.st.pending.iter().map(|x| emberwake_rules::status::display_name(x)).collect::<Vec<_>>().join(", ")), th().dim));
             }
         };
         let ap_line = (format!("AP left {}/{}", if s.plan_confirmed { u.ap } else { st.ap_left }, u.max_ap), ALLY);
@@ -498,86 +499,86 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             match intent {
                 Some(i) => {
                     let kind = if i == RoundIntent::Maneuver { pw.round_states.get(&h).and_then(|r| r.maneuver).map(|k| format!(" ({})", kind_name(k))).unwrap_or_default() } else { String::new() };
-                    lines.push((format!("Intent: {}{kind}{from}", i.label(&pw.cat)), TEXT));
+                    lines.push((format!("Intent: {}{kind}{from}", i.label(&pw.cat)), th().text));
                 }
-                None => lines.push(("Intent: none yet (click a target)".into(), GOLD)),
+                None => lines.push(("Intent: none yet (click a target)".into(), th().gold)),
             }
             if deferred_req.is_some() && planning {
                 let drops = intent.map(|i| ri::would_drop(w, h, i)).unwrap_or_default();
                 if !drops.is_empty() {
-                    lines.push((format!("Changing loses {}.", drops.join(", ")), FOE));
+                    lines.push((format!("Changing loses {}.", drops.join(", ")), th().foe));
                 }
             }
             match pw.round_states.get(&h).and_then(|r| r.target) {
-                Some(t) => lines.push((format!("Target: {}", target_name(pw, t)), TEXT)),
-                None => lines.push(("Target: click the board".into(), DIM)),
+                Some(t) => lines.push((format!("Target: {}", target_name(pw, t)), th().text)),
+                None => lines.push(("Target: click the board".into(), th().dim)),
             }
             if !picks.is_empty() && !s.plan_confirmed {
-                lines.push((format!("Picks: {}", picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", ")), GOLD));
+                lines.push((format!("Picks: {}", picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", ")), th().gold));
             }
             if s.plan_confirmed {
                 for (start, _, name, _, tgt) in committed(s, h) {
                     let tgt = tgt.map(|t| format!(" > {}", short_name(&t))).unwrap_or_default();
-                    lines.push((format!("B{start} {name}{tgt}"), TEXT));
+                    lines.push((format!("B{start} {name}{tgt}"), th().text));
                 }
             } else {
                 for (k, e) in st.entries.iter().enumerate().filter(|(_, e)| e.step_index >= 0 && emberwake_battle::skill::kind(&w.cat.skills[e.skill]) != Kind::Rest) {
                     let name = &w.cat.skills[e.skill].name;
                     let tgt = e.target.filter(|t| *t != h).map(|t| format!(" > {}", short_name(&w.units[t].name))).unwrap_or_default();
-                    lines.push((format!("B{} {name}{tgt}", e.start_block), if ghosts.get(k).copied().unwrap_or(false) { DIM } else { TEXT }));
+                    lines.push((format!("B{} {name}{tgt}", e.start_block), if ghosts.get(k).copied().unwrap_or(false) { th().dim } else { th().text }));
                 }
                 if let Some(gain) = rest.filter(|r| r.blocks > 0) {
-                    lines.push((rest_text(gain), GOOD));
+                    lines.push((rest_text(gain), th().good));
                 }
                 let empty: Vec<String> = (1..=s.def.total_blocks).filter(|b| !st.entries.iter().any(|e| *b >= e.start_block && *b <= e.end_block(pw))).map(|b| b.to_string()).collect();
                 if !empty.is_empty() && intent.is_some() && u.is_active() {
-                    lines.push((format!("Empty: B{}", empty.join(", B")), GOLD));
+                    lines.push((format!("Empty: B{}", empty.join(", B")), th().gold));
                 }
                 if st.error_index >= 0 {
-                    lines.push((st.error_text.clone(), FOE));
+                    lines.push((st.error_text.clone(), th().foe));
                 }
             }
             // ENCOUNTER2 H3: why a Withdraw waits (the gate is shut)
             let note = s.gate_note();
             if !note.is_empty() && !s.plan_confirmed {
-                lines.push((note, FOE));
+                lines.push((note, th().foe));
             }
             lines.push(ap_line);
             statuses(&mut lines);
             stats(&mut lines);
-            lines.push((format!("Gear: {weapon}"), GOLD));
+            lines.push((format!("Gear: {weapon}"), th().gold));
         } else {
             stats(&mut lines);
             lines.push(ap_line);
-            lines.push((format!("Gear: {weapon}"), GOLD));
+            lines.push((format!("Gear: {weapon}"), th().gold));
             statuses(&mut lines);
             if s.plan_confirmed {
-                lines.push(("This round".into(), TEXT));
+                lines.push(("This round".into(), th().text));
                 for (start, _, name, _, tgt) in committed(s, h) {
                     let tgt = tgt.map(|t| format!(" > {}", short_name(&t))).unwrap_or_default();
-                    lines.push((format!("B{start} {name}{tgt}"), TEXT));
+                    lines.push((format!("B{start} {name}{tgt}"), th().text));
                 }
             } else {
-                lines.push(("Plan".into(), TEXT));
+                lines.push(("Plan".into(), th().text));
                 // ENCOUNTER2 H3: why a Withdraw waits (the gate is shut)
                 let note = s.gate_note();
                 if !note.is_empty() {
-                    lines.push((note, FOE));
+                    lines.push((note, th().foe));
                 }
                 if st.entries.iter().all(|e| e.step_index < 0) {
-                    lines.push(("No plan yet".into(), GOLD));
+                    lines.push(("No plan yet".into(), th().gold));
                 }
                 for e in st.entries.iter().filter(|e| e.step_index >= 0) {
                     let name = &w.cat.skills[e.skill].name;
                     let tgt = e.target.filter(|t| *t != h).map(|t| format!(" > {}", short_name(&w.units[t].name))).unwrap_or_default();
-                    lines.push((format!("B{} {name}{tgt}", e.start_block), TEXT));
+                    lines.push((format!("B{} {name}{tgt}", e.start_block), th().text));
                 }
                 let empty: Vec<String> = (1..=s.def.total_blocks).filter(|b| !st.entries.iter().any(|e| *b >= e.start_block && *b <= e.end_block(w))).map(|b| b.to_string()).collect();
                 if !empty.is_empty() && u.is_active() {
-                    lines.push((format!("Empty: B{}", empty.join(", B")), GOLD));
+                    lines.push((format!("Empty: B{}", empty.join(", B")), th().gold));
                 }
                 if st.error_index >= 0 {
-                    lines.push((st.error_text.clone(), FOE));
+                    lines.push((st.error_text.clone(), th().foe));
                 }
             }
         }
@@ -602,7 +603,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                 ly += pitch;
             }
             if Some(n) == derived_at && !derived.is_empty() && ly > top {
-                let tip: Tip = derived.iter().flat_map(|d| [(format!("{} {}", d.label, d.shown), GOLD), (d.desc.clone(), TEXT)]).collect();
+                let tip: Tip = derived.iter().flat_map(|d| [(format!("{} {}", d.label, d.shown), th().gold), (d.desc.clone(), th().text)]).collect();
                 ui.push("hero.derived", "row", text, Rect::new(r.x + 2, top as i32 - 1, r.w - 4, (ly - top).ceil() as i32), true, false, None, tip);
             }
         }
@@ -667,9 +668,9 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
 
     // -- Right: hostile cards and the hovered (or first) foe's detail card.
     let right = Rect::new(W - 126, 28, 124, 290);
-    ui.p.panel(right, PANEL, BORDER, RADIUS);
+    ui.p.panel(right, th().game("battle_panel", PANEL), th().edge, RADIUS);
     let foes_active = w.enemies.iter().filter(|e| w.units[**e].is_active()).count();
-    ui.p.text(right.x as f32 + 6.0, 32.0, &format!("Hostiles {foes_active}"), TITLE, FOE);
+    ui.p.text(right.x as f32 + 6.0, 32.0, &format!("Hostiles {foes_active}"), TITLE, th().foe);
     let mut y = 44;
     let mut hovered_foe = None;
     for &e in &w.enemies {
@@ -702,8 +703,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         if hover {
             hovered_foe = Some(e);
         }
-        ui.p.panel(r, if hover { rgba(48, 28, 38, 255) } else { CARD }, if hover { FOE } else { BORDER }, RADIUS);
-        let col = if u.is_active() { FOE } else { DIM };
+        ui.p.panel(r, if hover { th().game("foe_hot", rgba(48, 28, 38, 255)) } else { th().card }, if hover { th().foe } else { th().edge }, RADIUS);
+        let col = if u.is_active() { th().foe } else { th().dim };
         // UI5: the enemy's intent glyph before its name (a tell, so only while the tells show)
         // slice 5: from the round records, as the tokens draw it, so the two agree during the playback too
         let glyph = round_of(e).filter(|_| show_tells && u.is_active());
@@ -717,15 +718,15 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             let tip = draw_badge_row(&mut ui.p, t, row, s.def.total_blocks.max(1));
             ui.push(format!("foe.{e}.badges"), "badges", tip.iter().skip(1).map(|x| x.0.clone()).collect::<Vec<_>>().join("; "), row, true, false, None, tip);
         }
-        ui.p.text_right(r.x as f32 + r.w as f32 - 3.0, r.y as f32 + 1.5, &format!("{}/{}", u.hp, u.max_hp), BODY, if u.is_active() { GOOD } else { DIM });
+        ui.p.text_right(r.x as f32 + r.w as f32 - 3.0, r.y as f32 + 1.5, &format!("{}/{}", u.hp, u.max_hp), BODY, if u.is_active() { th().good } else { th().dim });
         if u.is_active() {
             if two {
-                ui.p.text(r.x as f32 + 3.0, r.y as f32 + 11.5, &next_lines[0], SMALL, GOLD);
+                ui.p.text(r.x as f32 + 3.0, r.y as f32 + 11.5, &next_lines[0], SMALL, th().gold);
                 // the rest of the line as written (a word `wrap` broke mid-word stays whole)
                 let rest = next.get(next_lines[0].len()..).unwrap_or("").trim_start();
-                ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 11.5 + ui.p.line_h(SMALL), rest, SMALL, next_w, GOLD);
+                ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 11.5 + ui.p.line_h(SMALL), rest, SMALL, next_w, th().gold);
             } else {
-                ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 11.5, &next, SMALL, next_w, GOLD);
+                ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 11.5, &next, SMALL, next_w, th().gold);
             }
             if tell.is_some_and(|t| t.revealed) {
                 if let Some(img) = cx.art.image(&emberwake_content::art::badge("foresight"), 9, 9) {
@@ -733,7 +734,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                 }
             }
         } else {
-            ui.p.text(r.x as f32 + 3.0, r.y as f32 + 11.5, if u.is_withdrawn { "Fled" } else { "Down" }, SMALL, DIM);
+            ui.p.text(r.x as f32 + 3.0, r.y as f32 + 11.5, if u.is_withdrawn { "Fled" } else { "Down" }, SMALL, th().dim);
         }
         meter_row(&mut ui.p, Rect::new(r.x + 3, r.y + r.h - row_h - 5, r.w - 6, 3), &ms);
         if layers.guard && held_guard(s, e).is_some() {
@@ -760,7 +761,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     if let Some(e) = detail_foe {
         let r = Rect::new(right.x + 4, y + 2, 116, 318 - y - 6);
         g.panels.push(("intel", r));
-        ui.p.panel(r, CARD, if w.allies.contains(&e) { ALLY } else { FOE }, RADIUS);
+        ui.p.panel(r, th().card, if w.allies.contains(&e) { ALLY } else { th().foe }, RADIUS);
         let mut ly = r.y as f32 + 3.0;
         let mut lines = if pinned.is_some() { inspect_tip(s, e, sel, &tells, &rounds, &classes, show_tells) } else { unit_tip(s, e, sel, &tells, &rounds, &classes) };
         // RULESET1-U slice 5: the selected hero's planned hits on this unit, forecast (rule poise)
@@ -787,14 +788,14 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     }
 
     // -- Bottom bar: playback, round and status, the last log line.
-    ui.p.panel(Rect::new(2, 322, W - 4, 36), PANEL, BORDER, RADIUS);
-    ui.button_full("bar.restart", Rect::new(6, 325, 40, 14), "Restart", Action::Restart, !g.world_mode(), false, BODY, vec![("Restart the battle (R)".into(), TEXT)]);
-    ui.button_full("bar.step", Rect::new(48, 325, 34, 14), "Step", Action::Step, !planning || s.plan_confirmed, false, BODY, vec![("Resolve one action (Space)".into(), TEXT)]);
+    ui.p.panel(Rect::new(2, 322, W - 4, 36), th().game("battle_panel", PANEL), th().edge, RADIUS);
+    ui.button_full("bar.restart", Rect::new(6, 325, 40, 14), "Restart", Action::Restart, !g.world_mode(), false, BODY, vec![("Restart the battle (R)".into(), th().text)]);
+    ui.button_full("bar.step", Rect::new(48, 325, 34, 14), "Step", Action::Step, !planning || s.plan_confirmed, false, BODY, vec![("Resolve one action (Space)".into(), th().text)]);
     // Test Arena only: leave at any time (Esc does the same); a world battle is left only through its end.
     let ox = if g.world_mode() {
         0
     } else {
-        ui.button_full("bar.exit", Rect::new(84, 325, 30, 14), "Exit", Action::Leave, true, false, BODY, vec![("Back to the screen you came from (Esc)".into(), TEXT)]);
+        ui.button_full("bar.exit", Rect::new(84, 325, 30, 14), "Exit", Action::Leave, true, false, BODY, vec![("Back to the screen you came from (Esc)".into(), th().text)]);
         32
     };
     let phase = match s.phase {
@@ -802,19 +803,19 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         Phase::Resolving => "Resolving",
         Phase::Replay => "Round over",
     };
-    ui.p.text((88 + ox) as f32, 326.0, &format!("Round {}/{}  {phase}", s.current_round, s.def.max_rounds), BODY, GOLD);
+    ui.p.text((88 + ox) as f32, 326.0, &format!("Round {}/{}  {phase}", s.current_round, s.def.max_rounds), BODY, th().gold);
     // RULESET1-U (user 2026-10-29): an Arena fight beyond classic shows the Scene Runner card's ruleset chip at the
     // bar's right end; the message gives up the width
     let chip = g.arena_chip();
     let chip_w = chip.as_ref().map_or(0, |c| ((ui.p.text_w(c, SMALL) + 10.0).ceil() as i32).min(200) + 4);
-    ui.p.text_fit((200 + ox) as f32, 326.0, &g.message, BODY, (430 - ox - chip_w) as f32, TEXT);
+    ui.p.text_fit((200 + ox) as f32, 326.0, &g.message, BODY, (430 - ox - chip_w) as f32, th().text);
     ui.push("bar.status", "label", format!("Round {} {phase}: {}", s.current_round, g.message), Rect::new(88 + ox, 325, 540 - ox - chip_w, 12), true, false, None, Vec::new());
     if let Some(chip) = chip {
         let cr = Rect::new(W - 6 - (chip_w - 4), 325, chip_w - 4, 14);
-        ui.p.panel(cr, rgba(30, 44, 70, 255), BORDER, 2.0);
-        ui.p.text_fit(cr.x as f32 + 5.0, cr.y as f32 + 3.0, &chip, SMALL, (cr.w - 10) as f32, GOLD);
+        ui.p.panel(cr, th().game("chip", rgba(30, 44, 70, 255)), th().edge, 2.0);
+        ui.p.text_fit(cr.x as f32 + 5.0, cr.y as f32 + 3.0, &chip, SMALL, (cr.w - 10) as f32, th().gold);
         let on = format!("Rules on: {}.", s.w.ruleset.rules.join(", "));
-        ui.push("bar.chip", "label", chip.clone(), cr, true, false, None, vec![(format!("Ruleset: {chip}"), GOLD), (on, TEXT)]);
+        ui.push("bar.chip", "label", chip.clone(), cr, true, false, None, vec![(format!("Ruleset: {chip}"), th().gold), (on, th().text)]);
     }
     let last = s.resolver.log.last().cloned().unwrap_or_else(|| "No actions yet".into());
     // INPUT1 PB4: a timeline battle's log in its parts (round and block); during playback the compact log shows the
@@ -823,29 +824,29 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     let (last, mut card): (String, Tip) = match cursor {
         Some(b) => {
             let lines = groups.iter().find(|p| (p.round, p.block) == (s.current_round, b)).map(|p| p.lines.clone()).unwrap_or_default();
-            let head = (format!("Round {} block {b}", s.current_round), GOLD);
+            let head = (format!("Round {} block {b}", s.current_round), th().gold);
             let shown = lines.last().map_or_else(|| format!("Block {b}: nothing logged yet"), |l| format!("Block {b}: {l}"));
             let start = lines.len().saturating_sub(LOG_CARD_LINES);
-            (shown, std::iter::once(head).chain(lines[start..].iter().map(|l| (l.clone(), TEXT))).collect())
+            (shown, std::iter::once(head).chain(lines[start..].iter().map(|l| (l.clone(), th().text))).collect())
         }
-        None => (last.clone(), vec![(last, TEXT)]),
+        None => (last.clone(), vec![(last, th().text)]),
     };
-    card.push(("Click to open the full log.".into(), DIM));
+    card.push(("Click to open the full log.".into(), th().dim));
     let log_r = Rect::new(6, 341, W - 64, 14);
-    ui.p.panel(log_r, CARD, BORDER, RADIUS);
-    ui.p.text_fit(10.0, 342.5, &last, SMALL, (W - 72) as f32, DIM);
+    ui.p.panel(log_r, th().card, th().edge, RADIUS);
+    ui.p.text_fit(10.0, 342.5, &last, SMALL, (W - 72) as f32, th().dim);
     ui.push("bar.last", "label", last, log_r, true, false, Some(Action::ToggleLog), card);
-    ui.button_full("bar.log", Rect::new(W - 54, 341, 48, 14), if g.show_log { "Close" } else { "Expand" }, Action::ToggleLog, true, g.show_log, BODY, vec![("Full combat log (L); the wheel scrolls".into(), TEXT)]);
+    ui.button_full("bar.log", Rect::new(W - 54, 341, 48, 14), if g.show_log { "Close" } else { "Expand" }, Action::ToggleLog, true, g.show_log, BODY, vec![("Full combat log (L); the wheel scrolls".into(), th().text)]);
 
     let outcome = g.outcome();
     if !outcome.is_empty() {
         let r = Rect::new(GRID_X + 92, GRID_Y + 110, 200, 56);
-        ui.p.panel(r, rgba(10, 14, 22, 240), GOLD, 4.0);
+        ui.p.panel(r, th().game("outcome_fill", rgba(10, 14, 22, 240)), th().gold, 4.0);
         let (title, col) = match outcome.as_str() {
-            "won" => ("Victory", GOOD),
-            "lost" => ("Defeat", FOE),
-            "fled" => ("Fled", GOLD),
-            _ => ("Battle over", GOLD),
+            "won" => ("Victory", th().good),
+            "lost" => ("Defeat", th().foe),
+            "fled" => ("Fled", th().gold),
+            _ => ("Battle over", th().gold),
         };
         ui.p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + 8.0, title, 11.0, col);
         if g.world_mode() {
@@ -861,13 +862,13 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         // ENCOUNTER2-U (decision "RULESET1-A3 loose ends"): the resolver log with the encounter's phase and kill lines
         let log = s.log_lines(0, 0);
         ui.push("log.panel", "panel", format!("{} lines", log.len()), r, true, true, Some(Action::Step), Vec::new());
-        ui.p.panel(r, rgba(10, 14, 24, 246), BORDER, 3.0);
-        ui.p.text(r.x as f32 + 6.0, r.y as f32 + 3.0, &format!("Combat log ({} entries)", log.len()), TITLE, GOLD);
+        ui.p.panel(r, th().game("log_fill", rgba(10, 14, 24, 246)), th().edge, 3.0);
+        ui.p.text(r.x as f32 + 6.0, r.y as f32 + 3.0, &format!("Combat log ({} entries)", log.len()), TITLE, th().gold);
         // the rows: text, colour, x offset, a rule after it; INPUT1 PB4: a timeline battle's lines under their round's
         // "Round <r>" and their part's DIM "Block <b>" ("Round start", "Round end") with a 1 px rule, 6 px in
         let mut wrapped: Vec<(String, Rgba, f32, bool)> = Vec::new();
         let wrap_line = |p: &mut Painter, out: &mut Vec<(String, Rgba, f32, bool)>, l: &str, indent: f32| {
-            let col = if l.starts_with("[Phase]") { GOLD } else if l.starts_with("[Kill]") { FOE } else if l.starts_with("[Attack]") { TEXT } else if l.starts_with("[Support]") { GOOD } else if l.contains("Failed") || l.contains("Out of Range") { FOE } else { DIM };
+            let col = if l.starts_with("[Phase]") { th().gold } else if l.starts_with("[Kill]") { th().foe } else if l.starts_with("[Attack]") { th().text } else if l.starts_with("[Support]") { th().good } else if l.contains("Failed") || l.contains("Out of Range") { th().foe } else { th().dim };
             for (k, part) in p.wrap(l, SMALL, (r.w - 22) as f32 - indent).into_iter().enumerate() {
                 out.push((if k == 0 { part } else { format!("   {part}") }, col, indent, false));
             }
@@ -877,9 +878,9 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             for part in &groups {
                 if part.round != round {
                     round = part.round;
-                    wrapped.push((format!("Round {round}"), GOLD, 0.0, false));
+                    wrapped.push((format!("Round {round}"), th().gold, 0.0, false));
                 }
-                wrapped.push((log_part_name(part.block), DIM, 0.0, true));
+                wrapped.push((log_part_name(part.block), th().dim, 0.0, true));
                 for l in &part.lines {
                     wrap_line(&mut ui.p, &mut wrapped, l, LOG_INDENT);
                 }
@@ -898,15 +899,15 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             ui.p.text(x, y, t, SMALL, *col);
             if *rule {
                 let x0 = (x + ui.p.text_w(t, SMALL) + 3.0).ceil() as i32;
-                ui.p.fill(Rect::new(x0, y as i32 + 4, (r.x + r.w - 12 - x0).max(0), 1), with_alpha(DIM, 110));
+                ui.p.fill(Rect::new(x0, y as i32 + 4, (r.x + r.w - 12 - x0).max(0), 1), with_alpha(th().dim, 110));
             }
         }
         if max_scroll > 0 {
             let track = Rect::new(r.x + r.w - 8, r.y + 15, 4, r.h - 19);
-            ui.p.panel(track, rgba(30, 40, 60, 255), rgba(30, 40, 60, 255), 1.5);
+            ui.p.panel(track, th().game("battle_track", rgba(30, 40, 60, 255)), th().game("battle_track", rgba(30, 40, 60, 255)), 1.5);
             let thumb_h = (track.h * visible / wrapped.len() as i32).max(8);
             let pos = (track.h - thumb_h) * (max_scroll - g.log_scroll) / max_scroll;
-            ui.p.panel(Rect::new(track.x, track.y + pos, 4, thumb_h), GOLD, GOLD, 1.5);
+            ui.p.panel(Rect::new(track.x, track.y + pos, 4, thumb_h), th().gold, th().gold, 1.5);
         }
     }
 
@@ -914,8 +915,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     if let Some(text) = s.round_script().map(|r| r.banner.clone()).filter(|b| !b.is_empty()) {
         let bw = ((ui.p.text_w(&text, BODY) + 16.0).ceil() as i32).min(GRID_W * TILE - 8);
         let r = Rect::new(GRID_X + (GRID_W * TILE - bw) / 2, GRID_Y + 2, bw, 16);
-        ui.p.panel(r, CARD, GOLD, RADIUS);
-        ui.p.text_fit(r.x as f32 + 8.0, r.y as f32 + 3.0, &text, BODY, r.w as f32 - 16.0, GOLD);
+        ui.p.panel(r, th().card, th().gold, RADIUS);
+        ui.p.text_fit(r.x as f32 + 8.0, r.y as f32 + 3.0, &text, BODY, r.w as f32 - 16.0, th().gold);
         ui.push("battle.banner", "label", text, r, true, false, None, Vec::new());
     }
 
@@ -940,7 +941,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             }
         }
         ui.push("timeline.backdrop", "backdrop", "", r, true, false, Some(Action::TimelinePick(None)), Vec::new());
-        ui.p.panel(r, rgba(10, 14, 24, 250), BORDER, RADIUS);
+        ui.p.panel(r, th().game("timeline_fill", rgba(10, 14, 24, 250)), th().edge, RADIUS);
         let on_track = |k: &str| Action::TimelinePick(timeline_view::unit_of(k));
         let faces = &mut g.timeline_faces;
         let icon = |ui: &mut Ui<Action>, track: &aegis_ui::timeline::Track, sq: Rect| {
@@ -957,22 +958,22 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     if let Some(pop) = g.popup.clone() {
         let r = pop.rect(g.menu_row);
         ui.push("popup.backdrop", "backdrop", "", Rect::new(0, 0, W, H), true, false, Some(Action::ClosePopup), Vec::new());
-        ui.p.panel(r, rgba(14, 20, 34, 252), GOLD, 3.0);
-        ui.p.text_fit(r.x as f32 + 5.0, r.y as f32 + 2.0, &pop.title, BODY, r.w as f32 - 10.0, GOLD);
+        ui.p.panel(r, th().game("popup_fill", rgba(14, 20, 34, 252)), th().gold, 3.0);
+        ui.p.text_fit(r.x as f32 + 5.0, r.y as f32 + 2.0, &pop.title, BODY, r.w as f32 - 10.0, th().gold);
         for (k, row) in pop.rows.iter().enumerate() {
             let rr = pop.row(g.menu_row, k);
             let hover = ui.hover(rr);
             if hover && row.valid {
-                ui.p.panel(rr, PANEL_HI, rgb(110, 140, 196), 1.5);
+                ui.p.panel(rr, th().card_hot, th().edge_hot, 1.5);
             }
-            let col = if row.valid { TEXT } else { DIM };
+            let col = if row.valid { th().text } else { th().dim };
             // the label column: 78 px in a 170 px menu, wider in the skill menu (INPUT1 IF3)
             let label_w = (pop.w - 92) as f32;
             ui.p.text_fit(rr.x as f32 + 4.0, rr.y as f32 + 1.5, &row.label, BODY, label_w, col);
-            ui.p.text_fit(rr.x as f32 + label_w + 6.0, rr.y as f32 + 2.0, &row.detail, SMALL, rr.w as f32 - label_w - 8.0, if row.valid { GOLD } else { DIM });
+            ui.p.text_fit(rr.x as f32 + label_w + 6.0, rr.y as f32 + 2.0, &row.detail, SMALL, rr.w as f32 - label_w - 8.0, if row.valid { th().gold } else { th().dim });
             // IF3, IN6: a pick that changes the intent and drops intent-bound buffs: a red corner
             if row.warn {
-                ui.p.fill(Rect::new(rr.x + rr.w - 4, rr.y + 1, 3, 3), FOE);
+                ui.p.fill(Rect::new(rr.x + rr.w - 4, rr.y + 1, 3, 3), th().foe);
             }
             ui.push(format!("popup.{k}"), "option", format!("{} {}", row.label, row.detail), rr, row.valid, hover, Some(Action::Choose(k)), row.tip.clone());
         }
@@ -981,7 +982,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     // ENCOUNTER2-C DT7: the talk over a 35 % veil, centred at the bottom; its backdrop keeps the board's hover cards
     // from showing through the box
     if let (Some(gs), Some(view)) = (talk_gs.as_ref(), talk_view.as_ref()) {
-        ui.p.fill(Rect::new(0, 0, W, H), TALK_VEIL);
+        ui.p.fill(Rect::new(0, 0, W, H), th().game("talk_veil", TALK_VEIL));
         let b = talk::talk_layout(&mut ui.p, view);
         ui.push("talk.backdrop", "backdrop", "", b.r, true, false, None, Vec::new());
         talk::draw_talk(&mut ui, cx, gs, &mut g.faces, view, &b, false, Action::Talk);
@@ -1026,7 +1027,7 @@ pub(super) fn log_groups_json(groups: &[emberwake_battle::session::LogGroup]) ->
 #[allow(clippy::too_many_arguments)]
 fn panel_portrait(ui: &mut Ui<Action>, cx: &mut Cx, faces: &mut Faces, who: &Who, look: &emberwake_battle::portrait::Look, r: Rect, id: &str) -> Rect {
     let pr = Rect::new(r.x + PANEL_INSET, r.y + PANEL_INSET, PANEL_PORTRAIT, PANEL_PORTRAIT);
-    ui.p.panel(pr, rgb(22, 30, 48), BORDER, 2.0);
+    ui.p.panel(pr, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
     faces.draw(&mut ui.p, cx, who, look, PANEL_SURFACE, pr);
     ui.push(id, "portrait", who.name.clone(), pr, true, false, None, Vec::new());
     pr
@@ -1049,7 +1050,7 @@ fn plain_look(look: &emberwake_battle::portrait::Look) -> emberwake_battle::port
 /// `timeline.icon.<track>`), on the panels' dark backing, with `look`'s state rows on surface `timeline` through
 /// `faces` (capped at the minimal tier); the initial letter without a file.
 fn timeline_portrait(ui: &mut Ui<Action>, cx: &mut Cx, faces: &mut Faces, who: &Who, look: &emberwake_battle::portrait::Look, sq: Rect) {
-    ui.p.panel(sq, rgb(22, 30, 48), BORDER, 2.0);
+    ui.p.panel(sq, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
     faces.draw(&mut ui.p, cx, who, look, TIMELINE_SURFACE, Rect::new(sq.x + 1, sq.y + 1, sq.w - 2, sq.h - 2));
 }
 
@@ -1097,7 +1098,7 @@ fn intel_parts_at(p: &mut Painter, lines: &[(String, Rgba)], room: f32, beside: 
             parts.pop();
         }
         let narrow = height(&parts) < beside;
-        parts.push((INTEL_MORE.to_string(), DIM, false, narrow));
+        parts.push((INTEL_MORE.to_string(), th().dim, false, narrow));
     }
     parts
 }

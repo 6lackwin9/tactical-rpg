@@ -1,8 +1,9 @@
 //! The battle board: the Flat and Stage views' passes over the tiles, tokens, markers and hit rects (`Board`, `draw_flat`, `draw_stage`), status loops on tokens, board geometry helpers.
 
+use aegis_ui::theme::th;
 use super::marks::{bars_shown, break_plate, broken_units, draw_arrows, draw_hold_tiles, draw_hook_marks, draw_pushes, exit_sign, first_move_chips, poise_bar, poise_shown, HoldMarks, HookMarks};
 use super::overlays::{draw_overlay, Layers, Overlay};
-use super::{Action, ALLY, AMBER, BG, BORDER, DASH_MS, DIM, FOE, GOLD, GOOD, GRID_X, GRID_Y, TEXT, TILE};
+use super::{Action, ALLY, AMBER, DASH_MS, GRID_X, GRID_Y, TILE};
 use super::tips::{intent_glyph, unit_tip};
 use super::tokens::{body_keys, hit_flash, token_frame, token_outline, Float, Tokens, UnitAnim};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
@@ -252,7 +253,7 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
     focus.extend(tile_hover.or(card_hover));
     let shown = overlay.map(|o| o.shown(&layers, sel, inspect, alt));
     let panel = Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4);
-    ui.p.panel(panel, rgb(8, 10, 16), BORDER, RADIUS);
+    ui.p.panel(panel, th().game("board_tray", rgb(8, 10, 16)), th().edge, RADIUS);
     // FX1 4.1: the board shifted by the camera, kept inside its panel while it shakes (at rest the Flat board draws
     // unclipped, as before)
     if shift != (0, 0) {
@@ -272,12 +273,12 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
                 // ENCOUNTER2 H7: a hold escape's exit reads SHUT or OPEN (layer `gate`)
                 let (word, fill, edge) = exit_sign(hold);
                 ui.p.panel(r.inset(7), fill, edge, 2.0);
-                ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, word, SMALL, BG);
+                ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, word, SMALL, th().bg);
             }
             if planning && sel.is_some() && ui.hover(r) && !popup {
                 ui.p.panel(r.inset(1), rgba(255, 255, 255, 30), rgba(255, 255, 255, 160), 1.5);
             }
-            let mut tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), GOOD), ("A unit that steps here leaves the battle.".into(), TEXT)] } else { Vec::new() };
+            let mut tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), th().good), ("A unit that steps here leaves the battle.".into(), th().text)] } else { Vec::new() };
             tip.extend(marks.tile_tip(c));
             tip.extend(hold.map(|h| h.tile_tip(w, c)).unwrap_or_default());
             ui.push(format!("tile.{gx}.{gy}"), "tile", tid, r, planning, false, if w.occupant(c).is_none() { Some(Action::TileClick(c)) } else { None }, tip);
@@ -301,8 +302,8 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
             for e in &st.entries {
                 if e.pos_after != from && e.pos_after.x >= 0 {
                     let (a, b) = (center(from), center(e.pos_after));
-                    ui.p.line(a.0, a.1, b.0, b.1, GOLD, 3.0);
-                    ui.p.panel(cell_rect(e.pos_after).inset(3), rgba(244, 198, 84, 40), GOLD, 2.0);
+                    ui.p.line(a.0, a.1, b.0, b.1, th().gold, 3.0);
+                    ui.p.panel(cell_rect(e.pos_after).inset(3), rgba(244, 198, 84, 40), th().gold, 2.0);
                     from = e.pos_after;
                 }
             }
@@ -350,7 +351,7 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
         let a = tokens.anims.get(i).unwrap_or(&still);
         let facing = if tokens.anims.get(i).is_some() { a.faces(anim_now, if instant { 0 } else { tuning.walk_ms }) } else { Facing::side(!ally) };
         if !alive && !still_dying(&mut cx.art, a, body.as_deref(), anim_now, instant, tuning.death_hold_ms) {
-            ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, "x", BODY, DIM);
+            ui.p.text_center(r.x as f32 + 16.0, r.y as f32 + 11.0, "x", BODY, th().dim);
             continue;
         }
         let (flash, shake) = flash_of(flashes, i, now, tuning, reduce || instant);
@@ -366,12 +367,12 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
         // FX1-L2: a miss's target steps aside and back
         let (sx, sy) = fx::sidestep_of(sidesteps, i, anim_now);
         let tr = geo.token_rect(pos, shake + dx + sx, dy + sy);
-        let ring = if ally { ALLY } else { FOE };
+        let ring = if ally { ALLY } else { th().foe };
         if alive {
             ui.p.ellipse(tr.x as f32 + tp as f32 / 2.0, (tr.y + tp) as f32 - 2.5, tp as f32 * 0.36, tp as f32 * 0.11, rgba(ring[0], ring[1], ring[2], tuning.foot_alpha));
         }
         let hover = ui.hover(r) && !popup;
-        let outline = if Some(i) == sel || Some(i) == talker { Some(GOLD) } else if hover { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
+        let outline = if Some(i) == sel || Some(i) == talker { Some(th().gold) } else if hover { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
         let looks = status.iter().find(|x| x.unit == i).map_or(&[][..], |x| &x.looks[..]);
         let alpha = fx::token_alpha(looks, tuning);
         let frame = body.as_deref().and_then(|b| token_frame(&mut cx.art, b, palette, &a.player, anim_now, tp, facing).map(|(f, img)| {
@@ -393,7 +394,7 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
             _ => {
                 let ring = with_alpha(ring, scaled(ring[3], alpha));
                 ui.p.panel(tr.inset(4), ring, outline.unwrap_or(ring), 6.0);
-                ui.p.text_center(tr.x as f32 + tp as f32 / 2.0, r.y as f32 + 11.0 + dy as f32, &u.name.chars().next().unwrap_or('?').to_string(), BODY, BG);
+                ui.p.text_center(tr.x as f32 + tp as f32 / 2.0, r.y as f32 + 11.0 + dy as f32, &u.name.chars().next().unwrap_or('?').to_string(), BODY, th().bg);
                 if flash {
                     ui.p.panel(tr.inset(4), fx::FLASH, fx::FLASH, 6.0);
                 }
@@ -404,7 +405,7 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
         }
         // VISCLAR1 VC2, VC3: under the round intent the bars of the focus set (Alt or `all_bars`: every unit's)
         if bars_shown(overlay.is_some(), &layers, alt, &focus, i) {
-            hp_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 3 + dy, TILE - 6, 2), hp, u.max_hp, if ally { GOOD } else { FOE });
+            hp_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 3 + dy, TILE - 6, 2), hp, u.max_hp, if ally { th().good } else { th().foe });
             // RULESET1-U slice 5: the poise bar over the HP bar (rule poise)
             if let Some(st) = poise_shown(w, i, &layers) {
                 poise_bar(&mut ui.p, Rect::new(r.x + 3 + dx, r.y + TILE - 6 + dy, TILE - 6, 2), &st);
@@ -475,8 +476,8 @@ fn intent_chip(ui: &mut Ui<Action>, cx: &mut Cx, kind: &str, chip: Rect) {
     match cx.art.image(&emberwake_content::art::intent(kind), 10, 10) {
         Some(img) => ui.p.image(img, chip),
         None => {
-            ui.p.panel(chip, rgba(48, 28, 38, 230), FOE, 2.0);
-            ui.p.text_center(chip.x as f32 + 5.0, chip.y as f32 + 1.0, &kind[..1].to_uppercase(), SMALL, TEXT);
+            ui.p.panel(chip, th().game("foe_chip", rgba(48, 28, 38, 230)), th().foe, 2.0);
+            ui.p.text_center(chip.x as f32 + 5.0, chip.y as f32 + 1.0, &kind[..1].to_uppercase(), SMALL, th().text);
         }
     }
 }
@@ -548,7 +549,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
     let instant = cx.settings.v["skip_anim"].as_bool().unwrap_or(false);
     let reduce = cx.settings.reduce_motion();
     let still = UnitAnim::default();
-    ui.p.panel(Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4), rgb(8, 10, 16), BORDER, RADIUS);
+    ui.p.panel(Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4), th().game("board_tray", rgb(8, 10, 16)), th().edge, RADIUS);
 
     // The units' places this frame (STATUSFX1: and their status looks).
     let wall = tokens.wall_ms(now);
@@ -659,8 +660,8 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     for e in &st.entries {
                         if e.pos_after != from && e.pos_after.x >= 0 {
                             let (a, b) = (foot_f(from), foot_f(e.pos_after));
-                            stage::wide_line(&mut ui.p, a.0, a.1 - 3.0, b.0, b.1 - 3.0, GOLD, 2.0, 0.0);
-                            ui.p.panel(inset2(geo.cell_rect(e.pos_after), 3, 2), rgba(244, 198, 84, 40), GOLD, 2.0);
+                            stage::wide_line(&mut ui.p, a.0, a.1 - 3.0, b.0, b.1 - 3.0, th().gold, 2.0, 0.0);
+                            ui.p.panel(inset2(geo.cell_rect(e.pos_after), 3, 2), rgba(244, 198, 84, 40), th().gold, 2.0);
                             from = e.pos_after;
                         }
                     }
@@ -717,7 +718,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                 for t in units.iter().filter(|t| t.alive) {
                     let (fx, fy) = (t.foot.0 as f32, t.foot.1 as f32);
                     ui.p.ellipse(fx + 1.0, fy, 0.2 * tp as f32, 2.4, rgba(8, 10, 6, tuning.shadow_alpha));
-                    ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2, with_alpha(if t.ally { ALLY } else { FOE }, tuning.foot_ring_alpha));
+                    ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2, with_alpha(if t.ally { ALLY } else { th().foe }, tuning.foot_ring_alpha));
                 }
             }
             Pass::Face => stage::draw_face(&mut ui.p, &mut cx.art, &w.grid, set),
@@ -729,8 +730,8 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                         Item::Unit(i) => {
                             let Some(t) = unit_of(i) else { continue };
                             let a = tokens.anims.get(i).unwrap_or(&still);
-                            let ring = if t.ally { ALLY } else { FOE };
-                            let outline = if Some(i) == sel || Some(i) == talker { Some(GOLD) } else if hovered == Some(i) { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
+                            let ring = if t.ally { ALLY } else { th().foe };
+                            let outline = if Some(i) == sel || Some(i) == talker { Some(th().gold) } else if hovered == Some(i) { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
                             // STATUSFX1: a stealthed token (sprite and outline) at 55 % alpha
                             let alpha = fx::token_alpha(&t.looks, tuning);
                             let frame = t.body.as_deref().and_then(|b| token_frame(&mut cx.art, b, &t.palette, &a.player, anim_now, tp, t.facing).map(|(f, img)| {
@@ -756,7 +757,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                                     let ring = with_alpha(ring, scaled(ring[3], alpha));
                                     ui.p.panel(t.tr.inset(4), ring, outline.unwrap_or(ring), 6.0);
                                     let letter = w.units[i].name.chars().next().unwrap_or('?').to_string();
-                                    ui.p.text_center(t.tr.x as f32 + tp as f32 / 2.0, (t.tr.y + tp / 2) as f32 - 5.0, &letter, BODY, BG);
+                                    ui.p.text_center(t.tr.x as f32 + tp as f32 / 2.0, (t.tr.y + tp / 2) as f32 - 5.0, &letter, BODY, th().bg);
                                     if t.flash {
                                         ui.p.panel(t.tr.inset(4), fx::FLASH, fx::FLASH, 6.0);
                                     }
@@ -774,8 +775,8 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     let Some(t) = unit_of(i).filter(|t| t.alive) else { continue };
                     let (Some(b), Some((_, f))) = (t.body.as_deref(), frames.iter().find(|(j, _)| *j == i)) else { continue };
                     let col = match stage::through(&order, k, Some(i) == sel, hovered == Some(i), reveal) {
-                        Some(Through::Side) => with_alpha(if t.ally { ALLY } else { FOE }, 230),
-                        Some(Through::Selected) => GOLD,
+                        Some(Through::Side) => with_alpha(if t.ally { ALLY } else { th().foe }, 230),
+                        Some(Through::Selected) => th().gold,
                         Some(Through::Hovered) => rgba(255, 255, 255, tuning.hover_outline_alpha),
                         None => continue,
                     };
@@ -791,10 +792,10 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     let u = &w.units[t.i];
                     let (fx, fy) = t.foot;
                     if !t.standing {
-                        ui.p.text_center(fx as f32, fy as f32 - ui.p.line_h(BODY) / 2.0, "x", BODY, DIM);
+                        ui.p.text_center(fx as f32, fy as f32 - ui.p.line_h(BODY) / 2.0, "x", BODY, th().dim);
                     } else if t.alive && bars_shown(overlay.is_some(), &layers, alt, &focus, t.i) {
                         // VISCLAR1 VC2, VC3: under the round intent the focus set's bars (Alt or `all_bars`: all)
-                        hp_bar(&mut ui.p, Rect::new(fx - 12, fy + 3, 24, 2), t.hp, u.max_hp, if t.ally { GOOD } else { FOE });
+                        hp_bar(&mut ui.p, Rect::new(fx - 12, fy + 3, 24, 2), t.hp, u.max_hp, if t.ally { th().good } else { th().foe });
                         // RULESET1-U slice 5: the poise bar under the HP bar (rule poise)
                         if let Some(st) = poise_shown(w, t.i, &layers) {
                             poise_bar(&mut ui.p, Rect::new(fx - 12, fy + 6, 24, 2), &st);
@@ -830,7 +831,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     // ENCOUNTER2 H7: a hold escape's exit reads SHUT or OPEN (layer `gate`)
                     let (word, fill, edge) = exit_sign(hold);
                     ui.p.panel(sign, fill, edge, 2.0);
-                    ui.p.text_center(cx_ as f32, sign.y as f32 + (sign.h as f32 - ui.p.line_h(SMALL)) / 2.0, word, SMALL, BG);
+                    ui.p.text_center(cx_ as f32, sign.y as f32 + (sign.h as f32 - ui.p.line_h(SMALL)) / 2.0, word, SMALL, th().bg);
                 }
                 for f in floats {
                     let Some(pos) = w.grid.pos(f.unit) else { continue };
@@ -861,7 +862,7 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
     for gy in 0..GRID_H {
         for gx in 0..GRID_W {
             let c = V2::new(gx, gy);
-            let mut tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), GOOD), ("A unit that steps here leaves the battle.".into(), TEXT)] } else { Vec::new() };
+            let mut tip: Tip = if w.grid.is_exit(c) { vec![("Exit".into(), th().good), ("A unit that steps here leaves the battle.".into(), th().text)] } else { Vec::new() };
             tip.extend(marks.tile_tip(c));
             tip.extend(hold.map(|h| h.tile_tip(w, c)).unwrap_or_default());
             ui.push(format!("tile.{gx}.{gy}"), "tile", w.grid.terrain_id(c), geo.cell_rect(c), planning, false, if w.occupant(c).is_none() { Some(Action::TileClick(c)) } else { None }, tip);

@@ -15,9 +15,10 @@
 
 use crate::battle::{action_rows, ap_lines, kind_color, seen_intents, Layers};
 use crate::intent_text;
+use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, Rgba};
 use aegis_ui::timeline::{Mark, Part, PartStyle, Section, Segment, Timeline, Track};
-use aegis_ui::ui::{Tip, DIM, GOLD, TEXT};
+use aegis_ui::ui::{Tip};
 use emberwake_battle::intent::{Intent, ARRIVING, HIT, IDLE};
 use emberwake_battle::plan::Plan;
 use emberwake_battle::resolver::ScheduledAction;
@@ -90,7 +91,7 @@ pub fn parts_of(start: i32, impact: i32, end: i32, winds: bool) -> Vec<Part> {
 fn segment(key: String, start: i32, end: i32, name: &str, kind: &str, target: Option<String>, ghost: bool, dim_rest: bool, card: Vec<(String, Rgba)>) -> Segment {
     // the card leads with the label in full (TEXTFIT1: a label cut on its bar reads whole on hover)
     let label = target.map(|t| format!("{name} > {t}")).unwrap_or_else(|| name.to_string());
-    let mut tip: Tip = vec![(label.clone(), GOLD), (format!("Blocks {start}-{end}  {kind}"), DIM)];
+    let mut tip: Tip = vec![(label.clone(), th().gold), (format!("Blocks {start}-{end}  {kind}"), th().dim)];
     tip.extend(card);
     let rest = dim_rest && kind == "REST";
     let mut fill = if rest { REST_FILL } else { kind_color(kind) };
@@ -113,7 +114,7 @@ fn action_segments(w: &World, actions: &[ScheduledAction], u: usize, layers: &La
         s.hatched = a.cancelled;
         if a.broken && layers.breaks {
             s.tip.push(("BREAK: cancelled by a poise break".into(), FOE));
-            marks.push(Mark { key: format!("break{i}"), block: a.start, glyph: "BREAK".into(), colour: FOE, tip: vec![("BREAK".into(), FOE), (format!("{}: cancelled by a poise break (AP paid stays spent)", r.2), TEXT)] });
+            marks.push(Mark { key: format!("break{i}"), block: a.start, glyph: "BREAK".into(), colour: FOE, tip: vec![("BREAK".into(), FOE), (format!("{}: cancelled by a poise break (AP paid stays spent)", r.2), th().text)] });
         }
         segs.push(s);
     }
@@ -138,12 +139,12 @@ fn plan_segments(pw: &World, plan: &Plan, u: usize, layers: &Layers) -> Vec<Segm
                 card.push((format!("{} AP", e.total_ap()), ALLY));
             }
             if let Some(why) = why.filter(|_| !ghost) {
-                card.push((format!("Why: {why}"), DIM));
+                card.push((format!("Why: {why}"), th().dim));
             }
             let mut s = segment(format!("{i}"), e.start_block, e.end_block(pw), &sk.name, &sk.kind, e.target.filter(|t| *t != u).map(|t| pw.units[t].name.clone()), ghost, timeline, card);
             // GH8: a ghost's card starts "Auto-filled" with its reason tag
             if s.ghost {
-                s.tip.insert(0, (why.map_or_else(|| "Auto-filled".to_string(), |r| format!("Auto-filled: {r}")), DIM));
+                s.tip.insert(0, (why.map_or_else(|| "Auto-filled".to_string(), |r| format!("Auto-filled: {r}")), th().dim));
             }
             if layers.parts && timeline {
                 s.parts = parts_of(e.start_block, e.end_block(pw), e.end_block(pw), emberwake_battle::poise::winds_up(&e.build_command(pw, u)));
@@ -176,8 +177,8 @@ fn impact_marks(r: &Intent, blocks: i32) -> Vec<Mark> {
         .enumerate()
         .map(|(k, &(b, kind))| {
             let hit = kind == HIT;
-            let col = if hit { FOE } else { GOLD };
-            Mark { key: format!("i{k}"), block: b, glyph: if hit { "!" } else { "*" }.into(), colour: col, tip: vec![(format!("B{b}"), col), (if hit { "A hit lands." } else { "An action lands." }.into(), TEXT)] }
+            let col = if hit { FOE } else { th().gold };
+            Mark { key: format!("i{k}"), block: b, glyph: if hit { "!" } else { "*" }.into(), colour: col, tip: vec![(format!("B{b}"), col), (if hit { "A hit lands." } else { "An action lands." }.into(), th().text)] }
         })
         .collect()
 }
@@ -224,9 +225,9 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
             let (segments, marks) = if planning && unit.is_active() { (plan_segments(pw, plan, u, &o.layers), Vec::new()) } else { action_segments(w, &actions, u, &o.layers, |_| true) };
             let letter = ri::intent_of(pw, u).filter(|_| timeline && live && unit.is_active()).map(|i| format!("{} ", i.label(&pw.cat).chars().next().unwrap_or(' '))).unwrap_or_default();
             let label = format!("{letter}{}", unit.name);
-            let mut tip: Tip = vec![(label.clone(), GOLD)];
+            let mut tip: Tip = vec![(label.clone(), th().gold)];
             if let Some(i) = ri::intent_of(pw, u).filter(|_| timeline && live) {
-                tip.push((format!("Intent: {}", i.label(&pw.cat)), TEXT));
+                tip.push((format!("Intent: {}", i.label(&pw.cat)), th().text));
             }
             // TV3: AP9's lines while planning (the gauge's forecast), the live AP otherwise
             if timeline && planning && unit.is_active() {
@@ -249,12 +250,12 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
             let unit = &w.units[e];
             let rec = rec_of(e);
             let revealed = !live || o.reveal_all || rec.is_some_and(|r| r.revealed);
-            let mut tip: Tip = vec![(unit.name.clone(), GOLD)];
+            let mut tip: Tip = vec![(unit.name.clone(), th().gold)];
             let mut track = Track { key: track_key(e), label: unit.name.clone(), colour: if unit.is_active() { FOE } else { DOWN }, hatched: !unit.is_alive(), ..Track::default() };
             if planning && unit.is_active() && !revealed {
                 // TV4: masked: the round intent and target, the tell, the impact badges; none of the plan's skills
                 let note = masked_note(w, rec, o.show_tells);
-                tip.push((note.clone(), TEXT));
+                tip.push((note.clone(), th().text));
                 track.masked = Some(note);
                 if let Some(r) = rec.filter(|_| emberwake_battle::intent::badges_on(w) && o.layers.badges) {
                     track.marks = impact_marks(r, blocks);
@@ -266,8 +267,8 @@ pub fn build(s: &Session, o: &Opts) -> Timeline {
                 track.segments = segs;
                 track.marks = marks;
                 match rec.filter(|r| r.revealed && live && !o.reveal_all) {
-                    Some(r) => tip.push((reveal_card(w, r), GOLD)),
-                    None if live && !revealed => tip.push(("Plans in secret: its actions show as they start.".into(), DIM)),
+                    Some(r) => tip.push((reveal_card(w, r), th().gold)),
+                    None if live && !revealed => tip.push(("Plans in secret: its actions show as they start.".into(), th().dim)),
                     None => {}
                 }
             }

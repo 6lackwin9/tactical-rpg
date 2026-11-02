@@ -281,7 +281,7 @@ impl Desk {
                     ui.pop_clip();
                 }
                 let g = Rect::new(r.x + r.w - GRIP, r.y + r.h - GRIP, GRIP, GRIP);
-                let col = if ui.hover(g) { t.focus } else { t.edge_hot };
+                let col = if ui.hover(g) { t.focus } else { t.grip };
                 for k in [2, 5] {
                     ui.p.fill(Rect::new(g.x + g.w - 2, g.y + g.h - k - 1, 1, k), col);
                     ui.p.fill(Rect::new(g.x + g.w - k - 1, g.y + g.h - 2, k, 1), col);

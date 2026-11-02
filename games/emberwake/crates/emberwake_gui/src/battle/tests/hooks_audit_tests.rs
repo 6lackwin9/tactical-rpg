@@ -6,10 +6,11 @@
 use crate::battle::draw::{intel_parts, INTEL_HEAD, INTEL_LINE, INTEL_MORE};
 use crate::battle::marks::{HELD, METER};
 use crate::battle::overlays::OVERLAY_GROUPS;
-use crate::battle::{BattleScreen, ALLY, DIM, FOE, POISE, TEXT};
+use crate::battle::{BattleScreen, ALLY, POISE};
 use aegis_ui::canvas::Rgba;
 use crate::screens::{Cx, Screen};
 use aegis_ui::painter::Painter;
+use aegis_ui::theme::th;
 use aegis_ui::ui::{Gfx, H, W};
 use aegis_ui::art::Art;
 use serde_json::{json, Value};
@@ -113,9 +114,9 @@ fn the_intel_panel_drops_the_level_line_first_then_points_to_the_hover_card() {
     let mut g = crate::hud::hud_tests::gfx();
     let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
     let lines: Vec<(String, Rgba)> = vec![
-        ("Goblin Brawler".into(), FOE),
-        ("HP 108/108   AP 12/12   Neutral".into(), TEXT),
-        ("Level 3 Brawler (minion)   Speed 21   Reach 1".into(), DIM),
+        ("Goblin Brawler".into(), th().foe),
+        ("HP 108/108   AP 12/12   Neutral".into(), th().text),
+        ("Level 3 Brawler (minion)   Speed 21   Reach 1".into(), th().dim),
         ("Poise 46/46".into(), POISE),
         ("Test Heat 5/20".into(), METER),
         ("Held guard 50% through B3".into(), HELD),

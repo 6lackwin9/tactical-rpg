@@ -21,12 +21,13 @@ use crate::screens::{Cx, Game, GameCx, Key, Nav, Screen};
 use crate::timeline_view;
 use aegis_core::assets::Layers;
 use aegis_core::json;
+use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, Rect, Rgba};
 use aegis_ui::portrait_fx::{Cue, Tier};
 use aegis_ui::preview;
 use aegis_ui::specimens::{KitAct, Specimens, PORTRAIT_OVERLAYS, PORTRAIT_REACTIONS, PORTRAIT_SIZES, PORTRAIT_STAGE, PORTRAIT_STATES};
 use aegis_ui::timeline::Timeline;
-use aegis_ui::ui::{tip, Gfx, Tip, Ui, Widget, BODY, BORDER, DIM, GOLD, INFO, SMALL, TEXT, TITLE, W};
+use aegis_ui::ui::{tip, Gfx, Tip, Ui, Widget, BODY, SMALL, TITLE, W};
 use aegis_ui::vignette;
 use aegis_ui::widget_plumbing;
 use emberwake_battle::session::{Phase, Session, UnitSnap};
@@ -74,7 +75,6 @@ const NEEDS_GAME: [&str; 13] = ["region", "dialogue", "shop", "hub", "journal", 
 /// Where a preview's mouse is (off every widget).
 const OFF: (i32, i32) = (-10_000, -10_000);
 const ALLY: Rgba = [110, 170, 255, 255];
-const FOE: Rgba = [240, 100, 92, 255];
 /// The strip under the timeline: an action's details or a block's snapshot.
 const DETAIL_H: i32 = 64;
 
@@ -388,10 +388,10 @@ impl PortraitPage {
         let rows = &data.cat.portrait_cues;
         let line = ui.p.line_h(SMALL).ceil() as i32;
         let row_h = (ui.p.line_h(BODY) + 2.0).ceil() as i32;
-        ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, "Portraits", TITLE, GOLD);
+        ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, "Portraits", TITLE, th().gold);
         let nw = ui.p.text_w("Portraits", TITLE).ceil() as i32;
         let count = format!("{} portraits (game and kit layers); {} cue rows (portrait_cues.json)", files.len(), rows.len());
-        ui.p.text_fit((r.x + 12 + nw) as f32, r.y as f32 + 3.0, &count, SMALL, (r.w - nw - 16) as f32, DIM);
+        ui.p.text_fit((r.x + 12 + nw) as f32, r.y as f32 + 3.0, &count, SMALL, (r.w - nw - 16) as f32, th().dim);
         let top = r.y + 4 + ui.p.line_h(TITLE).ceil() as i32 + 3;
 
         // -- The list: a heading per folder, a row per portrait, its frames indented under it
@@ -410,17 +410,17 @@ impl PortraitPage {
         let mut last_folder = "";
         for (i, f) in files.iter().enumerate() {
             if f.folder != last_folder {
-                ui.p.text(list.x as f32 + 2.0, y as f32 + 1.0, &f.folder, SMALL, INFO);
+                ui.p.text(list.x as f32 + 2.0, y as f32 + 1.0, &f.folder, SMALL, th().info);
                 y += line + 2;
                 last_folder = &f.folder;
             }
             let picked = i == self.pick;
             let about = format!("{} ({} layer){}", f.rel, f.layer, if f.frames.is_empty() { String::new() } else { format!("; faces: {}", f.frames.join(", ")) });
-            ui.row(&format!("gallery.portraits.pick.{}.{}", f.folder, f.id), Rect::new(list.x, y, list.w - 4, row_h), &f.id, if picked { GOLD } else { TEXT }, Some(GAct::Portrait(PAct::Pick(i, 0))), picked && self.expression == 0, tip(&f.id, &about));
+            ui.row(&format!("gallery.portraits.pick.{}.{}", f.folder, f.id), Rect::new(list.x, y, list.w - 4, row_h), &f.id, if picked { th().gold } else { th().text }, Some(GAct::Portrait(PAct::Pick(i, 0))), picked && self.expression == 0, tip(&f.id, &about));
             y += row_h + 1;
             for (k, e) in f.frames.iter().enumerate() {
                 let on = picked && self.expression == k + 1;
-                ui.row(&format!("gallery.portraits.pick.{}.{}.{e}", f.folder, f.id), Rect::new(list.x + 10, y, list.w - 14, row_h), e, if on { GOLD } else { DIM }, Some(GAct::Portrait(PAct::Pick(i, k + 1))), on, tip(e, &format!("{} as {e}", f.id)));
+                ui.row(&format!("gallery.portraits.pick.{}.{}.{e}", f.folder, f.id), Rect::new(list.x + 10, y, list.w - 14, row_h), e, if on { th().gold } else { th().dim }, Some(GAct::Portrait(PAct::Pick(i, k + 1))), on, tip(e, &format!("{} as {e}", f.id)));
                 y += row_h + 1;
             }
         }
@@ -430,14 +430,14 @@ impl PortraitPage {
         let x2 = list.x + list.w + 8;
         let col_w = 150;
         let stage = Rect::new(x2, top, PORTRAIT_STAGE, PORTRAIT_STAGE);
-        ui.p.panel(stage, rgb(14, 15, 20), BORDER, 2.0);
+        ui.p.panel(stage, th().game("gallery_stage", rgb(14, 15, 20)), th().edge, 2.0);
         let size = PORTRAIT_SIZES[self.size.min(PORTRAIT_SIZES.len() - 1)];
         let face_r = Rect::new(stage.x + (stage.w - size) / 2, stage.y + (stage.h - size) / 2, size, size);
         let key = self.key();
         self.faces.begin();
         let pins = self.pins(rows);
         self.faces.pin(&key, pins);
-        let mut text = vec![(String::from("No portrait files in the art layers."), DIM)];
+        let mut text = vec![(String::from("No portrait files in the art layers."), th().dim)];
         if let Some(f) = files.get(self.pick) {
             let who = Who::file(&f.rel);
             let look = emberwake_battle::portrait::Look { ruleset: emberwake_rules::ruleset::CLASSIC.into(), ..Default::default() };
@@ -452,9 +452,9 @@ impl PortraitPage {
             let face = crate::portraits::sidecar(&mut cx.art, &drawn);
             let png = cx.art.size_of(&drawn).map_or(String::new(), |(w, h)| format!(", {w} x {h}"));
             text = vec![
-                (format!("Tier {tier} ({device} device px). Live: {}", if live.is_empty() { "nothing".to_string() } else { live.join(", ") }), DIM),
-                (format!("{} ({} layer{png}){}", if drawn.is_empty() { f.rel.clone() } else { drawn }, f.layer, if expression.is_empty() { String::new() } else { format!(", face {expression}") }), TEXT),
-                (face_summary(face.as_ref()), TEXT),
+                (format!("Tier {tier} ({device} device px). Live: {}", if live.is_empty() { "nothing".to_string() } else { live.join(", ") }), th().dim),
+                (format!("{} ({} layer{png}){}", if drawn.is_empty() { f.rel.clone() } else { drawn }, f.layer, if expression.is_empty() { String::new() } else { format!(", face {expression}") }), th().text),
+                (face_summary(face.as_ref()), th().text),
             ];
         }
         ui.push("gallery.portraits.face", "portrait", format!("{key}: {size} px"), stage, true, false, None, Vec::new());
@@ -463,14 +463,14 @@ impl PortraitPage {
             fy = ui.para(x2, fy, col_w, t, SMALL, *col) + 3;
         }
         if !self.last.is_empty() {
-            ui.para(x2, fy + 2, col_w, &format!("Last: {}", self.last), SMALL, INFO);
+            ui.para(x2, fy + 2, col_w, &format!("Last: {}", self.last), SMALL, th().info);
         }
 
         // -- The controls
         let x3 = x2 + col_w + 10;
         let right = r.x + r.w - 4;
         let head = |ui: &mut Ui<GAct>, y: i32, t: &str| -> i32 {
-            ui.p.text(x3 as f32, y as f32, t, SMALL, INFO);
+            ui.p.text(x3 as f32, y as f32, t, SMALL, th().info);
             y + line + 1
         };
         let label = |s: &str| {
@@ -515,7 +515,7 @@ impl PortraitPage {
         buttons(ui, &mut yy, items);
         yy = head(ui, yy, "Cue rows (events fire, states toggle)");
         if rows.is_empty() {
-            yy = ui.para(x3, yy, right - x3, "No cue rows yet (data/catalog/portrait_cues.json, PORTRAITFX1-A).", SMALL, DIM) + 3;
+            yy = ui.para(x3, yy, right - x3, "No cue rows yet (data/catalog/portrait_cues.json, PORTRAITFX1-A).", SMALL, th().dim) + 3;
         } else {
             let mut bx = x3;
             for row in rows.iter() {
@@ -548,7 +548,7 @@ impl PortraitPage {
         yy = head(ui, yy, "Expression effects (held as the face)");
         let fx_rows = &data.cat.portrait_expressions;
         if fx_rows.is_empty() {
-            yy = ui.para(x3, yy, right - x3, "No expression-effect rows (data/catalog/portrait_expressions.json).", SMALL, DIM) + 3;
+            yy = ui.para(x3, yy, right - x3, "No expression-effect rows (data/catalog/portrait_expressions.json).", SMALL, th().dim) + 3;
         } else {
             let mut bx = x3;
             for row in fx_rows.iter() {
@@ -895,7 +895,7 @@ fn segment_detail(cx: &Cx, s: &Session, viewed: i32, track: &str, seg: &str) -> 
         .flat_map(|x| x.tracks.iter())
         .find(|x| x.key == track)
         .and_then(|x| x.segments.iter().find(|g| g.key == seg).map(|g| (x.label.clone(), g.tip.clone())))
-        .map(|(unit, tip)| std::iter::once((unit, TEXT)).chain(tip).collect())
+        .map(|(unit, tip)| std::iter::once((unit, th().text)).chain(tip).collect())
         .unwrap_or_default()
 }
 
@@ -903,9 +903,9 @@ fn segment_detail(cx: &Cx, s: &Session, viewed: i32, track: &str, seg: &str) -> 
 /// (`aegis_ui::timeline::sample`, no game type and no session) under its name and what it shows; a click on a block or
 /// a track selects it (again: unselects), a span's click selects its track; hover cards are the widget's own.
 fn draw_timeline_pane(ui: &mut Ui<GAct>, r: Rect, name: &str, about: &str, sel: &(Option<i32>, Option<String>)) {
-    ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, name, TITLE, GOLD);
+    ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, name, TITLE, th().gold);
     let nw = ui.p.text_w(name, TITLE).ceil() as i32;
-    ui.p.text_fit((r.x + 12 + nw) as f32, r.y as f32 + 3.0, about, SMALL, (r.w - nw - 16) as f32, DIM);
+    ui.p.text_fit((r.x + 12 + nw) as f32, r.y as f32 + 3.0, about, SMALL, (r.w - nw - 16) as f32, th().dim);
     let top = r.y + 4 + ui.p.line_h(TITLE).ceil() as i32 + 3;
     let t = Timeline { selected_block: sel.0, selected_track: sel.1.clone(), ..aegis_ui::timeline::sample() };
     t.draw(ui, "gallery.pane", Rect::new(r.x + 4, top, r.w - 8, r.y + r.h - 4 - top), GAct::PaneBlock, |k| GAct::PaneTrack(k.to_string()), |k, _| GAct::PaneTrack(k.to_string()));
@@ -914,20 +914,20 @@ fn draw_timeline_pane(ui: &mut Ui<GAct>, r: Rect, name: &str, about: &str, sel: 
 /// INPUT1-AP: the Pip gauge entry (Kit): the engine's pip gauge alone, each sample state (`aegis_ui::pips::samples`)
 /// in a row with its name, the gauge (`gallery.pip.<k>`, its numbers on hover) and its reading, under a legend.
 fn draw_pip_gauges(ui: &mut Ui<GAct>, r: Rect, name: &str, about: &str) {
-    ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, name, TITLE, GOLD);
+    ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, name, TITLE, th().gold);
     let nw = ui.p.text_w(name, TITLE).ceil() as i32;
-    ui.p.text_fit((r.x + 12 + nw) as f32, r.y as f32 + 3.0, about, SMALL, (r.w - nw - 16) as f32, DIM);
+    ui.p.text_fit((r.x + 12 + nw) as f32, r.y as f32 + 3.0, about, SMALL, (r.w - nw - 16) as f32, th().dim);
     let mut y = r.y + 4 + ui.p.line_h(TITLE).ceil() as i32 + 3;
     let legend = "F full: kept.  H hollow: spent by the plan.  Hg / Sg: a ghost fill, next round's gain.  S: a slot above what is held now.";
-    ui.p.text_fit(r.x as f32 + 4.0, y as f32, legend, SMALL, (r.w - 8) as f32, TEXT);
+    ui.p.text_fit(r.x as f32 + 4.0, y as f32, legend, SMALL, (r.w - 8) as f32, th().text);
     let row_h = (ui.p.line_h(BODY) + 6.0).ceil() as i32;
     y += row_h;
     let (label_w, gauge_w) = (210, 90);
     for (k, (label, gauge)) in aegis_ui::pips::samples().into_iter().enumerate() {
-        ui.p.text_fit(r.x as f32 + 4.0, y as f32, label, BODY, label_w as f32 - 8.0, TEXT);
+        ui.p.text_fit(r.x as f32 + 4.0, y as f32, label, BODY, label_w as f32 - 8.0, th().text);
         let cy = y + (ui.p.line_h(BODY) / 2.0).round() as i32;
         gauge.draw(ui, &format!("gallery.pip.{k}"), r.x + label_w, cy);
-        ui.p.text_fit((r.x + label_w + gauge_w) as f32, y as f32, &gauge.reading(), SMALL, (r.w - label_w - gauge_w - 6) as f32, DIM);
+        ui.p.text_fit((r.x + label_w + gauge_w) as f32, y as f32, &gauge.reading(), SMALL, (r.w - label_w - gauge_w - 6) as f32, th().dim);
         y += row_h;
     }
 }
@@ -958,8 +958,8 @@ impl Screen<GameCx> for Gallery {
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         self.demo(cx);
         let mut ui: Ui<GAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, aegis_ui::ui::H), rgb(12, 16, 26));
-        ui.p.text(6.0, 4.0, "UI GALLERY", BODY, GOLD);
+        ui.p.fill(Rect::new(0, 0, W, aegis_ui::ui::H), th().tool_bg);
+        ui.p.text(6.0, 4.0, "UI GALLERY", BODY, th().gold);
         ui.button("gallery.exit", Rect::new(W - 36, 3, 32, 12), "Exit", GAct::Exit, true);
         // The entries by group; the list scrolls (the wheel over it).
         let list = Rect::new(4, 20, 102, aegis_ui::ui::H - 24);
@@ -971,15 +971,15 @@ impl Screen<GameCx> for Gallery {
         let mut y = list.y - off;
         for (i, (id, name, group, about)) in ENTRIES.iter().enumerate() {
             if i == 0 || ENTRIES[i - 1].2 != *group {
-                ui.p.text(list.x as f32 + 2.0, y as f32 + 2.0, group, SMALL, INFO);
+                ui.p.text(list.x as f32 + 2.0, y as f32 + 2.0, group, SMALL, th().info);
                 y += head_h;
             }
-            ui.row(&format!("gallery.entry.{id}"), Rect::new(list.x, y, list.w - 4, row_h), name, if i == self.entry { GOLD } else { TEXT }, Some(GAct::Entry(i)), i == self.entry, tip(name, about));
+            ui.row(&format!("gallery.entry.{id}"), Rect::new(list.x, y, list.w - 4, row_h), name, if i == self.entry { th().gold } else { th().text }, Some(GAct::Entry(i)), i == self.entry, tip(name, about));
             y += row_h + 1;
         }
         ui.scroll_end();
         let pane = Rect::new(110, 20, W - 114, aegis_ui::ui::H - 24);
-        ui.p.panel(pane, rgb(18, 24, 38), BORDER, 2.0);
+        ui.p.panel(pane, th().tool_pane, th().edge, 2.0);
         let (id, name, _, about) = ENTRIES[self.entry];
         if id == "kit" {
             self.kit.draw(&mut ui, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4), GAct::Kit);
@@ -993,10 +993,10 @@ impl Screen<GameCx> for Gallery {
             draw_timeline_pane(&mut ui, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4), name, about, &self.pane);
         } else if id != "timeline" {
             // A screen or a battle panel: its name, what it is, Open, and the preview under them.
-            ui.p.text(pane.x as f32 + 6.0, pane.y as f32 + 4.0, name, TITLE, GOLD);
+            ui.p.text(pane.x as f32 + 6.0, pane.y as f32 + 4.0, name, TITLE, th().gold);
             let ow = (ui.p.text_w("Open", SMALL) + 12.0).ceil() as i32;
             let nw = ui.p.text_w(name, TITLE).ceil() as i32;
-            ui.p.text_fit((pane.x + 14 + nw) as f32, pane.y as f32 + 5.0, about, SMALL, (pane.w - nw - ow - 28) as f32, DIM);
+            ui.p.text_fit((pane.x + 14 + nw) as f32, pane.y as f32 + 5.0, about, SMALL, (pane.w - nw - ow - 28) as f32, th().dim);
             ui.button_full("gallery.open", Rect::new(pane.x + pane.w - ow - 4, pane.y + 3, ow, 12), "Open", GAct::Open, true, false, SMALL, tip("Open", "Shows the screen itself to try it."));
             let mut top = pane.y + 4 + ui.p.line_h(TITLE).ceil() as i32 + 3;
             if id == "vignette" {
@@ -1008,7 +1008,7 @@ impl Screen<GameCx> for Gallery {
                 top += h + 3;
             }
             let shown = Rect::new(pane.x + 4, top, pane.w - 8, pane.y + pane.h - 4 - top);
-            ui.p.fill(shown, rgb(6, 8, 14));
+            ui.p.fill(shown, th().game("gallery_well", rgb(6, 8, 14)));
             self.w = std::mem::take(&mut ui.widgets);
             drop(ui);
             self.preview(cx, g, id, shown);
@@ -1017,7 +1017,7 @@ impl Screen<GameCx> for Gallery {
         if id == "timeline" {
             let d = self.demo.as_ref().unwrap();
             let Some(s) = d.host.session.as_ref() else {
-                ui.p.text(pane.x as f32 + 6.0, pane.y as f32 + 6.0, "No battle (the arena encounter did not start).", BODY, DIM);
+                ui.p.text(pane.x as f32 + 6.0, pane.y as f32 + 6.0, "No battle (the arena encounter did not start).", BODY, th().dim);
                 self.w = ui.widgets;
                 return;
             };
@@ -1035,7 +1035,7 @@ impl Screen<GameCx> for Gallery {
                 format!("resolving block {}", s.current_block)
             };
             ui.button_full("gallery.timeline.prev", Rect::new(pane.x + 4, pane.y + 3, 14, 12), "<", GAct::View(-1), d.viewed > 1, false, SMALL, tip("Previous round", "View the round before (the round archive)."));
-            ui.p.text_fit(pane.x as f32 + 21.0, pane.y as f32 + 4.0, &format!("Round {}/{}  {phase}", d.viewed, s.current_round), TITLE, 120.0, if live_round { TEXT } else { GOLD });
+            ui.p.text_fit(pane.x as f32 + 21.0, pane.y as f32 + 4.0, &format!("Round {}/{}  {phase}", d.viewed, s.current_round), TITLE, 120.0, if live_round { th().text } else { th().gold });
             ui.button_full("gallery.timeline.next", Rect::new(pane.x + 144, pane.y + 3, 14, 12), ">", GAct::View(1), d.viewed < s.current_round, false, SMALL, tip("Next round", "View the round after (back to the live one)."));
             let mut x = pane.x + 164;
             let buttons = [
@@ -1055,15 +1055,15 @@ impl Screen<GameCx> for Gallery {
             t.draw(&mut ui, "gallery.timeline", Rect::new(pane.x + 4, pane.y + 20, pane.w - 8, pane.h - 24 - DETAIL_H), GAct::Block, |k| GAct::Track(k.to_string()), |k, g| GAct::Segment(k.to_string(), g.to_string()));
             // The strip under the timeline: a selected block's snapshot, else the clicked action, else a hint.
             let strip = Rect::new(pane.x + 4, pane.y + pane.h - DETAIL_H, pane.w - 8, DETAIL_H - 4);
-            ui.p.fill(Rect::new(strip.x, strip.y - 2, strip.w, 1), BORDER);
+            ui.p.fill(Rect::new(strip.x, strip.y - 2, strip.w, 1), th().edge);
             let snap = d.block.and_then(|b| s.round_record(d.viewed).and_then(|r| r.snapshots.get(b as usize)).map(|sn| (b, sn)));
             let lines: Vec<(String, Rgba)> = match (d.block, snap) {
-                (Some(_), Some((b, sn))) => std::iter::once((format!("After block {b} of round {}", d.viewed), GOLD))
-                    .chain(s.w.allies.iter().chain(s.w.enemies.iter()).filter_map(|&u| sn.get(u).filter(|x| x.pos.is_some() || x.hp <= 0 || x.withdrawn).map(|x| (snap_line(&s.w.units[u].name, x), if s.w.allies.contains(&u) { ALLY } else { FOE }))))
+                (Some(_), Some((b, sn))) => std::iter::once((format!("After block {b} of round {}", d.viewed), th().gold))
+                    .chain(s.w.allies.iter().chain(s.w.enemies.iter()).filter_map(|&u| sn.get(u).filter(|x| x.pos.is_some() || x.hp <= 0 || x.withdrawn).map(|x| (snap_line(&s.w.units[u].name, x), if s.w.allies.contains(&u) { ALLY } else { th().foe }))))
                     .collect(),
-                (Some(b), None) => vec![(format!("Block {b} has not resolved yet."), DIM)],
+                (Some(b), None) => vec![(format!("Block {b} has not resolved yet."), th().dim)],
                 _ if !d.detail.is_empty() => d.detail.clone(),
-                _ => vec![("Click an action for its details, a resolved block for the state after it; < > page through the rounds.".to_string(), DIM)],
+                _ => vec![("Click an action for its details, a resolved block for the state after it; < > page through the rounds.".to_string(), th().dim)],
             };
             // Snapshot lines go in two columns.
             let (cols, col_w) = if lines.len() > 6 { (2, (strip.w - 8) / 2) } else { (1, strip.w - 8) };

@@ -26,6 +26,8 @@ Tree (section 3 of the spec; a test keeps every file on these patterns):
 - `ui/{pins,intents,badges,chips}/<id>.png`; `backgrounds/{menu,title,world_map,location,battle,story}/<id>.png` (`story`: vignette card pictures, STORYART1; `tools/gen_art.py` groups `story`, `world_card`, `menu_sunless`, `sunk_backdrops`, `family_icons` draw the Sunk Ward slice's story scenes at 1120 x 472 under a starless Shroud sky (`shroud_sky`, ash in `ASH_COLS`, never white), the `sunk_ward` world card, `menu/main_menu.png` (the sunless main menu, MENU2; the old sunny menu drawing is retired, so the `menu` group now draws only the Ashlands title card), the seven zone backdrops and the scourge and sprayer family icons in the ART2 icon look).
 - `tilesets/<set>/<tile>/v<n>.png` (set = a world id, or `common`; variants are the files present).
 - `audio/sfx/<key>.wav`, `audio/music/<key>.ogg` (played by `aegis_ui::audio`).
+- `ui/theme.json` `game_colors` (LOOK1-G2): screen fills and veils the engine roles do not cover, named by use and read with
+  `th().game(name, fallback)`; a new name goes in the code and here together (`emberwake_gui/tests/theme.rs` checks both ways).
 - `ui/theme.json` and `ui/frames/<role>.{png,json}`: the Tallow and Iron theme (LOOK1-G1, spec
   `games/emberwake/docs/specs/LOOK1.md` sections 2-3, read by `aegis_ui::theme`): the colour roles, the faces, the
   layout values and the nine-slice frames (`tools/gen_art.py ui_frames`, exact pixels at scale 2 in the art bible's
@@ -54,10 +56,10 @@ Tree (section 3 of the spec; a test keeps every file on these patterns):
 | File | Face | Version | Copyright | Reserved Font Name | Source |
 | --- | --- | --- | --- | --- | --- |
 | `AlegreyaSC-Bold.ttf` | `display` (headers; old-style digits, so numbers use the body or mono face) | Version 2.003 | Copyright 2011 The Alegreya Project Authors (`https://github.com/huertatipografica/Alegreya`) | none | `https://github.com/google/fonts/tree/main/ofl/alegreyasc` (upstream commit d6aedcbb5a82a09dedb07ab99bb91803db8e02af) |
-| `JetBrainsMono-wght.ttf` (upstream `JetBrainsMono[wght].ttf`, variable wght 100-800, default 400) | `mono` (badge numbers) | Version 2.211 | Copyright 2020 The JetBrains Mono Project Authors (`https://github.com/JetBrains/JetBrainsMono`) | none | `https://github.com/google/fonts/tree/main/ofl/jetbrainsmono` (upstream commit 19371302b95d218af43299bce79ddbddd0bc364d) |
+| `JetBrainsMono-Bold.ttf` (static, weight 700) | `mono` (badge numbers) | Version 2.304 | Copyright 2020 The JetBrains Mono Project Authors (`https://github.com/JetBrains/JetBrainsMono`) | none | `https://github.com/JetBrains/JetBrainsMono/blob/v2.304/fonts/ttf/JetBrainsMono-Bold.ttf` (tag v2.304, commit cd5227bd1f61dff3bbd6c814ceaf7ffd95e947d9) |
 
-The engine's font loader (fontdue) draws a variable font at its default instance, so `JetBrainsMono-wght.ttf` draws
-at weight 400 (Regular), not the picked Bold (700), until a static Bold file replaces it.
+The engine's font loader (fontdue) draws a variable font at its default instance, so the picked Bold ships as the
+upstream static file (LOOK1-G2), unmodified, not as the variable file of the pick board.
 
 Which file an entry shows is decided by the lookup chains in `kits/rpg/crates/rpgkit_content/src/art.rs` and
 checked by the asset checks A1-A6 (`check/assets.rs`). The Godot-era asset manifest is retired (the folders are the

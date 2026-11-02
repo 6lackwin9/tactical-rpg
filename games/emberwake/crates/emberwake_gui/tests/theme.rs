@@ -302,7 +302,7 @@ fn the_full_frames_edge_is_continuous_at_every_window_size_and_length() {
 #[test]
 fn the_faces_are_the_picked_fonts() {
     let t = shipped();
-    for (face, file) in [(Typeface::Body, "fonts/OpenSans-SemiBold.ttf"), (Typeface::Display, "fonts/AlegreyaSC-Bold.ttf"), (Typeface::Mono, "fonts/JetBrainsMono-wght.ttf")] {
+    for (face, file) in [(Typeface::Body, "fonts/OpenSans-SemiBold.ttf"), (Typeface::Display, "fonts/AlegreyaSC-Bold.ttf"), (Typeface::Mono, "fonts/JetBrainsMono-Bold.ttf")] {
         let f = t.face(face);
         assert_eq!(f.file, file);
         assert!(f.bytes.is_some(), "{file} was not read");
@@ -316,4 +316,221 @@ fn the_faces_are_the_picked_fonts() {
             assert!(fonts.join(format!("{family}-OFL.txt")).is_file(), "{name} has no {family}-OFL.txt");
         }
     }
+}
+
+// ---- LOOK1-G2: emberwake_gui reads the theme --------------------------------------------------------------------------
+
+/// The crate's sources by file, the path relative to `src`.
+fn sources() -> Vec<(String, String)> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for e in std::fs::read_dir(dir).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                walk(&p, out);
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                out.push(p);
+            }
+        }
+    }
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut files = Vec::new();
+    walk(&root, &mut files);
+    files.sort();
+    files.into_iter().map(|p| (p.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/"), std::fs::read_to_string(&p).unwrap())).collect()
+}
+
+/// `src` with comments gone and each string's contents gone (the quotes stay); a char literal goes too.
+fn code_only(src: &str) -> String {
+    let b = src.as_bytes();
+    let (mut out, mut i) = (Vec::with_capacity(b.len()), 0);
+    while i < b.len() {
+        if b[i] == b'/' && b.get(i + 1) == Some(&b'/') {
+            while i < b.len() && b[i] != b'\n' {
+                i += 1;
+            }
+        } else if b[i] == b'"' {
+            out.push(b'"');
+            i += 1;
+            while i < b.len() && b[i] != b'"' {
+                i += if b[i] == b'\\' { 2 } else { 1 };
+            }
+            out.push(b'"');
+            i += 1;
+        } else if b[i] == b'\'' && (b.get(i + 2) == Some(&b'\'') || (b.get(i + 1) == Some(&b'\\') && b.get(i + 3) == Some(&b'\''))) {
+            i += if b[i + 1] == b'\\' { 4 } else { 3 };
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// The identifiers of `code`, each with the character before it (`:` for a path).
+fn idents(code: &str) -> Vec<(char, String)> {
+    let (mut out, mut cur, mut before, mut last) = (Vec::new(), String::new(), ' ', ' ');
+    for c in code.chars() {
+        if c.is_alphanumeric() || c == '_' {
+            if cur.is_empty() {
+                before = last;
+            }
+            cur.push(c);
+        } else if !cur.is_empty() {
+            out.push((before, std::mem::take(&mut cur)));
+        }
+        last = c;
+    }
+    out
+}
+
+/// The old colour constants of `aegis_ui::ui`: a screen draws through `th()`. A bare name is legal only in a file that
+/// declares its own constant of that name (`fx::GOLD`, an effect's art hue; `timeline_view::FOE`, a block colour: art by
+/// design, LOOK1_TASKS G2 point 3); a path to `ui::` never is.
+#[test]
+fn no_ui_colour_constant_is_left_in_the_screens() {
+    const OLD: [&str; 13] = ["TEXT", "DIM", "GOLD", "INFO", "FOE", "GOOD", "BORDER", "CARD", "PANEL_HI", "MODAL", "FRAME", "BG", "SELECTED"];
+    let mut found = Vec::new();
+    for (file, src) in sources() {
+        let code = code_only(&src);
+        let tokens = idents(&code);
+        for name in OLD {
+            let own = code.contains(&format!("const {name}: Rgba"));
+            let bare = tokens.iter().any(|(before, t)| t == name && *before != ':');
+            if (bare && !own) || code.contains(&format!("ui::{name}")) {
+                found.push(format!("{file}: {name}"));
+            }
+        }
+    }
+    assert!(found.is_empty(), "{found:?}");
+}
+
+/// Each `.game("name", fallback)` of the sources: (name, fallback text, file).
+fn game_colour_uses() -> Vec<(String, String, String)> {
+    let mut out = Vec::new();
+    for (file, src) in sources() {
+        let mut rest = src.as_str();
+        while let Some(at) = rest.find(".game(\"") {
+            rest = &rest[at + 7..];
+            let end = rest.find('"').unwrap();
+            let name = rest[..end].to_string();
+            let args = rest[end + 1..].trim_start_matches([',', ' ']);
+            let mut depth = 0;
+            let stop = args.char_indices().find(|(_, c)| {
+                match c {
+                    '(' => depth += 1,
+                    ')' => depth -= 1,
+                    _ => {}
+                }
+                depth < 0
+            });
+            out.push((name, args[..stop.map_or(0, |s| s.0)].to_string(), file.clone()));
+        }
+    }
+    out
+}
+
+/// The theme file's `game_colors` and the code's agree both ways, and one name has one fallback (so the default theme
+/// draws each as it did).
+#[test]
+fn every_game_colour_is_set_used_and_has_one_fallback() {
+    let uses = game_colour_uses();
+    assert!(!uses.is_empty());
+    let t = shipped();
+    let mut fallback = std::collections::BTreeMap::new();
+    for (name, lit, file) in &uses {
+        assert!(t.game_colors.contains_key(name), "{file}: '{name}' is not in theme.json");
+        let first = fallback.entry(name.clone()).or_insert_with(|| lit.clone());
+        assert_eq!(first, lit, "{file}: '{name}' has two fallbacks");
+    }
+    for name in t.game_colors.keys() {
+        assert!(fallback.contains_key(name), "theme.json sets '{name}' and no code reads it");
+    }
+}
+
+/// The game colours filled behind text, with the theme roles drawn on them (`dim` at 3:1, the rest at 4.5:1). A
+/// translucent fill is taken over `bg`, as `contrast` does.
+const FILLS_BEHIND_TEXT: [(&str, &[&str]); 28] = [
+    ("battle_panel", &["text", "dim", "gold", "foe", "good", "info"]),
+    ("chip", &["text", "gold", "dim"]),
+    ("column", &["text", "gold", "dim", "foe", "good"]),
+    ("defeat_card", &["text", "foe"]),
+    ("editor_pane", &["text", "dim", "gold"]),
+    ("foe_hot", &["text", "foe", "dim"]),
+    ("hold_pick_fill", &["gold", "text"]),
+    ("hud_bar", &["text", "gold", "dim"]),
+    ("legend_fill", &["text", "dim"]),
+    ("log_fill", &["text", "dim", "gold", "foe"]),
+    ("map_pane", &["text", "gold", "dim", "good", "info"]),
+    ("menu_row", &["text", "gold", "dim"]),
+    ("outcome_fill", &["gold", "good", "foe", "text"]),
+    ("party_box", &["text", "gold", "dim"]),
+    ("popup_fill", &["text", "gold", "dim"]),
+    ("roster_hot", &["text", "gold", "dim"]),
+    ("settings_body", &["text", "dim", "gold"]),
+    ("slot_filled", &["text", "gold", "dim"]),
+    ("slot_open", &["text", "gold", "dim"]),
+    ("strip_cell", &["dim"]),
+    ("talk_box", &["text", "gold", "dim"]),
+    ("dojo_pick", &["text", "gold"]),
+    ("dojo_idle", &["text", "gold", "dim"]),
+    ("foe_chip", &["foe", "text"]),
+    ("slot_empty", &["text", "dim"]),
+    ("result_veil", &["text", "gold", "dim"]),
+    ("party_area", &["text", "dim"]),
+    ("timeline_fill", &["dim"]),
+];
+
+#[test]
+fn every_fill_behind_text_reads() {
+    let t = shipped();
+    let mut low = Vec::new();
+    for (fill, roles) in FILLS_BEHIND_TEXT {
+        let ground = *t.game_colors.get(fill).unwrap_or_else(|| panic!("{fill} is not set"));
+        for role in roles {
+            let least = if *role == "dim" { 3.0 } else { 4.5 };
+            let r = t.contrast(t.role(role).unwrap(), ground);
+            println!("{role} on {fill}: {r:.2}");
+            if r < least {
+                low.push(format!("{role} on {fill}: {r:.2} < {least}"));
+            }
+        }
+    }
+    let dim = t.contrast(t.game("story_dim", [0; 4]), t.stage);
+    println!("story_dim on stage: {dim:.2}");
+    assert!(dim >= 4.5, "the story's dim on its stage: {dim:.2}");
+    assert!(low.is_empty(), "{low:?}");
+}
+
+/// The theme sets every role but the two the spec leaves at today's (LOOK1 Q10), so no screen keeps a navy default.
+#[test]
+fn the_game_theme_sets_every_role_but_foe_and_good() {
+    let file: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(game_dir().join("assets/ui/theme.json")).unwrap()).unwrap();
+    let colors = file["colors"].as_object().unwrap();
+    for role in theme::ROLES {
+        assert_eq!(colors.contains_key(*role), !["foe", "good"].contains(role), "{role}");
+    }
+}
+
+/// The two things LOOK1-E1B left open: hovering the desk's grip shows, and the ruler's playing label reads on its fill.
+#[test]
+fn the_grip_shows_its_hover_and_the_playing_label_reads() {
+    let t = shipped();
+    assert_ne!(t.grip, t.focus, "the grip's hover colour is `focus`");
+    assert!(contrast_pairs().contains(&("focus", "playing", 4.5)));
+    assert!(t.contrast(t.focus, t.playing) >= 4.5);
+    // The block being played stands apart from the ruler it sits on, by its edge.
+    assert!(t.contrast(t.playing_edge, t.ruler) >= 3.0);
+}
+
+/// `mono` is the static Bold the user picked: fontdue draws a variable font at its default weight, so a file with an
+/// `fvar` table or a weight class other than 700 would draw the wrong face.
+#[test]
+fn mono_is_a_static_bold() {
+    let t = shipped();
+    let bytes = t.face(Typeface::Mono).bytes.clone().expect("the mono file");
+    let tables = u16::from_be_bytes([bytes[4], bytes[5]]) as usize;
+    let table = |tag: &[u8; 4]| (0..tables).map(|i| 12 + 16 * i).find(|o| &bytes[*o..*o + 4] == tag).map(|o| u32::from_be_bytes([bytes[o + 8], bytes[o + 9], bytes[o + 10], bytes[o + 11]]) as usize);
+    assert!(table(b"fvar").is_none(), "a variable font draws at its default weight");
+    let os2 = table(b"OS/2").expect("an OS/2 table");
+    assert_eq!(u16::from_be_bytes([bytes[os2 + 4], bytes[os2 + 5]]), 700);
 }

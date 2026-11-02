@@ -126,17 +126,8 @@ const TACTIC_INTENT_HELP: [&str; 6] = [
     "Assault with the cheapest opener, then Rest.",
 ];
 
-const BG: Rgba = rgb(10, 14, 24);
 const PANEL: Rgba = rgba(22, 32, 54, 245);
-const PANEL_HI: Rgba = rgba(34, 50, 82, 250);
-const CARD: Rgba = rgba(16, 24, 42, 250);
-const BORDER: Rgba = rgb(58, 78, 116);
-const TEXT: Rgba = rgb(222, 228, 240);
-const DIM: Rgba = rgb(132, 146, 172);
-const GOLD: Rgba = rgb(244, 198, 84);
 const ALLY: Rgba = rgb(110, 170, 255);
-const FOE: Rgba = rgb(240, 100, 92);
-const GOOD: Rgba = rgb(96, 210, 110);
 /// RULESET1-U slice 5: the poise bar's colour (a pale steel blue, apart from HP green and red).
 const POISE: Rgba = rgb(150, 190, 235);
 /// RULESET1-U slice 4: the enemy facing chevron (pale, so it reads apart from the red tell arrows).

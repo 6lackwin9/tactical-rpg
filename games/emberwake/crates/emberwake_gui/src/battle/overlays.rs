@@ -1,8 +1,9 @@
 //! The board overlays under the round intent (RULESET1-U slice 3) and the overlay groups behind their flags (`OVERLAY_GROUPS`, `Layers`).
 
+use aegis_ui::theme::th;
 use super::board::{inset2, plate, with_alpha};
 use super::marks::{arrows_json, Arrow};
-use super::{AMBER, DIM, FACING, GOLD};
+use super::{AMBER, FACING};
 use aegis_ui::canvas::rgba;
 use crate::stage::{self, Geom, View};
 use aegis_ui::painter::Painter;
@@ -376,7 +377,7 @@ pub(super) fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom) {
         p.ellipse_ring(x, y, rx, ry, rgba(186, 170, 255, if *hidden { 230 } else { 150 }));
     }
     for (tiles, how) in &o.moves {
-        let col = if *how == MoveKind::Carried { AMBER } else { GOLD };
+        let col = if *how == MoveKind::Carried { AMBER } else { th().gold };
         if let Some(end) = tiles.last() {
             let r = match geo.view {
                 View::Stage => inset2(geo.cell_rect(*end), 3, 2),
@@ -387,13 +388,13 @@ pub(super) fn draw_overlay(p: &mut Painter, o: &Overlay, geo: &Geom) {
     }
     // INPUT1 MR13: the hovered Engage row's open position tiles: a GOLD ring plate (preferred), a DIM one (fallback)
     for (c, preferred) in &o.positions {
-        let col = if *preferred { GOLD } else { DIM };
+        let col = if *preferred { th().gold } else { th().dim };
         plate(p, plate_of(*c), with_alpha(col, 36), col);
     }
     if let Some(c) = o.target {
         let (x, y) = ground_pt(geo, c);
-        p.ellipse_ring(x, y, rx + 2.5, ry + 1.6, GOLD);
-        p.ellipse_ring(x, y, rx + 3.5, ry + 2.2, with_alpha(GOLD, 150));
+        p.ellipse_ring(x, y, rx + 2.5, ry + 1.6, th().gold);
+        p.ellipse_ring(x, y, rx + 3.5, ry + 2.2, with_alpha(th().gold, 150));
     }
     // a chevron on the ground ahead of each enemy, pointing where it faces (the Stage squashes the y part)
     let squash = if geo.view == View::Stage { 0.6 } else { 1.0 };

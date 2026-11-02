@@ -2,9 +2,10 @@
 //! time (Q / E cycle), tabs Stats, Level up, Skills and Gear. Drafts live here until Confirm writes them to the game
 //! state (level-up points are permanent and asked about first); switching member or tab drops a draft after asking.
 
+use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, rgba, Rect};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
-use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s_or};
 use emberwake_data::{Catalog, Deck, DerivedStatDef, STATS};
@@ -1367,21 +1368,21 @@ impl Screen<GameCx> for Character {
         }
         let m = self.m(cx).clone();
         let mut ui: Ui<PAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), rgba(0, 0, 0, 110));
+        ui.p.fill(Rect::new(0, 0, W, H), th().game("popup_veil", rgba(0, 0, 0, 110)));
         let fr = Rect::new(16, 16, 608, 328);
         ui.frame(fr, "Character", true);
         ui.close_x("character.close", Rect::new(fr.x + fr.w - 26, fr.y + 8, 19, 18), PAct::Close);
         let unspent = m.unspent(&d);
         let pick = format!("{}  Lv {}{}", crate::hub::member_name(cx, &m), m.level(&d), if unspent > 0 { format!("  +{unspent}") } else { String::new() });
         let pw = ui.p.text_w(&pick, BODY + 1.0) as i32 + 12;
-        ui.p.text(320.0 - pw as f32 / 2.0 - 10.0, 57.0, "Q", BODY + 1.0, DIM);
+        ui.p.text(320.0 - pw as f32 / 2.0 - 10.0, 57.0, "Q", BODY + 1.0, th().dim);
         ui.button_full("character.member", Rect::new(320 - pw / 2, 53, pw, 17), &pick, PAct::Member(1), true, true, BODY + 1.0, tip("Next member (E)", "Q / E cycle the party."));
-        ui.p.text(320.0 + pw as f32 / 2.0 + 4.0, 57.0, "E", BODY + 1.0, DIM);
+        ui.p.text(320.0 + pw as f32 / 2.0 + 4.0, 57.0, "E", BODY + 1.0, th().dim);
         // PORTRAITFX1-R: the member's portrait (its carried HP and conditions hold the state rows; the initial without a
         // file)
         self.faces.begin();
         let pr = Rect::new(fr.x + 10, 44, PORTRAIT, PORTRAIT);
-        ui.p.panel(pr, rgb(22, 30, 48), BORDER, 2.0);
+        ui.p.panel(pr, th().game("portrait_well", rgb(22, 30, 48)), th().edge, 2.0);
         let (who, look) = crate::hub::member_portrait(&d, cx.gs(), &m);
         self.faces.draw(&mut ui.p, cx, &who, &look, "roster", pr);
         ui.push("character.portrait", "portrait", crate::hub::member_name(cx, &m), pr, true, false, None, Vec::new());
@@ -1398,12 +1399,12 @@ impl Screen<GameCx> for Character {
             _ => self.draw_gear(&mut ui, cx, &m),
         }
         let dbox = Rect::new(25, 275, 590, 31);
-        ui.p.panel(dbox, rgba(20, 28, 46, 255), BORDER, 2.0);
+        ui.p.panel(dbox, th().game("party_box", rgba(20, 28, 46, 255)), th().edge, 2.0);
         // while dragging on the Skills tab the pane says where the skill can go (SKILLUI1), not the hovered card
         let dragging_skill = self.tab == "skills" && ui.dragging().is_some() && !self.detail.is_empty();
         let hovered = ui.widgets.iter().rev().find(|w| !dragging_skill && w.rect.contains(mouse.0, mouse.1) && w.tip.len() > 1).map(|w| w.tip[1].0.clone());
         let text = hovered.unwrap_or_else(|| if self.detail.is_empty() { "Move to a row to read what it does.".into() } else { self.detail.clone() });
-        ui.para(30, 279, 580, &text, BODY, TEXT);
+        ui.para(30, 279, 580, &text, BODY, th().text);
         self.w = ui.widgets;
     }
 
@@ -1532,14 +1533,14 @@ impl Character {
         let d = &cx.data;
         let gs = cx.gs();
         let lvl = m.level(d);
-        let end = ui.p.text(68.0, 104.0, &format!("Level {lvl}  ·  XP {} ({} to next)  ·  {} {}", m.total_xp, progression::xp_to_next(d, m.total_xp), crate::hud::term_short(cx, emberwake_world::terms::CURRENCY), gs.party.gold), BODY + 1.0, TEXT);
+        let end = ui.p.text(68.0, 104.0, &format!("Level {lvl}  ·  XP {} ({} to next)  ·  {} {}", m.total_xp, progression::xp_to_next(d, m.total_xp), crate::hud::term_short(cx, emberwake_world::terms::CURRENCY), gs.party.gold), BODY + 1.0, th().text);
         // ROSTER1-U W2: a wounded member's mark and the HP it takes the field with (the act's cut max)
         let (hp, max, wounded) = crate::hub::field_hp(cx, m);
         if wounded {
             let mark = "Wounded";
             let x = end + 12.0;
-            let after = ui.p.text(x, 104.0, mark, BODY + 1.0, FOE);
-            ui.p.text(after + 5.0, 104.0, &format!("HP {hp} / {max}"), BODY + 1.0, DIM);
+            let after = ui.p.text(x, 104.0, mark, BODY + 1.0, th().foe);
+            ui.p.text(after + 5.0, 104.0, &format!("HP {hp} / {max}"), BODY + 1.0, th().dim);
             let w = ui.p.text_w(&format!("{mark} HP {hp} / {max}"), BODY + 1.0) + 5.0;
             let lh = (ui.p.line_h(BODY + 1.0) + 2.0).ceil() as i32;
             ui.push("stats.wounded", "row", format!("{mark} HP {hp} / {max}"), Rect::new(x as i32 - 2, 102, w as i32 + 4, lh), true, false, None, tip(mark, &crate::hub::wounded_tip(cx, m)));
@@ -1547,11 +1548,11 @@ impl Character {
         let active = gs.party.active_members().iter().any(|a| a.id == m.id);
         let n = gs.party.active_members().len();
         ui.checkbox("character.active", 72, 122, &format!("In party ({n}/{})", gs.party.max_active), active, PAct::ToggleActive, true);
-        let hint_end = ui.p.text(155.0, 122.0, "Keep at least one active member.", BODY + 1.0, DIM);
+        let hint_end = ui.p.text(155.0, 122.0, "Keep at least one active member.", BODY + 1.0, th().dim);
         // ROSTER1-U BK1: the bunk chip in a world with a roster block
         if let Some(bunks) = crate::hub::bunks_text(gs) {
             let bw = ui.p.text_w(&bunks, BODY + 1.0);
-            ui.p.text((600.0 - bw).max(hint_end + 12.0), 122.0, &bunks, BODY + 1.0, DIM);
+            ui.p.text((600.0 - bw).max(hint_end + 12.0), 122.0, &bunks, BODY + 1.0, th().dim);
         }
         let Some(arch) = d.cat.classes.get(&m.class_id(d)) else { return };
         let mut spend: IndexMap<String, i32> = m.spend.iter().map(|(k, v)| (k.clone(), *v as i32)).collect();
@@ -1561,7 +1562,7 @@ impl Character {
         let cs = emberwake_rules::stats::CharacterStats::new(arch, lvl as i32, &spend);
         let cols = columns(ui, &[(68.0, "Stat"), (112.0, "Base"), (148.0, "Growth"), (190.0, "Spent"), (226.0, "Total")], 10.0);
         for (&(x, _), h) in cols.iter().zip(["Stat", "Base", "Growth", "Spent", "Total"]) {
-            ui.p.text(x, 143.0, h, BODY + 1.0, DIM);
+            ui.p.text(x, 143.0, h, BODY + 1.0, th().dim);
         }
         let table_right = cols[4].1;
         for (i, st) in STATS.iter().enumerate() {
@@ -1569,9 +1570,9 @@ impl Character {
             let base = arch.base_stats.get(*st).copied().unwrap_or(0);
             let sp = m.spend.get(*st).copied().unwrap_or(0) as i32;
             let total = cs.base(st);
-            ui.p.text(68.0, y, st, BODY + 1.0, TEXT);
+            ui.p.text(68.0, y, st, BODY + 1.0, th().text);
             for (c, v) in cols[1..].iter().zip([base, total - base - sp, sp, total]) {
-                ui.p.text_right(c.1, y, &v.to_string(), BODY + 1.0, TEXT);
+                ui.p.text_right(c.1, y, &v.to_string(), BODY + 1.0, th().text);
             }
             ui.push(format!("stats.{st}"), "row", format!("{st} {total}"), Rect::new(66, y as i32 - 2, (table_right - 62.0) as i32, 14), true, false, None, tip(st, &stat_desc(st)));
         }
@@ -1583,13 +1584,13 @@ impl Character {
         let step = 15f32.min(120.0 / (rows.len().max(2) - 1) as f32);
         for (i, r) in rows.iter().enumerate() {
             let y = 143.0 + i as f32 * step;
-            ui.p.text(label_x, y, &r.label, BODY + 1.0, DIM);
-            ui.p.text(value_x, y, &r.shown, BODY + 1.0, TEXT);
+            ui.p.text(label_x, y, &r.label, BODY + 1.0, th().dim);
+            ui.p.text(value_x, y, &r.shown, BODY + 1.0, th().text);
             ui.push(format!("stats.derived.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(label_x as i32 - 2, y as i32 - 2, (value_x - label_x) as i32 + 26, step.min(14.0) as i32), true, false, None, tip(&r.label, &r.desc));
         }
         let names: Vec<String> = m.passives.iter().map(|p| s_or(d.entry("passives", p), "name", p)).collect();
         let line = format!("Passives: {}", if names.is_empty() { "none".into() } else { names.join(", ") });
-        ui.p.text_fit(68.0, 258.0, &line, BODY + 1.0, label_x - 78.0, DIM);
+        ui.p.text_fit(68.0, 258.0, &line, BODY + 1.0, label_x - 78.0, th().dim);
         let about: Vec<String> = m.passives.iter().map(|p| format!("{}: {}", s_or(d.entry("passives", p), "name", p), json::s(d.entry("passives", p), "description"))).collect();
         let line_h = (ui.p.line_h(BODY + 1.0) + 2.0).ceil().max(13.0) as i32;
         ui.push("stats.passives", "row", line, Rect::new(66, 256, (label_x - 74.0) as i32, line_h), true, false, None, tip("Passives", &if about.is_empty() { "None yet: passives come from the hero's background, faction, disciplines and named items.".into() } else { about.join(" ") }));
@@ -1599,14 +1600,14 @@ impl Character {
         let d = &cx.data;
         let drafted: i64 = self.draft.values().sum();
         let left = m.unspent(d) - drafted;
-        ui.p.text(70.0, 104.0, &format!("Points left: {left}   (confirmed points are permanent)"), BODY + 1.0, DIM);
+        ui.p.text(70.0, 104.0, &format!("Points left: {left}   (confirmed points are permanent)"), BODY + 1.0, th().dim);
         let Some(arch) = d.cat.classes.get(&m.class_id(d)) else { return };
         let mut spend: IndexMap<String, i32> = m.spend.iter().map(|(k, v)| (k.clone(), *v as i32)).collect();
         spend.entry(STATS[0].into()).or_insert(0);
         let cs = emberwake_rules::stats::CharacterStats::new(arch, m.level(d) as i32, &spend);
         let cols = columns(ui, &[(70.0, "Stat"), (105.0, "Now"), (132.0, "Added"), (165.0, "New")], 8.0);
         for (&(x, _), h) in cols.iter().zip(["Stat", "Now", "Added", "New"]) {
-            ui.p.text(x, 122.0, h, BODY + 1.0, DIM);
+            ui.p.text(x, 122.0, h, BODY + 1.0, th().dim);
         }
         let minus_x = 195.max(cols[3].1 as i32 + 8);
         let auto_x = 266.max(minus_x + 71);
@@ -1614,10 +1615,10 @@ impl Character {
             let y = 136 + i as i32 * 21;
             let now = cs.base(st) as i64;
             let add = self.draft.get(*st).copied().unwrap_or(0);
-            ui.p.text(70.0, y as f32 + 4.0, st, BODY + 1.0, TEXT);
-            ui.p.text_right(cols[1].1, y as f32 + 4.0, &now.to_string(), BODY + 1.0, TEXT);
-            ui.p.text_right(cols[2].1, y as f32 + 4.0, &add.to_string(), BODY + 1.0, if add > 0 { GOLD } else { DIM });
-            ui.p.text_right(cols[3].1, y as f32 + 4.0, &(now + add).to_string(), BODY + 1.0, TEXT);
+            ui.p.text(70.0, y as f32 + 4.0, st, BODY + 1.0, th().text);
+            ui.p.text_right(cols[1].1, y as f32 + 4.0, &now.to_string(), BODY + 1.0, th().text);
+            ui.p.text_right(cols[2].1, y as f32 + 4.0, &add.to_string(), BODY + 1.0, if add > 0 { th().gold } else { th().dim });
+            ui.p.text_right(cols[3].1, y as f32 + 4.0, &(now + add).to_string(), BODY + 1.0, th().text);
             ui.push(format!("level.{st}"), "row", format!("{st} {now} + {add}"), Rect::new(68, y, minus_x - 73, 17), true, false, None, tip(st, &stat_desc(st)));
             ui.button_tip(&format!("level.{st}.minus"), Rect::new(minus_x, y, 23, 17), "-", PAct::Remove(st), add > 0, tip(&format!("-1 {st}"), "Take back a drafted point. Nothing is spent until you Confirm."));
             ui.button_tip(&format!("level.{st}.plus"), Rect::new(minus_x + 31, y, 23, 17), "+", PAct::Add(st), left > 0, tip(&format!("+1 {st}"), &stat_desc(st)));
@@ -1639,8 +1640,8 @@ impl Character {
             let y = 122.0 + i as f32 * step;
             let old = before.get(i).filter(|b| b.value != r.value);
             let text = old.map_or_else(|| r.shown.clone(), |b| format!("{} -> {}", b.shown, r.shown));
-            ui.p.text(label_x, y, &r.label, BODY + 1.0, DIM);
-            ui.p.text(value_x, y, &text, BODY + 1.0, if old.is_some() { GOLD } else { TEXT });
+            ui.p.text(label_x, y, &r.label, BODY + 1.0, th().dim);
+            ui.p.text(value_x, y, &text, BODY + 1.0, if old.is_some() { th().gold } else { th().text });
             ui.push(format!("level.derived.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(label_x as i32 - 2, y as i32 - 2, (value_x - label_x) as i32 + 55, step.min(14.0) as i32), true, false, None, tip(&r.label, &r.desc));
         }
         ui.button("level.confirm", Rect::new(500, 312, 70, 18), "Confirm", PAct::ConfirmLevel, drafted > 0);
@@ -1661,9 +1662,9 @@ impl Character {
         let max_class = emberwake_rules::stats::MAX_CLASS_SLOTS;
         let max_extra = emberwake_rules::stats::MAX_EXTRA_SLOTS;
         // Left: the fixed slots, five class and three extra (SKILLUI1 section 4).
-        ui.p.text(64.0, 104.0, &format!("Class slots {} / {max_class}", self.class_slots.len()), BODY + 1.0, INFO);
-        ui.p.text(150.0, 104.0, if self.using_default { "Default loadout" } else { "Custom loadout" }, BODY, DIM);
-        ui.p.text(64.0, 205.0, &format!("Extra slots {} / {max_extra}", self.extra_slots.len()), BODY + 1.0, INFO);
+        ui.p.text(64.0, 104.0, &format!("Class slots {} / {max_class}", self.class_slots.len()), BODY + 1.0, th().info);
+        ui.p.text(150.0, 104.0, if self.using_default { "Default loadout" } else { "Custom loadout" }, BODY, th().dim);
+        ui.p.text(64.0, 205.0, &format!("Extra slots {} / {max_extra}", self.extra_slots.len()), BODY + 1.0, th().info);
         for (class, top_y, count) in [(true, 116, max_class), (false, 216, max_extra)] {
             let list = if class { self.class_slots.clone() } else { self.extra_slots.clone() };
             let g = if class { "class" } else { "extra" };
@@ -1671,8 +1672,8 @@ impl Character {
                 let r = Rect::new(64, top_y + i as i32 * 17, 236, 15);
                 let id = format!("skills.{g}.{i}");
                 let Some(f) = list.get(i) else {
-                    ui.p.panel(r, rgba(20, 28, 46, 120), rgba(58, 78, 116, 120), 2.0);
-                    ui.p.text(r.x as f32 + 4.0, r.y as f32 + 3.0, "Empty", BODY, DIM);
+                    ui.p.panel(r, th().game("slot_empty", rgba(20, 28, 46, 120)), th().game("slot_empty_edge", rgba(58, 78, 116, 120)), 2.0);
+                    ui.p.text(r.x as f32 + 4.0, r.y as f32 + 3.0, "Empty", BODY, th().dim);
                     let label = if class { "class" } else { "extra" };
                     ui.push(id, "row", "Empty", r, true, false, None, tip(&format!("Empty {label} slot"), "Drag a skill here, or click a skill in the list."));
                     ui.drop_target(format!("slot.{g}.{i}"));
@@ -1686,9 +1687,9 @@ impl Character {
                 let row = row_of(f, rank);
                 let ap = row.map(|s| emberwake_battle::skill::ap_cost(s, Some(u))).unwrap_or(0);
                 let desc = row.map(|s| json::s(&s.raw, "description")).unwrap_or_default();
-                ui.p.panel(r, rgba(26, 34, 54, 255), BORDER, 2.0);
-                ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &fam_name(f), BODY, 112.0, TEXT);
-                let card = vec![(fam_name(f), GOLD), (desc.clone(), TEXT), ("Drag to another slot or back to the list. Right click takes it out.".into(), DIM)];
+                ui.p.panel(r, th().game("slot_filled", rgba(26, 34, 54, 255)), th().edge, 2.0);
+                ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 3.0, &fam_name(f), BODY, 112.0, th().text);
+                let card = vec![(fam_name(f), th().gold), (desc.clone(), th().text), ("Drag to another slot or back to the list. Right click takes it out.".into(), th().dim)];
                 ui.push(id, "row", fam_name(f), r, true, false, None, card);
                 ui.draggable(format!("slot.{g}.{i}"));
                 ui.drop_target(format!("slot.{g}.{i}"));
@@ -1703,30 +1704,30 @@ impl Character {
                         std::cmp::Ordering::Greater => format!("Stronger: {to_ap} AP (now {ap})"),
                         std::cmp::Ordering::Equal => format!("Same cost: {ap} AP"),
                     };
-                    vec![(format!("Rank {}", roman(t)), GOLD), (line, TEXT), (cost, DIM)]
+                    vec![(format!("Rank {}", roman(t)), th().gold), (line, th().text), (cost, th().dim)]
                 };
                 let down = at.checked_sub(1).and_then(|k| ranks.get(k).copied());
                 let up = ranks.get(at + 1).copied();
                 ui.button_full(&format!("skills.rank.{g}.{i}.down"), Rect::new(r.x + 120, r.y + 1, 13, 13), "<", PAct::RankStep(class, i, -1), down.is_some(), false, BODY, step_tip(down));
-                let mut num_tip = vec![(format!("{}: Rank {} of {}", fam_name(f), roman(rank), roman(top)), GOLD)];
-                num_tip.extend(lines.iter().map(|l| (format!("{}: {}{}", roman(l.tier), l.text, if l.tier == rank { " (chosen)" } else { "" }), if l.unlocked { TEXT } else { DIM })));
-                num_tip.push((if chosen.is_some() { "Stays at this rank when new ranks unlock; change it with < and >." } else { "Follows the top rank until you confirm; from then on it stays put." }.into(), DIM));
-                ui.p.text(r.x as f32 + 136.0, r.y as f32 + 3.0, roman(rank), BODY, if rank < top { GOLD } else { TEXT });
+                let mut num_tip = vec![(format!("{}: Rank {} of {}", fam_name(f), roman(rank), roman(top)), th().gold)];
+                num_tip.extend(lines.iter().map(|l| (format!("{}: {}{}", roman(l.tier), l.text, if l.tier == rank { " (chosen)" } else { "" }), if l.unlocked { th().text } else { th().dim })));
+                num_tip.push((if chosen.is_some() { "Stays at this rank when new ranks unlock; change it with < and >." } else { "Follows the top rank until you confirm; from then on it stays put." }.into(), th().dim));
+                ui.p.text(r.x as f32 + 136.0, r.y as f32 + 3.0, roman(rank), BODY, if rank < top { th().gold } else { th().text });
                 ui.push(format!("skills.rank.{g}.{i}"), "row", roman(rank), Rect::new(r.x + 134, r.y, 22, 15), true, false, None, num_tip);
                 ui.button_full(&format!("skills.rank.{g}.{i}.up"), Rect::new(r.x + 157, r.y + 1, 13, 13), ">", PAct::RankStep(class, i, 1), up.is_some(), false, BODY, step_tip(up));
-                ui.p.text(r.x as f32 + 176.0, r.y as f32 + 3.0, &format!("{ap} AP"), BODY, DIM);
+                ui.p.text(r.x as f32 + 176.0, r.y as f32 + 3.0, &format!("{ap} AP"), BODY, th().dim);
             }
         }
         // Right: the owned skills; the whole column takes slots dropped back (recorded under the rows).
         let list_area = Rect::new(310, 114, 294, 156);
-        ui.p.text(310.0, 104.0, "Owned skills (drag onto a slot or click)", BODY + 1.0, INFO);
+        ui.p.text(310.0, 104.0, "Owned skills (drag onto a slot or click)", BODY + 1.0, th().info);
         ui.push("skills.list", "panel", "Owned skills", list_area, true, false, None, tip("Owned skills", "Drop a slot here to take the skill out."));
         ui.drop_target("list");
         let owned: Vec<String> = u.owned_families(cat).into_iter().filter(|f| !cat.is_basic_family(f)).collect();
         const ROWS: usize = 6;
         self.scroll = self.scroll.min(owned.len().saturating_sub(ROWS));
         if self.scroll > 0 || owned.len() > ROWS {
-            ui.p.text_right(604.0, 104.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(owned.len()), owned.len()), SMALL, DIM);
+            ui.p.text_right(604.0, 104.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(owned.len()), owned.len()), SMALL, th().dim);
         }
         for (k, f) in owned.iter().skip(self.scroll).take(ROWS).enumerate() {
             let y = 118 + k as i32 * 22;
@@ -1738,8 +1739,8 @@ impl Character {
             ui.button(&format!("skills.slot.{f}"), Rect::new(310, y, 50, 16), if slotted { "Slotted" } else if full { "Full" } else { "Slot" }, PAct::Slot(f.clone()), !slotted && !full);
             let grade: String = cat.family_rows(f).first().map(|s| { let mut c = s.grade.chars(); c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default() }).unwrap_or_default();
             let desc = row.map(|s| json::s(&s.raw, "description")).unwrap_or_default();
-            ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{}  [{}]  Rank {}", fam_name(f), grade, roman(top)), BODY, 238.0, TEXT);
-            ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, DIM);
+            ui.p.text_fit(366.0, y as f32 + 1.0, &format!("{}  [{}]  Rank {}", fam_name(f), grade, roman(top)), BODY, 238.0, th().text);
+            ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
             ui.push(format!("skills.family.{f}"), "row", fam_name(f), Rect::new(366, y, 238, 20), true, slotted, Some(PAct::Slot(f.clone())), tip(&fam_name(f), &desc));
             ui.draggable(format!("skill.{f}"));
         }
@@ -1794,9 +1795,9 @@ impl Character {
         for (kind, label, takes) in DECK_KINDS {
             let list = DeckTerms::list(&shown, kind);
             let cap = t.cap(kind);
-            ui.p.text(64.0, y as f32, &format!("{label} {} / {cap}", list.len()), BODY + 1.0, INFO);
+            ui.p.text(64.0, y as f32, &format!("{label} {} / {cap}", list.len()), BODY + 1.0, th().info);
             if kind == "active" {
-                ui.p.text(150.0, y as f32, if self.deck.is_empty() { "Automatic deck" } else { "Custom deck" }, BODY, DIM);
+                ui.p.text(150.0, y as f32, if self.deck.is_empty() { "Automatic deck" } else { "Custom deck" }, BODY, th().dim);
             }
             y += 11;
             for i in 0..cap {
@@ -1804,8 +1805,8 @@ impl Character {
                 let (id, key) = (format!("skills.{kind}.{i}"), format!("deck.{kind}.{i}"));
                 match list.get(i) {
                     None => {
-                        ui.p.panel(r, rgba(20, 28, 46, 120), rgba(58, 78, 116, 120), 2.0);
-                        ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, "Empty", BODY, DIM);
+                        ui.p.panel(r, th().game("slot_empty", rgba(20, 28, 46, 120)), th().game("slot_empty_edge", rgba(58, 78, 116, 120)), 2.0);
+                        ui.p.text(r.x as f32 + 4.0, r.y as f32 + 2.0, "Empty", BODY, th().dim);
                         let help = if t.owned(kind).is_empty() && kind != "active" {
                             format!("Holds one of the hero's {takes}; none owned yet: they come from the hero's background, faction, disciplines and named items.")
                         } else {
@@ -1814,17 +1815,17 @@ impl Character {
                         ui.push(id, "row", "Empty", r, true, false, None, tip(&format!("Empty {kind} slot"), &help));
                     }
                     Some(f) => {
-                        ui.p.panel(r, rgba(26, 34, 54, 255), BORDER, 2.0);
+                        ui.p.panel(r, th().game("slot_filled", rgba(26, 34, 54, 255)), th().edge, 2.0);
                         let card = if kind == "active" {
                             let (name, intent, ap, rank, desc) = skill_of(f);
-                            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 2.0, &name, BODY, 140.0, TEXT);
-                            ui.p.text_fit(r.x as f32 + 148.0, r.y as f32 + 3.0, &format!("{intent} {}", roman(rank)), SMALL, 56.0, DIM);
-                            ui.p.text_right(r.x as f32 + 232.0, r.y as f32 + 2.0, &format!("{ap} AP"), BODY, DIM);
-                            vec![(name, GOLD), (format!("{intent} skill, Rank {}, {ap} AP", roman(rank)), INFO), (desc, TEXT), ("Drag to another slot or back to the list. Right click takes it out.".into(), DIM)]
+                            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 2.0, &name, BODY, 140.0, th().text);
+                            ui.p.text_fit(r.x as f32 + 148.0, r.y as f32 + 3.0, &format!("{intent} {}", roman(rank)), SMALL, 56.0, th().dim);
+                            ui.p.text_right(r.x as f32 + 232.0, r.y as f32 + 2.0, &format!("{ap} AP"), BODY, th().dim);
+                            vec![(name, th().gold), (format!("{intent} skill, Rank {}, {ap} AP", roman(rank)), th().info), (desc, th().text), ("Drag to another slot or back to the list. Right click takes it out.".into(), th().dim)]
                         } else {
                             let (name, desc) = passive_of(f);
-                            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 2.0, &name, BODY, 228.0, TEXT);
-                            vec![(name, GOLD), (desc, TEXT), ("Applies only while slotted. Drag to another slot or back to the list. Right click takes it out.".into(), DIM)]
+                            ui.p.text_fit(r.x as f32 + 4.0, r.y as f32 + 2.0, &name, BODY, 228.0, th().text);
+                            vec![(name, th().gold), (desc, th().text), ("Applies only while slotted. Drag to another slot or back to the list. Right click takes it out.".into(), th().dim)]
                         };
                         ui.push(id, "row", name_of(kind, f), r, true, false, None, card);
                         ui.draggable(key.clone());
@@ -1836,15 +1837,15 @@ impl Character {
             y += 3;
         }
         // The basics: open to every unit, no slot, never removed (D1).
-        ui.p.text(64.0, y as f32, "Basics", BODY + 1.0, INFO);
-        ui.p.text(100.0, y as f32 + 1.0, "open to every unit, no slot", BODY, DIM);
+        ui.p.text(64.0, y as f32, "Basics", BODY + 1.0, th().info);
+        ui.p.text(100.0, y as f32 + 1.0, "open to every unit, no slot", BODY, th().dim);
         for (k, f) in t.basics.iter().enumerate() {
             let r = Rect::new(64 + (k % 3) as i32 * 79, y + 11 + (k / 3) as i32 * 12, 76, 11);
             let (name, intent, ap, _, desc) = skill_of(f);
-            ui.p.panel(r, rgba(22, 30, 48, 255), rgba(58, 78, 116, 200), 2.0);
-            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &name, SMALL, 70.0, TEXT);
+            ui.p.panel(r, th().game("slot_open", rgba(22, 30, 48, 255)), th().game("slot_open_edge", rgba(58, 78, 116, 200)), 2.0);
+            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &name, SMALL, 70.0, th().text);
             let line = if t.intent_of.get(f).is_some_and(|i| t.intents.contains(i)) { format!("{intent} basic, {ap} AP") } else { format!("Basic for any intent, {ap} AP") };
-            ui.push(format!("skills.basic.{f}"), "row", name.clone(), r, true, false, None, vec![(name, GOLD), (line, INFO), (desc, TEXT), ("Open to every unit: takes no slot and cannot be taken out.".into(), DIM)]);
+            ui.push(format!("skills.basic.{f}"), "row", name.clone(), r, true, false, None, vec![(name, th().gold), (line, th().info), (desc, th().text), ("Open to every unit: takes no slot and cannot be taken out.".into(), th().dim)]);
         }
         // Right: the owned list or the order editor.
         ui.tab("skills.view.owned", Rect::new(310, 100, 70, 14), "Owned", PAct::DeckView("owned"), self.deck_view == "owned");
@@ -1864,11 +1865,11 @@ impl Character {
             for (c, intent) in t.intents.iter().enumerate() {
                 let x = 310 + c as i32 * col_w;
                 let name = intent_name(intent);
-                ui.p.text_fit(x as f32 + 2.0, 118.0, &name, BODY + 1.0, (col_w - 6) as f32, INFO);
+                ui.p.text_fit(x as f32 + 2.0, 118.0, &name, BODY + 1.0, (col_w - 6) as f32, th().info);
                 ui.push(format!("skills.order.{intent}"), "row", name.clone(), Rect::new(x, 116, col_w - 4, 15), true, false, None, tip(&name, &format!("In {name} the planner fills each round from the top of this list down (its actives and basics). Drag to reorder; a click moves a skill one place up.")));
                 let list = t.order(&shown, intent);
                 if list.is_empty() {
-                    ui.p.text(x as f32 + 2.0, 134.0, "None", BODY, DIM);
+                    ui.p.text(x as f32 + 2.0, 134.0, "None", BODY, th().dim);
                 }
                 for (k, f) in list.iter().enumerate() {
                     let r = Rect::new(x, y_of(k), col_w - 4 - FOLLOW_TOGGLE - 1, 13);
@@ -1879,14 +1880,14 @@ impl Character {
                     let basic = t.basics.contains(f);
                     let set = !t.follow_list(&shown, f).is_empty();
                     let (fname, _, ap, _, desc) = skill_of(f);
-                    ui.p.panel(r, if basic { rgba(22, 30, 48, 255) } else { rgba(26, 34, 54, 255) }, BORDER, 2.0);
+                    ui.p.panel(r, if basic { th().game("slot_open", rgba(22, 30, 48, 255)) } else { th().game("slot_filled", rgba(26, 34, 54, 255)) }, th().edge, 2.0);
                     let mark = if set { 7 } else { 0 };
-                    ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &format!("{}. {fname}", k + 1), BODY, (r.w - 6 - mark) as f32, if basic { INFO } else { TEXT });
+                    ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &format!("{}. {fname}", k + 1), BODY, (r.w - 6 - mark) as f32, if basic { th().info } else { th().text });
                     if set {
                         // FL3: an entry with a set follow-up list shows a small "+"
-                        ui.p.text((r.x + r.w - 7) as f32, r.y as f32 + 2.0, "+", BODY, GOLD);
+                        ui.p.text((r.x + r.w - 7) as f32, r.y as f32 + 2.0, "+", BODY, th().gold);
                     }
-                    let card = vec![(fname.clone(), GOLD), (format!("{} {name}, {ap} AP: place {} of {}", if basic { "Basic," } else { "Active," }, k + 1, list.len()), INFO), (desc, TEXT), ("Drag to reorder; a click moves it one place up.".into(), DIM)];
+                    let card = vec![(fname.clone(), th().gold), (format!("{} {name}, {ap} AP: place {} of {}", if basic { "Basic," } else { "Active," }, k + 1, list.len()), th().info), (desc, th().text), ("Drag to reorder; a click moves it one place up.".into(), th().dim)];
                     ui.push(format!("skills.order.{intent}.{k}"), "row", fname.clone(), r, true, false, (k > 0).then(|| PAct::OrderUp(intent.clone(), k)), card);
                     ui.draggable(format!("order.{intent}.{k}"));
                     ui.drop_target(format!("order.{intent}.{k}"));
@@ -1899,8 +1900,8 @@ impl Character {
                 let y0 = 132 + (*k as i32 + 1) * 15;
                 let iname = intent_name(intent);
                 let oname = skill_of(op).0;
-                ui.p.panel(Rect::new(310, y0 - 1, 294, (ed_h - 1).min(273 - y0)), rgba(16, 22, 38, 255), BORDER, 2.0);
-                ui.p.text_fit(314.0, y0 as f32 + 2.0, &format!("After {oname}:"), BODY, 168.0, GOLD);
+                ui.p.panel(Rect::new(310, y0 - 1, 294, (ed_h - 1).min(273 - y0)), th().game("editor_pane", rgba(16, 22, 38, 255)), th().edge, 2.0);
+                ui.p.text_fit(314.0, y0 as f32 + 2.0, &format!("After {oname}:"), BODY, 168.0, th().gold);
                 ui.button_tip(&format!("skills.follow.clear.{op}"), Rect::new(490, y0, 112, 13), &format!("Use the {iname} order"), PAct::FollowClear(op.clone()), !follow.is_empty(), tip("Use the order", &format!("Empties this list: after {oname} the planner fills from the {iname} order.")));
                 let y = y0 + 16;
                 for j in 0..=follow.len() {
@@ -1912,16 +1913,16 @@ impl Character {
                     match follow.get(j) {
                         Some(f) => {
                             let (fname, _, ap, _, desc) = skill_of(f);
-                            ui.p.panel(r, rgba(26, 34, 54, 255), BORDER, 2.0);
-                            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &format!("{}. {fname}", j + 1), BODY, (r.w - 6) as f32, TEXT);
-                            let card = vec![(fname.clone(), GOLD), (format!("Follow-up {} of {} after {oname}, {ap} AP", j + 1, follow.len()), INFO), (desc, TEXT), ("Drag to reorder. Right click takes it out.".into(), DIM)];
+                            ui.p.panel(r, th().game("slot_filled", rgba(26, 34, 54, 255)), th().edge, 2.0);
+                            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &format!("{}. {fname}", j + 1), BODY, (r.w - 6) as f32, th().text);
+                            let card = vec![(fname.clone(), th().gold), (format!("Follow-up {} of {} after {oname}, {ap} AP", j + 1, follow.len()), th().info), (desc, th().text), ("Drag to reorder. Right click takes it out.".into(), th().dim)];
                             ui.push(format!("skills.follow.{op}.{j}"), "row", fname, r, true, false, None, card);
                             ui.draggable(format!("follow.{op}.{j}"));
                         }
                         None => {
-                            ui.p.panel(r, rgba(20, 28, 46, 120), rgba(58, 78, 116, 120), 2.0);
+                            ui.p.panel(r, th().game("slot_empty", rgba(20, 28, 46, 120)), th().game("slot_empty_edge", rgba(58, 78, 116, 120)), 2.0);
                             let label = if follow.is_empty() { "None set" } else { "Drop here" };
-                            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, label, BODY, (r.w - 6) as f32, DIM);
+                            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, label, BODY, (r.w - 6) as f32, th().dim);
                             ui.push(format!("skills.follow.{op}.end"), "row", label, r, true, false, None, tip("Follow-ups", &format!("Drop one of the {iname} skills here to try it after {oname}; with no list the {iname} order fills.")));
                         }
                     }
@@ -1929,7 +1930,7 @@ impl Character {
                 }
                 let y = y + 15 * lines(follow.len() + 1);
                 if !adds.is_empty() && y + 13 <= 272 {
-                    ui.p.text(314.0, y as f32 + 2.0, "Add:", BODY, INFO);
+                    ui.p.text(314.0, y as f32 + 2.0, "Add:", BODY, th().info);
                 }
                 for (j, f) in adds.iter().enumerate() {
                     let r = Rect::new(340 + (j % FOLLOW_PER) as i32 * 52, y + (j / FOLLOW_PER) as i32 * 15, 50, 13);
@@ -1938,9 +1939,9 @@ impl Character {
                     }
                     bottom = bottom.max(r.y + r.h);
                     let (fname, _, ap, _, desc) = skill_of(f);
-                    ui.p.panel(r, rgba(22, 30, 48, 255), rgba(58, 78, 116, 200), 2.0);
-                    ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &fname, BODY, (r.w - 6) as f32, INFO);
-                    let card = vec![(fname.clone(), GOLD), (format!("{iname} skill, {ap} AP"), INFO), (desc, TEXT), (format!("Click to try it after {oname} (at the end of the list), or drag it to a place."), DIM)];
+                    ui.p.panel(r, th().game("slot_open", rgba(22, 30, 48, 255)), th().game("slot_open_edge", rgba(58, 78, 116, 200)), 2.0);
+                    ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 2.0, &fname, BODY, (r.w - 6) as f32, th().info);
+                    let card = vec![(fname.clone(), th().gold), (format!("{iname} skill, {ap} AP"), th().info), (desc, th().text), (format!("Click to try it after {oname} (at the end of the list), or drag it to a place."), th().dim)];
                     ui.push(format!("skills.follow.add.{op}.{f}"), "row", fname, r, true, false, Some(PAct::FollowAdd(op.clone(), f.clone())), card);
                     ui.draggable(format!("follow.add.{op}.{f}"));
                 }
@@ -1948,7 +1949,7 @@ impl Character {
             let auto_y = 254.max(bottom + 3);
             if auto_y + 15 <= 273 {
                 ui.button_tip("skills.order.auto", Rect::new(310, auto_y, 70, 15), "Auto order", PAct::OrderAuto, !shown.order.is_empty(), tip("Auto order", "Every intent back to the automatic order: the deck's actives in slot order, then the basics."));
-                ui.p.text(386.0, auto_y as f32 + 4.0, "Each round fills from the top.", SMALL, DIM);
+                ui.p.text(386.0, auto_y as f32 + 4.0, "Each round fills from the top.", SMALL, th().dim);
             }
         } else {
             let list_area = Rect::new(310, 114, 294, 158);
@@ -1958,7 +1959,7 @@ impl Character {
             const ROWS: usize = 7;
             self.scroll = self.scroll.min(owned.len().saturating_sub(ROWS));
             if self.scroll > 0 || owned.len() > ROWS {
-                ui.p.text_right(604.0, 103.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(owned.len()), owned.len()), SMALL, DIM);
+                ui.p.text_right(604.0, 103.0, &format!("{}-{} of {}", self.scroll + 1, (self.scroll + ROWS).min(owned.len()), owned.len()), SMALL, th().dim);
             }
             for (k, &(kind, ref id)) in owned.iter().skip(self.scroll).take(ROWS).enumerate() {
                 let y = 118 + k as i32 * 22;
@@ -1972,8 +1973,8 @@ impl Character {
                     let (name, desc) = passive_of(id);
                     (name.clone(), format!("{name}  [{}]", title_case(kind)), desc)
                 };
-                ui.p.text_fit(366.0, y as f32 + 1.0, &line, BODY, 238.0, TEXT);
-                ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, DIM);
+                ui.p.text_fit(366.0, y as f32 + 1.0, &line, BODY, 238.0, th().text);
+                ui.p.text_fit(366.0, y as f32 + 10.0, &desc, SMALL, 238.0, th().dim);
                 ui.push(format!("skills.owned.{kind}.{id}"), "row", name.clone(), Rect::new(366, y, 238, 20), true, slotted, Some(PAct::DeckSlot(kind, id.clone())), tip(&name, &desc));
                 ui.draggable(format!("deck.own.{kind}.{id}"));
             }
@@ -2021,7 +2022,7 @@ impl Character {
         let head = BODY + 1.0;
         // Middle: the equipped slots, then the pouch.
         let (mx, mw) = (243, 185);
-        ui.p.text(mx as f32 + 2.0, 102.0, "Equipped", head, INFO);
+        ui.p.text(mx as f32 + 2.0, 102.0, "Equipped", head, th().info);
         for (i, slot) in LOADOUT_SLOTS.iter().enumerate() {
             let y = 116 + i as i32 * 15;
             let explicit = work.equipment.get(*slot).cloned();
@@ -2036,13 +2037,13 @@ impl Character {
                 (None, Some(item)) => item_tip(d, item, "Class default gear: drag an item from the stash onto this slot to replace it."),
                 (None, None) => tip(&label, "Empty: drag an item from the stash onto this slot."),
             };
-            ui.row(&format!("gear.slot.{slot}"), Rect::new(mx, y, mw, 14), &label, if explicit.is_some() { TEXT } else { DIM }, explicit.as_ref().map(|_| PAct::Unequip(slot.to_string())), false, card);
+            ui.row(&format!("gear.slot.{slot}"), Rect::new(mx, y, mw, 14), &label, if explicit.is_some() { th().text } else { th().dim }, explicit.as_ref().map(|_| PAct::Unequip(slot.to_string())), false, card);
             if explicit.is_some() {
                 ui.draggable(format!("equip.{slot}"));
             }
             ui.drop_target(format!("slot.{slot}"));
         }
-        ui.p.text(mx as f32 + 2.0, 210.0, "Battle pouch", head, INFO);
+        ui.p.text(mx as f32 + 2.0, 210.0, "Battle pouch", head, th().info);
         for i in 0..POUCH_MAX {
             let y = 224 + i as i32 * 15;
             let item = work.pouch.get(i);
@@ -2054,7 +2055,7 @@ impl Character {
                 Some(item) => item_tip(d, item, "Click or drag it to the stash to take it out; drag it onto another pouch slot to reorder."),
                 None => tip(&label, "Drag a consumable from the stash here; the hero can use it in battle."),
             };
-            ui.row(&format!("gear.pouch.{i}"), Rect::new(mx, y, mw, 14), &label, if item.is_some() { TEXT } else { DIM }, item.map(|_| PAct::PouchRemove(i)), false, card);
+            ui.row(&format!("gear.pouch.{i}"), Rect::new(mx, y, mw, 14), &label, if item.is_some() { th().text } else { th().dim }, item.map(|_| PAct::PouchRemove(i)), false, card);
             if item.is_some() {
                 ui.draggable(format!("pouch.{i}"));
             }
@@ -2062,9 +2063,9 @@ impl Character {
         }
         // Right: the party stash (the whole column takes items dropped back).
         let (sx, sw) = (436, 179);
-        ui.p.text(sx as f32 + 2.0, 102.0, "Party stash", head, INFO);
+        ui.p.text(sx as f32 + 2.0, 102.0, "Party stash", head, th().info);
         let area = Rect::new(sx, 114, sw, 156);
-        ui.p.panel(area, rgba(20, 28, 46, 160), BORDER, 2.0);
+        ui.p.panel(area, th().game("party_area", rgba(20, 28, 46, 160)), th().edge, 2.0);
         ui.push("gear.stash", "panel", "Party stash", area, true, false, None, tip("Party stash", "Drop a worn or pouch item here to take it off."));
         ui.drop_target("stash");
         let mut ids: Vec<&String> = stash.keys().filter(|id| d.cat.items.contains_key(*id)).collect();
@@ -2072,7 +2073,7 @@ impl Character {
         const ROWS: usize = 10;
         self.gear_scroll = self.gear_scroll.min(ids.len().saturating_sub(ROWS));
         if ids.is_empty() {
-            ui.p.text(sx as f32 + 4.0, 118.0, "Empty", head, DIM);
+            ui.p.text(sx as f32 + 4.0, 118.0, "Empty", head, th().dim);
         }
         for (row, id) in ids.iter().skip(self.gear_scroll).take(ROWS).enumerate() {
             let def = &d.cat.items[*id];
@@ -2084,14 +2085,14 @@ impl Character {
                 (None, "Not wearable.")
             };
             let movable = act.is_some();
-            ui.row(&format!("gear.stash.{id}"), Rect::new(sx + 2, 116 + row as i32 * 15, sw - 4, 14), &format!("{} x{}", def.name, stash[*id]), TEXT, act, false, item_tip(d, id, help));
+            ui.row(&format!("gear.stash.{id}"), Rect::new(sx + 2, 116 + row as i32 * 15, sw - 4, 14), &format!("{} x{}", def.name, stash[*id]), th().text, act, false, item_tip(d, id, help));
             if movable {
                 ui.draggable(format!("stash.{id}"));
             }
         }
         if ids.len() > ROWS {
             let shown = format!("{}-{} of {} (wheel)", self.gear_scroll + 1, (self.gear_scroll + ROWS).min(ids.len()), ids.len());
-            ui.p.text_right((sx + sw - 4) as f32, 262.0, &shown, SMALL, DIM);
+            ui.p.text_right((sx + sw - 4) as f32, 262.0, &shown, SMALL, th().dim);
         }
         // Left: the stats with this gear, and the change of the dragged item over a target, else of the hovered item.
         let ruleset = party_ruleset(cx);
@@ -2099,18 +2100,18 @@ impl Character {
         let now = sheet(d, &cx.gs().world_id, &ruleset, &work);
         let then = preview.as_ref().map(|p| sheet(d, &cx.gs().world_id, &ruleset, p));
         let (lx, lw) = (25, 210);
-        ui.p.text(lx as f32 + 3.0, 102.0, &format!("{}  Lv {}", d.class_name(&cx.gs().world_id, &work.class_id(d)), work.level(d)), head, INFO);
+        ui.p.text(lx as f32 + 3.0, 102.0, &format!("{}  Lv {}", d.class_name(&cx.gs().world_id, &work.class_id(d)), work.level(d)), head, th().info);
         // DERIVE1 4.4: catalog rows past the built-in ones close the 12 px step up (the last row starts at 260 at most)
         let step = 12f32.min(102.0 / (now.len().saturating_sub(STATS.len()).max(2) - 1) as f32);
         for (i, r) in now.iter().enumerate() {
             let core = i < STATS.len();
             let (x, y, w) = if core { (lx + 3 + (i as i32 % 2) * 104, 117 + (i as i32 / 2) * 12, 100) } else { (lx + 3, 158 + ((i - STATS.len()) as f32 * step) as i32, lw - 6) };
-            ui.p.text(x as f32, y as f32, &r.label, BODY, DIM);
+            ui.p.text(x as f32, y as f32, &r.label, BODY, th().dim);
             let right = (x + w - 26) as f32;
-            ui.p.text_right(right, y as f32, &r.shown, BODY, TEXT);
+            ui.p.text_right(right, y as f32, &r.shown, BODY, th().text);
             let delta = then.as_ref().and_then(|t| t.get(i)).map(|t| t.value - r.value).unwrap_or(0);
             if delta != 0 {
-                ui.p.text(right + 3.0, y as f32, &format!("{delta:+}"), BODY, if delta > 0 { GOOD } else { FOE });
+                ui.p.text(right + 3.0, y as f32, &format!("{delta:+}"), BODY, if delta > 0 { th().good } else { th().foe });
             }
             ui.push(format!("gear.stat.{}", r.label), "row", format!("{} {}", r.label, r.shown), Rect::new(x - 2, y - 1, w, if core { 12 } else { step.min(12.0) as i32 }), true, false, None, tip(&r.label, &r.desc));
         }

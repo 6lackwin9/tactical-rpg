@@ -1,9 +1,10 @@
 //! Hover cards and the text and colours of a unit's plans: intent chips and badges, the strip's action rows, unit tips, the AP gauge and its lines.
 
+use aegis_ui::theme::th;
 use super::board::with_alpha;
 use super::marks::{held_guard, meter_text, HELD, METER};
 use super::overlays::reach_text;
-use super::{ALLY, AP_ANIM_MS, AP_PIPS, DIM, FOE, GOLD, GOOD, POISE, TEXT};
+use super::{ALLY, AP_ANIM_MS, AP_PIPS, POISE};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::intent_text;
 use emberwake_battle::intent::Intent;
@@ -43,7 +44,7 @@ fn intent_ink(i: RoundIntent) -> Rgba {
 pub(super) fn intent_glyph(p: &mut Painter, cat: &emberwake_data::Catalog, i: RoundIntent, r: Rect) {
     p.panel(r, intent_color(i), rgba(255, 255, 255, 170), 2.0);
     let letter: String = i.label(cat).chars().take(1).collect();
-    p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0, &letter, SMALL, TEXT);
+    p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0, &letter, SMALL, th().text);
 }
 
 /// A tell line's kind as the command colour key (`kind_color`).
@@ -71,7 +72,7 @@ pub(super) fn draw_badge_row(p: &mut Painter, t: &Intent, row: Rect, blocks: i32
         Rect::new(x0, row.y, (row.x + (b as f32 * cw).round() as i32 - x0 - 1).max(1), row.h)
     };
     for b in 1..=blocks {
-        p.fill(cell(b), rgba(14, 20, 34, 255));
+        p.fill(cell(b), th().game("strip_cell", rgba(14, 20, 34, 255)));
     }
     if t.revealed {
         for l in t.plan.iter().filter(|l| l.blocks.0 >= 1) {
@@ -83,16 +84,16 @@ pub(super) fn draw_badge_row(p: &mut Painter, t: &Intent, row: Rect, blocks: i32
             }
         }
     }
-    let mut tip: Tip = vec![("Impacts this round".into(), GOLD)];
+    let mut tip: Tip = vec![("Impacts this round".into(), th().gold)];
     for &(b, k) in t.impacts.iter().filter(|(b, _)| (1..=blocks).contains(b)) {
         let c = cell(b);
-        let col = if k == HIT { FOE } else { GOLD };
+        let col = if k == HIT { th().foe } else { th().gold };
         p.fill(Rect::new(c.x + c.w / 2 - 2, c.y, 4, c.h), col);
         p.fill(Rect::new(c.x + c.w / 2 - 1, c.y - 1, 2, c.h + 2), col);
         tip.push((format!("B{b}: {}", if k == HIT { "a hit lands" } else { "an action lands" }), col));
     }
     if tip.len() == 1 {
-        tip.push(("Nothing lands this round".into(), DIM));
+        tip.push(("Nothing lands this round".into(), th().dim));
     }
     tip
 }
@@ -274,9 +275,9 @@ pub(super) fn ap_gauge_of(w: &World, u: usize, f: Option<&rip::ApForecast>, bloc
         None => {
             let mut tip: Tip = vec![(format!("AP {} of {}", unit.ap, unit.max_ap), ALLY)];
             if start > unit.ap {
-                tip.push((format!("Paid this round: {}", start - unit.ap), TEXT));
+                tip.push((format!("Paid this round: {}", start - unit.ap), th().text));
             }
-            tip.extend(pip_line(unit.max_ap).map(|l| (l, TEXT)));
+            tip.extend(pip_line(unit.max_ap).map(|l| (l, th().text)));
             PipGauge::live(start, unit.ap, AP_PAID, unit.max_ap, AP_PIPS).with_tip(tip)
         }
     }
@@ -289,15 +290,15 @@ fn plan_lines(s: &Session, u: usize) -> Tip {
     let w = &s.w;
     let target = |t: Option<usize>| t.filter(|t| *t != u).map(|t| format!(" on {}", w.units[t].name)).unwrap_or_default();
     if s.plan_confirmed || s.phase != Phase::Planning {
-        return committed(s, u).into_iter().map(|c| (format!("{} {}{}", intent_text::block_text((c.0, c.1)), c.2, c.4.map(|n| format!(" on {n}")).unwrap_or_default()), TEXT)).collect();
+        return committed(s, u).into_iter().map(|c| (format!("{} {}{}", intent_text::block_text((c.0, c.1)), c.2, c.4.map(|n| format!(" on {n}")).unwrap_or_default()), th().text)).collect();
     }
     let picks = rip::picks_of(w, u);
-    let mut t: Tip = vec![(if picks.is_empty() { "Picks: none, the planner's round".to_string() } else { format!("Picks: {}", picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", ")) }, GOLD)];
+    let mut t: Tip = vec![(if picks.is_empty() { "Picks: none, the planner's round".to_string() } else { format!("Picks: {}", picks.iter().map(|p| rip::pick_name(w, p)).collect::<Vec<_>>().join(", ")) }, th().gold)];
     let ghosts = rip::ghost_entries(w, &s.plan, u);
     for (k, e) in s.plan.entries_for(w, u).iter().enumerate() {
         let ghost = ghosts.get(k).copied().unwrap_or(false);
         let line = format!("{} {}{}{}", intent_text::block_text((e.start_block, e.end_block(w))), w.cat.skills[e.skill].name, target(e.target), if ghost { ", auto-filled" } else { "" });
-        t.push((line, if ghost { DIM } else { TEXT }));
+        t.push((line, if ghost { th().dim } else { th().text }));
     }
     t
 }
@@ -323,29 +324,29 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
     let u = &w.units[i];
     let ally = w.allies.contains(&i);
     let tells_shown = inspect.unwrap_or(true);
-    let mut t: Tip = vec![(u.name.clone(), if ally { ALLY } else { FOE })];
+    let mut t: Tip = vec![(u.name.clone(), if ally { ALLY } else { th().foe })];
     let round = rounds.iter().find(|r| r.unit == i);
     let tell = tells.iter().find(|r| r.unit == i).or(round.filter(|_| !ally));
     if let Some((head, intent)) = round.filter(|_| u.is_active()).and_then(|r| Some((intent_text::round_head(w, r)?, r.round_intent?))) {
         t.push((head, intent_ink(intent)));
     }
-    t.push((format!("HP {}/{}   AP {}/{}   {}", u.hp, u.max_hp, u.ap, u.max_ap, stance_name(u)), TEXT));
+    t.push((format!("HP {}/{}   AP {}/{}   {}", u.hp, u.max_hp, u.ap, u.max_ap, stance_name(u)), th().text));
     let level = match classes.get(i).filter(|c| !c.is_empty()) {
         Some(c) if u.tier.is_empty() => format!("Level {} {c}", u.stats.level),
         Some(c) => format!("Level {} {c} ({})", u.stats.level, u.tier),
         None => format!("Level {} {}", u.stats.level, u.tier),
     };
-    t.push((format!("{level}   Speed {}   Reach {}", u.speed, reach_text(w, i)), DIM));
+    t.push((format!("{level}   Speed {}   Reach {}", u.speed, reach_text(w, i)), th().dim));
     if let Some(line) = derived_line(&derived_rows(s, i)) {
-        t.push((line, DIM));
+        t.push((line, th().dim));
     }
     // IS2: the facing (the round intent's, rule round_intent)
     if let Some(f) = inspect.filter(|_| u.is_active() && ri::on(w)).and_then(|_| facing_name(ri::facing(w, i))) {
-        t.push((format!("Facing {f}"), DIM));
+        t.push((format!("Facing {f}"), th().dim));
     }
     // RULESET1-U slice 5: the poise bar in words (rule poise)
     if let Some(st) = emberwake_battle::poise::state(w, i).filter(|st| st.max > 0 && u.is_active()) {
-        t.push((format!("Poise {}/{}{}", st.value, st.max, if st.broken { "  BROKEN this round" } else if st.broken_last { "  (broke last round: stagger x repeat)" } else { "" }), if st.broken { FOE } else { POISE }));
+        t.push((format!("Poise {}/{}{}", st.value, st.max, if st.broken { "  BROKEN this round" } else if st.broken_last { "  (broke last round: stagger x repeat)" } else { "" }), if st.broken { th().foe } else { POISE }));
     }
     // HOOKS1-UI slice 3: its meters (UM7; none without the rule, a hidden meter left out) and a held guard (8.3)
     if u.is_active() {
@@ -359,13 +360,13 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
     // RULESET1-U slice 3 (GD5): a stealthed unit that moved this round is lost to attacks locked on it
     if ri::hidden(w, i) {
         // good news on a hero, a warning on an enemy
-        t.push(("Hidden: an attack locked on it finds nothing this round".into(), if ally { GOOD } else { GOLD }));
+        t.push(("Hidden: an attack locked on it finds nothing this round".into(), if ally { th().good } else { th().gold }));
     }
     if !u.st.active.is_empty() {
-        t.push((format!("Now: {}", u.st.active.iter().map(|x| emberwake_rules::status::display_name(x)).collect::<Vec<_>>().join(", ")), FOE));
+        t.push((format!("Now: {}", u.st.active.iter().map(|x| emberwake_rules::status::display_name(x)).collect::<Vec<_>>().join(", ")), th().foe));
     }
     if !u.st.pending.is_empty() {
-        t.push((format!("Next round: {}", u.st.pending.iter().map(|x| emberwake_rules::status::display_name(x)).collect::<Vec<_>>().join(", ")), GOLD));
+        t.push((format!("Next round: {}", u.st.pending.iter().map(|x| emberwake_rules::status::display_name(x)).collect::<Vec<_>>().join(", ")), th().gold));
     }
     // IS3: an inspected party member's AP numbers, picks and plan (round intent)
     if ally && u.is_active() && inspect.is_some() && ri::on(w) {
@@ -379,22 +380,22 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
             Some(r) => {
                 // IS2: the tell's first action only while the tells show (I)
                 if tells_shown {
-                    t.push((format!("Intent: {}", intent_text::first_line(w, &r.line)), GOLD));
+                    t.push((format!("Intent: {}", intent_text::first_line(w, &r.line)), th().gold));
                 }
                 // V1, V2: who reads the plan (a reader who fell stays listed), the enrage or the battle's plan reveal
                 if let Some(head) = intent_text::reveal_head(w, r, |p| s.w.cat.passives.get(p).map(|x| x.name.clone()).unwrap_or_else(|| p.to_string())) {
                     t.push((head, ALLY));
                     for l in &r.plan {
-                        t.push((intent_text::plan_line(w, l), TEXT));
+                        t.push((intent_text::plan_line(w, l), th().text));
                     }
                 }
                 if let Some(f) = sel.and_then(|h| intent_text::forecast(r, h)).filter(|_| tells_shown) {
-                    t.push((f, FOE));
+                    t.push((f, th().foe));
                 }
             }
             // IS2: an inspect never names an unrevealed next action
             None if inspect.is_some() => {}
-            None => t.push((format!("Next: {}", next_action(s, i)), GOLD)),
+            None => t.push((format!("Next: {}", next_action(s, i)), th().gold)),
         }
         if let Some(h) = sel.filter(|h| w.units[*h].is_active()) {
             let strike = w.book().lowest(Kind::Attack);
@@ -402,9 +403,9 @@ fn unit_tip_as(s: &Session, i: usize, sel: Option<usize>, tells: &[Intent], roun
         }
     }
     if !u.is_alive() {
-        t.push(("Down".into(), DIM));
+        t.push(("Down".into(), th().dim));
     } else if u.is_withdrawn {
-        t.push(("Left the battle".into(), DIM));
+        t.push(("Left the battle".into(), th().dim));
     }
     t
 }

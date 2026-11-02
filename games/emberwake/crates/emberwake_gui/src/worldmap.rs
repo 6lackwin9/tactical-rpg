@@ -12,11 +12,12 @@
 //! (`world_map.mode`) cycles the party's mode (`campaign::purse::set_travel_mode`); the trips, their tips and the road
 //! labels count its days, and the trip ask runs the trip's legs in it (`runover::trip_ask`).
 
+use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, rgba, Rect};
 use crate::music;
 use crate::hud::{hud_bar, hud_key, hud_open, purse_word, Hud, PurseWord};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
-use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, H, INFO, SMALL, TEXT, W};
+use aegis_ui::ui::{tip, Gfx, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s};
 use emberwake_world::{explore, progression, travel};
@@ -214,7 +215,7 @@ impl Screen<GameCx> for WorldMap {
         let d = cx.data.clone();
         let gs = cx.gs().clone();
         let mut ui: Ui<WAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), rgb(12, 16, 24));
+        ui.p.fill(Rect::new(0, 0, W, H), th().game("worldmap_ground", rgb(12, 16, 24)));
         let lineage = d.lineage(&gs.world_id);
         let backgrounds: Vec<String> = lineage.iter().rev().map(|w| emberwake_content::art::world_map_background(w)).collect();
         match cx.art.first(&backgrounds, 500, 500) {
@@ -273,7 +274,7 @@ impl Screen<GameCx> for WorldMap {
                 None => ui.p.circle(x, y, 5.0, rgb(210, 210, 220)),
             }
             if json::b(n, "quest", false) {
-                ui.p.text(x + 5.0, y - 15.0, "!", 8.0, GOLD);
+                ui.p.text(x + 5.0, y - 15.0, "!", 8.0, th().gold);
             }
             // STORYUI1 B10: the jobs of opened boards here: the quest badge (9 px) at the pin's top left
             let jobs = json::sget(n, "jobs");
@@ -288,20 +289,20 @@ impl Screen<GameCx> for WorldMap {
             let label = s(n, "name");
             // TEXTFIT1: the second line sits a line below the name at any text size, and the node's box holds both.
             let line = ui.p.line_h(BODY);
-            ui.p.text(x + 9.0, y - 6.0, &label, BODY, if is_here { GOLD } else if json::b(n, "visited", false) { TEXT } else { DIM });
+            ui.p.text(x + 9.0, y - 6.0, &label, BODY, if is_here { th().gold } else if json::b(n, "visited", false) { th().text } else { th().dim });
             if is_here {
-                ui.p.text(x + 9.0, y - 6.0 + line, "You are here", BODY, GOLD);
+                ui.p.text(x + 9.0, y - 6.0 + line, "You are here", BODY, th().gold);
             }
             let trip = travel::trip(&d, &gs, &here, &q);
             let mut t = tip(&label, &format!("{}{}", s(n, "region"), if json::b(n, "visited", false) { "" } else { " (not visited)" }));
             if json::b(&trip, "ok", false) {
-                t.push((format!("Trip: {}", trip_cost(cx, &gs, &trip)), INFO));
+                t.push((format!("Trip: {}", trip_cost(cx, &gs, &trip)), th().info));
             }
             for step in travel::quest_steps_at(&d, &gs, &q) {
-                t.push((format!("Quest: {step}"), GOLD));
+                t.push((format!("Quest: {step}"), th().gold));
             }
             for job in &jobs {
-                t.push((format!("Job: {job}"), GOLD));
+                t.push((format!("Job: {job}"), th().gold));
             }
             // STORYUI1 B10, CAMPAIGN1 W5: the checkpoint lines of the quests whose node this is
             for due in json::aget(n, "deadlines") {
@@ -319,20 +320,20 @@ impl Screen<GameCx> for WorldMap {
         }
         // -- Legend
         let lg = Rect::new(4, 238, 76, 100);
-        ui.p.panel(lg, rgba(10, 14, 22, 220), BORDER, 2.0);
+        ui.p.panel(lg, th().game("legend_fill", rgba(10, 14, 22, 220)), th().edge, 2.0);
         let mut ly = lg.y as f32 + 3.0;
         for (kind, label) in [("fortress", "Fortress"), ("town", "Town"), ("camp", "Camp"), ("ruin", "Ruin"), ("gate", "Gate"), ("wild", "Wild")] {
             if let Some(img) = cx.art.image(&emberwake_content::art::pin(kind), 9, 9) {
                 ui.p.image(img, Rect::new(lg.x + 4, ly as i32, 9, 9));
             }
-            ui.p.text(lg.x as f32 + 17.0, ly, label, SMALL, TEXT);
+            ui.p.text(lg.x as f32 + 17.0, ly, label, SMALL, th().text);
             ly += 10.0;
         }
         ui.p.line(lg.x as f32 + 4.0, ly + 4.0, lg.x as f32 + 14.0, ly + 4.0, rgb(220, 206, 160), 0.0);
-        ui.p.text(lg.x as f32 + 17.0, ly, "Open road", SMALL, TEXT);
+        ui.p.text(lg.x as f32 + 17.0, ly, "Open road", SMALL, th().text);
         ly += 10.0;
         ui.p.line(lg.x as f32 + 4.0, ly + 4.0, lg.x as f32 + 14.0, ly + 4.0, rgb(200, 90, 100), 2.0);
-        ui.p.text(lg.x as f32 + 17.0, ly, "Closed road", SMALL, TEXT);
+        ui.p.text(lg.x as f32 + 17.0, ly, "Closed road", SMALL, th().text);
         // -- HUD bar (PLAYUI1-H): Back and the location name; gold, supplies and the icon buttons at the right
         let back_w = (ui.p.text_w("Back", BODY) + 8.0).ceil().max(26.0) as i32;
         let here_name = cx.location_name(&gs.world_id, &here);
@@ -341,8 +342,8 @@ impl Screen<GameCx> for WorldMap {
         // -- Side panel: the time, actions and the log
         let sx = 504;
         let mut y = 28;
-        ui.p.text(sx as f32, y as f32, "World map", BODY, INFO);
-        ui.p.text_right(W as f32 - 6.0, y as f32, &format!("Time {}", gs.time), BODY, TEXT);
+        ui.p.text(sx as f32, y as f32, "World map", BODY, th().info);
+        ui.p.text_right(W as f32 - 6.0, y as f32, &format!("Time {}", gs.time), BODY, th().text);
         y += 14;
         // CAMPAIGN1-TM: the travel mode button (only in a campaign world with modes)
         let mode = emberwake_world::campaign::purse::travel_mode(&d, &gs);
@@ -365,7 +366,7 @@ impl Screen<GameCx> for WorldMap {
                 }
                 ui.button_tip("world_map.travel", Rect::new(sx, y, 130, 16), &format!("Travel to {name}"), WAct::Travel, true, tip("Travel", &text));
             } else {
-                ui.p.text_fit(sx as f32, y as f32 + 3.0, &format!("No known way to {name}."), SMALL, 130.0, FOE);
+                ui.p.text_fit(sx as f32, y as f32 + 3.0, &format!("No known way to {name}."), SMALL, 130.0, th().foe);
             }
             y += 20;
         }
@@ -388,7 +389,7 @@ impl Screen<GameCx> for WorldMap {
                 if y > H - 10 {
                     break;
                 }
-                ui.p.text(sx as f32, y as f32, &part, SMALL, TEXT);
+                ui.p.text(sx as f32, y as f32, &part, SMALL, th().text);
                 y += 8;
             }
         }
