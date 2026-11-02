@@ -568,6 +568,8 @@ fn the_party_tactic_skips_members_with_picks() {
     s.plan_apply_preset_all("balanced");
     assert_eq!((rows(&s.w, &s.plan, VANGUARD), s.w.round_states[&VANGUARD].clone()), kept, "the member with a pick is skipped");
     assert!(!s.plan.steps_of(ARCHER).is_empty(), "a member with no pick is drafted");
+    s.plan_apply_preset(VANGUARD, "balanced");
+    assert_eq!((rows(&s.w, &s.plan, VANGUARD), s.w.round_states[&VANGUARD].clone()), kept, "also one by one");
 }
 
 /// HK2, HK3 (`hotkey_target`): a self-only skill (a Defend kind, or `target_mode` SELF) picked by its key first aims at
@@ -611,7 +613,7 @@ fn a_round_change_previews_what_it_makes() {
     let (w2, p2) = rip::preview_round(&s.w, &s.plan, VANGUARD, &set).unwrap();
     assert_eq!(snap(&s), before, "the preview changes nothing");
     let done = s.set_round(VANGUARD, &set).unwrap();
-    assert!(done.planned.is_ok() && !done.manual, "{:?}", done.planned);
+    assert!(done.planned.is_ok(), "{:?}", done.planned);
     for &c in &party {
         assert_eq!(rows(&w2, &p2, c), rows(&s.w, &s.plan, c), "member {c}: the preview is the change");
     }

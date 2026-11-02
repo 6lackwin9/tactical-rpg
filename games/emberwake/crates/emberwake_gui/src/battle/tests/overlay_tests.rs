@@ -129,11 +129,9 @@ fn the_overlays_follow_the_kit() {
 fn maneuver_shades_the_targets_front() {
     let (mut cx, mut g, mut b) = arena(Some(TIMELINE));
     let (h, foe) = assault(&mut cx, &mut b);
-    // Manual: the intent stands even when the planner offers no Maneuver round here
-    for req in [json!({"cmd": "manual", "unit": h, "on": true}), json!({"cmd": "round_intent", "unit": h, "intent": "maneuver", "target": foe})] {
-        let r = b.send(&cx, req);
-        assert_eq!(r["ok"], json!(true), "{r}");
-    }
+    // the intent stands even when the planner offers no Maneuver round here
+    let r = b.send(&cx, json!({"cmd": "round_intent", "unit": h, "intent": "maneuver", "target": foe}));
+    assert_eq!(r["ok"], json!(true), "{r}");
     for f in [V2::new(-1, 0), V2::new(0, 1)] {
         b.host.session.as_mut().unwrap().w.round_states.entry(foe).or_default().facing = f;
         b.draw(&mut cx, &mut g, (-500, -500), true);

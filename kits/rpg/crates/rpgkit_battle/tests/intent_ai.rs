@@ -380,30 +380,6 @@ fn tier_3_low_hp_takes_safety() {
     assert!(cover == best && cover > 0.0, "{cell}: the most cover among them");
 }
 
-/// MM1 with the tactics (user 2026-10-28): a member set to Manual keeps its intent, target and steps when a tactic is
-/// applied to the party or to it; the others are drafted.
-#[test]
-fn a_tactic_skips_manual_members() {
-    let mut s = session(timeline());
-    {
-        let w = &mut s.w;
-        place(w, BLADE, V2::new(4, 4));
-        place(w, BOW, V2::new(2, 2));
-        place(w, BRUTE, V2::new(6, 4));
-    }
-    s.set_round_intent(BLADE, "guard").unwrap();
-    s.set_round_target(BLADE, RoundTarget::Myself).unwrap();
-    rip::set_manual(&mut s.w, &mut s.plan, BLADE, true).unwrap();
-    let guard = s.w.book().find("active_guard").unwrap();
-    assert_eq!(s.plan.add_step(&s.w, BLADE, rpgkit_battle::plan::PlanStep::self_skill(guard), false), "");
-    let before = (round_intent::intent_of(&s.w, BLADE), s.w.round_states[&BLADE].target, rows(&s.w, &s.plan, BLADE));
-    s.plan_apply_preset_all("aggressive");
-    assert_eq!((round_intent::intent_of(&s.w, BLADE), s.w.round_states[&BLADE].target, rows(&s.w, &s.plan, BLADE)), before, "the manual member is left alone");
-    assert_eq!(round_intent::intent_of(&s.w, BOW), Some(RoundIntent::Assault), "the others are drafted");
-    s.plan_apply_preset(BLADE, "aggressive");
-    assert_eq!((round_intent::intent_of(&s.w, BLADE), s.w.round_states[&BLADE].target, rows(&s.w, &s.plan, BLADE)), before, "also one by one");
-}
-
 /// Row 4: a Skirmisher whose Maneuver attack reaches a flank tile on a ranked target engaged with another unit picks
 /// Maneuver Engage on it; with the target engaged with nobody it Assaults.
 #[test]

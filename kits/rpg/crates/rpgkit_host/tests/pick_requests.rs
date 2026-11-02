@@ -47,14 +47,14 @@ fn history(h: &mut Host) -> Vec<Value> {
 }
 
 /// `pick` sets the intent and target from the skill, the plan holds the pick then the ghost, and `round_plan` gives the
-/// picks, `ghost_from`, `autofill` and `ap` (now - spent = left, next); `manual` is true with a pick.
+/// picks, `ghost_from`, `autofill` and `ap` (now - spent = left, next).
 #[test]
 fn a_pick_is_planned_and_reported() {
     let mut h = host();
     let r = h.handle(&json!({"cmd": "pick", "unit": 0, "target": 2, "pick": {"skill": "t_cleave"}}));
     assert_eq!((r["ok"].clone(), r["planned"].clone(), r["dropped"].clone()), (json!(true), json!(true), json!([])), "{r}");
     let hero = row(&mut h, 0);
-    assert_eq!((hero["intent"].as_str(), hero["target"].clone(), hero["manual"].as_bool(), hero["autofill"].as_bool()), (Some("assault"), json!(2), Some(true), Some(true)));
+    assert_eq!((hero["intent"].as_str(), hero["target"].clone(), hero["autofill"].as_bool()), (Some("assault"), json!(2), Some(true)));
     assert_eq!(hero["picks"], json!([{"skill": "t_cleave"}]));
     let entries = r["plan"]["t_hero"]["entries"].as_array().unwrap();
     let cleave = entries.iter().position(|e| e["skill"] == "t_cleave").expect("the pick is planned");

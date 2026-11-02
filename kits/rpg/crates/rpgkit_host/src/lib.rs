@@ -40,10 +40,8 @@
 //!                                              (engage, disengage, utility; "" = auto) and opener (a skill id,
 //!                                              {"item": id}; "" = auto), then rebuild its auto plan and every later
 //!                                              member's (planned, reason when the intent is not offered)
-//!   manual {unit, on?}                         the member's Manual toggle (default on; off rebuilds the auto plan)
-//!   fill {unit}                                Manual's "fill the rest": follow-ups and Rest after the last step
 //!   round_plan                                 the planner's own state of every active party-side unit: intent,
-//!                                              target, kind, opener, Manual and the reason tag of each planned entry,
+//!                                              target, kind, opener and the reason tag of each planned entry,
 //!                                              its picks, ghost_from, autofill and the AP forecast `ap` (never an
 //!                                              enemy: threat intel is `intents`' `round_intents`)
 //!   pick {unit, target?, pick, then?}          INPUT1-U (rule round_intent): append a pick to a member's round on
@@ -61,7 +59,7 @@
 //!                                              to plan draft their auto heroes with: `members` {hero key: id} over
 //!                                              `party`; none = balanced; replaces the last set; allowed while locked
 //! ENCOUNTER2-C SR5: in a scripted, locked round (`state` `script.lock`) the planning requests (preset, plan, add_step,
-//! undo, clear, round_intent, manual, fill, pick, unpick, autofill) are refused with "Round <n> is scripted."; confirm
+//! undo, clear, round_intent, pick, unpick, autofill) are refused with "Round <n> is scripted."; confirm
 //! answers ok; step, resolve, advance and autoplay work as always. `state` carries `script` {round, lock, banner} only
 //! in a round that plays scripted.
 //!   history                                    the mutating requests so far (feed them back to replay) and the
@@ -117,7 +115,7 @@ fn picked_ruleset(cat: &Catalog, req: &Value, default: Ruleset) -> Result<Rulese
 }
 
 /// ENCOUNTER2-C SR5: the requests a locked round refuses.
-const LOCKED_REFUSES: [&str; 12] = ["preset", "plan", "add_step", "undo", "clear", "round_intent", "manual", "fill", "pick", "unpick", "accept_ghost", "autofill"];
+const LOCKED_REFUSES: [&str; 10] = ["preset", "plan", "add_step", "undo", "clear", "round_intent", "pick", "unpick", "accept_ghost", "autofill"];
 
 fn err(msg: impl Into<String>) -> Value {
     json!({"ok": false, "error": msg.into()})
@@ -125,7 +123,7 @@ fn err(msg: impl Into<String>) -> Value {
 
 impl aegis_host::Commands for Battle {
     fn mutating(&self, cmd: &str) -> bool {
-        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "manual" | "fill" | "stay_pick" | "pick" | "unpick" | "accept_ghost" | "autofill" | "tactics")
+        matches!(cmd, "new" | "preset" | "plan" | "add_step" | "undo" | "clear" | "confirm" | "step" | "resolve" | "advance" | "autoplay" | "round_intent" | "stay_pick" | "pick" | "unpick" | "accept_ghost" | "autofill" | "tactics")
     }
 
     fn restarts(&self, cmd: &str) -> bool {
@@ -360,8 +358,6 @@ impl Battle {
                 json!({"ok": true, "rounds": played, "log": s.resolver.log[from..].to_vec(), "state": state_of(s)})
             }
             "round_intent" => round_intent_req(s, req),
-            "manual" => manual_req(s, req),
-            "fill" => fill_req(s, req),
             "pick" => pick_req(s, req),
             "unpick" => unpick_req(s, req),
             "accept_ghost" => accept_ghost_req(s, req),
@@ -763,7 +759,7 @@ fn intent_reply(s: &Session, result: Result<(), String>, refused: Vec<(UnitId, S
 }
 
 /// RULESET1_TASKS 1.8 `round_intent {unit, intent, target, maneuver, opener}`: each given field is set in order (the
-/// intent first: a change drops intent-bound buffs and the old steps), then a member that plans automatically gets its
+/// intent first: a change drops intent-bound buffs and the old steps), then the member gets its
 /// plan rebuilt, and every later member's (PL8). Atomic: on any refused field the battle is left exactly as it was
 /// (the protocol records only successful requests, so a replay must never see half a request).
 fn round_intent_req(s: &mut Session, req: &Value) -> Value {
@@ -779,7 +775,6 @@ fn round_intent_req(s: &mut Session, req: &Value) -> Value {
     // source); a refused field leaves the battle as it was
     match s.set_round(u, &set) {
         Err(e) => err(e),
-        Ok(done) if done.manual => intent_reply(s, Ok(()), Vec::new()),
         Ok(done) => intent_reply(s, done.planned, done.refused),
     }
 }
@@ -801,31 +796,6 @@ fn round_set_of(s: &Session, req: &Value) -> Result<rip::RoundSet, String> {
         set.opener = Some(opener_of(s, v)?);
     }
     Ok(set)
-}
-
-/// MM1, MM3 `manual {unit, on}`: the Manual toggle (default on); off rebuilds the auto plan.
-fn manual_req(s: &mut Session, req: &Value) -> Value {
-    let u = match planning_member(s, req, "manual") {
-        Ok(u) => u,
-        Err(e) => return e,
-    };
-    let on = req.get("on").and_then(Value::as_bool).unwrap_or(true);
-    match rip::set_manual(&mut s.w, &mut s.plan, u, on) {
-        Err(e) if on => err(e),
-        result => intent_reply(s, result, Vec::new()),
-    }
-}
-
-/// MM3 `fill {unit}`: follow-ups and Rest after the member's last step.
-fn fill_req(s: &mut Session, req: &Value) -> Value {
-    let u = match planning_member(s, req, "fill") {
-        Ok(u) => u,
-        Err(e) => return e,
-    };
-    match rip::fill_rest(&s.w, &mut s.plan, u) {
-        Err(e) => err(e),
-        Ok(()) => intent_reply(s, Ok(()), Vec::new()),
-    }
 }
 
 // ---- INPUT1-U: picks (rule round_intent) ---------------------------------------------------------------------------
@@ -1010,8 +980,8 @@ fn pick_options_req(s: &Session, req: &Value) -> Value {
 }
 
 /// RULESET1_TASKS 1.8 `round_plan`: the planner's own state of every active party-side unit (round intent, target,
-/// Maneuver kind, opener, Manual toggle and the reason tag of each entry it has planned, PL6; INPUT1 1.3: its picks,
-/// the first ghost entry's index, the party's Auto-fill and the AP forecast, AP1; `manual` is true with a pick); never
+/// Maneuver kind, opener and the reason tag of each entry it has planned, PL6; INPUT1 1.3: its picks, the first ghost
+/// entry's index, the party's Auto-fill and the AP forecast, AP1); never
 /// an enemy (its opener and target are not shown: the threat intel view is `intents`' `round_intents`, reveals
 /// respected); empty without the rule round_intent.
 fn round_plan(s: &Session) -> Vec<Value> {
@@ -1039,7 +1009,7 @@ fn round_plan(s: &Session) -> Vec<Value> {
             let ap = rip::ap_forecast(w, &s.plan, c);
             json!({"unit": c, "name": w.units[c].name, "side": "party",
                 "intent": rs.intent.map(|i| i.id()), "target": target, "maneuver": rs.maneuver.map(intent::maneuver_id), "maneuver_auto": rs.maneuver_auto,
-                "opener": opener, "manual": rs.manual || !rs.picks.is_empty(), "reasons": rip::reasons(w, &s.plan, c),
+                "opener": opener, "reasons": rip::reasons(w, &s.plan, c),
                 "picks": rs.picks.iter().map(|p| pick_json(s, p)).collect::<Vec<_>>(), "ghost_from": rip::ghost_from(w, &s.plan, c), "autofill": w.autofill,
                 "ap": {"now": ap.now, "spent": ap.spent, "picked": ap.picked, "filled": ap.filled, "left": ap.left, "gain": ap.gain, "rest_gain": ap.rest_gain, "next": ap.next, "max": ap.max}})
         })

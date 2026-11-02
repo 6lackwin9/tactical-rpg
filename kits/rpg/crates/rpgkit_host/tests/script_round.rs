@@ -9,7 +9,7 @@ use rpgkit_host::{Battle, Host};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-const REFUSED: [&str; 11] = ["preset", "plan", "add_step", "undo", "clear", "round_intent", "manual", "fill", "pick", "unpick", "autofill"];
+const REFUSED: [&str; 9] = ["preset", "plan", "add_step", "undo", "clear", "round_intent", "pick", "unpick", "autofill"];
 
 fn catalog() -> Arc<Catalog> {
     catalog_of(&[1])

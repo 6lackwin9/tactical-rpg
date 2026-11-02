@@ -1,4 +1,4 @@
-//! RULESET1-U slice 1 (RULESET1_INTENT UI1, UI2, MM1-MM3; the Arena chip, user 2026-10-29): the selected hero's round
+//! RULESET1-U slice 1 (RULESET1_INTENT UI1, UI2; the Arena chip, user 2026-10-29): the selected hero's round
 //! controls on the battle screen. A catalog encounter played by the catalog's timeline row; every expectation comes
 //! from the kit's planner (`round_intent_plan::preview`, `reasons`, `order`, `rest_preview`) and the intent table
 //! (`round_intent::target_problem`, `would_drop`), never from shipped numbers.

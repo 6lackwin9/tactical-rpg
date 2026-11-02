@@ -99,8 +99,6 @@ pub struct RoundState {
     pub rest_blocks: i32,
     /// PL1, FU1 (RULESET1-PL): the opener the player picked for this round (None = the planner's, PL3).
     pub opener: Option<Opener>,
-    /// MM1: the member plans by hand (the auto planner leaves its steps alone); persists across rounds.
-    pub manual: bool,
     /// MV11: `maneuver` was picked by the auto planner (Engage, else Disengage, else Utility), not by the player.
     pub maneuver_auto: bool,
     /// TG6: last round's target (the planner proposes it while it is valid).
@@ -325,8 +323,7 @@ pub fn rest_gain(n: &Numbers, blocks: i32) -> i32 {
 }
 
 /// Round start (after the status roll-over and `ap_regen`): RS2's Rest gain for the units that pay AP, then the
-/// round's target, kind, opener, picks, move and Rest count reset (the intent, facing and Manual toggle stay: IN2, MV1,
-/// MM1, INPUT1 GH6).
+/// round's target, kind, opener, picks, move and Rest count reset (the intent and facing stay: IN2, MV1, INPUT1 GH6).
 /// Returns the gain lines. CLN-45: the Rest gain is `rest_ap` round_end's (the Rest blocks are counted only then);
 /// without `round_intent` a unit's state holds only its Rest count, which goes once paid.
 pub fn round_start(w: &mut World) -> Vec<String> {

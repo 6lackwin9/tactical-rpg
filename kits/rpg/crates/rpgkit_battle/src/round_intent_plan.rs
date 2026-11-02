@@ -2,8 +2,8 @@
 //! unit's intent, round target, Maneuver kind and optional opener it builds the round's steps through `Plan::add_step`
 //! (every rule is checked there), each with a reason tag (PL6): the before-move (approach, kite, the move to a Guard
 //! tile), the opener (FU1, PL3), the reserved after-move (AS3) or the Disengage jump (MV8), the follow-ups from the
-//! member's order (`deck.order`, FU2-FU4) and Rest on every block left (RS1). Manual mode (MM1-MM3) keeps the player's
-//! steps and fills the rest on request. Deterministic (PL1): orders are lists, tiles are ranked by PL4 down to the cell
+//! member's order (`deck.order`, FU2-FU4) and Rest on every block left (RS1). `fill_rest` (MM3) fills the rest after steps
+//! already placed. Deterministic (PL1): orders are lists, tiles are ranked by PL4 down to the cell
 //! index, nothing draws a random number. Inert unless the battle's ruleset has `round_intent`.
 //!
 //! Picks (INPUT1-U, INPUT1 2-5 and 7): a member's round may hold the player's picks in order (a skill on the round
@@ -160,11 +160,6 @@ pub fn set_kind(w: &mut World, c: UnitId, kind: Option<ManeuverKind>) -> Result<
     }
 }
 
-/// MM1: whether `c` plans by hand.
-pub fn manual(w: &World, c: UnitId) -> bool {
-    w.round_states.get(&c).is_some_and(|r| r.manual)
-}
-
 /// TG6: the target the planner proposes for `c` under `intent`: the round's set target, else last round's while valid,
 /// else (Assault, Maneuver) the lock, else the nearest active foe (distance, then roster index); Guard and Support:
 /// the unit itself.
@@ -245,12 +240,11 @@ pub struct RoundSet {
     pub opener: Option<Option<Opener>>,
 }
 
-/// What `set_round` did: IN6's lines (the buffs an intent change dropped), whether `c` plans by hand (no rebuild then),
-/// `c`'s rebuild result and the later members' refusals (PL8).
+/// What `set_round` did: IN6's lines (the buffs an intent change dropped), `c`'s rebuild result and the later members'
+/// refusals (PL8).
 #[derive(Clone, Debug)]
 pub struct RoundSetDone {
     pub lines: Vec<String>,
-    pub manual: bool,
     pub planned: Result<(), String>,
     pub refused: Vec<(UnitId, String)>,
 }
@@ -267,11 +261,11 @@ pub fn change_intent(w: &mut World, plan: &mut Plan, c: UnitId, intent: RoundInt
 }
 
 /// RULESET1_TASKS 1.8 (the host's `round_intent`), INPUT1 GH2 b: sets each given field in order (the intent first,
-/// then the target, the Maneuver kind, the opener); then a member that plans automatically gets its round rebuilt, and
-/// every later member's (`replan`). Err = the first refused field; the world and the plan may be half changed then (the
+/// then the target, the Maneuver kind, the opener); then the member gets its round rebuilt, and every later member's
+/// (`replan`). Err = the first refused field; the world and the plan may be half changed then (the
 /// caller restores them).
 pub fn set_round(w: &mut World, plan: &mut Plan, c: UnitId, set: &RoundSet) -> Result<RoundSetDone, String> {
-    let mut done = RoundSetDone { lines: Vec::new(), manual: false, planned: Ok(()), refused: Vec::new() };
+    let mut done = RoundSetDone { lines: Vec::new(), planned: Ok(()), refused: Vec::new() };
     if let Some(i) = set.intent {
         done.lines = change_intent(w, plan, c, i)?;
     }
@@ -284,10 +278,7 @@ pub fn set_round(w: &mut World, plan: &mut Plan, c: UnitId, set: &RoundSet) -> R
     if let Some(o) = &set.opener {
         set_opener(w, c, o.clone())?;
     }
-    done.manual = manual(w, c);
-    if !done.manual {
-        (done.planned, done.refused) = replan(w, plan, c);
-    }
+    (done.planned, done.refused) = replan(w, plan, c);
     Ok(done)
 }
 
@@ -303,13 +294,13 @@ pub fn preview_round(w: &World, plan: &Plan, c: UnitId, set: &RoundSet) -> Resul
 
 /// PL8, INPUT1 GH5: rebuilds every member of `c`'s side after it in roster order: a member with picks from its picks
 /// (a pick that no longer fits is dropped with every pick after it: "<hero>: <skill> dropped: <reason>"), one without
-/// from its intent (`plan_unit`; Auto-fill off: Rest). Manual members and members without an intent are left alone.
+/// from its intent (`plan_unit`; Auto-fill off: Rest). Members without an intent are left alone.
 /// Returns the drops and the refusals.
 fn rebuild_later(w: &mut World, plan: &mut Plan, c: UnitId) -> Vec<(UnitId, String)> {
     let side: Vec<UnitId> = if w.allies.contains(&c) { w.allies.clone() } else { w.enemies.clone() };
     let mut refused = Vec::new();
     for &m in side.iter().skip_while(|&&m| m != c).skip(1) {
-        if !w.units[m].is_active() || manual(w, m) {
+        if !w.units[m].is_active() {
             continue;
         }
         if picks_of(w, m).is_empty() {
@@ -333,19 +324,6 @@ fn rebuild_later(w: &mut World, plan: &mut Plan, c: UnitId) -> Vec<(UnitId, Stri
         }
     }
     refused
-}
-
-/// MM1, MM3: the Manual toggle. On keeps the steps for the player to edit; off rebuilds the auto plan (and the later
-/// members', PL8).
-pub fn set_manual(w: &mut World, plan: &mut Plan, c: UnitId, on: bool) -> Result<(), String> {
-    if !round_intent::on(w) {
-        return Err("This battle has no round intents.".into());
-    }
-    w.round_states.entry(c).or_default().manual = on;
-    if on {
-        return Ok(());
-    }
-    replan(w, plan, c).0
 }
 
 /// MM3 "Fill the rest": PL5's fill after the last step placed by hand (follow-ups from the order on the round target,
@@ -1274,8 +1252,6 @@ fn set_up_picks(w: &mut World, c: UnitId, at: RoundTarget, picks: &[Pick]) -> Re
         }
         all.push(p.clone());
     }
-    // picks replace the Manual mode (MM1-MM3 retire under INPUT1)
-    w.round_states.entry(c).or_default().manual = false;
     set_picks(w, c, all);
     Ok(())
 }
@@ -1306,7 +1282,7 @@ pub fn ghost_picks(w: &World, plan: &Plan, c: UnitId, upto: Option<usize>) -> Re
         Some(_) => return Err("No auto-filled block there.".into()),
         None => steps.len().checked_sub(1).ok_or_else(|| "Nothing auto-filled to accept.".to_string())?,
     };
-    let none = picks_of(w, c).is_empty() && !manual(w, c);
+    let none = picks_of(w, c).is_empty();
     let chosen: Vec<&Step> = steps.iter().take(last + 1).filter(|s| none || s.ghost.get()).collect();
     if chosen.is_empty() {
         return Err("Nothing auto-filled to accept.".into());
@@ -1367,14 +1343,14 @@ pub fn clear_picks(w: &mut World, plan: &mut Plan, c: UnitId) -> (Result<(), Str
 }
 
 /// INPUT1 GH7: the Auto-fill setting; rebuilds every active party member's ghost (members with picks from their picks,
-/// members without from their intent, `plan_unit`, or Rest with Auto-fill off; Manual members stay as they are).
+/// members without from their intent, `plan_unit`, or Rest with Auto-fill off).
 pub fn set_autofill(w: &mut World, plan: &mut Plan, on: bool) {
     w.autofill = on;
     if !round_intent::on(w) {
         return;
     }
     for c in w.allies.clone() {
-        if !w.units[c].is_active() || manual(w, c) || (picks_of(w, c).is_empty() && round_intent::intent_of(w, c).is_none()) {
+        if !w.units[c].is_active() || (picks_of(w, c).is_empty() && round_intent::intent_of(w, c).is_none()) {
             continue;
         }
         let _ = rebuild_member(w, plan, c);
@@ -1789,11 +1765,10 @@ impl Builder<'_> {
 }
 
 /// INPUT1 GH1: whether each of `c`'s compiled entries (aligned with `Plan::entries_for`) is ghost: the planner's after
-/// the picks; with no pick every entry of the planned round (its tactic's or intent's plan) but a Manual member's hand
-/// steps; lost blocks never.
+/// the picks; with no pick every entry of the planned round (its tactic's or intent's plan); lost blocks never.
 pub fn ghost_entries(w: &World, plan: &Plan, c: UnitId) -> Vec<bool> {
     let steps = plan.steps_of(c);
-    let none = picks_of(w, c).is_empty() && !manual(w, c);
+    let none = picks_of(w, c).is_empty();
     plan.entries_for(w, c)
         .iter()
         .map(|e| usize::try_from(e.step_index).ok().and_then(|i| steps.get(i)).is_some_and(|s| none || s.ghost.get()))

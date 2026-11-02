@@ -492,7 +492,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             let picks = rip::picks_of(w, h);
             let from = match picks.iter().find(|p| p.holds_target()) {
                 Some(p) => format!(" from {}", rip::pick_name(w, p)),
-                None if picks.is_empty() && !g.player_target.contains(&h) && !rip::manual(w, h) => format!(" from {}", TACTIC_LABELS[g.tactic_of(h)]),
+                None if picks.is_empty() && !g.player_target.contains(&h) => format!(" from {}", TACTIC_LABELS[g.tactic_of(h)]),
                 None => " (carried over)".into(),
             };
             match intent {

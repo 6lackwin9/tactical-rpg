@@ -343,11 +343,11 @@ impl BattleScreen {
         self.member_tactic.get(&m).copied().unwrap_or(self.party_tactic)
     }
 
-    /// GH2 a: `m`'s ghost is its tactic's draft: an active party member with no pick, no player-set target this round
-    /// and not planning by hand.
+    /// GH2 a: `m`'s ghost is its tactic's draft: an active party member with no pick and no player-set target this
+    /// round.
     fn tactic_ghost(&self, m: usize) -> bool {
         let w = &self.session().w;
-        ri::on(w) && w.allies.contains(&m) && w.units[m].is_active() && w.has(m) && !rip::manual(w, m) && rip::picks_of(w, m).is_empty() && !self.player_target.contains(&m)
+        ri::on(w) && w.allies.contains(&m) && w.units[m].is_active() && w.has(m) && rip::picks_of(w, m).is_empty() && !self.player_target.contains(&m)
     }
 
     /// GH2 a: drafts `m`'s ghost with its tactic (`preset`). A draft whose intent change would drop intent-bound buffs
