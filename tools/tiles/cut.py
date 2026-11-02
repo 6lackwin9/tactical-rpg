@@ -12,9 +12,10 @@ an error.
 block detection. A source smaller than W x H is refused (no upscale).
 
 --form sets the size and the step, always a box reduce in one step from the source. A tile form takes a square and
-squashes it when the size is not square: `stage` 64 x 48, `region` 32 x 32, `region_tilted` 32 x 24. A face form crops the
-centred band of its aspect across the whole width (no squash) and reduces that: `stage_face` 64 x 24, `region_face`
-32 x 16, `region_tilted_face` 32 x 12.
+squashes it when the size is not square: `stage` 64 x 48, `region` 32 x 32, `region_tilted` 32 x 24, `ground` 256 x 256 (a
+master of 4 x 4 cells, REGIONGROUND1). A face form crops the centred band of its aspect across the whole width (no squash)
+and reduces that: `stage_face` 64 x 24, `region_face` 32 x 16, `region_tilted_face` 32 x 12, `region_tall_face` 128 x 48
+(4 cells wide, 24 logical tall, REGIONGROUND1_SCENE 1.6).
 
 --colours N (1 to 256, default off) leaves at most N colours, every one a colour of the reduced image; no dither, no fixed
 palette.
@@ -33,6 +34,8 @@ FORMS = {
     "region_tilted": ((32, 24), False),
     "region_face": ((32, 16), True),
     "region_tilted_face": ((32, 12), True),
+    "ground": ((256, 256), False),
+    "region_tall_face": ((128, 48), True),
 }
 MAX_COLOURS = 256                # what Pillow's quantize can group
 SQUARE_TOL = 0.03                # width over height still taken as a square (artqueue.py's ASPECT_TOL at ingest)

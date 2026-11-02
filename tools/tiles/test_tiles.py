@@ -1,6 +1,8 @@
 """LOOK1-T tests: temp dirs and fixtures only."""
 import contextlib
 import io
+import json
+import math
 import os
 import random
 import subprocess
@@ -13,6 +15,8 @@ from PIL import Image
 import board
 import compose
 import cut
+import flatten
+import groundcheck
 import masks
 import seam
 
@@ -164,9 +168,9 @@ class BoxTest(unittest.TestCase):
         self.assertEqual(colours_of(got), {(90, 90, 90)})
 
     def test_forms_match_the_board_sizes(self):
-        src = noise_tile(128, 128, 23)
+        src = noise_tile(256, 256, 23)
         for form, (size, banded) in cut.FORMS.items():
-            role = "stage" if form.startswith("stage") else "region"
+            role = "stage" if form.startswith("stage") else "ground" if form == "ground" else "region"
             kind = "wall_face" if banded else "floor"
             got = cut.cut_form(src, form)
             self.assertEqual(got.size, size)
@@ -248,7 +252,7 @@ class BoxTest(unittest.TestCase):
         self.assertIn("1 to 256", err)
 
     def test_cli_forms_and_option_clashes(self):
-        path = self.source(noise_tile(128, 128, 29))
+        path = self.source(noise_tile(256, 256, 29))
         for form in sorted(cut.FORMS):
             self.assertEqual(self.run_err(path, "--form", form)[0], 0)
             self.assertEqual(size_of(self.out), cut.FORMS[form][0])
@@ -417,6 +421,573 @@ class BoardTest(unittest.TestCase):
         rows = board.load_map()
         self.assertEqual((len(rows), {len(r) for r in rows}), (16, {24}))
         self.assertEqual(set("".join(rows)), set(".#~"))
+
+
+# REGIONGROUND1-T. Each ground fixture is a 256 x 256 master, what groundcheck sees in the pipeline.
+GROUND = 256
+
+
+def field_tile(fn, size=GROUND):
+    """A grey-brown tile: 40 + fn(x, y) in each channel (fn in floats)."""
+    data = bytearray()
+    for y in range(size):
+        for x in range(size):
+            v = max(0, min(255, int(40 + fn(x, y) + 0.5)))
+            data += bytes((v, v, v))
+    return Image.frombytes("RGB", (size, size), bytes(data))
+
+
+def grain(seed, amp=4):
+    rnd = random.Random(seed)
+    table = [rnd.randint(-amp, amp) for _ in range(GROUND * GROUND)]
+    return lambda x, y: table[y * GROUND + x]
+
+
+def sine_tile(amp=6, grain_amp=4):
+    """One wrapped period of light and dark, over fine grain."""
+    fine = grain(41, grain_amp)
+    return field_tile(lambda x, y: amp * math.sin(2 * math.pi * x / GROUND) * math.sin(2 * math.pi * y / GROUND) + fine(x, y))
+
+
+def stripes_tile():
+    """Diagonal stripes of 2 art px, wrapped."""
+    return field_tile(lambda x, y: 2.0 if ((x + y) // 8) % 2 else -2.0)
+
+
+def streak_tile():
+    """Short one-way streaks: slanted runs in even grain."""
+    fine = grain(42, 2)
+    rnd = random.Random(43)
+    marks = set()
+    for _ in range(90):
+        x0, y0 = rnd.randrange(GROUND), rnd.randrange(GROUND)
+        for i in range(48):
+            for w in range(4):
+                marks.add(((x0 + i + w) % GROUND, (y0 + i) % GROUND))
+    return field_tile(lambda x, y: (3.0 if (x, y) in marks else 0.0) + fine(x, y))
+
+
+def grid_tile():
+    """A square grid of joints every 2 cells, 1 art px wide."""
+    return field_tile(lambda x, y: -3.0 if (x // 4) % 32 == 0 or (y // 4) % 32 == 0 else 0.0)
+
+
+def row_striped_tile():
+    """Rows of two close tones, each 2 art px tall, over wrapped fine grain: no seam, plain bands."""
+    fine = grain(44, 2)
+    return field_tile(lambda x, y: (1.5 if ((y + 4) // 8) % 2 else -1.5) + fine(x, y))
+
+
+def block_grain(seed, amp):
+    """Grain at art px (4 master px), so it reaches the 64 x 64 form whole."""
+    rnd = random.Random(seed)
+    table = [rnd.randint(-amp, amp) for _ in range(64 * 64)]
+    return lambda x, y: table[(y // 4) * 64 + x // 4]
+
+
+def slabs_tile():
+    """Quiet axis-lined slabs of 4 art px, two close tones over fine grain; the wrap falls inside a slab."""
+    side, count = 16, GROUND // 16
+    rnd = random.Random(60)
+    tones = [rnd.choice((-3, 3)) for _ in range(count * count)]
+    fine = grain(70, 4)
+    return field_tile(lambda x, y: tones[((y + 8) % GROUND // side) * count + (x + 8) % GROUND // side] + fine(x, y))
+
+
+def peak_with_bins_on_a_boundary(grid):
+    """Direction's peak had a bin edge sat on each axis: what the centred bins replaced."""
+    h, w = len(grid), len(grid[0])
+    bins = [0.0] * groundcheck.ANGLE_BINS
+    width = math.pi / groundcheck.ANGLE_BINS
+    for y in range(h):
+        for x in range(w):
+            gx = (grid[y][(x + 1) % w] - grid[y][(x - 1) % w]) / 2
+            gy = (grid[(y + 1) % h][x] - grid[(y - 1) % h][x]) / 2
+            if gx or gy:
+                bins[int((math.atan2(gy, gx) % math.pi) / width + 1e-9) % groundcheck.ANGLE_BINS] += gx * gx + gy * gy
+    return max(bins) / (sum(bins) / groundcheck.ANGLE_BINS)
+
+
+def dark_spots(centres, radius, depth, fine=None):
+    """Hard dark disks on the wrapped tile, over even grain."""
+    fine = fine or grain(45, 4)
+
+    def inside(x, y):
+        for cx, cy in centres:
+            dx, dy = abs(x - cx), abs(y - cy)
+            if min(dx, GROUND - dx) ** 2 + min(dy, GROUND - dy) ** 2 < radius * radius:
+                return True
+        return False
+
+    return field_tile(lambda x, y: fine(x, y) - (depth if inside(x, y) else 0))
+
+
+BLOTCHES = (
+    ("one of radius 12, depth 10", ((90, 70),), 12, 10),
+    ("one of radius 24, depth 12", ((90, 70),), 24, 12),
+    ("three of radius 32, depth 6", ((40, 60), (150, 90), (90, 200)), 32, 6),
+)
+
+
+def even_tile(seed=45):
+    return field_tile(grain(seed))
+
+
+def tint_of(img, tint):
+    """`img` with `tint` added to its channels."""
+    out = bytearray(img.tobytes())
+    for i in range(len(out)):
+        out[i] = max(0, min(255, out[i] + tint[i % 3]))
+    return Image.frombytes("RGB", img.size, bytes(out))
+
+
+def fine_detail(img):
+    """Mean step in L on the 64 x 64 form."""
+    return groundcheck.busy(groundcheck.form_luma(img))
+
+
+class GroundCutTest(unittest.TestCase):
+    def test_ground_is_a_box_reduce_to_256(self):
+        src = noise_tile(512, 512, 51)
+        self.assertEqual(pixels(cut.cut_form(src, "ground")), pixels(src.resize((256, 256), Image.BOX)))
+
+    def test_ground_takes_at_most_3_percent_off_square_and_no_upscale(self):
+        self.assertEqual(cut.cut_form(noise_tile(520, 512, 52), "ground").size, (256, 256))
+        with self.assertRaises(ValueError):
+            cut.cut_form(noise_tile(600, 512, 53), "ground")
+        with self.assertRaises(ValueError):
+            cut.cut_form(noise_tile(128, 128, 54), "ground")
+
+    def test_tall_face_is_the_whole_width_of_the_centred_band(self):
+        art = noise_tile(128, 48, 55)
+        src = Image.new("RGB", (512, 512), (255, 0, 255))
+        src.paste(art.resize((512, 192), Image.NEAREST), (0, 160))
+        self.assertEqual(pixels(cut.cut_form(src, "region_tall_face")), pixels(art))
+
+    def test_cli_form_ground(self):
+        with tempfile.TemporaryDirectory() as d:
+            src, dst = os.path.join(d, "s.png"), os.path.join(d, "o.png")
+            noise_tile(512, 512, 56).save(src)
+            self.assertEqual(cut.main([src, "--form", "ground", "--out", dst]), 0)
+            self.assertEqual(size_of(dst), (256, 256))
+
+
+class GroundCheckTest(unittest.TestCase):
+    def fails(self, img, cls="natural"):
+        return groundcheck.failures(groundcheck.scores(img), cls)
+
+    def test_even_grain_passes_every_check(self):
+        self.assertEqual(self.fails(even_tile()), [])
+
+    def test_quiet_grain_is_not_taken_for_a_direction(self):
+        # rounded to 8 bits, this grain's gradients sit on four angles; the form stays in floats so it cannot fail for that
+        for amp in (1, 2, 4):
+            r = groundcheck.scores(field_tile(grain(46, amp)))
+            self.assertLess(r["peak"], groundcheck.LIMITS["natural"]["peak"], amp)
+            self.assertLess(r["coherence"], groundcheck.LIMITS["natural"]["coherence"], amp)
+
+    def test_wrapped_sine_fails_broad_tone(self):
+        self.assertIn("broad", self.fails(sine_tile()))
+
+    def test_stripes_and_streaks_fail_both_direction_scores(self):
+        for tile in (stripes_tile(), streak_tile()):
+            self.assertLessEqual({"peak", "coherence"}, set(self.fails(tile)))
+
+    def test_square_grid_fails_peak_but_has_no_one_direction(self):
+        r = groundcheck.scores(grid_tile())
+        self.assertGreater(r["peak"], groundcheck.LIMITS["natural"]["peak"])
+        self.assertLess(r["coherence"], groundcheck.LIMITS["natural"]["coherence"])
+
+    def test_quiet_axis_slabs_fail_peak_only_because_the_bins_sit_on_the_axes(self):
+        flat = flatten.flatten(slabs_tile(), flatten.GAINS["natural"])
+        limit = groundcheck.LIMITS["natural"]["peak"]
+        self.assertEqual(self.fails(flat), ["peak"])
+        self.assertLessEqual(peak_with_bins_on_a_boundary(groundcheck.form_luma(flat)), limit)
+
+    def test_a_repeated_dark_blotch_fails_before_and_after_flatten(self):
+        for name, centres, radius, depth in BLOTCHES:
+            src = dark_spots(centres, radius, depth)
+            self.assertIn("blotch", self.fails(src), name)
+            out, _, _ = flatten.run(src, "natural")
+            self.assertIn("blotch", self.fails(out), name)
+
+    def test_a_lower_gain_does_not_hide_a_blotch(self):
+        for name, centres, radius, depth in BLOTCHES:
+            out = flatten.flatten(dark_spots(centres, radius, depth), flatten.GAIN_FLOORS["natural"])
+            self.assertIn("blotch", self.fails(out), name)
+
+    def test_even_grain_has_no_blotch_at_any_gain_or_art_px(self):
+        limit = groundcheck.LIMITS["natural"]["blotch"]
+        for fine in (grain(46, 1), grain(46, 8), block_grain(47, 1), block_grain(47, 4)):
+            tile = field_tile(fine)
+            self.assertLess(groundcheck.scores(tile)["blotch"], limit)
+            self.assertLess(groundcheck.scores(flatten.flatten(tile, 0.55))["blotch"], limit)
+
+    def test_art_px_of_8_master_px_fail_seam_by_construction(self):
+        # every wrap step is a block's edge, while half the inner steps fall inside a block
+        rnd = random.Random(48)
+        table = [rnd.randint(-2, 2) for _ in range(32 * 32)]
+        tile = field_tile(lambda x, y: table[(y // 8) * 32 + x // 8])
+        self.assertGreater(groundcheck.scores(tile)["seam"], groundcheck.LIMITS["natural"]["seam"])
+        self.assertLessEqual(groundcheck.scores(field_tile(block_grain(47, 2)))["seam"], groundcheck.LIMITS["natural"]["seam"])
+
+    def test_a_size_off_the_form_warns_and_a_multiple_does_not(self):
+        self.assertIsNone(groundcheck.size_warning(even_tile()))
+        self.assertIsNone(groundcheck.size_warning(noise_tile(64, 64, 49)))
+        self.assertIn("300x300", groundcheck.size_warning(noise_tile(300, 300, 49)))
+        with tempfile.TemporaryDirectory() as d:
+            good, off = os.path.join(d, "g.png"), os.path.join(d, "o.png")
+            even_tile().save(good)
+            even_tile().resize((300, 300), Image.BOX).save(off)
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+                groundcheck.main(["score", good, "--class", "natural"])
+                self.assertEqual(err.getvalue(), "")
+                groundcheck.main(["score", off, "--class", "natural"])
+            self.assertIn("whole multiple of 64", err.getvalue())
+
+    def test_row_stripes_pass_seam_and_fail_banding(self):
+        r = groundcheck.scores(row_striped_tile())
+        self.assertLessEqual(r["seam"], groundcheck.LIMITS["natural"]["seam"])
+        self.assertGreater(r["banding"], groundcheck.LIMITS["natural"]["banding"])
+
+    def test_strong_colour_fails_the_colour_cap(self):
+        self.assertEqual(self.fails(even_tile()), [])
+        self.assertIn("colour", self.fails(tint_of(even_tile(), (14, 0, -14))))
+
+    def test_high_contrast_fails_the_contrast_cap(self):
+        loud = field_tile(block_grain(47, 30))
+        self.assertLessEqual({"range", "busy"}, set(self.fails(loud, "natural")))
+        self.assertLessEqual({"range", "busy"}, set(self.fails(loud, "built")))
+
+    def test_built_limits_are_wider_on_contrast_only(self):
+        n, b = groundcheck.LIMITS["natural"], groundcheck.LIMITS["built"]
+        self.assertGreater(b["range"], n["range"])
+        self.assertGreater(b["busy"], n["busy"])
+        self.assertGreater(b["broad"], n["broad"])
+        for c in ("seam", "blotch", "banding", "peak", "coherence", "colour", "lum"):
+            self.assertEqual(b[c], n[c], c)
+
+    def test_bright_fails_luminance(self):
+        self.assertIn("lum", self.fails(tint_of(even_tile(), (40, 40, 40))))
+
+    def test_pair_five_apart_warns_and_twenty_does_not(self):
+        base = even_tile()
+        step = round(5 / math.sqrt(3))
+        near = tint_of(base, (step, step, step))
+        far = tint_of(base, (12, 12, 12))
+        self.assertTrue(groundcheck.pair_warnings([("a", base), ("b", near)]))
+        self.assertEqual(groundcheck.pair_warnings([("a", base), ("b", far)]), [])
+
+    def test_a_figure_not_well_above_a_ground_warns(self):
+        rnd = random.Random(48)
+        figure = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+        quiet = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+        for y in range(4, 28):
+            for x in range(4, 28):
+                v = rnd.choice((10, 90, 170, 250))
+                figure.putpixel((x, y), (v, v, v, 255))
+                quiet.putpixel((x, y), (40, 40, 40, 255))
+        ground = [("g", even_tile())]
+        self.assertEqual(groundcheck.figure_warnings(ground, [("figure.png", figure)]), [])
+        self.assertTrue(groundcheck.figure_warnings(ground, [("quiet.png", quiet)]))
+        self.assertEqual(groundcheck.figure_warnings(ground, [(os.path.join("cobbles", "v0.png"), quiet)]), [])
+
+    def test_cli_pair_figures_and_read(self):
+        with tempfile.TemporaryDirectory() as d:
+            for g, tint in (("a", (0, 0, 0)), ("b", (1, 1, 1))):
+                os.makedirs(os.path.join(d, "ground", g))
+                tint_of(even_tile(), tint).save(os.path.join(d, "ground", g, "v0.png"))
+            frame = os.path.join(d, "frame.png")
+            body_fixture().save(frame)
+            ground_dir = os.path.join(d, "ground")
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(groundcheck.main(["pair", ground_dir]), 0)
+                self.assertEqual(groundcheck.main(["figures", ground_dir, "--art", frame]), 0)
+                self.assertEqual(groundcheck.main(["read", frame, os.path.join(ground_dir, "a", "v0.png"), "--option", "rim"]), 0)
+            self.assertIn("pair a / b", out.getvalue())
+            self.assertIn("2 grounds", out.getvalue())
+            self.assertIn("read_contrast", out.getvalue())
+
+    def test_score_exit_code(self):
+        with tempfile.TemporaryDirectory() as d:
+            good, bad = os.path.join(d, "g.png"), os.path.join(d, "b.png")
+            even_tile().save(good)
+            stripes_tile().save(bad)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(groundcheck.main(["score", good, "--class", "natural"]), 0)
+                self.assertEqual(groundcheck.main(["score", bad, "--class", "natural"]), 1)
+            self.assertIn("Direction, peak", out.getvalue())
+
+
+class FlattenTest(unittest.TestCase):
+    def test_sine_passes_after_flatten_with_its_mean_detail_and_seam(self):
+        src = sine_tile()
+        self.assertIn("broad", groundcheck.failures(groundcheck.scores(src), "natural"))
+        gain = flatten.GAINS["natural"]
+        out = flatten.flatten(src, gain)
+        after = groundcheck.scores(out)
+        self.assertNotIn("broad", groundcheck.failures(after, "natural"))
+        for a, b in zip(flatten.channel_means(src.tobytes()), flatten.channel_means(out.tobytes())):
+            self.assertLessEqual(abs(a - b), 1)
+        # fine detail: on the master, the mean step of the grain alone, against gain x the source's
+        raw, flat = groundcheck.busy(groundcheck.luma_grid(src)), groundcheck.busy(groundcheck.luma_grid(out))
+        self.assertAlmostEqual(flat / raw, gain, delta=0.08)
+        self.assertLessEqual(seam.score(out), seam.score(src))
+
+    def test_flatten_does_not_make_a_direction_pass(self):
+        for tile in (stripes_tile(), streak_tile(), grid_tile()):
+            before = groundcheck.failures(groundcheck.scores(tile), "natural")
+            after = groundcheck.failures(groundcheck.scores(flatten.flatten(tile, 0.55)), "natural")
+            self.assertIn("peak", before)
+            self.assertIn("peak", after)
+
+    def test_flatten_wraps_its_blur(self):
+        # a clamped blur would leave a light or dark fringe along the tile's edges on a wrapped sine
+        out = flatten.flatten(sine_tile(grain_amp=4), 0.55)
+        self.assertLessEqual(seam.score(out), groundcheck.LIMITS["natural"]["seam"])
+        low = flatten.low_of(field_tile(lambda x, y: 30 * math.sin(2 * math.pi * x / GROUND))).tobytes()
+        self.assertLessEqual(abs(low[0] - low[(GROUND - 1) * 3]), 1)   # a clamped blur leaves the two far apart
+
+    def test_isotropic_lowers_the_direction_scores_on_a_streak(self):
+        src = streak_tile()
+        before = groundcheck.scores(flatten.flatten(src, 0.55))
+        after = groundcheck.scores(flatten.isotropic(flatten.flatten(src, 0.55)))
+        self.assertLess(after["peak"], before["peak"])
+        self.assertLess(after["coherence"], before["coherence"])
+
+    def test_isotropic_is_never_the_default(self):
+        src = even_tile()
+        self.assertEqual(pixels(flatten.run(src, "natural")[0]), pixels(flatten.flatten(src, flatten.GAINS["natural"])))
+
+    def test_built_steps_the_gain_down_until_the_contrast_cap_passes(self):
+        loud = field_tile(block_grain(49, 9))
+        self.assertIn("busy", groundcheck.failures(groundcheck.scores(flatten.flatten(loud, flatten.GAINS["built"])), "built"))
+        self.assertEqual(flatten.GAIN_FLOORS["built"], 0.25)
+        out, gain, bad = flatten.run(loud, "built")
+        self.assertEqual(bad, [])
+        self.assertLess(gain, flatten.GAINS["built"])
+        self.assertGreaterEqual(gain, flatten.GAIN_FLOORS["built"])
+        # one step more would not have been needed: the gain above it still fails
+        above = groundcheck.failures(groundcheck.scores(flatten.flatten(loud, gain + flatten.GAIN_STEP)), "built")
+        self.assertTrue(set(above) & set(flatten.GAIN_CHECKS))
+
+    def test_natural_steps_the_gain_down_to_meet_the_caps(self):
+        loud = field_tile(block_grain(49, 4))
+        self.assertIn("busy", groundcheck.failures(groundcheck.scores(flatten.flatten(loud, flatten.GAINS["natural"])), "natural"))
+        out, gain, bad = flatten.run(loud, "natural")
+        self.assertEqual(bad, [])
+        self.assertLess(gain, flatten.GAINS["natural"])
+        self.assertGreaterEqual(gain, flatten.GAIN_FLOORS["natural"])
+        self.assertEqual(groundcheck.failures(groundcheck.scores(out), "natural"), [])
+
+    def test_natural_stops_at_its_floor_and_a_failure_records_the_gain(self):
+        with tempfile.TemporaryDirectory() as d:
+            src, dst, rec = os.path.join(d, "s.png"), os.path.join(d, "o.png"), os.path.join(d, "r.json")
+            field_tile(block_grain(50, 25)).save(src)
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(flatten.main([src, "--out", dst, "--record", rec]), 1)
+            self.assertIn("re-roll", err.getvalue())
+            with open(rec, encoding="utf-8") as f:
+                self.assertEqual(json.load(f)["flatten"]["gain"], flatten.GAIN_FLOORS["natural"])
+
+    def test_a_stepped_gain_goes_in_the_record(self):
+        with tempfile.TemporaryDirectory() as d:
+            src, dst, rec = os.path.join(d, "s.png"), os.path.join(d, "o.png"), os.path.join(d, "r.json")
+            loud = field_tile(block_grain(49, 4))
+            loud.save(src)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(flatten.main([src, "--out", dst, "--record", rec]), 0)
+            with open(rec, encoding="utf-8") as f:
+                self.assertEqual(json.load(f)["flatten"]["gain"], flatten.run(loud, "natural")[1])
+
+    def test_no_step_when_the_first_gain_passes(self):
+        self.assertEqual(flatten.run(even_tile(), "natural")[1], flatten.GAINS["natural"])
+        self.assertEqual(flatten.run(even_tile(), "built")[1], flatten.GAINS["built"])
+
+    def test_built_gives_up_at_the_floor_and_exits_1(self):
+        with tempfile.TemporaryDirectory() as d:
+            src, dst = os.path.join(d, "s.png"), os.path.join(d, "o.png")
+            field_tile(block_grain(50, 35)).save(src)
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(flatten.main([src, "--out", dst, "--class", "built"]), 1)
+            self.assertIn("re-roll", err.getvalue())
+            self.assertTrue(os.path.exists(dst))
+
+    def test_explicit_gain_takes_no_steps_and_goes_in_the_record(self):
+        with tempfile.TemporaryDirectory() as d:
+            src, dst, rec = os.path.join(d, "s.png"), os.path.join(d, "o.png"), os.path.join(d, "s.json")
+            even_tile().save(src)
+            with open(rec, "w", encoding="utf-8") as f:
+                json.dump({"id": "kept"}, f)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(flatten.main([src, "--out", dst, "--gain", "0.5", "--record", rec]), 0)
+            with open(rec, encoding="utf-8") as f:
+                record = json.load(f)
+            self.assertEqual(record["id"], "kept")
+            self.assertEqual(record["flatten"], {"class": "natural", "gain": 0.5, "isotropic": False})
+
+
+def body_fixture():
+    """A figure with a dark outline and a mid body on 48 x 48."""
+    img = Image.new("RGBA", (48, 48), (0, 0, 0, 0))
+    for y in range(8, 46):
+        for x in range(14, 34):
+            edge = x in (14, 33) or y in (8, 45)
+            img.putpixel((x, y), (18, 18, 18, 255) if edge else (70, 60, 80, 255))
+    return img
+
+
+class ReadContrastTest(unittest.TestCase):
+    def test_ring_and_band_are_the_figure_edge_and_the_two_px_around(self):
+        solid, ring, band = groundcheck.ring_and_band(body_fixture())
+        self.assertEqual(len(ring), 2 * 20 + 2 * 38 - 4)
+        self.assertEqual(ring & band, set())
+        self.assertLess(ring, solid)
+        self.assertEqual(len(band), (24 * 42) - (20 * 38))
+
+    def test_a_dark_figure_on_a_dark_ground_scores_low_and_on_a_light_one_high(self):
+        dark = Image.new("RGB", (64, 64), (18, 18, 18))
+        light = Image.new("RGB", (64, 64), (120, 120, 120))
+        self.assertLess(groundcheck.read_contrast(body_fixture(), dark), groundcheck.read_contrast(body_fixture(), light))
+
+    def test_the_rim_lifts_a_dark_figure_above_the_shadow(self):
+        soot = Image.new("RGB", (64, 64), (30, 30, 35))
+        shadow = groundcheck.read_contrast(body_fixture(), soot, "shadow")
+        rim = groundcheck.read_contrast(body_fixture(), soot, "rim")
+        self.assertGreater(rim, shadow)
+        self.assertGreaterEqual(rim, 25)
+
+    def test_golden_values_for_the_rust_check(self):
+        # the README's fixture: the numbers a port must reproduce, with the order and sampling written there
+        flat = Image.new("RGB", (64, 64), (30, 30, 35))
+        checker_ground = Image.new("RGB", (64, 64))
+        for y in range(64):
+            for x in range(64):
+                v = 60 if (x + y) % 2 else 20
+                checker_ground.putpixel((x, y), (v, v, v))
+        body = body_fixture()
+        for ground, option, contrast, step in (
+            (flat, "shadow", 11.476758, 11.443010),
+            (flat, "pool", 16.708316, 16.432241),
+            (flat, "rim", 51.270821, 53.059785),
+            (checker_ground, "shadow", 20.833413, 20.790557),
+            (checker_ground, "pool", 25.750239, 25.478856),
+            (checker_ground, "rim", 58.338361, 60.013358),
+        ):
+            self.assertAlmostEqual(groundcheck.read_contrast(body, ground, option), contrast, places=5, msg=option)
+            self.assertAlmostEqual(groundcheck.ring_step(body, ground, option), step, places=5, msg=option)
+
+    def test_a_fully_transparent_figure_scores_zero(self):
+        empty = Image.new("RGBA", (48, 48), (0, 0, 0, 0))
+        ground = Image.new("RGB", (64, 64), (30, 30, 35))
+        self.assertEqual(groundcheck.read_contrast(empty, ground), 0.0)
+        self.assertEqual(groundcheck.ring_step(empty, ground, "rim"), 0.0)
+
+    def test_soft_alpha_matches_the_engine_formula(self):
+        self.assertEqual(groundcheck.soft_alpha(0, 0, 10, 5, 90), 90)
+        self.assertEqual(groundcheck.soft_alpha(10, 0, 10, 5, 90), 0)
+        self.assertEqual(groundcheck.soft_alpha(0, 6, 10, 5, 90), 0)
+        values = [groundcheck.soft_alpha(x, 0, 10, 5, 90) for x in range(11)]
+        self.assertEqual(values, sorted(values, reverse=True))
+
+    def test_the_shadow_darkens_at_the_feet_only(self):
+        ground = Image.new("RGB", (64, 64), (60, 60, 60))
+        frame, _ = groundcheck.compose_frame(body_fixture(), ground, "shadow")
+        feet = 45 + groundcheck.BAND - 1
+        self.assertLess(frame[feet][13][0], 60)              # beside the feet
+        self.assertEqual(frame[10][13][0], 60)               # beside the head
+
+
+class GroundBoardTest(unittest.TestCase):
+    def make_set(self, d):
+        sd = os.path.join(d, "set")
+        for g, tint in (("ash", (0, 0, 0)), ("flagstone", (12, 12, 12)), ("mud", (2, 1, 0))):
+            os.makedirs(os.path.join(sd, "ground", g))
+            tint_of(even_tile(), tint).save(os.path.join(sd, "ground", g, "v0.png"))
+        root = os.path.join(d, "kit")
+        for b in board.CLASS_BODIES:
+            folder = os.path.join(root, "units", b, "base")
+            os.makedirs(folder)
+            body_fixture().save(os.path.join(folder, "sheet.png"))
+            with open(os.path.join(folder, "clips.json"), "w", encoding="utf-8") as f:
+                json.dump({"frame": [48, 48]}, f)
+        for p in board.FIGURE_PROPS:
+            folder = os.path.join(root, "props", "common", p)
+            os.makedirs(folder)
+            body_fixture().save(os.path.join(folder, "v0.png"))
+        return sd, root
+
+    def test_board_of_a_fixture_ground_set(self):
+        with tempfile.TemporaryDirectory() as d:
+            sd, root = self.make_set(d)
+            out = os.path.join(d, "out")
+            board.build_ground(sd, out, root)
+            names = os.listdir(out)
+            for g in ("ash", "flagstone", "mud"):
+                for cells in ("16x10", "32x20"):
+                    for scale in (1, 2, 3):
+                        self.assertIn(f"repeat_{g}_{cells}_x{scale}.png", names)
+            self.assertEqual(size_of(os.path.join(out, "repeat_ash_16x10_x1.png")), (256, 160))
+            self.assertEqual(size_of(os.path.join(out, "repeat_ash_32x20_x3.png")), (1536, 960))
+            for pair in ("ash_mud", "ash_flagstone", "mud_flagstone"):   # by the table's order, lower first
+                self.assertIn(f"pair_{pair}.png", names)
+            self.assertIn("figures_x2.png", names)
+            with open(os.path.join(out, "index.html"), encoding="utf-8") as f:
+                page = f.read()
+            self.assertIn("file:///", page)
+            self.assertIn("Direction, peak", page)
+            self.assertIn("read_contrast", page)
+            self.assertIn("warning: under 8", page)   # ash and mud are about 2 apart
+
+    def test_a_set_without_ground_art_is_an_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(board.main([d, "--ground", "--out", os.path.join(d, "o")]), 1)
+            self.assertIn("no <id>/v0.png", err.getvalue())
+
+    def test_pair_picture_holds_only_the_two_grounds_colours_and_their_edge_wanders(self):
+        lower = Image.new("RGB", (64, 64), (60, 50, 40))
+        upper = Image.new("RGB", (64, 64), (20, 90, 120))
+        w, h = board.PAIR_SIZE[0] * board.CELL_PX, board.PAIR_SIZE[1] * board.CELL_PX
+        noise = dict(board.edge_fields(w, h), tone=[0.0] * (w * h))
+        cells = dict(board.pair_layouts())["straight edge"]
+        img = board.draw_pair(lower, upper, (10, 0.06, False, 0.0), (20, 0.1, False, 0.0), board.upper_field(cells), noise)
+        px = img.load()
+        worn = tuple(int(c * 0.9) for c in (60, 50, 40))
+        bitten = tuple(int(c * 0.95) for c in (60, 50, 40))
+        self.assertLessEqual({px[x, y] for y in range(h) for x in range(w)}, {(60, 50, 40), (20, 90, 120), worn, bitten})
+        boundary = w // 2
+        off = 0
+        for y in range(h):
+            row = [px[x, y] == (20, 90, 120) for x in range(w)]
+            first = row.index(True)
+            self.assertLessEqual(abs(first - boundary), 6)
+            off += first != boundary
+        self.assertGreater(off, h // 2)
+
+    def test_every_swatch_meets_the_colour_cap(self):
+        limit = groundcheck.LIMITS["natural"]["colour"]
+        for g, row in board.GROUND_ROWS.items():
+            self.assertLessEqual(groundcheck.colour_cap(Image.new("RGB", (4, 4), row[4])), limit, g)
+        self.assertEqual(board.GROUND_ROWS["dirt_road"][4], "#39342e")
+        self.assertEqual(board.GROUND_ROWS["packed_dirt"][4], "#332e28")
+
+    def test_a_master_off_the_form_warns_on_the_board(self):
+        with tempfile.TemporaryDirectory() as d:
+            sd, root = self.make_set(d)
+            even_tile().resize((300, 300), Image.BOX).save(os.path.join(sd, "ground", "ash", "v0.png"))
+            out = os.path.join(d, "out")
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                board.build_ground(sd, out, root)
+            self.assertIn("ash", err.getvalue())
+            with open(os.path.join(out, "index.html"), encoding="utf-8") as f:
+                self.assertIn("whole multiple of 64", f.read())
+
+    def test_every_pair_layout_is_on_the_map(self):
+        cols, rows = board.PAIR_SIZE
+        for title, cells in board.pair_layouts():
+            self.assertTrue(cells, title)
+            self.assertTrue(all(0 <= x < cols and 0 <= y < rows for x, y in cells), title)
 
 
 if __name__ == "__main__":

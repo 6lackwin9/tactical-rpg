@@ -129,6 +129,21 @@ the same pixel-art style, pixel size and palette family as the first image, and 
 A single seamless ground texture tile for a dark fantasy tactical RPG, seen from directly overhead: a flat, straight-down orthographic view of the surface, as a floor plan, drawn as a square tile of {size} pixels scaled up (visible large square pixels, no anti-aliasing). No perspective, no horizon, no vanishing lines, no depth, no walls, no objects standing on it. This tile repeats many times across a battle map, so it must read as one continuous surface: low contrast, one main colour, nothing in it stands out, and no grid, rows or checker pattern. Irregular shapes of different sizes, none lined up with the tile's edges or with each other, with shapes and cracks running off all four edges so it wraps without a seam. Even, flat lighting across the whole tile: no vignette, no lighting gradient, no dark corners, no border, no frame, no text. Limited palette of 3-4 close colours from {the set's hex list}. {setting line}. Material: {material}.
 ```
 
+## Ground texture
+
+One texture per ground of a region map (REGIONGROUND1 section 7); "Tile" stays for walls and the stage. Gemini route,
+scale only, a record beside each image, a `session_ref` chain from the set's base. Chain the rest from the base with "In
+the same pixel size, palette family and flat straight-down view as the first image." A built ground (`flagstone`,
+`cobble_road`, `paved_road`, `iron_catwalk`) replaces "Fine even grain only, the same in all directions" with "Small
+irregular stones of different sizes, in no rows and no direction, with narrow joints only slightly darker than the
+stones". The batches' `{hex}` and `{material}`: the spec's section 7. Then `tools/tiles`: `cut.py --form ground`, `seam.py`,
+`flatten.py`, `groundcheck.py score` (a failure: re-roll once naming it in the prompt, then show the user), `board.py
+--ground`.
+
+```text
+One large seamless ground texture for a dark fantasy tactical RPG, seen from directly overhead: a flat, straight-down orthographic view of the surface, drawn as a square texture of 128 x 128 pixels scaled up (visible square pixels, no anti-aliasing). It sits quietly behind small characters and must never draw the eye. Muted and low contrast: one main colour, {hex}, with at most 3 close shades of it. Even tone across the whole image: no lighter or darker areas, no dark patches, no stains, no blotches, no vignette, no lighting gradient. Fine even grain only, the same in all directions: no direction, no streaks, no diagonal marks, no brush strokes, no lines, no footprints, no tracks, no ruts, nothing that stands out or could be recognised when repeated. It repeats across a large map, so it wraps on all four edges with no seam, and has no grid, rows, tiles, checker or plaid; no shape lines up with the image's edges or with any other shape. No perspective, no horizon, no objects, no border, no frame, no text. Material: {material}.
+```
+
 ## Routes by asset type (ARTPROMPT1, 2026-11-01)
 
 Since 2026-11-01 the "Gemini" route runs through the Antigravity queue by default (decision "Antigravity queue as the default
