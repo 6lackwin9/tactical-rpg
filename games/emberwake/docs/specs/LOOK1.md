@@ -79,6 +79,8 @@ role with that value as its default, named in E1's report (the planner adds it h
 | `good` | good changes, HP | `GOOD` #60d26e | not set (Q10) |
 | `ink` | text on light panes (parchment) | #101014 | Rotting Oak #2c221e |
 
+`frame_line` (default #92400e; Tallow and Iron #991b1b): the thin line of a frame that has one (LOOK1-R1).
+
 LOOK1-E1B adds 14 roles, each defaulting to the value drawn before; their Tallow and Iron values come with LOOK1-G2:
 `title_idle` #1a243a, `ruler` #101624, `playing` #346096, `playing_edge` #80dcff, `lane` #181e2c, `lane_stripe`
 #3c42548c, `lane_hatch` #7880965a, `impact_edge` #f0f4ffdc, `socket` #060910, `socket_edge` #c8d2e4dc, `tool_bg`

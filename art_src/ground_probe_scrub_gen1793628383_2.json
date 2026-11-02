@@ -1,0 +1,28 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "ground_probe_scrub",
+  "prompt": "A top-down seamless ground texture for a dark fantasy RPG map, as pixel art drawn at 128 x 128 pixels scaled up (visible square pixels, no anti-aliasing). Material: dry grey-green ground with sparse small tufts of dead grass and tiny twigs scattered evenly. Seen from straight above, no perspective, no horizon. Even light across the image, no vignette. It wraps seamlessly on all four sides. No footprints, no long lines, no large stains, no text. Muted colours around #2b2d22.",
+  "reference": null,
+  "prompts_file": null,
+  "time": "2026-11-02T13:51:07Z",
+  "n": 2,
+  "references": [],
+  "source": "gemini web app task",
+  "via": "gemini_web",
+  "request": "probe_scrub_q1793627467",
+  "metadata": {
+    "asset_id": "ground_probe_scrub",
+    "task": "regionground1probe",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "set": "ashlands",
+      "ground": "scrub"
+    }
+  },
+  "mark_cleared": true,
+  "set": "ashlands",
+  "ground": "scrub",
+  "notes": "Verified resolution and aspect ratio within 3% tolerance."
+}
