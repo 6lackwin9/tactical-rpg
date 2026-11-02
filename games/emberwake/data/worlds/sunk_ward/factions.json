@@ -1,0 +1,55 @@
+{
+	"kind": "factions",
+	"version": 1,
+	"entries": [
+		{
+			"id": "iron_inquisition",
+			"name": "Iron Inquisition",
+			"motto": "",
+			"description": "PLACEHOLDER motto. The church's hunters; the Castellan Watch is its city arm.",
+			"home": "",
+			"relations": {
+				"castellan_watch": "ally",
+				"tallow_guild": "ally"
+			},
+			"grants": [],
+			"tags": []
+		},
+		{
+			"id": "castellan_watch",
+			"name": "Castellan Watch",
+			"motto": "",
+			"description": "PLACEHOLDER motto. The city watch: Footmen and Watch Crossbowmen.",
+			"home": "",
+			"relations": {
+				"iron_inquisition": "ally"
+			},
+			"grants": [],
+			"tags": []
+		},
+		{
+			"id": "tallow_guild",
+			"name": "Tallow Guild",
+			"motto": "",
+			"description": "PLACEHOLDER motto. Renders the district's tallow; its mercenaries scour the cellars.",
+			"home": "",
+			"relations": {
+				"iron_inquisition": "ally"
+			},
+			"grants": [],
+			"tags": []
+		},
+		{
+			"id": "fourth_kiln_syndicate",
+			"name": "Fourth Kiln Syndicate",
+			"motto": "",
+			"description": "PLACEHOLDER motto. The Guild's foundry arm; runs the bone-mill.",
+			"home": "",
+			"relations": {
+				"tallow_guild": "ally"
+			},
+			"grants": [],
+			"tags": []
+		}
+	]
+}
