@@ -549,7 +549,7 @@ held (a cool pallor), the sweat drop in Salt Cyan at (0.12, 0.2), size 0.08.
 
 ## 17. Build notes (PORTRAITFX1-P, 2026-11-01)
 
-- Panels (`battle.rs`): the hero panel and the intel panel each draw their unit's portrait at (panel x + 4, panel y +
+- Panels (`battle/draw.rs`): the hero panel and the intel panel each draw their unit's portrait at (panel x + 4, panel y +
   4), 32 px (`PANEL_PORTRAIT`, `PANEL_INSET`), on the talk box's dark panel; widgets `hero.portrait` and `intel.portrait`
   (kind `portrait`, no action). The hero panel's name, its corner (the stance or the intent, now on the line under the
   name so both fit the 72 px beside the portrait) and the Self button start 40 px in (`PANEL_TEXT_X`); a following line
@@ -568,7 +568,7 @@ held (a cool pallor), the sweat drop in Salt Cyan at (0.12, 0.2), size 0.08.
   log lines; they ride in `fx::Impact.portrait` and `BattleScreen::fire` sends them to `react_portraits` at the
   impact's FX ms (rule I); a step with no delivery reacts at once. Under skip animations `Faces::react` fires none.
 - State: the screen's `state` gains `portraits` (the panel portraits kept).
-- Tests (`battle.rs` `portrait_panel_tests`, fixture cue rows): P1 placement, lines beside 40 px in, no spill or edge
+- Tests (`battle/tests/portrait_panel_tests.rs`, fixture cue rows): P1 placement, lines beside 40 px in, no spill or edge
   of either panel's texts at the four text sizes, classic and timeline; P2 no reaction at the pop, each event's flash
   from the impact's ms in its row's colour with a jolt for a blow, crit jolting harder than hit, heal without a jolt;
   P3 stealth alpha 0.58, below 25 % desaturate 0.5, down still and desaturate 1.0; P4 hit-stop and animation speed;
@@ -590,14 +590,14 @@ held (a cool pallor), the sweat drop in Salt Cyan at (0.12, 0.2), size 0.08.
 - Tier (4.6): a 15 px square is reduced from a 4x window (60 device px), so `PortraitOpts.tier_cap` (engine,
   `PortraitOpts::tier(side)`: the side's tier, no richer than the cap) and `Faces::capped(Tier::Minimal)` keep the row
   portraits minimal at any window size (flash, desaturate, tint, fade, face, eye-glow core; no jolt, no breath).
-- Game (`battle.rs`): a third `Faces`, `timeline_faces` (capped minimal), set to FX1's clock at every draw like
+- Game (`battle/draw.rs`, `battle/playback.rs`): a third `Faces`, `timeline_faces` (capped minimal), set to FX1's clock at every draw like
   `panel_faces`; `react_portraits` fires each step's events on it too, on surface `timeline` (cue rows with empty
   surfaces apply to both); the look and key are the panels' `unit_portrait` (board HP and life, rule I); the square is
   drawn on the panels' dark backing with the portrait 1 px inside. State: `timeline_portraits`.
 - Tests: TL1 (`aegis_ui/tests/kit_widgets.rs`): a track with and without an icon (the square, its widget, the label
   `ICON_W` in, every other widget and the plain row's pixels as before, `draw_icons` on plain tracks equal to `draw`),
   a long icon label widening the column by `ICON_W`, the Kit page's Icons check (a square per track, TEXTFIT clean);
-  `aegis_ui/tests/portrait_fx.rs` the tier cap. TL2 (`battle.rs` `portrait_timeline_tests`, fixture cue rows, scratch
+  `aegis_ui/tests/portrait_fx.rs` the tier cap. TL2 (`battle/tests/portrait_timeline_tests.rs`, fixture cue rows, scratch
   portraits): every track's square and minimal tier at the four text sizes with no timeline text spilled or cut
   without its hover text; on a 4x window the row stays minimal (flash, no jolt, no breath) while the panel is full and
   jolts; a struck unit's row flashes from the impact's ms, nothing at the pop; a stealthed row draws at alpha 0.58.

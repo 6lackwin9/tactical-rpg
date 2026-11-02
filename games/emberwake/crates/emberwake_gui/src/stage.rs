@@ -3,7 +3,7 @@
 //! map), the terrain stage table (ground, sunken, standing, block), the ground under a standing prop, the lips of
 //! sunken cells, the blocks, props, backdrop and front face, the draw passes, the ground arrows, the feet-sorted order
 //! with the outlines drawn through what covers a unit, and the units' hit rects. The pieces of the board itself are
-//! drawn here; `battle.rs` runs the passes and draws the units, markers and HUD. A view change only: rules, grid,
+//! drawn here; `battle/board.rs` runs the passes and draws the units and markers, `battle/draw.rs` the HUD. A view change only: rules, grid,
 //! plans and every battle number stay as they are. The Flat view (the board seen from above, as before) stays a
 //! setting until the user's review (STAGE1-C removes it). LOOK1-L1: the world's stage set (`stage_set`, LOOK1 5.2-5.4)
 //! over `common_stage`, and its transition pieces on the tile corners.
@@ -813,7 +813,7 @@ pub enum Pass {
 
 const PASSES: [Pass; 9] = [Pass::Backdrop, Pass::Ground, Pass::Markers, Pass::Arrows, Pass::Shadows, Pass::Face, Pass::Feet, Pass::Through, Pass::Top];
 
-/// The order `battle.rs` runs the Stage's passes in.
+/// The order `battle/board.rs` runs the Stage's passes in.
 pub fn passes() -> &'static [Pass] {
     &PASSES
 }

@@ -326,7 +326,7 @@ As built (INPUT1-U slice 1, 2026-11-01: kit, host and engine; tests `rpgkit_batt
 - Host: `pick`'s `target` defaults to the member's round target, else self; `clear {unit}` removes the picks only when
   the member has one (else today's empty steps, the Manual path); `autofill` outside planning only sets the flag.
 
-As built (INPUT1-U slice 2, 2026-11-01: the battle screen; tests `battle.rs` `input1_tests`, kit
+As built (INPUT1-U slice 2, 2026-11-01: the battle screen; tests `battle/tests/input1_tests.rs`, kit
 `rpgkit_battle/tests/picks.rs` IF9):
 
 - The menu is the existing popup (rows `popup.<k>`, 214 px wide; the row pitch grows with the text size); its rows are
@@ -349,7 +349,7 @@ As built (INPUT1-U slice 2, 2026-11-01: the battle screen; tests `battle.rs` `in
   replayed round's ghosts.
 - Clicking the selected hero still opens its self menu (SL4's "selects nothing" is slice 3).
 
-As built (INPUT1-U slice 3, 2026-11-01: selection and inspect; tests `battle.rs` `input1_tests` (SL1-SL7, IS1-IS3, the
+As built (INPUT1-U slice 3, 2026-11-01: selection and inspect; tests `battle/tests/input1_tests.rs` (SL1-SL7, IS1-IS3, the
 inspect panel's text audit), kit `rpgkit_battle/tests/picks.rs` (HK3, the round change preview)):
 
 - SL1-SL7 and IS1 apply under the round intent only (classic keeps today's clicks, Esc and panel). The inspected unit is
@@ -367,10 +367,10 @@ inspect panel's text audit), kit `rpgkit_battle/tests/picks.rs` (HK3, the round 
   draws the inspected unit's target arrow, section 10's as-built block.)
 - Kit: `round_intent_plan::set_round` / `preview_round` (a `RoundSet` of intent, target, kind, opener; `change_intent`,
   also behind `Session::set_round_intent`) carry the host's `round_intent` (through `Session::set_round`, atomic) and the
-  screen's waiting ghost (`battle.rs` `Deferred`), so the preview and Confirm share one source; `hotkey_target` and
+  screen's waiting ghost (`battle/input.rs` `Deferred`), so the preview and Confirm share one source; `hotkey_target` and
   `self_only` hold HK2-HK3's target rule.
 
-As built (INPUT1-AP, 2026-11-01: engine, kit and game; tests `aegis_ui/tests/pips.rs`, `rpgkit_battle/tests/picks.rs` (the AP shortfall), `battle.rs` `input1_tests` (the
+As built (INPUT1-AP, 2026-11-01: engine, kit and game; tests `aegis_ui/tests/pips.rs`, `rpgkit_battle/tests/picks.rs` (the AP shortfall), `battle/tests/input1_tests.rs` (the
 INPUT1-AP section), `gallery.rs` `the_pip_gauge_entry_shows_every_sample_state`; goldens and parity unchanged):
 
 - Engine `aegis_ui::pips`: `PipGauge::planned(now, left, next, max, cap)` is AP7 (counts in pips, rounded up, AP6),
@@ -439,7 +439,7 @@ a foresight-read enemy's track is unmasked; the Gallery's `timeline_pane` render
 and the Gallery's Battle timeline build the same tracks for the same session (one builder).
 
 As built (INPUT1-T, 2026-11-01: game `timeline_view.rs` (new), `battle.rs`, `gallery.rs`, `menus.rs`; engine
-`aegis_ui::timeline`; tests `battle.rs` `timeline_view_tests`, `gallery.rs`
+`aegis_ui::timeline`; tests `battle/tests/timeline_view_tests.rs`, `gallery.rs`
 `the_timeline_pane_draws_the_engine_widget_with_no_session` and `the_battle_timeline_entry_draws_the_shared_builders_tracks`,
 `aegis_ui/tests/kit_widgets.rs` (the track card and hatched lane, the pane sample); goldens and parity unchanged):
 
@@ -611,7 +611,7 @@ revealed one may have three; every arrow's alpha is 90; during playback `overlay
 plate draws; `party_foresight_off(settings_on, false)` is false; with the debug toggle on a Hawk Eye reveal leaves
 the hostile card's badge row unfilled.
 
-As built (VISCLAR1-A, 2026-11-01: game `battle.rs`, `menus.rs`, `screens.rs`; tests `battle.rs` `visclar_tests`, the
+As built (VISCLAR1-A, 2026-11-01: game `battle.rs`, `menus.rs`, `screens.rs`; tests `battle/tests/visclar_tests.rs`, the
 adapted `tells_tests::the_plan_reveal_shows_every_enemy_plan` and `slice5_tests::each_overlay_group_has_its_flag`, the
 widened `hooks_audit_tests::the_overlay_settings_fit_at_every_text_size`; goldens and parity unchanged):
 
@@ -889,7 +889,7 @@ playback sets `playback.waiting` at the block's end and closing the view clears 
 
 As built (INPUT1-PB, 2026-11-01: game `battle.rs`, `fx.rs` (`Trace`), `timeline_view.rs` (`Opts.playhead`),
 `menus.rs`, `screens.rs`, `gallery.rs`; kit `rpgkit_battle::session` (`log_marks`, `log_groups`, `LogGroup`,
-`LOG_ROUND_START`, `LOG_ROUND_END`); tests `battle.rs` `playback_tests`, `rpgkit_battle/tests/log_groups.rs`; adapted
+`LOG_ROUND_START`, `LOG_ROUND_END`); tests `battle/tests/playback_tests.rs`, `rpgkit_battle/tests/log_groups.rs`; adapted
 `overlay_tests::the_overlays_follow_the_kit` (the `tracers` key),
 `timeline_view_tests::during_playback_an_unrevealed_enemy_shows_only_what_has_started` (the playhead is PB2's block)
 and `hooks_audit_tests::the_overlay_settings_fit_at_every_text_size` (the speed select); goldens and parity

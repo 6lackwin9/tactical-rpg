@@ -373,7 +373,7 @@ Dojo and Arena pickers over the rows; `EncounterDef::from_obj_with`; `ruleset::D
 - Risk: host state shape (agents, `engine/README.md` host section). Touches: `kits/rpg/crates/rpgkit_host/src/lib.rs`,
   `kits/rpg/crates/rpgkit_battle/src/dojo.rs`, `games/emberwake/crates/emberwake_gui/src/{dojo,runner}.rs`.
   Dependencies: CLN-44. Spec pointer: `docs/specs/CLEANUP.md#CLN-46`.
-- Also (CLN-45 note, 2026-11-01): `emberwake_gui/src/battle.rs` shows the round-end Rest preview whenever the ruleset is timeline; read `Ruleset::rest_at_round_end()` instead, so a row with `rest_ap: on_use` shows no round-end gain.
+- Also (CLN-45 note, 2026-11-01): `emberwake_gui/src/battle/draw.rs` shows the round-end Rest preview whenever the ruleset is timeline; read `Ruleset::rest_at_round_end()` instead, so a row with `rest_ap: on_use` shows no round-end gain.
 
 ### CLN-47
 
@@ -433,7 +433,7 @@ Manual planning mode. Scope C. Status: proposed. Size S. Lane logic-builder. Lay
 
 - Where: `round_intent_plan.rs:137-140` (`manual`), :248-258 (`set_manual`), :1110, :220, :1142; `ai.rs:1622`;
   `rpgkit_host/src/lib.rs:341, 726, 752-763` (`manual` request), :958 (state key `manual`); `emberwake_gui/src/
-  battle.rs:2356, 3663, 8587`; tests `rpgkit_host/tests/round_intent_requests.rs:67-83, 140`,
+  battle/draw.rs` (`rip::manual` in the strip), `battle/input.rs` (`tactic_ghost`), `battle/tests/`; tests `rpgkit_host/tests/round_intent_requests.rs:67-83, 140`,
   `rpgkit_battle/tests/{intent_ai.rs:396, round_intent_plan.rs:516-579}`.
 - Why: HISTORY 2026-11-01 (INPUT1-U slice 2) replaced Manual with picks (INPUT1 IF8, IF9: "skips members with a pick
   (as it skipped Manual members)"); no screen sets it any more, so `manual` is always false in play; a member with
@@ -442,7 +442,7 @@ Manual planning mode. Scope C. Status: proposed. Size S. Lane logic-builder. Lay
   the readers use `picks_of(..).is_empty()`. `fill_rest` stays (ai.rs:2154, timed.rs:133); the host `fill` request is
   test-only (round_intent_requests.rs:71): drop it too unless agents use it (Q-C2 lists it).
 - Risk: low. Touches: `kits/rpg/crates/rpgkit_battle/src/{round_intent_plan,ai}.rs`, `kits/rpg/crates/rpgkit_host/src/
-  lib.rs`, `games/emberwake/crates/emberwake_gui/src/battle.rs`, the three test files. Dependencies: INPUT1-U (slice 3
+  lib.rs`, `games/emberwake/crates/emberwake_gui/src/battle/{draw,input}.rs`, the three test files. Dependencies: INPUT1-U (slice 3
   shares battle.rs and the host). Spec pointer: `docs/specs/CLEANUP.md#CLN-50`.
 
 ### CLN-51

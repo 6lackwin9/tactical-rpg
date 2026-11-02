@@ -9,14 +9,14 @@ warhammer), sharing the base's palette slots (DIR4 L3). The look follows the equ
 shield of burden `BUCKLER_MAX_BURDEN` (0) or less gives `1h_buckler`, a heavier shield the class sheet; named bodies keep
 their art (Hest, Brask, Orsa: hatchet and buckler; Grakka: a 2H double-bladed axe). The battle switch is slice 2.
 
-Status update (2026-10-27): WAR2H1 slice 2 done: the battle token shows the gear look (`body_keys` in `battle.rs` over
+Status update (2026-10-27): WAR2H1 slice 2 done: the battle token shows the gear look (`body_keys` in `battle/tokens.rs` over
 `gear_body_chain`); the seed `war2h1_gear.json` gives Hest, Brask and Orsa a hatchet and buckler and Grakka
 (`goblin_warlord`) a 2H battle axe; named bodies keep their baked art, so only bare class bases change look (the Gear
 Dojo's warrior, the timeline test-kit warriors). A weapon family without its own 2H look (dagger, mace, shortsword,
 polearm) falls back to the greatsword sheet; per-family looks come with DIR4-R2.
 
 Status update (2026-10-23): FACE1 done: units face their target or their step instead of their side (`Tokens::catch_up`,
-`UnitAnim` in `battle.rs`); this replaces SPRITE2's "foes face the party" mirroring. A battle still starts with the party
+`UnitAnim` in `battle/tokens.rs`); this replaces SPRITE2's "foes face the party" mirroring. A battle still starts with the party
 facing right and the foes left; with the enemy tells hidden, enemies keep their facing while the party plans.
 
 Status update (2026-10-23): SPRITE2 done: goblin variants of each class body, the dummy, Grakka, the Horde Warchief and
@@ -25,7 +25,7 @@ party: a foe's token frame and its outline are drawn mirrored (the sheets face r
 `battle.rs`).
 
 Status update (2026-10-22): SPRITE1-A2, SPRITE1-L and SPRITE1-U done. The attack clip by skill and weapon is the
-`SKILL_CLIPS` / `FIST_WEAPONS` table in `emberwake_gui/src/battle.rs` (a skill's own rig clip, else jab or kick with
+`SKILL_CLIPS` / `FIST_WEAPONS` table in `emberwake_gui/src/battle/tokens.rs` (a skill's own rig clip, else jab or kick with
 fists, else `attack`); `walk` slides the token to its new tile (`walk_ms`, 0 = off); `idle_focus` is not played yet.
 
 Status update (2026-10-22, user): SPRITE1-U drops the side-coloured disc behind the token: a flat foot ellipse in the
