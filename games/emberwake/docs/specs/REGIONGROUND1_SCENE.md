@@ -107,6 +107,17 @@ one (`rough basalt blocks`, slice A2); LOOK1-A1-A3's faces take the new form. Th
 6. Square view frames equal today's (hash); journey golden, store resave and battle traces unchanged. These tests take
    the new numbers: EXPLOREVIEW1 check 4 and `mapview.rs`'s `face` assertion, an intended change named in the commit.
 
+### Two kinds of wall (user 2026-11-02)
+
+- Prop walls extend a prop or make an indoor space. They belong to their building or prop set and match its props closely.
+- Region walls frame the map. They are defined at the region level, with their own form (cliffs, thick hedges,
+  ramparts), but keep a connection to the region's props.
+- Each region has one material family, a short palette and material list that both are prompted from (the Sunk Ward:
+  basalt, tallow, iron; the Ashlands: ash stone, rust). The texture check compares a wall against its family.
+- A prop wall may hold a doorway: an opening tile with a threshold on the ground, so an entrance reads at a glance.
+- Indoor reveal is a separate task, REVEAL1: stepping inside a walled building fades its roof and front wall so the
+  party stays visible, and they return on leaving. Bigger interiors stay their own maps.
+
 ### Storeys and how walls sit with the props (user 2026-11-02)
 
 - A wall face is one storey: 24 logical px high (48 px at 720p), its art 128 x 48, repeating sideways and upward, so
