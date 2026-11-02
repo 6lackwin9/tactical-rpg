@@ -1,6 +1,6 @@
 # LAYOUT720: reactive, relative layout as an engine feature, and the 1280 x 720 grid
 
-Status: proposed. Nothing starts until the user approves the screen table (section 1) and picks an option (section 3).
+Status: approved (user 2026-11-02: option B, tools first; only the main menu is finalized; wrapper for what the user plays or judges by eye, namely Battle, the Region map and all drawn on it, Character, Gallery, Frame tuner and Dojo, quadrant for the other unmoved screens; M0 kept; the touch rule per function; text, spacing, thin lines and frame parts stay fixed tokens from the layout).
 The direction here is the planner's relay of the user's messages of 2026-11-02.
 Depends on: nothing to start; section 8 gives the order against other work
 Lane: logic

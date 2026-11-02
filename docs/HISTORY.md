@@ -151,3 +151,4 @@ New rows go at the end of the table above (append-only); this section stays belo
 - Hand-edited JSON and ad-hoc string patch scripts corrupted files; use `ContentCatalog.upsert` and the Edit tool (skill `patch-and-seed`).
 - Test expectations hard-coded to old numbers broke on every data change; derive them from rules.
 | 2026-11-02 | Sprite fit by whole numbers, rounded down | deprecated | SPRITEFIT1 `Image::fit_square`: the exact size at any scale | At 1080p a 48 px frame in a 72 px box drew at 48 px and padded the rest, so units did not grow with the window (found from the user's Windowed screenshots) |
+| 2026-11-02 | Doubling every layout number in one sweep, and parity with the 640 x 360 layout on screens not finalized | dropped before starting | LAYOUT720 option B: engine layout tools, each screen moves in its own task | Most screens will be redone, so matching them is wasted work (spec section 3) |
