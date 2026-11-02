@@ -8,12 +8,12 @@
 use crate::bridge;
 use crate::focus;
 use crate::canvas::{Canvas, Image};
-use crate::painter::{Fonts, Painter, View};
+use crate::painter::{Fonts, Grid, Painter, View};
 use crate::screen::{Context, Cx, Held, Key, Nav, Notice, Screen};
 use crate::canvas::{rgba, Rect};
 use crate::window::Grab;
-use crate::theme::th;
-use crate::ui::{clipboard, field_content_h, field_layout, field_scroll_id, field_shift, reveal_offset, Drag, Edit, EditKey, Gfx, Kit, Layout, BODY, FIELD_PAD_X, FIELD_PAD_Y};
+use crate::theme::{th, Metrics};
+use crate::ui::{clipboard, field_content_h, field_layout, field_scroll_id, field_shift, reveal_offset, Drag, Edit, EditKey, Gfx, Kit, Layout, FIELD_PAD_X, FIELD_PAD_Y};
 use anyhow::Result;
 use pixels::{Pixels, SurfaceTexture};
 use serde_json::{json, Value};
@@ -237,14 +237,15 @@ impl<G: Context> Shell<G> {
         self.reveal();
     }
 
-    /// The text field being edited as the top screen last drew it: its layout, its rect and its line height. None when
-    /// nothing edits or the field is not drawn (yet).
+    /// The text field being edited as the top screen last drew it, in its units: its layout, its rect and its line height.
+    /// None when nothing edits or the field is not drawn (yet).
     fn edit_geometry(&mut self) -> Option<(Layout, Rect, f32)> {
         let (id, text, multiline) = self.gfx.kit.edit.as_ref().map(|e| (e.id.clone(), e.text.clone(), e.multiline))?;
         let infos = self.stack.last()?.widgets();
         let r = infos.iter().find(|w| w["id"] == id.as_str() && (w["kind"] == "text" || w["kind"] == "textarea")).map(info_rect)?;
+        let m = Metrics::of(&th(), self.gfx.view);
         let mut p = Painter { c: &mut self.gfx.canvas, v: self.gfx.view, fonts: &mut self.gfx.fonts };
-        let line = p.line_h(BODY);
+        let line = p.line_h(m.body);
         Some((field_layout(&mut p, &text, r, multiline), r, line))
     }
 
@@ -254,27 +255,31 @@ impl<G: Context> Shell<G> {
         let Some(e) = self.gfx.kit.edit.as_ref().filter(|e| e.multiline) else { return };
         let id = field_scroll_id(&e.id);
         let off = self.gfx.kit.scroll.get(&id).copied().unwrap_or(0);
-        let to = reveal_offset(off, lay.line_of(e.caret), line, r.h, field_content_h(lay.lines.len(), line));
+        let g = self.gfx.view.g;
+        let to = reveal_offset(off, lay.line_of(e.caret), line, r.h, field_content_h(lay.lines.len(), line, g), g);
         self.gfx.kit.scroll.insert(id, to);
     }
 
     /// The caret position under canvas point `pos` in the text field being edited (as drawn: scrolled or slid).
     fn caret_at(&mut self, pos: (i32, i32)) -> Option<usize> {
         let (lay, r, line) = self.edit_geometry()?;
+        let g = self.gfx.view.g;
         let e = self.gfx.kit.edit.as_ref()?;
         let (dx, off) = if e.multiline {
-            let max = (field_content_h(lay.lines.len(), line) - r.h).max(0);
+            let max = (field_content_h(lay.lines.len(), line, g) - r.h).max(0);
             (0.0, self.gfx.kit.scroll.get(&field_scroll_id(&e.id)).copied().unwrap_or(0).clamp(0, max))
         } else {
-            (field_shift(&lay, e.caret, r), 0)
+            (field_shift(&lay, e.caret, r, g), 0)
         };
-        Some(lay.pos_at(pos.0 as f32 - r.x as f32 - FIELD_PAD_X + dx, pos.1 as f32 - r.y as f32 - FIELD_PAD_Y + off as f32, line))
+        let (px, py) = (FIELD_PAD_X * g as f32, FIELD_PAD_Y * g as f32);
+        Some(lay.pos_at(pos.0 as f32 - r.x as f32 - px + dx, pos.1 as f32 - r.y as f32 - py + off as f32, line))
     }
 
     /// An editing key in the text field being edited (PLAYUI1-T): moves, selection, deletes, undo and the clipboard.
     fn edit_key(&mut self, k: EditKey, ctrl: bool, shift: bool) {
+        let g = self.gfx.view.g as f32;
         let (lay, rows) = match self.edit_geometry() {
-            Some((lay, r, line)) => (lay, ((r.h as f32 - 2.0 * FIELD_PAD_Y) / line).floor().max(1.0) as usize),
+            Some((lay, r, line)) => (lay, ((r.h as f32 - 2.0 * FIELD_PAD_Y * g) / line).floor().max(1.0) as usize),
             // Not drawn yet: one line of the text as it is (no wrapping).
             None => (self.gfx.kit.edit.as_ref().map(|e| Layout::new(&e.text, f32::MAX, false, &mut |_| 1.0)).unwrap_or_default(), 1),
         };
@@ -400,7 +405,11 @@ impl<G: Context> Shell<G> {
             }
             draw_ghost(&mut p, &d.text, self.mouse);
         } else {
-            self.stack[n - 1].draw_tip(&mut p, self.mouse);
+            // A tip is also reachable by focus (LAYOUT720 section 11); a screen still on the old numbers keeps today's
+            // picture, where only the mouse shows one, until its own task moves it.
+            let keyed = self.gfx.kit.focus.as_deref().filter(|_| self.gfx.kit.focus_visible && self.stack[n - 1].grid() == Grid::Native);
+            let at = keyed.map_or(self.mouse, |f| focus::tip_point(&self.stack[n - 1].widgets(), self.mouse, Some(f)));
+            self.stack[n - 1].draw_tip(&mut p, at);
         }
         self.settle();
         let cx = &self.cx;
@@ -1223,7 +1232,8 @@ impl<G: Context> ApplicationHandler for App<G> {
         let (pw, ph) = (size.width.max(1), size.height.max(1));
         let pixels = Pixels::new(pw, ph, SurfaceTexture::new(pw, ph, window.clone())).expect("pixels");
         let font_bytes = std::fs::read(&self.options.font).unwrap_or_else(|e| panic!("{}: {e}", self.options.font.display()));
-        let gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
+        let mut gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
+        gfx.kit.device.dpr = window.scale_factor() as f32;
         let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
         shell.cx.notice.extend(icon_notice);
         let port = self.options.port;
@@ -1271,6 +1281,11 @@ impl<G: Context> ApplicationHandler for App<G> {
                 if let Some(s) = self.shell.as_mut() {
                     s.gfx.canvas = Canvas::new(w as i32, h as i32);
                     s.gfx.view = s.top_view();
+                }
+            }
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                if let Some(s) = self.shell.as_mut() {
+                    s.gfx.kit.device.dpr = scale_factor as f32;
                 }
             }
             WindowEvent::RedrawRequested => self.redraw(),
@@ -1470,27 +1485,27 @@ fn shift_digit(code: KeyCode) -> Option<u8> {
 /// The keyboard focus's ring around a widget's rect.
 fn draw_ring(p: &mut Painter, r: Rect) {
     let t = th();
-    let (out, wide, radius) = (p.v.u(2), p.v.u(4), (t.layout.radius + 1.0) * p.v.g as f32);
+    let m = Metrics::of(&t, p.v);
+    let (out, wide, radius) = (m.u(2), m.u(4), m.radius + m.uf(1.0));
     p.panel(Rect::new(r.x - out, r.y - out, r.w + wide, r.h + wide), rgba(0, 0, 0, 0), t.ring, radius);
 }
 
 /// A valid drop target's outline while dragging, the one under the cursor lit in gold.
 fn draw_drop_target(p: &mut Painter, r: Rect, over: bool) {
     let t = th();
-    p.panel(r, if over { t.drop_hot } else { rgba(0, 0, 0, 0) }, if over { t.focus } else { t.edge_hot }, t.layout.radius * p.v.g as f32);
+    p.panel(r, if over { t.drop_hot } else { rgba(0, 0, 0, 0) }, if over { t.focus } else { t.edge_hot }, Metrics::of(&t, p.v).radius);
 }
 
 /// The dragged widget's text in a small card under the cursor.
 fn draw_ghost(p: &mut Painter, text: &str, mouse: (i32, i32)) {
-    let (v, g) = (p.v, p.v.g as f32);
-    let body = BODY * g;
-    let w = (p.text_w(text, body).ceil() as i32 + v.u(10)).clamp(v.u(24), v.u(160));
-    let h = p.line_h(body).ceil() as i32 + v.u(4);
-    let (cw, ch) = v.canvas();
-    let r = Rect::new((mouse.0 + v.u(6)).min(cw - w - v.u(2)), (mouse.1 + v.u(6)).min(ch - h - v.u(2)), w, h);
     let t = th();
-    p.panel(r, t.ghost, t.focus, t.layout.radius * g);
-    p.text_fit(r.x as f32 + 5.0 * g, r.y as f32 + 2.0 * g, text, body, (w - v.u(10)) as f32, t.text);
+    let (v, m) = (p.v, Metrics::of(&t, p.v));
+    let w = (p.text_w(text, m.body).ceil() as i32 + m.u(10)).clamp(m.u(24), m.u(160));
+    let h = p.line_h(m.body).ceil() as i32 + m.u(4);
+    let (cw, ch) = v.canvas();
+    let r = Rect::new((mouse.0 + m.u(6)).min(cw - w - m.u(2)), (mouse.1 + m.u(6)).min(ch - h - m.u(2)), w, h);
+    p.panel(r, t.ghost, t.focus, m.radius);
+    p.text_fit(r.x as f32 + m.uf(5.0), r.y as f32 + m.uf(2.0), text, m.body, (w - m.u(10)) as f32, t.text);
 }
 
 /// An open select's choice list, over the screen: one row per option, the chosen one in gold, the hovered one lit.
@@ -1500,16 +1515,15 @@ fn draw_options(p: &mut Painter, opts: &[&Value], mouse: (i32, i32), keyed: Opti
     let (x0, y0) = (rects.iter().map(|r| r.x).min().unwrap_or(0), rects.iter().map(|r| r.y).min().unwrap_or(0));
     let (x1, y1) = (rects.iter().map(|r| r.x + r.w).max().unwrap_or(0), rects.iter().map(|r| r.y + r.h).max().unwrap_or(0));
     let t = th();
-    let (v, g) = (p.v, p.v.g as f32);
-    let (body, radius) = (BODY * g, t.layout.radius * g);
-    p.panel(Rect::new(x0 - v.u(1), y0 - v.u(1), x1 - x0 + v.u(2), y1 - y0 + v.u(2)), t.panel, t.focus, radius);
+    let m = Metrics::of(&t, p.v);
+    p.panel(Rect::new(x0 - m.u(1), y0 - m.u(1), x1 - x0 + m.u(2), y1 - y0 + m.u(2)), t.panel, t.focus, m.radius);
     for (w, r) in opts.iter().zip(&rects) {
         let on_key = keyed.is_some_and(|k| w["id"] == k);
         if r.contains(mouse.0, mouse.1) || on_key {
-            p.panel(*r, t.card_hot, if on_key { t.ring } else { t.edge_hot }, radius);
+            p.panel(*r, t.card_hot, if on_key { t.ring } else { t.edge_hot }, m.radius);
         }
         let chosen = w["active"] == json!(true);
-        p.text_fit(r.x as f32 + 5.0 * g, r.y as f32 + (r.h as f32 - p.line_h(body)) / 2.0, w["text"].as_str().unwrap_or(""), body, r.w as f32 - 10.0 * g, if chosen { t.focus } else { t.text });
+        p.text_fit(r.x as f32 + m.uf(5.0), r.y as f32 + (r.h as f32 - p.line_h(m.body)) / 2.0, w["text"].as_str().unwrap_or(""), m.body, r.w as f32 - m.uf(10.0), if chosen { t.focus } else { t.text });
     }
 }
 
@@ -1546,7 +1560,7 @@ mod tests {
     use super::*;
     use crate::art::Art;
     use crate::canvas::rgb;
-    use crate::ui::{H, TEXT, W};
+    use crate::ui::{BODY, H, TEXT, W};
     use crate::audio::Audio;
     use crate::screen::Settings;
     use crate::ui::{Tip, Ui, Widget};
@@ -1880,9 +1894,135 @@ mod tests {
     fn point_of(s: &mut Shell<App>, pos: usize) -> (i32, i32) {
         let (lay, r, line) = s.edit_geometry().unwrap();
         let off = s.gfx.kit.scroll.get("area.scroll").copied().unwrap_or(0);
-        let x = r.x as f32 + FIELD_PAD_X + lay.x_of(pos);
-        let y = r.y as f32 + FIELD_PAD_Y + lay.line_of(pos) as f32 * line + line / 2.0 - off as f32;
+        let g = s.gfx.view.g as f32;
+        let x = r.x as f32 + FIELD_PAD_X * g + lay.x_of(pos);
+        let y = r.y as f32 + FIELD_PAD_Y * g + lay.line_of(pos) as f32 * line + line / 2.0 - off as f32;
         (x.round() as i32, y as i32)
+    }
+
+    /// A text field on any grid: the Pad screen with its rects in that grid's units.
+    struct Fields {
+        grid: Grid,
+        w: Vec<Widget<&'static str>>,
+        area: String,
+        line: String,
+    }
+
+    impl Fields {
+        fn act(&mut self, _cx: &mut Cx, _a: &'static str) {}
+    }
+
+    impl Screen<App> for Fields {
+        fn id(&self) -> &'static str {
+            "fields"
+        }
+        fn grid(&self) -> Grid {
+            self.grid
+        }
+        fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            let u = self.grid.g();
+            let mut ui: Ui<&'static str> = Ui::new(g, mouse, live);
+            ui.text_field("area", Rect::new(20 * u, 20 * u, 80 * u, 40 * u), &self.area, true, true);
+            ui.text_field("line", Rect::new(20 * u, 80 * u, 60 * u, 14 * u), &self.line, false, true);
+            self.w = ui.widgets;
+        }
+        fn text_changed(&mut self, _cx: &mut Cx, id: &str, text: &str) {
+            match id {
+                "area" => self.area = text.into(),
+                "line" => self.line = text.into(),
+                _ => {}
+            }
+        }
+        crate::widget_plumbing!(Cx);
+    }
+
+    /// Clicks through the physical pointer on a field land the caret where the text is drawn, on every grid and window: the
+    /// same character whichever units the field is written in, and the view's scroll and slide are in those units too.
+    #[test]
+    fn a_click_puts_the_caret_on_the_same_character_on_every_grid() {
+        for (pw, ph) in [(1280, 720), (1920, 1080), (1366, 768)] {
+            for (field, chars) in [("area", PAD_TEXT.chars().count()), ("line", 40)] {
+                let carets: Vec<Vec<usize>> = [Grid::Old, Grid::Native].iter().map(|grid| {
+                    let screen = Fields { grid: *grid, w: Vec::new(), area: PAD_TEXT.into(), line: "a line far too long to show in its one line field".into() };
+                    let mut s = window(pw, ph, vec![Box::new(screen)]);
+                    s.gfx.kit.edit = Some(Edit::new(field, if field == "area" { PAD_TEXT } else { "a line far too long to show in its one line field" }, field == "area"));
+                    s.frame();
+                    (0..chars).step_by(7).map(|at| {
+                        let e = s.gfx.kit.edit.as_mut().unwrap();
+                        e.caret = 0;
+                        let (x, y) = point_of(&mut s, at);
+                        s.caret_at((x, y)).unwrap()
+                    }).collect()
+                }).collect();
+                assert_eq!(carets[0], carets[1], "{pw}x{ph} {field}");
+                let hits = carets[1].iter().enumerate().filter(|(i, c)| i * 7 == **c).count();
+                assert!(hits * 2 > carets[1].len(), "{pw}x{ph} {field}: the caret lands on the character clicked: {:?}", carets[1]);
+            }
+        }
+    }
+
+    /// The caret's line stays in view, and the page keys step by the rows that show, in the field's own units: a text area
+    /// scrolled for the same caret shows the same line on either grid.
+    #[test]
+    fn a_text_area_scrolls_the_same_lines_on_the_native_grid() {
+        let offset = |grid: Grid| {
+            let screen = Fields { grid, w: Vec::new(), area: PAD_TEXT.into(), line: String::new() };
+            let mut s = window(1920, 1080, vec![Box::new(screen)]);
+            s.gfx.kit.edit = Some(Edit::new("area", PAD_TEXT, true));
+            s.frame();
+            s.gfx.kit.edit.as_mut().unwrap().caret = PAD_TEXT.chars().count();
+            s.reveal();
+            s.gfx.kit.scroll["area.scroll"]
+        };
+        let (old, native) = (offset(Grid::Old), offset(Grid::Native));
+        assert!(old > 0, "the text is taller than its field");
+        assert!((native - 2 * old).abs() <= 2, "{native} against twice {old}");
+    }
+
+    /// A screen on the native grid shows a focused widget's tip with no mouse over it; a screen on the old numbers keeps
+    /// today's picture.
+    #[test]
+    fn a_tip_follows_the_keyboard_focus_on_the_native_grid_only() {
+        struct Tips {
+            grid: Grid,
+            w: Vec<Widget<&'static str>>,
+        }
+        impl Tips {
+            fn act(&mut self, _cx: &mut Cx, _a: &'static str) {}
+        }
+        impl Screen<App> for Tips {
+            fn id(&self) -> &'static str {
+                "tips"
+            }
+            fn grid(&self) -> Grid {
+                self.grid
+            }
+            fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+                let u = self.grid.g();
+                let mut ui: Ui<&'static str> = Ui::new(g, mouse, live);
+                ui.button_tip("tipped", Rect::new(100 * u, 100 * u, 60 * u, 16 * u), "Tipped", "a", true, crate::ui::tip("A title", "A body."));
+                self.w = ui.widgets;
+            }
+            crate::widget_plumbing!(Cx);
+        }
+        let lit = |s: &Shell<App>| s.gfx.canvas.px.clone();
+        for (grid, shows) in [(Grid::Native, true), (Grid::Old, false), (Grid::Quadrant, false)] {
+            let mut s = window(1280, 720, vec![Box::new(Tips { grid, w: Vec::new() })]);
+            s.mouse = (-1, -1);
+            s.frame();
+            let plain = lit(&s);
+            s.gfx.kit.focus = Some("tipped".into());
+            s.gfx.kit.focus_visible = true;
+            s.frame();
+            // The ring is around the button; the tip is what reaches past the ring, below it.
+            let v = s.gfx.view;
+            let below = v.rect(Rect::new(110 * grid.g(), 122 * grid.g(), 40 * grid.g(), 6 * grid.g()));
+            let differs = (below.y..below.y + below.h).any(|y| (below.x..below.x + below.w).any(|x| {
+                let i = ((y * s.gfx.canvas.w + x) * 4) as usize;
+                s.gfx.canvas.px[i..i + 4] != plain[i..i + 4]
+            }));
+            assert_eq!(differs, shows, "{grid:?}");
+        }
     }
 
     #[test]

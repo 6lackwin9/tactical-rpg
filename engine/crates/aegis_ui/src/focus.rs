@@ -64,6 +64,19 @@ pub fn hover_target(infos: &[Value], mouse: (i32, i32)) -> Option<String> {
     (top["kind"] == "text_button" && ring(infos, false).iter().any(|w| w["id"] == id)).then(|| id.to_string())
 }
 
+/// Where a hover card is read from (LAYOUT720 section 11, so a tip is not for the mouse only): the mouse while it is over a
+/// widget with a card; else, with `focus` showing, the middle of that widget when it has one; else the mouse.
+pub fn tip_point(infos: &[Value], mouse: (i32, i32), focus: Option<&str>) -> (i32, i32) {
+    let has_tip = |w: &Value| w["tip"].as_array().is_some_and(|t| !t.is_empty());
+    if infos.iter().any(|w| rect(w).contains(mouse.0, mouse.1) && has_tip(w)) {
+        return mouse;
+    }
+    live(infos, focus, false).filter(|w| has_tip(w)).map_or(mouse, |w| {
+        let r = rect(w);
+        (r.x + r.w / 2, r.y + r.h / 2)
+    })
+}
+
 /// The focusable widgets in drawing order (a widget drawn twice keeps its first place); a widget whose centre a later
 /// popup or window covers (its `backdrop`) is out of reach, as it is for the mouse.
 pub fn ring(infos: &[Value], options: bool) -> Vec<&Value> {

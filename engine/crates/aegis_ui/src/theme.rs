@@ -7,7 +7,8 @@
 //! the shell shows through `show_errors` while the previous theme stays.
 
 use crate::canvas::{rgb, rgba, Image, Rgba};
-use crate::painter::Typeface;
+use crate::painter::{Typeface, View};
+use crate::panes::TAB_H;
 use crate::screen::{show_errors, Cx};
 use crate::ui;
 use aegis_core::assets::Layers;
@@ -24,7 +25,7 @@ pub const FILE: &str = "ui/theme.json";
 pub const FRAMES_DIR: &str = "ui/frames";
 /// The body face's file when no theme names one (the shell's UI font).
 pub const BODY_FONT: &str = "fonts/OpenSans-SemiBold.ttf";
-const TOP_KEYS: [&str; 6] = ["version", "colors", "game_colors", "fonts", "layout", "frames"];
+const TOP_KEYS: [&str; 7] = ["version", "colors", "game_colors", "fonts", "layout", "metrics", "frames"];
 
 /// The colour roles: the theme's fields, `ROLES` (names in table order), `ROLE_DOCS` (what each is drawn for) and the
 /// lookups by name. The first 17 are the spec's table (LOOK1 3.2); the rest are values the engine widgets drew that
@@ -40,6 +41,8 @@ macro_rules! theme_roles {
             /// The faces (`Typeface` order: body, display, mono).
             pub faces: [FontSpec; 3],
             pub layout: Layout,
+            /// The `metrics` keys the theme files name: tokens of a screen on the layout grid (`Metrics::of`).
+            pub metrics: MetricKeys,
             /// `frames: false` ignores every frame file (vector panels in the colours).
             pub frames_on: bool,
             /// The frame files found, by role (the game's over the kit's over the engine's).
@@ -51,7 +54,7 @@ macro_rules! theme_roles {
         impl Default for Theme {
             fn default() -> Self {
                 let body = FontSpec { file: BODY_FONT.into(), scale: 1.0, bytes: None };
-                Self { $($name: $def,)* game_colors: BTreeMap::new(), faces: [body.clone(), body.clone(), body], layout: Layout::default(), frames_on: true, frames: BTreeMap::new(), sources: Vec::new() }
+                Self { $($name: $def,)* game_colors: BTreeMap::new(), faces: [body.clone(), body.clone(), body], layout: Layout::default(), metrics: MetricKeys::default(), frames_on: true, frames: BTreeMap::new(), sources: Vec::new() }
             }
         }
 
@@ -193,6 +196,158 @@ impl Layout {
             "focus_glow" => self.focus_glow = v as i32,
             _ => {}
         }
+    }
+}
+
+/// The theme files' `metrics` block (LAYOUT720 section 14): only the keys a file names, each in grid units. A key no file
+/// names is today's value on that grid (`Metrics::of`); on `Grid::Old` and `Grid::Quadrant` none of them counts.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct MetricKeys {
+    pub body: Option<f32>,
+    pub small: Option<f32>,
+    pub title: Option<f32>,
+    pub head: Option<f32>,
+    pub line: Option<f32>,
+    pub radius: Option<f32>,
+    pub margin: Option<i32>,
+    pub gutter: Option<i32>,
+    pub padding: Option<i32>,
+    pub grid: Option<i32>,
+    pub frame_title_h: Option<i32>,
+    pub tab_h: Option<i32>,
+    pub row_h: Option<i32>,
+    pub focus_glow: Option<i32>,
+    pub breakpoints_width: Option<[i32; 2]>,
+    pub breakpoints_height: Option<[i32; 2]>,
+}
+
+/// The `metrics` keys that take one number: their ranges and whether they take whole numbers. Each range keeps the key
+/// above 0 unless the spec says otherwise (`radius`, `focus_glow`), and what `layout` allows, doubled, where it has the key.
+pub const METRIC_KEYS: [(&str, f32, f32, bool); 14] = [
+    ("body", 1.0, 64.0, false),
+    ("small", 1.0, 64.0, false),
+    ("title", 1.0, 64.0, false),
+    ("head", 1.0, 64.0, false),
+    ("line", 1.0, 96.0, false),
+    ("radius", 0.0, 16.0, false),
+    ("margin", 1.0, 64.0, true),
+    ("gutter", 1.0, 48.0, true),
+    ("padding", 1.0, 48.0, true),
+    ("grid", 1.0, 16.0, true),
+    ("frame_title_h", 24.0, 96.0, true),
+    ("tab_h", 1.0, 96.0, true),
+    ("row_h", 1.0, 96.0, true),
+    ("focus_glow", 0.0, 6.0, true),
+];
+
+/// The most a size-class limit can be, in units.
+pub const BREAKPOINT_MAX: i64 = 100_000;
+
+impl MetricKeys {
+    fn set(&mut self, k: &str, v: f32) {
+        match k {
+            "body" => self.body = Some(v),
+            "small" => self.small = Some(v),
+            "title" => self.title = Some(v),
+            "head" => self.head = Some(v),
+            "line" => self.line = Some(v),
+            "radius" => self.radius = Some(v),
+            "margin" => self.margin = Some(v as i32),
+            "gutter" => self.gutter = Some(v as i32),
+            "padding" => self.padding = Some(v as i32),
+            "grid" => self.grid = Some(v as i32),
+            "frame_title_h" => self.frame_title_h = Some(v as i32),
+            "tab_h" => self.tab_h = Some(v as i32),
+            "row_h" => self.row_h = Some(v as i32),
+            "focus_glow" => self.focus_glow = Some(v as i32),
+            _ => {}
+        }
+    }
+}
+
+/// The size-class limits, in grid units: `[compact, medium]` per axis. Under `compact` an axis is Compact, under `medium`
+/// Medium, else Expanded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Breakpoints {
+    pub width: [i32; 2],
+    pub height: [i32; 2],
+}
+
+/// The limits with no `metrics.breakpoints` (assumed, to tune with the first real target; LAYOUT720 6.4).
+pub const BREAKPOINTS: Breakpoints = Breakpoints { width: [800, 1200], height: [480, 700] };
+/// A row's height in old units (the shop's rows).
+const ROW_H: i32 = 14;
+
+/// What a screen's layout reads (LAYOUT720 6.2, 14): text sizes, gaps and small control heights, in the units of the view
+/// it was made for. `Ui::m` is the one read path; `Metrics::of` is for what draws without a `Ui`. On `Grid::Old` and
+/// `Grid::Quadrant` every value is today's constant or `Theme::layout`, so `metrics` changes nothing there. On a grid of
+/// more units per old unit a value is the `metrics` key when a file names it, else today's value times the units, so a
+/// screen moved to the grid draws its old picture under any theme.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Metrics {
+    pub body: f32,
+    pub small: f32,
+    pub title: f32,
+    pub head: f32,
+    pub line: f32,
+    pub radius: f32,
+    /// `Layout::frame_radius` in these units: a frame's vector panel. No `metrics` key.
+    pub frame_radius: f32,
+    pub margin: i32,
+    pub gutter: i32,
+    pub padding: i32,
+    pub grid: i32,
+    pub frame_title_h: i32,
+    pub tab_h: i32,
+    pub row_h: i32,
+    pub focus_glow: i32,
+    /// The thinnest fill that still shows, in units: one physical px at least, at any scale.
+    pub hair: i32,
+    pub breakpoints: Breakpoints,
+    /// Units per old unit (`View::g`).
+    pub g: i32,
+}
+
+impl Metrics {
+    /// The metrics of a screen drawn under `v` in theme `t`.
+    pub fn of(t: &Theme, v: View) -> Metrics {
+        let (l, k, g) = (&t.layout, &t.metrics, v.g.max(1));
+        let f = g as f32;
+        let hair = ((1.0 / v.s).ceil() as i32).max(1);
+        let breakpoints = Breakpoints { width: k.breakpoints_width.unwrap_or(BREAKPOINTS.width), height: k.breakpoints_height.unwrap_or(BREAKPOINTS.height) };
+        if g == 1 {
+            return Metrics { body: ui::BODY, small: ui::SMALL, title: ui::TITLE, head: ui::HEAD, line: ui::LINE, radius: l.radius, frame_radius: l.frame_radius, margin: l.margin, gutter: l.gutter, padding: l.padding, grid: l.grid, frame_title_h: l.frame_title_h, tab_h: TAB_H, row_h: ROW_H, focus_glow: l.focus_glow, hair, breakpoints, g };
+        }
+        Metrics {
+            body: k.body.unwrap_or(ui::BODY * f),
+            small: k.small.unwrap_or(ui::SMALL * f),
+            title: k.title.unwrap_or(ui::TITLE * f),
+            head: k.head.unwrap_or(ui::HEAD * f),
+            line: k.line.unwrap_or(ui::LINE * f),
+            radius: k.radius.unwrap_or(l.radius * f),
+            frame_radius: l.frame_radius * f,
+            margin: k.margin.unwrap_or(l.margin * g),
+            gutter: k.gutter.unwrap_or(l.gutter * g),
+            padding: k.padding.unwrap_or(l.padding * g),
+            grid: k.grid.unwrap_or(l.grid * g),
+            frame_title_h: k.frame_title_h.unwrap_or(l.frame_title_h * g),
+            tab_h: k.tab_h.unwrap_or(TAB_H * g),
+            row_h: k.row_h.unwrap_or(ROW_H * g),
+            focus_glow: k.focus_glow.unwrap_or(l.focus_glow * g),
+            hair,
+            breakpoints,
+            g,
+        }
+    }
+
+    /// `n` old units in these units: what a widget's inner layout writes where no token names the number.
+    pub fn u(&self, n: i32) -> i32 {
+        n * self.g
+    }
+
+    /// `u` for a position or a size that is not whole.
+    pub fn uf(&self, n: f32) -> f32 {
+        n * self.g as f32
     }
 }
 
@@ -472,6 +627,9 @@ pub const FRAME_ROLES: [(&str, Option<&str>); 15] = [
     ("ornate_full", Some("ornate")),
 ];
 
+/// A hover card's vector corner radius, in old units.
+const TIP_RADIUS: f32 = 3.0;
+
 fn fallback(role: &str) -> Option<&'static str> {
     FRAME_ROLES.iter().find(|r| r.0 == role).and_then(|r| r.1)
 }
@@ -521,9 +679,20 @@ impl Theme {
             "card" => (self.card, self.edge, r),
             "card_hot" => (self.card_hot, self.edge_hot, r),
             "card_on" => (self.selected, self.focus, r),
-            "tip" => (self.tip, self.edge_hot, 3.0),
+            "tip" => (self.tip, self.edge_hot, TIP_RADIUS),
             _ => (self.card, self.edge, r),
         }
+    }
+
+    /// `vector` on the grid of `m`: the same colours, the corner radius in its units.
+    pub fn vector_in(&self, role: &str, m: &Metrics) -> (Rgba, Rgba, f32) {
+        let (fill, edge, _) = self.vector(role);
+        let radius = match role {
+            "panel" | "ornate" | "ornate_full" => m.frame_radius,
+            "tip" => m.uf(TIP_RADIUS),
+            _ => m.radius,
+        };
+        (fill, edge, radius)
     }
 
     /// The text colour on frame role `role`: its frame's `ink`, else `ink` on vector parchment and `text` elsewhere.
@@ -774,10 +943,46 @@ fn apply_file(t: &mut Theme, file: &Path, at: &str, layers: &Layers, face_set: &
             None => errs.push(format!("{at}: layout.{k} must be {} {lo}-{hi}", if whole { "a whole number" } else { "a number" })),
         }
     }
+    for (k, v) in object("metrics", errs) {
+        if k == "breakpoints" {
+            apply_breakpoints(&mut t.metrics, &v, at, errs);
+            continue;
+        }
+        let Some(&(_, lo, hi, whole)) = METRIC_KEYS.iter().find(|l| l.0 == k) else {
+            errs.push(format!("{at}: unknown metrics key '{k}' (allowed: {}, breakpoints)", METRIC_KEYS.map(|l| l.0).join(", ")));
+            continue;
+        };
+        let n = v.as_f64().map(|n| n as f32).filter(|n| !whole || n.fract() == 0.0);
+        match n.filter(|n| (lo..=hi).contains(n)) {
+            Some(n) => t.metrics.set(&k, n),
+            None => errs.push(format!("{at}: metrics.{k} must be {} {lo}-{hi}", if whole { "a whole number" } else { "a number" })),
+        }
+    }
     if let Some(f) = o.get("frames") {
         match f.as_bool() {
             Some(b) => t.frames_on = b,
             None => errs.push(format!("{at}: frames must be true or false")),
+        }
+    }
+}
+
+/// `metrics.breakpoints`: `width` and `height`, each `[compact, medium]` ascending whole numbers. A file sets only the axes
+/// it names.
+fn apply_breakpoints(keys: &mut MetricKeys, v: &Value, at: &str, errs: &mut Vec<String>) {
+    let Some(o) = v.as_object() else { return errs.push(format!("{at}: metrics.breakpoints must be an object")) };
+    for (k, axis) in o {
+        let slot = match k.as_str() {
+            "width" => &mut keys.breakpoints_width,
+            "height" => &mut keys.breakpoints_height,
+            _ => {
+                errs.push(format!("{at}: unknown metrics.breakpoints key '{k}' (allowed: width, height)"));
+                continue;
+            }
+        };
+        let vals: Option<Vec<i64>> = axis.as_array().and_then(|a| a.iter().map(Value::as_i64).collect());
+        match vals.as_deref() {
+            Some(&[a, b]) if a >= 1 && a < b && b <= BREAKPOINT_MAX => *slot = Some([a as i32, b as i32]),
+            _ => errs.push(format!("{at}: metrics.breakpoints.{k} must be [compact, medium], whole numbers ascending, 1-{BREAKPOINT_MAX}")),
         }
     }
 }

@@ -6,11 +6,11 @@ Once a layout is selected, the position and size of each element are calculated 
 positions, only relative positions and sizes; the actual size at render time comes from the layout. Changing a layout's
 dimensions needs few or no screen edits.
 
-Built so far: the crate `aegis_layout` (`Rect`, `Insets`, `Anchor`, `Part`, `frac`, `fill`, `resolve`, `Stack`, `pick`)
-and `aegis_ui::shot_diff`. The later slices of the engine's layout work (`docs/specs/LAYOUT720.md`) add the rest: E1
-`Grid` and `Screen::grid`; E3 `Metrics` with `hair`, `Env`, `Ui::m`, `Ui::env`, `Ui::screen`, `Ui::image_in`,
-`Ui::frame_body` and `Ui::corner_size`; E5 `CanvasPolicy` and `layout_audit`. A name on this page that the code does not
-have yet is one of those.
+Built so far: the crate `aegis_layout` (`Rect`, `Insets`, `Anchor`, `Part`, `frac`, `fill`, `resolve`, `Stack`, `pick`),
+`aegis_ui::shot_diff`, `Grid` and `Screen::grid`, `Metrics` with `hair`, `Env`, `Ui::m`, `Ui::env`, `Ui::screen`,
+`Ui::image_in`, `Ui::frame_body` and `Ui::corner_size`, and the kit's widgets, which draw right on every grid. The later
+slices of the engine's layout work (`docs/specs/LAYOUT720.md`) add panes that go relative (E4), `CanvasPolicy` and
+`layout_audit` (E5). A name on this page that the code does not have yet is one of those.
 
 ## Window, policy, canvas and unit
 
@@ -29,10 +29,13 @@ in a screen: every screen receives its canvas as a rect.
 ## Writing a screen
 
 1. Cut from `ui.screen()`, the canvas as a rect. Read it each frame and assume no aspect.
-2. Take tokens from `ui.m()`.
+2. Take tokens from `ui.m()`: text sizes, gaps, small control heights, and `u(n)` for a number no token names. A theme's
+   `metrics` block sets them (`theme_and_tiles.md`). What draws with no `Ui` reads `Metrics::of(&th(), p.v)`.
 3. Draw frames through `ui.frame_body(role, r)`, which returns the content rect, so content never reads a slice number.
-4. Cut every pane first, then choose one corner size for the smallest (`ui.corner_size`), then draw.
-5. Keep no `Rect` across frames. A resize replaces the canvas and the view.
+4. Cut every pane first, then choose one corner size for the smallest (`ui.corner_size`), then draw. The size is against the
+   art, as a sidecar's `corner_size`, and lasts for that `Ui`.
+5. Draw images through `ui.image_in(img, r)`, and read `ui.env()` for the canvas, its size classes, `dpr` and the pointer.
+6. Keep no `Rect` across frames. A resize replaces the canvas and the view.
 
 ```rust
 let (m, area) = (ui.m(), ui.screen());
@@ -166,8 +169,10 @@ Each is its own later task, and no caller changes when it lands.
 
 ## No hover-only information
 
-Nothing needed to play lives only in a hover card. A tip is also reachable by focus or press. Dragging keeps a non-drag
-route, and a right click keeps a visible button. Touch input is later, and this rule keeps it possible.
+Nothing needed to play lives only in a hover card. On a screen on the layout grid a tip also shows for the widget with the
+visible keyboard focus when the mouse is on no card (`focus::tip_point`); a screen still on the old numbers keeps its
+picture until its own task moves it. The press route comes with touch. Dragging keeps a non-drag route, and a right click
+keeps a visible button. Touch input is later, and this rule keeps it possible.
 
 ## What layout code may not use
 

@@ -7,7 +7,7 @@
 
 use crate::canvas::Rect;
 use crate::painter::Painter;
-use crate::ui::BODY;
+use crate::theme::{th, Metrics};
 
 /// Undo steps one edit keeps (PLAYUI1-T: at most 100 per edit).
 pub const UNDO_MAX: usize = 100;
@@ -600,15 +600,16 @@ impl Layout {
 }
 
 /// A text field's padding: the text starts this far from its left and top edges, and wraps this much short of its
-/// right edge (`Ui::text_field`).
+/// right edge (`Ui::text_field`). In old units: `g` below is the view's units per old unit.
 pub const FIELD_PAD_X: f32 = 5.0;
 pub const FIELD_PAD_Y: f32 = 3.0;
 
-/// The layout of a text field in `r` showing `text` in the painter's font (`text_field` draws it, the shell maps keys
-/// and clicks with it).
+/// The layout of a text field in `r` showing `text` in the painter's font, in the view's units (`text_field` draws it,
+/// the shell maps keys and clicks with it).
 pub fn field_layout(p: &mut Painter, text: &str, r: Rect, multiline: bool) -> Layout {
     let mut buf = [0u8; 4];
-    Layout::new(text, r.w as f32 - 2.0 * FIELD_PAD_X, multiline, &mut |c| p.text_w(c.encode_utf8(&mut buf), BODY))
+    let m = Metrics::of(&th(), p.v);
+    Layout::new(text, r.w as f32 - 2.0 * m.uf(FIELD_PAD_X), multiline, &mut |c| p.text_w(c.encode_utf8(&mut buf), m.body))
 }
 
 /// The id of a multi-line text field's scroll area (its offset in `Kit::scroll`).
@@ -617,23 +618,24 @@ pub fn field_scroll_id(id: &str) -> String {
 }
 
 /// The height of a multi-line field's content: its lines and the padding above and below.
-pub fn field_content_h(lines: usize, line_h: f32) -> i32 {
-    (lines as f32 * line_h + 2.0 * FIELD_PAD_Y).ceil() as i32
+pub fn field_content_h(lines: usize, line_h: f32, g: i32) -> i32 {
+    (lines as f32 * line_h + 2.0 * FIELD_PAD_Y * g as f32).ceil() as i32
 }
 
 /// The scroll offset that shows line `i` (lines `line_h` apart) of a field `view_h` tall whose content is
 /// `content_h` tall: `off` when the line already shows, else the nearest offset that shows it.
-pub fn reveal_offset(off: i32, i: usize, line_h: f32, view_h: i32, content_h: i32) -> i32 {
+pub fn reveal_offset(off: i32, i: usize, line_h: f32, view_h: i32, content_h: i32, g: i32) -> i32 {
     let max = (content_h - view_h).max(0);
-    let top = FIELD_PAD_Y + i as f32 * line_h;
-    let lo = (top + line_h + FIELD_PAD_Y - view_h as f32).ceil() as i32;
-    let hi = (top - FIELD_PAD_Y).floor() as i32;
+    let pad = FIELD_PAD_Y * g as f32;
+    let top = pad + i as f32 * line_h;
+    let lo = (top + line_h + pad - view_h as f32).ceil() as i32;
+    let hi = (top - pad).floor() as i32;
     off.clamp(lo.min(hi), hi.max(lo)).clamp(0, max)
 }
 
 /// How far a one-line field in `r` slides its text left to keep caret position `caret` in view.
-pub fn field_shift(lay: &Layout, caret: usize, r: Rect) -> f32 {
-    (lay.x_of(caret) - (r.w as f32 - 2.0 * FIELD_PAD_X)).max(0.0)
+pub fn field_shift(lay: &Layout, caret: usize, r: Rect, g: i32) -> f32 {
+    (lay.x_of(caret) - (r.w as f32 - 2.0 * FIELD_PAD_X * g as f32)).max(0.0)
 }
 
 /// The clipboard (PLAYUI1-T): the system's through `arboard` (the engine runs on the desktop only), with an in-app

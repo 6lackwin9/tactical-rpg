@@ -26,6 +26,31 @@ With no theme file the engine draws its default look. To add one, put `ui/theme.
   theme already in force stays.
 - Engine widgets draw through `th()`; a game's screens should too, so the theme reaches them.
 
+### Tokens on the layout grid
+
+`layout` holds values in old units, for screens still on the old numbers. A screen on the layout grid reads its tokens
+through `Ui::m`, and the theme's optional `metrics` block sets them, in grid units (`reactive_layout.md`):
+
+```json
+{ "version": 1, "metrics": { "body": 15, "padding": 14, "breakpoints": { "width": [800, 1200] } } }
+```
+
+| Key | Type and limits | With no key |
+| --- | --- | --- |
+| `body`, `small`, `title`, `head` | number, 1-64 | the old constant doubled: 14, 12, 15.2, 24 |
+| `line` | number, 1-96 | 18 |
+| `radius` | number, 0-16 | `layout.radius` doubled |
+| `margin` | whole, 1-64 | `layout.margin` doubled |
+| `gutter`, `padding` | whole, 1-48 | `layout.gutter`, `layout.padding` doubled |
+| `grid` | whole, 1-16 | `layout.grid` doubled |
+| `frame_title_h` | whole, 24-96 | `layout.frame_title_h` doubled |
+| `tab_h`, `row_h` | whole, 1-96 | 36, 28 |
+| `focus_glow` | whole, 0-6 | `layout.focus_glow` doubled |
+| `breakpoints` | `width` and `height`, each `[compact, medium]`, whole, ascending, 1-100000 | `[800, 1200]`, `[480, 700]` |
+
+An unknown key is an error. With no key a token is today's value doubled, so a screen moved to the grid draws its old
+picture under any theme. On a screen still on the old numbers, `metrics` changes nothing.
+
 ## Frames
 
 A frame is `ui/frames/<role>.png` with a `ui/frames/<role>.json` sidecar beside it (roles: `theme::FRAME_ROLES`; a
@@ -40,7 +65,7 @@ missing role falls back to another). `"frames": false` in the theme draws vector
 | `pad` | content inset, [l, t, r, b] in logical px | the slices divided by `scale` |
 | `ink` | the colour role of text on the frame | `text` |
 | `corner_inner` | [x, y] art px from the anchor that the art reaches into the panel: `painter::nine_content_rect` keeps content past it at the size the corners draw | none (`pad` alone) |
-| `straddle` | `true`: half in, half out of the panel: edge bands and corners centred on its boundary and corner points, the centre filling exactly the panel; the panel's rect, layout, widget and hit area stay, the overhang only draws, under the canvas's clip; always averaged when reduced, whatever `reduce` says; the corners follow the window at `scale` and keep one size on any panel, as large as fits on a panel too small for two, mirrored art landing as mirrored pixels | off (inside the rect)|
+| `straddle` | `true`: half in, half out of the panel: edge bands and corners centred on its boundary and corner points, the centre filling exactly the panel; the panel's rect, layout, widget and hit area stay, the overhang only draws, under the canvas's clip; always averaged when reduced, whatever `reduce` says; the corners follow the window at `scale` and keep one size on any panel, as large as fits on a panel too small for two, mirrored art landing as mirrored pixels | off (inside the rect) |
 | `corner_anchor` | [x, y] art px of the top-left corner placed on the panel's corner point, mirrored for the others, so the boundary runs along the art's arms | the corner's middle |
 | `sharpen` | 0-2: an unsharp mask on the corners once reduced to the window | 0 |
 | `reduce` | `average`: a high-resolution frame, finer than the window, is averaged down to the window's physical size (cached per frame and size) instead of sampled; only when `scale` exceeds the view's scale (`straddle` always averages) | off (nearest, exact pixels) |

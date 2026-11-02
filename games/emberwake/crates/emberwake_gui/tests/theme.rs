@@ -522,6 +522,69 @@ fn the_grip_shows_its_hover_and_the_playing_label_reads() {
     assert!(t.contrast(t.playing_edge, t.ruler) >= 3.0);
 }
 
+/// LAYOUT720-E3: the kit's widgets in this game's frames and faces, drawn on the native grid with their numbers doubled, are
+/// their old picture: to the bit where no division rounds on the grid. `AEGIS_SHOT_DIR=<folder>` writes the pictures.
+#[test]
+fn the_shipped_frames_and_faces_draw_the_kit_the_same_on_the_native_grid() {
+    use aegis_ui::canvas::{Canvas, Image, Rect};
+    use aegis_ui::painter::{Fonts, Grid, View};
+    use aegis_ui::shot_diff::shot_diff;
+    use aegis_ui::ui::{draw_tip, tip, Gfx, Kit, Ui};
+    theme::set_theme(shipped());
+    let font = std::fs::read(game_dir().join("../../engine/assets/fonts/OpenSans-SemiBold.ttf")).unwrap();
+    let shots = std::env::var("AEGIS_SHOT_DIR").ok();
+    for (pw, ph) in [(1280, 720), (1920, 1080), (1366, 768)] {
+        let picture = |grid: Grid, hovered: bool| {
+            let mut g = Gfx { canvas: Canvas::new(pw, ph), view: View::fit(pw as u32, ph as u32).for_grid(grid), fonts: Fonts::new(&font), kit: Kit::default() };
+            let u = grid.g();
+            let r = |x: i32, y: i32, w: i32, h: i32| Rect::new(x * u, y * u, w * u, h * u);
+            g.canvas.clear(aegis_ui::theme::th().bg);
+            {
+                let mouse = if hovered { (30 * u, 100 * u) } else { (-1, -1) };
+                let mut ui: Ui<()> = Ui::new(&mut g, mouse, true);
+                let c = ui.frame(r(5, 5, 300, 70), "A frame's title", false);
+                ui.p.fill(Rect::new(15 * u, c, 30 * u, 3 * u), ui.t.text);
+                ui.frame_body("ornate", r(320, 15, 300, 60));
+                ui.frame_body("ornate_full", r(320, 95, 300, 60));
+                ui.button("a", r(10, 92, 80, 16), "Hovered", (), true);
+                ui.button("b", r(100, 92, 80, 16), "Idle", (), true);
+                ui.button("c", r(190, 92, 80, 16), "Disabled", (), false);
+                ui.tab("d", r(10, 114, 60, 18), "Open", (), true);
+                ui.tab("e", r(74, 114, 60, 18), "Shut", (), false);
+                ui.card("f", r(10, 140, 140, 34), &[("A card".into(), ui.t.text), ("Its second line".into(), ui.t.dim)], Some(()), false, true, Vec::new());
+                ui.card("g", r(160, 140, 140, 34), &[("Selected".into(), ui.t.text)], Some(()), true, true, Vec::new());
+                let i = ui.inset(r(10, 180, 140, 40), false);
+                ui.para(i.x, i.y, i.w, "Inset text", ui.m().small, ui.t.text);
+                let i = ui.inset(r(160, 180, 140, 40), true);
+                ui.para(i.x, i.y, i.w, "Parchment text", ui.m().small, ui.t.ink);
+                ui.header(10 * u, 230 * u, "A header");
+                ui.badge(r(150, 230, 24, 12), "42", "card");
+                ui.push("w", "row", "", r(320, 200, 100, 40), true, false, None, tip("A card's title", "Its body, long enough to wrap onto a line or two."));
+                let w = std::mem::take(&mut ui.widgets);
+                draw_tip(&mut ui.p, &w, (330 * u, 210 * u));
+            }
+            Image { w: g.canvas.w, h: g.canvas.h, px: g.canvas.px }
+        };
+        let view = View::fit(pw as u32, ph as u32);
+        for hovered in [false, true] {
+            let (old, native) = (picture(Grid::Old, hovered), picture(Grid::Native, hovered));
+            if let Some(dir) = &shots {
+                for (name, img) in [("old", &old), ("native", &native)] {
+                    let path = Path::new(dir).join(format!("game_{pw}_{hovered}_{name}.png"));
+                    let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(path).unwrap()), img.w as u32, img.h as u32);
+                    enc.set_color(png::ColorType::Rgba);
+                    enc.set_depth(png::BitDepth::Eight);
+                    enc.write_header().unwrap().write_image_data(&img.px).unwrap();
+                }
+            }
+            // The card's measured width rounds up in units, so the tip's far edge may land one away.
+            let diff = shot_diff(&old, &native, view.for_grid(Grid::Native).s).unwrap();
+            assert!(diff.passed(), "{pw}x{ph} hovered {hovered}: {diff}");
+        }
+    }
+    theme::set_theme(Theme::default());
+}
+
 /// `mono` is the static Bold the user picked: fontdue draws a variable font at its default weight, so a file with an
 /// `fvar` table or a weight class other than 700 would draw the wrong face.
 #[test]
