@@ -370,6 +370,8 @@ class Reduce(unittest.TestCase):
             png = rec.with_suffix(".png")
             if str(r.get("model", "")).startswith("local:") or not png.is_file():
                 continue
+            if r.get("via"):                                            # image-queue art takes the scale-only path, not reduce_of
+                continue
             try:
                 Image.open(png).verify()
             except Exception:

@@ -27,6 +27,7 @@ What is here (`assets/`):
 - `props/common/{tree,stones}/v<n>.png`: the battle stage's upright props (STAGE1-A2, 2026-10-27: generated locally with
   FLUX.2 Klein, sources and prompt records in `art_src/props/`, cut by `tools/sprites/props_cut.py`; STAGE1-T drew them
   by code before).
+- `props/common/<art>/v<n>.png`: the map props of PROPS1 (PROPS1-A2: tent, broken_pillar, fallen_column, rubble_wall, boulder, rock_spire, cliff_face, signpost, banner_pole, gatepost, crate_stack, fire_pit, cobbles, scorch_mark), cut by `tools/portraits/sheets.py props --reduce scale`; `props/samples/<set>/<art>/v<n>.png` (`camp_tan`, `camp_black`): two camp sheet takes kept as sample assets, bound to no data and to no region set.
 - `skills/kinds/<kind>.png`, `statuses/<id>.png`, `map/markers/<marker>.png`, `ui/{pins,intents,badges,chips}/`.
 - `ui/hud/` (gold, supplies, party, journal, stash, menu), `ui/markers/` (npc, chest, chest_open, lore, exit,
   world_map, encounter, roamer, point) and `ui/services/` (shop, recruit): the PLAYUI1 icons (32x32, made by

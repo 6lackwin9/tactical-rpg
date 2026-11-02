@@ -535,7 +535,28 @@ def reduce_to(im, w, h, colors=64):
     return out
 
 
-def prop_image(tile, size, layer, colors=16, palette="quantize"):
+def scale_to(im, w, h):
+    """A smooth (Lanczos) scale of an RGBA image to w x h without the palette step: colour is scaled premultiplied
+    (so clear pixels do not bleed their colour in), alpha is cut at 128 afterwards."""
+    from PIL import Image
+    pre = im.copy(); pp = pre.load()
+    for y in range(im.size[1]):
+        for x in range(im.size[0]):
+            r, g, b, al = pp[x, y]
+            pp[x, y] = (r * al // 255, g * al // 255, b * al // 255, al)
+    rgb = pre.convert("RGB").resize((w, h), Image.LANCZOS)
+    alpha = im.getchannel("A").resize((w, h), Image.LANCZOS)
+    out = Image.new("RGBA", (w, h), (0, 0, 0, 0)); op = out.load(); rp = rgb.load(); ap = alpha.load()
+    for y in range(h):
+        for x in range(w):
+            al = ap[x, y]
+            if al >= 128:
+                r, g, b = rp[x, y]
+                op[x, y] = (min(255, r * 255 // al), min(255, g * 255 // al), min(255, b * 255 // al), 255)
+    return out
+
+
+def prop_image(tile, size, layer, colors=16, palette="quantize", reduce="palette"):
     """One prop from its cell: background cleared, specks dropped, trimmed to the content, reduced to fit `size`
     less the 1 px outline margin keeping its aspect, placed bottom-centred (standing, layer "sort") or centred (flat,
     layer "ground") on a clear canvas of exactly `size`, cut to `colors` and outlined. Returns (image, fill): fill is
@@ -553,13 +574,15 @@ def prop_image(tile, size, layer, colors=16, palette="quantize"):
     bw, bh = w - 2 * m, h - 2 * m
     k = min(bw / cw, bh / ch)
     tw, th = min(bw, max(1, round(cw * k))), min(bh, max(1, round(ch * k)))
-    small = reduce_to(content, tw, th)
+    small = scale_to(content, tw, th) if reduce == "scale" else reduce_to(content, tw, th)
     y = h - m - th if layer != "ground" else (h - th) // 2
     canvas.paste(small, ((w - tw) // 2, y))
+    if reduce == "scale":                       # art that is already pixel art: no palette or outline step
+        return canvas, (tw / bw, th / bh)
     return snap(canvas, colors, outline, palette), (tw / bw, th / bh)
 
 
-def slice_props(path, sheet_id, root=ROOT, spares=None, palette="quantize"):
+def slice_props(path, sheet_id, root=ROOT, spares=None, palette="quantize", reduce="palette"):
     """Cuts a prop sheet: each cell to its layer path under `root` at its PNG size, spare takes to `spares`;
     returns (name, path, fill)."""
     from PIL import Image
@@ -572,7 +595,7 @@ def slice_props(path, sheet_id, root=ROOT, spares=None, palette="quantize"):
         rel = prop_path(cell)
         dest = pathlib.Path(root) / rel if rel else spares / f"{prop_name(cell)}.png"
         dest.parent.mkdir(parents=True, exist_ok=True)
-        img, fill = prop_image(im.crop(box), cell[4], cell[5], palette=palette)
+        img, fill = prop_image(im.crop(box), cell[4], cell[5], palette=palette, reduce=reduce)
         img.save(dest)
         saved.append((prop_name(cell), dest, fill))
     return saved
@@ -868,14 +891,15 @@ if __name__ == "__main__":
             sys.exit(f"faces: {e}")
     elif sys.argv[1] in ("props", "slice-props"):
         args = sys.argv[2:]; opt = {}
-        for flag in ("--root", "--spares", "--contact", "--palette"):
+        for flag in ("--root", "--spares", "--contact", "--palette", "--reduce"):
             if flag in args:
                 i = args.index(flag); opt[flag] = args[i + 1]; del args[i:i + 2]
-        if len(args) < 2 or args[1] not in PROP_SHEETS:
+        if len(args) < 2 or args[1] not in PROP_SHEETS or opt.get("--reduce", "palette") not in ("palette", "scale"):
             sys.exit("usage: sheets.py props <sheet.png> <" + "|".join(PROP_SHEETS) + "> [--root R] [--spares DIR] "
-                     "[--contact out.png] [--palette quantize|ramps]")
+                     "[--contact out.png] [--palette quantize|ramps] [--reduce palette|scale]")
         root = opt.get("--root", args[2] if len(args) > 2 else ROOT)   # slice-props takes the root as a third argument
-        saved = slice_props(args[0], args[1], root, opt.get("--spares"), palette=opt.get("--palette", "quantize"))
+        saved = slice_props(args[0], args[1], root, opt.get("--spares"), palette=opt.get("--palette", "quantize"),
+                            reduce=opt.get("--reduce", "palette"))
         for name, dest, (fw, fh) in saved:
             print(f"{name} {dest} fill {fw:.0%} x {fh:.0%}")
         if "--contact" in opt:
