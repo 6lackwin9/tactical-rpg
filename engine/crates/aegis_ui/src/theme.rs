@@ -660,6 +660,20 @@ thread_local! {
     /// the engine default and it with frames off).
     static CURRENT: RefCell<Rc<Theme>> = RefCell::new(Rc::new(Theme::default()));
     static LOADED: RefCell<Rc<Theme>> = RefCell::new(Rc::new(Theme::default()));
+    /// The asset layers of the last `reload` (LOOK1-E2: the Kit page's Tiles page reads `tilesets/` through them, as
+    /// the page draws with no `Cx`).
+    static LAYERS: RefCell<Rc<Layers>> = RefCell::new(Rc::new(Layers::default()));
+}
+
+/// The asset layers the last `reload` read (none before it). Each `reload` gives a new handle, so a cache of what they
+/// hold can tell (`Rc::ptr_eq`).
+pub fn layers() -> Rc<Layers> {
+    LAYERS.with(|c| c.borrow().clone())
+}
+
+/// Sets what `layers` answers (`reload` does; tests with fixture layers).
+pub fn set_layers(layers: Layers) {
+    LAYERS.with(|c| *c.borrow_mut() = Rc::new(layers));
 }
 
 /// The theme in force (cheap: a shared handle).
@@ -687,6 +701,7 @@ pub fn install(t: Theme) {
 /// Loads the theme from the game's asset layers (`cx.art`) and installs it; on any problem the theme in force stays
 /// and the problems are shown (`show_errors`). The shell calls it at start; a game calls it on its Reload data.
 pub fn reload<G: 'static>(cx: &mut Cx<G>) -> bool {
+    set_layers(cx.art.layers().clone());
     match load(cx.art.layers()) {
         Ok(t) => {
             install(t);

@@ -11,11 +11,13 @@
 //! INPUT1-AP: a budget planned against, kept, spent and refilled, with an alert and a debt or shortfall label) and the
 //! runtime theme (`theme`, LOOK1-E1: colour roles, faces, layout values and nine-slice frames over the asset layers;
 //! the default is the look before it) and the menu panes (`panes`, LOOK1-ME: backdrop, menu column, tab rail, slot
-//! card and the themed ask, standalone pieces on the theme). A game
+//! card and the themed ask, standalone pieces on the theme) and the tile masks (`autotile`, LOOK1-E2: corner masks for
+//! transition pieces, a block's open edges). A game
 //! supplies its screens, its context and the agent replies about its own state.
 
 pub mod art;
 pub mod audio;
+pub mod autotile;
 pub mod bridge;
 pub mod canvas;
 pub mod depth;

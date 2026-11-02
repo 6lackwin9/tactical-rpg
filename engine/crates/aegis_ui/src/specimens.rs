@@ -16,14 +16,19 @@
 //! page or the gallery is left: `leave_theme`). LOOK1-ME: a sixth page, Panes, shows each engine pane (`panes`) on
 //! its own stage, picked by tabs: the backdrop (vignette and veil switches), the menu column under its title block,
 //! the tab rail, three slot cards (a thumbnail, an initial, a long name cut; lock and delete) and the themed ask
-//! (ornate or panel, either default); `Specimens::key` takes the page's keys.
+//! (ornate or panel, either default); `Specimens::key` takes the page's keys. LOOK1-E2: a seventh page, Tiles, draws a
+//! fixture map (`TILES_MAP`: a pond with an island, a wall run, a lone water cell, a 1-wide channel) from a set picked
+//! among the asset layers' `tilesets/` (`theme::layers`), square or tilted at 1x-3x, with the set's transition pieces
+//! (`autotile`) when it has them, else the mask numbers.
 
+use crate::autotile::{block_edges, corner_pieces};
 use crate::canvas::{rgb, rgba, Image, Rect, Rgba};
 use crate::fx::{Beam, Camera, Clock, Effect, Flash, Fx, Layer, Look, Looped, Orbit, Projectile, Ring, ShakeLimits, ShakeTable, Sparks, Trail, PRIM_KINDS, SHAKE_PRESETS};
 use crate::portrait_fx::{self, Budget, Cue, ExpressionFx, Motion, PortraitFx, PortraitOpts, Tier, MOTION_SAMPLES};
-use aegis_core::assets::Face;
+use aegis_core::assets::{Face, Layers};
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
+use std::rc::Rc;
 use crate::painter::Typeface;
 use crate::panes::{ask_dialog, ask_key, backdrop, backdrop_pane, menu_column, menu_key, menu_title, slot_card, tab_key, tab_rail, AskView, Corner, MenuItem, SlotView};
 use crate::screen::Key;
@@ -82,10 +87,46 @@ pub enum KitAct {
     Slot(usize),
     SlotLock,
     PaneToggle(&'static str),
+    /// LOOK1-E2: the Tiles page's set (index in the layers' sorted `tilesets/`), view (`TILE_VIEWS` index), zoom
+    /// (`TILE_ZOOMS` index) and a pan in cells (x, y).
+    TileSet(usize),
+    /// The set's transition pair shown (index in its sorted `<upper>/over_<lower>/` folders).
+    TilePair(usize),
+    TileView(usize),
+    TileZoom(usize),
+    TilePan(i32, i32),
 }
 
 pub const TABS: [&str; 3] = ["First", "Second", "Third"];
-pub const PAGES: [&str; 6] = ["Widgets", "Timeline", "Effects", "Portraits", "Theme", "Panes"];
+pub const PAGES: [&str; 7] = ["Widgets", "Timeline", "Effects", "Portraits", "Theme", "Panes", "Tiles"];
+/// LOOK1-E2: the Tiles page's views (name, logical cell width and height at 1x) and zooms.
+pub const TILE_VIEWS: [(&str, i32, i32); 2] = [("Square 16 x 16", 16, 16), ("Tilted 32 x 24", 32, 24)];
+pub const TILE_ZOOMS: [i32; 3] = [1, 2, 3];
+/// The Tiles page's tile kinds: the Gallery fixture's defaults, and the file-name convention of LOOK1 5.4
+/// (`tilesets/<set>/<kind>/v<n>.png`, a block's `wall_face`). The engine's rules know no terrain: only this fixture
+/// names these; a set's own `<upper>/over_<lower>/` pair replaces `upper` and `lower`.
+pub const TILES_KINDS: TileKinds = TileKinds { upper: "floor", lower: "shallow_water", block: "wall", face: "wall_face" };
+/// The fixture map's kinds: `.` is `upper`, `~` is `lower`, `#` is `block` with `face` over an open south.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TileKinds {
+    pub upper: &'static str,
+    pub lower: &'static str,
+    pub block: &'static str,
+    pub face: &'static str,
+}
+/// The Tiles page's fixture map (engine test data): `.` ground, `#` a block, `~` the lower kind. A pond with a 1-cell
+/// island, a wall run, a lone water cell, a 1-wide channel; its corners hold all 16 masks.
+pub const TILES_MAP: [&str; 9] = [
+    "............",
+    ".~~~~~..###.",
+    ".~~.~~....#.",
+    ".~~~~~....#.",
+    "......~.....",
+    "............",
+    ".~..........",
+    "....~~~~~~~~",
+    "...~........",
+];
 /// LOOK1-ME: the Panes page's panes, and its tab rail's sample tabs.
 pub const PANES: [&str; 5] = ["Backdrop", "Menu column", "Tab rail", "Slot card", "Ask"];
 pub const PANE_TABS: [&str; 4] = ["Video", "Audio", "Controls", "Text"];
@@ -119,6 +160,12 @@ const AMBER: Rgba = rgb(217, 119, 6);
 const CANDLE: Rgba = rgb(251, 191, 36);
 const ORCHID: Rgba = rgb(192, 132, 252);
 const STAGE_BG: Rgba = rgb(14, 15, 20);
+/// The Tiles page's flat colours for a kind the set does not hold, and its block lines.
+const TILE_UPPER: Rgba = rgb(70, 68, 62);
+const TILE_LOWER: Rgba = rgb(34, 52, 78);
+const TILE_BLOCK: Rgba = rgb(96, 98, 106);
+const TILE_FACE: Rgba = rgb(52, 53, 60);
+const TILE_LINE: Rgba = rgb(14, 15, 20);
 pub const OPTIONS: [&str; 4] = ["Small", "Normal", "Large", "Extra large"];
 pub const SLIDER_STEPS: usize = 5;
 
@@ -165,6 +212,77 @@ pub struct Specimens {
     pub veil: bool,
     pub ask_ornate: bool,
     pub ask_no_default: bool,
+    /// The Tiles page's state (LOOK1-E2).
+    pub tiles: TileDemo,
+}
+
+/// The cell of `TILES_MAP` at (x, y), an off-grid cell taking its nearest cell's kind (so the map's rim draws no edge).
+pub fn tiles_map_cell(x: i32, y: i32) -> u8 {
+    let row = TILES_MAP[y.clamp(0, TILES_MAP.len() as i32 - 1) as usize].as_bytes();
+    row[x.clamp(0, row.len() as i32 - 1) as usize]
+}
+
+/// The Tiles page's choices, and what it read from the asset layers (behind a `RefCell`: the page draws through
+/// `&self`).
+#[derive(Debug, Clone, Default)]
+pub struct TileDemo {
+    /// Index in the layers' sorted sets, in the set's sorted pairs, `TILE_VIEWS` index, `TILE_ZOOMS` index, and the
+    /// pan in cells.
+    pub set: usize,
+    pub pair: usize,
+    pub view: usize,
+    pub zoom: usize,
+    pub pan: (i32, i32),
+    cache: RefCell<TileCache>,
+}
+
+/// What the Tiles page read from the layers `from`; a new `theme::reload` starts it over.
+#[derive(Debug, Clone, Default)]
+struct TileCache {
+    from: Option<Rc<Layers>>,
+    sets: Vec<String>,
+    /// Set -> its transition pairs (upper, lower): every `<upper>/over_<lower>/` folder, sorted.
+    pairs: HashMap<String, Vec<(String, String)>>,
+    /// Layer-relative file -> its image.
+    images: HashMap<String, Option<Image>>,
+}
+
+impl TileCache {
+    /// Starts over when the layers in force are not the ones read.
+    fn sync(&mut self) {
+        let now = theme::layers();
+        if !self.from.as_ref().is_some_and(|f| Rc::ptr_eq(f, &now)) {
+            *self = TileCache { sets: now.dirs("tilesets"), from: Some(now), ..TileCache::default() };
+        }
+    }
+
+    fn pairs(&mut self, set: &str) -> Vec<(String, String)> {
+        let Some(layers) = self.from.clone() else { return Vec::new() };
+        self.pairs
+            .entry(set.to_string())
+            .or_insert_with(|| {
+                let mut out = Vec::new();
+                for upper in layers.dirs(&format!("tilesets/{set}")) {
+                    for d in layers.dirs(&format!("tilesets/{set}/{upper}")) {
+                        if let Some(lower) = d.strip_prefix("over_") {
+                            out.push((upper.clone(), lower.to_string()));
+                        }
+                    }
+                }
+                out
+            })
+            .clone()
+    }
+
+    fn image(&mut self, rel: &str) -> Option<&Image> {
+        let layers = self.from.clone()?;
+        self.images.entry(rel.to_string()).or_insert_with(|| layers.find(rel).and_then(|p| crate::art::load_png(&p))).as_ref()
+    }
+
+    /// The first variant of tile `kind` in `set`, from the top layer holding it.
+    fn tile(&mut self, set: &str, kind: &str) -> Option<&Image> {
+        self.image(&format!("tilesets/{set}/{kind}/v0.png"))
+    }
 }
 
 /// The Portraits page's clock, portrait (its cache behind a `RefCell`: the page draws through `&self`), sample face
@@ -403,6 +521,7 @@ impl Default for Specimens {
             veil: true,
             ask_ornate: true,
             ask_no_default: false,
+            tiles: TileDemo::default(),
         }
     }
 }
@@ -454,6 +573,11 @@ impl Specimens {
                 };
                 format!("{w} {}", if on { "off" } else { "on" })
             }
+            KitAct::TileSet(i) => format!("tile set {i}"),
+            KitAct::TilePair(i) => format!("tile pair {i}"),
+            KitAct::TileView(i) => format!("tile view {}", TILE_VIEWS[*i % TILE_VIEWS.len()].0),
+            KitAct::TileZoom(i) => format!("tile zoom {}x", TILE_ZOOMS[*i % TILE_ZOOMS.len()]),
+            KitAct::TilePan(dx, dy) => format!("tile pan ({dx}, {dy})"),
         };
         match a {
             KitAct::Tab(i) => self.tab = i % TABS.len(),
@@ -501,6 +625,20 @@ impl Specimens {
                 "ornate" => self.ask_ornate = !self.ask_ornate,
                 _ => self.ask_no_default = !self.ask_no_default,
             },
+            KitAct::TileSet(i) => {
+                self.tiles.set = i;
+                self.tiles.pair = 0;
+            }
+            KitAct::TilePair(i) => self.tiles.pair = i,
+            KitAct::TileView(i) => {
+                self.tiles.view = i % TILE_VIEWS.len();
+                self.tiles.pan = (0, 0);
+            }
+            KitAct::TileZoom(i) => {
+                self.tiles.zoom = i % TILE_ZOOMS.len();
+                self.tiles.pan = (0, 0);
+            }
+            KitAct::TilePan(dx, dy) => self.tiles.pan = ((self.tiles.pan.0 + dx).max(0), (self.tiles.pan.1 + dy).max(0)),
             KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) | KitAct::Segment(..) | KitAct::Effect(_) | KitAct::Shake(_) | KitAct::PortraitToggle(_) | KitAct::PortraitFire(_) | KitAct::PortraitMotion(_) => {}
         }
     }
@@ -590,6 +728,8 @@ impl Specimens {
             self.draw_theme(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
         } else if self.page == 5 {
             self.draw_panes(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
+        } else if self.page == 6 {
+            self.draw_tiles(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
         } else {
             self.draw_widgets(ui, r, &wrap);
         }
@@ -1111,6 +1251,148 @@ impl Specimens {
                 ui.para(under.x, under.y, under.w, "The screen under the question: the scrim dims it and its widgets take no focus or click.", BODY, ink);
                 let v = AskView { ornate: self.ask_ornate, no_default: self.ask_no_default, ..AskView::new("Leave this place?", "Anything not saved since the last save is lost. Enter answers the default, y and n answer, Esc is No.") };
                 ask_dialog(ui, "kit.ask", stage, &v, wrap(KitAct::Press("yes")), wrap(KitAct::Press("no")));
+            }
+        }
+    }
+}
+
+impl Specimens {
+    /// The Tiles page (LOOK1-E2): the set picker (`kit.tiles.set`), the view (`kit.tiles.view.<i>`) and zoom
+    /// (`kit.tiles.zoom.<i>`) tabs, the pair picker (`kit.tiles.pair`, for a set with several pairs), what the set
+    /// gives and the pan buttons (`kit.tiles.pan.<dir>`, live when the map is larger than its stage), then the fixture
+    /// map on its stage (`kit.tiles.map`).
+    fn draw_tiles<A: Clone>(&self, ui: &mut Ui<A>, r: Rect, wrap: &impl Fn(KitAct) -> A) {
+        let d = &self.tiles;
+        let mut cache = d.cache.borrow_mut();
+        cache.sync();
+        let sets = cache.sets.clone();
+        let at = d.set.min(sets.len().saturating_sub(1));
+        let set = sets.get(at).cloned().unwrap_or_default();
+        let pairs = if sets.is_empty() { Vec::new() } else { cache.pairs(&set) };
+        let pair_at = d.pair.min(pairs.len().saturating_sub(1));
+        let pair = pairs.get(pair_at).cloned();
+        let (upper, lower) = pair.clone().unwrap_or((TILES_KINDS.upper.to_string(), TILES_KINDS.lower.to_string()));
+        let piece_rel = |mask: u8| format!("tilesets/{set}/{upper}/over_{lower}/m{mask:02}.png");
+
+        // The controls.
+        let row1 = r.y + 4;
+        let options = if sets.is_empty() { vec!["no tile sets".to_string()] } else { sets.clone() };
+        ui.select("kit.tiles.set", Rect::new(r.x + 6, row1, 110, 14), &options, at, |i| wrap(KitAct::TileSet(i)), !sets.is_empty(), tip("Tile set", "A folder of tilesets/ in the asset layers."));
+        let mut x = r.x + 122;
+        for (i, (name, _, _)) in TILE_VIEWS.iter().enumerate() {
+            let w = (ui.p.text_w(name, BODY) + 12.0).ceil() as i32;
+            ui.tab(&format!("kit.tiles.view.{i}"), Rect::new(x, row1, w, 14), name, wrap(KitAct::TileView(i)), d.view == i);
+            x += w + 2;
+        }
+        x += 6;
+        for (i, z) in TILE_ZOOMS.iter().enumerate() {
+            let label = format!("{z}x");
+            let w = (ui.p.text_w(&label, BODY) + 12.0).ceil() as i32;
+            ui.tab(&format!("kit.tiles.zoom.{i}"), Rect::new(x, row1, w, 14), &label, wrap(KitAct::TileZoom(i)), d.zoom == i);
+            x += w + 2;
+        }
+
+        // The map, in cells of the view at the zoom; the pan keeps it on the stage.
+        let (_, vw, vh) = TILE_VIEWS[d.view % TILE_VIEWS.len()];
+        let zoom = TILE_ZOOMS[d.zoom % TILE_ZOOMS.len()];
+        let (cw, ch) = (vw * zoom, vh * zoom);
+        let (cols, rows) = (TILES_MAP[0].len() as i32, TILES_MAP.len() as i32);
+        let stage = Rect::new(r.x + 6, r.y + 40, r.w - 12, r.h - 44);
+        let pan_max = (((cols * cw - stage.w).max(0) + cw - 1) / cw, ((rows * ch - stage.h).max(0) + ch - 1) / ch);
+        let pan = (d.pan.0.min(pan_max.0), d.pan.1.min(pan_max.1));
+
+        let row2 = r.y + 22;
+        let buttons = [("left", "<", (-1, 0), pan.0 > 0), ("right", ">", (1, 0), pan.0 < pan_max.0), ("up", "^", (0, -1), pan.1 > 0), ("down", "v", (0, 1), pan.1 < pan_max.1)];
+        let mut bx = r.x + r.w - 6 - 16 * buttons.len() as i32;
+        for (name, label, (dx, dy), live) in buttons {
+            ui.button(&format!("kit.tiles.pan.{name}"), Rect::new(bx, row2, 14, 14), label, wrap(KitAct::TilePan(dx, dy)), live);
+            bx += 16;
+        }
+        let mut said_x = r.x + 6;
+        if pairs.len() > 1 {
+            let names: Vec<String> = pairs.iter().map(|(u, l)| format!("{u} over {l}")).collect();
+            ui.select("kit.tiles.pair", Rect::new(said_x, row2, 110, 14), &names, pair_at, |i| wrap(KitAct::TilePair(i)), true, tip("Transition pair", "A folder <upper>/over_<lower>/ of this set."));
+            said_x += 116;
+        }
+        let have = (1..=14u8).filter(|m| pair.is_some() && cache.image(&piece_rel(*m)).is_some()).count();
+        let said = if sets.is_empty() {
+            "No tilesets/ in the asset layers: flat colours and the mask numbers.".to_string()
+        } else if pair.is_some() {
+            format!("{upper} over {lower}: {have} of 14 pieces (a number marks a corner whose piece is missing).")
+        } else {
+            format!("{set} has no transition pieces: the numbers are the corner masks ({upper}, {lower}).")
+        };
+        let dim = ui.t.dim;
+        ui.p.text_fit(said_x as f32, row2 as f32 + (14.0 - ui.p.line_h(SMALL)) / 2.0, &said, SMALL, (r.x + r.w - 10 - 16 * buttons.len() as i32 - said_x) as f32, dim);
+
+        // The stage.
+        ui.push("kit.tiles.map", "stage", format!("tile map: {} {}x", TILE_VIEWS[d.view % TILE_VIEWS.len()].0, zoom), stage, true, false, None, Vec::new());
+        ui.p.fill(stage, STAGE_BG);
+        let map = Rect::new(stage.x - pan.0 * cw, stage.y - pan.1 * ch, cols * cw, rows * ch);
+        let cell = |x: i32, y: i32| Rect::new(map.x + x * cw, map.y + y * ch, cw, ch);
+        let is_upper = |x: i32, y: i32| tiles_map_cell(x, y) != b'~';
+        let is_block = |x: i32, y: i32| (0..cols).contains(&x) && (0..rows).contains(&y) && tiles_map_cell(x, y) == b'#';
+        ui.push_clip(stage.intersect(map));
+        // The ground pass: a block stands on the upper kind.
+        for y in 0..rows {
+            for x in 0..cols {
+                let (kind, flat) = if is_upper(x, y) { (upper.as_str(), TILE_UPPER) } else { (lower.as_str(), TILE_LOWER) };
+                match cache.tile(&set, kind) {
+                    Some(img) => ui.p.image(img, cell(x, y)),
+                    None => ui.p.fill(cell(x, y), flat),
+                }
+            }
+        }
+        // The transition pieces, centred on their corners; the corners without one get their number last.
+        let mut numbers = Vec::new();
+        for (cx, cy, mask) in corner_pieces(cols, rows, is_upper) {
+            match if pair.is_some() { cache.image(&piece_rel(mask)) } else { None } {
+                Some(img) => ui.p.image(img, Rect::new(map.x + cx * cw - cw / 2, map.y + cy * ch - ch / 2, cw, ch)),
+                None => numbers.push((cx, cy, mask)),
+            }
+        }
+        // The blocks: the cap, the face over its lower half when the south is open, 1 px lines on the open north and
+        // sides of the cap.
+        for y in 0..rows {
+            for x in 0..cols {
+                if !is_block(x, y) {
+                    continue;
+                }
+                let c = cell(x, y);
+                match cache.tile(&set, TILES_KINDS.block) {
+                    Some(img) => ui.p.image(img, c),
+                    None => ui.p.fill(c, TILE_BLOCK),
+                }
+                let open = block_edges(is_block, x, y);
+                let cap_h = if open.south { ch / 2 } else { ch };
+                if open.south {
+                    let face = Rect::new(c.x, c.y + cap_h, cw, ch - cap_h);
+                    match cache.tile(&set, TILES_KINDS.face) {
+                        Some(img) => ui.p.image(img, face),
+                        None => ui.p.fill(face, TILE_FACE),
+                    }
+                }
+                if open.north {
+                    ui.p.fill(Rect::new(c.x, c.y, cw, 1), TILE_LINE);
+                }
+                if open.west {
+                    ui.p.fill(Rect::new(c.x, c.y, 1, cap_h), TILE_LINE);
+                }
+                if open.east {
+                    ui.p.fill(Rect::new(c.x + cw - 1, c.y, 1, cap_h), TILE_LINE);
+                }
+            }
+        }
+        ui.pop_clip();
+        // Only a number wholly on the stage (the audit's texts stay inside what is seen).
+        let lh = ui.p.line_h(SMALL).ceil() as i32;
+        for (cx, cy, mask) in numbers {
+            let text = mask.to_string();
+            let w = ui.p.text_w(&text, SMALL).ceil() as i32 + 2;
+            let plate = Rect::new(map.x + cx * cw - w / 2, map.y + cy * ch - lh / 2, w, lh);
+            if plate.x >= stage.x && plate.y >= stage.y && plate.x + plate.w <= stage.x + stage.w && plate.y + plate.h <= stage.y + stage.h {
+                ui.p.fill(plate, STAGE_BG);
+                ui.p.text_center((plate.x + plate.w / 2) as f32, plate.y as f32, &text, SMALL, CANDLE);
             }
         }
     }
