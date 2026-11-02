@@ -769,7 +769,7 @@ Worked examples (Wolf on (6, 4) faces right, engaged with tl_vanguard on (7, 4):
   screen animates; INPUT1_TASKS 1.8), and the battle screen (the draw hook is INPUT1-M's) plays the rig's `dash` clip
   from the start block's start along the route, faster than a walk (the route in 250 ms at 1x; `anim_speed` and PB3
   apply), then the wind-up pose holds on the position until the impact (WINDUP1), or the strike follows for a
-  one-block skill. A rig without a `dash` clip (every rig until DASH1 lands) plays its walk at that speed. Skip
+  one-block skill. A rig without a `dash` clip (every rig without a `dash` clip (DASH1 landed 2026-11-03; beast, crawler, dummy)) plays its walk at that speed. Skip
   animations: the unit appears on the position. It is not the round's regular move (ET5); the strip draws it inside
   the skill's span, not as a move block. Art: DASH1 (the dash clip for the humanoid rigs, front, side and back).
 - MR13. Hovering a Maneuver Engage row (IF5; INPUT1-U, since the menu is its) marks T's open candidates on the board:

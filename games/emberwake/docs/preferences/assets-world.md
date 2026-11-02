@@ -30,6 +30,7 @@ Owner: Assets & Audio thread. Firm rules: `docs/decisions/`. Content (items, uni
 - The priest holds the mace raised forward with the head up, gripped a third of the way up, in robe sleeves to the wrist (2026-10-20, ART2 pick B3).
 
 - NPCs face down by default; a side or up view only when it makes sense, such as leaning on a wall or hiding in a bush (user 2026-11-03).
+- The dash has speed lines on the side view only, and dust on all views (user 2026-11-02).
 - Warrior gets a shield: animation A for the attack, B for guard and bash (2026-10-18).
 - Brawler set as signed off 2026-10-18: L-shaped idle arms (elbows forward, fists bobbing in a 1-2 rhythm), walk arms slightly raised and swinging with the stride, upper-arm skin a touch darker so the arms read against the chest. Jab is short and straight at face height from the hip fist; haymaker keeps the wide hook; kick reaches chest height; the sweep spins with a motion trail near the foot only (2026-10-18).
 
