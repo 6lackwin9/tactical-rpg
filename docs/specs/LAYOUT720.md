@@ -400,6 +400,8 @@ let page = body.pad(Insets::all(m.padding));
 
 ## 7. Slices, phase 1
 
+As built (E3): defaults with no key are the `layout` value in force doubled, not fixed numbers, as the shipped `layout` has radius 0 and `focus_glow` 1; the focused tip is on `Grid::Native` only until each screen moves; `edit.rs` also touched.
+
 E3 owns `Ui::screen`, `Ui::image_in`, `Ui::frame_body` and `Ui::corner_size`, which no slice named (found by the E2 review). Carried from that review: E5 and M2 need `Stack` to report its used height for scrolled lists; E3, E4 and E5 watch `place`, which clamps an oversized child where old code went negative; M0 passes the native view's `s` to `shot_diff`.
 
 | Id | What | Layer | Lane | Depends on | Touches | Size |
