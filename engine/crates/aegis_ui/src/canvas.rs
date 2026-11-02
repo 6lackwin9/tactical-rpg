@@ -10,31 +10,8 @@ pub const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Rgba {
     [r, g, b, a]
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Rect {
-    pub x: i32,
-    pub y: i32,
-    pub w: i32,
-    pub h: i32,
-}
-
-impl Rect {
-    pub const fn new(x: i32, y: i32, w: i32, h: i32) -> Self {
-        Self { x, y, w, h }
-    }
-    pub fn contains(&self, px: i32, py: i32) -> bool {
-        px >= self.x && py >= self.y && px < self.x + self.w && py < self.y + self.h
-    }
-    pub fn inset(&self, d: i32) -> Rect {
-        Rect::new(self.x + d, self.y + d, (self.w - 2 * d).max(0), (self.h - 2 * d).max(0))
-    }
-    /// The overlap of two rects (zero size when they do not meet).
-    pub fn intersect(&self, o: Rect) -> Rect {
-        let (x0, y0) = (self.x.max(o.x), self.y.max(o.y));
-        let (x1, y1) = ((self.x + self.w).min(o.x + o.w), (self.y + self.h).min(o.y + o.h));
-        Rect::new(x0, y0, (x1 - x0).max(0), (y1 - y0).max(0))
-    }
-}
+/// `Rect` lives in `aegis_layout` since LAYOUT720-E2; every caller keeps reaching it here.
+pub use aegis_layout::Rect;
 
 /// The alpha from which a pixel counts as part of a sprite's silhouette (`Image::outline`).
 pub const OUTLINE_ALPHA: u8 = 128;

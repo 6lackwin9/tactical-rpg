@@ -5,7 +5,7 @@ filled-in version lives in its design library (`specs/art_and_visual_style.md`).
 
 | Section | Fix |
 | --- | --- |
-| Canvas | The logical canvas (the shell's 640x360) and integer scales |
+| Canvas | The logical canvas (the shell's 640x360) and integer scales; for a moved screen's canvas, unit and rounding see [reactive_layout.md](reactive_layout.md) |
 | Battle board | Cell size and camera (flat or tilted), unit draw size, what reads at that size |
 | Region map | Tile size and camera for exploration maps |
 | Sprites | Frame size of the rig, the figure bounds inside it, which clips exist, front/side/back views |

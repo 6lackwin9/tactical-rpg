@@ -1,0 +1,7 @@
+[package]
+name = "aegis_layout"
+version = "0.1.0"
+edition = "2021"
+
+# No dependencies, on purpose: `no_std` with `alloc`, so layout runs anywhere the game does (docs/specs/LAYOUT720.md 6.1).
+[dependencies]

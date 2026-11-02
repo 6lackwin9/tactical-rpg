@@ -60,6 +60,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "aegis_layout"
+version = "0.1.0"
+
+[[package]]
 name = "aegis_save"
 version = "0.1.0"
 dependencies = [
@@ -74,6 +78,7 @@ version = "0.1.0"
 dependencies = [
  "aegis_core",
  "aegis_host",
+ "aegis_layout",
  "anyhow",
  "arboard",
  "fontdue",

@@ -13,7 +13,8 @@
 //! the default is the look before it) and the menu panes (`panes`, LOOK1-ME: backdrop, menu column, tab rail, slot
 //! card and the themed ask, standalone pieces on the theme) and the tile masks (`autotile`, LOOK1-E2: corner masks for
 //! transition pieces, a block's open edges) and the ground composer (`ground`, REGIONGROUND1-E1: a cell grid to one
-//! opaque image with generated edges, cached and blitted). A game
+//! opaque image with generated edges, cached and blitted) and two shots compared with a tolerance (`shot_diff`,
+//! LAYOUT720-E2). `Rect` lives in `aegis_layout` and `canvas` re-exports it. A game
 //! supplies its screens, its context and the agent replies about its own state.
 
 pub mod art;
@@ -39,6 +40,7 @@ pub mod preview;
 pub mod recordings;
 pub mod screen;
 pub mod shell;
+pub mod shot_diff;
 pub mod specimens;
 pub mod text_audit;
 pub mod theme;
