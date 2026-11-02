@@ -1,0 +1,32 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "card_banner",
+  "prompt": "A long horizontal title banner for a gothic dark fantasy game's story cards, in the same gilt and black basalt style, line weight and pixel size as the first image. A single banner bar centred in the image, about four fifths of the image wide and about one eighth of its height, with a pointed gothic finial at each end and a plain dark basalt centre with thin gold lines along its top and bottom edges, so a title can be written across it later. The centre is plain and repeats along its length. No text, no letters, no crest, no scene. Every background pixel is flat solid pure magenta (#FF00FF); no magenta in the art, no shadow on it. Candle gold #fbbf24, tallow #d97706, iron #4b5563, basalt #14171f. Clear dark outlines, hand-placed pixel clusters, no anti-aliasing.",
+  "reference": "refs/ornate_corners_gen1793612836_1.png",
+  "prompts_file": null,
+  "time": "2026-11-02T10:42:00Z",
+  "n": 1,
+  "references": [
+    "refs/ornate_corners_gen1793612836_1.png"
+  ],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "card_banner_q1793615062",
+  "metadata": {
+    "asset_id": "card_banner",
+    "task": "look1a",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "source_refs": [
+        "C:/dev/tactical-rpg-plan/art_src/ornate_corners_gen1793612836_1.png"
+      ]
+    }
+  },
+  "mark_cleared": true,
+  "source_refs": [
+    "C:/dev/tactical-rpg-plan/art_src/ornate_corners_gen1793612836_1.png"
+  ],
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Generated 2 variations from reference."
+}

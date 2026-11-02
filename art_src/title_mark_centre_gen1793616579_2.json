@@ -1,0 +1,35 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "title_mark_centre",
+  "prompt": "A title logotype for a gothic dark fantasy tactical RPG, drawn as one single piece of game art, using the carved gothic lettering and gold colours of the first image and the weeping eye crest of the second image. The word is EMBERWAKE, nine letters: E, M, B, E, R, W, A, K, E. Under it, much smaller and centred, the words A SCARLET LULLABY in the same lettering in bleached linen (#d9cbb4). Spell every word exactly as written, every letter clear and readable. The crest stands in the middle of the word as its centrepiece, between EMBER and WAKE, much taller than the letters and rising above and below them. The letters on each side join the crest's pillars, so that the word and the crest read as one continuous shape. The eye and its falling tear stay fully visible; no letter covers them. No flames, no sparks, no embers, no scene, no frame, no other text, no watermark. Detailed 16-bit SNES/GBA-era pixel art with visible large pixels and no anti-aliasing. Every background pixel is flat solid pure magenta (#FF00FF) so it can be keyed out; no magenta in the art and no shadow on the background.",
+  "reference": "refs/title_logotype_clean_gen1793615022_2.png",
+  "prompts_file": null,
+  "time": "2026-11-02T10:38:00Z",
+  "n": 2,
+  "references": [
+    "refs/title_logotype_clean_gen1793615022_2.png",
+    "refs/logo_crest_gen1793612836_2.png"
+  ],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "title_mark_centre_q1793615061",
+  "metadata": {
+    "asset_id": "title_mark_centre",
+    "task": "look1a",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "source_refs": [
+        "C:/dev/tactical-rpg-plan/art_src/title_logotype_clean_gen1793615022_2.png",
+        "C:/dev/tactical-rpg-plan/art_src/logo_crest_gen1793612836_2.png"
+      ]
+    }
+  },
+  "mark_cleared": true,
+  "source_refs": [
+    "C:/dev/tactical-rpg-plan/art_src/title_logotype_clean_gen1793615022_2.png",
+    "C:/dev/tactical-rpg-plan/art_src/logo_crest_gen1793612836_2.png"
+  ],
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Generated 2 variations from references."
+}
