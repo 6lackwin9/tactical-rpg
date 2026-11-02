@@ -10,6 +10,7 @@ Owner: Assets & Audio thread. Firm rules: `docs/decisions/`. Content (items, uni
 
 - The class sets the outfit and palette; the weapon type sets the animation (2026-10-18).
 - Offensive stances stand upright; defensive stances hunch (2026-10-18).
+- Fire in generated art must look placed: flames scattered over a scene or dotted along letters read as random and awkward. Prefer a soft glow, a few embers and clean lettering; weak flames beat random ones (user 2026-11-02, title backdrop and logotype takes).
 
 ## Characters
 
