@@ -24,6 +24,7 @@ pub mod canvas;
 pub mod depth;
 pub mod edit;
 pub mod focus;
+pub mod frame_tuner;
 pub mod fx;
 pub mod ground;
 pub mod jpeg;

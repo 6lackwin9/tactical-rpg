@@ -144,6 +144,11 @@ fallbacks (a role with no file uses the next; none: today's vector panel in the 
 | `corner_anchor` | [x, y] art px | the corner's middle | inside the top-left slice: the px on the panel's corner point (LOOK1-R1) |
 | `sharpen` | number | 0 | 0-2: an unsharp mask on the reduced corners (LOOK1-R1) |
 | `reduce` | `average` | off (nearest) | a high-resolution frame is averaged to the window's physical size, only when `scale` exceeds the view's scale; `straddle` always averages (LOOK1-R1) |
+| `corner_size` | number | 1 | 0.25-3: the corners' drawn size against `scale`; inside the rect the edge bands go with it (LOOK1-FT) |
+| `tip` | [from, half] art px | none | with `straddle`, inside the slices: the head at each arm's end (LOOK1-FT) |
+| `tip_size` | number | 1 | 0.25-3, with `tip`: the head's size against the art (LOOK1-FT) |
+| `line_width` | number, logical px | the art's | 0.5-8, with `straddle` and stretched edges: the edge as a solid line (LOOK1-FT) |
+| `line_color` | a 3.2 role or `#rrggbb` | the art's | as `line_width` (LOOK1-FT) |
 
 A PNG without its sidecar, a sidecar without its PNG, an unknown role file in `ui/frames/` or a bad key is an error.
 `Painter::nine` draws the corners at `slice / scale` logical px, nearest sampling; a rect smaller than two corners

@@ -34,8 +34,9 @@ use emberwake_host::{Battle, Host};
 use serde_json::{json, Value};
 
 /// (id, name, group, what it shows). Battle panel ids are the battle screen's own panel names.
-const ENTRIES: [(&str, &str, &str, &str); 32] = [
+const ENTRIES: [(&str, &str, &str, &str); 33] = [
     ("kit", "Kit widgets", "Kit", "Every kit widget in its states; use them, the foot of the page says what happened."),
+    ("frame_tuner", "Frame tuner", "Kit", "A frame's corner, tip, line and padding on a live panel; Save in a debug build."),
     ("vignette", "Vignette player", "Kit", "The engine's sample reel or a world's vignette: image, text, title and line cards with fades, typing, hold and skip."),
     ("pip_gauge", "Pip gauge", "Kit", "The engine pip gauge in its states: kept, spent and next round's gain; red, a debt, two points a pip; numbers on hover."),
     ("timeline_pane", "Timeline pane", "Kit", "The engine timeline widget alone on sample data: two sections, a masked track, parts, a ghost, the playhead; the rows scroll."),
@@ -982,6 +983,8 @@ impl Screen<GameCx> for Gallery {
         let (id, name, _, about) = ENTRIES[self.entry];
         if id == "kit" {
             self.kit.draw(&mut ui, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4), GAct::Kit);
+        } else if id == "frame_tuner" {
+            self.kit.tuner.draw(&mut ui, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4), &|a| GAct::Kit(KitAct::Tuner(a)));
         } else if id == "portraits" {
             self.portraits.draw(&mut ui, cx, Rect::new(pane.x + 2, pane.y + 2, pane.w - 4, pane.h - 4));
         } else if id == "pip_gauge" {
@@ -1080,7 +1083,7 @@ impl Screen<GameCx> for Gallery {
         let d = self.demo.as_ref();
         let s = d.and_then(|d| d.host.session.as_ref());
         json!({
-            "entry": ENTRIES[self.entry].0, "shown": self.shown.as_ref().map(|sh| sh.screen.id()), "steps_left": self.shown.as_ref().map(|sh| sh.steps.len()), "kit_last": self.kit.last, "viewed": d.map(|d| d.viewed), "round": s.map(|s| s.current_round), "block": s.map(|s| s.current_block),
+            "entry": ENTRIES[self.entry].0, "shown": self.shown.as_ref().map(|sh| sh.screen.id()), "steps_left": self.shown.as_ref().map(|sh| sh.steps.len()), "kit_last": self.kit.last, "tuner": self.kit.tuner.state(), "viewed": d.map(|d| d.viewed), "round": s.map(|s| s.current_round), "block": s.map(|s| s.current_block),
             "selected_block": d.and_then(|d| d.block), "planning": s.map(|s| s.phase == Phase::Planning && !s.plan_confirmed), "rounds_archived": s.map(|s| s.history.len()),
             // PORTRAITFX1-G (4.11): the Portraits entry's pick and its portraits' state
             "portrait_pick": self.portraits.key(), "portrait_last": self.portraits.last, "portraits": self.portraits.faces.state(),
@@ -1105,11 +1108,14 @@ impl Screen<GameCx> for Gallery {
         if ENTRIES[self.entry].0 == "kit" {
             self.kit.key(k);
         }
+        if ENTRIES[self.entry].0 == "frame_tuner" {
+            self.kit.tuner.key(k);
+        }
     }
 
     /// Esc answers the Panes page's ask (No) there; anywhere else it leaves the gallery.
     fn escape(&mut self, cx: &mut Cx) {
-        if !(ENTRIES[self.entry].0 == "kit" && self.kit.key(Key::Esc)) {
+        if !(ENTRIES[self.entry].0 == "kit" && self.kit.key(Key::Esc)) && !(ENTRIES[self.entry].0 == "frame_tuner" && self.kit.tuner.key(Key::Esc)) {
             self.back(cx);
         }
     }

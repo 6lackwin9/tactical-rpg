@@ -20,10 +20,11 @@
 //! fixture map (`TILES_MAP`: a pond with an island, a wall run, a lone water cell, a 1-wide channel) from a set picked
 //! among the asset layers' `tilesets/` (`theme::layers`), square or tilted at 1x-3x (its Ground switch, REGIONGROUND1-E1:
 //! the same map through `ground::compose`), with the set's transition pieces
-//! (`autotile`) when it has them, else the mask numbers.
+//! (`autotile`) when it has them, else the mask numbers. LOOK1-FT: an eighth page, Frames, the frame tuner (`frame_tuner`).
 
 use crate::autotile::{block_edges, corner_pieces};
 use crate::canvas::{rgb, rgba, Image, Rect, Rgba};
+use crate::frame_tuner::{self, FrameTuner, TunerAct};
 use crate::ground::{self, GroundJob, GroundKey, GroundLayer};
 use crate::fx::{Beam, Camera, Clock, Effect, Flash, Fx, Layer, Look, Looped, Orbit, Projectile, Ring, ShakeLimits, ShakeTable, Sparks, Trail, PRIM_KINDS, SHAKE_PRESETS};
 use crate::portrait_fx::{self, Budget, Cue, ExpressionFx, Motion, PortraitFx, PortraitOpts, Tier, MOTION_SAMPLES};
@@ -99,10 +100,12 @@ pub enum KitAct {
     TilePan(i32, i32),
     /// REGIONGROUND1-E1: the Tiles page's Ground switch: the fixture map through `ground::compose`.
     TileGround,
+    /// LOOK1-FT: the Frames page's frame tuner.
+    Tuner(TunerAct),
 }
 
 pub const TABS: [&str; 3] = ["First", "Second", "Third"];
-pub const PAGES: [&str; 7] = ["Widgets", "Timeline", "Effects", "Portraits", "Theme", "Panes", "Tiles"];
+pub const PAGES: [&str; 8] = ["Widgets", "Timeline", "Effects", "Portraits", "Theme", "Panes", "Tiles", "Frames"];
 /// LOOK1-E2: the Tiles page's views (name, logical cell width and height at 1x) and zooms.
 pub const TILE_VIEWS: [(&str, i32, i32); 2] = [("Square 16 x 16", 16, 16), ("Tilted 32 x 24", 32, 24)];
 pub const TILE_ZOOMS: [i32; 3] = [1, 2, 3];
@@ -215,6 +218,8 @@ pub struct Specimens {
     pub vignette: bool,
     pub veil: bool,
     pub ask_ornate: bool,
+    /// LOOK1-FT: the Frames page.
+    pub tuner: FrameTuner,
     pub ask_no_default: bool,
     /// The Tiles page's state (LOOK1-E2).
     pub tiles: TileDemo,
@@ -530,6 +535,7 @@ impl Default for Specimens {
             vignette: true,
             veil: true,
             ask_ornate: true,
+            tuner: FrameTuner::default(),
             ask_no_default: false,
             tiles: TileDemo::default(),
         }
@@ -589,6 +595,7 @@ impl Specimens {
             KitAct::TileZoom(i) => format!("tile zoom {}x", TILE_ZOOMS[*i % TILE_ZOOMS.len()]),
             KitAct::TilePan(dx, dy) => format!("tile pan ({dx}, {dy})"),
             KitAct::TileGround => format!("composed ground {}", if self.tiles.ground { "off" } else { "on" }),
+            KitAct::Tuner(_) => String::new(),
         };
         match a {
             KitAct::Tab(i) => self.tab = i % TABS.len(),
@@ -651,6 +658,10 @@ impl Specimens {
             }
             KitAct::TilePan(dx, dy) => self.tiles.pan = ((self.tiles.pan.0 + dx).max(0), (self.tiles.pan.1 + dy).max(0)),
             KitAct::TileGround => self.tiles.ground = !self.tiles.ground,
+            KitAct::Tuner(t) => {
+                self.tuner.act(t);
+                self.last = self.tuner.note.clone();
+            }
             KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) | KitAct::Segment(..) | KitAct::Effect(_) | KitAct::Shake(_) | KitAct::PortraitToggle(_) | KitAct::PortraitFire(_) | KitAct::PortraitMotion(_) => {}
         }
     }
@@ -716,6 +727,7 @@ impl Specimens {
         match id {
             "kit.text" => self.text = text.to_string(),
             "kit.area" => self.area = text.to_string(),
+            frame_tuner::HEX_FIELD => self.tuner.hex_changed(text),
             _ => {}
         }
     }
@@ -742,6 +754,8 @@ impl Specimens {
             self.draw_panes(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
         } else if self.page == 6 {
             self.draw_tiles(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &wrap);
+        } else if self.page == 7 {
+            self.tuner.draw(ui, Rect::new(r.x, r.y, r.w, r.h - 18), &|a| wrap(KitAct::Tuner(a)));
         } else {
             self.draw_widgets(ui, r, &wrap);
         }
@@ -1161,6 +1175,13 @@ impl Specimens {
     /// The Panes page's keys (the gallery screen forwards them): the menu column's hotkeys, the tab rail's PageUp /
     /// PageDown and the ask's Enter, y, n and Esc. True when the key was used.
     pub fn key(&mut self, k: Key) -> bool {
+        if self.page == 7 {
+            let used = self.tuner.key(k);
+            if used {
+                self.last = self.tuner.note.clone();
+            }
+            return used;
+        }
         if self.page != 5 {
             return false;
         }

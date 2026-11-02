@@ -44,8 +44,33 @@ missing role falls back to another). `"frames": false` in the theme draws vector
 | `corner_anchor` | [x, y] art px of the top-left corner placed on the panel's corner point, mirrored for the others, so the boundary runs along the art's arms | the corner's middle |
 | `sharpen` | 0-2: an unsharp mask on the corners once reduced to the window | 0 |
 | `reduce` | `average`: a high-resolution frame, finer than the window, is averaged down to the window's physical size (cached per frame and size) instead of sampled; only when `scale` exceeds the view's scale (`straddle` always averages) | off (nearest, exact pixels) |
+| `corner_size` | 0.25-3: the corners' drawn size against `scale`, from the panel's corner point; inside the rect the edge bands go with it; `corner_inner` follows the size drawn | 1 |
+| `tip` | [from, half] art px, with `straddle`: the head at each arm's end of the top-left corner, from `from` to the slice's end and `half` px either side of the anchor, mirrored for the others | none |
+| `tip_size` | 0.25-3, with `tip`: the head's size against the art, from its base; the arm stays | 1 |
+| `line_width` | 0.5-8 logical px, with `straddle` and stretched edges: the edge drawn as a solid line of this width, centred on the boundary; the rest of the band goes | the art's width |
+| `line_color` | a colour role or `#rrggbb`, as `line_width` | the art's colour |
 
-A PNG without its sidecar, a sidecar without its PNG, or an unknown role file is an error.
+A PNG without its sidecar, a sidecar without its PNG, or an unknown role file is an error, and so is a key outside its limits or on a frame that cannot draw it.
+
+### Tuning a frame
+
+The UI Gallery's Frame tuner entry (the same pane as the Kit widgets page Frames, `aegis_ui::frame_tuner`) shows a panel with a
+portrait box and sample text, at the window's real pixels, on sliders you judge by eye:
+
+- Pick the frame role (PageUp and PageDown go through them; a role with no file tunes the file that draws it).
+- Width and Height are the panel's, read out and not saved. Corner, Tip, Line, the colour (a role or the hex field) and Padding
+  are sidecar keys, and Straddle turns `straddle` on and off. A slider the frame cannot use is off: Tip needs a head on the art
+  (`frame_tuner::find_tip`, or a `tip` key), Line and the colour a plain line on a straddling frame's edge. Padding sets all four
+  sides. Big preview gives the stage the whole page; Esc leaves it.
+- The keyboard walks the controls as anywhere (Tab, the arrows, Enter; Left and Right move a focused slider).
+- The sliders change this pane's own copy, never the theme in force or a file, until Save. The read-out under the stage gives the
+  sidecar as it stands, the panel's size, its content rect and its size in the window.
+- Save, in a debug build only, merges the keys that changed into the sidecar of the file that draws the role, keeping its other
+  keys and their order, and loads the theme again; a file the theme refuses goes back as it was. With nothing changed nothing is
+  written. Revert drops what is not saved, and then puts the file back as it was before the session's first save. A release build
+  shows the read-out only.
+- Saving writes the source file the game runs from, so it shows in `git status`. A game whose art tool writes sidecars should
+  keep these keys on a regenerate (`tools/gen_art.py ui_frames` does, and names them, unless the slices changed).
 
 ## A set's files
 

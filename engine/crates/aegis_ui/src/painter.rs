@@ -313,7 +313,53 @@ fn over(out: &mut [u8], w: i32, layer: &Image, x: i32, y: i32) {
 fn straddle_over(nine: &Nine, k: f32, p: f32) -> i32 {
     let most = nine.slice.into_iter().max().unwrap_or(0) as f32;
     let anchor = nine.corner_anchor.map_or(most / 2.0, |[x, y]| x.max(y) as f32);
-    (most * k / 2.0).max(anchor * p).ceil() as i32 + 2
+    let line = nine.line_width.map_or(0.0, |w| w * k * nine.scale.max(1) as f32 / 2.0);
+    (most * k / 2.0).max(anchor * p).max(line).ceil() as i32 + 2
+}
+
+/// The art px a corner `side` art px long reaches once its tip is sized (`tip`, `tip_size`).
+fn sized_corner(nine: &Nine, side: i32) -> i32 {
+    match nine.tip {
+        Some([from, _]) if nine.tip_size != 1.0 => from + (((side - from).max(0) as f32 * nine.tip_size).round() as i32).max(1),
+        _ => side,
+    }
+}
+
+/// The top-left form of a corner with its two heads resized from their bases on the arms (`tip`, `tip_size`).
+fn sized_tips(q: Image, nine: &Nine) -> Image {
+    let Some([from, half]) = nine.tip.filter(|_| nine.tip_size != 1.0) else { return q };
+    let [ax, ay] = nine.corner_anchor.unwrap_or([nine.slice[0] / 2, nine.slice[1] / 2]);
+    let (w, h) = (sized_corner(nine, q.w), sized_corner(nine, q.h));
+    let wide = 2 * half + 1;
+    let across = ((wide as f32 * nine.tip_size).round() as i32).max(1);
+    let (head_x, head_y) = (q.crop(from, ay - half, q.w - from, wide), q.crop(ax - half, from, wide, q.h - from));
+    let mut rest = q.clone();
+    for y in 0..q.h {
+        for x in 0..q.w {
+            if (x >= from && (y - ay).abs() <= half) || (y >= from && (x - ax).abs() <= half) {
+                rest.px[((y * q.w + x) * 4 + 3) as usize] = 0;
+            }
+        }
+    }
+    let mut out = vec![0u8; (w * h * 4) as usize];
+    over(&mut out, w, &rest, 0, 0);
+    over(&mut out, w, &head_x.downsample((w - from).max(1), across), from, ay - across / 2);
+    over(&mut out, w, &head_y.downsample(across, (h - from).max(1)), ax - across / 2, from);
+    Image { w, h, px: out }
+}
+
+/// The plain line a straddling frame's art has on its top band: its width in logical px and its colour. None: no line in
+/// the art (a see-through band), or edges that are not a line (tiled art, a frame inside its rect).
+pub fn nine_art_line(img: &Image, nine: &Nine) -> Option<(f32, Rgba)> {
+    let [sl, st, sr, _] = nine.slice;
+    if !nine.straddle || nine.edges != NineFill::Stretch || sl + sr >= img.w || st > img.h {
+        return None;
+    }
+    let x = sl + (img.w - sl - sr) / 2;
+    let drawn: Vec<i32> = (0..st).filter(|y| img.px[((y * img.w + x) * 4 + 3) as usize] > 0).collect();
+    let (a, b) = (*drawn.first()?, *drawn.last()?);
+    let at = (((a + b) / 2 * img.w + x) * 4) as usize;
+    Some(((b - a + 1) as f32 / nine.scale.max(1) as f32, [img.px[at], img.px[at + 1], img.px[at + 2], img.px[at + 3]]))
 }
 
 /// The physical px per art px a straddling frame's corners draw at, one scale in both axes: the frame's own `k`, so they
@@ -321,8 +367,8 @@ fn straddle_over(nine: &Nine, k: f32, p: f32) -> i32 {
 /// overlap (a px is left for rounding each corner's size and anchor apart).
 fn corner_scale(nine: &Nine, k: f32, pr: Rect) -> f32 {
     let [ax, ay] = nine.corner_anchor.unwrap_or([nine.slice[0] / 2, nine.slice[1] / 2]);
-    let room = |edge: i32, slice: i32, anchor: i32| (edge - 2).max(1) as f32 / 2.0 / (slice - anchor).max(1) as f32;
-    k.min(room(pr.w, nine.slice[0].min(nine.slice[2]), ax)).min(room(pr.h, nine.slice[1].min(nine.slice[3]), ay))
+    let room = |edge: i32, slice: i32, anchor: i32| (edge - 2).max(1) as f32 / 2.0 / (sized_corner(nine, slice) - anchor).max(1) as f32;
+    (k * nine.corner_size).min(room(pr.w, nine.slice[0].min(nine.slice[2]), ax)).min(room(pr.h, nine.slice[1].min(nine.slice[3]), ay))
 }
 
 /// The content rect of logical `r` in a frame at view scale `view`: inside the sidecar's `pad` and, with `corner_inner`,
@@ -380,19 +426,34 @@ fn compose_straddle(img: &Image, nine: &Nine, k: f32, p: f32, pr: Rect, reach: i
     let [ax, ay] = nine.corner_anchor.unwrap_or([sl / 2, st / 2]);
     let (fx, fy) = ((ax as f32 * p).round() as i32, (ay as f32 * p).round() as i32);
     let (kw, kh) = (sl.min(sr), st.min(sb));
-    let (cw, ch) = (((kw as f32 * p).round() as i32).max(1), ((kh as f32 * p).round() as i32).max(1));
+    let (cw, ch) = (((sized_corner(nine, kw) as f32 * p).round() as i32).max(1), ((sized_corner(nine, kh) as f32 * p).round() as i32).max(1));
     // Where a band starts, from the corner point: a tiled band starts where its corner ends, since a soft row drawn twice under
     // the corner would read as a step there; a plain line closes under the corner.
     let (from_x, from_y) = if tile { (cw - fx, ch - fy) } else { (-run, -run) };
     let (lw, lh) = ((pr.w - 2 * from_x).max(0), (pr.h - 2 * from_y).max(0));
     let (tt, tb, tl, tr) = (thick(st), thick(sb), thick(sl), thick(sr));
-    over(&mut out, bw, &band((sl, 0, sw, st), (lw, tt), tile, false), reach + from_x, reach - tt / 2);
-    over(&mut out, bw, &band((sl, img.h - sb, sw, sb), (lw, tb), tile, false), reach + from_x, reach + pr.h - (tb - tb / 2));
-    over(&mut out, bw, &band((0, st, sl, sh), (tl, lh), false, tile), reach - tl / 2, reach + from_y);
-    over(&mut out, bw, &band((img.w - sr, st, sr, sh), (tr, lh), false, tile), reach + pr.w - (tr - tr / 2), reach + from_y);
+    if !tile && (nine.line_width.is_some() || nine.line_color.is_some()) {
+        // The sidecar's line for the art's: the art's own width and colour wherever the sidecar does not say.
+        let art = nine_art_line(img, nine);
+        let wide = nine.line_width.or(art.map(|a| a.0)).unwrap_or(0.0);
+        let thick = ((wide * k * nine.scale.max(1) as f32).round() as i32).max(1);
+        let colour = nine.line_color.as_ref().map(|c| c.rgba).or(art.map(|a| a.1)).unwrap_or([0, 0, 0, 0]);
+        let solid = |w: i32, h: i32| Image { w, h, px: colour.repeat((w * h) as usize) };
+        let lap = thick - thick / 2;
+        let (long, tall) = (pr.w + 2 * lap, pr.h + 2 * lap);
+        over(&mut out, bw, &solid(long, thick), reach - lap, reach - thick / 2);
+        over(&mut out, bw, &solid(long, thick), reach - lap, reach + pr.h - lap);
+        over(&mut out, bw, &solid(thick, tall), reach - thick / 2, reach - lap);
+        over(&mut out, bw, &solid(thick, tall), reach + pr.w - lap, reach - lap);
+    } else {
+        over(&mut out, bw, &band((sl, 0, sw, st), (lw, tt), tile, false), reach + from_x, reach - tt / 2);
+        over(&mut out, bw, &band((sl, img.h - sb, sw, sb), (lw, tb), tile, false), reach + from_x, reach + pr.h - (tb - tb / 2));
+        over(&mut out, bw, &band((0, st, sl, sh), (tl, lh), false, tile), reach - tl / 2, reach + from_y);
+        over(&mut out, bw, &band((img.w - sr, st, sr, sh), (tr, lh), false, tile), reach + pr.w - (tr - tr / 2), reach + from_y);
+    }
     for (mx, my) in [(false, false), (true, false), (false, true), (true, true)] {
         let (sx, sy) = (if mx { img.w - kw } else { 0 }, if my { img.h - kh } else { 0 });
-        let mut corner = mirrored(&mirrored(&img.crop(sx, sy, kw, kh), mx, my).downsample(cw, ch), mx, my);
+        let mut corner = mirrored(&sized_tips(mirrored(&img.crop(sx, sy, kw, kh), mx, my), nine).downsample(cw, ch), mx, my);
         sharpen(&mut corner, nine.sharpen);
         let x = if mx { reach + pr.w + fx - corner.w } else { reach - fx };
         let y = if my { reach + pr.h + fy - corner.h } else { reach - fy };
@@ -654,7 +715,7 @@ impl<'a> Painter<'a> {
             return;
         }
         let side = |a: i32, b: i32, room: i32| -> (i32, i32) {
-            let (pa, pb) = (((a as f32) * k).round() as i32, ((b as f32) * k).round() as i32);
+            let (pa, pb) = (((a as f32) * k * nine.corner_size).round() as i32, ((b as f32) * k * nine.corner_size).round() as i32);
             if pa + pb > room {
                 (room / 2, room - room / 2)
             } else {

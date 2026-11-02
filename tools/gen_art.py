@@ -3161,14 +3161,40 @@ def ui_frames():
     return out
 
 
+# The sidecar keys the UI Gallery's frame tuner saves (LOOK1-FT): a regenerate keeps what the file says for them.
+TUNED_KEYS = ("pad", "straddle", "corner_size", "tip", "tip_size", "line_width", "line_color")
+
+
+def with_tuned_keys(side: dict, path: str) -> tuple:
+    # `side` with the tuned keys as the sidecar at `path` has them, and the names that differ from the table. A new cut (other
+    # slices) starts from the table, as those values were tuned on the old art; so does a file that is not there or not JSON.
+    try:
+        with open(path, encoding="utf-8") as f:
+            old = json.load(f)
+    except (OSError, ValueError):
+        return side, []
+    if not isinstance(old, dict) or old.get("slice") != side.get("slice"):
+        return side, []
+    out, kept = dict(side), []
+    for key in TUNED_KEYS:
+        if old.get(key) != side.get(key):
+            kept.append(key)
+        if key in old:
+            out[key] = old[key]
+        else:
+            out.pop(key, None)
+    return out, kept
+
+
 def g_ui_frames(out: Out) -> None:
     for role, (img, side) in sorted(ui_frames().items()):
         save(img, "game", "ui/frames/%s.png" % role, out)
         path = out.target("game", "ui/frames/%s.json" % role)
         if path:
+            side, kept = with_tuned_keys(dict(side, scale=side.get("scale", 2)), path)
             with open(path, "w", encoding="utf-8", newline="\n") as f:
-                f.write(json.dumps(dict(side, scale=side.get("scale", 2))) + "\n")
-            print("wrote game:ui/frames/%s.json" % role)
+                f.write(json.dumps(side) + "\n")
+            print("wrote game:ui/frames/%s.json%s" % (role, ", the tuned keys kept: " + ", ".join(kept) if kept else ""))
 
 
 GROUPS = {

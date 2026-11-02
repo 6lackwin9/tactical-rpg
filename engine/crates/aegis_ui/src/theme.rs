@@ -244,20 +244,46 @@ pub struct Nine {
     /// corner point (mirrored for the others), so the boundary runs along the art's own arms, whatever its image's
     /// empty space. Without it the corner's middle.
     pub corner_anchor: Option<[i32; 2]>,
+    /// Sidecar `"corner_size"`: the corners' drawn size against `scale` (1 as the art says, `CORNER_SIZE` the limits).
+    /// Inside the rect it takes the edge bands with it, as they share the corners' rows and columns.
+    pub corner_size: f32,
+    /// Sidecar `"tip": [from, half]`, with `straddle`: the head at each arm's end of the top-left corner: from art px
+    /// `from` to the slice's end, `half` art px either side of the anchor (mirrored for the other corners).
+    pub tip: Option<[i32; 2]>,
+    /// Sidecar `"tip_size"`, with `tip`: the head's size against the art, from its base, the arm staying put.
+    pub tip_size: f32,
+    /// Sidecar `"line_width"`, with `straddle` and stretched edges: the edge drawn as a solid line this many logical px
+    /// wide (`LINE_WIDTH` the limits) instead of the art's band; without it the art's own width.
+    pub line_width: Option<f32>,
+    /// Sidecar `"line_color"`, as `line_width`: that line's colour role or `#rrggbb`; without it the art's own colour.
+    pub line_color: Option<LineColour>,
 }
+
+/// A frame line's colour: what the sidecar says (a colour role or a hex colour) and the colour that is, a role's taken
+/// from the finished theme (`load`), so a cache keyed on the `Nine` tells two colours apart.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LineColour {
+    pub name: String,
+    pub rgba: Rgba,
+}
+
+/// The limits of the sidecar's `corner_size` and `tip_size`.
+pub const CORNER_SIZE: (f32, f32) = (0.25, 3.0);
+/// The limits of the sidecar's `line_width`, in logical px.
+pub const LINE_WIDTH: (f32, f32) = (0.5, 8.0);
 
 impl Nine {
     /// Slices `slice` at scale 2, stretched, padded by the slices, text in `text`.
     pub fn new(slice: [i32; 4]) -> Self {
-        Self { slice, scale: 2, edges: NineFill::Stretch, center: NineFill::Stretch, pad: slice.map(|s| (s + 1) / 2), ink: "text".into(), reduce: false, corner_inner: None, straddle: false, sharpen: 0.0, corner_anchor: None }
+        Self { slice, scale: 2, edges: NineFill::Stretch, center: NineFill::Stretch, pad: slice.map(|s| (s + 1) / 2), ink: "text".into(), reduce: false, corner_inner: None, straddle: false, sharpen: 0.0, corner_anchor: None, corner_size: 1.0, tip: None, tip_size: 1.0, line_width: None, line_color: None }
     }
 
     /// The sidecar `v` of a `w` x `h` PNG, or every problem with it (`at` names the file).
     pub fn parse(v: &Value, w: i32, h: i32, at: &str) -> Result<Nine, Vec<String>> {
         let mut errs = Vec::new();
         let Some(o) = v.as_object() else { return Err(vec![format!("{at}: a sidecar is a JSON object")]) };
-        for k in o.keys().filter(|k| !["slice", "scale", "edges", "center", "pad", "ink", "reduce", "corner_inner", "straddle", "sharpen", "corner_anchor"].contains(&k.as_str())) {
-            errs.push(format!("{at}: unknown key '{k}' (allowed: slice, scale, edges, center, pad, ink, reduce, corner_inner, straddle, sharpen, corner_anchor)"));
+        for k in o.keys().filter(|k| !["slice", "scale", "edges", "center", "pad", "ink", "reduce", "corner_inner", "straddle", "sharpen", "corner_anchor", "corner_size", "tip", "tip_size", "line_width", "line_color"].contains(&k.as_str())) {
+            errs.push(format!("{at}: unknown key '{k}' (allowed: slice, scale, edges, center, pad, ink, reduce, corner_inner, straddle, sharpen, corner_anchor, corner_size, tip, tip_size, line_width, line_color)"));
         }
         let four = |key: &str, lo: i64, hi: i64, errs: &mut Vec<String>| -> Option<[i32; 4]> {
             let a = o.get(key)?;
@@ -352,6 +378,50 @@ impl Nine {
                 None => errs.push(format!("{at}: unknown ink '{}' (a colour role: {})", ink.as_str().unwrap_or(&ink.to_string()), ROLES.join(", "))),
             }
         }
+        // The tuner's keys: each stays inside its limits, and says when the frame cannot draw it.
+        let size = |key: &str, errs: &mut Vec<String>| -> Option<f32> {
+            let m = o.get(key)?;
+            let n = m.as_f64().filter(|n| (CORNER_SIZE.0 as f64..=CORNER_SIZE.1 as f64).contains(n)).map(|n| n as f32);
+            if n.is_none() {
+                errs.push(format!("{at}: {key} must be a number {}-{}", CORNER_SIZE.0, CORNER_SIZE.1));
+            }
+            n
+        };
+        if let Some(n) = size("corner_size", &mut errs) {
+            nine.corner_size = n;
+        }
+        if let Some(n) = size("tip_size", &mut errs) {
+            nine.tip_size = n;
+        }
+        if let Some(m) = o.get("tip") {
+            let vals: Vec<i64> = m.as_array().map(|a| a.iter().filter_map(Value::as_i64).collect()).unwrap_or_default();
+            let room = nine.slice.into_iter().min().unwrap_or(1) as i64;
+            match vals[..] {
+                [from, half] if from >= 1 && from < room && half >= 1 && half <= room => nine.tip = Some([from as i32, half as i32]),
+                _ => errs.push(format!("{at}: tip must be [from, half] art px inside the slices")),
+            }
+        }
+        if nine.tip.is_some() && !nine.straddle {
+            errs.push(format!("{at}: tip needs straddle"));
+        }
+        if o.contains_key("tip_size") && !o.contains_key("tip") {
+            errs.push(format!("{at}: tip_size needs tip"));
+        }
+        if let Some(m) = o.get("line_width") {
+            match m.as_f64().filter(|n| (LINE_WIDTH.0 as f64..=LINE_WIDTH.1 as f64).contains(n)) {
+                Some(n) => nine.line_width = Some(n as f32),
+                None => errs.push(format!("{at}: line_width must be a number {}-{}", LINE_WIDTH.0, LINE_WIDTH.1)),
+            }
+        }
+        if let Some(m) = o.get("line_color") {
+            match m.as_str().and_then(line_colour) {
+                Some(c) => nine.line_color = Some(c),
+                None => errs.push(format!("{at}: line_color must be a colour role or #rrggbb")),
+            }
+        }
+        if (o.contains_key("line_width") || o.contains_key("line_color")) && (!nine.straddle || nine.edges != NineFill::Stretch) {
+            errs.push(format!("{at}: line_width and line_color need straddle and stretched edges"));
+        }
         if errs.is_empty() {
             Ok(nine)
         } else {
@@ -363,6 +433,14 @@ impl Nine {
     pub fn content(&self, r: crate::canvas::Rect) -> crate::canvas::Rect {
         let [l, t, rr, b] = self.pad;
         crate::canvas::Rect::new(r.x + l, r.y + t, (r.w - l - rr).max(0), (r.h - t - b).max(0))
+    }
+}
+
+/// The sidecar's `line_color` value `s`: a hex colour or a role (coloured by `load`, or by the caller, from its theme).
+pub fn line_colour(s: &str) -> Option<LineColour> {
+    match parse_colour(s) {
+        Some(rgba) => Some(LineColour { name: s.to_lowercase(), rgba }),
+        None => ROLES.contains(&s).then(|| LineColour { name: s.into(), rgba: [0, 0, 0, 0] }),
     }
 }
 
@@ -565,6 +643,13 @@ pub fn load(layers: &Layers) -> Result<Theme, Vec<String>> {
     for (i, root) in layers.roots.iter().enumerate().rev() {
         load_frames(&mut t, &root.join(FRAMES_DIR), &names[i], &mut errs);
     }
+    // A line colour's role, from the finished colours.
+    let roles: Vec<Option<Rgba>> = t.frames.values().map(|f| f.nine.line_color.as_ref().and_then(|c| t.role(&c.name))).collect();
+    for (f, rgba) in t.frames.values_mut().zip(roles) {
+        if let (Some(c), Some(rgba)) = (f.nine.line_color.as_mut(), rgba) {
+            c.rgba = rgba;
+        }
+    }
     if errs.is_empty() {
         Ok(t)
     } else {
@@ -765,6 +850,12 @@ pub fn install(t: Theme) {
     let t = Rc::new(t);
     LOADED.with(|c| *c.borrow_mut() = t.clone());
     CURRENT.with(|c| *c.borrow_mut() = t);
+}
+
+/// Loads the theme again from the layers of the last `reload` and installs it; on a problem the theme in force stays and
+/// the problems come back (a tool that edits a theme file, with no `Cx` to show them on).
+pub fn reinstall() -> Result<(), Vec<String>> {
+    load(&layers()).map(install)
 }
 
 /// Loads the theme from the game's asset layers (`cx.art`) and installs it; on any problem the theme in force stays
