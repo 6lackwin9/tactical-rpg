@@ -87,6 +87,7 @@ A split (square map, Stage battle) was STAGE1 8's recommendation; the decision r
 3. The sorted pass, one `DepthList`: wall blocks whose drawn rect meets the area (foot y the cell's bottom edge, group
    0), standing props (the footprint's bottom edge, group 0), markers and the party (foot y, group 1). `props::sorted`
    gains a block item.
+   As built: at equal feet block, prop, marker, party (decision "EXPLOREVIEW1-L click areas and sort").
 4. The party's outline (PROPS1 4.5) when a block or standing prop sorted after it meets its sprite rect.
 5. Service badges, names, the `party` widget, edge arrows, the legend, the ticker, the talk box, shop, board and lore
    page, the HUD bar: as today.
@@ -107,6 +108,8 @@ footprint, a 6 px south face in `BOX_FACE`, the 1 px edge. Placements and PROPS1
   without art the drawn stand-in in the same rect.
 - Widgets: `marker.<id>` and `party` take the union of the cell rect and the drawn rect (sprite or icon) and are pushed
   in feet order, front-most last (STAGE1 3.8), so a head over the row north is clickable and the front one wins.
+  As built (decision "EXPLOREVIEW1-L click areas and sort"): the party and people take their own cell only; icon markers
+  keep the union.
 - Names and badges over the drawn top, kept inside the map area, as today.
 
 ### 3.6 Controls (MAPNAV1-U and WALK2 rules unchanged, the 3.1 geometry)

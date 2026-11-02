@@ -222,7 +222,7 @@ angle" and came back unusable); the 4:3 forms are squashed from the square in co
 squashed to 64 x 48; the wall face is a flat front elevation, cropped to 64 x 24).
 
 Per batch: `tools/portraits/artqueue.py request` per image with its record; the user runs the Gemini web app;
-`artqueue.py ingest` into `art_src/look1/<set>/`; `tools/tiles/cut.py` (scale only), `seam.py` (score at most 1.5,
+`artqueue.py ingest` into `art_src/look1/<set>/`; `tools/tiles/cut.py --form stage|stage_face|region|...` (LOOK1-T2: one box reduce, the web route's tiles have no clean block), `seam.py` (score at most 1.5,
 else `fix`, else a re-roll), at most 16 colours (warning) and mean luminance at most 25 %; `board.py`; the user picks
 on the board. A6: the title backdrop (16:9, the MENU2 composition: cathedral left, open sky right; n 3), the crest
 (the weeping cathedral eye in gilt and basalt, no text, centred on a flat dark ground; n 2), the `ornate` corner sheet
