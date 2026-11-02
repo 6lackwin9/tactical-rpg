@@ -6,6 +6,10 @@ Depends on: nothing to start; section 8 gives the order against other work
 Lane: logic
 Touches: see the slice table in section 7
 
+**The model (user 2026-11-02, relayed by the planner):** once a layout is selected, the position and size of each element are
+calculated from it. Moved screens have no fixed positions, only relative positions and sizes; the actual size at render
+time comes from the layout. Image rules, minimum size caps and space priority are later work (section 11.1).
+
 This is not a one-shot migration. Phase 1 is the foundation and the layout tools. After that a screen moves only when it
 is being built or redesigned anyway. There is no sweep and no end date for the old mapping.
 
@@ -78,8 +82,9 @@ its size for the first use of the tools (estimate).
 
 ## 2. Goal
 
-Screens and engine pieces declare structure: position and size relative to a parent or the screen. The engine resolves it
-for the canvas it has, so a future layout change needs few or no edits. This is a game-agnostic `aegis_ui` capability
+Screens and engine pieces declare structure: position and size relative to a parent or the screen. Once a layout is
+selected, the engine calculates every element from it for the canvas it has, so a future layout change needs few or no
+edits. This is a game-agnostic `aegis_ui` capability
 (decision "Port goal and the end of Godot"): engine widgets and panes adopt it first and the game gets them for free.
 `Rect` and every existing call stay valid for screens not moved. The unit of new screens is 1 / 1280 of the fixed canvas,
 so decision "Layout grid moves to 1280 x 720" still happens, without a flag day.
@@ -208,27 +213,26 @@ re-exports it, so `Rect::new`, `inset`, `contains` and all callers stay as they 
 ```rust
 pub struct Insets { pub l: i32, pub t: i32, pub r: i32, pub b: i32 }
 pub enum Anchor { TopLeft, Top, TopRight, Left, Center, Right, BottomLeft, Bottom, BottomRight }
-pub struct Frac { pub per_mille: u16, pub min: i32, pub max: i32 }    // frac(240).clamp(180, 320)
-pub enum Size { Units(i32), Share(Frac), Fill(u16) }
+pub struct Part { /* private: a share, a fill weight or a token's units; section 11.1 attaches here */ }
+pub fn frac(per_mille: u16) -> Part;
+pub fn fill(weight: u16) -> Part;
+impl From<i32> for Part { /* a token's value, in units */ }
 pub enum SizeClass { Compact, Medium, Expanded }
 pub struct Need { pub min_w: i32, pub min_h: i32 }
 
 impl Rect {
     pub fn pad(self, by: Insets) -> Rect;
-    pub fn place(self, at: Anchor, w: i32, h: i32) -> Rect;
-    pub fn at(self, fx: u16, fy: u16, at: Anchor, w: i32, h: i32) -> Rect;    // a point in per mille of the parent
+    pub fn place(self, at: Anchor, w: impl Into<Part>, h: impl Into<Part>) -> Rect;
+    pub fn at(self, fx: u16, fy: u16, at: Anchor, w: impl Into<Part>, h: impl Into<Part>) -> Rect;    // per mille of the parent
     pub fn offset(self, dx: i32, dy: i32) -> Rect;
-    pub fn w_of(self, f: Frac) -> i32;    // also h_of
-    pub fn fit_aspect(self, art_w: i32, art_h: i32, at: Anchor) -> Rect;    // inside the parent, never stretched
-    pub fn cover_aspect(self, art_w: i32, art_h: i32) -> Rect;    // over the parent, the art's excess cropped
-    pub fn cut_top(&mut self, h: i32) -> Rect;    // also cut_bottom, cut_left, cut_right
-    pub fn split_x(self, parts: &[Size], gap: i32) -> Vec<Rect>;    // also split_y
+    pub fn cut_top(&mut self, h: impl Into<Part>) -> Rect;    // also cut_bottom, cut_left, cut_right
+    pub fn split_x(self, parts: &[Part], gap: i32) -> Vec<Rect>;    // also split_y
     pub fn grid(self, cols: i32, rows: i32, gap: i32) -> Vec<Rect>;
 }
 pub struct Stack { /* area, gap, used */ }
 impl Stack {
     pub fn new(area: Rect, gap: i32) -> Self;
-    pub fn next(&mut self, h: i32) -> Rect;
+    pub fn next(&mut self, h: impl Into<Part>) -> Rect;
     pub fn overflow(&self) -> i32;    // units past the area, 0 when it fits
 }
 pub fn pick<T: Copy>(area: Rect, choices: &[(Need, T)], last: T) -> T;
@@ -237,35 +241,36 @@ pub fn pick<T: Copy>(area: Rect, choices: &[(Need, T)], last: T) -> T;
 Rules, each with a test in the crate:
 
 - A size that cannot fit becomes 0. Nothing panics and nothing goes negative.
-- `Units` are taken first, then `Share` of what is left after gaps (then clamped), then `Fill` by weight.
+- Token sizes are taken first, then shares of what is left after gaps, then fills by weight, all in one function,
+  `resolve(parts, room)`, so later steps have one place to go.
 - `split`, `grid` and `Stack` resolve shared edges, not sizes (section 6.3), so the parts and gaps always add up to the
   area and neighbours never gain a gap. A test runs every part count from 1 to 12 over every width from 1 to 2,000.
 - `place` and `at` clamp to the parent, and a centred odd remainder rounds toward the top left.
-- `fit_aspect` keeps `art_w : art_h` within 1 unit at every parent size.
 - `pick` returns the first choice whose `Need` fits `area`, else `last`. It works on any rect, so a pane can rearrange
   inside itself.
 
-### 6.2 Relative, fixed and bounded values
+### 6.2 What is calculated, and what the layout supplies
 
-"Relative" means anchored or derived from a parent. It does not mean every number is a fraction: a fraction alone would
-stretch a line on a wide window and crush a panel on a small one.
+On a moved screen every position and every panel, pane or element size is calculated from the selected layout. Selecting
+means `pick` or a size class, or the only layout a screen has. Review checks moved code for `Rect::new` with numbers.
+Text, spacing and thin lines are not stretched by a fraction: the layout supplies them as tokens (question 6 in section 18).
 
 | Kind of value | How it is written | Examples |
 | --- | --- | --- |
 | Position | Anchor, cut, split, stack; `at` for a free point. Never an absolute canvas number | A dialog, a logo, a panel in its screen; a close button in its frame |
-| Panel and pane size | `Share` with min and max, or `Fill` | Dialog width, side rail, columns, list height |
+| Panel, pane and element size | `frac` or `fill`, or a token for a control's height | Dialog width, side rail, columns, list height |
 | Inner layout of a widget | Relative to its own rect | Icon centred in a button, slider knob by value |
-| Spacing | Fixed tokens from `Metrics`, not fractions | Margin, gutter, padding; bands of a frame |
-| Thin things | Fixed; `Metrics.hair` at small scales | Lines, borders, focus ring, scroll bar, grips |
-| Text | Fixed token times Text size and UI scale, with the floor of section 10; boxes grow from measured text | Body, head, line step |
-| Small icons and controls | Fixed tokens with a target floor | Glyph icons, checkbox, stepper, row height |
+| Spacing | Tokens from `Metrics`, not fractions | Margin, gutter, padding; bands of a frame |
+| Thin things | Tokens; `Metrics.hair` at small scales | Lines, borders, focus ring, scroll bar, grips |
+| Text | Token times the Text size setting; boxes grow from measured text | Body, head, line step |
+| Small icons and controls | Tokens | Glyph icons, checkbox, stepper, row height |
 | Frame parts | Sidecar corner and band sizes, not fractions; stretch or tile only along the edge | `corner_scale`, `straddle` (section 9) |
-| Aspect-locked art | `fit_aspect` or `cover_aspect`; a size bound applies to the result, never one axis | Portraits, sprites, backdrops, title art, thumbnails |
+| Images | Drawn in the rect the layout gives, through `Ui::image_in`; the per-image rule is later (section 11.1) | Portraits, thumbnails, title art |
 | Board and map | Cell math, its own world scale, not layout | Cells, sprites on cells, fx |
 
-A per mille is 1.28 units across the 1280 canvas, so exact alignment to art uses `Units` or an anchor plus a token, and a
-share is for "about this much of the room". Under `Fixed` nothing here moves, so bounds cost this game nothing until a
-canvas varies; they are checked by the audit's size profiles.
+A per mille is 1.28 units across the 1280 canvas, so a share lands within 1 unit of any target, inside T4's tolerance.
+Exact alignment to art uses an anchor plus a token. Under `Fixed` nothing here moves, so this game loses nothing by having
+no caps yet: on another canvas a share grows and shrinks freely until the caps of section 11.1 land.
 
 Rollout:
 
@@ -280,7 +285,7 @@ Rollout:
 
 The old path must stay bit-identical, so T1 limits E3 and E4: a pane's existing inner positions become anchors and tokens
 that resolve to the same numbers at `g = 1`. Where a share cannot reproduce today's value exactly on both grids, the piece
-uses `Units` and a share arrives with its first native caller. Callers keep passing a `Rect`: `tab_rail(ui, id, r, ...)`
+keeps `m.u(n)` and a share arrives with its first native caller. Existing minimums inside panes (`ASK_MIN_W`) stay as they are. Callers keep passing a `Rect`: `tab_rail(ui, id, r, ...)`
 is unchanged, and on a moved screen `r` itself comes from a share.
 
 ### 6.3 From fractions to grid to pixels, and rounding
@@ -303,28 +308,27 @@ once, and each cell's width is the difference between its two boundaries. For `F
 - The total always equals the room, so nothing is lost at the far end.
 - Cells can differ by 1 unit. That is the whole cost, and it never accumulates.
 
-`cut_*` share their edge by construction. `Stack` and `grid` use running totals the same way. A `Share` rounds down, then
-clamps. Parts with no `Fill` whose shares total 1,000 end exactly on the area's edge. `place` and `at` round the start down
+`cut_*` share their edge by construction. `Stack` and `grid` use running totals the same way. A share rounds down. Parts with
+no fill whose shares total 1,000 end exactly on the area's edge. `place` and `at` round the start down
 and add the size, so a lone element has one rounding only. Never add a rounded size to a rounded position across
 neighbours: a screen that needs a shared edge cuts or splits.
 
-**Worked example.** A screen: margin 16, a rail of `frac(188).clamp(180, 300)`, gap 12, then a list and a detail pane split
-`Fill(2)`, `Fill(1)` with gap 12.
+**Worked example.** A screen: margin 16, a rail of `frac(186)`, gap 12, then a list and a detail pane split `fill(2)`,
+`fill(1)` with gap 12.
 
 | | Canvas 1280 x 720 (`Fixed`; every 16:9 window) | Canvas 1720 x 720 (`Fit`; a 3440 x 1440 window) |
 | --- | --- | --- |
 | Area after margin | x 16 to 1264, 1248 wide | x 16 to 1704, 1688 wide |
-| Rail | 188 per mille of 1248 is 234.6, so 234; x 16 to 250 | 317.3, so 317, clamped to 300; x 16 to 316 |
-| Room for the panes | 262 to 1264, less the gap: 990 | 328 to 1704, less the gap: 1364 |
-| Boundary at 2 of 3 | 660 | 909.3, so 909 |
-| List | x 262 to 922 (660 wide) | x 328 to 1237 (909 wide) |
-| Detail | x 934 to 1264 (330 wide) | x 1249 to 1704 (455 wide) |
+| Rail | 186 per mille of 1248 is 232.1, so 232; x 16 to 248 | 313.97, so 313; x 16 to 329 |
+| Room for the panes | 260 to 1264, less the gap: 992 | 341 to 1704, less the gap: 1351 |
+| Boundary at 2 of 3 | 661.3, so 661 | 900.7, so 900 |
+| List | x 260 to 921 (661 wide) | x 341 to 1241 (900 wide) |
+| Detail | x 933 to 1264 (331 wide) | x 1253 to 1704 (451 wide) |
 | Ends on the area's edge | Yes | Yes |
 
-Rounding sizes instead would give 909 + 454 on the right, ending at 1703: the off-by-one gap this rule prevents. The rail
-stops at its bound on the wide canvas, so the extra room goes to the panes and nothing distorts. Step 3 at 1920 x 1080
-(`s` 1.5): the rail's right edge 250 is 375 px, list 262 to 922 is 393 to 1383 px, every window of the same canvas giving
-the same units.
+Rounding sizes instead would give 661 + 330 and 900 + 450, ending at 1263 and 1703: the off-by-one gap this rule prevents.
+The rail grows with the canvas; a cap on it is later work. Step 3 at 1920 x 1080 (`s` 1.5): the rail's right edge 248 is 372
+px, the list's edges 260 and 921 are 390 and 1382 px, and every window of the same canvas gives the same units.
 
 **Grid size, in one place.** E1 adds `GRID = (1280, 720)` beside `LW`, `LH` in `painter.rs`, and `View.g` becomes
 `GRID.0 / LW`. E5 lets a game's `canvas` key set it. Changing it re-resolves anchors and shares with no screen edit. Theme
@@ -361,11 +365,12 @@ pay in cell math or text wrapping.
 | `View` | Gains `g: i32`, units per old unit: 1 unmoved, 2 native. `View::fit` stays, so its 40-plus callers do not change. `View::for_grid(self, grid)` gives a screen's view |
 | `Screen::grid()` | New trait method: `Grid::Old` (default), `Grid::Quadrant`, `Grid::Native` |
 | `Ui::screen()` | The canvas as a rect: `(0, 0, 640, 360)` for `Old` and `Quadrant`; `(0, 0, 1280, 720)` for `Native` under the fixed canvas |
-| `Ui::m()` | `Metrics`: text sizes, gaps, `u(n)` = `n * g`, from the theme |
+| `Ui::m()` | `Metrics`: text sizes, gaps, `u(n)` = `n * g`, from the theme. The one read path for text and control sizes |
+| `Ui::image_in(img, r)` | Moved screens draw images through this. It draws as `Painter::image` does today |
 | `Ui::env()` | `Env { canvas, dpr, ui_scale, pointer, width_class, height_class }`. `pointer` is `Mouse` or `Touch`; no shell produces `Touch` yet |
 | `Ui::frame_body(role, r)` | Draws the frame, returns the content rect (section 9) |
 | `Ui::corner_size(f32)` | One corner size for this frame of drawing (section 9) |
-| Layout specimen | New engine module, one new Gallery entry, not a tab on `Specimens` (that would change pinned hashes). Shows anchors, shares, aspect locks and `pick`; the audit's subject |
+| Layout specimen | New engine module, one new Gallery entry, not a tab on `Specimens` (that would change pinned hashes). Shows anchors, shares, fills and `pick`; the audit's subject |
 
 `CanvasPolicy` is how a game relates canvas to window (E5; this game uses only `Fixed`):
 
@@ -387,7 +392,7 @@ Example, the settings popup. Today (`menus.rs:794`): `let r = Rect::new(95, 25, 
 
 ```rust
 let (m, area) = (ui.m(), ui.screen());
-let r = area.place(Anchor::Center, area.w_of(frac(703).clamp(640, 1100)), area.h_of(frac(861).clamp(480, 680)));
+let r = area.place(Anchor::Center, frac(703), frac(861));
 let mut body = ui.frame_body("panel", r);
 let tabs_row = body.cut_top(m.tab_h);
 let page = body.pad(Insets::all(m.padding));
@@ -462,12 +467,12 @@ Today's nine-slice code already follows a resized panel. Corners keep one size o
   reports it (`corner_shrunk`), and the fix is the screen's compact choice.
 - **Banners**: `r.place(Anchor::Top, w, h).offset(0, -h / 2)`, where `w` is the smaller of the art's width at the frame's
   `k` and a share of `r.w`. Ends stay at art size; the middle stretches or tiles as the sidecar says.
-- **Backdrops**: `cover_crop` (`panes.rs:78`) already handles any aspect; `cover_aspect` is its layout form.
+- **Backdrops**: `cover_crop` (`panes.rs:78`) already handles any aspect and stays as it is.
 
 ## 10. Small screens and any window
 
 Size alone is not enough. A 7-inch handheld at 1280 x 800 has the pixels but not the physical size, so the same layout
-gives unreadable text and tiny targets. `dpr` and the floors below are for this.
+gives unreadable text and tiny targets. Phase 1 reports this; the minimums that fix it are later work (section 11.1).
 
 **The engine supports any canvas; a game decides what it offers.** Emberwake declares `Fixed` at 1280 x 720 and a window
 list starting there, so its new screens always see Expanded, Expanded and need no compact code. Today's `WINDOW_SIZES`
@@ -476,9 +481,6 @@ opens at the nearest listed one. LOOK1-M2's settings rail reads the list.
 
 | Concern | Rule |
 | --- | --- |
-| Minimum text | `metrics.min_text_dp`, 0 by default (off). When on, drawn text is at least that many dp, after `fonts.scale` (Text size setting) and `ui_scale`, on `Native` screens only. `text_w` and `line_h` use the same floor, so layouts reflow rather than spill |
-| Minimum target | `metrics.min_target_dp`, 0 by default. `Metrics.row_h` is at least this, and `layout_audit` reports smaller clickable widgets |
-| Values when a game targets touch | 12 dp text, 44 dp targets (common platform guidance; assumed, tune on a device) |
 | `dpr` | Window px per CSS px, from winit `scale_factor` or the browser's `devicePixelRatio`. Not a true measurement: a handheld can report 1, so a game targeting one also sets a default `ui_scale` (about 1.5, assumed) |
 | Rearranging | `pick` or the classes choose side-by-side, tabs or a stack. The screen writes each arrangement; the engine never rearranges by itself |
 
@@ -493,7 +495,8 @@ Overflow: every stack or list declares one; the default is `Report`.
 
 `layout_audit::issues` sits beside `text_audit`, run by the same shell command on the same frame. Its results go in a
 separate `layout` key, so the exact `counts` checks of the text audit stay valid (`shell.rs:1968`, `text_audit.rs:85`).
-Kinds: `overflow`, `small_text`, `small_target`, `off_canvas`, `zero_size`, `corner_shrunk`, `stretched_art`, `hover_only`.
+Kinds: `overflow`, `off_canvas`, `zero_size`, `corner_shrunk`, `hover_only`. `zero_size` and `overflow` show where caps and
+priority will be needed.
 
 | Profile | Window px | dpr | ui_scale | Pointer | Policy |
 | --- | --- | --- | --- | --- | --- |
@@ -505,9 +508,9 @@ Kinds: `overflow`, `small_text`, `small_target`, `off_canvas`, `zero_size`, `cor
 | phone landscape | 2532 x 1170 | 3 | 1 | Touch | Dp |
 | phone portrait | 1170 x 2532 | 3 | 1 | Touch | Dp |
 
-Each runs at the four text sizes. The layout specimen and relative panes must pass all but phone portrait, which is
-report-only until a portrait task. `Native` game screens must pass `desktop` and report the rest until a game targets those
-sizes; a report does not fail the gate. `Old` and `Quadrant` screens are not audited for layout.
+Each runs at the four text sizes. The layout specimen, relative panes and `Native` game screens must pass `desktop`. The
+other profiles report only, because nothing keeps a minimum yet; a report does not fail the gate. They must resolve without a
+panic. `Old` and `Quadrant` screens are not audited for layout.
 
 ## 11. What this must not block, and what waits
 
@@ -518,12 +521,25 @@ Not built here: touch input, portrait layouts, the web port, a UI scale setting,
 | Web port | `aegis_layout` compiles anywhere; `aegis_ui` as a whole does not today (`bridge.rs:7,22` socket and threads, `shell.rs:1182` files; winit, pixels, rodio, arboard) and needs its own task | New layout and metric code uses no file, thread, socket or clock. Canvas comes in as a value |
 | Any browser window | A resize already replaces canvas and view (`shell.rs:1230`) | Read `ui.screen()` each frame; assume no aspect; keep no `Rect` across frames on `Native` screens |
 | Portrait | Classes treat it as width Compact | No `Native` screen assumes wide; one without a compact choice reports overflow |
-| Touch | `Env.pointer`, `min_target_dp`, `(-1, -1)` as "no pointer" | No information needed to play lives only in a hover card. A tip is also reachable by focus or press: `draw_tip` (`ui.rs:747`) is keyed on the mouse today, and E3 makes its target "the hovered or focused widget". `hover_only` reports a tip on a widget that can take neither. Dragging keeps a non-drag route; right click keeps a visible button |
+| Touch | `Env.pointer`, `(-1, -1)` as "no pointer", the target minimums of 11.1 | No information needed to play lives only in a hover card. A tip is also reachable by focus or press: `draw_tip` (`ui.rs:747`) is keyed on the mouse today, and E3 makes its target "the hovered or focused widget". `hover_only` reports a tip on a widget that can take neither. Dragging keeps a non-drag route; right click keeps a visible button |
 
 Added size for small screens: E5 (1 run) plus about a third of E2 and E3, already in the 5. Can wait until a game targets a
 small screen: `Fit` and `Dp` in the shell, the UI scale setting, touch input and enlarged hit boxes, the `draw_tip` press path,
-compact arrangements, device tuning of the floors. If E5 waits too, 1 run moves out of phase 1 and nothing checks the
-bounds. A real web target also means moving every screen it offers, which is not costed here.
+compact arrangements. If E5 waits too, 1 run moves out of phase 1 and nothing checks small sizes. A real web target also means
+moving every screen it offers, which is not costed here.
+
+### 11.1 Later work, and where it attaches
+
+Not in phase 1. Each is its own later task. Phase 1 only keeps one place for it, so no caller changes when it lands.
+
+| Later work | Where it attaches | What phase 1 does | What it adds |
+| --- | --- | --- | --- |
+| Images: a simple scale or fill rule, chosen per image | `Ui::image_in(img, r)` | Draws in the given rect, as today. `cover_crop` stays for backdrops | A rule argument with a default; aspect-kept drawing, so a varying canvas cannot stretch art; a `stretched_art` audit kind |
+| Minimum size caps: some elements keep a minimum to stay legible | `Part` (private fields, so a `.min(n)` adds without breaking callers); `Ui::m()` for text and control sizes; `Env.dpr` | Parts have no caps; text keeps only the 6 px floor of `Painter::px` | Caps on parts; `min_text_dp` and `min_target_dp` theme keys, after the Text size setting and UI scale; `small_text` and `small_target` audit kinds; values to tune on a device (12 dp text and 44 dp targets are common guidance, assumed) |
+| Space priority: what space may be lost when the minimums do not fit, such as which pane gives way first | `Part` (a `.give_way(rank)`), applied inside `resolve(parts, room)` | Too little room gives 0 size, and the audit reports it | The give-way step before boundaries are worked out; shared-edge rounding is unchanged. If nothing can give way, the screen's next `pick` choice is the fallback |
+
+Until these land, moved screens are checked on this game's fixed canvas only, where a layout has the room it was written for.
+Art on a moved screen is authored in a rect of its own proportions.
 
 ## 12. Risks
 
@@ -533,7 +549,8 @@ bounds. A real web target also means moving every screen it offers, which is not
 | Quadrant makes a real screen hard to use while the game is still being tested | Delete the line: it is the wrapper |
 | A native screen gets an old-unit number by habit (`BODY`, `W`, a copied literal) | T3; review checks moved files for `ui::{W, H, BODY, SMALL}` |
 | E3 or E4 changes old-path pixels while going relative | T1 pins them at `g = 1` |
-| Fractions distort a panel on an unusual canvas | Bounds and aspect locks (6.2); `stretched_art` and `overflow` in the audit |
+| Without caps, a moved screen distorts or overflows on another canvas, and art can stretch | Accepted for phase 1: this game has one canvas. The audit reports it; section 11.1 fixes it before a game offers another |
+| Phase 1 blocks the later work | `Part`, `resolve`, `Ui::image_in` and `Ui::m()` are the single entry points; a crate test covers `resolve` so the later steps can rely on it |
 | "Any piece touched moves to relative" grows small tasks | The function-level reading in 6.2; the review checks scope |
 | Reduced-frame caches recompose on every step of a window drag | `REDUCED_MAX` bounds memory, not time. Fine on desktop; a web port measures it |
 
@@ -544,8 +561,8 @@ bounds. A real web target also means moving every screen it offers, which is not
 writing a screen (cut from `ui.screen()`, tokens from `ui.m()`, frames through `frame_body`, panes before drawing, no rect
 kept across frames); the table of 6.2; fractions to grid to pixels and resolving edges, not sizes, with the worked example of
 6.3; **the rule that any engine layout code touched moves to relative**; size classes and
-`pick`; overflow per container; minimums, `dpr`, Text size and UI scale; art and units (odd and even, thin lines, aspect
-locks); no hover-only information; what layout code may not use; testing by relations, profiles and `shot_diff`; sorting
+`pick`; overflow per container; `dpr`, Text size and UI scale; art and units (odd and even, thin lines); no fixed positions on
+a moved screen; what is later and where it attaches (11.1); no hover-only information; what layout code may not use; testing by relations, profiles and `shot_diff`; sorting
 existing screens into the three classes, quadrant and wrapper, moving a screen only inside a task that changes it.
 
 ## 14. Schema contract
@@ -562,7 +579,6 @@ and `layout`, so `metrics` changes nothing there.
 | `margin`, `gutter`, `padding`, `grid` | i32 | 16, 12, 12, 8 | `grid` can later go to 4 for finer snaps; `panes::snap` reads it (`panes.rs:34-48`) |
 | `frame_title_h`, `tab_h`, `row_h` | i32 | 52, 36, 28 | `row_h` is assumed from `shop.rs:30`; a screen may keep its own |
 | `focus_glow` | i32, 0 or more | 2 | |
-| `min_text_dp`, `min_target_dp` | f32, 0 or more | 0, 0 | 0 is off |
 | `breakpoints` | object: `width: [i32, i32]`, `height: [i32, i32]`, ascending | `[800, 1200]`, `[480, 700]` | Compact and Medium upper limits |
 
 Game manifest keys (E5, read through the shell's options; the game sets them in G0): `canvas`, an object with `policy`
@@ -579,7 +595,7 @@ None.
 ## 16. Out of scope
 
 Touch, portrait arrangements, the web port and any wasm toolchain in the gate; a UI scale setting; `Fit` or `Dp` for this
-game; changing the fixed canvas; any visual redesign; parity work on non-finalized screens; a sweep over screens; removing
+game; image rules, minimum size caps and space priority (section 11.1); changing the fixed canvas; any visual redesign; parity work on non-finalized screens; a sweep over screens; removing
 the old mapping; kit crates, which draw nothing (`kits/rpg` mentions `aegis_ui` only in comments in
 `rpgkit_data/src/lib.rs`, and holds only the `_px` fields above).
 
@@ -593,7 +609,7 @@ Reasoned, not run: T2's float exactness; that `Grid::Old` is identical; the text
 `Painter::px` and `Painter::nine`); all readability calls; that panes can go relative while staying bit-identical at
 `g = 1` (T1 will show it, and 6.2 gives the fallback). No code was compiled for this spec.
 
-Assumed: all run counts; the M2 share; size-class thresholds and floors; `dpr` values; `row_h`; that playtest trail `pos`
+Assumed: all run counts; the M2 share; size-class thresholds; `dpr` values; `row_h`; that playtest trail `pos`
 (`shell.rs:566`) is informational (E1 checks it); frozen clocks for shots. Classes marked confirm or flag are my reading of
 the docs, not the user's word.
 
@@ -608,3 +624,6 @@ the docs, not the user's word.
 4. **Keep M0 as a pilot, or make M2 the first user?** Recommend keeping it: 0.5 run, and a problem in the tools shows on 7
    rects, not on M2's 40-odd.
 5. **"Any engine piece touched moves to relative": function level or whole file?** Recommend function level (6.2).
+6. **Do text, spacing, thin lines, frame parts and small control heights stay tokens under "only relative positions and
+   sizes"?** Recommend yes. The layout supplies them and they re-resolve with it, but a fraction would stretch them, as the
+   user said earlier. Making them relative too would need the minimum caps in phase 1.
