@@ -11,9 +11,10 @@
 //! pip codes, the hover card the screen's). The widget names no game: the block colours are the caller's. `samples` are
 //! the UI Gallery's states.
 
-use crate::canvas::{rgb, rgba, Rect, Rgba};
+use crate::canvas::{rgba, Rect, Rgba};
+use crate::theme::th;
 use crate::timeline::GHOST_ALPHA;
-use crate::ui::{Tip, Ui, DIM, FOE, GOLD, INFO, SMALL, TEXT};
+use crate::ui::{Tip, Ui, SMALL};
 
 /// One slot's size and the gap between slots (canvas pixels): 12 slots take 71.
 pub const PIP_W: i32 = 5;
@@ -96,8 +97,10 @@ impl Pip {
     }
 }
 
-/// The gauge's colours: a socket's fill and outline, a crossed slot's outline and cross, the alert (outlines and
-/// labels).
+/// The gauge's chrome colours: a socket's fill and outline, a crossed slot's outline and cross, the alert (outlines
+/// and labels). `default` reads the theme in force (LOOK1-E1B); a block's own colour is the caller's (a meaning, such as
+/// the skill kind, not chrome), and its ticks and rim are that colour mixed toward black and white, so they read on any
+/// colour under any theme.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Colours {
     pub socket: Rgba,
@@ -108,7 +111,8 @@ pub struct Colours {
 
 impl Default for Colours {
     fn default() -> Self {
-        Colours { socket: rgb(6, 9, 16), socket_edge: rgba(200, 210, 228, 220), crossed: rgba(132, 146, 172, 110), alert: FOE }
+        let t = th();
+        Colours { socket: t.socket, socket_edge: t.socket_edge, crossed: rgba(t.dim[0], t.dim[1], t.dim[2], 110), alert: t.foe }
     }
 }
 
@@ -336,10 +340,11 @@ pub fn mix(a: Rgba, b: Rgba, k: f32) -> Rgba {
 /// move, three attacks and a defend, one long attack, nothing planned), a ghost plan, a pick 1 short, a debt of 2, a
 /// budget of 14 at 2 points a slot and a spending one. Sample colours only (a game passes its own).
 pub fn samples() -> Vec<(&'static str, PipGauge)> {
-    let (attack, moving, defend) = (FOE, INFO, GOLD);
+    let t = th();
+    let (attack, moving, defend) = (t.foe, t.info, t.gold);
     let tip = |now: i32, plan: &[PipBlock], max: i32| {
         let spent: i32 = plan.iter().map(|b| b.ap).sum();
-        vec![(format!("Now {now} of {max}"), GOLD), (format!("Plan {spent}, left {}", now - spent), TEXT)]
+        vec![(format!("Now {now} of {max}"), t.gold), (format!("Plan {spent}, left {}", now - spent), t.text)]
     };
     let planned = |now: i32, plan: Vec<PipBlock>, max: i32| PipGauge::planned(now, &plan, max, 12).with_tip(tip(now, &plan, max));
     let a = |ap| PipBlock::new(ap, attack);
@@ -352,6 +357,6 @@ pub fn samples() -> Vec<(&'static str, PipGauge)> {
         ("A pick 1 short (red)", planned(3, vec![a(3)], 12).short(1)),
         ("A debt of 2", planned(-2, Vec::new(), 12)),
         ("Max 14, 2 a slot: now 14, plan 5", planned(14, vec![a(4), PipBlock::new(1, moving)], 14)),
-        ("Spending: 10 held, 6 left", PipGauge::live(10, 6, DIM, 12, 12).with_tip(vec![("Spent 4 of 10".into(), GOLD)])),
+        ("Spending: 10 held, 6 left", PipGauge::live(10, 6, t.dim, 12, 12).with_tip(vec![("Spent 4 of 10".into(), t.gold)])),
     ]
 }

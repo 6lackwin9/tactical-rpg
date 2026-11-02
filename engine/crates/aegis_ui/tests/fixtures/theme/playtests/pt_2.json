@@ -1,0 +1,11 @@
+{
+  "format": "playtest",
+  "version": 2,
+  "id": "pt_2",
+  "origin": "user",
+  "created": "2026-11-02 11:00:00",
+  "engine": "aegis fixture",
+  "content": "this data",
+  "battles": [],
+  "notes": []
+}

@@ -5,10 +5,10 @@
 //! A note's row opens it whole with a Copy button (PLAYUI1-T, `NoteView`). The game supplies the screen a session plays
 //! in (`Launch`) and its content fingerprint.
 
-use crate::canvas::{rgba, Rect};
+use crate::canvas::Rect;
 use crate::playtest::TAGS;
 use crate::screen::{Cx, Nav, Screen};
-use crate::ui::{clipboard, tip, Gfx, Ui, Widget, BODY, BORDER, DIM, FOE, GOLD, GOOD, H, INFO, SMALL, TEXT, W};
+use crate::ui::{clipboard, tip, Gfx, Ui, Widget, BODY, H, SMALL, W};
 use crate::widget_plumbing;
 use aegis_host::playtest::{self, Recording, Session};
 use serde_json::{json, Value};
@@ -185,17 +185,18 @@ impl<G> Screen<G> for Recordings<G> {
 
     fn draw(&mut self, cx: &mut Cx<G>, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<Act> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), rgba(12, 16, 26, 255));
-        ui.p.text(12.0, 8.0, "PLAYTESTS", 10.0, GOLD);
+        let t = ui.t.clone();
+        ui.p.fill(Rect::new(0, 0, W, H), t.tool_bg);
+        ui.p.text(12.0, 8.0, "PLAYTESTS", 10.0, t.gold);
         ui.button("recordings.back", Rect::new(W - 40, 6, 34, 13), "Back", Act::Back, true);
         let on = cx.playtest.on;
         ui.checkbox("recordings.record", 12, 24, "Record playtests (sessions, the UI trail, F8 notes)", on, Act::Toggle, true);
         ui.button("recordings.refresh", Rect::new(W - 112, 24, 66, 13), "Refresh", Act::Refresh, true);
         let folder = cx.playtest.dir.display().to_string();
-        ui.p.text_fit(12.0, 38.0, &format!("Folder: {folder}"), SMALL, (W - 24) as f32, DIM);
+        ui.p.text_fit(12.0, 38.0, &format!("Folder: {folder}"), SMALL, (W - 24) as f32, t.dim);
         // Left: the recordings, newest first.
         let left = Rect::new(12, 50, 214, 300);
-        ui.p.panel(left, rgba(18, 24, 38, 255), BORDER, 2.0);
+        ui.p.panel(left, t.tool_pane, t.edge, 2.0);
         let view = Rect::new(left.x + 3, left.y + 3, left.w - 6, left.h - 6);
         let off = ui.scroll_begin("recordings.list", view, self.items.len() as i32 * 16);
         for (i, item) in self.items.iter().enumerate() {
@@ -211,38 +212,38 @@ impl<G> Screen<G> for Recordings<G> {
                         badges.push("stale");
                     }
                     let badge = if badges.is_empty() { String::new() } else { format!(" [{}]", badges.join(", ")) };
-                    (format!("{id}  {} battles, {} notes{badge}", rec.battles.len(), rec.notes.len()), if cx.playtest.stale(rec) { DIM } else { TEXT })
+                    (format!("{id}  {} battles, {} notes{badge}", rec.battles.len(), rec.notes.len()), if cx.playtest.stale(rec) { t.dim } else { t.text })
                 }
-                Err(_) => (format!("{id}  (unreadable)"), FOE),
+                Err(_) => (format!("{id}  (unreadable)"), t.foe),
             };
             ui.row(&format!("recordings.item.{i}"), r, &label, col, Some(Act::Pick(i)), i == self.pick, Vec::new());
         }
         ui.scroll_end();
         if self.items.is_empty() {
-            ui.p.text(left.x as f32 + 8.0, left.y as f32 + 8.0, if on { "No recordings yet: play a battle." } else { "No recordings. Turn recording on." }, BODY, DIM);
+            ui.p.text(left.x as f32 + 8.0, left.y as f32 + 8.0, if on { "No recordings yet: play a battle." } else { "No recordings. Turn recording on." }, BODY, t.dim);
         }
         // Right: the picked recording.
         let right = Rect::new(232, 50, 396, 300);
-        ui.p.panel(right, rgba(18, 24, 38, 255), BORDER, 2.0);
+        ui.p.panel(right, t.tool_pane, t.edge, 2.0);
         let (x, mut y) = (right.x + 6, right.y + 4);
         match self.items.get(self.pick).map(|i| (&i.rec, i.repo)) {
             None => {}
-            Some((Err(e), _)) => ui.p.text_fit(x as f32, y as f32, e, BODY, (right.w - 12) as f32, FOE),
+            Some((Err(e), _)) => ui.p.text_fit(x as f32, y as f32, e, BODY, (right.w - 12) as f32, t.foe),
             Some((Ok(rec), repo)) => {
                 let stale = cx.playtest.stale(rec);
-                ui.p.text(x as f32, y as f32, &rec.id, BODY, INFO);
-                ui.p.text_fit(x as f32 + 90.0, y as f32 + 1.0, &format!("{}  ·  {}  ·  {}", rec.created, rec.origin, rec.engine), SMALL, (right.w - 102) as f32, DIM);
+                ui.p.text(x as f32, y as f32, &rec.id, BODY, t.info);
+                ui.p.text_fit(x as f32 + 90.0, y as f32 + 1.0, &format!("{}  ·  {}  ·  {}", rec.created, rec.origin, rec.engine), SMALL, (right.w - 102) as f32, t.dim);
                 y += 11;
                 if stale {
-                    ui.p.text(x as f32, y as f32, "Stale: made on other data, so a replay may diverge.", SMALL, GOLD);
+                    ui.p.text(x as f32, y as f32, "Stale: made on other data, so a replay may diverge.", SMALL, t.gold);
                     y += 9;
                 }
                 if !rec.parent.is_null() {
-                    ui.p.text_fit(x as f32, y as f32, &format!("Parent: {}", rec.parent), SMALL, (right.w - 12) as f32, DIM);
+                    ui.p.text_fit(x as f32, y as f32, &format!("Parent: {}", rec.parent), SMALL, (right.w - 12) as f32, t.dim);
                     y += 9;
                 }
                 y += 2;
-                ui.p.text(x as f32, y as f32, "BATTLE", SMALL, INFO);
+                ui.p.text(x as f32, y as f32, "BATTLE", SMALL, t.info);
                 y += 9;
                 let labels: Vec<String> = rec
                     .battles
@@ -263,7 +264,7 @@ impl<G> Screen<G> for Recordings<G> {
                 ui.select("recordings.round", Rect::new(x, y, 120, 14), &points, self.round, Act::Round, !points.is_empty(), Vec::new());
                 ui.button_tip("recordings.take_over", Rect::new(x + 126, y, 60, 14), "Take over", Act::TakeOver, !points.is_empty(), tip("Take over", "Replays the battle to the chosen round, then you play on: a new session that names this one as its parent."));
                 y += 20;
-                ui.p.text(x as f32, y as f32, &format!("NOTES ({})", rec.notes.len()), SMALL, INFO);
+                ui.p.text(x as f32, y as f32, &format!("NOTES ({})", rec.notes.len()), SMALL, t.info);
                 y += 9;
                 let view = Rect::new(x, y, right.w - 12, (right.y + right.h) - 24 - y);
                 let lines: Vec<String> = rec
@@ -283,7 +284,7 @@ impl<G> Screen<G> for Recordings<G> {
                 let off = ui.scroll_begin("recordings.notes", view, lines.len() as i32 * row_h);
                 for (i, line) in lines.iter().enumerate() {
                     let r = Rect::new(view.x, view.y - off + i as i32 * row_h, view.w - 5, row_h);
-                    ui.row(&format!("recordings.note.{i}"), r, line, TEXT, Some(Act::Note(i)), false, tip(&format!("Note {}", i + 1), "Click to read it whole and copy it."));
+                    ui.row(&format!("recordings.note.{i}"), r, line, t.text, Some(Act::Note(i)), false, tip(&format!("Note {}", i + 1), "Click to read it whole and copy it."));
                 }
                 ui.scroll_end();
                 let by = (right.y + right.h) - 19;
@@ -294,7 +295,7 @@ impl<G> Screen<G> for Recordings<G> {
             }
         }
         if !self.message.is_empty() {
-            ui.p.text_fit(12.0, (H - 8) as f32, &self.message, SMALL, (W - 24) as f32, if self.message.starts_with("Copied") { GOOD } else { GOLD });
+            ui.p.text_fit(12.0, (H - 8) as f32, &self.message, SMALL, (W - 24) as f32, if self.message.starts_with("Copied") { t.good } else { t.gold });
         }
         self.w = ui.widgets;
     }
@@ -364,12 +365,13 @@ impl<G> Screen<G> for NoteView {
     }
     fn draw(&mut self, _cx: &mut Cx<G>, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         let mut ui: Ui<NoteAct> = Ui::new(g, mouse, live);
-        ui.p.fill(Rect::new(0, 0, W, H), rgba(0, 0, 0, 120));
+        let t = ui.t.clone();
+        ui.p.fill(Rect::new(0, 0, W, H), t.scrim);
         let r = Rect::new(W / 2 - 200, 30, 400, H - 60);
         ui.frame(r, &self.title, false);
-        ui.p.text_fit(r.x as f32 + 10.0, r.y as f32 + 24.0, &self.meta, SMALL, (r.w - 20) as f32, DIM);
+        ui.p.text_fit(r.x as f32 + 10.0, r.y as f32 + 24.0, &self.meta, SMALL, (r.w - 20) as f32, t.dim);
         let view = Rect::new(r.x + 10, r.y + 36, r.w - 20, r.h - 36 - 28);
-        ui.p.panel(view, rgba(22, 30, 48, 255), BORDER, 2.0);
+        ui.p.panel(view, t.input, t.edge, 2.0);
         let line = ui.p.line_h(BODY).ceil() as i32 + 1;
         let mut lines = Vec::new();
         for para in self.text.split('\n') {
@@ -381,12 +383,12 @@ impl<G> Screen<G> for NoteView {
         }
         let off = ui.scroll_begin(&format!("{NOTE_ID}.text"), view, lines.len() as i32 * line + 6);
         for (i, l) in lines.iter().enumerate() {
-            ui.p.text((view.x + 5) as f32, (view.y + 3 - off + i as i32 * line) as f32, l, BODY, TEXT);
+            ui.p.text((view.x + 5) as f32, (view.y + 3 - off + i as i32 * line) as f32, l, BODY, t.text);
         }
         ui.scroll_end();
         let by = r.y + r.h - 22;
         if !self.message.is_empty() {
-            ui.p.text_fit(r.x as f32 + 10.0, by as f32 + 3.0, &self.message, SMALL, (r.w - 140) as f32, GOOD);
+            ui.p.text_fit(r.x as f32 + 10.0, by as f32 + 3.0, &self.message, SMALL, (r.w - 140) as f32, t.good);
         }
         ui.button_tip(&format!("{NOTE_ID}.copy"), Rect::new(r.x + r.w - 124, by, 54, 15), "Copy", NoteAct::Copy, true, tip("Copy", "Puts the note's text on the clipboard."));
         ui.button(&format!("{NOTE_ID}.close"), Rect::new(r.x + r.w - 64, by, 54, 15), "Close", NoteAct::Close, true);

@@ -115,6 +115,20 @@ theme_roles! {
     drop_hot = rgba(244, 198, 84, 40), "The drop target under the cursor.";
     ring = rgb(255, 255, 255), "The keyboard focus ring.";
     parchment = ui::TEXT, "Parchment inset fill (no frame file).";
+    title_idle = rgb(26, 36, 58), "Title bar of a window not in front.";
+    ruler = rgb(16, 22, 36), "A timeline's ruler strip.";
+    playing = rgb(52, 96, 150), "The block being played: its fill.";
+    playing_edge = rgb(128, 220, 255), "The block being played: its border and, faint, its column over the lanes.";
+    lane = rgb(24, 30, 44), "A timeline lane's cells.";
+    lane_stripe = rgba(60, 66, 84, 140), "The stripes over a masked lane.";
+    lane_hatch = rgba(120, 128, 150, 90), "The hatching over a hatched lane.";
+    impact_edge = rgba(240, 244, 255, 220), "The light edge where a timeline part lands.";
+    socket = rgb(6, 9, 16), "A pip gauge's free socket.";
+    socket_edge = rgba(200, 210, 228, 220), "A pip gauge's socket outline.";
+    tool_bg = rgb(12, 16, 26), "A tool screen's ground (the recordings).";
+    tool_pane = rgb(18, 24, 38), "A tool screen's pane fill (the recordings).";
+    stage = rgb(10, 11, 16), "A vignette reel's frame and backdrop when it names none.";
+    mote = rgb(206, 204, 200), "The drifting specks over a vignette card (their alpha is the card's).";
 }
 
 /// A face: its font file (layer-relative) and size factor; `bytes` None is the shell's UI font.

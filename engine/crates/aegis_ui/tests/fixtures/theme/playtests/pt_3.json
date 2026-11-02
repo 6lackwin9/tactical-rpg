@@ -1,0 +1,21 @@
+{
+  "format": "playtest",
+  "version": 2,
+  "id": "pt_3",
+  "origin": "user",
+  "created": "2026-11-02 12:00:00",
+  "engine": "aegis fixture",
+  "parent": {"id": "pt_2", "at": 3},
+  "content": "older data",
+  "battles": [
+    {
+      "requests": [{"cmd": "new", "encounter": "fixture_fight"}, {"cmd": "plan"}, {"cmd": "plan"}],
+      "checkpoints": [{"at": 2, "state": {"round": 1, "over": false}}],
+      "end": {"result": "won", "at": 3}
+    }
+  ],
+  "notes": [
+    {"n": 1, "tags": ["ui"], "scene": "battle", "round": 2, "text": "A note on a battle round."},
+    {"n": 2, "tags": [], "scene": "hub", "text": "A note on a screen."}
+  ]
+}

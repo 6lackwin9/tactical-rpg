@@ -11,7 +11,7 @@
 //! click, so clicks land where they did; labels and mask notes give way to them. All of it is empty by default.
 //!
 //! Ghost segments (INPUT1-U, engine-only): a segment can be a ghost, a planned, not chosen, span (what a planner filled
-//! in for the player): its fill at `GHOST_ALPHA`, a dashed outline all round and its label in `DIM`; `draw_ghost` and
+//! in for the player): its fill at `GHOST_ALPHA`, a dashed outline all round and its label in `dim`; `draw_ghost` and
 //! `ghost_fill` give a screen's own spans the same look. Off by default.
 //!
 //! Track cards and hatching (INPUT1-T, engine-only): a track's label can carry a hover card (`Track.tip`) and its lane
@@ -23,7 +23,8 @@
 //! Off by default: a track without it draws exactly as before.
 
 use crate::canvas::{rgb, rgba, Rect, Rgba};
-use crate::ui::{tip, Tip, Ui, BODY, BORDER, CARD, DIM, GOLD, PANEL_HI, RADIUS, SMALL, TEXT};
+use crate::theme::th;
+use crate::ui::{tip, Tip, Ui, BODY, RADIUS, SMALL};
 
 /// Height of the block ruler, a section header and a track row (canvas pixels).
 pub const RULER_H: i32 = 13;
@@ -76,7 +77,7 @@ pub struct Segment {
     /// Hatched whole (a dimmed or cancelled span, say).
     pub hatched: bool,
     /// A ghost span (a planned, not chosen, span): its fill at `GHOST_ALPHA`, a dashed outline all round and the label
-    /// in `DIM` (`draw_ghost`).
+    /// in `dim` (`draw_ghost`).
     pub ghost: bool,
 }
 
@@ -219,15 +220,15 @@ impl Timeline {
         let lane_x = r.x + label_w;
         let lane_w = (r.w - label_w - 4).max(self.blocks.max(1));
         // The ruler: one tick per block, the playhead filled, the selected block outlined.
-        ui.p.fill(Rect::new(r.x, r.y, r.w, RULER_H), rgba(16, 22, 36, 255));
-        ui.p.text(r.x as f32 + 3.0, r.y as f32 + 2.5, "Block", SMALL, DIM);
+        ui.p.fill(Rect::new(r.x, r.y, r.w, RULER_H), ui.t.ruler);
+        ui.p.text(r.x as f32 + 3.0, r.y as f32 + 2.5, "Block", SMALL, ui.t.dim);
         for b in 1..=self.blocks {
             let (x0, x1) = self.block_span(lane_x, lane_w, b);
             let cell = Rect::new(x0 + 1, r.y + 1, x1 - x0 - 2, RULER_H - 2);
             let (playing, selected) = (b == self.playhead, self.selected_block == Some(b));
             let hover = ui.hover(cell);
-            ui.p.panel(cell, if playing { rgb(52, 96, 150) } else if hover { PANEL_HI } else { CARD }, if selected { GOLD } else if playing { rgb(128, 220, 255) } else { BORDER }, 2.0);
-            ui.p.text_center((x0 + x1) as f32 / 2.0, r.y as f32 + 2.5, &format!("{}B{b}", if playing { "> " } else { "" }), SMALL, if playing || selected { GOLD } else { TEXT });
+            ui.p.panel(cell, if playing { ui.t.playing } else if hover { ui.t.card_hot } else { ui.t.card }, if selected { ui.t.focus } else if playing { ui.t.playing_edge } else { ui.t.edge }, 2.0);
+            ui.p.text_center((x0 + x1) as f32 / 2.0, r.y as f32 + 2.5, &format!("{}B{b}", if playing { "> " } else { "" }), SMALL, if playing || selected { ui.t.focus } else { ui.t.text });
             ui.push(format!("{id}.block.{b}"), "button", format!("B{b}"), cell, true, selected, Some(on_block(b)), tip(&format!("Block {b}"), if playing { "The block being played." } else { "Select this block." }));
         }
         // The tracks scroll under the ruler.
@@ -247,7 +248,7 @@ impl Timeline {
         // The playhead's column over the lanes.
         if self.playhead > 0 {
             let (x0, x1) = self.block_span(lane_x, lane_w, self.playhead);
-            ui.p.fill(Rect::new(x0, view.y, x1 - x0, view.h.min(self.content_h() - off)), rgba(128, 220, 255, 28));
+            ui.p.fill(Rect::new(x0, view.y, x1 - x0, view.h.min(self.content_h() - off)), rgba(ui.t.playing_edge[0], ui.t.playing_edge[1], ui.t.playing_edge[2], 28));
         }
         ui.scroll_end();
     }
@@ -265,7 +266,7 @@ impl Timeline {
         };
         let label = Rect::new(lx + 1, row.y + 1, lane_x - lx - 3, ROW_H - 2);
         if selected || ui.hover(label) {
-            ui.p.panel(label, if selected { rgba(86, 68, 22, 250) } else { PANEL_HI }, if selected { GOLD } else { BORDER }, 2.0);
+            ui.p.panel(label, if selected { ui.t.selected } else { ui.t.card_hot }, if selected { ui.t.focus } else { ui.t.edge }, 2.0);
         }
         ui.p.text_fit(label.x as f32 + 3.0, label.y as f32 + 2.0, &t.label, BODY, label.w as f32 - 6.0, t.colour);
         ui.push(format!("{id}.track.{}", t.key), "row", t.label.clone(), label, true, selected, Some(on_track(&t.key)), t.tip.clone());
@@ -273,9 +274,9 @@ impl Timeline {
         for b in 1..=self.blocks {
             let (x0, x1) = self.block_span(lane_x, lane_w, b);
             let cell = Rect::new(x0 + 1, row.y + 2, x1 - x0 - 2, ROW_H - 4);
-            ui.p.fill(cell, rgba(24, 30, 44, 255));
+            ui.p.fill(cell, ui.t.lane);
             if t.hatched {
-                hatch(ui, cell, LANE_HATCH);
+                hatch(ui, cell, ui.t.lane_hatch);
             }
         }
         let marks = self.mark_rects(ui, t, row, lane_x, lane_w);
@@ -283,11 +284,11 @@ impl Timeline {
         if let Some(note) = &t.masked {
             let lane = Rect::new(lane_x + 1, row.y + 2, lane_w - 2, ROW_H - 4);
             for k in (0..lane.w).step_by(6) {
-                ui.p.fill(Rect::new(lane.x + k, lane.y, 2, lane.h), rgba(60, 66, 84, 140));
+                ui.p.fill(Rect::new(lane.x + k, lane.y, 2, lane.h), ui.t.lane_stripe);
             }
             let need = ui.p.text_w(note, SMALL).ceil() as i32;
             let (nx, nx1) = clear_of(lane.x + 4, lane.x + lane.w - 4, &kept, need);
-            ui.p.text_fit(nx as f32, lane.y as f32 + 1.0, note, SMALL, (nx1 - nx) as f32, DIM);
+            ui.p.text_fit(nx as f32, lane.y as f32 + 1.0, note, SMALL, (nx1 - nx) as f32, ui.t.dim);
             ui.push(format!("{id}.track.{}.masked", t.key), "row", note.clone(), lane, true, false, None, tip(&t.label, note));
             draw_marks(ui, id, t, &marks);
             return;
@@ -300,7 +301,7 @@ impl Timeline {
             if hover {
                 fill = [fill[0].saturating_add(30), fill[1].saturating_add(30), fill[2].saturating_add(30), fill[3]];
             }
-            ui.p.panel(bar, fill, if hover { GOLD } else { rgba(0, 0, 0, 0) }, RADIUS);
+            ui.p.panel(bar, fill, if hover { ui.t.focus } else { rgba(0, 0, 0, 0) }, RADIUS);
             for p in &s.parts {
                 if let Some(pr) = self.part_rect(s, p, bar, lane_x, lane_w) {
                     draw_part(ui, p.style, bar, pr);
@@ -313,8 +314,8 @@ impl Timeline {
                 draw_ghost(ui, bar);
             } else if s.dashed {
                 for x in (bar.x..bar.x + bar.w).step_by(4) {
-                    ui.p.fill(Rect::new(x, bar.y, 2, 1), TEXT);
-                    ui.p.fill(Rect::new(x, bar.y + bar.h - 1, 2, 1), TEXT);
+                    ui.p.fill(Rect::new(x, bar.y, 2, 1), ui.t.text);
+                    ui.p.fill(Rect::new(x, bar.y + bar.h - 1, 2, 1), ui.t.text);
                 }
             }
         }
@@ -335,7 +336,7 @@ impl Timeline {
             let need = ui.p.text_w(&s.label, SMALL).ceil() as i32;
             let (lx, lx1) = clear_of(bar.x + 3, bar.x + bar.w - 3, &kept, need);
             if (lx, lx1) == (bar.x + 3, bar.x + bar.w - 3) || lx1 - lx >= 6 {
-                ui.p.text_fit(lx as f32, bar.y as f32 + 1.0, &s.label, SMALL, (lx1 - lx) as f32, if s.ghost { DIM } else { TEXT });
+                ui.p.text_fit(lx as f32, bar.y as f32 + 1.0, &s.label, SMALL, (lx1 - lx) as f32, if s.ghost { ui.t.dim } else { ui.t.text });
             }
             ui.push(format!("{id}.seg.{}.{}", t.key, s.key), "row", s.label.clone(), bar, true, false, Some(on_segment(&t.key, &s.key)), s.tip.clone());
         }
@@ -346,16 +347,15 @@ impl Timeline {
     }
 }
 
-/// The parts' overlays: a windup darker, an impact brighter with a light edge at its end, a recovery hatched.
+/// The parts' overlays over a segment's own colour (the caller's, a meaning, not chrome): a windup darker, an impact
+/// brighter (with the theme's `impact_edge` at its end), a recovery hatched. Pure black and white on purpose: they shift
+/// the colour under them, so a part reads the same on any fill under any theme.
 const WINDUP_SHADE: Rgba = rgba(0, 0, 0, 90);
 const IMPACT_GLOW: Rgba = rgba(255, 255, 255, 70);
-const IMPACT_EDGE: Rgba = rgba(240, 244, 255, 220);
 const RECOVERY_SHADE: Rgba = rgba(0, 0, 0, 40);
 const HATCH: Rgba = rgba(0, 0, 0, 120);
-/// A hatched track's lane cells (light, so they read on the dark cells).
-const LANE_HATCH: Rgba = rgba(120, 128, 150, 90);
-/// A mark's backing, under its coloured outline and glyph.
-const MARK_BG: Rgba = rgba(10, 14, 24, 235);
+/// A mark's backing's alpha (the theme's `bg`), under its coloured outline and glyph.
+const MARK_BG_ALPHA: u8 = 235;
 
 /// Part `style` over `bar`, drawn only in the part's rect `pr` (the bar's rounded ends stay rounded, the cuts between
 /// parts straight). Public so a screen's own strip of blocks draws its spans in the widget's look (RULESET1-U slice 5).
@@ -365,7 +365,7 @@ pub fn draw_part<A: Clone>(ui: &mut Ui<A>, style: PartStyle, bar: Rect, pr: Rect
         PartStyle::Windup => ui.p.panel(bar, WINDUP_SHADE, rgba(0, 0, 0, 0), RADIUS),
         PartStyle::Impact => {
             ui.p.panel(bar, IMPACT_GLOW, rgba(0, 0, 0, 0), RADIUS);
-            ui.p.fill(Rect::new(pr.x + pr.w - 2, pr.y, 2, pr.h), IMPACT_EDGE);
+            ui.p.fill(Rect::new(pr.x + pr.w - 2, pr.y, 2, pr.h), ui.t.impact_edge);
         }
         PartStyle::Recovery => {
             ui.p.panel(bar, RECOVERY_SHADE, rgba(0, 0, 0, 0), RADIUS);
@@ -385,19 +385,19 @@ pub fn ghost_fill(fill: Rgba) -> Rgba {
     [fill[0], fill[1], fill[2], (fill[3] as f32 * GHOST_ALPHA).round() as u8]
 }
 
-/// The ghost look's dashed outline round `bar` (all four sides, in `TEXT`). Public so a screen's own strip of blocks
-/// draws its ghost spans in the widget's look (with `ghost_fill` for the fill and `DIM` for the label).
+/// The ghost look's dashed outline round `bar` (all four sides, in `text`). Public so a screen's own strip of blocks
+/// draws its ghost spans in the widget's look (with `ghost_fill` for the fill and `dim` for the label).
 pub fn draw_ghost<A: Clone>(ui: &mut Ui<A>, bar: Rect) {
     let step = (GHOST_DASH * 2) as usize;
     for x in (bar.x..bar.x + bar.w).step_by(step) {
         let w = GHOST_DASH.min(bar.x + bar.w - x);
-        ui.p.fill(Rect::new(x, bar.y, w, 1), TEXT);
-        ui.p.fill(Rect::new(x, bar.y + bar.h - 1, w, 1), TEXT);
+        ui.p.fill(Rect::new(x, bar.y, w, 1), ui.t.text);
+        ui.p.fill(Rect::new(x, bar.y + bar.h - 1, w, 1), ui.t.text);
     }
     for y in (bar.y..bar.y + bar.h).step_by(step) {
         let h = GHOST_DASH.min(bar.y + bar.h - y);
-        ui.p.fill(Rect::new(bar.x, y, 1, h), TEXT);
-        ui.p.fill(Rect::new(bar.x + bar.w - 1, y, 1, h), TEXT);
+        ui.p.fill(Rect::new(bar.x, y, 1, h), ui.t.text);
+        ui.p.fill(Rect::new(bar.x + bar.w - 1, y, 1, h), ui.t.text);
     }
 }
 
@@ -422,7 +422,7 @@ fn draw_marks<A: Clone>(ui: &mut Ui<A>, id: &str, t: &Track, rects: &[Option<Rec
 /// One mark in `r` (a dark chip outlined in its colour, the glyph on it) with its info widget `wid` (hover card, no
 /// click). Public so a screen's own strip of blocks marks a block in the widget's look (RULESET1-U slice 5).
 pub fn draw_mark<A: Clone>(ui: &mut Ui<A>, wid: &str, m: &Mark, r: Rect) {
-    ui.p.panel(r, MARK_BG, m.colour, 2.0);
+    ui.p.panel(r, rgba(ui.t.bg[0], ui.t.bg[1], ui.t.bg[2], MARK_BG_ALPHA), m.colour, 2.0);
     if ui.p.text_w(&m.glyph, SMALL) <= (r.w - 2) as f32 {
         ui.p.text_center(r.x as f32 + r.w as f32 / 2.0, r.y as f32 + 1.0, &m.glyph, SMALL, m.colour);
     } else {
@@ -456,15 +456,16 @@ pub fn clear_of(x0: i32, x1: i32, marks: &[Rect], need: i32) -> (i32, i32) {
 /// 22 tracks in all (more than fit: the rows scroll); parts, a link, a ghost span, a hatched span, a hatched (downed)
 /// track, label hover cards, a masked track with its note and impact marks.
 pub fn sample() -> Timeline {
+    let theme = th();
     let part = |start, end, style| Part { start, end, style };
     let seg = |key: &str, start, end, label: &str, fill: Rgba, card: &str| Segment { key: key.into(), start, end, label: label.into(), fill, tip: tip(label, card), ..Segment::default() };
     let mark = |key: &str, block, glyph: &str, colour, title: &str, body: &str| Mark { key: key.into(), block, glyph: glyph.into(), colour, tip: tip(title, body) };
     let (blue, green, grey, red) = (rgb(70, 110, 170), rgb(60, 120, 100), rgb(44, 56, 78), rgb(160, 70, 64));
-    let (ally, foe, hit, other) = (rgb(110, 170, 255), rgb(240, 100, 92), rgb(240, 100, 92), GOLD);
+    let (ally, foe, hit, other) = (rgb(110, 170, 255), theme.foe, theme.foe, theme.gold);
     let track = |key: &str, label: &str, colour, segments: Vec<Segment>| Track { key: key.into(), label: label.into(), colour, segments, tip: tip(label, "The label's hover card."), ..Track::default() };
     let mut party = vec![
         Track {
-            links: vec![Link { from: "strike".into(), to: "follow".into(), colour: GOLD, tip: tip("Link", "Chained: the follow-up starts as the strike lands.") }],
+            links: vec![Link { from: "strike".into(), to: "follow".into(), colour: theme.gold, tip: tip("Link", "Chained: the follow-up starts as the strike lands.") }],
             ..track(
                 "p1",
                 "A Lead",
@@ -478,7 +479,7 @@ pub fn sample() -> Timeline {
         },
         track("p2", "M Scout", ally, vec![Segment { dashed: true, ..seg("move", 1, 1, "Move", rgb(60, 80, 110), "Dashed: a move.") }, seg("shot", 2, 4, "Shot", blue, "A plain span."), Segment { ghost: true, ..seg("rest", 5, 6, "Rest", grey, "Auto-filled: Rest.") }]),
         track("p3", "G Warden", ally, vec![seg("hold", 1, 3, "Hold", green, "A plain span."), Segment { hatched: true, ..seg("dropped", 4, 6, "Dropped", green, "Hatched whole: a span that will not happen.") }]),
-        Track { hatched: true, ..track("p4", "Fallen", rgb(132, 146, 172), vec![seg("cut", 1, 1, "Cut", blue, "Done before the fall.")]) },
+        Track { hatched: true, ..track("p4", "Fallen", theme.dim, vec![seg("cut", 1, 1, "Cut", blue, "Done before the fall.")]) },
     ];
     for k in 5..=10 {
         party.push(track(&format!("p{k}"), &format!("S Guest {}", k - 4), ally, vec![seg("aid", 1, 2, "Aid", green, "A support span."), Segment { ghost: true, ..seg("rest", 3, 6, "Rest", grey, "Auto-filled: Rest.") }]));
@@ -509,7 +510,7 @@ mod tests {
 
     #[test]
     fn blocks_split_the_lane_evenly_and_the_height_counts_every_row() {
-        let t = Timeline { blocks: 6, sections: vec![Section { title: "A".into(), colour: TEXT, tracks: vec![Track { key: "x".into(), label: "X".into(), colour: TEXT, ..Track::default() }; 3] }], ..Timeline::default() };
+        let t = Timeline { blocks: 6, sections: vec![Section { title: "A".into(), colour: rgb(1, 1, 1), tracks: vec![Track { key: "x".into(), label: "X".into(), ..Track::default() }; 3] }], ..Timeline::default() };
         assert_eq!(t.block_span(100, 600, 1), (100, 200));
         assert_eq!(t.block_span(100, 600, 6), (600, 700));
         assert_eq!(t.blocks_span(100, 600, 2, 4), (200, 500));

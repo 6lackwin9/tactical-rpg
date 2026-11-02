@@ -9,8 +9,8 @@
 //! desk (`restore(&settings.v["desks"][id])`). Ports UiWindow (`_clamp_to_parent`, `commit_fraction`) and
 //! DojoWorkspace (`apply_layout`, `save_layout`, `_load_layout`).
 
-use crate::canvas::{rgb, rgba, Rect};
-use crate::ui::{tip, Ui, BODY, BORDER, CARD, DIM, FRAME, GOLD, PANEL_HI, RADIUS, SMALL, TEXT};
+use crate::canvas::{rgba, Rect};
+use crate::ui::{tip, Ui, BODY, RADIUS, SMALL};
 use serde_json::{json, Value};
 
 /// Height of a window's title bar (canvas pixels).
@@ -242,23 +242,24 @@ impl Desk {
         let mouse = ui.mouse;
         let top = self.top_at(mouse).map(String::from);
         let front = self.wins.iter().rev().find(|w| w.open).map(|w| w.id.clone());
+        let t = ui.t.clone();
         for w in self.wins.iter().filter(|w| w.open) {
             let Some(r) = self.rect(&w.id) else { continue };
             ui.mouse = if top.as_deref() == Some(w.id.as_str()) { mouse } else { (-1, -1) };
             let lit = front.as_deref() == Some(w.id.as_str());
-            ui.p.panel(r, CARD, if lit { FRAME } else { BORDER }, RADIUS);
+            ui.p.panel(r, t.card, if lit { t.panel_edge } else { t.edge }, RADIUS);
             // The window blocks what is under it: a backdrop over the whole rect, its controls on top.
             ui.push(format!("win.{}.body", w.id), "backdrop", w.title.clone(), r, true, false, None, Vec::new());
             let bar = Rect::new(r.x + 1, r.y + 1, r.w - 2, TITLE_H - 1);
-            ui.p.fill(bar, if lit { PANEL_HI } else { rgba(26, 36, 58, 255) });
-            ui.p.text_fit(bar.x as f32 + 4.0, bar.y as f32 + 1.5, &w.title, BODY, (bar.w - 2 * BUTTON - 10) as f32, if lit { GOLD } else { TEXT });
+            ui.p.fill(bar, if lit { t.card_hot } else { t.title_idle });
+            ui.p.text_fit(bar.x as f32 + 4.0, bar.y as f32 + 1.5, &w.title, BODY, (bar.w - 2 * BUTTON - 10) as f32, if lit { t.gold } else { t.text });
             ui.push(format!("win.{}.title", w.id), "win_title", w.title.clone(), Rect::new(bar.x, bar.y, bar.w - 2 * BUTTON - 4, bar.h), true, false, None, tip(&w.title, "Drag to move; click to bring it to the front."));
             for (i, (part, label, help)) in [("close", "x", "Close (the toolbar opens it again)"), ("collapse", if w.collapsed { "+" } else { "-" }, if w.collapsed { "Expand" } else { "Collapse to the title bar" })].into_iter().enumerate() {
                 let b = Rect::new(bar.x + bar.w - (i as i32 + 1) * (BUTTON + 1), bar.y + 1, BUTTON, BUTTON - 1);
                 let hover = ui.hover(b);
-                ui.p.panel(b, if hover { PANEL_HI } else { rgba(0, 0, 0, 0) }, if hover { GOLD } else { rgba(0, 0, 0, 0) }, 2.0);
+                ui.p.panel(b, if hover { t.card_hot } else { rgba(0, 0, 0, 0) }, if hover { t.focus } else { rgba(0, 0, 0, 0) }, 2.0);
                 // Drawn as strokes, not text, so the text size never pushes them out of the bar (TEXTFIT1).
-                let (col, cx, cy, d) = (if hover { GOLD } else { DIM }, b.x as f32 + b.w as f32 / 2.0, b.y as f32 + b.h as f32 / 2.0, 2.5);
+                let (col, cx, cy, d) = (if hover { t.focus } else { t.dim }, b.x as f32 + b.w as f32 / 2.0, b.y as f32 + b.h as f32 / 2.0, 2.5);
                 match label {
                     "x" => {
                         ui.p.line(cx - d, cy - d, cx + d, cy + d, col, 0.0);
@@ -280,7 +281,7 @@ impl Desk {
                     ui.pop_clip();
                 }
                 let g = Rect::new(r.x + r.w - GRIP, r.y + r.h - GRIP, GRIP, GRIP);
-                let col = if ui.hover(g) { GOLD } else { rgb(110, 140, 196) };
+                let col = if ui.hover(g) { t.focus } else { t.edge_hot };
                 for k in [2, 5] {
                     ui.p.fill(Rect::new(g.x + g.w - 2, g.y + g.h - k - 1, 1, k), col);
                     ui.p.fill(Rect::new(g.x + g.w - k - 1, g.y + g.h - 2, k, 1), col);
@@ -316,8 +317,9 @@ fn desk_button<A: Clone>(ui: &mut Ui<A>, x: i32, y: i32, id: String, label: &str
     let w = ui.p.text_w(label, SMALL).ceil() as i32 + 10;
     let r = Rect::new(x, y, w, 12);
     let hover = ui.hover(r);
-    ui.p.panel(r, if active { rgba(86, 68, 22, 250) } else if hover { PANEL_HI } else { CARD }, if active || hover { GOLD } else { BORDER }, 2.0);
-    ui.p.text_center((r.x + r.w / 2) as f32, r.y as f32 + 2.0, label, SMALL, if active { GOLD } else { TEXT });
+    let t = ui.t.clone();
+    ui.p.panel(r, if active { t.selected } else if hover { t.card_hot } else { t.card }, if active || hover { t.focus } else { t.edge }, 2.0);
+    ui.p.text_center((r.x + r.w / 2) as f32, r.y as f32 + 2.0, label, SMALL, if active { t.focus } else { t.text });
     ui.push(id, "desk_button", label, r, true, active, None, tip(label, help));
     x + w + 2
 }
