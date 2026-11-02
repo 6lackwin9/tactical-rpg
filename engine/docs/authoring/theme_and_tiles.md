@@ -35,18 +35,12 @@ missing role falls back to another). `"frames": false` in the theme draws vector
 | --- | --- | --- |
 | `slice` | [left, top, right, bottom] in art px | required |
 | `scale` | art px per logical px, 1-32 | 2 |
-| `edges` | `stretch` or `tile` | `stretch` |
+| `edges` | `stretch` or `tile` (with `straddle`, a tiled edge repeats at its art's size, under the frame's `sharpen`) | `stretch` |
 | `center` | `stretch`, `tile` or `none` (the role's fill colour) | `stretch` |
 | `pad` | content inset, [l, t, r, b] in logical px | the slices divided by `scale` |
 | `ink` | the colour role of text on the frame | `text` |
-| `corner_arm` | with `straddle`: each arm of a corner reaches this share (above 0, at most 0.5) of its own edge, at one scale in both axes, cut or rebuilt, never squashed; two arms on an edge meet at most | whole corners |
-| `corner_arm_min`, `corner_arm_max` | logical px limits on an arm's reach | none |
-| `corner_arm_full` | `true`: the arms run to the middle of each edge (a portrait frame may want this) | off |
-| `corner_elbow` | art px from the anchor that a shorter arm must still show: it limits how large a very wide panel draws the art, whose longer arm then stops at the art's end | 0 |
-| `corner_art` | art px per logical px of the corners, whatever the panel, smaller only when a panel cannot show the elbow and the finish | the natural arm fills the longer reach |
-| `corner_splice` | `{"x": [c, d], "y": [c, d]}` art px: an arm's own finish, kept when the arm is cut shorter than the art; an arm is never longer than the art | arms cut at their end |
-| `corner_inner` | [x, y] art px from the anchor that the art reaches into the panel: `painter::nine_content_rect` keeps content past it at the size the arms resolve to | none (`pad` alone) |
-| `straddle` | `true`: half in, half out of the panel: edge bands and corners centred on its boundary and corner points, the centre filling exactly the panel; the panel's rect, layout, widget and hit area stay, the overhang only draws, under the canvas's clip; always averaged when reduced, whatever `reduce` says | off (inside the rect) |
+| `corner_inner` | [x, y] art px from the anchor that the art reaches into the panel: `painter::nine_content_rect` keeps content past it at the size the corners draw | none (`pad` alone) |
+| `straddle` | `true`: half in, half out of the panel: edge bands and corners centred on its boundary and corner points, the centre filling exactly the panel; the panel's rect, layout, widget and hit area stay, the overhang only draws, under the canvas's clip; always averaged when reduced, whatever `reduce` says; the corners follow the window at `scale` and keep one size on any panel, as large as fits on a panel too small for two, mirrored art landing as mirrored pixels | off (inside the rect)|
 | `corner_anchor` | [x, y] art px of the top-left corner placed on the panel's corner point, mirrored for the others, so the boundary runs along the art's arms | the corner's middle |
 | `sharpen` | 0-2: an unsharp mask on the corners once reduced to the window | 0 |
 | `reduce` | `average`: a high-resolution frame, finer than the window, is averaged down to the window's physical size (cached per frame and size) instead of sampled; only when `scale` exceeds the view's scale (`straddle` always averages) | off (nearest, exact pixels) |

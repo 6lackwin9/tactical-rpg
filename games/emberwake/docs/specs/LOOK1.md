@@ -129,6 +129,7 @@ fallbacks (a role with no file uses the next; none: today's vector panel in the 
 | `card`, `card_hot`, `card_on` | `card_hot` to `card`, `card_on` to `card_hot` | `Ui::card`, `SlotCard` |
 | `tip` | `panel` | tooltips (`draw_tip`) |
 | `ornate` | `panel` | the title screen panels and the one-time cards |
+| `ornate_full` | `ornate` | a frame that wants the kit's edge the whole way; nothing uses it yet (LOOK1-A8) |
 
 | Sidecar key | Type | Default | Validation |
 | --- | --- | --- | --- |
@@ -138,14 +139,8 @@ fallbacks (a role with no file uses the next; none: today's vector panel in the 
 | `center` | `stretch`, `tile` or `none` | `stretch` | `none` draws the role's fill colour instead |
 | `pad` | [l, t, r, b] logical px | the slices divided by `scale` | 0-32 each; the content inset |
 | `ink` | colour role | `text` | a 3.2 role |
-| `corner_arm` | number | off | above 0, at most 0.5: each corner arm's share of its own edge, one scale in both axes (LOOK1-R1) |
-| `corner_arm_min`, `corner_arm_max` | logical px | none | limits on an arm's reach; two arms meet at most (LOOK1-R1) |
-| `corner_arm_full` | bool | off | the arms run to the middle of each edge (LOOK1-R1) |
-| `corner_elbow` | art px | 0 | what a shorter arm must still show (LOOK1-R1) |
-| `corner_art` | art px per logical px | natural arm fills the reach | the corners' scale, smaller only when a panel cannot show elbow and finish (LOOK1-R1) |
-| `corner_splice` | `x`, `y`: [c, d] art px | none | an arm's finish, kept when it is cut shorter than the art; an arm is never longer than the art (LOOK1-R1) |
 | `corner_inner` | [x, y] art px | none | how far the art reaches into the panel; the content rect keeps past it (LOOK1-R1) |
-| `straddle` | bool | off | half in and half out of the panel; its rect, layout and hit area stay; always averaged when reduced (LOOK1-R1) |
+| `straddle` | bool | off | half in and half out of the panel; its rect, layout and hit area stay; always averaged when reduced; the corners follow the window and keep one size on any panel, as large as fits on a panel too small for two (LOOK1-R1, LOOK1-A8) |
 | `corner_anchor` | [x, y] art px | the corner's middle | inside the top-left slice: the px on the panel's corner point (LOOK1-R1) |
 | `sharpen` | number | 0 | 0-2: an unsharp mask on the reduced corners (LOOK1-R1) |
 | `reduce` | `average` | off (nearest) | a high-resolution frame is averaged to the window's physical size, only when `scale` exceeds the view's scale; `straddle` always averages (LOOK1-R1) |

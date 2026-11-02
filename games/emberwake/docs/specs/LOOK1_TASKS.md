@@ -77,7 +77,8 @@ Touches: `games/emberwake/assets/ui/{theme.json, frames/}` (new), `games/emberwa
 | `button`, `button_hot`, `button_down`, `button_off` | 16 x 16, 4 | ring 0-1 #6b7280, #d97706, #d97706, #4b5563; centre #14171f, #1e232d, #2c221e, #0e1016; ring 2 top row #1e232d (a lit edge) on the first three |
 | `tab`, `tab_on` | 16 x 16, 4 | as `button`, `button_down` |
 | `card`, `card_hot`, `card_on` | 16 x 16, 4 | ring 0-1 #4b5563, #d97706, #d97706; centre #14171f, #1e232d, #2c221e |
-| `ornate` | 928 x 928, 448 at scale 16 (LOOK1-R1, section R; was 48 x 48, 16) | high-resolution corners from the A6 sheet, thin edges in `frame_line`, straddling its panel; `gen_art.py ui_frames` composes it (as built: section R); without the sheet its files are left as they are |
+| `ornate` | 432 x 432, 200 at scale 8 (LOOK1-A8, section R; was 928 x 928, 448 at 16, and first 48 x 48, 16) | high-resolution corner and tip heads from the picked kit, one thin line in `frame_line`, straddling its panel; `gen_art.py ui_frames` composes it (as built: section R); without the sheet its files are left as they are |
+| `ornate_full` | 512 x 512, 224 at scale 8 (LOOK1-A8, section R) | the same corner without tips, the kit's plain edge tiled along every side, straddling its panel |
 
 Until G2 the screens' own fills keep today's navy beside the restyled engine widgets (accepted between slices; the
 user reviews at the end). Tests: the game theme loads clean from the game layers; every LOOK1 8.2 pair passes
@@ -237,13 +238,20 @@ as PROPS1 ground props `props/sunk_ward/<decal>/v0.png`; `backgrounds/menu/title
 `title.png` 1920 x 1080; `ui/logo_title.png` the 1246 x 325 master, drawn in logical x 390 to 625 from y 13 (room
 235 x 62, right-aligned) at the room's exact physical size (averaged down, enlarged above about 3393 px of window
 width), instead of M1's typeset place; `ui/logo_crest.png` 963 x 963 (only the typeset fallback draws it);
-`ui/banner_full.png`, `ui/banner_bar.png` for M2; `ornate` 928 x 928, slice 448, scale 16, `reduce: average`, `straddle`,
-`corner_arm: 0.23` within 18-48 logical px, `corner_art: 12`, `corner_splice` (user 2026-11-02): each arm 23 % of its own
-edge at one art scale, at most the art's natural length, keeping its finish when cut, its section's centre on the panel's
-boundary and the elbow on its corner point, the edge
-line centred on the same boundary, no fill outside; content insets derived from the art
-(`painter::nine_content_rect`, `corner_inner`); the sheet's top-left mirrored, keyed (R-G and B-G above 35, alpha eroded
-3 px, its largest piece); edges a thin `#1e232d` around the theme role `frame_line`, `#991b1b` here. Continue's peek stays
+`ui/banner_full.png`, `ui/banner_bar.png` for M2. The `ornate` frame, as built by LOOK1-A8 (replacing R1's arms, user
+2026-11-02, the approved mock's row 2): 432 x 432, slice 200, scale 8, `reduce: average`, `straddle`, `sharpen: 0.6`,
+`corner_anchor` and `corner_inner` measured from the art. The kit `art_src/frame_kit_ref_gen1793628366_2.png` (keyed, R-G
+and B-G above 35, alpha eroded 1 px, not 3: 3 breaks its thin ornament), its top-left corner mirrored to all four, cut 20
+px past the corner point at 720p, only the head of the kit's tip on each stub (2/3 of the mock's T2, the same art scale as
+the corner), never resampled: art px are the kit's px, 4 per physical px at 720p. The head takes the spikes' light
+(`ornate_lit_tip`, the user's addition): each pixel the spike colour of its brightness rank, then on the slanted faces a
+1 px outline and a 2 px bright rim in the spikes' dark and bright. One thin line in the theme role `frame_line`, `#991b1b`
+here, 1 logical px, the whole length, centred on the boundary, under the corners; fill to the boundary; no rail. Corners
+follow the window and keep one size on any panel (about 23 logical px across a corner, 14 past its corner point); a panel
+too small for two draws them as large as fits. Content insets: `painter::nine_content_rect`. `ornate_full` (user
+2026-11-02, for cases that want a full frame; nothing uses it yet): 512 x 512, slice 224, scale 8, `edges: tile`: the same
+corner without tips, its arm running 16 logical px past the corner point and fading into the kit's plain edge, 64 art px of
+which repeat along every side, spine on the boundary. Continue's peek stays
 160 x 64 at Normal, 12 from the column. Rows through `aegis content`: world `sunk_ward` `stage_set`
 `sunk_ward_stage`; the locations' `tileset` per LOOK1 5.2 once SUNKWARD1 has made them. Checks: K's asset warnings
 clean for the bound sets; `tools/fc.sh content` validation clean.

@@ -29,13 +29,15 @@ Tree (section 3 of the spec; a test keeps every file on these patterns):
 - `ui/theme.json` and `ui/frames/<role>.{png,json}`: the Tallow and Iron theme (LOOK1-G1, spec
   `games/emberwake/docs/specs/LOOK1.md` sections 2-3, read by `aegis_ui::theme`): the colour roles, the faces, the
   layout values and the nine-slice frames (`tools/gen_art.py ui_frames`, exact pixels at scale 2 in the art bible's
-  hues). `ornate` alone is high-resolution, 928 x 928 with slice 448 at scale 16, `reduce` `average`, `straddle`,
-  `corner_arm` 0.23 within 18-48 logical px, up to the art's natural end, `corner_art` 12, `corner_splice`, `corner_anchor`, `corner_inner`,
-  `corner_elbow` and `sharpen` 0.6: corners from the picked sheet `art_src/ornate_corners_gen1793612836_1.png`, its
-  top-left mirrored for all four (art outside the frame palette), the anchor and inner reach measured from the art and
-  the arm's pieces recorded in `gen_art.py`; see-through edge bands of a thin `#1e232d` around the line in the theme role
-  `frame_line` (`gen_art.py` reads it from `ui/theme.json`; `ornate` is the only frame with one); no sheet, its files are
-  left alone. Not content: no `aegis content` row. Test `emberwake_gui/tests/theme.rs`.
+  hues). `ornate` alone is high-resolution, 432 x 432 with slice 200 at scale 8, `reduce` `average`, `straddle`,
+  `corner_anchor`, `corner_inner` and `sharpen` 0.6 (LOOK1-A8): from the picked kit
+  `art_src/frame_kit_ref_gen1793628366_2.png` (`art_src/ornate_corners_gen1793612836_1.png` is the old sheet, kept), its
+  top-left corner cut close to the ornament and mirrored for all four (art outside the frame palette), only the head of
+  the kit's tip on each stub, in the spikes' light; art px are the kit's own, reduced only by the engine; the anchor and
+  inner reach measured from the art; see-through edge bands but for the 1 logical px line in the theme role
+  `frame_line` (`gen_art.py` reads it from `ui/theme.json`; `ornate` is the only frame with one); `ornate_full`, the
+  same corner without tips and the kit's plain edge tiled along every side (512 x 512, slice 224, `edges` `tile`; nothing
+  uses it yet); no sheet, their files are left alone. Not content: no `aegis content` row. Test `emberwake_gui/tests/theme.rs`.
 - The title's picked art (LOOK1-R1; Gemini art, scaled only, no palette pass; picks in `docs/decisions/workflow.md`; not
   content; made by `tools/title_art.py`, each file's recipe in its header): `backgrounds/menu/title.png` (1920 x 1080, cover crop of `art_src/title_backdrop_clean_gen1793615014_1.png`;
   fire goes on it as an effects layer, never into the picture), `ui/logo_title.png` (the 1246 x 325 master, an unscaled

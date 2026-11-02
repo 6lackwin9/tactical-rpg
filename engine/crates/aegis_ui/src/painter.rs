@@ -316,40 +316,17 @@ fn straddle_over(nine: &Nine, k: f32, p: f32) -> i32 {
     (most * k / 2.0).max(anchor * p).ceil() as i32 + 2
 }
 
-/// How far an arm of a corner reaches along an `edge` px long, in physical px at view scale `view`: the share of the edge
-/// within the frame's limits, or the edge's middle for a full arm; two arms on an edge meet at most.
-fn arm_reach(nine: &Nine, edge: i32, view: f32) -> f32 {
-    let logical = edge as f32 / view.max(0.001);
-    let want = if nine.corner_arm_full { logical / 2.0 } else { (nine.corner_arm.unwrap_or(0.5) * logical).clamp(nine.corner_arm_min, nine.corner_arm_max) };
-    want.min(logical / 2.0) * view
-}
-
-/// The physical px per art px a straddling frame's corners draw at, one scale in both axes. With `corner_arm`: `corner_art`
-/// when set, smaller if an arm could then not show `corner_elbow` art px and its finish; else large enough that the
-/// art's natural arm fills the longer arm's reach, unless the shorter arm could then not show `corner_elbow` art px (a
-/// very wide or tall panel, whose longer arm then stops at the art's end). Without `corner_arm`, the frame's own `k`.
+/// The physical px per art px a straddling frame's corners draw at, one scale in both axes: the frame's own `k`, so they
+/// follow the window and keep one size on any panel; on a panel too small for two corners, as large as fits so they do not
+/// overlap (a px is left for rounding each corner's size and anchor apart).
 fn corner_scale(nine: &Nine, k: f32, pr: Rect) -> f32 {
-    if nine.corner_arm.is_none() {
-        return k;
-    }
     let [ax, ay] = nine.corner_anchor.unwrap_or([nine.slice[0] / 2, nine.slice[1] / 2]);
-    let view = k * nine.scale.max(1) as f32;
-    let (reach_x, reach_y) = (arm_reach(nine, pr.w, view), arm_reach(nine, pr.h, view));
-    if let Some(art) = nine.corner_art {
-        let foot = |axis: usize| nine.corner_splice.map_or(0, |s| s[axis][1] - s[axis][0]);
-        let least = |reach: f32, axis: usize| reach / (nine.corner_elbow + foot(axis)).max(1) as f32;
-        return (view / art.max(1) as f32).min(least(reach_x, 0)).min(least(reach_y, 1));
-    }
-    let fill = (reach_x / (nine.slice[0] - ax).max(1) as f32).max(reach_y / (nine.slice[1] - ay).max(1) as f32);
-    if nine.corner_elbow > 0 {
-        fill.min(reach_x.min(reach_y) / nine.corner_elbow as f32)
-    } else {
-        fill
-    }
+    let room = |edge: i32, slice: i32, anchor: i32| (edge - 2).max(1) as f32 / 2.0 / (slice - anchor).max(1) as f32;
+    k.min(room(pr.w, nine.slice[0].min(nine.slice[2]), ax)).min(room(pr.h, nine.slice[1].min(nine.slice[3]), ay))
 }
 
 /// The content rect of logical `r` in a frame at view scale `view`: inside the sidecar's `pad` and, with `corner_inner`,
-/// past the corners' inward reach at the size the arms resolve to on this panel. Frames without it: `Nine::content`.
+/// past the corners' inward reach at the size they draw on this panel. Frames without it: `Nine::content`.
 pub fn nine_content_rect(nine: &Nine, r: Rect, view: f32) -> Rect {
     let Some([ix, iy]) = nine.corner_inner else { return nine.content(r) };
     let physical = Rect::new(0, 0, (r.w as f32 * view).round() as i32, (r.h as f32 * view).round() as i32);
@@ -360,41 +337,24 @@ pub fn nine_content_rect(nine: &Nine, r: Rect, view: f32) -> Rect {
     Rect::new(r.x + l, r.y + t, (r.w - l - rr).max(0), (r.h - t - b).max(0))
 }
 
-/// The art px an arm shows, in order, for a `want` px long arm at most `limit` long, from `finish` [c, d]: all the art up to
-/// `d` when the arm reaches that far, else the art up to the cut and then the finish.
-fn arm_map(want: i32, limit: i32, finish: [i32; 2]) -> Vec<i32> {
-    let [c, d] = finish;
-    let want = want.min(limit);
-    if want >= d {
-        return (0..d).collect();
-    }
-    let body = (want - (d - c)).clamp(1, c);
-    (0..body).chain(c..d).collect()
-}
-
-/// The art of a corner at (sx, sy), `w` x `h`, with the art px `cols` and `rows` from its outer corner taken in order;
-/// mirrored corners read their own art the same way from their outer corner, and draw from it too.
-fn spliced_corner(img: &Image, at: (i32, i32, i32, i32), cols: &[i32], rows: &[i32], mx: bool, my: bool) -> Image {
-    let (sx, sy, w, h) = at;
-    let (cw, ch) = (cols.len() as i32, rows.len() as i32);
-    let mut px = vec![0u8; (cw * ch * 4) as usize];
-    for (v, row) in rows.iter().enumerate() {
-        let src_y = sy + if my { h - 1 - row } else { *row };
-        let out_y = if my { ch - 1 - v as i32 } else { v as i32 };
-        for (u, col) in cols.iter().enumerate() {
-            let src_x = sx + if mx { w - 1 - col } else { *col };
-            let out_x = if mx { cw - 1 - u as i32 } else { u as i32 };
-            let (from, to) = (((src_y * img.w + src_x) * 4) as usize, ((out_y * cw + out_x) * 4) as usize);
+/// `img` flipped along the axes asked.
+fn mirrored(img: &Image, mx: bool, my: bool) -> Image {
+    let mut px = vec![0u8; img.px.len()];
+    for y in 0..img.h {
+        for x in 0..img.w {
+            let (fx, fy) = (if mx { img.w - 1 - x } else { x }, if my { img.h - 1 - y } else { y });
+            let (from, to) = (((y * img.w + x) * 4) as usize, ((fy * img.w + fx) * 4) as usize);
             px[to..to + 4].copy_from_slice(&img.px[from..from + 4]);
         }
     }
-    Image { w: cw, h: ch, px }
+    Image { w: img.w, h: img.h, px }
 }
 
 /// A straddling frame: the centre over exactly the panel, the edge bands centred on its boundary, the corners at `p`
-/// physical px per art px with their anchor (`corner_anchor`, else their middle) on its corner points, over the rest, their
-/// arms cut or spliced to `corner_arm`, in a buffer `reach` px larger than `pr` on every side. The bands run on past the corner
-/// points by the half width of what they draw, so the lines close under an open corner.
+/// physical px per art px with their anchor (`corner_anchor`, else their middle) on its corner points, over the rest, in a
+/// buffer `reach` px larger than `pr` on every side. Plain bands run on past the corner points by the half width of what they
+/// draw, so the lines close under an open corner; tiled bands run between the corners. Each corner is averaged from its outer corner, so mirrored art reduces to
+/// mirrored pixels at any ratio.
 fn compose_straddle(img: &Image, nine: &Nine, k: f32, p: f32, pr: Rect, reach: i32) -> Vec<u8> {
     let (bw, bh) = (pr.w + 2 * reach, pr.h + 2 * reach);
     let mut out = vec![0u8; (bw * bh * 4) as usize];
@@ -409,44 +369,30 @@ fn compose_straddle(img: &Image, nine: &Nine, k: f32, p: f32, pr: Rect, reach: i
     let drawn: Vec<i32> = (0..st).filter(|y| img.px[((y * img.w + sl) * 4 + 3) as usize] > 0).collect();
     let run = drawn.first().zip(drawn.last()).map_or(0, |(a, b)| (((b - a + 1) as f32 * k / 2.0).ceil()) as i32);
     let tile = nine.edges == NineFill::Tile;
-    let (lw, lh) = (pr.w + 2 * run, pr.h + 2 * run);
-    let (tt, tb, tl, tr) = (thick(st), thick(sb), thick(sl), thick(sr));
-    over(&mut out, bw, &fit_cell(img, (sl, 0, sw, st), (lw, tt), tile, false, k), reach - run, reach - tt / 2);
-    over(&mut out, bw, &fit_cell(img, (sl, img.h - sb, sw, sb), (lw, tb), tile, false, k), reach - run, reach + pr.h - (tb - tb / 2));
-    over(&mut out, bw, &fit_cell(img, (0, st, sl, sh), (tl, lh), false, tile, k), reach - tl / 2, reach - run);
-    over(&mut out, bw, &fit_cell(img, (img.w - sr, st, sr, sh), (tr, lh), false, tile, k), reach + pr.w - (tr - tr / 2), reach - run);
+    // A tiled band is art like the corners it joins, so it takes their `sharpen`; a stretched one is a plain line.
+    let band = |src: (i32, i32, i32, i32), dst: (i32, i32), tile_x: bool, tile_y: bool| {
+        let mut cell = fit_cell(img, src, dst, tile_x, tile_y, k);
+        if tile {
+            sharpen(&mut cell, nine.sharpen);
+        }
+        cell
+    };
     let [ax, ay] = nine.corner_anchor.unwrap_or([sl / 2, st / 2]);
     let (fx, fy) = ((ax as f32 * p).round() as i32, (ay as f32 * p).round() as i32);
-    // The art kept from the outer corner: past the anchor by each arm's reach, up to the art's end.
-    let view = k * nine.scale.max(1) as f32;
-    let reach_of = |edge: i32| nine.corner_arm.map(|_| arm_reach(nine, edge, view));
-    let kept = |anchor: i32, reach: Option<f32>, slice: i32| reach.map_or(slice, |r| ((anchor as f32 + r / p).ceil() as i32).min(slice));
-    let (reach_x, reach_y) = (reach_of(pr.w), reach_of(pr.h));
-    let (kw, kh) = (kept(ax, reach_x, sl.min(sr)), kept(ay, reach_y, st.min(sb)));
-    // Never past the reach, so two arms on an edge meet at most.
-    let drawn = |kept: i32, from: i32, reach: Option<f32>| {
-        let size = ((kept as f32 * p).round() as i32).max(1);
-        reach.map_or(size, |r| size.min(from + r.floor() as i32).max(1))
-    };
-    let (cw, ch) = (drawn(kw, fx, reach_x), drawn(kh, fy, reach_y));
-    // A spliced arm's art, at most to the edge's middle.
-    let splice_of = |axis: usize, anchor: i32, reach: Option<f32>, edge: i32| {
-        nine.corner_splice.zip(reach).map(|(s, r)| arm_map((anchor as f32 + r / p).round() as i32, (anchor as f32 + edge as f32 / 2.0 / p).floor() as i32, s[axis]))
-    };
-    let (cols, rows) = (splice_of(0, ax, reach_x, pr.w), splice_of(1, ay, reach_y, pr.h));
+    let (kw, kh) = (sl.min(sr), st.min(sb));
+    let (cw, ch) = (((kw as f32 * p).round() as i32).max(1), ((kh as f32 * p).round() as i32).max(1));
+    // Where a band starts, from the corner point: a tiled band starts where its corner ends, since a soft row drawn twice under
+    // the corner would read as a step there; a plain line closes under the corner.
+    let (from_x, from_y) = if tile { (cw - fx, ch - fy) } else { (-run, -run) };
+    let (lw, lh) = ((pr.w - 2 * from_x).max(0), (pr.h - 2 * from_y).max(0));
+    let (tt, tb, tl, tr) = (thick(st), thick(sb), thick(sl), thick(sr));
+    over(&mut out, bw, &band((sl, 0, sw, st), (lw, tt), tile, false), reach + from_x, reach - tt / 2);
+    over(&mut out, bw, &band((sl, img.h - sb, sw, sb), (lw, tb), tile, false), reach + from_x, reach + pr.h - (tb - tb / 2));
+    over(&mut out, bw, &band((0, st, sl, sh), (tl, lh), false, tile), reach - tl / 2, reach + from_y);
+    over(&mut out, bw, &band((img.w - sr, st, sr, sh), (tr, lh), false, tile), reach + pr.w - (tr - tr / 2), reach + from_y);
     for (mx, my) in [(false, false), (true, false), (false, true), (true, true)] {
-        let mut corner = match (&cols, &rows) {
-            (Some(c), Some(r)) => {
-                let at = (if mx { img.w - sr } else { 0 }, if my { img.h - sb } else { 0 }, if mx { sr } else { sl }, if my { sb } else { st });
-                let art = spliced_corner(img, at, c, r, mx, my);
-                let size = (((art.w as f32 * p).round() as i32).max(1), ((art.h as f32 * p).round() as i32).max(1));
-                art.downsample(size.0, size.1)
-            }
-            _ => {
-                let (sx, sy) = (if mx { img.w - kw } else { 0 }, if my { img.h - kh } else { 0 });
-                fit_cell(img, (sx, sy, kw, kh), (cw, ch), false, false, k)
-            }
-        };
+        let (sx, sy) = (if mx { img.w - kw } else { 0 }, if my { img.h - kh } else { 0 });
+        let mut corner = mirrored(&mirrored(&img.crop(sx, sy, kw, kh), mx, my).downsample(cw, ch), mx, my);
         sharpen(&mut corner, nine.sharpen);
         let x = if mx { reach + pr.w + fx - corner.w } else { reach - fx };
         let y = if my { reach + pr.h + fy - corner.h } else { reach - fy };
@@ -681,8 +627,7 @@ impl<'a> Painter<'a> {
     /// whose art is finer than the window (`scale` above the view's scale) is averaged down instead of sampled, each
     /// cell apart so the slices stay exact, and cached per frame and physical size (`reduced_nine`); at a view scale of
     /// `scale` or more it samples as any frame. `nine.straddle` centres the frame on `r`'s boundary (`compose_straddle`),
-    /// drawing past `r`, under the canvas's clip and bounds, and only draws: `r` stays the panel's; `nine.corner_arm`
-    /// cuts its corners' arms to a share of each edge.
+    /// drawing past `r`, under the canvas's clip and bounds, and only draws: `r` stays the panel's.
     pub fn nine(&mut self, img: &Image, nine: &Nine, r: Rect) {
         let pr = self.v.rect(r);
         if pr.w <= 0 || pr.h <= 0 || img.w <= 0 || img.h <= 0 {

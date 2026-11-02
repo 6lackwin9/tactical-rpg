@@ -1,1 +1,1 @@
-{"slice": [448, 448, 448, 448], "scale": 16, "corner_anchor": [98, 83], "corner_inner": [135, 99], "pad": [2, 2, 2, 2], "reduce": "average", "corner_arm": 0.23, "corner_arm_min": 18, "corner_arm_max": 48, "corner_elbow": 147, "corner_art": 12, "corner_splice": {"x": [378, 448], "y": [350, 448]}, "straddle": true, "sharpen": 0.6}
+{"slice": [200, 200, 200, 200], "corner_anchor": [72, 80], "corner_inner": [19, 18], "scale": 8, "pad": [2, 2, 2, 2], "reduce": "average", "straddle": true, "sharpen": 0.6}

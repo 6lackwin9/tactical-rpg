@@ -1460,6 +1460,14 @@ mod tests {
                 let mut rects: Vec<Rect> = audit.iter().filter(|t| inside(peek, t)).map(text_rect).collect();
                 assert!(rects.len() >= 2, "{ww} {size}: the peek's texts");
                 rects.extend(w.iter().filter(|x| x["kind"] == "text_button" || x["id"].as_str().is_some_and(|i| i.starts_with("menu.peek."))).map(rect_of));
+                // The content rect clears the art by itself, before any padding, and the peek lays out in it.
+                let padding = tallow.layout.padding / 2;
+                let content = aegis_ui::painter::nine_content_rect(&frame.nine, peek, g.view.s);
+                let inner = content.inset(padding);
+                let face = rect_of(w.iter().find(|x| x["id"].as_str().is_some_and(|i| i.starts_with("menu.peek."))).expect("a portrait"));
+                assert_eq!((face.x, face.y + face.h), (inner.x, inner.y + inner.h), "{ww} {size}: the peek's portraits sit in the content rect");
+                assert!(audit.iter().filter(|t| inside(peek, t)).any(|t| t.x as i32 == inner.x), "{ww} {size}: the peek's text starts at the content rect");
+                rects.push(content);
                 check(&mut g, "peek", peek, rects);
                 // The ask dialog.
                 g.fonts.audit = Some(Vec::new());
@@ -1473,6 +1481,10 @@ mod tests {
                 let audit = g.fonts.audit.take().unwrap();
                 shown.extend(audit.iter().filter(|t| inside(ask, t)).map(text_rect));
                 assert!(shown.len() >= 4, "{ww} {size}: the ask's title, question and buttons: {}", shown.len());
+                let content = aegis_ui::painter::nine_content_rect(&frame.nine, ask, g.view.s);
+                let inner = content.inset(tallow.layout.padding / 2);
+                assert_eq!((no.x + no.w, no.y + no.h), (inner.x + inner.w, inner.y + inner.h), "{ww} {size}: the ask's buttons sit in the content rect");
+                shown.push(content);
                 check(&mut g, "ask", ask, shown);
             }
         }
@@ -1547,7 +1559,31 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
-    /// A review render of the ornate frame on a very wide, a small and a tall panel: only with `AEGIS_REVIEW_DIR` set.
+    /// A review render of the full frame at 1280 x 720: only with `AEGIS_REVIEW_DIR` set.
+    #[test]
+    fn review_render_of_the_full_frame() {
+        let Ok(out) = std::env::var("AEGIS_REVIEW_DIR") else { return };
+        let game = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let tallow = aegis_ui::theme::load(&aegis_core::assets::Layers::for_game(&game)).expect("the game's theme loads");
+        let frame = tallow.frame("ornate_full").expect("the full frame");
+        let mut g = gfx();
+        g.canvas = Canvas::new(1280, 720);
+        g.canvas.clear([40, 44, 52, 255]);
+        g.view = View::fit(1280, 720);
+        let view = g.view;
+        let mut p = aegis_ui::painter::Painter { c: &mut g.canvas, v: view, fonts: &mut g.fonts };
+        for r in [Rect::new(35, 20, 160, 64), Rect::new(240, 20, 380, 95), Rect::new(35, 130, 100, 200), Rect::new(240, 150, 200, 160)] {
+            p.nine(&frame.img, &frame.nine, r);
+        }
+        let file = std::fs::File::create(Path::new(&out).join("a8_full_frame_1280x720.png")).unwrap();
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 1280, 720);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
+    }
+
+    /// A review render of the ornate frame on a very wide, a small, a tall, a large and a too small panel, at 1280 x 720 and
+    /// 1920 x 1080: only with `AEGIS_REVIEW_DIR` set.
     #[test]
     fn review_render_of_the_ornate_frame_on_other_panels() {
         let Ok(out) = std::env::var("AEGIS_REVIEW_DIR") else { return };
@@ -1555,19 +1591,21 @@ mod tests {
         let tallow = aegis_ui::theme::load(&aegis_core::assets::Layers::for_game(&game)).expect("the game's theme loads");
         let frame = tallow.frame("ornate").expect("the ornate frame");
         let mut g = gfx();
-        g.canvas = Canvas::new(1280, 720);
-        g.canvas.clear([40, 44, 52, 255]);
-        g.view = View::fit(1280, 720);
-        let view = g.view;
-        let mut p = aegis_ui::painter::Painter { c: &mut g.canvas, v: view, fonts: &mut g.fonts };
-        for r in [Rect::new(30, 40, 580, 60), Rect::new(60, 160, 100, 40), Rect::new(220, 150, 60, 180), Rect::new(340, 150, 260, 170)] {
-            p.nine(&frame.img, &frame.nine, r);
+        for (ww, wh) in [(1280, 720), (1920, 1080)] {
+            g.canvas = Canvas::new(ww, wh);
+            g.canvas.clear([40, 44, 52, 255]);
+            g.view = View::fit(ww as u32, wh as u32);
+            let view = g.view;
+            let mut p = aegis_ui::painter::Painter { c: &mut g.canvas, v: view, fonts: &mut g.fonts };
+            for r in [Rect::new(30, 40, 580, 60), Rect::new(60, 160, 100, 40), Rect::new(220, 150, 60, 180), Rect::new(340, 150, 260, 170), Rect::new(60, 240, 20, 16)] {
+                p.nine(&frame.img, &frame.nine, r);
+            }
+            let file = std::fs::File::create(Path::new(&out).join(format!("ornate_other_panels_{ww}x{wh}.png"))).unwrap();
+            let mut enc = png::Encoder::new(std::io::BufWriter::new(file), ww as u32, wh as u32);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
         }
-        let file = std::fs::File::create(Path::new(&out).join("ornate_other_panels_1280x720.png")).unwrap();
-        let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 1280, 720);
-        enc.set_color(png::ColorType::Rgba);
-        enc.set_depth(png::BitDepth::Eight);
-        enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
     }
 
     /// Review renders of the menu at 1280 x 720 with the game's art and theme: only with `AEGIS_REVIEW_DIR` set.

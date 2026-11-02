@@ -538,21 +538,73 @@ fn box_of(canvas: &Canvas, c: [u8; 4]) -> Option<(i32, i32, i32, i32)> {
     b
 }
 
-/// One solid art block in a corner stays square however the arms are cut, each arm reaches its share of its own edge, and
-/// the longer arm's reach stops at the art's end on a very wide panel rather than stretching.
-#[test]
-fn corner_arms_follow_their_own_edges_at_one_scale() {
-    // Solid corners with a 16 x 16 art px block at (40, 40) in a marker colour, its anchor at (24, 24).
+/// A 256 px straddling frame, slice 112, anchor (24, 24): its top-left corner in `CORNER_TL` with a 16 x 16 art px block at
+/// (40, 40) in a marker colour, the far corners see-through.
+fn solid_corner() -> (Image, Nine, [u8; 4]) {
     let (n, s) = (256, 112);
     let marker = [250, 250, 0, 255];
     let px = (0..n * n).flat_map(|i| {
         let (x, y) = (i % n, i / n);
-        if (40..56).contains(&x) && (40..56).contains(&y) { marker } else if (x < s || x >= n - s) && (y < s || y >= n - s) { CORNER_TL } else { [0, 0, 0, 0] }
+        if !(x < s && y < s) { [0, 0, 0, 0] } else if (40..56).contains(&x) && (40..56).contains(&y) { marker } else { CORNER_TL }
+    }).collect();
+    (Image { w: n, h: n, px }, Nine { reduce: true, scale: 16, straddle: true, corner_anchor: Some([24, 24]), ..Nine::new([s; 4]) }, marker)
+}
+
+/// A straddled `edges: tile` frame: slice 32, a 64 art px middle marked over its first 16 px, centred rows in its slices, no
+/// corners, at scale 16. The marks keep their spacing and width on any panel, so the band repeats and never stretches, and
+/// every side holds its rows the whole way, so nothing steps.
+#[test]
+fn a_tiled_straddled_edge_repeats_at_one_size_on_any_panel() {
+    let (n, s, seg) = (128, 32, 64);
+    let (mark, plain) = ([250, 250, 0, 255], [0, 0, 200, 255]);
+    let px = (0..n * n).flat_map(|i| {
+        let (x, y) = (i % n, i / n);
+        let row = |v: i32| (8..24).contains(&v) || (n - 24..n - 8).contains(&v);
+        let along_x = (s..n - s).contains(&x) && row(y);
+        let along_y = (s..n - s).contains(&y) && row(x);
+        if along_x { if x < s + 16 { mark } else { plain } } else if along_y { if y < s + 16 { mark } else { plain } } else { [0, 0, 0, 0] }
     }).collect();
     let img = Image { w: n, h: n, px };
-    let nine = Nine { reduce: true, scale: 16, straddle: true, corner_arm: Some(0.23), corner_anchor: Some([24, 24]), ..Nine::new([s; 4]) };
+    let nine = Nine { reduce: true, scale: 16, straddle: true, edges: NineFill::Tile, center: NineFill::None, ..Nine::new([s; 4]) };
     for (ww, wh) in [(960, 540), (1280, 720), (1920, 1080), (3840, 2160)] {
-        for r in [Rect::new(100, 80, 180, 84), Rect::new(100, 80, 84, 180), Rect::new(100, 80, 100, 100)] {
+        for (w, h) in [(40, 40), (97, 61), (160, 64), (333, 150), (580, 170)] {
+            let mut c = Canvas::new(ww, wh);
+            c.clear([0, 0, 0, 255]);
+            let mut f = painter_canvas().1;
+            let mut p = Painter { c: &mut c, v: View::fit(ww as u32, wh as u32), fonts: &mut f };
+            let r = Rect::new(20, 20, w, h);
+            p.nine(&img, &nine, r);
+            let pr = p.v.rect(r);
+            let (period, wide) = ((seg as f32 * p.v.s / 16.0).round() as i32, (16.0 * p.v.s / 16.0).round() as i32);
+            let is_mark = |q: [u8; 4]| q[0] > 128 && q[1] > 128;
+            // A tiled band runs between its corners: 16 art px, one logical px, from each corner point.
+            let clear = p.v.s.ceil() as i32 + 1;
+            let top: Vec<[u8; 4]> = (pr.x + clear..pr.x + pr.w - clear).map(|x| canvas_px(p.c, x, pr.y)).collect();
+            let left: Vec<[u8; 4]> = (pr.y + clear..pr.y + pr.h - clear).map(|y| canvas_px(p.c, pr.x, y)).collect();
+            for (name, line) in [("top", top), ("left", left)] {
+                assert!(line.iter().all(|q| q[0] > 128 || q[2] > 128), "{ww} {w} x {h}: a gap in the {name} edge");
+                for at in 0..line.len() - period as usize {
+                    assert_eq!(is_mark(line[at]), is_mark(line[at + period as usize]), "{ww} {w} x {h}: the {name} edge at {at} does not repeat every {period}");
+                }
+                let starts: Vec<usize> = (1..line.len()).filter(|i| is_mark(line[*i]) && !is_mark(line[i - 1])).collect();
+                if let [a, b, ..] = starts[..] {
+                    assert_eq!((b - a) as i32, period, "{ww} {w} x {h}: {name} marks {starts:?}");
+                    let run = (a..line.len()).take_while(|i| is_mark(line[*i])).count() as i32;
+                    assert!((run - wide).abs() <= 1, "{ww} {w} x {h}: the {name} mark is {run} wide, not {wide}");
+                }
+            }
+        }
+    }
+}
+
+/// A corner's size follows the window and not the panel: on any panel that holds two corners, the art block and its place
+/// from the corner point are one size, whole art scaled by the view, unsquashed; a sidecar no longer takes arm keys.
+#[test]
+fn a_straddling_corner_keeps_one_size_on_any_panel() {
+    let (img, nine, marker) = solid_corner();
+    for (ww, wh) in [(960, 540), (1280, 720), (1920, 1080), (3840, 2160)] {
+        let mut seen = None;
+        for r in [Rect::new(100, 80, 180, 84), Rect::new(100, 80, 84, 180), Rect::new(100, 80, 30, 400), Rect::new(10, 150, 600, 40)] {
             let mut c = Canvas::new(ww, wh);
             c.clear([0, 0, 0, 255]);
             let mut f = painter_canvas().1;
@@ -560,122 +612,100 @@ fn corner_arms_follow_their_own_edges_at_one_scale() {
             p.nine(&img, &nine, r);
             let pr = p.v.rect(r);
             let (x0, y0, x1, y1) = box_of(p.c, marker).expect("the marker");
-            assert!(((x1 - x0) - (y1 - y0)).abs() <= 1, "{ww} {r:?}: not squashed: {} x {}", x1 - x0 + 1, y1 - y0 + 1);
             let lit = |x: i32, y: i32| canvas_px(p.c, x, y)[0] > 0;
-            let reach_x = (0..pr.w / 2).rfind(|d| lit(pr.x + d, pr.y)).unwrap();
-            let reach_y = (0..pr.h / 2).rfind(|d| lit(pr.x, pr.y + d)).unwrap();
-            assert!((reach_x as f32 - 0.23 * pr.w as f32).abs() <= 2.0, "{ww} {r:?}: horizontal arm {reach_x} of {}", pr.w);
-            assert!((reach_y as f32 - 0.23 * pr.h as f32).abs() <= 2.0, "{ww} {r:?}: vertical arm {reach_y} of {}", pr.h);
+            let reach = (0..pr.w).rfind(|d| lit(pr.x + d, pr.y)).unwrap() + 1;
+            let got = (x0 - pr.x, y0 - pr.y, x1 - x0 + 1, y1 - y0 + 1, reach);
+            // The block's 16 art px are one logical px; from the corner point it starts 1 logical px in; 88 art px past it.
+            let s = p.v.s;
+            assert!(((got.2 as f32) - s).abs() <= 1.0 && ((got.3 as f32) - s).abs() <= 1.0, "{ww} {r:?}: the block {got:?} at view {s}");
+            assert!((reach as f32 - 88.0 / 16.0 * s).abs() <= 1.0, "{ww} {r:?}: reach {reach} at view {s}");
+            assert_eq!(*seen.get_or_insert(got), got, "{ww} {r:?}: one size on any panel");
         }
     }
-    // A panel so wide the elbow limit binds: the arm stops at the art's end, the art is not stretched to reach.
-    let limited = Nine { corner_elbow: 80, ..nine };
-    let mut c = Canvas::new(1280, 720);
-    c.clear([0, 0, 0, 255]);
-    let mut f = painter_canvas().1;
-    let mut p = Painter { c: &mut c, v: View::fit(1280, 720), fonts: &mut f };
-    let r = Rect::new(10, 150, 600, 40);
-    p.nine(&img, &limited, r);
-    let pr = p.v.rect(r);
-    let (x0, y0, x1, y1) = box_of(p.c, marker).expect("the marker");
-    assert!(((x1 - x0) - (y1 - y0)).abs() <= 1, "not squashed");
-    let reach_x = (0..pr.w / 2).rfind(|d| canvas_px(p.c, pr.x + d, pr.y)[0] > 0).unwrap();
-    assert!((reach_x as f32) < 0.23 * pr.w as f32 - 4.0, "short of its share: {reach_x}");
+    for gone in ["corner_arm", "corner_arm_min", "corner_arm_max", "corner_arm_full", "corner_elbow", "corner_art", "corner_splice"] {
+        let mut v = json!({"slice": [8, 8, 8, 8]});
+        v[gone] = json!(1);
+        assert!(Nine::parse(&v, 32, 32, "f").unwrap_err()[0].contains("unknown key"), "{gone}");
+    }
 }
 
-/// A solid straddling frame with its left corners red and its right ones blue, for reading arms along the boundary.
-fn arm_fixture(nine: impl Fn(Nine) -> Nine) -> (Image, Nine) {
+/// A panel too small for two corners draws them smaller, at one scale in both axes, so they do not overlap; from a panel
+/// that holds them on, the size does not change.
+#[test]
+fn a_panel_too_small_for_two_corners_clamps_without_overlap() {
+    let (img, nine, marker) = solid_corner();
+    for (ww, wh) in [(1280, 720), (1920, 1080)] {
+        for (w, h) in [(4, 30), (6, 40), (8, 12), (10, 6), (11, 11), (12, 30), (30, 4), (40, 8)] {
+            let mut c = Canvas::new(ww, wh);
+            c.clear([0, 0, 0, 255]);
+            let mut f = painter_canvas().1;
+            let mut p = Painter { c: &mut c, v: View::fit(ww as u32, wh as u32), fonts: &mut f };
+            let r = Rect::new(100, 100, w, h);
+            p.nine(&img, &nine, r);
+            let pr = p.v.rect(r);
+            let lit = |x: i32, y: i32| canvas_px(p.c, x, y)[0] > 0;
+            // The near corner alone is drawn: it must stop at the middle of both edges, where its mirror would start.
+            let across = (0..2 * pr.w).rfind(|d| lit(pr.x + d, pr.y)).unwrap_or(0) + 1;
+            let down = (0..2 * pr.h).rfind(|d| lit(pr.x, pr.y + d)).unwrap_or(0) + 1;
+            assert!(across * 2 <= pr.w && down * 2 <= pr.h, "{ww} {w} x {h}: reaches {across} and {down} of {} x {}", pr.w, pr.h);
+            if let Some((x0, y0, x1, y1)) = box_of(p.c, marker) {
+                assert!(((x1 - x0) - (y1 - y0)).abs() <= 1, "{ww} {w} x {h}: not squashed");
+            }
+        }
+    }
+}
+
+/// Mirrored art lands as mirrored pixels at every window size, at ratios that are not whole too: all four corners are one.
+#[test]
+fn mirrored_corners_reduce_to_mirrored_pixels() {
     let (n, s) = (256, 112);
     let px = (0..n * n).flat_map(|i| {
         let (x, y) = (i % n, i / n);
-        if (x < s || x >= n - s) && (y < s || y >= n - s) { if x < s { CORNER_TL } else { LINE } } else { [0, 0, 0, 0] }
+        let (u, v) = (x.min(n - 1 - x), y.min(n - 1 - y));
+        if u < s && v < s && (u * 7 + v * 13) % 11 < 6 { [(u * 2) as u8, (v * 2) as u8, 90, 255] } else { [0, 0, 0, 0] }
     }).collect();
-    (Image { w: n, h: n, px }, nine(Nine { reduce: true, scale: 16, straddle: true, corner_arm: Some(0.23), corner_anchor: Some([24, 24]), ..Nine::new([s; 4]) }))
-}
-
-/// The two arms along a panel's top edge at 1280 x 720, in logical px from their corner points; panics if they overlap.
-fn arms_along_top(img: &Image, nine: &Nine, r: Rect) -> (f32, f32) {
-    let mut c = Canvas::new(1280, 720);
-    c.clear([0, 0, 0, 255]);
-    let mut f = painter_canvas().1;
-    let mut p = Painter { c: &mut c, v: View::fit(1280, 720), fonts: &mut f };
-    p.nine(img, nine, r);
-    let pr = p.v.rect(r);
-    let lit = |x: i32, col: usize| canvas_px(p.c, x, pr.y)[col] > 0;
-    let last_left = (pr.x..pr.x + pr.w).rfind(|x| lit(*x, 0)).unwrap();
-    let first_right = (pr.x..pr.x + pr.w).find(|x| lit(*x, 2)).unwrap();
-    assert!(last_left < first_right, "{r:?}: the arms overlap: {last_left} past {first_right}");
-    ((last_left - pr.x + 1) as f32 / 2.0, (pr.x + pr.w - first_right) as f32 / 2.0)
-}
-
-/// The share of an edge sits within the frame's limits: a short panel's arm stays at the minimum, a long one's at the
-/// maximum; a full arm runs to the middle of the edge; arms on one edge never overlap, whatever they ask.
-#[test]
-fn corner_arms_keep_their_limits_and_never_overlap() {
-    let (img, limited) = arm_fixture(|n| Nine { corner_arm_min: 16.0, corner_arm_max: 48.0, ..n });
-    let close = |got: f32, want: f32, what: &str| assert!((got - want).abs() <= 1.5, "{what}: {got} for {want}");
-    close(arms_along_top(&img, &limited, Rect::new(100, 100, 40, 40)).0, 16.0, "the minimum");
-    close(arms_along_top(&img, &limited, Rect::new(10, 100, 600, 84)).0, 48.0, "the maximum");
-    close(arms_along_top(&img, &limited, Rect::new(10, 100, 180, 84)).0, 0.23 * 180.0, "the share between them");
-    let (img, full) = arm_fixture(|n| Nine { corner_arm_full: true, ..n });
-    let (left, right) = arms_along_top(&img, &full, Rect::new(10, 100, 200, 100));
-    close(left, 100.0, "a full arm, left");
-    close(right, 100.0, "a full arm, right");
-    // A minimum larger than half the edge and every size between: they meet at most.
-    let (img, huge) = arm_fixture(|n| Nine { corner_arm_min: 200.0, corner_arm_max: 400.0, ..n });
-    for w in [20, 31, 64, 101, 180, 300] {
-        let (left, right) = arms_along_top(&img, &huge, Rect::new(10, 100, w, 40));
-        assert!(left + right <= w as f32, "{w}: {left} + {right}");
+    let img = Image { w: n, h: n, px };
+    let nine = Nine { reduce: true, scale: 16, straddle: true, sharpen: 0.6, corner_anchor: Some([24, 24]), ..Nine::new([s; 4]) };
+    for (ww, wh) in [(960, 540), (1280, 720), (1920, 1080), (1366, 768)] {
+        let mut c = Canvas::new(ww, wh);
+        c.clear([0, 0, 0, 255]);
+        let mut f = painter_canvas().1;
+        let mut p = Painter { c: &mut c, v: View::fit(ww as u32, wh as u32), fonts: &mut f };
+        let r = Rect::new(100, 80, 180, 84);
+        p.nine(&img, &nine, r);
+        let pr = p.v.rect(r);
+        let (left, top) = (pr.x - 4, pr.y - 4);
+        let (right, bottom) = (pr.x + pr.w - 1 + 4, pr.y + pr.h - 1 + 4);
+        let (w, h) = ((pr.w + 8) / 2, (pr.h + 8) / 2);
+        for dy in 0..h {
+            for dx in 0..w {
+                let at = canvas_px(p.c, left + dx, top + dy);
+                assert_eq!(canvas_px(p.c, right - dx, top + dy), at, "{ww}: top right at ({dx}, {dy})");
+                assert_eq!(canvas_px(p.c, left + dx, bottom - dy), at, "{ww}: bottom left at ({dx}, {dy})");
+                assert_eq!(canvas_px(p.c, right - dx, bottom - dy), at, "{ww}: bottom right at ({dx}, {dy})");
+            }
+        }
     }
 }
 
-/// The content rect follows what the arms resolve to on the panel, and frames without `corner_inner` keep `Nine::content`.
+/// The content rect clears the corners' inward reach at their size, on any panel and in logical px whatever the view; a
+/// clamped corner asks less; frames without `corner_inner` keep `Nine::content`.
 #[test]
 fn a_frames_content_rect_clears_its_corners_at_their_size() {
     let plain = Nine::new([8; 4]);
     let r = Rect::new(10, 20, 100, 60);
     assert_eq!(aegis_ui::painter::nine_content_rect(&plain, r, 2.0), plain.content(r));
-    let (_, nine) = arm_fixture(|n| Nine { corner_inner: Some([60, 60]), pad: [1; 4], ..n });
-    let small = aegis_ui::painter::nine_content_rect(&nine, Rect::new(0, 0, 100, 50), 2.0);
-    let big = aegis_ui::painter::nine_content_rect(&nine, Rect::new(0, 0, 300, 150), 2.0);
-    assert!(small.x > 0 && big.x > small.x, "larger arms, larger inset: {} then {}", small.x, big.x);
-}
-
-/// An arm cut shorter than the art keeps its finish; a longer reach stops at the art's natural end, unstretched; two arms
-/// never overlap even asked to the middle.
-#[test]
-fn a_spliced_arm_ends_on_its_finish_at_any_length() {
-    let (n, s) = (256, 112);
-    let (foot, body) = ([250, 250, 0, 255], [200, 0, 0, 255]);
-    let px = (0..n * n).flat_map(|i| {
-        let (x, y) = (i % n, i / n);
-        let (u, v) = (x.min(n - 1 - x), y.min(n - 1 - y));
-        if !((x < s || x >= n - s) && (y < s || y >= n - s)) { [0, 0, 0, 0] } else if u >= 96 || v >= 96 { foot } else { body }
-    }).collect();
-    let img = Image { w: n, h: n, px };
-    let nine = Nine { reduce: true, scale: 16, straddle: true, corner_arm: Some(0.23), corner_anchor: Some([24, 24]), corner_art: Some(2), corner_splice: Some([[96, 112], [96, 112]]), ..Nine::new([s; 4]) };
-    // At 2 art px per logical px the natural arm is (112 - 24) / 2 = 44 logical px.
-    for w in [100, 180, 300, 500] {
-        let (mut c, mut f) = painter_canvas();
-        c.clear([0, 0, 0, 255]);
-        let mut p = Painter { c: &mut c, v: View::fit(1280, 720), fonts: &mut f };
-        let r = Rect::new(20, 40, w, 150);
-        p.nine(&img, &nine, r);
-        let pr = p.v.rect(r);
-        let end = (pr.x..pr.x + pr.w / 2).rfind(|x| canvas_px(p.c, *x, pr.y)[0] > 0).unwrap();
-        assert_eq!(canvas_px(p.c, end - 1, pr.y), foot, "{w}: ends on its finish");
-        let reach = (end - pr.x + 1) as f32 / 2.0;
-        assert!((reach - (0.23 * w as f32).min(44.0)).abs() <= 1.5, "{w}: reach {reach}");
+    let nine = Nine { corner_inner: Some([60, 60]), pad: [1; 4], ..solid_corner().1 };
+    // 60 art px at 16 per logical px, rounded up.
+    for view in [1.5, 2.0, 3.0, 6.0] {
+        for r in [Rect::new(0, 0, 100, 50), Rect::new(0, 0, 300, 150)] {
+            let c = aegis_ui::painter::nine_content_rect(&nine, r, view);
+            assert_eq!((c.x, c.y, c.w, c.h), (4, 4, r.w - 8, r.h - 8), "view {view}, {r:?}");
+        }
     }
-    let full = Nine { corner_arm_full: true, ..nine };
-    let (mut c, mut f) = painter_canvas();
-    c.clear([0, 0, 0, 255]);
-    let mut p = Painter { c: &mut c, v: View::fit(1280, 720), fonts: &mut f };
-    let r = Rect::new(20, 40, 60, 150);
-    p.nine(&img, &full, r);
-    let pr = p.v.rect(r);
-    let lit: Vec<i32> = (pr.x..pr.x + pr.w).filter(|x| canvas_px(p.c, *x, pr.y)[0] > 0).collect();
-    assert!(lit.len() as i32 <= pr.w, "two arms on one edge meet at most");
+    let small = aegis_ui::painter::nine_content_rect(&nine, Rect::new(0, 0, 8, 8), 2.0);
+    assert!(small.x < 4, "a clamped corner reaches less: {}", small.x);
+    assert_eq!(aegis_ui::painter::nine_content_rect(&Nine { pad: [5; 4], ..nine }, Rect::new(0, 0, 100, 50), 2.0).x, 5, "the pad when it is larger");
 }
 
 /// The fill stops at the panel: no fill pixel past the line, around the corners' holes too, with the band's line on the
@@ -801,17 +831,27 @@ fn a_corner_anchor_sits_on_the_corner_point() {
     assert_eq!(Nine::parse(&json!({"slice": [8, 8, 8, 8], "corner_anchor": [7, 0]}), 32, 32, "f").unwrap().corner_anchor, Some([7, 0]));
 }
 
-/// `corner_arm`, `corner_elbow`, `straddle` and `sharpen` are checked in the sidecar.
+/// `corner_inner`, `straddle` and `sharpen` are checked in the sidecar.
 #[test]
 fn the_corner_keys_are_validated() {
-    let ok = Nine::parse(&json!({"slice": [8, 8, 8, 8], "corner_arm": 0.24, "corner_elbow": 4, "straddle": true, "sharpen": 0.8}), 32, 32, "f").unwrap();
-    assert_eq!((ok.corner_arm, ok.corner_elbow, ok.straddle, ok.sharpen), (Some(0.24), 4, true, 0.8));
+    let ok = Nine::parse(&json!({"slice": [8, 8, 8, 8], "corner_inner": [3, 2], "straddle": true, "sharpen": 0.8}), 32, 32, "f").unwrap();
+    assert_eq!((ok.corner_inner, ok.straddle, ok.sharpen), (Some([3, 2]), true, 0.8));
     let plain = Nine::parse(&json!({"slice": [8, 8, 8, 8]}), 32, 32, "f").unwrap();
-    assert_eq!((plain.corner_arm, plain.corner_elbow, plain.straddle, plain.sharpen), (None, 0, false, 0.0));
-    for (bad, says) in [(json!({"corner_arm": 0.6}), "corner_arm"), (json!({"corner_arm_min": -1}), "corner_arm_min"), (json!({"corner_arm_min": 9, "corner_arm_max": 2}), "above"), (json!({"corner_arm_full": 1}), "corner_arm_full"), (json!({"corner_elbow": 8}), "corner_elbow"), (json!({"corner_art": 0}), "corner_art"), (json!({"corner_splice": {"x": [0, 2], "y": [1, 2]}}), "corner_splice"), (json!({"corner_splice": {"x": [4, 2], "y": [0, 2]}}), "corner_splice"), (json!({"corner_inner": [1]}), "corner_inner"), (json!({"straddle": 1}), "straddle"), (json!({"sharpen": 3}), "sharpen")] {
+    assert_eq!((plain.corner_inner, plain.straddle, plain.sharpen), (None, false, 0.0));
+    for (bad, says) in [(json!({"corner_inner": [1]}), "corner_inner"), (json!({"corner_inner": [8, 0]}), "corner_inner"), (json!({"corner_inner": [0, 2147483648i64]}), "corner_inner"), (json!({"straddle": 1}), "straddle"), (json!({"sharpen": 3}), "sharpen")] {
         let mut v = bad;
         v["slice"] = json!([8, 8, 8, 8]);
         assert!(Nine::parse(&v, 32, 32, "f").unwrap_err()[0].contains(says), "{says}");
+    }
+}
+
+/// A slice past the PNG is refused, however large, without overflowing what is derived from it.
+#[test]
+fn a_huge_slice_is_refused() {
+    for huge in [33, 2147483647i64, 2147483648i64, i64::MAX] {
+        for v in [json!({"slice": [huge, 8, 8, 8]}), json!({"slice": [huge, huge, huge, huge]}), json!({"slice": [8, 8, 8, huge], "scale": 32})] {
+            assert!(Nine::parse(&v, 32, 32, "f").unwrap_err().iter().any(|e| e.contains("slice")), "{v}");
+        }
     }
 }
 
