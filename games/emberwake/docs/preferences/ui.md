@@ -68,3 +68,4 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
   during playback, P, N, remembered), the combat log grouped by round and block, and the full timeline view (T)
   pausing the playback at the block's end. Nothing else draws on the board during playback.
 - Secondary text carries real information (levels, stats, labels), so it stays comfortable to read: `dim` is #9ca3af, about 6-8:1, not the darker Cinder Ash #6b7280 (user 2026-11-02).
+- Battle plan strip blocks: filled in the skill kind's colour, the icon and the name centred together (icon alone when the name does not fit), a thin light border on the icon, near-white text with a 1 px dark outline (user 2026-11-03, mock C).
