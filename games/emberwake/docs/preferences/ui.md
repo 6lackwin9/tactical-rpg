@@ -9,6 +9,7 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
 - Popups over full screens where possible. The level-up popup shows current stats, with Auto and Revert next to the allocation and Confirm kept separate (2026-10-18).
 - Dialogue sits in a bottom dock (2026-10-18). Refined: a 400 px box centred at the bottom, portrait and name on the left, the NPC's line above the
   replies (user playtest 2026-10-22, PLAYUI1-D).
+- Main menu (user 2026-11-02): the items blend into the picture as text only, dimmer by default and brighter on hover or keyboard focus, with no button panels; the title is an image rather than typeset text (title cards use art); the Continue peek waits for hover or a keyboard move, not the menu opening; "Day N" there may become the act or mission name later.
 
 ## Maps
 
