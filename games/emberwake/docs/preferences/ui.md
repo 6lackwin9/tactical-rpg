@@ -10,7 +10,7 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
 - Dialogue sits in a bottom dock (2026-10-18). Refined: a 400 px box centred at the bottom, portrait and name on the left, the NPC's line above the
   replies (user playtest 2026-10-22, PLAYUI1-D).
 - Main menu (user 2026-11-02): the items blend into the picture as text only, dimmer by default and brighter on hover or keyboard focus, with no button panels; the title is an image rather than typeset text (title cards use art); the Continue peek waits for hover or a keyboard move, not the menu opening; "Day N" there may become the act or mission name later. The label alone takes the mouse, not the column; no arrow, and one active item only, which hover moves and which stays lit when the mouse leaves. Continue is lit on opening, without its peek; once shown, the peek stays while Continue is the active item.
-- Frames (user 2026-11-02): `ornate_full`, the rail along the whole edge, suits static UI elements such as full menu screens and large panels; small popup boxes such as the Continue peek use `ornate`, corners with a thin red line, because the full frame is overkill there.
+- Frames (user 2026-11-02): `ornate_full`, the rail along the whole edge, suits static UI elements such as full menu screens and large panels; small popup boxes such as the Continue peek use `ornate`, corners with a thin red line, because the full frame is overkill there. Panes that sit side by side need a compact style with less spiked corners that stay inside the panel, so frames do not overlap; it is mocked first with LOOK1-M2.
 
 ## Maps
 
