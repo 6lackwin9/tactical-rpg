@@ -1,0 +1,10 @@
+{
+  "id": "title_logo_final",
+  "composed_from": {
+    "word_and_subtitle": "art_src/title_logotype_clean_gen1793615022_2.png",
+    "letter_a": "art_src/title_a_eye_gen1793617332_1.png"
+  },
+  "how": "magenta keyed, the word's A box (801,17)-(923,228) cleared, eye 1 reduced to the box's height and 1.6x its width, K and E moved right by the difference, the subtitle centred under it at 62 % of the width",
+  "source": "code composite of two Gemini web app images, no new image",
+  "decision": "Title mark: crest letter A (user 2026-11-02)"
+}

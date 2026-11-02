@@ -1,0 +1,35 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "title_a_door",
+  "prompt": "One single capital letter A for a game title logotype, large and centred, in exactly the carved gothic lettering of the first image: the same gold gradient, the same thick black basalt outline, the same pixel size. The letter is a much simplified version of the crest in the second image, drawn as an A: a narrow pointed gothic doorway whose two sides are the legs of the A, with a simple gold crossbar across its middle, a small eye above the crossbar and one tear below it, on dark basalt. Keep only a few big shapes, because it is shown about as tall as the other letters of the word. It must read as the letter A at a glance. No other letters, no words, no candles, no spires, no pillars, no flames, no sparks, no frame, no watermark. 16-bit SNES/GBA-era pixel art with visible large pixels and no anti-aliasing. Every background pixel is flat solid pure magenta (#FF00FF); no magenta in the art and no shadow on the background.",
+  "reference": "refs/title_logotype_clean_gen1793615022_2.png",
+  "prompts_file": null,
+  "time": "2026-11-02T11:00:00Z",
+  "n": 1,
+  "references": [
+    "refs/title_logotype_clean_gen1793615022_2.png",
+    "refs/logo_crest_gen1793612836_2.png"
+  ],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "title_a_door_q1793616588",
+  "metadata": {
+    "asset_id": "title_a_door",
+    "task": "look1a",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "source_refs": [
+        "C:/dev/tactical-rpg-plan/art_src/title_logotype_clean_gen1793615022_2.png",
+        "C:/dev/tactical-rpg-plan/art_src/logo_crest_gen1793612836_2.png"
+      ]
+    }
+  },
+  "mark_cleared": true,
+  "source_refs": [
+    "C:/dev/tactical-rpg-plan/art_src/title_logotype_clean_gen1793615022_2.png",
+    "C:/dev/tactical-rpg-plan/art_src/logo_crest_gen1793612836_2.png"
+  ],
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Generated 3 variations from references."
+}
