@@ -123,7 +123,9 @@ Builder self-check, the findings reviews kept repeating:
 - A rule's test fails when the rule is broken: break the code once and see it fail (mutation).
 - New paths run on real art or data, not only fixtures; say what was viewed, from the final files.
 - Docs that describe what changed are updated, and specs get an as-built note where the build differs.
+
 ## Ground composer (REGIONGROUND1-E1, 2026-11-02)
+
 Budget (spec `docs/specs/REGIONGROUND1_ENGINE.md` section 4.3): compose at most 100 ms, a copy at most 20 ms at 4K, in
 release, for a 48 x 30, 8-layer job. Measured with `ground_compose --timing` (10 runs each, best to worst, while other
 lanes built on the same machine):
