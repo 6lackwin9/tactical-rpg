@@ -123,3 +123,15 @@ Builder self-check, the findings reviews kept repeating:
 - A rule's test fails when the rule is broken: break the code once and see it fail (mutation).
 - New paths run on real art or data, not only fixtures; say what was viewed, from the final files.
 - Docs that describe what changed are updated, and specs get an as-built note where the build differs.
+## Ground composer (REGIONGROUND1-E1, 2026-11-02)
+Budget (spec `docs/specs/REGIONGROUND1_ENGINE.md` section 4.3): compose at most 100 ms, a copy at most 20 ms at 4K, in
+release, for a 48 x 30, 8-layer job. Measured with `ground_compose --timing` (10 runs each, best to worst, while other
+lanes built on the same machine):
+| Form | Compose | Copy at 720p | Copy at 1080p | Copy at 4K | Blit of a 4K frame | Cache holds at 4K |
+| --- | --- | --- | --- | --- | --- | --- |
+| Square, 768 x 480 art px | 21-25 ms | 1.3-1.6 ms | 2.7-3.6 ms | 11-12 ms | 2.4-4.2 ms | 54.6 MB |
+| Tilted, 768 x 360 art px | 16-20 ms | 1.0-1.1 ms | 2.0-2.9 ms | 8.1-12 ms | 2.5-3.6 ms | 42.4 MB |
+The cheap path: an x blur runs once per cell row, not per pixel row, and a y blur is a few weights per cell row (a cell
+row's pixels are alike), so the integers match full running sums at a fraction of the work. Only the noise a job reads is
+made. Compose runs once on a map's first frame; a frame only blits what shows. `GroundKey::of` hashes every texture
+pixel: 0.14 ms for that job, so it runs when the job changes, never each frame.

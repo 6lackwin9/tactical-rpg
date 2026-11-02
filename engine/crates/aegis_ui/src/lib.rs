@@ -12,7 +12,8 @@
 //! runtime theme (`theme`, LOOK1-E1: colour roles, faces, layout values and nine-slice frames over the asset layers;
 //! the default is the look before it) and the menu panes (`panes`, LOOK1-ME: backdrop, menu column, tab rail, slot
 //! card and the themed ask, standalone pieces on the theme) and the tile masks (`autotile`, LOOK1-E2: corner masks for
-//! transition pieces, a block's open edges). A game
+//! transition pieces, a block's open edges) and the ground composer (`ground`, REGIONGROUND1-E1: a cell grid to one
+//! opaque image with generated edges, cached and blitted). A game
 //! supplies its screens, its context and the agent replies about its own state.
 
 pub mod art;
@@ -24,6 +25,7 @@ pub mod depth;
 pub mod edit;
 pub mod focus;
 pub mod fx;
+pub mod ground;
 pub mod jpeg;
 pub mod notes;
 pub mod painter;

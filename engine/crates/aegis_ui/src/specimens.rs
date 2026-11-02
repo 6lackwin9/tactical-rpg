@@ -18,18 +18,20 @@
 //! the tab rail, three slot cards (a thumbnail, an initial, a long name cut; lock and delete) and the themed ask
 //! (ornate or panel, either default); `Specimens::key` takes the page's keys. LOOK1-E2: a seventh page, Tiles, draws a
 //! fixture map (`TILES_MAP`: a pond with an island, a wall run, a lone water cell, a 1-wide channel) from a set picked
-//! among the asset layers' `tilesets/` (`theme::layers`), square or tilted at 1x-3x, with the set's transition pieces
+//! among the asset layers' `tilesets/` (`theme::layers`), square or tilted at 1x-3x (its Ground switch, REGIONGROUND1-E1:
+//! the same map through `ground::compose`), with the set's transition pieces
 //! (`autotile`) when it has them, else the mask numbers.
 
 use crate::autotile::{block_edges, corner_pieces};
 use crate::canvas::{rgb, rgba, Image, Rect, Rgba};
+use crate::ground::{self, GroundJob, GroundKey, GroundLayer};
 use crate::fx::{Beam, Camera, Clock, Effect, Flash, Fx, Layer, Look, Looped, Orbit, Projectile, Ring, ShakeLimits, ShakeTable, Sparks, Trail, PRIM_KINDS, SHAKE_PRESETS};
 use crate::portrait_fx::{self, Budget, Cue, ExpressionFx, Motion, PortraitFx, PortraitOpts, Tier, MOTION_SAMPLES};
 use aegis_core::assets::{Face, Layers};
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
-use crate::painter::Typeface;
+use crate::painter::{Painter, Typeface};
 use crate::panes::{ask_dialog, ask_key, backdrop, backdrop_pane, menu_column, menu_column_styled, menu_key, menu_title, slot_card, tab_key, tab_rail, AskView, Corner, MenuItem, MenuStyle, SlotView};
 use crate::screen::Key;
 use crate::theme::{self, Theme, FRAME_ROLES, ROLES};
@@ -95,6 +97,8 @@ pub enum KitAct {
     TileView(usize),
     TileZoom(usize),
     TilePan(i32, i32),
+    /// REGIONGROUND1-E1: the Tiles page's Ground switch: the fixture map through `ground::compose`.
+    TileGround,
 }
 
 pub const TABS: [&str; 3] = ["First", "Second", "Third"];
@@ -233,6 +237,8 @@ pub struct TileDemo {
     pub view: usize,
     pub zoom: usize,
     pub pan: (i32, i32),
+    /// The Ground switch (REGIONGROUND1-E1): the fixture map composed, no tile set needed.
+    pub ground: bool,
     cache: RefCell<TileCache>,
 }
 
@@ -245,6 +251,10 @@ struct TileCache {
     pairs: HashMap<String, Vec<(String, String)>>,
     /// Layer-relative file -> its image.
     images: HashMap<String, Option<Image>>,
+    /// The Ground switch's fixture textures by art px per cell (no file needed).
+    ground_tex: HashMap<(i32, i32), [Image; 3]>,
+    /// Their jobs' keys, made once (`GroundKey::of` hashes every texture pixel).
+    ground_keys: HashMap<(i32, i32), GroundKey>,
 }
 
 impl TileCache {
@@ -578,6 +588,7 @@ impl Specimens {
             KitAct::TileView(i) => format!("tile view {}", TILE_VIEWS[*i % TILE_VIEWS.len()].0),
             KitAct::TileZoom(i) => format!("tile zoom {}x", TILE_ZOOMS[*i % TILE_ZOOMS.len()]),
             KitAct::TilePan(dx, dy) => format!("tile pan ({dx}, {dy})"),
+            KitAct::TileGround => format!("composed ground {}", if self.tiles.ground { "off" } else { "on" }),
         };
         match a {
             KitAct::Tab(i) => self.tab = i % TABS.len(),
@@ -639,6 +650,7 @@ impl Specimens {
                 self.tiles.pan = (0, 0);
             }
             KitAct::TilePan(dx, dy) => self.tiles.pan = ((self.tiles.pan.0 + dx).max(0), (self.tiles.pan.1 + dy).max(0)),
+            KitAct::TileGround => self.tiles.ground = !self.tiles.ground,
             KitAct::Press(_) | KitAct::Close | KitAct::Icon(_) | KitAct::Segment(..) | KitAct::Effect(_) | KitAct::Shake(_) | KitAct::PortraitToggle(_) | KitAct::PortraitFire(_) | KitAct::PortraitMotion(_) => {}
         }
     }
@@ -1293,6 +1305,9 @@ impl Specimens {
             ui.tab(&format!("kit.tiles.zoom.{i}"), Rect::new(x, row1, w, 14), &label, wrap(KitAct::TileZoom(i)), d.zoom == i);
             x += w + 2;
         }
+        x += 6;
+        let ground_w = (ui.p.text_w("Ground", BODY) + 12.0).ceil() as i32;
+        ui.tab("kit.tiles.ground", Rect::new(x, row1, ground_w, 14), "Ground", wrap(KitAct::TileGround), d.ground);
 
         // The map, in cells of the view at the zoom; the pan keeps it on the stage.
         let (_, vw, vh) = TILE_VIEWS[d.view % TILE_VIEWS.len()];
@@ -1317,7 +1332,9 @@ impl Specimens {
             said_x += 116;
         }
         let have = (1..=14u8).filter(|m| pair.is_some() && cache.image(&piece_rel(*m)).is_some()).count();
-        let said = if sets.is_empty() {
+        let said = if d.ground {
+            "Composed ground: three fixture layers, a generated edge, a sunken layer (needs no tile set).".to_string()
+        } else if sets.is_empty() {
             "No tilesets/ in the asset layers: flat colours and the mask numbers.".to_string()
         } else if pair.is_some() {
             format!("{upper} over {lower}: {have} of 14 pieces (a number marks a corner whose piece is missing).")
@@ -1332,6 +1349,12 @@ impl Specimens {
         ui.p.fill(stage, STAGE_BG);
         let map = Rect::new(stage.x - pan.0 * cw, stage.y - pan.1 * ch, cols * cw, rows * ch);
         let cell = |x: i32, y: i32| Rect::new(map.x + x * cw, map.y + y * ch, cw, ch);
+        if d.ground {
+            ui.push_clip(stage.intersect(map));
+            draw_ground_fixture(&mut ui.p, &mut cache, map, (vw, vh));
+            ui.pop_clip();
+            return;
+        }
         let is_upper = |x: i32, y: i32| tiles_map_cell(x, y) != b'~';
         let is_block = |x: i32, y: i32| (0..cols).contains(&x) && (0..rows).contains(&y) && tiles_map_cell(x, y) == b'#';
         ui.push_clip(stage.intersect(map));
@@ -1398,6 +1421,41 @@ impl Specimens {
             }
         }
     }
+}
+
+/// The Tiles page's Ground switch: `TILES_MAP` through the composer, at the art px per cell of the view's shape (16 x 16
+/// square, 16 x 12 tilted), three layers of fixture textures: `.` the lowest, toned; `~` a sunken layer; `#` an upper
+/// ground with wear and strays.
+fn draw_ground_fixture(p: &mut Painter, cache: &mut TileCache, map: Rect, view: (i32, i32)) {
+    let cell = (ground::CELL_PX, ground::CELL_PX * view.1 / view.0);
+    let (tw, th) = (ground::TEX_CELLS * cell.0, ground::TEX_CELLS * cell.1);
+    let TileCache { ground_tex, ground_keys, .. } = cache;
+    let tex = ground_tex.entry(cell).or_insert_with(|| {
+        [
+            ground::two_tone(tw, th, rgb(74, 66, 56), rgb(70, 62, 53), 1),
+            ground::two_tone(tw, th, rgb(38, 56, 80), rgb(35, 52, 75), 2),
+            ground::two_tone(tw, th, rgb(112, 108, 100), rgb(100, 97, 90), 3),
+        ]
+    });
+    let (cols, rows) = (TILES_MAP[0].len() as i32, TILES_MAP.len() as i32);
+    let cells: Vec<u8> = (0..rows)
+        .flat_map(|y| {
+            (0..cols).map(move |x| match tiles_map_cell(x, y) {
+                b'~' => 1,
+                b'#' => 2,
+                _ => 0,
+            })
+        })
+        .collect();
+    let blocked = vec![false; cells.len()];
+    let layers = [
+        GroundLayer { tex: Some(&tex[0]), tone: 0.13, ..GroundLayer::flat(0, TILE_UPPER) },
+        GroundLayer { tex: Some(&tex[1]), tone: 0.05, sunken: true, ..GroundLayer::flat(1, TILE_LOWER) },
+        GroundLayer { tex: Some(&tex[2]), tone: 0.13, wear: 0.1, strays: true, ..GroundLayer::flat(2, TILE_BLOCK) },
+    ];
+    let job = GroundJob { seed: 7, cols, rows, cell, cells: &cells, blocked: &blocked, layers: &layers, placed: &[] };
+    let key = ground_keys.entry(cell).or_insert_with(|| GroundKey::of("gallery.tiles", &job)).clone();
+    ground::draw(p, key, map, || ground::compose(&job));
 }
 
 /// The theme the Theme page's switch `view` puts in force: the engine default, the layers' theme, or it with frames

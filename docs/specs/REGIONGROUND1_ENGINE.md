@@ -114,6 +114,13 @@ For a pixel with top ground g:
 Order: base colour, worn band, stray, bite. A stray only comes from a layer whose row says so (stones off a road, none
 off moss).
 
+As built (REGIONGROUND1-E1): `U_k` holds every higher rank, so where two grounds meet a middle one's `bl` reads the same
+with none of its cells near, and the table read literally shows a third ground between them. So these three read a layer's
+own cells' share, `own_k = bl_k - bl_(k+1)` (exactly 0 with none of its cells in reach; equal to `bl_k` on the top rank
+and on two layers, whose output is unchanged). Worn band: the largest `wear_k` with `own_k + (n - .5) x .62 > .34`, so a
+ground's wear fades in with its share. Stray: `own_k` in (.16, .42). Bite: the ground under g with the largest share
+(`1 - bl_1` for the lowest).
+
 ### 2.5 Crispness
 
 Every test is a threshold on art pixels and colours are never blended between grounds, so an edge is hard at art
@@ -129,6 +136,8 @@ lips stay for a map without.
 ### 2.7 Determinism
 
 `compose` is a pure function of the job. Float steps are add and multiply only, no libm; the box passes are integers.
+As built (REGIONGROUND1-E1): add, multiply and IEEE division (integer sums over a constant, lattice fractions), all
+correctly rounded; no libm.
 The output does not depend on the view's scale, the camera, the frame or the party. Nothing it makes reaches a save.
 
 ## 3. Patches and marks (slice E2; E1 takes the fields and ignores them)
@@ -187,6 +196,9 @@ A mark placed on purpose (ruts along a road) is a PROPS1 `ground` prop in the ma
 
 The content hash covers the job's cells, legend rows and each texture's identity (`panes::picture_id`, made
 `pub(crate)`). `draw` copies the physical copy's rows inside the clip, as `panes::blit` does. No per-pixel blend, so a
+The content hash covers the job's cells, legend rows and each texture's identity. As built (REGIONGROUND1-E1): every
+pixel of each texture, not `panes::picture_id` (which stays private): real content, so no address, about 16 KB a texture,
+hashed by `GroundKey::of` when the job changes, never each frame. `draw` copies the physical copy's rows inside the clip, as `panes::blit` does. No per-pixel blend, so a
 hit costs less than today's per-cell tile loop. A map whose physical copy would pass `PHYSICAL_MAX` 64 MB draws the art
 image through `Painter::image` instead (nearest, per frame; slower, never wrong). No shipped map reaches it.
 
@@ -251,7 +263,7 @@ E2:
 
 | Row | Files |
 | --- | --- |
-| E1 | `engine/crates/aegis_ui/src/{ground.rs (new), panes.rs (`picture_id` visibility), specimens.rs, lib.rs}`, `src/bin/ground_compose.rs` (new), `tests/ground.rs` (new), `engine/README.md`, `docs/EFFICIENCY.md` |
+| E1 | `engine/crates/aegis_ui/src/{ground.rs (new), panes.rs (`picture_id` visibility), specimens.rs, lib.rs}`, `src/bin/ground_compose.rs` (new), `tests/ground.rs` (new), `engine/README.md`, `docs/EFFICIENCY.md` |; `engine/crates/aegis_ui/src/{ground.rs (new), specimens.rs, lib.rs}`, `src/bin/ground_compose.rs` (new), `tests/ground.rs` (new), `engine/README.md`, `docs/EFFICIENCY.md` |
 | E2 | `engine/crates/aegis_ui/src/ground.rs`, `tests/ground.rs` |
 
 `ground_compose`: `cargo run -q -p aegis_ui --bin ground_compose -- JOB.json OUT.png`. The job names cells, a legend of
