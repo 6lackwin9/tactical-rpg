@@ -226,7 +226,7 @@ Per batch: `tools/portraits/artqueue.py request` per image with its record; the 
 else `fix`, else a re-roll), at most 16 colours (warning) and mean luminance at most 25 %; `board.py`; the user picks
 on the board. A6: the title backdrop (16:9, the MENU2 composition: cathedral left, open sky right; n 3), the crest
 (the weeping cathedral eye in gilt and basalt, no text, centred on a flat dark ground; n 2), the `ornate` corner sheet
-(4 gilt basalt corners and a divider on magenta, cut with `tools/sprites/props_cut.py`; n 2).
+(4 gilt basalt corners and a divider on magenta, cut with `tools/sprites/props_cut.py`; n 2). Picks and the story card layout: decision "LOOK1-A6 picks: corners, crest, story card banner, title" (M2 builds the banner on the card's top edge).
 
 ## R: place the picks (game data, asset; K, T, the picks; SUNKWARD1 for location rows)
 
