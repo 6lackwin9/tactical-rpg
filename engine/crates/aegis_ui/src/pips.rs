@@ -9,14 +9,16 @@
 //! Levels are counted in slots and may be fractional while a screen animates them.
 //! A screen builds a `PipGauge` from its own numbers each frame and draws it; it pushes one info widget (its reading in
 //! pip codes, the hover card the screen's). The widget names no game: the block colours are the caller's. `samples` are
-//! the UI Gallery's states.
+//! the UI Gallery's states. LAYOUT720-E4: the gauge draws in the units of the screen's grid (`Ui::m`), its positions still
+//! sums from the row's start; the consts are old units, and `pips_w` and `pip_rect` answer in them (`_on`: on any grid).
 
 use crate::canvas::{rgba, Rect, Rgba};
-use crate::theme::th;
+use crate::theme::{th, Metrics};
 use crate::timeline::GHOST_ALPHA;
-use crate::ui::{Tip, Ui, SMALL};
+use crate::ui::{Tip, Ui};
+use aegis_layout::Insets;
 
-/// One slot's size and the gap between slots (canvas pixels): 12 slots take 71.
+/// One slot's size and the gap between slots (old units): 12 slots take 71.
 pub const PIP_W: i32 = 5;
 pub const PIP_H: i32 = 8;
 pub const PIP_GAP: i32 = 1;
@@ -45,18 +47,28 @@ pub fn count(n: i32, unit: i32) -> i32 {
     }
 }
 
-/// The width of `slots` slots side by side.
+/// The width of `slots` slots side by side on an unmoved screen.
 pub fn pips_w(slots: i32) -> i32 {
+    pips_w_on(slots, 1)
+}
+
+/// `pips_w` on any grid, `g` being the view's units per old unit.
+pub fn pips_w_on(slots: i32, g: i32) -> i32 {
     if slots <= 0 {
         0
     } else {
-        slots * (PIP_W + PIP_GAP) - PIP_GAP
+        (slots * (PIP_W + PIP_GAP) - PIP_GAP) * g
     }
 }
 
-/// Slot `k`'s rect (0 = the first) for a row starting at `x`, centred on `cy`: fixed whatever the plan.
+/// Slot `k`'s rect (0 = the first) for a row starting at `x`, centred on `cy`, on an unmoved screen: fixed whatever the plan.
 pub fn pip_rect(x: i32, cy: i32, k: i32) -> Rect {
-    Rect::new(x + k * (PIP_W + PIP_GAP), cy - PIP_H / 2, PIP_W, PIP_H)
+    pip_rect_on(x, cy, k, 1)
+}
+
+/// `pip_rect` on any grid, `g` being the view's units per old unit.
+pub fn pip_rect_on(x: i32, cy: i32, k: i32, g: i32) -> Rect {
+    Rect::new(x + k * (PIP_W + PIP_GAP) * g, cy - PIP_H / 2 * g, PIP_W * g, PIP_H * g)
 }
 
 /// A planned block: its points, its fill colour (the caller's) and whether it is a ghost (drawn at `GHOST_ALPHA`).
@@ -238,9 +250,10 @@ impl PipGauge {
 
     /// The width the gauge takes with its labels.
     pub fn width<A: Clone>(&self, ui: &mut Ui<A>) -> i32 {
-        let mut w = pips_w(self.slots);
+        let m = ui.m();
+        let mut w = pips_w_on(self.slots, m.g);
         for l in [&self.before, &self.after].into_iter().flatten() {
-            w += label_w(ui, l) + LABEL_GAP;
+            w += label_w(ui, l) + m.u(LABEL_GAP);
         }
         w
     }
@@ -248,28 +261,29 @@ impl PipGauge {
     /// Draws the gauge from `x`, its slots centred on `cy`, and pushes the info widget `id` (kind "pips", its reading,
     /// the hover card); returns the widget's rect.
     pub fn draw<A: Clone>(&self, ui: &mut Ui<A>, id: &str, x: i32, cy: i32) -> Rect {
-        let lh = ui.p.line_h(SMALL).ceil() as i32;
-        let h = PIP_H.max(lh);
+        let m = ui.m();
+        let lh = ui.p.line_h(m.small).ceil() as i32;
+        let h = m.u(PIP_H).max(lh);
         let mut at = x;
         if let Some(l) = &self.before {
-            ui.p.text(at as f32, (cy - lh / 2) as f32, l, SMALL, self.colours.alert);
-            at += label_w(ui, l) + LABEL_GAP;
+            ui.p.text(at as f32, (cy - lh / 2) as f32, l, m.small, self.colours.alert);
+            at += label_w(ui, l) + m.u(LABEL_GAP);
         }
         let c = self.colours;
         // the fixed row: sockets up to the points held, crossed slots above
         for k in 0..self.slots {
-            let r = pip_rect(at, cy, k);
+            let r = pip_rect_on(at, cy, k, m.g);
             let held = (self.edge - k as f32).clamp(0.0, 1.0);
             let edge = if self.alert { c.alert } else { mix(c.crossed, c.socket_edge, held) };
             if held > 0.0 {
-                ui.p.fill(inner(r), faded(c.socket, held));
+                ui.p.fill(inner(r, &m), faded(c.socket, held));
             }
             if held < 1.0 {
                 // the cross: a diagonal from the bottom left to the top right
                 let cross = faded(if self.alert { c.alert } else { c.crossed }, 1.0 - held);
-                for i in 0..(r.h - 2) {
-                    let px = r.x + 1 + i * (r.w - 2) / (r.h - 2);
-                    ui.p.fill(Rect::new(px, r.y + r.h - 2 - i, 1, 1), cross);
+                let (across, up) = (PIP_W - 2, PIP_H - 2);
+                for i in 0..up {
+                    ui.p.fill(Rect::new(r.x + m.u(1 + i * across / up), r.y + m.u(PIP_H - 2 - i), m.u(1), m.u(1)), cross);
                 }
             }
             outline(ui, r, edge, false);
@@ -280,49 +294,51 @@ impl PipGauge {
             if shown <= 0.0 {
                 continue;
             }
-            let full = pip_rect(at, cy, b.from);
-            let w = ((shown * (PIP_W + PIP_GAP) as f32).round() as i32 - PIP_GAP).max(2);
-            let r = Rect::new(full.x, full.y, w, PIP_H);
+            let full = pip_rect_on(at, cy, b.from, m.g);
+            let w = ((shown * m.uf((PIP_W + PIP_GAP) as f32)).round() as i32 - m.u(PIP_GAP)).max(m.u(2));
+            let r = Rect::new(full.x, full.y, w, full.h);
             let fill = if b.ghost { faded(b.colour, GHOST_ALPHA) } else { b.colour };
-            ui.p.fill(inner(r), fill);
+            ui.p.fill(inner(r, &m), fill);
             let tick = mix(b.colour, [0, 0, 0, 255], TICK_DARK);
             for j in 1..b.slots {
-                let tx = full.x + j * (PIP_W + PIP_GAP) - 1;
-                if tx < r.x + r.w - 1 {
-                    ui.p.fill(Rect::new(tx, r.y + 2, 1, r.h - 4), tick);
+                let tx = full.x + m.u(j * (PIP_W + PIP_GAP) - 1);
+                if tx < r.x + r.w - m.u(1) {
+                    ui.p.fill(Rect::new(tx, r.y + m.u(2), m.u(1), r.h - m.u(4)), tick);
                 }
             }
             outline(ui, r, mix(b.colour, [255, 255, 255, 255], RIM_LIGHT), true);
         }
-        at += pips_w(self.slots);
+        at += pips_w_on(self.slots, m.g);
         if let Some(l) = &self.after {
-            at += LABEL_GAP;
-            ui.p.text(at as f32, (cy - lh / 2) as f32, l, SMALL, self.colours.alert);
+            at += m.u(LABEL_GAP);
+            ui.p.text(at as f32, (cy - lh / 2) as f32, l, m.small, self.colours.alert);
             at += label_w(ui, l);
         }
-        let rect = Rect::new(x, cy - h / 2, (at - x).max(1), h);
+        let rect = Rect::new(x, cy - h / 2, (at - x).max(m.u(1)), h);
         ui.push(id, "pips", self.reading(), rect, true, false, None, self.tip.clone());
         rect
     }
 }
 
-/// `r` less its 1 px outline.
-fn inner(r: Rect) -> Rect {
-    Rect::new(r.x + 1, r.y + 1, (r.w - 2).max(0), (r.h - 2).max(0))
+/// `r` less its outline.
+fn inner(r: Rect, m: &Metrics) -> Rect {
+    r.pad(Insets::all(m.u(1)))
 }
 
-/// A 1 px outline of `r`; `round` leaves the four corner pixels out (a capsule's rounded look).
+/// An outline of `r`, 1 old unit thick; `round` leaves the four corners out (a capsule's rounded look).
 fn outline<A: Clone>(ui: &mut Ui<A>, r: Rect, c: Rgba, round: bool) {
-    let k = i32::from(round);
-    ui.p.fill(Rect::new(r.x + k, r.y, r.w - 2 * k, 1), c);
-    ui.p.fill(Rect::new(r.x + k, r.y + r.h - 1, r.w - 2 * k, 1), c);
-    ui.p.fill(Rect::new(r.x, r.y + 1, 1, r.h - 2), c);
-    ui.p.fill(Rect::new(r.x + r.w - 1, r.y + 1, 1, r.h - 2), c);
+    let t = ui.m().u(1);
+    let k = if round { t } else { 0 };
+    ui.p.fill(Rect::new(r.x + k, r.y, r.w - 2 * k, t), c);
+    ui.p.fill(Rect::new(r.x + k, r.y + r.h - t, r.w - 2 * k, t), c);
+    ui.p.fill(Rect::new(r.x, r.y + t, t, r.h - 2 * t), c);
+    ui.p.fill(Rect::new(r.x + r.w - t, r.y + t, t, r.h - 2 * t), c);
 }
 
 /// A label's width.
 pub fn label_w<A: Clone>(ui: &mut Ui<A>, s: &str) -> i32 {
-    ui.p.text_w(s, SMALL).ceil() as i32
+    let small = ui.m().small;
+    ui.p.text_w(s, small).ceil() as i32
 }
 
 /// `c` at `k` of its alpha.

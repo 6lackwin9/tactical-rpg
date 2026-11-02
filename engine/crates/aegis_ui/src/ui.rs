@@ -268,7 +268,7 @@ impl<'a, A: Clone> Ui<'a, A> {
     }
 
     /// `frame` as this `Ui` draws it: under `corner_size`, its corners at that size. None: as the sidecar says.
-    fn cornered(&self, frame: &Frame) -> Option<Frame> {
+    pub(crate) fn cornered(&self, frame: &Frame) -> Option<Frame> {
         self.corner.map(|size| {
             let mut f = frame.clone();
             f.nine.corner_size = size;

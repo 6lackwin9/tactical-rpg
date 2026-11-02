@@ -9,18 +9,25 @@
 //! their widgets for the agent link and the keyboard focus like every widget (ids `<id>.<key>` or `<id>.<i>`), and lay
 //! the rects they place themselves on the theme's grid (`layout.grid`; the fixed spec offsets, e.g. the slot card's
 //! 112 x 63 thumbnail at `padding`, are drawn as given).
+//!
+//! LAYOUT720-E4: a pane is worked out from the rect it is given, in tokens of the screen's grid (`Ui::m`): anchors and cuts
+//! where a child cannot be larger than its parent, sums of tokens where it can (`Rect::place` would clamp it, and a question
+//! must keep its answers). The consts are old units; a function with no `Ui` to read answers in them unless it is `_on` a
+//! grid's `Metrics`.
 
 use crate::canvas::{Canvas, Image, Rect, Rgba};
-use crate::painter::{Painter, Typeface};
+use crate::painter::{Painter, Typeface, View};
 use crate::screen::Key;
-use crate::ui::{tip, Glyph, Tip, Ui, BODY, HEAD, SMALL, TITLE};
+use crate::theme::{Frame, Metrics, Theme};
+use crate::ui::{tip, Glyph, Tip, Ui};
+use aegis_layout::{frac, Anchor, Insets, Stack};
 use std::cell::{Cell, RefCell};
 
-/// The ask dialog's least size at the Normal text size (logical px; the spec's 600 x 300 at the 1280 x 720
+/// The ask dialog's least size at the Normal text size (old units; the spec's 600 x 300 at the 1280 x 720
 /// reference window); it grows with the text size and the question.
 pub const ASK_MIN_W: i32 = 300;
 pub const ASK_MIN_H: i32 = 150;
-/// The tab rail's width (settings: 120) and its rows (18 high, one every 20).
+/// The tab rail's width (settings: 120) and its rows (18 high, one every 20), in old units.
 pub const RAIL_W: i32 = 120;
 pub const TAB_H: i32 = 18;
 pub const TAB_STEP: i32 = 20;
@@ -30,22 +37,42 @@ pub const THUMB_H: i32 = 63;
 pub const PORTRAIT: i32 = 20;
 pub const CORNER: i32 = 16;
 
-/// `v` rounded to the nearest step of the theme's grid (`layout.grid`).
+/// `v` rounded to the nearest step of the theme's grid in old units (`layout.grid`; on any grid `snap_on(v, m.grid)`).
 pub fn snap(v: i32) -> i32 {
-    let g = crate::theme::th().layout.grid.max(1);
+    snap_on(v, crate::theme::th().layout.grid)
+}
+
+/// `v` rounded up to the theme's grid in old units (sizes that must hold their content).
+pub fn snap_up(v: i32) -> i32 {
+    snap_up_on(v, crate::theme::th().layout.grid)
+}
+
+/// `v` rounded down to the theme's grid in old units (sizes that must stay inside their room).
+pub fn snap_down(v: i32) -> i32 {
+    snap_down_on(v, crate::theme::th().layout.grid)
+}
+
+/// `snap` to a step of `step` (`Metrics::grid`).
+pub fn snap_on(v: i32, step: i32) -> i32 {
+    let g = step.max(1);
     (v + g / 2).div_euclid(g) * g
 }
 
-/// `v` rounded up to the theme's grid (sizes that must hold their content).
-pub fn snap_up(v: i32) -> i32 {
-    let g = crate::theme::th().layout.grid.max(1);
+/// `snap_up` to a step of `step`.
+pub fn snap_up_on(v: i32, step: i32) -> i32 {
+    let g = step.max(1);
     (v + g - 1).div_euclid(g) * g
 }
 
-/// `v` rounded down to the theme's grid (sizes that must stay inside their room).
-pub fn snap_down(v: i32) -> i32 {
-    let g = crate::theme::th().layout.grid.max(1);
+/// `snap_down` to a step of `step`.
+pub fn snap_down_on(v: i32, step: i32) -> i32 {
+    let g = step.max(1);
     v.div_euclid(g) * g
+}
+
+/// The tokens of an unmoved screen, for what answers in old units with no view to read.
+fn old_metrics(t: &Theme) -> Metrics {
+    Metrics::of(t, View::fit(1280, 720))
 }
 
 /// `s` shortened with "..." to fit `max_w` in `face` (`Painter::fit` for any face).
@@ -264,7 +291,7 @@ pub fn backdrop_pane<A: Clone>(ui: &mut Ui<A>, id: &str, img: Option<&Image>, na
 /// action: the `focus` border (and the `layout.focus_glow` ring) even while idle.
 #[allow(clippy::too_many_arguments)]
 fn pane_button<A: Clone>(ui: &mut Ui<A>, id: &str, r: Rect, label: &str, hotkey: Option<char>, action: A, enabled: bool, primary: bool, size: f32, left: bool, t: Tip) {
-    let th = ui.t.clone();
+    let (th, m) = (ui.t.clone(), ui.m());
     let hover = enabled && ui.hover(r);
     let fill = if hover { th.card_hot } else { th.card };
     let border = if enabled && (hover || primary) { th.focus } else if enabled { th.edge_live } else { th.edge };
@@ -273,20 +300,20 @@ fn pane_button<A: Clone>(ui: &mut Ui<A>, id: &str, r: Rect, label: &str, hotkey:
         (true, true) => "button_hot",
         (true, false) => "button",
     };
-    let glow = th.layout.focus_glow;
+    let glow = m.focus_glow;
     if glow > 0 && enabled && (hover || primary) {
-        ui.p.panel(Rect::new(r.x - glow, r.y - glow, r.w + 2 * glow, r.h + 2 * glow), [0, 0, 0, 0], th.focus, th.layout.radius + glow as f32);
+        ui.p.panel(r.pad(Insets::all(-glow)), [0, 0, 0, 0], th.focus, m.radius + glow as f32);
     }
-    ui.p.skin(th.frame(role), r, fill, border, th.layout.radius);
-    let pad = th.layout.padding as f32;
+    ui.skin(role, r, fill, border, m.radius);
+    let pad = m.padding as f32;
     let col = if enabled { th.ink_on(role) } else { th.dim };
     let mut room = r.w as f32 - 2.0 * pad;
     if let Some(k) = hotkey {
         let hk = k.to_uppercase().to_string();
-        let lh = ui.p.line_h(SMALL);
-        let w = ui.p.text_w(&hk, SMALL);
-        ui.p.text((r.x + r.w) as f32 - pad - w, r.y as f32 + (r.h as f32 - lh) / 2.0, &hk, SMALL, th.dim);
-        room -= w + th.layout.gutter as f32;
+        let lh = ui.p.line_h(m.small);
+        let w = ui.p.text_w(&hk, m.small);
+        ui.p.text((r.x + r.w) as f32 - pad - w, r.y as f32 + (r.h as f32 - lh) / 2.0, &hk, m.small, th.dim);
+        room -= w + m.gutter as f32;
     }
     let lh = ui.p.line_h(size);
     let y = r.y as f32 + (r.h as f32 - lh) / 2.0;
@@ -308,40 +335,41 @@ fn pane_button<A: Clone>(ui: &mut Ui<A>, id: &str, r: Rect, label: &str, hotkey:
 /// The part of a `MenuStyle::Text` row that takes the mouse: its label's measured width (the room left of a hotkey at
 /// most) plus `MENU_TEXT_MARGIN` each side, at the row's height.
 fn text_hit<A: Clone>(ui: &mut Ui<A>, r: Rect, label: &str, hotkey: Option<char>, size: f32) -> Rect {
-    let pad = ui.t.layout.padding;
-    let mut room = r.w as f32 - 2.0 * pad as f32;
+    let m = ui.m();
+    let mut room = r.w as f32 - 2.0 * m.padding as f32;
     if let Some(k) = hotkey {
-        room -= ui.p.text_w(&k.to_uppercase().to_string(), SMALL) + ui.t.layout.gutter as f32;
+        room -= ui.p.text_w(&k.to_uppercase().to_string(), m.small) + m.gutter as f32;
     }
     let w = ui.p.text_w(label, size).min(room.max(0.0)).ceil() as i32;
-    Rect::new(r.x + pad - MENU_TEXT_MARGIN, r.y, w + 2 * MENU_TEXT_MARGIN, r.h)
+    let margin = m.u(MENU_TEXT_MARGIN);
+    Rect::new(r.x + m.padding - margin, r.y, w + 2 * margin, r.h)
 }
 
 /// A row of `MenuStyle::Text` laid out in `r`, clicked in `hit` (`text_hit`): no panel and no marker, the label (left, at
-/// the padding) and hotkey with a 1 px `bg` shadow. Its text is `text` at `MENU_TEXT_IDLE` alpha, `dim` when disabled and
+/// the padding) and hotkey with a `bg` shadow 1 old unit away. Its text is `text` at `MENU_TEXT_IDLE` alpha, `dim` when disabled and
 /// `gold` when it is the active item: the one with the keyboard focus, which the mouse moves too (`focus::hover_target`),
 /// so one item is lit at a time; the mouse lights a row by itself only while no focus shows.
 #[allow(clippy::too_many_arguments)]
 fn text_row<A: Clone>(ui: &mut Ui<A>, id: &str, r: Rect, hit: Rect, label: &str, hotkey: Option<char>, action: A, enabled: bool, size: f32, t: Tip) {
-    let th = ui.t.clone();
+    let (th, m) = (ui.t.clone(), ui.m());
     let lit = enabled && (ui.focused(id) || (!ui.focus_shown() && ui.hover(hit)));
     let mut col = if !enabled { th.dim } else if lit { th.gold } else { th.text };
     if enabled && !lit {
         col[3] = MENU_TEXT_IDLE;
     }
-    let pad = th.layout.padding as f32;
+    let (pad, shadow) = (m.padding as f32, m.uf(1.0));
     let mut room = r.w as f32 - 2.0 * pad;
     if let Some(k) = hotkey {
         let hk = k.to_uppercase().to_string();
-        let (lh, w) = (ui.p.line_h(SMALL), ui.p.text_w(&hk, SMALL));
+        let (lh, w) = (ui.p.line_h(m.small), ui.p.text_w(&hk, m.small));
         let (hx, hy) = ((r.x + r.w) as f32 - pad - w, r.y as f32 + (r.h as f32 - lh) / 2.0);
-        ui.p.text(hx + 1.0, hy + 1.0, &hk, SMALL, th.bg);
-        ui.p.text(hx, hy, &hk, SMALL, th.dim);
-        room -= w + th.layout.gutter as f32;
+        ui.p.text(hx + shadow, hy + shadow, &hk, m.small, th.bg);
+        ui.p.text(hx, hy, &hk, m.small, th.dim);
+        room -= w + m.gutter as f32;
     }
     let y = r.y as f32 + (r.h as f32 - ui.p.line_h(size)) / 2.0;
     let shown = ui.p.fit(label, size, room.max(0.0));
-    ui.p.text(r.x as f32 + pad + 1.0, y + 1.0, &shown, size, th.bg);
+    ui.p.text(r.x as f32 + pad + shadow, y + shadow, &shown, size, th.bg);
     ui.p.text(r.x as f32 + pad, y, &shown, size, col);
     if shown != label {
         ui.p.mark_cut(label);
@@ -364,7 +392,7 @@ pub enum MenuStyle {
 
 /// A `MenuStyle::Text` row's idle text alpha (the `text` role, dimmer than the active item's `gold`).
 pub const MENU_TEXT_IDLE: u8 = 190;
-/// How far past its label a `MenuStyle::Text` row takes the mouse, each side.
+/// How far past its label a `MenuStyle::Text` row takes the mouse, each side (old units).
 pub const MENU_TEXT_MARGIN: i32 = 3;
 
 /// One item of a `menu_column`: its id key, label, hotkey (a letter typed on the screen, `menu_key`), action,
@@ -402,20 +430,20 @@ pub fn menu_rect(x: i32, y: i32, w: i32, h: i32, step: i32, i: usize) -> Rect {
     Rect::new(x, y + i as i32 * step, w, h)
 }
 
-/// A menu column's title block (the display face): `title` in `HEAD` and `gold`, `subtitle` (may be empty) under it
+/// A menu column's title block (the display face): `title` in `head` and `gold`, `subtitle` (may be empty) under it
 /// in `dim`, both fitted to `w`; returns the y below it plus the gutter (where the column can start).
 pub fn menu_title<A: Clone>(ui: &mut Ui<A>, x: i32, y: i32, w: i32, title: &str, subtitle: &str) -> i32 {
-    let t = ui.t.clone();
-    text_cut(&mut ui.p, Typeface::Display, x as f32, y as f32, title, HEAD, w as f32, t.gold);
-    let mut yy = y as f32 + ui.p.line_h_face(Typeface::Display, HEAD);
+    let (t, m) = (ui.t.clone(), ui.m());
+    text_cut(&mut ui.p, Typeface::Display, x as f32, y as f32, title, m.head, w as f32, t.gold);
+    let mut yy = y as f32 + ui.p.line_h_face(Typeface::Display, m.head);
     if !subtitle.is_empty() {
-        text_cut(&mut ui.p, Typeface::Body, x as f32, yy, subtitle, BODY, w as f32, t.dim);
-        yy += ui.p.line_h(BODY);
+        text_cut(&mut ui.p, Typeface::Body, x as f32, yy, subtitle, m.body, w as f32, t.dim);
+        yy += ui.p.line_h(m.body);
     }
-    snap_up(yy.ceil() as i32 + t.layout.gutter)
+    snap_up_on(yy.ceil() as i32 + m.gutter, m.grid)
 }
 
-/// A vertical list of large menu buttons (`TITLE` size, label left, hotkey right in `dim`) at (x, y), each `w` x `h`,
+/// A vertical list of large menu buttons (`title` size, label left, hotkey right in `dim`) at (x, y), each `w` x `h`,
 /// one every `step`; the first enabled item is the primary (`focus` border and `focus_glow`). Ids `<id>.<key>`, in
 /// order top-down (the keyboard focus walks them so); a disabled item takes no click and shows its reason on hover.
 /// Returns the item under the mouse (enabled or not).
@@ -429,18 +457,19 @@ pub fn menu_column<A: Clone>(ui: &mut Ui<A>, id: &str, x: i32, y: i32, w: i32, h
 #[allow(clippy::too_many_arguments)]
 pub fn menu_column_styled<A: Clone>(ui: &mut Ui<A>, id: &str, x: i32, y: i32, w: i32, h: i32, step: i32, items: &[MenuItem<A>], style: MenuStyle) -> Option<usize> {
     let primary = items.iter().position(|i| i.enabled);
+    let title = ui.m().title;
     let mut hovered = None;
     for (i, it) in items.iter().enumerate() {
         let r = menu_rect(x, y, w, h, step, i);
-        let hit = if style == MenuStyle::Text { text_hit(ui, r, &it.label, it.hotkey, TITLE) } else { r };
+        let hit = if style == MenuStyle::Text { text_hit(ui, r, &it.label, it.hotkey, title) } else { r };
         if ui.hover(hit) {
             hovered = Some(i);
         }
         let t = if it.tip.is_empty() { Vec::new() } else { tip(&it.label, &it.tip) };
         let row = format!("{id}.{}", it.key);
         match style {
-            MenuStyle::Framed => pane_button(ui, &row, r, &it.label, it.hotkey, it.action.clone(), it.enabled, primary == Some(i), TITLE, true, t),
-            MenuStyle::Text => text_row(ui, &row, r, hit, &it.label, it.hotkey, it.action.clone(), it.enabled, TITLE, t),
+            MenuStyle::Framed => pane_button(ui, &row, r, &it.label, it.hotkey, it.action.clone(), it.enabled, primary == Some(i), title, true, t),
+            MenuStyle::Text => text_row(ui, &row, r, hit, &it.label, it.hotkey, it.action.clone(), it.enabled, title, t),
         }
     }
     hovered
@@ -454,15 +483,19 @@ pub fn menu_key<A: Clone>(items: &[MenuItem<A>], k: Key) -> Option<A> {
 
 // ---- TabRail -------------------------------------------------------------------------------------------------------
 
-/// The rects of a tab rail in `r`: the rail (`RAIL_W`, at most half of `r`), each tab's row (`TAB_H` high, one every
-/// `TAB_STEP`; only the rows that fit, `tab_window` picks what they show) and the content area right of the rail past
-/// the gutter.
+/// The rects of a tab rail in `r` on an unmoved screen: the rail (`RAIL_W`, at most half of `r`), each tab's row (`TAB_H`
+/// high, one every `TAB_STEP`; only the rows that fit, `tab_window` picks what they show) and the content area right of the
+/// rail past the gutter.
 pub fn tab_rail_rects(r: Rect, n: usize) -> (Vec<Rect>, Rect) {
-    let t = crate::theme::th();
-    let rail = RAIL_W.min(snap_down(r.w / 2));
-    let rows = (0..n).map(|i| Rect::new(r.x, r.y + i as i32 * TAB_STEP, rail, TAB_H)).take_while(|row| row.y + row.h <= r.y + r.h).collect();
-    let x = r.x + rail + t.layout.gutter;
-    (rows, Rect::new(x, r.y, (r.x + r.w - x).max(0), r.h))
+    tab_rail_rects_on(&old_metrics(&crate::theme::th()), r, n)
+}
+
+/// `tab_rail_rects` in the units of `m`.
+pub fn tab_rail_rects_on(m: &Metrics, r: Rect, n: usize) -> (Vec<Rect>, Rect) {
+    let rail = m.u(RAIL_W).min(snap_down_on(r.w / 2, m.grid));
+    let mut stack = Stack::new(r.place(Anchor::Left, rail, frac(1000)), m.u(TAB_STEP - TAB_H));
+    let rows = (0..n).map(|_| stack.next(m.tab_h)).take_while(|row| row.h == m.tab_h).collect();
+    (rows, r.pad(Insets { l: rail + m.gutter, t: 0, r: 0, b: 0 }))
 }
 
 /// What a rail of `rows` rows shows of `n` tabs with tab `open` on: the first tab, how many, and whether the first and
@@ -484,7 +517,7 @@ pub fn tab_window(rows: usize, n: usize, open: usize) -> (usize, usize, bool) {
 /// arrows that open the tab above / below (wrapping, as `tab_key`). Returns the content rect inside the inset, where
 /// the screen draws the open tab's form.
 pub fn tab_rail<A: Clone, S: AsRef<str>>(ui: &mut Ui<A>, id: &str, r: Rect, tabs: &[S], open: usize, act: impl Fn(usize) -> A) -> Rect {
-    let (rows, content) = tab_rail_rects(r, tabs.len());
+    let (rows, content) = tab_rail_rects_on(&ui.m(), r, tabs.len());
     let n = tabs.len();
     let (first, count, arrows) = tab_window(rows.len(), n, open);
     let mut row = rows.iter();
@@ -539,17 +572,25 @@ pub struct Corner<A> {
     pub tip: String,
 }
 
-/// The rects of a slot card in `r`: the thumbnail (112 x 63 at the padding, centred down; smaller cards keep 16:9),
-/// the text's left x (past the thumbnail and the padding), the portrait row's top y and the corner icons' hit boxes
-/// (right to left from the top right corner).
+/// The rects of a slot card in `r` on an unmoved screen: the thumbnail (112 x 63 at the padding, centred down; smaller cards
+/// keep 16:9), the text's left x (past the thumbnail and the padding), the portrait row's top y and the corner icons' hit
+/// boxes (right to left from the top right corner).
 pub fn slot_rects(r: Rect, corners: usize) -> (Rect, i32, i32, Vec<Rect>) {
-    let pad = crate::theme::th().layout.padding;
-    let th_h = THUMB_H.min(r.h - 2 * pad).max(0);
-    let th_w = if th_h == THUMB_H { THUMB_W } else { th_h * 16 / 9 };
+    slot_rects_on(&old_metrics(&crate::theme::th()), r, corners)
+}
+
+/// `slot_rects` in the units of `m`. The thumbnail and the icons stay sums, not `Rect::place`: on a card too narrow for them
+/// they keep their size and pass its edge.
+pub fn slot_rects_on(m: &Metrics, r: Rect, corners: usize) -> (Rect, i32, i32, Vec<Rect>) {
+    let pad = m.padding;
+    let (full_w, full_h) = (m.u(THUMB_W), m.u(THUMB_H));
+    let th_h = full_h.min(r.h - 2 * pad).max(0);
+    let th_w = if th_h == full_h { full_w } else { th_h * 16 / 9 };
     let thumb = Rect::new(r.x + pad, r.y + (r.h - th_h) / 2, th_w, th_h);
     let tx = thumb.x + thumb.w + pad;
-    let py = r.y + r.h - pad - PORTRAIT;
-    let icons = (0..corners).map(|i| Rect::new(r.x + r.w - 2 - CORNER * (corners - i) as i32, r.y + 2, CORNER, CORNER)).collect();
+    let py = r.y + r.h - pad - m.u(PORTRAIT);
+    let (size, off) = (m.u(CORNER), m.u(2));
+    let icons = (0..corners).map(|i| Rect::new(r.x + r.w - off - size * (corners - i) as i32, r.y + off, size, size)).collect();
     (thumb, tx, py, icons)
 }
 
@@ -559,56 +600,56 @@ pub fn slot_rects(r: Rect, corners: usize) -> (Rect, i32, i32, Vec<Rect>) {
 /// text on the hover card.
 #[allow(clippy::too_many_arguments)]
 pub fn slot_card<A: Clone>(ui: &mut Ui<A>, id: &str, r: Rect, view: &SlotView, action: Option<A>, selected: bool, corner: &[Corner<A>]) {
-    let t = ui.t.clone();
+    let (t, m) = (ui.t.clone(), ui.m());
     let hover = action.is_some() && ui.hover(r);
     let fill = if selected { t.selected } else if hover { t.card_hot } else { t.card };
     let border = if selected { t.focus } else if hover { t.edge_hot } else { t.edge };
     let role = if selected { "card_on" } else if hover { "card_hot" } else { "card" };
-    ui.p.skin(t.frame(role), r, fill, border, t.layout.radius);
-    let (pad, gutter) = (t.layout.padding, t.layout.gutter);
-    let (thumb, tx, py, icons) = slot_rects(r, corner.len());
+    ui.skin(role, r, fill, border, m.radius);
+    let (pad, gutter) = (m.padding, m.gutter);
+    let (thumb, tx, py, icons) = slot_rects_on(&m, r, corner.len());
     match view.thumb {
         Some(img) => cover_image(&mut ui.p, Some(img), thumb, 0.0, t.bg),
         None if thumb.w > 0 && thumb.h > 0 => {
             let inner = ui.inset(thumb, false);
             let initial: String = view.title.chars().find(|c| !c.is_whitespace()).map(|c| c.to_uppercase().collect()).unwrap_or_default();
-            let lh = ui.p.line_h_face(Typeface::Display, HEAD);
-            ui.p.text_center_face(Typeface::Display, inner.x as f32 + inner.w as f32 / 2.0, inner.y as f32 + (inner.h as f32 - lh) / 2.0, &initial, HEAD, t.gold);
+            let lh = ui.p.line_h_face(Typeface::Display, m.head);
+            ui.p.text_center_face(Typeface::Display, inner.x as f32 + inner.w as f32 / 2.0, inner.y as f32 + (inner.h as f32 - lh) / 2.0, &initial, m.head, t.gold);
         }
         None => {}
     }
     let ink = t.ink_on(role);
     let right = r.x + r.w - pad;
-    let title_room = (icons.first().map_or(right, |i| i.x - 2) - tx) as f32;
+    let title_room = (icons.first().map_or(right, |i| i.x - m.u(2)) - tx) as f32;
     let mut cut = false;
-    let mut y = r.y as f32 + pad as f32 - 2.0;
-    cut |= text_cut(&mut ui.p, Typeface::Display, tx as f32, y, &view.title, TITLE, title_room, t.gold);
-    y += ui.p.line_h_face(Typeface::Display, TITLE).ceil();
-    let bottom = if view.portraits.is_empty() && view.stamp.is_empty() { (r.y + r.h - pad) as f32 } else { (py - 1) as f32 };
-    let lh = ui.p.line_h(BODY);
+    let mut y = r.y as f32 + pad as f32 - m.uf(2.0);
+    cut |= text_cut(&mut ui.p, Typeface::Display, tx as f32, y, &view.title, m.title, title_room, t.gold);
+    y += ui.p.line_h_face(Typeface::Display, m.title).ceil();
+    let bottom = if view.portraits.is_empty() && view.stamp.is_empty() { (r.y + r.h - pad) as f32 } else { (py - m.u(1)) as f32 };
+    let lh = ui.p.line_h(m.body);
     let mut shown = 0;
     for (i, line) in view.lines.iter().enumerate() {
         if y + lh > bottom {
             break;
         }
-        cut |= text_cut(&mut ui.p, Typeface::Body, tx as f32, y, line, BODY, (right - tx) as f32, if i == 0 { ink } else { t.dim });
+        cut |= text_cut(&mut ui.p, Typeface::Body, tx as f32, y, line, m.body, (right - tx) as f32, if i == 0 { ink } else { t.dim });
         y += lh.ceil();
         shown += 1;
     }
     let mut stamp_x = right;
     if !view.stamp.is_empty() {
-        let (sh, sw) = (ui.p.line_h(SMALL), ui.p.text_w(&view.stamp, SMALL));
+        let (sh, sw) = (ui.p.line_h(m.small), ui.p.text_w(&view.stamp, m.small));
         let sw = sw.min((right - tx) as f32);
         stamp_x = right - sw.ceil() as i32;
-        cut |= text_cut(&mut ui.p, Typeface::Body, stamp_x as f32, (r.y + r.h - pad) as f32 - sh, &view.stamp, SMALL, sw.max(1.0), t.dim);
+        cut |= text_cut(&mut ui.p, Typeface::Body, stamp_x as f32, (r.y + r.h - pad) as f32 - sh, &view.stamp, m.small, sw.max(m.uf(1.0)), t.dim);
     }
-    let mut px = tx;
+    let (mut px, face) = (tx, m.u(PORTRAIT));
     for img in &view.portraits {
-        if px + PORTRAIT > stamp_x - gutter {
+        if px + face > stamp_x - gutter {
             break;
         }
-        ui.p.image(img, Rect::new(px, py, PORTRAIT, PORTRAIT));
-        px += PORTRAIT + 2;
+        ui.image_in(img, Rect::new(px, py, face, face));
+        px += face + m.u(2);
     }
     let mut full: Vec<String> = vec![view.title.clone()];
     full.extend(view.lines.iter().cloned());
@@ -645,31 +686,62 @@ impl<'a> AskView<'a> {
     }
 }
 
+/// The frame role of an ask.
+fn ask_role(v: &AskView) -> &'static str {
+    if v.ornate {
+        "ornate"
+    } else {
+        "panel"
+    }
+}
+
+/// Where an ask's text and answers go in its frame's body (`Ui::frame_body`): half the padding in on a frame file, which has
+/// its own pad, and nothing more on the vector panel, whose body is past the whole padding.
+fn ask_inner(body: Rect, framed: bool, m: &Metrics) -> Rect {
+    if framed {
+        body.inset(m.padding / 2)
+    } else {
+        body
+    }
+}
+
 /// The ask dialog's layout in `area` at the current text size: the dialog rect (centred, on the grid, at least
 /// `ASK_MIN_W` x `ASK_MIN_H` times the text size, as tall as the question needs, inside the margins), the question's
 /// lines, and the Yes and No rects (Yes left of No at the bottom right).
 pub fn ask_layout(p: &mut Painter, area: Rect, v: &AskView) -> (Rect, Vec<String>, Rect, Rect) {
     let t = crate::theme::th();
-    let (m, pad, gutter) = (t.layout.margin, t.layout.padding, t.layout.gutter);
+    ask_layout_in(p, area, v, t.frame(ask_role(v)))
+}
+
+/// `ask_layout` with the frame as it will draw (`Ui::corner_size` may have changed its corners).
+fn ask_layout_in(p: &mut Painter, area: Rect, v: &AskView, frame: Option<&Frame>) -> (Rect, Vec<String>, Rect, Rect) {
+    let t = crate::theme::th();
+    let m = Metrics::of(&t, p.v);
     let s = p.fonts.scale.max(1.0);
-    let w = snap_up((ASK_MIN_W as f32 * s).round() as i32).min(snap_down(area.w - 2 * m)).max(0);
-    let role = if v.ornate { "ornate" } else { "panel" };
-    let view = p.v.s;
-    let inset = |r: Rect| t.frame(role).map_or(r.inset(pad), |f| crate::painter::nine_content_rect(&f.nine, r, view).inset(pad / 2));
-    let least_h = (ASK_MIN_H as f32 * s).round() as i32;
+    let w = snap_up_on((m.uf(ASK_MIN_W as f32) * s).round() as i32, m.grid).min(snap_down_on(area.w - 2 * m.margin, m.grid)).max(0);
+    let view = p.v;
+    let inset = |r: Rect| match frame {
+        Some(f) => ask_inner(view.nine_content(&f.nine, r), true, &m),
+        None => ask_inner(r.pad(Insets::all(m.padding)), false, &m),
+    };
+    let least_h = (m.uf(ASK_MIN_H as f32) * s).round() as i32;
     let inner_w = inset(Rect::new(0, 0, w, least_h)).w;
-    let lines = p.wrap(v.question, BODY, inner_w as f32);
-    let lh = p.line_h(BODY).ceil() as i32;
-    let title_h = if v.title.is_empty() { 0 } else { p.line_h_face(Typeface::Display, HEAD).ceil() as i32 + gutter };
-    let bh = snap_up(p.line_h(BODY).ceil() as i32 + 6);
-    let bw = snap_up((p.text_w(v.yes, BODY).max(p.text_w(v.no, BODY)) + 24.0).ceil() as i32).max(48);
+    let lines = p.wrap(v.question, m.body, inner_w as f32);
+    let lh = p.line_h(m.body).ceil() as i32;
+    let title_h = if v.title.is_empty() { 0 } else { p.line_h_face(Typeface::Display, m.head).ceil() as i32 + m.gutter };
+    let bh = snap_up_on(p.line_h(m.body).ceil() as i32 + m.u(6), m.grid);
+    let bw = snap_up_on((p.text_w(v.yes, m.body).max(p.text_w(v.no, m.body)) + m.uf(24.0)).ceil() as i32, m.grid).max(m.u(48));
     let frame_pad = least_h - inset(Rect::new(0, 0, w, least_h)).h;
-    let need = frame_pad + title_h + lines.len() as i32 * lh + gutter + bh;
-    let h = snap_up(least_h.max(need)).min(snap_down(area.h - 2 * m)).max(0);
-    let r = Rect::new(area.x + snap((area.w - w) / 2), area.y + snap((area.h - h) / 2), w, h);
+    let need = frame_pad + title_h + lines.len() as i32 * lh + m.gutter + bh;
+    let h = snap_up_on(least_h.max(need), m.grid).min(snap_down_on(area.h - 2 * m.margin, m.grid)).max(0);
+    // Centred, then its start on the grid: `w` and `h` are inside the margins, so nothing clamps.
+    let c = area.place(Anchor::Center, w, h);
+    let (dx, dy) = (c.x - area.x, c.y - area.y);
+    let r = c.offset(snap_on(dx, m.grid) - dx, snap_on(dy, m.grid) - dy);
     let inner = inset(r);
+    // A sum, not `Rect::place`: in a dialog too small for them the answers keep their size, so the question can be answered.
     let no = Rect::new(inner.x + inner.w - bw, inner.y + inner.h - bh, bw, bh);
-    let yes = Rect::new(no.x - gutter - bw, no.y, bw, bh);
+    let yes = no.offset(-m.gutter - bw, 0);
     (r, lines, yes, no)
 }
 
@@ -679,36 +751,35 @@ pub fn ask_layout(p: &mut Painter, area: Rect, v: &AskView) -> (Rect, Vec<String
 /// lines the height cap dropped, the last one left ending in "...") shows its full text on hover, and the text audit
 /// sees it as cut. Returns the dialog's rect. Keys: `ask_key`.
 pub fn ask_dialog<A: Clone>(ui: &mut Ui<A>, id: &str, area: Rect, v: &AskView, yes: A, no: A) -> Rect {
-    let t = ui.t.clone();
+    let (t, m) = (ui.t.clone(), ui.m());
     ui.p.fill(area, t.scrim);
     ui.push(id, "backdrop", v.question, area, true, false, None, Vec::new());
-    let (r, lines, yr, nr) = ask_layout(&mut ui.p, area, v);
-    let role = if v.ornate { "ornate" } else { "panel" };
-    let (fill, edge, radius) = t.vector(role);
-    ui.p.skin(t.frame(role), r, fill, edge, radius);
-    let view = ui.p.v.s;
-    let inner = t.frame(role).map_or(r.inset(t.layout.padding), |f| crate::painter::nine_content_rect(&f.nine, r, view).inset(t.layout.padding / 2));
+    let role = ask_role(v);
+    let frame = t.frame(role);
+    let cornered = frame.and_then(|f| ui.cornered(f));
+    let (r, lines, yr, nr) = ask_layout_in(&mut ui.p, area, v, cornered.as_ref().or(frame));
+    let inner = ask_inner(ui.frame_body(role, r), frame.is_some(), &m);
     let mut y = inner.y as f32;
     if !v.title.is_empty() {
-        let lh = ui.p.line_h_face(Typeface::Display, HEAD);
-        let shown = fit_face(&mut ui.p, Typeface::Display, v.title, HEAD, inner.w as f32);
-        ui.p.text_center_face(Typeface::Display, inner.x as f32 + inner.w as f32 / 2.0, y, &shown, HEAD, t.gold);
+        let lh = ui.p.line_h_face(Typeface::Display, m.head);
+        let shown = fit_face(&mut ui.p, Typeface::Display, v.title, m.head, inner.w as f32);
+        ui.p.text_center_face(Typeface::Display, inner.x as f32 + inner.w as f32 / 2.0, y, &shown, m.head, t.gold);
         if shown != v.title {
             ui.p.mark_cut(v.title);
             ui.push(format!("{id}.title"), "label", v.title, Rect::new(inner.x, y as i32, inner.w, lh.ceil() as i32), true, false, None, tip(v.title, ""));
         }
-        y += lh.ceil() + t.layout.gutter as f32;
+        y += lh.ceil() + m.gutter as f32;
     }
-    let (ink, lh) = (t.ink_on(role), ui.p.line_h(BODY).ceil());
+    let (ink, lh) = (t.ink_on(role), ui.p.line_h(m.body).ceil());
     let top = y;
     let shown = lines.len().min((((yr.y as f32 - y) / lh).floor().max(0.0)) as usize);
     let dropped = shown < lines.len();
     for (i, l) in lines[..shown].iter().enumerate() {
         if dropped && i + 1 == shown {
-            let last = fit_face(&mut ui.p, Typeface::Body, &format!("{}...", l.trim_end()), BODY, inner.w as f32);
-            ui.p.text(inner.x as f32, y, &last, BODY, ink);
+            let last = fit_face(&mut ui.p, Typeface::Body, &format!("{}...", l.trim_end()), m.body, inner.w as f32);
+            ui.p.text(inner.x as f32, y, &last, m.body, ink);
         } else {
-            ui.p.text(inner.x as f32, y, l, BODY, ink);
+            ui.p.text(inner.x as f32, y, l, m.body, ink);
         }
         y += lh;
     }
@@ -716,8 +787,8 @@ pub fn ask_dialog<A: Clone>(ui: &mut Ui<A>, id: &str, area: Rect, v: &AskView, y
         ui.p.mark_cut(v.question);
         ui.push(format!("{id}.question"), "label", v.question, Rect::new(inner.x, top as i32, inner.w, (y - top).max(lh) as i32), true, false, None, tip(v.question, ""));
     }
-    pane_button(ui, &format!("{id}.yes"), yr, v.yes, None, yes, true, !v.no_default, BODY, false, Vec::new());
-    pane_button(ui, &format!("{id}.no"), nr, v.no, None, no, true, v.no_default, BODY, false, Vec::new());
+    pane_button(ui, &format!("{id}.yes"), yr, v.yes, None, yes, true, !v.no_default, m.body, false, Vec::new());
+    pane_button(ui, &format!("{id}.no"), nr, v.no, None, no, true, v.no_default, m.body, false, Vec::new());
     r
 }
 

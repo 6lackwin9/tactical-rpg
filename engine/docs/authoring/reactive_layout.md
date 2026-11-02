@@ -8,9 +8,14 @@ dimensions needs few or no screen edits.
 
 Built so far: the crate `aegis_layout` (`Rect`, `Insets`, `Anchor`, `Part`, `frac`, `fill`, `resolve`, `Stack`, `pick`),
 `aegis_ui::shot_diff`, `Grid` and `Screen::grid`, `Metrics` with `hair`, `Env`, `Ui::m`, `Ui::env`, `Ui::screen`,
-`Ui::image_in`, `Ui::frame_body` and `Ui::corner_size`, and the kit's widgets, which draw right on every grid. The later
-slices of the engine's layout work (`docs/specs/LAYOUT720.md`) add panes that go relative (E4), `CanvasPolicy` and
+`Ui::image_in`, `Ui::frame_body` and `Ui::corner_size`, and the kit's widgets, panes, pip gauge, timeline and desk, which draw
+right on every grid. The later slice of the engine's layout work (`docs/specs/LAYOUT720.md`) adds `CanvasPolicy` and
 `layout_audit` (E5). A name on this page that the code does not have yet is one of those.
+
+What has no `Ui` to read answers in old units, with an `_on` form for any grid: `panes::slot_rects_on(&m, r, n)`,
+`panes::tab_rail_rects_on(&m, r, n)`, `panes::snap_on(v, m.grid)`, `pips::pip_rect_on(x, cy, k, m.g)`,
+`timeline::icon_rect_on(row, m.g)`. A desk on a grid says so when it is built (`Desk::new(area, wins, layouts).on_grid(grid)`);
+what it saves is fractions of its area, so a saved desk means the same on every grid.
 
 ## Window, policy, canvas and unit
 
@@ -68,6 +73,8 @@ pronounced on smaller ones and always legible, and at one layout they keep the s
 in that task, at function level: a change that touches no layout moves nothing. New engine code is relative from its first
 line. The existing picture of a screen still drawn in old units must stay bit-identical; where a share cannot reproduce
 today's value exactly on every grid, the piece keeps a unit-scaled number and a share arrives with its first native caller.
+`Rect::place` clamps a child larger than its parent, so a child that may be larger and must keep its size (the answers of a
+question in a very small dialog) stays a sum of tokens from its parent's edge.
 
 **No fixed positions on a moved screen.** Review checks moved code for `Rect::new` with numbers. Exact alignment to art uses
 an anchor plus a token.
