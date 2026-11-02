@@ -7,6 +7,8 @@
 use aegis_core::json::{self, Dict};
 use aegis_ui::canvas::{rgb, Rect, Rgba};
 use aegis_ui::depth::DepthList;
+use crate::mapview::lift_of;
+#[cfg(test)]
 use crate::mapview::BLOCK_LIFT;
 
 /// Logical px of art per tile at tile size 32 (PROPS1 3.1: 32 px of art per tile; the map draws at 16 px a tile).
@@ -79,7 +81,7 @@ const GROUP_PARTY: u8 = 3;
 pub fn layout(t: &Dict, lineage: &[String], origin: (i32, i32), cell: (i32, i32), area: Rect, mut art: impl FnMut(&[&str], Option<u32>, i32, i32) -> Picked) -> Vec<PropDraw> {
     let (ox, oy) = origin;
     let (cw, ch) = cell;
-    let lift = if ch < cw { BLOCK_LIFT } else { 0 };
+    let lift = if ch < cw { lift_of(ch) } else { 0 };
     let mut out = Vec::new();
     for raw in json::aget(t, "props") {
         let Some(p) = raw.as_object() else { continue };
@@ -281,7 +283,7 @@ mod tests {
     /// hides a party whose sprite its cap meets.
     #[test]
     fn a_block_joins_the_sorted_pass_and_can_hide_the_party() {
-        let g = crate::mapview::MapGeom { view: crate::mapview::View::Tilted, ox: O.0, oy: O.1 };
+        let g = crate::mapview::MapGeom { view: crate::mapview::View::Tilted, ox: O.0, oy: O.1, q: 4 };
         let block = |x: i32, y: i32, face: bool| {
             let cell = g.cell(x, y);
             Block { x, y, cell, rect: crate::mapview::block_rect(cell, face), face }

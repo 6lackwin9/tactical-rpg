@@ -18,6 +18,9 @@
 //! walls as blocks in one feet-sorted pass, click areas in draw order); F7 flips it in a debug build.
 //! REGIONGROUND1-L: a map with a `ground` layer draws its composed picture (`ground.rs`) in place of the `.` and `~` tiles
 //! (and the tilted water lips); everything else draws over it as before, and `rows` alone still decide walking.
+//! REGIONVIEW1: the party's drawn position glides between tiles and the camera follows it in whole physical px, stopped
+//! by the map's edges with a small margin; pans and the talk camera ease (`mapview.rs`). The map's outer wall ring and what
+//! lies past it are the border: flat, under everything, in the location's boundary art when it has one.
 
 use aegis_core::assets::{ClipPlayer, Facing, View};
 use aegis_ui::theme::th;
@@ -25,7 +28,9 @@ use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::hud::{hud_bar, hud_key, hud_open, purse_word, Hud, PurseWord, HUD_H};
 use crate::runover::days as day_count;
 use crate::music;
-use crate::mapview::{self, MapGeom, CELL_W, FACE_H, SPRITE};
+use crate::mapview::{self, MapGeom};
+#[cfg(test)]
+use crate::mapview::{CELL_W, FACE_H, SPRITE};
 use crate::props::{Block, Item, PropDraw, ART_TILE, BOX_EDGE, BOX_FACE, BOX_FACE_H, BOX_FILL};
 use crate::board::{BoardAct, BoardPane};
 use crate::ground::MapGround;
@@ -33,6 +38,7 @@ use crate::portraits::Faces;
 use crate::shop::{ShopAct, ShopPane};
 use crate::talk::{self, talk_layout, TalkAct, TalkBox};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
+use aegis_ui::painter::View as PView;
 use aegis_ui::ui::{draw_glyph, tip, Gfx, Glyph, Ui, Widget, BODY, H, SMALL, W};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or, Dict};
@@ -40,6 +46,7 @@ use emberwake_world::dialogue::DialogueRunner;
 use emberwake_world::explore::{self, Pos};
 use emberwake_world::quest;
 use serde_json::{json, Value};
+use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 /// The leader keeps walking this long (animation ms) after a step, so key steps and walked paths play `walk` without
@@ -130,7 +137,30 @@ pub struct RegionMap {
     arrows: Vec<Value>,
     /// REGIONGROUND1-L: the map's composed ground, kept while its job stands.
     ground: MapGround,
+    /// REGIONVIEW1: this frame's wall time (set by the tick; None before the first: no time has passed, all at rest).
+    frame_at: Option<Instant>,
+    /// The scheduled time of a step taken since the last frame.
+    step_at: Option<Instant>,
+    /// The party's drawn position and the camera over frames.
+    glide: mapview::Glide,
+    follow: mapview::Follow,
+    /// The last frame's camera (physical px of cell (0, 0)), the party's physical px and scale (agent link `state.camera`);
+    /// a trail of them only under the unlisted setting `camera_trail` (what a render measures).
+    cam: CamShot,
+    cam_trail: VecDeque<(f64, CamShot)>,
+    opened_at: Instant,
 }
+
+/// One frame's camera as the agent link reports it.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct CamShot {
+    px: (i32, i32),
+    party: (i32, i32),
+    scale: f32,
+}
+
+/// The frames `state.camera.trail` keeps.
+const CAM_TRAIL: usize = 240;
 
 /// Starts a world fight: the battle screen, or the Skip / Fled / Lost popup in a debug game.
 pub fn begin_fight(cx: &mut Cx, fight: &Dict, runner: &str) {
@@ -244,6 +274,23 @@ impl RegionMap {
             pan_loc: String::new(),
             arrows: Vec::new(),
             ground: MapGround::default(),
+            frame_at: None,
+            step_at: None,
+            glide: mapview::Glide::default(),
+            follow: mapview::Follow::default(),
+            cam: CamShot::default(),
+            cam_trail: VecDeque::new(),
+            opened_at: Instant::now(),
+        }
+    }
+
+    /// The scheduled time of a step due at `now`: `next_walk` while on schedule, so the steps average `STEP_MS` whatever
+    /// the frame rate and the glide stays even; `now` after a stop or a long frame.
+    fn step_time(&self, now: Instant) -> Instant {
+        if now.saturating_duration_since(self.next_walk) < Duration::from_millis(STEP_MS) {
+            self.next_walk.min(now)
+        } else {
+            now
         }
     }
 
@@ -328,6 +375,66 @@ impl RegionMap {
     fn turn(&mut self, dir: Pos) {
         self.facing = dir;
         self.leader_face = self.leader_face.toward(dir.0 as i32, dir.1 as i32);
+    }
+
+    /// A frame's tick at wall time `now` (the frame's clock: the glide and the camera read it in `draw`).
+    fn tick_at(&mut self, cx: &mut Cx, now: Instant) {
+        self.frame_at = Some(now);
+        // PLAYUI1-R: the sprites play on their own clock at the animation speed setting (as the battle tokens)
+        let speed = cx.settings.v["anim_speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0);
+        self.anim_ms += now.duration_since(self.anim_at).as_secs_f64() * 1000.0 * speed;
+        self.anim_at = now;
+        // PORTRAITFX1 4.5: the talk box's portrait clock moves by the frame's wall time (at most 100 ms a frame)
+        self.faces.tick();
+        // CAMPAIGN1 W3: a Yes to the ask before a resting reply picks it
+        if cx.take_answer(crate::runover::ASK_TALK_REST) {
+            if let Some(i) = self.rest_ask.take() {
+                self.choose(cx, i);
+            }
+            return;
+        }
+        // STORYUI1 W2, 5.3: with nothing open, a running sequence takes over and queued vignettes play; CAMPAIGN1 W1,
+        // F3: campaign notices first, then the run-over screen once the run is over; T2: the campaign queue's head
+        // plays (vignettes and battles through `story::map_tick`, a dialogue scene here)
+        if !self.modal() && (crate::runover::map_tick(cx) || crate::story::map_tick(cx) || self.play_pending_talk(cx)) {
+            self.walk.clear();
+            self.walk_target = None;
+            return;
+        }
+        // WALK2: a held movement key keeps stepping at the step rate (the press itself stepped at once; the OS key
+        // repeat is dropped by the shell, `hold_walk`), so the steps chain with the walk clip running.
+        if cx.held.dir.is_none() {
+            self.hold = false;
+        }
+        if self.hold && self.walk.is_empty() && !self.modal() {
+            if let (Some(dir), true) = (cx.held.dir, now >= self.next_walk) {
+                let at = self.step_time(now);
+                self.next_walk = at + Duration::from_millis(STEP_MS);
+                self.step_at = Some(at);
+                let t = explore::template_of(&cx.data, explore::location(&cx.data, cx.gs()));
+                if t.is_empty() || !self.step(cx, dir) {
+                    self.hold = false;
+                }
+            }
+            return;
+        }
+        if self.walk.is_empty() || self.modal() || now < self.next_walk {
+            return;
+        }
+        let at = self.step_time(now);
+        self.next_walk = at + Duration::from_millis(STEP_MS);
+        self.step_at = Some(at);
+        let dir = self.walk.remove(0);
+        if !self.step(cx, dir) {
+            self.walk.clear();
+            self.walk_target = None;
+            return;
+        }
+        if self.walk.is_empty() {
+            if let Some(id) = self.walk_target.take() {
+                self.walk_to_marker(cx, &id);
+            }
+        }
     }
 
     /// Whether the leader walks at the clock's now: on a walked path, or within `WALK_LINGER_MS` of the last step.
@@ -746,26 +853,41 @@ impl Screen<GameCx> for RegionMap {
         // measured before the map: the camera keeps both speakers above the box (also while the shop hides it, so the
         // map does not jump when the shop opens or closes)
         let talk_box = talk_view.as_ref().map(|v| talk_layout(&mut ui.p, v));
-        // -- Map (PLAYUI1-M, spec PLAYUI1 3.2): the full width under the HUD bar; the camera centres on the party with no
-        // clamp (while talking, on the midpoint of the party and the speaker, inside the map above the dialogue box), and
-        // past the map's edge the location's wall tile is drawn
+        // -- Map (PLAYUI1-M, spec PLAYUI1 3.2; REGIONVIEW1): the full width under the HUD bar; the camera follows the party's
+        // drawn position (while talking, the midpoint of the party and the speaker, inside the map area above the dialogue
+        // box), stopping at the map's edges with a small margin
         let map_area = Rect::new(0, HUD_H, W, H - HUD_H);
         let focus_area = talk_box.as_ref().map_or(map_area, |b| Rect::new(0, HUD_H, W, b.r.y - HUD_H));
         let names_always = cx.settings.v["map_names"].as_str() == Some("always");
         // MAPNAV1-U: (id, name, tile) of the legend's markers out of view (their edge arrows follow the legend)
         let mut off_view: Vec<(String, String, Rect)> = Vec::new();
+        // where the names drew: an edge arrow keeps off them (near an edge they meet the arrows' band)
+        let mut name_boxes: Vec<Rect> = Vec::new();
         if !t.is_empty() {
             // EXPLOREVIEW1: the view this frame (a switch shows on the next frame)
             let view = mapview::View::of_setting(&cx.settings.v["region_view"]);
             let tilted = view == mapview::View::Tilted;
-            let ts = CELL_W;
-            // MAPNAV1-U: outside a talk the camera looks at the panned tile (a legend row or an edge arrow) when set
-            let (one, other) = match (talk_view.as_ref(), self.pan) {
-                (Some(v), _) => (gs.position, self.speaker_tile(cx, v).unwrap_or(gs.position)),
-                (None, Some(p)) => (p, p),
-                (None, None) => (gs.position, gs.position),
+            // the zoom sizes the whole scene (the cell, and all that takes its size from it)
+            let q = mapview::zoom_of(&cx.settings.v["map_zoom"]);
+            let cell_size = mapview::cell_of(view, q);
+            let ts = cell_size.0;
+            // REGIONVIEW1: the party's drawn position, and what the camera looks at (MAPNAV1-U: outside a talk the panned
+            // tile, a legend row or an edge arrow, when set); the party's glide always counts, the pan and talk ease
+            let scale = ui.p.v.s;
+            let (drawn, jumped) = self.glide.update(&gs.location_id, gs.position, self.step_at.take(), self.frame_at, STEP_MS as f64);
+            let tile_at = |p: Pos| (p.0 as f32, p.1 as f32);
+            let (look, at) = match (talk_view.as_ref(), self.pan) {
+                (Some(v), _) => {
+                    let who = self.speaker_tile(cx, v).unwrap_or(gs.position);
+                    (mapview::Look::Talk(who, focus_area), ((drawn.0 + who.0 as f32) / 2.0, (drawn.1 + who.1 as f32) / 2.0))
+                }
+                (None, Some(p)) => (mapview::Look::Pan(p), tile_at(p)),
+                (None, None) => (mapview::Look::Party, drawn),
             };
-            let geo = MapGeom::centred(view, focus_area, one, other);
+            let (map_w, map_h) = explore::size_of(t);
+            let target = mapview::camera_px(cell_size, focus_area, (map_w as i32, map_h as i32), at, scale);
+            let camera = self.follow.update(look, (view, q), target, scale, self.frame_at, jumped || cx.settings.reduce_motion());
+            let (geo, shift) = mapview::placed(view, q, camera, scale);
             self.geo = geo;
             // ASSETORG2 4.5, LOOK1 5.4: the location's `tileset`, the world lineage's tile sets child first, then common
             let mut lineage = d.lineage(&gs.world_id);
@@ -773,22 +895,30 @@ impl Screen<GameCx> for RegionMap {
             let sets = emberwake_content::art::region_sets(&lineage, &s(loc, "tileset"));
             let set_refs: Vec<&str> = sets.iter().map(String::as_str).collect();
             ui.push_clip(map_area);
+            // the map draws under the camera's rest (physical px); rects, clicks and hit areas keep `geo`'s whole px
+            let base_view = ui.p.v;
+            let map_view = PView { ox: base_view.ox + shift.0, oy: base_view.oy + shift.1, ..base_view };
+            ui.p.v = map_view;
             // REGIONGROUND1-L: the composed ground under everything; it stands in for the `.` and `~` tiles below
-            self.ground.sync(cx, t, &sets, view);
+            self.ground.sync(cx, t, &sets, view, q);
             let has_ground = self.ground.draw(&mut ui.p, &geo);
-            let (x0, x1) = geo.cols(map_area);
-            let (y0, y1) = geo.rows(map_area);
+            // the cells to draw: those meeting the area, by a logical px more (the camera's rest can bring one in)
+            let paint_area = Rect::new(map_area.x - 1, map_area.y - 1, map_area.w + 2, map_area.h + 2);
+            let (x0, x1) = geo.cols(paint_area);
+            let (y0, y1) = geo.rows(paint_area);
             // the art's size: the tile at the cell (square), or the 32 x 32 art the painter squashes by nearest
             // sampling into the 16 x 12 cell (tilted, EXPLOREVIEW1 3.2 until LOOK1 makes 4:3 region art)
-            let art_size = if tilted { ART_TILE } else { ts };
+            let art_size = if tilted { ART_TILE * q / 4 } else { ts };
             // render only: off the map is the wall (`#`), nothing walkable
             let ch_at = |x: i32, y: i32| explore::tile(t, x as i64, y as i64).unwrap_or('#');
+            let border_at = |x: i32, y: i32| on_border(t, (map_w, map_h), x as i64, y as i64);
+            let walls = WallArt::of(&sets, &s(loc, "boundary"));
             for y in y0..=y1 {
                 for x in x0..=x1 {
                     let r = geo.cell(x, y);
                     let ch = ch_at(x, y);
-                    // tilted: a wall is a block in the sorted pass below
-                    if tilted && ch == '#' {
+                    // the border draws after this pass; tilted, a wall is a block in the sorted pass below
+                    if border_at(x, y) || (tilted && ch == '#') {
                         continue;
                     }
                     if has_ground && matches!(ch, '.' | '~') {
@@ -809,18 +939,31 @@ impl Screen<GameCx> for RegionMap {
                     }
                 }
             }
+            // REGIONVIEW1: the border, flat so that it ends on the map's edge: tilted, a wall on an open cell keeps its
+            // face and the shade it drops, inside its own cell and the cell south (the row above the area can shade the
+            // first one)
+            for y in (if tilted { y0 - 1 } else { y0 })..=y1 {
+                for x in x0..=x1 {
+                    if border_at(x, y) {
+                        draw_border(&mut ui, cx, &walls, x, y, geo.cell(x, y), art_size, tilted && ch_at(x, y + 1) != '#');
+                    }
+                }
+            }
             if !modal {
                 ui.push("map", "map", s_or(loc, "name", ""), map_area, true, false, Some(RAct::MapClick), Vec::new());
             }
             // PROPS1 4.2-4.6: the ground props over the tiles; the standing props go into the sorted pass below. Props
             // are art only: no widget, and walking still comes from `rows`
-            let props = crate::props::layout(t, &lineage, (geo.ox, geo.oy), geo.cell_size(), map_area, |dirs, variant, x, y| {
+            let props = crate::props::layout(t, &lineage, (geo.ox, geo.oy), geo.cell_size(), paint_area, |dirs, variant, x, y| {
                 let rel = cx.art.pick(dirs, variant, x, y)?;
                 let size = cx.art.size_of(&rel)?;
                 Some((rel, size))
             });
+            // REGIONVIEW1: past the map is boundary art only: a prop's art that overhangs it is cut there (a footprint
+            // cannot leave the map: check P8)
+            let map_rect = Rect::new(geo.ox, geo.oy, map_w as i32 * geo.cell_size().0, map_h as i32 * geo.cell_size().1);
             for p in props.iter().filter(|p| p.ground) {
-                draw_prop(&mut ui, cx, p);
+                draw_prop(&mut ui, cx, p, map_rect, q);
             }
             let steps = gs.explore_int("loc_steps");
             // PLAYUI1-R: the people in the conversation turn to the party; the clock the sprites play at
@@ -898,19 +1041,19 @@ impl Screen<GameCx> for RegionMap {
                     labels.push((h.name_rect, h.label.clone(), h.badge));
                 }
             }
-            // EXPLOREVIEW1 3.3: tilted, the walls (also those past the map's edge) are blocks in the sorted pass; the row
+            // EXPLOREVIEW1 3.3: tilted, the walls inside the map (not its border) are blocks in the sorted pass; the row
             // above the area can still shade the first row
             let mut blocks: Vec<Block> = Vec::new();
             if tilted {
                 for y in (y0 - 1)..=y1 {
                     for x in x0..=x1 {
-                        if ch_at(x, y) != '#' {
+                        if ch_at(x, y) != '#' || border_at(x, y) {
                             continue;
                         }
                         let cell = geo.cell(x, y);
                         let face = ch_at(x, y + 1) != '#';
                         let rect = mapview::block_rect(cell, face);
-                        let seen = Rect::new(rect.x, rect.y, rect.w, rect.h + if face { mapview::SHADE_H } else { 0 }).intersect(map_area);
+                        let seen = Rect::new(rect.x, rect.y, rect.w, rect.h + if face { mapview::shade_of(cell.h) } else { 0 }).intersect(paint_area);
                         if seen.w > 0 && seen.h > 0 {
                             blocks.push(Block { x, y, cell, rect, face });
                         }
@@ -919,7 +1062,17 @@ impl Screen<GameCx> for RegionMap {
             }
             // the sorted pass (PROPS1 4.4): standing props, markers and the party back to front by their feet (the
             // sprites stand on their tiles, so lower rows cover upper ones, spec PLAYUI1 2.4)
-            let pr = geo.cell_of(gs.position);
+            // REGIONVIEW1: the party's cell where it is drawn, and the view that puts it on its own physical px
+            let (pr, party_shift) = mapview::party_px(view, q, camera, drawn, scale);
+            let party_view = PView { ox: base_view.ox + party_shift.0, oy: base_view.oy + party_shift.1, ..base_view };
+            let shot = CamShot { px: camera, party: (party_view.x(pr.x as f32), party_view.y(pr.y as f32)), scale };
+            self.cam = shot;
+            if let Some(now) = self.frame_at.filter(|_| cx.settings.v["camera_trail"] == json!(true)) {
+                self.cam_trail.push_back((now.saturating_duration_since(self.opened_at).as_secs_f64(), shot));
+                if self.cam_trail.len() > CAM_TRAIL {
+                    self.cam_trail.pop_front();
+                }
+            }
             let (pcx, pcy) = (pr.x as f32 + pr.w as f32 / 2.0, pr.y as f32 + pr.h as f32 / 2.0);
             // 2.4: the leader (the first active member): `walk` while moving, else `idle`
             let (leader_body, leader_palette) = leader_art(cx);
@@ -933,16 +1086,17 @@ impl Screen<GameCx> for RegionMap {
             let mut party_frame = None;
             for item in &order {
                 match *item {
-                    Item::Prop(i) => draw_prop(&mut ui, cx, &props[i]),
-                    Item::Block(i) => draw_block(&mut ui, cx, &blocks[i], &set_refs, &sets, &ch_at),
+                    Item::Prop(i) => draw_prop(&mut ui, cx, &props[i], map_rect, q),
+                    Item::Block(i) => draw_block(&mut ui, cx, &blocks[i], &walls, &ch_at, &border_at),
                     Item::Marker(i) => {
                         if let Some(sp) = draw_marker(&mut ui, cx, &marks[i], ts, &idle, now) {
                             sprites.push(sp.info(&format!("marker.{}", marks[i].id)));
                         }
                     }
                     Item::Party => {
-                        let drawn = leader_sprite.as_deref().and_then(|b| draw_sprite(&mut ui, cx, b, &leader_palette, &self.leader, now, self.leader_face, pr, crate::props::PARTY));
-                        match drawn {
+                        ui.p.v = party_view;
+                        let sprite = leader_sprite.as_deref().and_then(|b| draw_sprite(&mut ui, cx, b, &leader_palette, &self.leader, now, self.leader_face, pr, crate::props::PARTY));
+                        match sprite {
                             Some(sp) => {
                                 sprites.push(sp.info("party"));
                                 party_frame = Some(sp);
@@ -952,22 +1106,26 @@ impl Screen<GameCx> for RegionMap {
                                 ui.p.line(pcx, pcy, pcx + self.facing.0 as f32 * ts as f32 * 0.32, pcy + self.facing.1 as f32 * ts as f32 * 0.32, rgb(40, 30, 10), 0.0);
                             }
                         }
+                        ui.p.v = map_view;
                     }
                 }
             }
             // 4.5: a standing prop or a wall block drawn over the party: its outline over them (the sprite's silhouette
             // outline)
             if crate::props::party_hidden(&props, &blocks, &order, drawn_party) {
+                ui.p.v = party_view;
                 match party_frame.as_ref().and_then(|sp| cx.art.body_outline(&sp.body, &leader_palette, &sp.clip, sp.frame, sp.px, crate::props::PARTY, sp.flip)) {
                     Some(o) => ui.p.image(o, Rect::new(drawn_party.x - 1, drawn_party.y - 1, drawn_party.w + 2, drawn_party.h + 2)),
                     None => ui.p.circle(pcx, pcy, ts as f32 * 0.3, crate::props::PARTY),
                 }
+                ui.p.v = map_view;
             }
             self.sprites = sprites;
             // overlays, never covered by a prop: the service badges (over a sprite's head), then the names
             for m in &marks {
                 let Some(first) = m.badge else { continue };
-                let br = Rect::new(m.r.x + ts - 5, m.top - 5, 9, 9);
+                let (side, over) = (9 * q / 4, 5 * q / 4);
+                let br = Rect::new(m.r.x + ts - over, m.top - over, side, side);
                 let px = ui.icon_px(Rect::new(0, 0, br.w + 4, br.h + 4));
                 match cx.art.image(&service_icon(first), px, px) {
                     Some(img) => ui.p.image(img, br),
@@ -997,10 +1155,12 @@ impl Screen<GameCx> for RegionMap {
             for (r, label, badge) in labels {
                 let w = ui.p.text_w(&label, SMALL);
                 let lx = (r.x as f32 + ts as f32 / 2.0 - w / 2.0).min((map_area.x + map_area.w) as f32 - 2.0 - w).max(map_area.x as f32 + 2.0);
-                let ly = (r.y as f32 - if badge { 5.0 } else { 1.0 } - ui.p.line_h(SMALL)).max(map_area.y as f32 + 1.0);
+                let ly = (r.y as f32 - if badge { (5 * q / 4) as f32 } else { 1.0 } - ui.p.line_h(SMALL)).max(map_area.y as f32 + 1.0);
                 ui.p.text(lx + 0.5, ly + 0.5, &label, SMALL, rgba(0, 0, 0, 200));
                 ui.p.text(lx, ly, &label, SMALL, th().text);
+                name_boxes.push(Rect::new(lx.floor() as i32, ly.floor() as i32, w.ceil() as i32 + 1, ui.p.line_h(SMALL).ceil() as i32));
             }
+            ui.p.v = base_view;
             ui.pop_clip();
         } else {
             ui.p.text(20.0, 40.0, &s_or(loc, "name", "Nowhere"), 11.0, th().gold);
@@ -1023,13 +1183,17 @@ impl Screen<GameCx> for RegionMap {
         if !talking {
             panes.extend(self.draw_ticker(&mut ui, cx, modal));
         }
+        panes.extend(name_boxes);
         // -- MAPNAV1-U (DR2 6 A): an arrow at the map's edge toward each legend entry out of view (off in a talk, as
         // the legend), moved along the edge off the legend and the ticker; a click looks there
         if !talking {
             ui.push_clip(map_area);
+            // REGIONVIEW1: the arrows placed so far, so two toward the same side never stack
+            let mut placed: Vec<(f32, f32)> = Vec::new();
             for (id, label, r) in off_view {
                 let target = (r.x as f32 + r.w as f32 / 2.0, r.y as f32 + r.h as f32 / 2.0);
-                let Some((ax, ay)) = edge_arrow(map_area, target).map(|(x, y, _, _)| clear_of(map_area, (x, y), &panes)) else { continue };
+                let Some((ax, ay)) = edge_arrow(map_area, target).map(|(x, y, _, _)| beside_arrows(map_area, clear_of(map_area, (x, y), &panes), &placed, &panes)) else { continue };
+                placed.push((ax, ay));
                 let (dx, dy) = (target.0 - ax, target.1 - ay);
                 let len = (dx * dx + dy * dy).sqrt().max(0.5);
                 let (ux, uy) = (dx / len, dy / len);
@@ -1076,58 +1240,7 @@ impl Screen<GameCx> for RegionMap {
     }
 
     fn tick(&mut self, cx: &mut Cx) {
-        // PLAYUI1-R: the sprites play on their own clock at the animation speed setting (as the battle tokens)
-        let now = Instant::now();
-        let speed = cx.settings.v["anim_speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0);
-        self.anim_ms += now.duration_since(self.anim_at).as_secs_f64() * 1000.0 * speed;
-        self.anim_at = now;
-        // PORTRAITFX1 4.5: the talk box's portrait clock moves by the frame's wall time (at most 100 ms a frame)
-        self.faces.tick();
-        // CAMPAIGN1 W3: a Yes to the ask before a resting reply picks it
-        if cx.take_answer(crate::runover::ASK_TALK_REST) {
-            if let Some(i) = self.rest_ask.take() {
-                self.choose(cx, i);
-            }
-            return;
-        }
-        // STORYUI1 W2, 5.3: with nothing open, a running sequence takes over and queued vignettes play; CAMPAIGN1 W1,
-        // F3: campaign notices first, then the run-over screen once the run is over; T2: the campaign queue's head
-        // plays (vignettes and battles through `story::map_tick`, a dialogue scene here)
-        if !self.modal() && (crate::runover::map_tick(cx) || crate::story::map_tick(cx) || self.play_pending_talk(cx)) {
-            self.walk.clear();
-            self.walk_target = None;
-            return;
-        }
-        // WALK2: a held movement key keeps stepping at the step rate (the press itself stepped at once; the OS key
-        // repeat is dropped by the shell, `hold_walk`), so the steps chain with the walk clip running.
-        if cx.held.dir.is_none() {
-            self.hold = false;
-        }
-        if self.hold && self.walk.is_empty() && !self.modal() {
-            if let (Some(dir), true) = (cx.held.dir, now >= self.next_walk) {
-                self.next_walk = now + Duration::from_millis(STEP_MS);
-                let t = explore::template_of(&cx.data, explore::location(&cx.data, cx.gs()));
-                if t.is_empty() || !self.step(cx, dir) {
-                    self.hold = false;
-                }
-            }
-            return;
-        }
-        if self.walk.is_empty() || self.modal() || now < self.next_walk {
-            return;
-        }
-        self.next_walk = Instant::now() + Duration::from_millis(STEP_MS);
-        let dir = self.walk.remove(0);
-        if !self.step(cx, dir) {
-            self.walk.clear();
-            self.walk_target = None;
-            return;
-        }
-        if self.walk.is_empty() {
-            if let Some(id) = self.walk_target.take() {
-                self.walk_to_marker(cx, &id);
-            }
-        }
+        self.tick_at(cx, Instant::now());
     }
 
     fn key(&mut self, cx: &mut Cx, k: Key) {
@@ -1165,8 +1278,11 @@ impl Screen<GameCx> for RegionMap {
             self.pan = None;
             let t = explore::template_of(&cx.data, explore::location(&cx.data, cx.gs()));
             if !t.is_empty() {
+                // the frame's clock: the press moves from this frame on, and the steps chain from it
+                let at = self.frame_at.unwrap_or_else(Instant::now);
+                self.step_at = Some(at);
                 self.hold = self.step(cx, dir);
-                self.next_walk = Instant::now() + Duration::from_millis(STEP_MS);
+                self.next_walk = at + Duration::from_millis(STEP_MS);
             }
         } else if k == Key::Char('e') || k == Key::Enter {
             let dir = self.facing;
@@ -1210,6 +1326,9 @@ impl Screen<GameCx> for RegionMap {
             "shop": if self.shop_qid().is_empty() { Value::Null } else { self.shop.state() }, "board": Some(self.board_qid()).filter(|b| !b.is_empty()),
             "board_pane": if self.board_qid().is_empty() { Value::Null } else { self.board.state() }, "sprites": self.sprites,
             // MAPNAV1-U: who leads, the edge arrows of the last frame and the tile the camera looks at (null: the party)
+            // REGIONVIEW1: the camera (physical px of cell (0, 0)), the party's physical px, and the last frames of both
+            "camera": {"px": [self.cam.px.0, self.cam.px.1], "party": [self.cam.party.0, self.cam.party.1], "scale": self.cam.scale, "zoom": self.geo.q as f64 / 4.0,
+                "trail": (!self.cam_trail.is_empty()).then(|| self.cam_trail.iter().map(|(t, c)| json!([(t * 100000.0).round() / 100.0, c.px.0, c.px.1, c.party.0, c.party.1])).collect::<Vec<_>>())},
             "view": mapview::View::of_setting(&cx.settings.v["region_view"]).name(), "ground": self.ground.state(), "leader": leader_id(cx), "arrows": self.arrows, "pan": self.pan.filter(|_| self.pan_loc == gs.location_id).map(|p| json!([p.0, p.1])),
             // PORTRAITFX1 4.11: the speaker's portrait while the talk box shows (the shop or the board hides it)
             "portraits": if self.talking() && self.shop_qid().is_empty() && self.board_qid().is_empty() { self.faces.state() } else { json!([]) }})
@@ -1556,13 +1675,40 @@ fn edge_arrow(area: Rect, target: (f32, f32)) -> Option<(f32, f32, f32, f32)> {
     Some((cx + dx * k, cy + dy * k, dx / len, dy / len))
 }
 
+/// Whether an arrow at `p` meets the pane `r` (with 2 px to spare).
+fn arrow_meets(p: (f32, f32), r: &Rect) -> bool {
+    let half = ARROW as f32 / 2.0;
+    p.0 + half > r.x as f32 - 2.0 && p.0 - half < (r.x + r.w) as f32 + 2.0 && p.1 + half > r.y as f32 - 2.0 && p.1 - half < (r.y + r.h) as f32 + 2.0
+}
+
+/// Whether an arrow at `p` is in the arrows' band of `area`.
+fn arrow_inside(area: Rect, p: (f32, f32)) -> bool {
+    p.0 >= (area.x + ARROW) as f32 - 0.5 && p.0 <= (area.x + area.w - ARROW) as f32 + 0.5 && p.1 >= (area.y + ARROW) as f32 - 0.5 && p.1 <= (area.y + area.h - ARROW) as f32 + 0.5
+}
+
+/// REGIONVIEW1: an edge arrow at `at` moved along the edge it sits on, to the nearest place clear of the arrows already
+/// `placed` and of the panes (else where it was).
+fn beside_arrows(area: Rect, at: (f32, f32), placed: &[(f32, f32)], panes: &[Rect]) -> (f32, f32) {
+    let gap = ARROW as f32 + 2.0;
+    let free = |p: (f32, f32)| placed.iter().all(|o| (p.0 - o.0).abs() >= gap || (p.1 - o.1).abs() >= gap) && !panes.iter().any(|r| arrow_meets(p, r));
+    if placed.iter().all(|o| (at.0 - o.0).abs() >= gap || (at.1 - o.1).abs() >= gap) {
+        return at;
+    }
+    let on_side = at.0 <= (area.x + ARROW) as f32 + 0.5 || at.0 >= (area.x + area.w - ARROW) as f32 - 0.5;
+    (1..=(placed.len() as i32 + 1))
+        .flat_map(|k| [k, -k])
+        .map(|k| if on_side { (at.0, at.1 + k as f32 * gap) } else { (at.0 + k as f32 * gap, at.1) })
+        .find(|p| arrow_inside(area, *p) && free(*p))
+        .unwrap_or(at)
+}
+
 /// MAPNAV1-U: an edge arrow at `at` moved off the floating panes (the legend, the ticker): to the nearest place beside
 /// the pane it meets that stays in the arrows' band of `area` and clear of every pane (else where it was).
 fn clear_of(area: Rect, at: (f32, f32), panes: &[Rect]) -> (f32, f32) {
     let half = ARROW as f32 / 2.0;
     let pad = half + 2.0;
-    let meets = |p: (f32, f32), r: &Rect| p.0 + half > r.x as f32 - 2.0 && p.0 - half < (r.x + r.w) as f32 + 2.0 && p.1 + half > r.y as f32 - 2.0 && p.1 - half < (r.y + r.h) as f32 + 2.0;
-    let inside = |p: (f32, f32)| p.0 >= (area.x + ARROW) as f32 - 0.5 && p.0 <= (area.x + area.w - ARROW) as f32 + 0.5 && p.1 >= (area.y + ARROW) as f32 - 0.5 && p.1 <= (area.y + area.h - ARROW) as f32 + 0.5;
+    let meets = |p: (f32, f32), r: &Rect| arrow_meets(p, r);
+    let inside = |p: (f32, f32)| arrow_inside(area, p);
     let Some(r) = panes.iter().find(|r| meets(at, r)) else { return at };
     let options = [(r.x as f32 - pad, at.1), ((r.x + r.w) as f32 + pad, at.1), (at.0, r.y as f32 - pad), (at.0, (r.y + r.h) as f32 + pad)];
     let dist = |p: &(f32, f32)| (p.0 - at.0).abs() + (p.1 - at.1).abs();
@@ -1610,15 +1756,15 @@ fn leader_art(cx: &Cx) -> (String, String) {
 
 /// Body `body` standing on tile `r` (spec PLAYUI1 2.4): a foot shadow in `foot`, then the frame `player` plays at
 /// `now` in `face` (`Art::played_facing`, DIR4-M: the up or down row when the body has one, else the side row,
-/// mirrored facing left), fitted one source pixel per screen pixel. None when it does not play (the caller draws
-/// today's token).
+/// mirrored facing left), filling its rect at the zoomed size (SPRITEFIT1's exact fit). None when it does not play (the
+/// caller draws today's token).
 #[allow(clippy::too_many_arguments)]
 fn draw_sprite(ui: &mut Ui<RAct>, cx: &mut Cx, body: &str, palette: &str, player: &ClipPlayer, now: u64, face: Facing, r: Rect, foot: Rgba) -> Option<SpriteDrawn> {
     let sr = mapview::sprite_rect(r);
-    let px = (SPRITE as f32 * ui.p.v.s).round().max(1.0) as i32;
+    let px = (sr.w as f32 * ui.p.v.s).round().max(1.0) as i32;
     let (f, img) = cx.art.played_facing(body, palette, player, now, px, face)?;
     let flip = face.mirrors(&f);
-    let feet = (r.y + r.h) as f32 - 2.0;
+    let feet = (r.y + r.h) as f32 - r.w as f32 / 8.0;
     ui.p.ellipse(r.x as f32 + r.w as f32 / 2.0, feet, r.w as f32 * 0.4, r.h as f32 * 0.14, rgba(foot[0], foot[1], foot[2], FOOT_ALPHA));
     ui.p.image(img, sr);
     let view = if f.side { View::Side } else { face.view };
@@ -1658,10 +1804,23 @@ fn draw_marker(ui: &mut Ui<RAct>, cx: &mut Cx, m: &MarkDraw, ts: i32, idle: &Cli
 /// The foot shadow's alpha under a sprite.
 const FOOT_ALPHA: u8 = 150;
 
+/// A prop, cut at the map's rect (REGIONVIEW1: only boundary art past the map). The clip is physical px under the
+/// frame's view, so the cut moves with the map.
+fn draw_prop(ui: &mut Ui<RAct>, cx: &mut Cx, p: &PropDraw, map: Rect, q: i32) {
+    let leaves = p.rect.intersect(map) != p.rect;
+    let kept = ui.p.c.clip;
+    if leaves {
+        let inside = ui.p.v.rect(map);
+        ui.p.c.clip = Some(kept.map_or(inside, |c| c.intersect(inside)));
+    }
+    draw_prop_art(ui, cx, p, q);
+    ui.p.c.clip = kept;
+}
+
 /// A prop (PROPS1 4.3, 4.6): its art in its drawn rect (mirrored when flipped), one source pixel per screen pixel;
 /// without art a standing prop is a plain block over its footprint (fill, a darker south face, a 1 px edge; tilted,
-/// raised over the footprint with a `FACE_H` face, EXPLOREVIEW1 3.4) and a ground prop is nothing.
-fn draw_prop(ui: &mut Ui<RAct>, cx: &mut Cx, p: &PropDraw) {
+/// raised over the footprint with a face its lift tall, EXPLOREVIEW1 3.4) and a ground prop is nothing. `q`: the zoom.
+fn draw_prop_art(ui: &mut Ui<RAct>, cx: &mut Cx, p: &PropDraw, q: i32) {
     let (w, h) = ((p.rect.w as f32 * ui.p.v.s).round().max(1.0) as i32, (p.rect.h as f32 * ui.p.v.s).round().max(1.0) as i32);
     let img = match &p.file {
         Some(f) if p.flip => cx.art.image_mirrored(f, w, h),
@@ -1677,9 +1836,10 @@ fn draw_prop(ui: &mut Ui<RAct>, cx: &mut Cx, p: &PropDraw) {
     }
     let r = p.rect;
     ui.p.fill(r, BOX_FILL);
-    let face = if p.file.is_none() && r.y < p.foot.y { FACE_H } else { (r.h / 4).clamp(1, BOX_FACE_H) };
+    let face = if p.file.is_none() && r.y < p.foot.y { p.foot.y - r.y } else { (r.h / 4).clamp(1, BOX_FACE_H * q / 4) };
     ui.p.fill(Rect::new(r.x, r.y + r.h - face, r.w, face), BOX_FACE);
-    for edge in [Rect::new(r.x, r.y, r.w, 1), Rect::new(r.x, r.y + r.h - 1, r.w, 1), Rect::new(r.x, r.y, 1, r.h), Rect::new(r.x + r.w - 1, r.y, 1, r.h)] {
+    let e = (q / 4).max(1);
+    for edge in [Rect::new(r.x, r.y, r.w, e), Rect::new(r.x, r.y + r.h - e, r.w, e), Rect::new(r.x, r.y, e, r.h), Rect::new(r.x + r.w - e, r.y, e, r.h)] {
         ui.p.fill(edge, BOX_EDGE);
     }
 }
@@ -1690,58 +1850,127 @@ const WALL_FILL: Rgba = rgb(40, 60, 50);
 /// EXPLOREVIEW1 3.2: a water cell sunken by `LIP_DEPTH`: a band over its top when the cell north is not water, its
 /// bottom row shaded when the cell south is not.
 fn draw_lips(ui: &mut Ui<RAct>, r: Rect, north: bool, south: bool) {
+    let (line, lip) = (mapview::line_of(r.h), mapview::lip_of(r.h));
     if north {
-        ui.p.fill(Rect::new(r.x, r.y, r.w, 1), rgb(118, 116, 62));
-        ui.p.fill(Rect::new(r.x, r.y + 1, r.w, mapview::LIP_DEPTH), rgb(66, 54, 30));
-        ui.p.fill(Rect::new(r.x, r.y + 1 + mapview::LIP_DEPTH, r.w, 1), rgba(60, 40, 26, 110));
+        ui.p.fill(Rect::new(r.x, r.y, r.w, line), rgb(118, 116, 62));
+        ui.p.fill(Rect::new(r.x, r.y + line, r.w, lip), rgb(66, 54, 30));
+        ui.p.fill(Rect::new(r.x, r.y + line + lip, r.w, line), rgba(60, 40, 26, 110));
     }
     if south {
-        ui.p.fill(Rect::new(r.x, r.y + r.h - 1, r.w, 1), rgba(48, 34, 22, 120));
+        ui.p.fill(Rect::new(r.x, r.y + r.h - line, r.w, line), rgba(48, 34, 22, 120));
+    }
+}
+
+/// REGIONVIEW1: whether (x, y) is the map's border: past the map, or a wall on its outer ring (shipped maps ring themselves
+/// with `#`, which reads as one with what lies past it). Display only: `rows` still decide walking.
+fn on_border(t: &Dict, (w, h): Pos, x: i64, y: i64) -> bool {
+    match explore::tile(t, x, y) {
+        None => true,
+        Some(c) => c == '#' && (x == 0 || y == 0 || x == w - 1 || y == h - 1),
+    }
+}
+
+/// The folders a frame's walls draw from (REGIONGROUND1_SCENE: the location's `boundary` art for its border, else the
+/// walls' own): the region sets, and the boundary's `wall` and `wall_face` folders over them.
+struct WallArt<'a> {
+    names: &'a [String],
+    sets: Vec<&'a str>,
+    boundary_wall: Vec<String>,
+    boundary_face: Vec<String>,
+}
+
+impl<'a> WallArt<'a> {
+    fn of(names: &'a [String], boundary: &str) -> Self {
+        let dirs = |tile: &str| if boundary.is_empty() { Vec::new() } else { emberwake_content::art::boundary_dirs(names, boundary, tile) };
+        WallArt { names, sets: names.iter().map(String::as_str).collect(), boundary_wall: dirs("wall"), boundary_face: dirs("wall_face") }
+    }
+
+    /// The face's folders: the boundary's first on the border, the region sets', then the battle's stage set.
+    fn face_dirs(&self, border: bool) -> Vec<String> {
+        let own = self.names.iter().map(|set| format!("tilesets/{set}/wall_face"));
+        let first = self.boundary_face.iter().filter(|_| border).cloned();
+        first.chain(own).chain(emberwake_content::art::battle_stage_dirs("wall_face", "")).collect()
+    }
+}
+
+/// A wall's south face on its cell (EXPLOREVIEW1 3.2): `wall_face` along `dirs`, else the cap's top rows at 75 %, with its
+/// top line and the shade on the cell south.
+fn draw_face(ui: &mut Ui<RAct>, cx: &mut Cx, b: &Block, sets: &[&str], dirs: &[String]) {
+    let face = mapview::face_rect(b.cell);
+    let wall = emberwake_content::art::region_tile('#').unwrap_or("wall");
+    let dirs: Vec<&str> = dirs.iter().map(String::as_str).collect();
+    match cx.art.varied(&dirs, None, b.x, b.y, face.w, face.h) {
+        Some(img) => ui.p.image(img, face),
+        None => match darkened_cap(cx, sets, wall, b) {
+            Some(img) => ui.p.image(&img, face),
+            None => ui.p.fill(face, rgb(30, 45, 38)),
+        },
+    }
+    ui.p.fill(Rect::new(face.x, face.y, face.w, mapview::line_of(b.cell.h)), rgb(24, 24, 30));
+    ui.p.fill(Rect::new(b.cell.x, b.cell.y + b.cell.h, b.cell.w, mapview::shade_of(b.cell.h)), rgba(0, 0, 0, 70));
+}
+
+/// REGIONVIEW1: a cell of the border, flat on its cell (no lift, so it stays out of the map): the boundary's `wall` art, else
+/// the wall tile, else a plain fill; tilted, its south face when the cell south is open.
+#[allow(clippy::too_many_arguments)]
+fn draw_border(ui: &mut Ui<RAct>, cx: &mut Cx, walls: &WallArt, x: i32, y: i32, r: Rect, size: i32, face: bool) {
+    let dirs: Vec<&str> = walls.boundary_wall.iter().map(String::as_str).collect();
+    let wall = emberwake_content::art::region_tile('#').unwrap_or("wall");
+    let own = cx.art.pick(&dirs, None, x, y);
+    let img = match own {
+        Some(rel) => cx.art.image(&rel, size, size),
+        None => cx.art.tile_in(&walls.sets, wall, x, y, size),
+    };
+    match img {
+        Some(img) => ui.p.image(img, r),
+        None => ui.p.fill(r, WALL_FILL),
+    }
+    if face {
+        let b = Block { x, y, cell: r, rect: r, face };
+        draw_face(ui, cx, &b, &walls.sets, &walls.face_dirs(true));
     }
 }
 
 /// EXPLOREVIEW1 3.2: a wall block: its cap (the wall tile, squashed and lifted), its south face when the cell south is
-/// open (`wall_face` from the region sets, then the battle's stage set, else the cap's top rows at 75 %) with its top
-/// line and the shade on the cell south, the cap's highlight and side lines where the neighbour is not a wall.
-fn draw_block(ui: &mut Ui<RAct>, cx: &mut Cx, b: &Block, sets: &[&str], names: &[String], ch_at: &impl Fn(i32, i32) -> char) {
+/// open with its top line and shade (`draw_face`), the cap's highlight and side lines where the neighbour is not a wall.
+/// REGIONVIEW1: over a flat border south, the cell's own rows that the lifted cap leaves open are the wall too.
+fn draw_block(ui: &mut Ui<RAct>, cx: &mut Cx, b: &Block, walls: &WallArt, ch_at: &impl Fn(i32, i32) -> char, border_at: &impl Fn(i32, i32) -> bool) {
     let cap = mapview::cap_rect(b.cell);
     let wall = emberwake_content::art::region_tile('#').unwrap_or("wall");
-    match cx.art.tile_in(sets, wall, b.x, b.y, ART_TILE) {
+    let sets = walls.sets.as_slice();
+    let (size, line) = (ART_TILE * b.cell.w / mapview::CELL_W, mapview::line_of(b.cell.h));
+    if border_at(b.x, b.y + 1) {
+        match cx.art.tile_in(sets, wall, b.x, b.y, size) {
+            Some(img) => ui.p.image(img, b.cell),
+            None => ui.p.fill(b.cell, WALL_FILL),
+        }
+    }
+    match cx.art.tile_in(sets, wall, b.x, b.y, size) {
         Some(img) => ui.p.image(img, cap),
         None => ui.p.fill(cap, WALL_FILL),
     }
     if b.face {
-        let face = mapview::face_rect(b.cell);
-        let dirs: Vec<String> = names.iter().map(|set| format!("tilesets/{set}/wall_face")).chain(emberwake_content::art::battle_stage_dirs("wall_face", "")).collect();
-        let dirs: Vec<&str> = dirs.iter().map(String::as_str).collect();
-        match cx.art.varied(&dirs, None, b.x, b.y, CELL_W, FACE_H) {
-            Some(img) => ui.p.image(img, face),
-            None => match darkened_cap(cx, sets, wall, b) {
-                Some(img) => ui.p.image(&img, face),
-                None => ui.p.fill(face, rgb(30, 45, 38)),
-            },
-        }
-        ui.p.fill(Rect::new(face.x, face.y, face.w, 1), rgb(24, 24, 30));
-        ui.p.fill(Rect::new(b.cell.x, b.cell.y + b.cell.h, b.cell.w, mapview::SHADE_H), rgba(0, 0, 0, 70));
+        draw_face(ui, cx, b, sets, &walls.face_dirs(false));
     }
     if ch_at(b.x, b.y - 1) != '#' {
-        ui.p.fill(Rect::new(cap.x, cap.y, cap.w, 1), rgb(170, 172, 186));
+        ui.p.fill(Rect::new(cap.x, cap.y, cap.w, line), rgb(170, 172, 186));
     }
     let side = rgb(30, 30, 38);
     if ch_at(b.x - 1, b.y) != '#' {
-        ui.p.fill(Rect::new(cap.x, cap.y, 1, b.rect.h), side);
+        ui.p.fill(Rect::new(cap.x, cap.y, line, b.rect.h), side);
     }
     if ch_at(b.x + 1, b.y) != '#' {
-        ui.p.fill(Rect::new(cap.x + cap.w - 1, cap.y, 1, b.rect.h), side);
+        ui.p.fill(Rect::new(cap.x + cap.w - line, cap.y, line, b.rect.h), side);
     }
 }
 
-/// The wall face's fallback: the cap's top `FACE_H` rows at 75 % brightness (None: no wall art).
+/// The wall face's fallback: the cap's top rows, as many as the face is tall at this zoom, at 75 % brightness (None: no wall
+/// art).
 fn darkened_cap(cx: &mut Cx, sets: &[&str], wall: &str, b: &Block) -> Option<aegis_ui::canvas::Image> {
     let dirs: Vec<String> = sets.iter().map(|set| format!("tilesets/{set}/{wall}")).collect();
     let dirs: Vec<&str> = dirs.iter().map(String::as_str).collect();
-    let img = cx.art.varied(&dirs, None, b.x, b.y, CELL_W, mapview::TILTED_H)?;
-    let mut top = img.crop(0, 0, img.w, FACE_H);
+    let img = cx.art.varied(&dirs, None, b.x, b.y, b.cell.w, b.cell.h)?;
+    let mut top = img.crop(0, 0, img.w, mapview::lift_of(b.cell.h));
     for (k, v) in top.px.iter_mut().enumerate() {
         if k % 4 != 3 {
             *v = (*v as f32 * 0.75).round() as u8;
@@ -2040,10 +2269,11 @@ mod map_tests {
         }
     }
 
-    /// 3.2 A: no clamp; with the party on each corner tile of every map of the world, the party is drawn at the centre
-    /// of the map area (within a tile), and past the map's edge the wall is drawn (render only).
+    /// REGIONVIEW1 (replacing 3.2 A's no clamp): with the party on each corner tile of every map of the world, the party is
+    /// drawn on its cell in the map area, the camera stops with `MARGIN_CELLS` of margin (a map that fits centres), and past the
+    /// map's edge the wall is drawn (render only).
     #[test]
-    fn the_camera_centres_on_the_party_and_walls_fill_past_the_edge() {
+    fn the_camera_stops_at_the_map_and_walls_fill_past_the_edge() {
         let (mut cx, mut g) = (game_cx(), gfx());
         cx.settings.v["map_legend_open"] = json!(false);
         let d = cx.data.clone();
@@ -2063,15 +2293,31 @@ mod map_tests {
                 cx.gs_mut().position = (x, y);
                 cx.log.clear();
                 frame(&mut map, &mut cx, &mut g, 1.0);
-                let (px, py, pw, ph) = rect(&widget(&map, "party").expect("the party"));
                 let a = area();
-                let (dx, dy) = ((px + pw / 2) as i32 - (a.x + a.w / 2), (py + ph / 2) as i32 - (a.y + a.h / 2));
-                assert!(dx.abs() <= CELL_W && dy.abs() <= CELL_W, "{} at ({x}, {y}): the party is {dx}, {dy} off the centre", s(loc, "id"));
-                // the canvas pixel just outside the map, away from the corner the party stands on
-                let ox = if x == 0 { a.x + 2 } else { a.x + a.w - 3 };
-                let oy = if y == 0 { a.y + 20 } else { a.y + a.h - 3 };
-                let i = ((oy * g.canvas.w + ox) * 4) as usize;
-                assert_eq!(&g.canvas.px[i..i + 3], &[40, 60, 50], "{} at ({x}, {y}): the wall is drawn past the edge at ({ox}, {oy})", s(loc, "id"));
+                let (px, py, pw, ph) = rect(&widget(&map, "party").expect("the party"));
+                assert!(a.contains((px + pw / 2) as i32, (py + ph / 2) as i32), "{} at ({x}, {y}): the party is in view", s(loc, "id"));
+                let (cw, ch) = map.geo.cell_size();
+                let (mw, mh) = (w as i32 * cw, h as i32 * ch);
+                let want = |start: i32, len: i32, map: i32, cell: i32, near: bool| {
+                    if map <= len {
+                        start + (len - map) / 2
+                    } else if near {
+                        start + mapview::MARGIN_CELLS * cell
+                    } else {
+                        start + len - map - mapview::MARGIN_CELLS * cell
+                    }
+                };
+                assert_eq!((map.geo.ox, map.geo.oy), (want(a.x, a.w, mw, cw, x == 0), want(a.y, a.h, mh, ch, y == 0)), "{} at ({x}, {y})", s(loc, "id"));
+                // the canvas pixels just past the map on the sides the party is near, along the seams (an edge arrow or
+                // the folded legend may sit on one of them, never on all)
+                let ox = if x == 0 { map.geo.ox - 2 } else { map.geo.ox + mw + 1 };
+                let oy = if y == 0 { map.geo.oy - 2 } else { map.geo.oy + mh + 1 };
+                let wall = |px: i32, py: i32, g: &Gfx| {
+                    let i = ((py * g.canvas.w + px) * 4) as usize;
+                    g.canvas.px[i..i + 3] == [40, 60, 50]
+                };
+                assert!((1..4).any(|k| wall(ox, a.y + a.h * k / 4, &g)), "{} at ({x}, {y}): the wall past the side at x {ox}", s(loc, "id"));
+                assert!((1..4).any(|k| wall(a.x + a.w * k / 4, oy, &g)), "{} at ({x}, {y}): the wall past the end at y {oy}", s(loc, "id"));
             }
         }
         assert!(maps > 0, "the world has a location with a map");
@@ -2205,6 +2451,9 @@ mod map_tests {
 
     fn the_region_map_reads_clean_at_every_text_size_in(view: &str) {
         let (mut cx, mut g) = (game_cx(), gfx());
+        reads_clean(&mut cx, &mut g, view);
+        // REGIONVIEW1: the zoom moves names and arrows, and the panes keep their size
+        cx.settings.v["map_zoom"] = json!(2.0);
         reads_clean(&mut cx, &mut g, view);
     }
 
@@ -3126,7 +3375,7 @@ mod sprite_tests {
 #[cfg(test)]
 mod nav_tests {
     use super::*;
-    use crate::hud::hud_tests::{frame, game_cx, gfx, rect};
+    use crate::hud::hud_tests::{frame, game_cx, gfx};
 
     fn area() -> Rect {
         Rect::new(0, HUD_H, W, H - HUD_H)
@@ -3195,6 +3444,10 @@ mod nav_tests {
                 want.sort();
                 assert_eq!(arrow_ids(&map, &cx), want, "{} at {corner:?}", s(loc, "id"));
                 let state = map.state(&cx);
+                let spots: Vec<(i64, i64)> = state["arrows"].as_array().cloned().unwrap_or_default().iter().map(|v| (v["at"][0].as_i64().unwrap(), v["at"][1].as_i64().unwrap())).collect();
+                for (i, p) in spots.iter().enumerate() {
+                    assert!(spots[..i].iter().all(|o| (o.0 - p.0).abs() >= ARROW as i64 || (o.1 - p.1).abs() >= ARROW as i64), "{} at {corner:?}: arrows stacked: {spots:?}", s(loc, "id"));
+                }
                 for arrow in state["arrows"].as_array().cloned().unwrap_or_default() {
                     let id = s(json::dict(&arrow), "id");
                     let (x, y) = (arrow["at"][0].as_i64().unwrap() as i32, arrow["at"][1].as_i64().unwrap() as i32);
@@ -3236,9 +3489,18 @@ mod nav_tests {
         assert_eq!(map.state(&cx)["pan"], json!([at.0, at.1]));
         assert_eq!(map.state(&cx)["walking"], json!(false), "the first click only looks");
         frame(&mut map, &mut cx, &mut g, 1.0);
-        let (mx, my, mw, mh) = rect(&map.widgets().into_iter().find(|w| w["id"] == format!("marker.{id}")).expect("the marker in view"));
+        map.widgets().into_iter().find(|w| w["id"] == format!("marker.{id}")).expect("the marker in view");
         let a = area();
-        assert!(((mx + mw / 2) as i32 - (a.x + a.w / 2)).abs() <= CELL_W && ((my + mh / 2) as i32 - (a.y + a.h / 2)).abs() <= CELL_W, "the marker at the centre");
+        let (cols, rows) = explore::size_of(explore::template_of(&cx.data, explore::location(&cx.data, cx.gs())));
+        let (cw, ch) = map.geo.cell_size();
+        let want = mapview::camera_px(map.geo.cell_size(), a, (cols as i32, rows as i32), (at.0 as f32, at.1 as f32), 1.0);
+        assert_eq!((map.geo.ox, map.geo.oy), want, "the camera looks there, stopped by the map's edges");
+        // on the area's centre, unless an edge stopped it: then the camera stands on its margin
+        let r = tile_rect(&map, at);
+        let centred = (r.x + r.w / 2, r.y + r.h / 2) == (a.x + a.w / 2, a.y + a.h / 2);
+        let m = mapview::MARGIN_CELLS;
+        let on_margin = [map.geo.ox == a.x + m * cw, map.geo.ox + cols as i32 * cw == a.x + a.w - m * cw, map.geo.oy == a.y + m * ch, map.geo.oy + rows as i32 * ch == a.y + a.h - m * ch].contains(&true);
+        assert!(centred || on_margin, "the marker at the centre or the camera on a margin");
         assert!(!arrow_ids(&map, &cx).contains(&id), "no arrow for a marker in view");
         // a pan never carries into another location
         let here = cx.gs().location_id.clone();
@@ -3575,7 +3837,8 @@ mod view_tests {
         let mut g = gfx();
         cx.settings.v["region_view"] = json!("tilted");
         let open = |t: &Dict, x: i64, y: i64| ch(t, x, y) == '.';
-        let (loc, behind) = site(&cx, |t, x, y| open(t, x, y) && ch(t, x, y + 1) == '#');
+        let (loc, behind) = site(&cx, |t, x, y| open(t, x, y) && ch(t, x, y + 1) == '#' && !on_border(t, explore::size_of(t), x, y + 1));
+        let (loc3, by_ring) = site(&cx, |t, x, y| open(t, x, y) && ch(t, x, y + 1) == '#' && on_border(t, explore::size_of(t), x, y + 1));
         let (loc2, free) = site(&cx, |t, x, y| (-2..=2).all(|dy| (-2..=2).all(|dx| open(t, x + dx, y + dy))));
         let mut outline = |cx: &mut Cx, loc: &str, at: Pos| {
             cx.gs_mut().location_id = loc.to_string();
@@ -3591,6 +3854,7 @@ mod view_tests {
         };
         assert!(outline(&mut cx, &loc, behind) > 0, "the outline over the cap");
         assert_eq!(outline(&mut cx, &loc2, free), 0, "open ground: no outline");
+        assert_eq!(outline(&mut cx, &loc3, by_ring), 0, "REGIONVIEW1: the map's outer wall hides nobody");
     }
 
     /// Check 6: a tilted prop without art is the raised box; the square one stays on its footprint with today's face,
@@ -3601,7 +3865,7 @@ mod view_tests {
         let foot = Rect::new(100, 100, 160, 72);
         let p = |rect: Rect| PropDraw { id: "x".into(), rect, foot, file: None, flip: false, ground: false, foot_y: foot.y + foot.h };
         let mut ui: Ui<RAct> = Ui::new(&mut g, (0, 0), true);
-        draw_prop(&mut ui, &mut cx, &p(Rect::new(foot.x, foot.y - mapview::BLOCK_LIFT, foot.w, foot.h + mapview::BLOCK_LIFT)));
+        draw_prop_art(&mut ui, &mut cx, &p(Rect::new(foot.x, foot.y - mapview::BLOCK_LIFT, foot.w, foot.h + mapview::BLOCK_LIFT)), 4);
         drop(ui);
         let mid = foot.x + foot.w / 2;
         let colour = |c: Rgba| [c[0], c[1], c[2]];
@@ -3618,7 +3882,7 @@ mod view_tests {
         for (drawn, label) in [(p(foot), "square"), (unloadable, "art that will not load")] {
             let mut g = gfx();
             let mut ui: Ui<RAct> = Ui::new(&mut g, (0, 0), true);
-            draw_prop(&mut ui, &mut cx, &drawn);
+            draw_prop_art(&mut ui, &mut cx, &drawn, 4);
             drop(ui);
             assert_eq!(px(&g, mid, drawn.rect.y), colour(BOX_EDGE), "{label}: the top edge");
             assert_eq!(px(&g, mid, foot.y + foot.h - 2), colour(BOX_FACE), "{label}: the south face");
@@ -3868,9 +4132,10 @@ mod ground_tests {
         tileset: &'static str,
         tone: f64,
         many: bool,
+        boundary: &'static str,
     }
 
-    const PLAIN: Fixture = Fixture { cols: 40, rows: 40, layer: false, tileset: "", tone: 0.0, many: false };
+    const PLAIN: Fixture = Fixture { cols: 40, rows: 40, layer: false, tileset: "", tone: 0.0, many: false, boundary: "" };
     const LAYER: Fixture = Fixture { layer: true, ..PLAIN };
 
     impl Fixture {
@@ -3955,7 +4220,7 @@ mod ground_tests {
                 Value::Array(list.collect())
             };
             let worlds = json!({WORLD: {"manifest": {"id": WORLD, "name": "Yard", "start_location": "hub", "start_party": ["hero"]}, "own": {
-                "locations": owned(json!([{"id": "hub", "name": "Hub", "map": "zz_yard", "tileset": self.tileset, "markers": [
+                "locations": owned(json!([{"id": "hub", "name": "Hub", "map": "zz_yard", "tileset": self.tileset, "boundary": self.boundary, "markers": [
                     {"id": "m_job", "kind": "encounter", "encounter": "job", "anchor": "job"},
                     {"id": "m_far", "kind": "encounter", "encounter": "job", "anchor": "far", "unless_flags": [{"key": "zz_gone"}]}]}])),
                 "encounters": owned(json!([{"id": "job", "name": "Job", "location": "hub", "enemies": []}]))
@@ -4119,6 +4384,8 @@ mod ground_tests {
                     m.tick(c);
                 }
                 assert_eq!(c.gs().position, to, "{view}: the walk ends on the cell");
+                // the glide over (the two maps ran on their own wall clocks)
+                m.tick_at(c, Instant::now() + Duration::from_secs(1));
                 frame(m, c, g, 1.0);
             }
             same(&a, &b, &plain, &layered, "after a walk");
@@ -4395,10 +4662,11 @@ mod ground_tests {
     #[ignore = "a measurement; run by hand in a release build"]
     fn ground_frame_time_on_a_large_map() {
         for view in views() {
-            for (w, h) in [(1280, 720), (1920, 1080), (3840, 2160)] {
+            for (w, h, z) in [(1280, 720, 1.0), (1920, 1080, 1.0), (3840, 2160, 1.0), (1280, 720, 2.0), (1920, 1080, 2.0), (1920, 1080, 3.0)] {
                 for layer in [false, true] {
                     let f = Fixture { cols: 48, rows: 30, layer, tone: 0.13, many: true, ..PLAIN };
                     let (mut cx, mut g) = (f.cx(view), gfx());
+                    cx.settings.v["map_zoom"] = json!(z);
                     cx.art = aegis_ui::art::Art::new(Some(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
                     g.canvas = Canvas::new(w, h);
                     g.view = aegis_ui::painter::View::fit(w as u32, h as u32);
@@ -4416,9 +4684,682 @@ mod ground_tests {
                         times.push(t.elapsed().as_secs_f64() * 1000.0);
                     }
                     times.sort_by(f64::total_cmp);
-                    println!("{view} {w}x{h} ground={layer}: first {:.1} ms, frame median {:.2} ms, p95 {:.2} ms, composes so far {}", first.as_secs_f64() * 1000.0, times[60], times[114], ground_composes());
+                    println!("{view} {w}x{h} zoom {z} ground={layer}: first {:.1} ms, frame median {:.2} ms, p95 {:.2} ms, composes so far {}", first.as_secs_f64() * 1000.0, times[60], times[114], ground_composes());
                 }
             }
+        }
+    }
+
+    /// REGIONVIEW1: the smooth camera, its clamp and the map's border, over the same fixture on a map larger than the view.
+    mod camera_tests {
+        use super::*;
+
+        const BIG: Fixture = Fixture { cols: 120, rows: 80, ..LAYER };
+        /// Whole scales and a fractional one.
+        const WINDOWS: [(i32, i32); 3] = [(1280, 720), (1920, 1080), (1517, 853)];
+        const BOUNDARY: [u8; 3] = [90, 30, 150];
+        const BOUNDARY_FACE: [u8; 3] = [50, 10, 90];
+
+        fn gfx_at(w: i32, h: i32) -> Gfx {
+            let mut g = gfx();
+            g.canvas = Canvas::new(w, h);
+            g.view = aegis_ui::painter::View::fit(w as u32, h as u32);
+            g
+        }
+
+        fn shot_at(map: &mut RegionMap, cx: &mut Cx, g: &mut Gfx, t: Instant) {
+            map.tick_at(cx, t);
+            frame(map, cx, g, 1.0);
+        }
+
+        fn sixtieth(t0: Instant, i: u32) -> Instant {
+            t0 + Duration::from_secs_f64(i as f64 / 60.0)
+        }
+
+        /// The steps a hold from frame 0 has taken by frame `i`: the press, and one per `STEP_MS` from its time.
+        fn steps_by(i: u32) -> i64 {
+            1 + (i as f64 / 60.0 * 1000.0 / STEP_MS as f64).floor() as i64
+        }
+
+        fn widget(map: &RegionMap, id: &str) -> Value {
+            map.widgets().into_iter().find(|w| w["id"] == id).expect("the widget")
+        }
+
+        fn rect(w: &Value) -> (i32, i32, i32, i32) {
+            let n = |i: usize| w["rect"][i].as_i64().unwrap_or(0) as i32;
+            (n(0), n(1), n(2), n(3))
+        }
+
+        /// The party's screen place stays put through a held walk at any scale and in both views, and the camera moves by
+        /// the walking speed each frame (never a cell); WALK2's rate is kept. At the zoom's ends and its default.
+        #[test]
+        fn a_held_walk_keeps_the_party_still_and_moves_the_ground_in_small_even_steps() {
+            for view in views() {
+                for (w, h, z) in WINDOWS.map(|(w, h)| (w, h, 1.0)).into_iter().chain(WINDOWS.map(|(w, h)| (w, h, 2.0))).chain([(1280, 720, 1.25), (1280, 720, 3.0)]) {
+                    for (key, dir) in [(Key::Left, (-1, 0)), (Key::Up, (0, -1))] {
+                        let (mut cx, mut g) = (BIG.cx(view), gfx_at(w, h));
+                        cx.settings.v["map_zoom"] = json!(z);
+                        let mut map = RegionMap::new(&mut cx);
+                        let start = (60, 50);
+                        cx.gs_mut().position = start;
+                        let t0 = Instant::now();
+                        shot_at(&mut map, &mut cx, &mut g, t0);
+                        let s = g.view.s;
+                        let cell = if dir.0 != 0 { map.geo.cell_size().0 } else { map.geo.cell_size().1 };
+                        let speed = cell as f64 * s as f64 / 60.0 * 1000.0 / STEP_MS as f64;
+                        map.key(&mut cx, key);
+                        cx.held.dir = Some(dir);
+                        let party = map.cam.party;
+                        let mut was = map.cam.px;
+                        let mut moved = 0.0;
+                        for i in 1..=60 {
+                            shot_at(&mut map, &mut cx, &mut g, sixtieth(t0, i));
+                            assert_eq!(map.cam.party, party, "{view} {w} {dir:?}: frame {i}: the party's place");
+                            let d = (map.cam.px.0 - was.0, map.cam.px.1 - was.1);
+                            let along = if dir.0 != 0 { d.0 } else { d.1 } as f64;
+                            let across = if dir.0 != 0 { d.1 } else { d.0 };
+                            assert_eq!(across, 0, "{view} {w} {dir:?}: frame {i}");
+                            assert!(along >= speed.floor() && along <= speed.ceil(), "{view} {w} {dir:?}: frame {i} moved {along}, speed {speed}");
+                            assert!(along < (cell as f32 * s) as f64 / 2.0, "{view} {w}: small steps");
+                            assert_eq!(cx.gs().position, (start.0 + dir.0 * steps_by(i), start.1 + dir.1 * steps_by(i)), "{view} {w}: frame {i}: the step rate");
+                            was = map.cam.px;
+                            moved += along;
+                        }
+                        let want = speed * 60.0;
+                        assert!((moved - want).abs() <= 2.0, "{view} {w}: {moved} over a second, {want} wanted");
+                    }
+                }
+            }
+        }
+
+        /// The painted ground follows the camera to the physical px: a ground's edge on a row stays at the same distance from
+        /// the camera in every frame, at whole and fractional scales.
+        #[test]
+        fn the_painted_ground_moves_with_the_camera() {
+            let third = GROUNDS[4].4;
+            for view in views() {
+                for (w, h, z) in WINDOWS.map(|(w, h)| (w, h, 1.0)).into_iter().chain(WINDOWS.map(|(w, h)| (w, h, 2.0))).chain([(1280, 720, 1.25), (1280, 720, 3.0)]) {
+                    let (mut cx, mut g) = (BIG.cx(view), gfx_at(w, h));
+                    cx.settings.v["map_zoom"] = json!(z);
+                    let mut map = RegionMap::new(&mut cx);
+                    cx.gs_mut().position = (30, 30);
+                    let t0 = Instant::now();
+                    shot_at(&mut map, &mut cx, &mut g, t0);
+                    map.key(&mut cx, Key::Left);
+                    cx.held.dir = Some((-1, 0));
+                    let s = g.view.s;
+                    let (row, from) = (g.view.y(120.0), g.view.x(100.0));
+                    let mut seen = None;
+                    let mut between = false;
+                    for i in 1..=30 {
+                        shot_at(&mut map, &mut cx, &mut g, sixtieth(t0, i));
+                        between |= (map.cam.px.0 as f32 / s).fract() != 0.0;
+                        let edge = (from..g.view.x(500.0)).find(|x| px(&g, *x, row) == third).expect("the edge of the third ground");
+                        assert_eq!(*seen.get_or_insert(edge - map.cam.px.0), edge - map.cam.px.0, "{view} {w}: frame {i}");
+                    }
+                    assert!(between, "{view} {w}: the camera was between logical px");
+                }
+            }
+        }
+
+        /// A click in a walking frame goes to the cell drawn under the cursor at the frame's fractional camera, and a
+        /// marker's click area is the marker's drawn cell. The mouse is logical: a logical px whose physical px are both
+        /// inside the cell is exact.
+        #[test]
+        fn a_click_during_a_walk_lands_on_the_cell_under_the_cursor() {
+            for (view, z) in views().flat_map(|v| mapview::zoom_steps().map(move |z| (v, z))) {
+                let data = BIG.data(|m| {
+                    m["anchors"][1]["x"] = json!(57);
+                    m["anchors"][1]["y"] = json!(48);
+                });
+                let (mut cx, mut g) = (BIG.cx_on(data, view), gfx_at(1280, 720));
+                cx.settings.v["map_zoom"] = json!(z);
+                let mut map = RegionMap::new(&mut cx);
+                cx.gs_mut().position = (60, 50);
+                let t0 = Instant::now();
+                shot_at(&mut map, &mut cx, &mut g, t0);
+                map.key(&mut cx, Key::Left);
+                cx.held.dir = Some((-1, 0));
+                let mut i = 1;
+                loop {
+                    shot_at(&mut map, &mut cx, &mut g, sixtieth(t0, i));
+                    i += 1;
+                    if map.cam.px.0 % 2 != 0 {
+                        break;
+                    }
+                    assert!(i < 60, "a frame between logical px");
+                }
+                cx.held.dir = None;
+                let (cw, ch) = map.geo.cell_size();
+                let cam = map.cam.px;
+                let party = cx.gs().position;
+                let target = (party.0 + 3, party.1 - 2);
+                let (x0, y0) = (cam.0 + target.0 as i32 * cw * 2, cam.1 + target.1 as i32 * ch * 2);
+                let (x1, y1) = (x0 + cw * 2, y0 + ch * 2);
+                let first = |a: i32| (a + 1).div_euclid(2);
+                let last = |b: i32| (b - 2).div_euclid(2);
+                for at in [(first(x0), first(y0)), (last(x1), first(y0)), (first(x0), last(y1)), (last(x1), last(y1)), ((first(x0) + last(x1)) / 2, (first(y0) + last(y1)) / 2)] {
+                    map.draw(&mut cx, &mut g, at, true);
+                    map.walk.clear();
+                    assert_eq!(map.geo.cell_at(at.0, at.1), target, "{view}: {at:?} under camera {cam:?}");
+                    assert!(map.click(&mut cx, at), "{view}: the map takes the click");
+                    let end = map.walk.iter().fold(party, |p, d| (p.0 + d.0, p.1 + d.1));
+                    assert_eq!(end, target, "{view}: {at:?}: the walk ends under the cursor");
+                }
+                // the marker: its widget is its cell's whole logical px, under a logical px from where it is drawn
+                map.walk.clear();
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                let (mx, my, _, mh) = rect(&widget(&map, "marker.m_job"));
+                assert!((mx * 2 - (cam.0 + 57 * cw * 2)).abs() <= 1, "{view} {z}: the marker's left edge");
+                assert!(((my + mh) * 2 - (cam.1 + 49 * ch * 2)).abs() <= 1, "{view} {z}: the marker's feet");
+            }
+        }
+
+        /// The clamp on the real screen: at each corner of the map only the margin shows past it, the party off centre on
+        /// its cell; a pan to the corner stops at the same place, wherever the party is.
+        #[test]
+        fn the_margin_at_all_four_corners_in_both_views_and_a_pan_clamps_the_same() {
+            for view in views() {
+                for (w, h, z) in WINDOWS.map(|(w, h)| (w, h, 2.0)).into_iter().chain(mapview::zoom_steps().map(|z| (1280, 720, z))) {
+                    let (cols, rows) = (BIG.cols, BIG.rows);
+                    for (x, y) in [(1, 1), (cols - 2, 1), (1, rows - 2), (cols - 2, rows - 2)] {
+                        let (mut cx, mut g) = (BIG.cx(view), gfx_at(w, h));
+                        cx.settings.v["map_zoom"] = json!(z);
+                        let mut map = RegionMap::new(&mut cx);
+                        cx.gs_mut().position = (x, y);
+                        frame(&mut map, &mut cx, &mut g, 1.0);
+                        let a = Rect::new(0, HUD_H, W, H - HUD_H);
+                        let (cw, ch) = map.geo.cell_size();
+                        let s = g.view.s;
+                        let round = |v: i32| (v as f32 * s).round() as i32;
+                        let m = mapview::MARGIN_CELLS;
+                        let want_x = if x == 1 { round(a.x + m * cw) } else { round(a.x + a.w - m * cw - cols as i32 * cw) };
+                        let want_y = if y == 1 { round(a.y + m * ch) } else { round(a.y + a.h - m * ch - rows as i32 * ch) };
+                        assert_eq!(map.cam.px, (want_x, want_y), "{view} {w} at ({x}, {y})");
+                        let party = rect(&widget(&map, "party"));
+                        assert_eq!((party.0, party.1), (map.geo.ox + x as i32 * cw, map.geo.oy + y as i32 * ch), "{view} {w}: on its cell, off centre");
+                        assert!(a.contains(party.0, party.1), "{view} {w}: in view");
+                        cx.gs_mut().position = (60, 40);
+                        map.pan = Some((x, y));
+                        map.pan_loc = cx.gs().location_id.clone();
+                        frame(&mut map, &mut cx, &mut g, 1.0);
+                        assert_eq!(map.cam.px, (want_x, want_y), "{view} {w}: a pan to ({x}, {y})");
+                    }
+                }
+            }
+        }
+
+        /// A map that fits centres in the view on both axes, wherever the party is, in both views.
+        #[test]
+        fn a_small_map_centres_in_the_view() {
+            for view in views() {
+                let f = Fixture { cols: 30, rows: 14, ..LAYER };
+                for z in [1.0, 1.25] {
+                    let (mut cx, mut g) = (f.cx(view), gfx());
+                    cx.settings.v["map_zoom"] = json!(z);
+                    let mut map = RegionMap::new(&mut cx);
+                    let a = Rect::new(0, HUD_H, W, H - HUD_H);
+                    for at in [(1, 1), (28, 1), (1, 12), (28, 12), (15, 7)] {
+                        cx.gs_mut().position = at;
+                        frame(&mut map, &mut cx, &mut g, 1.0);
+                        let (cw, ch) = map.geo.cell_size();
+                        assert_eq!((map.geo.ox, map.geo.oy), (a.x + (a.w - 30 * cw) / 2, a.y + (a.h - 14 * ch) / 2), "{view} {z} at {at:?}");
+                    }
+                }
+            }
+        }
+
+        /// A legend pan eases there and clamps; Esc eases back; under reduce motion both are at once, and the party still
+        /// glides.
+        #[test]
+        fn a_pan_eases_and_reduce_motion_does_not() {
+            for view in views() {
+                for (reduce, z) in [(false, 1.0), (true, 1.0), (false, 2.0), (true, 2.0)] {
+                    let (mut cx, mut g) = (BIG.cx(view), gfx_at(1280, 720));
+                    cx.settings.v["map_zoom"] = json!(z);
+                    cx.settings.v[aegis_ui::vignette::REDUCE_MOTION] = json!(reduce);
+                    let mut map = RegionMap::new(&mut cx);
+                    cx.gs_mut().position = (60, 40);
+                    let t0 = Instant::now();
+                    shot_at(&mut map, &mut cx, &mut g, t0);
+                    let home = map.cam.px;
+                    map.act(&mut cx, RAct::Pan("m_job".into()));
+                    assert_eq!(map.pan, Some((3, 3)));
+                    let (cw, ch) = map.geo.cell_size();
+                    let area = Rect::new(0, HUD_H, W, H - HUD_H);
+                    let there = mapview::camera_px((cw, ch), area, (BIG.cols as i32, BIG.rows as i32), (3.0, 3.0), 2.0);
+                    assert_eq!(there.0, mapview::MARGIN_CELLS * cw * 2, "{view} {z}: the pan stops at the map's west margin");
+                    shot_at(&mut map, &mut cx, &mut g, sixtieth(t0, 2));
+                    if reduce {
+                        assert_eq!(map.cam.px, there, "{view}: at once");
+                    } else {
+                        assert!(map.cam.px != there, "{view}: on its way: {:?} from {home:?}", map.cam.px);
+                        let mut was = map.cam.px.0;
+                        for i in 3..=40 {
+                            shot_at(&mut map, &mut cx, &mut g, sixtieth(t0, i));
+                            assert!(map.cam.px.0 >= was, "{view}: frame {i}: towards the pan");
+                            was = map.cam.px.0;
+                        }
+                        assert_eq!(map.cam.px, there, "{view}: there in the ease's time");
+                    }
+                    map.back(&mut cx);
+                    shot_at(&mut map, &mut cx, &mut g, sixtieth(t0, 42));
+                    if reduce {
+                        assert_eq!(map.cam.px, home, "{view}: back at once");
+                    } else {
+                        assert!(map.cam.px != home, "{view}: on its way back");
+                    }
+                    shot_at(&mut map, &mut cx, &mut g, sixtieth(t0, 90));
+                    assert_eq!(map.cam.px, home, "{view}: back on the party");
+                    // the party's glide does not read the setting
+                    map.key(&mut cx, Key::Right);
+                    let was = map.cam.px;
+                    shot_at(&mut map, &mut cx, &mut g, sixtieth(t0, 91));
+                    assert!(map.cam.px.0 < was.0 && map.cam.px.0 > was.0 - cw * 2, "{view} reduce={reduce}: a small step of the glide: {} from {}", map.cam.px.0, was.0);
+                }
+            }
+        }
+
+        /// The walk only moves the blit: the composer neither composes nor expands, at a fractional scale too.
+        #[test]
+        fn a_walk_shifts_the_ground_without_a_new_picture() {
+            for view in views() {
+                for (w, h, z) in WINDOWS.map(|(w, h)| (w, h, 1.0)).into_iter().chain(WINDOWS.map(|(w, h)| (w, h, 2.0))) {
+                    let (mut cx, mut g) = (BIG.cx(view), gfx_at(w, h));
+                    cx.settings.v["map_zoom"] = json!(z);
+                    let mut map = RegionMap::new(&mut cx);
+                    cx.gs_mut().position = (60, 40);
+                    let t0 = Instant::now();
+                    shot_at(&mut map, &mut cx, &mut g, t0);
+                    let (c0, e0) = (ground_composes(), ground_expands());
+                    map.key(&mut cx, Key::Left);
+                    cx.held.dir = Some((-1, 0));
+                    let was = map.cam.px;
+                    for i in 1..=30 {
+                        shot_at(&mut map, &mut cx, &mut g, sixtieth(t0, i));
+                    }
+                    assert!(map.cam.px != was, "{view} {w}: it moved");
+                    assert_eq!((ground_composes() - c0, ground_expands() - e0, map.ground.builds), (0, 0, 1), "{view} {w}: 30 frames");
+                }
+            }
+        }
+
+        /// What the map's border is made of.
+        fn border_art(root: &Path, with_boundary: bool) {
+            solid(root, "tilesets/common/wall/v0.png", 32, 32, WALL);
+            solid(root, "tilesets/common/wall_face/v0.png", 128, 48, FACE);
+            if with_boundary {
+                solid(root, "tilesets/common/boundary/zz_fence/wall/v0.png", 32, 32, BOUNDARY);
+                solid(root, "tilesets/common/boundary/zz_fence/wall_face/v0.png", 128, 48, BOUNDARY_FACE);
+            }
+        }
+
+        /// Past the map (the margin and the ring of walls) only boundary art shows, right up to the map's edges: no cap, no
+        /// highlight line and no block over the last open row or column; with no `boundary`, the wall tile.
+        #[test]
+        fn past_the_map_only_boundary_art_shows_and_the_seam_is_clean() {
+            for view in views() {
+                let tilted = view == "tilted";
+                for (with_boundary, z) in [(false, 1.0), (true, 1.0), (true, 2.0), (true, 1.25), (false, 3.0)] {
+                    let root = scratch(&format!("edge_{view}_{with_boundary}_{z}"));
+                    border_art(&root, with_boundary);
+                    let f = Fixture { boundary: if with_boundary { "zz_fence" } else { "" }, ..BIG };
+                    let (cols, rows) = (f.cols as i32, f.rows as i32);
+                    let (wall, face) = if with_boundary { (BOUNDARY, BOUNDARY_FACE) } else { (WALL, FACE) };
+                    for corner in [(cols - 2, rows - 2), (1, 1), (1, rows - 2), (cols - 2, 1)] {
+                        let (mut cx, mut g) = (f.cx(view), gfx());
+                        cx.settings.v["map_zoom"] = json!(z);
+                        cx.art = art_of(&root);
+                        let mut map = RegionMap::new(&mut cx);
+                        cx.gs_mut().position = (corner.0 as i64, corner.1 as i64);
+                        frame(&mut map, &mut cx, &mut g, 1.0);
+                        let geo = map.geo;
+                        let ch = geo.cell_size().1;
+                        let a = Rect::new(0, HUD_H, W, H - HUD_H);
+                        // probes along the seams, through the middle of the screen: clear of the arrows' band and the ticker
+                        let (x, y) = (a.x + a.w / 2, a.y + a.h / 2);
+                        if corner.1 == rows - 2 {
+                            let edge = geo.cell(0, rows - 1).y;
+                            assert_ne!(px(&g, x, edge - 1), wall, "{view}: the last open row is uncovered");
+                            assert_ne!(px(&g, x, edge - mapview::lift_of(ch)), [170, 172, 186], "{view}: no highlight line");
+                            for py in edge..a.y + a.h {
+                                assert_eq!(px(&g, x, py), wall, "{view}: ({x}, {py}) on the south border");
+                            }
+                        } else {
+                            let top = geo.cell(0, 1).y;
+                            for py in a.y + 16..top - if tilted { mapview::lift_of(ch) } else { 0 } {
+                                assert_eq!(px(&g, x, py), wall, "{view}: ({x}, {py}) on the north border");
+                            }
+                            if tilted {
+                                assert_eq!(px(&g, x, top - 1), face, "{view}: the face ends on the first open row");
+                            }
+                            assert_ne!(px(&g, x, top + mapview::shade_of(ch)), wall, "{view}: the open row starts");
+                        }
+                        if corner.0 == 1 {
+                            for px_x in a.x..geo.cell(1, 0).x {
+                                assert_eq!(px(&g, px_x, y), wall, "{view}: ({px_x}, {y}) on the west border");
+                            }
+                            assert_ne!(px(&g, geo.cell(1, 0).x, y), wall, "{view}: the first open column is uncovered");
+                        } else {
+                            for px_x in geo.cell(cols - 1, 0).x..a.x + a.w {
+                                assert_eq!(px(&g, px_x, y), wall, "{view}: ({px_x}, {y}) on the east border");
+                            }
+                            assert_ne!(px(&g, geo.cell(cols - 1, 0).x - 1, y), wall, "{view}: the last open column is uncovered");
+                        }
+                    }
+                    let _ = std::fs::remove_dir_all(&root);
+                }
+            }
+        }
+
+        /// A location whose boundary has no art draws today's tile.
+        #[test]
+        fn a_boundary_without_art_falls_back_to_the_wall_tile() {
+            for view in views() {
+                let root = scratch(&format!("edge_none_{view}"));
+                border_art(&root, false);
+                let f = Fixture { boundary: "zz_fence", ..BIG };
+                let (mut cx, mut g) = (f.cx(view), gfx());
+                cx.art = art_of(&root);
+                let mut map = RegionMap::new(&mut cx);
+                cx.gs_mut().position = (f.cols - 2, f.rows - 2);
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                let south = map.geo.cell(100, (f.rows - 1) as i32);
+                assert_eq!(px(&g, south.x, south.y + 2), WALL, "{view}");
+                let _ = std::fs::remove_dir_all(&root);
+            }
+        }
+
+        /// Prop art reaching past the map is cut on its edge in both views; inside the map it draws whole.
+        #[test]
+        fn prop_art_past_the_map_is_cut_on_its_edge() {
+            for (view, z) in views().flat_map(|v| [(v, 1.0), (v, 2.0)]) {
+                let root = scratch(&format!("edge_prop_{view}_{z}"));
+                border_art(&root, false);
+                solid(&root, "props/common/zz_post/v0.png", 64, 128, POST);
+                let data = BIG.data(|m| {
+                    m["props"] = json!([
+                        {"id": "north", "art": "zz_post", "x": 12, "y": 0, "w": 1, "h": 1, "layer": "sort", "variant": -1, "flip": false},
+                        {"id": "west", "art": "zz_post", "x": 0, "y": 4, "w": 1, "h": 1, "layer": "sort", "variant": -1, "flip": false},
+                        {"id": "inside", "art": "zz_post", "x": 16, "y": 6, "w": 1, "h": 1, "layer": "sort", "variant": -1, "flip": false}
+                    ]);
+                });
+                let (mut cx, mut g) = (BIG.cx_on(data, view), gfx());
+                cx.settings.v["map_zoom"] = json!(z);
+                cx.art = art_of(&root);
+                let mut map = RegionMap::new(&mut cx);
+                cx.gs_mut().position = (2, 2);
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                // art of 64 x 128 px at 2 art px a logical px at 1x
+                let geo = map.geo;
+                let (w, h) = (32 * geo.q / 4, 64 * geo.q / 4);
+                let west = geo.cell(0, 4);
+                let row = west.y + west.h - 2;
+                for x in (west.x + west.w / 2 - w / 2).max(0)..west.x + west.w / 2 + w / 2 {
+                    assert_eq!(px(&g, x, row) == POST, x >= geo.ox, "{view}: ({x}, {row}) against the map's left edge at {}", geo.ox);
+                }
+                let inside = geo.cell(16, 6);
+                assert_eq!(px(&g, inside.x, inside.y + inside.h - h), POST, "{view}: a prop in the map draws whole");
+                let north = geo.cell(12, 0);
+                assert_eq!(px(&g, north.x + 1, geo.oy - 1), WALL, "{view}: above the map the wall");
+                assert_eq!(px(&g, north.x + 1, geo.oy), POST, "{view}: inside it the prop");
+                let _ = std::fs::remove_dir_all(&root);
+            }
+        }
+
+        /// The rect of the exact colour `c` on the canvas (None: not there).
+        fn bbox(g: &Gfx, c: [u8; 3]) -> Option<Rect> {
+            let mut b: Option<(i32, i32, i32, i32)> = None;
+            for y in HUD_H..H {
+                for x in 0..W {
+                    if px(g, x, y) == c {
+                        let o = b.unwrap_or((x, y, x, y));
+                        b = Some((o.0.min(x), o.1.min(y), o.2.max(x), o.3.max(y)));
+                    }
+                }
+            }
+            b.map(|(x0, y0, x1, y1)| Rect::new(x0, y0, x1 - x0 + 1, y1 - y0 + 1))
+        }
+
+        /// One factor sizes the scene (the user: else the units look gigantic against it): at 2x a standing prop's and a
+        /// ground prop's painted rects and a sprite's rect are exactly twice their 1x size around the same anchor, the
+        /// bottom middle of their cell or footprint, whose own size also doubles.
+        #[test]
+        fn at_2x_props_and_sprites_are_exactly_twice_their_size_around_the_same_anchor() {
+            for view in views() {
+                let root = scratch(&format!("twice_{view}"));
+                border_art(&root, false);
+                solid(&root, "props/common/zz_mat/v0.png", 32, 32, MAT);
+                solid(&root, "props/common/zz_post/v0.png", 32, 64, POST);
+                let f = BIG;
+                let props_at = |z: f64| {
+                    let (mut cx, mut g) = (f.cx(view), gfx());
+                    cx.settings.v["map_zoom"] = json!(z);
+                    cx.art = art_of(&root);
+                    let mut map = RegionMap::new(&mut cx);
+                    cx.gs_mut().position = (20, f.rows - 11);
+                    frame(&mut map, &mut cx, &mut g, 1.0);
+                    let (post, mat) = (bbox(&g, POST).expect("the post"), bbox(&g, MAT).expect("the mat"));
+                    let (pc, mc) = (map.geo.cell_of(f.post()), map.geo.cell_of(f.mat()));
+                    assert_eq!((post.x + post.w / 2, post.y + post.h), (pc.x + pc.w / 2, pc.y + pc.h), "{view} {z}: the post on its footprint");
+                    assert_eq!((mat.x + mat.w / 2, mat.y + mat.h), (mc.x + mc.w / 2, mc.y + mc.h), "{view} {z}: the mat on its footprint");
+                    (post, mat, pc)
+                };
+                let ((post1, mat1, cell1), (post2, mat2, cell2)) = (props_at(1.0), props_at(2.0));
+                assert_eq!((post2.w, post2.h), (post1.w * 2, post1.h * 2), "{view}: the standing prop");
+                assert_eq!((mat2.w, mat2.h), (mat1.w * 2, mat1.h * 2), "{view}: the ground prop");
+                assert_eq!((cell2.w, cell2.h), (cell1.w * 2, cell1.h * 2), "{view}: its cell");
+                let _ = std::fs::remove_dir_all(&root);
+                // a sprite, on the game's art
+                let sprite_at = |z: f64| {
+                    let (mut cx, mut g) = (game_cx(), gfx());
+                    cx.art = aegis_ui::art::Art::new(Some(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+                    cx.settings.v["region_view"] = json!(view);
+                    cx.settings.v["map_zoom"] = json!(z);
+                    let mut map = RegionMap::new(&mut cx);
+                    frame(&mut map, &mut cx, &mut g, 1.0);
+                    let state = map.state(&cx);
+                    let sp = state["sprites"].as_array().and_then(|l| l.iter().find(|v| v["id"] == "party").cloned()).expect("the leader");
+                    let n = |i: usize| sp["rect"][i].as_i64().unwrap_or(0) as i32;
+                    let c = map.geo.cell_of(cx.gs().position);
+                    assert_eq!((n(0) + n(2) / 2, n(1) + n(3)), (c.x + c.w / 2, c.y + c.h), "{view} {z}: the sprite on its cell");
+                    (n(2), n(3), sp["px"].clone(), c.w, c.h)
+                };
+                let ((w1, h1, _, cw1, ch1), (w2, h2, _, cw2, ch2)) = (sprite_at(1.0), sprite_at(2.0));
+                assert_eq!((w2, h2), (w1 * 2, h1 * 2), "{view}: the sprite");
+                assert_eq!((cw2, ch2), (cw1 * 2, ch1 * 2), "{view}: its cell");
+            }
+        }
+
+        /// The HUD bar, the legend and the ticker do not zoom.
+        #[test]
+        fn the_hud_the_legend_and_the_ticker_keep_their_size() {
+            let f = BIG;
+            let rects = |z: f64| {
+                let (mut cx, mut g) = (f.cx("square"), gfx());
+                cx.settings.v["map_zoom"] = json!(z);
+                cx.settings.v["map_legend_open"] = json!(true);
+                let mut map = RegionMap::new(&mut cx);
+                cx.log("A line.".to_string());
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                let fixed: Vec<Value> = map.widgets().into_iter().filter(|w| {
+                    let id = w["id"].as_str().unwrap_or("");
+                    !(id == "map" || id == "party" || id.starts_with("marker.") || id.starts_with("arrow."))
+                }).map(|w| json!([w["id"], w["rect"]])).collect();
+                fixed
+            };
+            let one = rects(1.0);
+            assert!(one.iter().any(|w| w[0].as_str().is_some_and(|i| i.starts_with("here."))), "the legend's rows are among them");
+            for z in mapview::zoom_steps() {
+                assert_eq!(rects(z), one, "at {z}");
+            }
+        }
+
+        /// A zoom step recomposes once (art px per cell follow it up to the composer's limit); past that limit the same
+        /// picture stretches, and only its physical copy is new.
+        #[test]
+        fn a_zoom_step_makes_one_new_picture_and_then_none() {
+            for view in views() {
+                let f = Fixture { cols: 48, rows: 30, ..LAYER };
+                let (mut cx, mut g) = (f.cx(view), gfx());
+                cx.settings.v["map_zoom"] = json!(1.0);
+                let mut map = RegionMap::new(&mut cx);
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                let c0 = ground_composes();
+                let at = |map: &mut RegionMap, cx: &mut Cx, g: &mut Gfx, z: f64| {
+                    cx.settings.v["map_zoom"] = json!(z);
+                    frame(map, cx, g, 1.0);
+                    frame(map, cx, g, 1.0);
+                };
+                at(&mut map, &mut cx, &mut g, 2.0);
+                assert_eq!((ground_composes() - c0, map.ground.builds), (1, 2), "{view}: to 2x");
+                at(&mut map, &mut cx, &mut g, 3.0);
+                assert_eq!(ground_composes() - c0, 1, "{view}: 3x stretches 2x's picture");
+                at(&mut map, &mut cx, &mut g, 2.0);
+                assert_eq!(ground_composes() - c0, 1, "{view}: back to a kept picture");
+            }
+        }
+
+        /// A game with no saved value draws at 1x, today's view.
+        #[test]
+        fn a_game_with_no_saved_zoom_draws_at_the_default() {
+            let (mut cx, mut g) = (BIG.cx("square"), gfx());
+            cx.settings.v.as_object_mut().expect("settings").remove("map_zoom");
+            let mut map = RegionMap::new(&mut cx);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            assert_eq!(map.geo.q, 4);
+            assert_eq!(map.geo.cell_size(), (mapview::CELL_W, mapview::SQUARE_H));
+        }
+
+        /// REGIONVIEW1's measurement on the shipped keep at 1080p: the first frame (job, compose, copy) and a walking frame.
+        #[test]
+        #[ignore = "a measurement; run by hand in a release build"]
+        fn the_keeps_frame_time_at_each_zoom() {
+            for view in views() {
+                for z in [1.0, 2.0, 3.0] {
+                    let (mut cx, mut g) = (game_cx(), gfx_at(1920, 1080));
+                    cx.art = aegis_ui::art::Art::new(Some(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+                    cx.settings.v["region_view"] = json!(view);
+                    cx.settings.v["map_zoom"] = json!(z);
+                    cx.settings.v["map_legend_open"] = json!(false);
+                    let mut map = RegionMap::new(&mut cx);
+                    let start = cx.gs().position;
+                    let c0 = ground_composes();
+                    let t0 = Instant::now();
+                    shot_at(&mut map, &mut cx, &mut g, t0);
+                    let first = t0.elapsed();
+                    let mut times = Vec::new();
+                    for i in 1..=240u32 {
+                        cx.gs_mut().position = (start.0 + (i as i64 / 6) % 3, start.1);
+                        let at = sixtieth(t0, i);
+                        let t = Instant::now();
+                        map.tick_at(&mut cx, at);
+                        frame(&mut map, &mut cx, &mut g, 1.0);
+                        times.push(t.elapsed().as_secs_f64() * 1000.0);
+                    }
+                    times.sort_by(f64::total_cmp);
+                    println!("{view} {z}x 1080p: first frame {:.1} ms ({} composes), walking frame median {:.2} ms, p95 {:.2} ms, ground {}", first.as_secs_f64() * 1000.0, ground_composes() - c0, times[120], times[228], map.ground.state());
+                }
+            }
+        }
+
+        /// On a map ringed with walls, as every shipped map is, 2 rows of wall show past the last walkable row at each corner:
+        /// the ring and one cell (user 2026-11-02), in both views, whatever the zoom.
+        #[test]
+        fn a_ringed_map_shows_two_rows_of_wall_past_the_last_walkable_row() {
+            for view in views() {
+                for z in [1.0, 2.0] {
+                    let (cols, rows) = (BIG.cols, BIG.rows);
+                    for (x, y) in [(1, 1), (cols - 2, 1), (1, rows - 2), (cols - 2, rows - 2)] {
+                        let (mut cx, mut g) = (BIG.cx(view), gfx());
+                        cx.settings.v["map_zoom"] = json!(z);
+                        let mut map = RegionMap::new(&mut cx);
+                        cx.gs_mut().position = (x, y);
+                        frame(&mut map, &mut cx, &mut g, 1.0);
+                        let a = Rect::new(0, HUD_H, W, H - HUD_H);
+                        let (cw, ch) = map.geo.cell_size();
+                        let walkable = map.geo.cell_of((x, y));
+                        let past_x = if x == 1 { walkable.x - a.x } else { a.x + a.w - (walkable.x + cw) };
+                        let past_y = if y == 1 { walkable.y - a.y } else { a.y + a.h - (walkable.y + ch) };
+                        assert_eq!((past_x, past_y), (2 * cw, 2 * ch), "{view} {z} at ({x}, {y})");
+                    }
+                }
+            }
+        }
+
+        /// The Settings screen's Map zoom row: a pick is a draft until Apply; then the setting holds the step and the map
+        /// draws at it.
+        #[test]
+        fn picking_a_map_zoom_and_applying_it_zooms_the_map() {
+            let (mut cx, mut g) = (BIG.cx("square"), gfx());
+            let mut s = crate::menus::SettingsScreen::new(&cx);
+            s.draw(&mut cx, &mut g, (-500, -500), true);
+            s.click_id(&mut cx, "settings.tab.gameplay").expect("the gameplay tab");
+            s.draw(&mut cx, &mut g, (-500, -500), true);
+            let row = s.widgets().into_iter().find(|w| w["id"] == "settings.map_zoom").expect("the row");
+            assert_eq!(row["text"], json!("1x"), "the default");
+            g.kit.open = Some("settings.map_zoom".to_string());
+            s.draw(&mut cx, &mut g, (-500, -500), true);
+            let steps: Vec<f64> = mapview::zoom_steps().collect();
+            let labels: Vec<Value> = s.widgets().into_iter().filter(|w| w["kind"] == "option").map(|w| w["text"].clone()).collect();
+            assert_eq!(labels.len(), steps.len(), "every step is listed: {labels:?}");
+            let at = steps.iter().position(|z| *z == 1.75).expect("the step");
+            s.click_id(&mut cx, &format!("settings.map_zoom.opt.{at}")).expect("the option");
+            g.kit.open = None;
+            s.draw(&mut cx, &mut g, (-500, -500), true);
+            assert_eq!(s.widgets().into_iter().find(|w| w["id"] == "settings.map_zoom").expect("the row")["text"], json!("1.75x"), "the row shows the pick");
+            let at_1x = |cx: &mut Cx, g: &mut Gfx| {
+                let mut map = RegionMap::new(cx);
+                frame(&mut map, cx, g, 1.0);
+                map.geo.q
+            };
+            assert_eq!(at_1x(&mut cx, &mut g), 4, "only a draft so far");
+            s.click_id(&mut cx, "settings.apply").expect("apply");
+            assert_eq!(cx.settings.v["map_zoom"], json!(1.75));
+            assert_eq!(at_1x(&mut cx, &mut g), 7, "the map draws at the applied step");
+            let _ = std::fs::remove_dir_all(&cx.shot_dir);
+        }
+
+        /// The camera's trail is a measuring aid: no `state` reply carries it, and nothing is kept, unless the flag is set; with
+        /// it, the trail stays bounded.
+        #[test]
+        fn the_camera_trail_is_off_unless_asked_for_and_bounded() {
+            let (mut cx, mut g) = (BIG.cx("square"), gfx());
+            let mut map = RegionMap::new(&mut cx);
+            let t0 = Instant::now();
+            for i in 0..20 {
+                shot_at(&mut map, &mut cx, &mut g, sixtieth(t0, i));
+            }
+            assert!(map.cam_trail.is_empty(), "nothing kept");
+            let state = map.state(&cx);
+            assert!(state["camera"]["trail"].is_null(), "not in the state");
+            assert!(state["camera"]["px"].is_array(), "the camera itself is");
+            cx.settings.v["camera_trail"] = json!(true);
+            for i in 20..(20 + CAM_TRAIL as u32 + 30) {
+                map.tick_at(&mut cx, sixtieth(t0, i));
+                map.draw(&mut cx, &mut g, (-500, -500), true);
+            }
+            assert_eq!(map.cam_trail.len(), CAM_TRAIL, "bounded");
+            assert_eq!(map.state(&cx)["camera"]["trail"].as_array().map(Vec::len), Some(CAM_TRAIL));
+        }
+
+        /// Arrows toward one side never stack: each stays clear of those before it, on the edge it sits on.
+        #[test]
+        fn edge_arrows_do_not_stack() {
+            let a = Rect::new(0, HUD_H, W, H - HUD_H);
+            let at = (200.0, (a.y + ARROW) as f32);
+            let mut placed = Vec::new();
+            for _ in 0..4 {
+                let p = beside_arrows(a, at, &placed, &[]);
+                assert_eq!(p.1, at.1, "along the top edge");
+                assert!(placed.iter().all(|o: &(f32, f32)| (o.0 - p.0).abs() >= ARROW as f32), "{p:?} clear of {placed:?}");
+                placed.push(p);
+            }
+            let side = ((a.x + ARROW) as f32, 150.0);
+            let p = beside_arrows(a, side, &[side], &[]);
+            assert_eq!(p.0, side.0, "along the left edge");
+            assert!((p.1 - side.1).abs() >= ARROW as f32);
+            assert_eq!(beside_arrows(a, at, &[(300.0, at.1)], &[]), at, "nothing in the way: it stays");
         }
     }
 }

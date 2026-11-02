@@ -741,6 +741,11 @@ impl SettingsScreen {
                     self.draft["map_names"] = json!(v);
                 }
             }
+            SetAct::Pick("map_zoom", i) => {
+                if let Some(v) = crate::mapview::zoom_steps().nth(i) {
+                    self.draft["map_zoom"] = json!(v);
+                }
+            }
             SetAct::Pick("see_through", i) => {
                 if let Some((v, _)) = crate::stage::SEE_THROUGH.get(i) {
                     self.draft["see_through"] = json!(v);
@@ -860,6 +865,12 @@ impl Screen<GameCx> for SettingsScreen {
                 let at = MAP_NAMES.iter().position(|m| d["map_names"].as_str() == Some(m.0)).unwrap_or(0);
                 let t = tip("Map names", "On hover: a marker's name shows while you point at it, its legend row, or face it. Always: every person and exit is named.");
                 ui.select("settings.map_names", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick("map_names", i), true, t);
+                y += 22;
+                // REGIONVIEW1: the region map's zoom
+                ui.p.text(x as f32, y as f32 + 3.0, "Map zoom", BODY, th().text);
+                let labels: Vec<String> = crate::mapview::zoom_steps().map(|z| format!("{z}x")).collect();
+                let at = (crate::mapview::zoom_of(&d["map_zoom"]) - crate::mapview::ZOOM_QUARTERS.0) as usize;
+                ui.select("settings.map_zoom", Rect::new(x + 125, y, 150, 16), &labels, at, |i| SetAct::Pick("map_zoom", i), true, tip("Map zoom", crate::mapview::ZOOM_TIP));
                 y += 22;
                 // STAGE1-O: when units hidden behind others or cover are outlined in battle (the Flat view is a Scene
                 // Runner debug setting since STAGE1-C, not a player choice).

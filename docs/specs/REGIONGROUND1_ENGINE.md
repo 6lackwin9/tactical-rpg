@@ -219,7 +219,9 @@ The content hash covers the job's cells, legend rows and each texture's identity
 pixel of each texture, not `panes::picture_id` (which stays private): real content, so no address, about 16 KB a texture,
 hashed by `GroundKey::of` when the job changes, never each frame. `draw` copies the physical copy's rows inside the clip, as `panes::blit` does. No per-pixel blend, so a
 hit costs less than today's per-cell tile loop. A map whose physical copy would pass `PHYSICAL_MAX` 64 MB draws the art
-image through `Painter::image` instead (nearest, per frame; slower, never wrong). No shipped map reaches it.
+image through `Painter::image` instead (nearest, per frame; slower, never wrong). No shipped map reaches it. As built
+(REGIONVIEW1): the map zoom reaches it (Warden Keep, square view, from 2.25x at 1080p and from 1.25x at 4K), so that path now
+copies only what shows (`blit_scaled`, the same pixels as `Painter::image`).
 
 ### 4.2 Memory (48 x 30 cells, the largest shipped map)
 

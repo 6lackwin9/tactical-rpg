@@ -38,7 +38,7 @@ pub const CELL_MAX: i32 = 32;
 pub const ART_PX_MAX: i64 = 16_000_000;
 /// The most layers a job holds (a rank is a byte): past it a job composes nothing.
 pub const LAYERS_MAX: usize = 255;
-/// A physical copy past this many bytes is not kept: the art image draws through `Painter::image` instead.
+/// A physical copy past this many bytes is not kept: the art image draws to what shows instead (`blit_scaled`).
 pub const PHYSICAL_MAX: usize = 64_000_000;
 /// How many art images are kept, the oldest dropped first.
 pub const ART_MAX: usize = 4;
@@ -989,10 +989,39 @@ fn blit(c: &mut Canvas, pr: Rect, stride: i32, px: &[u8]) {
     }
 }
 
+/// `art` on `pr` by nearest sampling (`Painter::image`'s), for an opaque image: only what shows inside the canvas, its clip
+/// and its bounds, a row repeated at the scale copied. So a map past `PHYSICAL_MAX` costs what shows, not its whole size.
+fn blit_scaled(c: &mut Canvas, pr: Rect, art: &Image) {
+    let mut v = pr.intersect(Rect::new(0, 0, c.w, c.h));
+    for limit in [c.clip, c.bounds].into_iter().flatten() {
+        v = v.intersect(limit);
+    }
+    if v.w <= 0 || v.h <= 0 {
+        return;
+    }
+    let n = (v.w * 4) as usize;
+    let xs: Vec<usize> = (v.x..v.x + v.w).map(|x| ((x - pr.x) as i64 * art.w as i64 / pr.w as i64) as usize * 4).collect();
+    let mut last = None;
+    for y in v.y..v.y + v.h {
+        let sy = ((y - pr.y) as i64 * art.h as i64 / pr.h as i64) as usize;
+        let to = ((y * c.w + v.x) * 4) as usize;
+        if let Some((was, from)) = last.filter(|(was, _)| *was == sy) {
+            c.px.copy_within(from..from + n, to);
+            last = Some((was, from));
+            continue;
+        }
+        last = Some((sy, to));
+        let src = &art.px[sy * art.w as usize * 4..(sy + 1) * art.w as usize * 4];
+        for (d, x) in c.px[to..to + n].as_chunks_mut::<4>().0.iter_mut().zip(&xs) {
+            d.copy_from_slice(&src[*x..*x + 4]);
+        }
+    }
+}
+
 /// The ground on `r`: the art image of `key` from the cache (`job` composes it on a miss), its physical copy from the
 /// cache (made on a miss, the old one freed first), the copy's rows blitted inside the clip. So a frame, a step or a
 /// pan costs a copy of what shows; a resize one new copy; another map one compose unless it is among the last 4. A
-/// copy past `PHYSICAL_MAX` draws the art image through `Painter::image` instead.
+/// copy past `PHYSICAL_MAX` draws the art image straight to what shows instead (the same pixels as `Painter::image`).
 ///
 /// The copy's size follows the logical size and the scale, not the rect's rounded edges, so a pan at a fractional
 /// window scale (where those edges differ by a pixel from place to place) keeps its copy; at a whole scale it is
@@ -1035,7 +1064,7 @@ pub fn draw(p: &mut Painter, key: GroundKey, r: Rect, job: impl FnOnce() -> Imag
     let size = (((r.w as f32 * p.v.s).ceil() as i32).max(pr.w), ((r.h as f32 * p.v.s).ceil() as i32).max(pr.h));
     if size.0 as usize * size.1 as usize * 4 > PHYSICAL_MAX {
         COPY.with(|copy| *copy.borrow_mut() = None);
-        p.image(&art, r);
+        blit_scaled(p.c, pr, &art);
         return;
     }
     COPY.with(|copy| {

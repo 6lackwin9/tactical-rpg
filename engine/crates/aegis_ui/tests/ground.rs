@@ -808,9 +808,10 @@ fn a_pan_at_a_fractional_scale_keeps_its_copy_and_leaves_no_gap() {
     assert_eq!(ground::ground_expands() - e0, 1);
 }
 
-/// A copy past `PHYSICAL_MAX` is not kept: the art image draws through `Painter::image`, the same pixels.
+/// A copy past `PHYSICAL_MAX` is not kept: the art image draws straight to what shows, the same pixels as `Painter::image`,
+/// through a clip and at an offset too.
 #[test]
-fn a_map_past_the_copy_limit_draws_through_the_painter() {
+fn a_map_past_the_copy_limit_draws_what_shows_as_the_painter_would() {
     let fx = Fixture::new(12, 8, SQUARE);
     // Past the limit at this window's scale of 4.
     let (w, h) = (2560u32, 1440u32);
@@ -824,6 +825,16 @@ fn a_map_past_the_copy_limit_draws_through_the_painter() {
     live.painter().image(&art, r);
     assert_eq!(ground::ground_expands() - e0, 0, "no copy");
     assert!(drawn.canvas.px == live.canvas.px);
+    let moved = Rect::new(-37, -21, side, side);
+    let clip = Rect::new(100, 60, 300, 200);
+    let (mut drawn, mut live) = (Frame::new(w, h), Frame::new(w, h));
+    let mut p = drawn.painter();
+    p.clip(Some(clip));
+    fx.draw(&mut p, "large", moved);
+    let mut p = live.painter();
+    p.clip(Some(clip));
+    p.image(&art, moved);
+    assert!(drawn.canvas.px == live.canvas.px, "clipped and moved");
 }
 
 /// Past the limit no old copy stays held, and `expand` of nothing allocates nothing.

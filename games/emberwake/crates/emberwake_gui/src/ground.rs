@@ -11,19 +11,22 @@ use crate::mapview::{MapGeom, View};
 use crate::screens::Cx;
 use aegis_core::json::{self, Dict};
 use aegis_ui::canvas::{Image, Rect, Rgba};
-use aegis_ui::ground::{self as composer, GroundJob, GroundKey, GroundLayer, PlacedPatch, ART_PX_MAX, CELL_PX, TEX_CELLS, TILTED_CELL};
+use aegis_ui::ground::{self as composer, GroundJob, GroundKey, GroundLayer, PlacedPatch, ART_PX_MAX, CELL_MAX, CELL_PX, TEX_CELLS, TILTED_CELL};
 use aegis_ui::painter::Painter;
 use emberwake_content::ground::{plan, GroundPlan};
 use emberwake_world::Data;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-/// The composer's art px per cell in a view; one art px is one logical px, so these equal `MapGeom::cell_size`.
-fn cell_of(view: View) -> (i32, i32) {
-    match view {
+/// The composer's art px per cell in a view at `q` quarters of zoom: one art px is one logical px, so these equal
+/// `MapGeom::cell_size`, up to the composer's `CELL_MAX` (past it, the picture at `CELL_MAX` stretches on the blit).
+fn cell_of(view: View, q: i32) -> (i32, i32) {
+    let (w, h) = match view {
         View::Square => (CELL_PX, CELL_PX),
         View::Tilted => TILTED_CELL,
-    }
+    };
+    let q = q.min(4 * CELL_MAX / CELL_PX);
+    (w * q / 4, h * q / 4)
 }
 
 /// What a job was made from. `data` is held, not its address, so a freed catalog's address can never come back as a
@@ -34,6 +37,7 @@ struct Seen {
     map: String,
     sets: Vec<String>,
     view: View,
+    q: i32,
 }
 
 /// One map's job, owning what the composer's job borrows. A texture is a layer's reduced art; `layers` is in `plan`'s
@@ -86,12 +90,12 @@ fn flat_colour(text: &str) -> Option<Rgba> {
     aegis_ui::theme::parse_colour(text)
 }
 
-/// The picture of template `t` in `view`; None (the map draws as if it had no ground) for what `plan` refuses, for a row
+/// The picture of template `t` in `view` at `q` quarters of zoom; None (the map draws as if it had no ground) for what `plan` refuses, for a row
 /// the checks refuse by its colour, or for a map too large for the composer, so a map never loses its tiles for nothing.
-fn picture(cx: &mut Cx, t: &Dict, sets: &[String], view: View) -> Option<Picture> {
+fn picture(cx: &mut Cx, t: &Dict, sets: &[String], view: View, q: i32) -> Option<Picture> {
     let d = cx.data.clone();
     let plan = plan(t, &d.cat.grounds)?;
-    let cell = cell_of(view);
+    let cell = cell_of(view, q);
     if (plan.cols * cell.0) as i64 * (plan.rows * cell.1) as i64 > ART_PX_MAX {
         return None;
     }
@@ -124,17 +128,17 @@ pub struct MapGround {
 
 impl MapGround {
     /// Makes the job and key if something they depend on changed since the last frame; else only compares.
-    pub fn sync(&mut self, cx: &mut Cx, t: &Dict, sets: &[String], view: View) {
+    pub fn sync(&mut self, cx: &mut Cx, t: &Dict, sets: &[String], view: View, q: i32) {
         let map = json::s(t, "id");
-        let same = self.seen.as_ref().is_some_and(|s| s.view == view && s.art == cx.art.generation() && Arc::ptr_eq(&s.data, &cx.data) && s.map == map && s.sets == sets);
+        let same = self.seen.as_ref().is_some_and(|s| s.view == view && s.q == q && s.art == cx.art.generation() && Arc::ptr_eq(&s.data, &cx.data) && s.map == map && s.sets == sets);
         if same {
             return;
         }
-        self.job = picture(cx, t, sets, view).map(|p| {
+        self.job = picture(cx, t, sets, view, q).map(|p| {
             let key = p.key(&map);
             (p, key)
         });
-        self.seen = Some(Seen { data: cx.data.clone(), art: cx.art.generation(), map, sets: sets.to_vec(), view });
+        self.seen = Some(Seen { data: cx.data.clone(), art: cx.art.generation(), map, sets: sets.to_vec(), view, q });
         #[cfg(test)]
         {
             self.builds += 1;
@@ -211,7 +215,16 @@ mod tests {
     fn the_composers_cell_is_the_views_cell() {
         for (name, _) in mapview::VIEWS {
             let view = View::of_setting(&json!(name));
-            assert_eq!(cell_of(view), (CELL_W, view.cell_h()), "{name}: one art px is one logical px");
+            assert_eq!(cell_of(view, 4), (CELL_W, view.cell_h()), "{name}: one art px is one logical px");
+            for z in mapview::zoom_steps() {
+                let q = mapview::zoom_of(&json!(z));
+                let (art, cell) = (cell_of(view, q), mapview::cell_of(view, q));
+                assert!(art.0 <= CELL_MAX && art.1 <= CELL_MAX, "{name} {z}: the composer takes it");
+                assert_eq!(art.0 * cell.1, art.1 * cell.0, "{name} {z}: the same shape as the cell");
+                if q <= 8 {
+                    assert_eq!(art, cell, "{name} {z}: one art px is one logical px up to 2x");
+                }
+            }
         }
     }
 
@@ -224,13 +237,49 @@ mod tests {
         cx.art = Art::layered(aegis_core::assets::Layers::of(vec![root.clone()]));
         let t = template(4, 3);
         for (view, want) in [(View::Square, (64, 64)), (View::Tilted, (64, 48))] {
-            let p = picture(&mut cx, &t, &["common".to_string()], view).expect("a picture");
+            let p = picture(&mut cx, &t, &["common".to_string()], view, 4).expect("a picture");
             let tex = p.textures[0].as_ref().expect("the texture");
             assert_eq!((tex.w, tex.h), want);
             assert!(*tex == master.downsample(want.0, want.1), "{view:?}: one step from the master");
         }
         assert!(master.downsample(64, 48) != master.downsample(64, 64).downsample(64, 48), "the fixture tells the two apart");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// REGIONVIEW1's measurement on the shipped keep: making the job, composing and expanding at the zoom's steps at 1080p.
+    #[test]
+    #[ignore = "a measurement; run by hand in a release build"]
+    fn the_keeps_ground_time_at_each_zoom() {
+        let mut cx = game_cx();
+        cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        let loc = d.merged_entries(&world, "locations").into_iter().find(|l| json::s(l, "map") == "ashlands_warden_keep").expect("the keep");
+        let t = emberwake_world::explore::template_of(&d, loc).clone();
+        let mut lineage = d.lineage(&world);
+        lineage.reverse();
+        let sets = emberwake_content::art::region_sets(&lineage, &json::s(loc, "tileset"));
+        for view in [View::Square, View::Tilted] {
+            for z in [1.0, 2.0, 3.0] {
+                let q = mapview::zoom_of(&json!(z));
+                let t0 = std::time::Instant::now();
+                let p = picture(&mut cx, &t, &sets, view, q).expect("a picture");
+                let job = t0.elapsed();
+                let t1 = std::time::Instant::now();
+                let key = p.key("keep");
+                let keyed = t1.elapsed();
+                let t2 = std::time::Instant::now();
+                let art = p.compose();
+                let composed = t2.elapsed();
+                let (cw, ch) = mapview::cell_of(view, q);
+                let (w, h) = ((p.plan.cols * cw) as f32 * 3.0, (p.plan.rows * ch) as f32 * 3.0);
+                let bytes = (w * h * 4.0) as usize;
+                let t3 = std::time::Instant::now();
+                let copy = if bytes <= composer::PHYSICAL_MAX { composer::expand(&art, w as i32, h as i32).len() } else { 0 };
+                let expanded = t3.elapsed();
+                println!("{view:?} {z}x: art {}x{} ({} MB), job {:.1} ms (first read of the art sizes), key {:.1} ms, compose {:.1} ms, physical copy {} MB in {:.1} ms{}; {:?}", art.w, art.h, art.px.len() / 1_000_000, job.as_secs_f64() * 1e3, keyed.as_secs_f64() * 1e3, composed.as_secs_f64() * 1e3, bytes / 1_000_000, expanded.as_secs_f64() * 1e3, if copy == 0 { " (past the limit: not kept)" } else { "" }, key.cell);
+            }
+        }
     }
 
     /// A row's numbers reach the composer as they are, in `plan`'s order (a texture's offset depends on it), water sunken.
@@ -249,7 +298,7 @@ mod tests {
         t.insert("rows".into(), json!([".~"]));
         t.insert("ground".into(), json!(["lw"]));
         t.insert("ground_legend".into(), json!({"l": "zz_late", "w": "zz_water"}));
-        let p = picture(&mut cx, &t, &[], View::Square).expect("a picture");
+        let p = picture(&mut cx, &t, &[], View::Square, 4).expect("a picture");
         let layers = p.layers();
         let got: Vec<(i32, bool, bool, bool)> = layers.iter().map(|l| (l.order, l.sunken, l.strays, l.tex.is_none())).collect();
         assert_eq!(got, [(5, true, false, true), (80, false, true, true)], "low order first");
@@ -265,11 +314,11 @@ mod tests {
     fn what_the_composer_cannot_draw_is_refused_not_cut() {
         for colour in ["", "102030", "#10203", "#1020300", "#10203040", "#10203g"] {
             let mut cx = cx_with(colour);
-            assert!(picture(&mut cx, &template(4, 3), &[], View::Square).is_none(), "'{colour}'");
+            assert!(picture(&mut cx, &template(4, 3), &[], View::Square, 4).is_none(), "'{colour}'");
         }
         let mut cx = cx_with("#102030");
         let side = (ART_PX_MAX as f64).sqrt() as usize / CELL_PX as usize;
-        assert!(picture(&mut cx, &template(side, side), &[], View::Square).is_some(), "at the limit");
-        assert!(picture(&mut cx, &template(side + 1, side + 1), &[], View::Square).is_none(), "past it");
+        assert!(picture(&mut cx, &template(side, side), &[], View::Square, 4).is_some(), "at the limit");
+        assert!(picture(&mut cx, &template(side + 1, side + 1), &[], View::Square, 4).is_none(), "past it");
     }
 }

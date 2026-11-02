@@ -178,6 +178,12 @@ Acceptance (A): with the party on any corner tile of an Ashlands map, the party 
 tile; for every NPC marker in the Ashlands maps, opening its dialogue from any adjacent tile leaves both the party and
 the NPC tiles fully inside the map area above the box at all four text sizes.
 
+As built (REGIONVIEW1, user 2026-11-02, decision "Region camera and terrain use"): option A's no clamp is replaced. The
+camera follows the party's drawn position and stops at the map's edges with 1 cell of boundary art past them (with the
+map's own wall ring, 2 rows of wall past the last walkable row); a map that fits centres; the party moves off centre near
+an edge. The talk camera keeps the midpoint rule, clamped over the area above the box, so both speakers stay above it.
+See `games/emberwake/docs/SCREENS.md` row 07.
+
 ### 3.3 Shop placement
 
 Recommended: while the shop is open the dialogue box is hidden, the map is dimmed, and the shop sits centred (4.2);
@@ -310,7 +316,8 @@ Total 22 icons (5 + 6 + 9 + 2). Props art belongs to PROPS1, sprites to SPRITE1-
 - UI_REVIEW1 shop "Buy / Sell tabs" becomes the three-column trade (4); DRAG1 C4 (drag between counter and bag) is
   retired or reshaped as 4.1 C.
 - MAPNAV1-U "Bryn's token as the party marker" becomes the leader's sprite (2.4).
-- MAPVIEW1's clamped region camera becomes the centred camera with drawn wall margins (3.2).
+- MAPVIEW1's clamped region camera becomes the centred camera with drawn wall margins (3.2; REGIONVIEW1 brought a clamp
+  back, with a 1 cell margin).
 
 ## 8. Out of scope
 
