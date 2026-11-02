@@ -69,8 +69,8 @@ one id. `colour` is the mock's swatch. Fields not listed take their defaults (KT
 | `scorched` | Scorched ground | 30 | land | #1c1917 | .06 | no | .13 | 0 | natural, .55 |
 | `tallow` | Tallow-stained ground | 32 | land | #2a251e | .06 | no | .13 | 0 | natural, .55 |
 | `mud` | Mud | 40 | land | #231d18 | .06 | no | .13 | .15 | natural, .55 |
-| `packed_dirt` | Packed dirt | 50 | land | #352c23 | .10 | no | .13 | .20 | natural, .55 |
-| `dirt_road` | Dirt road | 60 | land | #3c3126 | .10 | no | .13 | .15 | natural, .55 |
+| `packed_dirt` | Packed dirt | 50 | land | #332e28 | .10 | no | .13 | .20 | natural, .55 |
+| `dirt_road` | Dirt road | 60 | land | #39342e | .10 | no | .13 | .15 | natural, .55 |
 | `flagstone` | Flagstones | 70 | land | #373636 | .10 | yes | .08 | 0 | built, .45 |
 | `cobble_road` | Cobbled road | 78 | land | #2e3137 | .10 | yes | .08 | 0 | built, .45 |
 | `paved_road` | Paved road | 80 | land | #3e3f42 | .10 | yes | .08 | 0 | built, .45 |
@@ -154,6 +154,12 @@ The mix (T2) is drawn by `ground_compose` (EN 6), so the board's picture is the 
   `mud` 10-11, 3-9, 28-29, 3-9, 5-6, 13-15 and 32-33, 13-15; `moss` 0-39, 14-15 and 0-39, 20-21; `water` 0-39, 16-19;
   `iron_catwalk` 19-21, 13-21.
 
+As built (the review of slice T, 2026-11-02): natural grounds step their gain down as built grounds do, toward about .17,
+because real art cannot meet the natural caps at a fixed .55. `dirt_road` and `packed_dirt` were re-picked to meet the
+colour cap of 12. Direction bins are centred on the axes, L and the broad-tone blur stay in floats, so calibration reads
+`mud` 2.83, `floor` 2.84, `dirt_flat` 2.60, `floor_r2` 1.77, `stone_r2` 1.65, even noise about 1.1; broad tone `dirt_clean`
+1.91, `dirt_flat` .37. The tools stay Pillow only. A tail check catches a repeated dark blotch.
+
 ## 7. Prompt template and batches
 
 Gemini route (`tools/portraits/artqueue.py request`, a record beside each image, a `session_ref` chain from the base;
@@ -172,8 +178,8 @@ different sizes, in no rows and no direction, with narrow joints only slightly d
 | --- | --- | --- | --- |
 | A1 | `ash` base, n 2 (`ashlands`) | #2a2622 | fine grey ash over dry ground, soft even dust |
 | A1 | `scrub` | #2b2d22 | dry ground with sparse tiny flecks of dead grass, nothing taller than a few pixels |
-| A1 | `dirt_road` | #3c3126 | hard trodden brown dirt with tiny pebbles |
-| A1 | `packed_dirt` | #352c23 | pressed dry earth, smooth and fine |
+| A1 | `dirt_road` | #39342e | hard trodden brown dirt with tiny pebbles |
+| A1 | `packed_dirt` | #332e28 | pressed dry earth, smooth and fine |
 | A1 | `paved_road` | #3e3f42 | worn grey paving stones |
 | A1 | `flagstone` | #373636 | old grey-brown flagstones, chipped, of many sizes |
 | A1 | `mud` | #231d18 | dark wet mud with small even pits |
