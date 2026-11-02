@@ -4,6 +4,8 @@ Newest pass on top. Candidate statuses: `proposed`, `confirmed (user <date>)`, `
 
 ## Later backlog pass, 2026-11-02
 
+Confirmed by the user 2026-11-03 (decision "Ashlands is a test bed"): rewrites and merges apply; CLN-57, CLN-66, CLN-67 and CLN-68 are superseded, those rows are dropped; the keep verdicts on PACE1-A, PACE1-B and DESERT1 are superseded, also dropped.
+
 Scope: decision "Priorities after the visual pass" (`docs/decisions/workflow.md:118`, "The Later backlog gets a keep,
 rewrite or drop pass for the user to confirm"). Read-only scan of the planner checkout at a39ccb56. Source of the rows:
 `progress.py --milestone Later` gives 41 rows; PACE1-L and MAPNAV1-U are done, so 39 are open. LAYOUT1, MARKERS1, ICONUI1
