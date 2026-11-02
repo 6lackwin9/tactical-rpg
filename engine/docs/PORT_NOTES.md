@@ -329,3 +329,4 @@ files (the Godot build's) are refused with that reason.
   are not listed (none exist).
 - Recording can be turned on and off while the app runs (the browser's toggle; the setting is now the engine's).
 - Not ported yet: party battles of the world map (PLAYTEST2).
+| none | `aegis_ui` `MenuStyle::Text` and `text_button` rows, `panes::backdrop` compose-and-blit cache, `Kit::mouse_moved`, `focus::hover_target`, `shows_ring`, `click_keeps_focus`, the left-edge anchor in `focus::toward` (LOOK1-M1, engine-only) | `aegis_ui/tests/panes.rs`, `shell.rs` and `emberwake_gui/src/menus.rs` inline tests; new in the port, no Godot counterpart |

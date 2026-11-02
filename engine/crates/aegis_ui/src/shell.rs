@@ -42,6 +42,8 @@ struct Shell<G> {
     gfx: Gfx,
     stack: Vec<Box<dyn Screen<G>>>,
     mouse: (i32, i32),
+    /// The top screen has `text_button` rows (noted each frame by `settle_focus`; `mouse_moved` needs nothing without).
+    text_rows: bool,
     /// The slider being dragged (its id) and the step widget it last set.
     drag: Option<(String, String)>,
     /// A press on a draggable widget (UIKIT2), waiting to become a drag (a move) or a click (a release).
@@ -326,7 +328,7 @@ impl<G: Context> Shell<G> {
         let mut p = Painter { c: &mut self.gfx.canvas, v: self.gfx.view, fonts: &mut self.gfx.fonts };
         if self.gfx.kit.focus_visible && self.gfx.kit.open.is_none() {
             let infos = self.stack[n - 1].widgets();
-            if let Some(w) = focus::live(&infos, self.gfx.kit.focus.as_deref(), false) {
+            if let Some(w) = focus::live(&infos, self.gfx.kit.focus.as_deref(), false).filter(|w| focus::shows_ring(w)) {
                 let r = info_rect(w);
                 p.panel(Rect::new(r.x - 2, r.y - 2, r.w + 4, r.h + 4), rgba(0, 0, 0, 0), theme.ring, theme.layout.radius + 1.0);
             }
@@ -370,6 +372,7 @@ impl<G: Context> Shell<G> {
     fn settle_focus(&mut self) {
         let top = self.stack.last().unwrap();
         let infos = top.widgets();
+        self.text_rows = infos.iter().any(|w| !focus::shows_ring(w));
         let open = self.gfx.kit.open.is_some();
         if open && self.open_focus.is_some() && !self.gfx.kit.focus.as_deref().is_some_and(|f| infos.iter().any(|w| w["id"] == f && w["kind"] == "option")) {
             let picked = infos.iter().find(|w| w["kind"] == "option" && w["active"] == json!(true)).and_then(|w| w["id"].as_str()).map(String::from);
@@ -381,6 +384,10 @@ impl<G: Context> Shell<G> {
             let first = top.focus_first().filter(|f| focus::live(&infos, Some(f), open).is_some()).map(String::from);
             self.gfx.kit.focus = first.or_else(|| focus::step(&infos, None, focus::Move::Next, open));
             self.gfx.kit.focus_visible = self.gfx.kit.focus.is_some();
+        }
+        // No focus showing, and a menu row lit under a mouse that has not moved: it is the active item, so Enter presses it.
+        if !self.gfx.kit.focus_visible {
+            self.gfx.kit.mouse_moved(&infos, self.mouse);
         }
     }
 
@@ -424,6 +431,16 @@ impl<G: Context> Shell<G> {
         }
         let had = self.press.take().is_some() | moved;
         self.gfx.kit.drag.take().is_some() || had
+    }
+
+    /// The mouse moved: a menu row without a panel under it becomes the active item (`Kit::mouse_moved`).
+    fn mouse_moved(&mut self) {
+        // Most screens have none: no widget list built on every move (`settle_focus` notes it each frame).
+        if !self.text_rows {
+            return;
+        }
+        let infos = self.stack.last().unwrap().widgets();
+        self.gfx.kit.mouse_moved(&infos, self.mouse);
     }
 
     fn key(&mut self, k: Key) {
@@ -591,7 +608,8 @@ impl<G: Context> Shell<G> {
             return true;
         }
         self.gfx.kit.edit = None;
-        self.gfx.kit.focus_visible = false;
+        let keep = self.gfx.kit.focus_visible && focus::click_keeps_focus(&infos, self.gfx.kit.focus.as_deref(), at.as_ref());
+        self.gfx.kit.focus_visible = keep;
         self.open_focus = None;
         if self.gfx.kit.open.take().is_some() {
             // An open list: a pick goes through, any other click only closes it.
@@ -842,7 +860,8 @@ impl<G: Context> Shell<G> {
                 let infos = self.stack.last().unwrap().widgets();
                 let target = infos.iter().find(|w| w["id"] == id).cloned();
                 // As a mouse click: the ring hides, the clicked widget takes the focus.
-                self.gfx.kit.focus_visible = false;
+                let keep = self.gfx.kit.focus_visible && focus::click_keeps_focus(&infos, self.gfx.kit.focus.as_deref(), target.as_ref());
+                self.gfx.kit.focus_visible = keep;
                 self.open_focus = None;
                 if target.as_ref().is_some_and(|w| focus::focusable(w, false)) {
                     self.gfx.kit.focus = Some(id.to_string());
@@ -960,6 +979,7 @@ impl<G: Context> Shell<G> {
                 match self.stack.last().unwrap().widget_rect(id) {
                     Some((r, tip)) => {
                         self.mouse = (r.x + r.w / 2, r.y + r.h / 2);
+                        self.mouse_moved();
                         json!({"ok": true, "tip": tip})
                     }
                     None => json!({"ok": false, "error": format!("no widget '{id}'")}),
@@ -1150,7 +1170,7 @@ impl<G: Context> ApplicationHandler for App<G> {
         let font_bytes = std::fs::read(&self.options.font).unwrap_or_else(|e| panic!("{}: {e}", self.options.font.display()));
         let (cx, stack) = self.start.take().expect("the shell starts once");
         let gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
-        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
+        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), text_rows: false, drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
         let port = self.options.port;
         self.bridge = bridge::start(port, self.proxy.clone());
         if self.bridge.is_none() {
@@ -1227,6 +1247,7 @@ impl<G: Context> ApplicationHandler for App<G> {
             WindowEvent::CursorMoved { position, .. } => {
                 if let Some(s) = self.shell.as_mut() {
                     s.mouse = s.gfx.view.to_logical(position.x as f32, position.y as f32);
+                    s.mouse_moved();
                     s.drag_to();
                 }
             }
@@ -1524,7 +1545,7 @@ mod tests {
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
-        let mut s = Shell { cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
+        let mut s = Shell { cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), text_rows: false, drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
         s.frame();
         s
     }
@@ -2287,6 +2308,135 @@ mod tests {
             Some(&mut self.desk)
         }
         crate::widget_plumbing!(Cx);
+    }
+
+    /// A menu of two `MenuStyle::Text` rows; what it was told to do.
+    #[derive(Default)]
+    struct TextMenu {
+        w: Vec<crate::ui::Widget<&'static str>>,
+        did: Vec<&'static str>,
+    }
+
+    impl TextMenu {
+        fn act(&mut self, _cx: &mut Cx, a: &'static str) {
+            self.did.push(a);
+        }
+    }
+
+    impl Screen<App> for TextMenu {
+        fn id(&self) -> &'static str {
+            "text_menu"
+        }
+        fn draw(&mut self, _cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+            let mut ui = Ui::new(g, mouse, live);
+            let items = [crate::panes::MenuItem::new("a", "First", None, "a"), crate::panes::MenuItem::new("b", "Second", None, "b")];
+            crate::panes::menu_column_styled(&mut ui, "m", 40, 40, 160, 18, 22, &items, crate::panes::MenuStyle::Text);
+            self.w = ui.widgets;
+        }
+        fn state(&self, _cx: &Cx) -> Value {
+            json!(self.did)
+        }
+        crate::widget_plumbing!();
+    }
+
+    /// The real input path of a text menu: a mouse move makes the row under it the active item, whatever the keyboard
+    /// did before; Enter presses what is lit; leaving the labels keeps it; a mouse that rests there does not take the focus
+    /// back from the keyboard; past the label's end the mouse takes nothing and a click does nothing.
+    #[test]
+    fn a_mouse_move_makes_a_text_row_the_one_active_item() {
+        let mut s = shell();
+        s.stack = vec![Box::new(TextMenu::default())];
+        s.frame();
+        let focus = |s: &Shell<App>| (s.gfx.kit.focus.clone(), s.gfx.kit.focus_visible);
+        let infos = s.stack[0].widgets();
+        let centre = |id: &str| {
+            let r = info_rect(infos.iter().find(|w| w["id"] == id).unwrap());
+            (r.x + r.w / 2, r.y + r.h / 2)
+        };
+        s.key(Key::Tab);
+        s.frame();
+        assert_eq!(focus(&s), (Some("m.a".to_string()), true), "the keyboard on the first");
+        s.mouse = centre("m.b");
+        s.mouse_moved();
+        s.frame();
+        assert_eq!(focus(&s), (Some("m.b".to_string()), true), "the mouse moved it");
+        s.key(Key::Up);
+        s.frame();
+        s.frame();
+        assert_eq!(focus(&s).0.as_deref(), Some("m.a"), "the mouse rests there: the keyboard's move stays");
+        s.mouse = (600, 300);
+        s.mouse_moved();
+        s.frame();
+        assert_eq!(focus(&s), (Some("m.a".to_string()), true), "off the labels the last one stays lit");
+        s.key(Key::Enter);
+        assert_eq!(s.stack[0].state(&s.cx), json!(["a"]), "Enter presses what is lit");
+        let b = info_rect(infos.iter().find(|w| w["id"] == "m.b").unwrap());
+        s.mouse = (b.x + b.w + 2, b.y + b.h / 2);
+        s.mouse_moved();
+        assert_eq!(focus(&s).0.as_deref(), Some("m.a"), "just past the label's end: not hovered");
+        s.click();
+        assert_eq!(s.stack[0].state(&s.cx), json!(["a"]), "and not clicked");
+        s.frame();
+        assert_eq!(focus(&s), (Some("m.a".to_string()), true), "a click off the labels leaves the active item lit");
+        s.key(Key::Enter);
+        assert_eq!(s.stack[0].state(&s.cx), json!(["a", "a"]), "and Enter still presses it");
+    }
+
+    /// A row lit under a mouse that has not moved (no focus showing yet) is the active item: Enter presses it.
+    #[test]
+    fn a_text_row_lit_under_a_resting_mouse_can_be_pressed() {
+        let mut s = shell();
+        s.stack = vec![Box::new(TextMenu::default())];
+        s.frame();
+        assert_eq!((s.gfx.kit.focus.clone(), s.gfx.kit.focus_visible), (None, false), "nothing under the mouse");
+        let r = info_rect(s.stack[0].widgets().iter().find(|w| w["id"] == "m.b").unwrap());
+        s.mouse = (r.x + r.w / 2, r.y + r.h / 2);
+        s.frame();
+        assert_eq!((s.gfx.kit.focus.as_deref(), s.gfx.kit.focus_visible), (Some("m.b"), true));
+        s.key(Key::Enter);
+        assert_eq!(s.stack[0].state(&s.cx), json!(["b"]));
+    }
+
+    /// A screen without menu rows; counts how many times its widget list is built.
+    #[derive(Default)]
+    struct Counting(std::rc::Rc<std::cell::Cell<u32>>);
+
+    impl Screen<App> for Counting {
+        fn id(&self) -> &'static str {
+            "counting"
+        }
+        fn draw(&mut self, _cx: &mut Cx, _g: &mut Gfx, _mouse: (i32, i32), _live: bool) {}
+        fn widgets(&self) -> Vec<Value> {
+            self.0.set(self.0.get() + 1);
+            vec![json!({"id": "b", "kind": "button", "rect": [0, 0, 40, 14], "enabled": true, "clickable": true})]
+        }
+        fn draw_tip(&self, _p: &mut Painter, _mouse: (i32, i32)) {}
+        fn click(&mut self, _cx: &mut Cx, _pos: (i32, i32)) -> bool {
+            false
+        }
+        fn click_id(&mut self, _cx: &mut Cx, _id: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn widget_rect(&self, _id: &str) -> Option<(Rect, Vec<String>)> {
+            None
+        }
+    }
+
+    /// A mouse move on a screen without menu rows builds no widget list; one with them does its work.
+    #[test]
+    fn a_mouse_move_costs_nothing_on_a_screen_without_text_rows() {
+        let mut s = shell();
+        let built = std::rc::Rc::new(std::cell::Cell::new(0));
+        s.stack = vec![Box::new(Counting(built.clone()))];
+        s.frame();
+        assert!(built.get() > 0, "the frame looks");
+        built.set(0);
+        s.mouse = (10, 5);
+        s.mouse_moved();
+        assert_eq!((built.get(), s.gfx.kit.focus.clone()), (0, None));
+        s.stack = vec![Box::new(TextMenu::default())];
+        s.frame();
+        assert!(s.text_rows, "the frame noted them");
     }
 
     /// A shell over the two-window screen with its own settings file in the temp dir (removed by `clean`).

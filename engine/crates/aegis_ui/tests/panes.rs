@@ -7,7 +7,7 @@
 use aegis_ui::canvas::{Canvas, Image, Rect, Rgba};
 use aegis_ui::focus;
 use aegis_ui::painter::{Fonts, View};
-use aegis_ui::panes::{self, AskView, Corner, MenuItem, SlotView};
+use aegis_ui::panes::{self, AskView, Corner, MenuItem, MenuStyle, SlotView};
 use aegis_ui::screen::Key;
 use aegis_ui::specimens::{KitAct, Specimens, PAGES, PANES};
 use aegis_ui::text_audit;
@@ -439,6 +439,347 @@ fn the_ask_dialog_lays_out_on_the_grid_and_covers_the_screen() {
             }
         }
     }
+}
+
+// ---- the composed backdrop ------------------------------------------------------------------------------------------
+
+/// A 16:9 picture with a different colour at every pixel.
+fn gradient(w: i32, h: i32) -> Image {
+    let mut px = Vec::with_capacity((w * h * 4) as usize);
+    for y in 0..h {
+        for x in 0..w {
+            px.extend_from_slice(&[(x % 251) as u8, (y % 241) as u8, ((x + y) % 239) as u8, 255]);
+        }
+    }
+    Image { w, h, px }
+}
+
+/// `f` on a canvas of a known pattern (what must stay outside the clip and the bounds).
+fn painted(ww: u32, wh: u32, limits: (Option<Rect>, Option<Rect>), f: impl FnOnce(&mut Ui<()>)) -> Vec<u8> {
+    let mut g = gfx_at(ww, wh, 1.0);
+    for (i, b) in g.canvas.px.iter_mut().enumerate() {
+        *b = if i % 4 == 3 { 255 } else { (i % 97) as u8 };
+    }
+    g.canvas.bounds = limits.1;
+    let mut ui: Ui<()> = Ui::new(&mut g, (-1, -1), true);
+    ui.p.c.clip = limits.0;
+    f(&mut ui);
+    g.canvas.px.clone()
+}
+
+/// The blit is pixel for pixel what the live drawing gives, on the frame that composes and the frames after, whatever the
+/// clip and bounds, at the rect's place; those frames compose nothing more.
+#[test]
+fn the_composed_backdrop_is_pixel_identical_to_the_live_drawing() {
+    let img = gradient(320, 180);
+    let inner = Rect::new(100, 60, 300, 200);
+    let limits = [(None, None), (Some(inner), None), (None, Some(inner)), (Some(Rect::new(0, 0, 200, 100)), Some(inner)), (Some(Rect::new(1200, 0, 40, 40)), Some(inner))];
+    for (r, veil, vignette) in [(Rect::new(0, 0, 640, 360), 0, 0.4), (Rect::new(0, 0, 640, 360), 128, 0.7), (Rect::new(40, 20, 300, 300), 200, 0.0)] {
+        for l in limits {
+            let live = painted(1280, 720, l, |ui| panes::backdrop_live(&mut ui.p, Some(&img), r, veil, vignette));
+            let first = painted(1280, 720, l, |ui| panes::backdrop(&mut ui.p, Some(&img), r, veil, vignette));
+            let at = panes::backdrop_composes();
+            let again = painted(1280, 720, l, |ui| panes::backdrop(&mut ui.p, Some(&img), r, veil, vignette));
+            assert!(live == first && live == again, "{r:?} veil {veil} limits {l:?}");
+            assert_eq!(panes::backdrop_composes(), at, "the later frame only blits");
+        }
+    }
+    let live = painted(1280, 720, (None, None), |ui| panes::backdrop_live(&mut ui.p, None, Rect::new(0, 0, 640, 360), 40, 0.5));
+    assert!(live == painted(1280, 720, (None, None), |ui| panes::backdrop(&mut ui.p, None, Rect::new(0, 0, 640, 360), 40, 0.5)), "no picture: the bg colour");
+}
+
+/// A resize, another veil, vignette, picture or `bg` composes again; the same backdrop elsewhere does not.
+#[test]
+fn the_composed_backdrop_recomposes_when_what_it_shows_changes() {
+    let mut a = gradient(64, 36);
+    let mut other = gradient(64, 36);
+    for p in other.px.as_chunks_mut::<4>().0 {
+        p[0] = 255 - p[0];
+    }
+    let r = Rect::new(0, 0, 640, 360);
+    let draw_at = |ww: u32, wh: u32, img: &Image, r: Rect, veil: u8, vig: f32| {
+        let before = panes::backdrop_composes();
+        let px = painted(ww, wh, (None, None), |ui| panes::backdrop(&mut ui.p, Some(img), r, veil, vig));
+        let live = painted(ww, wh, (None, None), |ui| panes::backdrop_live(&mut ui.p, Some(img), r, veil, vig));
+        assert!(px == live, "{ww} x {wh}: drawn as it should be");
+        panes::backdrop_composes() - before
+    };
+    assert_eq!(draw_at(640, 360, &a, r, 0, 0.4), 1, "first");
+    assert_eq!(draw_at(640, 360, &a, r, 0, 0.4), 0, "same");
+    assert_eq!(draw_at(1280, 720, &a, r, 0, 0.4), 1, "a resize");
+    assert_eq!(draw_at(640, 360, &a, r, 10, 0.4), 1, "the veil");
+    assert_eq!(draw_at(640, 360, &a, r, 0, 0.5), 1, "the vignette");
+    assert_eq!(draw_at(640, 360, &other, r, 0, 0.4), 1, "another picture");
+    let small = Rect::new(0, 0, 100, 100);
+    assert_eq!(draw_at(640, 360, &a, small, 0, 0.4), 1, "another size");
+    assert_eq!(draw_at(640, 360, &a, Rect::new(20, 20, 100, 100), 0, 0.4), 0, "only moved");
+    theme::set_theme(Theme { bg: [1, 2, 3, 255], ..Theme::default() });
+    assert_eq!(draw_at(640, 360, &a, small, 0, 0.4), 1, "a theme change");
+    theme::set_theme(Theme::default());
+    // Repainted where it lies: same address, same size, other pixels.
+    let at = a.px.as_ptr();
+    for p in a.px.as_chunks_mut::<4>().0 {
+        p[1] = 255 - p[1];
+    }
+    assert_eq!(a.px.as_ptr(), at);
+    assert_eq!(draw_at(640, 360, &a, small, 0, 0.4), 1, "the same address repainted");
+}
+
+/// A see-through picture shows what lies under it, whatever that is: drawn live, every frame.
+#[test]
+fn a_see_through_backdrop_is_drawn_live() {
+    let mut img = gradient(64, 36);
+    img.px[3 + 4 * (64 * 18 + 32)] = 100;
+    let r = Rect::new(0, 0, 640, 360);
+    let live = painted(640, 360, (None, None), |ui| panes::backdrop_live(&mut ui.p, Some(&img), r, 20, 0.4));
+    for _ in 0..2 {
+        assert!(live == painted(640, 360, (None, None), |ui| panes::backdrop(&mut ui.p, Some(&img), r, 20, 0.4)));
+    }
+}
+
+/// Frame times of the backdrop at window sizes, live against the blit: `cargo test -p aegis_ui --release --test panes
+/// backdrop_frame_times -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn backdrop_frame_times() {
+    let img = gradient(1920, 1080);
+    let r = Rect::new(0, 0, 640, 360);
+    for (ww, wh) in [(1280, 720), (1920, 1080), (3840, 2160)] {
+        let mut g = gfx_at(ww, wh, 1.0);
+        let mut ui: Ui<()> = Ui::new(&mut g, (-1, -1), true);
+        let time = |ui: &mut Ui<()>, f: &dyn Fn(&mut Ui<()>)| {
+            let t = std::time::Instant::now();
+            for _ in 0..20 {
+                f(ui);
+            }
+            t.elapsed().as_secs_f64() * 1000.0 / 20.0
+        };
+        let live = time(&mut ui, &|ui| panes::backdrop_live(&mut ui.p, Some(&img), r, 0, 0.4));
+        let t = std::time::Instant::now();
+        panes::backdrop(&mut ui.p, Some(&img), r, 0, 0.4);
+        let compose = t.elapsed().as_secs_f64() * 1000.0;
+        let blit = time(&mut ui, &|ui| panes::backdrop(&mut ui.p, Some(&img), r, 0, 0.4));
+        println!("{ww} x {wh}: live {live:.2} ms, first frame {compose:.2} ms, blit {blit:.3} ms");
+    }
+}
+
+// ---- the text-only menu ---------------------------------------------------------------------------------------------
+
+/// How many gold pixels lie in row `i` of the column at (40, 40), step 22.
+fn lit_in_row(g: &Gfx, i: i32) -> usize {
+    let r = panes::menu_rect(40, 40, 160, 18, 22, i as usize);
+    (r.y..r.y + r.h).flat_map(|y| (r.x..r.x + r.w).map(move |x| (x, y))).filter(|(x, y)| {
+        let p = px(&g.canvas, *x, *y);
+        p[0] > 100 && (p[2] as u32) * 2 < p[0] as u32
+    }).count()
+}
+
+/// `MenuStyle::Text`: same ids, rows and actions as the framed column; no panel, no marker (only the text changes the
+/// pixels), no primary; a click takes the label's width plus the margin, and a point just past it neither lights nor
+/// clicks; a disabled row takes no click and stays dim; a cut label reads in full on hover.
+#[test]
+fn the_text_menu_style_has_no_panel_and_takes_the_mouse_only_on_its_label() {
+    let it = items();
+    let row = panes::menu_rect(40, 40, 160, 18, 22, 0);
+    let (mut g, mut framed) = (gfx(1.0), gfx(1.0));
+    let (fw, _) = draw(&mut framed, (-1, -1), |ui| panes::menu_column(ui, "m", 40, 40, 160, 18, 22, &it));
+    let (w, audit) = draw(&mut g, (-1, -1), |ui| panes::menu_column_styled(ui, "m", 40, 40, 160, 18, 22, &it, MenuStyle::Text));
+    assert_eq!(ids(&w), ids(&fw));
+    assert!(w.iter().zip(&fw).all(|(a, b)| a.rect.y == b.rect.y && a.rect.h == b.rect.h && a.enabled == b.enabled && a.action == b.action && a.kind == "text_button"));
+    clean(&audit, &w, "text menu");
+    let under = px(&g.canvas, row.x - 8, row.y - 8);
+    assert!(px(&g.canvas, row.x, row.y) == under && px(&g.canvas, row.x + row.w - 1, row.y + row.h / 2) == under, "no panel, no edge");
+    assert!((0..it.len() as i32).all(|i| lit_in_row(&g, i) == 0), "nothing lit while idle: no primary");
+
+    let (pad, margin) = (Theme::default().layout.padding, panes::MENU_TEXT_MARGIN);
+    let label_w = {
+        let mut m = gfx(1.0);
+        let mut got = 0.0;
+        let _ = draw::<(), _>(&mut m, (-1, -1), |ui| got = ui.p.text_w(&it[0].label, aegis_ui::ui::TITLE));
+        got.ceil() as i32
+    };
+    assert_eq!(w[0].rect, Rect::new(row.x + pad - margin, row.y, label_w + 2 * margin, row.h), "the label and its margin");
+    let (inside, past) = ((row.x + pad + label_w / 2, row.y + 9), (w[0].rect.x + w[0].rect.w + 1, row.y + 9));
+    assert_eq!(hit(&w, inside), fw[0].action.clone(), "inside the label clicks");
+    assert_eq!(hit(&w, past), None, "just past the label: no click");
+    assert!(past.0 < row.x + row.w, "the point is still inside the old row");
+    for (mouse, lit, hovered) in [(inside, true, Some(0)), (past, false, None)] {
+        let mut m = gfx(1.0);
+        let mut got = None;
+        let _ = draw(&mut m, mouse, |ui| got = panes::menu_column_styled(ui, "m", 40, 40, 160, 18, 22, &it, MenuStyle::Text));
+        assert_eq!((lit_in_row(&m, 0) > 0, got), (lit, hovered), "{mouse:?}");
+    }
+    let disabled = it.iter().position(|i| !i.enabled).expect("a disabled sample item");
+    assert_eq!(hit(&w, centre(w[disabled].rect)), None);
+
+    for scale in TEXT_SIZES {
+        let mut c = gfx(scale);
+        let long = vec![MenuItem::new("a", LONG, None, 1)];
+        let (w, audit) = draw(&mut c, (-1, -1), |ui| panes::menu_column_styled(ui, "m", 20, 20, 80, 18, 22, &long, MenuStyle::Text));
+        assert_eq!(w[0].tip[0].0, LONG);
+        assert!(w[0].rect.x + w[0].rect.w <= 20 + 80, "a cut label keeps to its row");
+        assert_eq!(audit["counts"]["cut"], json!(1), "at {scale}");
+        clean(&audit, &w, &format!("cut text row at {scale}"));
+    }
+}
+
+/// One active item, shown by brighter text alone: the keyboard on A lights A; the mouse moving to B leaves only B lit
+/// (through the same `Kit::mouse_moved` the shell calls); leaving the labels keeps B lit; a keyboard move while the mouse
+/// rests elsewhere lights only the keyboard's row; the shell draws no ring around it and the focus walks the rows.
+#[test]
+fn a_text_menu_lights_one_active_item() {
+    let it = items();
+    let frame = |g: &mut Gfx, mouse: (i32, i32)| {
+        g.canvas.clear([0, 0, 0, 255]);
+        draw(g, mouse, |ui| panes::menu_column_styled(ui, "m", 40, 40, 160, 18, 22, &it, MenuStyle::Text)).0
+    };
+    let lit = |g: &Gfx| (0..it.len() as i32).filter(|i| lit_in_row(g, *i) > 0).collect::<Vec<_>>();
+    let mut g = gfx(1.0);
+    let w = frame(&mut g, (-1, -1));
+    let (a, b) = (w[0].id.clone(), w[1].id.clone());
+    let centre_b = centre(w[1].rect);
+    g.kit.focus = Some(a.clone());
+    g.kit.focus_visible = true;
+    frame(&mut g, (-1, -1));
+    assert_eq!(lit(&g), [0], "the keyboard on A");
+    let under = infos(&frame(&mut g, centre_b));
+    assert_eq!(lit(&g), [0], "a mouse resting on B does not light a second row");
+    g.kit.mouse_moved(&under, centre_b);
+    assert_eq!(g.kit.focus.as_deref(), Some(b.as_str()));
+    frame(&mut g, centre_b);
+    assert_eq!(lit(&g), [1], "the mouse moved to B: only B");
+    g.kit.mouse_moved(&under, (620, 340));
+    frame(&mut g, (620, 340));
+    assert_eq!(lit(&g), [1], "off the labels the last active item stays lit");
+    assert_eq!(g.kit.focus.as_deref(), Some(b.as_str()));
+    g.kit.focus = Some(a.clone());
+    frame(&mut g, (620, 340));
+    assert_eq!(lit(&g), [0], "the keyboard moved it back");
+    assert!(!focus::shows_ring(&under[0]), "no ring around a row without a panel");
+    let framed = infos(&draw(&mut gfx(1.0), (-1, -1), |ui| panes::menu_column(ui, "m", 40, 40, 160, 18, 22, &it)).0);
+    assert!(focus::shows_ring(&framed[0]), "a framed column keeps it");
+    assert_eq!(focus::hover_target(&framed, centre_b), None, "a framed column does not move the focus with the mouse");
+    assert_eq!(focus::step(&under, Some(&a), focus::Move::Next, false).as_deref(), Some(b.as_str()));
+    assert_eq!(focus::step(&under, Some(&a), focus::Move::Dir(0, 1), false).as_deref(), Some(b.as_str()), "the arrow walks them");
+    assert_eq!(focus::step(&under, Some(&b), focus::Move::Dir(0, -1), false).as_deref(), Some(a.as_str()));
+}
+
+/// Whole steps keep the aspect and fit the room: up by the largest whole multiple, down by the smallest whole division.
+#[test]
+fn a_picture_scales_by_whole_steps() {
+    assert_eq!(panes::whole_steps(100, 50, 368, 232), (3, 1));
+    assert_eq!(panes::whole_steps(16, 16, 368, 232), (14, 1));
+    assert_eq!(panes::whole_steps(368, 232, 368, 232), (1, 1));
+    assert_eq!(panes::whole_steps(800, 200, 368, 232), (1, 3));
+    assert_eq!(panes::whole_steps(300, 700, 368, 232), (1, 4));
+    assert_eq!(panes::whole_steps(0, 10, 10, 10), (1, 1));
+    let red = solid(10, 20, [200, 0, 0, 255]);
+    for (ww, wh, want) in [(640, 360, 4), (1280, 720, 9)] {
+        let mut g = gfx_at(ww, wh, 1.0);
+        let mut got = Rect::default();
+        let _ = draw::<(), _>(&mut g, (-1, -1), |ui| got = panes::image_steps(&mut ui.p, &red, 100.0, 100.0, 50, 90));
+        let s = ww as i32 / 640;
+        assert_eq!((got.w * s, got.h * s), (10 * want, 20 * want), "{ww}");
+        assert_eq!((got.x + got.w / 2, got.y + got.h / 2), (100, 100), "centred at {ww}");
+        let solid_px = g.canvas.px.as_chunks::<4>().0.iter().filter(|p| p[0] == 200).count() as i32;
+        assert_eq!(solid_px, 10 * want * 20 * want, "whole multiple at {ww}");
+    }
+}
+
+// ---- cut text reads in full; tabs past the rail stay in reach -------------------------------------------------------
+
+const LONG: &str = "A label far too long for the narrow column it was given to sit in";
+
+/// A menu label that is cut has its full text on hover, whether or not the item has a hover card of its own; one that
+/// fits has no card added.
+#[test]
+fn a_cut_menu_label_reads_in_full_on_hover() {
+    for scale in TEXT_SIZES {
+        let mut g = gfx(scale);
+        let it = vec![MenuItem::new("plain", LONG, Some('p'), 1), MenuItem::new("told", LONG, None, 2).with_tip("What it does."), MenuItem::new("short", "Ok", None, 3)];
+        let (w, audit) = draw(&mut g, (-1, -1), |ui| panes::menu_column(ui, "m", 20, 20, 80, 18, 22, &it));
+        assert_eq!(w[0].tip[0].0, LONG, "at {scale}");
+        assert_eq!(w[1].tip[0].0, LONG, "at {scale}: the card it had leads with the label");
+        assert_eq!(w[1].tip[1].0, "What it does.", "at {scale}");
+        assert!(w[2].tip.is_empty(), "at {scale}");
+        assert_eq!(audit["counts"]["cut"], json!(2), "at {scale}");
+        clean(&audit, &w, &format!("cut labels at {scale}"));
+    }
+}
+
+/// An ask title too wide for the dialog is cut, seen by the audit, and has its full text on hover over the title's
+/// row; a title that fits adds no widget.
+#[test]
+fn a_cut_ask_title_reads_in_full_on_hover() {
+    let area = Rect::new(0, 0, 640, 360);
+    for scale in TEXT_SIZES {
+        let mut g = gfx(scale);
+        let title = LONG.repeat(2);
+        let v = AskView::new(&title, "Sure?");
+        let (w, audit) = draw(&mut g, (-1, -1), |ui| panes::ask_dialog(ui, "ask", area, &v, "yes", "no"));
+        assert_eq!(ids(&w), ["ask", "ask.title", "ask.yes", "ask.no"], "at {scale}");
+        assert_eq!(w[1].tip[0].0, title, "at {scale}");
+        assert_eq!(audit["cut"][0]["text"], json!(title), "at {scale}");
+        clean(&audit, &w, &format!("cut title at {scale}"));
+        let ring: Vec<String> = focus::ring(&infos(&w), false).iter().map(|x| x["id"].as_str().unwrap().to_string()).collect();
+        assert_eq!(ring, ["ask.yes", "ask.no"], "at {scale}: the title takes no focus");
+    }
+}
+
+/// Question lines the height cap drops are marked cut for the audit, the last line left says so, and the full question
+/// is on hover; a question that fits is not touched.
+#[test]
+fn dropped_question_lines_are_cut_and_read_in_full_on_hover() {
+    let question = LONG.repeat(8);
+    let v = AskView::new("Sure?", &question);
+    for scale in TEXT_SIZES {
+        let mut g = gfx(scale);
+        let (w, audit) = draw(&mut g, (-1, -1), |ui| panes::ask_dialog(ui, "ask", Rect::new(0, 0, 640, 110), &v, "yes", "no"));
+        assert_eq!(audit["cut"][0]["text"], json!(question), "at {scale}: {audit}");
+        assert!(audit["cut"][0]["shown"].as_str().unwrap().ends_with("..."), "at {scale}: {audit}");
+        assert_eq!(ids(&w), ["ask", "ask.question", "ask.yes", "ask.no"], "at {scale}");
+        assert_eq!(w[1].tip[0].0, question, "at {scale}");
+        clean(&audit, &w, &format!("dropped lines at {scale}"));
+        let mut g = gfx(scale);
+        let (w, audit) = draw(&mut g, (-1, -1), |ui| panes::ask_dialog(ui, "ask", Rect::new(0, 0, 640, 360), &AskView::new("Sure?", "Really?"), "yes", "no"));
+        assert_eq!(ids(&w), ["ask", "ask.yes", "ask.no"], "at {scale}");
+        assert_eq!(audit["counts"]["cut"], json!(0), "at {scale}");
+    }
+}
+
+/// Tabs past the rail's height never vanish: the rows show a window that holds the open tab, between arrows that step
+/// to the tab above and below (wrapping), so every tab is a few clicks away; with too few rows for arrows the window
+/// still follows the open tab (PageUp / PageDown).
+#[test]
+fn tabs_past_the_rail_stay_in_reach() {
+    let tabs = ["One", "Two", "Three", "Four", "Five", "Six", "Seven"];
+    let n = tabs.len();
+    // Five rows fit 100 high (the last ends at 98): three tabs between the arrows.
+    let r = Rect::new(0, 0, 300, 100);
+    let mut seen = std::collections::BTreeSet::new();
+    let mut open = 0;
+    for step in 0..n {
+        let mut g = gfx(1.0);
+        let (w, _) = draw(&mut g, (-1, -1), |ui| panes::tab_rail(ui, "rail", r, &tabs, open, |i| i));
+        let got = ids(&w);
+        assert_eq!((got.len(), got[0].as_str(), got[4].as_str()), (5, "rail.prev", "rail.next"), "open {open}");
+        assert!(got.contains(&format!("rail.{open}")), "the open tab is on view: {got:?}");
+        assert!(w.iter().all(|x| x.rect.y + x.rect.h <= r.h), "inside the rail");
+        assert_eq!(by_id(&w, "rail.prev"), Ok((open + n - 1) % n));
+        seen.insert(open);
+        open = by_id(&w, "rail.next").unwrap();
+        assert_eq!(open, (step + 1) % n, "the next arrow steps and wraps");
+    }
+    assert_eq!(seen.len(), n, "every tab comes on view");
+    // Too few rows for arrows: the window follows the open tab.
+    for open in 0..n {
+        let mut g = gfx(1.0);
+        let (w, _) = draw(&mut g, (-1, -1), |ui| panes::tab_rail(ui, "rail", Rect::new(0, 0, 300, 50), &tabs, open, |i| i));
+        assert_eq!(w.len(), 2);
+        assert!(ids(&w).contains(&format!("rail.{open}")), "open {open}");
+    }
+    assert_eq!(panes::tab_window(3, 3, 2), (0, 3, false), "all fit");
+    assert_eq!(panes::tab_window(0, 3, 2).1, 0, "no room, no rows");
 }
 
 // ---- themes, window sizes and the Kit page -------------------------------------------------------------------------

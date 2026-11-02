@@ -4,8 +4,12 @@
 use aegis_ui::audio::Bus;
 use aegis_ui::canvas::{rgba, Rect};
 use crate::music;
+use crate::portraits::{Faces, Who};
 use crate::screens::{default_settings, enter_game, show_errors, title, Cx, GameCx, Key, Nav, Screen};
-use aegis_ui::ui::{tip, Gfx, Glyph, Ui, Widget, BODY, DIM, GOLD, H, INFO, PANEL_HI, SMALL, TEXT, W};
+use aegis_ui::painter::Typeface;
+use aegis_ui::panes::{self, MenuItem, MenuStyle};
+use emberwake_battle::portrait::Look;
+use aegis_ui::ui::{tip, Gfx, Glyph, Ui, Widget, BODY, DIM, GOLD, H, INFO, PANEL_HI, SMALL, TEXT, TITLE, W};
 use aegis_ui::screen::{Settings, FPS_CAPS, TEXT_SIZES, TEXT_SPEEDS, WINDOW_MODES, WINDOW_SIZES};
 use aegis_ui::vignette::{TextSpeed, REDUCE_MOTION, TEXT_SPEED};
 use aegis_ui::widget_plumbing;
@@ -41,9 +45,73 @@ pub enum MenuAct {
     Quit,
 }
 
+/// The title backdrop (LOOK1 art A6) when present, else the MENU2 picture.
+pub const TITLE_ART: &str = "backgrounds/menu/title.png";
+pub const MENU_ART: &str = "backgrounds/menu/main_menu.png";
+/// The crest behind the typeset logo (LOOK1 art A6), only when present.
+pub const CREST_ART: &str = "ui/logo_crest.png";
+/// The title as a picture: when present it replaces the typeset title, the subtitle and the crest.
+pub const LOGO_ART: &str = "ui/logo_title.png";
+/// The picture's centre (the middle of the typeset logo at Normal) and its room (to the screen margin at the right).
+const LOGO_CENTRE: (f32, f32) = (540.0, 66.0);
+const LOGO_ROOM: (i32, i32) = (184, 116);
+/// The vignette over the backdrop (no veil: the title is the picture).
+const MENU_VIGNETTE: f32 = 0.4;
+/// The logo's right edge, top and sizes (the display face).
+const LOGO_RIGHT: f32 = 620.0;
+const LOGO_Y: f32 = 40.0;
+const LOGO_SIZE: f32 = 28.0;
+const LOGO_SUB_SIZE: f32 = 10.0;
+/// The menu column at the Normal text size: x, y, width, height and step. It widens leftward for a label that needs it.
+const MENU_X: i32 = 420;
+const MENU_Y: i32 = 150;
+const MENU_W: i32 = 160;
+const MENU_H: i32 = 18;
+const MENU_STEP: i32 = 22;
+/// Continue's peek at the Normal text size: its size and the gap left of the column; party portraits shown.
+const PEEK_W: i32 = 160;
+const PEEK_H: i32 = 64;
+const PEEK_GAP: i32 = 10;
+const PEEK_PARTY: usize = 4;
+
+/// The peek's second line: when the save stands (today the day: the game's day 1 is a new game, the clock plus one).
+fn peek_when(gs: &emberwake_world::state::GameState) -> String {
+    format!("Day {}", gs.time + 1)
+}
+
+/// What Continue's peek shows of the newest save.
+struct Peek {
+    location: String,
+    when: String,
+    /// Member id, the name, its portrait and look; the active members first.
+    party: Vec<(String, String, Who, Look)>,
+}
+
+impl Peek {
+    /// Reads `slot`; None when it does not load (Continue says why when pressed).
+    fn read(cx: &Cx, slot: i64) -> Option<Peek> {
+        let gs = save::read(&cx.data, &cx.save_dir, slot).ok()?.state;
+        let active: Vec<String> = gs.party.active_members().iter().map(|m| m.id.clone()).collect();
+        let (on, off): (Vec<_>, Vec<_>) = gs.party.members.iter().partition(|m| active.contains(&m.id));
+        let party = on.into_iter().chain(off).take(PEEK_PARTY).map(|m| {
+            let (who, look) = crate::hub::member_portrait(&cx.data, &gs, m);
+            (m.id.clone(), crate::hub::member_name(cx, m), who, look)
+        });
+        Some(Peek { location: cx.location_name(&gs.world_id, &gs.location_id), when: peek_when(&gs), party: party.collect() })
+    }
+}
+
 #[derive(Default)]
 pub struct MainMenu {
     w: Vec<Widget<MenuAct>>,
+    /// The peek of this slot, read once when it first shows (a None peek: the slot did not load).
+    peek: Option<(i64, Option<Peek>)>,
+    /// The peek's portraits (surface `roster`), on the menu's own clock.
+    faces: Faces,
+    /// The newest readable save (-1: none), read once; it parses every slot. `resume` reads it again.
+    newest: Option<i64>,
+    /// The mouse or the keyboard has moved since the menu opened: the opening focus on Continue does not show the peek.
+    moved: bool,
 }
 
 impl MainMenu {
@@ -70,6 +138,65 @@ impl MainMenu {
             }
         }
     }
+
+    /// The logo (LOOK1 6): the title picture when there is one (whole scale steps, nothing typeset, no crest), else the
+    /// title in the display face in `gold` with a 1 px `bg` shadow, right-aligned, over the crest when there is one, the
+    /// subtitle under it in `text`.
+    fn logo(ui: &mut Ui<MenuAct>, cx: &mut Cx) {
+        if let Some(img) = cx.art.size_of(LOGO_ART).and_then(|(w, h)| cx.art.image(LOGO_ART, w, h)) {
+            let r = panes::image_steps(&mut ui.p, img, LOGO_CENTRE.0, LOGO_CENTRE.1, LOGO_ROOM.0, LOGO_ROOM.1);
+            ui.push("menu.logo", "picture", LOGO_ART, r, true, false, None, Vec::new());
+            return;
+        }
+        let t = ui.t.clone();
+        let title_text = cx.manifest.title.clone();
+        let (w, h) = (ui.p.text_w_face(Typeface::Display, &title_text, LOGO_SIZE), ui.p.line_h_face(Typeface::Display, LOGO_SIZE));
+        let x = LOGO_RIGHT - w;
+        if cx.art.has(CREST_ART) {
+            let side = panes::snap_up((h * 2.0).ceil() as i32);
+            let r = Rect::new((x + w / 2.0) as i32 - side / 2, (LOGO_Y + h / 2.0) as i32 - side / 2, side, side);
+            let px = (side as f32 * ui.p.v.s).round() as i32;
+            if let Some(img) = cx.art.image(CREST_ART, px, px) {
+                ui.p.image(img, r);
+                ui.push("menu.crest", "picture", CREST_ART, r, true, false, None, Vec::new());
+            }
+        }
+        ui.p.text_face(Typeface::Display, x + 1.0, LOGO_Y + 1.0, &title_text, LOGO_SIZE, t.bg);
+        ui.p.text_face(Typeface::Display, x, LOGO_Y, &title_text, LOGO_SIZE, t.gold);
+        let sub_w = ui.p.text_w_face(Typeface::Display, &cx.manifest.subtitle, LOGO_SUB_SIZE);
+        ui.p.text_face(Typeface::Display, LOGO_RIGHT - sub_w, LOGO_Y + h, &cx.manifest.subtitle, LOGO_SUB_SIZE, t.text);
+    }
+
+    /// Continue's peek left of the column (x `right` is its right edge): an `ornate` panel with the save's location,
+    /// `peek_when` and up to `PEEK_PARTY` portraits at the pane's portrait size; it grows with the text size.
+    fn draw_peek(&mut self, ui: &mut Ui<MenuAct>, cx: &mut Cx, right: i32, slot: i64) {
+        if self.peek.as_ref().is_none_or(|(s, _)| *s != slot) {
+            self.peek = Some((slot, Peek::read(cx, slot)));
+        }
+        let Some((_, Some(peek))) = &self.peek else { return };
+        let t = ui.t.clone();
+        let s = ui.p.fonts.scale.max(1.0);
+        let lh = ui.p.line_h(BODY).ceil() as i32;
+        let w = panes::snap_up((PEEK_W as f32 * s).ceil() as i32);
+        let inner_of = |r: Rect| t.frame("ornate").map_or(r.inset(t.layout.padding), |f| f.nine.content(r).inset(t.layout.padding / 2));
+        let probe = Rect::new(0, 0, w, 200);
+        let need = 200 - inner_of(probe).h + 2 * lh + 2 + panes::PORTRAIT;
+        let r = Rect::new(right - PEEK_GAP - w, MENU_Y, w, panes::snap_up(PEEK_H.max(need)));
+        let (fill, edge, radius) = t.vector("ornate");
+        ui.p.skin(t.frame("ornate"), r, fill, edge, radius);
+        let inner = inner_of(r);
+        let day = &peek.when;
+        let cut = ui.p.fit(&peek.location, BODY, inner.w as f32) != peek.location;
+        ui.p.text_fit(inner.x as f32, inner.y as f32, &peek.location, BODY, inner.w as f32, t.ink_on("ornate"));
+        ui.p.text(inner.x as f32, (inner.y + lh) as f32, day, BODY, t.dim);
+        let hover = if cut { tip(&peek.location, day) } else { Vec::new() };
+        ui.push("menu.peek", "panel", format!("{} | {day}", peek.location), r, true, false, None, hover);
+        for (i, (id, name, who, look)) in peek.party.iter().enumerate() {
+            let pr = Rect::new(inner.x + i as i32 * (panes::PORTRAIT + 2), inner.y + inner.h - panes::PORTRAIT, panes::PORTRAIT, panes::PORTRAIT);
+            self.faces.draw(&mut ui.p, cx, who, look, "roster", pr);
+            ui.push(format!("menu.peek.{id}"), "portrait", name.as_str(), pr, true, false, None, Vec::new());
+        }
+    }
 }
 
 impl Screen<GameCx> for MainMenu {
@@ -77,26 +204,58 @@ impl Screen<GameCx> for MainMenu {
         "main_menu"
     }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+        // The opening focus lands on Continue without showing the peek: it follows Continue as the active item once the
+        // mouse has been on it or the keyboard has moved. A focus on another item rules (a mouse resting on Continue
+        // after the keyboard moved away is not it).
+        let on_continue = g.kit.focus.as_deref() == Some("menu.continue");
+        let elsewhere = g.kit.focus_visible && g.kit.focus.is_some() && !on_continue;
+        self.moved |= elsewhere;
+        let focused = live && g.kit.focus_visible && on_continue;
         let mut ui: Ui<MenuAct> = Ui::new(g, mouse, live);
-        title(&mut ui, &cx.manifest.title, 78);
-        ui.p.text_center(W as f32 / 2.0, 104.0, &cx.manifest.subtitle, BODY + 1.0, DIM);
-        let mut entries: Vec<(&str, &str, MenuAct)> = Vec::new();
-        if save::newest_slot(&cx.data, &cx.save_dir) >= 0 {
-            entries.push(("menu.continue", "Continue", MenuAct::Continue));
+        self.faces.begin();
+        let picture = if cx.art.has(TITLE_ART) { TITLE_ART } else { MENU_ART };
+        let img = cx.art.size_of(picture).and_then(|(w, h)| cx.art.image(picture, w, h));
+        panes::backdrop_pane(&mut ui, "menu.backdrop", img, picture, Rect::new(0, 0, W, H), 0, MENU_VIGNETTE);
+        Self::logo(&mut ui, cx);
+        let newest = *self.newest.get_or_insert_with(|| save::newest_slot(&cx.data, &cx.save_dir));
+        let mut items: Vec<MenuItem<MenuAct>> = Vec::new();
+        if newest >= 0 {
+            items.push(MenuItem::new("continue", "Continue", None, MenuAct::Continue));
         }
-        entries.extend([
-            ("menu.new_game", "New game", MenuAct::NewGame),
-            ("menu.load", "Load game", MenuAct::Load),
-            ("menu.settings", "Settings", MenuAct::Settings),
-            ("menu.tools", "Tools (Forge, Dojo, Test Arena)", MenuAct::Tools),
-            ("menu.quit", "Quit", MenuAct::Quit),
+        items.extend([
+            MenuItem::new("new_game", "New game", None, MenuAct::NewGame),
+            MenuItem::new("load", "Load game", None, MenuAct::Load),
+            MenuItem::new("settings", "Settings", None, MenuAct::Settings),
+            MenuItem::new("tools", "Tools (Forge, Dojo, Test Arena)", None, MenuAct::Tools),
+            MenuItem::new("quit", "Quit", None, MenuAct::Quit),
         ]);
-        for (i, (id, label, a)) in entries.iter().enumerate() {
-            let r = Rect::new(240, 139 + i as i32 * 24, 160, 18);
-            ui.button_full(id, r, label, *a, true, false, BODY + 1.0, Vec::new());
+        // The column widens leftward at the larger text sizes so its longest label is never cut (only the labels take
+        // the mouse: `MenuStyle::Text`).
+        let widest = items.iter().map(|i| ui.p.text_w(&i.label, TITLE)).fold(0.0, f32::max);
+        let w = MENU_W.max(panes::snap_up(widest.ceil() as i32 + 2 * ui.t.layout.padding));
+        let x = MENU_X + MENU_W - w;
+        let hovered = panes::menu_column_styled(&mut ui, "menu", x, MENU_Y, w, MENU_H, MENU_STEP, &items, MenuStyle::Text);
+        let over = newest >= 0 && hovered == Some(0) && !elsewhere;
+        self.moved |= over;
+        if newest >= 0 && (over || (focused && self.moved)) {
+            self.draw_peek(&mut ui, cx, x, newest);
+        } else {
+            self.peek = None;
         }
-        ui.p.text_right(616.0, 309.0, "Version dev · Aegis engine", SMALL, DIM);
+        let (margin, dim) = (ui.t.layout.margin, ui.t.dim);
+        let version_y = (H - margin) as f32 - ui.p.line_h(SMALL);
+        ui.p.text_right((W - margin) as f32, version_y, "Version dev · Aegis engine", SMALL, dim);
         self.w = ui.widgets;
+    }
+    /// The peek's portraits breathe on the menu's clock.
+    fn tick(&mut self, _cx: &mut Cx) {
+        self.faces.tick();
+    }
+    /// Back on the menu: the newest save may have changed, and the focus opens on Continue again.
+    fn resume(&mut self, _cx: &mut Cx) {
+        self.peek = None;
+        self.newest = None;
+        self.moved = false;
     }
     /// The menu starts with the first entry focused (the kit's focus: arrows, Tab, Enter).
     fn auto_focus(&self) -> bool {
@@ -929,6 +1088,432 @@ mod tests {
         assert!(save::exists(&dir, 2), "delete asks first");
         answer_yes(&mut cx, &mut g);
         assert!(!save::exists(&dir, 2) && cx.notice.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ---- LOOK1-M1: the main menu on the panes -------------------------------------------------------------------
+
+    const MENU_IDS: [&str; 5] = ["menu.new_game", "menu.load", "menu.settings", "menu.tools", "menu.quit"];
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("emberwake_m1_{name}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    fn menu_frame(m: &mut MainMenu, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32)) -> Vec<Value> {
+        m.draw(cx, g, mouse, true);
+        m.widgets()
+    }
+
+    fn buttons(w: &[Value]) -> Vec<String> {
+        w.iter().filter(|x| x["kind"] == "text_button").map(|x| x["id"].as_str().unwrap().to_string()).collect()
+    }
+
+    /// Writes the running game with day `time` as the fixture save.
+    fn write_fixture(cx: &mut Cx, time: i64) {
+        cx.gs_mut().time = time;
+        assert!(save::write(&cx.data, &cx.save_dir, cx.gs(), 2, 1000).is_empty());
+    }
+
+    /// The buttons keep their ids and actions, top-down in the focus order: Continue (only with a save), then the rest,
+    /// at the brief's rects at the Normal text size; the opening focus is the first.
+    #[test]
+    fn the_main_menu_keeps_its_ids_and_actions() {
+        let dir = scratch("ids");
+        let (mut cx, mut g) = (cx(dir.clone()), gfx());
+        let mut m = MainMenu::default();
+        assert_eq!(buttons(&menu_frame(&mut m, &mut cx, &mut g, (-1, -1))), MENU_IDS, "no save: no Continue");
+        write_fixture(&mut cx, 3);
+        m.resume(&mut cx);
+        let w = menu_frame(&mut m, &mut cx, &mut g, (-1, -1));
+        let mut want = vec!["menu.continue"];
+        want.extend(MENU_IDS);
+        assert_eq!(buttons(&w), want);
+        for (i, id) in want.iter().enumerate() {
+            let r = get(&w, id).unwrap();
+            assert_eq!((n(r, 0), n(r, 1), n(r, 3)), (423, 150 + 22 * i as i32, 18), "{id}: the label at the padding, less its margin");
+            assert!(n(r, 2) < 160, "{id}: the label's width, not the column's");
+            assert_eq!(r["clickable"], json!(true), "{id}");
+        }
+        assert!(m.auto_focus());
+        let ring: Vec<&str> = aegis_ui::focus::ring(&w, false).iter().map(|x| x["id"].as_str().unwrap()).collect();
+        assert_eq!(ring, want, "the backdrop and the peek take no focus");
+        cx.app.game.as_mut().unwrap().clean = cx.gs().to_value();
+        for (id, screen) in [("menu.new_game", "new_game"), ("menu.settings", "settings"), ("menu.tools", "scene_runner")] {
+            m.click_id(&mut cx, id).unwrap();
+            let Some(Nav::Push(s)) = cx.nav.pop() else { panic!("{id} pushes a screen") };
+            assert_eq!((s.id(), cx.nav.len()), (screen, 0), "{id}");
+        }
+        m.click_id(&mut cx, "menu.load").unwrap();
+        let Some(Nav::Push(s)) = cx.nav.pop() else { panic!("Load pushes a screen") };
+        assert_eq!(s.id(), Slots::new(false).id());
+        m.click_id(&mut cx, "menu.quit").unwrap();
+        assert!(cx.quit, "Quit with nothing unsaved");
+        cx.gs_mut().time = 99;
+        m.click_id(&mut cx, "menu.continue").unwrap();
+        assert_eq!(cx.gs().time, 3, "Continue loads the newest save");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Continue's peek reads the fixture save (its location, day (the clock plus one) and at most four of its party, the
+    /// active members first), at the brief's rect, while Continue is hovered or the keyboard moved onto it, and only then:
+    /// the focus the menu opens with (or comes back with) does not show it.
+    #[test]
+    fn the_peek_reads_the_newest_save_while_continue_is_hovered_or_focused() {
+        let dir = scratch("peek");
+        let (mut cx, mut g) = (cx(dir.clone()), gfx());
+        let mut extra = cx.gs().party.members[0].clone();
+        for i in 0..5 {
+            extra.id = format!("m1_extra_{i}");
+            cx.gs_mut().party.members.push(extra.clone());
+        }
+        write_fixture(&mut cx, 7);
+        let gs = save::read(&cx.data, &dir, 2).expect("the fixture loads").state;
+        // The game in play moves on: the peek shows the save, not the running game.
+        cx.gs_mut().time = 50;
+        let mut m = MainMenu::default();
+        assert!(get(&menu_frame(&mut m, &mut cx, &mut g, (-1, -1)), "menu.peek").is_none(), "idle: no peek");
+        let w = menu_frame(&mut m, &mut cx, &mut g, (430, 155));
+        let p = get(&w, "menu.peek").expect("hovered: the peek");
+        assert_eq!((n(p, 0), n(p, 1), n(p, 2), n(p, 3)), (250, 150, 160, 64));
+        assert_eq!(p["text"], json!(format!("{} | Day 8", cx.location_name(&gs.world_id, &gs.location_id))));
+        let faces: Vec<&Value> = w.iter().filter(|x| x["kind"] == "portrait").collect();
+        assert_eq!(faces.len(), 4, "at most four portraits");
+        assert!(faces.iter().all(|f| (n(f, 2), n(f, 3)) == (20, 20) && n(f, 1) + 20 <= n(p, 1) + n(p, 3) && n(f, 0) + 20 <= n(p, 0) + n(p, 2)), "20 px, inside the panel");
+        let active = gs.party.active_members();
+        assert_eq!(faces[0]["id"], json!(format!("menu.peek.{}", active[0].id)), "the active members first");
+        assert!(get(&menu_frame(&mut m, &mut cx, &mut g, (430, 185)), "menu.peek").is_none(), "on another item: none");
+        assert!(get(&menu_frame(&mut m, &mut cx, &mut g, (570, 155)), "menu.peek").is_none(), "right of Continue's label: none");
+        let mut m = MainMenu::default();
+        let focus_on = |m: &mut MainMenu, cx: &mut Cx, g: &mut Gfx, id: &str, visible: bool| {
+            g.kit.focus = Some(id.into());
+            g.kit.focus_visible = visible;
+            get(&menu_frame(m, cx, g, (-1, -1)), "menu.peek").is_some()
+        };
+        assert!(!focus_on(&mut m, &mut cx, &mut g, "menu.continue", true), "the opening focus: no peek");
+        assert!(!focus_on(&mut m, &mut cx, &mut g, "menu.new_game", true), "moved off Continue");
+        assert!(focus_on(&mut m, &mut cx, &mut g, "menu.continue", true), "the keyboard moved onto it: the peek");
+        assert!(!focus_on(&mut m, &mut cx, &mut g, "menu.continue", false), "a hidden focus does not show it");
+        assert!(focus_on(&mut m, &mut cx, &mut g, "menu.continue", true));
+        m.draw(&mut cx, &mut g, (-1, -1), false);
+        assert!(get(&m.widgets(), "menu.peek").is_none(), "under an overlay: none");
+        m.resume(&mut cx);
+        assert!(!focus_on(&mut m, &mut cx, &mut g, "menu.continue", true), "back on the menu the focus opens there again: no peek");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The pictures over a scratch asset layer: without the A6 files the MENU2 picture and no crest; with them the title
+    /// backdrop and the crest behind the logo. The veil is 0: the centre of the picture stays as it is under the vignette's
+    /// zero at the centre.
+    #[test]
+    fn the_title_art_is_used_when_present_else_the_menu_picture() {
+        let dir = scratch("art");
+        let root = scratch("art_layer");
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/ui/frames/button.png");
+        std::fs::create_dir_all(root.join("backgrounds/menu")).unwrap();
+        std::fs::copy(&source, root.join(MENU_ART)).unwrap();
+        let (mut cx, mut g) = (cx(dir.clone()), gfx());
+        cx.app.manifest.title = "Fixture".into();
+        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.clone()]));
+        let mut m = MainMenu::default();
+        let w = menu_frame(&mut m, &mut cx, &mut g, (-1, -1));
+        assert_eq!(get(&w, "menu.backdrop").unwrap()["text"], json!(MENU_ART));
+        assert_eq!(get(&w, "menu.backdrop").unwrap()["kind"], json!("picture"));
+        assert!(get(&w, "menu.crest").is_none(), "no crest file, no crest");
+        assert!(get(&w, "menu.logo").is_none(), "no title picture");
+        std::fs::copy(&source, root.join(TITLE_ART)).unwrap();
+        std::fs::create_dir_all(root.join("ui")).unwrap();
+        std::fs::copy(&source, root.join(CREST_ART)).unwrap();
+        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.clone()]));
+        let w = menu_frame(&mut m, &mut cx, &mut g, (-1, -1));
+        assert_eq!(get(&w, "menu.backdrop").unwrap()["text"], json!(TITLE_ART));
+        let crest = get(&w, "menu.crest").expect("the crest");
+        assert_eq!(crest["text"], json!(CREST_ART));
+        assert!(n(crest, 0) + n(crest, 2) <= W && n(crest, 0) >= 0 && n(crest, 1) >= 0, "on the canvas");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Down from the top visits every row in order and Up comes back, with and without a save, at the four text sizes
+    /// (the labels differ in width, the arrows go by the column's left edge).
+    #[test]
+    fn the_arrow_keys_walk_every_main_menu_row() {
+        use aegis_ui::focus::{step, Move};
+        let dir = scratch("arrows");
+        let (mut cx, mut g) = (cx(dir.clone()), gfx());
+        let game = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let tallow = aegis_ui::theme::load(&aegis_core::assets::Layers::for_game(&game)).expect("the game's theme loads");
+        for with_save in [false, true] {
+            if with_save {
+                write_fixture(&mut cx, 3);
+            }
+            for t in [aegis_ui::theme::Theme::default(), tallow.clone()] {
+                aegis_ui::theme::set_theme(t);
+                for (size, scale) in TEXT_SIZES {
+                    g.fonts.scale = scale as f32;
+                    let w = menu_frame(&mut MainMenu::default(), &mut cx, &mut g, (-1, -1));
+                    let rows = buttons(&w);
+                    assert_eq!(rows.len(), if with_save { 6 } else { 5 });
+                    for (i, id) in rows.iter().enumerate() {
+                        let (down, up) = (step(&w, Some(id), Move::Dir(0, 1), false), step(&w, Some(id), Move::Dir(0, -1), false));
+                        if let Some(next) = rows.get(i + 1) {
+                            assert_eq!(down.as_ref(), Some(next), "Down from {id} at {size}");
+                        }
+                        if i > 0 {
+                            assert_eq!(up.as_ref(), Some(&rows[i - 1]), "Up from {id} at {size}");
+                        }
+                    }
+                }
+            }
+        }
+        aegis_ui::theme::set_theme(aegis_ui::theme::Theme::default());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The real path of a hover at several window sizes (letterboxed too), with and without a save: a physical mouse
+    /// position through `View::to_logical` and `Kit::mouse_moved`, the two steps the shell's mouse handler takes, then
+    /// a frame: the peek's panel is really drawn on the canvas (its pixels change), on the canvas and left of the column.
+    /// Moving off keeps Continue active and its peek; moving to another item drops it. No save: no Continue, nothing drawn.
+    #[test]
+    fn a_real_hover_draws_the_peek_at_every_window_size() {
+        for (ww, wh) in [(960, 540), (1280, 720), (1366, 768), (1920, 1080), (2560, 1080), (1024, 768)] {
+            let dir = scratch(&format!("hover_{ww}"));
+            let (mut cx, mut g) = (cx(dir.clone()), gfx());
+            g.canvas = Canvas::new(ww, wh);
+            g.view = View::fit(ww as u32, wh as u32);
+            let view = g.view;
+            let physical = |w: &[Value], id: &str| {
+                let r = get(w, id).unwrap();
+                ((n(r, 0) + n(r, 2) / 2) as f32 * view.s + view.ox, (n(r, 1) + n(r, 3) / 2) as f32 * view.s + view.oy)
+            };
+            let mut m = MainMenu::default();
+            let idle = menu_frame(&mut m, &mut cx, &mut g, (-500, -500));
+            assert!(get(&idle, "menu.continue").is_none(), "{ww}: no save, no Continue");
+            let at = physical(&idle, "menu.quit");
+            let mouse = view.to_logical(at.0, at.1);
+            g.kit.mouse_moved(&idle, mouse);
+            assert!(get(&menu_frame(&mut m, &mut cx, &mut g, mouse), "menu.peek").is_none(), "{ww}: no save, no peek");
+            write_fixture(&mut cx, 7);
+            g.kit.focus = None;
+            g.kit.focus_visible = false;
+            m.resume(&mut cx);
+            g.kit.focus = Some("menu.continue".into());
+            g.kit.focus_visible = true;
+            let idle = menu_frame(&mut m, &mut cx, &mut g, (-500, -500));
+            assert!(get(&idle, "menu.peek").is_none(), "{ww}: the opening focus shows no peek");
+            let before = g.canvas.px.clone();
+            let at = physical(&idle, "menu.continue");
+            let mouse = view.to_logical(at.0, at.1);
+            g.kit.mouse_moved(&idle, mouse);
+            let w = menu_frame(&mut m, &mut cx, &mut g, mouse);
+            let p = get(&w, "menu.peek").unwrap_or_else(|| panic!("{ww}: hovering Continue draws the peek"));
+            let (x, y, pw, ph) = (n(p, 0), n(p, 1), n(p, 2), n(p, 3));
+            assert!(x >= 0 && y >= 0 && x + pw <= n(get(&w, "menu.continue").unwrap(), 0) && y + ph <= H, "{ww}: {p}");
+            let pr = view.rect(Rect::new(x, y, pw, ph));
+            let changed = (pr.y..pr.y + pr.h).flat_map(|py| (pr.x..pr.x + pr.w).map(move |px| ((py * ww + px) * 4) as usize)).filter(|i| g.canvas.px[*i..*i + 4] != before[*i..*i + 4]).count();
+            assert!(changed * 2 > (pr.w * pr.h) as usize, "{ww}: the panel is on the canvas ({changed} px changed)");
+            assert!(pr.x >= 0 && pr.y >= 0 && pr.x + pr.w <= ww && pr.y + pr.h <= wh, "{ww}: on the canvas {pr:?}");
+            let off = (10, 340);
+            g.kit.mouse_moved(&w, off);
+            let w = menu_frame(&mut m, &mut cx, &mut g, off);
+            assert!(get(&w, "menu.peek").is_some(), "{ww}: off the labels Continue stays active, and its peek");
+            let at = physical(&w, "menu.load");
+            let mouse = view.to_logical(at.0, at.1);
+            g.kit.mouse_moved(&w, mouse);
+            assert!(get(&menu_frame(&mut m, &mut cx, &mut g, mouse), "menu.peek").is_none(), "{ww}: another item is active");
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
+    /// `ui/logo_title.png` replaces the typeset title and subtitle, and the crest even when both files are there; it sits
+    /// centred on the logo's place at whole scale steps, above the column, without it today's text.
+    #[test]
+    fn the_title_picture_replaces_the_typeset_logo() {
+        let (dir, root) = (scratch("logo"), scratch("logo_layer"));
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/ui/frames/button.png");
+        std::fs::create_dir_all(root.join("ui")).unwrap();
+        let (mut cx, mut g) = (cx(dir.clone()), gfx());
+        cx.app.manifest.title = "Fixture title".into();
+        cx.app.manifest.subtitle = "Fixture subtitle".into();
+        let mut audited = |cx: &mut Cx| {
+            cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.clone()]));
+            g.fonts.audit = Some(Vec::new());
+            let w = menu_frame(&mut MainMenu::default(), cx, &mut g, (-1, -1));
+            let texts: Vec<String> = g.fonts.audit.take().unwrap().into_iter().map(|r| r.text).collect();
+            (w, texts)
+        };
+        let (w, texts) = audited(&mut cx);
+        assert!(get(&w, "menu.logo").is_none() && texts.iter().any(|t| t == "Fixture title") && texts.iter().any(|t| t == "Fixture subtitle"), "no picture: the text");
+        std::fs::copy(&source, root.join(CREST_ART)).unwrap();
+        std::fs::copy(&source, root.join(LOGO_ART)).unwrap();
+        let (w, texts) = audited(&mut cx);
+        let logo = get(&w, "menu.logo").expect("the title picture");
+        assert_eq!((logo["kind"].as_str(), logo["text"].as_str()), (Some("picture"), Some(LOGO_ART)));
+        assert!(!texts.iter().any(|t| t.starts_with("Fixture")), "nothing typeset: {texts:?}");
+        assert!(get(&w, "menu.crest").is_none(), "the title picture wins over the crest");
+        let (x, y, ww, h) = (n(logo, 0), n(logo, 1), n(logo, 2), n(logo, 3));
+        assert_eq!((ww, ww % 16), (h, 0), "the square fixture stays square, a whole multiple");
+        assert!(ww > 16, "scaled up to its room");
+        assert_eq!(((x + ww / 2) as f32, (y + h / 2) as f32), LOGO_CENTRE, "centred on the logo's place");
+        assert!(x + ww <= W && y >= 0 && y + h <= MENU_Y, "on the canvas, above the column");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Review renders of the menu at 1280 x 720 with the game's art and theme: only with `AEGIS_REVIEW_DIR` set.
+    #[test]
+    fn review_shots() {
+        let Ok(out) = std::env::var("AEGIS_REVIEW_DIR") else { return };
+        std::fs::create_dir_all(&out).unwrap();
+        let dir = scratch("review");
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut cx = cx(dir.clone());
+        let m = aegis_content::manifest::Manifest::read(&root.join(aegis_content::manifest::FILE)).unwrap();
+        cx.app.manifest = m;
+        cx.art = aegis_ui::art::Art::new(Some(root.clone()));
+        aegis_ui::theme::set_theme(aegis_ui::theme::load(cx.art.layers()).expect("the game's theme"));
+        let mut g = gfx();
+        g.canvas = Canvas::new(1280, 720);
+        g.view = View::fit(1280, 720);
+        let mut shot = |cx: &mut Cx, name: &str, save: bool, focus: &str, mouse: (i32, i32), scale: f32| {
+            let _ = std::fs::remove_dir_all(&dir);
+            if save {
+                write_fixture(cx, 11);
+            }
+            g.fonts.scale = scale;
+            g.kit.focus = Some(focus.to_string());
+            g.kit.focus_visible = true;
+            g.canvas.clear([0, 0, 0, 255]);
+            g.fonts.audit = Some(Vec::new());
+            let mut m = MainMenu::default();
+            let w = menu_frame(&mut m, cx, &mut g, mouse);
+            let recs = g.fonts.audit.take().unwrap();
+            let boxes: Vec<(String, f32, f32, f32, f32)> = w.iter().filter(|x| x["kind"] != "picture").map(|x| (x["id"].as_str().unwrap().to_string(), n(x, 0) as f32, n(x, 1) as f32, n(x, 2) as f32, n(x, 3) as f32)).collect();
+            println!("{name}: {} peek {}", aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes)["counts"], get(&w, "menu.peek").is_some());
+            let file = std::fs::File::create(format!("{out}/{name}.png")).unwrap();
+            let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 1280, 720);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
+        };
+        let away = (20, 340);
+        shot(&mut cx, "headless_idle", true, "menu.continue", away, 1.0);
+        shot(&mut cx, "headless_hover_item", true, "menu.settings", (450, 221), 1.0);
+        shot(&mut cx, "headless_peek_hover", true, "menu.continue", (440, 155), 1.0);
+        aegis_ui::theme::set_theme(aegis_ui::theme::Theme::default());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The fixture save's file as JSON, `f` applied, written back.
+    fn doctor_save(dir: &Path, f: impl FnOnce(&mut Value)) {
+        let path = dir.join("slot_2.json");
+        let mut v: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        f(&mut v);
+        std::fs::write(&path, v.to_string()).unwrap();
+    }
+
+    /// A save of a refused older version is no save to continue: no Continue, no peek.
+    #[test]
+    fn a_refused_older_save_gives_no_continue_and_no_peek() {
+        let dir = scratch("older");
+        let (mut cx, mut g) = (cx(dir.clone()), gfx());
+        write_fixture(&mut cx, 3);
+        doctor_save(&dir, |v| v["version"] = json!(save::OLDEST - 1));
+        let w = menu_frame(&mut MainMenu::default(), &mut cx, &mut g, (430, 155));
+        assert_eq!(buttons(&w), MENU_IDS);
+        assert!(get(&w, "menu.peek").is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A save that passes the slot header's check but fails to load: Continue stays (pressing it says why), no panel, and
+    /// it is read once while the peek is wanted, not every frame (the mended file changes nothing until the hover ends).
+    #[test]
+    fn a_save_that_fails_validate_keeps_continue_without_a_peek_or_a_reread() {
+        let dir = scratch("invalid");
+        let (mut cx, mut g) = (cx(dir.clone()), gfx());
+        write_fixture(&mut cx, 3);
+        let good = std::fs::read_to_string(dir.join("slot_2.json")).unwrap();
+        doctor_save(&dir, |v| v["game_state"]["party"]["members"][0]["base_unit"] = json!("no_such_unit"));
+        assert!(save::read(&cx.data, &dir, 2).is_err(), "the fixture fails validate");
+        let mut m = MainMenu::default();
+        let over = (430, 155);
+        let w = menu_frame(&mut m, &mut cx, &mut g, over);
+        assert_eq!(buttons(&w)[0], "menu.continue", "the header reads");
+        assert!(get(&w, "menu.peek").is_none(), "no panel");
+        std::fs::write(dir.join("slot_2.json"), good).unwrap();
+        assert!(get(&menu_frame(&mut m, &mut cx, &mut g, over), "menu.peek").is_none(), "the failed read is kept while it hovers");
+        assert!(get(&menu_frame(&mut m, &mut cx, &mut g, (-1, -1)), "menu.peek").is_none());
+        assert!(get(&menu_frame(&mut m, &mut cx, &mut g, over), "menu.peek").is_some(), "read again on the next hover");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `newest_slot` parses every slot, so the menu reads it once and again on `resume`.
+    #[test]
+    fn the_newest_slot_is_read_once_until_the_menu_resumes() {
+        let dir = scratch("newest");
+        let (mut cx, mut g) = (cx(dir.clone()), gfx());
+        let mut m = MainMenu::default();
+        assert_eq!(buttons(&menu_frame(&mut m, &mut cx, &mut g, (-1, -1))), MENU_IDS);
+        write_fixture(&mut cx, 3);
+        assert_eq!(buttons(&menu_frame(&mut m, &mut cx, &mut g, (-1, -1))), MENU_IDS, "kept");
+        m.resume(&mut cx);
+        assert_eq!(buttons(&menu_frame(&mut m, &mut cx, &mut g, (-1, -1)))[0], "menu.continue", "read again");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The logo right-aligned at x 620 with the subtitle under it, and the menu clean in the text audit (nothing cut, past
+    /// the canvas, overlapping or out of its control) at the four text sizes, with and without the peek, under the engine
+    /// default and the game's own theme; the column and the peek grow leftward and stay on the canvas.
+    #[test]
+    fn the_main_menu_is_clean_at_the_four_text_sizes() {
+        let dir = scratch("audit");
+        let (mut cx, mut g) = (cx(dir.clone()), gfx());
+        cx.app.manifest.title = "Emberwake".into();
+        cx.app.manifest.subtitle = "A Scarlet Lullaby".into();
+        write_fixture(&mut cx, 12);
+        let game = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let tallow = aegis_ui::theme::load(&aegis_core::assets::Layers::for_game(&game)).expect("the game's theme loads");
+        // The active item is shown by brighter text alone: it reads on the backdrop's colour and apart from the idle rows.
+        let mut idle = tallow.bg;
+        let a = aegis_ui::panes::MENU_TEXT_IDLE as u32;
+        for (c, (t, b)) in idle.iter_mut().zip(tallow.text.iter().zip(&tallow.bg)).take(3) {
+            *c = ((*t as u32 * a + *b as u32 * (255 - a)) / 255) as u8;
+        }
+        assert!(tallow.contrast(tallow.gold, tallow.bg) >= 4.5 && tallow.contrast(idle, tallow.bg) >= 4.5, "both read on the bg");
+        assert!(tallow.contrast(tallow.gold, idle) >= 1.3, "the active item stands apart: {}", tallow.contrast(tallow.gold, idle));
+        for (name, t) in [("default", aegis_ui::theme::Theme::default()), ("game", tallow)] {
+            aegis_ui::theme::set_theme(t);
+            for (size, scale) in TEXT_SIZES {
+                for mouse in [(-1, -1), (430, 155)] {
+                    let what = format!("{name} at {size}, mouse {mouse:?}");
+                    let mut m = MainMenu::default();
+                    g.fonts.scale = scale as f32;
+                    g.fonts.audit = Some(Vec::new());
+                    g.canvas.clear([0, 0, 0, 255]);
+                    let w = menu_frame(&mut m, &mut cx, &mut g, mouse);
+                    let recs = g.fonts.audit.take().unwrap();
+                    let boxes: Vec<(String, f32, f32, f32, f32)> = w.iter().filter(|x| x["kind"] != "picture").map(|x| (x["id"].as_str().unwrap().to_string(), n(x, 0) as f32, n(x, 1) as f32, n(x, 2) as f32, n(x, 3) as f32)).collect();
+                    let v = aegis_ui::text_audit::issues(&recs, W as f32, H as f32, &boxes);
+                    for k in ["cut", "edge", "overlap", "spill"] {
+                        assert_eq!(v["counts"][k], json!(0), "{what}: {k}: {v}");
+                    }
+                    let logo = recs.iter().rfind(|r| r.text == "Emberwake").expect("the logo");
+                    let sub = recs.iter().find(|r| r.text == "A Scarlet Lullaby").expect("the subtitle");
+                    assert!((logo.x + logo.w - 620.0).abs() <= 1.0 && logo.y == 40.0 && (sub.x + sub.w - 620.0).abs() <= 1.0 && sub.y >= logo.y + logo.h - 0.5, "{what}: {} {} {}", logo.x, logo.w, sub.y);
+                    let tools = get(&w, "menu.tools").unwrap();
+                    assert!(n(tools, 0) + n(tools, 2) <= 580, "{what}: the column keeps its right edge");
+                    if scale <= 1.0 {
+                        assert_eq!(n(tools, 0), 423, "{what}");
+                    }
+                    if let Some(p) = get(&w, "menu.peek") {
+                        assert!(n(p, 0) >= 0 && n(p, 0) + n(p, 2) <= n(tools, 0) && n(p, 1) + n(p, 3) <= H, "{what}");
+                        assert_eq!(n(p, 2) % 4 + n(p, 3) % 4, 0, "{what}: its size on the grid (its place follows the brief's 250, 150 at Normal)");
+                    }
+                }
+            }
+        }
+        aegis_ui::theme::set_theme(aegis_ui::theme::Theme::default());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

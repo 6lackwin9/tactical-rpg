@@ -17,7 +17,7 @@
 
 use crate::battle::BattleScreen;
 use crate::portraits::{cue_of, hue_name, Faces, Who};
-use crate::screens::{Cx, Game, GameCx, Nav, Screen};
+use crate::screens::{Cx, Game, GameCx, Key, Nav, Screen};
 use crate::timeline_view;
 use aegis_core::assets::Layers;
 use aegis_core::json;
@@ -1100,6 +1100,20 @@ impl Screen<GameCx> for Gallery {
         }
     }
 
+    /// The Kit widgets entry takes its Panes page's keys (hotkeys, PageUp / PageDown, the ask's Enter, y and n).
+    fn key(&mut self, _cx: &mut Cx, k: Key) {
+        if ENTRIES[self.entry].0 == "kit" {
+            self.kit.key(k);
+        }
+    }
+
+    /// Esc answers the Panes page's ask (No) there; anywhere else it leaves the gallery.
+    fn escape(&mut self, cx: &mut Cx) {
+        if !(ENTRIES[self.entry].0 == "kit" && self.kit.key(Key::Esc)) {
+            self.back(cx);
+        }
+    }
+
     /// Back from an opened screen: the previews are built again (a setting may have changed).
     fn resume(&mut self, _cx: &mut Cx) {
         self.shown = None;
@@ -1139,6 +1153,46 @@ impl Screen<GameCx> for Gallery {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// LOOK1-M1: the real Gallery forwards keys to the Kit widgets' Panes page: the menu column's hotkey, the tab rail's
+    /// PageUp / PageDown, the ask's y and Esc (Esc answers there and leaves the gallery elsewhere); another entry takes none.
+    #[test]
+    fn the_gallery_forwards_keys_to_the_panes_page() {
+        use crate::hud::hud_tests::{game_cx, gfx};
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut gallery = Gallery::new();
+        let at = |id: &str| ENTRIES.iter().position(|e| e.0 == id).unwrap();
+        gallery.act(&mut cx, GAct::Entry(at("kit")));
+        let page = aegis_ui::specimens::PAGES.iter().position(|p| *p == "Panes").expect("a Panes page");
+        let pane = |name: &str| aegis_ui::specimens::PANES.iter().position(|p| *p == name).unwrap_or_else(|| panic!("a pane {name}"));
+        let open = |gallery: &mut Gallery, cx: &mut Cx, g: &mut Gfx, id: String| {
+            gallery.draw(cx, g, (-500, -500), true);
+            gallery.click_id(cx, &id).unwrap();
+            gallery.draw(cx, g, (-500, -500), true);
+        };
+        let last = |gallery: &Gallery, cx: &Cx| gallery.state(cx)["kit_last"].as_str().unwrap_or("").to_string();
+        open(&mut gallery, &mut cx, &mut g, format!("kit.page.{page}"));
+        open(&mut gallery, &mut cx, &mut g, format!("kit.pane.{}", pane("Menu column")));
+        gallery.key(&mut cx, Key::Char('q'));
+        assert_eq!(last(&gallery, &cx), "pressed quit", "the menu column's hotkey");
+        open(&mut gallery, &mut cx, &mut g, format!("kit.pane.{}", pane("Tab rail")));
+        gallery.key(&mut cx, Key::PageDown);
+        assert!(last(&gallery, &cx).starts_with("rail tab "), "PageDown: {}", last(&gallery, &cx));
+        open(&mut gallery, &mut cx, &mut g, format!("kit.pane.{}", pane("Ask")));
+        gallery.key(&mut cx, Key::Char('y'));
+        assert_eq!(last(&gallery, &cx), "pressed yes");
+        gallery.escape(&mut cx);
+        assert_eq!(last(&gallery, &cx), "pressed no");
+        assert!(cx.nav.is_empty(), "Esc answered the ask and stayed");
+        open(&mut gallery, &mut cx, &mut g, format!("kit.pane.{}", pane("Backdrop")));
+        gallery.escape(&mut cx);
+        assert!(matches!(cx.nav.as_slice(), [Nav::Pop]), "no key to take: Esc leaves");
+        cx.nav.clear();
+        gallery.act(&mut cx, GAct::Entry(at("pip_gauge")));
+        let before = last(&gallery, &cx);
+        gallery.key(&mut cx, Key::Char('q'));
+        assert_eq!(last(&gallery, &cx), before, "another entry takes no key");
+    }
 
     /// Every battle panel entry names a panel the battle screen records, and every recorded panel has an entry.
     #[test]

@@ -30,7 +30,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
 use crate::painter::Typeface;
-use crate::panes::{ask_dialog, ask_key, backdrop, backdrop_pane, menu_column, menu_key, menu_title, slot_card, tab_key, tab_rail, AskView, Corner, MenuItem, SlotView};
+use crate::panes::{ask_dialog, ask_key, backdrop, backdrop_pane, menu_column, menu_column_styled, menu_key, menu_title, slot_card, tab_key, tab_rail, AskView, Corner, MenuItem, MenuStyle, SlotView};
 use crate::screen::Key;
 use crate::theme::{self, Theme, FRAME_ROLES, ROLES};
 use crate::timeline::{Link, Mark, Part, PartStyle, Section, Segment, Timeline, Track};
@@ -1206,6 +1206,8 @@ impl Specimens {
                 let y = menu_title(ui, x, stage.y + 12, 200, "Title", "A subtitle under it");
                 let items = pane_menu(wrap);
                 let hovered = menu_column(ui, "kit.menu", x, y, 160, 18, 22, &items);
+                // Both styles on one stage: the framed one and the text-only one over the same picture.
+                let hovered = menu_column_styled(ui, "kit.menu_text", x + 180, y, 160, 18, 22, &items, MenuStyle::Text).or(hovered);
                 let dim = ui.t.dim;
                 let said = hovered.map_or("Hovered: none (letters are the hotkeys)".to_string(), |i| format!("Hovered: {}", items[i].label));
                 ui.p.text_fit((r.x + 6) as f32, row as f32, &said, SMALL, (r.w - 12) as f32, dim);

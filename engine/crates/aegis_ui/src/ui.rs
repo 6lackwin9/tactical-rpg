@@ -88,6 +88,19 @@ pub struct Kit {
     pub edit: Option<Edit>,
 }
 
+impl Kit {
+    /// The mouse moved to `mouse` over a screen's widgets `infos`: a `text_button` under it takes the visible focus
+    /// (`focus::hover_target`). The shell calls it for every mouse move.
+    pub fn mouse_moved(&mut self, infos: &[Value], mouse: (i32, i32)) {
+        if self.open.is_none() && self.edit.is_none() {
+            if let Some(id) = crate::focus::hover_target(infos, mouse) {
+                self.focus = Some(id);
+                self.focus_visible = true;
+            }
+        }
+    }
+}
+
 /// The text editor's model, layout, keys and clipboard live in `edit` (PLAYUI1-T); re-exported here for the kit's
 /// callers.
 pub use crate::edit::{clipboard, field_content_h, field_layout, field_scroll_id, field_shift, reveal_offset, word_end, word_start, Edit, EditKey, Layout, VLine, FIELD_PAD_X, FIELD_PAD_Y, UNDO_MAX, UNDO_PAUSE_MS};
@@ -133,6 +146,8 @@ pub struct Ui<'a, A> {
     edit: Option<EditView>,
     /// The theme in force when the frame began (`theme::th()`).
     pub t: Rc<Theme>,
+    /// The widget with a visible keyboard focus (`Kit::focus`, read at the start of the frame; only the live screen).
+    focus: Option<String>,
 }
 
 /// What a frame draws of the text field being edited: its id, text, caret and selection anchor (not its history).
@@ -149,10 +164,22 @@ impl<'a, A: Clone> Ui<'a, A> {
         // Only the live (top) screen sees the drag; screens under an overlay draw as if there were none.
         let (open, drag, scroll) = (g.kit.open.clone(), if live { g.kit.drag.clone() } else { None }, g.kit.scroll.clone());
         let edit = g.kit.edit.as_ref().filter(|_| live).map(|e| EditView { id: e.id.clone(), text: e.text.clone(), caret: e.caret, anchor: e.anchor });
+        let focus = g.kit.focus.clone().filter(|_| live && g.kit.focus_visible);
         g.canvas.clip = None;
         let t = theme::th();
         g.fonts.sync(&t);
-        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag, clip: None, clips: Vec::new(), scroll, scrolls: 0, edit, t }
+        Ui { p: Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts }, widgets: Vec::new(), mouse, live, open, drag, clip: None, clips: Vec::new(), scroll, scrolls: 0, edit, t, focus }
+    }
+
+    /// Whether any widget shows the keyboard focus this frame.
+    pub fn focus_shown(&self) -> bool {
+        self.focus.is_some()
+    }
+
+    /// Whether widget `id` shows the keyboard focus this frame (the shell's ring goes around it unless it draws its own:
+    /// `focus::shows_ring`).
+    pub fn focused(&self, id: &str) -> bool {
+        self.focus.as_deref() == Some(id)
     }
 
     /// LOOK1-E1: draws frame role `role` (`theme::FRAME_ROLES`) over `r`: its frame file, else the vector panel

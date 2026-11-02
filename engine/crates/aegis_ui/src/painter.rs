@@ -220,7 +220,7 @@ impl<'a> Painter<'a> {
     }
 
     /// TEXTFIT1: marks the audited texts so far that `r` (filled at `alpha`) hides.
-    fn cover(&mut self, r: Rect, alpha: u8) {
+    pub(crate) fn cover(&mut self, r: Rect, alpha: u8) {
         let Some(a) = self.fonts.audit.as_mut().filter(|_| alpha >= COVER_ALPHA) else { return };
         let (x0, y0, x1, y1) = (r.x as f32, r.y as f32, (r.x + r.w) as f32, (r.y + r.h) as f32);
         for t in a.iter_mut().filter(|t| !t.covered) {

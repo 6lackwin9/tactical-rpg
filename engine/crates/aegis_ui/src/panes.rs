@@ -1,7 +1,8 @@
 //! LOOK1-ME: the engine's menu panes (spec LOOK1 section 6), each a standalone piece a screen composes and the UI
 //! Gallery's Kit page shows on its own (the Panes page): `backdrop` (a full-screen picture, cover fit, with a vignette
-//! and a veil; the screen's L0), `menu_column` (large menu buttons with hotkeys and one primary, under a
-//! `menu_title` block), `tab_rail` (a vertical tab rail and its content area, settings style), `slot_card` (a save
+//! and a veil, composed once and blitted after; the screen's L0), `menu_column` (large menu buttons with hotkeys and
+//! one primary, or text rows on a picture: `MenuStyle`, under a `menu_title` block), `image_steps` (a picture at whole
+//! scale steps), `tab_rail` (a vertical tab rail and its content area, settings style), `slot_card` (a save
 //! or load card: thumbnail, title and lines, a portrait row, a timestamp, corner icons) and `ask_dialog` (the themed
 //! yes / no question in the `ornate` or `panel` frame). They draw only through the theme in force (`Ui::t`: colour
 //! roles, faces, layout values, frame roles), take every text and picture from the caller (they name no game), record
@@ -9,10 +10,11 @@
 //! the rects they place themselves on the theme's grid (`layout.grid`; the fixed spec offsets, e.g. the slot card's
 //! 112 x 63 thumbnail at `padding`, are drawn as given).
 
-use crate::canvas::{Image, Rect, Rgba};
+use crate::canvas::{Canvas, Image, Rect, Rgba};
 use crate::painter::{Painter, Typeface};
 use crate::screen::Key;
 use crate::ui::{tip, Glyph, Tip, Ui, BODY, HEAD, SMALL, TITLE};
+use std::cell::{Cell, RefCell};
 
 /// The ask dialog's least size at the Normal text size (logical px; the spec's 600 x 300 at the 1280 x 720
 /// reference window); it grows with the text size and the question.
@@ -86,6 +88,11 @@ pub fn cover_crop(iw: i32, ih: i32, r: Rect) -> Rect {
 /// up to `vignette` x 255 alpha (0-1; the square of the distance from the centre, 1 at a corner).
 fn cover_image(p: &mut Painter, img: Option<&Image>, r: Rect, vignette: f32, bg: Rgba) {
     let pr = p.v.rect(r);
+    cover_pixels(p.c, img, r, pr, vignette, bg);
+}
+
+/// `cover_image` onto canvas `c` at physical `pr`.
+fn cover_pixels(c: &mut Canvas, img: Option<&Image>, r: Rect, pr: Rect, vignette: f32, bg: Rgba) {
     if pr.w <= 0 || pr.h <= 0 {
         return;
     }
@@ -97,17 +104,17 @@ fn cover_image(p: &mut Painter, img: Option<&Image>, r: Rect, vignette: f32, bg:
         for x in 0..pr.w {
             let (dx, at) = ((x as f32 + 0.5 - hw) / hw, (pr.x + x, pr.y + y));
             match crop {
-                Some((img, c)) => {
-                    let (sx, sy) = (c.x + x * c.w / pr.w, c.y + y * c.h / pr.h);
+                Some((img, part)) => {
+                    let (sx, sy) = (part.x + x * part.w / pr.w, part.y + y * part.h / pr.h);
                     let i = ((sy * img.w + sx) * 4) as usize;
-                    p.c.blend(at.0, at.1, [img.px[i], img.px[i + 1], img.px[i + 2], img.px[i + 3]]);
+                    c.blend(at.0, at.1, [img.px[i], img.px[i + 1], img.px[i + 2], img.px[i + 3]]);
                 }
-                None => p.c.blend(at.0, at.1, [bg[0], bg[1], bg[2], 255]),
+                None => c.blend(at.0, at.1, [bg[0], bg[1], bg[2], 255]),
             }
             if vig > 0.0 {
                 let d = ((dx * dx + dy * dy) / 2.0).min(1.0);
                 let a = (vig * d).round() as u8;
-                p.c.blend(at.0, at.1, [bg[0], bg[1], bg[2], a]);
+                c.blend(at.0, at.1, [bg[0], bg[1], bg[2], a]);
             }
         }
     }
@@ -115,13 +122,163 @@ fn cover_image(p: &mut Painter, img: Option<&Image>, r: Rect, vignette: f32, bg:
 
 /// The backdrop (L0): `img` over the whole of `r` with a cover fit (scale max(r.w / w, r.h / h), centred crop,
 /// nearest sampling; None: the `bg` colour), a vignette darkening toward the corners with `bg` up to `vignette` x 255
-/// alpha (0-1), then `bg` at `veil` alpha over all (the spec's 50 % veil for menus is 128).
+/// alpha (0-1), then `bg` at `veil` alpha over all (the spec's 50 % veil for menus is 128). Composed once and blitted
+/// on later frames (it would cost tens of ms a frame at full window size), keyed on the picture, the physical size, the
+/// veil, the vignette and `bg`, so a resize or a theme change composes again; the blit honours `Canvas::clip` and
+/// `bounds`. A picture with see-through pixels shows what lies under it, so it is drawn live every frame.
 pub fn backdrop(p: &mut Painter, img: Option<&Image>, r: Rect, veil: u8, vignette: f32) {
+    let bg = crate::theme::th().bg;
+    let pr = p.v.rect(r);
+    if pr.w <= 0 || pr.h <= 0 {
+        return;
+    }
+    let key = ComposedKey { picture: img.map(picture_id), logical: (r.w, r.h), size: (pr.w, pr.h), veil, vignette: vignette.to_bits(), bg };
+    let opaque = COMPOSED.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let entry = match cache.iter().position(|e| e.key == key) {
+            Some(at) => cache.remove(at),
+            None => {
+                COMPOSES.with(|n| n.set(n.get() + 1));
+                Composed { key, px: compose(img, r, pr, veil, vignette, bg) }
+            }
+        };
+        if let Some(px) = &entry.px {
+            blit(p.c, pr, px);
+        }
+        let opaque = entry.px.is_some();
+        cache.push(entry);
+        if cache.len() > COMPOSED_MAX {
+            cache.remove(0);
+        }
+        opaque
+    });
+    if opaque {
+        p.cover(r, veil);
+    } else {
+        backdrop_live(p, img, r, veil, vignette);
+    }
+}
+
+/// `backdrop` drawn pixel by pixel, without the composed copy (a see-through picture; the reference the blit matches).
+pub fn backdrop_live(p: &mut Painter, img: Option<&Image>, r: Rect, veil: u8, vignette: f32) {
     let bg = crate::theme::th().bg;
     cover_image(p, img, r, vignette, bg);
     if veil > 0 {
         p.fill(r, [bg[0], bg[1], bg[2], veil]);
     }
+}
+
+/// How many composed backdrops are kept (a screen has one; the Gallery's previews a few), the oldest dropped first.
+/// The cost: each is a full window of RGBA held until it is pushed out, never freed otherwise: 3.7 MB at 1280 x 720,
+/// 8.3 MB at 1920 x 1080, 33 MB at 3840 x 2160, so at most four times that (a resize leaves the old sizes in until then).
+const COMPOSED_MAX: usize = 4;
+
+/// What a composed backdrop depends on. Its place is not part of it: the blit puts it anywhere.
+#[derive(Clone, Copy, PartialEq)]
+struct ComposedKey {
+    picture: Option<(usize, i32, i32, u64)>,
+    logical: (i32, i32),
+    size: (i32, i32),
+    veil: u8,
+    vignette: u32,
+    bg: Rgba,
+}
+
+/// A composed backdrop's pixels (None: its picture is see-through, `backdrop_live` draws it).
+struct Composed {
+    key: ComposedKey,
+    px: Option<Vec<u8>>,
+}
+
+thread_local! {
+    static COMPOSED: RefCell<Vec<Composed>> = const { RefCell::new(Vec::new()) };
+    static COMPOSES: Cell<u64> = const { Cell::new(0) };
+}
+
+/// How many times this thread has composed a backdrop (a cache miss); tests and timings read it.
+pub fn backdrop_composes() -> u64 {
+    COMPOSES.with(|n| n.get())
+}
+
+/// A picture's identity: where it lives, its size and a hash of up to 256 pixels across it, so another image that lands
+/// on a freed one's address does not pass for it (an edit to pixels the hash does not sample would).
+fn picture_id(img: &Image) -> (usize, i32, i32, u64) {
+    let n = img.px.len() / 4;
+    let step = (n / 256).max(1);
+    let mut h: u64 = 0xcbf29ce484222325;
+    for i in (0..n).step_by(step) {
+        h = (h ^ u32::from_le_bytes([img.px[i * 4], img.px[i * 4 + 1], img.px[i * 4 + 2], img.px[i * 4 + 3]]) as u64).wrapping_mul(0x100000001b3);
+    }
+    (img.px.as_ptr() as usize, img.w, img.h, h)
+}
+
+/// The backdrop's pixels at physical size `pr` (row by row, opaque), the same blends as `backdrop_live`; None when the
+/// part of the picture it shows has see-through pixels.
+fn compose(img: Option<&Image>, r: Rect, pr: Rect, veil: u8, vignette: f32, bg: Rgba) -> Option<Vec<u8>> {
+    if let Some(i) = img {
+        let c = cover_crop(i.w, i.h, r);
+        for y in c.y..c.y + c.h {
+            let row = ((y * i.w + c.x) * 4) as usize..((y * i.w + c.x + c.w) * 4) as usize;
+            if i.px[row].as_chunks::<4>().0.iter().any(|p| p[3] != 255) {
+                return None;
+            }
+        }
+    }
+    let mut c = Canvas::new(pr.w, pr.h);
+    let whole = Rect::new(0, 0, pr.w, pr.h);
+    cover_pixels(&mut c, img, r, whole, vignette, bg);
+    if veil > 0 {
+        c.fill(whole, [bg[0], bg[1], bg[2], veil]);
+    }
+    Some(c.px)
+}
+
+/// Copies opaque pixels (`pr.w` wide) to `pr` on `c`, inside the canvas, its clip and its bounds.
+fn blit(c: &mut Canvas, pr: Rect, px: &[u8]) {
+    let mut v = pr.intersect(Rect::new(0, 0, c.w, c.h));
+    for limit in [c.clip, c.bounds].into_iter().flatten() {
+        v = v.intersect(limit);
+    }
+    if v.w <= 0 || v.h <= 0 {
+        return;
+    }
+    let n = (v.w * 4) as usize;
+    for y in v.y..v.y + v.h {
+        let from = (((y - pr.y) * pr.w + v.x - pr.x) * 4) as usize;
+        let to = ((y * c.w + v.x) * 4) as usize;
+        c.px[to..to + n].copy_from_slice(&px[from..from + n]);
+    }
+}
+
+/// The whole scale step (`num`, `den`, one of them 1) that fits an `iw` x `ih` picture in `rw` x `rh` physical px: the
+/// largest whole multiple that fits, or the smallest whole division when the picture is larger. It keeps the aspect.
+pub fn whole_steps(iw: i32, ih: i32, rw: i32, rh: i32) -> (i32, i32) {
+    if iw <= 0 || ih <= 0 || rw <= 0 || rh <= 0 {
+        return (1, 1);
+    }
+    if iw > rw || ih > rh {
+        return (1, ((iw + rw - 1) / rw).max((ih + rh - 1) / rh));
+    }
+    ((rw / iw).min(rh / ih), 1)
+}
+
+/// `img` centred on logical (`cx`, `cy`) at the `whole_steps` that fit a logical `room_w` x `room_h` at the view's scale
+/// (nearest sampling, so pixel art stays crisp). Returns the logical rect it covers.
+pub fn image_steps(p: &mut Painter, img: &Image, cx: f32, cy: f32, room_w: i32, room_h: i32) -> Rect {
+    let s = p.v.s;
+    let (num, den) = whole_steps(img.w, img.h, (room_w as f32 * s) as i32, (room_h as f32 * s) as i32);
+    let (pw, ph) = (img.w * num / den, img.h * num / den);
+    let px = (p.v.ox + cx * s - pw as f32 / 2.0).round() as i32;
+    let py = (p.v.oy + cy * s - ph as f32 / 2.0).round() as i32;
+    for y in 0..ph {
+        let sy = y * den / num;
+        for x in 0..pw {
+            let i = ((sy * img.w + x * den / num) * 4) as usize;
+            p.c.blend(px + x, py + y, [img.px[i], img.px[i + 1], img.px[i + 2], img.px[i + 3]]);
+        }
+    }
+    let (lw, lh) = ((pw as f32 / s).ceil() as i32, (ph as f32 / s).ceil() as i32);
+    Rect::new(((px as f32 - p.v.ox) / s).round() as i32, ((py as f32 - p.v.oy) / s).round() as i32, lw, lh)
 }
 
 /// `backdrop` recorded for the agent link: a widget `id` of kind `picture` (no action, no focus) whose text is
@@ -174,10 +331,72 @@ fn pane_button<A: Clone>(ui: &mut Ui<A>, id: &str, r: Rect, label: &str, hotkey:
     if shown != label {
         ui.p.mark_cut(label);
     }
+    // A cut label reads in full on hover (a caller's hover card already leads with it: `menu_column`).
+    let t = if shown != label && t.is_empty() { tip(label, "") } else { t };
     ui.push(id, "button", label, r, enabled, false, Some(action), t);
 }
 
+/// The part of a `MenuStyle::Text` row that takes the mouse: its label's measured width (the room left of a hotkey at
+/// most) plus `MENU_TEXT_MARGIN` each side, at the row's height.
+fn text_hit<A: Clone>(ui: &mut Ui<A>, r: Rect, label: &str, hotkey: Option<char>, size: f32) -> Rect {
+    let pad = ui.t.layout.padding;
+    let mut room = r.w as f32 - 2.0 * pad as f32;
+    if let Some(k) = hotkey {
+        room -= ui.p.text_w(&k.to_uppercase().to_string(), SMALL) + ui.t.layout.gutter as f32;
+    }
+    let w = ui.p.text_w(label, size).min(room.max(0.0)).ceil() as i32;
+    Rect::new(r.x + pad - MENU_TEXT_MARGIN, r.y, w + 2 * MENU_TEXT_MARGIN, r.h)
+}
+
+/// A row of `MenuStyle::Text` laid out in `r`, clicked in `hit` (`text_hit`): no panel and no marker, the label (left, at
+/// the padding) and hotkey with a 1 px `bg` shadow. Its text is `text` at `MENU_TEXT_IDLE` alpha, `dim` when disabled and
+/// `gold` when it is the active item: the one with the keyboard focus, which the mouse moves too (`focus::hover_target`),
+/// so one item is lit at a time; the mouse lights a row by itself only while no focus shows.
+#[allow(clippy::too_many_arguments)]
+fn text_row<A: Clone>(ui: &mut Ui<A>, id: &str, r: Rect, hit: Rect, label: &str, hotkey: Option<char>, action: A, enabled: bool, size: f32, t: Tip) {
+    let th = ui.t.clone();
+    let lit = enabled && (ui.focused(id) || (!ui.focus_shown() && ui.hover(hit)));
+    let mut col = if !enabled { th.dim } else if lit { th.gold } else { th.text };
+    if enabled && !lit {
+        col[3] = MENU_TEXT_IDLE;
+    }
+    let pad = th.layout.padding as f32;
+    let mut room = r.w as f32 - 2.0 * pad;
+    if let Some(k) = hotkey {
+        let hk = k.to_uppercase().to_string();
+        let (lh, w) = (ui.p.line_h(SMALL), ui.p.text_w(&hk, SMALL));
+        let (hx, hy) = ((r.x + r.w) as f32 - pad - w, r.y as f32 + (r.h as f32 - lh) / 2.0);
+        ui.p.text(hx + 1.0, hy + 1.0, &hk, SMALL, th.bg);
+        ui.p.text(hx, hy, &hk, SMALL, th.dim);
+        room -= w + th.layout.gutter as f32;
+    }
+    let y = r.y as f32 + (r.h as f32 - ui.p.line_h(size)) / 2.0;
+    let shown = ui.p.fit(label, size, room.max(0.0));
+    ui.p.text(r.x as f32 + pad + 1.0, y + 1.0, &shown, size, th.bg);
+    ui.p.text(r.x as f32 + pad, y, &shown, size, col);
+    if shown != label {
+        ui.p.mark_cut(label);
+    }
+    let t = if shown != label && t.is_empty() { tip(label, "") } else { t };
+    ui.push(id, "text_button", label, hit, enabled, false, Some(action), t);
+}
+
 // ---- MenuColumn ----------------------------------------------------------------------------------------------------
+
+/// How a `menu_column` looks: `Framed`, buttons with the first enabled one the primary, or `Text`, rows of text only for
+/// a menu that sits on a picture (`text_row`: only the active item stands out, by brighter text; the mouse takes only
+/// the label, not the whole row).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum MenuStyle {
+    #[default]
+    Framed,
+    Text,
+}
+
+/// A `MenuStyle::Text` row's idle text alpha (the `text` role, dimmer than the active item's `gold`).
+pub const MENU_TEXT_IDLE: u8 = 190;
+/// How far past its label a `MenuStyle::Text` row takes the mouse, each side.
+pub const MENU_TEXT_MARGIN: i32 = 3;
 
 /// One item of a `menu_column`: its id key, label, hotkey (a letter typed on the screen, `menu_key`), action,
 /// whether it can be used and its hover card text (on a disabled item, the reason it can't).
@@ -233,15 +452,27 @@ pub fn menu_title<A: Clone>(ui: &mut Ui<A>, x: i32, y: i32, w: i32, title: &str,
 /// Returns the item under the mouse (enabled or not).
 #[allow(clippy::too_many_arguments)]
 pub fn menu_column<A: Clone>(ui: &mut Ui<A>, id: &str, x: i32, y: i32, w: i32, h: i32, step: i32, items: &[MenuItem<A>]) -> Option<usize> {
+    menu_column_styled(ui, id, x, y, w, h, step, items, MenuStyle::Framed)
+}
+
+/// `menu_column` in `style` (`MenuStyle::Text`: widgets of kind `text_button`, same ids and rows, each widget's rect the
+/// label's own `text_hit`).
+#[allow(clippy::too_many_arguments)]
+pub fn menu_column_styled<A: Clone>(ui: &mut Ui<A>, id: &str, x: i32, y: i32, w: i32, h: i32, step: i32, items: &[MenuItem<A>], style: MenuStyle) -> Option<usize> {
     let primary = items.iter().position(|i| i.enabled);
     let mut hovered = None;
     for (i, it) in items.iter().enumerate() {
         let r = menu_rect(x, y, w, h, step, i);
-        if ui.hover(r) {
+        let hit = if style == MenuStyle::Text { text_hit(ui, r, &it.label, it.hotkey, TITLE) } else { r };
+        if ui.hover(hit) {
             hovered = Some(i);
         }
         let t = if it.tip.is_empty() { Vec::new() } else { tip(&it.label, &it.tip) };
-        pane_button(ui, &format!("{id}.{}", it.key), r, &it.label, it.hotkey, it.action.clone(), it.enabled, primary == Some(i), TITLE, true, t);
+        let row = format!("{id}.{}", it.key);
+        match style {
+            MenuStyle::Framed => pane_button(ui, &row, r, &it.label, it.hotkey, it.action.clone(), it.enabled, primary == Some(i), TITLE, true, t),
+            MenuStyle::Text => text_row(ui, &row, r, hit, &it.label, it.hotkey, it.action.clone(), it.enabled, TITLE, t),
+        }
     }
     hovered
 }
@@ -255,7 +486,8 @@ pub fn menu_key<A: Clone>(items: &[MenuItem<A>], k: Key) -> Option<A> {
 // ---- TabRail -------------------------------------------------------------------------------------------------------
 
 /// The rects of a tab rail in `r`: the rail (`RAIL_W`, at most half of `r`), each tab's row (`TAB_H` high, one every
-/// `TAB_STEP`; only those that fit) and the content area right of the rail past the gutter.
+/// `TAB_STEP`; only the rows that fit, `tab_window` picks what they show) and the content area right of the rail past
+/// the gutter.
 pub fn tab_rail_rects(r: Rect, n: usize) -> (Vec<Rect>, Rect) {
     let t = crate::theme::th();
     let rail = RAIL_W.min(snap_down(r.w / 2));
@@ -264,13 +496,37 @@ pub fn tab_rail_rects(r: Rect, n: usize) -> (Vec<Rect>, Rect) {
     (rows, Rect::new(x, r.y, (r.x + r.w - x).max(0), r.h))
 }
 
+/// What a rail of `rows` rows shows of `n` tabs with tab `open` on: the first tab, how many, and whether the first and
+/// last rows are the previous / next arrows. All tabs when they fit; past that the rows are a window that always holds
+/// the open tab, under arrows when there are at least three rows (with fewer, `tab_key` still walks the tabs).
+pub fn tab_window(rows: usize, n: usize, open: usize) -> (usize, usize, bool) {
+    if n <= rows {
+        return (0, n, false);
+    }
+    let arrows = rows >= 3;
+    let count = if arrows { rows - 2 } else { rows };
+    let first = open.min(n - 1).saturating_sub(count.saturating_sub(1) / 2).min(n - count);
+    (first, count, arrows)
+}
+
 /// A vertical tab rail (settings style) in `r`: `tabs` down the left (`Ui::tab`, frame roles `tab` and `tab_on`; ids
-/// `<id>.<i>`; `open` drawn on; a click sends `act(i)`), the content area right of it as an `inset`. Returns the
-/// content rect inside the inset, where the screen draws the open tab's form.
+/// `<id>.<i>`; `open` drawn on; a click sends `act(i)`), the content area right of it as an `inset`. Tabs past the
+/// rail's height stay in reach: `tab_window` shows those around the open one, between `<id>.prev` and `<id>.next`
+/// arrows that open the tab above / below (wrapping, as `tab_key`). Returns the content rect inside the inset, where
+/// the screen draws the open tab's form.
 pub fn tab_rail<A: Clone, S: AsRef<str>>(ui: &mut Ui<A>, id: &str, r: Rect, tabs: &[S], open: usize, act: impl Fn(usize) -> A) -> Rect {
     let (rows, content) = tab_rail_rects(r, tabs.len());
-    for (i, row) in rows.iter().enumerate() {
-        ui.tab(&format!("{id}.{i}"), *row, tabs[i].as_ref(), act(i), open == i);
+    let n = tabs.len();
+    let (first, count, arrows) = tab_window(rows.len(), n, open);
+    let mut row = rows.iter();
+    if arrows {
+        ui.tab(&format!("{id}.prev"), *row.next().unwrap(), "^", act((open + n - 1) % n), false);
+    }
+    for (i, tab) in tabs.iter().enumerate().skip(first).take(count) {
+        ui.tab(&format!("{id}.{i}"), *row.next().unwrap(), tab.as_ref(), act(i), open == i);
+    }
+    if arrows {
+        ui.tab(&format!("{id}.next"), *row.next().unwrap(), "v", act((open + 1) % n), false);
     }
     ui.inset(content, false)
 }
@@ -448,7 +704,9 @@ pub fn ask_layout(p: &mut Painter, area: Rect, v: &AskView) -> (Rect, Vec<String
 
 /// The themed yes / no question over `area` (its scrim and a `backdrop` widget `<id>` keep the focus and clicks off
 /// what lies under it): the `ornate` or `panel` frame, the title in the display face, the question wrapped, Yes then
-/// No (`<id>.yes`, `<id>.no`; the default one the primary). Returns the dialog's rect. Keys: `ask_key`.
+/// No (`<id>.yes`, `<id>.no`; the default one the primary). A cut title (`<id>.title`) or question (`<id>.question`:
+/// lines the height cap dropped, the last one left ending in "...") shows its full text on hover, and the text audit
+/// sees it as cut. Returns the dialog's rect. Keys: `ask_key`.
 pub fn ask_dialog<A: Clone>(ui: &mut Ui<A>, id: &str, area: Rect, v: &AskView, yes: A, no: A) -> Rect {
     let t = ui.t.clone();
     ui.p.fill(area, t.scrim);
@@ -465,16 +723,26 @@ pub fn ask_dialog<A: Clone>(ui: &mut Ui<A>, id: &str, area: Rect, v: &AskView, y
         ui.p.text_center_face(Typeface::Display, inner.x as f32 + inner.w as f32 / 2.0, y, &shown, HEAD, t.gold);
         if shown != v.title {
             ui.p.mark_cut(v.title);
+            ui.push(format!("{id}.title"), "label", v.title, Rect::new(inner.x, y as i32, inner.w, lh.ceil() as i32), true, false, None, tip(v.title, ""));
         }
         y += lh.ceil() + t.layout.gutter as f32;
     }
     let (ink, lh) = (t.ink_on(role), ui.p.line_h(BODY).ceil());
-    for l in &lines {
-        if y + lh > yr.y as f32 {
-            break;
+    let top = y;
+    let shown = lines.len().min((((yr.y as f32 - y) / lh).floor().max(0.0)) as usize);
+    let dropped = shown < lines.len();
+    for (i, l) in lines[..shown].iter().enumerate() {
+        if dropped && i + 1 == shown {
+            let last = fit_face(&mut ui.p, Typeface::Body, &format!("{}...", l.trim_end()), BODY, inner.w as f32);
+            ui.p.text(inner.x as f32, y, &last, BODY, ink);
+        } else {
+            ui.p.text(inner.x as f32, y, l, BODY, ink);
         }
-        ui.p.text(inner.x as f32, y, l, BODY, ink);
         y += lh;
+    }
+    if dropped {
+        ui.p.mark_cut(v.question);
+        ui.push(format!("{id}.question"), "label", v.question, Rect::new(inner.x, top as i32, inner.w, (y - top).max(lh) as i32), true, false, None, tip(v.question, ""));
     }
     pane_button(ui, &format!("{id}.yes"), yr, v.yes, None, yes, true, !v.no_default, BODY, false, Vec::new());
     pane_button(ui, &format!("{id}.no"), nr, v.no, None, no, true, v.no_default, BODY, false, Vec::new());
