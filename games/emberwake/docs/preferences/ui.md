@@ -67,3 +67,4 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
   "Impact tracers"), a gold frame on the strip's resolving block, playback speed 1x / 0.5x / block by block (chips
   during playback, P, N, remembered), the combat log grouped by round and block, and the full timeline view (T)
   pausing the playback at the block's end. Nothing else draws on the board during playback.
+- Secondary text carries real information (levels, stats, labels), so it stays comfortable to read: `dim` is #9ca3af, about 6-8:1, not the darker Cinder Ash #6b7280 (user 2026-11-02).

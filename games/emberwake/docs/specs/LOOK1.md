@@ -72,7 +72,7 @@ role with that value as its default, named in E1's report (the planner adds it h
 | `edge_hot` | hovered card border | #6e8cc4 | Tallow Amber #d97706 |
 | `focus` | hover and active button border, focus ring, primary action | `GOLD` #f4c654 | Tallow Amber #d97706 |
 | `text` | body text | `TEXT` #dee4f0 | Bleached Linen #d9cbb4 |
-| `dim` | secondary and disabled text | `DIM` #8492ac | Cinder Ash #6b7280 |
+| `dim` | secondary and disabled text | `DIM` #8492ac | #9ca3af (user 2026-11-02; was Cinder Ash #6b7280, too hard to read on stats and labels) |
 | `gold` | headers, titles, tip titles | `GOLD` #f4c654 | Candle Gold #fbbf24 |
 | `info` | neutral highlight | `INFO` #8cc4ec | Salt Cyan #06b6d4 |
 | `foe` | foes, damage | `FOE` #f0645c | not set (today's) |
