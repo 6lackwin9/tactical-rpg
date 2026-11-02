@@ -247,10 +247,10 @@ class Ingest(Base):
         with Image.open(art) as im:
             self.assertEqual(im.convert("RGB").getpixel(spot["xy"]), BG)   # the mark cleared
         rec = json.loads(art.with_suffix(".json").read_text(encoding="utf-8"))
-        self.assertEqual((rec["model"], rec["via"]), ("image-generator", "antigravity"))
+        self.assertEqual((rec["model"], rec["via"]), ("image-generator", Q.WEB_VIA))
         self.assertEqual(rec["id"], "bryn_hale")
         self.assertEqual(rec["prompt"], "Bryn, a scarred sergeant.")
-        self.assertEqual(rec["source"], Q.SOURCE)
+        self.assertEqual(rec["source"], Q.WEB_SOURCE)
         self.assertEqual(rec["request"], name)
         self.assertEqual(rec["n"], 1)
         self.assertEqual(rec["time"], "2026-11-02T10:00:00+00:00")
@@ -265,6 +265,40 @@ class Ingest(Base):
             self.assertEqual(im.size, (240, 240))
         marker = json.loads(next((self.pipe / "archive").glob(f"*/output/{name}.ingested.json")).read_text(encoding="utf-8"))
         self.assertEqual([a["art_src"] for a in marker["accepted"]], [G.rel(art)])
+
+    def ingest_record(self, cid, model="image-generator"):
+        """Queues, fakes and ingests one `other` image in self.pipe; the record written."""
+        path = self.queue_one("text", cid, "--text", "A tile.", "--route", "other")
+        self.fake_antigravity(path, {f"{path.stem}.png": portrait_png}, model=model)
+        self.run_cli("ingest")
+        return json.loads((self.src / f"{cid}.json").read_text(encoding="utf-8"))
+
+    def test_record_says_the_web_queue(self):
+        rec = self.ingest_record("web_tile")
+        self.assertEqual((rec["source"], rec["via"]), (Q.WEB_SOURCE, Q.WEB_VIA))
+
+    def test_record_says_antigravity_for_the_backup_queue(self):
+        self.pipe = self.tmp / Q.BACKUP_FOLDER                     # a temp folder of that name, never the real queue
+        rec = self.ingest_record("backup_tile")
+        self.assertEqual((rec["source"], rec["via"]), ("antigravity image subagent", "antigravity"))
+
+    def test_backup_flag_resolves_to_the_antigravity_origin(self):
+        self.assertEqual(Q.queue_origin(Q.pipeline(backup=True)), (Q.SOURCE, Q.VIA))
+
+    def test_origin_however_the_folder_is_named(self):
+        backup = self.tmp / Q.BACKUP_FOLDER; backup.mkdir()
+        for named in (backup, f"{backup}/", f"{backup}\\", self.tmp / ".IMAGE_Pipeline",
+                      self.tmp / "pipe" / ".." / Q.BACKUP_FOLDER):
+            self.assertEqual(Q.queue_origin(named), (Q.SOURCE, Q.VIA), named)
+        self.addCleanup(os.chdir, os.getcwd())                     # runs before the temp folder is removed
+        os.chdir(backup)
+        self.assertEqual(Q.queue_origin("."), (Q.SOURCE, Q.VIA))
+        self.assertEqual(Q.queue_origin(pathlib.Path(".")), (Q.SOURCE, Q.VIA))
+        for other in (self.tmp / "pipe", self.tmp / ".image_pipeline_old", self.tmp / Q.BACKUP_FOLDER / "sub"):
+            self.assertEqual(Q.queue_origin(other), (Q.WEB_SOURCE, Q.WEB_VIA), other)
+
+    def test_model_falls_back_to_the_queue(self):
+        self.assertEqual(self.ingest_record("no_model", model=None)["model"], Q.WEB_VIA)
 
     def test_portrait_target_and_existing_source(self):
         portrait_png(self.src / "bryn_hale.png")      # a first take exists: the new one is a _gen take
@@ -366,10 +400,14 @@ class Ingest(Base):
         (self.pipe / "failed" / f"{path.stem}.error.txt").write_text("reference refused by the model\n",
                                                                      encoding="utf-8")
         out = self.run_cli("ingest")
-        self.assertIn(f"{path.stem}: failed in Antigravity: reference refused by the model", out)
-        self.assertIn("failed in Antigravity", self.run_cli("ingest", path.stem))
+        self.assertIn(f"{path.stem}: failed in the Gemini web app: reference refused by the model", out)
+        self.assertIn("failed in the Gemini web app", self.run_cli("ingest", path.stem))
         self.assertEqual(list(self.src.iterdir()), [])
         self.assertEqual(Q.status(self.pipe)["failed"], 1)
+        self.pipe = self.tmp / Q.BACKUP_FOLDER
+        path = self.queue_one("text", "bad_b", "--text", "Bad.")
+        (self.pipe / "failed" / path.name).write_bytes(path.read_bytes()); path.unlink()
+        self.assertIn("failed in Antigravity", self.run_cli("ingest", path.stem))
 
 
 

@@ -14,7 +14,7 @@
 #       <name>_q<time>; the asset id is --id, else <name>
 # Every request name is unique (<id>_q<time>, a second later while taken in any folder); a reference that does not
 # exist refuses the request. Ingest refuses an image that is missing, corrupt, off the aspect by more than 3 % or
-# under 1024 px on its long edge, and reports a request Antigravity moved to failed/ with its error.txt.
+# under 1024 px on its long edge, and reports a request moved to failed/ with its error.txt.
 #   python artqueue.py ingest [<name>...] [--dry-run]
 #       every finished request (output/<name>.result.json and completed/<name>.json), or the names given
 #   python artqueue.py status
@@ -56,8 +56,13 @@ MIN_EDGE = 1024                  # the long edge of a full-size image (a smaller
 # Routes (ART_PROMPT_TEMPLATES.md "Routes by asset type"): only a portrait is pixelized at ingest; a faces sheet is cut
 # by sheets.py faces and the rest is left for the asset lane.
 ROUTES = ("portrait", "faces", "full_body", "story_scene", "icon", "icon_sheet", "other")
+# The record's `source` and `via` follow the queue the request went through (queue_origin); `model` keeps what the result
+# names (often "image-generator"). Records written before LOOK1-T2 keep what they say.
 SOURCE = "antigravity image subagent"
-VIA = "antigravity"              # the record's `via`; `model` keeps what the result names (often "image-generator")
+VIA = "antigravity"
+WEB_SOURCE = "gemini web app task"
+WEB_VIA = "gemini_web"
+BACKUP_FOLDER = ".image_pipeline"  # the Antigravity queue's folder, in the main checkout
 # Record keys the ingest writes itself; a request's metadata.record cannot replace them.
 RESERVED = {"model", "id", "cid", "prompt", "use_ref", "prompts_file", "n", "time", "when", "reference", "image",
             "references", "source", "via", "request", "metadata", "mark_cleared"}
@@ -84,7 +89,7 @@ def pipeline(override=None, backup=False, config=None):
     if override:
         return pathlib.Path(override)
     if backup:
-        return main_checkout() / ".image_pipeline"
+        return main_checkout() / BACKUP_FOLDER
     env = os.environ.get("AEGIS_IMAGE_PIPELINE") or os.environ.get("IMAGE_PIPELINE")
     where, src = env, "AEGIS_IMAGE_PIPELINE"
     if not where:
@@ -102,6 +107,23 @@ def pipeline(override=None, backup=False, config=None):
         raise SystemExit(f"the image pipeline folder {path} (from {src}) does not exist: is the Drive mounted? "
                          f"(--backup uses the Antigravity folder, --pipeline any other)")
     return path
+
+
+def is_backup(pipe):
+    """Whether a queue folder is the Antigravity one, however it was named on the command line (`.`, a trailing slash,
+    another case)."""
+    return pathlib.Path(pipe).resolve().name.casefold() == BACKUP_FOLDER
+
+
+def queue_origin(pipe):
+    """The record's (source, via) for a queue folder: the Antigravity values for the backup folder, the web-app values
+    for any other."""
+    return (SOURCE, VIA) if is_backup(pipe) else (WEB_SOURCE, WEB_VIA)
+
+
+def queue_label(pipe):
+    """The worker of a queue folder, for messages."""
+    return "Antigravity" if is_backup(pipe) else "the Gemini web app"
 
 
 def ensure(pipe):
@@ -262,7 +284,7 @@ def failed_error(pipe, name):
 
 
 def report_failed(pipe, name):
-    print(f"{name}: failed in Antigravity: {failed_error(pipe, name)[:300]}")
+    print(f"{name}: failed in {queue_label(pipe)}: {failed_error(pipe, name)[:300]}")
 
 
 def failed_names(pipe):
@@ -385,7 +407,8 @@ def ingest_one(pipe, name, dry=False, now=None):
             G.SRC.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, dest)
             clear_model_mark(dest)
-            extra = {"references": [G.rel(r) for r in refs], "source": SOURCE, "via": VIA, "request": name,
+            source, via = queue_origin(pipe)
+            extra = {"references": [G.rel(r) for r in refs], "source": source, "via": via, "request": name,
                      "metadata": meta, "mark_cleared": True}
             extra.update({key: v for key, v in (meta.get("record") or {}).items() if key not in RESERVED})
             if kind:
@@ -395,7 +418,7 @@ def ingest_one(pipe, name, dry=False, now=None):
             if result.get("notes"):
                 extra["notes"] = result["notes"]
             pf = (meta.get("record") or {}).get("prompts_file")
-            G.record(dest, result.get("model") or "antigravity", cid,
+            G.record(dest, result.get("model") or via, cid,
                      prompt_sent if prompt_sent is not None else req.get("prompt"), bool(refs),
                      G.ROOT / pf if pf else None, k + 1, when=result.get("time"),
                      reference=refs[0] if refs else None, **extra)

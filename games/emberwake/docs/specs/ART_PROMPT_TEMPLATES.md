@@ -226,13 +226,14 @@ moves to `rejected/` with a note and the valid variants of the same request are 
 is reported with its `error.txt` (and nothing is ingested).
 An accepted one is copied into `art_src/` with the house naming of `generate.py` (`<id>.png` for a single first take,
 else `<id>_gen<time>_<k>.png`; a faces sheet `<id>_faces_gen<time>_<k>.png`), its model mark is cleared
-(`pixelize.clear_mark`) and its prompt record is written beside it: `model` (as the result names it), `"via":
-"antigravity"`, `id`, `prompt` (the
-exact `prompt_sent`; `prompt_requested` too when it differs), `reference` (the first) and `references`,
-`prompts_file`, `time`, `n`, the request's `metadata` and `record` fields, `request`, `mark_cleared` and
-`"source": "antigravity image subagent"`. Route `portrait` is pixelized into the 120 px game portrait (the request's
-`target` when that file does not exist yet, else `pixelized/<art_src name>.png`); `faces` is cut by `sheets.py faces`
-and the rest is left for the asset lane. `output/<name>.ingested.json` lists what went where; a second ingest skips it.
+(`pixelize.clear_mark`) and its prompt record is written beside it: `model` (as the result names it, else the value of
+`via`), `via`, `id`, `prompt` (the exact `prompt_sent`; `prompt_requested` too when it differs), `reference` (the first)
+and `references`, `prompts_file`, `time`, `n`, the request's `metadata` and `record` fields, `request`, `mark_cleared`
+and `source`. `via` and `source` follow the queue (LOOK1-T2): `"antigravity"` and `"antigravity image subagent"` for the
+folder `.image_pipeline` (`--backup`), `"gemini_web"` and `"gemini web app task"` for any other; records written before
+LOOK1-T2 say antigravity whichever queue made them. Route `portrait` is pixelized into the 120 px game portrait (the
+request's `target` when that file does not exist yet, else `pixelized/<art_src name>.png`); `faces` is cut by
+`sheets.py faces` and the rest is left for the asset lane. `output/<name>.ingested.json` lists what went where; a second ingest skips it.
 Expression sheets from this route are already pixel art, so `sheets.py faces` takes `--reduce scale` (decision
 "Expression sheets: scale only and aligned cells", PORTRAITFX1-XA): each cell is only cut from its background
 (`pixelize.cut_background`), scaled to the 120 grid (`smooth_reduce`) and framed on the faction backdrop, with no
