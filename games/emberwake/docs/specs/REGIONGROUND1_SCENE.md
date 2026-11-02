@@ -107,6 +107,19 @@ one (`rough basalt blocks`, slice A2); LOOK1-A1-A3's faces take the new form. Th
 6. Square view frames equal today's (hash); journey golden, store resave and battle traces unchanged. These tests take
    the new numbers: EXPLOREVIEW1 check 4 and `mapview.rs`'s `face` assertion, an intended change named in the commit.
 
+### Storeys and how walls sit with the props (user 2026-11-02)
+
+- A wall face is one storey: 24 logical px high (48 px at 720p), its art 128 x 48, repeating sideways and upward, so
+  it wraps on all four sides. Each wall or plain structure has a height in storeys (default 1); a taller one stacks the
+  same face. Smaller pieces looped several times are not used: a mark in a 12 to 16 px piece repeats that often, the
+  same looping the user flagged on the dirt. A later cap band and foot strip may break up a tall wall. Proper buildings
+  (the tavern, the keep) stay whole props (PROPS1-A3b), not stacks.
+- Walls may stand out, but must not look out of place beside the props. They share the props' light from the upper
+  left, dark outline weight, pixel size and palette family, and sit within the props' saturation range; ground stays
+  below both. Wall art is prompted with a prop sheet as its reference, and `board.py --ground` shows each wall face
+  beside today's kit props and a unit, with a colour and contrast read of the wall against the props. The user judges
+  this at R1.
+
 ## 2. Hierarchy
 
 The user: "the unit, props and buildings should pop out way more than the terrain, even with layering."
