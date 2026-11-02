@@ -112,7 +112,7 @@ kill_tree() {  # $1 = a background job started by tooltests. Windows: taskkill /
 }
 
 tooltests() {  # the tools/tiles tests, with a time limit (FC_TOOLTESTS_LIMIT seconds); no Python with Pillow: a visible SKIP, not a failure
-  local py limit=${FC_TOOLTESTS_LIMIT:-180} log pid code start=$SECONDS run=()
+  local py limit=${FC_TOOLTESTS_LIMIT:-300} log pid code start=$SECONDS run=()
   if ! py=$(tools_python); then echo "[tooltests] SKIP: no Python with Pillow found, tools/tiles tests did not run"; return 0; fi
   log=$(mktemp)
   [ -r "/proc/$$/winpid" ] || run=(setsid)

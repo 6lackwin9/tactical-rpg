@@ -1,6 +1,6 @@
-# tools/tiles (LOOK1-T, REGIONGROUND1-T, REGIONGROUND1-T3)
+# tools/tiles (LOOK1-T, REGIONGROUND1-T, -T2, -T3)
 
-Tile and ground texture pipeline. Python 3.12 with Pillow only (decision "Art tools in Python, portable to Rust"). Gemini art is already pixel art, so every step is scale only
+Tile and ground texture pipeline. Python 3.12 with Pillow only (decision "Art tools in Python, portable to Rust"); the ground boards also need cargo, for the engine's `ground_compose`. Gemini art is already pixel art, so every step is scale only
 (no palette pass unless `--colours` is asked for). Run from this folder.
 
 | Tool | Use |
@@ -18,11 +18,16 @@ Tile and ground texture pipeline. Python 3.12 with Pillow only (decision "Art to
 | `groundcheck.py figures GROUND_DIR --art PATHS` | Warnings: a figure's range under 4 x a ground's, its busy under 3 x. `cistern`, `cobbles`, `scorch_mark` are not figures. |
 | `groundcheck.py pair GROUND_DIR` | Every two grounds' separation (below), exit 1 when any two are too alike; the stones warning for a built ground. |
 | `groundcheck.py read FRAME GROUND_PNG [--option shadow, pool or rim] [--colour RRGGBB]` | `read_contrast` and the ring step of one figure frame on a ground (below). |
-| `board.py SET_DIR --ground --out DIR [--figures ROOT]` | The set's `ground/<id>/v0.png`: each repeated over 16 x 10 and 32 x 20 cells at 1x-3x, no tone, with scores and pass or fail; each pair on a straight edge, a T crossing, a 1-cell lane and a lone cell (the prototype's edge, EN 2.3 and 2.4; pairs by the spec's order, lower first); each ground under the six class bodies, a crate, a tent and a wall face at 1x-2x; the figure warnings; `read_contrast` per body, ground and option. Also the mix below and the pairs' separation. `--layout` and `--set-colours` as for `--mix`. |
-| `board.py SET_DIR --mix --out DIR [--layout FIXTURE] [--set-colours]` | One picture, `mix.png`: the set's grounds as a small map (`fixtures/mix_outdoor.txt` by default, `mix_street.txt` for the Sunk Ward; `ID X0-X1 Y0-Y1` rects, later over earlier), at 2x with nothing written over the map, and beside it the grounds, how far each sits from its table colour, the pairs too alike and the plain built grounds. `--set-colours` sets each texture's mean to its row's colour as `flatten.py --colour` does; off, the art shows as it is. A ground without art draws its row's colour. The edge is Python for now (EN 2.3, 2.4 as built); REGIONGROUND1-T2 routes it through `ground_compose`. A layout that is off its map, past 128 cells, or names a ground outside the table is refused, not cut; so is a texture over 4096 px a side. |
+| `board.py SET_DIR --ground --out DIR [--figures ROOT] [--wear X] [--props FILE]` | The set's `ground/<id>/v0.png`: each repeated over 16 x 10 and 32 x 20 cells at 1x-3x, no tone, with scores and pass or fail; each pair on a straight edge, a T crossing, a 1-cell lane and a lone cell (each through `ground_compose`, so no tile tool holds an edge of its own; pairs by the spec's order, lower first); each ground under the six class bodies, a crate, a tent and a wall face at 1x-2x; the figure warnings; `read_contrast` per body, ground and option. Also the mix below and the pairs' separation. `--layout`, `--set-colours`, `--wear` and `--props` as for `--mix`. |
+| `board.py SET_DIR --mix --out DIR [--layout FIXTURE] [--set-colours] [--wear X] [--props FILE]` | One picture, `mix.png`, composed by the engine's `ground_compose` (EN 6), so it is the game's picture, random patches included: the set's grounds as a small map (`fixtures/mix_outdoor.txt` by default, `mix_street.txt` for the Sunk Ward; `ID X0-X1 Y0-Y1` rects, later over earlier), at 2x with nothing written over the map, and beside it the grounds, how far each sits from its table colour, the pairs too alike and the plain built grounds. `--set-colours` sets each texture's mean to its row's colour as `flatten.py --colour` does; off, the art shows as it is. A ground without art draws its row's colour. `--wear X` takes the table's wear times X, 0 to 3 (the table's own wear at 1). `--props FILE` draws props and units over the map at their own pixels (32 a cell), by feet, front last, so a ground is judged under what stands on it: `fixtures/mix_outdoor_props.txt` is the outdoor example, `prop FOLDER X Y` or `unit FOLDER X Y` with the foot in cells and FOLDER under `props/` or `units/` of the game's assets, then the kit's. A bad line, missing art, a foot off the map or past 256 lines is refused. A layout that is off its map, past 128 cells, or names a ground outside the table is refused, not cut; so is a texture over 4096 px a side. |
 
 Sizes (kit checks A13-A15): region tiles 32x32 or 32x24, faces 32x16, 32x12 or 128x48, stage tiles 64x48, stage faces 64x24.
 Ground masters 256x256.
+
+The ground job (`board.ground_job`): the grounds the map uses, by the table's order then id, as the kit's `plan` lists them; a texture's offset comes from
+the place in that list. `board.py` builds `ground_compose` once a run (a linked worktree in its own folder, as `tools/fc.sh`), then runs the binary per picture; a build
+needing more than `tools/fc.sh tooltests`' limit fails it, so a fresh worktree runs `tools/fc.sh build` first. Rows live in `board.GROUND_ROWS` until the catalog has them (D1).
+
 Checks on the board: seam at most 1.5, at most 16 colours, mean luminance at most 25 %.
 
 One ground texture: `cut.py --form ground`, `seam.py` (fix, else re-roll), `flatten.py --colour`, `groundcheck.py score --ground`

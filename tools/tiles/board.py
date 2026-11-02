@@ -1,19 +1,20 @@
 """LOOK1-T, REGIONGROUND1-T: review boards of one tile set.
 
     board.py SET_DIR --out C:/dev/localgen/review/look1/<set>/
-    board.py SET_DIR --ground --out DIR [--figures ROOT] [--layout FIXTURE] [--set-colours]
-    board.py SET_DIR --mix --out DIR [--layout FIXTURE] [--set-colours]
+    board.py SET_DIR --ground --out DIR [--figures ROOT] [--layout FIXTURE] [--set-colours] [--wear X] [--props FILE]
+    board.py SET_DIR --mix --out DIR [--layout FIXTURE] [--set-colours] [--wear X] [--props FILE]
 
 --mix: one picture, `mix.png`: the set's grounds laid out as a small map (`fixtures/mix_outdoor.txt`, after the mock; or
 FIXTURE) with their real textures, so sameness or too strong a ground shows at a glance, nothing written over the map; beside
 it the grounds, how far each sits from its colour, the pairs that are too alike and the warnings. A ground without art draws
 its row's flat colour (EN 2.2). --set-colours sets each texture's mean to its row's colour first, as `flatten.py --colour`
-does; off, the art shows as it is. The edge is Python for now (EN 2.3, 2.4); REGIONGROUND1-T2 routes it through
-`ground_compose`.
+does; off, the art shows as it is. The picture comes from the engine's `ground_compose` (EN 6), so it is the game's: its
+edges, wear, strays, tone and random patches. --wear X: the table's wear times X (default 1). --props FILE: props and units
+drawn over the map at their own pixels, sorted by feet (`fixtures/mix_outdoor_props.txt`), because bare shapes cannot be judged.
 
 --ground: the set's `ground/<id>/v0.png`: each ground repeated over 16 x 10 and 32 x 20 cells at 1x-3x with its scores and
-pass or fail (no tone, so a loop shows); each pair on a straight edge, a T crossing, a 1-cell lane and a lone cell, drawn
-by the prototype's edge (EN 2.3, 2.4); a figures sheet (each ground under the six class bodies, a crate, a tent and a wall
+pass or fail (no tone, so a loop shows); each pair on a straight edge, a T crossing, a 1-cell lane and a lone cell, each
+through `ground_compose`; a figures sheet (each ground under the six class bodies, a crate, a tent and a wall
 face, at 1x-2x) with `read_contrast` under each option; `index.html` with file:/// links. ROOT is the asset layer of the
 figures (default the RPG kit's). The board holds the mix too, and every pair's separation.
 
@@ -25,17 +26,22 @@ and under each tile its checks (size, seam ratio, colours, mean luminance).
 import argparse
 import html
 import json
+import math
 import os
-import random
+import re
+import string
+import subprocess
 import sys
+import tempfile
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 import flatten
 import groundcheck
 import seam
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+_composer = None                       # the built ground_compose, once a run
 # Kit checks A13-A15 (rpgkit_content check/assets.rs) by role; a piece is cell-sized like a tile (a stage piece is
 # 64 x 48 art px, drawn at 32 x 24 logical px by LOOK1-L1, as compose.py writes it).
 SIZES = {
@@ -45,28 +51,32 @@ SIZES = {
 }
 MAX_SEAM, MAX_COLOURS, MAX_LUM = 1.5, 16, 25.0
 
-# --ground. Spec section 3: id -> order, wear, strays, tone, colour. The catalog holds them once D1 lands; T2's mix reads it.
+# --ground. Spec section 3: id -> order, wear, strays, tone, colour, patches. `data/catalog/grounds.json` has no rows until D1.
 GROUND_ROWS = {
-    "water": (5, 0.0, False, 0.04, "#0e1018"),
-    "ash": (10, 0.06, False, 0.13, "#2a2622"),
-    "soot_yard": (12, 0.06, False, 0.13, "#1e1e23"),
-    "scrub": (20, 0.06, False, 0.13, "#2b2d22"),
-    "moss": (22, 0.06, False, 0.13, "#20261f"),
-    "scorched": (30, 0.06, False, 0.13, "#1c1917"),
-    "tallow": (32, 0.06, False, 0.13, "#2a251e"),
-    "mud": (40, 0.06, False, 0.13, "#231d18"),
-    "packed_dirt": (50, 0.10, False, 0.13, "#352c23"),
-    "dirt_road": (60, 0.10, False, 0.13, "#3c3126"),
-    "flagstone": (70, 0.10, True, 0.08, "#373636"),
-    "cobble_road": (78, 0.10, True, 0.08, "#2e3137"),
-    "paved_road": (80, 0.10, True, 0.08, "#3e3f42"),
-    "iron_catwalk": (90, 0.06, False, 0.08, "#303032"),
+    "water": (5, 0.0, False, 0.04, "#0e1018", 0.0),
+    "ash": (10, 0.03, False, 0.13, "#2a2622", 0.10),
+    "soot_yard": (12, 0.03, False, 0.13, "#1e1e23", 0.10),
+    "scrub": (20, 0.03, False, 0.13, "#2b2d22", 0.0),
+    "moss": (22, 0.03, False, 0.13, "#20261f", 0.0),
+    "scorched": (30, 0.03, False, 0.13, "#1c1917", 0.0),
+    "tallow": (32, 0.03, False, 0.13, "#2a251e", 0.0),
+    "mud": (40, 0.03, False, 0.13, "#231d18", 0.075),
+    "packed_dirt": (50, 0.05, False, 0.13, "#352c23", 0.10),
+    "dirt_road": (60, 0.05, False, 0.13, "#3c3126", 0.075),
+    "flagstone": (70, 0.05, False, 0.08, "#373636", 0.0),
+    "cobble_road": (78, 0.05, False, 0.08, "#2e3137", 0.0),
+    "paved_road": (80, 0.05, False, 0.08, "#3e3f42", 0.0),
+    "iron_catwalk": (90, 0.03, False, 0.08, "#303032", 0.0),
 }
-OTHER_ROW = (100, 0.06, False, 0.13, "#2a2622")   # a ground the table does not list
+OTHER_ROW = (100, 0.06, False, 0.13, "#2a2622", 0.0)   # a ground the table does not list
 CELL_PX = 16                           # art px per cell (EN 1.1)
 REPEATS = ((16, 10), (32, 20))         # cells
 PAIR_SIZE = (12, 8)                    # cells of one layout
-SEED = 11                              # the board's noise
+SEED = 11                              # the job's seed
+WEAR_MAX = 3.0                         # --wear: the table's largest wear, .10, times this is EN's limit of .30
+LEGEND_CHARS = string.digits + string.ascii_uppercase + string.ascii_lowercase   # ascending, so any JSON reader keeps the order
+COMPOSE_TIMEOUT = 900                  # s for a build or a compose, a first build included
+BLOCKED_TRIES = 3                      # runs of a binary Smart App Control blocks
 CLASS_BODIES = ("brawler", "mage", "priest", "ranger", "rogue", "warrior")
 FIGURE_PROPS = ("crate_stack", "tent")
 READ_OPTIONS = ("shadow", "pool", "rim")
@@ -74,10 +84,12 @@ MIX_LAYOUT = os.path.join(HERE, "fixtures", "mix_outdoor.txt")
 MIX_SCALE = 2                          # physical px per art px, as at 1280 x 720
 MIX_PANEL = 300                        # px of the panel beside the map
 MAX_MIX_CELLS = 128                    # a layout's side, refused above it
+MAX_PROPS = 256                        # lines of a props file, refused above it
 MAX_MASTER = 4096                      # px of a texture's side, refused above it
 MEAN_OFF = 1.0                         # the panel marks a texture further than this from its row's colour
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 KIT_ASSETS = os.path.join(REPO, "kits", "rpg", "assets")
+ART_ROOTS = (os.path.join(REPO, "games", "emberwake", "assets"), KIT_ASSETS)
 ENGINE_FACE = os.path.join(REPO, "engine", "assets", "tilesets", "common_stage", "wall_face", "v0.png")
 
 
@@ -214,80 +226,121 @@ def pair_layouts():
     ]
 
 
-def noise_field(w, h, step, seed):
-    """Value noise as a flat list of 0..1: a seeded lattice of `step` art px, resized by bicubic (the prototype's)."""
-    rnd = random.Random(seed)
-    lw, lh = w // step + 2, h // step + 2
-    lattice = Image.frombytes("L", (lw, lh), bytes(rnd.randrange(256) for _ in range(lw * lh)))
-    return [v / 255 for v in lattice.resize((w, h), Image.BICUBIC).tobytes()]
-
-
-def edge_fields(w, h):
-    """The noise a pair sheet shares (EN 2.1): edge, stray, bite, tone."""
-    a, b = noise_field(w, h, 10, SEED + 1), noise_field(w, h, 4, SEED + 2)
-    t0, t1 = noise_field(w, h, 48, SEED + 7), noise_field(w, h, 20, SEED + 8)
-    return {
-        "edge": [0.6 * p + 0.4 * q for p, q in zip(a, b)],
-        "stray": noise_field(w, h, 3, SEED + 3),
-        "bite": noise_field(w, h, 3, SEED + 4),
-        "tone": [0.7 * p + 0.3 * q - 0.5 for p, q in zip(t0, t1)],
-    }
-
-
-def upper_field(cells):
-    """EN 2.3's `bl`: the upper cells as 0..1 per art px, blurred by sigma 5.5."""
-    w, h = PAIR_SIZE[0] * CELL_PX, PAIR_SIZE[1] * CELL_PX
-    mask = Image.new("L", (w, h), 0)
-    for x, y in cells:
-        mask.paste(255, (x * CELL_PX, y * CELL_PX, (x + 1) * CELL_PX, (y + 1) * CELL_PX))
-    return [v / 255 for v in mask.filter(ImageFilter.GaussianBlur(5.5)).tobytes()]
-
-
 def row_of(ground_id):
     return GROUND_ROWS.get(ground_id, OTHER_ROW)
 
 
-def draw_pair(lower, upper, lower_row, upper_row, field, noise):
-    """The lower and upper 64 x 64 textures on one layout's field (EN 2.3, 2.4): a hard edge at art px, the worn band on
-    the lower ground, strays of the upper one, bites of the lower one. Colours are never blended between grounds."""
-    w, h = PAIR_SIZE[0] * CELL_PX, PAIR_SIZE[1] * CELL_PX
-    tl, tu = lower.tobytes(), upper.tobytes()
-    tw, th = lower.size
-    out = bytearray(w * h * 3)
-    tone_l = lower_row[3]
-    wear, strays, tone_u = upper_row[1:4]
-    for y in range(h):
-        for x in range(w):
-            i = y * w + x
-            bl = field[i]
-            v = bl + (noise["edge"][i] - 0.5) * 0.62
-            tone = noise["tone"][i]
-            lo = ((y % th) * tw + x % tw) * 3
-            up = (((y + 21) % th) * tw + (x + 37) % tw) * 3
-            scale_l, scale_u = 1 + tone_l * tone, 1 + tone_u * tone
-            if v > 0.5:
-                if v < 0.56 and noise["bite"][i] > 0.7:
-                    c, k = tl[lo:lo + 3], scale_l * 0.95
-                else:
-                    c, k = tu[up:up + 3], scale_u
-            elif strays and 0.16 < bl < 0.42 and noise["stray"][i] > 0.82:
-                c, k = tu[up:up + 3], scale_u * 0.92
-            elif v > 0.34:
-                c, k = tl[lo:lo + 3], scale_l * (1 - wear)
-            else:
-                c, k = tl[lo:lo + 3], scale_l
-            o = i * 3
-            out[o], out[o + 1], out[o + 2] = min(255, int(c[0] * k)), min(255, int(c[1] * k)), min(255, int(c[2] * k))
-    return Image.frombytes("RGB", (w, h), bytes(out))
+def cargo_env():
+    """The environment cargo runs in. As `tools/fc.sh`: a linked worktree (its `.git` is a file) builds into its own folder,
+    so a board in one lane never waits on another's build."""
+    env = dict(os.environ)
+    if "CARGO_TARGET_DIR" not in env and os.path.isfile(os.path.join(REPO, ".git")):
+        with open(os.path.join(REPO, ".cargo", "config.toml"), encoding="utf-8") as f:
+            base = re.search(r'^target-dir = "(.*)"', f.read(), re.M)
+        if base:
+            env["CARGO_TARGET_DIR"] = f"{base.group(1)}-{os.path.basename(REPO)}"
+    return env
 
 
-def pair_sheet(lower, upper, lower_row, upper_row, fields, noise):
-    """The four layouts of a pair side by side."""
-    w, h = PAIR_SIZE[0] * CELL_PX, PAIR_SIZE[1] * CELL_PX
+def run_tool(args, what, env=None):
+    """`args` run to their end; (stdout). ValueError when they time out or fail, with their message; OSError when they cannot
+    start."""
+    try:
+        done = subprocess.run(args, cwd=REPO, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=COMPOSE_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        raise ValueError(f"{what}: no end after {COMPOSE_TIMEOUT} s") from None
+    if done.returncode != 0:
+        raise ValueError(f"{what}: {done.stderr.strip()[-2000:]}")
+    return done.stdout
+
+
+def composer():
+    """The path of `ground_compose` (EN 6), the one implementation of the edge. cargo decides whether it needs building, once
+    a run: a board runs it once per picture, and `cargo run` per pair would cost a second each."""
+    global _composer
+    if _composer is None:
+        out = run_tool(["cargo", "build", "-q", "-p", "aegis_ui", "--bin", "ground_compose", "--message-format=json-render-diagnostics"],
+                       "building ground_compose", cargo_env())
+        found = [m.get("executable") for m in map(json.loads, out.splitlines())
+                 if m.get("reason") == "compiler-artifact" and m.get("target", {}).get("name") == "ground_compose"]
+        if not found or not found[-1]:
+            raise ValueError("building ground_compose: cargo named no executable")
+        _composer = found[-1]
+    return _composer
+
+
+def compose_file(job_path, out_path):
+    """Runs the composer on a job file. Windows Smart App Control sometimes blocks a freshly linked binary (os error 4551,
+    `engine/docs/PORT_NOTES.md`): that one is deleted and relinked, as `tools/fc.sh` does."""
+    global _composer
+    for attempt in range(BLOCKED_TRIES):
+        exe = composer()
+        try:
+            return run_tool([exe, job_path, out_path], "ground_compose")
+        except OSError as e:
+            if getattr(e, "winerror", None) != 4551 or attempt == BLOCKED_TRIES - 1:
+                raise
+            os.remove(exe)
+            _composer = None
+    raise AssertionError("unreachable")
+
+
+def layer_ids(grid):
+    """The grounds of `grid` in the game's layer order (`rpgkit_content`'s `plan`): those the map uses, by order, then id. A
+    texture's offset comes from the place in this list, so another order is another picture."""
+    return sorted({g for row in grid for g in row}, key=lambda g: (row_of(g)[0], g))
+
+
+def ground_job(grid, tex_paths, wear=1.0, seed=SEED):
+    """The job file's content for `grid` (rows of ground ids): a legend in the game's order, from the table's rows, each row's
+    wear times `wear`. `tex_paths`: id -> PNG; a ground without one draws its row's colour. ValueError on a `wear` off
+    0..WEAR_MAX, which would pass the composer's limit on the table's strongest row."""
+    if not 0 <= wear <= WEAR_MAX:
+        raise ValueError(f"wear {wear} is off 0..{WEAR_MAX}")
+    ids = layer_ids(grid)
+    if len(ids) > len(LEGEND_CHARS):
+        raise ValueError(f"{len(ids)} grounds on one map, at most {len(LEGEND_CHARS)}")
+    char = dict(zip(ids, LEGEND_CHARS))
+    legend = {}
+    for g in ids:
+        _, row_wear, strays, tone, colour, patches = row_of(g)
+        legend[char[g]] = {"colour": list(flatten.parse_colour(colour)), "wear": row_wear * wear, "strays": strays, "tone": tone,
+                           "patches": patches}
+        if g in tex_paths:
+            legend[char[g]]["tex"] = os.path.abspath(tex_paths[g]).replace(os.sep, "/")
+    return {"seed": seed, "cell": [CELL_PX, CELL_PX], "cells": ["".join(char[g] for g in row) for row in grid], "legend": legend}
+
+
+def draw_ground(grid, tex_paths, work_dir, wear=1.0):
+    """The picture of `grid` from `ground_compose`, one art px per logical px, RGB. Job and picture are `work_dir`'s."""
+    fd, job_path = tempfile.mkstemp(suffix=".json", dir=work_dir)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(ground_job(grid, tex_paths, wear), f)
+    out_path = job_path[:-len(".json")] + ".png"
+    compose_file(job_path, out_path)
+    with Image.open(out_path) as im:
+        return im.convert("RGB")
+
+
+def write_textures(images, work_dir):
+    """{id: path} of [(id, image)], saved in `work_dir`."""
+    paths = {}
+    for g, img in images:
+        paths[g] = os.path.join(work_dir, f"tex_{g}.png")
+        img.save(paths[g])
+    return paths
+
+
+def pair_sheet(lower, upper, tex_paths, layouts, work_dir, wear=1.0):
+    """The layouts of a pair side by side, each a map of its own."""
+    cols, rows = PAIR_SIZE
+    w, h = cols * CELL_PX, rows * CELL_PX
     gap = CELL_PX // 2
-    sheet = Image.new("RGB", (len(fields) * (w + gap) - gap, h), (10, 10, 10))
-    for i, field in enumerate(fields):
-        sheet.paste(draw_pair(lower, upper, lower_row, upper_row, field, noise), (i * (w + gap), 0))
+    sheet = Image.new("RGB", (len(layouts) * (w + gap) - gap, h), (10, 10, 10))
+    for i, cells in enumerate(layouts):
+        grid = [[upper if (x, y) in cells else lower for x in range(cols)] for y in range(rows)]
+        sheet.paste(draw_ground(grid, tex_paths, work_dir, wear), (i * (w + gap), 0))
     return sheet
 
 
@@ -424,68 +477,66 @@ def parse_layout(path):
     return cols, rows, grid
 
 
-def draw_mix(grid, textures):
-    """The map of `grid` (rows of ground ids) at one art px per logical px, by EN 2.3 and 2.4 as built: layers low `order`
-    first, each over the cells of its rank and up, one noise for all. `textures`: id -> 64 x 64 image; a ground without one
-    draws its row's colour. Colours are never blended between grounds."""
-    rows, cols = len(grid), len(grid[0])
-    w, h = cols * CELL_PX, rows * CELL_PX
-    ids = sorted({g for row in grid for g in row}, key=lambda g: (row_of(g)[0], g))
-    rank = {g: i for i, g in enumerate(ids)}
-    noise = edge_fields(w, h)
-    blurred = [None]                   # the lowest layer fills the image
-    for k in range(1, len(ids)):
-        mask = Image.new("L", (w, h), 0)
-        for y, row in enumerate(grid):
-            for x, g in enumerate(row):
-                if rank[g] >= k:
-                    mask.paste(255, (x * CELL_PX, y * CELL_PX, (x + 1) * CELL_PX, (y + 1) * CELL_PX))
-        blurred.append([v / 255 for v in mask.filter(ImageFilter.GaussianBlur(5.5)).tobytes()])
-    layers = []
-    for k, g in enumerate(ids):
-        tex = textures.get(g)
-        if tex is None:
-            tex = Image.new("RGB", (groundcheck.FORM, groundcheck.FORM), row_of(g)[4])
-        offset = random.Random(SEED * 1000 + k)
-        row = row_of(g)
-        layers.append((tex.tobytes(), tex.size[0], tex.size[1], offset.randrange(tex.size[0]), offset.randrange(tex.size[1]),
-                       row[1], row[2], row[3]))
-    count = len(ids)
-    edge, stray, bite, tone = noise["edge"], noise["stray"], noise["bite"], noise["tone"]
-    out = bytearray(w * h * 3)
+def art_file(path, where):
+    """`path` as RGBA. ValueError past MAX_MASTER."""
+    with Image.open(path) as im:
+        if max(im.size) > MAX_MASTER:
+            raise ValueError(f"{where}: {path} is over {MAX_MASTER} px a side")
+        return im.convert("RGBA")
 
-    def colour(k, x, y, t, factor):
-        raw, tw, th, ox, oy, _, _, layer_tone = layers[k]
-        at = (((y + oy) % th) * tw + (x + ox) % tw) * 3
-        v = (1 + layer_tone * t) * factor
-        return min(255, int(raw[at] * v)), min(255, int(raw[at + 1] * v)), min(255, int(raw[at + 2] * v))
 
-    for y in range(h):
-        for x in range(w):
-            i = y * w + x
-            push = (edge[i] - 0.5) * 0.62
-            top = 0
-            for k in range(1, count):
-                if blurred[k][i] + push > 0.5:
-                    top = k
-            t = tone[i]
-            # A layer's own share: `bl_k` less the next one's, so a ground far from here wears nothing (EN 2.4, as built).
-            factor = 1.0
-            source = top
-            for k in range(top + 1, count):
-                own = blurred[k][i] - (blurred[k + 1][i] if k + 1 < count else 0.0)
-                if own + push > 0.34:
-                    factor = min(factor, 1 - layers[k][5])
-            for k in range(top + 1, count):
-                own = blurred[k][i] - (blurred[k + 1][i] if k + 1 < count else 0.0)
-                if layers[k][6] and 0.16 < own < 0.42 and stray[i] > 0.82:
-                    source, factor = k, 0.92
-            if top > 0 and 0.5 < blurred[top][i] + push < 0.56 and bite[i] > 0.7:
-                shares = [(blurred[k][i] - blurred[k + 1][i]) if k else 1 - blurred[1][i] for k in range(top)]
-                source, factor = shares.index(max(shares)), 0.95
-            o = i * 3
-            out[o], out[o + 1], out[o + 2] = colour(source, x, y, t, factor)
-    return Image.frombytes("RGB", (w, h), bytes(out))
+def find_art(kind, name, roots, where):
+    """The picture of a `prop` (its lowest version) or a `unit` (frame 0 of its sheet), from the first of `roots` that holds it."""
+    for root in roots:
+        folder = os.path.join(root, f"{kind}s", *name.split("/"))
+        if kind == "unit":
+            if os.path.exists(os.path.join(folder, "sheet.png")):
+                with open(os.path.join(folder, "clips.json"), encoding="utf-8") as f:
+                    fw, fh = json.load(f)["frame"]
+                return art_file(os.path.join(folder, "sheet.png"), where).crop((0, 0, fw, fh))
+        elif os.path.isdir(folder):
+            versions = [(int(v[1:-4]), v) for v in os.listdir(folder) if re.fullmatch(r"v[0-9]+\.png", v)]
+            if versions:
+                return art_file(os.path.join(folder, min(versions)[1]), where)
+    raise ValueError(f"{where}: no {kind} {name}")
+
+
+def parse_props(path, cols, rows, roots=None):
+    """[(art RGBA, x, y)] of a props file by feet, front last: `prop FOLDER X Y` or `unit FOLDER X Y`, `#` comments, X and Y the
+    foot's place in cells (fractions welcome). FOLDER is under `props/` or `units/` of the game's assets, then the kit's. In
+    a tie, the file's order. ValueError on a line it cannot read, art it cannot find, a foot off the map or past MAX_PROPS."""
+    roots = ART_ROOTS if roots is None else roots
+    items = []
+    with open(path, encoding="utf-8") as f:
+        for n, line in enumerate(f, 1):
+            parts = line.split("#")[0].split()
+            where = f"{os.path.basename(path)}:{n}"
+            if not parts:
+                continue
+            if len(items) == MAX_PROPS:
+                raise ValueError(f"{where}: at most {MAX_PROPS} props")
+            if len(parts) != 4 or parts[0] not in ("prop", "unit"):
+                raise ValueError(f"{where}: not `prop FOLDER X Y` or `unit FOLDER X Y`")
+            if not re.fullmatch(r"[a-z0-9_]+(/[a-z0-9_]+)*", parts[1]):
+                raise ValueError(f"{where}: {parts[1]} is not a folder name")
+            try:
+                x, y = float(parts[2]), float(parts[3])
+            except ValueError as e:
+                raise ValueError(f"{where}: {e}") from None
+            if not (0 <= x <= cols and 0 <= y <= rows):
+                raise ValueError(f"{where}: foot {parts[2]} {parts[3]} is off the {cols} x {rows} map")
+            items.append((find_art(parts[0], parts[1], roots, where), x, y))
+    return sorted(items, key=lambda item: item[2])
+
+
+def draw_props(the_map, items, cell):
+    """`items` (`parse_props`) over `the_map` at their own pixels, `cell` px a cell, feet at the art's bottom centre. Art past
+    the map's side is cut there, as the map area's clip does."""
+    out = the_map.convert("RGBA")
+    for art, x, y in items:
+        left, top = math.floor(x * cell - art.width / 2), math.floor(y * cell - art.height)
+        out.alpha_composite(art, (max(left, 0), max(top, 0)), (max(-left, 0), max(-top, 0)))
+    return out.convert("RGB")
 
 
 def load_masters(set_dir, set_colours=False):
@@ -515,15 +566,18 @@ def mix_notes(textures, masters):
     return alike, plain
 
 
-def mix_picture(masters, layout_path=MIX_LAYOUT):
-    """The map at MIX_SCALE beside its panel; ([warnings], image). A ground of the set the layout does not use is a warning:
-    it is not on the picture."""
-    _, _, grid = parse_layout(layout_path)
+def mix_picture(masters, layout_path=MIX_LAYOUT, wear=1.0, props_path=None):
+    """The map from `ground_compose` at MIX_SCALE, its props and units over it, beside its panel; ([warnings], image). A ground
+    of the set the layout does not use is a warning: it is not on the picture."""
+    cols, rows, grid = parse_layout(layout_path)
+    props = parse_props(props_path, cols, rows) if props_path else []
     textures = [(g, groundcheck.form(m)) for g, m in masters]
     used = {g for row in grid for g in row}
     missing = [g for g, _ in textures if g not in used]
-    the_map = draw_mix(grid, dict(textures))
+    with tempfile.TemporaryDirectory() as work:
+        the_map = draw_ground(grid, write_textures(masters, work), work, wear)
     the_map = the_map.resize((the_map.size[0] * MIX_SCALE, the_map.size[1] * MIX_SCALE), Image.NEAREST)
+    the_map = draw_props(the_map, props, CELL_PX * MIX_SCALE)
     sheet = Image.new("RGB", (the_map.size[0] + MIX_PANEL, the_map.size[1]), (14, 15, 20))
     sheet.paste(the_map, (0, 0))
     draw = ImageDraw.Draw(sheet)
@@ -548,6 +602,8 @@ def mix_picture(masters, layout_path=MIX_LAYOUT):
         y += 30
     alike, plain = mix_notes(textures, masters)
     y += 6
+    draw.text((x, y), f"wear x {wear:g}, {len(props)} props and units", fill=(150, 150, 160), font=font)
+    y += 14
     draw.text((x, y), f"{len(alike)} pairs too alike", fill=(230, 120, 90) if alike else (120, 200, 120), font=font)
     y += 14
     notes = plain + alike
@@ -561,16 +617,16 @@ def mix_picture(masters, layout_path=MIX_LAYOUT):
     return warnings, sheet
 
 
-def build_mix(set_dir, out_dir, layout_path=MIX_LAYOUT, set_colours=False):
+def build_mix(set_dir, out_dir, layout_path=MIX_LAYOUT, set_colours=False, wear=1.0, props_path=None):
     """`mix.png` of `set_dir`; (its path, [warnings]). ValueError on a bad layout or a set without ground art."""
-    warnings, sheet = mix_picture(load_masters(set_dir, set_colours), layout_path)
+    warnings, sheet = mix_picture(load_masters(set_dir, set_colours), layout_path, wear, props_path)
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, "mix.png")
     sheet.save(path)
     return path, warnings
 
 
-def build_ground(set_dir, out_dir, figures_root=KIT_ASSETS, layout_path=MIX_LAYOUT, set_colours=False):
+def build_ground(set_dir, out_dir, figures_root=KIT_ASSETS, layout_path=MIX_LAYOUT, set_colours=False, wear=1.0, props_path=None):
     """The ground board of `set_dir`; the path of its index. ValueError when the set has no ground art."""
     masters = load_masters(set_dir, set_colours)
     os.makedirs(out_dir, exist_ok=True)
@@ -610,25 +666,25 @@ def build_ground(set_dir, out_dir, figures_root=KIT_ASSETS, layout_path=MIX_LAYO
                      f"<p>{score_line(result, cls, g)}</p>"
                      + "".join(f'<p style="color:#ea5">warning: {html.escape(n)}</p>' for n in (stone_note, size_note) if n)
                      + "</div>")
-    mix_warnings, mix = mix_picture(masters, layout_path)
+    mix_warnings, mix = mix_picture(masters, layout_path, wear, props_path)
     items.insert(0, f"<div><h2>The mix</h2>{thumb(save(mix, 'mix.png'))}</div>")
     for line in mix_warnings:
         print(f"warning: {line}", file=sys.stderr)
-    w, h = PAIR_SIZE[0] * CELL_PX, PAIR_SIZE[1] * CELL_PX
-    noise = edge_fields(w, h)
     layouts = pair_layouts()
-    fields = [upper_field(cells) for _, cells in layouts]
+    cell_sets = [set(cells) for _, cells in layouts]
     titles = ", ".join(t for t, _ in layouts)
     items.append(f"<h2>Pairs, lower then upper ({html.escape(titles)})</h2>")
-    for i, (low, tex_low) in enumerate(textures):
-        for up, tex_up in textures[i + 1:]:
-            sheet = pair_sheet(tex_low, tex_up, row_of(low), row_of(up), fields, noise)
-            p = save(sheet, f"pair_{low}_{up}.png")
-            q = save(sheet, f"pair_{low}_{up}_x2.png", 2)
-            r = groundcheck.pair_scores(tex_low, tex_up)
-            warn = "" if r["clear"] else ' <span style="color:#e55">FAIL: too alike</span>'
-            items.append(f"<div><h3>{html.escape(low)} / {html.escape(up)}: colour {r['colour']:.1f}, pattern {r['pattern']:.2f}{warn}</h3>"
-                         f"{thumb(p)}<p>{html.escape(groundcheck.pair_line(low, up, r))}</p><p>{link(q, '2x')}</p></div>")
+    with tempfile.TemporaryDirectory() as work:
+        tex_paths = write_textures(masters, work)
+        for i, (low, tex_low) in enumerate(textures):
+            for up, tex_up in textures[i + 1:]:
+                sheet = pair_sheet(low, up, tex_paths, cell_sets, work, wear)
+                p = save(sheet, f"pair_{low}_{up}.png")
+                q = save(sheet, f"pair_{low}_{up}_x2.png", 2)
+                r = groundcheck.pair_scores(tex_low, tex_up)
+                warn = "" if r["clear"] else ' <span style="color:#e55">FAIL: too alike</span>'
+                items.append(f"<div><h3>{html.escape(low)} / {html.escape(up)}: colour {r['colour']:.1f}, pattern {r['pattern']:.2f}{warn}</h3>"
+                             f"{thumb(p)}<p>{html.escape(groundcheck.pair_line(low, up, r))}</p><p>{link(q, '2x')}</p></div>")
     bodies, others = find_figures(set_dir, figures_root)
     sheet = figures_sheet(textures, bodies + others)
     if sheet is not None:
@@ -721,18 +777,20 @@ def main(argv=None):
     ap.add_argument("--mix", action="store_true", help="only the one-picture mix of the set's grounds, mix.png")
     ap.add_argument("--layout", default=MIX_LAYOUT, help="with --mix or --ground: the mix fixture")
     ap.add_argument("--set-colours", action="store_true", help="with --mix or --ground: set each texture's mean to its row's colour")
+    ap.add_argument("--wear", type=float, default=1.0, help="with --mix or --ground: the table's wear times this")
+    ap.add_argument("--props", help="with --mix or --ground: a props file drawn over the mix (fixtures/mix_outdoor_props.txt)")
     a = ap.parse_args(argv)
     if not a.ground and not a.mix:
         print(_uri(build(a.set_dir, a.out, a.role)))
         return 0
     try:
         if a.mix:
-            path, warnings = build_mix(a.set_dir, a.out, a.layout, a.set_colours)
+            path, warnings = build_mix(a.set_dir, a.out, a.layout, a.set_colours, a.wear, a.props)
             for line in warnings:
                 print(f"warning: {line}", file=sys.stderr)
             print(_uri(path))
         else:
-            print(_uri(build_ground(a.set_dir, a.out, a.figures, a.layout, a.set_colours)))
+            print(_uri(build_ground(a.set_dir, a.out, a.figures, a.layout, a.set_colours, a.wear, a.props)))
     except (OSError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

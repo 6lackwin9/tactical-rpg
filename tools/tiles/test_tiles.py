@@ -6,6 +6,7 @@ import json
 import math
 import os
 import random
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,9 @@ import flatten
 import groundcheck
 import masks
 import seam
+
+
+needs_composer = unittest.skipUnless(shutil.which("cargo"), "no cargo: ground_compose cannot run")
 
 
 def pixels(img):
@@ -912,6 +916,7 @@ class GroundBoardTest(unittest.TestCase):
             body_fixture().save(os.path.join(folder, "v0.png"))
         return sd, root
 
+    @needs_composer
     def test_board_of_a_fixture_ground_set(self):
         with tempfile.TemporaryDirectory() as d:
             sd, root = self.make_set(d)
@@ -941,26 +946,6 @@ class GroundBoardTest(unittest.TestCase):
                 self.assertEqual(board.main([d, "--ground", "--out", os.path.join(d, "o")]), 1)
             self.assertIn("no <id>/v0.png", err.getvalue())
 
-    def test_pair_picture_holds_only_the_two_grounds_colours_and_their_edge_wanders(self):
-        lower = Image.new("RGB", (64, 64), (60, 50, 40))
-        upper = Image.new("RGB", (64, 64), (20, 90, 120))
-        w, h = board.PAIR_SIZE[0] * board.CELL_PX, board.PAIR_SIZE[1] * board.CELL_PX
-        noise = dict(board.edge_fields(w, h), tone=[0.0] * (w * h))
-        cells = dict(board.pair_layouts())["straight edge"]
-        img = board.draw_pair(lower, upper, (10, 0.06, False, 0.0), (20, 0.1, False, 0.0), board.upper_field(cells), noise)
-        px = img.load()
-        worn = tuple(int(c * 0.9) for c in (60, 50, 40))
-        bitten = tuple(int(c * 0.95) for c in (60, 50, 40))
-        self.assertLessEqual({px[x, y] for y in range(h) for x in range(w)}, {(60, 50, 40), (20, 90, 120), worn, bitten})
-        boundary = w // 2
-        off = 0
-        for y in range(h):
-            row = [px[x, y] == (20, 90, 120) for x in range(w)]
-            first = row.index(True)
-            self.assertLessEqual(abs(first - boundary), 6)
-            off += first != boundary
-        self.assertGreater(off, h // 2)
-
     def test_every_swatch_meets_the_colour_cap(self):
         for g, row in board.GROUND_ROWS.items():
             limit = groundcheck.limits_of(groundcheck.class_of(g), g)["colour"]
@@ -968,6 +953,7 @@ class GroundBoardTest(unittest.TestCase):
         self.assertEqual(board.GROUND_ROWS["dirt_road"][4], "#3c3126")   # the decision's mock colours
         self.assertEqual(board.GROUND_ROWS["packed_dirt"][4], "#352c23")
 
+    @needs_composer
     def test_a_master_off_the_form_warns_on_the_board(self):
         with tempfile.TemporaryDirectory() as d:
             sd, root = self.make_set(d)
@@ -1269,43 +1255,7 @@ class MixBoardTest(unittest.TestCase):
             path = self.layout(d, "size 2 2\ndefault ash # a comment\nmud 1-1 1-1\n")
             self.assertEqual(board.parse_layout(path)[2], [["ash", "ash"], ["ash", "mud"]])
 
-    def test_each_cell_shows_its_own_ground_and_only_grounds_are_on_the_map(self):
-        grid = [["ash"] * 8 for _ in range(6)]
-        for y in range(2, 4):
-            for x in range(1, 3):
-                grid[y][x] = "flagstone"
-            for x in range(5, 7):
-                grid[y][x] = "dirt_road"
-        c = {g: flatten.parse_colour(board.row_of(g)[4]) for g in ("ash", "flagstone", "dirt_road")}
-        tex = {g: Image.new("RGB", (64, 64), c[g]) for g in c}
-        no_tone = lambda w, h, real=board.edge_fields: dict(real(w, h), tone=[0.0] * (w * h))
-        with unittest.mock.patch.object(board, "edge_fields", no_tone):
-            img = board.draw_mix(grid, tex)
-        px = img.load()
-        self.assertEqual(img.size, (8 * board.CELL_PX, 6 * board.CELL_PX))
-        for y, row in enumerate(grid):
-            for x, g in enumerate(row):
-                self.assertEqual(px[x * board.CELL_PX + 8, y * board.CELL_PX + 8], c[g], (x, y))
-        allowed = set()
-        for g, colour in c.items():
-            allowed |= {colour, tuple(int(v * 0.95) for v in colour), tuple(int(v * 0.92) for v in colour)}
-        for wear in (0.10, 0.06):
-            allowed |= {tuple(int(v * (1 - wear)) for v in c["ash"]), tuple(int(v * (1 - wear)) for v in c["flagstone"])}
-        seen = {px[x, y] for y in range(img.size[1]) for x in range(img.size[0])}
-        self.assertLessEqual(seen, allowed)
-        self.assertIn(tuple(int(v * 0.9) for v in c["ash"]), seen)   # the worn band
-        self.assertIn(tuple(int(v * 0.92) for v in c["flagstone"]), seen)   # a built ground's strays
-        self.assertNotIn(tuple(int(v * 0.92) for v in c["dirt_road"]), seen)   # none off a dirt road
-
-    def test_a_ground_without_art_draws_its_rows_colour(self):
-        grid = [["ash"] * 6 for _ in range(6)]
-        grid[3][3] = grid[3][2] = grid[2][3] = grid[2][2] = "mud"
-        no_tone = lambda w, h, real=board.edge_fields: dict(real(w, h), tone=[0.0] * (w * h))
-        with unittest.mock.patch.object(board, "edge_fields", no_tone):
-            img = board.draw_mix(grid, {})
-        self.assertEqual(img.getpixel((8, 8)), flatten.parse_colour(board.row_of("ash")[4]))
-        self.assertEqual(img.getpixel((3 * board.CELL_PX, 3 * board.CELL_PX)), flatten.parse_colour(board.row_of("mud")[4]))
-
+    @needs_composer
     def test_the_picture_size_and_no_label_on_the_map(self):
         with tempfile.TemporaryDirectory() as d:
             ash, mud = (0x2a, 0x26, 0x22), (0x23, 0x1d, 0x18)
@@ -1322,6 +1272,7 @@ class MixBoardTest(unittest.TestCase):
             panel = max(max(sheet.getpixel((x, y))) for y in range(map_h) for x in range(map_w, sheet.size[0]))
             self.assertGreater(panel, 150)
 
+    @needs_composer
     def test_set_colours_moves_the_art_to_the_table_and_off_it_leaves_the_art(self):
         with tempfile.TemporaryDirectory() as d:
             sd = self.make_set(d, {"ash": even_tile(45), "mud": even_tile(46)})
@@ -1336,6 +1287,7 @@ class MixBoardTest(unittest.TestCase):
             self.assertTrue(any("too alike: ash / mud" in w for w in before))
             self.assertFalse(any("too alike" in w for w in after))
 
+    @needs_composer
     def test_the_mix_is_deterministic(self):
         with tempfile.TemporaryDirectory() as d:
             sd = self.make_set(d, {"ash": even_tile(45), "mud": even_tile(46)})
@@ -1345,6 +1297,7 @@ class MixBoardTest(unittest.TestCase):
             with Image.open(a) as ia, Image.open(b) as ib:
                 self.assertEqual(ia.tobytes(), ib.tobytes())
 
+    @needs_composer
     def test_a_ground_off_the_layout_and_a_plain_road_are_named(self):
         with tempfile.TemporaryDirectory() as d:
             sd = self.make_set(d, {"ash": even_tile(45), "paved_road": flatten.set_mean(even_tile(46), (62, 63, 66)), "moss": even_tile(47)})
@@ -1353,6 +1306,7 @@ class MixBoardTest(unittest.TestCase):
             self.assertIn("moss: not on this layout", warnings)
             self.assertTrue(any(w.startswith("paved_road:") and "no joints" in w for w in warnings))
 
+    @needs_composer
     def test_cli(self):
         with tempfile.TemporaryDirectory() as d:
             sd = self.make_set(d, {"ash": even_tile(45), "mud": even_tile(46)})
@@ -1370,6 +1324,438 @@ class MixBoardTest(unittest.TestCase):
             with contextlib.redirect_stderr(io.StringIO()) as err:
                 self.assertEqual(board.main([big, "--mix", "--out", out]), 1)
             self.assertIn("px a side", err.getvalue())
+
+
+def flat_rows(**changes):
+    """The table for a picture of exact colours: no tone, no patches, unless asked."""
+    fields = {"tone": 3, "patches": 5, "strays": 2}
+    rows = {}
+    for g, row in board.GROUND_ROWS.items():
+        row = list(row)
+        row[3], row[5] = 0.0, 0.0
+        for name, value in changes.items():
+            row[fields[name]] = value
+        rows[g] = tuple(row)
+    return unittest.mock.patch.dict(board.GROUND_ROWS, rows)
+
+
+def colour_of(ground):
+    return flatten.parse_colour(board.row_of(ground)[4])
+
+
+def times(colour, factor):
+    return tuple(v * factor for v in colour)
+
+
+def near(c, wanted):
+    """`c` within one level per channel of a colour in `wanted`: the composer's rounding is its own."""
+    return any(all(abs(a - b) <= 1 for a, b in zip(c, w)) for w in wanted)
+
+
+def map_of(grid, tex_paths=None, wear=1.0):
+    with tempfile.TemporaryDirectory() as work:
+        return board.draw_ground(grid, tex_paths or {}, work, wear)
+
+
+def yard(lower="ash", upper="packed_dirt", cols=20, rows=12):
+    """`upper` on the right half."""
+    return [[upper if x >= cols // 2 else lower for x in range(cols)] for _ in range(rows)]
+
+
+class GroundJobTest(unittest.TestCase):
+    GRID = [["paved_road", "ash", "water"], ["mud", "ash", "water"]]
+
+    def test_the_legend_lists_the_maps_grounds_in_the_games_order(self):
+        job = board.ground_job(self.GRID, {})
+        order = ["water", "ash", "mud", "paved_road"]             # by the table's order, not by where the map first has them
+        self.assertEqual(board.layer_ids(self.GRID), order)
+        chars = list(job["legend"])
+        self.assertEqual(chars, sorted(chars))                    # a reader that sorts keys sees the same list
+        self.assertEqual(job["cells"], [chars[3] + chars[1] + chars[0], chars[2] + chars[1] + chars[0]])
+        self.assertEqual([job["legend"][c]["colour"] for c in chars], [list(colour_of(g)) for g in order])
+
+    def test_a_tie_in_order_goes_by_id_as_the_kits_plan_does(self):
+        self.assertEqual(board.layer_ids([["zz", "aa", "ash"]]), ["ash", "aa", "zz"])
+
+    def test_every_field_of_a_row_reaches_the_job(self):
+        row = (40, 0.07, True, 0.09, "#102030", 0.11)
+        with unittest.mock.patch.dict(board.GROUND_ROWS, {"mud": row}):
+            layer = board.ground_job([["mud"]], {"mud": "a/b.png"}, 2.0)["legend"]["0"]
+        self.assertEqual(layer["colour"], [0x10, 0x20, 0x30])
+        self.assertAlmostEqual(layer["wear"], 0.14)
+        self.assertEqual((layer["strays"], layer["tone"], layer["patches"]), (True, 0.09, 0.11))
+        self.assertEqual(layer["tex"], os.path.abspath("a/b.png").replace(os.sep, "/"))
+
+    def test_a_ground_without_art_has_no_texture(self):
+        self.assertNotIn("tex", board.ground_job([["mud"]], {})["legend"]["0"])
+
+    def test_the_cell_is_the_games_and_the_strongest_wear_stays_in_the_engines_limit(self):
+        self.assertEqual(board.ground_job([["mud"]], {})["cell"], [16, 16])
+        strongest = max(row[1] for row in board.GROUND_ROWS.values())
+        self.assertLessEqual(strongest * board.WEAR_MAX, 0.3)
+
+    def test_a_wear_off_its_range_or_too_many_grounds_are_refused(self):
+        for wear in (-0.1, board.WEAR_MAX + 0.1, float("nan"), float("inf")):
+            with self.assertRaises(ValueError) as caught:
+                board.ground_job([["mud"]], {}, wear)
+            self.assertIn("off 0..", str(caught.exception))
+        many = [[f"g{i}" for i in range(len(board.LEGEND_CHARS) + 1)]]
+        with self.assertRaises(ValueError) as caught:
+            board.ground_job(many, {})
+        self.assertIn("at most", str(caught.exception))
+
+
+class ComposerRunTest(unittest.TestCase):
+    def tearDown(self):
+        board._composer = None
+
+    def test_a_linked_worktree_builds_into_its_own_folder_as_fc_sh_does(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo = os.path.join(d, "lane9")
+            os.makedirs(os.path.join(repo, ".cargo"))
+            with open(os.path.join(repo, ".cargo", "config.toml"), "w", encoding="utf-8") as f:
+                f.write('[build]\ntarget-dir = "C:/t/aegis"\n')
+            clean = {k: v for k, v in os.environ.items() if k != "CARGO_TARGET_DIR"}
+            with unittest.mock.patch.object(board, "REPO", repo), unittest.mock.patch.dict(os.environ, clean, clear=True):
+                self.assertNotIn("CARGO_TARGET_DIR", board.cargo_env())       # a main checkout, .git a folder or absent
+                with open(os.path.join(repo, ".git"), "w", encoding="utf-8") as f:
+                    f.write("gitdir: x\n")
+                self.assertEqual(board.cargo_env()["CARGO_TARGET_DIR"], "C:/t/aegis-lane9")
+                with unittest.mock.patch.dict(os.environ, {"CARGO_TARGET_DIR": "mine"}):
+                    self.assertEqual(board.cargo_env()["CARGO_TARGET_DIR"], "mine")
+
+    def test_a_failed_or_stuck_tool_is_an_error_with_its_message(self):
+        failed = subprocess.CompletedProcess([], 1, "", "ground_compose: placed patch refused")
+        with unittest.mock.patch("subprocess.run", return_value=failed):
+            with self.assertRaises(ValueError) as caught:
+                board.run_tool(["x"], "ground_compose")
+        self.assertIn("placed patch refused", str(caught.exception))
+        with unittest.mock.patch("subprocess.run", side_effect=subprocess.TimeoutExpired("x", 1)):
+            with self.assertRaises(ValueError) as caught:
+                board.run_tool(["x"], "ground_compose")
+        self.assertIn("no end after", str(caught.exception))
+
+    def test_no_cargo_is_an_error_not_a_crash(self):
+        board._composer = None
+        with tempfile.TemporaryDirectory() as d:
+            sd = os.path.join(d, "set", "ground", "ash")
+            os.makedirs(sd)
+            even_tile().save(os.path.join(sd, "v0.png"))
+            with unittest.mock.patch("subprocess.run", side_effect=FileNotFoundError("cargo")), contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(board.main([os.path.join(d, "set"), "--mix", "--out", os.path.join(d, "o")]), 1)
+            self.assertIn("error:", err.getvalue())
+
+    def test_cargo_names_the_composer_once_a_run(self):
+        built = json.dumps({"reason": "compiler-artifact", "target": {"name": "ground_compose"}, "executable": "C:/t/ground_compose.exe"})
+        other = json.dumps({"reason": "compiler-artifact", "target": {"name": "aegis_ui"}, "executable": None})
+        with unittest.mock.patch.object(board, "run_tool", return_value=f"{other}\n{built}\n") as run:
+            self.assertEqual(board.composer(), "C:/t/ground_compose.exe")
+            self.assertEqual(board.composer(), "C:/t/ground_compose.exe")
+        self.assertEqual(run.call_count, 1)
+        board._composer = None
+        with unittest.mock.patch.object(board, "run_tool", return_value=other):
+            with self.assertRaises(ValueError):
+                board.composer()
+
+    def test_a_blocked_binary_is_relinked_and_any_other_failure_is_not(self):
+        blocked = OSError("blocked")
+        blocked.winerror = 4551
+        with tempfile.TemporaryDirectory() as d:
+            exe = os.path.join(d, "ground_compose.exe")
+            open(exe, "w", encoding="utf-8").close()
+            with unittest.mock.patch.object(board, "composer", return_value=exe), \
+                    unittest.mock.patch.object(board, "run_tool", side_effect=[blocked, "done"]) as run:
+                self.assertEqual(board.compose_file("j", "o"), "done")
+            self.assertEqual(run.call_count, 2)
+            self.assertFalse(os.path.exists(exe))
+            open(exe, "w", encoding="utf-8").close()
+            with unittest.mock.patch.object(board, "composer", return_value=exe), \
+                    unittest.mock.patch.object(board, "run_tool", side_effect=OSError("other")):
+                with self.assertRaises(OSError):
+                    board.compose_file("j", "o")
+            self.assertTrue(os.path.exists(exe))
+
+
+@needs_composer
+class ComposedMixTest(unittest.TestCase):
+    def test_the_boards_map_is_the_composers_on_a_job_in_the_games_order(self):
+        with tempfile.TemporaryDirectory() as d:
+            sd = os.path.join(d, "set")
+            tiles = {"ash": even_tile(45), "mud": even_tile(46)}
+            paths = {}
+            for g, tile in tiles.items():
+                os.makedirs(os.path.join(sd, "ground", g))
+                paths[g] = os.path.join(sd, "ground", g, "v0.png").replace(os.sep, "/")
+                tile.save(paths[g])
+            layout = os.path.join(d, "l.txt")
+            with open(layout, "w", encoding="utf-8") as f:
+                f.write("size 10 6\ndefault ash\nmud 3-6 2-3\n")
+            sheet_path, _ = board.build_mix(sd, os.path.join(d, "o"), layout)
+            with Image.open(sheet_path) as im:
+                w, h = 10 * board.CELL_PX, 6 * board.CELL_PX
+                the_map = im.convert("RGB").crop((0, 0, w * board.MIX_SCALE, h * board.MIX_SCALE))
+
+            def by_hand(names):
+                layers = {}
+                for char, g in names:
+                    _, wear, strays, tone, _, patches = board.row_of(g)
+                    layers[char] = {"tex": paths[g], "wear": wear, "strays": strays, "tone": tone, "patches": patches}
+                cells = ["aaaaaaaaaa"] * 2 + ["aaammmmaaa"] * 2 + ["aaaaaaaaaa"] * 2
+                job_path = os.path.join(d, "job.json")
+                with open(job_path, "w", encoding="utf-8") as f:
+                    json.dump({"seed": board.SEED, "cell": [16, 16], "cells": cells, "legend": layers}, f)
+                out = os.path.join(d, "by_hand.png")
+                done = subprocess.run([board.composer(), job_path, out], capture_output=True, check=True)
+                self.assertEqual(done.returncode, 0)
+                with Image.open(out) as im:
+                    return im.convert("RGB")
+
+            direct = by_hand((("a", "ash"), ("m", "mud")))
+            self.assertEqual(the_map.resize((w, h), Image.NEAREST).tobytes(), direct.tobytes())
+            # the legend's order is part of the picture: a texture's offset comes from its place
+            other = by_hand((("m", "mud"), ("a", "ash")))
+            self.assertNotEqual(direct.tobytes(), other.tobytes())
+
+    def test_each_cell_shows_its_own_ground_and_only_grounds_are_on_the_map(self):
+        grid = [["ash"] * 8 for _ in range(6)]
+        for y in range(2, 4):
+            for x in range(1, 3):
+                grid[y][x] = "flagstone"
+            for x in range(5, 7):
+                grid[y][x] = "dirt_road"
+        c = {g: colour_of(g) for g in ("ash", "flagstone", "dirt_road")}
+        with flat_rows():
+            img = map_of(grid)
+            wear_road, wear_flag = board.row_of("dirt_road")[1], board.row_of("flagstone")[1]
+        px = img.load()
+        self.assertEqual(img.size, (8 * board.CELL_PX, 6 * board.CELL_PX))
+        for y, row in enumerate(grid):
+            for x, g in enumerate(row):
+                self.assertTrue(near(px[x * board.CELL_PX + 8, y * board.CELL_PX + 8], [c[g]]), (x, y))
+        allowed = []
+        for g, colour in c.items():
+            allowed += [colour, times(colour, 0.95), times(colour, 0.92)]      # the ground, a bite in it, a stray of it
+            allowed += [times(colour, 1 - wear_road), times(colour, 1 - wear_flag)]
+        seen = {px[x, y] for y in range(img.size[1]) for x in range(img.size[0])}
+        self.assertEqual([s for s in seen if not near(s, allowed)], [])
+        strays = [s for s in seen if near(s, [times(c["flagstone"], 0.92)])]
+        self.assertFalse(strays)                                               # the table has strays off (the approved scene); the engine pins cover them on
+
+    def test_a_ground_off_the_built_table_throws_no_strays(self):
+        with flat_rows():
+            img = map_of(yard("ash", "dirt_road"))
+        road = times(colour_of("dirt_road"), 0.92)
+        seen = {img.getpixel((x, y)) for y in range(img.size[1]) for x in range(img.size[0])}
+        self.assertFalse([s for s in seen if near(s, [road]) and not near(s, [colour_of("dirt_road")])])
+
+    def test_a_ground_without_art_draws_its_rows_colour(self):
+        grid = [["ash"] * 6 for _ in range(6)]
+        grid[3][3] = grid[3][2] = grid[2][3] = grid[2][2] = "mud"
+        with flat_rows():
+            img = map_of(grid)
+        self.assertTrue(near(img.getpixel((8, 8)), [colour_of("ash")]))
+        self.assertTrue(near(img.getpixel((3 * board.CELL_PX, 3 * board.CELL_PX)), [colour_of("mud")]))
+
+    def test_wear_scales_the_darkening_of_the_lower_ground_only(self):
+        # a bright lower ground, so a level is small against the wear; a bite is the lower ground x .95 at every scale
+        rows = {"ash": (10, 0.03, False, 0.0, "#c8c8c8", 0.0), "packed_dirt": (50, 0.05, False, 0.0, "#402010", 0.0)}
+        lower = (200, 200, 200)
+        with unittest.mock.patch.dict(board.GROUND_ROWS, rows):
+            for scale in (0.0, 2.0, 3.0):
+                img = map_of(yard(), wear=scale)
+                greys = {c[0] for c in img.getdata() if c[0] == c[1] == c[2]}
+                self.assertAlmostEqual(min(greys), 200 * min(0.95, 1 - 0.05 * scale), delta=1, msg=str(scale))
+                self.assertEqual(max(greys), lower[0])
+
+    def test_the_tables_patches_reach_the_picture(self):
+        grid = [["ash"] * 30 for _ in range(20)]
+        with flat_rows():
+            img = map_of(grid)
+        self.assertEqual({img.getpixel((x, y)) for y in range(0, img.size[1], 3) for x in range(0, img.size[0], 3)}, {colour_of("ash")})
+        with flat_rows(patches=0.2):
+            img = map_of(grid)
+        self.assertTrue(any(img.getpixel((x, y))[0] < colour_of("ash")[0] - 1 for y in range(img.size[1]) for x in range(img.size[0])))
+
+    def test_a_pair_holds_its_two_grounds_and_its_edge_wanders_within_the_rule(self):
+        cells = dict(board.pair_layouts())["straight edge"]
+        with flat_rows(), tempfile.TemporaryDirectory() as work:
+            sheet = board.pair_sheet("ash", "packed_dirt", {}, [set(cells)], work)
+        w, h = board.PAIR_SIZE[0] * board.CELL_PX, board.PAIR_SIZE[1] * board.CELL_PX
+        self.assertEqual(sheet.size, (w, h))
+        upper = colour_of("packed_dirt")
+        boundary = min(x for x, _ in cells) * board.CELL_PX
+        off = 0
+        for y in range(h):
+            first = next(x for x in range(w) if near(sheet.getpixel((x, y)), [upper]))
+            self.assertLessEqual(abs(first - boundary), 6)
+            off += first != boundary
+        self.assertGreater(off, h // 2)
+
+    def test_the_second_panel_is_the_second_layout(self):
+        layouts = [set(cells) for _, cells in board.pair_layouts()][:2]
+        with flat_rows(), tempfile.TemporaryDirectory() as work:
+            sheet = board.pair_sheet("ash", "packed_dirt", {}, layouts, work)
+            alone = board.pair_sheet("ash", "packed_dirt", {}, layouts[1:], work)
+        w, h = board.PAIR_SIZE[0] * board.CELL_PX, board.PAIR_SIZE[1] * board.CELL_PX
+        self.assertEqual(sheet.crop((w + board.CELL_PX // 2, 0, 2 * w + board.CELL_PX // 2, h)).tobytes(), alone.tobytes())
+
+
+def prop_art(colour, size=(8, 16)):
+    return Image.new("RGBA", size, colour)
+
+
+class PropsTest(unittest.TestCase):
+    def root(self, d, name="kit"):
+        return os.path.join(d, name)
+
+    def add_prop(self, root, folder, art, version=0):
+        path = os.path.join(root, "props", *folder.split("/"))
+        os.makedirs(path, exist_ok=True)
+        art.save(os.path.join(path, f"v{version}.png"))
+
+    def add_unit(self, root, folder, sheet, frame):
+        path = os.path.join(root, "units", *folder.split("/"))
+        os.makedirs(path)
+        sheet.save(os.path.join(path, "sheet.png"))
+        with open(os.path.join(path, "clips.json"), "w", encoding="utf-8") as f:
+            json.dump({"frame": frame}, f)
+
+    def write(self, d, text):
+        path = os.path.join(d, "props.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        return path
+
+    def test_props_come_back_by_feet_a_tie_in_the_files_order(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = self.root(d)
+            for n, c in (("a", (1, 0, 0, 255)), ("b", (2, 0, 0, 255)), ("c", (3, 0, 0, 255))):
+                self.add_prop(root, f"common/{n}", prop_art(c))
+            items = board.parse_props(self.write(d, "prop common/a 1 5 # far in the file\nprop common/b 1 2\n\n# note\nprop common/c 1.5 5\n"), 10, 10, [root])
+        self.assertEqual([item[0].getpixel((0, 0))[0] for item in items], [2, 1, 3])
+        self.assertEqual([(item[1], item[2]) for item in items], [(1, 2), (1, 5), (1.5, 5)])
+
+    def test_a_prop_is_its_lowest_version_and_a_unit_frame_zero_and_the_game_goes_first(self):
+        with tempfile.TemporaryDirectory() as d:
+            game, kit = self.root(d, "game"), self.root(d, "kit")
+            self.add_prop(kit, "common/p", prop_art((9, 0, 0, 255)), 2)
+            self.add_prop(kit, "common/p", prop_art((8, 0, 0, 255)), 10)
+            self.add_prop(kit, "common/both", prop_art((7, 0, 0, 255)))
+            self.add_prop(game, "common/both", prop_art((6, 0, 0, 255)))
+            sheet = Image.new("RGBA", (96, 48), (5, 0, 0, 255))
+            sheet.paste((4, 0, 0, 255), (48, 0, 96, 48))
+            self.add_unit(kit, "warrior/base", sheet, [48, 48])
+            text = "prop common/p 1 1\nprop common/both 1 2\nunit warrior/base 1 3\n"
+            arts = [item[0] for item in board.parse_props(self.write(d, text), 10, 10, [game, kit])]
+        self.assertEqual(arts[0].getpixel((0, 0))[0], 9)
+        self.assertEqual(arts[1].getpixel((0, 0))[0], 6)
+        self.assertEqual((arts[2].size, arts[2].getpixel((47, 0))[0]), ((48, 48), 5))
+
+    def test_a_bad_props_file_is_refused_not_cut_to_fit(self):
+        bad = {
+            "prop common/a 1": "not `prop",
+            "thing common/a 1 1": "not `prop",
+            "prop ../../secret 1 1": "not a folder name",
+            "prop common/a x 1": "could not convert",
+            "prop common/a nan 1": "off the",
+            "prop common/a 1 inf": "off the",
+            "prop common/a 11 1": "off the",
+            "prop common/a 1 -1": "off the",
+            "prop common/none 1 1": "no prop common/none",
+            "unit common/a 1 1": "no unit common/a",
+        }
+        with tempfile.TemporaryDirectory() as d:
+            root = self.root(d)
+            self.add_prop(root, "common/a", prop_art((1, 0, 0, 255)))
+            for text, message in bad.items():
+                with self.assertRaises(ValueError) as caught:
+                    board.parse_props(self.write(d, text), 10, 10, [root])
+                self.assertIn(message, str(caught.exception), text)
+                self.assertIn("props.txt:1", str(caught.exception), text)
+            many = "prop common/a 1 1\n" * (board.MAX_PROPS + 1)
+            with self.assertRaises(ValueError) as caught:
+                board.parse_props(self.write(d, many), 10, 10, [root])
+            self.assertIn("at most", str(caught.exception))
+            self.add_prop(root, "common/big", Image.new("RGBA", (board.MAX_MASTER + 1, 1)))
+            with self.assertRaises(ValueError) as caught:
+                board.parse_props(self.write(d, "prop common/big 1 1"), 10, 10, [root])
+            self.assertIn("px a side", str(caught.exception))
+
+    def test_feet_stand_at_the_arts_bottom_centre_and_the_front_one_covers(self):
+        ground = Image.new("RGB", (64, 64), (10, 10, 10))
+        red, blue = (200, 0, 0, 255), (0, 0, 200, 255)
+        out = board.draw_props(ground, [(prop_art(red), 1.0, 1.0), (prop_art(blue), 1.25, 1.0)], 32)
+        self.assertEqual(out.size, (64, 64))
+        self.assertEqual(out.getpixel((28, 31))[:3], red[:3])                  # foot at 32, 32: art 28-35 by 16-31
+        self.assertEqual(out.getpixel((36, 31))[:3], blue[:3])                 # the later one, 36-43
+        self.assertEqual(out.getpixel((28, 32)), (10, 10, 10))                 # nothing under the feet
+        self.assertEqual(out.getpixel((28, 15)), (10, 10, 10))
+        self.assertEqual(out.getpixel((27, 31)), (10, 10, 10))
+        over = board.draw_props(ground, [(prop_art(red), 1.0, 1.0), (prop_art(blue), 1.0, 1.0)], 32)
+        self.assertEqual(over.getpixel((30, 20))[:3], blue[:3])
+
+    def test_a_clear_pixel_shows_the_ground_and_art_past_a_side_is_cut(self):
+        ground = Image.new("RGB", (32, 32), (10, 10, 10))
+        art = prop_art((200, 0, 0, 255), (16, 40))
+        art.putpixel((8, 39), (0, 0, 0, 0))
+        out = board.draw_props(ground, [(art, 0.0, 1.0)], 32)                  # past the left and the top
+        self.assertEqual(out.getpixel((0, 31)), (10, 10, 10))                  # art's (8, 39)
+        self.assertEqual(out.getpixel((1, 31)), (200, 0, 0))
+        self.assertEqual(out.getpixel((7, 0)), (200, 0, 0))
+        self.assertEqual(out.getpixel((8, 0)), (10, 10, 10))
+        out = board.draw_props(ground, [(art, 1.0, 1.0)], 32)                  # past the right
+        self.assertEqual(out.getpixel((31, 0)), (200, 0, 0))
+        self.assertEqual(out.getpixel((23, 0)), (10, 10, 10))
+
+    def test_the_outdoor_example_is_real_art_on_its_map_and_nothing_stands_in_water(self):
+        path = os.path.join(board.HERE, "fixtures", "mix_outdoor_props.txt")
+        cols, rows, grid = board.parse_layout(board.MIX_LAYOUT)
+        items = board.parse_props(path, cols, rows)
+        self.assertGreater(len(items), 0)
+        with open(path, encoding="utf-8") as f:
+            lines = [line.split() for line in f if line.strip() and not line.startswith("#")]
+        self.assertEqual(len(items), len(lines))
+        self.assertTrue(any(line[0] == "unit" for line in lines))
+        for line in lines:
+            x, y = float(line[2]), float(line[3])
+            self.assertNotEqual(grid[min(int(y), rows - 1)][min(int(x), cols - 1)], "water", line)
+
+    @needs_composer
+    def test_the_mix_draws_them_over_the_map_and_counts_them(self):
+        with tempfile.TemporaryDirectory() as d:
+            sd = os.path.join(d, "set", "ground", "ash")
+            os.makedirs(sd)
+            flatten.set_mean(even_tile(45), colour_of("ash")).save(os.path.join(sd, "v0.png"))
+            layout = os.path.join(d, "l.txt")
+            with open(layout, "w", encoding="utf-8") as f:
+                f.write("size 6 4\ndefault ash\n")
+            root = self.root(d)
+            self.add_prop(root, "common/a", prop_art((200, 0, 0, 255)))
+            props = self.write(d, "prop common/a 2 2\n")
+            with unittest.mock.patch.object(board, "ART_ROOTS", (root,)):
+                bare, _ = board.build_mix(os.path.join(d, "set"), os.path.join(d, "a"), layout)
+                dressed, _ = board.build_mix(os.path.join(d, "set"), os.path.join(d, "b"), layout, False, 1.0, props)
+            with Image.open(bare) as a, Image.open(dressed) as b:
+                a, b = a.convert("RGB"), b.convert("RGB")
+            map_w, map_h = 6 * board.CELL_PX * board.MIX_SCALE, 4 * board.CELL_PX * board.MIX_SCALE
+            self.assertEqual(a.size, b.size)
+            changed = [(x, y) for y in range(map_h) for x in range(map_w) if a.getpixel((x, y)) != b.getpixel((x, y))]
+            self.assertEqual((min(changed), max(changed)), ((60, 48), (67, 63)))
+            self.assertEqual(len(changed), 8 * 16)
+            self.assertEqual(b.getpixel((60, 48)), (200, 0, 0))
+            self.assertNotEqual(a.crop((map_w, 0, a.size[0], map_h)).tobytes(), b.crop((map_w, 0, b.size[0], map_h)).tobytes())
+
+    def test_the_command_line_refuses_a_bad_wear_or_props_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            sd = os.path.join(d, "set", "ground", "ash")
+            os.makedirs(sd)
+            even_tile(45).save(os.path.join(sd, "v0.png"))
+            out = os.path.join(d, "o")
+            for args, message in ((["--props", os.path.join(d, "none.txt")], "none.txt"), (["--wear", "nan"], "off 0..")):
+                with unittest.mock.patch.object(board, "composer", return_value="unused"), contextlib.redirect_stderr(io.StringIO()) as err:
+                    self.assertEqual(board.main([os.path.join(d, "set"), "--mix", "--out", out] + args), 1, args)
+                self.assertIn(message, err.getvalue(), args)
+            self.assertFalse(os.path.exists(out))
 
 
 if __name__ == "__main__":
