@@ -2,6 +2,310 @@
 
 Newest pass on top. Candidate statuses: `proposed`, `confirmed (user <date>)`, `rejected (user <date>): <reason>`, `done`. Only the user confirms; confirmed candidates become `docs/TASKS.md` rows. Cleanup is never folded into a feature task: "after X" = run once X is merged, "superseded by X" = X deletes it anyway.
 
+## Later backlog pass, 2026-11-02
+
+Scope: decision "Priorities after the visual pass" (`docs/decisions/workflow.md:118`, "The Later backlog gets a keep,
+rewrite or drop pass for the user to confirm"). Read-only scan of the planner checkout at a39ccb56. Source of the rows:
+`progress.py --milestone Later` gives 41 rows; PACE1-L and MAPNAV1-U are done, so 39 are open. LAYOUT1, MARKERS1, ICONUI1
+and SKILLTEXT2 are in that list. No other open idea row was checked for this pass.
+
+Counts: keep 11, rewrite 16, merge 11, close as done 1. Nothing is dropped as unwanted: the one close is a row whose work
+landed. Every candidate is `proposed`. A "merge" keeps the merged row's spec; only the task row goes.
+
+Two findings shape most verdicts:
+
+- The classic rules did not go away. Classic is a ruleset row for the Ashlands (`games/emberwake/docs/decisions/lore.md:15-16`;
+  `combat.md:79`, "INPUT1-M rule choices and the classic ruleset"), so a row naming stances or the Ashlands still has live
+  code to target. The real test is whether more classic balance work is wanted: the founders do not use the class paths
+  those rows change (`games/emberwake/docs/specs/CAST1_FOUNDERS.md:19`, `skill_path` is {} in the Sunk Ward). Question 1.
+- The Results screen and the battle chips have several small rows each, chained by dependency. The chain's first rows name
+  Godot files. One row per screen fits decision "Engine layout is relative" (`docs/decisions/workflow.md:117`: "a screen
+  moves only inside the task that builds or redesigns it").
+
+### Later pass: every open row
+
+| Row | Verdict | Reason | Candidate |
+| --- | --- | --- | --- |
+| PROPS1-A2 | close as done | Landed in ca9d43c6 and 204dfd51 (both in HEAD); the row still reads approved | CLN-54 |
+| UIR-4 | rewrite | Results half done by REWARD1; Journal fixes open; takes in BREPORT1-U and HEAL1-U | CLN-55 |
+| BREPORT1-U | merge into UIR-4 | Report built in the kit, never drawn; same screen | CLN-55 |
+| HEAL1-U | merge into UIR-4 | Hub HP, Make camp and notes done; only the Results part is left | CLN-55 |
+| OBJ1-U | rewrite | Objective text, hold ring, exit sign done; slay and guest chips and the count open; takes in the two below | CLN-56 |
+| MORALE1-U | merge into OBJ1-U | Morale state is exposed, no screen draws it; same cards | CLN-56 |
+| PACE1-U | merge into OBJ1-U | Enraged text done on two surfaces; the token chip and banner line open | CLN-56 |
+| LEVERS1-B | rewrite | Becomes the re-measure that decides which levers stay; spec's own rule | CLN-57 |
+| LEVERS1-L1 | merge into LEVERS1-B | Not built; gap numbers predate many rule changes; spec keeps the split | CLN-57 |
+| LEVERS1-L2 | merge into LEVERS1-B | As L1 | CLN-57 |
+| LEVERS1-L3 | merge into LEVERS1-B | As L1; a classic AI change must now be a rule option | CLN-57 |
+| LEVERS1-A1 | merge into LEVERS1-B | Waits on L1 | CLN-57 |
+| LEVERS1-A2 | merge into LEVERS1-B | Waits on L2 | CLN-57 |
+| LEVERS1-A3 | merge into LEVERS1-B | Waits on L3 | CLN-57 |
+| LEVERS1-U | merge into LEVERS1-B | Waits on L1 and L2 | CLN-57 |
+| RCLOSE1-U | rewrite | Right click is already back everywhere; only the one-time exceptions are left | CLN-58 |
+| QUESTTRACK1-U | rewrite | Badges done by PLAYUI1; card only, and the legend now holds the top right | CLN-59 |
+| DRAG1 | rewrite | C4 replaced, C1-C3 name the old plan strip; the list needs a new pass before a pick | CLN-60 |
+| SIMKPI1 | rewrite | Bug still there; the parity line it retires is gone, the golden is re-recorded instead | CLN-61 |
+| SKILLTEXT2 | rewrite | Bug still there; Touches names the wrong file; choose the logic fix | CLN-62 |
+| REWARDXW1 | rewrite | Still an idea, the road still exists; the Godot journey clause is dead | CLN-63 |
+| ICONUI1 | rewrite | Still undrawn; its screen list predates INPUT1, PLAYUI1-P and the deck tab | CLN-64 |
+| LAYOUT1 | rewrite | LAYOUT720 takes the layout tools, not the mockups; the user's end goal stands | CLN-65 |
+| PACE1-S | rewrite | Sim boss phase still the old shape; reuse `feel` rounds; drop `start=` | CLN-66 |
+| ASHPACE1 | rewrite | Its condition is resolved (still 20 after MORALE1-B); re-measure before the cut | CLN-67 |
+| COMBO-A2 | rewrite | Flow needs stances, which timeline turns off; Ashlands-only scope | CLN-68 |
+| KEEP1 | rewrite | Should sit on the kit's hub facilities, which have no code yet | CLN-69 |
+| DIFF1 | rewrite | "Injuries on" contradicts decisions; "too easy while BAL3" is stale | CLN-70 |
+| PACE1-A | keep | Not built; `enrage` and `or_round` absent from the data; needs Question 1 | - |
+| PACE1-B | keep | Report only, follows PACE1-A and PACE1-S; needs Question 1 | - |
+| DEEDS1 | keep | Not built; flags and passive grants still exist | - |
+| RESPEC1 | keep | Not built (`respec` in the code is only the word "respected") | - |
+| OFFHAND1 | keep | Not built; no item grants a skill; the passive `skill` effect exists | - |
+| DESERT1 | keep | No deserter in the data; CAMP1 story rows done; needs Question 1 | - |
+| UIR-7 | keep | No gamepad code; the focus keys it builds on exist; battle controller stays separate | - |
+| MARKERS1 | keep | Both marker folders and the old lookup still exist; user's call as written | - |
+| PLAYBACK2 | keep | Play back still only runs to the end; second clause unclear, see the note | - |
+| PLAYTEST2 | keep | CAMP1-P still needs it; idea status is right | - |
+| ARTTOOL1 | keep | User's "later" stands; regeneration check not found, see the note | - |
+
+Keep notes (file:line):
+
+- PACE1-A: `games/emberwake/data/worlds/ashlands/encounters.json:356,481` (`max_rounds` 8), `:395,499` (Crown of Nails),
+  `:409,513` (still fortify). HISTORY 2026-10-27 shows the precedent: a data change here re-records the PHASEFOLD golden.
+- UIR-7: `engine/crates/aegis_ui/src/shell.rs:484-512` (focus moves); no `gamepad` or `gilrs` hit in `aegis_ui` or the GUI;
+  `docs/specs/INPUT1.md:979` leaves the battle's controller input out.
+- MARKERS1: `kits/rpg/crates/rpgkit_content/src/art.rs:403`, `kits/rpg/assets/map/markers/`, `kits/rpg/assets/ui/markers/`.
+- PLAYBACK2: `engine/crates/aegis_ui/src/recordings.rs:3` (Play back runs to the end). Could not tell whether the row's
+  second clause (the game supplies take-over points) still applies: `recordings.rs:63` reads the checkpoint shape itself,
+  and that may be the state the row objected to or an accepted end point.
+- PLAYTEST2: `docs/TASKS.md:41` (CAMP1-P: "clean replay needs PLAYTEST2").
+- ARTTOOL1: `docs/decisions/workflow.md:63`. Could not find the ASSETORG2-T regeneration check in `tools/fc.sh`,
+  `docs/WORKFLOW.md`, `docs/EFFICIENCY.md` or `.github`. The tools have also grown (`tools/tiles`, `tools/portraits`,
+  `tools/title_art.py`); when the row is picked up, re-scope it.
+
+### Later pass: ranked candidates
+
+Row edits are the planner's (`docs/TASKS.md`, plus `games/emberwake/docs/MILESTONES.md` where a row moves). Lane and Touches
+below are for the build the row describes. Every candidate: status `proposed`, risk to the code none (docs only).
+
+| Rank | Id | Change | Size of the build | Lane | Depends on |
+| --- | --- | --- | --- | --- | --- |
+| 1 | CLN-54 | Close PROPS1-A2 | none | planner | - |
+| 2 | CLN-57 | LEVERS1: eight rows become one gated row | S (measure), then per spec | balance, then per spec | Question 1 |
+| 3 | CLN-55 | Results and Journal: three rows become UIR-4 | M | logic | LAYOUT720-E4 |
+| 4 | CLN-56 | Battle chips: three rows become OBJ1-U | M | logic | VISCLAR1 |
+| 5 | CLN-58 | RCLOSE1-U narrowed | S | logic | Question 5 |
+| 6 | CLN-61 | SIMKPI1 reworded | S | logic | - |
+| 7 | CLN-62 | SKILLTEXT2 reworded | S | logic | - |
+| 8 | CLN-63 | REWARDXW1 reworded | S | logic | stays an idea |
+| 9 | CLN-59 | QUESTTRACK1-U narrowed | S | logic | Question 4 |
+| 10 | CLN-66 | PACE1-S reworded | S | logic | Question 1 |
+| 11 | CLN-67 | ASHPACE1 reworded | S | asset | Question 1 |
+| 12 | CLN-60 | DRAG1 candidate list redone | S (design) | design | Question 3 |
+| 13 | CLN-64 | ICONUI1 screen list redone | M | logic | stays an idea |
+| 14 | CLN-65 | LAYOUT1 narrowed | M-L | design | LAYOUT720-E5 |
+| 15 | CLN-68 | COMBO-A2 scoped | M | design | Question 1 |
+| 16 | CLN-70 | DIFF1 corrected | S-M | design | - |
+| 17 | CLN-69 | KEEP1 re-based | M | design | hub facilities in the kit |
+
+### CLN-54
+
+PROPS1-A2 (`docs/TASKS.md:69`) is done. ca9d43c6 cut S1 and S3 into the kit and game files and added the scale-only path to
+`tools/portraits/sheets.py`; 204dfd51 moved the samples. Files are in `kits/rpg/assets/props/common/` (16),
+`games/emberwake/assets/props/ashlands/` (3). The buildings it left waiting are PROPS1-A3a and PROPS1-A3b
+(`docs/TASKS.md:70-71`), which list it as a dependency, so M2's PROPS1-A3a reads as blocked by a Later row.
+
+Change: status `done (ca9d43c6, 204dfd51)`. The row's file count "21 kit + 7 game" is older text; the commit says 16 kit, 3
+game and 5 kit. Touches: `docs/TASKS.md`. Spec pointer: `docs/specs/CLEANUP.md#CLN-54`.
+
+### CLN-55
+
+UIR-4 takes in BREPORT1-U and HEAL1-U. Their rows depend on each other in that order (`docs/TASKS.md:43,45`) and all land
+in `emberwake_gui/src/hub.rs`.
+
+Already built: fixed columns and the level line (`hub.rs:599`), loot and gold lines and the outcome note (`hub.rs:469-471`),
+the one Level up button, Continue in the corner (REWARD1, ROSTER1-U), hub party HP (`hub.rs:184-189`), Make camp and its
+note (`worldmap.rs:378-384`, `region.rs:181`). The battle report's logic is in `kits/rpg/crates/rpgkit_battle/src/report.rs`
+and its goldens, but `Results` (`hub.rs:400-414`) holds no report and no HP.
+
+Row text: "Results and Journal: the battle report (table, tips, best-moment line, BREPORT1 section 4), per-hero HP with the
+rally and the fled line (HEAL1 section 5), then the Journal fixes left from UI_REVIEW1 (a selected style instead of the `>`
+marker, `hub.rs:320`; Back beside the list, `hub.rs:370`; empty states per group; scrolling). Built on the relative layout;
+the OBJ1 and morale results lines land here too."
+
+Check against classic words: the report's Combos, "Stance break" and "Flow" (`report.rs:25,211`) hide at zero under
+`columns_for`, so a timeline fight shows no empty column. Could not tell whether the battle screen already passes the
+report to `Results`; the builder confirms it first.
+
+Lane logic; layer game. Depends on: LAYOUT720-E4 (replaces UIR-1, PORT-BREPORT, PORT-SETTINGS, all done or moot). Touches:
+`emberwake_gui/src/hub.rs`, `emberwake_gui/src/battle/flow.rs`. Risk: `hub.rs` tests on results text; LAYOUT720-Q gives both
+screens a one-line grid first, and this row replaces that line. Spec pointer: `docs/specs/CLEANUP.md#CLN-55`.
+
+### CLN-56
+
+OBJ1-U takes in MORALE1-U and PACE1-U. MORALE1-U already waits on OBJ1-U and PACE1-U must not run beside it
+(`docs/TASKS.md:47,50`), all on the same cards.
+
+Already built: the objective text (`battle/flow.rs:118-130`), the hold ring and plate (`battle/marks.rs:605-628`), the exit
+sign (`marks.rs:618-619`), the enraged text (`intent_text.rs:104-105`, `timeline_view.rs:190-191`). Not built: slay and guest
+chips (no `guest` or slay code in `battle/`), the count on the objective line, morale words (`rpgkit_battle/src/session.rs:1083`
+and `intent.rs:385` expose them, only `battle/tests/slice5_tests.rs` reads them), Enraged on the token, the second banner line.
+
+Drop from OBJ1-U: the asset key `overlay_objective` and `AssetRegistry` fallback (`OBJ1.md:93`, Godot names); the dependency
+COMBAT-UI2-L2. Add: VISCLAR1 as a dependency, since that row decides which badges the game view keeps
+(`docs/TASKS.md:225`; `ENCOUNTER2-U answers`, `combat.md:64`, also leaves the holder's marker to it).
+
+The slice needs part of this: `enc_evt_03` has guest `dunstan` (`CAST1_ENCOUNTERS.md:55`) and enrage 20
+(`CAST1_BOSSES.md:111`); `enc_evt_06` is an escape with `objective_count` 3 (`CAST1_ENCOUNTERS.md:56`). Morale is M2b
+(`CAST1_ENCOUNTERS.md:106`). Question 2 asks whether the row moves up.
+
+Lane logic; layer game. Touches: `emberwake_gui/src/battle/{marks,tips,draw,flow}.rs`, `intent_text.rs`. Spec pointers: OBJ1
+section 3, MORALE1 section 3, PACE1 section 7. Risk: `battle/tests/` text expectations. Spec pointer:
+`docs/specs/CLEANUP.md#CLN-56`.
+
+### CLN-57
+
+LEVERS1 (`docs/TASKS.md:53-60`): the eight rows become one. None of it is built: no `area_origin` in the schema or crates, no
+`ward` status, no absorb code, and `cyclone_kick` is still `SWEEP` (`games/emberwake/data/catalog/skills.json:1050,1061`).
+
+Why not leave them: the spec builds a lever only when its measured gap is open (`LEVERS1.md` Goal, section 1), and those gaps
+are from BAL5-R1b on 2026-10-18 (`BALANCE_REPORT.md:413-415`). Since then the trio bands were re-set
+(`games/emberwake/docs/decisions/balance.md:23`) and classic took rule changes (`combat.md:79`). L3 would also now have to be
+a rule option, by the same decision. The levers reach only Ashlands classes (`CAST1_FOUNDERS.md:19`).
+
+Row text for LEVERS1-B: "Re-measure the three gaps (priest down before round 3 and heal share, brawler foes per cast, tank
+allies' HP) on the current engine, classic ruleset, against LEVERS1 section 5. Report which levers are still open; the
+planner re-splits those from LEVERS1 section 6." Lane balance; layer game. Depends on: Question 1. Touches:
+`games/emberwake/docs/BALANCE_REPORT.md`. Spec pointer: `docs/specs/CLEANUP.md#CLN-57`. HISTORY: a merge note only; the
+deferred T4 Bodyguard row is unchanged.
+
+### CLN-58
+
+RCLOSE1-U (`docs/TASKS.md:39`). A right click already calls `back` on every screen (`engine/crates/aegis_ui/src/shell.rs:1279`),
+the default pops (`screen.rs:291-293`), the controls list says so (`menus.rs:703`), and story scenes ignore it
+(`story.rs:261`). Two cases break the row's rule:
+
+- `Results` has no `back` of its own (`hub.rs`), so a right click closes it. No result is lost, because Continue also only pops
+  (`hub.rs:529-530`), but the row wants it closed only by its button. Read from the code, not run.
+- A talk ends on a right click (`region.rs:1192`, `RAct::Farewell`), which may or may not count as "story dialogue": Question 5.
+
+Row text: "One-time screens ignore right click and Esc: Results; [talks, per the user's answer]. A test per screen." Lane logic;
+layer game. Touches: `emberwake_gui/src/{hub,region}.rs`. Risk: region `back` tests. Spec pointer:
+`docs/specs/CLEANUP.md#CLN-58`.
+
+### CLN-59
+
+QUESTTRACK1-U (`docs/TASKS.md:38`). The `!` and `?` badges are done (`region.rs:1784-1785`, PLAYUI1 section 6, which left the
+card out at `PLAYUI1.md:318-319`). The approved place, top right, now holds the legend (`region.rs:1308`, test at `:2088`). Row
+text: "Pinned quest card on the region map (quest name and current objective), placed per Question 4; drawn on the region
+map's layout." Remove the badges and the `quest.rs` turn-in Touches. The user's note "revisit at the UI review" stays. Lane
+logic; layer game. Touches: `emberwake_gui/src/region.rs`. Spec pointer: `docs/specs/CLEANUP.md#CLN-59`.
+
+### CLN-60
+
+DRAG1 (`docs/TASKS.md:34`, `games/emberwake/docs/specs/DRAG1.md`). C4 was replaced (`docs/HISTORY.md:61`). C1-C3 describe the
+step strip (`DRAG1.md` table): the timeline screen plans by target then skill with ghost fill (`combat.md:65`,
+"Combat input feedback"), and the latest playtest asks for clicking a slot to select its ghost (`combat.md:82`). INPUT1 left
+strip drag out of scope (`INPUT1.md:979`). C5 and C6 still stand (`party.rs:1550` is still the checkbox).
+
+Row text: "Redo the DRAG1 list against the INPUT1 screen and the ROSTER1 party screen; the user picks." Lane design; layer game.
+Touches: `DRAG1.md`. The preference (`preferences/ui.md:46`) stands. Question 3. Spec pointer: `docs/specs/CLEANUP.md#CLN-60`.
+
+### CLN-61
+
+SIMKPI1 (`docs/TASKS.md:29`). The bug is still there: `kits/rpg/crates/rpgkit_sim/src/roles.rs:187` labels `down_round` "prio
+down rnd" while `:209-210,223` read the test unit's own round. Parity is retired (CLN-42), so nothing holds the wrong value but
+`games/emberwake/crates/emberwake_sim/tests/fixtures/sim_golden.json:445-446`. Row text: "The striker's prio down rnd KPI reads
+the priority target's down round; re-record `sim_golden` for this change, with a HISTORY row." Lane logic; layer kit (was game).
+Touches: `roles.rs`, the fixture. Risk: `sim_golden`. Spec pointer: `docs/specs/CLEANUP.md#CLN-61`.
+
+### CLN-62
+
+SKILLTEXT2 (`docs/TASKS.md:28`). Riposte's top rank has mitigation 0 (`skills.json`, ranks 0.05, 0.0), the template is at
+`skills.json:571`, and the filler prints any value (`kits/rpg/crates/rpgkit_content/src/source.rs:495-497,645`). Touches names
+`rpgkit_world/src/skill_text.rs`, which is the rank lines, and that file already leaves out a zero (`skill_text.rs`, the
+`mitigation > 0.0` field). Recommended: the logic fix, because a template clause cannot be dropped by data without a per-rank
+description. Row text: "The description filler drops a clause whose value is zero." The clause rule needs care: the builder
+reports any template it cannot split cleanly. Lane logic; layer kit. Touches: `source.rs`, a test. Spec pointer:
+`docs/specs/CLEANUP.md#CLN-62`.
+
+### CLN-63
+
+REWARDXW1 (`docs/TASKS.md:35`). The road still exists (`games/emberwake/data/worlds/iron_reaches/routes.json:26`,
+`ashlands:wagon_raid`). Remove "and the two Godot journeys with such a fight retire their XP parity from that step" (CLN-41,
+CLN-42 removed those); say instead that a change re-records the journey golden if a walk meets the road. Stays an idea, per
+the user's 2026-10-22 word. Lane logic; layer kit. Touches: `kits/rpg/crates/rpgkit_world/src/battle.rs`. Spec pointer:
+`docs/specs/CLEANUP.md#CLN-63`.
+
+### CLN-64
+
+ICONUI1 (`docs/TASKS.md:31`). `item_icon_chain` and `skill_icon_chain` (`rpgkit_content/src/art.rs:238,259`) have no caller
+outside `art.rs`. Replace the screen list: "battle plan strip" becomes the timeline strip and pick list (INPUT1), "shop" the
+three-column trade's reserved 12 px slot (`PLAYUI1.md:38,218`), "skills tab" also covers the deck tab (`party.rs:1769`). Add
+status icons on cards if STATUSFX1's note still stands (`STATUSFX1.md:141`). Each screen takes its icons when that screen is
+built or redesigned; no sweep. Stays an idea. Lane logic; layer game. Touches: `emberwake_gui/src/{party,shop,battle}`.
+Spec pointer: `docs/specs/CLEANUP.md#CLN-64`.
+
+### CLN-65
+
+LAYOUT1 (`docs/TASKS.md:36`). Not simply overtaken. LAYOUT720 builds relative layout, the specimen and the audit
+(`docs/decisions/workflow.md:117`, `docs/specs/LAYOUT720.md:373`) but does not mention LAYOUT1, and the mockup goal is the
+user's own (`workflow.md:64`). What is left is the top of the goal: mock screens composed from the gallery's elements with the
+game's assets, resizable in-game, so a described layout becomes a real screen. Row text says that, with "layout primitives come
+from LAYOUT720". Stays an idea. Lane design; layer engine + game. Depends on: LAYOUT720-E5. Touches:
+`engine/crates/aegis_ui` (gallery, layouts). Spec pointer: `docs/specs/CLEANUP.md#CLN-65`.
+
+### CLN-66
+
+PACE1-S (`docs/TASKS.md:49`). The sim's boss phase is the old fortify shape (`rpgkit_sim/src/scenarios.rs:100-104`), so that part
+is open; no one-shot or pace-verdict metric exists. `feel` already records `rounds` and `won_rounds` "PACE1 reads" (`feel.rs:114`).
+Row text: "Sim boss phase in the PACE1 shape; phase 1/2 rounds, one-shots and the verdict beside `feel`'s rounds, not a second
+counter; re-record `sim_golden` if its lines change." `start=` stays out (Q3 B). Lane logic; layer kit. Touches:
+`kits/rpg/crates/rpgkit_sim/src/{scenarios,feel,kpi}.rs`. Spec pointer: `docs/specs/CLEANUP.md#CLN-66`.
+
+### CLN-67
+
+ASHPACE1 (`docs/TASKS.md:44`). Remove "unless MORALE1-B already lifts it to 90+": it did not (`BALANCE_REPORT.md:476`, also `:630`).
+Add "re-measure solo `ash_scouts` first": the number predates WAR2H1 and the classic rule edits. `ash_scouts` is still two scouts
+(`encounters.json:152`). Status "spec needed" stands; the user's "do not tune battles much" stays in the row. Lane asset; layer
+game. Touches: as the row. Question 1. Spec pointer: `docs/specs/CLEANUP.md#CLN-67`.
+
+### CLN-68
+
+COMBO-A2 (`docs/TASKS.md:46`). The pitch (`DESIGN_REVIEW1.md:97-102`) gives each class a flow move, an exploit and a status setup.
+Flow runs on stances, which timeline turns off (`kits/rpg/crates/rpgkit_rules/src/ruleset.rs:365`); only `opportunist` and
+`tl_hamstring_cut` carry `exploit` (`skills.json:1400,1501`). G5 is done, so the dependency is met. Row text: "Ashlands classes,
+classic ruleset: exploit and status setups across classes, flow only where stances run." The new campaign's skills stay with
+CAST1. Lane design, then asset. Question 1. Touches: a new spec, `skills.json` via `aegis content`. Spec pointer:
+`docs/specs/CLEANUP.md#CLN-68`.
+
+### CLN-69
+
+KEEP1 (`docs/TASKS.md:61`). The pitch uses flags and shop stock (`DESIGN_REVIEW1.md:135-140`), but "hub facilities with levels" is
+now a kit shape (`lore.md:13`) and only the bunk project is planned before Act 2 (`lore.md:57`). No facility code exists in the
+kit. Gold stays an Ashlands goal; the new worlds have none (`docs/HISTORY.md:74`). Row text: "Warden Keep upgrades as Ashlands
+data on the kit's hub facilities; spec after those exist." Lane design; layer game. Depends on: the kit's hub facilities (no
+row yet). Spec pointer: `docs/specs/CLEANUP.md#CLN-69`.
+
+### CLN-70
+
+DIFF1 (`docs/TASKS.md:62`). The pitch (`DESIGN_REVIEW1.md:149-155`) has "Hard: injuries on": the Ashlands reject injuries, and
+`wounded` is set by a world's roster rule, not by difficulty (`docs/HISTORY.md:37,85,116`). Its "while BAL3 finishes" is stale:
+BAL3 is done. The level offset and elite chance speak only of Ashlands mobs. Row text: "Difficulty options per ruleset: what a
+level means on authored timeline fights, Ironman; no difficulty changes the injury rule." Lane design; layer game. Touches: a new
+spec. Spec pointer: `docs/specs/CLEANUP.md#CLN-70`.
+
+### Later pass: questions for the user
+
+1. **More classic balance work?** ASHPACE1, PACE1-A, -S, -B, LEVERS1, COMBO-A2 and DESERT1 serve the Ashlands only. Options: (a) keep
+   them in Later as rewritten; (b) keep them but start none until the Ashlands maps come after the slice; (c) retire the balance
+   rows. Recommended: b; it costs nothing and decides nothing early.
+2. **Battle chips earlier?** The slice's fights have a guest, an enrage and an escape count (CLN-56). Move the merged OBJ1-U to M2
+   after VISCLAR1? Recommended: yes, with the morale words staying in the same row since they are small.
+3. **DRAG1:** redo the list (CLN-60), or pick now from C5 (party roster) and C6 (copy a save)? Recommended: redo after INPUT1-MB.
+4. **Quest card place:** the legend holds the top right. Options: under the legend, or top left under the bar. Recommended: decide
+   at the region map's redesign.
+5. **Right click on a talk:** does it count as a one-time screen? Recommended: an ordinary NPC talk stays closable (it can be
+   reopened at once); a talk that cannot be reopened takes only its button.
+
 ## Pass 3: Godot parity off, classic as data, code bloat (2026-11-01, develop at 4efb30c)
 
 Confirmed by the user 2026-11-01, all as recommended (decision "Godot parity retired and cleanup pass 3 answers"); rows CLN-36 to CLN-53 in docs/TASKS.md.
