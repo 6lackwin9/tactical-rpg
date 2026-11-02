@@ -142,6 +142,7 @@ Never delete or rewrite entries. When something is replaced, add a row with the 
 | 2026-11-02 | A tile variant per cell for ground | not adopted: one large seamless texture sampled by art pixel has no cell edge at all. |
 | 2026-11-02 | Averaging a texture with its rotations to remove its direction | fallback only: it cancels the angle but adds static-like grain; the user preferred regenerating the texture. |
 | 2026-11-02 | Region `floor` over `shallow_water` corner pieces; LOOK1 Q9 "no new ground kinds" for region maps | dropped: the user asked for mixed grounds and natural blends (REGIONGROUND1). |
+| 2026-11-02 | Ornate frame arms cut from one drawn corner (`corner_arm`, limits, `corner_elbow`, `corner_art`, `corner_splice`; the first corner sheet) | retired: the art could not be centred or stretched along an edge, after many rounds; replaced by a kit drawn for the job (decision "Ornate frame kit"). The first sheet stays in `art_src`. |
 
 New rows go at the end of the table above (append-only); this section stays below it.
 
