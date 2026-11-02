@@ -35,6 +35,8 @@ pub struct Options {
     pub font: PathBuf,
     /// The agent link's TCP port.
     pub port: u16,
+    /// The window's icon: a PNG path over the asset layers ("" none; ICON1, `crate::icon`).
+    pub icon: String,
 }
 
 struct Shell<G> {
@@ -1163,14 +1165,24 @@ impl<G: Context> ApplicationHandler for App<G> {
             return;
         }
         let attrs = Window::default_attributes().with_title(self.options.title.as_str()).with_inner_size(winit::dpi::LogicalSize::new(1280, 720)).with_min_inner_size(winit::dpi::LogicalSize::new(640, 360));
+        let (cx, stack) = self.start.take().expect("the shell starts once");
+        let (attrs, icon_notice) = match crate::icon::window_icons(cx.art.layers(), &self.options.icon) {
+            Ok(Some(icons)) => {
+                #[cfg(windows)]
+                let attrs = winit::platform::windows::WindowAttributesExtWindows::with_taskbar_icon(attrs, Some(icons.taskbar));
+                (attrs.with_window_icon(Some(icons.window)), None)
+            }
+            Ok(None) => (attrs, None),
+            Err(notice) => (attrs, Some(notice)),
+        };
         let window = Arc::new(el.create_window(attrs).expect("window"));
         let size = window.inner_size();
         let (pw, ph) = (size.width.max(1), size.height.max(1));
         let pixels = Pixels::new(pw, ph, SurfaceTexture::new(pw, ph, window.clone())).expect("pixels");
         let font_bytes = std::fs::read(&self.options.font).unwrap_or_else(|e| panic!("{}: {e}", self.options.font.display()));
-        let (cx, stack) = self.start.take().expect("the shell starts once");
         let gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
         let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), text_rows: false, drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
+        shell.cx.notice.extend(icon_notice);
         let port = self.options.port;
         self.bridge = bridge::start(port, self.proxy.clone());
         if self.bridge.is_none() {

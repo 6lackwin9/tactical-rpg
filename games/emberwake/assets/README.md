@@ -43,7 +43,8 @@ Tree (section 3 of the spec; a test keeps every file on these patterns):
   fire goes on it as an effects layer, never into the picture), `ui/logo_title.png` (the 1246 x 325 master, an unscaled
   copy of `art_src/title_logo_final.png`, which the menu sizes to the window: averaged down, enlarged above about 3393 px
   of window width), `ui/logo_crest.png` (963 x 963, crest
-  B keyed from its ground, the typeset fallback's crest), and for LOOK1-M2's story cards, not drawn yet,
+  B keyed from its ground, the typeset fallback's crest; ICON1: also the window icon, `game.json` `icon`, and the source
+  of the `.exe` icon, `tools/game_icon.py` writing `emberwake_gui/res/emberwake.ico`: rerun it when the crest changes), and for LOOK1-M2's story cards, not drawn yet,
   `ui/banner_full.png` (1329 x 243, take 1 of `art_src/card_banner_gen1793616575_*.png` with its finials) and
   `ui/banner_bar.png` (716 x 152, the plain middle of take 2, opaque, no finials; it tiles when every other copy is
   mirrored, its ends cut on the arches' axes).

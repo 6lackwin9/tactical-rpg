@@ -2,6 +2,7 @@
 	"id": "emberwake",
 	"title": "Emberwake",
 	"subtitle": "A Scarlet Lullaby",
+	"icon": "ui/logo_crest.png",
 	"version": "0.1.0",
 	"kit": "rpg",
 	"engine": ">=0.1",

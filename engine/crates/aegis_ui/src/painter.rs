@@ -260,7 +260,7 @@ fn fit_cell(img: &Image, src: (i32, i32, i32, i32), dst: (i32, i32), tile_x: boo
 }
 
 /// An unsharp mask of strength `amount` on the colours (a 3 x 3 blur; the alpha stays).
-fn sharpen(img: &mut Image, amount: f32) {
+pub(crate) fn sharpen(img: &mut Image, amount: f32) {
     if amount <= 0.0 {
         return;
     }

@@ -27,6 +27,7 @@ pub mod focus;
 pub mod frame_tuner;
 pub mod fx;
 pub mod ground;
+pub mod icon;
 pub mod jpeg;
 pub mod notes;
 pub mod painter;
