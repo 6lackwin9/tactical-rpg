@@ -13,14 +13,17 @@
 //! opens as the conversation when nothing is open (T2); a reply whose `rest` would end the run asks first (W3); the
 //! log lines name the purse (P1) and a retreat (R4). MAPNAV1-U: edge arrows toward the legend's markers out of view, a
 //! legend row or an arrow pans the camera there (a second row click walks), a tile click walks or says it can't, and
-//! Q or a click on the leader passes the lead (`GameState::explore_leader`, saved as `explore.leader`).
+//! Q or a click on the leader passes the lead (`GameState::explore_leader`, saved as `explore.leader`). EXPLOREVIEW1:
+//! the debug setting `region_view` draws the map square (as above) or tilted (`mapview.rs`: squashed ground, water lips,
+//! walls as blocks in one feet-sorted pass, click areas in draw order); F7 flips it in a debug build.
 
 use aegis_core::assets::{ClipPlayer, Facing, View};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::hud::{hud_bar, hud_key, hud_open, purse_word, Hud, PurseWord, HUD_H};
 use crate::runover::days as day_count;
 use crate::music;
-use crate::props::{Item, PropDraw, BOX_EDGE, BOX_FACE, BOX_FACE_H, BOX_FILL};
+use crate::mapview::{self, MapGeom, CELL_W, FACE_H, SPRITE};
+use crate::props::{Block, Item, PropDraw, ART_TILE, BOX_EDGE, BOX_FACE, BOX_FACE_H, BOX_FILL};
 use crate::board::{BoardAct, BoardPane};
 use crate::portraits::Faces;
 use crate::shop::{ShopAct, ShopPane};
@@ -35,11 +38,6 @@ use emberwake_world::quest;
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
-/// A map tile (logical px; 32 px at 1280 wide, MAPVIEW1).
-const TILE: i32 = 16;
-/// A character sprite on the map (spec PLAYUI1 2.4): 1.5 tiles tall (the 48 px frame at 24 logical px), standing
-/// bottom-centred on its tile.
-const SPRITE: i32 = TILE * 3 / 2;
 /// The leader keeps walking this long (animation ms) after a step, so key steps and walked paths play `walk` without
 /// a stop between tiles.
 const WALK_LINGER_MS: f64 = 130.0;
@@ -101,8 +99,8 @@ pub struct RegionMap {
     next_walk: Instant,
     /// WALK2: a movement key pressed on this map is held: the draw steps every `STEP_MS` until it is let go.
     hold: bool,
-    /// Map geometry of the last frame: (origin x, origin y, tile size).
-    geo: (i32, i32, i32),
+    /// Map geometry of the last frame.
+    geo: MapGeom,
     /// The ticker shows the last `LOG_OPEN` events (else only the latest).
     log_open: bool,
     /// The conversation node shown last ("character/node"): a new node starts its line and replies scrolled to the top.
@@ -226,7 +224,7 @@ impl RegionMap {
             walk_target: None,
             next_walk: Instant::now(),
             hold: false,
-            geo: (0, 0, 1),
+            geo: MapGeom::default(),
             log_open: false,
             talk_node: String::new(),
             anim_ms: 0.0,
@@ -542,9 +540,7 @@ impl RegionMap {
         let d = cx.data.clone();
         match a {
             RAct::MapClick => {
-                let (ox, oy, ts) = self.geo;
-                let tx = ((self.mouse.0 - ox) as f32 / ts as f32).floor() as i64;
-                let ty = ((self.mouse.1 - oy) as f32 / ts as f32).floor() as i64;
+                let (tx, ty) = self.geo.cell_at(self.mouse.0, self.mouse.1);
                 // MAPNAV1-U: a tile no open path reaches (a wall, water, a tile walled off) says so
                 match self.path_to(cx, (tx, ty), false) {
                     Some(path) => {
@@ -752,38 +748,51 @@ impl Screen<GameCx> for RegionMap {
         // MAPNAV1-U: (id, name, tile) of the legend's markers out of view (their edge arrows follow the legend)
         let mut off_view: Vec<(String, String, Rect)> = Vec::new();
         if !t.is_empty() {
-            let ts = TILE;
+            // EXPLOREVIEW1: the view this frame (a switch shows on the next frame)
+            let view = mapview::View::of_setting(&cx.settings.v["region_view"]);
+            let tilted = view == mapview::View::Tilted;
+            let ts = CELL_W;
             // MAPNAV1-U: outside a talk the camera looks at the panned tile (a legend row or an edge arrow) when set
             let (one, other) = match (talk_view.as_ref(), self.pan) {
                 (Some(v), _) => (gs.position, self.speaker_tile(cx, v).unwrap_or(gs.position)),
                 (None, Some(p)) => (p, p),
                 (None, None) => (gs.position, gs.position),
             };
-            let ox = focus_area.x + focus_area.w / 2 - ((one.0 + other.0) as i32 * ts + ts) / 2;
-            let oy = focus_area.y + focus_area.h / 2 - ((one.1 + other.1) as i32 * ts + ts) / 2;
-            self.geo = (ox, oy, ts);
+            let geo = MapGeom::centred(view, focus_area, one, other);
+            self.geo = geo;
             // ASSETORG2 4.5: the world lineage's tile sets, child first, then common
             let mut lineage = d.lineage(&gs.world_id);
             lineage.reverse();
             let sets = emberwake_content::art::region_sets(&lineage, "");
             let set_refs: Vec<&str> = sets.iter().map(String::as_str).collect();
             ui.push_clip(map_area);
-            let (x0, x1) = ((map_area.x - ox).div_euclid(ts), (map_area.x + map_area.w - ox - 1).div_euclid(ts));
-            let (y0, y1) = ((map_area.y - oy).div_euclid(ts), (map_area.y + map_area.h - oy - 1).div_euclid(ts));
+            let (x0, x1) = geo.cols(map_area);
+            let (y0, y1) = geo.rows(map_area);
+            // the art's size: the tile at the cell (square), or the 32 x 32 art the painter squashes by nearest
+            // sampling into the 16 x 12 cell (tilted, EXPLOREVIEW1 3.2 until LOOK1 makes 4:3 region art)
+            let art_size = if tilted { ART_TILE } else { ts };
+            // render only: off the map is the wall (`#`), nothing walkable
+            let ch_at = |x: i32, y: i32| explore::tile(t, x as i64, y as i64).unwrap_or('#');
             for y in y0..=y1 {
                 for x in x0..=x1 {
-                    let r = Rect::new(ox + x * ts, oy + y * ts, ts, ts);
-                    // render only: off the map is the wall (`#`), nothing walkable
-                    let ch = explore::tile(t, x as i64, y as i64).unwrap_or('#');
+                    let r = geo.cell(x, y);
+                    let ch = ch_at(x, y);
+                    // tilted: a wall is a block in the sorted pass below
+                    if tilted && ch == '#' {
+                        continue;
+                    }
                     let tile = emberwake_content::art::region_tile(ch);
-                    match tile.and_then(|t| cx.art.tile_in(&set_refs, t, x, y, ts)) {
+                    match tile.and_then(|t| cx.art.tile_in(&set_refs, t, x, y, art_size)) {
                         Some(img) => ui.p.image(img, r),
                         None => ui.p.fill(r, match ch {
                             '.' => rgb(70, 90, 64),
-                            '#' => rgb(40, 60, 50),
+                            '#' => WALL_FILL,
                             '~' => rgb(40, 90, 100),
                             _ => rgb(20, 20, 24),
                         }),
+                    }
+                    if tilted && ch == '~' {
+                        draw_lips(&mut ui, r, ch_at(x, y - 1) != '~', ch_at(x, y + 1) != '~');
                     }
                 }
             }
@@ -792,7 +801,7 @@ impl Screen<GameCx> for RegionMap {
             }
             // PROPS1 4.2-4.6: the ground props over the tiles; the standing props go into the sorted pass below. Props
             // are art only: no widget, and walking still comes from `rows`
-            let props = crate::props::layout(t, &lineage, (ox, oy), ts, map_area, |dirs, variant, x, y| {
+            let props = crate::props::layout(t, &lineage, (geo.ox, geo.oy), geo.cell_size(), map_area, |dirs, variant, x, y| {
                 let rel = cx.art.pick(dirs, variant, x, y)?;
                 let size = cx.art.size_of(&rel)?;
                 Some((rel, size))
@@ -808,8 +817,9 @@ impl Screen<GameCx> for RegionMap {
             let legend_hover = self.legend_hover(live);
             // (marker, name, the name sits over a badge)
             let mut labels: Vec<(Rect, String, bool)> = Vec::new();
-            // the markers to draw in the sorted pass (their widgets and names are taken here)
+            // the markers to draw in the sorted pass (their click areas and names are taken here)
             let mut marks: Vec<MarkDraw> = Vec::new();
+            let mut hits: Vec<MarkHit> = Vec::new();
             for raw in json::aget(loc, "markers") {
                 let m = explore::marker_full(json::dict(raw));
                 let view = explore::marker_view(&d, &gs, loc, &m);
@@ -821,7 +831,7 @@ impl Screen<GameCx> for RegionMap {
                 if at.0 < 0 {
                     continue;
                 }
-                let r = Rect::new(ox + at.0 as i32 * ts, oy + at.1 as i32 * ts, ts, ts);
+                let r = geo.cell_of(at);
                 let kind = s(&m, "kind");
                 let id = s(&m, "id");
                 let label = s(&view, "label");
@@ -835,7 +845,8 @@ impl Screen<GameCx> for RegionMap {
                 }
                 let mut services = Vec::new();
                 let mut npc = None;
-                let mut top = r.y;
+                // the drawn top: the icon standing on the cell (the cell itself in the square view), else the sprite's
+                let mut top = mapview::icon_rect(r);
                 if kind == "npc" {
                     let who = d.resolve(&gs.world_id, "characters", &s(&m, "character"));
                     services = explore::npc_services(&d, &gs, &s(who, "_qid"));
@@ -843,7 +854,7 @@ impl Screen<GameCx> for RegionMap {
                     // 2.4: the person's body, else its class body (the chain), else today's token
                     let sprite = cx.art.first_body(&emberwake_content::art::body_chain(&body));
                     if sprite.is_some() {
-                        top = sprite_rect(r).y;
+                        top = mapview::sprite_rect(r);
                     }
                     // facing the party while in the conversation (four ways, DIR4-M: up or down when the party is
                     // more above or below, keeping the sheets' right); else the sheets' right
@@ -851,38 +862,66 @@ impl Screen<GameCx> for RegionMap {
                     npc = Some(NpcDraw { body, sprite, palette, initial: s(who, "name").chars().next().unwrap_or('?').to_string(), face, offset: idle_offset(&s(who, "id")) });
                 }
                 // 2.2: the first service is the badge (turn_in and offer are today's `ready` and `quest`)
-                marks.push(MarkDraw { id: id.clone(), r, top, kind: kind.clone(), state: state.clone(), npc, badge: services.first().copied() });
+                marks.push(MarkDraw { id: id.clone(), r, top: top.y, kind: kind.clone(), state: state.clone(), npc, badge: services.first().copied() });
+                // EXPLOREVIEW1 3.5: a person's click area is their cell, so the cell north of them still walks (a tall
+                // sprite's head takes no click); tilted, an icon's is the cell and the icon standing on it
+                let hit = if tilted && kind != "npc" { mapview::union(r, top) } else { r };
+                let name_rect = Rect::new(r.x, top.y, r.w, r.h);
                 // 2.3: names always (people and exits, MAPREAD1), or on hover: the marker or its legend row under the
-                // pointer, or the marker the party faces
-                let named = if names_always { kind == "npc" || kind == "exit" } else { (!modal && ui.hover(r)) || legend_hover.as_deref() == Some(id.as_str()) || at == ahead };
+                // pointer, or the marker the party faces (tilted: the hovered one is the front-most, below)
+                let named = if names_always { kind == "npc" || kind == "exit" } else { (!modal && !tilted && ui.hover(r)) || legend_hover.as_deref() == Some(id.as_str()) || at == ahead };
                 if named {
-                    labels.push((Rect::new(r.x, top, r.w, r.h), label.clone(), !services.is_empty()));
+                    labels.push((name_rect, label.clone(), !services.is_empty()));
                 }
-                if !modal {
-                    let mut t = tip(&label, &s(&view, "verb"));
-                    if !services.is_empty() {
-                        t.push((services_text(&services), INFO));
+                let mut t = tip(&label, &s(&view, "verb"));
+                if !services.is_empty() {
+                    t.push((services_text(&services), INFO));
+                }
+                hits.push(MarkHit { id, label, hit, foot: r.y + r.h, tip: t, named, name_rect, badge: !services.is_empty() });
+            }
+            // tilted: the front-most click area under the pointer names its marker (click areas overlap)
+            if tilted && !names_always && !modal {
+                if let Some(h) = front_hit(&hits, |r| ui.hover(r)).filter(|h| !h.named) {
+                    labels.push((h.name_rect, h.label.clone(), h.badge));
+                }
+            }
+            // EXPLOREVIEW1 3.3: tilted, the walls (also those past the map's edge) are blocks in the sorted pass; the row
+            // above the area can still shade the first row
+            let mut blocks: Vec<Block> = Vec::new();
+            if tilted {
+                for y in (y0 - 1)..=y1 {
+                    for x in x0..=x1 {
+                        if ch_at(x, y) != '#' {
+                            continue;
+                        }
+                        let cell = geo.cell(x, y);
+                        let face = ch_at(x, y + 1) != '#';
+                        let rect = mapview::block_rect(cell, face);
+                        let seen = Rect::new(rect.x, rect.y, rect.w, rect.h + if face { mapview::SHADE_H } else { 0 }).intersect(map_area);
+                        if seen.w > 0 && seen.h > 0 {
+                            blocks.push(Block { x, y, cell, rect, face });
+                        }
                     }
-                    ui.push(format!("marker.{id}"), "marker", label.clone(), r, true, false, Some(RAct::Marker(id)), t);
                 }
             }
             // the sorted pass (PROPS1 4.4): standing props, markers and the party back to front by their feet (the
             // sprites stand on their tiles, so lower rows cover upper ones, spec PLAYUI1 2.4)
-            let pr = Rect::new(ox + gs.position.0 as i32 * ts, oy + gs.position.1 as i32 * ts, ts, ts);
-            let (pcx, pcy) = (pr.x as f32 + ts as f32 / 2.0, pr.y as f32 + ts as f32 / 2.0);
+            let pr = geo.cell_of(gs.position);
+            let (pcx, pcy) = (pr.x as f32 + pr.w as f32 / 2.0, pr.y as f32 + pr.h as f32 / 2.0);
             // 2.4: the leader (the first active member): `walk` while moving, else `idle`
             let (leader_body, leader_palette) = leader_art(cx);
             let leader_sprite = cx.art.first_body(&emberwake_content::art::body_chain(&leader_body));
             let base = if self.moving() { "walk" } else { "idle" };
             self.leader.set_base(base, now);
-            let drawn_party = if leader_sprite.is_some() { sprite_rect(pr) } else { pr };
-            let order = crate::props::sorted(&props, &marks.iter().map(|m| m.r).collect::<Vec<_>>(), drawn_party);
+            let drawn_party = if leader_sprite.is_some() { mapview::sprite_rect(pr) } else { pr };
+            let order = crate::props::sorted(&props, &blocks, &marks.iter().map(|m| m.r).collect::<Vec<_>>(), drawn_party);
             let idle = ClipPlayer::default();
             let mut sprites = Vec::new();
             let mut party_frame = None;
             for item in &order {
                 match *item {
                     Item::Prop(i) => draw_prop(&mut ui, cx, &props[i]),
+                    Item::Block(i) => draw_block(&mut ui, cx, &blocks[i], &set_refs, &sets, &ch_at),
                     Item::Marker(i) => {
                         if let Some(sp) = draw_marker(&mut ui, cx, &marks[i], ts, &idle, now) {
                             sprites.push(sp.info(&format!("marker.{}", marks[i].id)));
@@ -903,8 +942,9 @@ impl Screen<GameCx> for RegionMap {
                     }
                 }
             }
-            // 4.5: a standing prop drawn over the party: its outline over the props (the sprite's silhouette outline)
-            if crate::props::party_hidden(&props, &order, drawn_party) {
+            // 4.5: a standing prop or a wall block drawn over the party: its outline over them (the sprite's silhouette
+            // outline)
+            if crate::props::party_hidden(&props, &blocks, &order, drawn_party) {
                 match party_frame.as_ref().and_then(|sp| cx.art.body_outline(&sp.body, &leader_palette, &sp.clip, sp.frame, sp.px, crate::props::PARTY, sp.flip)) {
                     Some(o) => ui.p.image(o, Rect::new(drawn_party.x - 1, drawn_party.y - 1, drawn_party.w + 2, drawn_party.h + 2)),
                     None => ui.p.circle(pcx, pcy, ts as f32 * 0.3, crate::props::PARTY),
@@ -926,7 +966,20 @@ impl Screen<GameCx> for RegionMap {
             let lead_name = gs.party.member(&lead).map(|m| crate::hub::member_name(cx, m)).unwrap_or_default();
             let can_pass = gs.leader_choices(standing(&d, &gs.world_id)).len() > 1;
             let lead_tip = tip(&format!("{lead_name} leads"), if can_pass { "Q or click: the next member leads." } else { "No one else can lead." });
+            // EXPLOREVIEW1 3.5: the click areas in feet order, front-most last (square: the markers in list order, then
+            // the party, on their cells); a click takes the last one under the pointer
+            let party_foot = pr.y + pr.h;
+            if tilted {
+                sort_hits(&mut hits);
+            }
+            let (behind, front): (Vec<MarkHit>, Vec<MarkHit>) = hits.into_iter().partition(|h| !tilted || h.foot <= party_foot);
+            if !modal {
+                push_hits(&mut ui, behind);
+            }
             ui.push("party", "party", format!("Party at {}, {}", gs.position.0, gs.position.1), pr, true, false, (!modal && can_pass).then_some(RAct::Lead), lead_tip);
+            if !modal {
+                push_hits(&mut ui, front);
+            }
             // the names over everything on the map, kept inside the map area
             for (r, label, badge) in labels {
                 let w = ui.p.text_w(&label, SMALL);
@@ -1065,6 +1118,13 @@ impl Screen<GameCx> for RegionMap {
     }
 
     fn key(&mut self, cx: &mut Cx, k: Key) {
+        // EXPLOREVIEW1: a debug build's F7 flips the region view live, whatever is open
+        if k == Key::Fn(7) {
+            if cfg!(debug_assertions) {
+                flip_view(cx);
+            }
+            return;
+        }
         if let Some(r) = self.runner.as_ref().filter(|r| !r.closed) {
             if self.pending.is_some() {
                 if k == Key::Enter {
@@ -1137,7 +1197,7 @@ impl Screen<GameCx> for RegionMap {
             "shop": if self.shop_qid().is_empty() { Value::Null } else { self.shop.state() }, "board": Some(self.board_qid()).filter(|b| !b.is_empty()),
             "board_pane": if self.board_qid().is_empty() { Value::Null } else { self.board.state() }, "sprites": self.sprites,
             // MAPNAV1-U: who leads, the edge arrows of the last frame and the tile the camera looks at (null: the party)
-            "leader": leader_id(cx), "arrows": self.arrows, "pan": self.pan.filter(|_| self.pan_loc == gs.location_id).map(|p| json!([p.0, p.1])),
+            "view": mapview::View::of_setting(&cx.settings.v["region_view"]).name(), "leader": leader_id(cx), "arrows": self.arrows, "pan": self.pan.filter(|_| self.pan_loc == gs.location_id).map(|p| json!([p.0, p.1])),
             // PORTRAITFX1 4.11: the speaker's portrait while the talk box shows (the shop or the board hides it)
             "portraits": if self.talking() && self.shop_qid().is_empty() && self.board_qid().is_empty() { self.faces.state() } else { json!([]) }})
     }
@@ -1369,6 +1429,45 @@ struct MarkDraw {
     badge: Option<&'static str>,
 }
 
+/// A marker's click area and name, taken before the sorted pass (EXPLOREVIEW1 3.5): its id, label, the area, its feet,
+/// the tip, whether a name already shows, where the name sits and whether it sits over a badge.
+struct MarkHit {
+    id: String,
+    label: String,
+    hit: Rect,
+    foot: i32,
+    tip: Vec<(String, Rgba)>,
+    named: bool,
+    name_rect: Rect,
+    badge: bool,
+}
+
+/// The tilted view's click order, back to front: the draw order (`props::sorted`) by feet, then left edge.
+fn sort_hits(hits: &mut [MarkHit]) {
+    hits.sort_by_key(|h| (h.foot, h.hit.x));
+}
+
+/// The click area drawn in front among those `over` accepts (the last of `sort_hits`' order).
+fn front_hit(hits: &[MarkHit], over: impl Fn(Rect) -> bool) -> Option<&MarkHit> {
+    hits.iter().filter(|h| over(h.hit)).max_by_key(|h| (h.foot, h.hit.x))
+}
+
+/// The markers' click areas, in the order given.
+fn push_hits(ui: &mut Ui<RAct>, hits: Vec<MarkHit>) {
+    for h in hits {
+        ui.push(format!("marker.{}", h.id), "marker", h.label, h.hit, true, false, Some(RAct::Marker(h.id)), h.tip);
+    }
+}
+
+/// The other region view, saved to the settings like the Scene Runner's select (EXPLOREVIEW1 Q2, the debug build's F7).
+fn flip_view(cx: &mut Cx) {
+    let to = mapview::View::of_setting(&cx.settings.v["region_view"]).flipped();
+    cx.settings.v["region_view"] = json!(to.name());
+    if let Err(e) = cx.settings.save() {
+        show_errors(cx, vec![format!("Settings could not be saved: {e}")]);
+    }
+}
+
 /// A person's art on the map (PLAYUI1-R): the body key, the first of its chain that loads (None: today's token), the
 /// palette, the initial of the token stand-in, the facing and the person's idle offset (`idle_offset`).
 struct NpcDraw {
@@ -1457,11 +1556,6 @@ fn clear_of(area: Rect, at: (f32, f32), panes: &[Rect]) -> (f32, f32) {
     options.into_iter().filter(|p| inside(*p) && !panes.iter().any(|r| meets(*p, r))).min_by(|a, b| dist(a).total_cmp(&dist(b))).unwrap_or(at)
 }
 
-/// The rect of a character sprite on tile `r` (spec PLAYUI1 2.4): `SPRITE` square, bottom-centred on the tile.
-fn sprite_rect(r: Rect) -> Rect {
-    Rect::new(r.x + (r.w - SPRITE) / 2, r.y + r.h - SPRITE, SPRITE, SPRITE)
-}
-
 /// MAPNAV1-U: whether a member can lead on the maps in world `world`: not downed (HP lost below the member's max HP;
 /// benched and departed members are not active, so `leader_choices` never sees them).
 pub(crate) fn standing<'a>(d: &'a emberwake_world::Data, world: &str) -> impl Fn(&emberwake_world::state::UnitState) -> bool + 'a {
@@ -1507,7 +1601,7 @@ fn leader_art(cx: &Cx) -> (String, String) {
 /// today's token).
 #[allow(clippy::too_many_arguments)]
 fn draw_sprite(ui: &mut Ui<RAct>, cx: &mut Cx, body: &str, palette: &str, player: &ClipPlayer, now: u64, face: Facing, r: Rect, foot: Rgba) -> Option<SpriteDrawn> {
-    let sr = sprite_rect(r);
+    let sr = mapview::sprite_rect(r);
     let px = (SPRITE as f32 * ui.p.v.s).round().max(1.0) as i32;
     let (f, img) = cx.art.played_facing(body, palette, player, now, px, face)?;
     let flip = face.mirrors(&f);
@@ -1519,13 +1613,13 @@ fn draw_sprite(ui: &mut Ui<RAct>, cx: &mut Cx, body: &str, palette: &str, player
 }
 
 /// A marker on its tile: a person's sprite (PLAYUI1-R; their ring and token, or initial, without a body), else the
-/// marker icon (or its drawn stand-in). The person's sprite as drawn.
+/// marker icon (or its drawn stand-in), standing on the cell (EXPLOREVIEW1 3.5). The person's sprite as drawn.
 fn draw_marker(ui: &mut Ui<RAct>, cx: &mut Cx, m: &MarkDraw, ts: i32, idle: &ClipPlayer, now: u64) -> Option<SpriteDrawn> {
-    let r = m.r;
+    let r = mapview::icon_rect(m.r);
     let (cx_, cy_) = (r.x as f32 + ts as f32 / 2.0, r.y as f32 + ts as f32 / 2.0);
     if let Some(n) = &m.npc {
         let (col, _) = RegionMap::marker_style(&m.kind, &m.state);
-        if let Some(sp) = n.sprite.as_deref().and_then(|b| draw_sprite(ui, cx, b, &n.palette, idle, now + n.offset, n.face, r, col)) {
+        if let Some(sp) = n.sprite.as_deref().and_then(|b| draw_sprite(ui, cx, b, &n.palette, idle, now + n.offset, n.face, m.r, col)) {
             return Some(sp);
         }
         ui.p.circle(cx_, cy_, ts as f32 * 0.42, col);
@@ -1552,8 +1646,8 @@ fn draw_marker(ui: &mut Ui<RAct>, cx: &mut Cx, m: &MarkDraw, ts: i32, idle: &Cli
 const FOOT_ALPHA: u8 = 150;
 
 /// A prop (PROPS1 4.3, 4.6): its art in its drawn rect (mirrored when flipped), one source pixel per screen pixel;
-/// without art a standing prop is a plain block over its footprint (fill, a darker south face, a 1 px edge) and a
-/// ground prop is nothing.
+/// without art a standing prop is a plain block over its footprint (fill, a darker south face, a 1 px edge; tilted,
+/// raised over the footprint with a `FACE_H` face, EXPLOREVIEW1 3.4) and a ground prop is nothing.
 fn draw_prop(ui: &mut Ui<RAct>, cx: &mut Cx, p: &PropDraw) {
     let (w, h) = ((p.rect.w as f32 * ui.p.v.s).round().max(1.0) as i32, (p.rect.h as f32 * ui.p.v.s).round().max(1.0) as i32);
     let img = match &p.file {
@@ -1570,11 +1664,77 @@ fn draw_prop(ui: &mut Ui<RAct>, cx: &mut Cx, p: &PropDraw) {
     }
     let r = p.rect;
     ui.p.fill(r, BOX_FILL);
-    let face = (r.h / 4).clamp(1, BOX_FACE_H);
+    let face = if p.file.is_none() && r.y < p.foot.y { FACE_H } else { (r.h / 4).clamp(1, BOX_FACE_H) };
     ui.p.fill(Rect::new(r.x, r.y + r.h - face, r.w, face), BOX_FACE);
     for edge in [Rect::new(r.x, r.y, r.w, 1), Rect::new(r.x, r.y + r.h - 1, r.w, 1), Rect::new(r.x, r.y, 1, r.h), Rect::new(r.x + r.w - 1, r.y, 1, r.h)] {
         ui.p.fill(edge, BOX_EDGE);
     }
+}
+
+/// A wall without art.
+const WALL_FILL: Rgba = rgb(40, 60, 50);
+
+/// EXPLOREVIEW1 3.2: a water cell sunken by `LIP_DEPTH`: a band over its top when the cell north is not water, its
+/// bottom row shaded when the cell south is not.
+fn draw_lips(ui: &mut Ui<RAct>, r: Rect, north: bool, south: bool) {
+    if north {
+        ui.p.fill(Rect::new(r.x, r.y, r.w, 1), rgb(118, 116, 62));
+        ui.p.fill(Rect::new(r.x, r.y + 1, r.w, mapview::LIP_DEPTH), rgb(66, 54, 30));
+        ui.p.fill(Rect::new(r.x, r.y + 1 + mapview::LIP_DEPTH, r.w, 1), rgba(60, 40, 26, 110));
+    }
+    if south {
+        ui.p.fill(Rect::new(r.x, r.y + r.h - 1, r.w, 1), rgba(48, 34, 22, 120));
+    }
+}
+
+/// EXPLOREVIEW1 3.2: a wall block: its cap (the wall tile, squashed and lifted), its south face when the cell south is
+/// open (`wall_face` from the region sets, then the battle's stage set, else the cap's top rows at 75 %) with its top
+/// line and the shade on the cell south, the cap's highlight and side lines where the neighbour is not a wall.
+fn draw_block(ui: &mut Ui<RAct>, cx: &mut Cx, b: &Block, sets: &[&str], names: &[String], ch_at: &impl Fn(i32, i32) -> char) {
+    let cap = mapview::cap_rect(b.cell);
+    let wall = emberwake_content::art::region_tile('#').unwrap_or("wall");
+    match cx.art.tile_in(sets, wall, b.x, b.y, ART_TILE) {
+        Some(img) => ui.p.image(img, cap),
+        None => ui.p.fill(cap, WALL_FILL),
+    }
+    if b.face {
+        let face = mapview::face_rect(b.cell);
+        let dirs: Vec<String> = names.iter().map(|set| format!("tilesets/{set}/wall_face")).chain(emberwake_content::art::battle_stage_dirs("wall_face", "")).collect();
+        let dirs: Vec<&str> = dirs.iter().map(String::as_str).collect();
+        match cx.art.varied(&dirs, None, b.x, b.y, CELL_W, FACE_H) {
+            Some(img) => ui.p.image(img, face),
+            None => match darkened_cap(cx, sets, wall, b) {
+                Some(img) => ui.p.image(&img, face),
+                None => ui.p.fill(face, rgb(30, 45, 38)),
+            },
+        }
+        ui.p.fill(Rect::new(face.x, face.y, face.w, 1), rgb(24, 24, 30));
+        ui.p.fill(Rect::new(b.cell.x, b.cell.y + b.cell.h, b.cell.w, mapview::SHADE_H), rgba(0, 0, 0, 70));
+    }
+    if ch_at(b.x, b.y - 1) != '#' {
+        ui.p.fill(Rect::new(cap.x, cap.y, cap.w, 1), rgb(170, 172, 186));
+    }
+    let side = rgb(30, 30, 38);
+    if ch_at(b.x - 1, b.y) != '#' {
+        ui.p.fill(Rect::new(cap.x, cap.y, 1, b.rect.h), side);
+    }
+    if ch_at(b.x + 1, b.y) != '#' {
+        ui.p.fill(Rect::new(cap.x + cap.w - 1, cap.y, 1, b.rect.h), side);
+    }
+}
+
+/// The wall face's fallback: the cap's top `FACE_H` rows at 75 % brightness (None: no wall art).
+fn darkened_cap(cx: &mut Cx, sets: &[&str], wall: &str, b: &Block) -> Option<aegis_ui::canvas::Image> {
+    let dirs: Vec<String> = sets.iter().map(|set| format!("tilesets/{set}/{wall}")).collect();
+    let dirs: Vec<&str> = dirs.iter().map(String::as_str).collect();
+    let img = cx.art.varied(&dirs, None, b.x, b.y, CELL_W, mapview::TILTED_H)?;
+    let mut top = img.crop(0, 0, img.w, FACE_H);
+    for (k, v) in top.px.iter_mut().enumerate() {
+        if k % 4 != 3 {
+            *v = (*v as f32 * 0.75).round() as u8;
+        }
+    }
+    Some(top)
 }
 
 /// The legend pane's and the ticker's fill.
@@ -1830,7 +1990,7 @@ mod map_tests {
     /// A text drawn as `marker`'s name: `label` just above the marker's tile (shifted sideways at most to stay inside).
     fn named_above(recs: &[TextRec], label: &str, marker: (i64, i64, i64, i64)) -> bool {
         let (mx, my, mw, _) = marker;
-        recs.iter().any(|r| r.text == label && r.y + r.h <= my as f32 + 2.0 && r.y >= my as f32 - 24.0 && (r.x + r.w / 2.0 - (mx + mw / 2) as f32).abs() <= r.w / 2.0 + TILE as f32)
+        recs.iter().any(|r| r.text == label && r.y + r.h <= my as f32 + 2.0 && r.y >= my as f32 - 24.0 && (r.x + r.w / 2.0 - (mx + mw / 2) as f32).abs() <= r.w / 2.0 + CELL_W as f32)
     }
 
     #[test]
@@ -1845,8 +2005,8 @@ mod map_tests {
         let t = explore::template_of(&cx.data, explore::location(&cx.data, &gs));
         let open = explore::DIRS.into_iter().map(|d| (gs.position.0 + d.0, gs.position.1 + d.1)).find(|p| explore::is_open(t, p.0, p.1));
         if let Some(p) = open {
-            let (ox, oy, ts) = map.geo;
-            let at = (ox + p.0 as i32 * ts + ts / 2, oy + p.1 as i32 * ts + ts / 2);
+            let r = map.geo.cell_of(p);
+            let at = (r.x + r.w / 2, r.y + r.h / 2);
             frame_at(&mut map, &mut cx, &mut g, at);
             assert!(map.click(&mut cx, at), "the map takes the click");
             assert_eq!(map.state(&cx)["walking"], json!(true), "a click next to the party walks there");
@@ -1879,7 +2039,7 @@ mod map_tests {
                 let (px, py, pw, ph) = rect(&widget(&map, "party").expect("the party"));
                 let a = area();
                 let (dx, dy) = ((px + pw / 2) as i32 - (a.x + a.w / 2), (py + ph / 2) as i32 - (a.y + a.h / 2));
-                assert!(dx.abs() <= TILE && dy.abs() <= TILE, "{} at ({x}, {y}): the party is {dx}, {dy} off the centre", s(loc, "id"));
+                assert!(dx.abs() <= CELL_W && dy.abs() <= CELL_W, "{} at ({x}, {y}): the party is {dx}, {dy} off the centre", s(loc, "id"));
                 // the canvas pixel just outside the map, away from the corner the party stands on
                 let ox = if x == 0 { a.x + 2 } else { a.x + a.w - 3 };
                 let oy = if y == 0 { a.y + 20 } else { a.y + a.h - 3 };
@@ -2012,7 +2172,13 @@ mod map_tests {
     /// at every text size: nothing cut, past the canvas, overlapping or out of its control.
     #[test]
     fn the_region_map_reads_clean_at_every_text_size() {
+        // EXPLOREVIEW1: under both region views
+        mapview::VIEWS.iter().for_each(|v| the_region_map_reads_clean_at_every_text_size_in(v.0));
+    }
+
+    fn the_region_map_reads_clean_at_every_text_size_in(view: &str) {
         let (mut cx, mut g) = (game_cx(), gfx());
+        cx.settings.v["region_view"] = json!(view);
         let mut map = RegionMap::new(&mut cx);
         let place = cx.location_name(&cx.gs().world_id.clone(), &cx.gs().location_id.clone());
         for line in ["The party rests (+40 HP).".to_string(), format!("Entered {place}."), "The party makes camp (-3 supplies, +40 HP).".into(), "Found: Healing Draught x2, 15 gold.".into()] {
@@ -2170,15 +2336,20 @@ mod talk_tests {
     /// both the party's and their tile inside the map above the box, at all four text sizes; every box reads clean.
     #[test]
     fn both_speakers_stay_in_view_above_the_box() {
+        // EXPLOREVIEW1: under both region views
+        mapview::VIEWS.iter().for_each(|v| both_speakers_stay_in_view_above_the_box_in(v.0));
+    }
+
+    fn both_speakers_stay_in_view_above_the_box_in(view: &str) {
         let (mut cx, mut g) = (game_cx(), gfx());
+        cx.settings.v["region_view"] = json!(view);
         let n = each_talk(&mut cx, |map, cx, party, npc| {
             for (size, scale) in TEXT_SIZES {
                 let recs = frame(map, cx, &mut g, scale as f32);
                 let (_, by, _, _) = rect(&widget(map, "dialogue").expect("the dialogue box"));
                 let view = Rect::new(0, HUD_H, W, by as i32 - HUD_H);
-                let (ox, oy, ts) = map.geo;
                 for (who, at) in [("party", party), ("speaker", npc)] {
-                    let r = Rect::new(ox + at.0 as i32 * ts, oy + at.1 as i32 * ts, ts, ts);
+                    let r = map.geo.cell_of(at);
                     let inside = r.x >= view.x && r.y >= view.y && r.x + r.w <= view.x + view.w && r.y + r.h <= view.y + view.h;
                     assert!(inside, "{} at {party:?} talking to {npc:?}, {size}: the {who}'s tile {r:?} is not inside {view:?}", cx.gs().location_id);
                 }
@@ -2483,14 +2654,12 @@ mod sprite_tests {
 
     /// The map tile at (`x`, `y`) in the last frame.
     fn tile_rect(map: &RegionMap, at: Pos) -> Rect {
-        let (ox, oy, ts) = map.geo;
-        Rect::new(ox + at.0 as i32 * ts, oy + at.1 as i32 * ts, ts, ts)
+        map.geo.cell_of(at)
     }
 
     /// The tile a sprite stands on: under the middle of its bottom edge.
     fn stands_on(map: &RegionMap, r: Rect) -> Pos {
-        let (ox, oy, ts) = map.geo;
-        (((r.x + r.w / 2 - ox).div_euclid(ts)) as i64, ((r.y + r.h - 1 - oy).div_euclid(ts)) as i64)
+        map.geo.cell_at(r.x + r.w / 2, r.y + r.h - 1)
     }
 
     /// The first active member's body as the art resolves it: their character's body, else the class body.
@@ -2506,7 +2675,13 @@ mod sprite_tests {
     /// 2.4: the leader stands on the party's tile, 1.5 tiles tall and bottom-centred, idle and facing right at the start.
     #[test]
     fn the_leader_stands_on_the_party_tile() {
+        // EXPLOREVIEW1: under both region views
+        mapview::VIEWS.iter().for_each(|v| the_leader_stands_on_the_party_tile_in(v.0));
+    }
+
+    fn the_leader_stands_on_the_party_tile_in(view: &str) {
         let (mut cx, mut g) = (art_cx(), gfx());
+        cx.settings.v["region_view"] = json!(view);
         let mut map = RegionMap::new(&mut cx);
         frame(&mut map, &mut cx, &mut g, 1.0);
         let want = leader_body(&mut cx).expect("the leader has a body");
@@ -2514,7 +2689,7 @@ mod sprite_tests {
         assert_eq!(sp["body"], json!(want));
         assert_eq!((sp["clip"].clone(), sp["left"].clone()), (json!("idle"), json!(false)));
         let (r, t) = (rect_of(&sp), tile_rect(&map, cx.gs().position));
-        assert_eq!((r.w, r.h), (TILE * 3 / 2, TILE * 3 / 2), "1.5 tiles tall");
+        assert_eq!((r.w, r.h), (SPRITE, SPRITE), "1.5 tiles tall");
         assert_eq!((r.y + r.h, r.x + r.w / 2), (t.y + t.h, t.x + t.w / 2), "bottom-centred on the tile");
     }
 
@@ -2630,7 +2805,13 @@ mod sprite_tests {
     /// the same way. The row drawn is the facing's when the body has one, else the side row.
     #[test]
     fn people_are_sprites_and_face_the_party_while_talking() {
+        // EXPLOREVIEW1: under both region views
+        mapview::VIEWS.iter().for_each(|v| people_are_sprites_and_face_the_party_while_talking_in(v.0));
+    }
+
+    fn people_are_sprites_and_face_the_party_while_talking_in(view: &str) {
         let (mut cx, mut g) = (art_cx(), gfx());
+        cx.settings.v["region_view"] = json!(view);
         // (left, right, down or up) conversations checked
         let mut sides = (0, 0, 0);
         let n = super::talk_tests::each_talk(&mut cx, |map, cx, party, npc| {
@@ -2921,8 +3102,7 @@ mod nav_tests {
 
     /// The tile `at`'s rect through the last frame's camera.
     fn tile_rect(map: &RegionMap, at: Pos) -> Rect {
-        let (ox, oy, ts) = map.geo;
-        Rect::new(ox + at.0 as i32 * ts, oy + at.1 as i32 * ts, ts, ts)
+        map.geo.cell_of(at)
     }
 
     /// The legend's markers (present, spent or locked, not a bare point) with a map place: (id, tile).
@@ -2948,7 +3128,13 @@ mod nav_tests {
     /// out of the map area have an arrow; each sits inside the area near its edge and points at its marker.
     #[test]
     fn an_off_screen_marker_gets_an_edge_arrow_and_an_on_screen_one_none() {
+        // EXPLOREVIEW1: under both region views
+        mapview::VIEWS.iter().for_each(|v| an_off_screen_marker_gets_an_edge_arrow_and_an_on_screen_one_none_in(v.0));
+    }
+
+    fn an_off_screen_marker_gets_an_edge_arrow_and_an_on_screen_one_none_in(view: &str) {
         let (mut cx, mut g) = (game_cx(), gfx());
+        cx.settings.v["region_view"] = json!(view);
         cx.settings.v["map_legend_open"] = json!(false);
         let d = cx.data.clone();
         let world = cx.gs().world_id.clone();
@@ -3002,7 +3188,13 @@ mod nav_tests {
     /// arrow pans the same way; Esc first brings the camera back to the party; a second row click walks there.
     #[test]
     fn a_legend_row_or_an_arrow_pans_the_camera_to_its_marker() {
+        // EXPLOREVIEW1: under both region views
+        mapview::VIEWS.iter().for_each(|v| a_legend_row_or_an_arrow_pans_the_camera_to_its_marker_in(v.0));
+    }
+
+    fn a_legend_row_or_an_arrow_pans_the_camera_to_its_marker_in(view: &str) {
         let (mut cx, mut g) = (game_cx(), gfx());
+        cx.settings.v["region_view"] = json!(view);
         let mut map = RegionMap::new(&mut cx);
         frame(&mut map, &mut cx, &mut g, 1.0);
         let pos = cx.gs().position;
@@ -3014,7 +3206,7 @@ mod nav_tests {
         frame(&mut map, &mut cx, &mut g, 1.0);
         let (mx, my, mw, mh) = rect(&map.widgets().into_iter().find(|w| w["id"] == format!("marker.{id}")).expect("the marker in view"));
         let a = area();
-        assert!(((mx + mw / 2) as i32 - (a.x + a.w / 2)).abs() <= TILE && ((my + mh / 2) as i32 - (a.y + a.h / 2)).abs() <= TILE, "the marker at the centre");
+        assert!(((mx + mw / 2) as i32 - (a.x + a.w / 2)).abs() <= CELL_W && ((my + mh / 2) as i32 - (a.y + a.h / 2)).abs() <= CELL_W, "the marker at the centre");
         assert!(!arrow_ids(&map, &cx).contains(&id), "no arrow for a marker in view");
         // a pan never carries into another location
         let here = cx.gs().location_id.clone();
@@ -3071,7 +3263,13 @@ mod nav_tests {
     /// walks nowhere and says so.
     #[test]
     fn a_tile_click_walks_to_a_reachable_tile_and_refuses_a_blocked_one() {
+        // EXPLOREVIEW1: under both region views
+        mapview::VIEWS.iter().for_each(|v| a_tile_click_walks_to_a_reachable_tile_and_refuses_a_blocked_one_in(v.0));
+    }
+
+    fn a_tile_click_walks_to_a_reachable_tile_and_refuses_a_blocked_one_in(view: &str) {
         let (mut cx, mut g) = (game_cx(), gfx());
+        cx.settings.v["region_view"] = json!(view);
         cx.settings.v["map_legend_open"] = json!(false);
         let mut map = RegionMap::new(&mut cx);
         // no random fight in the few steps
@@ -3101,7 +3299,13 @@ mod nav_tests {
     /// button opens on it, and it survives a save and a load.
     #[test]
     fn the_lead_cycles_the_standing_active_members_and_survives_save_and_load() {
+        // EXPLOREVIEW1: under both region views
+        mapview::VIEWS.iter().for_each(|v| the_lead_cycles_the_standing_active_members_and_survives_save_and_load_in(v.0));
+    }
+
+    fn the_lead_cycles_the_standing_active_members_and_survives_save_and_load_in(view: &str) {
         let (mut cx, mut g) = (game_cx(), gfx());
+        cx.settings.v["region_view"] = json!(view);
         let d = cx.data.clone();
         let world = cx.gs().world_id.clone();
         {
@@ -3164,5 +3368,437 @@ mod nav_tests {
         frame(&mut map, &mut cx, &mut g, 1.0);
         assert_eq!(map.state(&cx)["leader"], json!(up[0]));
         assert!(map.click_id(&mut cx, "party").is_err(), "no lead to pass");
+    }
+}
+
+/// EXPLOREVIEW1 section 4 on the drawn map (the geometry's own checks are `mapview.rs`'; MAPNAV1-U, the talk camera, the
+/// sprites and the text audit run under both views above). Sites are found by rule on the world's maps; drawn colours
+/// are the no-art stand-ins or scratch art.
+#[cfg(test)]
+mod view_tests {
+    use super::*;
+    use crate::hud::hud_tests::{frame, game_cx, gfx, rect};
+    use std::path::{Path, PathBuf};
+
+    const WALL_FACE: [u8; 3] = [30, 45, 38];
+    const WALL_CAP: [u8; 3] = [40, 60, 50];
+
+    fn px(g: &Gfx, x: i32, y: i32) -> [u8; 3] {
+        let i = ((y * g.canvas.w + x) * 4) as usize;
+        [g.canvas.px[i], g.canvas.px[i + 1], g.canvas.px[i + 2]]
+    }
+
+    /// Nothing but the map's own tiles stands within two cells of (x, y): no marker, no prop.
+    fn clear(t: &Dict, loc: &Dict, x: i64, y: i64) -> bool {
+        let markers = explore::markers_of(loc).iter().all(|m| {
+            let at = explore::marker_pos(t, m, 0);
+            (at.0 - x).abs() > 2 || (at.1 - y).abs() > 2
+        });
+        let props = json::aget(t, "props").iter().all(|raw| {
+            let p = json::dict(raw);
+            let (px, py) = (json::i(p, "x", 0), json::i(p, "y", 0));
+            let (w, h) = (json::i(p, "w", 1), json::i(p, "h", 1));
+            x + 2 < px || x - 2 >= px + w || y + 2 < py || y - 2 >= py + h
+        });
+        markers && props
+    }
+
+    /// The first (location id, cell) of the world's maps that passes `want(template, x, y)` and stands clear.
+    fn site(cx: &Cx, want: impl Fn(&Dict, i64, i64) -> bool) -> (String, Pos) {
+        let d = cx.data.clone();
+        for loc in d.merged_entries(&cx.gs().world_id, "locations") {
+            let t = explore::template_of(&d, loc);
+            if t.is_empty() {
+                continue;
+            }
+            let (w, h) = explore::size_of(t);
+            for y in 0..h {
+                for x in 0..w {
+                    if want(t, x, y) && clear(t, loc, x, y) {
+                        return (s(loc, "id"), (x, y));
+                    }
+                }
+            }
+        }
+        panic!("no such place on the world's maps");
+    }
+
+    fn ch(t: &Dict, x: i64, y: i64) -> char {
+        explore::tile(t, x, y).unwrap_or('#')
+    }
+
+    /// A frame of location `loc` with the camera on `at` and the party on an open cell four or more cells off it.
+    fn look_at(cx: &mut Cx, g: &mut Gfx, loc: &str, at: Pos) -> RegionMap {
+        cx.gs_mut().location_id = loc.to_string();
+        let mut map = RegionMap::new(cx);
+        let d = cx.data.clone();
+        let t = explore::template_of(&d, explore::location(&d, cx.gs())).clone();
+        let (w, h) = explore::size_of(&t);
+        let far = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|p| explore::is_open(&t, p.0, p.1) && ((p.0 - at.0).abs() >= 4 || (p.1 - at.1).abs() >= 4)).expect("an open cell away");
+        cx.gs_mut().position = far;
+        map.pan = Some(at);
+        map.pan_loc = loc.to_string();
+        cx.settings.v["map_legend_open"] = json!(false);
+        frame(&mut map, cx, g, 1.0);
+        map
+    }
+
+    /// Check 1: with `region_view` missing the frame is the square one, to the pixel and the widget.
+    #[test]
+    fn a_missing_setting_draws_the_square_view() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        assert_eq!(cx.settings.v["region_view"], json!("square"), "the default");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let (pixels, widgets) = (g.canvas.px.clone(), map.widgets());
+        assert_eq!(map.state(&cx)["view"], json!("square"));
+        if let Some(o) = cx.settings.v.as_object_mut() {
+            o.remove("region_view");
+        }
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert!(g.canvas.px == pixels, "the same pixels");
+        assert_eq!(map.widgets(), widgets);
+        assert_eq!(map.state(&cx)["view"], json!("square"));
+        cx.settings.v["region_view"] = json!("tilted");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert!(g.canvas.px != pixels, "the switch shows on the next frame");
+        assert_eq!(map.state(&cx)["view"], json!("tilted"));
+    }
+
+    /// Check 4: a wall with an open cell south shows its face (darker than its cap), with its top line and the shade on
+    /// the cell south; a wall with a wall south shows the next cap there. Square, the same cell is one flat tile.
+    #[test]
+    fn a_wall_shows_a_face_only_over_an_open_cell() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        cx.settings.v["region_view"] = json!("tilted");
+        let (loc, at) = site(&cx, |t, x, y| ch(t, x, y) == '#' && ch(t, x, y + 1) == '.' && ch(t, x, y + 2) == '.' && ch(t, x - 1, y) == '#' && ch(t, x + 1, y) == '#');
+        let map = look_at(&mut cx, &mut g, &loc, at);
+        let c = map.geo.cell_of(at);
+        let mid = c.x + c.w / 2;
+        assert_eq!(px(&g, mid, c.y + 9), WALL_FACE, "the face");
+        assert_eq!(px(&g, mid, c.y), WALL_CAP, "the cap");
+        assert!(px(&g, mid, c.y + 9).iter().sum::<u8>() < px(&g, mid, c.y).iter().sum::<u8>(), "the face is darker than the cap");
+        assert_eq!(px(&g, mid, c.y + mapview::FACE_H), [24, 24, 30], "the line on the face's top edge");
+        let floor = px(&g, mid, c.y + c.h + mapview::SHADE_H + 1);
+        let shaded = px(&g, mid, c.y + c.h);
+        assert!(shaded.iter().map(|v| *v as i32).sum::<i32>() < floor.iter().map(|v| *v as i32).sum::<i32>(), "the shade on the cell south: {shaded:?} over {floor:?}");
+        let (loc2, at2) = site(&cx, |t, x, y| ch(t, x, y) == '#' && ch(t, x, y + 1) == '#' && ch(t, x, y + 2) == '#' && ch(t, x, y - 1) == '#');
+        let map = look_at(&mut cx, &mut g, &loc2, at2);
+        let c2 = map.geo.cell_of(at2);
+        assert_eq!(px(&g, c2.x + c2.w / 2, c2.y + 9), WALL_CAP, "no face: the south wall's cap");
+        cx.settings.v["region_view"] = json!("square");
+        let map = look_at(&mut cx, &mut g, &loc, at);
+        let c = map.geo.cell_of(at);
+        assert_eq!(px(&g, c.x + c.w / 2, c.y + 9), WALL_CAP, "square: no face");
+    }
+
+    /// Scratch art: `rel` in one colour.
+    fn solid(root: &Path, rel: &str, w: u32, h: u32, c: [u8; 3]) {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(path).unwrap()), w, h);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        let row: Vec<u8> = (0..w * h).flat_map(|_| [c[0], c[1], c[2], 255]).collect();
+        enc.write_header().unwrap().write_image_data(&row).unwrap();
+    }
+
+    fn scratch(tag: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("emberwake_mapview_{tag}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    /// 3.2: the face comes from the region sets, then the stage set, else the cap's top rows at 75 %; water gets its lip
+    /// under an open north cell.
+    #[test]
+    fn the_face_art_falls_back_along_its_chain() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        cx.settings.v["region_view"] = json!("tilted");
+        let world = cx.gs().world_id.clone();
+        let (loc, at) = site(&cx, |t, x, y| ch(t, x, y) == '#' && ch(t, x, y + 1) == '.' && ch(t, x - 1, y) == '#' && ch(t, x + 1, y) == '#');
+        let root = scratch("face");
+        let wall = [200, 100, 40];
+        solid(&root, "tilesets/common/wall/v0.png", 32, 32, wall);
+        let mut probe = |cx: &mut Cx, root: &Path| {
+            cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.to_path_buf()]));
+            let map = look_at(cx, &mut g, &loc, at);
+            let c = map.geo.cell_of(at);
+            (px(&g, c.x + c.w / 2, c.y + 9), px(&g, c.x + c.w / 2, c.y))
+        };
+        assert_eq!(probe(&mut cx, &root), ([150, 75, 30], wall), "no face art: the cap's rows at 75 %");
+        solid(&root, "tilesets/common_stage/wall_face/v0.png", 128, 48, [10, 20, 30]);
+        assert_eq!(probe(&mut cx, &root).0, [10, 20, 30], "the stage set's face");
+        solid(&root, &format!("tilesets/{world}/wall_face/v0.png"), 128, 48, [60, 70, 80]);
+        assert_eq!(probe(&mut cx, &root).0, [60, 70, 80], "the region set's face first");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Check 4: the leader north of a wall is behind its cap and gets the outline; on open ground neither.
+    #[test]
+    fn the_leader_north_of_a_wall_is_behind_its_cap_with_an_outline() {
+        let mut cx = game_cx();
+        cx.art = aegis_ui::art::Art::new(Some(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        let mut g = gfx();
+        cx.settings.v["region_view"] = json!("tilted");
+        let open = |t: &Dict, x: i64, y: i64| ch(t, x, y) == '.';
+        let (loc, behind) = site(&cx, |t, x, y| open(t, x, y) && ch(t, x, y + 1) == '#');
+        let (loc2, free) = site(&cx, |t, x, y| (-2..=2).all(|dy| (-2..=2).all(|dx| open(t, x + dx, y + dy))));
+        let mut outline = |cx: &mut Cx, loc: &str, at: Pos| {
+            cx.gs_mut().location_id = loc.to_string();
+            let mut map = RegionMap::new(cx);
+            cx.gs_mut().position = at;
+            frame(&mut map, cx, &mut g, 1.0);
+            let c = map.geo.cell_of(at);
+            let sp = map.state(cx)["sprites"].as_array().and_then(|l| l.iter().find(|v| v["id"] == "party").cloned()).expect("the leader's sprite");
+            let n = |i: usize| sp["rect"][i].as_i64().unwrap_or(0) as i32;
+            assert_eq!((n(1) + n(3), n(0) + n(2) / 2), (c.y + c.h, c.x + c.w / 2), "the sprite stands on the party's cell");
+            let party = [crate::props::PARTY[0], crate::props::PARTY[1], crate::props::PARTY[2]];
+            (n(1) - 1..n(1) + n(3) + 1).flat_map(|y| (n(0) - 1..n(0) + n(2) + 1).map(move |x| (x, y))).filter(|p| px(&g, p.0, p.1) == party).count()
+        };
+        assert!(outline(&mut cx, &loc, behind) > 0, "the outline over the cap");
+        assert_eq!(outline(&mut cx, &loc2, free), 0, "open ground: no outline");
+    }
+
+    /// Check 6: a tilted prop without art is the raised box; the square one stays on its footprint with today's face,
+    /// and so does a prop whose art will not load.
+    #[test]
+    fn a_prop_without_art_draws_the_raised_box() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let foot = Rect::new(100, 100, 160, 72);
+        let p = |rect: Rect| PropDraw { id: "x".into(), rect, foot, file: None, flip: false, ground: false, foot_y: foot.y + foot.h };
+        let mut ui: Ui<RAct> = Ui::new(&mut g, (0, 0), true);
+        draw_prop(&mut ui, &mut cx, &p(Rect::new(foot.x, foot.y - mapview::BLOCK_LIFT, foot.w, foot.h + mapview::BLOCK_LIFT)));
+        drop(ui);
+        let mid = foot.x + foot.w / 2;
+        let colour = |c: Rgba| [c[0], c[1], c[2]];
+        assert_eq!(px(&g, mid, foot.y - 6), colour(BOX_EDGE), "the raised top edge");
+        assert_eq!(px(&g, mid, foot.y - 3), colour(BOX_FILL), "the fill over the footprint");
+        assert_eq!(px(&g, mid, foot.y + foot.h - 4), colour(BOX_FACE), "the south face");
+        assert_eq!(px(&g, mid, foot.y + foot.h - FACE_H), colour(BOX_FACE), "6 px tall");
+        assert_eq!(px(&g, mid, foot.y + foot.h - FACE_H - 1), colour(BOX_FILL));
+        // the square box: on its footprint, a quarter of its height at most `BOX_FACE_H` (a raised rect with a file that
+        // fails to load draws this face too)
+        let plain = (foot.h / 4).clamp(1, BOX_FACE_H);
+        assert!(plain < FACE_H, "the two faces differ");
+        let unloadable = PropDraw { file: Some("no/such/file.png".into()), ..p(Rect::new(foot.x, foot.y - mapview::BLOCK_LIFT, foot.w, foot.h + mapview::BLOCK_LIFT)) };
+        for (drawn, label) in [(p(foot), "square"), (unloadable, "art that will not load")] {
+            let mut g = gfx();
+            let mut ui: Ui<RAct> = Ui::new(&mut g, (0, 0), true);
+            draw_prop(&mut ui, &mut cx, &drawn);
+            drop(ui);
+            assert_eq!(px(&g, mid, drawn.rect.y), colour(BOX_EDGE), "{label}: the top edge");
+            assert_eq!(px(&g, mid, foot.y + foot.h - 2), colour(BOX_FACE), "{label}: the south face");
+            assert_eq!(px(&g, mid, foot.y + foot.h - plain), colour(BOX_FACE), "{label}: its first row");
+            assert_eq!(px(&g, mid, foot.y + foot.h - plain - 1), colour(BOX_FILL), "{label}: the fill above it");
+        }
+    }
+
+    /// The square guard: every marker's click area is its cell (cut to the map) and they run in the marker list's order,
+    /// then the party on its cell.
+    #[test]
+    fn square_click_areas_stay_on_their_cells_in_list_order() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        let area = Rect::new(0, HUD_H, W, H - HUD_H);
+        let mut seen = 0;
+        for loc in d.merged_entries(&world, "locations") {
+            let t = explore::template_of(&d, loc);
+            if t.is_empty() {
+                continue;
+            }
+            cx.gs_mut().location_id = s(loc, "id");
+            let mut map = RegionMap::new(&mut cx);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            let gs = cx.gs().clone();
+            let steps = gs.explore_int("loc_steps");
+            let mut want: Vec<(String, (i64, i64, i64, i64))> = Vec::new();
+            for raw in json::aget(loc, "markers") {
+                let m = explore::marker_full(json::dict(raw));
+                let at = explore::marker_pos(t, &m, steps);
+                if s(&explore::marker_view(&d, &gs, loc, &m), "state") == "absent" || at.0 < 0 {
+                    continue;
+                }
+                let r = Rect::new(map.geo.ox + at.0 as i32 * 16, map.geo.oy + at.1 as i32 * 16, 16, 16).intersect(area);
+                if r.w > 0 && r.h > 0 {
+                    want.push((format!("marker.{}", s(&m, "id")), (r.x as i64, r.y as i64, r.w as i64, r.h as i64)));
+                }
+            }
+            seen += want.len();
+            let p = Rect::new(map.geo.ox + gs.position.0 as i32 * 16, map.geo.oy + gs.position.1 as i32 * 16, 16, 16);
+            want.push(("party".to_string(), (p.x as i64, p.y as i64, p.w as i64, p.h as i64)));
+            let got: Vec<(String, (i64, i64, i64, i64))> = map.widgets().iter().filter(|w| w["kind"] == "marker" || w["id"] == "party").map(|w| (s(json::dict(w), "id"), rect(w))).collect();
+            assert_eq!(got, want, "{}", s(loc, "id"));
+        }
+        assert!(seen > 0, "a marker in view on a map of the world");
+    }
+
+    /// 3.5: a person's and the party's click areas are their cells in both views: a person's own cell takes the click, a
+    /// tall sprite's head and the cell north of them do not; tilted, the areas run in draw order.
+    #[test]
+    fn click_areas_stay_on_the_cell_in_draw_order() {
+        let mut cx = game_cx();
+        cx.art = aegis_ui::art::Art::new(Some(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+        let mut g = gfx();
+        let d = cx.data.clone();
+        let world = cx.gs().world_id.clone();
+        let mut checked = 0;
+        for loc in d.merged_entries(&world, "locations") {
+            let t = explore::template_of(&d, loc);
+            if t.is_empty() {
+                continue;
+            }
+            for view in ["square", "tilted"] {
+                cx.settings.v["region_view"] = json!(view);
+                cx.gs_mut().location_id = s(loc, "id");
+                let mut map = RegionMap::new(&mut cx);
+                frame(&mut map, &mut cx, &mut g, 1.0);
+                let party = rect(&map.widgets().into_iter().find(|w| w["id"] == "party").expect("the party"));
+                let cell = map.geo.cell_of(cx.gs().position);
+                assert_eq!(party, (cell.x as i64, cell.y as i64, cell.w as i64, cell.h as i64), "{view}: the party's cell");
+                if view == "tilted" {
+                    // those cut by the map's edges aside, the areas run by feet (the party last at equal feet)
+                    let kept: Vec<(i64, i64, bool)> = map.widgets().iter().filter(|w| w["kind"] == "marker" || w["id"] == "party").filter_map(|w| {
+                        let (x, y, ww, h) = rect(w);
+                        (x > 0 && x + ww < W as i64 && y + h < (H - 1) as i64).then_some((y + h, x, w["id"] == "party"))
+                    }).collect();
+                    assert!(kept.windows(2).all(|p| p[0].0 < p[1].0 || (p[0].0 == p[1].0 && (p[1].2 || p[0].1 <= p[1].1))), "{}: draw order {kept:?}", s(loc, "id"));
+                }
+                // the camera on each person in turn
+                let people: Vec<Pos> = explore::markers_of(loc).iter().filter(|m| s(m, "kind") == "npc").map(|m| explore::marker_pos(t, m, 0)).filter(|at| at.0 >= 0).collect();
+                for at in people {
+                    map.pan = Some(at);
+                    map.pan_loc = s(loc, "id");
+                    frame(&mut map, &mut cx, &mut g, 1.0);
+                    let stands_here = |v: &Value| {
+                        let n = |i: usize| v["rect"][i].as_i64().unwrap_or(0) as i32;
+                        map.geo.cell_at(n(0) + n(2) / 2, n(1) + n(3) - 1) == at && v["id"] != "party"
+                    };
+                    let Some(raw) = map.state(&cx)["sprites"].as_array().and_then(|l| l.iter().find(|v| stands_here(v)).cloned()) else { continue };
+                    let id = s(json::dict(&raw), "id");
+                    let marker = id.strip_prefix("marker.").expect("a marker's sprite");
+                    let own = map.geo.cell_of(at);
+                    let takes = |p: (i32, i32)| matches!(aegis_ui::ui::hit(&map.w, p), Some(RAct::Marker(m)) if m == marker);
+                    assert!(takes((own.x + own.w / 2, own.y + own.h / 2)), "{view}: {id}'s own cell takes the click");
+                    let north = map.geo.cell_of((at.0, at.1 - 1));
+                    assert!(!takes((north.x + north.w / 2, north.y + north.h / 2)), "{view}: the cell north of {id} is not {id}'s");
+                    let n = |i: usize| raw["rect"][i].as_i64().unwrap_or(0) as i32;
+                    assert!(!takes((n(0) + n(2) / 2, n(1) + 2)), "{view}: {id}'s head takes no click");
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 0, "someone stands on a map of the world");
+    }
+
+    /// Review 2026-11-02 (MAPNAV1-U unchanged): with two standing members, a click anywhere in a cell next to the leader
+    /// walks there and never passes the lead; a click on the leader's own cell does.
+    #[test]
+    fn a_click_beside_the_leader_walks_and_does_not_pass_the_lead() {
+        for (view, _) in mapview::VIEWS {
+            let mut cx = game_cx();
+            cx.art = aegis_ui::art::Art::new(Some(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
+            let mut g = gfx();
+            cx.settings.v["region_view"] = json!(view);
+            cx.settings.v["map_legend_open"] = json!(false);
+            let (loc, at) = site(&cx, |t, x, y| (-2..=2).all(|dy| (-2..=2).all(|dx| ch(t, x + dx, y + dy) == '.')));
+            cx.gs_mut().location_id = loc;
+            let mut map = RegionMap::new(&mut cx);
+            {
+                let gs = cx.gs_mut();
+                gs.party.members.truncate(1);
+                gs.party.active_ids.clear();
+                let mut second = gs.party.members[0].clone();
+                second.id = "test_second".into();
+                gs.party.members.push(second);
+                gs.position = at;
+            }
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            let gs = cx.gs().clone();
+            assert!(gs.leader_choices(standing(&cx.data, &gs.world_id)).len() >= 2, "two can lead");
+            let own = map.geo.cell_of(at);
+            assert!(matches!(aegis_ui::ui::hit(&map.w, (own.x + own.w / 2, own.y + own.h / 2)), Some(RAct::Lead)), "{view}: the leader's own cell passes the lead");
+            for dir in explore::DIRS {
+                let to = (at.0 + dir.0, at.1 + dir.1);
+                let c = map.geo.cell_of(to);
+                for pt in [(c.x + c.w / 2, c.y + c.h / 2), (c.x, c.y), (c.x + c.w - 1, c.y), (c.x, c.y + c.h - 1), (c.x + c.w - 1, c.y + c.h - 1)] {
+                    map.walk.clear();
+                    map.draw(&mut cx, &mut g, pt, true);
+                    assert!(matches!(aegis_ui::ui::hit(&map.w, pt), Some(RAct::MapClick)), "{view}: {pt:?} in the cell at {dir:?} is the map's");
+                    assert!(map.click(&mut cx, pt), "{view}: the map takes the click at {pt:?}");
+                    assert_eq!(map.walk, vec![dir], "{view}: one step {dir:?}, the click at {pt:?}");
+                    assert_eq!(leader_id(&cx), gs.party.members[0].id, "{view}: the lead stays");
+                }
+            }
+        }
+    }
+
+    /// L3: the click order and the hovered name follow the draw order, by feet then left edge, so what is drawn in front
+    /// takes the click.
+    #[test]
+    fn the_person_drawn_in_front_takes_the_click_and_the_name() {
+        let mark = |id: &str, x: i32, foot: i32| MarkHit { id: id.into(), label: id.into(), hit: Rect::new(x, foot - 20, 30, 20), foot, tip: Vec::new(), named: false, name_rect: Rect::new(x, foot - 20, 30, 20), badge: false };
+        // all overlap at (35, 95); pushed out of order
+        let mut hits = vec![mark("right", 20, 100), mark("low", 15, 110), mark("left", 10, 100)];
+        let party = Rect::new(500, 500, 16, 12);
+        let order = crate::props::sorted(&[], &[], &hits.iter().map(|h| Rect::new(h.hit.x, h.foot - 12, 16, 12)).collect::<Vec<_>>(), party);
+        let drawn: Vec<String> = order.iter().filter_map(|i| if let Item::Marker(n) = i { Some(hits[*n].id.clone()) } else { None }).collect();
+        let front = front_hit(&hits, |r| r.contains(35, 95)).map(|h| h.id.clone());
+        assert_eq!(front.as_ref(), drawn.last(), "the hovered name is the one drawn last");
+        sort_hits(&mut hits);
+        assert_eq!(hits.iter().map(|h| h.id.clone()).collect::<Vec<_>>(), drawn, "the click order is the draw order");
+        let mut g = gfx();
+        let mut ui: Ui<RAct> = Ui::new(&mut g, (0, 0), true);
+        push_hits(&mut ui, hits);
+        assert!(matches!(aegis_ui::ui::hit(&ui.widgets, (35, 95)), Some(RAct::Marker(m)) if Some(&m) == drawn.last()), "the one in front takes the click");
+        // at equal feet, the one further right is in front
+        assert_eq!(drawn, ["left", "right", "low"]);
+    }
+
+    /// 3.2: water's lip: a 3 px band and its soft row under a dry north cell, a shaded bottom row over a dry south cell;
+    /// none between two water cells.
+    #[test]
+    fn water_gets_its_lips_only_beside_dry_cells() {
+        let mut g = gfx();
+        let water = [40, 90, 100];
+        let r = Rect::new(100, 100, 16, 12);
+        let paint = |g: &mut Gfx, north: bool, south: bool| {
+            let mut ui: Ui<RAct> = Ui::new(g, (0, 0), true);
+            ui.p.fill(r, rgb(water[0], water[1], water[2]));
+            draw_lips(&mut ui, r, north, south);
+        };
+        let mid = r.x + r.w / 2;
+        paint(&mut g, true, true);
+        assert_eq!(px(&g, mid, r.y), [118, 116, 62], "the top row");
+        assert_eq!((px(&g, mid, r.y + 1), px(&g, mid, r.y + mapview::LIP_DEPTH)), ([66, 54, 30], [66, 54, 30]), "the rest of the band");
+        assert_ne!(px(&g, mid, r.y + 3), water, "the soft row under it");
+        assert_eq!(px(&g, mid, r.y + 4), water, "then the water");
+        assert_ne!(px(&g, mid, r.y + r.h - 1), water, "the bottom row");
+        paint(&mut g, false, false);
+        for y in r.y..r.y + r.h {
+            assert_eq!(px(&g, mid, y), water, "between water cells, row {y}");
+        }
+    }
+
+    /// Q2: a debug build's F7 flips the view live and saves it, also in a talk; a release build ignores it.
+    #[test]
+    fn f7_flips_the_view_in_a_debug_build() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let start = cx.gs().position;
+        map.key(&mut cx, Key::Fn(7));
+        let want = if cfg!(debug_assertions) { "tilted" } else { "square" };
+        assert_eq!(cx.settings.v["region_view"], json!(want));
+        assert_eq!(cx.gs().position, start, "no step");
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        assert_eq!(map.state(&cx)["view"], json!(want));
+        assert_eq!(map.geo.view.name(), want);
+        map.key(&mut cx, Key::Fn(7));
+        assert_eq!(cx.settings.v["region_view"], json!("square"));
+        assert_eq!(Key::parse("f7"), Some(Key::Fn(7)), "the agent link's name");
+        assert_eq!(Key::Fn(7).name(), "f7");
     }
 }

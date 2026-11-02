@@ -180,6 +180,8 @@ not), widget presses, keys, hovers of 700 ms or more, screen changes, overlays a
 battle's end, errors and panics, and missing art (`aegis_host::trail` reads it). Party battles of the world map
 start outside `new`, so their replay waits for PLAYTEST2.
 
+F7 reaches the top screen as `Key::Fn(7)` for its debug use (agent link key `f7`; a screen that does not use it ignores it); F8 and F12 stay the shell's.
+
 F8 (recording on) takes a note: the screen as it was goes to `<id>/note_<n>.jpg`, and a box asks for the text (types
 at once) and tags (mechanic, ui, ux, bug); Ctrl+Enter saves, Esc cancels. The note stamps the screen, mouse, control
 and the battle's round, block and phase. The kit's text field (`Ui::text_field`, single or multi-line) edits through

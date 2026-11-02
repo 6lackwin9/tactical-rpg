@@ -21,13 +21,14 @@ pub type Nav = aegis_ui::Nav<GameCx>;
 /// engine's: `Settings::engine_defaults`). PLAYUI1-M: `map_names` (`hover` or `always`: the region map's marker names)
 /// and `map_legend_open` (the region map's legend, open or collapsed to its header). STAGE1: `battle_view` (`stage` or
 /// `flat`, `stage::VIEWS`; a debug setting set in the Scene Runner since STAGE1-C). STAGE1-O: `see_through`
-/// (`selected` or `always`, `stage::SEE_THROUGH`: when covered units are outlined in battle).
+/// (`selected` or `always`, `stage::SEE_THROUGH`: when covered units are outlined in battle). EXPLOREVIEW1:
+/// `region_view` (`square` or `tilted`, `mapview::VIEWS`; a debug setting set in the Scene Runner).
 pub fn default_settings() -> Value {
     // RULESET1-U slice 6: every battle overlay group at its default (`battle::OVERLAY_GROUPS`; VISCLAR1 VC6: on but
     // `first_move` and `all_bars`). VC5: the debug key `debug_party_foresight_off` is never a default.
     let overlays: serde_json::Map<String, Value> = crate::battle::OVERLAY_GROUPS.iter().map(|g| (g.0.to_string(), Value::Bool(g.3))).collect();
     // INPUT1 GH7: "Auto-fill the rest" on by default; PB3: the playback speed 1x
-    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "auto_fill": true, "map_names": "hover", "map_legend_open": true, "battle_view": "stage", "see_through": "selected", "battle_overlays": overlays,
+    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "auto_fill": true, "map_names": "hover", "map_legend_open": true, "battle_view": "stage", "region_view": "square", "see_through": "selected", "battle_overlays": overlays,
         "playback_speed": "1x"})
 }
 

@@ -39,6 +39,8 @@ pub enum SAct {
     Playtests,
     /// STAGE1-C: the battle view (an index into `stage::VIEWS`), a debug setting kept out of the player's settings.
     PickView(usize),
+    /// EXPLOREVIEW1: the region map's view.
+    PickRegionView(usize),
     Exit,
 }
 
@@ -277,6 +279,14 @@ impl SceneRunner {
                     }
                 }
             }
+            SAct::PickRegionView(i) => {
+                if let Some((v, _)) = crate::mapview::VIEWS.get(i) {
+                    cx.settings.v["region_view"] = serde_json::json!(v);
+                    if let Err(e) = cx.settings.save() {
+                        show_errors(cx, vec![format!("Settings could not be saved: {e}")]);
+                    }
+                }
+            }
             SAct::Playtests => {
                 let home = cx.data_dir.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
                 let repo = vec![home.join("playtests/inbox"), home.join("playtests/repro")];
@@ -414,6 +424,11 @@ impl Screen<GameCx> for SceneRunner {
         let views: Vec<String> = crate::stage::VIEWS.iter().map(|v| v.1.to_string()).collect();
         let at = crate::stage::VIEWS.iter().position(|v| cx.settings.v["battle_view"].as_str() == Some(v.0)).unwrap_or(0);
         ui.select("runner.battle_view", Rect::new(right.x + 82, right.y + 93, 90, 14), &views, at, SAct::PickView, true, tip("Battle view (debug)", crate::stage::VIEW_TIP));
+        // EXPLOREVIEW1: the region map's view for testing (Square ships until the review picks one)
+        ui.p.text(right.x as f32 + 6.0, right.y as f32 + 114.0, "Region view", SMALL, TEXT);
+        let views: Vec<String> = crate::mapview::VIEWS.iter().map(|v| v.1.to_string()).collect();
+        let at = crate::mapview::VIEWS.iter().position(|v| v.0 == crate::mapview::View::of_setting(&cx.settings.v["region_view"]).name()).unwrap_or(0);
+        ui.select("runner.region_view", Rect::new(right.x + 82, right.y + 111, 90, 14), &views, at, SAct::PickRegionView, true, tip("Region view (debug)", crate::mapview::VIEW_TIP));
         self.w = ui.widgets;
     }
 
@@ -635,5 +650,29 @@ mod tests {
         assert!(sel.enabled && sel.text.contains("All"), "{}", sel.text);
         r.act(&mut cx, SAct::PickDiagonal(0));
         assert_eq!(r.chip(&cx), plain, "back to the row's value");
+    }
+
+    /// EXPLOREVIEW1 check 9: the Developer panel's select shows and saves `region_view`, and offers both views.
+    #[test]
+    fn the_region_view_select_saves_the_setting() {
+        let dir = std::env::temp_dir().join(format!("emberwake_runner_view_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a scratch folder");
+        let path = dir.join("settings.json");
+        let mut cx = crate::hud::hud_tests::game_cx();
+        cx.settings = aegis_ui::screen::Settings::load(path.clone(), crate::screens::default_settings());
+        let mut g = crate::hud::hud_tests::gfx();
+        let mut r = SceneRunner::new();
+        crate::hud::hud_tests::frame(&mut r, &mut cx, &mut g, 1.0);
+        assert!(r.widgets().iter().any(|w| w["id"] == "runner.region_view"), "the select");
+        assert_eq!(cx.settings.v["region_view"], json!("square"), "the default");
+        r.act(&mut cx, SAct::PickRegionView(1));
+        assert_eq!(cx.settings.v["region_view"], json!(crate::mapview::VIEWS[1].0));
+        let saved: Value = serde_json::from_str(&std::fs::read_to_string(&path).expect("saved")).expect("json");
+        assert_eq!(saved["region_view"], json!("tilted"), "saved to the settings");
+        crate::hud::hud_tests::frame(&mut r, &mut cx, &mut g, 1.0);
+        let shown = r.widgets().into_iter().find(|w| w["id"] == "runner.region_view").expect("the select");
+        assert_eq!(shown["text"], json!("Tilted"), "the select shows the pick: {shown}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

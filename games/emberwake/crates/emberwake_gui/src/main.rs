@@ -15,6 +15,7 @@ mod gallery;
 mod hud;
 mod hub;
 mod intent_text;
+mod mapview;
 mod menus;
 mod music;
 mod party;
@@ -46,6 +47,15 @@ use std::sync::Arc;
 
 fn arg<'a>(args: &'a [(String, String)], k: &str) -> Option<&'a str> {
     args.iter().find(|(a, _)| a == k).map(|(_, v)| v.as_str())
+}
+
+/// STAGE1-C, EXPLOREVIEW1: the battle and region views are Scene Runner debug settings; the game itself always shows
+/// the Stage and the square map (until the view review picks one).
+fn force_shipped_views(settings: &mut serde_json::Value, screen: Option<&str>) {
+    if screen != Some("runner") {
+        settings["battle_view"] = serde_json::json!("stage");
+        settings["region_view"] = serde_json::json!("square");
+    }
 }
 
 fn main() -> Result<()> {
@@ -108,10 +118,7 @@ fn main() -> Result<()> {
         data_dir,
     };
     let mut settings = Settings::load(aegis_save::user_dir(GAME_ID).join("settings.json"), default_settings());
-    // STAGE1-C: the battle view is a Scene Runner debug setting; the game itself always shows the Stage
-    if arg(&args, "screen") != Some("runner") {
-        settings.v["battle_view"] = serde_json::json!("stage");
-    }
+    force_shipped_views(&mut settings.v, arg(&args, "screen"));
     let record = settings.v["record_playtests"].as_bool().unwrap_or(cfg!(debug_assertions));
     // The data fingerprint a recording carries; hashed only while recording is on.
     let content = if record { aegis_content::fingerprint::of(&game.data_dir) } else { serde_json::Value::Null };
@@ -138,4 +145,23 @@ fn main() -> Result<()> {
     let port = arg(&args, "port").and_then(|p| p.parse().ok()).unwrap_or(aegis_ui::bridge::DEFAULT_PORT);
     let options = Options { title, font: engine.join("assets/fonts/OpenSans-SemiBold.ttf"), port };
     aegis_ui::shell::run(cx, stack, options)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// EXPLOREVIEW1 check 9: outside the Scene Runner the debug views never show; in it they stay as saved.
+    #[test]
+    fn the_game_forces_the_shipped_views_outside_the_scene_runner() {
+        for screen in [None, Some("menu"), Some("arena")] {
+            let mut v = json!({"battle_view": "flat", "region_view": "tilted"});
+            force_shipped_views(&mut v, screen);
+            assert_eq!((v["battle_view"].as_str(), v["region_view"].as_str()), (Some("stage"), Some("square")), "{screen:?}");
+        }
+        let mut v = json!({"battle_view": "flat", "region_view": "tilted"});
+        force_shipped_views(&mut v, Some("runner"));
+        assert_eq!((v["battle_view"].as_str(), v["region_view"].as_str()), (Some("flat"), Some("tilted")));
+    }
 }
