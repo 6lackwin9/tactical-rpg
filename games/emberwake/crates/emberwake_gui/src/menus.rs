@@ -50,11 +50,13 @@ pub const TITLE_ART: &str = "backgrounds/menu/title.png";
 pub const MENU_ART: &str = "backgrounds/menu/main_menu.png";
 /// The crest behind the typeset logo (LOOK1 art A6), only when present.
 pub const CREST_ART: &str = "ui/logo_crest.png";
-/// The title as a picture: when present it replaces the typeset title, the subtitle and the crest.
+/// The title as a picture, a high-resolution master: when present it replaces the typeset title, the subtitle and the
+/// crest (the crest is inside the mark).
 pub const LOGO_ART: &str = "ui/logo_title.png";
-/// The picture's centre (the middle of the typeset logo at Normal) and its room (to the screen margin at the right).
-const LOGO_CENTRE: (f32, f32) = (540.0, 66.0);
-const LOGO_ROOM: (i32, i32) = (184, 116);
+/// The picture's room: logical x 390 to 625 from the top 13 (the mockup's right edge and top), right-aligned in it.
+const LOGO_ROOM_RIGHT: f32 = 625.0;
+const LOGO_ROOM_TOP: f32 = 13.0;
+const LOGO_ROOM: (f32, f32) = (235.0, 62.0);
 /// The vignette over the backdrop (no veil: the title is the picture).
 const MENU_VIGNETTE: f32 = 0.4;
 /// The logo's right edge, top and sizes (the display face).
@@ -71,7 +73,7 @@ const MENU_STEP: i32 = 22;
 /// Continue's peek at the Normal text size: its size and the gap left of the column; party portraits shown.
 const PEEK_W: i32 = 160;
 const PEEK_H: i32 = 64;
-const PEEK_GAP: i32 = 10;
+const PEEK_GAP: i32 = 12;
 const PEEK_PARTY: usize = 4;
 
 /// The peek's second line: when the save stands (today the day: the game's day 1 is a new game, the clock plus one).
@@ -139,12 +141,11 @@ impl MainMenu {
         }
     }
 
-    /// The logo (LOOK1 6): the title picture when there is one (whole scale steps, nothing typeset, no crest), else the
+    /// The logo (LOOK1 6): the title picture when there is one (`logo_picture`; nothing typeset, no crest), else the
     /// title in the display face in `gold` with a 1 px `bg` shadow, right-aligned, over the crest when there is one, the
     /// subtitle under it in `text`.
     fn logo(ui: &mut Ui<MenuAct>, cx: &mut Cx) {
-        if let Some(img) = cx.art.size_of(LOGO_ART).and_then(|(w, h)| cx.art.image(LOGO_ART, w, h)) {
-            let r = panes::image_steps(&mut ui.p, img, LOGO_CENTRE.0, LOGO_CENTRE.1, LOGO_ROOM.0, LOGO_ROOM.1);
+        if let Some(r) = Self::logo_picture(ui, cx) {
             ui.push("menu.logo", "picture", LOGO_ART, r, true, false, None, Vec::new());
             return;
         }
@@ -156,7 +157,7 @@ impl MainMenu {
             let side = panes::snap_up((h * 2.0).ceil() as i32);
             let r = Rect::new((x + w / 2.0) as i32 - side / 2, (LOGO_Y + h / 2.0) as i32 - side / 2, side, side);
             let px = (side as f32 * ui.p.v.s).round() as i32;
-            if let Some(img) = cx.art.image(CREST_ART, px, px) {
+            if let Some(img) = cx.art.image_fit(CREST_ART, px, px) {
                 ui.p.image(img, r);
                 ui.push("menu.crest", "picture", CREST_ART, r, true, false, None, Vec::new());
             }
@@ -165,6 +166,24 @@ impl MainMenu {
         ui.p.text_face(Typeface::Display, x, LOGO_Y, &title_text, LOGO_SIZE, t.gold);
         let sub_w = ui.p.text_w_face(Typeface::Display, &cx.manifest.subtitle, LOGO_SUB_SIZE);
         ui.p.text_face(Typeface::Display, LOGO_RIGHT - sub_w, LOGO_Y + h, &cx.manifest.subtitle, LOGO_SUB_SIZE, t.text);
+    }
+
+    /// The master at the room's exact physical size at this window, keeping its aspect (`Art::image_fit`: averaged down,
+    /// and enlarged by nearest above about 3393 px of window width, where the room is wider than the master), blended
+    /// pixel for pixel: the logical rects of `Painter::image` would round its height and stretch it. Returns the logical
+    /// rect it covers, None without the file.
+    fn logo_picture(ui: &mut Ui<MenuAct>, cx: &mut Cx) -> Option<Rect> {
+        let v = ui.p.v;
+        let pr = logo_px(v, cx.art.size_of(LOGO_ART)?);
+        let img = cx.art.image_fit(LOGO_ART, pr.w, pr.h)?;
+        for y in 0..pr.h {
+            for x in 0..pr.w {
+                let i = ((y * pr.w + x) * 4) as usize;
+                ui.p.c.blend(pr.x + x, pr.y + y, [img.px[i], img.px[i + 1], img.px[i + 2], img.px[i + 3]]);
+            }
+        }
+        let (w, h) = ((pr.w as f32 / v.s).round() as i32, (pr.h as f32 / v.s).ceil() as i32);
+        Some(Rect::new(LOGO_ROOM_RIGHT as i32 - w, LOGO_ROOM_TOP as i32, w, h))
     }
 
     /// Continue's peek left of the column (x `right` is its right edge): an `ornate` panel with the save's location,
@@ -178,9 +197,10 @@ impl MainMenu {
         let s = ui.p.fonts.scale.max(1.0);
         let lh = ui.p.line_h(BODY).ceil() as i32;
         let w = panes::snap_up((PEEK_W as f32 * s).ceil() as i32);
-        let inner_of = |r: Rect| t.frame("ornate").map_or(r.inset(t.layout.padding), |f| f.nine.content(r).inset(t.layout.padding / 2));
-        let probe = Rect::new(0, 0, w, 200);
-        let need = 200 - inner_of(probe).h + 2 * lh + 2 + panes::PORTRAIT;
+        let view = ui.p.v.s;
+        let inner_of = |r: Rect| t.frame("ornate").map_or(r.inset(t.layout.padding), |f| aegis_ui::painter::nine_content_rect(&f.nine, r, view).inset(t.layout.padding / 2));
+        let probe = Rect::new(0, 0, w, PEEK_H);
+        let need = PEEK_H - inner_of(probe).h + 2 * lh + 2 + panes::PORTRAIT;
         let r = Rect::new(right - PEEK_GAP - w, MENU_Y, w, panes::snap_up(PEEK_H.max(need)));
         let (fill, edge, radius) = t.vector("ornate");
         ui.p.skin(t.frame("ornate"), r, fill, edge, radius);
@@ -197,6 +217,15 @@ impl MainMenu {
             ui.push(format!("menu.peek.{id}"), "portrait", name.as_str(), pr, true, false, None, Vec::new());
         }
     }
+}
+
+/// The physical rect of a `size` picture in the logo's room at view `v`: as large as fits, keeping the aspect, its right
+/// edge and top on the room's.
+fn logo_px(v: aegis_ui::painter::View, size: (i32, i32)) -> Rect {
+    let (rw, rh) = (LOGO_ROOM.0 * v.s, LOGO_ROOM.1 * v.s);
+    let k = (rw / size.0.max(1) as f32).min(rh / size.1.max(1) as f32);
+    let (w, h) = ((size.0 as f32 * k).round() as i32, (size.1 as f32 * k).round() as i32);
+    Rect::new(v.x(LOGO_ROOM_RIGHT) - w, v.y(LOGO_ROOM_TOP), w, h)
 }
 
 impl Screen<GameCx> for MainMenu {
@@ -1176,7 +1205,7 @@ mod tests {
         assert!(get(&menu_frame(&mut m, &mut cx, &mut g, (-1, -1)), "menu.peek").is_none(), "idle: no peek");
         let w = menu_frame(&mut m, &mut cx, &mut g, (430, 155));
         let p = get(&w, "menu.peek").expect("hovered: the peek");
-        assert_eq!((n(p, 0), n(p, 1), n(p, 2), n(p, 3)), (250, 150, 160, 64));
+        assert_eq!((n(p, 0), n(p, 1), n(p, 2), n(p, 3)), (MENU_X - PEEK_GAP - PEEK_W, MENU_Y, PEEK_W, PEEK_H));
         assert_eq!(p["text"], json!(format!("{} | Day 8", cx.location_name(&gs.world_id, &gs.location_id))));
         let faces: Vec<&Value> = w.iter().filter(|x| x["kind"] == "portrait").collect();
         assert_eq!(faces.len(), 4, "at most four portraits");
@@ -1326,8 +1355,166 @@ mod tests {
         }
     }
 
+    /// A solid `w` x `h` PNG (RGBA), or with `stripes` alternating black and white columns.
+    fn write_picture(path: &Path, w: u32, h: u32, stripes: bool) {
+        let px: Vec<u8> = (0..w * h).flat_map(|i| if !stripes { [200, 30, 60, 255] } else if (i % w) % 2 == 0 { [0, 0, 0, 255] } else { [255, 255, 255, 255] }).collect();
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(path).unwrap()), w, h);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&px).unwrap();
+    }
+
+    /// The master draws at the room's exact physical size at every window size: the same fraction of the window, its
+    /// right edge and top on the room's, the aspect kept, and reduced by averaging (stripes come out grey, not sampled).
+    #[test]
+    fn the_title_picture_fills_its_room_at_every_window_size() {
+        let (iw, ih) = (1246, 325);
+        let (dir, root) = (scratch("logo_sizes"), scratch("logo_sizes_layer"));
+        std::fs::create_dir_all(root.join("ui")).unwrap();
+        write_picture(&root.join(LOGO_ART), iw as u32, ih as u32, false);
+        let (mut cx, mut g) = (cx(dir.clone()), gfx());
+        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.clone()]));
+        for (ww, wh) in [(960, 540), (1280, 720), (1920, 1080), (3840, 2160)] {
+            g.canvas = Canvas::new(ww, wh);
+            g.view = View::fit(ww as u32, wh as u32);
+            let s = ww as f32 / W as f32;
+            let w = menu_frame(&mut MainMenu::default(), &mut cx, &mut g, (-1, -1));
+            let logo = get(&w, "menu.logo").expect("the title picture");
+            assert_eq!((n(logo, 0), n(logo, 1), n(logo, 2), n(logo, 3)), (390, 13, 235, 62), "{ww}: the room");
+            let mut hits = (ww, wh, -1, -1);
+            for (i, p) in g.canvas.px.chunks(4).enumerate() {
+                if p[..3] == [200, 30, 60] {
+                    let (x, y) = (i as i32 % ww, i as i32 / ww);
+                    hits = (hits.0.min(x), hits.1.min(y), hits.2.max(x), hits.3.max(y));
+                }
+            }
+            let (pw, ph) = (hits.2 - hits.0 + 1, hits.3 - hits.1 + 1);
+            assert_eq!(pw, (LOGO_ROOM.0 * s).round() as i32, "{ww}: the room's whole width");
+            assert_eq!(ph, (ih as f32 * LOGO_ROOM.0 * s / iw as f32).round() as i32, "{ww}: the aspect kept");
+            assert_eq!(hits.2 + 1, (LOGO_ROOM_RIGHT * s).round() as i32, "{ww}: right-aligned");
+            assert_eq!(hits.1, (LOGO_ROOM_TOP * s).round() as i32, "{ww}: at the top");
+            assert!((pw as f32 / ww as f32 - LOGO_ROOM.0 / W as f32).abs() <= 1.0 / ww as f32, "{ww}: the same fraction");
+        }
+        write_picture(&root.join(LOGO_ART), iw as u32, ih as u32, true);
+        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.clone()]));
+        g.canvas = Canvas::new(1280, 720);
+        g.view = View::fit(1280, 720);
+        let _ = menu_frame(&mut MainMenu::default(), &mut cx, &mut g, (-1, -1));
+        let pr = logo_px(g.view, (iw, ih));
+        let i = (((pr.y + pr.h / 2) * 1280 + pr.x + pr.w / 2) * 4) as usize;
+        let mid = &g.canvas.px[i..i + 3];
+        assert!(mid.iter().all(|c| (100..156).contains(c)), "averaged to grey: {mid:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Nothing in the frame's content meets the frame: at the four text sizes and window sizes, no text, portrait or button
+    /// of the peek or the ask dialog falls on a pixel of the corners or the line (the file drawn with its centre see-through).
+    #[test]
+    fn the_ornate_frame_clears_the_peek_and_the_ask_dialog() {
+        let game = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let tallow = aegis_ui::theme::load(&aegis_core::assets::Layers::for_game(&game)).expect("the game's theme loads");
+        aegis_ui::theme::set_theme(tallow.clone());
+        let frame = tallow.frame("ornate").expect("the ornate frame");
+        let mut bare = (*frame.img).clone();
+        let (side, slice) = (bare.w, frame.nine.slice[0]);
+        for (i, px) in bare.px.chunks_mut(4).enumerate() {
+            let (x, y) = (i as i32 % side, i as i32 / side);
+            if x >= slice && x < side - slice && y >= slice && y < side - slice {
+                px.copy_from_slice(&[0, 0, 0, 0]);
+            }
+        }
+        let dir = scratch("frame_clear");
+        let (mut cx, mut g) = (cx(dir.clone()), gfx());
+        write_fixture(&mut cx, 3);
+        for (ww, wh) in [(960, 540), (1280, 720), (1920, 1080), (3840, 2160)] {
+            for (size, scale) in TEXT_SIZES {
+                g.canvas = Canvas::new(ww, wh);
+                g.view = View::fit(ww as u32, wh as u32);
+                g.fonts.scale = scale as f32;
+                // The frame's mask at `r`, then every rect that must stay off it.
+                let check = |g: &mut Gfx, what: &str, r: Rect, rects: Vec<Rect>| {
+                    let mut mask = Canvas::new(ww, wh);
+                    mask.clear([0, 255, 0, 255]);
+                    let view = g.view;
+                    aegis_ui::painter::Painter { c: &mut mask, v: view, fonts: &mut g.fonts }.nine(&bare, &frame.nine, r);
+                    for q in rects {
+                        let pq = view.rect(q);
+                        for y in pq.y..pq.y + pq.h {
+                            for x in pq.x..pq.x + pq.w {
+                                assert_eq!(mask.px[((y * ww + x) * 4 + 1) as usize], 255, "{ww} {size} {what}: {q:?} meets the frame at ({x}, {y}), panel {r:?}");
+                            }
+                        }
+                    }
+                };
+                let rect_of = |v: &Value| Rect::new(n(v, 0), n(v, 1), n(v, 2), n(v, 3));
+                let inside = |r: Rect, t: &aegis_ui::painter::TextRec| r.contains((t.x + t.w / 2.0) as i32, (t.y + t.h / 2.0) as i32);
+                let text_rect = |t: &aegis_ui::painter::TextRec| Rect::new(t.x.floor() as i32, t.y.floor() as i32, t.w.ceil() as i32 + 1, t.h.ceil() as i32);
+                // The peek.
+                let mut m = MainMenu::default();
+                let idle = menu_frame(&mut m, &mut cx, &mut g, (-1, -1));
+                g.fonts.audit = Some(Vec::new());
+                let w = menu_frame(&mut m, &mut cx, &mut g, centre(get(&idle, "menu.continue").unwrap()));
+                let audit = g.fonts.audit.take().unwrap();
+                let peek = rect_of(get(&w, "menu.peek").expect("the peek"));
+                let mut rects: Vec<Rect> = audit.iter().filter(|t| inside(peek, t)).map(text_rect).collect();
+                assert!(rects.len() >= 2, "{ww} {size}: the peek's texts");
+                rects.extend(w.iter().filter(|x| x["kind"] == "text_button" || x["id"].as_str().is_some_and(|i| i.starts_with("menu.peek."))).map(rect_of));
+                check(&mut g, "peek", peek, rects);
+                // The ask dialog.
+                g.fonts.audit = Some(Vec::new());
+                let v = aegis_ui::panes::AskView { ornate: true, ..aegis_ui::panes::AskView::new("Leave this place?", "Anything not saved since the last save is lost. Enter answers the default, y and n answer, Esc is No.") };
+                let area = Rect::new(0, 0, W, H);
+                let mut ui: Ui<MenuAct> = Ui::new(&mut g, (-1, -1), true);
+                let ask = panes::ask_dialog(&mut ui, "ask", area, &v, MenuAct::Quit, MenuAct::Quit);
+                let (_, _, yes, no) = panes::ask_layout(&mut ui.p, area, &v);
+                drop(ui);
+                let mut shown = vec![yes, no];
+                let audit = g.fonts.audit.take().unwrap();
+                shown.extend(audit.iter().filter(|t| inside(ask, t)).map(text_rect));
+                assert!(shown.len() >= 4, "{ww} {size}: the ask's title, question and buttons: {}", shown.len());
+                check(&mut g, "ask", ask, shown);
+            }
+        }
+        g.fonts.scale = 1.0;
+        aegis_ui::theme::set_theme(aegis_ui::theme::Theme::default());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The picture's rect never meets a menu row or the peek, at any text size, with or without a save.
+    #[test]
+    fn the_title_picture_never_meets_a_menu_row() {
+        let (dir, root) = (scratch("logo_rows"), scratch("logo_rows_layer"));
+        std::fs::create_dir_all(root.join("ui")).unwrap();
+        write_picture(&root.join(LOGO_ART), 1246, 325, false);
+        let (mut cx, mut g) = (cx(dir.clone()), gfx());
+        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.clone()]));
+        for with_save in [false, true] {
+            if with_save {
+                write_fixture(&mut cx, 3);
+            }
+            for (size, scale) in TEXT_SIZES {
+                g.fonts.scale = scale as f32;
+                let mut m = MainMenu::default();
+                let idle = menu_frame(&mut m, &mut cx, &mut g, (-1, -1));
+                let w = if with_save { let at = centre(get(&idle, "menu.continue").unwrap()); menu_frame(&mut m, &mut cx, &mut g, at) } else { idle };
+                assert_eq!(get(&w, "menu.peek").is_some(), with_save, "{size}: the peek shows with a save");
+                let logo = get(&w, "menu.logo").expect("the title picture");
+                let rect = |v: &Value| Rect::new(n(v, 0), n(v, 1), n(v, 2), n(v, 3));
+                let others: Vec<&Value> = w.iter().filter(|x| x["kind"] == "text_button" || x["id"].as_str().is_some_and(|i| i.starts_with("menu.peek"))).collect();
+                assert!(others.len() >= 5, "{size}: the rows");
+                for o in others {
+                    let meet = rect(logo).intersect(rect(o));
+                    assert!(meet.w <= 0 || meet.h <= 0, "{size}: the logo meets {}", o["id"]);
+                }
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     /// `ui/logo_title.png` replaces the typeset title and subtitle, and the crest even when both files are there; it sits
-    /// centred on the logo's place at whole scale steps, above the column, without it today's text.
+    /// in the logo's room above the column, without it today's text.
     #[test]
     fn the_title_picture_replaces_the_typeset_logo() {
         let (dir, root) = (scratch("logo"), scratch("logo_layer"));
@@ -1353,12 +1540,34 @@ mod tests {
         assert!(!texts.iter().any(|t| t.starts_with("Fixture")), "nothing typeset: {texts:?}");
         assert!(get(&w, "menu.crest").is_none(), "the title picture wins over the crest");
         let (x, y, ww, h) = (n(logo, 0), n(logo, 1), n(logo, 2), n(logo, 3));
-        assert_eq!((ww, ww % 16), (h, 0), "the square fixture stays square, a whole multiple");
-        assert!(ww > 16, "scaled up to its room");
-        assert_eq!(((x + ww / 2) as f32, (y + h / 2) as f32), LOGO_CENTRE, "centred on the logo's place");
+        assert_eq!((ww, h), (LOGO_ROOM.1 as i32, LOGO_ROOM.1 as i32), "the square fixture stays square, to its room's height");
+        assert_eq!((x + ww, y), (LOGO_ROOM_RIGHT as i32, LOGO_ROOM_TOP as i32), "right-aligned at the room's top");
         assert!(x + ww <= W && y >= 0 && y + h <= MENU_Y, "on the canvas, above the column");
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A review render of the ornate frame on a very wide, a small and a tall panel: only with `AEGIS_REVIEW_DIR` set.
+    #[test]
+    fn review_render_of_the_ornate_frame_on_other_panels() {
+        let Ok(out) = std::env::var("AEGIS_REVIEW_DIR") else { return };
+        let game = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let tallow = aegis_ui::theme::load(&aegis_core::assets::Layers::for_game(&game)).expect("the game's theme loads");
+        let frame = tallow.frame("ornate").expect("the ornate frame");
+        let mut g = gfx();
+        g.canvas = Canvas::new(1280, 720);
+        g.canvas.clear([40, 44, 52, 255]);
+        g.view = View::fit(1280, 720);
+        let view = g.view;
+        let mut p = aegis_ui::painter::Painter { c: &mut g.canvas, v: view, fonts: &mut g.fonts };
+        for r in [Rect::new(30, 40, 580, 60), Rect::new(60, 160, 100, 40), Rect::new(220, 150, 60, 180), Rect::new(340, 150, 260, 170)] {
+            p.nine(&frame.img, &frame.nine, r);
+        }
+        let file = std::fs::File::create(Path::new(&out).join("ornate_other_panels_1280x720.png")).unwrap();
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 1280, 720);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&g.canvas.px).unwrap();
     }
 
     /// Review renders of the menu at 1280 x 720 with the game's art and theme: only with `AEGIS_REVIEW_DIR` set.

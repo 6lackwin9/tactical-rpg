@@ -664,28 +664,6 @@ fn a_text_menu_lights_one_active_item() {
     assert_eq!(focus::step(&under, Some(&b), focus::Move::Dir(0, -1), false).as_deref(), Some(a.as_str()));
 }
 
-/// Whole steps keep the aspect and fit the room: up by the largest whole multiple, down by the smallest whole division.
-#[test]
-fn a_picture_scales_by_whole_steps() {
-    assert_eq!(panes::whole_steps(100, 50, 368, 232), (3, 1));
-    assert_eq!(panes::whole_steps(16, 16, 368, 232), (14, 1));
-    assert_eq!(panes::whole_steps(368, 232, 368, 232), (1, 1));
-    assert_eq!(panes::whole_steps(800, 200, 368, 232), (1, 3));
-    assert_eq!(panes::whole_steps(300, 700, 368, 232), (1, 4));
-    assert_eq!(panes::whole_steps(0, 10, 10, 10), (1, 1));
-    let red = solid(10, 20, [200, 0, 0, 255]);
-    for (ww, wh, want) in [(640, 360, 4), (1280, 720, 9)] {
-        let mut g = gfx_at(ww, wh, 1.0);
-        let mut got = Rect::default();
-        let _ = draw::<(), _>(&mut g, (-1, -1), |ui| got = panes::image_steps(&mut ui.p, &red, 100.0, 100.0, 50, 90));
-        let s = ww as i32 / 640;
-        assert_eq!((got.w * s, got.h * s), (10 * want, 20 * want), "{ww}");
-        assert_eq!((got.x + got.w / 2, got.y + got.h / 2), (100, 100), "centred at {ww}");
-        let solid_px = g.canvas.px.as_chunks::<4>().0.iter().filter(|p| p[0] == 200).count() as i32;
-        assert_eq!(solid_px, 10 * want * 20 * want, "whole multiple at {ww}");
-    }
-}
-
 // ---- cut text reads in full; tabs past the rail stay in reach -------------------------------------------------------
 
 const LONG: &str = "A label far too long for the narrow column it was given to sit in";

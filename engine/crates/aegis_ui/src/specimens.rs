@@ -1595,7 +1595,7 @@ impl Specimens {
             for (i, (role, _)) in FRAME_ROLES.iter().enumerate() {
                 let fr = Rect::new(x0 + (i as i32 % per) * 126, y + (i as i32 / per) * 44, 120, 40);
                 draw_frame_role(ui, t, role, fr);
-                let inner = t.frame(role).map_or(fr.inset(4), |f| f.nine.content(fr));
+                let inner = t.frame(role).map_or(fr.inset(4), |f| crate::painter::nine_content_rect(&f.nine, fr, ui.p.v.s));
                 ui.p.text_fit(inner.x as f32, inner.y as f32, role, SMALL, inner.w as f32, t.ink_on(role));
                 ui.push(format!("kit.theme.frame40.{role}"), "frame", *role, fr, true, false, None, tip(role, &t.frame_source(role)));
             }
@@ -1609,7 +1609,7 @@ impl Specimens {
             let role = FRAME_ROLES[self.theme_frame % FRAME_ROLES.len()].0;
             let fr = Rect::new(x0 + 106, y, 300, 120);
             draw_frame_role(ui, t, role, fr);
-            let inner = t.frame(role).map_or(fr.inset(6), |f| f.nine.content(fr));
+            let inner = t.frame(role).map_or(fr.inset(6), |f| crate::painter::nine_content_rect(&f.nine, fr, ui.p.v.s));
             ui.p.text_fit(inner.x as f32, inner.y as f32, &format!("{role}: {}", t.frame_source(role)), SMALL, inner.w as f32, t.ink_on(role));
         }
         y += 120 + 4;

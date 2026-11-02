@@ -6,7 +6,7 @@
 # Groups: bodies portraits items skills statuses terrain overlays region markers pins chips world_map backdrops menu stage_tiles battle_backdrops
 # story world_card menu_sunless sunk_backdrops family_icons ui_frames.
 # ui_frames (LOOK1-G1) = the Tallow and Iron nine-slice frames ui/frames/<role>.png + .json (exact pixels; the ornate
-# corners are code-drawn, or from the A6 corner sheet with --ornate SHEET).
+# frame is high-resolution, its corners from the picked A6 sheet, or --ornate SHEET; no sheet, no ornate file written).
 # The last five (STORYART1) are the Sunk Ward slice's placeholders in the art bible's 16 hues: story = the vignette
 # pictures backgrounds/story/<id>.png (1120 x 472, 2x STORYUI1 V9's 560 x 236 picture area: intro_1-4, meat_market,
 # hearth), world_card = backgrounds/title/sunk_ward.png, menu_sunless = backgrounds/menu/main_menu.png (the game's main menu, MENU2; the
@@ -36,7 +36,7 @@ import os
 import sys
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, UnidentifiedImageError
 
 OUT = "#14110f"
 CHAR = "#1d1c22"
@@ -2843,7 +2843,47 @@ def g_family_icons(out: Out) -> None:
 # ------------------------------------------------------------------------------
 
 INSET_DARK, INSET_FILL = "#050608", "#0e1016"
-ORNATE_SHEET = None   # --ornate SHEET: the A6 corner sheet (magenta key) whose corners go into the ornate frame
+# The picked A6 corner sheet (magenta key; decision "LOOK1-A6 picks"), or --ornate SHEET.
+ORNATE_SHEET = os.path.join(WORKSPACE, "art_src", "ornate_corners_gen1793612836_1.png")
+# The ornate frame: the sheet's corner reduced to ORNATE_CORNER px, at ORNATE_SCALE art px per logical px for its edge bands,
+# with 32 px of edge and centre between. An edge band, centred in its slice: a line 1 logical px wide on the panel's
+# boundary, between 1/2 logical px of dark iron each side; see-through past them. The engine draws the corners at
+# ORNATE_ART art px per logical px (thin arms; smaller on a panel too small for elbow and finish); each arm reaches 23 % of
+# its own edge within 18-48 logical px, up to the art's natural end at most. ORNATE_FINISH, an arm's own ending, kept when
+# it is cut shorter: x the drop and curl 378..448, y the pointed foot 350..448. `corner_elbow`: art px from the anchor an
+# arm must show before its finish, past the elbow ornament's tip.
+ORNATE_CORNER, ORNATE_SCALE, ORNATE_MID, ORNATE_ART = 448, 16, 32, 12
+ORNATE_FINISH = {"x": [378, 448], "y": [350, 448]}
+ORNATE_SIDECAR = {"pad": [2, 2, 2, 2], "reduce": "average", "corner_arm": 0.23, "corner_arm_min": 18, "corner_arm_max": 48, "corner_elbow": 147,
+                  "corner_art": ORNATE_ART, "corner_splice": ORNATE_FINISH, "straddle": True, "sharpen": 0.6}
+
+
+def ornate_corner(sheet):
+    # the sheet's top-left, keyed, and the art px on the panel's corner point: each arm's real centre across its whole
+    # section past the elbow (rail plus arcade on the top arm, both rails on the left arm), the middle of the 10th and 90th
+    # percentiles of its opaque pixels, so the arm sits centred on the boundary and the line
+    src = key_magenta(Image.open(sheet))
+    q = largest_piece(src.crop((0, 0, src.width // 2, src.height // 2)))
+    q = q.crop(q.getbbox()).resize((ORNATE_CORNER, ORNATE_CORNER), Image.BOX)
+    opaque = np.array(q)[..., 3] > 128
+
+    def centre(counts):
+        share = np.cumsum(counts) / counts.sum()
+        return int(np.searchsorted(share, 0.1) + np.searchsorted(share, 0.9)) // 2
+    anchor = [centre(opaque[275:350, :].sum(axis=0)), centre(opaque[:, 296:].sum(axis=1))]
+    # the tightest rect corner past the art (`corner_inner`): the column from which on the art stays above some row, the
+    # one where the two insets from the anchor are most even, so screens' content starts clear of the corner
+    def inset(x):
+        below = np.nonzero(opaque[:, x:].any(axis=1))[0]
+        return [x - anchor[0], int(below.max()) + 1 - anchor[1] if len(below) else 0]
+    inner = min((inset(x) for x in range(anchor[0], ORNATE_CORNER)), key=lambda i: max(i))
+    return q, anchor, inner
+
+
+def frame_line() -> str:
+    # the one shade of every frame's thin accent line: the theme role `frame_line`, so frames and theme cannot part
+    with open(os.path.join(WORKSPACE, "games", GAME, "assets", "ui", "theme.json"), encoding="utf-8") as f:
+        return json.load(f)["colors"]["frame_line"]
 
 
 def fr_ring(w: int, h: int, x: int, y: int) -> int:
@@ -2892,54 +2932,65 @@ def fr_inset() -> Image.Image:
     return img
 
 
-def fr_ornate_corner() -> dict:
-    # the top-left 16 x 16 corner of the code-drawn ornate frame: an 8 x 8 iron boss outlined in Pewter with a Candle
-    # Gold stud, a Tallow-to-Candle lancet pointing inward; the ring-3 Candle Gold line runs from the boss along the edge
-    c = {}
-    for y in range(16):
-        for x in range(16):
-            r = min(x, y)
-            if r < 2:
-                c[x, y] = IRON
-            elif x <= 7 and y <= 7:
-                c[x, y] = PSTEEL if x == 7 or y == 7 else IRON
-            elif r == 3:
-                c[x, y] = CANDLE
-            elif r == 2:
-                c[x, y] = BASALT
-            else:
-                c[x, y] = VOID + "f0"
-    c[3, 3], c[4, 3], c[3, 4], c[4, 4] = CANDLE, CANDLE, CANDLE, TALLOW
-    for i, col in ((8, TALLOW), (9, TALLOW), (10, CANDLE)):
-        c[i, i] = col
-    return c
+def key_magenta(img: Image.Image, erode: int = 3) -> Image.Image:
+    # a pixel is magenta when R-G and B-G both exceed 35 (the model's soft edges, not only the flat ground); the alpha
+    # is then eroded by `erode` px at source size, which takes the pink fringe the soft edges leave. It also erases
+    # #9333ea and #e11d48, so it is only for sheets whose prompt bans them.
+    a = np.array(img.convert("RGBA"))
+    r, g, b = a[..., 0].astype(int), a[..., 1].astype(int), a[..., 2].astype(int)
+    a[..., 3] = np.where((r - g > 35) & (b - g > 35), 0, a[..., 3])
+    alpha = Image.fromarray(a[..., 3], "L").filter(ImageFilter.MinFilter(2 * erode + 1))
+    a[..., 3] = np.array(alpha)
+    a[a[..., 3] == 0] = 0
+    return Image.fromarray(a, "RGBA")
 
 
-def fr_ornate(sheet) -> Image.Image:
-    # 48 x 48, slice 16: edges ring 0-1 Scavenged Iron, ring 2 Damp Basalt, a Candle Gold line at ring 3, the centre
-    # Void Abyss at 94 %; corners code-drawn, or with --ornate SHEET the sheet's four quadrants' keyed corners (each
-    # quadrant's non-magenta box, nearest-scaled to 16 x 16; the divider is not used here)
-    w = h = 48
-    img = fr_box(w, h, [IRON, IRON, BASALT, CANDLE], VOID, 0xf0)
-    corner = fr_ornate_corner()
-    quads = []
-    if sheet:
-        src = Image.open(sheet).convert("RGBA")
-        a = np.array(src)
-        key = (a[..., 0] > 200) & (a[..., 1] < 60) & (a[..., 2] > 200)
-        a[key] = 0
-        src = Image.fromarray(a, "RGBA")
-        sw, sh = src.size
-        for qx, qy in ((0, 0), (1, 0), (0, 1), (1, 1)):
-            q = src.crop((qx * sw // 2, qy * sh // 2, (qx + 1) * sw // 2, (qy + 1) * sh // 2))
-            box = q.getbbox()
-            quads.append(q.crop(box).resize((16, 16), Image.NEAREST) if box else None)
-    for i, (fx, fy) in enumerate(((False, False), (True, False), (False, True), (True, True))):
-        if quads and quads[i] is not None:
-            img.alpha_composite(quads[i], (32 if fx else 0, 32 if fy else 0))
+def largest_piece(img: Image.Image) -> Image.Image:
+    # only the largest 8-connected opaque piece of `img`
+    a = np.array(img)
+    h, w = a.shape[:2]
+    seen = a[..., 3] == 0
+    best = []
+    for sy, sx in zip(*np.nonzero(~seen)):
+        if seen[sy, sx]:
             continue
-        for (x, y), col in corner.items():
-            img.putpixel((47 - x if fx else x, 47 - y if fy else y), rgb(col[:7], int(col[7:] or "ff", 16)))
+        seen[sy, sx] = True
+        piece, stack = [], [(int(sy), int(sx))]
+        while stack:
+            y, x = stack.pop()
+            piece.append((y, x))
+            for ny in range(max(y - 1, 0), min(y + 2, h)):
+                for nx in range(max(x - 1, 0), min(x + 2, w)):
+                    if not seen[ny, nx]:
+                        seen[ny, nx] = True
+                        stack.append((ny, nx))
+        if len(piece) > len(best):
+            best = piece
+    out = np.zeros_like(a)
+    for y, x in best:
+        out[y, x] = a[y, x]
+    return Image.fromarray(out, "RGBA")
+
+
+def fr_ornate(q: Image.Image) -> Image.Image:
+    # see-through but for the centre (Void Abyss at 94 %), the edge bands and the corner `q`, mirrored for the other three
+    # as in the approved mockups (the sheet's bottom corners end in a heavy cut band). No mask here: at the window's size
+    # the engine's `sharpen` keeps the gold warm where a mask on this file turned it green.
+    c, n = ORNATE_CORNER, 2 * ORNATE_CORNER + ORNATE_MID
+    px = np.zeros((n, n, 4), dtype=np.uint8)
+    px[c:n - c, c:n - c] = rgb(VOID, 0xf0)
+    mid, half = c // 2, ORNATE_SCALE // 2
+    for lo, hi, col in ((mid - 2 * half, mid - half, rgb(SLATE)), (mid - half, mid + half, rgb(frame_line())), (mid + half, mid + 2 * half, rgb(SLATE))):
+        px[lo:hi, c:n - c] = col
+        px[n - hi:n - lo, c:n - c] = col
+        px[c:n - c, lo:hi] = col
+        px[c:n - c, n - hi:n - lo] = col
+    img = Image.fromarray(px, "RGBA")
+    far = n - c
+    img.paste(q, (0, 0))
+    img.paste(q.transpose(Image.FLIP_LEFT_RIGHT), (far, 0))
+    img.paste(q.transpose(Image.FLIP_TOP_BOTTOM), (0, far))
+    img.paste(q.transpose(Image.ROTATE_180), (far, far))
     return img
 
 
@@ -2965,8 +3016,13 @@ def ui_frames():
         "card": (btn(IRON, BASALT, False), s4),
         "card_hot": (btn(TALLOW, SLATE, False), s4),
         "card_on": (btn(TALLOW, OAK, False), s4),
-        "ornate": (fr_ornate(ORNATE_SHEET), {"slice": [16, 16, 16, 16]}),
     }
+    try:
+        q, anchor, inner = ornate_corner(ORNATE_SHEET)
+        c = ORNATE_CORNER
+        out["ornate"] = (fr_ornate(q), {"slice": [c, c, c, c], "scale": ORNATE_SCALE, "corner_anchor": anchor, "corner_inner": inner, **ORNATE_SIDECAR})
+    except (FileNotFoundError, UnidentifiedImageError):  # no file, or an unsmudged LFS pointer
+        print("ornate: no sheet at %s, its files are left as they are (--ornate SHEET)" % ORNATE_SHEET)
     out["tab"] = out["button"]
     out["tab_on"] = out["button_down"]
     return out
@@ -2978,7 +3034,7 @@ def g_ui_frames(out: Out) -> None:
         path = out.target("game", "ui/frames/%s.json" % role)
         if path:
             with open(path, "w", encoding="utf-8", newline="\n") as f:
-                f.write(json.dumps(dict(side, scale=2)) + "\n")
+                f.write(json.dumps(dict(side, scale=side.get("scale", 2))) + "\n")
             print("wrote game:ui/frames/%s.json" % role)
 
 
@@ -3081,7 +3137,7 @@ def main() -> None:
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--compare", metavar="DIR", help="check a regenerated workspace root against the committed files")
     ap.add_argument("--spot", metavar="OUT", help="with --compare: write committed | regenerated body sheets to OUT")
-    ap.add_argument("--ornate", metavar="SHEET", help="ui_frames: compose the ornate frame's corners from the A6 corner sheet")
+    ap.add_argument("--ornate", metavar="SHEET", help="ui_frames: another corner sheet than the picked one")
     a = ap.parse_args()
     if a.list:
         print(" ".join(GROUPS))
@@ -3091,7 +3147,7 @@ def main() -> None:
             spot(a.compare, a.spot)
         sys.exit(compare(a.compare))
     global ORNATE_SHEET
-    ORNATE_SHEET = a.ornate
+    ORNATE_SHEET = a.ornate or ORNATE_SHEET
     out = Out(a.root, a.layer or list(LAYERS), a.overwrite)
     for g in a.groups or list(GROUPS):
         if g not in GROUPS:

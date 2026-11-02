@@ -29,8 +29,22 @@ Tree (section 3 of the spec; a test keeps every file on these patterns):
 - `ui/theme.json` and `ui/frames/<role>.{png,json}`: the Tallow and Iron theme (LOOK1-G1, spec
   `games/emberwake/docs/specs/LOOK1.md` sections 2-3, read by `aegis_ui::theme`): the colour roles, the faces, the
   layout values and the nine-slice frames (`tools/gen_art.py ui_frames`, exact pixels at scale 2 in the art bible's
-  hues; the `ornate` corners are code-drawn until the A6 corner sheet exists, then `--ornate SHEET`). Not content: no
-  `aegis content` row. Test `emberwake_gui/tests/theme.rs`.
+  hues). `ornate` alone is high-resolution, 928 x 928 with slice 448 at scale 16, `reduce` `average`, `straddle`,
+  `corner_arm` 0.23 within 18-48 logical px, up to the art's natural end, `corner_art` 12, `corner_splice`, `corner_anchor`, `corner_inner`,
+  `corner_elbow` and `sharpen` 0.6: corners from the picked sheet `art_src/ornate_corners_gen1793612836_1.png`, its
+  top-left mirrored for all four (art outside the frame palette), the anchor and inner reach measured from the art and
+  the arm's pieces recorded in `gen_art.py`; see-through edge bands of a thin `#1e232d` around the line in the theme role
+  `frame_line` (`gen_art.py` reads it from `ui/theme.json`; `ornate` is the only frame with one); no sheet, its files are
+  left alone. Not content: no `aegis content` row. Test `emberwake_gui/tests/theme.rs`.
+- The title's picked art (LOOK1-R1; Gemini art, scaled only, no palette pass; picks in `docs/decisions/workflow.md`; not
+  content; made by `tools/title_art.py`, each file's recipe in its header): `backgrounds/menu/title.png` (1920 x 1080, cover crop of `art_src/title_backdrop_clean_gen1793615014_1.png`;
+  fire goes on it as an effects layer, never into the picture), `ui/logo_title.png` (the 1246 x 325 master, an unscaled
+  copy of `art_src/title_logo_final.png`, which the menu sizes to the window: averaged down, enlarged above about 3393 px
+  of window width), `ui/logo_crest.png` (963 x 963, crest
+  B keyed from its ground, the typeset fallback's crest), and for LOOK1-M2's story cards, not drawn yet,
+  `ui/banner_full.png` (1329 x 243, take 1 of `art_src/card_banner_gen1793616575_*.png` with its finials) and
+  `ui/banner_bar.png` (716 x 152, the plain middle of take 2, opaque, no finials; it tiles when every other copy is
+  mirrored, its ends cut on the arches' axes).
 - `fonts/<file>.ttf` with `<Family>-OFL.txt`: the theme's faces beyond the engine's body face (OpenSans SemiBold in
   `engine/assets/fonts/`). Shipped unmodified under the SIL Open Font License 1.1 (decision "LOOK1 fonts"):
 

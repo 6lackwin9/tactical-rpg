@@ -83,6 +83,7 @@ theme_roles! {
     bg = ui::BG, "Screen ground.";
     panel = ui::MODAL, "`Ui::frame` and popup fill.";
     panel_edge = ui::FRAME, "Frame edge.";
+    frame_line = rgb(146, 64, 14), "A frame's thin accent line: the one shade every frame file is generated with.";
     card = ui::CARD, "Button, card and row fill.";
     card_hot = ui::PANEL_HI, "Hovered fill.";
     selected = ui::SELECTED, "Active or selected fill.";
@@ -223,20 +224,61 @@ pub struct Nine {
     pub center: NineFill,
     pub pad: [i32; 4],
     pub ink: String,
+    /// Sidecar `"reduce": "average"`: a high-resolution frame (`scale` above the view's) is averaged down to the window's
+    /// physical size instead of sampled (`Painter::nine`). Off for the pixel frames, which keep their exact pixels. A
+    /// `straddle` frame always averages when it reduces, with or without this key.
+    pub reduce: bool,
+    /// Sidecar `"corner_arm"`, with `straddle`: each arm of a corner reaches this share of its own edge from the corner
+    /// point (so two corners cover twice that of each edge), at one scale in both axes: the arms are cut shorter or, with
+    /// `corner_splice`, rebuilt from their own art, never squashed. The scale: `Painter::nine`'s `corner_scale`.
+    pub corner_arm: Option<f32>,
+    /// Sidecar `"corner_arm_min"` and `"corner_arm_max"`: logical px limits on an arm's reach, so a small panel keeps a
+    /// readable ornament and a large one a sensible one. Two arms on an edge meet at most, whatever they ask.
+    pub corner_arm_min: f32,
+    pub corner_arm_max: f32,
+    /// Sidecar `"corner_arm_full": true`: the arms run on to the middle of each edge (a portrait frame may want this),
+    /// past the share and the limits. The art still ends where it ends: it is never stretched, only drawn larger.
+    pub corner_arm_full: bool,
+    /// Sidecar `"corner_elbow"`: art px from the anchor that the shorter arm must still show (the elbow's ornament), which
+    /// limits how large a very wide or tall panel may draw the art.
+    pub corner_elbow: i32,
+    /// Sidecar `"corner_art"`: art px per logical px the corners draw at, whatever the panel, so a thin arm stays thin;
+    /// a panel too small to show the elbow and the foot draws them smaller. Without it the art's natural arm fills the
+    /// longer arm's reach.
+    pub corner_art: Option<i32>,
+    /// Sidecar `"corner_splice": {"x": [c, d], "y": [c, d]}`: an arm's own finish in art px, along x (the top arm) and y
+    /// (the left arm). An arm shorter than the art is the art up to the cut then this finish, so it ends on real ornament.
+    /// An arm is never longer than the art: its reach stops there.
+    pub corner_splice: Option<[[i32; 2]; 2]>,
+    /// Sidecar `"corner_inner": [x, y]`: art px from the anchor that the corner's art reaches into the panel, across each
+    /// arm; `painter::nine_content_rect` keeps a panel's content past them at whatever size the arms resolve to.
+    pub corner_inner: Option<[i32; 2]>,
+    /// Sidecar `"straddle": true`: the frame sits half in and half out of the panel. The edge bands and corners are
+    /// centred on its boundary and corner points, the centre fills exactly the panel and the rest of the file's corners
+    /// is see-through. The panel's rect, layout, widget and hit area stay as they are; only the drawing overhangs. Its
+    /// cells are always averaged when reduced, whatever `reduce` says.
+    pub straddle: bool,
+    /// Sidecar `"sharpen"`: the strength of an unsharp mask on the corners once reduced (0 off), which holds thin lines
+    /// at the window's size where a mask on the file would have to guess it.
+    pub sharpen: f32,
+    /// Sidecar `"corner_anchor": [x, y]`, with `straddle`: the art px of the top-left corner that sits on the panel's
+    /// corner point (mirrored for the others), so the boundary runs along the art's own arms, whatever its image's
+    /// empty space. Without it the corner's middle.
+    pub corner_anchor: Option<[i32; 2]>,
 }
 
 impl Nine {
     /// Slices `slice` at scale 2, stretched, padded by the slices, text in `text`.
     pub fn new(slice: [i32; 4]) -> Self {
-        Self { slice, scale: 2, edges: NineFill::Stretch, center: NineFill::Stretch, pad: slice.map(|s| (s + 1) / 2), ink: "text".into() }
+        Self { slice, scale: 2, edges: NineFill::Stretch, center: NineFill::Stretch, pad: slice.map(|s| (s + 1) / 2), ink: "text".into(), reduce: false, corner_arm: None, corner_arm_min: 0.0, corner_arm_max: f32::MAX, corner_arm_full: false, corner_elbow: 0, corner_art: None, corner_splice: None, corner_inner: None, straddle: false, sharpen: 0.0, corner_anchor: None }
     }
 
     /// The sidecar `v` of a `w` x `h` PNG, or every problem with it (`at` names the file).
     pub fn parse(v: &Value, w: i32, h: i32, at: &str) -> Result<Nine, Vec<String>> {
         let mut errs = Vec::new();
         let Some(o) = v.as_object() else { return Err(vec![format!("{at}: a sidecar is a JSON object")]) };
-        for k in o.keys().filter(|k| !["slice", "scale", "edges", "center", "pad", "ink"].contains(&k.as_str())) {
-            errs.push(format!("{at}: unknown key '{k}' (allowed: slice, scale, edges, center, pad, ink)"));
+        for k in o.keys().filter(|k| !["slice", "scale", "edges", "center", "pad", "ink", "reduce", "corner_arm", "corner_arm_min", "corner_arm_max", "corner_arm_full", "corner_elbow", "corner_art", "corner_splice", "corner_inner", "straddle", "sharpen", "corner_anchor"].contains(&k.as_str())) {
+            errs.push(format!("{at}: unknown key '{k}' (allowed: slice, scale, edges, center, pad, ink, reduce, corner_arm, corner_arm_min, corner_arm_max, corner_arm_full, corner_elbow, corner_art, corner_splice, corner_inner, straddle, sharpen, corner_anchor)"));
         }
         let four = |key: &str, lo: i64, hi: i64, errs: &mut Vec<String>| -> Option<[i32; 4]> {
             let a = o.get(key)?;
@@ -268,9 +310,89 @@ impl Nine {
         }
         let mut nine = Nine::new(slice.unwrap_or([1; 4]));
         if let Some(s) = o.get("scale") {
-            match s.as_i64().filter(|n| (1..=4).contains(n)) {
+            match s.as_i64().filter(|n| (1..=32).contains(n)) {
                 Some(n) => nine.scale = n as i32,
-                None => errs.push(format!("{at}: scale must be a whole number 1-4")),
+                None => errs.push(format!("{at}: scale must be a whole number 1-32")),
+            }
+        }
+        if let Some(m) = o.get("reduce") {
+            match m.as_str() {
+                Some("average") => nine.reduce = true,
+                _ => errs.push(format!("{at}: reduce must be average")),
+            }
+        }
+        if let Some(m) = o.get("corner_arm") {
+            match m.as_f64().filter(|n| *n > 0.0 && *n <= 0.5) {
+                Some(n) => nine.corner_arm = Some(n as f32),
+                None => errs.push(format!("{at}: corner_arm must be a number above 0, at most 0.5")),
+            }
+        }
+        for (key, into) in [("corner_arm_min", &mut nine.corner_arm_min), ("corner_arm_max", &mut nine.corner_arm_max)] {
+            if let Some(m) = o.get(key) {
+                match m.as_f64().filter(|n| *n >= 0.0) {
+                    Some(n) => *into = n as f32,
+                    None => errs.push(format!("{at}: {key} must be logical px, 0 or more")),
+                }
+            }
+        }
+        if nine.corner_arm_min > nine.corner_arm_max {
+            errs.push(format!("{at}: corner_arm_min is above corner_arm_max"));
+        }
+        if let Some(m) = o.get("corner_arm_full") {
+            match m.as_bool() {
+                Some(b) => nine.corner_arm_full = b,
+                None => errs.push(format!("{at}: corner_arm_full must be true or false")),
+            }
+        }
+        if let Some(m) = o.get("corner_elbow") {
+            match m.as_i64().filter(|n| *n >= 0 && *n < nine.slice[0].min(nine.slice[1]) as i64) {
+                Some(n) => nine.corner_elbow = n as i32,
+                None => errs.push(format!("{at}: corner_elbow must be whole art px inside the slice")),
+            }
+        }
+        if let Some(m) = o.get("straddle") {
+            match m.as_bool() {
+                Some(b) => nine.straddle = b,
+                None => errs.push(format!("{at}: straddle must be true or false")),
+            }
+        }
+        if let Some(m) = o.get("sharpen") {
+            match m.as_f64().filter(|n| (0.0..=2.0).contains(n)) {
+                Some(n) => nine.sharpen = n as f32,
+                None => errs.push(format!("{at}: sharpen must be a number 0-2")),
+            }
+        }
+        if let Some(m) = o.get("corner_art") {
+            match m.as_i64().filter(|n| *n >= 1) {
+                Some(n) => nine.corner_art = Some(n as i32),
+                None => errs.push(format!("{at}: corner_art must be whole art px per logical px, 1 or more")),
+            }
+        }
+        if let Some(m) = o.get("corner_splice") {
+            let axis = |key: &str, slice: i32| -> Option<[i32; 2]> {
+                let v: Vec<i64> = m.get(key)?.as_array()?.iter().filter_map(Value::as_i64).collect();
+                match v[..] {
+                    [c, d] if 1 <= c && c < d && d <= slice as i64 => Some([c as i32, d as i32]),
+                    _ => None,
+                }
+            };
+            match (axis("x", nine.slice[0]), axis("y", nine.slice[1])) {
+                (Some(x), Some(y)) => nine.corner_splice = Some([x, y]),
+                _ => errs.push(format!("{at}: corner_splice must give x and y as [c, d] with 1 <= c < d, inside the slice")),
+            }
+        }
+        if let Some(m) = o.get("corner_inner") {
+            let vals: Vec<i64> = m.as_array().map(|a| a.iter().filter_map(Value::as_i64).collect()).unwrap_or_default();
+            match vals[..] {
+                [x, y] if x >= 0 && y >= 0 => nine.corner_inner = Some([x as i32, y as i32]),
+                _ => errs.push(format!("{at}: corner_inner must be [x, y] art px")),
+            }
+        }
+        if let Some(m) = o.get("corner_anchor") {
+            let vals: Vec<i64> = m.as_array().map(|a| a.iter().filter_map(Value::as_i64).collect()).unwrap_or_default();
+            match vals[..] {
+                [x, y] if x >= 0 && y >= 0 && x < nine.slice[0] as i64 && y < nine.slice[1] as i64 => nine.corner_anchor = Some([x as i32, y as i32]),
+                _ => errs.push(format!("{at}: corner_anchor must be [x, y] inside the top-left slice")),
             }
         }
         let fill = |key: &str, allowed: &[NineFill], errs: &mut Vec<String>| -> Option<NineFill> {

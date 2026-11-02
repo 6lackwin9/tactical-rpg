@@ -1,8 +1,8 @@
 //! LOOK1-ME: the engine's menu panes (spec LOOK1 section 6), each a standalone piece a screen composes and the UI
 //! Gallery's Kit page shows on its own (the Panes page): `backdrop` (a full-screen picture, cover fit, with a vignette
 //! and a veil, composed once and blitted after; the screen's L0), `menu_column` (large menu buttons with hotkeys and
-//! one primary, or text rows on a picture: `MenuStyle`, under a `menu_title` block), `image_steps` (a picture at whole
-//! scale steps), `tab_rail` (a vertical tab rail and its content area, settings style), `slot_card` (a save
+//! one primary, or text rows on a picture: `MenuStyle`, under a `menu_title` block), `tab_rail` (a vertical tab rail
+//! and its content area, settings style), `slot_card` (a save
 //! or load card: thumbnail, title and lines, a portrait row, a timestamp, corner icons) and `ask_dialog` (the themed
 //! yes / no question in the `ornate` or `panel` frame). They draw only through the theme in force (`Ui::t`: colour
 //! roles, faces, layout values, frame roles), take every text and picture from the caller (they name no game), record
@@ -202,7 +202,7 @@ pub fn backdrop_composes() -> u64 {
 
 /// A picture's identity: where it lives, its size and a hash of up to 256 pixels across it, so another image that lands
 /// on a freed one's address does not pass for it (an edit to pixels the hash does not sample would).
-fn picture_id(img: &Image) -> (usize, i32, i32, u64) {
+pub(crate) fn picture_id(img: &Image) -> (usize, i32, i32, u64) {
     let n = img.px.len() / 4;
     let step = (n / 256).max(1);
     let mut h: u64 = 0xcbf29ce484222325;
@@ -248,37 +248,6 @@ fn blit(c: &mut Canvas, pr: Rect, px: &[u8]) {
         let to = ((y * c.w + v.x) * 4) as usize;
         c.px[to..to + n].copy_from_slice(&px[from..from + n]);
     }
-}
-
-/// The whole scale step (`num`, `den`, one of them 1) that fits an `iw` x `ih` picture in `rw` x `rh` physical px: the
-/// largest whole multiple that fits, or the smallest whole division when the picture is larger. It keeps the aspect.
-pub fn whole_steps(iw: i32, ih: i32, rw: i32, rh: i32) -> (i32, i32) {
-    if iw <= 0 || ih <= 0 || rw <= 0 || rh <= 0 {
-        return (1, 1);
-    }
-    if iw > rw || ih > rh {
-        return (1, ((iw + rw - 1) / rw).max((ih + rh - 1) / rh));
-    }
-    ((rw / iw).min(rh / ih), 1)
-}
-
-/// `img` centred on logical (`cx`, `cy`) at the `whole_steps` that fit a logical `room_w` x `room_h` at the view's scale
-/// (nearest sampling, so pixel art stays crisp). Returns the logical rect it covers.
-pub fn image_steps(p: &mut Painter, img: &Image, cx: f32, cy: f32, room_w: i32, room_h: i32) -> Rect {
-    let s = p.v.s;
-    let (num, den) = whole_steps(img.w, img.h, (room_w as f32 * s) as i32, (room_h as f32 * s) as i32);
-    let (pw, ph) = (img.w * num / den, img.h * num / den);
-    let px = (p.v.ox + cx * s - pw as f32 / 2.0).round() as i32;
-    let py = (p.v.oy + cy * s - ph as f32 / 2.0).round() as i32;
-    for y in 0..ph {
-        let sy = y * den / num;
-        for x in 0..pw {
-            let i = ((sy * img.w + x * den / num) * 4) as usize;
-            p.c.blend(px + x, py + y, [img.px[i], img.px[i + 1], img.px[i + 2], img.px[i + 3]]);
-        }
-    }
-    let (lw, lh) = ((pw as f32 / s).ceil() as i32, (ph as f32 / s).ceil() as i32);
-    Rect::new(((px as f32 - p.v.ox) / s).round() as i32, ((py as f32 - p.v.oy) / s).round() as i32, lw, lh)
 }
 
 /// `backdrop` recorded for the agent link: a widget `id` of kind `picture` (no action, no focus) whose text is
@@ -685,16 +654,18 @@ pub fn ask_layout(p: &mut Painter, area: Rect, v: &AskView) -> (Rect, Vec<String
     let s = p.fonts.scale.max(1.0);
     let w = snap_up((ASK_MIN_W as f32 * s).round() as i32).min(snap_down(area.w - 2 * m)).max(0);
     let role = if v.ornate { "ornate" } else { "panel" };
-    let inset = |r: Rect| t.frame(role).map_or(r.inset(pad), |f| f.nine.content(r).inset(pad / 2));
-    let inner_w = inset(Rect::new(0, 0, w, 100)).w;
+    let view = p.v.s;
+    let inset = |r: Rect| t.frame(role).map_or(r.inset(pad), |f| crate::painter::nine_content_rect(&f.nine, r, view).inset(pad / 2));
+    let least_h = (ASK_MIN_H as f32 * s).round() as i32;
+    let inner_w = inset(Rect::new(0, 0, w, least_h)).w;
     let lines = p.wrap(v.question, BODY, inner_w as f32);
     let lh = p.line_h(BODY).ceil() as i32;
     let title_h = if v.title.is_empty() { 0 } else { p.line_h_face(Typeface::Display, HEAD).ceil() as i32 + gutter };
     let bh = snap_up(p.line_h(BODY).ceil() as i32 + 6);
     let bw = snap_up((p.text_w(v.yes, BODY).max(p.text_w(v.no, BODY)) + 24.0).ceil() as i32).max(48);
-    let frame_pad = 100 - inset(Rect::new(0, 0, 100, 100)).h;
+    let frame_pad = least_h - inset(Rect::new(0, 0, w, least_h)).h;
     let need = frame_pad + title_h + lines.len() as i32 * lh + gutter + bh;
-    let h = snap_up(((ASK_MIN_H as f32 * s).round() as i32).max(need)).min(snap_down(area.h - 2 * m)).max(0);
+    let h = snap_up(least_h.max(need)).min(snap_down(area.h - 2 * m)).max(0);
     let r = Rect::new(area.x + snap((area.w - w) / 2), area.y + snap((area.h - h) / 2), w, h);
     let inner = inset(r);
     let no = Rect::new(inner.x + inner.w - bw, inner.y + inner.h - bh, bw, bh);
@@ -715,7 +686,8 @@ pub fn ask_dialog<A: Clone>(ui: &mut Ui<A>, id: &str, area: Rect, v: &AskView, y
     let role = if v.ornate { "ornate" } else { "panel" };
     let (fill, edge, radius) = t.vector(role);
     ui.p.skin(t.frame(role), r, fill, edge, radius);
-    let inner = t.frame(role).map_or(r.inset(t.layout.padding), |f| f.nine.content(r).inset(t.layout.padding / 2));
+    let view = ui.p.v.s;
+    let inner = t.frame(role).map_or(r.inset(t.layout.padding), |f| crate::painter::nine_content_rect(&f.nine, r, view).inset(t.layout.padding / 2));
     let mut y = inner.y as f32;
     if !v.title.is_empty() {
         let lh = ui.p.line_h_face(Typeface::Display, HEAD);
