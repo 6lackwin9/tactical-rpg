@@ -753,7 +753,7 @@ impl Gallery {
             let k = (r.w as f32 / src.w.max(1) as f32).min(r.h as f32 / src.h.max(1) as f32).min(2.0);
             let (w, h) = ((src.w as f32 * k) as i32, (src.h as f32 * k) as i32);
             let target = Rect::new(r.x + (r.w - w) / 2, r.y + (r.h - h) / 2, w, h);
-            preview::region_in(g, target, src, |g| b.draw(cx, g, OFF, false));
+            preview::region_in(g, target, src, b.grid(), |g| b.draw(cx, g, OFF, false));
             return;
         }
         if NEEDS_GAME.contains(&id) && !self.ensure_game(cx) {
@@ -769,7 +769,7 @@ impl Gallery {
             };
         }
         if let Some(sh) = self.shown.as_mut() {
-            preview::screen_in(g, r, |g| sh.screen.draw(cx, g, OFF, false));
+            preview::screen_in(g, r, sh.screen.grid(), |g| sh.screen.draw(cx, g, OFF, false));
         }
         self.script(cx);
     }

@@ -6,6 +6,7 @@
 use crate::art::Art;
 use crate::audio::Audio;
 use crate::canvas::Rect;
+pub use crate::painter::Grid;
 use crate::painter::Painter;
 use crate::ui::{self, Gfx, Ui, Widget, BODY, H, W};
 use serde_json::{json, Value};
@@ -253,6 +254,11 @@ impl<G: Context> Cx<G> {
 
 pub trait Screen<G> {
     fn id(&self) -> &'static str;
+    /// The units this screen writes its rects in, for as long as it lives (LAYOUT720-E1; the shell gives it the view
+    /// and the mouse in them). The default keeps today's picture.
+    fn grid(&self) -> Grid {
+        Grid::Old
+    }
     /// Drawn over the screen below it (popups, menus over the map).
     fn overlay(&self) -> bool {
         false

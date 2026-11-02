@@ -1,5 +1,6 @@
-//! Two-layer drawing at the window's real resolution. Layout is in logical units (a 640x360 design canvas); `View`
-//! maps them to physical pixels. The battlefield is pixel art scaled with nearest sampling; panels and text are drawn
+//! Two-layer drawing at the window's real resolution. Layout is in logical units; `View` maps them to physical pixels,
+//! and a screen's `Grid` says which units it writes (LAYOUT720-E1: the old 640x360 design canvas, or the grid `GRID`).
+//! The battlefield is pixel art scaled with nearest sampling; panels and text are drawn
 //! smooth at full resolution (anti-aliased Open Sans, rounded panels), like the Godot HUD. LOOK1-E1: three faces
 //! (`Typeface`: body, display, mono; the theme's fonts, `Fonts::sync`) and nine-slice frames (`Painter::nine`).
 
@@ -12,18 +13,91 @@ use std::sync::Arc;
 pub const LW: f32 = 640.0;
 pub const LH: f32 = 360.0;
 
+/// The layout grid new screens are written on, in units (LAYOUT720-E1): set here and nowhere else. Its width must be a
+/// whole multiple of the old canvas, so that the old mapping stays whole.
+pub const GRID: (i32, i32) = (1280, 720);
+
+/// Grid units per old unit.
+const UNITS: i32 = GRID.0 / LW as i32;
+const _: () = assert!(GRID.0 % LW as i32 == 0 && GRID.1 == LH as i32 * UNITS, "the grid is a whole multiple of the old canvas");
+
+/// Which units a screen writes its rects in (`Screen::grid`), and so how they reach the window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Grid {
+    /// The wrapper, every screen's default: old numbers filling the window, exactly the view `View::fit` gives.
+    #[default]
+    Old,
+    /// Old numbers one to one on the grid: the whole picture smaller, in the top-left of the window.
+    Quadrant,
+    /// Grid units filling the window, for a screen written relative to its canvas.
+    Native,
+}
+
+impl Grid {
+    /// Units per old unit, `View.g`.
+    pub fn g(self) -> i32 {
+        match self {
+            Grid::Native => UNITS,
+            Grid::Old | Grid::Quadrant => 1,
+        }
+    }
+
+    /// How many times smaller the scale is than the wrapper's.
+    fn shrink(self) -> i32 {
+        match self {
+            Grid::Old => 1,
+            Grid::Quadrant | Grid::Native => UNITS,
+        }
+    }
+
+    /// The whole window in this screen's units: what a preview of the screen shows. Under `Quadrant` it is larger
+    /// than the canvas the screen draws on; the rest stays blank.
+    pub fn extent(self) -> (i32, i32) {
+        (LW as i32 * self.shrink(), LH as i32 * self.shrink())
+    }
+
+    /// The name the agent link reports.
+    pub fn name(self) -> &'static str {
+        match self {
+            Grid::Old => "old",
+            Grid::Quadrant => "quadrant",
+            Grid::Native => "native",
+        }
+    }
+}
+
 /// Logical -> physical mapping (uniform scale, letterboxed and centred).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct View {
     pub s: f32,
     pub ox: f32,
     pub oy: f32,
+    /// Units per old unit: 1 on an unmoved screen, `GRID.0 / LW` on a native one. What art, thin strokes and sidecar
+    /// numbers multiply by, as those stay in old units for good.
+    pub g: i32,
 }
 
 impl View {
     pub fn fit(pw: u32, ph: u32) -> Self {
         let s = (pw as f32 / LW).min(ph as f32 / LH).max(0.25);
-        Self { s, ox: ((pw as f32 - LW * s) / 2.0).floor(), oy: ((ph as f32 - LH * s) / 2.0).floor() }
+        Self { s, ox: ((pw as f32 - LW * s) / 2.0).floor(), oy: ((ph as f32 - LH * s) / 2.0).floor(), g: 1 }
+    }
+    /// The view a screen on `grid` draws with, `self` being the whole window's (`View::fit`). `Grid::Old` gives `self`
+    /// exactly.
+    pub fn for_grid(self, grid: Grid) -> Self {
+        Self { s: self.s / grid.shrink() as f32, g: grid.g(), ..self }
+    }
+    /// `n` old units in this view's units.
+    pub fn u(&self, n: i32) -> i32 {
+        n * self.g
+    }
+    /// Physical px per old unit: for what stays sized in old units, such as a stroke or a frame's art.
+    pub fn old_scale(&self) -> f32 {
+        self.s * self.g as f32
+    }
+    /// The canvas a screen draws on, in this view's units.
+    pub fn canvas(&self) -> (i32, i32) {
+        (LW as i32 * self.g, LH as i32 * self.g)
     }
     pub fn x(&self, x: f32) -> i32 {
         (self.ox + x * self.s).round() as i32
@@ -40,6 +114,15 @@ impl View {
     /// Physical point -> logical point.
     pub fn to_logical(&self, px: f32, py: f32) -> (i32, i32) {
         (((px - self.ox) / self.s).floor() as i32, ((py - self.oy) / self.s).floor() as i32)
+    }
+    /// The physical middle of a logical point, which `to_logical` reads back as that point.
+    pub fn to_physical(&self, x: i32, y: i32) -> (f32, f32) {
+        (self.ox + (x as f32 + 0.5) * self.s, self.oy + (y as f32 + 0.5) * self.s)
+    }
+    /// The content rect of `r` in a frame, `r` and the result in this view's units (`nine_content_rect` for a view on
+    /// any grid; the sidecar's `pad` and corners stay in old units).
+    pub fn nine_content(&self, nine: &Nine, r: Rect) -> Rect {
+        content_rect(nine, r, self.s, self.g)
     }
 }
 
@@ -371,15 +454,26 @@ fn corner_scale(nine: &Nine, k: f32, pr: Rect) -> f32 {
     (k * nine.corner_size).min(room(pr.w, nine.slice[0].min(nine.slice[2]), ax)).min(room(pr.h, nine.slice[1].min(nine.slice[3]), ay))
 }
 
-/// The content rect of logical `r` in a frame at view scale `view`: inside the sidecar's `pad` and, with `corner_inner`,
-/// past the corners' inward reach at the size they draw on this panel. Frames without it: `Nine::content`.
+/// The content rect of logical `r` in a frame at view scale `view`, on an unmoved screen (on any grid: `View::nine_content`):
+/// inside the sidecar's `pad` and, with `corner_inner`, past the corners' inward reach at the size they draw on this panel.
+/// Frames without it: `Nine::content`.
 pub fn nine_content_rect(nine: &Nine, r: Rect, view: f32) -> Rect {
-    let Some([ix, iy]) = nine.corner_inner else { return nine.content(r) };
-    let physical = Rect::new(0, 0, (r.w as f32 * view).round() as i32, (r.h as f32 * view).round() as i32);
-    let p = corner_scale(nine, view / nine.scale.max(1) as f32, physical);
-    let (dx, dy) = ((ix as f32 * p / view).ceil() as i32, (iy as f32 * p / view).ceil() as i32);
-    let [l, t, rr, b] = nine.pad;
-    let (l, t, rr, b) = (l.max(dx), t.max(dy), rr.max(dx), b.max(dy));
+    content_rect(nine, r, view, 1)
+}
+
+/// `nine_content_rect` with `s` physical px per unit and `g` units per old unit: worked out in old units, then multiplied.
+fn content_rect(nine: &Nine, r: Rect, s: f32, g: i32) -> Rect {
+    let [l, t, rr, b] = nine.pad.map(|p| p * g);
+    let (l, t, rr, b) = match nine.corner_inner {
+        None => (l, t, rr, b),
+        Some([ix, iy]) => {
+            let old = s * g as f32;
+            let physical = Rect::new(0, 0, (r.w as f32 * s).round() as i32, (r.h as f32 * s).round() as i32);
+            let p = corner_scale(nine, old / nine.scale.max(1) as f32, physical);
+            let (dx, dy) = ((ix as f32 * p / old).ceil() as i32 * g, (iy as f32 * p / old).ceil() as i32 * g);
+            (l.max(dx), t.max(dy), rr.max(dx), b.max(dy))
+        }
+    };
     Rect::new(r.x + l, r.y + t, (r.w - l - rr).max(0), (r.h - t - b).max(0))
 }
 
@@ -695,8 +789,8 @@ impl<'a> Painter<'a> {
             return;
         }
         let [sl, st, sr, sb] = nine.slice;
-        // Physical px per art px.
-        let k = self.v.s / nine.scale.max(1) as f32;
+        // Physical px per art px: a sidecar's `scale` is art px per old unit on every grid.
+        let k = self.v.old_scale() / nine.scale.max(1) as f32;
         if nine.straddle {
             let p = corner_scale(nine, k, pr);
             let reach = straddle_over(nine, k, p);
@@ -778,7 +872,7 @@ impl<'a> Painter<'a> {
             self.fill(r, fill);
         } else if f.nine.center == NineFill::None {
             let k = f.nine.scale.max(1);
-            let [l, t, rr, b] = f.nine.slice.map(|s| s / k);
+            let [l, t, rr, b] = f.nine.slice.map(|s| self.v.u(s / k));
             self.fill(Rect::new(r.x + l, r.y + t, (r.w - l - rr).max(0), (r.h - t - b).max(0)), fill);
         }
         self.nine(&f.img, &f.nine, r);
@@ -834,7 +928,7 @@ impl<'a> Painter<'a> {
     pub fn line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, col: Rgba, dash: f32) {
         let (a, b, c, d) = (self.v.x(x0), self.v.y(y0), self.v.x(x1), self.v.y(y1));
         let dash_px = (dash * self.v.s).round() as i32;
-        let t = (self.v.s * 0.6).round().max(1.0) as i32;
+        let t = (self.v.old_scale() * 0.6).round().max(1.0) as i32;
         for o in 0..t {
             self.c.line(a + o, b, c + o, d, col, dash_px);
         }
@@ -859,11 +953,11 @@ impl<'a> Painter<'a> {
         }
     }
 
-    /// A 1 px (logical) anti-aliased ellipse outline centred on logical (`cx`, `cy`) with radii `rx` and `ry`, no fill
+    /// A 1 px (old unit) anti-aliased ellipse outline centred on logical (`cx`, `cy`) with radii `rx` and `ry`, no fill
     /// (STAGE1-E: a unit's foot ring). Only pixels within half the stroke plus half a pixel of the edge are touched.
     pub fn ellipse_ring(&mut self, cx: f32, cy: f32, rx: f32, ry: f32, col: Rgba) {
         let (x, y, prx, pry) = (self.v.ox + cx * self.v.s, self.v.oy + cy * self.v.s, (rx * self.v.s).max(0.5), (ry * self.v.s).max(0.5));
-        let t = self.v.s.max(1.0);
+        let t = self.v.old_scale().max(1.0);
         let pad = t / 2.0 + 1.0;
         let (x0, y0, x1, y1) = ((x - prx - pad).floor() as i32, (y - pry - pad).floor() as i32, (x + prx + pad).ceil() as i32, (y + pry + pad).ceil() as i32);
         for py in y0..=y1 {
@@ -883,7 +977,7 @@ impl<'a> Painter<'a> {
 
     pub fn circle(&mut self, cx: f32, cy: f32, r: f32, col: Rgba) {
         let (x, y, pr) = (self.v.ox + cx * self.v.s, self.v.oy + cy * self.v.s, r * self.v.s);
-        let t = (self.v.s * 0.5).max(1.0);
+        let t = (self.v.old_scale() * 0.5).max(1.0);
         let (x0, y0, x1, y1) = ((x - pr - 2.0) as i32, (y - pr - 2.0) as i32, (x + pr + 2.0) as i32, (y + pr + 2.0) as i32);
         for py in y0..=y1 {
             for px in x0..=x1 {

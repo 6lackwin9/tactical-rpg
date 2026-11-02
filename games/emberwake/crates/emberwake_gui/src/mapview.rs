@@ -560,7 +560,7 @@ mod tests {
                     let at = (50.0 + i as f32 * 0.037, 50.0 + i as f32 * 0.011);
                     let cam = camera_px(cell_of(view, q), focus, (200, 200), at, s);
                     let (g, shift) = placed(view, q, cam, s);
-                    let shifted = aegis_ui::painter::View { s, ox: shift.0, oy: shift.1 };
+                    let shifted = aegis_ui::painter::View { s, ox: shift.0, oy: shift.1, g: 1 };
                     assert!(shift.0.abs() <= s / 2.0 + 0.01 && shift.1.abs() <= s / 2.0 + 0.01, "{s}: under a logical px from the geometry");
                     for (x, y) in [(50, 50), (51, 50), (52, 53)] {
                         let r = shifted.rect(g.cell(x, y));
@@ -570,7 +570,7 @@ mod tests {
                         assert_eq!((r.x + r.w, r.y + r.h), (want(cam.0, x + 1, cw), want(cam.1, y + 1, ch)), "{view:?} {s}");
                     }
                     let (pr, ps) = party_px(view, q, cam, at, s);
-                    let drawn = aegis_ui::painter::View { s, ox: ps.0, oy: ps.1 }.rect(pr);
+                    let drawn = aegis_ui::painter::View { s, ox: ps.0, oy: ps.1, g: 1 }.rect(pr);
                     assert_eq!(*party.get_or_insert(drawn), drawn, "{view:?} {s}: frame {i}");
                     assert_eq!((pr.w, pr.h), cell_of(view, q));
                 }

@@ -188,6 +188,8 @@ portable. No `Native` screen assumes a wide canvas; one with no compact choice r
 
 ## Sorting existing screens
 
+A screen picks with `fn grid(&self) -> Grid`; a preview passes the shown screen's `grid()`.
+
 Sort each existing screen before touching it. Move a screen only inside a task that changes it: there is no sweep and no end
 date for the old mapping.
 
