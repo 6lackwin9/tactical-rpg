@@ -120,7 +120,7 @@ fn tiles_of_the_wrong_size_are_errors() {
     assert_eq!(
         errors,
         ["Tile art 'tilesets/ward/wall/v0.png' is 16x16 px; a region tile wants 32x32 or 32x24.".to_string(),
-         "Tile art 'tilesets/ward/wall_face/v2.png' is 32x32 px; a region wall face wants 32x16 or 32x12.".to_string(),
+         "Tile art 'tilesets/ward/wall_face/v2.png' is 32x32 px; a region wall face wants 32x16 or 32x12 or 128x48.".to_string(),
          "Tile art 'tilesets/ward_stage/wall_face/v1.png' is 64x48 px; a stage wall face wants 64x24.".to_string()]
     );
     // one id as both the region set and the stage set is checked in both roles

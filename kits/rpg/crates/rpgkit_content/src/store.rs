@@ -184,16 +184,16 @@ pub fn file_of(data_dir: &Path, world: Option<&str>, kind: &str) -> PathBuf {
 /// "kind", the stored fields (to_storage keeps exactly these) and the normalize.
 type GameKind = (&'static str, &'static str, &'static str, &'static [&'static str]);
 pub const GAME_KINDS: [GameKind; 3] = [
-    ("maps", "maps/maps.json", "map_templates", &["id", "name", "rows", "zones", "zone_legend", "anchors", "paths", "props", "tags"]),
+    ("maps", "maps/maps.json", "map_templates", &["id", "name", "rows", "zones", "zone_legend", "anchors", "paths", "props", "ground", "ground_legend", "ground_patches", "wall_storeys", "tags"]),
     ("quests", "quests/quests.json", "quest_templates", &["id", "name", "description", "objectives", "rewards", "tags"]),
     ("services", "dialogue/services.json", "dialogue_services", &["id", "text"]),
 ];
 
 /// The kinds an upsert takes in the base catalog (catalog kinds, item families, the derived stats (DERIVE1), the
 /// rulesets (RULESET1), the portrait cues (PORTRAITFX1), the expression effects (PORTRAITFX1-EX), the combat hook
-/// kinds (HOOKS1), the terms (TERMS1), game-data kinds).
-const BASE_KINDS: [&str; 19] = [
-    "classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain", source::DERIVED_KIND, source::RULESET_KIND, source::PORTRAIT_KIND, source::EXPRESSION_FX_KIND, source::HOOK_KINDS[0], source::HOOK_KINDS[1], source::HOOK_KINDS[2], source::TERMS_KIND, "maps", "quests", "services",
+/// kinds (HOOKS1), the terms (TERMS1), the grounds (REGIONGROUND1), game-data kinds).
+const BASE_KINDS: [&str; 20] = [
+    "classes", "units", "skills", "items", "item_families", "passives", "encounters", "terrain", source::DERIVED_KIND, source::RULESET_KIND, source::PORTRAIT_KIND, source::EXPRESSION_FX_KIND, source::HOOK_KINDS[0], source::HOOK_KINDS[1], source::HOOK_KINDS[2], source::TERMS_KIND, source::GROUNDS_KIND, "maps", "quests", "services",
 ];
 
 fn game_kind(kind: &str) -> Option<GameKind> {

@@ -2,7 +2,9 @@
 //! (`View::assets`): bodies that are not there or do not load, item icons not in their folder, unique portraits and
 //! common portraits missing, palettes that do not fit their body; PROPS1 3.3: the map prop checks A7-A10 (art missing
 //! along the world's chain, a PNG of the wrong size, an explicit variant past the files, art hiding an anchor or path);
-//! PORTRAITFX1 5.5: the portrait file checks A11 (face sidecars) and A12 (expression frames) of each layer.
+//! PORTRAITFX1 5.5: the portrait file checks A11 (face sidecars) and A12 (expression frames) of each layer;
+//! REGIONGROUND1 KT 1.5: the ground checks A16-A19 (art missing along the chain, a wrong size, a mark's file, a marker
+//! behind a wall) and A20 (a location's boundary walls with no art).
 
 use super::View;
 use crate::art;
@@ -215,8 +217,9 @@ pub fn prop_warnings(v: &View, w: &str) -> Vec<String> {
 /// The pixel sizes of a region tile and of a stage tile (LOOK1 section 3: 16 square or tilted at 2x; a stage cell 64 x 48).
 const REGION_TILE_PX: [(u32, u32); 2] = [(32, 32), (32, 24)];
 const STAGE_TILE_PX: [(u32, u32); 1] = [(64, 48)];
-/// The wall face (LOOK1 5.1) has its own sizes: region 32 x 16 (square) or 32 x 12 (tilted), stage 64 x 24.
-const REGION_FACE_PX: [(u32, u32); 2] = [(32, 16), (32, 12)];
+/// The wall face (LOOK1 5.1) has its own sizes: region 32 x 16 (square) or 32 x 12 (tilted), or the tall face 128 x 48
+/// (REGIONGROUND1_SCENE 1.6: one storey, 4 cells wide), stage 64 x 24.
+const REGION_FACE_PX: [(u32, u32); 3] = [(32, 16), (32, 12), (128, 48)];
 const STAGE_FACE_PX: [(u32, u32); 1] = [(64, 24)];
 
 /// The world's `stage_set` and the `tileset` of each of its locations, as (label, set id) with empty ids left out.
@@ -233,7 +236,9 @@ fn bound_sets(v: &View, w: &str) -> (Option<String>, Vec<(String, String)>) {
 }
 
 /// A13 (id rule) and A15 (wrong size) of world `w`: a set id that is not `[a-z0-9_]{2,32}`, and a PNG of a bound set
-/// (`tilesets/<set>/**`) that is not a tile of the set's role. Errors; the size check is skipped without asset layers.
+/// (`tilesets/<set>/**`) that is not a tile of the set's role; a location's `boundary` id by the same rule, and its
+/// files by the same sizes. A set's `ground/` folder has its own check (A17). Errors; the size check is skipped without
+/// asset layers.
 pub fn tileset_errors(v: &View, w: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let (stage, regions) = bound_sets(v, w);
@@ -245,6 +250,12 @@ pub fn tileset_errors(v: &View, w: &str) -> Vec<String> {
     for (loc, set) in &regions {
         if !art::set_id_ok(set) {
             out.push(format!("Location '{loc}' tile set '{set}' must be 2-32 characters of a-z, 0-9 and _."));
+        }
+    }
+    for e in v.worlds.merged_entries(w, "locations") {
+        let boundary = json::s(e, "boundary");
+        if !boundary.is_empty() && !art::set_id_ok(&boundary) {
+            out.push(format!("Location '{}' boundary '{boundary}' must be 2-32 characters of a-z, 0-9 and _.", json::s(e, "id")));
         }
     }
     type Role<'a> = (String, &'a [(u32, u32)], &'a [(u32, u32)], &'a str);
@@ -263,9 +274,12 @@ pub fn tileset_errors(v: &View, w: &str) -> Vec<String> {
         seen.push((set.clone(), role));
         for root in &v.assets.roots {
             let dir = root.join(format!("tilesets/{set}"));
-            for rel in files_under(root, &dir).into_iter().filter(|r| r.ends_with(".png")) {
+            let ground = format!("tilesets/{set}/ground/");
+            for rel in files_under(root, &dir).into_iter().filter(|r| r.ends_with(".png") && !r.starts_with(&ground)) {
                 if let Some(size) = png_size(&root.join(&rel)) {
-                    let face = rel.starts_with(&format!("tilesets/{set}/wall_face/"));
+                    let in_set = rel.strip_prefix(&format!("tilesets/{set}/")).unwrap_or(&rel);
+                    let tile = in_set.strip_prefix("boundary/").and_then(|b| b.split_once('/')).map_or(in_set, |(_, rest)| rest);
+                    let face = tile.starts_with("wall_face/");
                     let (sizes, what) = if face { (face_px, format!("{role} wall face")) } else { (tile_px, format!("{role} tile")) };
                     if !sizes.contains(&size) {
                         let wants = sizes.iter().map(|(a, b)| format!("{a}x{b}")).collect::<Vec<_>>().join(" or ");
@@ -278,8 +292,9 @@ pub fn tileset_errors(v: &View, w: &str) -> Vec<String> {
     out
 }
 
-/// A13 (files) and A14 of world `w`, warnings: a bound set no layer holds (a region set without
-/// `tilesets/<set>/floor/v0.png`, a stage set without a tile), a location's map using a tile its set lacks, and a
+/// A13 (files) and A14 of world `w`, warnings: a bound set no layer holds (a region set with neither
+/// `tilesets/<set>/floor/v0.png` nor a `ground/` folder, a stage set without a tile), a location's map using a tile its
+/// set lacks (a map with ground draws `.` and `~` from its grounds, so only `#` counts there), and a
 /// transition pair with some of its 14 pieces (`m01`-`m14`) missing. Skipped without asset layers.
 pub fn tileset_warnings(v: &View, w: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
@@ -297,15 +312,16 @@ pub fn tileset_warnings(v: &View, w: &str) -> Vec<String> {
         if !art::set_id_ok(set) {
             continue;
         }
-        if !v.assets.has(&format!("tilesets/{set}/floor/v0.png")) {
+        if !v.assets.has(&format!("tilesets/{set}/floor/v0.png")) && v.assets.dirs(&format!("tilesets/{set}/ground")).is_empty() {
             push(format!("Location '{loc}' tile set '{set}': no file tilesets/{set}/floor/v0.png in any layer; it draws today's sets."));
         } else {
             let map_id = v.worlds.merged_entries(w, "locations").into_iter().find(|e| json::s(e, "id") == *loc).map(|e| json::s(e, "map")).unwrap_or_default();
             let t = v.get("maps", &map_id);
             let used: Vec<char> = json::aget(t, "rows").iter().flat_map(|r| json::gstr(r).chars().collect::<Vec<_>>()).collect();
+            let has_ground = !json::aget(t, "ground").is_empty();
             for ch in ['.', '#', '~'] {
                 let tile = art::region_tile(ch).unwrap_or("floor");
-                if used.contains(&ch) && v.assets.variants(&format!("tilesets/{set}/{tile}")) == 0 {
+                if used.contains(&ch) && !(has_ground && ch != '#') && v.assets.variants(&format!("tilesets/{set}/{tile}")) == 0 {
                     push(format!("Location '{loc}' tile set '{set}': its map uses '{ch}' but tilesets/{set}/{tile}/v0.png is missing; that tile draws today's set."));
                 }
             }
@@ -336,6 +352,145 @@ pub fn tileset_warnings(v: &View, w: &str) -> Vec<String> {
         }
     }
     out
+}
+
+// ---- REGIONGROUND1 KT 1.5: the ground checks A16-A19, and A20 ---------------------------------------------------------
+
+/// A world's region-map locations: (map id, the tile sets over its own `tileset` and the lineage).
+fn map_locations(v: &View, w: &str) -> Vec<(String, Vec<String>)> {
+    let mut lineage = v.worlds.lineage(w);
+    lineage.reverse();
+    let mut out = Vec::new();
+    for e in v.worlds.merged_entries(w, "locations") {
+        let map = json::s(e, "map");
+        if !map.is_empty() {
+            let tileset = json::s(e, "tileset");
+            let set = if art::set_id_ok(&tileset) { tileset } else { String::new() };
+            out.push((map, art::region_sets(&lineage, &set)));
+        }
+    }
+    out
+}
+
+/// The ground ids the cells of template `t` use, in legend order.
+fn used_grounds(t: &Dict) -> Vec<String> {
+    let cells: Vec<char> = json::aget(t, "ground").iter().flat_map(|r| json::gstr(r).chars().collect::<Vec<_>>()).collect();
+    let mut out: Vec<String> = Vec::new();
+    for (k, id) in json::dget(t, "ground_legend") {
+        let id = json::gstr(id);
+        if cells.iter().any(|c| c.to_string() == *k) && !out.contains(&id) {
+            out.push(id);
+        }
+    }
+    out
+}
+
+/// A17 of world `w` (an error, as A15): a file of a ground along any of its locations' chains that is not
+/// `art::ground_px` square, `tilesets/<set>/ground/<ground>/<file>.png`. A deeper file is not a ground's texture. Skipped
+/// without asset layers.
+pub fn ground_errors(v: &View, w: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut sets: Vec<String> = map_locations(v, w).into_iter().flat_map(|(_, s)| s).collect();
+    sets.sort();
+    sets.dedup();
+    let px = art::ground_px();
+    for root in &v.assets.roots {
+        for set in &sets {
+            let base = format!("tilesets/{set}/ground/");
+            for rel in files_under(root, &root.join(&base)).into_iter().filter(|r| r.ends_with(".png") && r[base.len()..].matches('/').count() == 1) {
+                match png_size(&root.join(&rel)) {
+                    Some((a, b)) if (a, b) != (px, px) => out.push(format!("Ground art '{rel}' is {a}x{b} px; it must be {px} x {px}.")),
+                    _ => {}
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The largest side of a ground mark's file in art px (A18): 32 x 32 at the job's density, from a 32-per-cell file
+/// (REGIONGROUND1_ENGINE 3.4).
+const GROUND_MARK_PX: u32 = 64;
+/// A wall storey covers this many tilted rows north of its cell (REGIONGROUND1_SCENE 1.3: a unit is 24 tall, a row 12).
+const ROWS_PER_STOREY: i64 = 2;
+
+/// A16, A18, A19 and A20 of world `w`, warnings, one line per finding; skipped without asset layers.
+pub fn ground_warnings(v: &View, w: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    if v.assets.roots.is_empty() {
+        return out;
+    }
+    let mut lineage = v.worlds.lineage(w);
+    lineage.reverse();
+    let mut push = |line: String| {
+        if !out.contains(&line) {
+            out.push(line);
+        }
+    };
+    for (map_id, sets) in map_locations(v, w) {
+        let t = v.get("maps", &map_id);
+        for id in used_grounds(t) {
+            // A16
+            if !art::ground_dirs(&sets, &id).iter().any(|d| v.assets.has(&format!("{d}/v0.png"))) {
+                push(format!("Map '{map_id}' ground '{id}': no art for world '{w}'; it draws its flat colour."));
+            }
+            // A18
+            for mark in json::sget(v.get(super::ground::KIND, &id), "marks") {
+                let dirs = art::prop_dirs(&lineage, &mark);
+                let Some((dir, n)) = dirs.iter().map(|d| (d.clone(), v.assets.variants(d))).find(|(_, n)| *n > 0) else {
+                    let names = art::region_sets(&lineage, "").join(",");
+                    push(format!("Ground '{id}' mark '{mark}': no file props/{{{names}}}/{mark}/v0.png for world '{w}'."));
+                    continue;
+                };
+                for k in 0..n {
+                    let size = v.assets.find(&format!("{dir}/v{k}.png")).and_then(|path| png_size(&path));
+                    if let Some((a, b)) = size.filter(|(a, b)| *a > GROUND_MARK_PX || *b > GROUND_MARK_PX) {
+                        push(format!("Ground '{id}' mark '{mark}': {dir}/v{k}.png is {a}x{b} px, larger than {GROUND_MARK_PX} x {GROUND_MARK_PX}."));
+                    }
+                }
+            }
+        }
+    }
+    // A19 and A20, per location: a marker's anchor and the boundary's art
+    for e in v.worlds.merged_entries(w, "locations") {
+        let map_id = json::s(e, "map");
+        let t = v.get("maps", &map_id);
+        for m in json::aget(e, "markers").iter().map(json::dict) {
+            let anchor = json::s(m, "anchor");
+            let Some(a) = json::aget(t, "anchors").iter().map(json::dict).find(|a| json::s(a, "id") == anchor) else { continue };
+            if behind_a_wall(v, &lineage, t, json::i(a, "x", -1), json::i(a, "y", -1)) {
+                push(format!("Map '{map_id}' marker anchor '{anchor}' stands behind a wall; it draws its outline."));
+            }
+        }
+        let boundary = json::s(e, "boundary");
+        if art::set_id_ok(&boundary) {
+            let tileset = json::s(e, "tileset");
+            let sets = art::region_sets(&lineage, if art::set_id_ok(&tileset) { &tileset } else { "" });
+            let found = ["wall", "wall_face"].iter().any(|tile| art::boundary_dirs(&sets, &boundary, tile).iter().any(|d| v.assets.has(&format!("{d}/v0.png"))));
+            if !found {
+                push(format!("Location '{}' boundary '{boundary}': no art along its tile sets; it draws the set's own walls.", json::s(e, "id")));
+            }
+        }
+    }
+    out
+}
+
+/// A19 (REGIONGROUND1_SCENE 1.3): whether cell (x, y) lies on the rows a wall south of it covers (2 per storey), that
+/// wall being off the south row and the side columns (those stay short) and not under a standing prop with art (the art
+/// is the height, and it draws no block).
+fn behind_a_wall(v: &View, lineage: &[String], t: &Dict, x: i64, y: i64) -> bool {
+    let Some(rows) = super::map::grid(t) else { return false };
+    let (mw, mh) = (rows[0].len() as i64, rows.len() as i64);
+    if x <= 0 || x >= mw - 1 || y < 0 || y >= mh {
+        return false;
+    }
+    let tallest = ROWS_PER_STOREY * super::ground::WALL_STOREYS_MAX;
+    (y + 1..=(y + tallest).min(mh - 2)).any(|wy| rows[wy as usize][x as usize] == '#' && wy - y <= ROWS_PER_STOREY * super::ground::storeys_at(t, x, wy) && !under_standing_art(v, lineage, t, x, wy))
+}
+
+/// Whether wall cell (x, y) lies under a standing prop whose art is on hand along the chain.
+fn under_standing_art(v: &View, lineage: &[String], t: &Dict, x: i64, y: i64) -> bool {
+    json::aget(t, "props").iter().map(json::dict).filter(|p| json::s(p, "layer") == "sort").any(|p| prop_footprint(p).is_some_and(|(px, py, pw, ph)| x >= px && y >= py && x < px.saturating_add(pw) && y < py.saturating_add(ph)) && art::prop_dirs(lineage, &json::s(p, "art")).iter().any(|d| v.assets.variants(d) > 0))
 }
 
 // ---- PORTRAITFX1 5.5: the portrait file checks A11 and A12 ----------------------------------------------------------

@@ -675,8 +675,10 @@ pub fn manifest_errors(v: &View, w: &str) -> Vec<String> {
     errors.extend(story::manifest_errors(v, w, m));
     // HOOKS1 CN1: the class names and paths of the world
     errors.extend(super::hooks::classes_errors(v, m));
-    // LOOK1 5.4: the tile set ids and file sizes
+    // LOOK1 5.4: the tile set ids and file sizes; REGIONGROUND1 A17: the ground files' size; G10: the material family
     errors.extend(super::assets::tileset_errors(v, w));
+    errors.extend(super::assets::ground_errors(v, w));
+    errors.extend(super::ground::family_errors(m));
     errors
 }
 
@@ -887,7 +889,8 @@ fn encounter_warnings(v: &View, w: &str) -> Vec<String> {
 }
 
 /// WorldCatalog.world_warnings: the map, route, dialogue, gone-NPC, quest link and reward, reputation key and
-/// encounter lints of one world; the character asset checks and the map prop asset checks (PROPS1 A7-A10).
+/// encounter lints of one world; the character asset checks, the map prop asset checks (PROPS1 A7-A10) and the ground
+/// asset checks (REGIONGROUND1 A16, A18-A20).
 pub fn world_warnings(v: &View, w: &str) -> Vec<String> {
     let mut out = map::warnings(v, w);
     out.extend(travel::warnings(v, w));
@@ -900,6 +903,7 @@ pub fn world_warnings(v: &View, w: &str) -> Vec<String> {
     out.extend(character_asset_warnings(v, w));
     out.extend(super::assets::prop_warnings(v, w));
     out.extend(super::assets::tileset_warnings(v, w));
+    out.extend(super::assets::ground_warnings(v, w));
     out.extend(campaign::warnings(v, w));
     out.extend(story::warnings(v, w));
     out

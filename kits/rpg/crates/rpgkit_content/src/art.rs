@@ -276,6 +276,24 @@ pub fn region_sets(lineage_child_first: &[String], tileset: &str) -> Vec<String>
     out
 }
 
+/// REGIONGROUND1 KT 1.4: a ground's art folders over the region sets (`region_sets`), `tilesets/<set>/ground/<ground>`:
+/// the file is `v0.png` in the first that holds it, and only `v0` is read, since a ground has one texture.
+pub fn ground_dirs(sets: &[String], ground: &str) -> Vec<String> {
+    sets.iter().map(|set| format!("tilesets/{set}/ground/{ground}")).collect()
+}
+
+/// KT 1.4: the side of a ground's `v0.png` in art px (4 per logical px of a 64 x 64 texture; REGIONGROUND1 4.2).
+pub fn ground_px() -> u32 {
+    256
+}
+
+/// REGIONGROUND1_SCENE (region boundary walls): the folders of a map's boundary `tile` (`wall` or `wall_face`) over the
+/// region sets, `tilesets/<set>/boundary/<boundary>/<tile>`: a set of its own inside the tile set, so a location can
+/// choose it. Keeps the short south and side borders of the scene's 1.1.
+pub fn boundary_dirs(sets: &[String], boundary: &str, tile: &str) -> Vec<String> {
+    sets.iter().map(|set| format!("tilesets/{set}/boundary/{boundary}/{tile}")).collect()
+}
+
 /// The folders of a map prop's art (PROPS1 3.1): `props/<set>/<art>` over the region sets (the world lineage child
 /// first, then `common`); the first holding `v0.png` in any layer gives the prop.
 pub fn prop_dirs(lineage_child_first: &[String], art: &str) -> Vec<String> {

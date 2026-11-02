@@ -91,3 +91,20 @@ A13 (no `floor/v0.png` in a bound set) also accepts a set with a `ground/` folde
 ## 3. Touches
 
 `kits/rpg/schema.json`, `kits/rpg/crates/rpgkit_data/src/lib.rs`, `kits/rpg/crates/rpgkit_content/src/{source.rs, store.rs, art.rs, ground.rs (new), check/{ground.rs (new), mod.rs, assets.rs}}`, its tests, `games/emberwake/data/catalog/grounds.json` (empty kind), `games/emberwake/data/maps/maps.json` (re-saved by the writer: three empty keys per template), test fixtures that list map keys (`emberwake_world/tests/store.rs`, `emberwake_content/tests/prop_checks.rs`, `emberwake_sim/tests/fixtures/sim_data.json` if it compares them).
+
+## 4. As built (REGIONGROUND1-K, 2026-11-02)
+
+Additions from `REGIONGROUND1_SCENE.md` (decisions "Wall storeys and walls beside props", "Two kinds of wall"), and from
+the review:
+| Item | Form | Check |
+| --- | --- | --- |
+| `wall_storeys`, a fourth map key after `ground_patches`, stored even when empty | `[{x, y, w, h, storeys}]` on `#` cells; a wall not in a rect is 1 storey; A19 reaches 2 rows per storey | G9: list, keys, 2-4 storeys (`WALL_STOREYS_MAX`), in the map, walls only, off the south row and side columns, no overlap, at most 64 rects |
+| `boundary` on a world location, left out at its default | names `tilesets/<set>/boundary/<name>/{wall,wall_face}/v<n>.png` over the location's sets (`art::boundary_dirs`) | the set id rule; A15's sizes; A20 (warning): no art along its sets |
+| `material_family` on the world manifest, left out at its default | `{}`, or `{"palette": ["#rrggbb"], "materials": ["..."]}` | G10: 1-8 entries each, a material at most 32 characters |
+| `origin` on `grounds`, as every Forge kind (decision "FORGE1 class answers") | `system` (left out when stored) or `user` | a row check, as `terms` |
+Doorways have no field: a `.` cell in `rows` and a `ground` prop already give walking and the threshold, and the opening
+art decides the rest (REVEAL1's spec or LOOK1-L2). Nothing reads `wall_storeys`, `boundary` or `material_family` yet
+except the checks.
+`ground::plan` plans only what the checks pass: anything they refuse for shape or numbers is None, so slice L draws that
+map without ground. G4 and G7 name the first cell per wrong character or pair, not every cell. `plan` leaves out a legend
+entry no cell uses. `storeys_at` counts only rects with right numbers, so it always answers 1-4.

@@ -42,6 +42,9 @@ pub const HOOK_KINDS: [&str; 3] = [rpgkit_data::HAZARDS_KIND, rpgkit_data::UNIT_
 /// TERMS1-L: the game's term rows, loaded into the catalog beside CATALOG_KINDS after the hook kinds (Godot had no
 /// such kind).
 pub const TERMS_KIND: &str = crate::check::terms::KIND;
+/// REGIONGROUND1 KT 1.1: the ground rows, loaded into the catalog beside CATALOG_KINDS after the terms (Godot had no
+/// such kind).
+pub const GROUNDS_KIND: &str = crate::check::ground::KIND;
 /// WorldSchema.KINDS, then CAMPAIGN1's `meters`, `checkpoints` and `triggers` (11.2) and STORYUI1's `vignettes`,
 /// `sequences` and `boards` (4.1-4.4; Godot had no such kinds).
 pub const WORLD_KINDS: [&str; 19] = [
@@ -105,6 +108,7 @@ fn load_catalog(data_dir: &Path, errors: &mut Vec<String>) -> Value {
         out.insert(kind.into(), Value::Array(rows.into_iter().map(Value::Object).collect()));
     }
     out.insert(TERMS_KIND.into(), Value::Array(read_terms(&dir, errors).into_iter().map(Value::Object).collect()));
+    out.insert(GROUNDS_KIND.into(), Value::Array(read_grounds(&dir, errors).into_iter().map(Value::Object).collect()));
     out.insert("item_families".into(), Value::Array(families.into_iter().map(Value::Object).collect()));
     Value::Object(out)
 }
@@ -231,6 +235,31 @@ fn read_terms(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
             kept.push(row);
         } else {
             errors.extend(found.iter().map(|m| format!("{at}: term '{}': {m}", sget(&row, "id", ""))));
+        }
+    }
+    kept
+}
+
+/// REGIONGROUND1 KT 1.1 (engine-only, beside CATALOG_KINDS): the ground rows that pass their checks (`check::ground`), in
+/// file order; every problem goes to `errors` and its row is skipped. A missing file is an empty table.
+fn read_grounds(dir: &Path, errors: &mut Vec<String>) -> Vec<Dict> {
+    let path = dir.join(format!("{GROUNDS_KIND}.json"));
+    let Some(doc) = read(&path, errors) else { return Vec::new() };
+    let at = path.display().to_string();
+    let mut rows = Vec::new();
+    for (i, item) in entries_of(doc).0.iter().enumerate() {
+        match item.as_object() {
+            Some(d) => rows.push(content(GROUNDS_KIND, d)),
+            None => errors.push(format!("{at}: entry {} is not an object; it is skipped.", i + 1)),
+        }
+    }
+    let checked = crate::check::ground::check_rows(&rows);
+    let mut kept = Vec::new();
+    for (row, found) in rows.into_iter().zip(checked) {
+        if found.is_empty() {
+            kept.push(row);
+        } else {
+            errors.extend(found.iter().map(|m| format!("{at}: ground '{}': {m}", sget(&row, "id", ""))));
         }
     }
     kept
@@ -950,15 +979,51 @@ fn template(entry: &Dict, keys: &[(&str, Value)]) -> Dict {
     out
 }
 
-/// MapRules.normalize_template; PROPS1 1: `props` (after `paths`), each prop with its defaults (`prop_full`).
+/// MapRules.normalize_template; PROPS1 1: `props` (after `paths`), each prop with its defaults (`prop_full`);
+/// REGIONGROUND1 KT 1.2 and SC: `ground`, `ground_legend`, `ground_patches` (each patch with its default strength,
+/// `ground_patch_full`) and `wall_storeys` (after `props`). `rows` alone decide walking: nothing in the world or battle
+/// crates reads these four.
 pub(crate) fn map_template(e: &Dict) -> Dict {
     let (s, a, d) = (Value::from(""), Value::Array(Vec::new()), Value::Object(Map::new()));
-    let mut t = template(e, &[("id", s.clone()), ("name", s), ("rows", a.clone()), ("zones", a.clone()), ("zone_legend", d.clone()), ("anchors", a.clone()), ("paths", d), ("props", a.clone()), ("tags", a)]);
+    let mut t = template(e, &[("id", s.clone()), ("name", s), ("rows", a.clone()), ("zones", a.clone()), ("zone_legend", d.clone()), ("anchors", a.clone()), ("paths", d.clone()), ("props", a.clone()), ("ground", a.clone()), ("ground_legend", d), ("ground_patches", a.clone()), ("wall_storeys", a.clone()), ("tags", a)]);
     if let Some(Value::Array(list)) = t.get("props") {
         let full = list.iter().map(|p| p.as_object().map_or_else(|| p.clone(), |o| Value::Object(prop_full(o)))).collect();
         t.insert("props".into(), Value::Array(full));
     }
+    if let Some(Value::Array(list)) = t.get("ground_patches") {
+        let full = list.iter().map(|p| p.as_object().map_or_else(|| p.clone(), |o| Value::Object(ground_patch_full(o)))).collect();
+        t.insert("ground_patches".into(), Value::Array(full));
+    }
     t
+}
+
+/// A placed ground patch's keys in stored order (KT 1.2).
+pub const GROUND_PATCH_KEYS: [&str; 6] = ["id", "x", "y", "w", "h", "strength"];
+/// KT 1.2: a placed patch's default strength.
+pub const GROUND_PATCH_STRENGTH: f64 = 0.12;
+
+/// A placed ground patch with its default strength in `GROUND_PATCH_KEYS` order; the other keys stay missing when
+/// missing and unknown keys follow (the checks name both).
+pub fn ground_patch_full(p: &Dict) -> Dict {
+    let p = json::normalize_dict(p);
+    let mut out = Dict::new();
+    for k in GROUND_PATCH_KEYS {
+        match p.get(k) {
+            Some(v) => {
+                out.insert(k.to_string(), v.clone());
+            }
+            None if k == "strength" => {
+                out.insert(k.to_string(), Value::from(GROUND_PATCH_STRENGTH));
+            }
+            None => {}
+        }
+    }
+    for (k, v) in &p {
+        if !out.contains_key(k) {
+            out.insert(k.clone(), v.clone());
+        }
+    }
+    out
 }
 
 /// A map prop's keys in stored order (PROPS1 1).

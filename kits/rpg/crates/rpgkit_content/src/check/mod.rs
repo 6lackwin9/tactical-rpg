@@ -10,6 +10,7 @@ pub mod derived;
 pub mod expression_fx;
 pub mod dialogue;
 pub mod encounter;
+pub mod ground;
 pub mod hook_kinds;
 pub mod hooks;
 pub mod item;
@@ -265,6 +266,10 @@ pub fn validate_entry(v: &View, kind: &str, entry: &Dict, current_id: &str) -> V
         // TERMS1-L: the row checks the loader applies (a game-scope term id, the lengths, unique ids)
         return terms::entry_errors(v, &content(kind, entry), current_id);
     }
+    if kind == ground::KIND {
+        // REGIONGROUND1 KT 1.3: the row checks the loader applies (the fields' limits, unknown keys, unique ids and orders)
+        return ground::entry_errors(v, &content(kind, entry), current_id);
+    }
     let old_id = if current_id.is_empty() { json::s(entry, "id") } else { current_id.to_string() };
     let e = match kind {
         "items" => item::prepare(v, entry, v.get(kind, &old_id)),
@@ -395,7 +400,8 @@ pub const KINDS: [&str; 8] = ["skills", "items", "item_families", "passives", "c
 /// A whole-catalog report: {"kind:id" (or "kind:required", "skills:fold", "terrain:missing", "load"): [messages]}.
 pub type Report = IndexMap<String, Vec<String>>;
 
-/// ContentCatalog.validate_all: every entry's errors, the map templates' prop checks (PROPS1, `maps:<id>`), then the
+/// ContentCatalog.validate_all: every entry's errors, the map templates' prop and ground checks (PROPS1, REGIONGROUND1,
+/// `maps:<id>`), then the
 /// rules across entries (required skills, one family per gear token, skill families that fold, a row per terrain
 /// type) and the load problems.
 pub fn validate_all(v: &View) -> Report {
@@ -409,9 +415,10 @@ pub fn validate_all(v: &View) -> Report {
             }
         }
     }
-    // PROPS1 2: the map templates' prop checks (engine-only; Godot's MapCatalog had no props)
+    // PROPS1 2, REGIONGROUND1 KT 1.3: the map templates' prop and ground checks (engine-only; Godot's MapCatalog had neither)
     for t in v.entries("maps") {
-        let errors = map::prop_errors(t);
+        let mut errors = map::prop_errors(t);
+        errors.extend(ground::map_errors(v, t));
         if !errors.is_empty() {
             problems.insert(format!("maps:{}", json::s(t, "id")), errors);
         }
@@ -485,6 +492,13 @@ pub fn warnings_all(v: &View) -> Report {
         let found = expression_fx::warnings(e);
         if !found.is_empty() {
             out.insert(format!("{}:{}", expression_fx::KIND, json::s(e, "id")), found);
+        }
+    }
+    // REGIONGROUND1 KT 1.3: a legend entry no cell uses
+    for t in v.entries("maps") {
+        let found = ground::legend_warnings(t);
+        if !found.is_empty() {
+            out.insert(format!("maps:{}", json::s(t, "id")), found);
         }
     }
     let faces = v.faces();

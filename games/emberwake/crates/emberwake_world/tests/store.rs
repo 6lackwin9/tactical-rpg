@@ -151,6 +151,42 @@ fn upsert_and_remove_validate_write_and_roll_back() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// REGIONGROUND1-K, on a scratch copy of the shipped data: one unchanged upsert of a map rewrites the whole file in the
+/// writer's form. Each template holds the ground keys in stored order, every key it had keeps its value, the file then
+/// re-saves byte for byte, and the data checks as it did. Since the shipped maps.json was re-saved (with this row's data
+/// step) it holds those keys already, so this now proves only that the upsert is idempotent, not the migration itself.
+#[test]
+fn an_unchanged_map_upsert_only_adds_the_empty_ground_keys() {
+    let tmp = std::env::temp_dir().join(format!("aegis_store_ground_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression"] {
+        copy_dir(&data_dir().join(sub), &tmp.join(sub));
+    }
+    let maps = store::file_of(&tmp, None, "maps");
+    let before: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&maps).unwrap()).unwrap();
+    let problems_before = store::check(&tmp);
+    let first = before["entries"][0].as_object().unwrap().clone();
+    store::upsert(&tmp, None, "maps", &first, None).expect("the unchanged map");
+    let text = std::fs::read_to_string(&maps).unwrap();
+    let after: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(before["entries"].as_array().unwrap().len(), after["entries"].as_array().unwrap().len());
+    let empties = json!({"ground": [], "ground_legend": {}, "ground_patches": [], "wall_storeys": []});
+    for (old, new) in before["entries"].as_array().unwrap().iter().zip(after["entries"].as_array().unwrap()) {
+        let (old, new) = (old.as_object().unwrap(), new.as_object().unwrap());
+        for (k, v) in old {
+            assert_eq!(new.get(k), Some(v), "{} {k}", old["id"]);
+        }
+        for (k, v) in empties.as_object().unwrap() {
+            assert_eq!(old.get(k).or(Some(v)), new.get(k), "{} {k}", old["id"]);
+        }
+        let keys: Vec<&String> = new.keys().collect();
+        assert_eq!(keys, ["id", "name", "rows", "zones", "zone_legend", "anchors", "paths", "props", "ground", "ground_legend", "ground_patches", "wall_storeys", "tags"]);
+    }
+    assert_eq!(store::resave_text(&tmp, None, "maps").unwrap(), text, "the file then re-saves byte for byte");
+    assert_eq!(store::check(&tmp), problems_before, "the data checks as it did");
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// PROPS1 1-2: a map template's `props` through the writer, on a test-only template in a scratch copy: no `props`
 /// loads and stores as `[]`, a prop given with only id, art, x and y is stored whole in key order, and an upsert whose
 /// standing prop lies on an open tile (P9) is refused and leaves maps.json as it was.
@@ -174,7 +210,7 @@ fn map_props_are_stored_whole_and_checked_on_upsert() {
     let loaded = source::load(&tmp).game["maps"].as_array().unwrap().iter().find(|e| e["id"] == "test_props_map").cloned().unwrap();
     assert_eq!(loaded["props"], json!([]));
     let keys: Vec<String> = stored(&tmp).as_object().unwrap().keys().cloned().collect();
-    assert_eq!(keys, ["id", "name", "rows", "zones", "zone_legend", "anchors", "paths", "props", "tags"]);
+    assert_eq!(keys, ["id", "name", "rows", "zones", "zone_legend", "anchors", "paths", "props", "ground", "ground_legend", "ground_patches", "wall_storeys", "tags"]);
 
     let mut with_post = base.clone();
     with_post["props"] = json!([{"y": 0, "x": 2, "art": "signpost", "id": "road_sign"}]);

@@ -649,6 +649,9 @@ pub struct Catalog {
     pub zones: IndexMap<String, ZoneDef>,
     /// The game's term rows (TERMS1 5.1, kind `terms`; engine-only; `game`-scope register ids only).
     pub terms: IndexMap<String, TermRow>,
+    /// Ground rows of a region map's picture (REGIONGROUND1 KT 1.1, kind `grounds`; engine-only; presentation only: no
+    /// rule reads them).
+    pub grounds: IndexMap<String, GroundDef>,
     skill_index: IndexMap<String, usize>,
     tier_one: IndexMap<String, usize>,
 }
@@ -700,6 +703,7 @@ impl Catalog {
         cat.unit_meters = rows(UNIT_METERS_KIND).iter().map(UnitMeterDef::from_obj).map(|m| (m.id.clone(), m)).collect();
         cat.zones = rows(ZONES_KIND).iter().map(ZoneDef::from_obj).map(|z| (z.id.clone(), z)).collect();
         cat.terms = rows(TERMS_KIND).iter().map(TermRow::from_obj).map(|t| (t.id.clone(), t)).collect();
+        cat.grounds = rows(GROUNDS_KIND).iter().map(GroundDef::from_obj).map(|g| (g.id.clone(), g)).collect();
         cat.skills = rows("skills").iter().map(SkillDef::from_obj).collect();
         cat.index_skills();
         cat
@@ -1808,6 +1812,51 @@ impl UnitMeterDef {
             rules: objs(o, "rules"),
             skills: strings(o, "skills"),
         }
+    }
+}
+
+/// REGIONGROUND1 KT 1.1: the catalog kind of the ground rows (file `data/catalog/grounds.json`).
+pub const GROUNDS_KIND: &str = "grounds";
+/// KT 1.1: a ground's `kind` that is sunken and belongs on `~` cells.
+pub const GROUND_WATER: &str = "water";
+
+/// KT 1.1: a ground row (kind `grounds`): what a layer of a region map's picture is. Presentation only: its art comes
+/// from the location's tile sets (`art::ground_dirs`), its numbers go to the engine's ground composer.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GroundDef {
+    pub id: String,
+    pub name: String,
+    pub order: i32,
+    pub kind: String,
+    pub colour: String,
+    pub wear: f64,
+    pub strays: bool,
+    pub tone: f64,
+    pub patches: f64,
+    pub marks: Vec<String>,
+    pub marks_per_100: i32,
+}
+
+impl GroundDef {
+    pub fn from_obj(o: &Obj) -> Self {
+        Self {
+            id: string(o, "id", ""),
+            name: string(o, "name", ""),
+            order: int(o, "order", -1),
+            kind: string(o, "kind", "land"),
+            colour: string(o, "colour", ""),
+            wear: float(o, "wear", 0.1),
+            strays: boolean(o, "strays", false),
+            tone: float(o, "tone", 0.13),
+            patches: float(o, "patches", 0.0),
+            marks: strings(o, "marks"),
+            marks_per_100: int(o, "marks_per_100", 0),
+        }
+    }
+
+    /// A water ground: sunken (a rim on its edge), and only on `~` cells (G7).
+    pub fn is_water(&self) -> bool {
+        self.kind == GROUND_WATER
     }
 }
 
