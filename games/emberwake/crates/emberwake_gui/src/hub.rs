@@ -161,6 +161,9 @@ impl Screen<GameCx> for Hub {
     fn id(&self) -> &'static str {
         "hub"
     }
+    fn key(&mut self, cx: &mut Cx, k: Key) {
+        crate::viewkeys::window_key(cx, k, crate::viewkeys::Shown::Notice);
+    }
     fn overlay(&self) -> bool {
         true
     }

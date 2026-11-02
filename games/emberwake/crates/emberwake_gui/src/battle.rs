@@ -35,7 +35,10 @@ mod tokens;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use marks::{party_foresight_off, seen_intents, FORESIGHT_OFF};
+pub(crate) use marks::{party_foresight_off, seen_intents};
+// VISCLAR1: only the debug-build settings row and the tests read it
+#[allow(unused_imports)]
+pub(crate) use marks::FORESIGHT_OFF;
 pub(crate) use overlays::{overlay_default, Layers, OVERLAY_GROUPS};
 pub(crate) use tips::{action_rows, ap_lines, kind_color};
 use draw::{draw, log_groups_json};
@@ -856,6 +859,9 @@ impl Screen<GameCx> for BattleScreen {
     }
 
     fn key(&mut self, cx: &mut Cx, k: Key) {
+        if crate::viewkeys::window_key(cx, k, crate::viewkeys::Shown::Notice) {
+            return;
+        }
         if self.host.session.is_none() {
             return;
         }

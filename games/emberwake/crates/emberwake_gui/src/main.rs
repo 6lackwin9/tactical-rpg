@@ -32,6 +32,7 @@ mod story;
 mod talk;
 mod timeline_view;
 mod tuning;
+mod viewkeys;
 mod worldmap;
 
 use aegis_content::manifest::{self, Manifest};

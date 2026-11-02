@@ -233,6 +233,9 @@ impl Screen<GameCx> for MainMenu {
     fn id(&self) -> &'static str {
         "main_menu"
     }
+    fn key(&mut self, cx: &mut Cx, k: Key) {
+        crate::viewkeys::window_key(cx, k, crate::viewkeys::Shown::Notice);
+    }
     fn draw(&mut self, cx: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
         // The opening focus lands on Continue without showing the peek: it follows Continue as the active item once the
         // mouse has been on it or the keyboard has moved. A focus on another item rules (a mouse resting on Continue
@@ -728,7 +731,13 @@ impl SettingsScreen {
             SetAct::Tab(t) => self.tab = t,
             SetAct::Toggle(k) => self.draft[k] = Value::Bool(!self.draft[k].as_bool().unwrap_or(false)),
             SetAct::Set(k, v) => {
-                let (lo, hi) = if k.ends_with("speed") || k.ends_with("scale") { (0.5, 2.0) } else { (0.0, 100.0) };
+                let (lo, hi) = if k.ends_with("speed") || k.ends_with("scale") {
+                    (0.5, 2.0)
+                } else if k == crate::mapview::WALK_STEP_KEY {
+                    (crate::mapview::WALK_STEP_MS.0, crate::mapview::WALK_STEP_MS.1)
+                } else {
+                    (0.0, 100.0)
+                };
                 let v = v.clamp(lo, hi);
                 self.draft[k] = if lo == 0.0 { json!(v.round() as i64) } else { json!((v * 100.0).round() / 100.0) };
                 if let Some((bus, sample)) = preview_of(k) {
@@ -921,6 +930,12 @@ impl Screen<GameCx> for SettingsScreen {
                 {
                     let y = y + groups.len().div_ceil(2) as i32 * OVERLAY_PITCH + 2;
                     ui.p.text(x as f32, y as f32, "Debug", BODY + 1.0, th().gold);
+                    // VIEWKEYS1: the walk's base step time (a release build uses the default), beside the heading
+                    let (least, most, _) = crate::mapview::WALK_STEP_MS;
+                    let base = crate::mapview::WalkStep::of(&json!({crate::mapview::WALK_STEP_KEY: d[crate::mapview::WALK_STEP_KEY]})).base;
+                    ui.p.text(x as f32 + 36.0, y as f32, "Walk step", BODY, th().text);
+                    let steps = ((most - least) / WALK_STEP_STEP) as usize + 1;
+                    ui.slider("settings.debug.walk_step", Rect::new(x + 84, y, col_w - 92, 13), ((base - least) / WALK_STEP_STEP).round() as usize, steps, &format!("{base:.0} ms"), |i| SetAct::Set(crate::mapview::WALK_STEP_KEY, least + i as f64 * WALK_STEP_STEP), true);
                     let at = x + 3 + col_w;
                     ui.checkbox("settings.debug.party_foresight_off", at, y, "Party foresight off", d[crate::battle::FORESIGHT_OFF].as_bool().unwrap_or(false), SetAct::Toggle(crate::battle::FORESIGHT_OFF), true);
                     if let Some(wd) = ui.widgets.last_mut() {
@@ -963,6 +978,9 @@ const OVERLAY_PITCH: i32 = 14;
 /// Volume sliders move in steps of 5 (0-100); speed and text-size sliders in quarters (0.5-2.0).
 const VOLUME_STEP: f64 = 5.0;
 const SCALE_STEP: f64 = 0.25;
+/// The debug Walk step slider's step, ms.
+#[cfg(debug_assertions)]
+const WALK_STEP_STEP: f64 = 10.0;
 
 fn choices(k: &str) -> &'static [&'static str] {
     CHOICES.iter().find(|c| c.0 == k).map(|c| c.1).unwrap_or(&[])

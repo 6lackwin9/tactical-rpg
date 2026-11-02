@@ -15,7 +15,7 @@
 
 use aegis_ui::canvas::Rect;
 use serde_json::Value;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// A map cell's width (logical px; 32 px at 1280 wide, MAPVIEW1), and its height in each view.
 pub const CELL_W: i32 = 16;
@@ -43,6 +43,44 @@ pub const CAM_EASE_MS: f64 = 260.0;
 /// 2026-11-02): the default is today's view, and nothing goes below it.
 pub const ZOOM_QUARTERS: (i32, i32, i32) = (4, 12, 4);
 pub const ZOOM_TIP: &str = "Draws the region map larger: ground, walls, props and people together. The bar, the legend and the log keep their size.";
+
+/// The debug setting of a walk's base step time (VIEWKEYS1; a release build uses the default).
+pub const WALK_STEP_KEY: &str = "walk_step_ms";
+/// The base step time in ms: (least, most, default). The user tunes the default.
+pub const WALK_STEP_MS: (f64, f64, f64) = (60.0, 240.0, 130.0);
+
+/// The `anim_speed` setting as the map plays it (missing or no number: 1x).
+pub fn anim_speed(settings: &Value) -> f64 {
+    settings["anim_speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0)
+}
+
+/// The time between steps of a walked path and of a held movement key (VIEWKEYS1, user 2026-11-03: base / `anim_speed`, so
+/// anyone preferring fast animation also walks faster, and the walk clip's pace per step stays the same).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WalkStep {
+    /// The base step time, ms: also the animation ms a step takes, whatever the speed.
+    pub base: f64,
+    /// The wall ms between steps.
+    pub wall: f64,
+}
+
+impl WalkStep {
+    pub fn of(settings: &Value) -> Self {
+        Self::read(settings, cfg!(debug_assertions))
+    }
+
+    /// `debug`: whether the debug setting counts; a value that is no number in range is the default.
+    fn read(settings: &Value, debug: bool) -> Self {
+        let (least, most, default) = WALK_STEP_MS;
+        let saved = settings[WALK_STEP_KEY].as_f64().filter(|b| debug && (least..=most).contains(b));
+        let base = saved.unwrap_or(default);
+        Self { base, wall: base / anim_speed(settings) }
+    }
+
+    pub fn gap(self) -> Duration {
+        Duration::from_secs_f64(self.wall / 1000.0)
+    }
+}
 
 /// The setting's quarters: a number to the nearest step in range; anything else (missing, unknown) the default.
 pub fn zoom_of(v: &Value) -> i32 {
@@ -208,7 +246,7 @@ pub fn party_px(view: View, q: i32, camera: (i32, i32), at: (f32, f32), s: f32) 
 }
 
 /// The party's drawn position (REGIONVIEW1): straight from where it was to its tile in one step's time. A step's start is
-/// its scheduled time, not the frame that noticed it, so steps every `STEP_MS` make one even line. Presentation only.
+/// its scheduled time, not the frame that noticed it, so steps every `WalkStep` make one even line. Presentation only.
 #[derive(Debug, Clone, Default)]
 pub struct Glide {
     loc: String,
@@ -669,5 +707,36 @@ mod tests {
         assert_eq!(union(a, b), Rect::new(6, 8, 24, 24));
         assert_eq!(union(b, a), union(a, b));
         assert_eq!(union(a, Rect::new(30, 40, 2, 2)), Rect::new(10, 20, 22, 22));
+    }
+
+    /// VIEWKEYS1: the step time is the base over the animation speed, at every speed the Settings slider gives.
+    #[test]
+    fn the_walk_step_is_the_base_over_the_animation_speed() {
+        let default = WALK_STEP_MS.2;
+        for speed in [0.5, 1.0, 2.0] {
+            let s = WalkStep::read(&json!({"anim_speed": speed}), true);
+            assert_eq!(s, WalkStep { base: default, wall: default / speed }, "{speed}");
+            assert_eq!(s.gap().as_secs_f64(), default / speed / 1000.0, "{speed}");
+            let tuned = WalkStep::read(&json!({"anim_speed": speed, WALK_STEP_KEY: 200.0}), true);
+            assert_eq!(tuned.wall, 200.0 / speed, "the slider's value: {speed}");
+        }
+        assert!(WalkStep::read(&json!({"anim_speed": 2.0}), true).wall < WalkStep::read(&json!({"anim_speed": 0.5}), true).wall, "faster animation walks faster");
+        assert_eq!(WalkStep::read(&json!({"anim_speed": 99}), true).wall, default / 2.0, "the sprite's clamp");
+        assert_eq!(WalkStep::read(&json!({"anim_speed": "fast"}), true).wall, default, "no number is 1x");
+    }
+
+    /// A bad or missing saved base is the default; the range's ends are good; a release build reads the default always.
+    #[test]
+    fn a_bad_walk_step_falls_back_to_the_default() {
+        let (least, most, default) = WALK_STEP_MS;
+        let base = |v: Value, debug: bool| WalkStep::read(&json!({WALK_STEP_KEY: v}), debug).base;
+        assert_eq!(WalkStep::read(&json!({}), true).base, default, "missing");
+        for bad in [json!("slow"), json!(null), json!(true), json!(least - 1.0), json!(most + 1.0), json!(-5), json!(1e300)] {
+            assert_eq!(base(bad.clone(), true), default, "{bad}");
+        }
+        assert_eq!(base(json!(least), true), least);
+        assert_eq!(base(json!(most), true), most);
+        assert_eq!(base(json!(most), false), default, "a release build");
+        assert_eq!(crate::screens::default_settings()[WALK_STEP_KEY], json!(default), "the settings' default");
     }
 }

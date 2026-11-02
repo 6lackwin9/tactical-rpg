@@ -47,13 +47,13 @@ use emberwake_world::explore::{self, Pos};
 use emberwake_world::quest;
 use serde_json::{json, Value};
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+#[cfg(test)]
+use std::time::Duration;
+use std::time::Instant;
 
-/// The leader keeps walking this long (animation ms) after a step, so key steps and walked paths play `walk` without
-/// a stop between tiles.
-const WALK_LINGER_MS: f64 = 130.0;
-/// WALK2: the time between steps (wall ms) of a walked path and of a held movement key.
-const STEP_MS: u64 = 90;
+/// The leader keeps walking this long (animation ms) past a step's time, so key steps and walked paths play `walk` without
+/// a stop between tiles at any step time (`mapview::WalkStep`).
+const WALK_LINGER_MS: f64 = 40.0;
 
 #[derive(Debug, Clone)]
 pub enum RAct {
@@ -108,7 +108,9 @@ pub struct RegionMap {
     walk: Vec<Pos>,
     walk_target: Option<String>,
     next_walk: Instant,
-    /// WALK2: a movement key pressed on this map is held: the draw steps every `STEP_MS` until it is let go.
+    /// WALK2, VIEWKEYS1: the time between steps, read from the settings each frame.
+    step: mapview::WalkStep,
+    /// WALK2: a movement key pressed on this map is held: the draw steps every `step` until it is let go.
     hold: bool,
     /// Map geometry of the last frame.
     geo: MapGeom,
@@ -259,6 +261,7 @@ impl RegionMap {
             walk: Vec::new(),
             walk_target: None,
             next_walk: Instant::now(),
+            step: mapview::WalkStep::of(&cx.settings.v),
             hold: false,
             geo: MapGeom::default(),
             log_open: false,
@@ -284,10 +287,10 @@ impl RegionMap {
         }
     }
 
-    /// The scheduled time of a step due at `now`: `next_walk` while on schedule, so the steps average `STEP_MS` whatever
+    /// The scheduled time of a step due at `now`: `next_walk` while on schedule, so the steps average `step` whatever
     /// the frame rate and the glide stays even; `now` after a stop or a long frame.
     fn step_time(&self, now: Instant) -> Instant {
-        if now.saturating_duration_since(self.next_walk) < Duration::from_millis(STEP_MS) {
+        if now.saturating_duration_since(self.next_walk) < self.step.gap() {
             self.next_walk.min(now)
         } else {
             now
@@ -381,7 +384,8 @@ impl RegionMap {
     fn tick_at(&mut self, cx: &mut Cx, now: Instant) {
         self.frame_at = Some(now);
         // PLAYUI1-R: the sprites play on their own clock at the animation speed setting (as the battle tokens)
-        let speed = cx.settings.v["anim_speed"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0);
+        let speed = mapview::anim_speed(&cx.settings.v);
+        self.step = mapview::WalkStep::of(&cx.settings.v);
         self.anim_ms += now.duration_since(self.anim_at).as_secs_f64() * 1000.0 * speed;
         self.anim_at = now;
         // PORTRAITFX1 4.5: the talk box's portrait clock moves by the frame's wall time (at most 100 ms a frame)
@@ -409,7 +413,7 @@ impl RegionMap {
         if self.hold && self.walk.is_empty() && !self.modal() {
             if let (Some(dir), true) = (cx.held.dir, now >= self.next_walk) {
                 let at = self.step_time(now);
-                self.next_walk = at + Duration::from_millis(STEP_MS);
+                self.next_walk = at + self.step.gap();
                 self.step_at = Some(at);
                 let t = explore::template_of(&cx.data, explore::location(&cx.data, cx.gs()));
                 if t.is_empty() || !self.step(cx, dir) {
@@ -422,7 +426,7 @@ impl RegionMap {
             return;
         }
         let at = self.step_time(now);
-        self.next_walk = at + Duration::from_millis(STEP_MS);
+        self.next_walk = at + self.step.gap();
         self.step_at = Some(at);
         let dir = self.walk.remove(0);
         if !self.step(cx, dir) {
@@ -437,9 +441,9 @@ impl RegionMap {
         }
     }
 
-    /// Whether the leader walks at the clock's now: on a walked path, or within `WALK_LINGER_MS` of the last step.
+    /// Whether the leader walks at the clock's now: on a walked path, or within a step and `WALK_LINGER_MS` of the last step.
     fn moving(&self) -> bool {
-        !self.walk.is_empty() || self.moved_at.is_some_and(|t| self.anim_ms - t < WALK_LINGER_MS)
+        !self.walk.is_empty() || self.moved_at.is_some_and(|t| self.anim_ms - t < self.step.base + WALK_LINGER_MS)
     }
 
     fn interact(&mut self, cx: &mut Cx, dir: Pos) {
@@ -874,7 +878,7 @@ impl Screen<GameCx> for RegionMap {
             // REGIONVIEW1: the party's drawn position, and what the camera looks at (MAPNAV1-U: outside a talk the panned
             // tile, a legend row or an edge arrow, when set); the party's glide always counts, the pan and talk ease
             let scale = ui.p.v.s;
-            let (drawn, jumped) = self.glide.update(&gs.location_id, gs.position, self.step_at.take(), self.frame_at, STEP_MS as f64);
+            let (drawn, jumped) = self.glide.update(&gs.location_id, gs.position, self.step_at.take(), self.frame_at, self.step.wall);
             let tile_at = |p: Pos| (p.0 as f32, p.1 as f32);
             let (look, at) = match (talk_view.as_ref(), self.pan) {
                 (Some(v), _) => {
@@ -1244,6 +1248,10 @@ impl Screen<GameCx> for RegionMap {
     }
 
     fn key(&mut self, cx: &mut Cx, k: Key) {
+        // VIEWKEYS1: a debug build's F6 (map zoom) and F9 (window size), whatever is open
+        if crate::viewkeys::zoom_key(cx, k) || crate::viewkeys::window_key(cx, k, crate::viewkeys::Shown::Log) {
+            return;
+        }
         // EXPLOREVIEW1: a debug build's F7 flips the region view live, whatever is open
         if k == Key::Fn(7) {
             if cfg!(debug_assertions) {
@@ -1282,7 +1290,7 @@ impl Screen<GameCx> for RegionMap {
                 let at = self.frame_at.unwrap_or_else(Instant::now);
                 self.step_at = Some(at);
                 self.hold = self.step(cx, dir);
-                self.next_walk = at + Duration::from_millis(STEP_MS);
+                self.next_walk = at + self.step.gap();
             }
         } else if k == Key::Char('e') || k == Key::Enter {
             let dir = self.facing;
@@ -3019,7 +3027,7 @@ mod sprite_tests {
             checks += 1;
         }
         assert_eq!(checks, 4);
-        map.anim_ms += WALK_LINGER_MS + 1.0;
+        map.anim_ms += map.step.base + WALK_LINGER_MS + 1.0;
         frame(&mut map, &mut cx, &mut g, 1.0);
         // standing still after the last step (up): idle in the view it faces, the side row when the body has no up row
         let sp = sprite(&map, &cx, "party").expect("the leader");
@@ -3028,7 +3036,7 @@ mod sprite_tests {
         assert_eq!((sp["clip"].clone(), sp["view"].clone()), (json!(want), json!(view)), "standing still");
     }
 
-    /// WALK2: a held movement key steps at once on the press (no key-repeat delay), chains a step every `STEP_MS`
+    /// WALK2: a held movement key steps at once on the press (no key-repeat delay), chains a step every `step`
     /// with the leader on one unbroken `walk` clip, turns at once to a newly held direction, and releasing stops on
     /// the tile and settles to idle once the linger has run out.
     #[test]
@@ -3075,7 +3083,7 @@ mod sprite_tests {
         frame(&mut map, &mut cx, &mut g, 1.0);
         assert_eq!(cx.gs().position, (at.0 + 3, at.1 + 1), "released: stopped on the tile");
         assert!(!map.hold);
-        map.anim_ms += WALK_LINGER_MS + 1.0;
+        map.anim_ms += map.step.base + WALK_LINGER_MS + 1.0;
         frame(&mut map, &mut cx, &mut g, 1.0);
         assert_eq!(map.leader.base(), "idle");
     }
@@ -4097,6 +4105,69 @@ mod view_tests {
         assert_eq!(Key::parse("f7"), Some(Key::Fn(7)), "the agent link's name");
         assert_eq!(Key::Fn(7).name(), "f7");
     }
+
+    /// VIEWKEYS1: a walked path keeps one step per due tick at any step time, the leader never idles between its steps
+    /// and the game state it ends in is the same: the step time is presentation, journeys are not touched.
+    #[test]
+    fn the_walk_step_only_changes_the_time_between_steps() {
+        let mut ended = Vec::new();
+        for (speed, base) in [(0.5, 240.0), (1.0, 130.0), (2.0, 60.0)] {
+            let (mut cx, mut g) = (game_cx(), gfx());
+            cx.settings.v["anim_speed"] = json!(speed);
+            cx.settings.v[mapview::WALK_STEP_KEY] = json!(base);
+            let mut map = RegionMap::new(&mut cx);
+            let d = cx.data.clone();
+            let start = cx.gs().clone();
+            let t = explore::template_of(&d, explore::location(&d, &start)).clone();
+            let (w, h) = explore::size_of(&t);
+            let marked: Vec<Pos> = explore::markers_of(explore::location(&d, &start)).iter().map(|m| explore::marker_pos(&t, m, start.explore_int("loc_steps"))).collect();
+            let free = |p: Pos| explore::is_open(&t, p.0, p.1) && !marked.contains(&p);
+            let at = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|&(x, y)| (0..4).all(|i| free((x + i, y)))).expect("a free row");
+            cx.gs_mut().position = at;
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            map.walk = vec![(1, 0); 3];
+            let begin = Instant::now() + Duration::from_secs(1);
+            map.next_walk = begin;
+            let want = if cfg!(debug_assertions) { base / speed } else { mapview::WALK_STEP_MS.2 / speed };
+            assert_eq!(map.step.wall, want);
+            let gap = map.step.gap();
+            for n in 1..=3 {
+                let due = begin + gap * (n - 1);
+                map.tick_at(&mut cx, due);
+                map.tick_at(&mut cx, due);
+                assert_eq!(cx.gs().position, (at.0 + n as i64, at.1), "one step per due tick: {base} at {speed}x");
+                map.tick_at(&mut cx, due + gap - Duration::from_millis(1));
+                assert_eq!(cx.gs().position, (at.0 + n as i64, at.1), "none before its time");
+                if n < 3 {
+                    assert!(map.moving(), "no idle frame between steps: {base} at {speed}x");
+                }
+            }
+            assert!(map.moving(), "the last step still walks to its end: {base} at {speed}x");
+            let gs = cx.gs();
+            ended.push((gs.position.0 - at.0, gs.position.1 - at.1, gs.world_id.clone(), gs.location_id.clone()));
+        }
+        assert!(ended.windows(2).all(|p| p[0] == p[1]), "the same end at every step time: {ended:?}");
+    }
+
+    /// VIEWKEYS1: on the map a debug build's F6 redraws at the next zoom and F9 saves the next size, both in the log and
+    /// neither taking a step; a release build ignores them (the rules are `viewkeys`' tests).
+    #[test]
+    fn f6_zooms_the_map_and_f9_sizes_the_window_in_a_debug_build() {
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut map = RegionMap::new(&mut cx);
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let (start, q) = (cx.gs().position, map.geo.q);
+        map.key(&mut cx, Key::Fn(6));
+        frame(&mut map, &mut cx, &mut g, 1.0);
+        let debug = cfg!(debug_assertions);
+        assert_eq!(map.geo.q, if debug { crate::viewkeys::ZOOM_CYCLE[1] } else { q });
+        assert_eq!(cx.log.last().is_some_and(|l| l.contains("1.5x")), debug);
+        map.key(&mut cx, Key::Fn(9));
+        assert_eq!(cx.settings.v["window_size"], json!(if debug { "1600x900" } else { "1280x720" }));
+        assert_eq!(cx.log.last().is_some_and(|l| l.contains("1600x900")), debug);
+        assert!(cx.notice.is_empty(), "the map's log ticker shows them");
+        assert_eq!(cx.gs().position, start, "no step");
+    }
 }
 
 /// REGIONGROUND1-L (spec section 8, checks L1-L6), under both views, on a test-only world and map, so no check reads
@@ -4716,9 +4787,9 @@ mod ground_tests {
             t0 + Duration::from_secs_f64(i as f64 / 60.0)
         }
 
-        /// The steps a hold from frame 0 has taken by frame `i`: the press, and one per `STEP_MS` from its time.
+        /// The steps a hold from frame 0 has taken by frame `i`: the press, and one per `step` from its time.
         fn steps_by(i: u32) -> i64 {
-            1 + (i as f64 / 60.0 * 1000.0 / STEP_MS as f64).floor() as i64
+            1 + (i as f64 / 60.0 * 1000.0 / crate::mapview::WALK_STEP_MS.2).floor() as i64
         }
 
         fn widget(map: &RegionMap, id: &str) -> Value {
@@ -4746,7 +4817,7 @@ mod ground_tests {
                         shot_at(&mut map, &mut cx, &mut g, t0);
                         let s = g.view.s;
                         let cell = if dir.0 != 0 { map.geo.cell_size().0 } else { map.geo.cell_size().1 };
-                        let speed = cell as f64 * s as f64 / 60.0 * 1000.0 / STEP_MS as f64;
+                        let speed = cell as f64 * s as f64 / 60.0 * 1000.0 / crate::mapview::WALK_STEP_MS.2;
                         map.key(&mut cx, key);
                         cx.held.dir = Some(dir);
                         let party = map.cam.party;

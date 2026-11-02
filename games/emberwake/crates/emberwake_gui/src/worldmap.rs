@@ -398,6 +398,9 @@ impl Screen<GameCx> for WorldMap {
 
     /// P, J, I and ? open the HUD bar's popups (PLAYUI1-H).
     fn key(&mut self, cx: &mut Cx, k: Key) {
+        if crate::viewkeys::window_key(cx, k, crate::viewkeys::Shown::Notice) {
+            return;
+        }
         if let Some(h) = hud_key(k) {
             self.act(cx, WAct::Hud(h));
         }
