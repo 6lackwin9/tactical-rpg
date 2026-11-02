@@ -1,0 +1,32 @@
+{
+  "model": "gemini-3.1-flash-image",
+  "id": "title_backdrop_clean",
+  "prompt": "Edit this pixel-art image and return it with only this change: take out all the fire. No flames licking up the cathedral walls, no burning rooftops, no fire along the street line, no flame on the chimney at the lower left. Instead the walls and rooftops at the foot of the cathedral catch a soft, even amber glow from below that fades smoothly up into shadow. The small candle lanterns stay only where they sit on a ledge of the cathedral. Keep the smoky amber haze and a few drifting embers in the sky. Same framing, same cathedral, same rooftops, same pixel size and same palette; the sky on the right stays open and empty. No text, no watermark.",
+  "reference": "refs/title_backdrop_gen1793612838_2.png",
+  "prompts_file": null,
+  "time": "2026-11-02T10:20:00Z",
+  "n": 2,
+  "references": [
+    "refs/title_backdrop_gen1793612838_2.png"
+  ],
+  "source": "antigravity image subagent",
+  "via": "antigravity",
+  "request": "title_backdrop_clean_q1793614225",
+  "metadata": {
+    "asset_id": "title_backdrop_clean",
+    "task": "look1a",
+    "target": null,
+    "route": "other",
+    "record": {
+      "prompts_file": null,
+      "source_refs": [
+        "C:/dev/tactical-rpg-plan/art_src/title_backdrop_gen1793612838_2.png"
+      ]
+    }
+  },
+  "mark_cleared": true,
+  "source_refs": [
+    "C:/dev/tactical-rpg-plan/art_src/title_backdrop_gen1793612838_2.png"
+  ],
+  "notes": "Verified resolution and aspect ratio within 3% tolerance. Generated 2 variations from reference."
+}
