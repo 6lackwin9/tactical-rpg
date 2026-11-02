@@ -1,4 +1,4 @@
-# tools/tiles (LOOK1-T, REGIONGROUND1-T)
+# tools/tiles (LOOK1-T, REGIONGROUND1-T, REGIONGROUND1-T3)
 
 Tile and ground texture pipeline. Python 3.12 with Pillow only (decision "Art tools in Python, portable to Rust"). Gemini art is already pixel art, so every step is scale only
 (no palette pass unless `--colours` is asked for). Run from this folder.
@@ -13,19 +13,21 @@ Tile and ground texture pipeline. Python 3.12 with Pillow only (decision "Art to
 | `masks.py [N]` | Ragged corner masks 1-14 (bit 1 NW, 2 NE, 4 SW, 8 SE is upper), prints mask N. Library: `mask_grid`. |
 | `compose.py --upper U --lower L --size WxH --out DIR` | U and L are PNGs or folders (their `v0.png`); writes opaque `m01.png`-`m14.png` (use `tilesets/<set>/<upper>/over_<lower>`). |
 | `board.py SET_DIR --out DIR` | Tile sheets (3 x 3, 1x and 2x) with checks, piece sheets, the sample map square and tilted (1x-3x), `index.html` with `file:///` links. |
-| `flatten.py SRC --out DST [--class natural or built] [--gain G] [--isotropic] [--record JSON]` | Per channel, `mean + (T - low) x G`, `low` a Gaussian blur of the image tiled 3 x 3 (centre crop), sigma 5 at 64 px wide, 20 at 256. Natural gain from .55 down to .17, built from .45 down to .25, by .05 steps (the last to the floor) until broad tone, range and busy pass, else exit 1 (a re-roll, the last try still written). `--gain` takes no steps. `--record` merges the class and gain used into the art's record. `--isotropic` averages the 8 rotations and mirrors x 2.1 plus a speckle: a fallback on the user's say, never a default. |
-| `groundcheck.py score PNG --class natural or built` | Reduces to 64 x 64, prints the scores against the limits below, exit 1 on a failure. A size that is not a whole multiple of 64 prints a warning: its scores come from a rounded form and can differ. |
+| `flatten.py SRC --out DST [--class natural or built] [--gain G] [--colour RRGGBB] [--isotropic] [--record JSON]` | Per channel, `mean + (T - low) x G`, `low` a Gaussian blur of the image tiled 3 x 3 (centre crop), sigma 5 at 64 px wide, 20 at 256. Natural gain from .55 down to .17, built from .45 down to .25, by .05 steps (the last to the floor) until broad tone, range and busy pass, else exit 1 (a re-roll, the last try still written). `--gain` takes no steps. `--colour` sets the mean per channel to the ground's colour in the spec's table, within half a level, by one whole-level shift per channel, so the pattern and the seam stay and the art's own tint no longer decides hue or value; the gain's steps score the coloured image. `--record` merges the class, gain and colour used into the art's record. A source over 4096 px a side is refused. `--isotropic` averages the 8 rotations and mirrors x 2.1 plus a speckle: a fallback on the user's say, never a default. |
+| `groundcheck.py score PNG --class natural or built [--ground ID]` | Reduces to 64 x 64, prints the scores against the limits below, exit 1 on a failure. A size that is not a whole multiple of 64 prints a warning: its scores come from a rounded form and can differ. `--ground` applies the ground's named colour cap and the stones warning. |
 | `groundcheck.py figures GROUND_DIR --art PATHS` | Warnings: a figure's range under 4 x a ground's, its busy under 3 x. `cistern`, `cobbles`, `scorch_mark` are not figures. |
-| `groundcheck.py pair GROUND_DIR` | Warnings: two grounds' means under 8 apart in RGB, so their edge may not read. |
+| `groundcheck.py pair GROUND_DIR` | Every two grounds' separation (below), exit 1 when any two are too alike; the stones warning for a built ground. |
 | `groundcheck.py read FRAME GROUND_PNG [--option shadow, pool or rim] [--colour RRGGBB]` | `read_contrast` and the ring step of one figure frame on a ground (below). |
-| `board.py SET_DIR --ground --out DIR [--figures ROOT]` | The set's `ground/<id>/v0.png`: each repeated over 16 x 10 and 32 x 20 cells at 1x-3x, no tone, with scores and pass or fail; each pair on a straight edge, a T crossing, a 1-cell lane and a lone cell (the prototype's edge, EN 2.3 and 2.4; pairs by the spec's order, lower first); each ground under the six class bodies, a crate, a tent and a wall face at 1x-2x; the figure warnings; `read_contrast` per body, ground and option. The mix through `ground_compose` is REGIONGROUND1-T2. |
+| `board.py SET_DIR --ground --out DIR [--figures ROOT]` | The set's `ground/<id>/v0.png`: each repeated over 16 x 10 and 32 x 20 cells at 1x-3x, no tone, with scores and pass or fail; each pair on a straight edge, a T crossing, a 1-cell lane and a lone cell (the prototype's edge, EN 2.3 and 2.4; pairs by the spec's order, lower first); each ground under the six class bodies, a crate, a tent and a wall face at 1x-2x; the figure warnings; `read_contrast` per body, ground and option. Also the mix below and the pairs' separation. `--layout` and `--set-colours` as for `--mix`. |
+| `board.py SET_DIR --mix --out DIR [--layout FIXTURE] [--set-colours]` | One picture, `mix.png`: the set's grounds as a small map (`fixtures/mix_outdoor.txt` by default, `mix_street.txt` for the Sunk Ward; `ID X0-X1 Y0-Y1` rects, later over earlier), at 2x with nothing written over the map, and beside it the grounds, how far each sits from its table colour, the pairs too alike and the plain built grounds. `--set-colours` sets each texture's mean to its row's colour as `flatten.py --colour` does; off, the art shows as it is. A ground without art draws its row's colour. The edge is Python for now (EN 2.3, 2.4 as built); REGIONGROUND1-T2 routes it through `ground_compose`. A layout that is off its map, past 128 cells, or names a ground outside the table is refused, not cut; so is a texture over 4096 px a side. |
 
 Sizes (kit checks A13-A15): region tiles 32x32 or 32x24, faces 32x16, 32x12 or 128x48, stage tiles 64x48, stage faces 64x24.
 Ground masters 256x256.
 Checks on the board: seam at most 1.5, at most 16 colours, mean luminance at most 25 %.
 
-One ground texture: `cut.py --form ground`, `seam.py` (fix, else re-roll), `flatten.py`, `groundcheck.py score` (a failure:
-re-roll once naming it in the prompt, then show the user), `board.py --ground`.
+One ground texture: `cut.py --form ground`, `seam.py` (fix, else re-roll), `flatten.py --colour`, `groundcheck.py score --ground`
+(a failure: re-roll once naming it in the prompt, then show the user), then for the set `groundcheck.py pair`, `board.py --mix`
+and `board.py --ground`.
 
 Ground checks, scored on the 64 x 64 form with L in Rec. 709 on 0-255 (`REGIONGROUND1.md` section 6, `REGIONGROUND1_SCENE.md`
 section 2):
@@ -40,7 +42,7 @@ section 2):
 | Direction, coherence | structure tensor, `sqrt((Jxx - Jyy)^2 + 4 Jxy^2) / (Jxx + Jyy)` | .25 | .25 | angled streaks |
 | Contrast, range | L p95 - p5 | 10 | 14 | too strong against the figures |
 | Contrast, busy | mean step in L | 1.0 | 2.0 | too busy |
-| Colour | mean(max - min of RGB) | 12 | 12 | too strong in colour |
+| Colour | mean(max - min of RGB); named caps `dirt_road` 24, `packed_dirt` 20, `tallow` 14, each its mock colour's flat swatch (22, 18, 12) plus 2 for the grain's colour noise (real grain adds up to .4; `tallow` on the common 12 could never pass) | 12 | 12 | too strong in colour |
 | Luminance | mean(L), % of 255 | 25 | 25 | too bright |
 
 L and the blur stay in floats, unrounded from a master that is a whole multiple of 64: rounded to 8 bits, a quiet grain's
@@ -52,6 +54,26 @@ Blotch is a ratio, so no gain cures it. It must fail `dirt_clean` (1.52) and the
 `dirt_flat` (1.28), `floor_r2` (.58), `stone_r2` (.55), `rubble_r2` (.52) and even grain (.38 to .51). A tail of the histogram
 (p99.5 - p0.5 against p95 - p5) was tried first: three large patches sit inside p5, so it reads them as normal (1.45), and it
 scores `dirt_flat` above `dirt_clean` (2.31 against 1.99).
+
+Pair separation (`groundcheck.py pair`, the board, the mix): two grounds of a set clearly differ when either holds:
+
+- Colour: RGB distance of the means at least 5. The closest neighbours in the mocks must pass (`cobble_road` / `iron_catwalk`
+  5.5, `ash` / `scrub` 7.1); the alike A1 images (`dirt_road`, `packed_dirt`, `paved_road`, `scrub`) sit at 1.7 at most and must
+  fail. This replaces the spec's earlier warning at 8, which the mock's own `ash` / `scrub` failed.
+- Pattern: at least .40, the largest of |ln| of the ratio of busy, |ln| of the ratio of the scale of shapes (the lag where the
+  wrapped autocorrelation of L falls to one half, so contrast does not move it) and the share of the gradient energy pointing
+  another way (half the L1 distance of the direction histograms). Those A1 images score .01 to .06, and .17 at most against
+  `flagstone`; the flat `ash` take scores 1.25 and up on busy.
+
+Any two grounds of a set can meet on some map, so all of a set's pairs count. Pictures of one grain pass on colour alone; set
+colours from the table and the A1 images all pass that way (0 of 36 too alike, against 28 of 36 as they came), with patterns
+still alike at .17 at most. The score says colour or pattern, so the board shows which one is carrying a pair.
+
+Stones (warning, `paved_road`, `flagstone`, `cobble_road`): at least 6 closed stones on the 64 x 64 form. The darkest 30 % of
+the fine detail (L less its sigma 4 blur) is taken as joints; a stone is a region of the rest, by sides, wrapped, from 6 art
+px to a quarter of the tile. A ratio of the image's own detail, so a flattened quiet road still counts. Real art: A1's
+`paved_road` and `flagstone` 0 (plain grain), other A1 grounds 0 to 1, `dirt_flat` 2; `sunk_ward_stage_stone` 13, `_stone_r2` 50,
+`_floor_r2` 48, their flattened forms 12, 50, 48.
 
 Art pixels of 8 master px or more fail seam by construction (a score of about 2 at 8 px, 4 at 16): every wrap step is a
 block's edge, while most inner steps fall inside a block. The Ground texture prompt's 128 x 128 pixels are 2 master px.
@@ -86,3 +108,5 @@ rect's border and (70, 60, 80) inside, on a flat ground of (30, 30, 35); read_co
 | `rim` | 51.270821; 53.059785 | 58.338361; 60.013358 |
 
 Test: `python -m unittest test_tiles` (temp dirs and fixtures only).
+
+The pair check is meant for coloured textures: without `--colour`, flatten's different gains can move `busy` enough to pass a pair on pattern alone.

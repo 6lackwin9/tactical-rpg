@@ -1,13 +1,21 @@
 """LOOK1-T, REGIONGROUND1-T: review boards of one tile set.
 
     board.py SET_DIR --out C:/dev/localgen/review/look1/<set>/
-    board.py SET_DIR --ground --out DIR [--figures ROOT]
+    board.py SET_DIR --ground --out DIR [--figures ROOT] [--layout FIXTURE] [--set-colours]
+    board.py SET_DIR --mix --out DIR [--layout FIXTURE] [--set-colours]
+
+--mix: one picture, `mix.png`: the set's grounds laid out as a small map (`fixtures/mix_outdoor.txt`, after the mock; or
+FIXTURE) with their real textures, so sameness or too strong a ground shows at a glance, nothing written over the map; beside
+it the grounds, how far each sits from its colour, the pairs that are too alike and the warnings. A ground without art draws
+its row's flat colour (EN 2.2). --set-colours sets each texture's mean to its row's colour first, as `flatten.py --colour`
+does; off, the art shows as it is. The edge is Python for now (EN 2.3, 2.4); REGIONGROUND1-T2 routes it through
+`ground_compose`.
 
 --ground: the set's `ground/<id>/v0.png`: each ground repeated over 16 x 10 and 32 x 20 cells at 1x-3x with its scores and
 pass or fail (no tone, so a loop shows); each pair on a straight edge, a T crossing, a 1-cell lane and a lone cell, drawn
 by the prototype's edge (EN 2.3, 2.4); a figures sheet (each ground under the six class bodies, a crate, a tent and a wall
 face, at 1x-2x) with `read_contrast` under each option; `index.html` with file:/// links. ROOT is the asset layer of the
-figures (default the RPG kit's). The composed mix is REGIONGROUND1-T2.
+figures (default the RPG kit's). The board holds the mix too, and every pair's separation.
 
 SET_DIR is a `tilesets/<set>` folder (`<tile>/v<n>.png`, `wall_face/v<n>.png`, `<upper>/over_<lower>/m<NN>.png`).
 Writes per tile a 3 x 3 sheet at 1x and 2x, per pair a sheet of the 14 pieces, the fixture map (`fixtures/sample_map.txt`,
@@ -21,8 +29,9 @@ import os
 import random
 import sys
 
-from PIL import Image, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+import flatten
 import groundcheck
 import seam
 
@@ -46,8 +55,8 @@ GROUND_ROWS = {
     "scorched": (30, 0.06, False, 0.13, "#1c1917"),
     "tallow": (32, 0.06, False, 0.13, "#2a251e"),
     "mud": (40, 0.06, False, 0.13, "#231d18"),
-    "packed_dirt": (50, 0.10, False, 0.13, "#332e28"),
-    "dirt_road": (60, 0.10, False, 0.13, "#39342e"),
+    "packed_dirt": (50, 0.10, False, 0.13, "#352c23"),
+    "dirt_road": (60, 0.10, False, 0.13, "#3c3126"),
     "flagstone": (70, 0.10, True, 0.08, "#373636"),
     "cobble_road": (78, 0.10, True, 0.08, "#2e3137"),
     "paved_road": (80, 0.10, True, 0.08, "#3e3f42"),
@@ -61,6 +70,12 @@ SEED = 11                              # the board's noise
 CLASS_BODIES = ("brawler", "mage", "priest", "ranger", "rogue", "warrior")
 FIGURE_PROPS = ("crate_stack", "tent")
 READ_OPTIONS = ("shadow", "pool", "rim")
+MIX_LAYOUT = os.path.join(HERE, "fixtures", "mix_outdoor.txt")
+MIX_SCALE = 2                          # physical px per art px, as at 1280 x 720
+MIX_PANEL = 300                        # px of the panel beside the map
+MAX_MIX_CELLS = 128                    # a layout's side, refused above it
+MAX_MASTER = 4096                      # px of a texture's side, refused above it
+MEAN_OFF = 1.0                         # the panel marks a texture further than this from its row's colour
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 KIT_ASSETS = os.path.join(REPO, "kits", "rpg", "assets")
 ENGINE_FACE = os.path.join(REPO, "engine", "assets", "tilesets", "common_stage", "wall_face", "v0.png")
@@ -336,11 +351,11 @@ def figures_sheet(textures, figures):
     return sheet
 
 
-def score_line(result, cls):
+def score_line(result, cls, ground=None):
     """The scores as coloured HTML."""
     parts = []
     for c, name, _ in groundcheck.CHECKS:
-        limit = groundcheck.LIMITS[cls][c]
+        limit = groundcheck.limits_of(cls, ground)[c]
         colour = "#e55" if result[c] > limit else "#4c4"
         parts.append(f'<span style="color:{colour}">{html.escape(name)} {result[c]:.2f} / {limit:g}</span>')
     return " | ".join(parts)
@@ -361,19 +376,205 @@ def read_table(textures, bodies):
             f"<tr><th>ground</th><th>option</th>{head}</tr>" + "".join(rows) + "</table>")
 
 
-def build_ground(set_dir, out_dir, figures_root=KIT_ASSETS):
-    """The ground board of `set_dir`; the path of its index. ValueError when the set has no ground art."""
+def parse_layout(path):
+    """(cols, rows, grid of ground ids) of a mix fixture: `size W H`, `default ID`, then `ID X0-X1 Y0-Y1` rects (inclusive,
+    later over earlier), `#` comments. ValueError on a line it cannot read, a ground the table does not list, a rect off the
+    map or a map past MAX_MIX_CELLS: nothing is cut to fit."""
+    size = default = None
+    rects = []
+    with open(path, encoding="utf-8") as f:
+        for n, line in enumerate(f, 1):
+            parts = line.split("#")[0].split()
+            where = f"{os.path.basename(path)}:{n}"
+            if not parts:
+                continue
+            try:
+                if parts[0] == "size" and len(parts) == 3:
+                    if size:
+                        raise ValueError("a second size")
+                    size = int(parts[1]), int(parts[2])
+                elif parts[0] == "default" and len(parts) == 2:
+                    if default:
+                        raise ValueError("a second default")
+                    default = parts[1]
+                elif len(parts) == 3:
+                    x0, x1 = (int(v) for v in parts[1].split("-"))
+                    y0, y1 = (int(v) for v in parts[2].split("-"))
+                    rects.append((parts[0], x0, x1, y0, y1, where))
+                else:
+                    raise ValueError("not `size W H`, `default ID` or `ID X0-X1 Y0-Y1`")
+            except ValueError as e:
+                raise ValueError(f"{where}: {e}") from None
+    if size is None or default is None:
+        raise ValueError(f"{os.path.basename(path)}: needs a size and a default")
+    cols, rows = size
+    if not (1 <= cols <= MAX_MIX_CELLS and 1 <= rows <= MAX_MIX_CELLS):
+        raise ValueError(f"{os.path.basename(path)}: size {cols} x {rows} is off 1..{MAX_MIX_CELLS}")
+    if default not in GROUND_ROWS:
+        raise ValueError(f"{os.path.basename(path)}: default {default} is not in the table")
+    grid = [[default] * cols for _ in range(rows)]
+    for g, x0, x1, y0, y1, where in rects:
+        if g not in GROUND_ROWS:
+            raise ValueError(f"{where}: ground {g} is not in the table")
+        if not (0 <= x0 <= x1 < cols and 0 <= y0 <= y1 < rows):
+            raise ValueError(f"{where}: rect {x0}-{x1} {y0}-{y1} is off the {cols} x {rows} map")
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                grid[y][x] = g
+    return cols, rows, grid
+
+
+def draw_mix(grid, textures):
+    """The map of `grid` (rows of ground ids) at one art px per logical px, by EN 2.3 and 2.4 as built: layers low `order`
+    first, each over the cells of its rank and up, one noise for all. `textures`: id -> 64 x 64 image; a ground without one
+    draws its row's colour. Colours are never blended between grounds."""
+    rows, cols = len(grid), len(grid[0])
+    w, h = cols * CELL_PX, rows * CELL_PX
+    ids = sorted({g for row in grid for g in row}, key=lambda g: (row_of(g)[0], g))
+    rank = {g: i for i, g in enumerate(ids)}
+    noise = edge_fields(w, h)
+    blurred = [None]                   # the lowest layer fills the image
+    for k in range(1, len(ids)):
+        mask = Image.new("L", (w, h), 0)
+        for y, row in enumerate(grid):
+            for x, g in enumerate(row):
+                if rank[g] >= k:
+                    mask.paste(255, (x * CELL_PX, y * CELL_PX, (x + 1) * CELL_PX, (y + 1) * CELL_PX))
+        blurred.append([v / 255 for v in mask.filter(ImageFilter.GaussianBlur(5.5)).tobytes()])
+    layers = []
+    for k, g in enumerate(ids):
+        tex = textures.get(g)
+        if tex is None:
+            tex = Image.new("RGB", (groundcheck.FORM, groundcheck.FORM), row_of(g)[4])
+        offset = random.Random(SEED * 1000 + k)
+        row = row_of(g)
+        layers.append((tex.tobytes(), tex.size[0], tex.size[1], offset.randrange(tex.size[0]), offset.randrange(tex.size[1]),
+                       row[1], row[2], row[3]))
+    count = len(ids)
+    edge, stray, bite, tone = noise["edge"], noise["stray"], noise["bite"], noise["tone"]
+    out = bytearray(w * h * 3)
+
+    def colour(k, x, y, t, factor):
+        raw, tw, th, ox, oy, _, _, layer_tone = layers[k]
+        at = (((y + oy) % th) * tw + (x + ox) % tw) * 3
+        v = (1 + layer_tone * t) * factor
+        return min(255, int(raw[at] * v)), min(255, int(raw[at + 1] * v)), min(255, int(raw[at + 2] * v))
+
+    for y in range(h):
+        for x in range(w):
+            i = y * w + x
+            push = (edge[i] - 0.5) * 0.62
+            top = 0
+            for k in range(1, count):
+                if blurred[k][i] + push > 0.5:
+                    top = k
+            t = tone[i]
+            # A layer's own share: `bl_k` less the next one's, so a ground far from here wears nothing (EN 2.4, as built).
+            factor = 1.0
+            source = top
+            for k in range(top + 1, count):
+                own = blurred[k][i] - (blurred[k + 1][i] if k + 1 < count else 0.0)
+                if own + push > 0.34:
+                    factor = min(factor, 1 - layers[k][5])
+            for k in range(top + 1, count):
+                own = blurred[k][i] - (blurred[k + 1][i] if k + 1 < count else 0.0)
+                if layers[k][6] and 0.16 < own < 0.42 and stray[i] > 0.82:
+                    source, factor = k, 0.92
+            if top > 0 and 0.5 < blurred[top][i] + push < 0.56 and bite[i] > 0.7:
+                shares = [(blurred[k][i] - blurred[k + 1][i]) if k else 1 - blurred[1][i] for k in range(top)]
+                source, factor = shares.index(max(shares)), 0.95
+            o = i * 3
+            out[o], out[o + 1], out[o + 2] = colour(source, x, y, t, factor)
+    return Image.frombytes("RGB", (w, h), bytes(out))
+
+
+def load_masters(set_dir, set_colours=False):
+    """[(id, master)] of a set's grounds by the table's order, each set to its row's colour when asked. ValueError when the
+    set has none or a texture's side is past MAX_MASTER."""
     ground_dir = os.path.join(set_dir, "ground")
     found = groundcheck.find_grounds(ground_dir)
     if not found:
         raise ValueError(f"{ground_dir} holds no <id>/v0.png")
-    os.makedirs(out_dir, exist_ok=True)
-    masters, textures = [], []
+    masters = []
     for g, path in sorted(found, key=lambda f: (row_of(f[0])[0], f[0])):
         with Image.open(path) as im:
+            if max(im.size) > MAX_MASTER:
+                raise ValueError(f"{path}: {im.size[0]}x{im.size[1]} is over {MAX_MASTER} px a side")
             master = im.convert("RGB")
+        if set_colours:
+            master = flatten.set_mean(master, flatten.parse_colour(row_of(g)[4]))
         masters.append((g, master))
-        textures.append((g, groundcheck.form(master)))
+    return masters
+
+
+def mix_notes(textures, masters):
+    """The lines beside the mix: (pairs too alike, built grounds without stones)."""
+    alike = [f"{a} / {b}: colour {r['colour']:.1f}, pattern {r['pattern']:.2f}"
+             for a, b, r in groundcheck.pair_report(textures) if not r["clear"]]
+    plain = [f"{g}: {groundcheck.stones(m)} stones, no joints" for g, m in masters if groundcheck.stone_warning(m, g)]
+    return alike, plain
+
+
+def mix_picture(masters, layout_path=MIX_LAYOUT):
+    """The map at MIX_SCALE beside its panel; ([warnings], image). A ground of the set the layout does not use is a warning:
+    it is not on the picture."""
+    _, _, grid = parse_layout(layout_path)
+    textures = [(g, groundcheck.form(m)) for g, m in masters]
+    used = {g for row in grid for g in row}
+    missing = [g for g, _ in textures if g not in used]
+    the_map = draw_mix(grid, dict(textures))
+    the_map = the_map.resize((the_map.size[0] * MIX_SCALE, the_map.size[1] * MIX_SCALE), Image.NEAREST)
+    sheet = Image.new("RGB", (the_map.size[0] + MIX_PANEL, the_map.size[1]), (14, 15, 20))
+    sheet.paste(the_map, (0, 0))
+    draw = ImageDraw.Draw(sheet)
+    font = ImageFont.load_default()
+    x, y = the_map.size[0] + 10, 8
+    have = dict(textures)
+    for g in sorted(used | set(have), key=lambda i: (row_of(i)[0], i)):
+        target = flatten.parse_colour(row_of(g)[4])
+        tex = have.get(g)
+        if tex is None:
+            sheet.paste(row_of(g)[4], (x, y, x + 24, y + 24))
+            note = "no art: flat"
+        else:
+            sheet.paste(tex.crop((0, 0, 24, 24)), (x, y))
+            mean = groundcheck.mean_rgb(tex)
+            off = max(abs(a - b) for a, b in zip(mean, target))
+            note = "#%02x%02x%02x" % tuple(int(v + 0.5) for v in mean)
+            note += f" off table {off:.0f}" if off > MEAN_OFF else ""
+        draw.rectangle((x - 1, y - 1, x + 24, y + 24), outline=(90, 90, 100))
+        draw.text((x + 32, y), g + ("" if g in used else " (not on this layout)"), fill=(225, 225, 225), font=font)
+        draw.text((x + 32, y + 12), note, fill=(150, 150, 160), font=font)
+        y += 30
+    alike, plain = mix_notes(textures, masters)
+    y += 6
+    draw.text((x, y), f"{len(alike)} pairs too alike", fill=(230, 120, 90) if alike else (120, 200, 120), font=font)
+    y += 14
+    notes = plain + alike
+    room = (sheet.size[1] - y) // 12 - 1
+    for line in notes[:room]:
+        draw.text((x, y), line, fill=(200, 170, 120), font=font)
+        y += 12
+    if len(notes) > room:
+        draw.text((x, y), f"and {len(notes) - room} more on the tool's output", fill=(150, 150, 160), font=font)
+    warnings = [f"{g}: not on this layout" for g in missing] + [f"too alike: {line}" for line in alike] + plain
+    return warnings, sheet
+
+
+def build_mix(set_dir, out_dir, layout_path=MIX_LAYOUT, set_colours=False):
+    """`mix.png` of `set_dir`; (its path, [warnings]). ValueError on a bad layout or a set without ground art."""
+    warnings, sheet = mix_picture(load_masters(set_dir, set_colours), layout_path)
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, "mix.png")
+    sheet.save(path)
+    return path, warnings
+
+
+def build_ground(set_dir, out_dir, figures_root=KIT_ASSETS, layout_path=MIX_LAYOUT, set_colours=False):
+    """The ground board of `set_dir`; the path of its index. ValueError when the set has no ground art."""
+    masters = load_masters(set_dir, set_colours)
+    os.makedirs(out_dir, exist_ok=True)
+    textures = [(g, groundcheck.form(master)) for g, master in masters]
     items = []
 
     def save(img, name, scale=1):
@@ -392,7 +593,8 @@ def build_ground(set_dir, out_dir, figures_root=KIT_ASSETS):
     for (g, master), (_, tex) in zip(masters, textures):
         cls = groundcheck.class_of(g)
         result = groundcheck.scores(master)
-        bad = groundcheck.failures(result, cls)
+        bad = groundcheck.failures(result, cls, g)
+        stone_note = groundcheck.stone_warning(master, g)
         size_note = groundcheck.size_warning(master)
         if size_note:
             print(f"warning: {g}: {size_note}", file=sys.stderr)
@@ -405,8 +607,13 @@ def build_ground(set_dir, out_dir, figures_root=KIT_ASSETS):
                 first = first or p
                 links.append(link(p, f"{cells[0]} x {cells[1]} at {scale}x"))
         items.append(f"<div><h3>{html.escape(g)} ({cls}): {verdict}</h3>{thumb(first)}<p>{' | '.join(links)}</p>"
-                     f"<p>{score_line(result, cls)}</p>"
-                     + (f'<p style="color:#ea5">warning: {html.escape(size_note)}</p>' if size_note else "") + "</div>")
+                     f"<p>{score_line(result, cls, g)}</p>"
+                     + "".join(f'<p style="color:#ea5">warning: {html.escape(n)}</p>' for n in (stone_note, size_note) if n)
+                     + "</div>")
+    mix_warnings, mix = mix_picture(masters, layout_path)
+    items.insert(0, f"<div><h2>The mix</h2>{thumb(save(mix, 'mix.png'))}</div>")
+    for line in mix_warnings:
+        print(f"warning: {line}", file=sys.stderr)
     w, h = PAIR_SIZE[0] * CELL_PX, PAIR_SIZE[1] * CELL_PX
     noise = edge_fields(w, h)
     layouts = pair_layouts()
@@ -418,9 +625,10 @@ def build_ground(set_dir, out_dir, figures_root=KIT_ASSETS):
             sheet = pair_sheet(tex_low, tex_up, row_of(low), row_of(up), fields, noise)
             p = save(sheet, f"pair_{low}_{up}.png")
             q = save(sheet, f"pair_{low}_{up}_x2.png", 2)
-            d = groundcheck.pair_distance(tex_low, tex_up)
-            warn = "" if d >= groundcheck.MIN_PAIR_DISTANCE else f' <span style="color:#ea5">warning: under {groundcheck.MIN_PAIR_DISTANCE:.0f}, the edge may not read</span>'
-            items.append(f"<div><h3>{html.escape(low)} / {html.escape(up)}: means {d:.1f} apart{warn}</h3>{thumb(p)}<p>{link(q, '2x')}</p></div>")
+            r = groundcheck.pair_scores(tex_low, tex_up)
+            warn = "" if r["clear"] else ' <span style="color:#e55">FAIL: too alike</span>'
+            items.append(f"<div><h3>{html.escape(low)} / {html.escape(up)}: colour {r['colour']:.1f}, pattern {r['pattern']:.2f}{warn}</h3>"
+                         f"{thumb(p)}<p>{html.escape(groundcheck.pair_line(low, up, r))}</p><p>{link(q, '2x')}</p></div>")
     bodies, others = find_figures(set_dir, figures_root)
     sheet = figures_sheet(textures, bodies + others)
     if sheet is not None:
@@ -510,13 +718,22 @@ def main(argv=None):
     ap.add_argument("--role", choices=["auto", "region", "stage"], default="auto")
     ap.add_argument("--ground", action="store_true", help="the set's ground/<id>/v0.png instead of its tiles")
     ap.add_argument("--figures", default=KIT_ASSETS, help="with --ground: the asset layer of the class bodies and props")
+    ap.add_argument("--mix", action="store_true", help="only the one-picture mix of the set's grounds, mix.png")
+    ap.add_argument("--layout", default=MIX_LAYOUT, help="with --mix or --ground: the mix fixture")
+    ap.add_argument("--set-colours", action="store_true", help="with --mix or --ground: set each texture's mean to its row's colour")
     a = ap.parse_args(argv)
-    if not a.ground:
+    if not a.ground and not a.mix:
         print(_uri(build(a.set_dir, a.out, a.role)))
         return 0
     try:
-        print(_uri(build_ground(a.set_dir, a.out, a.figures)))
-    except ValueError as e:
+        if a.mix:
+            path, warnings = build_mix(a.set_dir, a.out, a.layout, a.set_colours)
+            for line in warnings:
+                print(f"warning: {line}", file=sys.stderr)
+            print(_uri(path))
+        else:
+            print(_uri(build_ground(a.set_dir, a.out, a.figures, a.layout, a.set_colours)))
+    except (OSError, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
     return 0

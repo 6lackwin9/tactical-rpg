@@ -1,5 +1,6 @@
 """LOOK1-T tests: temp dirs and fixtures only."""
 import contextlib
+import functools
 import io
 import json
 import math
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 from PIL import Image
 
@@ -300,7 +302,7 @@ class ColoursTest(unittest.TestCase):
         digests = set()
         for seed in ("0", "1", "4242"):
             env = {**os.environ, "PYTHONHASHSEED": seed}
-            done = subprocess.run([sys.executable, "-c", code], cwd=here, env=env, capture_output=True, text=True, check=True)
+            done = subprocess.run([sys.executable, "-c", code], cwd=here, env=env, capture_output=True, text=True, timeout=120, check=True)
             digests.add(done.stdout.strip())
         self.assertEqual(len(digests), 1)
         self.assertEqual(len(digests.pop()), 64)
@@ -670,14 +672,6 @@ class GroundCheckTest(unittest.TestCase):
     def test_bright_fails_luminance(self):
         self.assertIn("lum", self.fails(tint_of(even_tile(), (40, 40, 40))))
 
-    def test_pair_five_apart_warns_and_twenty_does_not(self):
-        base = even_tile()
-        step = round(5 / math.sqrt(3))
-        near = tint_of(base, (step, step, step))
-        far = tint_of(base, (12, 12, 12))
-        self.assertTrue(groundcheck.pair_warnings([("a", base), ("b", near)]))
-        self.assertEqual(groundcheck.pair_warnings([("a", base), ("b", far)]), [])
-
     def test_a_figure_not_well_above_a_ground_warns(self):
         rnd = random.Random(48)
         figure = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
@@ -701,10 +695,11 @@ class GroundCheckTest(unittest.TestCase):
             body_fixture().save(frame)
             ground_dir = os.path.join(d, "ground")
             with contextlib.redirect_stdout(io.StringIO()) as out:
-                self.assertEqual(groundcheck.main(["pair", ground_dir]), 0)
+                self.assertEqual(groundcheck.main(["pair", ground_dir]), 1)   # one level apart, one grain: too alike
                 self.assertEqual(groundcheck.main(["figures", ground_dir, "--art", frame]), 0)
                 self.assertEqual(groundcheck.main(["read", frame, os.path.join(ground_dir, "a", "v0.png"), "--option", "rim"]), 0)
-            self.assertIn("pair a / b", out.getvalue())
+            self.assertIn("a / b: colour 1.7", out.getvalue())
+            self.assertIn("TOO ALIKE", out.getvalue())
             self.assertIn("2 grounds", out.getvalue())
             self.assertIn("read_contrast", out.getvalue())
 
@@ -937,7 +932,8 @@ class GroundBoardTest(unittest.TestCase):
             self.assertIn("file:///", page)
             self.assertIn("Direction, peak", page)
             self.assertIn("read_contrast", page)
-            self.assertIn("warning: under 8", page)   # ash and mud are about 2 apart
+            self.assertIn("FAIL: too alike", page)   # ash and mud are about 2 apart, on one grain
+            self.assertIn("mix.png", names)
 
     def test_a_set_without_ground_art_is_an_error(self):
         with tempfile.TemporaryDirectory() as d:
@@ -966,11 +962,11 @@ class GroundBoardTest(unittest.TestCase):
         self.assertGreater(off, h // 2)
 
     def test_every_swatch_meets_the_colour_cap(self):
-        limit = groundcheck.LIMITS["natural"]["colour"]
         for g, row in board.GROUND_ROWS.items():
+            limit = groundcheck.limits_of(groundcheck.class_of(g), g)["colour"]
             self.assertLessEqual(groundcheck.colour_cap(Image.new("RGB", (4, 4), row[4])), limit, g)
-        self.assertEqual(board.GROUND_ROWS["dirt_road"][4], "#39342e")
-        self.assertEqual(board.GROUND_ROWS["packed_dirt"][4], "#332e28")
+        self.assertEqual(board.GROUND_ROWS["dirt_road"][4], "#3c3126")   # the decision's mock colours
+        self.assertEqual(board.GROUND_ROWS["packed_dirt"][4], "#352c23")
 
     def test_a_master_off_the_form_warns_on_the_board(self):
         with tempfile.TemporaryDirectory() as d:
@@ -988,6 +984,392 @@ class GroundBoardTest(unittest.TestCase):
         for title, cells in board.pair_layouts():
             self.assertTrue(cells, title)
             self.assertTrue(all(0 <= x < cols and 0 <= y < rows for x, y in cells), title)
+
+
+@functools.lru_cache(maxsize=None)
+def stones_tile(cells=24, joint=4, depth=6.0, seed=60):
+    """Irregular stones with narrow dark joints over quiet grain, wrapped: Voronoi cells of `cells` random points."""
+    rnd = random.Random(seed)
+    points = [(rnd.randrange(GROUND), rnd.randrange(GROUND)) for _ in range(cells)]
+    fine = grain(seed + 1, 1)
+
+    def wrapped(x, y, p):
+        dx, dy = abs(x - p[0]), abs(y - p[1])
+        return math.hypot(min(dx, GROUND - dx), min(dy, GROUND - dy))
+
+    joints = {}
+    for y in range(GROUND):
+        for x in range(GROUND):
+            near = sorted(wrapped(x, y, p) for p in points)[:2]
+            joints[(x, y)] = near[1] - near[0] < joint
+    return field_tile(lambda x, y: fine(x, y) - (depth if joints[(x, y)] else 0))
+
+
+def blocks_tile(block=16, amp=3, seed=61):
+    """The same mean and quiet, with shapes of `block` px, wrapped."""
+    rnd = random.Random(seed)
+    n = GROUND // block
+    table = [rnd.randint(-amp, amp) for _ in range(n * n)]
+    return field_tile(lambda x, y: table[(y // block) * n + x // block])
+
+
+def layout_grounds(name):
+    _, _, grid = board.parse_layout(os.path.join(board.HERE, "fixtures", name))
+    return sorted({g for row in grid for g in row})
+
+
+class ColourSetTest(unittest.TestCase):
+    def test_every_table_colour_is_reached_within_half_a_level_whatever_the_art_tint(self):
+        for tint in ((0, 0, 0), (30, -10, 20)):
+            src = tint_of(even_tile(), tint)
+            for g, row in board.GROUND_ROWS.items():
+                target = flatten.parse_colour(row[4])
+                for a, b in zip(flatten.channel_means(flatten.set_mean(src, target).tobytes()), target):
+                    self.assertLessEqual(abs(a - b), 0.5, (g, tint))
+            target = flatten.parse_colour(board.row_of("dirt_road")[4])
+            for a, b in zip(flatten.channel_means(flatten.run(src, "natural", colour=target)[0].tobytes()), target):
+                self.assertLessEqual(abs(a - b), 0.5, tint)
+
+    def test_the_art_tint_no_longer_decides_hue_or_value(self):
+        target = flatten.parse_colour("#3c3126")
+        a = flatten.flatten(even_tile(), 0.45, target)
+        b = flatten.flatten(tint_of(even_tile(), (20, -5, 11)), 0.45, target)
+        self.assertEqual(flatten.channel_means(a.tobytes()), flatten.channel_means(b.tobytes()))
+        self.assertEqual(a.tobytes(), b.tobytes())
+
+    def test_the_pattern_and_the_seam_stay(self):
+        src = even_tile()
+        out = flatten.set_mean(src, (70, 60, 50))
+        first = out.tobytes()[0:3]
+        base = src.tobytes()
+        shift = [first[c] - base[c] for c in range(3)]
+        raw = out.tobytes()
+        self.assertTrue(all(raw[i] - base[i] == shift[i % 3] for i in range(len(raw))))
+        self.assertEqual(seam.score(out), seam.score(src))
+        flat, coloured = flatten.flatten(src, 0.5), flatten.flatten(src, 0.5, (28, 25, 23))
+        self.assertAlmostEqual(groundcheck.busy(groundcheck.luma_grid(flat)), groundcheck.busy(groundcheck.luma_grid(coloured)), delta=0.05)
+        self.assertLessEqual(seam.score(coloured), groundcheck.LIMITS["natural"]["seam"])
+
+    def test_clipped_pixels_are_made_up_by_another_shift(self):
+        src = field_tile(lambda x, y: -35 if (x // 8 + y // 8) % 2 else 25)   # levels 5 and 65
+        out = flatten.set_mean(src, (12, 12, 12))    # a plain shift by -23 clips the low half at 0 and lands on 17-ish
+        self.assertLessEqual(abs(flatten.channel_means(out.tobytes())[0] - 12), 0.5)
+
+    def test_a_mean_no_shift_can_reach_stops_at_the_nearest(self):
+        out = flatten.set_mean(Image.new("RGB", (8, 8), (255, 0, 9)), (0, 255, 9))
+        self.assertEqual(out.getpixel((0, 0)), (0, 255, 9))
+
+    def test_deterministic(self):
+        src = even_tile()
+        a = flatten.run(src, "natural", colour=(42, 38, 34))[0]
+        b = flatten.run(src, "natural", colour=(42, 38, 34))[0]
+        self.assertEqual(a.tobytes(), b.tobytes())
+
+    def test_a_gain_step_scores_the_coloured_image(self):
+        # broad tone is relative to the mean: art that passes as it is can fail once it is set to a dark colour
+        fine = grain(62)
+        src = field_tile(lambda x, y: 6 * math.sin(2 * math.pi * x / GROUND) + fine(x, y) + 40)
+        _, plain, _ = flatten.run(src, "natural")
+        _, dark, _ = flatten.run(src, "natural", colour=(14, 16, 24))
+        self.assertLess(dark, plain)
+
+    def test_a_run_makes_up_what_flatten_clips_at_a_dark_colour(self):
+        target = (6, 6, 6)
+        src = field_tile(grain(65, 20))
+        self.assertGreater(flatten.channel_means(flatten.flatten(src, 1.0, target).tobytes())[0], 6.5)
+        out = flatten.run(src, "natural", gain=1.0, colour=target)[0]
+        self.assertLessEqual(abs(flatten.channel_means(out.tobytes())[0] - 6), 0.5)
+
+    def test_cli_sets_the_colour_and_writes_it_to_the_record(self):
+        with tempfile.TemporaryDirectory() as d:
+            src, out, rec = os.path.join(d, "s.png"), os.path.join(d, "o.png"), os.path.join(d, "r.json")
+            even_tile().save(src)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(flatten.main([src, "--out", out, "--colour", "#3c3126", "--record", rec]), 0)
+            with Image.open(out) as im:
+                for a, b in zip(flatten.channel_means(im.convert("RGB").tobytes()), (0x3c, 0x31, 0x26)):
+                    self.assertLessEqual(abs(a - b), 0.5)
+            with open(rec, encoding="utf-8") as f:
+                self.assertEqual(json.load(f)["flatten"]["colour"], "#3c3126")
+
+    def test_cli_refuses_a_bad_colour_and_a_huge_source(self):
+        with tempfile.TemporaryDirectory() as d:
+            src, out = os.path.join(d, "s.png"), os.path.join(d, "o.png")
+            even_tile().save(src)
+            for bad in ("zzzzzz", "12345", "1234567", "", "#12345g", "-12345"):
+                with contextlib.redirect_stderr(io.StringIO()) as err:
+                    self.assertEqual(flatten.main([src, "--out", out, f"--colour={bad}"]), 1, bad)
+                self.assertIn("not RRGGBB", err.getvalue())
+                self.assertFalse(os.path.exists(out))
+            huge = os.path.join(d, "h.png")
+            Image.new("RGB", (flatten.MAX_SOURCE + 1, 2)).save(huge)
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(flatten.main([huge, "--out", out]), 1)
+            self.assertIn("px a side", err.getvalue())
+
+
+class NamedColourCapTest(unittest.TestCase):
+    def brown(self, colour):
+        return flatten.set_mean(even_tile(), flatten.parse_colour(colour))
+
+    def test_the_dirts_pass_on_their_colours_and_others_do_not_pass_on_them(self):
+        for g, colour in (("dirt_road", "#3c3126"), ("packed_dirt", "#352c23")):
+            r = groundcheck.scores(self.brown(colour))
+            self.assertNotIn("colour", groundcheck.failures(r, "natural", g))
+            self.assertIn("colour", groundcheck.failures(r, "natural"))
+            self.assertIn("colour", groundcheck.failures(r, "natural", "ash"))
+
+    def test_a_named_cap_still_catches_too_strong_a_colour(self):
+        strong = tint_of(self.brown("#3c3126"), (10, 0, -10))
+        self.assertIn("colour", groundcheck.failures(groundcheck.scores(strong), "natural", "dirt_road"))
+
+    def test_every_table_colour_on_grain_with_colour_noise_meets_its_cap(self):
+        rnd = random.Random(64)
+        noisy = Image.frombytes("RGB", (64, 64), bytes(40 + rnd.randint(-1, 1) for _ in range(64 * 64 * 3)))
+        for g, row in board.GROUND_ROWS.items():
+            r = groundcheck.colour_cap(flatten.set_mean(noisy, flatten.parse_colour(row[4])))
+            self.assertLessEqual(r, groundcheck.limits_of(groundcheck.class_of(g), g)["colour"], g)
+
+    def test_only_the_mock_colours_past_the_common_cap_are_named(self):
+        self.assertEqual(set(groundcheck.COLOUR_CAPS), {"dirt_road", "packed_dirt", "tallow"})
+        self.assertEqual(groundcheck.limits_of("natural", "ash"), groundcheck.LIMITS["natural"])
+
+    def test_score_takes_the_ground(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "g.png")
+            self.brown("#3c3126").save(path)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(groundcheck.main(["score", path, "--class", "natural", "--ground", "dirt_road"]), 0)
+                self.assertEqual(groundcheck.main(["score", path, "--class", "natural"]), 1)
+
+
+class PairSeparationTest(unittest.TestCase):
+    def test_two_rolls_of_one_grain_a_little_apart_fail(self):
+        a, b = even_tile(45), tint_of(even_tile(46), (1, 1, 1))
+        r = groundcheck.pair_scores(a, b)
+        self.assertLess(r["pattern"], groundcheck.MIN_PATTERN)
+        self.assertFalse(r["clear"])
+        self.assertTrue(groundcheck.pair_failures([("a", a), ("b", b)]))
+
+    def test_the_mocks_colours_on_one_grain_pass_on_colour_alone(self):
+        for name in ("mix_outdoor.txt", "mix_street.txt"):
+            grounds = layout_grounds(name)
+            tiles = [(g, flatten.set_mean(even_tile(), flatten.parse_colour(board.row_of(g)[4]))) for g in grounds]
+            for a, b, r in groundcheck.pair_report(tiles):
+                self.assertLess(r["pattern"], groundcheck.MIN_PATTERN, (a, b))
+                self.assertGreaterEqual(r["colour"], groundcheck.MIN_PAIR_DISTANCE, (a, b))
+                self.assertTrue(r["clear"], (a, b))
+
+    def test_one_colour_passes_on_a_clearly_different_pattern_of_each_kind(self):
+        even = even_tile()
+        for name, other, score in (("scale", blocks_tile(), "scale"), ("busy", field_tile(grain(63, 1)), "busy"),
+                                   ("direction", streak_tile(), "direction")):
+            other = flatten.set_mean(other, tuple(round(v) for v in groundcheck.mean_rgb(even)))
+            r = groundcheck.pair_scores(even, other)
+            self.assertLess(r["colour"], groundcheck.MIN_PAIR_DISTANCE, name)
+            self.assertGreaterEqual(r[score], groundcheck.MIN_PATTERN, name)
+            self.assertTrue(r["clear"], name)
+
+    def test_contrast_does_not_move_the_scale_of_shapes(self):
+        loud, quiet = blocks_tile(amp=8), blocks_tile(amp=2)
+        self.assertAlmostEqual(groundcheck.scale_of(groundcheck.form_luma(loud)), groundcheck.scale_of(groundcheck.form_luma(quiet)), delta=0.2)
+
+    def test_a_flat_image_has_no_pattern_and_divides_by_nothing(self):
+        flat = Image.new("RGB", (64, 64), (40, 40, 40))
+        r = groundcheck.pair_scores(flat, flat)
+        self.assertEqual((r["colour"], r["pattern"], r["clear"]), (0.0, 0.0, False))
+        self.assertTrue(groundcheck.pair_scores(flat, even_tile())["clear"])
+
+    def test_cli_exit_code(self):
+        with tempfile.TemporaryDirectory() as d:
+            for g, tile in (("a", even_tile(45)), ("b", flatten.set_mean(even_tile(46), (60, 49, 38)))):
+                os.makedirs(os.path.join(d, g))
+                tile.save(os.path.join(d, g, "v0.png"))
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(groundcheck.main(["pair", d]), 0)
+            self.assertIn("0 too alike", out.getvalue())
+
+
+class StonesTest(unittest.TestCase):
+    def test_stones_with_joints_count_and_even_grain_does_not(self):
+        self.assertGreaterEqual(groundcheck.stones(stones_tile()), groundcheck.MIN_STONES)
+        for seed in (45, 46, 47):
+            self.assertLess(groundcheck.stones(even_tile(seed)), groundcheck.MIN_STONES)
+        self.assertEqual(groundcheck.stones(Image.new("RGB", (64, 64), (40, 40, 40))), 0)
+
+    def test_a_quiet_flattened_road_still_counts(self):
+        out = flatten.flatten(stones_tile(), flatten.GAIN_FLOORS["built"], (62, 63, 66))
+        self.assertGreaterEqual(groundcheck.stones(out), groundcheck.MIN_STONES)
+
+    def test_only_stone_grounds_warn(self):
+        plain = even_tile()
+        for g in ("paved_road", "flagstone", "cobble_road"):
+            self.assertIn("no joint structure", groundcheck.stone_warning(plain, g))
+            self.assertIsNone(groundcheck.stone_warning(stones_tile(), g))
+        for g in ("ash", "dirt_road", "iron_catwalk", None):
+            self.assertIsNone(groundcheck.stone_warning(plain, g))
+
+    def test_the_warning_reaches_score_and_pair_and_does_not_fail(self):
+        with tempfile.TemporaryDirectory() as d:
+            for g, tile in (("paved_road", even_tile(45)), ("ash", flatten.set_mean(even_tile(46), (10, 80, 10)))):
+                os.makedirs(os.path.join(d, g))
+                tile.save(os.path.join(d, g, "v0.png"))
+            path = os.path.join(d, "paved_road", "v0.png")
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(groundcheck.main(["score", path, "--class", "built", "--ground", "paved_road"]), 0)
+                self.assertEqual(groundcheck.main(["pair", d]), 0)
+            self.assertEqual(out.getvalue().count("no joint structure"), 2)
+
+
+class MixBoardTest(unittest.TestCase):
+    def layout(self, d, text):
+        path = os.path.join(d, "l.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        return path
+
+    def make_set(self, d, grounds):
+        sd = os.path.join(d, "set")
+        for g, tile in grounds.items():
+            os.makedirs(os.path.join(sd, "ground", g))
+            tile.save(os.path.join(sd, "ground", g, "v0.png"))
+        return sd
+
+    def test_the_fixtures_hold_the_spec_rects(self):
+        cols, rows, grid = board.parse_layout(board.MIX_LAYOUT)
+        self.assertEqual((cols, rows), (40, 22))
+        for x, y, g in ((0, 0, "ash"), (4, 2, "flagstone"), (13, 8, "flagstone"), (5, 13, "water"), (3, 11, "mud"), (19, 15, "dirt_road"),
+                        (24, 11, "packed_dirt"), (27, 3, "scorched"), (39, 21, "scrub"), (17, 3, "paved_road")):
+            self.assertEqual(grid[y][x], g, (x, y))
+        cols, rows, grid = board.parse_layout(os.path.join(board.HERE, "fixtures", "mix_street.txt"))
+        self.assertEqual((cols, rows), (40, 22))
+        for x, y, g in ((0, 0, "soot_yard"), (0, 10, "cobble_road"), (20, 17, "iron_catwalk"), (0, 17, "water"), (0, 14, "moss"), (30, 4, "tallow")):
+            self.assertEqual(grid[y][x], g, (x, y))
+
+    def test_a_bad_layout_is_refused_not_cut_to_fit(self):
+        bad = {
+            "size 2 2": "needs a size and a default",
+            "default ash": "needs a size and a default",
+            "size 0 2\ndefault ash": "off 1..",
+            f"size {board.MAX_MIX_CELLS + 1} 2\ndefault ash": "off 1..",
+            "size 2 2\ndefault nope": "not in the table",
+            "size 2 2\ndefault ash\nnope 0-0 0-0": "not in the table",
+            "size 2 2\ndefault ash\nmud 0-2 0-0": "off the",
+            "size 2 2\ndefault ash\nmud 1-0 0-0": "off the",
+            "size 2 2\ndefault ash\nmud 0-0": "not `size",
+            "size 2 2\ndefault ash\nmud a-b 0-0": "invalid literal",
+            "size 2 2\nsize 3 3\ndefault ash": "a second size",
+            "size 2 2\ndefault ash\ndefault mud": "a second default",
+        }
+        with tempfile.TemporaryDirectory() as d:
+            for text, message in bad.items():
+                with self.assertRaises(ValueError) as caught:
+                    board.parse_layout(self.layout(d, text))
+                self.assertIn(message, str(caught.exception), text)
+            path = self.layout(d, "size 2 2\ndefault ash # a comment\nmud 1-1 1-1\n")
+            self.assertEqual(board.parse_layout(path)[2], [["ash", "ash"], ["ash", "mud"]])
+
+    def test_each_cell_shows_its_own_ground_and_only_grounds_are_on_the_map(self):
+        grid = [["ash"] * 8 for _ in range(6)]
+        for y in range(2, 4):
+            for x in range(1, 3):
+                grid[y][x] = "flagstone"
+            for x in range(5, 7):
+                grid[y][x] = "dirt_road"
+        c = {g: flatten.parse_colour(board.row_of(g)[4]) for g in ("ash", "flagstone", "dirt_road")}
+        tex = {g: Image.new("RGB", (64, 64), c[g]) for g in c}
+        no_tone = lambda w, h, real=board.edge_fields: dict(real(w, h), tone=[0.0] * (w * h))
+        with unittest.mock.patch.object(board, "edge_fields", no_tone):
+            img = board.draw_mix(grid, tex)
+        px = img.load()
+        self.assertEqual(img.size, (8 * board.CELL_PX, 6 * board.CELL_PX))
+        for y, row in enumerate(grid):
+            for x, g in enumerate(row):
+                self.assertEqual(px[x * board.CELL_PX + 8, y * board.CELL_PX + 8], c[g], (x, y))
+        allowed = set()
+        for g, colour in c.items():
+            allowed |= {colour, tuple(int(v * 0.95) for v in colour), tuple(int(v * 0.92) for v in colour)}
+        for wear in (0.10, 0.06):
+            allowed |= {tuple(int(v * (1 - wear)) for v in c["ash"]), tuple(int(v * (1 - wear)) for v in c["flagstone"])}
+        seen = {px[x, y] for y in range(img.size[1]) for x in range(img.size[0])}
+        self.assertLessEqual(seen, allowed)
+        self.assertIn(tuple(int(v * 0.9) for v in c["ash"]), seen)   # the worn band
+        self.assertIn(tuple(int(v * 0.92) for v in c["flagstone"]), seen)   # a built ground's strays
+        self.assertNotIn(tuple(int(v * 0.92) for v in c["dirt_road"]), seen)   # none off a dirt road
+
+    def test_a_ground_without_art_draws_its_rows_colour(self):
+        grid = [["ash"] * 6 for _ in range(6)]
+        grid[3][3] = grid[3][2] = grid[2][3] = grid[2][2] = "mud"
+        no_tone = lambda w, h, real=board.edge_fields: dict(real(w, h), tone=[0.0] * (w * h))
+        with unittest.mock.patch.object(board, "edge_fields", no_tone):
+            img = board.draw_mix(grid, {})
+        self.assertEqual(img.getpixel((8, 8)), flatten.parse_colour(board.row_of("ash")[4]))
+        self.assertEqual(img.getpixel((3 * board.CELL_PX, 3 * board.CELL_PX)), flatten.parse_colour(board.row_of("mud")[4]))
+
+    def test_the_picture_size_and_no_label_on_the_map(self):
+        with tempfile.TemporaryDirectory() as d:
+            ash, mud = (0x2a, 0x26, 0x22), (0x23, 0x1d, 0x18)
+            sd = self.make_set(d, {"ash": Image.new("RGB", (256, 256), ash), "mud": Image.new("RGB", (256, 256), mud)})
+            layout = self.layout(d, "size 10 6\ndefault ash\nmud 3-6 2-3\n")
+            path, _ = board.build_mix(sd, os.path.join(d, "o"), layout)
+            with Image.open(path) as im:
+                sheet = im.convert("RGB")
+            map_w, map_h = 10 * board.CELL_PX * board.MIX_SCALE, 6 * board.CELL_PX * board.MIX_SCALE
+            self.assertEqual(sheet.size, (map_w + board.MIX_PANEL, map_h))
+            # flat grounds under a tone of a few %: nothing bright, as a label would be
+            top = max(max(sheet.getpixel((x, y))) for y in range(map_h) for x in range(map_w))
+            self.assertLess(top, 60)
+            panel = max(max(sheet.getpixel((x, y))) for y in range(map_h) for x in range(map_w, sheet.size[0]))
+            self.assertGreater(panel, 150)
+
+    def test_set_colours_moves_the_art_to_the_table_and_off_it_leaves_the_art(self):
+        with tempfile.TemporaryDirectory() as d:
+            sd = self.make_set(d, {"ash": even_tile(45), "mud": even_tile(46)})
+            target = flatten.parse_colour(board.row_of("mud")[4])
+            raw = dict(board.load_masters(sd))["mud"]
+            set_ = dict(board.load_masters(sd, True))["mud"]
+            self.assertGreater(groundcheck.pair_distance(raw, Image.new("RGB", (8, 8), target)), 10)
+            self.assertLess(groundcheck.pair_distance(set_, Image.new("RGB", (8, 8), target)), 1)
+            layout = self.layout(d, "size 8 6\ndefault ash\nmud 2-5 2-3\n")
+            _, before = board.build_mix(sd, os.path.join(d, "a"), layout)
+            _, after = board.build_mix(sd, os.path.join(d, "b"), layout, True)
+            self.assertTrue(any("too alike: ash / mud" in w for w in before))
+            self.assertFalse(any("too alike" in w for w in after))
+
+    def test_the_mix_is_deterministic(self):
+        with tempfile.TemporaryDirectory() as d:
+            sd = self.make_set(d, {"ash": even_tile(45), "mud": even_tile(46)})
+            layout = self.layout(d, "size 8 6\ndefault ash\nmud 2-5 2-3\n")
+            a, _ = board.build_mix(sd, os.path.join(d, "a"), layout, True)
+            b, _ = board.build_mix(sd, os.path.join(d, "b"), layout, True)
+            with Image.open(a) as ia, Image.open(b) as ib:
+                self.assertEqual(ia.tobytes(), ib.tobytes())
+
+    def test_a_ground_off_the_layout_and_a_plain_road_are_named(self):
+        with tempfile.TemporaryDirectory() as d:
+            sd = self.make_set(d, {"ash": even_tile(45), "paved_road": flatten.set_mean(even_tile(46), (62, 63, 66)), "moss": even_tile(47)})
+            layout = self.layout(d, "size 8 6\ndefault ash\npaved_road 2-5 2-3\n")
+            _, warnings = board.build_mix(sd, os.path.join(d, "o"), layout)
+            self.assertIn("moss: not on this layout", warnings)
+            self.assertTrue(any(w.startswith("paved_road:") and "no joints" in w for w in warnings))
+
+    def test_cli(self):
+        with tempfile.TemporaryDirectory() as d:
+            sd = self.make_set(d, {"ash": even_tile(45), "mud": even_tile(46)})
+            layout = self.layout(d, "size 8 6\ndefault ash\nmud 2-5 2-3\n")
+            out = os.path.join(d, "o")
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(board.main([sd, "--mix", "--out", out, "--layout", layout, "--set-colours"]), 0)
+            self.assertEqual(os.listdir(out), ["mix.png"])
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(board.main([sd, "--mix", "--out", out, "--layout", os.path.join(d, "none.txt")]), 1)
+            self.assertIn("none.txt", err.getvalue())
+            big = os.path.join(d, "big")
+            os.makedirs(os.path.join(big, "ground", "ash"))
+            Image.new("RGB", (board.MAX_MASTER + 1, 1)).save(os.path.join(big, "ground", "ash", "v0.png"))
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(board.main([big, "--mix", "--out", out]), 1)
+            self.assertIn("px a side", err.getvalue())
 
 
 if __name__ == "__main__":

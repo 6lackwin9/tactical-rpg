@@ -1,8 +1,12 @@
 """REGIONGROUND1-T: is a ground texture quiet enough to repeat across a map under small figures?
 
-    groundcheck.py score PNG --class natural|built   the table of scores against the limits, exit 1 on a failure
+    groundcheck.py score PNG --class natural|built [--ground ID]
+                                                     the table of scores against the limits, exit 1 on a failure; with
+                                                     --ground, its named colour cap and the warning for a built ground
+                                                     that shows no stones
     groundcheck.py figures GROUND_DIR --art PATHS    warnings: a figure not well above a ground in range and busyness
-    groundcheck.py pair GROUND_DIR                   warnings: two grounds whose means are too close for an edge to read
+    groundcheck.py pair GROUND_DIR                   every pair's separation (colour and pattern), exit 1 when two
+                                                     grounds do not clearly differ; the built grounds' stones
     groundcheck.py read FRAME GROUND_PNG [--option shadow|pool|rim] [--colour RRGGBB]
                                                      read_contrast and ring step of one figure frame on a ground
 
@@ -42,8 +46,21 @@ CHECKS = [
     ("colour", "Colour", "mean(max - min of RGB)"),
     ("lum", "Luminance", "mean(L), % of 255"),
 ]
+# The colour cap by ground: the two dirts keep their brown mock colours (decision "Ground textures: pattern from art, colour
+# from code"; 22 and 18 as flat swatches). `tallow`'s swatch sits on the common cap at 12, and once its colour is set real
+# grain reads 12.4, so no art could pass. Each limit is the swatch plus 2, the room the grain's colour noise needs.
+COLOUR_CAPS = {"dirt_road": 24.0, "packed_dirt": 20.0, "tallow": 14.0}
 BUILT_GROUNDS = {"flagstone", "cobble_road", "paved_road", "iron_catwalk"}   # spec section 3, column "Class, gain"
-MIN_PAIR_DISTANCE = 8.0         # RGB distance of two grounds' means, so their edge reads
+STONE_GROUNDS = {"flagstone", "cobble_road", "paved_road"}   # must show stones and joints (iron plates are not stones)
+# Pair separation. Two grounds clearly differ on colour alone at MIN_PAIR_DISTANCE: the mocks' closest neighbours must pass
+# (`cobble_road` / `iron_catwalk` 5.5, `ash` / `scrub` 7.1), and A1's alike images must fail (1.7 at most, see the README).
+MIN_PAIR_DISTANCE = 5.0
+MIN_PATTERN = 0.40              # or on pattern alone: the largest of the three differences in `pair_scores`
+SCALE_LAG = 16                  # the longest lag of the scale of shapes, art px of the form
+JOINT_SIGMA = 4.0               # what is left after this blur is joint and stone, not broad tone
+JOINT_SHARE = 0.30              # the darkest part of that, as joints
+STONE_MIN_AREA = 6              # art px of the form: smaller is grain
+MIN_STONES = 6                  # fewer closed stones than this: no joint structure
 FIGURE_RANGE, FIGURE_BUSY = 4.0, 3.0   # a figure against a ground, at least (SC 2)
 FLAT_PROPS = {"cistern", "cobbles", "scorch_mark"}   # lie on the ground: not figures (SC 2)
 OPAQUE = 128                    # alpha that counts as a figure's pixel (the engine's OUTLINE_ALPHA is its neighbour)
@@ -156,9 +173,9 @@ def banding(grid):
     return max(stdev(rows), stdev(cols)) / spread
 
 
-def direction(grid):
-    """(peak, coherence) of the wrapped central differences of L. Orientation is taken over 180 degrees, so one set of
-    stripes falls in one bin whichever way its light and dark run. A bin is centred on each axis, where the flattened
+def direction_parts(grid):
+    """(angle bins, Jxx, Jyy, Jxy) of the wrapped central differences of L. Orientation is taken over 180 degrees, so one
+    set of stripes falls in one bin whichever way its light and dark run. A bin is centred on each axis, where the flattened
     plaid floor scores 2.76 and fails. With a bin boundary on the axis, an axis-lined edge splits between two bins, and
     that floor scores about 1.7 and passes."""
     h, w = len(grid), len(grid[0])
@@ -175,6 +192,12 @@ def direction(grid):
             jxx += gx * gx
             jyy += gy * gy
             jxy += gx * gy
+    return bins, jxx, jyy, jxy
+
+
+def direction(grid):
+    """(peak, coherence) of `direction_parts`."""
+    bins, jxx, jyy, jxy = direction_parts(grid)
     mean = sum(bins) / ANGLE_BINS
     trace = jxx + jyy
     if mean == 0 or trace == 0:
@@ -214,9 +237,15 @@ def scores(img):
     }
 
 
-def failures(result, cls):
-    """The ids of the checks `result` fails as a ground of class `cls`."""
+def limits_of(cls, ground=None):
+    """The limits of class `cls`, with the colour cap `ground` names, if any."""
     limits = LIMITS[cls]
+    return dict(limits, colour=COLOUR_CAPS[ground]) if ground in COLOUR_CAPS else limits
+
+
+def failures(result, cls, ground=None):
+    """The ids of the checks `result` fails as a ground of class `cls` (and id `ground`, for its named colour cap)."""
+    limits = limits_of(cls, ground)
     return [c for c, _, _ in CHECKS if result[c] > limits[c]]
 
 
@@ -230,9 +259,9 @@ def size_warning(img):
     return None
 
 
-def table(result, cls):
+def table(result, cls, ground=None):
     """The lines `score` prints."""
-    limits = LIMITS[cls]
+    limits = limits_of(cls, ground)
     out = []
     for c, name, formula in CHECKS:
         verdict = "FAIL" if result[c] > limits[c] else "pass"
@@ -266,15 +295,120 @@ def pair_distance(a, b):
     return math.sqrt(sum((ma[i] - mb[i]) ** 2 for i in range(3)))
 
 
-def pair_warnings(grounds):
-    """Warnings for [(id, image)]: two grounds too close for their edge to read."""
-    out = []
-    for i, (ida, a) in enumerate(grounds):
-        for idb, b in grounds[i + 1:]:
-            d = pair_distance(a, b)
-            if d < MIN_PAIR_DISTANCE:
-                out.append(f"pair {ida} / {idb}: means {d:.1f} apart, under {MIN_PAIR_DISTANCE:.0f}: the edge may not read")
+def scale_of(grid):
+    """The scale of shapes, art px: the first lag where the wrapped autocorrelation of L falls to one half, across both
+    axes, between lags by a straight line. Whatever the contrast: a ratio of the pattern's own variance. SCALE_LAG at most."""
+    h, w = len(grid), len(grid[0])
+    flat = [v for row in grid for v in row]
+    mean = sum(flat) / len(flat)
+    d = [[v - mean for v in row] for row in grid]
+    var = sum(v * v for row in d for v in row)
+    if var == 0:
+        return 0.0
+    previous = 1.0
+    for lag in range(1, SCALE_LAG + 1):
+        across = sum(d[y][x] * d[y][(x + lag) % w] for y in range(h) for x in range(w))
+        down = sum(d[y][x] * d[(y + lag) % h][x] for y in range(h) for x in range(w))
+        now = (across + down) / (2 * var)
+        if now <= 0.5:
+            return lag - 1 + (previous - 0.5) / (previous - now)
+        previous = now
+    return float(SCALE_LAG)
+
+
+def direction_histogram(grid):
+    """Gradient energy by angle (`direction_parts`' bins) as shares that sum to 1; all zero on a flat image."""
+    bins = direction_parts(grid)[0]
+    total = sum(bins)
+    return [v / total for v in bins] if total else bins
+
+
+def pattern_of(img):
+    """What the eye reads of a ground apart from its colour, on the 64 x 64 form: how busy, the scale of its shapes, its
+    direction histogram."""
+    grid = form_luma(img)
+    return {"busy": busy(grid), "scale": scale_of(grid), "hist": direction_histogram(grid)}
+
+
+def _log_ratio(a, b):
+    if a <= 0 or b <= 0:
+        return 0.0 if a == b else math.inf
+    return abs(math.log(a / b))
+
+
+def pair_scores(a, b, patterns=None):
+    """How two ground images differ. `colour`: RGB distance of their means. `busy`, `scale`: |ln(a / b)|. `direction`: half
+    the L1 distance of the direction histograms, the share of the gradient energy pointing another way. `pattern`: the
+    largest of those three. `clear`: colour or pattern reaches its limit, so two textures of one grain pass on colour alone
+    and two of one colour on pattern alone. `patterns`: their pattern_of, when already known."""
+    pa, pb = patterns or (pattern_of(a), pattern_of(b))
+    out = {
+        "colour": pair_distance(a, b),
+        "busy": _log_ratio(pa["busy"], pb["busy"]),
+        "scale": _log_ratio(pa["scale"], pb["scale"]),
+        "direction": sum(abs(p - q) for p, q in zip(pa["hist"], pb["hist"])) / 2,
+    }
+    out["pattern"] = max(out["busy"], out["scale"], out["direction"])
+    out["clear"] = out["colour"] >= MIN_PAIR_DISTANCE or out["pattern"] >= MIN_PATTERN
     return out
+
+
+def pair_line(ida, idb, r):
+    """One pair's scores and verdict, as the tool, the board and the mix print them."""
+    verdict = "ok" if r["clear"] else "TOO ALIKE"
+    return (f"{ida} / {idb}: colour {r['colour']:.1f} (at least {MIN_PAIR_DISTANCE:g}), pattern {r['pattern']:.2f} (at least "
+            f"{MIN_PATTERN:g}; busy {r['busy']:.2f}, scale {r['scale']:.2f}, direction {r['direction']:.2f}): {verdict}")
+
+
+def pair_report(grounds):
+    """[(id, id, pair_scores)] of every two of [(id, image)]. Any two grounds of a set can meet on some map, so a set's
+    pairs are all neighbours."""
+    patterns = [pattern_of(img) for _, img in grounds]
+    return [(grounds[i][0], grounds[j][0], pair_scores(grounds[i][1], grounds[j][1], (patterns[i], patterns[j])))
+            for i in range(len(grounds)) for j in range(i + 1, len(grounds))]
+
+
+def pair_failures(grounds):
+    """The pair_line of every two of [(id, image)] that do not clearly differ."""
+    return [pair_line(ida, idb, r) for ida, idb, r in pair_report(grounds) if not r["clear"]]
+
+
+def stones(img):
+    """How many closed stones `img` shows on its 64 x 64 form. The darkest JOINT_SHARE of the fine detail (L less its sigma
+    4 blur) is taken as joints; a stone is a region of the rest, by sides, wrapped, of STONE_MIN_AREA art px up to a quarter
+    of the tile. In even grain the rest runs together as one region that holds the tile, with only a few crumbs beside it.
+    Independent of contrast, so a quiet flattened road still counts."""
+    grid = form_luma(img)
+    h, w = len(grid), len(grid[0])
+    low = wrapped_blur(grid, JOINT_SIGMA)
+    fine = [grid[y][x] - low[y][x] for y in range(h) for x in range(w)]
+    limit = percentile(fine, 100 * JOINT_SHARE)
+    if max(fine) - limit < 1e-9:
+        return 0
+    open_px = {i for i, v in enumerate(fine) if v > limit}
+    count = 0
+    while open_px:
+        todo = [open_px.pop()]
+        area = 0
+        while todo:
+            i = todo.pop()
+            area += 1
+            y, x = divmod(i, w)
+            for n in (y * w + (x + 1) % w, y * w + (x - 1) % w, ((y + 1) % h) * w + x, ((y - 1) % h) * w + x):
+                if n in open_px:
+                    open_px.remove(n)
+                    todo.append(n)
+        if STONE_MIN_AREA <= area <= w * h // 4:
+            count += 1
+    return count
+
+
+def stone_warning(img, ground):
+    """A warning when a ground that should be built of stones shows none (A1's paved road came out plain), else None."""
+    if ground not in STONE_GROUNDS:
+        return None
+    n = stones(img)
+    return None if n >= MIN_STONES else f"{ground}: {n} stones (at least {MIN_STONES}): no joint structure, it reads as plain ground"
 
 
 def figure_stats(img):
@@ -418,6 +552,7 @@ def main(argv=None):
     s = sub.add_parser("score")
     s.add_argument("png")
     s.add_argument("--class", dest="cls", choices=sorted(LIMITS), required=True)
+    s.add_argument("--ground", help="the ground's id: its named colour cap, and the stones warning of a built ground")
     f = sub.add_parser("figures")
     f.add_argument("ground_dir")
     f.add_argument("--art", nargs="+", required=True)
@@ -435,9 +570,12 @@ def main(argv=None):
         if warning:
             print("warning: " + warning, file=sys.stderr)
         result = scores(img)
-        for line in table(result, a.cls):
+        for line in table(result, a.cls, a.ground):
             print(line)
-        bad = failures(result, a.cls)
+        warning = stone_warning(img, a.ground)
+        if warning:
+            print("warning: " + warning)
+        bad = failures(result, a.cls, a.ground)
         print("FAIL: " + ", ".join(bad) if bad else "pass")
         return 1 if bad else 0
     if a.cmd == "read":
@@ -447,9 +585,16 @@ def main(argv=None):
         return 0
     grounds = [(g, _load(path)) for g, path in find_grounds(a.ground_dir)]
     if a.cmd == "pair":
-        lines = pair_warnings(grounds)
-    else:
-        lines = figure_warnings(grounds, [(path, _load(path)) for path in a.art])
+        report = pair_report(grounds)
+        for ida, idb, r in report:
+            print(pair_line(ida, idb, r))
+        notes = [w for w in (stone_warning(img, g) for g, img in grounds) if w]
+        for line in notes:
+            print("warning: " + line)
+        alike = sum(not r["clear"] for _, _, r in report)
+        print(f"{len(grounds)} grounds, {len(report)} pairs, {alike} too alike, {len(notes)} warnings")
+        return 1 if alike else 0
+    lines = figure_warnings(grounds, [(path, _load(path)) for path in a.art])
     for line in lines:
         print("warning: " + line)
     print(f"{len(grounds)} grounds, {len(lines)} warnings")
