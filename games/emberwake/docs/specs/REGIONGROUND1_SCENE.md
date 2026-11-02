@@ -119,6 +119,10 @@ one (`rough basalt blocks`, slice A2); LOOK1-A1-A3's faces take the new form. Th
   below both. Wall art is prompted with a prop sheet as its reference, and `board.py --ground` shows each wall face
   beside today's kit props and a unit, with a colour and contrast read of the wall against the props. The user judges
   this at R1.
+- Region boundary walls (the map's outer edge) are their own art and may take a different style: cliffs, thick
+  hedges, ruined ramparts, fog walls. The prop rule above covers structures inside the map, not the boundary. A map's
+  boundary art is a set of its own in the tile set, so a location can choose it, and it keeps the short south and side
+  borders of this section.
 
 ## 2. Hierarchy
 
