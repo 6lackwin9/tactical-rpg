@@ -5,16 +5,18 @@
 //! with the outlines drawn through what covers a unit, and the units' hit rects. The pieces of the board itself are
 //! drawn here; `battle.rs` runs the passes and draws the units, markers and HUD. A view change only: rules, grid,
 //! plans and every battle number stay as they are. The Flat view (the board seen from above, as before) stays a
-//! setting until the user's review (STAGE1-C removes it).
+//! setting until the user's review (STAGE1-C removes it). LOOK1-L1: the world's stage set (`stage_set`, LOOK1 5.2-5.4)
+//! over `common_stage`, and its transition pieces on the tile corners.
 
 use crate::tuning::Tuning;
 use aegis_ui::art::Art;
+use aegis_ui::autotile::corner_mask;
 use aegis_ui::canvas::{rgb, rgba, Image, Rect, Rgba};
 use aegis_ui::depth::DepthList;
 use aegis_ui::painter::Painter;
 use emberwake_battle::grid::{data_zone, Grid, V2, GRID_H, GRID_W};
 use indexmap::IndexMap;
-use emberwake_content::art::{battle_backdrop, battle_prop_dirs, battle_stage_dirs, zone_backdrop, BATTLE_SETS};
+use emberwake_content::art::{battle_backdrop, battle_prop_dirs, battle_stage_dirs, transition_piece, zone_backdrop, BATTLE_SETS};
 use emberwake_data::ZoneDef;
 use serde_json::Value;
 
@@ -26,6 +28,10 @@ pub const BOARD_X: i32 = 128;
 pub const BOARD_Y: i32 = 82;
 pub const CELL_W: i32 = 32;
 pub const CELL_H: i32 = 24;
+/// The cells' area (the transition pieces stay inside it).
+pub const BOARD: Rect = Rect::new(BOARD_X, BOARD_Y, GRID_W * CELL_W, GRID_H * CELL_H);
+/// LOOK1 5.1: a stage set's art holds 2 art px per logical px.
+pub const SET_ART_PX: i32 = 2;
 /// The front face under the near edge (`FACE_H` tall) and the drop shadow under it.
 pub const FACE_H: i32 = 12;
 pub const FRONT_FACE: Rect = Rect::new(128, BOARD_Y + GRID_H * CELL_H, 384, FACE_H);
@@ -304,9 +310,9 @@ fn dirs_ref(dirs: &[String]) -> Vec<&str> {
     dirs.iter().map(String::as_str).collect()
 }
 
-/// 3.2.1: terrain `id`'s tile on cell (x, y), varied by position.
-pub fn tile_art(art: &mut Art, id: &str, x: i32, y: i32) -> TileArt {
-    if let Some(rel) = art.pick(&dirs_ref(&battle_stage_dirs(id, "")), None, x, y) {
+/// 3.2.1: terrain `id`'s tile on cell (x, y), varied by position (LOOK1 5.4: `set`, the world's stage set, first).
+pub fn tile_art(art: &mut Art, id: &str, set: &str, x: i32, y: i32) -> TileArt {
+    if let Some(rel) = art.pick(&dirs_ref(&battle_stage_dirs(id, set)), None, x, y) {
         return TileArt::Stage(rel);
     }
     let common: Vec<String> = BATTLE_SETS.iter().map(|s| format!("tilesets/{s}/{id}")).collect();
@@ -324,8 +330,8 @@ pub fn prop_art(art: &mut Art, prop: &str, x: i32, y: i32) -> Option<(String, (i
 }
 
 /// 3.3: a block's face art on cell (x, y); None: the cap's top rows darkened.
-pub fn face_art(art: &mut Art, x: i32, y: i32) -> Option<String> {
-    art.pick(&dirs_ref(&battle_stage_dirs("wall_face", "")), None, x, y)
+pub fn face_art(art: &mut Art, set: &str, x: i32, y: i32) -> Option<String> {
+    art.pick(&dirs_ref(&battle_stage_dirs("wall_face", set)), None, x, y)
 }
 
 /// 3.4: zone `zone`'s backdrop file (None: no zone, or no file: the gradient).
@@ -347,9 +353,17 @@ fn stage_cell(c: V2) -> Rect {
     Rect::new(BOARD_X + c.x * CELL_W, BOARD_Y + c.y * CELL_H, CELL_W, CELL_H)
 }
 
-fn draw_tile(p: &mut Painter, art: &mut Art, id: &str, c: V2, r: Rect) {
-    match tile_art(art, id, c.x, c.y) {
-        TileArt::Stage(rel) => match art.image(&rel, CELL_W, CELL_H) {
+/// A stage file for a `w` x `h` logical rect: a file of the world's set at its art resolution (LOOK1 5.1, so a large
+/// window shows its art px), any other as before.
+fn stage_image<'a>(art: &'a mut Art, rel: &str, set: &str, w: i32, h: i32) -> Option<&'a Image> {
+    let own = !set.is_empty() && rel.strip_prefix("tilesets/").and_then(|r| r.strip_prefix(set)).is_some_and(|r| r.starts_with('/'));
+    let k = if own { SET_ART_PX } else { 1 };
+    art.image(rel, w * k, h * k)
+}
+
+fn draw_tile(p: &mut Painter, art: &mut Art, id: &str, set: &str, c: V2, r: Rect) {
+    match tile_art(art, id, set, c.x, c.y) {
+        TileArt::Stage(rel) => match stage_image(art, &rel, set, CELL_W, CELL_H) {
             Some(img) => p.image(img, r),
             None => p.fill(r, terrain_color(id)),
         },
@@ -397,16 +411,88 @@ pub fn draw_backdrop(p: &mut Painter, art: &mut Art, grid: &Grid, zone: &str, zo
     }
 }
 
+/// The ground a cell's tile shows in the ground pass: a standing cell with prop art the ground under it, else its own.
+fn tile_shown(art: &mut Art, grid: &Grid, c: V2) -> &'static str {
+    if standing_art(art, grid, c).is_some() {
+        ground_under(grid, c)
+    } else {
+        grid.terrain_id(c)
+    }
+}
+
+/// LOOK1 5.3: the transition pieces of stage set `set` on this board, as (corner x, corner y, file); none without a
+/// set. A corner takes a piece when its cells show exactly two grounds and the set has that pair in one order (off-grid
+/// cells read as the nearest cell). A block counts as the upper ground: its cell is hidden under the block. A corner
+/// with a third ground takes none, since a piece is opaque and would paint over it.
+pub fn stage_pieces(art: &mut Art, grid: &Grid, set: &str) -> Vec<(i32, i32, String)> {
+    let mut out = Vec::new();
+    if set.is_empty() {
+        return out;
+    }
+    let mut cells = Vec::with_capacity((GRID_W * GRID_H) as usize);
+    for y in 0..GRID_H {
+        for x in 0..GRID_W {
+            cells.push(tile_shown(art, grid, V2::new(x, y)));
+        }
+    }
+    let at = |x: i32, y: i32| cells[(y.clamp(0, GRID_H - 1) * GRID_W + x.clamp(0, GRID_W - 1)) as usize];
+    let block = |t: &str| stage_of(t).kind == Kind::Block;
+    for cy in 0..=GRID_H {
+        for cx in 0..=GRID_W {
+            let mut grounds: Vec<&str> = [at(cx - 1, cy - 1), at(cx, cy - 1), at(cx - 1, cy), at(cx, cy)].into_iter().filter(|t| !block(t)).collect();
+            grounds.sort_unstable();
+            grounds.dedup();
+            let [a, b] = grounds[..] else { continue };
+            for (upper, lower) in [(a, b), (b, a)] {
+                let mask = corner_mask(|x, y| at(x, y) == upper || block(at(x, y)), cx, cy);
+                let rel = transition_piece(set, upper, lower, mask);
+                if art.has(&rel) {
+                    out.push((cx, cy, rel));
+                    break;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// LOOK1 5.3: a transition piece's rect, one cell centred on corner (`cx`, `cy`).
+pub fn piece_rect(cx: i32, cy: i32) -> Rect {
+    Rect::new(BOARD_X + cx * CELL_W - CELL_W / 2, BOARD_Y + cy * CELL_H - CELL_H / 2, CELL_W, CELL_H)
+}
+
+/// The pieces of `stage_pieces`, clipped to the board (which a camera shake moves) inside the clip already set.
+fn draw_pieces(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str) {
+    let pieces = stage_pieces(art, grid, set);
+    if pieces.is_empty() {
+        return;
+    }
+    let outer = p.c.clip;
+    let board = p.v.rect(BOARD);
+    p.c.clip = Some(outer.map_or(board, |o| o.intersect(board)));
+    for (cx, cy, rel) in &pieces {
+        if let Some(img) = stage_image(art, rel, set, CELL_W, CELL_H) {
+            p.image(img, piece_rect(*cx, *cy));
+        }
+    }
+    p.c.clip = outer;
+}
+
 /// Pass 2: every cell's ground tile (a standing cell with prop art the ground under it, without art the flat tile),
-/// the lips of sunken cells, the ground props and the grid lines at `grid_alpha`.
-pub fn draw_ground(p: &mut Painter, art: &mut Art, grid: &Grid, grid_alpha: u8) {
+/// the stage set's transition pieces, the lips of sunken cells, the ground props and the grid lines at `grid_alpha`.
+pub fn draw_ground(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, grid_alpha: u8) {
+    for y in 0..GRID_H {
+        for x in 0..GRID_W {
+            let c = V2::new(x, y);
+            let shown = tile_shown(art, grid, c);
+            draw_tile(p, art, shown, set, c, stage_cell(c));
+        }
+    }
+    draw_pieces(p, art, grid, set);
     for y in 0..GRID_H {
         for x in 0..GRID_W {
             let c = V2::new(x, y);
             let r = stage_cell(c);
-            let t = grid.terrain_id(c);
-            let shown = if standing_art(art, grid, c).is_some() { ground_under(grid, c) } else { t };
-            draw_tile(p, art, shown, c, r);
             let (band, bottom) = lips(grid, c);
             if band > 0 {
                 p.fill(Rect::new(r.x, r.y, r.w, 1), rgb(118, 116, 62));
@@ -418,7 +504,7 @@ pub fn draw_ground(p: &mut Painter, art: &mut Art, grid: &Grid, grid_alpha: u8) 
             if bottom {
                 p.fill(Rect::new(r.x, r.y + r.h - 1, r.w, 1), rgba(48, 34, 22, 120));
             }
-            let row = stage_of(t);
+            let row = stage_of(grid.terrain_id(c));
             if let (Kind::Ground, Some(prop)) = (row.kind, row.prop) {
                 if let Some((rel, size)) = prop_art(art, prop, x, y) {
                     if let Some(img) = art.image(&rel, size.0, size.1) {
@@ -479,7 +565,7 @@ pub fn face_column(grid: &Grid, x: i32) -> (&'static str, FaceBody) {
 
 /// Pass 6: the front face (per column: the top row the ground's colour lightened 25 %, the body wall art, water,
 /// lava or earth with flecks), then the drop shadow.
-pub fn draw_face(p: &mut Painter, art: &mut Art, grid: &Grid) {
+pub fn draw_face(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str) {
     for x in 0..GRID_W {
         let r = Rect::new(FRONT_FACE.x + x * CELL_W, FRONT_FACE.y, CELL_W, FACE_H);
         let (top, body) = face_column(grid, x);
@@ -492,7 +578,7 @@ pub fn draw_face(p: &mut Painter, art: &mut Art, grid: &Grid) {
             }
         };
         match body {
-            FaceBody::Wall => match face_art(art, x, GRID_H).and_then(|rel| art.image(&rel, CELL_W, FACE_H)) {
+            FaceBody::Wall => match face_art(art, set, x, GRID_H).and_then(|rel| stage_image(art, &rel, set, CELL_W, FACE_H)) {
                 Some(img) => p.image(img, r),
                 None => p.fill(r, scaled(terrain_color("wall"), 0.75)),
             },
@@ -515,14 +601,14 @@ pub fn draw_face(p: &mut Painter, art: &mut Art, grid: &Grid) {
 
 /// The feet pass: block `c` (3.3): its cap (the stage tile lifted `BLOCK_LIFT`), its face (the wall face art, else the
 /// cap's top rows at 75 %) with its top line and the shade on the cell south, the cap's highlight and side lines.
-pub fn draw_block(p: &mut Painter, art: &mut Art, grid: &Grid, c: V2) {
+pub fn draw_block(p: &mut Painter, art: &mut Art, grid: &Grid, set: &str, c: V2) {
     let r = stage_cell(c);
     let cap = Rect::new(r.x, r.y - BLOCK_LIFT, CELL_W, CELL_H);
     let t = grid.terrain_id(c);
-    draw_tile(p, art, t, c, cap);
+    draw_tile(p, art, t, set, c, cap);
     if block_face(grid, c) {
         let face = Rect::new(r.x, r.y + CELL_H - FACE_H, CELL_W, FACE_H);
-        let drawn = match face_art(art, c.x, c.y).and_then(|rel| art.image(&rel, CELL_W, FACE_H)) {
+        let drawn = match face_art(art, set, c.x, c.y).and_then(|rel| stage_image(art, &rel, set, CELL_W, FACE_H)) {
             Some(img) => {
                 p.image(img, face);
                 true
@@ -530,7 +616,7 @@ pub fn draw_block(p: &mut Painter, art: &mut Art, grid: &Grid, c: V2) {
             None => false,
         };
         if !drawn {
-            match darkened_cap(art, t, c) {
+            match darkened_cap(art, t, set, c) {
                 Some(img) => p.image(&img, face),
                 None => p.fill(face, scaled(terrain_color(t), 0.75)),
             }
@@ -554,8 +640,8 @@ pub fn draw_block(p: &mut Painter, art: &mut Art, grid: &Grid, c: V2) {
 }
 
 /// The wall face's fallback: the cap tile's top 12 rows at 75 % brightness.
-fn darkened_cap(art: &mut Art, t: &str, c: V2) -> Option<Image> {
-    let img = match tile_art(art, t, c.x, c.y) {
+fn darkened_cap(art: &mut Art, t: &str, set: &str, c: V2) -> Option<Image> {
+    let img = match tile_art(art, t, set, c.x, c.y) {
         TileArt::Stage(rel) => art.image(&rel, CELL_W, CELL_H)?.clone(),
         TileArt::Common(rel) => art.image(&rel, CELL_W, CELL_H)?.clone(),
         TileArt::Colour => return None,
@@ -954,22 +1040,22 @@ mod tests {
         png(&root, "tilesets/common/tree/v0.png", 32, 32);
         png(&root, "tilesets/common/wall/v0.png", 32, 32);
         let mut art = Art::layered(Layers::of(vec![root.clone()]));
-        assert_eq!(tile_art(&mut art, "grass", 2, 3), TileArt::Common("tilesets/common/grass/v0.png".into()));
-        assert_eq!(tile_art(&mut art, "lava", 2, 3), TileArt::Colour, "neither: the colour");
-        assert_eq!(face_art(&mut art, 2, 3), None, "the face falls back to the darkened cap");
-        assert!(darkened_cap(&mut art, "wall", V2::new(2, 3)).is_some_and(|img| img.h == CELL_H / 2 && img.px[0] == 96), "the cap's top rows at 75 %");
+        assert_eq!(tile_art(&mut art, "grass", "", 2, 3), TileArt::Common("tilesets/common/grass/v0.png".into()));
+        assert_eq!(tile_art(&mut art, "lava", "", 2, 3), TileArt::Colour, "neither: the colour");
+        assert_eq!(face_art(&mut art, "", 2, 3), None, "the face falls back to the darkened cap");
+        assert!(darkened_cap(&mut art, "wall", "", V2::new(2, 3)).is_some_and(|img| img.h == CELL_H / 2 && img.px[0] == 96), "the cap's top rows at 75 %");
         assert_eq!(prop_art(&mut art, "tree", 2, 3), None);
         let forest = zone("forest_clearing");
         assert!(board_items(&mut art, &forest).is_empty(), "no tree art: nothing stands");
-        assert_eq!(tile_art(&mut art, "tree", 0, 0), TileArt::Common("tilesets/common/tree/v0.png".into()), "the flat tree tile");
+        assert_eq!(tile_art(&mut art, "tree", "", 0, 0), TileArt::Common("tilesets/common/tree/v0.png".into()), "the flat tree tile");
         // with the stage art
         let full = scratch("full");
         png(&full, "tilesets/common_stage/grass/v0.png", 128, 96);
         png(&full, "tilesets/common_stage/wall_face/v0.png", 128, 48);
         png(&full, "props/common/tree/v0.png", 40, 52);
         let mut art = Art::layered(Layers::of(vec![full.clone(), root.clone()]));
-        assert_eq!(tile_art(&mut art, "grass", 2, 3), TileArt::Stage("tilesets/common_stage/grass/v0.png".into()));
-        assert_eq!(face_art(&mut art, 2, 3), Some("tilesets/common_stage/wall_face/v0.png".into()));
+        assert_eq!(tile_art(&mut art, "grass", "", 2, 3), TileArt::Stage("tilesets/common_stage/grass/v0.png".into()));
+        assert_eq!(face_art(&mut art, "", 2, 3), Some("tilesets/common_stage/wall_face/v0.png".into()));
         assert_eq!(prop_art(&mut art, "tree", 2, 3), Some(("props/common/tree/v0.png".into(), (40, 52))));
         let items = board_items(&mut art, &forest);
         let tree = items.iter().find(|p| p.item == Item::Prop(V2::new(10, 2))).expect("the tree at (10, 2) stands");
@@ -1122,6 +1208,267 @@ mod tests {
         assert!(at(Pass::Arrows) < at(Pass::Feet), "arrows before the feet pass");
         assert!(at(Pass::Ground) < at(Pass::Markers) && at(Pass::Feet) < at(Pass::Through) && at(Pass::Through) < at(Pass::Top));
         assert_eq!(passes().first(), Some(&Pass::Backdrop));
+    }
+
+    // ---- LOOK1-L1: stage sets ---------------------------------------------------------------------------------------
+
+    /// One PNG at `root/rel`, its colour stepped across both axes (a flat picture would hide a sampling change).
+    fn ramp(root: &Path, rel: &str, w: u32, h: u32, col: [u8; 3]) {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut px = Vec::with_capacity((w * h * 4) as usize);
+        for y in 0..h {
+            for x in 0..w {
+                px.extend([col[0].wrapping_add((x * 3) as u8), col[1].wrapping_add((y * 3) as u8), col[2], 255]);
+            }
+        }
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(path).unwrap()), w, h);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&px).unwrap();
+    }
+
+    /// A fixture layer of today's art: stage tiles for most terrains (two variants of grass), a `common` tile for the
+    /// rest, the wall face, the tree and the stones.
+    fn todays_layer(root: &Path) {
+        for (k, id) in emberwake_battle::grid::TERRAIN_IDS.iter().enumerate() {
+            let col = [(k * 13) as u8, (k * 29) as u8, (k * 47) as u8];
+            if matches!(*id, "lava" | "ice") {
+                ramp(root, &format!("tilesets/common/{id}/v0.png"), 32, 32, col);
+            } else {
+                ramp(root, &format!("tilesets/common_stage/{id}/v0.png"), 64, 48, col);
+            }
+        }
+        ramp(root, "tilesets/common_stage/grass/v1.png", 64, 48, [40, 200, 90]);
+        ramp(root, "tilesets/common_stage/wall_face/v0.png", 64, 24, [200, 90, 40]);
+        ramp(root, "props/common/tree/v0.png", 40, 52, [20, 120, 30]);
+        ramp(root, "props/common/stones/v0.png", 32, 24, [120, 120, 130]);
+    }
+
+    /// FNV-1a over the canvas of the board's passes on each zone, with stage set `set`.
+    fn frame_hash(art: &mut Art, zones: &[&str], set: &str) -> u64 {
+        let mut h: u64 = 0xcbf29ce484222325;
+        for id in zones {
+            let g = paint(art, &zone(id), set, 40, 1, (0, 0));
+            for b in &g.canvas.px {
+                h = (h ^ *b as u64).wrapping_mul(0x100000001b3);
+            }
+        }
+        h
+    }
+
+    /// The board's passes on `grid` with stage set `set`, on a canvas `scale` x 640 x 360, shifted by `shift`.
+    fn paint(art: &mut Art, grid: &Grid, set: &str, grid_alpha: u8, scale: i32, shift: (i32, i32)) -> aegis_ui::ui::Gfx {
+        let mut g = crate::hud::hud_tests::gfx();
+        g.canvas = aegis_ui::canvas::Canvas::new(640 * scale, 360 * scale);
+        g.view = aegis_ui::painter::View::fit((640 * scale) as u32, (360 * scale) as u32);
+        let mut p = Painter { c: &mut g.canvas, v: g.view, fonts: &mut g.fonts };
+        p.clip(Some(INTERIOR));
+        let interior = p.c.clip;
+        p.shift(shift.0, shift.1);
+        draw_backdrop(&mut p, art, grid, "", &IndexMap::new());
+        draw_ground(&mut p, art, grid, set, grid_alpha);
+        assert_eq!(p.c.clip, interior, "the ground pass gives the clip back");
+        draw_prop_shadows(&mut p, art, grid);
+        draw_face(&mut p, art, grid, set);
+        for it in feet_order(&board_items(art, grid)) {
+            match it.item {
+                Item::Block(c) => draw_block(&mut p, art, grid, set, c),
+                Item::Prop(c) => draw_prop(&mut p, art, grid, c),
+                Item::Unit(_) => {}
+            }
+        }
+        g
+    }
+
+    const ZONES: [&str; 5] = ["forest_clearing", "lava_cavern", "river_crossing", "frozen_pass", "stone_arena"];
+    /// The fixture layer's frame over `ZONES` before LOOK1-L1 (printed on the code before the change).
+    const TODAYS_FRAME: u64 = 0xe6c3440ef5f1669f;
+
+    /// An empty `stage_set` draws today's frame; so does a set no layer holds, and a `stage_set` draws its own.
+    #[test]
+    fn an_empty_stage_set_draws_todays_frame() {
+        let root = scratch("todays");
+        todays_layer(&root);
+        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        assert_eq!(frame_hash(&mut art, &ZONES, ""), TODAYS_FRAME);
+        assert_eq!(frame_hash(&mut art, &ZONES, "no_such_set"), TODAYS_FRAME, "a set with no files: common_stage");
+        ramp(&root, "tilesets/zz_set/grass/v0.png", 64, 48, [250, 0, 250]);
+        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        assert_ne!(frame_hash(&mut art, &ZONES, "zz_set"), TODAYS_FRAME);
+        assert_eq!(frame_hash(&mut art, &ZONES, ""), TODAYS_FRAME, "the same layer without the set named");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    const UPPER: [u8; 3] = [200, 30, 30];
+    const LOWER: [u8; 3] = [30, 30, 200];
+    const PIECE_UPPER: [u8; 3] = [240, 200, 40];
+    const PIECE_LOWER: [u8; 3] = [40, 220, 220];
+
+    fn flat_png(root: &Path, rel: &str, w: u32, h: u32, pixel: impl Fn(u32, u32) -> [u8; 3]) {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut px = Vec::with_capacity((w * h * 4) as usize);
+        for y in 0..h {
+            for x in 0..w {
+                let c = pixel(x, y);
+                px.extend([c[0], c[1], c[2], 255]);
+            }
+        }
+        let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(path).unwrap()), w, h);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.write_header().unwrap().write_image_data(&px).unwrap();
+    }
+
+    /// A two-colour set `zz_set` with the pair `floor` over `shallow_water`: each piece's quarters by its mask's bits,
+    /// in colours of their own so a piece reads apart from the tiles under it.
+    fn two_colour_set(root: &Path) {
+        flat_png(root, "tilesets/zz_set/floor/v0.png", 64, 48, |_, _| UPPER);
+        flat_png(root, "tilesets/zz_set/shallow_water/v0.png", 64, 48, |_, _| LOWER);
+        for m in 1..=14u8 {
+            let rel = transition_piece("zz_set", "floor", "shallow_water", m);
+            flat_png(root, &rel, 64, 48, |x, y| if m & (1 << ((y >= 24) as u8 * 2 + (x >= 32) as u8)) != 0 { PIECE_UPPER } else { PIECE_LOWER });
+        }
+    }
+
+    /// A board of `floor` with the given cells set.
+    fn board_of(cells: &[(i32, i32, &str)]) -> Grid {
+        let mut g = zone("stone_arena");
+        let id = |t: &str| emberwake_battle::grid::TERRAIN_IDS.iter().position(|x| *x == t).unwrap();
+        g.terrain.iter_mut().for_each(|t| *t = id("floor"));
+        for (x, y, t) in cells {
+            g.terrain[(y * GRID_W + x) as usize] = id(t);
+        }
+        g
+    }
+
+    fn at_px(g: &aegis_ui::ui::Gfx, x: i32, y: i32) -> [u8; 3] {
+        let i = ((y * g.canvas.w + x) * 4) as usize;
+        [g.canvas.px[i], g.canvas.px[i + 1], g.canvas.px[i + 2]]
+    }
+
+    /// LOOK1 5.3: a lone water cell takes a piece on each of its 4 corners, centred there, each quarter by its bit;
+    /// lips and grid lines draw over the pieces; the other cells keep their tiles.
+    #[test]
+    fn a_lone_water_cell_takes_pieces_on_its_four_corners() {
+        let root = scratch("lone");
+        two_colour_set(&root);
+        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let (x, y) = (5, 4);
+        let grid = board_of(&[(x, y, "shallow_water")]);
+        // Each corner's mask: all bits but the one where the water cell sits.
+        let corners = [(x, y, 8u8), (x + 1, y, 4), (x, y + 1, 2), (x + 1, y + 1, 1)];
+        let mut found = stage_pieces(&mut art, &grid, "zz_set");
+        found.sort();
+        let mut want: Vec<(i32, i32, String)> = corners.iter().map(|&(cx, cy, bit)| (cx, cy, transition_piece("zz_set", "floor", "shallow_water", 15 - bit))).collect();
+        want.sort();
+        assert_eq!(found, want);
+        let g = paint(&mut art, &grid, "zz_set", 0, 1, (0, 0));
+        let cell = stage_cell(V2::new(x, y));
+        for (cx, cy, bit) in corners {
+            let r = piece_rect(cx, cy);
+            assert_eq!((r.x + r.w / 2, r.y + r.h / 2), (BOARD_X + cx * CELL_W, BOARD_Y + cy * CELL_H), "centred on the corner");
+            for (b, qx, qy) in [(1u8, 8, 6), (2, 24, 6), (4, 8, 18), (8, 24, 18)] {
+                let want = if b == bit { PIECE_LOWER } else { PIECE_UPPER };
+                assert_eq!(at_px(&g, r.x + qx, r.y + qy), want, "corner ({cx}, {cy}) quarter {b}");
+            }
+        }
+        assert_eq!(at_px(&g, cell.x - 40, cell.y + 12), UPPER, "a cell away keeps its tile");
+        assert_eq!(at_px(&g, cell.x + 8, cell.y), [118, 116, 62], "the lip draws over the pieces");
+        let lined = paint(&mut art, &grid, "zz_set", 255, 1, (0, 0));
+        assert_eq!(at_px(&lined, cell.x + 8, cell.y), [0, 0, 0], "the grid draws over the lip");
+        // the set named without pieces, and no set: the water's own tile
+        let plain = scratch("lone_plain");
+        flat_png(&plain, "tilesets/zz_set/floor/v0.png", 64, 48, |_, _| UPPER);
+        flat_png(&plain, "tilesets/zz_set/shallow_water/v0.png", 64, 48, |_, _| LOWER);
+        let mut art = Art::layered(Layers::of(vec![plain.clone()]));
+        assert!(stage_pieces(&mut art, &grid, "zz_set").is_empty(), "no pieces in the set");
+        assert_eq!(at_px(&paint(&mut art, &grid, "zz_set", 0, 1, (0, 0)), cell.x + 8, cell.y + 12), LOWER);
+        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        assert!(stage_pieces(&mut art, &grid, "").is_empty(), "no set, no pieces");
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&plain);
+    }
+
+    /// A piece on the board's edge is clipped to the board, not spilled on the backdrop, a shake moving the clip with
+    /// the board; off-grid cells read as the nearest cell.
+    #[test]
+    fn a_piece_on_the_edge_stays_on_the_board() {
+        let root = scratch("edge");
+        two_colour_set(&root);
+        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let grid = board_of(&[(5, 0, "shallow_water")]);
+        let piece = |m: u8| transition_piece("zz_set", "floor", "shallow_water", m);
+        let found = stage_pieces(&mut art, &grid, "zz_set");
+        // The top corners read the row above as row 0: floor on the outer side, water on the inner.
+        assert!(found.contains(&(5, 0, piece(1 | 4))) && found.contains(&(6, 0, piece(2 | 8))), "{found:?}");
+        let bare = paint(&mut art, &grid, "", 0, 1, (0, 0));
+        let g = paint(&mut art, &grid, "zz_set", 0, 1, (0, 0));
+        let (x, top) = (BOARD_X + 5 * CELL_W - 8, BOARD_Y);
+        assert_eq!(at_px(&g, x, top - 1), at_px(&bare, x, top - 1), "nothing over the backdrop");
+        assert_eq!(at_px(&g, x, top), PIECE_UPPER, "the piece from the board's first row");
+        let shaken = paint(&mut art, &grid, "zz_set", 0, 1, (0, 2));
+        assert_eq!(at_px(&shaken, x, top + 1), at_px(&paint(&mut art, &grid, "", 0, 1, (0, 2)), x, top + 1), "the clip moves with the board");
+        assert_eq!(at_px(&shaken, x, top + 2), PIECE_UPPER);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A corner of a third ground takes no piece (an opaque piece would paint over it); a block counts as upper; a
+    /// corner of only water and blocks takes none; a tree with art shows the ground under it; a pair the set lacks
+    /// takes none.
+    #[test]
+    fn only_a_corner_of_the_sets_pair_takes_a_piece() {
+        let root = scratch("third");
+        two_colour_set(&root);
+        ramp(&root, "props/common/tree/v0.png", 40, 52, [20, 120, 30]);
+        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let corner = |art: &mut Art, g: &Grid, cx: i32, cy: i32| stage_pieces(art, g, "zz_set").into_iter().find(|p| (p.0, p.1) == (cx, cy)).map(|p| p.2);
+        let piece = |m: u8| Some(transition_piece("zz_set", "floor", "shallow_water", m));
+        let w = (5, 4, "shallow_water");
+        let third = board_of(&[w, (4, 3, "grass")]);
+        assert_eq!(corner(&mut art, &third, 5, 4), None, "floor, water and grass");
+        assert_eq!(corner(&mut art, &third, 6, 5), piece(15 - 1), "the far corner keeps its piece");
+        let walled = board_of(&[w, (4, 3, "wall")]);
+        assert_eq!(corner(&mut art, &walled, 5, 4), piece(15 - 8), "a wall counts as upper");
+        let tree = board_of(&[w, (4, 3, "tree")]);
+        assert_eq!(corner(&mut art, &tree, 5, 4), piece(15 - 8), "a tree stands on the floor around it");
+        let shut = board_of(&[w, (4, 3, "wall"), (5, 3, "wall"), (4, 4, "wall")]);
+        assert_eq!(corner(&mut art, &shut, 5, 4), None, "water and walls only");
+        let other = board_of(&[(5, 4, "lava")]);
+        assert!(stage_pieces(&mut art, &other, "zz_set").is_empty(), "the set lacks floor over lava");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// LOOK1 5.4: a terrain the set lacks falls back to `common_stage` (tile and wall face), and a set's own file draws
+    /// at its art px: on a 2x canvas each of its 64 x 48 px shows, a fallback tile as before.
+    #[test]
+    fn a_terrain_missing_in_the_set_falls_back_to_common_stage() {
+        let root = scratch("missing");
+        two_colour_set(&root);
+        flat_png(&root, "tilesets/common_stage/floor/v0.png", 64, 48, |_, _| [9, 9, 9]);
+        flat_png(&root, "tilesets/common_stage/grass/v0.png", 64, 48, |x, _| if x % 2 == 0 { [10, 90, 10] } else { [90, 10, 90] });
+        flat_png(&root, "tilesets/common_stage/wall_face/v0.png", 64, 24, |_, _| [90, 90, 10]);
+        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        assert_eq!(tile_art(&mut art, "floor", "zz_set", 2, 3), TileArt::Stage("tilesets/zz_set/floor/v0.png".into()), "the set first");
+        assert_eq!(tile_art(&mut art, "floor", "", 2, 3), TileArt::Stage("tilesets/common_stage/floor/v0.png".into()));
+        assert_eq!(tile_art(&mut art, "grass", "zz_set", 2, 3), TileArt::Stage("tilesets/common_stage/grass/v0.png".into()), "missing in the set");
+        assert_eq!(face_art(&mut art, "zz_set", 2, 3), Some("tilesets/common_stage/wall_face/v0.png".into()), "the face too");
+        let c = stage_cell(V2::new(3, 3));
+        let grid = board_of(&[(3, 3, "grass")]);
+        assert_eq!(at_px(&paint(&mut art, &grid, "zz_set", 0, 1, (0, 0)), c.x + 8, c.y + 8), at_px(&paint(&mut art, &grid, "", 0, 1, (0, 0)), c.x + 8, c.y + 8), "the fallback draws as today");
+        flat_png(&root, "tilesets/zz_set/wall_face/v0.png", 64, 24, |_, _| [77, 7, 7]);
+        flat_png(&root, "tilesets/zz_set/stone/v0.png", 64, 48, |x, _| if x % 2 == 0 { [1, 2, 3] } else { [200, 201, 202] });
+        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        assert_eq!(face_art(&mut art, "zz_set", 2, 3), Some("tilesets/zz_set/wall_face/v0.png".into()), "the set's own face");
+        let walled = board_of(&[(3, 3, "wall")]);
+        let g = paint(&mut art, &walled, "zz_set", 0, 1, (0, 0));
+        assert_eq!(at_px(&g, c.x + 8, c.y + CELL_H - 4), [77, 7, 7], "the block draws the set's face");
+        let stone = board_of(&[(3, 3, "stone")]);
+        let big = paint(&mut art, &stone, "zz_set", 0, 2, (0, 0));
+        let (px, py) = ((c.x + 8) * 2, (c.y + 8) * 2);
+        assert_eq!((at_px(&big, px, py), at_px(&big, px + 1, py)), ([1, 2, 3], [200, 201, 202]), "2 art px per logical px");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

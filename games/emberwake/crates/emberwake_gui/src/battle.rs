@@ -2343,6 +2343,17 @@ impl BattleScreen {
         s.phase == Phase::Planning && !s.plan_confirmed
     }
 
+    /// LOOK1 5.4: the stage set of the battle's world (a world fight's, the Arena's when it plays a world's encounter);
+    /// "" (`common_stage`) for a catalog encounter.
+    fn stage_set(&self, cx: &Cx) -> String {
+        let world = if self.world_mode() { self.class_world.as_str() } else { self.arena_world.as_deref().unwrap_or("") };
+        if world.is_empty() {
+            String::new()
+        } else {
+            dialogue::stage_set(&cx.data, world)
+        }
+    }
+
     /// ENCOUNTER2-C SR5, C4: the current round is scripted and locked (its plan is the script's, confirmed at its start).
     fn locked(&self) -> bool {
         self.host.session.as_ref().is_some_and(|s| s.round_locked())
@@ -4823,9 +4834,10 @@ fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32, i32), liv
     let push_list: Vec<emberwake_battle::forced::Forecast> = pushes.iter().flatten().cloned().collect();
     // VC2: the focus set but the unit under the mouse (each view adds its own hover)
     let focus = focus_set(w, sel, None, pinned);
+    let stage_set = g.stage_set(cx);
     let board = Board { s, tokens: &mut g.tokens, floats: &g.floats, flashes: &g.flashes, popup: g.popup.is_some() || talk_view.is_some(), anim_ms: g.clock.ms, sel, talker, planning, tells: &tells, show_tells, card_hover, inspect: pinned, focus: &focus, fx: &g.fx, shift, sidesteps: &g.sidesteps, overlay: overlay.as_ref(), rounds: &rounds, layers, alt: cx.held.alt, marks: &marks, classes: &classes, pushes: &push_list, hold: hold.as_ref() };
     let (board_hover, flat_hover) = match view {
-        View::Stage => (draw_stage(board, &mut ui, cx, &tuning, now), None),
+        View::Stage => (draw_stage(board, &stage_set, &mut ui, cx, &tuning, now), None),
         View::Flat => (None, draw_flat(board, &mut ui, cx, &tuning, now)),
     };
     g.focus_shown = focus_set(w, sel, board_hover.or(flat_hover).or(card_hover), pinned);
@@ -7195,8 +7207,9 @@ fn with_alpha(c: Rgba, a: u8) -> Rgba {
 /// STAGE1 option B, the Stage view: the board tilted to 32 x 24 cells, run as `stage::passes` (backdrop, ground,
 /// markers, ground arrows, shadows, front face, the feet-sorted blocks, props and units, the outlines through what
 /// covers a unit, the top: HP bars, chips, the exit sign, floats). Cell widgets first, then the units' in feet order
-/// (front-most last, so it takes the click). Returns the unit the mouse is over on the board.
-fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
+/// (front-most last, so it takes the click). `set`: the world's stage set (LOOK1-L1; "" = `common_stage`). Returns the
+/// unit the mouse is over on the board.
+fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: Instant) -> Option<usize> {
     let Board { s, tokens, floats, flashes, popup, anim_ms, sel, talker, planning, tells, show_tells, card_hover, inspect, focus, fx: live, shift, sidesteps, overlay, rounds, layers, alt, marks, classes, pushes, hold } = b;
     let w = &s.w;
     // VISCLAR1 AR3: the arrows of the selected and the inspected unit (Alt: all)
@@ -7287,7 +7300,7 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
         match pass {
             // HOOKS1 ZN3: a data zone row keys its own backdrop and gradient ground (a code zone ignores any row)
             Pass::Backdrop => stage::draw_backdrop(&mut ui.p, &mut cx.art, &w.grid, &s.def.zone, &w.cat.zones),
-            Pass::Ground => stage::draw_ground(&mut ui.p, &mut cx.art, &w.grid, tuning.grid_alpha),
+            Pass::Ground => stage::draw_ground(&mut ui.p, &mut cx.art, &w.grid, set, tuning.grid_alpha),
             Pass::Markers => {
                 // HOOKS1-UI slice 1: the ground hazards and the arena's struck cells, under the hover and the tells
                 draw_hook_marks(&mut ui.p, marks, &geo);
@@ -7379,11 +7392,11 @@ fn draw_stage(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tuning, now: 
                     ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2, with_alpha(if t.ally { ALLY } else { FOE }, tuning.foot_ring_alpha));
                 }
             }
-            Pass::Face => stage::draw_face(&mut ui.p, &mut cx.art, &w.grid),
+            Pass::Face => stage::draw_face(&mut ui.p, &mut cx.art, &w.grid, set),
             Pass::Feet => {
                 for p in &order {
                     match p.item {
-                        Item::Block(c) => stage::draw_block(&mut ui.p, &mut cx.art, &w.grid, c),
+                        Item::Block(c) => stage::draw_block(&mut ui.p, &mut cx.art, &w.grid, set, c),
                         Item::Prop(c) => stage::draw_prop(&mut ui.p, &mut cx.art, &w.grid, c),
                         Item::Unit(i) => {
                             let Some(t) = unit_of(i) else { continue };
@@ -9563,6 +9576,42 @@ mod input1_tests {
         let b = BattleScreen::arena_with(&cx, None, &encounter, ruleset.map(String::from), rules, reveal);
         assert!(b.host.session.is_some(), "the battle starts: {}", b.message);
         (cx, crate::hud::hud_tests::gfx(), b)
+    }
+
+    /// LOOK1-L1: the Stage draws the set of the battle's world, read from the manifest; a catalog encounter none.
+    #[test]
+    fn the_stage_draws_the_set_of_the_battles_world() {
+        let mut cx = crate::hud::hud_tests::game_cx();
+        let mut g = crate::hud::hud_tests::gfx();
+        cx.settings.v["battle_view"] = json!("stage");
+        // the manifest first: the battle's host shares the data from its start
+        let world = emberwake_world::new_game::playable_worlds(&cx.data).first().cloned().expect("a playable world");
+        std::sync::Arc::get_mut(&mut cx.app.data).expect("this test's own data").catalogs.worlds.get_mut(&world).expect("the world").manifest.insert("stage_set".into(), json!("zz_set"));
+        let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+        let mut b = BattleScreen::arena_with(&cx, None, &encounter, Some(TIMELINE.into()), "", false);
+        assert_eq!(b.stage_set(&cx), "", "a catalog encounter");
+        let root = std::env::temp_dir().join(format!("emberwake_battle_set_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        const MARK: [u8; 3] = [251, 3, 247];
+        for id in emberwake_battle::grid::TERRAIN_IDS {
+            let path = root.join(format!("tilesets/zz_set/{id}/v0.png"));
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            let mut enc = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(path).unwrap()), 64, 48);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&[MARK[0], MARK[1], MARK[2], 255].repeat(64 * 48)).unwrap();
+        }
+        let mut roots = vec![root.clone()];
+        roots.extend(aegis_core::assets::Layers::for_game(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).roots);
+        cx.art = Art::layered(aegis_core::assets::Layers::of(roots));
+        let marked = |g: &Gfx| g.canvas.px.chunks_exact(4).filter(|c| c[..3] == MARK).count();
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_eq!(marked(&g), 0, "no set: today's tiles");
+        b.arena_world = Some(world);
+        assert_eq!(b.stage_set(&cx), "zz_set");
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert!(marked(&g) > 0, "the world's set draws");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     fn drawn(cx: &mut Cx, g: &mut Gfx, b: &mut BattleScreen) {
