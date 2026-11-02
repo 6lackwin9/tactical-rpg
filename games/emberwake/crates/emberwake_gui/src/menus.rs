@@ -706,7 +706,7 @@ pub(crate) const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
             ("Back / close (mouse)", "Right click"),
         ],
     ),
-    ("Maps", &[("Move the party", "Arrow keys, W A S D"), ("Interact with the marker you face", "E"), ("Game menu", "Escape"), ("Choose a dialogue line", "1-9"), ("Party, journal, stash, help, event log", "P, J, I, ?, L")]),
+    ("Maps", &[("Move the party", "Arrow keys, W A S D"), ("Run", "Hold Shift"), ("Interact with the marker you face", "E"), ("Game menu", "Escape"), ("Choose a dialogue line", "1-9"), ("Party, journal, stash, help, event log", "P, J, I, ?, L")]),
     ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Select party member 1-4", "1-4"), ("Skills of the selected hero (timeline)", "Shift+1-9"), ("Accept the selected hero's auto-fill (timeline)", "F"), ("Support an ally while only the auto-fill shows (timeline)", "Ctrl+click"), ("Target self (timeline)", "S"), ("Inspect a unit (timeline)", "Right click"), ("Clear inspect, deselect (timeline)", "Escape"), ("Full timeline view, open / close (timeline)", "T, Escape"), ("Playback speed: 1x, 0.5x, block by block (timeline)", "P"), ("Next block (timeline)", "N"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Every bar and arrow (timeline)", "Hold Alt"), ("Screenshot", "F12")]),
 ];
 
@@ -932,7 +932,7 @@ impl Screen<GameCx> for SettingsScreen {
                     ui.p.text(x as f32, y as f32, "Debug", BODY + 1.0, th().gold);
                     // VIEWKEYS1: the walk's base step time (a release build uses the default), beside the heading
                     let (least, most, _) = crate::mapview::WALK_STEP_MS;
-                    let base = crate::mapview::WalkStep::of(&json!({crate::mapview::WALK_STEP_KEY: d[crate::mapview::WALK_STEP_KEY]})).base;
+                    let base = crate::mapview::WalkStep::of(&json!({crate::mapview::WALK_STEP_KEY: d[crate::mapview::WALK_STEP_KEY]}), false).base;
                     ui.p.text(x as f32 + 36.0, y as f32, "Walk step", BODY, th().text);
                     let steps = ((most - least) / WALK_STEP_STEP) as usize + 1;
                     ui.slider("settings.debug.walk_step", Rect::new(x + 84, y, col_w - 92, 13), ((base - least) / WALK_STEP_STEP).round() as usize, steps, &format!("{base:.0} ms"), |i| SetAct::Set(crate::mapview::WALK_STEP_KEY, least + i as f64 * WALK_STEP_STEP), true);

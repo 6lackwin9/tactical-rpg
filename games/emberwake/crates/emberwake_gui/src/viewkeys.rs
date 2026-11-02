@@ -104,7 +104,7 @@ fn press_zoom(cx: &mut Cx, k: Key, debug: bool) -> bool {
         let to = next_zoom(&cx.settings.v["map_zoom"]);
         cx.settings.v["map_zoom"] = json!(to);
         save(cx);
-        let line = format!("Map zoom {to}x, walk step {} (F6).", walk_words(WalkStep::of(&cx.settings.v)));
+        let line = format!("Map zoom {to}x, walk step {} (F6).", walk_words(WalkStep::of(&cx.settings.v, false)));
         cx.log(line);
     }
     true
@@ -118,7 +118,7 @@ fn press_walk(cx: &mut Cx, k: Key, debug: bool) -> bool {
         let to = next_walk(&cx.settings.v[WALK_STEP_KEY]);
         cx.settings.v[WALK_STEP_KEY] = json!(to);
         save(cx);
-        let line = format!("Walk step {} (F11).", walk_words(WalkStep::of(&cx.settings.v)));
+        let line = format!("Walk step {} (F11).", walk_words(WalkStep::of(&cx.settings.v, false)));
         cx.log(line);
     }
     true
@@ -223,7 +223,7 @@ mod tests {
         assert!(press_zoom(&mut cx, Key::Fn(6), true));
         assert_eq!(cx.settings.v["map_zoom"], json!(1.5));
         assert_eq!(saved(&cx, "map_zoom"), json!(1.5), "the file");
-        let base = WalkStep::of(&cx.settings.v).base;
+        let base = WalkStep::of(&cx.settings.v, false).base;
         assert_eq!(cx.log.last().cloned(), Some(format!("Map zoom 1.5x, walk step {base:.0} ms (F6).")));
         cx.settings.v["anim_speed"] = json!(2.0);
         press_zoom(&mut cx, Key::Fn(6), true);
@@ -296,8 +296,9 @@ mod tests {
         assert_eq!(cx.settings.v, before);
         assert!(!file_of(&cx).exists() && cx.log.is_empty(), "the gate shut: nothing");
         assert!(!press_walk(&mut cx, Key::Fn(6), true), "not its key");
+        cx.settings.v[WALK_STEP_KEY] = json!(130.0);
         assert!(press_walk(&mut cx, Key::Fn(11), true));
-        assert_eq!(cx.settings.v[WALK_STEP_KEY], json!(160.0), "from the default");
+        assert_eq!(cx.settings.v[WALK_STEP_KEY], json!(160.0), "the next step");
         assert_eq!(saved(&cx, WALK_STEP_KEY), json!(160.0), "the file");
         if cfg!(debug_assertions) {
             assert_eq!(cx.log.last().map(String::as_str), Some("Walk step 160 ms (F11)."));
@@ -351,12 +352,12 @@ mod tests {
         assert!(n(row, 0) + n(row, 2) <= n(boxed, 0), "beside the box: {row} {boxed}");
         let steps: Vec<&Value> = widgets.iter().filter(|w| w["id"].as_str().is_some_and(|i| i.starts_with("settings.debug.walk_step.step."))).collect();
         assert_eq!(steps.len(), ((WALK_STEP_MS.1 - WALK_STEP_MS.0) / 10.0) as usize + 1);
-        let at = ((200.0 - WALK_STEP_MS.0) / 10.0) as usize;
+        let at = ((180.0 - WALK_STEP_MS.0) / 10.0) as usize;
         s.click_id(&mut cx, &format!("settings.debug.walk_step.step.{at}")).expect("the step");
         assert_eq!(cx.settings.v[WALK_STEP_KEY], json!(WALK_STEP_MS.2), "only a draft so far");
         s.click_id(&mut cx, "settings.apply").expect("apply");
-        assert_eq!(WalkStep::of(&cx.settings.v).base, 200.0, "not the volumes' 0-100 clamp");
-        assert_eq!(saved(&cx, WALK_STEP_KEY).as_f64(), Some(200.0), "the file");
+        assert_eq!(WalkStep::of(&cx.settings.v, false).base, 180.0, "not the volumes' 0-100 clamp");
+        assert_eq!(saved(&cx, WALK_STEP_KEY).as_f64(), Some(180.0), "the file");
         // the slider's ends are the range's
         for (i, want) in [(0, WALK_STEP_MS.0), (steps.len() - 1, WALK_STEP_MS.1)] {
             let mut s = crate::menus::SettingsScreen::new(&cx);
@@ -365,7 +366,7 @@ mod tests {
             s.draw(&mut cx, &mut g, (-500, -500), true);
             s.click_id(&mut cx, &format!("settings.debug.walk_step.step.{i}")).expect("the end");
             s.click_id(&mut cx, "settings.apply").expect("apply");
-            assert_eq!(WalkStep::of(&cx.settings.v).base, want);
+            assert_eq!(WalkStep::of(&cx.settings.v, false).base, want);
         }
     }
 

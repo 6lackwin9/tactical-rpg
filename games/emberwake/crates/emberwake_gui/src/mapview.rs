@@ -46,8 +46,10 @@ pub const ZOOM_TIP: &str = "Draws the region map larger: ground, walls, props an
 
 /// The debug setting of a walk's base step time (VIEWKEYS1; a release build uses the default).
 pub const WALK_STEP_KEY: &str = "walk_step_ms";
-/// The base step time in ms: (least, most, default). The user tunes the default.
-pub const WALK_STEP_MS: (f64, f64, f64) = (60.0, 240.0, 130.0);
+/// The base walk step time in ms: (least, most, default).
+pub const WALK_STEP_MS: (f64, f64, f64) = (60.0, 240.0, 200.0);
+/// The base step time while running (WALKRUN1: Shift held on the region map), in every build.
+pub const RUN_STEP_MS: f64 = 130.0;
 
 /// The `anim_speed` setting as the map plays it (missing or no number: 1x).
 pub fn anim_speed(settings: &Value) -> f64 {
@@ -55,7 +57,8 @@ pub fn anim_speed(settings: &Value) -> f64 {
 }
 
 /// The time between steps of a walked path and of a held movement key (VIEWKEYS1, user 2026-11-03: base / `anim_speed`, so
-/// anyone preferring fast animation also walks faster, and the walk clip's pace per step stays the same).
+/// anyone preferring fast animation also walks faster, and the walk clip's pace per step stays the same; WALKRUN1: the
+/// base is the walk's, or `RUN_STEP_MS` while running).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WalkStep {
     /// The base step time, ms: also the animation ms a step takes, whatever the speed.
@@ -65,15 +68,16 @@ pub struct WalkStep {
 }
 
 impl WalkStep {
-    pub fn of(settings: &Value) -> Self {
-        Self::read(settings, cfg!(debug_assertions))
+    /// `run`: Shift is held.
+    pub fn of(settings: &Value, run: bool) -> Self {
+        Self::read(settings, run, cfg!(debug_assertions))
     }
 
-    /// `debug`: whether the debug setting counts; a value that is no number in range is the default.
-    fn read(settings: &Value, debug: bool) -> Self {
+    /// `debug`: whether the debug setting (the walk's only) counts; a value that is no number in range is the default.
+    fn read(settings: &Value, run: bool, debug: bool) -> Self {
         let (least, most, default) = WALK_STEP_MS;
         let saved = settings[WALK_STEP_KEY].as_f64().filter(|b| debug && (least..=most).contains(b));
-        let base = saved.unwrap_or(default);
+        let base = if run { RUN_STEP_MS } else { saved.unwrap_or(default) };
         Self { base, wall: base / anim_speed(settings) }
     }
 
@@ -253,6 +257,8 @@ pub struct Glide {
     to: Option<(i64, i64)>,
     from: (f32, f32),
     at: Option<Instant>,
+    /// The current step's own time (WALKRUN1: the pace may change between steps and must not move the party back).
+    ms: f64,
 }
 
 impl Glide {
@@ -261,19 +267,19 @@ impl Glide {
 
     fn rest(&mut self, loc: &str, tile: (i64, i64)) -> ((f32, f32), bool) {
         let here = (tile.0 as f32, tile.1 as f32);
-        *self = Glide { loc: loc.to_string(), to: Some(tile), from: here, at: None };
+        *self = Glide { loc: loc.to_string(), to: Some(tile), from: here, at: None, ms: 0.0 };
         (here, true)
     }
 
-    fn position(&self, now: Instant, step_ms: f64) -> (f32, f32) {
+    fn position(&self, now: Instant) -> (f32, f32) {
         let (Some(to), Some(at)) = (self.to, self.at) else { return self.from };
-        let t = (now.saturating_duration_since(at).as_secs_f64() * 1000.0 / step_ms).clamp(0.0, 1.0) as f32;
+        let t = (now.saturating_duration_since(at).as_secs_f64() * 1000.0 / self.ms).clamp(0.0, 1.0) as f32;
         (self.from.0 + (to.0 as f32 - self.from.0) * t, self.from.1 + (to.1 as f32 - self.from.1) * t)
     }
 
     /// The drawn position at `now` (None: no clock yet, so no time has passed: the tile), and whether it jumped: a first
     /// frame, a new location, or a tile too far to glide to (the camera then jumps with it). `step_at`: the scheduled time
-    /// of a step taken since the last frame.
+    /// of a step taken since the last frame; `step_ms`: the time a step taken now glides in.
     pub fn update(&mut self, loc: &str, tile: (i64, i64), step_at: Option<Instant>, now: Option<Instant>, step_ms: f64) -> ((f32, f32), bool) {
         let Some(now) = now else { return self.rest(loc, tile) };
         if self.to.is_none() || self.loc != loc {
@@ -281,13 +287,13 @@ impl Glide {
         }
         if self.to != Some(tile) {
             let start = step_at.unwrap_or(now);
-            let was = self.position(start, step_ms);
+            let was = self.position(start);
             if (tile.0 as f32 - was.0).abs() + (tile.1 as f32 - was.1).abs() > Self::REACH {
                 return self.rest(loc, tile);
             }
-            (self.from, self.to, self.at) = (was, Some(tile), Some(start));
+            (self.from, self.to, self.at, self.ms) = (was, Some(tile), Some(start), step_ms);
         }
-        (self.position(now, step_ms), false)
+        (self.position(now), false)
     }
 }
 
@@ -714,23 +720,62 @@ mod tests {
     fn the_walk_step_is_the_base_over_the_animation_speed() {
         let default = WALK_STEP_MS.2;
         for speed in [0.5, 1.0, 2.0] {
-            let s = WalkStep::read(&json!({"anim_speed": speed}), true);
+            let s = WalkStep::read(&json!({"anim_speed": speed}), false, true);
             assert_eq!(s, WalkStep { base: default, wall: default / speed }, "{speed}");
             assert_eq!(s.gap().as_secs_f64(), default / speed / 1000.0, "{speed}");
-            let tuned = WalkStep::read(&json!({"anim_speed": speed, WALK_STEP_KEY: 200.0}), true);
-            assert_eq!(tuned.wall, 200.0 / speed, "the slider's value: {speed}");
+            let tuned = WalkStep::read(&json!({"anim_speed": speed, WALK_STEP_KEY: 150.0}), false, true);
+            assert_eq!(tuned.wall, 150.0 / speed, "the slider's value: {speed}");
         }
-        assert!(WalkStep::read(&json!({"anim_speed": 2.0}), true).wall < WalkStep::read(&json!({"anim_speed": 0.5}), true).wall, "faster animation walks faster");
-        assert_eq!(WalkStep::read(&json!({"anim_speed": 99}), true).wall, default / 2.0, "the sprite's clamp");
-        assert_eq!(WalkStep::read(&json!({"anim_speed": "fast"}), true).wall, default, "no number is 1x");
+        assert!(WalkStep::read(&json!({"anim_speed": 2.0}), false, true).wall < WalkStep::read(&json!({"anim_speed": 0.5}), false, true).wall, "faster animation walks faster");
+        assert_eq!(WalkStep::read(&json!({"anim_speed": 99}), false, true).wall, default / 2.0, "the sprite's clamp");
+        assert_eq!(WalkStep::read(&json!({"anim_speed": "fast"}), false, true).wall, default, "no number is 1x");
+    }
+
+    /// WALKRUN1: walk 200 ms and run 130 ms over the animation speed; the debug setting moves the walk only, and a run
+    /// needs no debug build and takes no bad value.
+    #[test]
+    fn a_run_steps_at_its_own_time_at_every_speed() {
+        assert_eq!((WALK_STEP_MS.2, RUN_STEP_MS), (200.0, 130.0));
+        for speed in [0.5, 1.0, 2.0] {
+            let v = json!({"anim_speed": speed});
+            assert_eq!(WalkStep::read(&v, false, false), WalkStep { base: 200.0, wall: 200.0 / speed }, "walk at {speed}");
+            for debug in [false, true] {
+                assert_eq!(WalkStep::read(&v, true, debug), WalkStep { base: 130.0, wall: 130.0 / speed }, "run at {speed}");
+            }
+            let tuned = json!({"anim_speed": speed, WALK_STEP_KEY: 90.0});
+            assert_eq!(WalkStep::read(&tuned, false, true).base, 90.0, "the slider and F11 set the walk");
+            assert_eq!(WalkStep::read(&tuned, true, true).base, RUN_STEP_MS, "and not the run");
+        }
+        assert_eq!(WalkStep::read(&json!({WALK_STEP_KEY: "slow"}), true, true).base, RUN_STEP_MS, "a bad saved walk");
+        assert_eq!(WalkStep::read(&json!({WALK_STEP_KEY: "slow"}), false, true).base, WALK_STEP_MS.2, "a bad saved walk");
+    }
+
+    /// WALKRUN1: a step glides in the time it started with: a change of pace during it or at the next step never moves
+    /// the party back (the drawn position only goes forward through a run, a walk and a run again).
+    #[test]
+    fn a_change_of_pace_keeps_the_glide_going_forward() {
+        let t0 = Instant::now();
+        let at = |ms: u64| Some(t0 + Duration::from_millis(ms));
+        let mut g = Glide::default();
+        assert_eq!(g.update("m", (0, 0), None, at(0), 130.0).0, (0.0, 0.0));
+        // a run's step, half way
+        assert_eq!(g.update("m", (1, 0), at(0), at(65), 130.0).0, (0.5, 0.0));
+        // Shift let go during it: the step keeps its own time
+        assert_eq!(g.update("m", (1, 0), None, at(65), 200.0).0, (0.5, 0.0), "no hop back when the pace changes");
+        assert_eq!(g.update("m", (1, 0), None, at(130), 200.0).0, (1.0, 0.0), "it ends on its time");
+        // the next step is a walk's, from the tile
+        assert_eq!(g.update("m", (2, 0), at(130), at(130), 200.0).0, (1.0, 0.0), "from the tile, not from behind it");
+        assert_eq!(g.update("m", (2, 0), None, at(230), 200.0).0, (1.5, 0.0));
+        // Shift pressed during it: no hop forward
+        assert_eq!(g.update("m", (2, 0), None, at(230), 130.0).0, (1.5, 0.0), "no hop on when the pace changes");
     }
 
     /// A bad or missing saved base is the default; the range's ends are good; a release build reads the default always.
     #[test]
     fn a_bad_walk_step_falls_back_to_the_default() {
         let (least, most, default) = WALK_STEP_MS;
-        let base = |v: Value, debug: bool| WalkStep::read(&json!({WALK_STEP_KEY: v}), debug).base;
-        assert_eq!(WalkStep::read(&json!({}), true).base, default, "missing");
+        let base = |v: Value, debug: bool| WalkStep::read(&json!({WALK_STEP_KEY: v}), false, debug).base;
+        assert_eq!(WalkStep::read(&json!({}), false, true).base, default, "missing");
         for bad in [json!("slow"), json!(null), json!(true), json!(least - 1.0), json!(most + 1.0), json!(-5), json!(1e300)] {
             assert_eq!(base(bad.clone(), true), default, "{bad}");
         }

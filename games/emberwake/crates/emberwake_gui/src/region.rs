@@ -261,7 +261,7 @@ impl RegionMap {
             walk: Vec::new(),
             walk_target: None,
             next_walk: Instant::now(),
-            step: mapview::WalkStep::of(&cx.settings.v),
+            step: mapview::WalkStep::of(&cx.settings.v, cx.held.shift),
             hold: false,
             geo: MapGeom::default(),
             log_open: false,
@@ -385,7 +385,8 @@ impl RegionMap {
         self.frame_at = Some(now);
         // PLAYUI1-R: the sprites play on their own clock at the animation speed setting (as the battle tokens)
         let speed = mapview::anim_speed(&cx.settings.v);
-        self.step = mapview::WalkStep::of(&cx.settings.v);
+        // WALKRUN1: Shift held runs; the pace of a step is set as it is taken, so a release counts from the next step
+        self.step = mapview::WalkStep::of(&cx.settings.v, cx.held.shift);
         self.anim_ms += now.duration_since(self.anim_at).as_secs_f64() * 1000.0 * speed;
         self.anim_at = now;
         // PORTRAITFX1 4.5: the talk box's portrait clock moves by the frame's wall time (at most 100 ms a frame)
@@ -1286,6 +1287,7 @@ impl Screen<GameCx> for RegionMap {
             self.pan = None;
             let t = explore::template_of(&cx.data, explore::location(&cx.data, cx.gs()));
             if !t.is_empty() {
+                self.step = mapview::WalkStep::of(&cx.settings.v, cx.held.shift);
                 // the frame's clock: the press moves from this frame on, and the steps chain from it
                 let at = self.frame_at.unwrap_or_else(Instant::now);
                 self.step_at = Some(at);
@@ -4106,6 +4108,51 @@ mod view_tests {
         assert_eq!(Key::Fn(7).name(), "f7");
     }
 
+    /// WALKRUN1: Shift held runs a held-key walk and a path walk at `RUN_STEP_MS`, in any build; let go, the step under way
+    /// keeps its time and the next is a walk's; it is still one step per due tick.
+    #[test]
+    fn shift_runs_and_letting_go_walks_from_the_next_step() {
+        let (run, walk) = (mapview::RUN_STEP_MS, mapview::WALK_STEP_MS.2);
+        let ms = |v: f64| Duration::from_secs_f64(v / 1000.0);
+        for speed in [0.5, 1.0, 2.0] {
+            let (mut cx, mut g) = (game_cx(), gfx());
+            cx.settings.v["anim_speed"] = json!(speed);
+            let mut map = RegionMap::new(&mut cx);
+            let d = cx.data.clone();
+            let start = cx.gs().clone();
+            let t = explore::template_of(&d, explore::location(&d, &start)).clone();
+            let (w, h) = explore::size_of(&t);
+            let marked: Vec<Pos> = explore::markers_of(explore::location(&d, &start)).iter().map(|m| explore::marker_pos(&t, m, start.explore_int("loc_steps"))).collect();
+            let free = |p: Pos| explore::is_open(&t, p.0, p.1) && !marked.contains(&p);
+            let at = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).find(|&(x, y)| (0..5).all(|i| free((x + i, y)))).expect("a free row");
+            cx.gs_mut().position = at;
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            // a path walk with Shift held
+            cx.held.shift = true;
+            map.walk = vec![(1, 0); 3];
+            let begin = Instant::now() + Duration::from_secs(1);
+            map.next_walk = begin;
+            map.tick_at(&mut cx, begin);
+            assert_eq!(cx.gs().position, (at.0 + 1, at.1));
+            assert_eq!(map.next_walk, begin + ms(run / speed), "the run's time at {speed}x");
+            // let go: the step under way keeps its time, none comes early, and the one after it is a walk's
+            cx.held.shift = false;
+            let second = map.next_walk;
+            map.tick_at(&mut cx, second - Duration::from_millis(1));
+            assert_eq!(cx.gs().position, (at.0 + 1, at.1), "none before its time");
+            map.tick_at(&mut cx, second);
+            assert_eq!(cx.gs().position, (at.0 + 2, at.1), "the next step comes on the run's schedule");
+            assert_eq!(map.next_walk, second + ms(walk / speed), "and walks from there at {speed}x");
+            // a held key with Shift held: the press takes the run's time at once
+            map.walk.clear();
+            cx.held.shift = true;
+            map.key(&mut cx, Key::Right);
+            let pressed = map.frame_at.expect("the frame's clock");
+            assert_eq!(cx.gs().position, (at.0 + 3, at.1));
+            assert_eq!(map.next_walk, pressed + ms(run / speed), "the held key's run at {speed}x");
+        }
+    }
+
     /// VIEWKEYS1: a walked path keeps one step per due tick at any step time, the leader never idles between its steps
     /// and the game state it ends in is the same: the step time is presentation, journeys are not touched.
     #[test]
@@ -4170,7 +4217,7 @@ mod view_tests {
         // VIEWKEYS2: F11 takes effect on the next frame's tick, without Settings
         map.key(&mut cx, Key::Fn(11));
         map.tick(&mut cx);
-        assert_eq!(map.step.base, if debug { 160.0 } else { mapview::WALK_STEP_MS.2 });
+        assert_eq!(map.step.base, if debug { crate::viewkeys::next_walk(&json!(mapview::WALK_STEP_MS.2)) } else { mapview::WALK_STEP_MS.2 });
         assert_eq!(cx.gs().position, start, "no step");
     }
 }
@@ -4861,6 +4908,8 @@ mod ground_tests {
                     cx.gs_mut().position = (30, 30);
                     let t0 = Instant::now();
                     shot_at(&mut map, &mut cx, &mut g, t0);
+                    // a run: at the walk's pace a 3x cell moves a whole logical px every 60th of a second
+                    cx.held.shift = true;
                     map.key(&mut cx, Key::Left);
                     cx.held.dir = Some((-1, 0));
                     let s = g.view.s;
@@ -4894,6 +4943,8 @@ mod ground_tests {
                 cx.gs_mut().position = (60, 50);
                 let t0 = Instant::now();
                 shot_at(&mut map, &mut cx, &mut g, t0);
+                // a run: at the walk's pace a 1.5x cell moves a whole logical px every 60th of a second
+                cx.held.shift = true;
                 map.key(&mut cx, Key::Left);
                 cx.held.dir = Some((-1, 0));
                 let mut i = 1;
