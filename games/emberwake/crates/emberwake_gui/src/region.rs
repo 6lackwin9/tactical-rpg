@@ -1044,8 +1044,10 @@ impl Screen<GameCx> for RegionMap {
                         top = mapview::sprite_rect(r);
                     }
                     // facing the party while in the conversation (four ways, DIR4-M: up or down when the party is
-                    // more above or below, keeping the sheets' right); else the sheets' right
-                    let face = if talk_tiles.contains(&at) { Facing::default().toward((gs.position.0 - at.0) as i32, (gs.position.1 - at.1) as i32) } else { Facing::default() };
+                    // more above or below, keeping their left or right); else the row's `face`, down by default
+                    // (NPCFACE1; a body with no down row keeps its side view)
+                    let rest = explore::marker_facing(&m);
+                    let face = if talk_tiles.contains(&at) { rest.toward((gs.position.0 - at.0) as i32, (gs.position.1 - at.1) as i32) } else { rest };
                     npc = Some(NpcDraw { body, sprite, palette, initial: s(who, "name").chars().next().unwrap_or('?').to_string(), face, offset: idle_offset(&s(who, "id")) });
                 }
                 // 2.2: the first service is the badge (turn_in and offer are today's `ready` and `quest`)
@@ -3166,12 +3168,75 @@ mod sprite_tests {
             map.end_talk(cx);
             frame(map, cx, &mut g, 1.0);
             let after = sprite(map, cx, them["id"].as_str().unwrap_or("")).expect("still drawn");
-            assert_eq!((after["left"].clone(), after["facing"].clone()), (json!(false), json!("side")), "out of the conversation the sheets face right");
+            // NPCFACE1: out of the conversation back to the row's facing (down by default)
+            let loc = cx.data.resolve(&cx.gs().world_id, "locations", &cx.gs().location_id);
+            let t = explore::template_of(&cx.data, loc);
+            let steps = cx.gs().explore_int("loc_steps");
+            let rest = explore::markers_of(loc).iter().find(|m| explore::marker_pos(t, m, steps) == npc).map(explore::marker_facing).expect("their marker");
+            assert_eq!((after["left"].clone(), after["facing"].clone()), (json!(rest.left), json!(view_name(rest.view))), "out of the conversation they rest as their row says");
             true
         });
         println!("conversations checked (left, right, down or up): {sides:?}");
         assert!(n > 0, "someone on a map of the world talks");
         assert!(sides.0 > 0 && sides.1 > 0 && sides.2 > 0, "talked to from both sides and from above or below: {sides:?}");
+    }
+
+    /// NPCFACE1 under both region views: a person with no `face` draws down, a row's `face` draws that way, a bad value
+    /// (a `content check` problem) still draws down, a body with no down row (beast, crawler, dummy) keeps its side
+    /// view, and the party is untouched.
+    #[test]
+    fn people_rest_facing_down_unless_their_row_says() {
+        use crate::screens::Game;
+        use emberwake_world::{new_game, Data};
+        // (marker id, its art, its face, the drawn `facing`, the drawn `view`, mirrored)
+        let cases: [(&str, &str, Option<Value>, &str, &str, bool); 8] = [
+            ("plain", "warrior", None, "down", "down", false),
+            ("up", "warrior", Some(json!("up")), "up", "up", false),
+            ("left", "warrior", Some(json!("left")), "side", "side", true),
+            ("right", "warrior", Some(json!("right")), "side", "side", false),
+            ("bad", "warrior", Some(json!("sideways")), "down", "down", false),
+            ("beast", "beast", None, "down", "side", false),
+            ("crawler", "crawler", None, "down", "side", false),
+            ("dummy", "dummy", None, "down", "side", false),
+        ];
+        let at = |i: usize| (2 + 2 * i as i64, 2);
+        let anchors: Vec<Value> = cases.iter().enumerate().map(|(i, c)| json!({"id": c.0, "x": at(i).0, "y": at(i).1})).chain([json!({"id": "spawn", "x": 2, "y": 4})]).collect();
+        let markers: Vec<Value> = cases.iter().map(|c| {
+            let mut m = json!({"id": c.0, "kind": "npc", "anchor": c.0, "character": c.0});
+            if let Some(f) = &c.2 {
+                m["face"] = f.clone();
+            }
+            m
+        }).collect();
+        let owned = |id: &str, mut r: Value| {
+            r["_world"] = json!("yard");
+            r["_qid"] = json!(format!("yard:{id}"));
+            r
+        };
+        let people: Vec<Value> = cases.iter().map(|c| owned(c.0, json!({"id": c.0, "name": c.0, "role": "npc", "art": c.1}))).collect();
+        let worlds = json!({"yard": {"manifest": {"id": "yard", "name": "Yard", "start_location": "hub", "start_party": ["hero"]}, "own": {
+            "locations": [owned("hub", json!({"id": "hub", "name": "Hub", "map": "yard_map", "markers": markers}))], "characters": people}}});
+        let catalog = json!({"classes": [{"id": "fighter", "name": "Fighter", "art": "warrior"}], "units": [{"id": "hero", "name": "Hero", "side": "party", "class_id": "fighter", "level": 1}]});
+        let rows = vec![".".repeat(24); 8];
+        let data = std::sync::Arc::new(Data::from_values(&catalog, &worlds, &json!({"maps": [{"id": "yard_map", "rows": rows, "anchors": anchors}]})));
+        for (view, _) in mapview::VIEWS {
+            let (mut cx, mut g) = (art_cx(), gfx());
+            let mut gs = new_game::create_for_world(&data, "yard", 1).expect("a new game");
+            explore::enter(&data, &mut gs, "hub", explore::SPAWN);
+            cx.app.data = data.clone();
+            cx.app.game = Some(Game::new(gs, -1, true));
+            cx.settings.v["region_view"] = json!(view);
+            cx.settings.v["map_legend_open"] = json!(false);
+            let mut map = RegionMap::new(&mut cx);
+            frame(&mut map, &mut cx, &mut g, 1.0);
+            let sprites = map.state(&cx)["sprites"].as_array().cloned().unwrap_or_default();
+            for (i, c) in cases.iter().enumerate() {
+                let sp = sprites.iter().find(|s| s["id"] != "party" && stands_on(&map, rect_of(s)) == at(i)).unwrap_or_else(|| panic!("{} is drawn in {view}: {sprites:?}", c.0));
+                assert_eq!((sp["facing"].clone(), sp["view"].clone(), sp["left"].clone()), (json!(c.3), json!(c.4), json!(c.5)), "{} in {view}", c.0);
+            }
+            let party = sprites.iter().find(|s| s["id"] == "party").expect("the leader");
+            assert_eq!(party["facing"], json!("side"), "the party keeps its own facing in {view}");
+        }
     }
 
     /// 2.4: on every map of the world each person whose body chain loads is a sprite, and the sprites draw in row

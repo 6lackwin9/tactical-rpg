@@ -83,9 +83,25 @@ fn without_empty_follow_ups(kind: &str, entry: &Dict) -> Dict {
     out
 }
 
+/// NPCFACE1: a location's marker stores its `face` only when it is not the default `down`.
+fn without_default_faces(kind: &str, entry: &Dict) -> Dict {
+    let mut out = entry.clone();
+    if kind != "locations" {
+        return out;
+    }
+    if let Some(Value::Array(markers)) = out.get_mut("markers") {
+        for m in markers.iter_mut().filter_map(Value::as_object_mut) {
+            if m.get("face").is_some_and(|x| x.as_str() == Some("down")) {
+                m.shift_remove("face");
+            }
+        }
+    }
+    out
+}
+
 /// WorldSchema.to_storage of a raw entry (normalized first; an empty `override` is left out).
 pub fn world_storage(kind: &str, entry: &Dict) -> Dict {
-    aegis_content::schema::world_storage(source::schema(), kind, entry)
+    aegis_content::schema::world_storage(source::schema(), kind, &without_default_faces(kind, entry))
 }
 
 /// Resolved item keys the stored form leaves out (ItemModifiers.stored; RULESET1 K1 adds the family's reach rule).
