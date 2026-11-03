@@ -1,6 +1,6 @@
 # LAYOUTDATA1: screen layouts as data, authored by a UI agent
 
-Status: proposed (the user decides section 14; nothing is approved yet)
+Status: approved (user 2026-11-04: all as recommended).
 Depends on: LAYOUT720-E4 (done), LAYOUT720-M0 (built in lane 1, uncommitted), LAYOUT720-E5 (for slice D2)
 Lane: design for this spec; the slices are logic and a new `ui` lane (section 8)
 Touches: see the slice table in section 10
