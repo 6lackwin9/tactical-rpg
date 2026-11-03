@@ -187,3 +187,13 @@ Anything done repeatedly, a temp script worth keeping or a trial-and-error loop 
 | Mutation scripts rewritten per task | Most logic tasks | Skill `mutation-check` | SKILLS1 |
 | Comparison boards rewritten per task | LOOK1, REGIONGROUND1, SPRITEFIT1, VISCLAR1 | Skill `review-board` | SKILLS1 |
 | The `tools/fc.sh` gate filter hid a failing frame list | CI on the 2026-11-03 release | Filter widened; skill `ci-read` | Part done, SKILLS1 |
+
+## Local CPU and heat (user 2026-11-04)
+
+The machine is a low-power 8-core laptop chip (Core Ultra 7 258V). Each `cargo` and test run takes every core unless capped, and a test window takes about 90 % of a core until FPSCAP1. Decision "Local CPU and heat" sets the limits. Track the full gate's time per flush:
+
+| Date | Gate time | Load |
+| --- | --- | --- |
+| 2026-11-03 | 299-360 s | Quiet |
+| 2026-11-04 | 954 s | One lane running |
+| 2026-11-04 | 1533 s | Builders and a re-landing |
