@@ -1,7 +1,7 @@
 //! The battle board: the Flat and Stage views' passes over the tiles, tokens, markers and hit rects (`Board`, `draw_flat`, `draw_stage`), status loops on tokens, board geometry helpers.
 
 use aegis_ui::theme::th;
-use super::marks::{bars_shown, break_plate, broken_units, draw_arrows, draw_hold_tiles, draw_hook_marks, draw_pushes, exit_sign, first_move_chips, poise_bar, poise_shown, HoldMarks, HookMarks};
+use super::marks::{bars_shown, break_plate, broken_units, draw_arrows, draw_hold_tiles, draw_hook_marks, draw_pushes, exit_sign, poise_bar, poise_shown, HoldMarks, HookMarks};
 use super::overlays::{draw_overlay, Layers, Overlay};
 use super::{Action, ALLY, AMBER, DASH_MS, GRID_X, GRID_Y, TILE};
 use super::tips::{intent_glyph, unit_tip};
@@ -417,12 +417,9 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
     if show_tells {
         for r in tells {
             let Some(from) = w.grid.pos(r.unit) else { continue };
-            // VISCLAR1 AR5, VC1: under the round intent no tell arrow (the target arrows replace it) and the kind chip
-            // only with the group `first_move`
+            // VISCLAR1 AR5, decision "Battle view answers": under the round intent no tell arrow (the target arrows
+            // replace it) and no first-move chip (the round's intent marker is enough)
             if overlay.is_some() {
-                if first_move_chips(true, &layers) {
-                    intent_chip(ui, cx, r.line.kind, Rect::new(GRID_X + from.x * TILE + 1, GRID_Y + from.y * TILE + 1, 10, 10));
-                }
                 continue;
             }
             let (fx, fy) = center(from);
@@ -802,8 +799,8 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                         }
                     }
                 }
-                // VISCLAR1 VC1: under the round intent the tell's kind chip only with the group `first_move`
-                if show_tells && first_move_chips(overlay.is_some(), &layers) {
+                // Decision "Battle view answers": the first-move chip only in classic, which has no round intent marker
+                if show_tells && overlay.is_none() {
                     for r in tells {
                         let Some(t) = units.iter().find(|t| t.i == r.unit) else { continue };
                         let chip = Rect::new(t.foot.0 - 15, (t.foot.1 as f32 - 0.95 * tp as f32 - 2.0).round() as i32, 10, 10);

@@ -372,6 +372,8 @@ pub struct BattleScreen {
     round_ap: (i32, Vec<(usize, i32)>),
     /// The AP gauge as last drawn (the agent link's `ap_gauge`; None: hidden).
     ap_gauge: Option<Value>,
+    /// VISCLAR1-B: the planned blocks' labels as last drawn, each span's (the agent link's `strip_labels`).
+    strip_labels: Vec<Value>,
     /// INPUT1 TV1: the full timeline view is open (key T), and the view as last drawn (the agent link's
     /// `timeline_view`).
     tv_open: bool,
@@ -466,6 +468,7 @@ impl BattleScreen {
             ap_anim: None,
             round_ap: (0, Vec::new()),
             ap_gauge: None,
+            strip_labels: Vec::new(),
             tv_open: false,
             tv_shown: None,
             tracers: Vec::new(),
@@ -979,6 +982,7 @@ impl Screen<GameCx> for BattleScreen {
             out["inspect"] = json!(self.inspected());
             // INPUT1-AP: the AP gauge as last drawn (pips "F H Hg Sg S", red, its "-<n>" label and side; null: hidden)
             out["ap_gauge"] = self.ap_gauge.clone().unwrap_or(Value::Null);
+            out["strip_labels"] = json!(self.strip_labels);
         }
         // INPUT1 PB1-PB4: the playback aids (timeline battles): the speed, whether the playback waits at a block's end
         // and the resolving block; the live tracers; the log by round and block
@@ -1001,7 +1005,7 @@ impl Screen<GameCx> for BattleScreen {
         }
         // HOOKS1-UI slice 1: the hook marks as drawn, while the battle plays by ground or arena hazards (classic: no key)
         if let Some(sess) = self.host.session.as_ref().filter(|x| emberwake_battle::ground::on(&x.w) || emberwake_battle::arena::on(&x.w)) {
-            out["hook_marks"] = HookMarks::of(sess, &Layers::of(&cx.settings.v["battle_overlays"])).json();
+            out["hook_marks"] = HookMarks::of(sess, &Layers::of(&cx.settings.v["battle_overlays"]), cx.held.alt).json();
         }
         // ENCOUNTER2-U: a hold escape's state (key only in a hold escape)
         if let Some(sess) = self.host.session.as_ref() {

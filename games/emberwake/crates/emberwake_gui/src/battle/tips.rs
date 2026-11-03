@@ -135,6 +135,116 @@ pub(crate) fn kind_color(kind: &str) -> Rgba {
     }
 }
 
+/// VISCLAR1-B: a strip block's icon square with its border, in old units (the 16-high block keeps 1 above and below).
+pub(super) const BLOCK_ICON: i32 = 14;
+const BLOCK_ICON_EDGE: i32 = 1;
+const BLOCK_ICON_GAP: i32 = 2;
+const BLOCK_PAD: i32 = 2;
+/// A ghost block's icon and outline alpha, a dim (Rest) block's icon alpha.
+const BLOCK_GHOST_ALPHA: u8 = 150;
+const BLOCK_DIM_ALPHA: u8 = 110;
+/// Mock C on every kind colour, as `kind_color` is fixed too: the icon border, the name and its outline.
+const BLOCK_ICON_LIGHT: Rgba = rgb(238, 230, 210);
+const BLOCK_TEXT: Rgba = rgb(246, 242, 232);
+const BLOCK_TEXT_EDGE: Rgba = rgb(12, 12, 16);
+
+/// How a planned block reads (VISCLAR1-B): chosen, the planner's ghost, or a dim Rest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum BlockLook {
+    Chosen,
+    Ghost,
+    Dim,
+}
+
+/// What a planned block shows and where (VISCLAR1-B, mock C): the icon and the name centred together, the icon alone
+/// centred when the name does not fit, the name alone centred when there is no icon.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct BlockLabel {
+    /// The icon square, its border included.
+    pub(super) icon: Option<Rect>,
+    /// The name's left edge.
+    pub(super) name_x: Option<f32>,
+}
+
+pub(super) fn block_label(r: Rect, has_icon: bool, name_w: f32) -> BlockLabel {
+    let room = (r.w - 2 * BLOCK_PAD) as f32;
+    let icon_at = |x: i32| Some(Rect::new(x, r.y + (r.h - BLOCK_ICON) / 2, BLOCK_ICON, BLOCK_ICON));
+    let centred = |w: f32| r.x as f32 + (r.w as f32 - w) / 2.0;
+    if !has_icon {
+        return BlockLabel { icon: None, name_x: Some(centred(name_w.min(room))) };
+    }
+    let both = (BLOCK_ICON + BLOCK_ICON_GAP) as f32 + name_w;
+    if both > room {
+        return BlockLabel { icon: icon_at(r.x + (r.w - BLOCK_ICON) / 2), name_x: None };
+    }
+    let x = centred(both).round() as i32;
+    BlockLabel { icon: icon_at(x), name_x: Some((x + BLOCK_ICON + BLOCK_ICON_GAP) as f32) }
+}
+
+/// `s` with a dark outline one screen pixel wide.
+fn text_outlined(p: &mut Painter, x: f32, y: f32, s: &str, size: f32, col: Rgba, edge: Rgba) {
+    let d = 1.0 / p.v.s;
+    for (dx, dy) in [(-1.0, -1.0), (0.0, -1.0), (1.0, -1.0), (-1.0, 0.0), (1.0, 0.0), (-1.0, 1.0), (0.0, 1.0), (1.0, 1.0)] {
+        p.text(x + dx * d, y + dy * d, s, size, edge);
+    }
+    p.text(x, y, s, size, col);
+}
+
+/// VISCLAR1-B (mock C): a planned block's icon (`chain`, the first file the layers hold) with its thin light border and
+/// its name in near-white with a dark outline. A ghost shows them faded and its name dim; a dim Rest has no border and no
+/// outline. Returns what it drew for the agent link.
+pub(super) fn draw_block_label(ui: &mut aegis_ui::ui::Ui<super::Action>, art: &mut aegis_ui::art::Art, r: Rect, name: &str, chain: &[String], look: BlockLook) -> serde_json::Value {
+    let icon_rel = art.first_rel(chain);
+    let px = (((BLOCK_ICON - 2 * BLOCK_ICON_EDGE) as f32) * ui.p.v.s).round().max(1.0) as i32;
+    let img = icon_rel.as_deref().and_then(|rel| art.image(rel, px, px));
+    let name_w = ui.p.text_w(name, SMALL);
+    let label = block_label(r, img.is_some(), name_w);
+    if let (Some(sq), Some(img)) = (label.icon, img) {
+        let inner = Rect::new(sq.x + BLOCK_ICON_EDGE, sq.y + BLOCK_ICON_EDGE, sq.w - 2 * BLOCK_ICON_EDGE, sq.h - 2 * BLOCK_ICON_EDGE);
+        ui.p.image_alpha(img, inner, match look { BlockLook::Chosen => 255, BlockLook::Ghost => BLOCK_GHOST_ALPHA, BlockLook::Dim => BLOCK_DIM_ALPHA });
+        if look != BlockLook::Dim {
+            let edge = if look == BlockLook::Ghost { with_alpha(BLOCK_ICON_LIGHT, BLOCK_GHOST_ALPHA) } else { BLOCK_ICON_LIGHT };
+            for e in [Rect::new(sq.x, sq.y, sq.w, 1), Rect::new(sq.x, sq.y + sq.h - 1, sq.w, 1), Rect::new(sq.x, sq.y + 1, 1, sq.h - 2), Rect::new(sq.x + sq.w - 1, sq.y + 1, 1, sq.h - 2)] {
+                ui.p.fill(e, edge);
+            }
+        }
+    }
+    let mut cut = false;
+    if let Some(x) = label.name_x {
+        let y = r.y as f32 + (r.h as f32 - ui.p.line_h(SMALL)) / 2.0;
+        let shown = ui.p.fit(name, SMALL, (r.w - 2 * BLOCK_PAD) as f32);
+        cut = shown != name;
+        // Transient for the text audit: a span's name crosses the hover widgets of its later blocks by design, and
+        // `block_label` and `fit` keep it inside the span (a cut name reports in `strip_labels`; the tip has it whole)
+        ui.p.transient(|p| match look {
+            BlockLook::Chosen => text_outlined(p, x, y, &shown, SMALL, BLOCK_TEXT, BLOCK_TEXT_EDGE),
+            BlockLook::Ghost => text_outlined(p, x, y, &shown, SMALL, th().dim, with_alpha(BLOCK_TEXT_EDGE, BLOCK_GHOST_ALPHA)),
+            BlockLook::Dim => {
+                p.text(x, y, &shown, SMALL, th().dim);
+            }
+        });
+    }
+    serde_json::json!({"name": name, "icon": if label.icon.is_some() { icon_rel } else { None }, "shows_name": label.name_x.is_some(), "cut": cut, "look": format!("{look:?}").to_lowercase()})
+}
+
+/// The icon chain of each of unit `u`'s committed blocks, in `committed`'s order: the skill the command runs (by id; names
+/// are not unique), else its kind's icon, if any (an item has none yet: its name shows alone).
+pub(super) fn committed_icon_chains(s: &Session, u: usize) -> Vec<Vec<String>> {
+    committed(s, u)
+        .iter()
+        .zip(s.resolver.scheduled.iter().filter(|a| a.unit == u))
+        .map(|(row, a)| match s.w.cat.skill(&a.command.skill) {
+            Some(sk) => emberwake_content::art::skill_icon_chain(sk.family_id(), &row.3),
+            None => vec![kind_icon(&row.3)],
+        })
+        .collect()
+}
+
+/// A kind's own icon.
+pub(super) fn kind_icon(kind: &str) -> String {
+    format!("skills/kinds/{}.png", kind.to_lowercase())
+}
+
 pub(super) fn short_name(name: &str) -> String {
     name.strip_prefix("Goblin ").unwrap_or(name).to_string()
 }

@@ -308,6 +308,9 @@ impl PlanEntry {
             None => crate::ground::Place::of_skill(s),
         };
         cmd.name = s.name.clone();
+        if self.item.is_none() {
+            cmd.skill = s.id.clone();
+        }
         cmd.ap_cost = self.skill_ap;
         cmd.stance_switch_cost = self.switch_ap;
         // RULESET1_INTENT IN3, CLN-45: without `stances` (by the rules: under round_intent) no command enters, ends in

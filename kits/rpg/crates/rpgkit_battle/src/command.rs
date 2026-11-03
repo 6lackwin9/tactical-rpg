@@ -133,6 +133,8 @@ pub struct Command {
     /// lands at its last `block_cost` block and occupies `recovery` more.
     pub recovery: i32,
     pub name: String,
+    /// VISCLAR1-B: the catalog id of the skill it runs ("" for an item or a command built by hand); names are not unique.
+    pub skill: String,
     pub ap_cost: i32,
     pub stance_switch_cost: i32,
     pub stance_on_start: Option<Stance>,
@@ -215,6 +217,7 @@ impl Command {
             block_cost,
             recovery: 0,
             name: String::new(),
+            skill: String::new(),
             ap_cost: 0,
             stance_switch_cost: 0,
             stance_on_start: None,

@@ -222,8 +222,10 @@ The round intent's board only (classic and a timeline battle without `round_inte
   telegraph stays). The facing chevrons (pale yellow) and the gold target ring stay.
 - Bars in focus: the HP and poise bars under the tokens draw for the selected hero, its round target, the unit under
   the mouse (token or card) and the inspected unit; hold Alt for every unit's. The party and hostile cards keep theirs.
-- Settings, Battle: two new overlay groups, off by default: "Enemy first move" (`first_move`: the tell's kind chip on
-  each enemy token, a debug view; the intent glyph and the hostile card's first-action line stay) and "All bars"
+- Settings, Battle: an overlay group ("Enemy first move", `first_move`, the tell's kind chip on each enemy
+  token, was removed by VISCLAR1-B, 2026-11-03: the intent glyph and the hostile card's first-action line stay; "Ground
+  hazards (testing)" `test_hazards` and "Arena telegraph (testing)" `test_arena` are off too, Alt draws them, the hover
+  lines always tell): "All bars"
   (`all_bars`: every unit's token bars, today's look). The rows sit at a 14 px pitch (15 before INPUT1-PB's 25th group) so the debug row fits; a debug
   build adds "Debug" with "Party foresight off" (`settings.debug.party_foresight_off`, key
   `debug_party_foresight_off`): every plan a party foresight passive reveals (Hawk Eye) draws as unrevealed on the

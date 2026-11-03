@@ -46,8 +46,8 @@ fn assault(cx: &Cx, b: &mut BattleScreen) -> (usize, usize) {
     (h, foe)
 }
 
-/// The preference (user 2026-10-30): every group is at its default (on, but VISCLAR1's `first_move` and
-/// `all_bars`); the settings key switches one off and the board stops drawing it; the state lists the flags.
+/// The preference (user 2026-10-30): every group is at its default (on, but VISCLAR1's `all_bars` and the
+/// testing groups); the settings key switches one off and the board stops drawing it; the state lists the flags.
 #[test]
 fn each_overlay_group_has_its_flag() {
     let all = Layers::of(&Value::Null);

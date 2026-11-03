@@ -2,7 +2,7 @@
 //! the catalog's timeline row; every expectation is a rule of the spec or a kit query (the plan, the records, the
 //! positions), never a shipped number. Classic keeps today's board.
 
-use crate::battle::marks::{arrows_of, bars_shown, first_move_chips, party_foresight_off, party_leg, seen_intents, Arrow, FORESIGHT_OFF};
+use crate::battle::marks::{arrows_of, bars_shown, party_foresight_off, party_leg, seen_intents, Arrow, FORESIGHT_OFF};
 use crate::battle::overlays::{overlay_of, strike_tile, Layers, OVERLAY_GROUPS};
 use crate::battle::BattleScreen;
 use crate::screens::{Cx, Screen};
@@ -44,32 +44,33 @@ fn units_of(a: &[Value]) -> Vec<usize> {
     a.iter().map(|x| x["unit"].as_u64().unwrap() as usize).collect()
 }
 
-/// VC6, VC5: `default_settings` holds every group on but `first_move` and `all_bars`, and no debug key; a saved
-/// `battle_overlays` without a group takes the group's default; Restore defaults returns to them.
+/// VC6, VC5, decision "Battle view answers": `default_settings` holds every group on but `all_bars` and the testing
+/// groups, and no debug key; a saved `battle_overlays` without a group takes the group's default (a file from before
+/// the decision, which holds the old ids on, included); Restore defaults returns to them.
 #[test]
 fn the_defaults_are_the_calmer_view() {
     let d = crate::screens::default_settings();
     for (id, _, _, on) in OVERLAY_GROUPS {
         assert_eq!(d["battle_overlays"][id], json!(on), "{id}");
-        assert_eq!(on, !matches!(id, "first_move" | "all_bars"), "{id}");
+        assert_eq!(on, !matches!(id, "all_bars" | "test_hazards" | "test_arena"), "{id}");
     }
     assert!(d.get(FORESIGHT_OFF).is_none());
-    let older = Layers::of(&json!({"band": true, "moves": true}));
-    assert!(!older.first_move && !older.all_bars && older.facings && older.glyphs, "an older file shows the calmer view");
+    let older = Layers::of(&json!({"band": true, "moves": true, "first_move": true, "hazards": true, "arena": true}));
+    assert!(!older.all_bars && !older.hazards && !older.arena && older.facings && older.glyphs, "an older file shows the calmer view");
     let mut cx = crate::hud::hud_tests::game_cx();
     let mut g = crate::hud::hud_tests::gfx();
     let mut st = crate::menus::SettingsScreen::new(&cx);
     st.draw(&mut cx, &mut g, (-500, -500), true);
     st.click_id(&mut cx, "settings.tab.battle").unwrap();
     st.draw(&mut cx, &mut g, (-500, -500), true);
-    st.click_id(&mut cx, "settings.overlay.first_move").unwrap();
+    st.click_id(&mut cx, "settings.overlay.test_hazards").unwrap();
     st.click_id(&mut cx, "settings.overlay.all_bars").unwrap();
     let draft = st.state(&cx)["draft"].clone();
-    assert!(Layers::of(&draft["battle_overlays"]).first_move && Layers::of(&draft["battle_overlays"]).all_bars, "a click turns each on");
+    assert!(Layers::of(&draft["battle_overlays"]).hazards && Layers::of(&draft["battle_overlays"]).all_bars, "a click turns each on");
     st.click_id(&mut cx, "settings.defaults").unwrap();
     let draft = st.state(&cx)["draft"].clone();
     let l = Layers::of(&draft["battle_overlays"]);
-    assert!(!l.first_move && !l.all_bars && l.moves && l.walks, "Restore defaults");
+    assert!(!l.hazards && !l.arena && !l.all_bars && l.moves && l.walks, "Restore defaults");
 }
 
 /// VC4, VC5: the reader is false outside a debug build whatever the file says, and the checkbox (a debug build)
@@ -94,16 +95,14 @@ fn party_foresight_off_is_a_debug_build_reader() {
     }
 }
 
-/// VC1: under the round intent the tells' kind chips need the group `first_move` (off by default); classic keeps
-/// them. VC2, VC3: the token bars draw for the focus set (the selected hero and its target here, nothing hovered),
+/// VC2, VC3: the token bars draw for the focus set (the selected hero and its target here, nothing hovered),
 /// for every unit with Alt or `all_bars`; classic draws every unit's.
 #[test]
-fn chips_and_bars_follow_the_focus_set() {
+fn bars_follow_the_focus_set() {
     let (mut cx, mut g, mut b) = arena(Some(TIMELINE), "flat");
     let (h, foe) = assault(&cx, &mut b);
     b.draw(&mut cx, &mut g, (-500, -500), true);
     let l = Layers::of(&cx.settings.v["battle_overlays"]);
-    assert!(!first_move_chips(true, &l) && first_move_chips(true, &Layers::of(&json!({"first_move": true}))) && first_move_chips(false, &l));
     let st = b.state(&cx);
     assert_eq!(st["focus"], json!([h, foe]), "the selected hero and its round target");
     let focus: Vec<usize> = vec![h, foe];

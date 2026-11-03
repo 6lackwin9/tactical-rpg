@@ -182,12 +182,6 @@ pub(super) fn focus_set(w: &World, sel: Option<usize>, hovered: Option<usize>, i
     out
 }
 
-/// VC1: whether the tells' kind chips draw on the enemy tokens (while the tells show): in classic always; under the
-/// round intent only with the group `first_move`.
-pub(super) fn first_move_chips(timeline: bool, layers: &Layers) -> bool {
-    !timeline || layers.first_move
-}
-
 /// VC2, VC3: whether unit `i`'s token bars draw: in classic always; under the round intent for the focus set, every
 /// unit while Alt is held or the group `all_bars` is on.
 pub(super) fn bars_shown(timeline: bool, layers: &Layers, alt: bool, focus: &[usize], i: usize) -> bool {
@@ -377,22 +371,24 @@ pub(super) struct HookMarks {
     pub(super) arena: Vec<emberwake_battle::intent::ArenaTell>,
     /// Each arena hazard's effect in words, aligned with `arena`.
     arena_effects: Vec<String>,
+    /// Decision "Battle view answers" (user 2026-11-03): the board draws the marks with their group on or while Alt is
+    /// held; the hover lines read `ground` and `arena` whatever these say.
+    show_ground: bool,
+    pub(super) show_arena: bool,
 }
 
 impl HookMarks {
-    pub(super) fn of(s: &Session, layers: &Layers) -> HookMarks {
+    pub(super) fn of(s: &Session, layers: &Layers, alt: bool) -> HookMarks {
         let w = &s.w;
-        let mut out = HookMarks::default();
-        if layers.hazards && emberwake_battle::ground::on(w) {
+        let mut out = HookMarks { show_ground: layers.hazards || alt, show_arena: layers.arena || alt, ..HookMarks::default() };
+        if emberwake_battle::ground::on(w) {
             // the party's side sees what any of its members sees (GH6 is per side)
             if let Some(&viewer) = w.allies.first() {
                 out.ground = w.grid.ground.iter().filter(|(_, p)| p.seen_by(w, viewer)).map(|(c, p)| ground_mark(w, *c, p)).collect();
             }
         }
-        if layers.arena {
-            out.arena = emberwake_battle::intent::arena_tells(w);
-            out.arena_effects = out.arena.iter().map(|t| w.arena.hazards.iter().find(|h| h.id == t.id).map(arena_effect_text).unwrap_or_default()).collect();
-        }
+        out.arena = emberwake_battle::intent::arena_tells(w);
+        out.arena_effects = out.arena.iter().map(|t| w.arena.hazards.iter().find(|h| h.id == t.id).map(arena_effect_text).unwrap_or_default()).collect();
         out
     }
 
@@ -428,8 +424,8 @@ impl HookMarks {
     /// The agent link's state: the marks as drawn (tiles as [x, y]).
     pub(super) fn json(&self) -> Value {
         json!({
-            "ground": self.ground.iter().map(|g| json!({"at": [g.cell.x, g.cell.y], "id": g.id, "name": g.name, "glyph": g.glyph, "hidden": g.hidden, "last_round": g.last_round})).collect::<Vec<_>>(),
-            "arena": emberwake_battle::intent::arena_json(&self.arena),
+            "ground": self.ground.iter().filter(|_| self.show_ground).map(|g| json!({"at": [g.cell.x, g.cell.y], "id": g.id, "name": g.name, "glyph": g.glyph, "hidden": g.hidden, "last_round": g.last_round})).collect::<Vec<_>>(),
+            "arena": if self.show_arena { emberwake_battle::intent::arena_json(&self.arena) } else { json!([]) },
         })
     }
 }
@@ -528,7 +524,7 @@ pub(super) fn draw_hook_marks(p: &mut Painter, m: &HookMarks, geo: &Geom) {
         View::Stage => inset2(geo.cell_rect(c), 1, 1),
         View::Flat => geo.cell_rect(c).inset(1),
     };
-    for g in &m.ground {
+    for g in m.ground.iter().filter(|_| m.show_ground) {
         let r = plate_of(g.cell);
         let (fill, edge) = if g.hidden { (36, 120) } else { (70, 200) };
         plate(p, r, with_alpha(g.tint, fill), with_alpha(g.tint, edge));
@@ -538,7 +534,7 @@ pub(super) fn draw_hook_marks(p: &mut Painter, m: &HookMarks, geo: &Geom) {
         }
     }
     let mut struck: Vec<V2> = Vec::new();
-    for c in m.arena.iter().flat_map(|t| &t.cells) {
+    for c in m.arena.iter().filter(|_| m.show_arena).flat_map(|t| &t.cells) {
         if !struck.contains(c) {
             struck.push(*c);
         }

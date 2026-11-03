@@ -25,10 +25,16 @@ fn arena_screen(ruleset: Option<&str>, rules: &str) -> (Cx, Gfx, BattleScreen) {
     let mut cx = crate::hud::hud_tests::game_cx();
     cx.art = Art::new(Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")));
     cx.settings.v["battle_view"] = json!("flat");
+    // Decision "Battle view answers": the two groups are for testing, off by default; these tests are that testing
+    cx.settings.v["battle_overlays"] = marks_on();
     let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
     let b = BattleScreen::arena_with(&cx, None, &encounter, ruleset.map(String::from), rules, false);
     assert!(b.host.session.is_some(), "the battle starts: {}", b.message);
     (cx, crate::hud::hud_tests::gfx(), b)
+}
+
+fn marks_on() -> Value {
+    json!({"test_hazards": true, "test_arena": true})
 }
 
 fn s(b: &BattleScreen) -> &Session {
@@ -78,7 +84,9 @@ fn the_marks_follow_the_kit() {
     let w = &s(&b).w;
     assert!(ground::on(w) && arena::on(w), "both hook rules on");
     let viewer = w.allies[0];
-    let marks = HookMarks::of(s(&b), &Layers::of(&Value::Null));
+    let off = HookMarks::of(s(&b), &Layers::of(&Value::Null), false);
+    assert_eq!(off.json(), json!({"ground": [], "arena": []}), "not drawn by default");
+    let marks = HookMarks::of(s(&b), &Layers::of(&marks_on()), false);
     let seen: Vec<V2> = marks.ground.iter().map(|g| g.cell).collect();
     let want: Vec<V2> = cells.iter().copied().filter(|c| ground::seen_at(w, viewer, *c).is_some()).collect();
     assert_eq!(seen, want);
@@ -104,8 +112,9 @@ fn the_marks_follow_the_kit() {
     assert_eq!(st["hook_marks"]["arena"], emberwake_battle::intent::arena_json(&tells));
 }
 
-/// The marks draw on the ground in both views: a frame with them differs from the same frame with both layers off;
-/// with the layers off the marks, the hover lines and the strip lines are gone.
+/// The marks draw on the ground in both views: a frame with them differs from the same frame with both layers off. With
+/// the layers off the board and the strip badge lose them, the hover lines and the strip lines stay (user 2026-11-03), and
+/// Alt draws them as the layers do.
 #[test]
 fn the_layers_switch_the_marks() {
     for view in ["flat", "stage"] {
@@ -114,14 +123,20 @@ fn the_layers_switch_the_marks() {
         let (cells, _) = mark_up(&mut b);
         b.draw(&mut cx, &mut g, (-500, -500), true);
         let on = g.canvas.px.clone();
-        cx.settings.v["battle_overlays"] = json!({"hazards": false, "arena": false});
+        cx.settings.v["battle_overlays"] = json!({"test_hazards": false, "test_arena": false});
         b.draw(&mut cx, &mut g, (-500, -500), true);
         assert_ne!(on, g.canvas.px, "{view}: the marks draw");
-        let marks = HookMarks::of(s(&b), &Layers::of(&cx.settings.v["battle_overlays"]));
-        assert!(marks.ground.is_empty() && marks.arena.is_empty());
-        assert!(!tip_text(&b, &format!("tile.{}.{}", cells[0].x, cells[0].y)).contains("Test smoke"));
-        assert!((1..=s(&b).def.total_blocks).all(|blk| !tip_text(&b, &format!("strip.block{blk}")).contains("Test Vents")));
-        assert_eq!(b.state(&cx)["hook_marks"]["ground"], json!([]));
+        assert!(tip_text(&b, &format!("tile.{}.{}", cells[0].x, cells[0].y)).contains("Test smoke"), "the tile still tells");
+        assert!((1..=s(&b).def.total_blocks).any(|blk| tip_text(&b, &format!("strip.block{blk}")).contains("Test Vents")), "the block still tells");
+        let st = b.state(&cx);
+        assert_eq!((&st["hook_marks"]["ground"], &st["hook_marks"]["arena"]), (&json!([]), &json!([])), "not drawn");
+        cx.held.alt = true;
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert!(!b.state(&cx)["hook_marks"]["ground"].as_array().unwrap().is_empty(), "{view}: Alt draws them");
+        let alt = g.canvas.px.clone();
+        cx.held.alt = false;
+        b.draw(&mut cx, &mut g, (-500, -500), true);
+        assert_ne!(alt, g.canvas.px, "{view}: Alt shows on the board");
     }
 }
 
@@ -133,7 +148,7 @@ fn without_the_rules_nothing_is_marked() {
         let (mut cx, mut g, mut b) = arena_screen(ruleset, rules);
         mark_up(&mut b);
         b.draw(&mut cx, &mut g, (-500, -500), true);
-        let marks = HookMarks::of(s(&b), &Layers::of(&Value::Null));
+        let marks = HookMarks::of(s(&b), &Layers::of(&marks_on()), true);
         assert!(marks.ground.is_empty() && marks.arena.is_empty(), "{ruleset:?} {rules}");
         assert!(b.state(&cx).get("hook_marks").is_none(), "{ruleset:?} {rules}: the state keeps its shape");
     }

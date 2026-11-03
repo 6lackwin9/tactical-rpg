@@ -707,7 +707,7 @@ pub(crate) const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
         ],
     ),
     ("Maps", &[("Move the party", "Arrow keys, W A S D"), ("Run", "Hold Shift"), ("Interact with the marker you face", "E"), ("Game menu", "Escape"), ("Choose a dialogue line", "1-9"), ("Party, journal, stash, help, event log", "P, J, I, ?, L")]),
-    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Select party member 1-4", "1-4"), ("Skills of the selected hero (timeline)", "Shift+1-9"), ("Accept the selected hero's auto-fill (timeline)", "F"), ("Support an ally while only the auto-fill shows (timeline)", "Ctrl+click"), ("Target self (timeline)", "S"), ("Inspect a unit (timeline)", "Right click"), ("Clear inspect, deselect (timeline)", "Escape"), ("Full timeline view, open / close (timeline)", "T, Escape"), ("Playback speed: 1x, 0.5x, block by block (timeline)", "P"), ("Next block (timeline)", "N"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Every bar and arrow (timeline)", "Hold Alt"), ("Screenshot", "F12")]),
+    ("Battle", &[("Confirm the round", "Enter"), ("Step / next round", "Space"), ("Autoplay", "A"), ("Undo the hero's last step", "Z, right click"), ("Select party member 1-4", "1-4"), ("Skills of the selected hero (timeline)", "Shift+1-9"), ("Accept the selected hero's auto-fill (timeline)", "F"), ("Support an ally while only the auto-fill shows (timeline)", "Ctrl+click"), ("Target self (timeline)", "S"), ("Inspect a unit (timeline)", "Right click"), ("Clear inspect, deselect (timeline)", "Escape"), ("Full timeline view, open / close (timeline)", "T, Escape"), ("Playback speed: 1x, 0.5x, block by block (timeline)", "P"), ("Next block (timeline)", "N"), ("Combat log", "L"), ("Outline every unit", "Hold Alt"), ("Every bar, arrow and hazard mark (timeline)", "Hold Alt"), ("Screenshot", "F12")]),
 ];
 
 /// A volume slider's sample and bus (scripts/audio/volume_preview.gd: the master sample plays on the interface bus).
@@ -914,7 +914,7 @@ impl Screen<GameCx> for SettingsScreen {
                 ui.select("settings.playback_speed", sr, &labels, at, |i| SetAct::Pick(crate::battle::PLAYBACK_SPEED, i), true, t);
                 y += 14;
                 let col_w = (body.w - 10) / 2;
-                // VISCLAR1-A, INPUT1-PB: 13 rows of two at a 14 px pitch, so the debug row fits under them
+                // VISCLAR1-A, INPUT1-PB, VISCLAR1-B: 12 rows of two at a 14 px pitch, so the debug row fits under them
                 let groups = &crate::battle::OVERLAY_GROUPS;
                 for (k, (id, label, help, default)) in groups.iter().enumerate() {
                     let (cx_, cy_) = (x + 3 + (k as i32 % 2) * col_w, y + (k as i32 / 2) * OVERLAY_PITCH);

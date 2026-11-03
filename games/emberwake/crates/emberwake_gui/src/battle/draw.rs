@@ -7,7 +7,7 @@ use super::marks::{arena_badge, arrows_of, draw_hold_pick, draw_tracers, focus_s
 use super::overlays::{overlay_of, reach_text, Layers};
 use super::playback::PlaySpeed;
 use super::{Action, BattleScreen, ALLY, AP_PIPS, GRID_X, GRID_Y, PANEL, PANELS, PANEL_INSET, PANEL_PORTRAIT, PANEL_SURFACE, PANEL_TEXT_X, PLAYBACK_SPEEDS, TACTIC_LABELS, TALK_VEIL, TILE, TIMELINE_SURFACE, TV_PAD};
-use super::tips::{ap_blocks, ap_gauge_of, class_names, committed, derived_line, derived_rows, draw_badge_row, inspect_tip, intent_glyph, kind_color, next_action, short_name, stance_name, unit_tip, ApAnim};
+use super::tips::{ap_blocks, ap_gauge_of, class_names, committed, committed_icon_chains, derived_line, derived_rows, draw_badge_row, draw_block_label, inspect_tip, intent_glyph, kind_color, kind_icon, next_action, short_name, stance_name, unit_tip, ApAnim, BlockLook};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::intent_text;
 use crate::portraits::{Faces, Who};
@@ -77,7 +77,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     // RULESET1-U slice 5: each overlay group behind its flag (settings `battle_overlays`; all on by default)
     let layers = Layers::of(&cx.settings.v["battle_overlays"]);
     // HOOKS1-UI slice 1: the ground hazards and the arena telegraph (empty in classic)
-    let marks = HookMarks::of(s, &layers);
+    let marks = HookMarks::of(s, &layers, cx.held.alt);
     // ENCOUNTER2-U: a hold escape's tiles and gate (H7; None without a hold escape)
     let hold = HoldMarks::of(s, &layers);
     // HOOKS1-UI slice 2 (CN2): each unit's class name in the battle's world, for the hover cards
@@ -146,18 +146,20 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     if planning {
         g.round_ap = (s.current_round, w.allies.iter().map(|&a| (a, w.units[a].ap)).collect());
     }
-    let entries: Vec<(i32, i32, String, String, Option<String>, i32, i32)> = match sel {
-        Some(u) if s.plan_confirmed => committed(s, u).into_iter().map(|c| (c.0, c.1, c.2, c.3, c.4, 0, 0)).collect(),
+    // VISCLAR1-B: with each planned block its icon chain (a skill's family, then its kind)
+    let (entries, icons): (Vec<(i32, i32, String, String, Option<String>, i32, i32)>, Vec<Vec<String>>) = match sel {
+        Some(u) if s.plan_confirmed => committed(s, u).into_iter().map(|c| (c.0, c.1, c.2, c.3, c.4, 0, 0)).zip(committed_icon_chains(s, u)).unzip(),
         Some(u) if w.units[u].is_active() => pplan
             .compile(pw, u)
             .entries
             .iter()
             .map(|e| {
                 let sk = &w.cat.skills[e.skill];
-                (e.start_block, e.end_block(pw), sk.name.clone(), sk.kind.clone(), e.target.filter(|t| *t != u).map(|t| w.units[t].name.clone()), e.total_ap(), e.est_damage)
+                let chain = if e.item.is_some() { vec![kind_icon("ITEM")] } else { emberwake_content::art::skill_icon_chain(sk.family_id(), &sk.kind) };
+                ((e.start_block, e.end_block(pw), sk.name.clone(), sk.kind.clone(), e.target.filter(|t| *t != u).map(|t| w.units[t].name.clone()), e.total_ap(), e.est_damage), chain)
             })
-            .collect(),
-        _ => Vec::new(),
+            .unzip(),
+        _ => (Vec::new(), Vec::new()),
     };
     // RULESET1-U (intent UI2, PL6): under the round intent the planned blocks carry the planner's reason tags and the
     // Rest blocks the round's Rest gain; INPUT1 GH1: which are ghost (the planner's, after the picks)
@@ -313,6 +315,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         ui.push(format!("strip.block{b}"), "block", entry.map(|e| e.2.clone()).unwrap_or_else(|| "empty".into()), wr, true, live_block == b, accept.map(Action::GhostSlot), tip);
     }
     // Each action is one continuous span over its blocks, coloured by kind (COMBAT-UI3).
+    let mut strip_labels = Vec::new();
     for (k, e) in entries.iter().enumerate() {
         let r = Rect::new(bx + (e.0 - 1) * bw, 6, (e.1 - e.0 + 1) * bw - 1, 16);
         let live = live_block >= e.0 && live_block <= e.1;
@@ -325,21 +328,30 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         if ghost {
             aegis_ui::timeline::draw_ghost(&mut ui, r);
         }
-        // RULESET1-U slice 5: the timeline widget's look: wind-up shaded, impact bright with its edge, recovery hatched
+        // RULESET1-U slice 5: the timeline widget's look: impact bright with its edge, recovery hatched
         let sp = spans.get(k);
-        for part in sp.map(|sp| sp.parts.as_slice()).unwrap_or(&[]) {
+        // VISCLAR1-B: a block is filled in its kind's colour, not a dark bar, so the strip has no wind-up shade (the full
+        // timeline view keeps it)
+        for part in sp.map(|sp| sp.parts.as_slice()).unwrap_or(&[]).iter().filter(|p| !matches!(p.style, aegis_ui::timeline::PartStyle::Windup)) {
             let pr = Rect::new(bx + (part.start - 1) * bw, 6, (part.end - part.start + 1) * bw - 1, 16);
             aegis_ui::timeline::draw_part(&mut ui, part.style, r, pr);
         }
-        ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 4.0, &e.2, SMALL, r.w as f32 - 6.0, if dim || ghost { th().dim } else { th().text });
+        if timeline {
+            // VISCLAR1-B (mock C): the skill's icon and name centred, the icon alone when the name does not fit
+            let look = if dim { BlockLook::Dim } else if ghost { BlockLook::Ghost } else { BlockLook::Chosen };
+            strip_labels.push(draw_block_label(&mut ui, &mut cx.art, r, &e.2, icons.get(k).map_or(&[], Vec::as_slice), look));
+        } else {
+            ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 4.0, &e.2, SMALL, r.w as f32 - 6.0, th().text);
+        }
         if sp.is_some_and(|sp| sp.broken) && layers.breaks {
             let mark = aegis_ui::timeline::Mark { key: "break".into(), block: e.0, glyph: "BREAK".into(), colour: th().foe, tip: vec![("BREAK".into(), th().foe), (format!("{}: cancelled by a poise break (AP paid stays spent)", e.2), th().text)] };
             let mr = Rect::new(r.x + 1, 7, (bw - 3).min(r.w - 2), 14);
             aegis_ui::timeline::draw_mark(&mut ui, &format!("strip.mark.{k}"), &mark, mr);
         }
     }
+    g.strip_labels = strip_labels;
     // HOOKS1-UI slice 1 (AH3): a badge on each block at whose end an arena hazard strikes, over the spans
-    for b in (1..=s.def.total_blocks).filter(|b| marks.arena.iter().any(|t| t.blocks.contains(b))) {
+    for b in (1..=s.def.total_blocks).filter(|b| marks.show_arena && marks.arena.iter().any(|t| t.blocks.contains(b))) {
         arena_badge(&mut ui.p, Rect::new(bx + (b - 1) * bw, 6, bw - 1, 16));
     }
     // INPUT1 PB2: a 1 px GOLD frame around the resolving block's column, over the spans
