@@ -36,7 +36,8 @@ in a screen: every screen receives its canvas as a rect.
 1. Cut from `ui.screen()`, the canvas as a rect. Read it each frame and assume no aspect.
 2. Take tokens from `ui.m()`: text sizes, gaps, small control heights, and `u(n)` for a number no token names. A theme's
    `metrics` block sets them (`theme_and_tiles.md`). What draws with no `Ui` reads `Metrics::of(&th(), p.v)`.
-3. Draw frames through `ui.frame_body(role, r)`, which returns the content rect, so content never reads a slice number.
+3. Draw frames through `ui.frame_body(role, r)`, which returns the content rect, so content never reads a slice number. A
+   panel sized by its content measures first with `ui.frame_content(role, r)`, the same rect with nothing drawn.
 4. Cut every pane first, then choose one corner size for the smallest (`ui.corner_size`), then draw. The size is against the
    art, as a sidecar's `corner_size`, and lasts for that `Ui`.
 5. Draw images through `ui.image_in(img, r)`, and read `ui.env()` for the canvas, its size classes, `dpr` and the pointer.

@@ -869,8 +869,9 @@ impl<G: Context> Shell<G> {
                 (w["id"].as_str().unwrap_or("").to_string(), r.x as f32, r.y as f32, r.w as f32, r.h as f32)
             })
             .collect();
-        let (cw, ch) = self.top_view().canvas();
-        let mut out = crate::text_audit::issues(&recs, cw as f32, ch as f32, &boxes);
+        let view = self.top_view();
+        let (cw, ch) = view.canvas();
+        let mut out = crate::text_audit::issues_on(&recs, cw as f32, ch as f32, &boxes, view.g);
         out["screen"] = json!(screen);
         out["scale"] = json!(self.gfx.fonts.scale);
         if let Some(path) = shot {

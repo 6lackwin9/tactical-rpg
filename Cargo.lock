@@ -685,6 +685,7 @@ dependencies = [
  "aegis_content",
  "aegis_core",
  "aegis_host",
+ "aegis_layout",
  "aegis_save",
  "aegis_ui",
  "anyhow",

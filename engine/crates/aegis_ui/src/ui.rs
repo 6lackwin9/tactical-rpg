@@ -289,9 +289,14 @@ impl<'a, A: Clone> Ui<'a, A> {
         let (t, m) = (self.t.clone(), self.m());
         let (fill, edge, radius) = t.vector_in(role, &m);
         self.draw_role(&t, role, r, fill, edge, radius);
-        match t.frame(role) {
+        self.frame_content(role, r)
+    }
+
+    /// The content rect `frame_body` returns for `r`, with nothing drawn: what a panel sized by its content measures first.
+    pub fn frame_content(&self, role: &str, r: Rect) -> Rect {
+        match self.t.frame(role) {
             Some(f) => self.p.v.nine_content(&self.cornered(f).as_ref().unwrap_or(f).nine, r),
-            None => r.pad(Insets::all(m.padding)),
+            None => r.pad(Insets::all(self.m().padding)),
         }
     }
 

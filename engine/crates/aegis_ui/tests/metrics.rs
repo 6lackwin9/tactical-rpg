@@ -305,7 +305,9 @@ fn frame_body_returns_the_content_rect_on_every_grid() {
         let mut g = gfx(1920, 1080, grid);
         let mut ui: Ui<()> = Ui::new(&mut g, (-1, -1), true);
         let r = Rect::new(20 * u, 20 * u, 200 * u, 100 * u);
+        let measured = ui.frame_content("inset", r);
         assert_eq!(ui.frame_body("inset", r), Rect::new(r.x + 3 * u, r.y + 4 * u, r.w - 8 * u, r.h - 10 * u), "{grid:?}: the sidecar's pad, in old units");
+        assert_eq!(ui.frame_content("inset", r), measured, "{grid:?}: measuring first gives what drawing gives");
         assert_eq!(ui.inset(r, false), Rect::new(r.x + 3 * u, r.y + 4 * u, r.w - 8 * u, r.h - 10 * u), "{grid:?}: `inset` is the same");
     }
     // A corner that reaches into the panel: past it at the size it draws, under the call.
