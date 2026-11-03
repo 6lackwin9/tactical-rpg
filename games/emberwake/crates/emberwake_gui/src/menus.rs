@@ -12,7 +12,8 @@ use aegis_ui::painter::{Grid, Typeface};
 use aegis_ui::panes::{self, MenuItem, MenuStyle};
 use emberwake_battle::portrait::Look;
 use aegis_ui::ui::{tip, Gfx, Glyph, Ui, Widget, BODY, H, W};
-use aegis_ui::screen::{Settings, FPS_CAPS, TEXT_SIZES, TEXT_SPEEDS, WINDOW_MODES, WINDOW_SIZES};
+use crate::screens::WINDOW_SIZES;
+use aegis_ui::screen::{Settings, WindowShow, FPS_CAPS, TEXT_SIZES, TEXT_SPEEDS};
 use aegis_ui::vignette::{TextSpeed, REDUCE_MOTION, TEXT_SPEED};
 use aegis_ui::widget_plumbing;
 use aegis_core::json::{self, s, s_or};
@@ -734,8 +735,8 @@ pub struct SettingsScreen {
 }
 
 const TABS: [&str; 5] = ["Sound", "Display", "Gameplay", "Battle", "Controls"];
-/// The display choices are the engine's (aegis_ui::screen).
-const CHOICES: [(&str, &[&str]); 3] = [("window_mode", &WINDOW_MODES), ("window_size", &WINDOW_SIZES), ("fps_cap", &FPS_CAPS)];
+/// The display choices: the game's window sizes, the engine's frame-rate caps (aegis_ui::screen).
+const CHOICES: [(&str, &[&str]); 2] = [("window_size", &WINDOW_SIZES), ("fps_cap", &FPS_CAPS)];
 /// PLAYUI1-M: the region map's marker names (value, label); the first is the default.
 pub const MAP_NAMES: [(&str, &str); 2] = [("hover", "On hover"), ("always", "Always")];
 pub(crate) const CONTROLS: [(&str, &[(&str, &str)]); 3] = [
@@ -877,18 +878,27 @@ impl Screen<GameCx> for SettingsScreen {
                 }
             }
             1 => {
-                for (k, label) in [("window_mode", "Window mode"), ("window_size", "Window size")] {
-                    ui.p.text(x as f32, y as f32 + 3.0, label, BODY, th().text);
-                    choice(&mut ui, static_key(k), Rect::new(x + 125, y, 150, 16), d[k].as_str().unwrap_or(""));
-                    y += 22;
-                }
+                let show = WindowShow::of(&d);
+                ui.checkbox("settings.fullscreen", x + 3, y, "Fullscreen", show == WindowShow::Fullscreen, SetAct::Toggle("fullscreen"), true);
+                y += 18;
+                ui.checkbox("settings.borderless", x + 3, y, "Borderless", d["borderless"].as_bool().unwrap_or(false), SetAct::Toggle("borderless"), true);
+                y += 20;
+                ui.p.text(x as f32, y as f32 + 3.0, "Resolution", BODY, th().text);
+                choice(&mut ui, "window_size", Rect::new(x + 125, y, 150, 16), d["window_size"].as_str().unwrap_or(""), show != WindowShow::Fullscreen);
+                y += 22;
                 ui.p.text(x as f32, y as f32, "In use", BODY, th().text);
-                ui.p.text(x as f32 + 125.0, y as f32, &format!("{} {}", d["window_mode"].as_str().unwrap_or(""), d["window_size"].as_str().unwrap_or("")), BODY, th().dim);
+                let size = d["window_size"].as_str().unwrap_or("");
+                let in_use = match show {
+                    WindowShow::Fullscreen => "Fullscreen".to_string(),
+                    WindowShow::Borderless => format!("Borderless {size}"),
+                    WindowShow::Windowed => format!("Windowed {size}"),
+                };
+                ui.p.text(x as f32 + 125.0, y as f32, &in_use, BODY, th().dim);
                 y += 18;
                 ui.checkbox("settings.vsync", x + 3, y, "Vertical sync", d["vsync"].as_bool().unwrap_or(true), SetAct::Toggle("vsync"), true);
                 y += 20;
                 ui.p.text(x as f32, y as f32 + 3.0, "Frame rate cap", BODY, th().text);
-                choice(&mut ui, "fps_cap", Rect::new(x + 125, y, 150, 16), d["fps_cap"].as_str().unwrap_or(""));
+                choice(&mut ui, "fps_cap", Rect::new(x + 125, y, 150, 16), d["fps_cap"].as_str().unwrap_or(""), true);
                 y += 24;
                 ui.p.text(x as f32, y as f32 + 3.0, "Text size", BODY, th().text);
                 // The engine's four levels (Godot TEXT_LEVELS); a saved value off the levels shows the nearest one.
@@ -1031,14 +1041,14 @@ fn choices(k: &str) -> &'static [&'static str] {
 }
 
 /// A settings choice (CHOICES) as a select with its option list.
-fn choice(ui: &mut Ui<SetAct>, k: &'static str, r: Rect, current: &str) {
+fn choice(ui: &mut Ui<SetAct>, k: &'static str, r: Rect, current: &str, enabled: bool) {
     let opts: Vec<String> = choices(k).iter().map(|o| o.to_string()).collect();
     let at = opts.iter().position(|o| o == current).unwrap_or(0);
-    ui.select(&format!("settings.{k}"), r, &opts, at, |i| SetAct::Pick(k, i), true, Vec::new());
+    ui.select(&format!("settings.{k}"), r, &opts, at, |i| SetAct::Pick(k, i), enabled, Vec::new());
 }
 
 fn static_key(k: &str) -> &'static str {
-    ["master", "music", "effects", "interface", "window_mode", "window_size", "fps_cap"].into_iter().find(|x| *x == k).unwrap_or("master")
+    ["master", "music", "effects", "interface"].into_iter().find(|x| *x == k).unwrap_or("master")
 }
 
 #[cfg(test)]

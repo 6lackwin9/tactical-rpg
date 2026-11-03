@@ -17,6 +17,10 @@ pub use aegis_ui::screen::{show_errors, title, Key, Screen};
 pub type Cx = aegis_ui::Cx<GameCx>;
 pub type Nav = aegis_ui::Nav<GameCx>;
 
+/// The window sizes this game offers (decision "Layout grid moves to 1280 x 720": 720p is the lowest): the Settings
+/// Resolution row, and a saved size off the list opens at the nearest of these (`Settings::keep_window_size`).
+pub const WINDOW_SIZES: [&str; 5] = ["1280x720", "1366x768", "1600x900", "1920x1080", "2560x1440"];
+
 /// The game's own settings keys and defaults (sound, display, text size and playtest recording are the
 /// engine's: `Settings::engine_defaults`). PLAYUI1-M: `map_names` (`hover` or `always`: the region map's marker names)
 /// and `map_legend_open` (the region map's legend, open or collapsed to its header). STAGE1: `battle_view` (`stage` or

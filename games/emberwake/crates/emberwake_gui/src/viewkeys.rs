@@ -7,6 +7,7 @@
 
 use crate::mapview::{zoom_of, TurnCorner, View, WalkFeel, WalkStep, EQUAL_SPEED_KEY, QUICK_FINISH_MS, TURN_BEAT_KEY, TURN_BEAT_MS, TURN_CORNERS, TURN_CORNER_KEY, WALK_STEP_KEY};
 use crate::screens::{show_errors, Cx, Key};
+use aegis_ui::screen::WindowShow;
 use serde_json::{json, Value};
 
 /// F6's steps, in the quarters of `mapview::ZOOM_QUARTERS`: 1x, 1.5x, 2x.
@@ -73,10 +74,10 @@ pub fn next_size(now: &Value) -> &'static str {
     SIZE_CYCLE.into_iter().find(|s| pixels(s).is_some_and(|p| p > have)).unwrap_or(SIZE_CYCLE[0])
 }
 
-/// Why F9 may not size the window in this `window_mode` (the modes the shell does not size); None when it may.
-pub fn size_refusal(mode: &Value) -> Option<String> {
-    let mode = mode.as_str().filter(|m| matches!(*m, "Borderless" | "Fullscreen"))?;
-    Some(format!("F9: the window size only applies in Windowed mode (now {mode})."))
+/// Why F9 may not size the window under these settings (Fullscreen covers the monitor, as the greyed-out Resolution
+/// row shows; a Borderless window sizes like a framed one); None when it may.
+pub fn size_refusal(settings: &Value) -> Option<String> {
+    (WindowShow::of(settings) == WindowShow::Fullscreen).then(|| "F9: Resolution does not apply in Fullscreen.".to_string())
 }
 
 fn show(cx: &mut Cx, line: String, shown: Shown) {
@@ -205,7 +206,7 @@ fn press_window(cx: &mut Cx, k: Key, shown: Shown, debug: bool) -> bool {
         return false;
     }
     if debug {
-        match size_refusal(&cx.settings.v["window_mode"]) {
+        match size_refusal(&cx.settings.v) {
             Some(why) => show(cx, why, shown),
             None => {
                 let to = next_size(&cx.settings.v["window_size"]);
@@ -224,7 +225,8 @@ mod tests {
     use crate::hud::hud_tests::game_cx;
     use crate::mapview::{zoom_steps, WALK_STEP_MS, ZOOM_QUARTERS};
     use crate::screens::Screen;
-    use aegis_ui::screen::{Settings, WINDOW_MODES, WINDOW_SIZES};
+    use crate::screens::WINDOW_SIZES;
+    use aegis_ui::screen::Settings;
 
     /// `game_cx`'s settings file, in its own folder.
     fn file_of(cx: &Cx) -> std::path::PathBuf {
@@ -280,7 +282,7 @@ mod tests {
     #[test]
     fn f9_from_an_off_cycle_value_goes_to_the_next_step_above() {
         let area = |s: &str| pixels(s).expect("a size");
-        for s in WINDOW_SIZES.into_iter().filter(|s| !SIZE_CYCLE.contains(s)) {
+        for s in aegis_ui::screen::WINDOW_SIZES.into_iter().filter(|s| !SIZE_CYCLE.contains(s)) {
             let want = SIZE_CYCLE.into_iter().find(|c| area(c) > area(s)).unwrap_or(SIZE_CYCLE[0]);
             assert_eq!(next_size(&json!(s)), want, "from {s}");
         }
@@ -308,34 +310,53 @@ mod tests {
         assert_eq!(reload.v["map_zoom"], json!(2.0), "a new run reads it");
     }
 
-    /// In Windowed mode F9 saves the size and shows it where the screen says; other keys pass.
+    /// A Windowed and a Borderless window both take F9: it saves the size and shows it where the screen says; other
+    /// keys pass.
     #[test]
-    fn f9_in_windowed_mode_saves_and_shows_the_size() {
-        let mut cx = game_cx();
-        assert_eq!(cx.settings.v["window_mode"], json!("Windowed"), "the default");
-        assert!(!press_window(&mut cx, Key::Fn(6), Shown::Log, true), "not its key");
-        assert!(press_window(&mut cx, Key::Fn(9), Shown::Log, true));
-        assert_eq!(cx.settings.v["window_size"], json!("1600x900"));
-        assert_eq!(saved(&cx, "window_size"), json!("1600x900"), "the file");
-        assert_eq!(cx.log.last().map(String::as_str), Some("Window 1600x900 (F9)."));
-        assert!(cx.notice.is_empty(), "the log shows it");
-        press_window(&mut cx, Key::Fn(9), Shown::Notice, true);
-        assert_eq!(cx.notice, vec!["Window 1920x1080 (F9).".to_string()]);
+    fn f9_saves_and_shows_the_size_unless_fullscreen() {
+        for borderless in [false, true] {
+            let mut cx = game_cx();
+            assert_eq!(WindowShow::of(&cx.settings.v), WindowShow::Windowed, "the default");
+            cx.settings.v["borderless"] = json!(borderless);
+            assert!(!press_window(&mut cx, Key::Fn(6), Shown::Log, true), "not its key");
+            assert!(press_window(&mut cx, Key::Fn(9), Shown::Log, true));
+            assert_eq!(cx.settings.v["window_size"], json!("1600x900"));
+            assert_eq!(saved(&cx, "window_size"), json!("1600x900"), "the file");
+            assert_eq!(cx.log.last().map(String::as_str), Some("Window 1600x900 (F9)."));
+            assert!(cx.notice.is_empty(), "the log shows it");
+            press_window(&mut cx, Key::Fn(9), Shown::Notice, true);
+            assert_eq!(cx.notice, vec!["Window 1920x1080 (F9).".to_string()]);
+        }
     }
 
-    /// Every mode but Windowed leaves the size and its file alone and says why, naming the mode.
+    /// Fullscreen, with or without Borderless, leaves the size and its file alone and says why.
     #[test]
-    fn f9_outside_windowed_mode_only_says_why() {
-        let others: Vec<&str> = WINDOW_MODES.into_iter().filter(|m| *m != "Windowed").collect();
-        assert_eq!(others, ["Borderless", "Fullscreen"], "the modes the shell does not size");
-        for mode in others {
+    fn f9_in_fullscreen_only_says_why() {
+        for borderless in [false, true] {
             let mut cx = game_cx();
-            cx.settings.v["window_mode"] = json!(mode);
+            cx.settings.v["fullscreen"] = json!(true);
+            cx.settings.v["borderless"] = json!(borderless);
             let was = cx.settings.v["window_size"].clone();
             assert!(press_window(&mut cx, Key::Fn(9), Shown::Notice, true));
-            assert_eq!(cx.settings.v["window_size"], was, "{mode}");
-            assert!(!file_of(&cx).exists(), "{mode}: nothing to save");
-            assert!(cx.notice[0].contains(mode) && cx.notice[0].contains("Windowed"), "{:?}", cx.notice);
+            assert_eq!(cx.settings.v["window_size"], was);
+            assert!(!file_of(&cx).exists(), "nothing to save");
+            assert!(cx.notice[0].contains("Fullscreen") && cx.notice[0].contains("F9"), "{:?}", cx.notice);
+        }
+    }
+
+    /// The game's list starts at the decision's 720p: the engine's default list without what is under it, the first
+    /// is the default size, and a saved smaller size opens at the first.
+    #[test]
+    fn the_game_offers_720p_and_up() {
+        let area = |s: &str| pixels(s).expect("a size");
+        let engine: Vec<&str> = aegis_ui::screen::WINDOW_SIZES.into_iter().filter(|s| area(s) >= area("1280x720")).collect();
+        assert_eq!(WINDOW_SIZES.to_vec(), engine);
+        let mut cx = game_cx();
+        assert_eq!(cx.settings.v["window_size"], json!(WINDOW_SIZES[0]), "the default");
+        for small in aegis_ui::screen::WINDOW_SIZES.into_iter().filter(|s| area(s) < area("1280x720")) {
+            cx.settings.v["window_size"] = json!(small);
+            cx.settings.keep_window_size(&WINDOW_SIZES);
+            assert_eq!(cx.settings.v["window_size"], json!(WINDOW_SIZES[0]), "{small}");
         }
     }
 
@@ -500,6 +521,32 @@ mod tests {
             s.click_id(&mut cx, "settings.apply").expect("apply");
             assert_eq!(WalkStep::of(&cx.settings.v, false).base, want);
         }
+    }
+
+    /// DISPLAY2: the Display tab has the two toggles and its Resolution row greys out only in Fullscreen; a toggle is a
+    /// draft until Apply, which saves it.
+    #[test]
+    fn the_display_tab_greys_resolution_only_in_fullscreen() {
+        use crate::hud::hud_tests::gfx;
+        let (mut cx, mut g) = (game_cx(), gfx());
+        let mut s = crate::menus::SettingsScreen::new(&cx);
+        s.draw(&mut cx, &mut g, (-500, -500), true);
+        s.click_id(&mut cx, "settings.tab.display").expect("the tab");
+        let mut enabled = |s: &mut crate::menus::SettingsScreen, cx: &mut Cx| {
+            s.draw(cx, &mut g, (-500, -500), true);
+            s.widgets().iter().find(|w| w["id"] == "settings.window_size").expect("the row")["enabled"].clone()
+        };
+        assert_eq!(enabled(&mut s, &mut cx), json!(true), "Windowed");
+        s.click_id(&mut cx, "settings.borderless").expect("the toggle");
+        assert_eq!(enabled(&mut s, &mut cx), json!(true), "Borderless");
+        s.click_id(&mut cx, "settings.fullscreen").expect("the toggle");
+        assert_eq!(enabled(&mut s, &mut cx), json!(false), "Fullscreen");
+        assert_eq!(WindowShow::of(&cx.settings.v), WindowShow::Windowed, "only a draft so far");
+        s.click_id(&mut cx, "settings.apply").expect("apply");
+        assert_eq!(WindowShow::of(&cx.settings.v), WindowShow::Fullscreen);
+        assert_eq!((saved(&cx, "fullscreen"), saved(&cx, "borderless")), (json!(true), json!(true)), "the file");
+        s.click_id(&mut cx, "settings.fullscreen").expect("the toggle");
+        assert_eq!(enabled(&mut s, &mut cx), json!(true), "Borderless again");
     }
 
     /// The screens that call `window_key` act on F9 and show it in a notice; the agent link knows the names.

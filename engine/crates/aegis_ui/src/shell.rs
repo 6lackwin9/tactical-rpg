@@ -9,7 +9,7 @@ use crate::bridge;
 use crate::focus;
 use crate::canvas::{Canvas, Image};
 use crate::painter::{Fonts, Grid, Painter, View};
-use crate::screen::{Context, Cx, Held, Key, Nav, Notice, Screen};
+use crate::screen::{window_capped, window_centred, window_kept_in, window_size_of, Context, Cx, Held, Key, Nav, Notice, ScreenRect, Screen, WindowShow};
 use crate::canvas::{rgba, Rect};
 use crate::window::Grab;
 use crate::theme::{th, Metrics};
@@ -25,7 +25,8 @@ use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::keyboard::{Key as WKey, KeyCode, NamedKey, PhysicalKey};
-use winit::dpi::LogicalSize;
+use winit::dpi::{PhysicalPosition, PhysicalSize};
+use winit::monitor::MonitorHandle;
 use winit::window::{Fullscreen, Window, WindowId};
 
 /// The window the shell opens.
@@ -1120,6 +1121,63 @@ impl<G: Context> Shell<G> {
     }
 }
 
+/// The part of `monitor` a window may use, in physical px. Windows: the monitor's work area (`GetMonitorInfoW`'s
+/// `rcWork`: the monitor without the taskbar and docked bars; a hidden taskbar leaves it whole). Elsewhere winit offers
+/// no work area, so it is the whole monitor and a panel may still cover a window's edge.
+fn usable_area(monitor: &MonitorHandle) -> ScreenRect {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITORINFO};
+        use winit::platform::windows::MonitorHandleExtWindows;
+        // SAFETY: MONITORINFO is plain integers, so all zeroes is valid; `cbSize` is set as the call requires, and the
+        // call only writes through the pointer, which lives for the call. A stale handle returns 0 and writes nothing.
+        let (ok, work) = unsafe {
+            let mut info: MONITORINFO = std::mem::zeroed();
+            info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+            let ok = GetMonitorInfoW(monitor.hmonitor(), &mut info);
+            (ok != 0, info.rcWork)
+        };
+        let (w, h) = (i64::from(work.right) - i64::from(work.left), i64::from(work.bottom) - i64::from(work.top));
+        if ok && w > 0 && h > 0 {
+            return ScreenRect { x: work.left, y: work.top, w: w as u32, h: h as u32 };
+        }
+    }
+    whole_monitor(monitor)
+}
+
+fn whole_monitor(monitor: &MonitorHandle) -> ScreenRect {
+    let (at, size) = (monitor.position(), monitor.size());
+    ScreenRect { x: at.x, y: at.y, w: size.width, h: size.height }
+}
+
+/// Sizes a window that is not fullscreen (`window_size` is real pixels, so 1280 x 720 is 1280 x 720 px at any display
+/// scale) to fit the usable area of the monitor it is on, then places it: a borderless one centred, a framed
+/// one left where it is unless it must move to stay on the usable area. The setting itself never changes: a bigger
+/// monitor gets the full size back. A value that is no size leaves the size alone; no monitor reported (Wayland can
+/// report none) means no cap and no move. Returns a line for the log when the size was capped.
+fn size_and_place(window: &Window, want: &Value, show: WindowShow) -> Option<String> {
+    let (inner, outer) = (window.inner_size(), window.outer_size());
+    let frame = (outer.width.saturating_sub(inner.width), outer.height.saturating_sub(inner.height));
+    let area = window.current_monitor().map(|m| (whole_monitor(&m), usable_area(&m)));
+    let asked = window_size_of(want);
+    let client = match (asked, area) {
+        (Some(a), Some((_, usable))) => window_capped(a, frame, (usable.w, usable.h)),
+        (Some(a), None) => a,
+        (None, _) => (inner.width, inner.height),
+    };
+    if asked.is_some() {
+        let _ = window.request_inner_size(PhysicalSize::new(client.0, client.1));
+    }
+    if let (Some((monitor, usable)), Ok(at)) = (area, window.outer_position()) {
+        let (now, size) = ((at.x, at.y), (client.0 + frame.0, client.1 + frame.1));
+        let to = if show == WindowShow::Borderless { window_centred(monitor, usable, size) } else { window_kept_in(usable, now, size) };
+        if to != now {
+            window.set_outer_position(PhysicalPosition::new(to.0, to.1));
+        }
+    }
+    asked.filter(|a| *a != client).map(|a| format!("Window capped to {} x {} px: {} x {} px does not fit the usable screen area.", client.0, client.1, a.0, a.1))
+}
+
 struct App<G> {
     /// The context and the first screens, until the window exists.
     start: Option<(Cx<G>, Vec<Box<dyn Screen<G>>>)>,
@@ -1176,30 +1234,27 @@ impl<G: Context> App<G> {
         }
     }
 
-    /// Applies the engine's settings (DisplaySettings) when they changed since the last time: window mode (windowed
-    /// at the chosen size, borderless fullscreen, exclusive fullscreen at the monitor's best mode), vsync, the
-    /// frame-rate cap and the text size. The window size is set only when windowed and only when the mode or the size
-    /// setting changed, so a window the player resized keeps its size.
+    /// Applies the engine's settings (DisplaySettings) when they changed since the last time: the window's show
+    /// (DISPLAY2: borderless fullscreen over the monitor, a frameless centred window, or a framed one, the last two at the
+    /// chosen size capped to the usable area), vsync, the frame-rate cap and the text size. The window is sized only when
+    /// its show or the size setting changed, so a window the player resized keeps its size.
     fn apply_settings(&mut self) {
         let (Some(shell), Some(window)) = (self.shell.as_mut(), self.window.as_ref()) else { return };
         let v = shell.cx.settings.v.clone();
         if self.applied.as_ref() == Some(&v) {
             return;
         }
-        let was = |k: &str| self.applied.as_ref().map(|a| a[k].clone());
-        let mode = v["window_mode"].as_str().unwrap_or("Windowed");
-        if was("window_mode").as_ref() != Some(&v["window_mode"]) || was("window_size").as_ref() != Some(&v["window_size"]) {
-            match mode {
-                "Borderless" => window.set_fullscreen(Some(Fullscreen::Borderless(None))),
-                "Fullscreen" => {
-                    let best = window.current_monitor().and_then(|m| m.video_modes().max_by_key(|vm| (vm.size().width * vm.size().height, vm.refresh_rate_millihertz())));
-                    window.set_fullscreen(Some(best.map(Fullscreen::Exclusive).unwrap_or(Fullscreen::Borderless(None))));
+        let show = WindowShow::of(&v);
+        if self.applied.as_ref().is_none_or(|a| WindowShow::of(a) != show || a["window_size"] != v["window_size"]) {
+            if show == WindowShow::Fullscreen {
+                if window.fullscreen().is_none() {
+                    window.set_fullscreen(Some(Fullscreen::Borderless(None)));
                 }
-                _ => {
-                    window.set_fullscreen(None);
-                    if let Some((w, h)) = v["window_size"].as_str().and_then(|s| s.split_once('x')).and_then(|(w, h)| Some((w.parse::<u32>().ok()?, h.parse::<u32>().ok()?))) {
-                        let _ = window.request_inner_size(LogicalSize::new(w, h));
-                    }
+            } else {
+                window.set_fullscreen(None);
+                window.set_decorations(show == WindowShow::Windowed);
+                if let Some(note) = size_and_place(window, &v["window_size"], show) {
+                    shell.cx.app.note(note);
                 }
             }
         }
@@ -1217,7 +1272,7 @@ impl<G: Context> ApplicationHandler for App<G> {
         if self.window.is_some() {
             return;
         }
-        let attrs = Window::default_attributes().with_title(self.options.title.as_str()).with_inner_size(winit::dpi::LogicalSize::new(1280, 720)).with_min_inner_size(winit::dpi::LogicalSize::new(640, 360));
+        let attrs = Window::default_attributes().with_title(self.options.title.as_str()).with_inner_size(PhysicalSize::new(1280, 720)).with_min_inner_size(PhysicalSize::new(640, 360));
         let (cx, stack) = self.start.take().expect("the shell starts once");
         let (attrs, icon_notice) = match crate::icon::window_icons(cx.art.layers(), &self.options.icon) {
             Ok(Some(icons)) => {
@@ -1284,9 +1339,13 @@ impl<G: Context> ApplicationHandler for App<G> {
                     s.gfx.view = s.top_view();
                 }
             }
-            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+            WindowEvent::ScaleFactorChanged { scale_factor, mut inner_size_writer } => {
                 if let Some(s) = self.shell.as_mut() {
                     s.gfx.kit.device.dpr = scale_factor as f32;
+                }
+                // Sizes are real pixels: a window moved to a monitor of another scale keeps its pixels.
+                if let Some(w) = self.window.as_ref().filter(|w| w.fullscreen().is_none()) {
+                    let _ = inner_size_writer.request_inner_size(w.inner_size());
                 }
             }
             WindowEvent::RedrawRequested => self.redraw(),

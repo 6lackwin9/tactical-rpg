@@ -121,6 +121,7 @@ fn main() -> Result<()> {
         data_dir,
     };
     let mut settings = Settings::load(aegis_save::user_dir(GAME_ID).join("settings.json"), default_settings());
+    settings.keep_window_size(&screens::WINDOW_SIZES);
     force_shipped_views(&mut settings.v, arg(&args, "screen"));
     let record = settings.v["record_playtests"].as_bool().unwrap_or(cfg!(debug_assertions));
     // The data fingerprint a recording carries; hashed only while recording is on.
