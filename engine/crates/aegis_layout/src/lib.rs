@@ -9,7 +9,7 @@
 //! The rounding rule: resolve shared edges, not sizes. A split works out each boundary from its running total, rounded
 //! down once, and a cell's size is the difference between two boundaries, so neighbours read one number for their shared
 //! edge and the total always equals the room. `resolve` works out sizes in one place; the one exception is `Stack::next`,
-//! which reads a token and an over-budget share itself so `overflow` can count what did not fit.
+//! which reads tokens and shares itself so `overflow` can count what did not fit.
 //!
 //! Inputs to the relative methods (`pad`, `place`, `at`, `offset`, `cut_*`, `split_*`, `grid`), `resolve` and `Stack` are
 //! bounded: a size that cannot fit becomes 0 and nothing panics, whatever numbers come in. Their arithmetic is done in
@@ -29,6 +29,11 @@ pub const MAX_GRID_CELLS: i64 = 65_536;
 
 /// A share of `PER_MILLE` is the whole parent.
 const PER_MILLE: i64 = 1000;
+
+/// The largest denominator a running total of shares may reach. It keeps `Shares::of` inside `i128` (an `i32` room times
+/// this), and a share that would pass it gets 0, as one past the whole does: it takes several large prime denominators in
+/// one list to get here.
+const MAX_SHARE_DENOMINATOR: i128 = 1 << 90;
 
 /// A rectangle in whole grid units. Its size may be stored negative by a direct `Rect::new`; the relative methods read
 /// that as 0.
@@ -193,32 +198,92 @@ impl Anchor {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Kind {
     Units(i32),
-    Share(u16),
+    /// `n / d` of the room; `d` is never 0.
+    Share { n: u16, d: u16 },
     Fill(u16),
 }
 
-/// A size along one side: a share (`frac`), a fill weight (`fill`) or a token's value in units (`From<i32>`). Its fields
-/// stay private so later work can attach here with no caller changing (a minimum cap, a give-way rank; spec section 11.1).
+/// A size along one side: a share (`frac`, `ratio`), a fill weight (`fill`) or a token's value in units (`From<i32>`),
+/// with an optional floor (`min`). Its fields stay private so later work can attach here with no caller changing (a
+/// give-way rank; spec section 11.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Part {
     kind: Kind,
+    /// The least size in units, never negative; 0 is no floor. A fill does not read it.
+    floor: i32,
 }
 
-/// A share, per mille of the room it is resolved over.
+/// A share, per mille of the room it is resolved over. The same as `ratio(per_mille, 1000)`.
 pub const fn frac(per_mille: u16) -> Part {
-    Part { kind: Kind::Share(per_mille) }
+    ratio(per_mille, PER_MILLE as u16)
+}
+
+/// A share of `n / d` of the room it is resolved over, for what per mille cannot state ("a third"). Running totals stay
+/// exact across any mix of shares, so `ratio(1, 3)` three times ends on the edge. It reads as `frac` does everywhere:
+/// past the whole in a list it gets 0. `d` of 0 asks for nothing.
+pub const fn ratio(n: u16, d: u16) -> Part {
+    let kind = if d == 0 { Kind::Share { n: 0, d: 1 } } else { Kind::Share { n, d } };
+    Part { kind, floor: 0 }
 }
 
 /// A fill: what is left after tokens and shares, divided by weight.
 pub const fn fill(weight: u16) -> Part {
-    Part { kind: Kind::Fill(weight) }
+    Part { kind: Kind::Fill(weight), floor: 0 }
+}
+
+impl Part {
+    /// This size, but never under `units` (a negative floor is none; of two floors the larger holds). For shares and
+    /// tokens: a fill is what is left, so it ignores this. In a list the extra comes from the next shares first, then the
+    /// fills, so the edges stay shared and the total stays the room. A floor that cannot fit follows the rule of any size
+    /// that cannot fit: 0 in `resolve`, the cuts and the splits, 0 and counted in `Stack::overflow`, and clamped to the
+    /// parent by `place` and `at`.
+    pub const fn min(self, units: i32) -> Part {
+        let floor = if units > self.floor { units } else { self.floor };
+        Part { kind: self.kind, floor }
+    }
 }
 
 impl From<i32> for Part {
     /// A token's value, in units.
     fn from(units: i32) -> Self {
-        Part { kind: Kind::Units(units) }
+        Part { kind: Kind::Units(units), floor: 0 }
     }
+}
+
+/// A running total of shares, an exact fraction in lowest terms, at most the whole.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Shares {
+    n: i128,
+    d: i128,
+}
+
+impl Shares {
+    const NONE: Shares = Shares { n: 0, d: 1 };
+
+    /// The total with `n / d` added, or `None` when it would pass the whole or `MAX_SHARE_DENOMINATOR`. `d` is above 0.
+    fn plus(self, n: u16, d: u16) -> Option<Shares> {
+        let (n, d) = (i128::from(n), i128::from(d));
+        // `self.d` is at most 2^90 and `d` under 2^16, so nothing below passes 2^107.
+        let common = self.d / gcd(self.d, d) * d;
+        let sum = self.n * (common / self.d) + n * (common / d);
+        let g = gcd(sum, common);
+        let (n, d) = (sum / g, common / g);
+        (n <= d && d <= MAX_SHARE_DENOMINATOR).then_some(Shares { n, d })
+    }
+
+    /// This total of `room`, rounded down once. `room` is non-negative and within `i32`.
+    fn of(self, room: i64) -> i64 {
+        (i128::from(room) * self.n / self.d) as i64
+    }
+}
+
+/// Which way a `Stack` runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Axis {
+    /// Left to right.
+    X,
+    /// Top to bottom.
+    Y,
 }
 
 /// How roomy a canvas is, per axis. The limits are the caller's: this crate names no breakpoint.
@@ -239,27 +304,31 @@ pub struct Need {
 /// The size of each part over `room`, in the parts' order: where sizes are worked out, and where later steps attach (spec
 /// section 11.1; `Stack::next` has the one exception). Tokens are taken first, in order; then shares of what is left; then fills of what is left after
 /// those, by weight. `room` is already less any gaps. Shares and fills come from running totals, so they add up to their
-/// room exactly: a fill's last boundary is the room, and shares totalling 1,000 are all of it. A token that does not fit
-/// what is left, and a share past 1,000 in total, get 0, and the parts after them still get their turn.
+/// room exactly: a fill's last boundary is the room, and shares totalling the whole are all of it. A floor pushes its
+/// share's far edge out, and the running total's next boundary past that edge ends the push. A token that does not fit
+/// what is left, a share past the whole in total and a floor that does not fit get 0, and the parts after them still get
+/// their turn.
 pub fn resolve(parts: &[Part], room: i32) -> Vec<i32> {
     let mut sizes = vec![0i64; parts.len()];
     let mut left = i64::from(room.max(0));
     for (size, part) in sizes.iter_mut().zip(parts) {
         if let Kind::Units(n) = part.kind {
-            let n = i64::from(n.max(0));
+            let n = i64::from(n.max(part.floor).max(0));
             if n <= left {
                 *size = n;
                 left -= n;
             }
         }
     }
-    let (share_room, mut total, mut edge) = (left, 0i64, 0i64);
+    let (share_room, mut total, mut edge) = (left, Shares::NONE, 0i64);
     for (size, part) in sizes.iter_mut().zip(parts) {
-        if let Kind::Share(p) = part.kind {
-            if total + i64::from(p) <= PER_MILLE {
-                total += i64::from(p);
-                let next = mul_div(share_room, total, PER_MILLE);
-                (*size, edge) = (next - edge, next);
+        if let Kind::Share { n, d } = part.kind {
+            if let Some(sum) = total.plus(n, d) {
+                total = sum;
+                let next = total.of(share_room).max(edge + i64::from(part.floor));
+                if next <= share_room {
+                    (*size, edge) = (next - edge, next);
+                }
             }
         }
     }
@@ -277,41 +346,66 @@ pub fn resolve(parts: &[Part], room: i32) -> Vec<i32> {
     sizes.into_iter().map(|s| s as i32).collect()
 }
 
-/// Rects one under another, cut from an area as they come. Tokens as given; a share is of the whole area's height, from
-/// a running total, so shares totalling 1,000 with no gap end on the area's edge (use `Rect::split_y` when shares and gaps
-/// must add up); a fill takes all that is left, whatever its weight. A rect that does not fit is 0 high at the area's
-/// foot, and its height counts in `overflow`. A rect asking for nothing (a 0 token, or a fill with nothing left) takes no
-/// room and no gap.
+/// Rects one after another along an axis, cut from an area as they come: `new` runs down, `row` across, `along` either.
+/// Tokens as given; a share is of the whole area's length, from a running total, so shares totalling the whole with no gap
+/// end on the area's edge (use `Rect::split_x` or `split_y` when shares and gaps must add up); a floor only adds, so past
+/// the area it is overflow, and a fill takes all that is left, whatever its weight. A rect that does not fit has 0 length
+/// at the area's far end, and its length counts in `overflow`. A rect asking for nothing (a 0 token, or a fill with nothing
+/// left) takes no room and no gap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Stack {
     area: Rect,
+    axis: Axis,
     gap: i32,
     used: i64,
-    shares: u16,
+    shares: Shares,
     started: bool,
 }
 
 impl Stack {
+    /// A stack running down.
     pub fn new(area: Rect, gap: i32) -> Self {
-        Self { area, gap: gap.max(0), used: 0, shares: 0, started: false }
+        Self::along(area, Axis::Y, gap)
     }
 
-    /// The next rect down.
-    pub fn next(&mut self, h: impl Into<Part>) -> Rect {
-        let part = h.into();
-        let full = i64::from(self.area.h.max(0));
+    /// A stack running across, left to right.
+    pub fn row(area: Rect, gap: i32) -> Self {
+        Self::along(area, Axis::X, gap)
+    }
+
+    /// A stack running along `axis`, for a caller that holds the axis as a value.
+    pub fn along(area: Rect, axis: Axis, gap: i32) -> Self {
+        Self { area, axis, gap: gap.max(0), used: 0, shares: Shares::NONE, started: false }
+    }
+
+    /// The area's length along the axis, as no room when stored negative.
+    fn full(&self) -> i64 {
+        i64::from(match self.axis {
+            Axis::X => self.area.w,
+            Axis::Y => self.area.h,
+        }
+        .max(0))
+    }
+
+    /// The next rect along the axis; `size` is its length.
+    pub fn next(&mut self, size: impl Into<Part>) -> Rect {
+        let part = size.into();
+        let full = self.full();
         let start = self.used + if self.started { i64::from(self.gap) } else { 0 };
         let left = (full - start).max(0) as i32;
-        // A later cap or rank (spec section 11.1) must apply to the two arms that skip `resolve`: they keep the size that
-        // did not fit, because `resolve` would give 0 and `overflow` has to count it.
+        let floor = i64::from(part.floor);
+        // A later rank (spec section 11.1) must apply to the two arms that skip `resolve`: they keep the size that did not
+        // fit, because `resolve` would give 0 and `overflow` has to count it.
         let wanted = match part.kind {
-            Kind::Units(n) => i64::from(n.max(0)),
-            Kind::Share(p) if i64::from(self.shares) + i64::from(p) <= PER_MILLE => {
-                let run = self.shares;
-                self.shares += p;
-                i64::from(resolve(&[frac(run), part], self.area.h)[1])
-            }
-            Kind::Share(p) => mul_div(full, i64::from(p), PER_MILLE), // past the whole area: only `overflow` sees it
+            Kind::Units(n) => i64::from(n.max(0)).max(floor),
+            Kind::Share { n, d } => match self.shares.plus(n, d) {
+                Some(sum) => {
+                    let size = sum.of(full) - self.shares.of(full);
+                    self.shares = sum;
+                    size.max(floor)
+                }
+                None => mul_div(full, i64::from(n), i64::from(d)).max(floor), // past the whole area: only `overflow` sees it
+            },
             Kind::Fill(_) => i64::from(resolve(&[part], left)[0]),
         };
         let size = if start + wanted <= full { wanted as i32 } else { 0 };
@@ -319,12 +413,16 @@ impl Stack {
             self.used = start + wanted;
             self.started = true;
         }
-        Rect::new(self.area.x, add(self.area.y, start.min(full)), self.area.w.max(0), size)
+        let at = start.min(full);
+        match self.axis {
+            Axis::X => Rect::new(add(self.area.x, at), self.area.y, size, self.area.h.max(0)),
+            Axis::Y => Rect::new(self.area.x, add(self.area.y, at), self.area.w.max(0), size),
+        }
     }
 
     /// Units past the area, 0 when it fits.
     pub fn overflow(&self) -> i32 {
-        (self.used - i64::from(self.area.h.max(0))).clamp(0, i64::from(i32::MAX)) as i32
+        (self.used - self.full()).clamp(0, i64::from(i32::MAX)) as i32
     }
 }
 
@@ -336,6 +434,15 @@ pub fn pick<T: Copy>(area: Rect, choices: &[(Need, T)], last: T) -> T {
 /// `a * b / c`, rounded down, for non-negative `a`, `b` and positive `c`.
 fn mul_div(a: i64, b: i64, c: i64) -> i64 {
     (i128::from(a) * i128::from(b) / i128::from(c)) as i64
+}
+
+/// The greatest common divisor of two non-negative numbers, not both 0.
+fn gcd(a: i128, b: i128) -> i128 {
+    let (mut a, mut b) = (a, b);
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    a
 }
 
 /// `a + b`, held inside `i32`.
@@ -355,11 +462,12 @@ fn shrink(start: i32, len: i32, lo: i32, hi: i32) -> (i32, i32) {
 /// `len`. The whole start is one division, rounded down, then clamped so the element stays inside.
 fn along(start: i32, len: i32, f: u16, halves: i64, part: Part) -> (i32, i32) {
     let len = len.max(0);
-    // Only the kind changes, so anything a later task adds to `Part` (a cap, a rank) still reaches `resolve`.
+    // Only what must be clamped changes, so anything a later task adds to `Part` (a rank) still reaches `resolve`.
     let mut capped = part;
+    capped.floor = part.floor.min(len);
     capped.kind = match part.kind {
         Kind::Units(n) => Kind::Units(n.clamp(0, len)),
-        Kind::Share(p) => Kind::Share(p.min(PER_MILLE as u16)),
+        Kind::Share { n, d } => Kind::Share { n: n.min(d), d },
         Kind::Fill(w) => Kind::Fill(w),
     };
     let size = resolve(&[capped], len)[0];

@@ -6,7 +6,7 @@ Once a layout is selected, the position and size of each element are calculated 
 positions, only relative positions and sizes; the actual size at render time comes from the layout. Changing a layout's
 dimensions needs few or no screen edits.
 
-Built so far: the crate `aegis_layout` (`Rect`, `Insets`, `Anchor`, `Part`, `frac`, `fill`, `resolve`, `Stack`, `pick`),
+Built so far: the crate `aegis_layout` (`Rect`, `Insets`, `Anchor`, `Part` with `min`, `frac`, `ratio`, `fill`, `resolve`, `Stack`, `Axis`, `pick`),
 `aegis_ui::shot_diff`, `Grid` and `Screen::grid`, `Metrics` with `hair`, `Env`, `Ui::m`, `Ui::env`, `Ui::screen`,
 `Ui::image_in`, `Ui::frame_body` and `Ui::corner_size`, and the kit's widgets, panes, pip gauge, timeline and desk, which draw
 right on every grid. The later slice of the engine's layout work (`docs/specs/LAYOUT720.md`) adds `CanvasPolicy` and
@@ -60,7 +60,7 @@ pronounced on smaller ones and always legible, and at one layout they keep the s
 | Kind of value | How it is written | Examples |
 | --- | --- | --- |
 | Position | Anchor, cut, split, stack; `at` for a free point. Never an absolute canvas number | A dialog, a logo, a panel in its screen; a close button in its frame |
-| Panel, pane and element size | `frac` or `fill`, or a token for a control's height | Dialog width, side rail, columns, list height |
+| Panel, pane and element size | `frac`, `ratio` or `fill`, or a token for a control's height; `.min(n)` for a floor | Dialog width, side rail, columns, list height |
 | Inner layout of a widget | Relative to its own rect | Icon centred in a button, slider knob by value |
 | Spacing | Tokens from `Metrics`, not fractions | Margin, gutter, padding; bands of a frame |
 | Thin things | Tokens; `Metrics.hair` at small scales | Lines, borders, focus ring, scroll bar, grips |
@@ -99,13 +99,33 @@ cell's width is the difference between its two boundaries. For fills over `room`
 - Cells can differ by 1 unit. That is the whole cost, and it never accumulates.
 
 `resolve(parts, room)` works out sizes in one place: tokens first, then shares of what is left, then fills by weight. The
-one exception is `Stack::next`, which reads a token and an over-budget share itself so `overflow` can count what did not
-fit. A size that cannot fit becomes 0; nothing panics and nothing goes negative. `cut_*` share their edge by construction,
-and `Stack` and `grid` use running totals. Parts with no fill whose shares total 1,000 end exactly on the area's edge. A
+one exception is `Stack::next`, which reads tokens and shares itself so `overflow` can count what did not fit. A size that
+cannot fit becomes 0; nothing panics and nothing goes negative. `cut_*` share their edge by construction, and `Stack` and
+`grid` use running totals. Parts with no fill whose shares total the whole end exactly on the area's edge. A
 `Stack` share is of the whole area, unlike `split_y`, whose shares are of what the tokens leave: at height 1000, a token 40
 then `frac(500)` twice gives 40, 500 and a 0-high rect with overflow 40 in a `Stack`, and 40, 480, 480 in `split_y`. `place` and `at` clamp to the parent, round the start down once and add the size, so a lone element has one
 rounding only, and a centred odd remainder rounds toward the top left. Never add a rounded size to a rounded position across
 neighbours: a screen that needs a shared edge cuts or splits.
+
+**Shares finer than per mille.** `ratio(n, d)` is a share of `n / d`, both at most 65,535, for what per mille cannot state;
+`frac(p)` is `ratio(p, 1000)`. The running total is an exact fraction across any mix, so `ratio(1, 3)` three times ends on
+the edge. `ratio(n, 0)` asks for nothing, and past the whole it gets 0 as `frac` does. A list whose running total would need
+a denominator above 2^90 refuses the share that passes it, with 0: that takes several large prime denominators in one list.
+
+**Floors.** `part.min(n)` holds a share or a token at `n` units or more; a fill is what is left, so it ignores a floor. In a
+list a floor pushes its share's far edge out: at room 1000, `frac(300).min(400)`, `frac(200)`, `frac(500)` is 400, 100, 500.
+The extra comes from the next shares until the running total's next boundary passes the pushed edge, then from the fills, so
+edges stay shared and the total stays the room.
+
+| Where | A floor that cannot fit |
+| --- | --- |
+| `resolve`, `split_*`, `cut_*` | The part is 0, as any size that cannot fit, and the parts after it get their turn |
+| `Stack` | The rect is 0 long and its length counts in `overflow`. A floor that fits still only adds: it takes nothing from a neighbour, so a later rect can overflow |
+| `place`, `at` | Clamped to the parent |
+
+**Stacks on either axis.** `Stack::new(area, gap)` runs down, `Stack::row(area, gap)` runs across, and
+`Stack::along(area, axis, gap)` takes `Axis::X` or `Axis::Y` as a value. A row follows every rule of a stack turned on its
+side, and its `overflow` counts width.
 
 **Worked example.** A screen: margin 16, a rail of `frac(186)`, gap 12, then a list and a detail pane split `fill(2)`,
 `fill(1)` with gap 12. These numbers are pinned by a test in `aegis_layout/tests/layout.rs`.
@@ -172,7 +192,7 @@ Each is its own later task, and no caller changes when it lands.
 | Later work | Where it attaches | Until then |
 | --- | --- | --- |
 | Images: a scale or fill rule per image | `Ui::image_in(img, r)`: a rule argument with a default, aspect-kept drawing, a `stretched_art` audit kind | Drawn in the given rect |
-| Minimum size caps, so some elements stay legible | `Part` (private fields, so a `.min(n)` adds without breaking callers); `Ui::m()`; `Env.dpr` | Parts have no caps; text keeps its pixel floor |
+| Minimums on text and targets, so some elements stay legible | `Ui::m()`; `Env.dpr` (floors on parts are built: `Part::min`) | Text keeps its pixel floor |
 | Space priority: what gives way when the minimums do not fit | `Part` (a `.give_way(rank)`), applied inside `resolve` before boundaries are worked out | Too little room gives 0 size, and the audit reports it |
 
 ## No hover-only information
