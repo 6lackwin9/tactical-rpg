@@ -14,7 +14,16 @@
 				"pierce",
 				"reach",
 				"flank",
-				"plan_badges"
+				"plan_badges",
+				"forced_move",
+				"ground_hazards",
+				"arena_hazards",
+				"triggers",
+				"unit_meters",
+				"hp_cost",
+				"ignore_guard",
+				"ai_tactics",
+				"execute"
 			],
 			"intents": [
 				"assault",

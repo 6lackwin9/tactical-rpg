@@ -1,0 +1,379 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "hazards",
+   "entry": {
+    "id": "smoke",
+    "name": "Soot Smoke",
+    "on": "both",
+    "status": "",
+    "potency": 100,
+    "magnitude": 0,
+    "status_rounds": 1,
+    "damage": 0,
+    "cover_guard": 0.3,
+    "move_cost": 0,
+    "affects": "all",
+    "trap": false,
+    "hidden": false,
+    "stop_moves": false,
+    "duration": 2,
+    "tint": "#6b6b73",
+    "glyph": "s"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "hazards",
+   "entry": {
+    "id": "tripwire",
+    "name": "Tripwire",
+    "on": "enter",
+    "status": "root",
+    "potency": 90,
+    "magnitude": 0,
+    "status_rounds": 1,
+    "damage": 15,
+    "cover_guard": 0,
+    "move_cost": 0,
+    "affects": "foes",
+    "trap": true,
+    "hidden": true,
+    "stop_moves": true,
+    "duration": 3,
+    "tint": "#c8b27a",
+    "glyph": "t"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "hazards",
+   "entry": {
+    "id": "grease",
+    "name": "Scalding Grease",
+    "on": "both",
+    "status": "slow",
+    "potency": 80,
+    "magnitude": 0,
+    "status_rounds": 1,
+    "damage": 0,
+    "cover_guard": 0,
+    "move_cost": 1,
+    "affects": "all",
+    "trap": false,
+    "hidden": false,
+    "stop_moves": false,
+    "duration": 2,
+    "tint": "#b38f2e",
+    "glyph": "g"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "hazards",
+   "entry": {
+    "id": "phosphorus_fire",
+    "name": "Phosphorus Fire",
+    "on": "round_end",
+    "status": "burn",
+    "potency": 80,
+    "magnitude": 5,
+    "status_rounds": 2,
+    "damage": 8,
+    "cover_guard": 0,
+    "move_cost": 0,
+    "affects": "all",
+    "trap": false,
+    "hidden": false,
+    "stop_moves": false,
+    "duration": 2,
+    "tint": "#e8742a",
+    "glyph": "^"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "unit_meters",
+   "entry": {
+    "id": "bile_phial",
+    "name": "Bile Phial",
+    "short": "Phial",
+    "min": 0,
+    "max": 3,
+    "start": 0,
+    "show": "pips",
+    "decay": [],
+    "bands": [],
+    "rules": [],
+    "skills": []
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "unit_meters",
+   "entry": {
+    "id": "slag_fury",
+    "name": "Slag Fury",
+    "short": "Fury",
+    "min": 0,
+    "max": 5,
+    "start": 0,
+    "show": "pips",
+    "decay": [],
+    "rules": [],
+    "skills": [],
+    "bands": [
+     {
+      "id": "f0",
+      "name": "Cold",
+      "from": 0,
+      "effects": [],
+      "statuses": []
+     },
+     {
+      "id": "f1",
+      "name": "Fury 1",
+      "from": 1,
+      "effects": [],
+      "statuses": [
+       {
+        "status": "empower",
+        "magnitude": 5
+       }
+      ]
+     },
+     {
+      "id": "f2",
+      "name": "Fury 2",
+      "from": 2,
+      "effects": [],
+      "statuses": [
+       {
+        "status": "empower",
+        "magnitude": 10
+       }
+      ]
+     },
+     {
+      "id": "f3",
+      "name": "Fury 3",
+      "from": 3,
+      "effects": [],
+      "statuses": [
+       {
+        "status": "empower",
+        "magnitude": 15
+       }
+      ]
+     },
+     {
+      "id": "f4",
+      "name": "Fury 4",
+      "from": 4,
+      "effects": [],
+      "statuses": [
+       {
+        "status": "empower",
+        "magnitude": 20
+       }
+      ]
+     },
+     {
+      "id": "f5",
+      "name": "Fury 5",
+      "from": 5,
+      "effects": [],
+      "statuses": [
+       {
+        "status": "empower",
+        "magnitude": 25
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "zones",
+   "entry": {
+    "id": "alley",
+    "name": "Cinder Alley",
+    "rows": [],
+    "backdrop": "",
+    "ground": "stone"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "zones",
+   "entry": {
+    "id": "rooftops",
+    "name": "Market Rooftops",
+    "rows": [],
+    "backdrop": "",
+    "ground": "stone"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "zones",
+   "entry": {
+    "id": "canal",
+    "name": "Canal Bridge",
+    "rows": [],
+    "backdrop": "",
+    "ground": "bridge"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "zones",
+   "entry": {
+    "id": "foundry",
+    "name": "The Fourth Kiln",
+    "rows": [],
+    "backdrop": "",
+    "ground": "floor"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "zones",
+   "entry": {
+    "id": "tallow_vats",
+    "name": "Tallow Vats",
+    "rows": [],
+    "backdrop": "",
+    "ground": "floor"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "zones",
+   "entry": {
+    "id": "undercroft",
+    "name": "Sluice Undercroft",
+    "rows": [],
+    "backdrop": "",
+    "ground": "stone"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "zones",
+   "entry": {
+    "id": "watchpost",
+    "name": "Crucible Watchpost",
+    "rows": [],
+    "backdrop": "",
+    "ground": "floor"
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "rulesets",
+   "entry": {
+    "id": "timeline",
+    "name": "Timeline",
+    "rules": [
+     "round_intent",
+     "enemy_moves",
+     "deck",
+     "poise",
+     "ap_cost",
+     "pierce",
+     "reach",
+     "flank",
+     "plan_badges",
+     "forced_move",
+     "ground_hazards",
+     "arena_hazards",
+     "triggers",
+     "unit_meters",
+     "hp_cost",
+     "ignore_guard",
+     "ai_tactics",
+     "execute"
+    ],
+    "intents": [
+     "assault",
+     "guard",
+     "support",
+     "maneuver"
+    ],
+    "basics": [
+     "move",
+     "rest",
+     "strike",
+     "offhand_jab",
+     "active_guard",
+     "flank_cut"
+    ],
+    "poise_stat": "max_poise",
+    "stagger_windup_mult": 2.0,
+    "stagger_guard_mult": 0.5,
+    "stagger_repeat_mult": 0.5,
+    "flank_stagger_mult": 1.5,
+    "flank_power_mult": 1.0,
+    "break_chance_scale": 0.5,
+    "break_chance_cap": 50,
+    "rest_ap_per_block": 0.5,
+    "rest_ap_cap": 2,
+    "rest_poise_per_block": 5,
+    "deck_slots": {
+     "active": 3,
+     "passive": 2,
+     "keystone": 1
+    },
+    "melee_diagonal": "maneuver",
+    "flank_protected_cost": "full",
+    "flank_protected_ap": 1,
+    "rest_ap": "round_end",
+    "chase": "every_skill",
+    "root_stops_chase": "on",
+    "switch_target_step": "off",
+    "stances": "off"
+   }
+  },
+  {
+   "op": "world",
+   "id": "sunk_ward",
+   "fields": {
+    "classes": {
+     "warrior": {
+      "name": "Vanguard",
+      "description": "Former garrison infantry in dented plate: masters of narrow corridors, shield walls and poise breaks.",
+      "skill_path": {}
+     },
+     "rogue": {
+      "name": "Gutter-Stalker",
+      "description": "Rooftop couriers and curfew runners: they strike the staggered and the pinned and leave before the Watch arrives.",
+      "skill_path": {}
+     },
+     "priest": {
+      "name": "Heretic Acolyte",
+      "description": "Defrocked scribes and apostate embalmers: battlefield surgery with hot iron and sutures.",
+      "skill_path": {}
+     },
+     "ranger": {
+      "name": "Arbalestier",
+      "description": "Crag poachers and ridge scouts with winch arbalests and wire snares: they break windups from range.",
+      "skill_path": {}
+     },
+     "brawler": {
+      "name": "Slag-Brute",
+      "description": "Escaped kiln stokers and foundry breakers: bare hands, shackle cestuses and broken walls; the squad's stagger engine.",
+      "skill_path": {}
+     },
+     "mage": {
+      "name": "Ichor Alchemist",
+      "description": "Tenement hedge chemists and tallow distillers: phosphorus fire, flash-powder and caustic sprays.",
+      "skill_path": {}
+     }
+    }
+   }
+  }
+ ]
+}

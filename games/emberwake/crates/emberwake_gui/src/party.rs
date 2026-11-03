@@ -2754,9 +2754,17 @@ mod tests {
     /// A game on the shipped data in a world that plays under the deck rule (`deck` true) or without it, and its first
     /// member.
     fn deck_cx(deck: bool) -> (Cx, String) {
+        // The test bed (decision "Ashlands is a test bed"), by name: a pick by rule follows whichever world sorts first,
+        // and sunk_ward's empty class paths leave a member no actives. It plays classic, so the deck case gives this
+        // test's own copy of its manifest the timeline row.
+        const WORLD: &str = "ashlands";
         let mut cx = crate::hud::hud_tests::game_cx();
-        let w = cx.data.world_ids().into_iter().find(|w| emberwake_rules::DeckRule::of(&cx.data.ruleset(w)).is_some() == deck).expect("a world");
-        cx.gs_mut().world_id = w;
+        if deck {
+            let manifest = &mut std::sync::Arc::get_mut(&mut cx.app.data).expect("this test's own data").catalogs.worlds.get_mut(WORLD).expect("the world").manifest;
+            manifest.insert("ruleset".into(), json!(emberwake_rules::ruleset::TIMELINE));
+        }
+        assert_eq!(emberwake_rules::DeckRule::of(&cx.data.ruleset(WORLD)).is_some(), deck, "{WORLD} under the wanted rule");
+        cx.gs_mut().world_id = WORLD.into();
         let member = cx.gs().party.members[0].id.clone();
         (cx, member)
     }

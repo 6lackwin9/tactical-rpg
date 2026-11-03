@@ -1,0 +1,102 @@
+{
+	"kind": "unit_meters",
+	"version": 1,
+	"entries": [
+		{
+			"id": "bile_phial",
+			"name": "Bile Phial",
+			"short": "Phial",
+			"description": "",
+			"min": 0,
+			"max": 3,
+			"start": 0,
+			"show": "pips",
+			"decay": [],
+			"bands": [],
+			"rules": [],
+			"skills": []
+		},
+		{
+			"id": "slag_fury",
+			"name": "Slag Fury",
+			"short": "Fury",
+			"description": "",
+			"min": 0,
+			"max": 5,
+			"start": 0,
+			"show": "pips",
+			"decay": [],
+			"bands": [
+				{
+					"id": "f0",
+					"name": "Cold",
+					"from": 0,
+					"effects": [],
+					"statuses": []
+				},
+				{
+					"id": "f1",
+					"name": "Fury 1",
+					"from": 1,
+					"effects": [],
+					"statuses": [
+						{
+							"status": "empower",
+							"magnitude": 5
+						}
+					]
+				},
+				{
+					"id": "f2",
+					"name": "Fury 2",
+					"from": 2,
+					"effects": [],
+					"statuses": [
+						{
+							"status": "empower",
+							"magnitude": 10
+						}
+					]
+				},
+				{
+					"id": "f3",
+					"name": "Fury 3",
+					"from": 3,
+					"effects": [],
+					"statuses": [
+						{
+							"status": "empower",
+							"magnitude": 15
+						}
+					]
+				},
+				{
+					"id": "f4",
+					"name": "Fury 4",
+					"from": 4,
+					"effects": [],
+					"statuses": [
+						{
+							"status": "empower",
+							"magnitude": 20
+						}
+					]
+				},
+				{
+					"id": "f5",
+					"name": "Fury 5",
+					"from": 5,
+					"effects": [],
+					"statuses": [
+						{
+							"status": "empower",
+							"magnitude": 25
+						}
+					]
+				}
+			],
+			"rules": [],
+			"skills": []
+		}
+	]
+}

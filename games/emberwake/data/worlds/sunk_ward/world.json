@@ -13,5 +13,37 @@
 	"service_lines": {},
 	"ruleset": "timeline",
 	"plan_reveal_flag": "",
+	"classes": {
+		"warrior": {
+			"name": "Vanguard",
+			"description": "Former garrison infantry in dented plate: masters of narrow corridors, shield walls and poise breaks.",
+			"skill_path": {}
+		},
+		"rogue": {
+			"name": "Gutter-Stalker",
+			"description": "Rooftop couriers and curfew runners: they strike the staggered and the pinned and leave before the Watch arrives.",
+			"skill_path": {}
+		},
+		"priest": {
+			"name": "Heretic Acolyte",
+			"description": "Defrocked scribes and apostate embalmers: battlefield surgery with hot iron and sutures.",
+			"skill_path": {}
+		},
+		"ranger": {
+			"name": "Arbalestier",
+			"description": "Crag poachers and ridge scouts with winch arbalests and wire snares: they break windups from range.",
+			"skill_path": {}
+		},
+		"brawler": {
+			"name": "Slag-Brute",
+			"description": "Escaped kiln stokers and foundry breakers: bare hands, shackle cestuses and broken walls; the squad's stagger engine.",
+			"skill_path": {}
+		},
+		"mage": {
+			"name": "Ichor Alchemist",
+			"description": "Tenement hedge chemists and tallow distillers: phosphorus fire, flash-powder and caustic sprays.",
+			"skill_path": {}
+		}
+	},
 	"version": 1
 }
