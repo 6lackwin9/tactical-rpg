@@ -31,6 +31,8 @@ const STRAIN_GAIN: i32 = 20;
 const DECAY: i32 = 10;
 const HOT_FROM: i32 = 2;
 const HOT_EMPOWER: i32 = 10;
+/// Above the band's empower, so a test can tell which of the two is held.
+const GRANT_EMPOWER: i32 = 15;
 const HOT_CRIT: f64 = 5.0;
 const HOT_RESIST: i32 = 50;
 const TIDE_START: i32 = 2;
@@ -64,6 +66,8 @@ fn catalog() -> Catalog {
         json!({"id": "t_mend", "name": "Mend", "kind": "SUPPORT", "level": 1, "blocks": 1, "heal_base": 5, "target_mode": "ALLY"}),
         json!({"id": "t_coat", "name": "Coat", "kind": "SUPPORT", "level": 1, "blocks": 1, "ap_cost": 0, "heal_base": 5, "target_mode": "ALLY", "learned_only": true,
             "meters": [{"meter": "phial", "delta": -1}]}),
+        json!({"id": "t_empower", "name": "Empower", "kind": "SUPPORT", "level": 1, "blocks": 1, "ap_cost": 0, "reach_min": 1, "reach_max": 2, "target_mode": "ALLY", "learned_only": true,
+            "grant_status": "empower", "status_magnitude": GRANT_EMPOWER, "status_rounds": 1, "meters": [{"meter": "salve", "delta": -1}]}),
         json!({"id": "t_inoc", "name": "Inoculate", "kind": "ATTACK", "level": 1, "blocks": 1, "power_mult": 0.5, "target_mode": "ENEMY",
             "meters": [{"meter": "strain", "delta": STRAIN_GAIN}]}),
         focus("t_heat", "Heat", json!([{"meter": "fury", "delta": 2}])),
@@ -75,6 +79,7 @@ fn catalog() -> Catalog {
     let peak = |once: bool| json!([{"id": "peak", "at": 3, "dir": "up", "once": once, "effects": [{"type": "crit", "value": 1}]}]);
     let meters = vec![
         json!({"id": "phial", "name": "Phial", "short": "Ph", "min": 0, "max": PHIAL_MAX, "start": 0, "show": "pips", "skills": ["t_coat"]}),
+        json!({"id": "salve", "name": "Salve", "short": "Sa", "min": 0, "max": PHIAL_MAX, "start": 0, "show": "pips", "skills": ["t_empower"]}),
         json!({"id": "strain", "name": "Strain", "short": "St", "min": 0, "max": 100, "start": STRAIN_START, "show": "bar",
             "decay": [{"delta": -DECAY, "unless_gained": true}, {"delta": -DECAY, "unless_gained": true, "if_guarded": true}]}),
         json!({"id": "fury", "name": "Fury", "short": "Fu", "min": 0, "max": 5, "start": 0, "show": "pips", "bands": [
@@ -426,4 +431,114 @@ fn a_session_shows_logs_and_counts_the_meters() {
     m.finish(&s);
     assert!(m.fail_lines.is_empty(), "{:?}", m.fail_lines);
     assert_eq!(m.triggers["p_hero"].meters, 1);
+}
+
+/// EMPOWER1: a meter skill grants empower to an ally like any support buff: queued, active after the roll-over at the
+/// skill's magnitude, raising outgoing power by it, gone when its 1 round ends; the cost is paid.
+#[test]
+fn a_skill_grants_empower_for_its_rounds() {
+    let s = session(rules(&[UNIT_METERS]), vec![("p_ally", holds("salve"))]);
+    let mut w = s.w.clone();
+    set(&mut w, ALLY, "salve", 1);
+    let id = sid(&w, "t_empower");
+    let cmd = command(&w, ALLY, PlanStep::ally(id, HERO), "t_empower");
+    let mut res = Resolver::new(BLOCKS, 1);
+    book(&mut res, ALLY, cmd, 1);
+    run(&mut w, &mut res, 1, 1);
+    assert_eq!(meter::value(&w, ALLY, "salve"), Some(0));
+    assert!(w.units[HERO].st.has_any("empower") && !w.units[HERO].has_status("empower"), "queued for next round");
+    status::roll_over(&mut w.units[HERO], 0);
+    assert_eq!(w.units[HERO].active_magnitude("empower"), GRANT_EMPOWER);
+    assert!((w.units[HERO].empower_factor() - (1.0 + GRANT_EMPOWER as f64 / 100.0)).abs() < 1e-9);
+    status::roll_over(&mut w.units[HERO], 0);
+    assert!(!w.units[HERO].st.has_any("empower"), "a 1-round grant");
+}
+
+/// Puts the hero in the hot band.
+fn heat(w: &mut World, res: &mut Resolver, block: i32) {
+    book(res, HERO, own(w, HERO, "t_heat"), block);
+    run(w, res, block, block);
+    assert_eq!(meter::value(w, HERO, "fury"), Some(HOT_FROM));
+}
+
+/// Takes the hero out of the hot band.
+fn vent(w: &mut World, res: &mut Resolver, block: i32) {
+    book(res, HERO, own(w, HERO, "t_vent"), block);
+    run(w, res, block, block);
+    assert_eq!(meter::value(w, HERO, "fury"), Some(HOT_FROM - 1));
+}
+
+/// EMPOWER1, coat then band: the higher applies while both hold; leaving the band gives back the grant's own numbers.
+#[test]
+fn a_grant_outlives_a_band_entered_after_it() {
+    let s = session(rules(&[UNIT_METERS]), vec![("p_hero", holds("fury"))]);
+    for (grant, merged) in [(GRANT_EMPOWER, GRANT_EMPOWER), (HOT_EMPOWER - 1, HOT_EMPOWER)] {
+        let mut w = s.w.clone();
+        let mut res = Resolver::new(BLOCKS, 1);
+        status::grant_now(&mut w.units[HERO], "empower", 3, grant, "coat");
+        heat(&mut w, &mut res, 1);
+        assert_eq!(w.units[HERO].active_magnitude("empower"), merged);
+        vent(&mut w, &mut res, 2);
+        assert_eq!(w.units[HERO].active_magnitude("empower"), grant, "the grant alone");
+        assert_eq!(w.units[HERO].st.rounds_left.get("empower"), Some(&3));
+        assert_eq!(w.units[HERO].st.sources.get("empower").map(String::as_str), Some("coat"));
+    }
+}
+
+/// EMPOWER1, band then coat, active: the grant stays at its own magnitude after the band goes, and counts down.
+#[test]
+fn a_grant_outlives_a_band_it_landed_on() {
+    let s = session(rules(&[UNIT_METERS]), vec![("p_hero", holds("fury"))]);
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    heat(&mut w, &mut res, 1);
+    status::grant_now(&mut w.units[HERO], "empower", 2, HOT_EMPOWER - 1, "coat");
+    assert_eq!(w.units[HERO].active_magnitude("empower"), HOT_EMPOWER);
+    status::roll_over(&mut w.units[HERO], 0);
+    meter::round_start(&mut w);
+    assert_eq!(w.units[HERO].active_magnitude("empower"), HOT_EMPOWER);
+    vent(&mut w, &mut res, 2);
+    assert_eq!(w.units[HERO].active_magnitude("empower"), HOT_EMPOWER - 1);
+    assert_eq!(w.units[HERO].st.rounds_left.get("empower"), Some(&1), "one round already spent");
+}
+
+/// EMPOWER1, queued: a band change leaves a queued grant queued; queued while a band holds, it arrives merged and
+/// survives the band.
+#[test]
+fn a_queued_grant_outlives_a_band() {
+    let s = session(rules(&[UNIT_METERS]), vec![("p_hero", holds("fury"))]);
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    heat(&mut w, &mut res, 1);
+    status::queue(&mut w.units[HERO], "empower", 1, GRANT_EMPOWER, "coat");
+    vent(&mut w, &mut res, 2);
+    assert!(!w.units[HERO].has_status("empower") && w.units[HERO].st.pending.contains("empower"), "the band's part went, the queue stayed");
+    status::roll_over(&mut w.units[HERO], 0);
+    assert_eq!(w.units[HERO].active_magnitude("empower"), GRANT_EMPOWER);
+
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    heat(&mut w, &mut res, 1);
+    status::queue(&mut w.units[HERO], "empower", 2, HOT_EMPOWER - 1, "coat");
+    status::roll_over(&mut w.units[HERO], 0);
+    meter::round_start(&mut w);
+    assert_eq!(w.units[HERO].active_magnitude("empower"), HOT_EMPOWER);
+    vent(&mut w, &mut res, 2);
+    assert_eq!(w.units[HERO].active_magnitude("empower"), HOT_EMPOWER - 1);
+}
+
+/// EMPOWER1: a grant ending never removes the band's part: after it runs out the band holds again at its own number.
+#[test]
+fn a_grant_ending_leaves_the_band() {
+    let s = session(rules(&[UNIT_METERS]), vec![("p_hero", holds("fury"))]);
+    let mut w = s.w.clone();
+    let mut res = Resolver::new(BLOCKS, 1);
+    heat(&mut w, &mut res, 1);
+    status::grant_now(&mut w.units[HERO], "empower", 1, GRANT_EMPOWER, "coat");
+    assert_eq!(w.units[HERO].active_magnitude("empower"), GRANT_EMPOWER);
+    status::roll_over(&mut w.units[HERO], 0);
+    meter::round_start(&mut w);
+    assert_eq!(w.units[HERO].active_magnitude("empower"), HOT_EMPOWER);
+    vent(&mut w, &mut res, 2);
+    assert!(!w.units[HERO].st.has_any("empower"), "nothing left of either");
 }

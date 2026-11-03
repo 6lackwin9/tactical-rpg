@@ -2,7 +2,7 @@
 //! roll-over. Statuses inflicted this round become active next round; DEFEND buffs (riposte) are active at once.
 
 use crate::stats::roundi;
-use crate::unit::Unit;
+use crate::unit::{GrantUnder, Unit};
 use aegis_core::rng::GodotRng;
 use serde_json::Value;
 
@@ -59,7 +59,7 @@ pub const ROWS: [StatusRow; 17] = [
     row("regen", true, false, 2, RefreshMaxDuration, 10, "Regenerating", "support", 1, 10),
     row("poison", false, true, 3, StackPotency, 30, "Poisoned", "", 1, 15),
     row("burn", false, true, 2, RefreshMaxDuration, 10, "Burning", "", 1, 10),
-    row("empower", true, false, 2, RefreshMaxDuration, 25, "Empowered", "", 1, 25),
+    row("empower", true, false, 2, RefreshMaxDuration, 25, "Empowered", "support", 1, 25),
     row("steadfast", true, false, 1, RefreshMaxDuration, 0, "Steadfast", "support", 0, 0),
     bound(row("stealth", true, false, 2, RefreshMaxDuration, 0, "Stealthed", "defend", 0, 0)),
 ];
@@ -247,6 +247,63 @@ pub fn queue(target: &mut Unit, status: &str, rounds: i32, magnitude: i32, sourc
 
 /// Makes a buff active right now, lasting `rounds` rounds counting the current one.
 pub fn grant_now(target: &mut Unit, status: &str, rounds: i32, magnitude: i32, source: &str) {
+    note_grant_under(target, status, rounds, magnitude_or_min(status, magnitude), source);
+    apply_now(target, status, rounds, magnitude, source);
+}
+
+/// EMPOWER1: a grant landing on a status a band holds also keeps its own part, stacked by the row's rule.
+fn note_grant_under(target: &mut Unit, status: &str, rounds: i32, magnitude: i32, source: &str) {
+    let st = &mut target.st;
+    if !st.band_held.contains_key(status) {
+        return;
+    }
+    let old = st.band_under.get(status).cloned().unwrap_or_default();
+    let (rounds, magnitude) = stack(old.rounds, old.magnitude, rounds, magnitude, status);
+    st.band_under.insert(status.to_string(), GrantUnder { rounds, magnitude, source: source.to_string() });
+}
+
+/// EMPOWER1: a meter band holds `status` this round: merged with any grant like a 1-round grant (the higher magnitude
+/// applies). An instance already there when the band takes hold is a grant, kept apart for `band_release`.
+pub fn band_hold(target: &mut Unit, status: &str, magnitude: i32, source: &str) {
+    let st = &mut target.st;
+    if !st.band_held.contains_key(status) && st.active.contains(status) {
+        let under = GrantUnder {
+            rounds: st.rounds_left.get(status).copied().unwrap_or(0),
+            magnitude: st.magnitudes.get(status).copied().unwrap_or(0),
+            source: st.sources.get(status).cloned().unwrap_or_default(),
+        };
+        st.band_under.insert(status.to_string(), under);
+    }
+    st.band_held.insert(status.to_string(), magnitude);
+    apply_now(target, status, 1, magnitude, source);
+}
+
+/// EMPOWER1: a band lets go of `status`: only its part goes. A queued grant stays queued and an active grant is put
+/// back at its own rounds and magnitude. Does nothing when the band had not taken hold yet.
+pub fn band_release(target: &mut Unit, status: &str) {
+    let st = &mut target.st;
+    if st.band_held.shift_remove(status).is_none() {
+        return;
+    }
+    st.active.shift_remove(status);
+    st.rounds_left.shift_remove(status);
+    st.magnitudes.shift_remove(status);
+    st.sources.shift_remove(status);
+    if let Some(under) = st.band_under.shift_remove(status) {
+        st.active.insert(status.to_string());
+        st.rounds_left.insert(status.to_string(), under.rounds);
+        if has_magnitude(status) {
+            st.magnitudes.insert(status.to_string(), under.magnitude);
+        }
+        if !under.source.is_empty() {
+            st.sources.insert(status.to_string(), under.source);
+        }
+    } else if !st.pending.contains(status) {
+        st.intents.shift_remove(status);
+    }
+}
+
+fn apply_now(target: &mut Unit, status: &str, rounds: i32, magnitude: i32, source: &str) {
     let magnitude = magnitude_or_min(status, magnitude);
     let st = &mut target.st;
     let (r, p) = stack(st.rounds_left.get(status).copied().unwrap_or(0), st.magnitudes.get(status).copied().unwrap_or(0), rounds, magnitude, status);
@@ -290,6 +347,7 @@ pub fn remove(target: &mut Unit, status: &str) -> bool {
 
 /// Removes only the ACTIVE instance (a queued one stays; exploit consume).
 pub fn remove_active(target: &mut Unit, status: &str) -> bool {
+    target.st.band_under.shift_remove(status);
     let st = &mut target.st;
     let found = st.active.contains(status);
     st.active.shift_remove(status);
@@ -343,9 +401,20 @@ pub fn roll_over(c: &mut Unit, ap_regen: i32) -> Vec<String> {
             st.sources.insert(s.clone(), src.clone());
         }
     }
+    // EMPOWER1: a grant beneath a band counts down with the instance
+    st.band_under.retain(|_, u| {
+        u.rounds -= 1;
+        u.rounds > 0
+    });
     let pending: Vec<String> = st.pending.iter().cloned().collect();
     for s in pending {
         let queued = st.pending_rounds.get(&s).copied().unwrap_or(1);
+        if st.band_held.contains_key(&s) {
+            let (magnitude, source) = (st.pending_magnitudes.get(&s).copied().unwrap_or(0), st.pending_sources.get(&s).cloned().unwrap_or_default());
+            let old = st.band_under.get(&s).cloned().unwrap_or_default();
+            let (rounds, magnitude) = stack(old.rounds, old.magnitude, queued, magnitude, &s);
+            st.band_under.insert(s.clone(), GrantUnder { rounds, magnitude, source });
+        }
         if has_magnitude(&s) {
             let (_, p) = stack(st.rounds_left.get(&s).copied().unwrap_or(0), st.magnitudes.get(&s).copied().unwrap_or(0), queued, st.pending_magnitudes.get(&s).copied().unwrap_or(0), &s);
             st.magnitudes.insert(s.clone(), p);

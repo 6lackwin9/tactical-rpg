@@ -1059,6 +1059,19 @@ pub struct StatusState {
     /// RULESET1_INTENT IN6 (timeline, rule round_intent): status -> the round intent an intent-bound instance (active or
     /// queued) was applied under; it ends when the unit's intent changes. Classic never fills it.
     pub intents: IndexMap<String, String>,
+    /// EMPOWER1: status -> the magnitude a meter band holds. Filled only while a band holds the status.
+    pub band_held: IndexMap<String, i32>,
+    /// EMPOWER1: the skill or trigger grant beneath a band's merged instance (the higher magnitude applies), put back
+    /// when the band lets go. Filled only while a band holds the status.
+    pub band_under: IndexMap<String, GrantUnder>,
+}
+
+/// EMPOWER1: a grant's own part of an active instance a band also holds.
+#[derive(Debug, Clone, Default)]
+pub struct GrantUnder {
+    pub rounds: i32,
+    pub magnitude: i32,
+    pub source: String,
 }
 
 impl StatusState {
@@ -1112,6 +1125,7 @@ impl Unit {
         st.sources.shift_remove(status);
         st.pending_sources.shift_remove(status);
         st.intents.shift_remove(status);
+        st.band_under.shift_remove(status);
     }
 
     fn capped_magnitude(&self, status: &str) -> i32 {

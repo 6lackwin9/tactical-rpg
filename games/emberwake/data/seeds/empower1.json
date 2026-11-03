@@ -1,0 +1,31 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "skills",
+   "entry": {
+    "id": "bile_coat",
+    "name": "Bile Coat",
+    "kind": "SUPPORT",
+    "level": 1,
+    "ap_cost": 0,
+    "blocks": 1,
+    "description": "Support, Snap: spends a Bile Phial pip to coat an ally's weapon, empowering them for a round.",
+    "learned_only": true,
+    "round_intent": "support",
+    "reach_min": 1,
+    "reach_max": 2,
+    "target_mode": "ALLY",
+    "meters": [
+     {
+      "meter": "bile_phial",
+      "delta": -1
+     }
+    ],
+    "grant_status": "empower",
+    "status_magnitude": 15,
+    "status_rounds": 1
+   }
+  }
+ ]
+}

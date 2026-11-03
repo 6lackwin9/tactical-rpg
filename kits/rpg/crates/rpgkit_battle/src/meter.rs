@@ -150,7 +150,7 @@ fn settle_band(w: &mut World, i: usize, grant: bool) -> Option<String> {
     }
     if let Some(o) = old {
         for (st, _) in band_statuses(&def.bands[o]) {
-            status::remove(&mut w.units[c], &st);
+            status::band_release(&mut w.units[c], &st);
         }
     }
     let mut applied = BandApplied::default();
@@ -159,7 +159,7 @@ fn settle_band(w: &mut World, i: usize, grant: bool) -> Option<String> {
         applied = w.units[c].apply_band(&cat, value::array(b, "effects"), &format!("{METER_KEY}{meter}"));
         if grant {
             for (st, mag) in band_statuses(b) {
-                status::grant_now(&mut w.units[c], &st, 1, mag, &def.name);
+                status::band_hold(&mut w.units[c], &st, mag, &def.name);
             }
         }
     }
@@ -187,7 +187,7 @@ pub fn round_start(w: &mut World) {
             continue;
         }
         for (st, mag) in band_statuses(&def.bands[n]) {
-            status::grant_now(&mut w.units[g.unit], &st, 1, mag, &def.name);
+            status::band_hold(&mut w.units[g.unit], &st, mag, &def.name);
         }
     }
 }

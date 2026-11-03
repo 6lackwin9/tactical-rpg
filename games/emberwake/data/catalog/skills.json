@@ -1936,14 +1936,14 @@
 			"level": 1,
 			"ap_cost": 0,
 			"blocks": 1,
-			"description": "Support, Snap: spends a Bile Phial pip on an ally (PLACEHOLDER: fortify 1 stands in until a skill can grant empower 15).",
+			"description": "Support, Snap: spends a Bile Phial pip to coat an ally's weapon, empowering them for a round.",
 			"learned_only": true,
 			"round_intent": "support",
 			"reach_min": 1,
 			"reach_max": 2,
-			"status_magnitude": 1,
+			"status_magnitude": 15,
 			"target_mode": "ALLY",
-			"grant_status": "fortify",
+			"grant_status": "empower",
 			"meters": [
 				{
 					"meter": "bile_phial",
