@@ -1,0 +1,1015 @@
+{
+ "steps": [
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "loadout": [],
+    "default_intent": "",
+    "prefer_level": 0,
+    "status_resist": {},
+    "heal_below": 0.7,
+    "accessory_1": "",
+    "accessory_2": "",
+    "head": "",
+    "off_hand": "none",
+    "id": "founder_vesper",
+    "name": "Vesper",
+    "description": "Founder base unit: Vesper, a level 1 rogue.",
+    "side": "party",
+    "class_id": "rogue",
+    "level": 1,
+    "tier": "hero",
+    "art": "rogue/base",
+    "palette": "vesper",
+    "main_hand": "curfew_bodkin",
+    "body": "soot_leathers",
+    "pouch": [
+     "sulfur_poultice",
+     "pitch_fire_bomb"
+    ],
+    "extra_skills": [
+     "hamstring_sever",
+     "ash_cloud_fade",
+     "throat_carver"
+    ],
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "reckless": false,
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "tactics": [],
+    "loot": [],
+    "deck": {
+     "active": [
+      "hamstring_sever",
+      "ash_cloud_fade"
+     ],
+     "order": {
+      "assault": [
+       "strike"
+      ],
+      "guard": [
+       "ash_cloud_fade",
+       "active_guard"
+      ],
+      "maneuver": [
+       "hamstring_sever",
+       "flank_cut"
+      ]
+     },
+     "passive": [
+      "prowlers_cadence",
+      "anatomical_flaw"
+     ],
+     "keystone": [
+      "ghost_of_the_undercroft"
+     ]
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "loadout": [],
+    "default_intent": "",
+    "prefer_level": 0,
+    "status_resist": {},
+    "heal_below": 0.7,
+    "accessory_1": "",
+    "accessory_2": "",
+    "head": "",
+    "off_hand": "none",
+    "id": "founder_hollis",
+    "name": "Hollis",
+    "description": "Founder base unit: Hollis, a level 1 ranger.",
+    "side": "party",
+    "class_id": "ranger",
+    "level": 1,
+    "tier": "hero",
+    "art": "ranger/base",
+    "palette": "hollis",
+    "main_hand": "winch_arbalest",
+    "body": "poachers_brigandine",
+    "pouch": [
+     "sulfur_poultice"
+    ],
+    "extra_skills": [
+     "poachers_quarrel",
+     "tripwire_snare",
+     "heavy_winch_sunder"
+    ],
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "reckless": false,
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "tactics": [],
+    "loot": [],
+    "deck": {
+     "active": [
+      "poachers_quarrel",
+      "tripwire_snare"
+     ],
+     "order": {
+      "assault": [
+       "tripwire_snare",
+       "poachers_quarrel",
+       "strike"
+      ],
+      "guard": [
+       "active_guard"
+      ],
+      "maneuver": [
+       "flank_cut"
+      ]
+     },
+     "passive": [
+      "high_ground_traverse",
+      "cover_breaker"
+     ],
+     "keystone": [
+      "dead_eye_discipline"
+     ]
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "loadout": [],
+    "default_intent": "",
+    "prefer_level": 0,
+    "status_resist": {},
+    "heal_below": 0.7,
+    "accessory_1": "",
+    "accessory_2": "",
+    "head": "",
+    "off_hand": "none",
+    "id": "founder_dunstan",
+    "name": "Dunstan",
+    "description": "Founder base unit: Dunstan, a level 1 brawler.",
+    "side": "party",
+    "class_id": "brawler",
+    "level": 1,
+    "tier": "hero",
+    "art": "brawler/base",
+    "palette": "dunstan",
+    "main_hand": "penal_shackles",
+    "body": "penal_foundry_apron",
+    "pouch": [
+     "sulfur_poultice"
+    ],
+    "extra_skills": [
+     "shackle_pummel_slam",
+     "slag_slam_throw",
+     "foundry_shatter"
+    ],
+    "ai_role": "",
+    "target_pref": "ROLE",
+    "reckless": false,
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "tactics": [],
+    "loot": [],
+    "deck": {
+     "active": [
+      "shackle_pummel_slam",
+      "slag_slam_throw"
+     ],
+     "order": {
+      "assault": [
+       "slag_slam_throw",
+       "shackle_pummel_slam",
+       "strike"
+      ],
+      "guard": [
+       "active_guard"
+      ],
+      "maneuver": [
+       "flank_cut"
+      ]
+     },
+     "passive": [
+      "hypertrophy",
+      "anvil_posture"
+     ],
+     "keystone": [
+      "unbroken_iron"
+     ]
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": 25,
+    "poise": 24,
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "loadout": [],
+    "default_intent": "",
+    "prefer_level": 0,
+    "status_resist": {},
+    "heal_below": 0.7,
+    "accessory_1": "",
+    "accessory_2": "",
+    "head": "",
+    "off_hand": "watch_heater",
+    "id": "castellan_footman",
+    "name": "Castellan Footman",
+    "description": "Castellan Footman of the Watch.",
+    "side": "enemy",
+    "class_id": "warrior",
+    "level": 2,
+    "tier": "standard",
+    "art": "warrior/1h_buckler",
+    "palette": "castellan_watch",
+    "main_hand": "watch_hookbill",
+    "body": "watch_cuirass",
+    "pouch": [
+     "none"
+    ],
+    "extra_skills": [
+     "heavy_bill_thrust",
+     "billhook_hook"
+    ],
+    "ai_role": "AGGRESSOR",
+    "target_pref": "NEAREST",
+    "reckless": false,
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "tactics": [
+     "brace_after_hit",
+     "hold_line"
+    ],
+    "loot": [
+     {
+      "item": "watch_hookbill",
+      "chance": 4,
+      "count": 1
+     },
+     {
+      "item": "sulfur_poultice",
+      "chance": 6,
+      "count": 1
+     }
+    ],
+    "deck": {
+     "active": [
+      "heavy_bill_thrust",
+      "billhook_hook"
+     ],
+     "order": {
+      "assault": [
+       "heavy_bill_thrust",
+       "billhook_hook"
+      ],
+      "guard": [
+       "active_guard"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "loadout": [],
+    "default_intent": "",
+    "prefer_level": 0,
+    "status_resist": {},
+    "heal_below": 0.7,
+    "accessory_1": "",
+    "accessory_2": "",
+    "head": "",
+    "off_hand": "none",
+    "id": "watch_crossbowman",
+    "name": "Watch Crossbowman",
+    "description": "Watch Crossbowman.",
+    "side": "enemy",
+    "class_id": "ranger",
+    "level": 2,
+    "tier": "standard",
+    "art": "ranger/base",
+    "palette": "castellan_watch",
+    "main_hand": "stirrup_arbalest",
+    "body": "watch_gambeson",
+    "pouch": [
+     "none"
+    ],
+    "extra_skills": [
+     "aimed_bolt",
+     "buckler_jab"
+    ],
+    "ai_role": "SNIPER",
+    "target_pref": "WEAKEST",
+    "reckless": false,
+    "flee_ratio": 0.25,
+    "defend_below": 0.4,
+    "tactics": [],
+    "loot": [
+     {
+      "item": "stirrup_arbalest",
+      "chance": 4,
+      "count": 1
+     },
+     {
+      "item": "sulfur_poultice",
+      "chance": 4,
+      "count": 1
+     }
+    ],
+    "deck": {
+     "active": [
+      "aimed_bolt",
+      "buckler_jab"
+     ],
+     "order": {
+      "assault": [
+       "aimed_bolt",
+       "buckler_jab",
+       "strike"
+      ],
+      "guard": [
+       "active_guard"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": 35,
+    "poise": -1,
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "loadout": [],
+    "default_intent": "",
+    "prefer_level": 0,
+    "status_resist": {},
+    "heal_below": 0.7,
+    "accessory_1": "",
+    "accessory_2": "",
+    "head": "",
+    "off_hand": "none",
+    "id": "bailiff_enforcer",
+    "name": "Bailiff Enforcer",
+    "description": "Bailiff Enforcer.",
+    "side": "enemy",
+    "class_id": "warrior",
+    "level": 3,
+    "tier": "elite",
+    "art": "warrior/2h_hammer",
+    "palette": "bailiff",
+    "main_hand": "bailiff_maul",
+    "body": "watch_cuirass",
+    "pouch": [
+     "none"
+    ],
+    "extra_skills": [
+     "crushing_judgment",
+     "iron_shackle_drag"
+    ],
+    "ai_role": "AGGRESSOR",
+    "target_pref": "TOUGHEST",
+    "reckless": false,
+    "flee_ratio": 0.0,
+    "defend_below": 0.3,
+    "tactics": [],
+    "loot": [
+     {
+      "item": "bailiff_maul",
+      "chance": 5,
+      "count": 1
+     },
+     {
+      "item": "brimstone_draught",
+      "chance": 8,
+      "count": 1
+     }
+    ],
+    "deck": {
+     "active": [
+      "crushing_judgment",
+      "iron_shackle_drag"
+     ],
+     "order": {
+      "assault": [
+       "crushing_judgment",
+       "iron_shackle_drag"
+      ],
+      "guard": [
+       "active_guard"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "loadout": [],
+    "default_intent": "",
+    "prefer_level": 0,
+    "status_resist": {},
+    "heal_below": 0.7,
+    "accessory_1": "",
+    "accessory_2": "",
+    "head": "",
+    "off_hand": "none",
+    "id": "tallow_dredger",
+    "name": "Tallow Dredger",
+    "description": "Tallow Dredger.",
+    "side": "enemy",
+    "class_id": "rogue",
+    "level": 2,
+    "tier": "standard",
+    "art": "ranger/wenn_tallow",
+    "palette": "tallow_guild",
+    "main_hand": "boning_knife",
+    "body": "skinners_apron",
+    "pouch": [
+     "none"
+    ],
+    "extra_skills": [
+     "scalding_grease_pot",
+     "boning_knife_flurry"
+    ],
+    "ai_role": "SKIRMISHER",
+    "target_pref": "WEAKEST",
+    "reckless": false,
+    "flee_ratio": 0.3,
+    "defend_below": 0.4,
+    "tactics": [],
+    "loot": [
+     {
+      "item": "caustic_gall_sac",
+      "chance": 15,
+      "count": 1
+     },
+     {
+      "item": "boning_knife",
+      "chance": 4,
+      "count": 1
+     }
+    ],
+    "deck": {
+     "active": [
+      "scalding_grease_pot",
+      "boning_knife_flurry"
+     ],
+     "order": {
+      "assault": [
+       "scalding_grease_pot"
+      ],
+      "maneuver": [
+       "boning_knife_flurry",
+       "flank_cut"
+      ],
+      "guard": [
+       "active_guard"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "loadout": [],
+    "default_intent": "",
+    "prefer_level": 0,
+    "status_resist": {},
+    "heal_below": 0.7,
+    "accessory_1": "",
+    "accessory_2": "",
+    "head": "",
+    "off_hand": "none",
+    "id": "render_beast",
+    "name": "Render-Beast",
+    "description": "Render-Beast.",
+    "side": "enemy",
+    "class_id": "rogue",
+    "level": 2,
+    "tier": "minion",
+    "art": "beast/render_beast",
+    "palette": "",
+    "main_hand": "none",
+    "body": "none",
+    "pouch": [
+     "none"
+    ],
+    "extra_skills": [
+     "throat_clamp_pounce"
+    ],
+    "ai_role": "SKIRMISHER",
+    "target_pref": "WEAKEST",
+    "reckless": true,
+    "flee_ratio": 0.0,
+    "defend_below": 0.0,
+    "tactics": [],
+    "loot": [
+     {
+      "item": "render_beast_tendon",
+      "chance": 20,
+      "count": 1
+     },
+     {
+      "item": "stalker_optic_nerve",
+      "chance": 10,
+      "count": 1
+     }
+    ],
+    "deck": {
+     "active": [
+      "throat_clamp_pounce"
+     ],
+     "order": {
+      "maneuver": [
+       "throat_clamp_pounce"
+      ],
+      "assault": [
+       "strike"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": -1,
+    "poise": -1,
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "loadout": [],
+    "default_intent": "",
+    "prefer_level": 0,
+    "status_resist": {},
+    "heal_below": 0.7,
+    "accessory_1": "",
+    "accessory_2": "",
+    "head": "",
+    "off_hand": "none",
+    "id": "ash_crawler",
+    "name": "Ash-Crawler",
+    "description": "Ash-Crawler.",
+    "side": "enemy",
+    "class_id": "rogue",
+    "level": 2,
+    "tier": "minion",
+    "art": "crawler/ash_crawler",
+    "palette": "",
+    "main_hand": "none",
+    "body": "none",
+    "pouch": [
+     "none"
+    ],
+    "extra_skills": [
+     "burrow_ambush",
+     "caustic_vomit"
+    ],
+    "ai_role": "SKIRMISHER",
+    "target_pref": "NEAREST",
+    "reckless": true,
+    "flee_ratio": 0.0,
+    "defend_below": 0.0,
+    "tactics": [],
+    "loot": [
+     {
+      "item": "caustic_gall_sac",
+      "chance": 15,
+      "count": 1
+     }
+    ],
+    "deck": {
+     "active": [
+      "burrow_ambush",
+      "caustic_vomit"
+     ],
+     "order": {
+      "maneuver": [
+       "burrow_ambush"
+      ],
+      "assault": [
+       "caustic_vomit",
+       "strike"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": 35,
+    "poise": -1,
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "loadout": [],
+    "default_intent": "",
+    "prefer_level": 0,
+    "status_resist": {},
+    "heal_below": 0.7,
+    "accessory_1": "",
+    "accessory_2": "",
+    "head": "",
+    "off_hand": "none",
+    "id": "calcified_husk",
+    "name": "Calcified Husk",
+    "description": "Calcified Husk.",
+    "side": "enemy",
+    "class_id": "warrior",
+    "level": 3,
+    "tier": "standard",
+    "art": "brawler/base",
+    "palette": "calcified",
+    "main_hand": "bone_club",
+    "body": "none",
+    "pouch": [
+     "none"
+    ],
+    "extra_skills": [
+     "bone_club_slam"
+    ],
+    "ai_role": "AGGRESSOR",
+    "target_pref": "NEAREST",
+    "reckless": true,
+    "flee_ratio": 0.0,
+    "defend_below": 0.0,
+    "tactics": [],
+    "loot": [
+     {
+      "item": "calcified_bone_shard",
+      "chance": 25,
+      "count": 1
+     }
+    ],
+    "deck": {
+     "active": [
+      "bone_club_slam"
+     ],
+     "order": {
+      "assault": [
+       "bone_club_slam",
+       "strike"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": 35,
+    "poise": 70,
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "loadout": [],
+    "default_intent": "",
+    "prefer_level": 0,
+    "status_resist": {},
+    "heal_below": 0.7,
+    "accessory_1": "",
+    "accessory_2": "",
+    "head": "",
+    "off_hand": "none",
+    "id": "overseer_grendel",
+    "name": "Overseer Grendel",
+    "description": "Overseer Grendel of the foundry.",
+    "side": "enemy",
+    "class_id": "brawler",
+    "level": 4,
+    "tier": "boss",
+    "art": "warrior/2h_hammer",
+    "palette": "grendel",
+    "main_hand": "foundry_sledge",
+    "body": "skinners_apron",
+    "pouch": [
+     "none"
+    ],
+    "extra_skills": [
+     "pneumatic_hammer_strike",
+     "coal_shovel_jab",
+     "bone_mill_pulverizer"
+    ],
+    "ai_role": "AGGRESSOR",
+    "target_pref": "NEAREST",
+    "reckless": false,
+    "flee_ratio": 0.0,
+    "defend_below": 0.4,
+    "tactics": [],
+    "loot": [
+     {
+      "item": "calcified_bone_shard",
+      "chance": 40,
+      "count": 1
+     },
+     {
+      "item": "foundry_sledge",
+      "chance": 10,
+      "count": 1
+     }
+    ],
+    "deck": {
+     "active": [
+      "pneumatic_hammer_strike",
+      "coal_shovel_jab"
+     ],
+     "order": {
+      "assault": [
+       "pneumatic_hammer_strike",
+       "coal_shovel_jab"
+      ],
+      "guard": [
+       "active_guard"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": 35,
+    "poise": 75,
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "loadout": [],
+    "default_intent": "",
+    "prefer_level": 0,
+    "status_resist": {},
+    "heal_below": 0.7,
+    "accessory_1": "",
+    "accessory_2": "",
+    "head": "",
+    "off_hand": "none",
+    "id": "guild_master_orlov",
+    "name": "Orlov",
+    "description": "Guild-Master Orlov of the Tallow Guild.",
+    "side": "enemy",
+    "class_id": "brawler",
+    "level": 4,
+    "tier": "boss",
+    "art": "brawler/base",
+    "palette": "orlov",
+    "main_hand": "flensing_hooks",
+    "body": "skinners_apron",
+    "pouch": [
+     "none"
+    ],
+    "extra_skills": [
+     "pressurized_lard_spray",
+     "flensing_hook_drag",
+     "scalding_cataclysm"
+    ],
+    "ai_role": "AGGRESSOR",
+    "target_pref": "WEAKEST",
+    "reckless": false,
+    "flee_ratio": 0.0,
+    "defend_below": 0.4,
+    "tactics": [],
+    "loot": [
+     {
+      "item": "caustic_gall_sac",
+      "chance": 40,
+      "count": 1
+     }
+    ],
+    "deck": {
+     "active": [
+      "pressurized_lard_spray",
+      "flensing_hook_drag"
+     ],
+     "order": {
+      "assault": [
+       "pressurized_lard_spray",
+       "flensing_hook_drag"
+      ],
+      "guard": [
+       "active_guard"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 40,
+    "armor": 50,
+    "poise": 90,
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "loadout": [],
+    "default_intent": "",
+    "prefer_level": 0,
+    "status_resist": {},
+    "heal_below": 0.7,
+    "accessory_1": "",
+    "accessory_2": "",
+    "head": "",
+    "off_hand": "none",
+    "id": "calcified_amalgam",
+    "name": "The Amalgam",
+    "description": "The Calcified Amalgam.",
+    "side": "enemy",
+    "class_id": "mage",
+    "level": 5,
+    "tier": "boss",
+    "art": "brawler/base",
+    "palette": "amalgam",
+    "main_hand": "none",
+    "body": "none",
+    "pouch": [
+     "none"
+    ],
+    "extra_skills": [
+     "ossified_spine_volley",
+     "tendril_flail",
+     "ossification_bloom"
+    ],
+    "ai_role": "AGGRESSOR",
+    "target_pref": "NEAREST",
+    "reckless": true,
+    "flee_ratio": 0.0,
+    "defend_below": 0.4,
+    "tactics": [],
+    "loot": [
+     {
+      "item": "calcified_bone_shard",
+      "chance": 60,
+      "count": 1
+     }
+    ],
+    "deck": {
+     "active": [
+      "ossified_spine_volley",
+      "tendril_flail"
+     ],
+     "order": {
+      "assault": [
+       "ossified_spine_volley",
+       "tendril_flail"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "op": "upsert",
+   "kind": "units",
+   "entry": {
+    "spend": {},
+    "stat_mode": "derived",
+    "ap": 0,
+    "power": 0,
+    "armor": 50,
+    "poise": 80,
+    "portrait_tier": "",
+    "skill_cap": 0,
+    "loadout": [],
+    "default_intent": "",
+    "prefer_level": 0,
+    "status_resist": {},
+    "heal_below": 0.7,
+    "accessory_1": "",
+    "accessory_2": "",
+    "head": "",
+    "off_hand": "none",
+    "id": "inquisitor_prelate_nemeth",
+    "name": "Nemeth",
+    "description": "Inquisitor-Prelate Nemeth.",
+    "side": "enemy",
+    "class_id": "warrior",
+    "level": 6,
+    "tier": "boss",
+    "art": "warrior/2h_sword",
+    "palette": "nemeth",
+    "main_hand": "prelates_blade",
+    "body": "watch_cuirass",
+    "pouch": [
+     "none"
+    ],
+    "extra_skills": [
+     "sanctified_decapitation",
+     "prelates_censure",
+     "inquisitorial_parry"
+    ],
+    "ai_role": "AGGRESSOR",
+    "target_pref": "TOUGHEST",
+    "reckless": false,
+    "flee_ratio": 0.0,
+    "defend_below": 0.4,
+    "tactics": [],
+    "loot": [],
+    "deck": {
+     "active": [
+      "sanctified_decapitation",
+      "prelates_censure",
+      "inquisitorial_parry"
+     ],
+     "order": {
+      "assault": [
+       "sanctified_decapitation",
+       "prelates_censure"
+      ],
+      "guard": [
+       "inquisitorial_parry",
+       "active_guard"
+      ]
+     }
+    }
+   }
+  }
+ ]
+}
