@@ -14,7 +14,9 @@
 			"decay": [],
 			"bands": [],
 			"rules": [],
-			"skills": []
+			"skills": [
+				"bile_coat"
+			]
 		},
 		{
 			"id": "slag_fury",

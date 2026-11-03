@@ -730,7 +730,7 @@
 		},
 		{
 			"id": "heat_tempered_carapace",
-			"name": "Heat-Tempered Carapace",
+			"name": "Heat-Tempered",
 			"description": "75% resistance to Burn, 50% to Poison.",
 			"effects": [
 				{
@@ -876,6 +876,81 @@
 				}
 			],
 			"slot": ""
+		},
+		{
+			"id": "anatomical_flaw",
+			"name": "Anatomical Flaw",
+			"description": "Throat-Carver's Art and Hamstring Sever hit 15% harder.",
+			"effects": [
+				{
+					"type": "skill_potency",
+					"family": "throat_carver",
+					"value": 0.15
+				},
+				{
+					"type": "skill_potency",
+					"family": "hamstring_sever",
+					"value": 0.15
+				}
+			],
+			"slot": "passive"
+		},
+		{
+			"id": "cinder_childs_reflex",
+			"name": "Cinder-Child's Reflex",
+			"description": "Hasted for a round when an attack on her finds nothing; a Throat-Carver kill returns 2 AP.",
+			"effects": [
+				{
+					"type": "trigger",
+					"on": "evaded",
+					"effects": [
+						{
+							"type": "grant",
+							"status": "haste",
+							"rounds": 1
+						}
+					]
+				},
+				{
+					"type": "trigger",
+					"on": "kill",
+					"when": {
+						"skills": [
+							"throat_carver"
+						]
+					},
+					"effects": [
+						{
+							"type": "ap",
+							"value": 2
+						}
+					]
+				}
+			],
+			"slot": ""
+		},
+		{
+			"id": "master_alchemist",
+			"name": "Master Alchemist",
+			"description": "Phosphorus Pot, Flash-Bomb and Choke-Gas are 20% stronger.",
+			"effects": [
+				{
+					"type": "skill_potency",
+					"family": "phosphorus_pot",
+					"value": 0.2
+				},
+				{
+					"type": "skill_potency",
+					"family": "magnesium_flash_bomb",
+					"value": 0.2
+				},
+				{
+					"type": "skill_potency",
+					"family": "choke_gas",
+					"value": 0.2
+				}
+			],
+			"slot": "keystone"
 		}
 	]
 }
