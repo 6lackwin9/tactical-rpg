@@ -24,6 +24,8 @@ pub fn start(port: u16, proxy: EventLoopProxy<()>) -> Option<Receiver<Request>> 
             let tx = tx.clone();
             let proxy = proxy.clone();
             std::thread::spawn(move || {
+                // A reply is written in pieces: without this each one waits on the other side's delayed ack, about 0.3 s.
+                let _ = stream.set_nodelay(true);
                 let mut writer = match stream.try_clone() {
                     Ok(w) => w,
                     Err(_) => return,

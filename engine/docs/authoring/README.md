@@ -20,6 +20,7 @@ from re-deriving the method each time.
 | [combat_hooks.md](combat_hooks.md) | Use the RPG kit's combat hooks as data: forced moves, hazards, triggers, meters, phase effects, AI tactics |
 | [art_bible.md](art_bible.md) | Fix canvas, board, sprite, palette and pipelines before any art is made |
 | [reactive_layout.md](reactive_layout.md) | Write a screen whose positions and sizes are calculated from the selected layout; canvas, units and rounding; sort existing screens |
+| [scenarios.md](scenarios.md) | Scenario files that drive real windows, for agents |
 | [theme_and_tiles.md](theme_and_tiles.md) | Add a runtime theme and frames; lay out a set's tiles, faces and transition pieces; the corner mask convention |
 | [region_grounds.md](region_grounds.md) | Give a walkable map several ground types, its walls a height in storeys and its outer edge its own art |
 | [motion_profiles.md](motion_profiles.md) | Give each portrait face its own motion (breath, lean, bob, entry, rest, shiver, blink, flush) as data |

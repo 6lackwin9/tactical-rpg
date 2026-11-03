@@ -30,6 +30,7 @@ version = "0.1.0"
 dependencies = [
  "aegis_content",
  "aegis_host",
+ "aegis_save",
  "anyhow",
  "indexmap",
  "serde_json",

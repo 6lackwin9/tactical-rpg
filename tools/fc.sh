@@ -14,6 +14,9 @@
 #   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest (aegis content)
 #   tools/fc.sh sim <args>       balance sim (aegis sim <mode> [level] [seeds] [key=value ...]; sim help: the keys)
 #   tools/fc.sh replay <file> [...] replay a playtest recording (aegis replay: battle=, until=, json, variant=, write=, seeds=, fallback=)
+#   tools/fc.sh scenario check [<file>|all]   parse games/<id>/scenarios/*.json; no window (engine/docs/authoring/scenarios.md)
+#   tools/fc.sh scenario <id|all|file.json> [size=1280x720] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>]   run them in real muted
+#                                windows that do not take the focus (0 pass, 1 a step failed, 2 could not start); never in the gate
 # The Godot-only commands (parse, parse-all, arena, dojo, run, safe_delete, export_placeholder, gen_sfx, systems) live on
 # in legacy/tools/fc.sh for the frozen Godot copy (legacy/LEGACY.md).
 # Build output: .cargo/config.toml (desktop) or $CARGO_TARGET_DIR. Exit code 1 when anything failed.
@@ -209,6 +212,22 @@ aegis() {  # the CLI, built on demand
   cargo run -q -p emberwake_host -- "$@"
 }
 
+scenario() {  # the driver lies beside the game's program, so both are built first, in one profile
+  local a rest=() rel=()
+  if [ "${1:-}" = "check" ]; then aegis scenario "$@" || status=$?; return; fi
+  [ -n "${1:-}" ] || { echo "usage: tools/fc.sh scenario check [<file>|all] | <id|all|file.json> [size=WxH] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>]"; status=2; return; }
+  for a in "$@"; do
+    case "$a" in
+      profile=release) rel=(--release) ;;
+      profile=dev) ;;
+      profile=*) echo "[scenario] profile is dev or release"; status=2; return ;;
+      *) rest+=("$a") ;;
+    esac
+  done
+  cargo build -q -p emberwake_gui -p emberwake_host "${rel[@]}" || { echo "[scenario] FAIL: the build"; status=2; return; }
+  cargo run -q -p emberwake_host "${rel[@]}" -- scenario run "${rest[@]}" || status=$?
+}
+
 case "$1" in
   gate) gate ;;
   build) build ;;
@@ -224,8 +243,9 @@ case "$1" in
   content) aegis content "${@:2}" || status=1 ;;
   sim) aegis sim "${@:2}" || status=1 ;;
   replay) aegis replay "${@:2}" || status=1 ;;
+  scenario) scenario "${@:2}" ;;
   parse|parse-all|arena|dojo|run|safe_delete|export_placeholder|gen_sfx|systems|all)
     echo "'$1' is a Godot command: the Godot build is frozen in legacy/ (see legacy/LEGACY.md; legacy/tools/fc.sh, or the legacy branch)."; status=1 ;;
-  *) sed -n '2,16p' "$0"; status=1 ;;
+  *) sed -n '2,19p' "$0"; status=1 ;;
 esac
 exit $status

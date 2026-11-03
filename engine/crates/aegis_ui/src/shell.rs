@@ -75,6 +75,8 @@ struct Shell<G> {
     pointer_req: Option<(i32, i32)>,
     /// An agent-link command is being run: screens it opens never move the pointer.
     agent: bool,
+    /// Frames drawn so far (`ui_tree`'s `frame`): a link reply comes before the frame that shows it, so a driver waits on this.
+    frames: u64,
 }
 
 /// A press on a draggable widget: its id, payload and text, and where the press was.
@@ -417,6 +419,7 @@ impl<G: Context> Shell<G> {
         let track = self.stack.iter().rev().find_map(|s| s.music(cx));
         cx.audio.music(track.as_deref());
         cx.audio.tick();
+        self.frames += 1;
     }
 
     /// After the top screen drew: a focus whose widget is gone moves to the first one (when it was showing), an open
@@ -908,6 +911,7 @@ impl<G: Context> Shell<G> {
                 let cx = &self.cx;
                 let top = self.stack.last().unwrap();
                 json!({"ok": true, "screen": top.id(), "stack": self.stack.iter().map(|s| s.id()).collect::<Vec<_>>(), "canvas": self.top_view().canvas(), "grid": top.grid().name(), "mouse": [self.mouse.0, self.mouse.1],
+                    "frame": self.frames, "pid": std::process::id(), "px": [self.gfx.canvas.w, self.gfx.canvas.h],
                     "music": cx.audio.wanted_music(), "focus": self.gfx.kit.focus, "focus_visible": self.gfx.kit.focus_visible, "state": top.state(cx), "game": cx.app.agent_summary(), "widgets": top.widgets(),
                     "edit": self.gfx.kit.edit.as_ref().map(|e| json!({"id": e.id, "caret": e.caret, "selection": e.selection(), "selected": e.selected(), "undo": e.history().0}))})
             }
@@ -1107,6 +1111,11 @@ impl<G: Context> Shell<G> {
                 }
             }
             "game" => self.cx.app.agent_game(),
+            // As the Quit button: the screens leave and the recording is saved after this frame (the driver's clean stop).
+            "quit" => {
+                self.cx.quit = true;
+                json!({"ok": true})
+            }
             "_bad" => json!({"ok": false, "error": body["error"]}),
             _ => {
                 let cx = &self.cx;
@@ -1272,8 +1281,10 @@ impl<G: Context> ApplicationHandler for App<G> {
         if self.window.is_some() {
             return;
         }
-        let attrs = Window::default_attributes().with_title(self.options.title.as_str()).with_inner_size(PhysicalSize::new(1280, 720)).with_min_inner_size(PhysicalSize::new(640, 360));
         let (cx, stack) = self.start.take().expect("the shell starts once");
+        // The setting `start_inactive` (a scenario run's scratch profile): the window opens without taking the focus.
+        let active = cx.settings.v["start_inactive"] != json!(true);
+        let attrs = Window::default_attributes().with_title(self.options.title.as_str()).with_inner_size(PhysicalSize::new(1280, 720)).with_min_inner_size(PhysicalSize::new(640, 360)).with_active(active);
         let (attrs, icon_notice) = match crate::icon::window_icons(cx.art.layers(), &self.options.icon) {
             Ok(Some(icons)) => {
                 #[cfg(windows)]
@@ -1290,7 +1301,7 @@ impl<G: Context> ApplicationHandler for App<G> {
         let font_bytes = std::fs::read(&self.options.font).unwrap_or_else(|e| panic!("{}: {e}", self.options.font.display()));
         let mut gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
         gfx.kit.device.dpr = window.scale_factor() as f32;
-        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
+        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, frames: 0 };
         shell.cx.notice.extend(icon_notice);
         let port = self.options.port;
         self.bridge = bridge::start(port, self.proxy.clone());
@@ -1697,7 +1708,7 @@ mod tests {
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
-        let mut s = Shell { cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
+        let mut s = Shell { cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, frames: 0 };
         s.frame();
         s
     }
@@ -2529,6 +2540,30 @@ mod tests {
         assert_eq!(s.bridge(&json!({"cmd": "drag", "id": "item", "to": "slot"}))["ok"], json!(true));
         assert_eq!(s.cx.app.log, ["drop item.sword on slot.weapon"]);
         assert_eq!(s.bridge(&json!({"cmd": "drag", "id": "item", "to": "nowhere"}))["ok"], json!(false));
+    }
+
+    /// INTEG1-E1: a link reply comes before the frame that shows it, so `ui_tree` counts the frames for a driver to wait on,
+    /// and names the process, so a driver knows it reached the game it started.
+    #[test]
+    fn the_link_tree_counts_frames_and_names_its_process() {
+        let mut s = shell();
+        let frame = |s: &mut Shell<App>| s.bridge(&json!({"cmd": "ui_tree"}))["frame"].as_u64().expect("a frame count");
+        let before = frame(&mut s);
+        assert_eq!(frame(&mut s), before, "asking draws nothing");
+        s.frame();
+        s.frame();
+        assert_eq!(frame(&mut s), before + 2);
+        let tree = s.bridge(&json!({"cmd": "ui_tree"}));
+        assert_eq!(tree["pid"], json!(std::process::id()));
+        assert_eq!(tree["px"], json!([s.gfx.canvas.w, s.gfx.canvas.h]));
+    }
+
+    #[test]
+    fn the_link_quit_asks_for_what_the_quit_button_does() {
+        let mut s = shell();
+        assert!(!s.cx.quit);
+        assert_eq!(s.bridge(&json!({"cmd": "quit"}))["ok"], json!(true));
+        assert!(s.cx.quit);
     }
 
     thread_local! {
