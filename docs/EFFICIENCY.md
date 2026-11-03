@@ -150,3 +150,23 @@ Patches and marks (REGIONGROUND1-E2, 2026-11-02), same budget, `ground_compose -
 every layer with `patches` .2 and 10 mark tries per 100 cells, other lanes building: square 38-50 ms on the many-borders job
 (25-36 ms without them), 17-23 ms on one open ground with 16 placed patches; tilted 31-47 ms and 14-24 ms (17-23 ms without). A
 job that asks for none reads no patch noise and no extra blur, so its cost and bytes do not move.
+
+## Heavy tasks (user 2026-11-04)
+
+The main session tracks each agent run's cost from its completion notice (tokens, tool calls, time). A run counts as heavy past about 200,000 tokens, 100 tool calls or 60 minutes; these lines are a starting point, to tune. For each heavy run, note why and what could reduce the effort: a narrower brief, a mock first, a tool or skill, a split task. Flag to the user when a cause repeats or looks fixable, so it can be streamlined. Time alone can mean machine load, not effort.
+
+| Task (2026-11-02 to 11-04) | Agent | Tokens | Tool calls | Minutes | Likely cause |
+| --- | --- | --- | --- | --- | --- |
+| REGIONVIEW1 with zoom | logic | 485k | 146, plus 26 on fixes | 78, plus 25 | Scope grew mid-run (zoom), hand-written window measures |
+| LAYOUT720-E3 | logic | 367k | 129 | 45 | Every widget against its old picture |
+| LAYOUT720-E4 | logic | 328k | 73 | 47 | The same, for panes |
+| LAYOUT720 spec | design | 316k | 55 | 32 | The direction changed 7 times during the run |
+| LAYOUT720-E1 | logic | 282k | 100 | 30 | Shell and painter proof in real windows |
+| DASH1 | logic | 261k | 74 | 90 | Sprite suites are slow; ran under load |
+| LAYOUT720-M0 | logic | 250k | 76 | 72 | Hand-written T4 sweep in real windows |
+| LOOK1-G2 | logic | 252k | 82 | 49 | About 700 uses migrated |
+| TURNFEEL1 | logic | 226k | 62 | 87 | Measured real windows by hand; scope grew mid-run |
+| LAYOUTDATA1 spec | design | 224k | 44 | 19 | Long spec |
+| AGENTROLES1 spec | design | 214k | 39 | 18 | Long spec, three additions during the run |
+
+Repeating causes so far: hand-written real-window proof (AGENTROLES1's `aegis scenario` and the `real-window` skill target this), a scope added after the run started, and specs asked to cover much at once.
