@@ -8,8 +8,9 @@
 //! on `Grid::Old` stays as it was.
 
 use crate::canvas::{rgb, rgba, Canvas, Image, Rect, Rgba};
+use crate::layout_audit::LayoutRec;
 use crate::painter::{Fonts, Grid, Painter, Typeface, View};
-use crate::theme::{self, Frame, Metrics, Theme, CORNER_SIZE};
+use crate::theme::{self, Breakpoints, Frame, Metrics, Theme, CORNER_SIZE};
 use aegis_layout::{frac, Anchor, Insets, SizeClass};
 use serde_json::{json, Value};
 use std::rc::Rc;
@@ -109,7 +110,7 @@ pub enum Pointer {
 pub struct Device {
     /// Window px per CSS px (the window system's scale factor). Not a true measurement: a handheld can report 1.
     pub dpr: f32,
-    /// No setting yet: always 1 (LAYOUT720-E5).
+    /// No setting yet: 1 in a window; the layout audit's profiles set others (`layout_audit::PROFILES`).
     pub ui_scale: f32,
     pub pointer: Pointer,
 }
@@ -141,6 +142,13 @@ fn size_class(units: i32, [compact, medium]: [i32; 2]) -> SizeClass {
     } else {
         SizeClass::Expanded
     }
+}
+
+/// The width and height classes of `canvas` in a view of `g` units per old unit. They read the canvas in grid units, so
+/// an old-numbers screen (`g` 1) of a window gets the same ones as a native screen of it.
+pub(crate) fn size_classes(canvas: (i32, i32), g: i32, limits: Breakpoints) -> (SizeClass, SizeClass) {
+    let per = if g <= 1 { Grid::Native.g() } else { 1 };
+    (size_class(canvas.0 * per, limits.width), size_class(canvas.1 * per, limits.height))
 }
 
 impl Kit {
@@ -247,14 +255,24 @@ impl<'a, A: Clone> Ui<'a, A> {
     /// the same ones.
     pub fn env(&self) -> Env {
         let (m, canvas) = (self.m(), self.p.v.canvas());
-        let per = Grid::Native.g() / m.g.max(1);
-        Env { canvas, dpr: self.device.dpr, ui_scale: self.device.ui_scale, pointer: self.device.pointer, width_class: size_class(canvas.0 * per, m.breakpoints.width), height_class: size_class(canvas.1 * per, m.breakpoints.height) }
+        let (width_class, height_class) = size_classes(canvas, m.g, m.breakpoints);
+        Env { canvas, dpr: self.device.dpr, ui_scale: self.device.ui_scale, pointer: self.device.pointer, width_class, height_class }
     }
 
     /// An image in the rect the layout gives. It draws as `Painter::image` does; the per-image rule attaches here later
     /// (LAYOUT720 11.1).
     pub fn image_in(&mut self, img: &Image, r: Rect) {
+        self.p.note_layout(|| LayoutRec::Placed { what: "image".into(), at: r });
         self.p.image(img, r);
+    }
+
+    /// Tells the layout audit that what `what` lays out in `area` needs `by` units more (`Stack::overflow`, a list's
+    /// height past its area). `by` of 0 or less is nothing, so a list can report each frame. Clipping what is drawn past
+    /// the area stays the screen's.
+    pub fn report_overflow(&mut self, what: &str, area: Rect, by: i32) {
+        if by > 0 {
+            self.p.note_layout(|| LayoutRec::Overflow { what: what.into(), at: area, by });
+        }
     }
 
     /// One corner size for every frame this `Ui` still draws (LAYOUT720 section 9): cut every pane first, then call this with
@@ -280,7 +298,14 @@ impl<'a, A: Clone> Ui<'a, A> {
     fn draw_role(&mut self, t: &Theme, role: &str, r: Rect, fill: Rgba, edge: Rgba, radius: f32) {
         let frame = t.frame(role);
         let own = frame.and_then(|f| self.cornered(f));
+        let before = self.p.fonts.layout.as_ref().map_or(0, Vec::len);
         self.p.skin(own.as_ref().or(frame), r, fill, edge, radius);
+        // What the painter recorded for this frame takes the role it could not know.
+        for rec in self.p.fonts.layout.iter_mut().flat_map(|recs| recs[before..].iter_mut()) {
+            if let LayoutRec::CornerShrunk { what, .. } = rec {
+                *what = role.to_string();
+            }
+        }
     }
 
     /// Draws frame role `role` (`theme::FRAME_ROLES`) over `r` in its own colours and returns its content rect: past the
@@ -288,8 +313,13 @@ impl<'a, A: Clone> Ui<'a, A> {
     pub fn frame_body(&mut self, role: &str, r: Rect) -> Rect {
         let (t, m) = (self.t.clone(), self.m());
         let (fill, edge, radius) = t.vector_in(role, &m);
+        self.p.note_layout(|| LayoutRec::Placed { what: role.into(), at: r });
         self.draw_role(&t, role, r, fill, edge, radius);
-        self.frame_content(role, r)
+        let body = self.frame_content(role, r);
+        if r.w > 0 && r.h > 0 && (body.w <= 0 || body.h <= 0) {
+            self.p.note_layout(|| LayoutRec::Placed { what: format!("{role} body"), at: body });
+        }
+        body
     }
 
     /// The content rect `frame_body` returns for `r`, with nothing drawn: what a panel sized by its content measures first.
@@ -476,12 +506,16 @@ impl<'a, A: Clone> Ui<'a, A> {
             let (edge, radius) = (self.t.edge_hot, self.m().radius);
             self.p.panel(rect, rgba(0, 0, 0, 0), edge, radius);
         }
+        let id = id.into();
+        if rect.w <= 0 || rect.h <= 0 {
+            self.p.note_layout(|| LayoutRec::NoRoom { what: id.clone(), at: rect });
+        }
         let rect = match self.clip {
             // An open select's options are drawn over everything by the shell: not cut to a window body.
             Some(c) if kind != "option" => rect.intersect(c),
             _ => rect,
         };
-        self.widgets.push(Widget { id: id.into(), kind, text: text.into(), rect, enabled, active, action, tip, drag: None, drop: None });
+        self.widgets.push(Widget { id, kind, text: text.into(), rect, enabled, active, action, tip, drag: None, drop: None });
     }
 
     /// The mouse is over `r` (and inside the clip, so a widget scrolled out of its window shows no hover).

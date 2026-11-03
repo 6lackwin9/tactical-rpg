@@ -125,7 +125,7 @@ fn gfx(w: i32, h: i32, text: f32) -> Gfx {
 fn drawn(img: &Image, nine: &Nine, panel: Rect) -> Canvas {
     let mut c = Canvas::new(400, 400);
     let mut fonts = Fonts::new(&font());
-    let mut p = Painter { c: &mut c, v: View { s: 2.0, ox: 0.0, oy: 0.0, g: 1 }, fonts: &mut fonts };
+    let mut p = Painter { c: &mut c, v: View { s: 2.0, ox: 0.0, oy: 0.0, g: 1, canvas: (640, 360) }, fonts: &mut fonts };
     p.nine(img, nine, panel);
     c
 }

@@ -120,7 +120,7 @@ fn bad_metrics_are_refused_with_every_problem_named() {
 #[test]
 fn hair_is_one_physical_pixel_at_any_scale() {
     let t = Theme::default();
-    let hair = |s: f32| Metrics::of(&t, View { s, ox: 0.0, oy: 0.0, g: 2 }).hair;
+    let hair = |s: f32| Metrics::of(&t, View { s, ox: 0.0, oy: 0.0, g: 2, canvas: GRID }).hair;
     assert_eq!((hair(1.0), hair(1.5), hair(3.0)), (1, 1, 1));
     assert_eq!((hair(0.5), hair(0.4), hair(0.25)), (2, 3, 4));
     for s in [0.2f32, 0.3, 0.7, 0.99] {

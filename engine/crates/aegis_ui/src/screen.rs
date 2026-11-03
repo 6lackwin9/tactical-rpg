@@ -109,6 +109,8 @@ pub enum Nav<G> {
 pub struct Settings {
     pub v: Value,
     path: PathBuf,
+    /// The window sizes offered (`window_sizes`): the last list `keep_window_size` held to, else `WINDOW_SIZES`.
+    offered: Vec<String>,
 }
 
 /// The engine's choices (Godot SettingsFile / DisplaySettings): window sizes, frame-rate caps. `WINDOW_SIZES` is the
@@ -150,6 +152,27 @@ pub fn window_size_of(size: &Value) -> Option<(u32, u32)> {
     let (w, h) = size.as_str()?.split_once('x')?;
     let (w, h) = (w.parse::<u32>().ok()?, h.parse::<u32>().ok()?);
     ((1..=WINDOW_SIDE_MAX).contains(&w) && (1..=WINDOW_SIDE_MAX).contains(&h)).then_some((w, h))
+}
+
+/// The longest list of window sizes a game may offer: a settings row cycles through it.
+pub const WINDOW_SIZES_MAX: usize = 32;
+
+/// The manifest's `window_sizes` value (LAYOUT720-E5): absent (null) is `WINDOW_SIZES`; else a list of 1 to
+/// `WINDOW_SIZES_MAX` `WxH` strings (`window_size_of`), none twice. Anything else is refused, with why.
+pub fn read_window_sizes(v: &Value) -> Result<Vec<String>, String> {
+    if v.is_null() {
+        return Ok(WINDOW_SIZES.map(String::from).to_vec());
+    }
+    let Some(list) = v.as_array() else { return Err(format!("window_sizes must be a list of WxH strings, not {v}")) };
+    if list.is_empty() || list.len() > WINDOW_SIZES_MAX {
+        return Err(format!("window_sizes must list 1 to {WINDOW_SIZES_MAX} sizes, not {}", list.len()));
+    }
+    let mut sizes: Vec<String> = Vec::with_capacity(list.len());
+    for size in list {
+        let text = size.as_str().filter(|s| window_size_of(size).is_some() && !sizes.iter().any(|o| o == s));
+        sizes.push(text.ok_or_else(|| format!("window_sizes: {size} is not a WxH size up to {WINDOW_SIDE_MAX}, or is listed twice"))?.to_string());
+    }
+    Ok(sizes)
 }
 
 /// An area of the desktop in physical px.
@@ -231,12 +254,20 @@ impl Settings {
                 v[k] = x;
             }
         }
-        Self { v, path }
+        Self { v, path, offered: WINDOW_SIZES.map(String::from).to_vec() }
+    }
+
+    /// The window sizes the game offers, for a settings row: what `keep_window_size` was last given, else `WINDOW_SIZES`.
+    pub fn window_sizes(&self) -> &[String] {
+        &self.offered
     }
 
     /// Holds `window_size` to the sizes a game offers: a listed value stays, a size off the list becomes the listed one
     /// nearest in pixels, anything else the first listed. An empty list changes nothing. Not written until the next save.
     pub fn keep_window_size(&mut self, offered: &[&str]) {
+        if !offered.is_empty() {
+            self.offered = offered.iter().map(|s| s.to_string()).collect();
+        }
         let now = &self.v["window_size"];
         if now.as_str().is_some_and(|s| offered.contains(&s)) {
             return;

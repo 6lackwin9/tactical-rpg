@@ -1238,6 +1238,59 @@ mod tests {
         cut_column(CANVAS, resolve(&[frac(MENU_W)], CANVAS.w)[0], 0).0
     }
 
+    /// LAYOUT720-E5: what a manifest file declares reaches the shell's reader as written, with no notice.
+    #[test]
+    fn a_manifest_files_canvas_and_window_sizes_read_clean() {
+        let dir = scratch("menu_manifest");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("game.json");
+        std::fs::write(&path, r#"{"id": "demo", "title": "Demo", "canvas": {"policy": "fit", "w": 1280, "h": 800}, "window_sizes": ["1280x800", "2560x1600"]}"#).unwrap();
+        let m = aegis_content::manifest::Manifest::read(&path).unwrap();
+        let (policy, sizes, notices) = aegis_ui::shell::read_window_options(&m.canvas, &m.window_sizes);
+        assert_eq!(notices, Vec::<String>::new());
+        assert_eq!((policy, sizes), (aegis_ui::painter::CanvasPolicy::Fit { w: 1280, h: 800 }, vec!["1280x800".to_string(), "2560x1600".to_string()]));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// LAYOUT720-E5: the main menu must pass `desktop` at every text size, with and without its peek, on the default and the
+    /// game's theme; every other profile only has to resolve, and says what it finds. `AEGIS_AUDIT_PRINT=1` prints the answers.
+    #[test]
+    fn the_main_menu_passes_the_desktop_profile_and_resolves_on_every_other() {
+        use aegis_ui::layout_audit::{audit_screen, NO_MOUSE};
+        let dir = scratch("menu_audit");
+        let (mut cx, mut g) = (cx(dir.clone()), menu_gfx());
+        cx.app.manifest.title = "Emberwake".into();
+        cx.app.manifest.subtitle = "A Scarlet Lullaby".into();
+        write_fixture(&mut cx, 12);
+        let game = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let shipped = aegis_ui::theme::load(&aegis_core::assets::Layers::for_game(&game)).expect("the game's theme loads");
+        cx.art = aegis_ui::art::Art::new(Some(game));
+        let before = (g.canvas.w, g.canvas.h, g.view);
+        for (name, t) in [("default", aegis_ui::theme::Theme::default()), ("game", shipped)] {
+            aegis_ui::theme::set_theme(t);
+            for (state, mouse) in [("idle", NO_MOUSE), ("peek", OVER_FIRST)] {
+                let mut m = MainMenu::default();
+                let v = audit_screen(&mut m, &mut cx, &mut g, aegis_ui::painter::CanvasPolicy::default(), mouse, None);
+                if std::env::var_os("AEGIS_AUDIT_PRINT").is_some() {
+                    for p in v["profiles"].as_array().unwrap() {
+                        println!("{name} {state} {}: canvas {} classes {} counts {} text {} issues {}", p["profile"], p["canvas"], p["classes"], p["counts"], p["text_counts"], p["issues"]);
+                    }
+                }
+                assert_eq!(v["pass"], json!(true), "{name} {state}: {v}");
+                assert_eq!(v["profiles"].as_array().unwrap().len(), aegis_ui::layout_audit::PROFILES.len(), "{v}");
+                assert_eq!((g.canvas.w, g.canvas.h, g.view), before, "left as it was found");
+            }
+            // The state above had its peek on the canvas it was written for, at the largest text size too.
+            let mut m = MainMenu::default();
+            let desktop = aegis_ui::layout_audit::profile_named("desktop").unwrap();
+            let v = audit_screen(&mut m, &mut cx, &mut g, aegis_ui::painter::CanvasPolicy::default(), OVER_FIRST, Some(desktop));
+            assert_eq!(v["pass"], json!(true), "{name}: {v}");
+            assert!(get(&m.widgets(), "menu.peek").is_some(), "{name}: the peek was drawn and audited");
+        }
+        aegis_ui::theme::set_theme(aegis_ui::theme::Theme::default());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// The picture signed off in old units (LOOK1-M1), doubled, each edge within a unit: column x 420 to 580 from the top
     /// 150, the peek's right edge 12 left of it, the logo's room x 390 to 625 from the top 13 and 62 high, the typeset logo
     /// at 620, 40. The shares are picked to land there exactly: the art's width is what T4 could not lose.

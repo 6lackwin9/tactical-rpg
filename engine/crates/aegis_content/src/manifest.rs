@@ -2,6 +2,8 @@
 //! save folder, qualified ids), the display `title` and `subtitle` (window title, main menu), the version, the kit and
 //! engine it needs, its worlds and start worlds, and the games it references. Written through `aegis content
 //! manifest` (`set`), never by hand. `icon` (ICON1, optional): the window icon, a PNG path over the asset layers.
+//! `canvas` and `window_sizes` (LAYOUT720-E5, optional): how the game's canvas relates to the window and the window sizes
+//! it offers; held as written, as the shell reads them (a bad value is a notice there and the default).
 
 use crate::file::{read, stringify};
 use crate::schema::is_id;
@@ -11,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 pub const FILE: &str = "game.json";
 /// The manifest's keys, in the order the file holds them.
-pub const KEYS: [&str; 10] = ["id", "title", "subtitle", "icon", "version", "kit", "engine", "worlds", "start_worlds", "references"];
+pub const KEYS: [&str; 12] = ["id", "title", "subtitle", "icon", "canvas", "window_sizes", "version", "kit", "engine", "worlds", "start_worlds", "references"];
 
 #[derive(Debug, Clone, Default)]
 pub struct Manifest {
@@ -20,6 +22,10 @@ pub struct Manifest {
     pub subtitle: String,
     /// The window icon: a PNG path relative to the asset layers; "" none, and the file then has no such key.
     pub icon: String,
+    /// The canvas policy (`{"policy", "w", "h"}`) as written; null: the default, and the file then has no such key.
+    pub canvas: Value,
+    /// The window sizes offered (a list of `WxH` strings) as written; null: the default, and the file then has no such key.
+    pub window_sizes: Value,
     pub version: String,
     pub kit: String,
     pub engine: String,
@@ -36,6 +42,9 @@ impl Manifest {
             title: json::s(d, "title"),
             subtitle: json::s(d, "subtitle"),
             icon: json::s(d, "icon"),
+            // Reading a file makes every number a float (`file::read`); these go on as written, whole numbers whole.
+            canvas: d.get("canvas").map_or(Value::Null, json::normalize),
+            window_sizes: d.get("window_sizes").map_or(Value::Null, json::normalize),
             version: json::s(d, "version"),
             kit: json::s(d, "kit"),
             engine: json::s(d, "engine"),
@@ -52,6 +61,11 @@ impl Manifest {
         d.insert("subtitle".into(), self.subtitle.clone().into());
         if !self.icon.is_empty() {
             d.insert("icon".into(), self.icon.clone().into());
+        }
+        for (key, value) in [("canvas", &self.canvas), ("window_sizes", &self.window_sizes)] {
+            if !value.is_null() {
+                d.insert(key.into(), value.clone());
+            }
         }
         d.insert("version".into(), self.version.clone().into());
         d.insert("kit".into(), self.kit.clone().into());
@@ -195,8 +209,8 @@ mod tests {
         assert!(Manifest::set(&path, &patch(serde_json::json!({"start_worlds": ["two"]}))).unwrap_err()[0].contains("start world 'two'"));
         let back = Manifest::read(&path).unwrap();
         assert_eq!(back.to_dict(), m.to_dict());
-        // Every key but the optional icon, which this manifest does not set.
-        assert_eq!(back.to_dict().keys().cloned().collect::<Vec<_>>(), KEYS.iter().filter(|k| **k != "icon").copied().collect::<Vec<_>>());
+        // Every key but the optional ones, which this manifest does not set.
+        assert_eq!(back.to_dict().keys().cloned().collect::<Vec<_>>(), KEYS.iter().filter(|k| !["icon", "canvas", "window_sizes"].contains(*k)).copied().collect::<Vec<_>>());
         assert_eq!(find_game_dir(&game.join("data"), "demo").as_deref(), Some(game.as_path()));
         assert_eq!(find_game_dir(&root, "demo").as_deref(), Some(game.as_path()));
         assert_eq!(find_game_dir(&root, "other"), None);

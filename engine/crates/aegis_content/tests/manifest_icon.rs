@@ -14,16 +14,38 @@ fn patch(v: Value) -> aegis_core::json::Dict {
 #[test]
 fn a_manifest_without_an_icon_writes_no_key() {
     assert!(!manifest("").to_dict().contains_key("icon"));
+    assert!(!manifest("").to_dict().contains_key("canvas") && !manifest("").to_dict().contains_key("window_sizes"), "the same for the canvas and the window sizes");
     assert_eq!(Manifest::from_dict(&patch(json!({"id": "demo", "title": "Demo"}))).icon, "");
     assert!(manifest("").problems().is_empty());
 }
 
 #[test]
 fn the_icon_keeps_its_place_and_round_trips() {
-    let d = manifest("ui/mark.png").to_dict();
-    assert_eq!(Manifest::from_dict(&d).icon, "ui/mark.png");
+    let m = Manifest { canvas: json!({"policy": "fixed"}), window_sizes: json!(["1280x720"]), ..manifest("ui/mark.png") };
+    let d = m.to_dict();
+    let back = Manifest::from_dict(&d);
+    assert_eq!((back.icon.as_str(), &back.canvas, &back.window_sizes), ("ui/mark.png", &m.canvas, &m.window_sizes));
     let order: Vec<&str> = d.keys().map(String::as_str).collect();
     assert_eq!(order, KEYS, "the file holds the keys in KEYS order");
+}
+
+#[test]
+fn set_keeps_the_canvas_and_window_sizes_as_written_and_null_removes_them() {
+    let dir = std::env::temp_dir().join(format!("aegis_manifest_canvas_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("game.json");
+    Manifest::set(&path, &patch(json!({"id": "demo", "title": "Demo"}))).unwrap();
+    assert!(!std::fs::read_to_string(&path).unwrap().contains("canvas"), "absent stays absent");
+    let (canvas, sizes) = (json!({"policy": "fit", "w": 1280, "h": 720}), json!(["1280x720", "1920x1080"]));
+    Manifest::set(&path, &patch(json!({"canvas": canvas, "window_sizes": sizes}))).unwrap();
+    let back = Manifest::read(&path).unwrap();
+    assert_eq!((&back.canvas, &back.window_sizes), (&canvas, &sizes));
+    assert_eq!(back.canvas["w"].as_i64(), Some(1280), "a whole number stays one, as the shell reads it");
+    Manifest::set(&path, &patch(json!({"canvas": null, "window_sizes": null}))).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(!text.contains("canvas") && !text.contains("window_sizes"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

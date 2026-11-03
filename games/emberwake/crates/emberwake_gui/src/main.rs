@@ -107,7 +107,7 @@ fn main() -> Result<()> {
         }
     };
     let title = format!("Aegis - {}", manifest.title);
-    let icon = manifest.icon.clone();
+    let (icon, canvas, window_sizes) = (manifest.icon.clone(), manifest.canvas.clone(), manifest.window_sizes.clone());
     let game = GameCx {
         data,
         manifest,
@@ -147,7 +147,7 @@ fn main() -> Result<()> {
         _ => {}
     }
     let port = arg(&args, "port").and_then(|p| p.parse().ok()).unwrap_or(aegis_ui::bridge::DEFAULT_PORT);
-    let options = Options { title, font: engine.join("assets/fonts/OpenSans-SemiBold.ttf"), port, icon };
+    let options = Options { title, font: engine.join("assets/fonts/OpenSans-SemiBold.ttf"), port, icon, canvas, window_sizes };
     aegis_ui::shell::run(cx, stack, options)
 }
 

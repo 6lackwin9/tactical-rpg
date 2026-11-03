@@ -8,8 +8,9 @@
 use crate::bridge;
 use crate::focus;
 use crate::canvas::{Canvas, Image};
-use crate::painter::{Fonts, Grid, Painter, View};
-use crate::screen::{window_capped, window_centred, window_kept_in, window_size_of, Context, Cx, Held, Key, Nav, Notice, ScreenRect, Screen, WindowShow};
+use crate::layout_audit::{self, Profile};
+use crate::painter::{CanvasPolicy, Fonts, Grid, Painter, View};
+use crate::screen::{read_window_sizes, Settings, WINDOW_SIZES, window_capped, window_centred, window_kept_in, window_size_of, Context, Cx, Held, Key, Nav, Notice, ScreenRect, Screen, WindowShow};
 use crate::canvas::{rgba, Rect};
 use crate::window::Grab;
 use crate::theme::{th, Metrics};
@@ -38,6 +39,34 @@ pub struct Options {
     pub port: u16,
     /// The window's icon: a PNG path over the asset layers ("" none; ICON1, `crate::icon`).
     pub icon: String,
+    /// The manifest's `canvas` as written (null: `CanvasPolicy`'s default; a bad value is a notice and the default).
+    pub canvas: Value,
+    /// The manifest's `window_sizes` as written (null: the shell holds nothing, and what the game told its settings stands;
+    /// a bad value is a notice and `WINDOW_SIZES`).
+    pub window_sizes: Value,
+}
+
+/// Holds the saved window size to what the manifest declared (`declared` as written, `offered` as `read_window_options`
+/// read it). A manifest with no such key says nothing, so it overrides nothing the game gave `keep_window_size` itself.
+fn hold_declared_sizes(settings: &mut Settings, declared: &Value, offered: &[String]) {
+    if !declared.is_null() {
+        settings.keep_window_size(&offered.iter().map(String::as_str).collect::<Vec<_>>());
+    }
+}
+
+/// What a game's options say of its canvas and windows (LAYOUT720-E5): the policy, the sizes it offers and a notice for
+/// each value refused.
+pub fn read_window_options(canvas: &Value, window_sizes: &Value) -> (CanvasPolicy, Vec<String>, Vec<String>) {
+    let mut notices = Vec::new();
+    let policy = CanvasPolicy::read(canvas).unwrap_or_else(|e| {
+        notices.push(format!("game.json: {e}; using the default canvas."));
+        CanvasPolicy::default()
+    });
+    let sizes = read_window_sizes(window_sizes).unwrap_or_else(|e| {
+        notices.push(format!("game.json: {e}; using the default window sizes."));
+        WINDOW_SIZES.map(String::from).to_vec()
+    });
+    (policy, sizes, notices)
 }
 
 struct Shell<G> {
@@ -77,6 +106,8 @@ struct Shell<G> {
     agent: bool,
     /// Frames drawn so far (`ui_tree`'s `frame`): a link reply comes before the frame that shows it, so a driver waits on this.
     frames: u64,
+    /// How native screens' canvas relates to the window (the game's `Options::canvas`).
+    policy: CanvasPolicy,
 }
 
 /// A press on a draggable widget: its id, payload and text, and where the press was.
@@ -188,10 +219,19 @@ impl<G: Context> Shell<G> {
         View::fit(self.gfx.canvas.w as u32, self.gfx.canvas.h as u32)
     }
 
+    /// The view of a screen on `grid`: a native screen's comes from the game's policy, the others' from the whole window.
+    fn view_of(&self, grid: Grid) -> View {
+        if grid == Grid::Native {
+            let d = self.gfx.kit.device;
+            View::native(self.policy, self.gfx.canvas.w as u32, self.gfx.canvas.h as u32, d.dpr, d.ui_scale)
+        } else {
+            self.whole_view().for_grid(grid)
+        }
+    }
+
     /// The top screen's view.
     fn top_view(&self) -> View {
-        let whole = self.whole_view();
-        self.stack.last().map_or(whole, |t| whole.for_grid(t.grid()))
+        self.stack.last().map_or_else(|| self.whole_view(), |t| self.view_of(t.grid()))
     }
 
     /// The stack changed: the view and the mouse become the new top's. Nothing moves between screens with one view; the
@@ -359,21 +399,23 @@ impl<G: Context> Shell<G> {
             base -= 1;
         }
         let n = self.stack.len();
-        let whole = self.whole_view();
         for i in base..n {
             let live = i == n - 1;
-            self.gfx.view = whole.for_grid(self.stack[i].grid());
+            self.gfx.view = self.view_of(self.stack[i].grid());
             let mouse = if live { self.mouse } else { (-1, -1) };
-            // the text audit records the top screen only (what lies under a popup is covered, not cramped)
-            let paused = if live { None } else { self.gfx.fonts.audit.take() };
+            // the audits record the top screen only (what lies under a popup is covered, not cramped)
+            let paused = if live { (None, None) } else { (self.gfx.fonts.audit.take(), self.gfx.fonts.layout.take()) };
             self.stack[i].draw(&mut self.cx, &mut self.gfx, mouse, live);
-            if paused.is_some() {
-                self.gfx.fonts.audit = paused;
+            if paused.0.is_some() {
+                self.gfx.fonts.audit = paused.0;
+            }
+            if paused.1.is_some() {
+                self.gfx.fonts.layout = paused.1;
             }
         }
         self.gfx.canvas.clip = None;
         // The focus ring, the open list, the ghost and the tip are the top screen's: its view stays until the stack changes.
-        self.gfx.view = whole.for_grid(self.stack[n - 1].grid());
+        self.gfx.view = self.view_of(self.stack[n - 1].grid());
         self.settle_focus();
         self.settle_pointer();
         let mut p = Painter { c: &mut self.gfx.canvas, v: self.gfx.view, fonts: &mut self.gfx.fonts };
@@ -857,25 +899,27 @@ impl<G: Context> Shell<G> {
     /// size at `scale` when given; reports the screen, the scale and `text_audit::issues` (saving that frame to `shot`
     /// when given), then draws again as it was.
     fn text_audit(&mut self, scale: Option<f32>, shot: Option<&Path>) -> Value {
+        let out = self.audit_frame(scale, shot).report;
+        self.frame();
+        out
+    }
+
+    /// One frame with both audits on (`text_audit`'s report, the layout audit under `layout`), the scale and the mouse
+    /// put back. The picture is left as the audit drew it, for the caller's last frame to replace.
+    fn audit_frame(&mut self, scale: Option<f32>, shot: Option<&Path>) -> layout_audit::FrameAudit {
         let (old_scale, old_mouse) = (self.gfx.fonts.scale, self.mouse);
         if let Some(s) = scale {
             self.gfx.fonts.scale = s;
         }
-        self.mouse = (-500, -500);
+        self.mouse = layout_audit::NO_MOUSE;
         self.gfx.fonts.audit = Some(Vec::new());
+        self.gfx.fonts.layout = Some(Vec::new());
         self.frame();
-        let recs = self.gfx.fonts.audit.take().unwrap_or_default();
-        let screen = self.stack.last().map(|s| s.id()).unwrap_or("");
-        let boxes: Vec<(String, f32, f32, f32, f32)> = self.stack.last().map(|s| s.widgets()).unwrap_or_default().iter()
-            .filter(|w| w["kind"] != "scroll")
-            .map(|w| {
-                let r = info_rect(w);
-                (w["id"].as_str().unwrap_or("").to_string(), r.x as f32, r.y as f32, r.w as f32, r.h as f32)
-            })
-            .collect();
-        let view = self.top_view();
-        let (cw, ch) = view.canvas();
-        let mut out = crate::text_audit::issues_on(&recs, cw as f32, ch as f32, &boxes, view.g);
+        let (recs, laid) = (self.gfx.fonts.audit.take().unwrap_or_default(), self.gfx.fonts.layout.take().unwrap_or_default());
+        let top = self.stack.last();
+        let (screen, grid, widgets) = (top.map_or("", |s| s.id()), top.map_or(Grid::Old, |s| s.grid()), top.map(|s| s.widgets()).unwrap_or_default());
+        let mut audit = layout_audit::frame_report(self.top_view(), grid, &recs, &laid, &widgets);
+        let out = &mut audit.report;
         out["screen"] = json!(screen);
         out["scale"] = json!(self.gfx.fonts.scale);
         if let Some(path) = shot {
@@ -886,6 +930,32 @@ impl<G: Context> Shell<G> {
         }
         self.gfx.fonts.scale = old_scale;
         self.mouse = old_mouse;
+        audit
+    }
+
+    /// Runs `f` with the window, the device and the policy of `profile`, then puts them back, with the keyboard's focus and
+    /// any open list (`Profile::enter`). The mouse stays in the units it was in, and the caller draws a frame once it is done.
+    fn on_profile<R>(&mut self, profile: &Profile, f: impl FnOnce(&mut Self) -> R) -> R {
+        let game = self.policy;
+        let entered = profile.enter(&mut self.gfx, game);
+        self.policy = profile.policy_for(game);
+        self.gfx.view = self.top_view();
+        let out = f(self);
+        self.policy = game;
+        entered.leave(&mut self.gfx);
+        out
+    }
+
+    /// LAYOUT720-E5: the top screen through the size profiles (`only`: that one) at the four text sizes, then drawn as it
+    /// was (`layout_audit::sweep`'s answer). A screen in old numbers is not audited, and nothing is drawn for it.
+    fn layout_audit(&mut self, only: Option<&Profile>) -> Value {
+        let grid = self.stack.last().map_or(Grid::Old, |t| t.grid());
+        if grid != Grid::Native {
+            return layout_audit::not_audited(grid);
+        }
+        let breakpoints = Metrics::of(&th(), self.gfx.view).breakpoints;
+        let game = self.policy;
+        let out = layout_audit::sweep(game, only, breakpoints, |p, scale| self.on_profile(p, |s| s.audit_frame(Some(scale), None)));
         self.frame();
         out
     }
@@ -1094,14 +1164,37 @@ impl<G: Context> Shell<G> {
                     json!({"ok": false, "error": self.cx.notice.last().cloned().unwrap_or_else(|| "no note box".into())})
                 }
             }
-            // TEXTFIT1: one frame drawn with the text audit on (at `scale` when given, the saved text size after)
+            // TEXTFIT1: one frame drawn with the text audit on (at `scale` when given, the saved text size after); the layout
+            // audit reads the same frame, under `layout` (LAYOUT720-E5). `profile`: on that window and device.
             "text_audit" => {
                 let scale = body.get("scale").and_then(Value::as_f64).map(|s| s.clamp(0.5, 2.0) as f32);
                 let shot = body.get("shot").and_then(Value::as_str).map(PathBuf::from);
-                let mut out = self.text_audit(scale, shot.as_deref());
-                out["ok"] = json!(true);
-                out
+                match body.get("profile").and_then(Value::as_str).map(layout_audit::profile_named).transpose() {
+                    Err(e) => json!({"ok": false, "error": e}),
+                    Ok(profile) => {
+                        let mut out = match profile {
+                            None => self.text_audit(scale, shot.as_deref()),
+                            Some(p) => {
+                                let out = self.on_profile(p, |s| s.audit_frame(scale, shot.as_deref())).report;
+                                self.frame();
+                                out
+                            }
+                        };
+                        out["ok"] = json!(true);
+                        out
+                    }
+                }
             }
+            // LAYOUT720-E5: the top screen through every size profile at the four text sizes (`profile`: that one).
+            "layout_audit" => match body.get("profile").and_then(Value::as_str).map(layout_audit::profile_named).transpose() {
+                Err(e) => json!({"ok": false, "error": e}),
+                Ok(only) => {
+                    let mut out = self.layout_audit(only);
+                    out["ok"] = json!(true);
+                    out["screen"] = json!(self.stack.last().map_or("", |s| s.id()));
+                    out
+                }
+            },
             "screenshot" => {
                 let path = body.get("path").and_then(Value::as_str).map(PathBuf::from).unwrap_or_else(|| self.cx.shot_dir.join("gui_shot.png"));
                 let max_w = body.get("max_w").and_then(Value::as_u64).unwrap_or(1280) as i32;
@@ -1301,8 +1394,11 @@ impl<G: Context> ApplicationHandler for App<G> {
         let font_bytes = std::fs::read(&self.options.font).unwrap_or_else(|e| panic!("{}: {e}", self.options.font.display()));
         let mut gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
         gfx.kit.device.dpr = window.scale_factor() as f32;
-        let mut shell = Shell { cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, frames: 0 };
+        let (policy, offered, window_notices) = read_window_options(&self.options.canvas, &self.options.window_sizes);
+        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
         shell.cx.notice.extend(icon_notice);
+        shell.cx.notice.extend(window_notices);
+        hold_declared_sizes(&mut shell.cx.settings, &self.options.window_sizes, &offered);
         let port = self.options.port;
         self.bridge = bridge::start(port, self.proxy.clone());
         if self.bridge.is_none() {
@@ -1708,7 +1804,7 @@ mod tests {
             app: App::default(),
         };
         let gfx = Gfx { canvas: Canvas::new(W, H), view: View::fit(W as u32, H as u32), fonts: Fonts::new(&font), kit: Kit::default() };
-        let mut s = Shell { cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false, frames: 0 };
+        let mut s = Shell { frames: 0, policy: CanvasPolicy::default(), cx, gfx, stack: vec![Box::new(Board::default())], mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
         s.frame();
         s
     }
@@ -3323,6 +3419,229 @@ mod tests {
             s.drag_to();
             assert!(s.gfx.kit.drag.is_some(), "{grid:?}: past it");
         }
+    }
+
+    // ---- LAYOUT720-E5: the game's canvas and the layout audit (the rest: tests/canvas_policy.rs, tests/layout_audit.rs) ---
+
+    use crate::layout_specimen::LayoutSpecimen;
+
+    const FIT: CanvasPolicy = CanvasPolicy::Fit { w: 1280, h: 720 };
+
+    fn specimen() -> Box<LayoutSpecimen> {
+        Box::new(LayoutSpecimen::default())
+    }
+
+    #[test]
+    fn a_games_policy_reaches_its_native_screens_and_no_other() {
+        let mut s = window(3440, 1440, vec![on_grid("top", Grid::Native, false)]);
+        assert_eq!(s.gfx.view.canvas(), crate::painter::GRID, "the default: Fixed");
+        s.policy = FIT;
+        s.frame();
+        assert_eq!(s.gfx.view, View::native(FIT, 3440, 1440, 1.0, 1.0));
+        assert_eq!(s.bridge(&json!({"cmd": "ui_tree"}))["canvas"], json!([1720, 720]));
+        let (s_fit, whole) = (s.gfx.view.s, View::fit(3440, 1440));
+        s.cx.nav.push(Nav::Push(on_grid("old", Grid::Old, false)));
+        s.frame();
+        assert_eq!(s.gfx.view, whole, "an old screen keeps the whole window's view, whatever the game declares");
+        s.cx.nav.push(Nav::Pop);
+        s.frame();
+        assert_eq!(s.gfx.view.s, s_fit, "and the native one its own");
+        // A native screen under an old overlay: each draws with its own view, the top's stays.
+        s.cx.nav.push(Nav::Push(on_grid("over", Grid::Old, true)));
+        s.frame();
+        assert_eq!(s.gfx.view, whole);
+        assert!(s.cx.app.log.iter().any(|l| l.starts_with(&format!("draw top s={s_fit} g=2"))), "{:?}", s.cx.app.log);
+    }
+
+    #[test]
+    fn a_physical_pointer_clicks_the_widget_under_it_on_a_fit_canvas() {
+        for (pw, ph) in [(3440, 1440), (1920, 1200), (1280, 800)] {
+            let mut s = window(pw, ph, vec![on_grid("top", Grid::Native, false)]);
+            s.policy = FIT;
+            s.frame();
+            for id in ["left", "far"] {
+                let (x, y) = middle_px(&s, id);
+                s.pointer_moved(x, y);
+                assert!(row_rect(&s, id).contains(s.mouse.0, s.mouse.1), "{pw}x{ph} {id}: {:?}", s.mouse);
+            }
+        }
+    }
+
+    #[test]
+    fn a_resize_re_resolves_a_native_screen_with_no_screen_edit() {
+        let mut s = window(1280, 720, vec![specimen()]);
+        s.policy = FIT;
+        s.frame();
+        let wide = |s: &mut Shell<App>, pw: i32, ph: i32| {
+            s.gfx.canvas = Canvas::new(pw, ph);
+            s.gfx.view = s.top_view();
+            s.frame();
+            let t = s.bridge(&json!({"cmd": "ui_tree"}));
+            (t["canvas"].clone(), row_rect(s, "layout.close"))
+        };
+        let (narrow, a) = wide(&mut s, 1280, 720);
+        let (broad, b) = wide(&mut s, 3440, 1440);
+        assert_eq!((narrow, broad), (json!([1280, 720]), json!([1720, 720])));
+        assert!(b.x + b.w > a.x + a.w, "the close button follows the canvas's right edge: {a:?} {b:?}");
+    }
+
+    #[test]
+    fn the_layout_audit_answers_under_its_own_key() {
+        // The text audit's counts keep their exact form.
+        let mut s = window(1280, 720, vec![specimen()]);
+        let out = s.bridge(&json!({"cmd": "text_audit"}));
+        assert_eq!(out["counts"], json!({"cut": 0, "edge": 0, "overlap": 0, "spill": 0}), "{out}");
+        assert_eq!((out["layout"]["audited"].clone(), out["layout"]["clean"].clone(), out["layout"]["canvas"].clone()), (json!(true), json!(true), json!([1280, 720])), "{out}");
+        assert_eq!(out["layout"]["counts"].as_object().unwrap().len(), layout_audit::KINDS.len());
+        // A screen in old numbers keeps its answer, and is not audited for layout.
+        for grid in [Grid::Old, Grid::Quadrant] {
+            let mut s = window(1280, 720, vec![on_grid("top", grid, false)]);
+            let out = s.bridge(&json!({"cmd": "text_audit"}));
+            assert_eq!(out["layout"]["audited"], json!(false), "{grid:?}: {out}");
+            assert!(out["counts"].is_object());
+            let out = s.bridge(&json!({"cmd": "layout_audit"}));
+            assert_eq!((out["ok"].clone(), out["audited"].clone(), out["screen"].clone()), (json!(true), json!(false), json!("top")), "{grid:?}: {out}");
+            assert!(out["why"].as_str().unwrap().contains(grid.name()), "{out}");
+        }
+    }
+
+    #[test]
+    fn the_audit_records_the_top_screen_only() {
+        // An overlay over a native screen with a zero-size widget: only what the top screen drew is read.
+        struct Bare {
+            over: bool,
+            w: Vec<Widget<()>>,
+        }
+        impl Bare {
+            fn act(&mut self, _: &mut Cx, _: ()) {}
+        }
+        impl Screen<App> for Bare {
+            fn id(&self) -> &'static str {
+                "bare"
+            }
+            fn grid(&self) -> Grid {
+                Grid::Native
+            }
+            fn overlay(&self) -> bool {
+                self.over
+            }
+            fn draw(&mut self, _: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+                let mut ui: Ui<()> = Ui::new(g, mouse, live);
+                if !self.over {
+                    ui.push("under.gone", "row", "", Rect::new(0, 0, 0, 0), true, false, None, Vec::new());
+                }
+                self.w = ui.widgets;
+            }
+            crate::widget_plumbing!(Cx);
+        }
+        let mut s = window(1280, 720, vec![Box::new(Bare { over: false, w: Vec::new() }), Box::new(Bare { over: true, w: Vec::new() })]);
+        assert_eq!(s.bridge(&json!({"cmd": "text_audit"}))["layout"]["clean"], json!(true));
+        s.stack.pop();
+        let out = s.bridge(&json!({"cmd": "text_audit"}));
+        assert_eq!(out["layout"]["counts"]["zero_size"], json!(1), "alone, it is read: {out}");
+    }
+
+    #[test]
+    fn the_sweep_passes_on_desktop_and_leaves_the_window_as_it_was() {
+        let mut s = window(1920, 1080, vec![specimen()]);
+        s.gfx.kit.device.dpr = 1.25;
+        s.frame();
+        s.mouse = (321, 123);
+        s.gfx.fonts.scale = 1.15;
+        s.frame();
+        let before = (s.gfx.canvas.px.clone(), s.gfx.view, s.gfx.kit.device, s.policy);
+        let out = s.bridge(&json!({"cmd": "layout_audit"}));
+        assert_eq!((out["ok"].clone(), out["audited"].clone(), out["pass"].clone(), out["screen"].clone()), (json!(true), json!(true), json!(true), json!(crate::layout_specimen::ID)), "{out}");
+        assert_eq!(out["profiles"].as_array().unwrap().len(), layout_audit::PROFILES.len());
+        let names: Vec<&str> = out["profiles"].as_array().unwrap().iter().map(|p| p["profile"].as_str().unwrap()).collect();
+        assert_eq!(names, layout_audit::PROFILES.map(|p| p.name));
+        assert!(before.0 == s.gfx.canvas.px, "the picture is back");
+        assert_eq!((s.gfx.view, s.gfx.kit.device, s.policy), (before.1, before.2, before.3));
+        assert_eq!((s.gfx.canvas.w, s.gfx.canvas.h, s.gfx.fonts.scale, s.mouse), (1920, 1080, 1.15, (321, 123)));
+        assert_eq!((s.gfx.fonts.audit.is_none(), s.gfx.fonts.layout.is_none()), (true, true), "no audit stays on");
+    }
+
+    #[test]
+    fn one_profile_runs_alone_and_a_wrong_name_says_what_there_is() {
+        let mut s = window(1280, 720, vec![specimen()]);
+        let out = s.bridge(&json!({"cmd": "layout_audit", "profile": "phone_portrait"}));
+        assert_eq!(out["profiles"].as_array().unwrap().len(), 1, "{out}");
+        assert_eq!((out["profiles"][0]["canvas"].clone(), out["profiles"][0]["must_pass"].clone(), out["pass"].clone()), (json!([390, 844]), json!(false), json!(true)), "reports only: {out}");
+        let one = s.bridge(&json!({"cmd": "text_audit", "profile": "ultrawide", "scale": 1.3}));
+        assert_eq!((one["ok"].clone(), one["layout"]["canvas"].clone(), one["scale"].clone()), (json!(true), json!([1720, 720]), json!(1.3f32)), "{one}");
+        assert_eq!((s.gfx.canvas.w, s.gfx.canvas.h, s.gfx.view), (1280, 720, View::fit(1280, 720).for_grid(Grid::Native)));
+        for cmd in ["layout_audit", "text_audit"] {
+            let out = s.bridge(&json!({"cmd": cmd, "profile": "watch"}));
+            assert_eq!(out["ok"], json!(false), "{out}");
+            assert!(out["error"].as_str().unwrap().contains("desktop"), "{out}");
+        }
+    }
+
+    /// The manifest's list holds the saved size; with no such key the game's own list stands.
+    #[test]
+    fn only_a_declared_list_replaces_the_games_own() {
+        let game = ["1280x720", "1920x1080"];
+        let settings = || {
+            let mut s = Settings::load(std::env::temp_dir().join("aegis_no_settings.json"), json!({}));
+            s.keep_window_size(&game);
+            s
+        };
+        let hold = |declared: Value| {
+            let mut s = settings();
+            s.v["window_size"] = json!("2560x1440");
+            let (_, offered, notices) = read_window_options(&Value::Null, &declared);
+            hold_declared_sizes(&mut s, &declared, &offered);
+            (s.window_sizes().to_vec(), s.v["window_size"].clone(), notices.len())
+        };
+        assert_eq!(hold(Value::Null), (game.map(String::from).to_vec(), json!("2560x1440"), 0), "absent: nothing is touched");
+        assert_eq!(hold(json!(["1366x768"])), (vec!["1366x768".to_string()], json!("1366x768"), 0), "declared");
+        assert_eq!(hold(json!(7)), (WINDOW_SIZES.map(String::from).to_vec(), json!("2560x1440"), 1), "refused: a notice and the default");
+    }
+
+    /// A widget a profile's canvas has no room for must not take the focus or an open list with it for good.
+    #[test]
+    fn a_profile_leaves_the_focus_where_it_was() {
+        struct Shrinks {
+            w: Vec<Widget<()>>,
+        }
+        impl Shrinks {
+            fn act(&mut self, _: &mut Cx, _: ()) {}
+        }
+        impl Screen<App> for Shrinks {
+            fn id(&self) -> &'static str {
+                "shrinks"
+            }
+            fn grid(&self) -> Grid {
+                Grid::Native
+            }
+            fn draw(&mut self, _: &mut Cx, g: &mut Gfx, mouse: (i32, i32), live: bool) {
+                let mut ui: Ui<()> = Ui::new(g, mouse, live);
+                ui.row("always", Rect::new(0, 0, 100, 40), "Always", TEXT, Some(()), false, Vec::new());
+                if ui.screen().w >= 1000 {
+                    ui.row("wide.only", Rect::new(0, 50, 100, 40), "Wide", TEXT, Some(()), false, Vec::new());
+                }
+                self.w = ui.widgets;
+            }
+            crate::widget_plumbing!(Cx);
+        }
+        let mut s = window(1280, 720, vec![Box::new(Shrinks { w: Vec::new() })]);
+        s.gfx.kit.focus = Some("wide.only".into());
+        s.gfx.kit.focus_visible = true;
+        let keep = |s: &Shell<App>| (s.gfx.kit.focus.clone(), s.gfx.kit.focus_visible);
+        let was = keep(&s);
+        for cmd in [json!({"cmd": "layout_audit"}), json!({"cmd": "layout_audit", "profile": "phone_portrait"}), json!({"cmd": "text_audit", "profile": "phone_portrait"})] {
+            s.bridge(&cmd);
+            assert_eq!(keep(&s), was, "{cmd}");
+        }
+        // Moved by the frames, as `settle_focus` does when the widget is gone: the profile's own leaving puts it back.
+        let mut g = Gfx { canvas: Canvas::new(1280, 720), view: s.gfx.view, fonts: Fonts::new(&std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts/OpenSans-SemiBold.ttf")).unwrap()), kit: Kit::default() };
+        g.kit.open = Some("a list".into());
+        g.kit.focus = Some("wide.only".into());
+        let entered = layout_audit::profile_named("phone_portrait").unwrap().enter(&mut g, CanvasPolicy::default());
+        g.kit.open = None;
+        g.kit.focus = Some("always".into());
+        entered.leave(&mut g);
+        assert_eq!((g.kit.open.as_deref(), g.kit.focus.as_deref()), (Some("a list"), Some("wide.only")));
     }
 
     /// The text audit reads the top screen's canvas: a text inside the grid is no problem on a native screen and past the

@@ -8,9 +8,8 @@ dimensions needs few or no screen edits.
 
 Built so far: the crate `aegis_layout` (`Rect`, `Insets`, `Anchor`, `Part` with `min`, `frac`, `ratio`, `fill`, `resolve`, `Stack`, `Axis`, `pick`),
 `aegis_ui::shot_diff`, `Grid` and `Screen::grid`, `Metrics` with `hair`, `Env`, `Ui::m`, `Ui::env`, `Ui::screen`,
-`Ui::image_in`, `Ui::frame_body` and `Ui::corner_size`, and the kit's widgets, panes, pip gauge, timeline and desk, which draw
-right on every grid. The later slice of the engine's layout work (`docs/specs/LAYOUT720.md`) adds `CanvasPolicy` and
-`layout_audit` (E5). A name on this page that the code does not have yet is one of those.
+`Ui::image_in`, `Ui::frame_body` and `Ui::corner_size`, the kit's widgets, panes, pip gauge, timeline and desk, which draw
+right on every grid, `CanvasPolicy`, `View::native`, `layout_audit`, its size profiles and `layout_specimen`.
 
 What has no `Ui` to read answers in old units, with an `_on` form for any grid: `panes::slot_rects_on(&m, r, n)`,
 `panes::tab_rail_rects_on(&m, r, n)`, `panes::snap_on(v, m.grid)`, `pips::pip_rect_on(x, cy, k, m.g)`,
@@ -30,6 +29,18 @@ physical pixels one unit is.
 
 The engine supports any canvas; a game decides what it offers. The grid's size is set in one place and is never a number
 in a screen: every screen receives its canvas as a rect.
+
+A game declares both in its manifest, and they reach the shell through `Options`. A bad value is a notice and the default.
+
+| Key | Form | Absent |
+| --- | --- | --- |
+| `canvas` | `{"policy": "fixed", "fit" or "dp", "w": n, "h": n}`; `w` a whole multiple of 640; `dp` takes no `w` or `h` | `fixed`, the grid's size |
+| `window_sizes` | A list of 1 to 32 `WxH` strings, none twice. The saved size is held to it, and a settings row reads `Settings::window_sizes` | The shell holds nothing: the list the game gave `keep_window_size`, else the engine's |
+
+The canvas is a value in the view (`View.canvas`), and the policy decides the view of `Native` screens only: `Old` and
+`Quadrant` screens keep the old canvas whatever a game declares. A preview draws a native screen on the grid's canvas, whatever
+the game's policy. `View::native(policy, pw, ph, dpr, ui_scale)` gives the view; a side's canvas is whole units, rounded down,
+and what is left of the window, under a unit, stays blank.
 
 ## Writing a screen
 
@@ -166,7 +177,7 @@ Every stack or list declares what it does when it does not fit; the default is R
 | Scroll | The widget kit's scroll area, content height from `Stack` | Lists, long text |
 | Collapse | The kit's section, or tabs through `pick` | Secondary panels |
 | Truncate | Fitted text with the full text on a tip and on focus | Names, one-line labels |
-| Report | `Stack::overflow()` goes into the audit; drawing is clipped to the area | Anything not designed to overflow |
+| Report | `ui.report_overflow(id, area, stack.overflow())` goes into the audit; drawing is clipped to the area | Anything not designed to overflow |
 
 ## `dpr`, Text size and UI scale
 
@@ -212,8 +223,23 @@ portable. No `Native` screen assumes a wide canvas; one with no compact choice r
 
 - **Relations, not numbers.** "Yes is left of No, inside the frame, one gutter apart", over several canvases. Derive every
   expected value from the rules.
-- **Profiles.** A moved screen must pass the `desktop` profile at each text size. Other profiles (wide, ultrawide, handheld,
-  browser, phone) report only until the minimums exist, and must resolve without a panic.
+- **Profiles.** A moved screen must pass the `desktop` profile at each text size. Other profiles (`wide`, `ultrawide`,
+  `handheld`, `browser_small`, `phone_landscape`, `phone_portrait`) report only until the minimums exist, and must resolve
+  without a panic.
+- **`layout_audit`.** What a frame of a `Native` screen does with its space; `Old` and `Quadrant` screens answer
+  `{"audited": false, "why"}`. The agent link's `text_audit` gives it for one frame under its own `layout` key, so the text
+  audit's counts keep their form. Its `layout_audit {profile}` runs every profile, or that one, at the four text sizes, and
+  answers `{pass, profiles: [{profile, must_pass, window, policy, canvas, classes, clean, counts, text_counts, issues}]}`. With
+  no shell (a test, a tool): `layout_audit::audit_screen`. An issue has `kind`, `what`, `at` (in the screen's units) and `why`,
+  a sentence with the numbers.
+
+| Kind | Means | Fix |
+| --- | --- | --- |
+| `overflow` | A stack or list needs `by` units more than its area | Scroll, collapse, or a `pick` choice for less room |
+| `off_canvas` | A widget, frame or image runs up to `by` units past the canvas | A rect cut from the canvas, not added to it |
+| `zero_size` | A widget, frame, frame body or image got no room. A row scrolled out of its area is not one | A choice for less room; a minimum, once they exist |
+| `corner_shrunk` | A panel too small for its frame's corners draws them at `share` of their size, against one corner size per screen | A larger panel, or a smaller `corner_size` for the screen |
+| `hover_only` | A tip on a widget that takes neither focus nor a press | A focusable widget, or the text on the screen |
 - **`shot_diff`.** `aegis_ui::shot_diff::shot_diff(a, b, s)` compares two shots at `s` physical px per grid unit. A pixel
   matches if some pixel of the other image within `ceil(s)`, in a square window, is within 3 per channel. Both images are
   read against each other, and any unmatched pixel fails with a bounding box. It refuses shots of different sizes. It knows
