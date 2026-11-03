@@ -4,7 +4,7 @@ What only you can judge, with what to do. The planner keeps this current: new it
 
 ## Battle view: closes M1
 
-Scene Runner > Arena > `tl_flank`. Plan a round, then confirm it.
+Scene Runner > Arena > `tl_flank`, with **Ruleset set to Timeline** on the Arena card (otherwise it may run on Classic, with no capsules or coloured strip). Plan a round, then confirm it.
 
 - [ ] Plan strip: are the block colours, centred icons and names readable? Icons are generic for now, as `tl_` skills have no art of their own.
 - [ ] No first-move chips on enemies, only the intent marker. Is that enough?

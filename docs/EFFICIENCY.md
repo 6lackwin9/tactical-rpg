@@ -182,6 +182,8 @@ Anything done repeatedly, a temp script worth keeping or a trial-and-error loop 
 | Hand-written scripts driving a real window | 20 scripts in the lanes, 2,451 lines; most UI tasks | `aegis scenario`, skill `real-window` | INTEG1-E1, SKILLS1 |
 | Scratch files overwriting each other in the shared scratchpad | VIEWKEYS1, TURNFEEL1, LAYOUTDATA1-E1 | Task subfolder (self-check above) | Done |
 | `.agent/pgate.txt` left stale, gate output under other names, so reviewers read the wrong log | E3, E4, DASH1, CIPANES1, HOOKS1-A | The brief names one output; `pgate.sh` should write it itself | SKILLS1 |
+| Content batches discover by check-and-fix loops that rows name things coming later, then hold them | CAST1-A2, CAST1-A4, CAMPAIGN1-D | Asset checklist: list what each row waits on before applying; hold those rows from the start | Done |
+| Planner docs commits failed silently: chained commands went on after a script error, and two ran at once in `-plan` | 2026-11-04, twice | One docs commit at a time; stop on error; check the result. In skill `task-landing` under SKILLS1 | Part done |
 | Mutation scripts rewritten per task | Most logic tasks | Skill `mutation-check` | SKILLS1 |
 | Comparison boards rewritten per task | LOOK1, REGIONGROUND1, SPRITEFIT1, VISCLAR1 | Skill `review-board` | SKILLS1 |
 | The `tools/fc.sh` gate filter hid a failing frame list | CI on the 2026-11-03 release | Filter widened; skill `ci-read` | Part done, SKILLS1 |

@@ -24,3 +24,5 @@ Work on the branch/worktree you were given (verify with `git branch --show-curre
 Report (concise): assets added/changed (ids), `content check` output, test results, any schema gaps or spec ambiguities, and tests that need a rule-derived update by the logic-builder.
 
 Repeats (user 2026-11-04): before writing a temp script or repeating a loop, check `docs/EFFICIENCY.md` "Repeat findings". A first-time script or trial-and-error loop is fine, but end your report with a `Repeats:` line naming anything you did more than once or wrote that could be kept, or `Repeats: none`. Keep scratch files in the task's own subfolder of the scratchpad.
+
+Before applying a batch, list which rows name things that don't exist yet, and hold those in a `<task>_after.json` seed from the start, with what each waits on, rather than discovering them through check-and-fix loops.
