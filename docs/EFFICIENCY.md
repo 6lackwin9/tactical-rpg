@@ -166,6 +166,7 @@ The main session tracks each agent run's cost from its completion notice (tokens
 | DASH1 | logic | 261k | 74 | 90 | Sprite suites are slow; ran under load |
 | LAYOUT720-M0 | logic | 250k | 76 | 72 | Hand-written T4 sweep in real windows |
 | LOOK1-G2 | logic | 252k | 82 | 49 | About 700 uses migrated |
+| LAYOUT720-E5 | logic | 338k+ | 85+ | 56+ | Still running when noted |
 | TURNFEEL1 | logic | 226k | 62 | 87 | Measured real windows by hand; scope grew mid-run |
 | LAYOUTDATA1 spec | design | 224k | 44 | 19 | Long spec |
 | AGENTROLES1 spec | design | 214k | 39 | 18 | Long spec, three additions during the run |
