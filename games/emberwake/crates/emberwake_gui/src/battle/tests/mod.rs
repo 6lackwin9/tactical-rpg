@@ -1263,3 +1263,4 @@ fn the_camera_shakes_the_board_only() {
         assert_eq!(rects(&b), hit_rects, "{view}: the hit rects stay");
     }
 }
+mod visclar_c_tests;

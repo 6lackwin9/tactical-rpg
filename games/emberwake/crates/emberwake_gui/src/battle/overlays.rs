@@ -97,7 +97,7 @@ pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str, bool); 24] = [
     // VISCLAR1 VC3: today's look, every unit's bars on the board
     ("all_bars", "All bars", "Every unit's HP and poise bars on the board; off: only the selected hero, its target and the unit under the mouse (hold Alt: all).", false),
     ("breaks", "Breaks", "BREAK over a broken unit and on its cancelled strip span.", true),
-    ("parts", "Wind-up and impact", "The strip's impact and recovery shading, and the full timeline's wind-up.", true),
+    ("parts", "Wind-up and impact", "The full timeline's wind-up, impact and recovery shading.", true),
     ("forecasts", "Hit forecasts", "Stagger and break forecasts in the strip tips and the intel panel.", true),
     ("summary", "Round summary", "The round summary in the message bar at round end.", true),
     // HOOKS1-UI slice 1: the hooks' marks (HOOKS1 GH6, AH3). VISCLAR1-B, decision "Battle view answers": the board's marks

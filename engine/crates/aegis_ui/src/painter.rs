@@ -746,8 +746,23 @@ impl<'a> Painter<'a> {
         let (hw, hh) = (pr.w as f32 / 2.0, pr.h as f32 / 2.0);
         let rad = rad.min(hw).min(hh);
         let (cx, cy) = (pr.x as f32 + hw, pr.y as f32 + hh);
+        // VISCLAR1-C: a pixel centre at least `rad` + 1.5 from every edge is all fill and no border, so the middle is
+        // filled at once; only the border band needs the distance. The same pixels, in far less time
+        let band = rad.ceil() as i32 + 1;
+        let middle = Rect::new(pr.x + band, pr.y + band, pr.w - 2 * band, pr.h - 2 * band);
+        let solid = middle.w > 0 && middle.h > 0;
+        if solid {
+            self.c.fill(middle, mix(fill, 1.0));
+        }
         for y in pr.y..pr.y + pr.h {
-            for x in pr.x..pr.x + pr.w {
+            let skip = solid && y >= middle.y && y < middle.y + middle.h;
+            let mut x = pr.x - 1;
+            while x + 1 < pr.x + pr.w {
+                x += 1;
+                if skip && x == middle.x {
+                    x += middle.w - 1;
+                    continue;
+                }
                 // Rounded-box signed distance (negative inside).
                 let qx = (x as f32 + 0.5 - cx).abs() - (hw - rad);
                 let qy = (y as f32 + 0.5 - cy).abs() - (hh - rad);
@@ -781,13 +796,15 @@ impl<'a> Painter<'a> {
         if pr.w <= 0 || pr.h <= 0 || a == 0 {
             return;
         }
-        for y in 0..pr.h {
-            let sy = y * img.h / pr.h;
-            for x in 0..pr.w {
-                let sx = x * img.w / pr.w;
+        // VISCLAR1-C: only the visible part is sampled, its pixels without a test each
+        let v = self.c.visible(pr);
+        for py in v.y..v.y + v.h {
+            let sy = (py - pr.y) * img.h / pr.h;
+            for px in v.x..v.x + v.w {
+                let sx = (px - pr.x) * img.w / pr.w;
                 let i = ((sy * img.w + sx) * 4) as usize;
                 let alpha = ((img.px[i + 3] as u32 * a as u32 + 127) / 255) as u8;
-                self.c.blend(pr.x + x, pr.y + y, [img.px[i], img.px[i + 1], img.px[i + 2], alpha]);
+                self.c.put(px, py, [img.px[i], img.px[i + 1], img.px[i + 2], alpha]);
             }
         }
     }
@@ -804,10 +821,7 @@ impl<'a> Painter<'a> {
         let mut pen = self.v.ox + x * self.v.s;
         let base = self.v.oy + y * self.v.s + ascent;
         for ch in s.chars() {
-            let (m, bitmap) = {
-                let g = self.fonts.glyph(face, ch, px);
-                (g.0, g.1.clone())
-            };
+            let (m, bitmap) = self.fonts.glyph(face, ch, px);
             let gx = (pen + m.xmin as f32).round() as i32;
             let gy = (base - m.height as f32 - m.ymin as f32).round() as i32;
             for row in 0..m.height {

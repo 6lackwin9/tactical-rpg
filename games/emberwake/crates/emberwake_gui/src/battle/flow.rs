@@ -243,6 +243,7 @@ impl BattleScreen {
                     RowAct::SelectAlly(u) => {
                         self.selected = Some(u);
                     }
+                    RowAct::Fill => self.accept_ghost(cx, None),
                     RowAct::Step(step) => {
                         if let Some(h) = self.selected {
                             let r = self.send(cx, json!({"cmd": "add_step", "unit": h, "step": step}));

@@ -1767,9 +1767,14 @@ impl Builder<'_> {
 /// INPUT1 GH1: whether each of `c`'s compiled entries (aligned with `Plan::entries_for`) is ghost: the planner's after
 /// the picks; with no pick every entry of the planned round (its tactic's or intent's plan); lost blocks never.
 pub fn ghost_entries(w: &World, plan: &Plan, c: UnitId) -> Vec<bool> {
+    ghosts_of(w, plan, c, &plan.entries_for(w, c))
+}
+
+/// `ghost_entries` of `c`'s entries already compiled.
+fn ghosts_of(w: &World, plan: &Plan, c: UnitId, entries: &[crate::plan::PlanEntry]) -> Vec<bool> {
     let steps = plan.steps_of(c);
     let none = picks_of(w, c).is_empty();
-    plan.entries_for(w, c)
+    entries
         .iter()
         .map(|e| usize::try_from(e.step_index).ok().and_then(|i| steps.get(i)).is_some_and(|s| none || s.ghost.get()))
         .collect()
@@ -1807,7 +1812,7 @@ pub fn regular_move(w: &World, plan: &Plan, c: UnitId) -> Option<RegularMove> {
 pub fn ap_forecast(w: &World, plan: &Plan, c: UnitId) -> ApForecast {
     let u = &w.units[c];
     let entries = plan.entries_for(w, c);
-    let ghost = ghost_entries(w, plan, c);
+    let ghost = ghosts_of(w, plan, c, &entries);
     let (mut picked, mut filled) = (0, 0);
     for (e, g) in entries.iter().zip(&ghost) {
         if *g {

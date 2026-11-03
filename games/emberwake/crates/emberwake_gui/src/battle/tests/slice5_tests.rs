@@ -6,7 +6,7 @@
 
 use crate::battle::board::cell_rect;
 use crate::battle::input::pick_detail;
-use crate::battle::marks::{broken_units, hit_forecasts, round_summary_text, span_parts, HitForecast};
+use crate::battle::marks::{broken_units, hit_forecasts, round_summary_text, HitForecast};
 use crate::battle::overlays::{overlay_of, strike_tile, Layers, MoveKind, OVERLAY_GROUPS};
 use crate::battle::{BattleScreen, Mode, TILE};
 use crate::battle::tips::{intent_glyph, unit_tip};
@@ -156,7 +156,7 @@ fn a_disengage_retreat_keeps_the_band_on_the_strike_tile() {
 
 /// RULESET1 5, 12: under the rule poise the hover card tells the bar; a planned hit's strip tip carries the kit's
 /// forecast of it (`poise::forecast` on the target's bar now, flank from its strike tile); a unit broken this round
-/// is listed for its BREAK plate; the strip's spans carry wind-up then impact parts for a command that winds up.
+/// is listed for its BREAK plate.
 #[test]
 fn poise_breaks_parts_and_forecasts_follow_the_kit() {
     let (mut cx, mut g, mut b) = arena(false);
@@ -167,16 +167,6 @@ fn poise_breaks_parts_and_forecasts_follow_the_kit() {
     let bar = *emberwake_battle::poise::state(w, foe).unwrap();
     let tip = unit_tip(s(&b), foe, Some(h), &[], &[], &[]);
     assert!(tip.iter().any(|t| t.0.starts_with(&format!("Poise {}/{}", bar.value, bar.max))), "{tip:?}");
-    let st = s(&b).plan.compile(w, h);
-    let spans = span_parts(s(&b), h, &st.entries.iter().map(|e| (e.start_block, e.end_block(w), String::new(), String::new(), None, 0, 0)).collect::<Vec<_>>());
-    for (sp, e) in spans.iter().zip(&st.entries) {
-        let winds = emberwake_battle::poise::winds_up(&e.build_command(w, h)) && e.end_block(w) > e.start_block;
-        let styles: Vec<aegis_ui::timeline::PartStyle> = sp.parts.iter().map(|p| p.style).collect();
-        assert_eq!(!styles.is_empty(), winds, "{styles:?}");
-        if winds {
-            assert_eq!((sp.parts[0].start, sp.parts[0].end, sp.parts[1].start), (e.start_block, e.end_block(w) - 1, e.end_block(w)));
-        }
-    }
     assert!(broken_units(w, &Layers::of(&Value::Null)).is_empty(), "nobody broke yet");
     b.host.session.as_mut().unwrap().w.poise.get_mut(&foe).unwrap().broken = true;
     assert_eq!(broken_units(&s(&b).w, &Layers::of(&Value::Null)), vec![foe]);

@@ -348,6 +348,11 @@ fn put_base(a: &mut UnitAnim, guarded: bool, staggered: bool, at: u64, m: Motion
     a.pose = pose;
 }
 
+/// INPUT1 MR12: the command of `unit`'s whose start this block made its dash, if one did (`dashed`).
+fn dash_action(s: &Session, unit: usize) -> Option<&emberwake_battle::resolver::ScheduledAction> {
+    s.resolver.scheduled.iter().find(|a| a.unit == unit && a.start == s.current_block && a.command.moved == Some(emberwake_battle::command::MoveKind::Dash))
+}
+
 /// WINDUP1 W2: where a scheduled action aims: its target unit's tile (the tile it stood on before this change when it
 /// left the grid), else an area's aim; the command kind `action_clips` reads ("attack", "area", "support"; "" else).
 fn action_aim(s: &Session, act: &emberwake_battle::resolver::ScheduledAction, before: &[Option<V2>]) -> (&'static str, Option<V2>) {
@@ -470,6 +475,11 @@ impl Tokens {
                         // INPUT1 MR12: a dash (its board event) runs faster than a walk, with its own clip
                         a.dash = dashed(s, i);
                         a.dash_clip = a.dash;
+                        // VISCLAR1-C: a dash faces its target from its first frame, not once it has landed
+                        if let Some(aim) = dash_action(s, i).and_then(|act| action_aim(s, act, &before).1) {
+                            a.facing = turn(a.facing, to, aim);
+                            a.step = a.facing;
+                        }
                         a.slide = Some((from, now));
                         a.player.play_for("walk", now, a.slide_ms(walk_ms));
                     }

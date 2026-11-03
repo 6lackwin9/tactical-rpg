@@ -849,28 +849,10 @@ pub(super) fn break_plate(p: &mut Painter, x: f32, y: f32) {
     p.text_center(x, r.y as f32 + (r.h as f32 - p.line_h(SMALL)) / 2.0, "BREAK", SMALL, th().text);
 }
 
-/// A strip span's parts in the timeline widget's look (wind-up, impact, recovery) and whether a break cancelled it.
-pub(super) struct SpanParts {
-    pub(super) parts: Vec<aegis_ui::timeline::Part>,
-    pub(super) broken: bool,
-}
-
-/// RULESET1-U slice 5: the parts of the selected hero's strip spans (aligned with `entries`, the strip's spans):
-/// planning, from its plan (a command that winds up, P5, longer than a block: its wind-up blocks, then its impact
-/// block); once confirmed, from its scheduled actions (start, impact, recovery to its end; broken by a break, P7).
-pub(super) fn span_parts(s: &Session, u: usize, entries: &[(i32, i32, String, String, Option<String>, i32, i32)]) -> Vec<SpanParts> {
-    use crate::timeline_view::parts_of;
-    let w = &s.w;
-    if s.plan_confirmed {
-        return entries
-            .iter()
-            .map(|e| match s.resolver.scheduled.iter().find(|a| a.unit == u && a.start == e.0 && a.command.name == e.2) {
-                Some(a) => SpanParts { parts: parts_of(a.start, a.impact, e.1, emberwake_battle::poise::winds_up(&a.command)), broken: a.broken },
-                None => SpanParts { parts: Vec::new(), broken: false },
-            })
-            .collect();
-    }
-    s.plan.compile(w, u).entries.iter().map(|e| SpanParts { parts: parts_of(e.start_block, e.end_block(w), e.end_block(w), emberwake_battle::poise::winds_up(&e.build_command(w, u))), broken: false }).collect()
+/// RULESET1-U slice 5, P7: once the round is confirmed, whether a break cancelled each of the selected hero's strip spans
+/// (aligned with `entries`; VISCLAR1-C: the strip draws no parts, so a planned span needs no reading).
+pub(super) fn broken_spans(s: &Session, u: usize, entries: &[(i32, i32, String, String, Option<String>, i32, i32)]) -> Vec<bool> {
+    entries.iter().map(|e| s.resolver.scheduled.iter().any(|a| a.unit == u && a.start == e.0 && a.command.name == e.2 && a.broken)).collect()
 }
 
 /// One planned hit's forecast (RULESET1 12 "forecasts").

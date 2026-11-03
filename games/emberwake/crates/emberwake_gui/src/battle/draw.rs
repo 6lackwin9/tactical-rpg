@@ -3,7 +3,7 @@
 use aegis_ui::theme::th;
 use super::board::{cell_rect, draw_flat, draw_stage, hp_bar, note_drawn, with_alpha, Board};
 use super::input::{engage_positions, kind_name, rest_text, target_name, RowAct};
-use super::marks::{arena_badge, arrows_of, draw_hold_pick, draw_tracers, focus_set, held_guard, hit_forecasts, meter_row, meter_text, meters_of, party_foresight_off, poise_bar, poise_shown, push_forecasts, push_text, seen_intents, span_parts, HitForecast, HoldMarks, HookMarks, SpanParts, HELD, METER};
+use super::marks::{arena_badge, arrows_of, broken_spans, draw_hold_pick, draw_tracers, focus_set, held_guard, hit_forecasts, meter_row, meter_text, meters_of, party_foresight_off, poise_bar, poise_shown, push_forecasts, push_text, seen_intents, HitForecast, HoldMarks, HookMarks, HELD, METER};
 use super::overlays::{overlay_of, reach_text, Layers};
 use super::playback::PlaySpeed;
 use super::{Action, BattleScreen, ALLY, AP_PIPS, GRID_X, GRID_Y, PANEL, PANELS, PANEL_INSET, PANEL_PORTRAIT, PANEL_SURFACE, PANEL_TEXT_X, PLAYBACK_SPEEDS, TACTIC_LABELS, TALK_VEIL, TILE, TIMELINE_SURFACE, TV_PAD};
@@ -146,13 +146,14 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     if planning {
         g.round_ap = (s.current_round, w.allies.iter().map(|&a| (a, w.units[a].ap)).collect());
     }
+    // VISCLAR1-C: the selected hero's round, compiled once a frame for the strip, the costs and the panel
+    let compiled = sel.map(|u| pplan.compile(pw, u));
     // VISCLAR1-B: with each planned block its icon chain (a skill's family, then its kind)
     let (entries, icons): (Vec<(i32, i32, String, String, Option<String>, i32, i32)>, Vec<Vec<String>>) = match sel {
         Some(u) if s.plan_confirmed => committed(s, u).into_iter().map(|c| (c.0, c.1, c.2, c.3, c.4, 0, 0)).zip(committed_icon_chains(s, u)).unzip(),
-        Some(u) if w.units[u].is_active() => pplan
-            .compile(pw, u)
-            .entries
+        Some(u) if w.units[u].is_active() => compiled
             .iter()
+            .flat_map(|st| st.entries.iter())
             .map(|e| {
                 let sk = &w.cat.skills[e.skill];
                 let chain = if e.item.is_some() { vec![kind_icon("ITEM")] } else { emberwake_content::art::skill_icon_chain(sk.family_id(), &sk.kind) };
@@ -164,7 +165,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     // RULESET1-U (intent UI2, PL6): under the round intent the planned blocks carry the planner's reason tags and the
     // Rest blocks the round's Rest gain; INPUT1 GH1: which are ghost (the planner's, after the picks)
     let (reasons, rest, ghosts) = match sel {
-        Some(u) if timeline && !s.plan_confirmed && w.units[u].is_active() => (rip::reasons(pw, pplan, u), Some(rip::rest_preview(pw, pplan, u)).filter(|_| w.ruleset.rest_at_round_end()), rip::ghost_entries(pw, pplan, u)),
+        // VISCLAR1-C (decision "Battle view answers, part 2"): the ghost shows in planning, not otherwise
+        Some(u) if timeline && s.is_planning() && w.units[u].is_active() => (rip::reasons(pw, pplan, u), Some(rip::rest_preview(pw, pplan, u)).filter(|_| w.ruleset.rest_at_round_end()), rip::ghost_entries(pw, pplan, u)),
         _ => (Vec::new(), None, Vec::new()),
     };
     let gauge = match sel {
@@ -191,10 +193,9 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         }
         _ => None,
     };
-    // RULESET1-U slice 5: each span's wind-up, impact and recovery (and a break), the planned hits' forecasts (the
-    // battle's own plan: a preview draws its spans plain)
-    let spans: Vec<SpanParts> = match sel {
-        Some(u) if timeline && layers.parts && !previewing => span_parts(s, u, &entries),
+    // RULESET1-U slice 5: each span's break, the planned hits' forecasts (the battle's own plan: a preview has none)
+    let broken: Vec<bool> = match sel {
+        Some(u) if timeline && s.plan_confirmed => broken_spans(s, u, &entries),
         _ => Vec::new(),
     };
     let hits: Vec<Option<HitForecast>> = match sel {
@@ -204,7 +205,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     // HOOKS1-UI slice 3 review: each span's HP cost from its own skill (the plan entry's) or, once confirmed, its command
     let costs: Vec<i32> = match sel {
         Some(u) if s.plan_confirmed => s.resolver.scheduled.iter().filter(|a| a.unit == u).map(|a| a.command.hp_cost).collect(),
-        Some(u) if w.units[u].is_active() => pplan.compile(pw, u).entries.iter().map(|e| emberwake_battle::command::hp_cost_of(pw, &w.cat.skills[e.skill])).collect(),
+        Some(u) if w.units[u].is_active() => compiled.iter().flat_map(|st| st.entries.iter()).map(|e| emberwake_battle::command::hp_cost_of(pw, &w.cat.skills[e.skill])).collect(),
         _ => Vec::new(),
     };
     // HOOKS1-UI slice 4: each planned entry's push and pull forecasts (rule forced_move; planning, layer `pushes`)
@@ -289,7 +290,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
                 if let Some(f) = at.and_then(|i| hits.get(i)).and_then(|f| f.as_ref()) {
                     tip.extend(f.lines(w));
                 }
-                if at.and_then(|i| spans.get(i)).is_some_and(|sp| sp.broken) {
+                if at.and_then(|i| broken.get(i)).copied().unwrap_or(false) {
                     tip.push(("BREAK: cancelled by a poise break".into(), th().foe));
                 }
             }
@@ -323,19 +324,11 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         let dim = timeline && e.3 == "REST";
         // INPUT1 GH8: a ghost span (the planner's, after the picks) in the engine's ghost look; a ghost Rest stays dim
         let ghost = ghosts.get(k).copied().unwrap_or(false) && !dim;
-        let fill =if dim { rgb(34, 40, 54) } else if ghost { aegis_ui::timeline::ghost_fill(kind_color(&e.3)) } else { kind_color(&e.3) };
-        ui.p.panel(r, fill, if live { th().gold } else if ghost { rgba(0, 0, 0, 0) } else { rgba(255, 255, 255, if dim { 24 } else { 50 }) }, RADIUS);
-        if ghost {
-            aegis_ui::timeline::draw_ghost(&mut ui, r);
-        }
-        // RULESET1-U slice 5: the timeline widget's look: impact bright with its edge, recovery hatched
-        let sp = spans.get(k);
-        // VISCLAR1-B: a block is filled in its kind's colour, not a dark bar, so the strip has no wind-up shade (the full
-        // timeline view keeps it)
-        for part in sp.map(|sp| sp.parts.as_slice()).unwrap_or(&[]).iter().filter(|p| !matches!(p.style, aegis_ui::timeline::PartStyle::Windup)) {
-            let pr = Rect::new(bx + (part.start - 1) * bw, 6, (part.end - part.start + 1) * bw - 1, 16);
-            aegis_ui::timeline::draw_part(&mut ui, part.style, r, pr);
-        }
+        // VISCLAR1-C (decision "Battle view answers, part 2"): one solid colour a block, no wind-up or impact shading (the
+        // full timeline view keeps its parts); an auto-filled block fades, with no outline
+        let fill = if dim { rgb(34, 40, 54) } else if ghost { aegis_ui::timeline::ghost_fill(kind_color(&e.3)) } else { kind_color(&e.3) };
+        let edge = if live { th().gold } else if ghost { rgba(0, 0, 0, 0) } else if dim { rgba(255, 255, 255, 24) } else if timeline { fill } else { rgba(255, 255, 255, 50) };
+        ui.p.panel(r, fill, edge, RADIUS);
         if timeline {
             // VISCLAR1-B (mock C): the skill's icon and name centred, the icon alone when the name does not fit
             let look = if dim { BlockLook::Dim } else if ghost { BlockLook::Ghost } else { BlockLook::Chosen };
@@ -343,7 +336,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         } else {
             ui.p.text_fit(r.x as f32 + 3.0, r.y as f32 + 4.0, &e.2, SMALL, r.w as f32 - 6.0, th().text);
         }
-        if sp.is_some_and(|sp| sp.broken) && layers.breaks {
+        if broken.get(k).copied().unwrap_or(false) && layers.breaks {
             let mark = aegis_ui::timeline::Mark { key: "break".into(), block: e.0, glyph: "BREAK".into(), colour: th().foe, tip: vec![("BREAK".into(), th().foe), (format!("{}: cancelled by a poise break (AP paid stays spent)", e.2), th().text)] };
             let mr = Rect::new(r.x + 1, 7, (bw - 3).min(r.w - 2), 14);
             aegis_ui::timeline::draw_mark(&mut ui, &format!("strip.mark.{k}"), &mark, mr);
@@ -475,7 +468,7 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         } else {
             row3
         };
-        let st = pplan.compile(pw, h);
+        let st = compiled.as_ref().expect("a hero selected");
         let weapon = u.inventory.main_weapon().map(|e| e.item.name.clone()).unwrap_or_else(|| "Bare hands".into());
         let mut lines: Vec<(String, Rgba)> = Vec::new();
         // DERIVE1 4.4: the derived-stat line hovers to each row's formula and breakdown
@@ -778,7 +771,15 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         let mut lines = if pinned.is_some() { inspect_tip(s, e, sel, &tells, &rounds, &classes, show_tells) } else { unit_tip(s, e, sel, &tells, &rounds, &classes) };
         // RULESET1-U slice 5: the selected hero's planned hits on this unit, forecast (rule poise)
         if let Some(h) = sel.filter(|h| layers.forecasts && planning && ri::on(w) && w.units[*h].is_active()) {
-            for f in hit_forecasts(s, h).into_iter().flatten().filter(|f| f.target == e) {
+            // VISCLAR1-C: the strip's list when it has one (a preview leaves that empty)
+            let own;
+            let list = if previewing {
+                own = hit_forecasts(s, h);
+                &own
+            } else {
+                &hits
+            };
+            for f in list.iter().flatten().filter(|f| f.target == e) {
                 lines.push(f.short(w));
             }
         }

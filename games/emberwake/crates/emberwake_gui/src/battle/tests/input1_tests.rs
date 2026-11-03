@@ -145,7 +145,7 @@ fn a_target_click_opens_the_skill_menu_and_a_pick_relists_it() {
     let p = b.popup.as_ref().expect("the skill menu");
     assert_eq!((p.menu, p.title.clone()), (Some((h, RoundTarget::Unit(f))), format!("{} -> {}", w(&b).units[h].name, w(&b).units[f].name)));
     let s = b.host.session.as_ref().unwrap();
-    assert_eq!(p.rows.len(), rip::pick_options(&s.w, &s.plan, h, RoundTarget::Unit(f)).len(), "one row per kit option");
+    assert_eq!(p.rows.iter().filter(|r| matches!(r.act, crate::battle::input::RowAct::Pick(_))).count(), rip::pick_options(&s.w, &s.plan, h, RoundTarget::Unit(f)).len(), "one row per kit option");
     for row in &p.rows {
         assert!(row_intent(&b, row).is_none_or(|i| i == "assault" || i == "maneuver"), "an enemy takes Assault and Maneuver skills: {}", row.label);
     }

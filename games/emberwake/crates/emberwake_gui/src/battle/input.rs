@@ -24,6 +24,8 @@ pub(super) enum RowAct {
     Pick(Vec<rip::Pick>),
     /// SL6: the ally menu's last row, "Select <ally>".
     SelectAlly(usize),
+    /// VISCLAR1-C: the skill menu's Fill: what key F does (`accept_ghost`).
+    Fill,
 }
 
 /// INPUT1 GH2, IN6 timing (decision "INPUT1 answers, part 4" Q18): a member's ghost that waits for Confirm because its
@@ -457,6 +459,12 @@ impl BattleScreen {
             .iter()
             .map(|o| Row { label: pick_label(s, h, &o.picks), detail: pick_detail(&w.cat, o), valid: o.problem.is_none(), act: RowAct::Pick(o.picks.clone()), tip: pick_tip(s, h, o), warn: !o.drops.is_empty(), ap_short: o.ap_short })
             .collect();
+        // VISCLAR1-C (decision "Battle view answers, part 2"): Fill after the rows, while the hero has a ghost to take
+        // (VISCLAR1-D moves it to the menu's top)
+        let has_ghost = self.deferred.iter().any(|d| d.0 == h) || rip::ghost_entries(w, &s.plan, h).contains(&true);
+        if has_ghost && rows.iter().any(|r| matches!(r.act, RowAct::Pick(_))) {
+            rows.push(Row { label: "Fill".into(), detail: "the rest of the round".into(), valid: true, act: RowAct::Fill, tip: vec![("Fill (F)".into(), th().gold), ("Accepts the auto-fill for the rest of the round.".into(), th().text)], warn: false, ap_short: None });
+        }
         let held = rip::picks_of(w, h).iter().any(|p| p.holds_target());
         let round = w.round_states.get(&h).and_then(|r| r.target);
         if let RoundTarget::Unit(u) = at {

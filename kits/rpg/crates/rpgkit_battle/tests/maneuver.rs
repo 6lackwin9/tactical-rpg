@@ -588,3 +588,99 @@ fn every_skill_on_a_unit_chases_one_tile() {
     let a = s.resolver.scheduled.iter().find(|a| a.unit == ARCHER).unwrap();
     assert_eq!(a.command.moved, Some(MoveKind::Chase));
 }
+
+/// VISCLAR1-C (a Flank unit seen taking a diagonal): from every start tile, for every facing of the target, with each
+/// tile round it taken in turn and every range: MR2's tiers from an angle worked out here and MR4's costs from a search
+/// written here say what `position_tiles` must return: the preferred tiles in range; else the nearest fallback tiles in
+/// range (Q11 a); else nothing. Flank Cut's real plan (range 2) agrees: it dashes to that tier, or a plain move comes
+/// first (MR7), or it is refused.
+#[test]
+fn a_flank_skill_takes_the_tier_the_rules_name() {
+    use std::collections::{HashMap, VecDeque};
+    let t = V2::new(6, 4);
+    let k_of = |off: V2, f: V2| -> i32 {
+        let d = ((off.y as f64).atan2(off.x as f64) - (-f.y as f64).atan2(-f.x as f64)).to_degrees().rem_euclid(360.0);
+        (d.min(360.0 - d) / 45.0).round() as i32
+    };
+    let facings = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)].map(|(x, y)| V2::new(x, y));
+    let ring = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)].map(|(x, y)| V2::new(x, y));
+    let (mut in_flank, mut in_fallback, mut out, mut moved_first, mut corner_flanks) = (0, 0, 0, 0, 0);
+    let mut s = session(timeline());
+    place(&mut s.w, WOLF, t);
+    let flank_cut = sid(&s.w, "flank_cut");
+    for f in facings {
+        s.w.round_states.entry(WOLF).or_default().facing = f;
+        for taken in std::iter::once(None).chain(ring.iter().map(|o| Some(t + *o))) {
+            place(&mut s.w, GOBLIN, taken.unwrap_or(V2::new(11, 8)));
+            for y in 0..rpgkit_battle::grid::GRID_H {
+                for x in 0..rpgkit_battle::grid::GRID_W {
+                    let from = V2::new(x, y);
+                    if s.w.occupant(from).is_some_and(|o| o != SPIKER) {
+                        continue;
+                    }
+                    place(&mut s.w, SPIKER, from);
+                    let others: Cells = (0..s.w.units.len()).filter(|c| *c != SPIKER).filter_map(|c| s.w.grid.pos(c)).collect();
+                    // the costs: 4-way steps round the units
+                    let mut cost: HashMap<(i32, i32), i32> = HashMap::from([((from.x, from.y), 0)]);
+                    let mut todo = VecDeque::from([from]);
+                    while let Some(c) = todo.pop_front() {
+                        let d = cost[&(c.x, c.y)];
+                        for o in [V2::new(1, 0), V2::new(-1, 0), V2::new(0, 1), V2::new(0, -1)] {
+                            let n = c + o;
+                            if s.w.grid.is_valid(n) && s.w.grid.is_walkable(n) && !others.contains(&n) && !cost.contains_key(&(n.x, n.y)) {
+                                cost.insert((n.x, n.y), d + 1);
+                                todo.push_back(n);
+                            }
+                        }
+                    }
+                    let open = |k: i32| -> Vec<V2> { ring.iter().filter(|o| k_of(**o, f) == k).map(|o| t + *o).filter(|c| s.w.grid.is_valid(*c) && !others.contains(c)).collect() };
+                    let (preferred, fallback) = (open(2), open(1));
+                    let cost_of = |c: &V2| cost.get(&(c.x, c.y)).copied().unwrap_or(i32::MAX);
+                    let sk = s.w.cat.skills[flank_cut].clone();
+                    for range in 1..=4 {
+                        let pref: Vec<V2> = preferred.iter().copied().filter(|c| cost_of(c) <= range).collect();
+                        let near = fallback.iter().map(&cost_of).filter(|d| *d <= range).min();
+                        let (_, tiles) = round_intent::position_tiles(&s.w, SPIKER, &sk, WOLF, from, range, false, &others);
+                        let got: Vec<V2> = tiles.iter().map(|x| x.0).collect();
+                        if !pref.is_empty() {
+                            assert_eq!(sorted(got), sorted(pref), "preferred in range: facing {f}, from {from}, range {range}, taken {taken:?}");
+                            in_flank += 1;
+                        } else if let Some(near) = near {
+                            let all: Vec<V2> = fallback.iter().copied().filter(|c| cost_of(c) <= range).collect();
+                            assert_eq!(sorted(got.clone()), sorted(all), "fallback in range: facing {f}, from {from}, range {range}, taken {taken:?}");
+                            assert_eq!(cost_of(&got[0]), near, "the nearest first: facing {f}, from {from}, range {range}");
+                            in_fallback += 1;
+                        } else {
+                            assert!(got.is_empty(), "out of range: facing {f}, from {from}, range {range}: {got:?}");
+                            out += 1;
+                        }
+                    }
+                    // Flank Cut's plan, by hand
+                    s.plan = rpgkit_battle::plan::Plan::new();
+                    engage(&mut s, SPIKER);
+                    let problem = add(&mut s, SPIKER, "flank_cut");
+                    let in_range: Vec<V2> = preferred.iter().copied().filter(|c| cost_of(c) <= 2).collect();
+                    let fall: Vec<V2> = fallback.iter().copied().filter(|c| cost_of(c) <= 2).collect();
+                    if preferred.is_empty() && fallback.is_empty() {
+                        assert_eq!(problem, FLANK_PROTECTED, "facing {f}, from {from}, taken {taken:?}");
+                    } else if !in_range.is_empty() || !fall.is_empty() {
+                        assert_eq!(problem, "", "facing {f}, from {from}, taken {taken:?}");
+                        let e = entry_of(&s, SPIKER, "flank_cut");
+                        assert_eq!(e.pos_before, from, "no move first");
+                        assert!(if in_range.is_empty() { fall.contains(&e.pos_after) } else { in_range.contains(&e.pos_after) }, "facing {f}, from {from}, taken {taken:?}: took {}", e.pos_after);
+                        let off = e.pos_after - t;
+                        corner_flanks += (!in_range.is_empty() && off.x != 0 && off.y != 0) as i32;
+                    } else if problem.is_empty() {
+                        let e = entry_of(&s, SPIKER, "flank_cut");
+                        assert_ne!(e.pos_before, from, "out of range: a plain move comes first (MR7)");
+                        assert!(preferred.contains(&e.pos_after) || fallback.contains(&e.pos_after), "a position tile: {}", e.pos_after);
+                        moved_first += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert!(in_flank > 0 && in_fallback > 0 && out > 0 && moved_first > 0, "every case ran: {in_flank} {in_fallback} {out} {moved_first}");
+    // MR2's table: under a diagonal facing the flanks are the target's corner tiles, so a flank can be a diagonal step
+    assert!(corner_flanks > 0, "a flank tile at a corner of the target");
+}
