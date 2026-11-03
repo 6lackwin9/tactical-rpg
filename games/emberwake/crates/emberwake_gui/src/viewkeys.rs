@@ -3,8 +3,9 @@
 //! the game menu, the main menu). Each press saves like a normal setting and shows the new value; the shell applies a
 //! window size when it sees the setting change. A release build ignores both keys. The Settings screen does not call
 //! them: its draft would overwrite the key's value on Apply. VIEWKEYS2: F11 cycles the walk step on the region map.
+//! TURNFEEL1: F10 cycles the walk's beat and equal speed on the region map, F5 its turn corner.
 
-use crate::mapview::{zoom_of, WalkStep, WALK_STEP_KEY};
+use crate::mapview::{zoom_of, TurnCorner, View, WalkFeel, WalkStep, EQUAL_SPEED_KEY, QUICK_FINISH_MS, TURN_BEAT_KEY, TURN_BEAT_MS, TURN_CORNERS, TURN_CORNER_KEY, WALK_STEP_KEY};
 use crate::screens::{show_errors, Cx, Key};
 use serde_json::{json, Value};
 
@@ -15,6 +16,14 @@ pub const SIZE_CYCLE: [&str; 3] = ["1280x720", "1600x900", "1920x1080"];
 
 /// F11's steps, as `walk_step_ms` values.
 pub const WALK_CYCLE: [f64; 5] = [90.0, 110.0, 130.0, 160.0, 200.0];
+
+/// F10's steps: off, the beat, equal speed, both.
+pub const FEEL_CYCLE: [WalkFeel; 4] = [
+    WalkFeel { beat: false, equal: false, corner: TurnCorner::Cut },
+    WalkFeel { beat: true, equal: false, corner: TurnCorner::Cut },
+    WalkFeel { beat: false, equal: true, corner: TurnCorner::Cut },
+    WalkFeel { beat: true, equal: true, corner: TurnCorner::Cut },
+];
 
 /// Where a screen shows the key's note: the region map's log ticker, or a notice on a screen with no log in view.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -37,6 +46,18 @@ pub fn next_zoom(now: &Value) -> f64 {
 /// out of `WALK_STEP_MS` also lands on the first: below it the first step is above, over it the steps are past).
 pub fn next_walk(now: &Value) -> f64 {
     now.as_f64().map_or(WALK_CYCLE[0], |b| next_above(&WALK_CYCLE, b))
+}
+
+/// The options F10 goes to from `now`: the next beat and equal speed, the corner kept.
+pub fn next_feel(now: WalkFeel) -> WalkFeel {
+    let at = FEEL_CYCLE.iter().position(|f| (f.beat, f.equal) == (now.beat, now.equal)).unwrap_or(0);
+    WalkFeel { corner: now.corner, ..FEEL_CYCLE[(at + 1) % FEEL_CYCLE.len()] }
+}
+
+/// The corner F5 goes to from `now`.
+pub fn next_corner(now: TurnCorner) -> TurnCorner {
+    let at = TURN_CORNERS.iter().position(|c| *c == now).unwrap_or(0);
+    TURN_CORNERS[(at + 1) % TURN_CORNERS.len()]
 }
 
 /// A `window_size` value's pixel count (None: not a size).
@@ -86,6 +107,16 @@ pub fn walk_key(cx: &mut Cx, k: Key) -> bool {
     press_walk(cx, k, cfg!(debug_assertions))
 }
 
+/// F10 on the region map: whether `k` was the key (a release build takes it and does nothing).
+pub fn feel_key(cx: &mut Cx, k: Key) -> bool {
+    press_feel(cx, k, cfg!(debug_assertions))
+}
+
+/// F5 on the region map: whether `k` was the key (a release build takes it and does nothing).
+pub fn corner_key(cx: &mut Cx, k: Key) -> bool {
+    press_corner(cx, k, cfg!(debug_assertions))
+}
+
 /// The walk's step time for the F6 and F11 notes, so it reads while comparing zoom levels: the base and, when the Animation speed
 /// changes it, the time it makes.
 fn walk_words(step: WalkStep) -> String {
@@ -119,6 +150,51 @@ fn press_walk(cx: &mut Cx, k: Key, debug: bool) -> bool {
         cx.settings.v[WALK_STEP_KEY] = json!(to);
         save(cx);
         let line = format!("Walk step {} (F11).", walk_words(WalkStep::of(&cx.settings.v, false)));
+        cx.log(line);
+    }
+    true
+}
+
+fn feel_words(feel: WalkFeel, view: View, key: &str) -> String {
+    let beat = if feel.beat { format!("{TURN_BEAT_MS:.0} ms") } else { "off".to_string() };
+    let equal = match (feel.equal, view) {
+        (false, _) => "off",
+        (true, View::Tilted) => "on",
+        (true, View::Square) => "on (changes nothing on square cells)",
+    };
+    let corner = match feel.corner {
+        TurnCorner::Cut => "cut".to_string(),
+        TurnCorner::Finish => "finish the leg".to_string(),
+        TurnCorner::Quick => format!("quick finish {QUICK_FINISH_MS:.0} ms"),
+    };
+    format!("Turn beat {beat}, equal speed {equal}, corner {corner} ({key}).")
+}
+
+fn press_corner(cx: &mut Cx, k: Key, debug: bool) -> bool {
+    if k != Key::Fn(5) {
+        return false;
+    }
+    if debug {
+        let now = WalkFeel::read(&cx.settings.v, true);
+        let to = WalkFeel { corner: next_corner(now.corner), ..now };
+        cx.settings.v[TURN_CORNER_KEY] = json!(to.corner.name());
+        save(cx);
+        let line = feel_words(to, View::of_setting(&cx.settings.v["region_view"]), "F5");
+        cx.log(line);
+    }
+    true
+}
+
+fn press_feel(cx: &mut Cx, k: Key, debug: bool) -> bool {
+    if k != Key::Fn(10) {
+        return false;
+    }
+    if debug {
+        let to = next_feel(WalkFeel::read(&cx.settings.v, true));
+        cx.settings.v[TURN_BEAT_KEY] = json!(to.beat);
+        cx.settings.v[EQUAL_SPEED_KEY] = json!(to.equal);
+        save(cx);
+        let line = feel_words(to, View::of_setting(&cx.settings.v["region_view"]), "F10");
         cx.log(line);
     }
     true
@@ -311,6 +387,62 @@ mod tests {
         assert_eq!(cx.settings.v[WALK_STEP_KEY] != was, cfg!(debug_assertions), "and follows the build");
     }
 
+    /// TURNFEEL1: F10 walks the four combinations in order and back; a value that is no bool reads as off; each press saves
+    /// and notes what is on, and says when the view makes equal speed do nothing; other keys pass; with the debug gate
+    /// shut it is taken and changes nothing.
+    #[test]
+    fn f10_cycles_the_four_feels_and_saves_them() {
+        let mut cx = game_cx();
+        let before = cx.settings.v.clone();
+        assert!(press_feel(&mut cx, Key::Fn(10), false));
+        assert_eq!(cx.settings.v, before);
+        assert!(!file_of(&cx).exists() && cx.log.is_empty(), "the gate shut: nothing");
+        assert!(!press_feel(&mut cx, Key::Fn(11), true), "not its key");
+        assert_eq!(WalkFeel::read(&cx.settings.v, true), FEEL_CYCLE[0], "both off by default");
+        for i in 1..=FEEL_CYCLE.len() {
+            let want = FEEL_CYCLE[i % FEEL_CYCLE.len()];
+            assert!(press_feel(&mut cx, Key::Fn(10), true));
+            assert_eq!(WalkFeel::read(&cx.settings.v, true), want);
+            assert_eq!((saved(&cx, TURN_BEAT_KEY), saved(&cx, EQUAL_SPEED_KEY)), (json!(want.beat), json!(want.equal)), "the file");
+            assert_eq!(cx.log.last().cloned(), Some(feel_words(want, View::Square, "F10")));
+        }
+        let distinct: std::collections::HashSet<(bool, bool)> = FEEL_CYCLE.iter().map(|f| (f.beat, f.equal)).collect();
+        assert_eq!(distinct.len(), 4, "every combination");
+        cx.settings.v[TURN_BEAT_KEY] = json!("yes");
+        cx.settings.v[EQUAL_SPEED_KEY] = json!(1);
+        assert_eq!(WalkFeel::read(&cx.settings.v, true), FEEL_CYCLE[0], "no bool is off");
+        assert_eq!(feel_words(FEEL_CYCLE[3], View::Tilted, "F10"), "Turn beat 60 ms, equal speed on, corner cut (F10).");
+        assert_eq!(feel_words(FEEL_CYCLE[2], View::Square, "F10"), "Turn beat off, equal speed on (changes nothing on square cells), corner cut (F10).");
+        assert_eq!(feel_words(FEEL_CYCLE[0], View::Tilted, "F10"), "Turn beat off, equal speed off, corner cut (F10).");
+    }
+
+    /// F5 walks the three corners in order and back, leaves the beat and equal speed alone, and F10 leaves the corner
+    /// alone; each saves and notes it; with the debug gate shut it is taken and changes nothing.
+    #[test]
+    fn f5_cycles_the_corner_and_saves_it() {
+        let mut cx = game_cx();
+        let before = cx.settings.v.clone();
+        assert!(press_corner(&mut cx, Key::Fn(5), false));
+        assert_eq!(cx.settings.v, before);
+        assert!(!file_of(&cx).exists() && cx.log.is_empty(), "the gate shut: nothing");
+        assert!(!press_corner(&mut cx, Key::Fn(10), true), "not its key");
+        press_feel(&mut cx, Key::Fn(10), true);
+        let was = WalkFeel::read(&cx.settings.v, true);
+        for want in [TurnCorner::Finish, TurnCorner::Quick, TurnCorner::Cut] {
+            assert!(press_corner(&mut cx, Key::Fn(5), true));
+            let now = WalkFeel::read(&cx.settings.v, true);
+            assert_eq!(now, WalkFeel { corner: want, ..was }, "only the corner moves");
+            assert_eq!(saved(&cx, TURN_CORNER_KEY), json!(want.name()), "the file");
+            assert_eq!(cx.log.last().cloned(), Some(feel_words(now, View::Square, "F5")));
+        }
+        assert_eq!(WalkFeel::read(&crate::screens::default_settings(), true).corner, TurnCorner::Cut, "the default");
+        cx.settings.v[TURN_CORNER_KEY] = json!("quick");
+        press_feel(&mut cx, Key::Fn(10), true);
+        assert_eq!(WalkFeel::read(&cx.settings.v, true).corner, TurnCorner::Quick, "F10 keeps the corner");
+        assert_eq!(feel_words(WalkFeel { beat: false, equal: false, corner: TurnCorner::Quick }, View::Tilted, "F5"), "Turn beat off, equal speed off, corner quick finish 60 ms (F5).");
+        assert_eq!(feel_words(WalkFeel { beat: false, equal: false, corner: TurnCorner::Finish }, View::Tilted, "F5"), "Turn beat off, equal speed off, corner finish the leg (F5).");
+    }
+
     /// With the debug gate shut the keys are taken and change, save and show nothing.
     #[test]
     fn a_release_build_ignores_the_keys() {
@@ -389,7 +521,7 @@ mod tests {
             assert_eq!(cx.notice.len(), cfg!(debug_assertions) as usize, "{id}");
             assert!(cx.nav.is_empty(), "{id}: no screen change");
         }
-        for (name, k) in [("f6", Key::Fn(6)), ("f9", Key::Fn(9)), ("f11", Key::Fn(11))] {
+        for (name, k) in [("f5", Key::Fn(5)), ("f6", Key::Fn(6)), ("f9", Key::Fn(9)), ("f10", Key::Fn(10)), ("f11", Key::Fn(11))] {
             assert_eq!(Key::parse(name), Some(k));
             assert_eq!(k.name(), name);
         }

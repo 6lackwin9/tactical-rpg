@@ -192,7 +192,7 @@ not), widget presses, keys, hovers of 700 ms or more, screen changes, overlays a
 battle's end, errors and panics, and missing art (`aegis_host::trail` reads it). Party battles of the world map
 start outside `new`, so their replay waits for PLAYTEST2.
 
-F6, F7, F9 and F11 reach the top screen as `Key::Fn(n)` for its debug use (agent link keys `f6`, `f7`, `f9`, `f11`; a screen that does not use one ignores it; the shell drops the key repeats of F6, F9 and F11); F8 and F12 stay the shell's.
+F5, F6, F7, F9, F10 and F11 reach the top screen as `Key::Fn(n)` for its debug use (agent link keys `f5`, `f6`, `f7`, `f9`, `f10`, `f11`; a screen that does not use one ignores it; repeats of all but F7 are dropped); F8 and F12 stay the shell's.
 
 F8 (recording on) takes a note: the screen as it was goes to `<id>/note_<n>.jpg`, and a box asks for the text (types
 at once) and tags (mechanic, ui, ux, bug); Ctrl+Enter saves, Esc cancels. The note stamps the screen, mouse, control
