@@ -303,7 +303,7 @@ impl Playtests {
     }
 
     /// The recordings in the folder, newest first.
-    pub fn list(&self) -> Vec<(PathBuf, Result<Recording, String>)> {
+    pub fn list(&self) -> Vec<(PathBuf, Result<Recording, playtest::Unreadable>)> {
         playtest::list(&self.dir)
     }
 
