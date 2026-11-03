@@ -1,6 +1,6 @@
 # AGENTROLES1: who owns what, and the integration agent
 
-Status: proposed
+Status: approved (user 2026-11-04: all as recommended).
 Depends on: none to start; LAYOUTDATA1 covers UI and is not re-specified here
 Lane: design for this spec; slices in section 11
 Touches: section 11
