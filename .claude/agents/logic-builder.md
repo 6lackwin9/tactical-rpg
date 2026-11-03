@@ -28,3 +28,5 @@ Rules:
 - Run `tools/fc.sh docs` if you touched any markdown (it includes a markdownlint subset).
 
 Report (concise): branch/worktree, files changed, behaviour added, tests added and PASS/FAIL counts, deviations from the spec, a short "docs delta" (the exact README / engine README / PORT_NOTES / GAME_BRIEF / STRUCTURE / decisions-file lines the planner should add), and open questions. Do not update README or roadmap; the planner does.
+
+Repeats (user 2026-11-04): before writing a temp script or repeating a loop, check `docs/EFFICIENCY.md` "Repeat findings". A first-time script or trial-and-error loop is fine, but end your report with a `Repeats:` line naming anything you did more than once or wrote that could be kept, or `Repeats: none`. Keep scratch files in the task's own subfolder of the scratchpad.

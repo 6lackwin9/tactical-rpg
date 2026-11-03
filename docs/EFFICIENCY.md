@@ -123,6 +123,7 @@ Builder self-check, the findings reviews kept repeating:
 - A rule's test fails when the rule is broken: break the code once and see it fail (mutation).
 - New paths run on real art or data, not only fixtures; say what was viewed, from the final files.
 - Docs that describe what changed are updated, and specs get an as-built note where the build differs.
+- Repeats: a temp script, a repeated tool call or a trial-and-error loop is fine the first time. Report each in the report's `Repeats:` line, so it can become a tool, skill or checklist line. Before writing one, check the list below; keep scratch files in the task's own subfolder of the scratchpad.
 
 Docs check (EFF1, 2026-11-02): of the 80 s, the size loop's `wc` per file took 66-141 s when timed alone (2-3 forks per
 file on Windows, where a fork is slow under load); one `wc -lc` on all files takes 0.13-0.19 s, the lint 0.5-0.8 s and the
@@ -170,3 +171,16 @@ The main session tracks each agent run's cost from its completion notice (tokens
 | AGENTROLES1 spec | design | 214k | 39 | 18 | Long spec, three additions during the run |
 
 Repeating causes so far: hand-written real-window proof (AGENTROLES1's `aegis scenario` and the `real-window` skill target this), a scope added after the run started, and specs asked to cover much at once.
+
+## Repeat findings (user 2026-11-04)
+
+Anything done repeatedly, a temp script worth keeping or a trial-and-error loop is fine once, then gets tracked here and added to the builder checklist, to avoid token waste on repetitive tasks. The main session adds each `Repeats:` line from a report here, and acts on it: a checklist line, a skill, or a tool.
+
+| Finding | Seen in | Fix | Status |
+| --- | --- | --- | --- |
+| Hand-written scripts driving a real window | 20 scripts in the lanes, 2,451 lines; most UI tasks | `aegis scenario`, skill `real-window` | INTEG1-E1, SKILLS1 |
+| Scratch files overwriting each other in the shared scratchpad | VIEWKEYS1, TURNFEEL1, LAYOUTDATA1-E1 | Task subfolder (self-check above) | Done |
+| `.agent/pgate.txt` left stale, gate output under other names, so reviewers read the wrong log | E3, E4, DASH1, CIPANES1, HOOKS1-A | The brief names one output; `pgate.sh` should write it itself | SKILLS1 |
+| Mutation scripts rewritten per task | Most logic tasks | Skill `mutation-check` | SKILLS1 |
+| Comparison boards rewritten per task | LOOK1, REGIONGROUND1, SPRITEFIT1, VISCLAR1 | Skill `review-board` | SKILLS1 |
+| The `tools/fc.sh` gate filter hid a failing frame list | CI on the 2026-11-03 release | Filter widened; skill `ci-read` | Part done, SKILLS1 |

@@ -22,3 +22,5 @@ Scope:
 Work on the branch/worktree you were given (verify with `git branch --show-current` and `pwd`); never commit, push or merge (the planner does; in the cloud, the area thread).
 
 Report (concise): assets added/changed (ids), `content check` output, test results, any schema gaps or spec ambiguities, and tests that need a rule-derived update by the logic-builder.
+
+Repeats (user 2026-11-04): before writing a temp script or repeating a loop, check `docs/EFFICIENCY.md` "Repeat findings". A first-time script or trial-and-error loop is fine, but end your report with a `Repeats:` line naming anything you did more than once or wrote that could be kept, or `Repeats: none`. Keep scratch files in the task's own subfolder of the scratchpad.
