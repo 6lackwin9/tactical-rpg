@@ -1,0 +1,31 @@
+{
+	"kind": "triggers",
+	"version": 1,
+	"entries": [
+		{
+			"id": "t_wiped",
+			"name": "The cell is wiped out",
+			"on": "any",
+			"encounter": "",
+			"outcome": "any",
+			"location": "",
+			"when": [
+				{
+					"key": "roster.living",
+					"op": "<",
+					"value": 1
+				}
+			],
+			"once": true,
+			"effects": [
+				{
+					"effect": "end",
+					"kind": "fail",
+					"card": "extinguished_wiped"
+				}
+			],
+			"then": [],
+			"tags": []
+		}
+	]
+}

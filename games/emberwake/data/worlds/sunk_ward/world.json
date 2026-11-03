@@ -13,6 +13,40 @@
 	"service_lines": {},
 	"ruleset": "timeline",
 	"plan_reveal_flag": "",
+	"campaign": {
+		"start_act": 0,
+		"act_saves": true
+	},
+	"purse": {
+		"currency": {
+			"name": "Scrap",
+			"icon": "ui/hud/scrap.png",
+			"tip": "Salvaged iron: trade, the forge, bribes."
+		},
+		"upkeep": {
+			"name": "Warded Tallow",
+			"short": "Tallow",
+			"icon": "ui/hud/tallow.png",
+			"tip": "1 a day on the move or at rest. Without it every fight starts at -2 AP.",
+			"per_day": 1,
+			"at_zero": {
+				"road_pct": 100,
+				"start_ap": -2
+			}
+		}
+	},
+	"rest": {
+		"days": 1,
+		"cost": 1,
+		"where": "rest_places",
+		"on_enter": false,
+		"needs_upkeep": false
+	},
+	"defeat": {
+		"mode": "retreat",
+		"to": "sluice_undercroft",
+		"days": 1
+	},
 	"classes": {
 		"warrior": {
 			"name": "Vanguard",
