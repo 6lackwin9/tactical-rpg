@@ -91,9 +91,10 @@ pub(crate) const OVERLAY_GROUPS: [(&str, &str, &str, bool); 24] = [
     ("facings", "Enemy facings", "A chevron where each enemy faces (a flank comes from beside or behind).", true),
     // VISCLAR1 AR5: a revealed enemy's moves are its target arrow's move leg
     ("walks", "Revealed enemy moves", "The move leg of a revealed enemy's target arrow (off: the arrow goes straight to its target).", true),
-    ("glyphs", "Intent glyphs", "The round intent's plate on the strip, the cards and the tokens.", true),
+    // VISCLAR1-D (mock `intent_ring`): the ring replaces the side ring on the board; the plate there waits for Alt
+    ("glyphs", "Intent glyphs", "The round intent's plate on the strip and the cards, and a ring in its colour under each unit (off: the side's colour). Hold Alt: the plate over the tokens too.", true),
     ("badges", "Impact badges", "The row of blocks on each hostile card with its impacts.", true),
-    ("poise", "Poise bars", "The poise bars under the HP bars.", true),
+    ("poise", "Poise pips", "Five poise pips under the HP bars, each 20 % of the unit's poise.", true),
     // VISCLAR1 VC3: today's look, every unit's bars on the board
     ("all_bars", "All bars", "Every unit's HP and poise bars on the board; off: only the selected hero, its target and the unit under the mouse (hold Alt: all).", false),
     ("breaks", "Breaks", "BREAK over a broken unit and on its cancelled strip span.", true),

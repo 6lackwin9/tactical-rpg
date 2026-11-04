@@ -819,16 +819,34 @@ pub(super) fn poise_shown(w: &World, i: usize, layers: &Layers) -> Option<emberw
     emberwake_battle::poise::state(w, i).filter(|st| layers.poise && st.max > 0 && w.units[i].is_active()).copied()
 }
 
-/// A poise bar in `r`: the share of Max Poise left in `POISE` (a windup bonus over the max shows as a gold tip); empty
-/// on a red ground once broken this round.
-pub(super) fn poise_bar(p: &mut Painter, r: Rect, st: &emberwake_battle::poise::PoiseState) {
-    p.fill(r, if st.broken { rgba(120, 30, 34, 255) } else { rgb(28, 34, 48) });
-    if st.broken || st.max <= 0 {
-        return;
+/// VISCLAR1-D (decision "Battle view answers, part 2", POISE1's look, no rule in it): poise shows as this many pips, each
+/// 20 % of the unit's Max Poise.
+pub(super) const POISE_PIPS: i32 = 5;
+
+/// The pips lit for `value` of `max`: every started 20 % lights one, so none lit means no poise left; a windup bonus over
+/// the max stays at all five; none once broken this round.
+pub(super) fn poise_pips(value: i32, max: i32, broken: bool) -> i32 {
+    if broken || max <= 0 {
+        return 0;
     }
-    let w = (r.w * st.value.clamp(0, st.max) + st.max - 1) / st.max;
-    p.fill(Rect::new(r.x, r.y, w.min(r.w), r.h), POISE);
-    if st.value > st.max {
+    (value.clamp(0, max) * POISE_PIPS + max - 1) / max
+}
+
+/// Pip `k`'s rect in row `r`: relative to the row, so a card's and a token's are the same five with a 1-unit gap.
+pub(super) fn poise_pip_rect(r: Rect, k: i32) -> Rect {
+    let x = |k: i32| r.x + k * (r.w + 1) / POISE_PIPS;
+    Rect::new(x(k), r.y, x(k + 1) - x(k) - 1, r.h)
+}
+
+/// A poise row in `r`: the pips lit in `POISE` (a windup bonus over the max shows as a gold tip on the last); all five on a
+/// red ground once broken this round.
+pub(super) fn poise_bar(p: &mut Painter, r: Rect, st: &emberwake_battle::poise::PoiseState) {
+    let lit = poise_pips(st.value, st.max, st.broken);
+    for k in 0..POISE_PIPS {
+        let pip = poise_pip_rect(r, k);
+        p.fill(pip, if st.broken { rgba(120, 30, 34, 255) } else if k < lit { POISE } else { rgb(28, 34, 48) });
+    }
+    if !st.broken && st.value > st.max {
         p.fill(Rect::new(r.x + r.w - 2, r.y, 2, r.h), th().gold);
     }
 }

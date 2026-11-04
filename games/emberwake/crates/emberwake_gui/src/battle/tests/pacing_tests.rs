@@ -76,3 +76,69 @@ fn a_finished_round_waiting_for_next_rests_again() {
     rested(&mut b);
     assert_eq!(b.frame_need(&cx), FrameNeed::Within(SLOW_LIFE));
 }
+
+/// VISCLAR1-D: a NextRound after a long rest draws every frame until the round's banner and the refill are both done, on the
+/// FX clock: at animation speed 0.5 a wall time past `REST_AFTER` is not enough.
+#[test]
+fn the_next_round_gets_every_frame_until_its_banner_and_refill_end() {
+    use crate::battle::playback::ROUND_BANNER_MS;
+    use crate::battle::tips::AP_REFILL_MS;
+    let mut cx = crate::hud::hud_tests::game_cx();
+    cx.settings.v["battle_view"] = json!("flat");
+    let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
+    let mut b = BattleScreen::arena_with(&cx, None, &encounter, Some(emberwake_rules::ruleset::TIMELINE.into()), "", false);
+    let mut g = crate::hud::hud_tests::gfx();
+    b.tick(&mut cx);
+    let a = b.selected.unwrap();
+    assert_eq!(b.send(&cx, json!({"cmd": "resolve"}))["ok"], json!(true));
+    b.host.session.as_mut().unwrap().w.units[a].ap = 0;
+    // the round over, long at rest: banner and pips landed
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    b.clock.advance(ROUND_BANNER_MS.0 as f64 + ROUND_BANNER_MS.1 as f64 + ROUND_BANNER_MS.2 as f64 + AP_REFILL_MS as f64, 1.0);
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    b.impacts.clear();
+    b.gap_until = None;
+    b.fx.clear();
+    b.floats.clear();
+    b.flashes.clear();
+    b.tracers.clear();
+    b.sidesteps.clear();
+    rested(&mut b);
+    assert_eq!(b.frame_need(&cx), FrameNeed::Within(SLOW_LIFE), "resting at the round's end");
+    b.act(&mut cx, Action::NextRound);
+    assert_eq!(b.frame_need(&cx), FrameNeed::Full, "the advance is a stir");
+    // no draw yet: the old long rest must not count
+    assert!(b.astir_at.elapsed() < REST_AFTER);
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    assert!(b.round_banner_alive() && b.pips_moving(), "both just started");
+    rested(&mut b);
+    // more wall time than REST_AFTER, at animation speed 0.5: under the refill's FX time when the rest is short
+    b.clock.advance(AP_REFILL_MS as f64, 0.5);
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    assert!(b.pips_moving(), "half the refill's FX time");
+    assert_eq!(b.frame_need(&cx), FrameNeed::Full, "the pips still move");
+    b.clock.advance(AP_REFILL_MS as f64, 0.5);
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    assert!(!b.pips_moving(), "the refill landed");
+    assert!(b.round_banner_alive());
+    assert_eq!(b.frame_need(&cx), FrameNeed::Full, "the banner is still up");
+    let (fade_in, hold, fade_out) = ROUND_BANNER_MS;
+    b.clock.advance((fade_in + hold + fade_out) as f64, 1.0);
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    assert!(!b.round_banner_alive());
+    assert_eq!(b.frame_need(&cx), FrameNeed::Within(SLOW_LIFE), "both done: rest again");
+    // the pips alone keep the frames: a fall with the banner long gone
+    let ap = s_ap(&b, a);
+    assert!(ap > 0, "the refill gave AP");
+    b.host.session.as_mut().unwrap().w.units[a].ap = 0;
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    assert!(!b.round_banner_alive() && b.pips_moving());
+    assert_eq!(b.frame_need(&cx), FrameNeed::Full, "the pips move, no banner");
+    b.clock.advance(crate::battle::tips::AP_DRAIN_MS as f64, 1.0);
+    b.draw(&mut cx, &mut g, (-500, -500), true);
+    assert_eq!(b.frame_need(&cx), FrameNeed::Within(SLOW_LIFE), "landed");
+}
+
+fn s_ap(b: &BattleScreen, a: usize) -> i32 {
+    b.host.session.as_ref().unwrap().w.units[a].ap
+}

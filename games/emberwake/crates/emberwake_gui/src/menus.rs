@@ -939,6 +939,12 @@ impl Screen<GameCx> for SettingsScreen {
                 if let Some(wd) = ui.widgets.last_mut() {
                     wd.tip = tip("Auto-fill the rest", "After your picks the planner fills the round's free blocks with follow-ups (ghost blocks you can replace). Off: the free blocks Rest.");
                 }
+                y += 18;
+                // VISCLAR1-D: after a round plays the battle goes to the next round by itself
+                ui.checkbox("settings.auto_confirm", x + 3, y, "Auto-confirm next round", d[crate::battle::AUTO_CONFIRM].as_bool().unwrap_or(true), SetAct::Toggle(crate::battle::AUTO_CONFIRM), true);
+                if let Some(wd) = ui.widgets.last_mut() {
+                    wd.tip = tip("Auto-confirm next round", "Timeline battles: after a round plays, the battle goes to the next round's planning by itself; your plan still waits for your Confirm. Off: press Next round (Space) to go on. A recording you watch always waits.");
+                }
                 y += 20;
                 ui.p.text(x as f32, y as f32 + 3.0, "Map names", BODY, th().text);
                 let labels: Vec<String> = MAP_NAMES.iter().map(|m| m.1.to_string()).collect();

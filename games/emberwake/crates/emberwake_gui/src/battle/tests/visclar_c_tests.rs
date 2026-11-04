@@ -12,6 +12,7 @@ use aegis_core::assets::{Facing, View as Dir};
 use aegis_ui::ui::Gfx;
 use emberwake_battle::command::{CmdKind, MoveKind};
 use emberwake_battle::grid::V2;
+use emberwake_battle::round_intent::RoundTarget;
 use emberwake_battle::round_intent_plan as rip;
 use emberwake_battle::session::{Phase, Session};
 use emberwake_rules::ruleset::TIMELINE;
@@ -35,7 +36,7 @@ fn foe_of(b: &BattleScreen) -> usize {
 }
 
 /// The colours on block `start`'s top row of pixels, between its rounded corners (the icon and name sit lower).
-fn top_row(g: &Gfx, b: &BattleScreen, start: i32) -> Vec<[u8; 3]> {
+pub(super) fn top_row(g: &Gfx, b: &BattleScreen, start: i32) -> Vec<[u8; 3]> {
     let r = b.w.iter().find(|x| x.id == format!("strip.block{start}")).unwrap().rect;
     let y = g.view.y(r.y as f32);
     let (x0, x1) = (g.view.x(r.x as f32 + 3.0), g.view.x((r.x + r.w) as f32 - 3.0));
@@ -173,7 +174,10 @@ fn the_menu_fill_does_what_f_does() {
     open(&mut cx, &mut by_row);
     let rows = by_row.popup.as_ref().expect("the skill menu").rows.clone();
     let k = rows.iter().position(|r| matches!(r.act, RowAct::Fill)).expect("a Fill row while a ghost shows");
-    assert!(rows[k].valid && rows[k].tip.iter().any(|t| t.0.contains('F')));
+    assert!(rows[k].valid);
+    // VISCLAR1-D: the tip's wording, as "contains F" passes on the word Fill alone
+    let tip: Vec<&str> = rows[k].tip.iter().map(|t| t.0.as_str()).collect();
+    assert_eq!(tip, ["Fill (F)", "Accepts the auto-fill for the rest of the round."], "it names the key and what it takes");
     by_row.act(&mut cx, Action::Choose(k));
     assert!(by_row.popup.is_none(), "Fill closes the menu");
     assert!(!rip::picks_of(&s(&by_row).w, h).is_empty(), "the ghost became picks");
@@ -186,7 +190,57 @@ fn the_menu_fill_does_what_f_does() {
     by_key.act(&mut cx2, Action::FillGhost);
     assert_eq!(plan_of(&by_row, h), plan_of(&by_key, h), "the row and key F agree");
 
-    // no ghost left: no Fill
-    open(&mut cx, &mut by_row);
-    assert!(by_row.popup.as_ref().is_none_or(|p| !p.rows.iter().any(|r| matches!(r.act, RowAct::Fill))), "nothing to fill");
+    // no ghost left: no Fill. VISCLAR1-D: the rows themselves, as a menu with no row at all does not open and passed any code
+    let foe = foe_of(&by_row);
+    let (_, after) = by_row.menu_rows(h, RoundTarget::Unit(foe));
+    assert!(!after.iter().any(|r| matches!(r.act, RowAct::Fill)), "the round is full of picks: nothing to fill");
+    // the same with rows to pick from: Auto-fill off, a hero with no plan yet has skills to pick and no ghost to fill
+    let (mut cx3, _, mut bare) = arena(Some(TIMELINE));
+    cx3.settings.v["auto_fill"] = json!(false);
+    bare.tick(&mut cx3);
+    let (h3, foe3) = (bare.selected.unwrap(), foe_of(&bare));
+    assert!(!rip::ghost_entries(&s(&bare).w, &s(&bare).plan, h3).contains(&true), "no ghost yet");
+    let (_, rows3) = bare.menu_rows(h3, RoundTarget::Unit(foe3));
+    assert!(rows3.iter().any(|r| matches!(r.act, RowAct::Pick(_))), "skills to pick");
+    assert!(!rows3.iter().any(|r| matches!(r.act, RowAct::Fill)), "no ghost: no Fill among them");
+}
+
+/// VISCLAR1-D (carried from VISCLAR1-C): Fill with Auto-fill off: after a pick the free blocks are the planner's Rest, the row
+/// offers them, and taking it leaves what key F leaves: those Rests as picks, no follow-up skills, no ghost left.
+#[test]
+fn fill_with_auto_fill_off_takes_the_rest_blocks() {
+    let planned = |b: &BattleScreen, h: usize| -> Vec<(i32, String, bool)> {
+        let session = s(b);
+        let ghosts = rip::ghost_entries(&session.w, &session.plan, h);
+        session.plan.entries_for(&session.w, h).iter().zip(ghosts).map(|(e, g)| (e.start_block, session.w.cat.skills[e.skill].kind.clone(), g)).collect()
+    };
+    // one screen to the point the row or the key acts on: the hero's first valid skill on the first foe
+    let start = || {
+        let (mut cx, _, mut b) = arena(Some(TIMELINE));
+        cx.settings.v["auto_fill"] = json!(false);
+        b.tick(&mut cx);
+        let (h, foe) = (b.selected.unwrap(), foe_of(&b));
+        b.act(&mut cx, Action::UnitClick(foe));
+        let pick = b.popup.as_ref().and_then(|p| p.rows.iter().position(|r| r.valid && matches!(r.act, RowAct::Pick(_)))).expect("a skill to pick");
+        b.act(&mut cx, Action::Choose(pick));
+        (cx, b, h)
+    };
+    let (mut cx, mut by_row, h) = start();
+    let before = planned(&by_row, h);
+    let free: Vec<_> = before.iter().filter(|e| e.2).collect();
+    assert!(!free.is_empty() && free.iter().all(|e| e.1 == "REST"), "Auto-fill off: the free blocks Rest: {before:?}");
+    let rows = by_row.popup.as_ref().expect("the menu stays open after the pick").rows.clone();
+    let k = rows.iter().position(|r| matches!(r.act, RowAct::Fill)).expect("a Fill row for the Rest blocks");
+    by_row.act(&mut cx, Action::Choose(k));
+    assert!(by_row.popup.is_none(), "Fill closes the menu");
+    let after = planned(&by_row, h);
+    assert_eq!(after.len(), before.len(), "no block changes");
+    for (a, b) in after.iter().zip(&before) {
+        assert_eq!((a.0, &a.1), (b.0, &b.1), "the same blocks and kinds: no follow-up skill appears");
+    }
+    assert!(after.iter().all(|e| !e.2), "no ghost left: {after:?}");
+
+    let (mut cx2, mut by_key, h2) = start();
+    by_key.act(&mut cx2, Action::FillGhost);
+    assert_eq!(planned(&by_key, h2), after, "the row and key F agree");
 }

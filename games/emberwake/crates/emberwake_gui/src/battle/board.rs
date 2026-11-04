@@ -4,7 +4,7 @@ use aegis_ui::theme::th;
 use super::marks::{bars_shown, break_plate, broken_units, draw_arrows, draw_hold_tiles, draw_hook_marks, draw_pushes, exit_sign, poise_bar, poise_shown, HoldMarks, HookMarks};
 use super::overlays::{draw_overlay, Layers, Overlay};
 use super::{Action, ALLY, AMBER, DASH_MS, GRID_X, GRID_Y, TILE};
-use super::tips::{intent_glyph, unit_tip};
+use super::tips::{intent_glyph, intent_ring_color, ring_intent, unit_tip};
 use super::tokens::{body_keys, hit_flash, token_frame, token_outline, Float, Tokens, UnitAnim};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::fx;
@@ -369,7 +369,9 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
         let tr = geo.token_rect(pos, shake + dx + sx, dy + sy);
         let ring = if ally { ALLY } else { th().foe };
         if alive {
-            ui.p.ellipse(tr.x as f32 + tp as f32 / 2.0, (tr.y + tp) as f32 - 2.5, tp as f32 * 0.36, tp as f32 * 0.11, rgba(ring[0], ring[1], ring[2], tuning.foot_alpha));
+            // VISCLAR1-D: the ellipse in its intent's colour (`ring_intent`), else its side's
+            let foot = ring_intent(rounds, i, ally, layers.glyphs, show_tells).map_or(ring, intent_ring_color);
+            ui.p.ellipse(tr.x as f32 + tp as f32 / 2.0, (tr.y + tp) as f32 - 2.5, tp as f32 * 0.36, tp as f32 * 0.11, rgba(foot[0], foot[1], foot[2], tuning.foot_alpha));
         }
         let hover = ui.hover(r) && !popup;
         let outline = if Some(i) == sel || Some(i) == talker { Some(th().gold) } else if hover { Some(rgba(255, 255, 255, tuning.hover_outline_alpha)) } else { windup_outline(a, tuning) };
@@ -436,8 +438,9 @@ pub(super) fn draw_flat(b: Board, ui: &mut Ui<Action>, cx: &mut Cx, tuning: &Tun
             intent_chip(ui, cx, r.line.kind, chip);
         }
     }
-    // RULESET1-U slice 4 (UI5): each unit's intent glyph at its cell's top right (an enemy's only while the tells show)
-    for r in rounds.iter().filter(|_| layers.glyphs) {
+    // RULESET1-U slice 4 (UI5): each unit's intent glyph at its cell's top right (an enemy's only while the tells show);
+    // VISCLAR1-D: the ring tells the intent, the plate shows while Alt is held
+    for r in rounds.iter().filter(|_| layers.glyphs && alt) {
         let (Some(i), Some(at)) = (r.round_intent, w.grid.pos(r.unit)) else { continue };
         if w.enemies.contains(&r.unit) && !show_tells {
             continue;
@@ -715,7 +718,16 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                 for t in units.iter().filter(|t| t.alive) {
                     let (fx, fy) = (t.foot.0 as f32, t.foot.1 as f32);
                     ui.p.ellipse(fx + 1.0, fy, 0.2 * tp as f32, 2.4, rgba(8, 10, 6, tuning.shadow_alpha));
-                    ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2, with_alpha(if t.ally { ALLY } else { th().foe }, tuning.foot_ring_alpha));
+                    // VISCLAR1-D (mock `intent_ring`): the ring in its intent's colour, heavier than the side ring it
+                    // replaces (`ring_intent`: the side's stays where no intent shows)
+                    match ring_intent(rounds, t.i, t.ally, layers.glyphs, show_tells) {
+                        Some(intent) => {
+                            let col = intent_ring_color(intent);
+                            ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2, col);
+                            ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32 - 0.5, 2.7, col);
+                        }
+                        None => ui.p.ellipse_ring(fx, fy, 0.25 * tp as f32, 3.2, with_alpha(if t.ally { ALLY } else { th().foe }, tuning.foot_ring_alpha)),
+                    }
                 }
             }
             Pass::Face => stage::draw_face(&mut ui.p, &mut cx.art, &w.grid, set),
@@ -808,8 +820,8 @@ pub(super) fn draw_stage(b: Board, set: &str, ui: &mut Ui<Action>, cx: &mut Cx, 
                     }
                 }
                 // RULESET1-U slice 4 (UI5): each unit's intent glyph right of where the tell chip sits (an enemy's only
-                // while the tells show)
-                for r in rounds.iter().filter(|_| layers.glyphs) {
+                // while the tells show); VISCLAR1-D: the ring tells the intent, the plate shows while Alt is held
+                for r in rounds.iter().filter(|_| layers.glyphs && alt) {
                     let (Some(i), Some(t)) = (r.round_intent, units.iter().find(|t| t.i == r.unit && t.alive)) else { continue };
                     if w.enemies.contains(&r.unit) && !show_tells {
                         continue;

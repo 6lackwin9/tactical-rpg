@@ -3,7 +3,7 @@
 use super::input::RowAct;
 use super::marks::{hold_line, round_summary_text};
 use super::overlays::Layers;
-use super::{after_fight, log_settled, Action, BattleScreen, Mode, PLAYBACK_SPEED, PLAYBACK_SPEEDS, TACTICS, TACTIC_LABELS};
+use super::{after_fight, log_settled, Action, BattleScreen, Mode, AUTO_CONFIRM, CONFIRM_GUARD_MS, PLAYBACK_SPEED, PLAYBACK_SPEEDS, TACTICS, TACTIC_LABELS};
 use super::tokens::Tokens;
 use crate::screens::{show_errors, Cx, Nav};
 use aegis_ui::audio::Bus;
@@ -115,6 +115,10 @@ impl BattleScreen {
         self.play_block = None;
         self.block_ended = None;
         self.waiting = None;
+        self.card_ap.clear();
+        self.banner = None;
+        self.round_note = None;
+        self.advanced_at = None;
         let (objective, n) = {
             let s = self.session();
             (emberwake_battle::encounter::Objectives::text_of(&s.def.raw, |r| s.units_of_ref(r).first().map(|&c| s.w.units[c].name.clone()).unwrap_or_else(|| r.to_string())), s.events.len())
@@ -205,6 +209,10 @@ impl BattleScreen {
     pub(super) fn act(&mut self, cx: &mut Cx, a: Action) {
         // ENCOUNTER2-C DT5: while a talk is open only its box acts
         if self.talk.is_some() != matches!(a, Action::Talk(_)) {
+            return;
+        }
+        // VISCLAR1-D: the player's Confirm only (autoplay's goes through `run`): see `CONFIRM_GUARD_MS`
+        if a == Action::Confirm && self.advanced_at.is_some_and(|t| t.elapsed() < Duration::from_millis(CONFIRM_GUARD_MS)) {
             return;
         }
         if matches!(a, Action::Confirm | Action::Step | Action::Autoplay | Action::NextRound | Action::PlaybackSpeed(_) | Action::NextBlock | Action::Skip) {
@@ -375,18 +383,33 @@ impl BattleScreen {
             Action::PartyMenu => self.tactic_menu(true),
             Action::HeroMenu => self.tactic_menu(false),
             Action::NextRound => {
+                self.pending_next_round = false;
                 let r = self.send(cx, json!({"cmd": "advance"}));
                 if r["ok"] == json!(true) {
                     self.message = format!("Round {}: plan your party.", self.session().current_round);
+                    // VISCLAR1-D: the old round's playback is over: left on, the next tick's `step` would confirm this plan
+                    self.playing = false;
+                    self.astir_at = Instant::now();
+                    if ri::on(&self.session().w) {
+                        self.advanced_at = Some(Instant::now());
+                    }
                     if self.auto {
                         self.auto_plan(cx);
+                    } else if !self.viewing && !self.talk_due() && ri::on(&self.session().w) && self.planning() {
+                        // VISCLAR1-D: the ghosts draft with the advance, not a tick later: a click that lands between
+                        // them would lose its target to the planning start (`plan_start` resets them). A round-start
+                        // talk still goes first: the tick drafts when it closes
+                        self.plan_start(cx);
                     }
                 }
             }
             Action::Step => {
+                // VISCLAR1-D: while the party plans a step would confirm the plan (the host's `step`): with the next round
+                // coming by itself, a Space meant for the round's end must not take the plan unseen; the Step button is
+                // off there too. Classic stays as it was
                 if self.session().phase == Phase::Replay {
                     self.run(cx, Action::NextRound);
-                } else {
+                } else if !(self.planning() && ri::on(&self.session().w)) {
                     self.send(cx, json!({"cmd": "step"}));
                 }
             }
@@ -435,13 +458,17 @@ impl BattleScreen {
         self.run(cx, Action::Confirm);
     }
 
-    /// The round's playback is over: its message; autoplay (and, ENCOUNTER2-C4, a locked round) starts the next round on
-    /// its own after the round-end pause.
+    /// The round's playback is over: its message; `next_round_by_itself` starts the next round after the round-end pause
+    /// (only the next round's planning: nothing confirms a plan but autoplay).
     pub(super) fn round_over(&mut self, cx: &Cx, now: Instant) {
         let t = cx.tuning.value.clone();
         let pace = self.pace(cx);
         let s = self.session();
         let can_advance = s.can_advance_round();
+        // classic keeps its old flow: only autoplay goes on by itself
+        let setting = cx.settings.v[AUTO_CONFIRM].as_bool().unwrap_or(true) && ri::on(&s.w);
+        let by_itself = next_round_by_itself(can_advance, self.auto, s.round_locked(), self.viewing, setting);
+        let hint = if by_itself { "" } else { " Space (or Next) for the next round." };
         let message = if s.combat_over {
             match s.outcome.as_str() {
                 "won" => "Victory!".to_string(),
@@ -453,16 +480,23 @@ impl BattleScreen {
         } else {
             // RULESET1-U slice 5 (RULESET1 12): the round summary under the round intent
             match round_summary_text(s, &Layers::of(&cx.settings.v["battle_overlays"])) {
-                Some(sum) => format!("Round over: {sum}. Space (or Next) for the next round."),
-                None => "Round over. Space (or Next) for the next round.".into(),
+                Some(sum) => format!("Round over: {sum}.{hint}"),
+                None => format!("Round over.{hint}"),
             }
         };
         self.message = message;
-        if (self.auto || (self.locked() && !self.viewing)) && can_advance {
+        if by_itself {
             self.next_at = now + Duration::from_millis(t.round_pause_ms * pace);
             self.pending_next_round = true;
         }
     }
+}
+
+/// VISCLAR1-D (decision "Battle view answers, part 2"): the next round starts by itself once a round has played: under
+/// autoplay; after a locked round (ENCOUNTER2-C4); and, with the Auto-confirm setting, after any other, except while
+/// watching a recording (`viewing`), whose rounds the player steps through.
+pub(super) fn next_round_by_itself(can_advance: bool, auto: bool, locked: bool, viewing: bool, setting: bool) -> bool {
+    can_advance && (auto || (!viewing && (locked || setting)))
 }
 
 /// ENCOUNTER2-C DT8: the qualified id of world character `r` in `world` ("" when there is none).

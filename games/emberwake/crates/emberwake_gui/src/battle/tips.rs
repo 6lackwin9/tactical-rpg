@@ -32,6 +32,27 @@ fn intent_color(i: RoundIntent) -> Rgba {
     })
 }
 
+/// VISCLAR1-D (mock `intent_ring`): the ring under a unit whose intent shows, a brighter cut of the intent's colour, so it
+/// reads on the ground.
+pub(super) fn intent_ring_color(i: RoundIntent) -> Rgba {
+    match i {
+        RoundIntent::Assault => rgb(200, 70, 70),
+        RoundIntent::Guard => rgb(50, 160, 160),
+        RoundIntent::Support => rgb(70, 165, 90),
+        RoundIntent::Maneuver => rgb(70, 145, 205),
+        RoundIntent::Channel => rgb(175, 135, 50),
+    }
+}
+
+/// VISCLAR1-D: the intent unit `i`'s ring shows; None keeps the side ring: no record (classic), the intent glyphs off, or
+/// an enemy while the tells are hidden (a ring would tell what the player chose not to see).
+pub(super) fn ring_intent(rounds: &[Intent], i: usize, ally: bool, glyphs: bool, show_tells: bool) -> Option<RoundIntent> {
+    if !glyphs || (!ally && !show_tells) {
+        return None;
+    }
+    rounds.iter().find(|r| r.unit == i).and_then(|r| r.round_intent)
+}
+
 /// UI5: an intent's colour for text on the dark cards (its colour lifted toward white, so it reads at SMALL).
 fn intent_ink(i: RoundIntent) -> Rgba {
     let c = intent_color(i);
@@ -118,6 +139,77 @@ impl ApAnim {
     }
 }
 
+// ---- VISCLAR1-D: the party card's AP pips (mock `party_ap`) -------------------------------------------------------
+
+/// The pips' one colour and a spent pip's socket; no plan colours here, the strip's gauge has those.
+pub(super) const AP_PIP: Rgba = rgb(110, 160, 235);
+pub(super) const AP_PIP_EMPTY: Rgba = rgb(36, 44, 60);
+/// How long a card's pips take to fall when a move pays AP and to rise when the round starts (ms of the FX clock: the
+/// animation speed and 0.5x apply; at once with skip animations or reduce motion).
+pub(super) const AP_DRAIN_MS: u64 = 240;
+pub(super) const AP_REFILL_MS: u64 = 480;
+const AP_PIP_H: i32 = 5;
+
+/// What one party card's pips show over time: a pure function of the FX clock, so no window is needed to test it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct ApPips {
+    pub(super) from: f32,
+    pub(super) to: f32,
+    pub(super) at: u64,
+}
+
+impl ApPips {
+    /// A card first seen: at its AP, no animation.
+    pub(super) fn still(ap: f32, now: u64) -> ApPips {
+        ApPips { from: ap, to: ap, at: now }
+    }
+
+    /// The AP the pips show at clock `now`.
+    pub(super) fn level(&self, now: u64) -> f32 {
+        let ms = if self.to >= self.from { AP_REFILL_MS } else { AP_DRAIN_MS };
+        let k = now.saturating_sub(self.at) as f32 / ms as f32;
+        // landed means exactly the target: `pips_moving` compares them
+        if k >= 1.0 {
+            self.to
+        } else {
+            self.from + (self.to - self.from) * k
+        }
+    }
+
+    /// The unit's AP at clock `now`: a change starts from what shows now (`instant`: lands at once).
+    pub(super) fn follow(self, ap: f32, now: u64, instant: bool) -> ApPips {
+        if instant {
+            ApPips::still(ap, now)
+        } else if ap == self.to {
+            self
+        } else {
+            ApPips { from: self.level(now), to: ap, at: now }
+        }
+    }
+}
+
+/// How full pip `k` is at `level` AP, with `unit` AP a pip (0 empty, 1 full; the one between is falling or rising).
+pub(super) fn pip_fill(level: f32, unit: i32, k: i32) -> f32 {
+    (level / unit.max(1) as f32 - k as f32).clamp(0.0, 1.0)
+}
+
+/// The row of AP pips with its left end at (`x`, `y`), one size whatever the maximum (the engine gauge's slots, lower);
+/// each pip a socket and the part of it still held. Returns the row's rect.
+pub(super) fn draw_ap_pips(p: &mut Painter, x: i32, y: i32, level: f32, max: i32) -> Rect {
+    use aegis_ui::pips::{count, unit, PIP_GAP, PIP_W};
+    let per = unit(max, AP_PIPS);
+    let slots = count(max, per);
+    for k in 0..slots {
+        let r = Rect::new(x + k * (PIP_W + PIP_GAP), y, PIP_W, AP_PIP_H);
+        p.fill(r, AP_PIP_EMPTY);
+        let held = (pip_fill(level, per, k) * PIP_W as f32).round() as i32;
+        if held > 0 {
+            p.fill(Rect::new(r.x, r.y, held, r.h), AP_PIP);
+        }
+    }
+    Rect::new(x, y, aegis_ui::pips::pips_w(slots), AP_PIP_H)
+}
+
 // ---- Drawing ------------------------------------------------------------------------------------------------------
 
 pub(crate) fn kind_color(kind: &str) -> Rgba {
@@ -140,20 +232,22 @@ pub(super) const BLOCK_ICON: i32 = 14;
 const BLOCK_ICON_EDGE: i32 = 1;
 const BLOCK_ICON_GAP: i32 = 2;
 const BLOCK_PAD: i32 = 2;
-/// A ghost block's icon and outline alpha, a dim (Rest) block's icon alpha.
+/// A ghost block's icon and outline alpha.
 const BLOCK_GHOST_ALPHA: u8 = 150;
-const BLOCK_DIM_ALPHA: u8 = 110;
 /// Mock C on every kind colour, as `kind_color` is fixed too: the icon border, the name and its outline.
 const BLOCK_ICON_LIGHT: Rgba = rgb(238, 230, 210);
 const BLOCK_TEXT: Rgba = rgb(246, 242, 232);
 const BLOCK_TEXT_EDGE: Rgba = rgb(12, 12, 16);
+/// VISCLAR1-D (mock `rest_colour`, the user's pick "light slate"): a Rest block's one colour and its dark ink.
+pub(super) const REST_BLOCK: Rgba = rgb(170, 184, 204);
+const REST_INK: Rgba = rgb(28, 34, 46);
 
-/// How a planned block reads (VISCLAR1-B): chosen, the planner's ghost, or a dim Rest.
+/// How a planned block reads (VISCLAR1-B): chosen, the planner's ghost, or a Rest (VISCLAR1-D: bright, dark ink).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum BlockLook {
     Chosen,
     Ghost,
-    Dim,
+    Rest,
 }
 
 /// What a planned block shows and where (VISCLAR1-B, mock C): the icon and the name centred together, the icon alone
@@ -201,12 +295,14 @@ pub(super) fn draw_block_label(ui: &mut aegis_ui::ui::Ui<super::Action>, art: &m
     let label = block_label(r, img.is_some(), name_w);
     if let (Some(sq), Some(img)) = (label.icon, img) {
         let inner = Rect::new(sq.x + BLOCK_ICON_EDGE, sq.y + BLOCK_ICON_EDGE, sq.w - 2 * BLOCK_ICON_EDGE, sq.h - 2 * BLOCK_ICON_EDGE);
-        ui.p.image_alpha(img, inner, match look { BlockLook::Chosen => 255, BlockLook::Ghost => BLOCK_GHOST_ALPHA, BlockLook::Dim => BLOCK_DIM_ALPHA });
-        if look != BlockLook::Dim {
-            let edge = if look == BlockLook::Ghost { with_alpha(BLOCK_ICON_LIGHT, BLOCK_GHOST_ALPHA) } else { BLOCK_ICON_LIGHT };
-            for e in [Rect::new(sq.x, sq.y, sq.w, 1), Rect::new(sq.x, sq.y + sq.h - 1, sq.w, 1), Rect::new(sq.x, sq.y + 1, 1, sq.h - 2), Rect::new(sq.x + sq.w - 1, sq.y + 1, 1, sq.h - 2)] {
-                ui.p.fill(e, edge);
-            }
+        ui.p.image_alpha(img, inner, if look == BlockLook::Ghost { BLOCK_GHOST_ALPHA } else { 255 });
+        let edge = match look {
+            BlockLook::Chosen => BLOCK_ICON_LIGHT,
+            BlockLook::Ghost => with_alpha(BLOCK_ICON_LIGHT, BLOCK_GHOST_ALPHA),
+            BlockLook::Rest => REST_INK,
+        };
+        for e in [Rect::new(sq.x, sq.y, sq.w, 1), Rect::new(sq.x, sq.y + sq.h - 1, sq.w, 1), Rect::new(sq.x, sq.y + 1, 1, sq.h - 2), Rect::new(sq.x + sq.w - 1, sq.y + 1, 1, sq.h - 2)] {
+            ui.p.fill(e, edge);
         }
     }
     let mut cut = false;
@@ -219,8 +315,8 @@ pub(super) fn draw_block_label(ui: &mut aegis_ui::ui::Ui<super::Action>, art: &m
         ui.p.transient(|p| match look {
             BlockLook::Chosen => text_outlined(p, x, y, &shown, SMALL, BLOCK_TEXT, BLOCK_TEXT_EDGE),
             BlockLook::Ghost => text_outlined(p, x, y, &shown, SMALL, th().dim, with_alpha(BLOCK_TEXT_EDGE, BLOCK_GHOST_ALPHA)),
-            BlockLook::Dim => {
-                p.text(x, y, &shown, SMALL, th().dim);
+            BlockLook::Rest => {
+                p.text(x, y, &shown, SMALL, REST_INK);
             }
         });
     }

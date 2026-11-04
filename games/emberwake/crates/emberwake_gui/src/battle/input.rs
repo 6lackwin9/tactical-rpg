@@ -451,7 +451,7 @@ impl BattleScreen {
 
     /// IF2: the skill menu's title and rows for `h` on `at` (the kit's `pick_options`, in hotkey order), with "Select
     /// <ally>" last on another ally (SL6).
-    fn menu_rows(&self, h: usize, at: RoundTarget) -> (String, Vec<Row>) {
+    pub(super) fn menu_rows(&self, h: usize, at: RoundTarget) -> (String, Vec<Row>) {
         let s = self.session();
         let w = &s.w;
         let opts = rip::pick_options(w, &s.plan, h, at);

@@ -70,9 +70,9 @@ fn a_block_centres_what_it_shows() {
 }
 
 /// Mock C: a chosen block's icon has a light border, its name is near-white with dark pixels round it; a ghost is fainter
-/// on all of it; a dim Rest has no border and no outline. Each is measured against a plain kind-coloured fill.
+/// on all of it; a Rest has dark ink for its own light slate. Each is measured against a plain kind-coloured fill.
 #[test]
-fn the_looks_read_as_chosen_ghost_and_dim() {
+fn the_looks_read_as_chosen_ghost_and_rest() {
     let mut art = game_art();
     let chain = vec!["skills/kinds/attack.png".to_string()];
     assert!(art.first_rel(&chain).is_some(), "the kit's kind icon");
@@ -96,10 +96,11 @@ fn the_looks_read_as_chosen_ghost_and_dim() {
     let (ghost, _) = render(&mut art, BlockLook::Ghost);
     assert!(pixels(&ghost, r, light) * 2 < c_light, "the ghost's border and name are not light: {c_light}");
     assert!(pixels(&ghost, r, dark) < c_dark, "its outline is fainter");
-    let (dim, v) = render(&mut art, BlockLook::Dim);
-    assert_eq!(v["look"], json!("dim"));
-    assert_eq!(pixels(&dim, r, light), 0, "a dim block has neither");
-    assert!(pixels(&dim, r, dark) * 2 < c_dark, "no outline");
+    // VISCLAR1-D: a Rest block's ink is dark, on its own light slate
+    let (rest, v) = render(&mut art, BlockLook::Rest);
+    assert_eq!(v["look"], json!("rest"));
+    assert!(pixels(&rest, r, light) * 2 < c_light, "no light border or name");
+    assert!(pixels(&rest, r, dark) > 0, "its ink is dark");
     // no icon: the name alone
     let mut g = crate::hud::hud_tests::gfx();
     let v = {
@@ -111,7 +112,7 @@ fn the_looks_read_as_chosen_ghost_and_dim() {
     assert!(pixels(&g, r, light) > 0 && pixels(&g, r, dark) > 0, "near-white text with its dark outline");
 }
 
-/// A real fight: every span of the selected hero gets a label; at the start they are the planner's ghost or dim Rest; a
+/// A real fight: every span of the selected hero gets a label; at the start they are the planner's ghost or Rest; a
 /// pick makes chosen ones; a block that hides its name keeps it in its tip. The block with no plan stays dark. Classic
 /// draws no such label.
 #[test]
@@ -141,7 +142,7 @@ fn a_fight_labels_its_spans() {
         assert_eq!(g.canvas.px[i..i + 3], kind_color(kind)[..3], "{kind} at block {start}");
     }
     assert!(picked.iter().any(|l| l["look"] == json!("chosen")), "{picked:?}");
-    assert!(picked.iter().filter(|l| l["look"] != json!("dim")).all(|l| l["icon"].is_string()), "every kind has an icon: {picked:?}");
+    assert!(picked.iter().filter(|l| l["look"] != json!("rest")).all(|l| l["icon"].is_string()), "every kind has an icon: {picked:?}");
     for l in picked.iter().filter(|l| l["shows_name"] == json!(false) || l["cut"] == json!(true)) {
         let name = l["name"].as_str().unwrap();
         assert!(b.w.iter().any(|x| x.id.starts_with("strip.block") && x.tip.iter().any(|(t, _)| t == name)), "{name} in a tip");

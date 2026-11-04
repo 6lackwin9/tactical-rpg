@@ -20,6 +20,8 @@
 //! (`talk.rs`) once its step's impacts have played, over a 35 % veil, the speaker's token in the gold ring; while it is
 //! open the screen sends no request, autoplay waits and every board click and battle key is swallowed; replies run in
 //! the game in play (a world fight) or a scratch game state of the Arena's world.
+//! VISCLAR1-D (timeline battles; classic keeps its old flow): after a round plays, the next round's planning starts by itself
+//! (setting Auto-confirm next round; not while watching a recording), and a banner names each new round.
 
 
 mod board;
@@ -48,7 +50,7 @@ use marks::{held_guard, hold_pick_ids, meters_of, push_forecasts, push_json, Arr
 use overlays::{overlay_json, overlay_of};
 use playback::PlaySpeed;
 use talks::BattleTalk;
-use tips::ApAnim;
+use tips::{ApAnim, ApPips};
 use tokens::{Float, Tokens};
 use aegis_ui::canvas::{rgb, rgba, Rect, Rgba};
 use crate::music;
@@ -104,6 +106,9 @@ const TRACER_INSET: f32 = 3.0;
 /// INPUT1 PB3: the settings key of the playback speed and its values (setting value, chip label, chip widget id).
 pub(crate) const PLAYBACK_SPEED: &str = "playback_speed";
 pub(crate) const PLAYBACK_SPEEDS: [(&str, &str, &str); 3] = [("1x", "1x", "playback.speed.1"), ("0.5x", "0.5x", "playback.speed.half"), ("block", "Block", "playback.speed.block")];
+/// VISCLAR1-D: the settings key of "Auto-confirm next round" (Settings, Gameplay; on by default): after a round of a timeline
+/// battle plays, the battle goes to the next round's planning by itself.
+pub(crate) const AUTO_CONFIRM: &str = "auto_confirm";
 /// The battle screen's panels by name (`BattleScreen::panels`; the UI Gallery's battle panel entries).
 pub const PANELS: [&str; 7] = ["strip", "party", "hero", "grid", "hostiles", "intel", "bar"];
 const GRID_X: i32 = 128;
@@ -390,17 +395,32 @@ pub struct BattleScreen {
     /// and the block the playback waits after with whether Block mode holds it (the agent link's `playback.waiting`).
     block_ended: Option<i32>,
     waiting: Option<(i32, bool)>,
+    /// VISCLAR1-D: each party card's AP pips over time, the cards as last drawn (the agent link's `party_cards`), and the
+    /// round banner's round with the FX clock ms it started at.
+    card_ap: Vec<(usize, ApPips)>,
+    cards_shown: Vec<Value>,
+    banner: Option<(i32, u64)>,
+    /// VISCLAR1-D: the round's summary shown before the next round's prompt while that prompt stands (prompt, summary), and
+    /// when the last advance of a timeline battle came (`CONFIRM_GUARD_MS`).
+    round_note: Option<(String, String)>,
+    advanced_at: Option<Instant>,
 }
+
+/// VISCLAR1-D: how long after an advance the player's Confirm is ignored: "Next round" and "Confirm round" are one button,
+/// so a click or Enter meant for the round's end must not take the plan that just came up.
+pub(crate) const CONFIRM_GUARD_MS: u64 = 350;
 
 /// FPSCAP1: how long after the last stir a battle must stay at rest before it draws slower.
 pub(crate) const REST_AFTER: Duration = Duration::from_millis(1500);
 
 impl BattleScreen {
     /// FPSCAP1: waiting for the player (a plan, Next after a round, the end banner) with nothing playing and no short-lived
-    /// effect alive. Only `playing`, `auto` and `pending_next_round` move a battle by themselves.
+    /// effect alive. Only `playing`, `auto` and `pending_next_round` move a battle by themselves. VISCLAR1-D: the round
+    /// banner and the cards' AP pips count as effects, both on the FX clock, so a slow animation speed keeps them smooth.
     pub(crate) fn at_rest(&self) -> bool {
         self.host.session.is_some() && !self.viewing && !self.playing && !self.auto && !self.pending_next_round && self.talk.is_none()
             && self.impacts_done(Instant::now()) && self.fx.is_empty() && self.floats.is_empty() && self.flashes.is_empty() && self.tracers.is_empty() && self.sidesteps.is_empty()
+            && !self.round_banner_alive() && !self.pips_moving()
     }
 
     fn blank(cx: &Cx, mode: Mode) -> Self {
@@ -490,6 +510,11 @@ impl BattleScreen {
             play_block: None,
             block_ended: None,
             waiting: None,
+            card_ap: Vec::new(),
+            cards_shown: Vec::new(),
+            banner: None,
+            round_note: None,
+            advanced_at: None,
         }
     }
 
@@ -756,6 +781,7 @@ impl Screen<GameCx> for BattleScreen {
         self.mouse = mouse;
         self.resolve_impacts(cx);
         self.react_start_portraits(cx);
+        self.follow_round_banner();
         draw(self, cx, g, mouse, live);
     }
 
@@ -859,20 +885,35 @@ impl Screen<GameCx> for BattleScreen {
         let ready = now >= self.next_at && self.impacts_done(now);
         // INPUT1 PB3: at 0.5x the pacing between steps and rounds doubles
         let pace = self.pace(cx);
+        // VISCLAR1-D: the player went ahead during the pause (Space, Next round): the wait is over
+        if self.pending_next_round && self.session().phase != Phase::Replay {
+            self.pending_next_round = false;
+        }
         if self.pending_next_round {
-            if ready && self.session().phase == Phase::Replay {
+            if ready {
                 // PB3: Block mode holds autoplay after the round's last block too
                 if self.hold_at_block_end(cx) {
                     return;
                 }
+                // VISCLAR1-D: a menu the player has open is not closed under them
+                if self.popup.is_some() && !self.auto {
+                    return;
+                }
                 self.pending_next_round = false;
+                // the round's summary stays readable in the message bar as the next round starts (`summary_and_prompt`)
+                let summary = Some(self.message.clone()).filter(|m| m.starts_with("Round over"));
                 self.run(cx, Action::NextRound);
+                self.round_note = summary.filter(|_| self.planning()).map(|m| (self.message.clone(), m));
             }
             return;
         }
         if self.playing && ready {
             if self.session().phase == Phase::Replay {
+                // VISCLAR1-D: a Space during the playback may have played the round's last step (classic stays as it was)
                 self.playing = false;
+                if ri::on(&self.session().w) {
+                    self.round_over(cx, now);
+                }
                 return;
             }
             // PB3, PB5: after a block the playback waits in Block mode and while the timeline view is open
@@ -1010,6 +1051,9 @@ impl Screen<GameCx> for BattleScreen {
             // INPUT1-AP: the AP gauge as last drawn (pips "F H Hg Sg S", red, its "-<n>" label and side; null: hidden)
             out["ap_gauge"] = self.ap_gauge.clone().unwrap_or(Value::Null);
             out["strip_labels"] = json!(self.strip_labels);
+            // VISCLAR1-D: the party cards as last drawn and the round banner showing (null: none)
+            out["party_cards"] = json!(self.cards_shown);
+            out["round_banner"] = json!(self.round_banner_now(cx).map(|b| json!({"round": b.0, "alpha": b.1})));
         }
         // INPUT1 PB1-PB4: the playback aids (timeline battles): the speed, whether the playback waits at a block's end
         // and the resolving block; the live tracers; the log by round and block
@@ -1114,6 +1158,10 @@ impl Screen<GameCx> for BattleScreen {
             self.new_session();
             self.tokens = Tokens::default();
             self.reset_talks();
+            self.card_ap.clear();
+            self.banner = None;
+            self.round_note = None;
+            self.advanced_at = None;
         }
         if self.host.session.is_some() {
             self.after_change(cx);

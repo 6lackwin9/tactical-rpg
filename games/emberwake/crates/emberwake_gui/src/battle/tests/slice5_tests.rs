@@ -244,6 +244,8 @@ fn card_and_token_glyphs_agree_in_playback() {
     assault(&cx, &mut b);
     let r = b.send(&cx, json!({"cmd": "confirm"}));
     assert_eq!(r["ok"], json!(true), "{r}");
+    // VISCLAR1-D: the token's plate shows while Alt is held (the ring tells the intent otherwise)
+    cx.held.alt = true;
     let recs = crate::hud::hud_tests::frame(&mut b, &mut cx, &mut g, 1.0);
     let rounds = s(&b).round_intents();
     let mut checked = 0;

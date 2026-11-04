@@ -31,8 +31,8 @@ pub fn default_settings() -> Value {
     // RULESET1-U slice 6: every battle overlay group at its default (`battle::OVERLAY_GROUPS`; VISCLAR1 VC6: on but
     // `all_bars`, `test_hazards` and `test_arena`). VC5: the debug key `debug_party_foresight_off` is never a default.
     let overlays: serde_json::Map<String, Value> = crate::battle::OVERLAY_GROUPS.iter().map(|g| (g.0.to_string(), Value::Bool(g.3))).collect();
-    // INPUT1 GH7: "Auto-fill the rest" on by default; PB3: the playback speed 1x
-    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "auto_fill": true, "map_names": "hover", "map_zoom": 1.0, "walk_step_ms": crate::mapview::WALK_STEP_MS.2, crate::mapview::TURN_BEAT_KEY: false, crate::mapview::EQUAL_SPEED_KEY: false, crate::mapview::TURN_CORNER_KEY: crate::mapview::TURN_CORNERS[0].name(), "map_legend_open": true, "battle_view": "stage", "region_view": "square", "see_through": "selected", "battle_overlays": overlays,
+    // INPUT1 GH7: "Auto-fill the rest" on by default; PB3: the playback speed 1x; VISCLAR1-D: "Auto-confirm next round" on
+    json!({"anim_speed": 1.0, "skip_anim": false, "show_tells": true, "warn_missing": true, "auto_fill": true, crate::battle::AUTO_CONFIRM: true, "map_names": "hover", "map_zoom": 1.0, "walk_step_ms": crate::mapview::WALK_STEP_MS.2, crate::mapview::TURN_BEAT_KEY: false, crate::mapview::EQUAL_SPEED_KEY: false, crate::mapview::TURN_CORNER_KEY: crate::mapview::TURN_CORNERS[0].name(), "map_legend_open": true, "battle_view": "stage", "region_view": "square", "see_through": "selected", "battle_overlays": overlays,
         "playback_speed": "1x"})
 }
 

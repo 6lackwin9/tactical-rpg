@@ -247,7 +247,7 @@ In battle: hover anything (units, cards, plan blocks, menu options) for a detail
 a foe, an ally, the hero itself or an empty tile for its options (each shows AP and the expected damage or heal); right
 click closes a menu or undoes the last step. Strip: the Party and Hero dropdowns draft a tactic (with its
 description), Auto plays the battle out, Confirm resolves the round. The log (Expand) wraps and scrolls with the wheel
-or PageUp / PageDown. Keys (while no control shows the focus ring): Enter confirm, Space step / next round, A autoplay, Z undo, L log, R restart (arena),
+or PageUp / PageDown. Keys (while no control shows the focus ring): Enter confirm, Space step / next round (timeline battles: nothing while planning, Enter is ignored for 350 ms after an advance, and the next round's planning comes by itself: Settings, Gameplay, "Auto-confirm next round", on by default; classic keeps its Next round), A autoplay, Z undo, L log, R restart (arena),
 I enemy tells, F12 screenshot. Timeline battles (INPUT1-U): click a target (an enemy, an ally, an empty tile; the hero
 panel's Self button or S for the hero itself), then pick skills from its menu (Shift+1-9 are the selected hero's skill
 hotkeys, with or without the menu open; INPUT2); keys 1-4 select the party's members; the planner fills the rest of
