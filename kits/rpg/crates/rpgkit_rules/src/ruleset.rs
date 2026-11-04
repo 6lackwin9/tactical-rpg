@@ -287,6 +287,9 @@ pub struct DeckSlots {
     pub keystone: i32,
 }
 
+/// VISCLAR1-D: the default of `move_after_blocks`.
+pub const MOVE_AFTER_BLOCKS: i32 = 3;
+
 /// A ruleset row's numbers (RULESET1_TASKS 1.2); `Default` is the schema defaults.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Numbers {
@@ -311,6 +314,8 @@ pub struct Numbers {
     pub melee_diagonal: MeleeDiagonal,
     /// INPUT1 MR9 (`flank_protected_cost`, `flank_protected_ap`; default `full`).
     pub flank_protected: FlankCost,
+    /// VISCLAR1-D (`move_after_blocks`): the most move blocks of a Move after a skill; a Move as the opener keeps its two.
+    pub move_after_blocks: i32,
     /// CLN-45: when Rest returns its AP (`rest_ap`).
     pub rest_ap: RestAp,
     /// CLN-45: which skills chase (`chase`).
@@ -343,6 +348,7 @@ impl Default for Numbers {
             deck_slots: DeckSlots::default(),
             melee_diagonal: MeleeDiagonal::Maneuver,
             flank_protected: FlankCost::Full,
+            move_after_blocks: MOVE_AFTER_BLOCKS,
             rest_ap: RestAp::OnUse,
             chase: Chase::Classic,
             root_stops_chase: false,
@@ -393,6 +399,7 @@ impl Numbers {
             rest_poise_per_block: value::int(o, "rest_poise_per_block", d.rest_poise_per_block),
             deck_slots: DeckSlots { active: slot("active"), passive: slot("passive"), keystone: slot("keystone") },
             melee_diagonal: MeleeDiagonal::parse(&value::string(o, "melee_diagonal", "")).unwrap_or(raw_diagonal),
+            move_after_blocks: value::int(o, "move_after_blocks", MOVE_AFTER_BLOCKS),
             flank_protected: FlankCost::from_ids(&value::string(o, "flank_protected_cost", ""), value::int(o, "flank_protected_ap", FlankCost::FIXED_AP)),
             rest_ap: RestAp::parse(&value::string(o, "rest_ap", "")).unwrap_or(d.rest_ap),
             chase: Chase::parse(&value::string(o, "chase", "")).unwrap_or(d.chase),

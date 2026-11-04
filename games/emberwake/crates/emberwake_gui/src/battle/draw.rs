@@ -53,6 +53,13 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     };
     let mut ui: Ui<Action> = Ui::new(gfx, mouse, live);
     g.menu_row = ((ui.p.line_h(BODY) + 2.5).ceil() as i32).max(11);
+    let menu_row = g.menu_row;
+    if let Some(pop) = g.popup.as_mut() {
+        // VISCLAR1-D: the skill menu beside its tile, in this frame's view of the board
+        let geo = Geom::new(View::of_setting(&cx.settings.v["battle_view"]), &tuning);
+        let tile = pop.anchor.map(|c| geo.cell_rect(c));
+        pop.fit_grid(&mut ui.p, menu_row, tile, Rect::new(GRID_X - 2, GRID_Y - 2, GRID_W * TILE + 4, GRID_H * TILE + 4));
+    }
     let Some(s) = g.host.session.as_ref() else {
         ui.p.text(8.0, 8.0, &g.message, BODY, th().foe);
         g.w = ui.widgets;
@@ -111,8 +118,13 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
     // INPUT1 IF5: a hovered skill-menu row previews the round as if picked (copies of the world and the plan, kept for
     // the battle's revision); GH2 a: a member whose ghost waits for Confirm shows it from copies too
     let timeline = ri::on(w);
-    let hovered_row = g.popup.as_ref().filter(|p| p.menu.is_some() && live).and_then(|p| (0..p.rows.len()).find(|&k| p.row(g.menu_row, k).contains(mouse.0, mouse.1)));
-    let hovered_pick = g.popup.as_ref().and_then(|p| Some((p.menu?, p.rows.get(hovered_row?)?.clone())));
+    let hovered_row = g.popup.as_ref().filter(|p| p.menu.is_some() && live).and_then(|p| p.row_at(g.menu_row, mouse));
+    // VISCLAR1-D: a cell may act on another target than the menu's own
+    let hovered_pick = g.popup.as_ref().and_then(|p| {
+        let row = p.rows.get(hovered_row?)?.clone();
+        let (h, at) = p.menu?;
+        Some(((h, row.at.unwrap_or(at)), row))
+    });
     if let Some(((h, at), row)) = hovered_pick.clone().filter(|_| planning) {
         let k = hovered_row.unwrap_or(0);
         if g.preview.as_ref().is_none_or(|p| (p.0, p.1) != (g.rev, k)) {
@@ -345,6 +357,15 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         }
     }
     g.strip_labels = strip_labels;
+    // VISCLAR1-D: a Move that replaced a larger block says so, under the blocks it left as Rest
+    // (drawn after the panels, as it lies over the board's top edge)
+    // and while the Move waits for its tile, what the tile under the mouse takes
+    let aimed = aegis_ui::ui::hit(&g.w, mouse).and_then(|a| if let Action::TileClick(c) = a { g.move_tiles.iter().find(|t| t.cell == c).cloned() } else { None }).filter(|_| g.move_aim.is_some());
+    let aim_note = aimed.map(|t| {
+        let drops = if t.drops.is_empty() { String::new() } else { format!(", drops {}", t.drops) };
+        (format!("Move here: {} block{}, {} AP{drops}", t.blocks, if t.blocks == 1 { "" } else { "s" }, t.ap), bx)
+    });
+    let move_note = aim_note.or(sel.filter(|_| timeline && planning).and_then(|u| rip::move_note(pplan, u)).map(|note| (note, entries.iter().find(|e| e.3 == "REST").map_or(bx, |e| bx + (e.0 - 1) * bw))));
     // HOOKS1-UI slice 1 (AH3): a badge on each block at whose end an arena hazard strikes, over the spans
     for b in (1..=s.def.total_blocks).filter(|b| marks.show_arena && marks.arena.iter().any(|t| t.blocks.contains(b))) {
         arena_badge(&mut ui.p, Rect::new(bx + (b - 1) * bw, 6, bw - 1, 16));
@@ -658,6 +679,8 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
             RowAct::Pick(picks) => engage_positions(s, *h, *at, picks),
             _ => Vec::new(),
         },
+        // VISCLAR1-D: the tiles the Move can go to while it waits for one
+        _ if planning && g.move_aim.is_some() => g.move_tiles.iter().map(|t| (t.cell, true)).collect(),
         _ => Vec::new(),
     };
     if let Some(o) = overlay.as_mut() {
@@ -1003,7 +1026,20 @@ pub(super) fn draw(g: &mut BattleScreen, cx: &mut Cx, gfx: &mut Gfx, mouse: (i32
         g.tv_shown = None;
     }
 
-    if let Some(pop) = g.popup.clone() {
+    if let Some((note, left)) = move_note {
+        let (tw, th_) = (ui.p.text_w(&note, SMALL).ceil() as i32 + 8, ui.p.line_h(SMALL).ceil() as i32 + 2);
+        let plate = Rect::new(left.min(W - tw - 2), 24, tw, th_);
+        ui.p.panel(plate, th().game("popup_fill", rgba(14, 20, 34, 252)), REST_BLOCK, 2.0);
+        ui.p.text(plate.x as f32 + 4.0, plate.y as f32 + 1.0, &note, SMALL, th().text);
+        ui.push("strip.move_note", "note", note.clone(), plate, true, false, None, vec![(note, th().text)]);
+    }
+
+    if let Some(grid) = g.popup.as_ref().and_then(|p| p.grid.clone()) {
+        // VISCLAR1-D: the skill menu as icons
+        let pop = g.popup.clone().expect("the grid's popup");
+        ui.push("popup.backdrop", "backdrop", "", Rect::new(0, 0, W, H), true, false, Some(Action::ClosePopup), Vec::new());
+        super::skill_menu::draw_menu(&mut ui, &mut cx.art, &pop, &grid, g.menu_row);
+    } else if let Some(pop) = g.popup.clone() {
         let r = pop.rect(g.menu_row);
         ui.push("popup.backdrop", "backdrop", "", Rect::new(0, 0, W, H), true, false, Some(Action::ClosePopup), Vec::new());
         ui.p.panel(r, th().game("popup_fill", rgba(14, 20, 34, 252)), th().gold, 3.0);

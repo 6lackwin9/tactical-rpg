@@ -156,6 +156,8 @@ pub struct Command {
     pub intent_buff: bool,
     /// RULESET1_INTENT MV4: the carried move (Carry::None in classic and for every other command).
     pub carry: Carry,
+    /// Decision "Auto-fill keeps a flank": planned to stay on its flank or behind tile (`round_intent::keeps_flank`).
+    pub keep_flank: bool,
     /// RULESET1 5, 7: the skill's stagger, windup poise, unbreakable, sure break and armour piercing (read only under
     /// the rules `poise` and `pierce`).
     pub impact: crate::poise::Impact,
@@ -237,6 +239,7 @@ impl Command {
             kind,
             intent_buff: false,
             carry: Carry::None,
+            keep_flank: false,
             impact: crate::poise::Impact::default(),
             poise_bonus: 0,
             hits: Vec::new(),
@@ -291,6 +294,10 @@ impl Command {
                     return String::new();
                 }
                 if let (Carry::Engage(cell), Some(position)) = (self.carry, self.position) {
+                    // Decision "Auto-fill keeps a flank": planned to stay, it hits from there while the tile still flanks
+                    if self.keep_flank && cell == w.pos(src) && tgt.is_some_and(|t| round_intent::keeps_flank(w, t, cell, diag)) {
+                        return String::new();
+                    }
                     let (line, moved, protected) = carried_engage(w, rng, src, tgt, cell, position, self.carry_range, self.target_cell, diag);
                     self.moved = moved;
                     if protected {

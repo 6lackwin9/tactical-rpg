@@ -52,6 +52,7 @@ fn catalog() -> Catalog {
         atk("t_dash_shot", "maneuver", 1, 2, json!({"position": "flank", "reach_max": 4})),
         atk("t_poke", "maneuver", 1, 1, json!({})),
         atk("t_transition", "maneuver", 1, 2, json!({"dash_tiles": 2})),
+        atk("t_burst", "maneuver", 1, 2, json!({"area": "BURST", "reach_min": 1, "reach_max": 3})),
         atk("tl_aimed_shot", "assault", 2, 2, json!({"power_mult": 1.1})),
         json!({"id": "tl_field_dressing", "name": "Field Dressing", "kind": "SUPPORT", "round_intent": "support", "level": 1, "blocks": 2, "ap_cost": 2, "heal_base": 8, "heal_mult": 0.3, "target_mode": "ALLY_OR_SELF"}),
     ];
@@ -322,6 +323,293 @@ fn a_follow_up_on_a_position_tile_stays() {
     for e in &carried[1..] {
         assert_eq!((e.pos_before, e.pos_after), (V2::new(6, 3), V2::new(6, 3)), "a follow-up hits from the flank tile");
     }
+}
+
+/// `c`'s Maneuver order is `fam` alone (the fill's follow-ups).
+fn order_of(s: &mut Session, c: UnitId, fam: &str) {
+    s.w.units[c].deck.order.insert("maneuver".into(), vec![fam.to_string()]);
+}
+
+/// The carried entries of `c`'s plan after the opener, as (from, to).
+fn follow_ups(s: &Session, c: UnitId) -> Vec<(V2, V2)> {
+    s.plan.entries_for(&s.w, c).into_iter().filter(|e| matches!(e.carry, Carry::Engage(_))).skip(1).map(|e| (e.pos_before, e.pos_after)).collect()
+}
+
+/// Decision "Auto-fill keeps a flank": a `behind` follow-up auto-filled after a flank opener stays on the flank tile, which is
+/// not one of its own position tiles; accepting the ghost changes nothing and the round plays it from there.
+#[test]
+fn an_auto_filled_follow_up_keeps_the_flank() {
+    let mut s = session(timeline());
+    drop_enemy_plans(&mut s);
+    wolf_board(&mut s);
+    place(&mut s.w, SPIKER, V2::new(5, 2));
+    engage(&mut s, SPIKER);
+    order_of(&mut s, SPIKER, "tl_hamstring_cut");
+    opener(&mut s, SPIKER, "flank_cut");
+    rip::plan_unit(&mut s.w, &mut s.plan, SPIKER).unwrap();
+    let flank = V2::new(6, 3);
+    let behind = round_intent::positions(&s.w, WOLF, SPIKER, Position::Behind, flank, false, &Cells::new());
+    assert!(!behind.contains(flank), "the flank tile is no position of a `behind` skill: without the rule it moves");
+    let f = follow_ups(&s, SPIKER);
+    assert!(!f.is_empty(), "a follow-up: {:?}", s.plan.entries_for(&s.w, SPIKER));
+    assert!(f.iter().all(|x| *x == (flank, flank)), "it stays: {f:?}");
+    let planned: Vec<(usize, V2)> = s.plan.entries_for(&s.w, SPIKER).iter().map(|e| (e.skill, e.pos_after)).collect();
+    // F: the ghost as picks plans the same; the round plays it from the tile
+    rip::accept_ghost(&mut s.w, &mut s.plan, SPIKER, None).0.unwrap();
+    assert_eq!(s.plan.entries_for(&s.w, SPIKER).iter().map(|e| (e.skill, e.pos_after)).collect::<Vec<_>>(), planned, "accepting the ghost moves no one");
+    resolve(&mut s);
+    assert_eq!(s.w.pos(SPIKER), flank, "the round plays it from the flank tile");
+}
+
+/// The same from the tile behind, for a `flank` follow-up.
+#[test]
+fn an_auto_filled_follow_up_keeps_the_tile_behind() {
+    let mut s = session(timeline());
+    wolf_board(&mut s);
+    place(&mut s.w, SPIKER, V2::new(4, 4));
+    engage(&mut s, SPIKER);
+    order_of(&mut s, SPIKER, "flank_cut");
+    opener(&mut s, SPIKER, "tl_hamstring_cut");
+    rip::plan_unit(&mut s.w, &mut s.plan, SPIKER).unwrap();
+    let back = V2::new(5, 4);
+    let f = follow_ups(&s, SPIKER);
+    assert!(!f.is_empty() && f.iter().all(|x| *x == (back, back)), "{:?}", s.plan.entries_for(&s.w, SPIKER));
+}
+
+/// Only the auto-fill: the same `behind` skill picked by the player after the flank opener still moves to its position.
+#[test]
+fn an_explicit_pick_still_repositions() {
+    let mut s = session(timeline());
+    wolf_board(&mut s);
+    place(&mut s.w, SPIKER, V2::new(5, 2));
+    let (cut, ham) = (sid(&s.w, "flank_cut"), sid(&s.w, "tl_hamstring_cut"));
+    let at = RoundTarget::Unit(WOLF);
+    let engage_pick = |skill| rip::Pick::Skill { skill, kind: Some(ManeuverKind::Engage) };
+    rip::pick(&mut s.w, &mut s.plan, SPIKER, at, &[engage_pick(cut)]).0.unwrap();
+    rip::pick(&mut s.w, &mut s.plan, SPIKER, at, &[engage_pick(ham)]).0.unwrap();
+    let e = entry_of(&s, SPIKER, "tl_hamstring_cut");
+    assert_eq!(e.pos_before, V2::new(6, 3));
+    assert_ne!(e.pos_after, e.pos_before, "the pick repositions");
+    assert!(round_intent::positions(&s.w, WOLF, SPIKER, Position::Behind, e.pos_before, false, &Cells::new()).contains(e.pos_after), "to a tile of its own position");
+}
+
+/// The mirror: on the flank's line but not next to the target, the tile is no attack position for the follow-up, which still
+/// moves to its own position tile.
+#[test]
+fn a_follow_up_with_no_attack_position_from_its_tile_moves() {
+    let mut s = session(timeline());
+    wolf_board(&mut s);
+    s.w.units[SPIKER].attack_range = 3;
+    let tile = V2::new(6, 2);
+    place(&mut s.w, SPIKER, tile);
+    engage(&mut s, SPIKER);
+    order_of(&mut s, SPIKER, "tl_hamstring_cut");
+    opener(&mut s, SPIKER, "t_poke");
+    rip::plan_unit(&mut s.w, &mut s.plan, SPIKER).unwrap();
+    let poke = entry_of(&s, SPIKER, "t_poke");
+    assert_eq!(poke.pos_after, tile, "the opener needs no position");
+    assert!(!round_intent::keeps_flank(&s.w, WOLF, tile, false), "two tiles out: no attack position from there");
+    let e = entry_of(&s, SPIKER, "tl_hamstring_cut");
+    assert_eq!(e.pos_before, tile);
+    assert_ne!(e.pos_after, tile, "it moves");
+    assert!(round_intent::positions(&s.w, WOLF, SPIKER, Position::Behind, tile, false, &Cells::new()).contains(e.pos_after), "to a tile of its own position");
+}
+
+/// The board where every tile of a `behind` skill on Wolf is taken, SPIKER on the flank tile with `tl_hamstring_cut` to fill.
+fn protected_behind() -> Session {
+    let mut s = session(timeline());
+    drop_enemy_plans(&mut s);
+    wolf_board(&mut s);
+    for (c, cell) in [(PLAIN, V2::new(5, 4)), (ARCHER, V2::new(5, 3)), (LONGBOW, V2::new(5, 5))] {
+        place(&mut s.w, c, cell);
+    }
+    place(&mut s.w, SPIKER, V2::new(6, 3));
+    engage(&mut s, SPIKER);
+    order_of(&mut s, SPIKER, "tl_hamstring_cut");
+    opener(&mut s, SPIKER, "flank_cut");
+    let ham = &s.w.cat.skills[sid(&s.w, "tl_hamstring_cut")];
+    assert!(round_intent::flank_protected(&s.w, WOLF, SPIKER, ham, V2::new(6, 3), &Cells::new()), "its own position is protected");
+    s
+}
+
+/// Plays the round: every attack of SPIKER lands with a hit from the flank tile, none is `[Flank Protected]`, and the AP paid
+/// is the plan's.
+fn plays_from_the_flank(s: &mut Session, spent: i32) {
+    let (hp, ap) = (s.w.units[WOLF].hp, s.w.units[SPIKER].ap);
+    resolve(s);
+    let flank = V2::new(6, 3);
+    assert_eq!(s.w.pos(SPIKER), flank);
+    assert!(logged(s, "[Flank Protected]").is_empty(), "{:?}", logged(s, "[Flank Protected]"));
+    let attacks: Vec<_> = s.resolver.scheduled.iter().filter(|a| a.unit == SPIKER && matches!(a.command.kind, CmdKind::Attack { .. })).collect();
+    assert!(attacks.len() >= 2, "the opener and a follow-up");
+    assert!(attacks.iter().all(|a| a.landed && !a.command.missed && !a.command.hits.is_empty()), "every attack lands");
+    assert!(s.w.units[WOLF].hp < hp, "damage landed");
+    assert_eq!(s.w.units[SPIKER].ap, ap - spent, "the plan's AP is what it paid");
+}
+
+/// A kept follow-up whose own position is protected plans, is accepted as it shows (F) and plays: what the ghost shows is what
+/// the round does. Only the kept tile: the player's own pick of that skill is refused there.
+#[test]
+fn a_kept_follow_up_on_a_protected_position_plans_accepts_and_plays() {
+    let mut s = protected_behind();
+    rip::plan_unit(&mut s.w, &mut s.plan, SPIKER).unwrap();
+    let flank = V2::new(6, 3);
+    let f = follow_ups(&s, SPIKER);
+    assert!(!f.is_empty() && f.iter().all(|x| *x == (flank, flank)), "it stays: {:?}", s.plan.entries_for(&s.w, SPIKER));
+    let spent = rip::ap_forecast(&s.w, &s.plan, SPIKER).spent;
+    assert!(spent > 0);
+    let planned: Vec<(usize, V2)> = s.plan.entries_for(&s.w, SPIKER).iter().map(|e| (e.skill, e.pos_after)).collect();
+    rip::accept_ghost(&mut s.w, &mut s.plan, SPIKER, None).0.expect("F keeps what the ghost shows");
+    assert_eq!(s.plan.entries_for(&s.w, SPIKER).iter().map(|e| (e.skill, e.pos_after)).collect::<Vec<_>>(), planned);
+    assert_eq!(rip::ap_forecast(&s.w, &s.plan, SPIKER).spent, spent);
+    plays_from_the_flank(&mut s, spent);
+
+    // the plan with no accept plays the same
+    let mut s = protected_behind();
+    rip::plan_unit(&mut s.w, &mut s.plan, SPIKER).unwrap();
+    let spent = rip::ap_forecast(&s.w, &s.plan, SPIKER).spent;
+    plays_from_the_flank(&mut s, spent);
+
+    // the player's own pick has no kept tile to stand on
+    let mut s = protected_behind();
+    let at = RoundTarget::Unit(WOLF);
+    let (cut, ham) = (sid(&s.w, "flank_cut"), sid(&s.w, "tl_hamstring_cut"));
+    let engage_pick = |skill| rip::Pick::Skill { skill, kind: Some(ManeuverKind::Engage) };
+    rip::pick(&mut s.w, &mut s.plan, SPIKER, at, &[engage_pick(cut)]).0.unwrap();
+    assert!(rip::pick(&mut s.w, &mut s.plan, SPIKER, at, &[engage_pick(ham)]).0.is_err(), "refused for its protected position");
+}
+
+/// A rooted unit on the flank tile: the fill keeps it there and F accepts it, with no position tile in its reach.
+#[test]
+fn a_rooted_unit_accepts_its_kept_follow_up() {
+    let mut s = session(timeline());
+    drop_enemy_plans(&mut s);
+    wolf_board(&mut s);
+    place(&mut s.w, SPIKER, V2::new(6, 3));
+    status::grant_now(&mut s.w.units[SPIKER], "root", 2, 0, "test");
+    engage(&mut s, SPIKER);
+    order_of(&mut s, SPIKER, "tl_hamstring_cut");
+    opener(&mut s, SPIKER, "flank_cut");
+    rip::plan_unit(&mut s.w, &mut s.plan, SPIKER).unwrap();
+    assert!(!follow_ups(&s, SPIKER).is_empty(), "{:?}", s.plan.entries_for(&s.w, SPIKER));
+    let spent = rip::ap_forecast(&s.w, &s.plan, SPIKER).spent;
+    rip::accept_ghost(&mut s.w, &mut s.plan, SPIKER, None).0.expect("F keeps what the ghost shows");
+    assert_eq!(rip::ap_forecast(&s.w, &s.plan, SPIKER).spent, spent);
+    plays_from_the_flank(&mut s, spent);
+}
+
+/// One Maneuver kind a round: after an Engage opener the skill's Disengage cell fades and the pick is refused; the other way
+/// round too; and a Utility area pick after an Engage, and an Engage after a Utility area pick. `pick_options` and the menu agree.
+#[test]
+fn one_maneuver_kind_a_round() {
+    let dis = |s: &Session, id: &str| rip::Pick::Skill { skill: sid(&s.w, id), kind: Some(ManeuverKind::Disengage) };
+    let eng = |s: &Session, id: &str| rip::Pick::Skill { skill: sid(&s.w, id), kind: Some(ManeuverKind::Engage) };
+    let cell_of = |s: &Session, p: &rip::Pick, at: RoundTarget| rip::menu_options(&s.w, &s.plan, SPIKER, at).into_iter().find(|o| o.picks.last() == Some(p));
+    let at = RoundTarget::Unit(WOLF);
+    let board = || {
+        let mut s = session(timeline());
+        wolf_board(&mut s);
+        place(&mut s.w, SPIKER, V2::new(6, 3));
+        s.w.units[SPIKER].deck.order.insert("maneuver".into(), vec!["flank_cut".into(), "t_burst".into()]);
+        s
+    };
+    // Engage first: the Disengage cell fades
+    let mut s = board();
+    let first = eng(&s, "flank_cut");
+    rip::pick(&mut s.w, &mut s.plan, SPIKER, at, &[first]).0.unwrap();
+    let other = dis(&s, "flank_cut");
+    assert!(cell_of(&s, &other, at).unwrap().problem.is_some_and(|p| p.starts_with("Only engage")));
+    assert!(rip::pick(&mut s.w, &mut s.plan, SPIKER, at, &[other.clone()]).0.is_err_and(|e| e.starts_with("Only engage")));
+    assert!(!rip::pick_options(&s.w, &s.plan, SPIKER, at).iter().any(|o| o.picks == [other.clone()]));
+    assert_eq!(cell_of(&s, &eng(&s, "flank_cut"), at).unwrap().problem, None, "its own kind stays lit");
+    // a Utility area pick on a tile after it
+    let tile = V2::new(4, 3);
+    let burst = rip::Pick::Skill { skill: sid(&s.w, "t_burst"), kind: Some(ManeuverKind::Utility) };
+    assert!(rip::pick(&mut s.w, &mut s.plan, SPIKER, RoundTarget::Cell(tile), &[burst.clone()]).0.is_err_and(|e| e.starts_with("Only engage")));
+    assert!(!rip::pick_options(&s.w, &s.plan, SPIKER, RoundTarget::Cell(tile)).iter().any(|o| o.picks == [burst.clone()] && o.problem.is_none()));
+    assert!(cell_of(&s, &burst, RoundTarget::Cell(tile)).is_none_or(|o| o.problem.is_some()), "no lit Utility cell");
+
+    // Disengage first: the Engage cell fades
+    let mut s = board();
+    let first = dis(&s, "flank_cut");
+    rip::pick(&mut s.w, &mut s.plan, SPIKER, at, &[first.clone()]).0.unwrap();
+    let other = eng(&s, "flank_cut");
+    assert!(cell_of(&s, &other, at).unwrap().problem.is_some_and(|p| p.starts_with("Only disengage")));
+    assert!(rip::pick(&mut s.w, &mut s.plan, SPIKER, at, &[other]).0.is_err_and(|e| e.starts_with("Only disengage")));
+
+    // Utility first: an Engage is refused, another Utility pick is not for its kind
+    let mut s = board();
+    let burst = rip::Pick::Skill { skill: sid(&s.w, "t_burst"), kind: Some(ManeuverKind::Utility) };
+    rip::pick(&mut s.w, &mut s.plan, SPIKER, RoundTarget::Cell(tile), &[burst.clone()]).0.unwrap();
+    assert_eq!(round_intent::maneuver_of(&s.w, SPIKER), ManeuverKind::Utility);
+    let other = eng(&s, "flank_cut");
+    assert!(rip::pick(&mut s.w, &mut s.plan, SPIKER, RoundTarget::Cell(tile), &[other]).0.is_err_and(|e| e.starts_with("Only utility")));
+    assert_eq!(cell_of(&s, &burst, RoundTarget::Cell(tile)).unwrap().problem, None, "its own kind stays lit");
+}
+
+/// Ruling on the fade: a dash moved the unit, though ET5 lets a step after follow it: Move fades, on a unit's menu and a tile's.
+/// An opener that stays on its tile leaves Move lit.
+#[test]
+fn move_fades_after_a_dash() {
+    let mut s = session(timeline());
+    wolf_board(&mut s);
+    place(&mut s.w, SPIKER, V2::new(5, 2));
+    let at = RoundTarget::Unit(WOLF);
+    let cut = rip::Pick::Skill { skill: sid(&s.w, "flank_cut"), kind: Some(ManeuverKind::Engage) };
+    rip::pick(&mut s.w, &mut s.plan, SPIKER, at, &[cut.clone()]).0.unwrap();
+    assert_ne!(entry_of(&s, SPIKER, "flank_cut").pos_before, entry_of(&s, SPIKER, "flank_cut").pos_after, "it dashed");
+    let why = Some("Already moved this round (a dash)".to_string());
+    assert_eq!(rip::move_refusal(&s.w, &s.plan, SPIKER), why);
+    let tile = V2::new(3, 3);
+    let cell = rip::menu_options(&s.w, &s.plan, SPIKER, RoundTarget::Cell(tile)).into_iter().find(|o| o.picks == [rip::Pick::StepAfter(tile)]).unwrap();
+    assert_eq!(cell.problem, why);
+    // on the position tile already: no dash, Move lit
+    let mut s = session(timeline());
+    wolf_board(&mut s);
+    place(&mut s.w, SPIKER, V2::new(6, 3));
+    rip::pick(&mut s.w, &mut s.plan, SPIKER, at, &[cut]).0.unwrap();
+    assert_eq!(rip::move_refusal(&s.w, &s.plan, SPIKER), None);
+}
+
+/// The Move's route and AP are read from the tile the fill leaves the unit on, not the tile before the fill: a follow-up that
+/// dashes away and leaves too little AP for the way back goes for the Move, with no debt and no refusal.
+#[test]
+fn the_move_is_checked_from_the_tile_after_the_fill() {
+    let mut s = session(timeline());
+    wolf_board(&mut s);
+    s.w.units[SPIKER].attack_range = 3;
+    let start = V2::new(6, 2);
+    place(&mut s.w, SPIKER, start);
+    order_of(&mut s, SPIKER, "tl_hamstring_cut");
+    let (poke, ham) = (sid(&s.w, "t_poke"), sid(&s.w, "tl_hamstring_cut"));
+    let cost = |s: &Session, k: usize| skill::ap_cost_by(&s.w.cat.skills[k], Some(&s.w.units[SPIKER]), &s.w.ruleset);
+    // the poke, one dashing follow-up and one tile: enough from the tile before the fill, short from the one after
+    s.w.units[SPIKER].ap = cost(&s, poke) + cost(&s, ham) + 1;
+    let at = RoundTarget::Unit(WOLF);
+    rip::pick(&mut s.w, &mut s.plan, SPIKER, at, &[rip::Pick::Skill { skill: poke, kind: Some(ManeuverKind::Engage) }]).0.unwrap();
+    let filled = entry_of(&s, SPIKER, "tl_hamstring_cut");
+    assert_ne!(filled.pos_after, start, "the follow-up dashes: {:?}", s.plan.entries_for(&s.w, SPIKER));
+    let tile = V2::new(7, 2);
+    assert!(filled.pos_after.dist(tile) > 1, "the way back from there costs more than the one tile");
+    rip::pick(&mut s.w, &mut s.plan, SPIKER, RoundTarget::Cell(tile), &[rip::Pick::StepAfter(tile)]).0.expect("the follow-up goes for the Move");
+    assert!(!s.plan.entries_for(&s.w, SPIKER).iter().any(|e| e.skill == ham), "it went");
+    assert!(rip::ap_forecast(&s.w, &s.plan, SPIKER).left >= 0, "no debt");
+    let entries = s.plan.entries_for(&s.w, SPIKER);
+    let mv = entries.iter().find(|e| s.w.cat.skills[e.skill].id == "move").expect("the Move");
+    assert_eq!((mv.pos_before, mv.pos_after), (start, tile), "from the poke's tile");
+}
+
+/// `keeps_flank` by the table: beside and behind count, the diagonals and the front do not, nor a tile not next to the target,
+/// and with no facing there is no flank.
+#[test]
+fn keeps_flank_reads_the_facing_table() {
+    let mut s = session(timeline());
+    wolf_board(&mut s);
+    for (cell, want) in [(V2::new(5, 4), true), (V2::new(6, 3), true), (V2::new(6, 5), true), (V2::new(5, 3), false), (V2::new(7, 3), false), (V2::new(7, 4), false), (V2::new(4, 4), false)] {
+        assert_eq!(round_intent::keeps_flank(&s.w, WOLF, cell, true), want, "{cell}");
+    }
+    s.w.round_states.entry(GOBLIN).or_default().facing = V2::new(0, 0);
+    assert!(!round_intent::keeps_flank(&s.w, GOBLIN, s.w.pos(GOBLIN) + V2::new(0, 1), true), "a target with no facing faces the tile: its front");
 }
 
 /// MR8 c, MR9: the position tiles filled between planning and the start: `[Flank Protected]` at the start with the AP

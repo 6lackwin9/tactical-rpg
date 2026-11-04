@@ -56,6 +56,9 @@ pub struct PlanStep {
     /// INPUT1 GH1: the planner placed the step after a member's picks (a ghost block: a real step all the same).
     /// Display only: compiling never reads it.
     pub ghost: Cell<bool>,
+    /// Decision "Auto-fill keeps a flank": an auto-filled follow-up (or one accepted from the ghost): a carried Engage hits
+    /// from its flank or behind tile (`round_intent::keeps_flank`) rather than moving to its own position.
+    pub stay: Cell<bool>,
 }
 
 pub type Step = Rc<PlanStep>;
@@ -100,20 +103,24 @@ impl PlanStep {
     }
 
     fn make(mode: Mode, skill: Option<SkillId>, target: Option<UnitId>, cell: V2) -> Step {
-        Rc::new(PlanStep { mode, skill, target, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false) })
+        Rc::new(PlanStep { mode, skill, target, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
     }
     pub fn engage(skill: SkillId, target: UnitId) -> Step {
         Self::make(Mode::Engage, Some(skill), Some(target), NO_CELL)
     }
     pub fn mv(skill: SkillId, direction: V2, tiles: i32) -> Step {
-        Rc::new(PlanStep { mode: Mode::Move, skill: Some(skill), target: None, direction, tiles, cell: Cell::new(NO_CELL), item_id: String::new(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false) })
+        Rc::new(PlanStep { mode: Mode::Move, skill: Some(skill), target: None, direction, tiles, cell: Cell::new(NO_CELL), item_id: String::new(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
     }
     pub fn go_to(skill: SkillId, cell: V2) -> Step {
         Self::make(Mode::Goto, Some(skill), None, cell)
     }
     /// RULESET1_INTENT AS3: an after-move to `cell` (a kite step after the attacks; rule `round_intent`).
     pub fn after_move(skill: SkillId, cell: V2) -> Step {
-        Rc::new(PlanStep { mode: Mode::Goto, skill: Some(skill), target: None, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new(), after: true, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false) })
+        Rc::new(PlanStep { mode: Mode::Goto, skill: Some(skill), target: None, direction: ZERO, tiles: 1, cell: Cell::new(cell), item_id: String::new(), after: true, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
+    }
+    /// VISCLAR1-D: the player's Move after a skill: an after-move of up to `blocks` move blocks (kept in `tiles`).
+    pub fn after_move_up_to(skill: SkillId, cell: V2, blocks: i32) -> Step {
+        Rc::new(PlanStep { mode: Mode::Goto, skill: Some(skill), target: None, direction: ZERO, tiles: blocks, cell: Cell::new(cell), item_id: String::new(), after: true, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
     }
     pub fn area_at(skill: SkillId, cell: V2) -> Step {
         Self::make(Mode::Area, Some(skill), None, cell)
@@ -129,7 +136,7 @@ impl PlanStep {
     }
     /// ITEMUSE1 1.3: use pouch item `item_id` on `target` (the user itself for self items). Skill-less step.
     pub fn use_item(item_id: &str, target: UnitId) -> Step {
-        Rc::new(PlanStep { mode: Mode::Item, skill: None, target: Some(target), direction: ZERO, tiles: 1, cell: Cell::new(NO_CELL), item_id: item_id.to_string(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false) })
+        Rc::new(PlanStep { mode: Mode::Item, skill: None, target: Some(target), direction: ZERO, tiles: 1, cell: Cell::new(NO_CELL), item_id: item_id.to_string(), after: false, reason: String::new(), move_reason: String::new(), ghost: Cell::new(false), stay: Cell::new(false) })
     }
 }
 
@@ -163,6 +170,8 @@ pub struct PlanEntry {
     pub item: Option<ItemDef>,
     /// RULESET1_INTENT MV4: the move the skill carries (Engage before its hit, a retreat after it).
     pub carry: Carry,
+    /// Decision "Auto-fill keeps a flank": the carried Engage was planned to stay on its flank or behind tile.
+    pub keep_flank: bool,
 }
 
 impl PlanEntry {
@@ -193,6 +202,7 @@ impl PlanEntry {
             stance_after: Stance::Neutral,
             item: None,
             carry: Carry::None,
+            keep_flank: false,
         }
     }
 
@@ -275,6 +285,7 @@ impl PlanEntry {
         };
         cmd.recovery = self.recovery;
         cmd.carry = self.carry;
+        cmd.keep_flank = self.keep_flank;
         // INPUT1 MR1, MR8, MR10, MR16: the position, its range, the target's tile now, diagonal melee and the Support chase
         if skill::kind(s) == Kind::Attack && !skill::is_area(s) && self.item.is_none() {
             cmd.diagonal = round_intent::diagonal(w, actor, Some(s));
@@ -815,10 +826,12 @@ impl Plan {
         if route.is_empty() {
             return "No path to that tile.".into();
         }
-        if !self.fits_move(w, c, st.pos, &route) {
+        let need = path::blocks_needed(&w.grid, st.pos, &route, w.units[c].move_per_block());
+        let cap = if step.after { step.tiles.max(1) as usize } else { MAX_MOVE_BLOCKS };
+        if need > cap.max(MAX_MOVE_BLOCKS) {
             return self.too_far();
         }
-        if step.after && path::blocks_needed(&w.grid, st.pos, &route, w.units[c].move_per_block()) > 1 {
+        if need > cap {
             return "An after-move takes one move block.".into();
         }
         self.add_move(w, c, st, &route, None, index)
@@ -1015,6 +1028,7 @@ impl Plan {
         let foe_pos = w.pos(foe);
         let beyond = || format!("{} is beyond {}'s range.", w.units[foe].name, s.name);
         let blocked = self.blocked_cells(w, c);
+        let mut keep_flank = false;
         let (dest, route, carry) = if round_intent::maneuver_of(w, c) == ManeuverKind::Disengage {
             // MR14: the hit from the unit's tile (adjacent, diagonal per MR10), then the retreat within the range
             let d = round_intent::melee_dist(w, c, Some(s), st.pos, foe_pos);
@@ -1035,12 +1049,14 @@ impl Plan {
             let rooted = st.rooted;
             let engage = |from: V2| round_intent::position_tiles(w, c, s, foe, from, n, rooted, &blocked);
             let (open, mut tiles) = engage(st.pos);
-            if open.protected() {
+            let stored = step.cell.get();
+            // Decision "Auto-fill keeps a flank": an auto-filled follow-up stays on its flank or behind tile
+            keep_flank = step.stay.get() && stored == st.pos && round_intent::keeps_flank(w, foe, st.pos, round_intent::diagonal(w, c, Some(s)));
+            if open.protected() && !keep_flank {
                 // MR5: no open position tile: the Engage is not planned
                 return round_intent::FLANK_PROTECTED.into();
             }
-            let stored = step.cell.get();
-            if stored == st.pos && open.contains(st.pos) {
+            if keep_flank || (stored == st.pos && open.contains(st.pos)) {
                 tiles = vec![(st.pos, Vec::new())];
             }
             if tiles.is_empty() {
@@ -1070,6 +1086,7 @@ impl Plan {
         e.pos_after = dest;
         e.goal = dest;
         e.carry = carry;
+        e.keep_flank = keep_flank;
         let dmg = e.est_damage;
         st.pos = dest;
         *st.est_hp.entry(foe).or_insert(0) -= dmg;

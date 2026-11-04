@@ -31,6 +31,7 @@ mod input;
 mod marks;
 mod overlays;
 mod playback;
+mod skill_menu;
 mod talks;
 mod tips;
 mod tokens;
@@ -153,6 +154,8 @@ pub enum Action {
     TileClick(V2),
     Choose(usize),
     ClosePopup,
+    /// VISCLAR1-D: a click inside the skill menu's panel, off its cells: nothing.
+    MenuGap,
     Confirm,
     Clear,
     Undo,
@@ -248,6 +251,10 @@ pub struct BattleScreen {
     mouse: (i32, i32),
     selected: Option<usize>,
     popup: Option<Popup>,
+    /// VISCLAR1-D: the menu's Move from a unit's menu waits for a tile: the hero and the round (the next target click ends it).
+    move_aim: Option<(usize, i32)>,
+    /// The tiles that Move can go to, marked on the board while it waits.
+    move_tiles: Vec<rip::MoveTile>,
     playing: bool,
     auto: bool,
     next_at: Instant,
@@ -430,6 +437,8 @@ impl BattleScreen {
             mouse: (0, 0),
             selected: None,
             popup: None,
+            move_aim: None,
+            move_tiles: Vec::new(),
             playing: false,
             auto: false,
             next_at: Instant::now(),
@@ -988,6 +997,9 @@ impl Screen<GameCx> for BattleScreen {
         // undoes the last pick
         if self.popup.is_some() {
             self.popup = None;
+        } else if self.move_aim.take().is_some() {
+            self.move_tiles.clear();
+            self.message = "Move cancelled.".into();
         } else if self.show_log {
             self.show_log = false;
         } else if let Some(u) = self.unit_under_mouse() {
@@ -1008,6 +1020,9 @@ impl Screen<GameCx> for BattleScreen {
             self.close_view(cx);
         } else if self.popup.is_some() {
             self.popup = None;
+        } else if self.move_aim.take().is_some() {
+            self.move_tiles.clear();
+            self.message = "Move cancelled.".into();
         } else if self.show_log {
             self.show_log = false;
         } else if self.inspected().is_some() {

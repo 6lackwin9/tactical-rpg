@@ -124,7 +124,7 @@ fn intent_names_read_the_games_terms() {
         let rec = emberwake_battle::intent::Intent { unit: d, line, revealed: false, enraged: false, readers: Vec::new(), plan: Vec::new(), morale_state: "", morale_group: -1,
             round_intent: Some(RoundIntent::Assault), round_target: Some(RoundTarget::Unit(f)), maneuver: None, impacts: Vec::new() };
         assert_eq!(intent_text::round_head(w, &rec), Some(format!("{assault}: {}", w.units[f].name)));
-        let opt = |i: RoundIntent, kind: Option<ManeuverKind>| rip::PickOption { picks: Vec::new(), intent: Some(i), kind, ap: 2, blocks: 2, problem: None, ap_short: None, drops: Vec::new() };
+        let opt = |i: RoundIntent, kind: Option<ManeuverKind>| rip::PickOption { picks: Vec::new(), intent: Some(i), kind, ap: 2, blocks: 2, problem: None, ap_short: None, drops: Vec::new(), at: RoundTarget::Myself };
         assert_eq!(pick_detail(&w.cat, &opt(RoundIntent::Assault, None)), format!("2 blocks, 2 AP; {assault}"));
         assert_eq!(pick_detail(&w.cat, &opt(RoundIntent::Maneuver, Some(ManeuverKind::Engage))), format!("2 blocks, 2 AP; {maneuver} (Engage)"));
         assert_eq!(ri::target_problem(w, d, RoundIntent::Assault, RoundTarget::Myself), format!("{assault} targets an enemy or a tile."), "the kit's intent text");

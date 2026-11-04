@@ -1,5 +1,6 @@
 mod pacing_tests;
 mod windup_tests;
+mod skill_menu_tests;
 mod arena_rules_tests;
 mod status_tests;
 mod input1_tests;

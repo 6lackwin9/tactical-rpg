@@ -193,7 +193,7 @@ fn the_menu_fill_does_what_f_does() {
     // no ghost left: no Fill. VISCLAR1-D: the rows themselves, as a menu with no row at all does not open and passed any code
     let foe = foe_of(&by_row);
     let (_, after) = by_row.menu_rows(h, RoundTarget::Unit(foe));
-    assert!(!after.iter().any(|r| matches!(r.act, RowAct::Fill)), "the round is full of picks: nothing to fill");
+    assert!(!after.iter().any(|r| r.valid && matches!(r.act, RowAct::Fill)), "the round is full of picks: nothing to fill");
     // the same with rows to pick from: Auto-fill off, a hero with no plan yet has skills to pick and no ghost to fill
     let (mut cx3, _, mut bare) = arena(Some(TIMELINE));
     cx3.settings.v["auto_fill"] = json!(false);
@@ -202,7 +202,7 @@ fn the_menu_fill_does_what_f_does() {
     assert!(!rip::ghost_entries(&s(&bare).w, &s(&bare).plan, h3).contains(&true), "no ghost yet");
     let (_, rows3) = bare.menu_rows(h3, RoundTarget::Unit(foe3));
     assert!(rows3.iter().any(|r| matches!(r.act, RowAct::Pick(_))), "skills to pick");
-    assert!(!rows3.iter().any(|r| matches!(r.act, RowAct::Fill)), "no ghost: no Fill among them");
+    assert!(!rows3.iter().any(|r| r.valid && matches!(r.act, RowAct::Fill)), "no ghost: Fill stays in its place, faded");
 }
 
 /// VISCLAR1-D (carried from VISCLAR1-C): Fill with Auto-fill off: after a pick the free blocks are the planner's Rest, the row

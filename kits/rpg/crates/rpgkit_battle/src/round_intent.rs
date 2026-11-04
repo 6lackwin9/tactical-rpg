@@ -109,6 +109,9 @@ pub struct RoundState {
     /// ENCOUNTER2-C SR3: a scripted entry's own ghost fill this round (Some(true) the planner's fill, Some(false) Rest),
     /// read instead of the Auto-fill setting; None = the setting. Cleared at every round start; in no trace or save.
     pub fill: Option<bool>,
+    /// Decision "Auto-fill keeps a flank": the indexes in `picks` accepted from the ghost (`accept_ghost`): they plan as
+    /// the fill did, so accepting keeps the tile; a pick from the menu still repositions. Cleared with the picks.
+    pub accepted: Vec<usize>,
 }
 
 /// INPUT1 IF4, ET1-ET4 (`round_intent_plan::pick`): one pick of a member's round. A skill (with the Maneuver kind of
@@ -355,6 +358,7 @@ pub fn round_start(w: &mut World) -> Vec<String> {
         rs.rest_blocks = 0;
         // INPUT1 GH6: the picks go with the target, kind and opener; the intent carries over
         rs.picks.clear();
+        rs.accepted.clear();
         rs.fill = None;
     }
     lines
@@ -692,6 +696,25 @@ pub fn positions(w: &World, t: UnitId, attacker: UnitId, position: Position, fro
         }
     }
     out
+}
+
+/// Decision "Auto-fill keeps a flank": whether `cell` is a tile beside (k 2) or behind (k 0) `t` from which a positioned
+/// skill hits it (MR4's (1, 1), with diagonal melee `diag` per MR10). An auto-filled follow-up stays there rather than
+/// moving to its own position.
+pub fn keeps_flank(w: &World, t: UnitId, cell: V2, diag: bool) -> bool {
+    if !w.has(t) {
+        return false;
+    }
+    let tp = w.pos(t);
+    let off = cell - tp;
+    if !RING.contains(&off) || band_dist(diag, cell, tp) != 1 {
+        return false;
+    }
+    let mut f = facing(w, t);
+    if f == ZERO {
+        f = sign(off);
+    }
+    matches!(ring_steps(off, V2::new(-f.x, -f.y)), 0 | 2)
 }
 
 /// INPUT1 MR4: the open position tiles of `c`'s skill `s` on `t` that `c` reaches from `from` within `budget` move cost

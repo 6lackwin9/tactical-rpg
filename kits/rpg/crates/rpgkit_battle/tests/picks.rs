@@ -330,7 +330,7 @@ fn a_pick_replaces_the_ghost_from_its_block() {
 /// GH4, ET4: Step here after reserves the round's last block; later picks and the ghost go before it; a pick that would
 /// need it is refused; one a round, after a skill pick, never after the round's regular move, one move block at most.
 #[test]
-fn the_step_after_takes_the_last_block() {
+fn the_step_after_replaces_the_last_block() {
     let mut s = session();
     place(&mut s.w, VANGUARD, V2::new(4, 4));
     place(&mut s.w, FOOTMAN, V2::new(5, 4));
@@ -344,10 +344,7 @@ fn the_step_after_takes_the_last_block() {
     assert_eq!((last.0.as_str(), last.1, last.4, last.5.as_str(), last.6), ("move", BLOCKS, step, rip::STEP_AFTER, false), "the after-move on the last block, a pick: {r:?}");
     assert!(r[1..r.len() - 1].iter().all(|x| x.6 && x.2 < BLOCKS), "the ghost fills the blocks before it");
     assert_eq!(rip::regular_move(&s.w, &s.plan, VANGUARD), Some(RegularMove::StepAfter));
-    pick(&mut s, VANGUARD, foe(FOOTMAN), &[sc]).unwrap();
-    let hc = sk(&s, "tl_heavy_cleave");
-    let need = need_of(&s.w, VANGUARD, "tl_heavy_cleave");
-    assert_eq!(pick(&mut s, VANGUARD, foe(FOOTMAN), &[hc]), Err(format!("Blocks 3 < {need} (the step after takes B{BLOCKS})")), "IF6 c: b3-b5 are left");
+    assert_eq!(pick(&mut s, VANGUARD, foe(FOOTMAN), &[sc]), Err(rip::ONLY_REST.to_string()), "VISCLAR1-D: only Rest follows it");
     assert_eq!(pick(&mut s, VANGUARD, RoundTarget::Cell(step), &[Pick::StepAfter(step)]), Err("One step after a round".to_string()));
 
     // after a pick whose approach is the round's move: refused with the move's kind
@@ -362,15 +359,6 @@ fn the_step_after_takes_the_last_block() {
     assert!(!row.iter().any(|o| o.picks == vec![Pick::StepAfter(tile)]), "not offered after the first pick when it cannot be picked");
     assert_eq!(pick(&mut s, VANGUARD, RoundTarget::Cell(tile), &[Pick::StepAfter(tile)]), Err("Already moved this round (approach)".to_string()));
 
-    // too far for one move block
-    let mut s = session();
-    place(&mut s.w, VANGUARD, V2::new(4, 4));
-    place(&mut s.w, FOOTMAN, V2::new(5, 4));
-    let sc = sk(&s, "tl_shoulder_check");
-    pick(&mut s, VANGUARD, foe(FOOTMAN), &[sc]).unwrap();
-    let mpb = s.w.units[VANGUARD].move_per_block();
-    let far = V2::new(4 - mpb - 1, 4);
-    assert_eq!(pick(&mut s, VANGUARD, RoundTarget::Cell(far), &[Pick::StepAfter(far)]), Err(format!("Too far for one move block: {} > {mpb}", mpb + 1)));
 }
 
 /// ET2, ET3, ET5: Move here is a plain move, only first and while no move is planned, within two move blocks; a pick
@@ -838,4 +826,347 @@ fn accepting_the_ghost_makes_the_same_plan_solid() {
     // nothing auto-filled left: refused
     let (r, _) = rip::accept_ghost(&mut s.w, &mut s.plan, VANGUARD, None);
     assert_eq!(r, Err("Nothing auto-filled to accept.".into()));
+}
+
+// ---- VISCLAR1-D: the menu's Move, which replaces the last move or filled block; the icon menu's cells ------------------
+
+/// `c`'s Assault order is `fam` alone (the fill's follow-ups).
+fn assault_order(s: &mut Session, c: UnitId, fam: &str) {
+    s.w.units[c].deck.order.insert("assault".into(), vec![fam.to_string()]);
+}
+
+/// A clear board round VANGUARD on (4, 4) with FOOTMAN beside it.
+fn side_by_side() -> Session {
+    let mut s = session();
+    place(&mut s.w, VANGUARD, V2::new(4, 4));
+    place(&mut s.w, FOOTMAN, V2::new(5, 4));
+    s
+}
+
+/// A Move after a skill takes the first slot of the last filled block, here Heavy Cleave, at 1 AP a tile; Rest fills after it,
+/// the note names what it replaced, the block's AP comes back; undo gives the block back.
+#[test]
+fn the_move_takes_the_slot_of_the_last_filled_block() {
+    let mut s = side_by_side();
+    let opener = sk(&s, "tl_shoulder_check");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[opener.clone(), opener]).unwrap();
+    let before = rows(&s.w, &s.plan, VANGUARD);
+    let need = need_of(&s.w, VANGUARD, "tl_heavy_cleave");
+    let last = before.last().unwrap();
+    assert_eq!((last.0.as_str(), last.1, last.2, last.6), ("tl_heavy_cleave", BLOCKS - need + 1, BLOCKS, true), "the fill ends in the large block: {before:?}");
+    assert_eq!(rip::move_note(&s.plan, VANGUARD), None);
+
+    let step = V2::new(3, 4);
+    pick(&mut s, VANGUARD, RoundTarget::Cell(step), &[Pick::StepAfter(step)]).unwrap();
+    let after = rows(&s.w, &s.plan, VANGUARD);
+    let kept = before.len() - 1;
+    assert_eq!(after[..kept], before[..kept], "the fill before it stays");
+    let mv = &after[kept];
+    assert_eq!((mv.0.as_str(), mv.1, mv.3, mv.4, mv.6), ("move", before[kept].1, 1, step, false), "a picked move in the block's first slot at 1 AP a tile: {after:?}");
+    let spare = &after[kept + 1..];
+    assert_eq!(spare.len() as i32, need - 1, "the spare blocks: {after:?}");
+    assert!(spare.iter().all(|x| x.0 == "rest" && x.6 && x.5.starts_with(rip::MOVE_REPLACED)), "ghost Rest after it, tagged: {after:?}");
+    assert_eq!(rip::move_note(&s.plan, VANGUARD), Some(format!("Move replaces tl_heavy_cleave: {} blocks left as Rest", need - 1)));
+    let spent = rip::ap_forecast(&s.w, &s.plan, VANGUARD).spent;
+    assert_eq!(spent, 2 * ap_of(&s.w, VANGUARD, "tl_shoulder_check") + 1, "the cleave's AP came back; the move costs its tile");
+
+    rip::unpick(&mut s.w, &mut s.plan, VANGUARD).0.unwrap();
+    assert_eq!(rows(&s.w, &s.plan, VANGUARD), before, "undo restores the block");
+    assert_eq!(rip::move_note(&s.plan, VANGUARD), None);
+}
+
+/// A block no larger than the move: it goes alone, with no Rest and no note, and the fill before it stays.
+#[test]
+fn the_move_over_one_block_leaves_no_rest() {
+    let mut s = side_by_side();
+    assault_order(&mut s, VANGUARD, "tl_shoulder_check");
+    assert_eq!(need_of(&s.w, VANGUARD, "tl_shoulder_check"), 1, "the fixture's one-block skill");
+    let opener = sk(&s, "tl_shoulder_check");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[opener]).unwrap();
+    let before = rows(&s.w, &s.plan, VANGUARD);
+    assert!(before.iter().all(|x| x.0 == "tl_shoulder_check") && before.last().unwrap().2 == BLOCKS, "{before:?}");
+    let step = V2::new(3, 4);
+    pick(&mut s, VANGUARD, RoundTarget::Cell(step), &[Pick::StepAfter(step)]).unwrap();
+    let after = rows(&s.w, &s.plan, VANGUARD);
+    assert_eq!(after[..before.len() - 1], before[..before.len() - 1]);
+    assert_eq!((after.len(), after.last().unwrap().0.as_str(), after.last().unwrap().1), (before.len(), "move", BLOCKS));
+    assert_eq!(rip::move_note(&s.plan, VANGUARD), None);
+}
+
+/// The Move's blocks follow from the distance, up to the rule's cap at the move's own pace: at the cap's reach it plans, one
+/// tile further it is refused, and a cap of one holds it to one block. A Move as the opener keeps its two.
+#[test]
+fn the_move_runs_up_to_the_cap() {
+    let mpb = |s: &Session| s.w.units[VANGUARD].move_per_block();
+    let cap = |s: &Session| s.w.ruleset.numbers.move_after_blocks;
+    let open = |s: &mut Session| {
+        place(&mut s.w, VANGUARD, V2::new(1, 4));
+        place(&mut s.w, FOOTMAN, V2::new(2, 4));
+        assault_order(s, VANGUARD, "tl_shoulder_check");
+        let opener = sk(s, "tl_shoulder_check");
+        pick(s, VANGUARD, foe(FOOTMAN), &[opener]).unwrap();
+    };
+    let mut s = session();
+    open(&mut s);
+    assert!(cap(&s) >= 2, "a cap above one block");
+    let far = V2::new(1, 4 - mpb(&s).min(4));
+    pick(&mut s, VANGUARD, RoundTarget::Cell(far), &[Pick::StepAfter(far)]).unwrap();
+    let r = rows(&s.w, &s.plan, VANGUARD);
+    assert_eq!(r.iter().filter(|x| x.0 == "move").count(), 1, "{r:?}");
+
+    // the cap's reach: straight along an open row, `cap` blocks of `mpb` tiles
+    let mut s = session();
+    place(&mut s.w, VANGUARD, V2::new(0, 4));
+    place(&mut s.w, FOOTMAN, V2::new(0, 5));
+    assault_order(&mut s, VANGUARD, "tl_shoulder_check");
+    let opener = sk(&s, "tl_shoulder_check");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[opener]).unwrap();
+    let tiles = mpb(&s) * cap(&s);
+    let at_cap = V2::new(tiles, 4);
+    pick(&mut s, VANGUARD, RoundTarget::Cell(at_cap), &[Pick::StepAfter(at_cap)]).unwrap();
+    let r = rows(&s.w, &s.plan, VANGUARD);
+    let moves: Vec<&Row> = r.iter().filter(|x| x.0 == "move").collect();
+    assert_eq!(moves.len() as i32, cap(&s), "one entry a move block: {r:?}");
+    assert_eq!(moves.iter().map(|x| x.3).sum::<i32>(), tiles, "1 AP a tile: {r:?}");
+    assert_eq!(moves.last().unwrap().4, at_cap);
+    rip::unpick(&mut s.w, &mut s.plan, VANGUARD).0.unwrap();
+    let past = V2::new(tiles + 1, 4);
+    assert_eq!(pick(&mut s, VANGUARD, RoundTarget::Cell(past), &[Pick::StepAfter(past)]), Err(format!("Too far: {} move blocks > {}", cap(&s) + 1, cap(&s))));
+
+    // the rule value holds it
+    s.w.ruleset.numbers.move_after_blocks = 1;
+    let two_blocks = V2::new(mpb(&s) + 1, 4);
+    assert_eq!(pick(&mut s, VANGUARD, RoundTarget::Cell(two_blocks), &[Pick::StepAfter(two_blocks)]), Err("Too far: 2 move blocks > 1".to_string()));
+
+    // the opener Move stays at two blocks
+    let mut s = session();
+    place(&mut s.w, VANGUARD, V2::new(0, 4));
+    let most = s.plan.max_move_tiles(&s.w, VANGUARD);
+    let beyond = V2::new(most + 1, 4);
+    assert_eq!(pick(&mut s, VANGUARD, RoundTarget::Cell(beyond), &[Pick::MoveHere(beyond)]), Err(format!("Too far: {} tiles > {most} (two move blocks)", most + 1)));
+}
+
+/// The cap gives way to the blocks left after the picks, and to the AP left, with no debt.
+#[test]
+fn the_move_is_capped_by_blocks_and_ap() {
+    let start = |ap: i32, picks: usize| {
+        let mut s = session();
+        place(&mut s.w, VANGUARD, V2::new(0, 4));
+        place(&mut s.w, FOOTMAN, V2::new(0, 5));
+        assault_order(&mut s, VANGUARD, "tl_shoulder_check");
+        s.w.units[VANGUARD].ap = ap;
+        for _ in 0..picks {
+            let opener = sk(&s, "tl_shoulder_check");
+            pick(&mut s, VANGUARD, foe(FOOTMAN), &[opener]).unwrap();
+        }
+        s
+    };
+    let sc = ap_of(&start(UNIT_AP, 0).w, VANGUARD, "tl_shoulder_check");
+    let mpb = start(UNIT_AP, 0).w.units[VANGUARD].move_per_block();
+    let three = V2::new(2 * mpb + 1, 4);
+    // two free blocks left: a tile that takes three is refused
+    let mut s = start(UNIT_AP, BLOCKS as usize - 2);
+    assert_eq!(pick(&mut s, VANGUARD, RoundTarget::Cell(three), &[Pick::StepAfter(three)]), Err("Blocks 2 < 3 (the picks fill the round)".to_string()));
+    // the AP left pays for every tile, or the tile is refused
+    let tiles = three.x;
+    let mut s = start(sc + tiles - 1, 1);
+    assert_eq!(pick(&mut s, VANGUARD, RoundTarget::Cell(three), &[Pick::StepAfter(three)]), Err(format!("AP {} < {tiles}", tiles - 1)));
+    let mut s = start(sc + tiles, 1);
+    pick(&mut s, VANGUARD, RoundTarget::Cell(three), &[Pick::StepAfter(three)]).unwrap();
+    assert_eq!(rip::ap_forecast(&s.w, &s.plan, VANGUARD).left, 0, "every AP spent and no debt");
+}
+
+/// After the Move only Rest: a skill, an item, a second Move and the Fill are refused with a short reason, and the Rest picked
+/// is a pick, in the block after the Move.
+#[test]
+fn only_rest_follows_the_move() {
+    let mut s = side_by_side();
+    let opener = sk(&s, "tl_shoulder_check");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[opener.clone(), opener.clone()]).unwrap();
+    let step = V2::new(3, 4);
+    pick(&mut s, VANGUARD, RoundTarget::Cell(step), &[Pick::StepAfter(step)]).unwrap();
+    assert_eq!(pick(&mut s, VANGUARD, foe(FOOTMAN), &[opener]), Err(rip::ONLY_REST.to_string()));
+    assert_eq!(pick(&mut s, VANGUARD, RoundTarget::Cell(V2::new(3, 3)), &[Pick::StepAfter(V2::new(3, 3))]), Err("One step after a round".to_string()));
+    assert_eq!(rip::accept_ghost(&mut s.w, &mut s.plan, VANGUARD, None).0, Err(rip::ONLY_REST.to_string()));
+    let move_block = rows(&s.w, &s.plan, VANGUARD).iter().find(|x| x.0 == "move").map(|x| x.1).unwrap();
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[Pick::Rest]).unwrap();
+    let r = rows(&s.w, &s.plan, VANGUARD);
+    let rest = r.iter().find(|x| x.1 == move_block + 1).unwrap();
+    assert_eq!((rest.0.as_str(), rest.6), ("rest", false), "a picked Rest after the Move: {r:?}");
+    let cells = rip::menu_options(&s.w, &s.plan, VANGUARD, foe(FOOTMAN));
+    assert!(cells.iter().filter(|o| o.picks[0].holds_target()).all(|o| o.problem.is_some()), "every skill fades: {cells:?}");
+    assert!(cells.iter().any(|o| o.picks == [Pick::Rest] && o.problem.is_none()), "Rest stays");
+}
+
+/// When the Move needs two blocks and takes two fills back for them, the note names both, in round order.
+#[test]
+fn the_note_names_every_block_it_replaced() {
+    let mut s = session();
+    place(&mut s.w, VANGUARD, V2::new(0, 4));
+    place(&mut s.w, FOOTMAN, V2::new(0, 5));
+    let opener = sk(&s, "tl_shoulder_check");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[opener]).unwrap();
+    let before = rows(&s.w, &s.plan, VANGUARD);
+    assert_eq!(before[1..].iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), ["tl_heavy_cleave", "tl_shoulder_check"], "the fixture's fill");
+    let two = V2::new(s.w.units[VANGUARD].move_per_block() + 1, 4);
+    // The tile says so before the click: a far tile can cost more than the last block
+    let near = V2::new(1, 4);
+    let tiles = rip::move_tiles(&s.w, &s.plan, VANGUARD);
+    let tile = |at: V2| tiles.iter().find(|t| t.cell == at).unwrap().drops.clone();
+    assert_eq!(tile(two), "tl_heavy_cleave and tl_shoulder_check", "{tiles:?}");
+    assert_eq!(tile(near), "tl_shoulder_check", "{tiles:?}");
+    pick(&mut s, VANGUARD, RoundTarget::Cell(two), &[Pick::StepAfter(two)]).unwrap();
+    let free = BLOCKS - before[0].2 - 2;
+    assert_eq!(rip::move_note(&s.plan, VANGUARD), Some(format!("Move replaces tl_heavy_cleave and tl_shoulder_check: {free} blocks left as Rest")));
+}
+
+/// The longest Move plays as it previews: three move blocks after the opener end on the picked tile, with no AP debt.
+#[test]
+fn a_three_block_move_plays_as_it_previews() {
+    let mut s = session();
+    place(&mut s.w, VANGUARD, V2::new(0, 4));
+    place(&mut s.w, FOOTMAN, V2::new(0, 5));
+    let opener = sk(&s, "tl_shoulder_check");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[opener]).unwrap();
+    let far = V2::new(2 * s.w.units[VANGUARD].move_per_block() + 1, 4);
+    let tiles = rip::move_tiles(&s.w, &s.plan, VANGUARD);
+    let tile = tiles.iter().find(|t| t.cell == far).unwrap_or_else(|| panic!("{far} in {tiles:?}"));
+    assert_eq!(tile.blocks, 3, "{tile:?}");
+    pick(&mut s, VANGUARD, RoundTarget::Cell(far), &[Pick::StepAfter(far)]).unwrap();
+    assert!(s.confirm_plan());
+    while s.phase != rpgkit_battle::session::Phase::Replay {
+        s.step_next();
+    }
+    assert_eq!(s.w.pos(VANGUARD), far);
+    assert!(s.w.units[VANGUARD].ap >= 0);
+}
+
+/// The AP for the move comes back from the blocks it takes: with the fill spending every AP the last block goes though a free
+/// block was there.
+#[test]
+fn the_move_takes_a_block_back_for_its_ap() {
+    let mut s = side_by_side();
+    let unit = ap_of(&s.w, VANGUARD, "tl_shoulder_check");
+    assault_order(&mut s, VANGUARD, "tl_shoulder_check");
+    s.w.units[VANGUARD].ap = 3 * unit;
+    let opener = sk(&s, "tl_shoulder_check");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[opener]).unwrap();
+    let before: Vec<String> = rows(&s.w, &s.plan, VANGUARD).iter().map(|x| x.0.clone()).collect();
+    assert_eq!(before.iter().filter(|x| *x == "tl_shoulder_check").count(), 3, "the fill runs out of AP: {before:?}");
+    let step = V2::new(3, 4);
+    pick(&mut s, VANGUARD, RoundTarget::Cell(step), &[Pick::StepAfter(step)]).unwrap();
+    let f = rip::ap_forecast(&s.w, &s.plan, VANGUARD);
+    assert!(f.left >= 0, "no debt: {f:?}");
+    let after = rows(&s.w, &s.plan, VANGUARD);
+    assert!(after.iter().filter(|x| x.0 == "tl_shoulder_check").count() < 3, "a block went for the move: {after:?}");
+    assert!(rip::move_note(&s.plan, VANGUARD).is_some());
+}
+
+/// The last move: a ranged unit's auto-filled kite step (AS3) is replaced in place; the fill before it stays.
+#[test]
+fn the_move_replaces_the_auto_filled_kite() {
+    let mut s = session();
+    place(&mut s.w, ARCHER, V2::new(4, 4));
+    place(&mut s.w, FOOTMAN, V2::new(6, 4));
+    let opener = sk(&s, "tl_aimed_shot");
+    pick(&mut s, ARCHER, foe(FOOTMAN), &[opener]).unwrap();
+    let before = rows(&s.w, &s.plan, ARCHER);
+    let kite = before.iter().position(|x| x.5 == rip::KITE_THREATENED).unwrap_or_else(|| panic!("the kite step is planned: {before:?}"));
+    assert_eq!(rip::move_refusal(&s.w, &s.plan, ARCHER), None, "the planner's own move does not count as moved");
+    let step = V2::new(4, 3);
+    pick(&mut s, ARCHER, RoundTarget::Cell(step), &[Pick::StepAfter(step)]).unwrap();
+    let after = rows(&s.w, &s.plan, ARCHER);
+    assert_eq!(after[..kite], before[..kite], "the fill before it stays");
+    assert_eq!((after[kite].0.as_str(), after[kite].1, after[kite].4, after[kite].5.as_str(), after[kite].6), ("move", before[kite].1, step, rip::STEP_AFTER, false), "the pick in its block: {after:?}");
+    assert_eq!(rip::move_note(&s.plan, ARCHER), None);
+}
+
+/// Move's validity: free before an opener and after an opener that stays; refused once the unit has moved (the opener's own
+/// approach, a picked move), after a Rest first, when the picks fill the round and at no AP.
+#[test]
+fn the_menu_move_is_valid_only_if_the_unit_has_not_moved() {
+    let mut s = side_by_side();
+    assert_eq!(rip::move_refusal(&s.w, &s.plan, VANGUARD), None, "no pick yet");
+    let opener = sk(&s, "tl_shoulder_check");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[opener]).unwrap();
+    assert_eq!(rip::move_refusal(&s.w, &s.plan, VANGUARD), None, "the opener stayed");
+    let step = V2::new(3, 4);
+    pick(&mut s, VANGUARD, RoundTarget::Cell(step), &[Pick::StepAfter(step)]).unwrap();
+    assert_eq!(rip::move_refusal(&s.w, &s.plan, VANGUARD).as_deref(), Some("One step after a round"));
+
+    // the opener walks: Move fades, on a unit's menu and a tile's alike, in the same words as the pick's refusal
+    let mut s = session();
+    place(&mut s.w, VANGUARD, V2::new(2, 4));
+    place(&mut s.w, FOOTMAN, V2::new(5, 4));
+    let opener = sk(&s, "tl_shoulder_check");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[opener]).unwrap();
+    let why = "Already moved this round (approach)";
+    assert_eq!(rip::move_refusal(&s.w, &s.plan, VANGUARD).as_deref(), Some(why));
+    let tile = V2::new(2, 3);
+    assert_eq!(pick(&mut s, VANGUARD, RoundTarget::Cell(tile), &[Pick::StepAfter(tile)]), Err(why.to_string()));
+    let cell = rip::menu_options(&s.w, &s.plan, VANGUARD, RoundTarget::Cell(tile)).into_iter().find(|o| o.picks == [Pick::StepAfter(tile)]).expect("the Move stays in the menu");
+    assert_eq!(cell.problem.as_deref(), Some(why));
+
+    // Rest first, then Move: as Move here's own rule
+    let mut s = session();
+    place(&mut s.w, VANGUARD, V2::new(4, 4));
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[Pick::Rest]).unwrap();
+    assert_eq!(rip::move_refusal(&s.w, &s.plan, VANGUARD).as_deref(), Some("Move here comes first in a round"));
+
+    // the picks fill the round
+    let mut s = side_by_side();
+    assault_order(&mut s, VANGUARD, "tl_shoulder_check");
+    let opener = sk(&s, "tl_shoulder_check");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[opener]).unwrap();
+    rip::accept_ghost(&mut s.w, &mut s.plan, VANGUARD, None).0.unwrap();
+    assert!(rip::move_refusal(&s.w, &s.plan, VANGUARD).is_some_and(|w| w.starts_with("Blocks 0")));
+
+    // no AP left after the picks
+    let mut s = side_by_side();
+    s.w.units[VANGUARD].ap = ap_of(&s.w, VANGUARD, "tl_shoulder_check");
+    let opener = sk(&s, "tl_shoulder_check");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[opener]).unwrap();
+    assert_eq!(rip::move_refusal(&s.w, &s.plan, VANGUARD).as_deref(), Some("AP 0 < 1"));
+}
+
+/// The icon menu's cells are one list: the same picks in the same order before and after an opener. A cell is lit only when
+/// `pick_options` has it on the clicked target: on a foe a Guard skill is grey and says what it needs, on the unit itself it is
+/// lit; once the opener fixes the intent it fades with why.
+#[test]
+fn the_menu_cells_are_one_list_lit_by_the_target() {
+    let mut s = side_by_side();
+    let key = |os: &[rip::PickOption]| -> Vec<String> { os.iter().map(|o| format!("{:?}", o.picks.last())).collect() };
+    let open = rip::menu_options(&s.w, &s.plan, VANGUARD, foe(FOOTMAN));
+    for sid in rip::hotkey_skills(&s.w, VANGUARD) {
+        assert!(open.iter().any(|o| matches!(o.picks[..], [Pick::Skill { skill, .. }] if skill == sid)), "every skill has a cell");
+    }
+    assert!(open.iter().any(|o| o.picks == [Pick::Rest] && o.problem.is_none()));
+    let offered = rip::pick_options(&s.w, &s.plan, VANGUARD, foe(FOOTMAN));
+    for row in &offered {
+        let o = open.iter().find(|o| o.picks == row.picks).expect("the kit's row has its cell");
+        assert_eq!((&o.problem, o.ap, o.blocks, o.at), (&row.problem, row.ap, row.blocks, foe(FOOTMAN)), "the same answer on the same target");
+    }
+    for o in open.iter().filter(|o| o.problem.is_none()) {
+        assert!(offered.iter().any(|r| r.picks == o.picks), "lit only with a row of `pick_options`: {o:?}");
+    }
+    let guard = sid(&s.w, "tl_brace_counter");
+    let is_guard = |o: &&rip::PickOption| matches!(o.picks[..], [Pick::Skill { skill, .. }] if skill == guard);
+    let cell = open.iter().find(is_guard).expect("a Guard cell on a foe's menu");
+    assert_eq!((cell.intent, cell.at, cell.problem.as_deref()), (Some(RoundIntent::Guard), foe(FOOTMAN), Some("Target yourself to use this")), "grey on a foe");
+    let on_self = rip::menu_options(&s.w, &s.plan, VANGUARD, RoundTarget::Myself);
+    assert_eq!(on_self.iter().find(is_guard).unwrap().problem, None, "lit on the unit itself");
+    assert_eq!(key(&on_self), key(&open), "the same cells on another target");
+
+    let opener = sk(&s, "tl_shoulder_check");
+    pick(&mut s, VANGUARD, foe(FOOTMAN), &[opener]).unwrap();
+    let fixed = rip::menu_options(&s.w, &s.plan, VANGUARD, foe(FOOTMAN));
+    assert_eq!(key(&fixed), key(&open), "the same cells in the same order");
+    let cell = fixed.iter().find(is_guard).unwrap();
+    assert!(cell.problem.as_deref().is_some_and(|p| p.starts_with("Only ")), "faded with why: {:?}", cell.problem);
+    assert!(rip::menu_options(&s.w, &s.plan, VANGUARD, foe(FOOTMAN_B)).is_empty(), "another unit than the round target: no menu, as `pick_options`");
+    // a tile's menu lists the same skills, Rest and then the move
+    let tile = V2::new(3, 4);
+    let on_tile = rip::menu_options(&s.w, &s.plan, VANGUARD, RoundTarget::Cell(tile));
+    assert_eq!(key(&on_tile[..open.len()]), key(&open));
+    assert_eq!(on_tile.last().map(|o| o.picks.clone()), Some(vec![Pick::StepAfter(tile)]));
 }

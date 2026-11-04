@@ -90,6 +90,17 @@ damage and raises no hit event.
   item (the planner spends no pouch item it was not told to). An entry may repeat.
 - FU3. The fill stops at the first block where no entry qualifies; every later block not reserved is Rest. Rest pays AP
   only at round end (RS2), so no later skill becomes affordable mid-round and the fill needs one pass.
+- As built (VISCLAR1-D slice 2, 2026-11-05; decision "Auto-fill keeps a flank"): a Maneuver Engage follow-up placed by the
+  fill keeps a tile beside or behind its target (`round_intent::keeps_flank`: k 0 or 2 of MR2, next to it with MR10's
+  diagonal rule) instead of moving to its own position, also where that position is protected, and hits from there when
+  the round plays while the tile still qualifies; else MR6-MR8 as written. Accepting the ghost (`accept_ghost`) keeps it;
+  a follow-up the player picks still repositions. Both sides, AI and sim included (planner's ruling). One Maneuver kind a
+  round is now refused in `set_up_picks` too, not only hidden from `pick_options`. The menu's Move after a skill
+  (`Pick::StepAfter`; user 2026-11-05) no longer refills the round: the fill stays as it was and the Move replaces its last
+  step, or AS3's auto-filled kite step, in that step's first slot. The fill's last steps go until, from the tile the steps
+  left end on, the route fits the free blocks, the AP (1 a tile, no debt) and the rule value `move_after_blocks` (default
+  3; a Move as the opener keeps its two). Spare blocks after it are Rest tagged `MOVE_REPLACED` (`move_note`). Only Rest
+  may follow: a skill, an item, a second Move and accepting the ghost are refused (`ONLY_REST`). The AS3 kite is unchanged.
 - FU4. Order lists (`deck.order`, tasks 1.5): per member and intent, skill families from the deck's actives and the
   ruleset's basics of that intent, in the player's priority. Missing or empty = auto: the deck's actives of that
   intent in slot order, then those basics in the ruleset's `basics` order.

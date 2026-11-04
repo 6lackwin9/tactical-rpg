@@ -276,7 +276,7 @@ pub(super) fn block_label(r: Rect, has_icon: bool, name_w: f32) -> BlockLabel {
 }
 
 /// `s` with a dark outline one screen pixel wide.
-fn text_outlined(p: &mut Painter, x: f32, y: f32, s: &str, size: f32, col: Rgba, edge: Rgba) {
+pub(super) fn text_outlined(p: &mut Painter, x: f32, y: f32, s: &str, size: f32, col: Rgba, edge: Rgba) {
     let d = 1.0 / p.v.s;
     for (dx, dy) in [(-1.0, -1.0), (0.0, -1.0), (1.0, -1.0), (-1.0, 0.0), (1.0, 0.0), (-1.0, 1.0), (0.0, 1.0), (1.0, 1.0)] {
         p.text(x + dx * d, y + dy * d, s, size, edge);

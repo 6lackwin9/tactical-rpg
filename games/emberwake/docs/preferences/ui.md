@@ -69,6 +69,13 @@ Owner: UI/UX thread. Firm rules: `docs/decisions/`. UI picks Tushar approves fro
   "Impact tracers"), a gold frame on the strip's resolving block, playback speed 1x / 0.5x / block by block (chips
   during playback, P, N, remembered), the combat log grouped by round and block, and the full timeline view (T)
   pausing the playback at the block's end. Nothing else draws on the board during playback.
+- The skill menu is icons only (VISCLAR1-D slice 2; decision "Battle view answers, part 2", mock `menu_icons`): a neutral row
+  with Fill, Move and Rest on top, one row per intent, the others fading in place once the opener fixes the intent, nothing
+  shifting; cost and AP on hover. Rows the clicked target does not allow are grey, not clickable (decision "Intent framework
+  answers"). The menu opens beside the clicked unit, inside the battle view (user 2026-11-05: the mouse is there on targeting).
+  A Move after a skill takes the slot of the last auto-filled block, Rest after it, only Rest can follow, up to 3 move blocks:
+  near gains Rest AP, far is the safe choice (user 2026-11-05); a short note under the strip says what it replaced; Undo
+  restores. An auto-filled follow-up keeps its flank or behind tile (decision "Auto-fill keeps a flank").
 - The battle view after the test battle (VISCLAR1-D slice 1; decision "Battle view answers, part 2"): Rest blocks light slate with
   their icon, an auto-filled Rest staying solid; the intent ring replaces the side ring on every unit, the letter plate over a
   token on Alt; no always-on affiliation outline, the user judges rings on real faction sprites; AP pips in the party cards, one

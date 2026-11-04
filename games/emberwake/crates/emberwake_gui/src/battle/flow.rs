@@ -245,7 +245,14 @@ impl BattleScreen {
                     RowAct::Pick(picks) => {
                         if let Some((h, at)) = p.menu {
                             self.popup = Some(p);
-                            self.choose_pick(cx, h, at, &picks, &row.label);
+                            self.choose_pick(cx, h, row.at.unwrap_or(at), &picks, &row.label);
+                        }
+                    }
+                    RowAct::MoveAim => {
+                        if let Some((h, _)) = p.menu {
+                            self.move_aim = Some((h, self.session().current_round));
+                            self.move_tiles = rip::move_tiles(&self.session().w, &self.session().plan, h);
+                            self.message = format!("{}: click a tile to move there (Esc cancels).", self.session().w.units[h].name);
                         }
                     }
                     RowAct::SelectAlly(u) => {
@@ -300,6 +307,7 @@ impl BattleScreen {
                 }
             }
             Action::ClosePopup => self.popup = None,
+            Action::MenuGap => {}
             Action::TimelineView => {
                 if self.tv_open {
                     self.close_view(cx);
@@ -342,6 +350,9 @@ impl BattleScreen {
             // ENCOUNTER2-C4: a locked round has no Confirm (the script confirmed it; it plays by itself)
             Action::Confirm if self.locked() => {}
             Action::Confirm => {
+                // VISCLAR1-D: a Move still waiting for its tile ends with the planning
+                self.move_aim = None;
+                self.move_tiles.clear();
                 // GH2 a, IN6: the ghosts that wait for Confirm are drafted now (their intent change drops its buffs)
                 for (m, d) in std::mem::take(&mut self.deferred) {
                     if self.planning() && rip::picks_of(&self.session().w, m).is_empty() {
