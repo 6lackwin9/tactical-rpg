@@ -15,6 +15,8 @@ Every system goes through these stages (decisions "System workflow" and "System 
 
 The master plan (MASTERPLAN1, starting from `docs/specs/SILOS1.md`) holds the connections between systems and guides the integration pipelines to build.
 
+Design works bottom up from building blocks (decision "Bottom up from building blocks"). The first is the unit: stat, class, item and gear, affiliation, and placeholder lore behaviour such as background or race. Each behaviour in a design session is marked: built and tested, built and untested, or new; a new one needs a reason from gameplay, which is the guard against scope creep.
+
 Where each silo stands, 2026-11-05 (planner's reading):
 
 | Silo | Stage | Next |
