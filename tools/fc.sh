@@ -228,8 +228,16 @@ scenario() {  # the driver lies beside the game's program, so both are built fir
   cargo run -q -p emberwake_host "${rel[@]}" -- scenario run "${rest[@]}" || status=$?
 }
 
+# Low-power laptop (CPU1): cargo runs below normal priority on the desktop, so the machine stays usable; children inherit it.
+case "$1" in gate|build|test|clippy)
+  [ -z "${CI:-}" ] && [ -r /proc/$$/winpid ] && powershell -NoProfile -Command "(Get-Process -Id $(cat /proc/$$/winpid)).PriorityClass='BelowNormal'" 2>/dev/null ;;
+esac
+
 case "$1" in
-  gate) gate ;;
+  gate)  # on the desktop a full gate joins the planner's queue, one heavy run at a time (CPU1)
+    heavy="$HOME/.claude/projects/c--dev-tactical-rpg/heavy.sh"
+    [ -z "${CI:-}" ] && [ -f "$heavy" ] && { source "$heavy"; heavy_start "fc.sh gate"; }
+    gate ;;
   build) build ;;
   test) cargo_test "${@:2}" ;;
   clippy) cargo clippy --workspace --all-targets 2>&1 | grep -E "^(warning|error)" -A4 | head -80 ;;
