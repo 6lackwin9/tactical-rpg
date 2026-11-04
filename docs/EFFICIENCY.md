@@ -166,7 +166,8 @@ The main session tracks each agent run's cost from its completion notice (tokens
 | DASH1 | logic | 261k | 74 | 90 | Sprite suites are slow; ran under load |
 | LAYOUT720-M0 | logic | 250k | 76 | 72 | Hand-written T4 sweep in real windows |
 | LOOK1-G2 | logic | 252k | 82 | 49 | About 700 uses migrated |
-| LAYOUT720-E5 | logic | 338k+ | 85+ | 56+ | Still running when noted |
+| VISCLAR1-C | logic | 375k | 81 | 56 | Five tasks in one run; hand-written timing probe |
+| LAYOUT720-E5 | logic | 368k | 97 | 61 | Sweeps and proof in real windows |
 | TURNFEEL1 | logic | 226k | 62 | 87 | Measured real windows by hand; scope grew mid-run |
 | LAYOUTDATA1 spec | design | 224k | 44 | 19 | Long spec |
 | AGENTROLES1 spec | design | 214k | 39 | 18 | Long spec, three additions during the run |
@@ -184,6 +185,7 @@ Anything done repeatedly, a temp script worth keeping or a trial-and-error loop 
 | `.agent/pgate.txt` left stale, gate output under other names, so reviewers read the wrong log | E3, E4, DASH1, CIPANES1, HOOKS1-A | The brief names one output; `pgate.sh` should write it itself | SKILLS1 |
 | Content batches discover by check-and-fix loops that rows name things coming later, then hold them | CAST1-A2, CAST1-A4, CAMPAIGN1-D | Asset checklist: list what each row waits on before applying; hold those rows from the start | Done |
 | Planner docs commits failed silently: chained commands went on after a script error, and two ran at once in `-plan` | 2026-11-04, twice | One docs commit at a time; stop on error; check the result. In skill `task-landing` under SKILLS1 | Part done |
+| Scenario runs failing with "window minimized" at 1080p, intermittently | VISCLAR1-C | Look in INTEG1; HEADLESS1 removes it | Open |
 | Mutation scripts rewritten per task | Most logic tasks | Skill `mutation-check` | SKILLS1 |
 | Comparison boards rewritten per task | LOOK1, REGIONGROUND1, SPRITEFIT1, VISCLAR1 | Skill `review-board` | SKILLS1 |
 | The `tools/fc.sh` gate filter hid a failing frame list | CI on the 2026-11-03 release | Filter widened; skill `ci-read` | Part done, SKILLS1 |
@@ -197,3 +199,4 @@ The machine is a low-power 8-core laptop chip (Core Ultra 7 258V). Each `cargo` 
 | 2026-11-03 | 299-360 s | Quiet |
 | 2026-11-04 | 954 s | One lane running |
 | 2026-11-04 | 1533 s | Builders and a re-landing |
+| 2026-11-04 | see the last flush | Quiet |
