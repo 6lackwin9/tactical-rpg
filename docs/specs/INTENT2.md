@@ -93,7 +93,7 @@ First-pass blocks, stacks and shapes per item, with the code checks behind them:
 Each came out of the answers above.
 
 1. **The Assault row's price: answered (user 2026-11-05).** One block more than the Field row (IR17), with the authored shape in both rows; half splash stays as the first value, and the feel run may raise it once the longer wind-up is measured; `splash_mult` 0.33 stays the fallback.
-2. **The bonus table's first pass.** The aimed boss swings take `area`, so each is 5 wide: Sunder, Judgment and Hammer Strike cover more, and a party that crowds a boss's front pays. `power` on them would add 25 % to 2.0-2.2 blows. (a) As listed. (b) Keep swings at 3 wide with no bonus until the feel run. Recommend a.
+2. **The bonus table's first pass: answered (user 2026-11-05).** As listed: the aimed boss swings take `area`, 5 wide.
 
 ## 8. What it takes to build
 
