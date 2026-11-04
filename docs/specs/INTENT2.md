@@ -97,10 +97,10 @@ Each came out of the answers above.
 
 1. **The Assault row's price: answered (user 2026-11-05).** One block more than the Field row (IR17), with the authored shape in both rows; half splash stays as the first value, and the feel run may raise it once the longer wind-up is measured; `splash_mult` 0.33 stays the fallback.
 2. **The bonus table's first pass: answered (user 2026-11-05).** As listed: the aimed boss swings take `area`, 5 wide.
-3. **Gap-close skills (Lunge, Pounce, Charge In): Assault or Maneuver?** Today Assault by decision "Gap-close" (M1). IR21's plain rule makes any dash inside a skill Maneuver, matching the user's "move is included in the windup". (a) Maneuver, with a `position` of the nearest tile beside the target. (b) Keep Assault as an exception. Recommend a.
-4. **When a guard starts.** (a) At its impact, so a hit landing during its wind-up is not mitigated, and the status then runs to the end of the round or its rounds. (b) At its start, as today. Recommend b for one-block guards' clarity only if the feel run shows (a) too exposed; first value a.
-5. **How long and at what price.** Today a guard covers only its own blocks, so a whole-round one is much stronger. Recommend: the common guard costs what it does now and lasts to the round's end at a lower value than today; a multi-round guard is a separate, costlier skill with a value that is the lowest of them, and does not stack with another guard: the higher applies, as the empower rule does. The feel run watches capped fights, already 24-25 % in `tl_skirmish`.
-6. **Other Stand buffs across rounds.** Does Riposte stay intent-bound (IN6: it ends when the unit leaves Stand), as it answers attacks rather than reducing them? Recommend yes: only mitigation outlives the intent, so a tank that attacks keeps its armour, not its counter.
+3. **Gap-close skills** Answered (user 2026-11-05): decision "Stand answers".
+4. **When a guard starts.** Answered (user 2026-11-05): decision "Stand answers".
+5. **How long and at what price.** Answered (user 2026-11-05): decision "Stand answers".
+6. **Other Stand buffs across rounds.** Answered (user 2026-11-05): decision "Stand answers".
 
 ## 8. What it takes to build
 
