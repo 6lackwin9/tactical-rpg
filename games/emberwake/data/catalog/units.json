@@ -2401,6 +2401,498 @@
 				"sulfur_poultice"
 			],
 			"loot": []
+		},
+		{
+			"id": "founder_kaelen",
+			"name": "Kaelen",
+			"side": "party",
+			"description": "Founder base unit: Kaelen, a level 1 warrior.",
+			"class_id": "warrior",
+			"level": 1,
+			"tier": "hero",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": -1,
+			"poise": -1,
+			"art": "warrior/2h_axe",
+			"palette": "kaelen",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [
+				"pommel_strike",
+				"intercepting_hook",
+				"billhook_sunder",
+				"seventh_ward_bulwark"
+			],
+			"loadout": [],
+			"deck": {
+				"active": [
+					"pommel_strike",
+					"intercepting_hook"
+				],
+				"order": {
+					"assault": [
+						"pommel_strike",
+						"strike"
+					],
+					"guard": [
+						"intercepting_hook",
+						"active_guard"
+					],
+					"maneuver": [
+						"flank_cut"
+					]
+				},
+				"passive": [
+					"braced_poise",
+					"kinetic_leverage"
+				],
+				"keystone": [
+					"unbroken_phalanx"
+				]
+			},
+			"default_intent": "",
+			"ai_role": "",
+			"target_pref": "ROLE",
+			"flee_ratio": 0.25,
+			"defend_below": 0.4,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": false,
+			"heal_below": 0.7,
+			"tactics": [],
+			"main_hand": "notched_billhook",
+			"off_hand": "none",
+			"head": "",
+			"body": "castellan_breastplate",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [
+				"sulfur_poultice"
+			],
+			"loot": []
+		},
+		{
+			"id": "founder_maren",
+			"name": "Maren",
+			"side": "party",
+			"description": "Founder base unit: Maren, a level 1 priest.",
+			"class_id": "priest",
+			"level": 1,
+			"tier": "hero",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": -1,
+			"poise": -1,
+			"art": "priest/base",
+			"palette": "maren",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [
+				"brimstone_cauterize",
+				"tourniquet_tonic",
+				"resilience_ward"
+			],
+			"loadout": [],
+			"deck": {
+				"active": [
+					"brimstone_cauterize",
+					"tourniquet_tonic"
+				],
+				"order": {
+					"support": [
+						"tourniquet_tonic",
+						"brimstone_cauterize"
+					],
+					"assault": [
+						"strike"
+					],
+					"guard": [
+						"active_guard"
+					],
+					"maneuver": [
+						"flank_cut"
+					]
+				},
+				"passive": [
+					"anatomical_precision",
+					"triage_efficiency"
+				],
+				"keystone": [
+					"pure_hippocratic_oath"
+				]
+			},
+			"default_intent": "",
+			"ai_role": "",
+			"target_pref": "ROLE",
+			"flee_ratio": 0.25,
+			"defend_below": 0.4,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": false,
+			"heal_below": 0.7,
+			"tactics": [],
+			"main_hand": "bronze_censer",
+			"off_hand": "copied_psalter",
+			"head": "",
+			"body": "embalmers_habit",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [
+				"sulfur_poultice"
+			],
+			"loot": []
+		},
+		{
+			"id": "founder_elyse",
+			"name": "Elyse",
+			"side": "party",
+			"description": "Founder base unit: Elyse, a level 1 mage.",
+			"class_id": "mage",
+			"level": 1,
+			"tier": "hero",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": -1,
+			"poise": -1,
+			"art": "ranger/wenn_tallow",
+			"palette": "elyse",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [
+				"phosphorus_pot",
+				"magnesium_flash_bomb",
+				"choke_gas"
+			],
+			"loadout": [],
+			"deck": {
+				"active": [
+					"phosphorus_pot",
+					"magnesium_flash_bomb"
+				],
+				"order": {
+					"assault": [
+						"phosphorus_pot",
+						"magnesium_flash_bomb",
+						"strike"
+					],
+					"guard": [
+						"active_guard"
+					]
+				},
+				"passive": [
+					"combustion_formula",
+					"catalytic_munitions"
+				],
+				"keystone": [
+					"master_alchemist"
+				]
+			},
+			"default_intent": "",
+			"ai_role": "",
+			"target_pref": "ROLE",
+			"flee_ratio": 0.25,
+			"defend_below": 0.4,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": false,
+			"heal_below": 0.7,
+			"tactics": [],
+			"main_hand": "brass_vitriol_sprayer",
+			"off_hand": "none",
+			"head": "",
+			"body": "tanners_rubbered_coat",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [
+				"pitch_fire_bomb",
+				"sulfur_poultice"
+			],
+			"loot": []
+		},
+		{
+			"id": "mortuary_flagellant",
+			"name": "Mortuary Flagellant",
+			"side": "enemy",
+			"description": "Mortuary Flagellant.",
+			"class_id": "rogue",
+			"level": 1,
+			"tier": "minion",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": -1,
+			"poise": -1,
+			"art": "brawler/base",
+			"palette": "flagellant",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [
+				"scourge_lash",
+				"martyrs_rush"
+			],
+			"loadout": [],
+			"deck": {
+				"active": [
+					"scourge_lash",
+					"martyrs_rush"
+				],
+				"order": {
+					"assault": [
+						"scourge_lash"
+					],
+					"maneuver": [
+						"martyrs_rush",
+						"flank_cut"
+					]
+				}
+			},
+			"default_intent": "",
+			"ai_role": "SKIRMISHER",
+			"target_pref": "SOFTEST",
+			"flee_ratio": 0.0,
+			"defend_below": 0.0,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": true,
+			"heal_below": 0.7,
+			"tactics": [],
+			"main_hand": "penitent_scourge",
+			"off_hand": "none",
+			"head": "",
+			"body": "none",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [
+				"none"
+			],
+			"loot": [
+				{
+					"item": "sulfur_poultice",
+					"chance": 5,
+					"count": 1
+				}
+			]
+		},
+		{
+			"id": "inquisitorial_purifier",
+			"name": "Purifier",
+			"side": "enemy",
+			"description": "Inquisitorial Purifier.",
+			"class_id": "mage",
+			"level": 3,
+			"tier": "elite",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": 25,
+			"poise": -1,
+			"art": "priest/base",
+			"palette": "purifier",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [
+				"pyre_nozzle_sweep",
+				"brand_of_the_heretic"
+			],
+			"loadout": [],
+			"deck": {
+				"active": [
+					"pyre_nozzle_sweep",
+					"brand_of_the_heretic"
+				],
+				"order": {
+					"assault": [
+						"pyre_nozzle_sweep",
+						"brand_of_the_heretic"
+					],
+					"guard": [
+						"active_guard"
+					]
+				}
+			},
+			"default_intent": "",
+			"ai_role": "SNIPER",
+			"target_pref": "NEAREST",
+			"flee_ratio": 0.2,
+			"defend_below": 0.4,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": false,
+			"heal_below": 0.7,
+			"tactics": [
+				"flush_cover"
+			],
+			"main_hand": "pyre_nozzle",
+			"off_hand": "none",
+			"head": "",
+			"body": "warded_apron",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [
+				"none"
+			],
+			"wears_untrained": [
+				"warded_apron"
+			],
+			"loot": [
+				{
+					"item": "pyre_nozzle",
+					"chance": 4,
+					"count": 1
+				},
+				{
+					"item": "brimstone_draught",
+					"chance": 6,
+					"count": 1
+				}
+			]
+		},
+		{
+			"id": "captain_vane",
+			"name": "Captain Vane",
+			"side": "enemy",
+			"description": "Captain Vane of the Castellan Watch.",
+			"class_id": "warrior",
+			"level": 3,
+			"tier": "boss",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": 50,
+			"poise": 60,
+			"art": "warrior/2h_axe",
+			"palette": "vane",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [
+				"gilded_billhook_sunder",
+				"traitors_parry",
+				"heavy_bill_thrust",
+				"execution_wall"
+			],
+			"loadout": [],
+			"deck": {
+				"active": [
+					"gilded_billhook_sunder",
+					"traitors_parry"
+				],
+				"order": {
+					"assault": [
+						"gilded_billhook_sunder"
+					],
+					"guard": [
+						"traitors_parry",
+						"active_guard"
+					]
+				}
+			},
+			"default_intent": "",
+			"ai_role": "AGGRESSOR",
+			"target_pref": "NEAREST",
+			"flee_ratio": 0.0,
+			"defend_below": 0.4,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": false,
+			"heal_below": 0.7,
+			"tactics": [],
+			"main_hand": "vanes_bill",
+			"off_hand": "none",
+			"head": "",
+			"body": "watch_cuirass",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [
+				"none"
+			],
+			"loot": [
+				{
+					"item": "vanes_bill",
+					"chance": 25,
+					"count": 1
+				},
+				{
+					"item": "sulfur_poultice",
+					"chance": 20,
+					"count": 1
+				}
+			]
+		},
+		{
+			"id": "proctor_quell",
+			"name": "Proctor Quell",
+			"side": "enemy",
+			"description": "Proctor Quell of the Iron Inquisition.",
+			"class_id": "warrior",
+			"level": 3,
+			"tier": "boss",
+			"spend": {},
+			"stat_mode": "derived",
+			"ap": 0,
+			"power": 0,
+			"armor": 25,
+			"poise": 50,
+			"art": "warrior/2h_sword",
+			"palette": "quell",
+			"portrait_tier": "",
+			"skill_cap": 0,
+			"extra_skills": [
+				"sanctified_vivisection",
+				"inquisitorial_parry",
+				"transfusion_pulse"
+			],
+			"loadout": [],
+			"deck": {
+				"active": [
+					"sanctified_vivisection",
+					"inquisitorial_parry"
+				],
+				"order": {
+					"assault": [
+						"sanctified_vivisection"
+					],
+					"guard": [
+						"inquisitorial_parry",
+						"active_guard"
+					]
+				}
+			},
+			"default_intent": "",
+			"ai_role": "AGGRESSOR",
+			"target_pref": "WEAKEST",
+			"flee_ratio": 0.0,
+			"defend_below": 0.4,
+			"prefer_level": 0,
+			"status_resist": {},
+			"reckless": false,
+			"heal_below": 0.7,
+			"tactics": [],
+			"main_hand": "quells_bone_saws",
+			"off_hand": "none",
+			"head": "",
+			"body": "none",
+			"accessory_1": "",
+			"accessory_2": "",
+			"pouch": [
+				"none"
+			],
+			"loot": [
+				{
+					"item": "brimstone_draught",
+					"chance": 30,
+					"count": 1
+				}
+			]
 		}
 	]
 }

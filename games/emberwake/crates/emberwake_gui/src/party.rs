@@ -2368,7 +2368,8 @@ mod tests {
     #[test]
     fn a_two_handed_weapon_and_a_focus_exclude_each_other() {
         let (d, _, mut st) = setup();
-        let base = d.cat.units.values().filter(|u| u.class_id == "mage" && u.side == "party").map(|u| u.id.clone()).min().expect("a party mage");
+        // The plain class row, by id: a named mage such as a founder may start with a two-handed weapon of its own.
+        let base = d.cat.units.get("mage").map(|u| u.id.clone()).expect("the mage row");
         let mut m = UnitState::create("test_mage", &base);
         let wear = |m: &UnitState, slot: &str, f: &dyn Fn(&emberwake_data::ItemDef) -> bool| {
             let mut ids: Vec<&String> = d.cat.items.iter().filter(|(id, i)| f(i) && m.can_wear(&d, id, slot).is_ok()).map(|(id, _)| id).collect();
