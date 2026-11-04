@@ -249,6 +249,8 @@ rows stay, as the Arena, Dojo and sim need them and each is a working template o
 | BASERULES1-BN | Move rate and reference-hit bands, measured | game | balance | F, P or V | S | `BALANCE_REPORT.md` |
 | BASERULES1-U | User session: PERC, KNOW, stat jobs (Q1); a short one, with STATUSPASS1 or before it | kit + game | design | - | S | spec |
 
+**Changed by the user 2026-11-05 (decision "Combat tunes on its own values, not on base rules"):** combat is tuned on direct values and does not read base rules until integration, so `feel_flat` is combat's working model and must cover what combat reads from stats, not damage alone: HP, speed, move rate, poise, AP. The minimum before battle shrinks to M and that wider F; V, D, P and the audit BASERULES1-DOM continue inside the base silo. Where Stand's guard term goes follows from this: in combat's model first, its link to the formula at integration. The text below is the earlier order, kept for the sizes.
+
 **Minimum foundation before battle: M, V, D, G, F.** About 4S + 1M, and each costs more later: M as every new option adds metadata; V and G as K1-K3 and
 POISE1 build on them; D as SKILLPASS1 needs honest text; F as INTENT2-B can then test timing without stats. **P and PP run in parallel with K1**, not gating it, as K1-K3 add no stat reads **[R]**; schema
 merges serially. **H goes with K3, B with SKILLPASS1.** Can wait: BN's numbers after POISE1, the rest of the audit's tier 3.
