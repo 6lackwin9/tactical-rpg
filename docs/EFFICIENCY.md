@@ -169,7 +169,7 @@ The main session tracks each agent run's cost from its completion notice (tokens
 | VISCLAR1-C | logic | 375k | 81 | 56 | Five tasks in one run; hand-written timing probe |
 | LAYOUT720-E5 | logic | 368k | 97 | 61 | Sweeps and proof in real windows |
 | FPSCAP1 | logic | 206k | 61 | 50 | About 25 hand-written window measures |
-| VISCLAR1-D slice 1 | logic | 381k | 156 | 54 | Six features in one slice; a hand-written proof driver run 5 times, one batch blank |
+| VISCLAR1-D slice 1 | logic | 381k, plus 76k on fixes | 156, plus 34 | 54, plus 20 | Six features in one slice; a hand-written proof driver run 5 times, one batch blank |
 | TURNFEEL1 | logic | 226k | 62 | 87 | Measured real windows by hand; scope grew mid-run |
 | LAYOUTDATA1 spec | design | 224k | 44 | 19 | Long spec |
 | AGENTROLES1 spec | design | 214k | 39 | 18 | Long spec, three additions during the run |
