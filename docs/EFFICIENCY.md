@@ -168,6 +168,8 @@ The main session tracks each agent run's cost from its completion notice (tokens
 | LOOK1-G2 | logic | 252k | 82 | 49 | About 700 uses migrated |
 | VISCLAR1-C | logic | 375k | 81 | 56 | Five tasks in one run; hand-written timing probe |
 | LAYOUT720-E5 | logic | 368k | 97 | 61 | Sweeps and proof in real windows |
+| FPSCAP1 | logic | 206k | 61 | 50 | About 25 hand-written window measures |
+| VISCLAR1-D slice 1 | logic | 381k | 156 | 54 | Six features in one slice; a hand-written proof driver run 5 times, one batch blank |
 | TURNFEEL1 | logic | 226k | 62 | 87 | Measured real windows by hand; scope grew mid-run |
 | LAYOUTDATA1 spec | design | 224k | 44 | 19 | Long spec |
 | AGENTROLES1 spec | design | 214k | 39 | 18 | Long spec, three additions during the run |
@@ -192,7 +194,7 @@ Anything done repeatedly, a temp script worth keeping or a trial-and-error loop 
 
 ## Local CPU and heat (user 2026-11-04)
 
-The machine is a low-power 8-core laptop chip (Core Ultra 7 258V). Each `cargo` and test run takes every core unless capped, and a test window takes about 90 % of a core until FPSCAP1. Decision "Local CPU and heat" sets the limits. Track the full gate's time per flush:
+The machine is a low-power 8-core laptop chip (Core Ultra 7 258V). Each `cargo` and test run takes every core unless capped, and a window took about 90 % of a core before FPSCAP1. Since then a resting menu takes 1-2 % and a battle waiting for input 17-22 % (dev build, 720p); region and world maps still draw every frame (FPSCAP2). Decision "Local CPU and heat" sets the limits. Track the full gate's time per flush:
 
 | Date | Gate time | Load |
 | --- | --- | --- |
