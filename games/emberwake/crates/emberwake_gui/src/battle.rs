@@ -57,6 +57,7 @@ use crate::portraits::Faces;
 use crate::talk::{self, TalkAct};
 use crate::timeline_view;
 use aegis_ui::fx::{Camera, Clock, Fx};
+use aegis_ui::pacing::{FrameNeed, SLOW_LIFE};
 use crate::stage::View;
 use crate::screens::{Cx, GameCx, Key, Nav, Screen};
 use aegis_ui::ui::{Gfx, Widget};
@@ -299,6 +300,8 @@ pub struct BattleScreen {
     tokens: Tokens,
     clock: Clock,
     clock_at: Instant,
+    /// FPSCAP1: the last frame the battle was not at rest (`at_rest`).
+    astir_at: Instant,
     /// FX1-L1 rule I: the step feedback waiting for its action to land (at most one: rule F fires it before the next).
     impacts: Vec<Impact>,
     /// FX1-L1 rule P: autoplay waits `impact_gap_ms` after the last impact.
@@ -389,7 +392,17 @@ pub struct BattleScreen {
     waiting: Option<(i32, bool)>,
 }
 
+/// FPSCAP1: how long after the last stir a battle must stay at rest before it draws slower.
+pub(crate) const REST_AFTER: Duration = Duration::from_millis(1500);
+
 impl BattleScreen {
+    /// FPSCAP1: waiting for the player (a plan, Next after a round, the end banner) with nothing playing and no short-lived
+    /// effect alive. Only `playing`, `auto` and `pending_next_round` move a battle by themselves.
+    pub(crate) fn at_rest(&self) -> bool {
+        self.host.session.is_some() && !self.viewing && !self.playing && !self.auto && !self.pending_next_round && self.talk.is_none()
+            && self.impacts_done(Instant::now()) && self.fx.is_empty() && self.floats.is_empty() && self.flashes.is_empty() && self.tracers.is_empty() && self.sidesteps.is_empty()
+    }
+
     fn blank(cx: &Cx, mode: Mode) -> Self {
         Self {
             host: Host::new(Battle::with_data(cx.data.clone())),
@@ -432,6 +445,7 @@ impl BattleScreen {
             tokens: Tokens::default(),
             clock: Clock::default(),
             clock_at: Instant::now(),
+            astir_at: Instant::now(),
             impacts: Vec::new(),
             gap_until: None,
             req_cmd: String::new(),
@@ -720,6 +734,16 @@ impl BattleScreen {
 }
 
 impl Screen<GameCx> for BattleScreen {
+    /// FPSCAP1: a battle waiting for the player moves slowly (idle clips, portraits, status loops); any other time every
+    /// frame. `REST_AFTER` lets the last clips and reactions of a playback run at full rate.
+    fn frame_need(&self, _cx: &Cx) -> FrameNeed {
+        if self.at_rest() && self.astir_at.elapsed() >= REST_AFTER {
+            FrameNeed::Within(SLOW_LIFE)
+        } else {
+            FrameNeed::Full
+        }
+    }
+
     fn id(&self) -> &'static str {
         if self.world_mode() {
             "battle"
@@ -752,6 +776,9 @@ impl Screen<GameCx> for BattleScreen {
 
     fn tick(&mut self, cx: &mut Cx) {
         let now = Instant::now();
+        if !self.at_rest() {
+            self.astir_at = now;
+        }
         // SPRITE1-U, FX1-L1 3.1: the tokens and effects run on the FX clock at the animation speed setting (FxSettings
         // 0.5-2x; at most 100 wall ms a frame), which a hit-stop holds still.
         // INPUT1 PB3: at 0.5x the playback's clock runs at half the animation speed

@@ -6,6 +6,7 @@
 use crate::art::Art;
 use crate::audio::Audio;
 use crate::canvas::Rect;
+use crate::pacing::FrameNeed;
 pub use crate::painter::Grid;
 use crate::painter::Painter;
 use crate::ui::{self, Gfx, Ui, Widget, BODY, H, W};
@@ -430,6 +431,11 @@ pub trait Screen<G> {
     }
     fn wheel(&mut self, _cx: &mut Cx<G>, _lines: i32) {}
     fn tick(&mut self, _cx: &mut Cx<G>) {}
+    /// What the frame loop owes this screen now (FPSCAP1). Default: every frame. Say less only when `tick` and `draw` have
+    /// nothing to do until input or the time named; the shell asks every screen it draws, after each frame.
+    fn frame_need(&self, _cx: &Cx<G>) -> FrameNeed {
+        FrameNeed::Full
+    }
     /// Extra state for the agent's ui_tree.
     fn state(&self, _cx: &Cx<G>) -> Value {
         Value::Null
@@ -532,6 +538,9 @@ impl<G> Screen<G> for Ask<G> {
     fn id(&self) -> &'static str {
         "ask"
     }
+    fn frame_need(&self, _cx: &Cx<G>) -> FrameNeed {
+        FrameNeed::Idle
+    }
     fn overlay(&self) -> bool {
         true
     }
@@ -594,6 +603,9 @@ impl Notice {
 impl<G> Screen<G> for Notice {
     fn id(&self) -> &'static str {
         "notice"
+    }
+    fn frame_need(&self, _cx: &Cx<G>) -> FrameNeed {
+        FrameNeed::Idle
     }
     fn overlay(&self) -> bool {
         true

@@ -34,6 +34,7 @@ pub mod jpeg;
 pub mod layout_audit;
 pub mod layout_specimen;
 pub mod notes;
+pub mod pacing;
 pub mod painter;
 pub mod panes;
 pub mod pips;

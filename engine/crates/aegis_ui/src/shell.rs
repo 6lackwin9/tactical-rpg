@@ -12,6 +12,7 @@ use crate::layout_audit::{self, Profile};
 use crate::painter::{CanvasPolicy, Fonts, Grid, Painter, View};
 use crate::screen::{read_window_sizes, Settings, WINDOW_SIZES, window_capped, window_centred, window_kept_in, window_size_of, Context, Cx, Held, Key, Nav, Notice, ScreenRect, Screen, WindowShow};
 use crate::canvas::{rgba, Rect};
+use crate::pacing::{FrameNeed, Pace, Pacer};
 use crate::window::Grab;
 use crate::theme::{th, Metrics};
 use crate::ui::{clipboard, field_content_h, field_layout, field_scroll_id, field_shift, reveal_offset, Drag, Edit, EditKey, Gfx, Kit, Layout, FIELD_PAD_X, FIELD_PAD_Y};
@@ -380,6 +381,26 @@ impl<G: Context> Shell<G> {
         self.hover = under.map(|(id, ctl)| (id, std::time::Instant::now(), ctl));
     }
 
+    /// The lowest screen drawn: the top one and those under it down to the first that is not an overlay.
+    fn drawn_from(&self) -> usize {
+        let mut base = self.stack.len() - 1;
+        while base > 0 && self.stack[base].overlay() {
+            base -= 1;
+        }
+        base
+    }
+
+    /// What the frame loop owes what is on screen now (FPSCAP1): every frame while the shell's own work runs (a text field
+    /// and its caret, a drag, a held walk key, a music fade, a queued screen or notice), else the most any drawn screen says.
+    fn frame_need(&self) -> FrameNeed {
+        let kit = &self.gfx.kit;
+        let own = kit.edit.is_some() || kit.drag.is_some() || self.drag.is_some() || self.press.is_some() || self.win_drag.is_some() || self.cx.held.dir.is_some();
+        if own || self.cx.audio.fading() || !self.cx.nav.is_empty() || !self.cx.notice.is_empty() {
+            return FrameNeed::Full;
+        }
+        self.stack[self.drawn_from()..].iter().fold(FrameNeed::Idle, |need, s| need.and(s.frame_need(&self.cx)))
+    }
+
     fn frame(&mut self) {
         self.settle();
         self.cx.playtest.tick();
@@ -394,12 +415,8 @@ impl<G: Context> Shell<G> {
         let theme = th();
         self.gfx.fonts.sync(&theme);
         self.gfx.canvas.clear(theme.bg);
-        let mut base = self.stack.len() - 1;
-        while base > 0 && self.stack[base].overlay() {
-            base -= 1;
-        }
         let n = self.stack.len();
-        for i in base..n {
+        for i in self.drawn_from()..n {
             let live = i == n - 1;
             self.gfx.view = self.view_of(self.stack[i].grid());
             let mouse = if live { self.mouse } else { (-1, -1) };
@@ -1293,6 +1310,8 @@ struct App<G> {
     /// unlimited).
     applied: Option<Value>,
     frame_every: Option<Duration>,
+    /// FPSCAP1: when the next frame comes.
+    pacer: Pacer,
     /// The movement keys held down, in press order (the last one walks).
     walk_keys: Vec<Key>,
     /// Shift is held (Shift+Tab).
@@ -1305,6 +1324,7 @@ struct App<G> {
 
 impl<G: Context> App<G> {
     fn redraw(&mut self) {
+        let started = Instant::now();
         let Some(shell) = self.shell.as_mut() else { return };
         if let Some(rx) = &self.bridge {
             while let Ok(req) = rx.try_recv() {
@@ -1334,6 +1354,7 @@ impl<G: Context> App<G> {
                 let _ = p.render();
             }
         }
+        self.pacer.framed(started, shell.frame_need());
     }
 
     /// Applies the engine's settings (DisplaySettings) when they changed since the last time: the window's show
@@ -1409,24 +1430,32 @@ impl<G: Context> ApplicationHandler for App<G> {
         self.pixels = Some(pixels);
     }
 
+    /// The agent link woke the loop: its requests are answered in a redraw, at once, whatever the cap says.
     fn user_event(&mut self, _el: &ActiveEventLoop, _e: ()) {
+        self.pacer.touch(Instant::now());
         if let Some(w) = &self.window {
             w.request_redraw();
         }
     }
 
+    /// FPSCAP1: asked after every wake. A flood of events only asks again: the cap's deadline counts from the last frame.
+    /// Unlimited draws as fast as presenting allows (vsync waits for the screen); the redraw itself wakes the loop.
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
-        // The frame-rate cap paces the redraws; unlimited redraws as fast as presenting allows (vsync waits for the screen).
-        el.set_control_flow(match self.frame_every {
-            Some(every) => ControlFlow::WaitUntil(Instant::now() + every),
-            None => ControlFlow::Poll,
-        });
-        if let Some(w) = &self.window {
-            w.request_redraw();
+        match self.pacer.decide(Instant::now(), self.frame_every) {
+            Pace::Redraw => {
+                el.set_control_flow(ControlFlow::Wait);
+                if let Some(w) = &self.window {
+                    w.request_redraw();
+                }
+            }
+            Pace::WaitUntil(at) => el.set_control_flow(ControlFlow::WaitUntil(at)),
         }
     }
 
     fn window_event(&mut self, el: &ActiveEventLoop, _id: WindowId, ev: WindowEvent) {
+        if !matches!(ev, WindowEvent::RedrawRequested) {
+            self.pacer.touch(Instant::now());
+        }
         match ev {
             WindowEvent::CloseRequested => {
                 // Taken out first: no event after the close reaches a shell whose screens have left.
@@ -1444,6 +1473,10 @@ impl<G: Context> ApplicationHandler for App<G> {
                 if let Some(s) = self.shell.as_mut() {
                     s.gfx.canvas = Canvas::new(w as i32, h as i32);
                     s.gfx.view = s.top_view();
+                }
+                // The new surface shows nothing until a frame: at once, also inside the system's own resize loop.
+                if let Some(w) = &self.window {
+                    w.request_redraw();
                 }
             }
             WindowEvent::ScaleFactorChanged { scale_factor, mut inner_size_writer } => {
@@ -1719,7 +1752,7 @@ pub fn run<G: Context>(mut cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: O
     crate::theme::reload(&mut cx);
     let el: EventLoop<()> = EventLoop::with_user_event().build()?;
     let proxy = el.create_proxy();
-    let mut app = App { start: Some((cx, stack)), shell: None, options, window: None, pixels: None, proxy, bridge: None, applied: None, frame_every: Some(Duration::from_millis(16)), walk_keys: Vec::new(), shift: false, ctrl: false, alt: false };
+    let mut app = App { start: Some((cx, stack)), shell: None, options, window: None, pixels: None, proxy, bridge: None, applied: None, frame_every: Some(Duration::from_millis(16)), pacer: Pacer::default(), walk_keys: Vec::new(), shift: false, ctrl: false, alt: false };
     el.run_app(&mut app)?;
     Ok(())
 }
@@ -2652,6 +2685,78 @@ mod tests {
         let tree = s.bridge(&json!({"cmd": "ui_tree"}));
         assert_eq!(tree["pid"], json!(std::process::id()));
         assert_eq!(tree["px"], json!([s.gfx.canvas.w, s.gfx.canvas.h]));
+    }
+
+    /// A screen that says what it needs from the frame loop, over the screen below when it is an overlay.
+    struct Rests(FrameNeed, bool);
+
+    impl Screen<App> for Rests {
+        fn id(&self) -> &'static str {
+            "rests"
+        }
+        fn overlay(&self) -> bool {
+            self.1
+        }
+        fn frame_need(&self, _cx: &Cx) -> FrameNeed {
+            self.0
+        }
+        fn draw(&mut self, _cx: &mut Cx, _g: &mut Gfx, _mouse: (i32, i32), _live: bool) {}
+        fn widgets(&self) -> Vec<Value> {
+            Vec::new()
+        }
+        fn draw_tip(&self, _p: &mut Painter, _mouse: (i32, i32)) {}
+        fn click(&mut self, _cx: &mut Cx, _pos: (i32, i32)) -> bool {
+            false
+        }
+        fn click_id(&mut self, _cx: &mut Cx, _id: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn widget_rect(&self, _id: &str) -> Option<(Rect, Vec<String>)> {
+            None
+        }
+    }
+
+    /// FPSCAP1: the shell's answer to the frame loop.
+    #[test]
+    fn a_screen_that_has_not_said_keeps_drawing() {
+        let s = shell();
+        assert_eq!(s.frame_need(), FrameNeed::Full, "the Board says nothing");
+    }
+
+    #[test]
+    fn the_shell_asks_every_screen_it_draws_and_no_other() {
+        let slow = FrameNeed::Within(Duration::from_millis(66));
+        let mut s = shell();
+        s.stack.push(Box::new(Rests(FrameNeed::Idle, true)));
+        assert_eq!(s.frame_need(), FrameNeed::Full, "an idle popup over a screen that keeps drawing");
+        s.stack.clear();
+        s.stack.push(Box::new(Rests(slow, false)));
+        s.stack.push(Box::new(Rests(FrameNeed::Idle, true)));
+        assert_eq!(s.frame_need(), slow, "an idle popup over a slow screen");
+        s.stack.push(Box::new(Rests(FrameNeed::Idle, false)));
+        assert_eq!(s.frame_need(), FrameNeed::Idle, "a full screen hides what is under it");
+    }
+
+    #[test]
+    fn the_shells_own_work_keeps_an_idle_screen_drawing() {
+        let mut s = shell();
+        s.stack.clear();
+        s.stack.push(Box::new(Rests(FrameNeed::Idle, false)));
+        assert_eq!(s.frame_need(), FrameNeed::Idle);
+        s.gfx.kit.edit = Some(Edit::new("field", "", false));
+        assert_eq!(s.frame_need(), FrameNeed::Full, "a text field's caret");
+        s.gfx.kit.edit = None;
+        s.cx.held.dir = Some((1, 0));
+        assert_eq!(s.frame_need(), FrameNeed::Full, "a held walk key");
+        s.cx.held.dir = None;
+        s.cx.notice.push("A notice".into());
+        assert_eq!(s.frame_need(), FrameNeed::Full, "a notice waiting for the next frame");
+        s.cx.notice.clear();
+        s.cx.nav.push(Nav::Pop);
+        assert_eq!(s.frame_need(), FrameNeed::Full, "a screen change waiting for the next frame");
+        s.cx.nav.clear();
+        s.win_drag = Some(("win".into(), Grab::Move, (0, 0)));
+        assert_eq!(s.frame_need(), FrameNeed::Full, "a window being dragged");
     }
 
     #[test]

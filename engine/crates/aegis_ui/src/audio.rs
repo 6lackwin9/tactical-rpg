@@ -208,6 +208,11 @@ impl Audio {
         self.state.borrow().wanted.clone()
     }
 
+    /// A music fade is running: `tick` still has work to do.
+    pub fn fading(&self) -> bool {
+        self.state.borrow().tracks.iter().any(|t| t.gain != t.target)
+    }
+
     /// Advances the fades; tracks faded to silence stop. The shell calls it every frame.
     pub fn tick(&self) {
         let mut st = self.state.borrow_mut();

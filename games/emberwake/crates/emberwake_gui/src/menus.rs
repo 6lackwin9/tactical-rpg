@@ -8,6 +8,7 @@ use aegis_ui::canvas::{rgba, Rect};
 use crate::music;
 use crate::portraits::{Faces, Who};
 use crate::screens::{default_settings, enter_game, show_errors, title, Cx, GameCx, Key, Nav, Screen};
+use aegis_ui::pacing::FrameNeed;
 use aegis_ui::painter::{Grid, Typeface};
 use aegis_ui::panes::{self, MenuItem, MenuStyle};
 use emberwake_battle::portrait::Look;
@@ -329,6 +330,10 @@ impl Screen<GameCx> for MainMenu {
     fn tick(&mut self, _cx: &mut Cx) {
         self.faces.tick();
     }
+    /// The picture, the logo and the entries stand still; only the peek's portraits move.
+    fn frame_need(&self, _cx: &Cx) -> FrameNeed {
+        if self.peek.is_some() { FrameNeed::Full } else { FrameNeed::Idle }
+    }
     /// Back on the menu: the newest save may have changed, and the focus opens on Continue again.
     fn resume(&mut self, _cx: &mut Cx) {
         self.peek = None;
@@ -465,6 +470,10 @@ fn start_world(cx: &mut Cx, world: &str) {
 }
 
 impl Screen<GameCx> for NewGameScreen {
+    /// Nothing here moves by itself.
+    fn frame_need(&self, _cx: &Cx) -> FrameNeed {
+        FrameNeed::Idle
+    }
     fn id(&self) -> &'static str {
         "new_game"
     }
@@ -642,6 +651,10 @@ fn save_now(cx: &mut Cx, slot: i64) {
 }
 
 impl Screen<GameCx> for Slots {
+    /// Nothing here moves by itself.
+    fn frame_need(&self, _cx: &Cx) -> FrameNeed {
+        FrameNeed::Idle
+    }
     fn id(&self) -> &'static str {
         if self.saving {
             "save_slots"
@@ -840,6 +853,10 @@ impl SettingsScreen {
 }
 
 impl Screen<GameCx> for SettingsScreen {
+    /// Nothing here moves by itself.
+    fn frame_need(&self, _cx: &Cx) -> FrameNeed {
+        FrameNeed::Idle
+    }
     fn id(&self) -> &'static str {
         "settings"
     }
@@ -1406,8 +1423,10 @@ mod tests {
         cx.gs_mut().time = 50;
         let mut m = MainMenu::default();
         assert!(get(&menu_frame(&mut m, &mut cx, &mut g, (-1, -1)), "menu.peek").is_none(), "idle: no peek");
+        assert_eq!(m.frame_need(&cx), FrameNeed::Idle, "FPSCAP1: nothing moves on the menu without a peek");
         let w = menu_frame(&mut m, &mut cx, &mut g, OVER_FIRST);
         let p = get(&w, "menu.peek").expect("hovered: the peek");
+        assert_eq!(m.frame_need(&cx), FrameNeed::Full, "FPSCAP1: the peek's portraits move");
         let (gap, face, column) = (g.view.u(PEEK_GAP), g.view.u(panes::PORTRAIT), base_column());
         let (pw, ph) = (resolve(&[frac(PEEK_W)], CANVAS.w)[0], resolve(&[frac(PEEK_H)], CANVAS.h)[0]);
         assert_eq!((n(p, 0) + n(p, 2) + gap, n(p, 1), n(p, 2), n(p, 3)), (column.x, column.y, pw, ph), "one gap left of the column, at its top");

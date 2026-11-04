@@ -2,6 +2,7 @@
 //! time (Q / E cycle), tabs Stats, Level up, Skills and Gear. Drafts live here until Confirm writes them to the game
 //! state (level-up points are permanent and asked about first); switching member or tab drops a draft after asking.
 
+use aegis_ui::pacing::{FrameNeed, SLOW_LIFE};
 use aegis_ui::theme::th;
 use aegis_ui::canvas::{rgb, rgba, Rect};
 use crate::screens::{show_errors, Cx, GameCx, Key, Nav, Screen};
@@ -1353,6 +1354,10 @@ fn drop_move(d: &Data, work: &mut UnitState, stash: &mut Stash, from: &str, to: 
 }
 
 impl Screen<GameCx> for Character {
+    /// At rest only the portrait moves, and slowly.
+    fn frame_need(&self, _cx: &Cx) -> FrameNeed {
+        FrameNeed::Within(SLOW_LIFE)
+    }
     fn id(&self) -> &'static str {
         "character"
     }

@@ -1,3 +1,4 @@
+mod pacing_tests;
 mod windup_tests;
 mod arena_rules_tests;
 mod status_tests;
