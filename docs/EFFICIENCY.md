@@ -200,3 +200,5 @@ The machine is a low-power 8-core laptop chip (Core Ultra 7 258V). Each `cargo` 
 | 2026-11-04 | 954 s | One lane running |
 | 2026-11-04 | 1533 s | Builders and a re-landing |
 | 2026-11-04 | see the last flush | Quiet |
+
+CPU1 (2026-11-04): each `cargo` run takes 4 build jobs and 4 test threads (`.cargo/config.toml`). Partial and full gates queue, one at a time, and run below normal priority; a builder's direct `cargo` command is capped but not queued or lowered. `flush.sh` logs each full gate to `gate_times.tsv` in the planner's script folder, copied to the table above. Run a gate in the background: a queued one can pass the shell's 10-minute limit.
