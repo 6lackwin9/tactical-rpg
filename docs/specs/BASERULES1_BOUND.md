@@ -1,5 +1,7 @@
 # BASERULES1 bound: audit, stats as data, skill values, report, proof
 
+**User 2026-11-05 (decision "Behaviours fixed, stats as data; bugs after lock"):** behaviours are fixed in the kit; each reads a stat that a pack makes independent or derives from base stats by a formula; an unused behaviour is dropped with its derived stat, so it needs a defined off state. The proof should add a 3-stat pack, the harder direction: every behaviour kept derives from 3 base stats, one `tl_` fight, no code change. The design session settles the behaviour list and its off states.
+
 Companion of [BASERULES1.md](BASERULES1.md), section 4 (the stop rule, the contract). Parallel: [LAYOUTDATA1.md](LAYOUTDATA1.md). Size limits kept this out of the main file.
 Marks: **[V]** read in code at `db55a63e`; **[R]** reasoning.
 
