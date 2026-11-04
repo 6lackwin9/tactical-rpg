@@ -11,6 +11,11 @@ Scene Runner > Arena > `tl_flank`, with **Ruleset set to Timeline** on the Arena
 - [ ] Hold Alt: bars, arrows and hazard marks show. Is the calm view without Alt right?
 - [ ] AP gauge beside the strip: do the capsules read?
 - [ ] Dash: use Flank Cut or Hamstring Cut. Is any animation weak, in any direction?
+- [ ] Round flow: after a round plays, the next starts by itself with a Round N ribbon. Settings > Gameplay has "Auto-confirm next round". Does the pace feel right?
+- [ ] Party cards: AP pips drain as moves play and refill at round start; numbers beside the bars; 5 poise pips. Readable?
+- [ ] Rings: the intent ring replaces the side ring; the letter shows on Alt. In a test fight both sides share sprites, so judge it with real factions in mind.
+- [ ] Skill menu: click a unit or tile. It opens beside it, icons only, with rows the target does not allow greyed. Does it read? It can cover a nearby unit.
+- [ ] Move in the menu, after a skill: click a tile. The plate names the blocks it takes back, only Rest follows, up to 3 move blocks. Is the reach, up to 12 tiles for fast units, what you want?
 - [ ] Anything else looks wrong? If nothing does, the clarity pass closes.
 
 ## Walking and turns

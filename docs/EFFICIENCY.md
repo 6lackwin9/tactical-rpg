@@ -197,6 +197,11 @@ Anything done repeatedly, a temp script worth keeping or a trial-and-error loop 
 | Hand-written proof shots and blank 73-byte PNGs | VISCLAR1-D, FPSCAP1 (`shots.py`, about 30 window runs) | `tools/fc.sh scenario shots <name> ...`, compare with `shot_compare`; `window=1` only for what needs a window | HEADLESS1 |
 | Mutation scripts rewritten per task | Most logic tasks | Skill `mutation-check` | SKILLS1 |
 | Comparison boards rewritten per task | LOOK1, REGIONGROUND1, SPRITEFIT1, VISCLAR1 | Skill `review-board` | SKILLS1 |
+| `tools/fc.sh test` hides panic text, so a builder reruns raw `cargo` to read a failure | ATTACKLOCK1, twice | Show panic lines in its filter | Open |
+| Python heredocs fail on quotes in the shell; agents fall back to writing a script file, and throwaway patch scripts pile up | INTENT2, BASERULES1, ATTACKLOCK1, VISCLAR1-D (`p1`-`p12`) | Agent note: use Edit or a script file from the start | Open |
+| A planner script failing partway while the next command still lands the rest | FPSCAP1's docs, 2026-11-05 | `set -e` in landing commands too; do not chain a landing after a docs script | Done |
+| An agent and the planner sharing `-plan`: an agent's checkout moved it between the planner's commit and push, and the commit stayed unpushed | INTENT2 revision, 2026-11-05 | No agent works in `-plan`; a spec revision takes a lane | Done |
+| A user's design additions reaching a running spec agent one by one | INTENT2 seven, BASERULES1 five | Hold them for one revision pass when the run is past its first draft | Open |
 | The `tools/fc.sh` gate filter hid a failing frame list | CI on the 2026-11-03 release | Filter widened; skill `ci-read` | Part done, SKILLS1 |
 
 ## Local CPU and heat (user 2026-11-04)
