@@ -2,6 +2,26 @@
 
 Decision "Order of work: engine and kit first" (user 2026-11-05). `docs/TASKS.md` stays the queue: this file says which phase each open row belongs to. The planner sorted the rows; the user moves any that sit wrong. Each system builds its own placeholder widgets and mockups and takes just enough Sunk Ward data to test on.
 
+Every system goes through these stages (decision "System workflow"). A finalized ruleset reopens only as a named change, usually a new option.
+
+| Stage | Done when |
+| --- | --- |
+| 1. Design | A spec with no open question that changes the design; no code yet |
+| 2. Build or reuse | The spec's rules run, tested alone, with placeholder UI where a human must judge it |
+| 3. Iterate on options | The user has tried the options; dropped ones stay in the library when they could serve a game |
+| 4. Finalize the ruleset | The options picked are named as a bundle; `aegis rules` states what is tweakable and locked; goldens recorded |
+| 5. Tune within bounds | A limit test finds what drives outcomes and what breaks; values set within the bounds; the silo closes |
+
+Where each silo stands, 2026-11-05 (planner's reading):
+
+| Silo | Stage | Next |
+| --- | --- | --- |
+| Base rules | 1, spec written, 5 questions open | The user's answers |
+| Combat rules and input | 1, INTENT2 written and answered; much of it built under older rules | The rule option bundle, then K1 |
+| Exploration and maps | 2-3, built, options open (TURNFEEL1, EXPLOREVIEW1-R) | After combat closes |
+| Party, progression, economy, quests, story | 2, built, no ruleset named | Design pass per silo |
+| UI screens | Main menu finalized, the rest placeholder | After the gameplay silos |
+
 | Phase | Goal | Rows |
 | --- | --- | --- |
 | 0. Base rules | Stats, damage, items, classes and the rule library: which options work together, conflict or ship together | BASERULES1-M and BASERULES1-F, the wider flat model (the minimum before battle; decision "Combat tunes on its own values, not on base rules"); in the base silo, not gating battle: BASERULES1-DOM, BASERULES1-V, BASERULES1-D, KITIDS1, STATUSROWS1, BASERULES1-G, BASERULES1-U, BASERULES1-P, BASERULES1-PP, BASERULES1-B, BASERULES1-A, BASERULES1-BN, STATUSPASS1, LEVERS1-K, OFFHAND1, DRILLSAVE1, TERMS1 |
