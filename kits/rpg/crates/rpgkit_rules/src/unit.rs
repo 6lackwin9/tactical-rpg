@@ -480,7 +480,7 @@ impl Unit {
                     }
                     self.stats.modifiers.push(m);
                 }
-                "proficiency" => self.stats.proficiency.add_bonus(&value::string(e, "gear", ""), value::int(e, "levels", 0)),
+                "proficiency" => self.stats.proficiency.add_effect(e),
                 "resist" => {
                     let status = value::string(e, "status", "");
                     let target = if gear { &mut self.gear_status_resist } else { &mut self.status_resist };

@@ -1,7 +1,9 @@
 //! StatRules, StatModifier, Proficiency and CharacterStats (scripts/core/specs/).
 
-use rpgkit_data::{ClassDef, ProfEntry, STATS};
+use aegis_core::value;
+use rpgkit_data::{Catalog, ClassDef, ProfEntry, STATS};
 use indexmap::IndexMap;
+use serde_json::Value;
 
 pub const CLASS_BUDGET: i32 = 62;
 pub const SPEND_BASE: i32 = 4;
@@ -130,6 +132,26 @@ impl Proficiency {
 
     pub fn add_bonus(&mut self, gear: &str, levels: i32) {
         *self.bonus_levels.entry(gear.to_lowercase()).or_insert(0) += levels;
+    }
+
+    /// The `proficiency` effect of the passive grammar (keys `gear`, `levels`): the one reader, for a built unit and for
+    /// the gear rule (`with_drills`).
+    pub fn add_effect(&mut self, effect: &serde_json::Map<String, Value>) {
+        self.add_bonus(&value::string(effect, "gear", ""), value::int(effect, "levels", 0));
+    }
+
+    /// UNITDRILL1: this proficiency plus the drills among `passive_ids`, the always-on passives (`slot` "") with a
+    /// `proficiency` effect, read as a built unit reads them (`Unit::apply_passive`). Unknown ids and slottable passives add
+    /// nothing: a slottable passive trains only while slotted, which is a battle's deck, not the gear rule's.
+    pub fn with_drills<'a>(mut self, cat: &Catalog, passive_ids: impl IntoIterator<Item = &'a String>) -> Self {
+        for passive in passive_ids.into_iter().filter_map(|id| cat.passives.get(id)).filter(|p| p.slot.is_empty()) {
+            for effect in passive.effects.iter().filter_map(Value::as_object) {
+                if value::string(effect, "type", "") == "proficiency" {
+                    self.add_effect(effect);
+                }
+            }
+        }
+        self
     }
 
     pub fn base_level(&self, gear: &str) -> i32 {

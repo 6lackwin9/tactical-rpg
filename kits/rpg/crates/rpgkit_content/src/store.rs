@@ -19,10 +19,12 @@ pub use aegis_content::store::Outcome;
 
 // ---- Storage forms -----------------------------------------------------------------------------------------------
 
-/// ContentSchema.to_storage of a normalized row: hidden and internal fields, `system` false and `origin` system
-/// left out; unknown keys kept.
+/// ContentSchema.to_storage of a normalized row: hidden and internal fields, `system` false, `origin` system and an empty
+/// `wears_untrained` (UNITDRILL1: a row without the exception reads as before) left out; unknown keys kept.
 fn content_storage(kind: &str, full: &Dict) -> Dict {
-    to_storage(source::schema(), "content", kind, full, |key, v| (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system"))
+    to_storage(source::schema(), "content", kind, full, |key, v| {
+        (key == "system" && !json::to_bool(v)) || (key == "origin" && gstr(v) == "system") || (key == crate::check::unit::WEARS_UNTRAINED && json::strings(v).is_empty())
+    })
 }
 
 /// CLN-45: a ruleset row stores a switch it leaves to the rules (`ruleset::BY_RULES_FIELDS` at "") as no key (the

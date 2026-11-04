@@ -5,6 +5,8 @@ reuse groups (user 2026-10-20)"). A game uses the kit by naming it in its `game.
 then looks up every asset in the game's `assets/`, this kit's `assets/` and `engine/assets/`, in that order, so a game
 overrides a kit file by putting its own at the same path.
 
+Gear training (UNITDRILL1): a unit's class or its own always-on drill passives train its gear, read through `Proficiency::with_drills` by the unit check and `can_wear`; a unit row's `wears_untrained` names items worn without training, and adds none.
+
 Since KIT1-M and KIT1-N (2026-10-25) the kit also holds code and names no game: the genre rules in
 `crates/rpgkit_{data,rules,battle,content,world,sim,host}` (the host crate is the battle command set on `aegis_host`) and
 their field tables `schema.json`; the lookup chains that pick a body, portrait, icon or battle stage art (`battle_stage_dirs`, `battle_prop_dirs`,

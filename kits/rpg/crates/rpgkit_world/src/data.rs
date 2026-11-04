@@ -311,24 +311,9 @@ impl Data {
         entry
     }
 
-    /// WorldFactory.character_passives: its own, its faction's, its disciplines' and its named items', once each.
+    /// WorldFactory.character_passives: its own, its faction's, its disciplines' and its named items', once each
+    /// (the one list, kept with the content checks that also read it).
     pub fn character_passives(&self, character: &Dict, w: &str) -> Vec<String> {
-        let mut out: Vec<String> = Vec::new();
-        let mut add = |raw: &Value| {
-            for id in json::strings(raw) {
-                if !out.contains(&id) {
-                    out.push(id);
-                }
-            }
-        };
-        add(json::get(character, "passives"));
-        add(json::get(self.resolve(w, "factions", &json::s(character, "faction")), "grants"));
-        for r in json::aget(character, "disciplines") {
-            add(json::get(self.resolve(w, "disciplines", &json::gstr(r)), "passives"));
-        }
-        for r in json::aget(character, "named_items") {
-            add(json::get(self.resolve(w, "items", &json::gstr(r)), "grants"));
-        }
-        out
+        rpgkit_content::check::unit::character_passives(&self.catalogs, character, w)
     }
 }

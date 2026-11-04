@@ -211,10 +211,10 @@ pub fn off_hand_ok(main: Option<&ItemDef>, off: &ItemDef) -> bool {
 }
 
 /// ClassArchetype.can_equip_gear: accessories always; gear with no weapon type, or a class with no proficiency list,
-/// too; otherwise the class must have training (level 1) in the gear type (`class` is the class's own proficiency,
-/// Proficiency::from_class, without passive bonuses).
-pub fn class_can_equip(class: &crate::stats::Proficiency, item: &ItemDef) -> bool {
-    item.item_type == "ACCESSORY" || item.slot.starts_with("ACCESSORY") || item.weapon_type.is_empty() || class.entries.is_empty() || class.base_level(&item.weapon_type) >= 1
+/// too; otherwise there must be training (level 1) in the gear type. UNITDRILL1: `prof` is the class's proficiency plus
+/// the wearer's drills (`Proficiency::with_drills`), read through `level_of` as `min_proficiency` reads it.
+pub fn class_can_equip(prof: &crate::stats::Proficiency, item: &ItemDef) -> bool {
+    item.item_type == "ACCESSORY" || item.slot.starts_with("ACCESSORY") || item.weapon_type.is_empty() || prof.entries.is_empty() || prof.level_of(&item.weapon_type) >= 1
 }
 
 #[derive(Debug, Clone, Default)]

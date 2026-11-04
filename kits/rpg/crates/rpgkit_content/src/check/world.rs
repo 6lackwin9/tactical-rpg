@@ -2,10 +2,11 @@
 //! problem of a world entry (id, name, enums, references across the lineage and connections, overrides, the rules of
 //! its kind) and of a world manifest, and the soft warnings over a world.
 
-use super::{board, campaign, dialogue, encounter, map, quest, shop, story, travel, View};
+use super::{board, campaign, dialogue, encounter, map, quest, shop, story, travel, unit, View};
 use crate::source::{content, fields};
 use aegis_content::world::split_qid;
 use aegis_core::json::{self, gstr, Dict};
+use rpgkit_rules::stats::Proficiency;
 use serde_json::Value;
 
 /// WorldSchema.KINDS, then CAMPAIGN1's and STORYUI1's kinds (the loader's list).
@@ -376,11 +377,22 @@ fn tuning_errors(raw: &Value, allowed: &[&str], what: &str) -> Vec<String> {
     errors
 }
 
+/// UNITDRILL1: the gear of character `c`'s base unit its class leaves untrained needs this character's own drills
+/// (another character's drill passes the unit row, not this character).
+fn training_errors(v: &View, w: &str, c: &Dict) -> Vec<String> {
+    let base_id = json::s(c, "base_unit");
+    let base = v.get("units", &base_id);
+    let Some(class) = v.typed.classes.get(&json::s(base, "class_id")) else { return Vec::new() };
+    let prof = Proficiency::from_class(class).with_drills(&v.typed, &unit::character_passives(&v.worlds, c, w));
+    unit::untrained_gear(v, base, &prof).into_iter().map(|(gear, name)| format!("Base unit '{base_id}' wears {name}: neither its class nor this character's drills train '{gear}'.")).collect()
+}
+
 fn character_errors(v: &View, w: &str, e: &Dict) -> Vec<String> {
     let mut errors = Vec::new();
     if json::s(e, "base_unit").is_empty() {
         errors.push("Choose the base unit this character plays as.".into());
     }
+    errors.extend(training_errors(v, w, e));
     errors.extend(tuning_errors(json::get(e, "tuning"), &TUNING_KEYS, "Character"));
     errors.extend(super::assets::body_errors(v, &json::s(e, "art")));
     match e.get("gone_flags").unwrap_or(&Value::Array(Vec::new())) {
@@ -606,6 +618,11 @@ fn start_party_errors(v: &View, w: &str, raw: &Value) -> Vec<String> {
             errors.push(format!("Start party unit '{id}' is not a known unit."));
         } else if json::s_or(unit, "side", "enemy") != "party" {
             errors.push(format!("Start party unit '{id}' is not a party unit."));
+        } else if let Some(class) = v.typed.classes.get(&json::s(unit, "class_id")) {
+            // UNITDRILL1: a member made from the unit row has no character, so no drills
+            for (_, name) in unit::untrained_gear(v, unit, &Proficiency::from_class(class)) {
+                errors.push(format!("Start party unit '{id}' wears {name}, which only a character's drill trains: list the character."));
+            }
         }
     }
     if ids.len() as i64 > PARTY_MAX {

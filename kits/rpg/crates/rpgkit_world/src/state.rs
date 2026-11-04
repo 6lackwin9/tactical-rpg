@@ -167,15 +167,18 @@ impl UnitState {
         rpgkit_rules::stats::spend_pool(self.level(d) as i32) as i64 - self.spent()
     }
 
-    /// UnitState._gear_errors for one item: it fits `slot` (ContentFactory.item_fits_slot, worn gear kept) and the
-    /// class has training in its weapon or gear type (Proficiency.can_use on the class's own proficiency).
+    /// UnitState._gear_errors for one item: it fits `slot` (ContentFactory.item_fits_slot, worn gear kept) and it has
+    /// training in the weapon or gear type: its class's or its own drill passives' (UNITDRILL1; a character's drills are
+    /// in `passives` from `hero_from_character`, and a built unit reads the same list), or the base unit names the item
+    /// in `wears_untrained`.
     pub fn can_wear(&self, d: &Data, item: &str, slot: &str) -> Result<(), String> {
         let def = d.cat.items.get(item).ok_or_else(|| format!("unknown item '{item}'."))?;
         if !item_fits_slot(def, slot) {
             return Err(format!("{} can't be equipped in {}.", def.name, slot.replace('_', " ")));
         }
         let class = d.cat.classes.get(&self.class_id(d));
-        if !class.is_some_and(|c| class_can_equip(&rpgkit_rules::stats::Proficiency::from_class(c), def)) {
+        let trained = class.is_some_and(|c| class_can_equip(&rpgkit_rules::stats::Proficiency::from_class(c).with_drills(&d.cat, &self.passives), def));
+        if !trained && !json::sget(d.entry("units", &self.base_unit), rpgkit_content::check::unit::WEARS_UNTRAINED).iter().any(|i| i == item) {
             return Err(format!("{} has no training in {} ({}).", class.map(|c| c.name.as_str()).unwrap_or("This class"), def.weapon_type, def.name));
         }
         Ok(())

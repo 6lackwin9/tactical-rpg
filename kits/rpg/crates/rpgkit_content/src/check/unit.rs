@@ -1,6 +1,7 @@
 //! Class and unit rows (ClassUnitValidator errors and warnings, StatRules.validate_class / validate_spend).
 
 use super::{capitalize, View, LOADOUT_SLOTS, NO_ITEM};
+use aegis_content::world::Catalogs;
 use aegis_core::fmt::fixed;
 use aegis_core::json::{self, Dict};
 use rpgkit_data::{ClassDef, Deck, ItemDef, SkillDef, STATS};
@@ -20,6 +21,8 @@ const MAX_SCALING: f64 = 2.0;
 /// Proficiency.WEAPON_TYPES (RULESET1-S adds `polearm` and `scourge`, CAST1-S `censer`, `bone_saw` and `sprayer`).
 const WEAPON_TYPES: [&str; 18] = ["sword", "axe", "mace", "hammer", "fist", "dagger", "bow", "crossbow", "staff", "wand", "polearm", "scourge", "censer", "bone_saw", "sprayer", "orb", "tome", "shield"];
 pub const DUPLICATE_ACCESSORY_ERROR: &str = "The same accessory cannot fill both accessory slots.";
+/// UNITDRILL1: the unit field listing the items of its own gear it wears with no class or drill training.
+pub const WEARS_UNTRAINED: &str = "wears_untrained";
 
 type Ints = IndexMap<String, i64>;
 
@@ -96,8 +99,78 @@ fn fits_slot(item: &ItemDef, slot: &str) -> bool {
     target == item.slot
 }
 
-/// ClassUnitValidator._loadout_errors: every item fits its slot and (with `check_training`) is trained for by `prof`;
-/// no two-handed weapon with an off-hand item; no accessory twice.
+/// WorldFactory.character_passives: its own, its faction's, its disciplines' and its named items', once each.
+pub fn character_passives(worlds: &Catalogs, character: &Dict, w: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut add = |raw: &Value| {
+        for id in json::strings(raw) {
+            if !out.contains(&id) {
+                out.push(id);
+            }
+        }
+    };
+    add(json::get(character, "passives"));
+    add(json::get(worlds.resolve(w, "factions", &json::s(character, "faction")), "grants"));
+    for r in json::aget(character, "disciplines") {
+        add(json::get(worlds.resolve(w, "disciplines", &json::gstr(r)), "passives"));
+    }
+    for r in json::aget(character, "named_items") {
+        add(json::get(worlds.resolve(w, "items", &json::gstr(r)), "grants"));
+    }
+    out
+}
+
+/// UNITDRILL1: the passives of every world character playing as unit `unit_id`, any world (a unit row has none itself).
+fn drills_of_characters(v: &View, unit_id: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for w in v.worlds.world_ids() {
+        for c in v.worlds.own_entries(&w, "characters").iter().filter(|c| json::s(c, "base_unit") == unit_id) {
+            out.extend(character_passives(&v.worlds, c, &w));
+        }
+    }
+    out
+}
+
+/// UNITDRILL1: `item` (id `item_id`) worn on unit row `e` needs training `prof` does not give, and the row does not name
+/// it in `wears_untrained`: its gear type.
+fn missing_training(item: &Dict, item_id: &str, e: &Dict, prof: &Proficiency) -> Option<String> {
+    let weapon_type = json::s(item, "weapon_type");
+    (!prof.can_use(&weapon_type) && !json::sget(e, WEARS_UNTRAINED).iter().any(|i| i == item_id)).then_some(weapon_type)
+}
+
+/// UNITDRILL1: (gear type, item name) of each item of unit row `e` that `prof` leaves untrained.
+pub(crate) fn untrained_gear(v: &View, e: &Dict, prof: &Proficiency) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for slot in LOADOUT_SLOTS {
+        let item_id = json::s(e, slot);
+        let item = v.get("items", &item_id);
+        if !item.is_empty() {
+            if let Some(gear) = missing_training(item, &item_id, e, prof) {
+                out.push((gear, json::s_or(item, "name", &item_id)));
+            }
+        }
+    }
+    out
+}
+
+/// UNITDRILL1: `wears_untrained` is a narrow exception: each id once, an item this row wears, that really has no training
+/// from the class or a character's drill (`prof`; None: a unit with no class, whose gear is not checked).
+fn wears_untrained_errors(v: &View, e: &Dict, prof: Option<&Proficiency>) -> Vec<String> {
+    let mut errors = Vec::new();
+    let ids = json::sget(e, WEARS_UNTRAINED);
+    repeats("Wears untrained", &ids, &mut Vec::new(), &mut errors);
+    for id in &ids {
+        if !LOADOUT_SLOTS.iter().any(|slot| json::s(e, slot) == *id) {
+            errors.push(format!("Wears untrained: '{id}' is not in this unit's gear."));
+        } else if !prof.is_some_and(|p| !p.can_use(&json::s(v.get("items", id), "weapon_type"))) {
+            errors.push(format!("Wears untrained: '{id}' needs no exception (its class or a drill trains it)."));
+        }
+    }
+    errors
+}
+
+/// ClassUnitValidator._loadout_errors: every item fits its slot and (with `check_training`) is trained for by `prof`
+/// or named in the row's `wears_untrained`; no two-handed weapon with an off-hand item; no accessory twice.
 fn loadout_errors(v: &View, e: &Dict, prof: &Proficiency, check_training: bool) -> Vec<String> {
     let mut errors = Vec::new();
     for slot in LOADOUT_SLOTS {
@@ -110,10 +183,9 @@ fn loadout_errors(v: &View, e: &Dict, prof: &Proficiency, check_training: bool) 
             continue;
         }
         let name = json::s_or(item, "name", &item_id);
-        let weapon_type = json::s(item, "weapon_type");
         if !fits_slot(&ItemDef::from_obj(item), slot) {
             errors.push(format!("{name} can't be equipped in {}.", capitalize(slot)));
-        } else if check_training && !weapon_type.is_empty() && !prof.can_use(&weapon_type) {
+        } else if let Some(weapon_type) = missing_training(item, &item_id, e, prof).filter(|_| check_training) {
             errors.push(format!("This class has no training in '{weapon_type}' ({name})."));
         }
     }
@@ -225,8 +297,10 @@ pub fn unit_errors(v: &View, e: &Dict) -> Vec<String> {
     } else if json::get(e, "spend").as_object().is_some_and(|s| !s.is_empty()) {
         errors.push("Fixed units don't spend points.".into());
     }
-    let prof = arch.map(Proficiency::from_class).unwrap_or_default();
+    // UNITDRILL1: the class's training plus the drills of the world characters playing as this unit
+    let prof = arch.map(Proficiency::from_class).unwrap_or_default().with_drills(&v.typed, &drills_of_characters(v, &json::s(e, "id")));
     errors.extend(loadout_errors(v, e, &prof, arch.is_some()));
+    errors.extend(wears_untrained_errors(v, e, arch.map(|_| &prof)));
     if let Some(a) = arch.filter(|_| !fixed_mode) {
         errors.extend(skill_loadout_errors(v, e, a));
     }
