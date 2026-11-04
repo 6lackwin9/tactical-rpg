@@ -21,6 +21,11 @@ pub const TACTICS: [(&str, &str); 6] =
     [("balanced", "balanced"), ("all_out", "aggressive"), ("focus_weakest", "focus_weakest"), ("guard_counter", "defensive"), ("kite", "ranged_kite"), ("economy", "economy")];
 /// RULESET1-G2: the keys only the feel mode reads (any other mode refuses them).
 pub const FEEL_KEYS: [&str; 4] = ["tactic", "party", "armor", "tune"];
+/// SIMCOUNT1: the feel key `usage` does not list (see `FEEL_COUNTS_USAGE`); any other mode refuses it too.
+pub const FEEL_COUNTS_KEY: &str = "counts";
+/// SIMCOUNT1: the help of the `counts=` key, printed apart from `usage` (`sim help`, a refused feel line): `sim_golden` holds
+/// `usage`.
+pub const FEEL_COUNTS_USAGE: &str = "       feel only: counts=on|off (off): each block and FEEL_JSON add per side the rule counts (feel::RULE_COUNTERS), protected share, Rest blocks a round, items by id";
 /// RULESET1-G2: the `armor=` range (the unit field's, less -1 = derived).
 pub const ARMOR_MAX: i32 = 200;
 /// RULESET1-G2: the ruleset numbers `tune=` may set (RULESET1_TASKS 1.2), by key prefix; ranges from the kit schema.
@@ -117,6 +122,8 @@ pub struct SimArgs {
     pub tactic: String,
     /// RULESET1-G2 (feel only): the party drivers, each run as its own block (`party=auto|timed|both`; auto).
     pub drivers: Vec<crate::timed::Driver>,
+    /// SIMCOUNT1 (feel only): print the rule counts (`counts=on|off`; off).
+    pub counts: bool,
     /// RULESET1-G2 (feel only): unit id -> the armour it fights with in this run (`armor=<unit>:<0-200>`).
     pub armor: IndexMap<String, i32>,
     /// RULESET1-G2 (feel only): ruleset number -> its value in this run (`tune=<key>:<value>`), applied to `ruleset`.
@@ -180,6 +187,7 @@ impl Default for SimArgs {
             melee_diagonal: None,
             tactic: "balanced".into(),
             drivers: vec![crate::timed::Driver::Auto],
+            counts: false,
             armor: IndexMap::new(),
             tune: IndexMap::new(),
             feel_keys: Vec::new(),
@@ -419,7 +427,7 @@ impl SimArgs {
 
     fn key(&mut self, d: &Data, key: &str, value: &str) -> Result<(), String> {
         let classes = godot_list(&CLASSES);
-        if FEEL_KEYS.contains(&key) && !self.feel_keys.iter().any(|k| k == key) {
+        if (FEEL_KEYS.contains(&key) || key == FEEL_COUNTS_KEY) && !self.feel_keys.iter().any(|k| k == key) {
             self.feel_keys.push(key.to_string());
         }
         if DEADLINE_KEYS.contains(&key) && !self.deadline_keys.iter().any(|k| k == key) {
@@ -446,6 +454,12 @@ impl SimArgs {
                     "both" => vec![crate::timed::Driver::Auto, crate::timed::Driver::Timed],
                     v => vec![crate::timed::Driver::parse(v).ok_or_else(|| format!("party must be one of {} or both (got '{value}')", godot_list(&crate::timed::DRIVERS)))?],
                 };
+            }
+            "counts" => {
+                if value != "on" && value != "off" {
+                    return Err(format!("counts must be on or off (got '{value}')"));
+                }
+                self.counts = value == "on";
             }
             "armor" => {
                 for part in list(value) {
@@ -833,6 +847,9 @@ impl SimArgs {
                 }
                 if self.drivers != [crate::timed::Driver::Auto] {
                     t += &format!(", party {}", if self.drivers.len() > 1 { "both" } else { self.drivers[0].id() });
+                }
+                if self.counts {
+                    t += ", counts on";
                 }
                 if !self.armor.is_empty() {
                     t += &format!(", armor {}", self.armor.iter().map(|(u, n)| format!("{u}:{n}")).collect::<Vec<_>>().join(","));

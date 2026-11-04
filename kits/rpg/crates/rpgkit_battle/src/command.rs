@@ -209,6 +209,14 @@ pub struct Command {
     pub missed: bool,
     /// INPUT1 MR12: the board event of the move the command made at its start (None = it did not move).
     pub moved: Option<MoveKind>,
+    /// SIMCOUNT1: `on_start` ran. A record for the feel sim; no rule reads it.
+    pub started: bool,
+    /// SIMCOUNT1: the start moved the unit by a dash, of a skill with a position or a plain `dash_tiles`. A record for the
+    /// feel sim; no rule reads it (`moved` stays the board event).
+    pub dashed: bool,
+    /// SIMCOUNT1: the hit landed from a tile only the diagonal rule puts in its band (INPUT1 MR10). A record for the feel
+    /// sim; no rule reads it.
+    pub diagonal_hit: bool,
 }
 
 impl Command {
@@ -264,6 +272,9 @@ impl Command {
             follow: 0,
             missed: false,
             moved: None,
+            started: false,
+            dashed: false,
+            diagonal_hit: false,
         }
     }
 
@@ -283,6 +294,7 @@ impl Command {
 
     /// Runs when the command STARTS (after AP and stance): attack dash / chase, defend grants.
     pub fn on_start(&mut self, w: &mut World, rng: &mut GodotRng) -> String {
+        self.started = true;
         let src = self.source;
         let diag = self.diagonal;
         match &mut self.kind {
@@ -300,6 +312,7 @@ impl Command {
                     }
                     let (line, moved, protected) = carried_engage(w, rng, src, tgt, cell, position, self.carry_range, self.target_cell, diag);
                     self.moved = moved;
+                    self.dashed = moved == Some(MoveKind::Dash);
                     if protected {
                         // INPUT1 MR8 c, MR9: a miss at its impact; the ruleset's cost decides what of its AP stays paid
                         self.missed = true;
@@ -314,7 +327,7 @@ impl Command {
                     return line;
                 }
                 if *dash_tiles > 0 {
-                    return dash(w, rng, src, tgt, band, *dash_tiles);
+                    return dash(w, rng, src, tgt, band, *dash_tiles, &mut self.dashed);
                 }
                 let Some(t) = tgt else { return String::new() };
                 if *follow_tiles <= 0 || !w.units[t].is_active() || !w.units[src].is_active() || in_reach(w, src, t, band, diag) {
@@ -411,6 +424,8 @@ impl Command {
                 }
                 w.units[src].active_target = Some(t);
                 let damaging = skill_mult > 0.0;
+                // SIMCOUNT1: a hit only the diagonal rule let land (read before an intercept moves it)
+                self.diagonal_hit = damaging && self.diagonal && !in_reach(w, src, t, band, false);
                 // RULESET1_INTENT MV3: a flank hit (rule flank) matches `flanked`, takes the flank power and no riposte
                 let flank = round_intent::flank_bonus(w, src, t);
                 // HOOKS1 EX1: an `hp_below` entry matches the target's HP share before the hit (rule execute)
@@ -861,7 +876,7 @@ fn effective_target(w: &World, src: UnitId, target: Option<UnitId>) -> Option<Un
 }
 
 /// The attack's reach band: the command's own, else the unit's (ranged 2..range, melee 1).
-pub(crate) fn reach_band(w: &World, src: UnitId, min_range: i32, max_range: i32) -> (i32, i32) {
+pub fn reach_band(w: &World, src: UnitId, min_range: i32, max_range: i32) -> (i32, i32) {
     let u = &w.units[src];
     (if min_range > 0 { min_range } else { u.min_attack_range() }, if max_range > 0 { max_range } else { u.attack_range })
 }
@@ -905,7 +920,7 @@ fn others_blocked(w: &World, src: UnitId, active_only: bool) -> Cells {
 }
 
 /// Gap-close: route to the nearest tile in reach within `dash_tiles` cost; hazards entered roll their status.
-fn dash(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<UnitId>, band: (i32, i32), dash_tiles: i32) -> String {
+fn dash(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<UnitId>, band: (i32, i32), dash_tiles: i32, dashed: &mut bool) -> String {
     let Some(t) = tgt else { return String::new() };
     if !w.units[t].is_active() || !w.units[src].is_active() || in_reach(w, src, t, band, false) {
         return String::new();
@@ -938,6 +953,7 @@ fn dash(w: &mut World, rng: &mut GodotRng, src: UnitId, tgt: Option<UnitId>, ban
         return format!("[Dash Blocked] {name} couldn't move toward {}.", w.units[t].name);
     }
     round_intent::note_moved(w, src);
+    *dashed = true;
     let mut line = format!("[Dash] {name} dashes at {}: {from} to {to}", w.units[t].name);
     for note in hazard_on_enter(w, rng, src, &entered) {
         line += &format!(" {note}");

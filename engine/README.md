@@ -160,6 +160,8 @@ tools/fc.sh sim feel [enc=a,b] [seeds=N] [ruleset=..] [rules=-id,+id]
     # RULESET1-G, engine-only (not in the sim help): catalog encounters with their party (default the game's five tl_
     # encounters, 10 seeds, timeline): breaks, windups, flanks, pierce, AP, intents, Rest, carried moves, kiting,
     # planner reasons per encounter and in total; last line FEEL_JSON {...} (machine-readable, for RULESET1-B)
+    # SIMCOUNT1: counts=on adds per side the rule counts (protected flanks, Maneuver commands, dashes, diagonal hits,
+    # chases by skill kind, items used), per fight too, the protected share, Rest blocks a round and items by id
 tools/fc.sh sim deadlines [world=<id>] [losses=0..9]
     # CAMPAIGN1-SIM, engine-only, no fights (not in the sim help): per campaign world with checkpoints, the best and
     # worst day each checkpoint's quest can be won and the slack (CAMPAIGN1 C5); no checkpoints: one line says so

@@ -60,6 +60,10 @@ pub fn run(d: &Data, argv: &[String], game: &SimGame) -> Vec<String> {
         Err(e) => {
             let mut out = vec![format!("SIM argument error: {e}")];
             out.extend(args::usage(game));
+            // SIMCOUNT1: apart from `usage`, which `sim_golden` holds; no golden run asks for help or refuses a feel line
+            if matches!(argv.first().map(String::as_str), Some("help" | "feel")) {
+                out.push(args::FEEL_COUNTS_USAGE.to_string());
+            }
             return out;
         }
     };
