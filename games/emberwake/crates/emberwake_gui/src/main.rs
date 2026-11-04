@@ -2,7 +2,10 @@
 //! screens (main menu, new game, slots, settings, region map with dialogue and shops, world map, game menu, character,
 //! journal, battle results, battle); the agent link (TCP, `aegis link`) also reaches the battle command API while a
 //! battle is open.
-//!   emberwake [screen=menu|arena|runner] [encounter=goblin_skirmish] [seed=N] [port=47800] [data=<export dir>] [saves=<dir>]
+//!   emberwake [screen=menu|arena|runner] [encounter=goblin_skirmish] [ruleset=<id>] [seed=N] [port=47800] [data=<export dir>] [saves=<dir>]
+//!             [headless=WxH [fps=N] [dpr=X] [idle_exit=S]]
+//! `ruleset=`: the ruleset `screen=arena` plays by (default the encounter's own). `headless=`: no window and no sound
+//! device; the frames stay in memory and the agent link draws them out (`aegis_ui::shell::headless`).
 //! Keys: arrows / W A S D move, E interact, Esc back or game menu, Enter confirm, F12 screenshot; battle keys as listed
 //! in battle.rs. Right click goes back.
 
@@ -39,6 +42,7 @@ use aegis_content::manifest::{self, Manifest};
 use aegis_ui::art;
 use aegis_ui::audio::Audio;
 use aegis_ui::screen::Settings;
+use aegis_ui::shell::headless::Headless;
 use aegis_ui::shell::Options;
 use aegis_ui::tuning::TuningFile;
 use anyhow::{Context, Result};
@@ -60,9 +64,19 @@ fn force_shipped_views(settings: &mut serde_json::Value, screen: Option<&str>) {
     }
 }
 
+/// `ruleset=`: only `screen=arena` plays by one a launch names; anywhere else it would be ignored, so it is refused.
+fn arena_ruleset<'a>(args: &'a [(String, String)]) -> Result<Option<&'a str>> {
+    match (arg(args, "ruleset"), arg(args, "screen")) {
+        (Some(_), screen) if screen != Some("arena") => anyhow::bail!("ruleset= comes with screen=arena"),
+        (ruleset, _) => Ok(ruleset),
+    }
+}
+
 fn main() -> Result<()> {
     let raw: Vec<String> = std::env::args().skip(1).collect();
     let args: Vec<(String, String)> = raw.iter().filter_map(|a| a.split_once('=').map(|(k, v)| (k.to_string(), v.to_string()))).collect();
+    let headless = Headless::from_args(&args)?;
+    let ruleset = arena_ruleset(&args)?;
     let cwd = std::env::current_dir()?;
     let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf));
     let engine_dir = [Some(cwd.clone()), exe_dir].into_iter().flatten().find_map(|start| {
@@ -126,12 +140,13 @@ fn main() -> Result<()> {
     let record = settings.v["record_playtests"].as_bool().unwrap_or(cfg!(debug_assertions));
     // The data fingerprint a recording carries; hashed only while recording is on.
     let content = if record { aegis_content::fingerprint::of(&game.data_dir) } else { serde_json::Value::Null };
+    let layers = project.as_ref().map(|p| aegis_core::assets::Layers::for_game(p)).unwrap_or_default();
     let cx = Cx {
         playtest: aegis_ui::playtest::Playtests::new(aegis_save::user_dir(GAME_ID).join("playtests"), record, content),
         settings,
-        art: art::Art::new(project.clone()),
+        art: art::Art::new(project),
         // ASSETORG2: sounds and music over the same layers as the art (game, kit, engine)
-        audio: Audio::of_layers(&project.map(|p| aegis_core::assets::Layers::for_game(&p)).unwrap_or_default()),
+        audio: if headless.is_some() { Audio::offline_layers(&layers) } else { Audio::of_layers(&layers) },
         nav: Vec::new(),
         notice: notices,
         shot_dir: home.join(".shots"),
@@ -142,12 +157,19 @@ fn main() -> Result<()> {
     };
     let mut stack: Vec<Box<dyn Screen<GameCx>>> = vec![Box::new(menus::MainMenu::default())];
     match arg(&args, "screen") {
-        Some("arena") => stack.push(Box::new(battle::BattleScreen::sandbox(&cx))),
+        Some("arena") => match ruleset {
+            Some(ruleset) => {
+                emberwake_rules::ruleset::Ruleset::of(&cx.app.data.cat, ruleset).map_err(anyhow::Error::msg)?;
+                let encounter = cx.app.encounter.clone();
+                stack.push(Box::new(battle::BattleScreen::arena_with(&cx, None, &encounter, Some(ruleset.to_string()), "", false)));
+            }
+            None => stack.push(Box::new(battle::BattleScreen::sandbox(&cx))),
+        },
         Some("runner") => stack.push(Box::new(runner::SceneRunner::new())),
         _ => {}
     }
     let port = arg(&args, "port").and_then(|p| p.parse().ok()).unwrap_or(aegis_ui::bridge::DEFAULT_PORT);
-    let options = Options { title, font: engine.join("assets/fonts/OpenSans-SemiBold.ttf"), port, icon, canvas, window_sizes };
+    let options = Options { title, font: engine.join("assets/fonts/OpenSans-SemiBold.ttf"), port, icon, canvas, window_sizes, headless };
     aegis_ui::shell::run(cx, stack, options)
 }
 
@@ -155,6 +177,16 @@ fn main() -> Result<()> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_launch_ruleset_comes_with_the_arena_only() {
+        let args = |list: &[(&str, &str)]| list.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect::<Vec<_>>();
+        assert_eq!(arena_ruleset(&args(&[("screen", "arena"), ("ruleset", "r")])).unwrap(), Some("r"));
+        assert_eq!(arena_ruleset(&args(&[("screen", "arena")])).unwrap(), None);
+        assert_eq!(arena_ruleset(&args(&[])).unwrap(), None);
+        assert!(arena_ruleset(&args(&[("ruleset", "r")])).is_err());
+        assert!(arena_ruleset(&args(&[("screen", "runner"), ("ruleset", "r")])).is_err());
+    }
 
     /// EXPLOREVIEW1 check 9: outside the Scene Runner the debug views never show; in it they stay as saved.
     #[test]

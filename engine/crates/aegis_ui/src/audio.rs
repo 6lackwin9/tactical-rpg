@@ -107,6 +107,11 @@ impl Audio {
         Self { roots, device: None, state: RefCell::new(State::new()) }
     }
 
+    /// The audio folders of asset `layers` without a device (a run with no window: no sound device is opened or needed).
+    pub fn offline_layers(layers: &aegis_core::assets::Layers) -> Self {
+        Self::offline_layered(layers.roots.iter().map(|r| r.join("audio")).collect())
+    }
+
     /// The first folder's file at `rel`.
     fn find(&self, rel: &str) -> Option<PathBuf> {
         self.roots.iter().map(|r| r.join(rel)).find(|p| p.is_file())

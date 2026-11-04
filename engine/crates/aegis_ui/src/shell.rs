@@ -31,7 +31,9 @@ use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::monitor::MonitorHandle;
 use winit::window::{Fullscreen, Window, WindowId};
 
-/// The window the shell opens.
+pub mod headless;
+
+/// What the shell opens.
 pub struct Options {
     pub title: String,
     /// The UI font (a TTF file).
@@ -45,6 +47,8 @@ pub struct Options {
     /// The manifest's `window_sizes` as written (null: the shell holds nothing, and what the game told its settings stands;
     /// a bad value is a notice and `WINDOW_SIZES`).
     pub window_sizes: Value,
+    /// Some: no window at all, the frames stay in memory (HEADLESS1, `headless`). None: the player's window.
+    pub headless: Option<headless::Headless>,
 }
 
 /// Holds the saved window size to what the manifest declared (`declared` as written, `offered` as `read_window_options`
@@ -158,6 +162,26 @@ fn screen_ctl(id: &str) -> Value {
 }
 
 impl<G: Context> Shell<G> {
+    /// The shell on a canvas of `pw` x `ph` px: everything but where the frames go, so a window and a run without one
+    /// start the same. `icon_notice` is what the manifest's icon came to.
+    fn open(cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: &Options, (pw, ph): (u32, u32), dpr: f32, icon_notice: Option<String>) -> Self {
+        let font_bytes = std::fs::read(&options.font).unwrap_or_else(|e| panic!("{}: {e}", options.font.display()));
+        let mut gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
+        gfx.kit.device.dpr = dpr;
+        let (policy, offered, window_notices) = read_window_options(&options.canvas, &options.window_sizes);
+        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
+        shell.cx.notice.extend(icon_notice);
+        shell.cx.notice.extend(window_notices);
+        hold_declared_sizes(&mut shell.cx.settings, &options.window_sizes, &offered);
+        shell
+    }
+
+    /// The canvas is now `w` x `h` px.
+    fn resize_canvas(&mut self, w: u32, h: u32) {
+        self.gfx.canvas = Canvas::new(w as i32, h as i32);
+        self.gfx.view = self.top_view();
+    }
+
     /// Applies queued navigation and notices (a screen change closes an open choice list).
     fn settle(&mut self) {
         let mut guard = 0;
@@ -981,6 +1005,19 @@ impl<G: Context> Shell<G> {
         save_png(&self.gfx.canvas, path, max_w)
     }
 
+    /// F12: the shot, noted; one that fails also shows, since nothing else says that no file came.
+    fn f12_shot(&mut self) {
+        let p = self.cx.shot_dir.join("gui_shot.png");
+        let msg = match self.shot(&p, 0) {
+            Ok(()) => format!("Screenshot: {}", p.display()),
+            Err(e) => {
+                self.cx.notice.push(format!("Screenshot failed: {e}"));
+                format!("Screenshot failed: {e}")
+            }
+        };
+        self.cx.app.note(msg);
+    }
+
     /// Agent link requests.
     fn bridge(&mut self, body: &Value) -> Value {
         self.agent = true;
@@ -1297,6 +1334,11 @@ fn size_and_place(window: &Window, want: &Value, show: WindowShow) -> Option<Str
     asked.filter(|a| *a != client).map(|a| format!("Window capped to {} x {} px: {} x {} px does not fit the usable screen area.", client.0, client.1, a.0, a.1))
 }
 
+/// The settings' text size.
+fn text_scale_of(v: &Value) -> f32 {
+    v["text_scale"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0) as f32
+}
+
 struct App<G> {
     /// The context and the first screens, until the window exists.
     start: Option<(Cx<G>, Vec<Box<dyn Screen<G>>>)>,
@@ -1385,7 +1427,7 @@ impl<G: Context> App<G> {
             p.enable_vsync(v["vsync"].as_bool().unwrap_or(true));
         }
         self.frame_every = v["fps_cap"].as_str().and_then(|c| c.parse::<u64>().ok()).filter(|n| *n > 0).map(|n| Duration::from_micros(1_000_000 / n));
-        shell.gfx.fonts.scale = v["text_scale"].as_f64().unwrap_or(1.0).clamp(0.5, 2.0) as f32;
+        shell.gfx.fonts.scale = text_scale_of(&v);
         self.applied = Some(v);
     }
 }
@@ -1412,16 +1454,12 @@ impl<G: Context> ApplicationHandler for App<G> {
         let size = window.inner_size();
         let (pw, ph) = (size.width.max(1), size.height.max(1));
         let pixels = Pixels::new(pw, ph, SurfaceTexture::new(pw, ph, window.clone())).expect("pixels");
-        let font_bytes = std::fs::read(&self.options.font).unwrap_or_else(|e| panic!("{}: {e}", self.options.font.display()));
-        let mut gfx = Gfx { canvas: Canvas::new(pw as i32, ph as i32), view: View::fit(pw, ph), fonts: Fonts::new(&font_bytes), kit: Kit::default() };
-        gfx.kit.device.dpr = window.scale_factor() as f32;
-        let (policy, offered, window_notices) = read_window_options(&self.options.canvas, &self.options.window_sizes);
-        let mut shell = Shell { frames: 0, policy, cx, gfx, stack, mouse: (0, 0), mouse_px: None, text_rows: false, drag: None, press: None, win_drag: None, open_focus: None, hover: None, shift: false, text_press: false, text_click: None, born: Instant::now(), pointer_pending: false, pointer_req: None, agent: false };
-        shell.cx.notice.extend(icon_notice);
-        shell.cx.notice.extend(window_notices);
-        hold_declared_sizes(&mut shell.cx.settings, &self.options.window_sizes, &offered);
+        let mut shell = Shell::open(cx, stack, &self.options, (pw, ph), window.scale_factor() as f32, icon_notice);
         let port = self.options.port;
-        self.bridge = bridge::start(port, self.proxy.clone());
+        let proxy = self.proxy.clone();
+        self.bridge = bridge::start(port, move || {
+            let _ = proxy.send_event(());
+        });
         if self.bridge.is_none() {
             shell.cx.notice.push(format!("Agent link: port {port} is busy."));
         }
@@ -1471,8 +1509,7 @@ impl<G: Context> ApplicationHandler for App<G> {
                     let _ = p.resize_buffer(w, h);
                 }
                 if let Some(s) = self.shell.as_mut() {
-                    s.gfx.canvas = Canvas::new(w as i32, h as i32);
-                    s.gfx.view = s.top_view();
+                    s.resize_canvas(w, h);
                 }
                 // The new surface shows nothing until a frame: at once, also inside the system's own resize loop.
                 if let Some(w) = &self.window {
@@ -1632,12 +1669,7 @@ impl<G: Context> ApplicationHandler for App<G> {
                     WKey::Named(NamedKey::PageUp) => Some(Key::PageUp),
                     WKey::Named(NamedKey::PageDown) => Some(Key::PageDown),
                     WKey::Named(NamedKey::F12) => {
-                        let p = s.cx.shot_dir.join("gui_shot.png");
-                        let msg = match s.shot(&p, 0) {
-                            Ok(()) => format!("Screenshot: {}", p.display()),
-                            Err(e) => format!("Screenshot failed: {e}"),
-                        };
-                        s.cx.app.note(msg);
+                        s.f12_shot();
                         None
                     }
                     WKey::Character(c) => c.chars().next().map(|ch| Key::Char(ch.to_ascii_lowercase())),
@@ -1729,8 +1761,30 @@ fn draw_options(p: &mut Painter, opts: &[&Value], mouse: (i32, i32), keyed: Opti
     }
 }
 
-/// Saves the canvas as PNG; `max_w` > 0 shrinks it (box filter) to at most that width.
-fn save_png(c: &Canvas, path: &Path, max_w: i32) -> Result<()> {
+/// The smallest canvas a shot is taken of: below this it is a minimized window's canvas of nothing, not a picture.
+pub const SHOT_SIDE_MIN: i32 = 64;
+/// How far from the first pixel, on any channel, a pixel of a blank frame may be.
+pub const BLANK_TOLERANCE: u8 = 3;
+
+/// Why this canvas is no picture of anything, if it is not: too small, or one colour all over (nothing drawn, or a
+/// cleared frame).
+pub fn blank_reason(c: &Canvas) -> Option<String> {
+    if c.w < SHOT_SIDE_MIN || c.h < SHOT_SIDE_MIN {
+        return Some(format!("the canvas is {} x {} px: a window that is minimized, or no frame", c.w, c.h));
+    }
+    let first = c.px.first_chunk::<4>()?;
+    let same = c.px.chunks_exact(4).all(|p| p.iter().zip(first).all(|(a, b)| a.abs_diff(*b) <= BLANK_TOLERANCE));
+    same.then(|| format!("the frame is blank: all {} x {} px are one colour, {first:?}", c.w, c.h))
+}
+
+/// Saves the canvas as PNG; `max_w` > 0 shrinks it (box filter) to at most that width. A blank canvas (`blank_reason`) is
+/// refused and nothing is written, so a shot on disk always shows something; an older shot at `path` goes, which this one
+/// would have replaced, so it cannot pass for this one.
+pub fn save_png(c: &Canvas, path: &Path, max_w: i32) -> Result<()> {
+    if let Some(why) = blank_reason(c) {
+        let _ = std::fs::remove_file(path);
+        anyhow::bail!("no shot: {why}");
+    }
     let mut img = Image { w: c.w, h: c.h, px: c.px.clone() };
     if max_w > 0 && c.w > max_w {
         img = img.downsample(max_w, c.h * max_w / c.w);
@@ -1746,10 +1800,14 @@ fn save_png(c: &Canvas, path: &Path, max_w: i32) -> Result<()> {
     Ok(())
 }
 
-/// Opens the window and runs the screens until the window closes or a screen sets `cx.quit`. The theme is loaded
-/// from the game's asset layers first (LOOK1-E1; its problems show as a notice over the first screen).
+/// Opens the window (or, with `Options::headless`, none) and runs the screens until the window closes or a screen sets
+/// `cx.quit`. The theme is loaded from the game's asset layers first (LOOK1-E1; its problems show as a notice over the
+/// first screen).
 pub fn run<G: Context>(mut cx: Cx<G>, stack: Vec<Box<dyn Screen<G>>>, options: Options) -> Result<()> {
     crate::theme::reload(&mut cx);
+    if let Some(h) = options.headless {
+        return headless::run(cx, stack, &options, h);
+    }
     let el: EventLoop<()> = EventLoop::with_user_event().build()?;
     let proxy = el.create_proxy();
     let mut app = App { start: Some((cx, stack)), shell: None, options, window: None, pixels: None, proxy, bridge: None, applied: None, frame_every: Some(Duration::from_millis(16)), pacer: Pacer::default(), walk_keys: Vec::new(), shift: false, ctrl: false, alt: false };
@@ -2757,6 +2815,58 @@ mod tests {
         s.cx.nav.clear();
         s.win_drag = Some(("win".into(), Grab::Move, (0, 0)));
         assert_eq!(s.frame_need(), FrameNeed::Full, "a window being dragged");
+    }
+
+    /// A screen's own commands are answered by it: the shell's names hide them, so its own must stay few.
+    struct OwnStep;
+
+    impl Screen<App> for OwnStep {
+        fn id(&self) -> &'static str {
+            "own_step"
+        }
+        fn draw(&mut self, _cx: &mut Cx, _g: &mut Gfx, _mouse: (i32, i32), _live: bool) {}
+        fn command(&mut self, _cx: &Cx, body: &Value) -> Option<Value> {
+            (body["cmd"] == "step").then(|| json!({"ok": true, "stepped": true}))
+        }
+        fn widgets(&self) -> Vec<Value> {
+            Vec::new()
+        }
+        fn draw_tip(&self, _p: &mut Painter, _mouse: (i32, i32)) {}
+        fn click(&mut self, _cx: &mut Cx, _pos: (i32, i32)) -> bool {
+            false
+        }
+        fn click_id(&mut self, _cx: &mut Cx, _id: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn widget_rect(&self, _id: &str) -> Option<(Rect, Vec<String>)> {
+            None
+        }
+    }
+
+    #[test]
+    fn a_screens_own_step_reaches_it_through_the_shared_path() {
+        let mut s = shell();
+        s.stack.push(Box::new(OwnStep));
+        assert_eq!(s.bridge(&json!({"cmd": "step"}))["stepped"], json!(true));
+        s.stack.pop();
+        assert_eq!(s.bridge(&json!({"cmd": "step"}))["ok"], json!(false), "no screen answers it here");
+    }
+
+    /// F12 on a blank frame: it shows, no file comes, and an older shot does not pass for this one.
+    #[test]
+    fn a_refused_f12_shows_and_leaves_no_old_shot() {
+        let mut s = shell();
+        s.cx.shot_dir = std::env::temp_dir().join(format!("aegis_f12_{}", std::process::id()));
+        std::fs::create_dir_all(&s.cx.shot_dir).unwrap();
+        let path = s.cx.shot_dir.join("gui_shot.png");
+        s.f12_shot();
+        assert!(path.is_file(), "a drawn frame is saved");
+        assert!(s.cx.notice.is_empty());
+        s.gfx.canvas.clear(rgb(9, 9, 9));
+        s.f12_shot();
+        assert!(!path.exists(), "the old shot would look current");
+        assert!(s.cx.notice.iter().any(|n| n.contains("Screenshot failed")), "{:?}", s.cx.notice);
+        std::fs::remove_dir_all(&s.cx.shot_dir).unwrap();
     }
 
     #[test]

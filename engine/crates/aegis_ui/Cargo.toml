@@ -8,6 +8,11 @@ name = "ground_compose"
 path = "src/bin/ground_compose.rs"
 test = false
 
+[[bin]]
+name = "shot_compare"
+path = "src/bin/shot_compare.rs"
+test = false
+
 [dependencies]
 aegis_host = { path = "../aegis_host" }
 aegis_core = { path = "../aegis_core" }

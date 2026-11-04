@@ -189,7 +189,8 @@ Anything done repeatedly, a temp script worth keeping or a trial-and-error loop 
 | `.agent/pgate.txt` left stale, gate output under other names, so reviewers read the wrong log | E3, E4, DASH1, CIPANES1, HOOKS1-A | The brief names one output; `pgate.sh` should write it itself | SKILLS1 |
 | Content batches discover by check-and-fix loops that rows name things coming later, then hold them | CAST1-A2, CAST1-A4, CAMPAIGN1-D | Asset checklist: list what each row waits on before applying; hold those rows from the start | Done |
 | Planner docs commits failed silently: chained commands went on after a script error, and two ran at once in `-plan` | 2026-11-04, twice | One docs commit at a time; stop on error; check the result. In skill `task-landing` under SKILLS1 | Part done |
-| Scenario runs failing with "window minimized" at 1080p, intermittently | VISCLAR1-C | Look in INTEG1; HEADLESS1 removes it | Open |
+| Scenario runs failing with "window minimized" at 1080p, intermittently | VISCLAR1-C | HEADLESS1: a run has no window unless asked; a blank shot is refused. Why a real window can open minimized is still unknown | Done for runs with no window |
+| Hand-written proof shots and blank 73-byte PNGs | VISCLAR1-D, FPSCAP1 (`shots.py`, about 30 window runs) | `tools/fc.sh scenario shots <name> ...`, compare with `shot_compare`; `window=1` only for what needs a window | HEADLESS1 |
 | Mutation scripts rewritten per task | Most logic tasks | Skill `mutation-check` | SKILLS1 |
 | Comparison boards rewritten per task | LOOK1, REGIONGROUND1, SPRITEFIT1, VISCLAR1 | Skill `review-board` | SKILLS1 |
 | The `tools/fc.sh` gate filter hid a failing frame list | CI on the 2026-11-03 release | Filter widened; skill `ci-read` | Part done, SKILLS1 |

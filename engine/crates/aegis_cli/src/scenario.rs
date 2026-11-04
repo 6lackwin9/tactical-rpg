@@ -1,11 +1,13 @@
 //! `aegis scenario` (INTEG1-E1, docs/specs/AGENTROLES1.md 4; authoring: engine/docs/authoring/scenarios.md): JSON files walk a
-//! game's real screens over the agent link and assert state, in a real muted window that does not take the focus.
-//!   aegis scenario check [<file> | all]                                       parse the files; no window opens
-//!   aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>]
+//! game's real screens over the agent link and assert state, with no window by default (HEADLESS1), or in a real muted
+//! window that does not take the focus when the file or `window=1` asks.
+//!   aegis scenario check [<file> | all]                                       parse the files; no game starts
+//!   aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]
+//!   aegis scenario shots <name> [screen=] [encounter=] [ruleset=] [seed=] [do=<a>,<b>,...] [the same keys as run]
 //! A scenario is named by where it lies: `<game folder>/scenarios/<id>.json`. The game folder is the one holding the game
-//! manifest the registered game names, and the window's program is the file named as the manifest's id beside this one
+//! manifest the registered game names, and the game's program is the file named as the manifest's id beside this one
 //! (`exe=` says otherwise). Exit codes: 0 pass, 1 a step or a file failed, 2 could not start. Nothing here runs in the gate
-//! but `check` and the tests on a fake link (`tests/scenario.rs`): a real window never does.
+//! but `check` and the tests on a fake link (`tests/scenario.rs`).
 
 use crate::Args;
 use anyhow::{Context, Result};
@@ -37,6 +39,14 @@ pub const PORT_TRIES: u32 = 3;
 /// The shell's smallest window: less than this is a minimized one, which draws on a canvas of nothing.
 const WINDOW_MIN: (i64, i64) = (640, 360);
 const POLL: Duration = Duration::from_millis(5);
+/// Between two looks at a game with no window: a look costs it a reply, and frames come at its low rate anyway.
+const POLL_HEADLESS: Duration = Duration::from_millis(30);
+/// A clip's bounds, as the game takes them (`aegis_ui::shell::headless`): a file that passes the check also runs.
+const CLIP_FRAMES_MAX: u64 = 120;
+const CLIP_EVERY_MS: (u64, u64) = (10, 2000);
+const CLIP_MS_MAX: u64 = 15_000;
+/// A long `pause` still asks the game now and then: with no window a game leaves when nothing has asked for a while.
+pub const PAUSE_LOOK: Duration = Duration::from_secs(1);
 /// How long one link reply may take (times `slow`), and on the way out after a failure.
 const REPLY: Duration = Duration::from_secs(30);
 const REPLY_LEAVING: Duration = Duration::from_secs(5);
@@ -65,6 +75,7 @@ pub struct Launch {
     pub screen: String,
     pub encounter: Option<String>,
     pub seed: Option<u64>,
+    pub ruleset: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -102,6 +113,8 @@ pub enum Step {
     Wait { until: Cond, timeout_ms: u64 },
     Assert { until: Cond },
     Shot { name: String, max_w: u64 },
+    Clip { name: String, frames: u64, every_ms: u64, max_w: u64 },
+    Pause { ms: u64 },
     Audit { scales: Vec<f64>, fail: Vec<String> },
     Repeat { times: u64, steps: Vec<Step>, until: Option<Cond> },
 }
@@ -115,6 +128,8 @@ pub struct Scenario {
     pub sizes: Vec<(u32, u32)>,
     pub settings: Map<String, Value>,
     pub timeout: Duration,
+    /// It needs a real window (window behaviour, real input, final performance numbers); else it runs with none.
+    pub window: bool,
     pub steps: Vec<Step>,
 }
 
@@ -320,6 +335,23 @@ fn parse_step(v: &Value, place: &str, depth: usize, problems: &mut Vec<String>) 
             }
             Step::Shot { name, max_w: int_of(o, "max_w", Some(1920), (1, u64::from(SIZE_MAX.0)), place, problems) }
         }
+        "clip" => {
+            keys(&["name", "frames", "every_ms", "max_w"], problems);
+            let name = text_of(o, "name", place, problems);
+            if !name.is_empty() && !plain_name(&name) {
+                problems.push(format!("{place}: 'name' becomes a folder: letters, digits, _ and - only, at most 80"));
+            }
+            let frames = int_of(o, "frames", Some(30), (1, CLIP_FRAMES_MAX), place, problems);
+            let every_ms = int_of(o, "every_ms", Some(66), CLIP_EVERY_MS, place, problems);
+            if frames.saturating_mul(every_ms) > CLIP_MS_MAX {
+                problems.push(format!("{place}: {frames} frames every {every_ms} ms is over {CLIP_MS_MAX} ms"));
+            }
+            Step::Clip { name, frames, every_ms, max_w: int_of(o, "max_w", Some(1280), (1, u64::from(SIZE_MAX.0)), place, problems) }
+        }
+        "pause" => {
+            keys(&["ms"], problems);
+            Step::Pause { ms: int_of(o, "ms", None, (1, WAIT_MS_MAX), place, problems) }
+        }
         "audit" => {
             keys(&["scales", "fail"], problems);
             let scales: Vec<f64> = o.get("scales").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_f64).collect()).unwrap_or_default();
@@ -378,12 +410,20 @@ pub fn steps_counted(steps: &[Step]) -> u64 {
     })
 }
 
+fn has_clip(steps: &[Step]) -> bool {
+    steps.iter().any(|s| match s {
+        Step::Clip { .. } => true,
+        Step::Repeat { steps, .. } => has_clip(steps),
+        _ => false,
+    })
+}
+
 /// A scenario from its JSON; `stem` is its file's name without the extension. Every problem, each with where it is.
 pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>> {
     let mut problems = Vec::new();
     let p = &mut problems;
     let Some(o) = v.as_object() else { return Err(vec!["a scenario is an object".to_string()]) };
-    unknown_keys(o, &["id", "title", "status", "why", "launch", "sizes", "settings", "timeout_s", "steps"], "scenario", p);
+    unknown_keys(o, &["id", "title", "status", "why", "launch", "sizes", "settings", "timeout_s", "window", "steps"], "scenario", p);
     let id = text_of(o, "id", "scenario", p);
     if !id.is_empty() && id != stem {
         p.push(format!("scenario: id '{id}' is not the file's name '{stem}'"));
@@ -415,12 +455,12 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
             Status::Active
         }
     };
-    let mut launch = Launch { screen: "menu".into(), encounter: None, seed: None };
+    let mut launch = Launch { screen: "menu".into(), encounter: None, seed: None, ruleset: None };
     if let Some(l) = o.get("launch") {
         match l.as_object() {
             None => p.push("launch: an object".into()),
             Some(l) => {
-                unknown_keys(l, &["screen", "encounter", "seed"], "launch", p);
+                unknown_keys(l, &["screen", "encounter", "seed", "ruleset"], "launch", p);
                 match l.get("screen").map(|s| s.as_str()) {
                     None => {}
                     Some(Some(s @ ("menu" | "arena" | "runner"))) => launch.screen = s.to_string(),
@@ -431,6 +471,9 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
                 }
                 if l.contains_key("seed") {
                     launch.seed = Some(int_of(l, "seed", None, (0, u64::MAX), "launch", p));
+                }
+                if l.contains_key("ruleset") {
+                    launch.ruleset = Some(text_of(l, "ruleset", "launch", p));
                 }
             }
         }
@@ -468,6 +511,13 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
         p.push(format!("settings: '{k}' belongs to the driver (a run stays windowed, at `sizes`, without the focus)"));
     }
     let timeout_s = int_of(o, "timeout_s", Some(300), (1, TIMEOUT_S_MAX), "scenario", p);
+    let window = match o.get("window") {
+        None => false,
+        Some(w) => w.as_bool().unwrap_or_else(|| {
+            p.push("scenario: 'window' is true or false".into());
+            false
+        }),
+    };
     let steps: Vec<Step> = match o.get("steps").and_then(Value::as_array).filter(|a| !a.is_empty()) {
         Some(list) => list.iter().enumerate().map(|(i, s)| parse_step(s, &format!("step {}", i + 1), 0, p)).collect(),
         None => {
@@ -475,12 +525,18 @@ pub fn parse(stem: &str, v: &Value) -> std::result::Result<Scenario, Vec<String>
             Vec::new()
         }
     };
+    if window && has_clip(&steps) {
+        p.push("scenario: a 'clip' is taken in a run with no window, and this one has 'window' true".into());
+    }
+    if launch.ruleset.is_some() && launch.screen != "arena" {
+        p.push("launch: 'ruleset' comes with 'screen' arena".into());
+    }
     let counted = steps_counted(&steps);
     if counted > STEPS_MAX {
         p.push(format!("scenario: {counted} steps after repeat, at most {STEPS_MAX}"));
     }
     if problems.is_empty() {
-        Ok(Scenario { id, title, status, launch, sizes, settings, timeout: Duration::from_secs(timeout_s), steps })
+        Ok(Scenario { id, title, status, launch, sizes, settings, timeout: Duration::from_secs(timeout_s), window, steps })
     } else {
         Err(problems)
     }
@@ -501,10 +557,7 @@ pub fn load(path: &Path) -> std::result::Result<Scenario, Vec<String>> {
 
 /// The `*.json` files of a scenarios folder by name (none when it does not exist).
 pub fn files_in(dir: &Path) -> Vec<PathBuf> {
-    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
-    let mut files: Vec<PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.is_file() && p.extension().is_some_and(|x| x == "json")).collect();
-    files.sort();
-    files
+    files_with(dir, "json")
 }
 
 /// Every problem of the files, each naming its file; empty when all parse. What `check` and a game's parse test call.
@@ -631,7 +684,7 @@ pub trait Launcher {
     fn start(&mut self, plan: &Plan) -> std::result::Result<(Box<dyn Link>, Box<dyn Process>), StartFailure>;
 }
 
-/// One window to open: what the program is given, all of it under the scratch folder.
+/// One start of the game: what the program is given, all of it under the scratch folder.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Plan {
     pub exe: PathBuf,
@@ -673,6 +726,9 @@ pub fn plan(s: &Scenario, size: (u32, u32), game_id: &str, exe: &Path, data: Opt
     if let Some(n) = s.launch.seed {
         args.push(format!("seed={n}"));
     }
+    if let Some(r) = &s.launch.ruleset {
+        args.push(format!("ruleset={r}"));
+    }
     if let Some(d) = data {
         args.push(format!("data={}", d.display()));
     }
@@ -688,6 +744,14 @@ pub fn write_scratch(p: &Plan) -> std::io::Result<()> {
     std::fs::write(&p.settings_path, serde_json::to_string_pretty(&p.settings).unwrap_or_default())
 }
 
+/// What a game with no window is told: the size, and the rate and device scale when asked.
+pub fn headless_args(size: (u32, u32), o: &Options) -> Vec<String> {
+    let mut args = vec![format!("headless={}x{}", size.0, size.1)];
+    args.extend(o.fps.map(|n| format!("fps={n}")));
+    args.extend(o.dpr.as_ref().map(|d| format!("dpr={d}")));
+    args
+}
+
 /// What a run needs beyond the file.
 #[derive(Debug, Clone)]
 pub struct Options {
@@ -700,6 +764,11 @@ pub struct Options {
     pub size: Option<(u32, u32)>,
     /// How long a window may take to reach the asked size before the run goes on at the size it has (`SIZED_MS`).
     pub sized_ms: u64,
+    /// `window=1`: every scenario in a real window, as if its file asked.
+    pub window: bool,
+    /// `fps=` and `dpr=`: for a game with no window (its own bounds refuse a bad one).
+    pub fps: Option<u32>,
+    pub dpr: Option<String>,
 }
 
 /// One size's result.
@@ -729,6 +798,8 @@ struct Run<'a> {
     deadline: Instant,
     done: Vec<Value>,
     frame: u64,
+    /// No window: frames are asked for, and looks are further apart.
+    headless: bool,
 }
 
 impl Run<'_> {
@@ -770,6 +841,14 @@ impl Run<'_> {
 
     /// Waits for two more frames, never a sleep of a guessed length: what the last action changed is on the canvas after.
     fn settle(&mut self, step: &str) -> std::result::Result<Value, Failure> {
+        if self.headless {
+            // Its frames come at a low rate, and on request at once: drawn before the reply, so nothing to wait for.
+            let reply = self.ask(step, &json!({"cmd": "frames", "frames": SETTLE_FRAMES}))?;
+            if reply["ok"] != json!(true) {
+                return Err(Failure { step: step.to_string(), message: format!("the frames asked for: {}", reply["error"]), gone: false });
+            }
+            return self.tree(step);
+        }
         let mut tree = self.tree(step)?;
         let want = self.frame + SETTLE_FRAMES;
         let until = Instant::now() + Duration::from_millis(SETTLE_MS * self.slow);
@@ -826,8 +905,19 @@ impl Run<'_> {
                     if let Some(fail) = self.over_time(label, by, &why) {
                         return Err(fail);
                     }
-                    std::thread::sleep(POLL);
+                    std::thread::sleep(if self.headless { POLL_HEADLESS } else { POLL });
                 }
+            }
+            Step::Pause { ms } => {
+                let by = Instant::now() + Duration::from_millis(*ms);
+                if by > self.deadline {
+                    return Err(Failure { step: label.to_string(), message: format!("a pause of {ms} ms runs past the run's timeout_s"), gone: false });
+                }
+                while Instant::now() + PAUSE_LOOK < by {
+                    std::thread::sleep(PAUSE_LOOK);
+                    self.tree(label)?;
+                }
+                std::thread::sleep(by.saturating_duration_since(Instant::now()));
             }
             Step::Assert { until } => {
                 if let Err(why) = self.holds(label, until)? {
@@ -840,6 +930,23 @@ impl Run<'_> {
                 let reply = self.ask(label, &json!({"cmd": "screenshot", "path": path.display().to_string(), "max_w": max_w}))?;
                 if reply["ok"] != json!(true) {
                     return Err(Failure { step: label.to_string(), message: format!("the shot {name}: {}", reply["error"]), gone: false });
+                }
+            }
+            Step::Clip { name, frames, every_ms, max_w } => {
+                if !self.headless {
+                    return Err(Failure { step: label.to_string(), message: "a clip is taken in a run with no window".to_string(), gone: false });
+                }
+                if Instant::now() + Duration::from_millis(frames * every_ms) > self.deadline {
+                    return Err(Failure { step: label.to_string(), message: format!("a clip of {} ms runs past the run's timeout_s", frames * every_ms), gone: false });
+                }
+                self.settle(label)?;
+                let dir = self.bundle.join(name);
+                // It replies when the last frame is written, and frames are written on the game's own time.
+                self.link.patience(REPLY * self.slow as u32 + Duration::from_millis(frames * every_ms));
+                let reply = self.ask(label, &json!({"cmd": "clip", "dir": dir.display().to_string(), "frames": frames, "every_ms": every_ms, "max_w": max_w}))?;
+                self.link.patience(REPLY * self.slow as u32);
+                if reply["ok"] != json!(true) {
+                    return Err(Failure { step: label.to_string(), message: format!("the clip {name}: {}", reply["error"]), gone: false });
                 }
             }
             Step::Audit { scales, fail } => {
@@ -892,6 +999,8 @@ fn kind_of(s: &Step) -> &'static str {
         Step::Wait { .. } => "wait",
         Step::Assert { .. } => "assert",
         Step::Shot { .. } => "shot",
+        Step::Clip { .. } => "clip",
+        Step::Pause { .. } => "pause",
         Step::Audit { .. } => "audit",
         Step::Repeat { .. } => "repeat",
     }
@@ -903,7 +1012,7 @@ fn cut(text: &str, max: usize) -> String {
 
 /// Asks until the window is ready: the link names the process that was started, frames come, and it has reached the size
 /// (or will not: a capped size stays smaller). `Err(retry)` says whether another port may help.
-fn ready(link: &mut dyn Link, game: &mut dyn Process, want: (u32, u32), sized_ms: u64, slow: u64) -> std::result::Result<(Value, Value), StartFailure> {
+fn ready(link: &mut dyn Link, game: &mut dyn Process, want: (u32, u32), sized_ms: u64, slow: u64, poll: Duration) -> std::result::Result<(Value, Value), StartFailure> {
     let fail = |reason: String, retry: bool| StartFailure { reason, retry };
     let first = link.ask(&json!({"cmd": "ui_tree"})).map_err(|e| fail(format!("the link: {e}"), false))?;
     if first["pid"] != json!(game.pid()) {
@@ -925,7 +1034,7 @@ fn ready(link: &mut dyn Link, game: &mut dyn Process, want: (u32, u32), sized_ms
         if let Some(how) = game.exited() {
             return Err(fail(format!("the game ended while starting: {how}"), false));
         }
-        std::thread::sleep(POLL);
+        std::thread::sleep(poll);
     }
 }
 
@@ -970,7 +1079,9 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
         return out;
     }
     let started = Instant::now();
-    let mut record = json!({"id": s.id, "title": s.title, "size": format!("{}x{}", size.0, size.1), "slow": slow});
+    let headless = !(s.window || o.window);
+    let poll = if headless { POLL_HEADLESS } else { POLL };
+    let mut record = json!({"id": s.id, "title": s.title, "size": format!("{}x{}", size.0, size.1), "slow": slow, "window": !headless});
     for attempt in 1..=PORT_TRIES {
         let port = match free_port() {
             Ok(p) => p,
@@ -981,7 +1092,10 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
         };
         let scratch = std::env::temp_dir().join("aegis_scenario").join(format!("{}_{port}", std::process::id()));
         let _ = std::fs::remove_dir_all(&scratch);
-        let plan = plan(s, size, &o.game_id, &o.exe, o.data.as_deref(), port, &scratch);
+        let mut plan = plan(s, size, &o.game_id, &o.exe, o.data.as_deref(), port, &scratch);
+        if headless {
+            plan.args.extend(headless_args(size, o));
+        }
         if let Err(e) = write_scratch(&plan) {
             out.message = format!("the scratch folder {}: {e}", scratch.display());
             break;
@@ -998,7 +1112,7 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
             }
         };
         record["port"] = json!(port);
-        let readiness = ready(link.as_mut(), game.as_mut(), size, o.sized_ms, slow);
+        let readiness = ready(link.as_mut(), game.as_mut(), size, o.sized_ms, slow, poll);
         let (px, canvas) = match readiness {
             Ok(both) => both,
             Err(f) => {
@@ -1021,7 +1135,7 @@ pub fn run_size(s: &Scenario, size: (u32, u32), o: &Options, launcher: &mut dyn 
         record["canvas"] = canvas;
         record["capped"] = json!(px != json!([size.0, size.1]));
         let deadline = Instant::now() + s.timeout * slow as u32;
-        let mut run = Run { link: link.as_mut(), game: game.as_mut(), bundle: &bundle, slow, deadline, done: Vec::new(), frame: 0 };
+        let mut run = Run { link: link.as_mut(), game: game.as_mut(), bundle: &bundle, slow, deadline, done: Vec::new(), frame: 0, headless };
         let walked = s.steps.iter().enumerate().try_for_each(|(i, step)| run.step(&(i + 1).to_string(), step));
         let done = std::mem::take(&mut run.done);
         let frames = run.frame;
@@ -1082,7 +1196,7 @@ pub fn run_scenario(s: &Scenario, o: &Options, launcher: &mut dyn Launcher) -> V
     sizes.into_iter().map(|size| run_size(s, size, o, launcher)).collect()
 }
 
-// ---- the real window ----
+// ---- the real program ----
 
 /// The agent link over TCP.
 pub struct TcpLink {
@@ -1177,12 +1291,13 @@ impl Drop for GameProcess {
     }
 }
 
-/// Opens real windows: the plan's program, its APPDATA the scratch folder, its output in a file there.
-pub struct WindowLauncher {
+/// Starts the real program, with or without a window as the plan's arguments say: its APPDATA the scratch folder, its
+/// output in a file there.
+pub struct GameLauncher {
     pub slow: u64,
 }
 
-impl Launcher for WindowLauncher {
+impl Launcher for GameLauncher {
     fn start(&mut self, plan: &Plan) -> std::result::Result<(Box<dyn Link>, Box<dyn Process>), StartFailure> {
         let fail = |reason: String| StartFailure { reason, retry: false };
         if !plan.exe.is_file() {
@@ -1222,12 +1337,15 @@ impl Launcher for WindowLauncher {
 // ---- the command line ----
 
 fn game_folder<G: crate::Game>(game: &G, args: &Args) -> Result<PathBuf> {
-    // `data=` is the window's data folder here, which may be a scratch copy away from the game's folder.
+    // `data=` is the game's data folder here, which may be a scratch copy away from the game's folder.
     let mut keys = args.keys.clone();
     keys.shift_remove("data");
     let manifest = game.manifest_path(&Args { positional: args.positional.clone(), keys })?;
     manifest.parent().map(Path::to_path_buf).with_context(|| format!("{} has no folder", manifest.display()))
 }
+
+const RUN_USAGE: &str = "aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
+const SHOTS_USAGE: &str = "aegis scenario shots <name> [screen=menu|arena|runner] [encounter=<id>] [ruleset=<id>] [seed=N] [do=<a>,<b>,...] [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>] [window=1] [fps=N] [dpr=X]";
 
 /// `aegis scenario ...`; returns the exit code.
 pub fn command<G: crate::Game>(game: &G, args: &Args) -> Result<i32> {
@@ -1237,13 +1355,20 @@ pub fn command<G: crate::Game>(game: &G, args: &Args) -> Result<i32> {
         Some("check") => Ok(check(&scenarios, args.pos(2).unwrap_or("all"))),
         Some("run") => {
             let Some(what) = args.pos(2) else {
-                println!("usage: aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>]");
+                println!("usage: {RUN_USAGE}");
                 return Ok(2);
             };
             run(&folder, &scenarios, what, args)
         }
+        Some("shots") => {
+            let Some(name) = args.pos(2) else {
+                println!("usage: {SHOTS_USAGE}");
+                return Ok(2);
+            };
+            shots(&folder, name, args)
+        }
         _ => {
-            println!("usage: aegis scenario check [<file> | all]\n       aegis scenario run <id | all | file.json> [size=WxH] [out=<dir>] [slow=N] [exe=<game exe>] [data=<data dir>]");
+            println!("usage: aegis scenario check [<file> | all]\n       {RUN_USAGE}\n       {SHOTS_USAGE}");
             Ok(2)
         }
     }
@@ -1259,7 +1384,17 @@ fn check(scenarios: &Path, what: &str) -> i32 {
     i32::from(!problems.is_empty())
 }
 
-fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args) -> Result<i32> {
+/// Whether `window=` asks for a real window in every scenario: by default none is opened.
+pub fn window_asked(args: &Args) -> Result<bool> {
+    match args.key("window", "0").as_str() {
+        "0" => Ok(false),
+        "1" => Ok(true),
+        other => anyhow::bail!("window is 1 or 0, not '{other}'"),
+    }
+}
+
+/// The keys `run` and `shots` share; `out` is the bundle folder's default.
+fn options_of(folder: &Path, args: &Args, out: &str) -> Result<Options> {
     let manifest = aegis_content::manifest::Manifest::read(&folder.join(aegis_content::manifest::FILE)).map_err(anyhow::Error::msg)?;
     let exe = match args.keys.get("exe") {
         Some(path) => PathBuf::from(path),
@@ -1267,8 +1402,108 @@ fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args) -> Result<i32> 
     };
     let slow: u32 = args.key("slow", "1").parse().ok().filter(|n| (1..=SLOW_MAX).contains(n)).with_context(|| format!("slow is a whole number from 1 to {SLOW_MAX}"))?;
     let size = args.keys.get("size").map(|s| parse_size(s)).transpose().map_err(anyhow::Error::msg)?;
-    let out = PathBuf::from(args.key("out", ".agent/scenario"));
-    let options = Options { game_id: manifest.id.clone(), exe, data: args.keys.get("data").map(PathBuf::from), out, slow, size, sized_ms: SIZED_MS };
+    let out = PathBuf::from(args.key("out", out));
+    let window = window_asked(args)?;
+    let fps = args.keys.get("fps").map(|n| n.parse::<u32>().with_context(|| format!("fps '{n}' is not a whole number"))).transpose()?;
+    Ok(Options { game_id: manifest.id.clone(), exe, data: args.keys.get("data").map(PathBuf::from), out, slow, size, sized_ms: SIZED_MS, window, fps, dpr: args.keys.get("dpr").cloned() })
+}
+
+/// The steps of `do=`, comma separated: `key:<k>`, `click:<id>`, `hover:<id>`, `screen:<id>` (wait for it), `widget:<id>`
+/// (wait for it), `pause:<ms>`, `shot:<name>`, `clip:<name>[:<frames>[:<every_ms>]]`. Without a shot or clip anywhere, one
+/// shot named `shot` ends the list.
+pub fn do_steps(list: &str) -> std::result::Result<Vec<Value>, String> {
+    let mut steps = Vec::new();
+    for item in list.split(',').filter(|i| !i.is_empty()) {
+        let (verb, rest) = item.split_once(':').ok_or_else(|| format!("do: '{item}' is not verb:value"))?;
+        let number = |t: &str| t.parse::<u64>().map_err(|_| format!("do: '{item}': '{t}' is not a whole number"));
+        steps.push(match verb {
+            "key" => json!({"step": "key", "key": rest}),
+            "click" | "hover" => json!({"step": verb, "id": rest}),
+            "screen" => json!({"step": "wait", "until": {"path": "screen", "eq": rest}}),
+            "widget" => json!({"step": "wait", "until": {"widget": rest}}),
+            "pause" => json!({"step": "pause", "ms": number(rest)?}),
+            "shot" => json!({"step": "shot", "name": rest}),
+            "clip" => {
+                let mut parts = rest.split(':');
+                let mut clip = json!({"step": "clip", "name": parts.next().unwrap_or("")});
+                if let Some(frames) = parts.next() {
+                    clip["frames"] = json!(number(frames)?);
+                }
+                if let Some(every) = parts.next() {
+                    clip["every_ms"] = json!(number(every)?);
+                }
+                clip
+            }
+            _ => return Err(format!("do: '{verb}' is not key, click, hover, screen, widget, pause, shot or clip")),
+        });
+    }
+    if !steps.iter().any(|s| s["step"] == json!("shot") || s["step"] == json!("clip")) {
+        steps.push(json!({"step": "shot", "name": "shot"}));
+    }
+    Ok(steps)
+}
+
+/// The scenario `shots` runs: named `name`, launched as the keys say.
+pub fn shots_scenario(name: &str, args: &Args) -> std::result::Result<Scenario, Vec<String>> {
+    let steps = do_steps(&args.key("do", "")).map_err(|e| vec![e])?;
+    let mut launch = json!({"screen": args.key("screen", "menu")});
+    for k in ["encounter", "ruleset"] {
+        if let Some(v) = args.keys.get(k) {
+            launch[k] = json!(v);
+        }
+    }
+    if let Some(seed) = args.keys.get("seed") {
+        launch["seed"] = json!(seed.parse::<u64>().map_err(|_| vec![format!("seed '{seed}' is not a whole number")])?);
+    }
+    parse(name, &json!({"id": name, "title": "Proof shots", "launch": launch, "steps": steps}))
+}
+
+/// `aegis scenario shots`: a named fight or screen, driven and photographed with no scenario file. The bundle is a
+/// scenario's; the pictures are listed.
+fn shots(folder: &Path, name: &str, args: &Args) -> Result<i32> {
+    let options = options_of(folder, args, ".agent/shots")?;
+    let s = match shots_scenario(name, args) {
+        Ok(s) => s,
+        Err(problems) => {
+            problems.iter().for_each(|p| println!("§ {p}"));
+            return Ok(2);
+        }
+    };
+    let mut launcher = GameLauncher { slow: u64::from(options.slow) };
+    let mut worst = 0;
+    for r in run_scenario(&s, &options, &mut launcher) {
+        print_outcome(&r);
+        worst = worst.max(r.code);
+        for f in files_with(&r.bundle, "png") {
+            println!("§ shot {}", f.display());
+        }
+        for clip in std::fs::read_dir(&r.bundle).map(|d| d.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect::<Vec<_>>()).unwrap_or_default() {
+            println!("§ clip {}: {} frames", clip.display(), files_with(&clip, "png").len());
+        }
+    }
+    Ok(worst)
+}
+
+/// The files of a folder with an extension, by name.
+fn files_with(dir: &Path, ext: &str) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+    let mut files: Vec<PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.is_file() && p.extension().is_some_and(|x| x == ext)).collect();
+    files.sort();
+    files
+}
+
+fn print_outcome(r: &Outcome) {
+    let size = format!("{}x{}", r.size.0, r.size.1);
+    match r.code {
+        0 => println!("§ {} {size} PASS; bundle {}", r.id, r.bundle.display()),
+        1 => println!("§ {} {size} FAIL at step {}: {}; bundle {}", r.id, r.step.as_deref().unwrap_or("?"), r.message, r.bundle.display()),
+        _ => println!("§ {} {size} COULD NOT START: {}; bundle {}", r.id, r.message, r.bundle.display()),
+    }
+}
+
+fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args) -> Result<i32> {
+    let options = options_of(folder, args, ".agent/scenario")?;
+    let slow = options.slow;
     let files = match what {
         "all" => files_in(scenarios),
         path if path.ends_with(".json") => vec![PathBuf::from(path)],
@@ -1289,7 +1524,7 @@ fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args) -> Result<i32> 
         println!("§ scenario run: nothing ran: {} file(s) have problems", files.len());
         return Ok(worst);
     }
-    let mut launcher = WindowLauncher { slow: u64::from(slow) };
+    let mut launcher = GameLauncher { slow: u64::from(slow) };
     let (mut passed, mut failed) = (0, 0);
     for s in &loaded {
         if let Status::Waiting(why) = &s.status {
@@ -1297,12 +1532,7 @@ fn run(folder: &Path, scenarios: &Path, what: &str, args: &Args) -> Result<i32> 
             continue;
         }
         for r in run_scenario(s, &options, &mut launcher) {
-            let size = format!("{}x{}", r.size.0, r.size.1);
-            match r.code {
-                0 => println!("§ {} {size} PASS; bundle {}", r.id, r.bundle.display()),
-                1 => println!("§ {} {size} FAIL at step {}: {}; bundle {}", r.id, r.step.as_deref().unwrap_or("?"), r.message, r.bundle.display()),
-                _ => println!("§ {} {size} COULD NOT START: {}; bundle {}", r.id, r.message, r.bundle.display()),
-            }
+            print_outcome(&r);
             if r.code == 0 {
                 passed += 1;
             } else {

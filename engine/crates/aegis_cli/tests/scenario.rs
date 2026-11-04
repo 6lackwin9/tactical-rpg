@@ -359,8 +359,13 @@ fn launcher() -> FakeLauncher {
     FakeLauncher { script: Rc::new(RefCell::new(script)), log: Rc::default(), plans: Vec::new(), ended: None, refuse: None, foreign: 0, pid: 0, exit: GameExit { code: Some(0), killed: false } }
 }
 
+/// A real window: the frames are polled for. `no_window` is the run with none.
 fn options(out: &Path) -> Options {
-    Options { game_id: "somegame".into(), exe: PathBuf::from("no_such_exe"), data: None, out: out.to_path_buf(), slow: 1, size: None, sized_ms: 0 }
+    Options { game_id: "somegame".into(), exe: PathBuf::from("no_such_exe"), data: None, out: out.to_path_buf(), slow: 1, size: None, sized_ms: 0, window: true, fps: None, dpr: None }
+}
+
+fn no_window(out: &Path) -> Options {
+    Options { window: false, ..options(out) }
 }
 
 fn scenario_of(steps: Value) -> Scenario {
@@ -827,7 +832,7 @@ fn exit_codes_say_pass_failed_or_could_not_start() {
 #[test]
 fn a_missing_program_could_not_start() {
     let out = temp("noexe");
-    let mut real = scenario::WindowLauncher { slow: 1 };
+    let mut real = scenario::GameLauncher { slow: 1 };
     let o = scenario::run_size(&scenario_of(json!([{"step": "back"}])), (1280, 720), &options(&out), &mut real);
     assert_eq!(o.code, 2);
     assert!(o.message.contains("no game program"), "{}", o.message);
@@ -910,4 +915,231 @@ fn the_tcp_link_answers_and_gives_up_on_silence_and_on_a_close() {
     server.join().unwrap();
     link.patience(Duration::from_secs(2));
     assert!(link.ask(&json!({"cmd": "late"})).is_err(), "a closed link fails rather than hangs");
+}
+
+// ---- HEADLESS1: no window unless asked ----
+
+#[test]
+fn a_run_opens_no_window_unless_the_file_or_the_flag_asks() {
+    let out = temp("modes");
+    let steps = json!([{"step": "back"}]);
+    let mut l = launcher();
+    let o = scenario::run_size(&scenario_of(steps.clone()), (1920, 1080), &no_window(&out), &mut l);
+    assert_eq!(o.code, 0, "{}", o.message);
+    assert!(l.plans[0].args.contains(&"headless=1920x1080".to_string()), "{:?}", l.plans[0].args);
+    assert_eq!(result_of(&o)["window"], json!(false));
+
+    // The file asks.
+    let mut wanted = minimal(steps.clone());
+    wanted["window"] = json!(true);
+    let mut l = launcher();
+    let o = scenario::run_size(&parse("x", &wanted).unwrap(), (1280, 720), &no_window(&out), &mut l);
+    assert_eq!(o.code, 0, "{}", o.message);
+    assert!(!l.plans[0].args.iter().any(|a| a.starts_with("headless=")), "{:?}", l.plans[0].args);
+    assert_eq!(result_of(&o)["window"], json!(true));
+    assert!(!actions(&l).contains(&"frames".to_string()), "a window's frames come by themselves");
+
+    // The flag asks (`options` is what window=1 gives).
+    let mut l = launcher();
+    let o = run(steps.clone(), &mut l, &out);
+    assert_eq!(o.code, 0, "{}", o.message);
+    assert!(!l.plans[0].args.iter().any(|a| a.starts_with("headless=")));
+    assert!(parse("x", &{
+        let mut bad = minimal(steps);
+        bad["window"] = json!("yes");
+        bad
+    })
+    .is_err());
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
+#[test]
+fn the_rate_and_the_device_scale_reach_a_game_with_no_window_alone() {
+    let out = temp("rate");
+    let o = Options { fps: Some(30), dpr: Some("1.5".into()), ..no_window(&out) };
+    assert_eq!(scenario::headless_args((1280, 720), &o), ["headless=1280x720", "fps=30", "dpr=1.5"]);
+    assert_eq!(scenario::headless_args((1280, 720), &no_window(&out)), ["headless=1280x720"]);
+    let mut l = launcher();
+    assert_eq!(scenario::run_size(&scenario_of(json!([{"step": "back"}])), (1280, 720), &o, &mut l).code, 0);
+    assert!(l.plans[0].args.contains(&"fps=30".to_string()));
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
+/// With no window frames are asked for: after each action, and before a shot, so the picture is whole with no waiting.
+#[test]
+fn with_no_window_each_action_and_shot_asks_for_its_frames() {
+    let out = temp("steps");
+    let mut l = launcher();
+    let steps = json!([{"step": "click", "id": "a"}, {"step": "shot", "name": "menu"}]);
+    let o = scenario::run_size(&scenario_of(steps), (1280, 720), &no_window(&out), &mut l);
+    assert_eq!(o.code, 0, "{}", o.message);
+    assert_eq!(actions(&l), ["click", "frames", "frames", "screenshot", "quit"]);
+    let s = l.script.borrow();
+    assert!(!s.asked.iter().any(|a| a["cmd"] == "step"), "a game's battle has its own step, which plays a turn");
+    let asked = s.asked.iter().find(|a| a["cmd"] == "frames").unwrap();
+    assert_eq!(asked["frames"], json!(scenario::SETTLE_FRAMES));
+    drop(s);
+    // A game that refuses them fails the step, rather than a shot of the frame before.
+    let mut l = launcher();
+    l.script.borrow_mut().refuse = Some("frames".into());
+    let o = scenario::run_size(&scenario_of(json!([{"step": "click", "id": "a"}])), (1280, 720), &no_window(&out), &mut l);
+    assert_eq!(o.code, 1);
+    assert_eq!(o.step.as_deref(), Some("1"));
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
+/// The game refuses a blank frame (`aegis_ui::shell::save_png`): the step fails, and the run says so.
+#[test]
+fn a_shot_the_game_refuses_fails_the_step() {
+    let out = temp("blank");
+    let mut l = launcher();
+    l.script.borrow_mut().refuse = Some("screenshot".into());
+    let o = scenario::run_size(&scenario_of(json!([{"step": "shot", "name": "menu"}])), (1280, 720), &no_window(&out), &mut l);
+    assert_eq!(o.code, 1, "{}", o.message);
+    assert!(o.message.contains("the shot menu"), "{}", o.message);
+    assert!(!o.bundle.join("menu.png").exists());
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
+#[test]
+fn a_clip_goes_into_the_bundle_needs_no_window_and_is_bounded() {
+    let out = temp("clip");
+    let mut l = launcher();
+    let steps = json!([{"step": "clip", "name": "fight", "frames": 5, "every_ms": 100, "max_w": 640}]);
+    let o = scenario::run_size(&scenario_of(steps.clone()), (1280, 720), &no_window(&out), &mut l);
+    assert_eq!(o.code, 0, "{}", o.message);
+    let s = l.script.borrow();
+    let asked = s.asked.iter().find(|a| a["cmd"] == "clip").unwrap();
+    assert_eq!((asked["frames"].clone(), asked["every_ms"].clone(), asked["max_w"].clone()), (json!(5), json!(100), json!(640)));
+    assert_eq!(asked["dir"], json!(o.bundle.join("fight").display().to_string()));
+    drop(s);
+    let mut l = launcher();
+    let o = run(steps, &mut l, &out);
+    assert_eq!(o.code, 1, "a window has no clip");
+    assert!(o.message.contains("no window"), "{}", o.message);
+    for bad in [
+        json!({"step": "clip"}),
+        json!({"step": "clip", "name": "a/b"}),
+        json!({"step": "clip", "name": "c", "frames": 121}),
+        json!({"step": "clip", "name": "c", "every_ms": 1}),
+        json!({"step": "clip", "name": "c", "frames": 120, "every_ms": 2000}),
+        json!({"step": "pause"}),
+        json!({"step": "pause", "ms": 0}),
+    ] {
+        assert!(parse("x", &minimal(json!([bad]))).is_err(), "{bad}");
+    }
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
+/// With no window a game leaves when nothing asks for a while, so a pause goes on asking.
+#[test]
+fn a_long_pause_keeps_asking() {
+    let out = temp("pause_asks");
+    let mut l = launcher();
+    let ms = scenario::PAUSE_LOOK.as_millis() as u64 + 200;
+    let o = scenario::run_size(&scenario_of(json!([{"step": "pause", "ms": 60}])), (1280, 720), &no_window(&out), &mut l);
+    assert_eq!(o.code, 0, "{}", o.message);
+    let short = l.script.borrow().trees;
+    let mut l = launcher();
+    let o = scenario::run_size(&scenario_of(json!([{"step": "pause", "ms": ms}])), (1280, 720), &no_window(&out), &mut l);
+    assert_eq!(o.code, 0, "{}", o.message);
+    assert!(l.script.borrow().trees > short, "no look in {ms} ms");
+    // A game that died during it is noticed then, not at the end.
+    let mut l = launcher();
+    l.script.borrow_mut().dies_at = Some(3);
+    l.ended = Some("exit code: 1".into());
+    let o = scenario::run_size(&scenario_of(json!([{"step": "pause", "ms": ms}])), (1280, 720), &no_window(&out), &mut l);
+    assert_ne!(o.code, 0);
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
+#[test]
+fn a_clip_stays_inside_the_runs_timeout() {
+    let out = temp("clip_time");
+    let mut v = minimal(json!([{"step": "clip", "name": "c", "frames": 120, "every_ms": 100}]));
+    v["timeout_s"] = json!(1);
+    let mut l = launcher();
+    let o = scenario::run_size(&parse("x", &v).unwrap(), (1280, 720), &no_window(&out), &mut l);
+    assert_eq!(o.code, 1);
+    assert!(o.message.contains("timeout_s"), "{}", o.message);
+    assert!(!actions(&l).contains(&"clip".to_string()), "never asked");
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
+#[test]
+fn a_file_that_cannot_run_as_written_is_a_problem() {
+    let mut v = minimal(json!([{"step": "repeat", "times": 2, "steps": [{"step": "clip", "name": "c"}]}]));
+    v["window"] = json!(true);
+    assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("clip")), "a clip needs no window, even inside a repeat");
+    let mut v = minimal(json!([{"step": "back"}]));
+    v["launch"] = json!({"screen": "runner", "ruleset": "r1"});
+    assert!(parse("x", &v).unwrap_err().iter().any(|p| p.contains("ruleset")));
+    v["launch"] = json!({"ruleset": "r1"});
+    assert!(parse("x", &v).is_err(), "the default screen is not the arena");
+}
+
+#[test]
+fn a_run_opens_no_window_unless_the_key_says_so() {
+    assert!(!scenario::window_asked(&keys(&[])).unwrap());
+    assert!(!scenario::window_asked(&keys(&["window=0"])).unwrap());
+    assert!(scenario::window_asked(&keys(&["window=1"])).unwrap());
+    assert!(scenario::window_asked(&keys(&["window=2"])).is_err());
+}
+
+#[test]
+fn a_pause_waits_and_never_past_the_runs_timeout() {
+    let out = temp("pause");
+    let mut l = launcher();
+    let t0 = std::time::Instant::now();
+    let o = run(json!([{"step": "pause", "ms": 60}]), &mut l, &out);
+    assert_eq!(o.code, 0, "{}", o.message);
+    assert!(t0.elapsed() >= Duration::from_millis(60));
+    let mut short = minimal(json!([{"step": "pause", "ms": 5000}]));
+    short["timeout_s"] = json!(1);
+    let mut l = launcher();
+    let t0 = std::time::Instant::now();
+    let o = scenario::run_size(&parse("x", &short).unwrap(), (1280, 720), &options(&out), &mut l);
+    assert_eq!(o.code, 1);
+    assert!(o.message.contains("timeout_s"), "{}", o.message);
+    assert!(t0.elapsed() < Duration::from_secs(4), "it did not sleep through");
+    std::fs::remove_dir_all(&out).unwrap();
+}
+
+#[test]
+fn a_launch_names_its_ruleset() {
+    let mut v = minimal(json!([{"step": "back"}]));
+    v["launch"] = json!({"screen": "arena", "encounter": "e1", "ruleset": "r1"});
+    let p = scenario::plan(&parse("x", &v).unwrap(), (1280, 720), "somegame", Path::new("game.exe"), None, 4567, Path::new("scratch_root"));
+    assert!(p.args.contains(&"ruleset=r1".to_string()), "{:?}", p.args);
+    v["launch"]["ruleset"] = json!(3);
+    assert!(parse("x", &v).is_err());
+}
+
+// ---- the proof helper ----
+
+fn keys(raw: &[&str]) -> aegis_cli::Args {
+    aegis_cli::Args::parse(&raw.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+}
+
+#[test]
+fn proof_shots_turn_a_short_list_into_steps() {
+    let s = scenario::shots_scenario("menu", &keys(&[])).unwrap();
+    assert_eq!(s.launch.screen, "menu");
+    assert_eq!(s.steps, parse("menu", &json!({"id": "menu", "steps": [{"step": "shot", "name": "shot"}]})).unwrap().steps, "one shot when none is named");
+    assert!(!s.window);
+
+    let s = scenario::shots_scenario("fight", &keys(&["screen=arena", "encounter=e1", "ruleset=r1", "seed=4", "do=screen:a_b,shot:start,key:a,widget:w,pause:50,click:c,hover:h,clip:play:6:100"])).unwrap();
+    assert_eq!((s.launch.screen.as_str(), s.launch.encounter.as_deref(), s.launch.ruleset.as_deref(), s.launch.seed), ("arena", Some("e1"), Some("r1"), Some(4)));
+    let kinds = json!([
+        {"step": "wait", "until": {"path": "screen", "eq": "a_b"}}, {"step": "shot", "name": "start"}, {"step": "key", "key": "a"}, {"step": "wait", "until": {"widget": "w"}},
+        {"step": "pause", "ms": 50}, {"step": "click", "id": "c"}, {"step": "hover", "id": "h"}, {"step": "clip", "name": "play", "frames": 6, "every_ms": 100}
+    ]);
+    assert_eq!(s.steps, parse("fight", &json!({"id": "fight", "steps": kinds})).unwrap().steps);
+    // A clip stands for a shot too.
+    assert_eq!(scenario::do_steps("clip:c").unwrap().len(), 1);
+
+    for bad in [vec!["do=key"], vec!["do=jump:up"], vec!["do=pause:soon"], vec!["seed=x"], vec!["do=clip:c:many"], vec!["screen=nowhere"], vec!["do=shot:a/b"]] {
+        assert!(scenario::shots_scenario("x", &keys(&bad)).is_err(), "{bad:?}");
+    }
+    assert!(scenario::shots_scenario("a/b", &keys(&[])).is_err(), "the name becomes a folder");
 }

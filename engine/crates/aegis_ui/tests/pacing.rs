@@ -136,3 +136,29 @@ fn the_screens_drawn_together_share_the_most_demanding_need() {
     assert_eq!(FrameNeed::Within(a).and(FrameNeed::Within(b)), FrameNeed::Within(a));
     assert_eq!(FrameNeed::Within(b).and(FrameNeed::Within(a)), FrameNeed::Within(a));
 }
+
+/// A clock taking at most 100 ms a frame, as a battle's does, stays on wall time at the lowest headless rate with
+/// each wake 16 ms late; at 10 fps it loses time, which is why that rate is refused. No real clock is read.
+#[test]
+fn the_lowest_headless_rate_keeps_a_100_ms_clock_on_wall_time() {
+    fn clock_lost(fps: u32) -> Duration {
+        let every = Duration::from_micros(1_000_000 / u64::from(fps));
+        let (t0, mut pacer, mut lost) = (Instant::now(), Pacer::default(), Duration::ZERO);
+        let (mut now, mut last) = (t0, t0);
+        pacer.framed(t0, FrameNeed::Full);
+        for _ in 0..1000 {
+            match pacer.decide(now, Some(every)) {
+                Pace::Redraw => {
+                    let gap = now - last;
+                    lost += gap.saturating_sub(Duration::from_millis(100));
+                    last = now;
+                    pacer.framed(now, FrameNeed::Full);
+                }
+                Pace::WaitUntil(at) => now = at + Duration::from_millis(16),
+            }
+        }
+        lost
+    }
+    assert_eq!(clock_lost(aegis_ui::shell::headless::FPS_MIN), Duration::ZERO);
+    assert!(clock_lost(10) > Duration::ZERO, "the test can see a lost clock");
+}

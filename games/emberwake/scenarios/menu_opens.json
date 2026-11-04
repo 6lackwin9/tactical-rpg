@@ -1,0 +1,13 @@
+{
+  "id": "menu_opens",
+  "title": "The main menu opens the new game screen",
+  "steps": [
+    {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}},
+    {"step": "shot", "name": "menu"},
+    {"step": "click", "id": "menu.new_game"},
+    {"step": "wait", "until": {"widget": "new_game.start"}},
+    {"step": "shot", "name": "new_game"},
+    {"step": "back"},
+    {"step": "wait", "until": {"path": "screen", "eq": "main_menu"}}
+  ]
+}

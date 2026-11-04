@@ -14,9 +14,12 @@
 #   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest (aegis content)
 #   tools/fc.sh sim <args>       balance sim (aegis sim <mode> [level] [seeds] [key=value ...]; sim help: the keys)
 #   tools/fc.sh replay <file> [...] replay a playtest recording (aegis replay: battle=, until=, json, variant=, write=, seeds=, fallback=)
-#   tools/fc.sh scenario check [<file>|all]   parse games/<id>/scenarios/*.json; no window (engine/docs/authoring/scenarios.md)
-#   tools/fc.sh scenario <id|all|file.json> [size=1280x720] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>]   run them in real muted
-#                                windows that do not take the focus (0 pass, 1 a step failed, 2 could not start); never in the gate
+#   tools/fc.sh scenario check [<file>|all]   parse games/<id>/scenarios/*.json; no game starts (engine/docs/authoring/scenarios.md)
+#   tools/fc.sh scenario <id|all|file.json> [size=1280x720] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>]   run
+#                                them with no window, or in real muted windows that do not take the focus where the file or window=1 asks
+#                                (0 pass, 1 a step failed, 2 could not start); never in the gate
+#   tools/fc.sh scenario shots <name> [screen=menu|arena|runner] [encounter=<id>] [ruleset=<id>] [seed=<n>] [do=<a>,<b>,...] [the keys above]
+#                                proof shots of a named fight or screen, into .agent/shots/<name>/<WxH>/, no window, no script to write
 # The Godot-only commands (parse, parse-all, arena, dojo, run, safe_delete, export_placeholder, gen_sfx, systems) live on
 # in legacy/tools/fc.sh for the frozen Godot copy (legacy/LEGACY.md).
 # Build output: .cargo/config.toml (desktop) or $CARGO_TARGET_DIR. Exit code 1 when anything failed.
@@ -215,7 +218,12 @@ aegis() {  # the CLI, built on demand
 scenario() {  # the driver lies beside the game's program, so both are built first, in one profile
   local a rest=() rel=()
   if [ "${1:-}" = "check" ]; then aegis scenario "$@" || status=$?; return; fi
-  [ -n "${1:-}" ] || { echo "usage: tools/fc.sh scenario check [<file>|all] | <id|all|file.json> [size=WxH] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>]"; status=2; return; }
+  [ -n "${1:-}" ] || { echo "usage: tools/fc.sh scenario check [<file>|all] | <id|all|file.json> [size=WxH] [out=<dir>] [profile=dev|release] [slow=<n>] [data=<dir>] [window=1] [fps=<n>] | shots <name> [screen=] [encounter=] [ruleset=] [seed=] [do=<a>,<b>,...]"; status=2; return; }
+  local verb=run
+  if [ "$1" = "shots" ]; then
+    verb=shots; shift
+    case "${1:-}" in ""|*=*) echo "usage: tools/fc.sh scenario shots <name> [screen=] [encounter=] [ruleset=] [seed=] [do=<a>,<b>,...] [size=] [out=] [profile=] [slow=] [data=] [window=1] [fps=]"; status=2; return ;; esac
+  fi
   for a in "$@"; do
     case "$a" in
       profile=release) rel=(--release) ;;
@@ -225,7 +233,7 @@ scenario() {  # the driver lies beside the game's program, so both are built fir
     esac
   done
   cargo build -q -p emberwake_gui -p emberwake_host "${rel[@]}" || { echo "[scenario] FAIL: the build"; status=2; return; }
-  cargo run -q -p emberwake_host "${rel[@]}" -- scenario run "${rest[@]}" || status=$?
+  cargo run -q -p emberwake_host "${rel[@]}" -- scenario "$verb" "${rest[@]}" || status=$?
 }
 
 # Low-power laptop (CPU1): cargo runs below normal priority on the desktop, so the machine stays usable; children inherit it.
