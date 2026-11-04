@@ -2,15 +2,18 @@
 
 Decision "Order of work: engine and kit first" (user 2026-11-05). `docs/TASKS.md` stays the queue: this file says which phase each open row belongs to. The planner sorted the rows; the user moves any that sit wrong. Each system builds its own placeholder widgets and mockups and takes just enough Sunk Ward data to test on.
 
-Every system goes through these stages (decision "System workflow"). A finalized ruleset reopens only as a named change, usually a new option.
+Every system goes through these stages (decisions "System workflow" and "System workflow, refined"). Major logic builds hold until a system's design is done.
 
 | Stage | Done when |
 | --- | --- |
-| 1. Design | A spec with no open question that changes the design; no code yet |
-| 2. Build or reuse | The spec's rules run, tested alone, with placeholder UI where a human must judge it |
-| 3. Iterate on options | The user has tried the options; dropped ones stay in the library when they could serve a game |
-| 4. Finalize the ruleset | The options picked are named as a bundle; `aegis rules` states what is tweakable and locked; goldens recorded |
-| 5. Tune within bounds | A limit test finds what drives outcomes and what breaks; values set within the bounds; the silo closes |
+| 1. Design | Worked out in interactive sessions with the user, no code; the spec says exactly what builders change and which parameters the build exposes; connections go in the master plan |
+| 2. Build or reuse | The designed rules run, tested alone, with those parameters in data, and placeholder UI where a human must judge |
+| 3. Iterate | Mostly a data job over the parameters. A new idea first shows it improves gameplay, by data, sim or a mock, before any build work |
+| 4. Finalize | Parameters decided, which to take and which to drop; dropped ones stay in the library when they could serve a game; the set is named as a bundle |
+| 5. Limit test | The system's bounds found: what drives outcomes, what breaks; `aegis rules` states what is tweakable and locked; goldens recorded |
+| 6. Locked | The silo closes. After this, only data tuning if needed: no code change except on the connecting pipelines |
+
+The master plan (MASTERPLAN1, starting from `docs/specs/SILOS1.md`) holds the connections between systems and guides the integration pipelines to build.
 
 Where each silo stands, 2026-11-05 (planner's reading):
 
@@ -34,4 +37,4 @@ Where each silo stands, 2026-11-05 (planner's reading):
 
 Any time, as they serve every phase: INTEG1-R, INTEG1-S1 and SILOSCN1 (a small set of headless scenarios at each flush); SILOCARD1, SKILLS1, SCOPE1, KITDONE1, LINKGATE1, TOOLTESTS2, WEBPROBE1, ARTTOOL1, CLN-23, CLN-27, CLN-30, CLN-33, CLN-34, CLN-49, CLN-53, CLN-71.
 
-Parts of phase 5 move up when a system needs them to test: a Sunk Ward fight for battle, one Sunk Ward map for exploration. PLAYTEST2 comes after WORLDFIGHT1. The map of systems and their joins: `docs/specs/SILOS1.md`. M1 waits on the user's look at the battle view; M2, the vertical slice, comes after phase 6 by design.
+Parts of phase 5 move up when a system needs them to test: a Sunk Ward fight for battle, one Sunk Ward map for exploration. PLAYTEST2 comes after WORLDFIGHT1. The map of systems and their joins: `docs/specs/SILOS1.md`. Row order inside a phase follows design: rows stay proposed or held until their system's design is done. M1 waits on the user's look at the battle view; M2, the vertical slice, comes after phase 6 by design.
