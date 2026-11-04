@@ -172,6 +172,8 @@ The main session tracks each agent run's cost from its completion notice (tokens
 | HEADLESS1 | logic | 252k, plus 54k on fixes | 51, plus 17 | 30, plus 14 | New launch mode with proof comparisons |
 | INTENT2 spec | design | 361k, plus 91k on the revision | 61, plus 16 | 31, plus 10 | Every skill classified; seven additions from the user during the run |
 | VISCLAR1-D slice 2 | logic | 371k, plus 142k on fixes | 107, plus 40 | 54, plus 29 | A kit rule and a new menu in one slice; two user answers added mid-run. Second visual slice over 500k with fixes |
+| ATTACKLOCK1 slice 1 | logic | 234k | 69 | 25 | A rule with on and off sim runs, golden checks |
+| BASERULES1 spec | design | 392k | 67 | 29 | Audit of the whole base rules and every option; five additions from the user during the run |
 | VISCLAR1-D slice 1 | logic | 381k, plus 76k on fixes | 156, plus 34 | 54, plus 20 | Six features in one slice; a hand-written proof driver run 5 times, one batch blank |
 | TURNFEEL1 | logic | 226k | 62 | 87 | Measured real windows by hand; scope grew mid-run |
 | LAYOUTDATA1 spec | design | 224k | 44 | 19 | Long spec |
