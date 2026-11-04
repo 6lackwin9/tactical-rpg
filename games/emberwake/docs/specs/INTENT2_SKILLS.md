@@ -1,6 +1,6 @@
 # INTENT2 skills: every skill and consumable under the proposed framework
 
-Status: proposed, nothing decided. Generated 2026-11-05 by a read-only script from the `skills.json` and `items.json`
+Status: revised to the answers of 2026-11-05. The id `guard` is the intent shown as Stand. Field bonuses: 9 `reach`, 5 `lingering`, 6 `area`, 3 `power` (IR20). Generated 2026-11-05 by a read-only script from the `skills.json` and `items.json`
 catalogs. The framework and the rules named in flags are in [INTENT2.md](../../../../docs/specs/INTENT2.md). Input to
 SKILLPASS1, not a replacement for it. The proposed intent is the test applied to today's fields.
 
@@ -23,7 +23,7 @@ Allowed intents (IR14-IR16): 12 skills list two: 8 SUPPORT with `target_mode` AL
 
 Flags: 31 `rule` (fits with a named rule), 9 `feel` (fits, but would feel wrong or needs tuning), 10 `unclear` (the test gives no one clear answer). A row with no flag fits cleanly.
 
-Why words: `foe` aimed at an enemy unit; `tile` at the ground (Field); `self` lands only on you; `ring` around you, no direction; `arc` one side of you, with a direction; `friend` a chosen friend; `place` the point is where you end up; `none` a system command.
+Why words: `foe` aimed at an enemy unit; `tile` at the ground (Field); `self` lands only on you; `ring` around you, no direction; `arc` away from you, across the source; `friend` a chosen friend; `place` the point is where you end up; `none` a system command.
 
 ## Proposed assault (62)
 
@@ -94,69 +94,69 @@ Why words: `foe` aimed at an enemy unit; `tile` at the ground (Field); `self` la
 
 ## Proposed field (23)
 
-| Id | Kind | Now | Shape | Primary | Allowed | Why | Flag |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `shockwave` | ATTACK | assault | LINE | field | field | tile | rule: drawn from you, thrown off = miss |
-| `volley` | ATTACK | assault | PLUS | field | field | tile | feel: ranger loses its Volley-then-shots mix |
-| `firebomb` | ATTACK | assault | BURST | field | field, assault | tile | rule: both rows, Assault row smaller (IR17) |
-| `arc_lance` | ATTACK | assault | LINE | field | field | tile | rule: drawn from you, thrown off = miss |
-| `inferno` | ATTACK | assault | BURST | field | field, assault | tile | rule: both rows, Assault row smaller (IR17) |
-| `glacial_burst` | ATTACK | assault | BURST | field | field, assault | tile | rule: both rows, Assault row smaller (IR17) |
-| `tripwire_snare` | ATTACK | assault | one tile | field | field | tile | feel: then Rest unless the pouch fills; wasted on a unit target today |
-| `foundry_shatter` | ATTACK | assault | SWEEP to ARC | field | field | arc | rule: arc; never fires today |
-| `phosphorus_pot` | ATTACK | assault | BURST | field | field | tile |  |
-| `magnesium_flash_bomb` | ATTACK | assault | BURST | field | field, assault | tile | rule: both rows, Assault row smaller (IR17) |
-| `choke_gas` | ATTACK | assault | BURST | field | field | tile |  |
-| `crushing_judgment` | ATTACK | assault | SWEEP to ARC | field | field | arc | rule: arc; never fires today |
-| `pyre_nozzle_sweep` | ATTACK | assault | BURST | field | field | tile | feel: Purifier loses its Nozzle-then-Brand mix |
-| `scalding_grease_pot` | ATTACK | assault | PLUS | field | field | tile | feel: Dredger has no Assault skill left |
-| `gilded_billhook_sunder` | ATTACK | assault | SWEEP to ARC | field | field | arc | rule: arc; never fires today; Assault list left empty |
-| `execution_wall` | ATTACK | assault | LINE | field | field | tile | rule: drawn from you, thrown off = miss |
-| `transfusion_pulse` | ATTACK | assault | BURST | field | field | tile | unclear: reach 1, reads as around you |
-| `pneumatic_hammer_strike` | ATTACK | assault | SWEEP to ARC | field | field | arc | rule: arc; never fires today |
-| `bone_mill_pulverizer` | ATTACK | assault | BURST | field | field | tile | unclear: reach 1, reads as around you |
-| `pressurized_lard_spray` | ATTACK | assault | BURST | field | field | tile | feel: Orlov alternates with Hook Drag; Field only, a boss telegraphs |
-| `scalding_cataclysm` | ATTACK | assault | BURST | field | field | tile | unclear: reach 1, reads as around you |
-| `ossified_spine_volley` | ATTACK | assault | BURST | field | field | tile | unclear: reach 1, reads as around you |
-| `ossification_bloom` | ATTACK | assault | BURST | field | field | tile | unclear: reach 0, may centre on itself |
+| Id | Kind | Now | Shape | Primary | Allowed | Bonus | Why | Flag |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `shockwave` | ATTACK | assault | LINE | field | field | area | tile | rule: drawn; off the planned tile = miss |
+| `volley` | ATTACK | assault | PLUS | field | field | reach | tile | feel: ranger loses its Volley-then-shots mix |
+| `firebomb` | ATTACK | assault | BURST | field | field, assault | reach | tile | rule: both rows: Assault half splash, Field its bonus (IR17) |
+| `arc_lance` | ATTACK | assault | LINE | field | field | area | tile | rule: drawn; off the planned tile = miss |
+| `inferno` | ATTACK | assault | BURST | field | field, assault | reach | tile | rule: both rows: Assault half splash, Field its bonus (IR17) |
+| `glacial_burst` | ATTACK | assault | BURST | field | field, assault | reach | tile | rule: both rows: Assault half splash, Field its bonus (IR17) |
+| `tripwire_snare` | ATTACK | assault | one tile | field | field | lingering | tile | feel: then Rest unless the pouch fills; wasted on a unit target today |
+| `foundry_shatter` | ATTACK | assault | SWEEP to ARC | field | field | power | arc | rule: ARC; never fires today |
+| `phosphorus_pot` | ATTACK | assault | BURST | field | field | lingering | tile |  |
+| `magnesium_flash_bomb` | ATTACK | assault | BURST | field | field, assault | reach | tile | rule: both rows: Assault half splash, Field its bonus (IR17) |
+| `choke_gas` | ATTACK | assault | BURST | field | field | lingering | tile |  |
+| `crushing_judgment` | ATTACK | assault | SWEEP to ARC | field | field | area | arc | rule: ARC; never fires today |
+| `pyre_nozzle_sweep` | ATTACK | assault | BURST | field | field | lingering | tile | feel: Purifier loses its Nozzle-then-Brand mix |
+| `scalding_grease_pot` | ATTACK | assault | PLUS | field | field | lingering | tile | feel: Dredger has no Assault skill left |
+| `gilded_billhook_sunder` | ATTACK | assault | SWEEP to ARC | field | field | area | arc | rule: ARC; never fires today; Assault list left empty |
+| `execution_wall` | ATTACK | assault | LINE | field | field | area | tile | rule: drawn; off the planned tile = miss |
+| `transfusion_pulse` | ATTACK | assault | BURST | field | field | power | tile | unclear: reach 1, reads as around you |
+| `pneumatic_hammer_strike` | ATTACK | assault | SWEEP to ARC | field | field | area | arc | rule: ARC; never fires today |
+| `bone_mill_pulverizer` | ATTACK | assault | BURST | field | field | power | tile | unclear: reach 1, reads as around you |
+| `pressurized_lard_spray` | ATTACK | assault | BURST | field | field | reach | tile | feel: Field only, a boss telegraphs; alternates with Hook Drag |
+| `scalding_cataclysm` | ATTACK | assault | BURST | field | field | reach | tile | unclear: reach 1, reads as around you |
+| `ossified_spine_volley` | ATTACK | assault | BURST | field | field | reach | tile | unclear: reach 1, reads as around you |
+| `ossification_bloom` | ATTACK | assault | BURST | field | field | reach | tile | unclear: reach 0, may centre on itself |
 
-## Proposed guard (16)
+## Proposed stand (id guard) (16)
 
 | Id | Kind | Now | Shape | Primary | Allowed | Why | Flag |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `guard` | DEFEND | guard | - | guard | guard | self |  |
-| `focus` | FOCUS | support | - | guard | guard | self | feel: offence buff under Guard; must outlast its round |
-| `taunt_shout` | SUPPORT | support | - | guard | guard | self | feel: was Support; fits Guard |
+| `focus` | FOCUS | support | - | guard | guard | self | feel: offence buff under Stand; must outlast its round |
+| `taunt_shout` | SUPPORT | support | - | guard | guard | self | feel: was Support; fits Stand |
 | `riposte` | DEFEND | guard | - | guard | guard | self |  |
-| `sweep_kick` | ATTACK | assault | SWEEP to RING | guard | guard | ring | rule: ring, foes only; never fires today |
-| `cyclone_kick` | ATTACK | assault | SWEEP to RING | guard | guard | ring | rule: ring, foes only; never fires today |
+| `sweep_kick` | ATTACK | assault | SWEEP to RING | guard | guard | ring | rule: RING, foes only; never fires today |
+| `cyclone_kick` | ATTACK | assault | SWEEP to RING | guard | guard | ring | rule: RING, foes only; never fires today |
 | `shield_wall` | DEFEND | guard | - | guard | guard | self |  |
 | `active_guard` | DEFEND | guard | - | guard | guard | self |  |
 | `tl_brace_counter` | DEFEND | guard | - | guard | guard | self |  |
-| `tl_fade` | DEFEND | guard | - | guard | guard | self | rule: bound buff ends on leaving Guard |
+| `tl_fade` | DEFEND | guard | - | guard | guard | self | rule: bound buff ends on leaving Stand |
 | `intercepting_hook` | DEFEND | guard | - | guard | guard | self | unclear: guards any friend within 1, aimed at none |
 | `seventh_ward_bulwark` | DEFEND | guard | - | guard | guard | self |  |
 | `ash_cloud_fade` | DEFEND | guard | - | guard | guard | self | rule: hazard stays when you walk |
 | `traitors_parry` | DEFEND | guard | - | guard | guard | self |  |
 | `inquisitorial_parry` | DEFEND | guard | - | guard | guard | self |  |
-| `tendril_flail` | ATTACK | assault | SWEEP to RING | guard | guard | ring | feel: reckless unit needs the Guard exemption; never fires today |
+| `tendril_flail` | ATTACK | assault | SWEEP to RING | guard | guard | ring | feel: reckless unit needs the Stand exemption; never fires today |
 
 ## Proposed support (12)
 
 | Id | Kind | Now | Shape | Primary | Allowed | Why | Flag |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `mend` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Guard round, on an ally Support |
+| `mend` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Stand round, on an ally Support |
 | `rally` | SUPPORT | support | - | support | support | friend |  |
-| `purify` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Guard round, on an ally Support |
-| `greater_mend` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Guard round, on an ally Support |
+| `purify` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Stand round, on an ally Support |
+| `greater_mend` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Stand round, on an ally Support |
 | `renewal` | SUPPORT | support | - | support | support | friend |  |
-| `aegis` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Guard round, on an ally Support |
+| `aegis` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Stand round, on an ally Support |
 | `rejuvenate` | SUPPORT | support | - | support | support | friend |  |
-| `tl_field_dressing` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Guard round, on an ally Support |
-| `brimstone_cauterize` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Guard round, on an ally Support |
-| `tourniquet_tonic` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Guard round, on an ally Support |
+| `tl_field_dressing` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Stand round, on an ally Support |
+| `brimstone_cauterize` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Stand round, on an ally Support |
+| `tourniquet_tonic` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Stand round, on an ally Support |
 | `bile_coat` | SUPPORT | support | - | support | support | friend |  |
-| `resilience_ward` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Guard round, on an ally Support |
+| `resilience_ward` | SUPPORT | support | - | support | support, guard | friend | rule: on yourself a Stand round, on an ally Support |
 
 ## Proposed maneuver (11)
 
@@ -186,13 +186,13 @@ Why words: `foe` aimed at an enemy unit; `tile` at the ground (Field); `self` la
 
 ## Consumables (6)
 
-Blocks, AP and stack are today's; the proposed values are in INTENT2 section 6.
+Blocks, AP and stack are today's; the proposed values, shape and bonus are in INTENT2_CASES section 6. No consumable lists Maneuver: none is about mobility.
 
 | Id | Type | Effect | Reach | Blocks | AP | `max_stack` | Now | Allowed | Why | Flag |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `con_heal_potion` | HEALTH_POTION | heal 90 | 1 | 1 | 1 | 5 | support | support, guard | friend | feel: strong, longest block cost |
-| `con_focus_elixir` | FOCUS_INCENSE | STR +50 % for 2 rounds | 0 | 1 | 1 | 5 | support | guard | self | feel: offence buff under Guard, as Focus |
-| `con_fire_bomb` | THROWABLE_BOMB | damage 45 | 3 | 1 | 1 | 5 | maneuver | field, assault | foe or tile | rule: tile row is new; override: one foe in Assault |
+| `con_focus_elixir` | FOCUS_INCENSE | STR +50 % for 2 rounds | 0 | 1 | 1 | 5 | support | guard | self | feel: offence buff under Stand, as Focus |
+| `con_fire_bomb` | THROWABLE_BOMB | damage 45 | 3 | 1 | 1 | 5 | maneuver | field, assault | foe or tile | rule: tile row is new; Assault half splash (IR17) |
 | `sulfur_poultice` | HEALTH_POTION | heal 60 | 1 | 1 | 1 | 5 | support | support, guard | friend |  |
-| `pitch_fire_bomb` | THROWABLE_BOMB | damage 40 | 3 | 1 | 1 | 5 | maneuver | field, assault | foe or tile | rule: tile row is new; override: one foe in Assault |
+| `pitch_fire_bomb` | THROWABLE_BOMB | damage 40 | 3 | 1 | 1 | 5 | maneuver | field, assault | foe or tile | rule: tile row is new; Assault half splash (IR17) |
 | `brimstone_draught` | FOCUS_INCENSE | CONS +30 % for 3 rounds | 0 | 1 | 1 | 5 | support | guard | self | rule: code gives attack, not CONS |
