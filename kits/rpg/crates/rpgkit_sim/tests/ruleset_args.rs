@@ -90,6 +90,19 @@ fn melee_diagonal_overrides_the_row() {
     assert_eq!(parse(&d, "duel melee_diagonal=sideways").unwrap_err(), "melee_diagonal must be one of [\"none\", \"maneuver\", \"all\"] (got 'sideways')");
 }
 
+/// ATTACKLOCK1: `attack_lock=` overrides the row's value (a catalog fight and a world fight alike), for the feel runs; an
+/// unknown value is an argument error; without it the row's value stands (none).
+#[test]
+fn attack_lock_overrides_the_row() {
+    use rpgkit_rules::ruleset::AttackLock;
+    let d = data(true);
+    assert_eq!(parse(&d, "duel ruleset=timeline").unwrap().ruleset.attack_lock(), AttackLock::None, "the row's default");
+    assert_eq!(parse(&d, "duel ruleset=timeline attack_lock=melee").unwrap().ruleset.attack_lock(), AttackLock::Melee);
+    assert_eq!(parse(&d, "duel attack_lock=all ruleset=timeline").unwrap().ruleset.attack_lock(), AttackLock::All, "any token order");
+    assert_eq!(fight_ruleset(&d, "party attack_lock=melee", Some("vale")).attack_lock(), AttackLock::Melee, "a world fight");
+    assert_eq!(parse(&d, "duel attack_lock=sideways").unwrap_err(), "attack_lock must be one of [\"none\", \"melee\", \"all\"] (got 'sideways')");
+}
+
 /// CLN-44: classic is a row: the default pick reads the catalog's `classic` row (its numbers), and the built-in classic
 /// values stand in only when the row is missing.
 #[test]

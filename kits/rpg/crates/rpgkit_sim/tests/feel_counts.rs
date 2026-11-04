@@ -149,6 +149,25 @@ fn observed(s: &Session) -> Counts {
     f.counts
 }
 
+/// ATTACKLOCK1: a swing dodged by a Walk in its wind-up counts one dodge, for the side that swung, and not as a lost attack
+/// though it raises `evaded`.
+#[test]
+fn a_dodge_counts_for_the_swinger_and_not_as_lost() {
+    let mut s = session(MeleeDiagonal::Maneuver);
+    s.w.ruleset.numbers.attack_lock = rpgkit_rules::ruleset::AttackLock::Melee;
+    place(&mut s.w, BLADE, V2::new(5, 4));
+    place(&mut s.w, FOE, V2::new(6, 4));
+    assault(&mut s, BLADE, "strike", FOE);
+    confirm(&mut s);
+    s.w.units[FOE].speed = s.w.units[BLADE].speed + 1;
+    let step = rpgkit_battle::command::CmdKind::Walk { path: vec![V2::new(1, 0)], expected_start: rpgkit_battle::grid::NO_CELL, goal: rpgkit_battle::grid::NO_CELL, approach: None, moved_tiles: 0, cut_short: false, blocked_by: String::new() };
+    assert!(s.resolver.schedule(FOE, rpgkit_battle::command::Command::new(FOE, 0, 1, step), 1));
+    play_out(&mut s);
+    let c = observed(&s);
+    assert_eq!(counted(&c.party), [("dodges", 1)], "{:?}", s.resolver.log);
+    assert_eq!(c.lost_attacks, 0);
+}
+
 /// A side's counts as (key, count), only the ones that counted.
 fn counted(side: &Side) -> Vec<(&'static str, i64)> {
     RULE_COUNTERS.iter().map(|(k, _, _)| (*k, side.rule_count(k))).filter(|(_, n)| *n != 0).collect()

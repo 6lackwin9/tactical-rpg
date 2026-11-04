@@ -179,7 +179,7 @@ pub struct Command {
     pub triggers: Vec<rpgkit_data::TriggerRow>,
     /// HOOKS1 8.1: the damaging hits of the last execution, a redirected part included (rule `triggers` reads them).
     pub struck: Vec<crate::trigger::Struck>,
-    /// HOOKS1 8.1 `evaded`: the locked target the last execution did not find (GD5).
+    /// HOOKS1 8.1 `evaded`: the locked target the last execution did not find (GD5) or that dodged it (ATTACKLOCK1).
     pub evaded: Option<UnitId>,
     /// HOOKS1 8.4: the `ally_hit` triggers the hits consult (set by the resolver before the action lands; rule
     /// `triggers` only).
@@ -217,6 +217,11 @@ pub struct Command {
     /// SIMCOUNT1: the hit landed from a tile only the diagonal rule puts in its band (INPUT1 MR10). A record for the feel
     /// sim; no rule reads it.
     pub diagonal_hit: bool,
+    /// ATTACKLOCK1: the target and its tile as the wind-up started, after the chase or dash, a forced move carrying the
+    /// tile along (`attack_lock`; None = no lock, or the target was out of reach).
+    pub locked: Option<(UnitId, V2)>,
+    /// ATTACKLOCK1: the target that had left the locked tile at the last execution's impact (the swing missed it).
+    pub dodged: Option<UnitId>,
 }
 
 impl Command {
@@ -275,6 +280,8 @@ impl Command {
             started: false,
             dashed: false,
             diagonal_hit: false,
+            locked: None,
+            dodged: None,
         }
     }
 
@@ -290,6 +297,26 @@ impl Command {
 
     pub fn is_defend(&self) -> bool {
         matches!(self.kind, CmdKind::Defend { .. })
+    }
+
+    /// ATTACKLOCK1: this command moves its unit by a dash as it starts (a carried Engage or a plain `dash_tiles`).
+    pub(crate) fn dashes_at_start(&self) -> bool {
+        matches!(self.carry, Carry::Engage(_)) || matches!(self.kind, CmdKind::Attack { dash_tiles, .. } if dash_tiles > 0)
+    }
+
+    /// ATTACKLOCK1: under `attack_lock`, an attack on a unit that has it in reach after its own chase or dash stores the
+    /// unit and its tile; out of reach it takes no lock, and the band test decides at impact. `opening`: the tiles the
+    /// block's dashes started from (decision "Attack lock answers": a dash on the same tick leaves the locked tile, for
+    /// both sides), else the tile now. A melee band is `round_intent::melee_band`; an area aims at tiles and never locks.
+    pub(crate) fn lock_tile(&mut self, w: &World, opening: Option<&[Option<V2>]>) {
+        self.locked = None;
+        let CmdKind::Attack { target, min_range, max_range, .. } = &self.kind else { return };
+        let band = reach_band(w, self.source, *min_range, *max_range);
+        if !w.ruleset.attack_lock().locks(round_intent::melee_band(band)) {
+            return;
+        }
+        let Some(t) = effective_target(w, self.source, *target).filter(|t| in_reach(w, self.source, *t, band, self.diagonal)) else { return };
+        self.locked = opening.map_or(w.grid.pos(t), |tiles| tiles[t]).map(|cell| (t, cell));
     }
 
     /// Runs when the command STARTS (after AP and stance): attack dash / chase, defend grants.
@@ -385,6 +412,7 @@ impl Command {
         self.pushes.clear();
         self.struck.clear();
         self.evaded = None;
+        self.dodged = None;
         self.guard_bypassed = false;
         self.failed = false;
         let src = self.source;
@@ -414,6 +442,16 @@ impl Command {
                 if self.missed {
                     self.failed = true;
                     self.log = format!("[Flank Protected] {src_name}'s {} misses {}: its flank is protected", self.name, w.units[t].name);
+                    return;
+                }
+                // ATTACKLOCK1: the target left the tile the attack committed to by a move of its own, wherever it stands
+                // now (no hit, no riposte, AP stays spent; a forced move carries the lock along, `forced::shove_unit`); the
+                // tile is read at impact, so a target back on it is hit. An `evaded` event, as a lost attack is
+                if let Some((_, cell)) = self.locked.filter(|(l, cell)| *l == t && w.grid.pos(t) != Some(*cell)) {
+                    self.failed = true;
+                    self.dodged = Some(t);
+                    self.evaded = Some(t);
+                    self.log = format!("[Dodged] {} left {cell} before {src_name}'s {} landed", w.units[t].name, self.name);
                     return;
                 }
                 let band = reach_band(w, src, min_range, max_range);

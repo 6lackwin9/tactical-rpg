@@ -225,6 +225,49 @@ impl Chase {
     }
 }
 
+/// ATTACKLOCK1 (decision "Attack lock at wind-up"): which attacks on a unit commit to their target's tile when their
+/// wind-up starts, after any chase or dash, and miss if it has left that tile at impact: none (the built-in classic
+/// values and a row that sets nothing), melee bands, or every attack on a unit. Area attacks keep their tiles fixed at
+/// planning under every value. Read as the row sets it, whatever the rules.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AttackLock {
+    #[default]
+    None,
+    Melee,
+    All,
+}
+
+impl AttackLock {
+    /// The `attack_lock` values, in order.
+    pub const IDS: [&'static str; 3] = ["none", "melee", "all"];
+
+    pub fn parse(id: &str) -> Option<Self> {
+        match id {
+            "none" => Some(AttackLock::None),
+            "melee" => Some(AttackLock::Melee),
+            "all" => Some(AttackLock::All),
+            _ => None,
+        }
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            AttackLock::None => "none",
+            AttackLock::Melee => "melee",
+            AttackLock::All => "all",
+        }
+    }
+
+    /// Whether an attack on a unit locks its tile (`melee`: it hits in a melee band).
+    pub fn locks(self, melee: bool) -> bool {
+        match self {
+            AttackLock::None => false,
+            AttackLock::Melee => melee,
+            AttackLock::All => true,
+        }
+    }
+}
+
 /// CLN-45: the values of an on/off ruleset field (`root_stops_chase`, `switch_target_step`, `stances`; beside "" = by
 /// the rules).
 pub const SWITCH_IDS: [&str; 2] = ["on", "off"];
@@ -327,6 +370,8 @@ pub struct Numbers {
     pub switch_target_step: bool,
     /// CLN-45 (RULESET1_INTENT IN3): whether the classic stance machinery runs (`stances`).
     pub stances: bool,
+    /// ATTACKLOCK1: which attacks commit to their target's tile at the wind-up (`attack_lock`; default none).
+    pub attack_lock: AttackLock,
 }
 
 impl Default for Numbers {
@@ -354,6 +399,7 @@ impl Default for Numbers {
             root_stops_chase: false,
             switch_target_step: true,
             stances: true,
+            attack_lock: AttackLock::None,
         }
     }
 }
@@ -406,6 +452,7 @@ impl Numbers {
             root_stops_chase: switch("root_stops_chase", d.root_stops_chase),
             switch_target_step: switch("switch_target_step", d.switch_target_step),
             stances: switch("stances", d.stances),
+            attack_lock: AttackLock::parse(&value::string(o, "attack_lock", "")).unwrap_or(d.attack_lock),
         }
     }
 
@@ -526,6 +573,11 @@ impl Ruleset {
     /// CLN-45 (RULESET1_INTENT TG3): whether an attack on another unit than the locked one inserts Switch Target.
     pub fn switch_target_step(&self) -> bool {
         self.numbers.switch_target_step
+    }
+
+    /// ATTACKLOCK1: which attacks commit to their target's tile at the wind-up.
+    pub fn attack_lock(&self) -> AttackLock {
+        self.numbers.attack_lock
     }
 
     pub fn is_classic(&self) -> bool {

@@ -171,6 +171,14 @@ round_intent_plan, the Dojo); with `rest_ap` round_end and no `round_intent`, `r
 gain too. `melee_diagonal` reads as the row sets it (the coupling to `round_intent` and its warning are gone; the
 classic row sets `none`; a raw row without the key reads `maneuver` with `round_intent`, else `none`). Checks: a switch
 is "" or one of its values; the writer leaves a "" switch out.
+
+ATTACKLOCK1: the row field `attack_lock` (`rpgkit_rules::ruleset::AttackLock`: none, melee, all; default none, read as the
+row sets it; both shipped rows none) beside `melee_diagonal`. An attack in a melee band (`round_intent::melee_band`) with
+its target in reach after its own chase or dash stores the target and its tile (`Command.locked`, `lock_tile`, from
+`Resolver::begin_actions`); at impact, a target on another tile by its own move is `[Dodged]` (`Command.dodged`, log
+outcome `DODGED`, the `evaded` event, AP spent). `forced::shove_unit` carries the lock along. Under the option a block's
+dashes start after its other actions and lock the tiles as they began. The sim (`attack_lock=`) and the host's `new`
+override the row; `sim feel counts=on` has the row `dodges`.
 PORTRAITFX2-M: `portrait_expressions` rows carry the motion fields (`PORTRAIT_MOTION_KEYS`; defaults = the plain breath), checked in `check::expression_fx` (ranges, needs-a-breath, needs-a-tint, a warning when offsets add up past 3 px; a motion-only row draws something).
 
 PORTRAITFX2-F: `DEFAULT_FACES`, `NEUTRAL`, `faces_of`, `Catalog::faces`, `View::faces`; `PORTRAIT_EVENTS` adds battle_start, ambush, round_start, skill (`min_level`), ally_down, victory; trigger `unspent` (`Look.unspent`); `rpgkit_battle::portrait::{start_events, round_events, skill_event, ally_down_events, victory_events, reactions_at}`.

@@ -138,8 +138,16 @@ impl Resolver {
 
     /// Commands starting now pay AP (skill + stance switch; debt allowed; RULESET1 T11: not the units `pays_ap` spares),
     /// enter their stance and run on_start.
+    /// ATTACKLOCK1: under `attack_lock` the block's dashes start after its other actions and read the tiles as they
+    /// began, so a swing and a dash on one tick mostly end alike whichever side was scheduled first (the exceptions: ATTACKLOCK1-O).
     fn begin_actions(&mut self, w: &mut World, block: i32) {
-        for i in 0..self.scheduled.len() {
+        let lock_on = w.ruleset.attack_lock() != rpgkit_rules::ruleset::AttackLock::None;
+        let mut order: Vec<usize> = (0..self.scheduled.len()).collect();
+        if lock_on {
+            order.sort_by_key(|&i| self.scheduled[i].command.dashes_at_start());
+        }
+        let mut opening: Option<Vec<Option<crate::grid::V2>>> = None;
+        for i in order {
             let a = &self.scheduled[i];
             if a.cancelled || a.start != block || !w.units[a.unit].is_active() {
                 continue;
@@ -175,7 +183,13 @@ impl Resolver {
             self.pay_hp_cost(w, i);
             // HOOKS1 UM2: then the meter changes (rule unit_meters; nothing in classic)
             crate::meter::pay(self, w, i);
+            if lock_on && opening.is_none() && self.scheduled[i].command.dashes_at_start() {
+                opening = Some(w.grid.positions.clone());
+            }
             let msg = self.scheduled[i].command.on_start(w, &mut self.rng);
+            if lock_on {
+                self.scheduled[i].command.lock_tile(w, opening.as_deref());
+            }
             if !msg.is_empty() {
                 self.notes.push((i, msg.clone()));
                 self.log.push(msg);

@@ -95,6 +95,33 @@ fn the_schema_lists_what_the_code_owns() {
     assert_eq!(options("content", ruleset::KIND, "intents"), strs(&INTENTS));
 }
 
+/// ATTACKLOCK1: the schema lists the code's `attack_lock` values with `none` as the default; a normalized row reads them
+/// and a row that does not name the field stays at none, as the built-in classic values do. Which attacks each value
+/// locks: `locks` (melee bands under melee, every attack under all, none under none).
+#[test]
+fn the_attack_lock_option_reads_from_the_row() {
+    use rpgkit_rules::ruleset::AttackLock;
+    assert_eq!(options("content", ruleset::KIND, "attack_lock"), strs(&AttackLock::IDS));
+    let row = |extra: Value| {
+        let mut r = dict(good_row());
+        for (k, v) in extra.as_object().unwrap() {
+            r.insert(k.clone(), v.clone());
+        }
+        normalize(fields(source::schema(), "content", ruleset::KIND), &r, false)
+    };
+    assert_eq!(json::s(&row(json!({})), "attack_lock"), "none", "the schema's default");
+    assert_eq!(Ruleset::from_row(&row(json!({}))).attack_lock(), AttackLock::None);
+    assert_eq!(Ruleset::classic().attack_lock(), AttackLock::None);
+    for id in AttackLock::IDS {
+        let lock = AttackLock::parse(id).unwrap();
+        assert_eq!(lock.id(), id);
+        assert_eq!(Ruleset::from_row(&row(json!({"attack_lock": id}))).attack_lock(), lock);
+    }
+    assert_eq!([AttackLock::None.locks(true), AttackLock::None.locks(false)], [false, false]);
+    assert_eq!([AttackLock::Melee.locks(true), AttackLock::Melee.locks(false)], [true, false]);
+    assert_eq!([AttackLock::All.locks(true), AttackLock::All.locks(false)], [true, true]);
+}
+
 /// INPUT1 1.7 (MR9, MR10): the schema lists the code's `melee_diagonal` and `flank_protected_cost` values; a row reads
 /// them (classic: none and full); CLN-45: `maneuver` reads as set without `round_intent` too (no warning); the cost
 /// pays as MR9 says (4 AP: full 4, half 2, fixed 1, none 0); the soft problem is a warning.

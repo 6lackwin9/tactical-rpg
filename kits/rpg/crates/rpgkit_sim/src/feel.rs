@@ -37,8 +37,7 @@ pub const JSON_PREFIX: &str = "FEEL_JSON ";
 pub type RuleCount = fn(&World, &ScheduledAction) -> i64;
 
 /// SIMCOUNT1: the rule counts, by the side of the acting unit: JSON key, human label, how an action counts. ADD A COUNTER
-/// HERE: one row, and the JSON and the human line carry it. Read structured command fields, never log strings. ATTACKLOCK1's
-/// dodge: `("dodges", "dodges", |_, a| a.command.dodged.is_some() as i64),` once the command records it.
+/// HERE: one row, and the JSON and the human line carry it. Read structured command fields, never log strings.
 pub const RULE_COUNTERS: &[(&str, &str, RuleCount)] = &[
     ("protected_flanks", "protected flanks", |_, a| a.command.missed as i64),
     ("maneuver_commands", "Maneuver commands", |_, a| is_maneuver(a) as i64),
@@ -48,6 +47,7 @@ pub const RULE_COUNTERS: &[(&str, &str, RuleCount)] = &[
     ("chases_ranged", "ranged chases", |w, a| (chase_kind(w, a) == Some(ChaseKind::Ranged)) as i64),
     ("chases_support", "Support chases", |w, a| (chase_kind(w, a) == Some(ChaseKind::Support)) as i64),
     ("items_used", "items used", |_, a| matches!(a.command.kind, CmdKind::Item { used: true, .. }) as i64),
+    ("dodges", "dodges", |_, a| a.command.dodged.is_some() as i64),
 ];
 
 /// A command that started as a dash to a position tile (INPUT1 MR1, MR8), whatever came of it: it dashed, stayed on its
@@ -516,7 +516,8 @@ impl Feel {
             side.carried_moves += carried as i64;
             side.guard_blocks += guard;
             let c = &mut self.counts;
-            c.lost_attacks += cmd.evaded.is_some() as i64;
+            // RULESET1_INTENT GD5 only: an ATTACKLOCK1 dodge raises `evaded` too and has its own row
+            c.lost_attacks += (cmd.evaded.is_some() && cmd.dodged.is_none()) as i64;
             c.hits += cmd.hits.len() as i64;
             c.flank_hits += cmd.hits.iter().filter(|h| h.1).count() as i64;
             if pierce_on && cmd.impact.armor_piercing {

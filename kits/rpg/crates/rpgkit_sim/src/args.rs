@@ -118,6 +118,8 @@ pub struct SimArgs {
     rules: String,
     /// INPUT1 MR11: `melee_diagonal=none|maneuver|all` over the ruleset row's value (None = the row's).
     pub melee_diagonal: Option<rpgkit_rules::ruleset::MeleeDiagonal>,
+    /// ATTACKLOCK1: `attack_lock=none|melee|all` over the ruleset row's value (None = the row's).
+    pub attack_lock: Option<rpgkit_rules::ruleset::AttackLock>,
     /// RULESET1-G2 (feel only): the party's AUTO1 tactic (a TACTICS name; `balanced`).
     pub tactic: String,
     /// RULESET1-G2 (feel only): the party drivers, each run as its own block (`party=auto|timed|both`; auto).
@@ -185,6 +187,7 @@ impl Default for SimArgs {
             ruleset_id: String::new(),
             rules: String::new(),
             melee_diagonal: None,
+            attack_lock: None,
             tactic: "balanced".into(),
             drivers: vec![crate::timed::Driver::Auto],
             counts: false,
@@ -264,6 +267,9 @@ impl SimArgs {
                 let _ = r.adjust(&self.rules);
                 if let Some(m) = self.melee_diagonal {
                     r.numbers.melee_diagonal = m;
+                }
+                if let Some(l) = self.attack_lock {
+                    r.numbers.attack_lock = l;
                 }
                 r
             }
@@ -367,6 +373,9 @@ impl SimArgs {
         a.ruleset.adjust(&a.rules)?;
         if let Some(m) = a.melee_diagonal {
             a.ruleset.numbers.melee_diagonal = m;
+        }
+        if let Some(l) = a.attack_lock {
+            a.ruleset.numbers.attack_lock = l;
         }
         if a.mode == "feel" {
             a.feel_checks(d)?;
@@ -534,6 +543,10 @@ impl SimArgs {
             "melee_diagonal" => {
                 let ids = rpgkit_rules::ruleset::MeleeDiagonal::IDS;
                 self.melee_diagonal = Some(rpgkit_rules::ruleset::MeleeDiagonal::parse(value).ok_or_else(|| format!("melee_diagonal must be one of {} (got '{value}')", godot_list(&ids)))?);
+            }
+            "attack_lock" => {
+                let ids = rpgkit_rules::ruleset::AttackLock::IDS;
+                self.attack_lock = Some(rpgkit_rules::ruleset::AttackLock::parse(value).ok_or_else(|| format!("attack_lock must be one of {} (got '{value}')", godot_list(&ids)))?);
             }
             "rewards" => {
                 if value != "on" && value != "off" {

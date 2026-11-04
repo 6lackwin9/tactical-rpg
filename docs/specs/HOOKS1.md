@@ -174,7 +174,7 @@ order, then list order. `limit`: round (default), battle or none.
 | `kill` | its hit took a foe to 0 HP | the downed foe |
 | `ally_downed` | a friend within `range` fell | the friend |
 | `broken`, `break_dealt` | it broke (P7); its hit broke a foe | the breaker; the broken foe |
-| `evaded` | a locked attack on it found nothing (GD5) | the attacker |
+| `evaded` | a locked attack on it found nothing (GD5), or it dodged a swing (ATTACKLOCK1) | the attacker |
 | `heal_given`, `cleanse_given` | its heal landed; its cleanse removed at least one status | the target |
 | `hp_below` | its HP share crosses from above `pct` to at or below (any cause; after each action and the round-end ticks) | - |
 | `guard_start`, `round_start`, `round_end` | a Defend of it starts or a held guard begins; after the poise refill; after the round-end ticks | - |

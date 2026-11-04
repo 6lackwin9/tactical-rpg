@@ -143,6 +143,10 @@ pub fn from_action(w: &World, a: &ScheduledAction, round: i32, block: i32) -> En
             if cmd.missed {
                 e.outcome = "FLANK PROTECTED".into();
             }
+            // ATTACKLOCK1: the target left the locked tile before the hit landed
+            if cmd.dodged.is_some() {
+                e.outcome = "DODGED".into();
+            }
             e.detail = format!("Dealt {} | Skill x{:.2} | Range {}", last_damage, skill_mult, me.attack_range);
             // RULESET1 A2, P6 (timeline only): the armour pierced and the poise the hit took
             if cmd.impact.armor_piercing && w.ruleset.has(rpgkit_rules::ruleset::PIERCE) && *last_damage > 0 {

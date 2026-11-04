@@ -130,6 +130,18 @@ Worked examples (move 2 tiles a block; tasks 4.1 tests them):
   move plus its reach) and a farther tile in band is reachable in one move block, the last block is reserved for a
   step there after the attacks (a standard move, TQ19 a). A target out of band and not in melee: approach as AS1.
 - AS4. Assault never targets self or an ally.
+- As built (ATTACKLOCK1, 2026-11-05; decisions "Attack lock at wind-up", "Attack lock answers"; `command.rs` `lock_tile`,
+  the ruleset field `attack_lock`: none, melee, all; none in both shipped rows until the switch is made): after the chase
+  or dash, an attack in a melee band (`round_intent::melee_band`: starts at 1, ends within 2; a skill with a position has
+  (1, 1)) with its target in reach stores the target and its tile; out of reach it takes no lock and the band test decides
+  at impact. At impact it misses with `[Dodged]` (`Command.dodged`, log outcome `DODGED`, the `evaded` event, AP spent, no
+  hit, no riposte) if the target is on another tile. A forced move (`forced::shove_unit`: a shove, a hook's pull, an arena
+  push) carries the lock along, so only the target's own move dodges. Each swing commits again. Order at impact: attacker
+  gone, target gone, `[Lost]`, `[Flank Protected]`, `[Dodged]`, `[Attack Out of Range]`. Tick order under the option: a
+  block starts its other actions in `scheduled` order (enemy plans first), then its dashes, each dash reading the tiles as
+  the dashes began, then lands its impacts by initiative, equal initiative by sort order. So a Walk landing on the
+  wind-up's first block leaves after the lock, one on the block before is chased, one on a one-block attack's own block
+  goes by initiative, and a dash on the wind-up's first block dodges for both sides, with two known exceptions that hold the switch-on (ATTACKLOCK1-O): a same-block chase still depends on scheduled order, and a second dasher that needs no move can lose the tie.
 
 ### 5.2 Guard
 

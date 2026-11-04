@@ -257,6 +257,13 @@ pub fn shove_unit(res: &mut Resolver, w: &mut World, t: UnitId, by: Option<UnitI
     }
     m.to = w.pos(t);
     m.tiles = entered.len() as i32;
+    // ATTACKLOCK1: a forced move does not dodge: a swing locked on the tile it left follows it (decision "Attack lock
+    // answers"); one its target already walked off stays missed
+    for a in res.scheduled.iter_mut().filter(|a| !a.landed && !a.cancelled) {
+        if a.command.locked == Some((t, from)) {
+            a.command.locked = Some((t, m.to));
+        }
+    }
     let notes = hazard_on_enter(w, &mut res.rng, t, &entered);
     if stop {
         m.stopped = stop_walks(res, t);
