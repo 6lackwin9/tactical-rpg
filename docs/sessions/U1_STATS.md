@@ -23,3 +23,13 @@ MASTERPLAN1 sub-block U1. Interactive design session with the user, 2026-11-06. 
 ## The user's proposal
 
 Treat every derived value as a meter: a value in a range (min, max), with behaviour on a threshold breach, on a change (+delta, -delta), or at a meter level.
+
+## Decided (user 2026-11-06)
+
+- **One derived class, two modes.** A **pool** holds a current value that moves in play, with behaviour on bands and on change (+/- delta): HP (knocked at 0 as a band effect), poise (5 pips as bands), AP. A **rating** is read when needed and changes only with its inputs (gear, buffs, level): initiative, move rate, armour, crit, resist, weapon power. Both: formula, clamp to (min, max), optional bands with effects. Reuses DERIVE1 rows and unit meters.
+- **Speed splits** into move rate and initiative, both from DEX by default; a pack may separate them.
+- **Unarmed folds in**: fists are an implicit weapon item, so no weapon is a weapon.
+- **Moved out of U1**: ranged reach to the skill; heal value to the skill, with heal scaling as a base rule; unlock early to passives (U4); item requirements to gear (U3), proficiency lowering their cost; the dialogue check to story, as a roll plus bonus against a threshold; carry kept as an option, off by default.
+- **Composure** parked as a named pool with no behaviour, a candidate for morale tied to anti-corruption, until its gameplay case.
+- **The mitigation stack** is one rule covering armour, guard, cover and any others, settled in this session.
+- **AP** counts as a U1 pool, the same shape as poise.
