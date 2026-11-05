@@ -1,6 +1,6 @@
 # Session U2: class and loadout
 
-MASTERPLAN1 sub-block U2. Interactive design session with the user, 2026-11-06. Status: in progress.
+MASTERPLAN1 sub-block U2. Interactive design session with the user, 2026-11-06. Status: design closed (user 2026-11-06); build waits for the rest of Unit.
 
 ## The user's purpose for each item (2026-11-06)
 
@@ -39,3 +39,5 @@ MASTERPLAN1 sub-block U2. Interactive design session with the user, 2026-11-06. 
 | Tiers | Tier scales the budget and is an input to derived formulas (the HP base); optional pool modifiers through the damage pipeline | Tier budget factors; tier terms in formulas; tier modifiers |
 
 Moved to other sub-blocks: AI roles as weighted choice with randomness (AI, I1). Build note: tier as a formula input is one added input for the derived formulas, made once in the build.
+
+**Approved (user 2026-11-06).** The core is one consistent unit base for every unit in the game: once a unit is defined, its behaviour follows and nothing is guessed about how it plays. An NPC put in a fight follows its loadout and AI; the weapons and skills it can use and the damage it deals come from the same core. Acceptance test for the build: any static or growth unit, NPC included, enters a fight with no unit-specific code.
