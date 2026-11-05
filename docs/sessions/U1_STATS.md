@@ -1,6 +1,6 @@
 # Session U1: stats and derived values
 
-MASTERPLAN1 sub-block U1. Interactive design session with the user, 2026-11-06. Status: in progress; nothing final until the user closes it.
+MASTERPLAN1 sub-block U1. Interactive design session with the user, 2026-11-06. Status: design closed (user 2026-11-06); build waits for the rest of Unit.
 
 ## The user's purpose for each derived value (2026-11-06)
 
@@ -65,4 +65,4 @@ Moved to other sub-blocks: ranged reach and heal value (skills, A1); item requir
 
 A new derived value is a data row plus picks from existing behaviours: mode, formula in the frozen grammar, min and max, start; what moves it (triggers on existing events with a pool-change effect, pipeline effects aimed at that pool); what it does (bands granting existing statuses, which the AI already reads); modifiers that read it as a value source. The UI shows any pool by name, the trace lists its changes, and the level-3 tests already cover any pool's bands. Code is needed only for a new effect kind or a consumer that is neither a modifier nor a band, each one build task with a gameplay case.
 
-**Composure is the U1 build's acceptance test**, as data only and off in this game: pool, `KNOW x 2 + CONS`, 0 to that, full each fight; -10 when an ally within 2 is knocked, the corruption pool's changes as its effects, +5 on rest; below half grants `weaken`, at 0 a shaken status. The user will revisit its behaviour when evaluating its gameplay, unlike the other values, which have a clear purpose now. The parameter list above still awaits the user's approval to close U1's design stage.
+**Composure is the U1 build's acceptance test**, as data only and off in this game: pool, `KNOW x 2 + CONS`, 0 to that, full each fight; -10 when an ally within 2 is knocked, the corruption pool's changes as its effects, +5 on rest; below half grants `weaken`, at 0 a shaken status. The user will revisit its behaviour when evaluating its gameplay, unlike the other values, which have a clear purpose now. The user approved the framework and the parameter list (2026-11-06): U1's design stage is closed. It is built with the other Unit sub-blocks once their design closes, as major builds hold until then.
