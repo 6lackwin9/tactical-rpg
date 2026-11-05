@@ -38,3 +38,25 @@ Treat every derived value as a meter: a value in a range (min, max), with behavi
 ## Proposed by the user: a modular damage formula
 
 Damage is a second-order effect. Its behaviour is a change to HP (delta HP), scaled by multipliers (mult x delta HP); the actual damage dealt comes from all the behaviours applied. Planner's shape, for the user's answer: fixed stages in the kit (base, amplifiers, mitigation layers, finish: rounding, minimum, clamp to the pool), each modifier a data entry naming its stage, its condition and its value source; the same pipeline for heals and for other pools (poise, AP); a trace of every modifier on every hit for forecasts and tests; the default pipeline reproduces today's formula exactly, rounding points included.
+
+## Decided (user 2026-11-06, all recommendations)
+
+- **Mitigation**: two named layers that multiply, a hit doing at least 1. Rating layer (who you are): gear, stat bonus, rating statuses such as fortify and expose, added into a rating, then the curve. Situational layer (what you are doing): Stand's guard status, cover, later stance-like sources, added, then capped; the cap is a parameter starting near 75 %, set by the limit test. Piercing skips the rating layer, ignore-guard the situational one. Every new mitigation source declares its layer.
+- **Stats to values**: HP from CONS and STR; poise from CONS and gear; AP no stat; initiative and move rate from DEX, each with its own curve and cap; armour from gear and STR; **crit from PERC**; resist from INT; **status potency from KNOW**, against resist; weapon scaling by weapon family (STR, DEX or INT); heal scaling from KNOW as a base rule. All linear, no thresholds. CONS's weight is left to the limit test.
+- **Core, never off**: HP, initiative, move rate, weapon power; poise, AP and heal scaling while those systems exist. Everything else has an off state.
+- **Modular damage**: a pipeline of fixed stages in the kit, base, amplifiers, mitigation, finish (round, minimum 1, clamp to the pool); modifiers are data naming their stage, condition and value source; games cannot reorder stages; flat modifiers only in the base stage; the same pipeline for heals, poise and AP; every hit keeps a trace of its modifiers; the default pipeline reproduces today's formula exactly, both rounding points included.
+
+## Design result, for the user's approval: what is fixed and what is a parameter
+
+| Item | Fixed (kit behaviour) | Parameter (data), with today's value |
+| --- | --- | --- |
+| Derived class | Two modes, pool and rating; formula, clamp, bands, delta effects; the frozen formula grammar | Each value's formula weights, min, max and bands |
+| Pools | HP, poise and AP exist as pools; knocked at HP 0 | Max HP weights (60 + CONS x 8 + STR x 2); poise weights (CONS x 2 + gear); AP pool 12, start 10, regen 4; poise bands (5 pips) |
+| Ratings | Initiative, move rate, armour, crit, resist, potency, weapon power | Initiative weight (DEX); move rate curve and cap (today speed-based, cap 4); armour stat bonus (STR / 4); crit base and weight (5 % + PERC term), crit multiplier (1.5); resist weight (INT x 2.5); potency weight (KNOW); weapon scaling per family |
+| Mitigation | Two layers, their order, minimum 1, skip flags | Armour curve constant (50); situational cap (near 75 %, today 0.9) |
+| Damage pipeline | Four stages and their order; rounding points; flat only in base | Each modifier's value and condition |
+| Stats | Behaviours read roles, never stat names | Stat ids, names and how many (6 today); which stat fills each role |
+
+Off states, defined: crit off = no crits; resist off = statuses land at their potency; potency off = the skill's own potency; armour stat bonus off = gear only. Parked: composure (morale, anti-corruption), carry (an option, off by default).
+
+Moved to other sub-blocks: ranged reach and heal value (skills, A1); item requirements (gear, U3); unlock early (passives, U4); dialogue rolls (story, T1).
