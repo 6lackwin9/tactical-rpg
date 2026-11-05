@@ -17,3 +17,25 @@ MASTERPLAN1 sub-block U2. Interactive design session with the user, 2026-11-06. 
 
 - **Static units**: NPCs and named enemies; a fixed budget, skill set and loadout, saved as data, that does not change.
 - **Growth units**: follow a class path and upgrade over time. Mobs may follow a growth path of their own, different from playable units', that scales as the game progresses (Act 1 against Act 2 mobs), so the same mob reference serves random encounters, gaining skills and budget in Act 2 rather than building stronger mobs and disabling weaker ones.
+
+## Decided (user 2026-11-06)
+
+- **Static units use templates, not classes.** For a hero the class is the limit on the unit's path and decides its progression; a static unit neither changes nor grows, so it shows little class-like behaviour. Generic static units act as templates for named units, splitting behaviour from class where it applies. Heroes may be reused as a base.
+- **Mob growth** follows a world stage (act or campaign progress, flag-gated), not the party's level.
+- **Tiers** scale the budget, with pool modifiers through data where budget scaling is too weak a knob, one consistent approach for all units rather than unit-specific behaviour. The flat 60 in the HP formula scales with tier too, so stats stay budgeted for the unit.
+- **One budget per level for every class**; classes differ in shares. The first goal is that every base stat matters, so its weight sits near 1 and no stat feels wasted; balance then works around each stat's natural weight, so an INT-heavy class at weight 0.9 gets enough INT to match a DEX-heavy class at 1.1.
+- **Playable growth** has its own, more robust curve on the same machinery: level-driven for stats and skills, complemented by gear and region access as gameplay progression. Mobs grow on their gated, flagged curve.
+
+## Design result, for the user's approval: what is fixed and what is a parameter
+
+| Item | Fixed (kit behaviour) | Parameter (data) |
+| --- | --- | --- |
+| Unit types | Growth units on a class path; static units from a static template, named units as a template plus overrides | Which template each named unit uses; its overrides |
+| Budget | Budget = sum of stat x weight; one budget per level for every class | Stat weights (start 1); the playable curve by level; the mob curve by world stage |
+| Class identity | Base stats and growth from the class's share of the budget per stat; largest-remainder rounding on a running total, so each level hits the budget exactly; free allocation separate | Class shares per stat; the free allocation pool by level |
+| Proficiency | Four levels: 0 none, 1 standard, 2 lower requirement, 3 bonus effect | Per class and gear family: level and scaling weight in the weapon power rating; the level 3 effect per family, from the effect library |
+| Skill path and deck | A path per class; generic access by unlock condition; a deck of picked skills plus base skills every unit has | Paths, unlock levels and conditions; the base skill list; deck slots |
+| Loadout | Templates that units reference; named units may hold unique items | Template contents; unique items |
+| Tiers | Tier scales the budget and is an input to derived formulas (the HP base); optional pool modifiers through the damage pipeline | Tier budget factors; tier terms in formulas; tier modifiers |
+
+Moved to other sub-blocks: AI roles as weighted choice with randomness (AI, I1). Build note: tier as a formula input is one added input for the derived formulas, made once in the build.
