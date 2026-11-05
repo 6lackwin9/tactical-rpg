@@ -33,3 +33,8 @@ Treat every derived value as a meter: a value in a range (min, max), with behavi
 - **Composure** parked as a named pool with no behaviour, a candidate for morale tied to anti-corruption, until its gameplay case.
 - **The mitigation stack** is one rule covering armour, guard, cover and any others, settled in this session.
 - **AP** counts as a U1 pool, the same shape as poise.
+- **Baseline agreed** (user 2026-11-06): two mitigation layers, the stat table and the core list as the planner proposed them in the session, with the open questions there.
+
+## Proposed by the user: a modular damage formula
+
+Damage is a second-order effect. Its behaviour is a change to HP (delta HP), scaled by multipliers (mult x delta HP); the actual damage dealt comes from all the behaviours applied. Planner's shape, for the user's answer: fixed stages in the kit (base, amplifiers, mitigation layers, finish: rounding, minimum, clamp to the pool), each modifier a data entry naming its stage, its condition and its value source; the same pipeline for heals and for other pools (poise, AP); a trace of every modifier on every hit for forecasts and tests; the default pipeline reproduces today's formula exactly, rounding points included.
