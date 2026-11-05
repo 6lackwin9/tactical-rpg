@@ -39,6 +39,6 @@ Where each silo stands, 2026-11-05 (planner's reading):
 | 5. Data | Bulk content and art | CAST1-A5, CAST1-A6, CAST1-A6b, CAST1-B, CAMPAIGN1-D, ROSTER1-D, ROSTER1-TA, ROSTER1-KD, STORYUI1-A, ENCOUNTER2-CA, ENCOUNTER2-D2, FX1-A, LOOK1-A, LOOK1-R, REGIONGROUND1-A2, REGIONGROUND1-D2, REGIONGROUND1-A3, REGIONGROUND1-D3, PROPS1-A3a, PROPS1-A3b, PIXEL4, MOB1, ALINE1-F, PORTRAITFX1-XA, PORTRAITFX2-A, ART2, DIR4-R4, HOLDART1 |
 | 6. Integration | The whole game, performance, the slice playtest | INTEG1-E2, INTEG1-E3, INTEG1-S2, INTEG1-X, CAMP1-P |
 
-Any time, as they serve every phase: INTEG1-R, INTEG1-S1 and SILOSCN1 (a small set of headless scenarios at each flush); SILOCARD1, SKILLS1, SCOPE1, KITDONE1, LINKGATE1, TOOLTESTS2, WEBPROBE1, ARTTOOL1, CLN-23, CLN-27, CLN-30, CLN-33, CLN-34, CLN-49, CLN-53, CLN-71.
+Any time, as they serve every phase: INTEG1-R, INTEG1-S1 and SILOSCN1 (a small set of headless scenarios at each flush); SILOCARD1, TESTCLEAN1, SKILLS1, SCOPE1, KITDONE1, LINKGATE1, TOOLTESTS2, WEBPROBE1, ARTTOOL1, CLN-23, CLN-27, CLN-30, CLN-33, CLN-34, CLN-49, CLN-53, CLN-71.
 
 Parts of phase 5 move up when a system needs them to test: a Sunk Ward fight for battle, one Sunk Ward map for exploration. PLAYTEST2 comes after WORLDFIGHT1. The map of systems and their joins: `docs/specs/SILOS1.md`. Row order inside a phase follows design: rows stay proposed or held until their system's design is done. M1 waits on the user's look at the battle view; M2, the vertical slice, comes after phase 6 by design.
