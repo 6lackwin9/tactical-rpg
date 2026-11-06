@@ -284,6 +284,46 @@ FB-01 to FB-22 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-1
 - **Finding**: The `stat` condition is `best_stat >= min` (`dialogue.rs:187`), where `best_stat` builds every active member on each call and takes the party's best. `condition_holds` takes the game state by shared reference and runs on every redraw (choice listing, lock text, the stat prefix, story card `when`), so a roll inside it would advance `gs.rolls` every frame, cannot mutate the state, and could be save-scummed. The spec says "the unit's stat"; today it is the party maximum. "Pools and ratings" need U1's ratings, not built yet. `dialogue_roll_die` has no home in the ruleset numbers. T2 needs little new.
 - **Recommendation**: The roll is a choice-time effect (a `check` effect setting an outcome flag), and conditions read the recorded flag; `threshold` stays a pure condition. Say whose stat. Slices: (a) `threshold` mode with `threshold` as an alias of `min`, S; (b) the roll effect with a `dialogue` stream and `dialogue_roll_die`, plus a determinism and reload test, M; (c) rating reads after U1.2, S.
 
+### FB-55: A1.2 audit: value, consumables, stance cleanup, budget
+
+- **Spec**: `docs/sessions/A1_VALUE.md`
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: (1) Buff items apply at once today (`apply_item` calls `apply_attack_boost(1 + buff_pct)`, `command.rs:688-691`; `buff_stat` is never read). Rerouting them to `empower` through `status::queue` makes them land next round, and `empower` is capped at 25 (`status.rs:62`), so the 50 % Elixir of Focus and 30 % Brimstone Draught would be clipped; `grant_now` (`status.rs:249`) applies at once. (2) Item damage is `w.damage(target, item.damage, true)` (`command.rs:683`): no armour, no guard, no minimum 1; routing it through mitigation is a balance change. Item range and use are duplicated in `dojo.rs:1188` and the AI (`ai.rs:399-429`, `:1809`), and items have no `area` yet. (3) `ITEM_AP` 1 is a constant (`command.rs:1451`); `item_ap` must stay 1 under classic, as classic goldens use pouches. (4) `{flow}` and `{disrupt}` render from the row with no ruleset (`source.rs:652-665`), and classic shares these skills with stances on, so the stance cleanup cannot be a pure data edit; `feint` (1 block, 0.7) is not dominated by Strike (2 blocks). (5) A new budget warning on every ranked skill is a named `checks_golden` re-record.
+- **Recommendation**: Items use `grant_now`; decide the magnitude cap or new rows in the balance lane; port item damage exactly first, and make mitigation for items its own flagged slice. Pass a `stances` flag to the token renderer so tokens are empty with stances off. Gate the budget check behind a flag, off by default. Slices: (a) `item_ap` as a ruleset number, classic 1, timeline 0, S; (b) stance tokens and warning, S-M; (c) items through the pipeline, after A2's first slice, rule-gated, M; (d) budget check, flag-gated, S.
+
+### FB-56: A2.2 audit: resolution
+
+- **Spec**: `docs/sessions/A2_RESOLUTION.md`
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: Not yet routed through the pipeline: `take_damage` (`unit.rs:1091`), `heal` (`:1100`), `heal_amount`, item damage, hazard damage (`ground.rs:346`, `arena.rs:231`) and tick damage. A2 says Round is `max(1, ...)` everywhere, but today `take_damage` keeps a minimum of 1 only when guard is above 0, and hazard and tick damage of 0 stays 0. `heal_amount` is `heal_base + roundi(stat x mult)` (`command.rs:1387-1394`); there is no KNOW potency or passive heal multiplier yet. `skill_mult` is one pre-multiplied scalar into which callers fold flank, splash and counter (`command.rs:787-823`); splitting it into separate modifiers changes the f64 order and can flip rounding. Of the three re-derivation triggers, armour already reads fortify and expose per hit (`damage.rs:158`); the new work is pool-band modifiers, after U1's bands; max HP and max poise are already not re-derived mid-fight; initiative is not a rating yet.
+- **Recommendation**: Port exactly first; make the minimum-1 floor everywhere a flagged rule change of its own; show the folded factors as trace-only entries rather than splitting the multiplication. Slices: (a) `take_damage` and heal ports with traces, S-M, neutral; (b) trace entries for the folded factors and the heal trace, M, neutral; (c) band re-reads, after U1's bands, M; the guard cap 0.90 to 0.75 as its own named balance commit.
+
+### FB-57: A3.2 and A4.2 audit: shapes, effects, derivation
+
+- **Spec**: `docs/sessions/A3_SHAPES.md`, `A4_EFFECTS.md`; `docs/specs/INTENT2.md` IR9, IR17, IR21
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: (1) Retiring SWEEP can move classic goldens: the frozen kit's brawler knows `sweep_kick` and `cyclone_kick`, and classic SWEEP never fires today (the planner refuses it), so a working ARC under classic would start the brawler swinging; SWEEP lives in two enums (`skill::Area`, `ground::Shape`), `HAZARD_SHAPES` and `ai.rs:1270`. (2) A3 says shaped skills always lock to their ground tiles at wind-up; IR17 says an Assault shape centres where the target stands at impact and only Field is tile-fixed. A3 defaults `affects` to enemies for attacks; IR9 says Field defaults to all, as today. (3) A4's step 5 gives a self-centred ARC to Field and Stand and every melee shape to Field and Assault; IR21 gives RING to Stand only and ARC and LINE to Field only, and A4's own counts (Assault 59, Maneuver 14, 19 dual) match IR21; A4 also omits FOCUS (Stand) and DISENGAGE (Maneuver). (4) K1 is nearer L: about 108 `RoundIntent::` sites in `rpgkit_battle` plus the GUI. The schema is a single-line file, so K2, K3 and `affects` edits must go one at a time. (5) `EffectSpec` normalises 5 vocabularies at about 11 call sites; debuffs calling `try_inflict` add RNG draws.
+- **Recommendation**: Add RING and ARC beside SWEEP first, keeping SWEEP as a legacy alias under classic until the frozen kit migrates, and remove it last with the `checks_golden` re-record; rewrite A3 section 2 ("Field and drawn rows lock; Assault shapes track") and derive `affects`'s default per row; replace A4 step 5 with IR21's rows plus FOCUS and DISENGAGE. Slices: K1a derive function and check output, rule-gated, M; K1b the Field intent and row-aware picks, L; K2 shapes, direction snap, `affects`, M-L, with the 2 `checks_golden` cases quoting the `area` enum; K3 item area, item intent, spends and refill, M; `EffectSpec` after S1's table, M.
+
+### FB-58: F1.2-F4.2 audit: fight flow
+
+- **Spec**: `docs/sessions/F_FIGHT_FLOW.md`
+- **Kind**: feasibility
+- **Status**: open
+- **Finding**: F1: the attack lock needs no A3 code; areas never lock today. `lock_tile` has no power test, though the spec says power above 0, and zero-power attacks exist (`intimidate`, `tripwire_snare`): an S fix. The switch-on is one data row in its own commit; the frozen kit's ruleset has no `attack_lock`, so the timeline golden moves only if the fixture is re-frozen. Initiative waits for U1's speed split (`Command::initiative` reads `speed`, `command.rs:275-277`). F2: the debt penalty goes straight into `st.active` with no `rounds_left` (`status.rs:436-439`), not queued, so a literal queue would land a round late; `DEBT_STAGGER` and `DEBT_STUN` are LOCKED constants, and making them ruleset fields re-records the rules contract golden. F3 is INTENT2-K1b; Stand's 1-tile Move uses the standard walk. F4: `fire_phase` uses `grant_now` with no resist roll (`session.rs:955`); no shipped phase grants a status.
+- **Recommendation**: READY's "switches on once A3.2 lands" is a design gate, not a code dependency; say which is meant. Keep the debt status in `st.active` with consistent `rounds_left`; give `EffectSpec` an explicit `resistable`, default no roll for phases. Slices: (a) attack lock power test and switch-on, S; (b) debt ids and thresholds as ruleset numbers, S, rules contract; (c) an initiative accessor, then the burden change after U1, S; (d) phase status through `EffectSpec`, after A4, S.
+
+### FB-59: Build order across the audited blocks
+
+- **Spec**: `docs/READY.md`; all `.1` sessions
+- **Kind**: feasibility
+- **Status**: open
+- **Finding**: Hard dependencies found by the audits: S1's status table and behaviour fields before I1's predicates, F2's custom ids and A4's `EffectSpec`; A2's exact `take_damage` and heal ports before A1's consumables; U1's speed split before F1's initiative; K1 before K2 and K3, K2 before IR21's full derivation; the single builder (READY row 10) and mob growth before W's `begin_world`, world stage and stage-scaled XP; `WorldRoster::new` and `finish_world` before SERVICES1; A4's `EffectSpec` before the unified cell effect and the AI's Field rows. Behaviour-neutral slices that can run in any order now: A2 ports, F2 debt ids, A1 `item_ap`, the stance tokens, K1a, additive RING and ARC, P's `walkable` data, E's purse caps, T's threshold mode, W's constructor and `finish_world`.
+- **Recommendation**: Order the next READY rows from that list; each named golden move (guard cap, item mitigation, break-queues-stagger, pips, attack lock switch-on) as its own commit with a HISTORY row.
+
 ## 3. Notes for the user (non-build, read by the Design Session)
 
 The user may not read the build session's chat, so anything outside build work goes here, numbered `UN-nn`: questions or permissions for the user, things that need the user's eyes, process suggestions, and state the user should know. The Design Session relays them; the user's answers come back through `docs/READY.md` section 4 like any other. Fields: `For` (user, design, both), `Status` (open, answered, closed), `Note`, `Ask`.
@@ -308,3 +348,10 @@ The user may not read the build session's chat, so anything outside build work g
 - **Status**: open
 - **Note**: `develop` is 111 commits ahead of `main` (release PR #54 was 2026-11-03). Releases go by PR at milestone ends or when asked; CI passes on `develop`.
 - **Ask**: Whether to release `develop` to `main` now, or at M1's close.
+
+### UN-04: FEEDBACK.md is past its size limit until open items are answered
+
+- **For**: design
+- **Status**: open
+- **Note**: The 12 feasibility audits added FB-48 to FB-59, so `docs/FEEDBACK.md` is about 50 KB, past the docs check's 25 KB warning (a warning, not a failure). The build session moves only answered or closed items to the archive.
+- **Ask**: Answer FB-23 to FB-59 in READY section 4 so they can be archived, or allow the build session to move a long audit item's finding to the archive and leave a two-line summary here.
