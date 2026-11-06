@@ -70,6 +70,14 @@ FB-01 to FB-60 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-1
 - **Finding**: The user's goal for the current build session is to build to R1 and release `develop` to `main`. R1 (Unit & Status Foundation: U1-U4, S1-S2, C01-C05) ships Option 1C Guard and 5-pip Poise, which exist only in Wave 2: section 3 marks W2-2 as closing the R1 Unit half and W2-3 the R1 Status half, and W2-1 (the U1/U2 formula switches) comes before both. Section 3 promotes Wave 2 only "after Wave 1 Rows 7-20", but rows 14-20 (A, F, P, I, E, T, W) are R2 and R3 work, so R1 waits on them as written. Wave 1 rows R1 needs: 22 (`SKILLS1-FB`, landed), 8 (`U3.2-S2`), 11 (`S1.2-S1`), 12 (`S1.2-S2/S3`), 13 (`S2.2`), 21 (`BASERULES1-M2`). R1 also needs FB-63 (2) answered before W2-2, which rewrites the same equip check (`state.rs:180`), and W2-2 carries the party-screen penalty display, mock first (FB-34), which needs the user's look.
 - **Recommendation**: (1) Approve building rows 8, 11, 12, 13, 21 in that order before rows 14-20 (rows 14-20 stay in section 1 for after R1, or move to section 3). (2) Promote W2-1, W2-2 and W2-3 into section 1 now, below row 21, with their slice order and named golden re-records, so the build session moves on without waiting a session; W2-4 to W2-6 stay held. (3) Answer FB-63 (2). (4) Say how the user reviews the W2-2 party-screen mock (screenshot in FEEDBACK, or a desktop look before W2-2 lands). (5) Confirm the R1 release is the `develop` -> `main` PR right after W2-3 lands with a clean gate, and whether a balance run or the user's look is part of the R1 ship gate.
 
+### FB-66: The cloud session-start hook installs the ALSA headers: docs delta
+
+- **Spec**: user approval in the build session chat (2026-11-06); known-issues row "alsa-sys"
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: A fresh cloud container could not run `tools/fc.sh build` or the gate: `alsa-sys` (rodio -> cpal) needs `libasound2-dev` and `pkg-config`, which only CI's `gate.yml` installed. `.claude/hooks/session-start.sh` now installs both when `pkg-config --exists alsa` fails (warns, does not stop the hook, if apt fails).
+- **Recommendation**: `docs/workflow/cloud.md` "Environment" bullet: the hook also installs the ALSA headers (`libasound2-dev`, `pkg-config`); optionally the known-issues row: cloud sessions get them from the hook.
+
 ## 3. Notes for the user (non-build, read by the Design Session)
 
 The user may not read the build session's chat, so anything outside build work goes here, numbered `UN-nn`: questions or permissions for the user, things that need the user's eyes, process suggestions, and state the user should know. The Design Session relays them; the user's answers come back through `docs/READY.md` section 4 like any other. Fields: `For` (user, design, both), `Status` (open, answered, closed), `Note`, `Ask`.

@@ -1,6 +1,7 @@
 #!/bin/bash
 # SessionStart hook for Claude Code cloud sessions: installs the tools the commit gate needs (Rust stable for the Aegis
-# engine; PowerShell 7 for check_project.ps1) so
+# engine; PowerShell 7 for check_project.ps1; the ALSA headers the audio crate builds against; Xvfb and Mesa for off-screen
+# windows) so
 # tools/fc.sh gate and check_project.ps1 run. Local (Windows) sessions skip it. Idempotent: every step is skipped when
 # already done, so when the cloud environment's setup script already installed the tools (preferred: done once and
 # cached), this hook installs only what is missing (no Godot: the parity suites were retired, CLN-42).
@@ -41,6 +42,15 @@ if ! command -v pwsh >/dev/null 2>&1; then
   rm -rf "$tmp"
   $SUDO apt-get update -qq >/dev/null
   $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y -qq powershell >/dev/null
+fi
+
+# --- ALSA headers: the audio crate (rodio -> cpal -> alsa-sys) needs them to build, so without them the gate cannot
+# build in a fresh container (known-issues "alsa-sys"; CI installs the same in .github/workflows/gate.yml) ---------
+if ! pkg-config --exists alsa 2>/dev/null; then
+  log "installing the ALSA headers and pkg-config"
+  { $SUDO apt-get update -qq >/dev/null && \
+    $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends libasound2-dev pkg-config >/dev/null; } || \
+    log "WARNING: could not install libasound2-dev / pkg-config; tools/fc.sh build and gate fail until they are installed"
 fi
 
 # --- Rendering a game window off-screen (Xvfb + Mesa software Vulkan / OpenGL) ---
