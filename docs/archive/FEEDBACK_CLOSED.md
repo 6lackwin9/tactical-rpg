@@ -507,3 +507,20 @@ When `docs/FEEDBACK.md` approaches the 300-line / 25 KB doc limit, the Build Ses
 - **Status**: closed (answered in `docs/READY.md` section 4, 2026-11-07)
 - **Note**: The 12 feasibility audits added FB-48 to FB-59, so `docs/FEEDBACK.md` is about 50 KB, past the docs check's 25 KB warning (a warning, not a failure). The build session moves only answered or closed items to the archive.
 - **Ask**: Answer FB-23 to FB-59 in READY section 4 so they can be archived, or allow the build session to move a long audit item's finding to the archive and leave a two-line summary here.
+
+## FB-60 and UN-05 (raised through the chat relay, answered in READY 9c29b73a, recorded 2026-11-07)
+
+### FB-60: FB-40's follow-ups were tracked nowhere
+
+- **Spec**: `docs/READY.md` section 4, FB-40
+- **Kind**: conflict
+- **Status**: closed: accepted (@9c29b73a), follow-up `BASERULES1-M2` (READY row 21)
+- **Finding**: FB-40's answer folded the sim `rules=` notes and the recursive `LOCKED` scan into "the next base-rules slice", but no READY row carried them, so archiving FB-40 would have lost them.
+- **Recommendation**: A READY row for them.
+
+### UN-05: Feedback approval pipeline gaps
+
+- **For**: design
+- **Status**: closed: policy (@9c29b73a), follow-up `SKILLS1-FB` (READY row 22)
+- **Note**: Archiving checked answers by eye; nothing tied an accepted answer's promised work to a READY row, answers to a commit, or kept the disposition.
+- **Ask**: A `Follow-up` and `Disposition` column in READY section 4, a check script, and `<disposition> (@<commit>)` on archived items. Adopted.
