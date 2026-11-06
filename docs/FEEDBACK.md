@@ -14,12 +14,12 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `VISCLAR1-D` | built | `develop` | Battle view parts 1 and 2 landed; waiting on user look to close M1. |
 | `TESTCLEAN1` | built, in its partial gate | `claude/testclean1`, lane 1 | One scratch helper removing its folder on drop. |
 | `SKILLS1` | staged | `staging` | Review passed; reaches `develop` with the next full gate. |
-| `KITIDS1` | built, review passed, small fixes running | `claude/kitids1`, lane 2 | No golden moves; `fc.sh layers` gains a class-id check; FB-23, FB-24. |
+| `KITIDS1` | staged | `staging` | Review fixes in; reaches `develop` with the next full gate; FB-23, FB-24, docs delta FB-38. |
 | `BASERULES1-M` | building | `claude/baserules1m`, lane 3 | |
 | `U1.2` (`U1_STATS`) | audited, slice 1 queued | - | FB-04 to FB-09 closed. `U1.2-S1` follows `BASERULES1-M`. |
 | `U2.2` (`U2_CLASS`) | audited, slice 1 queued | - | FB-10 to FB-15 closed. `U2.2-S1` follows `U1.2-S1`. |
 | `A4.2` (`INTENT2`) | audited | - | FB-16 to FB-22 closed; design updating INTENT2. |
-| `U3.2` (`U3_GEAR`) | auditing | - | Read-only audit running. |
+| `U3.2` (`U3_GEAR`) | audited | - | Feasible, but the premise is partly stale; about 2M + 1M-L + 1L + 1S; FB-31 to FB-37. |
 | `U4.2` (`U4_PASSIVES`) | audited | - | Feasible as a typed view plus compatibility loader, M-L in five slices; FB-25 to FB-30. |
 
 ## 2. Feedback Items (Append-Only)
@@ -91,3 +91,67 @@ FB-01 to FB-22 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-1
 - **Status**: open
 - **Finding**: A read-time loader turning `PassiveDef.effects` into a typed grant view, with today's accumulators kept as evaluators at first, gives identical numbers with no row rewrite; pitfalls: trigger limit keys are `source#index`, so trigger order and index must not change; `foresight`'s first source and meter floors depend on add order; meter bands diff the old accumulator shapes. Saves store only passive ids, so no migration except a new temperament key. Goldens: none move with the loader; rewriting rows or error texts moves `checks_golden` (21 passive references, the raw `sword_training` row) and the hand-copied fixture catalog; temperament fields move `checks_golden` and possibly `journey_golden`. Slices: (1) typed view and loader with a double-load test asserting old and new are equal for all 55 rows and the fixture's 16, M; (2) one source gatherer and both apply sites into the FB-12 builder, S-M; (3) temperament field and AI override, M; (4) evaluators onto U1's pipeline, L, after U1.2; (5) optional row migration, S. The validation messages (`check/simple.rs:100-210`, 12 of them) and the editor's per-type rows change when the schema does.
 - **Recommendation**: Land the loader first with zero golden diffs; move evaluators onto the pipeline only after U1.2's pipeline lands.
+
+### FB-31: Gear's family table exists already; keep `weapon_type`
+
+- **Spec**: `docs/sessions/U3_GEAR.md` section 1
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: `item_families.json` already declares `hands`, `scaling_stats`, `off_hand_category`, `engine_rules` (always_ranged, focus, shield, spell_source, reach), per-hand base range and bands, and the loader resolves them onto `ItemDef`. There is no `weapon_kind` field: the item field is `weapon_type` (about 40 uses), also the key of class proficiency, the skill `weapon_types` gate and the passive `proficiency.gear`. `sling` is not a family. What does name families in code: `ALWAYS_RANGED_TYPES` (`gear.rs:10`, read at `:78`) duplicates the `always_ranged` rule, which only the content check reads, so a data-only `always_ranged` family with range 1 behaves as melee; `off_hand_ok` names orb and tome (`gear.rs:210`); `is_shield` reads the item type, not the `shield` rule; `skill_in_group` names staff and wand (`unit.rs:877`); `FIST` and the trained-fists rule (`damage.rs`); the art, Dojo and party-screen spots.
+- **Recommendation**: Keep `weapon_type`; "migration" means making those code sites read the table's `engine_rules`. No rename.
+
+### FB-32: "Zero Rust changes" fails as written
+
+- **Spec**: `docs/sessions/U3_GEAR.md`, acceptance test 1
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: Besides the sites above, the content check holds fixed lists: `GEAR_TYPES` (21, `check/skill.rs:537`), `WEAPON_TYPES` (18, `check/unit.rs:22`; the two disagree), `OFF_CATEGORIES` and `FOCUS_TYPES` (`check/item.rs:19-20`, `source.rs:690`), `ENGINE_RULES` (5, `check/item.rs:28`). A new off-hand category or engine rule needs code today.
+- **Recommendation**: Derive those lists from `item_families.json`, and word the test as "a new family using existing engine rules, in data only"; a new engine rule stays a code change.
+
+### FB-33: The wield penalty already exists in a different shape; and unarmed damage would change
+
+- **Spec**: `docs/sessions/U3_GEAR.md`, soft wield penalty
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: `wield_penalty` (`gear.rs:96`) costs 15 % of weapon power per missing stat point, capped at 60 %, plus an extra block cost at a deficit of 4 or more (whose only reader, `effective_block_cost`, has no callers); it touches weapon power only. Proficiency also adds +level weapon power (`stats.rs:179`), which the spec leaves out; level 3's only effect today, `block_cost_reduction` (`stats.rs:199`), is dead, so a level 3 mastery is new content. The spec's flat 0.75 plus 1 burden per missing point, on power and armour, also at proficiency 0. Unarmed: today weapon power is 0 unless fist proficiency is 2 or more (then 15 plus the level bonus, `damage.rs:18-31`, `:76-85`); "an implicit fist weapon at -25 % untrained" would make untrained unarmed deal 15 x 0.75 instead of 0. "No proficiency list means no restriction" (`class_can_equip`, `gear.rs:216`) must stay, or classless and hand-built units are all penalised.
+- **Recommendation**: Give one formula for a stat deficit and for proficiency 0, say whether it replaces or stacks with today's ramp, add armour if wanted, keep or drop the +level power bonus, and decide unarmed explicitly; the unarmed change and the penalty change are separate commits with named golden re-records.
+
+### FB-34: The soft penalty removes four hard gates, and the party screen must show it
+
+- **Spec**: `docs/sessions/U3_GEAR.md`; UNITDRILL1
+- **Kind**: cost
+- **Status**: open
+- **Finding**: Today an item a unit has no training for cannot be worn, gated in four places: `class_can_equip` (`gear.rs:216`), `UnitState::can_wear` (`state.rs:174-185`, also behind `validate` and the party pickers), the content check (`check/unit.rs:136-176`, `check/world.rs:623`) and the Dojo (`dojo.rs:1274`, `:1324`). The party pickers hide items that fail `can_wear` (`party.rs:1222`, `:2261`, `:2349`, `:2375`); soft means they all show, so the screen must display the penalty. `with_drills` stays as training. `wears_untrained` (one unit, the Purifier, and seed `cast1a4b.json`) retires. Skill gates stay hard. Only 8 shipped slots are untrained, 7 covered by drills.
+- **Recommendation**: Include the party screen's penalty display in the slice (a game UI change, mock first), and say the skill gates stay hard.
+
+### FB-35: Item-granted skills and stat changes are not reversible today
+
+- **Spec**: `docs/sessions/U3_GEAR.md` (OFFHAND1 through `grant_skill`); `U4_PASSIVES.md` (items as a source)
+- **Kind**: cost
+- **Status**: open
+- **Finding**: `apply_effects` (`unit.rs:463`) pushes a granted skill to `granted_skills` for good, and `stat` and `proficiency` effects are never cleared when gear changes; `rebuild_gear_effects` (`:429`) clears only potency, resist, status potency, spell reach, forced moves and triggers. Items may not carry `skill`, `stat` or `proficiency` at all (`ITEM_TYPES`, `check/simple.rs:74`). With the `deck` rule on (emberwake's row), `apply_deck` takes only owned families up to the active slots, and the world deck builder (`owned_in`, `state.rs:193`) reads known and granted skills, so a worn item's skill would be owned but not active, and invisible to the deck screen.
+- **Recommendation**: One "sources recomputed on every sync" pass, shared by U3 items and U4's sources (built with FB-12's single builder), rather than a separate item list on the unit. Design calls: item skills are always active while worn and take no deck slot (as off-hand basics do); worn or held under a two-handed main.
+
+### FB-36: Hands, budget, reach and carry differ from the built model
+
+- **Spec**: `docs/sessions/U3_GEAR.md`
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: (a) Hands: the spec says a two-handed weapon uses both hands; built, a two-handed main may pair with an off-hand weapon that is not a focus (`off_hand_ok`, `gear.rs:208`, with a weapon switch); only shields and foci are excluded. MASTERPLAN1 says 3 hands, the spec 2. (b) Budget: 23 +/- 20 % is a class loadout's target, not an item's (`budget.rs:19`); an item's static override already exists as `special` and `special_note`; item `tiers` are threshold unlocks, so "tier_mult" has no meaning; the weights are code constants, not data, and derived-value modifiers carry no weight. (c) Reach: `range_band` overlaps `base_range`, `effective_range` (PERC 18 adds 1), the constant `REACH_WEAPON_REACH` 2 (`unit.rs:17`), `melee_reach` and `melee_band_max` (`skill.rs:338`), which the attack lock and INTENT2's "engaged" read; U1 moves ranged reach to the skill. (d) Carry is party-wide and always on today (`carry.rs`); the spec makes it a per-unit rating, off by default. (e) "Level 1 gets tier-1 family skills" has no code hook: gating is the skill's `min_proficiency` and `weapon_types`, plus path level.
+- **Recommendation**: (a) correct the spec to the built rule or change it on purpose; (b) restate the budget as the loadout's; (c) `range_band.max` replaces the `reach` rule and its constant, ranged families keep `base_range`, and name one owner; (d) carry goes with U1's speed split; (e) "data on the skill rows".
+
+### FB-37: U3's slices and goldens
+
+- **Spec**: `docs/sessions/U3_GEAR.md`
+- **Kind**: feasibility
+- **Status**: open
+- **Finding**: Dropping `block_cost` touches `ItemDef`, the budget (`W_EXTRA_BLOCK`), the content check, `source.rs`, `store.rs`, the schema, 71 places in `item_families.json` and two items (`shd_tower` +1, `wpn_glass_wand` +2, whose notes promise "slow to raise"); their budgets rise by 3 and 6, which can change class budget warnings; the loader must ignore a stored key and drop it on resave. Skill and command `block_cost` is separate and untouched. Goldens: `rules_golden` runs on the frozen kit, so data edits do not move it; the penalty and unarmed changes do. `checks_golden` (43 `block_cost` lines) moves with the removal, the soft penalty and `wears_untrained`'s retirement. Slices: (1) drop `block_cost`, M, `checks_golden` re-recorded; (2) the family table drives the rules, M-L, every golden identical; (3) soft penalty, M, after (2) and FB-14, moving `rules_golden`, the timeline and checks goldens in separate commits; (4) reversible item grants, OFFHAND1 and the level 2-3 family bonuses, L, after U1.2 and U4.2; (5) per-unit carry, S, with U1's speed split.
+- **Recommendation**: Answer FB-33 to FB-36 before slice 3; slices 1 and 2 can be ready-to-build now.
+
+### FB-38: Docs delta from SKILLS1 and KITIDS1
+
+- **Spec**: shared docs
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: SKILLS1: planner scripts live in `tools/planner/` (README there); `tools/fc.sh test` prints each panic's message; `flush.sh` logs gate times to `$AEGIS_PLANNER_LOG`. KITIDS1: `tools/fc.sh layers` also fails when kit `src` quotes a class id from a game's `classes.json`; the sim's classes, roles, rosters and limit tests come from `emberwake_sim::CLASSES`.
+- **Recommendation**: Apply to `docs/WORKFLOW.md` (fc.sh help, the planner scripts), `games/emberwake/docs/GAME_BRIEF.md` ("where to look": sim classes), `docs/STRUCTURE.md` (`tools/planner/`), and the planner and task-landing skills' script paths; TASKS: SKILLS1 and KITIDS1 done.
