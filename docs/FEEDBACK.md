@@ -15,9 +15,9 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `TESTCLEAN1` | done | `develop` 41de4e5c | Docs delta FB-39. UN-01 for the old folders. |
 | `SKILLS1` | done | `develop` 41de4e5c | Full gate 2215 tests. |
 | `KITIDS1` | done | `develop` 41de4e5c | FB-23, FB-24 open; docs delta FB-38. |
-| `BASERULES1-M` | staged | `staging` | Reaches `develop` with the next full gate; FB-40, FB-41. |
-| `U1.2` (`U1_STATS`) | slice 1 built, in review | `claude/u12s1`, lane 2 | Every golden byte-identical; FB-42, FB-43. |
-| `U2.2` (`U2_CLASS`) | slice 1 building | `claude/u22s1`, lane 1 | Two share vectors, compatibility view. |
+| `BASERULES1-M` | done | `develop` c804f8af | Full gate 2235 tests. FB-40, FB-41 open. |
+| `U1.2` (`U1_STATS`) | slice 1 done | `develop` c804f8af | Pipeline and pool view, goldens byte-identical; FB-42, FB-43, FB-45. Slices 2-6 wait for READY. |
+| `U2.2` (`U2_CLASS`) | slice 1 staged | `staging` | Two share vectors; every class identical at levels 1-10; FB-44, FB-46, FB-47. |
 | `A4.2` (`INTENT2`) | audited | - | FB-16 to FB-22 closed; design updating INTENT2. |
 | `U3.2` (`U3_GEAR`) | audited | - | Feasible, but the premise is partly stale; about 2M + 1M-L + 1L + 1S; FB-31 to FB-37. |
 | `U4.2` (`U4_PASSIVES`) | audited | - | Feasible as a typed view plus compatibility loader, M-L in five slices; FB-25 to FB-30. |
@@ -195,6 +195,38 @@ FB-01 to FB-22 are closed and moved to `docs/archive/FEEDBACK_CLOSED.md` (2026-1
 - **Status**: open
 - **Finding**: New `rpgkit_rules/src/pipeline.rs` (stages, `Op`, `Modifier`, `Pipeline` with `DAMAGE` and `STAGGER`, a trace per hit, `Hit.trace`) and `pool.rs` (a read-only `PoolView` over hp, ap and poise; `Unit::pool`, `World::pool`). Attack power, the hit and poise stagger run through it; `take_damage(mitigated=false)` and the intercept split stay on their own paths, as FB-05 allows. An exact port of `take_damage` is easy (Add, Reduce(guard), round to minimum 1, only when guard is above 0).
 - **Recommendation**: `docs/STRUCTURE.md` `rpgkit_rules/src/` row: `pipeline.rs`, `pool.rs`, tests `damage_pipeline.rs`, `pools.rs`; `engine/docs/PORT_NOTES.md` (`damage_calculator.gd` row): runs `rpgkit_rules::pipeline`, exact port; `kits/rpg/README.md`: a U1.2-S1 line. Say whether `take_damage` joins in A2.2 or in the next U1 slice.
+
+### FB-44: Share data cannot be stored yet: the schema rounds stats to integers
+
+- **Spec**: `docs/READY.md` row 6 ("kit + data"); `docs/sessions/U2_CLASS.md`
+- **Kind**: feasibility
+- **Status**: open
+- **Finding**: U2.2-S1 computes shares from today's integer rows and moved no shipped data. The schema's `stats` field type rounds values to integers, so share fields need a float-stats field type in `aegis_content` first (an engine change); adding share fields to every class row would also break the byte-for-byte resave until the data is re-saved. The writer prints floats to 15 significant digits (13/62 comes back as 0.209677419354839); the tie rounding on whole billionths absorbs it, so stats stay identical. Share keys are read as extra keys on a row, not schema fields, so the editor and the Forge do not show them.
+- **Recommendation**: Move the class data to shares with the stat-weights slice: a float-stats field type, schema rows for `base_shares` and `growth_shares`, and a seed with the re-save, as one schema-first step.
+
+### FB-45: An authored power below 1 is now raised to 1 before the multipliers
+
+- **Spec**: `docs/sessions/U1_STATS.md`; U1.2-S1
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: In the pipeline, an authored `power` enters the base stage and is rounded to at least 1 at rounding point one, so a power of 0 or less would now be 1 before the multipliers, and the hit could pass the old floor of 1. No shipped data authors a power below 1, so nothing moves today.
+- **Recommendation**: A schema minimum of 1 on authored power, or a note that it is the intended floor.
+
+### FB-46: Free-spend allocation still reads level 2's gain
+
+- **Spec**: `docs/sessions/U2_CLASS.md`, free allocation
+- **Kind**: feasibility
+- **Status**: open
+- **Finding**: `auto_spend` (party screen and `unit.rs`) reads the `growth` view, which on a share row is level 2's rounded gain. That is exact for today's whole-point growth rows, but not for share rows whose growth is not whole points a level.
+- **Recommendation**: When share rows ship (FB-44), `auto_spend` reads the growth shares, as `primary_stat` now does.
+
+### FB-47: Docs delta from U2.2-S1
+
+- **Spec**: shared docs
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: New `rpgkit_data/src/unit_budget.rs` (re-exported as `rpgkit_rules::unit_budget`): the unit budget, 62 plus 5 a level, two share vectors per class, largest-remainder rounding on a running total, ties on whole billionths to the larger fraction then the earlier stat; not the gear budget `rpgkit_rules::budget`. `primary_stat` reads the largest growth share.
+- **Recommendation**: `docs/STRUCTURE.md` (`rpgkit_data`): `unit_budget.rs`; `games/emberwake/docs/GAME_BRIEF.md` stats line: "class stats are base_shares x 62 + growth_shares x 5 x (level - 1), rounded by largest remainder; integer rows read as shares"; TASKS: U2.2-S1 done once on `develop`.
 
 ## 3. Notes for the user (non-build, read by the Design Session)
 
