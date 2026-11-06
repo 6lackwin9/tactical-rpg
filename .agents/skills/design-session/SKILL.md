@@ -43,6 +43,10 @@ git push origin "${commit}:refs/heads/develop"
 Remove-Item $env:GIT_INDEX_FILE -Force
 Remove-Item Env:\GIT_INDEX_FILE
 # Restore working tree to match local .git index so VS Code Sync/Pull fast-forwards with 0 conflicts
+Copy-Item "C:\dev\tactical-rpg\.git\worktrees\tactical-rpg-dev\index" "$env:TEMP\restore_index" -Force
+$env:GIT_INDEX_FILE = "$env:TEMP\restore_index"
 git checkout-index -f -a
+Remove-Item $env:GIT_INDEX_FILE -Force
+Remove-Item Env:\GIT_INDEX_FILE
 git clean -fd
 ```
