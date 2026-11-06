@@ -234,7 +234,7 @@ impl<'a> Runner<'a> {
             if def.loadout.is_empty() && self.args.loadout == "newest" {
                 entry.insert("loadout".into(), json!(variants::newest_loadout(&self.d.cat, &def.class_id, def.level)));
             } else if def.loadout.is_empty() && self.args.loadout == "role" {
-                entry.insert("loadout".into(), json!(roles::role_loadout(&self.d.cat, &def.class_id, roles::primary_role(&def.class_id), def.level)));
+                entry.insert("loadout".into(), json!(roles::role_loadout(&self.d.cat, &self.args.game.classes, &def.class_id, roles::primary_role(&self.args.game.classes, &def.class_id), def.level)));
             }
         }
         self.units.insert(id.into(), UnitDef::from_obj(&entry));

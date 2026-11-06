@@ -4,7 +4,8 @@
 #                                docs --all, tooltests
 #                                (`auto` is accepted and runs everything)
 #   tools/fc.sh layers           engine and kit crates name no game (any folder under games/) and no manifest has a path into games/;
-#                                kit src, schema.json and kit.json name no lore word (world ids, games/<id>/lore_words.txt)
+#                                kit src, schema.json and kit.json name no lore word (world ids, games/<id>/lore_words.txt);
+#                                kit src names no class id of a game as a string literal (games/<id>/data/catalog/classes.json)
 #   tools/fc.sh build            cargo build --workspace --all-targets (a compiler warning fails it)
 #   tools/fc.sh test [filter]    cargo test --workspace, optional test-name filter
 #   tools/fc.sh clippy           cargo clippy --workspace --all-targets (advisory: warnings do not fail)
@@ -204,7 +205,27 @@ layers_check() {  # KIT1-G (docs/specs/KIT1_TASKS.md 4): the engine and kit crat
       bad=1
     fi
   done
-  if [ $bad -eq 0 ]; then echo "[layers] ok: engine and kit crates name no game (${ids[*]}) and have no path into games/; kit code names no lore word"; else echo "[layers] FAIL: engine and kit code must not name a game, kit code no lore word (CLAUDE.md Layers)"; status=1; fi
+  # G4 (KITIDS1, SILOS1 T4): kit code assumes no class of a game: the entry ids of games/<id>/data/catalog/classes.json
+  # (the writer's form: one `"id"` line per entry, three tabs in) as a whole string literal ("<id>"), exact case. Scope:
+  # kit src (kit tests build their own classes; comments name no literal); the game passes its classes (SimGame.classes).
+  local cf cs
+  for id in "${ids[@]}"; do
+    cf="games/$id/data/catalog/classes.json"
+    [ -f "$cf" ] || continue
+    cs=$(tr -d '\r' < "$cf" | sed -n 's/^\t\t\t"id": "\([^"]*\)",\{0,1\}$/\1/p' | sed 's/[][\.*^$+?(){}|/]/\\&/g' | paste -sd'|')
+    if [ -z "$cs" ]; then  # a format the extraction does not know must not pass the check silently
+      echo "[layers] $cf: no class id found (expected the writer's form: one \"id\" line per entry, three tabs in)"
+      bad=1
+      continue
+    fi
+    if hits=$(git grep --untracked -n -I -E -e "\"($cs)\"" -- 'kits/*/crates/*/src/*'); then
+      echo "$hits" | head -20 | awk -v g="$id" -v cs="$cs" '{ split($0, f, ":"); t = $0; sub(/^[^:]*:[^:]*:/, "", t)
+        match(t, "\"(" cs ")\""); x = substr(t, RSTART, RLENGTH); c = RSTART > 40 ? RSTART - 40 : 1
+        printf "[layers] %s:%s names class id %s of game %s: %s\n", f[1], f[2], x, g, substr(t, c, 120) }'
+      bad=1
+    fi
+  done
+  if [ $bad -eq 0 ]; then echo "[layers] ok: engine and kit crates name no game (${ids[*]}) and have no path into games/; kit code names no lore word and no class id"; else echo "[layers] FAIL: engine and kit code must not name a game, kit code no lore word or class id (CLAUDE.md Layers)"; status=1; fi
 }
 
 gate() {

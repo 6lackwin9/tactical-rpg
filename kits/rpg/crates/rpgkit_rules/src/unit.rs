@@ -921,7 +921,9 @@ pub fn auto_actives(cat: &Catalog, e: &UnitDef, rule: &DeckRule) -> Vec<String> 
 fn build_catalog_unit(cat: &Catalog, e: &UnitDef, default_ap: i32) -> Unit {
     let arch = class_for(cat, e);
     let derived = e.stat_mode == "derived" && arch.is_some();
-    let warrior = || cat.classes.get("warrior").cloned().unwrap_or_else(|| ClassDef::from_obj(&Default::default()));
+    // KITIDS1: a unit without a class takes the stats of the catalog's first class at level 1 (a blank class when the
+    // catalog has none); the kit names no class id
+    let classless = || cat.classes.values().next().cloned().unwrap_or_else(|| ClassDef::from_obj(&Default::default()));
     let mut u = if derived {
         let arch = arch.unwrap();
         let spend = if e.spend.is_empty() { stats::auto_spend(&arch.growth, stats::spend_pool(e.level)) } else { e.spend.clone() };
@@ -929,7 +931,7 @@ fn build_catalog_unit(cat: &Catalog, e: &UnitDef, default_ap: i32) -> Unit {
     } else if let Some(arch) = arch {
         Unit::blank(&e.name, e.hp, e.speed, e.attack_range, CharacterStats::new(arch, e.level, &IndexMap::new()))
     } else {
-        Unit::blank(&e.name, e.hp, e.speed, e.attack_range, CharacterStats::new(&warrior(), 1, &IndexMap::new()))
+        Unit::blank(&e.name, e.hp, e.speed, e.attack_range, CharacterStats::new(&classless(), 1, &IndexMap::new()))
     };
     equip(cat, &mut u, e, arch);
     if derived {

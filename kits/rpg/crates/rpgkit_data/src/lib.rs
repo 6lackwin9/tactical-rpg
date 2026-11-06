@@ -92,10 +92,12 @@ impl ClassDef {
                 (!id.is_empty()).then(|| (s.to_string(), id))
             })
             .collect();
+        let id = string(o, "id", "");
         Self {
-            id: string(o, "id", ""),
+            // KITIDS1: without an art key the class wears the body named like itself (the kit names no class)
+            art: string(o, "art", &id),
+            id,
             name: string(o, "name", "New Class"),
-            art: string(o, "art", "warrior"),
             ai_role: string(o, "ai_role", "AGGRESSOR"),
             base_stats: int_map(o, "base_stats"),
             growth: int_map(o, "growth"),

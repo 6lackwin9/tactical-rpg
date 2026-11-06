@@ -414,23 +414,23 @@ mod tests {
 
     #[test]
     fn bodies_and_portraits_follow_the_chains() {
-        let class = d(json!({"id": "brawler", "art": "brawler"}));
-        let unit = d(json!({"id": "goblin_brawler", "class_id": "brawler", "art": "brawler/goblin", "tier": "minion"}));
-        let elite = d(json!({"id": "elite_brawler", "art": "brawler/elite_brawler", "role": "enemy", "portrait_tier": "elite"}));
-        let mob = d(json!({"id": "mob_brawler", "art": "", "role": "enemy"}));
-        assert_eq!(body_of(&elite, &unit, &class), "brawler/elite_brawler");
-        assert_eq!(body_of(&mob, &unit, &class), "brawler/goblin", "a character without art wears its base unit's body");
-        assert_eq!(body_of(&Dict::new(), &d(json!({"class_id": "mage"})), &Dict::new()), "mage");
-        assert_eq!(body_chain("brawler/goblin"), ["brawler/goblin", "brawler"]);
-        assert_eq!(body_chain("brawler"), ["brawler"]);
+        let class = d(json!({"id": "bruiser", "art": "bruiser"}));
+        let unit = d(json!({"id": "goblin_bruiser", "class_id": "bruiser", "art": "bruiser/goblin", "tier": "minion"}));
+        let elite = d(json!({"id": "elite_bruiser", "art": "bruiser/elite_bruiser", "role": "enemy", "portrait_tier": "elite"}));
+        let mob = d(json!({"id": "mob_bruiser", "art": "", "role": "enemy"}));
+        assert_eq!(body_of(&elite, &unit, &class), "bruiser/elite_bruiser");
+        assert_eq!(body_of(&mob, &unit, &class), "bruiser/goblin", "a character without art wears its base unit's body");
+        assert_eq!(body_of(&Dict::new(), &d(json!({"class_id": "seer"})), &Dict::new()), "seer");
+        assert_eq!(body_chain("bruiser/goblin"), ["bruiser/goblin", "bruiser"]);
+        assert_eq!(body_chain("bruiser"), ["bruiser"]);
         assert_eq!(portrait_tier(&elite, &unit), "elite");
         assert_eq!(portrait_tier(&mob, &unit), "common");
         assert_eq!(portrait_tier(&d(json!({"role": "party"})), &unit), "hero");
         assert_eq!(portrait_tier(&d(json!({"role": "npc"})), &unit), "npc");
         assert_eq!(portrait_tier(&Dict::new(), &d(json!({"tier": "boss"}))), "boss");
-        assert_eq!(portrait_chain("elite", "elite_brawler", "brawler/elite_brawler"), ["portraits/elites/elite_brawler.png", "portraits/common/brawler_elite_brawler.png", "portraits/common/brawler_base.png"]);
-        assert_eq!(portrait_chain("common", "mob_brawler", "brawler/goblin"), ["portraits/common/brawler_goblin.png", "portraits/common/brawler_base.png"]);
-        assert_eq!(portrait_chain("common", "x", "mage"), ["portraits/common/mage_base.png"]);
+        assert_eq!(portrait_chain("elite", "elite_bruiser", "bruiser/elite_bruiser"), ["portraits/elites/elite_bruiser.png", "portraits/common/bruiser_elite_bruiser.png", "portraits/common/bruiser_base.png"]);
+        assert_eq!(portrait_chain("common", "mob_bruiser", "bruiser/goblin"), ["portraits/common/bruiser_goblin.png", "portraits/common/bruiser_base.png"]);
+        assert_eq!(portrait_chain("common", "x", "seer"), ["portraits/common/seer_base.png"]);
     }
 
     #[test]

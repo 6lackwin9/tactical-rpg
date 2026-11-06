@@ -9,7 +9,6 @@ use indexmap::IndexMap;
 /// RULESET1-G: `feel` has no Godot original; nor has CAMPAIGN1-SIM's `deadlines` (deadlines.rs, no fights). Both are in
 /// the help text since CLN-39 (it was Godot parity before).
 pub const MODES: [&str; 11] = ["duel", "tier", "levels", "group", "stats", "party", "role", "sweep", "campaign", "feel", "deadlines"];
-pub const CLASSES: [&str; 6] = ["warrior", "ranger", "priest", "brawler", "rogue", "mage"];
 pub const SPENDS: [&str; 4] = ["class", "cons", "primary", "mixed"];
 pub const LOADOUTS: [&str; 3] = ["default", "newest", "role"];
 pub const SCORES: [&str; 3] = ["both", "hp", "binary"];
@@ -49,7 +48,6 @@ pub const DISTANCE_MAX: i32 = 6;
 pub const METRIC_MODES: [&str; 3] = ["party", "role", "sweep"];
 /// Role limit tests start enemies 4 tiles away.
 pub const ROLE_DISTANCE: i32 = 4;
-pub const DEFAULT_COMP: [&str; 4] = ["warrior", "ranger", "priest", "mage"];
 const PARTY_MAX: usize = rpgkit_world::data::PARTY_MAX as usize;
 const POUCH_MAX: usize = rpgkit_world::state::POUCH_MAX;
 const MAX_LEVEL: i32 = rpgkit_rules::stats::MAX_LEVEL;
@@ -156,7 +154,7 @@ impl Default for SimArgs {
             rewards: false,
             band_lo: 30,
             band_hi: 70,
-            comp: strings(&DEFAULT_COMP),
+            comp: Vec::new(),
             comp_set: false,
             heal: "none".into(),
             rest: Vec::new(),
@@ -164,10 +162,10 @@ impl Default for SimArgs {
             encounters: strings(&GENERATED),
             elevel: 0,
             elevel_set: false,
-            elite_class: "warrior".into(),
-            boss_class: "brawler".into(),
+            elite_class: String::new(),
+            boss_class: String::new(),
             roles: strings(&ROLES),
-            classes: strings(&CLASSES),
+            classes: Vec::new(),
             dupes: false,
             sample: 0,
             jitter: true,
@@ -286,7 +284,17 @@ impl SimArgs {
     /// Parses the sim's command line (mode first) for `game`: world= defaults to its default world, the campaign
     /// mode plays its story run. Err = the message after "SIM argument error: ".
     pub fn parse_for(d: &Data, argv: &[String], game: &SimGame) -> Result<Self, String> {
-        let mut a = SimArgs { world: game.default_world.clone(), game: game.clone(), ..SimArgs::default() };
+        // KITIDS1: the class defaults are the game's (SimGame.classes); the kit names no class
+        let c = &game.classes;
+        let mut a = SimArgs {
+            world: game.default_world.clone(),
+            game: game.clone(),
+            comp: strings(c.default_comp),
+            elite_class: c.elite.into(),
+            boss_class: c.boss.into(),
+            classes: strings(c.ids),
+            ..SimArgs::default()
+        };
         let mut positional: Vec<String> = Vec::new();
         let mut metrics_set = false;
         let mut distance_set = false;
@@ -435,7 +443,8 @@ impl SimArgs {
     }
 
     fn key(&mut self, d: &Data, key: &str, value: &str) -> Result<(), String> {
-        let classes = godot_list(&CLASSES);
+        let ids = self.game.classes.ids;
+        let classes = godot_list(ids);
         if (FEEL_KEYS.contains(&key) || key == FEEL_COUNTS_KEY) && !self.feel_keys.iter().any(|k| k == key) {
             self.feel_keys.push(key.to_string());
         }
@@ -581,7 +590,7 @@ impl SimArgs {
                     return Err(format!("comp needs 1..{PARTY_MAX} class ids (got '{value}')"));
                 }
                 for c in &picked {
-                    if !CLASSES.contains(&c.as_str()) {
+                    if !ids.contains(&c.as_str()) {
                         return Err(format!("comp: unknown class '{c}' (one of {classes})"));
                     }
                 }
@@ -670,7 +679,7 @@ impl SimArgs {
                 }
             }
             "elite" | "boss" => {
-                if !CLASSES.contains(&value) {
+                if !ids.contains(&value) {
                     return Err(format!("{key} must be a class id of {classes} (got '{value}')"));
                 }
                 if key == "elite" {
@@ -690,8 +699,8 @@ impl SimArgs {
             }
             "class" => {
                 if value == "all" {
-                    self.classes = strings(&CLASSES);
-                } else if CLASSES.contains(&value) {
+                    self.classes = strings(ids);
+                } else if ids.contains(&value) {
                     self.classes = vec![value.into()];
                 } else {
                     return Err(format!("class must be one of {classes} or all (got '{value}')"));
@@ -737,13 +746,13 @@ impl SimArgs {
                 self.comp_size = int(value) as usize;
             }
             "lead" => {
-                if !CLASSES.contains(&value) {
+                if !ids.contains(&value) {
                     return Err(format!("lead must be a class id of {classes} (got '{value}')"));
                 }
                 self.lead = value.into();
             }
             "tier_foe" => {
-                if value != MIRROR && !CLASSES.contains(&value) {
+                if value != MIRROR && !ids.contains(&value) {
                     return Err(format!("tier_foe must be {MIRROR} or a class id of {classes} (got '{value}')"));
                 }
                 self.tier_foe = value.into();
@@ -799,6 +808,13 @@ impl SimArgs {
         self.score != "hp"
     }
 
+    /// KITIDS1: the campaign header's party text without comp=: "all trios (<lead> + 2 of <the other classes>)".
+    fn trios_text(&self) -> String {
+        let c = &self.game.classes;
+        let others: Vec<&str> = c.ids.iter().copied().filter(|id| *id != c.trio_lead).collect();
+        format!("all trios ({} + 2 of {})", c.trio_lead, others.join(","))
+    }
+
     /// One line echoing the effective arguments (every table starts with it).
     pub fn header(&self) -> String {
         let on = |b: bool| if b { "on" } else { "off" };
@@ -835,7 +851,7 @@ impl SimArgs {
                 }
             }
             "campaign" => {
-                let comp = if self.comp_set { self.comp.join(",") } else { "all trios (warrior + 2 of ranger,priest,brawler,rogue,mage)".into() };
+                let comp = if self.comp_set { self.comp.join(",") } else { self.trios_text() };
                 t += &format!(", comp {comp}, heal {}", self.heal);
                 if !self.rest.is_empty() {
                     t += &format!(", rest {}", self.rest.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(","));
@@ -911,7 +927,17 @@ fn tune_fields() -> impl Iterator<Item = &'static serde_json::Map<String, serde_
 pub fn usage(game: &SimGame) -> Vec<String> {
     let campaign = game.story.as_ref().map_or(NO_STORY_USAGE, |s| s.usage.as_str());
     let world = format!("       world=<id> ({}): bare enc= ids also find that world's encounters (story characters with their extras and tuning)", game.default_world);
-    let mut out = strings(&USAGE);
+    // KITIDS1: the class defaults are the game's
+    let c = &game.classes;
+    let or_none = |s: String| if s.is_empty() { "none".to_string() } else { s };
+    let fill = |l: &str| {
+        l.replace("{comp}", &or_none(c.default_comp.join(",")))
+            .replace("{elite}", &or_none(c.elite.into()))
+            .replace("{boss}", &or_none(c.boss.into()))
+            .replace("{lead}", &or_none(c.trio_lead.into()))
+            .replace("{trios}", &crate::campaign::trios(c).len().to_string())
+    };
+    let mut out: Vec<String> = USAGE.iter().map(|l| fill(l)).collect();
     out.insert(USAGE_CAMPAIGN_AT, campaign.to_string());
     out.insert(USAGE_WORLD_AT, world);
     out
@@ -939,14 +965,14 @@ const USAGE: [&str; 30] = [
     "       spend=class|cons|primary|mixed|all (class; party side)  preset=<PlanPresets id>|both (balanced; every unit)",
     "       distance=default|2..6 (default; role mode 4)  score=both|hp|binary (both)  quick  metrics=on|off (on in party/role/sweep)",
     "       band=lo-hi (30-70): duel row hp averages outside it are flagged LOW/HIGH (diagnostic, not a gate)",
-    "       comp=c1,c2,.. (warrior,ranger,priest,mage)  enc=<ids>|generated|all|world:<id>[,..] (generated)  elevel=+n|-n|catalog (+0)",
-    "       elite=<class> (warrior)  boss=<class> (brawler)  role=<tank|ranged|aoe|support|striker|all>  class=<id|all>",
+    "       comp=c1,c2,.. ({comp})  enc=<ids>|generated|all|world:<id>[,..] (generated)  elevel=+n|-n|catalog (+0)",
+    "       elite=<class> ({elite})  boss=<class> ({boss})  role=<tank|ranged|aoe|support|striker|all>  class=<id|all>",
     "       dupes=on|off (off)  sample=<n> (sweep with dupes; RNG seed 7)  target=<key>:<lo>-<hi> (override a section 8 band)",
     "       heal=none|full|rally|<pct> (none; campaign: between-battle healing, full also revives, rally = HealRules 25% after a win, a downed hero gets up)  comp=.. picks one campaign party",
     "       rest=<b,b> (none): campaign story battles that start after a full rest  extra=<b>:<enc>[,..] (none): campaign extra fight(s) before story battle b (a loss there is a fall at b)",
     "       jitter=on|off (on): seeded start tiles (each unit up to 1 tile inside its half) and party order per seed",
     "       pouch=<id,id,id> (none): every party unit carries these consumables and may use them (TacticalAI use_items)",
-    "       size=1..PARTY_MAX (4) lead=<class> (none): sweep compositions of that size holding the lead (size=3 lead=warrior: the 10 trios)",
+    "       size=1..PARTY_MAX (4) lead=<class> (none): sweep compositions of that size holding the lead (size=3 lead={lead}: the {trios} trios)",
     "       tier_foe=mirror|<class> (mirror): tier mode foe class  phase=on|off (on): the generated boss's sim phase  s2=on|off (off): support_attrition S2 foes (authored since BAL5-R1b: no change)",
     "       jitter PLAN FAIL on an unreachable target (no path / too far) is a skipped fight (PLAN SKIP line), not a fail",
     "       ruleset=classic|timeline (classic; a world encounter: its world's)  rules=+id,-id (none): switch single extensions  melee_diagonal=none|maneuver|all (the row's)",
