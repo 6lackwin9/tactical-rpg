@@ -165,7 +165,7 @@
 | BATTLEMAP1 | Battle maps | kit + game | design | - | proposed | to spec | - |
 | ENCOUNTER2-C | Mid-battle dialogue overlay (the talk b... | kit + game | design ... | ENCOUNTER2-U | spec | docs/specs/ENCOUNTER2... | to spec |
 | TERMS1 | Terms table (decision "INPUT1 answers, ... | kit + game | design ... | - | spec | to spec | `kits/rpg/schema.json`... |
-| TESTCLEAN1 | Tests leave their scratch folders in th... | engine | logic | - | proposed | this row | `aegis_ui/tests/`, te... |
+| TESTCLEAN1 | Tests leave their scratch folders in th... | engine | logic | - | done (2026-11-07) | this row | `aegis_ui/tests/`, te... |
 | TOOLTESTS2 | `tools/sprites` suites reach no gate (``... | process | logic | - | proposed | - | `tools/fc.sh`, `check`... |
 | TACTIC2 | Revisit the party and hero tactics unde... | kit + game | design | INPUT1-U | approved | to spec | - |
 | ENCOUNTER2-CA | The prologue's scripted opening (`enc_p`... | game (data) | asset | ENCOUNTER2-C4, CAST... | approved | docs/specs/ENCOUNTER2... | `data/worlds/sunk_war`... |
