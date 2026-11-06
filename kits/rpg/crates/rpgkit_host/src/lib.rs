@@ -69,6 +69,9 @@
 //! "target"}, {"mode": "area", "skill", "cell": [x, y]}, {"mode": "goto", "cell"}, {"mode": "move", "dir": [dx, dy],
 //! "tiles"}, {"mode": "withdraw"}, {"mode": "item", "item", "target"}. Units are referred to by index (as in `state`)
 //! or by name.
+//! BASERULES1-M: `rules` builds the `aegis rules` tweak report and its `--contract` surface.
+
+pub mod rules;
 
 use rpgkit_battle::command;
 use rpgkit_battle::grid::{V2, GRID_H, GRID_W, NO_CELL, TERRAIN_IDS};

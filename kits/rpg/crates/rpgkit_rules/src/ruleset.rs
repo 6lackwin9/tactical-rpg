@@ -54,32 +54,51 @@ pub enum RuleKind {
     Extension,
 }
 
+/// BASERULES1-M (docs/specs/BASERULES1_LIBRARY.md 7): a register entry and its metadata. `requires` names the rules
+/// without which this one is silently inert (the content check refuses a row that lists it alone: an error);
+/// `conflicts` names rules or `field=value` settings it runs with but cuts against (a warning); `bundle` the bundle it
+/// belongs to (`BUNDLES`, "" = none); `system` the system it reads in; `tested` the kit tests that fight it
+/// (`rpgkit_battle/tests/`, "golden" = the timeline golden). Additive: a rule is off when a row does not list it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rule {
     pub id: &'static str,
     pub kind: RuleKind,
+    pub requires: &'static [&'static str],
+    pub conflicts: &'static [&'static str],
+    pub bundle: &'static str,
+    pub system: &'static str,
+    pub tested: &'static [&'static str],
+    /// What it does when on, in a few words (the `aegis rules` report).
+    pub does: &'static str,
 }
 
-/// The rule register (RULESET1 3.2, then HOOKS1 4.1), in its order.
+const fn rule_of(id: &'static str, kind: RuleKind, system: &'static str, bundle: &'static str, tested: &'static [&'static str], does: &'static str) -> Rule {
+    Rule { id, kind, requires: &[], conflicts: &[], bundle, system, tested, does }
+}
+
+/// The rule register (RULESET1 3.2, then HOOKS1 4.1), in its order, with its metadata (BASERULES1-M).
 pub const REGISTER: [Rule; 18] = [
-    Rule { id: ROUND_INTENT, kind: RuleKind::Option },
-    Rule { id: ENEMY_MOVES, kind: RuleKind::Option },
-    Rule { id: DECK, kind: RuleKind::Option },
-    Rule { id: POISE, kind: RuleKind::Extension },
-    Rule { id: AP_COST, kind: RuleKind::Extension },
-    Rule { id: PIERCE, kind: RuleKind::Extension },
-    Rule { id: REACH, kind: RuleKind::Extension },
-    Rule { id: FLANK, kind: RuleKind::Extension },
-    Rule { id: PLAN_BADGES, kind: RuleKind::Extension },
-    Rule { id: FORCED_MOVE, kind: RuleKind::Extension },
-    Rule { id: GROUND_HAZARDS, kind: RuleKind::Extension },
-    Rule { id: ARENA_HAZARDS, kind: RuleKind::Extension },
-    Rule { id: TRIGGERS, kind: RuleKind::Extension },
-    Rule { id: UNIT_METERS, kind: RuleKind::Extension },
-    Rule { id: HP_COST, kind: RuleKind::Extension },
-    Rule { id: IGNORE_GUARD, kind: RuleKind::Extension },
-    Rule { id: AI_TACTICS, kind: RuleKind::Extension },
-    Rule { id: EXECUTE, kind: RuleKind::Extension },
+    Rule {
+        conflicts: &["stances=on", "switch_target_step=on"],
+        ..rule_of(ROUND_INTENT, RuleKind::Option, "planning", "intent_core", &["round_intent.rs", "golden"], "one intent and target a round, follow-ups, facing, flanks drawn")
+    },
+    rule_of(ENEMY_MOVES, RuleKind::Option, "timing", "windup", &["timeline_timing.rs"], "enemies pay no AP and book recovery blocks"),
+    rule_of(DECK, RuleKind::Option, "build", "build", &["deck.rs"], "open basics, slots, slottable passives"),
+    rule_of(POISE, RuleKind::Extension, "poise", "windup", &["poise.rs", "battle_talk.rs"], "max poise, stagger, breaks, rest poise"),
+    rule_of(AP_COST, RuleKind::Extension, "timing", "windup", &["timeline_timing.rs"], "a skill's ap_cost replaces its level as AP"),
+    rule_of(PIERCE, RuleKind::Extension, "damage", "", &["poise.rs"], "armor_piercing drops the armour term"),
+    rule_of(REACH, RuleKind::Extension, "positioning", "positioning", &["reach.rs"], "melee band 1-2 by the family rule"),
+    Rule { requires: &[ROUND_INTENT], ..rule_of(FLANK, RuleKind::Extension, "positioning", "positioning", &["round_intent.rs"], "flanked exploit, flank power, no riposte") },
+    rule_of(PLAN_BADGES, RuleKind::Extension, "tells", "tells", &["plan_badges.rs"], "impact badges, intents in tells, foresight"),
+    rule_of(FORCED_MOVE, RuleKind::Extension, "hooks", "hooks", &["forced_move.rs"], "push, pull, collision"),
+    rule_of(GROUND_HAZARDS, RuleKind::Extension, "hooks", "hooks", &["ground_hazards.rs"], "skill and item hazards on tiles"),
+    rule_of(ARENA_HAZARDS, RuleKind::Extension, "hooks", "hooks", &["arena_hazards.rs"], "scheduled hazards"),
+    rule_of(TRIGGERS, RuleKind::Extension, "hooks", "hooks", &["triggers.rs", "riders.rs"], "events, riders, held guard, intercept"),
+    rule_of(UNIT_METERS, RuleKind::Extension, "hooks", "hooks", &["meters.rs"], "meters, bands, meter costs"),
+    rule_of(HP_COST, RuleKind::Extension, "hooks", "hooks", &["riders.rs"], "a skill's HP cost"),
+    rule_of(IGNORE_GUARD, RuleKind::Extension, "hooks", "hooks", &["riders.rs", "poise.rs"], "a skill drops guard, keeps cover"),
+    rule_of(AI_TACTICS, RuleKind::Extension, "ai", "hooks", &["tactics.rs"], "target preferences and unit tactics"),
+    rule_of(EXECUTE, RuleKind::Extension, "hooks", "hooks", &["execute.rs"], "the hp_below exploit"),
 ];
 
 /// The register entry of `id`.
@@ -641,4 +660,309 @@ fn note_fallback(id: &str) {
 /// nearest first): the first non-empty `ruleset`, else classic.
 pub fn world_ruleset<'a>(nearest_first: impl IntoIterator<Item = &'a Obj>) -> String {
     nearest_first.into_iter().map(|m| value::string(m, "ruleset", "")).find(|r| !r.is_empty()).unwrap_or_else(|| CLASSIC.to_string())
+}
+
+// BASERULES1-M (docs/specs/BASERULES1_LIBRARY.md 7): the register's metadata beside it. A token names a condition on a
+// ruleset: a rule id (listed), `!<rule>` (not listed), `<field>=<value>` (the field reads as the value, by the rules
+// when empty) or a bare field key (set: it reads other than the schema default).
+
+/// A row field and what it needs to be read: `needs` tokens that must hold when the field is set (else a warning, or
+/// nothing when `refused`: the row checks already refuse it), `untested_with` tokens no test fights it with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FieldRule {
+    pub key: &'static str,
+    pub needs: &'static [&'static str],
+    pub untested_with: &'static [&'static str],
+    pub refused: bool,
+}
+
+const fn field_rule(key: &'static str, needs: &'static [&'static str]) -> FieldRule {
+    FieldRule { key, needs, untested_with: &[], refused: false }
+}
+
+/// The row fields that need a rule or a value to be read (library 2 and 4); a field not listed is read whatever the
+/// rules.
+pub const FIELD_RULES: [FieldRule; 15] = [
+    FieldRule { refused: true, ..field_rule("intents", &[ROUND_INTENT]) },
+    field_rule("flank_protected_cost", &[ROUND_INTENT]),
+    field_rule("flank_protected_ap", &[ROUND_INTENT]),
+    field_rule("move_after_blocks", &[ROUND_INTENT]),
+    field_rule("stagger_windup_mult", &[POISE]),
+    field_rule("stagger_guard_mult", &[POISE]),
+    field_rule("stagger_repeat_mult", &[POISE]),
+    field_rule("flank_stagger_mult", &[POISE, FLANK]),
+    field_rule("flank_power_mult", &[FLANK]),
+    field_rule("break_chance_scale", &[POISE]),
+    field_rule("break_chance_cap", &[POISE]),
+    field_rule("rest_ap_per_block", &["rest_ap=round_end"]),
+    field_rule("rest_ap_cap", &["rest_ap=round_end"]),
+    field_rule("rest_poise_per_block", &[POISE]),
+    FieldRule { untested_with: &["chase=classic"], ..field_rule("attack_lock", &[]) },
+];
+
+/// The metadata of row field `key`, if it has any.
+pub fn field_rule_of(key: &str) -> Option<&'static FieldRule> {
+    FIELD_RULES.iter().find(|f| f.key == key)
+}
+
+/// Must ship together (a bundle breaks if split: a warning) or works well (a suggestion, never a warning).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BundleKind {
+    MustShip,
+    WorksWell,
+}
+
+/// A bundle (library 5): when every `anchor` token holds, a must-ship bundle wants every `holds` token too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Bundle {
+    pub id: &'static str,
+    pub kind: BundleKind,
+    pub anchor: &'static [&'static str],
+    pub holds: &'static [&'static str],
+    pub note: &'static str,
+}
+
+/// The bundles of the rules built so far (library 5; the coming options add theirs).
+pub const BUNDLES: [Bundle; 7] = [
+    Bundle {
+        id: "legacy_core",
+        kind: BundleKind::MustShip,
+        anchor: &["!round_intent"],
+        holds: &["stances=on", "chase=classic", "rest_ap=on_use", "switch_target_step=on", "root_stops_chase=off"],
+        note: "the classic row; melee_diagonal reads as set",
+    },
+    Bundle {
+        id: "intent_core",
+        kind: BundleKind::MustShip,
+        anchor: &[ROUND_INTENT],
+        holds: &["rest_ap=round_end", "chase=every_skill", "root_stops_chase=on"],
+        note: "the by-rules choices; stances and the Switch Target step are round_intent's conflicts",
+    },
+    Bundle { id: "build", kind: BundleKind::MustShip, anchor: &[DECK], holds: &["basics", "deck_slots"], note: "the row checks refuse it split" },
+    Bundle { id: "windup", kind: BundleKind::WorksWell, anchor: &[], holds: &[ENEMY_MOVES, AP_COST, POISE, "poise_stat"], note: "" },
+    Bundle { id: "positioning", kind: BundleKind::WorksWell, anchor: &[], holds: &[FLANK, REACH, "melee_diagonal=maneuver", "attack_lock=melee"], note: "flank needs round_intent" },
+    Bundle { id: "tells", kind: BundleKind::WorksWell, anchor: &[], holds: &[PLAN_BADGES, ROUND_INTENT], note: "" },
+    Bundle {
+        id: "hooks",
+        kind: BundleKind::WorksWell,
+        anchor: &[],
+        holds: &[FORCED_MOVE, GROUND_HAZARDS, ARENA_HAZARDS, TRIGGERS, UNIT_METERS, HP_COST, IGNORE_GUARD, AI_TACTICS, EXECUTE],
+        note: "each alone",
+    },
+];
+
+/// The bundle `id`.
+pub fn bundle(id: &str) -> Option<&'static Bundle> {
+    BUNDLES.iter().find(|b| b.id == id)
+}
+
+/// The rule sets kit tests fight (library 4, `[poise, flank]` left out: it is read only, and flank is inert there); a
+/// row listing another set is untested together (a warning).
+pub const TESTED_SETS: [&[&str]; 21] = [
+    &[],
+    &[ROUND_INTENT],
+    &[ROUND_INTENT, FLANK],
+    &[ROUND_INTENT, AP_COST],
+    &[ROUND_INTENT, AP_COST, FLANK],
+    &[ROUND_INTENT, DECK],
+    &[ROUND_INTENT, REACH],
+    &[ROUND_INTENT, PLAN_BADGES],
+    &[ROUND_INTENT, POISE, PIERCE],
+    &[ROUND_INTENT, ENEMY_MOVES, AP_COST],
+    &[ROUND_INTENT, AP_COST, POISE, DECK],
+    &[ENEMY_MOVES, AP_COST],
+    &[DECK],
+    &[DECK, POISE],
+    &[POISE],
+    &[REACH],
+    &[UNIT_METERS],
+    &[TRIGGERS],
+    &[AI_TACTICS],
+    &[GROUND_HAZARDS],
+    &[
+        ROUND_INTENT, ENEMY_MOVES, DECK, POISE, AP_COST, PIERCE, REACH, FLANK, PLAN_BADGES, FORCED_MOVE, GROUND_HAZARDS, ARENA_HAZARDS, TRIGGERS,
+        UNIT_METERS, HP_COST, IGNORE_GUARD, AI_TACTICS, EXECUTE,
+    ],
+];
+
+/// Whether the rule set `rules` is one the kit tests fight (order does not matter).
+pub fn tested_set(rules: &[&str]) -> bool {
+    TESTED_SETS.iter().any(|t| t.len() == rules.len() && t.iter().all(|r| rules.contains(r)))
+}
+
+/// A numeric `pub const` of `rpgkit_rules/src` that stays code (BASERULES1 4.1): its name, file, system and why.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Locked {
+    pub name: &'static str,
+    pub file: &'static str,
+    pub system: &'static str,
+    pub why: &'static str,
+}
+
+const fn locked(name: &'static str, file: &'static str, system: &'static str, why: &'static str) -> Locked {
+    Locked { name, file, system, why }
+}
+
+const BUDGET_WHY: &str = "gear budget weight of a soft check (warnings only)";
+const STATS_WHY: &str = "stat and level rule; opens in the stat sessions (U1, U2)";
+const CRIT_WHY: &str = "crit input; becomes a role row (BASERULES1 4)";
+const FORMULA_WHY: &str = "formula value; leaves code as a value (BASERULES1 4)";
+const CARRY_WHY: &str = "the carry formula; one form, no option yet";
+const STATUS_WHY: &str = "status rule; opens in the status session (S1)";
+const BOUND_WHY: &str = "a schema field's bound";
+
+/// What stays code, and why (BASERULES1 4.1). A test scans `src` and fails on a numeric `pub const` neither here nor in
+/// `PROMOTED`, so the table cannot go stale.
+pub const LOCKED: [Locked; 50] = [
+    locked("W_POWER", "budget.rs", "gear", BUDGET_WHY),
+    locked("W_MITIGATION", "budget.rs", "gear", BUDGET_WHY),
+    locked("W_STAT_POINT", "budget.rs", "gear", BUDGET_WHY),
+    locked("W_BURDEN", "budget.rs", "gear", BUDGET_WHY),
+    locked("W_EXTRA_BLOCK", "budget.rs", "gear", BUDGET_WHY),
+    locked("W_SKILL_POTENCY", "budget.rs", "gear", BUDGET_WHY),
+    locked("W_STATUS_POTENCY", "budget.rs", "gear", BUDGET_WHY),
+    locked("W_SPELL_REACH", "budget.rs", "gear", BUDGET_WHY),
+    locked("TARGET_BUDGET", "budget.rs", "gear", BUDGET_WHY),
+    locked("TOLERANCE", "budget.rs", "gear", BUDGET_WHY),
+    locked("UNARMED_VALUE", "budget.rs", "gear", "follows UNARMED_BASE_POWER"),
+    locked("BASE_CAPACITY", "carry.rs", "carry", CARRY_WHY),
+    locked("HEAVY_RATIO", "carry.rs", "carry", CARRY_WHY),
+    locked("OVERLOAD_STEP", "carry.rs", "carry", CARRY_WHY),
+    locked("DEFAULT_UNIT_SCALING", "damage.rs", "damage", "unit power scale of an untrained wielder"),
+    locked("ARMOR_K", "damage.rs", "damage", FORMULA_WHY),
+    locked("CRIT_BASE", "damage.rs", "damage", CRIT_WHY),
+    locked("CRIT_PER_DEX", "damage.rs", "damage", CRIT_WHY),
+    locked("CRIT_DEX_FLOOR", "damage.rs", "damage", CRIT_WHY),
+    locked("CRIT_MULT", "damage.rs", "damage", FORMULA_WHY),
+    locked("UNARMED_BASE_POWER", "damage.rs", "damage", "unarmed power input; becomes a role row (BASERULES1 4)"),
+    locked("TRAINED_FIST_MIN_LEVEL", "damage.rs", "damage", "the fist proficiency gate"),
+    locked("GUARD_CAP", "damage.rs", "damage", FORMULA_WHY),
+    locked("POTENCY_MIN", "derived.rs", "stats", BOUND_WHY),
+    locked("POTENCY_MAX", "derived.rs", "stats", BOUND_WHY),
+    locked("CLASS_BUDGET", "stats.rs", "stats", STATS_WHY),
+    locked("SPEND_BASE", "stats.rs", "stats", STATS_WHY),
+    locked("FREE_PER_LEVEL", "stats.rs", "stats", STATS_WHY),
+    locked("MAX_LEVEL", "stats.rs", "stats", STATS_WHY),
+    locked("MAX_CLASS_SLOTS", "stats.rs", "stats", STATS_WHY),
+    locked("MAX_EXTRA_SLOTS", "stats.rs", "stats", STATS_WHY),
+    locked("TIER_UNLOCK_STEP", "stats.rs", "stats", STATS_WHY),
+    locked("MAX_UNLOCK_REDUCTION", "stats.rs", "stats", STATS_WHY),
+    locked("ADVANCED_UNLOCK_FLOOR", "stats.rs", "stats", STATS_WHY),
+    locked("KNOW_UNLOCK_BASE", "stats.rs", "stats", STATS_WHY),
+    locked("KNOW_UNLOCK_STEP", "stats.rs", "stats", STATS_WHY),
+    locked("MINION_SKILL_CAP", "stats.rs", "stats", STATS_WHY),
+    locked("HP_PER_CONS", "stats.rs", "stats", STATS_WHY),
+    locked("RANGE_PERC_THRESHOLD", "stats.rs", "stats", STATS_WHY),
+    locked("PROF_MAX_LEVEL", "stats.rs", "stats", STATS_WHY),
+    locked("DEFAULT_SCALING", "stats.rs", "stats", STATS_WHY),
+    locked("PASSIVE_ONLY_SCALING", "stats.rs", "stats", STATS_WHY),
+    locked("BLEED_PCT", "status.rs", "statuses", STATUS_WHY),
+    locked("DEBT_STAGGER", "status.rs", "statuses", STATUS_WHY),
+    locked("DEBT_STUN", "status.rs", "statuses", STATUS_WHY),
+    locked("BASE_AP", "unit.rs", "timing", "the AP pool every timing rule counts in"),
+    locked("GEAR_REACH_CAP", "unit.rs", "positioning", "the most reach gear adds"),
+    locked("FORESIGHT_RANGE_MAX", "unit.rs", "tells", BOUND_WHY),
+    locked("STAGGER_TAKEN_MULT_MAX", "unit.rs", "poise", BOUND_WHY),
+    locked("REACH_WEAPON_REACH", "unit.rs", "positioning", "the reach rule's band"),
+];
+
+/// Numeric `pub const`s promoted to data: the default of a ruleset row field (name, field).
+pub const PROMOTED: [(&str, &str); 2] = [("FIXED_AP", "flank_protected_ap"), ("MOVE_AFTER_BLOCKS", "move_after_blocks")];
+
+impl Numbers {
+    /// BASERULES1-M: a row field as it reads, in its row form (a number, a value id, `on`/`off`, a comma list; deck
+    /// slots `active/passive/keystone`); None for a key that is not a ruleset field.
+    pub fn field(&self, key: &str) -> Option<String> {
+        let switch = |on: bool| if on { "on" } else { "off" }.to_string();
+        Some(match key {
+            "intents" => self.intents.join(","),
+            "basics" => self.basics.join(","),
+            "poise_stat" => self.poise_stat.clone(),
+            "stagger_windup_mult" => self.stagger_windup_mult.to_string(),
+            "stagger_guard_mult" => self.stagger_guard_mult.to_string(),
+            "stagger_repeat_mult" => self.stagger_repeat_mult.to_string(),
+            "flank_stagger_mult" => self.flank_stagger_mult.to_string(),
+            "flank_power_mult" => self.flank_power_mult.to_string(),
+            "break_chance_scale" => self.break_chance_scale.to_string(),
+            "break_chance_cap" => self.break_chance_cap.to_string(),
+            "rest_ap_per_block" => self.rest_ap_per_block.to_string(),
+            "rest_ap_cap" => self.rest_ap_cap.to_string(),
+            "rest_poise_per_block" => self.rest_poise_per_block.to_string(),
+            "deck_slots" => format!("{}/{}/{}", self.deck_slots.active, self.deck_slots.passive, self.deck_slots.keystone),
+            "melee_diagonal" => self.melee_diagonal.id().to_string(),
+            "flank_protected_cost" => self.flank_protected.id().to_string(),
+            "flank_protected_ap" => match self.flank_protected {
+                FlankCost::Fixed(ap) => ap,
+                _ => FlankCost::FIXED_AP,
+            }
+            .to_string(),
+            "move_after_blocks" => self.move_after_blocks.to_string(),
+            "rest_ap" => self.rest_ap.id().to_string(),
+            "chase" => self.chase.id().to_string(),
+            "root_stops_chase" => switch(self.root_stops_chase),
+            "switch_target_step" => switch(self.switch_target_step),
+            "stances" => switch(self.stances),
+            "attack_lock" => self.attack_lock.id().to_string(),
+            _ => return None,
+        })
+    }
+}
+
+/// BASERULES1-M: what the register's metadata says of a rule set: errors (a rule that would be silently inert; the
+/// content check refuses the row) and warnings (a set field nothing reads, a conflict, a split bundle, an untested set).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RuleNotes {
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+impl Ruleset {
+    /// Whether the metadata token `token` holds (see `FIELD_RULES`); an unknown token never holds.
+    pub fn holds(&self, token: &str) -> bool {
+        if let Some(t) = token.strip_prefix('!') {
+            return !self.holds(t);
+        }
+        if let Some((key, v)) = token.split_once('=') {
+            return self.numbers.field(key).is_some_and(|x| x == v);
+        }
+        if rule(token).is_some() {
+            return self.has(token);
+        }
+        match (self.numbers.field(token), Numbers::default().field(token)) {
+            (Some(x), Some(d)) => x != d,
+            _ => false,
+        }
+    }
+
+    /// The register metadata's notes on this ruleset (the content check's, and an `adjust`ed set's for the tools).
+    /// Additive: a rule not listed and a field at its default raise nothing.
+    pub fn notes(&self) -> RuleNotes {
+        let mut n = RuleNotes::default();
+        for r in REGISTER.iter().filter(|r| self.has(r.id)) {
+            for req in r.requires.iter().filter(|t| !self.holds(t)) {
+                n.errors.push(format!("{} needs {req} in Rules: without it the rule does nothing.", r.id));
+            }
+            for c in r.conflicts.iter().filter(|t| self.holds(t)) {
+                n.warnings.push(format!("{} conflicts with {c}: it runs, but the two cut against each other.", r.id));
+            }
+        }
+        for f in FIELD_RULES.iter().filter(|f| self.holds(f.key)) {
+            let unmet: Vec<&str> = f.needs.iter().copied().filter(|t| !self.holds(t)).collect();
+            if !unmet.is_empty() && !f.refused {
+                n.warnings.push(format!("{} is set but read only with {}.", f.key, unmet.join(" and ")));
+            }
+            for u in f.untested_with.iter().filter(|t| self.holds(t)) {
+                n.warnings.push(format!("{} {} is untested with {u}.", f.key, self.numbers.field(f.key).unwrap_or_default()));
+            }
+        }
+        for b in BUNDLES.iter().filter(|b| b.kind == BundleKind::MustShip && b.anchor.iter().all(|t| self.holds(t))) {
+            for t in b.holds.iter().filter(|t| !self.holds(t)) {
+                n.warnings.push(format!("Bundle {} ships together: it needs {t}.", b.id));
+            }
+        }
+        if !tested_set(&self.rules) {
+            n.warnings.push(format!("Rules untested together: {} (no kit test fights this set; aegis rules lists the tested sets).", self.rules.join(", ")));
+        }
+        n
+    }
 }

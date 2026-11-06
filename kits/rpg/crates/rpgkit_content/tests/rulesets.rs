@@ -430,3 +430,32 @@ fn the_switches_read_by_the_rules_or_as_set() {
     assert_eq!(store::resave_text(&data, None, ruleset::KIND).unwrap(), text, "a re-save without changes is byte-identical");
     drop_scratch(&data);
 }
+
+/// BASERULES1-M: the register's metadata in the row checks. A rule that would be silently inert (flank without
+/// round_intent) is one load error and the row is dropped; with what it requires it loads; a conflict, a field set
+/// without its rule and a split bundle are warnings only, beside the row's own (`check::ruleset::warnings`).
+#[test]
+fn the_register_metadata_refuses_an_inert_rule_and_warns_on_the_rest() {
+    let (_scratch, data) = scratch("metadata");
+    base_catalog(&data);
+    let lone = json!({"id": "loose", "name": "Loose", "rules": ["flank"]});
+    write_kind(&data, ruleset::KIND, 1, json!([lone]));
+    let src = source::load(&data);
+    let errors = ruleset_errors(&src);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(errors[0].ends_with("flank needs round_intent in Rules: without it the rule does nothing."), "{errors:?}");
+    assert!(src.catalog[ruleset::KIND].as_array().is_none_or(|rows| rows.is_empty()), "the row is dropped");
+    write_kind(&data, ruleset::KIND, 1, json!([{"id": "loose", "name": "Loose", "rules": ["round_intent", "flank"]}]));
+    assert_eq!(ruleset_errors(&source::load(&data)), Vec::<String>::new(), "with what it requires");
+    drop_scratch(&data);
+
+    let norm = |v: Value| normalize(fields(source::schema(), "content", ruleset::KIND), &dict(v), false);
+    assert_eq!(check::ruleset::warnings(&norm(good_row())), Vec::<String>::new(), "a complete row");
+    let mut conflict = good_row();
+    conflict["stances"] = json!("on");
+    assert_eq!(check::ruleset::warnings(&norm(conflict)), ["round_intent conflicts with stances=on: it runs, but the two cut against each other."]);
+    let plain = norm(json!({"id": "plain", "name": "Plain", "rules": [], "stagger_windup_mult": 3.0}));
+    assert_eq!(check::ruleset::warnings(&plain), ["stagger_windup_mult is set but read only with poise."]);
+    let split = norm(json!({"id": "split", "name": "Split", "rules": ["round_intent"], "chase": "classic", "flank_protected_ap": 3}));
+    assert_eq!(check::ruleset::warnings(&split), ["flank_protected_ap is read only with fixed", "Bundle intent_core ships together: it needs chase=every_skill."]);
+}

@@ -103,6 +103,8 @@ pub fn row_errors(e: &Dict, refs: &Refs) -> Vec<String> {
         out.push(format!("Poise stat: {POISE} needs a derived stat."));
     }
     deck_slot_errors(json::get(e, "deck_slots"), has(DECK), &mut out);
+    // BASERULES1-M: a listed rule the register says would be silently inert (`flank` without `round_intent`)
+    out.extend(ruleset::Ruleset::from_row(e).notes().errors);
     // CLN-45: each switch is "" (by the rules) or one of its values
     for key in ruleset::BY_RULES_FIELDS {
         let v = json::s(e, key);
@@ -143,14 +145,17 @@ pub fn missing_rows(v: &View, e: &Dict) -> Vec<String> {
         .collect()
 }
 
-/// INPUT1 1.7 (MR9): the soft problem of one row (normalized): a `flank_protected_ap` set while the cost is not `fixed`
-/// (it is not read). CLN-45: `melee_diagonal` maneuver without `round_intent` is no longer a warning (it reads as set).
+/// INPUT1 1.7 (MR9): the soft problems of one row (normalized): a `flank_protected_ap` set while the cost is not `fixed`
+/// (it is not read), then the register metadata's warnings (BASERULES1-M, `Ruleset::notes`). CLN-45: `melee_diagonal` maneuver without `round_intent` is no longer a warning (it reads as set).
 pub fn warnings(e: &Dict) -> Vec<String> {
     let mut out = Vec::new();
     let ap = e.get("flank_protected_ap").map(|v| json::to_int(v));
     if ap.is_some_and(|ap| ap != i64::from(ruleset::FlankCost::FIXED_AP)) && json::s(e, "flank_protected_cost") != "fixed" {
         out.push("flank_protected_ap is read only with fixed".into());
     }
+    // BASERULES1-M: the register metadata's warnings (a set field nothing reads, a conflict, a split bundle, an
+    // untested rule set)
+    out.extend(ruleset::Ruleset::from_row(e).notes().warnings);
     out
 }
 

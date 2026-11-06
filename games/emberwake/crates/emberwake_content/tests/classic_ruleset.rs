@@ -36,3 +36,22 @@ fn a_shipped_classic_row_reads_as_the_built_in_classic_values() {
     let row = v.entries(ruleset::KIND).iter().find(|e| json::s(e, "id") == CLASSIC).expect("the shipped classic row (seed cln44.json)");
     assert_eq!(Ruleset::from_row(row), Ruleset::classic(), "classic battles unchanged");
 }
+
+/// BASERULES1-M: the register's metadata is additive: every shipped ruleset row still loads, and the default rows
+/// (classic, timeline) raise no metadata warning (a test row may: it is printed).
+#[test]
+fn the_shipped_rows_pass_the_register_metadata() {
+    let v = store::view(&data_dir());
+    let rows = v.entries(ruleset::KIND);
+    assert!(source::load(&data_dir()).errors.iter().all(|e| !e.contains("rulesets.json")), "every shipped row loads");
+    for row in rows {
+        let notes = Ruleset::from_row(row).notes();
+        let id = json::s(row, "id");
+        assert!(notes.errors.is_empty(), "{id}: {:?}", notes.errors);
+        if id == CLASSIC || id == ruleset::TIMELINE {
+            assert_eq!(emberwake_content::check::ruleset::warnings(row), Vec::<String>::new(), "{id}");
+        } else if !notes.warnings.is_empty() {
+            eprintln!("rulesets:{id}: {:?}", notes.warnings);
+        }
+    }
+}

@@ -13,6 +13,8 @@
 #                                with origin/develop, staged or untracked; --all (the gate and the flush): every file
 #   tools/fc.sh tooltests        the tools/tiles tests, time limit FC_TOOLTESTS_LIMIT (180 s); a visible SKIP when no Python has Pillow
 #   tools/fc.sh content <args>   edit games/emberwake/data/ through the engine's writer: check | upsert | remove | world | apply | manifest (aegis content)
+#   tools/fc.sh rules [--contract]   the ruleset tweak report (aegis rules: register metadata, fields, bundles, tested sets, locked,
+#                                the game's rows); --contract: tunable and locked, one line each
 #   tools/fc.sh sim <args>       balance sim (aegis sim <mode> [level] [seeds] [key=value ...]; sim help: the keys)
 #   tools/fc.sh replay <file> [...] replay a playtest recording (aegis replay: battle=, until=, json, variant=, write=, seeds=, fallback=)
 #   tools/fc.sh scenario check [<file>|all]   parse games/<id>/scenarios/*.json; no game starts (engine/docs/authoring/scenarios.md)
@@ -288,6 +290,7 @@ case "$1" in
   tooltests) tooltests ;;
   layers) layers_check ;;
   content) aegis content "${@:2}" || status=1 ;;
+  rules) aegis rules "${@:2}" || status=1 ;;
   sim) aegis sim "${@:2}" || status=1 ;;
   replay) aegis replay "${@:2}" || status=1 ;;
   scenario) scenario "${@:2}" ;;
