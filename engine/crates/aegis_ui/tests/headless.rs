@@ -2,6 +2,7 @@
 //! here opens a window or a sound device. Frame counts are read as bounds: the upper ones are the rule (the pace holds), the
 //! lower ones only say that frames come at all, so a loaded machine does not fail them.
 
+use aegis_core::scratch::Scratch;
 use aegis_ui::art::{load_png, Art};
 use aegis_ui::audio::Audio;
 use aegis_ui::canvas::{rgb, Canvas, Rect};
@@ -14,7 +15,7 @@ use aegis_ui::ui::{Gfx, Ui, TEXT};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -89,7 +90,8 @@ impl Screen<App> for Probe {
 
 fn context() -> AppCx {
     static N: AtomicU32 = AtomicU32::new(0);
-    let settings = std::env::temp_dir().join(format!("aegis_headless_settings_{}_{}.json", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
+    // The settings file sits in a scratch folder held until the test thread ends (the context outlives this helper).
+    let settings = Scratch::new(&format!("headless_settings_{}", N.fetch_add(1, Ordering::Relaxed))).until_thread_end().join("settings.json");
     Cx {
         settings: Settings::load(settings, json!({})),
         art: Art::new(None),
@@ -165,10 +167,8 @@ impl Game {
     }
 }
 
-fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("aegis_headless_{}_{name}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+fn scratch(name: &str) -> Scratch {
+    let dir = Scratch::new(&format!("headless_{name}"));
     dir
 }
 

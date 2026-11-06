@@ -17,13 +17,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// A scratch data folder `<tmp>/<tag>/data` with empty catalog and worlds folders.
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_zones_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_zones_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -104,7 +103,7 @@ fn zone_field(section: &str) -> Dict {
 
 #[test]
 fn the_zone_options_are_the_code_zones_then_the_rows() {
-    let data = scratch("options");
+    let (_scratch, data) = scratch("options");
     catalog(&data, "alley", json!([]));
     let v = store::view(&data);
     let mut want = strs(&ZONE_IDS);
@@ -124,7 +123,7 @@ fn the_zone_options_are_the_code_zones_then_the_rows() {
 
 #[test]
 fn without_zone_rows_the_options_are_the_code_zones() {
-    let data = scratch("classic");
+    let (_scratch, data) = scratch("classic");
     catalog(&data, "forest_clearing", json!([]));
     fs::remove_file(data.join("catalog").join(format!("{ZONES_KIND}.json"))).unwrap();
     let v = store::view(&data);
@@ -135,7 +134,7 @@ fn without_zone_rows_the_options_are_the_code_zones() {
 
 #[test]
 fn a_world_encounter_may_name_a_data_zone() {
-    let data = scratch("world");
+    let (_scratch, data) = scratch("world");
     catalog(&data, "alley", json!([]));
     let dir = data.join("worlds").join("vale");
     fs::create_dir_all(&dir).unwrap();
@@ -150,7 +149,7 @@ fn a_world_encounter_may_name_a_data_zone() {
 
 #[test]
 fn a_road_fight_may_name_a_data_zone() {
-    let data = scratch("route");
+    let (_scratch, data) = scratch("route");
     catalog(&data, "alley", json!([]));
     let dir = data.join("worlds").join("vale");
     fs::create_dir_all(&dir).unwrap();
@@ -167,7 +166,7 @@ fn a_road_fight_may_name_a_data_zone() {
 
 #[test]
 fn a_data_zone_without_encounter_rows_plays_on_its_own_rows() {
-    let data = scratch("zone_rows");
+    let (_scratch, data) = scratch("zone_rows");
     catalog(&data, "alley", json!([]));
     let s = battle(&data);
     assert_eq!(board(&s.w.grid), board_of(zone_layout().iter().map(String::as_str)), "the zone row's layout");
@@ -180,7 +179,7 @@ fn a_data_zone_without_encounter_rows_plays_on_its_own_rows() {
 
 #[test]
 fn encounter_rows_win_over_the_data_zone() {
-    let data = scratch("enc_rows");
+    let (_scratch, data) = scratch("enc_rows");
     catalog(&data, "alley", json!(authored()));
     let want = board_of(authored().iter().map(String::as_str));
     assert_ne!(want, board_of(zone_layout().iter().map(String::as_str)), "fixture");
@@ -191,7 +190,7 @@ fn encounter_rows_win_over_the_data_zone() {
 #[test]
 fn a_data_zone_without_rows_or_an_unknown_zone_is_floor() {
     for (tag, zone) in [("empty", "yard"), ("unknown", "nowhere")] {
-        let data = scratch(tag);
+        let (_scratch, data) = scratch(tag);
         catalog(&data, zone, json!([]));
         assert_eq!(board(&battle(&data).w.grid), floor(), "{tag}: 9 rows of floor");
         drop_scratch(&data);
@@ -200,7 +199,7 @@ fn a_data_zone_without_rows_or_an_unknown_zone_is_floor() {
 
 #[test]
 fn a_row_named_like_a_code_zone_is_one_error_and_the_code_zone_stays() {
-    let data = scratch("code_id");
+    let (_scratch, data) = scratch("code_id");
     catalog(&data, "stone_arena", json!([]));
     write_kind(&data, ZONES_KIND, json!([{"id": "alley", "name": "Cinder Alley", "rows": zone_layout()}, {"id": "stone_arena", "name": "Walled Arena", "rows": zone_layout()}]));
     let src = source::load(&data);
@@ -235,7 +234,7 @@ fn an_unchecked_code_id_row_never_stands_in_for_the_code_zone() {
 
 #[test]
 fn a_hold_tile_is_checked_on_the_data_zone_board() {
-    let data = scratch("hold");
+    let (_scratch, data) = scratch("hold");
     catalog(&data, "alley", json!([]));
     let v = store::view(&data);
     let hold = |zone: &str, tile: [i32; 2]| {
@@ -255,7 +254,7 @@ fn a_hold_tile_is_checked_on_the_data_zone_board() {
 
 #[test]
 fn the_backdrop_key_is_the_row_s_else_the_zone_path() {
-    let data = scratch("backdrop");
+    let (_scratch, data) = scratch("backdrop");
     catalog(&data, "alley", json!([]));
     let cat = Catalog::from_value(&source::load(&data).catalog);
     assert_eq!(zone_backdrop("alley", cat.zones.get("alley")), battle_backdrop("alley"), "no backdrop: backgrounds/battle/<id>.png");

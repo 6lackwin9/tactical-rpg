@@ -5,3 +5,6 @@ edition = "2021"
 
 [dependencies]
 serde_json = { workspace = true }
+
+[dev-dependencies]
+aegis_core = { path = "../aegis_core" }

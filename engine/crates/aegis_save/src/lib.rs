@@ -355,9 +355,8 @@ mod tests {
 
     const FMT: Format = Format { tag: "test_save", version: 3, first_slot: 0, last_slot: 2, keys: &["a", "b"] };
 
-    fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("aegis_save_{name}_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+    fn temp_dir(name: &str) -> aegis_core::scratch::Scratch {
+        let dir = aegis_core::scratch::Scratch::vacant(&format!("save_{name}"));
         dir
     }
 
@@ -392,7 +391,7 @@ mod tests {
         std::fs::create_dir_all(base.join("Aegis/saves")).unwrap();
         std::fs::write(base.join("Aegis/saves/slot_1.json"), "{}").unwrap();
         std::fs::write(base.join("Aegis/settings.json"), "{\"mute\": true}").unwrap();
-        std::env::set_var("APPDATA", &base);
+        std::env::set_var("APPDATA", base.path());
         let mut copied = adopt_shared("demo").unwrap();
         copied.sort();
         assert_eq!(copied, vec![Path::new("saves").join("slot_1.json").display().to_string(), "settings.json".to_string()]);

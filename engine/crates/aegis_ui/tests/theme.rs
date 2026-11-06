@@ -5,6 +5,7 @@
 //! frames switch, the Theme page's text audit and a themed hover border follow, each on a scratch set of asset layers
 //! written by the test (engine, kit, game) under the temp folder.
 
+use aegis_core::scratch::Scratch;
 use aegis_core::assets::Layers;
 use aegis_ui::art::Art;
 use aegis_ui::audio::Audio;
@@ -112,9 +113,8 @@ fn the_default_theme_draws_the_kit_pages_exactly_as_before() {
 // ---- scratch asset layers --------------------------------------------------------------------------------------
 
 /// A fresh scratch folder holding three asset layers, in lookup order: game, kit, engine.
-fn layers(name: &str) -> (PathBuf, Layers) {
-    let dir = std::env::temp_dir().join(format!("aegis_theme_{name}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn layers(name: &str) -> (Scratch, Layers) {
+    let dir = Scratch::vacant(&format!("theme_{name}"));
     let roots: Vec<PathBuf> = ["game", "kit", "engine"].iter().map(|l| dir.join(l)).collect();
     for r in &roots {
         std::fs::create_dir_all(r).unwrap();

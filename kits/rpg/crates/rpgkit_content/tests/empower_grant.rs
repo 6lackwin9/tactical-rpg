@@ -24,7 +24,7 @@ fn a_skill_grants_empower_inside_its_range() {
     assert!(status::buffs().contains(&"empower") && row.grant == "support" && !status::intent_bound("empower"));
     let (lo, hi) = (row.magnitude_min, row.magnitude_max);
 
-    let root = std::env::temp_dir().join(format!("rpgkit_empower_grant_{}", std::process::id()));
+    let root = aegis_core::scratch::Scratch::vacant("rpgkit_empower_grant");
     let _ = fs::remove_dir_all(&root);
     let data = root.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();

@@ -101,8 +101,7 @@ fn copy_dir(from: &Path, to: &Path) {
 
 #[test]
 fn upsert_and_remove_validate_write_and_roll_back() {
-    let tmp = std::env::temp_dir().join(format!("aegis_store_test_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
+    let tmp = aegis_core::scratch::Scratch::vacant("store_test");
     for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression"] {
         copy_dir(&data_dir().join(sub), &tmp.join(sub));
     }
@@ -157,8 +156,7 @@ fn upsert_and_remove_validate_write_and_roll_back() {
 /// step) it holds those keys already, so this now proves only that the upsert is idempotent, not the migration itself.
 #[test]
 fn an_unchanged_map_upsert_only_adds_the_empty_ground_keys() {
-    let tmp = std::env::temp_dir().join(format!("aegis_store_ground_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
+    let tmp = aegis_core::scratch::Scratch::vacant("store_ground");
     for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression"] {
         copy_dir(&data_dir().join(sub), &tmp.join(sub));
     }
@@ -192,8 +190,7 @@ fn an_unchanged_map_upsert_only_adds_the_empty_ground_keys() {
 /// standing prop lies on an open tile (P9) is refused and leaves maps.json as it was.
 #[test]
 fn map_props_are_stored_whole_and_checked_on_upsert() {
-    let tmp = std::env::temp_dir().join(format!("aegis_store_props_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
+    let tmp = aegis_core::scratch::Scratch::vacant("store_props");
     for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression"] {
         copy_dir(&data_dir().join(sub), &tmp.join(sub));
     }

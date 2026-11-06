@@ -18,13 +18,12 @@ const W: &str = "ward";
 /// The game's own face of these tests (not a kit default).
 const SMUG: &str = "smug";
 
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_faces_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_faces_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds").join(W)).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(dir: &Path) {
@@ -57,7 +56,7 @@ fn fl1_the_faces_are_neutral_then_the_rows_in_file_order() {
     assert_eq!(faces_of([NEUTRAL]), defaults(), "only the plain face's motion row: the kit's four");
     assert_eq!(Catalog::default().faces(), defaults());
     // the loader's catalog and the checks' view read the same list
-    let data = scratch("fl1");
+    let (_scratch, data) = scratch("fl1");
     write_catalog(&data, KIND, json!([{"id": SMUG, "lean_px": 1}, {"id": NEUTRAL, "breath_ms": 4000}, {"id": "hurt", "tint": "#e11d48"}]));
     let src = source::load(&data);
     assert!(src.errors.iter().all(|e| !e.contains(KIND)), "{:?}", src.errors);
@@ -69,7 +68,8 @@ fn fl1_the_faces_are_neutral_then_the_rows_in_file_order() {
 
 /// A world with one character, a dialogue whose node and a vignette whose line card say `smug`.
 fn talk_world(tag: &str) -> PathBuf {
-    let data = scratch(tag);
+    let (scratch_dir, data) = scratch(tag);
+    scratch_dir.until_thread_end();
     fs::write(aegis_content::world::manifest_path(&data, W), json!({"id": W, "name": "Ward", "extends": [], "connects": [], "version": 1}).to_string()).unwrap();
     let write = |kind: &str, entries: Value| fs::write(store::file_of(&data, Some(W), kind), json!({"kind": kind, "version": 1, "entries": entries}).to_string()).unwrap();
     write("characters", json!([{"id": "keeper_a", "name": "Keeper A"}]));
@@ -124,7 +124,7 @@ fn fl4_a_face_cue_takes_a_game_face_once_its_row_exists() {
     let game = faces_of(["hurt", SMUG]);
     assert!(portrait::row_errors(&face_cue(SMUG), &portrait::Refs { derived: &derived, faces: &game }).is_empty());
     // the loader reads the face rows first: a cue naming `smug` loads only beside its row
-    let data = scratch("fl4_cue");
+    let (_scratch, data) = scratch("fl4_cue");
     write_catalog(&data, portrait::KIND, json!([{"id": "face_hit", "event": "hit", "effect": "face", "expression": SMUG, "ms": 900, "priority": 60}]));
     let src = source::load(&data);
     assert!(json::arr(&src.catalog[portrait::KIND]).is_empty(), "refused before the row");
@@ -145,8 +145,7 @@ fn fixtures() -> PathBuf {
 
 #[test]
 fn fl4_a12_takes_a_game_face_frame_once_its_row_exists() {
-    let t = std::env::temp_dir().join(format!("rpgkit_faces_a12_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+    let t = aegis_core::scratch::Scratch::vacant("rpgkit_faces_a12");
     let root = t.join("layer").join("assets");
     for (from, to) in [("heroes/good.png", "portraits/heroes/hero_a.png"), ("heroes/good.png", format!("portraits/heroes/faces/hero_a/{SMUG}.png").as_str())] {
         let dest = root.join(to);
@@ -162,7 +161,6 @@ fn fl4_a12_takes_a_game_face_frame_once_its_row_exists() {
     assert_eq!(check::warnings_all(&bare).get("assets:layer").cloned().unwrap_or_default().len(), 1);
     let with_row = check::View::new(&json!({KIND: face_rows()}), &json!({}), &json!({}), Layers::of(vec![root.clone()]));
     assert!(!check::warnings_all(&with_row).contains_key("assets:layer"), "{:?}", check::warnings_all(&with_row));
-    let _ = fs::remove_dir_all(&t);
 }
 
 /// A cue row as the loader normalizes it.
@@ -194,7 +192,7 @@ fn min_level_is_for_skill_rows_and_unspent_holds() {
     assert_eq!(cue_errors(json!({"id": "level_up", "trigger": "unspent", "effect": "face", "expression": "angry", "ms": 300})), ["Duration ms must be 0 on a state row (it holds while its unspent matches; is 300)."]);
     assert!(!cue_errors(json!({"id": "level_up", "trigger": "unspent", "effect": "flash", "ms": 0})).is_empty(), "a one-shot on a state row");
     // the writer leaves the default out
-    let data = scratch("min_level");
+    let (_scratch, data) = scratch("min_level");
     store::upsert(&data, None, portrait::KIND, json::dict(&skill(3)), None).expect("a skill row");
     store::upsert(&data, None, portrait::KIND, json::dict(&json!({"id": "hit_flash", "event": "hit", "ms": 140})), None).expect("a hit row");
     let doc: Value = serde_json::from_str(&fs::read_to_string(data.join("catalog").join(format!("{}.json", portrait::KIND))).unwrap()).unwrap();

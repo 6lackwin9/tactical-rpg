@@ -24,12 +24,11 @@ fn copy_dir(from: &Path, to: &Path) {
 }
 
 /// A scratch copy of the shipped data folder (json files only) at `<tmp>/<tag>/data`.
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("emberwake_content_world_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("emberwake_content_world_{tag}"));
     let data = t.join("data");
     copy_dir(&data_dir(), &data);
-    data
+    (t, data)
 }
 
 fn aegis(data: &Path, args: &[&str]) -> Output {
@@ -50,7 +49,7 @@ fn worlds(data: &Path) -> Vec<String> {
 
 #[test]
 fn an_untouched_resave_of_every_shipped_world_manifest_is_byte_identical() {
-    let data = scratch("resave");
+    let (_scratch, data) = scratch("resave");
     let ids = worlds(&data);
     assert!(!ids.is_empty(), "the shipped data has worlds");
     for id in &ids {
@@ -68,7 +67,7 @@ fn an_untouched_resave_of_every_shipped_world_manifest_is_byte_identical() {
 
 #[test]
 fn a_seed_creates_a_world_and_fills_it() {
-    let data = scratch("seed");
+    let (_scratch, data) = scratch("seed");
     let id = "test_seed_world";
     let seed = data.parent().unwrap().join("seed.json");
     fs::write(

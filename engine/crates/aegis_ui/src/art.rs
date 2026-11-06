@@ -468,14 +468,13 @@ mod fit_tests {
     /// `image_fit` answers at the asked size and holds one size per file however many sizes a window drag asks for.
     #[test]
     fn a_window_sized_picture_keeps_one_size() {
-        let root = std::env::temp_dir().join(format!("aegis_art_fit_{}", std::process::id()));
-        std::fs::create_dir_all(&root).unwrap();
+        let root = aegis_core::scratch::Scratch::new("art_fit");
         let file = std::fs::File::create(root.join("p.png")).unwrap();
         let mut enc = png::Encoder::new(std::io::BufWriter::new(file), 64, 32);
         enc.set_color(png::ColorType::Rgba);
         enc.set_depth(png::BitDepth::Eight);
         enc.write_header().unwrap().write_image_data(&[200u8; 64 * 32 * 4]).unwrap();
-        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
         for w in 10..40 {
             let img = art.image_fit("p.png", w, w / 2).expect("the file");
             assert_eq!((img.w, img.h), (w, w / 2));
@@ -501,9 +500,8 @@ mod tests {
     }
 
     /// A 2-frame idle row and a 1-frame walk row of 8x8 frames: idle frame 0 red with a gold top-left pixel.
-    fn body_tree(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("aegis_art_{name}_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+    fn body_tree(name: &str) -> aegis_core::scratch::Scratch {
+        let root = aegis_core::scratch::Scratch::vacant(&format!("art_{name}"));
         let (w, h) = (16u32, 16u32);
         let mut px = vec![0u8; (w * h * 4) as usize];
         for y in 0..8 {
@@ -525,7 +523,7 @@ mod tests {
     #[test]
     fn a_body_gives_frames_a_token_and_palette_swaps() {
         let root = body_tree("body");
-        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
         let f = art.body_frame("knight", "", "idle", 0).expect("idle frame 0");
         assert_eq!((f.w, f.h, &f.px[0..4], &f.px[4..8]), (8, 8, &[0xe0, 0xb4, 0x3c, 255][..], &[0xa8, 0x30, 0x28, 255][..]));
         assert!(art.body_frame("knight", "", "idle", 2).is_none() && art.body_frame("knight", "", "run", 0).is_none());
@@ -546,7 +544,7 @@ mod tests {
     fn chains_take_the_first_file_or_body_present() {
         let root = body_tree("chains");
         write_png(&root.join("portraits/common/knight_base.png"), 2, 2, &[7u8; 16]);
-        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
         let chain = vec!["portraits/heroes/nobody.png".to_string(), "portraits/common/knight_base.png".to_string()];
         assert_eq!(art.first(&chain, 2, 2).map(|i| i.px[0]), Some(7), "the second of the chain");
         assert!(art.first(&["portraits/heroes/nobody.png".to_string()], 2, 2).is_none());
@@ -562,15 +560,14 @@ mod tests {
 
     #[test]
     fn tiles_come_from_the_first_set_with_files_and_vary_by_their_count() {
-        let root = std::env::temp_dir().join(format!("aegis_art_tiles_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let root = aegis_core::scratch::Scratch::vacant("art_tiles");
         for (set, n) in [("common", 3), ("world_a", 0)] {
             for v in 0..n {
                 write_png(&root.join(format!("tilesets/{set}/floor/v{v}.png")), 1, 1, &[v as u8, 0, 0, 255]);
             }
         }
         write_png(&root.join("tilesets/world_a/wall/v0.png"), 1, 1, &[9, 9, 9, 255]);
-        let mut art = Art::layered(Layers::of(vec![root.clone()]));
+        let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
         let red = |art: &mut Art, x: i32| art.tile_in(&["world_a", "common"], "floor", x, 0, 1).map(|i| i.px[0]);
         assert_eq!((red(&mut art, 0), red(&mut art, 1), red(&mut art, 2)), (Some(0), Some(1), Some(2)), "(x * 7) mod 3 over common's three");
         assert_eq!(art.tile_in(&["world_a", "common"], "wall", 5, 5, 1).map(|i| i.px[0]), Some(9), "the world's own set first");

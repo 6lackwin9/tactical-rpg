@@ -256,7 +256,7 @@ impl Playtests {
             return Err("Playtest recording is off.".into());
         }
         let t = self.ms();
-        let dir = self.dir.clone();
+        let dir = self.dir.to_path_buf();
         let rec = self.open();
         let n = rec.notes.len() + 1;
         let mut image = String::new();
@@ -286,7 +286,7 @@ impl Playtests {
         if !self.on {
             return None;
         }
-        let dir = self.dir.clone();
+        let dir = self.dir.to_path_buf();
         let rec = self.rec.as_ref()?;
         self.dirty = false;
         self.last_save = Instant::now();
@@ -324,9 +324,8 @@ mod tests {
     #[test]
     fn one_recording_per_run_keeps_every_session_and_saves() {
         let _queues = test_queues();
-        let dir = std::env::temp_dir().join(format!("aegis_hub_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let mut hub = Playtests::new(dir.clone(), true, json!({"total": "abc"}));
+        let dir = aegis_core::scratch::Scratch::vacant("hub");
+        let mut hub = Playtests::new(dir.to_path_buf(), true, json!({"total": "abc"}));
         assert!(hub.current().is_none(), "nothing opened before a session");
         let (mut a, mut b) = (None, None);
         hub.put_session(&mut a, session(0));

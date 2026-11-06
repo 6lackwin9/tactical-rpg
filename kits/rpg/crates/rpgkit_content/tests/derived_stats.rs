@@ -12,13 +12,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// A scratch data folder `<tmp>/<tag>/data` with an empty catalog folder.
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_derived_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_derived_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -50,7 +49,7 @@ fn ids(list: &Value) -> Vec<String> {
 
 #[test]
 fn passing_rows_load_typed_in_dependency_order() {
-    let data = scratch("order");
+    let (_scratch, data) = scratch("order");
     write_kind(
         &data,
         derived::KIND,
@@ -81,7 +80,7 @@ fn passing_rows_load_typed_in_dependency_order() {
 
 #[test]
 fn a_missing_file_is_no_rows_and_no_error() {
-    let data = scratch("missing");
+    let (_scratch, data) = scratch("missing");
     let src = source::load(&data);
     assert_eq!(derived_errors(&src), Vec::<String>::new());
     assert_eq!(src.catalog[derived::KIND], json!([]));
@@ -91,7 +90,7 @@ fn a_missing_file_is_no_rows_and_no_error() {
 
 #[test]
 fn rows_naming_each_other_are_a_cycle_on_each_row() {
-    let data = scratch("cycle");
+    let (_scratch, data) = scratch("cycle");
     write_kind(
         &data,
         derived::KIND,
@@ -200,7 +199,8 @@ fn a_formula_that_does_not_parse_names_the_column() {
 
 /// A data folder with one derived row `grit` (or none) and a sword family for gear.
 fn gear_view(tag: &str, with_row: bool) -> (PathBuf, check::View) {
-    let data = scratch(tag);
+    let (scratch_dir, data) = scratch(tag);
+    scratch_dir.until_thread_end();
     if with_row {
         write_kind(&data, derived::KIND, 1, json!([{"id": "grit", "name": "Grit", "formula": "KNOW"}]));
     }
@@ -279,7 +279,7 @@ fn the_forge_check_of_one_row_sees_the_loaded_rows() {
 /// label are not.
 #[test]
 fn the_forge_check_of_a_rename_sees_later_rows() {
-    let data = scratch("rename");
+    let (_scratch, data) = scratch("rename");
     write_kind(&data, derived::KIND, 1, json!([{"id": "grit", "name": "Grit", "label": "Grt", "formula": "KNOW"}, {"id": "nerve", "name": "Nerve", "label": "Nrv", "formula": "CONS"}]));
     let v = store::view(&data);
     assert_eq!(v.derived_ids(), ["grit", "nerve"]);
@@ -293,7 +293,7 @@ fn the_forge_check_of_a_rename_sees_later_rows() {
 
 #[test]
 fn the_writer_takes_the_kind_and_refuses_a_row_that_adds_a_problem() {
-    let data = scratch("writer");
+    let (_scratch, data) = scratch("writer");
     let file = data.join("catalog").join("derived_stats.json");
     let up = |entry: Value| store::upsert(&data, None, derived::KIND, &dict(entry), None);
     let bad = up(json!({"id": "nerve", "name": "Nerve", "formula": "grit + 1"})).err().expect("the write is refused");

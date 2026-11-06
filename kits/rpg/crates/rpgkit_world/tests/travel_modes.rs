@@ -185,7 +185,7 @@ fn the_pick_is_saved_only_when_it_is_not_the_default() {
     assert!(gs.to_value()["campaign"].get("mode").is_none(), "the default writes nothing");
     pick(&d, &mut gs, "forced");
     assert_eq!(gs.to_value()["campaign"]["mode"], json!("forced"));
-    let dir = std::env::temp_dir().join(format!("rpgkit_travel_modes_{}", std::process::id()));
+    let dir = aegis_core::scratch::Scratch::vacant("rpgkit_travel_modes");
     assert!(save::write(&d, &dir, &gs, 1, 1).is_empty());
     let back = save::read(&d, &dir, 1).expect("reads back");
     let _ = std::fs::remove_dir_all(&dir);

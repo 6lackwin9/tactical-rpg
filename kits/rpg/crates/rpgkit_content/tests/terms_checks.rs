@@ -13,13 +13,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// A scratch data folder `<tmp>/<tag>/data` with empty catalog and worlds folders.
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_terms_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_terms_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -40,7 +39,7 @@ fn long(n: usize) -> String {
 
 #[test]
 fn a_missing_file_is_an_empty_table() {
-    let data = scratch("missing");
+    let (_scratch, data) = scratch("missing");
     let src = source::load(&data);
     assert!(json::arr(&src.catalog[TERMS_KIND]).is_empty(), "the kind loads as no rows");
     assert!(src.errors.iter().all(|e| !e.contains(&format!("{TERMS_KIND}.json"))), "{:?}", src.errors);
@@ -50,7 +49,7 @@ fn a_missing_file_is_an_empty_table() {
 
 #[test]
 fn each_mistake_has_its_text() {
-    let data = scratch("texts");
+    let (_scratch, data) = scratch("texts");
     let v = store::view(&data);
     let check = |e: Value| check::validate_entry(&v, TERMS_KIND, &dict(e), "");
     assert_eq!(check(json!({"id": INTENT_GUARD, "name": "Bulwark"})), Vec::<String>::new(), "a game term with a name");
@@ -72,7 +71,7 @@ fn each_mistake_has_its_text() {
 
 #[test]
 fn the_loader_keeps_the_rows_that_pass() {
-    let data = scratch("loader");
+    let (_scratch, data) = scratch("loader");
     write_terms(&data, json!([{"id": INTENT_GUARD, "name": "Bulwark"}, {"id": CURRENCY, "name": "Scrap"}, {"id": INTENT_GUARD, "name": "Again"}]));
     let src = source::load(&data);
     let kept: Vec<String> = json::arr(&src.catalog[TERMS_KIND]).iter().map(|e| json::s(json::dict(e), "id")).collect();
@@ -90,7 +89,7 @@ fn the_loader_keeps_the_rows_that_pass() {
 
 #[test]
 fn the_writer_takes_a_row_and_refuses_a_world_term() {
-    let data = scratch("writer");
+    let (_scratch, data) = scratch("writer");
     let file = data.join("catalog").join(format!("{TERMS_KIND}.json"));
     let refused = store::upsert(&data, None, TERMS_KIND, &dict(json!({"id": CURRENCY, "name": "Scrap"})), None).err().expect("a currency row is refused");
     assert!(refused.iter().any(|e| e.ends_with("'currency' is named per world: set the world's purse block.")), "{refused:?}");

@@ -6,9 +6,8 @@ use aegis_host::playtest::{self, Recording, Unreadable};
 use std::path::{Path, PathBuf};
 
 /// A scratch folder holding `pt.json` with `bytes`.
-fn folder(tag: &str, bytes: &[u8]) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("aegis_unreadable_{tag}_{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+fn folder(tag: &str, bytes: &[u8]) -> aegis_core::scratch::Scratch {
+    let dir = aegis_core::scratch::Scratch::new(&format!("unreadable_{tag}"));
     std::fs::write(dir.join("pt.json"), bytes).unwrap();
     dir
 }

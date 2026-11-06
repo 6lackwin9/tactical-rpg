@@ -1172,9 +1172,8 @@ mod tests {
     /// their cards name the lock; the autosave has no lock; the load screen loads a locked save; unlock, delete.
     #[test]
     fn the_save_screen_rows_and_icons_follow_the_slot_rules() {
-        let dir = std::env::temp_dir().join(format!("emberwake_slots_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let mut cx = cx(dir.clone());
+        let dir = aegis_core::scratch::Scratch::vacant("emberwake_slots");
+        let mut cx = cx(dir.to_path_buf());
         let mut g = gfx();
         let mut s = Slots::new(true);
         let w = frame(&mut s, &mut cx, &mut g);
@@ -1231,9 +1230,8 @@ mod tests {
 
     const MENU_IDS: [&str; 5] = ["menu.new_game", "menu.load", "menu.settings", "menu.tools", "menu.quit"];
 
-    fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("emberwake_m1_{name}_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+    fn scratch(name: &str) -> aegis_core::scratch::Scratch {
+        let dir = aegis_core::scratch::Scratch::vacant(&format!("emberwake_m1_{name}"));
         dir
     }
 
@@ -1281,7 +1279,7 @@ mod tests {
     fn the_main_menu_passes_the_desktop_profile_and_resolves_on_every_other() {
         use aegis_ui::layout_audit::{audit_screen, NO_MOUSE};
         let dir = scratch("menu_audit");
-        let (mut cx, mut g) = (cx(dir.clone()), menu_gfx());
+        let (mut cx, mut g) = (cx(dir.to_path_buf()), menu_gfx());
         cx.app.manifest.title = "Emberwake".into();
         cx.app.manifest.subtitle = "A Scarlet Lullaby".into();
         write_fixture(&mut cx, 12);
@@ -1376,7 +1374,7 @@ mod tests {
     #[test]
     fn the_main_menu_keeps_its_ids_and_actions() {
         let dir = scratch("ids");
-        let (mut cx, mut g) = (cx(dir.clone()), menu_gfx());
+        let (mut cx, mut g) = (cx(dir.to_path_buf()), menu_gfx());
         let mut m = MainMenu::default();
         assert_eq!(buttons(&menu_frame(&mut m, &mut cx, &mut g, (-1, -1))), MENU_IDS, "no save: no Continue");
         write_fixture(&mut cx, 3);
@@ -1417,7 +1415,7 @@ mod tests {
     #[test]
     fn the_peek_reads_the_newest_save_while_continue_is_hovered_or_focused() {
         let dir = scratch("peek");
-        let (mut cx, mut g) = (cx(dir.clone()), menu_gfx());
+        let (mut cx, mut g) = (cx(dir.to_path_buf()), menu_gfx());
         let mut extra = cx.gs().party.members[0].clone();
         for i in 0..5 {
             extra.id = format!("m1_extra_{i}");
@@ -1473,9 +1471,9 @@ mod tests {
         let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/ui/frames/button.png");
         std::fs::create_dir_all(root.join("backgrounds/menu")).unwrap();
         std::fs::copy(&source, root.join(MENU_ART)).unwrap();
-        let (mut cx, mut g) = (cx(dir.clone()), menu_gfx());
+        let (mut cx, mut g) = (cx(dir.to_path_buf()), menu_gfx());
         cx.app.manifest.title = "Fixture".into();
-        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.clone()]));
+        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.to_path_buf()]));
         let mut m = MainMenu::default();
         let w = menu_frame(&mut m, &mut cx, &mut g, (-1, -1));
         assert_eq!(get(&w, "menu.backdrop").unwrap()["text"], json!(MENU_ART));
@@ -1485,7 +1483,7 @@ mod tests {
         std::fs::copy(&source, root.join(TITLE_ART)).unwrap();
         std::fs::create_dir_all(root.join("ui")).unwrap();
         std::fs::copy(&source, root.join(CREST_ART)).unwrap();
-        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.clone()]));
+        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.to_path_buf()]));
         let w = menu_frame(&mut m, &mut cx, &mut g, (-1, -1));
         assert_eq!(get(&w, "menu.backdrop").unwrap()["text"], json!(TITLE_ART));
         let crest = get(&w, "menu.crest").expect("the crest");
@@ -1501,7 +1499,7 @@ mod tests {
     fn the_arrow_keys_walk_every_main_menu_row() {
         use aegis_ui::focus::{step, Move};
         let dir = scratch("arrows");
-        let (mut cx, mut g) = (cx(dir.clone()), menu_gfx());
+        let (mut cx, mut g) = (cx(dir.to_path_buf()), menu_gfx());
         let game = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let tallow = aegis_ui::theme::load(&aegis_core::assets::Layers::for_game(&game)).expect("the game's theme loads");
         for with_save in [false, true] {
@@ -1539,7 +1537,7 @@ mod tests {
     fn a_real_hover_draws_the_peek_at_every_window_size() {
         for (ww, wh) in [(960, 540), (1280, 720), (1366, 768), (1920, 1080), (2560, 1080), (1024, 768)] {
             let dir = scratch(&format!("hover_{ww}"));
-            let (mut cx, mut g) = (cx(dir.clone()), gfx());
+            let (mut cx, mut g) = (cx(dir.to_path_buf()), gfx());
             g.canvas = Canvas::new(ww, wh);
             let view = View::fit(ww as u32, wh as u32).for_grid(Grid::Native);
             let physical = |w: &[Value], id: &str| {
@@ -1602,8 +1600,8 @@ mod tests {
         let (dir, root) = (scratch("logo_sizes"), scratch("logo_sizes_layer"));
         std::fs::create_dir_all(root.join("ui")).unwrap();
         write_picture(&root.join(LOGO_ART), iw as u32, ih as u32, false);
-        let (mut cx, mut g) = (cx(dir.clone()), menu_gfx());
-        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.clone()]));
+        let (mut cx, mut g) = (cx(dir.to_path_buf()), menu_gfx());
+        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.to_path_buf()]));
         let room = logo_room(CANVAS);
         for (ww, wh) in [(960, 540), (1280, 720), (1920, 1080), (3840, 2160)] {
             g.canvas = Canvas::new(ww, wh);
@@ -1627,7 +1625,7 @@ mod tests {
             assert!((pw as f32 / ww as f32 - room.w as f32 / CANVAS.w as f32).abs() <= 1.0 / ww as f32, "{ww}: the same fraction");
         }
         write_picture(&root.join(LOGO_ART), iw as u32, ih as u32, true);
-        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.clone()]));
+        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.to_path_buf()]));
         g.canvas = Canvas::new(1280, 720);
         let _ = menu_frame(&mut MainMenu::default(), &mut cx, &mut g, (-1, -1));
         let pr = logo_px(g.view, room, (iw, ih));
@@ -1655,7 +1653,7 @@ mod tests {
             }
         }
         let dir = scratch("frame_clear");
-        let (mut cx, mut g) = (cx(dir.clone()), menu_gfx());
+        let (mut cx, mut g) = (cx(dir.to_path_buf()), menu_gfx());
         write_fixture(&mut cx, 3);
         for (ww, wh) in [(960, 540), (1280, 720), (1920, 1080), (3840, 2160)] {
             for (size, scale) in TEXT_SIZES {
@@ -1730,8 +1728,8 @@ mod tests {
         let (dir, root) = (scratch("logo_rows"), scratch("logo_rows_layer"));
         std::fs::create_dir_all(root.join("ui")).unwrap();
         write_picture(&root.join(LOGO_ART), 1246, 325, false);
-        let (mut cx, mut g) = (cx(dir.clone()), menu_gfx());
-        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.clone()]));
+        let (mut cx, mut g) = (cx(dir.to_path_buf()), menu_gfx());
+        cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.to_path_buf()]));
         for with_save in [false, true] {
             if with_save {
                 write_fixture(&mut cx, 3);
@@ -1763,11 +1761,11 @@ mod tests {
         let (dir, root) = (scratch("logo"), scratch("logo_layer"));
         let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/ui/frames/button.png");
         std::fs::create_dir_all(root.join("ui")).unwrap();
-        let (mut cx, mut g) = (cx(dir.clone()), menu_gfx());
+        let (mut cx, mut g) = (cx(dir.to_path_buf()), menu_gfx());
         cx.app.manifest.title = "Fixture title".into();
         cx.app.manifest.subtitle = "Fixture subtitle".into();
         let mut audited = |cx: &mut Cx| {
-            cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.clone()]));
+            cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![root.to_path_buf()]));
             g.fonts.audit = Some(Vec::new());
             let w = menu_frame(&mut MainMenu::default(), cx, &mut g, (-1, -1));
             let texts: Vec<String> = g.fonts.audit.take().unwrap().into_iter().map(|r| r.text).collect();
@@ -1847,10 +1845,10 @@ mod tests {
         std::fs::create_dir_all(&out).unwrap();
         let dir = scratch("review");
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let mut cx = cx(dir.clone());
+        let mut cx = cx(dir.to_path_buf());
         let m = aegis_content::manifest::Manifest::read(&root.join(aegis_content::manifest::FILE)).unwrap();
         cx.app.manifest = m;
-        cx.art = aegis_ui::art::Art::new(Some(root.clone()));
+        cx.art = aegis_ui::art::Art::new(Some(root.to_path_buf()));
         aegis_ui::theme::set_theme(aegis_ui::theme::load(cx.art.layers()).expect("the game's theme"));
         let mut g = menu_gfx();
         let mut shot = |cx: &mut Cx, name: &str, save: bool, focus: &str, mouse: (i32, i32), scale: f32| {
@@ -1894,7 +1892,7 @@ mod tests {
     #[test]
     fn a_refused_older_save_gives_no_continue_and_no_peek() {
         let dir = scratch("older");
-        let (mut cx, mut g) = (cx(dir.clone()), menu_gfx());
+        let (mut cx, mut g) = (cx(dir.to_path_buf()), menu_gfx());
         write_fixture(&mut cx, 3);
         doctor_save(&dir, |v| v["version"] = json!(save::OLDEST - 1));
         let w = menu_frame(&mut MainMenu::default(), &mut cx, &mut g, OVER_FIRST);
@@ -1908,7 +1906,7 @@ mod tests {
     #[test]
     fn a_save_that_fails_validate_keeps_continue_without_a_peek_or_a_reread() {
         let dir = scratch("invalid");
-        let (mut cx, mut g) = (cx(dir.clone()), menu_gfx());
+        let (mut cx, mut g) = (cx(dir.to_path_buf()), menu_gfx());
         write_fixture(&mut cx, 3);
         let good = std::fs::read_to_string(dir.join("slot_2.json")).unwrap();
         doctor_save(&dir, |v| v["game_state"]["party"]["members"][0]["base_unit"] = json!("no_such_unit"));
@@ -1929,7 +1927,7 @@ mod tests {
     #[test]
     fn the_newest_slot_is_read_once_until_the_menu_resumes() {
         let dir = scratch("newest");
-        let (mut cx, mut g) = (cx(dir.clone()), menu_gfx());
+        let (mut cx, mut g) = (cx(dir.to_path_buf()), menu_gfx());
         let mut m = MainMenu::default();
         assert_eq!(buttons(&menu_frame(&mut m, &mut cx, &mut g, (-1, -1))), MENU_IDS);
         write_fixture(&mut cx, 3);
@@ -1945,7 +1943,7 @@ mod tests {
     #[test]
     fn the_main_menu_is_clean_at_the_four_text_sizes() {
         let dir = scratch("audit");
-        let (mut cx, mut g) = (cx(dir.clone()), menu_gfx());
+        let (mut cx, mut g) = (cx(dir.to_path_buf()), menu_gfx());
         cx.app.manifest.title = "Emberwake".into();
         cx.app.manifest.subtitle = "A Scarlet Lullaby".into();
         write_fixture(&mut cx, 12);
@@ -2012,9 +2010,8 @@ mod tests {
     /// unsaved progress, overwrite, delete, a new game over the autosave).
     #[test]
     fn the_risky_questions_answer_no_on_enter() {
-        let dir = std::env::temp_dir().join(format!("emberwake_askno_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let mut cx = cx(dir.clone());
+        let dir = aegis_core::scratch::Scratch::vacant("emberwake_askno");
+        let mut cx = cx(dir.to_path_buf());
         let mut g = gfx();
         cx.app.game.as_mut().unwrap().clean = Value::Null;
         assert!(cx.is_dirty(), "unsaved progress");

@@ -14,13 +14,12 @@ use std::path::{Path, PathBuf};
 
 const W: &str = "ward";
 
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_roster_schema_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_roster_schema_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds").join(W)).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -75,7 +74,8 @@ fn bram() -> Value {
 /// A scratch roster world: a class, a party unit, four keepsake candidates (one good, three broken), the manifest, a
 /// location, the founder and an npc, the Crucible and Bram's dialogue.
 fn roster_world(tag: &str, party_max: i64) -> PathBuf {
-    let data = scratch(tag);
+    let (scratch_dir, data) = scratch(tag);
+    scratch_dir.until_thread_end();
     write_catalog(&data, "classes", json!([{"id": "drill", "name": "Drill", "base_stats": {"STR": 13, "DEX": 10, "INT": 6, "CONS": 13, "PERC": 10, "KNOW": 10}, "growth": {"STR": 2}}]));
     write_catalog(&data, "units", json!([{"id": "hero", "name": "Hero", "side": "party", "class_id": "drill", "level": 1}, {"id": "brute", "name": "Brute", "side": "enemy", "class_id": "drill", "level": 1}]));
     let acc = |id: &str, t: &str, value: i64, special: bool| json!({"id": id, "name": id, "item_type": t, "slot": "ACCESSORY_1", "value": value, "special": special});

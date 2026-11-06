@@ -31,9 +31,7 @@ fn the_icon_keeps_its_place_and_round_trips() {
 
 #[test]
 fn set_keeps_the_canvas_and_window_sizes_as_written_and_null_removes_them() {
-    let dir = std::env::temp_dir().join(format!("aegis_manifest_canvas_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = aegis_core::scratch::Scratch::new("manifest_canvas");
     let path = dir.join("game.json");
     Manifest::set(&path, &patch(json!({"id": "demo", "title": "Demo"}))).unwrap();
     assert!(!std::fs::read_to_string(&path).unwrap().contains("canvas"), "absent stays absent");
@@ -58,9 +56,7 @@ fn only_a_png_path_inside_the_layers_is_an_icon() {
 
 #[test]
 fn set_writes_the_icon_and_empty_removes_it() {
-    let dir = std::env::temp_dir().join(format!("aegis_manifest_icon_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = aegis_core::scratch::Scratch::new("manifest_icon");
     let path = dir.join("game.json");
     Manifest::set(&path, &patch(json!({"id": "demo", "title": "Demo"}))).unwrap();
     let without = std::fs::read_to_string(&path).unwrap();

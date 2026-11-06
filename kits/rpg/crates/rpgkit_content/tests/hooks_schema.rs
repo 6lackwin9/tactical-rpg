@@ -14,13 +14,12 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_hooks_schema_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_hooks_schema_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -213,7 +212,7 @@ fn the_schema_and_the_code_name_the_same_fields_kinds_options_and_rules() {
 
 #[test]
 fn the_fields_load_into_the_typed_catalog_and_default_to_nothing() {
-    let data = scratch("load");
+    let (_scratch, data) = scratch("load");
     catalog(&data);
     let src = source::load(&data);
     assert_eq!(catalog_errors(&src), Vec::<String>::new());
@@ -254,7 +253,7 @@ fn the_fields_load_into_the_typed_catalog_and_default_to_nothing() {
 
 #[test]
 fn the_fixture_checks_clean_and_a_bad_kind_row_is_dropped_with_its_reason() {
-    let data = scratch("clean");
+    let (_scratch, data) = scratch("clean");
     catalog(&data);
     let v = store::view(&data);
     let mut failures = Vec::new();
@@ -294,7 +293,7 @@ fn errors_of(v: &check::View, kind: &str, id: &str, change: &Value) -> Vec<Strin
 
 #[test]
 fn each_broken_rule_is_one_error_naming_its_field() {
-    let data = scratch("rules");
+    let (_scratch, data) = scratch("rules");
     catalog(&data);
     let v = store::view(&data);
     let trig = |on: &str, when: Value, effects: Value| json!([{"type": "trigger", "on": on, "when": when, "effects": effects}]);
@@ -405,7 +404,7 @@ fn each_broken_rule_is_one_error_naming_its_field() {
 
 #[test]
 fn item_and_encounter_rules_each_report_one_error() {
-    let data = scratch("encounters");
+    let (_scratch, data) = scratch("encounters");
     catalog(&data);
     let v = store::view(&data);
     let item = |hazard: Value| errors_of(&v, "items", "pot", &json!({"hazard": hazard}));
@@ -498,7 +497,7 @@ fn item_and_encounter_rules_each_report_one_error() {
 
 #[test]
 fn the_hook_kinds_check_their_rows() {
-    let data = scratch("kinds");
+    let (_scratch, data) = scratch("kinds");
     catalog(&data);
     let v = store::view(&data);
     let cases: Vec<(&str, &str, Value, &str)> = vec![
@@ -577,7 +576,7 @@ fn the_hook_kinds_check_their_rows() {
 
 #[test]
 fn a_placement_and_an_hp_cost_warn() {
-    let data = scratch("warnings");
+    let (_scratch, data) = scratch("warnings");
     catalog(&data);
     let v = store::view(&data);
     let warnings = |id: &str, change: Value| {
@@ -605,7 +604,7 @@ fn a_placement_and_an_hp_cost_warn() {
 /// warns nothing.
 #[test]
 fn a_deck_add_on_a_full_automatic_deck_warns() {
-    let data = scratch("deck_warn");
+    let (_scratch, data) = scratch("deck_warn");
     catalog(&data);
     // brute without its authored deck: the automatic actives are slam, rush (the path's level-1 families fill the 2 slots)
     write_kind(
@@ -638,7 +637,7 @@ fn a_deck_add_on_a_full_automatic_deck_warns() {
     assert_eq!(order(json!({"type": "deck", "unit": "brute", "add": ["hook"], "order": {"assault": ["rush"]}})), ["Phase 'pulverize': deck order assault: 'rush' is neither an active of the deck nor a basic."]);
     drop_scratch(&data);
     // the fixture's authored deck (slam, one short of the slots) takes the add without a warning
-    let data = scratch("deck_warn_authored");
+    let (_scratch, data) = scratch("deck_warn_authored");
     catalog(&data);
     let v = store::view(&data);
     let e = v.get("encounters", "kiln").clone();
@@ -646,7 +645,7 @@ fn a_deck_add_on_a_full_automatic_deck_warns() {
     drop_scratch(&data);
     // a loadout listing an extra before the class families: the battle fills the slots class families first
     // (`loadout_of`), so the automatic actives are slam, rush; sweep pushes out rush, and hook (listed first) is no active
-    let data = scratch("deck_warn_loadout");
+    let (_scratch, data) = scratch("deck_warn_loadout");
     catalog(&data);
     write_kind(
         &data,
@@ -669,7 +668,7 @@ fn a_deck_add_on_a_full_automatic_deck_warns() {
 
 #[test]
 fn world_classes_and_arena_hazards_follow_the_world_and_its_ruleset() {
-    let data = scratch("worlds");
+    let (_scratch, data) = scratch("worlds");
     catalog(&data);
     let encounter = json!({"id": "kiln", "name": "Kiln", "party": ["hero_c"], "enemies": ["brute_c"],
         "arena_hazards": [{"id": "vents", "name": "Slag Vents", "columns": [7], "blocks": [3], "effect": {"stagger": 10}}]});
@@ -726,7 +725,7 @@ fn world_classes_and_arena_hazards_follow_the_world_and_its_ruleset() {
 /// differ), the kinds store every field, and a re-save writes the same text.
 #[test]
 fn the_writer_keeps_the_hook_fields_and_a_resave_is_identical() {
-    let data = scratch("writer");
+    let (_scratch, data) = scratch("writer");
     catalog(&data);
     let entry = json!({"id": "maul", "name": "Maul", "kind": "ATTACK", "hp_cost": 5, "forced_move": {"kind": "push", "tiles": 1}, "ignore_guard": true,
         "description": "{power} and a push.", "ranks": [{"hp_cost": 8}, {"meters": [{"meter": "fury", "delta": 1}]}]});

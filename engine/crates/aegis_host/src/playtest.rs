@@ -551,7 +551,7 @@ mod tests {
         let mut rec = Recording::new("20261020-120000", "user", json!({"algo": "sha256-12", "total": "x", "files": {}}));
         rec.battles.push(s.clone());
         rec.extra.insert("future_key".into(), json!(7));
-        let dir = std::env::temp_dir().join(format!("aegis_playtest_{}", std::process::id()));
+        let dir = aegis_core::scratch::Scratch::vacant("playtest");
         let path = rec.save(&dir).unwrap();
         let back = Recording::load(&path).unwrap();
         assert_eq!(back.battles[0], s);

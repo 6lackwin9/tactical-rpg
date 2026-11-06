@@ -3,6 +3,7 @@
 //! limits, the engine ceiling, reduce motion), `Painter::shift`, the silhouette flash, `Settings::reduce_motion` and
 //! the Effects page of the Kit widgets. Expectations follow from the spec's rules.
 
+use aegis_core::scratch::Scratch;
 use aegis_core::assets::Layers;
 use aegis_ui::art::Art;
 use aegis_ui::canvas::{Canvas, Image, Rect, Rgba, OUTLINE_ALPHA};
@@ -264,9 +265,8 @@ fn e10_shift_moves_later_drawing_by_whole_px_and_keeps_an_earlier_clip() {
 }
 
 /// A scratch asset root with body `hero`: one 8 x 8 `idle` frame holding an L (not symmetric left to right).
-fn hero_root() -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("aegis_ui_fx_body_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+fn hero_root() -> Scratch {
+    let root = Scratch::vacant("ui_fx_body");
     let dir = root.join("units/hero/base");
     std::fs::create_dir_all(&dir).unwrap();
     let mut px = vec![0u8; 8 * 8 * 4];
@@ -292,7 +292,7 @@ fn e11_a_silhouette_paints_the_solid_pixels_and_mirrors_with_flip() {
     assert_eq!(pixels, vec![WHITE, [0; 4], WHITE, [0; 4], WHITE, [0; 4]], "solid pixels take the colour, the rest are clear");
 
     let root = hero_root();
-    let mut art = Art::layered(Layers::of(vec![root.clone()]));
+    let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
     let col: Rgba = [255, 255, 255, 150];
     let plain = art.body_silhouette("hero", "", "idle", 0, 16, col, false).cloned().unwrap();
     let flipped = art.body_silhouette("hero", "", "idle", 0, 16, col, true).cloned().unwrap();

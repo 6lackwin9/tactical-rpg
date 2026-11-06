@@ -29,6 +29,7 @@ name = "aegis_cli"
 version = "0.1.0"
 dependencies = [
  "aegis_content",
+ "aegis_core",
  "aegis_host",
  "aegis_save",
  "anyhow",
@@ -57,6 +58,7 @@ dependencies = [
 name = "aegis_host"
 version = "0.1.0"
 dependencies = [
+ "aegis_core",
  "serde_json",
 ]
 

@@ -2,6 +2,7 @@
 //! `Env`, `Ui::screen`, `Ui::image_in`, `Ui::frame_body` and `Ui::corner_size`. Every expected value comes from the rules:
 //! today's constants and `layout` on the old grids, those doubled on the native one unless a theme file names the key.
 
+use aegis_core::scratch::Scratch;
 use aegis_core::assets::Layers;
 use aegis_layout::{Anchor, SizeClass};
 use aegis_ui::canvas::{Canvas, Image, Rect, Rgba};
@@ -10,7 +11,7 @@ use aegis_ui::painter::{Fonts, Grid, View, GRID};
 use aegis_ui::theme::{self, Frame, Metrics, Nine, NineFill, Theme, BREAKPOINTS, CORNER_SIZE};
 use aegis_ui::ui::{self, Gfx, Kit, Pointer, Ui};
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 fn fonts() -> Fonts {
@@ -27,15 +28,14 @@ fn view(grid: Grid) -> View {
 
 /// A game layer with this theme file, loaded.
 fn load(tag: &str, v: Value) -> Result<Theme, Vec<String>> {
-    let dir = scratch(tag);
+    let dir = scratch(tag).until_thread_end();
     std::fs::create_dir_all(dir.join("ui")).unwrap();
     std::fs::write(dir.join("ui/theme.json"), v.to_string()).unwrap();
-    theme::load(&Layers::of(vec![dir]))
+    theme::load(&Layers::of(vec![dir.to_path_buf()]))
 }
 
-fn scratch(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("aegis_metrics_{tag}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn scratch(tag: &str) -> Scratch {
+    let dir = Scratch::vacant(&format!("metrics_{tag}"));
     dir
 }
 

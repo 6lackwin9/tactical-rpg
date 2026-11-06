@@ -8,7 +8,7 @@ use aegis_core::json::{self, Dict};
 use emberwake_content::check::{assets, map, View};
 use emberwake_content::{art, source};
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// 8 x 8: a wall border, a wall block in row 3 (columns 0-4), open floor elsewhere.
 const ROWS: [&str; 8] = ["########", "#......#", "#......#", "#####..#", "#......#", "#......#", "#......#", "########"];
@@ -116,9 +116,8 @@ fn png(path: &Path, w: u32, h: u32) {
 }
 
 /// The world's `post` art (two files, `post_h` px tall), a 32 x 32 `crate` and a 64 x 64 `rug` in common, no `lamp`.
-fn layer(name: &str, post_h: u32) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("aegis_prop_checks_{name}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+fn layer(name: &str, post_h: u32) -> aegis_core::scratch::Scratch {
+    let root = aegis_core::scratch::Scratch::vacant(&format!("prop_checks_{name}"));
     for v in 0..2 {
         png(&root.join(format!("props/test_world/post/v{v}.png")), 32, post_h);
     }

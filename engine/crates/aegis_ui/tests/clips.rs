@@ -4,12 +4,13 @@
 //! ellipse (`Painter::ellipse`). Expectations follow from the clips.json
 //! rules (ASSETORG2 4.1) and the fixture's own durations.
 
+use aegis_core::scratch::Scratch;
 use aegis_core::assets::{Clip, ClipPlayer, Clips, Layers, View as AssetView};
 use aegis_ui::art::Art;
 use aegis_ui::canvas::{Canvas, Image, Rgba};
 use aegis_ui::painter::{Fonts, Painter, View};
 use serde_json::json;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 const F: u32 = 8;
 
@@ -39,9 +40,8 @@ fn write_png(path: &Path, w: u32, h: u32, px: &[u8]) {
 
 /// A scratch asset root with body `hero`: every frame a 4x4 figure (x and y 2..6) in its own colour; `blank` leaves
 /// that (row, frame) empty.
-fn body_root(name: &str, blank: Option<(usize, u32)>) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("aegis_ui_clips_{name}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+fn body_root(name: &str, blank: Option<(usize, u32)>) -> Scratch {
+    let root = Scratch::vacant(&format!("ui_clips_{name}"));
     let rows = fixture_clips();
     let cols = rows.iter().map(|r| r.1.len() as u32).max().unwrap();
     let (w, h) = (cols * F, rows.len() as u32 * F);
@@ -125,7 +125,7 @@ fn a_player_shows_its_shot_then_its_base_loop() {
 #[test]
 fn art_slices_the_frame_a_player_shows_from_the_sheet() {
     let root = body_root("slice", None);
-    let mut art = Art::layered(Layers::of(vec![root.clone()]));
+    let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
     assert!(art.has_clip("hero", "attack") && !art.has_clip("hero", "hurt"));
     assert_eq!(art.first_body(&["hero/goblin".to_string(), "hero".to_string()]).as_deref(), Some("hero"));
     let mut p = ClipPlayer::default();
@@ -146,8 +146,7 @@ fn art_slices_the_frame_a_player_shows_from_the_sheet() {
 #[test]
 fn a_flipped_frame_and_its_outline_are_the_sheet_frame_mirrored() {
     // A one-clip body whose frame is lopsided: a 3-pixel bar on the left (x 1..3) and one pixel on the right (x 6).
-    let root = std::env::temp_dir().join(format!("aegis_ui_clips_flip_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+    let root = Scratch::vacant("ui_clips_flip");
     let mut px = vec![0u8; (F * F * 4) as usize];
     for x in [1u32, 2, 3, 6] {
         let i = ((3 * F + x) * 4) as usize;
@@ -156,7 +155,7 @@ fn a_flipped_frame_and_its_outline_are_the_sheet_frame_mirrored() {
     write_png(&root.join("units/arrow/base/sheet.png"), F, F, &px);
     let clips = json!({"frame": [F, F], "clips": [{"id": "idle", "frames": 1, "ms": [100], "loop": true}]});
     std::fs::write(root.join("units/arrow/base/clips.json"), clips.to_string()).unwrap();
-    let mut art = Art::layered(Layers::of(vec![root.clone()]));
+    let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
     let p = ClipPlayer::default();
     let size = F as i32 * 3;
     let plain = art.played("arrow", "", &p, 0, size, false).unwrap().1.clone();
@@ -196,7 +195,7 @@ fn an_outline_rings_the_solid_pixels_and_is_cached() {
     assert_eq!(lit.len(), 16);
     assert!(lit.iter().all(|(x, y)| (1..=5).contains(x) && (1..=5).contains(y) && !((2..=4).contains(x) && (2..=4).contains(y))));
     let root = body_root("outline", None);
-    let mut art = Art::layered(Layers::of(vec![root.clone()]));
+    let mut art = Art::layered(Layers::of(vec![root.to_path_buf()]));
     let o = art.body_outline("hero", "", "idle", 0, F as i32, gold, false).unwrap().clone();
     // The 4x4 figure at 2..6 of the 8x8 frame: its ring at 1..=6 of the frame, 2..=7 of the outline.
     let lit = (0..10).flat_map(|y| (0..10).map(move |x| (x, y))).filter(|(x, y)| at(&o, *x, *y) == gold).count();
@@ -208,16 +207,16 @@ fn an_outline_rings_the_solid_pixels_and_is_cached() {
 #[test]
 fn a_body_is_checked_against_its_clips_frame_by_frame() {
     let good = body_root("good", None);
-    assert!(Art::layered(Layers::of(vec![good.clone()])).body_problems("hero").is_empty());
+    assert!(Art::layered(Layers::of(vec![good.to_path_buf()])).body_problems("hero").is_empty());
     let gap = body_root("gap", Some((1, 2)));
-    assert_eq!(Art::layered(Layers::of(vec![gap.clone()])).body_problems("hero"), ["clip 'attack' frame 2 is empty."]);
+    assert_eq!(Art::layered(Layers::of(vec![gap.to_path_buf()])).body_problems("hero"), ["clip 'attack' frame 2 is empty."]);
     // One clip more than the sheet has rows.
     let mut v = clips_json();
     v["clips"].as_array_mut().unwrap().push(json!({"id": "hurt", "frames": 1, "ms": [100]}));
     std::fs::write(gap.join("units/hero/base/clips.json"), v.to_string()).unwrap();
-    let p = Art::layered(Layers::of(vec![gap.clone()])).body_problems("hero");
+    let p = Art::layered(Layers::of(vec![gap.to_path_buf()])).body_problems("hero");
     assert_eq!(p, [format!("the sheet is {}x{}; its clips need at least {}x{}.", 3 * F, 4 * F, 3 * F, 5 * F)]);
-    assert!(Art::layered(Layers::of(vec![gap.clone()])).body_problems("nobody")[0].contains("units/nobody/base/clips.json"));
+    assert!(Art::layered(Layers::of(vec![gap.to_path_buf()])).body_problems("nobody")[0].contains("units/nobody/base/clips.json"));
     for r in [good, gap] {
         let _ = std::fs::remove_dir_all(&r);
     }

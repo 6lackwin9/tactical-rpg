@@ -17,13 +17,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// A scratch data folder `<tmp>/<tag>/data` with empty catalog and worlds folders.
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_encounter_rows_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_encounter_rows_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -112,7 +111,7 @@ fn the_schema_carries_rows_in_both_encounter_sections() {
 
 #[test]
 fn authored_rows_are_the_battle_board() {
-    let data = scratch("board");
+    let (_scratch, data) = scratch("board");
     let rows = authored();
     assert!(GLYPHS.iter().all(|g| rows.iter().any(|r| r.contains(*g))), "the fixture uses every glyph");
     catalog(&data, json!(rows));
@@ -135,12 +134,12 @@ fn without_valid_rows_the_zone_builds_the_board() {
     let mut eight = authored();
     eight.pop();
     for (tag, rows) in [("none", json!([])), ("eight", json!(eight))] {
-        let data = scratch(tag);
+        let (_scratch, data) = scratch(tag);
         catalog(&data, rows);
         assert_eq!(board(&battle(&data).w.grid), zone, "{tag}: the zone's rows, as before rows existed");
         drop_scratch(&data);
     }
-    let data = scratch("absent");
+    let (_scratch, data) = scratch("absent");
     catalog(&data, json!([]));
     let mut e = Catalog::from_value(&source::load(&data).catalog).encounters["walled"].clone();
     e.shift_remove("rows");
@@ -157,7 +156,7 @@ fn row_errors(v: &check::View, value: Value) -> Vec<String> {
 
 #[test]
 fn each_bad_rows_value_is_one_error() {
-    let data = scratch("check");
+    let (_scratch, data) = scratch("check");
     catalog(&data, json!(authored()));
     let v = store::view(&data);
     let text = format!("Rows are {GRID_H} strings of {GRID_W} terrain glyphs.");
@@ -179,7 +178,7 @@ fn each_bad_rows_value_is_one_error() {
 
 #[test]
 fn a_world_encounter_checks_its_rows() {
-    let data = scratch("world");
+    let (_scratch, data) = scratch("world");
     catalog(&data, json!([]));
     let dir = data.join("worlds").join("vale");
     fs::create_dir_all(&dir).unwrap();
@@ -196,7 +195,7 @@ fn a_world_encounter_checks_its_rows() {
 
 #[test]
 fn a_hold_tile_is_checked_on_the_authored_board() {
-    let data = scratch("hold");
+    let (_scratch, data) = scratch("hold");
     catalog(&data, json!(authored()));
     let v = store::view(&data);
     // (0, 2) is burning ground in the rows (walkable) and a wall in the zone; (11, 3) is a wall in the rows
@@ -221,7 +220,7 @@ fn a_hold_tile_is_checked_on_the_authored_board() {
 
 #[test]
 fn the_writer_stores_and_reloads_rows() {
-    let data = scratch("writer");
+    let (_scratch, data) = scratch("writer");
     catalog(&data, json!([]));
     let mut e = dict(json!({"id": "walled", "name": "Walled", "zone": ZONE, "party": ["hero"], "enemies": ["brute"]}));
     e.insert("rows".into(), json!(authored()));

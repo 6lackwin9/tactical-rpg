@@ -12,3 +12,4 @@ anyhow = { workspace = true }
 
 [dev-dependencies]
 aegis_save = { path = "../aegis_save" }
+aegis_core = { path = "../aegis_core" }

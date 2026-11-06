@@ -189,10 +189,8 @@ fn a_condition_reads_the_tree_the_game_or_the_widgets() {
 
 static NEXT: AtomicU32 = AtomicU32::new(0);
 
-fn temp(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("aegis_scenario_test_{}_{}_{name}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+fn temp(name: &str) -> aegis_core::scratch::Scratch {
+    let dir = aegis_core::scratch::Scratch::new(&format!("scenario_test_{}_{name}", NEXT.fetch_add(1, Ordering::Relaxed)));
     dir
 }
 

@@ -8,13 +8,12 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_reach_rule_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_reach_rule_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
-    data
+    (t, data)
 }
 
 fn write_kind(data: &Path, kind: &str, version: i64, entries: Value) {
@@ -36,7 +35,7 @@ fn item(id: &str, family: &str) -> Value {
 
 #[test]
 fn a_reach_family_marks_its_items_and_the_stored_form_leaves_it_out() {
-    let data = scratch("load");
+    let (_scratch, data) = scratch("load");
     write_kind(&data, "item_families", 1, families());
     write_kind(&data, "items", 2, json!([item("t_hook", "t_pole"), item("t_sabre", "t_blade")]));
     let src = source::load(&data);

@@ -4,6 +4,7 @@
 //! layout at every text size (the text audit). FX1-V (spec FX1 5.2, FX1_TASKS 1.5 V1-V3):
 //! a card's camera shake, its start, its stops and the parts it moves.
 
+use aegis_core::scratch::Scratch;
 use aegis_ui::art::Art;
 use aegis_ui::audio::Audio;
 use aegis_ui::canvas::Canvas;
@@ -611,9 +612,8 @@ const IDA: &str = "portraits/npcs/ida.png";
 
 /// A scratch asset layer holding `IDA`, a 96 px portrait (a 3 px dark border round a warm fill), with `sidecar` beside
 /// it when given.
-fn portrait_layer(name: &str, sidecar: Option<Value>) -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("aegis_vignette_portrait_{name}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+fn portrait_layer(name: &str, sidecar: Option<Value>) -> Scratch {
+    let root = Scratch::vacant(&format!("vignette_portrait_{name}"));
     let path = root.join(IDA);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     let side = 96u32;
@@ -652,7 +652,8 @@ fn art_cx(layer: std::path::PathBuf) -> Cx<App> {
 fn d3_a_line_card_portrait_lives_with_its_sidecar_idle() {
     use aegis_ui::portrait_fx::EASE_MS;
     let face = json!({"size": 96, "eyes": [[30, 40, 10, 6], [56, 40, 10, 6]], "idle": [{"effect": "eye_glow", "color": "#c084fc", "intensity": 0.8}]});
-    let mut cx = art_cx(portrait_layer("idle", Some(face)));
+    let layer = portrait_layer("idle", Some(face));
+    let mut cx = art_cx(layer.to_path_buf());
     let mut g = gfx();
     let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![line_card(&[IDA]), card("After.")]), TextSpeed::Normal, |_, _| {});
     s.draw(&mut cx, &mut g, (-1, -1), true);
@@ -684,7 +685,8 @@ fn d3_a_line_card_portrait_lives_with_its_sidecar_idle() {
     assert!(s.portrait.get().is_none() && s.state(&cx)["portraits"] == json!([]), "skipped: no portrait");
     // a portrait file no layer holds: the empty frame, the same pixels as a card naming none
     let frame = |portrait: &[&str]| {
-        let mut cx = art_cx(portrait_layer("missing", None));
+        let layer = portrait_layer("missing", None);
+        let mut cx = art_cx(layer.to_path_buf());
         let mut g = gfx();
         let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![line_card(portrait)]), TextSpeed::Normal, |_, _| {});
         s.draw(&mut cx, &mut g, (-1, -1), true);
@@ -705,14 +707,14 @@ fn d3_the_plain_draw_and_the_rim_key() {
     let plain = |portrait: &[&str]| {
         let p = Player::new(reel(vec![line_card(portrait)]), TextSpeed::Normal);
         let mut g = gfx();
-        let mut art = Art::layered(aegis_core::assets::Layers::of(vec![layer.clone()]));
+        let mut art = Art::layered(aegis_core::assets::Layers::of(vec![layer.to_path_buf()]));
         let mut ui: Ui<()> = Ui::new(&mut g, (-1, -1), true);
         vignette::draw(&mut ui, &mut art, &p, &Palette::default(), false);
         drop(ui);
         g.canvas.px
     };
     assert!(plain(&[IDA]) != plain(&[]), "the portrait draws");
-    let mut cx = art_cx(layer.clone());
+    let mut cx = art_cx(layer.to_path_buf());
     let mut g = gfx();
     let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![line_card(&[IDA])]), TextSpeed::Normal, |_, _| {}).portrait_rim(Some([0xd9, 0x77, 0x06, 255]));
     s.draw(&mut cx, &mut g, (-1, -1), true);
@@ -728,7 +730,7 @@ fn d3_the_plain_draw_and_the_rim_key() {
 fn d4_a_line_card_with_a_portrait_reads_clean_at_every_text_size() {
     let layer = portrait_layer("audit", None);
     for (label, scale) in TEXT_SIZES {
-        let mut cx = art_cx(layer.clone());
+        let mut cx = art_cx(layer.to_path_buf());
         let mut g = gfx();
         let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![Card { text: words(360), speaker: "A speaker with a long name".into(), ..line_card(&[IDA]) }]), TextSpeed::Normal, |_, _| {});
         to_phase(&mut s.player, Phase::Hold);
@@ -771,7 +773,7 @@ fn x3_a_line_cards_expression_and_its_frames_base_sidecar() {
     std::fs::copy(layer.join(IDA), layer.join(IDA_ANGRY)).unwrap();
     let angry = Card { expression: "angry".into(), ..line_card(&[IDA_ANGRY, IDA]) };
     let run = |sidecars: Option<fn(&str) -> Vec<String>>| {
-        let mut cx = art_cx(layer.clone());
+        let mut cx = art_cx(layer.to_path_buf());
         let mut g = gfx();
         let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![angry.clone()]), TextSpeed::Normal, |_, _| {});
         if let Some(f) = sidecars {
@@ -791,7 +793,7 @@ fn x3_a_line_cards_expression_and_its_frames_base_sidecar() {
     let (_, glow, _) = run(None);
     assert!(!glow, "without the rule a frame reads only its own sidecar (none here)");
     // the same file drawn plainly (no expression): no face cue
-    let mut cx = art_cx(layer.clone());
+    let mut cx = art_cx(layer.to_path_buf());
     let mut g = gfx();
     let mut s: VignetteScreen<App> = VignetteScreen::new(reel(vec![line_card(&[IDA])]), TextSpeed::Normal, |_, _| {}).portrait_sidecars(frame_then_base);
     s.draw(&mut cx, &mut g, (-1, -1), true);

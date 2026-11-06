@@ -292,10 +292,10 @@ mod tests {
 
     #[test]
     fn has_finds_files_under_the_root() {
-        let dir = std::env::temp_dir().join(format!("aegis_audio_{}", std::process::id()));
+        let dir = aegis_core::scratch::Scratch::vacant("audio");
         std::fs::create_dir_all(dir.join("sfx")).unwrap();
         std::fs::write(dir.join("sfx/hit.wav"), b"x").unwrap();
-        let a = Audio::offline(Some(dir.clone()));
+        let a = Audio::offline(Some(dir.to_path_buf()));
         assert!(a.has("sfx/hit.wav"));
         assert!(!a.has("sfx/none.wav"));
         let _ = std::fs::remove_dir_all(dir);
@@ -303,7 +303,7 @@ mod tests {
 
     #[test]
     fn layered_folders_resolve_in_order() {
-        let base = std::env::temp_dir().join(format!("aegis_audio_layers_{}", std::process::id()));
+        let base = aegis_core::scratch::Scratch::vacant("audio_layers");
         let (game, engine) = (base.join("game"), base.join("engine"));
         for (dir, file) in [(&game, "music/town.ogg"), (&engine, "sfx/ui_click.wav"), (&engine, "music/town.ogg")] {
             std::fs::create_dir_all(dir.join(file).parent().unwrap()).unwrap();

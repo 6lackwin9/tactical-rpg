@@ -2037,11 +2037,11 @@ mod tests {
     #[test]
     fn a_click_comes_before_what_it_opens() {
         let _queues = crate::playtest::test_queues();
-        let dir = std::env::temp_dir().join(format!("aegis_shell_open_{}", std::process::id()));
+        let dir = aegis_core::scratch::Scratch::vacant("shell_open");
         let mut s = shell();
         s.stack = vec![Box::new(Opener::default())];
         s.frame();
-        s.cx.playtest = crate::playtest::Playtests::new(dir.clone(), true, Value::Null);
+        s.cx.playtest = crate::playtest::Playtests::new(dir.to_path_buf(), true, Value::Null);
         s.mouse = (20, 17);
         s.click();
         s.frame();
@@ -2052,7 +2052,7 @@ mod tests {
         assert_eq!((report["counts"]["unprompted_open"].clone(), report["counts"]["slow_open"].clone()), (json!(0), json!(0)), "{report}");
 
         let mut f = form(Form::default());
-        f.cx.playtest = crate::playtest::Playtests::new(dir.clone(), true, Value::Null);
+        f.cx.playtest = crate::playtest::Playtests::new(dir.to_path_buf(), true, Value::Null);
         f.mouse = (30, 47);
         f.click();
         f.frame();
@@ -2069,14 +2069,13 @@ mod tests {
     #[test]
     fn f8_takes_a_note_with_a_screenshot() {
         let _queues = crate::playtest::test_queues();
-        let dir = std::env::temp_dir().join(format!("aegis_shell_note_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = aegis_core::scratch::Scratch::vacant("shell_note");
         let mut s = form(Form::default());
         s.note();
         assert!(s.stack.iter().all(|t| t.id() != crate::notes::ID), "recording off: no note box");
         s.cx.notice.clear();
         s.stack.truncate(1);
-        s.cx.playtest = crate::playtest::Playtests::new(dir.clone(), true, Value::Null);
+        s.cx.playtest = crate::playtest::Playtests::new(dir.to_path_buf(), true, Value::Null);
         s.mouse = (30, 17);
         s.note();
         s.frame();
@@ -2388,10 +2387,9 @@ mod tests {
     #[test]
     fn the_recordings_browser_shows_a_note_whole_and_copies_it() {
         let _queues = crate::playtest::test_queues();
-        let dir = std::env::temp_dir().join(format!("aegis_shell_note_view_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = aegis_core::scratch::Scratch::vacant("shell_note_view");
         let mut s = shell();
-        s.cx.playtest = crate::playtest::Playtests::new(dir.clone(), true, Value::Null);
+        s.cx.playtest = crate::playtest::Playtests::new(dir.to_path_buf(), true, Value::Null);
         let text = "The OK button is hard to read.\nSecond line: the gold on navy is too dim at Small.";
         s.cx.playtest.add_note(json!({"scene": "form", "text": text, "tags": ["ui"]}), None).unwrap();
         let browser = crate::recordings::Recordings::new(&s.cx, launch, |_| Value::Null, Vec::new());
@@ -2415,10 +2413,9 @@ mod tests {
     #[test]
     fn the_note_box_and_the_note_view_read_clean_at_every_text_size() {
         let _queues = crate::playtest::test_queues();
-        let dir = std::env::temp_dir().join(format!("aegis_shell_note_sizes_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = aegis_core::scratch::Scratch::vacant("shell_note_sizes");
         let mut s = form(Form::default());
-        s.cx.playtest = crate::playtest::Playtests::new(dir.clone(), true, Value::Null);
+        s.cx.playtest = crate::playtest::Playtests::new(dir.to_path_buf(), true, Value::Null);
         s.note();
         s.frame();
         s.edit(|e| e.insert("The OK button is hard to read at Small text size; the gold on navy loses contrast.\nSecond paragraph."));
@@ -2457,10 +2454,9 @@ mod tests {
     #[test]
     fn the_recordings_browser_plays_back_takes_over_and_copies() {
         let _queues = crate::playtest::test_queues();
-        let dir = std::env::temp_dir().join(format!("aegis_shell_recordings_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = aegis_core::scratch::Scratch::vacant("shell_recordings");
         let mut s = shell();
-        s.cx.playtest = crate::playtest::Playtests::new(dir.clone(), true, json!({"total": "a"}));
+        s.cx.playtest = crate::playtest::Playtests::new(dir.to_path_buf(), true, json!({"total": "a"}));
         let session = aegis_host::playtest::Session {
             requests: vec![json!({"cmd": "x"}); 6],
             checkpoints: vec![json!({"at": 3, "state": {"round": 1, "over": false}}), json!({"at": 6, "state": {"round": 2, "over": true}})],
@@ -2498,10 +2494,9 @@ mod tests {
     #[test]
     fn the_shell_feeds_the_playtest_trail() {
         let _queues = crate::playtest::test_queues();
-        let dir = std::env::temp_dir().join(format!("aegis_shell_trail_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = aegis_core::scratch::Scratch::vacant("shell_trail");
         let mut s = form(Form::default());
-        s.cx.playtest = crate::playtest::Playtests::new(dir.clone(), true, Value::Null);
+        s.cx.playtest = crate::playtest::Playtests::new(dir.to_path_buf(), true, Value::Null);
         s.mouse = (30, 17);
         s.click();
         s.frame();
@@ -2856,7 +2851,8 @@ mod tests {
     #[test]
     fn a_refused_f12_shows_and_leaves_no_old_shot() {
         let mut s = shell();
-        s.cx.shot_dir = std::env::temp_dir().join(format!("aegis_f12_{}", std::process::id()));
+        let shots = aegis_core::scratch::Scratch::vacant("f12");
+        s.cx.shot_dir = shots.to_path_buf();
         std::fs::create_dir_all(&s.cx.shot_dir).unwrap();
         let path = s.cx.shot_dir.join("gui_shot.png");
         s.f12_shot();

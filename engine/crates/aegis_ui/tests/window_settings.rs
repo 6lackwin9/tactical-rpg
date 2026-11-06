@@ -2,21 +2,22 @@
 //! the usable area, where a window goes, and holding a saved size to a game's list. The shell's calls to the OS are
 //! `size_and_place` in `shell.rs`, over these rules.
 
+use aegis_core::scratch::Scratch;
 use aegis_ui::screen::{window_capped, window_centred, window_kept_in, window_size_of, ScreenRect, Settings, WindowShow, WINDOW_SIDE_MAX, WINDOW_SIZES};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
-/// A settings file holding `text`, in its own folder.
-fn file_with(name: &str, text: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("aegis_window_settings_{}_{name}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+/// A settings file holding `text`, in its own folder (removed when the returned guard drops).
+fn file_with(name: &str, text: &str) -> (Scratch, PathBuf) {
+    let dir = Scratch::new(&format!("window_settings_{name}"));
     let path = dir.join("settings.json");
     std::fs::write(&path, text).unwrap();
-    path
+    (dir, path)
 }
 
 fn load(name: &str, text: &str) -> Settings {
-    Settings::load(file_with(name, text), json!({}))
+    let (_dir, path) = file_with(name, text);
+    Settings::load(path, json!({}))
 }
 
 #[test]
@@ -55,7 +56,7 @@ fn an_old_window_mode_carries_over() {
 /// The next save writes the new keys only, and a new run reads them back.
 #[test]
 fn a_carried_over_file_saves_in_the_new_form() {
-    let path = file_with("resave", r#"{"window_mode": "Borderless"}"#);
+    let (_dir, path) = file_with("resave", r#"{"window_mode": "Borderless"}"#);
     Settings::load(path.clone(), json!({})).save().unwrap();
     let text: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     assert!(text.get("window_mode").is_none());
@@ -66,7 +67,7 @@ fn a_carried_over_file_saves_in_the_new_form() {
 /// Dropping the old key leaves the order of the other keys alone, through the next save.
 #[test]
 fn the_carry_over_keeps_the_key_order() {
-    let path = file_with("order", r#"{"zeta": 1, "window_mode": "Windowed", "alpha": 2, "mid": 3, "beta": 4}"#);
+    let (_dir, path) = file_with("order", r#"{"zeta": 1, "window_mode": "Windowed", "alpha": 2, "mid": 3, "beta": 4}"#);
     Settings::load(path.clone(), json!({})).save().unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
     let at = |k: &str| text.find(&format!("\"{k}\"")).unwrap_or_else(|| panic!("{k}"));

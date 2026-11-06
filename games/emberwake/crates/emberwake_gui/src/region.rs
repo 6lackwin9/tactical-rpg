@@ -3436,8 +3436,7 @@ mod sprite_tests {
             println!("the shipped leader body {shipped} has view rows: checked by the scratch bodies only");
         }
         // scratch bodies as the leader's: side clips only, then with front and back rows
-        let root = std::env::temp_dir().join(format!("emberwake_dir4m_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let root = aegis_core::scratch::Scratch::vacant("emberwake_dir4m");
         let side = root.join("side");
         scratch_body(&side, &key, &["idle", "walk"]);
         cx.art = aegis_ui::art::Art::layered(aegis_core::assets::Layers::of(vec![side.clone()]));
@@ -3778,7 +3777,7 @@ mod nav_tests {
 mod view_tests {
     use super::*;
     use crate::hud::hud_tests::{frame, game_cx, gfx, rect};
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
 
     const WALL_FACE: [u8; 3] = [30, 45, 38];
     const WALL_CAP: [u8; 3] = [40, 60, 50];
@@ -3903,10 +3902,8 @@ mod view_tests {
         enc.write_header().unwrap().write_image_data(&row).unwrap();
     }
 
-    fn scratch(tag: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("emberwake_mapview_{tag}_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
+    fn scratch(tag: &str) -> aegis_core::scratch::Scratch {
+        let root = aegis_core::scratch::Scratch::new(&format!("emberwake_mapview_{tag}"));
         root
     }
 
@@ -4510,7 +4507,7 @@ mod ground_tests {
     use aegis_ui::canvas::Canvas;
     use aegis_ui::ground::{ground_composes, ground_expands};
     use emberwake_world::{new_game, Data};
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
     use std::sync::Arc;
 
     const WORLD: &str = "zz_world";
@@ -4669,10 +4666,8 @@ mod ground_tests {
         (0..f.rows).flat_map(|y| (0..f.cols).map(move |x| (x, y))).filter(|at| inside(mid(map, *at))).collect()
     }
 
-    fn scratch(tag: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("emberwake_ground_{tag}_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).unwrap();
+    fn scratch(tag: &str) -> aegis_core::scratch::Scratch {
+        let root = aegis_core::scratch::Scratch::new(&format!("emberwake_ground_{tag}"));
         root
     }
 

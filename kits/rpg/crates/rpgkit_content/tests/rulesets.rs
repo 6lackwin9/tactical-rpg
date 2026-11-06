@@ -13,13 +13,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// A scratch data folder `<tmp>/<tag>/data` with empty catalog and worlds folders.
-fn scratch(tag: &str) -> PathBuf {
-    let t = std::env::temp_dir().join(format!("rpgkit_rulesets_{tag}_{}", std::process::id()));
-    let _ = fs::remove_dir_all(&t);
+fn scratch(tag: &str) -> (aegis_core::scratch::Scratch, PathBuf) {
+    let t = aegis_core::scratch::Scratch::vacant(&format!("rpgkit_rulesets_{tag}"));
     let data = t.join("data");
     fs::create_dir_all(data.join("catalog")).unwrap();
     fs::create_dir_all(data.join("worlds")).unwrap();
-    data
+    (t, data)
 }
 
 fn drop_scratch(data: &Path) {
@@ -164,7 +163,7 @@ fn a_row_without_numbers_reads_the_schema_defaults() {
 
 #[test]
 fn a_valid_row_loads_and_reads_as_its_rules_and_numbers() {
-    let data = scratch("valid");
+    let (_scratch, data) = scratch("valid");
     base_catalog(&data);
     write_kind(&data, ruleset::KIND, 1, json!([good_row()]));
     let src = source::load(&data);
@@ -185,7 +184,7 @@ fn a_valid_row_loads_and_reads_as_its_rules_and_numbers() {
 
 #[test]
 fn without_a_file_there_is_no_row_and_timeline_cannot_be_had() {
-    let data = scratch("missing");
+    let (_scratch, data) = scratch("missing");
     let src = source::load(&data);
     assert_eq!(ruleset_errors(&src), Vec::<String>::new());
     assert_eq!(src.catalog[ruleset::KIND], json!([]));
@@ -225,7 +224,7 @@ fn each_broken_rule_is_one_error_naming_its_field() {
         // intents other than the default need the round_intent rule
         ("rules", json!(["deck", "poise"]), "Intents need round_intent in Rules."),
     ];
-    let data = scratch("rules");
+    let (_scratch, data) = scratch("rules");
     base_catalog(&data);
     let mut runs: Vec<(Value, String)> = Vec::new();
     for (key, v, want) in cases {
@@ -269,7 +268,7 @@ fn each_broken_rule_is_one_error_naming_its_field() {
 /// the bound, as for every kind).
 #[test]
 fn numbers_past_their_range_load_at_the_schema_bounds() {
-    let data = scratch("ranges");
+    let (_scratch, data) = scratch("ranges");
     base_catalog(&data);
     let mut row = good_row();
     let mut want: Vec<(String, f64)> = Vec::new();
@@ -294,7 +293,7 @@ fn numbers_past_their_range_load_at_the_schema_bounds() {
 
 #[test]
 fn the_writer_takes_the_kind_and_refuses_a_row_that_adds_a_problem() {
-    let data = scratch("writer");
+    let (_scratch, data) = scratch("writer");
     base_catalog(&data);
     let file = data.join("catalog").join("rulesets.json");
     let up = |entry: Value| store::upsert(&data, None, ruleset::KIND, &dict(entry), None);
@@ -324,7 +323,7 @@ fn world_problems(data: &Path, world: &str) -> Vec<String> {
 
 #[test]
 fn a_world_names_a_known_ruleset_with_its_row_and_a_flag_key() {
-    let data = scratch("worlds");
+    let (_scratch, data) = scratch("worlds");
     base_catalog(&data);
     write_world(&data, "vale", json!({"id": "vale", "name": "Vale", "ruleset": "timeline"}));
     write_world(&data, "glen", json!({"id": "glen", "name": "Glen", "extends": ["vale"]}));
@@ -350,7 +349,7 @@ fn a_world_names_a_known_ruleset_with_its_row_and_a_flag_key() {
 /// a content error, and with the row it is clean.
 #[test]
 fn classic_is_a_row_and_the_rulesets_lists_name_rows() {
-    let data = scratch("classic_row");
+    let (_scratch, data) = scratch("classic_row");
     base_catalog(&data);
     write_kind(&data, ruleset::KIND, 1, json!([good_row()]));
     write_kind(&data, "derived_stats", 1, json!([{"id": "max_poise", "name": "Max Poise", "formula": "CONS * 2", "rulesets": ["timeline", "hardcore"]}]));
@@ -409,7 +408,7 @@ fn the_switches_read_by_the_rules_or_as_set() {
     assert_eq!(switches(&flipped), intent_choices, "set, without round_intent");
     assert!(!flipped.has(ruleset::ROUND_INTENT));
 
-    let data = scratch("switches");
+    let (_scratch, data) = scratch("switches");
     base_catalog(&data);
     for key in BY_RULES_FIELDS {
         let mut row = good_row();

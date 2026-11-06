@@ -24,9 +24,8 @@ fn write(path: &Path, text: &str) {
 
 const CLIPS: &str = r##"{"frame": [104, 104], "palette": {"main": "#a83028"}, "clips": [{"id": "idle", "frames": 1, "ms": [1000]}]}"##;
 
-fn layer(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("aegis_asset_checks_{name}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+fn layer(name: &str) -> aegis_core::scratch::Scratch {
+    let root = aegis_core::scratch::Scratch::vacant(&format!("asset_checks_{name}"));
     for body in ["brawler/base", "brawler/goblin", "brawler/short", "brawler/broken"] {
         let dir = root.join("units").join(body);
         png(&dir.join("sheet.png"), if body.ends_with("short") { 50 } else { 104 }, 104);

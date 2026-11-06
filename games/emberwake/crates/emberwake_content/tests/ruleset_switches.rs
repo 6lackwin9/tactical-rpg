@@ -69,8 +69,7 @@ fn the_seed_sets_the_values_the_rows_read_now() {
     for e in &entries {
         assert!(BY_RULES_FIELDS.iter().all(|k| !json::s(e, k).is_empty()), "the seed sets every switch of '{}'", json::s(e, "id"));
     }
-    let tmp = std::env::temp_dir().join(format!("emberwake_cln45_seed_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
+    let tmp = aegis_core::scratch::Scratch::vacant("emberwake_cln45_seed");
     for sub in ["catalog", "worlds", "maps", "quests", "dialogue", "progression"] {
         copy_dir(&data_dir().join(sub), &tmp.join(sub));
     }

@@ -3,6 +3,7 @@
 //! and stays byte-stable when nothing changed; Revert restores; a release build refuses writes; extreme values draw inside
 //! the preview; the new keys draw what they say and are refused out of bounds.
 
+use aegis_core::scratch::Scratch;
 use aegis_core::assets::Layers;
 use aegis_ui::canvas::{Canvas, Image, Rect, Rgba};
 use aegis_ui::frame_tuner::{find_tip, merged_sidecar, sidecar_text, writes_allowed, FrameTuner, Param, TunerAct, HEX_FIELD, PARAMS};
@@ -12,7 +13,7 @@ use aegis_ui::specimens::{KitAct, Specimens, PAGES};
 use aegis_ui::theme::{self, line_colour, Nine, NineFill, CORNER_SIZE, FRAME_ROLES, LINE_WIDTH};
 use aegis_ui::ui::{Gfx, Kit, Ui, BG};
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 const LINE: Rgba = [153, 27, 27, 255];
 const ARM: Rgba = [200, 160, 60, 255];
@@ -84,9 +85,8 @@ fn write_png(path: &Path, img: &Image) {
 
 /// One asset layer with `ornate` (a tip and a line), `ornate_full` (tiled, an arm to the end) and `panel` (inside its rect),
 /// the theme installed from it. Its folder is the test's.
-fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("aegis_frame_tuner_{name}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn scratch(name: &str) -> Scratch {
+    let dir = Scratch::vacant(&format!("frame_tuner_{name}"));
     let frames = dir.join("ui/frames");
     write_png(&frames.join("ornate.png"), &straddle_art(true, true));
     std::fs::write(frames.join("ornate.json"), SIDE).unwrap();
@@ -94,7 +94,7 @@ fn scratch(name: &str) -> PathBuf {
     std::fs::write(frames.join("ornate_full.json"), SIDE.replace("\"straddle\": true", "\"straddle\": true, \"edges\": \"tile\"")).unwrap();
     write_png(&frames.join("panel.png"), &plain_art());
     std::fs::write(frames.join("panel.json"), "{\"slice\": [4, 4, 4, 4], \"scale\": 2}\n").unwrap();
-    let layers = Layers::of(vec![dir.clone()]);
+    let layers = Layers::of(vec![dir.to_path_buf()]);
     theme::install(theme::load(&layers).expect("the scratch theme loads"));
     theme::set_layers(layers);
     dir
@@ -247,7 +247,7 @@ fn save_writes_a_sidecar_that_loads_and_is_byte_stable_when_unchanged() {
     assert_ne!(saved, SIDE.as_bytes());
     assert_eq!(theme::loaded().frames["ornate"].nine.corner_size, 1.5);
     assert_eq!(theme::th().frames["ornate"].nine.corner_size, 1.5);
-    let again = theme::load(&Layers::of(vec![dir.clone()])).expect("the saved sidecar loads");
+    let again = theme::load(&Layers::of(vec![dir.to_path_buf()])).expect("the saved sidecar loads");
     assert_eq!(again.frames["ornate"].nine.corner_size, 1.5);
     // Every other key is as it was.
     let (old, new): (Value, Value) = (serde_json::from_str(SIDE).unwrap(), serde_json::from_slice(&saved).unwrap());
@@ -280,7 +280,7 @@ fn a_saved_tip_and_line_load_and_draw_the_same() {
     let want = drawn(&tuned.img, &tuned.nine, Rect::new(30, 30, 60, 40));
     t.act(TunerAct::Save);
     assert!(t.note.starts_with("saved"), "{}", t.note);
-    let f = theme::load(&Layers::of(vec![dir])).unwrap().frames["ornate"].clone();
+    let f = theme::load(&Layers::of(vec![dir.to_path_buf()])).unwrap().frames["ornate"].clone();
     assert_eq!(f.nine.line_color.as_ref().map(|c| c.rgba), Some(theme::loaded().gold), "the role takes the theme's colour");
     assert_eq!(f.nine, tuned.nine);
     assert_eq!(drawn(&f.img, &f.nine, Rect::new(30, 30, 60, 40)).px, want.px);
@@ -370,10 +370,8 @@ fn a_role_without_a_file_tunes_the_file_that_draws_it_and_a_vector_panel_refuses
         assert!(!dir.join("ui/frames/tip.json").exists());
     }
     // A theme with no frame files: every frame control does nothing and nothing panics.
-    let empty = std::env::temp_dir().join(format!("aegis_frame_tuner_empty_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&empty);
-    std::fs::create_dir_all(&empty).unwrap();
-    let layers = Layers::of(vec![empty]);
+    let empty = Scratch::new("frame_tuner_empty");
+    let layers = Layers::of(vec![empty.to_path_buf()]);
     theme::install(theme::load(&layers).unwrap());
     theme::set_layers(layers);
     let mut t = tuner_on("ornate");

@@ -215,7 +215,8 @@ fn a_bad_value_is_a_notice_and_the_default() {
 
 #[test]
 fn settings_remember_the_sizes_a_game_offers() {
-    let scratch = std::env::temp_dir().join(format!("aegis_canvas_policy_{}.json", std::process::id()));
+    let tmp = aegis_core::scratch::Scratch::new("canvas_policy");
+    let scratch = tmp.join("settings.json");
     let mut s = Settings::load(scratch, json!({}));
     assert_eq!(s.window_sizes(), WINDOW_SIZES, "nothing said yet: the engine's list");
     s.v["window_size"] = json!("960x540");

@@ -195,8 +195,7 @@ mod tests {
 
     #[test]
     fn set_checks_then_writes_and_finds_the_game() {
-        let root = std::env::temp_dir().join(format!("aegis_manifest_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let root = aegis_core::scratch::Scratch::vacant("manifest");
         let game = root.join("games").join("demo");
         std::fs::create_dir_all(game.join("data")).unwrap();
         let path = game.join(FILE);
@@ -219,8 +218,7 @@ mod tests {
 
     #[test]
     fn a_kit_must_exist_and_its_manifest_names_its_folder() {
-        let root = std::env::temp_dir().join(format!("aegis_kit_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
+        let root = aegis_core::scratch::Scratch::vacant("kit");
         std::fs::create_dir_all(root.join("engine/assets")).unwrap();
         let game = root.join("games").join("demo");
         std::fs::create_dir_all(&game).unwrap();

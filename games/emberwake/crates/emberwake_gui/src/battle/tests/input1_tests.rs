@@ -43,8 +43,7 @@ fn the_stage_draws_the_set_of_the_battles_world() {
     let encounter = cx.data.cat.encounters.keys().next().cloned().expect("a catalog encounter");
     let mut b = BattleScreen::arena_with(&cx, None, &encounter, Some(TIMELINE.into()), "", false);
     assert_eq!(b.stage_set(&cx), "", "a catalog encounter");
-    let root = std::env::temp_dir().join(format!("emberwake_battle_set_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+    let root = aegis_core::scratch::Scratch::vacant("emberwake_battle_set");
     const MARK: [u8; 3] = [251, 3, 247];
     for id in emberwake_battle::grid::TERRAIN_IDS {
         let path = root.join(format!("tilesets/zz_set/{id}/v0.png"));
@@ -54,7 +53,7 @@ fn the_stage_draws_the_set_of_the_battles_world() {
         enc.set_depth(png::BitDepth::Eight);
         enc.write_header().unwrap().write_image_data(&[MARK[0], MARK[1], MARK[2], 255].repeat(64 * 48)).unwrap();
     }
-    let mut roots = vec![root.clone()];
+    let mut roots = vec![root.to_path_buf()];
     roots.extend(aegis_core::assets::Layers::for_game(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).roots);
     cx.art = Art::layered(aegis_core::assets::Layers::of(roots));
     let marked = |g: &Gfx| g.canvas.px.chunks_exact(4).filter(|c| c[..3] == MARK).count();
