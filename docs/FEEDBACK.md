@@ -18,7 +18,7 @@ This file is the **only doc file edited by the Build Session** under the two-ses
 | `BASERULES1-M` | queued | - | Starts when a lane frees; see FB-01. |
 | `U1.2` (`U1_STATS`) | audited | - | Feasible as six slices, about 2S + 3M + 1L; FB-04 to FB-09. |
 | `U2.2` (`U2_CLASS`) | audited | - | Feasible as six slices, about 1S + 4M + 1L; FB-10 to FB-15. |
-| `A4.2` (`INTENT2`) | auditing | - | Read-only audit running; findings come as FB items. |
+| `A4.2` (`INTENT2`) | audited | - | IR21 needs no code rollback; K1 a lighter M, K2 M, K3 M, AI S, plus one new task; FB-16 to FB-22. |
 
 ## 2. Feedback Items (Append-Only)
 
@@ -143,3 +143,59 @@ Each entry uses: `### FB-nn: <short title>` with fields `Spec`, `Kind` (`feasibi
 - **Status**: open
 - **Finding**: (a) Loadout templates save little today: 34 of 48 unit rows carry gear, with 32 distinct loadouts; they mostly help future mob families. (b) `rpgkit_rules/src/budget.rs` is the gear budget (target 23), not the unit budget. (c) The party screen (`party.rs:1003`, `:1575`), the Forge (`forge.rs:180`) and the sim's `primary_stat` read `base_stats` and `growth` directly. (d) Saves store `spend`, XP and `base_unit`, never stats, so they are safe if the free pool is unchanged. (e) The frozen kit the goldens load (`timeline_kit.json`) still has `base_stats` and `growth`.
 - **Recommendation**: Loadout templates as an optional last piece; name the new module or term "unit budget"; keep `base_stats` and `growth` as a compatibility view (or a loader for the frozen kit), so readers and goldens hold while the rows move to shares.
+
+### FB-16: Guard as a status needs its own task before Stand is built
+
+- **Spec**: `docs/specs/INTENT2.md` IR22; decisions "What Stand is", "Stand answers"; see FB-06
+- **Kind**: cost
+- **Status**: open
+- **Finding**: `Unit.guard` is a number that `resolver.rs:112-126` zeroes every block and sets only while a Defend command runs; `command.rs:585` and `guard_start` triggers (`trigger.rs:209`, `:332`) set it, `poise.rs:461` and `command.rs:890` clear it. The decisions want a mitigation status from impact to the round's end or several rounds, the higher guard applying. No INTENT2 task (K1 to K3) owns this; it crosses A2, S1 and F1.
+- **Recommendation**: Add a task "guard as a status", tied to the S1 and U1 designs, ahead of the Stand rows. FB-06 is the same seam from the U1 side, so settle both together.
+
+### FB-17: INTENT2 still carries text the decisions replaced
+
+- **Spec**: `docs/specs/INTENT2.md`, `INTENT2_MATRIX.md`; `games/emberwake/docs/specs/INTENT2_CASES.md`, `INTENT2_SKILLS.md`
+- **Kind**: docs-delta
+- **Status**: open
+- **Finding**: "Guard only while a Defend runs" remains in IR16, MATRIX Table B (Stand, follow-up fill), CASES rows 21 and 29, CASES section 4 round 3 (so its 2.6 power figure is wrong under the decision) and section 5 ("guarded in 4 of 6 blocks"). IR22 lacks the decided parts: the common guard is lower in value; a multi-round guard is a separate, costlier skill at the lowest value; guards do not stack, the higher applies; it starts at impact; only mitigation carries over and Riposte stays tied to Stand. Stale since decision "Stand answers": line 3 ("only section 7 is open"), IR21's "3 gap-close skills are the open question", IR22's "Open: section 7", CASES row 4 (Lunge as Assault), and SKILLS listing Lunge, Pounce and Charge In as Assault (counts: Assault 62 becomes 59, Maneuver 11 becomes 14). Removed authored fields still named: line 7 ("capstone 3"), CASES section 5 ("capstone only" for Quell and Nemeth), IR20 ("a Field row names one of a fixed set", "Assignments: the listing"), SKILLS' Bonus column and its counts (derived: 11 reach, 5 lingering, 7 area, 0 power; 19 skills list two intents), section 6 ("no item needs `intent_versions`"), and INTENT2-A's seed (28 intents, 12 second intents and 23 Field bonuses are no longer seeded). Wrong line references: `ITEM_AP` is at `command.rs:1451`; the "not used" log at `:668`; the `buff_pct` bug at `:688-691`. Section 8 says items gain `max_stack`, which already exists; only item `area` is new.
+- **Recommendation**: Rewrite those passages. INTENT2-A then seeds only the 7 `area` fixes, the 3 gap-close moves, the removal of 72 redundant `round_intent` values, `strike` for two bosses, Brand's recovery, the item table and `intents`. IR15 defines "primary" as the first of the derived list.
+
+### FB-18: The multi-round guard is a new skill, but INTENT2 says none are needed
+
+- **Spec**: `games/emberwake/docs/specs/INTENT2_CASES.md` section 5 ("New skills needed before the slice: none"); decision "Stand answers"
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: No existing skill gives multi-round mitigation; `riposte`, `tl_fade` and `seventh_ward_bulwark` carry rounds only for their riposte, stealth and taunt statuses.
+- **Recommendation**: Add one skill row to INTENT2-A, or defer the multi-round guard by name.
+
+### FB-19: IR21's derivation needs a precedence order and a few rules
+
+- **Spec**: `docs/specs/INTENT2.md` IR21
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: Re-run over all 129 skills: exactly the 17 stated differences; after the 7 SWEEP data fixes every skill gets one answer, and the Field bonus changes are exactly the 3 stated (the rule reads `reach_max`). Gaps: engine kinds (MOVE, REST, TARGET, STATUS) are neutral; `hazard` applies to ATTACK only (`ash_cloud_fade` is a DEFEND with a hazard and stays Stand); `tripwire_snare` has a hazard and no shape, so hazard must come before "no shape: Assault"; a short PLUS or BURST (reach_max 1 or less) is undefined (none in data); CASES rows 26, 30 and 31 cannot be derived, as `area` and `target_mode` exist only on ATTACK and SUPPORT. Items have no `kind` or `target_mode`, so they need their own mapping: heal gives Support and Stand; buff gives Stand; damage with an `area` and `use_reach` above 1 gives Field and Assault; damage alone gives Assault. Today `item_intent` (`round_intent.rs:166`) makes foe-aimed bombs Maneuver. The skill's intent has three diverging copies (`round_intent::skill_intent`, `skill::intent_id`, the content check's `intent_of`), and `skill::position_by` uses one to find Maneuver, so a derived Maneuver without an authored `round_intent` would not dash. About 15 call sites compare intents for equality and become "row allows"; `deck_errors` would flag a skill in its second row. The pick must carry its row, so the planner knows which version of a dual skill was chosen. No current skill derives the `power` Field bonus.
+- **Recommendation**: State the precedence (engine kind, then kind, dash or position, shape, hazard, no shape), the item mapping, and that CASES rows 26, 30 and 31 are out of scope. One derivation function in `rpgkit_rules`, used by all three callers. Keep `power` as a future default and say so.
+
+### FB-20: Section 5's winners and losers contradict IR21; three bosses sit at the block limit
+
+- **Spec**: `games/emberwake/docs/specs/INTENT2_CASES.md` sections 3-5
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: IR21 gives Volley an Assault row, so the ranger keeps its mix (and its data is reach 2-3, not 2-4). Spine Volley and Lard Spray are now dual, so the Amalgam has an Assault row and Orlov's Spray has two; CASES rows 11-13 say Field only; Spine Volley is reach 1-3, not 1-4. Of the 7 throws gaining an Assault row, Pulverizer, Cataclysm and Bloom reach exactly 6 blocks with their recovery and the Assault row's extra block, so a rank row could pass `MAX_ACTION_BLOCKS` 6.
+- **Recommendation**: Rewrite section 5 and rows 11-13. The content check tests the derived extra block against the block limit on every rank row.
+
+### FB-21: INTENT2 against U1 and U2
+
+- **Spec**: `docs/specs/INTENT2.md`; `docs/sessions/U1_STATS.md`, `U2_CLASS.md`
+- **Kind**: conflict
+- **Status**: open
+- **Finding**: (a) CASES round 6 has item damage "40 flat, no armour"; U1 puts flat values in the base stage, then mitigation, minimum 1. (b) Brimstone Draught raises CONS 30 % mid-fight, and U1 makes CONS feed max HP and poise, so a drink moves max HP. (c) S1's chance "potency - INT x 2.5 - resist" is the old formula; U1 makes potency come from KNOW. (d) "Enemies use no items" against U2's "any unit fights with no unit-specific code". (e) INTENT2's AI row ladder (row Z, ring row) against U2's weighted AI roles, moved to I1. (f) The 3-slot pouch and `pouch_packed` against U2's loadout templates. (g) U1's situational cap near 75 % against 0.9 in code; INTENT2's "higher guard applies" sits inside U1's additive guard plus cover. (h) The attack lock reads band 1-2 as melee and IR21 reads reach above 1 as thrown; they differ for Transfusion Pulse and Cataclysm, but shaped skills never lock, so behaviour does not clash.
+- **Recommendation**: Rule on (a) to (f) in U1, U2 and I1; note (h) in IR17.
+
+### FB-22: INTENT2's slices after IR21
+
+- **Spec**: `docs/specs/INTENT2.md` section 8
+- **Kind**: feasibility
+- **Status**: open
+- **Finding**: No `also_intents`, `intent_versions`, `field_bonus` or `capstone` exists in code or data, so IR21 needs no rollback. K1 stays M but lighter: the derivation function, `RoundIntent::Field`, the row-aware planner, `field_fill_once`, Stand's tile as a Move, and the check printing what it derived; about 40 kit sites and 6 GUI files name `RoundIntent::Guard` or `::Support`. K2 stays M and is the only schema change (RING and ARC replace SWEEP, a new `affects`); it touches `skill.rs`, `ai.rs:1270`, `plan.rs:1314-1320`, `ground.rs` and the SWEEP entry in `HAZARD_SHAPES`. K3 is a smaller M (only item `area` is new; `item_ap` 0 replaces `ITEM_AP`). AI stays S; its row numbering maps onto the named `ROWS` at `ai.rs:1590`. Goldens: `checks_golden` has 2 cases quoting the `area` enum and changes with K2, a named re-record; the timeline, sim and rules goldens read the frozen kit, whose `tl_` units hold no area or gap-close skill, so no other golden should move. The `lingering` bonus adds 1 to `hazard.rounds`, whose range is 0-5 with 0 meaning the row's duration.
+- **Recommendation**: Define `lingering` as one more than the row's duration, capped. Add the guard task (FB-16) to the slice list.
