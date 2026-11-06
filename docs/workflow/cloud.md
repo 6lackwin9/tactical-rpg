@@ -2,6 +2,15 @@
 
 Use this when Claude runs in a cloud container (`$CLAUDE_CODE_REMOTE` is `true`). Shared rules: `CLAUDE.md`, skills `planner` and `planner-ops`. Differences from the desktop and the switching checklist: [README.md](README.md). Decided by the user 2026-10-17 (decisions "Cloud workflow" and "Environment split" in `docs/decisions/workflow.md`).
 
+## Two-session split in the cloud (since 2026-11-07)
+
+Under decision "Two-session split: Design and Build" (`2026-11-07`), cloud sessions operate as the **Build Session** while the **Design Session** (desktop `C:/dev/tactical-rpg-dev` or remote Gemini session on `develop`) owns all specs and shared docs:
+
+- **Entry point**: Read `docs/READY.md` (and the specific specs it names), `docs/STRUCTURE.md`, and `engine/README.md`. Build **only** items marked `ready-to-build` in `docs/READY.md` Section 1 and run read-only audits on `feasibility-check` items in Section 2.
+- **Sole writer of**: `docs/FEEDBACK.md` and `docs/archive/FEEDBACK_CLOSED.md` (plus crate-local READMEs where appropriate), and code/data commits on `claude/<task>` branches squashed onto `origin/develop` after `change-reviewer`, `tools/fc.sh gate`, and `tools/fc.sh docs`.
+- **Never edit**: `docs/READY.md`, `docs/specs/MASTERPLAN1.md`, `docs/sessions/*.md`, `docs/specs/*`, `docs/TASKS.md`, `games/emberwake/docs/ROADMAP.md`, `games/emberwake/docs/MILESTONES.md`, `docs/DECISIONS.md` (`docs/decisions/*`, `games/emberwake/docs/decisions/*`), `docs/HISTORY.md`, or shared READMEs (`README.md`, `GAME_BRIEF.md`, `STRUCTURE.md`, `CLAUDE.md`). Instead, record build status, feasibility findings, spec questions (`FB-nn` / `UN-nn`), and docs deltas in `docs/FEEDBACK.md` for the Design Session to apply.
+- Where the older sections below refer to editing `docs/TASKS.md`, `ROADMAP.md`, `decisions/*`, or `HISTORY.md` directly inside a task commit, the two-session split rules above supersede them.
+
 ## Sessions
 
 - **Project chat (coordinator)**: the front desk. The user asks there; it routes each ask to the matching area thread and relays follow-ups. It does not edit the repo. It rotates at about 120k context like the area threads ("Fresh sessions" below) and takes no turn on routine thread status pings; the user drives it mainly through skills (user 2026-10-18, decision "Coordinator and assets cutbacks").
