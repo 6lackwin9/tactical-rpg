@@ -30,6 +30,23 @@ MASTERPLAN1 sub-block U3. Interactive design session with the user, 2026-11-07. 
 
 ## Acceptance test for `U3.2`
 
-1. No gear family ID (`bow`, `shield`, `staff`, etc.) is hardcoded in `rpgkit_rules`; adding a new weapon family in data with a custom scaling stat, range band, and Level-3 mastery bonus works with zero Rust changes.
+1. No gear family ID (`bow`, `shield`, `staff`, etc.) is hardcoded in `rpgkit_rules`; adding a new weapon family in data using existing `engine_rules`, a custom scaling stat, range band, and Level-3 mastery bonus works with zero Rust changes.
 2. Equipping an untrained weapon or an item above the unit's stat requirement succeeds without `wears_untrained` and applies the configured wield penalty to `Weapon Power` / `Armour` and `Initiative`.
 3. `block_cost` is removed from the gear budget check without breaking existing item saves/resaves.
+
+## Feasibility resolutions (`FB-31` to `FB-37`, accepted 2026-11-07)
+
+- **`FB-31` & `FB-32` (`item_families.json` & `weapon_type`)**: Keep the field name `weapon_type` and `item_families.json`. "Family migration" means wiring the remaining hardcoded sites (`ALWAYS_RANGED_TYPES`, `off_hand_ok`, `is_shield`, `skill_in_group`) and deriving `GEAR_TYPES`, `WEAPON_TYPES`, `OFF_CATEGORIES`, and `FOCUS_TYPES` in `check/` from `item_families.json` and `engine_rules`. A new `engine_rule` remains a code change.
+- **`FB-33` & `FB-34` (Wield penalty, `+level` power, unarmed, and party screen)**:
+  - **Stat deficit**: Keep the existing `15 %` power penalty per missing stat point (capped at `60 %`, after `-2` requirement discount per proficiency level) and extend it to armour as well.
+  - **Proficiency 0 (Untrained)**: Soft penalty replaces the hard equip block (`0.75x` power/armour multiplier + `+1` burden when `level == 0`, stacking multiplicatively with any stat-deficit penalty). Keep `+level` weapon power for trained levels (`1..3`).
+  - **Unarmed (`fist`) & classless units**: Keep unarmed weapon power at `0` unless `fist` proficiency is `>= 2` (then `15 + level`), and keep "no proficiency list on a unit/class means no restriction" so classless/hand-built units are not penalised.
+  - **Skill gates & UI**: Skill `min_proficiency` and `weapon_types` gates stay hard; include the party-screen penalty badge (mocked first) in Slice 3.
+- **`FB-35` (Reversible item grants & `OFFHAND1`)**: Recompute item grants and `U4` sources on every sync inside the shared `FB-12` builder. Worn item skills (`OFFHAND1`) are always active while worn, take no deck slot, and follow the built hand rule.
+- **`FB-36` (Hands, loadout budget, reach, carry, skill gating)**:
+  - **(a) Hands**: Keep the built 3-hand rule (`main_1h`, `main_2h`, `off`, where `main_2h` may pair with a non-focus off-hand weapon via weapon switch; shields and foci are excluded).
+  - **(b) Budget**: `23 +/- 20 %` is the **class loadout** budget target (`budget.rs:19`); individual items use `special` and `special_note` as their static override.
+  - **(c) Reach**: `range_band.max` on the family replaces the hardcoded `REACH_WEAPON_REACH = 2` constant, while ranged families keep `base_range` and `U1` moves ranged skill reach to the skill.
+  - **(d) Carry**: Party-wide carry (`carry.rs`) stays alongside per-unit burden -> `Initiative` (`U1` speed split).
+  - **(e) Skill gating**: Expressed as data on the skill rows (`min_proficiency`, `weapon_types`, path level).
+- **`FB-37` (5 slices)**: Slice 1 (drop `block_cost`, re-record `checks_golden`) and Slice 2 (`item_families.json` drives all rules, `0` golden diffs) are ready to build now; Slice 3 (soft penalty + UI), Slice 4 (reversible item grants + `OFFHAND1` + Level 2-3 bonuses), and Slice 5 (carry/burden speed split) follow `U1.2` and `U4.2`.

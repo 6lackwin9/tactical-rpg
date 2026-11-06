@@ -8,7 +8,7 @@ This file is the **single active queue** for the Build Session under the two-ses
 
 ## 1. Ready to Build (`ready-to-build`)
 
-Execute these behaviour-neutral tasks in order. Existing engine goldens must remain unchanged.
+Execute these slices in order. Existing engine goldens must remain unchanged except where a named `checks_golden` re-record is specified.
 
 | Order | Task ID | Masterplan | Layer | Summary & Spec | Acceptance Test |
 | --- | --- | --- | --- | --- | --- |
@@ -18,43 +18,47 @@ Execute these behaviour-neutral tasks in order. Existing engine goldens must rem
 | 4 | `BASERULES1-M` | `U1.2` prep | kit | Rule metadata register, `check/ruleset.rs`, bundle tests, and `aegis rules` CLI with `LOCKED` and `--contract` (`docs/specs/BASERULES1.md` sections 6-7 and `BASERULES1_LIBRARY.md` section 7). | `aegis rules --contract` lists ruleset fields with locked/tunable metadata; bundle validation tests pass. |
 | 5 | `U1.2-S1` | `U1.2` | kit | Slice 1 of `U1.2` (`docs/sessions/U1_STATS.md` + `FB-04..05`): exact port of the 4-stage pipeline (`base -> flat -> mult -> mitigation -> round`) and typed pool facade (`Unit.hp`, `Unit.ap`, `poise` kept as fields). | All existing `rules_golden` and `sim_golden` tests pass byte-identical (`0` delta). |
 | 6 | `U2.2-S1` | `U2.2` | kit + data | Slice 1 of `U2.2` (`docs/sessions/U2_CLASS.md` + `FB-10`, `FB-15`): `unit_budget` module with two share vectors (`base_shares` + `growth_shares`) and largest-remainder rounding, plus computed `base_stats`/`growth` compatibility view. | Levels 1-10 reproduce existing classes; `rules_golden`, `party.rs`, `forge.rs`, and `timeline_kit.json` pass unchanged. |
+| 7 | `U3.2-S1` | `U3.2` | kit + data | Slice 1 of `U3.2` (`docs/sessions/U3_GEAR.md` + `FB-37`): drop `block_cost` from `ItemDef`, `budget.rs` (`W_EXTRA_BLOCK`), `check/`, `source.rs`, `store.rs`, schema, and `item_families.json` (loader ignores stored key and drops on resave). | Named `checks_golden` re-record (`43` `block_cost` lines); `rules_golden` and `sim_golden` byte-identical. |
+| 8 | `U3.2-S2` | `U3.2` | kit | Slice 2 of `U3.2` (`docs/sessions/U3_GEAR.md` + `FB-31..32`, `FB-36c`, `FB-37`): wire `ALWAYS_RANGED_TYPES`, `off_hand_ok`, `is_shield`, `skill_in_group`, `REACH_WEAPON_REACH`, and check lists (`GEAR_TYPES`, `WEAPON_TYPES`, `OFF_CATEGORIES`, `FOCUS_TYPES`) to read `item_families.json` and `engine_rules`. | Every golden (`rules_golden`, `sim_golden`, `checks_golden`) passes byte-identical. |
+| 9 | `U4.2-S1` | `U4.2` | kit | Slice 1 of `U4.2` (`docs/sessions/U4_PASSIVES.md` + `FB-25..27`, `FB-30`): read-time typed grant view (`modifier` with combine rules, `proficiency` replacing `with_drills`, `grant_skill`, `grant_pool`, `trigger`) with today's accumulators kept as evaluators first. | Double-load test asserts old and new are equal across all 55 shipped rows + 16 fixture rows; `0` golden diffs. |
+| 10 | `U2.2-S2` / `U4.2-S2` | `U2.2` + `U4.2` | kit + game | Single unit builder (`FB-12`, `FB-23`, `FB-28`, `FB-30`): unify hero, NPC, Dojo, and sim unit builds + `character_passives` source gathering (keeping today's gather order), give `training_dummy` a static/explicit class (`FB-23`), and change `kits/rpg/schema.json` class `art` default to `""` (`FB-24`). | All goldens byte-identical; no silent first-class fallback needed. |
 
 ## 2. Feasibility Check (`feasibility-check`)
 
-Read-only code audit requested from the Build Session for `U3.2` and `U4.2` (Block `U` design is now 100% closed across `U1.1-U4.1`). Once `U3.2` and `U4.2` are audited, the remaining slices of `U1.2-U4.2` will move into `ready-to-build`.
+Read-only code audit requested from the Build Session for `S1.2` and `S2.2` (Session 3 design is now closed).
 
 | Order | Sub-block / ID | Spec to Audit | Audit Focus | Status |
 | --- | --- | --- | --- | --- |
-| 1 | `U3.2` | `docs/sessions/U3_GEAR.md` | Audit gear family table migration (`weapon_kind`), soft wield penalty (`Proficiency 0`), dropping `block_cost`, and `OFFHAND1` via `grant_skill`. | `feasibility-check` (new) |
-| 2 | `U4.2` | `docs/sessions/U4_PASSIVES.md` | Audit collapsing the 13 passive effect variants into 4 unified grant kinds (`modifier`, `proficiency`, `grant_skill`, `trigger`) with compatibility loader, 4-source deduplication (`C04`), and `ROSTER1-T` temperament fold-in. | `feasibility-check` (new) |
-| 3 | `U1.2` | `docs/sessions/U1_STATS.md` | Audited (`FB-04` to `FB-09`): 6 slices (2S + 3M + 1L). All recommendations accepted in `U1_STATS.md`. | Audited; Slice 1 in `ready-to-build`. |
-| 4 | `U2.2` | `docs/sessions/U2_CLASS.md` | Audited (`FB-10` to `FB-15`): 6 slices (1S + 4M + 1L). All recommendations accepted in `U2_CLASS.md`. | Audited; Slice 1 in `ready-to-build`. |
-| 5 | `A4.2` (`INTENT2`) | `docs/specs/INTENT2.md` | Audited (`FB-16` to `FB-22`): `IR21` needs no rollback; K1 M, K2 M, K3 M, AI S + guard-status task. | Audited; Design updating `INTENT2*.md` per `FB-16..22`. |
+| 1 | `S1.2` | `docs/sessions/S1_STATUS.md` | Audit data-driven 18-status class over 6 primitives (`modifier`, `tick`, `block_lock`, `targeting`, `reactive`, `rule_flag`), round-granular Guard timing (wind-up start + full-round roll-over, `Option 1C`), and single status resist. | `feasibility-check` (new) |
+| 2 | `S2.2` | `docs/sessions/S2_POISE.md` | Audit strict per-hit Poise Pip Threshold rule (`5` pips, `T = Max_Poise / 5`, `pips_lost = clamp(floor(D / T), 0, 3)`, chip immunity for `D < T`, guard `0.5x` poise mult, break at `0` pips + refill at `roll_over`). | `feasibility-check` (new) |
+| 3 | `U1.2` - `U4.2` | `docs/sessions/U1..U4*.md` | Audited (`FB-04..15`, `FB-25..37`). Slices 1-2 queued in Section 1 above; remaining slices follow. | Audited |
+| 4 | `A4.2` (`INTENT2`) | `docs/specs/INTENT2.md` | Audited (`FB-16..22`). Design applying `FB-17..22` text updates to `INTENT2*.md`. | Audited |
 
 ## 3. Held / Waiting on Design
 
 - **`ATTACKLOCK1-O`**: Built behind off-switch (`ATTACKLOCK1` slice 1). Holds until `A1`/`F2` design confirms power > 0 lock rule and melee band check.
 - **`WORLDFIGHT1` (`C18`)**: Holds until `U` and `F` seams settle (`MASTERPLAN1` Q5).
-- **`S1.1` & `S2.1`**: Next design session (Status class & Pools).
+- **`A1.1` - `A4.1`**: Next design session (Action block: skills, consumables, resolution, shapes, triggers).
 
 ## 4. Feedback Responses (Design answers to `docs/FEEDBACK.md`)
 
+`FB-01` to `FB-22` were accepted and archived in `docs/archive/FEEDBACK_CLOSED.md` (2026-11-07).
+
 | Feedback ID | Spec / Task | Design Decision / Response | Date |
 | --- | --- | --- | --- |
-| `FB-01` | `BASERULES1-M` | **Accepted**: Updated section 1 row 4 above to point to `BASERULES1.md` sections 6-7 and `BASERULES1_LIBRARY.md` section 7. | 2026-11-07 |
-| `FB-02` | `planner`, `task-landing` | **Accepted**: Updated `.claude/skills/planner/SKILL.md` step 3.3 and `.claude/skills/task-landing/SKILL.md` so Build writes agent runs and docs deltas only to `docs/FEEDBACK.md` (plus crate-local READMEs). | 2026-11-07 |
-| `FB-03` | `fc.sh docs` | **Accepted**: Design runs `fc.sh docs` (size + lint) before every commit; if a doc ever blocks a gate, Build logs an `FB` item and waits. | 2026-11-07 |
-| `FB-04` | `U1_STATS.md` | **Accepted**: Keep `Unit.hp`, `Unit.ap`, and `poise` as typed fields with the `U1` Pool layer as a facade over them; only newly added data pools (`composure`) use the generic pool store. Recorded in `U1_STATS.md`. | 2026-11-07 |
-| `FB-05` | `U1_STATS.md` | **Accepted**: Allow `tier_power` multiplier in the base stage (flat adds remain base-only); keep fixed-stat and authored-power overrides; leave flat hazard/push (`take_damage`) and ally intercepts on their paths until `A2.2`; Slice 1 of `U1.2` is an exact port with byte-identical goldens. | 2026-11-07 |
-| `FB-06` | `U1_STATS.md`, `INTENT2` | **Accepted**: Keep `Unit.guard` as the numeric accumulator for Situational Mitigation (Layer 2), with guard statuses/skills feeding it; move the cap (`0.9` -> `0.75`) in a separate named balance commit. | 2026-11-07 |
-| `FB-07` | `U1_STATS.md` | **Accepted**: Burden and carry overload lower `Initiative` first (and `Move Rate` only if Initiative hits floor 1); legacy fixed-stat `speed` maps to `initiative`. Land each formula change (`PERC`->crit, `KNOW`->potency, speed split) as its own commit with a `HISTORY` row. | 2026-11-07 |
-| `FB-08` | `U1_STATS.md` | **Accepted**: Drop the unbuilt `corruption` pool clause from `U1.2`'s composure proof test; composure's max is the formula `KNOW x 2 + CONS` (capped at 100); add formula max, percent bands, and `within` distance filter to `U1.2`; widen/parameterize the `-10..10` pool delta clamp so `-10`/`+5` and larger pool effects work. | 2026-11-07 |
-| `FB-09` | `U1_STATS.md`, `U2_CLASS.md` | **Accepted**: Represent tier in formulas via a data table of per-tier factors read as `tier_hp` and `tier_power`. | 2026-11-07 |
-| `FB-10` | `U2_CLASS.md` | **Accepted**: Use two share vectors per class (`base_shares` for budget 62, `growth_shares` for +5/level) with largest-remainder rounding (ties broken by largest fraction, then stat order) so levels 1-10 reproduce existing classes and `rules_golden` holds. | 2026-11-07 |
-| `FB-11` | `U2_CLASS.md` | **Accepted**: Replace `power_scale` with `tier_power` in the `U1` pipeline and `tier_hp` in the HP base formula; apply the `6..18` stat check to the class row only; keep AI skill cap on tier; build this slice after `U1` derived formulas land. | 2026-11-07 |
-| `FB-12` | `U2_CLASS.md` | **Accepted**: Define static units as derived at a fixed level/budget, reuse `base_unit`, `tuning`, `named_items`, and `passives` as the override mechanism, migrate `training_dummy`, and route all unit builders (heroes, NPCs, Dojo, sim) through one function. | 2026-11-07 |
-| `FB-13` | `U2_CLASS.md` | **Accepted**: Pass `stage` on `WorldRoster` (`campaign.act` when in a campaign world, `0` when no campaign/sim/host), and scale enemy XP weight (`roster()`) by the stage-resolved level. Leave `WORLDFIGHT1` held. | 2026-11-07 |
-| `FB-14` | `U2_CLASS.md`, `U3` | **Accepted**: Hold the proficiency bonus slice until `U3.1` and `U4.1` close so Level 1-3 rules are built once. | 2026-11-07 |
-| `FB-15` | `U2_CLASS.md` | **Accepted**: Name the module `unit_budget`; keep `base_stats` and `growth` as a computed compatibility view so `party.rs`, `forge.rs`, `sim`, and `timeline_kit.json` hold; keep loadout templates as an optional last slice. | 2026-11-07 |
-| `FB-16` | `INTENT2.md`, `S1` | **Accepted**: Add a dedicated pre-Stand slice for "guard as a status feeding `Unit.guard`" aligned with `FB-06` and `S1`. | 2026-11-07 |
-| `FB-17` to `FB-22` | `INTENT2*.md` | **Accepted all recommendations**: Design will update `INTENT2.md`, `INTENT2_MATRIX.md`, `INTENT2_CASES.md`, and `INTENT2_SKILLS.md` with the `IR21` precedence order, item mapping, block-limit check, and `lingering = duration + 1` rule before queueing `INTENT2` for build. | 2026-11-07 |
+| `FB-23` | `KITIDS1`, `U2.2` | **Accepted**: Give `training_dummy` an explicit class / migrate it in the `FB-12` static unit builder (`U2.2-S2`), with a content error if a classless unit has no fallback. | 2026-11-07 |
+| `FB-24` | `schema.json` | **Accepted**: Change class `art` default in `kits/rpg/schema.json` from `"warrior"` to `""` (verifying no shipped class relies on the omitted default) as part of `U2.2-S2`. | 2026-11-07 |
+| `FB-25` | `U4_PASSIVES.md` | **Accepted**: Name items (`apply_effects`) and meter bands (incl. `crit`) as consumers of the unified grant kinds; retire unused `spell_reach` (`0` shipped rows). Recorded in `U4_PASSIVES.md`. | 2026-11-07 |
+| `FB-26` | `U4_PASSIVES.md` | **Accepted**: Add per-target combine rules (`sum`, `sum_capped`, `product`, `max`, `or_flag`) to `modifier`, and add a 5th grant kind `grant_pool` for `meter`. Recorded in `U4_PASSIVES.md`. | 2026-11-07 |
+| `FB-27` | `U4_PASSIVES.md` | **Accepted**: The typed grant loader replaces `Proficiency::with_drills` too, keeping the rule that slottable passives do not train outside battle. | 2026-11-07 |
+| `FB-28` | `U4_PASSIVES.md` | **Accepted**: Keep today's `character_passives` gather order (`character -> faction -> discipline -> named items`) so `foresight` and trigger-order goldens hold; deduplicate by passive ID while inline item effects (`gear_*`) rebuild on sync; re-gather live in the `FB-12` builder. | 2026-11-07 |
+| `FB-29` | `U4_PASSIVES.md` | **Accepted**: Put `temperament` on the character row (`characters.temperament` naming a slotless passive + optional `default_intent` and `ai_role` keys), keeping passive rows pure. | 2026-11-07 |
+| `FB-30` | `U4_PASSIVES.md` | **Accepted**: Queue `U4.2-S1` (typed grant loader + double-load test, `0` golden diffs) and `U4.2-S2` (unified source gatherer) in `ready-to-build` now; move evaluators onto `U1.2` pipeline after `U1.2` lands. | 2026-11-07 |
+| `FB-31` | `U3_GEAR.md` | **Accepted**: Keep field name `weapon_type` and `item_families.json`; wire the remaining hardcoded sites to read `item_families.json` and `engine_rules`. Recorded in `U3_GEAR.md`. | 2026-11-07 |
+| `FB-32` | `U3_GEAR.md` | **Accepted**: Derive `GEAR_TYPES`, `WEAPON_TYPES`, `OFF_CATEGORIES`, and `FOCUS_TYPES` from `item_families.json`; word test 1 as "a new family using existing engine rules, in data only". | 2026-11-07 |
+| `FB-33` | `U3_GEAR.md` | **Accepted**: Keep the `15 %`/point stat-deficit penalty (capped at `60 %`, `-2` req/level, extended to armour) + `+level` weapon power; add `Proficiency 0` soft penalty (`0.75x` power/armour + `+1` burden, stacking multiplicatively); keep unarmed at `0` power unless `fist >= 2`; keep "no proficiency list = no restriction". | 2026-11-07 |
+| `FB-34` | `U3_GEAR.md` | **Accepted**: Include the party-screen penalty display (mocked first) in `U3.2` Slice 3; skill `min_proficiency` and `weapon_types` gates stay hard. | 2026-11-07 |
+| `FB-35` | `U3_GEAR.md`, `U4` | **Accepted**: Recompute item grants and `U4` sources on every sync in the shared builder; worn item skills (`OFFHAND1`) are always active while worn and take no deck slot. | 2026-11-07 |
+| `FB-36` | `U3_GEAR.md` | **Accepted**: Keep the built 3-hand rule (`main_2h` pairs with non-focus off-hand weapon via switch), state `23 +/- 20 %` as the class loadout budget (`special`/`special_note` for static item override), let `range_band.max` replace `REACH_WEAPON_REACH`, keep party-wide carry alongside per-unit burden -> `Initiative`, and keep skill gating on skill rows. | 2026-11-07 |
+| `FB-37` | `U3_GEAR.md` | **Accepted**: Queue `U3.2-S1` (drop `block_cost`) and `U3.2-S2` (family table drives rules) in `ready-to-build` now; Slices 3-5 follow `U1.2` and `U4.2`. | 2026-11-07 |
+| `FB-38` | Docs delta | **Accepted**: Applied `SKILLS1` and `KITIDS1` docs deltas to `docs/WORKFLOW.md`, `GAME_BRIEF.md`, `STRUCTURE.md`, `.claude/skills/`, and marked `SKILLS1` + `KITIDS1` done in `docs/TASKS.md`. | 2026-11-07 |

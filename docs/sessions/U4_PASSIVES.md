@@ -27,5 +27,16 @@ MASTERPLAN1 sub-block U4. Interactive design session with the user, 2026-11-07. 
 
 ## Acceptance test for `U4.2`
 
-1. All 55 shipped passives load and evaluate through the 4 unified grant kinds (`modifier`, `proficiency`, `grant_skill`, `trigger`) with existing combat and rules goldens byte-identical before new content tweaks.
+1. All 55 shipped passives load and evaluate through the unified grant kinds (`modifier`, `proficiency`, `grant_skill`, `grant_pool`, `trigger`) with existing combat and rules goldens byte-identical before new content tweaks.
 2. A character with a drill passive (`proficiency`), an off-hand skill item (`grant_skill`), a faction grant (`modifier`), and a temperament (`modifier` + `default_intent`) builds through the single `C05` unit builder (`FB-12`) and enters battle with all four sources active and deduplicated.
+
+## Feasibility resolutions (`FB-25` to `FB-30`, accepted 2026-11-07)
+
+- **`FB-25` (14 effect types, items & meter bands, `spell_reach`)**: Items (`apply_effects`) and meter bands (including `crit`) are consumers of the same unified grant kinds. Retire unused `spell_reach` (`0` shipped rows, since `U1` moved reach to the skill).
+- **`FB-26` (Per-target combine rules & 5th grant kind `grant_pool`)**:
+  - Add a **combine rule per target** inside `modifier`: `sum` (`stat`, `ap_regen`, `status_potency`, `skill_potency` pooled as `1 + sum`, `forced_move` bonus tiles), `sum_capped` (`resist` per status capped at `100`), `product` (`stagger_taken` filtered by action length), `max` (`foresight` range capped, keeping first-source ID), and `or_flag` (`forced_move` immunity flags).
+  - Add a **5th grant kind `grant_pool`** for `meter` (spawns the gauge at battle start, raises its floor, and opens the meter's skills).
+- **`FB-27` (`Proficiency::with_drills`)**: The typed grant loader replaces `Proficiency::with_drills` (`stats.rs:146`) as well, preserving the rule that slottable passives do not train outside battle.
+- **`FB-28` (Source gather order, deduplication & inline item effects)**: Keep today's `character_passives` gather order (`character -> faction grants -> discipline -> named items' grants`) so `foresight` first-source and trigger-order goldens (`source#index`) remain byte-identical. Deduplication means at most one application per passive ID, while different passives stack per their combine rule; ordinary worn gear keeps inline `gear_*` effects rebuilt on sync. Party members and NPCs both re-gather passives from live sources via the single `FB-12` unit builder.
+- **`FB-29` (Temperament home)**: Place `temperament` on the character record (`characters.temperament` naming a slotless passive ID, plus optional `default_intent` and `ai_role` keys on the character), keeping passive rows pure.
+- **`FB-30` (5 slices)**: Slice 1 (read-time typed grant view & loader with double-load equality test over all 55 shipped rows + 16 fixture rows, `0` golden diffs) and Slice 2 (unified source gatherer in the `FB-12` builder) are ready to build now; Slice 3 (temperament field & AI override), Slice 4 (evaluators onto `U1.2` pipeline), and Slice 5 (optional row migration) follow.
