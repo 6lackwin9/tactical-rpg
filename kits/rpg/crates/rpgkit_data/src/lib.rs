@@ -16,7 +16,9 @@ use indexmap::IndexMap;
 use serde_json::Value;
 
 pub mod terms;
+pub mod unit_budget;
 pub use terms::{Term, TermDef, TermRow, TermScope, TERMS_KIND};
+pub use unit_budget::ClassShares;
 
 pub const STATS: [&str; 6] = ["STR", "DEX", "INT", "CONS", "PERC", "KNOW"];
 pub const LOADOUT_SLOTS: [&str; 6] = ["main_hand", "off_hand", "head", "body", "accessory_1", "accessory_2"];
@@ -63,8 +65,12 @@ pub struct ClassDef {
     pub name: String,
     pub art: String,
     pub ai_role: String,
+    /// Level 1 stats. On a row given as shares (`base_shares`), the computed view `unit_budget::stats_at(level 1)`.
     pub base_stats: IndexMap<String, i32>,
+    /// Points per level. On a row given as shares, the computed view of level 2's gain (`unit_budget::gain_at`).
     pub growth: IndexMap<String, i32>,
+    /// U2.2-S1: the row's own `base_shares` and `growth_shares` (None on a row given as `base_stats` and `growth`).
+    pub shares: Option<ClassShares>,
     pub proficiency: IndexMap<String, ProfEntry>,
     /// Family head id -> unlock level, in entry order.
     pub skill_path: IndexMap<String, i32>,
@@ -93,19 +99,53 @@ impl ClassDef {
             })
             .collect();
         let id = string(o, "id", "");
+        // U2.2-S1: a row with base_shares is read as shares and base_stats/growth become a computed view
+        let shares = obj(o, "base_shares").filter(|m| !m.is_empty()).map(|base| ClassShares {
+            base: float_map(base),
+            growth: obj(o, "growth_shares").map(float_map).unwrap_or_default(),
+        });
+        let (base_stats, growth) = match &shares {
+            Some(sh) => (unit_budget::stats_at(sh, 1), unit_budget::gain_at(sh, 2)),
+            None => (int_map(o, "base_stats"), int_map(o, "growth")),
+        };
         Self {
             // KITIDS1: without an art key the class wears the body named like itself (the kit names no class)
             art: string(o, "art", &id),
             id,
             name: string(o, "name", "New Class"),
             ai_role: string(o, "ai_role", "AGGRESSOR"),
-            base_stats: int_map(o, "base_stats"),
-            growth: int_map(o, "growth"),
+            base_stats,
+            growth,
+            shares,
             proficiency,
             skill_path: int_map(o, "skill_path"),
             loadout,
             pouch: strings(o, "pouch"),
         }
+    }
+
+    /// The class's share vectors: its own (a share row), or today's integer row read as shares (base / 62, growth / 5).
+    pub fn unit_shares(&self) -> ClassShares {
+        self.shares.clone().unwrap_or_else(|| ClassShares {
+            base: unit_budget::shares_of(&self.base_stats, unit_budget::BASE_BUDGET),
+            growth: unit_budget::shares_of(&self.growth, unit_budget::GROWTH_BUDGET),
+        })
+    }
+
+    /// The class stats at `level` before the free spend: a share row by the unit budget's running total; an integer
+    /// row as base + growth per level gained (a missing base stat is 10), as before U2.2.
+    pub fn stats_at(&self, level: i32) -> IndexMap<String, i32> {
+        if let Some(sh) = &self.shares {
+            return unit_budget::stats_at(sh, level);
+        }
+        let gained = level.max(1) - 1;
+        STATS
+            .iter()
+            .map(|s| {
+                let v = self.base_stats.get(*s).copied().unwrap_or(10) + self.growth.get(*s).copied().unwrap_or(0) * gained;
+                (s.to_string(), v)
+            })
+            .collect()
     }
 
     /// The path as ordered steps (level, family): unlock level ascending, then entry position.
@@ -1620,6 +1660,11 @@ pub const CLASS_OVERLAY_KEYS: [&str; 3] = ["name", "description", "skill_path"];
 /// The objects of the list `key` (entries that are not objects are left out).
 fn objs(o: &Obj, key: &str) -> Vec<Obj> {
     array(o, key).iter().filter_map(|v| v.as_object().cloned()).collect()
+}
+
+/// The numeric values of an object as floats, in its key order (other values left out).
+fn float_map(m: &Obj) -> IndexMap<String, f64> {
+    m.iter().filter_map(|(k, v)| v.as_f64().map(|x| (k.clone(), x))).collect()
 }
 
 /// FM1: a skill's forced move (`forced_move`), read with its defaults.

@@ -62,11 +62,12 @@ pub fn spend_for(cat: &Catalog, variant: &str, class_id: &str, level: i32) -> Ma
     m
 }
 
-/// The stat of the largest class growth (ties: the first in the class's growth order).
+/// The stat of the largest class growth share (U2.2: the growth identity, not one level's rounded gain; an integer row
+/// reads as growth / 5, so the same stat as before; ties: the first in the class's growth order).
 pub fn primary_stat(cat: &Catalog, class_id: &str) -> String {
-    let mut best = (String::new(), -1);
+    let mut best = (String::new(), -1.0);
     if let Some(cls) = cat.classes.get(class_id) {
-        for (k, &v) in &cls.growth {
+        for (k, &v) in &cls.unit_shares().growth {
             if v > best.1 {
                 best = (k.clone(), v);
             }

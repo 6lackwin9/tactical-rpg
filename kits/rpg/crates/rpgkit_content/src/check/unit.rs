@@ -5,14 +5,14 @@ use aegis_content::world::Catalogs;
 use aegis_core::fmt::fixed;
 use aegis_core::json::{self, Dict};
 use rpgkit_data::{ClassDef, Deck, ItemDef, SkillDef, STATS};
-use rpgkit_rules::ruleset;
+use rpgkit_rules::{ruleset, unit_budget};
 use rpgkit_rules::stats::{spend_pool, Proficiency, CLASS_BUDGET, DEFAULT_SCALING, MAX_CLASS_SLOTS, MAX_EXTRA_SLOTS, MAX_LEVEL, PROF_MAX_LEVEL};
 use indexmap::IndexMap;
 use serde_json::Value;
 
 const STAT_FLOOR: i64 = 6;
 const STAT_CEILING: i64 = 18;
-const GROWTH_TOTAL: i64 = 5;
+const GROWTH_TOTAL: i64 = unit_budget::GROWTH_BUDGET as i64;
 const GROWTH_STAT_MAX: i64 = 3;
 /// StatRules.ADVANCED_MIN_LEVEL: an advanced family may not sit on a class path below this level.
 const ADVANCED_MIN_LEVEL: i64 = 5;
@@ -28,6 +28,21 @@ type Ints = IndexMap<String, i64>;
 
 /// StatRules.validate_class: every base stat in range, the class budget, the growth per level.
 fn validate_class(base: &Ints, growth: &Ints) -> Vec<String> {
+    let mut errors = validate_base(base);
+    let growth_total: i64 = growth.values().sum();
+    if growth_total != GROWTH_TOTAL {
+        errors.push(format!("Growth totals {growth_total}, every class gains exactly {GROWTH_TOTAL} per level."));
+    }
+    for s in STATS {
+        if !(0..=GROWTH_STAT_MAX).contains(&growth.get(s).copied().unwrap_or(0)) {
+            errors.push(format!("Growth {s} must be 0-{GROWTH_STAT_MAX} per level."));
+        }
+    }
+    errors
+}
+
+/// The base stats half of `validate_class`: every stat in range and the class budget.
+fn validate_base(base: &Ints) -> Vec<String> {
     let mut errors = Vec::new();
     let mut total = 0;
     for s in STATS {
@@ -40,13 +55,45 @@ fn validate_class(base: &Ints, growth: &Ints) -> Vec<String> {
     if total != CLASS_BUDGET as i64 {
         errors.push(format!("Base stats total {total}, every class must total {CLASS_BUDGET} (every stat set)."));
     }
-    let growth_total: i64 = growth.values().sum();
-    if growth_total != GROWTH_TOTAL {
-        errors.push(format!("Growth totals {growth_total}, every class gains exactly {GROWTH_TOTAL} per level."));
+    errors
+}
+
+/// U2.2-S1: a class row given as shares (`base_shares`, `growth_shares`): both vectors sum to 1, each share is 0-1,
+/// no `base_stats` or `growth` beside them, and the stats the unit budget gives keep the integer row's limits (base
+/// 6-18 at level 1, 0-3 gained per stat at every level).
+fn validate_shares(e: &Dict) -> Vec<String> {
+    let mut errors = Vec::new();
+    for (key, label) in [("base_shares", "Base shares"), ("growth_shares", "Growth shares")] {
+        let raw = json::get(e, key).as_object().cloned().unwrap_or_default();
+        let shares: unit_budget::Shares = raw.iter().map(|(k, v)| (k.clone(), v.as_f64().unwrap_or(-1.0))).collect();
+        for (k, v) in &shares {
+            if !STATS.contains(&k.as_str()) {
+                errors.push(format!("{label}: '{k}' is not a stat."));
+            } else if !(0.0..=1.0).contains(v) {
+                errors.push(format!("{label} {k} must be a number from 0 to 1."));
+            }
+        }
+        if !unit_budget::sums_to_one(&shares) {
+            errors.push(format!("{label} total {}, a share vector must total 1.", fixed(shares.values().sum::<f64>(), 4)));
+        }
     }
-    for s in STATS {
-        if !(0..=GROWTH_STAT_MAX).contains(&growth.get(s).copied().unwrap_or(0)) {
-            errors.push(format!("Growth {s} must be 0-{GROWTH_STAT_MAX} per level."));
+    for key in ["base_stats", "growth"] {
+        if json::get(e, key).as_object().is_some_and(|m| !m.is_empty()) {
+            errors.push(format!("A class given as shares cannot also set {key}."));
+        }
+    }
+    if !errors.is_empty() {
+        return errors;
+    }
+    let shares = ClassDef::from_obj(e).unit_shares();
+    let base: Ints = unit_budget::stats_at(&shares, 1).into_iter().map(|(k, v)| (k, v as i64)).collect();
+    errors.extend(validate_base(&base));
+    for level in 2..=MAX_LEVEL {
+        for (s, gain) in unit_budget::gain_at(&shares, level) {
+            let msg = format!("Growth {s} must be 0-{GROWTH_STAT_MAX} per level.");
+            if !(0..=GROWTH_STAT_MAX).contains(&(gain as i64)) && !errors.contains(&msg) {
+                errors.push(msg);
+            }
         }
     }
     errors
@@ -245,7 +292,15 @@ fn path_errors(v: &View, raw: &Value) -> Vec<String> {
 
 /// ClassUnitValidator.class_errors of a normalized class row.
 pub fn class_errors(v: &View, e: &Dict) -> Vec<String> {
-    let mut errors = validate_class(&json::ints(json::get(e, "base_stats")), &json::ints(json::get(e, "growth")));
+    let mut errors = if json::get(e, "base_shares").as_object().is_some_and(|m| !m.is_empty()) {
+        validate_shares(e)
+    } else {
+        let mut list = validate_class(&json::ints(json::get(e, "base_stats")), &json::ints(json::get(e, "growth")));
+        if json::get(e, "growth_shares").as_object().is_some_and(|m| !m.is_empty()) {
+            list.push("Growth shares need base shares (a class gives both vectors or neither).".into());
+        }
+        list
+    };
     // a class always names its body (A1; "" inherits only on units and characters)
     let art = json::s(e, "art");
     if art.is_empty() && !v.assets.roots.is_empty() {

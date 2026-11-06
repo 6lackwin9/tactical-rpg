@@ -5,7 +5,8 @@ use rpgkit_data::{Catalog, ClassDef, ProfEntry, STATS};
 use indexmap::IndexMap;
 use serde_json::Value;
 
-pub const CLASS_BUDGET: i32 = 62;
+/// The level 1 unit budget (`unit_budget::BASE_BUDGET`).
+pub const CLASS_BUDGET: i32 = rpgkit_data::unit_budget::BASE_BUDGET;
 pub const SPEND_BASE: i32 = 4;
 pub const FREE_PER_LEVEL: i32 = 1;
 pub const MAX_LEVEL: i32 = 10;
@@ -211,21 +212,15 @@ pub struct CharacterStats {
 }
 
 impl CharacterStats {
-    /// Class base stats + `spend` + the class growth of every level gained.
+    /// The class stats at the level (base and growth, `ClassDef::stats_at`; U2.2 unit budget) + `spend`.
     pub fn new(class: &ClassDef, level: i32, spend: &IndexMap<String, i32>) -> Self {
-        let mut core: IndexMap<String, i32> =
-            STATS.iter().map(|s| (s.to_string(), class.base_stats.get(*s).copied().unwrap_or(10))).collect();
         let target = level.clamp(1, MAX_LEVEL);
+        let mut core = class.stats_at(target);
         let mut spent = 0;
         for s in STATS {
             let pts = spend.get(s).copied().unwrap_or(0).max(0);
             *core.get_mut(s).unwrap() += pts;
             spent += pts;
-        }
-        for _ in 1..target {
-            for s in STATS {
-                *core.get_mut(s).unwrap() += class.growth.get(s).copied().unwrap_or(0);
-            }
         }
         Self { level: target, unallocated: (spend_pool(target) - spent).max(0), core, proficiency: Proficiency::from_class(class), modifiers: Vec::new() }
     }
