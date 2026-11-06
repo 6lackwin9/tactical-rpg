@@ -287,6 +287,15 @@ pub struct World {
 }
 
 impl World {
+    /// U1.2 slice 1 (`FB-04`): unit `c`'s pool `id` through the typed facade: HP and AP from the unit, poise from
+    /// `World.poise` (None in classic or before the first refill).
+    pub fn pool(&self, c: UnitId, id: rpgkit_rules::pool::PoolId) -> Option<rpgkit_rules::pool::PoolView> {
+        match id {
+            rpgkit_rules::pool::PoolId::Poise => crate::poise::pool(self, c),
+            _ => self.units.get(c)?.pool(id),
+        }
+    }
+
     /// HOOKS1 4.1: whether the battle plays by AI tactics (target preferences SOFTEST and TOUGHEST, unit tactics,
     /// hazard-aware tiles).
     pub fn ai_tactics(&self) -> bool {

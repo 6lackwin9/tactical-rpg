@@ -13,7 +13,8 @@ use crate::world::{UnitId, World};
 use rpgkit_data::SkillDef;
 use rpgkit_rules::derived;
 use rpgkit_rules::ruleset;
-use rpgkit_rules::stats::roundi;
+use rpgkit_rules::pipeline::{self, Modifier, Op, Stage};
+use rpgkit_rules::pool::PoolView;
 
 /// The status that keeps a unit from breaking (P12).
 pub const STEADFAST: &str = "steadfast";
@@ -77,6 +78,12 @@ pub fn state(w: &World, c: UnitId) -> Option<&PoiseState> {
         return None;
     }
     w.poise.get(&c)
+}
+
+/// U1.2 slice 1 (`FB-04`): `c`'s bar as a pool view over `World.poise` (0 to its Max Poise; the value sits above the
+/// max while a windup bonus holds, P11). None as `state`.
+pub fn pool(w: &World, c: UnitId) -> Option<PoolView> {
+    state(w, c).map(|s| PoolView { current: s.value, min: 0, max: s.max })
 }
 
 /// P1, P2: `c`'s Max Poise now: the unit row's fixed `poise` (above 0), none (0), else the ruleset's `poise_stat` row
@@ -160,8 +167,23 @@ impl Default for Factors {
 }
 
 /// P6: stagger taken = `roundi(stagger x windup x guard x repeat x flank x passive x hook)`, floor 0.
+/// It runs the stage pipeline (U1.2 slice 1): the stagger as the base, the factors as amplifiers in that order.
 pub fn stagger_taken(stagger: i32, f: &Factors) -> i32 {
-    roundi(stagger as f64 * f.windup * f.guard * f.repeat * f.flank * f.passive * f.hook).max(0)
+    pipeline::STAGGER.run(&stagger_modifiers(stagger, f)).value
+}
+
+/// The pipeline modifiers of `stagger_taken`, in its order.
+pub fn stagger_modifiers(stagger: i32, f: &Factors) -> [Modifier; 7] {
+    let mult = |id: &'static str, x: f64| Modifier::new(id, Stage::Mult, Op::Mul(x));
+    [
+        Modifier::new("stagger", Stage::Base, Op::Add(stagger as f64)),
+        mult("windup", f.windup),
+        mult("guard", f.guard),
+        mult("repeat", f.repeat),
+        mult("flank", f.flank),
+        mult("passive", f.passive),
+        mult("hook", f.hook),
+    ]
 }
 
 /// P6: the factors of a hit of an action `blocks` long on `t` at `block` (`flank`: the hit was a flank with the rule on).

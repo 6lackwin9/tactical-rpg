@@ -3,8 +3,13 @@
 //!   Attack Power = (Weapon Power + Unit Power) x tier power scale   (authored power replaces it, unscaled)
 //!   Hit = Attack Power x Focus x Skill x Stance x Crit x (1 - min(cap, Guard + Cover)) x (1 - Armor), minimum 1
 //!   (RULESET1 A2: an armour-piercing hit under the rule pierce skips the Armor term.)
+//!
+//! Both run the stage pipeline (`pipeline`, U1.2 slice 1): attack power is the base stage (weapon and unit power added,
+//! the tier power scale, rounding point one); the hit adds the amplifiers (Focus, skill, stance, crit) and the
+//! mitigation layers (guard and cover, armour) in that order, then the finish (rounding point two, minimum 1).
 
 use crate::gear::Equipment;
+use crate::pipeline::{self, Modifier, Op, Stage, Trace};
 use crate::stats::roundi;
 use crate::unit::{Stance, Unit};
 
@@ -52,6 +57,8 @@ pub struct AttackPower {
     pub stat_name: String,
     pub stat_val: i32,
     pub unit_scaling: f64,
+    /// The tier power scale the base stage multiplies by (unused by an authored power).
+    pub power_scale: f64,
 }
 
 pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
@@ -112,8 +119,27 @@ pub fn attack_power(u: &Unit, ranged: bool, offhand: bool) -> AttackPower {
             res.unit_power = res.stat_val as f64 * scaling;
         }
     }
-    res.attack_power = roundi((res.weapon_power + res.unit_power) * u.power_scale).max(1);
+    res.power_scale = u.power_scale;
+    let (base, n) = res.base_modifiers();
+    res.attack_power = pipeline::DAMAGE.run(&base[..n]).base.unwrap_or(1);
     res
+}
+
+impl AttackPower {
+    /// The base stage's modifiers and how many of them count: the authored power alone (unscaled), else weapon power
+    /// and unit power added, then the tier power scale. A fixed array, so a hit allocates nothing.
+    pub fn base_modifiers(&self) -> ([Modifier; 3], usize) {
+        if self.authored {
+            let unused = || Modifier::new("unused", Stage::Base, Op::Add(0.0));
+            return ([Modifier::new("authored", Stage::Base, Op::Add(self.attack_power as f64)), unused(), unused()], 1);
+        }
+        let mods = [
+            Modifier::new("weapon", Stage::Base, Op::Add(self.weapon_power)),
+            Modifier::new("unit", Stage::Base, Op::Add(self.unit_power)),
+            Modifier::new("tier", Stage::Base, Op::Mul(self.power_scale)),
+        ];
+        (mods, 3)
+    }
 }
 
 pub fn power_of(u: &Unit, ranged: bool, offhand: bool) -> i32 {
@@ -196,9 +222,23 @@ pub struct Hit {
     pub final_attack_power: i32,
     /// RULESET1 A2: the hit ignored the armour ("armour pierced"; `armor_rating` still names the target's rating).
     pub armor_pierced: bool,
+    /// U1.2 slice 1: every pipeline step of the hit (base terms, tier, rounding point one, the amplifiers, the
+    /// mitigation layers, the finish); filled by `compute_traced` only, empty from `compute`.
+    pub trace: Trace,
 }
 
+/// One hit, keeping no trace (`Hit.trace` stays empty and allocates nothing): the planner, forecasts, the sim and
+/// every resolved hit.
 pub fn compute(attacker: &Unit, target: &Unit, h: HitInput) -> Hit {
+    hit(attacker, target, h, false)
+}
+
+/// `compute`, keeping every pipeline step in `Hit.trace` (for a hit that is shown with its steps).
+pub fn compute_traced(attacker: &Unit, target: &Unit, h: HitInput) -> Hit {
+    hit(attacker, target, h, true)
+}
+
+fn hit(attacker: &Unit, target: &Unit, h: HitInput, traced: bool) -> Hit {
     let explained = attack_power(attacker, h.ranged, h.offhand);
     let power = explained.attack_power;
     let buff = attacker.attack_boost.max(1.0);
@@ -211,14 +251,33 @@ pub fn compute(attacker: &Unit, target: &Unit, h: HitInput) -> Hit {
     let guard_term = GUARD_CAP.min(guard + h.cover.max(0.0));
     let rating = armor_rating(target);
     let armor_ratio = if h.ignore_armor { 0.0 } else { armor_reduction(rating) };
-    let gross = power as f64 * buff * h.skill_mult * stance_factor * crit_mult * (1.0 - guard_term) * (1.0 - armor_ratio);
+    // today's order: power, Focus, skill, stance, crit, guard and cover, armour (f64 products are not associative)
+    let rest = [
+        Modifier::new("focus", Stage::Mult, Op::Mul(buff)),
+        Modifier::new("skill", Stage::Mult, Op::Mul(h.skill_mult)),
+        Modifier::new("stance", Stage::Mult, Op::Mul(stance_factor)),
+        Modifier::new("crit", Stage::Mult, Op::Mul(crit_mult)),
+        Modifier::new("guard_cover", Stage::Mitigation, Op::Reduce(guard_term)),
+        Modifier::new("armour", Stage::Mitigation, Op::Reduce(armor_ratio)),
+    ];
+    let (out, trace) = if traced {
+        // every base term, so the trace shows them
+        let (base, n) = explained.base_modifiers();
+        let mods: Vec<Modifier> = base.into_iter().take(n).chain(rest).collect();
+        pipeline::DAMAGE.run_traced(&mods)
+    } else {
+        // the base stage already ran in `attack_power`: its rounded result (an integer, so rounding point one keeps it)
+        let [r0, r1, r2, r3, r4, r5] = rest;
+        (pipeline::DAMAGE.run(&[Modifier::new("attack_power", Stage::Base, Op::Add(power as f64)), r0, r1, r2, r3, r4, r5]), Trace::default())
+    };
+    debug_assert_eq!(out.base, Some(power), "the hit's base stage is the attack power");
     Hit {
         attack_power: power,
         is_crit,
         crit_rate: chance,
         stance_factor,
         armor_rating: rating,
-        final_dmg: roundi(gross).max(1),
+        final_dmg: out.value,
         power: explained,
         buff_mult: buff,
         skill_mult: h.skill_mult,
@@ -228,5 +287,6 @@ pub fn compute(attacker: &Unit, target: &Unit, h: HitInput) -> Hit {
         crit_mult,
         final_attack_power: roundi(power as f64 * buff),
         armor_pierced: h.ignore_armor,
+        trace,
     }
 }

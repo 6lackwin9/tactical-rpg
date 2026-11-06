@@ -726,3 +726,25 @@ fn a_hit_sequence_forecasts_on_the_bar_the_earlier_hits_leave() {
     assert_eq!(round_intent::summary_text(&sum), "1 break (1 of 2 hits into a wind-up), 1 flank, 3 follow-ups, Rest +1 AP");
     assert_eq!(round_intent::summary_text(&round_intent::RoundSummary::default()), "no breaks");
 }
+
+/// U1.2 slice 1 (`FB-04`): the battle's pool facade reads poise from the bar (0 to its Max Poise, a windup bonus above
+/// it unclamped), HP and AP from the unit's typed fields; classic has no poise pool.
+#[test]
+fn the_pool_facade_reads_the_bar_and_the_unit_fields() {
+    use rpgkit_rules::pool::{PoolId, PoolView};
+    let s = session(poise_rules());
+    let mut w = s.w.clone();
+    for c in [HERO, FOE, NO_BAR] {
+        let b = bar(&w, c);
+        assert_eq!(w.pool(c, PoolId::Poise), Some(PoolView { current: b.value, min: 0, max: b.max }), "unit {c}");
+        assert_eq!(w.pool(c, PoolId::Hp), w.units[c].pool(PoolId::Hp));
+        assert_eq!(w.pool(c, PoolId::Ap).map(|p| (p.current, p.max)), Some((w.units[c].ap, w.units[c].max_ap)));
+    }
+    set_poise(&mut w, HERO, BAR + 20);
+    assert_eq!(w.pool(HERO, PoolId::Poise).map(|p| (p.current, p.max)), Some((BAR + 20, BAR)), "a windup bonus sits above the max");
+    w.damage(FOE, 9, true);
+    assert_eq!(w.pool(FOE, PoolId::Hp).map(|p| p.current), Some(w.units[FOE].hp), "a write through the typed field shows");
+    let classic = session(Ruleset::classic());
+    assert_eq!(classic.w.pool(HERO, PoolId::Poise), None, "classic keeps no bars");
+    assert!(classic.w.pool(HERO, PoolId::Hp).is_some());
+}
