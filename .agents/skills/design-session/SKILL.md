@@ -29,9 +29,8 @@ Operate as the **Design Session** (`C:\dev\tactical-rpg-dev`, branch `develop`) 
 Because `.git/worktrees/tactical-rpg-dev/index` is write-protected inside the agent sandbox, stage and push via a temporary `GIT_INDEX_FILE`, and then **restore the working tree on disk back to the local `.git` index** (Clean Pull-Ready Mode). This leaves `C:\dev\tactical-rpg-dev` 100% clean (`[behind 1]`, zero modified or untracked files) so the user's VS Code **Sync / Pull** button fast-forwards cleanly every time:
 
 ```powershell
-$ErrorActionPreference = "Stop"
 Set-Location C:\dev\tactical-rpg-dev
-git fetch origin develop
+git fetch -q origin develop
 $env:GIT_INDEX_FILE = "$env:TEMP\dev_index"
 if (Test-Path $env:GIT_INDEX_FILE) { Remove-Item $env:GIT_INDEX_FILE -Force }
 git read-tree origin/develop
@@ -39,7 +38,7 @@ git add <design-owned-files>
 $tree = git write-tree
 $parent = git rev-parse origin/develop
 $commit = "<commit message>" | git commit-tree $tree -p $parent
-git push origin "${commit}:refs/heads/develop"
+git push -q origin "${commit}:refs/heads/develop"
 Remove-Item $env:GIT_INDEX_FILE -Force
 Remove-Item Env:\GIT_INDEX_FILE
 # Restore working tree to match local .git index so VS Code Sync/Pull fast-forwards with 0 conflicts
