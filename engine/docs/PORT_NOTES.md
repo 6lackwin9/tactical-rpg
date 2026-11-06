@@ -27,7 +27,7 @@ because the RNG is bit-exact.
 | `core/combat/combatant.gd` (build, skills, unlocks) | `emberwake_rules::unit` | unit snapshots (`rules_golden.rs`) |
 | `content/content_factory.gd` (`unit`, `loadout_of`, `_equip`) | `emberwake_rules::unit::build_unit` | unit snapshots (`rules_golden.rs`) |
 | `core/specs/passives.gd` (`apply_effects`) | `Unit::apply_effects` | unit snapshots (gear effects) |
-| `core/combat/damage_calculator.gd` | `emberwake_rules::damage` | damage cases (`rules_golden.rs`, engine-recorded, CLN-38) |
+| `core/combat/damage_calculator.gd` | `emberwake_rules::damage` (runs `rpgkit_rules::pipeline`, exact port, `U1.2-S1`) | damage cases (`rules_golden.rs`, engine-recorded, CLN-38) |
 | `combat/status/status_effects.gd`, `status_registry.gd` | `emberwake_rules::status` | battle traces |
 | `combat/arena/combat_grid.gd`, `terrain.gd`, `combat_zones.gd` | `emberwake_battle::grid`, `world` | battle traces |
 | `combat/arena/grid_path.gd` | `emberwake_battle::path` | battle traces |

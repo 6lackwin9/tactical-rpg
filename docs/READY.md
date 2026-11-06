@@ -25,20 +25,22 @@ Execute these slices in order. Existing engine goldens must remain unchanged exc
 
 ## 2. Feasibility Check (`feasibility-check`)
 
-Read-only code audit requested from the Build Session for `S1.2` and `S2.2` (Session 3 design is now closed).
+Read-only code audit requested from the Build Session for `S1.2`, `S2.2`, and `A1.2-A4.2` (Sessions 3 and 4 are now closed).
 
 | Order | Sub-block / ID | Spec to Audit | Audit Focus | Status |
 | --- | --- | --- | --- | --- |
 | 1 | `S1.2` | `docs/sessions/S1_STATUS.md` | Audit data-driven 18-status class over 6 primitives (`modifier`, `tick`, `block_lock`, `targeting`, `reactive`, `rule_flag`), round-granular Guard timing (wind-up start + full-round roll-over, `Option 1C`), and single status resist. | `feasibility-check` (new) |
 | 2 | `S2.2` | `docs/sessions/S2_POISE.md` | Audit strict per-hit Poise Pip Threshold rule (`5` pips, `T = Max_Poise / 5`, `pips_lost = clamp(floor(D / T), 0, 3)`, chip immunity for `D < T`, guard `0.5x` poise mult, break at `0` pips + refill at `roll_over`). | `feasibility-check` (new) |
-| 3 | `U1.2` - `U4.2` | `docs/sessions/U1..U4*.md` | Audited (`FB-04..15`, `FB-25..37`). Slices 1-2 queued in Section 1 above; remaining slices follow. | Audited |
-| 4 | `A4.2` (`INTENT2`) | `docs/specs/INTENT2.md` | Audited (`FB-16..22`). Design applying `FB-17..22` text updates to `INTENT2*.md`. | Audited |
+| 3 | `A1.2` | `docs/sessions/A1_VALUE.md` | Audit consumables routed through `A2` pipeline & `S1` statuses (`item_ap = 0`), stance-off cleanup (`feint`, `crushing_blow`, `{flow}`, `{disrupt}`), and advisory skill budget check in `check/skill.rs`. | `feasibility-check` (new) |
+| 4 | `A2.2` | `docs/sessions/A2_RESOLUTION.md` | Audit dynamic hit/heal resolution over `rpgkit_rules::pipeline` (`Base -> Flat -> Mult -> Mitigation -> Round`) and the 3 explicit mid-fight re-derivation triggers. | `feasibility-check` (new) |
+| 5 | `A3.2` & `A4.2` | `docs/sessions/A3_SHAPES.md`, `docs/sessions/A4_EFFECTS.md` | `FB-16..22` folded into `A3_SHAPES.md` (`RING`/`ARC` replacing `SWEEP`, `affects`, melee vs shaped lock) and `A4_EFFECTS.md` (`IR21` 7-step precedence, item intent mapping, `EffectSpec` across 5 vocabularies). Verify slice readiness (`INTENT2-K1..K3`). | `feasibility-check` / audited (`FB-16..22`) |
+| 6 | `U1.2` - `U4.2` | `docs/sessions/U1..U4*.md` | Audited (`FB-04..15`, `FB-25..37`). Slices 1-2 queued in Section 1 above; remaining slices follow. | Audited |
 
 ## 3. Held / Waiting on Design
 
-- **`ATTACKLOCK1-O`**: Built behind off-switch (`ATTACKLOCK1` slice 1). Holds until `A1`/`F2` design confirms power > 0 lock rule and melee band check.
+- **`ATTACKLOCK1-O`**: Built behind off-switch (`ATTACKLOCK1` slice 1). Unblocks once `A3.2` / `F1` confirms `attack_lock = melee` switch-on.
 - **`WORLDFIGHT1` (`C18`)**: Holds until `U` and `F` seams settle (`MASTERPLAN1` Q5).
-- **`A1.1` - `A4.1`**: Next design session (Action block: skills, consumables, resolution, shapes, triggers).
+- **`F1.1-F4.1`, `P1.1-P2.1`, `I1.1`**: Next design session (Fight flow, Space, and AI).
 
 ## 4. Feedback Responses (Design answers to `docs/FEEDBACK.md`)
 
@@ -65,6 +67,8 @@ Read-only code audit requested from the Build Session for `S1.2` and `S2.2` (Ses
 | `FB-39` | Docs delta | **Accepted**: Applied `TESTCLEAN1` (`aegis_core::scratch::Scratch`) docs delta to `docs/STRUCTURE.md`, `engine/README.md`, `.claude/skills/rust-conventions/SKILL.md`, and marked `TESTCLEAN1` done in `docs/TASKS.md`. | 2026-11-07 |
 | `FB-40` | `BASERULES1-M` | **Accepted**: Keep (a) `compute`/role contract surface for `U1.2`, (b) `move_after_blocks` schema entry for a schema-first slice with re-save, (c) per-bundle fight test and (d) `game.json` `ruleset`/`test_rulesets` for their respective slices; fold sim `rules=` notes and recursive `LOCKED` scan into the next base-rules slice. | 2026-11-07 |
 | `FB-41` | Docs delta | **Accepted**: Applied `BASERULES1-M` (`aegis rules [--contract]`, `rules_contract_golden.json`) docs delta to `CLAUDE.md`, `engine/README.md`, `docs/WORKFLOW.md`, `docs/HISTORY.md`, and created `engine/docs/authoring/rule_library.md`. | 2026-11-07 |
+| `FB-42` | `U1_STATS.md`, `READY.md` | **Accepted**: Standardized stage names in `U1_STATS.md` to `Base -> Flat -> Mult -> Mitigation -> Round` (`Stage::ORDER` as built in `U1.2-S1`, with `Flat` after attack power's rounding and `Add` allowed in `Base` and `Flat`). | 2026-11-07 |
+| `FB-43` | Docs delta, `U1.2` | **Accepted**: Applied `U1.2-S1` (`pipeline.rs`, `pool.rs`) docs delta to `docs/STRUCTURE.md`, `engine/docs/PORT_NOTES.md`, and `kits/rpg/README.md`; fold the exact port of `take_damage` (`Add`, `Reduce(guard)`, round to `min 1` when `guard > 0`) into the next `U1.2` slice. | 2026-11-07 |
 | `UN-01` | Temp folder cleanup | **Approved (user 2026-11-07)**: Temp cleanup is allowed. Build Session (or Design) may delete old pre-`TESTCLEAN1` `emberwake_*` and `rpgkit_*` folders in `$TEMP`. | 2026-11-07 |
 | `UN-02` | `VISCLAR1-D` / M1 look | **Deferred to post-combat-silo build (user 2026-11-07)**: Pushed to backlog/superseded during the engine refactor so the user reviews battle visuals once after the `U`/`S`/`A`/`F` combat silos finish building, rather than reviewing transient state. | 2026-11-07 |
 | `UN-03` | `develop` -> `main` release | **Silo-based releases (`R1-R4`, user 2026-11-07)**: Replace old `M1..M4` milestone releases with Masterplan Silo releases: **`R1`** after Unit + Status (`U1-U4`, `S1-S2`, `C01-C05`) lock; **`R2`** after Action + Combat (`A1-A4`, `F1-F4`, `P1-P2`, `I1`, `C06-C17`) + consolidated user Arena visual/feel review; **`R3`** after World + Economy + Story (`E`, `W`, `T`, `C18-C28`); **`R4`** after Final Shells (`X1-X8`). Hold `main` release until `R1`. | 2026-11-07 |
